@@ -59,6 +59,8 @@ public sealed record KernelSettings
     public int BooleanThreads { get; init; }
     public int MeshThreads { get; init; }
     public string? OpTag { get; init; }
+    /// <summary>KRN-10 (g.13): предпросмотр — проверки результата откладываются до принятия (BooleanOp.AcceptPreview).</summary>
+    public bool Preview { get; init; }
     /// <summary>KRN-02: бюджет точности (утверждённая числовая область).</summary>
     public ToleranceContext? Tolerance { get; init; } = ToleranceContext.Default;
 

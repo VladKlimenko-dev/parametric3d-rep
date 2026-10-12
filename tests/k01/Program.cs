@@ -365,6 +365,7 @@ static partial class Program
         if (mode is "sphere" or "allA") Sphere();
         if (mode is "negative" or "allA") Negative();
         if (mode is "selfx2" or "negative" or "allA") SelfXChecks();
+        if (mode is "perftargets") { PerfTargets(args[1]); return; }
         if (mode is "perf") { Perf(args); return; }
         if (mode is "meshreuse") { MeshReuseExperiment(); MeshReuseIdentity(); }
         if (mode is "globals") { foreach (var g in UnboundGlobals()) Console.WriteLine(g); return; }
@@ -416,6 +417,8 @@ static partial class Program
         if (mode is "krn05unite" or "allB") Krn05UniteChainChecks();
         if (mode is "krn06var" or "allB") Krn06VariableChecks();
         if (mode is "krn06uneq" or "allA") Krn06UnequalChecks();
+        if (mode is "krn06tan" or "allA") Krn06TanLoopChecks();
+        if (mode is "krn10prev" or "allA") Krn10PreviewChecks();
         if (mode is "krn03comp" or "allA") Krn03FaceCompChecks();
         if (mode is "krn07hole" or "allA") Krn07HoleContractChecks();
         if (mode is "krn07inst" or "allA") Krn07InstanceChecks();
@@ -868,6 +871,8 @@ static partial class Program
         if (mode is "k09" or "allB") { K09Matrix(); K09Solver(); K09Solver2(); GridSolve(); FilletMatrix(); PrismCorners(); K09Constraints(); VertexOps(); VertexOpsN(); VertexConcave(); }
         if (mode is "solver") { K09Solver(); K09Solver2(); }
         if (mode is "vopsn") VertexOpsN();
+        if (mode is "triprobe") { var tr = TriProbe.Run(true); Console.WriteLine($"TRIPROBE cases={tr.Cases} bad={tr.Bad} first={tr.FirstBad}"); return; }
+        if (mode is "tanchain") { TanChainProbe(); return; }
         if (mode is "partholes") { SpeedPartHoles(int.Parse(args[1])); return; }
         if (mode is "facetdev") { FacetDevProbe(); return; }
         if (mode is "sphcap") { SphCapProbe(); return; }

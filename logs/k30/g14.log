@@ -1,0 +1,45 @@
+c00  OK                                                                                                                                                      shell cube 60, t=2, open top
+c01  OK                                                                                                                                                      revolve ring 360°
+c02  OK                                                                                                                                                      revolve ring 90°
+c03  OK                                                                                                                                                      sweep circle r5 along 40
+c04  SKIP (ours: no exact step: STEP: surface unknown is not written exactly yet.)                                                                           loft square 20 → 10 over 30
+c05  OK                                                                                                                                                      draft 5° on the sides of a cube 60 (neutral bottom)
+c06  OK                                                                                                                                                      mirror box across x=0
+c07  OK                                                                                                                                                      linear pattern 3 × 20
+c08  OK                                                                                                                                                      circular pattern 4
+c09  OK                                                                                                                                                      shell cylinder r10 h30, t=2, open top
+c10  OK                                                                                                                                                      sweep circle r2 along a quarter arc R20
+c11  OK                                                                                                                                                      revolve circle 90° (torus segment)
+c12  OK                                                                                                                                                      revolve cut groove in a cylinder
+c13  OK                                                                                                                                                      extrude symmetric two-sided
+c14  OK                                                                                                                                                      loft circle r10 → r5 over 30 (cone frustum)
+c15  OK                                                                                                                                                      rib in an L-bracket (triangle 30×30, t=3)
+c16  OK                                                                                                                                                      sweep circle r2 along a line 20 + tangent arc R20 (90°)
+c17  OK                                                                                                                                                      sweep circle r3 along an L-shaped polyline 40 + 30 (mitred corner)
+c18  OK                                                                                                                                                      edge round R4
+c19  OK                                                                                                                                                      edge chamfer 3
+c20  OK                                                                                                                                                      hole d8 depth 20
+c21  OK                                                                                                                                                      vertex round R5
+c22  OK                                                                                                                                                      vertex chamfer 5
+c23  OK                                                                                                                                                      boolean sphere cut
+c24  OK                                                                                                                                                      boolean torus cut
+c25  OK                                                                                                                                                      boolean spline-prism cut
+c26  OK                                                                                                                                                      plate K08 seed 8001, 20 features
+c27  OK                                                                                                                                                      plate K08 seed 8002, 30 features
+c28  OK                                                                                                                                                      plate K08 seed 8003, 40 features
+c29  OK                                                                                                                                                      plate K08 seed 8004, 60 features
+c30  OK                                                                                                                                                      plate K08 seed 8005, 20 features
+c31  OK                                                                                                                                                      plate K08 seed 8006, 20 features
+c32  OK                                                                                                                                                      plate K08 seed 8007, 25 features
+c33  OK                                                                                                                                                      plate K08 seed 8008, 25 features
+c34  OK                                                                                                                                                      flange: revolve hub + disc, 6 through holes d9 on R45
+c35  OK                                                                                                                                                      shaft: stepped revolve, groove by revolve cut, axial hole
+c36  OK                                                                                                                                                      housing: block, shell t=3 open top, inner bosses with holes
+c37  OK                                                                                                                                                      variable round R1.5→5 on a cube edge
+c38  OK                                                                                                                                                      cavity: sphere R10 inside cube 60
+c39  OK                                                                                                                                                      cavity: closed cylinder r8 h20 inside cube 60
+c40  OK                                                                                                                                                      two cavities: sphere R6 and cylinder r5 h10
+c41  OK                                                                                                                                                      sphere cavity R6, then a through hole r5 elsewhere
+c42  OK                                                                                                                                                      assembly: flange ×4 (as is, moved, rotated 37° about (1,1,1), mirrored about x = −80)
+c43  OK                                                                                                                                                      assembly: shaft rotated 90° about X + 3-body pattern rotated 120° about Z, moved far (+5000 mm)
+OCCT: 43/43 agree; our build failures 0; honest refusals of exact STEP 1

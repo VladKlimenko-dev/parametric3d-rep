@@ -238,7 +238,9 @@ public static partial class DirectRound
             if (edges.Contains(e)) continue;
             edges.Add(e);
         }
-        if (circs.Count > 0 && edges.Count > 0) { why = "circular and straight edges in one operation"; return null; }
+        // KRN-06: касательный контур из отрезков и дуг (P3D_DRTANLOOP) — свой построитель ниже; иначе прежний отказ
+        bool tanLoop = circs.Count > 0 && edges.Count > 0 && TanLoops && closedCC.Count == 0;
+        if (circs.Count > 0 && edges.Count > 0 && !tanLoop) { why = "circular and straight edges in one operation"; return null; }
         var law = _law; var cham = _chamfer;
         if (cham != null && UnequalChainsOff && edges.Any(e => new[] { e.V0.P, e.V1.P }.Any(p => edges.Count(x => (x.V0.P - p).Length < 1e-7 || (x.V1.P - p).Length < 1e-7) > 1))) { why = "unequal chamfer: chains and corners not in this family"; return null; }
         // размер фаски ребра x на грани F: несимметричная — по грани первого размера, иначе r
@@ -309,6 +311,11 @@ public static partial class DirectRound
         }
 
         var blends = new List<FDesc>();
+        if (tanLoop)
+        {
+            if (!TangentLoopBlends(edges.Concat(circs).ToList(), byFace, r, ch, blends, ref why)) return null;
+            edges.Clear(); circs.Clear();
+        }
         if (circs.Count > 0 && !CircularBlends(circs, byFace, blends, r, ch, ref why)) return null;
         if (closedCC.Count > 0 && !CylCylBlends(body, closedCC, byFace, blends, r, ref why)) return null;
         var corners = new Dictionary<Vector3d, (Vector3d C, Vector3d[] Ns, List<(Vector3d A, Vector3d B, ICurve3 Arc)> Arcs)>();
@@ -731,27 +738,35 @@ public static partial class DirectRound
         Stage("mesh");
         if (Analytic.PrismBuild.Finish(solid, w) > 0) { why = "faces not meshed: " + string.Join(" / ", w.Take(3)); return null; }
         solid.Guarantee = GuaranteeLevel.ExactAnalytic;
-        Stage("validate");
-        var v = SolidValidator.Validate(solid);
-        if (!v.IsValid && Debug != null)
-            foreach (var f in solid.Faces)
-            {
-                var src = GeometryAudit.AuthoritativeSurface(f);
-                int agree = 0, dis = 0;
-                if (f.Surface is FacetedSurface fsd && src != null)
-                    foreach (var (ta, tb, tc) in fsd.Facets.ReadView)
-                    {
-                        var cc = (ta + tb + tc) / 3; var n = src.NormalAt(src.ProjectToUV(cc)) * (f.Reversed ? -1 : 1);
-                        if (Vector3d.Dot(Vector3d.Cross(tb - ta, tc - ta), n) >= 0) agree++; else { dis++; if (src is SectionSurface && dis <= 4) Debug($"   flipped facet uv {src.ProjectToUV(ta):G6} {src.ProjectToUV(tb):G6} {src.ProjectToUV(tc):G6} at {cc:0.###} area {Vector3d.Cross(tb - ta, tc - ta).Length / 2:G3}"); }
-                    }
-                var uvs = f.Loops.SelectMany(l => l.CoEdges).SelectMany(ce => Enumerable.Range(0, 9).Select(k => src!.ProjectToUV(ce.Edge.Curve.PointAt(ce.Edge.Curve.T0 + (ce.Edge.Curve.T1 - ce.Edge.Curve.T0) * k / 8.0)))).ToList();
-                Debug($"face {f.Id} {src?.GetType().Name} rev {f.Reversed} tag {f.Tag} facets agree {agree} dis {dis} u {uvs.Min(q => q.X):G5}..{uvs.Max(q => q.X):G5} v {uvs.Min(q => q.Y):G5}..{uvs.Max(q => q.Y):G5}");
-            }
-        if (!v.IsValid) { why = "result invalid: " + v.Summary() + " " + string.Join(" / ", v.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(2)); return null; }
-        Stage("volume");
-        if (AnalyticVolume.Of(solid) == null) { why = "no analytic volume"; return null; }
-        Stage("volfacets");
-        if (BooleanOp.VolumeVsFacets(solid) is { } vf && !vf.Agree) { why = $"volume {vf.Va:G8} vs facets {vf.Vf:G8}"; return null; }
+        // KRN-10 (g.13): проверки результата — сразу или, в предпросмотре, при принятии (BooleanOp.AcceptPreview)
+        string? Checks()
+        {
+            if (BooleanOp.ForceAcceptFailure) return "forced acceptance failure (test)";
+            Stage("validate");
+            var v = SolidValidator.Validate(solid);
+            if (!v.IsValid && Debug != null)
+                foreach (var f in solid.Faces)
+                {
+                    var src = GeometryAudit.AuthoritativeSurface(f);
+                    int agree = 0, dis = 0;
+                    if (f.Surface is FacetedSurface fsd && src != null)
+                        foreach (var (ta, tb, tc) in fsd.Facets.ReadView)
+                        {
+                            var cc = (ta + tb + tc) / 3; var n = src.NormalAt(src.ProjectToUV(cc)) * (f.Reversed ? -1 : 1);
+                            if (Vector3d.Dot(Vector3d.Cross(tb - ta, tc - ta), n) >= 0) agree++; else { dis++; if (src is SectionSurface && dis <= 4) Debug($"   flipped facet uv {src.ProjectToUV(ta):G6} {src.ProjectToUV(tb):G6} {src.ProjectToUV(tc):G6} at {cc:0.###} area {Vector3d.Cross(tb - ta, tc - ta).Length / 2:G3}"); }
+                        }
+                    var uvs = f.Loops.SelectMany(l => l.CoEdges).SelectMany(ce => Enumerable.Range(0, 9).Select(k => src!.ProjectToUV(ce.Edge.Curve.PointAt(ce.Edge.Curve.T0 + (ce.Edge.Curve.T1 - ce.Edge.Curve.T0) * k / 8.0)))).ToList();
+                    Debug($"face {f.Id} {src?.GetType().Name} rev {f.Reversed} tag {f.Tag} facets agree {agree} dis {dis} u {uvs.Min(q => q.X):G5}..{uvs.Max(q => q.X):G5} v {uvs.Min(q => q.Y):G5}..{uvs.Max(q => q.Y):G5}");
+                }
+            if (!v.IsValid) return "result invalid: " + v.Summary() + " " + string.Join(" / ", v.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(2));
+            Stage("volume");
+            if (AnalyticVolume.Of(solid) == null) return "no analytic volume";
+            Stage("volfacets");
+            if (BooleanOp.VolumeVsFacets(solid) is { } vf && !vf.Agree) return $"volume {vf.Va:G8} vs facets {vf.Vf:G8}";
+            return null;
+        }
+        if (BooleanOp.PreviewMode) solid.PendingAcceptance = Checks;
+        else if (Checks() is { } cw) { why = cw; return null; }
         Stage("tolerance");
         Analytic.EntityTolerance.Assign(solid);
         Stage("done");

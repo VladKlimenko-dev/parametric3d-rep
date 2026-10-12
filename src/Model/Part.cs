@@ -573,7 +573,7 @@ public sealed class Part : ModelItem
     {
         if (_lastInputs is { } last)
         {
-            if (!last.Settings.Equals(settings) || last.Policy != Policy || !last.Limits.Equals(Limits))
+            if (!(last.Settings with { Preview = false }).Equals(settings with { Preview = false }) || last.Policy != Policy || !last.Limits.Equals(Limits))
                 _dirtyFrom = 0;                               // настройки ядра или политика изменились
             else if (last.Stage != EffectiveStage)
                 DirtyFromIndex(Math.Min(last.Stage, EffectiveStage));   // полоска сдвинулась
@@ -595,9 +595,30 @@ public sealed class Part : ModelItem
         return _lastResult != null && _dirtyFrom == int.MaxValue && UseCheckpoints;
     }
 
+    static readonly bool PreviewPartOff = Environment.GetEnvironmentVariable("P3D_PREVIEWPART") == "0";
+
+    /// <summary>Принять тела предпросмотра в сохранённых состояниях и прежнем результате; не принятое — пересчёт с его места.</summary>
+    private void AcceptPreviewBodies()
+    {
+        foreach (var c in _checkpoints.OrderBy(c => c.After))
+            foreach (var b in c.State.Bodies)
+                if (b.IsPreview && Kernel.Ops.BooleanOp.AcceptPreview(b) != null) { DirtyFromIndex(c.After); return; }
+        if (_lastResult != null)
+            foreach (var b in _lastResult.Bodies)
+                if (b.IsPreview && Kernel.Ops.BooleanOp.AcceptPreview(b) != null)
+                {
+                    // место неизвестно — с первой операции после последнего принятого состояния
+                    DirtyFromIndex(_checkpoints.Count > 0 ? _checkpoints.Max(c => c.After) : 0); return;
+                }
+    }
+
     private BuildResult ComputeCore(ParameterTable? parameters, ISketchSolver? solver, CancellationToken cancellation)
     {
         var settingsNow = Kernel.KernelSettings.Capture();
+        // KRN-10 (g.13): ПРЕДПРОСМОТР НЕ МЕНЯЕТ РЕЗУЛЬТАТ — только откладывает проверки. Обычный расчёт сначала принимает
+        // тела предпросмотра, оставшиеся в сохранённых состояниях и прежнем результате (те же проверки на тех же телах);
+        // не принятое — пересчёт с этой операции без предпросмотра. Мутация P3D_PREVIEWPART=0 — без принятия.
+        if (!settingsNow.Preview && !PreviewPartOff) AcceptPreviewBodies();
         if (ApplyOutsideChanges(parameters, settingsNow))
         {
             // НИЧЕГО НЕ ИЗМЕНИЛОСЬ: прежний результат выдаётся без единой геометрической операции.

@@ -24,11 +24,18 @@ if python3 -c "import OCP" 2>/dev/null; then
   # базового прогона (все сохранённые сценарии в конфигурации выпуска). P3D_BASELINE_SERIES=0 — пропуск.
   if [ "${P3D_BASELINE_SERIES:-1}" != "0" ]; then
     for seed in 8 9 10; do
+      if [ "$seed" = "8" ]; then export DIFFPROF="$OUT/d8/prof.tsv"; else unset DIFFPROF; fi
       timeout 4000 "$OUT/k01/K01Checks" diffdump "$OUT/d$seed" "$seed" 200 > /dev/null 2>&1
       timeout 6000 python3 "$ROOT/tools/occt_diff.py" "$OUT/d$seed" --json "$OUT/d$seed/r.json" > "$OUT/diff$seed.txt" 2>&1
       echo "DIFF$seed: $(tail -1 "$OUT/diff$seed.txt")"
     done
+    unset DIFFPROF
+    # g.13: OpenCascade на тех же операндах серии 8 (время), затем замеры деталей и сравнение с целями
+    timeout 1200 python3 "$ROOT/tools/occt_time.py" "$OUT/d8" "$OUT/d8/occt_time.tsv" > /dev/null 2>&1
     echo "DIFF exact: $(cat "$OUT"/d8/manifest.tsv "$OUT"/d9/manifest.tsv "$OUT"/d10/manifest.tsv 2>/dev/null | grep -o ExactAnalytic | wc -l)"
   fi
 else echo "G14: SKIPPED (OCP not installed: pip install cadquery-ocp)"; fi
+# g.13 / m.v1 / m.v2: замеры по целям пользователя (один процесс, после всех наборов) и сравнение с целями
+timeout 1800 "$OUT/k01/K01Checks" perftargets "$OUT/perf.jsonl" > "$OUT/perf_run.log" 2>&1
+python3 "$ROOT/tools/perf_targets.py" "$OUT" > "$OUT/perf.txt" 2>&1; echo "PERF: $(tail -1 "$OUT/perf.txt")"
 bash tools/make_manifest.sh "$OUT/k01/K01Checks"

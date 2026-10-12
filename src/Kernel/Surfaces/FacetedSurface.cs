@@ -21,6 +21,8 @@ public sealed class FacetedSurface : ISurface3, Topology.IFreezable
     /// <summary>Треугольники грани: тройки точек в мировых координатах.</summary>
     /// <summary>Треугольники поверхности — её форма. Поставка 2: неизменяемы, когда грань опубликована (Freeze).</summary>
     public readonly Topology.TopoList<(Vector3d A, Vector3d B, Vector3d C)> Facets;
+    /// <summary>KRN-10: треугольники построены разметчиком по контурам грани (годятся донором той же грани по ключу).</summary>
+    public bool FromLoops { get; set; }
     private bool _frozen;
     bool Topology.IFreezable.IsFrozen => _frozen;
     string Topology.IFreezable.FreezeName => "FacetedSurface";

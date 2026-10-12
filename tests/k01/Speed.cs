@@ -29,8 +29,21 @@ static partial class Program
             // правка последней операции: перестроение только хвоста
             Parametric3D.Kernel.Diagnostics.Prof.Reset();
             var last = p.Features[^1]; p.MarkDirtyFrom(last);
+            Parametric3D.Kernel.Export.StepImport.DonorReused = 0;
             sw.Restart(); var r2 = p.Compute(null); p.Apply(r2); double tail = sw.Elapsed.TotalMilliseconds;
+            Console.WriteLine($"   donorReused(last)={Parametric3D.Kernel.Export.StepImport.DonorReused}");
             string prof2 = string.Join(" ;; ", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Where(l => l.Contains(" мс")).Take(6).Select(l => System.Text.RegularExpressions.Regex.Replace(l.Trim(), @"\s+", " ")));
+            // g.13: та же правка в предпросмотре (проверки отложены) — медиана из 5, затем принятие каждого тела
+            var tp = new List<double>(); var tf = new List<double>(); int pend = 0, acc = 0;
+            for (int rep = 0; rep < 5; rep++)
+            {
+                p.MarkDirtyFrom(last); sw.Restart(); var rf = p.Compute(null); tf.Add(sw.Elapsed.TotalMilliseconds); p.Apply(rf);
+                p.MarkDirtyFrom(last); sw.Restart();
+                using (new KernelContext(KernelSettings.Capture() with { Preview = true }).Enter()) { var rp = p.Compute(null); tp.Add(sw.Elapsed.TotalMilliseconds); p.Apply(rp); }
+                foreach (var b in p.Bodies) if (b.IsPreview) { pend++; if (Parametric3D.Kernel.Ops.BooleanOp.AcceptPreview(b) == null) acc++; }
+            }
+            tp.Sort(); tf.Sort();
+            Console.WriteLine($"SPEEDPREVIEW n={n} lastEditFull={tf[2]:0}ms lastEditPreview={tp[2]:0}ms pendingBodies={pend} accepted={acc}");
             Console.WriteLine($"SPEED n={n} interactiveBuild={build:0}ms features={p.Features.Count} faces={faces} guarantee={g} errors={errs} full={full:0}ms perOp={full / Math.Max(1, p.Features.Count):0}ms lastEdit={tail:0}ms");
             Console.WriteLine($"   full: {prof}");
             Console.WriteLine($"   last: {prof2}");

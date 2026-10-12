@@ -71,6 +71,7 @@ src/Kernel/Ops/CrossHole.cs
 src/Kernel/Ops/Csg.cs
 src/Kernel/Ops/DirectRound.cs
 src/Kernel/Ops/DirectRoundCylCyl.cs
+src/Kernel/Ops/DirectRoundTangent.cs
 src/Kernel/Ops/DraftOp.cs
 src/Kernel/Ops/ExtrudeOp.cs
 src/Kernel/Ops/FilletOp.cs
@@ -425,6 +426,7 @@ tests/k01/Krn06BlendStep.cs
 tests/k01/Krn06CylCyl.cs
 tests/k01/Krn06CylCylPart.cs
 tests/k01/Krn06Quadric.cs
+tests/k01/Krn06TanLoop.cs
 tests/k01/Krn06Unequal.cs
 tests/k01/Krn06Variable.cs
 tests/k01/Krn07.cs
@@ -437,6 +439,7 @@ tests/k01/Krn08Prov.cs
 tests/k01/Krn09.cs
 tests/k01/Krn09ImportHeal.cs
 tests/k01/Krn10Pairs.cs
+tests/k01/Krn10Preview.cs
 tests/k01/Krn11History.cs
 tests/k01/LongChain.cs
 tests/k01/LongHistory.cs
@@ -444,6 +447,7 @@ tests/k01/MeshReuse.cs
 tests/k01/Negative.cs
 tests/k01/PappusRef.cs
 tests/k01/Perf.cs
+tests/k01/PerfTargets.cs
 tests/k01/Program.cs
 tests/k01/QuadricVariants.cs
 tests/k01/Queries.cs
@@ -454,10 +458,12 @@ tests/k01/SelfX.cs
 tests/k01/SerProbe.cs
 tests/k01/Speed.cs
 tests/k01/SplineTool.cs
+tests/k01/TanChainProbe.cs
 tests/k01/ThinProbe.cs
 tests/k01/TopoDump.cs
 tests/k01/Torus.cs
 tests/k01/TouchProbe.cs
+tests/k01/TriProbe.cs
 tests/k01/TweakProbe.cs
 tests/k01/VarRoundProbe.cs
 tests/k03bench/K03Bench.csproj
@@ -530,5 +536,7 @@ tools/indep_slice_volume_d8_0082.py
 tools/make_manifest.sh
 tools/occt_check.py
 tools/occt_diff.py
+tools/occt_time.py
+tools/perf_targets.py
 tools/progress_score.py
 tools/run_baseline.sh
