@@ -11,6 +11,8 @@ for s in allA allB allS; do "$OUT/k01/K01Checks" $s > "$OUT/$s.log" 2>&1; echo "
 "$OUT/fprobe/FProbe" rotations > "$OUT/fprobe.log" 2>&1; echo "FProbe: $(tail -1 "$OUT/fprobe.log")"
 bash tests/run_local.sh "$ROOT/src" "$OUT/a06" "$ROOT/tools/deps" > "$OUT/a06_build.log" 2>&1 && bash tests/run_suites.sh "$OUT/a06" > "$OUT/a06_summary.txt" 2>&1
 echo "A06: $(grep -c 'rc=0' "$OUT/a06_summary.txt")/9"
+# g.13: серверы сборки (компилятор, MSBuild) после сборок не нужны — замеры времени дальше идут без них
+dotnet build-server shutdown > /dev/null 2>&1
 # Ворота g.14: независимая проверка точного STEP другим ядром (OpenCascade, пакет cadquery-ocp; без него — пропуск с пометкой)
 if python3 -c "import OCP" 2>/dev/null; then
   "$OUT/k01/K01Checks" g14dump "$OUT/g14" > "$OUT/g14_dump.log" 2>&1

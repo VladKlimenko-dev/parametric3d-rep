@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
@@ -477,6 +477,7 @@ public static class StepImport
     internal static int MeshFacesFromLoops(TSolid solid, List<string>? warnings, string format,
                                            Func<TFace, Surfaces.FacetedSurface?>? donor = null)
     {
+        using var _oh = Diagnostics.Overhead.Scope();
         int built = 0, failed = 0;
         foreach (var f2 in solid.Faces.ToList())
         {
@@ -504,7 +505,7 @@ public static class StepImport
             if (seamOnly) { failed++; continue; }
 
             (List<Vector3d> P, List<int> T)? got2; string? why2;
-            using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("разметка грани: " + (Topology.GeometryAudit.AuthoritativeSurface(f2)?.GetType().Name ?? "?")) : null)
+            using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("разметка грани: " + (Topology.GeometryAudit.AuthoritativeSurface(f2)?.GetType().Name ?? "?") + (Topology.GeometryAudit.AuthoritativeSurface(f2) is Surfaces.RevolvedSurface rvp ? "/" + Geometry.ExactEdges.ShapeOf(rvp)?.GetType().Name : "")) : null)
                 got2 = Tess.ExactFaceMesher.Mesh(f2, out why2, out _);
             if (got2 == null)
             {

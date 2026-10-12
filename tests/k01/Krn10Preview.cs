@@ -1,4 +1,4 @@
-using Parametric3D.Model;
+﻿using Parametric3D.Model;
 using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Ops;
@@ -42,6 +42,51 @@ static partial class Program
             Require(fails.Count == 0, string.Join("; ", fails));
         });
 
+        Check("KRN10-MESH-CHECKS-SAME", () =>
+        {
+            // g.13: быстрые проверки сетки тела (грубый ключ повторов граней, стороны без владельцев, слияние точек с памятью)
+            // дают ту же сетку отображения, что прежние (P3D_MESHCHECKFAST=0), и быстрее
+            var fails = new List<string>();
+            static List<string> MeshSig(IEnumerable<TSolid> bs) => bs.SelectMany(b => b.Faces).Select(f => f.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface fs && fs.Display is { } d
+                ? f.Tag + ":" + string.Join(";", d.Select(t => $"{t.Item1.X:R},{t.Item1.Y:R},{t.Item1.Z:R},{t.Item2.X:R},{t.Item2.Y:R},{t.Item2.Z:R},{t.Item3.X:R},{t.Item3.Y:R},{t.Item3.Z:R}"))
+                : f.Tag + ":-").OrderBy(x => x, StringComparer.Ordinal).ToList();
+            foreach (int seed in new[] { 1, 4, 6 })
+            {
+                var p = RealisticPart(seed, 40, out _);
+                p.MarkDirtyFrom(p.Features[0]); p.Rebuild(null);
+                var sNew = MeshSig(p.Bodies);
+                BooleanOp.MeshChecksFastOffForTests = true;
+                try { p.MarkDirtyFrom(p.Features[0]); p.Rebuild(null); }
+                finally { BooleanOp.MeshChecksFastOffForTests = false; }
+                var sOld = MeshSig(p.Bodies);
+                int diff = sNew.Zip(sOld).Count(z => z.First != z.Second) + Math.Abs(sNew.Count - sOld.Count);
+                if (diff != 0) fails.Add($"seed {seed}: {diff} face mesh(es) differ");
+                if (sNew.All(x => x.EndsWith(":-"))) fails.Add($"seed {seed}: no display meshes to compare");
+            }
+            // выигрыш — на самих проверках: выделения памяти в вызывающем потоке (проверки последовательны; разметка граней —
+            // в других потоках) при разметке копий тела каждым способом; память детерминирована, время на 2 ядрах — нет
+            var body = RealisticPart(1, 40, out _); body.MarkDirtyFrom(body.Features[0]); body.Rebuild(null);
+            var solid = body.Bodies[0];
+            (double Mb, double Ms) M(bool off)
+            {
+                BooleanOp.MeshChecksFastOffForTests = off;
+                try
+                {
+                    var copies = Enumerable.Range(0, 5).Select(_ => TopologyClone.Deep(solid)).ToList();
+                    foreach (var c in copies) foreach (var f in c.Faces) foreach (var e in f.Edges) Parametric3D.Kernel.Tess.ExactFaceMesher.EdgePoints(e);
+                    long a0 = GC.GetAllocatedBytesForCurrentThread(); var sw = System.Diagnostics.Stopwatch.StartNew();
+                    foreach (var c in copies) BooleanOp.MeshExactlyForTest(c);
+                    return ((GC.GetAllocatedBytesForCurrentThread() - a0) / 1048576.0, sw.Elapsed.TotalMilliseconds);
+                }
+                finally { BooleanOp.MeshChecksFastOffForTests = false; }
+            }
+            M(false); M(true);
+            var mNew = M(false); var mOld = M(true);
+            Log(new { test = "KRN10-MESH-CHECKS", newMb = mNew.Mb, oldMb = mOld.Mb, newMs = mNew.Ms, oldMs = mOld.Ms });
+            if (!(mNew.Mb < 0.92 * mOld.Mb)) fails.Add($"no saving: {mNew.Mb:F1} vs {mOld.Mb:F1} MB in the checking thread");
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+
         Check("KRN10-PART-PREVIEW-ACCEPT", () =>
         {
             // деталь: правка последней операции в предпросмотре — тело помечено; следующий обычный расчёт без изменений
@@ -56,10 +101,18 @@ static partial class Program
             var vols = p.Bodies.Select(b => AnalyticVolume.Of(b)).ToList();
             if (pending == 0) fails.Add("preview edit left no pending body (the last operation did not take a deferred route)");
             if (rp.StartedAt < p.Features.Count - 1) fails.Add($"preview rebuilt from operation {rp.StartedAt}, not the last");
+            bool pendingVal = rp.ValidationPending; int valAtPreview = rp.Validation.Count;
             var rn = p.Compute(null); p.Apply(rn);
             if (p.Bodies.Any(b => b.IsPreview)) fails.Add("ordinary rebuild kept preview bodies unaccepted");
             if (!p.Bodies.Select(b => AnalyticVolume.Of(b)).SequenceEqual(vols)) fails.Add("accepted bodies differ from the preview");
             if (rn.Executed != 0) fails.Add($"ordinary rebuild after preview executed {rn.Executed} operation(s)");
+            // g.13: проверка сетки тел в предпросмотре отложена (P3D_PREVIEWVALIDATE=0 — сразу) и выполнена при принятии
+            if (Part.ValidateResults)
+            {
+                if (!pendingVal || valAtPreview != 0) fails.Add($"preview validated the bodies at once ({valAtPreview} report(s)) instead of deferring");
+                if (rn.ValidationPending || rn.Validation.Count != rn.Bodies.Count) fails.Add($"acceptance ran {rn.Validation.Count} body validation(s) for {rn.Bodies.Count} body(ies)");
+                if (rn.Validation.Any(v => !v.IsValid) != (rn.IntegrityError != null)) fails.Add("deferred validation outcome not reflected in the integrity error");
+            }
             Log(new { test = "KRN10-PART-PREVIEW", pending, startedAt = rp.StartedAt, executedAfter = rn.Executed });
             Require(fails.Count == 0, string.Join("; ", fails));
         });
@@ -71,7 +124,7 @@ static partial class Program
             // только грань с сеткой отображения, а у точных маршрутов её нет — доноров не было вовсе (0 из 59 граней).
             // Сетки граней — побитно те же, что без доноров (KernelSettings.ReuseFaceMeshes = false).
             var fails = new List<string>();
-            foreach (int seed in new[] { 1, 3 })
+            foreach (int seed in new[] { 1, 3, 4, 6 })
             {
                 var p = RealisticPart(seed, 40, out _);
                 var last = p.Features[^1];
@@ -90,6 +143,14 @@ static partial class Program
                 int diff = s1.Zip(s2).Count(z => z.First != z.Second) + Math.Abs(s1.Count - s2.Count);
                 Log(new { test = "KRN10-MESH-DONOR", seed, reused, faces = s1.Count, differing = diff });
                 if (reused == 0) fails.Add($"seed {seed}: no face took a donor mesh");
+                // g.13: ключ без направления кривой отрезка находит больше доноров, чем прежний
+                p.MarkDirtyFrom(p.Features[0]); p.Rebuild(null);
+                BooleanOp.DonorCanonOffForTests = true;
+                Parametric3D.Kernel.Export.StepImport.DonorReused = 0;
+                try { p.MarkDirtyFrom(last); p.Rebuild(null); } finally { BooleanOp.DonorCanonOffForTests = false; }
+                int reusedOld = Parametric3D.Kernel.Export.StepImport.DonorReused;
+                Log(new { test = "KRN10-MESH-DONOR-KEY", seed, reused, reusedOld });
+                if (seed == 1 && !(reused > reusedOld)) fails.Add($"seed {seed}: the line-direction-free key reuses {reused}, the old one {reusedOld}");
                 if (diff != 0) fails.Add($"seed {seed}: {diff} face mesh(es) differ from the build without donors");
             }
             Require(fails.Count == 0, string.Join("; ", fails));
@@ -184,6 +245,33 @@ static partial class Program
             }
             Log(new { test = "KRN10-PREVIEW", general, rounds, accepted, msFull, msPreview = msPrev, msAccept, speedup = msPrev > 0 ? msFull / msPrev : 0 });
             if (general < 8) fails.Add($"only {general} cases took the general analytic path");
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+        Check("KRN10-PAIRS-PARALLEL-SAME", () =>
+        {
+            // g.13: пересечения пар граней общей булевой — параллельно (2 потока), разбор — в прежнем порядке: тело то же
+            // до бита (объём, площади граней, координаты вершин), что при одном потоке, и пары действительно шли
+            // одновременно. Мутация P3D_PAIRPAR=0.
+            var fails = new List<string>();
+            List<TSolid> Run(int threads)
+            {
+                using (new KernelContext(KernelSettings.Capture() with { BooleanThreads = threads }).Enter())
+                {
+                    var bl = new List<TSolid> { PrimitiveOp.Torus(new Vector3d(1, 2, 3), 10, 3) };
+                    BooleanOp.Subtract(bl, PrimitiveOp.Cylinder(new Vector3d(11, 2, -7), 1.5, 20), new List<string>());
+                    BooleanOp.Subtract(bl, Box(-20, -20, 4, 40, 40, 10), new List<string>());
+                    return bl;
+                }
+            }
+            Parametric3D.Kernel.Analytic.GeneralBoolean.PairsMaxConcurrent = 0;
+            var p2 = Run(2); long conc = Parametric3D.Kernel.Analytic.GeneralBoolean.PairsMaxConcurrent;
+            var p1 = Run(1);
+            string Sig(List<TSolid> b) => string.Join("|", b.Select(x => $"{AnalyticVolume.Of(x):R};{string.Join(",", x.Vertices.Select(v => $"{v.P.X:R},{v.P.Y:R},{v.P.Z:R}").OrderBy(z => z))}"));
+            bool same = Sig(p1) == Sig(p2);
+            Log(new { test = "KRN10-PAIRS-PARALLEL", same, maxConcurrent = conc, guarantee = string.Join(",", p2.Select(x => x.Guarantee)) });
+            if (!same) fails.Add("two-thread result differs from one-thread");
+            if (Environment.ProcessorCount > 1 && conc < 2) fails.Add($"pairs were not computed concurrently (max {conc})");
+            if (p2.Any(x => x.Guarantee != GuaranteeLevel.ExactAnalytic)) fails.Add("not exact");
             Require(fails.Count == 0, string.Join("; ", fails));
         });
     }
