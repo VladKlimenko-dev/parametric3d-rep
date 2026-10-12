@@ -42,9 +42,17 @@ static partial class Program
                 Parametric3D.Kernel.Diagnostics.Prof.Reset();
                 BooleanOp.Subtract(bl, TransformOp.Copy(PrimitiveOp.Cylinder(new Vector3d(0, 0, -40), 5, 80), TransformOp.Rotate(new Vector3d(30, 45, 10), Vector3d.UnitY, 25)), w);
                 long all = Parametric3D.Kernel.Diagnostics.Prof.CountOf("общая: пар граней"), cut = Parametric3D.Kernel.Diagnostics.Prof.CountOf("общая: пар отброшено габаритом");
-                Log(new { test = "KRN10-PAIR-BOUNDS", corpusSkipped = skipped, wrong, partPairs = all, partSkipped = cut });
                 if (all > 0 && cut == 0) fails.Add($"part rebuild: {all} face pairs, none skipped by bounds");
                 if (all == 0) fails.Add("part rebuild: the general boolean was not reached");
+                // (в) проход по оси: плита с 40 отверстиями, наклонный цилиндр — сравнений габаритов много меньше n·m
+                var pl = new List<TSolid> { Box(0, 0, 0, 400, 60, 20) };
+                for (int k = 0; k < 40; k++) BooleanOp.Subtract(pl, PrimitiveOp.Cylinder(new Vector3d(5 + 10 * k, 15 + 30 * (k % 2), -5), 3, 30), w);
+                Parametric3D.Kernel.Diagnostics.Prof.Reset();
+                BooleanOp.Subtract(pl, TransformOp.Copy(PrimitiveOp.Cylinder(new Vector3d(0, 0, -40), 4, 80), TransformOp.Rotate(new Vector3d(212, 30, 10), Vector3d.UnitY, 25)), w);
+                long all2 = Parametric3D.Kernel.Diagnostics.Prof.CountOf("общая: пар граней"), cmp = Parametric3D.Kernel.Diagnostics.Prof.CountOf("общая: сравнений габаритов");
+                Log(new { test = "KRN10-PAIR-BOUNDS", corpusSkipped = skipped, wrong, partPairs = all, partSkipped = cut, platePairs = all2, plateBoxCompares = cmp, plateFaces = pl[0].Faces.Count() });
+                if (all2 == 0) fails.Add("plate: the general boolean was not reached");
+                else if (cmp * 4 > all2) fails.Add($"plate: {cmp} box comparisons for {all2} face pairs — the sweep does not prune");
             }
             finally { Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
             Require(fails.Count == 0, string.Join("; ", fails));

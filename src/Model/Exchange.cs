@@ -160,6 +160,9 @@ public static class Exchange
             return null;
         }
 
+        // KRN-09 (09.5): лечение в бюджете с отчётом (строка на тело в предупреждениях)
+        if (!Kernel.Export.ImportHeal.Off)
+            for (int i = 0; i < bodies.Count; i++) Kernel.Export.ImportHeal.Heal(bodies[i], warnings, $"body {i + 1}");
         var part = new Part("импорт");
         foreach (var b in bodies) part.Bodies.Add(b);
         return part;

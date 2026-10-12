@@ -196,6 +196,8 @@ public sealed class HoleFeature : Feature
                 }
                 // KRN-07 (07.2): особый путь объявляет уровень гарантии, как общая булева (квадрики и их стыки — точные).
                 if (!HoleGuarOff && r.Guarantee == Parametric3D.Kernel.GuaranteeLevel.Unspecified) r.Guarantee = Parametric3D.Kernel.GuaranteeLevel.ExactQuadric;
+                // KRN-01 (01.5): особый путь карту не пишет — собирается по картам промежуточных тел и тождеству поверхностей
+                if (!HoleProvOff && !Kernel.Topology.ProvenanceBySurface.Covers(r.Provenance, r, new[] { body })) r.SetProvenance(Kernel.Topology.ProvenanceBySurface.Compose("Hole/" + name, new[] { body }, r));
                 trace.Add(new(name, HoleRouteVerdict.Accepted, null)); exact = r; return true;
             }
 
@@ -312,6 +314,8 @@ public sealed class HoleFeature : Feature
     static readonly bool HoleRolesOff = Environment.GetEnvironmentVariable("P3D_HOLEROLES") == "0";
     /// <summary>Мутация P3D_HOLEGUAR=0: особый путь не объявляет уровень гарантии (Unspecified), как прежде.</summary>
     static readonly bool HoleGuarOff = Environment.GetEnvironmentVariable("P3D_HOLEGUAR") == "0";
+    /// <summary>Мутация P3D_HOLEPROV=0: результат особого пути отверстия без карты происхождения.</summary>
+    static readonly bool HoleProvOff = Environment.GetEnvironmentVariable("P3D_HOLEPROV") == "0";
 
     /// <summary>Роли граней отверстия — одни на все маршруты.</summary>
     public const string RoleWall = "hole:wall", RoleBottom = "hole:bottom", RoleCounterbore = "hole:counterbore",
@@ -388,6 +392,7 @@ public sealed class HoleFeature : Feature
             if (src is Kernel.Surfaces.ExtrudedSurface { Base: Kernel.Curves.ArcCurve3 }) origSide = f;
             else if (f.Loops.SelectMany(l => l.CoEdges).FirstOrDefault()?.Start.P is Vector3d q) origCaps.Add((Vector3d.Dot(q - at, w), f));
         }
+        var prov = new Kernel.Topology.Provenance { Operation = "Hole/cross-hole" };
         foreach (var f in res.Faces)
         {
             TFace? from = null;
@@ -397,9 +402,12 @@ public sealed class HoleFeature : Feature
                 double h = Vector3d.Dot(q - at, w);
                 from = origCaps.OrderBy(c => Math.Abs(c.H - h)).First().F;
             }
+            prov.Faces.Add(new Kernel.Topology.FaceProvenance(f, from, from == null ? Kernel.Topology.FaceOrigin.Generated : Kernel.Topology.FaceOrigin.Modified));
             if (from == null || from.Tag.Length == 0) continue;
             f.Tag = from.Tag; f.Attr = from.Attr; f.MaterialSlot = from.MaterialSlot;
         }
+        // KRN-01 (01.5): происхождение — грани вала из граней вала, стенка отверстия новая
+        if (!HoleProvOff) res.SetProvenance(prov);
         return res;
     }
 

@@ -422,7 +422,7 @@ public static class OperationContract
         // резцами) последняя булева пишет карту относительно своих операндов (полость, резец, промежуточное тело) — тогда
         // карта строится заново по тождеству поверхностей относительно входа операции
         var inputFaces = new HashSet<Topology.TFace>(bodies.SelectMany(b => b.Faces), ReferenceEqualityComparer.Instance);
-        if (fresh.Count == 1 && fresh[0].Provenance is { } pv && (SurfaceProvOff || pv.Faces.All(x => x.Source == null || inputFaces.Contains(x.Source)))) result.ProvenanceMap = pv;
+        if (fresh.Count == 1 && fresh[0].Provenance is { } pv && (SurfaceProvOff || Topology.ProvenanceBySurface.Covers(pv, fresh[0], bodies))) result.ProvenanceMap = pv;
         // KRN-01 (01.5): построитель не записал происхождение — по ТОЖДЕСТВУ ПОВЕРХНОСТЕЙ: грань результата на том же объекте
         // поверхности, что грань входа (построители переносят поверхность, а не строят похожую), — из неё: та же граница
         // (те же объекты кривых рёбер) — сохранена, иначе изменена; несколько граней от одной — разделена; поверхность,

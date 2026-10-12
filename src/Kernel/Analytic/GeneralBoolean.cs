@@ -21,6 +21,8 @@ public static class GeneralBoolean
 {
     /// <summary>Мутация P3D_PAIRBOX=0: все пары граней идут в FaceIntersect.Of (прежде).</summary>
     static readonly bool PairBoxOff = Environment.GetEnvironmentVariable("P3D_PAIRBOX") == "0";
+    /// <summary>Мутация P3D_PAIRSWEEP=0: габариты сравниваются у всех n·m пар (без прохода по оси).</summary>
+    static readonly bool PairSweepOff = Environment.GetEnvironmentVariable("P3D_PAIRSWEEP") == "0";
     static readonly bool PartitionOff = Environment.GetEnvironmentVariable("P3D_PARTITIONCHECK") == "0";
     static readonly bool PartStat = Environment.GetEnvironmentVariable("P3D_PARTSTAT") == "1";
     /// <summary>Проверка KRN05: внести потерю последней области у первой разрезанной грани (один раз).</summary>
@@ -175,12 +177,17 @@ public static class GeneralBoolean
         // каждой грани считался заново для каждой пары — гранением рёбер). Порядок пар прежний. Мутация P3D_PAIRBOX=0.
         var boxA = PairBoxOff ? null : fa.Select(FaceIntersect.PairBox).ToList();
         var boxB = PairBoxOff ? null : fb.Select(FaceIntersect.PairBox).ToList();
+        // пары-кандидаты — проходом по оси X (sort and sweep): сравниваются только габариты, перекрытые по X; затем пары
+        // идут в прежнем порядке (ia, ib) — результат от отбора не зависит. Мутация P3D_PAIRSWEEP=0 — перебор всех n·m.
+        HashSet<long>? cand = boxA == null || PairSweepOff ? null : FaceIntersect.SweepPairs(boxA, boxB!);
         for (int ia = 0; ia < fa.Count; ia++)
             for (int ib = 0; ib < fb.Count; ib++)
             {
                 var x = fa[ia]; var y = fb[ib];
                 Diagnostics.Prof.Count("общая: пар граней", 1);
-                if (boxA != null && !FaceIntersect.BoxesMeet(boxA[ia], boxB![ib])) { Diagnostics.Prof.Count("общая: пар отброшено габаритом", 1); continue; }
+                if (cand != null && !cand.Contains(((long)ia << 32) | (uint)ib)) { Diagnostics.Prof.Count("общая: пар отброшено габаритом", 1); continue; }
+                if (boxA != null && cand == null) Diagnostics.Prof.Count("общая: сравнений габаритов", 1);
+                if (boxA != null && cand == null && !FaceIntersect.BoxesMeet(boxA[ia], boxB![ib])) { Diagnostics.Prof.Count("общая: пар отброшено габаритом", 1); continue; }
                 var r = FaceIntersect.Of(x, y);
                 if (r.Kind == FaceIntersect.Kind.Coincident) { coincident.Add((x, y)); continue; }
                 if (r.Kind == FaceIntersect.Kind.Unresolved) { why = "face intersection: " + r.Unresolved; return null; }

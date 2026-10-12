@@ -414,6 +414,7 @@ static partial class Program
         if (mode is "krn07hole" or "allA") Krn07HoleContractChecks();
         if (mode is "krn07inst" or "allA") Krn07InstanceChecks();
         if (mode is "krn10pairs" or "allA") Krn10PairChecks();
+        if (mode is "krn09heal" or "allA") Krn09ImportHealChecks();
         if (mode == "swprobe") { SweepLoftProbe(); return; }
         if (mode == "patprobe") { PatternProbe(); return; }
         if (mode == "serprobe") { SerProbe(); return; }
@@ -433,6 +434,7 @@ static partial class Program
         if (mode == "tweakprobe") { TweakProbe(); return; }
         if (mode == "provprobe") { ProvProbe(); return; }
         if (mode == "fcprobe") { FaceCompProbe(); return; }
+        if (mode == "ihprobe") { ImportHealProbe(); return; }
         if (mode == "cylfaceprobe") { CylFaceProbe(); return; }
         if (mode == "igesprobe")
         {
