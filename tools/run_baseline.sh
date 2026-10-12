@@ -20,5 +20,15 @@ if python3 -c "import OCP" 2>/dev/null; then
   "$OUT/k01/K01Checks" krn04dump "$OUT/krn04" > "$OUT/krn04_dump.log" 2>&1
   python3 "$ROOT/tools/occt_diff.py" "$OUT/krn04" --json "$OUT/krn04/occt.json" > "$OUT/krn04.log" 2>&1
   echo "KRN04: $(tail -1 "$OUT/krn04.log")"
+  # KRN-11 (11.1): разностные серии 8–10 (случайные цепочки 1–2 булевых над примитивами; OpenCascade + арбитр) — часть
+  # базового прогона (все сохранённые сценарии в конфигурации выпуска). P3D_BASELINE_SERIES=0 — пропуск.
+  if [ "${P3D_BASELINE_SERIES:-1}" != "0" ]; then
+    for seed in 8 9 10; do
+      timeout 4000 "$OUT/k01/K01Checks" diffdump "$OUT/d$seed" "$seed" 200 > /dev/null 2>&1
+      timeout 6000 python3 "$ROOT/tools/occt_diff.py" "$OUT/d$seed" --json "$OUT/d$seed/r.json" > "$OUT/diff$seed.txt" 2>&1
+      echo "DIFF$seed: $(tail -1 "$OUT/diff$seed.txt")"
+    done
+    echo "DIFF exact: $(cat "$OUT"/d8/manifest.tsv "$OUT"/d9/manifest.tsv "$OUT"/d10/manifest.tsv 2>/dev/null | grep -o ExactAnalytic | wc -l)"
+  fi
 else echo "G14: SKIPPED (OCP not installed: pip install cadquery-ocp)"; fi
 bash tools/make_manifest.sh "$OUT/k01/K01Checks"

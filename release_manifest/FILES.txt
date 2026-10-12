@@ -418,6 +418,7 @@ tests/k01/Krn04.cs
 tests/k01/Krn04Seam.cs
 tests/k01/Krn05.cs
 tests/k01/Krn05AfterBlend.cs
+tests/k01/Krn05UniteChain.cs
 tests/k01/Krn06Acc.cs
 tests/k01/Krn06BlendStep.cs
 tests/k01/Krn06CylCyl.cs
@@ -433,6 +434,7 @@ tests/k01/Krn08Prov.cs
 tests/k01/Krn09.cs
 tests/k01/Krn09ImportHeal.cs
 tests/k01/Krn10Pairs.cs
+tests/k01/Krn11History.cs
 tests/k01/LongChain.cs
 tests/k01/LongHistory.cs
 tests/k01/MeshReuse.cs

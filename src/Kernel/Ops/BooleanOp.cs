@@ -721,6 +721,8 @@ public static class BooleanOp
 
     /// <summary>KRN-03: многотельная семантика (P3D_MULTIBODY=0 — прежнее: операция над первым/единственным задетым телом).</summary>
     static readonly bool MultiBodyEach = Environment.GetEnvironmentVariable("P3D_MULTIBODY") != "0";
+    /// <summary>Мутация P3D_UNITELOOP=0: присоединение к слитому набору из нескольких тел — снова многотельным путём (прежде).</summary>
+    static readonly bool UniteLoopOff = Environment.GetEnvironmentVariable("P3D_UNITELOOP") == "0";
 
     /// <summary>
     /// KRN-03: операция над набором тел сводится к операциям над одним телом. Вычитание — каждое тело, задетое резцом по
@@ -776,8 +778,24 @@ public static class BooleanOp
                 {
                     if (!hit[i]) { outBodies.Add(bodies[i]); levels.Add(GuaranteeOf(bodies[i])); continue; }
                     if (at < 0) at = outBodies.Count;
-                    var r = merged == null ? Sub(new[] { bodies[i] }, other, kind) : Sub(merged, bodies[i], kind); if (failed != null) break;
-                    merged = r.Bodies.ToList();
+                    if (merged == null || UniteLoopOff) { var r = merged == null ? Sub(new[] { bodies[i] }, other, kind) : Sub(merged, bodies[i], kind); if (failed != null) break; merged = r.Bodies.ToList(); continue; }
+                    // KRN-05: присоединение следующего тела — к каждому телу слитого набора ПО ОДНОМУ (однотельные операции). Прежде
+                    // слитый набор из нескольких тел (касание: тела остаются отдельными) шёл снова в многотельный путь, и тройка
+                    // взаимно касающихся тел ходила по кругу (d9_0021: 2481 вызов точного маршрута за одну операцию, предел
+                    // времени). Мутация P3D_UNITELOOP=0.
+                    var cur = bodies[i]; var rest = new List<TSolid>();
+                    foreach (var m in merged)
+                    {
+                        if (failed != null) break;
+                        if (!Overlap(BoxOf(m), BoxOf(cur))) { rest.Add(m); continue; }
+                        var r = Sub(new[] { m }, cur, kind); if (failed != null) break;
+                        if (r.Bodies.Count == 1) { cur = r.Bodies[0]; continue; }
+                        // тела не слились (касание, раздельные куски): последний — присоединяемое, прочие — остаются в наборе
+                        for (int j = 0; j + 1 < r.Bodies.Count; j++) rest.Add(r.Bodies[j]);
+                        if (r.Bodies.Count > 0) cur = r.Bodies[^1];
+                    }
+                    if (failed != null) break;
+                    rest.Add(cur); merged = rest;
                 }
                 merged ??= new List<TSolid>();
                 // резец не задел ни одного тела — отдельное тело через обычный путь (нормализация, проверка, уровень)
