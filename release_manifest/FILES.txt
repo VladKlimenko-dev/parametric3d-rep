@@ -116,6 +116,7 @@ src/Kernel/Topology/EntityNames.cs
 src/Kernel/Topology/GeometryAudit.cs
 src/Kernel/Topology/PCurves.cs
 src/Kernel/Topology/Provenance.cs
+src/Kernel/Topology/ProvenanceBySurface.cs
 src/Kernel/Topology/ShellComponents.cs
 src/Kernel/Topology/SolidFingerprint.cs
 src/Kernel/Topology/SolidValidator.cs
@@ -428,6 +429,7 @@ tests/k01/Krn07c.cs
 tests/k01/Krn08.cs
 tests/k01/Krn08Prov.cs
 tests/k01/Krn09.cs
+tests/k01/Krn10Pairs.cs
 tests/k01/LongChain.cs
 tests/k01/LongHistory.cs
 tests/k01/MeshReuse.cs

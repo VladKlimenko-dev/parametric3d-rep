@@ -37,6 +37,24 @@ public static class FaceIntersect
         return (lo, hi);
     }
 
+    /// <summary>
+    /// KRN-10 (10.1): КОНСЕРВАТИВНЫЙ ГАБАРИТ ГРАНИ для отбора пар — тот же, что проверяет Of (габарит рёбер, у шара и тора —
+    /// целого тела, у ленты — её габарит), расширенный на СВОЙ запас грани (у Of — наибольший из двух запасов; сумма двух
+    /// своих ≥ наибольшего, поэтому отбор не отбрасывает пару, которую Of не отбросил бы).
+    /// </summary>
+    public static (Vector3d Lo, Vector3d Hi) PairBox(AnalyticFace a)
+    {
+        if (a.Band) return (a.BandLo, a.BandHi);
+        var (lo, hi) = BoxOf(a.Face);
+        if (a.Sph) { lo = a.O - new Vector3d(a.R); hi = a.O + new Vector3d(a.R); }
+        if (a.Tor) { lo = a.O - new Vector3d(a.R + a.Rm); hi = a.O + new Vector3d(a.R + a.Rm); }
+        var m = new Vector3d((a.Cone ? 4 * a.R : a.Cyl ? a.R : a.Sph ? 2 * a.R : a.Tor ? a.R + a.Rm : 0) + 1e-6);
+        return (lo - m, hi + m);
+    }
+
+    public static bool BoxesMeet((Vector3d Lo, Vector3d Hi) a, (Vector3d Lo, Vector3d Hi) b) =>
+        !(a.Lo.X > b.Hi.X || b.Lo.X > a.Hi.X || a.Lo.Y > b.Hi.Y || b.Lo.Y > a.Hi.Y || a.Lo.Z > b.Hi.Z || b.Lo.Z > a.Hi.Z);
+
     public static Result Of(AnalyticFace a, AnalyticFace b)
     {
         var res = new Result { Kind = Kind.Empty };

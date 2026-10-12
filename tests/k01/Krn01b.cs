@@ -36,6 +36,39 @@ static partial class Program
                     if (pm.Faces.Count != all || mod == 0 || mod == all || pm.Faces.Any(x => x.Source == null)) fails.Add($"{name}: provenance {pm.Faces.Count} of {all}, modified {mod}");
                 }
             }
+            {   // KRN-01 (01.5): прочие операции — происхождение по тождеству поверхностей (если построитель карту не пишет):
+                // карта есть, покрывает все грани результата, источники — грани входа, есть сохранённые/изменённые и новые
+                var cases = new (string Name, Func<TSolid> Make, Action<List<TSolid>> Op, bool NeedNew)[]
+                {
+                    ("shell with a hole", () => { var bl = new List<TSolid> { Box(0, 0, 0, 60, 40, 20) }; BooleanOp.Subtract(bl, PrimitiveOp.Cylinder(new Vector3d(30, 20, -2), 8, 24), new List<string>()); return bl[0]; },
+                        l => ShellOp.Hollow(l, 2, new List<Vector3d> { new(5, 5, 20) }, new List<string>()), false),
+                    ("linear pattern", () => Box(0, 0, 0, 10, 10, 10), l => TransformOp.LinearPattern(l, new Vector3d(5, 0, 0), 3, new List<string>()), false),
+                    ("mirror", () => Box(-3, 0, 0, 13, 10, 10), l => TransformOp.MirrorBody(l, Vector3d.Zero, Vector3d.UnitX, new List<string>()), false),
+                    ("vertex round", () => Box(0, 0, 0, 40, 30, 20), l => VertexOp.Round(l, new Vector3d(40, 30, 20), 5, new List<string>()), true),
+                    ("chamfer 2/3 (cutter path)", () => Box(0, 0, 0, 40, 30, 20), l =>
+                    {
+                        var e = l[0].Edges.First(x => x.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(x.V0.P.Z - 20) < 1e-9 && Math.Abs(x.V1.P.Z - 20) < 1e-9);
+                        FilletOp.ChamferEdges(l, new[] { EdgeRef.Of(e) }, 2, 3, new List<string>());
+                    }, true),
+                };
+                foreach (var (name, make, op, needNew) in cases)
+                {
+                    var b0 = make(); var inFaces = new HashSet<TFace>(b0.Faces, ReferenceEqualityComparer.Instance);
+                    var r = OperationContract.Run(name, new List<TSolid> { b0 }, op);
+                    var pm = r.ProvenanceMap;
+                    if (!r.Accepted || pm == null) { fails.Add($"{name}: {r.Outcome}, provenance {(pm == null ? "missing" : "ok")}"); continue; }
+                    int all = r.Bodies.Sum(b => b.Faces.Count());
+                    int fromInput = pm.Faces.Count(x => x.Source != null), gen = pm.Faces.Count(x => x.Kind == FaceOrigin.Generated);
+                    Log(new { test = "KRN01-PROVENANCE", name, op = pm.Operation, faces = all, mapped = pm.Faces.Count, fromInput, generated = gen, deleted = pm.Deleted.Count });
+                    if (pm.Faces.Count != all) fails.Add($"{name}: provenance covers {pm.Faces.Count} of {all} faces");
+                    if (pm.Faces.Any(x => x.Source != null && !inFaces.Contains(x.Source))) fails.Add($"{name}: a source is not an input face");
+                    if (fromInput == 0) fails.Add($"{name}: no face traced to the input");
+                    if (needNew && gen == 0) fails.Add($"{name}: no generated face");
+                    if (pm.Faces.All(x => x.Kind == FaceOrigin.Kept)) fails.Add($"{name}: every face is 'kept' — the operation changed nothing?");
+                    // массив, зеркало, оболочка сдвигом не создают граней без источника: копии и стенки полости — из граней входа
+                    if (!needNew && gen > 0) fails.Add($"{name}: {gen} face(s) without a source (copies must trace to the input)");
+                }
+            }
             {   // оболочка
                 var r = OperationContract.Run("Shell", new List<TSolid> { Box(0, 0, 0, 40, 30, 20) }, l => ShellOp.Hollow(l, 2, new List<Vector3d> { new(20, 15, 20) }, new List<string>()));
                 if (!r.Accepted || r.Accuracy == null) fails.Add($"shell: {r.Outcome} accuracy {r.Accuracy}");

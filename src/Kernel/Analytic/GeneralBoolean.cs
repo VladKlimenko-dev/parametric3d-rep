@@ -19,6 +19,8 @@ namespace Parametric3D.Kernel.Analytic;
 /// </summary>
 public static class GeneralBoolean
 {
+    /// <summary>Мутация P3D_PAIRBOX=0: все пары граней идут в FaceIntersect.Of (прежде).</summary>
+    static readonly bool PairBoxOff = Environment.GetEnvironmentVariable("P3D_PAIRBOX") == "0";
     static readonly bool PartitionOff = Environment.GetEnvironmentVariable("P3D_PARTITIONCHECK") == "0";
     static readonly bool PartStat = Environment.GetEnvironmentVariable("P3D_PARTSTAT") == "1";
     /// <summary>Проверка KRN05: внести потерю последней области у первой разрезанной грани (один раз).</summary>
@@ -169,10 +171,16 @@ public static class GeneralBoolean
         var onB = fb.ToDictionary(x => x, _ => new List<FaceIntersect.Piece>());
         var coincident = new List<(AnalyticFace X, AnalyticFace Y)>();
         var swPairs = System.Diagnostics.Stopwatch.StartNew();
-        foreach (var x in fa)
-            foreach (var y in fb)
+        // KRN-10 (10.1): габариты граней — один раз; пара с разошедшимися габаритами не идёт в FaceIntersect.Of (там габарит
+        // каждой грани считался заново для каждой пары — гранением рёбер). Порядок пар прежний. Мутация P3D_PAIRBOX=0.
+        var boxA = PairBoxOff ? null : fa.Select(FaceIntersect.PairBox).ToList();
+        var boxB = PairBoxOff ? null : fb.Select(FaceIntersect.PairBox).ToList();
+        for (int ia = 0; ia < fa.Count; ia++)
+            for (int ib = 0; ib < fb.Count; ib++)
             {
+                var x = fa[ia]; var y = fb[ib];
                 Diagnostics.Prof.Count("общая: пар граней", 1);
+                if (boxA != null && !FaceIntersect.BoxesMeet(boxA[ia], boxB![ib])) { Diagnostics.Prof.Count("общая: пар отброшено габаритом", 1); continue; }
                 var r = FaceIntersect.Of(x, y);
                 if (r.Kind == FaceIntersect.Kind.Coincident) { coincident.Add((x, y)); continue; }
                 if (r.Kind == FaceIntersect.Kind.Unresolved) { why = "face intersection: " + r.Unresolved; return null; }

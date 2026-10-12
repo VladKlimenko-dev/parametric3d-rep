@@ -18,6 +18,8 @@ namespace Parametric3D.Kernel.Topology;
 /// </summary>
 public static class TopologyTransform
 {
+    /// <summary>Мутация P3D_XFORMPROV=0: перенесённая копия без карты происхождения.</summary>
+    static readonly bool XformProvOff = Environment.GetEnvironmentVariable("P3D_XFORMPROV") == "0";
     static readonly bool XformHintOff = Environment.GetEnvironmentVariable("P3D_XFORMHINT") == "0";
     static readonly bool XformMeshOff = Environment.GetEnvironmentVariable("P3D_XFORMMESH") == "0";
     /// <summary>Мутация P3D_XFORMPROC=0: кривая и поверхность по формуле (лента катящегося шара, 06.12) и кривая пересечения
@@ -136,6 +138,14 @@ public static class TopologyTransform
         {
             using var _fs = Ops.BooleanOp.FacetingScope();     // гранение CAD, не хорда отображения (g.04)
             Export.StepImport.MeshFacesFromLoops(dst, null, "Transform");
+        }
+        // KRN-01 (01.5): копия — каждая грань из своей грани исходного тела (порядок тот же), форма перенесена (изменена)
+        if (!XformProvOff)
+        {
+            var pv = new Provenance { Operation = "transform" };
+            var df = dst.Faces.ToList();
+            for (int i = 0; i < df.Count && i < srcFaces.Count; i++) pv.Faces.Add(new FaceProvenance(df[i], srcFaces[i], FaceOrigin.Modified, "transformed copy"));
+            dst.SetProvenance(pv);
         }
         return dst;
     }

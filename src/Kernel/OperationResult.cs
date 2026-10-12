@@ -330,6 +330,8 @@ public static class OperationContract
     static readonly bool OpAccuracyOff = Environment.GetEnvironmentVariable("P3D_OPACCURACY") == "0";
     /// <summary>Мутация P3D_DIAGENTITIES=0: диагностика без затронутых сущностей (прежде).</summary>
     internal static readonly bool DiagEntitiesOff = Environment.GetEnvironmentVariable("P3D_DIAGENTITIES") == "0";
+    /// <summary>Мутация P3D_SURFPROV=0: без происхождения по тождеству поверхностей (карта — только у построителей, что её пишут).</summary>
+    static readonly bool SurfaceProvOff = Environment.GetEnvironmentVariable("P3D_SURFPROV") == "0";
 
     public static OperationResult Run(string name, IReadOnlyList<TSolid> bodies, Action<List<TSolid>> op,
                                       List<string>? warnings = null, OperationPolicy? policy = null)
@@ -416,7 +418,16 @@ public static class OperationContract
                 result.Diagnostics.Add(new OperationDiagnostic(name.ToLowerInvariant() + ".accuracy", "accuracy-over-budget", result.Accuracy.ToString()));
         }
         // KRN-01 (01.5): происхождение — если построитель записал его для единственного нового тела
-        if (fresh.Count == 1 && fresh[0].Provenance is { } pv) result.ProvenanceMap = pv;
+        // карта построителя годна, если её источники — грани ВХОДА операции; у составной операции (оболочка, массив, фаска
+        // резцами) последняя булева пишет карту относительно своих операндов (полость, резец, промежуточное тело) — тогда
+        // карта строится заново по тождеству поверхностей относительно входа операции
+        var inputFaces = new HashSet<Topology.TFace>(bodies.SelectMany(b => b.Faces), ReferenceEqualityComparer.Instance);
+        if (fresh.Count == 1 && fresh[0].Provenance is { } pv && (SurfaceProvOff || pv.Faces.All(x => x.Source == null || inputFaces.Contains(x.Source)))) result.ProvenanceMap = pv;
+        // KRN-01 (01.5): построитель не записал происхождение — по ТОЖДЕСТВУ ПОВЕРХНОСТЕЙ: грань результата на том же объекте
+        // поверхности, что грань входа (построители переносят поверхность, а не строят похожую), — из неё: та же граница
+        // (те же объекты кривых рёбер) — сохранена, иначе изменена; несколько граней от одной — разделена; поверхность,
+        // которой у входа не было, — новая; грани входа без наследников — удалены. Не по именам и не по геометрии.
+        else if (fresh.Count == 1 && !SurfaceProvOff) result.ProvenanceMap = Topology.ProvenanceBySurface.Compose(name, bodies, fresh[0]);
         return result;
     }
 
