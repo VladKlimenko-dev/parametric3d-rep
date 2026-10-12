@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;

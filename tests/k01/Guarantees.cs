@@ -28,6 +28,12 @@ static partial class Program
         ["Kernel.KernelContext._verifying"] = "счётчик контекстов с проверкой предикатов (Interlocked)",
         // разбор и профили
         ["Kernel.Diagnostics.Prof.Enabled"] = "профилирование",
+        ["Kernel.Curves.IntersectionCurve3.ShapeProjections"] = "g.13: счётчик проекций по аналитической форме (Interlocked, только замер)",
+        ["Kernel.Ops.BooleanOp.PrismChecksDeferred"] = "g.13: счётчик отложенных проверок призматического маршрута (Interlocked, разбор)",
+        ["Kernel.Topology.GeometryAudit.CacheHits"] = "g.13: счётчик попаданий в память аудита (Interlocked, разбор)",
+        ["Kernel.Tess.Cdt.LoopWalks"] = "g.13: счётчик обходов контуров (Interlocked, замер KRN10-CDT-BOX-SAME)",
+        ["Kernel.Tess.Cdt.BoxOffForTests"] = "переключатель сравнения KRN10-CDT-BOX-SAME (только проверки)",
+        ["Model.FeatureHistory.HistRefHits"] = "g.13: счётчик сравнений истории по объектам (разбор)",
         ["Kernel.Diagnostics.Overhead._ticks"] = "g.13: время проверок и разметки сверх B-rep (Interlocked, только замер)",
         ["Kernel.Tess.ExactFaceMesher.ObjDumpPath"] = "отладочная выгрузка",
         ["Kernel.Tess.ExactFaceMesher.UVDumpPath"] = "отладочная выгрузка",

@@ -87,6 +87,112 @@ static partial class Program
             Require(fails.Count == 0, string.Join("; ", fails));
         });
 
+        Check("KRN10-REFINE-BY-SHAPE", () =>
+        {
+            // g.13: точки кривой пересечения уточняются проекцией по аналитической форме поверхностей (q = x − F·∇F) — те же
+            // точки, что прежней проекцией в параметры (тор × цилиндр: тела вращения), до 1e-10 мм, на обеих поверхностях.
+            // Мутация P3D_REFINESHAPE=0 (счётчик проекций по форме не растёт).
+            var fails = new List<string>();
+            var c = new Vector3d(1, 2, 3);
+            var bl = new List<TSolid> { PrimitiveOp.Torus(c, 10, 3) };
+            BooleanOp.Subtract(bl, PrimitiveOp.Cylinder(c + new Vector3d(10, 0, -10), 1.5, 20), new List<string>());
+            var edges = bl[0].Edges.Where(e => e.Curve is Parametric3D.Kernel.Curves.IntersectionCurve3).Select(e => (Parametric3D.Kernel.Curves.IntersectionCurve3)e.Curve!).ToList();
+            if (edges.Count == 0) fails.Add("no traced edges");
+            var tor = new Parametric3D.Kernel.Geometry.Ssi.Torus(c, Vector3d.UnitZ, 10, 3);
+            var cyl = new Parametric3D.Kernel.Geometry.Ssi.Cylinder(c + new Vector3d(10, 0, 0), Vector3d.UnitZ, 1.5);
+            double worst = 0, off = 0; long n0 = Parametric3D.Kernel.Curves.IntersectionCurve3.ShapeProjections;
+            foreach (var ic in edges)
+            {
+                var seed = Enumerable.Range(0, 17).Select(i => ic.PointAt(i / 16.0)).ToList();
+                var fresh = new Parametric3D.Kernel.Curves.IntersectionCurve3(ic.A, ic.B, seed);
+                Parametric3D.Kernel.Curves.IntersectionCurve3.OldProjectionForTests = true;
+                Parametric3D.Kernel.Curves.IntersectionCurve3 old;
+                try { old = new Parametric3D.Kernel.Curves.IntersectionCurve3(ic.A, ic.B, seed); old.PointAt(0.5); }
+                finally { Parametric3D.Kernel.Curves.IntersectionCurve3.OldProjectionForTests = false; }
+                for (int i = 1; i < 40; i++)
+                {
+                    double t = i / 40.0 + 0.003; var p = fresh.PointAt(t); var q = old.PointAt(t);
+                    worst = Math.Max(worst, (p - q).Length);
+                    off = Math.Max(off, Math.Max(Math.Abs(Parametric3D.Kernel.Geometry.Ssi.Implicit(tor, p).F), Math.Abs(Parametric3D.Kernel.Geometry.Ssi.Implicit(cyl, p).F)));
+                }
+            }
+            long used = Parametric3D.Kernel.Curves.IntersectionCurve3.ShapeProjections - n0;
+            Log(new { test = "KRN10-REFINE-BY-SHAPE", worst, off, used });
+            if (worst > 1e-10) fails.Add($"points differ from the parametric projection by {worst:G3} mm");
+            if (off > 1e-11) fails.Add($"refined points off the surfaces by {off:G3} mm");
+            if (used == 0) fails.Add("no projection by the analytic shape");
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+
+        Check("KRN10-AUDIT-CACHE-SAME", () =>
+        {
+            // g.13: аудит геометрии с памятью (отход кривой от поверхности — по паре неизменяемых объектов; ошибка гранения —
+            // у замороженной сетки) — те же уровни и отходы, что без памяти; память срабатывает. Мутация P3D_AUDITCACHE=0.
+            var fails = new List<string>();
+            static string Sig(GeometryAudit a) => string.Join(";", a.Faces.Select(f => $"{f.Face}:{f.Level}:{f.ChordError:R}")) + "|" + string.Join(";", a.Edges.Select(e => $"{e.Edge}:{e.Level}:{e.OnA:R}:{e.OnB:R}"));
+            long h0 = GeometryAudit.CacheHits;
+            foreach (int seed in new[] { 1, 4 })
+            {
+                var p = RealisticPart(seed, 40, out _); p.MarkDirtyFrom(p.Features[0]); p.Rebuild(null);
+                foreach (var b in p.Bodies)
+                {
+                    var s1 = Sig(GeometryAudit.Of(b)); var s2 = Sig(GeometryAudit.Of(b));
+                    GeometryAudit.CacheOffForTests = true;
+                    string s0; try { s0 = Sig(GeometryAudit.Of(b)); } finally { GeometryAudit.CacheOffForTests = false; }
+                    if (s1 != s0 || s2 != s0) fails.Add($"seed {seed}: audit with memory differs");
+                }
+            }
+            long hits = GeometryAudit.CacheHits - h0;
+            Log(new { test = "KRN10-AUDIT-CACHE", hits });
+            if (hits == 0) fails.Add("the audit memory was never used");
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+
+        Check("KRN10-CDT-BOX-SAME", () =>
+        {
+            // g.13: отбор отверстий по габариту при проверке середины треугольника (CDT плоской грани) — те же треугольники,
+            // обходов контуров меньше: квадрат 200×200 с 100 круглыми отверстиями. Мутация P3D_CDTBOX=0.
+            var fails = new List<string>();
+            var outer = new List<Vector2d> { new(-100, -100), new(100, -100), new(100, 100), new(-100, 100) };
+            var holes = new List<IReadOnlyList<Vector2d>>();
+            for (int i = 0; i < 100; i++)
+            {
+                var c = new Vector2d(-90 + 18 * (i % 10) + 0.37 * (i % 3), -90 + 18 * (i / 10)); var h = new List<Vector2d>();
+                for (int k = 0; k < 24; k++) { double a = -2 * Math.PI * k / 24; h.Add(c + new Vector2d(Math.Cos(a), Math.Sin(a)) * 2); }
+                holes.Add(h);
+            }
+            Parametric3D.Kernel.Tess.Cdt.LoopWalks = 0; var t1 = Parametric3D.Kernel.Tess.Cdt.Triangulate(outer, holes, out var p1); long w1 = Parametric3D.Kernel.Tess.Cdt.LoopWalks;
+            Parametric3D.Kernel.Tess.Cdt.BoxOffForTests = true;
+            List<int>? t0; List<Vector2d> p0; long w0;
+            try { Parametric3D.Kernel.Tess.Cdt.LoopWalks = 0; t0 = Parametric3D.Kernel.Tess.Cdt.Triangulate(outer, holes, out p0); w0 = Parametric3D.Kernel.Tess.Cdt.LoopWalks; }
+            finally { Parametric3D.Kernel.Tess.Cdt.BoxOffForTests = false; }
+            Log(new { test = "KRN10-CDT-BOX", walksNew = w1, walksOld = w0, tris = t1?.Count / 3 });
+            if (t1 == null || t0 == null || !t1.SequenceEqual(t0) || !p1.SequenceEqual(p0)) fails.Add("triangulations differ");
+            if (!(w1 < 0.5 * w0)) fails.Add($"loop walks {w1} vs {w0}");
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+
+        Check("KRN10-HISTORY-BY-REFERENCE", () =>
+        {
+            // g.13: история дерева — грани и рёбра, скопированные теми же объектами, сравниваются без строковых подписей;
+            // история (созданные, изменённые, разделённые, удалённые грани и рёбра) та же, что прежняя. Мутация P3D_HISTREF=0.
+            var fails = new List<string>(); long h0 = FeatureHistory.HistRefHits;
+            static string H(Part p, Part.BuildResult r) => string.Join("\n", p.Features.Select(f => r.History.TryGetValue(f, out var h) ? $"{f.Name}: G[{string.Join(",", h.Generated)}] M[{string.Join(",", h.Modified)}] S[{string.Join(",", h.Split)}] D[{string.Join(",", h.Deleted)}] EG[{string.Join(",", h.EdgesGenerated)}] EM[{string.Join(",", h.EdgesModified)}] ED[{string.Join(",", h.EdgesDeleted)}]" : f.Name + ": -"));
+            foreach (int seed in new[] { 1, 3, 6 })
+            {
+                var p = RealisticPart(seed, 40, out _);
+                p.MarkDirtyFrom(p.Features[0]); var rn = p.Compute(null); p.Apply(rn); var hNew = H(p, rn);
+                FeatureHistory.HistRefOffForTests = true;
+                Part.BuildResult ro;
+                try { p.MarkDirtyFrom(p.Features[0]); ro = p.Compute(null); p.Apply(ro); } finally { FeatureHistory.HistRefOffForTests = false; }
+                if (H(p, ro) != hNew) fails.Add($"seed {seed}: history differs");
+            }
+            long hits = FeatureHistory.HistRefHits - h0;
+            Log(new { test = "KRN10-HISTORY-BY-REFERENCE", hits });
+            if (hits == 0) fails.Add("no group compared by reference");
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+
         Check("KRN10-PART-PREVIEW-ACCEPT", () =>
         {
             // деталь: правка последней операции в предпросмотре — тело помечено; следующий обычный расчёт без изменений
@@ -97,6 +203,16 @@ static partial class Program
             p.MarkDirtyFrom(last);
             Part.BuildResult rp;
             using (new KernelContext(KernelSettings.Capture() with { Preview = true }).Enter()) { rp = p.Compute(null); p.Apply(rp); }
+            // g.13: проверки призматического маршрута в предпросмотре отложены (P3D_PREVIEWPRISM=0 — сразу): брусок минус
+            // цилиндр — тело помечено, принятие проходит, объём тот же, что без предпросмотра
+            {
+                List<TSolid> Cut() { var bl = new List<TSolid> { Box(0, 0, 0, 40, 30, 20) }; BooleanOp.Subtract(bl, PrimitiveOp.Cylinder(new Vector3d(20, 15, -5), 6, 30), new List<string>()); return bl; }
+                List<TSolid> pb; long dp = BooleanOp.PrismChecksDeferred;
+                using (new KernelContext(KernelSettings.Capture() with { Preview = true }).Enter()) pb = Cut();
+                if (BooleanOp.PrismChecksDeferred == dp || !pb[0].IsPreview) fails.Add("the prism route checks were not deferred in preview");
+                else if (BooleanOp.AcceptPreview(pb[0]) is { } why) fails.Add("prism preview not accepted: " + why);
+                if (AnalyticVolume.Of(pb[0]) != AnalyticVolume.Of(Cut()[0])) fails.Add("prism preview body differs");
+            }
             int pending = p.Bodies.Count(b => b.IsPreview);
             var vols = p.Bodies.Select(b => AnalyticVolume.Of(b)).ToList();
             if (pending == 0) fails.Add("preview edit left no pending body (the last operation did not take a deferred route)");

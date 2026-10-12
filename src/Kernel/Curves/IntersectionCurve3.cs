@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Surfaces;
 
 namespace Parametric3D.Kernel.Curves;
@@ -136,8 +136,8 @@ public sealed class IntersectionCurve3 : ICurve3
         residual = double.MaxValue;
         for (int it = 0; it < 12; it++)
         {
-            var (pa, na) = ExactSurfaces.Project(A, x);
-            var (pb, nb) = ExactSurfaces.Project(B, x);
+            var (pa, na) = ProjA(x);
+            var (pb, nb) = ProjB(x);
             residual = Math.Max((pa - x).Length, (pb - x).Length);
             if (residual < 1e-12) break;
             // Решить: na·y = na·pa, nb·y = nb·pb, tS·y = tS·x0.
@@ -151,11 +151,39 @@ public sealed class IntersectionCurve3 : ICurve3
             x = y;
             if (done) break;
         }
-        var (qa, _) = ExactSurfaces.Project(A, x);
-        var (qb, _) = ExactSurfaces.Project(B, x);
+        var (qa, _) = ProjA(x);
+        var (qb, _) = ProjB(x);
         residual = Math.Max((qa - x).Length, (qb - x).Length);
         return x;
     }
+
+    /// <summary>
+    /// g.13: ПРОЕКЦИЯ НА ПОВЕРХНОСТЬ ПО ЕЁ АНАЛИТИЧЕСКОЙ ФОРМЕ (плоскость, цилиндр, конус, шар, тор): q = x − F·∇F, где F —
+    /// расстояние со знаком, |∇F| = 1 (Ssi.Implicit) — вместо проекции в параметры поверхности (у тела вращения — atan2,
+    /// синусы и ньютон по образующей; замер: уточнение точек кривых пересечения — половина времени общей булевой). Для
+    /// уточнения знак нормали не важен (плоскость n·y = n·q). Поверхность без аналитической формы — прежняя проекция.
+    /// Мутация P3D_REFINESHAPE=0.
+    /// </summary>
+    (Vector3d P, Vector3d N) ProjA(Vector3d x) { if (!_shapesSet) SetShapes(); return _sa != null ? ShapeProj(_sa, x) : ExactSurfaces.Project(A, x); }
+    (Vector3d P, Vector3d N) ProjB(Vector3d x) { if (!_shapesSet) SetShapes(); return _sb != null ? ShapeProj(_sb, x) : ExactSurfaces.Project(B, x); }
+    Geometry.Ssi.Shape? _sa, _sb; volatile bool _shapesSet;
+    void SetShapes()
+    {
+        if (!RefineShapeOff && !_oldForTests) { _sa = Geometry.ExactEdges.ShapeOf(A); _sb = Geometry.ExactEdges.ShapeOf(B); }
+        _shapesSet = true;
+    }
+    static (Vector3d P, Vector3d N) ShapeProj(Geometry.Ssi.Shape s, Vector3d x)
+    {
+        Interlocked.Increment(ref ShapeProjections);
+        var (f, g) = Geometry.Ssi.Implicit(s, x);
+        return (x - g * f, g);
+    }
+    internal static readonly bool RefineShapeOff = Environment.GetEnvironmentVariable("P3D_REFINESHAPE") == "0";
+    [ThreadStatic] static bool _oldForTests;
+    /// <summary>Сравнение (KRN10-REFINE-BY-SHAPE): кривые, созданные в этом потоке, уточняются прежней проекцией.</summary>
+    public static bool OldProjectionForTests { get => _oldForTests; set => _oldForTests = value; }
+    /// <summary>Счётчик проекций по аналитической форме (проверка KRN10-REFINE-BY-SHAPE).</summary>
+    public static long ShapeProjections;
 
     /// <summary>
     /// Затравка точки при параметре t. Положение — между УТОЧНЁННЫМИ точками затравки
@@ -197,8 +225,8 @@ public sealed class IntersectionCurve3 : ICurve3
     {
         var (x0, tS) = SeedAt(t);
         Vector3d x = t <= 0 || t >= 1 ? x0 : PointAt(t);
-        var (_, na) = ExactSurfaces.Project(A, x);
-        var (_, nb) = ExactSurfaces.Project(B, x);
+        var (_, na) = ProjA(x);
+        var (_, nb) = ProjB(x);
         Vector3d c = Vector3d.Cross(na, nb);
         if (c.LengthSquared < 1e-18) return tS;
         c = c.Normalized();

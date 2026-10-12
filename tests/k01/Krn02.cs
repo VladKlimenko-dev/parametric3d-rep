@@ -122,6 +122,35 @@ static partial class Program
             }
             finally { Region2Ops.EpsOverrideForTests = prev; }
         });
+        // g.13: отбор пар кусков по габаритам в булевой областей — тот же результат (контуры побитно), меньше пар.
+        // Мутация P3D_R2BOX=0 (пар столько же).
+        Check("KRN02-REGION-BOX-SAME", () =>
+        {
+            var rnd = new Random(20261013); var fails = new List<string>(); long pNew = 0, pOld = 0;
+            Region2 R()
+            {
+                var g = new Region2();
+                for (int k = 0; k < 1 + rnd.Next(3); k++)
+                {
+                    double x = rnd.NextDouble() * 60, y = rnd.NextDouble() * 60;
+                    var part = rnd.Next(2) == 0 ? Region2.Rect(x, y, x + 3 + rnd.NextDouble() * 30, y + 3 + rnd.NextDouble() * 30) : Region2.Circle(new Vector2d(x, y), 2 + rnd.NextDouble() * 15);
+                    g = g.Loops.Count == 0 ? part : Region2Ops.Boolean(g, part, Bool2.Union);
+                }
+                return g;
+            }
+            static string Sig(Region2 r) => string.Join("|", r.Loops.Select(l => string.Join(";", l.Select(q => $"{q.A.X:R},{q.A.Y:R},{q.B.X:R},{q.B.Y:R},{q.IsArc},{q.T0:R},{q.Sweep:R}"))));
+            for (int i = 0; i < 300; i++)
+            {
+                var a = R(); var b = R(); var op = (Bool2)rnd.Next(3);
+                Region2Ops.PairsTested = 0; var n1 = Region2Ops.Boolean(a, b, op); pNew += Region2Ops.PairsTested;
+                Region2Ops.BoxOffForTests = true;
+                try { Region2Ops.PairsTested = 0; var n0 = Region2Ops.Boolean(a, b, op); pOld += Region2Ops.PairsTested; if (Sig(n0) != Sig(n1)) fails.Add($"case {i} {op}: contours differ"); }
+                finally { Region2Ops.BoxOffForTests = false; }
+            }
+            Log(new { test = "KRN02-REGION-BOX", pairsNew = pNew, pairsOld = pOld });
+            if (!(pNew < 0.7 * pOld)) fails.Add($"pairs {pNew} vs {pOld}");
+            Require(fails.Count == 0, string.Join("; ", fails.Take(3)));
+        });
         // KRN-02: аналитический объём не теряет точности на краю рабочей области (±500 м).
         Check("KRN02-ANALYTIC-ACCURACY-ACROSS-DOMAIN", () =>
         {

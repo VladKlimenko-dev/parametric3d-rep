@@ -312,9 +312,24 @@ public static class Region2Ops
         // 1. Точки разбиения каждого куска — пересечения со всеми кусками другой области.
         var cutA = segA.Select(_ => new List<Vector2d>()).ToList();
         var cutB = segB.Select(_ => new List<Vector2d>()).ToList();
+        // g.13: ГАБАРИТЫ КУСКОВ. Любая точка пересечения лежит не дальше Eps от обоих кусков (Add проверяет OnLinePoint /
+        // OnArcPoint с допуском Eps) — пары, чьи габариты, расширенные на 2·Eps, не перекрываются, точек не дают: отбор
+        // ничего не меняет, а пар n·m на сечении детали — сотни. Дуга — габарит её окружности (с запасом).
+        // Мутация P3D_R2BOX=0 — все пары.
+        bool noBox = BoxOff || BoxOffForTests;
+        var boxA = noBox ? null : segA.Select(Box).ToArray(); var boxB = noBox ? null : segB.Select(Box).ToArray();
+        double m2 = 2 * Eps;
         for (int i = 0; i < segA.Count; i++)
             for (int j = 0; j < segB.Count; j++)
+            {
+                if (boxA != null)
+                {
+                    var (al, ah) = boxA[i]; var (bl, bh) = boxB![j];
+                    if (al.X > bh.X + m2 || bl.X > ah.X + m2 || al.Y > bh.Y + m2 || bl.Y > ah.Y + m2) continue;
+                }
+                PairsTested++;
                 foreach (var p in Intersections(segA[i], segB[j])) { cutA[i].Add(p); cutB[j].Add(p); }
+            }
         var pa = segA.SelectMany((s, i) => SplitAt(s, cutA[i])).ToList();
         var pb = segB.SelectMany((s, j) => SplitAt(s, cutB[j])).ToList();
 
@@ -368,6 +383,17 @@ public static class Region2Ops
         return outR;
     }
     [ThreadStatic] public static Vector2d? DbgAt;
+    static readonly bool BoxOff = Environment.GetEnvironmentVariable("P3D_R2BOX") == "0";
+    /// <summary>Сравнение (KRN02-REGION-BOX-SAME): все пары в этом потоке.</summary>
+    [ThreadStatic] public static bool BoxOffForTests;
+    /// <summary>Пары кусков, переданные в Intersections (замер KRN02-REGION-BOX-SAME); на поток.</summary>
+    [ThreadStatic] public static long PairsTested;
+    static (Vector2d Lo, Vector2d Hi) Box(Seg2 s)
+    {
+        if (!s.IsArc) return (Vector2d.ComponentMin(s.A, s.B), Vector2d.ComponentMax(s.A, s.B));
+        var r = new Vector2d(s.R, s.R);
+        return (Vector2d.ComponentMin(Vector2d.ComponentMin(s.A, s.B), s.C - r), Vector2d.ComponentMax(Vector2d.ComponentMax(s.A, s.B), s.C + r));
+    }
     internal static readonly bool LocalAreaOff = Environment.GetEnvironmentVariable("P3D_R2LOCALAREA") == "0";
 
     /// <summary>

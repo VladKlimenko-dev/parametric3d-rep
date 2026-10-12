@@ -422,9 +422,9 @@ public static class BooleanOp
     private static TSolid? TryAnalyticGeneral(TSolid body, TSolid other, BooleanKind kind, List<string> warn)
     {
         var prevE = Analytic.Region2Ops.EpsOverride; var prevF = Analytic.FaceSplit.TolOverride;
-        double tol = OperationTolerance(body, other); ToleranceDebug?.Invoke("general", tol);
+        double tol; using (Diagnostics.Prof.Time("булева: допуск операции (общая)")) tol = OperationTolerance(body, other); ToleranceDebug?.Invoke("general", tol);
         Analytic.FaceSplit.TolOverride = tol; Analytic.Region2Ops.EpsOverride = tol;
-        try { return TryAnalyticGeneralCore(body, other, kind, warn); }
+        try { using (Diagnostics.Prof.Time("булева: общий маршрут целиком")) return TryAnalyticGeneralCore(body, other, kind, warn); }
         finally { Analytic.Region2Ops.EpsOverride = prevE; Analytic.FaceSplit.TolOverride = prevF; }
     }
 
@@ -433,6 +433,9 @@ public static class BooleanOp
     static readonly bool PreviewOff = Environment.GetEnvironmentVariable("P3D_PREVIEW") == "0";
     /// <summary>Мутация: P3D_PREVIEWCHECKS=0 — принятие предпросмотра без проверок.</summary>
     static readonly bool PreviewChecksOff = Environment.GetEnvironmentVariable("P3D_PREVIEWCHECKS") == "0";
+    static readonly bool PreviewPrismOff = Environment.GetEnvironmentVariable("P3D_PREVIEWPRISM") == "0";
+    /// <summary>Сколько раз проверки призматического маршрута отложены предпросмотром (проверка KRN10-PART-PREVIEW-ACCEPT).</summary>
+    public static long PrismChecksDeferred;
     /// <summary>Проверки: отложенная проверка отказывает (принятие должно это увидеть).</summary>
     [ThreadStatic] internal static bool ForceAcceptFailure;
 
@@ -663,12 +666,21 @@ public static class BooleanOp
         // НЕЗАВИСИМАЯ СВЕРКА РАСПОЗНАВАНИЯ: объём каждого операнда по слоям — против аналитического объёма его
         // нормализованной копии. Самопроверка «объём результата = объём по слоям» неверное распознавание не ловит (обе
         // величины ошибаются одинаково: составной резец цекования был принят с ошибкой 804 мм³). Не подтверждено — отказ.
-        foreach (var (operand, pv0, name) in new[] { (body, Analytic.PrismBuild.LastVolumeA, "first"), (other, Analytic.PrismBuild.LastVolumeB, "second") })
+        // g.13: В ПРЕДПРОСМОТРЕ ПРОВЕРКИ МАРШРУТА (сверка операндов, B-rep, объём) ОТКЛАДЫВАЮТСЯ до принятия, как у общего
+        // маршрута; разметка граней по контурам — нет (без неё нечего показать). Мутация P3D_PREVIEWPRISM=0.
+        bool deferChecks = PreviewMode && !PreviewPrismOff;
+        double pvA = Analytic.PrismBuild.LastVolumeA, pvB = Analytic.PrismBuild.LastVolumeB, pvR = Analytic.PrismBuild.LastVolume;
+        string? OperandChecks()
         {
-            double? ov; using (Diagnostics.Overhead.Scope()) using (Diagnostics.Prof.Time("аналитика: сверка операнда")) ov = OperandVolume(operand);
-            if (ov == null) { AnalyticRouteDebug?.Invoke($"recognition unconfirmed: {name} operand has no analytic volume"); return null; }
-            if (Math.Abs(ov.Value - pv0) > 1e-6 * Math.Max(1, Math.Abs(ov.Value))) { AnalyticRouteDebug?.Invoke($"recognition check: {name} operand layers {pv0} vs analytic {ov}"); return null; }
+            foreach (var (operand, pv0, name) in new[] { (body, pvA, "first"), (other, pvB, "second") })
+            {
+                double? ov; using (Diagnostics.Overhead.Scope()) using (Diagnostics.Prof.Time("аналитика: сверка операнда")) ov = OperandVolume(operand);
+                if (ov == null) { AnalyticRouteDebug?.Invoke($"recognition unconfirmed: {name} operand has no analytic volume"); return "recognition unconfirmed"; }
+                if (Math.Abs(ov.Value - pv0) > 1e-6 * Math.Max(1, Math.Abs(ov.Value))) { AnalyticRouteDebug?.Invoke($"recognition check: {name} operand layers {pv0} vs analytic {ov}"); return "recognition check failed"; }
+            }
+            return null;
         }
+        if (!deferChecks && OperandChecks() != null) return null;
         // Производная многогранная форма — из аналитического тела ДО разметки отображения, тем же гранением, что у сырых
         // резцов (TessellateFace точных поверхностей): иначе её многоугольники не совпадают с гранями следующего соосного
         // резца, и смешанная цепочка (аналитика → многогранная операция) даёт «гребёнку» щепок (зенковка двумя
@@ -709,12 +721,27 @@ public static class BooleanOp
         // детали) повторяет известное — проверяется B-rep. Не построенная грань — отказ маршрута (многогранный путь):
         // строже прежнего (результат проходил, если общая сетка всё же оказывалась замкнутой), зато без случайностей.
         if (unmeshed > 0) { AnalyticRouteDebug?.Invoke($"invalid: {unmeshed} face(s) not meshed from their loops"); return null; }
-        Topology.ValidationReport v;
-        using (Diagnostics.Overhead.Scope()) using (Diagnostics.Prof.Time("аналитика: проверка B-rep")) v = Topology.SolidValidator.ValidateBRep(r);
-        if (!v.IsValid) { AnalyticRouteDebug?.Invoke("invalid: " + v.Summary()); return null; }
-        double? av; using (Diagnostics.Overhead.Scope()) using (Diagnostics.Prof.Time("аналитика: аналитический объём")) av = Topology.AnalyticVolume.Of(r);
-        double pv = Analytic.PrismBuild.LastVolume;
-        if (av == null || Math.Abs(av.Value - pv) > 1e-9 * Math.Max(1, Math.Abs(pv))) { AnalyticRouteDebug?.Invoke($"volume check: analytic {av} vs layers {pv}"); return null; }
+        var gAtBuild = r.Guarantee;
+        string? ResultChecks()
+        {
+            var gSaved = r.Guarantee; r.Guarantee = gAtBuild;
+            try
+            {
+                Topology.ValidationReport v;
+                using (Diagnostics.Overhead.Scope()) using (Diagnostics.Prof.Time("аналитика: проверка B-rep")) v = Topology.SolidValidator.ValidateBRep(r);
+                if (!v.IsValid) { AnalyticRouteDebug?.Invoke("invalid: " + v.Summary()); return "prism route: invalid B-rep"; }
+                double? av; using (Diagnostics.Overhead.Scope()) using (Diagnostics.Prof.Time("аналитика: аналитический объём")) av = Topology.AnalyticVolume.Of(r);
+                if (av == null || Math.Abs(av.Value - pvR) > 1e-9 * Math.Max(1, Math.Abs(pvR))) { AnalyticRouteDebug?.Invoke($"volume check: analytic {av} vs layers {pvR}"); return "prism route: volume check failed"; }
+                return null;
+            }
+            finally { r.Guarantee = gSaved; }
+        }
+        if (deferChecks)
+        {
+            r.PendingAcceptance = () => ForceAcceptFailure ? "forced acceptance failure (test)" : OperandChecks() ?? ResultChecks();
+            Interlocked.Increment(ref PrismChecksDeferred);
+        }
+        else if (ResultChecks() != null) return null;
         // Производная многогранная форма — лениво: следующие многогранные операции берут её через ExactAdapter.ToExact.
         r.LazyDerivedExact = (derived, r.Revision);
         if (prismProv != null) r.SetProvenance(FinalizeProvenance(r, prismProv, body, other));
@@ -942,7 +969,7 @@ public static class BooleanOp
     public static OperationResult Evaluate(IReadOnlyList<TSolid> bodies, TSolid other, BooleanKind kind,
                                            OperationPolicy policy, List<string>? warnings = null)
     {
-        var r = EvaluateCore(bodies, other, kind, policy, warnings);
+        OperationResult r; using (Diagnostics.Prof.Time("булева: операция целиком")) r = EvaluateCore(bodies, other, kind, policy, warnings);
         if (TouchOff || kind != BooleanKind.Unite || bodies.Count != 1) return r;
         if (r.Accepted && r.Bodies.Count == 1) return r;
         var inputs = new[] { bodies[0], other };
@@ -1028,7 +1055,8 @@ public static class BooleanOp
                     var hits = Enumerable.Range(0, work.Count).Where(i => Overlap(BoxOf(work[i]), tb)).ToList();
                     if (hits.Count == 1) target = hits[0];
                 }
-                if (target >= 0 && (TryAnalyticPrism(work[target], other, kind, warn) ?? (AnalyticGeneral ? TryAnalyticGeneral(work[target], other, kind, warn) : null)) is { } exactResult)
+                TSolid? prismR; using (Diagnostics.Prof.Time("булева: маршрут призмы целиком")) prismR = target >= 0 ? TryAnalyticPrism(work[target], other, kind, warn) : null;
+                if (target >= 0 && (prismR ?? (AnalyticGeneral ? TryAnalyticGeneral(work[target], other, kind, warn) : null)) is { } exactResult)
                 {
                     if (ReferenceEquals(exactResult, ProvedEmpty)) { work.RemoveAt(target); warn.Add("Boolean: general analytic path — the result is empty (proved)."); }
                     else work[target] = exactResult;
@@ -1094,7 +1122,7 @@ public static class BooleanOp
                 {
                     var b = work[i];
                     if (bodies.Any(x => ReferenceEquals(x, b)) || (ReferenceEquals(b, other) && bodies.Count > 0) || b.IsPublished) continue;
-                    var split = Topology.ShellComponents.Split(b);
+                    Topology.ShellComponents.Outcome split; using (Diagnostics.Prof.Time("булева: компоненты результата")) split = Topology.ShellComponents.Split(b);
                     if (split.Warning != null) result.Diagnostics.Add(new OperationDiagnostic("components", "components", split.Warning));
                     if (split.Bodies.Count == 1 && ReferenceEquals(split.Bodies[0], b)) continue;
                     work.RemoveAt(i); work.InsertRange(i, split.Bodies);
@@ -1104,8 +1132,15 @@ public static class BooleanOp
             foreach (var b in fresh)
             {
                 // K05: опубликованное тело приводится к соглашению о полурёбрах до проверки.
-                if (b.TopologyConvention < Topology.TopologyConventions.Version) Topology.TopologyConventions.Normalize(b);
-                var v = Topology.SolidValidator.ValidateBRep(b);
+                if (b.TopologyConvention < Topology.TopologyConventions.Version) using (Diagnostics.Prof.Time("булева: соглашение результата")) Topology.TopologyConventions.Normalize(b);
+                // g.13: тело предпросмотра (проверки маршрута отложены) — и эта проверка при принятии (P3D_PREVIEWPRISM=0 — сразу)
+                if (PreviewMode && !PreviewPrismOff && b.PendingAcceptance is { } pending)
+                {
+                    var bb = b;
+                    b.PendingAcceptance = () => pending() ?? (Topology.SolidValidator.ValidateBRep(bb) is { IsValid: false } bad ? "result body failed B-rep validation: " + bad.Summary() : null);
+                    continue;
+                }
+                Topology.ValidationReport v; using (Diagnostics.Prof.Time("булева: проверка результата")) v = Topology.SolidValidator.ValidateBRep(b);
                 if (!v.IsValid)
                 {
                     var first = v.Issues.First(i => i.Severity == Topology.ValidationSeverity.Error);
@@ -1141,10 +1176,10 @@ public static class BooleanOp
             {
                 var budget = ToleranceContext.Current;
                 // KRN-03: допуски сущностей точного результата — измеренные (до отчёта и проверки бюджета)
-                if (level is GuaranteeLevel.ExactAnalytic or GuaranteeLevel.ExactQuadric) foreach (var b in fresh) Analytic.EntityTolerance.Assign(b);
+                if (level is GuaranteeLevel.ExactAnalytic or GuaranteeLevel.ExactQuadric) using (Diagnostics.Prof.Time("булева: допуски сущностей")) foreach (var b in fresh) Analytic.EntityTolerance.Assign(b);
                 double stored = fresh.Max(b => Math.Max(b.Edges.Select(e => e.Tolerance).DefaultIfEmpty(0).Max(), b.Vertices.Select(v => v.Tolerance).DefaultIfEmpty(0).Max()));
                 bool exactLevel = level is GuaranteeLevel.ExactAnalytic or GuaranteeLevel.ExactQuadric;
-                double? measured = exactLevel ? fresh.Max(b => Analytic.OperandTolerance.Measure(b)) : null;
+                double? measured; using (Diagnostics.Prof.Time("булева: замер отклонений")) measured = exactLevel ? fresh.Max(b => Analytic.OperandTolerance.Measure(b)) : null;
                 if (!exactLevel && !FacetMeasureOff)
                 {
                     // g.04: МНОГОГРАННЫЙ РЕЗУЛЬТАТ — ИЗМЕРЕННОЕ отклонение фасет от аналитических источников граней (центры
