@@ -800,18 +800,28 @@ public static class Ssi
             {
                 closed = false;
                 var pts = new List<Vector3d> { start };
-                var x = start;
-                for (int step = 0; step < 20000; step++)
+                var x = start; double travelled = 0, hsStart = -1;
+                for (int step = 0; step < 200000; step++)
                 {
                     var (_, g1) = Implicit(a, x); var (_, g2) = Implicit(b, x);
                     var t = Vector3d.Cross(g1, g2);
                     if (t.Length < 1e-10) break;                            // касание
+                    // g.05 (04.7): ШАГ ПО УГЛУ ПЕРЕСЕЧЕНИЯ — у почти касания точки чаще (шаг ≤ ¼ угла на кривизну): удостоверение
+                    // единственности ветви доказывается в шаре радиусом в шаг, и редкие точки там его не допускали
+                    double hs = h;
+                    if (!UniqOff && NormalLip(a, x, 0) is double la0 && NormalLip(b, x, 0) is double lb0 && la0 + lb0 > 0)
+                        hs = Math.Clamp(0.25 * t.Length / (la0 + lb0), Math.Max(1e-5 * br, 1e-6), h);
                     t = t.Normalized() * dir;
-                    var y = OntoBoth(a, b, x + t * h);
+                    if (hsStart < 0) hsStart = hs;
+                    var y = OntoBoth(a, b, x + t * hs);
                     if (y == null) break;
+                    travelled += (y.Value - x).Length;
                     x = y.Value;
                     if ((x - bc).Length > br) { pts.Add(x); break; }
-                    if (step > 4 && (x - start).Length < 0.8 * h) { closed = true; break; }
+                    // замыкание: обойдено больше трёх шагов у начала и вернулись ближе 0.8 шага (шаг у начала и текущий —
+                    // при переменном шаге прежнее «ближе 0.8 h» срабатывало на первых мелких шагах)
+                    double hc = UniqOff ? h : Math.Max(hs, hsStart);
+                    if (step > 4 && travelled > 3 * hc && (x - start).Length < 0.8 * hc) { closed = true; break; }
                     pts.Add(x);
                 }
                 return pts;
@@ -853,6 +863,38 @@ public static class Ssi
     }
 
     static readonly bool TraceCertOff = Environment.GetEnvironmentVariable("P3D_TRACECERT") == "0";
+    static readonly bool UniqOff = Environment.GetEnvironmentVariable("P3D_TRACEUNIQ") == "0";
+    /// <summary>Замер: ячеек у прослеженной кривой, где единственность ветви не доказана до малого размера (отказ).</summary>
+    public static long TraceNearTangent;
+
+    /// <summary>Верхняя оценка поворота единичного градиента неявной формы на единицу длины в шаре (c, rb); null — нет оценки
+    /// (шар задевает ось, центр, кольцо — особенность формы).</summary>
+    static double? NormalLip(Shape s, Vector3d c, double rb)
+    {
+        switch (s)
+        {
+            case Plane: return 0;
+            case Sphere sp: { double d = (c - sp.C).Length - rb; return d > 1e-9 ? 1 / d : null; }
+            case Cylinder cy: { var w = cy.Axis.Normalized(); var d = c - cy.P; double rho = (d - w * Vector3d.Dot(d, w)).Length - rb; return rho > 1e-9 ? 1 / rho : null; }
+            case Cone k: { var w = k.Axis.Normalized(); var d = c - k.Apex; double rho = (d - w * Vector3d.Dot(d, w)).Length - rb; return rho > 1e-9 ? Math.Cos(k.HalfAngle) / rho : null; }
+            case Torus t:
+            {
+                var w = t.Axis.Normalized(); var d = c - t.C; double hh = Vector3d.Dot(d, w); var rad = d - w * hh; double rho = rad.Length;
+                var ring = t.C + (rho > 0 ? rad / rho : Vector3d.UnitX) * t.R; double dr = (c - ring).Length - rb; double ra = rho - rb;
+                return dr > 1e-9 && ra > 1e-9 ? 1 / dr + 1 / ra : null;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Поверхности трансверсальны во всём шаре и шар мал против их кривизны (ветвь в шаре — одна дуга).</summary>
+    static bool Transversal(Shape a, Shape b, Vector3d c, double rb)
+    {
+        if (NormalLip(a, c, rb) is not double la || NormalLip(b, c, rb) is not double lb) return false;
+        double L = (la + lb) * rb; if (L > 0.25) return false;
+        var ga = Implicit(a, c).G; var gb = Implicit(b, c).G;
+        return Vector3d.Cross(ga.Normalized(), gb.Normalized()).Length - L > 1e-3;
+    }
 
     /// <summary>Константы Липшица карты Param по u и v (на [0,1]²): плоскость — 2br, 2br; цилиндр — 2πR, 2br; шар — 2πR, πR;
     /// конус — 2π·far·sin α, far; тор — 2π(R + r), 2πr.</summary>
@@ -888,14 +930,15 @@ public static class Ssi
         var buckets = new Dictionary<(long, long, long), List<Vector3d>>();
         (long, long, long) K(Vector3d x) => ((long)Math.Floor(x.X / cell), (long)Math.Floor(x.Y / cell), (long)Math.Floor(x.Z / cell));
         foreach (var c in traced) foreach (var p in c) { var k = K(p); if (!buckets.TryGetValue(k, out var l)) buckets[k] = l = new(); l.Add(p); }
-        bool Explained(Vector3d x, double rad)
+        bool Explained(Vector3d x, double rad) => NearestTraced(x, rad) != null;
+        Vector3d? NearestTraced(Vector3d x, double rad)
         {
             double rr = rad + 2 * h; int n = (int)Math.Ceiling(rr / cell);
-            var k0 = K(x);
+            var k0 = K(x); Vector3d? best = null; double bd = rr * rr;
             for (long i = -n; i <= n; i++) for (long j = -n; j <= n; j++) for (long kk = -n; kk <= n; kk++)
                 if (buckets.TryGetValue((k0.Item1 + i, k0.Item2 + j, k0.Item3 + kk), out var l))
-                    foreach (var p in l) if ((p - x).LengthSquared <= rr * rr) return true;
-            return false;
+                    foreach (var p in l) { double d2 = (p - x).LengthSquared; if (d2 <= bd) { bd = d2; best = p; } }
+            return best;
         }
         double rhoMin = 1e-4 * br;
         (double Lu, double Lv)? Lip = ParamLipschitz(a, bcC, br);
@@ -905,7 +948,7 @@ public static class Ssi
         int visited = 0; string? fail = null;
         while (stack.Count > 0)
         {
-            if (++visited > 400000) return "trace certificate: too many cells";
+            if (++visited > 2000000) return "trace certificate: too many cells";
             var (u0, v0, u1, v1) = stack.Pop();
             double um = (u0 + u1) / 2, vm = (v0 + v1) / 2;
             var c = P(um, vm);
@@ -918,7 +961,23 @@ public static class Ssi
             if ((c - bcC).Length > br + rho) continue;              // вне шара области — кривые там не нужны
             double f = Math.Abs(Implicit(b, c).F);
             if (f > rho) continue;                                  // исключена
-            if (Explained(c, rho)) continue;                        // пояснена найденной кривой
+            // пояснена найденной кривой; g.05 (04.7): и ДОКАЗАНО, что в шаре ячейки ветвь одна — поверхности трансверсальны во
+            // всём шаре (угол нормалей в центре минус их поворот по шару > 0) и шар мал против кривизны: пересечение там —
+            // одна дуга (теорема о неявной функции). Прежде ветвь ближе ~2 шагов к прослеженной считалась пояснённой без
+            // доказательства. Мутация P3D_TRACEUNIQ=0.
+            // шар — от центра ячейки до ближайшей точки найденной кривой (не меньше радиуса ячейки): в нём одна дуга, и она
+            // проходит через найденную точку — значит, все точки пересечения в ячейке лежат на найденной ветви
+            if (NearestTraced(c, rho) is { } pNear)
+            {
+                if (UniqOff || Transversal(a, b, c, Math.Max(rho, (pNear - c).Length) * 1.01 + 1e-12)) continue;
+                // ближе: точка пересечения у центра (Ньютон) и ближайшая к ней найденная — шар через обе
+                if (OntoBoth(a, b, c) is { } qn && NearestTraced(qn, 0) is { } pq
+                    && Transversal(a, b, c, Math.Max(rho, Math.Max((qn - c).Length, (pq - c).Length)) * 1.01 + 1e-12)) continue;
+                // у почти касания полоса неисключённых ячеек шире — делить глубже обычного предела
+                if (rho <= 1e-2 * rhoMin) { Interlocked.Increment(ref TraceNearTangent); return $"trace certificate: near-tangent cell at {c:0.######} (single branch not proven)"; }
+                stack.Push((u0, v0, um, vm)); stack.Push((um, v0, u1, vm)); stack.Push((u0, vm, um, v1)); stack.Push((um, vm, u1, v1));
+                continue;
+            }
             if (rho > rhoMin)
             {
                 stack.Push((u0, v0, um, vm)); stack.Push((um, v0, u1, vm)); stack.Push((u0, vm, um, v1)); stack.Push((um, vm, u1, v1));

@@ -418,6 +418,7 @@ static partial class Program
         if (mode is "krn06var" or "allB") Krn06VariableChecks();
         if (mode is "krn06uneq" or "allA") Krn06UnequalChecks();
         if (mode is "krn06tan" or "allA") Krn06TanLoopChecks();
+        if (mode is "krn04uniq" or "allB") Krn04UniqChecks();
         if (mode is "krn07nurbs" or "allB") Krn07NurbsChecks();
         if (mode is "krn10prev" or "allA") Krn10PreviewChecks();
         if (mode is "krn03comp" or "allA") Krn03FaceCompChecks();
@@ -875,6 +876,7 @@ static partial class Program
         if (mode is "triprobe") { var tr = TriProbe.Run(true); Console.WriteLine($"TRIPROBE cases={tr.Cases} bad={tr.Bad} first={tr.FirstBad}"); return; }
         if (mode is "tanchain") { TanChainProbe(); return; }
         if (mode is "nurbsprobe") { NurbsProbe(); return; }
+        if (mode is "uniqprobe") { UniqProbe(); return; }
         if (mode is "partholes") { SpeedPartHoles(int.Parse(args[1])); return; }
         if (mode is "facetdev") { FacetDevProbe(); return; }
         if (mode is "sphcap") { SphCapProbe(); return; }

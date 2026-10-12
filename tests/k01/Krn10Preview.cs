@@ -8,6 +8,40 @@ static partial class Program
 {
     static void Krn10PreviewChecks()
     {
+        Check("KRN10-MERGE-EDGES-SAME", () =>
+        {
+            // 10.7: слияние рёбер на прямой и дуге без пересчёта всего тела после каждого стыка — тот же результат, что прежнее
+            // (пластины K08 3 зерна, полное перестроение: те же грани, те же рёбра — концы и вид кривой, тот же объём), и
+            // меньше выделений памяти на перестройку
+            var fails = new List<string>();
+            static List<string> Sig(IEnumerable<TSolid> bs) => bs.SelectMany(b => b.Faces).Select(f => f.Tag + ":" + string.Join(";", f.Loops.Select(l => string.Join(",", l.CoEdges.Select(c =>
+                { var a = c.Start.P; var z = c.End.P; return $"{c.Edge.Curve.GetType().Name[0]}{a.X:R}/{a.Y:R}/{a.Z:R}>{z.X:R}/{z.Y:R}/{z.Z:R}"; }).OrderBy(x => x, StringComparer.Ordinal))))).OrderBy(x => x, StringComparer.Ordinal).ToList();
+            double allocOld = 0, allocNew = 0;
+            foreach (int seed in new[] { 1, 3, 6 })
+            {
+                var p = RealisticPart(seed, 40, out _);
+                GC.Collect(); long a0 = GC.GetTotalAllocatedBytes(true);
+                p.MarkDirtyFrom(p.Features[0]); p.Rebuild(null);
+                allocNew += (GC.GetTotalAllocatedBytes(true) - a0) / 1048576.0;
+                var sNew = Sig(p.Bodies); var vNew = p.Volume;
+                Parametric3D.Kernel.Analytic.PrismBuild.MergeOldForTest = true;
+                try
+                {
+                    GC.Collect(); a0 = GC.GetTotalAllocatedBytes(true);
+                    p.MarkDirtyFrom(p.Features[0]); p.Rebuild(null);
+                    allocOld += (GC.GetTotalAllocatedBytes(true) - a0) / 1048576.0;
+                }
+                finally { Parametric3D.Kernel.Analytic.PrismBuild.MergeOldForTest = false; }
+                var sOld = Sig(p.Bodies);
+                int diff = sNew.Zip(sOld).Count(z => z.First != z.Second) + Math.Abs(sNew.Count - sOld.Count);
+                if (diff != 0 && Environment.GetEnvironmentVariable("MERGEDBG") == "1") foreach (var z in sNew.Zip(sOld).Where(z => z.First != z.Second).Take(2)) Console.WriteLine($"NEW {z.First}\nOLD {z.Second}");
+                if (diff != 0 || vNew != p.Volume) fails.Add($"seed {seed}: {diff} face(s) differ, volume {vNew:R} vs {p.Volume:R}");
+            }
+            Log(new { test = "KRN10-MERGE", allocOldMb = allocOld, allocNewMb = allocNew });
+            if (!(allocNew < 0.9 * allocOld)) fails.Add($"allocation saving under 10%: {allocNew:F0} vs {allocOld:F0} MB");
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+
         Check("KRN10-PART-PREVIEW-ACCEPT", () =>
         {
             // деталь: правка последней операции в предпросмотре — тело помечено; следующий обычный расчёт без изменений

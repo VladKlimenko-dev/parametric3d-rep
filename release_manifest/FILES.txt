@@ -421,6 +421,7 @@ tests/k01/Krn03.cs
 tests/k01/Krn03FaceComp.cs
 tests/k01/Krn04.cs
 tests/k01/Krn04Seam.cs
+tests/k01/Krn04Uniq.cs
 tests/k01/Krn05.cs
 tests/k01/Krn05AfterBlend.cs
 tests/k01/Krn05UniteChain.cs
@@ -470,6 +471,7 @@ tests/k01/Torus.cs
 tests/k01/TouchProbe.cs
 tests/k01/TriProbe.cs
 tests/k01/TweakProbe.cs
+tests/k01/UniqProbe.cs
 tests/k01/VarRoundProbe.cs
 tests/k03bench/K03Bench.csproj
 tests/k03bench/Program.cs
