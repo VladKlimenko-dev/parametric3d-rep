@@ -1,0 +1,24 @@
+{"runtime":".NET 8.0.31","cpu":2,"os":"Ubuntu 24.04.5 LTS","args":["guarantees"]}
+{"test":"G6-DISPLAY-ATOMIC","reads":233,"mixed":0,"atomic":true}
+{"test":"G6-DISPLAY-ATOMIC","ok":true}
+{"test":"G6-EXACT-IMMUTABLE","polygons":17,"publicFields":"readonly, no arrays or lists"}
+{"test":"G6-EXACT-IMMUTABLE","ok":true}
+{"test":"G5-GLOBALS-INVENTORY","unbound":93,"allowed":14,"statistics":79}
+{"test":"G5-GLOBALS-INVENTORY","ok":true}
+{"test":"G5-SETGLOBAL-INSIDE-THROWS","ok":true}
+{"test":"G5-CONTEXT-ISOLATION","ok":true}
+{"test":"G5-CONTEXT-DRIVES-RESULT","tagsWithSeveralPlanes_on":0,"tagsWithSeveralPlanes_off":3}
+{"test":"G5-CONTEXT-DRIVES-RESULT","ok":true}
+{"test":"G5-MODEL-SNAPSHOT-DURING-REBUILD","stages":45}
+{"test":"G5-MODEL-SNAPSHOT-DURING-REBUILD","ok":true}
+{"test":"G6-PUBLISH-FREEZES-FORM","ok":true}
+{"test":"G6-EXACT-STATE-BY-EDIT-KIND","ok":true}
+{"test":"G6-MESH-REVISION","ok":true}
+{"test":"G6-CLONE-FAITHFUL","ok":true}
+{"test":"G6-STEP-EXACT-EDGES-APPLIED","warning":null}
+{"test":"G6-STEP-EXACT-EDGES-APPLIED","ok":true}
+{"test":"G6-STALE-EXACT-NOT-USED","cachedV":48000,"rebuiltV":45744.935242896}
+{"test":"G6-STALE-EXACT-NOT-USED","ok":true}
+{"test":"G6-PUBLISHED-RESULT-STATES","ok":true}
+{"staleExactUses":1}
+{"passed":14,"failed":0}

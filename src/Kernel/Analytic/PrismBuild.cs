@@ -84,6 +84,7 @@ public static class PrismBuild
         TFace Orig(TFace f) => orig.TryGetValue(f, out var o) ? o : f;
         // Направление — по ОБОИМ операндам: сначала оси цилиндров любого из них, затем нормали плоскостей.
         Prism25? pa = null, pb = null; why = "no common direction";
+        var profRec = Diagnostics.Prof.Time("призма: распознавание");
         foreach (var d0 in Prism25.DirectionCandidates(a, b))
         {
             var u0 = Math.Abs(d0.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY;
@@ -94,7 +95,9 @@ public static class PrismBuild
             if (pb == null) { why = "second operand: " + wb; pa = null; continue; }
             break;
         }
+        profRec.Dispose();
         if (pa == null || pb == null) return null;
+        var profSec = Diagnostics.Prof.Time("призма: сечения");
         var levels = pa.Levels.Concat(pb.Levels).OrderBy(x => x).ToList();
         var lv = new List<double>();
         foreach (var l in levels) if (lv.Count == 0 || l - lv[^1] > 1e-7) lv.Add(l);
@@ -115,8 +118,11 @@ public static class PrismBuild
             }
             return null;
         }
-        var res = Build(pa.D, pa.U, pa.V, lv, secs, out why, out var info, Namer);
+        profSec.Dispose();
+        TSolid? res; Dictionary<TFace, FaceInfo> info;
+        using (Diagnostics.Prof.Time("призма: сборка тела")) res = Build(pa.D, pa.U, pa.V, lv, secs, out why, out info, Namer);
         LastProvenance = null;
+        using var profProv = Diagnostics.Prof.Time("призма: происхождение");
         if (res != null && !ProvOff)
         {
             // KRN-08 (08.2): ИСТОЧНИК КАЖДОЙ ГРАНИ — грань операнда на той же несущей (боковая — та же прямая/окружность в её
@@ -275,19 +281,25 @@ public static class PrismBuild
 
         // Контуры, подходящие к каждому уровню: края боковых граней снизу и сверху и торцы.
         int nL = lv.Count;
+        var profLv = Diagnostics.Prof.Time("призма: сборка — уровни");
         var levelObjs = new Level[nL];
         var capUp = new Region2[nL]; var capDown = new Region2[nL];
         for (int k = 0; k < nL; k++)
         {
             var below = k > 0 ? secs[k - 1] : new Region2();
             var above = k < secs.Count ? secs[k] : new Region2();
-            capUp[k] = k > 0 ? Region2Ops.Boolean(below, above, Bool2.Subtract) : new Region2();
-            capDown[k] = k < secs.Count ? Region2Ops.Boolean(above, below, Bool2.Subtract) : new Region2();
+            using (Diagnostics.Prof.Time("призма: уровни — торцы"))
+            {
+                capUp[k] = k > 0 ? Region2Ops.Boolean(below, above, Bool2.Subtract) : new Region2();
+                capDown[k] = k < secs.Count ? Region2Ops.Boolean(above, below, Bool2.Subtract) : new Region2();
+            }
             var all = below.Loops.SelectMany(l => l).Concat(above.Loops.SelectMany(l => l))
                       .Concat(capUp[k].Loops.SelectMany(l => l)).Concat(capDown[k].Loops.SelectMany(l => l)).ToList();
-            levelObjs[k] = Arrange(all, lv[k], P3, frame, d);
+            using (Diagnostics.Prof.Time("призма: уровни — разбиение")) levelObjs[k] = Arrange(all, lv[k], P3, frame, d);
         }
 
+        profLv.Dispose();
+        var profFaces = Diagnostics.Prof.Time("призма: сборка — грани");
         var solid = new TSolid(); var shell = new TShell { Solid = solid }; solid.Shells.Add(shell);
         int faces = 0;
         var carrier = new Dictionary<TFace, Seg2>(ReferenceEqualityComparer.Instance);
@@ -350,16 +362,17 @@ public static class PrismBuild
 
         // Копия ДО объединения граней — для производной многогранной формы: здесь каждая боковая грань — прямоугольная
         // полоса (кусок сечения в одном слое), и гранение выдавливания полной полосой (контуров оно не учитывает) верно.
+        profFaces.Dispose();
         var mergedInto = new Dictionary<TFace, TFace>(ReferenceEqualityComparer.Instance);
-        UnifySides(shell, carrier, heights, d, U, V, mergedInto);
-        MergeCollinearEdges(shell);
+        using (Diagnostics.Prof.Time("призма: сборка — объединение сторон")) UnifySides(shell, carrier, heights, d, U, V, mergedInto);
+        using (Diagnostics.Prof.Time("призма: сборка — слияние рёбер")) MergeCollinearEdges(shell);
         // Копия ПОСЛЕ объединения граней — для ленивой точной формы: у каждого имени одна грань (в копии до объединения
         // стороны, разрезанные уровнем, были двумя полосами с одним именем — многогранный путь собирал грань результата
         // с разрывом контура 8 мм). Плоские стороны — PlaneSurface (гранится по контурам), цилиндрические — полосы
         // («прямоугольники» в развёртке, см. UnifySides). Соответствие «грань копии → грань результата» — по порядку:
         // деталь дописывает ключ операции к именам уже после операции, только в теле результата.
         var finalFaces = shell.Faces.ToList();
-        LastPreUnify = TopologyClone.Deep(solid);
+        using (Diagnostics.Prof.Time("призма: сборка — копия для ленивой формы")) LastPreUnify = TopologyClone.Deep(solid);
         LastPreUnifyMap = finalFaces;
         foreach (var (f, c) in carrier)
             info[f] = new FaceInfo(true, c, heights[f].Lo, heights[f].Hi, false, c.At(0.5));
@@ -561,8 +574,14 @@ public static class PrismBuild
     /// Вершина, у которой осталось ровно два коллинеарных отрезка (вертикальные рёбра соседних слоёв после объединения
     /// граней), убирается: отрезки сливаются в один во всех контурах.
     /// </summary>
+    /// <summary>Мутация P3D_MERGEFAST=0: слияние с полным пересчётом соседства после каждого шага (прежнее, квадратичное).</summary>
+    static readonly bool MergeFastOff = Environment.GetEnvironmentVariable("P3D_MERGEFAST") == "0";
+    /// <summary>Проверки: прежнее слияние в этом потоке (сравнение результатов).</summary>
+    [ThreadStatic] internal static bool MergeOldForTest;
+
     internal static void MergeCollinearEdges(TShell shell)
     {
+        if (!MergeFastOff && !MergeOldForTest) { MergeCollinearEdgesFast(shell); return; }
         for (bool again = true; again;)
         {
             again = false;
@@ -627,6 +646,102 @@ public static class PrismBuild
         }
     }
 
+    /// <summary>
+    /// KRN-10 (10.7): ТО ЖЕ СЛИЯНИЕ БЕЗ ПЕРЕСЧЁТА ВСЕГО ТЕЛА. Прежде после каждого слитого стыка соседство вершин строилось
+    /// заново по всем граням, а контуры искались перебором всех граней — на пластине с отверстиями 101 МБ выделений из 616 на
+    /// перестройку. Теперь соседство — одно на всё слияние и правится на месте, контуры — по полурёбрам самих рёбер. Порядок
+    /// тот же: каждый раз берётся первый годный стык в порядке первого появления вершин (как у полного пересчёта), поэтому
+    /// результат — тот же.
+    /// </summary>
+    static void MergeCollinearEdgesFast(TShell shell)
+    {
+        // ранг ребра — номер его первого полуребра в обходе граней (как у полного пересчёта: порядок добавления в множества);
+        // слитое ребро стоит на месте первого из пары
+        var rank = new Dictionary<TEdge, long>(ReferenceEqualityComparer.Instance);
+        var inc = new Dictionary<TVertex, List<TEdge>>(ReferenceEqualityComparer.Instance);
+        long pos = 0;
+        foreach (var ce in shell.Faces.SelectMany(f => f.Loops.SelectMany(l => l.CoEdges)))
+        {
+            var e = ce.Edge;
+            if (!rank.ContainsKey(e)) rank[e] = pos;
+            pos++;
+            foreach (var v in new[] { e.V0, e.V1 })
+            {
+                if (!inc.TryGetValue(v, out var l)) inc[v] = l = new();
+                if (!l.Contains(e)) l.Add(e);
+            }
+        }
+        // порядок вершин — первое появление: ребро наименьшего ранга, у него V0 раньше V1
+        (long, int) Key(TVertex v) { long best = long.MaxValue; int side = 1; foreach (var e in inc[v]) { long r = rank[e]; int sd = ReferenceEquals(e.V0, v) ? 0 : 1; if (r < best || (r == best && sd < side)) { best = r; side = sd; } } return (best, side); }
+        var faceOrder = shell.Faces.ToList();
+        while (true)
+        {
+            bool merged = false;
+            foreach (var v in inc.Keys.Where(x => inc[x].Count > 0).OrderBy(Key).ToList())
+            {
+                var es = inc[v];
+                if (es.Count != 2) continue;
+                var e1 = rank[es[0]] <= rank[es[1]] ? es[0] : es[1]; var e2 = ReferenceEquals(e1, es[0]) ? es[1] : es[0];
+                var a = ReferenceEquals(e1.V0, v) ? e1.V1 : e1.V0; var b = ReferenceEquals(e2.V0, v) ? e2.V1 : e2.V0;
+                TEdge ne;
+                if (e1.Curve is LineCurve3 && e2.Curve is LineCurve3)
+                {
+                    var u1 = (v.P - a.P).Normalized(); var u2 = (b.P - v.P).Normalized();
+                    if (Vector3d.Dot(u1, u2) < 1 - 1e-12) continue;
+                    ne = new TEdge { V0 = a, V1 = b, Curve = new LineCurve3(a.P, b.P) };
+                }
+                else if (e1.Curve is ArcCurve3 c1 && e2.Curve is ArcCurve3 c2
+                         && (c1.Frame.Origin - c2.Frame.Origin).Length <= Eps && Math.Abs(c1.Radius - c2.Radius) <= Eps
+                         && Math.Abs(Math.Abs(Vector3d.Dot(c1.Frame.W.Normalized(), c2.Frame.W.Normalized())) - 1) < 1e-12)
+                {
+                    double Ang(Vector3d p) { var q = p - c1.Frame.Origin; return Math.Atan2(Vector3d.Dot(q, c1.Frame.V), Vector3d.Dot(q, c1.Frame.U)); }
+                    double s1 = ReferenceEquals(e1.V0, a) ? c1.Sweep : -c1.Sweep;
+                    double s2 = (ReferenceEquals(e2.V0, v) ? c2.Sweep : -c2.Sweep) * Math.Sign(Vector3d.Dot(c1.Frame.W, c2.Frame.W));
+                    if (Math.Sign(s1) != Math.Sign(s2)) continue;
+                    double total = s1 + s2;
+                    if (Math.Abs(total) > 2 * Math.PI + 1e-9) continue;
+                    double a0 = Ang(a.P);
+                    bool closed = ReferenceEquals(a, b);
+                    ne = new TEdge { V0 = a, V1 = closed ? a : b, Curve = new ArcCurve3(c1.Frame, c1.Radius, a0, a0 + (closed ? Math.Sign(total) * 2 * Math.PI : total)) };
+                }
+                else continue;
+                var loops = e1.CoEdges.Select(c => c.Loop).OfType<TLoop>().Where(l => e2.CoEdges.Any(c => ReferenceEquals(c.Loop, l))).Distinct().ToList();
+                loops.Sort((x, y) => { int fx = faceOrder.IndexOf(x.Face!), fy = faceOrder.IndexOf(y.Face!); return fx != fy ? fx.CompareTo(fy) : x.Face!.Loops.IndexOf(x).CompareTo(y.Face!.Loops.IndexOf(y)); });
+                long? neRank = null;
+                foreach (var loop in loops)
+                {
+                    var f = loop.Face!; int li = f.Loops.IndexOf(loop);
+                    var ces = loop.CoEdges.ToList();
+                    int i1 = ces.FindIndex(c => ReferenceEquals(c.Edge, e1)), i2 = ces.FindIndex(c => ReferenceEquals(c.Edge, e2));
+                    int n = ces.Count;
+                    int firstI = (i1 + 1) % n == i2 ? i1 : i2;
+                    neRank ??= rank[ces[firstI].Edge];          // новое ребро — на месте первого из пары в первом контуре
+                    bool forward = ReferenceEquals(ces[firstI].Start, a);
+                    var list = new List<(TEdge, bool)>();
+                    for (int k = 0; k < n; k++)
+                    {
+                        if (k == firstI) { list.Add((ne, !forward)); continue; }
+                        if (k == (firstI + 1) % n) continue;
+                        list.Add((ces[k].Edge, ces[k].Reversed));
+                    }
+                    bool outer = loop.IsOuter;
+                    foreach (var ce in ces) ce.Edge.CoEdges.Remove(ce);
+                    f.Loops.RemoveAt(li);
+                    var nl = new TLoop { IsOuter = outer, Face = f };
+                    foreach (var (e, r) in list) nl.Add(e, r);
+                    f.Loops.Insert(li, nl);
+                }
+                rank[ne] = neRank ?? Math.Min(rank[e1], rank[e2]);
+                inc[v].Clear();
+                inc[a].Remove(e1); inc[b].Remove(e2);
+                if (!inc[a].Contains(ne)) inc[a].Add(ne);
+                if (!inc[b].Contains(ne)) inc[b].Add(ne);
+                merged = true; break;
+            }
+            if (!merged) break;
+        }
+    }
+
     sealed class LayerVertexComparer : IEqualityComparer<(int, TVertex)>
     {
         public bool Equals((int, TVertex) x, (int, TVertex) y) => x.Item1 == y.Item1 && ReferenceEquals(x.Item2, y.Item2);
@@ -641,16 +756,31 @@ public static class PrismBuild
     static Vector3d Lift(Level L, Vector2d p) => LocalOrigin + L.U * p.X + L.V * p.Y + L.D * L.H;
 
     /// <summary>Разбиение уровня: все куски режутся в общих точках; каждый уникальный кусок — одно ребро.</summary>
+    /// <summary>Мутация P3D_ARRANGEBOX=0: все пары кусков уровня — без отбора по габариту (прежнее).</summary>
+    static readonly bool ArrangeBoxOff = Environment.GetEnvironmentVariable("P3D_ARRANGEBOX") == "0";
+
     static Level Arrange(List<Seg2> segs, double h, Func<Vector2d, double, Vector3d> p3, Frame3 frame, Vector3d d)
     {
         var L = new Level { H = h, U = frame.U, V = frame.V, D = d };
         // точки разбиения: концы и взаимные пересечения
         var pts = new List<Vector2d>();
-        void AddPt(Vector2d p) { if (pts.All(q => (q - p).Length > Eps)) pts.Add(p); }
+        void AddPt(Vector2d p) { foreach (var q in pts) if ((q - p).Length <= Eps) return; pts.Add(p); }
         foreach (var s in segs) { AddPt(s.A); AddPt(s.B); }
+        // KRN-10 (10.7): габарит куска (у дуги — её окружность) с запасом; пары врозь пересечений не имеют — не считаются
+        // (прежде — каждая пара с перечислителем: на пластине с отверстиями ~10⁵ пар на перестройку). Точки — те же.
+        var box = new (Vector2d Lo, Vector2d Hi)[segs.Count];
+        for (int i = 0; i < segs.Count; i++)
+        {
+            var sg = segs[i]; double m = 1e3 * Eps + 1e-9;
+            box[i] = sg.IsArc ? (sg.C - new Vector2d(sg.R + m), sg.C + new Vector2d(sg.R + m))
+                              : (Vector2d.ComponentMin(sg.A, sg.B) - new Vector2d(m), Vector2d.ComponentMax(sg.A, sg.B) + new Vector2d(m));
+        }
         for (int i = 0; i < segs.Count; i++)
             for (int j = i + 1; j < segs.Count; j++)
+            {
+                if (!ArrangeBoxOff && !MergeOldForTest && (box[i].Lo.X > box[j].Hi.X || box[j].Lo.X > box[i].Hi.X || box[i].Lo.Y > box[j].Hi.Y || box[j].Lo.Y > box[i].Hi.Y)) continue;
                 foreach (var q in Region2Ops.Intersections(segs[i], segs[j])) AddPt(q);
+            }
         foreach (var p in pts) L.Verts.Add(new TVertex(p3(p, h)));
         // куски
         foreach (var s in segs)
