@@ -521,9 +521,10 @@ public static class SolidValidator
     /// <summary>
     /// KRN-03 (03.2): ГРАНЬ — ОДНА СВЯЗНАЯ КОМПОНЕНТА. У плоской грани контуры с положительной площадью (против часовой
     /// вокруг наружной нормали) — внешние; два и больше — грань из нескольких несвязных кусков. ПОКА — замер
-    /// (metric brep.multiComponentFaces; P3D_FACECOMPLOG=1 — печать).
+    /// (metric brep.multiComponentFaces; P3D_FACECOMPLOG=1 — печать); нарушение — ошибка проверки.
     /// </summary>
     static readonly bool FaceCompLog = Environment.GetEnvironmentVariable("P3D_FACECOMPLOG") == "1";
+    static readonly bool FaceCompErrOff = Environment.GetEnvironmentVariable("P3D_FACECOMPERR") == "0";
     static void CheckFaceComponents(ValidationReport r, List<TFace> faces)
     {
         int bad = 0;
@@ -533,8 +534,9 @@ public static class SolidValidator
         {
             if (f.Loops.Count < 2) continue;
             var src = GeometryAudit.AuthoritativeSurface(f);
-            if (src is not Surfaces.PlaneSurface ps) continue;
-            var n = ps.NormalAt(ps.ProjectToUV(ps.F.Origin)).Normalized() * (f.Reversed ? -1 : 1);
+            if (src is not Surfaces.PlaneSurface) continue;
+            // наружная нормаль — как у PlanarTweak.OutwardNormal: у гранёной грани сторону несут треугольники
+            if (Ops.PlanarTweak.OutwardNormal(f) is not { } n) continue;
             int outer = 0;
             foreach (var l in f.Loops)
             {
@@ -544,7 +546,14 @@ public static class SolidValidator
                 for (int i = 0; i < pts.Count; i++) acc += Vector3d.Cross(pts[i], pts[(i + 1) % pts.Count]);
                 if (Vector3d.Dot(acc, n) > 0) outer++;
             }
-            if (outer > 1) { bad++; if (FaceCompLog) Console.Error.WriteLine($"FACECOMP face {f.Id} tag {f.Tag} loops {f.Loops.Count} outer {outer}"); }
+            if (outer > 1)
+            {
+                bad++; if (FaceCompLog) Console.Error.WriteLine($"FACECOMP face {f.Id} tag {f.Tag} loops {f.Loops.Count} outer {outer}");
+                // KRN-03 (03.2): ГРАНЬ — ОДНА СВЯЗНАЯ КОМПОНЕНТА (правило, а не замер: на корпусе allA/allB/A06 нарушений 0).
+                // Мутация P3D_FACECOMPERR=0 — только замер.
+                if (!FaceCompErrOff) r.Issues.Add(new ValidationIssue(Representation.BRep, ValidationSeverity.Error, "face-components",
+                    $"плоская грань {f.Id} из {outer} несвязных кусков (внешних контуров)", f.Id));
+            }
         }
         r.Metrics["brep.multiComponentFaces"] = bad;
     }
