@@ -424,6 +424,8 @@ tests/k01/Krn06BlendStep.cs
 tests/k01/Krn06CylCyl.cs
 tests/k01/Krn06CylCylPart.cs
 tests/k01/Krn06Quadric.cs
+tests/k01/Krn06Unequal.cs
+tests/k01/Krn06Variable.cs
 tests/k01/Krn07.cs
 tests/k01/Krn07HoleContract.cs
 tests/k01/Krn07Instances.cs
@@ -456,6 +458,7 @@ tests/k01/TopoDump.cs
 tests/k01/Torus.cs
 tests/k01/TouchProbe.cs
 tests/k01/TweakProbe.cs
+tests/k01/VarRoundProbe.cs
 tests/k03bench/K03Bench.csproj
 tests/k03bench/Program.cs
 tests/make_localdeps.sh

@@ -19,6 +19,13 @@ static partial class Program
         var known = K09Cases().ToDictionary(c => c.Name, c => c.Expected);
         foreach (var (name, build) in GateCatalogue()) res.Add((name, build, known.GetValueOrDefault(name, double.NaN)));
         foreach (var c in G14RealParts()) res.Add(c);
+        // KRN-06 (06.14): скругление с переменным радиусом — лента-конус, торцы — дуги эллипса
+        res.Add(("variable round R1.5→5 on a cube edge", () =>
+        {
+            var p = new Part("vr"); TestGeometry.AddCube(p, 60); p.Rebuild(null);
+            var e = p.Bodies[0].Edges.First(x => x.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(x.V0.P.X - 30) < 1e-9 && Math.Abs(x.V1.P.X - 30) < 1e-9 && Math.Abs(x.V0.P.Z - 30) < 1e-9 && Math.Abs(x.V1.P.Z - 30) < 1e-9);
+            var rf = new RoundFeature("R") { Radius = new ValueRef(1.5), RadiusEnd = new ValueRef(5) }; rf.Edges.Add(EdgeRef.Of(e)); p.AddFeature(rf); return p;
+        }, 216000 - RollingBallVariableCorner(60, 1.5, 5)));
         // Полости (матрица «Обмен: ориентация полостей»): тело с внутренними оболочками пишется BREP_WITH_VOIDS.
         res.Add(("cavity: sphere R10 inside cube 60", () => { var p = new Part("cvs"); TestGeometry.AddCube(p, 60); p.AddFeature(new CutSphere(0, 0, 0, 10)); return p; },
             216000 - 4.0 / 3 * Math.PI * 1000));

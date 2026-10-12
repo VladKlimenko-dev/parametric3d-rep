@@ -414,6 +414,8 @@ static partial class Program
         if (mode is "krn05blend" or "allB") Krn05AfterBlendChecks();
         if (mode is "krn11hist" or "allB") Krn11HistoryChecks();
         if (mode is "krn05unite" or "allB") Krn05UniteChainChecks();
+        if (mode is "krn06var" or "allB") Krn06VariableChecks();
+        if (mode is "krn06uneq" or "allA") Krn06UnequalChecks();
         if (mode is "krn07hole" or "allA") Krn07HoleContractChecks();
         if (mode is "krn07inst" or "allA") Krn07InstanceChecks();
         if (mode is "krn10pairs" or "allA") Krn10PairChecks();
@@ -438,6 +440,8 @@ static partial class Program
         if (mode == "provprobe") { ProvProbe(); return; }
         if (mode == "fcprobe") { FaceCompProbe(); return; }
         if (mode == "ihprobe") { ImportHealProbe(); return; }
+        if (mode == "vrprobe") { VarRoundProbe(); return; }
+        if (mode == "uqprobe") { UneqProbe(); return; }
         if (mode == "cylfaceprobe") { CylFaceProbe(); return; }
         if (mode == "igesprobe")
         {
