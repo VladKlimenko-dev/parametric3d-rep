@@ -212,7 +212,8 @@ public static class DocumentFile
             Distance = rf.Radius.Value,
             Formula = rf.Radius.Formula,
             Edges = rf.Edges.Select(SaveEdge).ToList(),
-            Selectors = rf.Selectors.Count == 0 ? null : rf.Selectors.Select(x => new SelectorDto { Kind = x.Kind.ToString(), Feature = x.FeatureKey, Other = x.OtherKey }).ToList()
+            Selectors = rf.Selectors.Count == 0 ? null : rf.Selectors.Select(x => new SelectorDto { Kind = x.Kind.ToString(), Feature = x.FeatureKey, Other = x.OtherKey }).ToList(),
+            RadiusEnd = rf.RadiusEnd?.Value, RadiusEndFormula = rf.RadiusEnd?.Formula
         },
 
         ChamferFeature cf => new FeatureDto
@@ -560,6 +561,7 @@ public static class DocumentFile
                 {
                     var rf = new RoundFeature(fd.Name) { Suppressed = fd.Suppressed };
                     rf.Radius = new ValueRef(fd.Distance) { Formula = fd.Formula };
+                    if (fd.RadiusEnd is double rEnd) rf.RadiusEnd = new ValueRef(rEnd) { Formula = fd.RadiusEndFormula };
                     foreach (var ed in fd.Edges) rf.Edges.Add(LoadEdge(ed));
                     foreach (var sd in fd.Selectors ?? new())
                         if (Enum.TryParse<EdgeSelectorKind>(sd.Kind, out var sk) && sd.Feature != null) rf.Selectors.Add(new EdgeSelector(sk, sd.Feature, sd.Other));
@@ -993,6 +995,9 @@ public static class DocumentFile
         public List<SelectorDto>? FaceSelectors { get; set; }
         public string? VertexKey { get; set; }
         public List<double> OpenFaces { get; set; } = new();
+        /// <summary>KRN-06 (06.14): радиус скругления в конце ребра (переменный радиус); null — постоянный.</summary>
+        public double? RadiusEnd { get; set; }
+        public string? RadiusEndFormula { get; set; }
         /// <summary>KRN-07 (07.5): точки граней со своей толщиной оболочки (толщины — в Values/Formulas).</summary>
         public List<double>? ThickFaces { get; set; }
         public double[]? Point { get; set; }

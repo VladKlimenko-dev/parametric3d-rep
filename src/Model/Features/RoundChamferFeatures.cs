@@ -17,10 +17,12 @@ public sealed class RoundFeature : Feature
     /// <summary>KRN-08 (08.3): рёбра по роли (кромки операции и т. п.), разрешаются при каждой перестройке.</summary>
     public readonly List<EdgeSelector> Selectors = new();
     public ValueRef Radius = new(2);
+    /// <summary>KRN-06 (06.14): радиус в конце ребра (линейный закон от Radius в начале ссылки); null — постоянный радиус.</summary>
+    public ValueRef? RadiusEnd;
 
     public RoundFeature(string name = "Round") { Name = name; }
 
-    public override string Summary => $"Round R{Radius} ({Edges.Count} edges{(Selectors.Count > 0 ? ", " + string.Join(", ", Selectors) : "")})";
+    public override string Summary => $"Round R{Radius}{(RadiusEnd is { } re0 ? "→" + re0 : "")} ({Edges.Count} edges{(Selectors.Count > 0 ? ", " + string.Join(", ", Selectors) : "")})";
 
     public override void Execute(BuildContext ctx)
     {
@@ -54,9 +56,15 @@ public sealed class RoundFeature : Feature
         int w0 = ctx.Warnings.Count;
 
         // K02: через контракт операции — результат проверяется, отказ не меняет тела дерева.
-        Kernel.OperationContract.Apply("Round", ctx.Bodies, b => FilletOp.RoundEdges(b, edges, r, ctx.Warnings));
+        if (RadiusEnd is { } re)
+        {
+            double r1 = re.Resolve(ctx.Parameters);
+            if (r1 <= Tol.Weld) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Round: the end radius must be greater than zero.");
+            Kernel.OperationContract.Apply("Round", ctx.Bodies, b => FilletOp.RoundEdgesVariable(b, edges, r, r1, ctx.Warnings));
+        }
+        else Kernel.OperationContract.Apply("Round", ctx.Bodies, b => FilletOp.RoundEdges(b, edges, r, ctx.Warnings));
         // KRN-06: прямой построитель (плоскость/плоскость, плоскость/цилиндр) — сопряжение точное; иначе — резец с хордами
-        if (!ctx.Warnings.Skip(w0).Any(x => x.StartsWith("Round: direct blend", StringComparison.Ordinal)))
+        if (!ctx.Warnings.Skip(w0).Any(x => x.StartsWith("Round: direct blend", StringComparison.Ordinal) || x.StartsWith("Round: direct variable blend", StringComparison.Ordinal)))
             ctx.Warnings.Add("Round: the surface and its edges are exact, but the cut itself " +
                              "is made with a chord approximation — the removed volume is about " +
                              "half a percent larger. Vertices where several rounds meet are " +

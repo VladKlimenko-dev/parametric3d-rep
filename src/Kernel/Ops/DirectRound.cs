@@ -82,12 +82,24 @@ public static partial class DirectRound
     /// </summary>
     public static bool TryChamfer(List<TSolid> bodies, IReadOnlyList<EdgeRef> refs, double d1, double d2, List<string> warnings)
     {
-        if (Off || ChamferOff || refs.Count == 0 || !(d1 > 0) || Math.Abs(d1 - d2) > 1e-9 * Math.Max(1, d1) || OwnerBody(bodies, refs) is not int k) return false;
+        bool unequal = Math.Abs(d1 - d2) > 1e-9 * Math.Max(1, d1);
+        if (Off || ChamferOff || refs.Count == 0 || !(d1 > 0) || !(d2 > 0) || (unequal && UnequalOff) || OwnerBody(bodies, refs) is not int k) return false;
         string? why = null;
-        var res = Build(bodies[k], refs, d1, true, ref why);
+        if (unequal)
+        {
+            // KRN-06 (06.15): несимметричная фаска — грань первого размера по правилу резцов (ход цепочки, «правая рука»)
+            var one = new List<TSolid> { bodies[k] }; var whole = FilletOp.WholeNamedEdges(one, refs);
+            var es = refs.Select(rf => FilletOp.Resolve(one, rf, out _) ?? (whole.TryGetValue(rf, out var we) ? we : null)).ToList();
+            if (es.Any(x => x == null)) return false;
+            var first = FilletOp.FirstSizeFaces(es!.Distinct().ToList()!);
+            _chamfer = (d1, d2, first);
+        }
+        TSolid? res;
+        try { res = Build(bodies[k], refs, d1, true, ref why); }
+        finally { _chamfer = null; }
         if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); return false; }
         bodies[k] = res; Interlocked.Increment(ref Built);
-        warnings.Add($"Chamfer: direct cut (plane/plane, {refs.Count} edge(s), exact planes).");
+        warnings.Add(unequal ? $"Chamfer: direct cut {d1:0.###}x{d2:0.###} (plane/plane, {refs.Count} edge(s), exact planes)." : $"Chamfer: direct cut (plane/plane, {refs.Count} edge(s), exact planes).");
         return true;
     }
 
@@ -114,6 +126,74 @@ public static partial class DirectRound
             owner = i;
         }
         return owner;
+    }
+
+    [ThreadStatic] static Func<Vector3d, double>? _law;
+    [ThreadStatic] static (double D1, double D2, Dictionary<TEdge, TFace> First)? _chamfer;
+    /// <summary>Мутация P3D_DRUNEQUAL=0: несимметричная фаска — только путь резцов (прежде).</summary>
+    static readonly bool UnequalOff = Environment.GetEnvironmentVariable("P3D_DRUNEQUAL") == "0";
+    /// <summary>Мутация P3D_DRUNEQUALCHAIN=0: несимметричная фаска — только одиночные рёбра (цепочки и углы — путь резцов).</summary>
+    static readonly bool UnequalChainsOff = Environment.GetEnvironmentVariable("P3D_DRUNEQUALCHAIN") == "0";
+    /// <summary>Мутация P3D_DRUNEQUALCIRCLE=0: несимметричная фаска окружности плоскость/цилиндр — путь резцов.</summary>
+    static readonly bool UnequalCircleOff = Environment.GetEnvironmentVariable("P3D_DRUNEQUALCIRCLE") == "0";
+    /// <summary>Мутация P3D_DRVARIABLE=0: переменный радиус — только обходной путь резцов (прежде).</summary>
+    static readonly bool VariableOff = Environment.GetEnvironmentVariable("P3D_DRVARIABLE") == "0";
+
+    /// <summary>
+    /// KRN-06 (06.14): ПРЯМОЕ СКРУГЛЕНИЕ С ЛИНЕЙНО МЕНЯЮЩИМСЯ РАДИУСОМ — одно прямое ребро между плоскостями, концы на плоских
+    /// торцах. Огибающая шаров — круговой конус (точная поверхность), контакты — прямые, торцы — дуги эллипса (сечение конуса
+    /// плоскостью торца, точно). Закон — по ссылке: R(Start) = r0, R(End) = r1, линейно по проекции на ребро.
+    /// </summary>
+    public static bool TryRoundVariable(List<TSolid> bodies, IReadOnlyList<EdgeRef> refs, double r0, double r1, List<string> warnings)
+    {
+        if (Off || OffForTest || VariableOff || refs.Count != 1 || !(r0 > 0) || !(r1 > 0) || Math.Abs(r1 - r0) < 1e-12 || OwnerBody(bodies, refs) is not int k) return false;
+        var S = refs[0].Start; var E = refs[0].End; double l2 = (E - S).LengthSquared; if (l2 < 1e-18) return false;
+        _law = x => r0 + (r1 - r0) * Vector3d.Dot(x - S, E - S) / l2;
+        try
+        {
+            string? why = null;
+            var res = Build(bodies[k], refs, Math.Max(r0, r1), false, ref why);
+            if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); return false; }
+            bodies[k] = res; Interlocked.Increment(ref Built);
+            warnings.Add($"Round: direct variable blend R{r0:0.###}→R{r1:0.###} (exact cone).");
+            return true;
+        }
+        finally { _law = null; }
+    }
+
+    /// <summary>
+    /// Дуга сечения кругового конуса (вершина A, ось w — в сторону роста радиуса, полуугол α) плоскостью (V, n) от q1 до q2 —
+    /// эллипс, точно: образующие G(φ) = w cos α + (U cos φ + V sin φ) sin α, U — проекция n поперёк оси; точка X(φ) = A + G·d/(n·G),
+    /// d = n·(V − A). Большая ось — в плоскости симметрии (φ = 0, π), малая — вдоль V-рамки; её полуось — из cos φ, при котором
+    /// проекция на большую ось — центр (решение в замкнутом виде). Дуга — короткая (сопряжение меньше полуоборота).
+    /// </summary>
+    static ICurve3? ConeSection(Vector3d A, Vector3d w, double alpha, Vector3d V0, Vector3d n, Vector3d q1, Vector3d q2)
+    {
+        n = n.Normalized(); w = w.Normalized();
+        double d = Vector3d.Dot(n, V0 - A);
+        var nu = n - w * Vector3d.Dot(n, w);
+        Vector3d U = nu.Length > 1e-12 ? nu.Normalized() : Vector3d.Cross(w, Math.Abs(w.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY).Normalized();
+        var Vv = Vector3d.Cross(w, U);
+        double ca = Math.Cos(alpha), sa = Math.Sin(alpha);
+        double a = Vector3d.Dot(n, w) * ca, b = Vector3d.Dot(n, U) * sa;
+        if (!(Math.Abs(a) > Math.Abs(b) + 1e-12)) return null;                 // не эллипс (парабола, гипербола)
+        Vector3d X(double c, double sgnS) { double sn = sgnS * Math.Sqrt(Math.Max(0, 1 - c * c)); var g = w * ca + (U * c + Vv * sn) * sa; return A + g * (d / (a + b * c)); }
+        var X0 = X(1, 1); var Xp = X(-1, 1);
+        if (Vector3d.Dot(X0 - A, w) <= 0 || Vector3d.Dot(Xp - A, w) <= 0) return null;   // другая полость конуса
+        var Cc = (X0 + Xp) / 2; var e1 = X0 - Xp; double ra = e1.Length / 2; e1 /= 2 * ra;
+        // cos φ: проекция X(φ) − C на e1 равна нулю; X − A = d (w ca + U sa c)/(a + b c) (+ V-часть, ортогональна e1)
+        double pw = Vector3d.Dot(w, e1) * ca * d, pu = Vector3d.Dot(U, e1) * sa * d, c0 = Vector3d.Dot(Cc - A, e1);
+        // (pw + pu c)/(a + b c) = c0  →  c = (c0 a − pw)/(pu − c0 b)
+        double den = pu - c0 * b; if (Math.Abs(den) < 1e-15) return null;
+        double cm = (c0 * a - pw) / den; if (Math.Abs(cm) > 1) return null;
+        double rb = Math.Abs(Vector3d.Dot(X(cm, 1) - Cc, Vv));
+        var e2 = Vector3d.Cross(n, e1).Normalized(); if (Vector3d.Dot(e2, Vv) < 0) e2 = -e2;
+        double Ang(Vector3d q) => Math.Atan2(Vector3d.Dot(q - Cc, e2) / rb, Vector3d.Dot(q - Cc, e1) / ra);
+        double a1 = Ang(q1), a2 = Ang(q2), sw = a2 - a1;
+        while (sw > Math.PI) sw -= 2 * Math.PI; while (sw < -Math.PI) sw += 2 * Math.PI;
+        var el = new EllipseCurve3(new Frame3(Cc, e1, e2), ra, rb, a1, a1 + sw);
+        if ((el.PointAt(0) - q1).Length > 1e-7 * Math.Max(1, ra) || (el.PointAt(1) - q2).Length > 1e-7 * Math.Max(1, ra)) return null;
+        return el;
     }
 
     /// <summary>Окружность между плоской гранью и цилиндром, чья ось ⟂ плоскости (семейство тора, 06.11).</summary>
@@ -159,6 +239,19 @@ public static partial class DirectRound
             edges.Add(e);
         }
         if (circs.Count > 0 && edges.Count > 0) { why = "circular and straight edges in one operation"; return null; }
+        var law = _law; var cham = _chamfer;
+        if (cham != null && UnequalChainsOff && edges.Any(e => new[] { e.V0.P, e.V1.P }.Any(p => edges.Count(x => (x.V0.P - p).Length < 1e-7 || (x.V1.P - p).Length < 1e-7) > 1))) { why = "unequal chamfer: chains and corners not in this family"; return null; }
+        // размер фаски ребра x на грани F: несимметричная — по грани первого размера, иначе r
+        double Dist(TEdge x, TFace F) => cham is { } cmd && cmd.First.TryGetValue(x, out var ff) ? (ReferenceEquals(ff, F) ? cmd.D1 : cmd.D2) : r;
+        // точка пересечения прямой q + tq·s с прямой A2 + t2·s (или null, если не пересекаются)
+        static Vector3d? MeetLines(Vector3d q, Vector3d tq, Vector3d A2, Vector3d t2, double scale)
+        {
+            var cr12 = Vector3d.Cross(tq, t2); if (cr12.LengthSquared < 1e-18) return null;
+            double sq = Vector3d.Dot(Vector3d.Cross(A2 - q, t2), cr12) / cr12.LengthSquared;
+            var pt = q + tq * sq;
+            return (pt - (A2 + t2 * Vector3d.Dot(pt - A2, t2))).Length < 1e-9 * Math.Max(1, scale) ? pt : null;
+        }
+        if (law != null && (ch || edges.Count != 1 || circs.Count > 0 || closedCC.Count > 0)) { why = "variable radius: one straight plane/plane edge only"; return null; }
         if (closedCC.Count > 0 && (edges.Count > 0 || circs.Count > 0)) { why = "cyl/cyl edges with other edges in one operation"; return null; }
         // общие вершины выбранных рёбер: ровно два ребра в вершине — стык цепочки (06.10, срез по биссекторной плоскости);
         // три и больше — угловой узел (06.13, не в этом семействе)
@@ -257,6 +350,7 @@ public static partial class DirectRound
             var F1 = byFace[fs[0]]; var F2 = byFace[fs[1]];
             // ПЛОСКОСТЬ/ЦИЛИНДР (06.11): прямое ребро вдоль оси цилиндра — скругление (фаска — прежний построитель)
             bool mixed = !(F1.Surf.IsPlanar && F2.Surf.IsPlanar);
+            if (law != null && mixed) { why = "variable radius: plane/plane only"; return null; }
             if (mixed && !(LineCyl && !ch && ((F1.Surf.IsPlanar && F2.IsCyl) || (F2.Surf.IsPlanar && F1.IsCyl))))
             { why = "a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only)"; return null; }
             var n1 = F1.Surf.IsPlanar ? F1.N : NormalOf(F1, e.V0.P); var n2 = F2.Surf.IsPlanar ? F2.N : NormalOf(F2, e.V0.P);
@@ -268,12 +362,31 @@ public static partial class DirectRound
             if (sigmaOf[e] is not int sg0) { why = "convexity undecided (tangent faces or the face side not found)"; return null; }
             double sigma = sg0;                                     // −1 выпуклое, +1 вогнутое
             var P0 = e.V0.P; var P1 = e.V1.P; var t = (P1 - P0).Normalized(); double L = (P1 - P0).Length;
+            double lr0 = 0, lr1 = 0, lAlpha = 0; Vector3d lW = default, lApex = default, lq10 = default, lq11 = default, lq20 = default, lq21 = default;
             Vector3d C0, q10, q20;                                  // точка оси (spine) при P0 и контакты при P0
             FDesc? Cy = null; Vector3d qCyl0 = default, A0c = default;
             if (!mixed)
             {
                 C0 = P0 + (n1 + n2) * (sigma * r / (1 + c12));
                 q10 = C0 - n1 * (sigma * r); q20 = C0 - n2 * (sigma * r);
+                if (law != null)
+                {
+                    // KRN-06 (06.14): ПЕРЕМЕННЫЙ РАДИУС (линейный закон) — шары радиуса R(s) с центрами C(s) = P0 + t·s + k·R(s),
+                    // k = σ(n1 + n2)/(1 + n1·n2): касаются обеих плоскостей; огибающая — круговой конус (ось — линия центров,
+                    // sin α = |R'|/|C'|); контакты — прямые Q_i(s) = C(s) − σ R(s) n_i.
+                    lr0 = law(P0); lr1 = law(P1);
+                    if (!(lr0 > 1e-9) || !(lr1 > 1e-9)) { why = "variable radius: a radius is not positive"; return null; }
+                    var kk = (n1 + n2) * (sigma / (1 + c12));
+                    double gL = (lr1 - lr0) / L;
+                    if (Math.Abs(gL) < 1e-12) { why = "variable radius: constant law"; return null; }
+                    Vector3d Cs(double s0) => P0 + t * s0 + kk * (lr0 + gL * s0);
+                    C0 = Cs(0); q10 = C0 - n1 * (sigma * lr0); q20 = C0 - n2 * (sigma * lr0);
+                    lq11 = Cs(L) - n1 * (sigma * lr1); lq21 = Cs(L) - n2 * (sigma * lr1);
+                    var dC = t + kk * gL; double sinA = Math.Abs(gL) / dC.Length;
+                    if (!(sinA < 0.99)) { why = "variable radius: the radius changes too fast"; return null; }
+                    lAlpha = Math.Asin(sinA); lW = dC.Normalized() * Math.Sign(gL); lApex = Cs(-lr0 / gL);
+                    lq10 = q10; lq20 = q20;
+                }
             }
             else
             {
@@ -296,8 +409,14 @@ public static partial class DirectRound
             }
             // фаска: контактные прямые P + d·u_i (u_i — в грани i поперёк ребра, от ребра в грань)
             var u1 = (n2 - n1 * c12).Normalized() * sigma; var u2 = (n1 - n2 * c12).Normalized() * sigma;
-            Vector3d Q(int i, Vector3d onSpine) => ch ? P0 + (i == 1 ? u1 : u2) * r : (i == 1 ? q10 : q20);
-            var dir1 = (q10 - C0) / r; var dir2 = (q20 - C0) / r;   // направления от оси к контактам
+            double dF1 = r, dF2 = r;
+            if (cham is { } cm)
+            {
+                if (!cm.First.TryGetValue(e, out var f1st)) { why = "unequal chamfer: the first-size face is unknown"; return null; }
+                dF1 = ReferenceEquals(F1.Orig, f1st) ? cm.D1 : cm.D2; dF2 = ReferenceEquals(F2.Orig, f1st) ? cm.D1 : cm.D2;
+            }
+            Vector3d Q(int i, Vector3d onSpine) => ch ? P0 + (i == 1 ? u1 * dF1 : u2 * dF2) : (i == 1 ? q10 : q20);
+            var dir1 = (q10 - C0) / (law != null ? lr0 : r); var dir2 = (q20 - C0) / (law != null ? lr0 : r);   // направления от оси к контактам
             // базис сечения
             var e1 = (dir1 - t * Vector3d.Dot(dir1, t)).Normalized(); var e2 = Vector3d.Cross(t, e1);
             double Th(Vector3d d) => Math.Atan2(Vector3d.Dot(d, e2), Vector3d.Dot(d, e1));
@@ -341,7 +460,7 @@ public static partial class DirectRound
                             var xf = x.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
                             var nO = byFace[xf.First(f => f != F)].N; var nF = byFace[F].N;
                             var ux = (nO - nF * Vector3d.Dot(nF, nO)).Normalized() * sigmaOf[x]!.Value;
-                            var A2 = x.V0.P + ux * r; var t2 = (x.V1.P - x.V0.P).Normalized();
+                            var A2 = x.V0.P + ux * Dist(x, F); var t2 = (x.V1.P - x.V0.P).Normalized();
                             var cr12 = Vector3d.Cross(tq, t2); if (cr12.LengthSquared < 1e-18) return null;
                             double sq = Vector3d.Dot(Vector3d.Cross(A2 - q, t2), cr12) / cr12.LengthSquared;
                             var pt = q + tq * sq;
@@ -382,6 +501,24 @@ public static partial class DirectRound
                     if (Math.Abs(tm) < 0.1) { why = "chain bisector too oblique"; return null; }
                     Vector3d OnM(Vector3d p0) => p0 + t * (Vector3d.Dot(V - p0, nm) / tm);
                     var m1 = OnM(Q(1, C0)); var m2 = OnM(Q(2, C0));
+                    if (ch && cham != null)
+                    {
+                        // KRN-06 (06.15): несимметричная фаска на стыке — на общей грани пересечение контактных прямых двух рёбер,
+                        // на необщей — пересечение контактной прямой с третьим ребром вершины (биссектор не годится: d1 ≠ d2)
+                        var tMate = (mate.V1.P - mate.V0.P).Normalized(); var t3 = (e3.V1.P - e3.V0.P).Normalized();
+                        // Fa, Fb — НЕобщие грани ребра и его соседа; общая — третья грань ребра
+                        var Fc = fs[0] == Fa ? fs[1] : fs[0];
+                        var nFb = byFace[Fb].N; var nFc = byFace[Fc].N;
+                        var uMate = (nFb - nFc * Vector3d.Dot(nFc, nFb)).Normalized() * sigmaOf[mate]!.Value;
+                        Vector3d? Pt(int i)
+                        {
+                            var Fi = fs[i - 1];
+                            return Fi == Fc ? MeetLines(Q(i, C0), t, mate.V0.P + uMate * Dist(mate, Fc), tMate, r)
+                                            : MeetLines(Q(i, C0), t, e3.V0.P, t3, r);
+                        }
+                        if (Pt(1) is not { } mm1 || Pt(2) is not { } mm2) { why = "unequal chamfer: chain contact lines do not meet"; return null; }
+                        m1 = mm1; m2 = mm2;
+                    }
                     // контакт на необщей грани — внутри третьего ребра
                     var qa3 = byFace[Fa] == F1 ? m1 : m2;
                     {
@@ -402,7 +539,8 @@ public static partial class DirectRound
                 if (Math.Abs(tn) < 0.1) { why = "end face too oblique"; return null; }
                 // контактные точки на плоскости торца
                 Vector3d OnEnd(Vector3d p0) => p0 + t * (Vector3d.Dot(V - p0, ne) / tn);
-                var q1 = OnEnd(Q(1, C0)); var q2 = OnEnd(Q(2, C0));
+                Vector3d LineHit(Vector3d a, Vector3d b) => a + (b - a) * (Vector3d.Dot(V - a, ne) / Vector3d.Dot(b - a, ne));
+                var q1 = law != null ? LineHit(lq10, lq11) : OnEnd(Q(1, C0)); var q2 = law != null ? LineHit(lq20, lq21) : OnEnd(Q(2, C0));
                 // каждая — внутри своего соседнего ребра (F_i ∩ Fe)
                 foreach (var (q, Fi) in new[] { (q1, F1), (q2, F2) })
                 {
@@ -419,7 +557,9 @@ public static partial class DirectRound
                     if (dist > 1e-7 * Math.Max(1, len) || u <= 1e-6 || u >= 1 - 1e-6) { why = "radius too large for a neighbour edge"; return null; }
                 }
                 // дуга сечения цилиндра плоскостью торца
-                ICurve3 arc = ch ? new LineCurve3(q1, q2) : Section(C0, t, e1, e2, r, V, ne, th1, dth);
+                ICurve3? arcL = law != null ? ConeSection(lApex, lW, lAlpha, V, ne, q1, q2) : null;
+                if (law != null && arcL == null) { why = "variable radius: the end plane does not cut the cone in an ellipse"; return null; }
+                ICurve3 arc = arcL ?? (ch ? new LineCurve3(q1, q2) : Section(C0, t, e1, e2, r, V, ne, th1, dth));
                 if ((arc.PointAt(arc.T0) - q1).Length > 1e-7 || (arc.PointAt(arc.T1) - q2).Length > 1e-7) { why = "end arc does not meet the contact points"; return null; }
                 endPts[vi] = (q1, q2, arc);
                 // правка торцевой грани: в вершине V — укоротить соседние и вставить дугу
@@ -490,6 +630,20 @@ public static partial class DirectRound
             {
                 var axisFrame = new Frame3(C0, e1, e2);   // W = t
                 bl = new FDesc { Surf = new CylinderSurface(axisFrame, r), Rev = sigma > 0, Tag = "round:face", Touched = true };
+                if (law != null)
+                {
+                    // конус: образующая в полуплоскости угла 0 рамки оси, от вершины на высоты контактных точек (с запасом)
+                    var uu = Vector3d.Cross(lW, Math.Abs(lW.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY).Normalized();
+                    double H(Vector3d x) => Vector3d.Dot(x - lApex, lW);
+                    var hs = new[] { endPts[0].Q1, endPts[0].Q2, endPts[1].Q1, endPts[1].Q2 }.Select(H).ToList();
+                    double h0 = hs.Min() * 0.5, h1 = hs.Max() * 1.5; double ta = Math.Tan(lAlpha);
+                    var gen = new LineCurve3(lApex + lW * h0 + uu * (h0 * ta), lApex + lW * h1 + uu * (h1 * ta));
+                    var cone = new RevolvedSurface(gen, new Frame3(lApex, uu, Vector3d.Cross(lW, uu)), 0, 2 * Math.PI);
+                    var qm = endPts[0].Arc.PointAt(0.5); var nr = qm - lApex; nr -= lW * Vector3d.Dot(nr, lW);
+                    var want = sigma < 0 ? nr : -nr;
+                    bool rv = Vector3d.Dot(cone.NormalAt(cone.ProjectToUV(qm)), want) < 0;
+                    bl = new FDesc { Surf = cone, Rev = rv, Tag = "round:face", Touched = true };
+                }
             }
             var a0 = endPts[0]; var a1 = endPts[1];
             var loopB = new List<Seg>
@@ -510,6 +664,7 @@ public static partial class DirectRound
                 loopB.Reverse();
                 foreach (var s in loopB) (s.A, s.B) = (s.B, s.A);
             }
+            if (law != null && bl.Surf is RevolvedSurface lcs) { var mm = (endPts[0].Arc.PointAt(0.5) + endPts[1].Arc.PointAt(0.5)) / 2; mid = lcs.PointAt(lcs.ProjectToUV(mm)); }
             bl.Loops.Add(loopB); bl.Hint = mid;
             blends.Add(bl);
         }
@@ -852,7 +1007,15 @@ public static partial class DirectRound
             }
             double aP = around % 2 == 1 ? 1 : -1;                // +1: плоская грань уходит от окружности наружу
             double sigma = aP * sC < 0 ? -1 : 1;                 // −1 выпуклое
-            double rho = R + sigma * sC * r;
+            // KRN-06 (06.15): несимметричная фаска окружности — свой размер на плоскости (радиальный сдвиг) и на цилиндре (осевой)
+            double dP = r, dC = r;
+            if (ch && _chamfer is { } cmc && !UnequalCircleOff)
+            {
+                if (!cmc.First.TryGetValue(arcs[0], out var f1st)) { why = "unequal chamfer: the first-size face is unknown"; return false; }
+                dP = ReferenceEquals(Fp.Orig, f1st) ? cmc.D1 : cmc.D2; dC = ReferenceEquals(Fc.Orig, f1st) ? cmc.D1 : cmc.D2;
+            }
+            else if (ch && _chamfer != null) { why = "unequal chamfer: circles off"; return false; }
+            double rho = R + sigma * sC * dP;
             if (!(rho > 1e-6)) { why = "circle: radius too large for the boss"; return false; }
             // место на плоскости: другие контуры не ближе к оси, чем новая окружность (снаружи) / дальше (внутри)
             foreach (var l in Fp.Loops.Where(l => l != lp))
@@ -863,8 +1026,8 @@ public static partial class DirectRound
                         if (aP > 0 ? rq <= rho + 1e-7 : rq >= rho - 1e-7) { why = "circle: another loop of the plane face in the blend strip"; return false; }
                     }
             // место на цилиндре: другая окружность дальше r вдоль оси в сторону σ·n_p
-            var shift = np * (sigma * r);
-            if (Vector3d.Dot(oa.Frame.Origin - O, np * sigma) <= r + 1e-7) { why = "circle: cylinder face shorter than the blend"; return false; }
+            var shift = np * (sigma * dC);
+            if (Vector3d.Dot(oa.Frame.Origin - O, np * sigma) <= dC + 1e-7) { why = "circle: cylinder face shorter than the blend"; return false; }
             // новые дуги — те же угловые пределы и рамки, другой радиус (плоскость) и сдвиг вдоль оси (цилиндр); звено идёт
             // в ту же сторону, что прежнее
             Seg Moved(Seg sg, Vector3d centre, double rad)

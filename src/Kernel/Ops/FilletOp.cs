@@ -297,6 +297,8 @@ public static class FilletOp
             return;
         }
 
+        // KRN-06 (06.14): одно прямое ребро между плоскостями — точный конус прямым построителем
+        if (DirectRound.TryRoundVariable(bodies, edges, r0, r1, warnings)) return;
         VariableLaw = t => r0 + (r1 - r0) * Math.Clamp(t, 0, 1);
         try { Apply(bodies, edges, warnings, "Round", Math.Max(r0, r1), Math.Max(r0, r1), true); }
         finally { VariableLaw = null; }
@@ -2474,6 +2476,20 @@ public static class FilletOp
     }
 
     /// <summary>Грань, на которую построитель резца кладёт первый размер.</summary>
+    /// <summary>KRN-06 (06.15): грань, на которую ложится ПЕРВЫЙ размер несимметричной фаски, — по тому же правилу, что у резцов
+    /// (SizeOneFace и сторона по ходу цепочки, ChamferSides).</summary>
+    internal static Dictionary<TEdge, TFace> FirstSizeFaces(List<TEdge> edges)
+    {
+        var swap = ChamferSides(edges); var res = new Dictionary<TEdge, TFace>(ReferenceEqualityComparer.Instance);
+        for (int i = 0; i < edges.Count; i++)
+        {
+            var e = edges[i]; if (e.FaceA == null || e.FaceB == null) continue;
+            var f1 = SizeOneFace(e); var f2 = ReferenceEquals(f1, e.FaceA) ? e.FaceB : e.FaceA;
+            res[e] = swap[i] ? f2 : f1;
+        }
+        return res;
+    }
+
     private static TFace SizeOneFace(TEdge edge)
     {
         TFace a = edge.FaceA!, b = edge.FaceB!;

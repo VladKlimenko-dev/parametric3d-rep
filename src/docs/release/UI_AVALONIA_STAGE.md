@@ -65,3 +65,18 @@ SolidWorks. Выполняется параллельно с этапом FF (`F
 U.1 паритет функций со старым приложением; U.2 все операции ядра доступны с предпросмотром и правкой; U.3 3D-вид — те же
 снимки-эталоны в Xvfb и на Windows; U.4 отклик вида и правки в целях пользователя; U.5 сценарии пользователя (деталь,
 сборка) без модальных окон.
+
+## Пакеты UI (2026-10-12)
+
+- Источник — приватный релиз `ui-packages-1` репозитория `VladKlimenko-dev/parametric3d-rep`: архив `ui-nupkgs.zip`,
+  658 МБ, 74 пакета `.nupkg`. Состав — `dotnet restore` пользователя по списку: Avalonia, Avalonia.Desktop,
+  Avalonia.Themes.Fluent, Avalonia.Fonts.Inter, Avalonia.Headless 12.1.4; Avalonia.Controls.DataGrid 12.1.2; Dock.Avalonia и
+  Dock.Model.Mvvm 12.1.0.7; Svg.Controls.Skia.Avalonia 12.0.0.17; Xaml.Behaviors.Avalonia 12.0.5; CommunityToolkit.Mvvm
+  8.4.2. Зависимости пришли сами, в том числе SkiaSharp и HarfBuzzSharp с нативными сборками для linux-x64 и win-x64.
+- Стек этапа — Avalonia 12 (а не 11, как в первом плане): restore и сборка проходят под .NET 8.
+- Проверено в среде разработки ядра, без доступа к nuget.org (локальный источник):
+  - restore и сборка пробного приложения со всем набором;
+  - компиляция XAML (`.axaml` с `x:Class`);
+  - отрисовка окна через Skia без экрана (Avalonia.Headless, `CaptureRenderedFrame`).
+- Генераторы исходников Avalonia 12 требуют компилятор Roslyn 4.14, а в .NET 8 SDK — 4.8. Это предупреждение CS9057;
+  обычная компиляция XAML работает.
