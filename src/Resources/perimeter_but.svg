@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="140" height="88">
+	<path fill="none" stroke="#D2691E" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1760.31 -445.138)" d="M1780.595 512.21625C1830.6796 461.92151 1835.6429 539.81165 1880.313 501.97928" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1760.31 -445.138)" d="M1780.595 512.21631L1780.313 467.99637" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1760.31 -445.138)" d="M1880.313 501.97925L1880.031 465.13843" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1760.31 -445.138)" d="M1787.2377 483.82886C1828.4589 449.10974 1836.688 508.00714 1872.8733 485.27567" fill-rule="evenodd"/>
+	<path transform="matrix(-0.705625 0.708586 -0.708586 -0.705625 20.141 44.9679)" d="M0 0L-18 7.2000003L-18 -7.2000003L0 0Z"/>
+	<path transform="matrix(0.763094 -0.646287 0.646287 0.763094 119.859 34.7309)" d="M0 0L-18 7.2000003L-18 -7.2000003L0 0Z"/>
+</svg>
