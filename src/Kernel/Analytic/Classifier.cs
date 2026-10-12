@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Geometry;
 using Parametric3D.Kernel.Topology;
@@ -546,7 +546,8 @@ public sealed partial class AnalyticFace
             else
             {
                 double t0 = Theta(prev), t1 = t0 + (Wrap(Theta(q) - t0 + Math.PI) - Math.PI);
-                Bounds.Add(new Seg(Seg.Line, new(t0, H(prev)), new(t1, H(q)), default, 0, 0, 0));
+                // сырые углы концов (atan2, −π → π) — в T0 и Sweep, R = 1 — признак: соседние отрезки делят их побитно
+                Bounds.Add(new Seg(Seg.Line, new(t0, H(prev)), new(t1, H(q)), default, 1, Canon(Theta(prev)), Canon(Theta(q))));
             }
             prev = q;
         }
@@ -627,6 +628,26 @@ public sealed partial class AnalyticFace
                     }
                 default:
                     {
+                        if (s.R == 1 && !RayExactOff)
+                        {
+                            // g.05/g.13: ПРИНАДЛЕЖНОСТЬ θ ОТРЕЗКУ — ПО СЫРЫМ УГЛАМ КОНЦОВ, без сдвигов на 2π в плавающей точке.
+                            // Соседние отрезки ломаной делят конец побитно, интервал полуоткрыт в сторону роста угла — каждый θ
+                            // ровно в одном отрезке. Прежде концы сдвигались на 2π с округлением: луч точки ровно на шве
+                            // развёртки (θ = π) проходил через вершину кромки и считался дважды или ни разу в зависимости от
+                            // знака 1e-16 в координате точки кривой (KRN04-REFINE-AT-CLOSED-EDGE-SEAM). Мутация P3D_CYLRAYEXACT=0.
+                            double r0 = s.T0, r1 = s.Sweep, tq = Canon(th);
+                            if (r0 == r1) break;
+                            double mn = Math.Min(r0, r1), mx = Math.Max(r0, r1);
+                            bool wraps = mx - mn > Math.PI;
+                            if (!(wraps ? (tq >= mx || tq < mn) : (tq >= mn && tq < mx))) break;
+                            double a0x = s.A.X, a1x = s.B.X, lo0 = Math.Min(a0x, a1x);
+                            double tt0 = th; while (tt0 < lo0) tt0 += 2 * Math.PI; while (tt0 - 2 * Math.PI >= lo0) tt0 -= 2 * Math.PI;
+                            double u0 = Math.Abs(a1x - a0x) < 1e-300 ? 0 : Math.Clamp((tt0 - a0x) / (a1x - a0x), 0, 1);
+                            double hh0 = s.A.Y + (s.B.Y - s.A.Y) * u0;
+                            if (Math.Abs(hh0 - h) < tolH) return null;
+                            if (hh0 > h) crossings++;
+                            break;
+                        }
                         // отрезок ломаной в развёртке (θ — непрерывно вдоль отрезка): θ точки — со сдвигом на 2πk
                         double a0 = s.A.X, a1 = s.B.X; double lo = Math.Min(a0, a1), hiA = Math.Max(a0, a1);
                         double tt = th; while (tt < lo) tt += 2 * Math.PI; while (tt - 2 * Math.PI >= lo) tt -= 2 * Math.PI;
@@ -802,4 +823,6 @@ public sealed partial class AnalyticFace
 
     static double Ang(Vector2d v) => Math.Atan2(v.Y, v.X);
     static double Wrap(double a) { a %= 2 * Math.PI; return a < 0 ? a + 2 * Math.PI : a; }
+    static double Canon(double a) => a == -Math.PI ? Math.PI : a;
+    static readonly bool RayExactOff = Environment.GetEnvironmentVariable("P3D_CYLRAYEXACT") == "0";
 }

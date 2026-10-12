@@ -74,6 +74,24 @@ static partial class Program
     /// <summary>Разбор g.13: профиль предпросмотра правки последней операции и полного перестроения детали (PERFSEED).</summary>
     static void PerfProfile()
     {
+        if (Environment.GetEnvironmentVariable("PERFHOLES") is string ph)
+        {
+            // для внешнего профилировщика: деталь со 100 отверстиями, полное перестроение ph раз (метка — HolesLoop)
+            var ph0 = new Part("perfholes");
+            TestGeometry.AddCube(ph0, 200);
+            int side = 10; double step = 200.0 / (side + 1);
+            for (int i = 0; i < 100; i++)
+            {
+                double x = -100 + step * (1 + i % side), y = -100 + step * (1 + i / side);
+                var h = new Parametric3D.Model.Features.HoleFeature($"H{i}") { Direction = -OpenTK.Mathematics.Vector3d.UnitZ, Diameter = new Parametric3D.Model.Features.ValueRef(4), ThroughAll = true };
+                h.Points.Add(new OpenTK.Mathematics.Vector3d(x, y, 100));
+                ph0.AddFeature(h);
+            }
+            ph0.Rebuild(null);
+            void HolesLoop() { for (int k = 0; k < int.Parse(ph); k++) { ph0.MarkDirtyFrom(ph0.Features[0]); var sw0 = Stopwatch.StartNew(); ph0.Rebuild(null); Console.WriteLine($"holes100 full: {sw0.ElapsedMilliseconds} ms"); } }
+            HolesLoop();
+            return;
+        }
         int seed = int.Parse(Environment.GetEnvironmentVariable("PERFSEED") ?? "6");
         { var p0 = RealisticPart(99, 20, out _); p0.MarkDirtyFrom(p0.Features[0]); p0.Rebuild(null); }
         var p = RealisticPart(seed, 40, out _);
@@ -93,6 +111,12 @@ static partial class Program
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < 5; i++) { p.MarkDirtyFrom(last); using (new KernelContext(KernelSettings.Capture() with { Preview = true }).Enter()) { var r = p.Compute(null); p.Apply(r); } }
         Console.WriteLine($"preview ×5: {sw.ElapsedMilliseconds} ms");
+        if (int.TryParse(Environment.GetEnvironmentVariable("PERFLOOP"), out int loops))
+        {
+            // для внешнего профилировщика: тот же предпросмотр loops раз (метка в стеке — PreviewLoop)
+            void PreviewLoop() { for (int i = 0; i < loops; i++) { p.MarkDirtyFrom(last); using (new KernelContext(KernelSettings.Capture() with { Preview = true }).Enter()) { var r = p.Compute(null); p.Apply(r); } } }
+            sw.Restart(); PreviewLoop(); Console.WriteLine($"preview ×{loops}: {sw.ElapsedMilliseconds} ms");
+        }
         Console.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report());
         p.Rebuild(null);
         Parametric3D.Kernel.Diagnostics.Prof.Reset();

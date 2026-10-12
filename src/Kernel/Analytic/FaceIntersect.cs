@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Geometry;
 using Parametric3D.Kernel.Topology;
@@ -372,6 +372,7 @@ public static class FaceIntersect
                     double tc = FaceSplit.ClosestParam(c, q);
                     if ((c.PointAt(tc) - q).Length <= 1e-6) ts.Add(tc);
                     else if (Debug != null && (a.Tor || b.Tor)) Debug($"   event dropped: q {q:0.######} curve dist {(c.PointAt(tc) - q).Length:G3} tc {tc:G6} [{c.T0:G4},{c.T1:G4}]");
+                    if (ClipDbg) Console.WriteLine($"  EVT on {e.Curve.GetType().Name} te {te:G9} q {q:0.#########} tc {tc:G9} dist {(c.PointAt(tc) - q).Length:G3}");
                 }
             }
         if (closed) { for (int i = 0; i < ts.Count; i++) if (ts[i] >= T1 - 1e-12 * P) ts[i] = T0; }

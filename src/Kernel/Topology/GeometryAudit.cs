@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 
@@ -86,7 +86,8 @@ public sealed class GeometryAudit
                 continue;
             }
             double chord = 0;
-            if (f.Surface is FacetedSurface fs)
+            if (f.Surface is FacetedSurface fsc && CachedChord(fsc, s) is double cc) chord = cc;
+            else if (f.Surface is FacetedSurface fs)
             {
                 // Ошибка гранения: наибольший отход центров и середин сторон треугольников.
                 // KRN-02 (P0): по ГЕОМЕТРИИ (Facets), не по сетке отображения — прежде аудит, а за ним годность и допуски,
@@ -99,6 +100,7 @@ public sealed class GeometryAudit
                     chord = Math.Max(chord, Distance(s, (p + q + r) / 3));
                     chord = Math.Max(chord, Distance(s, (p + q) / 2));
                 }
+                StoreChord(fs, s, chord);
             }
             a.Faces.Add(new FaceGeometry(f.Id, s.GetType().Name, GeometryLevel.Analytic, chord));
         }
@@ -116,13 +118,13 @@ public sealed class GeometryAudit
             var faces = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
             var sa = faces.Count > 0 ? AuthoritativeSurface(faces[0]) : null;
             var sb = faces.Count > 1 ? AuthoritativeSurface(faces[1]) : sa;
-            double da = sa == null || sa is FacetedSurface ? double.NaN : CurveOff(e.Curve, sa);
-            double db = sb == null || sb is FacetedSurface ? double.NaN : CurveOff(e.Curve, sb);
+            double da = sa == null || sa is FacetedSurface ? double.NaN : Off(e.Curve, sa, false);
+            double db = sb == null || sb is FacetedSurface ? double.NaN : Off(e.Curve, sb, false);
             if (exactBody)
             {
                 // точное расстояние до элементарной поверхности (проекция на поверхность численная — её шум 1e-9…1e-8)
-                if (Geometry.ExactEdges.ShapeOf(sa) is { } ha) da = CurveOffExact(e.Curve, ha);
-                if (Geometry.ExactEdges.ShapeOf(sb) is { } hb) db = CurveOffExact(e.Curve, hb);
+                if (sa != null && Off(e.Curve, sa, true) is var xa && !double.IsNaN(xa)) da = xa;
+                if (sb != null && Off(e.Curve, sb, true) is var xb && !double.IsNaN(xb)) db = xb;
             }
 
             // Допуск согласования учитывает и заявленную ошибку гранения смежных граней: точная
@@ -140,6 +142,44 @@ public sealed class GeometryAudit
             if (level == GeometryLevel.Inconsistent) OnInconsistent?.Invoke(solid, e, faces);
         }
         return a;
+    }
+
+    /// <summary>
+    /// g.13: ПАМЯТЬ АУДИТА. Отход кривой ребра от поверхности — функция пары неизменяемых объектов (кривая, поверхность):
+    /// тело после операции делит их с телом до неё (TopologyClone не копирует геометрию), и аудит каждой операции заново
+    /// мерил все рёбра детали (100 отверстий — квадратично). Ошибка гранения грани — только у замороженной (опубликованной)
+    /// сетки. Ответы те же (KRN10-AUDIT-CACHE-SAME). Мутация P3D_AUDITCACHE=0.
+    /// </summary>
+    static readonly bool CacheOff = Environment.GetEnvironmentVariable("P3D_AUDITCACHE") == "0";
+    [ThreadStatic] static bool _cacheOffForTests;
+    public static bool CacheOffForTests { get => _cacheOffForTests; set => _cacheOffForTests = value; }
+    static bool UseCache => !CacheOff && !_cacheOffForTests;
+    public static long CacheHits;
+    sealed class OffBox { public readonly List<(ISurface3 S, bool Exact, double D)> L = new(); }
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ICurve3, OffBox> _off = new();
+    sealed class ChordBox { public ISurface3? S; public int N; public double D; }
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<FacetedSurface, ChordBox> _chord = new();
+
+    static double Off(ICurve3 c, ISurface3 s, bool exact)
+    {
+        if (!UseCache) return exact ? (Geometry.ExactEdges.ShapeOf(s) is { } h ? CurveOffExact(c, h) : double.NaN) : CurveOff(c, s);
+        var box = _off.GetValue(c, _ => new OffBox());
+        lock (box) foreach (var (S, X, D) in box.L) if (ReferenceEquals(S, s) && X == exact) { Interlocked.Increment(ref CacheHits); return D; }
+        double d = exact ? (Geometry.ExactEdges.ShapeOf(s) is { } h2 ? CurveOffExact(c, h2) : double.NaN) : CurveOff(c, s);
+        lock (box) box.L.Add((s, exact, d));
+        return d;
+    }
+    static double? CachedChord(FacetedSurface fs, ISurface3 s)
+    {
+        if (!UseCache || !((IFreezable)fs).IsFrozen || !_chord.TryGetValue(fs, out var b)) return null;
+        lock (b) { if (ReferenceEquals(b.S, s) && b.N == fs.Facets.Count) { Interlocked.Increment(ref CacheHits); return b.D; } }
+        return null;
+    }
+    static void StoreChord(FacetedSurface fs, ISurface3 s, double d)
+    {
+        if (!UseCache || !((IFreezable)fs).IsFrozen) return;
+        var b = _chord.GetValue(fs, _ => new ChordBox());
+        lock (b) { b.S = s; b.N = fs.Facets.Count; b.D = d; }
     }
 
     private static double Distance(ISurface3 s, Vector3d p)

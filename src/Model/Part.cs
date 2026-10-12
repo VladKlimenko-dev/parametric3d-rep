@@ -1641,15 +1641,31 @@ public sealed class FeatureHistory
     static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Kernel.Topology.TEdge, RevBox<(string Name, string Sig)>> EdgeInfoCache = new();
     static long RevOf(Kernel.Topology.TFace f) => f.Shell?.Solid?.Revision ?? -1;
 
+    /// <summary>
+    /// g.13: подпись ребра (вид кривой и округлённые концы) — функция кривой-объекта и концов: копии тела делят кривые, и
+    /// подпись прежнего ребра не строится строкой заново после каждой операции. Мутация P3D_HISTREF=0.
+    /// </summary>
+    sealed class EdgeSigBox { public readonly List<(OpenTK.Mathematics.Vector3d A, OpenTK.Mathematics.Vector3d B, string S)> L = new(); }
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Kernel.Curves.ICurve3, EdgeSigBox> EdgeSigCache = new();
+    static string EdgeSigOf(Kernel.Topology.TEdge e)
+    {
+        static string P(OpenTK.Mathematics.Vector3d q) => $"{Math.Round(q.X, 6)},{Math.Round(q.Y, 6)},{Math.Round(q.Z, 6)}";
+        string Make() { var ends = new[] { P(e.V0.P), P(e.V1.P) }.OrderBy(x => x, StringComparer.Ordinal); return e.Curve.GetType().Name + ":" + string.Join("/", ends); }
+        if (HistRefOff) return Make();
+        var box = EdgeSigCache.GetValue(e.Curve, _ => new EdgeSigBox());
+        lock (box) foreach (var (a, b, str) in box.L) if (a.Equals(e.V0.P) && b.Equals(e.V1.P) && !double.IsNaN(a.X)) return str;
+        var s = Make();
+        lock (box) { if (box.L.Count < 8) box.L.Add((e.V0.P, e.V1.P, s)); }
+        return s;
+    }
+
     internal static (string Name, string Sig) EdgeInfo(Kernel.Topology.TEdge e)
     {
         var face0 = e.CoEdges.FirstOrDefault()?.Loop?.Face;
         long rev = face0 == null ? -1 : RevOf(face0);
         if (!HistCacheOff && rev >= 0 && EdgeInfoCache.TryGetValue(e, out var box) && box.Rev == rev) return box.Value;
         var names = e.CoEdges.Select(c => c.Loop?.Face?.Tag ?? "").Distinct().OrderBy(x => x, StringComparer.Ordinal).ToList();
-        string P(OpenTK.Mathematics.Vector3d q) => $"{Math.Round(q.X, 6)},{Math.Round(q.Y, 6)},{Math.Round(q.Z, 6)}";
-        var ends = new[] { P(e.V0.P), P(e.V1.P) }.OrderBy(x => x, StringComparer.Ordinal);
-        var v = (string.Join("|", names), e.Curve.GetType().Name + ":" + string.Join("/", ends));
+        var v = (string.Join("|", names), EdgeSigOf(e));
         if (!HistCacheOff && rev >= 0) EdgeInfoCache.AddOrUpdate(e, new RevBox<(string, string)> { Rev = rev, Value = v });
         return v;
     }
@@ -1660,11 +1676,59 @@ public sealed class FeatureHistory
     /// </summary>
     internal static bool SameRegionSignature(List<Kernel.Topology.TFace> a, List<Kernel.Topology.TFace> b)
     {
+        // g.13: КОПИЯ ГРАНИ ТЕМИ ЖЕ ОБЪЕКТАМИ. Операция копирует тело (TopologyClone делит поверхности и кривые), и подпись
+        // каждой неизменной грани строилась заново строкой после каждой операции (100 отверстий — квадратично). Грани с той
+        // же поверхностью-объектом, стороной и теми же полурёбрами (кривая-объект, направление, концы побитно) в том же
+        // порядке имеют ту же подпись — сравнение без строк; иначе — подписи. Мутация P3D_HISTREF=0.
+        if (!HistRefOff && a.Count == b.Count && a.Count > 0 && SameByReference(a, b)) { Interlocked.Increment(ref HistRefHits); return true; }
         var sa = new List<string>(a.Count); var sb = new List<string>(b.Count);
         foreach (var f in a) { var k = FaceSignature(f); if (k == null) return false; sa.Add(k); }
         foreach (var f in b) { var k = FaceSignature(f); if (k == null) return false; sb.Add(k); }
         sa.Sort(StringComparer.Ordinal); sb.Sort(StringComparer.Ordinal);
         return sa.SequenceEqual(sb);
+    }
+
+    static readonly bool HistRefEnvOff = Environment.GetEnvironmentVariable("P3D_HISTREF") == "0";
+    [ThreadStatic] static bool _histRefOffForTests;
+    /// <summary>Сравнение (KRN10-HISTORY-BY-REFERENCE): прежние подписи в этом потоке.</summary>
+    public static bool HistRefOffForTests { get => _histRefOffForTests; set => _histRefOffForTests = value; }
+    static bool HistRefOff => HistRefEnvOff || _histRefOffForTests;
+    /// <summary>Сравнений групп граней, решённых совпадением объектов (замер KRN10-HISTORY-BY-REFERENCE).</summary>
+    public static long HistRefHits;
+    static bool SameByReference(List<Kernel.Topology.TFace> a, List<Kernel.Topology.TFace> b)
+    {
+        var used = new bool[b.Count];
+        foreach (var f in a)
+        {
+            int j = -1;
+            for (int k = 0; k < b.Count && j < 0; k++) if (!used[k] && SameFaceObjects(f, b[k])) j = k;
+            if (j < 0) return false;
+            used[j] = true;
+        }
+        return true;
+    }
+    static bool SameFaceObjects(Kernel.Topology.TFace x, Kernel.Topology.TFace y)
+    {
+        var sx = Kernel.Topology.GeometryAudit.AuthoritativeSurface(x);
+        if (sx == null || !ReferenceEquals(sx, Kernel.Topology.GeometryAudit.AuthoritativeSurface(y)) || x.Reversed != y.Reversed) return false;
+        // подпись была бы null (поверхность не по содержанию) — решают прежние сравнения, как прежде
+        if (sx is not Kernel.Surfaces.CylinderSurface && Kernel.Ops.BooleanOp.SourceKey(sx) is not string) return false;
+        if (x.Loops.Count != y.Loops.Count) return false;
+        for (int i = 0; i < x.Loops.Count; i++)
+        {
+            var lx = x.Loops[i].CoEdges; var ly = y.Loops[i].CoEdges;
+            if (lx.Count != ly.Count) return false;
+            for (int k = 0; k < lx.Count; k++)
+            {
+                var cx = lx[k]; var cy = ly[k];
+                if (!ReferenceEquals(cx.Edge.Curve, cy.Edge.Curve) || cx.Reversed != cy.Reversed) return false;
+                if (cx.Edge.Curve is not (Kernel.Curves.LineCurve3 or Kernel.Curves.ArcCurve3 or Kernel.Curves.EllipseCurve3 or Kernel.Curves.SplineCurve3)) return false;
+                if (!Bits(cx.Edge.V0.P, cy.Edge.V0.P) || !Bits(cx.Edge.V1.P, cy.Edge.V1.P)) return false;
+            }
+        }
+        return true;
+        static bool Bits(OpenTK.Mathematics.Vector3d p, OpenTK.Mathematics.Vector3d q) =>
+            BitConverter.DoubleToInt64Bits(p.X) == BitConverter.DoubleToInt64Bits(q.X) && BitConverter.DoubleToInt64Bits(p.Y) == BitConverter.DoubleToInt64Bits(q.Y) && BitConverter.DoubleToInt64Bits(p.Z) == BitConverter.DoubleToInt64Bits(q.Z);
     }
 
     internal static string? FaceSignature(Kernel.Topology.TFace f)

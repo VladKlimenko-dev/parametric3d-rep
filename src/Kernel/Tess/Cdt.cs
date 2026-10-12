@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 
 namespace Parametric3D.Kernel.Tess;
 
@@ -730,6 +730,15 @@ public static class Cdt
 
         if (counted > 0) mean /= counted;
 
+        (double Y0, double Y1, double X1)[]? lb = CdtBoxOff || BoxOffForTests ? null : new (double, double, double)[loops.Count];
+        if (lb != null)
+            for (int i = 0; i < loops.Count; i++)
+            {
+                double y0 = double.MaxValue, y1 = double.MinValue, x1 = double.MinValue;
+                for (int j = 0; j < loops[i].Count; j++) { var q = pts[loops[i].From + j]; y0 = Math.Min(y0, q.Y); y1 = Math.Max(y1, q.Y); x1 = Math.Max(x1, q.X); }
+                lb[i] = (y0, y1, x1);
+            }
+
         for (int k = 0; k < count; k++)
         {
             int t = k * 3;
@@ -744,7 +753,14 @@ public static class Cdt
 
             bool inOuter = Inside(pts, loops[0], mid);
             bool inHole = false;
-            for (int i = 1; i < loops.Count && !inHole; i++) inHole = Inside(pts, loops[i], mid);
+            for (int i = 1; i < loops.Count && !inHole; i++)
+            {
+                // g.13: точка вне габарита отверстия по Y (ни одна сторона не пересекает луч) или правее него (с запасом на
+                // округление точки пересечения) — подсчёт пересечений дал бы «снаружи»: тот же ответ без обхода контура.
+                // Грань со 100 отверстиями — треугольники × точки всех отверстий. Мутация P3D_CDTBOX=0.
+                if (lb != null && (mid.Y < lb[i].Y0 || mid.Y > lb[i].Y1 || mid.X > lb[i].X1 + 1e-9 * (1 + Math.Abs(lb[i].X1)))) continue;
+                inHole = Inside(pts, loops[i], mid);
+            }
 
             keep[k] = inOuter && !inHole;
         }
@@ -752,8 +768,13 @@ public static class Cdt
         return keep;
     }
 
+    static readonly bool CdtBoxOff = Environment.GetEnvironmentVariable("P3D_CDTBOX") == "0";
+    /// <summary>Сравнение (KRN10-CDT-BOX-SAME): без отбора по габаритам в этом потоке; обходы контуров — счётчик.</summary>
+    public static volatile bool BoxOffForTests;
+    public static long LoopWalks;
     private static bool Inside(List<Vector2d> pts, (int From, int Count) loop, Vector2d q)
     {
+        Interlocked.Increment(ref LoopWalks);
         bool inside = false;
         for (int i = 0, j = loop.Count - 1; i < loop.Count; j = i++)
         {
