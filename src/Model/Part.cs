@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Tess;
@@ -438,6 +438,10 @@ public sealed class Part : ModelItem
         /// поэтому её вердикт идёт вместе с результатом, а не теряется в предупреждениях.
         /// </summary>
         public readonly List<Kernel.Topology.ValidationReport> Validation = new();
+        /// <summary>g.13: проверка сетки тел отложена предпросмотром — выполняется при следующем обычном расчёте (тела и сетки те же).</summary>
+        internal readonly List<(TSolid Body, MeshData Mesh)> DeferredValidation = new();
+        /// <summary>Отложена ли проверка тел (результат предпросмотра, ещё не принятый обычным расчётом).</summary>
+        public bool ValidationPending => DeferredValidation.Count > 0;
 
         /// <summary>Есть ли среди тел приближённые (выбранные явно приближённой политикой).</summary>
         public bool Approximate;
@@ -596,6 +600,25 @@ public sealed class Part : ModelItem
     }
 
     static readonly bool PreviewPartOff = Environment.GetEnvironmentVariable("P3D_PREVIEWPART") == "0";
+    internal static readonly bool PreviewValidateOff = Environment.GetEnvironmentVariable("P3D_PREVIEWVALIDATE") == "0";
+
+    static void ValidationIntegrity(BuildResult result)
+    {
+        var bad = result.Validation.Where(v => !v.IsValid).ToList();
+        if (bad.Count > 0)
+            result.IntegrityError = (result.IntegrityError == null ? "" : result.IntegrityError + " ") + $"Integrity: {bad.Count} body(ies) failed validation — " +
+                                    string.Join(" | ", bad.Select(v => v.Summary()));
+    }
+
+    /// <summary>g.13: отложенная предпросмотром проверка тел результата — те же проверки на тех же телах и сетках.</summary>
+    static void RunDeferredValidation(BuildResult r)
+    {
+        if (r.DeferredValidation.Count == 0) return;
+        foreach (var (b, md) in r.DeferredValidation)
+            r.Validation.Add(Kernel.Topology.SolidValidator.Validate(b, md, new Kernel.Topology.ValidationOptions { CheckExact = false }));
+        r.DeferredValidation.Clear();
+        ValidationIntegrity(r);
+    }
 
     /// <summary>Принять тела предпросмотра в сохранённых состояниях и прежнем результате; не принятое — пересчёт с его места.</summary>
     private void AcceptPreviewBodies()
@@ -621,6 +644,17 @@ public sealed class Part : ModelItem
         if (!settingsNow.Preview && !PreviewPartOff) AcceptPreviewBodies();
         if (ApplyOutsideChanges(parameters, settingsNow))
         {
+            // g.13: результат предпросмотра принимается — его отложенная проверка тел выполняется сейчас; найденный сбой
+            // целостности — как у обычного расчёта (следующий расчёт начнётся с конца).
+            if (!settingsNow.Preview && _lastResult!.ValidationPending)
+            {
+                RunDeferredValidation(_lastResult);
+                if (_lastResult.IntegrityError != null && RetryAfterFailure)
+                {
+                    var failed = _lastResult; _lastResult = null; DirtyFromIndex(Features.Count - 1);
+                    return failed;
+                }
+            }
             // НИЧЕГО НЕ ИЗМЕНИЛОСЬ: прежний результат выдаётся без единой геометрической операции.
             // Прежде такое перестроение шло по ветке «отметки нет» и пересчитывало всё дерево.
             var last = _lastResult!;
@@ -990,16 +1024,17 @@ public sealed class Part : ModelItem
                 else { result.Volume += MassProps.Volume(md); result.Area += MassProps.Area(md); result.MassFromMesh = true; result.VolumeError += Kernel.Topology.AnalyticMeasure.Volume(b, md).Error; }
                 result.Bounds.Add(md.Bounds);
                 if (ValidateResults)
-                    result.Validation.Add(Kernel.Topology.SolidValidator.Validate(b, md,
+                {
+                    // g.13: в предпросмотре проверка сетки тела откладывается до принятия (P3D_PREVIEWVALIDATE=0 — сразу)
+                    if (settingsNow.Preview && !PreviewValidateOff) result.DeferredValidation.Add((b, md));
+                    else result.Validation.Add(Kernel.Topology.SolidValidator.Validate(b, md,
                         new Kernel.Topology.ValidationOptions { CheckExact = false }));
+                }
                 if (b.Guarantee == Kernel.GuaranteeLevel.Approximate) result.Approximate = true;
             }
             result.Mesh = all.Count == 1 ? all[0] : Merge(all);
 
-            var bad = result.Validation.Where(v => !v.IsValid).ToList();
-            if (bad.Count > 0)
-                result.IntegrityError = (result.IntegrityError == null ? "" : result.IntegrityError + " ") + $"Integrity: {bad.Count} body(ies) failed validation — " +
-                                        string.Join(" | ", bad.Select(v => v.Summary()));
+            ValidationIntegrity(result);
             if (result.Mesh != null && !result.Mesh.Whole)
                 result.IntegrityError ??= $"Integrity: {result.Mesh.BrokenFaces.Count} face(s) missing from the mesh.";
         }

@@ -107,6 +107,7 @@ public static class SolidValidator
     /// <summary>Проверить тело; сетку — если передана, иначе построить показную.</summary>
     public static ValidationReport Validate(TSolid solid, MeshData? mesh = null, ValidationOptions? options = null)
     {
+        using var _oh = Diagnostics.Overhead.Scope();
         options ??= new ValidationOptions();
         var report = new ValidationReport();
 

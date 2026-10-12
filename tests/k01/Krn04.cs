@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Ops;
@@ -528,6 +528,20 @@ static partial class Program
                     Log(new { test = "KRN04-EVENTS-TRACED", delta = d, top, events = ev.Count, onAll, distinct, uncertain = Parametric3D.Kernel.Analytic.SsiEvents.LastUncertain });
                     if (ev.Count != want || !onAll || !distinct) fails.Add($"δ {d} {(top ? "top" : "bottom")} edge: {ev.Count} events (want {want}), on surfaces {onAll}, distinct {distinct}");
                 }
+            }
+            // РЕДКАЯ ЛОМАНАЯ (серия 10, случай 0176): та же кривая по 9 опорным точкам — звенья длинны для шара единственности,
+            // звено делится по точкам самой кривой; события те же. Мутация P3D_TRACEDSPLIT=0 (отказ без деления).
+            foreach (var e in edges)
+            {
+                var ic = (IntersectionCurve3)e.Curve!;
+                bool top = e.V0.P.Z > c.Z || ic.PointAt(0.5).Z > c.Z;
+                var sparse = new IntersectionCurve3(ic.A, ic.B, Enumerable.Range(0, 9).Select(i => ic.PointAt(i / 8.0)).ToList());
+                double z = c.Z + 3 - 1e-2;
+                var ev = Parametric3D.Kernel.Analytic.SsiEvents.CurveSurface(sparse, new Parametric3D.Kernel.Geometry.Ssi.Plane(new Vector3d(0, 0, z), Vector3d.UnitZ), out _);
+                bool unc = Parametric3D.Kernel.Analytic.SsiEvents.LastUncertain;
+                int want = top ? 4 : 0;
+                Log(new { test = "KRN04-EVENTS-TRACED-SPARSE", top, events = ev.Count, uncertain = unc });
+                if (unc || ev.Count != want) fails.Add($"sparse {(top ? "top" : "bottom")} edge: {ev.Count} events (want {want}), uncertain {unc}");
             }
             Require(fails.Count == 0, string.Join("; ", fails));
         });

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Parametric3D.Kernel;
 using Parametric3D.Model;
 
@@ -66,5 +66,39 @@ static partial class Program
             Emit(new { kind = "session", edits = 200, startMb = m0 / 1048576.0, endMb = m1 / 1048576.0, growthMb = (m1 - m0) / 1048576.0,
                        workingSetMb = Environment.WorkingSet / 1048576.0 });
         }
+    }
+}
+
+static partial class Program
+{
+    /// <summary>Разбор g.13: профиль предпросмотра правки последней операции и полного перестроения детали (PERFSEED).</summary>
+    static void PerfProfile()
+    {
+        int seed = int.Parse(Environment.GetEnvironmentVariable("PERFSEED") ?? "6");
+        { var p0 = RealisticPart(99, 20, out _); p0.MarkDirtyFrom(p0.Features[0]); p0.Rebuild(null); }
+        var p = RealisticPart(seed, 40, out _);
+        p.MarkDirtyFrom(p.Features[0]); p.Rebuild(null);
+        var last = p.Features[^1];
+        Console.WriteLine($"last feature: {last.GetType().Name} {last.Name}");
+        for (int i = 0; i < 3; i++) { p.MarkDirtyFrom(last); using (new KernelContext(KernelSettings.Capture() with { Preview = true }).Enter()) { var r = p.Compute(null); p.Apply(r); } }
+        if (Environment.GetEnvironmentVariable("ROUTEDBG") == "1")
+        {
+            Parametric3D.Kernel.Ops.BooleanOp.AnalyticRouteDebug = m => Console.WriteLine("  ROUTE " + m);
+            p.MarkDirtyFrom(last); using (new KernelContext(KernelSettings.Capture() with { Preview = true }).Enter()) { var r = p.Compute(null); p.Apply(r); }
+            Parametric3D.Kernel.Ops.BooleanOp.AnalyticRouteDebug = null;
+            if (last is Parametric3D.Model.Features.HoleFeature hf && hf.LastRoutes != null)
+                foreach (var tr in hf.LastRoutes) Console.WriteLine("  HOLE " + string.Join(" | ", tr.Select(d => $"{d.Route}:{d.Verdict}:{d.Reason}")));
+        }
+        Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset();
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i < 5; i++) { p.MarkDirtyFrom(last); using (new KernelContext(KernelSettings.Capture() with { Preview = true }).Enter()) { var r = p.Compute(null); p.Apply(r); } }
+        Console.WriteLine($"preview ×5: {sw.ElapsedMilliseconds} ms");
+        Console.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report());
+        p.Rebuild(null);
+        Parametric3D.Kernel.Diagnostics.Prof.Reset();
+        GC.Collect(); long a0 = GC.GetTotalAllocatedBytes(true);
+        p.MarkDirtyFrom(p.Features[0]); sw.Restart(); p.Rebuild(null);
+        Console.WriteLine($"full rebuild: {sw.ElapsedMilliseconds} ms, allocated {(GC.GetTotalAllocatedBytes(true) - a0) / 1048576.0:F0} MB");
+        Console.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report());
     }
 }

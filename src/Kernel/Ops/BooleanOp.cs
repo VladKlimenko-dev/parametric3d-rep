@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Tess;
@@ -499,7 +499,7 @@ public static class BooleanOp
         {
             if (ForceAcceptFailure) return "forced acceptance failure (test)";
             var gSaved = r.Guarantee; r.Guarantee = gAtBuild;
-            try { return ChecksCore(); } finally { r.Guarantee = gSaved; }
+            try { using (Diagnostics.Overhead.Scope()) return ChecksCore(); } finally { r.Guarantee = gSaved; }
         }
         string? ChecksCore()
         {
@@ -653,6 +653,8 @@ public static class BooleanOp
         // Свой этап: отмена пробрасывается (KernelContext.Checkpoint), внутренний сбой маршрута — в том числе
         // внедрённый (FaultInjection, этап «boolean.analytic») — отказ маршрута и переход на многогранный путь.
         Topology.Provenance? prismProv = null;
+        if (Environment.GetEnvironmentVariable("P3D_R2DBGAT") is string r2at && r2at.Split(',') is [var r2x, var r2y])
+            Analytic.Region2Ops.DbgAt = new OpenTK.Mathematics.Vector2d(double.Parse(r2x, System.Globalization.CultureInfo.InvariantCulture), double.Parse(r2y, System.Globalization.CultureInfo.InvariantCulture));
         try { OperationTrace.Enter("boolean.analytic"); string why; using (Diagnostics.Prof.Time("аналитика: распознавание и сборка")) r = Analytic.PrismBuild.Boolean(body, other, op, out why);
             if (r == null && why == "the result is empty" && Analytic.GeneralBoolean.ConfirmEmpty(body, other, op)) { AnalyticRouteDebug?.Invoke("prism: empty result proved"); return ProvedEmpty; }
             if (r == null) { AnalyticRouteDebug?.Invoke("declined: " + why); return null; }
@@ -663,7 +665,7 @@ public static class BooleanOp
         // величины ошибаются одинаково: составной резец цекования был принят с ошибкой 804 мм³). Не подтверждено — отказ.
         foreach (var (operand, pv0, name) in new[] { (body, Analytic.PrismBuild.LastVolumeA, "first"), (other, Analytic.PrismBuild.LastVolumeB, "second") })
         {
-            double? ov; using (Diagnostics.Prof.Time("аналитика: сверка операнда")) ov = OperandVolume(operand);
+            double? ov; using (Diagnostics.Overhead.Scope()) using (Diagnostics.Prof.Time("аналитика: сверка операнда")) ov = OperandVolume(operand);
             if (ov == null) { AnalyticRouteDebug?.Invoke($"recognition unconfirmed: {name} operand has no analytic volume"); return null; }
             if (Math.Abs(ov.Value - pv0) > 1e-6 * Math.Max(1, Math.Abs(ov.Value))) { AnalyticRouteDebug?.Invoke($"recognition check: {name} operand layers {pv0} vs analytic {ov}"); return null; }
         }
@@ -708,9 +710,9 @@ public static class BooleanOp
         // строже прежнего (результат проходил, если общая сетка всё же оказывалась замкнутой), зато без случайностей.
         if (unmeshed > 0) { AnalyticRouteDebug?.Invoke($"invalid: {unmeshed} face(s) not meshed from their loops"); return null; }
         Topology.ValidationReport v;
-        using (Diagnostics.Prof.Time("аналитика: проверка B-rep")) v = Topology.SolidValidator.ValidateBRep(r);
+        using (Diagnostics.Overhead.Scope()) using (Diagnostics.Prof.Time("аналитика: проверка B-rep")) v = Topology.SolidValidator.ValidateBRep(r);
         if (!v.IsValid) { AnalyticRouteDebug?.Invoke("invalid: " + v.Summary()); return null; }
-        double? av; using (Diagnostics.Prof.Time("аналитика: аналитический объём")) av = Topology.AnalyticVolume.Of(r);
+        double? av; using (Diagnostics.Overhead.Scope()) using (Diagnostics.Prof.Time("аналитика: аналитический объём")) av = Topology.AnalyticVolume.Of(r);
         double pv = Analytic.PrismBuild.LastVolume;
         if (av == null || Math.Abs(av.Value - pv) > 1e-9 * Math.Max(1, Math.Abs(pv))) { AnalyticRouteDebug?.Invoke($"volume check: analytic {av} vs layers {pv}"); return null; }
         // Производная многогранная форма — лениво: следующие многогранные операции берут её через ExactAdapter.ToExact.
@@ -736,6 +738,7 @@ public static class BooleanOp
         // точность гранения — часть ключа: сетка той же грани при другой хорде другая
         b.Append("|c").Append(BitConverter.DoubleToInt64Bits(Core.Tol.Chord)).Append(',').Append(BitConverter.DoubleToInt64Bits(Core.Tol.ChordAngle));
         static void V(System.Text.StringBuilder sb, Vector3d v) => sb.Append(BitConverter.DoubleToInt64Bits(v.X)).Append(',').Append(BitConverter.DoubleToInt64Bits(v.Y)).Append(',').Append(BitConverter.DoubleToInt64Bits(v.Z)).Append(';');
+        if (!DonorCanonOff) return CanonLoops(b, f);
         foreach (var l in f.Loops)
         {
             b.Append(l.IsOuter ? "|O" : "|I");
@@ -754,6 +757,46 @@ public static class BooleanOp
         }
         return b.ToString();
     }
+
+    /// <summary>
+    /// g.13: КЛЮЧ ДОНОРА БЕЗ ПРОИЗВОЛА ПОСТРОЕНИЯ. Разметчик видит контур как цикл точек рёбер в порядке обхода: у отрезка это
+    /// его две вершины (обход), направление самой кривой ребра роли не играет; начало цикла — тоже (одна и та же грань,
+    /// собранная заново, хранила отрезки в другую сторону — донор не находился, 1 680
+    /// промахов на детали). Ключ: отрезок — концы по обходу; дуга — как прежде (её точки идут по параметру); начало цикла —
+    /// как у грани. Что сетка при этом та же, проверяет KRN10-MESH-DONOR-FROM-LOOPS. Мутация P3D_DONORCANON=0.
+    /// </summary>
+    static string? CanonLoops(System.Text.StringBuilder b, TFace f)
+    {
+        static string V(Vector3d v) => $"{BitConverter.DoubleToInt64Bits(v.X)},{BitConverter.DoubleToInt64Bits(v.Y)},{BitConverter.DoubleToInt64Bits(v.Z)};";
+        foreach (var l in f.Loops)
+        {
+            b.Append(l.IsOuter ? "|O" : "|I");
+            var toks = new List<string>(l.CoEdges.Count);
+            foreach (var ce in l.CoEdges)
+            {
+                switch (ce.Edge.Curve)
+                {
+                    case LineCurve3:
+                        // первое ребро контура задаёт направление обхода у разметчика (цикл идёт от его V0) — его направление в ключе
+                        toks.Add((toks.Count == 0 ? (ce.Reversed ? "<l" : ">l") : "l") + V(ce.Reversed ? ce.Edge.V1.P : ce.Edge.V0.P) + V(ce.Reversed ? ce.Edge.V0.P : ce.Edge.V1.P)); break;
+                    case ArcCurve3 a:
+                        toks.Add((ce.Reversed ? "<A" : ">A") + V(a.Frame.Origin) + V(a.Frame.U) + V(a.Frame.V) + V(a.Frame.W)
+                                 + $"{BitConverter.DoubleToInt64Bits(a.Radius)},{BitConverter.DoubleToInt64Bits(a.A0)},{BitConverter.DoubleToInt64Bits(a.A1)};" + V(ce.Edge.V0.P) + V(ce.Edge.V1.P)
+                                 + (ReferenceEquals(ce.Edge.V0, ce.Edge.V1) ? "c" : ""));
+                        break;
+                    default: return null;
+                }
+            }
+            // начало цикла — как у грани: разметчик от него зависит (поворот цикла менял сетку 7 граней из 193)
+            foreach (var t in toks) b.Append(t);
+        }
+        return b.ToString();
+    }
+    static readonly bool DonorCanonEnvOff = Environment.GetEnvironmentVariable("P3D_DONORCANON") == "0";
+    [ThreadStatic] static bool _donorCanonOffForTests;
+    static bool DonorCanonOff => DonorCanonEnvOff || _donorCanonOffForTests;
+    /// <summary>Сравнение (KRN10-MESH-DONOR-FROM-LOOPS): прежний ключ донора в этом потоке.</summary>
+    public static bool DonorCanonOffForTests { get => _donorCanonOffForTests; set => _donorCanonOffForTests = value; }
 
     /// <summary>Аналитический объём тела; не приведённое к соглашению — по нормализованной копии.</summary>
     private static double? OperandVolume(TSolid s)
@@ -2261,6 +2304,15 @@ public static class BooleanOp
     private static string Bucket(int n) =>
         n < 50 ? "<50" : n < 200 ? "50-200" : n < 800 ? "200-800" : n < 3000 ? "800-3000" : ">3000";
 
+    static readonly bool MeshAgainDbg = Environment.GetEnvironmentVariable("P3D_MESHAGAIN") == "1";
+    /// <summary>g.13: быстрые проверки сетки тела (грубый ключ повторов, стороны без владельцев); P3D_MESHCHECKFAST=0 — прежние.</summary>
+    static readonly bool MeshChecksFastEnvOff = Environment.GetEnvironmentVariable("P3D_MESHCHECKFAST") == "0";
+    [ThreadStatic] static bool _meshChecksOldForTests;
+    internal static bool MeshChecksFastOff => MeshChecksFastEnvOff || _meshChecksOldForTests;
+    /// <summary>Сравнение (KRN10-MESH-CHECKS): прежние проверки в этом потоке.</summary>
+    public static bool MeshChecksFastOffForTests { get => _meshChecksOldForTests; set => _meshChecksOldForTests = value; }
+    /// <summary>Замер проверок сетки (KRN10-MESH-CHECKS): разметка тела заново, без памяти о прежней разметке.</summary>
+    public static void MeshExactlyForTest(TSolid solid) => MeshExactly(solid, null, new MeshRun());
     public static void MeshExactlySolid(TSolid solid, List<string>? warnings = null, bool perFace = false)
     {
         // K03: тело уже размечено с теми же настройками — повторная разметка дала бы ту же сетку
@@ -2273,6 +2325,7 @@ public static class BooleanOp
         var key = (Core.Tol.Chord, Core.Tol.ChordAngle, perFace);
         // Поставка 2: сетка — производное данной РЕВИЗИИ B-rep; правка формы после разметки делает её устаревшей.
         if (solid.DisplayMeshKey == key && solid.MeshRevision == solid.Revision) return;
+        if (MeshAgainDbg) Console.Error.WriteLine($"MESHAGAIN key {solid.DisplayMeshKey?.ToString() ?? "null"} vs {key} rev {solid.MeshRevision} vs {solid.Revision}");
 
         bool prev = PerFaceAdoption;
         PerFaceAdoption = perFace;
@@ -2504,9 +2557,30 @@ public static class BooleanOp
         // пропускается. Плёнка (обходы встречные) под это не подпадает: ключ учитывает обход.
         var faceKey = new HashSet<string>();
         var skip = new HashSet<TFace>();
+        // g.13: полный ключ (строки по всем треугольникам) — только у граней с общим грубым ключом: число треугольников и
+        // габарит округлённых центров (функции того же набора, что и полный ключ — равные ключи дают равный грубый).
+        Dictionary<(int, double, double, double, double, double, double), int>? coarse = null;
+        (int, double, double, double, double, double, double) Coarse(FacetedSurface fk)
+        {
+            double x0 = double.MaxValue, y0 = double.MaxValue, z0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue, z1 = double.MinValue;
+            foreach (var t in fk.Facets)
+            {
+                var c = (t.A + t.B + t.C) / 3; double cx = Math.Round(c.X, 5), cy = Math.Round(c.Y, 5), cz = Math.Round(c.Z, 5);
+                x0 = Math.Min(x0, cx); y0 = Math.Min(y0, cy); z0 = Math.Min(z0, cz); x1 = Math.Max(x1, cx); y1 = Math.Max(y1, cy); z1 = Math.Max(z1, cz);
+            }
+            return (fk.Facets.Count, x0, y0, z0, x1, y1, z1);
+        }
+        if (!MeshChecksFastOff)
+        {
+            coarse = new();
+            foreach (var f in solid.Faces)
+                if (f.Surface is FacetedSurface fk0 && fk0.Facets.Count > 0) { var ck = Coarse(fk0); coarse[ck] = coarse.GetValueOrDefault(ck) + 1; }
+        }
+        using (Diagnostics.Prof.Time("сетка: повторы граней"))
         foreach (var f in solid.Faces)
         {
             if (f.Surface is not FacetedSurface fk || fk.Facets.Count == 0) continue;
+            if (coarse != null && coarse[Coarse(fk)] < 2) continue;
             var parts = fk.Facets.Select(t =>
             {
                 var c = (t.A + t.B + t.C) / 3;
@@ -2656,9 +2730,18 @@ public static class BooleanOp
         // оказываются в десятках нанометров друг от друга: экспорт склеит их, треугольник
         // выродится, и в STL откроется сторона. Слияние идёт по всему телу одинаково, поэтому
         // щелей между гранями не появляется.
+        using (Diagnostics.Prof.Time("сетка: слияние точек"))
         {
             var cellsM = new Dictionary<(long, long, long), List<Vector3d>>();
+            // g.13: одна и та же точка (общая у соседних треугольников) — один ответ, без 27 поисков по ячейкам заново
+            var memo = MeshChecksFastOff ? null : new Dictionary<Vector3d, Vector3d>();
             Vector3d Merge(Vector3d p)
+            {
+                if (memo == null) return Merge0(p);
+                if (memo.TryGetValue(p, out var m)) return m;
+                return memo[p] = Merge0(p);
+            }
+            Vector3d Merge0(Vector3d p)
             {
                 var c = ((long)Math.Floor(p.X / micro), (long)Math.Floor(p.Y / micro), (long)Math.Floor(p.Z / micro));
                 for (long ddx = -1; ddx <= 1; ddx++)
@@ -2706,8 +2789,44 @@ public static class BooleanOp
         // направлениях (вырожденные треугольники не в счёт — их не рисуют). Иначе тело остаётся
         // на прежней сетке: вырожденное место топологии (два ребра друг на друге) новое
         // построение честно превращает в двойной слой — на прежней сетке оно пряталось в щепке.
+        var tClosed = Diagnostics.Prof.Time("сетка: замкнутость");
+        // g.13: ТА ЖЕ ПРОВЕРКА ПО НОМЕРАМ ТОЧЕК (без разбора): точки — номерами, сторона — парой номеров
+        // вместо пары векторов; исход тот же (повтор вершины, сторона короче 2e-4 мм, равенство числа сторон в обе стороны).
+        if (!MeshChecksFastOff && MeshDebug == null)
+        {
+            var idOf = new Dictionary<Vector3d, int>(); var pts = new List<Vector3d>();
+            int Id(Vector3d p)
+            {
+                ref int slot = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(idOf, p, out bool exists);
+                if (!exists) { slot = pts.Count; pts.Add(p); }
+                return slot;
+            }
+            var dirI = new Dictionary<(int, int), int>();
+            foreach (var (_, tris, _) in results)
+                foreach (var (a, b, c) in tris)
+                {
+                    if (a == b || b == c || c == a) continue;
+                    int ia = Id(a), ib = Id(b), ic = Id(c);
+                    System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(dirI, (ia, ib), out _)++;
+                    System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(dirI, (ib, ic), out _)++;
+                    System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(dirI, (ic, ia), out _)++;
+                }
+            foreach (var (i, j) in dirI.Keys)
+                if ((pts[i] - pts[j]).LengthSquared < 4e-8) { tClosed.Dispose(); return; }
+            foreach (var ((i, j), n) in dirI)
+                if (n == 0 || n != dirI.GetValueOrDefault((j, i)))
+                {
+                    tClosed.Dispose();
+                    if (PerFaceAdoption) foreach (var (fs3, tris3, norms3) in results) fs3.SetDisplay(tris3, AgreeNormals(tris3, norms3));
+                    return;
+                }
+        }
+        else
+        {
         var dir = new Dictionary<(Vector3d, Vector3d), int>();
         var owner = new Dictionary<(Vector3d, Vector3d), List<uint>>();
+        // g.13: владельцы сторон — только для разбора (MeshDebug); проверке замкнутости они не нужны
+        bool needOwner = MeshChecksFastOff || MeshDebug != null;
         var faceOf = solid.Faces.Where(x => x.Surface is FacetedSurface).ToDictionary(x => (FacetedSurface)x.Surface, x => x.Id);
         foreach (var (fs, tris, _) in results)
             foreach (var (a, b, c) in tris)
@@ -2715,9 +2834,12 @@ public static class BooleanOp
                 if (a == b || b == c || c == a) continue;
                 foreach (var (p, q) in new[] { (a, b), (b, c), (c, a) })
                 {
-                    dir[(p, q)] = dir.GetValueOrDefault((p, q)) + 1;
-                    if (!owner.TryGetValue((p, q), out var l)) owner[(p, q)] = l = new List<uint>();
-                    l.Add(faceOf.GetValueOrDefault(fs));
+                    System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(dir, (p, q), out _)++;
+                    if (needOwner)
+                    {
+                        if (!owner.TryGetValue((p, q), out var l)) owner[(p, q)] = l = new List<uint>();
+                        l.Add(faceOf.GetValueOrDefault(fs));
+                    }
                 }
             }
         // Стороны короче 2e-4 мм: экспорт склеит их концы (его допуск 1e-5…2.4e-5), а в STL с
@@ -3025,6 +3147,8 @@ public static class BooleanOp
         // ОБЪЁМ ТЕЛА — НЕ ДАЛЬШЕ ДОПУСКА ГРАНЕНИЯ ОТ ПРЕЖНЕГО (та же мера, что у проверки
         // прогона: площадь × допуск, вдвое). Смещения соседних граней на общем шве гасят друг
         // друга, поэтому мерить надо тело целиком, а не грань по отдельности.
+        }
+        tClosed.Dispose();
         double vNew = 0, vOld = 0, area = 0;
         foreach (var (fs, tris, _) in results)
         {

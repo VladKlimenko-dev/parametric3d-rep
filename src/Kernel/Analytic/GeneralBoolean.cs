@@ -24,12 +24,15 @@ public static class GeneralBoolean
     /// <summary>Мутация P3D_PAIRSWEEP=0: габариты сравниваются у всех n·m пар (без прохода по оси).</summary>
     static readonly bool PairSweepOff = Environment.GetEnvironmentVariable("P3D_PAIRSWEEP") == "0";
     static readonly bool PartitionOff = Environment.GetEnvironmentVariable("P3D_PARTITIONCHECK") == "0";
+    static readonly bool PairParOff = Environment.GetEnvironmentVariable("P3D_PAIRPAR") == "0";
     static readonly bool SubSplineProcOld = Environment.GetEnvironmentVariable("P3D_SUBSPLINE") == "0";
     /// <summary>Мутация P3D_BNDRIGOR=0: интервалы ребра в совпадающей грани — выборкой без отказа (прежнее).</summary>
     /// <summary>04.4: вершин результата, сведённых по расстоянию (точки разреза одной вершины не совпали побитово).</summary>
     public static long VertexMergedByDistance, VertexMergedFar;
     /// <summary>05.6: правок сшивки после сборки (разрез открытого ребра в чужой вершине, слияние парных рёбер).</summary>
     public static long SewSplits, SewMerges;
+    /// <summary>g.13: наибольшее число пар граней, считавшихся одновременно (замер параллельности).</summary>
+    public static long PairsMaxConcurrent;
     static readonly bool SewDbg = Environment.GetEnvironmentVariable("P3D_SEWDBG") == "1";
     [ThreadStatic] public static Action<Vector3d, Vector3d>? MergeDebug;
     static readonly bool BndRigorOff = Environment.GetEnvironmentVariable("P3D_BNDRIGOR") == "0";
@@ -94,7 +97,7 @@ public static class GeneralBoolean
     /// <summary>
     /// 05.5: узлы квадратуры по куску контура (s ∈ [0, 1]), вес и шаг разностей. Аналитическая кривая — 20 узлов Гаусса на
     /// весь кусок (как прежде); кривая с изломами параметризации (кривая пересечения, NURBS-кривые: параметр — доля длины
-    /// ломаной; сплайн — узлы) — 8 узлов на каждый гладкий участок между изломами, шаг разностей — внутри участка: прежде
+    /// ломаной; сплайн — узлы) — 3 узла на каждый гладкий участок между изломами, шаг разностей — внутри участка: прежде
     /// квадратура через изломы давала ошибку меры до 2.6e-4, и такие грани разбиение не проверяли.
     /// </summary>
     static IEnumerable<(double S, double W, double H)> Nodes(FaceSplit.Dart d)
@@ -105,10 +108,10 @@ public static class GeneralBoolean
         for (int k = 0; k + 1 < br.Count; k++)
         {
             double a = br[k], b = br[k + 1]; if (b - a < 1e-15) continue;
-            for (int i = 0; i < Gauss8X.Length; i++)
+            for (int i = 0; i < Gauss3X.Length; i++)
             {
-                double sN = a + (b - a) * (Gauss8X[i] + 1) / 2;
-                yield return (sN, Gauss8W[i] * (b - a) / 2, 0.4 * Math.Min(sN - a, b - sN));
+                double sN = a + (b - a) * (Gauss3X[i] + 1) / 2;
+                yield return (sN, Gauss3W[i] * (b - a) / 2, 0.4 * Math.Min(sN - a, b - sN));
             }
         }
     }
@@ -134,6 +137,9 @@ public static class GeneralBoolean
         res.Sort(); return res;
     }
     static readonly bool PartitionBreaksOff = Environment.GetEnvironmentVariable("P3D_PARTBREAKS") == "0";
+    // участок между изломами короток и гладок: 3 узла Гаусса (точны для многочлена 5-й степени) — ошибка меры ~1e-12
+    static readonly double[] Gauss3X = { -0.7745966692414834, 0, 0.7745966692414834 };
+    static readonly double[] Gauss3W = { 0.5555555555555556, 0.8888888888888888, 0.5555555555555556 };
     static readonly double[] Gauss8X = { -0.9602898564975363, -0.7966664774136267, -0.5255324099163290, -0.1834346424956498, 0.1834346424956498, 0.5255324099163290, 0.7966664774136267, 0.9602898564975363 };
     static readonly double[] Gauss8W = { 0.1012285362903763, 0.2223810344533745, 0.3137066392354946, 0.3626837833783620, 0.3626837833783620, 0.3137066392354946, 0.2223810344533745, 0.1012285362903763 };
 
@@ -209,6 +215,7 @@ public static class GeneralBoolean
             var c = TopologyClone.Deep(t); TopologyConventions.Normalize(c); return c;
         }
         var a0 = a; var b0 = b;
+        var swPrep = System.Diagnostics.Stopwatch.StartNew();
         a = Conventional(a); b = Conventional(b);
         // копия ради соглашения — те же грани в том же порядке: происхождение — на грани исходных операндов
         var orig = new Dictionary<TFace, TFace>(ReferenceEqualityComparer.Instance);
@@ -223,6 +230,7 @@ public static class GeneralBoolean
         foreach (var f in a.Faces) { var x = AnalyticFace.Of(f, out var w); if (x == null) { why = "first operand: " + w; return null; } fa.Add(x); }
         foreach (var f in b.Faces) { var x = AnalyticFace.Of(f, out var w); if (x == null) { why = "second operand: " + w; return null; } fb.Add(x); }
 
+        Diagnostics.Prof.Add("общая: подготовка граней и классификаторов", swPrep.ElapsedTicks);
         // 1. Куски пересечения пар граней.
         var onA = fa.ToDictionary(x => x, _ => new List<FaceIntersect.Piece>());
         var onB = fb.ToDictionary(x => x, _ => new List<FaceIntersect.Piece>());
@@ -235,15 +243,40 @@ public static class GeneralBoolean
         // пары-кандидаты — проходом по оси X (sort and sweep): сравниваются только габариты, перекрытые по X; затем пары
         // идут в прежнем порядке (ia, ib) — результат от отбора не зависит. Мутация P3D_PAIRSWEEP=0 — перебор всех n·m.
         HashSet<long>? cand = boxA == null || PairSweepOff ? null : FaceIntersect.SweepPairs(boxA, boxB!);
+        // пары, прошедшие отбор габаритами, — в прежнем порядке (ia, ib)
+        var todo = new List<(int A, int B)>();
         for (int ia = 0; ia < fa.Count; ia++)
             for (int ib = 0; ib < fb.Count; ib++)
             {
-                var x = fa[ia]; var y = fb[ib];
                 Diagnostics.Prof.Count("общая: пар граней", 1);
                 if (cand != null && !cand.Contains(((long)ia << 32) | (uint)ib)) { Diagnostics.Prof.Count("общая: пар отброшено габаритом", 1); continue; }
                 if (boxA != null && cand == null) Diagnostics.Prof.Count("общая: сравнений габаритов", 1);
                 if (boxA != null && cand == null && !FaceIntersect.BoxesMeet(boxA[ia], boxB![ib])) { Diagnostics.Prof.Count("общая: пар отброшено габаритом", 1); continue; }
-                var r = FaceIntersect.Of(x, y);
+                todo.Add((ia, ib));
+            }
+        // KRN-10 (g.13): пересечения пар — параллельно (пара независима: свои кривые, общие только неизменные грани), разбор —
+        // последовательно в прежнем порядке: результат тот же до бита, что у последовательного (первый отказ по порядку пар).
+        // Мутация P3D_PAIRPAR=0 — последовательно.
+        var results = new FaceIntersect.Result[todo.Count];
+        int thr = Ops.BooleanOp.Threads;
+        if (!PairParOff && thr > 1 && todo.Count > 1 && Environment.ProcessorCount > 1)
+        {
+            int active = 0;
+            try
+            {
+                System.Threading.Tasks.Parallel.For(0, todo.Count, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = thr }, k =>
+                {
+                    int now = Interlocked.Increment(ref active); long seen; while (now > (seen = Interlocked.Read(ref PairsMaxConcurrent)) && Interlocked.CompareExchange(ref PairsMaxConcurrent, now, seen) != seen) { }
+                    try { results[k] = FaceIntersect.Of(fa[todo[k].A], fb[todo[k].B]); } finally { Interlocked.Decrement(ref active); }
+                });
+            }
+            catch (AggregateException ex) { throw KernelContext.Unwrap(ex) is var u && u != ex ? u : ex.Flatten().InnerExceptions[0]; }
+        }
+        else for (int k = 0; k < todo.Count; k++) results[k] = FaceIntersect.Of(fa[todo[k].A], fb[todo[k].B]);
+        for (int k = 0; k < todo.Count; k++)
+            {
+                var x = fa[todo[k].A]; var y = fb[todo[k].B];
+                var r = results[k];
                 if (r.Kind == FaceIntersect.Kind.Coincident) { coincident.Add((x, y)); continue; }
                 if (r.Kind == FaceIntersect.Kind.Unresolved) { why = "face intersection: " + r.Unresolved; return null; }
                 // КАСАНИЕ (резец скругления касается граней тела вдоль своих же рёбер — граница его плоских граней, а они
@@ -307,7 +340,7 @@ public static class GeneralBoolean
         // Мутация P3D_NESTED=0 — прежний отказ.
         if (onA.Values.All(l => l.Count == 0) && coincident.Count == 0 && NestedOff) { why = "no intersection (disjoint or nested bodies — not handled by the general boolean)"; return null; }
 
-        Diagnostics.Prof.Add("общая: пересечение пар граней", swPairs.Elapsed.Ticks);
+        Diagnostics.Prof.Add("общая: пересечение пар граней", swPairs.ElapsedTicks);
         if (PointDebug != null)
         {
             foreach (var (fx, l) in onA) foreach (var p in l) { PointDebug($"A-piece {fx.Face.Tag} {p.Curve.GetType().Name} P0", p.P0); PointDebug($"A-piece {fx.Face.Tag} P1", p.P1); }
@@ -317,7 +350,8 @@ public static class GeneralBoolean
         // 2. Разбиение граней; точки разреза — общие на тело.
         var cutsA = onA.Values.SelectMany(l => l).Where(p => !p.Closed).SelectMany(p => new[] { p.P0, p.P1 }).Concat(extraCuts).ToList();
         var cutsB = onB.Values.SelectMany(l => l).Where(p => !p.Closed).SelectMany(p => new[] { p.P0, p.P1 }).Concat(extraCuts).ToList();
-        var clA = new Classifier(a); var clB = new Classifier(b);
+        Classifier clA, clB;
+        using (Diagnostics.Prof.Time("общая: классификаторы операндов")) { clA = new Classifier(a); clB = new Classifier(b); }
         if (clA.Unsupported != null || clB.Unsupported != null) { why = "classifier: " + (clA.Unsupported ?? clB.Unsupported); return null; }
 
         var kept = new List<(AnalyticFace F, FaceSplit.Region R, bool Flip)>();
@@ -366,6 +400,8 @@ public static class GeneralBoolean
                 // погрешность приближения (замер: до 2.6e-4 у цилиндра и тора при верном разбиении)
                 measurable &= regs.All(r => r.Loops.All(l => l.All(d => d.Curve is Curves.LineCurve3 or Curves.ArcCurve3 or Curves.EllipseCurve3
                                                                        || (!PartitionBreaksOff && d.Curve is IntersectionCurve3 or NurbsImplicitCurve3 or NurbsNurbsCurve3 or SplineCurve3))));
+                using var _pc = Diagnostics.Prof.Time("общая: проверка разбиения");
+                using var _pco = Diagnostics.Overhead.Scope();          // проверка, а не построение (g.13)
                 if (!PartitionOff && on[f].Count > 0 && regs.Count > 0 && measurable)
                 {
                     // плоская грань: площади точно (квадратура Гаусса по кривым областей); по ломаным разметка областей и
@@ -426,8 +462,10 @@ public static class GeneralBoolean
             }
             w = ""; return true;
         }
-        if (!Select(fa, onA, cutsA, clB, true, out why)) return null;
-        if (!Select(fb, onB, cutsB, clA, false, out why)) return null;
+        var swSel = System.Diagnostics.Stopwatch.StartNew();
+        bool selOk = Select(fa, onA, cutsA, clB, true, out why) && Select(fb, onB, cutsB, clA, false, out why);
+        Diagnostics.Prof.Add("общая: разбиение и отбор областей", swSel.ElapsedTicks);
+        if (!selOk) return null;
         if (kept.Count == 0)
         {
             // KRN-05 (05.8): ПУСТО ДОКАЗАНО — каждая область каждой грани классифицирована (иначе отказ выше) и ни одна не
@@ -440,6 +478,7 @@ public static class GeneralBoolean
             return null;
         }
 
+        using var _asm = Diagnostics.Prof.Time("общая: сборка тела из областей");
         // 3. Сборка: вершины по положению, рёбра по ключу «кривая + диапазон».
         var solid = new TSolid(); var shell = new TShell { Solid = solid }; solid.Shells.Add(shell);
         var verts = new List<TVertex>(); string? farVertex = null;

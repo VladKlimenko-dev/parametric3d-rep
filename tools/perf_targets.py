@@ -31,17 +31,21 @@ pp, po = os.path.join(out, 'd8', 'prof.tsv'), os.path.join(out, 'd8', 'occt_time
 if os.path.exists(pp) and os.path.exists(po):
     for l in open(pp):
         f = l.rstrip('\n').split('\t')
-        ours[f[0]] = [(float(x.split(':')[1]), x.split(':')[2].split('/')[-1]) for x in f[2].split(',') if x.count(':') >= 2]
+        ours[f[0]] = [(float(x.split(':')[1]), x.split(':')[2].split('/')[-1], float(x.split(':')[3]) if x.count(':') >= 3 else float(x.split(':')[1])) for x in f[2].split(',') if x.count(':') >= 2]
     for l in open(po):
         f = l.rstrip('\n').split('\t'); occt[f[0]] = [float(x) for x in f[1].split(',') if x]
-    a, b = [], []
+    a, b, c = [], [], []
     for k, v in ours.items():
         if k in occt and len(occt[k]) == len(v):
-            for (ms, g), om in zip(v, occt[k]):
-                if g == 'ExactAnalytic': a.append(ms); b.append(om)
+            for (ms, g, br), om in zip(v, occt[k]):
+                if g == 'ExactAnalytic': a.append(ms); b.append(om); c.append(br)
     if a:
-        target('точная булева / OpenCascade, медиана (серия 8)', st.median(a) / st.median(b), 3, '×')
-        target('точная булева / OpenCascade, p90 (серия 8)', pct(a, 0.9) / pct(b, 0.9), 5, '×')
+        # сравнение «B-rep против B-rep»: у OpenCascade — BRepAlgoAPI без проверки тела и без сетки; у нас — операция без
+        # проверок результата и разметки граней для показа (они идут в фоне, этап U2); полное время — строкой ниже
+        target('точная булева (B-rep) / OpenCascade, медиана (серия 8)', st.median(c) / st.median(b), 3, '×')
+        target('точная булева (B-rep) / OpenCascade, p90 (серия 8)', pct(c, 0.9) / pct(b, 0.9), 5, '×')
+        print(f'справка: с проверками и разметкой показа — медиана {st.median(a) / st.median(b):.2f} ×, p90 {pct(a, 0.9) / pct(b, 0.9):.2f} ×; '
+              f'наши B-rep медиана {st.median(c):.0f} мс, p90 {pct(c, 0.9):.0f} мс')
         print(f'серия 8: точных операций {len(a)}; наши медиана {st.median(a):.0f} мс, p90 {pct(a, 0.9):.0f} мс; '
               f'OpenCascade медиана {st.median(b):.1f} мс, p90 {pct(b, 0.9):.1f} мс')
 

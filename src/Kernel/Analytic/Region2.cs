@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 
 namespace Parametric3D.Kernel.Analytic;
 
@@ -43,6 +43,18 @@ public readonly record struct Seg2(Vector2d A, Vector2d B, bool IsArc, Vector2d 
         if (!IsArc) return (A.X * B.Y - A.Y * B.X) / 2;
         double t1 = T0 + Sweep;
         return (R * R * Sweep + R * (C.X * (Math.Sin(t1) - Math.Sin(T0)) - C.Y * (Math.Cos(t1) - Math.Cos(T0)))) / 2;
+    }
+
+    /// <summary>
+    /// Тот же вклад относительно начала o: у щепки вдали от начала координат вклады x·dy порядка |p|² гасят друг друга,
+    /// и шум округления (~|p|²·ε) больше её настоящей площади; разность синусов — через полусумму (малый угол без потерь).
+    /// </summary>
+    public double AreaTerm(Vector2d o)
+    {
+        if (!IsArc) { var a = A - o; var b = B - o; return (a.X * b.Y - a.Y * b.X) / 2; }
+        var c = C - o; double h = Sweep / 2, m = T0 + h, sh = Math.Sin(h);
+        double ds = 2 * Math.Cos(m) * sh, dc = -2 * Math.Sin(m) * sh;
+        return (R * R * Sweep + R * (c.X * ds - c.Y * dc)) / 2;
     }
 
     public double Length => IsArc ? Math.Abs(Sweep) * R : (B - A).Length;
@@ -338,8 +350,25 @@ public static class Region2Ops
             else if (op == Bool2.Intersect && inA) keep.Add(s);
             else if (op == Bool2.Subtract && inA) keep.Add(s.Reversed());
         }
-        return Chain(keep);
+        var outR = Chain(keep);
+        if (DbgAt is Vector2d dp)
+        {
+            bool Near(Seg2 q) => (q.A - dp).Length < 1e-3 || (q.B - dp).Length < 1e-3;
+            string S(Seg2 q) => q.IsArc ? $"arc C{q.C:0.#########} R{q.R:G9} T0 {q.T0:G12} Sw {q.Sweep:G12} {q.A:0.#########}->{q.B:0.#########}" : $"line {q.A:0.#########}->{q.B:0.#########}";
+            if (segA.Any(Near) || segB.Any(Near))
+            {
+                Console.Error.WriteLine($"R2 {op} Eps {Eps:G3}");
+                foreach (var q in segA.Where(Near)) Console.Error.WriteLine("  A " + S(q));
+                foreach (var q in segB.Where(Near)) Console.Error.WriteLine("  B " + S(q));
+                foreach (var q in keep.Where(Near)) Console.Error.WriteLine("  K " + S(q));
+                foreach (var l in outR.Loops) if (l.Any(Near) && l.Count < 4) foreach (var q in l) Console.Error.WriteLine($"  RK {q.A.X:R} {q.A.Y:R} {q.B.X:R} {q.B.Y:R} {q.IsArc} {q.C.X:R} {q.C.Y:R} {q.R:R} {q.T0:R} {q.Sweep:R}");
+                foreach (var l in outR.Loops) if (l.Any(Near)) Console.Error.WriteLine($"  loop n{l.Count} area {l.Sum(q => q.AreaTerm()):G4} per {l.Sum(q => q.Length):G6}");
+            }
+        }
+        return outR;
     }
+    [ThreadStatic] public static Vector2d? DbgAt;
+    internal static readonly bool LocalAreaOff = Environment.GetEnvironmentVariable("P3D_R2LOCALAREA") == "0";
 
     /// <summary>
     /// Собрать куски в замкнутые контуры. Область слева от входящего куска; обход вокруг вершины по часовой стрелке от
@@ -376,7 +405,13 @@ public static class Region2Ops
             }
             // KRN-02: вырожденный контур — средняя ширина не больше допуска: |площадь| ≤ Eps × периметр (а не |площадь| ≤ Eps —
             // сравнение мм² с мм, зависевшее от размера детали)
-            if (loop != null && loop.Count > 0 && Math.Abs(loop.Sum(s => s.AreaTerm())) > Eps * loop.Sum(s => s.Length)) res.Loops.Add(loop);
+            // площадь — относительно своей вершины (P3D_R2LOCALAREA=0 — от начала координат: щепка 3e-7 мм у (76, 50) давала
+            // шумовую площадь 7e-14 мм² > Eps × периметр и оставалась гранью, которую нельзя разбить на треугольники)
+            if (loop != null && loop.Count > 0)
+            {
+                var o = LocalAreaOff ? Vector2d.Zero : loop[0].A;
+                if (Math.Abs(loop.Sum(s => s.AreaTerm(o))) > Eps * loop.Sum(s => s.Length)) res.Loops.Add(loop);
+            }
         }
         return res;
     }

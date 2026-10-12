@@ -29,6 +29,7 @@ src/Kernel/Curves/ProcCurve3.cs
 src/Kernel/Curves/RBezierCurve.cs
 src/Kernel/Curves/SplineCurve3.cs
 src/Kernel/Curves/SplineFit.cs
+src/Kernel/Diagnostics/Overhead.cs
 src/Kernel/Diagnostics/Prof.cs
 src/Kernel/Diagnostics/Reproducer.cs
 src/Kernel/Exact/ExactAdapter.cs

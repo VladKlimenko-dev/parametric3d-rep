@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
@@ -96,6 +96,31 @@ static partial class Program
             Require(sliver.Loops.Count == 0, $"a 1e-5 mm strip (below the 2e-5 tolerance) survives: area {sliver.Area:G3}");
             var thin = Region2Ops.Boolean(Region2.Rect(0, 0, 10, 10), Region2.Rect(-1, -1, 11, 10 - 1e-3), Bool2.Subtract);
             Require(thin.Loops.Count == 1, "a 1e-3 mm strip (above tolerance) is dropped");
+        });
+        // KRN-02: щепка между одной и той же дугой скругления, повёрнутой на 4e-8 рад (концы врозь на 1.5e-7 мм), вдали от
+        // начала координат — вырожденная (площадь от своей вершины, а не от нуля: шум x·dy ~ 7e-14 мм² её не спасает).
+        Check("KRN02-DEGENERATE-CONTOUR-FAR", () =>
+        {
+            var prev = Region2Ops.EpsOverrideForTests; Region2Ops.EpsOverrideForTests = 1e-7;
+            try
+            {
+                double r = 3.691718231; var c = new Vector2d(80 - r, 50 - r);
+                Region2 Corner(double t0, double sw)
+                {
+                    var g = new Region2(); var arc = Seg2.Arc(c, r, t0, sw);
+                    var top = new Vector2d(-76.120010342, 50); var bl = new Vector2d(-76.120010342, 0); var br = new Vector2d(arc.A.X, 0);
+                    g.Loops.Add(new List<Seg2> { arc, Seg2.Line(arc.B, top), Seg2.Line(top, bl), Seg2.Line(bl, br), Seg2.Line(br, arc.A) });
+                    return g;
+                }
+                var a = Corner(4.11631155828E-08, 1.57079628563); var b = Corner(0, 1.57079628563);
+                var d = Region2Ops.Boolean(a, b, Bool2.Subtract);
+                Require(d.Loops.Count == 0, $"{d.Loops.Count} sliver loop(s) survive, perimeter {d.Loops.Sum(l => l.Sum(s => s.Length)):G3}");
+                // щепка из реальной детали (RealisticPart, сквозное отверстие): дуга 4.1e-8 рад и отрезок 1.5e-7 мм
+                var p0 = new Vector2d(76.30828192115088, 50); var p1 = new Vector2d(76.30828176918826, 50);
+                var sl = Region2Ops.Chain(new List<Seg2> { new Seg2(p0, p1, true, new Vector2d(76.30828176918826, 46.308281769188255), 3.6917182308117478, 1.5707962856317812, 4.116311542068316E-08), Seg2.Line(p1, p0) });
+                Require(sl.Loops.Count == 0, "the 3e-7 mm sliver at (76, 50) is kept as a contour");
+            }
+            finally { Region2Ops.EpsOverrideForTests = prev; }
         });
         // KRN-02: аналитический объём не теряет точности на краю рабочей области (±500 м).
         Check("KRN02-ANALYTIC-ACCURACY-ACROSS-DOMAIN", () =>

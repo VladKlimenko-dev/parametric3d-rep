@@ -1,0 +1,16 @@
+{"runtime":".NET 8.0.31","cpu":2,"os":"Ubuntu 24.04.5 LTS","args":["g11poly"]}
+diff dump: 1 cases → /tmp/g11_8_0_30566
+diff dump: 83 cases → /tmp/g11_8_82_30566
+diff dump: 21 cases → /tmp/g11_9_20_30566
+diff dump: 47 cases → /tmp/g11_9_46_30566
+diff dump: 66 cases → /tmp/g11_9_65_30566
+diff dump: 67 cases → /tmp/g11_9_66_30566
+diff dump: 92 cases → /tmp/g11_9_91_30566
+diff dump: 137 cases → /tmp/g11_9_136_30566
+diff dump: 51 cases → /tmp/g11_9_50_30566
+diff dump: 130 cases → /tmp/g11_9_129_30566
+{"test":"G11-POLY-DISPLAY-MANIFOLD-SLIVERS","ok":true}
+{"test":"G11-POLY-BOX-MINUS-TORUS","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"openLoopsMerged":0,"vertexMergedByDistance":207,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":264,"tracedUncertain":0,"sampledEdges":0}
+{"passed":2,"failed":0}

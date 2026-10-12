@@ -366,6 +366,7 @@ static partial class Program
         if (mode is "negative" or "allA") Negative();
         if (mode is "selfx2" or "negative" or "allA") SelfXChecks();
         if (mode is "perftargets") { PerfTargets(args[1]); return; }
+        if (mode is "perfprof") { PerfProfile(); return; }
         if (mode is "perf") { Perf(args); return; }
         if (mode is "meshreuse") { MeshReuseExperiment(); MeshReuseIdentity(); }
         if (mode is "globals") { foreach (var g in UnboundGlobals()) Console.WriteLine(g); return; }

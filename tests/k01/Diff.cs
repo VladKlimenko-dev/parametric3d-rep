@@ -94,7 +94,7 @@ static partial class Program
             void Timing(string outcome)
             {
                 if (profPath == null) return;
-                var top = Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Where(l => l.Contains(" мс")).Take(8).Select(l => System.Text.RegularExpressions.Regex.Replace(l.Trim(), @"\s+", " "));
+                var top = Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Where(l => l.Contains(" мс")).Take(Environment.GetEnvironmentVariable("DIFFPROFALL") == "1" ? 200 : 8).Select(l => System.Text.RegularExpressions.Regex.Replace(l.Trim(), @"\s+", " "));
                 File.AppendAllText(profPath, $"{id}\t{caseSw.Elapsed.TotalMilliseconds:0}\t{string.Join(",", opMs)}\t{outcome}\t{string.Join(" | ", kinds)}\t{string.Join(" ;; ", top)}\n");
             }
             try
@@ -156,9 +156,11 @@ static partial class Program
                     if (only != null) watch = new System.Threading.Timer(_ => Console.WriteLine($"  WATCH {(DateTime.UtcNow - lastAt).TotalSeconds:F0}s since stage '{lastStage}'; threads: " + string.Join(", ", perThread.Select(kv => $"{kv.Key}:{kv.Value.S}@{(DateTime.UtcNow - kv.Value.At).TotalSeconds:F0}s"))), null, 10000, 10000);
                     using (new KernelContext(KernelSettings.Capture(), OperationPolicy.Strict, new KernelLimits { Deadline = DateTime.UtcNow.AddSeconds(120) }) { StageHook = st => { lastStage = st; lastAt = DateTime.UtcNow; perThread[Environment.CurrentManagedThreadId] = (st, DateTime.UtcNow); } }.Enter())
                     {
-                        var osw = System.Diagnostics.Stopwatch.StartNew();
+                        var osw = System.Diagnostics.Stopwatch.StartNew(); double oh0 = Parametric3D.Kernel.Diagnostics.Overhead.Ms;
                         r = BooleanOp.Evaluate(cur, b, k, OperationPolicy.Strict, dw);
-                        opMs.Add($"{OpName(k)}:{osw.Elapsed.TotalMilliseconds:0}:{r.Outcome}/{r.Guarantee}");
+                        double total = osw.Elapsed.TotalMilliseconds, brep = Math.Max(0, total - (Parametric3D.Kernel.Diagnostics.Overhead.Ms - oh0));
+                        // g.13: время операции и его часть без проверок и разметки показа (B-rep — как у OpenCascade)
+                        opMs.Add($"{OpName(k)}:{total:0}:{r.Outcome}/{r.Guarantee}:{brep:0.0}");
                     }
                     if (whyPath != null && !dbg) { BooleanOp.AnalyticRouteDebug = null; File.AppendAllText(whyPath, $"{id}\t{s}\t{OpName(k)}\t{r.Guarantee}\t{string.Join(" | ", whyL.Where(x => !x.StartsWith("declined: first operand: a face that is neither") && !x.StartsWith("declined: second operand: a face that is neither")))}\n"); }
                     if (dbg)

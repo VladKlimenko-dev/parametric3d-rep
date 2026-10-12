@@ -135,12 +135,13 @@ public static class FaceIntersect
         var lo = Vector3d.ComponentMin(la, lb) - m; var hi = Vector3d.ComponentMax(ha, hb) + m;
         var centre = (lo + hi) / 2; double radius = (hi - lo).Length / 2 * 1.01;
 
-        var ssi = Ssi.Intersect(a.Shape, b.Shape, centre, radius);
+        Ssi.Result ssi;
+        using (Diagnostics.Prof.Time("пары: SSI")) ssi = Ssi.Intersect(a.Shape, b.Shape, centre, radius);
         if (ssi.Uncertified != null) { res.Kind = Kind.Unresolved; res.Unresolved = ssi.Uncertified; return res; }
         if (ssi.Kind == Ssi.Kind.Coincident) { res.Kind = Kind.Coincident; return res; }
         if (ssi.Kind == Ssi.Kind.Tangent) { res.Kind = Kind.Tangent; return res; }
-        foreach (var c in ssi.Curves) Clip(c, a, b, res);
-        if (!EventCertOff && !EventsOff && res.Unresolved == null) CertifyEvents(a, b, ssi, res);
+        using (Diagnostics.Prof.Time("пары: события и обрезка")) foreach (var c in ssi.Curves) Clip(c, a, b, res);
+        using (Diagnostics.Prof.Time("пары: удостоверение событий")) if (!EventCertOff && !EventsOff && res.Unresolved == null) CertifyEvents(a, b, ssi, res);
         if (Debug != null && (a.Tor || b.Tor))
         {
             Debug($"pair {a.Face.Id}/{b.Face.Id} ssi {ssi.Kind} curves {ssi.Curves.Count} → pieces {res.Pieces.Count} unresolved {res.Unresolved}");
@@ -196,7 +197,7 @@ public static class FaceIntersect
             return ParamEvents(c, other);
         }
         var l = EventsOn(c, other);
-        if (!other.Param && SsiEvents.LastUncertain && res.Unresolved == null) { res.Unresolved = $"events of a {c.GetType().Name} edge are not proven (sampled)"; if (RigorDbg) Console.Error.WriteLine("RIGOR unresolved: " + res.Unresolved); }
+        if (!other.Param && SsiEvents.LastUncertain && res.Unresolved == null) { res.Unresolved = $"events of a {c.GetType().Name} edge are not proven (sampled; {SsiEvents.TracedWhy})"; if (RigorDbg) Console.Error.WriteLine("RIGOR unresolved: " + res.Unresolved); }
         return l;
     }
 

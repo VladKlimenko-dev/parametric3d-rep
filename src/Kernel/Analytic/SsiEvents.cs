@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Geometry;
 
@@ -161,8 +161,11 @@ public static class SsiEvents
     static readonly bool RigorDbg = Environment.GetEnvironmentVariable("P3D_RIGORDBG") == "1";
     /// <summary>Последний вызов CurveSurface (в этом потоке) дал события выборкой по кривой пересечения — не доказано.</summary>
     [ThreadStatic] public static bool LastUncertain;
+    [ThreadStatic] public static string? TracedWhy;
     /// <summary>Мутация P3D_TRACEDEVENTS=0: события на кривых пересечения — выборкой (прежнее), без отказа.</summary>
     internal static readonly bool TracedOff = Environment.GetEnvironmentVariable("P3D_TRACEDEVENTS") == "0";
+    /// <summary>Мутация P3D_TRACEDSPLIT=0: звено без шара единственности — отказ сразу (прежнее), без деления.</summary>
+    static readonly bool TracedSplitOff = Environment.GetEnvironmentVariable("P3D_TRACEDSPLIT") == "0";
 
     /// <summary>
     /// 04.2: СТРОГИЕ СОБЫТИЯ НА КРИВОЙ ПЕРЕСЕЧЕНИЯ (ребро — прослеженная кривая A ∩ B) с поверхностью s. Звено между
@@ -175,9 +178,9 @@ public static class SsiEvents
     /// </summary>
     static List<double>? TracedEvents(IntersectionCurve3 ic, Ssi.Shape s)
     {
-        if (ExactEdges.ShapeOf(ic.A) is not { } sa || ExactEdges.ShapeOf(ic.B) is not { } sb) return null;
+        if (ExactEdges.ShapeOf(ic.A) is not { } sa || ExactEdges.ShapeOf(ic.B) is not { } sb) { TracedWhy = "shapes/ends"; return null; }
         var (P, T) = ic.RefinedWithParams();
-        if (P.Length < 2) return null;
+        if (P.Length < 2) { TracedWhy = "shapes/ends"; return null; }
         double ext = 0; foreach (var p in P) ext = Math.Max(ext, (p - P[0]).Length);
         double tiny = 1e-9 * Math.Max(1, ext);
         // концы — на обеих поверхностях
@@ -190,7 +193,16 @@ public static class SsiEvents
             if (!ok) return;
             if (--budget < 0) { ok = false; return; }
             var m = (p0 + p1) / 2; double r = (p1 - p0).Length / 2 * 1.01 + 1e-12;
-            if (!Ssi.Transversal(sa, sb, m, r)) { ok = false; return; }
+            if (!Ssi.Transversal(sa, sb, m, r))
+            {
+                if (TracedSplitOff) { ok = false; TracedWhy = "segment not transversal (no split)"; return; }
+                // звено длинно для доказательства (часть кривой перестроена реже): точка кривой посередине — два звена; цепочка
+                // звеньев, каждое в своём шаре единственности, через общую точку — одна связная ветвь
+                if (2 * r < tiny || depth > 40) { ok = false; TracedWhy = $"segment not transversal at {m:0.###} r {r:G3}"; return; }
+                double tq = (t0 + t1) / 2; var pq = ic.PointAt(tq);
+                if (Math.Abs(Ssi.Implicit(sa, pq).F) > 1e-9 || Math.Abs(Ssi.Implicit(sb, pq).F) > 1e-9) { ok = false; TracedWhy = "mid point off the curve"; return; }
+                Seg(t0, tq, p0, pq, depth + 1); Seg(tq, t1, pq, p1, depth + 1); return;
+            }
             double fm = Fs(m);
             if (Math.Abs(fm) > r * (1 + 1e-12) + 1e-13) return;                  // событий нет
             if (Ssi.NormalLip(s, m, r) is double ks && Ssi.NormalLip(sa, m, r) is double ka && Ssi.NormalLip(sb, m, r) is double kb)
@@ -214,9 +226,9 @@ public static class SsiEvents
                     res.Add((lo + hi) / 2); return;
                 }
             }
-            if (2 * r < tiny || depth > 60) { ok = false; return; }                  // касание: не отделить
+            if (2 * r < tiny || depth > 60) { ok = false; TracedWhy = $"tangency at {m:0.###}"; return; }                  // касание: не отделить
             double tm = (t0 + t1) / 2; var q = ic.PointAt(tm);
-            if ((q - m).Length > r) { ok = false; return; }                         // точка кривой вне шара звена
+            if ((q - m).Length > r) { ok = false; TracedWhy = "point outside ball"; return; }                         // точка кривой вне шара звена
             Seg(t0, tm, p0, q, depth + 1); Seg(tm, t1, q, p1, depth + 1);
         }
         for (int i = 0; i + 1 < P.Length && ok; i++) Seg(T[i], T[i + 1], P[i], P[i + 1], 0);
