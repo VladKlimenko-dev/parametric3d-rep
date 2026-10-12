@@ -23,6 +23,19 @@ static partial class Program
                 if (!r.Accepted || r.Accuracy is not { Basis: "exact B-rep", Measured: { } m } || m > r.Accuracy.Budget) fails.Add($"round: {r.Outcome} accuracy {r.Accuracy}");
                 if (r.ProvenanceMap == null) fails.Add("round: provenance missing");
             }
+            {   // уклон (замена плоскости, конус): происхождение — каждая грань результата из своей грани, наклонённая — изменена
+                foreach (var (name, make, probe) in new (string, Func<TSolid>, Vector3d)[] {
+                    ("draft plane", () => Box(0, 0, 0, 40, 30, 20), new Vector3d(40, 15, 10)),
+                    ("draft cylinder", () => { var bl = new List<TSolid> { Box(0, 0, 0, 40, 30, 20) }; BooleanOp.Unite(bl, PrimitiveOp.Cylinder(new Vector3d(20, 15, 20), 6, 10), new List<string>()); return bl[0]; }, new Vector3d(26, 15, 25)) })
+                {
+                    var b0 = make();
+                    var r = OperationContract.Run("Draft", new List<TSolid> { b0 }, l => DraftOp.Apply(l, new[] { probe }, new Vector3d(0, 0, name.EndsWith("cylinder") ? 20 : 0), Vector3d.UnitZ, 4, new List<string>()));
+                    var pm = r.ProvenanceMap;
+                    if (!r.Accepted || pm == null) { fails.Add($"{name}: {r.Outcome}, provenance {(pm == null ? "missing" : "ok")}"); continue; }
+                    int mod = pm.Faces.Count(x => x.Kind == FaceOrigin.Modified), all = r.Bodies[0].Faces.Count();
+                    if (pm.Faces.Count != all || mod == 0 || mod == all || pm.Faces.Any(x => x.Source == null)) fails.Add($"{name}: provenance {pm.Faces.Count} of {all}, modified {mod}");
+                }
+            }
             {   // оболочка
                 var r = OperationContract.Run("Shell", new List<TSolid> { Box(0, 0, 0, 40, 30, 20) }, l => ShellOp.Hollow(l, 2, new List<Vector3d> { new(20, 15, 20) }, new List<string>()));
                 if (!r.Accepted || r.Accuracy == null) fails.Add($"shell: {r.Outcome} accuracy {r.Accuracy}");

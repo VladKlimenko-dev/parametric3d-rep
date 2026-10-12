@@ -257,7 +257,10 @@ public static class DocumentFile
             Formula = sh.Thickness.Formula,
             OpenFaces = sh.OpenFaces.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList(),
             FaceNames = sh.OpenFaceNames.Count > 0 ? sh.OpenFaceNames.ToList() : null,
-            FaceSelectors = FaceSel(sh.OpenSelectors)
+            FaceSelectors = FaceSel(sh.OpenSelectors),
+            ThickFaces = sh.FaceThickness.Count > 0 ? sh.FaceThickness.SelectMany(x => new[] { x.At.X, x.At.Y, x.At.Z }).ToList() : null,
+            Values = sh.FaceThickness.Count > 0 ? sh.FaceThickness.Select(x => x.T.Value).ToList() : null,
+            Formulas = sh.FaceThickness.Count > 0 ? sh.FaceThickness.Select(x => x.T.Formula).ToList() : null
         },
 
         MirrorFeature mf => new FeatureDto
@@ -689,6 +692,10 @@ public static class DocumentFile
                         sh.OpenFaces.Add(new Vector3d(fd.OpenFaces[i], fd.OpenFaces[i + 1], fd.OpenFaces[i + 2]));
                     if (fd.FaceNames != null) sh.OpenFaceNames.AddRange(fd.FaceNames);
                     sh.OpenSelectors.AddRange(FaceSel(fd.FaceSelectors));
+                    if (fd.ThickFaces != null && fd.Values != null)
+                        for (int i = 0; 3 * i + 2 < fd.ThickFaces.Count && i < fd.Values.Count; i++)
+                            sh.FaceThickness.Add((new Vector3d(fd.ThickFaces[3 * i], fd.ThickFaces[3 * i + 1], fd.ThickFaces[3 * i + 2]),
+                                                  new ValueRef(fd.Values[i]) { Formula = fd.Formulas != null && i < fd.Formulas.Count ? fd.Formulas[i] : null }));
                     part.AddFeature(sh);
                     break;
                 }
@@ -986,6 +993,8 @@ public static class DocumentFile
         public List<SelectorDto>? FaceSelectors { get; set; }
         public string? VertexKey { get; set; }
         public List<double> OpenFaces { get; set; } = new();
+        /// <summary>KRN-07 (07.5): точки граней со своей толщиной оболочки (толщины — в Values/Formulas).</summary>
+        public List<double>? ThickFaces { get; set; }
         public double[]? Point { get; set; }
         public double[]? Dir { get; set; }
         public List<uint> Sections { get; set; } = new();

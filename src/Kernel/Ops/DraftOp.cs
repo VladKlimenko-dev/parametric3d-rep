@@ -40,6 +40,7 @@ public static class DraftOp
                 return true;
             }
             if (degrees < 0) { warnings.Add($"Draft: an outward draft is built only by plane replacement, which declined: {why}."); return false; }
+            warnings.Add($"Draft: the exact plane replacement declined ({why}); half-space cuts are used.");
         }
         else if (degrees < 0) { warnings.Add("Draft: the angle must be greater than zero."); return false; }
 
@@ -132,9 +133,17 @@ public static class DraftOp
         var picks = new Dictionary<int, (Vector3d P, Vector3d N)>();
         double a = degrees * Math.PI / 180;
         Vector3d centre = Centre(body);
+        var cyls = new List<(int Face, Vector3d Probe)>();
         foreach (var probe in probes)
         {
             int hit = -1;
+            // KRN-07 (07.6): цилиндрическая грань с осью вдоль направления вытяжки — конус (DraftCylinders)
+            if (!CylDraftOff)
+                for (int i = 0; i < faces.Count; i++)
+                    if (Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(faces[i])) is Geometry.Ssi.Cylinder cy
+                        && Math.Abs(DistToCylinder(cy, probe)) <= 1e-6 && MeshDistance(faces[i], probe) <= Math.Max(1e-2, 0.03 * cy.R))
+                    { if (!cyls.Any(c => c.Face == i)) cyls.Add((i, probe)); hit = -2; break; }
+            if (hit == -2) continue;
             for (int i = 0; i < faces.Count; i++)
             {
                 if (PlaneOf(faces[i]) is not { } pl) continue;
@@ -157,9 +166,111 @@ public static class DraftOp
             if (Vector3d.Dot(side, m) * bodySide < 0) side = -side;
             picks[hit] = (p0, (nOut * Math.Cos(a) + side * Math.Sin(a)).Normalized());
         }
-        if (picks.Count == 0) { why = "no faces"; return null; }
+        if (picks.Count == 0 && cyls.Count == 0) { why = "no faces"; return null; }
 
-        return PlanarTweak.Apply(body, (i, f) => picks.TryGetValue(i, out var q) ? q : null, ref why);
+        var res = picks.Count == 0 ? body : PlanarTweak.Apply(body, (i, f) => picks.TryGetValue(i, out var q) ? q : null, ref why);
+        if (res == null || cyls.Count == 0) return res;
+        return DraftCylinders(res, cyls.Select(c => c.Face).ToList(), neutralPoint, m, a, ref why);
+    }
+
+    /// <summary>Мутация P3D_DRAFTCYL=0: цилиндрические грани уклону не поддаются (прежде).</summary>
+    static readonly bool CylDraftOff = Environment.GetEnvironmentVariable("P3D_DRAFTCYL") == "0";
+
+    static double DistToCylinder(Geometry.Ssi.Cylinder c, Vector3d p)
+    {
+        var w = c.Axis.Normalized(); var d = p - c.P; return (d - w * Vector3d.Dot(d, w)).Length - c.R;
+    }
+
+    /// <summary>
+    /// KRN-07 (07.6): УКЛОН ЦИЛИНДРИЧЕСКОЙ ГРАНИ — КОНУС. Грань-цилиндр с осью вдоль нормали нейтральной плоскости,
+    /// ограниченная только замкнутыми окружностями в плоскостях поперёк оси (боковая грань бобышки, стенка отверстия):
+    /// радиус на высоте h от нейтрали — r + κ·Δ(h), Δ(h) = −tg α·h·s (s — сторона самой грани от нейтрали; грань уходит
+    /// внутрь материала по мере удаления от нейтрали), κ = +1 у выпуклой (материал внутри), −1 у вогнутой. Поверхность —
+    /// тело вращения отрезка (конус), окружности — те же плоскости и центры с новыми радиусами; соседние грани — плоскости
+    /// поперёк оси, их форма та же. Иное — отказ (тогда прежний путь не применим: цилиндр уклону не поддаётся).
+    /// </summary>
+    static TSolid? DraftCylinders(TSolid body, List<int> idx, Vector3d neutralPoint, Vector3d m, double a, ref string? why)
+    {
+        var clone = TopologyClone.Deep(body);
+        var faces = body.Faces.ToList(); var cf = clone.Faces.ToList();
+        var touched = new HashSet<TFace>(ReferenceEqualityComparer.Instance);
+        foreach (int i in idx)
+        {
+            if (Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(faces[i])) is not Geometry.Ssi.Cylinder cy) { why = "not a cylinder"; return null; }
+            var w = cy.Axis.Normalized();
+            if (Math.Abs(Math.Abs(Vector3d.Dot(w, m)) - 1) > 1e-9) { why = "the cylinder axis is not along the pull direction"; return null; }
+            var f = cf[i];
+            var arcs = f.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct().ToList();
+            if (arcs.Count != 2 || arcs.Any(e => e.Curve is not ArcCurve3 ac || !ReferenceEquals(e.V0, e.V1) || Math.Abs(Math.Abs(Vector3d.Dot(ac.Frame.W.Normalized(), w)) - 1) > 1e-9
+                                              || Math.Abs(ac.Radius - cy.R) > 1e-9 * Math.Max(1, cy.R)))
+            { why = "the cylindrical face is not bounded by two full circles across its axis"; return null; }
+            // выпуклость: наружная нормаль грани против направления от оси
+            var src = GeometryAudit.AuthoritativeSurface(faces[i])!;
+            var q0 = ((ArcCurve3)arcs[0].Curve).PointAt(((ArcCurve3)arcs[0].Curve).T0 + 0.3);
+            Vector3d nq;
+            if (faces[i].Surface is FacetedSurface fs && fs.Facets.Count > 0)
+            {
+                var best = fs.Facets.ReadView.OrderBy(t => ((t.A + t.B + t.C) / 3 - q0).LengthSquared).First();
+                nq = Vector3d.Cross(best.B - best.A, best.C - best.A) * (faces[i].Reversed ? -1 : 1);
+            }
+            else nq = src.NormalAt(src.ProjectToUV(q0)) * (faces[i].Reversed ? -1 : 1);
+            var rad = q0 - cy.P; rad -= w * Vector3d.Dot(rad, w);
+            bool convex = Vector3d.Dot(nq, rad) > 0;
+            double H(Vector3d x) => Vector3d.Dot(x - neutralPoint, m);
+            var c0 = ((ArcCurve3)arcs[0].Curve).Frame.Origin; var c1 = ((ArcCurve3)arcs[1].Curve).Frame.Origin;
+            double hm = (H(c0) + H(c1)) / 2;
+            double sgn = Math.Abs(hm) > 1e-9 ? Math.Sign(hm) : Math.Sign(Vector3d.Dot(Centre(body) - neutralPoint, m));
+            double R(Vector3d x) => cy.R + (convex ? 1 : -1) * (-Math.Tan(a) * H(x) * sgn);
+            foreach (var e in arcs)
+            {
+                var ac = (ArcCurve3)e.Curve; double r = R(ac.Frame.Origin);
+                if (!(r > 1e-6)) { why = "the cone would close before the end of the face"; return null; }
+                var na = new ArcCurve3(ac.Frame, r, ac.A0, ac.A0 + ac.Sweep);
+                e.Curve = na; e.PolylineCache = null; e.V0.P = na.PointAt(na.T0);
+            }
+            // конус: отрезок образующей в полуплоскости угла 0 и ось
+            double t0 = Vector3d.Dot(c0 - cy.P, w), t1 = Vector3d.Dot(c1 - cy.P, w);
+            var u = Vector3d.Cross(w, Math.Abs(w.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY).Normalized();
+            var axisO = cy.P;
+            var gen = new LineCurve3(axisO + w * Math.Min(t0, t1) + u * R(axisO + w * Math.Min(t0, t1)), axisO + w * Math.Max(t0, t1) + u * R(axisO + w * Math.Max(t0, t1)));
+            var cone = new RevolvedSurface(gen, new Frame3(axisO, u, Vector3d.Cross(w, u)), 0, 2 * Math.PI);
+            f.Surface = cone;
+            // сторона: нормаль конуса в точке грани против желаемой наружной (выпуклая — от оси, вогнутая — к оси)
+            var qp = gen.PointAt(0.5); var nr = qp - axisO; nr -= w * Vector3d.Dot(nr, w);
+            var nc = cone.NormalAt(cone.ProjectToUV(qp));
+            f.Reversed = Vector3d.Dot(nc, nr) * (convex ? 1 : -1) < 0;
+            touched.Add(f);
+            foreach (var e in arcs) foreach (var ce in e.CoEdges) if (ce.Loop?.Face is { } nb) touched.Add(nb);
+        }
+        foreach (var f in touched)
+        {
+            if (f.Surface is FacetedSurface fs2)
+            {
+                if (fs2.Source is not PlaneSurface || PlanarTweak.OutwardNormal(f) is not { } no || Geometry.ExactEdges.ShapeOf(fs2.Source) is not Geometry.Ssi.Plane pl)
+                { why = "a face next to the drafted cylinder is not planar"; return null; }
+                f.Surface = new PlaneSurface(Frame3.FromNormal(pl.P, no)); f.Reversed = false;
+            }
+            else if (f.Surface is not (PlaneSurface or RevolvedSurface)) { why = "a face next to the drafted cylinder is not planar"; return null; }
+            f.InteriorHint = null;
+            foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) { ce.PCurve = null; ce.PCurveDeviation = 0; }
+        }
+        clone.Exact = null; clone.QExact = null; clone.DisplayMeshKey = null;
+        var wl = new List<string>();
+        if (Analytic.PrismBuild.Finish(clone, wl) > 0) { why = "faces not meshed: " + string.Join(" / ", wl.Take(2)); return null; }
+        clone.Guarantee = GuaranteeLevel.ExactAnalytic;
+        var vr = SolidValidator.Validate(clone);
+        if (!vr.IsValid) { why = "result invalid: " + vr.Summary() + " " + string.Join(" / ", vr.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(2)); return null; }
+        if (AnalyticVolume.Of(clone) is not { } vol || vol <= 0) { why = "no analytic volume"; return null; }
+        if (BooleanOp.VolumeVsFacets(clone) is { } vf && !vf.Agree) { why = $"volume {vf.Va:G8} vs facets {vf.Vf:G8}"; return null; }
+        // KRN-01 (01.5): происхождение — та же грань (порядок клона), изменённая, если её форма или края сдвинулись
+        if (!PlanarTweak.ProvOff)
+        {
+            var pv = new Provenance { Operation = "Draft" };
+            var srcFaces = body.Faces.ToList(); var resFaces = clone.Faces.ToList();
+            for (int k = 0; k < resFaces.Count; k++) pv.Faces.Add(new FaceProvenance(resFaces[k], srcFaces[k], touched.Contains(resFaces[k]) ? FaceOrigin.Modified : FaceOrigin.Kept));
+            clone.SetProvenance(pv);
+        }
+        return clone;
     }
 
     static double MeshDistance(TFace f, Vector3d p)

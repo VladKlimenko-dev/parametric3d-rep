@@ -23,25 +23,57 @@ public static class ShellOp
     public static Action<string>? ShellDebug;
 
     /// <param name="open">Точки на гранях, которые остаются открытыми (могут отсутствовать).</param>
+    /// <param name="faceThickness">KRN-07 (07.5): своя толщина граней (точка на грани, толщина того же знака).</param>
     public static bool Hollow(List<TSolid> bodies, double thickness, IReadOnlyList<Vector3d>? open,
-                              List<string> warnings)
+                              List<string> warnings, IReadOnlyList<(Vector3d At, double T)>? faceThickness = null)
     {
         if (bodies.Count == 0) { warnings.Add("Shell: no body."); return false; }
-        if (thickness <= Tol.Weld) { warnings.Add("Shell: the wall thickness must be greater than zero."); return false; }
+        bool outward = thickness < 0 && !TweakOff;
+        if (!outward && thickness <= Tol.Weld) { warnings.Add("Shell: the wall thickness must be greater than zero."); return false; }
+        if (faceThickness != null && faceThickness.Any(x => Math.Sign(x.T) != Math.Sign(thickness) || Math.Abs(x.T) <= Tol.Weld))
+        { warnings.Add("Shell: a face thickness must be non-zero and of the same sign as the wall thickness."); return false; }
 
         TSolid body = bodies[0];
-        // KRN-07 (07.5): тело из плоских граней — полость сдвигом плоскостей (верно и для вогнутых тел)
+        // KRN-07 (07.5): тело из плоских граней — полость сдвигом плоскостей (верно и для вогнутых тел); стенка наружу
+        // (толщина < 0) и своя толщина граней — только здесь
         if (!TweakOff && body.Faces.All(f => PlaneOfFace(f) != null))
         {
             string? why = null;
-            var cavT = OffsetCavity(body, thickness, open, ref why);
-            if (cavT != null)
+            double T(TFace f, Geometry.Ssi.Plane pl) => Math.Abs(faceThickness?.FirstOrDefault(x => OnFace(f, pl, x.At)).T is double v && v != 0 ? v : thickness);
+            if (!outward)
             {
-                BooleanOp.Subtract(bodies, cavT, warnings);
-                warnings.Add($"Shell: wall {thickness:0.###}, cavity by plane offset (exact).");
-                return true;
+                var cavT = OffsetBody(body, (f, pl, isOpen) => isOpen ? T(f, pl) : -T(f, pl), open, "shell:inner", ref why);
+                if (cavT != null)
+                {
+                    BooleanOp.Subtract(bodies, cavT, warnings);
+                    warnings.Add($"Shell: wall {thickness:0.###}, cavity by plane offset (exact).");
+                    return true;
+                }
+            }
+            else
+            {
+                // стенка наружу: наружное тело — грани сдвинуты наружу (открытые — на месте), внутреннее — само тело с
+                // открытыми гранями, вынесенными наружу (полость выходит сквозь них)
+                var outer = OffsetBody(body, (f, pl, isOpen) => isOpen ? 0 : T(f, pl), open, null, ref why);
+                var inner = outer == null ? null : open == null || open.Count == 0 ? body : OffsetBody(body, (f, pl, isOpen) => isOpen ? T(f, pl) : 0, open, null, ref why);
+                if (outer != null && inner != null)
+                {
+                    foreach (var f in outer.Faces) if (f.Tag.Length > 0 && !f.Tag.StartsWith("shell:")) f.Tag = "shell:outer:" + EdgeRef.Bare(f.Tag);
+                    var res = new List<TSolid> { outer };
+                    BooleanOp.Subtract(res, inner, warnings);
+                    if (res.Count == 0) { warnings.Add("Shell: the outward wall is empty."); return false; }
+                    bodies.RemoveAt(0); bodies.InsertRange(0, res);
+                    warnings.Add($"Shell: wall {-thickness:0.###} outward, by plane offset (exact).");
+                    return true;
+                }
+                warnings.Add($"Shell: an outward wall is built only by plane offset, which declined: {why}."); return false;
             }
             if (!Convex(body)) { warnings.Add($"Shell: a concave body is hollowed only by plane offset, which declined: {why}."); return false; }
+        }
+        else if (outward || faceThickness != null)
+        {
+            warnings.Add("Shell: an outward wall and per-face thickness need a body of planar faces.");
+            return false;
         }
         else if (!ConvexOff && !Convex(body))
         {
@@ -220,37 +252,36 @@ public static class ShellOp
     }
 
     /// <summary>
-    /// KRN-07 (07.5): ПОЛОСТЬ СДВИГОМ ПЛОСКОСТЕЙ. Каждая плоская грань сдвигается внутрь на толщину стенки, открытая —
-    /// наружу на ту же величину (полость выходит сквозь неё); вершины — пересечения сдвинутых плоскостей (PlanarTweak).
-    /// Полость — тот же граф, что тело: верно и у вогнутого тела (уступ L-профиля сдвигается так же). Стенка толще
-    /// элемента (ребро полости исчезло бы) — отказ.
+    /// KRN-07 (07.5): СДВИГ ПЛОСКОСТЕЙ. Каждая плоская грань сдвигается вдоль наружной нормали на offset(грань, плоскость,
+    /// открыта ли); вершины — пересечения сдвинутых плоскостей (PlanarTweak). Полость оболочки — то же тело со сдвигом
+    /// внутрь (открытые грани — наружу): тот же граф, что тело, поэтому верно и у вогнутого тела (уступ L-профиля
+    /// сдвигается так же). Стенка толще элемента (ребро исчезло бы) — отказ.
     /// </summary>
-    static TSolid? OffsetCavity(TSolid body, double t, IReadOnlyList<Vector3d>? open, ref string? why)
+    static TSolid? OffsetBody(TSolid body, Func<TFace, Geometry.Ssi.Plane, bool, double> offset, IReadOnlyList<Vector3d>? open, string? tag, ref string? why)
     {
-        bool IsOpen(TFace f, Geometry.Ssi.Plane pl)
-        {
-            if (open == null) return false;
-            var n = pl.N.Normalized();
-            foreach (var q in open)
-            {
-                if (Math.Abs(Vector3d.Dot(q - pl.P, n)) >= Tol.Chord) continue;
-                var mb = new Tess.MeshBuilder(); f.Surface.TessellateFace(f, mb); var md = new Tess.MeshData(); mb.FillInto(md);
-                for (int i = 0; i + 2 < md.Indices.Length; i += 3)
-                {
-                    Vector3d x = mb.PositionsD[md.Indices[i]], y = mb.PositionsD[md.Indices[i + 1]], z = mb.PositionsD[md.Indices[i + 2]];
-                    if (InTriangle(q - n * Vector3d.Dot(q - x, n), x, y, z)) return true;
-                }
-            }
-            return false;
-        }
-        var cav = PlanarTweak.Apply(body, (i, f) =>
+        var res = PlanarTweak.Apply(body, (i, f) =>
         {
             var pl = PlaneOfFace(f)!; var nOut = PlanarTweak.OutwardNormal(f)!.Value;
-            return (pl.P + nOut * (IsOpen(f, pl) ? t : -t), nOut);
+            double d = offset(f, pl, open != null && open.Any(q => OnFace(f, pl, q)));
+            return d == 0 ? null : (pl.P + nOut * d, nOut);
         }, ref why);
-        if (cav == null) return null;
-        foreach (var f in cav.Faces) f.Tag = "shell:inner";
-        return cav;
+        if (res == null) return null;
+        if (tag != null) foreach (var f in res.Faces) f.Tag = tag;
+        return res;
+    }
+
+    /// <summary>Точка q на плоской грани f: на её плоскости (до Tol.Chord) и внутри её треугольников.</summary>
+    static bool OnFace(TFace f, Geometry.Ssi.Plane pl, Vector3d q)
+    {
+        var n = pl.N.Normalized();
+        if (Math.Abs(Vector3d.Dot(q - pl.P, n)) >= Tol.Chord) return false;
+        var mb = new Tess.MeshBuilder(); f.Surface.TessellateFace(f, mb); var md = new Tess.MeshData(); mb.FillInto(md);
+        for (int i = 0; i + 2 < md.Indices.Length; i += 3)
+        {
+            Vector3d x = mb.PositionsD[md.Indices[i]], y = mb.PositionsD[md.Indices[i + 1]], z = mb.PositionsD[md.Indices[i + 2]];
+            if (InTriangle(q - n * Vector3d.Dot(q - x, n), x, y, z)) return true;
+        }
+        return false;
     }
 
     private static bool InTriangle(Vector3d p, Vector3d a, Vector3d b, Vector3d c)

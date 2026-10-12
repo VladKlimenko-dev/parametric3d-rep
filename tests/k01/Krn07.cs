@@ -72,10 +72,10 @@ static partial class Program
         Check("KRN07-SHELL-ACCEPTANCE", () =>
         {
             var fails = new List<string>();
-            void Case(string name, Func<TSolid> make, double t, Vector3d[]? open, double expected)
+            void Case(string name, Func<TSolid> make, double t, Vector3d[]? open, double expected, (Vector3d, double)[]? ft = null)
             {
                 var bl = new List<TSolid> { make() }; var w = new List<string>();
-                bool ok; try { ok = ShellOp.Hollow(bl, t, open, w); } catch (Exception ex) { fails.Add($"{name}: {ex.GetType().Name} {ex.Message}"); return; }
+                bool ok; try { ok = ShellOp.Hollow(bl, t, open, w, ft); } catch (Exception ex) { fails.Add($"{name}: {ex.GetType().Name} {ex.Message}"); return; }
                 if (!ok) { fails.Add($"{name}: refused ({string.Join(" | ", w.Take(2))})"); return; }
                 var b = bl[0]; double v = OpVolume(b);
                 double tol = b.Guarantee == GuaranteeLevel.ExactAnalytic ? 1e-9 * expected : AnalyticMeasure.Volume(b).Error;   // точный — до 1e-9, многогранный — в заявленной границе
@@ -86,6 +86,22 @@ static partial class Program
             }
             Case("box open top t2", () => Box(0, 0, 0, 60, 40, 20), 2, new[] { new Vector3d(30, 20, 20) }, 48000 - 56 * 36 * 18);
             Case("box closed t2", () => Box(0, 0, 0, 60, 40, 20), 2, null, 48000 - 56 * 36 * 16);
+            // KRN-07 (07.5): стенка наружу (толщина < 0) и своя толщина грани — сдвигом плоскостей
+            Case("box outward t2 closed", () => Box(0, 0, 0, 60, 40, 20), -2, null, 64 * 44 * 24 - 48000);
+            Case("box outward t2 open top", () => Box(0, 0, 0, 60, 40, 20), -2, new[] { new Vector3d(30, 20, 20) }, 64 * 44 * 22 - 48000);
+            Case("box open top t2, front wall t5", () => Box(0, 0, 0, 60, 40, 20), 2, new[] { new Vector3d(30, 20, 20) }, 48000 - 56 * 33 * 18, new[] { (new Vector3d(30, 0, 10), 5.0) });
+            {   // в дереве детали: своя толщина грани — параметр операции, переживает сохранение и загрузку
+                var p = new Parametric3D.Model.Part("shft"); var ex = Parametric3D.Model.TestGeometry.AddCube(p, 60);   // куб [-30, 30]³
+                var sh = new Parametric3D.Model.Features.ShellFeature("S") { Thickness = new Parametric3D.Model.Features.ValueRef(2) };
+                sh.OpenSelectors.Add(new Parametric3D.Model.Features.FaceSelector(Parametric3D.Model.Features.FaceSelectorKind.Role, ex.Key, "top"));
+                sh.FaceThickness.Add((new Vector3d(30, 0, 0), new Parametric3D.Model.Features.ValueRef(4)));
+                p.AddFeature(sh); p.Rebuild(null);
+                double want = 216000 - 54.0 * 56 * 58;
+                var (q, _) = Parametric3D.Model.DocumentFile.Load(Parametric3D.Model.DocumentFile.Save(p)); q.Rebuild(null);
+                Log(new { test = "KRN07-SHELL", name = "part: wall x=+30 t4", volume = p.Volume, reloaded = q.Volume, expected = want });
+                if (sh.Error != null || Math.Abs(p.Volume - want) > 1e-9 * want) fails.Add($"part shell with a face thickness: {sh.Error} V {p.Volume:R} vs {want:R}");
+                if (Math.Abs(q.Volume - want) > 1e-9 * want) fails.Add($"part shell with a face thickness after save/load: V {q.Volume:R} vs {want:R}");
+            }
             // ВОГНУТОЕ тело (L-профиль: брусок 60×40×20 без [30,60]×[0,40]×[10,20]): полость — L, сдвинутый внутрь на t
             // (уступ — тоже), а не пересечение полупространств всех граней
             TSolid L() { var bl = new List<TSolid> { Box(0, 0, 0, 60, 40, 20) }; BooleanOp.Subtract(bl, Box(30, -1, 10, 31, 42, 11), new List<string>()); return bl[0]; }
@@ -156,6 +172,14 @@ static partial class Program
                         if (Math.Abs(xt - (60 - 10 * a5)) > 1e-9 || Math.Abs(xb - (60 + 10 * a5)) > 1e-9) fails.Add($"neutral at mid-height: x top {xt:R}, bottom {xb:R}");
                     }
                 }
+                // KRN-07 (07.6): цилиндрические грани — конус. Бобышка R8 h15 на бруске, нейтраль у основания: усечённый конус
+                // r0 = 8, r1 = 8 − 15·tg 3°; сквозное отверстие R5, нейтраль внизу: стенка расходится вверх, r1 = 5 + 20·tg 3°
+                double a3 = Math.Tan(3 * Math.PI / 180);
+                double Frustum(double h, double r0, double r1) => Math.PI * h / 3 * (r0 * r0 + r0 * r1 + r1 * r1);
+                Case("boss side 3deg (cone)", () => { var bl = new List<TSolid> { Box(0, 0, 0, 60, 40, 20) }; BooleanOp.Unite(bl, PrimitiveOp.Cylinder(new Vector3d(30, 20, 20), 8, 15), new List<string>()); return bl[0]; },
+                    new[] { new Vector3d(38, 20, 27) }, new Vector3d(0, 0, 20), Vector3d.UnitZ, 3, 48000 + Frustum(15, 8, 8 - 15 * a3));
+                Case("hole wall 3deg (cone)", () => { var bl = new List<TSolid> { Box(0, 0, 0, 60, 40, 20) }; BooleanOp.Subtract(bl, PrimitiveOp.Cylinder(new Vector3d(30, 20, -5), 5, 30), new List<string>()); return bl[0]; },
+                    new[] { new Vector3d(35, 20, 10) }, Vector3d.Zero, Vector3d.UnitZ, 3, 48000 - Frustum(20, 5, 5 + 20 * a3));
                 // L-образный профиль (вогнутое ребро): наклонена внешняя грань высокой части
                 Case("L-profile outer face 5deg", () => { var bl = new List<TSolid> { Box(0, 0, 0, 60, 40, 20) }; BooleanOp.Subtract(bl, Box(30, -1, 10, 31, 42, 11), new List<string>()); return bl[0]; },
                     new[] { new Vector3d(0, 20, 10) }, Vector3d.Zero, Vector3d.UnitZ, 5, 48000 - 30 * 40 * 10 - 0.5 * 400 * a5 * 40);

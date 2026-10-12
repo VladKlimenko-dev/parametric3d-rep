@@ -430,6 +430,9 @@ static partial class Program
         if (mode == "holecontract") { HoleContractProbe(); return; }
         if (mode == "instprobe") { InstanceProbe(); return; }
         if (mode == "tweakprobe") { TweakProbe(); return; }
+        if (mode == "provprobe") { ProvProbe(); return; }
+        if (mode == "fcprobe") { FaceCompProbe(); return; }
+        if (mode == "cylfaceprobe") { CylFaceProbe(); return; }
         if (mode == "igesprobe")
         {
             var rot = TransformOp.Rotate(new Vector3d(3, -1, 2), new Vector3d(0.2, 0.9, -0.4).Normalized(), 53);
