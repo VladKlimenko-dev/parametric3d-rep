@@ -110,14 +110,14 @@ public static class SolidValidator
         options ??= new ValidationOptions();
         var report = new ValidationReport();
 
-        if (options.CheckBRep) report.Merge(ValidateBRep(solid, options));
-        if (options.CheckExact && solid.Exact != null) report.Merge(ValidateExact(solid.Exact.Solid, options));
-        if (options.CheckBRep && options.CheckPCurves) report.Merge(ValidatePCurves(solid, options));
+        if (options.CheckBRep) using (Diagnostics.Prof.Time("проверка: B-rep")) report.Merge(ValidateBRep(solid, options));
+        if (options.CheckExact && solid.Exact != null) using (Diagnostics.Prof.Time("проверка: точное тело")) report.Merge(ValidateExact(solid.Exact.Solid, options));
+        if (options.CheckBRep && options.CheckPCurves) using (Diagnostics.Prof.Time("проверка: p-кривые")) report.Merge(ValidatePCurves(solid, options));
         if (TorStat) TorusStat(solid);
         if (options.CheckMesh || options.CheckSelfIntersections)
         {
-            mesh ??= Tessellator.Tessellate(solid);
-            report.Merge(ValidateMesh(mesh, options));
+            using (Diagnostics.Prof.Time("проверка: сетка тела")) mesh ??= Tessellator.Tessellate(solid);
+            using (Diagnostics.Prof.Time("проверка: сетка — разбор")) report.Merge(ValidateMesh(mesh, options));
         }
         return report;
     }

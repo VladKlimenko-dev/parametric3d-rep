@@ -198,6 +198,7 @@ public static class AnalyticFlux
             Point = (u, v) => s.PointAt(new Vector2d(u, v)),
             Normal = (u, v) =>
             {
+                if (s is NurbsSurface nsd && !NurbsSurface.DerivsOff) { nsd.Derivs(new Vector2d(u, v), out _, out var a1, out var b1); return Vector3d.Cross(a1, b1); }
                 double u0 = Math.Max(0, u - h), u1 = Math.Min(1, u + h), v0 = Math.Max(0, v - h), v1 = Math.Min(1, v + h);
                 var su = (s.PointAt(new Vector2d(u1, v)) - s.PointAt(new Vector2d(u0, v))) / (u1 - u0);
                 var sv = (s.PointAt(new Vector2d(u, v1)) - s.PointAt(new Vector2d(u, v0))) / (v1 - v0);
@@ -262,7 +263,10 @@ public static class AnalyticFlux
                                             0.3626837833783620, 0.3137066458778873, 0.2223810344533745, 0.1012285362903763 };
 
     /// <summary>G(α, β) = ∫_{β₀}^{β} g(α, t) dt — составная квадратура Гаусса, 8 узлов на кусок.</summary>
-    private static double G(Param p, Func<Vector3d, Vector3d> F, double a, double b)
+    private static double G(Param p, Func<Vector3d, Vector3d> F, double a, double b) =>
+        GI(p, (aa, t) => Vector3d.Dot(F(p.Point(aa, t)), p.Normal(aa, t)), a, b);
+
+    private static double GI(Param p, Func<double, double, double> g, double a, double b)
     {
         double lo = p.B0, hi = b;
         if (hi == lo) return 0;
@@ -274,13 +278,32 @@ public static class AnalyticFlux
             for (int i = 0; i < GX.Length; i++)
             {
                 double t = m + r * GX[i];
-                sum += GW[i] * r * Vector3d.Dot(F(p.Point(a, t)), p.Normal(a, t));
+                sum += GW[i] * r * g(a, t);
             }
         }
         return sum;
     }
 
-    private static double FaceFlux(TFace f, Param p, Func<Vector3d, Vector3d> F)
+    /// <summary>KRN-07 N1b: поток поля через одну грань (общая параметризация — для граней NURBS в AnalyticVolume); null — не поддержано.</summary>
+    internal static double? FaceFluxOf(TFace f, Func<Vector3d, Vector3d> F)
+    {
+        var p = ParamOf(f); if (p == null) return null;
+        double v = FaceFlux(f, p, F); return double.IsNaN(v) ? null : v;
+    }
+
+    /// <summary>KRN-07 N1b: площадь грани с общей параметризацией (NURBS) — тот же интеграл по краю с |P_α × P_β|; null — нет.</summary>
+    internal static double? FaceAreaOf(TFace f)
+    {
+        var p = ParamOf(f); if (p == null) return null;
+        double v = FaceIntegral(f, p, (a, t) => p.Normal(a, t).Length); return double.IsNaN(v) ? null : Math.Abs(v);
+    }
+
+    static readonly bool BreaksOff = Environment.GetEnvironmentVariable("P3D_FLUXBREAKS") == "0";
+
+    private static double FaceFlux(TFace f, Param p, Func<Vector3d, Vector3d> F) =>
+        FaceIntegral(f, p, (a, t) => Vector3d.Dot(F(p.Point(a, t)), p.Normal(a, t)));
+
+    private static double FaceIntegral(TFace f, Param p, Func<double, double, double> g)
     {
         // Интеграл по краю ∮ −G dα — квадратурой Гаусса по параметру каждой кривой: у отрезка
         // плоскости подынтегральное — многочлен, и 8 узлов дают его точно; у кривых — 16 кусков.
@@ -294,9 +317,17 @@ public static class AnalyticFlux
                 int pieces = c is LineCurve3 ? 1 : 16;
                 double t0 = forward ? c.T0 : c.T1, t1 = forward ? c.T1 : c.T0;
                 double span = (t1 - t0) / pieces, eps = 1e-7 * Math.Abs(c.T1 - c.T0);
-                for (int k = 0; k < pieces; k++)
+                // KRN-07 N1b: кривая с изломами параметризации (точки затравки кривой пересечения) — куски между изломами
+                // (квадратура Гаусса через излом теряет порядок: объём среза грани NURBS отходил на 2e-5 отн.)
+                var cuts = new List<double>();
+                if (!BreaksOff && c is Geometry.NurbsImplicitCurve3 nic) { cuts.Add(c.T0); foreach (var b in nic.Breaks) cuts.Add(c.T0 + (c.T1 - c.T0) * b); cuts.Add(c.T1); }
+                else if (!BreaksOff && c is Geometry.NurbsNurbsCurve3 nnc) { cuts.Add(c.T0); foreach (var b in nnc.Breaks) cuts.Add(c.T0 + (c.T1 - c.T0) * b); cuts.Add(c.T1); }
+                else for (int k = 0; k <= pieces; k++) cuts.Add(c.T0 + (c.T1 - c.T0) * k / pieces);
+                if (!forward) cuts.Reverse();
+                eps = Math.Min(eps, 1e-3 * Enumerable.Range(0, cuts.Count - 1).Min(k => Math.Abs(cuts[k + 1] - cuts[k])));
+                for (int k = 0; k + 1 < cuts.Count; k++)
                 {
-                    double m = t0 + span * (k + 0.5), r = span / 2;
+                    double m = (cuts[k] + cuts[k + 1]) / 2, r = (cuts[k + 1] - cuts[k]) / 2;
                     for (int i = 0; i < GX.Length; i++)
                     {
                         double t = m + r * GX[i];
@@ -306,7 +337,7 @@ public static class AnalyticFlux
                         double da = aPlus - aMinus;
                         if (p.PeriodicA) { while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; }
                         double dadt = da / (2 * eps);
-                        sum += GW[i] * r * (-G(p, F, a, bq)) * dadt;
+                        sum += GW[i] * r * (-GI(p, g, a, bq)) * dadt;
                     }
                 }
             }

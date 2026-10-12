@@ -81,6 +81,7 @@ public sealed class Classifier
     static IEnumerable<(double T, Vector3d Q, bool Grazing)> RayHits(AnalyticFace f, Vector3d p, Vector3d dir)
     {
         if (f.Band) { foreach (var h in f.BandRayHits(p, dir)) yield return h; yield break; }
+        if (f.Param) { foreach (var h in f.ParamRayHits(p, dir)) yield return h; yield break; }
         if (f.Tor)
         {
             // ((|w|² + R² − r²)² − 4R²ρ²) на луче — многочлен 4-й степени по t; t — в пределах шара R + r вокруг центра
@@ -154,7 +155,7 @@ public sealed class Classifier
 /// (плоскость — 2D рамка; цилиндр — развёртка (θ, h)). Попадание точки в грань — чётностью; знаковое расстояние до
 /// границы — для отсечения кривых пересечения гранью.
 /// </summary>
-public sealed class AnalyticFace
+public sealed partial class AnalyticFace
 {
     public readonly TFace Face;
     public Ssi.Shape Shape = null!;
@@ -323,6 +324,7 @@ public sealed class AnalyticFace
     /// <summary>null — поверхность грани не плоскость и не цилиндр (why).</summary>
     public static AnalyticFace? Of(TFace f, out string? why)
     {
+        if (!NurbsBoolOff && GeometryAudit.AuthoritativeSurface(f) is Surfaces.NurbsSurface nsf) return OfNurbs(f, nsf, out why);
         if (!BandBoolOff && GeometryAudit.AuthoritativeSurface(f) is Surfaces.SectionSurface bs && bs.IsProcedural && Topology.AnalyticVolume.BandRange(f, bs) is { } brg)
         {
             var fb = new AnalyticFace(f) { Band = true, BandS = bs, BandU0 = brg.Ua, BandU1 = brg.Ub };
@@ -446,6 +448,7 @@ public sealed class AnalyticFace
 
     public Vector2d PlaneUV(Vector3d p)
     {
+        if (Param) { var uv = ParamS!.ProjectToUV(p); return new(uv.X * PSpeedU / 1.5, uv.Y * PSpeedV / 1.5); }
         if (Sph)
         {
             var u = (p - O) / R; double den = 1 - Vector3d.Dot(u, W);
@@ -460,6 +463,7 @@ public sealed class AnalyticFace
     /// <summary>Точка поверхности по параметрам (плоскость — (u, v); сфера — обратная стереографическая проекция).</summary>
     public Vector3d FromPlaneUV(Vector2d q)
     {
+        if (Param) return ParamS!.PointAt(new Vector2d(q.X / (PSpeedU / 1.5), q.Y / (PSpeedV / 1.5)));
         if (!Sph) return O + U * q.X + V * q.Y;
         double q2 = q.LengthSquared; var w = U * q.X + V * q.Y;
         var u = (w * 2 + W * (q2 - 1)) / (q2 + 1);
@@ -555,6 +559,7 @@ public sealed class AnalyticFace
     {
         var f = this;
         if (Band) { double sd = BandSignedBoundary(q); return Math.Abs(sd) < Tol ? null : sd > 0; }
+        if (Param) { double sd = ParamSignedBoundary(q); return Math.Abs(sd) < Tol ? null : sd > 0; }
         if (FullSurface) return true;
         if (Tor) return TorusContains(q);
         int crossings = 0;
@@ -700,6 +705,7 @@ public sealed class AnalyticFace
     {
         double d = double.MaxValue;
         if (Band) return Math.Abs(BandSignedBoundary(q));
+        if (Param) return Math.Abs(ParamSignedBoundary(q));
         if (FullSurface) return double.MaxValue;
         if (Tor)
         {
@@ -755,6 +761,7 @@ public sealed class AnalyticFace
     public double SurfaceDistance(Vector3d p)
     {
         if (Band) return (BandS!.PointAt(BandS.ProjectToUV(p)) - p).Length;
+        if (Param) return (ParamS!.PointAt(ParamS.ProjectToUV(p)) - p).Length;
         if (Sph) return Math.Abs((p - O).Length - R);
         if (Tor)
         {
@@ -775,6 +782,7 @@ public sealed class AnalyticFace
     public Vector3d ProjectTo(Vector3d p)
     {
         if (Band) return BandS!.PointAt(BandS.ProjectToUV(p));
+        if (Param) return ParamS!.PointAt(ParamS.ProjectToUV(p));
         if (Sph) { var d = p - O; return d.Length < 1e-300 ? O + W * R : O + d * (R / d.Length); }
         if (Tor) { var (th, ph) = TorusAngles(p); return TorusPoint(th, ph); }
         if (Cone)

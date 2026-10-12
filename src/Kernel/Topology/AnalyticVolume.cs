@@ -66,6 +66,9 @@ public static class AnalyticVolume
         finally { _quadErr = prev; }
     }
 
+    /// <summary>Мутация P3D_NURBSVOL=0: грань NURBS без аналитического интеграла (объём тела — null).</summary>
+    static readonly bool NurbsVolOff = Environment.GetEnvironmentVariable("P3D_NURBSVOL") == "0";
+
     public static double? Of(TSolid solid)
     {
         if (solid.TopologyConvention < TopologyConventions.Version) return null;
@@ -149,12 +152,32 @@ public static class AnalyticVolume
         return (p0, u, Vector3d.Cross(w, u));
     }
 
+    /// <summary>Мутация P3D_AREARICH=0: площадь грани с кривыми общего вида — ломаной без поправки Ричардсона (прежнее).</summary>
+    static readonly bool AreaRichOff = Environment.GetEnvironmentVariable("P3D_AREARICH") == "0";
+
     public static double? FaceArea(TFace f)
+    {
+        // KRN-07 (g.14, сверка с OpenCascade): площадь грани с кривыми общего вида (сплайн, кривая пересечения) — как у
+        // интеграла объёма: проход с половиной шагов и поправка Ричардсона (ломаная — ошибка ∝ шаг²; четверть круга с краем
+        // «сплайн» и «кривая NURBS × плоскость» отходила на 1e-6 мм² — у тела 9e-8 отн. против 1e-8 у OpenCascade)
+        if (!AreaRichOff && _coarse == 0 && (HasTracedCurves(f) || f.Loops.Any(l => l.CoEdges.Any(ce => ce.Edge.Curve is EllipseCurve3 or ArcCurve3))))
+        {
+            double? fine = FaceAreaCore(f);
+            if (fine == null) return null;
+            _coarse = 0.5; double? coarse;
+            try { coarse = FaceAreaCore(f); } finally { _coarse = 0; }
+            return coarse == null ? fine : fine + (fine - coarse) / 3;
+        }
+        return FaceAreaCore(f);
+    }
+
+    static double? FaceAreaCore(TFace f)
     {
         if (FlatRevolved(GeometryAudit.AuthoritativeSurface(f)) is { } fr) return PlaneArea(f, fr.P0, fr.U, fr.V);
         switch (GeometryAudit.AuthoritativeSurface(f))
         {
             case PlaneSurface pl: return PlaneArea(f, pl.F.Origin, pl.F.U, pl.F.V);
+            case NurbsSurface when !NurbsVolOff: return AnalyticFlux.FaceAreaOf(f);
             case ExtrudedSurface exl when exl.Base is LineCurve3 ln:
             {
                 var u = (ln.B - ln.A).Normalized();
@@ -579,6 +602,12 @@ public static class AnalyticVolume
                 return RevolvedIntegral(f, rv2);
             case SectionSurface band when !BandOff && BandRange(f, band) != null:
                 return BandIntegral(f, band, area: false);
+            case NurbsSurface when !NurbsVolOff:
+            {
+                // KRN-07 N1b: грань NURBS — поток (x − o) по краю (AnalyticFlux, общая параметризация (u, v))
+                var o = _origin;
+                return AnalyticFlux.FaceFluxOf(f, x => x - o);
+            }
             default:
                 _ = coords; _ = form; _ = factor; _ = periodicB;
                 return null;

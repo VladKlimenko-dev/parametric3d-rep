@@ -45,6 +45,7 @@ public static class FaceIntersect
     public static (Vector3d Lo, Vector3d Hi) PairBox(AnalyticFace a)
     {
         if (a.Band) return (a.BandLo, a.BandHi);
+        if (a.Param) return (a.ParamLo, a.ParamHi);
         var (lo, hi) = BoxOf(a.Face);
         if (a.Sph) { lo = a.O - new Vector3d(a.R); hi = a.O + new Vector3d(a.R); }
         if (a.Tor) { lo = a.O - new Vector3d(a.R + a.Rm); hi = a.O + new Vector3d(a.R + a.Rm); }
@@ -88,6 +89,25 @@ public static class FaceIntersect
     {
         var res = new Result { Kind = Kind.Empty };
         // ЛЕНТА КАТЯЩЕГОСЯ ШАРА — пассивная грань: габариты врозь — пусто; иначе — отказ маршрута (пересечение с лентой не строится)
+        // KRN-07 (07.8) N1b: ГРАНЬ NURBS С ЕСТЕСТВЕННОЙ ГРАНИЦЕЙ × плоскость/квадрика/тор — нулевое множество F(S(u, v)) в
+        // прямоугольнике параметров с удостоверением полноты (NurbsSsi); две NURBS, NURBS × лента — отказ маршрута
+        if (a.Param || b.Param)
+        {
+            var pf = a.Param ? a : b; var oth = a.Param ? b : a;
+            var (plo, phi) = (pf.ParamLo, pf.ParamHi); var (olo, ohi) = PairBox(oth);
+            if (!BoxesMeet((plo, phi), (olo, ohi))) return res;
+            if ((oth.Param && NurbsNurbsOff) || oth.Band || (!oth.Param && oth.Shape == null) || NurbsActiveOff)
+            { res.Kind = Kind.Unresolved; res.Unresolved = $"a NURBS face meets face {oth.Face.Tag} ({(oth.Param ? "two NURBS faces" : oth.Band ? "a blend face" : "not in this family")})"; return res; }
+            var lo2 = Vector3d.ComponentMin(plo, olo); var hi2 = Vector3d.ComponentMax(phi, ohi);
+            var nssi = oth.Param
+                ? Geometry.NurbsNurbsSsi.Intersect(a.ParamS!, new Geometry.NurbsNurbsSsi.Rect(a.PUa, a.PUb, a.PVa, a.PVb), b.ParamS!, new Geometry.NurbsNurbsSsi.Rect(b.PUa, b.PUb, b.PVa, b.PVb), (hi2 - lo2).Length)
+                : Geometry.NurbsSsi.Intersect(pf.ParamS!, pf.PUa, pf.PUb, pf.PVa, pf.PVb, oth.Shape, (hi2 - lo2).Length);
+            if (nssi.Uncertified != null) { res.Kind = Kind.Unresolved; res.Unresolved = nssi.Uncertified; return res; }
+            foreach (var c in nssi.Curves) Clip(c, a, b, res);
+            if (!EventCertOff && !EventsOff && res.Unresolved == null) CertifyEvents(a, b, nssi, res);
+            res.Kind = res.Unresolved != null ? Kind.Unresolved : res.Pieces.Count > 0 ? Kind.Pieces : Kind.Empty;
+            return res;
+        }
         if (a.Band || b.Band)
         {
             if (a.Band && b.Band) { res.Kind = Kind.Unresolved; res.Unresolved = "two blend faces"; return res; }
@@ -132,6 +152,59 @@ public static class FaceIntersect
     }
 
     static readonly bool EventCertOff = Environment.GetEnvironmentVariable("P3D_EVENTCERT") == "0";
+    /// <summary>Мутация P3D_NURBSACTIVE=0: грань NURBS только пассивная (пересечение с ней — отказ маршрута).</summary>
+    static readonly bool NurbsActiveOff = Environment.GetEnvironmentVariable("P3D_NURBSACTIVE") == "0";
+    /// <summary>Мутация P3D_NURBSNN=0: пересечение двух граней NURBS — отказ маршрута (прежнее).</summary>
+    static readonly bool NurbsNurbsOff = Environment.GetEnvironmentVariable("P3D_NURBSNN") == "0";
+
+    /// <summary>События «кривая ∩ поверхность грани»: неявная — алгебраически (SsiEvents), NURBS — по знаку расстояния.</summary>
+    static List<double> EventsOn(ICurve3 c, AnalyticFace other) => other.Param ? ParamEvents(c, other) : SsiEvents.CurveSurface(c, other.Shape, out _);
+
+    /// <summary>Градиент (нормаль) поверхности грани в точке.</summary>
+    static Vector3d SurfaceGradient(AnalyticFace f, Vector3d q)
+    {
+        if (f.Param) { var uv = f.ParamS!.ProjectToUV(q); return f.ParamS.NormalAt(uv); }
+        return Ssi.Implicit(f.Shape, q).G;
+    }
+
+    /// <summary>
+    /// KRN-07 N1b: точки кривой на поверхности NURBS — смены знака расстояния (по нормали в проекции) в 1024 отсчётах с
+    /// уточнением делением пополам; кратные касания не ищутся (интервалы обрезки проверяются в трёх точках — пропущенное
+    /// событие даёт отказ).
+    /// </summary>
+    static List<double> ParamEvents(ICurve3 c, AnalyticFace pf)
+    {
+        var S = pf.ParamS!; var res = new List<double>();
+        int n = 1024; Vector2d hint = S.ProjectToUV(c.PointAt(c.T0));
+        double D(double t, ref Vector2d hn)
+        {
+            var x = c.PointAt(t); var uv = S.ProjectToUV(x, hn); hn = uv;
+            var p = S.PointAt(uv); return Vector3d.Dot(x - p, S.NormalAt(uv));
+        }
+        var h0 = hint; double prev = D(c.T0, ref h0); double tPrev = c.T0;
+        for (int i = 1; i <= n; i++)
+        {
+            double t = c.T0 + (c.T1 - c.T0) * i / n; var hh = h0; double d = D(t, ref hh);
+            if (prev == 0) { if (OnFace(tPrev, h0)) res.Add(tPrev); }
+            else if (prev * d < 0)
+            {
+                double lo = tPrev, hi = t, flo = prev; var hb = h0;
+                for (int it = 0; it < 60; it++) { double m = (lo + hi) / 2; var hm = hb; double fm = D(m, ref hm); if (Math.Sign(fm) == Math.Sign(flo)) { lo = m; flo = fm; hb = hm; } else hi = m; }
+                var xq = c.PointAt((lo + hi) / 2); var uvq = S.ProjectToUV(xq, hb);
+                // точка — на грани (в прямоугольнике с запасом) и на поверхности
+                if (uvq.X >= pf.PUa - 1e-9 && uvq.X <= pf.PUb + 1e-9 && uvq.Y >= pf.PVa - 1e-9 && uvq.Y <= pf.PVb + 1e-9 && (S.PointAt(uvq) - xq).Length < 1e-7)
+                    res.Add((lo + hi) / 2);
+            }
+            prev = d; tPrev = t; h0 = hh;
+        }
+        if (prev == 0 && OnFace(c.T1, h0)) res.Add(c.T1);
+        return res;
+        bool OnFace(double t, Vector2d hn)
+        {
+            var xq = c.PointAt(t); var uvq = S.ProjectToUV(xq, hn);
+            return uvq.X >= pf.PUa - 1e-9 && uvq.X <= pf.PUb + 1e-9 && uvq.Y >= pf.PVa - 1e-9 && uvq.Y <= pf.PVb + 1e-9 && (S.PointAt(uvq) - xq).Length < 1e-7;
+        }
+    }
     public static long EventCertFailures;
     /// <summary>
     /// g.05: ПОЛНОТА НА ГРАНИЦЕ. Точка ребра одной грани на поверхности другой лежит на обеих поверхностях — значит, на их
@@ -148,15 +221,15 @@ public static class FaceIntersect
 
     static void CertifyEvents(AnalyticFace a, AnalyticFace b, Ssi.Result ssi, Result res)
     {
-        foreach (var (f, other) in new[] { (a, b.Shape), (b, a.Shape) })
+        foreach (var (f, otherF) in new[] { (a, b), (b, a) })
             foreach (var e in f.Face.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct())
             {
                 if (e.Curve == null) continue;
-                foreach (var te in SsiEvents.CurveSurface(e.Curve, other, out _))
+                foreach (var te in EventsOn(e.Curve, otherF))
                 {
                     var q = e.Curve.PointAt(te);
                     // касание ребра поверхностью (кратный корень) кривой пересечения может и не дать — только поперечные
-                    var (_, gO) = Ssi.Implicit(other, q); var tng = e.Curve.TangentAt(te);
+                    var gO = SurfaceGradient(otherF, q); var tng = e.Curve.TangentAt(te);
                     if (tng.LengthSquared < 1e-24 || Math.Abs(Vector3d.Dot(gO, tng.Normalized())) < 1e-6) continue;
                     bool on = false;
                     foreach (var c in ssi.Curves) { double tc = FaceSplit.ClosestParam(c, q); if ((c.PointAt(tc) - q).Length <= 1e-6) { on = true; break; } }
@@ -248,11 +321,11 @@ public static class FaceIntersect
         var p0 = c.PointAt(T0); var p1 = c.PointAt(T1);
         bool closed = (p0 - p1).Length < 1e-9;
         var ts = new List<double>();
-        foreach (var (f, other) in new[] { (a, b.Shape), (b, a.Shape) })
+        foreach (var (f, otherF) in new[] { (a, b), (b, a) })
             foreach (var e in f.Face.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct())
             {
                 if (e.Curve == null) continue;
-                foreach (var te in SsiEvents.CurveSurface(e.Curve, other, out _))
+                foreach (var te in EventsOn(e.Curve, otherF))
                 {
                     var q = e.Curve.PointAt(te);
                     double tc = FaceSplit.ClosestParam(c, q);
