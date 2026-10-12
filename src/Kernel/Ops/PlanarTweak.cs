@@ -15,6 +15,9 @@ namespace Parametric3D.Kernel.Ops;
 /// </summary>
 public static class PlanarTweak
 {
+    /// <summary>Мутация P3D_TWEAKPROV=0: результат замены плоскостей (уклон, оболочка) без карты происхождения.</summary>
+    internal static readonly bool ProvOff = Environment.GetEnvironmentVariable("P3D_TWEAKPROV") == "0";
+
     static Geometry.Ssi.Plane? PlaneOf(TFace f) => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) as Geometry.Ssi.Plane;
 
     /// <summary>Наружная нормаль плоской грани — по самой поверхности и обращению грани (не по нормали плоскости-формы, у которой знак свой).</summary>
@@ -111,6 +114,14 @@ public static class PlanarTweak
         if (!vr.IsValid) { why = "result invalid: " + vr.Summary() + " " + string.Join(" / ", vr.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(2)); return null; }
         if (AnalyticVolume.Of(clone) is not { } vol || vol <= 0) { why = "no analytic volume"; return null; }
         if (BooleanOp.VolumeVsFacets(clone) is { } vf && !vf.Agree) { why = $"volume {vf.Va:G8} vs facets {vf.Vf:G8}"; return null; }
+        // KRN-01 (01.5): происхождение — та же грань (порядок клона), изменённая, если её форма или края сдвинулись
+        if (!ProvOff)
+        {
+            var pv = new Provenance { Operation = "Plane replacement" };
+            var srcFaces = body.Faces.ToList(); var resFaces = clone.Faces.ToList();
+            for (int k = 0; k < resFaces.Count; k++) pv.Faces.Add(new FaceProvenance(resFaces[k], srcFaces[k], touched.Contains(k) ? FaceOrigin.Modified : FaceOrigin.Kept));
+            clone.SetProvenance(pv);
+        }
         return clone;
     }
 }

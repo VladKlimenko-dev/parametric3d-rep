@@ -26,6 +26,9 @@ public sealed class ShellFeature : Feature
     /// <summary>KRN-08 (08.3): открытые грани по роли (все грани операции / с ролью) — разрешаются при каждой перестройке.</summary>
     public readonly List<FaceSelector> OpenSelectors = new();
 
+    /// <summary>KRN-07 (07.5): своя толщина отдельных граней — точка на грани и толщина того же знака, что общая.</summary>
+    public readonly List<(Vector3d At, ValueRef T)> FaceThickness = new();
+
     public ShellFeature(string name = "Shell") { Name = name; }
 
     public override string Summary =>
@@ -51,7 +54,10 @@ public sealed class ShellFeature : Feature
                 open.AddRange(fs.Select(FaceRefs.Inside));
             }
         }
-        Kernel.OperationContract.Apply("Shell", ctx.Bodies, b => hollowed = ShellOp.Hollow(b, t, open, ctx.Warnings));
+        var ft = FaceThickness.Select(x => (x.At, x.T.Resolve(ctx.Parameters))).ToList();
+        if (ft.Any(x => Math.Abs(x.Item2) <= Tol.Weld || Math.Sign(x.Item2) != Math.Sign(t)))
+            throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Shell: a face thickness must be non-zero and of the same sign as the wall thickness.");
+        Kernel.OperationContract.Apply("Shell", ctx.Bodies, b => hollowed = ShellOp.Hollow(b, t, open, ctx.Warnings, ft.Count > 0 ? ft : null));
         if (!hollowed)
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Shell: the body could not be hollowed.");
     }

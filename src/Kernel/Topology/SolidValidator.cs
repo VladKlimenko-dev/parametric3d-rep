@@ -142,6 +142,7 @@ public static class SolidValidator
         CheckLoopOrientation(r, faces);
         CheckChartPoles(r, faces);
         CheckLoopConnectivity(r, faces);
+        CheckFaceComponents(r, faces);
         CheckSignedVolume(r, faces);
 
         // Окрестность вершины: грани, сходящиеся в ней, связаны через рёбра этой вершины в один
@@ -515,6 +516,37 @@ public static class SolidValidator
         }
         if (!double.IsPositiveInfinity(min)) r.Metrics["brep.minPoleClearance"] = min;
         r.Metrics["brep.poleOnBoundary"] = bad;
+    }
+
+    /// <summary>
+    /// KRN-03 (03.2): ГРАНЬ — ОДНА СВЯЗНАЯ КОМПОНЕНТА. У плоской грани контуры с положительной площадью (против часовой
+    /// вокруг наружной нормали) — внешние; два и больше — грань из нескольких несвязных кусков. ПОКА — замер
+    /// (metric brep.multiComponentFaces; P3D_FACECOMPLOG=1 — печать).
+    /// </summary>
+    static readonly bool FaceCompLog = Environment.GetEnvironmentVariable("P3D_FACECOMPLOG") == "1";
+    static void CheckFaceComponents(ValidationReport r, List<TFace> faces)
+    {
+        int bad = 0;
+        var solid = faces.FirstOrDefault()?.Shell?.Solid;
+        if (solid == null || solid.TopologyConvention < TopologyConventions.Version) return;   // соглашение ещё не применено
+        foreach (var f in faces)
+        {
+            if (f.Loops.Count < 2) continue;
+            var src = GeometryAudit.AuthoritativeSurface(f);
+            if (src is not Surfaces.PlaneSurface ps) continue;
+            var n = ps.NormalAt(ps.ProjectToUV(ps.F.Origin)).Normalized() * (f.Reversed ? -1 : 1);
+            int outer = 0;
+            foreach (var l in f.Loops)
+            {
+                var pts = new List<Vector3d>();
+                foreach (var ce in l.CoEdges) ce.Tessellate(pts, pts.Count == 0);
+                Vector3d acc = Vector3d.Zero;
+                for (int i = 0; i < pts.Count; i++) acc += Vector3d.Cross(pts[i], pts[(i + 1) % pts.Count]);
+                if (Vector3d.Dot(acc, n) > 0) outer++;
+            }
+            if (outer > 1) { bad++; if (FaceCompLog) Console.Error.WriteLine($"FACECOMP face {f.Id} tag {f.Tag} loops {f.Loops.Count} outer {outer}"); }
+        }
+        r.Metrics["brep.multiComponentFaces"] = bad;
     }
 
     /// <summary>
