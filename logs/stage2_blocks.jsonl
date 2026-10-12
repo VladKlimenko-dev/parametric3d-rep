@@ -1,0 +1,28 @@
+{"test":"G15-CLASSIFY-BOX","faces":6,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-THROUGH-HOLE","faces":7,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-BOSS","faces":8,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-BLIND-HOLE","faces":8,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-SHAFT","faces":3,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-UNSUPPORTED","unsupported":"face 327137: Sphere"}
+{"test":"G15-CLASSIFY-SLOTTED-SHAFT","faces":10,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-ROTATED","faces":7,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-TILTED-HOLE","faces":7,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G16-FACEX-TOP-HOLE-CIRCLE","kind":"Pieces","pieces":1,"length":31.41592653460545,"expected":31.41592653589793,"err":-1.292480789061301E-09,"ends":["(30, 15, 20) (30, 15, 20)"],"closed":[true]}
+{"test":"G16-FACEX-TOP-EDGE-HOLE-ARC","kind":"Pieces","pieces":1,"length":19.823131728298993,"expected":19.823131728623846,"err":-3.248530333621602E-10,"ends":["(60, 24.582575694955842, 20) (60.00000000000001, 15.417424305044165, 20)"],"closed":[false]}
+{"test":"G16-FACEX-TOP-TILTED-ELLIPSE","kind":"Pieces","pieces":1,"length":25.930653019540255,"expected":25.93065302060556,"err":-1.0653060655840818E-09,"ends":["(36.53792638093602, 24.358617587290684, 20) (36.53792638093602, 24.358617587290684, 20)"],"closed":[true]}
+{"test":"G16-FACEX-PLANE-PLANE-SEGMENT","kind":"Pieces","pieces":1,"length":40,"expected":40,"err":0,"ends":["(10, 40, 20) (10, 0, 20)"],"closed":[false]}
+{"test":"G16-FACEX-CROSS-HOLE-QUARTIC","gaps":[0,0],"kind":"Pieces","pieces":2,"closed":[true,true],"curves":["IntersectionCurve3","IntersectionCurve3"],"worstSurf":8.189005029635155E-13,"outside":0,"samples":802}
+{"test":"G16-FACEX-DISJOINT","kind":"Empty","pieces":0,"length":0,"expected":0,"err":0,"ends":[],"closed":[]}
+{"test":"G17-SPLIT-TOP-CIRCLE","pieces":1,"regions":[78.50674715588993,2321.49325284411],"expected":[78.53981633974483,2321.460183660255],"loops":[2,1],"insideOk":true}
+{"test":"G17-SPLIT-TOP-EDGE-ARC","pieces":1,"regions":[58.70269770891278,2341.297302291087],"expected":[58.7229807114713,2341.2770192885287],"loops":[1,1],"insideOk":true}
+{"test":"G17-SPLIT-TOP-TWO-LINES","pieces":2,"regions":[400,400,1600.000000000003],"expected":[400,400,1600],"loops":[1,1,1],"insideOk":true}
+{"test":"G17-SPLIT-SHAFT-BAND","pieces":1,"regions":[1884.9555921538665,1884.955592153871],"expected":[1884.9555921538758,1884.9555921538758],"loops":[2,2],"insideOk":true}
+{"test":"G17-SPLIT-SHAFT-CROSS-HOLE","regions":[28.571111655498566,28.57111165549866,3712.7689609967447],"total":3769.9111843077417,"expectedTotal":3769.9111843077517}
+{"test":"G18-GENERAL-TILTED-HOLE","faces":7,"edges":14,"curves":{"LineCurve3":12,"EllipseCurve3":2},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":46931.34118425998,"formula":46931.34118425998,"err":0}
+{"test":"G18-GENERAL-CROSS-HOLE","faces":4,"edges":4,"curves":{"ArcCurve3":2,"IntersectionCurve3":2},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":18290.50463453555,"formula":18290.504634467427,"err":6.812479114159942E-08}
+{"test":"G18-GENERAL-COPLANAR-BOSS","faces":8,"edges":14,"curves":{"LineCurve3":12,"ArcCurve3":2},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":50010.61929829747,"formula":50010.61929829747,"err":0}
+{"test":"G18-GENERAL-COPLANAR-FLUSH-POCKET","faces":11,"edges":24,"curves":{"LineCurve3":24},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":47000,"formula":47000,"err":0}
+{"test":"G18-GENERAL-COPLANAR-FLUSH-BLIND-HOLE","faces":8,"edges":14,"curves":{"LineCurve3":12,"ArcCurve3":2},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":47371.68146928205,"formula":47371.68146928204,"err":7.275957614183426E-12}
+{"test":"G18-GENERAL-COPLANAR-STACK","faces":10,"edges":20,"curves":{"LineCurve3":20},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":96000,"formula":96000,"err":0}
+{"test":"G18-GENERAL-COPLANAR-CORNER-NOTCH","faces":8,"edges":18,"curves":{"LineCurve3":18},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":44000,"formula":44000,"err":0}
+{"test":"G18-GENERAL-CHAMFERED-HOLE","faces":8,"edges":17,"curves":{"LineCurve3":15,"ArcCurve3":2},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":45429.2036732051,"formula":45429.203673205106,"err":-7.275957614183426E-12}

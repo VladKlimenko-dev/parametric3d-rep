@@ -1,0 +1,1187 @@
+[
+ {
+  "id": "c00",
+  "name": "shell cube 60, t=2, open top",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 11,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 11
+   },
+   "volume": 34111.99999999994,
+   "solidVolumes": [
+    34111.99999999994
+   ],
+   "area": 34592.0,
+   "edgeLength": 1400.0,
+   "uncertainty": 1e-06
+  },
+  "relVol": 1.9196651772880753e-15,
+  "relArea": 0.0,
+  "tol": "1e-8",
+  "relExpected": 1.7063690464782894e-15,
+  "relOursExpected": 2.1329613080978617e-16,
+  "verdict": "OK"
+ },
+ {
+  "id": "c01",
+  "name": "revolve ring 360°",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 4,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 2,
+    "cylinder": 2
+   },
+   "volume": 28274.333882304632,
+   "solidVolumes": [
+    28274.333882304632
+   ],
+   "area": 7539.822368615507,
+   "edgeLength": 436.9911184307752,
+   "uncertainty": 1e-06
+  },
+  "relVol": 1.2879584718271383e-13,
+  "relArea": 1.0132540425213648e-14,
+  "tol": "1e-8",
+  "relExpected": 1.2390649434261142e-13,
+  "relOursExpected": 4.889352840103047e-15,
+  "verdict": "OK"
+ },
+ {
+  "id": "c02",
+  "name": "revolve ring 90°",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 6,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 4,
+    "cylinder": 2
+   },
+   "volume": 7068.583470577033,
+   "solidVolumes": [
+    7068.583470577033
+   ],
+   "area": 2484.955592153876,
+   "edgeLength": 254.24777960769381,
+   "uncertainty": 1e-06
+  },
+  "relVol": 1.801340520037968e-15,
+  "relArea": 2.9280030746452292e-15,
+  "tol": "1e-8",
+  "relExpected": 1.2866718000271175e-16,
+  "relOursExpected": 1.9300077000406764e-15,
+  "verdict": "OK"
+ },
+ {
+  "id": "c03",
+  "name": "sweep circle r5 along 40",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 3,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "cylinder": 1,
+    "plane": 2
+   },
+   "volume": 3141.5926535897925,
+   "solidVolumes": [
+    3141.5926535897925
+   ],
+   "area": 1413.7166941154078,
+   "edgeLength": 102.83185307179588,
+   "uncertainty": 1e-06
+  },
+  "relVol": 6.513775987637326e-15,
+  "relArea": 7.398362850155866e-15,
+  "tol": "1e-8",
+  "relExpected": 2.895011550061014e-16,
+  "relOursExpected": 6.803277142643383e-15,
+  "verdict": "OK"
+ },
+ {
+  "id": "c04",
+  "name": "loft square 20 → 10 over 30",
+  "status": "no exact step: STEP: surface unknown is not written exactly yet.",
+  "verdict": "SKIP (ours: no exact step: STEP: surface unknown is not written exactly yet.)"
+ },
+ {
+  "id": "c05",
+  "name": "draft 5° on the sides of a cube 60 (neutral bottom)",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 6,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 6
+   },
+   "volume": 180409.32601329405,
+   "solidVolumes": [
+    180409.32601329405
+   ],
+   "area": 19240.741213084875,
+   "edgeLength": 679.8354881723928,
+   "uncertainty": 1e-06
+  },
+  "relVol": 2.0669278554968354e-09,
+  "relArea": 2.146105296282667e-09,
+  "tol": "declared u=1e-06",
+  "relExpected": 1.2319672773368555e-10,
+  "relOursExpected": 2.1901245787036914e-09,
+  "verdict": "OK"
+ },
+ {
+  "id": "c06",
+  "name": "mirror box across x=0",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 2,
+   "faces": 12,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 12
+   },
+   "volume": 7999.999999999996,
+   "solidVolumes": [
+    3999.999999999999,
+    3999.999999999999
+   ],
+   "area": 3200.0,
+   "edgeLength": 400.0,
+   "uncertainty": 1e-06
+  },
+  "relVol": 4.547473508864641e-16,
+  "relArea": 0.0,
+  "tol": "1e-8",
+  "relExpected": 4.547473508864641e-16,
+  "relOursExpected": 0.0,
+  "verdict": "OK"
+ },
+ {
+  "id": "c07",
+  "name": "linear pattern 3 × 20",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 3,
+   "faces": 18,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 18
+   },
+   "volume": 2999.999999999998,
+   "solidVolumes": [
+    999.9999999999998,
+    999.9999999999998,
+    999.9999999999998
+   ],
+   "area": 1800.0,
+   "edgeLength": 360.0,
+   "uncertainty": 1e-06
+  },
+  "relVol": 6.063298011819521e-16,
+  "relArea": 0.0,
+  "tol": "1e-8",
+  "relExpected": 6.063298011819521e-16,
+  "relOursExpected": 0.0,
+  "verdict": "OK"
+ },
+ {
+  "id": "c08",
+  "name": "circular pattern 4",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 4,
+   "faces": 24,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 24
+   },
+   "volume": 3999.9999999999977,
+   "solidVolumes": [
+    999.9999999999998,
+    999.9999999999998,
+    999.9999999999998,
+    999.9999999999998
+   ],
+   "area": 2400.0,
+   "edgeLength": 480.0,
+   "uncertainty": 1e-06
+  },
+  "relVol": 5.684341886080802e-16,
+  "relArea": 0.0,
+  "tol": "1e-8",
+  "relExpected": 5.684341886080802e-16,
+  "relOursExpected": 0.0,
+  "verdict": "OK"
+ },
+ {
+  "id": "c09",
+  "name": "shell cylinder r10 h30, t=2, open top",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 5,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 3,
+    "cylinder": 2
+   },
+   "volume": 3795.043925537354,
+   "solidVolumes": [
+    3795.043925537354
+   ],
+   "area": 3920.707631680064,
+   "edgeLength": 284.19467105846513,
+   "uncertainty": 1e-06
+  },
+  "relVol": 2.3569899499048145e-13,
+  "relArea": 1.855776634654492e-15,
+  "tol": "1e-8",
+  "relExpected": 2.3294298233934655e-13,
+  "relOursExpected": 2.756012651134244e-15,
+  "verdict": "OK"
+ },
+ {
+  "id": "c10",
+  "name": "sweep circle r2 along a quarter arc R20",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 3,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "torus": 1,
+    "plane": 2
+   },
+   "volume": 394.78417604357855,
+   "solidVolumes": [
+    394.78417604357855
+   ],
+   "area": 419.91691727229266,
+   "edgeLength": 59.690260418206066,
+   "uncertainty": 1e-06
+  },
+  "relVol": 1.1086926776414447e-14,
+  "relArea": 3.248838035679239e-15,
+  "tol": "1e-8",
+  "relExpected": 1.0798954652351731e-14,
+  "relOursExpected": 2.8797212406271283e-16,
+  "verdict": "OK"
+ },
+ {
+  "id": "c11",
+  "name": "revolve circle 90° (torus segment)",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 3,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "torus": 1,
+    "plane": 2
+   },
+   "volume": 394.7841760435787,
+   "solidVolumes": [
+    394.7841760435787
+   ],
+   "area": 419.9169172722928,
+   "edgeLength": 59.690260418206066,
+   "uncertainty": 1e-06
+  },
+  "relVol": 6.9113309775050776e-15,
+  "relArea": 6.633044322845045e-15,
+  "tol": "1e-8",
+  "relExpected": 1.1086926776414442e-14,
+  "relOursExpected": 4.175595798909335e-15,
+  "verdict": "OK"
+ },
+ {
+  "id": "c12",
+  "name": "revolve cut groove in a cylinder",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 7,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 4,
+    "cylinder": 3
+   },
+   "volume": 8293.804605477055,
+   "solidVolumes": [
+    8293.804605477055
+   ],
+   "area": 2613.805087786709,
+   "edgeLength": 381.8583772020569,
+   "uncertainty": 1e-06
+  },
+  "relVol": 3.0704667955192477e-15,
+  "relArea": 1.3918324759908737e-15,
+  "tol": "1e-8",
+  "relExpected": 2.1931905682280414e-16,
+  "relOursExpected": 3.2897858523420623e-15,
+  "verdict": "OK"
+ },
+ {
+  "id": "c13",
+  "name": "extrude symmetric two-sided",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 6,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 6
+   },
+   "volume": 2999.9999999999995,
+   "solidVolumes": [
+    2999.9999999999995
+   ],
+   "area": 1400.0,
+   "edgeLength": 200.0,
+   "uncertainty": 1e-06
+  },
+  "relVol": 1.5158245029548803e-16,
+  "relArea": 0.0,
+  "tol": "1e-8",
+  "relExpected": 1.5158245029548803e-16,
+  "relOursExpected": 0.0,
+  "verdict": "OK"
+ },
+ {
+  "id": "c14",
+  "name": "loft circle r10 → r5 over 30 (cone frustum)",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 3,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 2,
+    "cone": 1
+   },
+   "volume": 5497.787149969434,
+   "solidVolumes": [
+    5497.787149969434
+   ],
+   "area": 1825.916238790936,
+   "edgeLength": 124.6615922591849,
+   "uncertainty": 1e-06
+  },
+  "relVol": 1.1254005036599072e-09,
+  "relArea": 6.508852601284569e-10,
+  "tol": "1e-8",
+  "relExpected": 1.1254157231492162e-09,
+  "relOursExpected": 1.5219489291749333e-14,
+  "verdict": "OK"
+ },
+ {
+  "id": "c15",
+  "name": "rib in an L-bracket (triangle 30×30, t=3)",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 11,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 11
+   },
+   "volume": 8849.999999999996,
+   "solidVolumes": [
+    8849.999999999996
+   ],
+   "area": 4797.279220613578,
+   "edgeLength": 647.8528137423857,
+   "uncertainty": 1e-06
+  },
+  "relVol": 4.110710516487811e-16,
+  "relArea": 0.0,
+  "tol": "1e-8",
+  "relExpected": 4.110710516487811e-16,
+  "relOursExpected": 0.0,
+  "verdict": "OK"
+ },
+ {
+  "id": "c16",
+  "name": "sweep circle r2 along a line 20 + tangent arc R20 (90°)",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 4,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "torus": 1,
+    "plane": 2,
+    "cylinder": 1
+   },
+   "volume": 646.111588364651,
+   "solidVolumes": [
+    646.111588364651
+   ],
+   "area": 671.2443295345479,
+   "edgeLength": 92.2297547631222,
+   "uncertainty": 6.918e-06
+  },
+  "relVol": 2.01358736332309e-07,
+  "relArea": 1.7161859515584778e-09,
+  "tol": "declared u=6.92e-06",
+  "relExpected": 5.245723829816113e-11,
+  "relOursExpected": 2.0130623855924102e-07,
+  "verdict": "OK"
+ },
+ {
+  "id": "c17",
+  "name": "sweep circle r3 along an L-shaped polyline 40 + 30 (mitred corner)",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 4,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 2,
+    "cylinder": 2
+   },
+   "volume": 1979.2032839891,
+   "solidVolumes": [
+    1979.2032839891
+   ],
+   "area": 1376.0175822693243,
+   "edgeLength": 124.620292130524,
+   "uncertainty": 3.281e-06
+  },
+  "relVol": 4.434725579755723e-08,
+  "relArea": 2.185799816450173e-12,
+  "tol": "declared u=3.28e-06",
+  "relExpected": 4.434737274682815e-08,
+  "relOursExpected": 1.1694927610960764e-13,
+  "verdict": "OK"
+ },
+ {
+  "id": "c18",
+  "name": "edge round R4",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 8,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 6,
+    "cylinder": 2
+   },
+   "volume": 214097.52220392285,
+   "solidVolumes": [
+    214097.52220392285
+   ],
+   "area": 22564.5485471872,
+   "edgeLength": 874.2654824574367,
+   "uncertainty": 1e-06
+  },
+  "relVol": 9.515608172386542e-16,
+  "relArea": 1.6122541957726018e-16,
+  "tol": "1e-8",
+  "verdict": "OK"
+ },
+ {
+  "id": "c19",
+  "name": "edge chamfer 3",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 7,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 7
+   },
+   "volume": 215730.0,
+   "solidVolumes": [
+    215730.0
+   ],
+   "area": 21485.558441227156,
+   "edgeLength": 776.4852813742386,
+   "uncertainty": 1e-06
+  },
+  "relVol": 0.0,
+  "relArea": 0.0,
+  "tol": "1e-8",
+  "verdict": "OK"
+ },
+ {
+  "id": "c20",
+  "name": "hole d8 depth 20",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 8,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 7,
+    "cylinder": 1
+   },
+   "volume": 214994.69035085128,
+   "solidVolumes": [
+    214994.69035085128
+   ],
+   "area": 22102.654824574372,
+   "edgeLength": 790.2654824574365,
+   "uncertainty": 1e-06
+  },
+  "relVol": 0.0,
+  "relArea": 0.0,
+  "tol": "declared u=1e-06",
+  "verdict": "OK"
+ },
+ {
+  "id": "c21",
+  "name": "vertex round R5",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 7,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 6,
+    "sphere": 1
+   },
+   "volume": 215998.4562722295,
+   "solidVolumes": [
+    215998.4562722295
+   ],
+   "area": 21596.716755718822,
+   "edgeLength": 726.0242758480181,
+   "uncertainty": 1e-06
+  },
+  "relVol": 1.0398347451104826e-10,
+  "relArea": 9.547002277981151e-11,
+  "tol": "1e-8",
+  "verdict": "OK"
+ },
+ {
+  "id": "c22",
+  "name": "vertex chamfer 5",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 7,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 7
+   },
+   "volume": 215979.16666666663,
+   "solidVolumes": [
+    215979.16666666663
+   ],
+   "area": 21584.150635094615,
+   "edgeLength": 726.2132034355966,
+   "uncertainty": 1e-06
+  },
+  "relVol": 1.3475295282369227e-16,
+  "relArea": 1.685486201702357e-16,
+  "tol": "1e-8",
+  "verdict": "OK"
+ },
+ {
+  "id": "c23",
+  "name": "boolean sphere cut",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 7,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 6,
+    "sphere": 1
+   },
+   "volume": 215476.4012244017,
+   "solidVolumes": [
+    215476.4012244017
+   ],
+   "area": 21521.460183660256,
+   "edgeLength": 737.1238898038471,
+   "uncertainty": 1e-06
+  },
+  "relVol": 0.0,
+  "relArea": 0.0,
+  "tol": "1e-8",
+  "verdict": "OK"
+ },
+ {
+  "id": "c24",
+  "name": "boolean torus cut",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 8,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 7,
+    "torus": 1
+   },
+   "volume": 215783.18297396478,
+   "solidVolumes": [
+    215783.18297396478
+   ],
+   "area": 21626.306314182504,
+   "edgeLength": 758.2791694667079,
+   "uncertainty": 0.019739482
+  },
+  "relVol": 2.4326265107813967e-05,
+  "relArea": 3.62668080487567e-05,
+  "tol": "declared u=0.0197",
+  "verdict": "OK"
+ },
+ {
+  "id": "c25",
+  "name": "plate K08 seed 8001, 20 features",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 30,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 22,
+    "cylinder": 8
+   },
+   "volume": 318595.3503203076,
+   "solidVolumes": [
+    318595.3503203076
+   ],
+   "area": 44571.57891218003,
+   "edgeLength": 1915.581189422209,
+   "uncertainty": 1e-06
+  },
+  "relVol": 9.160623704237089e-13,
+  "relArea": 9.881043596275567e-13,
+  "tol": "1e-8",
+  "verdict": "OK"
+ },
+ {
+  "id": "c26",
+  "name": "plate K08 seed 8002, 30 features",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 39,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 23,
+    "cylinder": 16
+   },
+   "volume": 314661.0450155745,
+   "solidVolumes": [
+    314661.0450155745
+   ],
+   "area": 47020.81501184083,
+   "edgeLength": 2423.920721338368,
+   "uncertainty": 1e-06
+  },
+  "relVol": 2.3478701464046765e-11,
+  "relArea": 2.629016954169747e-13,
+  "tol": "1e-8",
+  "verdict": "OK"
+ },
+ {
+  "id": "c27",
+  "name": "plate K08 seed 8003, 40 features",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 51,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 33,
+    "cylinder": 18
+   },
+   "volume": 319692.4383716074,
+   "solidVolumes": [
+    319692.4383716074
+   ],
+   "area": 46487.207412004514,
+   "edgeLength": 2589.3304261270414,
+   "uncertainty": 1e-06
+  },
+  "relVol": 1.362823419145981e-12,
+  "relArea": 2.391396742809439e-12,
+  "tol": "1e-8",
+  "verdict": "OK"
+ },
+ {
+  "id": "c28",
+  "name": "plate K08 seed 8004, 60 features",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 57,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 39,
+    "cylinder": 18
+   },
+   "volume": 309107.26863568573,
+   "solidVolumes": [
+    309107.26863568573
+   ],
+   "area": 47553.15823673644,
+   "edgeLength": 2811.01034210053,
+   "uncertainty": 1e-06
+  },
+  "relVol": 2.2927554526376902e-10,
+  "relArea": 1.3285582347517826e-12,
+  "tol": "1e-8",
+  "verdict": "OK"
+ },
+ {
+  "id": "c29",
+  "name": "plate K08 seed 8005, 20 features",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 32,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 23,
+    "cylinder": 9
+   },
+   "volume": 318376.0633201401,
+   "solidVolumes": [
+    318376.0633201401
+   ],
+   "area": 44323.21835773751,
+   "edgeLength": 1883.7729518573335,
+   "uncertainty": 1e-06
+  },
+  "relVol": 2.883836021920593e-10,
+  "relArea": 1.7105138378658935e-12,
+  "tol": "1e-8",
+  "verdict": "OK"
+ },
+ {
+  "id": "c30",
+  "name": "plate K08 seed 8006, 20 features",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 32,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 22,
+    "cylinder": 10
+   },
+   "volume": 313707.15021728823,
+   "solidVolumes": [
+    313707.15021728823
+   ],
+   "area": 45066.17452504939,
+   "edgeLength": 1945.6115298270265,
+   "uncertainty": 1e-06
+  },
+  "relVol": 5.108129999072829e-13,
+  "relArea": 3.2797059997371695e-12,
+  "tol": "1e-8",
+  "verdict": "OK"
+ },
+ {
+  "id": "c31",
+  "name": "plate K08 seed 8007, 25 features",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 40,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 31,
+    "cylinder": 9
+   },
+   "volume": 318733.2705207409,
+   "solidVolumes": [
+    318733.2705207409
+   ],
+   "area": 45140.81607002235,
+   "edgeLength": 2165.4683882671748,
+   "uncertainty": 1e-06
+  },
+  "relVol": 8.015273188519829e-13,
+  "relArea": 6.4576583064112516e-12,
+  "tol": "1e-8",
+  "verdict": "OK"
+ },
+ {
+  "id": "c32",
+  "name": "plate K08 seed 8008, 25 features",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 33,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 22,
+    "cylinder": 11
+   },
+   "volume": 319838.7680256868,
+   "solidVolumes": [
+    319838.7680256868
+   ],
+   "area": 45198.729139892355,
+   "edgeLength": 2058.605752866055,
+   "uncertainty": 1e-06
+  },
+  "relVol": 6.46048559838042e-11,
+  "relArea": 4.346058117266916e-12,
+  "tol": "1e-8",
+  "verdict": "OK"
+ },
+ {
+  "id": "c33",
+  "name": "flange: revolve hub + disc, 6 through holes d9 on R45",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 12,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 3,
+    "cylinder": 9
+   },
+   "volume": 157839.89810165844,
+   "solidVolumes": [
+    157839.89810165844
+   ],
+   "area": 35170.129756937735,
+   "edgeLength": 1747.929068023615,
+   "uncertainty": 1e-06
+  },
+  "relVol": 3.687765996654304e-15,
+  "relArea": 8.275155837601834e-16,
+  "tol": "1e-8",
+  "relExpected": 3.6877659966542917e-16,
+  "relOursExpected": 3.3189893969888623e-15,
+  "verdict": "OK"
+ },
+ {
+  "id": "c34",
+  "name": "shaft: stepped revolve, groove by revolve cut, axial hole",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 13,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 7,
+    "cylinder": 6
+   },
+   "volume": 78549.24111770559,
+   "solidVolumes": [
+    78549.24111770559
+   ],
+   "area": 12861.680323796621,
+   "edgeLength": 1070.044166691297,
+   "uncertainty": 1e-06
+  },
+  "relVol": 2.9641361309267767e-15,
+  "relArea": 1.1314163361254555e-15,
+  "tol": "1e-8",
+  "relExpected": 0.0,
+  "relOursExpected": 2.9641361309267676e-15,
+  "verdict": "OK"
+ },
+ {
+  "id": "c35",
+  "name": "housing: block, shell t=3 open top, inner bosses with holes",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 27,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 19,
+    "cylinder": 8
+   },
+   "volume": 45731.36269740923,
+   "solidVolumes": [
+    45731.36269740923
+   ],
+   "area": 31327.57513160619,
+   "edgeLength": 1779.8583772020572,
+   "uncertainty": 1e-06
+  },
+  "relVol": 2.54563422037563e-15,
+  "relArea": 9.290163804402168e-16,
+  "tol": "1e-8",
+  "relExpected": 4.773064163204316e-16,
+  "relOursExpected": 2.0683278040552036e-15,
+  "verdict": "OK"
+ },
+ {
+  "id": "c36",
+  "name": "cavity: sphere R10 inside cube 60",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 7,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 6,
+    "sphere": 1
+   },
+   "volume": 211811.20979521354,
+   "solidVolumes": [
+    211811.20979521354
+   ],
+   "area": 22856.637061435922,
+   "edgeLength": 751.4159265358978,
+   "uncertainty": 1e-06
+  },
+  "relVol": 4.1221374191959373e-16,
+  "relArea": 1.5916509490496171e-16,
+  "tol": "1e-8",
+  "relExpected": 2.748091612797292e-16,
+  "relOursExpected": 1.374045806398646e-16,
+  "verdict": "OK"
+ },
+ {
+  "id": "c37",
+  "name": "cavity: closed cylinder r8 h20 inside cube 60",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 9,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 8,
+    "cylinder": 1
+   },
+   "volume": 211978.76140340508,
+   "solidVolumes": [
+    211978.76140340508
+   ],
+   "area": 23007.43350880823,
+   "edgeLength": 840.5309649148733,
+   "uncertainty": 1e-06
+  },
+  "relVol": 0.0,
+  "relArea": 1.5812188724565643e-16,
+  "tol": "1e-8",
+  "relExpected": 0.0,
+  "relOursExpected": 0.0,
+  "verdict": "OK"
+ },
+ {
+  "id": "c38",
+  "name": "two cavities: sphere R6 and cylinder r5 h10",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 10,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 8,
+    "sphere": 1,
+    "cylinder": 1
+   },
+   "volume": 214309.8231523686,
+   "solidVolumes": [
+    214309.8231523686
+   ],
+   "area": 22523.6282401554,
+   "edgeLength": 811.6814089933343,
+   "uncertainty": 1e-06
+  },
+  "relVol": 2.7160519316038674e-16,
+  "relArea": 1.6151832947614897e-16,
+  "tol": "1e-8",
+  "relExpected": 4.0740778974058004e-16,
+  "relOursExpected": 1.3580259658019335e-16,
+  "verdict": "OK"
+ },
+ {
+  "id": "c39",
+  "name": "sphere cavity R6, then a through hole r5 elsewhere",
+  "status": "ok",
+  "occt": {
+   "read": true,
+   "valid": true,
+   "solids": 1,
+   "faces": 8,
+   "shellsWithFreeEdges": 0,
+   "disconnectedShells": 0,
+   "fileDisconnectedShells": 0,
+   "surfaces": {
+    "plane": 6,
+    "cylinder": 1,
+    "sphere": 1
+   },
+   "volume": 210382.83224526723,
+   "solidVolumes": [
+    210382.83224526723
+   ],
+   "area": 23780.265301591324,
+   "edgeLength": 861.6814089933343,
+   "uncertainty": 1e-06
+  },
+  "relVol": 4.2833447171848883e-10,
+  "relArea": 0.0,
+  "tol": "1e-8",
+  "relExpected": 4.2833447171848883e-10,
+  "relOursExpected": 0.0,
+  "verdict": "OK"
+ }
+]

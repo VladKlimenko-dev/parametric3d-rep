@@ -1,0 +1,283 @@
+{"runtime":".NET 8.0.31","cpu":2,"os":"Ubuntu 24.04.5 LTS","args":["allA"]}
+{"scenario":"S-SPHERE","speedOpenEdges":0,"triangles":2618,"hash":"84FB7DBF7302E744","volume":46930.668258254875,"verdict":"BRep: ok; Exact: ok; Mesh: ok; Geometry: ok","metrics":{"brep.faces":7,"brep.edges":15,"brep.shells":1,"brep.pinchedVertices":0,"brep.faceComponents":1,"brep.coedgesSameDirection":0,"brep.convention":1,"geometry.analyticFaces":7,"geometry.analyticEdges":15,"geometry.facetedEdges":0,"geometry.maxChordError":0.03375563393000322,"geometry.inconsistentEdges":0,"exact.polygons":1184,"exact.uncancelledSegments":0,"exact.edges":1865,"exact.openEdges":0,"exact.nonManifoldEdges":0,"exact.sameDirectionEdges":0,"exact.badLinkVertices":0,"exact.pinchedVertices":0,"mesh.triangles":2618,"mesh.vertices":1311,"mesh.collapsedTriangles":0,"mesh.zeroAreaTriangles":0,"mesh.edges":3927,"mesh.openEdges":0,"mesh.nonManifoldEdges":0,"mesh.sameDirectionEdges":0,"mesh.badLinkVertices":0,"mesh.pinchedVertices":0,"mesh.shortestEdge":0.04199646088360669,"mesh.microEdges":0,"mesh.components":1,"mesh.volume":46930.66825825486,"mesh.cavities":0,"geometry.selfIntersections":0,"geometry.pairs.transversal":0,"geometry.pairs.coplanarOverlap":0,"geometry.pairs.tJunction":0,"geometry.pairs.duplicate":0,"geometry.pairs.adjacent":19302,"geometry.pairs.tested":21077},"issues":[]}
+{"scenario":"S-SPHERE","distinctVertexPairsCloserThan1e5":0,"minDistance":0}
+{"test":"K01-SPHERE-OPEN-EDGES","ok":true}
+{"test":"K01-SPHERE-VALIDATOR","ok":true}
+{"test":"K01-SPHERE-VOLUME","ok":true}
+{"test":"K01-NEG-CONTROL-TET","ok":true}
+{"test":"K01-NEG-CONTROL-CUBE","ok":true}
+{"test":"K01-NEG-MISSING-TRIANGLE","ok":true}
+{"test":"K01-NEG-FLIPPED-TRIANGLE","ok":true}
+{"test":"K01-NEG-NONMANIFOLD-EDGE","ok":true}
+{"test":"K01-NEG-PINCH-VERTEX","ok":true}
+{"test":"K01-NEG-INSIDE-OUT","ok":true}
+{"test":"K01-POS-CAVITY","ok":true}
+{"test":"K01-POS-TWO-COMPONENTS","ok":true}
+{"test":"K01-NEG-ORPHAN-CAVITY","ok":true}
+{"test":"K01-NEG-SELF-INTERSECTION","ok":true}
+{"test":"K01-NEG-BROKEN-FACE","ok":true}
+{"test":"K01-NEG-BREP-MISSING-FACE","ok":true}
+{"test":"K01-NEG-EXACT-DROPPED-POLYGON","ok":true}
+{"test":"K01-NEG-EXACT-DUPLICATED-POLYGON","ok":true}
+{"test":"K01-NEEDLE-QUALITY","ok":true}
+{"test":"K01-WELD-KEEPS-CLOSURE","ok":true}
+{"test":"SX-DISJOINT-FAR","ok":true}
+{"test":"SX-DISJOINT-ABOVE","ok":true}
+{"test":"SX-DISJOINT-COPLANAR","ok":true}
+{"test":"SX-ADJ-EDGE-BENT","ok":true}
+{"test":"SX-ADJ-EDGE-FLAT","ok":true}
+{"test":"SX-ADJ-VERTEX","ok":true}
+{"test":"SX-TRANSVERSAL","ok":true}
+{"test":"SX-TRANSVERSAL-SHARED-VERTEX","ok":true}
+{"test":"SX-TRANSVERSAL-DEGENERATE","ok":true}
+{"test":"SX-COPLANAR-OVERLAP","ok":true}
+{"test":"SX-COPLANAR-CONTAINED","ok":true}
+{"test":"SX-COPLANAR-FOLD-EDGE","ok":true}
+{"test":"SX-TJUNCTION-COPLANAR","ok":true}
+{"test":"SX-TOUCH-FACE","ok":true}
+{"test":"SX-TOUCH-EDGE-EDGE","ok":true}
+{"test":"SX-DUPLICATE","ok":true}
+{"test":"SX-DUPLICATE-FILM","ok":true}
+{"test":"SX-DUPLICATE-SAME-INDICES","ok":true}
+{"test":"SX-EXACT-ORIENT","ok":true}
+{"test":"SX-MESH-CONTROL-CUBES","ok":true}
+{"test":"SX-MESH-TRANSVERSAL","ok":true}
+{"test":"SX-MESH-COPLANAR-OVERLAP","ok":true}
+{"test":"SX-MESH-DUPLICATE","ok":true}
+{"test":"SX-MESH-TJUNCTION","ok":true}
+{"test":"G6-DISPLAY-ATOMIC","reads":797,"mixed":0,"atomic":true}
+{"test":"G6-DISPLAY-ATOMIC","ok":true}
+{"test":"G6-EXACT-IMMUTABLE","polygons":17,"publicFields":"readonly, no arrays or lists"}
+{"test":"G6-EXACT-IMMUTABLE","ok":true}
+{"test":"G5-GLOBALS-INVENTORY","unbound":58,"allowed":14,"statistics":44}
+{"test":"G5-GLOBALS-INVENTORY","ok":true}
+{"test":"G5-SETGLOBAL-INSIDE-THROWS","ok":true}
+{"test":"G5-CONTEXT-ISOLATION","ok":true}
+{"test":"G5-CONTEXT-DRIVES-RESULT","tagsWithSeveralPlanes_on":0,"tagsWithSeveralPlanes_off":3}
+{"test":"G5-CONTEXT-DRIVES-RESULT","ok":true}
+{"test":"G5-MODEL-SNAPSHOT-DURING-REBUILD","stages":50}
+{"test":"G5-MODEL-SNAPSHOT-DURING-REBUILD","ok":true}
+{"test":"G6-PUBLISH-FREEZES-FORM","ok":true}
+{"test":"G6-EXACT-STATE-BY-EDIT-KIND","ok":true}
+{"test":"G6-MESH-REVISION","ok":true}
+{"test":"G6-CLONE-FAITHFUL","ok":true}
+{"test":"G6-STEP-EXACT-EDGES-APPLIED","warning":null}
+{"test":"G6-STEP-EXACT-EDGES-APPLIED","ok":true}
+{"test":"G6-STALE-EXACT-NOT-USED","cachedV":48000,"rebuiltV":45744.935242896}
+{"test":"G6-STALE-EXACT-NOT-USED","ok":true}
+{"test":"G6-PUBLISHED-RESULT-STATES","ok":true}
+{"test":"KRN02-AUDIT-BUDGET","ok":true}
+{"test":"KRN02-OPERATION-TOLERANCE","ok":true}
+{"test":"KRN02-SECTION-TANGENCY-VERTEX","ok":true}
+{"test":"KRN02-DEGENERATE-CONTOUR","ok":true}
+{"test":"KRN02-ANALYTIC-ACCURACY-ACROSS-DOMAIN","ok":true}
+{"test":"KRN02-METAMORPHIC","ok":true}
+{"test":"KRN02-SMALL-FAR","ok":true}
+{"test":"KRN02-ACCURACY-REPORT","ok":true}
+{"test":"KRN02-CONE-AXIS","ok":true}
+{"test":"KRN02-MESH-VOLUME-FAR","ok":true}
+{"test":"KRN02-TORUS-VOLUME","ok":true}
+{"test":"KRN01-UNCHECKED-IS-NOT-VALID","ok":true}
+{"test":"KRN01-UNION-INTO-EMPTY-HAS-GUARANTEE","ok":true}
+{"test":"KRN01-EMPTY-AND-FAILURE-OUTCOMES","ok":true}
+{"test":"KRN01-DISPLAY-INDEPENDENCE","ok":true}
+{"test":"K02-SUCCESS-TYPED","ok":true}
+{"test":"K02-QUADRIC-ROUTE","guarantee":"ExactAnalytic"}
+{"test":"K02-QUADRIC-ROUTE","ok":true}
+{"stage":"boolean.input.face","policy":"Strict","kind":"Subtract","result":"Boolean.Subtract: Failed at boolean.exact (face-missing); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41029); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41031); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41033); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41035)"}
+{"test":"K02-FAULT boolean.input.face Strict Subtract","ok":true}
+{"stage":"boolean.input.face","policy":"Strict","kind":"Unite","result":"Boolean.Unite: Failed at boolean.exact (face-missing); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41071); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41073); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41075); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41077)"}
+{"test":"K02-FAULT boolean.input.face Strict Unite","ok":true}
+{"stage":"boolean.input.face","policy":"AllowApproximate","kind":"Subtract","result":"Boolean.Subtract: Failed at boolean.exact (face-missing); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41139); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41141); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41143); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41145)"}
+{"test":"K02-FAULT boolean.input.face AllowApproximate Subtract","ok":true}
+{"stage":"boolean.input.face","policy":"AllowApproximate","kind":"Unite","result":"Boolean.Unite: Failed at boolean.exact (face-missing); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41181); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41183); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41185); [boolean.exact] face-missing: face could not be tessellated: injected fault at boolean.input.face (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 41187)"}
+{"test":"K02-FAULT boolean.input.face AllowApproximate Unite","ok":true}
+{"stage":"boolean.exact","policy":"Strict","kind":"Subtract","result":"Boolean.Subtract: Failed at boolean.exact (fallback-refused); [boolean.exact] exact-failed: injected fault at boolean.exact; [boolean.exact] fallback-refused: the exact route did not produce the result; strict policy refuses the approximate CSG path"}
+{"test":"K02-FAULT boolean.exact Strict Subtract","ok":true}
+{"stage":"boolean.exact","policy":"Strict","kind":"Unite","result":"Boolean.Unite: Failed at boolean.exact (fallback-refused); [boolean.exact] exact-failed: injected fault at boolean.exact; [boolean.exact] fallback-refused: the exact route did not produce the result; strict policy refuses the approximate CSG path"}
+{"test":"K02-FAULT boolean.exact Strict Unite","ok":true}
+{"stage":"boolean.exact","policy":"AllowApproximate","kind":"Subtract","result":"Boolean.Subtract: SucceededApproximate, Approximate, fallback; [boolean.exact] exact-failed: injected fault at boolean.exact; [boolean.exact] fallback-approximate: exact kernel did not produce the result; approximate CSG path used; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is Approximate"}
+{"test":"K02-FAULT boolean.exact AllowApproximate Subtract","ok":true}
+{"stage":"boolean.exact","policy":"AllowApproximate","kind":"Unite","result":"Boolean.Unite: SucceededApproximate, Approximate, fallback; [boolean.exact] exact-failed: injected fault at boolean.exact; [boolean.exact] fallback-approximate: exact kernel did not produce the result; approximate CSG path used; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is Approximate"}
+{"test":"K02-FAULT boolean.exact AllowApproximate Unite","ok":true}
+{"stage":"boolean.topology","policy":"Strict","kind":"Subtract","result":"Boolean.Subtract: Failed at boolean.topology (fallback-refused); [boolean.topology] exact-failed: injected fault at boolean.topology; [boolean.topology] fallback-refused: the exact route did not produce the result; strict policy refuses the approximate CSG path"}
+{"test":"K02-FAULT boolean.topology Strict Subtract","ok":true}
+{"stage":"boolean.topology","policy":"Strict","kind":"Unite","result":"Boolean.Unite: Failed at boolean.topology (fallback-refused); [boolean.topology] exact-failed: injected fault at boolean.topology; [boolean.topology] fallback-refused: the exact route did not produce the result; strict policy refuses the approximate CSG path"}
+{"test":"K02-FAULT boolean.topology Strict Unite","ok":true}
+{"stage":"boolean.topology","policy":"AllowApproximate","kind":"Subtract","result":"Boolean.Subtract: Failed at boolean.topology (exception); [boolean.topology] exact-failed: injected fault at boolean.topology; [boolean.topology] fallback-approximate: exact kernel did not produce the result; approximate CSG path used; [boolean.topology] exception: injected fault at boolean.topology"}
+{"test":"K02-FAULT boolean.topology AllowApproximate Subtract","ok":true}
+{"stage":"boolean.topology","policy":"AllowApproximate","kind":"Unite","result":"Boolean.Unite: Failed at boolean.topology (exception); [boolean.topology] exact-failed: injected fault at boolean.topology; [boolean.topology] fallback-approximate: exact kernel did not produce the result; approximate CSG path used; [boolean.topology] exception: injected fault at boolean.topology"}
+{"test":"K02-FAULT boolean.topology AllowApproximate Unite","ok":true}
+{"test":"K02-FAULT-INPUT-FACE-SKIP","ok":true}
+{"test":"K02-FAULT-FINAL-MESH","ok":true}
+{"test":"K02-FAULT-EXACT-MESHING-KEEPS-OLD","ok":true}
+{"test":"K02-PART-ROLLBACK","e0":"Boolean.Subtract refused (fallback-refused at boolean.exact): the exact route did not produce the result; strict policy refuses the approximate CSG path","e1":null,"Error":"Failed features in the build tree: 1.","Volume":214303.5399670615,"Integrity":null,"Approximate":false}
+{"test":"K02-PART-ROLLBACK","ok":true}
+{"test":"K02-PART-APPROXIMATE-EXPLICIT","ok":true}
+{"test":"K02-PART-MESH-INTEGRITY","ok":true}
+{"test":"K02-MERGE-KEEPS-BROKEN-FACES","ok":true}
+{"test":"K03-CHECKPOINTS-IMMUTABLE","checkpoints":6,"authoritativeChanged":0,"derivedChanged":0,"derivedAt":[]}
+{"test":"K03-CHECKPOINTS-IMMUTABLE","ok":true}
+{"test":"K03-INCREMENTAL-EQUALS-FULL","withIntersect":false,"edit":"last","executed":1,"startedAt":4,"equal":true,"inc":217733.64351503112,"full":217733.64351503112}
+{"test":"K03-INCREMENTAL-EQUALS-FULL","withIntersect":false,"edit":"middle","executed":3,"startedAt":2,"equal":true,"inc":217279.15977781298,"full":217279.15977781298}
+{"test":"K03-INCREMENTAL-EQUALS-FULL","withIntersect":false,"edit":"early","executed":4,"startedAt":1,"equal":true,"inc":217279.15977781298,"full":217279.15977781298}
+{"test":"K03-INCREMENTAL-EQUALS-FULL","withIntersect":false,"edit":"noop-last","executed":1,"startedAt":4,"equal":true,"inc":217279.15977781298,"full":217279.15977781298}
+{"test":"K03-INCREMENTAL-EQUALS-FULL intersect=False","ok":true}
+{"test":"K03-INCREMENTAL-EQUALS-FULL","withIntersect":true,"edit":"last","executed":1,"startedAt":5,"equal":true,"inc":168458.1456977433,"full":168458.1456977433}
+{"test":"K03-INCREMENTAL-EQUALS-FULL","withIntersect":true,"edit":"middle","executed":4,"startedAt":2,"equal":true,"inc":168003.66196052486,"full":168003.66196052486}
+{"test":"K03-INCREMENTAL-EQUALS-FULL","withIntersect":true,"edit":"early","executed":5,"startedAt":1,"equal":true,"inc":168003.66196052486,"full":168003.66196052486}
+{"test":"K03-INCREMENTAL-EQUALS-FULL","withIntersect":true,"edit":"noop-last","executed":1,"startedAt":5,"equal":true,"inc":168003.66196052486,"full":168003.66196052486}
+{"test":"K03-INCREMENTAL-EQUALS-FULL intersect=True","ok":true}
+{"test":"K03-APPEND-AFTER-PUBLISHED","kind":"intersect","executed":1,"inc":167982.97980888866,"full":167982.97980888866,"equal":true,"publishedAuthoritativeSame":true,"publishedDerivedSame":true}
+{"test":"K03-APPEND-AFTER-PUBLISHED intersect","ok":true}
+{"test":"K03-APPEND-AFTER-PUBLISHED","kind":"cut","executed":1,"inc":210429.44059543512,"full":210429.44059543512,"equal":true,"publishedAuthoritativeSame":true,"publishedDerivedSame":true}
+{"test":"K03-APPEND-AFTER-PUBLISHED cut","ok":true}
+{"test":"K03-APPEND-AFTER-PUBLISHED","kind":"unite","executed":1,"inc":221215.2807271893,"full":221215.2807271893,"equal":true,"publishedAuthoritativeSame":true,"publishedDerivedSame":true}
+{"test":"K03-APPEND-AFTER-PUBLISHED unite","ok":true}
+{"test":"K03-UNTOUCHED-BODY-NOT-MUTATED","ok":true}
+{"test":"K03-FAILED-FEATURE-LEAVES-NO-TRACE","ok":true}
+{"test":"K03-FAULT-PART","stage":"boolean.input.face","failed":true,"errors":["Boolean.Subtract refused (face-missing at boolean.exact): face could not be tessellated: injected fault at boolean.input.face"],"IntegrityError":null}
+{"test":"K03-FAULT-PART boolean.input.face","ok":true}
+{"test":"K03-FAULT-PART","stage":"boolean.exact","failed":true,"errors":["Boolean.Subtract refused (fallback-refused at boolean.exact): the exact route did not produce the result; strict policy refuses the approximate CSG path"],"IntegrityError":null}
+{"test":"K03-FAULT-PART boolean.exact","ok":true}
+{"test":"K03-FAULT-PART","stage":"boolean.topology","failed":true,"errors":["Boolean.Subtract refused (fallback-refused at boolean.topology): the exact route did not produce the result; strict policy refuses the approximate CSG path"],"IntegrityError":null}
+{"test":"K03-FAULT-PART boolean.topology","ok":true}
+{"test":"K03-FAULT-PART","stage":"mesh.face","failed":true,"errors":[],"IntegrityError":"Integrity: 1 body(ies) failed validation \u2014 BRep: ok; Mesh: 10 error(s)"}
+{"test":"K03-FAULT-PART mesh.face","ok":true}
+{"test":"K03-GUARD","verify":false,"error":"Internal error: published body is immutable: TVertex 69136.P modified in place","Integrity":null,"volume":212984.0710525538,"reference":212984.0710525538}
+{"test":"K03-GUARD","verify":true,"error":"Internal error: published body is immutable: TShell 69355.Faces modified in place","Integrity":null,"volume":212984.0710525538,"reference":212984.0710525538}
+{"test":"K03-GUARD-DETECTS-IN-PLACE-MUTATION","ok":true}
+{"test":"K03-DIAG-TREE-INTEGRITY","withIntersect":false,"verdict":"BRep: ok; Exact: ok; Mesh: ok; Geometry: ok","m":{"geometry.analyticFaces":15,"geometry.analyticEdges":45,"geometry.facetedEdges":0,"geometry.maxChordError":0.03375563393000322,"geometry.inconsistentEdges":0,"mesh.triangles":3162,"mesh.vertices":1579,"mesh.collapsedTriangles":0,"mesh.zeroAreaTriangles":0,"mesh.edges":4743,"mesh.openEdges":0,"mesh.nonManifoldEdges":0,"mesh.sameDirectionEdges":0,"mesh.badLinkVertices":0,"mesh.pinchedVertices":0,"mesh.shortestEdge":0.04199673094963063,"mesh.microEdges":0,"mesh.components":1,"mesh.volume":217238.0752253397,"mesh.cavities":0,"geometry.selfIntersections":0,"geometry.pairs.transversal":0,"geometry.pairs.coplanarOverlap":0,"geometry.pairs.tJunction":0,"geometry.pairs.duplicate":0,"geometry.pairs.adjacent":23710,"geometry.pairs.tested":28271},"issues":[]}
+{"test":"K03-DIAG-TREE-INTEGRITY","withIntersect":true,"verdict":"BRep: ok; Exact: ok; Mesh: ok; Geometry: ok","m":{"geometry.analyticFaces":15,"geometry.analyticEdges":45,"geometry.facetedEdges":0,"geometry.maxChordError":0.03375563393000322,"geometry.inconsistentEdges":0,"mesh.triangles":3162,"mesh.vertices":1579,"mesh.collapsedTriangles":0,"mesh.zeroAreaTriangles":0,"mesh.edges":4743,"mesh.openEdges":0,"mesh.nonManifoldEdges":0,"mesh.sameDirectionEdges":0,"mesh.badLinkVertices":0,"mesh.pinchedVertices":0,"mesh.shortestEdge":0.04199657308557933,"mesh.microEdges":0,"mesh.components":1,"mesh.volume":168004.09210959895,"mesh.cavities":0,"geometry.selfIntersections":0,"geometry.pairs.transversal":0,"geometry.pairs.coplanarOverlap":0,"geometry.pairs.tJunction":0,"geometry.pairs.duplicate":0,"geometry.pairs.adjacent":23822,"geometry.pairs.tested":28328},"issues":[]}
+{"test":"K03-DIAG-TREE-INTEGRITY","ok":true}
+{"test":"KNOWN-INTERSECT-DEFECT","exactNonManifold":0,"Integrity":null}
+{"test":"INTERSECT-AFTER-FIX","valid":true}
+{"test":"K03-INTERSECT-EXACT-VALID","ok":true}
+{"test":"K03-INTERSECT-INDEPENDENT-VOLUME","subtractVerdict":"BRep: ok; Exact: ok; Mesh: ok","dbl":"double display: open 0 non 0","name":"box","vi":11471.36889735,"expected":11471.368897350003,"valid":true,"verdict":"BRep: ok; Exact: ok; Mesh: ok; Geometry: ok"}
+{"test":"K03-INTERSECT-INDEPENDENT-VOLUME","subtractVerdict":"BRep: ok; Exact: ok; Mesh: ok","dbl":"double display: open 0 non 0","name":"sphere","vi":3461.08770666787,"expected":3461.087706667873,"valid":false,"verdict":"BRep: ok; Exact: ok; Mesh: ok; Geometry: 2 error(s)"}
+{"test":"K03-INTERSECT-INDEPENDENT-VOLUME","subtractVerdict":"BRep: ok; Exact: ok; Mesh: ok","dbl":"double display: open 0 non 0","name":"cyl","vi":4363.374817314801,"expected":4363.374817314805,"valid":true,"verdict":"BRep: ok; Exact: ok; Mesh: ok; Geometry: ok"}
+{"test":"K03-INTERSECT-INDEPENDENT-VOLUME","subtractVerdict":"BRep: ok; Exact: ok; Mesh: ok","dbl":"","name":"disjoint","vi":0,"expected":0,"valid":null,"verdict":null}
+{"test":"K03-INTERSECT-INDEPENDENT-VOLUME","ok":true}
+{"test":"K03-GUARD-CLEAN-TREE","ok":true}
+{"test":"K03-STALE-RESULT-REJECTED","ok":true}
+{"test":"K03-EDGE-CACHE-FOLLOWS-CURVE","ok":true}
+{"test":"K03-TRANSFORM-COPY-INDEPENDENT","ok":true}
+{"test":"K04-DIAG-CHORD","ch":0.02,"partVolume":170287.59981968364,"sphereCutExact":46935.30345673965,"faces":15}
+{"test":"K04-DIAG-CHORD","ch":0.05,"partVolume":170287.59981968452,"sphereCutExact":46947.12319335349,"faces":15}
+{"test":"K04-DIAG-CHORD","ch":0.2,"partVolume":170287.59981968452,"sphereCutExact":46947.12319335349,"faces":15}
+{"test":"K04-DIAG-CHORD","ok":true}
+{"test":"K04-DIAG-ID-GAPS","distinct":1,"res":["F424882949D6DE99E049|V=170287.59981968364|err=,,,,,|int=","F424882949D6DE99E049|V=170287.59981968364|err=,,,,,|int=","F424882949D6DE99E049|V=170287.59981968364|err=,,,,,|int=","F424882949D6DE99E049|V=170287.59981968364|err=,,,,,|int=","F424882949D6DE99E049|V=170287.59981968364|err=,,,,,|int="]}
+{"test":"K04-DIAG-ID-GAPS","ok":true}
+{"test":"K04-GLOBAL-SETTER-REFUSED-IN-CONTEXT","ok":true}
+{"test":"K04-OPTIONS-SCOPE-DOES-NOT-LEAK","ok":true}
+{"test":"K04-SEQUENTIAL-REFERENCE","ok":true}
+{"test":"K04-PARALLEL-EQUALS-SEQUENTIAL","round":0,"mismatched":[]}
+{"test":"K04-PARALLEL-EQUALS-SEQUENTIAL","round":1,"mismatched":[]}
+{"test":"K04-PARALLEL-EQUALS-SEQUENTIAL","round":2,"mismatched":[]}
+{"test":"K04-PARALLEL-EQUALS-SEQUENTIAL","ok":true}
+{"test":"K04-THREADS-INSIDE-COMPUTE-DETERMINISTIC","ok":true}
+{"test":"K04-CANCEL feature skip=0","ok":true}
+{"test":"K04-CANCEL feature skip=2","ok":true}
+{"test":"K04-CANCEL boolean.exact skip=0","ok":true}
+{"test":"K04-CANCEL boolean.exact skip=2","ok":true}
+{"test":"K04-CANCEL boolean.input.face skip=0","ok":true}
+{"test":"K04-CANCEL boolean.input.face skip=2","ok":true}
+{"test":"K04-CANCEL boolean.topology skip=0","ok":true}
+{"test":"K04-CANCEL boolean.topology skip=2","ok":true}
+{"test":"K04-CANCEL mesh.face skip=0","ok":true}
+{"test":"K04-CANCEL mesh.face skip=2","ok":true}
+{"test":"K04-CANCEL final mesh skip=0","ok":true}
+{"test":"K04-DEADLINE","ok":true}
+{"test":"K04-POLYGON-LIMIT","What":"2356 exact polygons at boolean.input (limit 50)"}
+{"test":"K04-POLYGON-LIMIT","ok":true}
+{"test":"K04-GLOBALS-RESTORED","ok":true}
+{"test":"K05-NORMALIZE-IDEMPOTENT","ok":true}
+{"test":"K05-VALIDATOR-ENFORCES-ORIENTATION","ok":true}
+{"test":"K05-PART-BODIES-NORMALIZED","ok":true}
+{"test":"K05-STEP","ok":true,"loops":22,"rings":22}
+{"test":"K05-STEP-ROUNDTRIP","v0":45748.933700197194,"v1":45748.93370644464,"bodies":1}
+{"test":"K10-STEP-ROUNDTRIP","id":"S-HOLES4","a0":45748.933700197194,"a1":45748.93370644464}
+{"test":"K10-STEP-ROUNDTRIP","id":"S-HOLES8","a0":43497.86763469438,"a1":43497.867547393405}
+{"test":"K10-STEP-ROUNDTRIP","id":"S-OVERLAP","a0":24000,"a1":24000}
+{"test":"K10-STEP-ROUNDTRIP","id":"S-UNION","a0":90000,"a1":90000}
+{"test":"K10-STEP-ROUNDTRIP","id":"S-ROUND","a0":47960.77899268609,"a1":47960.77899301463}
+{"test":"K10-STEP-ROUNDTRIP","id":"S-SPHERE","a0":46935.303435712936,"a1":46930.870737240766}
+{"test":"K10-STEP-ROUNDTRIP","id":"S-ROUNDHOLE","a0":43944.31679088558,"a1":43941.4249971075}
+{"test":"K05-STEP-ONE-RING-PER-LOOP","ok":true}
+{"test":"K05-REF-UNRELATED-EDIT","ok":true}
+{"test":"K05-REF-RESIZE","Error":null,"Volume":249780.44257124353}
+{"test":"K05-REF-RESIZE","ok":true}
+{"test":"K05-REF-SPLIT-KEEPS-PIECE","roundError":null,"notchError":null,"order":"ExtrudeFeature,CutCyl,CutBox,RoundFeature"}
+{"test":"K05-REF-SPLIT-KEEPS-PIECE","ok":true}
+{"test":"K05-REF-SPLIT-CONFLICT","Error":"Round refused (exception at round.build): Round: edge reference conflict \u2014 the edge between faces \u0027#d0000001fb/extrude[0]:side[0.1]\u0027 and \u0027#d0000001fb/extrude[0]:side[0.2]\u0027 was split and no piece contains the referenced point."}
+{"test":"K05-REF-SPLIT-LOSES-POINT-IS-CONFLICT","ok":true}
+{"test":"K05-REF-EDGE-GONE","Error":"Round refused (exception at round.build): Round: edge reference conflict \u2014 the edge between faces \u0027#d0000001ff/extrude[0]:side[0.1]\u0027 and \u0027#d0000001ff/extrude[0]:side[0.2]\u0027 no longer exists."}
+{"test":"K05-REF-EDGE-GONE-IS-CONFLICT","ok":true}
+{"test":"K05-REF-SUPPRESS-RESTORE","ok":true}
+{"test":"K05-REF-REORDER","order":"ExtrudeFeature,RoundFeature,CutCyl","Error":null}
+{"test":"K05-REF-REORDER-INDEPENDENT","ok":true}
+{"test":"K05-NAMES","tags":["#d000000209/extrude[0]:side[0.1]","#d00000020a/extrude[0]:bottom","#d00000020a/extrude[0]:side[0.3]","#d00000020a/extrude[0]:top","#d000000209/extrude[0]:side[0.1]","#d000000209/extrude[0]:top","#d000000209/extrude[0]:side[0.3]","#d000000209/extrude[0]:bottom","#d000000209/extrude[0]:side[0.2]","#d000000209/extrude[0]:side[0.0]"],"collisionsAvoided":3}
+{"test":"K05-NAMES-SCOPED-BY-FEATURE","ok":true}
+{"test":"K05-HISTORY-HOLE","Generated":["#d00000020c/extrude[0]:side[0.0]"],"Modified":["#d00000020b/extrude[0]:bottom","#d00000020b/extrude[0]:top"],"Split":[],"Deleted":[]}
+{"test":"K05-HISTORY-HOLE","ok":true}
+{"test":"K05-HISTORY-DELETE-AND-SPLIT","slice":{"Generated":["#d00000020e/extrude[0]:side[0.3]"],"Modified":["#d00000020d/extrude[0]:bottom","#d00000020d/extrude[0]:side[0.0]","#d00000020d/extrude[0]:side[0.2]","#d00000020d/extrude[0]:top"],"Deleted":["#d00000020d/extrude[0]:side[0.1]"]},"slot":{"Generated":["#d00000020f/extrude[0]:bottom","#d00000020f/extrude[0]:side[0.1]","#d00000020f/extrude[0]:side[0.3]"],"Split":["#d00000020d/extrude[0]:top"],"Modified":["#d00000020d/extrude[0]:side[0.0]","#d00000020d/extrude[0]:side[0.2]"]}}
+{"test":"K05-HISTORY-DELETE-AND-SPLIT","ok":true}
+{"test":"K05-KEYS-PERSIST","ok":true}
+{"test":"K05-LEGACY-REFERENCE","ok":true}
+{"test":"K06-NOOP","Executed":0,"booleans":0,"ms":1.1687}
+{"test":"K06-NOOP-REBUILD","ok":true}
+{"test":"K06-APPEARANCE-ONLY","ok":true}
+{"test":"K06-PARAM","name":"last","Executed":1,"StartedAt":3,"equal":true}
+{"test":"K06-PARAM last","ok":true}
+{"test":"K06-PARAM","name":"chain-formula","Executed":1,"StartedAt":3,"equal":true}
+{"test":"K06-PARAM chain-formula","ok":true}
+{"test":"K06-PARAM","name":"early","Executed":3,"StartedAt":1,"equal":true}
+{"test":"K06-PARAM early","ok":true}
+{"test":"K06-PARAM","name":"base","Executed":4,"StartedAt":0,"equal":true}
+{"test":"K06-PARAM base","ok":true}
+{"test":"K06-PARAM","name":"unused","Executed":0,"StartedAt":4,"equal":true}
+{"test":"K06-PARAM unused","ok":true}
+{"test":"K06-SETTINGS-CHANGE-REBUILDS","ok":true}
+{"test":"K06-SKETCH-EDITS","ok":true}
+{"test":"K06-SERIES","step":0,"kind":1,"Executed":3,"StartedAt":1}
+{"test":"K06-SERIES","step":1,"kind":1,"Executed":3,"StartedAt":1}
+{"test":"K06-SERIES","step":2,"kind":4,"Executed":0,"StartedAt":4}
+{"test":"K06-SERIES","step":3,"kind":2,"Executed":2,"StartedAt":2}
+{"test":"K06-SERIES","step":4,"kind":4,"Executed":0,"StartedAt":4}
+{"test":"K06-SERIES","step":5,"kind":3,"Executed":1,"StartedAt":2}
+{"test":"K06-SERIES","step":6,"kind":1,"Executed":2,"StartedAt":1}
+{"test":"K06-SERIES","step":7,"kind":0,"Executed":1,"StartedAt":2}
+{"test":"K06-SERIES","step":8,"kind":2,"Executed":1,"StartedAt":2}
+{"test":"K06-SERIES","step":9,"kind":0,"Executed":1,"StartedAt":2}
+{"test":"K06-SERIES","step":10,"kind":1,"Executed":2,"StartedAt":1}
+{"test":"K06-SERIES","step":11,"kind":2,"Executed":1,"StartedAt":2}
+{"test":"K06-SERIES","step":12,"kind":0,"Executed":1,"StartedAt":2}
+{"test":"K06-SERIES","step":13,"kind":4,"Executed":0,"StartedAt":4}
+{"test":"K06-RANDOM-EDIT-SERIES","ok":true}
+{"test":"K06-DATUM","freeExecuted":0,"usedStartedAt":2,"pocketIndex":2}
+{"test":"K06-DATUM-CHANGES","ok":true}
+{"test":"G11-2D-HOLE","area":5798.938070170253,"expected":5798.938070170253,"err":0,"loops":2,"segs":6}
+{"test":"G11-2D-HOLE","ok":true}
+{"test":"G11-2D-NOTCH-ON-EDGE","area":5842.92036732051,"expected":5842.92036732051,"err":0,"loops":1,"segs":6}
+{"test":"G11-2D-NOTCH-ON-EDGE","ok":true}
+{"test":"G11-2D-NOTCH-OFFSET","area":5765.108077154115,"expected":5765.108077154115,"err":0,"loops":1,"segs":8}
+{"test":"G11-2D-NOTCH-OFFSET","ok":true}
+{"test":"G11-2D-LENS","area":89.45904360032242,"expected":89.45904360032245,"err":-2.842170943040401E-14,"loops":1,"segs":4}
+{"test":"G11-2D-LENS","ok":true}
+{"test":"G11-2D-TWO-CIRCLES-UNION","area":538.8594871176361,"expected":538.8594871176363,"err":-1.1368683772161603E-13,"loops":1,"segs":4}
+{"test":"G11-2D-TWO-CIRCLES-UNION","ok":true}
+{"test":"G11-2D-ADJACENT-UNION","area":6000,"expected":6000,"err":0,"loops":1,"segs":6}
+{"test":"G11-2D-ADJACENT-UNION","ok":true}
+{"test":"G11-2D-ADJACENT-SUBTRACT","area":3000,"expected":3000,"err":0,"loops":1,"segs":4}
+{"test":"G11-2D-ADJACENT-SUBTRACT","ok":true}
+{"test":"G11-2D-FLUSH-POCKET","area":5400,"expected":5400,"err":0,"loops":1,"segs":8}
+{"test":"G11-2D-FLUSH-POCKET","ok":true}
+{"test":"G11-2D-TANGENT-CIRCLE","area":6314.15926535898,"expected":6314.15926535898,"err":0,"loops":1,"segs":8}
+{"test":"G11-2D-TANGENT-CIRCLE","ok":true}
+{"test":"G11-2D-CHAIN","area":5664.380550980765,"expected":5664.380550980765,"err":0,"loops":4,"segs":14}
+{"test":"G11-2D-CHAIN","ok":true}
+{"test":"G11-2D-IDENTITIES","pairs":200,"worst":6.821210263296962E-13}
+{"test":"G11-2D-IDENTITIES","ok":true}
+{"test":"K02-CONTRACT-NON-BOOLEAN-OPS","ok":true}
+{"staleExactUses":1}
+{"passed":174,"failed":0}

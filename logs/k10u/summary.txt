@@ -1,0 +1,10 @@
+built: /home/claude/out/base_k10u/k01/K01Checks /home/claude/out/base_k10u/fprobe/FProbe
+allA: {"passed":232,"failed":0}
+allB: {"passed":130,"failed":0}
+allS: {"passed":2,"failed":0}
+G11POLY: {"passed":2,"failed":0}
+FProbe: {"passed":88,"failed":0}
+A06: 9/9
+G14: OCCT: 42/42 agree; our build failures 0; honest refusals of exact STEP 1
+KRN04: DIFF: agree 110, refused 0, WRONG 0, occt-failed 1, ours-exception 0 (of 111)
+RELEASE_ID 4fa7d6b25bb570704038d7a5b489c53c028add00709156338280faa80ab5fd37; файлов 481

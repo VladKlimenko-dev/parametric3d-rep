@@ -1,0 +1,10 @@
+d8_0000  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 3 error(s)  [common,common] box 25.6x23.7x22.58 | cyl r8.32 h26.62 rot74 | torus 13.97/3.85
+d8_0009  occt-wrong? reported 14434.4232 vs OCCT 14348.7076; Monte-Carlo 14557.3±345 → ours closer  [fuse,fuse] torus 6.57/3.36 rot72 | torus 11.26/3.66 | box 33.6x9.36x34.85
+d8_0012  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 6 error(s)  [cut] torus 9.38/3.68 rot56 | cone r11.07/5.4 h23.96 rot156
+d8_0079  BOUND-VIOLATION (polyhedral, reported 39343.9648): |reported − OCCT| = 216 > declared bound 0.296  [cut] box 34.17x34.89x35.17 rot152 | torus 10.78/3.95
+d8_0082  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 10 error(s)  [fuse] cyl r9.35 h27.3 rot62 | cone r7.81/0 h9.15 rot13
+d8_0089  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 6 error(s)  [cut,fuse] cone r2.63/0 h25.05 rot157 | torus 6.78/2.06 | cyl r10.41 h28.92
+d8_0133  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 6 error(s)  [fuse,fuse] torus 14.81/3.53 | box 31.41x39.67x29.01 | cone r10.09/1 h18.6 rot8
+d8_0154  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 3 error(s)  [common,cut] box 16.7x35.01x37.22 | cyl r8.32 h33.91 rot39 | box 35.09x20.14x13.81
+d8_0189  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 3 error(s)  [cut,fuse] box 16.65x23.52x11.21 | torus 13.44/1.62 rot70 | box 18.01x22.13x36.03
+DIFF: agree 193, refused 0, WRONG 0, occt-failed 1, ours-exception 0, INVALID-SUCCESS 7, bound-violation 1 (of 200)

@@ -1,0 +1,37 @@
+MSBuild version 17.8.49+7806cbf7b for .NET
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  System.Drawing.Common -> /home/claude/w/Parametric3D/logs/g14a/fprobe/SDCStub.dll
+  OpenTK.Mathematics -> /home/claude/w/Parametric3D/logs/g14a/fprobe/OpenTK.Mathematics.dll
+/home/claude/w/Parametric3D/src/Kernel/Export/IgesImport.cs(48,21): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Export/IgesImport.cs(51,18): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Export/StepExact.cs(89,27): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Export/StepExact.cs(98,17): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Tess/UvMesher.cs(230,34): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/FilletOp.cs(2837,21): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/FilletOp.cs(2837,37): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/FilletOp.cs(3292,45): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/BooleanOp.cs(4086,35): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Geometry/ExactCylinderCut.cs(29,41): warning CS0649: Field 'ExactCylinderCut.DebugNoOrient' is never assigned to, and will always have its default value false [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Geometry/ExactCylinderCut.cs(28,41): warning CS0649: Field 'ExactCylinderCut.DebugKeepInvalid' is never assigned to, and will always have its default value false [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/BooleanOp.cs(2144,79): warning CS0649: Field 'BooleanOp.MeshSnapProbe' is never assigned to, and will always have its default value null [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+  FProbe -> /home/claude/w/Parametric3D/logs/g14a/fprobe/FProbe.dll
+
+Build succeeded.
+
+/home/claude/w/Parametric3D/src/Kernel/Export/IgesImport.cs(48,21): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Export/IgesImport.cs(51,18): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Export/StepExact.cs(89,27): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Export/StepExact.cs(98,17): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Tess/UvMesher.cs(230,34): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/FilletOp.cs(2837,21): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/FilletOp.cs(2837,37): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/FilletOp.cs(3292,45): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/BooleanOp.cs(4086,35): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Geometry/ExactCylinderCut.cs(29,41): warning CS0649: Field 'ExactCylinderCut.DebugNoOrient' is never assigned to, and will always have its default value false [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Geometry/ExactCylinderCut.cs(28,41): warning CS0649: Field 'ExactCylinderCut.DebugKeepInvalid' is never assigned to, and will always have its default value false [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/BooleanOp.cs(2144,79): warning CS0649: Field 'BooleanOp.MeshSnapProbe' is never assigned to, and will always have its default value null [/home/claude/w/Parametric3D/tests/fprobe/FProbe.csproj]
+    12 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:09.76

@@ -1,0 +1,1455 @@
+[
+ {
+  "id": "k4_000",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 1 × sphere, phase 0",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 1 × sphere, phase 0",
+  "occt": 8161.097364267582,
+  "ours": 8161.0973642652825,
+  "tol": 0.009104778684233858,
+  "verdict": "agree",
+  "bound": 0.0004432073084882905
+ },
+ {
+  "id": "k4_001",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 1 × sphere, phase 1",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 1 × sphere, phase 1",
+  "occt": 8161.216924310199,
+  "ours": 8161.216924307898,
+  "tol": 0.009104778684233858,
+  "verdict": "agree",
+  "bound": 0.00044323267950691845
+ },
+ {
+  "id": "k4_002",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 1 × sphere, phase 2",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 1 × sphere, phase 2",
+  "occt": 8161.336915312056,
+  "ours": 8161.336915309715,
+  "tol": 0.009104778684233858,
+  "verdict": "agree",
+  "bound": 0.0004432580546443566
+ },
+ {
+  "id": "k4_003",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 1 × sphere, phase 3",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 1 × sphere, phase 3",
+  "occt": 8161.457337049465,
+  "ours": 8161.4573370443095,
+  "tol": 0.009104778684233858,
+  "verdict": "agree",
+  "bound": 0.00044328353779984274
+ },
+ {
+  "id": "k4_004",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.1 × sphere, phase 0",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.1 × sphere, phase 0",
+  "occt": 8011.974626124849,
+  "ours": 8011.974626123272,
+  "tol": 0.00892477868423386,
+  "verdict": "agree",
+  "bound": 0.00044139664945071124
+ },
+ {
+  "id": "k4_005",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.1 × sphere, phase 1",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.1 × sphere, phase 1",
+  "occt": 8011.986588011795,
+  "ours": 8011.986588010222,
+  "tol": 0.00892477868423386,
+  "verdict": "agree",
+  "bound": 0.0004414206561459914
+ },
+ {
+  "id": "k4_006",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.1 × sphere, phase 2",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.1 × sphere, phase 2",
+  "occt": 8011.998593064082,
+  "ours": 8011.998593064208,
+  "tol": 0.00892477868423386,
+  "verdict": "agree",
+  "bound": 0.0004414447531281059
+ },
+ {
+  "id": "k4_007",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.1 × sphere, phase 3",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.1 × sphere, phase 3",
+  "occt": 8012.010641263649,
+  "ours": 8012.010641263726,
+  "tol": 0.00892477868423386,
+  "verdict": "agree",
+  "bound": 0.0004414689300973508
+ },
+ {
+  "id": "k4_008",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.03 × sphere, phase 0",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.03 × sphere, phase 0",
+  "occt": 8000.385312864337,
+  "ours": 8000.385312864214,
+  "tol": 0.008910778684233858,
+  "verdict": "agree",
+  "bound": 0.0004412608419962578
+ },
+ {
+  "id": "k4_009",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.03 × sphere, phase 1",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.03 × sphere, phase 1",
+  "occt": 8000.388901446426,
+  "ours": 8000.388901446273,
+  "tol": 0.008910778684233858,
+  "verdict": "agree",
+  "bound": 0.0004412847386811844
+ },
+ {
+  "id": "k4_010",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.03 × sphere, phase 2",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.03 × sphere, phase 2",
+  "occt": 8000.392502978677,
+  "ours": 8000.392502978634,
+  "tol": 0.008910778684233858,
+  "verdict": "agree",
+  "bound": 0.00044130872395174963
+ },
+ {
+  "id": "k4_011",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.03 × sphere, phase 3",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.03 × sphere, phase 3",
+  "occt": 8000.396117454896,
+  "ours": 8000.396117454849,
+  "tol": 0.008910778684233858,
+  "verdict": "agree",
+  "bound": 0.00044133279703937326
+ },
+ {
+  "id": "k4_012",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.01 × sphere, phase 0",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.01 × sphere, phase 0",
+  "occt": 7997.074110478919,
+  "ours": 7997.074110478844,
+  "tol": 0.00890677868423386,
+  "verdict": "agree",
+  "bound": 0.00044122216803022776
+ },
+ {
+  "id": "k4_013",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.01 × sphere, phase 1",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.01 × sphere, phase 1",
+  "occt": 7997.075306673405,
+  "ours": 7997.0753066733305,
+  "tol": 0.00890677868423386,
+  "verdict": "agree",
+  "bound": 0.00044124602924130416
+ },
+ {
+  "id": "k4_014",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.01 × sphere, phase 2",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.01 × sphere, phase 2",
+  "occt": 7997.076507184736,
+  "ours": 7997.076507184593,
+  "tol": 0.00890677868423386,
+  "verdict": "agree",
+  "bound": 0.00044126998960833706
+ },
+ {
+  "id": "k4_015",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.01 × sphere, phase 3",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.01 × sphere, phase 3",
+  "occt": 7997.077712010627,
+  "ours": 7997.077712010476,
+  "tol": 0.00890677868423386,
+  "verdict": "agree",
+  "bound": 0.0004412940280385444
+ },
+ {
+  "id": "k4_016",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.002 × sphere, phase 0",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.002 × sphere, phase 0",
+  "occt": 7995.749630643919,
+  "ours": 7995.749630643742,
+  "tol": 0.008905178684233859,
+  "verdict": "agree",
+  "bound": 0.00044120671243707334
+ },
+ {
+  "id": "k4_017",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.002 × sphere, phase 1",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.002 × sphere, phase 1",
+  "occt": 7995.749869882771,
+  "ours": 7995.749869882652,
+  "tol": 0.008905178684233859,
+  "verdict": "agree",
+  "bound": 0.0004412305667592602
+ },
+ {
+  "id": "k4_018",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.002 × sphere, phase 2",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.002 × sphere, phase 2",
+  "occt": 7995.75010998505,
+  "ours": 7995.750109984915,
+  "tol": 0.008905178684233859,
+  "verdict": "agree",
+  "bound": 0.0004412545047011485
+ },
+ {
+  "id": "k4_019",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.002 × sphere, phase 3",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.002 × sphere, phase 3",
+  "occt": 7995.750350950237,
+  "ours": 7995.750350950104,
+  "tol": 0.008905178684233859,
+  "verdict": "agree",
+  "bound": 0.000441278537487151
+ },
+ {
+  "id": "k4_020",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.1 × tilted cylinder, phase 0",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.1 × tilted cylinder, phase 0",
+  "occt": 7749.784410473833,
+  "ours": 7749.784411802285,
+  "tol": 0.009226371578932841,
+  "verdict": "agree",
+  "bound": 0.0004451997327783474
+ },
+ {
+  "id": "k4_021",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.1 × tilted cylinder, phase 1",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.1 × tilted cylinder, phase 1",
+  "occt": 7749.798648348053,
+  "ours": 7749.798649871915,
+  "tol": 0.009226371578932841,
+  "verdict": "agree",
+  "bound": 0.0004452286760193726
+ },
+ {
+  "id": "k4_022",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.1 × tilted cylinder, phase 2",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.1 × tilted cylinder, phase 2",
+  "occt": 7749.813052859667,
+  "ours": 7749.813054574399,
+  "tol": 0.009226371578932841,
+  "verdict": "agree",
+  "bound": 0.000445258233375454
+ },
+ {
+  "id": "k4_023",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.03 × tilted cylinder, phase 0",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.03 × tilted cylinder, phase 0",
+  "occt": 7737.72952066911,
+  "ours": 7737.729522144408,
+  "tol": 0.00921237157893284,
+  "verdict": "agree",
+  "bound": 0.0004450342039217483
+ },
+ {
+  "id": "k4_024",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.03 × tilted cylinder, phase 1",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.03 × tilted cylinder, phase 1",
+  "occt": 7737.733792936297,
+  "ours": 7737.733791103586,
+  "tol": 0.00921237157893284,
+  "verdict": "agree",
+  "bound": 0.00044506317991119433
+ },
+ {
+  "id": "k4_025",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.03 × tilted cylinder, phase 2",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.03 × tilted cylinder, phase 2",
+  "occt": 7737.7381086226715,
+  "ours": 7737.738109907087,
+  "tol": 0.00921237157893284,
+  "verdict": "agree",
+  "bound": 0.00044509292002370665
+ },
+ {
+  "id": "k4_026",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.01 × tilted cylinder, phase 0",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.01 × tilted cylinder, phase 0",
+  "occt": 7734.285357651897,
+  "ours": 7734.285358694452,
+  "tol": 0.009208371578932839,
+  "verdict": "agree",
+  "bound": 0.0004449876530723935
+ },
+ {
+  "id": "k4_027",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.01 × tilted cylinder, phase 1",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.01 × tilted cylinder, phase 1",
+  "occt": 7734.28678351338,
+  "ours": 7734.286781608942,
+  "tol": 0.009208371578932839,
+  "verdict": "agree",
+  "bound": 0.0004450164012348036
+ },
+ {
+  "id": "k4_028",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "narrow rib 0.01 × tilted cylinder, phase 2",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "narrow rib 0.01 × tilted cylinder, phase 2",
+  "occt": 7734.288219831813,
+  "ours": 7734.288221133979,
+  "tol": 0.009208371578932839,
+  "verdict": "agree",
+  "bound": 0.0004450460046822923
+ },
+ {
+  "id": "k4_029",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "tangent to edge, offset 0",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "tangent to edge, offset 0",
+  "occt": 14385.20127749832,
+  "ours": 14394.903135763721,
+  "tol": 181.46475050909115,
+  "verdict": "agree",
+  "bound": 134.14124280342634,
+  "reported": 14385.201274475601
+ },
+ {
+  "id": "k4_030",
+  "ops": [
+   "common"
+  ],
+  "kinds": "tangent to edge (common), offset 0",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "tangent to edge (common), offset 0",
+  "occt": 1614.7987225162246,
+  "ours": 1605.0968642362789,
+  "tol": 181.46475050909115,
+  "verdict": "agree",
+  "bound": 48.098204155433145,
+  "reported": 1614.798729442224
+ },
+ {
+  "id": "k4_031",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "tangent to edge, offset 0.001",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "tangent to edge, offset 0.001",
+  "occt": 14385.229574952033,
+  "ours": 14385.229574943774,
+  "tol": 0.01814466058485063,
+  "verdict": "agree",
+  "bound": 0.0005168817552619231
+ },
+ {
+  "id": "k4_032",
+  "ops": [
+   "common"
+  ],
+  "kinds": "tangent to edge (common), offset 0.001",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "tangent to edge (common), offset 0.001",
+  "occt": 1614.7704250533257,
+  "ours": 1614.7704250562267,
+  "tol": 0.01814466058485063,
+  "verdict": "agree",
+  "bound": 7.361816587237746e-05
+ },
+ {
+  "id": "k4_033",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "tangent to edge, offset -0.001",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "tangent to edge, offset -0.001",
+  "occt": 14385.173026466826,
+  "ours": 14385.173026438622,
+  "tol": 0.01814466058485063,
+  "verdict": "agree",
+  "bound": 0.0005169025931533089
+ },
+ {
+  "id": "k4_034",
+  "ops": [
+   "common"
+  ],
+  "kinds": "tangent to edge (common), offset -0.001",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "tangent to edge (common), offset -0.001",
+  "occt": 1614.8269735471997,
+  "ours": 1614.8269735613758,
+  "tol": 0.01814466058485063,
+  "verdict": "agree",
+  "bound": 7.361849144821632e-05
+ },
+ {
+  "id": "k4_035",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "tangent to edge, offset 1E-06",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "tangent to edge, offset 1E-06",
+  "occt": 14385.201305772749,
+  "ours": 14385.201305747141,
+  "tol": 0.01814466058485063,
+  "verdict": "agree",
+  "bound": 0.000516892949327305
+ },
+ {
+  "id": "k4_036",
+  "ops": [
+   "common"
+  ],
+  "kinds": "tangent to edge (common), offset 1E-06",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "tangent to edge (common), offset 1E-06",
+  "occt": 1614.7986942418581,
+  "ours": 1614.798694252859,
+  "tol": 0.01814466058485063,
+  "verdict": "agree",
+  "bound": 7.361815389242011e-05
+ },
+ {
+  "id": "k4_037",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "tangent to edge, offset -1E-06",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "tangent to edge, offset -1E-06",
+  "occt": 14385.201249226677,
+  "ours": 14394.903160563,
+  "tol": 181.46475050909115,
+  "verdict": "agree",
+  "bound": 297.3964522554526,
+  "reported": 14385.201246350041
+ },
+ {
+  "id": "k4_038",
+  "ops": [
+   "common"
+  ],
+  "kinds": "tangent to edge (common), offset -1E-06",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "tangent to edge (common), offset -1E-06",
+  "occt": 1614.7987507873413,
+  "ours": 1605.0968394369997,
+  "tol": 181.46475050909115,
+  "verdict": "agree",
+  "bound": 18.85706793852992,
+  "reported": 1614.7987526732852
+ },
+ {
+  "id": "k4_039",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "through vertex, radius 15",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "through vertex, radius 15",
+  "occt": 10600.502952216824,
+  "ours": 10600.502952226192,
+  "tol": 0.030137166941154064,
+  "verdict": "agree",
+  "bound": 0.0003922932392709336
+ },
+ {
+  "id": "k4_040",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "through vertex (fuse), radius 15",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "through vertex (fuse), radius 15",
+  "occt": 24737.669893370083,
+  "ours": 24737.669893380265,
+  "tol": 0.030137166941154064,
+  "verdict": "agree",
+  "bound": 0.000595921516547285
+ },
+ {
+  "id": "k4_041",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "through vertex, radius 15.000001",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "through vertex, radius 15.000001",
+  "occt": 10600.502492364278,
+  "ours": 10600.502492374218,
+  "tol": 0.030137169768587633,
+  "verdict": "agree",
+  "bound": 0.0003922932338072717
+ },
+ {
+  "id": "k4_042",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "through vertex (fuse), radius 15.000001",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "through vertex (fuse), radius 15.000001",
+  "occt": 24737.672260951018,
+  "ours": 24737.672260961863,
+  "tol": 0.030137169768587633,
+  "verdict": "agree",
+  "bound": 0.0005959215499230655
+ },
+ {
+  "id": "k4_043",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "through vertex, radius 14.999999",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "through vertex, radius 14.999999",
+  "occt": 10600.503412068072,
+  "ours": 10600.503412078147,
+  "tol": 0.030137164113720864,
+  "verdict": "agree",
+  "bound": 0.0003922932464810116
+ },
+ {
+  "id": "k4_044",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "through vertex (fuse), radius 14.999999",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "through vertex (fuse), radius 14.999999",
+  "occt": 24737.667525788274,
+  "ours": 24737.667525799017,
+  "tol": 0.030137164113720864,
+  "verdict": "agree",
+  "bound": 0.0005959214851620206
+ },
+ {
+  "id": "k4_045",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "through vertex, radius 15.001",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "through vertex, radius 15.001",
+  "occt": 10600.043094576215,
+  "ours": 10600.043094585608,
+  "tol": 0.030139994563042043,
+  "verdict": "agree",
+  "bound": 0.00039228170615328376
+ },
+ {
+  "id": "k4_046",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "through vertex (fuse), radius 15.001",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "through vertex (fuse), radius 15.001",
+  "occt": 24740.037657617362,
+  "ours": 24740.03765762765,
+  "tol": 0.030139994563042043,
+  "verdict": "agree",
+  "bound": 0.0005959479619234146
+ },
+ {
+  "id": "k4_047",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cylinder seam × tilted box 25°",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "cylinder seam × tilted box 25°",
+  "occt": 4712.388978635075,
+  "ours": 4712.388980384686,
+  "tol": 0.057424777961245115,
+  "verdict": "agree",
+  "bound": 0.00016483752642161749
+ },
+ {
+  "id": "k4_048",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cylinder seam × tilted box 60°",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "cylinder seam × tilted box 60°",
+  "occt": 4712.388979200515,
+  "ours": 4712.388980384688,
+  "tol": 0.05742477796206314,
+  "verdict": "agree",
+  "bound": 0.00018941613374948106
+ },
+ {
+  "id": "k4_049",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cylinder seam × sphere on the seam (Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "cylinder seam × sphere on the seam (Subtract)",
+  "occt": 9371.416155609988,
+  "ours": 9371.416157783313,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 0.0002829215699161626
+ },
+ {
+  "id": "k4_050",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cylinder seam × sphere on the seam, rotated (Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "cylinder seam × sphere on the seam, rotated (Subtract)",
+  "occt": 9357.651967076072,
+  "ours": 9357.651966619445,
+  "tol": 0.009537875296224818,
+  "verdict": "agree",
+  "bound": 0.0002878485961252085
+ },
+ {
+  "id": "k4_051",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "cylinder seam × sphere on the seam (Unite)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "cylinder seam × sphere on the seam (Unite)",
+  "occt": 9484.51349113922,
+  "ours": 9484.513493312546,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 0.0002838963210605687
+ },
+ {
+  "id": "k4_052",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "cylinder seam × sphere on the seam, rotated (Unite)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "cylinder seam × sphere on the seam, rotated (Unite)",
+  "occt": 9470.749302643544,
+  "ours": 9470.749302148677,
+  "tol": 0.009537875296224818,
+  "verdict": "agree",
+  "bound": 0.00028696597484206913
+ },
+ {
+  "id": "k4_053",
+  "ops": [
+   "common"
+  ],
+  "kinds": "cylinder seam × sphere on the seam (Intersect)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "cylinder seam × sphere on the seam (Intersect)",
+  "occt": 53.361805159168,
+  "ours": 53.36180298607129,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 5.418556741944498e-05
+ },
+ {
+  "id": "k4_054",
+  "ops": [
+   "common"
+  ],
+  "kinds": "cylinder seam × sphere on the seam, rotated (Intersect)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "cylinder seam × sphere on the seam, rotated (Intersect)",
+  "occt": 67.12599382239364,
+  "ours": 67.12599414992889,
+  "tol": 0.009537875296224818,
+  "verdict": "agree",
+  "bound": 5.6792241716448074e-05
+ },
+ {
+  "id": "k4_055",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "sphere off-centre on cylinder wall 0° (Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "sphere off-centre on cylinder wall 0° (Subtract)",
+  "occt": 9363.203231651512,
+  "ours": 9363.203232500437,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 0.0002966254803045579
+ },
+ {
+  "id": "k4_056",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "sphere off-centre on cylinder wall 0° (Unite)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "sphere off-centre on cylinder wall 0° (Unite)",
+  "occt": 9476.300567332526,
+  "ours": 9476.30056802967,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 0.0002964877316126354
+ },
+ {
+  "id": "k4_057",
+  "ops": [
+   "common"
+  ],
+  "kinds": "sphere off-centre on cylinder wall 0° (Intersect)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "sphere off-centre on cylinder wall 0° (Intersect)",
+  "occt": 61.574729285339586,
+  "ours": 61.5747282689675,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 5.634479294648557e-05
+ },
+ {
+  "id": "k4_058",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "sphere off-centre on cylinder wall 45° (Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "sphere off-centre on cylinder wall 45° (Subtract)",
+  "occt": 9363.203232637576,
+  "ours": 9363.203232500417,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 0.0005513957286220709
+ },
+ {
+  "id": "k4_059",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "sphere off-centre on cylinder wall 45° (Unite)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "sphere off-centre on cylinder wall 45° (Unite)",
+  "occt": 9476.300567987068,
+  "ours": 9476.30056802965,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 0.0005512579916377666
+ },
+ {
+  "id": "k4_060",
+  "ops": [
+   "common"
+  ],
+  "kinds": "sphere off-centre on cylinder wall 45° (Intersect)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "sphere off-centre on cylinder wall 45° (Intersect)",
+  "occt": 61.57472771882835,
+  "ours": 61.57472826896804,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 5.634527802198704e-05
+ },
+ {
+  "id": "k4_061",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "sphere off-centre on cylinder wall 100° (Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "sphere off-centre on cylinder wall 100° (Subtract)",
+  "occt": 9363.203232225815,
+  "ours": 9363.203232500438,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 0.0010930607428321394
+ },
+ {
+  "id": "k4_062",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "sphere off-centre on cylinder wall 100° (Unite)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "sphere off-centre on cylinder wall 100° (Unite)",
+  "occt": 9476.300567453887,
+  "ours": 9476.300568029672,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 0.0010929230502361126
+ },
+ {
+  "id": "k4_063",
+  "ops": [
+   "common"
+  ],
+  "kinds": "sphere off-centre on cylinder wall 100° (Intersect)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "sphere off-centre on cylinder wall 100° (Intersect)",
+  "occt": 61.57472803395851,
+  "ours": 61.574728268968435,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 5.634527783045899e-05
+ },
+ {
+  "id": "k4_064",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "sphere off-centre on cylinder wall 200° (Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "sphere off-centre on cylinder wall 200° (Subtract)",
+  "occt": 9363.203232858863,
+  "ours": 9363.203232500427,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 0.0013737531194678077
+ },
+ {
+  "id": "k4_065",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "sphere off-centre on cylinder wall 200° (Unite)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "sphere off-centre on cylinder wall 200° (Unite)",
+  "occt": 9476.30056839942,
+  "ours": 9476.300568029661,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 0.0013736149684458307
+ },
+ {
+  "id": "k4_066",
+  "ops": [
+   "common"
+  ],
+  "kinds": "sphere off-centre on cylinder wall 200° (Intersect)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "sphere off-centre on cylinder wall 200° (Intersect)",
+  "occt": 61.5747280260884,
+  "ours": 61.57472826896828,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 5.634479319992682e-05
+ },
+ {
+  "id": "k4_067",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "sphere off-centre on cylinder wall 290° (Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "sphere off-centre on cylinder wall 290° (Subtract)",
+  "occt": 9363.20323214927,
+  "ours": 9363.203232500417,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 0.0005620013741097159
+ },
+ {
+  "id": "k4_068",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "sphere off-centre on cylinder wall 290° (Unite)",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "sphere off-centre on cylinder wall 290° (Unite)",
+  "occt": 9476.300567659044,
+  "ours": 9451.485440532173,
+  "tol": 95.38829083828242,
+  "verdict": "agree",
+  "bound": 0.013682214738862533,
+  "reported": 9476.30056802948
+ },
+ {
+  "id": "k4_069",
+  "ops": [
+   "common"
+  ],
+  "kinds": "sphere off-centre on cylinder wall 290° (Intersect)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "sphere off-centre on cylinder wall 290° (Intersect)",
+  "occt": 61.57472864249887,
+  "ours": 61.574728268967455,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 5.634479294413144e-05
+ },
+ {
+  "id": "k4_070",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "small cylinder through big (big first, Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "small cylinder through big (big first, Subtract)",
+  "occt": 8867.163723022426,
+  "ours": 8867.16372324554,
+  "tol": 0.010555751316061705,
+  "verdict": "agree",
+  "bound": 0.001485014140308991
+ },
+ {
+  "id": "k4_071",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "small cylinder through big (small first, Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "small cylinder through big (small first, Subtract)",
+  "occt": 573.3591175651271,
+  "ours": 573.3591177684893,
+  "tol": 0.010555751316061705,
+  "verdict": "agree",
+  "bound": 0.0029682440239455865
+ },
+ {
+  "id": "k4_072",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "small cylinder through big (big first, Unite)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "small cylinder through big (big first, Unite)",
+  "occt": 9998.137078324422,
+  "ours": 9998.137078537864,
+  "tol": 0.010555751316061705,
+  "verdict": "agree",
+  "bound": 0.0038498393285122112
+ },
+ {
+  "id": "k4_073",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "small cylinder through big (small first, Unite)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "small cylinder through big (small first, Unite)",
+  "occt": 9998.137078324695,
+  "ours": 9998.137078537864,
+  "tol": 0.010555751316061705,
+  "verdict": "agree",
+  "bound": 0.003859617930831443
+ },
+ {
+  "id": "k4_074",
+  "ops": [
+   "common"
+  ],
+  "kinds": "small cylinder through big (big first, Intersect)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "small cylinder through big (big first, Intersect)",
+  "occt": 557.6142377372005,
+  "ours": 557.614237523836,
+  "tol": 0.010555751316061705,
+  "verdict": "agree",
+  "bound": 0.001237070043862255
+ },
+ {
+  "id": "k4_075",
+  "ops": [
+   "common"
+  ],
+  "kinds": "small cylinder through big (small first, Intersect)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "small cylinder through big (small first, Intersect)",
+  "occt": 557.6142377369246,
+  "ours": 557.6142375238356,
+  "tol": 0.010555751316061705,
+  "verdict": "agree",
+  "bound": 0.0012370969754041915
+ },
+ {
+  "id": "k4_076",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "small loop: sphere grazes cylinder, depth 0.1 (Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "small loop: sphere grazes cylinder, depth 0.1 (Subtract)",
+  "occt": 9424.768060122517,
+  "ours": 9424.768060122573,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 0.00026058267518182324
+ },
+ {
+  "id": "k4_077",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "small loop: cylinder grazes sphere, depth 0.1 (Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "small loop: cylinder grazes sphere, depth 0.1 (Subtract)",
+  "occt": 4188.657917370845,
+  "ours": 4188.657917366124,
+  "tol": 0.004471533543609471,
+  "verdict": "agree",
+  "bound": 0.0001301547876179393
+ },
+ {
+  "id": "k4_078",
+  "ops": [
+   "common"
+  ],
+  "kinds": "small loop: sphere grazes cylinder, depth 0.1 (Intersect)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "small loop: sphere grazes cylinder, depth 0.1 (Intersect)",
+  "occt": 0.009900646768817047,
+  "ours": 0.009900646798412011,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 1.298160872503242e-07
+ },
+ {
+  "id": "k4_079",
+  "ops": [
+   "common"
+  ],
+  "kinds": "small loop: cylinder grazes sphere, depth 0.1 (Intersect)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "small loop: cylinder grazes sphere, depth 0.1 (Intersect)",
+  "occt": 0.1322874172007583,
+  "ours": 0.13228742026720022,
+  "tol": 0.004471533543609471,
+  "verdict": "agree",
+  "bound": 1.1520419693517728e-06
+ },
+ {
+  "id": "k4_080",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "small loop: sphere grazes cylinder, depth 0.01 (Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "small loop: sphere grazes cylinder, depth 0.01 (Subtract)",
+  "occt": 9424.77796076938,
+  "ours": 9424.777960769372,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 0.0002604486284904103
+ },
+ {
+  "id": "k4_081",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "small loop: cylinder grazes sphere, depth 0.01 (Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "small loop: cylinder grazes sphere, depth 0.01 (Subtract)",
+  "occt": 4188.789981950516,
+  "ours": 4161.303655462758,
+  "tol": 44.71980696963833,
+  "verdict": "agree",
+  "bound": 0.00012943952315267238,
+  "reported": 4188.790204786391
+ },
+ {
+  "id": "k4_082",
+  "ops": [
+   "common"
+  ],
+  "kinds": "small loop: sphere grazes cylinder, depth 0.01 (Intersect)",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedralsmall loop: sphere grazes cylinder, depth 0.01 (Intersect)",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 95.38829083828242,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "k4_083",
+  "ops": [
+   "common"
+  ],
+  "kinds": "small loop: cylinder grazes sphere, depth 0.01 (Intersect)",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedralsmall loop: cylinder grazes sphere, depth 0.01 (Intersect)",
+  "occt": 0.00022283589919937978,
+  "ours": 0.0,
+  "tol": 44.71980696963833,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "k4_084",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "small loop: sphere grazes cylinder, depth 0.001 (Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "small loop: sphere grazes cylinder, depth 0.001 (Subtract)",
+  "occt": 9424.77796076938,
+  "ours": 9424.777960769372,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 0.0002604486284904103
+ },
+ {
+  "id": "k4_085",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "small loop: cylinder grazes sphere, depth 0.001 (Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "small loop: cylinder grazes sphere, depth 0.001 (Subtract)",
+  "occt": 4188.790204786391,
+  "ours": 4188.790204786391,
+  "tol": 0.004471533543609471,
+  "verdict": "agree",
+  "bound": 0.00012943951015289935
+ },
+ {
+  "id": "k4_086",
+  "ops": [
+   "common"
+  ],
+  "kinds": "small loop: sphere grazes cylinder, depth 0.001 (Intersect)",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedralsmall loop: sphere grazes cylinder, depth 0.001 (Intersect)",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 95.38829083828242,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "k4_087",
+  "ops": [
+   "common"
+  ],
+  "kinds": "small loop: cylinder grazes sphere, depth 0.001 (Intersect)",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedralsmall loop: cylinder grazes sphere, depth 0.001 (Intersect)",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 44.71980696963833,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "k4_088",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "small loop: sphere grazes cylinder, depth 0.0001 (Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "small loop: sphere grazes cylinder, depth 0.0001 (Subtract)",
+  "occt": 9424.77796076938,
+  "ours": 9424.777960769372,
+  "tol": 0.00953787529629861,
+  "verdict": "agree",
+  "bound": 0.0002604486284904103
+ },
+ {
+  "id": "k4_089",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "small loop: cylinder grazes sphere, depth 0.0001 (Subtract)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "small loop: cylinder grazes sphere, depth 0.0001 (Subtract)",
+  "occt": 4188.790204786391,
+  "ours": 4188.790204786391,
+  "tol": 0.004471533543609471,
+  "verdict": "agree",
+  "bound": 0.00012943951015289935
+ },
+ {
+  "id": "k4_090",
+  "ops": [
+   "common"
+  ],
+  "kinds": "small loop: sphere grazes cylinder, depth 0.0001 (Intersect)",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedralsmall loop: sphere grazes cylinder, depth 0.0001 (Intersect)",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 95.38829083828242,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "k4_091",
+  "ops": [
+   "common"
+  ],
+  "kinds": "small loop: cylinder grazes sphere, depth 0.0001 (Intersect)",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedralsmall loop: cylinder grazes sphere, depth 0.0001 (Intersect)",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 44.71980696963833,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "k4_092",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "loop inside plane face",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "loop inside plane face",
+  "occt": 15991.622419590427,
+  "ours": 15991.622419590427,
+  "tol": 0.016113097335529226,
+  "verdict": "agree",
+  "bound": 0.0004963003640321365
+ },
+ {
+  "id": "k4_093",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "loop inside cylinder face",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "loop inside cylinder face",
+  "occt": 9408.651643020748,
+  "ours": 9408.651643558458,
+  "tol": 0.009458288282407669,
+  "verdict": "agree",
+  "bound": 0.0005274006767793656
+ },
+ {
+  "id": "k4_094",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "loop inside cylinder face (fuse)",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "loop inside cylinder face (fuse)",
+  "occt": 9424.77796076936,
+  "ours": 9442.16196519675,
+  "tol": 0.009458288282407669,
+  "mc": 9442.30667921135,
+  "mcErr": 0.23999988929991883,
+  "verdict": "occt-wrong? WRONG: ours 9442.16 vs OCCT 9424.78 (tol 0.00946); Monte-Carlo 9442.31±0.24 → ours closer"
+ },
+ {
+  "id": "k4_095",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "two loops: cylinder through sphere",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "two loops: cylinder through sphere",
+  "occt": 1708.569476837661,
+  "ours": 1708.569476872388,
+  "tol": 0.0032756339401581987,
+  "verdict": "agree",
+  "bound": 0.0001041000518588607
+ }
+]

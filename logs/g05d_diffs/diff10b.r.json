@@ -1,0 +1,3159 @@
+[
+ {
+  "id": "d10_0000",
+  "ops": [
+   "fuse",
+   "cut"
+  ],
+  "kinds": "sphere r6.57 rot119 | cyl r4.76 h10.11 rot54 | cone r10.84/3.09 h10.96",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 1369.8978572761407,
+  "ours": 1365.0004906248696,
+  "tol": 37.51366008908597,
+  "verdict": "agree",
+  "bound": 13.544535368618567,
+  "reported": 1369.983636917748
+ },
+ {
+  "id": "d10_0001",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cyl r3.96 h9.78 | box 13.74x27.24x31.66",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 347.84363196550345,
+  "ours": 347.8436320265127,
+  "tol": 0.012332564511246431,
+  "verdict": "agree",
+  "bound": 3.334221436522801e-05
+ },
+ {
+  "id": "d10_0002",
+  "ops": [
+   "common"
+  ],
+  "kinds": "cone r3.97/6.49 h9.53 rot91 | box 38.59x16.57x25.2",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 169.57184754302924,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0003",
+  "ops": [
+   "cut",
+   "fuse"
+  ],
+  "kinds": "box 22.75x16.86x19.09 rot138 | cone r2.42/4.85 h10.79 rot122 | sphere r8.66 rot15",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 8780.2592614512,
+  "ours": 8767.409460687426,
+  "tol": 105.07677123521839,
+  "verdict": "agree",
+  "bound": 159.95190076677318,
+  "reported": 8780.29262914577
+ },
+ {
+  "id": "d10_0004",
+  "ops": [
+   "cut",
+   "common"
+  ],
+  "kinds": "cone r11.34/5.44 h26.66 | cyl r3.63 h15.23 rot152 | cyl r9.39 h21.88",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 3836.864055101001,
+  "ours": 3826.9757235039215,
+  "tol": 128.29550328590457,
+  "verdict": "agree",
+  "bound": 52.7848502234829,
+  "reported": 3836.8641456550235
+ },
+ {
+  "id": "d10_0005",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 16.72x23.88x17.51 rot4 | torus 9.15/2.33 rot3",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 6546.36985694451,
+  "ours": 6548.0520680053305,
+  "tol": 79.69881955139986,
+  "verdict": "agree",
+  "bound": 22.92552419466682,
+  "reported": 6546.370637191576
+ },
+ {
+  "id": "d10_0006",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 12.68x24x33.5 rot155 | sphere r6.9",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 9267.432527314075,
+  "ours": 9267.43252578671,
+  "tol": 0.011566538588993137,
+  "verdict": "agree",
+  "bound": 0.00032702160774174624
+ },
+ {
+  "id": "d10_0007",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "cone r2.6/5.03 h28.93 | torus 9.58/2.65 rot9",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 2505.378755884022,
+  "ours": 2497.7872259804517,
+  "tol": 26.951731638622864,
+  "verdict": "agree",
+  "bound": 26.22345618520091
+ },
+ {
+  "id": "d10_0008",
+  "ops": [
+   "common",
+   "common"
+  ],
+  "kinds": "box 9.01x23.65x26.94 | cyl r3.41 h30.71 | box 17.44x14.06x26.53",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 133.73166276761762,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0009",
+  "ops": [
+   "cut",
+   "common"
+  ],
+  "kinds": "cyl r10.29 h28.23 | box 35.85x8.92x8.45 rot84 | box 32.95x30.95x21.04 rot8",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 3200.8520438050036,
+  "ours": 3200.85204349648,
+  "tol": 0.03355990708569499,
+  "verdict": "agree",
+  "bound": 0.00018370600996346962
+ },
+ {
+  "id": "d10_0010",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cyl r7.26 h20.38 | torus 11.55/2.06",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 3166.1883378330276,
+  "ours": 3157.6680252706497,
+  "tol": 43.390693515907444,
+  "verdict": "agree",
+  "bound": 0.010699699683201879,
+  "reported": 3166.18819305809
+ },
+ {
+  "id": "d10_0011",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "sphere r7.17 rot20 | cyl r9.38 h25.37 rot170",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 502.657581587815,
+  "ours": 502.6575817196256,
+  "tol": 0.008561478147100694,
+  "verdict": "agree",
+  "bound": 0.0020442153831621264
+ },
+ {
+  "id": "d10_0012",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "box 15.64x9.98x27.83 | sphere r13.13 | box 13.08x21.24x13.2 rot137",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 1181.9134527566744,
+  "ours": 1181.913451760988,
+  "tol": 0.017498547426916967,
+  "verdict": "agree",
+  "bound": 0.00011315514215035733
+ },
+ {
+  "id": "d10_0013",
+  "ops": [
+   "common"
+  ],
+  "kinds": "torus 6.41/2.65 rot8 | cone r3.41/4 h27.67",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 69.53074109547504,
+  "ours": 68.77561972459877,
+  "tol": 20.891517099553965,
+  "verdict": "agree",
+  "bound": 1.6592565552746368
+ },
+ {
+  "id": "d10_0014",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 22.33x37.27x39.08 | sphere r12",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 29361.26705755132,
+  "ours": 29361.267057267247,
+  "tol": 0.03976897867748195,
+  "verdict": "agree",
+  "bound": 0.0006892101875918184
+ },
+ {
+  "id": "d10_0015",
+  "ops": [
+   "common",
+   "common"
+  ],
+  "kinds": "sphere r14.92 | torus 15.31/4.01 rot37 | torus 9.2/4.59 rot134",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 43.796203447929294,
+  "ours": 43.0480966706495,
+  "tol": 225.91158136229294,
+  "verdict": "agree",
+  "bound": 4.239519861428553
+ },
+ {
+  "id": "d10_0016",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r5.8/1.36 h25.5 rot81 | box 22.29x25.44x17.3 rot111",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 103.3994611259744,
+  "ours": 102.89668630128351,
+  "tol": 109.7052476567767,
+  "verdict": "agree",
+  "bound": 4.656511167791881,
+  "reported": 103.39957712792825
+ },
+ {
+  "id": "d10_0017",
+  "ops": [
+   "cut",
+   "fuse"
+  ],
+  "kinds": "cyl r7.75 h12.86 | torus 6.09/3.89 | cone r11.01/7.04 h9.39 rot81",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 4306.820485727799,
+  "ours": 4298.130124243436,
+  "tol": 66.82619636269382,
+  "verdict": "agree",
+  "bound": 66.77711273554466,
+  "reported": 4306.44707357159
+ },
+ {
+  "id": "d10_0018",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r9.47/7.81 h28.37 | sphere r6.63",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 6347.40372735632,
+  "ours": 6332.297831301868,
+  "tol": 78.97063632623998,
+  "verdict": "agree",
+  "bound": 102.66951747907298,
+  "reported": 6347.475013075787
+ },
+ {
+  "id": "d10_0019",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "sphere r8.59 rot167 | cyl r9.61 h30.37",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 336.4149348816217,
+  "ours": 336.4149346950606,
+  "tol": 0.011469169191512,
+  "verdict": "agree",
+  "bound": 0.0046157209279398025
+ },
+ {
+  "id": "d10_0020",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "torus 8.66/1.82 | torus 5.56/2.91 | box 8.47x37.71x28.49 rot38",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 513.0792292868638,
+  "ours": 510.8539703213012,
+  "tol": 105.98484456889196,
+  "verdict": "agree",
+  "bound": 14.076373929501006
+ },
+ {
+  "id": "d10_0021",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "box 15.08x15.97x22.49 rot159 | cone r7.27/2.26 h24.26 rot50 | torus 11.12/3.09 rot7",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 4826.0101635249475,
+  "ours": 4827.846909296676,
+  "tol": 93.99279195951819,
+  "verdict": "agree",
+  "bound": 42.77721615712612,
+  "reported": 4826.0110296198845
+ },
+ {
+  "id": "d10_0022",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "torus 10.74/1.63 rot22 | cyl r3.71 h12.83",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 1076.9780051052962,
+  "ours": 1070.1252513201691,
+  "tol": 11.182389245494962,
+  "verdict": "agree",
+  "bound": 18.87000541826949
+ },
+ {
+  "id": "d10_0023",
+  "ops": [
+   "common",
+   "cut"
+  ],
+  "kinds": "cone r7.49/7.98 h23.88 rot4 | cyl r9.41 h9.57 rot91 | cyl r10 h37.13",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 1.165146287436798,
+  "ours": 1.1651462809801938,
+  "tol": 0.018826677053683703,
+  "verdict": "agree",
+  "bound": 1.0319572855488415e-06
+ },
+ {
+  "id": "d10_0024",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "sphere r10.34 rot59 | sphere r6.14",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 4628.6089035984405,
+  "ours": 4628.608902977415,
+  "tol": 0.0055965272187867956,
+  "verdict": "agree",
+  "bound": 0.00013852692929847688
+ },
+ {
+  "id": "d10_0025",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "box 16.8x35.84x9.08 | box 36.55x31.44x39.98",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 47070.58934106364,
+  "ours": 47070.58934073106,
+  "tol": 0.05140703401562315,
+  "verdict": "agree",
+  "bound": 0.0008588109495768989
+ },
+ {
+  "id": "d10_0026",
+  "ops": [
+   "common"
+  ],
+  "kinds": "torus 13.82/2.19 | torus 14.06/3.05 rot30",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 38.99133789884423,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0027",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "sphere r4.19 | sphere r3.38",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 309.20970488200976,
+  "ours": 309.2097049823895,
+  "tol": 0.00047056673959779073,
+  "verdict": "agree",
+  "bound": 2.2343624963822114e-05
+ },
+ {
+  "id": "d10_0028",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "torus 13.68/4.89 | cyl r8.18 h31.57",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 6191.556646209394,
+  "ours": 6166.493997406685,
+  "tol": 131.04408175279372,
+  "verdict": "agree",
+  "bound": 78.81110659672281
+ },
+ {
+  "id": "d10_0029",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "torus 7.88/2.78 | box 17.02x23.59x30.7",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 12554.828576392538,
+  "ours": 12551.608723678788,
+  "tol": 135.30961069205708,
+  "verdict": "agree",
+  "bound": 129.86462893670696,
+  "reported": 12554.827376289119
+ },
+ {
+  "id": "d10_0030",
+  "ops": [
+   "fuse",
+   "fuse"
+  ],
+  "kinds": "sphere r9.4 rot85 | cone r8.84/6.4 h8.51 rot150 | sphere r6.89 rot115",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 5894.713788879401,
+  "ours": 5865.968125083832,
+  "tol": 64.17339636205365,
+  "verdict": "agree",
+  "bound": 104.78417114028177,
+  "reported": 5894.713429596471
+ },
+ {
+  "id": "d10_0031",
+  "ops": [
+   "common"
+  ],
+  "kinds": "cone r8.3/6.42 h29.32 rot55 | sphere r10.96",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 2240.4729430320094,
+  "ours": 2240.472943308656,
+  "tol": 0.010535543808526312,
+  "verdict": "agree",
+  "bound": 0.0033898065043579477
+ },
+ {
+  "id": "d10_0032",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "torus 12.13/1.87 | cyl r11.88 h35.01 | sphere r4.42 rot117",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 546.0566478082669,
+  "ours": 543.6256570663858,
+  "tol": 167.19496618407152,
+  "verdict": "agree",
+  "bound": 14.396383567119878
+ },
+ {
+  "id": "d10_0033",
+  "ops": [
+   "common",
+   "cut"
+  ],
+  "kinds": "sphere r10.39 | sphere r5.62 rot98 | cone r6.22/9.15 h22.84 rot10",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 5.505419366134155,
+  "ours": 5.453997562649292,
+  "tol": 97.37093255859874,
+  "verdict": "agree",
+  "bound": 1.2145918282204267
+ },
+ {
+  "id": "d10_0034",
+  "ops": [
+   "cut",
+   "fuse"
+  ],
+  "kinds": "cyl r7.51 h10.49 rot118 | sphere r12.2 rot34 | sphere r11.71",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 8051.348800892071,
+  "ours": 8014.14541378947,
+  "tol": 161.94861610342042,
+  "verdict": "agree",
+  "bound": 126.36546687068208,
+  "reported": 8051.345031334812
+ },
+ {
+  "id": "d10_0035",
+  "ops": [
+   "common",
+   "cut"
+  ],
+  "kinds": "sphere r13.27 rot84 | cone r4.44/7.77 h22.92 rot132 | torus 14.21/3.04",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 2.9003725724058187,
+  "ours": 2.7164242737297726,
+  "tol": 151.15269717304722,
+  "verdict": "agree",
+  "bound": 0.3811684817125359
+ },
+ {
+  "id": "d10_0036",
+  "ops": [
+   "common",
+   "cut"
+  ],
+  "kinds": "box 9.61x20.38x30.89 | box 25.1x17.21x37.48 rot112 | cyl r8.15 h20.71",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 3252.6430543835304,
+  "ours": 3252.643055076487,
+  "tol": 0.026557950889579494,
+  "verdict": "agree",
+  "bound": 0.00015379510382076609
+ },
+ {
+  "id": "d10_0037",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "sphere r11.68 | sphere r7.66",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 6654.745624979872,
+  "ours": 6654.745624768016,
+  "tol": 0.008557314829856166,
+  "verdict": "agree",
+  "bound": 0.00017798083290624845
+ },
+ {
+  "id": "d10_0038",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "sphere r6.76 | torus 15.8/4.07 rot178 | torus 12.33/3.9",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 1081.72554890111,
+  "ours": 1075.2461209850294,
+  "tol": 101.72563738936562,
+  "verdict": "agree",
+  "bound": 20.524036669236732,
+  "reported": 1081.725864892798
+ },
+ {
+  "id": "d10_0039",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "sphere r14.32 rot31 | cyl r5.1 h29.15 rot13 | cyl r4.18 h13.36 rot19",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 11726.783025358849,
+  "ours": 11726.783018160315,
+  "tol": 0.01541157731516644,
+  "verdict": "agree",
+  "bound": 0.0008412291973764967
+ },
+ {
+  "id": "d10_0040",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "sphere r14.4 | cyl r9.88 h32.28",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 15554.43085405923,
+  "ours": 15501.38333579585,
+  "tol": 224.07791695613196,
+  "verdict": "agree",
+  "bound": 118.3171629284971,
+  "reported": 15554.435091927908
+ },
+ {
+  "id": "d10_0041",
+  "ops": [
+   "common",
+   "fuse"
+  ],
+  "kinds": "cyl r8.26 h17.76 rot145 | box 28.2x14.47x35.98 rot65 | cone r7.44/5.06 h14.72",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 2979.7929698338035,
+  "ours": 2973.0328203459267,
+  "tol": 203.105299950447,
+  "verdict": "agree",
+  "bound": 49.241900039322765,
+  "reported": 2979.8503826458905
+ },
+ {
+  "id": "d10_0042",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 27.31x34.84x17.51 rot158 | box 26.74x36.31x27.78",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 8475.345310561535,
+  "ours": 8475.345315131503,
+  "tol": 0.043635618217093705,
+  "verdict": "agree",
+  "bound": 0.00033051288010040215
+ },
+ {
+  "id": "d10_0043",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 29.85x21.21x37.78 rot29 | box 16.66x16.35x16.89 rot111",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 21843.963751546828,
+  "ours": 21843.963752033716,
+  "tol": 0.028510089536171894,
+  "verdict": "agree",
+  "bound": 0.0005763102943995023
+ },
+ {
+  "id": "d10_0044",
+  "ops": [
+   "common",
+   "cut"
+  ],
+  "kinds": "box 36.23x31.4x32.14 | box 12.99x36.31x25.89 rot5 | torus 11.28/2.75 rot114",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 5072.991246757557,
+  "ours": 5075.850757622919,
+  "tol": 504.66117316736756,
+  "verdict": "agree",
+  "bound": 49.084371057535336,
+  "reported": 5072.9893545278765
+ },
+ {
+  "id": "d10_0045",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "cyl r6.22 h30.63 rot130 | sphere r5.56 rot0 | box 10.5x29.49x24.5",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 2597.7651143832786,
+  "ours": 2597.7651164459726,
+  "tol": 0.012026010857605816,
+  "verdict": "agree",
+  "bound": 0.00014193857142548658
+ },
+ {
+  "id": "d10_0046",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "cyl r8.06 h13.95 rot177 | cyl r4.6 h21.89",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 4275.123174127521,
+  "ours": 4275.123174059548,
+  "tol": 0.00430241339548535,
+  "verdict": "agree",
+  "bound": 0.0001956870414864561
+ },
+ {
+  "id": "d10_0047",
+  "ops": [
+   "fuse",
+   "cut"
+  ],
+  "kinds": "cone r5.79/3.42 h15.62 | sphere r10.87 rot109 | torus 8.76/3.79",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 5663.426981277388,
+  "ours": 5643.062554063524,
+  "tol": 89.2747362646278,
+  "verdict": "agree",
+  "bound": 73.18855604459537,
+  "reported": 5663.426845507084
+ },
+ {
+  "id": "d10_0048",
+  "ops": [
+   "fuse",
+   "cut"
+  ],
+  "kinds": "cyl r11.56 h35.87 rot120 | cyl r10.84 h21.34 | sphere r12.97 rot24",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 10629.96795665266,
+  "ours": 10629.041004915522,
+  "tol": 320.73644245587593,
+  "verdict": "agree",
+  "bound": 300.137252160345,
+  "reported": 10630.493283790624
+ },
+ {
+  "id": "d10_0049",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "cone r10.11/4.97 h14.11 rot83 | cyl r10.72 h19.13 | sphere r13.33 rot130",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 686.0164376089285,
+  "verdict": "INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 1 error(s)"
+ },
+ {
+  "id": "d10_0050",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 17.57x36.78x17.27 rot102 | cone r11.14/5.49 h14.09",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 8998.865082940622,
+  "ours": 8998.865079425681,
+  "tol": 0.014339551912224007,
+  "verdict": "agree",
+  "bound": 0.003868876892419554
+ },
+ {
+  "id": "d10_0051",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "box 32.41x22.65x10.89 | box 18.31x18.23x31.2 rot104 | cone r11.11/0.91 h19.29 rot165",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 5628.57034241798,
+  "ours": 5628.570341170577,
+  "tol": 0.021116779783240815,
+  "verdict": "agree",
+  "bound": 0.003591446387680506
+ },
+ {
+  "id": "d10_0052",
+  "ops": [
+   "common",
+   "common"
+  ],
+  "kinds": "box 34.62x17.48x16.22 rot113 | torus 10.56/2.56 | sphere r13.23 rot111",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 208.8181531345784,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0053",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 34.06x34.78x15.24 rot78 | cone r10.38/0 h11.1",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 17729.350755204487,
+  "ours": 17730.4195096083,
+  "tol": 193.08791750137956,
+  "verdict": "agree",
+  "bound": 108.07559213860367,
+  "reported": 17729.347009591158
+ },
+ {
+  "id": "d10_0054",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "box 17.09x22.88x31.01 | torus 9.62/3.07",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 13376.938191112611,
+  "ours": 13370.647564299477,
+  "tol": 139.13396383852427,
+  "verdict": "agree",
+  "bound": 0.03880096590739884,
+  "reported": 13376.940186920265
+ },
+ {
+  "id": "d10_0055",
+  "ops": [
+   "common",
+   "common"
+  ],
+  "kinds": "cone r6.2/5.97 h20.96 rot101 | cyl r11.4 h17.6 | cyl r11.85 h18.82",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 9.551700094436837,
+  "ours": 9.551700192224848,
+  "tol": 0.017920792429651403,
+  "verdict": "agree",
+  "bound": 1.5772410800218946e-05
+ },
+ {
+  "id": "d10_0056",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "torus 10.45/1.71 rot7 | sphere r8.83 rot43",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 3305.357986326544,
+  "ours": 3281.319211217821,
+  "tol": 34.923732969964725,
+  "verdict": "agree",
+  "bound": 53.32479717411367
+ },
+ {
+  "id": "d10_0057",
+  "ops": [
+   "common"
+  ],
+  "kinds": "sphere r10.34 | box 27.09x31.49x24.82 rot121",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 2191.4232578906667,
+  "ours": 2191.4232575157052,
+  "tol": 0.025798901283373015,
+  "verdict": "agree",
+  "bound": 9.62224271305659e-05
+ },
+ {
+  "id": "d10_0058",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "cone r10.38/5.15 h9.7 | sphere r6.93 | cyl r4.69 h11.34",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 1907.4319007473923,
+  "ours": 1907.4319000658936,
+  "tol": 0.004087124427483796,
+  "verdict": "agree",
+  "bound": 9.768783586983132e-05
+ },
+ {
+  "id": "d10_0059",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "torus 10.53/4.82 | torus 12.62/3.87 | box 27.12x17.44x21.82 rot136",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 2984.42160805026,
+  "ours": 2969.2704619005885,
+  "tol": 188.7234698710096,
+  "verdict": "agree",
+  "bound": 41.88336685877604,
+  "reported": 2984.4221850420254
+ },
+ {
+  "id": "d10_0060",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "cone r4.15/0 h26.86 | box 27.14x32.87x26.55 | sphere r10.22",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 1.619769198925503,
+  "verdict": "INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 6 error(s)"
+ },
+ {
+  "id": "d10_0061",
+  "ops": [
+   "common",
+   "common"
+  ],
+  "kinds": "sphere r11.93 | sphere r4.11 | cone r8.19/6.43 h29.38 rot13",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 123.59562428949803,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0062",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "torus 11.8/4.78 rot11 | cyl r8.8 h39.15 rot22",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 4317.186192239069,
+  "ours": 4309.014274775677,
+  "tol": 148.44724312131046,
+  "verdict": "agree",
+  "bound": 46.82358188065734
+ },
+ {
+  "id": "d10_0063",
+  "ops": [
+   "common"
+  ],
+  "kinds": "torus 14.55/4.81 | sphere r7.77",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 465.5715137149641,
+  "ours": 462.5652551921678,
+  "tol": 86.15498990806822,
+  "verdict": "agree",
+  "bound": 11.037380924669193
+ },
+ {
+  "id": "d10_0064",
+  "ops": [
+   "common"
+  ],
+  "kinds": "cyl r11.37 h15.68 rot3 | sphere r14.85",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 2803.0816665294433,
+  "ours": 2803.0816567283314,
+  "tol": 0.02007709241718168,
+  "verdict": "agree",
+  "bound": 0.0029282462408566265
+ },
+ {
+  "id": "d10_0065",
+  "ops": [
+   "cut",
+   "common"
+  ],
+  "kinds": "box 28.01x34.81x25.13 rot42 | torus 9.05/3.38 rot33 | torus 12.74/4.05",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 3685.0285611729596,
+  "ours": 3671.0792151227583,
+  "tol": 306.8729287150205,
+  "verdict": "agree",
+  "bound": 54.34190180131409
+ },
+ {
+  "id": "d10_0066",
+  "ops": [
+   "common"
+  ],
+  "kinds": "torus 7.43/2.8 rot161 | box 8.29x10.08x31.97",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 157.39676741965354,
+  "ours": 156.4907831470819,
+  "tol": 38.19969590020112,
+  "verdict": "agree",
+  "bound": 4.775388877379943,
+  "reported": 157.3969064405475
+ },
+ {
+  "id": "d10_0067",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "sphere r11.72 | sphere r5.84 rot6",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 6794.331030450879,
+  "ours": 6794.331031189849,
+  "tol": 0.0075799664074323635,
+  "verdict": "agree",
+  "bound": 0.0001805051782789543
+ },
+ {
+  "id": "d10_0068",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 30.45x17.31x10.02 | torus 8.14/4.72 rot112",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 4046.971270857155,
+  "ours": 4048.4722324412974,
+  "tol": 88.5678203320855,
+  "verdict": "agree",
+  "bound": 38.402274078028434,
+  "reported": 4046.9707334652107
+ },
+ {
+  "id": "d10_0069",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "cone r4.86/6.57 h24.47 | torus 10.71/3.54 | cyl r4.05 h34.06 rot17",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 2044.764349537861,
+  "ours": 2041.3213412163557,
+  "tol": 69.29249001163414,
+  "verdict": "agree",
+  "bound": 27.23316432229838,
+  "reported": 2044.8319206861559
+ },
+ {
+  "id": "d10_0070",
+  "ops": [
+   "common",
+   "cut"
+  ],
+  "kinds": "torus 10.69/3.33 rot114 | cyl r6.23 h18.37 rot150 | cyl r4.76 h25.44 rot179",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 369.4231899604529,
+  "ours": 367.7929209708618,
+  "tol": 63.97665221842759,
+  "verdict": "agree",
+  "bound": 11.170230426005878,
+  "reported": 369.4006312159342
+ },
+ {
+  "id": "d10_0071",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r6.69/3.98 h13.36 rot162 | torus 7.4/3.15",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 1220.556108592553,
+  "ours": 1218.159468684003,
+  "tol": 26.663239545756184,
+  "verdict": "agree",
+  "bound": 0.007361066960591327,
+  "reported": 1220.555841728147
+ },
+ {
+  "id": "d10_0072",
+  "ops": [
+   "fuse",
+   "cut"
+  ],
+  "kinds": "box 12.67x17.79x38.98 | box 8.35x35.51x25.23 rot106 | cone r6.61/2.4 h18.64 rot10",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 15396.817759776824,
+  "ours": 15398.498913545869,
+  "tol": 175.3962336838735,
+  "verdict": "agree",
+  "bound": 150.92838644412205,
+  "reported": 15396.689706873129
+ },
+ {
+  "id": "d10_0073",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r2.92/2.76 h15.16 | sphere r8.35 rot46",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 383.3174245422371,
+  "ours": 383.31742453635655,
+  "tol": 0.002820894036127134,
+  "verdict": "agree",
+  "bound": 3.2420625176804224e-05
+ },
+ {
+  "id": "d10_0074",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "sphere r11.22 rot130 | sphere r3.6 rot56",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 5823.506093065874,
+  "ours": 5823.50609322294,
+  "tol": 0.006106630334217415,
+  "verdict": "agree",
+  "bound": 0.00016649761711453302
+ },
+ {
+  "id": "d10_0075",
+  "ops": [
+   "cut",
+   "fuse"
+  ],
+  "kinds": "torus 9.69/4.28 | cyl r2.28 h30.36 | cyl r7.38 h30.34",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 8284.545498287569,
+  "ours": 8256.978241282362,
+  "tol": 91.9347772264848,
+  "verdict": "agree",
+  "bound": 87.53602461215962
+ },
+ {
+  "id": "d10_0076",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 20.33x16.31x35.83 rot30 | box 34.45x30.93x11.79",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 10508.048150486973,
+  "ours": 10508.048154058713,
+  "tol": 0.024435931334846887,
+  "verdict": "agree",
+  "bound": 0.00033827228254789375
+ },
+ {
+  "id": "d10_0077",
+  "ops": [
+   "cut",
+   "common"
+  ],
+  "kinds": "sphere r11.19 rot0 | box 15.95x11.92x36.12 rot147 | torus 12.88/3.77",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 47.36329139640687,
+  "ours": 46.57431721669379,
+  "tol": 163.44104378921804,
+  "verdict": "agree",
+  "bound": 3.896256569175615
+ },
+ {
+  "id": "d10_0078",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "box 26.24x14.74x26.47 | sphere r4.36",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 10587.45657624939,
+  "ours": 10587.4565758236,
+  "tol": 0.010588939258568773,
+  "verdict": "agree",
+  "bound": 0.00032701023626797423
+ },
+ {
+  "id": "d10_0079",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "torus 12.15/3.29 | torus 9.83/1.75",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 2600.720573986113,
+  "ours": 2588.864475853018,
+  "tol": 31.95725530596799,
+  "verdict": "agree",
+  "bound": 0.00016027463744156532,
+  "reported": 2600.72057344489
+ },
+ {
+  "id": "d10_0080",
+  "ops": [
+   "common"
+  ],
+  "kinds": "box 27.8x19.36x25.67 | sphere r3.56",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 24.19814366736752,
+  "ours": 24.198143657714315,
+  "tol": 0.014005753852736799,
+  "verdict": "agree",
+  "bound": 6.338751829423427e-06
+ },
+ {
+  "id": "d10_0081",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 12.6x10.45x25.93 rot31 | box 13.77x28.56x24.54 rot97",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 2368.855415028393,
+  "ours": 2368.855415819722,
+  "tol": 0.013063441318153764,
+  "verdict": "agree",
+  "bound": 0.00013064942568445068
+ },
+ {
+  "id": "d10_0082",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 37.06x23.8x28.35 | torus 7.67/4.95 rot85",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 24428.39557140987,
+  "verdict": "INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 5 error(s)"
+ },
+ {
+  "id": "d10_0083",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "cyl r6.04 h8.09 | torus 16.23/4.49 rot61 | cone r8.24/1.21 h22.47 rot83",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 812.5502120068877,
+  "ours": 810.7534166272093,
+  "tol": 92.6697433624185,
+  "verdict": "agree",
+  "bound": 16.12501783168805,
+  "reported": 812.5484090409213
+ },
+ {
+  "id": "d10_0084",
+  "ops": [
+   "cut",
+   "fuse"
+  ],
+  "kinds": "sphere r6.36 | cone r10.42/9.08 h12.49 rot164 | box 12.34x23.37x22.53",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 6571.993460618497,
+  "ours": 6571.9934609095735,
+  "tol": 0.011308994589427463,
+  "verdict": "agree",
+  "bound": 0.0002264670946017216
+ },
+ {
+  "id": "d10_0085",
+  "ops": [
+   "fuse",
+   "common"
+  ],
+  "kinds": "cyl r2.81 h18.59 rot150 | torus 13.29/4.12 | cone r6.26/9.78 h28.59",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 1051.3434232062862,
+  "ours": 1046.2149550449417,
+  "tol": 107.88685455847475,
+  "verdict": "agree",
+  "bound": 19.73051004614842
+ },
+ {
+  "id": "d10_0086",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cyl r3.03 h24.55 | torus 8.14/3.89 rot56",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 707.4681593478668,
+  "ours": 703.6673646084129,
+  "tol": 31.459730377349516,
+  "verdict": "agree",
+  "bound": 4.401850748845639,
+  "reported": 707.4682449883854
+ },
+ {
+  "id": "d10_0087",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "cyl r3.18 h37.95 | cyl r9.63 h18.34 rot173 | box 33.41x38.93x32.19",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 410.9884411528884,
+  "ours": 410.98844134712687,
+  "tol": 0.04840789399924322,
+  "verdict": "agree",
+  "bound": 0.0004579837082680001
+ },
+ {
+  "id": "d10_0088",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "cyl r4.43 h28.33 rot30 | torus 16.1/4.92 rot22 | torus 13.76/4.33 rot113",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 588.9905644619663,
+  "ours": 587.2499807645744,
+  "tol": 145.27895358385197,
+  "verdict": "agree",
+  "bound": 23.919571102797768,
+  "reported": 588.9893011735527
+ },
+ {
+  "id": "d10_0089",
+  "ops": [
+   "common"
+  ],
+  "kinds": "cone r3.8/6.93 h17.22 rot118 | cyl r2.2 h33.64 rot174",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 3.7928182014837817,
+  "ours": 3.792818206557696,
+  "tol": 0.002113291090455498,
+  "verdict": "agree",
+  "bound": 1.801864265383861e-05
+ },
+ {
+  "id": "d10_0090",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "sphere r14.75 rot82 | cyl r6.29 h30.57 rot147",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 10739.945499120573,
+  "ours": 10694.244922504056,
+  "tol": 172.44413949787048,
+  "verdict": "agree",
+  "bound": 224.18670683640414,
+  "reported": 10740.290385886701
+ },
+ {
+  "id": "d10_0091",
+  "ops": [
+   "fuse",
+   "cut"
+  ],
+  "kinds": "box 13.43x16.17x34.55 | sphere r4.77 | cyl r3.61 h19.45",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 7160.808451828526,
+  "ours": 7160.808451802206,
+  "tol": 0.008750719186640388,
+  "verdict": "agree",
+  "bound": 0.0003357742592606253
+ },
+ {
+  "id": "d10_0092",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r3.08/1 h17.12 rot87 | torus 11.57/2.82",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 241.6908679290985,
+  "verdict": "INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 6 error(s)"
+ },
+ {
+  "id": "d10_0093",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "torus 14.53/2.73 rot67 | torus 10.07/4.51",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 5975.537497012729,
+  "ours": 5944.544201666714,
+  "tol": 61.874431109468205,
+  "verdict": "agree",
+  "bound": 92.14560557569754
+ },
+ {
+  "id": "d10_0094",
+  "ops": [
+   "fuse",
+   "cut"
+  ],
+  "kinds": "cyl r4.13 h22.95 | cone r11.93/0.58 h29.69 | cone r3.19/2.85 h29.1 rot144",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 4525.607625588944,
+  "ours": 4525.6076229897,
+  "tol": 0.006714796764192451,
+  "verdict": "agree",
+  "bound": 0.0014009442055735425
+ },
+ {
+  "id": "d10_0095",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "box 34.07x27.26x32.07 rot140 | torus 6.57/4.29 | cyl r8.9 h10.18 rot121",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 27293.77624317143,
+  "ours": 27301.54345631949,
+  "tol": 347.10570547228,
+  "verdict": "agree",
+  "bound": 236.60767355001218,
+  "reported": 27293.57513246153
+ },
+ {
+  "id": "d10_0096",
+  "ops": [
+   "common"
+  ],
+  "kinds": "cyl r10.11 h13.48 | torus 7.31/1.9 rot150",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 185.97072343402135,
+  "ours": 184.24295052460306,
+  "tol": 48.50017743031717,
+  "verdict": "agree",
+  "bound": 8.799756126967836,
+  "reported": 185.91450284957477
+ },
+ {
+  "id": "d10_0097",
+  "ops": [
+   "common"
+  ],
+  "kinds": "box 33.89x25.8x31.9 rot38 | torus 10.1/2.22",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 455.96156275963426,
+  "ours": 454.1995728046491,
+  "tol": 288.7268667114939,
+  "verdict": "agree",
+  "bound": 21.650452542640327,
+  "reported": 455.9615920180172
+ },
+ {
+  "id": "d10_0098",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "cone r4.81/3.49 h24.2 | cyl r11.09 h38.21 | sphere r11.1",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 1321.4371324854808,
+  "ours": 1321.4371310153617,
+  "tol": 0.021831981871544826,
+  "verdict": "agree",
+  "bound": 7.649515790911262e-05
+ },
+ {
+  "id": "d10_0099",
+  "ops": [
+   "common"
+  ],
+  "kinds": "sphere r11.79 | box 29.81x22.8x20.98 rot84",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 2889.8477252705406,
+  "ours": 2889.847723435809,
+  "tol": 0.02112738544471708,
+  "verdict": "agree",
+  "bound": 0.00011952659421865289
+ },
+ {
+  "id": "d10_0100",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "torus 13.57/4.36 | sphere r11.21",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 3746.97846818884,
+  "ours": 3733.455690838737,
+  "tol": 109.84592481666279,
+  "verdict": "agree",
+  "bound": 72.93747711422127
+ },
+ {
+  "id": "d10_0101",
+  "ops": [
+   "common"
+  ],
+  "kinds": "torus 10.7/2.77 | torus 11.29/3.62 rot138",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 52.90819500040783,
+  "ours": 52.33103025364891,
+  "tol": 45.34158245438284,
+  "verdict": "agree",
+  "bound": 4.1737020894896826e-05,
+  "reported": 52.908195030048994
+ },
+ {
+  "id": "d10_0102",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cyl r2.12 h19.29 rot180 | sphere r8.43",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 193.1351208167993,
+  "ours": 193.13512100376445,
+  "tol": 0.0027830370154477593,
+  "verdict": "agree",
+  "bound": 0.0005463568630686243
+ },
+ {
+  "id": "d10_0103",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "sphere r9.48 rot123 | box 25.16x9.38x28.47 | box 24.45x19.99x16.49",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 3191.064638069494,
+  "ours": 3191.064638191126,
+  "tol": 0.018340456003501468,
+  "verdict": "agree",
+  "bound": 0.00011230726718447472
+ },
+ {
+  "id": "d10_0104",
+  "ops": [
+   "common",
+   "fuse"
+  ],
+  "kinds": "torus 7.25/2.13 | box 36.65x18.12x18.84 rot159 | sphere r6.22",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 1258.5321442622385,
+  "ours": 1250.219636690442,
+  "tol": 141.69600260609846,
+  "verdict": "agree",
+  "bound": 27.300361325444722,
+  "reported": 1258.532136047793
+ },
+ {
+  "id": "d10_0105",
+  "ops": [
+   "common"
+  ],
+  "kinds": "torus 7.77/4.64 rot132 | cone r9.09/7.28 h12.33",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 59.03120376098866,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0106",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 19.91x18.33x9.1 rot132 | cyl r8.3 h39.98 rot60",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 880.3093572359726,
+  "ours": 880.3093587558566,
+  "tol": 0.011972740846057211,
+  "verdict": "agree",
+  "bound": 0.00010026712626717499
+ },
+ {
+  "id": "d10_0107",
+  "ops": [
+   "common"
+  ],
+  "kinds": "torus 4.56/1.84 | torus 3.86/1.82",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 5.578932914726332,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0108",
+  "ops": [
+   "common"
+  ],
+  "kinds": "torus 12.34/4.12 | sphere r8.88",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 655.9385370729555,
+  "ours": 653.453751809922,
+  "tol": 70.7762246003214,
+  "verdict": "agree",
+  "bound": 19.584561041511254
+ },
+ {
+  "id": "d10_0109",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "torus 7.55/4.08 rot164 | cone r8.26/4.76 h17.09",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 1857.437033693625,
+  "ours": 1854.7475306177378,
+  "tol": 48.12091354024768,
+  "verdict": "agree",
+  "bound": 28.173786178397144
+ },
+ {
+  "id": "d10_0110",
+  "ops": [
+   "fuse",
+   "cut"
+  ],
+  "kinds": "box 33.42x13.68x9.59 | torus 7.92/3.52 rot9 | cone r2.73/3.18 h20.01",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 6090.631396433443,
+  "ours": 6087.074647357863,
+  "tol": 68.715131464624,
+  "verdict": "agree",
+  "bound": 35.79106629547098
+ },
+ {
+  "id": "d10_0111",
+  "ops": [
+   "fuse",
+   "common"
+  ],
+  "kinds": "box 33.45x27.92x31.37 rot93 | sphere r13.76 | box 30.54x22.85x19.47",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 9818.205788107618,
+  "ours": 9818.2057826933,
+  "tol": 0.053795475939226,
+  "verdict": "agree",
+  "bound": 0.00028634293154172264
+ },
+ {
+  "id": "d10_0112",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "cone r3.52/3.19 h17.26 rot160 | sphere r14.21 rot76",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 12236.604916770404,
+  "ours": 12236.604917126695,
+  "tol": 0.012634396461802505,
+  "verdict": "agree",
+  "bound": 0.0007261002610028543
+ },
+ {
+  "id": "d10_0113",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r11.23/7.95 h17.61 | torus 13.63/1.74 rot104",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 5083.213646084827,
+  "ours": 5072.238124153087,
+  "tol": 59.52976786807445,
+  "verdict": "agree",
+  "bound": 0.020908343442591036,
+  "reported": 5083.213130690257
+ },
+ {
+  "id": "d10_0114",
+  "ops": [
+   "fuse",
+   "fuse"
+  ],
+  "kinds": "box 18.14x24.95x16.33 | sphere r14.86 rot51 | box 28.58x31.81x18.21",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 31193.825757183076,
+  "ours": 31193.82575808938,
+  "tol": 0.037699111114202835,
+  "verdict": "agree",
+  "bound": 0.000657716689243963
+ },
+ {
+  "id": "d10_0115",
+  "ops": [
+   "common"
+  ],
+  "kinds": "sphere r5.64 rot109 | cyl r5.3 h21.21 rot72",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 26.277352439833532,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0116",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "box 13.68x27.43x9.02 | cone r11.57/2.12 h27.06",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 7644.070359560701,
+  "ours": 7634.0372990885,
+  "tol": 80.03120941532777,
+  "verdict": "agree",
+  "bound": 97.14390406517892,
+  "reported": 7644.0707421472325
+ },
+ {
+  "id": "d10_0117",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "box 34.63x29.22x33.24 rot4 | box 33.08x29.57x8.92 rot109",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 36478.16519070698,
+  "ours": 36478.16519210506,
+  "tol": 0.04235316219402908,
+  "verdict": "agree",
+  "bound": 0.0007459688908479587
+ },
+ {
+  "id": "d10_0118",
+  "ops": [
+   "common"
+  ],
+  "kinds": "cone r6.61/3.12 h12.57 rot144 | sphere r7.52",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 27.57335861232131,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0119",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "sphere r8.14 rot50 | cyl r3.1 h26.02 | torus 11.07/3.05 rot153",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 2210.7467219985233,
+  "ours": 2202.7457088131337,
+  "tol": 50.8159881422026,
+  "verdict": "agree",
+  "bound": 28.91485515813291
+ },
+ {
+  "id": "d10_0120",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r8.72/2.37 h8.68 | cyl r11.86 h8.93 rot142",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 930.699230493709,
+  "ours": 930.6992297426287,
+  "tol": 0.004878615847107987,
+  "verdict": "agree",
+  "bound": 6.393887979251741e-05
+ },
+ {
+  "id": "d10_0121",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "sphere r8.26 rot43 | sphere r5.64 rot152",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 1658.7773360485185,
+  "ours": 1658.7773361061345,
+  "tol": 0.0031123657145450396,
+  "verdict": "agree",
+  "bound": 0.00010985345939144534
+ },
+ {
+  "id": "d10_0122",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "cyl r7.73 h26.55 | sphere r4.63 | cyl r9.52 h18.39 rot35",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 4236.769739008381,
+  "ours": 4236.769741414961,
+  "tol": 0.010638535302457173,
+  "verdict": "agree",
+  "bound": 0.00023088530581922708
+ },
+ {
+  "id": "d10_0123",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "sphere r5.42 rot169 | torus 6.69/3.1",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 533.9930339077165,
+  "ours": 532.5695036610651,
+  "tol": 19.347576836312903,
+  "verdict": "agree",
+  "bound": 6.667898640942431,
+  "reported": 533.9930783124729
+ },
+ {
+  "id": "d10_0124",
+  "ops": [
+   "fuse",
+   "fuse"
+  ],
+  "kinds": "box 14.53x23.17x11.04 | cone r4.63/4.21 h14.95 | box 34.59x25.32x31.5 rot114",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 27954.7587810027,
+  "ours": 27954.441864356693,
+  "tol": 322.330253005405,
+  "verdict": "agree",
+  "bound": 106.90611960412623,
+  "reported": 27954.915568203098
+ },
+ {
+  "id": "d10_0125",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "cone r2.61/6.82 h25.01 | torus 10.46/3.08 rot128",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 3825.295385556975,
+  "ours": 3814.221177107688,
+  "tol": 38.25677915118357,
+  "verdict": "agree",
+  "bound": 0.010217903340220378,
+  "reported": 3825.294994691276
+ },
+ {
+  "id": "d10_0126",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 29.16x19.38x38.08 | cone r10.5/6.8 h18.23",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 18720.875060404956,
+  "ours": 18720.875059441136,
+  "tol": 0.025873390279742902,
+  "verdict": "agree",
+  "bound": 0.0005548885744484326
+ },
+ {
+  "id": "d10_0127",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cyl r2.31 h36.56 rot96 | sphere r4.37 rot72",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 613.1406690418738,
+  "ours": 613.1406692577035,
+  "tol": 0.0009631091829329307,
+  "verdict": "agree",
+  "bound": 5.69367512238001e-05
+ },
+ {
+  "id": "d10_0128",
+  "ops": [
+   "cut",
+   "common"
+  ],
+  "kinds": "torus 11.22/3.19 | box 21.18x32.29x31.58 rot103 | box 20.3x39.46x31.54 rot154",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 529.6501199932331,
+  "ours": 526.6776278642302,
+  "tol": 491.12212450876746,
+  "verdict": "agree",
+  "bound": 20.565816169736305,
+  "reported": 529.6507480086909
+ },
+ {
+  "id": "d10_0129",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r11.47/4.86 h15.49 | cone r3.75/3.78 h29.44",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 3420.468178956804,
+  "ours": 3420.4681805804544,
+  "tol": 0.004730865268605455,
+  "verdict": "agree",
+  "bound": 0.00013855607271623656
+ },
+ {
+  "id": "d10_0130",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "torus 13.1/4.19 rot55 | box 28.16x15.66x20.06 rot147",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 3311.910964151676,
+  "ours": 3302.952009653855,
+  "tol": 133.9401322320803,
+  "verdict": "agree",
+  "bound": 53.47574622389844,
+  "reported": 3311.911870239465
+ },
+ {
+  "id": "d10_0131",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "box 19.46x17.97x13.82 | cone r2.91/2.73 h14.1 | sphere r3.64 rot108",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 4820.83816283797,
+  "ours": 4820.8381622353945,
+  "tol": 0.0053857968485564725,
+  "verdict": "agree",
+  "bound": 0.0001779147266189823
+ },
+ {
+  "id": "d10_0132",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "box 24.94x26.63x35.42 | sphere r10.23 rot27 | torus 3.85/1.67",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 19170.98341164419,
+  "ours": 19186.353906461165,
+  "tol": 282.32676099432206,
+  "verdict": "agree",
+  "bound": 159.60686801285314,
+  "reported": 19170.950072031203
+ },
+ {
+  "id": "d10_0133",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "torus 7.15/4.58 rot101 | sphere r4.31 | sphere r7.71",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 2839.988805389711,
+  "ours": 2837.5463550154877,
+  "tol": 52.17596393156102,
+  "verdict": "agree",
+  "bound": 42.01111998411407
+ },
+ {
+  "id": "d10_0134",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r3.88/0 h17.86 rot98 | cyl r3.73 h36.22",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 281.11918140385495,
+  "ours": 281.119180758706,
+  "tol": 0.0018639905681716738,
+  "verdict": "agree",
+  "bound": 2.7232196093897833e-05
+ },
+ {
+  "id": "d10_0135",
+  "ops": [
+   "cut",
+   "common"
+  ],
+  "kinds": "box 30.76x33x12.78 | cyl r7.41 h28.09 | box 12.16x14.39x18.39",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 1375.6376185220083,
+  "ours": 1375.637618568897,
+  "tol": 0.021037318911747364,
+  "verdict": "agree",
+  "bound": 7.677845896866656e-05
+ },
+ {
+  "id": "d10_0136",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 24.32x20.9x10.61 | cyl r6.76 h15.06 rot11",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 5392.208011978422,
+  "ours": 5392.208011942091,
+  "tol": 0.007556020250685345,
+  "verdict": "agree",
+  "bound": 0.0002029965079386999
+ },
+ {
+  "id": "d10_0137",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "torus 6.56/4.29 rot97 | cone r6.83/1.04 h15.92 | sphere r7.72",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 1879.8844679875376,
+  "ours": 1879.5969437256715,
+  "tol": 52.292343192667936,
+  "verdict": "agree",
+  "bound": 35.22872807205818
+ },
+ {
+  "id": "d10_0138",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "cyl r8.4 h19.67 rot128 | cyl r9.45 h19.92 rot47 | box 27.12x30.5x34.8",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 1760.561312745172,
+  "ours": 1757.37395959279,
+  "tol": 387.2875472656938,
+  "verdict": "agree",
+  "bound": 42.83446575904802,
+  "reported": 1761.0138355608922
+ },
+ {
+  "id": "d10_0139",
+  "ops": [
+   "fuse",
+   "fuse"
+  ],
+  "kinds": "cyl r9.79 h37.86 rot154 | sphere r14.26 | cyl r3.23 h23.29",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 17820.09921446195,
+  "ours": 17764.738378647642,
+  "tol": 242.9813591288847,
+  "verdict": "agree",
+  "bound": 280.1958784677282,
+  "reported": 17820.67334350882
+ },
+ {
+  "id": "d10_0140",
+  "ops": [
+   "common"
+  ],
+  "kinds": "cone r8.26/5.2 h23.15 | cyl r4.57 h25.53 rot99",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 401.3295216106766,
+  "ours": 401.3295197046702,
+  "tol": 0.005030469338140627,
+  "verdict": "agree",
+  "bound": 0.0026109919620117034
+ },
+ {
+  "id": "d10_0141",
+  "ops": [
+   "fuse",
+   "cut"
+  ],
+  "kinds": "sphere r8.04 rot118 | box 27.73x25.26x10.48 rot178 | cone r5.61/0.63 h12.88 rot144",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 9519.48130074513,
+  "ours": 9519.481298409864,
+  "tol": 0.009998322273979534,
+  "verdict": "agree",
+  "bound": 0.00034762577262625253
+ },
+ {
+  "id": "d10_0142",
+  "ops": [
+   "common"
+  ],
+  "kinds": "box 8.75x22.73x26.88 rot130 | torus 7.76/1.57",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 144.03416376488724,
+  "ours": 143.50392053915533,
+  "tol": 57.221483952466265,
+  "verdict": "agree",
+  "bound": 6.391494494906955,
+  "reported": 144.03424967157432
+ },
+ {
+  "id": "d10_0143",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "torus 12.41/3.6 | torus 7.21/3.57",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 3166.7397639674796,
+  "ours": 3152.4723085779133,
+  "tol": 49.84514038856773,
+  "verdict": "agree",
+  "bound": 0.0001789897479627625,
+  "reported": 3166.739764471445
+ },
+ {
+  "id": "d10_0144",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 20.9x33.43x13.41 | sphere r10.1",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 9190.552928372183,
+  "ours": 9190.552928339588,
+  "tol": 0.013687469142987357,
+  "verdict": "agree",
+  "bound": 0.0002937936927989534
+ },
+ {
+  "id": "d10_0145",
+  "ops": [
+   "common"
+  ],
+  "kinds": "box 37.5x10.42x21.59 | torus 6.91/3.6",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 120.13821667019863,
+  "ours": 119.28742728509656,
+  "tol": 101.99057066274106,
+  "verdict": "agree",
+  "bound": 4.5508971791613435
+ },
+ {
+  "id": "d10_0146",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r10.69/9.93 h11.81 rot51 | torus 11.96/4.59 rot177",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 3792.603963743065,
+  "ours": 3787.5212940709753,
+  "tol": 89.32795240928347,
+  "verdict": "agree",
+  "bound": 55.315042326606935,
+  "reported": 3792.603728855629
+ },
+ {
+  "id": "d10_0147",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "box 38.61x24.25x17.7 rot31 | box 21.62x17.41x10.81 | box 30.91x26.99x27.61 rot145",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 11586.998355327947,
+  "ours": 11586.998355053072,
+  "tol": 0.04367418647307821,
+  "verdict": "agree",
+  "bound": 0.0004777921148773652
+ },
+ {
+  "id": "d10_0148",
+  "ops": [
+   "common",
+   "cut"
+  ],
+  "kinds": "sphere r8.76 rot2 | sphere r10.84 | torus 14.04/3.11",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 13.995314408534412,
+  "ours": 13.533652339185965,
+  "tol": 108.2759157336275,
+  "verdict": "agree",
+  "bound": 1.1376479912004671
+ },
+ {
+  "id": "d10_0149",
+  "ops": [
+   "fuse",
+   "fuse"
+  ],
+  "kinds": "sphere r12.52 rot147 | cone r8.88/8.68 h20.34 rot74 | box 10.49x30.19x17.65 rot91",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 14727.10951026913,
+  "verdict": "INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 6 error(s)"
+ },
+ {
+  "id": "d10_0150",
+  "ops": [
+   "common",
+   "common"
+  ],
+  "kinds": "cyl r10.88 h39.2 | cyl r7.66 h13.18 | cyl r8.6 h28.2 rot138",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 1246.044869506798,
+  "ours": 1246.0448689145085,
+  "tol": 0.023555625601817256,
+  "verdict": "agree",
+  "bound": 0.0005154384663838896
+ },
+ {
+  "id": "d10_0151",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "box 11.86x17.57x15.7 | sphere r11.96",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 3061.9232607439794,
+  "ours": 3061.9232606265346,
+  "tol": 0.010444943931408377,
+  "verdict": "agree",
+  "bound": 0.00013413167602383826
+ },
+ {
+  "id": "d10_0152",
+  "ops": [
+   "cut",
+   "common"
+  ],
+  "kinds": "cyl r6.87 h9.33 rot169 | torus 4.44/1.92 rot37 | torus 7.98/2.81",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 192.57450175958346,
+  "ours": 191.14517450595292,
+  "tol": 29.501403409663936,
+  "verdict": "agree",
+  "bound": 6.86839596216718,
+  "reported": 192.54579415205703
+ },
+ {
+  "id": "d10_0153",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "box 15.6x24.65x8.2 rot38 | cyl r8.18 h15.55 rot97 | box 21.4x32.07x26.46 rot103",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 575.9695131266786,
+  "ours": 575.9695145909536,
+  "tol": 0.024577995815713717,
+  "verdict": "agree",
+  "bound": 6.992032862637684e-05
+ },
+ {
+  "id": "d10_0154",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "torus 7.73/4.74 rot118 | cone r7.06/5.5 h24.75 rot140",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 5540.992350882602,
+  "ours": 5532.404378739892,
+  "tol": 65.06065934461833,
+  "verdict": "agree",
+  "bound": 40.140768127659925
+ },
+ {
+  "id": "d10_0155",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "cyl r5.72 h23.08 | torus 5.34/1.75 rot30 | torus 11.68/4.78 rot2",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 1610.7147087143471,
+  "ours": 1606.5614931551165,
+  "tol": 79.78221563265446,
+  "verdict": "agree",
+  "bound": 30.153629571787956,
+  "reported": 1610.7470075614692
+ },
+ {
+  "id": "d10_0156",
+  "ops": [
+   "fuse",
+   "fuse"
+  ],
+  "kinds": "torus 5.75/3.59 rot48 | sphere r7.38 | cyl r9.26 h18.18 rot70",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 5926.259295137876,
+  "ours": 5910.306012882778,
+  "tol": 80.49205499458456,
+  "verdict": "agree",
+  "bound": 64.95416153262245,
+  "reported": 5926.259699254503
+ },
+ {
+  "id": "d10_0157",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r7.41/7.85 h28.08 rot171 | cyl r2.55 h9.55",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 5136.016309784555,
+  "ours": 5136.016312135355,
+  "tol": 0.005331323605693587,
+  "verdict": "agree",
+  "bound": 0.0001761953117505801
+ },
+ {
+  "id": "d10_0158",
+  "ops": [
+   "fuse",
+   "cut"
+  ],
+  "kinds": "sphere r13.7 rot35 | cone r8.85/5 h11.96 | box 35.19x31.51x20.45",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 3201.4271685445174,
+  "ours": 3180.795972667966,
+  "tol": 353.0593561505712,
+  "verdict": "agree",
+  "bound": 80.66631756177229,
+  "reported": 3201.4269394614666
+ },
+ {
+  "id": "d10_0159",
+  "ops": [
+   "common"
+  ],
+  "kinds": "sphere r8.38 | box 23.75x22.73x16.64",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 932.71565350502,
+  "ours": 932.7156535278872,
+  "tol": 0.01144793005933394,
+  "verdict": "agree",
+  "bound": 5.616484764804354e-05
+ },
+ {
+  "id": "d10_0160",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "sphere r13.08 | box 16.34x25.55x24.94 rot107",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 17825.92001927922,
+  "ours": 17825.920022251197,
+  "tol": 0.019790785799320358,
+  "verdict": "agree",
+  "bound": 0.0004294538012794872
+ },
+ {
+  "id": "d10_0161",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "torus 13.26/3.44 rot46 | torus 10.96/2.43 rot96",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 2933.9234825947533,
+  "ours": 2920.1272594539046,
+  "tol": 43.82624917317482,
+  "verdict": "agree",
+  "bound": 38.51681539628822
+ },
+ {
+  "id": "d10_0162",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r3.46/7.89 h14.92 | torus 13.7/2.75",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 1587.7210932689882,
+  "ours": 1583.1903827583967,
+  "tol": 36.29422372799422,
+  "verdict": "agree",
+  "bound": 0.006137758883688677,
+  "reported": 1587.720993009006
+ },
+ {
+  "id": "d10_0163",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "torus 4.9/2.63 | cyl r3.05 h34.15 | sphere r10.1 rot105",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 669.9957487635274,
+  "ours": 666.1778315558028,
+  "tol": 59.92655492205902,
+  "verdict": "agree",
+  "bound": 5.147652066583223e-05,
+  "reported": 669.995748535173
+ },
+ {
+  "id": "d10_0164",
+  "ops": [
+   "fuse",
+   "cut"
+  ],
+  "kinds": "cone r8.94/4.32 h29.61 | cone r7.54/4.66 h16.81 | cyl r11.56 h38.11",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 4943.831350491957,
+  "ours": 4943.831352228384,
+  "tol": 0.022249864550604175,
+  "verdict": "agree",
+  "bound": 0.0025260010822931098
+ },
+ {
+  "id": "d10_0165",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "cone r5.66/5.27 h14.6 rot53 | cyl r9.91 h15.88 | cone r7.6/8.68 h8.32",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 254.4954555419852,
+  "ours": 253.92320984128074,
+  "tol": 80.03021413785143,
+  "verdict": "agree",
+  "bound": 13.866258133359015,
+  "reported": 254.49537187491987
+ },
+ {
+  "id": "d10_0166",
+  "ops": [
+   "cut",
+   "common"
+  ],
+  "kinds": "cone r11.65/5.06 h24.39 | box 18.11x22.07x26.73 rot174 | sphere r7.09",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 178.00731587670862,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0167",
+  "ops": [
+   "common"
+  ],
+  "kinds": "cone r7.32/5.43 h9.88 | box 9.78x10.54x16.7",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 29.932536317673033,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0168",
+  "ops": [
+   "cut",
+   "common"
+  ],
+  "kinds": "cone r3.2/6.64 h10.59 rot0 | sphere r11.02 | cone r7.66/0.74 h12.1",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 72.71489373078533,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0169",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "sphere r9.37 rot71 | sphere r12.61 rot44",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 10916.030141733885,
+  "ours": 10916.03014165032,
+  "tol": 0.011850309516636995,
+  "verdict": "agree",
+  "bound": 0.0002672173450677978
+ },
+ {
+  "id": "d10_0170",
+  "ops": [
+   "common"
+  ],
+  "kinds": "cyl r8.02 h9.88 | sphere r7.12 rot17",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 35.11006097893082,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0171",
+  "ops": [
+   "cut",
+   "fuse"
+  ],
+  "kinds": "cone r9.33/7.04 h9.72 | box 24.91x27.16x14.54 rot79 | cone r6.91/7.36 h23.63 rot78",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 4073.0473083919583,
+  "ours": 4063.5580748781354,
+  "tol": 156.83824137810936,
+  "verdict": "agree",
+  "bound": 60.25313207040806,
+  "reported": 4073.0182884873943
+ },
+ {
+  "id": "d10_0172",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r5.22/5.24 h15.93 rot146 | sphere r13.4",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Subtract: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 114.55902185902295,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0173",
+  "ops": [
+   "fuse",
+   "common"
+  ],
+  "kinds": "torus 14.03/2.35 rot20 | box 25.29x12.9x17.53 rot93 | torus 14.49/4.8 rot18",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 1345.1378746844468,
+  "ours": 1342.0350647083646,
+  "tol": 138.208811734947,
+  "verdict": "agree",
+  "bound": 31.160319042990444,
+  "reported": 1345.1382207852737
+ },
+ {
+  "id": "d10_0174",
+  "ops": [
+   "cut",
+   "common"
+  ],
+  "kinds": "cone r10.62/6.49 h29.55 | box 30.98x23.08x26.21 rot34 | torus 15.29/3.45 rot83",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 133.96167367494323,
+  "ours": 134.1002164858389,
+  "tol": 292.5525120547874,
+  "verdict": "agree",
+  "bound": 8.553685749156976e-05,
+  "reported": 133.96167340992898
+ },
+ {
+  "id": "d10_0175",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "sphere r14.52 rot153 | torus 16.52/4.6 rot49 | sphere r10.98",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 9375.717911878523,
+  "ours": 9341.973983706584,
+  "tol": 252.45853174619987,
+  "verdict": "agree",
+  "bound": 124.65055886260778
+ },
+ {
+  "id": "d10_0176",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "torus 12.5/4.18 | torus 7.16/3.39 | torus 14.38/4.02",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 4255.865530052953,
+  "ours": 4238.419970284799,
+  "tol": 105.23515820061621,
+  "verdict": "agree",
+  "bound": 57.8411998794046
+ },
+ {
+  "id": "d10_0177",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r3.63/6.54 h25.85 | torus 7.35/2.12",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 2158.285814947102,
+  "ours": 2152.1277752030282,
+  "tol": 28.130771259041378,
+  "verdict": "agree",
+  "bound": 0.009502488689117475,
+  "reported": 2158.2859800417064
+ },
+ {
+  "id": "d10_0178",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r9.31/2.9 h9.83 rot79 | cyl r3.84 h19.34",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 1256.5923338753466,
+  "ours": 1256.5923333218864,
+  "tol": 0.002154269911561797,
+  "verdict": "agree",
+  "bound": 7.596676058361375e-05
+ },
+ {
+  "id": "d10_0179",
+  "ops": [
+   "common"
+  ],
+  "kinds": "sphere r10.66 rot2 | box 10.12x15.74x15.24",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 623.764645170156,
+  "ours": 623.7646452226576,
+  "tol": 0.007499211536487896,
+  "verdict": "agree",
+  "bound": 4.502138458109283e-05
+ },
+ {
+  "id": "d10_0180",
+  "ops": [
+   "common"
+  ],
+  "kinds": "cyl r5.3 h27.72 rot174 | box 23.77x21.08x11.29 rot143",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 778.540707479924,
+  "ours": 778.5407098711984,
+  "tol": 0.008106881865722039,
+  "verdict": "agree",
+  "bound": 5.7017489042715496e-05
+ },
+ {
+  "id": "d10_0181",
+  "ops": [
+   "cut",
+   "common"
+  ],
+  "kinds": "cyl r5.04 h38.66 | cone r6.05/6.97 h20.08 rot147 | box 26.36x34.66x11.95",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 434.7192133320776,
+  "ours": 434.7192133997005,
+  "tol": 0.01667079788830289,
+  "verdict": "agree",
+  "bound": 3.996396340552339e-05
+ },
+ {
+  "id": "d10_0182",
+  "ops": [
+   "cut",
+   "common"
+  ],
+  "kinds": "box 38.81x28.4x18.01 | cyl r5.27 h20.89 | sphere r7.82",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 236.69189700005077,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0183",
+  "ops": [
+   "fuse",
+   "fuse"
+  ],
+  "kinds": "sphere r9.92 rot132 | sphere r10.04 rot141 | sphere r8.83 rot54",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 9748.150313156026,
+  "ours": 9748.150313531345,
+  "tol": 0.011210733302502397,
+  "verdict": "agree",
+  "bound": 0.0002688334704718341
+ },
+ {
+  "id": "d10_0184",
+  "ops": [
+   "common",
+   "cut"
+  ],
+  "kinds": "sphere r3.33 rot126 | cone r2.24/9.67 h23.08 rot56 | box 19.19x16.48x13.23",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 72.99425477868628,
+  "ours": 72.99425478034047,
+  "tol": 0.007242077092434429,
+  "verdict": "agree",
+  "bound": 1.0217460287659767e-05
+ },
+ {
+  "id": "d10_0185",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "cone r9.01/8.48 h14.43 | cone r11.6/1.62 h9.83 rot42",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 2983.247445624029,
+  "ours": 2983.2474447478294,
+  "tol": 0.005072918343179495,
+  "verdict": "agree",
+  "bound": 0.0006612793036307272
+ },
+ {
+  "id": "d10_0186",
+  "ops": [
+   "fuse",
+   "common"
+  ],
+  "kinds": "cone r5.58/9.52 h17 | cone r11.1/5.14 h22.69 rot115 | cyl r7.08 h8.25 rot37",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 898.600862354459,
+  "ours": 895.5473345802365,
+  "tol": 93.26429354051773,
+  "verdict": "agree",
+  "bound": 17.95122064859421,
+  "reported": 898.6665994300612
+ },
+ {
+  "id": "d10_0187",
+  "ops": [
+   "common"
+  ],
+  "kinds": "cone r6.9/3.4 h11.62 | cone r4.51/5.69 h17.45 rot133",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 24.385600604909165,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0188",
+  "ops": [
+   "common"
+  ],
+  "kinds": "cone r11.44/1.57 h14.02 rot173 | box 30.37x21.87x23.26",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 1181.8095001500276,
+  "ours": 1181.8095000756687,
+  "tol": 0.017669370171703495,
+  "verdict": "agree",
+  "bound": 0.0005086242094666511
+ },
+ {
+  "id": "d10_0189",
+  "ops": [
+   "cut",
+   "cut"
+  ],
+  "kinds": "cone r10.23/3.48 h12.7 rot40 | cone r5.96/0 h16.19 rot52 | sphere r3.31 rot130",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 1547.9215741142486,
+  "verdict": "INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 3 error(s)"
+ },
+ {
+  "id": "d10_0190",
+  "ops": [
+   "common",
+   "cut"
+  ],
+  "kinds": "cone r10.36/2.08 h23.72 rot48 | box 23.05x30.87x12.85 rot86 | box 34.01x37.05x38.55 rot80",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Subtract: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 610.2661488111416,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0191",
+  "ops": [
+   "fuse"
+  ],
+  "kinds": "box 26.83x11.22x10.55 | torus 12.43/4.7",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 8370.090859686388,
+  "ours": 8347.27673633413,
+  "tol": 85.88233463135077,
+  "verdict": "agree",
+  "bound": 98.66287002868985
+ },
+ {
+  "id": "d10_0192",
+  "ops": [
+   "common"
+  ],
+  "kinds": "cyl r6.89 h38.2 rot172 | box 14.95x22.35x10.34 rot68",
+  "outcome": "Empty",
+  "guarantee": "",
+  "detail": "Boolean.Intersect: Succeeded, ExactPolyhedral; [policy] geometry-downgrade: an analytic operand was processed through its faceted form (chord 0.02 mm); the result is ExactPolyhedral",
+  "occt": 0.0,
+  "ours": 0.0,
+  "tol": 91.52338586656418,
+  "verdict": "agree",
+  "bound": 0.0,
+  "reported": 0.0
+ },
+ {
+  "id": "d10_0193",
+  "ops": [
+   "common"
+  ],
+  "kinds": "sphere r14.94 rot76 | box 9.31x15.14x23.64 rot151",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 451.5254664815389,
+  "ours": 451.5254657339361,
+  "tol": 0.017290569483403108,
+  "verdict": "agree",
+  "bound": 4.192150754440539e-05
+ },
+ {
+  "id": "d10_0194",
+  "ops": [
+   "cut"
+  ],
+  "kinds": "sphere r14.33 rot82 | sphere r6 rot67",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 11743.720880701158,
+  "ours": 11743.720881104635,
+  "tol": 0.013226498610283839,
+  "verdict": "agree",
+  "bound": 0.0002817675598243477
+ },
+ {
+  "id": "d10_0195",
+  "ops": [
+   "common"
+  ],
+  "kinds": "torus 8.25/4.75 rot177 | cyl r11.02 h23.2 rot26",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 1162.1184310959286,
+  "ours": 1157.9199669640814,
+  "tol": 125.26364054222891,
+  "verdict": "agree",
+  "bound": 26.222874973241936,
+  "reported": 1162.118206987554
+ },
+ {
+  "id": "d10_0196",
+  "ops": [
+   "common"
+  ],
+  "kinds": "sphere r10.92 rot106 | sphere r5.1",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 233.38431874316584,
+  "ours": 233.38431882201658,
+  "tol": 0.006006365736483737,
+  "verdict": "agree",
+  "bound": 2.105758921185969e-05
+ },
+ {
+  "id": "d10_0197",
+  "ops": [
+   "cut",
+   "fuse"
+  ],
+  "kinds": "box 9.87x31.05x25.57 | box 22.27x30.69x28.9 rot42 | torus 14.63/3.46",
+  "outcome": "Success",
+  "guarantee": "ExactPolyhedral",
+  "detail": "",
+  "occt": 5957.478531669409,
+  "ours": 5942.542772249209,
+  "tol": 310.50086341394467,
+  "verdict": "agree",
+  "bound": 0.017271379109142396,
+  "reported": 5957.477778523888
+ },
+ {
+  "id": "d10_0198",
+  "ops": [
+   "fuse",
+   "cut"
+  ],
+  "kinds": "box 38.82x38.79x11.02 rot17 | cyl r3.41 h36.94 rot99 | sphere r5.83 rot24",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 16596.998927999688,
+  "ours": 16596.998932731956,
+  "tol": 0.01877009302255715,
+  "verdict": "agree",
+  "bound": 0.00048899900374064
+ },
+ {
+  "id": "d10_0199",
+  "ops": [
+   "cut",
+   "fuse"
+  ],
+  "kinds": "cyl r2.3 h22.19 rot128 | cyl r2.12 h24.1 rot39 | sphere r11.73",
+  "outcome": "Success",
+  "guarantee": "ExactAnalytic",
+  "detail": "",
+  "occt": 7128.486759663016,
+  "ours": 7128.486758922967,
+  "tol": 0.007469714381857947,
+  "verdict": "agree",
+  "bound": 0.00021490183455737848
+ }
+]

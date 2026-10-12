@@ -1,0 +1,9 @@
+numerics        ok 7 vs 7 lines; differing=0; unparsed=0/0
+rotations       ok 89 vs 89 lines; differing=0; unparsed=0/0
+suite           ok 128 vs 128 lines; differing=0; unparsed=0/0
+target          ok 9 vs 9 lines; differing=0; unparsed=0/0
+a01-tests       ok 41 vs 41 lines; differing=0; unparsed=0/0
+a01-corpus      ok 102 vs 102 lines; differing=0; unparsed=0/0
+a01-sequences   ok 902 vs 902 lines; differing=0; unparsed=0/0
+a03-hints       ok 1003 vs 1003 lines; differing=0; unparsed=0/0
+a04-cylinder    ok 105 vs 105 lines; differing=0; unparsed=0/0

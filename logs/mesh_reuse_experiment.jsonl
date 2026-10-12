@@ -1,0 +1,2 @@
+{"test":"MESH-REUSE-EXPERIMENT","rebuilds":24,"facesMeshed":765,"reusableFromPrevious":309,"keyRepeats":309,"match":309,"mismatch":0,"mismatches":[]}
+{"test":"G7-MESH-REUSE-IDENTICAL","edits":20,"facesCompared":765,"facesReused":337}

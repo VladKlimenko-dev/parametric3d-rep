@@ -1,0 +1,10 @@
+bin/
+obj/
+*.dll
+*.pdb
+logs/*/k01/
+logs/**/fprobe/
+logs/**/a06/
+*.step
+.vs/
+*.user

@@ -1,0 +1,285 @@
+d8_0000	0	common	ExactAnalytic	declined: second operand: a cylinder not along the direction | general accepted
+d8_0000	1	common	ExactAnalytic	declined: first operand: a cylinder not along the direction | general accepted
+d8_0001	0	common	ExactAnalytic	general accepted
+d8_0001	1	fuse	ExactAnalytic	general accepted
+d8_0002	0	cut	ExactAnalytic	general accepted
+d8_0002	1	cut	ExactAnalytic	general accepted
+d8_0003	0	fuse	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0004	0	cut	ExactAnalytic	declined: second operand: a cylinder not along the direction | general accepted
+d8_0004	1	cut	ExactAnalytic	declined: first operand: a cylinder not along the direction | general accepted
+d8_0005	0	fuse	ExactAnalytic	general accepted
+d8_0005	1	cut	ExactPolyhedral	declined: first operand: a cylinder not along the direction | general invalid: BRep: 1 error(s); Mesh: ok :: [BRep/Error] pcurve-inconsistent: p-кривая (Arc2) отходит от ребра (IntersectionCurve3) на 3.77E-006 мм при допуске 1.00E-007 (элемент 1684) | general accepted
+d8_0006	0	fuse	ExactAnalytic	general accepted
+d8_0006	1	common	ExactAnalytic	general accepted
+d8_0007	0	cut	ExactAnalytic	general accepted
+d8_0007	1	fuse	ExactAnalytic	general accepted
+d8_0008	0	fuse	ExactAnalytic	general accepted
+d8_0008	1	common	ExactAnalytic	general accepted
+d8_0009	0	fuse	ExactAnalytic	declined: no common direction | general accepted
+d8_0009	1	fuse	ExactPolyhedral	general declined: face split: torus: a hole between several bands (not yet supported)
+d8_0010	0	cut	ExactAnalytic	general accepted
+d8_0010	1	cut	ExactAnalytic	general accepted
+d8_0011	0	cut	ExactAnalytic	general accepted
+d8_0011	1	fuse	ExactAnalytic	general accepted
+d8_0012	0	cut	ExactAnalytic	general accepted
+d8_0013	0	cut	ExactAnalytic	general accepted
+d8_0013	1	common	ExactAnalytic	declined: no common direction | general accepted
+d8_0014	0	common	ExactPolyhedral	declined: first operand: a cylinder not along the direction | general declined: the result is empty
+d8_0015	0	fuse	ExactAnalytic	general accepted
+d8_0015	1	common	ExactAnalytic	general accepted
+d8_0016	0	cut	ExactAnalytic	general accepted
+d8_0016	1	common	ExactAnalytic	general accepted
+d8_0017	0	cut	ExactAnalytic	accepted
+d8_0017	1	fuse	ExactAnalytic	general accepted
+d8_0018	0	cut	ExactAnalytic	general accepted
+d8_0019	0	cut	ExactAnalytic	general accepted
+d8_0020	0	common	ExactAnalytic	declined: no common direction | general accepted
+d8_0021	0	common	ExactAnalytic	general accepted
+d8_0021	1	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0022	0	fuse	ExactAnalytic	general accepted
+d8_0022	1	cut	ExactAnalytic	general accepted
+d8_0023	0	cut	ExactAnalytic	general accepted
+d8_0024	0	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0025	0	cut	ExactAnalytic	general accepted
+d8_0026	0	fuse	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0026	1	cut	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0027	0	fuse	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0028	0	fuse	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0028	1	fuse	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0029	0	cut	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0030	0	fuse	ExactAnalytic	general accepted
+d8_0031	0	cut	ExactAnalytic	general accepted
+d8_0032	0	fuse	ExactAnalytic	general accepted
+d8_0033	0	cut	ExactAnalytic	general accepted
+d8_0034	0	common	ExactAnalytic	general accepted
+d8_0035	0	fuse	ExactAnalytic	declined: no common direction | general accepted
+d8_0036	0	cut	ExactAnalytic	general accepted
+d8_0037	0	fuse	ExactAnalytic	general accepted
+d8_0038	0	common	ExactPolyhedral	general declined: the result is empty
+d8_0039	0	cut	ExactAnalytic	general accepted
+d8_0040	0	cut	ExactAnalytic	general accepted
+d8_0041	0	cut	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0042	0	cut	ExactAnalytic	general accepted
+d8_0042	1	cut	ExactAnalytic	general accepted
+d8_0043	0	cut	ExactPolyhedral	general invalid: BRep: ok; Mesh: 8 error(s) :: [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону: 43 at (1.72025, -14.01004, -11.66501) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (2.07389, -14.52681, -11.59798) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (1.53824, -14.84893, -11.62511)
+d8_0043	1	cut	ExactPolyhedral	declined: polyhedral operand | general declined: polyhedral operand
+d8_0044	0	cut	ExactPolyhedral	general invalid: 1 face(s) not meshed from their loops
+d8_0045	0	fuse	ExactAnalytic	declined: no common direction | general accepted
+d8_0045	1	fuse	ExactPolyhedral	general accepted | general invalid: BRep: ok; Mesh: 8 error(s) :: [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону: 86 at (6.158, -1.95838, 1.24304) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (5.92138, -1.49465, 1.24304) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (5.82299, 7.6388, 1.24304)
+d8_0046	0	cut	ExactAnalytic	general accepted
+d8_0047	0	fuse	ExactAnalytic	declined: no common direction | general accepted
+d8_0048	0	cut	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0049	0	cut	ExactAnalytic	general accepted
+d8_0049	1	cut	ExactAnalytic	general accepted
+d8_0050	0	cut	ExactAnalytic	general accepted
+d8_0051	0	cut	ExactAnalytic	general accepted
+d8_0052	0	fuse	ExactAnalytic	general accepted
+d8_0052	1	common	ExactAnalytic	general accepted
+d8_0053	0	cut	ExactAnalytic	general accepted
+d8_0053	1	fuse	ExactAnalytic	general accepted
+d8_0054	0	cut	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0054	1	fuse	ExactAnalytic	general accepted
+d8_0055	0	common	ExactAnalytic	general accepted
+d8_0055	1	common	ExactAnalytic	general accepted
+d8_0056	0	common	ExactPolyhedral	declined: no common direction | general declined: the result is empty
+d8_0057	0	cut	ExactAnalytic	general accepted
+d8_0058	0	common	ExactAnalytic	general accepted
+d8_0059	0	cut	ExactAnalytic	general accepted
+d8_0060	0	fuse	ExactAnalytic	general accepted
+d8_0060	1	common	ExactAnalytic	general accepted
+d8_0061	0	fuse	ExactPolyhedral	declined: no common direction | general: CSG agreement 156/256
+d8_0062	0	fuse	ExactAnalytic	declined: no common direction | general accepted
+d8_0063	0	common	ExactPolyhedral	general declined: the result is empty
+d8_0064	0	common	ExactAnalytic	declined: no common direction | general accepted
+d8_0065	0	common	ExactAnalytic	general accepted
+d8_0066	0	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0066	1	common	ExactAnalytic	declined: no common direction | general accepted
+d8_0067	0	cut	ExactAnalytic	general accepted
+d8_0067	1	common	ExactAnalytic	general accepted
+d8_0068	0	cut	ExactAnalytic	declined: first operand: a cylinder not along the direction | general accepted
+d8_0068	1	cut	ExactAnalytic	declined: first operand: a cylinder not along the direction | general accepted
+d8_0069	0	cut	ExactAnalytic	declined: first operand: a cylinder not along the direction | general accepted
+d8_0070	0	cut	ExactAnalytic	general accepted
+d8_0071	0	cut	ExactAnalytic	general accepted
+d8_0072	0	fuse	ExactAnalytic	general accepted
+d8_0072	1	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0073	0	cut	ExactAnalytic	declined: first operand: a cylinder not along the direction | general accepted
+d8_0073	1	fuse	ExactAnalytic	general accepted
+d8_0074	0	cut	ExactPolyhedral	general invalid: BRep: ok; Mesh: 8 error(s) :: [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону: 86 at (4.63376, -3.67225, -0.76077) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (4.7661, -2.35505, -1.3067) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (4.76502, -2.30604, -1.32266)
+d8_0074	1	fuse	ExactPolyhedral	declined: polyhedral operand | general declined: polyhedral operand
+d8_0075	0	fuse	ExactAnalytic	general accepted
+d8_0076	0	fuse	ExactAnalytic	general accepted
+d8_0077	0	cut	ExactAnalytic	accepted
+d8_0078	0	cut	ExactAnalytic	general accepted
+d8_0079	0	cut	ExactAnalytic	general accepted
+d8_0080	0	fuse	ExactAnalytic	declined: first operand: a cylinder not along the direction | general accepted
+d8_0081	0	cut	ExactAnalytic	general accepted
+d8_0081	1	cut	ExactAnalytic	general accepted
+d8_0082	0	fuse	ExactPolyhedral	declined: first operand: a cylinder not along the direction | general invalid: BRep: ok; Mesh: 8 error(s) :: [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону: 43 at (-3.63828, -1.9158, -13.94002) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (-3.24367, -1.80723, -13.98908) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (-3.55786, -1.86578, -13.94995)
+d8_0083	0	cut	ExactAnalytic	general accepted
+d8_0084	0	cut	ExactAnalytic	general accepted
+d8_0085	0	common	ExactPolyhedral	general declined: the result is empty
+d8_0086	0	fuse	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0086	1	fuse	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0087	0	fuse	ExactAnalytic	general accepted
+d8_0088	0	cut	ExactAnalytic	general accepted
+d8_0088	1	fuse	ExactAnalytic	declined: no common direction | general accepted
+d8_0089	0	cut	ExactAnalytic	general accepted
+d8_0089	1	fuse	ExactAnalytic	general accepted
+d8_0090	0	common	ExactAnalytic	declined: no common direction | general accepted
+d8_0090	1	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0091	0	cut	ExactAnalytic	general accepted
+d8_0092	0	cut	ExactAnalytic	general accepted
+d8_0092	1	fuse	ExactAnalytic	declined: no common direction | general accepted
+d8_0093	0	cut	ExactAnalytic	general accepted
+d8_0093	1	cut	ExactAnalytic	general accepted
+d8_0094	0	common	ExactAnalytic	general accepted
+d8_0095	0	common	ExactAnalytic	general accepted
+d8_0095	1	common	ExactPolyhedral	general declined: the result is empty
+d8_0096	0	common	ExactAnalytic	general accepted
+d8_0096	1	fuse	ExactAnalytic	general accepted
+d8_0097	0	fuse	ExactAnalytic	general accepted
+d8_0098	0	fuse	ExactAnalytic	general accepted
+d8_0098	1	fuse	ExactPolyhedral	general invalid: 1 face(s) not meshed from their loops
+d8_0099	0	cut	ExactPolyhedral	general invalid: BRep: ok; Mesh: 8 error(s) :: [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону: 89 at (19.93876, -10.07225, 0.27684) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (16.61243, -6.72789, 0.19302) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (16.56074, -6.71293, 0.15061)
+d8_0099	1	cut	ExactPolyhedral	declined: polyhedral operand | general declined: polyhedral operand
+d8_0100	0	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0100	1	cut	ExactAnalytic	general accepted
+d8_0101	0	fuse	ExactAnalytic	general accepted
+d8_0102	0	fuse	ExactAnalytic	declined: no common direction | general accepted
+d8_0103	0	common	ExactAnalytic	general accepted
+d8_0103	1	fuse	ExactPolyhedral	general invalid: 1 face(s) not meshed from their loops
+d8_0104	0	fuse	ExactAnalytic	general accepted
+d8_0104	1	cut	ExactAnalytic	general accepted
+d8_0105	0	cut	ExactAnalytic	general accepted
+d8_0106	0	cut	ExactAnalytic	declined: first operand: a cylinder not along the direction | general accepted
+d8_0107	0	fuse	ExactAnalytic	general accepted
+d8_0107	1	common	ExactAnalytic	general accepted
+d8_0108	0	common	ExactAnalytic	general accepted
+d8_0108	1	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0109	0	common	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0109	1	cut	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0110	0	common	ExactAnalytic	general accepted
+d8_0110	1	fuse	ExactAnalytic	general accepted
+d8_0111	0	fuse	ExactAnalytic	general accepted
+d8_0112	0	fuse	ExactAnalytic	general accepted
+d8_0113	0	cut	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0113	1	cut	ExactPolyhedral	declined: first operand: a plane that is neither across nor along the direction | general invalid: BRep: 1 error(s); Mesh: ok :: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (ArcCurve3) на 1.44E-006 мм при допуске 1.00E-007 (элемент 23415)
+d8_0114	0	common	ExactPolyhedral	declined: no common direction | general declined: the result is empty
+d8_0115	0	cut	ExactAnalytic	declined: first operand: a cylinder not along the direction | general accepted
+d8_0115	1	cut	ExactPolyhedral	general invalid: 1 face(s) not meshed from their loops
+d8_0116	0	cut	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0117	0	cut	ExactAnalytic	accepted
+d8_0118	0	fuse	ExactPolyhedral	general invalid: 1 face(s) not meshed from their loops
+d8_0118	1	fuse	ExactPolyhedral	declined: polyhedral operand | general declined: polyhedral operand
+d8_0119	0	common	ExactAnalytic	declined: second operand: a cylinder not along the direction | general accepted
+d8_0120	0	cut	ExactAnalytic	general accepted
+d8_0121	0	cut	ExactAnalytic	general accepted
+d8_0121	1	cut	ExactAnalytic	general accepted
+d8_0122	0	fuse	ExactAnalytic	general accepted
+d8_0123	0	common	ExactAnalytic	general accepted
+d8_0124	0	cut	ExactAnalytic	general accepted
+d8_0125	0	cut	ExactAnalytic	general accepted
+d8_0125	1	cut	ExactAnalytic	general accepted
+d8_0126	0	cut	ExactAnalytic	general accepted
+d8_0127	0	cut	ExactAnalytic	general accepted
+d8_0128	0	cut	ExactAnalytic	general accepted
+d8_0129	0	cut	ExactAnalytic	general accepted
+d8_0129	1	cut	ExactAnalytic	general accepted
+d8_0130	0	common	ExactPolyhedral	general declined: the result is empty
+d8_0131	0	fuse	ExactAnalytic	general accepted
+d8_0131	1	cut	ExactAnalytic	general accepted
+d8_0132	0	cut	ExactAnalytic	general accepted
+d8_0133	0	fuse	ExactAnalytic	general accepted
+d8_0133	1	fuse	ExactPolyhedral	general invalid: BRep: ok; Mesh: 8 error(s) :: [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону: 46 at (-8.77574, 15.81755, -15.54214) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (-8.77574, 2.50877, -15.2033) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (-9.12358, 15.41864, -15.5647)
+d8_0134	0	fuse	ExactPolyhedral	declined: no common direction | general: CSG agreement 148/256
+d8_0134	1	cut	ExactPolyhedral	declined: polyhedral operand | general declined: polyhedral operand
+d8_0135	0	cut	ExactAnalytic	general accepted
+d8_0136	0	cut	ExactAnalytic	general accepted
+d8_0137	0	common	ExactAnalytic	general accepted
+d8_0138	0	cut	ExactAnalytic	general accepted
+d8_0138	1	fuse	ExactAnalytic	general accepted
+d8_0139	0	cut	ExactAnalytic	general accepted
+d8_0140	0	fuse	ExactAnalytic	accepted
+d8_0141	0	cut	ExactAnalytic	general accepted
+d8_0141	1	cut	ExactAnalytic	general accepted
+d8_0142	0	cut	ExactAnalytic	general accepted
+d8_0142	1	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0143	0	cut	ExactAnalytic	general accepted
+d8_0143	1	cut	ExactAnalytic	declined: first operand: a cylinder not along the direction | general accepted
+d8_0144	0	common	ExactAnalytic	declined: no common direction | general accepted
+d8_0145	0	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0146	0	cut	ExactAnalytic	general accepted
+d8_0147	0	cut	ExactAnalytic	general accepted
+d8_0147	1	cut	ExactAnalytic	general accepted
+d8_0148	0	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0149	0	common	ExactAnalytic	general accepted
+d8_0150	0	cut	ExactPolyhedral	general invalid: BRep: ok; Mesh: 8 error(s) :: [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону: 43 at (-8.2679, -10.30061, 5.04345) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (-7.80137, -9.78843, 5.04345) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (-7.7669, -10.29881, 5.04345)
+d8_0150	1	cut	ExactPolyhedral	declined: polyhedral operand | general declined: polyhedral operand
+d8_0151	0	cut	ExactAnalytic	general accepted
+d8_0152	0	fuse	ExactAnalytic	general accepted
+d8_0153	0	cut	ExactAnalytic	general accepted
+d8_0153	1	common	ExactPolyhedral	general declined: the result is empty
+d8_0154	0	common	ExactAnalytic	declined: second operand: a cylinder not along the direction | general accepted
+d8_0154	1	cut	ExactPolyhedral	declined: first operand: a cylinder not along the direction | general declined: face split: a hole lies in no region
+d8_0155	0	cut	ExactAnalytic	general accepted
+d8_0156	0	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0157	0	cut	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0158	0	cut	ExactPolyhedral	declined: no common direction | general: CSG agreement 120/256
+d8_0159	0	fuse	ExactAnalytic	declined: second operand: a cylinder not along the direction | general accepted
+d8_0159	1	fuse	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0160	0	fuse	ExactAnalytic	accepted
+d8_0161	0	common	ExactAnalytic	general accepted
+d8_0162	0	cut	ExactPolyhedral	general invalid: BRep: ok; Mesh: 3 error(s) :: [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону: 3 at (5.94441, 2.43853, 6.58082) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (5.96716, 2.4614, 6.52316) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (5.95658, 2.45092, 8.98946)
+d8_0163	0	fuse	ExactAnalytic	general accepted
+d8_0164	0	cut	ExactPolyhedral	general invalid: BRep: ok; Mesh: 3 error(s) :: [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону: 3 at (6.69676, 2.05453, 11.26094) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (6.69215, 2.01534, 11.2359) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (7.83957, 2.57979, 13.04549)
+d8_0164	1	fuse	ExactPolyhedral	declined: polyhedral operand | general declined: polyhedral operand
+d8_0165	0	common	ExactAnalytic	declined: second operand: a cylinder not along the direction | general accepted
+d8_0166	0	cut	ExactAnalytic	general accepted
+d8_0166	1	common	ExactAnalytic	general accepted
+d8_0167	0	cut	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0168	0	cut	ExactAnalytic	declined: first operand: a cylinder not along the direction | general accepted
+d8_0168	1	cut	ExactAnalytic	general accepted
+d8_0169	0	cut	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0169	1	cut	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0170	0	cut	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0171	0	cut	ExactAnalytic	general accepted
+d8_0171	1	fuse	ExactAnalytic	general accepted
+d8_0172	0	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0173	0	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0174	0	common	ExactAnalytic	declined: no common direction | general accepted
+d8_0175	0	common	ExactAnalytic	general accepted
+d8_0176	0	fuse	ExactAnalytic	general accepted
+d8_0176	1	cut	ExactAnalytic	general accepted
+d8_0177	0	cut	ExactAnalytic	general accepted
+d8_0178	0	cut	ExactAnalytic	general accepted
+d8_0178	1	fuse	ExactAnalytic	declined: first operand: a cylinder not along the direction | general accepted
+d8_0179	0	cut	ExactAnalytic	general accepted
+d8_0180	0	fuse	ExactPolyhedral	declined: first operand: a cylinder not along the direction | general invalid: 1 face(s) not meshed from their loops
+d8_0181	0	fuse	ExactAnalytic	general accepted
+d8_0181	1	cut	ExactAnalytic	general accepted
+d8_0182	0	common	ExactPolyhedral	general declined: the result is empty
+d8_0183	0	cut	ExactAnalytic	declined: first operand: a plane that is neither across nor along the direction | general accepted
+d8_0184	0	common	ExactAnalytic	general accepted
+d8_0185	0	common	ExactPolyhedral	general declined: the result is empty
+d8_0186	0	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0186	1	common	ExactAnalytic	general accepted
+d8_0187	0	cut	ExactAnalytic	general accepted
+d8_0187	1	cut	ExactAnalytic	general accepted
+d8_0188	0	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0189	0	cut	ExactPolyhedral	general invalid: BRep: ok; Mesh: 8 error(s) :: [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону: 9 at (4.47133, 2.43713, -1.69489) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (3.98007, 0.52401, -3.33436) / [Mesh/Error] orientation: сторон, обходимых обеими сторонами в одну сторону at (3.90603, 0.31691, -3.53635)
+d8_0189	1	fuse	ExactPolyhedral	declined: polyhedral operand | general declined: polyhedral operand
+d8_0190	0	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0191	0	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0191	1	cut	ExactAnalytic	general accepted
+d8_0192	0	common	ExactPolyhedral	general declined: the result is empty
+d8_0193	0	cut	ExactAnalytic	general accepted
+d8_0193	1	common	ExactPolyhedral	general declined: the result is empty
+d8_0194	0	fuse	ExactAnalytic	general accepted
+d8_0195	0	cut	ExactAnalytic	general accepted
+d8_0195	1	cut	ExactAnalytic	general accepted
+d8_0196	0	common	ExactPolyhedral	general declined: the result is empty
+d8_0197	0	common	ExactPolyhedral	general declined: the result is empty
+d8_0198	0	common	ExactPolyhedral	declined: no common direction | general declined: the result is empty
+d8_0199	0	cut	ExactAnalytic	declined: no common direction | general accepted
+d8_0199	1	common	ExactPolyhedral	general declined: face split: torus: a hole between several bands (not yet supported)

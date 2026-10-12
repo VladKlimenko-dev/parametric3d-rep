@@ -1,0 +1,9 @@
+numerics rc=0 t=.711706559s :: {"passed":6,"failed":0}
+rotations rc=0 t=3.480336834s :: {"passed":44,"failed":0}
+suite rc=0 t=5.010111364s :: {"passed":64,"failed":0}
+target rc=0 t=1.491077643s :: {"passed":4,"failed":0}
+a01-tests rc=0 t=.644178894s :: {"passed":39,"failed":0}
+a01-corpus rc=0 t=.907314974s :: {"passed":100,"failed":0}
+a01-sequences rc=0 t=12.243446394s :: {"passed":450,"failed":0}
+a03-hints rc=0 t=.240725091s :: {"passed":1002,"failed":0}
+a04-cylinder rc=0 t=7.206510970s :: {"passed":104,"failed":0,"accepted":88,"declined":8}

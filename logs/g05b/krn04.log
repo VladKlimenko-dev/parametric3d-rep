@@ -1,0 +1,2 @@
+k4_094  occt-wrong? WRONG: ours 9442.16 vs OCCT 9424.78 (tol 0.00946); Monte-Carlo 9442.31±0.24 → ours closer  [fuse] loop inside cylinder face (fuse)
+DIFF: agree 95, refused 0, WRONG 0, occt-failed 1, ours-exception 0 (of 96)
