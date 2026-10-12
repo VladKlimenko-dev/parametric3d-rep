@@ -13,6 +13,15 @@ public static class ProvenanceBySurface
 {
     static object Key(TFace f) => f.Surface is FacetedSurface fs && fs.Source != null ? fs.Source : f.Surface;
 
+    /// <summary>Карта годна для результата: каждая грань результата в ней, источники — грани входа.</summary>
+    public static bool Covers(Provenance? pv, TSolid result, IReadOnlyList<TSolid> inputs)
+    {
+        if (pv == null) return false;
+        var inputSet = new HashSet<TFace>(inputs.SelectMany(b => b.Faces), ReferenceEqualityComparer.Instance);
+        var mapped = new HashSet<TFace>(pv.Faces.Select(x => x.Result), ReferenceEqualityComparer.Instance);
+        return result.Faces.All(mapped.Contains) && pv.Faces.All(x => x.Source == null || inputSet.Contains(x.Source));
+    }
+
     /// <summary>
     /// Карта составной операции: от грани результата — по картам промежуточных тел (каждая булева записала свою относительно
     /// своих операндов) до грани входа; не дошли (грань резца, тело без карты) — по тождеству поверхностей; иначе новая.

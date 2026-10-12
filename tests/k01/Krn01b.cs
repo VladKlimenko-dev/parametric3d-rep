@@ -69,6 +69,16 @@ static partial class Program
                     if (!needNew && gen > 0) fails.Add($"{name}: {gen} face(s) without a source (copies must trace to the input)");
                 }
             }
+            {   // особые маршруты отверстия (мимо контракта операций): карта у тела детали — стенка новая, прочие из граней входа
+                foreach (var (name, build) in HoleContractCases().Where(c => c.Name is "quadric-through" or "exact-through (tilted)" or "cross-hole"))
+                {
+                    var (p, h) = build();
+                    var pm = p.Bodies.Count == 1 ? p.Bodies[0].Provenance : null;
+                    if (pm == null) { fails.Add($"hole {name}: provenance missing ({Trace(h)})"); continue; }
+                    int all = p.Bodies[0].Faces.Count(), gen = pm.Faces.Count(x => x.Kind == FaceOrigin.Generated), src = pm.Faces.Count(x => x.Source != null);
+                    if (pm.Faces.Count != all || gen == 0 || src == 0) fails.Add($"hole {name}: provenance {pm.Faces.Count} of {all}, generated {gen}, from input {src}");
+                }
+            }
             {   // оболочка
                 var r = OperationContract.Run("Shell", new List<TSolid> { Box(0, 0, 0, 40, 30, 20) }, l => ShellOp.Hollow(l, 2, new List<Vector3d> { new(20, 15, 20) }, new List<string>()));
                 if (!r.Accepted || r.Accuracy == null) fails.Add($"shell: {r.Outcome} accuracy {r.Accuracy}");

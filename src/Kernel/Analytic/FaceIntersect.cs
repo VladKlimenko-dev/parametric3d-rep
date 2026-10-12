@@ -52,6 +52,35 @@ public static class FaceIntersect
         return (lo - m, hi + m);
     }
 
+    /// <summary>
+    /// KRN-10 (10.1): ПАРЫ-КАНДИДАТЫ ПРОХОДОМ ПО ОСИ (sort and sweep): концы габаритов обоих наборов по X упорядочены;
+    /// открытые на момент начала габарита одного набора габариты другого — кандидаты по X, у них проверяются Y и Z.
+    /// Сравнений — по числу перекрытий по X, а не n·m. Ключ пары — (ia &lt;&lt; 32) | ib.
+    /// </summary>
+    public static HashSet<long> SweepPairs(IReadOnlyList<(Vector3d Lo, Vector3d Hi)> a, IReadOnlyList<(Vector3d Lo, Vector3d Hi)> b)
+    {
+        var ev = new List<(double X, int Kind, int Set, int Idx)>(2 * (a.Count + b.Count));   // Kind: 0 — начало, 1 — конец
+        for (int i = 0; i < a.Count; i++) { ev.Add((a[i].Lo.X, 0, 0, i)); ev.Add((a[i].Hi.X, 1, 0, i)); }
+        for (int i = 0; i < b.Count; i++) { ev.Add((b[i].Lo.X, 0, 1, i)); ev.Add((b[i].Hi.X, 1, 1, i)); }
+        ev.Sort((p, q) => p.X != q.X ? p.X.CompareTo(q.X) : p.Kind.CompareTo(q.Kind));   // при равенстве начало раньше конца (касание — пересечение)
+        var openA = new HashSet<int>(); var openB = new HashSet<int>(); var res = new HashSet<long>();
+        foreach (var (_, kind, set, idx) in ev)
+        {
+            if (kind == 1) { (set == 0 ? openA : openB).Remove(idx); continue; }
+            if (set == 0)
+            {
+                foreach (int j in openB) { Diagnostics.Prof.Count("общая: сравнений габаритов", 1); if (BoxesMeet(a[idx], b[j])) res.Add(((long)idx << 32) | (uint)j); }
+                openA.Add(idx);
+            }
+            else
+            {
+                foreach (int i in openA) { Diagnostics.Prof.Count("общая: сравнений габаритов", 1); if (BoxesMeet(a[i], b[idx])) res.Add(((long)i << 32) | (uint)idx); }
+                openB.Add(idx);
+            }
+        }
+        return res;
+    }
+
     public static bool BoxesMeet((Vector3d Lo, Vector3d Hi) a, (Vector3d Lo, Vector3d Hi) b) =>
         !(a.Lo.X > b.Hi.X || b.Lo.X > a.Hi.X || a.Lo.Y > b.Hi.Y || b.Lo.Y > a.Hi.Y || a.Lo.Z > b.Hi.Z || b.Lo.Z > a.Hi.Z);
 

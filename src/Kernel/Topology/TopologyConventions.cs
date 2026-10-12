@@ -68,10 +68,15 @@ public static class TopologyConventions
     /// если всё согласовано (кольца замкнуты, противоречий нет, каждая компонента опознана).
     /// </summary>
     public static Report Normalize(TSolid solid) => Run(solid, apply: true);
+    /// <summary>Мутация P3D_NORMPROV=0: приведение к соглашению теряет карту происхождения (прежде).</summary>
+    static readonly bool KeepProvOff = Environment.GetEnvironmentVariable("P3D_NORMPROV") == "0";
 
     private static Report Run(TSolid solid, bool apply)
     {
+        // KRN-01 (01.5): соглашение не меняет граней (только обход полурёбер) — карта происхождения остаётся годной
+        var keepProv = apply && !KeepProvOff ? solid.Provenance : null;
         if (apply) solid.BeginEdit("TopologyConventions.Normalize", EditKind.Layout);
+        if (keepProv != null) solid.SetProvenance(keepProv);
         var rep = new Report();
         var rings = new List<Ring>();
         var faces = solid.Faces.ToList();

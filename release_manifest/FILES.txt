@@ -52,6 +52,7 @@ src/Kernel/Export/IgesFile.cs
 src/Kernel/Export/IgesImport.cs
 src/Kernel/Export/IgesParser.cs
 src/Kernel/Export/IgesSolid.cs
+src/Kernel/Export/ImportHeal.cs
 src/Kernel/Export/MeshExport.cs
 src/Kernel/Export/StepExact.cs
 src/Kernel/Export/StepImport.cs
@@ -397,6 +398,7 @@ tests/k01/Globals.cs
 tests/k01/Guarantees.cs
 tests/k01/HoleContractProbe.cs
 tests/k01/HoleRoutes.cs
+tests/k01/ImportHealProbe.cs
 tests/k01/InstanceProbe.cs
 tests/k01/K01Checks.csproj
 tests/k01/K03.cs
@@ -429,6 +431,7 @@ tests/k01/Krn07c.cs
 tests/k01/Krn08.cs
 tests/k01/Krn08Prov.cs
 tests/k01/Krn09.cs
+tests/k01/Krn09ImportHeal.cs
 tests/k01/Krn10Pairs.cs
 tests/k01/LongChain.cs
 tests/k01/LongHistory.cs
