@@ -10,7 +10,7 @@ WEIGHTS = {"KRN-00": 2, "KRN-01": 5, "KRN-02": 6, "KRN-03": 8, "KRN-04": 10, "KR
            "KRN-06": 18, "KRN-07": 18, "KRN-08": 8, "KRN-09": 7, "KRN-10": 5, "KRN-11": 3}
 path = sys.argv[1] if len(sys.argv) > 1 else "src/docs/release/PROGRESS_ITEMS.tsv"
 rows = []
-for line in open(path, encoding="utf-8"):
+for line in open(path, encoding="utf-8-sig"):
     if line.startswith("#") or line.startswith("kind\t") or not line.strip():
         continue
     k, g, i, s, req, ev = (line.rstrip("\n").split("\t") + [""] * 6)[:6]
