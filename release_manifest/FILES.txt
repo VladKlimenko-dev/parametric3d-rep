@@ -414,6 +414,7 @@ tests/k01/Krn01b.cs
 tests/k01/Krn02.cs
 tests/k01/Krn02UvMetric.cs
 tests/k01/Krn03.cs
+tests/k01/Krn03FaceComp.cs
 tests/k01/Krn04.cs
 tests/k01/Krn04Seam.cs
 tests/k01/Krn05.cs
