@@ -302,6 +302,235 @@ static partial class Program
 
     static void Krn04Checks()
     {
+        Check("KRN05-SEW-IDENTIFIES-SAME-ONLY", () =>
+        {
+            // 05.6: сшивка после сборки только ОТОЖДЕСТВЛЯЕТ совпадающее: парные открытые рёбра с общими концами сливаются,
+            // если это доказанно та же кривая (до точности модели), а не «середины ближе 1e-6». Отрезок и дуга через те же
+            // концы со стрелой 5e-7 мм (больше точности модели) — не сливаются (прежде сливались); тот же эллипс с другой
+            // начальной точкой и та же дуга — сливаются. Мутация P3D_MERGEGUARD=0.
+            var fails = new List<string>();
+            var A = new Vector3d(0, 0, 0); var B = new Vector3d(10, 0, 0); double sag = 5e-7;
+            double R = (25 + sag * sag) / (2 * sag); var C = new Vector3d(5, sag - R, 0);
+            double a0 = Math.Atan2(A.Y - C.Y, A.X - C.X), a1 = Math.Atan2(B.Y - C.Y, B.X - C.X);
+            var arc = new ArcCurve3(new Frame3(C, Vector3d.UnitX, Vector3d.UnitY), R, a0, a1);
+            var line = new LineCurve3(A, B);
+            bool m1 = Parametric3D.Kernel.Analytic.GeneralBoolean.SewMergeable(line, arc);
+            var f1 = new Frame3(new Vector3d(1, 2, 3), Vector3d.UnitX, Vector3d.UnitY);
+            var e1 = new EllipseCurve3(f1, 6, 4, 0, Math.PI); var e2 = new EllipseCurve3(new Frame3(f1.Origin, -Vector3d.UnitX, -Vector3d.UnitY), 6, 4, -Math.PI, 0);
+            bool m2 = Parametric3D.Kernel.Analytic.GeneralBoolean.SewMergeable(e1, e2);
+            var c1 = new ArcCurve3(f1, 5, 0.3, 2.1); var c2 = new ArcCurve3(f1, 5, 0.3, 2.1);
+            bool m3 = Parametric3D.Kernel.Analytic.GeneralBoolean.SewMergeable(c1, c2);
+            Log(new { test = "KRN05-SEW", lineVsArc5e7 = m1, sameEllipseShifted = m2, sameArc = m3, sagitta = (line.PointAt(0.5) - arc.PointAt(0.5)).Length });
+            if (m1) fails.Add("a segment and an arc 5e-7 apart are merged");
+            if (!m2) fails.Add("the same half-ellipse with another frame is not merged");
+            if (!m3) fails.Add("the same arc is not merged");
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+        Check("KRN04-COMMON-VERTICES", () =>
+        {
+            // 04.4/04.6: ОБЩИЕ ВЕРШИНЫ И ТОЧКИ РАЗРЕЗА — одно событие до точности модели (1e-7 мм). Вершины результата, узлы
+            // графа разреза и точки разреза рёбер сводятся по расстоянию лишь до округления одного события; две РАЗНЫЕ точки
+            // ближе допуска слияния (2e-5), но дальше точности модели — отказ маршрута, а не молчаливое слияние; часть кривой
+            // внутри обеих граней уже допуска — тоже отказ (прежде терялась). Требования:
+            //   угол бруска, срезанный плоскостью x + y + z = 30 − s: s = 1e-3 — ExactAnalytic, объём 1000 − s³/6 до 1e-12;
+            //   s = 2e-6 — не ExactAnalytic (прежде: ExactAnalytic с целым углом, вершина вне точного тела на 1.2e-6 мм);
+            //   на всех операциях проверки сведённые по расстоянию точки не дальше точности модели.
+            // Мутация P3D_MERGEGUARD=0.
+            var fails = new List<string>();
+            double maxMerge = 0; Parametric3D.Kernel.Analytic.GeneralBoolean.MergeDebug = (x, y) => maxMerge = Math.Max(maxMerge, (x - y).Length);
+            long far0 = Parametric3D.Kernel.Analytic.GeneralBoolean.VertexMergedFar + Parametric3D.Kernel.Analytic.FaceSplit.NodeMergedFar + Parametric3D.Kernel.Analytic.FaceSplit.CutFar;
+            try
+            {
+                TSolid? Corner(double sc, out GuaranteeLevel g, out List<string> w)
+                {
+                    var bl = new List<TSolid> { Box(0, 0, 0, 10, 10, 10) }; w = new List<string>();
+                    var n = new Vector3d(1, 1, 1).Normalized();
+                    var axis = Vector3d.Cross(Vector3d.UnitZ, n).Normalized(); double ang = Math.Acos(Vector3d.Dot(Vector3d.UnitZ, n)) * 180 / Math.PI;
+                    var tool = TransformOp.Copy(TransformOp.Copy(Box(-50, -50, 0, 100, 100, 50), TransformOp.Rotate(Vector3d.Zero, axis, ang)), TransformOp.Move(n * ((30 - sc) / Math.Sqrt(3))));
+                    BooleanOp.Subtract(bl, tool, w);
+                    g = bl.Count == 1 ? bl[0].Guarantee : GuaranteeLevel.ExactPolyhedral;
+                    return bl.Count == 1 ? bl[0] : null;
+                }
+                var b1 = Corner(1e-3, out var g1, out var w1);
+                double? v1 = b1 == null ? null : AnalyticVolume.Of(b1); double want1 = 1000 - 1e-9 / 6;
+                bool ok1 = g1 == GuaranteeLevel.ExactAnalytic && v1 is double vv && Math.Abs(vv - want1) <= 1e-12 * 1000 && SolidValidator.Validate(b1!).IsValid && b1!.Faces.Count() == 7;
+                Log(new { test = "KRN04-COMMON-VERTICES", corner = 1e-3, guarantee = g1.ToString(), volume = v1, want = want1, ok = ok1 });
+                if (!ok1) fails.Add($"corner 1e-3: {g1} V {v1} want {want1} | {string.Join(" | ", w1.Take(2))}");
+                var b2 = Corner(2e-6, out var g2, out var w2);
+                Log(new { test = "KRN04-COMMON-VERTICES", corner = 2e-6, guarantee = g2.ToString() });
+                if (g2 == GuaranteeLevel.ExactAnalytic) fails.Add($"corner 2e-6: accepted as ExactAnalytic with {b2?.Faces.Count()} faces (the 2e-6 corner facet is below the merge tolerance)");
+                // обычные операции: слияния — только округление
+                var cyl = new List<TSolid> { PrimitiveOp.Cylinder(new Vector3d(0, 0, 0), 8, 20) };
+                BooleanOp.Subtract(cyl, TransformOp.Copy(Box(-3, -20, 5, 6, 40, 6), TransformOp.Rotate(new Vector3d(0, 0, 8), Vector3d.UnitX, 25)), new List<string>());
+                BooleanOp.Unite(cyl, PrimitiveOp.Sphere(new Vector3d(0, 0, 20), 5), new List<string>());
+                long far = Parametric3D.Kernel.Analytic.GeneralBoolean.VertexMergedFar + Parametric3D.Kernel.Analytic.FaceSplit.NodeMergedFar + Parametric3D.Kernel.Analytic.FaceSplit.CutFar - far0;
+                Log(new { test = "KRN04-COMMON-VERTICES", maxMergeDistance = maxMerge, farMerges = far, chain = cyl[0].Guarantee.ToString() });
+                if (maxMerge > ToleranceContext.Current.ModelAccuracy) fails.Add($"points merged {maxMerge:G3} mm apart (model accuracy {ToleranceContext.Current.ModelAccuracy:G3})");
+                if (cyl.Count != 1 || cyl[0].Guarantee != GuaranteeLevel.ExactAnalytic) fails.Add($"cylinder chain: {string.Join(",", cyl.Select(b => b.Guarantee))}");
+            }
+            finally { Parametric3D.Kernel.Analytic.GeneralBoolean.MergeDebug = null; }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+        Check("KRN04-EVENTS-RIGOROUS-ALL", () =>
+        {
+            // 04.2: строгие события для рёбер и поверхностей без алгебраического решения (RigorousEvents, Кравчик по кускам
+            // Безье). Пары близких корней (почти касание, расстояние между корнями 1e-4…3e-3 мм — меньше шага выборки):
+            //   сплайн (рациональная окружность R10) × плоскость на расстоянии 10 − δ от центра (нормаль (1, 0.03)) — 2 корня;
+            //   отрезок × грань NURBS (четверть цилиндра R10) на расстоянии 10 − δ от оси — 2 корня;
+            //   ребро NURBS × неявная (окружность R12 = тор NURBS ∩ плоскость z = 0) × плоскость x = 12 − δ — 2 корня;
+            //   ребро NURBS × NURBS (та же окружность: тор NURBS ∩ плоскость NURBS) × плоскость x = 12 − δ — 2 корня.
+            // Требование: ровно 2 события на месте (до 1e-9 мм). Прежде (выборка 512…8192 и 1024 отсчёта): 1 или 0 событий.
+            // Мутация P3D_RIGOREVENTS=0.
+            var fails = new List<string>();
+            double s2 = Math.Sqrt(0.5);
+            void Expect(string name, List<Vector3d> got, List<Vector3d> want)
+            {
+                bool ok = got.Count == want.Count && want.All(w => got.Any(g => (g - w).Length <= 1e-9));
+                Log(new { test = "KRN04-EVENTS-RIGOROUS", name, got = got.Count, want = want.Count, ok });
+                if (!ok) fails.Add($"{name}: {got.Count} event(s) [{string.Join(" ", got.Select(p => p.ToString("0.#########")))}], want {want.Count} [{string.Join(" ", want.Select(p => p.ToString("0.#########")))}]");
+            }
+            // сплайн: полная окружность R10 в z = 0 (рациональная квадратичная, 9 точек)
+            var cx = new[] { 1.0, 1, 0, -1, -1, -1, 0, 1, 1 }; var cy = new[] { 0.0, 1, 1, 1, 0, -1, -1, -1, 0 };
+            var circ = new SplineCurve3(Enumerable.Range(0, 9).Select(i => new Vector3d(10 * cx[i], 10 * cy[i], 0)).ToList(), 2,
+                new[] { 1, s2, 1, s2, 1, s2, 1, s2, 1 }, new[] { 0, 0, 0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1, 1, 1 });
+            foreach (double d in new[] { 1e-6, 1e-8, 1e-10 })
+            {
+                var nrm = new Vector3d(1, 0.03, 0).Normalized(); var pl = new Parametric3D.Kernel.Geometry.Ssi.Plane(nrm * (10 - d), nrm);
+                var ev = Parametric3D.Kernel.Analytic.SsiEvents.CurveSurface(circ, pl, out _).Select(t => circ.PointAt(t)).ToList();
+                // прямая n·p = n·p0 в плоскости z = 0 и окружность R10: корни квадратного уравнения по параметру вдоль прямой
+                var nn = pl.N.Normalized(); var p0 = pl.P; var dir = new Vector3d(-nn.Y, nn.X, 0);
+                double bq = 2 * Vector3d.Dot(p0, dir), cq = p0.LengthSquared - 100, dsc = bq * bq - 4 * cq;
+                var want = dsc < 0 ? new List<Vector3d>() : new List<Vector3d> { p0 + dir * ((-bq - Math.Sqrt(dsc)) / 2), p0 + dir * ((-bq + Math.Sqrt(dsc)) / 2) };
+                Expect($"spline circle × plane δ {d}", ev, want);
+            }
+            // отрезок × четверть цилиндра NURBS R10 (z 0…20)
+            {
+                var cp = new Vector3d[3, 2]; var w = new double[3, 2];
+                var xy = new[] { new Vector3d(10, 0, 0), new Vector3d(10, 10, 0), new Vector3d(0, 10, 0) }; var wc = new[] { 1, s2, 1 };
+                for (int i = 0; i < 3; i++) for (int j = 0; j < 2; j++) { cp[i, j] = xy[i] + new Vector3d(0, 0, 20 * j); w[i, j] = wc[i]; }
+                var S = new Parametric3D.Kernel.Surfaces.NurbsSurface(cp, 2, 1, w);
+                foreach (double d in new[] { 1e-6, 1e-7 })
+                {
+                    // прямая x + y = (10 − δ)√2 в z = 7 (по нормали к оси на 45°)
+                    double c0 = (10 - d) * Math.Sqrt(2); var dir = new Vector3d(-1, 1, 0).Normalized();
+                    var mid = new Vector3d(c0 / 2, c0 / 2, 7); var L = new LineCurve3(mid - dir * 8, mid + dir * 8);
+                    var got = Parametric3D.Kernel.Analytic.RigorousEvents.OnNurbs(L, S, 0, 1, 0, 1)?.Select(t => L.PointAt(t)).ToList() ?? new List<Vector3d>();
+                    double h = Math.Sqrt(100 - (10 - d) * (10 - d));
+                    Expect($"line × NURBS cylinder δ {d}", got, new() { mid - dir * h, mid + dir * h });
+                }
+            }
+            // рёбра NURBS: окружность R12 (тор NURBS R10 r2 ∩ плоскость z = 0)
+            {
+                var T = NurbsTorus(10, 2);
+                var r1 = Parametric3D.Kernel.Geometry.NurbsSsi.Intersect(T, 0, 1, 0, 1, new Parametric3D.Kernel.Geometry.Ssi.Plane(Vector3d.Zero, Vector3d.UnitZ), 13);
+                var P0 = new Parametric3D.Kernel.Geometry.NurbsNurbsSsi.Rect(0, 1, 0, 1);
+                var r2 = Parametric3D.Kernel.Geometry.NurbsNurbsSsi.Intersect(T, P0, NurbsPlane(Vector3d.Zero, Vector3d.UnitZ, 15), P0, 13);
+                foreach (var (kind, curves) in new[] { ("NURBS × implicit", r1.Curves), ("NURBS × NURBS", r2.Curves) })
+                {
+                    // ветвь R12 (внешняя), куски у шва — все
+                    var outer = curves.Where(cv => cv.PointAt(0.5).Xy.Length > 11).ToList();
+                    foreach (double d in new[] { 1e-7 })
+                    {
+                        var pl = new Parametric3D.Kernel.Geometry.Ssi.Plane(new Vector3d(0, 12 - d, 0), Vector3d.UnitY);
+                        var got = new List<Vector3d>();
+                        foreach (var cv in outer) got.AddRange(Parametric3D.Kernel.Analytic.SsiEvents.CurveSurface(cv, pl, out _).Select(t => cv.PointAt(t)));
+                        double x = Math.Sqrt(144 - (12 - d) * (12 - d));
+                        Expect($"{kind} edge × plane δ {d}", got, new() { new Vector3d(x, 12 - d, 0), new Vector3d(-x, 12 - d, 0) });
+                    }
+                }
+            }
+            // цепочка на теле с гранью NURBS: срез x > 8 режет дугу-сплайн основания (остаётся часть сплайна), затем паз
+            // y ∈ [3, 4] режет эту часть: её события с плоскостями паза — строго (часть сплайна — сплайн, P3D_SUBSPLINE;
+            // прежде — процедурная кривая с выборкой). Эталон — те же операции над четвертью цилиндра из примитивов.
+            {
+                List<TSolid> Run(TSolid b0)
+                {
+                    var bl = new List<TSolid> { b0 };
+                    BooleanOp.Subtract(bl, Box(8, -5, -5, 10, 20, 30), new List<string>());
+                    BooleanOp.Subtract(bl, Box(-5, 3, -5, 20, 1, 30), new List<string>());
+                    return bl;
+                }
+                var nb = Run(TopologyClone.Deep(NurbsQuarterCylinder()));
+                var ab = new List<TSolid> { Box(0, 0, 0, 10, 10, 20) }; BooleanOp.Intersect(ab, PrimitiveOp.Cylinder(new Vector3d(0, 0, -1), 10, 22), new List<string>());
+                var rb = Run(ab[0]);
+                double vn = nb.Sum(b => AnalyticVolume.Of(b) ?? double.NaN), vr = rb.Sum(b => AnalyticVolume.Of(b) ?? double.NaN);
+                bool ok = nb.Count == rb.Count && nb.All(b => b.Guarantee == Parametric3D.Kernel.GuaranteeLevel.ExactAnalytic && SolidValidator.Validate(b).IsValid) && Math.Abs(vn - vr) <= 1e-8 * vr;
+                Log(new { test = "KRN04-EVENTS-RIGOROUS", name = "NURBS chain: sub-spline edge cut again", bodies = nb.Count, guarantee = string.Join(",", nb.Select(b => b.Guarantee)), vn, vr, ok });
+                if (!ok) fails.Add($"NURBS chain: {nb.Count} bodies {string.Join(",", nb.Select(b => b.Guarantee))} V {vn} vs {vr}");
+            }
+            // интервалы ребра в СОВПАДАЮЩЕЙ грани (общая булева, копланарные грани): верхняя грань бруска с эллиптическим
+            // отверстием (наклонный цилиндр r5 под 30°: полуоси 5/cos30° и 5) и отрезок y = 25 − δ в её плоскости — почти
+            // касается эллипса сверху: внутри грани — два интервала, между ними хорда эллипса длиной 2a√(1 − (1 − δ/b)²).
+            // Прежде для эллипса вспомогательной поверхности не было — выборка 512 точек (шаг 0.08 мм) хорды 0.007 мм не
+            // видела. Теперь эллипс — сечение круглого цилиндра радиуса b, наклонённого на arccos(b/a) (P3D_BNDRIGOR).
+            {
+                var bl = new List<TSolid> { Box(0, 0, 0, 40, 40, 10) };
+                var cyl = TransformOp.Copy(PrimitiveOp.Cylinder(new Vector3d(20, 20, -20), 5, 60), TransformOp.Rotate(new Vector3d(20, 20, 5), Vector3d.UnitY, 30));
+                BooleanOp.Subtract(bl, cyl, new List<string>());
+                var top = bl[0].Faces.FirstOrDefault(f => Parametric3D.Kernel.Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) is Parametric3D.Kernel.Geometry.Ssi.Plane pz
+                                                      && Math.Abs(Math.Abs(pz.N.Normalized().Z) - 1) < 1e-12 && Math.Abs(pz.P.Z * Math.Sign(pz.N.Z) * pz.N.Normalized().Z - 10) < 1e-9 && f.Loops.Count == 2);
+                if (top == null) fails.Add("box top with the elliptic hole not found");
+                else
+                {
+                    var el = top.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge.Curve).OfType<EllipseCurve3>().FirstOrDefault();
+                    if (el == null) fails.Add("elliptic edge not found");
+                    else
+                    {
+                        double a = Math.Max(el.RU, el.RV), b = Math.Min(el.RU, el.RV); var cen = el.Frame.Origin;
+                        var minor = el.RU < el.RV ? el.Frame.U : el.Frame.V;
+                        foreach (double d in new[] { 1e-4, 1e-6 })
+                        {
+                            // отрезок вдоль большой оси на расстоянии b − δ от центра
+                            var major = el.RU >= el.RV ? el.Frame.U : el.Frame.V;
+                            var p0 = cen + minor * (b - d) - major * 15; var p1 = cen + minor * (b - d) + major * 15;
+                            var L = new LineCurve3(p0, p1);
+                            var runs = Parametric3D.Kernel.Analytic.GeneralBoolean.EdgeRunsForTest(L, top, out var unres);
+                            double half = a * Math.Sqrt(1 - (1 - d / b) * (1 - d / b));
+                            double tA = (15 - half) / 30, tB = (15 + half) / 30;
+                            bool ok = runs != null && unres == null && runs.Count == 2 && Math.Abs(runs[0].E - tA) < 1e-9 && Math.Abs(runs[1].S - tB) < 1e-9;
+                            Log(new { test = "KRN04-EVENTS-RIGOROUS", name = $"coincident face runs across an ellipse δ {d}", runs = runs?.Select(r => $"{r.S:R}..{r.E:R}"), unres, ok });
+                            if (!ok) fails.Add($"coincident runs δ {d}: {(runs == null ? "null" : string.Join(" ", runs.Select(r => $"[{r.S:G9},{r.E:G9}]")))} {unres}; want gap [{tA:G9},{tB:G9}]");
+                        }
+                    }
+                }
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+        Check("KRN04-EVENTS-TRACED-RIGOROUS", () =>
+        {
+            // 04.2: СОБЫТИЯ НА РЕБРЕ — ПРОСЛЕЖЕННОЙ КРИВОЙ. Тор (R10, r3) минус вертикальный цилиндр r1.5 через трубку: рёбра —
+            // кривые пересечения тор × цилиндр. Плоскость z = верх − δ режет верхнее ребро у его наивысших точек: точки ребра на
+            // этой высоте — на торе ρ = 10 ± √(6δ − δ²) и на окружности цилиндра — ровно 4 (при δ → 0 попарно сближаются, у
+            // δ 1e-8 — на ~1e-3 мм). Прежде — выборка 512 отсчётов (шаг ~0.02 мм) с уточнением локальных минимумов: при δ ≤ 1e-7
+            // находилось 2 из 4. Теперь (SsiEvents.TracedEvents): звенья — в шарах единственности ветви, исключение по Липшицу,
+            // монотонность F вдоль дуги по тройному произведению нормалей, иначе деление звена. Требование: 4 события на
+            // верхнем ребре (на плоскости, торе и цилиндре до 1e-9, попарно различны), 0 — на нижнем. Мутация P3D_TRACEDEVENTS=0.
+            var fails = new List<string>();
+            var c = new Vector3d(1, 2, 3);
+            var bl = new List<TSolid> { PrimitiveOp.Torus(c, 10, 3) };
+            BooleanOp.Subtract(bl, PrimitiveOp.Cylinder(c + new Vector3d(10, 0, -10), 1.5, 20), new List<string>());
+            var edges = bl[0].Edges.Where(e => e.Curve is IntersectionCurve3).ToList();
+            if (edges.Count != 2) fails.Add($"{edges.Count} traced edges");
+            var tor = new Parametric3D.Kernel.Geometry.Ssi.Torus(c, Vector3d.UnitZ, 10, 3);
+            var cyl = new Parametric3D.Kernel.Geometry.Ssi.Cylinder(c + new Vector3d(10, 0, 0), Vector3d.UnitZ, 1.5);
+            foreach (double d in new[] { 1e-2, 1e-4, 1e-6, 1e-7, 1e-8 })
+            {
+                double z = c.Z + 3 - d;
+                var pl = new Parametric3D.Kernel.Geometry.Ssi.Plane(new Vector3d(0, 0, z), Vector3d.UnitZ);
+                foreach (var e in edges)
+                {
+                    bool top = e.V0.P.Z > c.Z || e.Curve!.PointAt(0.5).Z > c.Z;
+                    var ev = Parametric3D.Kernel.Analytic.SsiEvents.CurveSurface(e.Curve!, pl, out _);
+                    var pts = ev.Select(t => e.Curve!.PointAt(t)).ToList();
+                    int want = top ? 4 : 0;
+                    bool onAll = pts.All(p => Math.Abs(p.Z - z) <= 1e-9 && Math.Abs(Parametric3D.Kernel.Geometry.Ssi.Implicit(tor, p).F) <= 1e-9 && Math.Abs(Parametric3D.Kernel.Geometry.Ssi.Implicit(cyl, p).F) <= 1e-9);
+                    bool distinct = pts.SelectMany((p, i) => pts.Skip(i + 1).Select(q => (p - q).Length)).All(x => x > 1e-6);
+                    Log(new { test = "KRN04-EVENTS-TRACED", delta = d, top, events = ev.Count, onAll, distinct, uncertain = Parametric3D.Kernel.Analytic.SsiEvents.LastUncertain });
+                    if (ev.Count != want || !onAll || !distinct) fails.Add($"δ {d} {(top ? "top" : "bottom")} edge: {ev.Count} events (want {want}), on surfaces {onAll}, distinct {distinct}");
+                }
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
         Check("KRN04-EVENTS-ALGEBRAIC-ROOTS", () =>
         {
             var fails = new List<string>();

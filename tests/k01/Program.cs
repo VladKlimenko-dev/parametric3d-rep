@@ -402,6 +402,7 @@ static partial class Program
             var r = BooleanOp.Evaluate(new List<TSolid> { a }, TransformOp.Copy(a, TransformOp.Move(Vector3d.Zero)), k, OperationPolicy.Strict);
             Console.WriteLine($"{d} {k}: {r.Outcome} {r.Describe()} in {sw.Elapsed.TotalSeconds:F2} s");
         }
+        if (Environment.GetEnvironmentVariable("MERGEDBG") == "1") Parametric3D.Kernel.Analytic.GeneralBoolean.MergeDebug = (a, b) => Console.WriteLine($"MERGE {(a - b).Length:G3} at {a:0.######}");
         if (mode is "torus" or "allA") TorusRouteChecks();
         if (mode is "longchain" or "allA") LongChainChecks();
         if (mode is "longhist" or "allA") LongHistoryChecks();
@@ -877,6 +878,13 @@ static partial class Program
         if (mode is "tanchain") { TanChainProbe(); return; }
         if (mode is "nurbsprobe") { NurbsProbe(); return; }
         if (mode is "uniqprobe") { UniqProbe(); return; }
+        if (mode is "nurbsuniq") { NurbsUniqProbe(); return; }
+        if (mode is "dirbound") { DirBoundProbe(); return; }
+        if (mode is "nnuniq") { NurbsNNUniqProbe(); return; }
+        if (mode is "tracedev") { TracedEventsProbe(); return; }
+        if (mode is "tracedcount") { TracedEventsCount(); return; }
+        if (mode is "rigorprobe") { RigorProbe(); return; }
+        if (mode is "mergeguard") { MergeGuardProbe(); return; }
         if (mode is "partholes") { SpeedPartHoles(int.Parse(args[1])); return; }
         if (mode is "facetdev") { FacetDevProbe(); return; }
         if (mode is "sphcap") { SphCapProbe(); return; }
@@ -932,6 +940,7 @@ static partial class Program
         if (mode is "splitface") SplitFaceProbe();
         if (mode is "seqexact") SeqExact();
         Log(new { staleExactUses = Parametric3D.Kernel.Exact.ExactAdapter.StaleExactUses });   // поставка 2: замер
+        Log(new { sewSplits = Parametric3D.Kernel.Analytic.GeneralBoolean.SewSplits, sewMerges = Parametric3D.Kernel.Analytic.GeneralBoolean.SewMerges, openLoopsMerged = Parametric3D.Kernel.Analytic.GeneralBoolean.OpenLoopsMerged, vertexMergedByDistance = Parametric3D.Kernel.Analytic.GeneralBoolean.VertexMergedByDistance, vertexMergedFar = Parametric3D.Kernel.Analytic.GeneralBoolean.VertexMergedFar, nodeMergedFar = Parametric3D.Kernel.Analytic.FaceSplit.NodeMergedFar, cutFar = Parametric3D.Kernel.Analytic.FaceSplit.CutFar, rigorousEvents = Parametric3D.Kernel.Analytic.RigorousEvents.Certified, rigorousUncertain = Parametric3D.Kernel.Analytic.RigorousEvents.Uncertain, tracedEvents = Parametric3D.Kernel.Analytic.SsiEvents.TracedCertified, tracedUncertain = Parametric3D.Kernel.Analytic.SsiEvents.TracedUncertain, sampledEdges = Parametric3D.Kernel.Analytic.SsiEvents.SampledEdges });
         if (histStats.Count > 0) Log(new { historyCompare = histStats, disagreements = histDisagree });
         if (capA != null)
         {

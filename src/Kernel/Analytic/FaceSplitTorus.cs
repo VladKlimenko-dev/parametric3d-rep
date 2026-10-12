@@ -33,7 +33,16 @@ public static partial class FaceSplit
         Vector2d P(Vector3d x, Vector2d r) => Near(A(x), r);
 
         var nodes = new List<Vector3d>();
-        int Node(Vector3d x) { for (int i = 0; i < nodes.Count; i++) if ((nodes[i] - x).Length < TolV) return i; nodes.Add(x); return nodes.Count - 1; }
+        string? farMerge = null;
+        int Node(Vector3d x)
+        {
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                double dn = (nodes[i] - x).Length;
+                if (dn < TolV) { if (dn > MergeExact) { Interlocked.Increment(ref NodeMergedFar); farMerge ??= $"two distinct points {dn:G3} mm apart (above the model accuracy, below the merge tolerance) at {x:0.#########}"; } return i; }
+            }
+            nodes.Add(x); return nodes.Count - 1;
+        }
         var darts = new List<Dart>();
         var cuts = new List<Vector3d>();
         if (globalCuts != null) cuts.AddRange(globalCuts); else foreach (var p in pieces) if (!p.Closed) { cuts.Add(p.P0); cuts.Add(p.P1); }
@@ -48,7 +57,12 @@ public static partial class FaceSplit
             foreach (var x in cuts)
             {
                 double t = ClosestParam(c, x);
-                if ((c.PointAt(t) - x).Length < TolV && Math.Min(Math.Abs(t - c.T0), Math.Abs(t - c.T1)) > 1e-12 * Math.Max(1, c.T1 - c.T0)) inner.Add(t);
+                double dcT = (c.PointAt(t) - x).Length;
+                if (dcT < TolV && Math.Min(Math.Abs(t - c.T0), Math.Abs(t - c.T1)) > 1e-12 * Math.Max(1, c.T1 - c.T0))
+                {
+                    inner.Add(t);
+                    if (dcT > MergeExact) { Interlocked.Increment(ref CutFar); farMerge ??= $"a cut point {dcT:G3} mm off the edge it cuts (above the model accuracy) at {x:0.#########}"; }
+                }
             }
             var seq = new List<double> { a0 }; seq.AddRange(inner.OrderBy(t => (t - a0) / (a1 - a0))); seq.Add(a1);
             bool closedEdge = (c.PointAt(c.T0) - c.PointAt(c.T1)).Length < TolV;
@@ -69,6 +83,7 @@ public static partial class FaceSplit
             d1.Twin = d2; d2.Twin = d1;
             darts.Add(d1); darts.Add(d2);
         }
+        if (farMerge != null && !MergeGuardOff) { why = farMerge; return null; }
         if (darts.Count == 0) return new List<Region>();
 
         Vector2d Dir(Dart d, bool outgoing)

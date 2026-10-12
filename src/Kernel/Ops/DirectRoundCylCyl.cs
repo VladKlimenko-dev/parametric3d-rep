@@ -197,6 +197,38 @@ public static partial class DirectRound
             Vector3d S(double t) => Spine(t) ?? new Vector3d(double.NaN);
             Vector3d QA(double t) => Foot(FA, S(t));
             Vector3d QB(double t) => Foot(FB, S(t));
+            // 04.2: ЛИНИЯ КАСАНИЯ НЕ ЗАДЕВАЕТ ПОВЕРХНОСТЬ s — строго. Хребет — пересечение уровней F_A = offA, F_B = offB;
+            // звено хребта между соседними точками лежит в шаре, где ветвь одна (Ssi.Transversal для полей градиентов F_A,
+            // F_B — те же нормали уровней): хребет на звене — в шаре (m, ρ). Точка касания Q = x − offA·∇F_A(x) отходит от
+            // Q(m) не больше ρ(1 + |offA|·κ_A) (κ_A — поворот ∇F_A по шару, NormalLip). |F_s(Q(m))| больше этого — на звене
+            // событий нет; иначе звено делится (до 1e-6 мм — не доказано).
+            bool NoEvents(bool onA, Geometry.Ssi.Shape s, double ta, double tb)
+            {
+                var sh = onA ? shA : shB; double off = onA ? offA : offB;
+                bool Seg(double u0, double u1, Vector3d x0, Vector3d x1, int depth)
+                {
+                    var m = (x0 + x1) / 2; double rho = (x1 - x0).Length / 2 * 1.01 + 1e-12;
+                    bool tr = Geometry.Ssi.Transversal(shA, shB, m, rho);
+                    if (tr && Geometry.Ssi.NormalLip(sh, m, rho) is double kap)
+                    {
+                        var (fm, gm) = Geometry.Ssi.Implicit(sh, m);
+                        var qm = m - gm * off; double R = rho * (1 + Math.Abs(off) * kap) + Math.Abs(fm - off);
+                        if (Math.Abs(Geometry.Ssi.Implicit(s, qm).F) > R * (1 + 1e-12) + 1e-12) return true;
+                    }
+                    if (rho < 1e-6 || depth > 30) return false;
+                    double um = (u0 + u1) / 2; var xm = Spine(um); if (xm == null) return false;
+                    if (tr && (xm.Value - m).Length > rho) return false;                 // точка хребта вне шара звена
+                    return Seg(u0, um, x0, xm.Value, depth + 1) && Seg(um, u1, xm.Value, x1, depth + 1);
+                }
+                int n = 64;
+                for (int i = 0; i < n; i++)
+                {
+                    double u0 = ta + (tb - ta) * i / n, u1 = ta + (tb - ta) * (i + 1) / n;
+                    var x0 = Spine(u0); var x1 = Spine(u1); if (x0 == null || x1 == null) return false;
+                    if (!Seg(u0, u1, x0.Value, x1.Value, 0)) return false;
+                }
+                return true;
+            }
             SweepSection Gen(double t)
             {
                 var x = S(t); var qa = Foot(FA, x); var qb = Foot(FB, x);
@@ -285,8 +317,8 @@ public static partial class DirectRound
             {
                 // прежде: лента — один пояс без шва (сетка пояса режет его по шву хордой поперёк дуги: у r ≥ 2 прогиб хорды
                 // больше допуска, и разметка отказывала)
-                var cA = new ProcCurve3(QA, t0, t1, true, "rolling-ball contact");
-                var cB = new ProcCurve3(QB, t0, t1, true, "rolling-ball contact");
+                var cA = new ProcCurve3(QA, t0, t1, true, "rolling-ball contact") { NoEventsOn = (s, a, b) => NoEvents(true, s, a, b) };
+                var cB = new ProcCurve3(QB, t0, t1, true, "rolling-ball contact") { NoEventsOn = (s, a, b) => NoEvents(false, s, a, b) };
                 var pA = cA.PointAt(t0); var pB = cB.PointAt(t0);
                 lA.Clear(); lA.Add(new Seg { Curve = cA, A = pA, B = pA });
                 lB.Clear(); lB.Add(new Seg { Curve = cB, A = pB, B = pB });
@@ -303,8 +335,8 @@ public static partial class DirectRound
                 double th = (t0 + t1) / 2;
                 ArcCurve3 SecArc(double t) { var g = Gen(t); return new ArcCurve3(new Frame3(g.C, g.E1, g.E2), r, 0, g.Phi); }
                 var a0 = SecArc(t0); var ah = SecArc(th);
-                var cA1 = new ProcCurve3(QA, t0, th, false, "rolling-ball contact"); var cA2 = new ProcCurve3(QA, th, t1, false, "rolling-ball contact");
-                var cB1 = new ProcCurve3(QB, t0, th, false, "rolling-ball contact"); var cB2 = new ProcCurve3(QB, th, t1, false, "rolling-ball contact");
+                var cA1 = new ProcCurve3(QA, t0, th, false, "rolling-ball contact") { NoEventsOn = (s, a, b) => NoEvents(true, s, a, b) }; var cA2 = new ProcCurve3(QA, th, t1, false, "rolling-ball contact") { NoEventsOn = (s, a, b) => NoEvents(true, s, a, b) };
+                var cB1 = new ProcCurve3(QB, t0, th, false, "rolling-ball contact") { NoEventsOn = (s, a, b) => NoEvents(false, s, a, b) }; var cB2 = new ProcCurve3(QB, th, t1, false, "rolling-ball contact") { NoEventsOn = (s, a, b) => NoEvents(false, s, a, b) };
                 Vector3d qa0 = QA(t0), qah = QA(th), qb0 = QB(t0), qbh = QB(th);
                 if ((a0.PointAt(0) - qa0).Length > 1e-9 || (a0.PointAt(1) - qb0).Length > 1e-9 || (ah.PointAt(0) - qah).Length > 1e-9 || (ah.PointAt(1) - qbh).Length > 1e-9
                     || (QA(t1) - qa0).Length > 1e-9 || (QB(t1) - qb0).Length > 1e-9)

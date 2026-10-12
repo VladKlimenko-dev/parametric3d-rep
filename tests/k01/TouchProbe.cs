@@ -76,6 +76,27 @@ static partial class Program
                 bool named2 = w2.Any(x => x.Contains("partition check"));
                 if (!named2 || (r2.Accepted && r2.Guarantee == GuaranteeLevel.ExactAnalytic)) fails.Add($"lost cylinder region: named {named2}, {r2.Outcome} {r2.Guarantee}");
             }
+            {   // потеря области грани с контуром из кривой пересечения (тор − вертикальный цилиндр через трубку): мера по участкам
+                // между изломами параметризации (P3D_PARTBREAKS; прежде такие грани разбиение не проверяли)
+                var c = new Vector3d(1, 2, 3);
+                OperationResult Run(bool drop, List<string> w)
+                {
+                    var r = BooleanOp.Evaluate(new List<TSolid> { PrimitiveOp.Torus(c, 10, 3) }, PrimitiveOp.Cylinder(c + new Vector3d(10, 0, -10), 1.5, 20), BooleanOp.BooleanKind.Subtract, OperationPolicy.Strict, new List<string>());
+                    Parametric3D.Kernel.Analytic.GeneralBoolean.DropTracedRegionForTest = drop;
+                    try
+                    {
+                        // вторая операция режет грани с контуром-кривой пересечения
+                        return BooleanOp.Evaluate(r.Bodies.ToList(), Box(c.X + 9.6, c.Y - 20, c.Z - 10, 0.8, 40, 20), BooleanOp.BooleanKind.Subtract, OperationPolicy.Strict, w);
+                    }
+                    finally { Parametric3D.Kernel.Analytic.GeneralBoolean.DropTracedRegionForTest = false; }
+                }
+                var w3 = new List<string>(); var r3 = Run(false, w3);
+                if (!r3.Accepted || r3.Guarantee != GuaranteeLevel.ExactAnalytic || w3.Any(x => x.Contains("partition check"))) fails.Add($"traced clean: {r3.Outcome} {r3.Guarantee} {string.Join(" | ", w3.Where(x => x.Contains("partition")))}");
+                var w4 = new List<string>(); var r4 = Run(true, w4);
+                bool named4 = w4.Any(x => x.Contains("partition check")) || r4.Diagnostics.Any(d => d.Message.Contains("partition check"));
+                Log(new { test = "KRN05-PARTITION", traced = true, named = named4, outcome = r4.Outcome.ToString(), guarantee = r4.Guarantee.ToString() });
+                if (!named4 || (r4.Accepted && r4.Guarantee == GuaranteeLevel.ExactAnalytic)) fails.Add($"lost region bounded by an intersection curve: named {named4}, {r4.Outcome} {r4.Guarantee}");
+            }
             Require(fails.Count == 0, string.Join("; ", fails));
         });
         Check("KRN05-TOUCH-POLICY-REGULARIZED", () =>
