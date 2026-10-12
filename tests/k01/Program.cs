@@ -413,6 +413,7 @@ static partial class Program
         if (mode is "krn05blend" or "allB") Krn05AfterBlendChecks();
         if (mode is "krn07hole" or "allA") Krn07HoleContractChecks();
         if (mode is "krn07inst" or "allA") Krn07InstanceChecks();
+        if (mode is "krn10pairs" or "allA") Krn10PairChecks();
         if (mode == "swprobe") { SweepLoftProbe(); return; }
         if (mode == "patprobe") { PatternProbe(); return; }
         if (mode == "serprobe") { SerProbe(); return; }

@@ -36,13 +36,13 @@ public static class ShellOp
         TSolid body = bodies[0];
         // KRN-07 (07.5): тело из плоских граней — полость сдвигом плоскостей (верно и для вогнутых тел); стенка наружу
         // (толщина < 0) и своя толщина граней — только здесь
-        if (!TweakOff && body.Faces.All(f => PlaneOfFace(f) != null))
+        if (!TweakOff && body.Faces.All(f => PlaneOfFace(f) != null || (!CylTweakOff && CylOfFace(f) != null)))
         {
             string? why = null;
             double T(TFace f, Geometry.Ssi.Plane pl) => Math.Abs(faceThickness?.FirstOrDefault(x => OnFace(f, pl, x.At)).T is double v && v != 0 ? v : thickness);
             if (!outward)
             {
-                var cavT = OffsetBody(body, (f, pl, isOpen) => isOpen ? T(f, pl) : -T(f, pl), open, "shell:inner", ref why);
+                var cavT = OffsetBody(body, (f, pl, isOpen) => isOpen ? T(f, pl) : -T(f, pl), open, "shell:inner", ref why, -thickness);
                 if (cavT != null)
                 {
                     BooleanOp.Subtract(bodies, cavT, warnings);
@@ -54,8 +54,8 @@ public static class ShellOp
             {
                 // стенка наружу: наружное тело — грани сдвинуты наружу (открытые — на месте), внутреннее — само тело с
                 // открытыми гранями, вынесенными наружу (полость выходит сквозь них)
-                var outer = OffsetBody(body, (f, pl, isOpen) => isOpen ? 0 : T(f, pl), open, null, ref why);
-                var inner = outer == null ? null : open == null || open.Count == 0 ? body : OffsetBody(body, (f, pl, isOpen) => isOpen ? T(f, pl) : 0, open, null, ref why);
+                var outer = OffsetBody(body, (f, pl, isOpen) => isOpen ? 0 : T(f, pl), open, null, ref why, -thickness);
+                var inner = outer == null ? null : open == null || open.Count == 0 ? body : OffsetBody(body, (f, pl, isOpen) => isOpen ? T(f, pl) : 0, open, null, ref why, 0);
                 if (outer != null && inner != null)
                 {
                     foreach (var f in outer.Faces) if (f.Tag.Length > 0 && !f.Tag.StartsWith("shell:")) f.Tag = "shell:outer:" + EdgeRef.Bare(f.Tag);
@@ -257,14 +257,27 @@ public static class ShellOp
     /// внутрь (открытые грани — наружу): тот же граф, что тело, поэтому верно и у вогнутого тела (уступ L-профиля
     /// сдвигается так же). Стенка толще элемента (ребро исчезло бы) — отказ.
     /// </summary>
-    static TSolid? OffsetBody(TSolid body, Func<TFace, Geometry.Ssi.Plane, bool, double> offset, IReadOnlyList<Vector3d>? open, string? tag, ref string? why)
+    /// <summary>Мутация P3D_SHELLCYL=0: сдвиг плоскостей только у тел из плоских граней (цилиндры — прежним путём).</summary>
+    static readonly bool CylTweakOff = Environment.GetEnvironmentVariable("P3D_SHELLCYL") == "0";
+    static Geometry.Ssi.Cylinder? CylOfFace(TFace f) => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) as Geometry.Ssi.Cylinder;
+
+    /// <param name="cylOffset">Сдвиг цилиндрических граней вдоль наружной нормали (у выпуклой — радиус больше, у вогнутой — меньше).</param>
+    static TSolid? OffsetBody(TSolid body, Func<TFace, Geometry.Ssi.Plane, bool, double> offset, IReadOnlyList<Vector3d>? open, string? tag, ref string? why, double cylOffset)
     {
+        string? openCyl = null;
         var res = PlanarTweak.Apply(body, (i, f) =>
         {
-            var pl = PlaneOfFace(f)!; var nOut = PlanarTweak.OutwardNormal(f)!.Value;
+            if (PlaneOfFace(f) is not { } pl) return null;
+            var nOut = PlanarTweak.OutwardNormal(f)!.Value;
             double d = offset(f, pl, open != null && open.Any(q => OnFace(f, pl, q)));
             return d == 0 ? null : (pl.P + nOut * d, nOut);
-        }, ref why);
+        }, ref why, (i, f) =>
+        {
+            if (cylOffset == 0 || CylOfFace(f) is not { } cy || PlanarTweak.CylConvex(f) is not bool convex) return null;
+            if (open != null && open.Any(q => Math.Abs((q - cy.P - cy.Axis.Normalized() * Vector3d.Dot(q - cy.P, cy.Axis.Normalized())).Length - cy.R) < Tol.Chord)) { openCyl = "an open cylindrical face"; return null; }
+            return cy.R + (convex ? cylOffset : -cylOffset);
+        });
+        if (openCyl != null) { why = openCyl; return null; }
         if (res == null) return null;
         if (tag != null) foreach (var f in res.Faces) f.Tag = tag;
         return res;

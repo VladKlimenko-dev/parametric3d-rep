@@ -107,11 +107,15 @@ static partial class Program
             TSolid L() { var bl = new List<TSolid> { Box(0, 0, 0, 60, 40, 20) }; BooleanOp.Subtract(bl, Box(30, -1, 10, 31, 42, 11), new List<string>()); return bl[0]; }
             Case("L-profile closed t2", L, 2, null, 36000 - (56 * 36 * 16 - 30 * 36 * 10));
             Case("L-profile open top of the tall part t2", L, 2, new[] { new Vector3d(15, 20, 20) }, 36000 - (26 * 36 * 18 + 30 * 36 * 6));
-            {   // вогнутое тело с цилиндрической гранью: сдвиг плоскостей неприменим, пересечение полупространств неверно —
-                // честный отказ (прежде — неверная полость, принятая как точная)
+            // вогнутое тело с отверстием: сдвиг плоскостей и цилиндров (стенка отверстия — радиус 5 + 2), полость — L минус
+            // труба R7 по высоте полости в высокой части
+            Case("L-profile with a hole closed t2", () => { var bl = new List<TSolid> { L() }; BooleanOp.Subtract(bl, PrimitiveOp.Cylinder(new Vector3d(15, 20, -2), 5, 24), new List<string>()); return bl[0]; },
+                2, null, 36000 - Math.PI * 25 * 20 - (21456 - Math.PI * 49 * 16));
+            {   // вогнутое тело с кривой гранью, которую сдвиг не берёт (бобышка на уступе с открытым торцом цилиндра): прежний
+                // путь (пересечение полупространств) неверен — честный отказ
                 var bl = new List<TSolid> { L() }; BooleanOp.Subtract(bl, PrimitiveOp.Cylinder(new Vector3d(15, 20, -2), 5, 24), new List<string>());
-                var w = new List<string>(); bool ok = ShellOp.Hollow(bl, 2, null, w);
-                if (ok) fails.Add($"concave L-profile with a hole: accepted (V {OpVolume(bl[0]):R}), an honest refusal expected");
+                var w = new List<string>(); bool ok = ShellOp.Hollow(bl, 2, new List<Vector3d> { new(20, 20, 10) }, w);
+                if (ok) fails.Add($"concave L-profile, open hole wall: accepted (V {OpVolume(bl[0]):R}), an honest refusal expected");
             }
             Case("box open top and front t3", () => Box(0, 0, 0, 60, 40, 20), 3, new[] { new Vector3d(30, 20, 20), new Vector3d(30, 0, 10) }, 48000 - 54 * 37 * 17);
             {
