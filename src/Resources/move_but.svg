@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="107" height="107">
+	<path fill="none" stroke="black" stroke-width="3.999999" stroke-linecap="round" stroke-linejoin="round" transform="translate(-2955.67 -190.64)" d="M3008.9207 270.6424L3009.1177 217.33307" fill-rule="evenodd"/>
+	<path transform="matrix(-0.00369493 0.999993 -0.999993 -0.00369493 53.2197 88.0023)" d="M0 0L-15.999996 6.3999987L-15.999996 -6.3999987L0 0Z"/>
+	<path transform="matrix(0.0036952 -0.999993 0.999993 0.0036952 53.4758 18.6931)" d="M0 0L-15.999996 6.3999987L-15.999996 -6.3999987L0 0Z"/>
+	<path fill="none" stroke="black" stroke-width="3.999999" stroke-linecap="round" stroke-linejoin="round" transform="translate(-2955.67 -190.64)" d="M2982.3645 244.08636L3035.6736 243.88947" fill-rule="evenodd"/>
+	<path transform="matrix(-0.999993 0.00369325 -0.00369325 -0.999993 18.6931 53.4759)" d="M0 0L-15.999996 6.3999987L-15.999996 -6.3999987L0 0Z"/>
+	<path transform="matrix(0.999993 -0.00369331 0.00369331 0.999993 88.0022 53.2199)" d="M0 0L-15.999996 6.3999987L-15.999996 -6.3999987L0 0Z"/>
+</svg>
