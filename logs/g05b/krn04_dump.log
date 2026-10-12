@@ -1,0 +1,99 @@
+{"runtime":".NET 8.0.31","cpu":2,"os":"Ubuntu 24.04.5 LTS","args":["krn04dump","/home/claude/w/Parametric3D/logs/g05b/krn04"]}
+k4_000 narrow rib 1 × sphere, phase 0: Success ExactAnalytic valid True vol 8161.0973642652825
+k4_001 narrow rib 1 × sphere, phase 1: Success ExactAnalytic valid True vol 8161.216924307898
+k4_002 narrow rib 1 × sphere, phase 2: Success ExactAnalytic valid True vol 8161.336915309715
+k4_003 narrow rib 1 × sphere, phase 3: Success ExactAnalytic valid True vol 8161.4573370443095
+k4_004 narrow rib 0.1 × sphere, phase 0: Success ExactAnalytic valid True vol 8011.974626123272
+k4_005 narrow rib 0.1 × sphere, phase 1: Success ExactAnalytic valid True vol 8011.986588010222
+k4_006 narrow rib 0.1 × sphere, phase 2: Success ExactAnalytic valid True vol 8011.998593064208
+k4_007 narrow rib 0.1 × sphere, phase 3: Success ExactAnalytic valid True vol 8012.010641263726
+k4_008 narrow rib 0.03 × sphere, phase 0: Success ExactAnalytic valid True vol 8000.385312864214
+k4_009 narrow rib 0.03 × sphere, phase 1: Success ExactAnalytic valid True vol 8000.388901446273
+k4_010 narrow rib 0.03 × sphere, phase 2: Success ExactAnalytic valid True vol 8000.392502978634
+k4_011 narrow rib 0.03 × sphere, phase 3: Success ExactAnalytic valid True vol 8000.396117454849
+k4_012 narrow rib 0.01 × sphere, phase 0: Success ExactAnalytic valid True vol 7997.074110478844
+k4_013 narrow rib 0.01 × sphere, phase 1: Success ExactAnalytic valid True vol 7997.0753066733305
+k4_014 narrow rib 0.01 × sphere, phase 2: Success ExactAnalytic valid True vol 7997.076507184593
+k4_015 narrow rib 0.01 × sphere, phase 3: Success ExactAnalytic valid True vol 7997.077712010476
+k4_016 narrow rib 0.002 × sphere, phase 0: Success ExactAnalytic valid True vol 7995.749630643742
+k4_017 narrow rib 0.002 × sphere, phase 1: Success ExactAnalytic valid True vol 7995.749869882652
+k4_018 narrow rib 0.002 × sphere, phase 2: Success ExactAnalytic valid True vol 7995.750109984915
+k4_019 narrow rib 0.002 × sphere, phase 3: Success ExactAnalytic valid True vol 7995.750350950104
+k4_020 narrow rib 0.1 × tilted cylinder, phase 0: Success ExactAnalytic valid True vol 7749.784411802285
+k4_021 narrow rib 0.1 × tilted cylinder, phase 1: Success ExactAnalytic valid True vol 7749.798649871915
+k4_022 narrow rib 0.1 × tilted cylinder, phase 2: Success ExactAnalytic valid True vol 7749.813054574399
+k4_023 narrow rib 0.03 × tilted cylinder, phase 0: Success ExactAnalytic valid True vol 7737.729522144408
+k4_024 narrow rib 0.03 × tilted cylinder, phase 1: Success ExactAnalytic valid True vol 7737.733791103586
+k4_025 narrow rib 0.03 × tilted cylinder, phase 2: Success ExactAnalytic valid True vol 7737.738109907087
+k4_026 narrow rib 0.01 × tilted cylinder, phase 0: Success ExactAnalytic valid True vol 7734.285358694452
+k4_027 narrow rib 0.01 × tilted cylinder, phase 1: Success ExactAnalytic valid True vol 7734.286781608942
+k4_028 narrow rib 0.01 × tilted cylinder, phase 2: Success ExactAnalytic valid True vol 7734.288221133979
+k4_029 tangent to edge, offset 0: Success ExactPolyhedral valid True vol 14385.201274475601
+k4_030 tangent to edge (common), offset 0: Success ExactPolyhedral valid True vol 1614.798729442224
+k4_031 tangent to edge, offset 0.001: Success ExactAnalytic valid True vol 14385.229574943774
+k4_032 tangent to edge (common), offset 0.001: Success ExactAnalytic valid True vol 1614.7704250562267
+k4_033 tangent to edge, offset -0.001: Success ExactAnalytic valid True vol 14385.173026438622
+k4_034 tangent to edge (common), offset -0.001: Success ExactAnalytic valid True vol 1614.8269735613758
+k4_035 tangent to edge, offset 1E-06: Success ExactAnalytic valid True vol 14385.201305747141
+k4_036 tangent to edge (common), offset 1E-06: Success ExactAnalytic valid True vol 1614.798694252859
+k4_037 tangent to edge, offset -1E-06: Success ExactPolyhedral valid True vol 14385.201246350041
+k4_038 tangent to edge (common), offset -1E-06: Success ExactPolyhedral valid True vol 1614.7987526732852
+k4_039 through vertex, radius 15: Success ExactAnalytic valid True vol 10600.502952226192
+k4_040 through vertex (fuse), radius 15: Success ExactAnalytic valid True vol 24737.669893380265
+k4_041 through vertex, radius 15.000001: Success ExactAnalytic valid True vol 10600.502492374218
+k4_042 through vertex (fuse), radius 15.000001: Success ExactAnalytic valid True vol 24737.672260961863
+k4_043 through vertex, radius 14.999999: Success ExactAnalytic valid True vol 10600.503412078147
+k4_044 through vertex (fuse), radius 14.999999: Success ExactAnalytic valid True vol 24737.667525799017
+k4_045 through vertex, radius 15.001: Success ExactAnalytic valid True vol 10600.043094585608
+k4_046 through vertex (fuse), radius 15.001: Success ExactAnalytic valid True vol 24740.03765762765
+k4_047 cylinder seam × tilted box 25°: Success ExactAnalytic valid True vol 4712.388980384686
+k4_048 cylinder seam × tilted box 60°: Success ExactAnalytic valid True vol 4712.388980384688
+k4_049 cylinder seam × sphere on the seam (Subtract): Success ExactAnalytic valid True vol 9371.416157783313
+k4_050 cylinder seam × sphere on the seam, rotated (Subtract): Success ExactAnalytic valid True vol 9357.651966619445
+k4_051 cylinder seam × sphere on the seam (Unite): Success ExactAnalytic valid True vol 9484.513493312546
+k4_052 cylinder seam × sphere on the seam, rotated (Unite): Success ExactAnalytic valid True vol 9470.749302148677
+k4_053 cylinder seam × sphere on the seam (Intersect): Success ExactAnalytic valid True vol 53.36180298607129
+k4_054 cylinder seam × sphere on the seam, rotated (Intersect): Success ExactAnalytic valid True vol 67.12599414992889
+k4_055 sphere off-centre on cylinder wall 0° (Subtract): Success ExactAnalytic valid True vol 9363.203232500437
+k4_056 sphere off-centre on cylinder wall 0° (Unite): Success ExactAnalytic valid True vol 9476.30056802967
+k4_057 sphere off-centre on cylinder wall 0° (Intersect): Success ExactAnalytic valid True vol 61.5747282689675
+k4_058 sphere off-centre on cylinder wall 45° (Subtract): Success ExactAnalytic valid True vol 9363.203232500417
+k4_059 sphere off-centre on cylinder wall 45° (Unite): Success ExactAnalytic valid True vol 9476.30056802965
+k4_060 sphere off-centre on cylinder wall 45° (Intersect): Success ExactAnalytic valid True vol 61.57472826896804
+k4_061 sphere off-centre on cylinder wall 100° (Subtract): Success ExactAnalytic valid True vol 9363.203232500438
+k4_062 sphere off-centre on cylinder wall 100° (Unite): Success ExactAnalytic valid True vol 9476.300568029672
+k4_063 sphere off-centre on cylinder wall 100° (Intersect): Success ExactAnalytic valid True vol 61.574728268968435
+k4_064 sphere off-centre on cylinder wall 200° (Subtract): Success ExactAnalytic valid True vol 9363.203232500427
+k4_065 sphere off-centre on cylinder wall 200° (Unite): Success ExactAnalytic valid True vol 9476.300568029661
+k4_066 sphere off-centre on cylinder wall 200° (Intersect): Success ExactAnalytic valid True vol 61.57472826896828
+k4_067 sphere off-centre on cylinder wall 290° (Subtract): Success ExactAnalytic valid True vol 9363.203232500417
+k4_068 sphere off-centre on cylinder wall 290° (Unite): Success ExactPolyhedral valid True vol 9476.30056802948
+k4_069 sphere off-centre on cylinder wall 290° (Intersect): Success ExactAnalytic valid True vol 61.574728268967455
+k4_070 small cylinder through big (big first, Subtract): Success ExactAnalytic valid True vol 8867.16372324554
+k4_071 small cylinder through big (small first, Subtract): Success ExactAnalytic valid True vol 573.3591177684893
+k4_072 small cylinder through big (big first, Unite): Success ExactAnalytic valid True vol 9998.137078537864
+k4_073 small cylinder through big (small first, Unite): Success ExactAnalytic valid True vol 9998.137078537864
+k4_074 small cylinder through big (big first, Intersect): Success ExactAnalytic valid True vol 557.614237523836
+k4_075 small cylinder through big (small first, Intersect): Success ExactAnalytic valid True vol 557.6142375238356
+k4_076 small loop: sphere grazes cylinder, depth 0.1 (Subtract): Success ExactAnalytic valid True vol 9424.768060122573
+k4_077 small loop: cylinder grazes sphere, depth 0.1 (Subtract): Success ExactAnalytic valid True vol 4188.657917366124
+k4_078 small loop: sphere grazes cylinder, depth 0.1 (Intersect): Success ExactAnalytic valid True vol 0.009900646798412011
+k4_079 small loop: cylinder grazes sphere, depth 0.1 (Intersect): Success ExactAnalytic valid True vol 0.13228742026720022
+k4_080 small loop: sphere grazes cylinder, depth 0.01 (Subtract): Success ExactAnalytic valid True vol 9424.777960769372
+k4_081 small loop: cylinder grazes sphere, depth 0.01 (Subtract): Success ExactPolyhedral valid True vol 4188.790204786391
+k4_082 small loop: sphere grazes cylinder, depth 0.01 (Intersect): Empty ExactPolyhedral valid True vol 0
+k4_083 small loop: cylinder grazes sphere, depth 0.01 (Intersect): Empty ExactPolyhedral valid True vol 0
+k4_084 small loop: sphere grazes cylinder, depth 0.001 (Subtract): Success ExactAnalytic valid True vol 9424.777960769372
+k4_085 small loop: cylinder grazes sphere, depth 0.001 (Subtract): Success ExactAnalytic valid True vol 4188.790204786391
+k4_086 small loop: sphere grazes cylinder, depth 0.001 (Intersect): Empty ExactPolyhedral valid True vol 0
+k4_087 small loop: cylinder grazes sphere, depth 0.001 (Intersect): Empty ExactPolyhedral valid True vol 0
+k4_088 small loop: sphere grazes cylinder, depth 0.0001 (Subtract): Success ExactAnalytic valid True vol 9424.777960769372
+k4_089 small loop: cylinder grazes sphere, depth 0.0001 (Subtract): Success ExactAnalytic valid True vol 4188.790204786391
+k4_090 small loop: sphere grazes cylinder, depth 0.0001 (Intersect): Empty ExactPolyhedral valid True vol 0
+k4_091 small loop: cylinder grazes sphere, depth 0.0001 (Intersect): Empty ExactPolyhedral valid True vol 0
+k4_092 loop inside plane face: Success ExactAnalytic valid True vol 15991.622419590427
+k4_093 loop inside cylinder face: Success ExactAnalytic valid True vol 9408.651643558458
+k4_094 loop inside cylinder face (fuse): Success ExactAnalytic valid True vol 9442.16196519675
+k4_095 two loops: cylinder through sphere: Success ExactAnalytic valid True vol 1708.569476872388
+{"staleExactUses":0}
+{"passed":0,"failed":0}

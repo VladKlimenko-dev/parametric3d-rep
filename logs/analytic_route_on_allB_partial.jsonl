@@ -1,0 +1,16 @@
+{"test":"K07-DRILL-STRAIGHT-EQUALS-ROTATED","ok":false,"error":"drill at (15.3,12.7): 47699.42457054323 vs 47699.4246199019"}
+{"test":"G7-MESH-REUSE-IDENTICAL","ok":false,"error":"no face mesh was reused on edits"}
+{"test":"G7-HISTORY-EXACT","ok":false,"error":"exactly the notched face x = 60 must be modified: "}
+{"test":"G8-COMPOSITE-COUNTERBORE-BLIND","ok":false,"error":"composite volume 215384.2478398964 vs exact 214580.0001205774"}
+{"test":"G8-COMPOSITE-COUNTERSINK-BLIND","ok":false,"error":"two cuts volume 214853.41114181175 vs exact 214853.31868143973"}
+{"test":"G9-CURVED-REGIONS-BANDS","ok":false,"error":"faces 7 with splitting vs 7 without"}
+{"test":"G9-CURVED-REGIONS-SLOTS","ok":false,"error":"faces 10 with splitting vs 10 without"}
+{"test":"G12-PRISM-SLOTTED-SHAFT-HEALED","ok":false,"error":"heal shift 0"}
+{"test":"K10-IGES-ROUNDTRIP","ok":false,"error":"FAIL S-ROUNDHOLE: 55918.278 vs 43933.361 (rel 2.7E-001) BRep: 15 error(s); Mesh: 25 error(s) | IGES: 50 face(s) of 1 body(ies) written. | IGES: 50 face(s) read."}
+{"k09":"revolve cut groove in a cylinder","ok":false,"expected":8293.804605477053,"vol":9424.77796076938,"rel":0.13636363636363646,"analytic":true,"err":"","verdict":"BRep: ok; Exact: ok; Mesh: ok"}
+{"k09":"sweep circle r3 along an L-shaped polyline 40 \u002B 30 (mitred corner)","ok":false,"expected":1979.2033717615698,"vol":1970.9621481078987,"rel":0.004163909465420977,"analytic":false,"err":"","verdict":"BRep: ok; Exact: ok; Mesh: ok"}
+{"test":"K09-OPERATION-MATRIX","ok":false,"error":"FAIL revolve cut groove in a cylinder; FAIL sweep circle r3 along an L-shaped polyline 40 \u002B 30 (mitred corner)"}
+{"test":"K09-FILLET-MATRIX","ok":false,"error":"FAIL four top edges (closed loop): vol 47624.071 vs 47624.071 (rel 1.6E-012) BRep: ok; Exact: ok; Mesh: 6 error(s)"}
+{"test":"G1-PCURVES","ok":false,"error":"FAIL hole with a rounded rim (torus): pcurves exact 33, sampled 329, skipped 0; max deviation exact 2.4E-014 mm, sampled 1.7E-002 mm"}
+{"test":"G2-UV-MESH","ok":false,"error":"FAIL hole with a rounded rim (torus): faces 50/50 in (u,v), worst area error 1.6E\u002B003, volume 43940.432 vs 43933.361, Mesh: 3 error(s) "}
+{"test":"G3-TOLERANCES","ok":false,"error":"FAIL hole with a rounded rim: edges 181 (raised 175, max 1.7E-002 mm), vertices 135 (raised 129, max 1.7E-002 mm); inconsistencies before 408, after 0"}

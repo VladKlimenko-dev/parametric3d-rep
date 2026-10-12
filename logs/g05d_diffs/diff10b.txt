@@ -1,0 +1,7 @@
+d10_0049  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 1 error(s)  [cut,cut] cone r10.11/4.97 h14.11 rot83 | cyl r10.72 h19.13 | sphere r13.33 rot130
+d10_0060  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 6 error(s)  [cut,cut] cone r4.15/0 h26.86 | box 27.14x32.87x26.55 | sphere r10.22
+d10_0082  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 5 error(s)  [cut] box 37.06x23.8x28.35 | torus 7.67/4.95 rot85
+d10_0092  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 6 error(s)  [cut] cone r3.08/1 h17.12 rot87 | torus 11.57/2.82
+d10_0149  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 6 error(s)  [fuse,fuse] sphere r12.52 rot147 | cone r8.88/8.68 h20.34 rot74 | box 10.49x30.19x17.65 rot91
+d10_0189  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 3 error(s)  [cut,cut] cone r10.23/3.48 h12.7 rot40 | cone r5.96/0 h16.19 rot52 | sphere r3.31 rot130
+DIFF: agree 194, refused 0, WRONG 0, occt-failed 0, ours-exception 0, INVALID-SUCCESS 6 (of 200)

@@ -1,0 +1,61 @@
+MSBuild version 17.8.49+7806cbf7b for .NET
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  System.Drawing.Common -> /home/claude/w/Parametric3D/logs/g11a/k01/SDCStub.dll
+  OpenTK.Mathematics -> /home/claude/w/Parametric3D/logs/g11a/k01/OpenTK.Mathematics.dll
+/home/claude/w/Parametric3D/tests/k01/Analytic2D.cs(483,33): warning CS8604: Possible null reference argument for parameter 'source' in 'bool Enumerable.All<Region>(IEnumerable<Region> source, Func<Region, bool> predicate)'. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/G11.cs(40,35): warning CS8123: The tuple element name 'Axis' is ignored because a different name or no name is specified by the target type '(Vector3d, double, Vector3d)'. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/G11.cs(40,57): warning CS8123: The tuple element name 'Deg' is ignored because a different name or no name is specified by the target type '(Vector3d, double, Vector3d)'. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/G11.cs(40,67): warning CS8123: The tuple element name 'Move' is ignored because a different name or no name is specified by the target type '(Vector3d, double, Vector3d)'. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Tess/UvMesher.cs(230,34): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Export/IgesImport.cs(48,21): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Export/IgesImport.cs(51,18): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Krn03.cs(359,25): warning CS8629: Nullable value type may be null. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/BooleanOp.cs(4115,35): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Program.cs(608,13): warning CS0162: Unreachable code detected [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Representations.cs(48,13): warning CS1717: Assignment made to same variable; did you mean to assign something else? [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Representations.cs(48,40): warning CS1717: Assignment made to same variable; did you mean to assign something else? [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Perf.cs(25,44): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Perf.cs(26,54): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Perf.cs(40,21): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Perf.cs(48,83): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Perf.cs(49,72): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Perf.cs(74,17): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Export/StepExact.cs(108,27): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Export/StepExact.cs(117,17): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/FilletOp.cs(2837,21): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/FilletOp.cs(2837,37): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/FilletOp.cs(3292,45): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Exact/ExactContactInput.cs(13,52): warning CS0649: Field 'ExactContactInput.Trace' is never assigned to, and will always have its default value null [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+  K01Checks -> /home/claude/w/Parametric3D/logs/g11a/k01/K01Checks.dll
+
+Build succeeded.
+
+/home/claude/w/Parametric3D/tests/k01/Analytic2D.cs(483,33): warning CS8604: Possible null reference argument for parameter 'source' in 'bool Enumerable.All<Region>(IEnumerable<Region> source, Func<Region, bool> predicate)'. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/G11.cs(40,35): warning CS8123: The tuple element name 'Axis' is ignored because a different name or no name is specified by the target type '(Vector3d, double, Vector3d)'. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/G11.cs(40,57): warning CS8123: The tuple element name 'Deg' is ignored because a different name or no name is specified by the target type '(Vector3d, double, Vector3d)'. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/G11.cs(40,67): warning CS8123: The tuple element name 'Move' is ignored because a different name or no name is specified by the target type '(Vector3d, double, Vector3d)'. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Tess/UvMesher.cs(230,34): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Export/IgesImport.cs(48,21): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Export/IgesImport.cs(51,18): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Krn03.cs(359,25): warning CS8629: Nullable value type may be null. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/BooleanOp.cs(4115,35): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Program.cs(608,13): warning CS0162: Unreachable code detected [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Representations.cs(48,13): warning CS1717: Assignment made to same variable; did you mean to assign something else? [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Representations.cs(48,40): warning CS1717: Assignment made to same variable; did you mean to assign something else? [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Perf.cs(25,44): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Perf.cs(26,54): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Perf.cs(40,21): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Perf.cs(48,83): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Perf.cs(49,72): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/tests/k01/Perf.cs(74,17): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Export/StepExact.cs(108,27): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Export/StepExact.cs(117,17): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/FilletOp.cs(2837,21): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/FilletOp.cs(2837,37): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Ops/FilletOp.cs(3292,45): warning CS8602: Dereference of a possibly null reference. [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+/home/claude/w/Parametric3D/src/Kernel/Exact/ExactContactInput.cs(13,52): warning CS0649: Field 'ExactContactInput.Trace' is never assigned to, and will always have its default value null [/home/claude/w/Parametric3D/tests/k01/K01Checks.csproj]
+    24 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:19.52

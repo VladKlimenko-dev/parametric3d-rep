@@ -1,0 +1,14 @@
+{"runtime":".NET 8.0.31","cpu":1,"os":"Ubuntu 24.04.4 LTS","args":["fmatrix"]}
+{"fillet":"one vertical edge","edges":1,"err":null,"vol":47961.37166941154,"expected":47961.37166941154,"rel":0,"verdict":"BRep: ok; Mesh: ok","ms":1110.6857,"analytic":true}
+{"fillet":"four vertical edges","edges":4,"err":null,"vol":47845.486677646164,"expected":47845.486677646164,"rel":0,"verdict":"BRep: ok; Mesh: ok","ms":242.389,"analytic":true}
+{"fillet":"four top edges (closed loop)","edges":4,"err":null,"vol":47624.07060453138,"expected":47624.07069082156,"rel":1.8119026471301593E-09,"verdict":"BRep: ok; Mesh: ok","ms":2043.6209,"analytic":true}
+{"fillet":"all twelve edges (corner blends)","edges":12,"err":null,"vol":47095.415260842165,"expected":47109.07939152466,"rel":0.0002900530186322227,"verdict":"BRep: ok; Exact: ok; Mesh: 20 error(s)","ms":63783.7422,"analytic":false}
+{"fillet":"variable 2\u21924","vol":47959.25324932734,"expect":47959.94099050086,"verdict":"BRep: ok; Exact: ok; Mesh: ok","warnings":["Boolean: 2 chord chain(s) restored to arcs (24 segments collapsed).","Round: 1 edge(s) requested, 1 processed (swept chain of 1 edge(s) rounded R4); body volume now 47959.523, 0 open edges."]}
+OK   one vertical edge: vol 47961.372 vs 47961.372 (rel 0.0E+000) BRep: ok; Mesh: ok
+OK   four vertical edges: vol 47845.487 vs 47845.487 (rel 0.0E+000) BRep: ok; Mesh: ok
+OK   four top edges (closed loop): vol 47624.071 vs 47624.071 (rel 1.8E-009) BRep: ok; Mesh: ok
+FAIL all twelve edges (corner blends): vol 47095.415 vs 47109.079 (rel 2.9E-004) BRep: ok; Exact: ok; Mesh: 20 error(s)
+OK   variable radius 2→4: vol 47959.253 vs 47959.941 BRep: ok; Exact: ok; Mesh: ok
+{"test":"K09-FILLET-MATRIX","ok":false,"error":"FAIL all twelve edges (corner blends): vol 47095.415 vs 47109.079 (rel 2.9E-004) BRep: ok; Exact: ok; Mesh: 20 error(s)"}
+{"staleExactUses":0}
+{"passed":0,"failed":1}

@@ -1,0 +1,14 @@
+{"runtime":".NET 8.0.31","cpu":2,"os":"Ubuntu 24.04.5 LTS","args":["g11poly"]}
+diff dump: 1 cases → /tmp/g11_8_0_18760
+diff dump: 83 cases → /tmp/g11_8_82_18760
+diff dump: 21 cases → /tmp/g11_9_20_18760
+diff dump: 47 cases → /tmp/g11_9_46_18760
+diff dump: 66 cases → /tmp/g11_9_65_18760
+diff dump: 67 cases → /tmp/g11_9_66_18760
+diff dump: 92 cases → /tmp/g11_9_91_18760
+diff dump: 137 cases → /tmp/g11_9_136_18760
+diff dump: 51 cases → /tmp/g11_9_50_18760
+diff dump: 130 cases → /tmp/g11_9_129_18760
+{"test":"G11-POLY-DISPLAY-MANIFOLD-SLIVERS","ok":true}
+{"staleExactUses":0}
+{"passed":1,"failed":0}

@@ -1,0 +1,6 @@
+{"test":"G12-PRISM-SLOTTED-SHAFT-HEALED","levels":2,"prism":17921.750718982938,"analytic":17921.74199231333,"formula":17921.750718982938,"heal":0.019246274569079347,"errFormula":0,"errAnalytic":0.008726669606403448}
+{"test":"G12-PRISM-GROOVED-SHAFT","levels":4,"prism":18397.16657942183,"analytic":18397.166579421682,"formula":18397.166579421828,"heal":0,"errFormula":3.637978807091713E-12,"errAnalytic":1.4915713109076023E-10}
+{"test":"G12-PRISM-REALISTIC-8001","levels":8,"prism":318595.35174689326,"analytic":318595.35151806625,"formula":null,"heal":4.262216179995448E-06,"errFormula":null,"errAnalytic":0.00022882700432091951}
+{"test":"G12-PRISM-REALISTIC-8002","levels":8,"prism":317309.7880613147,"analytic":317309.7888314077,"formula":null,"heal":3.0933077468375814E-06,"errFormula":null,"errAnalytic":-0.0007700930000282824}
+{"test":"G12-PRISM-REALISTIC-8003","levels":9,"prism":321458.1461529539,"analytic":321458.14622739266,"formula":null,"heal":4.1597797348913446E-06,"errFormula":null,"errAnalytic":-7.443875074386597E-05}
+{"test":"G12-PRISM-REALISTIC-8004","levels":7,"prism":313742.3650548182,"analytic":313742.36363729805,"formula":null,"heal":4.97481438799241E-06,"errFormula":null,"errAnalytic":0.0014175201649777591}

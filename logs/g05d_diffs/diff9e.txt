@@ -1,0 +1,14 @@
+d9_0020  INVALID-SUCCESS: INVALID BRep: 2 error(s); Mesh: ok  [cut] cyl r11.38 h34.95 | box 36.36x9.56x30.84
+d9_0021  ours-exception  [fuse,fuse] cyl r4.08 h18.93 rot35 | cone r3.89/5.85 h28.98 rot50 | torus 6.24/2.46 rot52
+d9_0040  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 8 error(s)  [fuse,cut] cone r8.03/5.83 h19.96 rot69 | cone r5.18/6.58 h18.23 rot40 | cone r4.8/9.35 h20.32
+d9_0046  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 1 error(s)  [fuse,cut] box 24.1x37.03x28.3 rot22 | cone r10.41/7.82 h14.38 rot27 | sphere r4.79 rot100
+d9_0065  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 18 error(s)  [fuse,fuse] sphere r7.26 rot58 | cone r5.04/0 h18.57 rot10 | cone r10.6/8.8 h29.87 rot86
+d9_0066  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 1 error(s)  [cut] cone r6.39/9.61 h19.06 rot13 | sphere r13.16 rot112
+d9_0078  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 16 error(s)  [cut] box 21.1x30.12x34.31 rot144 | torus 7.88/2.85
+d9_0091  INVALID-SUCCESS: INVALID BRep: ok; Mesh: 9 error(s)  [cut,common] torus 11.64/3.58 | sphere r9.56 rot78 | sphere r7.83 rot105
+d9_0096  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 3 error(s)  [common] torus 16.02/4.02 rot97 | cone r11.42/7.51 h27.05
+d9_0100  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 3 error(s)  [common,cut] cyl r6.89 h10.14 rot123 | torus 15.34/3.94 | cyl r7.1 h18.2
+d9_0136  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 4 error(s)  [cut] cyl r6.23 h26.81 rot61 | cone r5.56/9.29 h12.62 rot135
+d9_0141  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 3 error(s)  [cut,common] cyl r3.28 h36.62 | torus 5.94/2.9 rot148 | torus 11.65/4.88 rot45
+d9_0186  INVALID-SUCCESS: INVALID BRep: ok; Exact: ok; Mesh: 4 error(s)  [cut] cone r8.96/2.11 h21.36 rot180 | cone r10.34/7.4 h28.08 rot172
+DIFF: agree 187, refused 0, WRONG 0, occt-failed 0, ours-exception 1, INVALID-SUCCESS 12 (of 200)

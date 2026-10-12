@@ -1,0 +1,78 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Parametric3D</RootNamespace>
+    <AssemblyName>Parametric3D</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+
+    <!-- Процесс x64.
+
+         Родных библиотек у приложения больше нет, и разрядность ему
+         безразлична, но OpenGL-драйвер и объём памяти под сетки — нет.
+         Задаётся PlatformTarget, а НЕ ограничение Platforms=x64:
+         ограничение требует, чтобы платформу x64 знало и решение,
+         а иначе проект под конфигурацией «Any CPU» просто не собирается,
+         тогда как Visual Studio всё равно ищет exe по пути bin\x64\... -->
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- OpenTK 4.9.4 = OpenGL bindings + math.  OpenTK.GLControl 4.0.2 = WinForms host
+         (это переименованный OpenTK.WinForms; namespace теперь OpenTK.GLControl). -->
+    <PackageReference Include="OpenTK" Version="4.9.4" />
+    <PackageReference Include="OpenTK.GLControl" Version="4.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Иконки тулбаров и дерева ВШИТЫ В СБОРКУ.
+         Раньше они лежали рядом с exe отдельными файлами и подгружались
+         с диска: достаточно было одной неудачной копии при сборке, чтобы
+         кнопки остались без картинок. Встроенный ресурс уехать никуда
+         не может — он часть exe.
+         Имя ресурса собирается из пути: Resources\Toolbar\ok.png
+         превращается в Parametric3D.Resources.Toolbar.ok.png -->
+    <None Remove="Resources\**\*.png" />
+    <EmbeddedResource Include="Resources\**\*.png" />
+  </ItemGroup>
+
+  <!-- Тестам видны внутренние типы: операции ядра проверяются напрямую,
+       а делать их открытыми ради тестов значило бы расширить API без нужды. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Parametric3D.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Legacy/ — материалы из старого проекта для справки, в сборку не входят. -->
+    <Compile Remove="Legacy/**" />
+    <None Include="Legacy/**" />
+
+    <!-- Тестовый проект лежит ВНУТРИ папки приложения — так удобнее, когда
+         папка проекта и есть корень. Но SDK-проект берёт все *.cs под собой
+         рекурсивно, и без исключения тесты компилировались бы как часть
+         приложения, где xUnit нет. Ошибка выглядела как «Xunit не найден»
+         в проекте Parametric3D — именно так это и проявилось. -->
+    <Compile Remove="Parametric3D.Tests/**" />
+    <None Remove="Parametric3D.Tests/**" />
+    <EmbeddedResource Remove="Parametric3D.Tests/**" />
+    <Compile Remove="Parametric3D.Verify/**" />
+    <None Remove="Parametric3D.Verify/**" />
+    <EmbeddedResource Remove="Parametric3D.Verify/**" />
+
+    <!-- Прежний мост к родному ядру. Папка Kernel/Native удалена, но
+         распаковка архива поверх старой копии её не стирает, и SDK-проект
+         подхватил бы оставшиеся файлы как исходники — с обращениями
+         к типам, которых больше нет. Исключение здесь страхует от этого;
+         удалить папку всё же стоит. -->
+    <Compile Remove="Kernel/Native/**" />
+    <None Remove="Kernel/Native/**" />
+  </ItemGroup>
+
+</Project>

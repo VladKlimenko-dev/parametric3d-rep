@@ -1,0 +1,2 @@
+d8_0042  occt-wrong? WRONG: ours 3480.01 vs OCCT 3506.44 (tol 0.018); Monte-Carlo 3464.38±243 → ours closer  [cut,cut] torus 10.35/4.33 rot141 | box 12.49x25.39x11.88 | cyl r10.3 h31.31 rot135
+DIFF: agree 199, refused 0, WRONG 0, occt-failed 1, ours-exception 0 (of 200)

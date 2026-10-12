@@ -1,0 +1,1 @@
+  DIFFMC d8_0042: N 8000000 CSG-of-operands 3476.681 ± 5.862 (undecided 0); result-classifier 3476.691; points where result ≠ CSG 1

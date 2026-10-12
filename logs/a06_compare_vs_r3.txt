@@ -1,0 +1,17 @@
+numerics        ok 7 vs 7 lines; differing=0; unparsed=0/0
+rotations       FAIL 89 vs 89 lines; differing=44; unparsed=0/0
+suite           FAIL 128 vs 128 lines; differing=2; unparsed=0/0
+target          FAIL 9 vs 9 lines; differing=4; unparsed=0/0
+a01-tests       ok 41 vs 41 lines; differing=0; unparsed=0/0
+a01-corpus      ok 102 vs 102 lines; differing=0; unparsed=0/0
+a01-sequences   ok 902 vs 902 lines; differing=0; unparsed=0/0
+a03-hints       ok 1003 vs 1003 lines; differing=0; unparsed=0/0
+a04-cylinder    ok 105 vs 105 lines; differing=0; unparsed=0/0
+
+diffclass.py --labels '^(Z angle|3D axis|translated rotated|target angle)':
+differing records: 50
+  warning gone  x2: Boolean: # zero-length edge(s) removed.
+  warning gone  x4: Boolean: no arcs recovered; longest chain of same-owner links is # — цепочка короче трёх звеньев.
+  warning gone  x2: Boolean: sliver face merged into a neighbour.
+  warning gone  x2: Edges: # plane–cylinder edge(s) given their exact elliptic curve.
+OK

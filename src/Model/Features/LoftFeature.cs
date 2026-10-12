@@ -1,0 +1,58 @@
+using Parametric3D.Core;
+using Parametric3D.Kernel.Ops;
+
+namespace Parametric3D.Model.Features;
+
+/// <summary>
+/// ЛОФТ (по сечениям) — операция дерева. В ядре она была, но из модели ею воспользоваться было
+/// нельзя. Сечения задаются эскизами по порядку: порядок и есть смысл операции, поэтому он
+/// хранится списком, а не набором.
+/// </summary>
+public sealed class LoftFeature : Feature
+{
+    /// <summary>Эскизы сечений, по порядку от первого к последнему.</summary>
+    public readonly List<uint> SectionSketchIds = new();
+
+    /// <summary>Сколько точек размечается по длине каждого сечения.</summary>
+    public int Samples = 64;
+
+    public LoftFeature(string name = "Loft") { Name = name; }
+    static readonly bool LoftSolveOff = Environment.GetEnvironmentVariable("P3D_LOFTSOLVE") == "0";
+
+    public override string Summary => $"Loft ({SectionSketchIds.Count} sections)" + (Cut ? " cut" : "");
+
+    public override void Execute(BuildContext ctx)
+    {
+        if (SectionSketchIds.Count < 2)
+            throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Loft: at least two sections are needed.");
+
+        var sections = new List<Profile>();
+        foreach (uint id in SectionSketchIds)
+        {
+            var sk = ctx.FindSketch(id)
+                     ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Loft: a section sketch is not found.");
+            // KRN-07 (07.4): сечения решаются, как у прочих операций по эскизу. Прежде лофт брал эскиз как есть: размер,
+            // заданный параметром, не действовал (измерено: радиус по формуле R=3 — лофт строился по нарисованному r=5,
+            // объём на 26% больше). Мутация P3D_LOFTSOLVE=0.
+            if (!LoftSolveOff)
+            {
+                if (ctx.Parameters != null) sk.UpdateDimensionsFromParameters(ctx.Parameters);
+                sk.Solve(ctx.Solver);
+                sk.RequireSolved(Name);
+            }
+            var prof = sk.ToProfile();
+            if (prof.IsEmpty) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Loft: a section sketch is empty or not closed.");
+            sections.Add(prof);
+        }
+
+        var solid = LoftOp.Build(sections, Math.Clamp(Samples, 8, 512));
+
+        if (Cut) BooleanOp.Subtract(ctx.Bodies, solid, ctx.Warnings);
+        else BooleanOp.Unite(ctx.Bodies, solid, ctx.Warnings);
+    }
+
+    public override IEnumerable<uint> ConsumedSketchIds()
+    {
+        foreach (uint id in SectionSketchIds) if (id != 0) yield return id;
+    }
+}

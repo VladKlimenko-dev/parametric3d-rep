@@ -1,0 +1,41 @@
+id	name	status	bodies	faces	volume	area	expected	guarantee	massFromMesh
+c00	shell cube 60, t=2, open top	ok	1	11	34112.00000000001	34592	34112	ExactAnalytic	False
+c01	revolve ring 360°	ok	1	4	28274.333882308274	7539.822368615431	28274.333882308136	ExactAnalytic	False
+c02	revolve ring 90°	ok	1	6	7068.58347057702	2484.955592153883	7068.583470577034	ExactAnalytic	False
+c03	sweep circle r5 along 40	ok	1	3	3141.592653589772	1413.7166941154182	3141.5926535897934	ExactAnalytic	False
+c04	loft square 20 → 10 over 30	no exact step: STEP: surface unknown is not written exactly yet.							
+c05	draft 5° on the sides of a cube 60 (neutral bottom)	ok	1	6	180409.325640401	19240.74117179222	180409.3260355199	ExactPolyhedral	False
+c06	mirror box across x=0	ok	2	12	8000	3200	8000	ExactAnalytic,ExactAnalytic	False
+c07	linear pattern 3 × 20	ok	3	18	3000	1800	3000	ExactAnalytic,ExactAnalytic,ExactAnalytic	False
+c08	circular pattern 4	ok	4	24	4000	2400	4000	ExactAnalytic,ExactAnalytic,ExactAnalytic,ExactAnalytic	False
+c09	shell cylinder r10 h30, t=2, open top	ok	1	5	3795.0439255364595	3920.7076316800712	3795.04392553647	ExactAnalytic	False
+c10	sweep circle r2 along a quarter arc R20	ok	1	3	394.7841760435742	419.9169172722913	394.7841760435743	ExactAnalytic	False
+c11	revolve circle 90° (torus segment)	ok	1	3	394.784176043576	419.91691727229556	394.78417604357435	ExactAnalytic	False
+c12	revolve cut groove in a cylinder	ok	1	7	8293.80460547708	2613.8050877867054	8293.804605477053	ExactAnalytic	False
+c13	extrude symmetric two-sided	ok	1	6	3000	1400	3000	ExactAnalytic	False
+c14	loft circle r10 → r5 over 30 (cone frustum)	ok	1	3	5497.787143782221	1825.916237602474	5497.787143782138	ExactAnalytic	False
+c15	rib in an L-bracket (triangle 30×30, t=3)	ok	1	11	8850	4797.279220613578	8850	ExactAnalytic	False
+c16	sweep circle r2 along a line 20 + tangent arc R20 (90°)	ok	1	4	646.1114582644642	671.2443283825678	646.1115883307577	ExactPolyhedral	False
+c17	sweep circle r3 along an L-shaped polyline 40 + 30 (mitred corner)	ok	1	4	1979.2033717613383	1376.017582272332	1979.2033717615698	ExactPolyhedral	False
+c18	edge round R4	ok	1	8	214097.52220392306	22564.548547187198	NaN	ExactAnalytic	False
+c19	edge chamfer 3	ok	1	7	215730	21485.558441227156	NaN	ExactAnalytic	False
+c20	hole d8 depth 20	ok	1	8	214994.69035085128	22102.654824574372	NaN	Unspecified	False
+c21	vertex round R5	ok	1	7	215998.45629468976	21596.71675778066	NaN	ExactAnalytic	False
+c22	vertex chamfer 5	ok	1	7	215979.16666666666	21584.15063509461	NaN	ExactAnalytic	False
+c23	boolean sphere cut	ok	1	7	215476.4012244017	21521.460183660256	NaN	ExactAnalytic	False
+c24	boolean torus cut	ok	1	8	215777.93390274025	21625.52202552625	NaN	ExactPolyhedral	False
+c25	plate K08 seed 8001, 20 features	ok	1	30	318595.35032001574	44571.578912224075	NaN	ExactAnalytic	False
+c26	plate K08 seed 8002, 30 features	ok	1	39	314661.0450229623	47020.81501182847	NaN	ExactAnalytic	False
+c27	plate K08 seed 8003, 40 features	ok	1	51	319692.4383720431	46487.207411893345	NaN	ExactAnalytic	False
+c28	plate K08 seed 8004, 60 features	ok	1	57	309107.268564815	47553.158236799616	NaN	ExactAnalytic	False
+c29	plate K08 seed 8005, 20 features	ok	1	32	318376.06341195456	44323.218357813326	NaN	ExactAnalytic	False
+c30	plate K08 seed 8006, 20 features	ok	1	32	313707.150217128	45066.17452490159	NaN	ExactAnalytic	False
+c31	plate K08 seed 8007, 25 features	ok	1	40	318733.2705204854	45140.81607031386	NaN	ExactAnalytic	False
+c32	plate K08 seed 8008, 25 features	ok	1	33	319838.7680463499	45198.72913969592	NaN	ExactAnalytic	False
+c33	flange: revolve hub + disc, 6 through holes d9 on R45	ok	1	12	157839.89810165786	35170.129756937706	157839.8981016584	ExactAnalytic	False
+c34	shaft: stepped revolve, groove by revolve cut, axial hole	ok	1	13	78549.24111770536	12861.680323796636	78549.24111770559	ExactAnalytic	False
+c35	housing: block, shell t=3 open top, inner bosses with holes	ok	1	27	45731.36269740935	31327.57513160616	45731.362697409255	ExactAnalytic	False
+c36	cavity: sphere R10 inside cube 60	ok	1	7	211811.20979521362	22856.63706143592	211811.2097952136	ExactAnalytic	False
+c37	cavity: closed cylinder r8 h20 inside cube 60	ok	1	9	211978.76140340508	23007.433508808233	211978.76140340508	ExactAnalytic	False
+c38	two cavities: sphere R6 and cylinder r5 h10	ok	1	10	214309.82315236866	22523.628240155398	214309.82315236868	ExactAnalytic	False
+c39	sphere cavity R6, then a through hole r5 elsewhere	ok	1	8	210382.83233538145	23780.265301591324	210382.83233538145	ExactAnalytic	False

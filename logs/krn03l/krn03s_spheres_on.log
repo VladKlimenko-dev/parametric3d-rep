@@ -1,0 +1,20 @@
+{"runtime":".NET 8.0.31","cpu":2,"os":"Ubuntu 24.04.5 LTS","args":["krn03s"]}
+KRN03S cut top: Success ExactAnalytic analytic 46927.67 mesh 46930.846 BRep: ok; Mesh: ok uvPole 1/0 cut 0 cap 0/0
+KRN03S cut corner: Success ExactAnalytic analytic 47476.395 mesh 47480.967 BRep: ok; Mesh: ok uvPole 1/0 cut 0 cap 0/0
+KRN03S cavity: Success ExactPolyhedral analytic 47476.401 mesh 47480.128 BRep: ok; Exact: ok; Mesh: ok uvPole 1/0 cut 0 cap 0/0
+      general declined: no intersection (disjoint or nested bodies — not handled by the general boolean)
+KRN03S dome: Success ExactAnalytic analytic 49072.33 mesh 49069.154 BRep: ok; Mesh: ok uvPole 2/0 cut 0 cap 0/0
+KRN03S dome side: Success ExactAnalytic analytic 48452.389 mesh 48450.747 BRep: ok; Mesh: ok uvPole 3/0 cut 0 cap 0/0
+KRN03S intersect: Success ExactAnalytic analytic 7068.5835 mesh 7055.4829 BRep: ok; Mesh: ok uvPole 4/0 cut 0 cap 0/0
+KRN03S cut bottom: Success ExactAnalytic analytic 47281.622 mesh 47283.901 BRep: ok; Mesh: ok uvPole 5/0 cut 0 cap 0/0
+KRN03S rot cut top: Success ExactAnalytic analytic 46927.67 mesh 46930.848 BRep: ok; Mesh: ok uvPole 6/0 cut 1 cap 0/0
+KRN03S rot cut corner: Success ExactAnalytic analytic 47476.395 mesh 47484.788 BRep: ok; Mesh: ok uvPole 7/0 cut 2 cap 0/0
+KRN03S rot cavity: Success ExactPolyhedral analytic 47476.414 mesh 47480.144 BRep: ok; Exact: ok; Mesh: ok uvPole 7/0 cut 2 cap 0/0
+      general declined: no intersection (disjoint or nested bodies — not handled by the general boolean)
+KRN03S rot dome: Success ExactAnalytic analytic 49072.33 mesh 49069.157 BRep: ok; Mesh: ok uvPole 8/0 cut 3 cap 0/0
+KRN03S rot dome side: Success ExactAnalytic analytic 48452.389 mesh 48450.749 BRep: ok; Mesh: ok uvPole 9/0 cut 4 cap 0/0
+KRN03S rot intersect: Success ExactAnalytic analytic 7068.5835 mesh 7055.4831 BRep: ok; Mesh: ok uvPole 10/0 cut 5 cap 0/0
+KRN03S rot cut bottom: Success ExactAnalytic analytic 47281.622 mesh 47283.904 BRep: ok; Mesh: ok uvPole 11/0 cut 6 cap 0/0
+KRN03S total 14 analytic 12 bad 0
+{"staleExactUses":0}
+{"passed":0,"failed":0}

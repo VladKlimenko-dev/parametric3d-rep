@@ -1,0 +1,63 @@
+# Поставка 3: попеременные замеры (tests/k01 режим perf; база — исходники r7, текущая — r8), по 15 замеров на сторону
+# шум стенда (A/A, holes8): медиана ±2 %, p95 ±7 %
+holes8 base: n=15 median    222.4 ms  p95    266.6 ms  alloc 107.9 MB
+holes8 cur : n=15 median    206.9 ms  p95    227.6 ms  alloc 107.7 MB
+holes8 ratio median 0.930  p95 0.854
+sphere base: n=15 median    343.0 ms  p95    385.7 ms  alloc 88.7 MB
+sphere cur : n=15 median    334.2 ms  p95    433.2 ms  alloc 87.9 MB
+sphere ratio median 0.974  p95 1.123
+roundhole base: n=15 median    131.7 ms  p95    156.5 ms  alloc 61.2 MB
+roundhole cur : n=15 median    132.7 ms  p95    181.1 ms  alloc 61.2 MB
+roundhole ratio median 1.008  p95 1.157
+tilted-step-fillet base: n=15 median     43.4 ms  p95     51.1 ms  alloc 15.1 MB
+tilted-step-fillet cur : n=15 median     43.7 ms  p95     51.6 ms  alloc 15.1 MB
+tilted-step-fillet ratio median 1.007  p95 1.010
+realistic-8001-edit-last base: n=15 median     71.9 ms  p95    103.0 ms  alloc 43.7 MB
+realistic-8001-edit-last cur : n=15 median     64.8 ms  p95     74.0 ms  alloc 43.7 MB
+realistic-8001-edit-last ratio median 0.901  p95 0.718
+oblique-hole base: n=15 median     56.7 ms  p95     62.7 ms  alloc 40.3 MB
+oblique-hole cur : n=15 median     45.5 ms  p95     56.1 ms  alloc 26.9 MB
+oblique-hole ratio median 0.802  p95 0.895
+# сняты до раннего отказа в ExactPlanarInput (он на эти пути не влияет):
+cylcut-pockets base: n=15 median     33.0 ms  p95     34.9 ms  alloc 38.6 MB
+cylcut-pockets cur : n=15 median     10.2 ms  p95     12.8 ms  alloc 8.1 MB
+cylcut-pockets ratio median 0.309  p95 0.367
+step-read base: n=15 median    195.0 ms  p95    225.9 ms  alloc 119.6 MB
+step-read cur : n=15 median     45.6 ms  p95     60.5 ms  alloc 17.4 MB
+step-read ratio median 0.234  p95 0.268
+iges-read base: n=15 median    107.8 ms  p95    123.3 ms  alloc 116.9 MB
+iges-read cur : n=15 median     28.6 ms  p95     35.4 ms  alloc 15.7 MB
+iges-read ratio median 0.265  p95 0.287
+# r9: переиспользование сырой сетки неизменённых граней (BooleanOp.ReuseFaceMeshes), база — r8:
+realistic-8001-edit-last base: n=15 median     71.3 ms  p95     82.0 ms  alloc 43.7 MB
+realistic-8001-edit-last cur : n=15 median     50.8 ms  p95     62.5 ms  alloc 35 MB
+realistic-8001-edit-last ratio median 0.712  p95 0.762
+realistic-8001 base: n=15 median    325.5 ms  p95    415.4 ms  alloc 164.6 MB
+realistic-8001 cur : n=15 median    319.5 ms  p95    389.9 ms  alloc 164.6 MB
+realistic-8001 ratio median 0.982  p95 0.939
+# r10: точная история операции (FeatureHistory.SameRegionExact), база — r9 с прежним сравнением; 35 замеров на сторону:
+realistic-8001-edit-last base: n=35 median     50.8 ms  p95     67.0 ms  alloc 35 MB
+realistic-8001-edit-last cur : n=35 median     53.7 ms  p95     63.6 ms  alloc 35.8 MB
+realistic-8001-edit-last ratio median 1.057  p95 0.949
+realistic-8001 base: n=15 median    331.4 ms  p95    473.0 ms  alloc 164.6 MB
+realistic-8001 cur : n=15 median    334.5 ms  p95    455.5 ms  alloc 170.3 MB
+realistic-8001 ratio median 1.009  p95 0.963
+# r18: составной инструмент вкл/выкл (P3D_COMPOSITE), полное перестроение реалистичной детали, 15 замеров на сторону:
+realistic-8001 off: median 374.1 ms  p95 406.0 ms
+realistic-8001 on : median 414.9 ms  p95 543.2 ms
+realistic-8001 ratio median 1.109 — составной инструмент оставлен выключенным
+# r20: неизменяемое точное тело (копия многоугольников, ReadOnlySpan границ и вершин), база — r19:
+holes8 ratio median 0.964 (шум); sphere 1.046 (шум); realistic-8001 (35 замеров) ratio median 1.009, p95 0.885; память +1 МБ
+# r21: видимая сетка одной парой (SetDisplay), база — r20: realistic-8001 ratio median 0.976, edit-last 0.979 (шум)
+# r23: выбор секущей — выборка узла на стеке, плотный цикл SideOfBoxCore (база — r22):
+sphere (35 замеров) median 352.5 → 321.2 ms (0.911), p95 396.0 → 397.5; память 89.2 → 89.2 МБ
+realistic-8001 median 366.8 → 346.5 ms (0.945); holes8 190.1 → 193.4 ms (1.017, шум)
+(промежуточный вариант с массивами на куче: сфера 0.913, память +8.7 МБ — заменён стеком)
+# r33: аналитический маршрут (P3D_ANALYTIC=1) против многогранного пути, попеременно, 15 замеров на сторону:
+realistic-8001            off median 299.5 ms | on 261.0 ms | ratio 0.871
+holes8                    off median 175.4 ms | on  99.8 ms | ratio 0.569
+realistic-8001-edit-last  off median  52.9 ms | on  54.0 ms | ratio 1.021 (после доноров сетки; до — 1.155)
+профиль маршрута до правок (11 булевых): полная проверка 115 мс (из них сетка 88), разметка граней 95, сборка 24
+# r35: составной инструмент при аналитическом маршруте по умолчанию: realistic-8001 composite off 413.9 | on 419.5 (1.014) — шум, оставлен выключенным
+# r35: дерево резца с фиксированным порядком секущих (почти выпуклый резец; эксперимент, откатан): sphere off 549.2 | on 583.0 (1.062) — без выигрыша
+# r43: общая аналитическая булева (P3D_ANALYTICGENERAL): realistic-8001 off 296.8 | on 295.0 (0.994); edit-last off 64.0 | on 64.7 (1.011)

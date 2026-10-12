@@ -1,0 +1,28 @@
+<Project>
+  <!--
+    Общее для всех проверочных проектов.
+    • Исходники ядра: по умолчанию ../src рядом с tests/ (раскладка поставки); иначе -p:SourceRoot=<путь>.
+    • Зависимости: по умолчанию настоящие пакеты NuGet (OpenTK.Mathematics, System.Drawing.Common).
+      Для автономной сборки без сети: -p:LocalDeps=<каталог с OTKMath/ и SDCStub/>.
+    • Fixtures (tests/stepfiles) копируются в выходной каталог: тесты читают их из AppContext.BaseDirectory/stepfiles.
+  -->
+  <PropertyGroup>
+    <SourceRoot Condition="'$(SourceRoot)'==''">$(MSBuildThisFileDirectory)../src</SourceRoot>
+  </PropertyGroup>
+  <!-- Автономная сборка: пакетов не нужно, сеть не трогается. -->
+  <PropertyGroup Condition="'$(LocalDeps)'!=''">
+    <RestoreSources>$(LocalDeps)</RestoreSources>
+    <RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(LocalDeps)'!=''">
+    <ProjectReference Include="$(LocalDeps)/OTKMath/OpenTK.Mathematics.csproj" />
+    <ProjectReference Include="$(LocalDeps)/SDCStub/System.Drawing.Common.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(LocalDeps)'==''">
+    <PackageReference Include="OpenTK.Mathematics" Version="4.9.4" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)stepfiles/**/*" LinkBase="stepfiles" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

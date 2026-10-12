@@ -1,0 +1,8 @@
+{"runtime":".NET 8.0.31","cpu":2,"os":"Ubuntu 24.04.5 LTS","args":["allB"]}
+{"test":"K07-DRILL","x":15.3,"r":3.1,"h":30,"rotated":47700.06992996383,"straight":47698.6405456384,"rel":2.99660844842774E-05,"exactEqual":false,"validA":true,"validB":true}
+{"test":"K07-DRILL","x":30,"r":2,"h":8,"rotated":47599.39990010175,"straight":47599.02297897172,"rel":7.918610966156313E-06,"exactEqual":false,"validA":true,"validB":true}
+{"test":"K07-DRILL","x":44.4,"r":4.2,"h":30,"rotated":46495.21600739513,"straight":46493.83150641972,"rel":2.9777278057757842E-05,"exactEqual":false,"validA":true,"validB":true}
+{"test":"K07-DRILL-STRAIGHT-EQUALS-ROTATED","ok":true}
+{"test":"K07-BOSS","x":12.3,"r":3.3,"direct":48204.6860011248,"general":48204.6860011248,"rel":0,"valid":true}
+{"test":"K07-BOSS","x":40,"r":5.1,"direct":48790.35275531508,"general":48790.35275531508,"rel":0,"valid":true}
+{"test":"K07-BOSS-DIRECT-EQUALS-GENERAL","ok":true}

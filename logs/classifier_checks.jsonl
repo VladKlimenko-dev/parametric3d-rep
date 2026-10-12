@@ -1,0 +1,9 @@
+{"test":"G15-CLASSIFY-BOX","faces":6,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-THROUGH-HOLE","faces":7,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-BOSS","faces":8,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-BLIND-HOLE","faces":8,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-SHAFT","faces":3,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-UNSUPPORTED","unsupported":"face 327137: Sphere"}
+{"test":"G15-CLASSIFY-SLOTTED-SHAFT","faces":10,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-ROTATED","faces":7,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-TILTED-HOLE","faces":7,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}

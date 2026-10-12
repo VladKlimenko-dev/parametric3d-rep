@@ -1,0 +1,2 @@
+d9_0021  ours-exception  [fuse,fuse] cyl r4.08 h18.93 rot35 | cone r3.89/5.85 h28.98 rot50 | torus 6.24/2.46 rot52
+DIFF: agree 199, refused 0, WRONG 0, occt-failed 0, ours-exception 1 (of 200)

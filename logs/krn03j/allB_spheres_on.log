@@ -1,0 +1,797 @@
+{"runtime":".NET 8.0.31","cpu":2,"os":"Ubuntu 24.04.5 LTS","args":["allB"]}
+{"test":"K07-DRILL","x":15.3,"r":3.1,"h":30,"rotated":47698.6405456384,"straight":47698.6405456384,"rel":0,"exactEqual":true,"validA":true,"validB":true}
+{"test":"K07-DRILL","x":30,"r":2,"h":8,"rotated":47599.02297897172,"straight":47599.02297897172,"rel":0,"exactEqual":true,"validA":true,"validB":true}
+{"test":"K07-DRILL","x":44.4,"r":4.2,"h":30,"rotated":46493.83150641972,"straight":46493.83150641972,"rel":0,"exactEqual":true,"validA":true,"validB":true}
+{"test":"K07-DRILL-STRAIGHT-EQUALS-ROTATED","ok":true}
+{"test":"K07-BOSS","x":12.3,"r":3.3,"direct":48204.6860011248,"general":48204.6860011248,"rel":0,"valid":true}
+{"test":"K07-BOSS","x":40,"r":5.1,"direct":48790.35275531508,"general":48790.35275531508,"rel":0,"valid":true}
+{"test":"K07-BOSS-DIRECT-EQUALS-GENERAL","ok":true}
+{"test":"G7-MESH-REUSE-IDENTICAL","edits":20,"facesCompared":765,"facesReused":575,"analyticDonors":898}
+{"test":"G7-MESH-REUSE-IDENTICAL","ok":true}
+{"test":"G7-HISTORY-EXACT","modified":["extrude[0]:side[0.1]"],"split":[],"generated":["notch/extrude[0]:bottom","notch/extrude[0]:side[0.0]","notch/extrude[0]:side[0.2]","notch/extrude[0]:side[0.3]","notch/extrude[0]:top"],"unchangedModified":[],"toleranceDisagreement":"DISAGREE extrude[0]:side[0.1]: tolerance True, exact False"}
+{"test":"G7-HISTORY-EXACT","ok":true}
+{"test":"G8-ROUTE-QUADRIC-THROUGH","trace":["quadric-through: Accepted"],"volume":212984.07105255383}
+{"test":"G8-ROUTE-QUADRIC-THROUGH","ok":true}
+{"test":"G8-ROUTE-QUADRIC-BLIND","trace":["quadric-blind: Accepted"],"volume":214994.69035085128}
+{"test":"G8-ROUTE-QUADRIC-BLIND","ok":true}
+{"test":"G8-ROUTE-QUADRIC-COUNTERBORE","trace":["quadric-counterbore: Accepted"],"volume":212569.38082227996}
+{"test":"G8-ROUTE-QUADRIC-COUNTERBORE","ok":true}
+{"test":"G8-ROUTE-QUADRIC-COUNTERSINK","trace":["quadric-countersink: Accepted"],"volume":212842.6993831422}
+{"test":"G8-ROUTE-QUADRIC-COUNTERSINK","ok":true}
+{"test":"G8-ROUTE-EXACT-THROUGH","trace":["quadric-through: Declined (QuadricCut: this case is not supported yet (planar body, through hole along Z).)","exact-through: Accepted"],"volume":212877.68059889972}
+{"test":"G8-ROUTE-EXACT-THROUGH","ok":true}
+{"test":"G8-ROUTE-EXACT-BLIND","trace":["quadric-blind: Declined (QuadricCut: this case is not supported yet (planar body, hole along an axis).)","exact-blind: Accepted"],"volume":214994.69035085128}
+{"test":"G8-ROUTE-EXACT-BLIND","ok":true}
+{"test":"G8-ROUTE-EXACT-CUT-EDGE","trace":["quadric-through: Declined (QuadricCut: this case is not supported yet (planar body, through hole along Z).)","exact-through: Declined (ExactBoolean: a rim crosses a face boundary (face splitting is not implemented yet) \u2014 the polyhedral boolean is used.)","exact-cut-edge: Accepted"],"volume":212476.62115731172}
+{"test":"G8-ROUTE-EXACT-CUT-EDGE","ok":true}
+{"test":"G8-ROUTE-EXACT-CUT-EDGE-BLIND","trace":["quadric-blind: Declined (QuadricCut: this case is not supported yet (planar body, hole along an axis).)","exact-blind: Declined (ExactBoolean: a rim crosses a face boundary (face splitting is not implemented yet) \u2014 the polyhedral boolean is used.)","exact-cut-edge-blind: Accepted"],"volume":211564.94730793146}
+{"test":"G8-ROUTE-EXACT-CUT-EDGE-BLIND","ok":true}
+{"test":"G8-ROUTE-EXACT-CUT-EDGE-BLIND-R4","trace":["quadric-blind: Declined (QuadricCut: this case is not supported yet (planar body, hole along an axis).)","exact-blind: Declined (ExactBoolean: a rim crosses a face boundary (face splitting is not implemented yet) \u2014 the polyhedral boolean is used.)","exact-cut-edge-blind: Accepted"],"volume":210921.87320766944}
+{"test":"G8-ROUTE-EXACT-CUT-EDGE-BLIND-R4","ok":true}
+{"test":"G8-ROUTE-GENERAL-COUNTERBORE-BLIND","trace":["quadric-counterbore: NotApplicable (counterbore and countersink are exact only when through)","exact-blind: NotApplicable (only a simple hole)","exact-cut-edge-blind: NotApplicable (only a simple hole)","cross-hole: NotApplicable (only a simple through hole)","general-boolean: Accepted"],"volume":214580.0001205774}
+{"test":"G8-ROUTE-GENERAL-COUNTERBORE-BLIND","ok":true}
+{"test":"G8-ROUTE-CROSS-HOLE","trace":["quadric-through: Declined (QuadricCut: this case is not supported yet (planar body, through hole along Z).)","exact-through: NotApplicable (the body has non-planar faces)","exact-cut-edge: NotApplicable (the body has non-planar faces)","cross-hole: Accepted"],"volume":18599.49150944608}
+{"test":"G8-ROUTE-CROSS-HOLE","ok":true}
+{"test":"G8-ROUTE-SWITCHED-OFF","ok":true}
+{"test":"G8-COMPOSITE-Counterbore-BLIND","exact":214580.0001205774,"composite":214580.0001205774,"twoCuts":214580.0001205774,"compositeError":0,"twoCutsError":0,"reason":"composite tool"}
+{"test":"G8-COMPOSITE-COUNTERBORE-BLIND","ok":true}
+{"test":"G8-COMPOSITE-Countersink-BLIND","exact":214853.31868143973,"composite":214853.3186814397,"twoCuts":214853.3186814397,"compositeError":2.9103830456733704E-11,"twoCutsError":2.9103830456733704E-11,"reason":"composite tool"}
+{"test":"G8-COMPOSITE-COUNTERSINK-BLIND","ok":true}
+{"test":"G8-CROSS-HOLE-UV-ALL-FACES","ok":true}
+{"test":"G8-BLIND-EDGE-VS-GENERAL","exact":211564.94730793143,"newRoute":211564.94730793146,"general":211564.94730793146,"newError":2.9103830456733704E-11,"generalError":2.9103830456733704E-11}
+{"test":"G8-BLIND-EDGE-VS-GENERAL","ok":true}
+{"test":"G9-CURVED-REGIONS-BANDS","facesOn":7,"facesOff":6,"wallPieces":2,"loops":[2,2],"volume":18397.16657942168,"volumeWithoutSplit":18397.166579422406,"exact":18397.166579421828,"err":-1.4915713109076023E-10,"stepBack":1,"stepFaces":7,"stepVerdict":"BRep: ok; Mesh: ok","stepMeshVolume":18352.18042569647}
+{"test":"G9-CURVED-REGIONS-BANDS","ok":true}
+{"test":"G9-CURVED-REGIONS-SLOTS","facesOn":10,"facesOff":9,"wallPieces":2,"loops":[1,1],"volume":17921.74199231333,"volumeWithoutSplit":17921.741992313222,"exact":17921.750718982938,"err":-0.008726669606403448,"stepBack":1,"stepFaces":10,"stepVerdict":"BRep: ok; Mesh: ok","stepMeshVolume":17876.339104690727}
+{"test":"G9-CURVED-REGIONS-SLOTS","ok":true}
+{"test":"G10-TRIANGULATOR-DEGENERATE-COLLINEAR","triangles":50,"area":5440,"expected":5440,"flipped":0}
+{"test":"G10-TRIANGULATOR-DEGENERATE-COLLINEAR","ok":true}
+{"test":"G10-TRIANGULATOR-BRIDGE-DUPLICATES","triangles":50,"area":5440.0056159999995,"expected":5440.0056159999995,"flipped":0}
+{"test":"G10-TRIANGULATOR-BRIDGE-DUPLICATES","ok":true}
+{"test":"G12-PRISM-SLOTTED-SHAFT-HEALED","levels":2,"prism":17921.750718982938,"analytic":17921.74199231333,"formula":17921.750718982938,"heal":0.019246274569079347,"errFormula":0,"errAnalytic":0.008726669606403448}
+{"test":"G12-PRISM-SLOTTED-SHAFT-HEALED","ok":true}
+{"test":"G12-PRISM-GROOVED-SHAFT","levels":4,"prism":18397.16657942183,"analytic":18397.166579421748,"formula":18397.166579421828,"heal":0,"errFormula":3.637978807091713E-12,"errAnalytic":8.36735125631094E-11}
+{"test":"G12-PRISM-GROOVED-SHAFT","ok":true}
+{"test":"G12-PRISM-REALISTIC-8001","levels":8,"prism":318595.35032001574,"analytic":318595.35032001574,"formula":null,"heal":2.4575624024691933E-07,"errFormula":null,"errAnalytic":0}
+{"test":"G12-PRISM-REALISTIC-8001","ok":true}
+{"test":"G12-PRISM-REALISTIC-8002","levels":8,"prism":317309.7888896477,"analytic":317309.78888964775,"formula":null,"heal":7.105427357601002E-15,"errFormula":null,"errAnalytic":-5.820766091346741E-11}
+{"test":"G12-PRISM-REALISTIC-8002","ok":true}
+{"test":"G12-PRISM-REALISTIC-8003","levels":9,"prism":321458.14539839234,"analytic":321458.14539839246,"formula":null,"heal":5.551115123125783E-17,"errFormula":null,"errAnalytic":-1.1641532182693481E-10}
+{"test":"G12-PRISM-REALISTIC-8003","ok":true}
+{"test":"G12-PRISM-REALISTIC-8004","levels":7,"prism":313742.36540267576,"analytic":313742.3654026757,"formula":null,"heal":1.6323406271112617E-07,"errFormula":null,"errAnalytic":5.820766091346741E-11}
+{"test":"G12-PRISM-REALISTIC-8004","ok":true}
+{"test":"G13-PRISM-THROUGH-HOLE","faces":7,"edges":14,"untagged":0,"tags":["extrude[0]:bottom","extrude[0]:side[0.0]","extrude[0]:side[0.0]","extrude[0]:side[0.1]","extrude[0]:side[0.2]","extrude[0]:side[0.3]","extrude[0]:top"],"curves":{"LineCurve3":12,"ArcCurve3":2},"verdict":"BRep: ok; Mesh: ok","analytic":46429.20367320511,"formula":46429.203673205106,"err":7.275957614183426E-12,"warnings":[]}
+{"test":"G13-PRISM-THROUGH-HOLE","ok":true}
+{"test":"G13-PRISM-BLIND-HOLE","faces":8,"edges":14,"untagged":0,"tags":["extrude[0]:bottom","extrude[0]:bottom","extrude[0]:side[0.0]","extrude[0]:side[0.0]","extrude[0]:side[0.1]","extrude[0]:side[0.2]","extrude[0]:side[0.3]","extrude[0]:top"],"curves":{"LineCurve3":12,"ArcCurve3":2},"verdict":"BRep: ok; Mesh: ok","analytic":47371.68146928205,"formula":47371.68146928204,"err":7.275957614183426E-12,"warnings":[]}
+{"test":"G13-PRISM-BLIND-HOLE","ok":true}
+{"test":"G13-PRISM-BOSS","faces":8,"edges":14,"untagged":0,"tags":["extrude[0]:bottom","extrude[0]:side[0.0]","extrude[0]:side[0.0]","extrude[0]:side[0.1]","extrude[0]:side[0.2]","extrude[0]:side[0.3]","extrude[0]:top","extrude[0]:top"],"curves":{"LineCurve3":12,"ArcCurve3":2},"verdict":"BRep: ok; Mesh: ok","analytic":50010.619298297475,"formula":50010.61929829747,"err":7.275957614183426E-12,"warnings":[]}
+{"test":"G13-PRISM-BOSS","ok":true}
+{"test":"G13-PRISM-POCKET","faces":11,"edges":24,"untagged":0,"tags":["extrude[0]:bottom","extrude[0]:bottom","extrude[0]:side[0.0]","extrude[0]:side[0.0]","extrude[0]:side[0.1]","extrude[0]:side[0.1]","extrude[0]:side[0.2]","extrude[0]:side[0.2]","extrude[0]:side[0.3]","extrude[0]:side[0.3]","extrude[0]:top"],"curves":{"LineCurve3":24},"verdict":"BRep: ok; Mesh: ok","analytic":47000,"formula":47000,"err":0,"warnings":[]}
+{"test":"G13-PRISM-POCKET","ok":true}
+{"test":"G13-PRISM-SLOTTED-SHAFT","faces":10,"edges":24,"untagged":0,"tags":["extrude[0]:bottom","extrude[0]:side[0.0]","extrude[0]:side[0.0]","extrude[0]:side[0.0]","extrude[0]:side[0.0]","extrude[0]:side[0.1]","extrude[0]:side[0.2]","extrude[0]:side[0.2]","extrude[0]:side[0.3]","extrude[0]:top"],"curves":{"LineCurve3":20,"ArcCurve3":4},"verdict":"BRep: ok; Mesh: ok","analytic":17921.750718982952,"formula":17921.750718982938,"err":1.4551915228366852E-11,"warnings":[]}
+{"test":"G13-PRISM-SLOTTED-SHAFT","ok":true}
+{"test":"G13-PRISM-GROOVED-SHAFT","faces":7,"edges":6,"untagged":0,"tags":["extrude[0]:bottom","extrude[0]:bottom","extrude[0]:side[0.0]","extrude[0]:side[0.0]","extrude[0]:side[0.0]","extrude[0]:top","extrude[0]:top"],"curves":{"ArcCurve3":6},"verdict":"BRep: ok; Mesh: ok","analytic":18397.166579421748,"formula":18397.166579421828,"err":-8.003553375601768E-11,"warnings":[]}
+{"test":"G13-PRISM-GROOVED-SHAFT","ok":true}
+{"test":"G14-ANALYTIC-ROUTE-USED","Status":0,"Guarantee":3,"faces":7}
+{"test":"G14-ANALYTIC-ROUTE-USED","ok":true}
+{"test":"G14-ANALYTIC-FAULT-FALLS-BACK","Status":0,"Guarantee":1}
+{"test":"G14-ANALYTIC-FAULT-FALLS-BACK","ok":true}
+{"test":"G14-ANALYTIC-CANCEL","ok":true}
+{"test":"G14-ANALYTIC-STATE","state":"RepresentationState { BRepRevision = 1, Published = False, HasExact = False, ExactRevision = -1, ExactCurrent = False, MeshRevision = -1, MeshCurrent = False }"}
+{"test":"G14-ANALYTIC-STATE-LAZY-EXACT","vex":46433.685160864,"van":46429.20367320511,"rel":9.65230351661729E-05}
+{"test":"G14-ANALYTIC-STATE","ok":true}
+{"test":"G14-ANALYTIC-NAMES-AND-VOLUME","namesOff":["#F0/extrude[0]:bottom","#F0/extrude[0]:side[0.0]","#F0/extrude[0]:side[0.1]","#F0/extrude[0]:side[0.2]","#F0/extrude[0]:side[0.3]","#F0/extrude[0]:top","#F1/extrude[0]:bottom","#F1/extrude[0]:side[0.3]","#F1/extrude[0]:side[0.3]","#F2/exact:hole-bottom","#F2/exact:hole-wall"],"namesOn":["#F0/extrude[0]:bottom","#F0/extrude[0]:side[0.0]","#F0/extrude[0]:side[0.1]","#F0/extrude[0]:side[0.2]","#F0/extrude[0]:side[0.3]","#F0/extrude[0]:top","#F1/extrude[0]:bottom","#F1/extrude[0]:side[0.3]","#F1/extrude[0]:side[0.3]","#F2/exact:hole-bottom","#F2/exact:hole-wall"],"volOff":211564.9473079314,"volOn":211564.94730793146}
+{"test":"G14-ANALYTIC-NAMES-AND-VOLUME","ok":true}
+{"test":"G14-ANALYTIC-INTERSECT-IDENTITY","va":46429.20367320511,"vi":10821.902754903831,"vd":35607.30091830128,"err":-5.4569682106375694E-12,"guarantees":[3,3,3]}
+{"test":"G14-ANALYTIC-INTERSECT-IDENTITY","ok":true}
+{"test":"G15-CLASSIFY-BOX","faces":6,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-BOX","ok":true}
+{"test":"G15-CLASSIFY-THROUGH-HOLE","faces":7,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-THROUGH-HOLE","ok":true}
+{"test":"G15-CLASSIFY-BOSS","faces":8,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-BOSS","ok":true}
+{"test":"G15-CLASSIFY-BLIND-HOLE","faces":8,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-BLIND-HOLE","ok":true}
+{"test":"G15-CLASSIFY-SHAFT","faces":3,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-SHAFT","ok":true}
+{"test":"G15-CLASSIFY-UNSUPPORTED","unsupported":"face 327463: Torus"}
+{"test":"G15-CLASSIFY-UNSUPPORTED","ok":true}
+{"test":"G15-CLASSIFY-SPHERE-CUT","faces":7,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-SPHERE-CUT","ok":true}
+{"test":"G15-CLASSIFY-CONE-CUT","faces":7,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-CONE-CUT","ok":true}
+{"test":"G15-CLASSIFY-SLOTTED-SHAFT","faces":10,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-SLOTTED-SHAFT","ok":true}
+{"test":"G15-CLASSIFY-ROTATED","faces":7,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-ROTATED","ok":true}
+{"test":"G15-CLASSIFY-TILTED-HOLE","faces":7,"points":10000,"skipped":0,"wrong":0,"unknown":0,"first":null}
+{"test":"G15-CLASSIFY-TILTED-HOLE","ok":true}
+{"test":"G16-FACEX-TOP-HOLE-CIRCLE","kind":"Pieces","pieces":1,"length":31.41592653460545,"expected":31.41592653589793,"err":-1.292480789061301E-09,"ends":["(30, 15, 20) (30, 15, 20)"],"closed":[true]}
+{"test":"G16-FACEX-TOP-HOLE-CIRCLE","ok":true}
+{"test":"G16-FACEX-TOP-EDGE-HOLE-ARC","kind":"Pieces","pieces":1,"length":19.823131728298993,"expected":19.823131728623846,"err":-3.248530333621602E-10,"ends":["(60, 24.582575694955842, 20) (60.00000000000001, 15.417424305044165, 20)"],"closed":[false]}
+{"test":"G16-FACEX-TOP-EDGE-HOLE-ARC","ok":true}
+{"test":"G16-FACEX-TOP-TILTED-ELLIPSE","kind":"Pieces","pieces":1,"length":25.930653019540255,"expected":25.93065302060556,"err":-1.0653060655840818E-09,"ends":["(36.53792638093602, 24.358617587290684, 20) (36.53792638093602, 24.358617587290684, 20)"],"closed":[true]}
+{"test":"G16-FACEX-TOP-TILTED-ELLIPSE","ok":true}
+{"test":"G16-FACEX-PLANE-PLANE-SEGMENT","kind":"Pieces","pieces":1,"length":40,"expected":40,"err":0,"ends":["(10, 40, 20) (10, 0, 20)"],"closed":[false]}
+{"test":"G16-FACEX-PLANE-PLANE-SEGMENT","ok":true}
+{"test":"G16-FACEX-CROSS-HOLE-QUARTIC","gaps":[0,0],"kind":"Pieces","pieces":2,"closed":[true,true],"curves":["IntersectionCurve3","IntersectionCurve3"],"worstSurf":8.189005029635155E-13,"outside":0,"samples":802}
+{"test":"G16-FACEX-CROSS-HOLE-QUARTIC","ok":true}
+{"test":"G16-FACEX-DISJOINT","kind":"Empty","pieces":0,"length":0,"expected":0,"err":0,"ends":[],"closed":[]}
+{"test":"G16-FACEX-DISJOINT","ok":true}
+{"test":"G17-SPLIT-TOP-CIRCLE","pieces":1,"regions":[78.50674715588993,2321.49325284411],"expected":[78.53981633974483,2321.460183660255],"loops":[2,1],"insideOk":true}
+{"test":"G17-SPLIT-TOP-CIRCLE","ok":true}
+{"test":"G17-SPLIT-TOP-EDGE-ARC","pieces":1,"regions":[58.70269770891278,2341.297302291087],"expected":[58.7229807114713,2341.2770192885287],"loops":[1,1],"insideOk":true}
+{"test":"G17-SPLIT-TOP-EDGE-ARC","ok":true}
+{"test":"G17-SPLIT-TOP-TWO-LINES","pieces":2,"regions":[400,400,1600.000000000003],"expected":[400,400,1600],"loops":[1,1,1],"insideOk":true}
+{"test":"G17-SPLIT-TOP-TWO-LINES","ok":true}
+{"test":"G17-SPLIT-SHAFT-BAND","pieces":1,"regions":[1884.9555921538665,1884.955592153871],"expected":[1884.9555921538758,1884.9555921538758],"loops":[2,2],"insideOk":true}
+{"test":"G17-SPLIT-SHAFT-BAND","ok":true}
+{"test":"G17-SPLIT-SHAFT-CROSS-HOLE","regions":[28.571111655498566,28.57111165549866,3712.7689609967447],"total":3769.9111843077417,"expectedTotal":3769.9111843077517}
+{"test":"G17-SPLIT-SHAFT-CROSS-HOLE","ok":true}
+{"test":"G18-GENERAL-TILTED-HOLE","faces":7,"edges":14,"curves":{"LineCurve3":12,"EllipseCurve3":2},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":46931.34118425998,"formula":46931.34118425998,"err":0}
+{"test":"G18-GENERAL-TILTED-HOLE","ok":true}
+{"test":"G18-GENERAL-CROSS-HOLE","faces":4,"edges":4,"curves":{"ArcCurve3":2,"IntersectionCurve3":2},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":18290.50463453555,"formula":18290.504634467427,"err":6.812479114159942E-08}
+{"test":"G18-GENERAL-CROSS-HOLE","ok":true}
+{"test":"G18-GENERAL-COPLANAR-BOSS","faces":8,"edges":14,"curves":{"LineCurve3":12,"ArcCurve3":2},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":50010.61929829747,"formula":50010.61929829747,"err":0}
+{"test":"G18-GENERAL-COPLANAR-BOSS","ok":true}
+{"test":"G18-GENERAL-COPLANAR-FLUSH-POCKET","faces":11,"edges":24,"curves":{"LineCurve3":24},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":47000,"formula":47000,"err":0}
+{"test":"G18-GENERAL-COPLANAR-FLUSH-POCKET","ok":true}
+{"test":"G18-GENERAL-COPLANAR-FLUSH-BLIND-HOLE","faces":8,"edges":14,"curves":{"LineCurve3":12,"ArcCurve3":2},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":47371.68146928205,"formula":47371.68146928204,"err":7.275957614183426E-12}
+{"test":"G18-GENERAL-COPLANAR-FLUSH-BLIND-HOLE","ok":true}
+{"test":"G18-GENERAL-COPLANAR-STACK","faces":6,"edges":12,"curves":{"LineCurve3":12},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":96000,"formula":96000,"err":0}
+{"test":"G18-GENERAL-COPLANAR-STACK","ok":true}
+{"test":"G18-GENERAL-COPLANAR-CORNER-NOTCH","faces":8,"edges":18,"curves":{"LineCurve3":18},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":44000,"formula":44000,"err":0}
+{"test":"G18-GENERAL-COPLANAR-CORNER-NOTCH","ok":true}
+{"test":"G18-GENERAL-SPHERE-DIMPLE","faces":7,"edges":13,"curves":{"LineCurve3":12,"ArcCurve3":1},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":46927.66970757468,"formula":46927.669707574685,"err":-7.275957614183426E-12}
+{"test":"G18-GENERAL-SPHERE-DIMPLE","ok":true}
+{"test":"G18-GENERAL-SPHERE-DOME","faces":7,"edges":13,"curves":{"LineCurve3":12,"ArcCurve3":1},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":49072.330292425315,"formula":49072.330292425315,"err":0}
+{"test":"G18-GENERAL-SPHERE-DOME","ok":true}
+{"test":"G18-GENERAL-SPHERE-CORNER","faces":7,"edges":15,"curves":{"LineCurve3":12,"ArcCurve3":3},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":47886.90121688708,"formula":47886.90266447077,"err":-0.001447583686967846}
+{"test":"G18-GENERAL-SPHERE-CORNER","ok":true}
+{"test":"G18-GENERAL-SPHERE-SHAFT-END","faces":4,"edges":3,"curves":{"ArcCurve3":3},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":18587.756533739586,"formula":18587.756533739608,"err":-2.1827872842550278E-11}
+{"test":"G18-GENERAL-SPHERE-SHAFT-END","ok":true}
+{"test":"G18-GENERAL-CONE-COUNTERSINK","faces":7,"edges":13,"curves":{"LineCurve3":12,"ArcCurve3":1},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":46952.802448803406,"formula":46952.8024488034,"err":7.275957614183426E-12}
+{"test":"G18-GENERAL-CONE-COUNTERSINK","ok":true}
+{"test":"G18-GENERAL-CONE-FRUSTUM-BOSS","faces":8,"edges":14,"curves":{"LineCurve3":12,"ArcCurve3":2},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":48703.71675440412,"formula":48703.716754404115,"err":7.275957614183426E-12}
+{"test":"G18-GENERAL-CONE-FRUSTUM-BOSS","ok":true}
+{"test":"G18-GENERAL-CHAMFERED-HOLE","faces":8,"edges":17,"curves":{"LineCurve3":15,"ArcCurve3":2},"unmeshed":0,"verdict":"BRep: ok; Mesh: ok","analytic":45429.2036732051,"formula":45429.203673205106,"err":-7.275957614183426E-12}
+{"test":"G18-GENERAL-CHAMFERED-HOLE","ok":true}
+{"k08":8001,"features":12,"recipe":"boss\u00D73,chamfer\u00D72,round\u00D72,(no free corner)\u00D78,hole Counterbore d7.8\u00D71,pocket\u00D72,hole Simple d7.4\u00D71","genMs":388.8053,"fullMs":282.3029,"noopMs":0.0261,"editLastMs":149.9051,"editMidMs":108.5526,"allocMB":166.882288,"errors":0,"errorList":[],"incEqFull":true,"verdict":"BRep: ok; Mesh: ok","Integrity":null,"volume":318893.2129143266}
+{"k08":8002,"features":18,"recipe":"hole Simple d6.2\u00D71,hole Simple d3.1\u00D71,boss\u00D74,pocket\u00D71,chamfer\u00D73,round\u00D71,(no free corner)\u00D712,hole Counterbore d8.5\u00D72,hole Simple d8.8\u00D71,hole Simple d8.3\u00D71,hole Simple d7.8\u00D71,hole Counterbore d8.6\u00D71","genMs":793.6351,"fullMs":651.0028,"noopMs":0.0533,"editLastMs":219.7265,"editMidMs":386.0965,"allocMB":358.820648,"errors":0,"errorList":[],"incEqFull":true,"verdict":"BRep: ok; Mesh: ok","Integrity":null,"volume":314956.2260697672}
+{"k08":8003,"features":21,"recipe":"boss\u00D76,pocket\u00D73,chamfer\u00D72,round\u00D72,(no free corner)\u00D719,hole Counterbore d5.0\u00D71,hole Counterbore d4.9\u00D71,hole Simple d5.5\u00D71,hole Simple d7.7\u00D71,hole Simple d5.3\u00D71,hole Counterbore d4.2\u00D71,hole Simple d3.3\u00D71","genMs":1625.5411,"fullMs":2075.7348,"noopMs":0.041,"editLastMs":289.3105,"editMidMs":1158.2712,"allocMB":522.326296,"errors":0,"errorList":[],"incEqFull":true,"verdict":"BRep: ok; Mesh: ok","Integrity":null,"volume":319887.8338032674}
+{"k08":8004,"features":21,"recipe":"hole Simple d8.7\u00D71,hole Counterbore d7.5\u00D71,pocket\u00D75,round\u00D74,hole Counterbore d6.8\u00D71,boss\u00D73,hole Simple d6.9\u00D71,(no free corner)\u00D739,hole Simple d7.2\u00D71,hole Counterbore d5.0\u00D71,hole Simple d3.9\u00D71,hole Simple d6.0\u00D71","genMs":1925.0895,"fullMs":1927.1484,"noopMs":0.0357,"editLastMs":486.2789,"editMidMs":1940.2095,"allocMB":541.669144,"errors":0,"errorList":[],"incEqFull":true,"verdict":"BRep: ok; Mesh: ok","Integrity":null,"volume":309280.60686582053}
+{"test":"K08-REALISTIC-INCREMENTAL-EQUALS-FULL","ok":true}
+{"test":"K08-REALISTIC-NO-FEATURE-ERRORS","ok":true}
+{"test":"K08-REALISTIC-VALID","ok":true}
+{"test":"K08-AUDIT","total":201,"faceted":0,"inconsistent":0}
+{"test":"K08-AUDIT-CORPUS-CONSISTENT","ok":true}
+{"test":"K08-AUDIT-DETECTS-WRONG-CURVE","ok":true}
+{"test":"K08-AUDIT-POLYLINE-IS-FACETED","ok":true}
+{"test":"K08-MEASURE","radius":"8 (Analytic, \u00B10, cylinder)","thickness":"20 (Analytic, \u00B10, parallel planes)","rim":"50.265482 (Analytic, \u00B10, 1 arcs)"}
+{"test":"K08-MEASURE-ANALYTIC","ok":true}
+{"test":"K08-VOLUME","id":"S-HOLE","v":"43978.761403 (Analytic, \u00B10.094079, analytic boundary integral)","analytic":43978.761403405064,"deviation":7.275957614183426E-12}
+{"test":"K08-VOLUME","id":"S-HOLES8","v":"43476.106579 (Analytic, \u00B10.113648, analytic boundary integral)","analytic":43476.106578830695,"deviation":4.3655745685100555E-11}
+{"test":"K08-VOLUME","id":"S-SPHERE","v":"46927.669708 (Analytic, \u00B10.090057, analytic boundary integral)","analytic":46927.669707574685,"deviation":7.275957614183426E-12}
+{"test":"K08-VOLUME","id":"S-BOX","v":"48000 (Analytic, \u00B10, planar mesh)","analytic":48000,"deviation":0}
+{"test":"K08-VOLUME-BOUND-HOLDS","ok":true}
+{"test":"K08-TILTED","tilt":0.2,"summary":"faces analytic 7/7, edges analytic 14/14, inconsistent 0, max chord error 0.01995 mm","kinds":["LineCurve3\u00D712","EllipseCurve3\u00D72"],"warnings":[]}
+{"test":"K08-TILTED","tilt":0.45,"summary":"faces analytic 7/7, edges analytic 14/14, inconsistent 0, max chord error 0.01983 mm","kinds":["LineCurve3\u00D712","EllipseCurve3\u00D72"],"warnings":[]}
+{"test":"K08-TILTED","tilt":0.8,"summary":"faces analytic 7/7, edges analytic 14/14, inconsistent 0, max chord error 0.0199 mm","kinds":["LineCurve3\u00D712","EllipseCurve3\u00D72"],"warnings":[]}
+{"test":"K08-TILTED-HOLE-EDGES-ANALYTIC","ok":true}
+{"test":"K08-SHAFT","d":4,"features":["ok","ok"],"exactPath":true,"verdict":"BRep: ok; Exact: ok; Mesh: ok; Geometry: ok","volume":18599.49150944607,"analytic":18599.49154543994,"geometry":"faces analytic 4/4, edges analytic 4/4, inconsistent 0, max chord error 0.02466 mm","warnings":["QuadricCut: this case is not supported yet (planar body, through hole along Z).","CrossHole: 4 face(s) meshed from their loops, 0 left as is.","CrossHole: hole \u23004 through a shaft \u230020, rim error up to 1.43E-013 mm; faces meshed from their loops."]}
+{"test":"K08-SHAFT","d":8,"features":["ok","ok"],"exactPath":true,"verdict":"BRep: ok; Exact: ok; Mesh: ok; Geometry: ok","volume":17864.77623352467,"analytic":17864.776368199284,"geometry":"faces analytic 4/4, edges analytic 4/4, inconsistent 0, max chord error 0.02466 mm","warnings":["QuadricCut: this case is not supported yet (planar body, through hole along Z).","CrossHole: 4 face(s) meshed from their loops, 0 left as is.","CrossHole: hole \u23008 through a shaft \u230020, rim error up to 1.77E-013 mm; faces meshed from their loops."]}
+{"test":"K08-SHAFT","d":12,"features":["ok","ok"],"exactPath":true,"verdict":"BRep: ok; Exact: ok; Mesh: ok; Geometry: ok","volume":16694.593301353565,"analytic":16694.593565839652,"geometry":"faces analytic 4/4, edges analytic 4/4, inconsistent 0, max chord error 0.02466 mm","warnings":["QuadricCut: this case is not supported yet (planar body, through hole along Z).","CrossHole: 4 face(s) meshed from their loops, 0 left as is.","CrossHole: hole \u230012 through a shaft \u230020, rim error up to 7.33E-013 mm; faces meshed from their loops."]}
+{"test":"K08-SHAFT-CROSS-HOLE","ok":true}
+{"test":"K08-AV","id":"S-BOX","analytic":48000,"mesh":48000,"exact":48000,"errAnalytic":0,"errMesh":0}
+{"dbgFace":646471,"outer":true,"rev":true,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":40,"sweep":0,"v0":"60,0","v1":"60,40"}
+{"dbgFace":646471,"outer":true,"rev":true,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":60,"sweep":0,"v0":"0,0","v1":"60,0"}
+{"dbgFace":646471,"outer":true,"rev":true,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":40,"sweep":0,"v0":"0,40","v1":"0,0"}
+{"dbgFace":646471,"outer":true,"rev":true,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":60,"sweep":0,"v0":"60,40","v1":"0,40"}
+{"dbgFace":646471,"outer":false,"rev":false,"curve":"ArcCurve3","closed":true,"c0v0":0,"c1v1":3.552713678800501E-15,"c0v1":0,"sweep":6.283185307179586,"v0":"22,20","v1":"22,20"}
+{"dbgFace":646474,"outer":true,"rev":false,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":40,"sweep":0,"v0":"60,0","v1":"60,40"}
+{"dbgFace":646474,"outer":true,"rev":false,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":60,"sweep":0,"v0":"60,40","v1":"0,40"}
+{"dbgFace":646474,"outer":true,"rev":false,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":40,"sweep":0,"v0":"0,40","v1":"0,0"}
+{"dbgFace":646474,"outer":true,"rev":false,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":60,"sweep":0,"v0":"0,0","v1":"60,0"}
+{"dbgFace":646474,"outer":false,"rev":true,"curve":"ArcCurve3","closed":true,"c0v0":0,"c1v1":3.552713678800501E-15,"c0v1":0,"sweep":6.283185307179586,"v0":"38,20","v1":"38,20"}
+{"areas":646453,"a":[800,0],"origin":"(60, 0, 0)"}
+{"areas":646457,"a":[1200,0],"origin":"(60, 40, 0)"}
+{"areas":646460,"a":[800,0],"origin":"(0, 40, 0)"}
+{"areas":646463,"a":[1200,0],"origin":"(0, 0, 0)"}
+{"areas":646471,"a":[2400,0,-201.0606681834928,3.552713678800501E-15],"origin":"(0, 0, 0)"}
+{"areas":646474,"a":[2400,0,-201.06066818349336,3.552713678800501E-15],"origin":"(0, 0, 20)"}
+{"face":646453,"src":"PlaneSurface","integral":48000,"loops":["O4:\u002B\u002B--"]}
+{"face":646457,"src":"PlaneSurface","integral":48000,"loops":["O4:\u002B\u002B--"]}
+{"face":646460,"src":"PlaneSurface","integral":0,"loops":["O4:\u002B\u002B--"]}
+{"face":646463,"src":"PlaneSurface","integral":0,"loops":["O4:\u002B\u002B--"]}
+{"face":646471,"src":"PlaneSurface","integral":0,"loops":["O4:----","I1:\u002B"]}
+{"face":646474,"src":"PlaneSurface","integral":43978.76140340507,"loops":["O4:\u002B\u002B\u002B\u002B","I1:-"]}
+{"face":646477,"src":"ExtrudedSurface","integral":-8042.477193189859,"loops":["O1:-","O1:\u002B"]}
+{"test":"K08-AV","id":"S-HOLE","analytic":43978.76140340506,"mesh":43978.76140340506,"exact":43978.761403405064,"errAnalytic":7.275957614183426E-12,"errMesh":7.275957614183426E-12}
+{"test":"K08-AV","id":"S-HOLES4","analytic":45738.05328941537,"mesh":45738.05328941537,"exact":45738.05328941535,"errAnalytic":2.1827872842550278E-11,"errMesh":2.1827872842550278E-11}
+{"test":"K08-AV","id":"S-HOLES8","analytic":43476.10657883074,"mesh":43476.10657883074,"exact":43476.106578830695,"errAnalytic":4.3655745685100555E-11,"errMesh":4.3655745685100555E-11}
+{"test":"K08-AV","id":"S-SPHERE","analytic":46927.66970757468,"mesh":46927.66970757468,"exact":46927.669707574685,"errAnalytic":7.275957614183426E-12,"errMesh":7.275957614183426E-12}
+{"test":"K08-AV","id":"S-OVERLAP","analytic":24000,"mesh":24000,"exact":24000,"errAnalytic":0,"errMesh":0}
+{"test":"K08-AV","id":"SHAFT-d4","analytic":18599.49150944607,"mesh":18599.49150944607,"exact":18599.49154543994,"errAnalytic":3.599387127906084E-05,"errMesh":3.599387127906084E-05}
+{"test":"K08-AV","id":"SHAFT-d8","analytic":17864.77623352467,"mesh":17864.77623352467,"exact":17864.776368199284,"errAnalytic":0.00013467461394611746,"errMesh":0.00013467461394611746}
+{"test":"K08-ANALYTIC-VOLUME","ok":true}
+{"test":"K08-AREA","id":"S-BOX","analytic":8800,"exact":8800,"mesh":8800}
+{"test":"K08-AREA","id":"S-HOLE","analytic":9403.185789489238,"exact":9403.18578948924,"mesh":9403.534799575806}
+{"test":"K08-AREA","id":"S-SPHERE","analytic":9001.061929829748,"exact":9001.061929829748,"mesh":9000.998807929456}
+{"test":"K08-PART-VOLUME","Volume":197150.44407846115,"expect":197150.44407846124,"MassFromMesh":false}
+{"test":"K08-ANALYTIC-AREA-AND-PART","ok":true}
+AVDBG loop: points 1027, theta 6.283..6.283, sum dH -4712.389, Htot 4712.389, cut 4.712
+AVDBG loop: points 2391, theta 9.425..9.425, sum dH 4712.389, Htot 4712.389, cut 4.712
+AVDBG loop: points 1027, theta 6.283..6.283, sum dH -4712.389, Htot 4712.389, cut 4.712
+AVDBG loop: points 1367, theta 9.425..9.425, sum dH 4712.389, Htot 4712.389, cut 4.712
+AVDBG loop: points 1027, theta 6.283..6.283, sum dH -4712.389, Htot 4712.389, cut 4.712
+AVDBG loop: points 2391, theta 9.425..9.425, sum dH 4712.389, Htot 4712.389, cut 4.712
+AVDBG loop: points 1027, theta 6.283..6.283, sum dH -4712.389, Htot 4712.389, cut 4.712
+AVDBG loop: points 1367, theta 9.425..9.425, sum dH 4712.389, Htot 4712.389, cut 4.712
+{"test":"K08-AV-REV","id":"half torus","analytic":4934.802105258935,"mesh":4915.536085256241,"exact":4934.802200544679,"conv":1,"faces":["RevolvedSurface:14804.406","ExtrudedSurface:0","ExtrudedSurface:-0"]}
+{"normalize":"cone frustum","report":"faces 3, loops 3, rings 4 (multi-ring loops 1), components 2, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 0\u21920, Reversed changed 4, reordered loops 0, split loops 1, roles changed 0, multi-region faces 0, faces split 0","Problems":[]}
+{"test":"K08-AV-REV","id":"cone frustum","analytic":2450.442269800048,"mesh":2443.998061039448,"exact":2450.4422698000385,"conv":1,"faces":["RevolvedSurface:0","RevolvedSurface:6597.345","RevolvedSurface:753.982"]}
+{"test":"K08-AV-REV","id":"countersink","analytic":71321.4159868246,"mesh":71323.35223470247,"exact":71321.4159868246,"conv":1,"faces":["ExtrudedSurface:36000","ExtrudedSurface:36000","ExtrudedSurface:36000","ExtrudedSurface:36000","PlaneSurface:35717.257","PlaneSurface:34869.027","ExtrudedSurface:-961.327","RevolvedSurface:339.292"]}
+{"test":"K08-ANALYTIC-VOLUME-REVOLVED","ok":true}
+{"test":"K08-BUILD-INDEPENDENT-OF-CHORD","ok":true}
+{"test":"K08-PART-COM","com":"(-0.2230319590644797, -1.2431011220736523E-11, -2.422330010691059E-11)","analytic":true,"expect":-0.22303195902703474}
+{"test":"K08-COM","id":"hole centred","volume":43978.76139184977,"exactV":43978.761403405064,"com":"(30.00000000363044, 19.99999999623787, 10.00000000112382)","exactCom":"(30, 20, 10)","err":5.347585805479927E-09}
+{"test":"K08-COM","id":"hole off-centre","volume":45738.05327831139,"exactV":45738.05328941535,"com":"(30.741815586043124, 19.99999999634791, 10.000000001026153)","exactCom":"(30.741815582838143, 20, 10)","err":4.9661512048822225E-09}
+{"test":"K08-COM","id":"sphere cut","volume":46927.66969279716,"exactV":46927.669707574685,"com":"(30.000000004702418, 19.999999998514085, 9.840045070931009)","exactCom":"(30, 20, 9.840045071622944)","err":4.979905048197882E-09}
+{"test":"K08-COM","id":"cone","volume":2450.442269296055,"exactV":2450.4422698000385,"com":"(1.0673223297586581E-10, 8.207482239009851E-10, 5.480769230786568)","exactCom":"(0, 0, 5.480769230769231)","err":8.27840562293789E-10}
+{"test":"K08-ANALYTIC-CENTROID","ok":true}
+{"inertia":"box 60\u00D740\u00D720","V":47999.999985377835,"cg":"(30.000000004912422, 19.999999998362522, 9.999999999181261)","J":"7999999.999 15999999.991 20799999.99 | 0.001 -0.001 -0.001","expect":"(8000000, 16000000, 20800000)","eD":4.809720513339226E-10,"eO":1.4737341552972793E-10}
+{"inertia":"cylinder r5 h20","V":1570.7963265384901,"cg":"(1.000000000007772, 2.000000000614751, 12.999999999627374)","J":"62177.355 62177.355 19634.954 | 0 -0 -0","expect":"(62177.35460229799, 62177.35460229799, 19634.95408493621)","eD":7.69357011017296E-11,"eO":1.8827487594944002E-11}
+{"inertia":"box with a hole R8","V":43978.76139184977,"cg":"(30.00000000363044, 19.99999999623787, 10.00000000112382)","J":"7801618.896 15801618.888 20671320.359 | -0.002 0.001 0.001","expect":"(7801618.895901317, 15801618.895901317, 20671320.364908963)","eD":3.6008776292183823E-10,"eO":2.364146888499734E-10}
+OK   box 60×40×20: diag rel 4.8E-010, off 1.5E-010
+OK   cylinder r5 h20: diag rel 7.7E-011, off 1.9E-011
+OK   box with a hole R8: diag rel 3.6E-010, off 2.4E-010
+OK   part of two bodies: Iyy 483333.333 vs 483333.333
+OK   principal axes of a rotated box: moments (7999999.999310996, 15999999.99263103, 20799999.99343975), first axis at 30°
+{"test":"K09-ANALYTIC-INERTIA","ok":true}
+{"test":"K10-STEP-REAL-ANALYTIC","seed":8001,"before":318595.35032001574,"after":318595.3503201026,"diff":8.684583008289337E-08,"conv":1}
+{"test":"K10-STEP-REAL","seed":8001,"ok":true,"faces":30,"v0":318595.35032001574,"v1":318592.9827714236,"rel":7.431208866600518E-06,"verdict":"BRep: ok; Mesh: ok","warnings":["STEP: 30 face(s) meshed from their loops, 0 left as is.\u00D71"]}
+{"test":"K10-STEP-REAL-ANALYTIC","seed":8002,"before":317309.78888964775,"after":317309.7888891773,"diff":-4.704343155026436E-07,"conv":1}
+{"test":"K10-STEP-REAL","seed":8002,"ok":true,"faces":28,"v0":317309.78888964775,"v1":317313.6555320003,"rel":1.2185701443605824E-05,"verdict":"BRep: ok; Mesh: ok","warnings":["STEP: 28 face(s) meshed from their loops, 0 left as is.\u00D71"]}
+{"test":"K10-STEP-REAL-ANALYTIC","seed":8003,"before":321458.14539839246,"after":321458.14539821603,"diff":-1.764274202287197E-07,"conv":1}
+{"test":"K10-STEP-REAL","seed":8003,"ok":true,"faces":33,"v0":321458.14539839246,"v1":321445.4078081359,"rel":3.9624412816693365E-05,"verdict":"BRep: ok; Mesh: ok","warnings":["STEP: 64 edge(s) written as exact intersection curves.\u00D71","STEP: 33 face(s) meshed from their loops, 0 left as is.\u00D71"]}
+{"test":"K10-STEP-REAL-ANALYTIC","seed":8004,"before":313742.3654026757,"after":313742.3654033882,"diff":7.125199772417545E-07,"conv":1}
+{"test":"K10-STEP-REAL","seed":8004,"ok":true,"faces":35,"v0":313742.3654026757,"v1":313754.3235042459,"rel":3.8114398592141153E-05,"verdict":"BRep: ok; Mesh: ok","warnings":["STEP: 62 edge(s) written as exact intersection curves.\u00D71","STEP: 35 face(s) meshed from their loops, 0 left as is.\u00D71"]}
+{"test":"K10-STEP-ROUNDTRIP-REALISTIC","ok":true}
+{"test":"K10-STEP-SHAFT","d":4,"ok":true,"v0":18599.49150944607,"vm":18571.48578473965,"va":18599.49152364052,"verdict":"BRep: ok; Mesh: ok","warnings":["STEP: 2 edge(s) written as exact intersection curves.","STEP: an intersection curve is written as a cubic B-spline (65 poles, deviation 7.1E-006 mm).","STEP: 4 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-STEP-SHAFT","d":8,"ok":true,"v0":17864.77623352467,"vm":17840.42648940176,"va":17864.7762873747,"verdict":"BRep: ok; Mesh: ok","warnings":["STEP: 2 edge(s) written as exact intersection curves.","STEP: an intersection curve is written as a cubic B-spline (65 poles, deviation 2.8E-005 mm).","STEP: 4 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-STEP-ROUNDTRIP-CROSS-HOLE","ok":true}
+{"dbgArc":718395,"curveTess":200.4882312499992,"same":true,"cacheCount":49,"src":"PlaneSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":200.48823124999925,"faceRev":false}
+{"dbgArc":718408,"curveTess":-200.48823124999925,"same":true,"cacheCount":49,"src":"PlaneSurface","z":20,"sweep":-6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":-200.4882312499993,"faceRev":false}
+{"dbgArc":718433,"curveTess":200.4882312499992,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":-200.4882312499992,"faceRev":false}
+{"dbgArc":718433,"curveTess":-200.48823124999925,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":20,"sweep":-6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":200.48823124999927,"faceRev":false}
+{"fi":718395,"src":"PlaneSurface","integral":-0,"area":-2198.9380701702535,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":718408,"src":"PlaneSurface","integral":43978.76140340507,"area":2198.9380701702535,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":718421,"src":"PlaneSurface","integral":-0,"area":-1200,"loops":["Ol-l\u002Bl-l\u002B"]}
+{"fi":718425,"src":"PlaneSurface","integral":48000,"area":800,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":718428,"src":"PlaneSurface","integral":48000,"area":1200,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":718431,"src":"PlaneSurface","integral":-0,"area":-800,"loops":["Ol-l-l-l-"]}
+{"fi":718433,"src":"ExtrudedSurface","integral":-8042.477193189857,"area":-1005.3096491487322,"loops":["Oa-","Oa-l-l\u002B"]}
+{"test":"K10-FOREIGN","faces":7,"vm":43989.41761876564,"va":43978.76140340507,"exact":43978.761403405064,"verdict":"BRep: ok; Mesh: ok","conv":1,"norm":"faces 7, loops 9, rings 10 (multi-ring loops 1), components 3, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 0\u21920, Reversed changed 0, reordered loops 1, split loops 1, roles changed 0, multi-region faces 0, faces split 0","issues":[],"warnings":["STEP: 7 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-STEP-FOREIGN-BOX-HOLE none","ok":true}
+{"dbgArc":718439,"curveTess":200.4882312499992,"same":true,"cacheCount":49,"src":"PlaneSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":200.48823124999925,"faceRev":false}
+{"dbgArc":718452,"curveTess":-200.48823124999925,"same":true,"cacheCount":49,"src":"PlaneSurface","z":20,"sweep":-6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":-200.4882312499993,"faceRev":false}
+{"dbgArc":718477,"curveTess":200.4882312499992,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":-200.4882312499992,"faceRev":false}
+{"dbgArc":718477,"curveTess":-200.48823124999925,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":20,"sweep":-6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":200.48823124999927,"faceRev":false}
+{"fi":718439,"src":"PlaneSurface","integral":-0,"area":-2198.9380701702535,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":718452,"src":"PlaneSurface","integral":43978.76140340507,"area":2198.9380701702535,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":718465,"src":"PlaneSurface","integral":-0,"area":-1200,"loops":["Ol-l\u002Bl-l\u002B"]}
+{"fi":718469,"src":"PlaneSurface","integral":48000,"area":800,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":718472,"src":"PlaneSurface","integral":48000,"area":1200,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":718475,"src":"PlaneSurface","integral":-0,"area":-800,"loops":["Ol-l-l-l-"]}
+{"fi":718477,"src":"ExtrudedSurface","integral":-8042.477193189857,"area":-1005.3096491487322,"loops":["Oa-","Oa-l-l\u002B"]}
+{"test":"K10-FOREIGN","faces":7,"vm":43989.41761876564,"va":43978.76140340507,"exact":43978.761403405064,"verdict":"BRep: ok; Mesh: ok","conv":1,"norm":"faces 7, loops 9, rings 10 (multi-ring loops 1), components 3, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 0\u21920, Reversed changed 0, reordered loops 1, split loops 1, roles changed 0, multi-region faces 0, faces split 0","issues":[],"warnings":["STEP: 7 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-STEP-FOREIGN-BOX-HOLE mm","ok":true}
+{"dbgArc":718483,"curveTess":200.48823124966833,"same":true,"cacheCount":49,"src":"PlaneSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":200.48823124990713,"faceRev":false}
+{"dbgArc":718496,"curveTess":-200.48823124966822,"same":true,"cacheCount":49,"src":"PlaneSurface","z":19.9999999999962,"sweep":-6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":-200.48823124990702,"faceRev":false}
+{"dbgArc":718521,"curveTess":200.48823124966833,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":-200.4882312499071,"faceRev":false}
+{"dbgArc":718521,"curveTess":-200.48823124966822,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":19.9999999999962,"sweep":-6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":200.48823124990705,"faceRev":false}
+{"fi":718483,"src":"PlaneSurface","integral":-0,"area":-2198.9380701767845,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":718496,"src":"PlaneSurface","integral":43978.76140352733,"area":2198.9380701767845,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":718509,"src":"PlaneSurface","integral":-0,"area":-1200.0000000000518,"loops":["Ol-l\u002Bl-l\u002B"]}
+{"fi":718513,"src":"PlaneSurface","integral":48000.00000011487,"area":800.0000000017279,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":718516,"src":"PlaneSurface","integral":48000.00000011487,"area":1200.0000000000518,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":718519,"src":"PlaneSurface","integral":-0,"area":-800.0000000017279,"loops":["Ol-l-l-l-"]}
+{"fi":718521,"src":"ExtrudedSurface","integral":-8042.477193175053,"area":-1005.3096491477146,"loops":["Oa-","Oa-l-l\u002B"]}
+{"test":"K10-FOREIGN","faces":7,"vm":43989.417618765634,"va":43978.761403527344,"exact":43978.761403405064,"verdict":"BRep: ok; Mesh: ok","conv":1,"norm":"faces 7, loops 9, rings 10 (multi-ring loops 1), components 3, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 0\u21920, Reversed changed 0, reordered loops 1, split loops 1, roles changed 0, multi-region faces 0, faces split 0","issues":[],"warnings":["STEP: lengths are scaled by 25.4 to millimetres.","STEP: 7 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-STEP-FOREIGN-BOX-HOLE inch","ok":true}
+{"dbgArc":718527,"curveTess":200.4882312499992,"same":true,"cacheCount":49,"src":"PlaneSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":200.48823124999925,"faceRev":false}
+{"dbgArc":718540,"curveTess":-200.48823124999925,"same":true,"cacheCount":49,"src":"PlaneSurface","z":20,"sweep":-6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":-200.4882312499993,"faceRev":false}
+{"dbgArc":718565,"curveTess":200.4882312499992,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":-200.4882312499992,"faceRev":false}
+{"dbgArc":718565,"curveTess":-200.48823124999925,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":20,"sweep":-6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":200.48823124999927,"faceRev":false}
+{"fi":718527,"src":"PlaneSurface","integral":-0,"area":-2198.9380701702535,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":718540,"src":"PlaneSurface","integral":43978.76140340507,"area":2198.9380701702535,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":718553,"src":"PlaneSurface","integral":-0,"area":-1200,"loops":["Ol-l\u002Bl-l\u002B"]}
+{"fi":718557,"src":"PlaneSurface","integral":48000,"area":800,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":718560,"src":"PlaneSurface","integral":48000,"area":1200,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":718563,"src":"PlaneSurface","integral":-0,"area":-800,"loops":["Ol-l-l-l-"]}
+{"fi":718565,"src":"ExtrudedSurface","integral":-8042.477193189857,"area":-1005.3096491487322,"loops":["Oa-","Oa-l-l\u002B"]}
+{"test":"K10-FOREIGN","faces":7,"vm":43989.41761876564,"va":43978.76140340507,"exact":43978.761403405064,"verdict":"BRep: ok; Mesh: ok","conv":1,"norm":"faces 7, loops 9, rings 10 (multi-ring loops 1), components 3, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 0\u21920, Reversed changed 0, reordered loops 1, split loops 1, roles changed 0, multi-region faces 0, faces split 0","issues":[],"warnings":["STEP: lengths are scaled by 1000 to millimetres.","STEP: 7 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-STEP-FOREIGN-BOX-HOLE m","ok":true}
+{"test":"K10-NURBS","faces":["NurbsSurface","PlaneSurface","PlaneSurface","PlaneSurface","PlaneSurface"],"vm":1569.3223305431386,"exact":1570.7963267948967,"rel":0.0009383751582648974,"nurbsOffCylinder":3.552713678800501E-15,"verdict":"BRep: ok; Mesh: ok","warnings":["STEP: 5 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-NURBS-ANALYTIC","volume":1570.7963263086658,"exact":1570.7963267948967,"err":4.862308742303867E-07,"com":"(4.244131814457294, 4.244131816199887, 10.000000002292955)","comExact":4.244131815783875}
+{"test":"K10-STEP-FOREIGN-RATIONAL-NURBS","ok":true}
+IGESNORM faces 30, loops 46, rings 46 (multi-ring loops 0), components 15, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 6→0, Reversed changed 6, reordered loops 0, split loops 0, roles changed 0, multi-region faces 0, faces split 0 | 
+IGESANALYTIC REAL-8001: analytic 318595.35032007296 vs 318595.35032001574 diff 5.721813067793846E-08 conv 1
+IGESNORM faces 28, loops 48, rings 48 (multi-ring loops 0), components 18, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 8→0, Reversed changed 8, reordered loops 0, split loops 0, roles changed 0, multi-region faces 0, faces split 0 | 
+IGESANALYTIC REAL-8002: analytic 317309.78888911166 vs 317309.78888964775 diff -5.360925570130348E-07 conv 1
+IGESNORM faces 33, loops 44, rings 44 (multi-ring loops 0), components 12, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 4→0, Reversed changed 4, reordered loops 3, split loops 0, roles changed 0, multi-region faces 0, faces split 0 | 
+IGESANALYTIC REAL-8003: analytic 321458.1453989166 vs 321458.14539839246 diff 5.24159986525774E-07 conv 1
+IGESNORM faces 35, loops 62, rings 62 (multi-ring loops 0), components 23, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 10→0, Reversed changed 10, reordered loops 0, split loops 0, roles changed 0, multi-region faces 0, faces split 0 | 
+IGESANALYTIC REAL-8004: analytic 313742.36540201027 vs 313742.3654026757 diff -6.654299795627594E-07 conv 1
+OK   S-BOX: 48000 vs 48000 (rel 0.0E+000) BRep: ok; Mesh: ok | IGES: 6 face(s) of 1 body(ies) written. | IGES: 6 face(s) read. | IGES: 6 face(s) meshed from their loops, 0 left as is.
+OK   S-HOLE: 43989.418 vs 43978.761 (rel 2.4E-004) BRep: ok; Mesh: ok | IGES: 7 face(s) of 1 body(ies) written. | IGES: 7 face(s) read. | IGES: 7 face(s) meshed from their loops, 0 left as is.
+OK   S-HOLES4: 45748.934 vs 45738.053 (rel 2.4E-004) BRep: ok; Mesh: ok | IGES: 10 face(s) of 1 body(ies) written. | IGES: 10 face(s) read. | IGES: 10 face(s) meshed from their loops, 0 left as is.
+OK   S-UNION: 90000 vs 90000 (rel 0.0E+000) BRep: ok; Mesh: ok | IGES: 12 face(s) of 1 body(ies) written. | IGES: 12 face(s) read. | IGES: 12 face(s) meshed from their loops, 0 left as is.
+OK   S-ROUND: 47960.779 vs 47961.372 (rel 1.2E-005) BRep: ok; Mesh: ok | IGES: 7 face(s) of 1 body(ies) written. | IGES: 7 face(s) read. | IGES: 7 face(s) meshed from their loops, 0 left as is.
+OK   S-SPHERE: 46930.878 vs 46927.67 (rel 6.8E-005) BRep: ok; Mesh: ok | IGES: 7 face(s) of 1 body(ies) written. | IGES: 7 face(s) read. | IGES: 7 face(s) meshed from their loops, 0 left as is.
+OK   S-ROUNDHOLE: 43941.349 vs 43933.204 (rel 1.9E-004) BRep: ok; Mesh: ok | IGES: 8 face(s) of 1 body(ies) written. | IGES: 8 face(s) read. | IGES: 8 face(s) meshed from their loops, 0 left as is.
+OK   REAL-8001: 318592.983 vs 318595.35 (rel 7.4E-006) BRep: ok; Mesh: ok
+OK   REAL-8002: 317313.849 vs 317309.789 (rel 1.3E-005) BRep: ok; Mesh: ok
+OK   REAL-8003: 321445.918 vs 321458.145 (rel 3.8E-005) BRep: ok; Mesh: ok
+OK   REAL-8004: 313754.763 vs 313742.365 (rel 4.0E-005) BRep: ok; Mesh: ok
+{"test":"K10-IGES-ROUNDTRIP","ok":true}
+{"test":"K10-IGES-FOREIGN","faces":7,"vm":43986.186574521016,"va":43978.76140340507,"exact":43978.761403405064,"verdict":"BRep: ok; Mesh: ok","warnings":["IGES: 7 face(s) read.","IGES: 7 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-IGES-FOREIGN-BOX-HOLE","ok":true}
+FREFWARN started 0 executed 2 | Shell: cavity volume 244608. | Shell: wall 2, 1 face(s) left open.
+FREFDBG resolved (-10, -10, 40) tags #d00000021f/extrude[0]:side[0.0],#d00000021f/extrude[0]:side[0.1],#d00000021f/extrude[0]:side[0.2],#d00000021f/extrude[0]:side[0.3],#d00000021f/extrude[0]:bottom,#d00000021f/extrude[0]:top zmax 40
+{"test":"K05-FACEREF","v60":34112.00000000001,"v80":43391.99999999997,"expect80":43392,"err":null,"name":"#d00000021f/extrude[0]:top"}
+{"test":"K05-FACE-REFS-SHELL-DRAFT","ok":true}
+{"test":"K05-MULTI-REGION-FACE-SPLIT","ok":true}
+{"test":"K05-EDGE-HISTORY","EdgesGenerated":["#d000000225/extrude[0]:bottom|#d000000226/extrude[0]:side[0.0]","#d000000225/extrude[0]:top|#d000000226/extrude[0]:side[0.0]"],"EdgesModified":[],"EdgesDeleted":[]}
+{"test":"K05-EDGE-HISTORY-ROUND","EdgesGenerated":["#d000000225/extrude[0]:bottom|#d000000227/round:face","#d000000225/extrude[0]:side[0.1]|#d000000227/round:face","#d000000225/extrude[0]:side[0.2]|#d000000227/round:face","#d000000225/extrude[0]:top|#d000000227/round:face"],"EdgesModified":["#d000000225/extrude[0]:bottom|#d000000225/extrude[0]:side[0.1]","#d000000225/extrude[0]:bottom|#d000000225/extrude[0]:side[0.2]","#d000000225/extrude[0]:side[0.1]|#d000000225/extrude[0]:top","#d000000225/extrude[0]:side[0.2]|#d000000225/extrude[0]:top"],"EdgesDeleted":["#d000000225/extrude[0]:side[0.1]|#d000000225/extrude[0]:side[0.2]"]}
+{"test":"K05-EDGE-HISTORY","ok":true}
+{"k09":"shell cube 60, t=2, open top","ok":true,"expected":34112,"vol":34112.00000000001,"rel":2.1329613080978617E-16,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"revolve ring 360\u00B0","ok":true,"expected":28274.333882308136,"vol":28274.333882308274,"rel":4.889352840103047E-15,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"revolve ring 90\u00B0","ok":true,"expected":7068.583470577034,"vol":7068.58347057702,"rel":1.9300077000406764E-15,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"sweep circle r5 along 40","ok":true,"expected":3141.5926535897934,"vol":3141.592653589772,"rel":6.803277142643383E-15,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"loft square 20 \u2192 10 over 30","ok":true,"expected":7000,"vol":7000,"rel":0,"analytic":false,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"draft 5\u00B0 on the sides of a cube 60 (neutral bottom)","ok":true,"expected":180409.3260355199,"vol":180409.325640401,"rel":2.1901245787036914E-09,"analytic":true,"err":"","verdict":"BRep: ok; Exact: ok; Mesh: ok"}
+{"k09":"mirror box across x=0","ok":true,"expected":8000,"vol":8000,"rel":0,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok | BRep: ok; Mesh: ok"}
+{"k09":"linear pattern 3 \u00D7 20","ok":true,"expected":3000,"vol":3000,"rel":0,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok | BRep: ok; Mesh: ok | BRep: ok; Mesh: ok"}
+{"k09":"circular pattern 4","ok":true,"expected":4000,"vol":4000,"rel":0,"analytic":true,"err":"","verdict":"BRep: ok; Exact: ok; Mesh: ok | BRep: ok; Exact: ok; Mesh: ok | BRep: ok; Mesh: ok | BRep: ok; Mesh: ok"}
+{"k09":"shell cylinder r10 h30, t=2, open top","ok":true,"expected":3795.04392553647,"vol":3795.0439255364595,"rel":2.756012651134244E-15,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"shell too thick (cube 10, t=6) must be refused","ok":true,"expected":-1,"vol":1000,"rel":-1,"analytic":true,"err":"Shell: Shell: the body could not be hollowed.","verdict":"BRep: ok; Mesh: ok"}
+AVDBG loop: points 1025, theta 6.283..6.283, sum dH -753.982, Htot -753.982, cut 3.927
+AVDBG loop: points 1537, theta 6.283..7.854, sum dH 753.982, Htot -753.982, cut 3.927
+AVDBG loop: points 1025, theta 6.283..6.283, sum dH 251.327, Htot 251.327, cut 3.927
+AVDBG loop: points 1537, theta 6.283..7.854, sum dH -251.327, Htot 251.327, cut 3.927
+{"k09":"sweep circle r2 along a quarter arc R20","ok":true,"expected":394.7841760435743,"vol":394.7841760435742,"rel":2.8797212406271283E-16,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+AVDBG loop: points 1025, theta 7.854..7.854, sum dH -753.982, Htot 753.982, cut 5.498
+AVDBG loop: points 1537, theta 7.854..9.425, sum dH 753.982, Htot 753.982, cut 5.498
+AVDBG loop: points 1025, theta 7.854..7.854, sum dH -251.327, Htot 251.327, cut 5.498
+AVDBG loop: points 1537, theta 7.854..9.425, sum dH 251.327, Htot 251.327, cut 5.498
+{"k09":"revolve circle 90\u00B0 (torus segment)","ok":true,"expected":394.78417604357435,"vol":394.784176043576,"rel":4.175595798909335E-15,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"revolve cut groove in a cylinder","ok":true,"expected":8293.804605477053,"vol":8293.80460547708,"rel":3.2897858523420623E-15,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"extrude symmetric two-sided","ok":true,"expected":3000,"vol":3000,"rel":0,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"loft circle r10 \u2192 r5 over 30 (cone frustum)","ok":true,"expected":5497.787143782138,"vol":5497.787143782221,"rel":1.5219489291749333E-14,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"rib in an L-bracket (triangle 30\u00D730, t=3)","ok":true,"expected":8850,"vol":8850,"rel":0,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+AVDBG loop: points 1027, theta 6.283..6.283, sum dH 251.327, Htot 251.327, cut 3.927
+AVDBG loop: points 1027, theta 7.854..7.854, sum dH -251.327, Htot 251.327, cut 3.927
+AVDBG loop: points 1027, theta 6.283..6.283, sum dH -753.982, Htot -753.982, cut 3.927
+AVDBG loop: points 1027, theta 7.854..7.854, sum dH 753.982, Htot -753.982, cut 3.927
+AVDBG loop: points 1027, theta 6.283..6.283, sum dH 251.327, Htot 251.327, cut 3.927
+AVDBG loop: points 1027, theta 7.854..7.854, sum dH -251.327, Htot 251.327, cut 3.927
+{"k09":"sweep circle r2 along a line 20 \u002B tangent arc R20 (90\u00B0)","ok":true,"expected":646.1115883307577,"vol":646.1114582644642,"rel":2.0130623855924102E-07,"analytic":true,"err":"","verdict":"BRep: ok; Exact: ok; Mesh: ok"}
+{"k09":"sweep circle r3 along an L-shaped polyline 40 \u002B 30 (mitred corner)","ok":true,"expected":1979.2033717615698,"vol":1979.2033717613383,"rel":1.1694927610960764E-13,"analytic":true,"err":"","verdict":"BRep: ok; Exact: ok; Mesh: ok"}
+OK   shell cube 60, t=2, open top
+OK   revolve ring 360°
+OK   revolve ring 90°
+OK   sweep circle r5 along 40
+OK   loft square 20 → 10 over 30
+OK   draft 5° on the sides of a cube 60 (neutral bottom)
+OK   mirror box across x=0
+OK   linear pattern 3 × 20
+OK   circular pattern 4
+OK   shell cylinder r10 h30, t=2, open top
+OK   shell too thick (cube 10, t=6) must be refused
+OK   sweep circle r2 along a quarter arc R20
+OK   revolve circle 90° (torus segment)
+OK   revolve cut groove in a cylinder
+OK   extrude symmetric two-sided
+OK   loft circle r10 → r5 over 30 (cone frustum)
+OK   rib in an L-bracket (triangle 30×30, t=3)
+OK   sweep circle r2 along a line 20 + tangent arc R20 (90°)
+OK   sweep circle r3 along an L-shaped polyline 40 + 30 (mitred corner)
+{"test":"K09-OPERATION-MATRIX","ok":true}
+{"solver":"fully constrained","scale":1,"status":"Ok","dof":0,"want":"Ok","wantDof":0,"geo":true,"ok":true,"a":"(-0,0)","c":"(10,6)"}
+{"solver":"one dimension missing","scale":1,"status":"Underconstrained","dof":1,"want":"Underconstrained","wantDof":1,"geo":true,"ok":true,"a":"(-0,0)","c":"(10,5.9)"}
+{"solver":"conflicting dimensions","scale":1,"status":"Inconsistent","dof":0,"want":"Inconsistent","wantDof":0,"geo":true,"ok":true,"a":"(0,-0)","c":"(6.0774,3.328)"}
+{"solver":"redundant but consistent","scale":1,"status":"Overconstrained","dof":0,"want":"Overconstrained","wantDof":0,"geo":true,"ok":true,"a":"(-0,0)","c":"(10,6)"}
+{"solver":"fully constrained","scale":1000,"status":"Ok","dof":0,"want":"Ok","wantDof":0,"geo":true,"ok":true,"a":"(0,0)","c":"(10000,6000)"}
+{"solver":"one dimension missing","scale":1000,"status":"Underconstrained","dof":1,"want":"Underconstrained","wantDof":1,"geo":true,"ok":true,"a":"(0,0)","c":"(10000,5900)"}
+{"solver":"conflicting dimensions","scale":1000,"status":"Inconsistent","dof":0,"want":"Inconsistent","wantDof":0,"geo":true,"ok":true,"a":"(-0.0145,0.0085)","c":"(6077.3847,3328.0235)"}
+{"solver":"redundant but consistent","scale":1000,"status":"Overconstrained","dof":0,"want":"Overconstrained","wantDof":0,"geo":true,"ok":true,"a":"(0,0)","c":"(10000,6000)"}
+{"solver":"fully constrained","scale":0.001,"status":"Ok","dof":0,"want":"Ok","wantDof":0,"geo":true,"ok":true,"a":"(-0,0)","c":"(0.01,0.006)"}
+{"solver":"one dimension missing","scale":0.001,"status":"Underconstrained","dof":1,"want":"Underconstrained","wantDof":1,"geo":true,"ok":true,"a":"(-0,0)","c":"(0.01,0.0059)"}
+{"solver":"conflicting dimensions","scale":0.001,"status":"Inconsistent","dof":0,"want":"Inconsistent","wantDof":0,"geo":true,"ok":true,"a":"(0,0)","c":"(0.0061,0.0033)"}
+{"solver":"redundant but consistent","scale":0.001,"status":"Overconstrained","dof":0,"want":"Overconstrained","wantDof":0,"geo":true,"ok":true,"a":"(-0,0)","c":"(0.01,0.006)"}
+OK   fully constrained ×1: Ok/0 (want Ok/0)
+OK   one dimension missing ×1: Underconstrained/1 (want Underconstrained/1)
+OK   conflicting dimensions ×1: Inconsistent/0 (want Inconsistent/0)
+OK   redundant but consistent ×1: Overconstrained/0 (want Overconstrained/0)
+OK   fully constrained ×1000: Ok/0 (want Ok/0)
+OK   one dimension missing ×1000: Underconstrained/1 (want Underconstrained/1)
+OK   conflicting dimensions ×1000: Inconsistent/0 (want Inconsistent/0)
+OK   redundant but consistent ×1000: Overconstrained/0 (want Overconstrained/0)
+OK   fully constrained ×0.001: Ok/0 (want Ok/0)
+OK   one dimension missing ×0.001: Underconstrained/1 (want Underconstrained/1)
+OK   conflicting dimensions ×0.001: Inconsistent/0 (want Inconsistent/0)
+OK   redundant but consistent ×0.001: Overconstrained/0 (want Overconstrained/0)
+{"test":"K09-SKETCH-SOLVER","ok":true}
+{"solver2":"branch","flips":[]}
+{"solver2":"tangent","status":"Underconstrained","dof":2,"dist":5,"radius":5}
+{"solver2":"big","rectangles":5,"variables":40,"status":"Ok","dof":0,"ms":0.5664}
+{"solver2":"big","rectangles":20,"variables":160,"status":"Ok","dof":0,"ms":0.7951}
+{"solver2":"big","rectangles":50,"variables":400,"status":"Ok","dof":0,"ms":2.4501}
+OK   triangle keeps its branch: 
+OK   line tangent to a circle: distance 5, status Underconstrained, dof 2
+OK   5 rectangles (40 variables): Ok/0 in 1 ms
+OK   20 rectangles (160 variables): Ok/0 in 1 ms
+OK   50 rectangles (400 variables): Ok/0 in 2 ms
+{"test":"K09-SKETCH-SOLVER-2","ok":true}
+{"grid":4,"variables":50,"status":"Ok","dof":0,"ms":1.2488,"corner":"(40,40)"}
+{"grid":8,"variables":162,"status":"Ok","dof":0,"ms":24.0862,"corner":"(80,80)"}
+{"grid":12,"variables":338,"status":"Ok","dof":0,"ms":96.9455,"corner":"(120,120)"}
+{"test":"K09-SKETCH-SOLVER-CONNECTED-GRID","ok":true}
+{"fillet":"one vertical edge","edges":1,"err":null,"vol":47961.37166941154,"expected":47961.37166941154,"rel":0,"verdict":"BRep: ok; Mesh: ok","ms":17.4754,"analytic":true}
+{"fillet":"four vertical edges","edges":4,"err":null,"vol":47845.486677646164,"expected":47845.486677646164,"rel":0,"verdict":"BRep: ok; Mesh: ok","ms":80.9075,"analytic":true}
+{"fillet":"four top edges (closed loop)","edges":4,"err":null,"vol":47624.07069082143,"expected":47624.07069082156,"rel":2.7500218934569696E-15,"verdict":"BRep: ok; Exact: ok; Mesh: ok","ms":277.1385,"analytic":true}
+{"fillet":"all twelve edges (corner blends)","edges":12,"err":null,"vol":47109.07832285375,"expected":47109.07939152466,"rel":2.2685030733208803E-08,"verdict":"BRep: ok; Exact: ok; Mesh: ok","ms":3642.6827,"analytic":true}
+{"fillet":"variable 2\u21924","vol":47959.25295502489,"expect":47959.94099050086,"verdict":"BRep: ok; Exact: ok; Mesh: ok","warnings":["Boolean: 2 chord chain(s) restored to arcs (24 segments collapsed).","Round: 1 edge(s) requested, 1 processed (swept chain of 1 edge(s) rounded R4); body volume now 47959.523, 0 open edges."]}
+OK   one vertical edge: vol 47961.372 vs 47961.372 (rel 0.0E+000) BRep: ok; Mesh: ok
+OK   four vertical edges: vol 47845.487 vs 47845.487 (rel 0.0E+000) BRep: ok; Mesh: ok
+OK   four top edges (closed loop): vol 47624.071 vs 47624.071 (rel 2.8E-015) BRep: ok; Exact: ok; Mesh: ok
+OK   all twelve edges (corner blends): vol 47109.078 vs 47109.079 (rel 2.3E-008) BRep: ok; Exact: ok; Mesh: ok
+OK   variable radius 2→4: vol 47959.253 vs 47959.941 BRep: ok; Exact: ok; Mesh: ok
+{"test":"K09-FILLET-MATRIX","ok":true}
+{"prismDetail":"all","analytic":null,"massFromMesh":true,"audit":"faces analytic 20/20, edges analytic 84/84, inconsistent 0, max chord error 0.00643 mm","issues":[]}
+{"prism":"all edges","err":null,"vol":13101.611516232006,"expect":13086.92828342726,"diff":14.683232804745785,"rel":0.001121977020638221,"verdict":"BRep: ok; Exact: ok; Mesh: ok","warnings":[]}
+{"prism":"vertical only","vol":13486.585702109987,"exp":13486.585702109986,"verdict":"BRep: ok; Mesh: ok"}
+{"prism":"top three only","vol":13635.89601347548,"exp":-1,"verdict":"BRep: ok; Exact: ok; Mesh: ok"}
+{"test":"K09-PRISM-ROUND-ALL-EDGES-VALID","ok":true}
+OK   coincident: Ok (1.3000177302036521E-21, 7.0002744276714195E-22)
+OK   point on line: Underconstrained (4, 1.0755932902603588E-21)
+OK   point on circle: Underconstrained |p| 5
+OK   parallel: Underconstrained 
+OK   perpendicular: Underconstrained 
+OK   equal lengths: Underconstrained 10
+OK   equal radii: Underconstrained 4
+OK   symmetric about a line: Ok (3, 1)
+OK   midpoint: Ok (5, 2)
+OK   concentric: Underconstrained (1, 1)
+OK   tangent circle–circle: Underconstrained centre distance 8
+OK   tangent line–arc: Underconstrained line y 5
+OK   angle 30° between lines: Underconstrained 30°
+OK   distance point–line: Underconstrained (3, 7)
+OK   ellipse semi-axes: Ok 12×4
+OK   point on ellipse: Underconstrained x²/a²+y²/b² = 1
+OK   tangent line–ellipse (rotated 20°): Underconstrained line y 3.928584709 vs 3.928584709
+OK   unsupported combination reported: Tangent SkEllipse+SkEllipse
+{"test":"K09-SOLVER-CONSTRAINTS","ok":true}
+{"vertexOp":"chamfer uniform d6","vol":215964,"expected":215964,"rel":0,"analytic":true,"err":null,"verdict":"BRep: ok; Mesh: ok","why":null}
+{"vertexOp":"chamfer per edge 4/6/9","vol":215964,"expected":215964,"rel":0,"analytic":true,"err":null,"verdict":"BRep: ok; Mesh: ok","why":null}
+{"vertexOp":"round R6","vol":215997.3340581448,"expected":215997.3323959956,"rel":7.695230269849847E-09,"analytic":true,"err":null,"verdict":"BRep: ok; Mesh: ok","why":null}
+{"vertexOp":"chamfer uniform d4 at a 60\u00B0 corner","vol":13847.168856243987,"expected":13847.168856243983,"rel":2.6272365455060304E-16,"analytic":true,"err":null,"verdict":"BRep: ok; Mesh: ok","why":null}
+OK   chamfer uniform d6: vol 215964 vs 215964 (rel 0.0E+000, exact) BRep: ok; Mesh: ok 
+OK   chamfer per edge 4/6/9: vol 215964 vs 215964 (rel 0.0E+000, exact) BRep: ok; Mesh: ok 
+OK   round R6: vol 215997.334058 vs 215997.332396 (rel 7.7E-009, exact) BRep: ok; Mesh: ok 
+OK   chamfer uniform d4 at a 60° corner: vol 13847.168856 vs 13847.168856 (rel 2.6E-016, exact) BRep: ok; Mesh: ok 
+OK   round R4 at a 60° corner: vol 13854.994 (< 13856.406) BRep: ok; Mesh: ok 
+OK   too large a radius is refused: VertexRound refused (exception at vertexround.build): Vertex round: radius 90 needs a setback of 63.64 that does not fit on an edge of length 60.
+OK   a point that is not a vertex is refused: VertexChamfer refused (exception at vertexchamfer.build): Vertex chamfer: no vertex at the selected point.
+OK   document round trip: 215962.456355 vs 215962.456355 ;;
+{"test":"K09-VERTEX-CHAMFER-AND-ROUND","ok":true}
+OK   N=4 chamfer uniform d6: removed 50.911688 vs 50.911688; pyramid volume 5333.333 vs 5333.333; BRep: ok; Mesh: ok
+OK   N=4 chamfer per edge (tilted plane): removed 46.256402 vs 46.256402; BRep: ok; Mesh: ok
+OK   N=4 chamfer per edge (non-coplanar): BRep: ok; Mesh: ok; cut points on the edges: True
+OK   N=4 round R4: removed 4.0161 vs quadrature 4.0241; tangent points True; BRep: ok; Exact: ok; Mesh: ok
+OK   N=5 chamfer uniform d6: removed 60.524866 vs 60.524866; pyramid volume 6340.377 vs 6340.377; BRep: ok; Mesh: ok
+OK   N=5 chamfer per edge (tilted plane): removed 55.277343 vs 55.277343; BRep: ok; Mesh: ok
+OK   N=5 chamfer per edge (non-coplanar): BRep: ok; Mesh: ok; cut points on the edges: True
+OK   N=5 round R4: removed 5.054 vs quadrature 5.0573; tangent points True; BRep: ok; Exact: ok; Mesh: ok
+OK   N=6 chamfer uniform d6: removed 66.136223 vs 66.136223; pyramid volume 6928.203 vs 6928.203; BRep: ok; Mesh: ok
+OK   N=6 chamfer per edge (tilted plane): removed 60.595006 vs 60.595006; BRep: ok; Mesh: ok
+OK   N=6 chamfer per edge (non-coplanar): BRep: ok; Mesh: ok; cut points on the edges: True
+OK   N=6 round R4: removed 5.7514 vs quadrature 5.7483; tangent points True; BRep: ok; Mesh: ok
+OK   irregular 4-edge corner round R3: BRep: ok; Exact: ok; Mesh: ok; removed 1.291
+OK   irregular 4-edge corner chamfer d4: BRep: ok; Mesh: ok
+{"test":"K09-VERTEX-N-EDGES","ok":true}
+OK   concave corner chamfer d6 (adds d³/6): added 36 vs 36; BRep: ok; Mesh: ok
+OK   concave corner chamfer 4/6/9: added 36 vs 36; BRep: ok; Mesh: ok
+OK   concave corner round R6 (adds the cube corner outside the sphere): added 2.66589 vs 2.667604; BRep: ok; Exact: ok; Mesh: ok
+OK   concave 4-edge corner chamfer d6: edges 4, concave True; added 50.911688 vs 50.911688; BRep: ok; Mesh: ok
+FAIL concave 4-edge corner round R4: added NaN; Boolean.Unite refused (invalid-result at validate): result body failed B-rep validation: [BRep/Error] vertex-pinch: грани вокруг вершины образуют не один веер (элемент 823285) at (0, 0, 10.5)
+OK   saddle vertex refused: Vertex: the corner is neither convex nor concave (a saddle vertex); a vertex chamfer or round is not defined for it.
+OK   concave round in the tree and the document:  189000 → 189001.542778, reloaded 189001.542778
+{"test":"K09-VERTEX-CONCAVE","ok":false,"error":"FAIL concave 4-edge corner round R4: added NaN; Boolean.Unite refused (invalid-result at validate): result body failed B-rep validation: [BRep/Error] vertex-pinch: \u0433\u0440\u0430\u043D\u0438 \u0432\u043E\u043A\u0440\u0443\u0433 \u0432\u0435\u0440\u0448\u0438\u043D\u044B \u043E\u0431\u0440\u0430\u0437\u0443\u044E\u0442 \u043D\u0435 \u043E\u0434\u0438\u043D \u0432\u0435\u0435\u0440 (\u044D\u043B\u0435\u043C\u0435\u043D\u0442 823285) at (0, 0, 10.5)"}
+{"g1":"box","stats":"pcurves exact 24, sampled 0, skipped 0; max deviation exact 7.1E-015 mm, sampled 0.0E\u002B000 mm"}
+{"g1":"box with a hole","stats":"pcurves exact 28, sampled 0, skipped 0; max deviation exact 2.2E-014 mm, sampled 0.0E\u002B000 mm"}
+{"g1":"4 holes","stats":"pcurves exact 40, sampled 0, skipped 0; max deviation exact 1.1E-014 mm, sampled 0.0E\u002B000 mm"}
+{"g1":"spherical cut","stats":"pcurves exact 26, sampled 0, skipped 0; max deviation exact 1.4E-014 mm, sampled 0.0E\u002B000 mm"}
+{"g1":"rounded edge","stats":"pcurves exact 30, sampled 0, skipped 0; max deviation exact 7.1E-015 mm, sampled 0.0E\u002B000 mm"}
+{"g1":"hole with a rounded rim (torus)","stats":"pcurves exact 39, sampled 3, skipped 0; max deviation exact 3.7E-014 mm, sampled 7.1E-012 mm"}
+{"g1":"shaft with a cross hole (intersection curves)","stats":"pcurves exact 8, sampled 0, skipped 0; max deviation exact 8.9E-015 mm, sampled 0.0E\u002B000 mm"}
+{"g1":"realistic 8001","stats":"pcurves exact 120, sampled 0, skipped 0; max deviation exact 1.9E-013 mm, sampled 0.0E\u002B000 mm"}
+{"g1":"realistic 8002","stats":"pcurves exact 104, sampled 0, skipped 0; max deviation exact 4.3E-013 mm, sampled 0.0E\u002B000 mm"}
+OK   box: pcurves exact 24, sampled 0, skipped 0; max deviation exact 7.1E-015 mm, sampled 0.0E+000 mm
+OK   box with a hole: pcurves exact 28, sampled 0, skipped 0; max deviation exact 2.2E-014 mm, sampled 0.0E+000 mm
+OK   4 holes: pcurves exact 40, sampled 0, skipped 0; max deviation exact 1.1E-014 mm, sampled 0.0E+000 mm
+OK   spherical cut: pcurves exact 26, sampled 0, skipped 0; max deviation exact 1.4E-014 mm, sampled 0.0E+000 mm
+OK   rounded edge: pcurves exact 30, sampled 0, skipped 0; max deviation exact 7.1E-015 mm, sampled 0.0E+000 mm
+OK   hole with a rounded rim (torus): pcurves exact 39, sampled 3, skipped 0; max deviation exact 3.7E-014 mm, sampled 7.1E-012 mm
+OK   shaft with a cross hole (intersection curves): pcurves exact 8, sampled 0, skipped 0; max deviation exact 8.9E-015 mm, sampled 0.0E+000 mm
+OK   realistic 8001: pcurves exact 120, sampled 0, skipped 0; max deviation exact 1.9E-013 mm, sampled 0.0E+000 mm
+OK   realistic 8002: pcurves exact 104, sampled 0, skipped 0; max deviation exact 4.3E-013 mm, sampled 0.0E+000 mm
+{"test":"G1-PCURVES","ok":true}
+{"g2":"box","handled":6,"total":6,"worstArea":0,"vol":48000,"va":48000,"mesh":"Mesh: ok","reasons":{}}
+UVDBG classify PlaneSurface per False/False: closed 1, periodic 0, chains 1
+UVDBG rims 1: points 4, missing 0, boundary edges 4, tris 2
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+UVDBG classify PlaneSurface per False/False: closed 1, periodic 0, chains 1
+UVDBG rims 1: points 4, missing 0, boundary edges 4, tris 2
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+UVDBG classify PlaneSurface per False/False: closed 1, periodic 0, chains 1
+UVDBG rims 1: points 4, missing 0, boundary edges 4, tris 2
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+UVDBG classify PlaneSurface per False/False: closed 1, periodic 0, chains 1
+UVDBG rims 1: points 4, missing 0, boundary edges 4, tris 2
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+UVDBG classify PlaneSurface per False/False: closed 2, periodic 0, chains 2
+UVDBG rims 2: points 52, missing 0, boundary edges 52, tris 52
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 52, tris 52
+UVDBG classify PlaneSurface per False/False: closed 2, periodic 0, chains 2
+UVDBG rims 2: points 52, missing 0, boundary edges 52, tris 52
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 52, tris 52
+UVDBG classify ExtrudedSurface per True/False: closed 0, periodic 2, chains 2
+UVDBG strip 0: A 0..48 B 0..48 area 1 n 98 holes 0
+UVDBG strips: A 49 pts 1→2, B 49 pts 2→1, other coord A 0 B 1
+UVDBG rims 2: points 98, missing 0, boundary edges 96, tris 96
+UVDBG consistency: max |P(uv)-x| on boundary 1.46E-014, su 50.265 sv 20, tol 0.0214, pts 98, tris 96
+UVDBG pass 0: interior points 43, h 1.171, tris 182, area3 1004.511
+UVDBG classify PlaneSurface per False/False: closed 1, periodic 0, chains 1
+UVDBG rims 1: points 4, missing 0, boundary edges 4, tris 2
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+UVDBG classify PlaneSurface per False/False: closed 1, periodic 0, chains 1
+UVDBG rims 1: points 4, missing 0, boundary edges 4, tris 2
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+UVDBG classify PlaneSurface per False/False: closed 1, periodic 0, chains 1
+UVDBG rims 1: points 4, missing 0, boundary edges 4, tris 2
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+UVDBG classify PlaneSurface per False/False: closed 1, periodic 0, chains 1
+UVDBG rims 1: points 4, missing 0, boundary edges 4, tris 2
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+UVDBG classify PlaneSurface per False/False: closed 2, periodic 0, chains 2
+UVDBG rims 2: points 52, missing 0, boundary edges 52, tris 52
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 52, tris 52
+UVDBG classify PlaneSurface per False/False: closed 2, periodic 0, chains 2
+UVDBG rims 2: points 52, missing 0, boundary edges 52, tris 52
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 52, tris 52
+UVDBG classify ExtrudedSurface per True/False: closed 0, periodic 2, chains 2
+UVDBG strip 0: A 0..48 B 0..48 area 1 n 98 holes 0
+UVDBG strips: A 49 pts 1→2, B 49 pts 2→1, other coord A 0 B 1
+UVDBG rims 2: points 98, missing 0, boundary edges 96, tris 96
+UVDBG consistency: max |P(uv)-x| on boundary 1.46E-014, su 50.265 sv 20, tol 0.0214, pts 98, tris 96
+UVDBG pass 0: interior points 43, h 1.171, tris 182, area3 1004.511
+UVDBG classify PlaneSurface per False/False: closed 1, periodic 0, chains 1
+UVDBG rims 1: points 4, missing 0, boundary edges 4, tris 2
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.01, pts 4, tris 2
+G2DBG PlaneSurface mesh 800 exact 800 tris 2 pts 4
+UVDBG classify PlaneSurface per False/False: closed 1, periodic 0, chains 1
+UVDBG rims 1: points 4, missing 0, boundary edges 4, tris 2
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.01, pts 4, tris 2
+G2DBG PlaneSurface mesh 1200 exact 1200 tris 2 pts 4
+UVDBG classify PlaneSurface per False/False: closed 1, periodic 0, chains 1
+UVDBG rims 1: points 4, missing 0, boundary edges 4, tris 2
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.01, pts 4, tris 2
+G2DBG PlaneSurface mesh 800 exact 800 tris 2 pts 4
+UVDBG classify PlaneSurface per False/False: closed 1, periodic 0, chains 1
+UVDBG rims 1: points 4, missing 0, boundary edges 4, tris 2
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.01, pts 4, tris 2
+G2DBG PlaneSurface mesh 1200 exact 1200 tris 2 pts 4
+UVDBG classify PlaneSurface per False/False: closed 2, periodic 0, chains 2
+UVDBG rims 2: points 52, missing 0, boundary edges 52, tris 52
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.01, pts 52, tris 52
+G2DBG PlaneSurface mesh 2199.512 exact 2198.938 tris 52 pts 52
+UVDBG classify PlaneSurface per False/False: closed 2, periodic 0, chains 2
+UVDBG rims 2: points 52, missing 0, boundary edges 52, tris 52
+UVDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.01, pts 52, tris 52
+G2DBG PlaneSurface mesh 2199.512 exact 2198.938 tris 52 pts 52
+UVDBG classify ExtrudedSurface per True/False: closed 0, periodic 2, chains 2
+UVDBG strip 0: A 0..48 B 0..48 area 1 n 98 holes 0
+UVDBG strips: A 49 pts 1→2, B 49 pts 2→1, other coord A 0 B 1
+UVDBG rims 2: points 98, missing 0, boundary edges 96, tris 96
+UVDBG consistency: max |P(uv)-x| on boundary 1.46E-014, su 50.265 sv 20, tol 0.0214, pts 98, tris 96
+UVDBG pass 0: interior points 43, h 1.171, tris 182, area3 1004.511
+G2DBG ExtrudedSurface mesh 1004.511 exact -1005.31 tris 182 pts 141
+{"g2":"box with a hole","handled":7,"total":7,"worstArea":0.0007942345245472915,"vol":43989.417566623306,"va":43978.76140340506,"mesh":"Mesh: ok","reasons":{}}
+G2VOL PlaneSurface loops 1 uv 0 old 0 area 1200 exact 1200
+G2VOL PlaneSurface loops 1 uv 16000 old 16000 area 800 exact 800
+G2VOL PlaneSurface loops 1 uv 16000 old 16000 area 1200 exact 1200
+G2VOL PlaneSurface loops 1 uv 0 old 0 area 800 exact 800
+G2VOL PlaneSurface loops 5 uv 0 old 0 area 2287.225 exact 2286.903
+G2VOL PlaneSurface loops 5 uv 15248.169 old 15248.169 area 2287.225 exact 2286.903
+G2VOL ExtrudedSurface loops 2 uv -375.809 old -374.809 area 376.65 exact -376.991
+G2VOL ExtrudedSurface loops 2 uv -375.809 old -374.809 area 376.65 exact -376.991
+G2VOL ExtrudedSurface loops 2 uv -375.809 old -374.809 area 376.65 exact -376.991
+G2VOL ExtrudedSurface loops 2 uv -375.809 old -374.809 area 376.65 exact -376.991
+{"g2":"4 holes","handled":10,"total":10,"worstArea":0.0009059945761738175,"vol":45744.935007651045,"va":45738.05328941537,"mesh":"Mesh: ok","reasons":{}}
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+RDBG consistency: max |P(uv)-x| on boundary 2.59E-015, su 4.712 sv 20, tol 0.02, pts 26, tris 24
+RDBG pass 0: interior points 6, h 0.693, tris 36, area3 94.102
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 16, tris 14
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 16, tris 14
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+RDBG consistency: max |P(uv)-x| on boundary 2.59E-015, su 4.712 sv 20, tol 0.02, pts 26, tris 24
+RDBG pass 0: interior points 6, h 0.693, tris 36, area3 94.102
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 4, tris 2
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 16, tris 14
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.02, pts 16, tris 14
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.01, pts 4, tris 2
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.01, pts 4, tris 2
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.01, pts 4, tris 2
+RDBG consistency: max |P(uv)-x| on boundary 2.59E-015, su 4.712 sv 20, tol 0.01, pts 26, tris 24
+RDBG pass 0: interior points 9, h 0.49, tris 42, area3 94.162
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.01, pts 4, tris 2
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.01, pts 16, tris 14
+RDBG consistency: max |P(uv)-x| on boundary 0.00E+000, su 1 sv 1, tol 0.01, pts 16, tris 14
+{"g2":"rounded edge","handled":7,"total":7,"worstArea":0.0004660360063502463,"vol":47961.089014295234,"va":47961.37166941154,"mesh":"Mesh: ok","reasons":{}}
+TDBG strips: A 49 pts 1→2, B 49 pts 2→1, other coord A 0 B 1
+TDBG strips: A 51 pts 0.8958→1.8958, B 51 pts 1.902→0.902, other coord A 0 B 0.9
+TDBG strips: A 52 pts 0.9792→-0.0208, B 51 pts -0.0208→0.9792, other coord A -0 B 1
+TDBG strips: A 51 pts 0.8958→1.8958, B 51 pts 1.902→0.902, other coord A 0 B 0.9
+TDBG strips: A 52 pts 0.9792→-0.0208, B 51 pts -0.0208→0.9792, other coord A -0 B 1
+{"g2":"hole with a rounded rim (torus)","handled":8,"total":8,"worstArea":0.004948725929043139,"vol":43941.40061798975,"va":43933.203659549465,"mesh":"Mesh: ok","reasons":{}}
+{"g2":"spherical cut (pole)","handled":7,"total":7,"worstArea":0.0015838109617035895,"vol":46930.8455359353,"va":46927.66970757468,"mesh":"Mesh: ok","reasons":{}}
+{"g2":"shaft with a cross hole","handled":4,"total":4,"worstArea":0.0026298172274968243,"vol":18570.821890040817,"va":18599.49150944607,"mesh":"Mesh: ok","reasons":{}}
+{"g2":"realistic 8001","handled":30,"total":30,"worstArea":0.0028533426503633517,"vol":318592.076020977,"va":318595.35032001574,"mesh":"Mesh: ok","reasons":{}}
+{"g2":"realistic 8002","handled":28,"total":28,"worstArea":0.0028533426503632793,"vol":317311.53451255045,"va":317309.78888964775,"mesh":"Mesh: ok","reasons":{}}
+OK   box: faces 6/6 in (u,v), worst area error 0.0E+000, volume 48000 vs 48000, Mesh: ok 
+OK   box with a hole: faces 7/7 in (u,v), worst area error 7.9E-004, volume 43989.418 vs 43978.761, Mesh: ok 
+OK   4 holes: faces 10/10 in (u,v), worst area error 9.1E-004, volume 45744.935 vs 45738.053, Mesh: ok 
+OK   rounded edge: faces 7/7 in (u,v), worst area error 4.7E-004, volume 47961.089 vs 47961.372, Mesh: ok 
+OK   hole with a rounded rim (torus): faces 8/8 in (u,v), worst area error 4.9E-003, volume 43941.401 vs 43933.204, Mesh: ok 
+OK   spherical cut (pole): faces 7/7 in (u,v), worst area error 1.6E-003, volume 46930.846 vs 46927.67, Mesh: ok 
+OK   shaft with a cross hole: faces 4/4 in (u,v), worst area error 2.6E-003, volume 18570.822 vs 18599.492, Mesh: ok 
+OK   realistic 8001: faces 30/30 in (u,v), worst area error 2.9E-003, volume 318592.076 vs 318595.35, Mesh: ok 
+OK   realistic 8002: faces 28/28 in (u,v), worst area error 2.9E-003, volume 317311.535 vs 317309.789, Mesh: ok 
+{"test":"G2-UV-MESH","ok":true}
+OK   box: edges 12 (raised 12, max 1.0E-007 mm), vertices 8 (raised 8, max 1.0E-007 mm); inconsistencies before 0, after 0
+OK   4 holes: edges 20 (raised 20, max 1.0E-007 mm), vertices 16 (raised 16, max 1.0E-007 mm); inconsistencies before 0, after 0
+OK   spherical cut: edges 13 (raised 13, max 1.0E-007 mm), vertices 9 (raised 9, max 1.0E-007 mm); inconsistencies before 0, after 0
+OK   hole with a rounded rim: edges 21 (raised 12, max 8.3E-006 mm), vertices 17 (raised 9, max 8.3E-006 mm); inconsistencies before 0, after 0
+OK   realistic 8001: edges 60 (raised 60, max 1.0E-007 mm), vertices 44 (raised 44, max 1.0E-007 mm); inconsistencies before 0, after 0
+OK   realistic 8002: edges 52 (raised 52, max 1.0E-007 mm), vertices 40 (raised 40, max 1.0E-007 mm); inconsistencies before 0, after 0
+OK   IGES import (sphere cut): edges 13 (raised 13, max 1.0E-007 mm), vertices 9 (raised 9, max 1.0E-007 mm); inconsistencies before 0, after 0
+{"test":"G3-TOLERANCES","ok":true}
+OK   plane × plane: Curves: 1 curve(s) [LineCurve3], 0 point(s), on both surfaces within 4.4E-016 mm 
+OK   parallel planes: Empty: 0 curve(s) [], 0 point(s), on both surfaces within 0.0E+000 mm 
+OK   plane × sphere: Curves: 1 curve(s) [ArcCurve3], 0 point(s), on both surfaces within 0.0E+000 mm 
+OK   plane touching a sphere: Tangent: 0 curve(s) [], 1 point(s), on both surfaces within 0.0E+000 mm 
+OK   plane × cylinder at 30°: Curves: 1 curve(s) [EllipseCurve3], 0 point(s), on both surfaces within 8.9E-016 mm 
+OK   plane parallel to the axis at d = 3: Curves: 2 curve(s) [LineCurve3, LineCurve3], 0 point(s), on both surfaces within 0.0E+000 mm 
+OK   plane across the axis: Curves: 1 curve(s) [ArcCurve3], 0 point(s), on both surfaces within 8.9E-016 mm 
+OK   sphere × sphere: Curves: 1 curve(s) [ArcCurve3], 0 point(s), on both surfaces within 0.0E+000 mm 
+OK   parallel cylinders: Curves: 2 curve(s) [LineCurve3, LineCurve3], 0 point(s), on both surfaces within 0.0E+000 mm 
+OK   cylinder × coaxial sphere: Curves: 2 curve(s) [ArcCurve3, ArcCurve3], 0 point(s), on both surfaces within 4.4E-016 mm 
+OK   cross hole R2 through a shaft R10: Curves: 2 curve(s) [IntersectionCurve3, IntersectionCurve3], 0 point(s), on both surfaces within 9.1E-013 mm 
+OK   offset cross hole R4, axis 8 from the shaft axis (partial): Curves: 1 curve(s) [IntersectionCurve3], 0 point(s), on both surfaces within 4.6E-014 mm 
+OK   oblique cross hole at 60°: Curves: 2 curve(s) [IntersectionCurve3, IntersectionCurve3], 0 point(s), on both surfaces within 1.4E-014 mm 
+OK   plane across the cone axis: Curves: 1 curve(s) [ArcCurve3], 0 point(s), on both surfaces within 8.9E-016 mm 
+OK   oblique plane × cone (ellipse): Curves: 1 curve(s) [IntersectionCurve3], 0 point(s), on both surfaces within 8.6E-013 mm 
+OK   plane parallel to a generator (parabola): Curves: 1 curve(s) [IntersectionCurve3], 0 point(s), on both surfaces within 1.4E-014 mm 
+OK   plane through the apex and the axis (two generators): Curves: 2 curve(s) [LineCurve3, LineCurve3], 0 point(s), on both surfaces within 1.4E-014 mm 
+OK   cone × coaxial cylinder: Curves: 1 curve(s) [ArcCurve3], 0 point(s), on both surfaces within 4.4E-016 mm 
+OK   cone × coaxial sphere: Curves: 1 curve(s) [ArcCurve3], 0 point(s), on both surfaces within 4.4E-016 mm 
+OK   plane across the torus axis: Curves: 2 curve(s) [ArcCurve3, ArcCurve3], 0 point(s), on both surfaces within 1.8E-015 mm 
+OK   plane through the torus axis: Curves: 2 curve(s) [ArcCurve3, ArcCurve3], 0 point(s), on both surfaces within 8.9E-016 mm 
+OK   torus × coaxial cylinder: Curves: 2 curve(s) [ArcCurve3, ArcCurve3], 0 point(s), on both surfaces within 1.8E-015 mm 
+OK   torus × coaxial sphere: Curves: 2 curve(s) [ArcCurve3, ArcCurve3], 0 point(s), on both surfaces within 1.8E-015 mm 
+OK   cone × coaxial torus: Curves: 2 curve(s) [ArcCurve3, ArcCurve3], 0 point(s), on both surfaces within 5.3E-015 mm 
+OK   Villarceau: bitangent plane × torus (circles of radius R) [294 ms]: Curves: 3 curve(s) [IntersectionCurve3, IntersectionCurve3, IntersectionCurve3], 0 point(s), on both surfaces within 9.4E-013 mm 
+OK   slightly tilted plane × torus (inner and outer loop): Curves: 2 curve(s) [IntersectionCurve3, IntersectionCurve3], 0 point(s), on both surfaces within 9.0E-013 mm 
+OK   tilted plane leaving the tube on one side (one loop): Curves: 1 curve(s) [IntersectionCurve3], 0 point(s), on both surfaces within 7.4E-013 mm 
+OK   cylinder × sphere off the axis: Curves: 1 curve(s) [IntersectionCurve3], 0 point(s), on both surfaces within 9.3E-013 mm 
+OK   cylinder × cone, axes crossing: Curves: 2 curve(s) [IntersectionCurve3, IntersectionCurve3], 0 point(s), on both surfaces within 8.8E-013 mm 
+OK   cone × cone, axes crossing: Curves: 2 curve(s) [IntersectionCurve3, IntersectionCurve3], 0 point(s), on both surfaces within 1.0E-012 mm 
+OK   torus × torus, perpendicular ring through the tube: Curves: 2 curve(s) [IntersectionCurve3, IntersectionCurve3], 0 point(s), on both surfaces within 9.9E-013 mm 
+{"test":"G4-SSI-QUADRICS","ok":true}
+OK   4 holes: edges 20: exact 20, kept 0; vertices snapped 0; max point shift 7.9E-015 mm; max edge tolerance 1.0E-007 → 1.0E-007, vertex 1.0E-007 → 1.0E-007; volume 45738.053289 → 45738.053289; BRep: ok; Mesh: ok
+OK   spherical cut: edges 13: exact 13, kept 0; vertices snapped 0; max point shift 0.0E+000 mm; max edge tolerance 1.0E-007 → 1.0E-007, vertex 1.0E-007 → 1.0E-007; volume 46927.669708 → 46927.669708; BRep: ok; Mesh: ok
+OK   hole with a rounded rim: edges 21: exact 21, kept 0; vertices snapped 6; max point shift 5.3E-006 mm; max edge tolerance 8.3E-006 → 2.8E-006, vertex 8.3E-006 → 2.8E-006; volume 43933.20366 → 43933.20366; BRep: ok; Exact: ok; Mesh: ok
+OK   realistic 8001: edges 60: exact 57, kept 3; vertices snapped 0; max point shift 6.4E-014 mm; max edge tolerance 1.0E-007 → 1.0E-007, vertex 1.0E-007 → 1.0E-007; volume 318595.35032 → 318595.35032; BRep: ok; Mesh: ok
+OK   realistic 8002: edges 52: exact 50, kept 2; vertices snapped 0; max point shift 4.3E-014 mm; max edge tolerance 1.0E-007 → 1.0E-007, vertex 1.0E-007 → 1.0E-007; volume 317309.78889 → 317309.78889; BRep: ok; Mesh: ok
+{"test":"G4-EXACT-EDGES","ok":true}
+EXB   face 881899 FacetedSurface display  facets 52 src PlaneSurface
+EXB   face 881900 FacetedSurface display  facets 52 src PlaneSurface
+EXB   face 881901 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 881902 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 881903 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 881904 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 881937 FacetedSurface display  facets 182 src ExtrudedSurface
+EXV vertical hole R8 through a box: mesh volume 43989.417607; per-face: 
+EXB   face 882166 FacetedSurface display  facets 52 src PlaneSurface
+EXB   face 882167 FacetedSurface display  facets 52 src PlaneSurface
+EXB   face 882168 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 882169 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 882170 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 882171 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 882204 FacetedSurface display  facets 3442 src ExtrudedSurface
+EXV hole R5 tilted 30° through a box: mesh volume 46191.136174; per-face: 
+EXB   face 882361 FacetedSurface display  facets 52 src PlaneSurface
+EXB   face 882362 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 882363 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 882364 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 882365 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 882366 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 882401 FacetedSurface display  facets 46 src PlaneSurface
+EXB   face 882396 FacetedSurface display  facets 172 src ExtrudedSurface
+EXV blind hole R6, depth 12: mesh volume 46646.960849; per-face: 
+EXB   face 882671 FacetedSurface display  facets 52 src PlaneSurface
+EXB   face 882672 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 882673 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 882674 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 882675 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 882676 FacetedSurface display  facets 2 src PlaneSurface
+EXB   face 882711 FacetedSurface display  facets 46 src PlaneSurface
+EXB   face 882706 FacetedSurface display  facets 1460 src ExtrudedSurface
+EXV blind hole R4 tilted 20°, axial depth 10: mesh volume 47498.920744; per-face: 
+SHAFTFACE 882860 ExtrudedSurface loops 2 tag #d0000002d6/extrude[0]:side[0.0]
+SHAFTFACE 882853 PlaneSurface loops 1 tag #d0000002d6/extrude[0]:bottom
+SHAFTFACE 882854 PlaneSurface loops 1 tag #d0000002d6/extrude[0]:top
+EXFACE 882867 FacetedSurface loops 1 3 tag #d0000002d6/extrude[0]:top
+EXFACE 882868 FacetedSurface loops 1 3 tag #d0000002d6/extrude[0]:bottom
+EXFACE 882869 FacetedSurface loops 4 3/3/1/1 tag #d0000002d6/extrude[0]:side[0.0]
+EXFACE 882891 FacetedSurface loops 2 1/1 tag exact:hole-wall
+EXB   face 882867 FacetedSurface display  facets 48 src PlaneSurface
+EXB   face 882868 FacetedSurface display  facets 48 src PlaneSurface
+EXB   face 882869 FacetedSurface display  facets 13040 src ExtrudedSurface
+EXB   face 882891 FacetedSurface display  facets 4588 src ExtrudedSurface
+EXV cross hole R2 through a shaft R10 (curved face): mesh volume 18572.663851; per-face: 
+OK   vertical hole R8 through a box: exact volume 43978.761403405 vs formula 43978.761403405 (polyhedral 43978.761403405); faces 7 vs 7; max tolerance exact 1.0E-007 vs polyhedral 1.0E-007; BRep: ok; Mesh: ok
+OK   hole R5 tilted 30° through a box: exact volume 46186.200635766 vs formula 46186.200635766 (polyhedral 46186.200635766); faces 7 vs 7; max tolerance exact 1.0E-007 vs polyhedral 1.0E-007; BRep: ok; Mesh: ok
+OK   blind hole R6, depth 12: exact volume 46642.831973649 vs formula 46642.831973649 (polyhedral 46642.831973649); faces 8 vs 8; max tolerance exact 1.0E-007 vs polyhedral 1.0E-007; BRep: ok; Mesh: ok
+OK   blind hole R4 tilted 20°, axial depth 10: exact volume 47497.345175426 vs formula 47497.345175426 (polyhedral 47497.345175426); faces 8 vs 8; max tolerance exact 1.0E-007 vs polyhedral 1.0E-007; BRep: ok; Mesh: ok
+OK   cross hole R2 through a shaft R10 (curved face): exact volume 18599.491509446 vs formula 18599.491509845 (polyhedral 18599.491509446); faces 4 vs 4; max tolerance exact 1.0E-007 vs polyhedral 1.0E-007; BRep: ok; Mesh: ok
+OK   hole at the box edge is refused (rim crosses a face boundary): refused as expected — ExactBoolean: a rim crosses a face boundary (face splitting is not implemented yet) — the polyhedral boolean is used.
+{"test":"G4-EXACT-BOOLEAN-THROUGH-HOLE","ok":true}
+POLY25 212697.894456 mesh 212708.833; exact mesh 212708.714
+OK   oblique through hole Ø8 at 15°: exact path True, volume 212877.6805989 vs 212877.6805989 
+OK   oblique blind hole Ø8 at 15°, depth 20: exact path True, volume 214994.690350851 vs 214994.690350851 
+OK   oblique through hole Ø8 at 25° (exit reaches the side face): exact path True, volume 212697.894456227 vs 212697.808286545 
+{"test":"G4-HOLE-FEATURE-OBLIQUE-EXACT","ok":true}
+BLINDLOOP outer True A+[(10, 0, 0)>(10, 0, 0)]
+BLINDLOOP outer True A-[(10, 0, 60)>(10, 0, 60)]
+BLINDLOOP outer True L-[(10, 0, 0)>(10, 0, 60)] L+[(10, 0, 0)>(10, 0, 60)]
+BLINDLOOP outer False I+[(-4, -9.2, 30)>(-4, -9.2, 30)]
+BLINDFACE #d0000002e0/extrude[0]:side[0.0] FacetedSurface src ExtrudedSurface loops 1/1/2/1 display 
+BLINDFACE #d0000002e0/extrude[0]:bottom FacetedSurface src PlaneSurface loops 1 display 
+BLINDFACE #d0000002e0/extrude[0]:top FacetedSurface src PlaneSurface loops 1 display 
+BLINDFACE exact:hole-bottom FacetedSurface src PlaneSurface loops 1 display 
+BLINDFACE exact:hole-wall FacetedSurface src ExtrudedSurface loops 1/1 display 
+OK   notch at an edge: vertical R5, axis 2 mm inside the face x = 0: exact 46825.540385771 vs formula 46825.540385771 (polyhedral 46825.540385771); faces 8 vs 8; BRep: ok; Mesh: ok
+OK   corner cut: vertical R5 on the corner edge: exact 47607.300918301 vs formula 47607.300918301 (polyhedral 47607.300918301); faces 7 vs 7; BRep: ok; Mesh: ok
+OK   through hole inside the faces (no splitting): exact 43978.761403405 vs formula 43978.761403405 (polyhedral 43978.761403405); faces 7 vs 7; BRep: ok; Mesh: ok
+OK   slot across the whole width: horizontal R5 along y through the top: exact 46429.203673205 vs formula 46429.203673205 (polyhedral 46429.203673205); faces 8 vs 8; BRep: ok; Mesh: ok
+OK   cross hole at the shaft end (rims cross the end circle): exact 18058.734727176 vs integral 18058.734727247; faces 5; BRep: ok; Mesh: ok
+OK   oblique blind hole across the top edge: exact 47304.077615 vs quadrature 47304.060016; faces 8; BRep: ok; Mesh: ok
+OK   blind cross hole into a shaft (bottom on the axis plane): exact 18357.16607751 vs integral 18357.166078276; faces 5; BRep: ok; Mesh: ok
+{"test":"G4-FACE-SPLIT-CYLINDER","ok":true}
+{"test":"K10-SAVE-LOAD-ATOMIC","ok":true}
+{"test":"K10-SAVE-FAILURE-LEAVES-OLD-FILE","ok":true}
+{"test":"K10-LOAD-REFUSES-DAMAGED","ok":true}
+{"test":"K10-REPRO","size":12710,"FailureCode":"fallback-refused","FailedStage":"boolean.exact","againCode":"fallback-refused","same":true}
+{"test":"K10-REPRODUCER-REPLAYS-FAILURE","ok":true}
+{"test":"K10-REPRO-OK","v0":43989.41756662328,"v1":43989.41756662328}
+{"test":"K10-REPRODUCER-REPLAYS-SUCCESS","ok":true}
+{"staleExactUses":0}
+{"passed":128,"failed":1}

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>OpenTK.Mathematics</RootNamespace>
+    <Nullable>disable</Nullable>
+    <NoWarn>$(NoWarn);CS1591;CS0618;CS8632;CS0436</NoWarn>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+</Project>

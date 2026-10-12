@@ -1,0 +1,178 @@
+{"meshcheck":"Z angle=0.1 union=False reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=0.1 union=False reverse=False","before":36000.000000000065,"after":36034.33629385647,"gain":34.336293856402335,"expected":34.336293856408275,"error":5.9401372709544376E-12,"hash":"23BDA2B0F31864E266543A3EDA49738DDACED70D9DB3145DCFF6F8CC728D6CD4","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.051, 0 open edges."]}
+{"test":"Z angle=0.1 union=False reverse=False","ok":true}
+{"test":"Z angle=0.1 union=False reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=0.1 union=False reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=0.1 union=False reverse=True","before":36000.000000000065,"after":36034.33629385643,"gain":34.336293856365955,"expected":34.336293856408275,"error":4.231992534187157E-11,"hash":"113B395CF30F4E050FE69BFC254E3719D2989D5F7943C4D07836A1694094456C","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84034.695, 0 open edges."]}
+{"test":"Z angle=0.1 union=False reverse=True","ok":true}
+{"test":"Z angle=0.1 union=False reverse=True [meshes]","ok":true}
+{"meshcheck":"Z angle=0.1 union=True reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=0.1 union=True reverse=False","before":36000.00000000008,"after":36034.33629385644,"gain":34.33629385635868,"expected":34.336293856408275,"error":4.959588295605499E-11,"hash":"8CE15DADEC4856265DF99C43736B0DB9EAAECFFD74C310B04F79967C1D80242B","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.051, 0 open edges."]}
+{"test":"Z angle=0.1 union=True reverse=False","ok":true}
+{"test":"Z angle=0.1 union=True reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=0.1 union=True reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=0.1 union=True reverse=True","before":36000.00000000008,"after":36034.33629385642,"gain":34.33629385633685,"expected":34.336293856408275,"error":7.142375579860527E-11,"hash":"0E5A2D88BD6A5ECC4B1D24C8F00211D876247BDEBF421D68A989BEBAB32F0812","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84034.695, 0 open edges."]}
+{"test":"Z angle=0.1 union=True reverse=True","ok":true}
+{"test":"Z angle=0.1 union=True reverse=True [meshes]","ok":true}
+{"meshcheck":"Z angle=0.37 union=False reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=0.37 union=False reverse=False","before":36000.00000000004,"after":36034.33629385642,"gain":34.33629385638051,"expected":34.336293856408275,"error":2.7768010113504715E-11,"hash":"E7CF2EC9FAB6D8CACA2C0C20D8D0D6B96EA1EB3EF9F98770A9AF8B6CE06E1297","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.054, 0 open edges."]}
+{"test":"Z angle=0.37 union=False reverse=False","ok":true}
+{"test":"Z angle=0.37 union=False reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=0.37 union=False reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=0.37 union=False reverse=True","before":36000.00000000004,"after":36034.33629385642,"gain":34.33629385638051,"expected":34.336293856408275,"error":2.7768010113504715E-11,"hash":"8F94ED7F68387BD06701AA890AF790D15BFC92F948C5BE4446746E0F3355B232","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84034.695, 0 open edges."]}
+{"test":"Z angle=0.37 union=False reverse=True","ok":true}
+{"test":"Z angle=0.37 union=False reverse=True [meshes]","ok":true}
+{"meshcheck":"Z angle=0.37 union=True reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=0.37 union=True reverse=False","before":36000.00000000003,"after":36034.3362938564,"gain":34.33629385637323,"expected":34.336293856408275,"error":3.504396772768814E-11,"hash":"ECC2FBDE32C01B474ED84339B065F6EFAEBF62D7E3686A657515F1F0AF771432","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.054, 0 open edges."]}
+{"test":"Z angle=0.37 union=True reverse=False","ok":true}
+{"test":"Z angle=0.37 union=True reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=0.37 union=True reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=0.37 union=True reverse=True","before":36000.00000000003,"after":36034.33629385642,"gain":34.33629385638778,"expected":34.336293856408275,"error":2.049205249932129E-11,"hash":"D46E143A71F51E0BAD787A835E82975AE12FA2567D4B9B984C320F0EF16A0277","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84034.695, 0 open edges."]}
+{"test":"Z angle=0.37 union=True reverse=True","ok":true}
+{"test":"Z angle=0.37 union=True reverse=True [meshes]","ok":true}
+{"meshcheck":"Z angle=0.7 union=False reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=0.7 union=False reverse=False","before":35999.99999999999,"after":36034.33629385639,"gain":34.33629385639506,"expected":34.336293856408275,"error":1.3216094885137863E-11,"hash":"F7F7C6B3E0AF40497FC9C0E97E96C6C5396C9AED5D3522A9F02D9F029D3BEC0F","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.051, 0 open edges."]}
+{"test":"Z angle=0.7 union=False reverse=False","ok":true}
+{"test":"Z angle=0.7 union=False reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=0.7 union=False reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=0.7 union=False reverse=True","before":35999.99999999999,"after":36034.33629385633,"gain":34.33629385633685,"expected":34.336293856408275,"error":7.142375579860527E-11,"hash":"5CC7A3060471DEBB2664692CEC57650F00D5265AE9C83D0416EEDF945ADFAB15","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84034.695, 0 open edges."]}
+{"test":"Z angle=0.7 union=False reverse=True","ok":true}
+{"test":"Z angle=0.7 union=False reverse=True [meshes]","ok":true}
+{"meshcheck":"Z angle=0.7 union=True reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=0.7 union=True reverse=False","before":35999.99999999998,"after":36034.33629385639,"gain":34.33629385640961,"expected":34.336293856408275,"error":1.3358203432289883E-12,"hash":"7FBB7A76621AFBE5FF523A63F2ED74108820B56C8EC490E02A7C199356E24051","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.051, 0 open edges."]}
+{"test":"Z angle=0.7 union=True reverse=False","ok":true}
+{"test":"Z angle=0.7 union=True reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=0.7 union=True reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=0.7 union=True reverse=True","before":35999.99999999998,"after":36034.33629385633,"gain":34.3362938563514,"expected":34.336293856408275,"error":5.687184057023842E-11,"hash":"26C09A52C15E5D6CB8BB04C6EE347FE05A6A82F799D1BA4BC50B8F86E4D61934","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84034.695, 0 open edges."]}
+{"test":"Z angle=0.7 union=True reverse=True","ok":true}
+{"test":"Z angle=0.7 union=True reverse=True [meshes]","ok":true}
+{"meshcheck":"Z angle=1.2 union=False reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=1.2 union=False reverse=False","before":36000.000000000015,"after":36034.33629385639,"gain":34.33629385637323,"expected":34.336293856408275,"error":3.504396772768814E-11,"hash":"A4FE92E3D2D983B8055B9AA1AF70F7C1E7F1E39E3E069233FE3354434456C136","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.054, 0 open edges."]}
+{"test":"Z angle=1.2 union=False reverse=False","ok":true}
+{"test":"Z angle=1.2 union=False reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=1.2 union=False reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=1.2 union=False reverse=True","before":36000.000000000015,"after":36034.33629385637,"gain":34.33629385635868,"expected":34.336293856408275,"error":4.959588295605499E-11,"hash":"0E5B4EBF277F4AF083E420B99F9C8C51906AD2CCBF537ADDE3CA2D20D5E73BA6","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.054, 0 open edges."]}
+{"test":"Z angle=1.2 union=False reverse=True","ok":true}
+{"test":"Z angle=1.2 union=False reverse=True [meshes]","ok":true}
+{"meshcheck":"Z angle=1.2 union=True reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=1.2 union=True reverse=False","before":36000.00000000005,"after":36034.33629385639,"gain":34.33629385633685,"expected":34.336293856408275,"error":7.142375579860527E-11,"hash":"8937030B6CCA385057AA577C3F49273880FFA43AAAB8ED5D5A6046F2615E99A8","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.051, 0 open edges."]}
+{"test":"Z angle=1.2 union=True reverse=False","ok":true}
+{"test":"Z angle=1.2 union=True reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=1.2 union=True reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=1.2 union=True reverse=True","before":36000.00000000005,"after":36034.3362938564,"gain":34.3362938563514,"expected":34.336293856408275,"error":5.687184057023842E-11,"hash":"525B36857012ED2BB38A3FFDE4C512C6458C36413BC347E4947208FF8581E3AE","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84034.695, 0 open edges."]}
+{"test":"Z angle=1.2 union=True reverse=True","ok":true}
+{"test":"Z angle=1.2 union=True reverse=True [meshes]","ok":true}
+{"meshcheck":"Z angle=2 union=False reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=2 union=False reverse=False","before":36000.00000000002,"after":36034.33629385644,"gain":34.33629385641689,"expected":34.336293856408275,"error":8.611777957412414E-12,"hash":"03AD246D13B9A60C243584D0398CBDA03A8F796B0C5D327E607BE66E74E06E16","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.054, 0 open edges."]}
+{"test":"Z angle=2 union=False reverse=False","ok":true}
+{"test":"Z angle=2 union=False reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=2 union=False reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=2 union=False reverse=True","before":36000.00000000002,"after":36034.33629385642,"gain":34.33629385639506,"expected":34.336293856408275,"error":1.3216094885137863E-11,"hash":"A90DDE22BA6EB5134162FE1C39C2D3BC76D088D1B44C67A76D18A264C36BE131","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.054, 0 open edges."]}
+{"test":"Z angle=2 union=False reverse=True","ok":true}
+{"test":"Z angle=2 union=False reverse=True [meshes]","ok":true}
+{"meshcheck":"Z angle=2 union=True reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=2 union=True reverse=False","before":36000.00000000002,"after":36034.33629385644,"gain":34.33629385641689,"expected":34.336293856408275,"error":8.611777957412414E-12,"hash":"264AC54B1332F56FBFFE902DE81C1E89DFE6495257DEBA4901C83C3E145BAE5D","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.054, 0 open edges."]}
+{"test":"Z angle=2 union=True reverse=False","ok":true}
+{"test":"Z angle=2 union=True reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=2 union=True reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=2 union=True reverse=True","before":36000.00000000002,"after":36034.33629385642,"gain":34.33629385639506,"expected":34.336293856408275,"error":1.3216094885137863E-11,"hash":"56EE3D5151100AE5A626DD070AAA4A9597D08F8AE83F38A2E5AF4F703A35805E","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.054, 0 open edges."]}
+{"test":"Z angle=2 union=True reverse=True","ok":true}
+{"test":"Z angle=2 union=True reverse=True [meshes]","ok":true}
+{"meshcheck":"Z angle=2.9 union=False reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=2.9 union=False reverse=False","before":36000.000000000044,"after":36034.33629385641,"gain":34.336293856365955,"expected":34.336293856408275,"error":4.231992534187157E-11,"hash":"2879B2F87CF591929138A5A8942AE0DF3EF1AD3C1FF05E644A8192D92AFEDEC9","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.051, 0 open edges."]}
+{"test":"Z angle=2.9 union=False reverse=False","ok":true}
+{"test":"Z angle=2.9 union=False reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=2.9 union=False reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=2.9 union=False reverse=True","before":36000.000000000044,"after":36034.3362938564,"gain":34.33629385635868,"expected":34.336293856408275,"error":4.959588295605499E-11,"hash":"CD8F1A75818F3E1C18A4CFA7B80E647DAB1F0D3EB5CC2B91CD90250812F97A36","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84034.695, 0 open edges."]}
+{"test":"Z angle=2.9 union=False reverse=True","ok":true}
+{"test":"Z angle=2.9 union=False reverse=True [meshes]","ok":true}
+{"meshcheck":"Z angle=2.9 union=True reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=2.9 union=True reverse=False","before":36000.000000000065,"after":36034.3362938564,"gain":34.33629385633685,"expected":34.336293856408275,"error":7.142375579860527E-11,"hash":"E4F5636A640E12529497B1ADEDD59ACD62B4414C5C393216E3AFD006594FB752","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.051, 0 open edges."]}
+{"test":"Z angle=2.9 union=True reverse=False","ok":true}
+{"test":"Z angle=2.9 union=True reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=2.9 union=True reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=2.9 union=True reverse=True","before":36000.000000000065,"after":36034.336293856446,"gain":34.33629385638051,"expected":34.336293856408275,"error":2.7768010113504715E-11,"hash":"48BC0B02AF125A0C38C6D17D7C124F2FC56B4384522CFB64E9BB902E0EF55E04","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.054, 0 open edges."]}
+{"test":"Z angle=2.9 union=True reverse=True","ok":true}
+{"test":"Z angle=2.9 union=True reverse=True [meshes]","ok":true}
+{"meshcheck":"Z angle=3.7 union=False reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=3.7 union=False reverse=False","before":36000.00000000002,"after":36034.33629385636,"gain":34.33629385633685,"expected":34.336293856408275,"error":7.142375579860527E-11,"hash":"D7821A98027CE7FCE9B5C0D20E70EBB5555CAA3100E5E24D91886B90B4226BA8","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.054, 0 open edges."]}
+{"test":"Z angle=3.7 union=False reverse=False","ok":true}
+{"test":"Z angle=3.7 union=False reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=3.7 union=False reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=3.7 union=False reverse=True","before":36000.00000000002,"after":36034.33629385642,"gain":34.33629385639506,"expected":34.336293856408275,"error":1.3216094885137863E-11,"hash":"7F9D6475CD8EE6D6FFDDCA11EC95FF7E69C645B6FA407DEAAA17F19055EF4D33","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.054, 0 open edges."]}
+{"test":"Z angle=3.7 union=False reverse=True","ok":true}
+{"test":"Z angle=3.7 union=False reverse=True [meshes]","ok":true}
+{"meshcheck":"Z angle=3.7 union=True reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=3.7 union=True reverse=False","before":36000.00000000003,"after":36034.336293856366,"gain":34.33629385633685,"expected":34.336293856408275,"error":7.142375579860527E-11,"hash":"D01FBB2064CA2567DF4C94C92A23C447605FAD0F999FBB70F25C9A64F483FA03","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.054, 0 open edges."]}
+{"test":"Z angle=3.7 union=True reverse=False","ok":true}
+{"test":"Z angle=3.7 union=True reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=3.7 union=True reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=3.7 union=True reverse=True","before":36000.00000000003,"after":36034.33629385642,"gain":34.33629385638778,"expected":34.336293856408275,"error":2.049205249932129E-11,"hash":"BA6BB37D233CCA9D5CCA2378199077FF56F3738C1FC881F140E8BC2631A65CE2","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.054, 0 open edges."]}
+{"test":"Z angle=3.7 union=True reverse=True","ok":true}
+{"test":"Z angle=3.7 union=True reverse=True [meshes]","ok":true}
+{"meshcheck":"Z angle=5.5 union=False reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=5.5 union=False reverse=False","before":35999.99999999999,"after":36034.33629385639,"gain":34.33629385639506,"expected":34.336293856408275,"error":1.3216094885137863E-11,"hash":"F57978D3C8DB80959FF44E0E7F673D47956C2550466A770CB4BF83B97D76FDE6","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84034.695, 0 open edges."]}
+{"test":"Z angle=5.5 union=False reverse=False","ok":true}
+{"test":"Z angle=5.5 union=False reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=5.5 union=False reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=5.5 union=False reverse=True","before":35999.99999999999,"after":36034.33629385639,"gain":34.33629385639506,"expected":34.336293856408275,"error":1.3216094885137863E-11,"hash":"58BEE4819007D8FD041D1A571B504176042AE1722B04462CC12939CFB37A8F5F","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.054, 0 open edges."]}
+{"test":"Z angle=5.5 union=False reverse=True","ok":true}
+{"test":"Z angle=5.5 union=False reverse=True [meshes]","ok":true}
+{"meshcheck":"Z angle=5.5 union=True reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=5.5 union=True reverse=False","before":35999.99999999999,"after":36034.33629385639,"gain":34.33629385639506,"expected":34.336293856408275,"error":1.3216094885137863E-11,"hash":"7FDC99B2F4E04564E0DAD2C5131A83061B85CA9A79D1A5804F2C08BA8ABC215A","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84034.695, 0 open edges."]}
+{"test":"Z angle=5.5 union=True reverse=False","ok":true}
+{"test":"Z angle=5.5 union=True reverse=False [meshes]","ok":true}
+{"meshcheck":"Z angle=5.5 union=True reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"Z angle=5.5 union=True reverse=True","before":35999.99999999999,"after":36034.336293856395,"gain":34.336293856402335,"expected":34.336293856408275,"error":5.9401372709544376E-12,"hash":"05759FDBB45BF5243001CAC16EA236FD1B7616E8A4EC086DEE1945C76C897168","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 84035.054, 0 open edges."]}
+{"test":"Z angle=5.5 union=True reverse=True","ok":true}
+{"test":"Z angle=5.5 union=True reverse=True [meshes]","ok":true}
+{"meshcheck":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.37 reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.37 reverse=False","before":36000.00000000006,"after":36034.336293856475,"gain":34.33629385641689,"expected":34.336293856408275,"error":8.611777957412414E-12,"hash":"AD3FB7A404BEFD0A10FC918F415B92EDD8E9ED9224B0466C7904BAC5EAED4240","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 36035.05, 0 open edges."]}
+{"test":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.37 reverse=False","ok":true}
+{"test":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.37 reverse=False [meshes]","ok":true}
+{"meshcheck":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.37 reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.37 reverse=True","before":36000.00000000006,"after":36034.33629385647,"gain":34.33629385640961,"expected":34.336293856408275,"error":1.3358203432289883E-12,"hash":"A0558C93CB50388B11B927208CB6160E8421788BA8129C30F4782EFAC9D95214","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 36034.642, 0 open edges."]}
+{"test":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.37 reverse=True","ok":true}
+{"test":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.37 reverse=True [meshes]","ok":true}
+{"meshcheck":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.9 reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.9 reverse=False","before":36000.00000000006,"after":36034.33629385646,"gain":34.336293856402335,"expected":34.336293856408275,"error":5.9401372709544376E-12,"hash":"FED22DA5360ADE92D1963EA4AD21064324AEEC192F1786B2313A9476A456C5D1","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 36035.072, 0 open edges."]}
+{"test":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.9 reverse=False","ok":true}
+{"test":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.9 reverse=False [meshes]","ok":true}
+{"meshcheck":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.9 reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.9 reverse=True","before":36000.00000000006,"after":36034.336293856475,"gain":34.33629385641689,"expected":34.336293856408275,"error":8.611777957412414E-12,"hash":"802E04A610998B9BE9B9A8CCBFD4E146D953A90B35390A0586FEE5CA4D2CDF66","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 36034.695, 0 open edges."]}
+{"test":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.9 reverse=True","ok":true}
+{"test":"3D axis=(0.5773502691896258, 0.5773502691896258, 0.5773502691896258) angle=0.9 reverse=True [meshes]","ok":true}
+{"meshcheck":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.37 reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.37 reverse=False","before":36000.00000000004,"after":36034.33629385646,"gain":34.33629385642416,"expected":34.336293856408275,"error":1.588773557159584E-11,"hash":"728B4CCA2B90621E0E0FDB9599F4A84D10BF9939EE000EFE758DB5E422312E64","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 36035.051, 0 open edges."]}
+{"test":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.37 reverse=False","ok":true}
+{"test":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.37 reverse=False [meshes]","ok":true}
+{"meshcheck":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.37 reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.37 reverse=True","before":36000.00000000004,"after":36034.336293856446,"gain":34.33629385640961,"expected":34.336293856408275,"error":1.3358203432289883E-12,"hash":"F1A7A5EAB08D57BE2A7A0217C6412670E310620BABD936E8BECFC11798B2CEA2","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 36034.695, 0 open edges."]}
+{"test":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.37 reverse=True","ok":true}
+{"test":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.37 reverse=True [meshes]","ok":true}
+{"meshcheck":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.9 reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.9 reverse=False","before":36000.000000000044,"after":36034.33629385646,"gain":34.33629385641689,"expected":34.336293856408275,"error":8.611777957412414E-12,"hash":"2DEBE14F17EFFC9AACB5E404339DE6BE827C355792FB64544F6D9EF1855566B4","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 36034.695, 0 open edges."]}
+{"test":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.9 reverse=False","ok":true}
+{"test":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.9 reverse=False [meshes]","ok":true}
+{"meshcheck":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.9 reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.9 reverse=True","before":36000.000000000044,"after":36034.336293856475,"gain":34.33629385643144,"expected":34.336293856408275,"error":2.3163693185779266E-11,"hash":"AB7B7D6F99E7662F2CD340FE642849E215D22332C77E6B9358E9C713E74D3556","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 36035.051, 0 open edges."]}
+{"test":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.9 reverse=True","ok":true}
+{"test":"3D axis=(0.24077170617153842, 0.8427009716003845, 0.48154341234307685) angle=0.9 reverse=True [meshes]","ok":true}
+{"meshcheck":"3D axis=(0, 1, 0) angle=0.37 reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"3D axis=(0, 1, 0) angle=0.37 reverse=False","before":36000.00000000001,"after":36034.3362938564,"gain":34.33629385639506,"expected":34.336293856408275,"error":1.3216094885137863E-11,"hash":"B7964723AB582B2751D045F5565753AB1BB7D7107EACC8BFB31338D7E613CFE8","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 36035.054, 0 open edges."]}
+{"test":"3D axis=(0, 1, 0) angle=0.37 reverse=False","ok":true}
+{"test":"3D axis=(0, 1, 0) angle=0.37 reverse=False [meshes]","ok":true}
+{"meshcheck":"3D axis=(0, 1, 0) angle=0.37 reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"3D axis=(0, 1, 0) angle=0.37 reverse=True","before":36000.00000000001,"after":36034.33629385641,"gain":34.336293856402335,"expected":34.336293856408275,"error":5.9401372709544376E-12,"hash":"CC7EAECD3EBB7D9113D57F1D1CD34D35F5D18B45300EBF3D063B7D5CBD494386","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 36035.054, 0 open edges."]}
+{"test":"3D axis=(0, 1, 0) angle=0.37 reverse=True","ok":true}
+{"test":"3D axis=(0, 1, 0) angle=0.37 reverse=True [meshes]","ok":true}
+{"meshcheck":"3D axis=(0, 1, 0) angle=0.9 reverse=False","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"3D axis=(0, 1, 0) angle=0.9 reverse=False","before":35999.99999999999,"after":36034.33629385642,"gain":34.33629385642416,"expected":34.336293856408275,"error":1.588773557159584E-11,"hash":"CAA368300F59FFC2D4F18DA3E52A5EF4805DD269BBF826E1CBD1D1642C976B9E","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 36035.054, 0 open edges."]}
+{"test":"3D axis=(0, 1, 0) angle=0.9 reverse=False","ok":true}
+{"test":"3D axis=(0, 1, 0) angle=0.9 reverse=False [meshes]","ok":true}
+{"meshcheck":"3D axis=(0, 1, 0) angle=0.9 reverse=True","display":true,"facets":true,"dIssues":0,"fIssues":0,"first":[],"ffirst":[]}
+{"scenario":"3D axis=(0, 1, 0) angle=0.9 reverse=True","before":35999.99999999999,"after":36034.3362938564,"gain":34.33629385640961,"expected":34.336293856408275,"error":1.3358203432289883E-12,"hash":"B10B4256BC35505A49BC0F3B40CEC44B085ED6D47A4C18AF55C079E631E1D411","warnings":["Boolean: analytic 2.5D path (8 faces, exact surfaces).","Boolean: analytic 2.5D path (9 faces, exact surfaces).","Round: 1 edge(s) requested, 1 processed (concave straight); body volume now 36035.054, 0 open edges."]}
+{"test":"3D axis=(0, 1, 0) angle=0.9 reverse=True","ok":true}
+{"test":"3D axis=(0, 1, 0) angle=0.9 reverse=True [meshes]","ok":true}
+{"staleExactUses":0}
+{"passed":88,"failed":0}
