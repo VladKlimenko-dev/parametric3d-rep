@@ -21,6 +21,8 @@ public sealed class NurbsSurface : ISurface3
     private readonly double[] _ku, _kv;      // узловые векторы
     private readonly int _du, _dv;           // степени
 
+    /// <summary>Мутация P3D_NURBSDERIVS=0: производные разностями (прежнее; у края параметров — односторонние, ошибка O(h)).</summary>
+    public static readonly bool DerivsOff = Environment.GetEnvironmentVariable("P3D_NURBSDERIVS") == "0";
     public int DegreeU => _du;
     public int DegreeV => _dv;
     public int CountU => _cp.GetLength(0);
@@ -75,6 +77,25 @@ public sealed class NurbsSurface : ISurface3
     public Vector3d PointAt(Vector2d uv)
     {
         double u = Math.Clamp(uv.X, 0, 1), v = Math.Clamp(uv.Y, 0, 1);
+        if (!FastEvalOff)
+        {
+            // KRN-07 (07.8): базис на промежутке (Пигль — Тиллер A2.2) без выделений памяти — та же точка, что у де Бура
+            int nu0 = CountU, nv0 = CountV;
+            int su = Span(_ku, nu0, _du, u), sv = Span(_kv, nv0, _dv, v);
+            Span<double> Nu = stackalloc double[_du + 1]; Span<double> Nv = stackalloc double[_dv + 1];
+            Basis(_ku, su, u, _du, Nu); Basis(_kv, sv, v, _dv, Nv);
+            Vector3d A = Vector3d.Zero; double w = 0;
+            for (int a = 0; a <= _du; a++)
+            {
+                int i = su - _du + a; if (Nu[a] == 0) continue;
+                for (int b = 0; b <= _dv; b++)
+                {
+                    int j = sv - _dv + b; double n = Nu[a] * Nv[b] * _w[i, j];
+                    A += _cp[i, j] * n; w += n;
+                }
+            }
+            return A / w;
+        }
 
         // Сперва по второму направлению: каждая строка сетки сворачивается в одну точку,
         // затем полученная строка — в искомую. Счёт идёт в однородных координатах, поэтому
@@ -208,6 +229,12 @@ public sealed class NurbsSurface : ISurface3
 
     public Vector3d NormalAt(Vector2d uv)
     {
+        if (!DerivsOff)
+        {
+            Derivs(uv, out _, out var dsu, out var dsv);
+            var nn = Vector3d.Cross(dsu, dsv);
+            if (nn.LengthSquared > 1e-24) return nn.Normalized();
+        }
         // Производные берутся разностями: аналитические для рациональной поверхности громоздки,
         // а шаг подбирается так, чтобы не терять точность у краёв.
         const double h = 1e-5;
@@ -226,12 +253,13 @@ public sealed class NurbsSurface : ISurface3
         // параметрам. Для поверхности общего вида точного решения нет.
         const int grid = 12;
         double bestU = 0, bestV = 0, best = double.MaxValue;
+        // KRN-07 (07.8): точки сетки — один раз на поверхность (прежде 169 вычислений на каждую проекцию)
+        var g = _grid ??= BuildGrid(grid);
         for (int i = 0; i <= grid; i++)
             for (int j = 0; j <= grid; j++)
             {
-                double u = i / (double)grid, v = j / (double)grid;
-                double d = (PointAt(new Vector2d(u, v)) - p).LengthSquared;
-                if (d < best) { best = d; bestU = u; bestV = v; }
+                double d = (g[i, j] - p).LengthSquared;
+                if (d < best) { best = d; bestU = i / (double)grid; bestV = j / (double)grid; }
             }
 
         double step = 1.0 / grid;
@@ -281,6 +309,133 @@ public sealed class NurbsSurface : ISurface3
         }
 
         return new Vector2d(bestU, bestV);
+    }
+
+    // ------------------------------------------------------------------ производные (KRN-07 N1b)
+
+    /// <summary>Номер промежутка узлов для параметра t (последний промежуток включает правый конец).</summary>
+    private static int Span(double[] knots, int count, int degree, double t)
+    {
+        if (t >= knots[count]) return count - 1;
+        if (t <= knots[degree]) return degree;
+        int lo = degree, hi = count;
+        while (hi - lo > 1) { int mid = (lo + hi) / 2; if (t < knots[mid]) hi = mid; else lo = mid; }
+        return lo;
+    }
+
+    /// <summary>Мутация P3D_NURBSFAST=0: точка — прежним путём (де Бур с выделениями памяти).</summary>
+    public static readonly bool FastEvalOff = Environment.GetEnvironmentVariable("P3D_NURBSFAST") == "0";
+
+    /// <summary>Ненулевые базисные функции на промежутке i (Пигль — Тиллер, A2.2).</summary>
+    private static void Basis(double[] U, int i, double u, int p, Span<double> N)
+    {
+        Span<double> left = stackalloc double[p + 1]; Span<double> right = stackalloc double[p + 1];
+        N[0] = 1;
+        for (int j = 1; j <= p; j++)
+        {
+            left[j] = u - U[i + 1 - j]; right[j] = U[i + j] - u; double saved = 0;
+            for (int r = 0; r < j; r++)
+            {
+                double den = right[r + 1] + left[j - r];
+                double temp = den == 0 ? 0 : N[r] / den;
+                N[r] = saved + right[r + 1] * temp; saved = left[j - r] * temp;
+            }
+            N[j] = saved;
+        }
+    }
+
+    /// <summary>Базисные функции и их первые производные на промежутке (Пигль — Тиллер, A2.3, n = 1).</summary>
+    private static void BasisDers(double[] U, int i, double u, int p, double[] N, double[] dN)
+    {
+        var ndu = new double[p + 1, p + 1]; var left = new double[p + 1]; var right = new double[p + 1];
+        ndu[0, 0] = 1;
+        for (int j = 1; j <= p; j++)
+        {
+            left[j] = u - U[i + 1 - j]; right[j] = U[i + j] - u; double saved = 0;
+            for (int r = 0; r < j; r++)
+            {
+                ndu[j, r] = right[r + 1] + left[j - r];
+                double temp = ndu[j, r] == 0 ? 0 : ndu[r, j - 1] / ndu[j, r];
+                ndu[r, j] = saved + right[r + 1] * temp; saved = left[j - r] * temp;
+            }
+            ndu[j, j] = saved;
+        }
+        for (int j = 0; j <= p; j++) N[j] = ndu[j, p];
+        if (p == 0) { dN[0] = 0; return; }
+        for (int r = 0; r <= p; r++)
+        {
+            // первая производная: p·(N_{r,p−1}/(U_{i+r}−U_{i+r−p}) − N_{r+1,p−1}/(U_{i+r+1}−U_{i+r+1−p}))
+            double d = 0;
+            if (r >= 1) { double den = ndu[p, r - 1]; if (den != 0) d += ndu[r - 1, p - 1] / den; }
+            if (r <= p - 1) { double den = ndu[p, r]; if (den != 0) d -= ndu[r, p - 1] / den; }
+            dN[r] = d * p;
+        }
+    }
+
+    /// <summary>Точка и первые производные рациональной поверхности (точно, без разностей): S_u = (A_u − w_u S)/w.</summary>
+    public void Derivs(Vector2d uv, out Vector3d S, out Vector3d Su, out Vector3d Sv)
+    {
+        double u = Math.Clamp(uv.X, 0, 1), v = Math.Clamp(uv.Y, 0, 1);
+        int nu = CountU, nv = CountV;
+        int su = Span(_ku, nu, _du, u), sv = Span(_kv, nv, _dv, v);
+        var Nu = new double[_du + 1]; var dNu = new double[_du + 1]; var Nv = new double[_dv + 1]; var dNv = new double[_dv + 1];
+        BasisDers(_ku, su, u, _du, Nu, dNu); BasisDers(_kv, sv, v, _dv, Nv, dNv);
+        Vector3d A = Vector3d.Zero, Au = Vector3d.Zero, Av = Vector3d.Zero; double w = 0, wu = 0, wv = 0;
+        for (int a = 0; a <= _du; a++)
+            for (int b = 0; b <= _dv; b++)
+            {
+                int i = su - _du + a, j = sv - _dv + b; double ww = _w[i, j]; var pw = _cp[i, j] * ww;
+                double n = Nu[a] * Nv[b], nuu = dNu[a] * Nv[b], nvv = Nu[a] * dNv[b];
+                A += pw * n; Au += pw * nuu; Av += pw * nvv; w += ww * n; wu += ww * nuu; wv += ww * nvv;
+            }
+        S = A / w; Su = (Au - S * wu) / w; Sv = (Av - S * wv) / w;
+    }
+
+    /// <summary>Образ при аффинном отображении точек (перенос, поворот, зеркало): опорные точки отображаются, веса и узлы те же —
+    /// рациональная поверхность переходит в рациональную точно.</summary>
+    public NurbsSurface Mapped(Func<Vector3d, Vector3d> map)
+    {
+        int nu = CountU, nv = CountV; var cp = new Vector3d[nu, nv]; var w = new double[nu, nv];
+        for (int i = 0; i < nu; i++) for (int j = 0; j < nv; j++) { cp[i, j] = map(_cp[i, j]); w[i, j] = _w[i, j]; }
+        return new NurbsSurface(cp, _du, _dv, w, (double[])_ku.Clone(), (double[])_kv.Clone());
+    }
+
+    private Vector3d[,]? _grid;
+    private Vector3d[,] BuildGrid(int n)
+    {
+        var g = new Vector3d[n + 1, n + 1];
+        for (int i = 0; i <= n; i++) for (int j = 0; j <= n; j++) g[i, j] = PointAt(new Vector2d(i / (double)n, j / (double)n));
+        return g;
+    }
+
+    /// <summary>Проекция с начальным приближением (ряд близких точек): Ньютон из подсказки; не сошлось — общая проекция.</summary>
+    public Vector2d ProjectToUV(Vector3d p, Vector2d hint)
+    {
+        double u = Math.Clamp(hint.X, 0, 1), v = Math.Clamp(hint.Y, 0, 1);
+        const double h = 1e-6;
+        double best = (PointAt(new Vector2d(u, v)) - p).LengthSquared;
+        for (int it = 0; it < 20; it++)
+        {
+            var q = PointAt(new Vector2d(u, v)); var r = q - p;
+            double ua = Math.Max(0, u - h), ub = Math.Min(1, u + h), va = Math.Max(0, v - h), vb = Math.Min(1, v + h);
+            var su = (PointAt(new Vector2d(ub, v)) - PointAt(new Vector2d(ua, v))) / (ub - ua);
+            var sv = (PointAt(new Vector2d(u, vb)) - PointAt(new Vector2d(u, va))) / (vb - va);
+            double f1 = Vector3d.Dot(r, su), f2 = Vector3d.Dot(r, sv);
+            double a11 = Vector3d.Dot(su, su), a12 = Vector3d.Dot(su, sv), a22 = Vector3d.Dot(sv, sv), det = a11 * a22 - a12 * a12;
+            if (Math.Abs(det) < 1e-18) break;
+            double nu = Math.Clamp(u - (f1 * a22 - f2 * a12) / det, 0, 1), nv = Math.Clamp(v - (f2 * a11 - f1 * a12) / det, 0, 1);
+            double nd = (PointAt(new Vector2d(nu, nv)) - p).LengthSquared;
+            if (nd > best * (1 + 1e-12) + 1e-30) break;
+            bool small = Math.Abs(nu - u) < 1e-14 && Math.Abs(nv - v) < 1e-14;
+            u = nu; v = nv; best = nd;
+            if (small) break;
+        }
+        // годится, если невязка перпендикулярна поверхности (или точка на ней); иначе — общая проекция
+        var qq = PointAt(new Vector2d(u, v)); var rr = qq - p;
+        if (rr.Length < 1e-9) return new Vector2d(u, v);
+        var nn = NormalAt(new Vector2d(u, v));
+        if (Math.Abs(Vector3d.Dot(rr.Normalized(), nn)) > 1 - 1e-8 && u > 0 && u < 1 && v > 0 && v < 1) return new Vector2d(u, v);
+        return ProjectToUV(p);
     }
 
     public bool IsPlanar => false;

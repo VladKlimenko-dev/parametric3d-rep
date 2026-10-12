@@ -6,6 +6,7 @@ src/Core/P3DException.cs
 src/Core/Settings.cs
 src/Core/Tol.cs
 src/HANDOFF.md
+src/Kernel/Analytic/AnalyticFaceNurbs.cs
 src/Kernel/Analytic/Classifier.cs
 src/Kernel/Analytic/EntityTolerance.cs
 src/Kernel/Analytic/FaceIntersect.cs
@@ -62,6 +63,7 @@ src/Kernel/GeomUtil.cs
 src/Kernel/Geometry/ExactBoolean.cs
 src/Kernel/Geometry/ExactCylinderCut.cs
 src/Kernel/Geometry/ExactEdges.cs
+src/Kernel/Geometry/NurbsSsi.cs
 src/Kernel/Geometry/Ssi.cs
 src/Kernel/KernelContext.cs
 src/Kernel/KernelOptions.cs
@@ -92,6 +94,7 @@ src/Kernel/Surfaces/BandNurbs.cs
 src/Kernel/Surfaces/FacetedSurface.cs
 src/Kernel/Surfaces/ISurface3.cs
 src/Kernel/Surfaces/NurbsSurface.cs
+src/Kernel/Surfaces/NurbsTools.cs
 src/Kernel/Surfaces/OffsetSurface.cs
 src/Kernel/Surfaces/SectionSurface.cs
 src/Kernel/Surfaces/StereoChart.cs
@@ -432,6 +435,7 @@ tests/k01/Krn06Variable.cs
 tests/k01/Krn07.cs
 tests/k01/Krn07HoleContract.cs
 tests/k01/Krn07Instances.cs
+tests/k01/Krn07Nurbs.cs
 tests/k01/Krn07b.cs
 tests/k01/Krn07c.cs
 tests/k01/Krn08.cs
@@ -445,6 +449,7 @@ tests/k01/LongChain.cs
 tests/k01/LongHistory.cs
 tests/k01/MeshReuse.cs
 tests/k01/Negative.cs
+tests/k01/NurbsProbe.cs
 tests/k01/PappusRef.cs
 tests/k01/Perf.cs
 tests/k01/PerfTargets.cs

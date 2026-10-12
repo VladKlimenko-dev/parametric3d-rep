@@ -17,6 +17,8 @@ namespace Parametric3D.Kernel.Export;
 public static class StepExact
 {
     /// <summary>Мутация P3D_STEPBAND=0: лента по формуле и линии касания не пишутся (честный отказ точной записи, прежде).</summary>
+    /// <summary>Мутация P3D_STEPRATIONAL=0: веса рационального сплайна (кривой и поверхности) не пишутся (прежнее).</summary>
+    static readonly bool StepRationalOff = Environment.GetEnvironmentVariable("P3D_STEPRATIONAL") == "0";
     static readonly bool StepBandOff = Environment.GetEnvironmentVariable("P3D_STEPBAND") == "0";
 
     static readonly bool StepCylOff = Environment.GetEnvironmentVariable("P3D_STEPCYL") == "0";
@@ -180,6 +182,13 @@ public static class StepExact
                         if (knots.Count > 0 && Math.Abs(knots[^1] - k) < 1e-12) mult[^1]++;
                         else { knots.Add(k); mult.Add(1); }
                     }
+                    // KRN-07 (07.8): РАЦИОНАЛЬНЫЙ СПЛАЙН — с весами (составная сущность). Прежде веса терялись: дуга окружности как
+                    // рациональный сплайн выходила в файл параболой. Мутация P3D_STEPRATIONAL=0.
+                    if (!StepRationalOff && sp.Weights.Any(wv => Math.Abs(wv - 1) > 1e-15))
+                        geom = E($"(BOUNDED_CURVE()B_SPLINE_CURVE({sp.Degree},({string.Join(",", ids.Select(x => "#" + x))}),.UNSPECIFIED.,.F.,.F.)" +
+                                 $"B_SPLINE_CURVE_WITH_KNOTS(({string.Join(",", mult)}),({string.Join(",", knots.Select(N))}),.UNSPECIFIED.)" +
+                                 $"CURVE()GEOMETRIC_REPRESENTATION_ITEM()RATIONAL_B_SPLINE_CURVE(({string.Join(",", sp.Weights.Select(N))}))REPRESENTATION_ITEM(''))");
+                    else
                     geom = E($"B_SPLINE_CURVE_WITH_KNOTS('',{sp.Degree}," +
                              $"({string.Join(",", ids.Select(x => "#" + x))}),.UNSPECIFIED.,.F.,.F.," +
                              $"({string.Join(",", mult)}),({string.Join(",", knots.Select(N))}),.UNSPECIFIED.)");
@@ -187,7 +196,7 @@ public static class StepExact
                 }
 
                 // KRN-06: линия касания катящегося шара (кривая по формуле) — так же: кубический B-сплайн с проверенным отходом
-                case IntersectionCurve3 or ProcCurve3 when e.Curve is IntersectionCurve3 || !StepBandOff:
+                case IntersectionCurve3 or ProcCurve3 or Geometry.NurbsImplicitCurve3 or Geometry.NurbsNurbsCurve3 when e.Curve is IntersectionCurve3 or Geometry.NurbsImplicitCurve3 or Geometry.NurbsNurbsCurve3 || !StepBandOff:
                 {
                     // K10. Кривая пересечения пишется кубическим B-сплайном через её точки с
                     // ПРОВЕРЕННЫМ отклонением (≤ 1e-4 мм). Прежде — ломаной из 64 отрезков.
@@ -437,6 +446,19 @@ public static class StepExact
                         var (mu, vu) = Pack(ns.KnotsU);
                         var (mv, vv) = Pack(ns.KnotsV);
 
+                        bool rational = false;
+                        for (int i = 0; i < ns.CountU; i++) for (int j = 0; j < ns.CountV; j++) if (Math.Abs(ns.Weight(i, j) - 1) > 1e-15) rational = true;
+                        if (rational && !StepRationalOff)
+                        {
+                            // KRN-07 (07.8): веса — составной сущностью (как у ленты скругления); прежде терялись: четверть цилиндра
+                            // R10 h20 из чужого STEP выходила телом объёмом 1666.7 вместо 1570.8 (OpenCascade)
+                            var wrows = new List<string>();
+                            for (int i = 0; i < ns.CountU; i++) { var wc = new List<string>(); for (int j = 0; j < ns.CountV; j++) wc.Add(N(ns.Weight(i, j))); wrows.Add("(" + string.Join(",", wc) + ")"); }
+                            surf = E($"(BOUNDED_SURFACE()B_SPLINE_SURFACE({ns.DegreeU},{ns.DegreeV},({string.Join(",", rows)}),.UNSPECIFIED.,.F.,.F.,.F.)" +
+                                     $"B_SPLINE_SURFACE_WITH_KNOTS(({string.Join(",", mu)}),({string.Join(",", mv)}),({string.Join(",", vu.Select(N))}),({string.Join(",", vv.Select(N))}),.UNSPECIFIED.)" +
+                                     $"GEOMETRIC_REPRESENTATION_ITEM()RATIONAL_B_SPLINE_SURFACE(({string.Join(",", wrows)}))REPRESENTATION_ITEM('')SURFACE())");
+                            break;
+                        }
                         surf = E($"B_SPLINE_SURFACE_WITH_KNOTS('',{ns.DegreeU},{ns.DegreeV}," +
                                  $"({string.Join(",", rows)}),.UNSPECIFIED.,.F.,.F.,.F.," +
                                  $"({string.Join(",", mu)}),({string.Join(",", mv)})," +

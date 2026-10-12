@@ -26,6 +26,20 @@ public static class TopologyTransform
     /// не переносятся точно — копия пересобирается из треугольников (прежде: «Unspecified», десятки секунд).</summary>
     static readonly bool XformProcOff = Environment.GetEnvironmentVariable("P3D_XFORMPROC") == "0";
 
+    /// <summary>Мутация P3D_NURBSXFORM=0: тело с гранью NURBS не переносится точно (прежнее: отказ переноса).</summary>
+    static readonly bool NurbsXformOff = Environment.GetEnvironmentVariable("P3D_NURBSXFORM") == "0";
+
+    /// <summary>Неявная форма при отображении (перенос, поворот, зеркало сохраняют расстояния).</summary>
+    static Geometry.Ssi.Shape? ShapeMapped(Geometry.Ssi.Shape s, TransformOp.Xform x) => s switch
+    {
+        Geometry.Ssi.Plane p => new Geometry.Ssi.Plane(x.Point(p.P), x.Direction(p.N).Normalized()),
+        Geometry.Ssi.Cylinder c => new Geometry.Ssi.Cylinder(x.Point(c.P), x.Direction(c.Axis).Normalized(), c.R),
+        Geometry.Ssi.Sphere sp => new Geometry.Ssi.Sphere(x.Point(sp.C), sp.R),
+        Geometry.Ssi.Cone k => new Geometry.Ssi.Cone(x.Point(k.Apex), x.Direction(k.Axis).Normalized(), k.HalfAngle),
+        Geometry.Ssi.Torus t => new Geometry.Ssi.Torus(x.Point(t.C), x.Direction(t.Axis).Normalized(), t.R, t.r),
+        _ => null
+    };
+
     public static TSolid? Apply(TSolid src, TransformOp.Xform x)
     {
         if (src.Exact != null && src.ExactAuthoritative) return null;     // рациональная многогранная форма не поворачивается точно
@@ -43,6 +57,9 @@ public static class TopologyTransform
                 // KRN-06 (06.12): формула переносится отображением точки; кривая пересечения — те же поверхности, перенесённые
                 ProcCurve3 pc when !XformProcOff => pc.Mapped(x.Point),
                 IntersectionCurve3 ic when !XformProcOff && S(ic.A) is { } ia && S(ic.B) is { } ib => new IntersectionCurve3(ia, ib, ic.Seed.Select(x.Point).ToList()),
+                // KRN-07 (07.8): кривая «NURBS × неявная» — те же параметры на перенесённом сплайне и перенесённая форма
+                Geometry.NurbsNurbsCurve3 nn when !NurbsXformOff && S(nn.A) is NurbsSurface na && S(nn.B) is NurbsSurface nb => new Geometry.NurbsNurbsCurve3(na, nb, nn.Seed),
+                Geometry.NurbsImplicitCurve3 nc when !NurbsXformOff && S(nc.S) is NurbsSurface ns2 && ShapeMapped(nc.Other, x) is { } sh2 => new Geometry.NurbsImplicitCurve3(ns2, sh2, nc.SeedUV),
                 _ => null
             };
             if (r != null) curves[c] = r;
@@ -58,6 +75,7 @@ public static class TopologyTransform
                 ExtrudedSurface ex when C(ex.Base) is { } b => new ExtrudedSurface(b, x.Direction(ex.Dir)),
                 RevolvedSurface rv when C(rv.Base) is { } b => new RevolvedSurface(b, Frame(rv.Axis, x), rv.A0, rv.A1),
                 CylinderSurface cs => new CylinderSurface(Frame(cs.Axis, x), cs.Radius),
+                NurbsSurface ns when !NurbsXformOff => ns.Mapped(x.Point),
                 SectionSurface ss when !XformProcOff => ss.Mapped(q => q.IsArc
                     ? SweepSection.Arc(x.Point(q.C), x.Direction(q.E1).Normalized(), x.Direction(q.E2).Normalized(), q.R, q.Phi)
                     : SweepSection.Line(x.Point(q.A), x.Point(q.B))),

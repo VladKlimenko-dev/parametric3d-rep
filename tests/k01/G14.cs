@@ -134,6 +134,41 @@ static partial class Program
             }
             catch (Exception ex) { man.Add($"{id}\t{name}\texception: {ex.Message.Replace('\t', ' ')}\t\t\t\t\t\t\t"); }
         }
+        // KRN-07 (07.8): ТЕЛА С ГРАНЬЮ NURBS после точной булевой (рациональный сплайн с весами, кривые пересечения NURBS ×
+        // плоскость/квадрика) — OpenCascade читает точный STEP и сверяет объём и площадь
+        foreach (var (name, tool, _) in NurbsBooleanCases())
+        {
+            string id = $"c{i++:D2}";
+            try
+            {
+                var bl = new List<TSolid> { TopologyClone.Deep(NurbsQuarterCylinder()) }; var w = new List<string>();
+                BooleanOp.Subtract(bl, tool(), w);
+                var b = bl[0];
+                if (b.Guarantee != Parametric3D.Kernel.GuaranteeLevel.ExactAnalytic) { man.Add($"{id}\tnurbs: {name}\tnot exact: {b.Guarantee}\t\t\t\t\t\t\t"); continue; }
+                var sw = new StringWriter(); var ws = new List<string>();
+                if (!Parametric3D.Kernel.Export.StepExact.Write(sw, bl, id, ws)) { man.Add($"{id}\tnurbs: {name}\tno exact step: {string.Join("; ", ws).Replace('\t', ' ')}\t\t\t\t\t\t\t"); continue; }
+                File.WriteAllText(Path.Combine(dir, id + ".step"), sw.ToString());
+                man.Add($"{id}\tnurbs: {name}\tok\t1\t{b.Faces.Count()}\t{AnalyticVolume.Of(b):R}\t{AnalyticVolume.AreaOf(b):R}\tNaN\tExactAnalytic\tFalse\t0");
+            }
+            catch (Exception ex) { man.Add($"{id}\tnurbs: {name}\texception: {ex.Message.Replace('\t', ' ')}\t\t\t\t\t\t\t"); }
+        }
+        // KRN-04 (04.9): ДВА ТЕЛА С ГРАНЯМИ NURBS (кривые пересечения двух сплайнов) — тоже OpenCascade
+        foreach (var (name, xf) in NurbsNNCases())
+        {
+            string id = $"c{i++:D2}";
+            try
+            {
+                var bl = new List<TSolid> { TopologyClone.Deep(NurbsQuarterCylinder()) };
+                BooleanOp.Subtract(bl, TopologyTransform.Apply(TopologyClone.Deep(NurbsQuarterCylinder()), xf)!, new List<string>());
+                if (bl.Any(b => b.Guarantee != Parametric3D.Kernel.GuaranteeLevel.ExactAnalytic)) { man.Add($"{id}\tnurbs×nurbs: {name}\tnot exact\t\t\t\t\t\t\t"); continue; }
+                var sw = new StringWriter(); var ws = new List<string>();
+                if (!Parametric3D.Kernel.Export.StepExact.Write(sw, bl, id, ws)) { man.Add($"{id}\tnurbs×nurbs: {name}\tno exact step: {string.Join("; ", ws).Replace('\t', ' ')}\t\t\t\t\t\t\t"); continue; }
+                File.WriteAllText(Path.Combine(dir, id + ".step"), sw.ToString());
+                if (Environment.GetEnvironmentVariable("NURBSDBG") == "1") foreach (var b in bl) foreach (var f in b.Faces) Console.WriteLine($"FACEAREA {id} {GeometryAudit.AuthoritativeSurface(f)?.GetType().Name} {AnalyticVolume.FaceArea(f):R} {string.Join(",", f.Loops.SelectMany(l => l.CoEdges).Select(c => c.Edge.Curve.GetType().Name))}");
+                man.Add($"{id}\tnurbs×nurbs: {name}\tok\t{bl.Count}\t{bl.Sum(b => b.Faces.Count())}\t{bl.Sum(b => AnalyticVolume.Of(b) ?? double.NaN):R}\t{bl.Sum(b => AnalyticVolume.AreaOf(b) ?? double.NaN):R}\tNaN\tExactAnalytic\tFalse\t0");
+            }
+            catch (Exception ex) { man.Add($"{id}\tnurbs×nurbs: {name}\texception: {ex.Message.Replace('\t', ' ')}\t\t\t\t\t\t\t"); }
+        }
         File.WriteAllLines(Path.Combine(dir, "manifest.tsv"), man);
         Console.WriteLine($"G14 dump: {man.Count - 1} cases → {dir}");
     }

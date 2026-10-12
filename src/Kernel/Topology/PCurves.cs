@@ -104,7 +104,7 @@ public static class PCurves
         if (Enumerable.Range(0, n + 1).All(i => (line.PointAt((double)i / n) - uv[i]).Length < 1e-9 * scale)) cand = line;
         else if (s.IsPlanar && ConicOnPlane(ce, s, uv, scale) is { } cn) cand = cn;
         else if (s.IsPlanar && ArcThrough(uv) is { } arc) cand = arc;
-        else if (ce.Edge.Curve is IntersectionCurve3)
+        else if (ce.Edge.Curve is IntersectionCurve3 or Geometry.NurbsImplicitCurve3 or Geometry.NurbsNurbsCurve3)
             cand = new ProjectedCurve2(t => PoleSafeUV(s, poles, ce, t), uv, perU, perV);
         else cand = HermiteThrough(ce, s, uv, perU, perV) ?? (ICurve2)new Polyline2(uv);
         // Отклонение: середины шагов и сами точки выборки.

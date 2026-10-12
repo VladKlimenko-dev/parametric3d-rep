@@ -272,7 +272,8 @@ public static class GeneralBoolean
             {
                 // лента катящегося шара (пассивная грань) — целиком одна область, с теми же рёбрами
                 List<FaceSplit.Region>? regs; string? sw;
-                if (f.Band) { regs = BandRegion(f); sw = null; } else regs = FaceSplit.Split(f, on[f], cuts, out sw);
+                if (f.Band) { regs = BandRegion(f); sw = null; }
+                else if (f.Param && on[f].Count == 0) { regs = ParamRegion(f); sw = null; } else regs = FaceSplit.Split(f, on[f], cuts, out sw);
                 if (regs == null) { w = $"face split: {sw}"; return false; }
                 // ЦЕЛАЯ ЗАМКНУТАЯ ПОВЕРХНОСТЬ без кусков разреза (полость-шар у тела, вложенного в другое): областей разбиение
                 // не строит (контуров нет) — грань целиком одна область. Прежде грань молча терялась: шар-полость исчезал
@@ -854,6 +855,7 @@ public static class GeneralBoolean
     /// <summary>Поверхность, которая вместе с поверхностью грани задаёт носитель ребра g (см. EdgeRunsByEvents); null — нет.</summary>
     static Ssi.Shape? AuxSurface(ICurve3 g, AnalyticFace f)
     {
+        if (f.Param) return null;                         // носитель ребра NURBS — не пара неявных поверхностей (выборка)
         switch (f.Shape)
         {
             case Ssi.Plane pl:
@@ -1073,6 +1075,43 @@ public static class GeneralBoolean
 
     /// <summary>Часть кривой на [lo, hi] (параметр за T1 — по кругу: у дуги и эллипса — углы дальше, у трассы — затравка).</summary>
     /// <summary>Грань ленты целиком — одна область: её контуры дугами-рёбрами в направлении полурёбер (как у границы в FaceSplit).</summary>
+    /// <summary>Грань NURBS (N1a) — одна область, её контуры как есть; точки внутри — в прямоугольнике параметров.</summary>
+    static List<FaceSplit.Region> ParamRegion(AnalyticFace f)
+    {
+        var r = new FaceSplit.Region();
+        foreach (var l in f.Face.Loops)
+        {
+            var ord = l.Ordered() ?? l.CoEdges.ToList();
+            var darts = new List<FaceSplit.Dart>();
+            foreach (var ce in ord)
+            {
+                var c = ce.Edge.Curve;
+                darts.Add(new FaceSplit.Dart { Curve = c, T0 = ce.Reversed ? c.T1 : c.T0, T1 = ce.Reversed ? c.T0 : c.T1, BoundaryEdge = ce.Edge });
+            }
+            r.Loops.Add(darts);
+        }
+        var S = f.ParamS!;
+        Vector3d At(double a, double b) => S.PointAt(new Vector2d(f.PUa + (f.PUb - f.PUa) * a, f.PVa + (f.PVb - f.PVa) * b));
+        if (!f.PTrim)
+        {
+            r.Inside = At(0.5, 0.5);
+            foreach (var (a, b) in new[] { (0.31, 0.43), (0.69, 0.57), (0.13, 0.71), (0.87, 0.29) }) r.InsideCandidates.Add(At(a, b));
+            return new List<FaceSplit.Region> { r };
+        }
+        // обрезанная: точки внутри — центры треугольников грани на поверхности, заведомо внутри (дальше всех от границы — раньше)
+        var cand = new List<(double D, Vector3d P)>();
+        foreach (var (a, b, c) in f.ParamTris!)
+        {
+            var p = S.PointAt(S.ProjectToUV((a + b + c) / 3));
+            if (f.Contains(p) == true) cand.Add((f.BoundaryDistance(p), p));
+            if (cand.Count > 64) break;
+        }
+        if (cand.Count == 0) return new List<FaceSplit.Region>();
+        cand.Sort((x, y) => y.D.CompareTo(x.D));
+        r.Inside = cand[0].P; foreach (var x in cand.Skip(1).Take(4)) r.InsideCandidates.Add(x.P);
+        return new List<FaceSplit.Region> { r };
+    }
+
     static List<FaceSplit.Region> BandRegion(AnalyticFace f)
     {
         var r = new FaceSplit.Region();
@@ -1115,6 +1154,22 @@ public static class GeneralBoolean
                     }
                     return new IntersectionCurve3(ic.A, ic.B, seed);
                 }
+            case Geometry.NurbsImplicitCurve3 nc:
+                {
+                    // KRN-07 N1b: часть кривой «NURBS × неявная» — те же точки (на сплайне точно) в пределах [lo, hi]
+                    var uv = new List<Vector2d>(); int n = Math.Max(16, nc.SeedUV.Count);
+                    for (int i = 0; i <= n; i++) uv.Add(nc.UVAt(lo + (hi - lo) * i / n));
+                    return new Geometry.NurbsImplicitCurve3(nc.S, nc.Other, uv);
+                }
+            case Geometry.NurbsNurbsCurve3 nn:
+                {
+                    var q = new List<Vector4d>(); int n = Math.Max(16, nn.Seed.Count);
+                    for (int i = 0; i <= n; i++) q.Add(nn.QAt(lo + (hi - lo) * i / n));
+                    return new Geometry.NurbsNurbsCurve3(nn.A, nn.B, q);
+                }
+            case SplineCurve3:
+                // KRN-07 N1b: часть сплайнового ребра (граница грани NURBS) — та же функция на подынтервале, без приближения
+                return new ProcCurve3(t => c.PointAt(t), lo, hi, false, "sub-spline");
             default:
                 throw new InvalidOperationException("sub-curve of " + c.GetType().Name);
         }

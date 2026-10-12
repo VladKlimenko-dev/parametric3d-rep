@@ -143,14 +143,17 @@ def check(path):
     from OCP.TopAbs import TopAbs_EDGE as _E
     bb = Bnd_Box(); BRepBndLib.Add_s(shape, bb); mn, mx = bb.CornerMin(), bb.CornerMax()
     diag = ((mx.X() - mn.X()) ** 2 + (mx.Y() - mn.Y()) ** 2 + (mx.Z() - mn.Z()) ** 2) ** 0.5
-    unc = 0.0
+    unc = 0.0; unca = 0.0
     ex = TopExp_Explorer(shape, _E)
     while ex.More():                                     # ребро оболочки встречается дважды — вклад пополам
         ed = TopoDS.Edge(ex.Current()); t = _BT.Tolerance_s(ed)
         if t > 1e-7:
             ge = GProp_GProps(); BRepGProp.LinearProperties_s(ed, ge, False, False); unc += t * ge.Mass() * diag / 3 / 2
+            unca += t * ge.Mass() / 2 * 2                 # площадь: сдвиг края на t по обе стороны ребра (две грани)
         ex.Next()
     res["occtUncertainty"] = unc
+    # KRN-07: то же для площади — граница грани по приближению ребра с допуском t меняет площадь не больше чем на t·L
+    res["occtAreaUncertainty"] = unca
     txt = open(path, encoding="utf-8", errors="replace").read()
     import re
     m = re.search(r"UNCERTAINTY_MEASURE_WITH_UNIT\(LENGTH_MEASURE\(([-0-9.Ee+]+)\)", txt)
@@ -196,7 +199,7 @@ def main():
             item["occtUncertainty"] = o.get("occtUncertainty", 0.0)
             # площадь не точного тела — с той же относительной границей, что объём (отход вписанных фасет — второго порядка и там,
             # и там); своей границы площади у детали пока нет
-            ta = REL_EXACT * a if exact else max(REL_EXACT * a, 2 * u * o["edgeLength"], (ve / v) * a if v > 0 else 0.0)
+            ta = max(REL_EXACT * a, o.get("occtAreaUncertainty", 0.0)) if exact else max(REL_EXACT * a, 2 * u * o["edgeLength"], (ve / v) * a if v > 0 else 0.0, o.get("occtAreaUncertainty", 0.0))
             item["tol"] = ("1e-8" if exact else f"declared u={u:.3g}, volume bound {ve:.3g}") + (f", reader {o.get('occtUncertainty', 0):.3g}" if o.get("occtUncertainty", 0) > 0 else "")
             if abs(o["volume"] - v) > tv: probs.append(f"volume {o['volume']:.12g} vs ours {v:.12g} (rel {rv:.2e}, tol {item['tol']})")
             if abs(o["area"] - a) > ta: probs.append(f"area {o['area']:.12g} vs ours {a:.12g} (rel {ra:.2e}, tol {item['tol']})")
