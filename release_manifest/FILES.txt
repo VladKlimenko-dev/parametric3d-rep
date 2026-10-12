@@ -17,6 +17,7 @@ src/Kernel/Analytic/OperandTolerance.cs
 src/Kernel/Analytic/Prism25.cs
 src/Kernel/Analytic/PrismBuild.cs
 src/Kernel/Analytic/Region2.cs
+src/Kernel/Analytic/RigorousEvents.cs
 src/Kernel/Analytic/SsiEvents.cs
 src/Kernel/Bounds3.cs
 src/Kernel/Curves/Curve2.cs
@@ -25,6 +26,7 @@ src/Kernel/Curves/CurveParam.cs
 src/Kernel/Curves/ICurve3.cs
 src/Kernel/Curves/IntersectionCurve3.cs
 src/Kernel/Curves/ProcCurve3.cs
+src/Kernel/Curves/RBezierCurve.cs
 src/Kernel/Curves/SplineCurve3.cs
 src/Kernel/Curves/SplineFit.cs
 src/Kernel/Diagnostics/Prof.cs
@@ -63,6 +65,7 @@ src/Kernel/GeomUtil.cs
 src/Kernel/Geometry/ExactBoolean.cs
 src/Kernel/Geometry/ExactCylinderCut.cs
 src/Kernel/Geometry/ExactEdges.cs
+src/Kernel/Geometry/Krawczyk.cs
 src/Kernel/Geometry/NurbsSsi.cs
 src/Kernel/Geometry/Ssi.cs
 src/Kernel/KernelContext.cs
@@ -539,6 +542,7 @@ tools/deps/OTKMath/Vector/Vector4i.cs
 tools/deps/README.md
 tools/deps/SDCStub/Empty.cs
 tools/deps/SDCStub/System.Drawing.Common.csproj
+tools/ensure_bom.py
 tools/indep_slice_volume_d8_0082.py
 tools/make_manifest.sh
 tools/occt_check.py

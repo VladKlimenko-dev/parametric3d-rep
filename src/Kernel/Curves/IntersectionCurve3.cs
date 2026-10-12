@@ -210,6 +210,15 @@ public sealed class IntersectionCurve3 : ICurve3
     // кривой нельзя: кривая обязана лежать на обеих поверхностях, иначе её точки сходят с
     // цилиндра. Излом у самого конца остаётся; он порядка отхода вершины, сотые доли.
 
+    /// <summary>Уточнённые точки затравки и их доли параметра (для строгих событий на кривой).</summary>
+    internal (Vector3d[] P, double[] T) RefinedWithParams()
+    {
+        var r = Refined(); double total = _s[^1]; var t = new double[r.Length];
+        for (int i = 0; i < r.Length; i++) t[i] = total > 0 ? _s[i] / total : i / (double)Math.Max(1, r.Length - 1);
+        t[^1] = 1;
+        return (r, t);
+    }
+
     private Vector3d[] Refined()
     {
         if (_refined != null) return _refined;

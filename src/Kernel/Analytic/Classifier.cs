@@ -555,11 +555,14 @@ public sealed partial class AnalyticFace
 
     /// <summary>Точка внутри грани (в параметрах); null — сомнительно (ближе допуска к границе).</summary>
     /// <summary>Точка (на поверхности) внутри грани; null — сомнительно (ближе допуска к границе).</summary>
-    public bool? Contains(Vector3d q)
+    public bool? Contains(Vector3d q) => Contains(q, Tol);
+
+    /// <summary>То же с заданным допуском у границы (0 — без допуска: точная чётность пересечений).</summary>
+    public bool? Contains(Vector3d q, double tol)
     {
         var f = this;
-        if (Band) { double sd = BandSignedBoundary(q); return Math.Abs(sd) < Tol ? null : sd > 0; }
-        if (Param) { double sd = ParamSignedBoundary(q); return Math.Abs(sd) < Tol ? null : sd > 0; }
+        if (Band) { double sd = BandSignedBoundary(q); return Math.Abs(sd) < tol ? null : sd > 0; }
+        if (Param) { double sd = ParamSignedBoundary(q); return Math.Abs(sd) < tol ? null : sd > 0; }
         if (FullSurface) return true;
         if (Tor) return TorusContains(q);
         int crossings = 0;
@@ -570,7 +573,7 @@ public sealed partial class AnalyticFace
             var dir = new Vector2d(Math.Cos(0.613), Math.Sin(0.613));
             foreach (var s in f.Bounds)
             {
-                if (DistToSeg(s, p) * Scale(p) < Tol) return null;
+                if (DistToSeg(s, p) * Scale(p) < tol) return null;
                 if (s.Kind == Seg.Line)
                 {
                     var e = s.B - s.A; double den = dir.X * e.Y - dir.Y * e.X; if (Math.Abs(den) < 1e-300) continue;
@@ -595,7 +598,7 @@ public sealed partial class AnalyticFace
         }
         // цилиндр: луч вдоль образующей (+h) в развёртке
         double th = Theta(q), h = H(q); double Rq = f.RadiusAt(h);
-        double tolH = Cone && !ConeMetricOff ? Tol / Math.Sqrt(1 + TanA * TanA) : Tol;   // допуск по h: мм вдоль образующей → h
+        double tolH = Cone && !ConeMetricOff ? tol / Math.Sqrt(1 + TanA * TanA) : tol;   // допуск по h: мм вдоль образующей → h
         foreach (var s in f.Bounds)
         {
             switch (s.Kind)
@@ -604,8 +607,8 @@ public sealed partial class AnalyticFace
                     {
                         double dth = Math.Abs(Wrap(th - s.A.X + Math.PI) - Math.PI) * Rq;
                         double lo = Math.Min(s.A.Y, s.B.Y), hi = Math.Max(s.A.Y, s.B.Y);
-                        if (dth < Tol && h >= lo - tolH && h <= hi + tolH) return null;     // на вертикали
-                        if (dth < Tol && h < lo) return null;                             // луч идёт вдоль вертикали
+                        if (dth < tol && h >= lo - tolH && h <= hi + tolH) return null;     // на вертикали
+                        if (dth < tol && h < lo) return null;                             // луч идёт вдоль вертикали
                         break;
                     }
                 case Seg.Horizontal:

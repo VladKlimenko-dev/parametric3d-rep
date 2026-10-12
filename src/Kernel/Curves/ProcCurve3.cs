@@ -18,6 +18,12 @@ public sealed class ProcCurve3 : ICurve3
     public ProcCurve3(Func<double, Vector3d> f, double t0, double t1, bool closed, string kind)
     { _f = f; _t0 = t0; _t1 = t1; _closed = closed; Kind = kind; }
 
+    /// <summary>
+    /// 04.2: строгое доказательство «событий с поверхностью нет» (поставляет построитель кривой): true — кривая на
+    /// [T0, T1] не задевает поверхность; false — не доказано (события ищутся выборкой, маршрут отказывает).
+    /// </summary>
+    public Func<Geometry.Ssi.Shape, double, double, bool>? NoEventsOn;
+
     public double T0 => _t0;
     public double T1 => _t1;
     public bool IsClosed => _closed;
@@ -48,13 +54,13 @@ public sealed class ProcCurve3 : ICurve3
     public ProcCurve3 Sub(double lo, double hi)
     {
         bool whole = Math.Abs(lo - Math.Min(_t0, _t1)) < 1e-15 && Math.Abs(hi - Math.Max(_t0, _t1)) < 1e-15;
-        return new ProcCurve3(_f, lo, hi, whole && _closed, Kind);
+        return new ProcCurve3(_f, lo, hi, whole && _closed, Kind) { NoEventsOn = NoEventsOn };
     }
 
     /// <summary>Та же кривая под отображением точек (жёсткое преобразование тела): параметр — тот же.</summary>
     public ProcCurve3 Mapped(Func<Vector3d, Vector3d> x) { var f = _f; return new ProcCurve3(t => x(f(t)), _t0, _t1, _closed, Kind); }
 
-    public ICurve3 Reversed() => new ProcCurve3(_f, _t1, _t0, _closed, Kind);
+    public ICurve3 Reversed() => new ProcCurve3(_f, _t1, _t0, _closed, Kind) { NoEventsOn = NoEventsOn };
 
     public void Tessellate(List<Vector3d> dst, bool includeFirstPoint)
     {

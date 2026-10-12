@@ -66,6 +66,12 @@ public static partial class FaceSplit
     /// <summary>Разбор: P3D_CONEHALF=0 — прежний выбор точки (за вершину конуса).</summary>
     static readonly bool ConeHalf = Environment.GetEnvironmentVariable("P3D_CONEHALF") != "0";
     static readonly bool BandDbg = Environment.GetEnvironmentVariable("P3D_BANDDBG") == "1";
+    /// <summary>04.4/04.6: сведений узлов и точек разреза дальше округления одного события (1e-9 мм), но ближе допуска.</summary>
+    public static long NodeMergedFar, CutFar;
+    static readonly bool FarDbg = Environment.GetEnvironmentVariable("P3D_FARDBG") == "1";
+    /// <summary>Точки ближе этого — одно событие (точность модели); дальше, но ближе допуска слияния — разные точки.</summary>
+    internal static double MergeExact => ToleranceContext.Current.ModelAccuracy;
+    internal static readonly bool MergeGuardOff = Environment.GetEnvironmentVariable("P3D_MERGEGUARD") == "0";
     static double TolV => TolOverride ?? Region2Ops.Eps;
     [ThreadStatic] public static Action<string>? Debug;
     static readonly bool ConeCapHoleOff = Environment.GetEnvironmentVariable("P3D_CONECAPHOLE") == "0";
@@ -116,7 +122,24 @@ public static partial class FaceSplit
 
         // узлы
         var nodes = new List<Vector3d>();
-        int Node(Vector3d x) { for (int i = 0; i < nodes.Count; i++) if ((nodes[i] - x).Length < TolV) return i; nodes.Add(x); return nodes.Count - 1; }
+        string? farMerge = null;
+        int Node(Vector3d x)
+        {
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                double dn = (nodes[i] - x).Length;
+                if (dn < TolV)
+                {
+                    if (dn > MergeExact)
+                    {
+                        Interlocked.Increment(ref NodeMergedFar); farMerge ??= $"two distinct points {dn:G3} mm apart (above the model accuracy, below the merge tolerance) at {x:0.#########}";
+                        if (FarDbg) Console.WriteLine($"NODEFAR {dn:G3} at {x:0.#########} face {f.Face.Tag} {f.Shape?.GetType().Name}");
+                    }
+                    return i;
+                }
+            }
+            nodes.Add(x); return nodes.Count - 1;
+        }
         var darts = new List<Dart>();
 
         // концы кусков — точки разреза рёбер границы
@@ -136,7 +159,12 @@ public static partial class FaceSplit
             foreach (var x in cuts)
             {
                 double t = ClosestParam(c, x);
-                if ((c.PointAt(t) - x).Length < TolV && Math.Min(Math.Abs(t - c.T0), Math.Abs(t - c.T1)) > 1e-12 * Math.Max(1, c.T1 - c.T0)) ts.Add(t);
+                double dc = (c.PointAt(t) - x).Length;
+                if (dc < TolV && Math.Min(Math.Abs(t - c.T0), Math.Abs(t - c.T1)) > 1e-12 * Math.Max(1, c.T1 - c.T0))
+                {
+                    ts.Add(t);
+                    if (dc > MergeExact) { Interlocked.Increment(ref CutFar); farMerge ??= $"a cut point {dc:G3} mm off the edge it cuts (above the model accuracy) at {x:0.#########}"; }
+                }
             }
             ts.Add(a1);
             var inner = ts.Skip(1).Take(ts.Count - 2).OrderBy(t => (t - a0) / (a1 - a0)).ToList();
@@ -169,6 +197,9 @@ public static partial class FaceSplit
             darts.Add(d1); darts.Add(d2);
         }
 
+        // 04.4/04.6: общие вершины и точки разреза — одно событие до округления (точности модели); две РАЗНЫЕ точки ближе
+        // допуска слияния, но дальше точности модели слились бы молча — отказ. Мутация P3D_MERGEGUARD=0.
+        if (farMerge != null && !MergeGuardOff) { why = farMerge; return null; }
         // направление выхода из узла — малым шагом вдоль кривой, в параметрах грани
         Vector2d OutDir(Dart d)
         {

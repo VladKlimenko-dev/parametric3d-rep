@@ -40,6 +40,14 @@ public sealed class SplineCurve3 : ICurve3
     ///
     /// Узел задаётся в тех же пределах, что и параметр кривой (0…1 у зажатого вектора).
     /// </summary>
+    /// <summary>Та же кривая с узлами на [0, 1] (параметр кривой и узел совпадают — для вставки и деления по параметру).</summary>
+    public SplineCurve3 WithUnitKnots()
+    {
+        double a = _knots[0], b = _knots[^1];
+        if (a == 0 && b == 1) return this;
+        return new SplineCurve3(_cp, _degree, _w, _knots.Select(k => (k - a) / (b - a)).ToArray());
+    }
+
     public SplineCurve3 InsertKnot(double t)
     {
         double lo = _knots[_degree], hi = _knots[^(_degree + 1)];

@@ -809,7 +809,7 @@ public static class Ssi
                     // g.05 (04.7): ШАГ ПО УГЛУ ПЕРЕСЕЧЕНИЯ — у почти касания точки чаще (шаг ≤ ¼ угла на кривизну): удостоверение
                     // единственности ветви доказывается в шаре радиусом в шаг, и редкие точки там его не допускали
                     double hs = h;
-                    if (!UniqOff && NormalLip(a, x, 0) is double la0 && NormalLip(b, x, 0) is double lb0 && la0 + lb0 > 0)
+                    if (!UniqOff && !TestFixedStep && NormalLip(a, x, 0) is double la0 && NormalLip(b, x, 0) is double lb0 && la0 + lb0 > 0)
                         hs = Math.Clamp(0.25 * t.Length / (la0 + lb0), Math.Max(1e-5 * br, 1e-6), h);
                     t = t.Normalized() * dir;
                     if (hsStart < 0) hsStart = hs;
@@ -864,12 +864,17 @@ public static class Ssi
 
     static readonly bool TraceCertOff = Environment.GetEnvironmentVariable("P3D_TRACECERT") == "0";
     static readonly bool UniqOff = Environment.GetEnvironmentVariable("P3D_TRACEUNIQ") == "0";
+    /// <summary>Мутация: P3D_TRACESTEPCERT=0 — без проверки звеньев ломаной и полноты прохода дуги в шаре ячейки.</summary>
+    static readonly bool StepCertOff = Environment.GetEnvironmentVariable("P3D_TRACESTEPCERT") == "0";
+    /// <summary>Для проверки: постоянный шаг прослеживания (без шага по углу) — ломаная может перескочить на соседнюю ветвь,
+    /// удостоверение обязано это поймать.</summary>
+    [ThreadStatic] internal static bool TestFixedStep;
     /// <summary>Замер: ячеек у прослеженной кривой, где единственность ветви не доказана до малого размера (отказ).</summary>
     public static long TraceNearTangent;
 
     /// <summary>Верхняя оценка поворота единичного градиента неявной формы на единицу длины в шаре (c, rb); null — нет оценки
     /// (шар задевает ось, центр, кольцо — особенность формы).</summary>
-    static double? NormalLip(Shape s, Vector3d c, double rb)
+    internal static double? NormalLip(Shape s, Vector3d c, double rb)
     {
         switch (s)
         {
@@ -888,7 +893,7 @@ public static class Ssi
     }
 
     /// <summary>Поверхности трансверсальны во всём шаре и шар мал против их кривизны (ветвь в шаре — одна дуга).</summary>
-    static bool Transversal(Shape a, Shape b, Vector3d c, double rb)
+    internal static bool Transversal(Shape a, Shape b, Vector3d c, double rb)
     {
         if (NormalLip(a, c, rb) is not double la || NormalLip(b, c, rb) is not double lb) return false;
         double L = (la + lb) * rb; if (L > 0.25) return false;
@@ -923,22 +928,45 @@ public static class Ssi
     /// и в непояснённой малой ячейке ищется точка пересечения (Ньютон из c) — новая затравка (extra); не найдена — отказ.
     /// null — все ячейки исключены или пояснены.
     /// </summary>
+    /// <summary>Для проверки: удостоверение готовых ломаных (те же карта, шаг и область, что у Trace).</summary>
+    internal static string? CertifyTraceForTest(Shape a, Shape b, Vector3d bc, double br, List<List<Vector3d>> traced) =>
+        CertifyTrace(a, b, Param(a, bc, br), bc, br, traced, Math.Max(br / 200, 1e-4), null);
+
     static string? CertifyTrace(Shape a, Shape b, Func<double, double, Vector3d> P, Vector3d bcC, double br, List<List<Vector3d>> traced, double h, List<Vector3d>? extra)
     {
         // сетка корзин по точкам кривых
         double cell = Math.Max(h * 4, br / 64);
-        var buckets = new Dictionary<(long, long, long), List<Vector3d>>();
+        var buckets = new Dictionary<(long, long, long), List<(Vector3d P, int C)>>();
         (long, long, long) K(Vector3d x) => ((long)Math.Floor(x.X / cell), (long)Math.Floor(x.Y / cell), (long)Math.Floor(x.Z / cell));
-        foreach (var c in traced) foreach (var p in c) { var k = K(p); if (!buckets.TryGetValue(k, out var l)) buckets[k] = l = new(); l.Add(p); }
+        for (int ci = 0; ci < traced.Count; ci++) foreach (var p in traced[ci]) { var k = K(p); if (!buckets.TryGetValue(k, out var l)) buckets[k] = l = new(); l.Add((p, ci)); }
         bool Explained(Vector3d x, double rad) => NearestTraced(x, rad) != null;
+        int nearestCurve = -1;
         Vector3d? NearestTraced(Vector3d x, double rad)
         {
             double rr = rad + 2 * h; int n = (int)Math.Ceiling(rr / cell);
-            var k0 = K(x); Vector3d? best = null; double bd = rr * rr;
+            var k0 = K(x); Vector3d? best = null; double bd = rr * rr; nearestCurve = -1;
             for (long i = -n; i <= n; i++) for (long j = -n; j <= n; j++) for (long kk = -n; kk <= n; kk++)
                 if (buckets.TryGetValue((k0.Item1 + i, k0.Item2 + j, k0.Item3 + kk), out var l))
-                    foreach (var p in l) { double d2 = (p - x).LengthSquared; if (d2 <= bd) { bd = d2; best = p; } }
+                    foreach (var (p, ci) in l) { double d2 = (p - x).LengthSquared; if (d2 <= bd) { bd = d2; best = p; nearestCurve = ci; } }
             return best;
+        }
+        // 04.7: ЛОМАНАЯ БЕЗ СКАЧКОВ — каждое звено лежит в шаре, где ветвь одна (трансверсальность и малость против кривизны):
+        // обе точки звена — на одной дуге, значит, ломаная идёт по одной связной ветви. Мутация P3D_TRACEUNIQ=0.
+        if (!UniqOff && !StepCertOff)
+            foreach (var cv in traced)
+                for (int i = 1; i < cv.Count; i++)
+                {
+                    var mid = (cv[i] + cv[i - 1]) / 2; double half = (cv[i] - cv[i - 1]).Length / 2;
+                    if (!Transversal(a, b, mid, half * 1.01 + 1e-12)) return $"trace certificate: trace step at {mid:0.######} not proven single-branch";
+                }
+        // ветвь в шаре ячейки пройдена ломаной целиком, если концы незамкнутой ломаной этой ветви — вне шара (или вне области)
+        bool Covered(Vector3d c, double rb)
+        {
+            if (UniqOff || StepCertOff || nearestCurve < 0) return true;
+            var cv = traced[nearestCurve]; if (cv.Count > 2 && (cv[0] - cv[^1]).Length < 1e-9) return true;
+            foreach (var e in new[] { cv[0], cv[^1] })
+                if ((e - c).Length < rb && (e - bcC).Length < br * (1 - 1e-9)) return false;
+            return true;
         }
         double rhoMin = 1e-4 * br;
         (double Lu, double Lv)? Lip = ParamLipschitz(a, bcC, br);
@@ -969,10 +997,14 @@ public static class Ssi
             // проходит через найденную точку — значит, все точки пересечения в ячейке лежат на найденной ветви
             if (NearestTraced(c, rho) is { } pNear)
             {
-                if (UniqOff || Transversal(a, b, c, Math.Max(rho, (pNear - c).Length) * 1.01 + 1e-12)) continue;
+                double rb1 = Math.Max(rho, (pNear - c).Length) * 1.01 + 1e-12;
+                if (UniqOff || (Transversal(a, b, c, rb1) && Covered(c, rb1))) continue;
                 // ближе: точка пересечения у центра (Ньютон) и ближайшая к ней найденная — шар через обе
-                if (OntoBoth(a, b, c) is { } qn && NearestTraced(qn, 0) is { } pq
-                    && Transversal(a, b, c, Math.Max(rho, Math.Max((qn - c).Length, (pq - c).Length)) * 1.01 + 1e-12)) continue;
+                if (OntoBoth(a, b, c) is { } qn && NearestTraced(qn, 0) is { } pq)
+                {
+                    double rb2 = Math.Max(rho, Math.Max((qn - c).Length, (pq - c).Length)) * 1.01 + 1e-12;
+                    if (Transversal(a, b, c, rb2) && Covered(c, rb2)) continue;
+                }
                 // у почти касания полоса неисключённых ячеек шире — делить глубже обычного предела
                 if (rho <= 1e-2 * rhoMin) { Interlocked.Increment(ref TraceNearTangent); return $"trace certificate: near-tangent cell at {c:0.######} (single branch not proven)"; }
                 stack.Push((u0, v0, um, vm)); stack.Push((um, v0, u1, vm)); stack.Push((u0, vm, um, v1)); stack.Push((um, vm, u1, v1));

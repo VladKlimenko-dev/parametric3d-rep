@@ -77,7 +77,7 @@ public static class SsiEvents
     /// </summary>
     public static List<double> CurveSurface(ICurve3 e, Ssi.Shape s, out bool coincident)
     {
-        coincident = false;
+        coincident = false; LastUncertain = false;
         // ребро на поверхности целиком: расстояние ~0 по всей длине
         bool allOn = true;
         for (int i = 0; i <= 16 && allOn; i++) if (Math.Abs(Ssi.Implicit(s, e.PointAt(e.T0 + (e.T1 - e.T0) * (i + 0.37 * (i < 16 ? 1 : 0)) / 16)).F) > 1e-9) allOn = false;
@@ -108,7 +108,24 @@ public static class SsiEvents
                 }
                 break;
             }
+            case IntersectionCurve3 ic when !TracedOff && TracedEvents(ic, s) is { } tr:
+                Interlocked.Increment(ref TracedCertified);
+                roots.AddRange(tr);
+                break;
+            case SplineCurve3 or BezierCurve3 or NurbsImplicitCurve3 or NurbsNurbsCurve3 when !RigorousEvents.Off && RigorousEvents.OnImplicit(e, s) is { } rg:
+                if (RigorDbg)
+                {
+                    var old = Sampled(e, s).Select(t => Polish(e, s, t)).Where(t => Math.Abs(Ssi.Implicit(s, e.PointAt(t)).F) <= 1e-7).ToList();
+                    Console.Error.WriteLine($"RIGOR {e.GetType().Name} × {s.GetType().Name}: rigorous [{string.Join(", ", rg.Select(t => t.ToString("R")))}] sampled [{string.Join(", ", old.Select(t => t.ToString("R")))}]");
+                }
+                roots.AddRange(rg.Select(t => OnSampleGrid(e, s, t)));
+                break;
+            case ProcCurve3 pc when !RigorousEvents.Off && !ContactExclOff && pc.NoEventsOn != null && pc.NoEventsOn(s, Math.Min(pc.T0, pc.T1), Math.Max(pc.T0, pc.T1)):
+                Interlocked.Increment(ref RigorousEvents.Certified);   // доказано: кривая поверхность не задевает
+                break;
             default:
+                if (e is IntersectionCurve3 && !TracedOff) { Interlocked.Increment(ref TracedUncertain); LastUncertain = true; }
+                else if (!RigorousEvents.Off) LastUncertain = true;          // выборка — события не доказаны
                 Interlocked.Increment(ref SampledEdges);
                 roots.AddRange(Sampled(e, s));
                 break;
@@ -135,6 +152,98 @@ public static class SsiEvents
             merged.Add(t);
         }
         return merged;
+    }
+
+    /// <summary>Замер: рёбра-кривые пересечения со строгими событиями и без них (тогда — выборка и отказ маршрута).</summary>
+    public static long TracedCertified, TracedUncertain;
+    /// <summary>Мутация P3D_CONTACTEXCL=0: без доказательства «линия касания шара поверхность не задевает» (отказ маршрута).</summary>
+    static readonly bool ContactExclOff = Environment.GetEnvironmentVariable("P3D_CONTACTEXCL") == "0";
+    static readonly bool RigorDbg = Environment.GetEnvironmentVariable("P3D_RIGORDBG") == "1";
+    /// <summary>Последний вызов CurveSurface (в этом потоке) дал события выборкой по кривой пересечения — не доказано.</summary>
+    [ThreadStatic] public static bool LastUncertain;
+    /// <summary>Мутация P3D_TRACEDEVENTS=0: события на кривых пересечения — выборкой (прежнее), без отказа.</summary>
+    internal static readonly bool TracedOff = Environment.GetEnvironmentVariable("P3D_TRACEDEVENTS") == "0";
+
+    /// <summary>
+    /// 04.2: СТРОГИЕ СОБЫТИЯ НА КРИВОЙ ПЕРЕСЕЧЕНИЯ (ребро — прослеженная кривая A ∩ B) с поверхностью s. Звено между
+    /// соседними уточнёнными точками лежит в шаре единственности ветви (Ssi.Transversal: дуга A ∩ B в шаре одна и связна) —
+    /// значит, дуга между ними целиком в шаре звена. В шаре: |F_s(центр)| > радиуса — событий нет (F_s — расстояние со знаком,
+    /// Липшиц 1); иначе F_s монотонна вдоль дуги, если тройное произведение ∇F_s·(∇F_A × ∇F_B) в центре больше его
+    /// наибольшего изменения по шару (повороты нормалей — NormalLip) — тогда событие одно при смене знака на концах (деление
+    /// пополам по параметру кривой) и ни одного без неё; иначе звено делится пополам (точка кривой обязана лежать в шаре).
+    /// Касание (не отделить до 1e-9 мм) и шар без доказательства — null: события не доказаны.
+    /// </summary>
+    static List<double>? TracedEvents(IntersectionCurve3 ic, Ssi.Shape s)
+    {
+        if (ExactEdges.ShapeOf(ic.A) is not { } sa || ExactEdges.ShapeOf(ic.B) is not { } sb) return null;
+        var (P, T) = ic.RefinedWithParams();
+        if (P.Length < 2) return null;
+        double ext = 0; foreach (var p in P) ext = Math.Max(ext, (p - P[0]).Length);
+        double tiny = 1e-9 * Math.Max(1, ext);
+        // концы — на обеих поверхностях
+        foreach (var p in new[] { P[0], P[^1] })
+            if (Math.Abs(Ssi.Implicit(sa, p).F) > 1e-9 || Math.Abs(Ssi.Implicit(sb, p).F) > 1e-9) return null;
+        var res = new List<double>(); bool ok = true; int budget = 200000;
+        double Fs(Vector3d x) => Ssi.Implicit(s, x).F;
+        void Seg(double t0, double t1, Vector3d p0, Vector3d p1, int depth)
+        {
+            if (!ok) return;
+            if (--budget < 0) { ok = false; return; }
+            var m = (p0 + p1) / 2; double r = (p1 - p0).Length / 2 * 1.01 + 1e-12;
+            if (!Ssi.Transversal(sa, sb, m, r)) { ok = false; return; }
+            double fm = Fs(m);
+            if (Math.Abs(fm) > r * (1 + 1e-12) + 1e-13) return;                  // событий нет
+            if (Ssi.NormalLip(s, m, r) is double ks && Ssi.NormalLip(sa, m, r) is double ka && Ssi.NormalLip(sb, m, r) is double kb)
+            {
+                var gs = Ssi.Implicit(s, m).G; var ga = Ssi.Implicit(sa, m).G; var gb = Ssi.Implicit(sb, m).G;
+                double trip = Vector3d.Dot(gs, Vector3d.Cross(ga, gb));
+                double da = Math.Min(2, ka * r), db = Math.Min(2, kb * r), dsv = Math.Min(2, ks * r);
+                double err = dsv * (1 + da) * (1 + db) + da * (1 + db) + db + da * db;
+                if (Math.Abs(trip) > err * (1 + 1e-9) + 1e-12)
+                {
+                    double f0 = Fs(p0), f1 = Fs(p1);
+                    if (f0 == 0) { res.Add(t0); return; }
+                    if (f1 == 0) { res.Add(t1); return; }
+                    if (Math.Sign(f0) == Math.Sign(f1)) return;                     // монотонна, без смены знака — нет
+                    double lo = t0, hi = t1, flo = f0;
+                    for (int k = 0; k < 100 && hi - lo > 1e-16; k++)
+                    {
+                        double mid = (lo + hi) / 2, fmid = Fs(ic.PointAt(mid));
+                        if (Math.Sign(fmid) == Math.Sign(flo)) { lo = mid; flo = fmid; } else hi = mid;
+                    }
+                    res.Add((lo + hi) / 2); return;
+                }
+            }
+            if (2 * r < tiny || depth > 60) { ok = false; return; }                  // касание: не отделить
+            double tm = (t0 + t1) / 2; var q = ic.PointAt(tm);
+            if ((q - m).Length > r) { ok = false; return; }                         // точка кривой вне шара звена
+            Seg(t0, tm, p0, q, depth + 1); Seg(tm, t1, q, p1, depth + 1);
+        }
+        for (int i = 0; i + 1 < P.Length && ok; i++) Seg(T[i], T[i + 1], P[i], P[i + 1], 0);
+        return ok ? res : null;
+    }
+
+    /// <summary>
+    /// Строгий корень — тем же делением пополам на интервале сетки выборки, где он лежит (если там смена знака): то же значение
+    /// до бита, что давала выборка (последующие построения сравнивают точки побитово — у плоскости z = 0 знак нуля менял
+    /// разметку грани). Два корня в одном интервале (смены знака нет) — строгий корень как есть.
+    /// </summary>
+    static double OnSampleGrid(ICurve3 e, Ssi.Shape s, double t)
+    {
+        double len = 0; var prev = e.PointAt(e.T0); for (int i = 1; i <= 64; i++) { var q = e.PointAt(e.T0 + (e.T1 - e.T0) * i / 64); len += (q - prev).Length; prev = q; }
+        int n = Math.Clamp((int)Math.Ceiling(len * 40), 512, 8192);
+        double T(int i) => e.T0 + (e.T1 - e.T0) * i / n;
+        int k = Math.Clamp((int)Math.Floor((t - e.T0) / (e.T1 - e.T0) * n), 0, n - 1);
+        double f0 = Ssi.Implicit(s, e.PointAt(T(k))).F, f1 = Ssi.Implicit(s, e.PointAt(T(k + 1))).F;
+        if (f0 == 0) return T(k);
+        if (!(Math.Sign(f0) != Math.Sign(f1) && f1 != 0)) return t;
+        double lo = T(k), hi = T(k + 1), flo = f0;
+        for (int it = 0; it < 100 && hi - lo > 1e-16 * Math.Max(1, e.T1 - e.T0); it++)
+        {
+            double m = (lo + hi) / 2, fm = Ssi.Implicit(s, e.PointAt(m)).F;
+            if (Math.Sign(fm) == Math.Sign(flo)) { lo = m; flo = fm; } else hi = m;
+        }
+        return (lo + hi) / 2;
     }
 
     static double Polish(ICurve3 e, Ssi.Shape s, double t)

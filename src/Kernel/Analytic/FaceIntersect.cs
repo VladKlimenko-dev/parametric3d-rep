@@ -151,6 +151,8 @@ public static class FaceIntersect
         return res;
     }
 
+    static readonly bool ClipDbg = Environment.GetEnvironmentVariable("P3D_CLIPDBG") == "1";
+    static readonly bool RigorDbg = Environment.GetEnvironmentVariable("P3D_RIGORDBG") == "1";
     static readonly bool EventCertOff = Environment.GetEnvironmentVariable("P3D_EVENTCERT") == "0";
     /// <summary>Мутация P3D_NURBSACTIVE=0: грань NURBS только пассивная (пересечение с ней — отказ маршрута).</summary>
     static readonly bool NurbsActiveOff = Environment.GetEnvironmentVariable("P3D_NURBSACTIVE") == "0";
@@ -159,6 +161,44 @@ public static class FaceIntersect
 
     /// <summary>События «кривая ∩ поверхность грани»: неявная — алгебраически (SsiEvents), NURBS — по знаку расстояния.</summary>
     static List<double> EventsOn(ICurve3 c, AnalyticFace other) => other.Param ? ParamEvents(c, other) : SsiEvents.CurveSurface(c, other.Shape, out _);
+    /// <summary>То же, с отказом: события на кривой пересечения не доказаны (выборка) — Unresolved.</summary>
+    static List<double> EventsOn(ICurve3 c, AnalyticFace other, Result res)
+    {
+        var lst = EventsOn0(c, other, res);
+        if (Environment.GetEnvironmentVariable("P3D_EVDUMP") == "1") Console.Error.WriteLine($"EVDUMP {c.GetType().Name} {c.PointAt(c.T0):0.######}->{c.PointAt(c.T1):0.######} on {(other.Param ? "NURBS" : other.Shape?.GetType().Name)}: [{string.Join(", ", lst.Select(t => t.ToString("R")))}] unres {res.Unresolved != null}");
+        return lst;
+    }
+    static List<double> EventsOn0(ICurve3 c, AnalyticFace other, Result res)
+    {
+        if (other.Param && !RigorousEvents.Off)
+        {
+            // 04.2: с поверхностью NURBS — строго (Кравчик по кускам Безье); не доказано — отказ маршрута
+            var rg = RigorousEvents.OnNurbs(c, other.ParamS!, other.PUa, other.PUb, other.PVa, other.PVb);
+            if (RigorDbg)
+            {
+                var old = ParamEvents(c, other);
+                if (rg == null || old.Count != rg.Count || old.Zip(rg).Any(z => Math.Abs(z.First - z.Second) > 1e-13))
+                    Console.Error.WriteLine($"RIGOR {c.GetType().Name} on NURBS: rigorous [{(rg == null ? "null" : string.Join(", ", rg.Select(t => t.ToString("R"))))}] sampled [{string.Join(", ", old.Select(t => t.ToString("R")))}]");
+            }
+            if (rg != null)
+            {
+                // тот же корень, что даёт выборка (если она его нашла), — её значение до бита: последующие построения сравнивают
+                // точки побитово; корни, которых выборка не нашла, — строгие
+                var smp = ParamEvents(c, other);
+                for (int i = 0; i < rg.Count; i++)
+                {
+                    var p = c.PointAt(rg[i]);
+                    foreach (var t in smp) if ((c.PointAt(t) - p).Length <= 1e-9) { rg[i] = t; break; }
+                }
+                return rg;
+            }
+            if (res.Unresolved == null) { res.Unresolved = $"events of a {c.GetType().Name} edge on a NURBS face are not proven"; if (RigorDbg) Console.Error.WriteLine("RIGOR unresolved: " + res.Unresolved); }
+            return ParamEvents(c, other);
+        }
+        var l = EventsOn(c, other);
+        if (!other.Param && SsiEvents.LastUncertain && res.Unresolved == null) { res.Unresolved = $"events of a {c.GetType().Name} edge are not proven (sampled)"; if (RigorDbg) Console.Error.WriteLine("RIGOR unresolved: " + res.Unresolved); }
+        return l;
+    }
 
     /// <summary>Градиент (нормаль) поверхности грани в точке.</summary>
     static Vector3d SurfaceGradient(AnalyticFace f, Vector3d q)
@@ -225,7 +265,7 @@ public static class FaceIntersect
             foreach (var e in f.Face.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct())
             {
                 if (e.Curve == null) continue;
-                foreach (var te in EventsOn(e.Curve, otherF))
+                foreach (var te in EventsOn(e.Curve, otherF, res))
                 {
                     var q = e.Curve.PointAt(te);
                     // касание ребра поверхностью (кратный корень) кривой пересечения может и не дать — только поперечные
@@ -325,7 +365,7 @@ public static class FaceIntersect
             foreach (var e in f.Face.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct())
             {
                 if (e.Curve == null) continue;
-                foreach (var te in EventsOn(e.Curve, otherF))
+                foreach (var te in EventsOn(e.Curve, otherF, res))
                 {
                     var q = e.Curve.PointAt(te);
                     double tc = FaceSplit.ClosestParam(c, q);
@@ -362,6 +402,21 @@ public static class FaceIntersect
                 return;
             }
             inside[i] = g2 > 0;
+            if (ClipDbg) Console.WriteLine($"CLIP {a.Face.Tag}×{b.Face.Tag} {c.GetType().Name} iv [{s:G9},{e:G9}] len {(c.PointAt(Wrap(s)) - c.PointAt(Wrap(e))).Length:G3} g {g1:G3} {g2:G3} {g3:G3}");
+            // 04.4/04.6: часть кривой внутри обеих граней, но ближе допуска слияния к их границам (узкий угол, срезанный на
+            // доли допуска): знаковое расстояние там — ноль, и кусок молча терялся (у бруска угол, срезанный плоскостью в
+            // 2e-6 мм, оставался целым — вершина вне точного тела на 1.2e-6 мм при точности модели 1e-7). Внутри обеих граней
+            // дальше точности модели — отказ, а не потеря. Мутация P3D_MERGEGUARD=0.
+            if (!inside[i] && !FaceSplit.MergeGuardOff && g2 == 0)
+            {
+                var m = c.PointAt(Wrap(s + (e - s) * 0.5)); double acc = FaceSplit.MergeExact;
+                if ((c.PointAt(Wrap(s)) - c.PointAt(Wrap(e))).Length > acc && a.Contains(m, 0) == true && b.Contains(m, 0) == true
+                    && Math.Min(a.BoundaryDistance(m), b.BoundaryDistance(m)) > acc)
+                {
+                    res.Unresolved = $"a part of the intersection inside both faces is narrower than the merge tolerance (at {m:0.#########})";
+                    return;
+                }
+            }
         }
         // соседние внутренние интервалы — один кусок (событие без смены стороны: шов, касание ребра изнутри)
         var runs = new List<(double S, double E)>();
