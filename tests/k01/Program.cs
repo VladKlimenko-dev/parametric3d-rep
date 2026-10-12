@@ -372,6 +372,7 @@ static partial class Program
         if (mode is "guarantees" or "allA") Representations();
         if (mode is "survey" or "allS") Survey(false);
         if (mode is "selfx" or "allS") Survey(true);
+        if (mode is "krn11long" or "allS") Krn11LongSessionChecks();
         if (mode is "krn02" or "allA") Krn02();
         if (mode is "krn03" or "allA") Krn03();
         if (mode is "krn05" or "allA") Krn05();
@@ -411,6 +412,8 @@ static partial class Program
         if (mode is "krn06ccpart" or "allB") Krn06CylCylPartChecks();
         if (mode is "krn06step" or "allB") Krn06BlendStepChecks();
         if (mode is "krn05blend" or "allB") Krn05AfterBlendChecks();
+        if (mode is "krn11hist" or "allB") Krn11HistoryChecks();
+        if (mode is "krn05unite" or "allB") Krn05UniteChainChecks();
         if (mode is "krn07hole" or "allA") Krn07HoleContractChecks();
         if (mode is "krn07inst" or "allA") Krn07InstanceChecks();
         if (mode is "krn10pairs" or "allA") Krn10PairChecks();
