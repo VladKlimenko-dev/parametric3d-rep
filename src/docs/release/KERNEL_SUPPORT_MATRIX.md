@@ -1,4 +1,4 @@
-# Parametric3D — матрица возможностей ядра (KRN-00)
+﻿# Parametric3D — матрица возможностей ядра (KRN-00)
 
 Счёт выполнения и покрытия — `PROGRESS_ITEMS.tsv` (статус и доказательство каждой строки) и `tools/progress_score.py`.
 
