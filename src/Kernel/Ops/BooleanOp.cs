@@ -428,6 +428,27 @@ public static class BooleanOp
         finally { Analytic.Region2Ops.EpsOverride = prevE; Analytic.FaceSplit.TolOverride = prevF; }
     }
 
+    /// <summary>KRN-10 (g.13): режим предпросмотра текущего вычисления — проверки результата откладываются до принятия.</summary>
+    internal static bool PreviewMode => !PreviewOff && KernelContext.Current?.Settings.Preview == true;
+    static readonly bool PreviewOff = Environment.GetEnvironmentVariable("P3D_PREVIEW") == "0";
+    /// <summary>Мутация: P3D_PREVIEWCHECKS=0 — принятие предпросмотра без проверок.</summary>
+    static readonly bool PreviewChecksOff = Environment.GetEnvironmentVariable("P3D_PREVIEWCHECKS") == "0";
+    /// <summary>Проверки: отложенная проверка отказывает (принятие должно это увидеть).</summary>
+    [ThreadStatic] internal static bool ForceAcceptFailure;
+
+    /// <summary>
+    /// ПРИНЯТЬ ПРЕДПРОСМОТР: выполнить отложенные проверки маршрута на том же теле. null — принято (тело то же, отметка снята);
+    /// иначе причина отказа — тело не принято, вызывающий строит операцию заново без предпросмотра (там проверка отвергнет
+    /// маршрут и сработает прежний запасной путь).
+    /// </summary>
+    public static string? AcceptPreview(TSolid r)
+    {
+        if (r.PendingAcceptance is not { } f) return null;
+        string? why = PreviewChecksOff ? null : f();
+        if (why == null) r.PendingAcceptance = null;
+        return why;
+    }
+
     private static TSolid? TryAnalyticGeneralCore(TSolid body, TSolid other, BooleanKind kind, List<string> warn)
     {
         // g.02: ОПЕРАНД С АВТОРИТЕТНОЙ МНОГОГРАННОЙ ФОРМОЙ — не в точный маршрут. Его грани несут аналитические источники, а
@@ -460,8 +481,8 @@ public static class BooleanOp
         if (ReuseFaceMeshes)
         {
             var donors = new Dictionary<string, FacetedSurface>();
-            foreach (var f in body.Faces)
-                if (f.Surface is FacetedSurface dfs && dfs.Facets.Count > 0 && dfs.Display != null && MeshDonorKey(f) is { } k) donors.TryAdd(k, dfs);
+            foreach (var f in DonorLoopsOff ? body.Faces : body.Faces.Concat(other.Faces))
+                if (f.Surface is FacetedSurface dfs && dfs.Facets.Count > 0 && (dfs.Display != null || (dfs.FromLoops && !DonorLoopsOff)) && MeshDonorKey(f) is { } k) donors.TryAdd(k, dfs);
             if (donors.Count > 0) donor = f => MeshDonorKey(f) is { } k && donors.TryGetValue(k, out var d) ? d : null;
         }
         int unmeshed;
@@ -470,55 +491,79 @@ public static class BooleanOp
         if (unmeshed > 0) { AnalyticRouteDebug?.Invoke($"general invalid: {unmeshed} face(s) not meshed from their loops"); return null; }
         // Сферические грани размечаются иначе (кольцами к полюсу) — швы не согласованы по построению: полная проверка
         // (на корпусе — сетка с замечаниями у скругления вершин); прочие — B-rep (швы плоскостей и цилиндров — по рёбрам).
-        bool curved = r.Faces.Any(fc => Geometry.ExactEdges.ShapeOf(Topology.GeometryAudit.AuthoritativeSurface(fc)) is Geometry.Ssi.Sphere);
-        // g.02: ПОЛНАЯ ПРОВЕРКА И У НЕСФЕРИЧЕСКИХ РЕЗУЛЬТАТОВ, если есть грани не плоскость/цилиндр (конус): объединение бруска
-        // с повёрнутым конусом принималось с 46 сторонами сетки «в одну сторону» и объёмом на 351 мм³ меньше (разностное
-        // сравнение с OpenCascade). Мутация P3D_FULLVAL=0 — прежняя проверка (только B-rep).
-        // Сетка отображения хранит координаты во float: дальше ~1000 мм от начала её швы не сходятся по округлению (деталь у
-        // 3e4 мм — «стороны без пары»), и проверка сетки там не о геометрии (KRN-09) — там прежняя проверка B-rep.
-        var (blo, bhi) = BoxOf(r); double far = Math.Max(Math.Max(blo.Length, bhi.Length), 0);
-        bool coneLike = !FullValidateOff && far < 1000 && r.Faces.Any(fc => Geometry.ExactEdges.ShapeOf(Topology.GeometryAudit.AuthoritativeSurface(fc)) is not (Geometry.Ssi.Plane or Geometry.Ssi.Cylinder));
-        // g.05: p-КРИВЫЕ ПРОВЕРЯЮТСЯ КАК У ТОЧНОГО ТЕЛА. Прежде проверка шла до того, как результату присвоен уровень гарантии,
-        // и несогласованность p-кривых (ошибка только у точного тела) не замечалась; у тел из плоскостей и цилиндров p-кривые
-        // не проверялись вовсе: результат с p-кривой в 2e-6 мм от ребра (допуск 1e-7) принимался как ExactAnalytic.
-        // Мутация P3D_ROUTEPCURVE=0.
-        var g0 = r.Guarantee; if (!RoutePCurveOff) r.Guarantee = GuaranteeLevel.ExactAnalytic;
-        var v = curved || coneLike ? Topology.SolidValidator.Validate(r) : Topology.SolidValidator.ValidateBRep(r);
-        if (!RoutePCurveOff && v.IsValid && !(curved || coneLike)) v.Merge(Topology.SolidValidator.ValidatePCurves(r));
-        r.Guarantee = g0;
-        if (!v.IsValid) { GeneralInvalidProbe?.Invoke(r!); AnalyticRouteDebug?.Invoke("general invalid: " + v.Summary() + " :: " + string.Join(" / ", v.Issues.Where(i => i.Severity == Topology.ValidationSeverity.Error).Take(3))); GeneralDeclineProbe?.Invoke(body, other, kind, "invalid: " + v.Summary()); return null; }
-        if (Topology.AnalyticVolume.Of(r) == null) { AnalyticRouteDebug?.Invoke("general: no analytic volume"); GeneralDeclineProbe?.Invoke(body, other, kind, "no analytic volume"); return null; }
-        // g.05: ОБЪЁМ ПО ФОРМУЛАМ ГРАНЕЙ СОГЛАСУЕТСЯ С ОБЪЁМОМ ЕГО ЖЕ ФАСЕТ в пределах прогиба гранения. Точки CSG проверяют
-        // геометрию тела, но не интеграл: брусок минус тор (серия 8, случай 79) принимался с объёмом 46 190 при фасетах
-        // 42 871 и верном 39 560 (OpenCascade). Мутация P3D_VOLFACETS=0.
-        if (!VolFacetsOff && VolumeVsFacets(r) is { } vf && !vf.Agree)
+        // KRN-10 (g.13): ПРОВЕРКИ РЕЗУЛЬТАТА МАРШРУТА — одна функция. Обычный режим — сразу (отказ — многогранный путь);
+        // режим предпросмотра (KernelSettings.Preview) — откладываются: тело помечено PendingAcceptance, принятие —
+        // AcceptPreview (те же проверки на том же теле; отказ — вызывающий строит заново без предпросмотра).
+        var gAtBuild = r.Guarantee;
+        string? Checks()
         {
-            AnalyticRouteDebug?.Invoke($"general: volume {vf.Va:G8} disagrees with its facets {vf.Vf:G8} (bound {vf.Bound:G3})");
-            GeneralDeclineProbe?.Invoke(body, other, kind, "volume vs facets"); return null;
+            if (ForceAcceptFailure) return "forced acceptance failure (test)";
+            var gSaved = r.Guarantee; r.Guarantee = gAtBuild;
+            try { return ChecksCore(); } finally { r.Guarantee = gSaved; }
         }
-        // согласие с CSG по точкам
-        using (Diagnostics.Prof.Time("аналитика (общая): согласие с CSG"))
+        string? ChecksCore()
         {
-            var cr = new Analytic.Classifier(r); var ca = new Analytic.Classifier(body); var cb = new Analytic.Classifier(other);
-            if (cr.Unsupported != null || ca.Unsupported != null || cb.Unsupported != null) { AnalyticRouteDebug?.Invoke("general: classifier unsupported"); return null; }
-            // Точки — в основном в ПЕРЕСЕЧЕНИИ габаритов операндов (там результат меняется: снятые 268 мм³ в теле в десятки
-            // мм проскакивали мимо 128 точек по общему габариту), четверть — по общему.
-            var (lo, hi) = BoxOf(body); var (lo2, hi2) = BoxOf(other);
-            var ilo = Vector3d.ComponentMax(lo, lo2); var ihi = Vector3d.ComponentMin(hi, hi2);
-            bool hasI = ilo.X < ihi.X && ilo.Y < ihi.Y && ilo.Z < ihi.Z;
-            lo = Vector3d.ComponentMin(lo, lo2); hi = Vector3d.ComponentMax(hi, hi2);
-            var rnd = new Random(20261006); int decided = 0, disagree = 0;
-            for (int i = 0; i < 800 && decided < 256; i++)
+            bool curved = r.Faces.Any(fc => Geometry.ExactEdges.ShapeOf(Topology.GeometryAudit.AuthoritativeSurface(fc)) is Geometry.Ssi.Sphere);
+            // g.02: ПОЛНАЯ ПРОВЕРКА И У НЕСФЕРИЧЕСКИХ РЕЗУЛЬТАТОВ, если есть грани не плоскость/цилиндр (конус): объединение бруска
+            // с повёрнутым конусом принималось с 46 сторонами сетки «в одну сторону» и объёмом на 351 мм³ меньше (разностное
+            // сравнение с OpenCascade). Мутация P3D_FULLVAL=0 — прежняя проверка (только B-rep).
+            // Сетка отображения хранит координаты во float: дальше ~1000 мм от начала её швы не сходятся по округлению (деталь у
+            // 3e4 мм — «стороны без пары»), и проверка сетки там не о геометрии (KRN-09) — там прежняя проверка B-rep.
+            var (blo, bhi) = BoxOf(r); double far = Math.Max(Math.Max(blo.Length, bhi.Length), 0);
+            bool coneLike = !FullValidateOff && far < 1000 && r.Faces.Any(fc => Geometry.ExactEdges.ShapeOf(Topology.GeometryAudit.AuthoritativeSurface(fc)) is not (Geometry.Ssi.Plane or Geometry.Ssi.Cylinder));
+            // g.05: p-КРИВЫЕ ПРОВЕРЯЮТСЯ КАК У ТОЧНОГО ТЕЛА. Прежде проверка шла до того, как результату присвоен уровень гарантии,
+            // и несогласованность p-кривых (ошибка только у точного тела) не замечалась; у тел из плоскостей и цилиндров p-кривые
+            // не проверялись вовсе: результат с p-кривой в 2e-6 мм от ребра (допуск 1e-7) принимался как ExactAnalytic.
+            // Мутация P3D_ROUTEPCURVE=0.
+            var g0 = r.Guarantee; if (!RoutePCurveOff) r.Guarantee = GuaranteeLevel.ExactAnalytic;
+            Topology.ValidationReport v;
+            using (Diagnostics.Prof.Time("аналитика (общая): проверка тела"))
             {
-                var (bl, bh) = hasI && i % 4 != 0 ? (ilo, ihi) : (lo, hi);
-                var p = new Vector3d(bl.X + (bh.X - bl.X) * rnd.NextDouble(), bl.Y + (bh.Y - bl.Y) * rnd.NextDouble(), bl.Z + (bh.Z - bl.Z) * rnd.NextDouble());
-                int? a = ca.Classify(p), b = cb.Classify(p), c = cr.Classify(p);
-                if (a is not (1 or -1) || b is not (1 or -1) || c is not (1 or -1)) continue;
-                bool expect = op switch { Analytic.Bool2.Union => a == 1 || b == 1, Analytic.Bool2.Intersect => a == 1 && b == 1, _ => a == 1 && b != 1 };
-                decided++; if ((c == 1) != expect) { disagree++; if (disagree <= 4) CsgDisagreeProbe?.Invoke(p, a.Value, b.Value, c.Value, r); }
+                v = curved || coneLike ? Topology.SolidValidator.Validate(r) : Topology.SolidValidator.ValidateBRep(r);
+                if (!RoutePCurveOff && v.IsValid && !(curved || coneLike)) v.Merge(Topology.SolidValidator.ValidatePCurves(r));
             }
-            if (decided < 64 || disagree > 0) { AnalyticRouteDebug?.Invoke($"general: CSG agreement {decided - disagree}/{decided}"); return null; }
+            r.Guarantee = g0;
+            if (!v.IsValid) { GeneralInvalidProbe?.Invoke(r!); AnalyticRouteDebug?.Invoke("general invalid: " + v.Summary() + " :: " + string.Join(" / ", v.Issues.Where(i => i.Severity == Topology.ValidationSeverity.Error).Take(3))); GeneralDeclineProbe?.Invoke(body, other, kind, "invalid: " + v.Summary()); return "general route check failed"; }
+            bool noVol;
+            using (Diagnostics.Prof.Time("аналитика (общая): объём по формулам")) noVol = Topology.AnalyticVolume.Of(r) == null;
+            if (noVol) { AnalyticRouteDebug?.Invoke("general: no analytic volume"); GeneralDeclineProbe?.Invoke(body, other, kind, "no analytic volume"); return "general route check failed"; }
+            // g.05: ОБЪЁМ ПО ФОРМУЛАМ ГРАНЕЙ СОГЛАСУЕТСЯ С ОБЪЁМОМ ЕГО ЖЕ ФАСЕТ в пределах прогиба гранения. Точки CSG проверяют
+            // геометрию тела, но не интеграл: брусок минус тор (серия 8, случай 79) принимался с объёмом 46 190 при фасетах
+            // 42 871 и верном 39 560 (OpenCascade). Мутация P3D_VOLFACETS=0.
+            (bool Agree, double Va, double Vf, double Bound)? vfr = null;
+            using (Diagnostics.Prof.Time("аналитика (общая): объём и фасеты")) { if (!VolFacetsOff) vfr = VolumeVsFacets(r); }
+            if (!VolFacetsOff && vfr is { } vf && !vf.Agree)
+            {
+                AnalyticRouteDebug?.Invoke($"general: volume {vf.Va:G8} disagrees with its facets {vf.Vf:G8} (bound {vf.Bound:G3})");
+                GeneralDeclineProbe?.Invoke(body, other, kind, "volume vs facets"); return "general route check failed";
+            }
+            // согласие с CSG по точкам
+            using (Diagnostics.Prof.Time("аналитика (общая): согласие с CSG"))
+            {
+                var cr = new Analytic.Classifier(r); var ca = new Analytic.Classifier(body); var cb = new Analytic.Classifier(other);
+                if (cr.Unsupported != null || ca.Unsupported != null || cb.Unsupported != null) { AnalyticRouteDebug?.Invoke("general: classifier unsupported"); return "general route check failed"; }
+                // Точки — в основном в ПЕРЕСЕЧЕНИИ габаритов операндов (там результат меняется: снятые 268 мм³ в теле в десятки
+                // мм проскакивали мимо 128 точек по общему габариту), четверть — по общему.
+                var (lo, hi) = BoxOf(body); var (lo2, hi2) = BoxOf(other);
+                var ilo = Vector3d.ComponentMax(lo, lo2); var ihi = Vector3d.ComponentMin(hi, hi2);
+                bool hasI = ilo.X < ihi.X && ilo.Y < ihi.Y && ilo.Z < ihi.Z;
+                lo = Vector3d.ComponentMin(lo, lo2); hi = Vector3d.ComponentMax(hi, hi2);
+                var rnd = new Random(20261006); int decided = 0, disagree = 0;
+                for (int i = 0; i < 800 && decided < 256; i++)
+                {
+                    var (bl, bh) = hasI && i % 4 != 0 ? (ilo, ihi) : (lo, hi);
+                    var p = new Vector3d(bl.X + (bh.X - bl.X) * rnd.NextDouble(), bl.Y + (bh.Y - bl.Y) * rnd.NextDouble(), bl.Z + (bh.Z - bl.Z) * rnd.NextDouble());
+                    int? a = ca.Classify(p), b = cb.Classify(p), c = cr.Classify(p);
+                    if (a is not (1 or -1) || b is not (1 or -1) || c is not (1 or -1)) continue;
+                    bool expect = op switch { Analytic.Bool2.Union => a == 1 || b == 1, Analytic.Bool2.Intersect => a == 1 && b == 1, _ => a == 1 && b != 1 };
+                    decided++; if ((c == 1) != expect) { disagree++; if (disagree <= 4) CsgDisagreeProbe?.Invoke(p, a.Value, b.Value, c.Value, r); }
+                }
+                if (decided < 64 || disagree > 0) { AnalyticRouteDebug?.Invoke($"general: CSG agreement {decided - disagree}/{decided}"); return "general route check failed"; }
+            }
+            return null;
         }
+        if (PreviewMode) r.PendingAcceptance = Checks;
+        else if (Checks() != null) return null;
         // производная многогранная форма — лениво, из собранного тела (имена — текущие на момент построения)
         var derived = rawForLazy == null
             ? new Lazy<Exact.ExactBody>(() => Exact.ExactAdapter.ToExact(TopologyClone.Deep(r), new Exact.PlaneRegistry(), null), LazyThreadSafetyMode.ExecutionAndPublication)
@@ -651,9 +696,10 @@ public static class BooleanOp
         if (ReuseFaceMeshes)
         {
             var donors = new Dictionary<string, FacetedSurface>();
-            foreach (var f in body.Faces)
-                if (f.Surface is FacetedSurface dfs && dfs.Facets.Count > 0 && dfs.Display != null && MeshDonorKey(f) is { } k) donors.TryAdd(k, dfs);
+            foreach (var f in DonorLoopsOff ? body.Faces : body.Faces.Concat(other.Faces))
+                if (f.Surface is FacetedSurface dfs && dfs.Facets.Count > 0 && (dfs.Display != null || (dfs.FromLoops && !DonorLoopsOff)) && MeshDonorKey(f) is { } k) donors.TryAdd(k, dfs);
             if (donors.Count > 0) donor = f => MeshDonorKey(f) is { } k && donors.TryGetValue(k, out var d) ? d : null;
+            if (DonorDbg) Console.Error.WriteLine($"DONORDBG prism: body faces {body.Faces.Count()}, with display {body.Faces.Count(f => f.Surface is FacetedSurface fs && fs.Display != null)}, donors {donors.Count}");
         }
         using (Diagnostics.Prof.Time("аналитика: завершение (соглашение, разметка)")) unmeshed = Analytic.PrismBuild.Finish(r, w, donor);
         // ПРОВЕРКА РЕЗУЛЬТАТА. Каждая грань размечается точным разметчиком по общим ломаным рёбер и проверяет себя сама:
@@ -679,11 +725,16 @@ public static class BooleanOp
     /// Строгий ключ донора сетки грани: поверхность по содержанию, обращение грани, контуры в порядке обхода — у каждого
     /// полуребра вид кривой, все её определяющие числа побитово и направление. null — поверхность не по содержанию.
     /// </summary>
+    /// <summary>Мутация P3D_DONORLOOPS=0: донором — только грань с сеткой отображения (у точных маршрутов её нет — доноров нет).</summary>
+    static readonly bool DonorLoopsOff = Environment.GetEnvironmentVariable("P3D_DONORLOOPS") == "0";
+    static readonly bool DonorDbg = Environment.GetEnvironmentVariable("P3D_DONORDBG") == "1";
     internal static string? MeshDonorKey(TFace f)
     {
         var src = Topology.GeometryAudit.AuthoritativeSurface(f);
         if (src == null || SourceKey(src) is not string sk) return null;
         var b = new System.Text.StringBuilder(sk).Append(f.Reversed ? "|R" : "|F");
+        // точность гранения — часть ключа: сетка той же грани при другой хорде другая
+        b.Append("|c").Append(BitConverter.DoubleToInt64Bits(Core.Tol.Chord)).Append(',').Append(BitConverter.DoubleToInt64Bits(Core.Tol.ChordAngle));
         static void V(System.Text.StringBuilder sb, Vector3d v) => sb.Append(BitConverter.DoubleToInt64Bits(v.X)).Append(',').Append(BitConverter.DoubleToInt64Bits(v.Y)).Append(',').Append(BitConverter.DoubleToInt64Bits(v.Z)).Append(';');
         foreach (var l in f.Loops)
         {

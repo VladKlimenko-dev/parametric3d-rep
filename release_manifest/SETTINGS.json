@@ -34,6 +34,7 @@
     "OpTag": null,
     "OwnPlanesInGeneralPath": "True",
     "PlanarInput": "True",
+    "Preview": "False",
     "QMeshEnabled": "True",
     "ReuseFaceMeshes": "True",
     "SnapVertices": "False",

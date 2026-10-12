@@ -12,6 +12,9 @@ namespace Parametric3D.Kernel.Tess;
 /// </summary>
 public static class Triangulator
 {
+    /// <summary>Сколько раз ушей не нашлось и треугольник отрезан принудительно (признак негодной триангуляции).</summary>
+    [ThreadStatic] public static long ForcedClips;
+
     /// <param name="outer">Внешний контур, без повторения первой точки.</param>
     /// <param name="holes">Внутренние контуры (отверстия).</param>
     /// <param name="pts">Итоговый список точек (внешний контур + дырки, возможно с дублями-мостами).</param>
@@ -285,6 +288,7 @@ public static class Triangulator
                 // Сюда попадают только по-настоящему негодные входные данные:
                 // самопересечения, дырка, вылезающая за внешний контур.
                 // Отрезаем принудительно, лишь бы не зациклиться.
+                ForcedClips++;
                 tris.Add(idx[0]); tris.Add(idx[1]); tris.Add(idx[2]);
                 idx.RemoveAt(1);
             }

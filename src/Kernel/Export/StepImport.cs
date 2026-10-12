@@ -487,6 +487,7 @@ public static class StepImport
                 var copy = new Surfaces.FacetedSurface(dn.Source, dn.FallbackNormal);
                 foreach (var t in dn.Facets.ReadView) copy.Facets.Add(t);
                 copy.SetDisplay(dn.Display, dn.DisplayNormals);
+                copy.FromLoops = true;
                 f2.Surface = copy;
                 built++; DonorReused++;
                 continue;
@@ -553,6 +554,7 @@ public static class StepImport
 
             var res2 = new Surfaces.FacetedSurface(fs2.Source, n2.LengthSquared > 1e-18 ? n2.Normalized() : Vector3d.UnitZ);
             foreach (var t in facets2) res2.Facets.Add(t);
+            res2.FromLoops = true;
             f2.Surface = res2;
             // Сторону теперь несёт гранёная поверхность (её нормаль — по треугольникам,
             // уже развёрнутым по флагу файла). Флаг Reversed сверху разворачивал её ещё раз:

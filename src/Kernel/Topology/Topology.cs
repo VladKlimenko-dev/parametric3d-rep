@@ -388,6 +388,10 @@ public sealed class TSolid : TEntity
     /// (производные данные, как видимая сетка), не в замороженном состоянии тела.
     /// </summary>
     internal (Lazy<Exact.ExactBody> Form, long Revision)? LazyDerivedExact;
+    /// <summary>KRN-10 (g.13): тело предпросмотра — проверки маршрута отложены (BooleanOp.AcceptPreview). null — принято.</summary>
+    public Func<string?>? PendingAcceptance { get; internal set; }
+    /// <summary>Тело построено в режиме предпросмотра и ещё не принято: показывать отлично от принятого, не публиковать.</summary>
+    public bool IsPreview => PendingAcceptance != null;
 
     private (Provenance P, long Revision)? _provenance;
     /// <summary>KRN-08: происхождение граней, записанное построившей тело операцией (null — не записано или тело правили).</summary>
