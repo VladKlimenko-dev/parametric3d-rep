@@ -19,7 +19,7 @@ namespace Parametric3D.Kernel.Query;
 /// образующая при d ⟂ оси); кандидаты граней проверяются принадлежностью грани. Габарит по ±X, ±Y, ±Z.
 /// </para>
 /// </summary>
-public static class BodyQuery
+public static partial class BodyQuery
 {
     public readonly record struct ClosestResult(double Distance, Vector3d Point, string Where);
 
@@ -59,6 +59,8 @@ public static class BodyQuery
         {
             var af = AnalyticFace.Of(f, out _);
             if (af == null) return null;
+            // m.q3: грань NURBS — подножие перпендикуляра Ньютоном из ближайших треугольников грани
+            if (af.Param) { if (NurbsFoot(af, p) is { } qn) Try(qn, "face"); continue; }
             if (af.Shape is not (Ssi.Plane or Ssi.Cylinder or Ssi.Sphere or Ssi.Cone or Ssi.Torus)) return null;
             // точка на оси (центре): ближайших точек — окружность (сфера целиком); берутся 16 направлений, годна любая
             // из них внутри грани (расстояние у всех одно)
@@ -146,13 +148,36 @@ public static class BodyQuery
                     Try(el.PointAt(0)); Try(el.PointAt(1));
                     break;
                 }
-                default: return null;
+                default:
+                {
+                    // m.q3: общая кривая (сплайн, кривая пересечения) — максимум d·c(t): выборка 128 и золотое сечение у пиков
+                    var c = e.Curve; double T0 = c.T0, T1 = c.T1; const int n = 128;
+                    double F(double t) => Vector3d.Dot(c.PointAt(t), d);
+                    var vals = Enumerable.Range(0, n + 1).Select(i => F(T0 + (T1 - T0) * i / n)).ToArray();
+                    for (int i = 0; i <= n; i++)
+                    {
+                        if ((i > 0 && vals[i - 1] > vals[i]) || (i < n && vals[i + 1] > vals[i])) continue;
+                        double lo = T0 + (T1 - T0) * Math.Max(0, i - 1) / n, hi = T0 + (T1 - T0) * Math.Min(n, i + 1) / n;
+                        const double g = 0.6180339887498949;
+                        double x1 = hi - g * (hi - lo), x2 = lo + g * (hi - lo), f1 = F(x1), f2 = F(x2);
+                        for (int it = 0; it < 90; it++)
+                        {
+                            if (f1 > f2) { hi = x2; x2 = x1; f2 = f1; x1 = hi - g * (hi - lo); f1 = F(x1); }
+                            else { lo = x1; x1 = x2; f1 = f2; x2 = lo + g * (hi - lo); f2 = F(x2); }
+                        }
+                        Try(c.PointAt(f1 > f2 ? x1 : x2));
+                    }
+                    Try(c.PointAt(T0)); Try(c.PointAt(T1));
+                    break;
+                }
             }
         }
         foreach (var f in body.Faces)
         {
             var af = AnalyticFace.Of(f, out _);
             if (af == null) return null;
+            // m.q3: грань NURBS — внутренний максимум d·S(u, v) подъёмом по параметрам из лучших вершин треугольников
+            if (af.Param) { foreach (var q in NurbsSupportCandidates(af, d)) if (af.Contains(q) == true) Try(q); continue; }
             var cands = new List<Vector3d>();
             switch (af.Shape)
             {

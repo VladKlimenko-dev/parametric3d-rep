@@ -26,6 +26,7 @@ public static partial class ExactFaceMesher
     static readonly bool ConformalOff = Environment.GetEnvironmentVariable("P3D_CONFORMAL") == "0";
     public static int ConformalMeshed, ConformalFailed;
     public static Action<string>? ConformalDebug;
+    public static Action<string>? TorusDebug;
 
     /// <summary>Отображение поверхности на плоскость (прямое и обратное) и проверка, применимо ли оно к точке.</summary>
     sealed class ConformalMap
@@ -33,6 +34,8 @@ public static partial class ExactFaceMesher
         public required Func<Vector3d, Vector2d> Fwd;
         public required Func<Vector2d, Vector3d> Inv;
         public required string Kind;
+        /// <summary>Нормаль поверхности (знак — любой, но один на всей поверхности); null — по грани.</summary>
+        public Func<Vector3d, Vector3d>? Normal;
     }
 
     static (Vector3d U, Vector3d V) Perp(Vector3d w)
@@ -163,8 +166,10 @@ public static partial class ExactFaceMesher
         return maps;
     }
 
-    // Тор — НЕ ВКЛЮЧЁН (P3D_CONFORMALTORUS=1 — включить для разбора): на корпусе KRN11 разрез по меридиану давал складку
-    // (482 из 7898 треугольников против нормали грани; самопроверка отвергала), прочие грани тора — без промежутка для разреза.
+    // Тор — НЕ ВКЛЮЧЁН (P3D_CONFORMALTORUS=1 — включить для разбора). Отображение проверено (якобиан одного знака на сетке
+    // 24×24, обратное — до 1e-6), но на грани тора с вырезом бруска (пара #45) 482 из 7898 треугольников сетки ложатся против
+    // нормали при согласованном обходе в плоскости — причина не найдена; самопроверка такую сетку отвергает. Контур с
+    // ненулевым числом оборотов по координате разреза делает разрез негодным (Winding).
     static readonly bool TorusOff = Environment.GetEnvironmentVariable("P3D_CONFORMALTORUS") != "1";
 
     /// <summary>
@@ -195,6 +200,7 @@ public static partial class ExactFaceMesher
         }
         static double Wrap(double x, double per) => x - per * Math.Floor(x / per);          // [0, per)
         static double WrapS(double x, double per) => x - per * Math.Round(x / per);         // (−per/2, per/2]
+        Vector3d TorN(Vector3d p) { var d = p - o; var rad = d - w * Vector3d.Dot(d, w); return (p - (o + rad.Normalized() * R)).Normalized(); }
         var tp = loops.Select(l => l.Select(TP).ToList()).ToList();
         var hp = TP(hint);
         // чётность пересечений контуров на пути от точки грани вдоль одной координаты до разреза: нечётно — разрез вне грани
@@ -214,6 +220,7 @@ public static partial class ExactFaceMesher
                     double sm = Wrap(m - start, per);
                     if (sm > 0 && sm < span) cross++;
                 }
+            TorusDebug?.Invoke($"cut {(alongPsi ? "psi" : "theta")} {cut:0.###} from {start:0.###} span {span:0.###} crossings {cross}; loops θ [{string.Join("; ", tp.Select(l => $"{l.Min(x => x.Th):0.##}..{l.Max(x => x.Th):0.##}"))}] ψ [{string.Join("; ", tp.Select(l => $"{l.Min(x => x.Ps):0.##}..{l.Max(x => x.Ps):0.##}"))}] Ψ {Psi:0.###}");
             return cross % 2 == 1;
         }
         double? GapMid(bool psi)
@@ -229,7 +236,16 @@ public static partial class ExactFaceMesher
             }
             return best > 1e-6 * per ? mid : null;
         }
-        if (GapMid(true) is { } pc && CutOutside(true, pc))
+        // контур, обходящий тор по координате (число оборотов ≠ 0), пересекает любой разрез по ней — такой разрез негоден
+        int Winding(List<(double Th, double Ps)> l, bool psi)
+        {
+            double per = psi ? Psi : 2 * Math.PI, tot = 0;
+            for (int i = 0; i < l.Count; i++) { var p1 = l[i]; var p2 = l[(i + 1) % l.Count]; tot += WrapS(psi ? p2.Ps - p1.Ps : p2.Th - p1.Th, per); }
+            return (int)Math.Round(tot / per);
+        }
+        bool psiFree = tp.All(l => Winding(l, true) == 0), thetaFree = tp.All(l => Winding(l, false) == 0);
+        TorusDebug?.Invoke($"windings ψ [{string.Join(",", tp.Select(l => Winding(l, true)))}] θ [{string.Join(",", tp.Select(l => Winding(l, false)))}]");
+        if (psiFree && GapMid(true) is { } pc && CutOutside(true, pc))
         {
             double lo = double.MaxValue, hi = double.MinValue;
             foreach (var x in tp.SelectMany(l => l)) { double s2 = Wrap(x.Ps - pc, Psi); lo = Math.Min(lo, s2); hi = Math.Max(hi, s2); }
@@ -237,12 +253,12 @@ public static partial class ExactFaceMesher
             if (hi - lo <= 12)
                 maps.Add(new ConformalMap
                 {
-                    Kind = "torus-psi",
+                    Kind = "torus-psi", Normal = TorN,
                     Fwd = p => { var (th, ps) = TP(p); double rho = Math.Exp(Wrap(ps - pc, Psi) - mid); return new Vector2d(rho * Math.Cos(th), rho * Math.Sin(th)); },
                     Inv = z => FromTP(Math.Atan2(z.Y, z.X), Math.Log(z.Length) + mid + pc),
                 });
         }
-        if (GapMid(false) is { } tc && CutOutside(false, tc))
+        if (thetaFree && GapMid(false) is { } tc && CutOutside(false, tc))
         {
             double k = 2 * Math.PI / Psi, lo = double.MaxValue, hi = double.MinValue;
             foreach (var x in tp.SelectMany(l => l)) { double s2 = k * Wrap(x.Th - tc, 2 * Math.PI); lo = Math.Min(lo, s2); hi = Math.Max(hi, s2); }
@@ -250,7 +266,7 @@ public static partial class ExactFaceMesher
             if (hi - lo <= 12)
                 maps.Add(new ConformalMap
                 {
-                    Kind = "torus-theta",
+                    Kind = "torus-theta", Normal = TorN,
                     Fwd = p => { var (th, ps) = TP(p); double rho = Math.Exp(k * Wrap(th - tc, 2 * Math.PI) - mid); return new Vector2d(rho * Math.Cos(k * ps), rho * Math.Sin(k * ps)); },
                     Inv = z => FromTP((Math.Log(z.Length) + mid) / k + tc, Math.Atan2(z.Y, z.X) / k),
                 });
@@ -427,9 +443,15 @@ public static partial class ExactFaceMesher
                 for (int i = 0; i + 2 < T.Count; i += 3)
                 {
                     var nT = Vector3d.Cross(P[T[i + 1]] - P[T[i]], P[T[i + 2]] - P[T[i]]);
-                    if (Vector3d.Dot(nT, f.NormalAt((P[T[i]] + P[T[i + 1]] + P[T[i + 2]]) / 3)) < 0) against++;
+                    var gN = (P[T[i]] + P[T[i + 1]] + P[T[i + 2]]) / 3;
+                    if (Vector3d.Dot(nT, map.Normal?.Invoke(gN) ?? f.NormalAt(gN)) < 0) against++;
                 }
-                if (against > 0 && against < T.Count / 3) { lastWhy = $"conformal ({map.Kind}): folded — {against} of {T.Count / 3} triangles against the face normal"; continue; }
+                if (against > 0 && against < T.Count / 3)
+                {
+                    int negPlane = 0;
+                    for (int i = 0; i + 2 < T.Count; i += 3) { Vector2d a2 = pts[T[i]], b2 = pts[T[i + 1]], c2 = pts[T[i + 2]]; if ((b2.X - a2.X) * (c2.Y - a2.Y) - (b2.Y - a2.Y) * (c2.X - a2.X) < 0) negPlane++; }
+                    lastWhy = $"conformal ({map.Kind}): folded — {against} of {T.Count / 3} triangles against the face normal (in the plane: {negPlane} clockwise)"; continue;
+                }
             }
             if (ConformalDebug != null)
             {

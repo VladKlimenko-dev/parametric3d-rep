@@ -7,6 +7,9 @@ namespace Parametric3D.Model;
 /// <summary>Сборка: детали и вложенные сборки плюс собственная базовая геометрия.</summary>
 public sealed class Assembly : ModelItem
 {
+    /// <summary>m.x4: система единиц сборки для ввода и показа; детали хранят свою, геометрия — в мм.</summary>
+    public Core.UnitSystem Units = Core.UnitSystem.Metric;
+
 
     /// <summary>
     /// Исполнения: именованные наборы отличий. Хранится только отличие от основной модели —

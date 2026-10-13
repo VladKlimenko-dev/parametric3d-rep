@@ -23,7 +23,7 @@ static partial class Program
         int seed = int.TryParse(Environment.GetEnvironmentVariable("P3D_QUALSEED"), out var qs) ? qs : 1102;
         bool verbose = Environment.GetEnvironmentVariable("P3D_QUALV") == "1";
         int only = int.TryParse(Environment.GetEnvironmentVariable("P3D_QUALONLY"), out var qo) ? qo : -1;
-        if (only >= 0) { verbose = true; BooleanOp.AnalyticRouteDebug = m => Console.WriteLine("      route: " + m); if (Environment.GetEnvironmentVariable("P3D_QUALMESH") == "1") Parametric3D.Kernel.Tess.ExactFaceMesher.TryDebug = m => Console.WriteLine("      mesh: " + m); Parametric3D.Kernel.Tess.ExactFaceMesher.ConformalDebug = m => Console.WriteLine("      conf: " + m); }
+        if (only >= 0) { verbose = true; BooleanOp.AnalyticRouteDebug = m => Console.WriteLine("      route: " + m); if (Environment.GetEnvironmentVariable("P3D_QUALMESH") == "1") Parametric3D.Kernel.Tess.ExactFaceMesher.TryDebug = m => Console.WriteLine("      mesh: " + m); Parametric3D.Kernel.Tess.ExactFaceMesher.ConformalDebug = m => Console.WriteLine("      conf: " + m); Parametric3D.Kernel.Tess.ExactFaceMesher.TorusDebug = m => Console.WriteLine("      torus: " + m); }
         var rnd = new Random(seed);
         double U(double a, double b) => a + (b - a) * rnd.NextDouble();
 

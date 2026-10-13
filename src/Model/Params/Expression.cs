@@ -33,6 +33,20 @@ public sealed class NumExpr : Expr
     public override string Print() => V.ToString(System.Globalization.CultureInfo.InvariantCulture);
 }
 
+/// <summary>
+/// m.x4: ЧИСЛО С ЕДИНИЦЕЙ («10 in», «30 deg», «7.85 g/cm^3»). Значение — во внутренних единицах (мм, кг, с, градус): формула
+/// с единицами считает то же, что без них, а разбор размерности — ExprUnits.
+/// </summary>
+public sealed class QtyExpr : Expr
+{
+    public readonly double Number; public readonly Parametric3D.Core.Unit Unit;
+    public QtyExpr(double number, Parametric3D.Core.Unit unit) { Number = number; Unit = unit; }
+    public double Internal => Unit.ToInternal(Number);
+    public override double Eval(IValueResolver v, IGeometryResolver? g) => Internal;
+    public override void CollectRefs(HashSet<string> dst) { }
+    public override string Print() => Number.ToString(System.Globalization.CultureInfo.InvariantCulture) + " " + Unit.Symbol;
+}
+
 public sealed class RefExpr : Expr
 {
     public readonly string Name;
@@ -297,7 +311,41 @@ public static class ExprParser
             if (!double.TryParse(t, System.Globalization.NumberStyles.Float,
                                  System.Globalization.CultureInfo.InvariantCulture, out double v))
                 throw new P3DException($"Not a number: '{t}'.");
+            // m.x4: единица сразу за числом (через пробелы): самая длинная разбираемая цепочка «sym[^n][(*|/)sym[^n]]…»
+            if (!UnitsOff && TryUnit() is { } u) return new QtyExpr(v, u);
             return new NumExpr(v);
+        }
+
+        static readonly bool UnitsOff = Environment.GetEnvironmentVariable("P3D_EXPRUNITS") == "0";
+
+        private Parametric3D.Core.Unit? TryUnit()
+        {
+            int save = _i;
+            while (_i < _s.Length && _s[_i] == ' ') _i++;
+            int j = _i;
+            static bool UnitChar(char c) => char.IsLetter(c) || c == 'µ' || c == '°' || c == '"' || c == '\'' || c == '²' || c == '³' || c == '·';
+            if (j >= _s.Length || !UnitChar(_s[j])) { _i = save; return null; }
+            // кандидаты — границы перед '*', '/' (если за ними буква) и конец цепочки
+            var ends = new List<int>();
+            while (j < _s.Length)
+            {
+                int k = j; while (k < _s.Length && UnitChar(_s[k])) k++;
+                if (k == j) break;
+                if (k < _s.Length && _s[k] == '^') { k++; if (k < _s.Length && _s[k] == '-') k++; while (k < _s.Length && char.IsDigit(_s[k])) k++; }
+                ends.Add(k);
+                if (k < _s.Length && (_s[k] == '/' || _s[k] == '*' || _s[k] == '·') && k + 1 < _s.Length && UnitChar(_s[k + 1])) j = k + 1; else break;
+            }
+            for (int e = ends.Count - 1; e >= 0; e--)
+            {
+                string cand = _s[_i..ends[e]];
+                // первое обозначение должно быть единицей: «2 x» — не единица, а ошибка разбора дальше
+                int f = 0; while (f < cand.Length && UnitChar(cand[f]) && cand[f] != '·') f++;
+                if (!Parametric3D.Core.Units.IsUnitSymbol(cand[..f])) continue;
+                // после единицы — не продолжение идентификатора и не '(' (иначе это вызов функции)
+                int after = ends[e]; if (after < _s.Length && (char.IsLetterOrDigit(_s[after]) || _s[after] == '_' || _s[after] == '(')) continue;
+                if (Parametric3D.Core.Units.TryParse(cand, out var u, out _)) { _i = ends[e]; return u; }
+            }
+            _i = save; return null;
         }
 
         private Expr ParseIdentOrCall()

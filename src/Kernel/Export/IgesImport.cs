@@ -20,6 +20,7 @@ public static class IgesImport
     public static TSolid? Read(string text, List<string>? warnings = null)
     {
         var parsed = IgesParser.Parse(text);
+        if (parsed.LengthUnitNote != null) warnings?.Add(parsed.LengthUnitNote);
         var all = parsed.Entities;
 
         IgesParser.Entity? At(int number) => parsed.At(number);
