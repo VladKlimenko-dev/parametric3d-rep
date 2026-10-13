@@ -922,6 +922,8 @@ static partial class Program
             return;
         }
         if (mode is "grid") GridSolve();
+        if (mode is "sksparse" or "allA") SketchSparseChecks();
+        if (mode is "gridbig") { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); GridSolveSizes(new[] { 12, 20, 30 }); Console.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report()); }
         if (mode is "constraints") K09Constraints();
         if (mode is "vertex") VertexOps();
         if (mode is "vdbg") VertexDbg();
