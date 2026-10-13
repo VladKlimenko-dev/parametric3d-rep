@@ -416,6 +416,22 @@ public sealed class Sketch : ModelItem
         return ProfileBuilder.Build(Plane, curves);
     }
 
+    /// <summary>
+    /// KRN-11 (11.2): ПРОФИЛЬ ДЛЯ ТЕЛА. Самопересекающийся контур («бабочка») прежде уходил в выдавливание как есть: знаковая
+    /// площадь двух треугольников взаимно гасилась, операция «успешно» не добавляла ничего (найдено квалификационным набором,
+    /// KRN11-QUAL-NEG-BOWTIE-SKETCH). Теперь — отказ InvalidInput с названной причиной; эскиз уже подсвечивает такие
+    /// элементы (SketchDiagnostics). Мутация P3D_PROFILESELFX=0.
+    /// </summary>
+    public Profile ToSolidProfile(string operation)
+    {
+        var pr = ToProfile();
+        if (!ProfileSelfXOff && pr.HasSelfIntersections)
+            throw new Parametric3D.Core.RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput,
+                $"{operation}: the sketch «{Name}» cannot be used — its profile crosses itself.");
+        return pr;
+    }
+    static readonly bool ProfileSelfXOff = Environment.GetEnvironmentVariable("P3D_PROFILESELFX") == "0";
+
     /// <summary>Ось вращения — первая осевая линия эскиза.</summary>
     /// <summary>Ось по конкретному отрезку эскиза, выбранному пользователем.</summary>
     public Frame3? AxisFromEntity(uint entityId)

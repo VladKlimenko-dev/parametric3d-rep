@@ -100,7 +100,7 @@ public sealed class ExtrudeFeature : Feature
         sketch.Solve(ctx.Solver);
         sketch.RequireSolved(Name);
 
-        Profile profile = sketch.ToProfile();
+        Profile profile = sketch.ToSolidProfile("Extrude");
         if (profile.IsEmpty)
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Extrude: the sketch has no closed loop.");
 

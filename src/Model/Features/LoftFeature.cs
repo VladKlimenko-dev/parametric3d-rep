@@ -43,7 +43,7 @@ public sealed class LoftFeature : Feature
                 sk.Solve(ctx.Solver);
                 sk.RequireSolved(Name);
             }
-            var prof = sk.ToProfile();
+            var prof = sk.ToSolidProfile("Loft");
             if (prof.IsEmpty) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Loft: a section sketch is empty or not closed.");
             sections.Add(prof);
         }

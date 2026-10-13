@@ -462,6 +462,7 @@ tests/k01/Krn10Pairs.cs
 tests/k01/Krn10Preview.cs
 tests/k01/Krn10QuadricLocal.cs
 tests/k01/Krn11History.cs
+tests/k01/Krn11Qualification.cs
 tests/k01/LongChain.cs
 tests/k01/LongHistory.cs
 tests/k01/MeshReuse.cs
