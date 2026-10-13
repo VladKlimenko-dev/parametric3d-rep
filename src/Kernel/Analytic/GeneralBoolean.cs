@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Topology;
@@ -31,9 +31,13 @@ public static class GeneralBoolean
     public static long VertexMergedByDistance, VertexMergedFar;
     /// <summary>05.6: правок сшивки после сборки (разрез открытого ребра в чужой вершине, слияние парных рёбер).</summary>
     public static long SewSplits, SewMerges;
+    /// <summary>05.6: отождествления при построении (разрезы, слияния кусков) и работа сшивки после сборки при них (должна быть 0).</summary>
+    public static long BuildSplits, BuildMerges, LateSew;
+    static readonly bool ShareBuildOff = Environment.GetEnvironmentVariable("P3D_SHAREBUILD") == "0";
     /// <summary>g.13: наибольшее число пар граней, считавшихся одновременно (замер параллельности).</summary>
     public static long PairsMaxConcurrent;
     static readonly bool SewDbg = Environment.GetEnvironmentVariable("P3D_SEWDBG") == "1";
+    static readonly bool VMergeDbg = Environment.GetEnvironmentVariable("P3D_VMERGEDBG") == "1";
     [ThreadStatic] public static Action<Vector3d, Vector3d>? MergeDebug;
     static readonly bool BndRigorOff = Environment.GetEnvironmentVariable("P3D_BNDRIGOR") == "0";
     static readonly bool PartStat = Environment.GetEnvironmentVariable("P3D_PARTSTAT") == "1";
@@ -43,6 +47,8 @@ public static class GeneralBoolean
     [ThreadStatic] public static bool DropCurvedRegionForTest;
     /// <summary>То же у грани, контур которой — кривая пересечения (проверка меры по участкам между изломами).</summary>
     [ThreadStatic] public static bool DropTracedRegionForTest;
+    /// <summary>Проверка 05.5: потеря области ЦЕЛОЙ замкнутой грани (шар, тор) — один раз.</summary>
+    [ThreadStatic] public static bool DropClosedRegionForTest;
 
     /// <summary>Площадь области плоской грани (знаковая, ½∮(x dy − y dx) в осях грани): 20-точечная квадратура по каждому
     /// куску контура — точна для отрезков и до ~1e-15 для дуг и эллипсов.</summary>
@@ -69,12 +75,24 @@ public static class GeneralBoolean
                     double x = Vector3d.Dot(p, f.U), y = Vector3d.Dot(p, f.V), hgt = Vector3d.Dot(p, f.W) - h0;
                     double rr = x * x + y * y; if (rr < 1e-24) continue;
                     double dth = (x * Vector3d.Dot(dp, f.V) - y * Vector3d.Dot(dp, f.U)) / rr;
-                    a += wq * (-hgt * dth);
+                    a += wq * (Tor2 ? 0.5 * rr * dth : -hgt * dth);
                     lenW += wq * dp.Length / Math.Sqrt(rr);      // мера полоски ширины 1 мм вдоль границы ≈ ds / r
                 }
+        // 05.5: ОБЛАСТЬ ВОКРУГ СЕВЕРНОГО ПОЛЮСА СФЕРЫ (неограниченная в стереографической проекции из него): 1-форма −(h − h0) dθ
+        // в полюсе особая; по Стоксу на области без малого круга у полюса — поправка ∮ по кругу «на бесконечности»
+        // проекции, обходимому по развёртке: −(h_N − h0)·2π·знак = −2R·2π·знак. Мутация P3D_PARTPOLE=0.
+        if (f.Sph && r.Unbounded && !PartPoleOff && !Tor2) a += -2 * f.R * 2 * Math.PI * r.ChartSign;
         return a;
     }
+    /// <summary>Вторая мера тора — ½ρ² dθ (площадь проекции на плоскость, ⟂ оси): у целого тора, как и первая, равна 0.</summary>
+    [ThreadStatic] static bool Tor2;
+    static double MeasureTor2(AnalyticFace f, FaceSplit.Region r, Vector3d origin)
+    {
+        Tor2 = true; try { return Measure(f, r, origin, out _); } finally { Tor2 = false; }
+    }
+    static readonly bool PartPoleOff = Environment.GetEnvironmentVariable("P3D_PARTPOLE") == "0";
     static readonly bool PartitionCurvedOff = Environment.GetEnvironmentVariable("P3D_PARTITIONCURVED") == "0";
+    static readonly bool PartSkipDbg = Environment.GetEnvironmentVariable("P3D_PARTSKIPDBG") == "1";
 
     static double PlanarArea(AnalyticFace f, FaceSplit.Region r, Vector3d origin, out double len)
     {
@@ -391,15 +409,23 @@ public static class GeneralBoolean
                 // задвоенная область обнаруживалась (если обнаруживалась) лишь сборкой тела, без названной причины.
                 // Мутация P3D_PARTITIONCHECK=0; внесение потери для проверки — DropRegionForTest.
                 if ((DropRegionForTest || (DropCurvedRegionForTest && (f.Cyl || f.Cone))) && regs.Count > 1) { DropRegionForTest = DropCurvedRegionForTest = false; regs.Remove(regs.OrderByDescending(x => Math.Abs(x.Area)).First()); }
+                if (DropClosedRegionForTest && f.FullSurface && regs.Count > 1) { DropClosedRegionForTest = false; regs.Remove(regs.OrderByDescending(x => Math.Abs(x.Area)).First()); }
                 if (DropTracedRegionForTest && regs.Count > 1 && regs.Any(r => r.Loops.Any(l => l.Any(d => d.Curve is IntersectionCurve3))))
                 { DropTracedRegionForTest = false; regs.Remove(regs.OrderByDescending(x => Math.Abs(x.Area)).First()); }
                 bool curved = f.Cyl || f.Cone || f.Sph || f.Tor;
+                // 05.5: области у полюса сферы (поправка в Measure), до вершины конуса (начало развёртки — вершина: форма там
+                // гладкая), тора любого строения (θ определён на всём торе — форма гладкая везде) и целые замкнутые
+                // поверхности (мера целой: сфера 4πR, тор 0) — тоже проверяются. Мутация P3D_PARTPOLE=0 — прежний отбор.
+                bool poleOk = !PartPoleOff;
                 bool measurable = (!curved && !f.FullSurface)
-                                  || (curved && !PartitionCurvedOff && !f.FullSurface && f.W.LengthSquared > 0.5 && !regs.Any(r => r.ApexAbove || r.Unbounded));
+                                  || (curved && !PartitionCurvedOff && f.W.LengthSquared > 0.5
+                                      && (poleOk ? (!f.FullSurface || f.Sph || f.Tor) : (!f.FullSurface && !regs.Any(r => r.ApexAbove || r.Unbounded))));
                 // только грани с аналитическими кривыми контуров: мера по процедурной кривой пересечения несёт её
                 // погрешность приближения (замер: до 2.6e-4 у цилиндра и тора при верном разбиении)
                 measurable &= regs.All(r => r.Loops.All(l => l.All(d => d.Curve is Curves.LineCurve3 or Curves.ArcCurve3 or Curves.EllipseCurve3
-                                                                       || (!PartitionBreaksOff && d.Curve is IntersectionCurve3 or NurbsImplicitCurve3 or NurbsNurbsCurve3 or SplineCurve3))));
+                                                                       || (!PartitionBreaksOff && d.Curve is IntersectionCurve3 or NurbsImplicitCurve3 or NurbsNurbsCurve3 or SplineCurve3) || (!PartPoleOff && d.Curve is ProcCurve3))));
+                if (PartSkipDbg && on[f].Count > 0 && regs.Count > 0 && !measurable)
+                    Console.Error.WriteLine($"PARTSKIP {(f.Sph ? "sph" : f.Cone ? "cone" : f.Cyl ? "cyl" : f.Tor ? "tor" : "plane")} full {f.FullSurface} wlen {f.W.LengthSquared > 0.5} apex {regs.Any(r => r.ApexAbove)} unb {regs.Any(r => r.Unbounded)} curves {string.Join(",", regs.SelectMany(r => r.Loops.SelectMany(l => l.Select(d => d.Curve.GetType().Name))).Distinct())}");
                 using var _pc = Diagnostics.Prof.Time("общая: проверка разбиения");
                 using var _pco = Diagnostics.Overhead.Scope();          // проверка, а не построение (g.13)
                 if (!PartitionOff && on[f].Count > 0 && regs.Count > 0 && measurable)
@@ -407,7 +433,20 @@ public static class GeneralBoolean
                     // плоская грань: площади точно (квадратура Гаусса по кривым областей); по ломаным разметка областей и
                     // целой грани разная — расхождение до 2.6e-4 при верном разбиении (измерено на krn05)
                     var whole = FaceSplit.Split(f, Array.Empty<FaceIntersect.Piece>(), new List<Vector3d>(), out _);
-                    if (whole is { Count: 1 })
+                    if (poleOk && f.FullSurface && (f.Sph || f.Tor))
+                    {
+                        // целая замкнутая поверхность: мера целой известна — сфера ∬ dθ∧dh = 4πR, тор — 0 (обе меры)
+                        var org0 = f.O;
+                        double sum = Math.Abs(regs.Sum(r => Measure(f, r, org0, out _))), a0 = f.Sph ? 4 * Math.PI * f.R : 0;
+                        double lsum = regs.Sum(r => { Measure(f, r, org0, out double l2); return l2; });
+                        double tolAbs = 2 * TolV * lsum;
+                        bool bad = Math.Abs(sum - a0) > 1e-7 * Math.Max(a0, f.Tor ? 2 * Math.PI * f.R * 2 * f.Rm : 0) + tolAbs + 1e-12;
+                        double sum2 = 0;
+                        if (f.Tor) { sum2 = Math.Abs(regs.Sum(r => MeasureTor2(f, r, org0))); bad |= sum2 > 1e-7 * Math.PI * (f.R + f.Rm) * (f.R + f.Rm) + 2 * TolV * (f.R + f.Rm) * lsum + 1e-12; }
+                        if (PartStat) Console.Error.WriteLine($"PARTSTAT full {(f.Sph ? "sph" : "tor")} regs {regs.Count} sum {sum:G6} a0 {a0:G6} sum2 {sum2:G6}");
+                        if (bad) { w = $"face split: the regions of the closed face {f.Face.Tag} cover {sum:G10} (second measure {sum2:G6}) of {a0:G10} (partition check)"; return false; }
+                    }
+                    else if (whole is { Count: 1 })
                     {
                         var org = whole[0].Loops[0][0].At(0);
                         double sum = Math.Abs(regs.Sum(r => Measure(f, r, org, out _))), a0 = Math.Abs(Measure(f, whole[0], org, out double lw));
@@ -416,6 +455,12 @@ public static class GeneralBoolean
                         if (PartStat) Console.Error.WriteLine($"PARTSTAT {(f.Cyl ? "cyl" : f.Cone ? "cone" : f.Tor ? "tor" : f.Sph ? "sph" : "plane")} regs {regs.Count} rel {(sum - a0) / a0:E2} a0 {a0:G6}");
                         if (Math.Abs(sum - a0) > 1e-7 * Math.Abs(a0) + tolAbs + 1e-12)
                         { w = $"face split: the regions of face {f.Face.Tag} cover {sum:G10} of {a0:G10} (partition check)"; return false; }
+                        if (f.Tor && poleOk)
+                        {
+                            double s2 = Math.Abs(regs.Sum(r => MeasureTor2(f, r, org))), w2 = Math.Abs(MeasureTor2(f, whole[0], org));
+                            if (Math.Abs(s2 - w2) > 1e-7 * Math.Max(w2, Math.PI * (f.R + f.Rm) * (f.R + f.Rm)) + 2 * TolV * (f.R + f.Rm) * (lw + regs.Sum(r => { Measure(f, r, org, out double l3); return l3; })) + 1e-12)
+                            { w = $"face split: the regions of face {f.Face.Tag} cover {s2:G10} of {w2:G10} (second measure, partition check)"; return false; }
+                        }
                     }
                 }
                 if (on[f].Count > 0 || regs.Count > 1) cutFace.Add(f.Face);
@@ -482,6 +527,7 @@ public static class GeneralBoolean
         // 3. Сборка: вершины по положению, рёбра по ключу «кривая + диапазон».
         var solid = new TSolid(); var shell = new TShell { Solid = solid }; solid.Shells.Add(shell);
         var verts = new List<TVertex>(); string? farVertex = null;
+        string curDart = ""; var vOrigin = new Dictionary<TVertex, string>();
         TVertex Vert(Vector3d p)
         {
             foreach (var v in verts) if (v.P == p) return v;
@@ -489,10 +535,11 @@ public static class GeneralBoolean
                 if ((v.P - p).Length < TolV)
                 {
                     Interlocked.Increment(ref VertexMergedByDistance); MergeDebug?.Invoke(v.P, p);
+                    if (VMergeDbg) Console.Error.WriteLine($"VMERGE {(v.P - p).Length:G3} cur {curDart} first {vOrigin.GetValueOrDefault(v, "?")}");
                     if ((v.P - p).Length > FaceSplit.MergeExact) { Interlocked.Increment(ref VertexMergedFar); farVertex ??= $"two distinct vertices {(v.P - p).Length:G3} mm apart (above the model accuracy) at {p:0.#########}"; }
                     return v;
                 }
-            var nv = new TVertex(p); verts.Add(nv); PointDebug?.Invoke("new vertex", p); return nv;
+            var nv = new TVertex(p); verts.Add(nv); PointDebug?.Invoke("new vertex", p); if (VMergeDbg) vOrigin[nv] = curDart; return nv;
         }
         var edges = new Dictionary<(object Curve, long Lo, long Hi), TEdge>();
         (TEdge E, bool Forward) EdgeOf(FaceSplit.Dart d)
@@ -502,9 +549,76 @@ public static class GeneralBoolean
             bool forward = d.T1 > d.T0;
             if (edges.TryGetValue(key, out var e)) return (e, forward);
             var sub = SubCurve(d.Curve, lo, hi);
+            if (VMergeDbg) curDart = $"{d.Curve.GetType().Name}{(d.IsPiece ? "(piece)" : "(bnd)")} [{lo:G6},{hi:G6}]";
             e = new TEdge { V0 = Vert(sub.PointAt(sub.T0)), V1 = Vert(sub.PointAt(sub.T1)), Curve = sub };
             edges[key] = e;
             return (e, forward);
+        }
+        // 05.6: ОБЩИЕ СУЩНОСТИ ПО ПОСТРОЕНИЮ. Куски, входящие в контуры ровно одной области (без пары по ключу «кривая +
+        // диапазон»), отождествляются ДО сборки граней: разрез в вершине другого такого куска, лежащей на нём до точности
+        // модели, и одно ребро на куски с общими концами и доказанно той же кривой (SewMergeable). Каждое ребро создаётся
+        // один раз и входит в контуры обеих граней; сшивка после сборки остаётся проверкой и ничего не делает (счётчик
+        // LateSew). Мутация P3D_SHAREBUILD=0 — прежнее: отдельные рёбра, слияние сшивкой после сборки.
+        Dictionary<(object, long, long), List<(TEdge E, bool Along)>>? shared = null;
+        if (!ShareBuildOff)
+        {
+            static (object, long, long) KeyOf(FaceSplit.Dart d) { double lo = Math.Min(d.T0, d.T1), hi = Math.Max(d.T0, d.T1); return (d.Curve, BitConverter.DoubleToInt64Bits(lo), BitConverter.DoubleToInt64Bits(hi)); }
+            var uses = new Dictionary<(object, long, long), int>(); var firstDart = new Dictionary<(object, long, long), FaceSplit.Dart>();
+            foreach (var (_, r0, _) in kept) foreach (var loop in r0.Loops) foreach (var d in loop) { var k = KeyOf(d); uses[k] = uses.GetValueOrDefault(k) + 1; firstDart.TryAdd(k, d); }
+            // рёбра всех ключей (вершины — общие); открытые — с одним использованием
+            shared = new();
+            var openSeg = new List<((object, long, long) Key, TEdge E)>();
+            foreach (var (k, d) in firstDart)
+            {
+                var (e, _) = EdgeOf(d);
+                shared[k] = new List<(TEdge, bool)> { (e, true) };
+                if (uses[k] == 1) openSeg.Add((k, e));
+            }
+            // разрез открытых в вершинах открытых, лежащих внутри (до точности модели)
+            var vOpen = openSeg.SelectMany(x => new[] { x.E.V0, x.E.V1 }).Distinct(ReferenceEqualityComparer.Instance).Cast<TVertex>().ToList();
+            foreach (var (k, e) in openSeg.ToList())
+            {
+                var bx = e.Curve.Bounds; var cut = new List<(double T, TVertex V)>();
+                foreach (var v in vOpen)
+                {
+                    if (ReferenceEquals(v, e.V0) || ReferenceEquals(v, e.V1)) continue;
+                    if (v.P.X < bx.Min.X - TolV || v.P.Y < bx.Min.Y - TolV || v.P.Z < bx.Min.Z - TolV || v.P.X > bx.Max.X + TolV || v.P.Y > bx.Max.Y + TolV || v.P.Z > bx.Max.Z + TolV) continue;
+                    double t = FaceSplit.ClosestParam(e.Curve, v.P); double dv = (e.Curve.PointAt(t) - v.P).Length;
+                    if (dv > TolV || t <= e.Curve.T0 + 1e-12 || t >= e.Curve.T1 - 1e-12) continue;
+                    if (dv > FaceSplit.MergeExact && !FaceSplit.MergeGuardOff) { why = $"shared build: a vertex {dv:G3} mm off an edge (above the model accuracy)"; return null; }
+                    cut.Add((t, v));
+                }
+                if (cut.Count == 0) continue;
+                cut.Sort((x, y) => x.T.CompareTo(y.T));
+                var segs = new List<(TEdge, bool)>(); double t0 = e.Curve.T0; var v0 = e.V0;
+                foreach (var (t, v) in cut) { segs.Add((new TEdge { V0 = v0, V1 = v, Curve = SubCurve(e.Curve, t0, t) }, true)); t0 = t; v0 = v; }
+                segs.Add((new TEdge { V0 = v0, V1 = e.V1, Curve = SubCurve(e.Curve, t0, e.Curve.T1) }, true));
+                shared[k] = segs; Interlocked.Increment(ref BuildSplits);
+            }
+            // одно ребро на куски с общими концами и той же кривой
+            var byPair = new Dictionary<(TVertex, TVertex), List<TEdge>>();
+            var vIdx = new Dictionary<TVertex, int>(ReferenceEqualityComparer.Instance); foreach (var v in verts) vIdx[v] = vIdx.Count;
+            (TVertex, TVertex) Pair(TEdge e) => vIdx[e.V0] <= vIdx[e.V1] ? (e.V0, e.V1) : (e.V1, e.V0);
+            foreach (var (k, _) in openSeg)
+            {
+                var list = shared[k];
+                for (int i = 0; i < list.Count; i++)
+                {
+                    var e = list[i].E; var pk = Pair(e);
+                    if (!byPair.TryGetValue(pk, out var cands)) byPair[pk] = cands = new List<TEdge>();
+                    TEdge? same = null;
+                    foreach (var c in cands)
+                    {
+                        var ma = c.Curve.PointAt((c.Curve.T0 + c.Curve.T1) / 2); var mb = e.Curve.PointAt((e.Curve.T0 + e.Curve.T1) / 2);
+                        if ((ma - mb).Length > 1e-6) continue;
+                        if (!SewMergeable(c.Curve, e.Curve)) { why = $"shared build: pieces {c.Curve.GetType().Name}/{e.Curve.GetType().Name} share ends but are not the same curve"; return null; }
+                        same = c; break;
+                    }
+                    if (same == null) { cands.Add(e); continue; }
+                    cands.Remove(same);           // пара собрана: третьему куску то же ребро не достаётся (как сшивка)
+                    list[i] = (same, ReferenceEquals(same.V0, e.V0)); Interlocked.Increment(ref BuildMerges);
+                }
+            }
         }
         foreach (var (f, r, flip) in kept)
         {
@@ -590,6 +704,14 @@ public static class GeneralBoolean
                 var seq = flip ? loop.AsEnumerable().Reverse().ToList() : loop;
                 foreach (var d in seq)
                 {
+                    if (shared != null)
+                    {
+                        double lo = Math.Min(d.T0, d.T1), hi = Math.Max(d.T0, d.T1);
+                        var sk = ((object)d.Curve, BitConverter.DoubleToInt64Bits(lo), BitConverter.DoubleToInt64Bits(hi));
+                        bool incr = (d.T1 > d.T0) ^ flip; var segs = shared[sk];
+                        for (int i = 0; i < segs.Count; i++) { var (se, along) = segs[incr ? i : segs.Count - 1 - i]; tl.Add(se, incr ? !along : along); }
+                        continue;
+                    }
                     var (e, fwd) = EdgeOf(d);
                     tl.Add(e, flip ? fwd : !fwd);
                 }
@@ -613,7 +735,9 @@ public static class GeneralBoolean
                     }
         }
         SewRefused = null;
+        long late0 = SewSplits + SewMerges;
         Sew(shell);
+        if (shared != null && SewSplits + SewMerges > late0) Interlocked.Add(ref LateSew, SewSplits + SewMerges - late0);
         if (SewRefused != null) { why = SewRefused; return null; }
         if (!LoopMergeOff) MergeOpenLoops(shell);
         // KRN-03: СФЕРИЧЕСКИЕ ГРАНИ БОЛЬШЕ НЕ ПРОВЕРЯЮТСЯ И НЕ ПЕРЕСТРАИВАЮТСЯ ПО СЕТКЕ. Прежде шапка с одной окружностью

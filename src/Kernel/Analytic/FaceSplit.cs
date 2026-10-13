@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Topology;
 
@@ -44,6 +44,8 @@ public static partial class FaceSplit
         public bool Unbounded;
         /// <summary>KRN-02: область конуса до вершины, лежащей ВЫШЕ контура в развёртке (луч вверх контур не пересекает).</summary>
         public bool ApexAbove;
+        /// <summary>Знак развёртки грани (обход наружных контуров в параметрах): нужен мере области вокруг полюса.</summary>
+        public double ChartSign = 1;
         public Vector3d Inside;                           // точка внутри области (на поверхности грани)
         public readonly List<Vector3d> InsideCandidates = new();   // запасные точки внутри (глубже — раньше)
     }
@@ -464,6 +466,7 @@ public static partial class FaceSplit
                 Debug($"region inside: kind {(f.Cone ? "cone" : f.Cyl ? "cyl" : "plane")} q ({qi.X:G9}, {qi.Y:G9}) clearance {Clearance(polys, qi, f.Cyl ? 2 * Math.PI * f.R : 0):G6} area {r.Area:G6}");
             }
         }
+        foreach (var rg in regions) rg.ChartSign = sign;
         return regions;
     }
 

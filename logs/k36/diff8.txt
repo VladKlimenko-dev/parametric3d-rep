@@ -1,0 +1,3 @@
+d8_0042  occt-wrong (arbiter: Монте-Карло 8e6 точек по точным классификаторам исходных операндов (DIFFMC=8000000), 2026-10-11): ours 3480.010666, OCCT 3506.435088, reference 3476.681 ± 5.86  [cut,cut] torus 10.35/4.33 rot141 | box 12.49x25.39x11.88 | cyl r10.3 h31.31 rot135
+d8_0082  occt-wrong (arbiter: интегрирование по сечениям вдоль оси конуса: πR²H + πr²h/3 − V(цилиндр ∩ конус), tools/indep_slice_volume_d8_0082.py, 2026-10-11): ours 7789.692805, OCCT 7789.686439, reference 77  [fuse] cyl r9.35 h27.3 rot62 | cone r7.81/0 h9.15 rot13
+DIFF: agree 199, refused 0, WRONG 0, occt-failed 0, ours-exception 0, bound-violation 0, occt-wrong-arbitrated 2 (of 200)
