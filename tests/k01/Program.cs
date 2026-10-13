@@ -426,6 +426,8 @@ static partial class Program
         if (mode is "krn06ncorner" or "allA") Krn06NCornerChecks();
         if (mode is "krn06incl" or "allA") Krn06InclinedHoleChecks();
         if (mode is "krn06mixed" or "allA") Krn06MixedChecks();
+        if (mode is "krn06tanprop" or "allA") Krn06TanPropChecks();
+        if (mode is "krn07shellc" or "allA") Krn07ShellCurvedChecks();
         if (mode is "krn04uniq" or "allB") Krn04UniqChecks();
         if (mode is "krn07nurbs" or "allB") Krn07NurbsChecks();
         if (mode is "krn10prev" or "allA") Krn10PreviewChecks();

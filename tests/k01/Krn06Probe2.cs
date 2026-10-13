@@ -232,4 +232,43 @@ static partial class Program
             Require(fails.Count == 0, string.Join("; ", fails));
         });
     }
+    static void Krn06TanPropChecks()
+    {
+        Check("KRN06-DIRECT-ROUND-TANGENT-PROPAGATION", () =>
+        {
+            // 06.9/06.11: выбор, кончающийся у касательного продолжения (отрезок верха бруска у скруглённого вертикального ребра,
+            // одна дуга), дополняется звеньями до острых стыков — как у OpenCascade (BRepFilletAPI_MakeFillet продолжает
+            // скругление по касательным сам; эталон — тот же выбор одним ребром), допуск 1e-9 отн.; предупреждение о добавленных.
+            var fails = new List<string>();
+            TSolid BoxR5(bool all4)
+            {
+                var bl = new List<TSolid> { Box(0, 0, 0, 60, 40, 20) };
+                var es = all4 ? bl[0].Edges.Where(e => Math.Abs(e.V0.P.Z - e.V1.P.Z) > 1).ToList() : new List<TEdge> { EdgeAt(bl[0], new(60, 40, 0), new(60, 40, 20)) };
+                FilletOp.RoundEdges(bl, es.Select(EdgeRef.Of).ToList(), 5, new List<string>());
+                return bl[0];
+            }
+            static Vector3d Mid(TEdge e) => e.Curve.PointAt((e.Curve.T0 + e.Curve.T1) / 2);
+            static bool Z(TEdge e, double z) => Math.Abs(e.V0.P.Z - z) < 1e-9 && Math.Abs(e.V1.P.Z - z) < 1e-9;
+            var cases = new (string Name, Func<TSolid> Make, Func<TEdge, bool> Sel, double R, double Occt)[]
+            {
+                ("one R5: top line x = 60 only", () => BoxR5(false), e => Z(e, 20) && Math.Abs(Mid(e).X - 60) < 1e-9, 2, 47809.302876099515),
+                ("one R5: top arc only", () => BoxR5(false), e => Z(e, 20) && e.Curve is Parametric3D.Kernel.Curves.ArcCurve3, 2, 47809.302876099515),
+                ("four R5: top line x = 60 only (whole loop)", () => BoxR5(true), e => Z(e, 20) && Math.Abs(Mid(e).X - 60) < 1e-9, 2, 47408.892973680064),
+                ("four R5: one bottom arc r1.5 (whole loop)", () => BoxR5(true), e => Z(e, 0) && e.Curve is Parametric3D.Kernel.Curves.ArcCurve3 && Mid(e).X < 30 && Mid(e).Y < 20, 1.5, 47479.38685691795),
+            };
+            foreach (var (name, make, selF, rr, occt) in cases)
+            {
+                var bl = new List<TSolid> { make() }; var w = new List<string>(); long t0 = DirectRound.TanPropagations;
+                var es = bl[0].Edges.Where(selF).ToList();
+                FilletOp.RoundEdges(bl, es.Select(EdgeRef.Of).ToList(), rr, w);
+                var b = bl[0]; double v = AnalyticVolume.Of(b) ?? double.NaN;
+                bool direct = w.Any(x => x.Contains("direct blend")), told = w.Any(x => x.Contains("tangent propagation added"));
+                Log(new { test = "KRN06-TANPROP", name, n = es.Count, volume = double.IsFinite(v) ? v : -1, occt, direct, told });
+                if (es.Count != 1) fails.Add($"{name}: {es.Count} edges selected");
+                if (!direct || !told || DirectRound.TanPropagations == t0 || b.Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(b).IsValid) fails.Add($"{name}: direct {direct} told {told} {b.Guarantee} {SolidValidator.Validate(b).Summary()} | {string.Join(" | ", w.Take(2))}");
+                if (!(Math.Abs(v - occt) <= 1e-9 * occt)) fails.Add($"{name}: V {v:R} vs OCCT {occt:R}");
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
 }
