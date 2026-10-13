@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Topology;
 using Parametric3D.Model;
@@ -434,10 +434,71 @@ static partial class Program
 }
 static partial class Program
 {
-    static void GridSolve()
+    static void GridSolve() => GridSolveSizes(new[] { 4, 8, 12 });
+
+    /// <summary>Сетка N×N клеток: горизонтальные/вертикальные связи, размеры по нижнему и левому краю, угол закреплён;
+    /// dropOne — без одного размера (одна степень свободы).</summary>
+    static (Sketch S, SkPoint Corner) GridSketch(int N, bool dropOne = false)
+    {
+        var s = new Sketch("grid", new Frame3(Vector3d.Zero, Vector3d.UnitX, Vector3d.UnitY));
+        var P = new SkPoint[N + 1, N + 1];
+        var rnd = new Random(7);
+        for (int i = 0; i <= N; i++) for (int j = 0; j <= N; j++) { P[i, j] = new SkPoint(i * 10 + rnd.NextDouble(), j * 10 + rnd.NextDouble()); s.AddEntity(P[i, j]); }
+        for (int i = 0; i <= N; i++)
+            for (int j = 0; j <= N; j++)
+            {
+                if (i < N) { var l = new SkLine(P[i, j], P[i + 1, j]); s.AddEntity(l); s.AddConstraint(ConstraintType.Horizontal, l); if (j == 0 && !(dropOne && i == N - 1)) s.AddDimension(DimensionType.DistancePointPoint, 10, P[i, j], P[i + 1, j]).Locked = true; }
+                if (j < N) { var l = new SkLine(P[i, j], P[i, j + 1]); s.AddEntity(l); s.AddConstraint(ConstraintType.Vertical, l); if (i == 0) s.AddDimension(DimensionType.DistancePointPoint, 10, P[i, j], P[i, j + 1]).Locked = true; }
+            }
+        s.AddDimension(DimensionType.CoordX, 0, P[0, 0]).Locked = true; s.AddDimension(DimensionType.CoordY, 0, P[0, 0]).Locked = true;
+        return (s, P[N, N]);
+    }
+
+    static void SketchSparseChecks()
+    {
+        Check("KRN10-SKETCH-SPARSE", () =>
+        {
+            // 10.8: связный большой эскиз — разреженная алгебра (J^T J в профиле после RCM, ранг по разреженным строкам,
+            // доводка разреженной J·Jᵀ). Сетка 31×31 (1922 переменные): решение верно (угол (300, 300)), Ok/0, время ≤ 4 с
+            // (плотно — 4.7…8 с на том же стенде); сетка 13×13 с одним снятым размером — 1 степень свободы, как у плотного;
+            // сетка 21×21 — то же решение, что у плотного (до 1e-9).
+            var fails = new List<string>(); var solver = new NumericSketchSolver();
+            long s0 = NumericSketchSolver.SparseSteps;
+            var (g30, c30) = GridSketch(30);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var st = solver.Solve(g30, null, out int dof); double ms = sw.Elapsed.TotalMilliseconds;
+            Log(new { test = "KRN10-SKETCH-SPARSE", grid = 30, status = st.ToString(), dof, ms, corner = $"({c30.X:R},{c30.Y:R})" });
+            if (st != SolveStatus.Ok || dof != 0 || Math.Abs(c30.X - 300) > 1e-6 || Math.Abs(c30.Y - 300) > 1e-6) fails.Add($"grid 31×31: {st}/{dof} corner ({c30.X},{c30.Y})");
+            if (ms > 4000) fails.Add($"grid 31×31: {ms:0} ms");
+            if (NumericSketchSolver.SparseSteps == s0) fails.Add("no sparse steps");
+            foreach (bool dense in new[] { false, true })
+            {
+                NumericSketchSolver.SparseOffForTests = dense;
+                try
+                {
+                    var (g, _) = GridSketch(12, dropOne: true);
+                    var st1 = solver.Solve(g, null, out int dof1);
+                    Log(new { test = "KRN10-SKETCH-SPARSE", grid = 12, dropOne = true, dense, status = st1.ToString(), dof = dof1 });
+                    if (st1 != SolveStatus.Underconstrained || dof1 != 1) fails.Add($"grid 13×13 minus one dimension ({(dense ? "dense" : "sparse")}): {st1}/{dof1}");
+                }
+                finally { NumericSketchSolver.SparseOffForTests = false; }
+            }
+            {
+                var (ga, ca) = GridSketch(20); var (gb, cb) = GridSketch(20);
+                solver.Solve(ga, null, out _);
+                NumericSketchSolver.SparseOffForTests = true;
+                try { solver.Solve(gb, null, out _); } finally { NumericSketchSolver.SparseOffForTests = false; }
+                var pa = ga.Entities.OfType<SkPoint>().ToList(); var pb = gb.Entities.OfType<SkPoint>().ToList();
+                double worst = pa.Zip(pb).Max(t => Math.Max(Math.Abs(t.First.X - t.Second.X), Math.Abs(t.First.Y - t.Second.Y)));
+                if (worst > 1e-9) fails.Add($"grid 21×21: sparse vs dense differ by {worst:G3}");
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
+    static void GridSolveSizes(int[] sizes)
     {
         var solver = new NumericSketchSolver();
-        foreach (int N in new[] { 4, 8, 12 })
+        foreach (int N in sizes)
         {
             var s = new Sketch("grid", new Frame3(Vector3d.Zero, Vector3d.UnitX, Vector3d.UnitY));
             var P = new SkPoint[N + 1, N + 1];

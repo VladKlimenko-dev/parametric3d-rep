@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 
 namespace Parametric3D.Model.Sketching;
 
@@ -65,6 +65,14 @@ public sealed class NumericSketchSolver : ISketchSolver
     /// они позволяют.
     /// </summary>
     public double DragWeight = 1e-4;
+
+    /// <summary>KRN-10 (10.8): с какого числа переменных связной части — разреженная алгебра (меньше — плотная).</summary>
+    public const int SparseMin = 150;
+    static readonly bool SparseOff = Environment.GetEnvironmentVariable("P3D_SKSPARSE") == "0";
+    [ThreadStatic] public static bool SparseOffForTests;
+    static bool UseSparse(int n) => !SparseOff && !SparseOffForTests && n >= SparseMin;
+    /// <summary>Число разреженных шагов (разбор).</summary>
+    public static long SparseSteps;
 
     private sealed class Var
     {
@@ -223,23 +231,48 @@ public sealed class NumericSketchSolver : ISketchSolver
             // собиралась тройным циклом по плотной матрице: связная сетка 13×13 (338 переменных)
             // решалась 7 с. Теперь сдвиг переменной пересчитывает только зависящие от неё невязки,
             // а J^T J собирается по ненулевым элементам строк.
-            sparse ??= SparseStructure(vars, x, residuals);
+            using (Parametric3D.Kernel.Diagnostics.Prof.Time("эскиз: структура якобиана")) sparse ??= SparseStructure(vars, x, residuals);
             var (rowCols, rowVals) = SparseJacobian(vars, x, residuals, dragged, sparse, r);
-            var A = new double[n, n];
             var b = new double[n];
-            for (int k = 0; k < rows; k++)
+            bool solved; double[] d;
+            if (UseSparse(n))
             {
-                var cols = rowCols[k]; var vals = rowVals[k];
-                for (int p1 = 0; p1 < cols.Count; p1++)
+                // KRN-10 (10.8): разреженная J^T J + Холецкий в профиле после RCM (сетка 31×31, 1922 переменные: шаг ЛМ
+                // плотным методом Гаусса — O(n³)). Мутация P3D_SKSPARSE=0 — плотный путь.
+                var As = new Dictionary<int, double>[n];
+                for (int i = 0; i < n; i++) As[i] = new Dictionary<int, double>();
+                for (int k = 0; k < rows; k++)
                 {
-                    int i = cols[p1];
-                    b[i] -= vals[p1] * r[k];
-                    for (int p2 = 0; p2 < cols.Count; p2++) A[i, cols[p2]] += vals[p1] * vals[p2];
+                    var cols = rowCols[k]; var vals = rowVals[k];
+                    for (int p1 = 0; p1 < cols.Count; p1++)
+                    {
+                        int i = cols[p1];
+                        b[i] -= vals[p1] * r[k];
+                        var Ai = As[i];
+                        for (int p2 = 0; p2 < cols.Count; p2++) { int j = cols[p2]; Ai[j] = (Ai.TryGetValue(j, out var o) ? o : 0) + vals[p1] * vals[p2]; }
+                    }
                 }
+                for (int i = 0; i < n; i++) { double dg = As[i].TryGetValue(i, out var o) ? o : 0; As[i][i] = dg + lambda * (1.0 + dg); }
+                using (Parametric3D.Kernel.Diagnostics.Prof.Time("эскиз: шаг ЛМ (решение)")) solved = SparseLinear.SolveSpd(As, b, out d);
+                Interlocked.Increment(ref SparseSteps);
             }
-            for (int i = 0; i < n; i++) A[i, i] += lambda * (1.0 + A[i, i]);
-
-            if (!SolveLinear(A, b, out double[] d)) { lambda *= 10; continue; }
+            else
+            {
+                var A = new double[n, n];
+                for (int k = 0; k < rows; k++)
+                {
+                    var cols = rowCols[k]; var vals = rowVals[k];
+                    for (int p1 = 0; p1 < cols.Count; p1++)
+                    {
+                        int i = cols[p1];
+                        b[i] -= vals[p1] * r[k];
+                        for (int p2 = 0; p2 < cols.Count; p2++) A[i, cols[p2]] += vals[p1] * vals[p2];
+                    }
+                }
+                for (int i = 0; i < n; i++) A[i, i] += lambda * (1.0 + A[i, i]);
+                using (Parametric3D.Kernel.Diagnostics.Prof.Time("эскиз: шаг ЛМ (решение)")) solved = SolveLinear(A, b, out d);
+            }
+            if (!solved) { lambda *= 10; continue; }
 
             var trial = new double[n];
             for (int i = 0; i < n; i++) trial[i] = x[i] + d[i];
@@ -268,14 +301,14 @@ public sealed class NumericSketchSolver : ISketchSolver
         // выродившееся в текущем положении, не убирает ни одной. Ранг
         // говорит, сколько уравнений ДЕЙСТВИТЕЛЬНО независимы.
         int equations = CountEquations(vars, x, residuals);
-        int rank = JacobianRank(vars, x, residuals);
+        int rank; using (Parametric3D.Kernel.Diagnostics.Prof.Time("эскиз: ранг")) rank = JacobianRank(vars, x, residuals, sparse);
         dof = Math.Max(0, n - rank);
 
         // K09. ДОВОДКА: несколько шагов Гаусса — Ньютона по одним ограничениям (решение наименьшей
         // нормы, без притяжения к начальному положению). Регуляризация Левенберга — Марквардта
         // оставляла невязку 1e-8…2e-7 мм (точка на окружности R5 — на 6e-8 от неё, касание двух
         // окружностей — с ошибкой расстояния центров 2.4e-7) — для модели это много.
-        Polish(vars, x, residuals, sparse);
+        using (Parametric3D.Kernel.Diagnostics.Prof.Time("эскиз: доводка")) Polish(vars, x, residuals, sparse);
 
         // Решение оценивается по невязке ОГРАНИЧЕНИЙ, без регуляризации (она не нулевая всегда,
         // когда точки сдвинулись). Противоречие (невязка не убывает до нуля при зависимых
@@ -682,11 +715,43 @@ public sealed class NumericSketchSolver : ISketchSolver
     /// удерживающий недоопределённый эскиз от расползания. Учти её —
     /// и степеней свободы никогда бы не оказалось.
     /// </summary>
-    private int JacobianRank(List<Var> vars, double[] x, List<ResidualFn> fns)
+    private int JacobianRank(List<Var> vars, double[] x, List<ResidualFn> fns, Sparse? sp = null)
     {
         int n = vars.Count;
         int m = CountEquations(vars, x, fns);
         if (m == 0 || n == 0) return 0;
+        if (UseSparse(n) && sp != null && sp.ConstraintRows == m)
+        {
+            // KRN-10 (10.8): разреженный якобиан (центральные разности только по зависящим невязкам), нормировка строк,
+            // исключение по разреженным строкам — тот же порог
+            var rowsS = new List<Dictionary<int, double>>(m);
+            for (int k = 0; k < m; k++) rowsS.Add(new Dictionary<int, double>());
+            var xp2 = (double[])x.Clone();
+            for (int i = 0; i < n; i++) vars[i].Set(x[i]);
+            var bp = new List<double>(); var bm = new List<double>();
+            for (int j = 0; j < n; j++)
+            {
+                double h = Math.Max(1e-6, Math.Abs(x[j]) * 1e-6);
+                foreach (int k in sp.FnsOfVar[j])
+                {
+                    vars[j].Set(x[j] + h); bp.Clear(); fns[k](bp);
+                    vars[j].Set(x[j] - h); bm.Clear(); fns[k](bm);
+                    vars[j].Set(x[j]);
+                    for (int t = 0; t < sp.FnCount[k] && t < bp.Count && t < bm.Count; t++)
+                    {
+                        double v = (bp[t] - bm[t]) / (2 * h);
+                        if (v != 0) rowsS[sp.FnOffset[k] + t][j] = v;
+                    }
+                }
+            }
+            foreach (var rowS in rowsS)
+            {
+                double norm = Math.Sqrt(rowS.Values.Sum(v => v * v));
+                if (norm < 1e-300) continue;
+                foreach (var key in rowS.Keys.ToList()) rowS[key] /= norm;
+            }
+            return SparseLinear.Rank(rowsS, n, 1e-7);
+        }
 
         var J = new double[m, n];
         var xp = (double[])x.Clone();
@@ -792,6 +857,25 @@ public sealed class NumericSketchSolver : ISketchSolver
             if (before < 1e-28) return;
             var (rowCols, rowVals) = SparseJacobian(vars, x, fns, null, sp, r.Concat(new double[n]).ToArray());
             // (J Jᵀ + εI) y = r; dx = −Jᵀ y.
+            if (UseSparse(n))
+            {
+                // KRN-10 (10.8): J·Jᵀ разреженно — строки, делящие столбец; Холецкий в профиле
+                var colRows = new Dictionary<int, List<(int Row, double V)>>();
+                for (int a = 0; a < m; a++) for (int p = 0; p < rowCols[a].Count; p++) { int c = rowCols[a][p]; if (!colRows.TryGetValue(c, out var lst)) colRows[c] = lst = new(); lst.Add((a, rowVals[a][p])); }
+                var As = new Dictionary<int, double>[m]; for (int a = 0; a < m; a++) As[a] = new Dictionary<int, double>();
+                foreach (var lst in colRows.Values)
+                    foreach (var (ra, va) in lst) foreach (var (rb, vb) in lst) As[ra][rb] = (As[ra].TryGetValue(rb, out var o) ? o : 0) + va * vb;
+                double dmax = 0; for (int a = 0; a < m; a++) dmax = Math.Max(dmax, As[a].TryGetValue(a, out var o) ? o : 0);
+                for (int a = 0; a < m; a++) As[a][a] = (As[a].TryGetValue(a, out var o) ? o : 0) + 1e-12 * Math.Max(dmax, 1e-30);
+                if (!SparseLinear.SolveSpd(As, r.ToArray(), out double[] ys)) return;
+                var trialS = (double[])x.Clone();
+                for (int a = 0; a < m; a++) { var ca = rowCols[a]; var va = rowVals[a]; for (int p = 0; p < ca.Count; p++) trialS[ca[p]] -= va[p] * ys[a]; }
+                for (int i = 0; i < n; i++) vars[i].Set(trialS[i]);
+                var r2s = new List<double>(); foreach (var f in fns) f(r2s);
+                if (r2s.Sum(v => v * v) >= before) { for (int i = 0; i < n; i++) vars[i].Set(x[i]); return; }
+                Array.Copy(trialS, x, n);
+                continue;
+            }
             var A = new double[m, m];
             for (int a = 0; a < m; a++)
                 for (int b = a; b < m; b++)

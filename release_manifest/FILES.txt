@@ -196,6 +196,7 @@ src/Model/Sketching/SketchEntities.cs
 src/Model/Sketching/SketchProjection.cs
 src/Model/Sketching/SketchSolver.cs
 src/Model/Sketching/SketchState.cs
+src/Model/Sketching/SparseLinear.cs
 src/Model/TestGeometry.cs
 src/Model/UndoHistory.cs
 src/Parametric3D.csproj
