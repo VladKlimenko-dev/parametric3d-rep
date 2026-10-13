@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Topology;
@@ -9,12 +9,18 @@ public static partial class DirectRound
 {
     /// <summary>Мутация: P3D_DRTANLOOP=0 — касательные контуры из отрезков и дуг не строятся прямо (прежний отказ).</summary>
     static readonly bool TanLoops = Environment.GetEnvironmentVariable("P3D_DRTANLOOP") != "0";
+    /// <summary>06.11: ОТКРЫТЫЕ касательные цепочки (концы — отрезки, торец — плоскость). Мутация P3D_DRTANOPEN=0 — отказ, как прежде.</summary>
+    static readonly bool TanOpen = Environment.GetEnvironmentVariable("P3D_DRTANOPEN") != "0";
+    public static long TanOpenChains;
 
     sealed class TPiece
     {
         public Seg S = null!; public FDesc W = null!; public ArcCurve3? Arc; public double SgnRad;
         public ICurve3 Q1C = null!, Q2C = null!;
+        public Vector3d? QA1, QA2, QB1, QB2;        // контакты на свободном конце цепочки (иначе — Q1/Q2 в вершине)
+        public ICurve3? EndA, EndB;                 // сечение ленты плоскостью торца на свободном конце (от Q1 к Q2)
     }
+    sealed class TFree { public Vector3d V; public TPiece P = null!; public bool AtA; public FDesc We = null!; public Vector3d Q1, Q2; public ICurve3 Sec = null!; }
 
     /// <summary>
     /// KRN-06 (06.10/06.11): КАСАТЕЛЬНЫЙ КОНТУР — целый контур плоской грани Fp из отрезков (стенка — плоскость ⟂ Fp) и дуг
@@ -38,12 +44,23 @@ public static partial class DirectRound
         var np = Fp.N.Normalized();
         var selSet = new HashSet<TEdge>(sel);
         var loops = Fp.Loops.Where(l => l.Any(s => s.Id != null && selSet.Contains(s.Id))).ToList();
-        if (loops.Any(l => l.Any(s => s.Id == null || !selSet.Contains(s.Id)))) { why = "tangent loop: only whole loops of the face (open chains not in this family)"; return false; }
-        if (loops.Sum(l => l.Count) != sel.Count) { why = "tangent loop: selected edges outside the face loops"; return false; }
+        bool IsSel(Seg s) => s.Id != null && selSet.Contains(s.Id);
+        // ОТКРЫТАЯ ЦЕПОЧКА: в контуре — одна непрерывная (по кругу) серия выбранных звеньев; звенья — от её начала
+        var runs = new List<List<Seg>>(); var openRun = new List<bool>();
+        foreach (var l in loops)
+        {
+            if (l.All(IsSel)) { runs.Add(l.ToList()); openRun.Add(false); continue; }
+            if (!TanOpen) { why = "tangent loop: only whole loops of the face (open chains not in this family)"; return false; }
+            int n0 = l.Count, st = -1;
+            for (int k = 0; k < n0; k++) if (IsSel(l[k]) && !IsSel(l[(k - 1 + n0) % n0])) { if (st >= 0) { why = "tangent chain: several runs in one loop"; return false; } st = k; }
+            var run = new List<Seg>(); for (int k = st; IsSel(l[k % n0]); k++) run.Add(l[k % n0]);
+            runs.Add(run); openRun.Add(true);
+        }
+        if (runs.Sum(l => l.Count) != sel.Count) { why = "tangent loop: selected edges outside the face loops"; return false; }
 
         // звенья: стенка и её нормаль
         var pieces = new List<List<TPiece>>();
-        foreach (var l in loops)
+        foreach (var l in runs)
         {
             var pl = new List<TPiece>();
             foreach (var s in l)
@@ -95,9 +112,10 @@ public static partial class DirectRound
             return fw ? tg : -tg;
         }
         var joints = new List<(Vector3d P, TPiece Before, TPiece After)>();
-        foreach (var pl in pieces)
-            for (int k = 0; k < pl.Count; k++)
+        for (int ri = 0; ri < pieces.Count; ri++)
+            for (int k = 0; k < pieces[ri].Count - (openRun[ri] ? 1 : 0); k++)
             {
+                var pl = pieces[ri];
                 var a = pl[k]; var b = pl[(k + 1) % pl.Count];
                 if ((a.S.B - b.S.A).Length > 1e-7) { why = "tangent loop: loop not chained"; return false; }
                 var P = a.S.B;
@@ -129,6 +147,48 @@ public static partial class DirectRound
             }
         }
 
+        // СВОБОДНЫЕ КОНЦЫ открытой цепочки: конец — отрезок, торец We — плоскость (грань соседнего невыбранного звена Fp);
+        // контакты — пересечения смещённых прямых с We, сечение цилиндра ленты плоскостью We — дуга (эллипс) от Q1 к Q2
+        var frees = new List<TFree>();
+        for (int ri = 0; ri < pieces.Count; ri++)
+        {
+            if (!openRun[ri]) continue;
+            var l = loops[ri]; int n0 = l.Count;
+            foreach (bool atA in new[] { true, false })
+            {
+                var p = atA ? pieces[ri][0] : pieces[ri][^1];
+                if (p.Arc != null) { why = "tangent chain: an end of the chain is an arc"; return false; }
+                int k = l.IndexOf(p.S);
+                var nb = atA ? l[(k - 1 + n0) % n0] : l[(k + 1) % n0];
+                var V = atA ? p.S.A : p.S.B;
+                var weF = nb.Id?.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().FirstOrDefault(f => byFace[f] != Fp);
+                if (weF == null || !byFace[weF].Surf.IsPlanar || byFace[weF].N.Length < 0.5) { why = "tangent chain: the end face is not planar"; return false; }
+                var We = byFace[weF]; var ne = We.N.Normalized();
+                var t = (p.S.B - p.S.A).Normalized(); double tn = Vector3d.Dot(t, ne);
+                if (Math.Abs(tn) < 0.1) { why = "tangent chain: end face too oblique"; return false; }
+                Vector3d Hit(Vector3d x0) => x0 + t * (Vector3d.Dot(V - x0, ne) / tn);
+                var q1 = Hit(Q1(p, p.S.A)); var q2 = Hit(Q2(p.S.A));
+                var C0 = Cc(p, p.S.A); var e1 = (Q1(p, p.S.A) - C0) / r; var e2 = Vector3d.Cross(t, e1); var d2 = (Q2(p.S.A) - C0) / r;
+                double dth = Math.Atan2(Vector3d.Dot(d2, e2), Vector3d.Dot(d2, e1));
+                ICurve3 sec = ch ? new LineCurve3(q1, q2) : Section(C0, t, e1, e2, r, V, ne, 0, dth);
+                if ((sec.PointAt(sec.T0) - q1).Length > 1e-7 || (sec.PointAt(sec.T1) - q2).Length > 1e-7) { why = "tangent chain: end section does not meet the contacts"; return false; }
+                // q1 — внутри соседнего звена Fp
+                {
+                    var a0 = nb.A; var b0 = nb.B; double len = (b0 - a0).Length;
+                    if (nb.Curve is not LineCurve3) { why = "tangent chain: the neighbour at the end is not a line"; return false; }
+                    double u = Vector3d.Dot(q1 - a0, b0 - a0) / (len * len), dist = (a0 + (b0 - a0) * u - q1).Length;
+                    if (dist > 1e-7 * Math.Max(1, len) || u <= 1e-6 || u >= 1 - 1e-6) { why = "tangent chain: radius too large for the end neighbour"; return false; }
+                }
+                if (atA) { p.QA1 = q1; p.QA2 = q2; p.EndA = sec; } else { p.QB1 = q1; p.QB2 = q2; p.EndB = sec; }
+                var l1 = p.Q1C; var l2 = p.Q2C;
+                p.Q1C = new LineCurve3(p.QA1 ?? Q1(p, p.S.A), p.QB1 ?? Q1(p, p.S.B)); p.Q2C = new LineCurve3(p.QA2 ?? Q2(p.S.A), p.QB2 ?? Q2(p.S.B));
+                frees.Add(new TFree { V = V, P = p, AtA = atA, We = We, Q1 = q1, Q2 = q2, Sec = sec });
+            }
+        }
+        Vector3d CA1(TPiece p) => p.QA1 ?? Q1(p, p.S.A); Vector3d CB1(TPiece p) => p.QB1 ?? Q1(p, p.S.B);
+        Vector3d CA2(TPiece p) => p.QA2 ?? Q2(p.S.A); Vector3d CB2(TPiece p) => p.QB2 ?? Q2(p.S.B);
+        if (frees.Count > 0) Interlocked.Increment(ref TanOpenChains);
+
         // место: смещённый контур не ближе r к другим звеньям (узкие пазы), другие контуры Fp — не в полосе
         var all = pieces.SelectMany(x => x).ToList();
         foreach (var p in all)
@@ -137,8 +197,11 @@ public static partial class DirectRound
                 var x = p.Q1C.PointAt(p.Q1C.T0 + (p.Q1C.T1 - p.Q1C.T0) * k / 16.0);
                 foreach (var o in all) if (DistToCurve(o.S.Curve, x) < r * (1 - 1e-6)) { why = "tangent loop: the offset loop runs into itself (radius too large)"; return false; }
             }
-        foreach (var l in Fp.Loops.Where(l => !loops.Contains(l)))
-            foreach (var s in l)
+        var freeNb = new HashSet<Seg>();
+        for (int ri = 0; ri < runs.Count; ri++)
+            if (openRun[ri]) { var l = loops[ri]; int n0 = l.Count; freeNb.Add(l[(l.IndexOf(runs[ri][0]) - 1 + n0) % n0]); freeNb.Add(l[(l.IndexOf(runs[ri][^1]) + 1) % n0]); }
+        foreach (var l in Fp.Loops)
+            foreach (var s in l.Where(x => !IsSel(x) && !freeNb.Contains(x)))
                 for (int k = 0; k < 32; k++)
                 {
                     var x = s.Curve.PointAt(s.Curve.T0 + (s.Curve.T1 - s.Curve.T0) * k / 32.0);
@@ -146,13 +209,27 @@ public static partial class DirectRound
                 }
 
         // правка Fp: контур → смещённый (то же направление)
-        foreach (var (l, pl) in loops.Zip(pieces))
-            for (int k = 0; k < l.Count; k++)
-                l[k] = new Seg { Curve = pl[k].Q1C, A = Q1(pl[k], pl[k].S.A), B = Q1(pl[k], pl[k].S.B), Id = pl[k].S.Id };
+        for (int ri = 0; ri < runs.Count; ri++)
+        {
+            var l = loops[ri]; var pl = pieces[ri]; int n0 = l.Count;
+            if (openRun[ri])
+            {
+                int ia = (l.IndexOf(runs[ri][0]) - 1 + n0) % n0, ib = (l.IndexOf(runs[ri][^1]) + 1) % n0;
+                var sa = Shorten(l[ia], null, CA1(pl[0])); var sb = Shorten(l[ib], CB1(pl[^1]), null);
+                if (sa == null || sb == null) { why = "tangent chain: an end neighbour cannot be shortened"; return false; }
+                l[ia] = sa; l[ib] = sb;
+            }
+            foreach (var p in pl)
+            {
+                int k = l.IndexOf(p.S);
+                l[k] = new Seg { Curve = p.Q1C, A = CA1(p), B = CB1(p), Id = p.S.Id };
+            }
+        }
         Fp.Touched = true;
 
         // правка стенок: ребро → сдвинутое на σr по n_p; рёбра стыков вдоль n_p — укоротить на r
         var jointPts = joints.Select(j => j.P).ToList();
+        var freePts = frees.Select(f => f.V).ToList();
         var wallHeight = new Dictionary<FDesc, double>();
         foreach (var p in all)
         {
@@ -161,7 +238,8 @@ public static partial class DirectRound
                 for (int k = 0; k < l.Count && !done; k++)
                     if (l[k].Id == p.S.Id && l[k].Orig != null)
                     {
-                        l[k] = new Seg { Curve = p.Q2C, A = Q2(l[k].A), B = Q2(l[k].B), Id = p.S.Id };
+                        Vector3d C2(Vector3d x) => (x - p.S.A).Length < 1e-7 ? CA2(p) : CB2(p);
+                        l[k] = new Seg { Curve = p.Q2C, A = C2(l[k].A), B = C2(l[k].B), Id = p.S.Id };
                         done = true;
                     }
             if (!done) { why = "tangent loop: the edge is not in its wall's loops"; return false; }
@@ -171,8 +249,21 @@ public static partial class DirectRound
             foreach (var l in W.Loops)
                 for (int k = 0; k < l.Count; k++)
                 {
-                    var s = l[k]; if (s.Orig == null || (s.Id != null && selSet.Contains(s.Id))) continue;
+                    var s = l[k]; if (s.Id == null || selSet.Contains(s.Id) || (s.Orig == null && !TanGroups)) continue;
                     int ia = jointPts.FindIndex(P => (P - s.A).Length < 1e-7), ib = jointPts.FindIndex(P => (P - s.B).Length < 1e-7);
+                    int fa = freePts.FindIndex(P => (P - s.A).Length < 1e-7), fb = freePts.FindIndex(P => (P - s.B).Length < 1e-7);
+                    if (ia < 0 && ib < 0 && (fa >= 0 || fb >= 0))
+                    {
+                        // ребро стенки и торца на свободном конце — укоротить до Q2 (точка лежит на нём)
+                        if (fa >= 0 && fb >= 0) { why = "tangent chain: a wall edge joins two free ends"; return false; }
+                        var fr = frees[fa >= 0 ? fa : fb]; if (fr.P.W != W) continue;
+                        var Pf = fa >= 0 ? s.A : s.B; var farf = fa >= 0 ? s.B : s.A;
+                        double lenf = (farf - Pf).Length, uf = Vector3d.Dot(fr.Q2 - Pf, farf - Pf) / (lenf * lenf);
+                        if (s.Curve is not LineCurve3 || !(uf > 1e-9 && uf < 1 - 1e-9) || (Pf + (farf - Pf) * uf - fr.Q2).Length > 1e-7 * Math.Max(1, lenf)) { why = "tangent chain: the end edge of the wall does not carry the contact"; return false; }
+                        var nsf = Shorten(s, fa >= 0 ? fr.Q2 : null, fb >= 0 ? fr.Q2 : null);
+                        if (nsf == null) { why = "tangent chain: an end wall edge cannot be shortened"; return false; }
+                        l[k] = nsf; continue;
+                    }
                     if (ia < 0 && ib < 0) continue;
                     if (ia >= 0 && ib >= 0) { why = "tangent loop: a wall edge joins two joints"; return false; }
                     if (s.Curve is not LineCurve3 || Math.Abs(Math.Abs(Vector3d.Dot((s.B - s.A).Normalized(), np)) - 1) > 1e-9) { why = "tangent loop: a joint edge of the walls is not along the face normal"; return false; }
@@ -191,6 +282,28 @@ public static partial class DirectRound
             p.W.Hint = p.Q2C.PointAt((p.Q2C.T0 + p.Q2C.T1) / 2) + np * (sgm * (h - r) / 2);
         }
 
+        // торцы свободных концов: в вершине V — укоротить звено Fp и ребро стенки, вставить сечение ленты
+        foreach (var fr in frees)
+        {
+            bool done = false;
+            foreach (var loop in fr.We.Loops)
+                for (int k = 0; k < loop.Count && !done; k++)
+                {
+                    var s0 = loop[k];
+                    if ((s0.B - fr.V).Length >= 1e-7) continue;
+                    var nx = loop[(k + 1) % loop.Count];
+                    // звено на Fp — то, на чьей прямой лежит Q1
+                    bool sOnFp = DistToCurve(s0.Curve, fr.Q1) < 1e-7;
+                    var qa = sOnFp ? fr.Q1 : fr.Q2; var qb = sOnFp ? fr.Q2 : fr.Q1;
+                    var sNew = Shorten(s0, null, qa); var nNew = Shorten(nx, qb, null);
+                    if (sNew == null || nNew == null) { why = "tangent chain: end face neighbours cannot be shortened"; return false; }
+                    loop[k] = sNew; loop[(k + 1) % loop.Count] = nNew;
+                    loop.Insert(k + 1, new Seg { Curve = fr.Sec, A = qa, B = qb });
+                    fr.We.Touched = true; done = true;
+                }
+            if (!done) { why = "tangent chain: the end vertex is not in the end face"; return false; }
+        }
+
         // ленты и стыки
         var jointCurve = new Dictionary<int, ICurve3>();
         ICurve3 Joint(TPiece p, Vector3d P)
@@ -204,16 +317,16 @@ public static partial class DirectRound
         foreach (var p in all)
         {
             var A = p.S.A; var B = p.S.B;
-            var jA = Joint(p, A); var jB = Joint(p, B);
-            if ((jA.PointAt(jA.T0) - Q1(p, A)).Length > 1e-7 || (jA.PointAt(jA.T1) - Q2(A)).Length > 1e-7) { why = "tangent loop: joint arc does not meet the contacts"; return false; }
+            var jA = p.EndA ?? Joint(p, A); var jB = p.EndB ?? Joint(p, B);
+            if ((jA.PointAt(jA.T0) - CA1(p)).Length > 1e-7 || (jA.PointAt(jA.T1) - CA2(p)).Length > 1e-7) { why = "tangent loop: joint arc does not meet the contacts"; return false; }
             var loopB = new List<Seg>
             {
-                new() { Curve = p.Q1C, A = Q1(p, B), B = Q1(p, A) },
-                new() { Curve = jA, A = Q1(p, A), B = Q2(A) },
-                new() { Curve = p.Q2C, A = Q2(A), B = Q2(B) },
-                new() { Curve = jB, A = Q2(B), B = Q1(p, B) },
+                new() { Curve = p.Q1C, A = CB1(p), B = CA1(p) },
+                new() { Curve = jA, A = CA1(p), B = CA2(p) },
+                new() { Curve = p.Q2C, A = CA2(p), B = CB2(p) },
+                new() { Curve = jB, A = CB2(p), B = CB1(p) },
             };
-            var xm = p.S.Curve.PointAt((p.S.Curve.T0 + p.S.Curve.T1) / 2);
+            var xm = p.EndA != null || p.EndB != null ? ((CA1(p) + CB1(p)) / 2 - N2(p, CA1(p)) * (sgm * r)) : p.S.Curve.PointAt((p.S.Curve.T0 + p.S.Curve.T1) / 2);
             var hint = ch ? (Q1(p, xm) + Q2(xm)) / 2 : Cc(p, xm) - (np + N2(p, xm)).Normalized() * (sgm * r);
             ISurface3 surf; bool rev;
             if (p.Arc is { } a)

@@ -50,6 +50,33 @@ static partial class Program
             catch (Exception ex) { Console.WriteLine("  threw " + ex.Message); return; }
             var b = bl[0];
             if (Environment.GetEnvironmentVariable("P3D_PROBEMESH") == "1") BooleanOp.MeshExactlySolid(b, w);
+            if (nm.StartsWith("inclined"))
+            {
+                var md = Parametric3D.Kernel.Tess.Tessellator.Tessellate(b);
+                double mv = 0; for (int i = 0; i < md.Indices.Length; i += 3) { Vector3d V3(int j) { var q = md.Vertices[md.Indices[j]].P; return new Vector3d(q.X, q.Y, q.Z); } mv += Vector3d.Dot(V3(i), Vector3d.Cross(V3(i + 1), V3(i + 2))) / 6; }
+                Console.WriteLine($"  mesh volume {mv:R}");
+                var rng = new Random(1); var ax = new Vector3d(0, -Math.Sin(25 * Math.PI / 180), Math.Cos(25 * Math.PI / 180)); var ao = new Vector3d(30, 20, 10);
+                foreach (var f in b.Faces.Where(f => f.Tag.Contains("round")))
+                {
+                    var su = GeometryAudit.AuthoritativeSurface(f); double worst = 0; int nOk = 0;
+                    var pts = f.Loops.SelectMany(l => l.CoEdges).SelectMany(ce => Enumerable.Range(0, 9).Select(k => ce.Edge.Curve.PointAt(ce.Edge.Curve.T0 + (ce.Edge.Curve.T1 - ce.Edge.Curve.T0) * (k + 0.5) / 9))).ToList();
+                    // внутренние точки: середины между точками контуров
+                    var inner = new List<Vector3d>();
+                    for (int k = 0; k < 400; k++) { var p1 = pts[rng.Next(pts.Count)]; var p2 = pts[rng.Next(pts.Count)]; var m = (p1 + p2) / 2; inner.Add(su.PointAt(su.ProjectToUV(m))); }
+                    foreach (var p in inner)
+                    {
+                        var uv = su.ProjectToUV(p); var nn = su.NormalAt(uv).Normalized();
+                        foreach (var sgn in new[] { 1.0, -1.0 })
+                        {
+                            var cc = p + nn * (1.5 * sgn);
+                            var rel = cc - ao; double dax = (rel - ax * Vector3d.Dot(rel, ax)).Length;
+                            double e1 = Math.Abs(cc.Z - 18.5), e2 = Math.Abs(dax - 6.5);
+                            if (e1 < 0.1 && e2 < 0.1) { worst = Math.Max(worst, Math.Max(e1, e2)); nOk++; }
+                        }
+                    }
+                    Console.WriteLine($"  face {f.Tag} {su.GetType().Name}: centre deviation max {worst:E3} over {nOk} points");
+                }
+            }
             Console.WriteLine($"  {sw.ElapsedMilliseconds} ms {b.Guarantee} V {(AnalyticVolume.Of(b) ?? double.NaN):R} faces {b.Faces.Count()} valid {SolidValidator.Validate(b).IsValid} [{SolidValidator.Validate(b).Summary()}]; declined {DirectRound.Declined - d0}; {string.Join(" | ", w.Take(3))}");
             foreach (var iss in SolidValidator.Validate(b).Issues.Where(i => i.Severity == ValidationSeverity.Error).Take(4)) Console.WriteLine($"    issue {iss.Where} {iss}");
         }
@@ -58,7 +85,27 @@ static partial class Program
             var bl = new List<TSolid> { Box(0, 0, 0, 60, 40, 20) };
             var cyl = TransformOp.Copy(PrimitiveOp.Cylinder(new Vector3d(30, 20, -20), 5, 60), TransformOp.Rotate(new Vector3d(30, 20, 10), Vector3d.UnitX, 25));
             BooleanOp.Subtract(bl, cyl, new List<string>());
+            DirectRound.Debug = null;
             Show("inclined hole top r1.5", bl, s => s.Edges.Where(e => e.V0.P.Z > 19.999 && e.V1.P.Z > 19.999 && e.Curve is not Parametric3D.Kernel.Curves.LineCurve3).ToList(), 1.5);
+        }
+        {   // ступенька: L-профиль в XZ (60×20, уступ 30×10), выдавлен по Y на 40
+            TSolid Step() { var bl = new List<TSolid> { Box(0, 0, 0, 60, 40, 20) }; BooleanOp.Subtract(bl, Box(30, -1, 10, 31, 42, 11), new List<string>()); return bl[0]; }
+            bool Front(TEdge e) => Math.Abs(e.V0.P.Y) < 1e-9 && Math.Abs(e.V1.P.Y) < 1e-9;
+            bool At(TEdge e, double x, double z) => (Math.Abs(e.V0.P.X - x) < 1e-9 && Math.Abs(e.V0.P.Z - z) < 1e-9) || (Math.Abs(e.V1.P.X - x) < 1e-9 && Math.Abs(e.V1.P.Z - z) < 1e-9);
+            Show("step: front outline at inner corner (2 convex edges, concave 3rd)", new List<TSolid> { Step() }, s => s.Edges.Where(e => Front(e) && At(e, 30, 10)).ToList(), 2);
+            Show("step: whole front outline r2", new List<TSolid> { Step() }, s => s.Edges.Where(Front).ToList(), 2);
+            Show("step: concave step edge + front edges at its end (mixed corner)", new List<TSolid> { Step() }, s => s.Edges.Where(e => (Front(e) && At(e, 30, 10)) || (Math.Abs(e.V0.P.X - 30) < 1e-9 && Math.Abs(e.V1.P.X - 30) < 1e-9 && Math.Abs(e.V0.P.Z - 10) < 1e-9 && Math.Abs(e.V1.P.Z - 10) < 1e-9)).ToList(), 2);
+            {
+                var bl = new List<TSolid> { Step() }; var w0 = new List<string>();
+                FilletOp.RoundEdges(bl, bl[0].Edges.Where(e => Math.Abs(e.V0.P.X - 30) < 1e-9 && Math.Abs(e.V1.P.X - 30) < 1e-9 && Math.Abs(e.V0.P.Z - 10) < 1e-9 && Math.Abs(e.V1.P.Z - 10) < 1e-9).Select(EdgeRef.Of).ToList(), 2, w0);
+                Console.WriteLine($"step concave edge first: V {AnalyticVolume.Of(bl[0]):R} {w0.FirstOrDefault()}");
+                Show("step: then front line-arc-line at the corner", bl, s => s.Edges.Where(e => Front(e) && (e.Curve is Parametric3D.Kernel.Curves.ArcCurve3 || ((e.V0.P - new Vector3d(32, 0, 10)).Length < 1e-9 || (e.V1.P - new Vector3d(32, 0, 10)).Length < 1e-9 || (e.V0.P - new Vector3d(30, 0, 12)).Length < 1e-9 || (e.V1.P - new Vector3d(30, 0, 12)).Length < 1e-9))).ToList(), 2);
+            }
+            DirectRound.Debug = x => { if (x.StartsWith("declined")) Console.WriteLine("    " + x); };
+            Show("step: mixed both ends", new List<TSolid> { Step() }, s => s.Edges.Where(e => ((Front(e) || (Math.Abs(e.V0.P.Y - 40) < 1e-9 && Math.Abs(e.V1.P.Y - 40) < 1e-9)) && At(e, 30, 10)) || (Math.Abs(e.V0.P.X - 30) < 1e-9 && Math.Abs(e.V1.P.X - 30) < 1e-9 && Math.Abs(e.V0.P.Z - 10) < 1e-9 && Math.Abs(e.V1.P.Z - 10) < 1e-9)).ToList(), 2);
+            Show("step: mixed + whole front", new List<TSolid> { Step() }, s => s.Edges.Where(e => Front(e) || (Math.Abs(e.V0.P.X - 30) < 1e-9 && Math.Abs(e.V1.P.X - 30) < 1e-9 && Math.Abs(e.V0.P.Z - 10) < 1e-9 && Math.Abs(e.V1.P.Z - 10) < 1e-9)).ToList(), 2);
+            DirectRound.Debug = null;
+            Show("step: concave step edge + convex riser top edge (mixed chain? no — parallel)", new List<TSolid> { Step() }, s => s.Edges.Where(e => Math.Abs(e.V0.P.Y - e.V1.P.Y) > 1 && ((Math.Abs(e.V0.P.X - 30) < 1e-9 && Math.Abs(e.V0.P.Z - 10) < 1e-9) || (Math.Abs(e.V0.P.X - 30) < 1e-9 && Math.Abs(e.V0.P.Z - 20) < 1e-9))).ToList(), 2);
         }
         foreach (var (n, slope2) in new[] { (4, 0.5), (5, 0.5), (6, 0.5), (4, 0.7) })
         {
@@ -109,6 +156,78 @@ static partial class Program
                 }
                 catch (Parametric3D.Core.RebuildException ex) { Log(new { test = "KRN06-N-CORNER", irregular = "refused", ex.Message }); }
                 if (DirectRound.NCorners != c0) fails.Add("irregular apex: the direct builder took a corner without a common ball");
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
+    static void Krn06InclinedHoleChecks()
+    {
+        Check("KRN06-INCLINED-HOLE-ROLLING-BALL", () =>
+        {
+            // 06.11/06.14: кромка НАКЛОННОГО отверстия (ось ⟂ плоскости не перпендикулярна; кромка — эллипс) — прямой построитель
+            // замкнутых рёбер между квадриками. Эталон снятого объёма — независимый расчёт канала катящегося шара
+            // (tools/ref_canal_inclined_hole.py: теорема Гаусса по трём кускам границы, при a = 0 — формула Паппа до 7e-8).
+            // Допуск 5e-7 мм³ (точность эталона). OpenCascade (BRepFilletAPI_MakeFillet) на a = 25°, r = 1.5 снимает 20.75499 —
+            // на 0.058 мм³ (0.28 %) меньше эталона при любых допусках SetParams; прямой построитель — 20.8129563.
+            var fails = new List<string>();
+            foreach (var (a, rr, want) in new[] { (10.0, 1.5, 16.882074680907408), (25.0, 1.5, 20.812956441127426), (25.0, 2.0, 37.73630634894312), (40.0, 1.0, 12.925939254939294) })
+            {
+                var bl = new List<TSolid> { Box(0, 0, 0, 60, 40, 20) };
+                var cyl = TransformOp.Copy(PrimitiveOp.Cylinder(new Vector3d(30, 20, -20), 5, 60), TransformOp.Rotate(new Vector3d(30, 20, 10), Vector3d.UnitX, a));
+                BooleanOp.Subtract(bl, cyl, new List<string>());
+                double v0 = AnalyticVolume.Of(bl[0]) ?? double.NaN; var w = new List<string>();
+                var es = bl[0].Edges.Where(e => e.V0.P.Z > 19.999 && e.V1.P.Z > 19.999 && e.Curve is not Parametric3D.Kernel.Curves.LineCurve3).ToList();
+                FilletOp.RoundEdges(bl, es.Select(EdgeRef.Of).ToList(), rr, w);
+                var b = bl[0]; double rem = v0 - (AnalyticVolume.Of(b) ?? double.NaN);
+                Log(new { test = "KRN06-INCLINED-HOLE", a, r = rr, removed = double.IsFinite(rem) ? rem : -1, want, guarantee = b.Guarantee.ToString(), direct = w.Any(x => x.Contains("direct blend")) });
+                if (es.Count != 1) fails.Add($"a {a}: {es.Count} rim edges");
+                if (b.Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(b).IsValid) fails.Add($"a {a} r {rr}: {b.Guarantee} {SolidValidator.Validate(b).Summary()}");
+                if (!(Math.Abs(rem - want) <= 5e-7)) fails.Add($"a {a} r {rr}: removed {rem:R} vs reference {want:R}");
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
+    static void Krn06MixedChecks()
+    {
+        Check("KRN06-DIRECT-ROUND-MIXED-OPEN-CHAIN", () =>
+        {
+            // 06.2/06.11: смешанный угол (вогнутое ребро уступа и выпуклые рёбра передней грани в одной вершине) — сначала
+            // вогнутые, затем выпуклые с дугой вогнутой ленты: открытая касательная цепочка отрезок–дуга–отрезок (цилиндр–тор–
+            // цилиндр); открытая цепочка верха бруска со скруглённым вертикальным ребром. Эталон — OpenCascade
+            // (BRepFilletAPI_MakeFillet одной операцией; те же тела), допуск 1e-9 отн.; прямой построитель, ExactAnalytic.
+            var fails = new List<string>();
+            TSolid Step() { var bl = new List<TSolid> { Box(0, 0, 0, 60, 40, 20) }; BooleanOp.Subtract(bl, Box(30, -1, 10, 31, 42, 11), new List<string>()); return bl[0]; }
+            static bool Y(TEdge e, double y) => Math.Abs(e.V0.P.Y - y) < 1e-9 && Math.Abs(e.V1.P.Y - y) < 1e-9;
+            static bool At(TEdge e) => (Math.Abs(e.V0.P.X - 30) < 1e-9 && Math.Abs(e.V0.P.Z - 10) < 1e-9) || (Math.Abs(e.V1.P.X - 30) < 1e-9 && Math.Abs(e.V1.P.Z - 10) < 1e-9);
+            static bool StepE(TEdge e) => Math.Abs(e.V0.P.X - 30) < 1e-9 && Math.Abs(e.V1.P.X - 30) < 1e-9 && Math.Abs(e.V0.P.Z - 10) < 1e-9 && Math.Abs(e.V1.P.Z - 10) < 1e-9;
+            TSolid BoxR5()
+            {
+                var bl = new List<TSolid> { Box(0, 0, 0, 60, 40, 20) };
+                FilletOp.RoundEdges(bl, new List<EdgeRef> { EdgeRef.Of(EdgeAt(bl[0], new(60, 40, 0), new(60, 40, 20))) }, 5, new List<string>());
+                return bl[0];
+            }
+            static bool Top(TEdge e) => Math.Abs(e.V0.P.Z - 20) < 1e-9 && Math.Abs(e.V1.P.Z - 20) < 1e-9;
+            static Vector3d Mid(TEdge e) => e.Curve.PointAt((e.Curve.T0 + e.Curve.T1) / 2);
+            var cases = new (string Name, Func<TSolid> Make, Func<TEdge, bool> Sel, double R, double Occt, bool Mixed)[]
+            {
+                ("mixed corner r2", Step, e => (Y(e, 0) && At(e)) || StepE(e), 2, 36000.134492061494, true),
+                ("mixed corner r1.5", Step, e => (Y(e, 0) && At(e)) || StepE(e), 1.5, 36000.056738838444, true),
+                ("mixed corners at both ends r2", Step, e => ((Y(e, 0) || Y(e, 40)) && At(e)) || StepE(e), 2, 35965.93269026658, true),
+                ("open chain line-arc-line on top r2", BoxR5, e => Top(e) && (Math.Abs(Mid(e).X - 60) < 1e-9 || Math.Abs(Mid(e).Y - 40) < 1e-9 || e.Curve is Parametric3D.Kernel.Curves.ArcCurve3), 2, 47809.302876099515, false),
+            };
+            foreach (var (name, make, selF, rr, occt, mixed) in cases)
+            {
+                var bl = new List<TSolid> { make() }; var w = new List<string>();
+                long m0 = DirectRound.MixedCorners, o0 = DirectRound.TanOpenChains;
+                var es = bl[0].Edges.Where(selF).ToList();
+                FilletOp.RoundEdges(bl, es.Select(EdgeRef.Of).ToList(), rr, w);
+                var b = bl[0]; double v = AnalyticVolume.Of(b) ?? double.NaN;
+                bool direct = w.Any(x => x.Contains("direct blend"));
+                Log(new { test = "KRN06-MIXED-OPEN", name, n = es.Count, volume = double.IsFinite(v) ? v : -1, occt, direct, mixedN = DirectRound.MixedCorners - m0, openN = DirectRound.TanOpenChains - o0 });
+                if (!direct || b.Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(b).IsValid) fails.Add($"{name}: direct {direct} {b.Guarantee} {SolidValidator.Validate(b).Summary()} | {string.Join(" | ", w.Take(2))}");
+                if (!(Math.Abs(v - occt) <= 1e-9 * occt)) fails.Add($"{name}: V {v:R} vs OCCT {occt:R}");
+                if (mixed && DirectRound.MixedCorners == m0) fails.Add($"{name}: not staged");
+                if (DirectRound.TanOpenChains == o0) fails.Add($"{name}: no open tangent chain");
             }
             Require(fails.Count == 0, string.Join("; ", fails));
         });

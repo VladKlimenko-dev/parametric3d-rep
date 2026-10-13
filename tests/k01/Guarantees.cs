@@ -36,6 +36,8 @@ static partial class Program
         ["Model.FeatureHistory.HistRefHits"] = "g.13: счётчик сравнений истории по объектам (разбор)",
         ["Kernel.Ops.DirectRound.AsymJunctions"] = "06.10: счётчик несимметричных стыков цепочек (разбор)",
         ["Kernel.Ops.DirectRound.LineCylChamfers"] = "06.15: счётчик фасок прямых рёбер плоскость/цилиндр (разбор)",
+        ["Kernel.Ops.DirectRound.MixedCorners"] = "06.2: счётчик смешанных углов (разбор)",
+        ["Kernel.Ops.DirectRound.TanOpenChains"] = "06.11: счётчик открытых касательных цепочек (разбор)",
         ["Kernel.Ops.DirectRound.NCorners"] = "06.13: счётчик углов степени > 3 (разбор)",
         ["Kernel.Ops.FilletOp.FinalCheckRefusals"] = "g.02: счётчик отказов итоговой проверки обходного пути скругления (разбор)",
         ["Kernel.Diagnostics.Overhead._ticks"] = "g.13: время проверок и разметки сверх B-rep (Interlocked, только замер)",

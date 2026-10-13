@@ -78,10 +78,15 @@ public static partial class DirectRound
     {
         if (Off || OffForTest || refs.Count == 0 || !(r > 0) || OwnerBody(bodies, refs) is not int k) return false;
         string? why = null;
+        _mixedSigma = null;
         var res = Build(bodies[k], refs, r, false, ref why);
+        bool staged = false;
+        if (res == null && _mixedSigma is { } ms && MixedOn) { _mixedSigma = null; res = BuildMixed(bodies[k], refs, r, ms, ref why); staged = res != null; }
+        _mixedSigma = null;
         if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); return false; }
         bodies[k] = res; Interlocked.Increment(ref Built);
-        warnings.Add($"Round: direct blend ({refs.Count} edge(s), exact blend surfaces).");
+        warnings.Add(staged ? $"Round: direct blend ({refs.Count} edge(s), exact blend surfaces; concave edges first at mixed corners)."
+                            : $"Round: direct blend ({refs.Count} edge(s), exact blend surfaces).");
         return true;
     }
 
@@ -112,6 +117,56 @@ public static partial class DirectRound
         bodies[k] = res; Interlocked.Increment(ref Built);
         warnings.Add(unequal ? $"Chamfer: direct cut {d1:0.###}x{d2:0.###} (plane/plane, {refs.Count} edge(s), exact planes)." : $"Chamfer: direct cut (plane/plane, {refs.Count} edge(s), exact planes).");
         return true;
+    }
+
+    /// <summary>06.2/06.13: смешанный угол (в вершине сходятся выпуклые и вогнутые выбранные рёбра) — в два этапа: сначала вогнутые,
+    /// затем выпуклые вместе с новыми звеньями (дуга вогнутой ленты на общей грани выпуклых) — открытая касательная цепочка
+    /// отрезок–дуга–отрезок (цилиндр–тор–цилиндр). Так же строит OpenCascade (BRepFilletAPI_MakeFillet: 3 цилиндра + тор,
+    /// объём совпадает до 1e-15). Мутация P3D_DRMIXED=0 — отказ, как прежде.</summary>
+    static readonly bool MixedOn = Environment.GetEnvironmentVariable("P3D_DRMIXED") != "0";
+    internal static readonly bool TanGroups = Environment.GetEnvironmentVariable("P3D_DRTANGROUPS") != "0";
+    [ThreadStatic] static Dictionary<TEdge, int?>? _mixedSigma;
+    public static long MixedCorners;
+
+    static TSolid? BuildMixed(TSolid body, IReadOnlyList<EdgeRef> refs, double r, Dictionary<TEdge, int?> sigma, ref string? why)
+    {
+        var one = new List<TSolid> { body };
+        var res = refs.Select(rf => (rf, e: FilletOp.Resolve(one, rf, out _))).ToList();
+        if (res.Any(x => x.e == null || !sigma.TryGetValue(x.e, out var sg) || sg == null)) { why = "mixed corner: an edge without convexity"; return null; }
+        var conc = res.Where(x => sigma[x.e!] == 1).ToList(); var conv = res.Where(x => sigma[x.e!] == -1).ToList();
+        if (conc.Count == 0 || conv.Count == 0) { why = "mixed corner: not mixed"; return null; }
+        // смешанные вершины и общая грань выпуклых рёбер в каждой
+        static bool Touches(TEdge e, Vector3d p) => (e.V0.P - p).Length < 1e-7 || (e.V1.P - p).Length < 1e-7;
+        static List<TFace> FacesOf(TEdge e) => e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
+        var mixedV = new List<(Vector3d V, string FpTag)>();
+        foreach (var p in conc.SelectMany(x => new[] { x.e!.V0.P, x.e!.V1.P }))
+        {
+            var cv = conv.Where(x => Touches(x.e!, p)).Select(x => x.e!).ToList();
+            if (cv.Count == 0 || mixedV.Any(m => (m.V - p).Length < 1e-7)) continue;
+            var common = cv.Select(FacesOf).Aggregate((a, b) => a.Intersect(b).ToList());
+            if (common.Count != 1) { why = "mixed corner: the convex edges do not share one face"; return null; }
+            mixedV.Add((p, common[0].Tag));
+        }
+        if (mixedV.Count == 0) { why = "mixed corner: no mixed vertex"; return null; }
+        string? w1 = null;
+        var b1 = Build(body, conc.Select(x => x.rf).ToList(), r, false, ref w1);
+        _mixedSigma = null;
+        if (b1 == null) { why = "mixed corner: concave stage: " + w1; return null; }
+        var refs2 = conv.Select(x => x.rf).ToList();
+        foreach (var e in b1.Edges)
+        {
+            var fs = FacesOf(e); if (fs.Count != 2) continue;
+            foreach (var (V, tag) in mixedV)
+                if (fs.Any(f => f.Tag == tag) && fs.Any(f => f.Tag == "round:face") && Math.Min((e.V0.P - V).Length, (e.V1.P - V).Length) < 2 * r + 1e-7
+                    && !refs2.Any(x => ReferenceEquals(FilletOp.Resolve(new List<TSolid> { b1 }, x, out _), e)))
+                    refs2.Add(EdgeRef.Of(e));
+        }
+        string? w2 = null;
+        var b2 = Build(b1, refs2, r, false, ref w2);
+        _mixedSigma = null;
+        if (b2 == null) { why = "mixed corner: convex stage: " + w2; return null; }
+        Interlocked.Increment(ref MixedCorners);
+        return b2;
     }
 
     /// <summary>Мутация P3D_DRMULTIBODY=0: прямой построитель только у детали из одного тела (прежде).</summary>
@@ -324,7 +379,29 @@ public static partial class DirectRound
         var blends = new List<FDesc>();
         if (tanLoop)
         {
-            if (!TangentLoopBlends(edges.Concat(circs).ToList(), byFace, r, ch, blends, ref why)) return null;
+            // несколько несвязанных цепочек (передняя и задняя грань) — каждая своим проходом (P3D_DRTANGROUPS=0 — одним)
+            var allT = edges.Concat(circs).ToList();
+            var groups = new List<List<TEdge>>();
+            if (TanGroups)
+            {
+                var left = new List<TEdge>(allT);
+                while (left.Count > 0)
+                {
+                    var g = new List<TEdge> { left[0] }; left.RemoveAt(0);
+                    for (bool grew = true; grew;)
+                    {
+                        grew = false;
+                        for (int i = left.Count - 1; i >= 0; i--)
+                            if (g.Any(x => new[] { x.V0.P, x.V1.P }.Any(p => (left[i].V0.P - p).Length < 1e-7 || (left[i].V1.P - p).Length < 1e-7)))
+                            { g.Add(left[i]); left.RemoveAt(i); grew = true; }
+                    }
+                    groups.Add(g);
+                }
+                if (groups.Any(g => !g.Any(x => circs.Contains(x)))) { why = "tangent chains: a chain without arcs next to tangent chains"; return null; }
+            }
+            else groups.Add(allT);
+            foreach (var g in groups)
+                if (!TangentLoopBlends(g, byFace, r, ch, blends, ref why)) return null;
             edges.Clear(); circs.Clear();
         }
         if (circs.Count > 0 && !CircularBlends(circs, byFace, blends, r, ch, ref why)) return null;
@@ -484,7 +561,7 @@ public static partial class DirectRound
                     // УГЛОВОЙ УЗЕЛ (06.13): три выбранных ребра в вершине степени 3 — шар радиуса r, касающийся трёх граней
                     // (центр C — пересечение трёх смещённых плоскостей). Цилиндр касается шара по большой окружности в
                     // плоскости через C поперёк оси: торец ленты — эта дуга; угол — сферический треугольник из трёх дуг.
-                    if (cornerSel.Any(x => sigmaOf[x] != (int)sigma)) { why = "corner of convex and concave edges"; return null; }
+                    if (cornerSel.Any(x => sigmaOf[x] != (int)sigma)) { why = "corner of convex and concave edges"; _mixedSigma = sigmaOf; return null; }
                     var cf = edges.Where(x => x == e || cornerSel.Contains(x)).SelectMany(x => x.CoEdges.Select(c => c.Loop?.Face)).OfType<TFace>().Distinct().ToList();
                     if (cf.Count != inc.Count || cf.Any(f => !byFace[f].Surf.IsPlanar)) { why = "corner faces are not planes, one per edge"; return null; }
                     if (!corners.TryGetValue(V, out var cr))
@@ -542,7 +619,7 @@ public static partial class DirectRound
                 {
                     // СТЫК ЦЕПОЧКИ: два цилиндра равного радиуса с пересекающимися осями пересекаются по плоским эллипсам в
                     // биссекторных плоскостях; нужная — биссектор двух НЕобщих граней (через третье ребро вершины).
-                    if (sigmaOf[mate] != (int)sigma) { why = "chain of convex and concave edges"; return null; }
+                    if (sigmaOf[mate] != (int)sigma) { why = "chain of convex and concave edges"; _mixedSigma = sigmaOf; return null; }
                     var mateFaces = mate.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
                     var Fa = mateFaces.Contains(fs[0]) ? fs[1] : mateFaces.Contains(fs[1]) ? fs[0] : null;
                     var Fb = mateFaces.FirstOrDefault(f => f != fs[0] && f != fs[1]);

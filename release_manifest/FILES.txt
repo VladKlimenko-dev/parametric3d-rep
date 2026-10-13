@@ -555,4 +555,5 @@ tools/occt_diff.py
 tools/occt_time.py
 tools/perf_targets.py
 tools/progress_score.py
+tools/ref_canal_inclined_hole.py
 tools/run_baseline.sh
