@@ -83,8 +83,20 @@ public static partial class DirectRound
         bool staged = false;
         if (res == null && _mixedSigma is { } ms && MixedOn) { _mixedSigma = null; res = BuildMixed(bodies[k], refs, r, ms, ref why); staged = res != null; }
         _mixedSigma = null;
+        int added = 0;
+        if (res == null && TanProp && TangentClosure(bodies[k], refs) is { } more)
+        {
+            // РАСПРОСТРАНЕНИЕ ПО КАСАТЕЛЬНЫМ (как у OpenCascade и привычных CAD): выбор, который кончается у касательного
+            // продолжения (дуга после отрезка, отрезок после дуги), дополняется звеньями до острых стыков
+            string? w2 = null;
+            var res2 = Build(bodies[k], more, r, false, ref w2);
+            _mixedSigma = null;
+            if (res2 != null) { res = res2; added = more.Count - refs.Count; Interlocked.Increment(ref TanPropagations); }
+            else why += " | with tangent propagation: " + w2;
+        }
         if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); return false; }
         bodies[k] = res; Interlocked.Increment(ref Built);
+        if (added > 0) warnings.Add($"Round: tangent propagation added {added} edge(s) to the selection.");
         warnings.Add(staged ? $"Round: direct blend ({refs.Count} edge(s), exact blend surfaces; concave edges first at mixed corners)."
                             : $"Round: direct blend ({refs.Count} edge(s), exact blend surfaces).");
         return true;
@@ -167,6 +179,45 @@ public static partial class DirectRound
         if (b2 == null) { why = "mixed corner: convex stage: " + w2; return null; }
         Interlocked.Increment(ref MixedCorners);
         return b2;
+    }
+
+    /// <summary>06.9/06.11: распространение выбора по касательным звеньям, когда без него прямой построитель отказывает
+    /// (мутация P3D_DRTANPROP=0 — без распространения, отказ, как прежде).</summary>
+    static readonly bool TanProp = Environment.GetEnvironmentVariable("P3D_DRTANPROP") != "0";
+    public static long TanPropagations;
+
+    /// <summary>Замыкание выбора по касательным продолжениям: звено e' в конце V выбранного e добавляется, если у них ровно
+    /// одна общая грань, касательные в V продолжают друг друга, а вторые грани касаются в V. null — добавлять нечего.</summary>
+    static List<EdgeRef>? TangentClosure(TSolid body, IReadOnlyList<EdgeRef> refs)
+    {
+        var one = new List<TSolid> { body };
+        var sel = new List<TEdge>();
+        foreach (var rf in refs) { var e = FilletOp.Resolve(one, rf, out _); if (e == null) return null; if (!sel.Contains(e)) sel.Add(e); }
+        static List<TFace> FacesOf(TEdge e) => e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
+        static Vector3d Away(TEdge e, Vector3d V)
+        {
+            var c = e.Curve; bool atStart = (c.PointAt(c.T0) - V).Length <= (c.PointAt(c.T1) - V).Length;
+            var tg = c.TangentAt(atStart ? c.T0 : c.T1).Normalized();
+            return atStart ? tg : -tg;
+        }
+        static Vector3d Nrm(TFace f, Vector3d V) { var su = GeometryAudit.AuthoritativeSurface(f); return su.NormalAt(su.ProjectToUV(V)).Normalized(); }
+        var all = body.Edges.ToList(); var added = new List<TEdge>();
+        for (int i = 0; i < sel.Count; i++)
+        {
+            var e = sel[i]; var fe = FacesOf(e); if (fe.Count != 2) continue;
+            foreach (var V in new[] { e.V0.P, e.V1.P })
+                foreach (var x in all)
+                {
+                    if (sel.Contains(x) || !((x.V0.P - V).Length < 1e-7 || (x.V1.P - V).Length < 1e-7)) continue;
+                    var fx = FacesOf(x); if (fx.Count != 2) continue;
+                    var common = fe.Intersect(fx).ToList(); if (common.Count != 1) continue;
+                    if (Vector3d.Dot(Away(e, V), Away(x, V)) > -1 + 1e-9) continue;          // не продолжение
+                    var ge = fe.First(f => f != common[0]); var gx = fx.First(f => f != common[0]);
+                    if (Math.Abs(Vector3d.Dot(Nrm(ge, V), Nrm(gx, V))) < 1 - 1e-9) continue;  // вторые грани не касаются
+                    sel.Add(x); added.Add(x);
+                }
+        }
+        return added.Count == 0 ? null : refs.Concat(added.Select(EdgeRef.Of)).ToList();
     }
 
     /// <summary>Мутация P3D_DRMULTIBODY=0: прямой построитель только у детали из одного тела (прежде).</summary>

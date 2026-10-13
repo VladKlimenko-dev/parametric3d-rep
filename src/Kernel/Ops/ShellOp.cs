@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -34,6 +34,45 @@ public static class ShellOp
         { warnings.Add("Shell: a face thickness must be non-zero and of the same sign as the wall thickness."); return false; }
 
         TSolid body = bodies[0];
+        // KRN-07 (07.5): ТЕЛО С КРИВЫМИ ГРАНЯМИ (шар, тор, скругления, цилиндры с прямыми рёбрами) — полость смещением всех
+        // граней без смены топологии (DirectRound.OffsetSolid): закрытые грани внутрь на толщину, открытые (только плоские,
+        // все соседи — плоские) — наружу. Мутация P3D_OFFSETSOLID=0.
+        string? whyOffset = null;
+        if (!TweakOff && outward && faceThickness == null && !body.Faces.All(f => PlaneOfFace(f) != null || (!CylTweakOff && CylOfFace(f) != null))
+            && OffsetOpenFaces(body, open) is { } openOut)
+        {
+            // стенка наружу у тела с кривыми гранями: наружное — все грани наружу (открытые — на месте), внутреннее — тело
+            // с открытыми гранями, вынесенными наружу
+            double t = -thickness;
+            var outerO = DirectRound.OffsetSolid(body, f => openOut.Contains(f) ? 0 : t, null, ref whyOffset);
+            var innerO = outerO == null ? null : openOut.Count == 0 ? body : DirectRound.OffsetSolid(body, f => openOut.Contains(f) ? t : 0, null, ref whyOffset);
+            if (outerO != null && innerO != null)
+            {
+                foreach (var f in outerO.Faces) if (f.Tag.Length > 0 && !f.Tag.StartsWith("shell:")) f.Tag = "shell:outer:" + EdgeRef.Bare(f.Tag);
+                var res = new List<TSolid> { outerO };
+                BooleanOp.Subtract(res, innerO, warnings);
+                if (res.Count == 0) { warnings.Add("Shell: the outward wall is empty."); return false; }
+                bodies.RemoveAt(0); bodies.InsertRange(0, res);
+                warnings.Add($"Shell: wall {t:0.###} outward, by offsetting all faces (exact).");
+                return true;
+            }
+            warnings.Add($"Shell: an outward wall by offsetting all faces declined: {whyOffset}."); return false;
+        }
+        if (!TweakOff && !outward && faceThickness == null)
+        {
+            bool planarOnly = body.Faces.All(f => PlaneOfFace(f) != null || (!CylTweakOff && CylOfFace(f) != null));
+            if (OffsetOpenFaces(body, open) is { } openFaces && !planarOnly)
+            {
+                var cavO = DirectRound.OffsetSolid(body, f => openFaces.Contains(f) ? thickness : -thickness, "shell:inner", ref whyOffset);
+                if (cavO != null)
+                {
+                    BooleanOp.Subtract(bodies, cavO, warnings);
+                    warnings.Add($"Shell: wall {thickness:0.###}, cavity by offsetting all faces (exact).");
+                    return true;
+                }
+                ShellDebug?.Invoke("offset solid declined: " + whyOffset);
+            }
+        }
         // KRN-07 (07.5): тело из плоских граней — полость сдвигом плоскостей (верно и для вогнутых тел); стенка наружу
         // (толщина < 0) и своя толщина граней — только здесь
         if (!TweakOff && body.Faces.All(f => PlaneOfFace(f) != null || (!CylTweakOff && CylOfFace(f) != null)))
@@ -43,10 +82,18 @@ public static class ShellOp
             if (!outward)
             {
                 var cavT = OffsetBody(body, (f, pl, isOpen) => isOpen ? T(f, pl) : -T(f, pl), open, "shell:inner", ref why, -thickness);
+                // цилиндры с прямыми рёбрами (скруглённые вертикальные рёбра) — смещение всех граней (07.5)
+                bool byOffset = false;
+                if (cavT == null && faceThickness == null && OffsetOpenFaces(body, open) is { } of2)
+                {
+                    byOffset = true;
+                    cavT = DirectRound.OffsetSolid(body, f => of2.Contains(f) ? thickness : -thickness, "shell:inner", ref whyOffset);
+                    if (cavT == null) ShellDebug?.Invoke("offset solid declined: " + whyOffset + "; plane offset: " + why);
+                }
                 if (cavT != null)
                 {
                     BooleanOp.Subtract(bodies, cavT, warnings);
-                    warnings.Add($"Shell: wall {thickness:0.###}, cavity by plane offset (exact).");
+                    warnings.Add(byOffset ? $"Shell: wall {thickness:0.###}, cavity by offsetting all faces (exact)." : $"Shell: wall {thickness:0.###}, cavity by plane offset (exact).");
                     return true;
                 }
             }
@@ -223,6 +270,20 @@ public static class ShellOp
         BooleanOp.Subtract(bodies, cavity, warnings);
         warnings.Add($"Shell: wall {thickness:0.###}, {planes.Count(x => x.Open)} face(s) left open.");
         return true;
+    }
+
+    /// <summary>Открытые грани по точкам — только плоские (null — точка не на плоской грани).</summary>
+    static HashSet<TFace>? OffsetOpenFaces(TSolid body, IReadOnlyList<Vector3d>? open)
+    {
+        var res = new HashSet<TFace>();
+        if (open != null)
+            foreach (var q in open)
+            {
+                var hit = body.Faces.FirstOrDefault(f => PlaneOfFace(f) is { } pl && OnFace(f, pl, q));
+                if (hit == null) return null;
+                res.Add(hit);
+            }
+        return res;
     }
 
     /// <summary>Мутация P3D_SHELLTWEAK=0: полость только пересечением полупространств (прежде).</summary>
