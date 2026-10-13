@@ -82,6 +82,7 @@ src/Kernel/Ops/DirectRoundDraft.cs
 src/Kernel/Ops/DirectRoundLoft.cs
 src/Kernel/Ops/DirectRoundOffset.cs
 src/Kernel/Ops/DirectRoundTangent.cs
+src/Kernel/Ops/DirectRoundVertex.cs
 src/Kernel/Ops/DraftOp.cs
 src/Kernel/Ops/ExtrudeOp.cs
 src/Kernel/Ops/FilletOp.cs
@@ -99,6 +100,7 @@ src/Kernel/Ops/VertexOp.cs
 src/Kernel/Ops/VertexSnap.cs
 src/Kernel/Query/BodyQuery.cs
 src/Kernel/Query/BodyQueryDistance.cs
+src/Kernel/Robust/Predicates.cs
 src/Kernel/Surfaces/BandNurbs.cs
 src/Kernel/Surfaces/FacetedSurface.cs
 src/Kernel/Surfaces/ISurface3.cs

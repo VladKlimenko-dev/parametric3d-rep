@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
@@ -192,5 +192,173 @@ static partial class Program
         for (int i = 0; i < res.Count; i++)
             if (res[i].Length >= 73 && res[i][72] == 'T') res[i] = System.Text.RegularExpressions.Regex.Replace(res[i], @"G\s*\d+", m => "G" + gi.ToString().PadLeft(m.Length - 1));
         return string.Join("\n", res);
+    }
+}
+
+static partial class Program
+{
+    /// <summary>
+    /// m.f3: скругление и фаска вершины прямым построением — грань «round:vertex» (точная сфера) или «chamfer:vertex» (точная
+    /// плоскость), рёбра доходят до точек касания/среза ТОЧНО (прежде шар-резец раздувался на 2e-5·R, и рёбра кончались в
+    /// ~0.04 мм от касания), гарантия ExactAnalytic, объём — по формуле. Выпуклый угол бруска (скругление и фаска); прочие углы
+    /// (призма, вогнутый угол кармана) — регрессия K09-VERTEX/VOPSN/VCONCAVE. Мутация P3D_DRVERTEX=0 — прежний путь резцов.
+    /// </summary>
+    static void VertexDirectChecks()
+    {
+        Check("K09-VERTEX-DIRECT-EXACT", () =>
+        {
+            var fails = new List<string>();
+            Part Cube() { var p = new Part("v"); TestGeometry.AddCube(p, 60); p.Rebuild(null); return p; }
+            var corner = new Vector3d(30, 30, 30);
+            bool Has(Part p, Vector3d x) => p.Bodies[0].Vertices.Any(v => (v.P - x).Length < 1e-9);
+            {
+                var p = Cube(); var f = new Parametric3D.Model.Features.VertexRoundFeature { Vertex = corner, Radius = new Parametric3D.Model.Features.ValueRef(6) };
+                long b0 = DirectRound.VertexBuilt;
+                p.AddFeature(f); p.Rebuild(null);
+                if (DirectRound.VertexBuilt == b0) fails.Add("round: the direct builder was not used");
+                var b = p.Bodies[0]; double sb = 6 / Math.Sqrt(2);
+                if (f.Error != null) fails.Add("round: " + f.Error);
+                else
+                {
+                    if (b.Guarantee != Parametric3D.Kernel.GuaranteeLevel.ExactAnalytic) fails.Add("round: guarantee " + b.Guarantee);
+                    foreach (var t in new[] { new Vector3d(30 - sb, 30, 30), new Vector3d(30, 30 - sb, 30), new Vector3d(30, 30, 30 - sb) })
+                        if (!Has(p, t)) fails.Add($"round: tangent point {t:0.######} is not a vertex");
+                    double want = 216000 - VertexRoundRemoved(6);
+                    if (!(Math.Abs(p.Volume - want) <= 1e-9 * want)) fails.Add($"round: volume {p.Volume:R} vs {want:R}");
+                    if (!SolidValidator.Validate(b).IsValid) fails.Add("round: invalid");
+                }
+            }
+            {
+                var p = Cube(); var f = new Parametric3D.Model.Features.VertexChamferFeature { Vertex = corner, Distance = new Parametric3D.Model.Features.ValueRef(6) };
+                long b0 = DirectRound.VertexBuilt;
+                p.AddFeature(f); p.Rebuild(null);
+                if (DirectRound.VertexBuilt == b0) fails.Add("chamfer: the direct builder was not used");
+                if (f.Error != null) fails.Add("chamfer: " + f.Error);
+                else
+                {
+                    foreach (var t in new[] { new Vector3d(24, 30, 30), new Vector3d(30, 24, 30), new Vector3d(30, 30, 24) }) if (!Has(p, t)) fails.Add($"chamfer: {t} is not a vertex");
+                    if (!(Math.Abs(p.Volume - (216000 - 36)) <= 1e-12 * 216000)) fails.Add($"chamfer: volume {p.Volume:R}");
+                }
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
+}
+
+static partial class Program
+{
+    /// <summary>
+    /// KRN-02 (02.4): единые точные предикаты. Эталон знака — независимая точная арифметика здесь же (double → дробь
+    /// m·2^e в BigInteger). Сетка Shewchuk у почти вырожденной прямой: точный знак совпадает с эталоном во всех точках
+    /// (наивный определитель в double — нет); антисимметрия и циклическая инвариантность; точно вырожденные (коллинеарные,
+    /// компланарные, коциркулярные) — 0; CDT многоугольника с почти коллинеарными точками — все треугольники одного обхода,
+    /// площадь сходится. Мутация P3D_PREDICATES=0.
+    /// </summary>
+    static int RefO(Vector2d a, Vector2d b, Vector2d c)
+    {
+        static System.Numerics.BigInteger N(double x)
+        {
+            if (x == 0) return 0;
+            long bits = BitConverter.DoubleToInt64Bits(x); int ex = (int)((bits >> 52) & 0x7FF); long mant = bits & 0xFFFFFFFFFFFFFL;
+            if (ex == 0) ex = 1; else mant |= 1L << 52; ex -= 1075;
+            var v = new System.Numerics.BigInteger(mant) << (ex + 1200);
+            return bits < 0 ? -v : v;
+        }
+        return ((N(b.X) - N(a.X)) * (N(c.Y) - N(a.Y)) - (N(b.Y) - N(a.Y)) * (N(c.X) - N(a.X))).Sign;
+    }
+
+    static void PredicateChecks()
+    {
+        Check("KRN02-PREDICATES-EXACT-CONSISTENT", () =>
+        {
+            var fails = new List<string>();
+            static System.Numerics.BigInteger Num(double x, int e0)
+            {
+                // x = mant·2^exp; приведение к общему порядку e0 (e0 ≤ exp)
+                if (x == 0) return 0;
+                long bits = BitConverter.DoubleToInt64Bits(x); int ex = (int)((bits >> 52) & 0x7FF); long mant = bits & 0xFFFFFFFFFFFFFL;
+                if (ex == 0) ex = 1; else mant |= 1L << 52; ex -= 1075;
+                var v = new System.Numerics.BigInteger(mant) << (ex - e0);
+                return bits < 0 ? -v : v;
+            }
+            static int RefOrient(Vector2d a, Vector2d b, Vector2d c)
+            {
+                const int e0 = -1200;
+                System.Numerics.BigInteger ax = Num(a.X, e0), ay = Num(a.Y, e0), bx = Num(b.X, e0), by = Num(b.Y, e0), cx = Num(c.X, e0), cy = Num(c.Y, e0);
+                return ((bx - ax) * (cy - ay) - (by - ay) * (cx - ax)).Sign;
+            }
+            int naiveWrong = 0, exactWrong = 0, n = 0;
+            var q = new Vector2d(12, 12); var r = new Vector2d(24, 24);
+            double ulp = Math.BitIncrement(0.5) - 0.5;
+            for (int i = 0; i < 128; i++)
+                for (int j = 0; j < 128; j++)
+                {
+                    var p = new Vector2d(0.5 + i * ulp, 0.5 + j * ulp);
+                    int want = RefOrient(p, q, r); n++;
+                    if (Parametric3D.Kernel.Robust.Predicates.Orient2D(p, q, r) != want) exactWrong++;
+                    double naive = (q.X - p.X) * (r.Y - p.Y) - (q.Y - p.Y) * (r.X - p.X);
+                    if (Math.Sign(naive) != want) naiveWrong++;
+                    // антисимметрия и циклическая инвариантность
+                    int s = Parametric3D.Kernel.Robust.Predicates.Orient2D(p, q, r);
+                    if (Parametric3D.Kernel.Robust.Predicates.Orient2D(q, r, p) != s || Parametric3D.Kernel.Robust.Predicates.Orient2D(q, p, r) != -s) exactWrong++;
+                }
+            Log(new { test = "KRN02-PREDICATES-EXACT-CONSISTENT", n, naiveWrong, exactWrong });
+            if (exactWrong > 0) fails.Add($"orient2d: {exactWrong} of {n} wrong or inconsistent");
+            if (naiveWrong == 0) fails.Add("the near-degenerate grid did not stress the naive determinant (test not meaningful)");
+            // точно вырожденные — 0
+            if (Parametric3D.Kernel.Robust.Predicates.Orient2D(new(0.1, 0.1), new(0.2, 0.2), new(0.30000000000000004, 0.30000000000000004)) != 0) fails.Add("collinear (0.1, 0.2, 0.30000000000000004) not 0");
+            if (Parametric3D.Kernel.Robust.Predicates.InCircle(new(5, 0), new(0, 5), new(-3, 4), new(4, -3)) != 0) fails.Add("cocircular not 0");
+            if (Parametric3D.Kernel.Robust.Predicates.InCircle(new(5, 0), new(0, 5), new(-3, 4), new(4, Math.BitDecrement(-3.0))) != -1) fails.Add("just outside the circle not -1");
+            if (Parametric3D.Kernel.Robust.Predicates.InCircle(new(5, 0), new(0, 5), new(-3, 4), new(4, Math.BitIncrement(-3.0))) != 1) fails.Add("just inside the circle not +1");
+            if (Parametric3D.Kernel.Robust.Predicates.Orient3D(new(0, 0, 0), new(1, 0, 0), new(0, 1, 0), new(0.3, 0.7, 0)) != 0) fails.Add("coplanar not 0");
+            if (Parametric3D.Kernel.Robust.Predicates.Orient3D(new(0, 0, 0), new(1, 0, 0), new(0, 1, 0), new(0.3, 0.7, -1e-300)) != 1) fails.Add("d just below the plane not +1");
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+        Check("KRN02-PREDICATES-POINT-IN-POLYGON", () =>
+        {
+            // ядро: GeomUtil.PointInPolygon у почти вырожденного звена должна совпадать с точным эталоном
+            // (внутри ⇔ точка строго слева от восходящего звена AB; вне — справа и НА звене)
+            var A = new Vector2d(-7.3, -3.1); var B = new Vector2d(17.9, 11.3); var C = new Vector2d(-50, 11.3);
+            var poly = new List<Vector2d> { A, B, C };
+            var P0 = A + 0.37 * (B - A);
+            double ux = Math.BitIncrement(Math.Abs(P0.X)) - Math.Abs(P0.X), uy = Math.BitIncrement(Math.Abs(P0.Y)) - Math.Abs(P0.Y);
+            int n = 0, wrong = 0;
+            for (int i = -32; i < 32; i++)
+                for (int j = -32; j < 32; j++)
+                {
+                    var p = new Vector2d(P0.X + i * ux, P0.Y + j * uy);
+                    bool want = RefO(A, B, p) > 0; n++;
+                    if (Parametric3D.Kernel.GeomUtil.PointInPolygon(poly, p) != want) wrong++;
+                }
+            Log(new { test = "KRN02-PREDICATES-POINT-IN-POLYGON", n, wrong });
+            Require(wrong == 0, $"{wrong} of {n} points classified against the exact reference");
+        });
+        Check("KRN02-PREDICATES-CDT-NEAR-COLLINEAR", () =>
+        {
+            // многоугольник: нижняя сторона — 200 точек на прямой y = x·k с отклонениями в несколько ulp, верх — одна вершина
+            var outer = new List<Vector2d>();
+            var rnd = new Random(42); double k = 0.1;
+            for (int i = 0; i <= 200; i++)
+            {
+                double x = i * 0.05, y = x * k;
+                for (int t = rnd.Next(4); t > 0; t--) y = rnd.Next(2) == 0 ? Math.BitIncrement(y) : Math.BitDecrement(y);
+                outer.Add(new Vector2d(x, y));
+            }
+            outer.Add(new Vector2d(5, 3));
+            double area = 0; for (int i = 0; i < outer.Count; i++) { var a = outer[i]; var b = outer[(i + 1) % outer.Count]; area += a.X * b.Y - b.X * a.Y; } area /= 2;
+            var tris = Parametric3D.Kernel.Tess.Cdt.Triangulate(outer, new List<IReadOnlyList<Vector2d>>(), out var pts);
+            Require(tris != null, "triangulation failed");
+            int cw = 0; double sum = 0;
+            for (int i = 0; i + 2 < tris!.Count; i += 3)
+            {
+                int o = Parametric3D.Kernel.Robust.Predicates.Orient2D(pts[tris[i]], pts[tris[i + 1]], pts[tris[i + 2]]);
+                if (o * Math.Sign(area) < 0) cw++;
+                var a = pts[tris[i]]; var b = pts[tris[i + 1]]; var c = pts[tris[i + 2]];
+                sum += Math.Abs((b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X)) / 2;
+            }
+            Log(new { test = "KRN02-PREDICATES-CDT-NEAR-COLLINEAR", triangles = tris.Count / 3, cw, sum, area });
+            Require(cw == 0, $"{cw} triangles wound the other way");
+            Require(Math.Abs(sum - Math.Abs(area)) <= 1e-12 * Math.Abs(area), $"area {sum:R} vs {Math.Abs(area):R}");
+        });
     }
 }
