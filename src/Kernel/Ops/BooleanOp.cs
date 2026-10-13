@@ -490,8 +490,9 @@ public static class BooleanOp
         }
         int unmeshed;
         var rawForLazy = LazyFine ? TopologyClone.Deep(r) : null;      // эксперимент r48: копия до завершения
-        using (Diagnostics.Prof.Time("аналитика (общая): завершение")) unmeshed = Analytic.PrismBuild.Finish(r, null, donor);
-        if (unmeshed > 0) { AnalyticRouteDebug?.Invoke($"general invalid: {unmeshed} face(s) not meshed from their loops"); return null; }
+        var meshWhy = AnalyticRouteDebug != null ? new List<string>() : null;
+        using (Diagnostics.Prof.Time("аналитика (общая): завершение")) unmeshed = Analytic.PrismBuild.Finish(r, meshWhy, donor);
+        if (unmeshed > 0) { AnalyticRouteDebug?.Invoke($"general invalid: {unmeshed} face(s) not meshed from their loops: {string.Join(" | ", meshWhy ?? new())}"); return null; }
         // Сферические грани размечаются иначе (кольцами к полюсу) — швы не согласованы по построению: полная проверка
         // (на корпусе — сетка с замечаниями у скругления вершин); прочие — B-rep (швы плоскостей и цилиндров — по рёбрам).
         // KRN-10 (g.13): ПРОВЕРКИ РЕЗУЛЬТАТА МАРШРУТА — одна функция. Обычный режим — сразу (отказ — многогранный путь);
