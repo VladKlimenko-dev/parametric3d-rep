@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -27,15 +27,26 @@ public static partial class DirectRound
     /// <summary>Мутация P3D_DRSRCSIDE=0: сторона источника — по Reversed фасетной грани.</summary>
     /// <summary>Мутация P3D_DRCHAINS=0: цепочки (общая вершина двух выбранных рёбер) — отказ, прежний построитель.</summary>
     static readonly bool Chains = Environment.GetEnvironmentVariable("P3D_DRCHAINS") != "0";
+    /// <summary>Мутация P3D_DRASYM=0: несимметричный стык цепочки — отказ (прежний построитель).</summary>
+    static readonly bool AsymOff = Environment.GetEnvironmentVariable("P3D_DRASYM") == "0";
+    /// <summary>Несимметричных стыков цепочек построено (разбор, KRN06-DIRECT-ROUND-ASYM-CHAIN).</summary>
+    public static long AsymJunctions;
     /// <summary>Мутация P3D_DRPRINCIPAL=0: сопряжённые полудиаметры вместо главных осей эллипса сечения.</summary>
     static readonly bool PrincipalAxes = Environment.GetEnvironmentVariable("P3D_DRPRINCIPAL") != "0";
     /// <summary>Мутация P3D_DRCORNERS=0: угловой узел из трёх рёбер — отказ, прежний построитель.</summary>
     static readonly bool Corners = Environment.GetEnvironmentVariable("P3D_DRCORNERS") != "0";
+    /// <summary>06.13: угол из n &gt; 3 скруглений (все рёбра вершины степени n, плоские грани, общий шар) — сферический
+    /// n-угольник (мутация P3D_DRNCORNER=0 — отказ, как прежде).</summary>
+    static readonly bool NCorner = Environment.GetEnvironmentVariable("P3D_DRNCORNER") != "0";
+    public static long NCorners;
     static readonly bool TrueNormal = Environment.GetEnvironmentVariable("P3D_DRTRUENORMAL") != "0";
     static readonly bool ChamferOff = Environment.GetEnvironmentVariable("P3D_DIRECTCHAMFER") == "0";
     static readonly bool Prov = Environment.GetEnvironmentVariable("P3D_DRPROVENANCE") != "0";
     static readonly bool Lazy = Environment.GetEnvironmentVariable("P3D_DRLAZY") != "0";
     static readonly bool LineCyl = Environment.GetEnvironmentVariable("P3D_DRLINECYL") != "0";
+    /// <summary>06.15: фаска прямого ребра плоскость/цилиндр вдоль оси прямым построителем (мутация P3D_DRLINECYLCH=0 — прежний путь резцов).</summary>
+    static readonly bool LineCylCh = Environment.GetEnvironmentVariable("P3D_DRLINECYLCH") != "0";
+    public static long LineCylChamfers;
     static readonly bool ConvGeom = Environment.GetEnvironmentVariable("P3D_DRCONVGEOM") != "0";
     static readonly bool Scan = Environment.GetEnvironmentVariable("P3D_DRSCAN") != "0";
     static readonly bool Circles = Environment.GetEnvironmentVariable("P3D_DRCIRCLES") != "0";
@@ -83,7 +94,7 @@ public static partial class DirectRound
     public static bool TryChamfer(List<TSolid> bodies, IReadOnlyList<EdgeRef> refs, double d1, double d2, List<string> warnings)
     {
         bool unequal = Math.Abs(d1 - d2) > 1e-9 * Math.Max(1, d1);
-        if (Off || ChamferOff || refs.Count == 0 || !(d1 > 0) || !(d2 > 0) || (unequal && UnequalOff) || OwnerBody(bodies, refs) is not int k) return false;
+        if (Off || OffForTest || ChamferOff || refs.Count == 0 || !(d1 > 0) || !(d2 > 0) || (unequal && UnequalOff) || OwnerBody(bodies, refs) is not int k) return false;
         string? why = null;
         if (unequal)
         {
@@ -264,7 +275,7 @@ public static partial class DirectRound
         }
         foreach (var e in edges)
             foreach (var p in new[] { e.V0.P, e.V1.P })
-                if (edges.Count(x => (x.V0.P - p).Length < 1e-7 || (x.V1.P - p).Length < 1e-7) is int nsel && (nsel > 3 || (nsel == 3 && !Corners))) { why = "three or more selected edges meet at a vertex (corner off or degree > 3)"; return null; }
+                if (edges.Count(x => (x.V0.P - p).Length < 1e-7 || (x.V1.P - p).Length < 1e-7) is int nsel && ((nsel > 3 && (!NCorner || ch || !Corners)) || (nsel == 3 && !Corners))) { why = "three or more selected edges meet at a vertex (corner off or degree > 3)"; return null; }
                 else if (ChainMate(e, p) != null && !Chains) { why = "selected edges share a vertex (chains off)"; return null; }
 
         // смежность по положению (вершинные списки ведут не все построители)
@@ -319,6 +330,7 @@ public static partial class DirectRound
         if (circs.Count > 0 && !CircularBlends(circs, byFace, blends, r, ch, ref why)) return null;
         if (closedCC.Count > 0 && !CylCylBlends(body, closedCC, byFace, blends, r, ref why)) return null;
         var corners = new Dictionary<Vector3d, (Vector3d C, Vector3d[] Ns, List<(Vector3d A, Vector3d B, ICurve3 Arc)> Arcs)>();
+        var asymFix = new List<(FDesc Fb, TEdge E3, Vector3d P, Vector3d R, ICurve3 Sec)>();
         // выпуклость ребра: (n1 × n2)·t1 > 0 по направлению ребра в контуре первой грани
         int? SigmaOf(TEdge e)
         {
@@ -358,7 +370,7 @@ public static partial class DirectRound
             // ПЛОСКОСТЬ/ЦИЛИНДР (06.11): прямое ребро вдоль оси цилиндра — скругление (фаска — прежний построитель)
             bool mixed = !(F1.Surf.IsPlanar && F2.Surf.IsPlanar);
             if (law != null && mixed) { why = "variable radius: plane/plane only"; return null; }
-            if (mixed && !(LineCyl && !ch && ((F1.Surf.IsPlanar && F2.IsCyl) || (F2.Surf.IsPlanar && F1.IsCyl))))
+            if (mixed && !(LineCyl && (!ch || LineCylCh) && ((F1.Surf.IsPlanar && F2.IsCyl) || (F2.Surf.IsPlanar && F1.IsCyl))))
             { why = "a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only)"; return null; }
             var n1 = F1.Surf.IsPlanar ? F1.N : NormalOf(F1, e.V0.P); var n2 = F2.Surf.IsPlanar ? F2.N : NormalOf(F2, e.V0.P);
             if (n1.Length < 1e-12 || n2.Length < 1e-12) { why = "face normal undefined"; return null; }
@@ -395,6 +407,14 @@ public static partial class DirectRound
                     lq10 = q10; lq20 = q20;
                 }
             }
+            else if (ch)
+            {
+                // ФАСКА прямого ребра плоскость/цилиндр вдоль оси (06.15): контакты — ниже, после размеров по граням
+                var Pl = F1.Surf.IsPlanar ? F1 : F2; Cy = Pl == F1 ? F2 : F1;
+                if (Math.Abs(Math.Abs(Vector3d.Dot(Cy.AxW, t)) - 1) > 1e-12) { why = "plane/cylinder: the edge is not along the cylinder axis"; return null; }
+                A0c = Cy.AxO + Cy.AxW * Vector3d.Dot(P0 - Cy.AxO, Cy.AxW);
+                C0 = P0; q10 = P0; q20 = P0;
+            }
             else
             {
                 // сечение поперёк оси: центр шара — на расстоянии σr от плоскости и ρ = R + σ·s·r от оси цилиндра (s = +1 —
@@ -422,7 +442,23 @@ public static partial class DirectRound
                 if (!cm.First.TryGetValue(e, out var f1st)) { why = "unequal chamfer: the first-size face is unknown"; return null; }
                 dF1 = ReferenceEquals(F1.Orig, f1st) ? cm.D1 : cm.D2; dF2 = ReferenceEquals(F2.Orig, f1st) ? cm.D1 : cm.D2;
             }
-            Vector3d Q(int i, Vector3d onSpine) => ch ? P0 + (i == 1 ? u1 * dF1 : u2 * dF2) : (i == 1 ? q10 : q20);
+            if (mixed && ch)
+            {
+                // плоскость: P0 + d·u (поперёк ребра в плоскости); цилиндр — точка сечения на ХОРДЕ d от ребра (как у
+                // BRepFilletAPI_MakeChamfer: сверка объёмов до 1e-12), поворот вокруг оси на φ = 2·asin(d/2R) в сторону грани.
+                // Грань фаски — плоскость через две прямые, параллельные оси.
+                bool plFirst = F1.Surf.IsPlanar;
+                double dPl = plFirst ? dF1 : dF2, dCy = plFirst ? dF2 : dF1;
+                if (!(dCy < 2 * Cy!.AxR * 0.999)) { why = "plane/cylinder chamfer: size too large for the cylinder"; return null; }
+                var rad = (P0 - A0c); double Rc = rad.Length; rad /= Rc;
+                var uc = plFirst ? u2 : u1; uc = (uc - rad * Vector3d.Dot(uc, rad) - t * Vector3d.Dot(uc, t)).Normalized();
+                double phi = 2 * Math.Asin(dCy / (2 * Rc));
+                var qC = A0c + rad * (Rc * Math.Cos(phi)) + uc * (Rc * Math.Sin(phi));
+                var qP = P0 + (plFirst ? u1 : u2) * dPl;
+                q10 = plFirst ? qP : qC; q20 = plFirst ? qC : qP; qCyl0 = qC;
+                Interlocked.Increment(ref LineCylChamfers);
+            }
+            Vector3d Q(int i, Vector3d onSpine) => ch ? (mixed ? (i == 1 ? q10 : q20) : P0 + (i == 1 ? u1 * dF1 : u2 * dF2)) : (i == 1 ? q10 : q20);
             var dir1 = (q10 - C0) / (law != null ? lr0 : r); var dir2 = (q20 - C0) / (law != null ? lr0 : r);   // направления от оси к контактам
             // базис сечения
             var e1 = (dir1 - t * Vector3d.Dot(dir1, t)).Normalized(); var e2 = Vector3d.Cross(t, e1);
@@ -431,28 +467,40 @@ public static partial class DirectRound
             double dth = th2 - th1; while (dth > Math.PI) dth -= 2 * Math.PI; while (dth < -Math.PI) dth += 2 * Math.PI;
 
             var endPts = new Dictionary<int, (Vector3d Q1, Vector3d Q2, ICurve3 Arc)>();
+            var chainOf = new Dictionary<int, List<(ICurve3 C, Vector3d A, Vector3d B)>>();   // торец из нескольких кривых: от Q1 к Q2
             foreach (var (vi, V) in new[] { (0, P0), (1, P1) })
             {
                 var inc = At(V);
-                if (inc.Count != 3) { why = $"vertex of degree {inc.Count}"; return null; }
                 var others = inc.Where(x => x != e).ToList();
+                // вершина степени n > 3 — только угол, где выбраны все n рёбер (06.13)
+                bool nCorner = inc.Count > 3 && NCorner && !ch && Corners && !mixed
+                    && others.All(x => edges.Contains(x));
+                if (inc.Count != 3 && !nCorner) { why = $"vertex of degree {inc.Count}"; return null; }
                 if (others.Any(x => x.Curve is not LineCurve3 && !(mixed && x.Curve is ArcCurve3))) { why = "curved neighbour edge"; return null; }
                 if (mixed && edges.Any(x => x != e && ((x.V0.P - V).Length < 1e-7 || (x.V1.P - V).Length < 1e-7))) { why = "plane/cylinder: chains and corners not in this family"; return null; }
                 var cornerSel = edges.Where(x => x != e && ((x.V0.P - V).Length < 1e-7 || (x.V1.P - V).Length < 1e-7)).ToList();
-                if (cornerSel.Count == 2)
+                if (cornerSel.Count >= 2 && cornerSel.Count == inc.Count - 1)
                 {
                     // УГЛОВОЙ УЗЕЛ (06.13): три выбранных ребра в вершине степени 3 — шар радиуса r, касающийся трёх граней
                     // (центр C — пересечение трёх смещённых плоскостей). Цилиндр касается шара по большой окружности в
                     // плоскости через C поперёк оси: торец ленты — эта дуга; угол — сферический треугольник из трёх дуг.
                     if (cornerSel.Any(x => sigmaOf[x] != (int)sigma)) { why = "corner of convex and concave edges"; return null; }
                     var cf = edges.Where(x => x == e || cornerSel.Contains(x)).SelectMany(x => x.CoEdges.Select(c => c.Loop?.Face)).OfType<TFace>().Distinct().ToList();
-                    if (cf.Count != 3 || cf.Any(f => !byFace[f].Surf.IsPlanar)) { why = "corner faces are not three planes"; return null; }
+                    if (cf.Count != inc.Count || cf.Any(f => !byFace[f].Surf.IsPlanar)) { why = "corner faces are not planes, one per edge"; return null; }
                     if (!corners.TryGetValue(V, out var cr))
                     {
                         var ns = cf.Select(f => byFace[f].N).ToArray();
                         var ds = ns.Select(n => Vector3d.Dot(n, V) + sigma * r).ToArray();   // n·C = n·V + σ r
-                        var Cc = Solve3(ns, ds);
+                        Vector3d? Cc = null;
+                        for (int i0 = 0; i0 < ns.Length && Cc == null; i0++)
+                            for (int i1 = i0 + 1; i1 < ns.Length && Cc == null; i1++)
+                                for (int i2 = i1 + 1; i2 < ns.Length && Cc == null; i2++)
+                                    Cc = Solve3(new[] { ns[i0], ns[i1], ns[i2] }, new[] { ds[i0], ds[i1], ds[i2] });
                         if (Cc == null) { why = "corner planes degenerate"; return null; }
+                        // n > 3: шар должен касаться ВСЕХ граней (иначе угол — не сфера: заполнение общего вида — отказ)
+                        for (int i = 0; i < ns.Length; i++)
+                            if (Math.Abs(Vector3d.Dot(ns[i], Cc.Value) - ds[i]) > 1e-9 * Math.Max(1, r)) { why = "corner of degree > 3 without a common ball"; return null; }
+                        if (ns.Length > 3) Interlocked.Increment(ref NCorners);
                         cr = (Cc.Value, ns, new List<(Vector3d A, Vector3d B, ICurve3 Arc)>());
                         corners[V] = cr;
                     }
@@ -525,6 +573,71 @@ public static partial class DirectRound
                         }
                         if (Pt(1) is not { } mm1 || Pt(2) is not { } mm2) { why = "unequal chamfer: chain contact lines do not meet"; return null; }
                         m1 = mm1; m2 = mm2;
+                    }
+                    // KRN-06 (06.10): НЕСИММЕТРИЧНЫЙ СТЫК (n_c·n_a ≠ n_c·n_b). Оси двух цилиндров лежат в плоскости, смещённой от
+                    // общей грани на r, и пересекаются в O; цилиндры равного радиуса пересекаются по плоскому эллипсу в плоскости
+                    // через O с нормалью t_e − t_m (направления рёбер от вершины). Эллипс идёт от общей точки контакта на общей
+                    // грани и раньше доходит до контактной прямой одного из цилиндров на его необщей грани (точка P); другой
+                    // цилиндр продолжается до необщей грани соседа: от P по сечению этой плоскостью до R — своей контактной прямой
+                    // на ней (R лежит на третьем ребре). Так строит и OpenCascade (два цилиндра, без углового лоскута).
+                    // Мутация P3D_DRASYM=0 — прежний отказ.
+                    if (!ch && law == null && !AsymOff)
+                    {
+                        var Fc = fs[0] == Fa ? fs[1] : fs[0];
+                        var nc = byFace[Fc].N.Normalized(); var nA = na.Normalized(); var nB = nb.Normalized();
+                        // ось соседа: та же формула хребта
+                        var mfs = mate.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
+                        var mn1 = byFace[mfs[0]].N.Normalized(); var mn2 = byFace[mfs[1]].N.Normalized(); double mc12 = Vector3d.Dot(mn1, mn2);
+                        var mC0 = mate.V0.P + (mn1 + mn2) * (sigma * r / (1 + mc12)); var mt = (mate.V1.P - mate.V0.P).Normalized();
+                        var Oax = MeetLines(C0, t, mC0, mt, Math.Max(1, (V - C0).Length));
+                        if (Oax == null) { why = "chain: blend axes do not meet"; return null; }
+                        var O = Oax.Value;
+                        var tAway = (Vector3d.Dot(t, (P0 + P1) / 2 - V) > 0 ? t : -t);
+                        var oV = (mate.V0.P - V).Length < 1e-7 ? mate.V1.P : mate.V0.P; var mAway = (oV - V).Normalized();
+                        var nE = (tAway - mAway).Normalized();
+                        var QC = O - nc * (sigma * r);
+                        Vector3d HitPlane(Vector3d q, Vector3d d, Vector3d pp, Vector3d pn) => q + d * (Vector3d.Dot(pp - q, pn) / Vector3d.Dot(d, pn));
+                        var PX = HitPlane(O - nA * (sigma * r), t, O, nE);      // эллипс ∩ контакт ребра на его необщей грани
+                        var PY = HitPlane(O - nB * (sigma * r), mt, O, nE);     // эллипс ∩ контакт соседа на его необщей грани
+                        if ((PX - PY).Length > 1e-9 * Math.Max(1, r))
+                        {
+                            // угол на цилиндре ребра от контакта на общей грани
+                            Vector3d Dir(Vector3d x) { var d = x - O; d -= t * Vector3d.Dot(d, t); return d.Normalized(); }
+                            double Ang(Vector3d x) => Math.Acos(Math.Clamp(Vector3d.Dot(Dir(x), -nc * sigma), -1, 1));
+                            bool otherFirst = Ang(PY) < Ang(PX);               // эллипс раньше доходит до контакта соседа
+                            Vector3d endFa; var ch3 = new List<(ICurve3 C, Vector3d A, Vector3d B)>();
+                            double ThX(Vector3d x) => Th(Dir(x));
+                            double Sweep(double a0, double a1) { double d = a1 - a0; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
+                            if (otherFirst)
+                            {
+                                // эллипс QC → PY, затем сечение плоскостью необщей грани соседа PY → R
+                                var R = HitPlane(O - nA * (sigma * r), t, e3.V0.P, nB);
+                                var ell = Section(C0, t, e1, e2, r, O, nE, ThX(QC), Sweep(ThX(QC), ThX(PY)));
+                                var sec = Section(C0, t, e1, e2, r, e3.V0.P, nB, ThX(PY), Sweep(ThX(PY), ThX(R)));
+                                ch3.Add((ell, QC, PY)); ch3.Add((sec, PY, R)); endFa = R;
+                                asymFix.Add((byFace[Fb], e3, PY, R, sec));
+                            }
+                            else
+                            {
+                                var ell = Section(C0, t, e1, e2, r, O, nE, ThX(QC), Sweep(ThX(QC), ThX(PX)));
+                                ch3.Add((ell, QC, PX)); endFa = PX;
+                            }
+                            foreach (var (cc, ca, cb) in ch3)
+                                if ((cc.PointAt(cc.T0) - ca).Length > 1e-7 || (cc.PointAt(cc.T1) - cb).Length > 1e-7) { why = "asymmetric chain: junction curve does not meet its points"; return null; }
+                            // контакт на необщей грани — внутри третьего ребра (R) или на нём (P на своей контактной прямой — внутри ребра)
+                            if (otherFirst)
+                            {
+                                var a = e3.V0.P; var b = e3.V1.P; double len = (b - a).Length;
+                                var chk = endFa;
+                                double u = Vector3d.Dot(chk - a, b - a) / (len * len), dist = ((a + (b - a) * u) - chk).Length;
+                                if (dist > 1e-7 * Math.Max(1, len) || u <= 1e-6 || u >= 1 - 1e-6) { why = "radius too large for the chain's third edge"; return null; }
+                            }
+                            bool f1c = byFace[Fc] == F1;                        // Q1 — на F1
+                            var q1a = f1c ? QC : endFa; var q2a = f1c ? endFa : QC;
+                            if (!f1c) { ch3.Reverse(); ch3 = ch3.Select(x => (x.C, x.B, x.A)).ToList(); }
+                            endPts[vi] = (q1a, q2a, ch3[0].C); chainOf[vi] = ch3; Interlocked.Increment(ref AsymJunctions);
+                            continue;
+                        }
                     }
                     // контакт на необщей грани — внутри третьего ребра
                     var qa3 = byFace[Fa] == F1 ? m1 : m2;
@@ -653,13 +766,12 @@ public static partial class DirectRound
                 }
             }
             var a0 = endPts[0]; var a1 = endPts[1];
-            var loopB = new List<Seg>
-            {
-                new() { Curve = new LineCurve3(a0.Q1, a1.Q1), A = a0.Q1, B = a1.Q1 },
-                new() { Curve = a1.Arc, A = a1.Q1, B = a1.Q2 },
-                new() { Curve = new LineCurve3(a1.Q2, a0.Q2), A = a1.Q2, B = a0.Q2 },
-                new() { Curve = a0.Arc, A = a0.Q2, B = a0.Q1 },
-            };
+            var loopB = new List<Seg> { new() { Curve = new LineCurve3(a0.Q1, a1.Q1), A = a0.Q1, B = a1.Q1 } };
+            if (chainOf.TryGetValue(1, out var cb1)) foreach (var (cc, ca, cbb) in cb1) loopB.Add(new() { Curve = cc, A = ca, B = cbb });
+            else loopB.Add(new() { Curve = a1.Arc, A = a1.Q1, B = a1.Q2 });
+            loopB.Add(new() { Curve = new LineCurve3(a1.Q2, a0.Q2), A = a1.Q2, B = a0.Q2 });
+            if (chainOf.TryGetValue(0, out var cb0)) foreach (var (cc, ca, cbb) in Enumerable.Reverse(cb0)) loopB.Add(new() { Curve = cc, A = cbb, B = ca });
+            else loopB.Add(new() { Curve = a0.Arc, A = a0.Q2, B = a0.Q1 });
             var mid = ch ? (Q(1, C0) + Q(2, C0)) / 2 + t * (L / 2) : C0 + t * (L / 2) + (e1 * Math.Cos(th1 + dth / 2) + e2 * Math.Sin(th1 + dth / 2)) * r;
             // обход ленты — согласованно с соседней гранью F1: общая контактная прямая проходится ими во встречных
             // направлениях (как и всё соседство тела; нормализация выравнивает именно это)
@@ -676,12 +788,32 @@ public static partial class DirectRound
             blends.Add(bl);
         }
 
+        // 06.10: несимметричные стыки — третье ребро на необщей грани соседа укоротить до R, между P и R — сечение
+        foreach (var (Fb, e3, Pp, Rr, sec) in asymFix)
+        {
+            bool done = false;
+            foreach (var loop in Fb.Loops)
+                for (int k = 0; k < loop.Count && !done; k++)
+                {
+                    var s0 = loop[k];
+                    if (s0.Id != e3 && s0.Orig != e3) continue;
+                    bool atA = (s0.A - Pp).Length < 1e-7, atB = (s0.B - Pp).Length < 1e-7;
+                    if (!atA && !atB) continue;
+                    var sh = atA ? Shorten(s0, Rr, null) : Shorten(s0, null, Rr);
+                    if (sh == null) { why = "asymmetric chain: the third edge cannot be shortened"; return null; }
+                    sh.Id = e3; loop[k] = sh;
+                    if (atA) loop.Insert(k, new Seg { Curve = sec, A = Pp, B = Rr });
+                    else loop.Insert(k + 1, new Seg { Curve = sec, A = Rr, B = Pp });
+                    Fb.Touched = true; done = true;
+                }
+            if (!done) { why = "asymmetric chain: the neighbour's third edge not found"; return null; }
+        }
         // угловые сферические треугольники
         foreach (var (V, cr) in corners)
         {
-            if (cr.Arcs.Count != 3) { why = "corner with a missing blend"; return null; }
+            if (cr.Arcs.Count != cr.Ns.Length) { why = "corner with a missing blend"; return null; }
             double sg = sigmaOf[edges.First(x => (x.V0.P - V).Length < 1e-7 || (x.V1.P - V).Length < 1e-7)]!.Value;
-            var dsum = cr.Ns[0] + cr.Ns[1] + cr.Ns[2];
+            var dsum = cr.Ns.Aggregate(Vector3d.Zero, (a, b) => a + b);
             var dir = (-dsum * sg).Normalized();                 // от центра к середине треугольника
             var helper = Math.Abs(dir.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY;
             var W = Vector3d.Cross(dir, helper).Normalized(); var U = -dir; var Vv = Vector3d.Cross(W, U);
