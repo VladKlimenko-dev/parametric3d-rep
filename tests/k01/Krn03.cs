@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
@@ -251,15 +251,22 @@ static partial class Program
             var b = new List<TSolid> { Box(-30, -30, -30, 60, 60, 60) }; var w = new List<string>();
             BooleanOp.Subtract(b, moved, w);
             double v0 = AnalyticVolume.Of(b[0]) ?? double.NaN;
+            // m.f3: прямой построитель вершины берёт этот угол первым; здесь проверяется путь резцов и булевой, а прямой
+            // результат сверяется с ним по объёму
+            var direct = new List<TSolid> { TransformOp.Copy(b[0], TransformOp.Move(Vector3d.Zero)) };
+            VertexOp.Round(direct, new Vector3d(0, 0, 10.5), 4, w);
             string last = "";
             BooleanOp.EvaluateOutcomeProbe = m => last = m;
+            DirectRound.OffForTest = true;
             try { VertexOp.Round(b, new Vector3d(0, 0, 10.5), 4, w); }
-            finally { BooleanOp.EvaluateOutcomeProbe = null; }
+            finally { BooleanOp.EvaluateOutcomeProbe = null; DirectRound.OffForTest = false; }
+            double dv = AnalyticVolume.Of(direct[0]) ?? double.NaN;
             var rep = SolidValidator.Validate(b[0]);
             double av = AnalyticVolume.Of(b[0]) ?? double.NaN, mv = rep.Metrics.GetValueOrDefault("mesh.volume", double.NaN);
             Require(rep.IsValid, rep.Summary());
             Require(last == "ExactAnalytic", $"the union is {last}, not analytic");
             Require(av > v0 && Math.Abs(av - mv) < 1e-4 * mv, $"volume {v0:G10} → {av:G10}, mesh {mv:G10}");
+            Require(SolidValidator.Validate(direct[0]).IsValid && Math.Abs(dv - av) < 1e-4 * av, $"direct {dv:G12} vs boolean {av:G12}");
         });
         // KRN-03 (03.5, 03.6): ИНВАРИАНТ ОБОЛОЧЕК ПОСЛЕ ЛЮБОЙ ОПЕРАЦИИ ДЕТАЛИ. Замер корпуса (P3D_SHELLSTAT=1): 2105 результатов
         // 28 видов операций — все с одной компонентой на оболочку, но полостей среди них нет; здесь — полость через операцию

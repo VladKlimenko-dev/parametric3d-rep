@@ -393,6 +393,8 @@ static partial class Program
         if (mode is "query" or "allA") QueryChecks();
         if (mode is "query" or "allA") QueryChecks2();
         if (mode is "units" or "allA") UnitsChecks();
+        if (mode is "vdirect" or "allA") VertexDirectChecks();
+        if (mode is "predicates" or "allA") PredicateChecks();
         if (mode is "selfone")
         {
             var rnd = new Random(20261011); TSolid a = null!; string d = "";

@@ -128,6 +128,8 @@ public static class VertexOp
             if (d[i] <= Tol.Weld) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Vertex chamfer: distances must be greater than zero.");
             if (d[i] >= c.Lengths[i] - Tol.Weld) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"Vertex chamfer: distance {d[i]:0.###} does not fit on an edge of length {c.Lengths[i]:0.###}.");
         }
+        // m.f3: прямое построение (точная плоскость, рёбра укорочены); не подошло — резцы и булева, как прежде
+        if (DirectRound.TryVertex(bodies, point, null, d, warnings)) return;
         var q = Enumerable.Range(0, n).Select(i => c.P + c.Dirs[i] * d[i]).ToArray();
         var tool = CornerRegion(c, q, warnings) ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Vertex chamfer: the cut region could not be built.");
         // Вогнутый угол — фаска ДОБАВЛЯЕТ материал: заполняется та же оболочка «вершина + точки».
@@ -144,6 +146,8 @@ public static class VertexOp
         var (centre, cut) = RoundGeometry(c, r);
         for (int i = 0; i < n; i++)
             if (cut[i] >= c.Lengths[i] - Tol.Weld) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"Vertex round: radius {r:0.###} needs a setback of {cut[i]:0.###} that does not fit on an edge of length {c.Lengths[i]:0.###}.");
+        // m.f3: прямое построение (точная сфера, касание рёбер точно); не подошло — шар-резец и булева, как прежде
+        if (DirectRound.TryVertex(bodies, point, r, null, warnings)) return;
         var q = Enumerable.Range(0, n).Select(i => c.P + c.Dirs[i] * cut[i]).ToArray();   // где сфера встречает рёбра
         // Шар-резец чуть больше (на 2e-6 R): точное касание сферы и ребра — вырожденный случай
         // для многогранной булевой (касание ребра вершиной гранёного шара давало у точки касания

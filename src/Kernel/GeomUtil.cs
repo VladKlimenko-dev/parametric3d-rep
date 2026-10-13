@@ -60,6 +60,7 @@ public static class GeomUtil
     /// <summary>Строгое пересечение двух отрезков во внутренних точках.</summary>
     private static bool SegmentsCross(Vector2d a1, Vector2d a2, Vector2d b1, Vector2d b2)
     {
+        if (ExactPred) return Robust.Predicates.SegmentsCrossProperly(a1, a2, b1, b2);
         double d1 = Cross2(b2 - b1, a1 - b1);
         double d2 = Cross2(b2 - b1, a2 - b1);
         double d3 = Cross2(a2 - a1, b1 - a1);
@@ -71,6 +72,7 @@ public static class GeomUtil
     }
 
     private static double Cross2(Vector2d a, Vector2d b) => a.X * b.Y - a.Y * b.X;
+    static readonly bool ExactPred = Environment.GetEnvironmentVariable("P3D_PREDICATES") != "0";
 
     public static bool PointInPolygon(IReadOnlyList<Vector2d> poly, Vector2d p)
     {
@@ -81,6 +83,13 @@ public static class GeomUtil
             Vector2d a = poly[i], b = poly[j];
             if ((a.Y > p.Y) != (b.Y > p.Y))
             {
+                // KRN-02 (02.4): сторона точки от звена — точным предикатом (звено снизу вверх: слева — пересечение луча)
+                if (ExactPred)
+                {
+                    var (lo, hi) = a.Y < b.Y ? (a, b) : (b, a);
+                    if (Robust.Predicates.Orient2D(lo, hi, p) > 0) inside = !inside;
+                    continue;
+                }
                 double x = (b.X - a.X) * (p.Y - a.Y) / (b.Y - a.Y) + a.X;
                 if (p.X < x) inside = !inside;
             }

@@ -18,6 +18,9 @@ public static class Cdt
 {
     /// <summary>ДИАГНОСТИКА: причина отказа.</summary>
     public static Action<string>? Debug;
+    /// <summary>KRN-02 (02.4): точные предикаты (Robust.Predicates) вместо определителей с абсолютными порогами 1e-12…1e-18.
+    /// Мутация P3D_PREDICATES=0 — прежние определители.</summary>
+    internal static readonly bool ExactPred = Environment.GetEnvironmentVariable("P3D_PREDICATES") != "0";
 
     /// <param name="outer">Внешний контур (без повтора первой точки).</param>
     /// <param name="holes">Отверстия.</param>
@@ -72,7 +75,7 @@ public static class Cdt
         // Следующий flip мог склеить несоседние треугольники и изменить площадь.
         // Поддерживаем направленные стороны после каждого flip; все треугольники CCW.
         for (int t = 0; t + 2 < tris.Count; t += 3)
-            if (Cross(pts[tris[t]], pts[tris[t + 1]], pts[tris[t + 2]]) < 0)
+            if (ExactPred ? Robust.Predicates.Orient2D(pts[tris[t]], pts[tris[t + 1]], pts[tris[t + 2]]) < 0 : Cross(pts[tris[t]], pts[tris[t + 1]], pts[tris[t + 2]]) < 0)
                 (tris[t + 1], tris[t + 2]) = (tris[t + 2], tris[t + 1]);
 
         var map = Sides(tris);
@@ -113,6 +116,12 @@ public static class Cdt
     /// <summary>Лежит ли d внутри окружности, описанной около abc (для перестановки сторон).</summary>
     private static bool InCircleForFlip(Vector2d a, Vector2d b, Vector2d c, Vector2d d)
     {
+        if (ExactPred)
+        {
+            int o = Robust.Predicates.Orient2D(a, b, c);
+            if (o == 0) return false;
+            return Robust.Predicates.InCircle(a, b, c, d) * o > 0;
+        }
         double orient = (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
         if (Math.Abs(orient) < 1e-15) return false;
 
@@ -349,6 +358,7 @@ public static class Cdt
     /// </summary>
     private static bool CanFlip(List<Vector2d> p, int u, int v, int c, int dd)
     {
+        if (ExactPred) return Robust.Predicates.SegmentsCrossProperly(p[u], p[v], p[c], p[dd]);
         double s1 = Cross(p[u], p[v], p[c]), s2 = Cross(p[u], p[v], p[dd]);
         double s3 = Cross(p[c], p[dd], p[u]), s4 = Cross(p[c], p[dd], p[v]);
         return s1 * s2 < 0 && s3 * s4 < 0;
@@ -403,10 +413,12 @@ public static class Cdt
             for (int step = 0; step < count; step++)
             {
                 Vector2d a = p[T[at]], b = p[T[at + 1]], c = p[T[at + 2]];
-                double s2 = Math.Sign(Cross(a, b, c));
+                double s2 = ExactPred ? Robust.Predicates.Orient2D(a, b, c) : Math.Sign(Cross(a, b, c));
                 if (s2 == 0) break;
 
-                double d1 = Cross(a, b, q) * s2, d2 = Cross(b, c, q) * s2, d3 = Cross(c, a, q) * s2;
+                double d1, d2, d3;
+                if (ExactPred) { d1 = Robust.Predicates.Orient2D(a, b, q) * s2; d2 = Robust.Predicates.Orient2D(b, c, q) * s2; d3 = Robust.Predicates.Orient2D(c, a, q) * s2; }
+                else { d1 = Cross(a, b, q) * s2; d2 = Cross(b, c, q) * s2; d3 = Cross(c, a, q) * s2; }
 
                 if (d1 >= 0 && d2 >= 0 && d3 >= 0) { _lastFound = at / 3; return at; }
 
@@ -427,10 +439,11 @@ public static class Cdt
         {
             int t = ((start + step) % count) * 3;
             Vector2d a = p[T[t]], b = p[T[t + 1]], c = p[T[t + 2]];
-            double s = Math.Sign(Cross(a, b, c));
+            double s = ExactPred ? Robust.Predicates.Orient2D(a, b, c) : Math.Sign(Cross(a, b, c));
             if (s == 0) continue;
             double d1 = Cross(a, b, q) * s, d2 = Cross(b, c, q) * s, d3 = Cross(c, a, q) * s;
-            if (d1 >= 0 && d2 >= 0 && d3 >= 0) { _lastFound = t / 3; return t; }
+            if (ExactPred ? Robust.Predicates.Orient2D(a, b, q) * s >= 0 && Robust.Predicates.Orient2D(b, c, q) * s >= 0 && Robust.Predicates.Orient2D(c, a, q) * s >= 0
+                          : d1 >= 0 && d2 >= 0 && d3 >= 0) { _lastFound = t / 3; return t; }
             double outside = -Math.Min(d1, Math.Min(d2, d3));
             if (outside < bestD) { bestD = outside; best = t; }
         }
@@ -565,6 +578,12 @@ public static class Cdt
     /// <summary>Точка d внутри описанной окружности треугольника (a, b, c) (a, b, c против часовой).</summary>
     private static bool InCircle(Vector2d a, Vector2d b, Vector2d c, Vector2d d)
     {
+        if (ExactPred)
+        {
+            int o = Robust.Predicates.Orient2D(a, b, c);
+            if (o == 0) return false;
+            return Robust.Predicates.InCircle(a, b, c, d) * o > 0;
+        }
         if (Cross(a, b, c) < 0) (b, c) = (c, b);
         double ax = a.X - d.X, ay = a.Y - d.Y;
         double bx = b.X - d.X, by = b.Y - d.Y;
@@ -628,6 +647,7 @@ public static class Cdt
 
     private static bool Crosses(Vector2d a, Vector2d b, Vector2d u, Vector2d v)
     {
+        if (ExactPred) return Robust.Predicates.SegmentsCrossProperly(a, b, u, v);
         double d1 = Cross(a, b, u), d2 = Cross(a, b, v), d3 = Cross(u, v, a), d4 = Cross(u, v, b);
         return d1 * d2 < 0 && d3 * d4 < 0;
     }

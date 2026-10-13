@@ -29,93 +29,24 @@ public enum PairClass
 /// </summary>
 internal static class ExactPredicates
 {
-    private const double Eps = 1.1102230246251565e-16;          // 2^-53
-    private const double O3dBound = (7 + 56 * Eps) * Eps;
-    private const double O2dBound = (3 + 16 * Eps) * Eps;
+    /// <summary>Знак (a−d)·((b−d)×(c−d)) — Robust.Predicates.Orient3D (одна конвенция для всего ядра, KRN-02 02.4).</summary>
+    public static int Orient3D(Vector3d a, Vector3d b, Vector3d c, Vector3d d) => Robust.Predicates.Orient3D(a, b, c, d);
 
-    /// <summary>Знак (a−d)·((b−d)×(c−d)): положителен, если d по ту сторону плоскости abc, куда смотрит … (как Orient прежней проверки).</summary>
-    public static int Orient3D(Vector3d a, Vector3d b, Vector3d c, Vector3d d)
-    {
-        double adx = a.X - d.X, ady = a.Y - d.Y, adz = a.Z - d.Z;
-        double bdx = b.X - d.X, bdy = b.Y - d.Y, bdz = b.Z - d.Z;
-        double cdx = c.X - d.X, cdy = c.Y - d.Y, cdz = c.Z - d.Z;
-        double bdxcdy = bdx * cdy, cdxbdy = cdx * bdy;
-        double cdxady = cdx * ady, adxcdy = adx * cdy;
-        double adxbdy = adx * bdy, bdxady = bdx * ady;
-        double det = adz * (bdxcdy - cdxbdy) + bdz * (cdxady - adxcdy) + cdz * (adxbdy - bdxady);
-        double permanent = (Math.Abs(bdxcdy) + Math.Abs(cdxbdy)) * Math.Abs(adz)
-                         + (Math.Abs(cdxady) + Math.Abs(adxcdy)) * Math.Abs(bdz)
-                         + (Math.Abs(adxbdy) + Math.Abs(bdxady)) * Math.Abs(cdz);
-        double bound = O3dBound * permanent;
-        if (det > bound) return 1;
-        if (-det > bound) return -1;
-        if (permanent == 0) return 0;
-        Exact++;
-        var v = Scale(stackalloc double[] { a.X, a.Y, a.Z, b.X, b.Y, b.Z, c.X, c.Y, c.Z, d.X, d.Y, d.Z });
-        BigInteger ax = v[0] - v[9], ay = v[1] - v[10], az = v[2] - v[11];
-        BigInteger bx = v[3] - v[9], by = v[4] - v[10], bz = v[5] - v[11];
-        BigInteger cx = v[6] - v[9], cy = v[7] - v[10], cz = v[8] - v[11];
-        var e = az * (bx * cy - cx * by) + bz * (cx * ay - ax * cy) + cz * (ax * by - bx * ay);
-        return e.Sign;
-    }
+    /// <summary>Знак (b−a)×(c−a) на плоскости — Robust.Predicates.Orient2D.</summary>
+    public static int Orient2D(double ax, double ay, double bx, double by, double cx, double cy) => Robust.Predicates.Orient2D(ax, ay, bx, by, cx, cy);
 
-    /// <summary>Знак (b−a)×(c−a) на плоскости.</summary>
-    public static int Orient2D(double ax, double ay, double bx, double by, double cx, double cy)
-    {
-        double l = (ax - cx) * (by - cy), r = (ay - cy) * (bx - cx);
-        double det = l - r;
-        double bound = O2dBound * (Math.Abs(l) + Math.Abs(r));
-        if (det > bound) return 1;
-        if (-det > bound) return -1;
-        if (l == 0 && r == 0) return 0;
-        Exact++;
-        var v = Scale(stackalloc double[] { ax, ay, bx, by, cx, cy });
-        return ((v[0] - v[4]) * (v[3] - v[5]) - (v[1] - v[5]) * (v[2] - v[4])).Sign;
-    }
-
-    /// <summary>Сколько раз понадобилась точная арифметика (для замеров).</summary>
-    [ThreadStatic] public static long Exact;
+    /// <summary>Сколько раз понадобилась точная арифметика (для замеров) — общий счётчик предикатов.</summary>
+    public static long Exact { get => Robust.Predicates.ExactFallbacks; set => Robust.Predicates.ExactFallbacks = value; }
 
     /// <summary>Точки → целые координаты с общим наименьшим порядком (точно; общий множитель 2^e не важен для знаков).</summary>
     internal static BigInteger[][] ScalePoints(IReadOnlyList<Vector3d> ps)
     {
         var flat = new double[ps.Count * 3];
         for (int i = 0; i < ps.Count; i++) { flat[3 * i] = ps[i].X; flat[3 * i + 1] = ps[i].Y; flat[3 * i + 2] = ps[i].Z; }
-        var v = Scale(flat);
+        var v = Robust.Predicates.Scale(flat);
         var r = new BigInteger[ps.Count][];
         for (int i = 0; i < ps.Count; i++) r[i] = new[] { v[3 * i], v[3 * i + 1], v[3 * i + 2] };
         return r;
-    }
-
-    /// <summary>double → целые с общим наименьшим порядком (точно).</summary>
-    private static BigInteger[] Scale(ReadOnlySpan<double> xs)
-    {
-        Span<long> m = stackalloc long[xs.Length]; Span<int> e = stackalloc int[xs.Length];
-        int emin = int.MaxValue;
-        for (int i = 0; i < xs.Length; i++)
-        {
-            (m[i], e[i]) = Decompose(xs[i]);
-            if (m[i] != 0) emin = Math.Min(emin, e[i]);
-        }
-        var r = new BigInteger[xs.Length];
-        for (int i = 0; i < xs.Length; i++)
-            r[i] = m[i] == 0 ? BigInteger.Zero : new BigInteger(m[i]) << (e[i] - emin);
-        return r;
-    }
-
-    /// <summary>x = m·2^e, m — целое со знаком (до 53 бит).</summary>
-    private static (long M, int E) Decompose(double x)
-    {
-        if (!double.IsFinite(x)) throw new ArgumentException("non-finite coordinate");
-        if (x == 0) return (0, 0);
-        long bits = BitConverter.DoubleToInt64Bits(x);
-        bool negative = bits < 0;
-        int exp = (int)((bits >> 52) & 0x7FF);
-        long mant = bits & 0xFFFFFFFFFFFFFL;
-        if (exp == 0) exp = 1; else mant |= 1L << 52;
-        exp -= 1075;
-        while ((mant & 1) == 0) { mant >>= 1; exp++; }
-        return (negative ? -mant : mant, exp);
     }
 }
 
