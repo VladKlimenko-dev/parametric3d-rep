@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
 
@@ -82,9 +82,11 @@ static partial class Program
                 var (a, wa) = Run(true); var (c, _) = Run(false);
                 double va = AnalyticVolume.Of(a) ?? double.NaN, vc = OpVolume(c);
                 bool direct = wa.Any(x => x.StartsWith("Chamfer: direct cut " + d1.ToString("0.###")));
-                string Areas(TSolid b) => string.Join(";", b.Faces.Where(f => !f.Tag.Contains("chamfer")).GroupBy(f => EdgeRef.Bare(f.Tag)).OrderBy(g => g.Key).Select(g => $"{g.Key}={g.Sum(f => AnalyticVolume.FaceArea(f) ?? double.NaN):F6}"));
+                // грани исходного тела (у пути резцов грань фаски носит имя резца — «revolve:…»); площадь — по модулю (знак — обход
+                // относительно рамки поверхности, у пересобранной грани рамка может быть обращена)
+                string Areas(TSolid b) => string.Join(";", b.Faces.Where(f => EdgeRef.Bare(f.Tag).StartsWith("extrude[")).GroupBy(f => EdgeRef.Bare(f.Tag)).OrderBy(g => g.Key).Select(g => $"{g.Key}={g.Sum(f => Math.Abs(AnalyticVolume.FaceArea(f) ?? double.NaN)):F6}"));
                 string sa = Areas(a), sc = Areas(c);
-                Log(new { test = "KRN06-UNEQUAL", name, direct, volume = va, cutter = vc, want, guarantee = a.Guarantee.ToString() });
+                Log(new { test = "KRN06-UNEQUAL", name, direct, volume = va, cutter = vc, cutterGuarantee = c.Guarantee.ToString(), want, guarantee = a.Guarantee.ToString() });
                 if (!direct) fails.Add($"{name}: not the direct builder ({string.Join(" | ", wa.Take(2))})");
                 if (want < 0)
                 {
@@ -93,7 +95,9 @@ static partial class Program
                     want = Math.Abs(va - Vp(d1)) < Math.Abs(va - Vp(d2)) ? Vp(d1) : Vp(d2);
                 }
                 if (!double.IsNaN(want) && Math.Abs(va - want) > 1e-9 * want) fails.Add($"{name}: V {va:R} vs {want:R}");
-                if (Math.Abs(va - vc) > 1e-6 * Math.Abs(va)) fails.Add($"{name}: V {va:R} vs cutter path {vc:R}");
+                // путь резцов у кромки отверстия — многогранный (вписанный многоугольник: +2.5 мм³ у R5 × 20), допуск 2e-4
+                double tolC = c.Guarantee == Parametric3D.Kernel.GuaranteeLevel.ExactAnalytic ? 1e-6 : 2e-4;
+                if (Math.Abs(va - vc) > tolC * Math.Abs(va)) fails.Add($"{name}: V {va:R} vs cutter path {vc:R} ({c.Guarantee})");
                 if (sa != sc) fails.Add($"{name}: face areas differ from the cutter path — sizes on other faces? [{sa}] vs [{sc}]");
                 if (a.Guarantee != Parametric3D.Kernel.GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(a).IsValid) fails.Add($"{name}: {a.Guarantee} {SolidValidator.Validate(a).Summary()}");
             }

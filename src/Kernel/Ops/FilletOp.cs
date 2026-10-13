@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -667,6 +667,23 @@ public static class FilletOp
             }
         }
 
+        // KRN-06 (06.13, g.02): ИТОГ ОБХОДНОГО ПУТИ — ПОЛНАЯ ПРОВЕРКА (B-rep, точная форма, сетка показа). Угол из четырёх
+        // скруглений без общего шара (пирамида с разными уклонами граней) давал микрорёбра 1e-6 мм у основания и сетку с
+        // рёбрами кратности 4 — тело принималось (защитная проверка смотрит объём и открытые рёбра своей разметки).
+        // Негодный итог — откат и отказ. Мутация P3D_FILLETFINALCHECK=0.
+        if (!FinalCheckOff && done > 0)
+            foreach (var b in bodies.Where(x => !original.Any(o => ReferenceEquals(o, x))))
+            {
+                ValidationReport vr;
+                using (Diagnostics.Prof.Time("скругление: итоговая проверка")) vr = SolidValidator.Validate(b);
+                if (vr.IsValid) continue;
+                var bad = vr.Issues.First(i => i.Severity == ValidationSeverity.Error);
+                bodies.Clear(); bodies.AddRange(original);
+                Interlocked.Increment(ref FinalCheckRefusals);
+                throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported,
+                    $"{what}: the result of the cutter route failed validation ({bad}) — not applied") { Entities = EdgeNames(bodies, edges) };
+            }
+
         if (done == 0 && edges.Count > 0)
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, $"{what}: none of the selected edges could be processed.")
             { Entities = EdgeNames(bodies, edges) };
@@ -702,6 +719,10 @@ public static class FilletOp
     /// мерить качество. Тонкую неточность поймает сверка с объёмной моделью,
     /// а здесь ловится то, после чего продолжать нельзя.
     /// </summary>
+    static readonly bool FinalCheckOff = Environment.GetEnvironmentVariable("P3D_FILLETFINALCHECK") == "0";
+    /// <summary>Число отказов итоговой проверки обходного пути (разбор).</summary>
+    public static long FinalCheckRefusals;
+
     private static string? Damage(List<TSolid> bodies, double volumeBefore, double toolWeight, bool adds, out double after)
     {
         after = volumeBefore;

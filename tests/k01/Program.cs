@@ -1,4 +1,4 @@
-// K01/K02 checks: unified validator, sphere reproducer, negative cases, corpus survey, fault injection.
+﻿// K01/K02 checks: unified validator, sphere reproducer, negative cases, corpus survey, fault injection.
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -420,6 +420,10 @@ static partial class Program
         if (mode is "krn06var" or "allB") Krn06VariableChecks();
         if (mode is "krn06uneq" or "allA") Krn06UnequalChecks();
         if (mode is "krn06tan" or "allA") Krn06TanLoopChecks();
+        if (mode is "krn06asym" or "allA") Krn06AsymChecks();
+        if (mode is "krn06lcch" or "allA") Krn06LineCylChamferChecks();
+        if (mode is "krn06probe2") Krn06Probe2();
+        if (mode is "krn06ncorner" or "allA") Krn06NCornerChecks();
         if (mode is "krn04uniq" or "allB") Krn04UniqChecks();
         if (mode is "krn07nurbs" or "allB") Krn07NurbsChecks();
         if (mode is "krn10prev" or "allA") Krn10PreviewChecks();
@@ -436,6 +440,7 @@ static partial class Program
         if (mode == "avfar") { AvFarProbe(); AvFarScene(); return; }
         if (mode == "cylcyl") { CylCylProbe(); return; }
         if (mode == "rbvol") { RollingBallProbe(); return; }
+        if (mode == "asymprobe") { AsymProbe(); return; }
         if (mode == "topo") { TopoProbe(); return; }
         if (mode == "ccvar") { CylCylVariants(); return; }
         if (mode == "ccpost") { CylCylPost(); return; }
