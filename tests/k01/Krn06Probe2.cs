@@ -271,4 +271,18 @@ static partial class Program
             Require(fails.Count == 0, string.Join("; ", fails));
         });
     }
+    /// <summary>Воспроизводитель (k37): брусок 40×40×60 и резцы через нижние рёбра, второй — повёрнут на 90°: булева оставляла
+    /// ребро 4.7e-8 мм и отказывала.</summary>
+    static void PyramidCutRepro()
+    {
+        var bl = new List<TSolid> { Box(0, 0, 0, 40, 40, 60) };
+        double deg = Math.Atan(0.5) * 180 / Math.PI;
+        var c0 = TransformOp.Copy(TransformOp.Copy(Box(0, -50, -50, 100, 200, 200), TransformOp.Rotate(Vector3d.Zero, Vector3d.UnitY, -deg)), TransformOp.Move(new Vector3d(40, -20, 0)));
+        for (int q = 0; q < 4; q++)
+        {
+            var w = new List<string>();
+            try { BooleanOp.Subtract(bl, TransformOp.Copy(c0, TransformOp.Rotate(new Vector3d(20, 20, 0), Vector3d.UnitZ, 90 * q)), w); Console.WriteLine($"cut {q}: ok V {AnalyticVolume.Of(bl[0]):R} faces {bl[0].Faces.Count()} {bl[0].Guarantee} | {string.Join(" | ", w.Take(2))}"); }
+            catch (Exception ex) { Console.WriteLine($"cut {q}: {ex.Message}"); return; }
+        }
+    }
 }
