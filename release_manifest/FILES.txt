@@ -5,6 +5,7 @@ src/Core/Ids.cs
 src/Core/P3DException.cs
 src/Core/Settings.cs
 src/Core/Tol.cs
+src/Core/Units.cs
 src/HANDOFF.md
 src/Kernel/Analytic/AnalyticFaceNurbs.cs
 src/Kernel/Analytic/Classifier.cs
@@ -97,6 +98,7 @@ src/Kernel/Ops/TransformOp.cs
 src/Kernel/Ops/VertexOp.cs
 src/Kernel/Ops/VertexSnap.cs
 src/Kernel/Query/BodyQuery.cs
+src/Kernel/Query/BodyQueryDistance.cs
 src/Kernel/Surfaces/BandNurbs.cs
 src/Kernel/Surfaces/FacetedSurface.cs
 src/Kernel/Surfaces/ISurface3.cs
@@ -184,6 +186,7 @@ src/Model/Mates/Constraint.cs
 src/Model/Mates/Mate.cs
 src/Model/ModelItem.cs
 src/Model/ModelSettings.cs
+src/Model/Params/ExprUnits.cs
 src/Model/Params/Expression.cs
 src/Model/Params/ParameterTable.cs
 src/Model/Part.cs
@@ -490,6 +493,7 @@ tests/k01/TouchProbe.cs
 tests/k01/TriProbe.cs
 tests/k01/TweakProbe.cs
 tests/k01/UniqProbe.cs
+tests/k01/UnitsChecks.cs
 tests/k01/VarRoundProbe.cs
 tests/k03bench/K03Bench.csproj
 tests/k03bench/Program.cs

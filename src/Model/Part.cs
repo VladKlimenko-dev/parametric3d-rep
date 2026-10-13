@@ -28,6 +28,8 @@ public sealed class Part : ModelItem
     public readonly List<Feature> Features = new();
 
     public Material Material = Material.Steel();
+    /// <summary>m.x4: система единиц документа детали — для ввода и показа; геометрия всегда в мм.</summary>
+    public Core.UnitSystem Units = Core.UnitSystem.Metric;
 
     /// <summary>
     /// Сведения о документе: обозначение, наименование, автор, изменение. То, что попадает в

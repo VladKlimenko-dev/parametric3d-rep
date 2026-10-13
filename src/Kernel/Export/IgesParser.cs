@@ -32,12 +32,75 @@ public sealed class IgesParser
 
     public readonly List<Entity> Entities = new();
 
+    /// <summary>
+    /// m.x4: МНОЖИТЕЛЬ ДЛИНЫ ФАЙЛА К ММ по общему разделу: признак единиц (поле 14: 1 — дюйм, 2 — мм, 3 — по имени, 4 — фут,
+    /// 5 — миля, 6 — м, 7 — км, 8 — мил, 9 — мкм, 10 — см, 11 — микродюйм), имя (поле 15) и масштаб модели (поле 13: модель =
+    /// мир × масштаб). Прежде единицы не читались: файл в дюймах давал деталь в 25.4 раза меньше. Мутация P3D_IGESUNITS=0.
+    /// </summary>
+    public double LengthScale = 1;
+    public string? LengthUnitNote;
+    static readonly bool UnitsOff = Environment.GetEnvironmentVariable("P3D_IGESUNITS") == "0";
+
+    static List<string> GlobalFields(string g)
+    {
+        // поля общего раздела: разделитель и конец записи — первые два поля («1H,», «1H;»); строки — Холлерит nH…
+        char delim = ',', end = ';';
+        var res = new List<string>(); int i = 0;
+        string Read()
+        {
+            int j = i; while (j < g.Length && char.IsDigit(g[j])) j++;
+            if (j < g.Length && j > i && (g[j] == 'H' || g[j] == 'h'))
+            {
+                int n = int.Parse(g[i..j]); string str = g.Substring(j + 1, Math.Min(n, g.Length - j - 1)); i = j + 1 + n; return str;
+            }
+            int k = i; while (k < g.Length && g[k] != delim && g[k] != end) k++;
+            string v = g[i..k].Trim(); i = k; return v;
+        }
+        for (int f = 0; i < g.Length && f < 30; f++)
+        {
+            string v = Read();
+            if (f == 0 && v.Length == 1) delim = v[0];
+            if (f == 1 && v.Length == 1) end = v[0];
+            res.Add(v);
+            if (i < g.Length && g[i] == end) break;
+            if (i < g.Length && g[i] == delim) i++;
+        }
+        return res;
+    }
+
+    static double? UnitByName(string n) => n.Trim().ToUpperInvariant() switch
+    {
+        "IN" or "INCH" => 25.4, "MM" => 1, "FT" => 304.8, "MI" => 1609344, "M" => 1000, "KM" => 1e6, "MIL" => 0.0254,
+        "UM" => 1e-3, "CM" => 10, "UIN" => 2.54e-5, _ => null,
+    };
+
+    static void ScaleLengths(int type, List<double> d, double k)
+    {
+        void S(int from, int count) { for (int i = from; i < from + count && i < d.Count; i++) d[i] *= k; }
+        switch (type)
+        {
+            case IgesFile.TypeLine: S(0, 6); break;
+            case IgesFile.TypeArc: S(0, 7); break;
+            case 116: S(0, 3); break;                                           // точка
+            case IgesFile.TypePlane: S(3, 1); break;                            // A·x + B·y + C·z = D
+            case IgesFile.TypeTabulatedCylinder: S(1, 3); break;
+            case 124: S(3, 1); S(7, 1); S(11, 1); break;                        // перенос матрицы
+            case IgesFile.TypeSpline:
+                if (d.Count >= 2) { int n = (int)d[0], kk = (int)d[1], pts = n + 1, knots = n + kk + 2; S(6 + knots + pts, pts * 3); }
+                break;
+            case IgesFile.TypeSplineSurface:
+                if (d.Count >= 4) { int k1 = (int)d[0], k2 = (int)d[1], m1 = (int)d[2], m2 = (int)d[3], nu = k1 + 1, nv = k2 + 1; S(9 + (k1 + m1 + 2) + (k2 + m2 + 2) + nu * nv, nu * nv * 3); }
+                break;
+        }
+    }
+
     public static IgesParser Parse(string text)
     {
         var res = new IgesParser();
 
         var dir = new List<string>();
         var par = new List<string>();
+        var glob = new List<string>();
 
         foreach (string raw in text.Split('\n'))
         {
@@ -47,7 +110,23 @@ public sealed class IgesParser
             char section = line[72];
             if (section == 'D') dir.Add(line);
             else if (section == 'P') par.Add(line);
+            else if (section == 'G') glob.Add(line.Substring(0, 72));
             else if (section == 'S' && line.Contains("Parametric3D exact geometry") && !line.Contains("DE pointers")) res.LegacyPointers = true;
+        }
+
+        if (!UnitsOff && glob.Count > 0)
+        {
+            var gf = GlobalFields(string.Concat(glob));
+            double scale = gf.Count > 12 && double.TryParse(gf[12].Replace('D', 'E'), NumberStyles.Float, CultureInfo.InvariantCulture, out var sc) && sc > 0 ? sc : 1;
+            int flag = gf.Count > 13 && int.TryParse(gf[13], out var fl) ? fl : 2;
+            string uname = gf.Count > 14 ? gf[14] : "";
+            double? unit = flag switch { 1 => 25.4, 2 => 1, 3 => UnitByName(uname), 4 => 304.8, 5 => 1609344, 6 => 1000, 7 => 1e6, 8 => 0.0254, 9 => 1e-3, 10 => 10, 11 => 2.54e-5, _ => null };
+            if (unit == null) res.LengthUnitNote = $"IGES: unknown units (flag {flag}, name '{uname}') — read as millimetres";
+            else
+            {
+                res.LengthScale = unit.Value / scale;
+                if (res.LengthScale != 1) res.LengthUnitNote = $"IGES: units {(uname.Length > 0 ? uname : "flag " + flag)}, model scale {scale} — lengths × {res.LengthScale} to mm";
+            }
         }
 
         // ИМЕНА БЕРУТСЯ ИЗ РАЗДЕЛА ОПИСАНИЙ. У каждой сущности там две строки, и имя лежит в
@@ -86,6 +165,7 @@ public sealed class IgesParser
                 if (double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double d)) data.Add(d);
             }
 
+            if (res.LengthScale != 1) ScaleLengths(type, data, res.LengthScale);
             string label = res.Entities.Count < labels.Count ? labels[res.Entities.Count] : "";
             int matrix = res.Entities.Count < matrices.Count ? matrices[res.Entities.Count] : 0;
             res.Entities.Add(new Entity(type, data, label, matrix));

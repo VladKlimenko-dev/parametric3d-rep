@@ -38,6 +38,7 @@ public static class DocumentFile
         {
             Version = CurrentVersion,
             Name = part.Name,
+            Units = part.Units.ToDictionary(),
             Parameters = parameters?.All.Select(p => new ParamDto
             {
                 Name = p.Name,
@@ -422,7 +423,8 @@ public static class DocumentFile
         if (doc.Version > CurrentVersion)
             throw new InvalidDataException($"файл записан более новой сборкой (вид {doc.Version})");
 
-        var table = new ParameterTable();
+        var units = Core.UnitSystem.FromDictionary(doc.Units);                  // m.x4: система единиц документа
+        var table = new ParameterTable { Units = units };
         foreach (var p in doc.Parameters)
         {
             var kind = Enum.TryParse<ParamKind>(p.Kind, out var k) ? k : ParamKind.Real;
@@ -431,7 +433,7 @@ public static class DocumentFile
         }
         table.Recalculate();
 
-        var part = new Part(doc.Name) { ActiveConfiguration = doc.ActiveConfiguration ?? "" };
+        var part = new Part(doc.Name) { ActiveConfiguration = doc.ActiveConfiguration ?? "", Units = units };
 
         if (doc.Material is { } md) part.Material = Load(md);
 
@@ -756,6 +758,8 @@ public static class DocumentFile
     {
         public int Version { get; set; }
         public string Name { get; set; } = "деталь";
+        /// <summary>m.x4: система единиц документа (размерность → обозначение); нет — мм, кг, с, градус.</summary>
+        public Dictionary<string, string>? Units { get; set; }
         public List<ParamDto> Parameters { get; set; } = new();
         public List<SketchDto> Sketches { get; set; } = new();
         public List<FeatureDto> Features { get; set; } = new();

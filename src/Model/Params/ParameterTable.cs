@@ -20,6 +20,11 @@ public sealed class Parameter
 
     internal Expr? Compiled;
 
+    /// <summary>m.x4: размерность по единице показа (Unit); пустая единица — число без размерности (как прежде).</summary>
+    public Dimension Dim => string.IsNullOrWhiteSpace(Unit) ? Dimension.None : Units.Parse(Unit).Dim;
+    /// <summary>Величина параметра: значение во внутренних единицах (мм, кг, с, градус) и размерность.</summary>
+    public Quantity Quantity => string.IsNullOrWhiteSpace(Unit) ? Quantity.Number(Value) : new Quantity(Value, Dim);
+
     public double Value => Kind switch
     {
         ParamKind.Integer => Math.Round(Number),
@@ -45,6 +50,9 @@ public sealed class ParameterTable : IValueResolver
 
     public IGeometryResolver? Geometry;
     public event Action? Changed;
+    /// <summary>m.x4: система единиц документа — число без единицы в формуле с величинами берёт её единицу.</summary>
+    public UnitSystem Units = UnitSystem.Metric;
+    static readonly bool UnitCheckOff = Environment.GetEnvironmentVariable("P3D_PARAMUNITS") == "0";
 
     public IReadOnlyList<Parameter> All => _order;
     public int Count => _order.Count;
@@ -119,6 +127,24 @@ public sealed class ParameterTable : IValueResolver
         catch (Exception ex) { error = ex.Message; return false; }
     }
 
+    /// <summary>m.x4: вычисление выражения с единицами — значение во внутренних единицах и размерность.</summary>
+    public bool TryEvaluateQuantity(string formula, out Quantity value, out string? error)
+    {
+        value = default; error = null;
+        if (!ExprParser.TryParse(formula, out Expr? e, out error) || e == null) return false;
+        try { value = ExprUnits.Evaluate(e, n => _map.TryGetValue(n, out var p) && p.Error == null ? p.Quantity : null, Units, Geometry); return true; }
+        catch (Exception ex) { error = ex.Message; return false; }
+    }
+
+    /// <summary>m.x4: параметр из записи с единицей («2 in», «7.85 g/cm^3»): значение — во внутренних единицах, единица показа — из записи.</summary>
+    public Parameter AddQuantity(string name, string text)
+    {
+        if (!ExprParser.TryParse(text, out var e, out var err) || e == null) throw new P3DException(err ?? "bad value");
+        var q = ExprUnits.Evaluate(e, n => _map.TryGetValue(n, out var p) ? p.Quantity : null, Units, Geometry);
+        string unit = e is QtyExpr qe ? qe.Unit.Symbol : q.Dim.IsNone ? "" : Units.UnitFor(q.Dim).Symbol;
+        return Add(name, q.Value, ParamKind.Real, unit);
+    }
+
     /// <summary>Полный пересчёт всех формул в порядке зависимостей.</summary>
     public void Recalculate()
     {
@@ -169,7 +195,19 @@ public sealed class ParameterTable : IValueResolver
 
             if (p.Kind == ParamKind.Formula && p.Error == null && p.Compiled != null)
             {
-                try { p.Number = p.Compiled.Eval(this, Geometry); }
+                try
+                {
+                    p.Number = p.Compiled.Eval(this, Geometry);
+                    // m.x4: у параметра с единицей — размерность формулы; число без единицы — в единице параметра
+                    if (!UnitCheckOff && !string.IsNullOrWhiteSpace(p.Unit))
+                    {
+                        var unit = Parametric3D.Core.Units.Parse(p.Unit);
+                        var q = ExprUnits.Evaluate(p.Compiled, n => _map.TryGetValue(n, out var o) && o.Error == null ? o.Quantity : null, Units, Geometry);
+                        if (q.Bare && q.Dim.IsNone) p.Number = unit.ToInternal(q.Value);
+                        else if (q.Dim != unit.Dim) p.Error = $"The formula gives {q.Dim}, the parameter is {unit.Dim} ({p.Unit}).";
+                        else p.Number = q.Value;
+                    }
+                }
                 catch (Exception ex) { p.Error = ex.Message; }
             }
         }

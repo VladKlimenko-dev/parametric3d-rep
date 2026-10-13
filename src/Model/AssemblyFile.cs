@@ -33,6 +33,7 @@ public static class AssemblyFile
         {
             Version = CurrentVersion,
             Name = asm.Name,
+            Units = asm.Units.ToDictionary(),
             Explodes = asm.ExplodedViews.Select(v => new ExplodeDto
             {
                 Name = v.Name,
@@ -94,8 +95,8 @@ public static class AssemblyFile
         if (dto.Version > CurrentVersion)
             throw new InvalidDataException($"файл записан более новой сборкой (вид {dto.Version})");
 
-        var asm = new Assembly(dto.Name);
-        var table = new ParameterTable();
+        var asm = new Assembly(dto.Name) { Units = Core.UnitSystem.FromDictionary(dto.Units) };
+        var table = new ParameterTable { Units = asm.Units };
         var parts = new List<Part>();
 
         foreach (var pd in dto.Parts)
@@ -182,6 +183,8 @@ public static class AssemblyFile
     {
         public int Version { get; set; }
         public string Name { get; set; } = "сборка";
+        /// <summary>m.x4: система единиц сборки; у каждой детали — своя (в её документе).</summary>
+        public Dictionary<string, string>? Units { get; set; }
         public List<AsmPartDto> Parts { get; set; } = new();
         public List<ExplodeDto> Explodes { get; set; } = new();
     }

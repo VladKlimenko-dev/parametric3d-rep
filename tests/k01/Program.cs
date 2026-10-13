@@ -391,6 +391,8 @@ static partial class Program
         if (mode is "krn05t" or "allA") Krn05TouchChecks();
         if (mode is "prov" or "allA") ProvenanceChecks();
         if (mode is "query" or "allA") QueryChecks();
+        if (mode is "query" or "allA") QueryChecks2();
+        if (mode is "units" or "allA") UnitsChecks();
         if (mode is "selfone")
         {
             var rnd = new Random(20261011); TSolid a = null!; string d = "";
