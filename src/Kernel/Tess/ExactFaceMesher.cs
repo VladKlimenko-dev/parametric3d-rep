@@ -23,7 +23,7 @@ namespace Parametric3D.Kernel.Tess;
 ///   5. внутренние рёбра треугольников дробятся, пока середина на поверхности отходит от
 ///      середины хорды больше допуска гранения; рёбра на границе не дробятся.
 /// </summary>
-public static class ExactFaceMesher
+public static partial class ExactFaceMesher
 {
     /// <summary>ДИАГНОСТИКА: неудачные попытки триангуляции.</summary>
     public static Action<string>? TryDebug;
@@ -1050,7 +1050,10 @@ public static class ExactFaceMesher
         }
         if (DeclinePoles && ContainsPole(f, src))
         {
-            why = "полюс поверхности вращения внутри грани: развёртка не замкнута";
+            // KRN-11: полюс внутри — конформная плоскость (полюс — внутренняя точка 0), иначе отказ, как прежде
+            if (MeshConformal(f, src, cycles, out var cwhy) is { } conf && Validate(f, src, conf.P, conf.T, out cwhy) is { } confOk) { ConformalMeshed++; return confOk; }
+            ConformalFailed++;
+            why = "полюс поверхности вращения внутри грани: развёртка не замкнута; " + cwhy;
             PoleDeclined++;
             return null;
         }
@@ -1058,10 +1061,23 @@ public static class ExactFaceMesher
         if (MeshTrace) Console.Error.WriteLine($"MESHTRACE {DateTime.Now:HH:mm:ss.fff}   loops start");
         var r = MeshLoops(f, src, cycles, out why);
         if (MeshTrace) Console.Error.WriteLine($"MESHTRACE {DateTime.Now:HH:mm:ss.fff}   loops done {(r == null ? "null " + why : "ok")}");
-        if (r == null) return null;
+        string? cwhy2 = null;
+        (List<Vector3d> P, List<int> T)? Conformal()
+        {
+            if (MeshConformal(f, src, cycles, out cwhy2) is { } conf && Validate(f, src, conf.P, conf.T, out cwhy2) is { } confOk) { ConformalMeshed++; return confOk; }
+            ConformalFailed++; return null;
+        }
+        if (r == null)
+        {
+            if (Conformal() is { } c1) { why = null; normals = null; return c1; }
+            why += "; " + cwhy2; return null;
+        }
         normals = r.Value.N;
         // Вложенная MeshLoops уже проверила результат для несвязной грани.
-        return r.Value.Validated ? (r.Value.P, r.Value.T) : Validate(f, src, r.Value.P, r.Value.T, out why);
+        var checkedR = r.Value.Validated ? (r.Value.P, r.Value.T) : Validate(f, src, r.Value.P, r.Value.T, out why);
+        if (checkedR != null) return checkedR;
+        if (Conformal() is { } c2) { why = null; normals = null; return c2; }
+        why += "; " + cwhy2; return null;
     }
 
     /// <summary>
@@ -1891,6 +1907,7 @@ public static class ExactFaceMesher
 
         foreach (var cand in candidates)
         {
+            if (candIdx >= 0) TryDebug?.Invoke($"грань {f.Id}: способ {candIdx}: {lastWhy}");
             candIdx++;
             (List<int>, List<Vector2d>)? init;
             using (Diagnostics.Prof.Time($"сетка: способ {candIdx}")) init = cand();

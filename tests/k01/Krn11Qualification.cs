@@ -23,7 +23,7 @@ static partial class Program
         int seed = int.TryParse(Environment.GetEnvironmentVariable("P3D_QUALSEED"), out var qs) ? qs : 1102;
         bool verbose = Environment.GetEnvironmentVariable("P3D_QUALV") == "1";
         int only = int.TryParse(Environment.GetEnvironmentVariable("P3D_QUALONLY"), out var qo) ? qo : -1;
-        if (only >= 0) { verbose = true; BooleanOp.AnalyticRouteDebug = m => Console.WriteLine("      route: " + m); }
+        if (only >= 0) { verbose = true; BooleanOp.AnalyticRouteDebug = m => Console.WriteLine("      route: " + m); if (Environment.GetEnvironmentVariable("P3D_QUALMESH") == "1") Parametric3D.Kernel.Tess.ExactFaceMesher.TryDebug = m => Console.WriteLine("      mesh: " + m); Parametric3D.Kernel.Tess.ExactFaceMesher.ConformalDebug = m => Console.WriteLine("      conf: " + m); }
         var rnd = new Random(seed);
         double U(double a, double b) => a + (b - a) * rnd.NextDouble();
 
@@ -101,7 +101,7 @@ static partial class Program
                 if (all.Any(t => t.G == "refused")) { refused++; if (verbose) Console.WriteLine($"  refused {tag}: {string.Join(",", all.Select(t => t.Why))}"); continue; }
                 double scale = Math.Max(va, vb), tolE = 1e-7 * scale;
                 double B(params (double V, double Bound, string G, string? Why)[] t) => tolE + t.Sum(q => q.Bound);
-                if (all.All(t => t.Bound == 0)) exact++; else bounded++;
+                if (all.All(t => t.Bound == 0)) exact++; else { bounded++; if (verbose) Console.WriteLine($"  bounded {tag}: {string.Join(" ", all.Select(t => t.G))}"); }
                 void Id(string name, double lhs, double rhs, double tol)
                 {
                     if (!(Math.Abs(lhs - rhs) <= tol))
@@ -128,6 +128,18 @@ static partial class Program
             catch (Exception e) { failures.Add($"{tag}: {e.Message}"); }
         }
         Log(new { test = "KRN11-QUAL-METAMORPHIC", n, seed, exact, bounded, refused, failures = failures.Count });
+        // ТОЧНЫЙ ПУТЬ НА ГРАНЯХ ВРАЩЕНИЯ (конформная разметка, P3D_CONFORMAL=0 — прежние способы): пояс цилиндра между торцом и
+        // кривой стыка с конусом (пара #0) и шар с узким овальным вырезом от конуса (пара #44) — объединение точное.
+        foreach (var (pid, name) in new[] { (0, "KRN11-QUAL-EXACT-CYLINDER-BAND"), (44, "KRN11-QUAL-EXACT-SPHERE-OVAL") })
+            Check(name, () =>
+            {
+                rnd = new Random(1102 * 7919 + pid);
+                var (a, _) = Prim(); var (b, _) = Prim();
+                var r = BooleanOp.Evaluate(new[] { a }, b, BooleanOp.BooleanKind.Unite, OperationPolicy.AllowApproximate);
+                Log(new { test = name, r.Guarantee, r.Outcome });
+                Require(r.Accepted && r.Guarantee is GuaranteeLevel.ExactAnalytic or GuaranteeLevel.ExactQuadric, $"union is {r.Guarantee}");
+                Require(Math.Abs(r.Bodies.Sum(OpVolume) - (OpVolume(a) + OpVolume(b) - BooleanOp.Evaluate(new[] { a }, b, BooleanOp.BooleanKind.Intersect, OperationPolicy.AllowApproximate).Bodies.Sum(OpVolume))) < 1e-6 * OpVolume(a), "inclusion-exclusion");
+            });
         foreach (var f in failures.Take(verbose ? 1000 : 20)) Console.WriteLine("  " + f);
         Check("KRN11-QUAL-METAMORPHIC", () =>
         {

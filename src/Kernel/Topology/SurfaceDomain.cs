@@ -202,6 +202,29 @@ public static class SurfaceDomain
             if (InsideFace(loops, C, d, side, maxStep) != false) continue;    // внутри грани или не решено
             bestCos = near; best = d;
         }
+        // KRN-11: узкий вырез (овал стыка с почти касающимся конусом) уже шага сетки из 600 направлений — ни одно не ложилось
+        // в него, полюс не находился, классификатор брал полюс внутри грани (согласие с CSG 166/256). Тогда — кандидаты в
+        // центрах контуров (среднее направление точек контура и противоположное), по возрастанию близости к краю. Только
+        // если сетка направлений не дала полюса: прежний выбор не меняется. Мутация P3D_POLELOOPS=0.
+        if (best == null && !PoleLoopsOff)
+        {
+            var extra = new List<(double Near, Vector3d D)>();
+            foreach (var l in loops)
+            {
+                var m = l.Aggregate(Vector3d.Zero, (s2, p) => s2 + (p - C).Normalized());
+                if (m.Length < 1e-9) continue;
+                foreach (var d in new[] { m.Normalized(), -m.Normalized() })
+                {
+                    double near = double.MinValue; foreach (var x in dirs) { double c = Vector3d.Dot(x, d); if (c > near) near = c; }
+                    if (near < 1 - 1e-12) extra.Add((near, d));
+                }
+            }
+            foreach (var (_, d) in extra.OrderBy(e => e.Near))
+            {
+                PoleInsideTests++;
+                if (InsideFace(loops, C, d, side, maxStep) == false) { best = d; break; }
+            }
+        }
         if (Environment.GetEnvironmentVariable("P3D_POLEDBG") == "1")
             Console.Error.WriteLine($"POLEDBG face {f.Id} loops {loops.Count} pts {loops.Sum(l => l.Count)} side {side} best {best}");
         return best;
@@ -217,6 +240,7 @@ public static class SurfaceDomain
     static readonly bool PoleClearOff = Environment.GetEnvironmentVariable("P3D_POLECLEAR") == "0";
     static int PoleSamples => PoleClearOff ? 48 : 192;
     static readonly bool PoleFastOff = Environment.GetEnvironmentVariable("P3D_POLEFAST") == "0";
+    static readonly bool PoleLoopsOff = Environment.GetEnvironmentVariable("P3D_POLELOOPS") == "0";
     /// <summary>Сколько проверок «направление внутри грани» сделал выбор полюса карты (диагностика скорости).</summary>
     public static long PoleInsideTests;
     /// <summary>Проверка: сравнить быстрый выбор полюса с прежним перебором на тех же гранях.</summary>
