@@ -30,7 +30,7 @@ public sealed class SweepFeature : Feature
         section.Solve(ctx.Solver);
         section.RequireSolved(Name);
 
-        Profile profile = section.ToProfile();
+        Profile profile = section.ToSolidProfile("Sweep");
         if (profile.IsEmpty)
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Sweep: the section is not closed.");
 

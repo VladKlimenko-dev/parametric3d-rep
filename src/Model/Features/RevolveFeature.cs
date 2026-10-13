@@ -36,7 +36,7 @@ public sealed class RevolveFeature : Feature
         sketch.Solve(ctx.Solver);
         sketch.RequireSolved(Name);
 
-        Profile profile = sketch.ToProfile();
+        Profile profile = sketch.ToSolidProfile("Revolve");
         if (profile.IsEmpty)
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Revolve: the sketch has no closed loop.");
 

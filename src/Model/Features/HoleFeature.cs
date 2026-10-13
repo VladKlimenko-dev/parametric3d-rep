@@ -154,6 +154,28 @@ public sealed class HoleFeature : Feature
         double depth = ThroughAll ? Extent(ctx.Bodies) * 3 : Depth.Resolve(ctx.Parameters);
         if (depth <= Tol.Weld) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: the depth must be greater than zero.");
 
+        // KRN-11 (11.2): ОТВЕРСТИЕ МИМО ТЕЛА. Точка вне тела прежде давала «успешную» операцию без снятого материала
+        // (KRN11-QUAL-NEG-HOLE-MISSES). Резец (ось от точки на глубину, радиус головки) не задевает даже габарит тела с запасом
+        // 10 % — такая точка пропускается с предупреждением; все точки мимо — отказ InvalidInput. Мутация P3D_HOLEMISS=0.
+        if (!HoleMissOff)
+        {
+            var bb = ctx.Bodies[0].Bounds; bb = bb.Expanded(0.1 * bb.Diagonal + Tol.Weld);
+            double rr = Math.Max(d, Kind == HoleKind.Simple ? 0 : HeadDiameter.Resolve(ctx.Parameters)) / 2;
+            var dn = Direction.Normalized();
+            bool Misses(Vector3d q)
+            {
+                var a0 = q - dn * rr; var a1 = q + dn * depth;
+                var lo = Vector3d.ComponentMin(a0, a1) - new Vector3d(rr); var hi = Vector3d.ComponentMax(a0, a1) + new Vector3d(rr);
+                return hi.X < bb.Min.X || hi.Y < bb.Min.Y || hi.Z < bb.Min.Z || lo.X > bb.Max.X || lo.Y > bb.Max.Y || lo.Z > bb.Max.Z;
+            }
+            var miss = at.Where(Misses).ToList();
+            if (miss.Count == at.Count)
+                throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput,
+                    at.Count == 1 ? "Hole: the position is outside the body." : "Hole: every position is outside the body.");
+            foreach (var q in miss) ctx.Warnings.Add($"Hole: the position {q.X:0.###}, {q.Y:0.###}, {q.Z:0.###} is outside the body and was skipped.");
+            if (miss.Count > 0) at = at.Where(q => !miss.Contains(q)).ToList();
+        }
+
         var routes = new List<List<HoleRouteDecision>>();
         LastRoutes = routes;
         foreach (var p in at)
@@ -519,6 +541,8 @@ public sealed class HoleFeature : Feature
         var x = new TransformOp.Xform(p => Rot(p) + at, Rot, false);
         return TransformOp.Copy(body, x);
     }
+
+    static readonly bool HoleMissOff = Environment.GetEnvironmentVariable("P3D_HOLEMISS") == "0";
 
     private static double Extent(List<TSolid> bodies)
     {
