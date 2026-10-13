@@ -6,9 +6,20 @@ using Parametric3D.Kernel.Topology;
 
 static partial class Program
 {
+    /// <summary>
+    /// Проверка механизма общей булевой на реалистичных деталях (слияние рёбер, проверки сетки, доноры): с местной плитой
+    /// (KRN-10, QuadricCut) отверстия этих деталей идут точным путём, и механизм на них не работает — проверка шла бы
+    /// впустую. Здесь — прежнее правило плиты, как при замере механизма.
+    /// </summary>
+    static void OldSlab(Action a)
+    {
+        Parametric3D.Kernel.Ops.QuadricCut.LocalOffForTests = true;
+        try { a(); } finally { Parametric3D.Kernel.Ops.QuadricCut.LocalOffForTests = false; }
+    }
+
     static void Krn10PreviewChecks()
     {
-        Check("KRN10-MERGE-EDGES-SAME", () =>
+        Check("KRN10-MERGE-EDGES-SAME", () => OldSlab(() =>
         {
             // 10.7: слияние рёбер на прямой и дуге без пересчёта всего тела после каждого стыка — тот же результат, что прежнее
             // (пластины K08 3 зерна, полное перестроение: те же грани, те же рёбра — концы и вид кривой, тот же объём), и
@@ -40,9 +51,9 @@ static partial class Program
             Log(new { test = "KRN10-MERGE", allocOldMb = allocOld, allocNewMb = allocNew });
             if (!(allocNew < 0.9 * allocOld)) fails.Add($"allocation saving under 10%: {allocNew:F0} vs {allocOld:F0} MB");
             Require(fails.Count == 0, string.Join("; ", fails));
-        });
+        }));
 
-        Check("KRN10-MESH-CHECKS-SAME", () =>
+        Check("KRN10-MESH-CHECKS-SAME", () => OldSlab(() =>
         {
             // g.13: быстрые проверки сетки тела (грубый ключ повторов граней, стороны без владельцев, слияние точек с памятью)
             // дают ту же сетку отображения, что прежние (P3D_MESHCHECKFAST=0), и быстрее
@@ -85,7 +96,7 @@ static partial class Program
             Log(new { test = "KRN10-MESH-CHECKS", newMb = mNew.Mb, oldMb = mOld.Mb, newMs = mNew.Ms, oldMs = mOld.Ms });
             if (!(mNew.Mb < 0.92 * mOld.Mb)) fails.Add($"no saving: {mNew.Mb:F1} vs {mOld.Mb:F1} MB in the checking thread");
             Require(fails.Count == 0, string.Join("; ", fails));
-        });
+        }));
 
         Check("KRN10-REFINE-BY-SHAPE", () =>
         {
@@ -233,7 +244,7 @@ static partial class Program
             Require(fails.Count == 0, string.Join("; ", fails));
         });
 
-        Check("KRN10-MESH-DONOR-FROM-LOOPS", () =>
+        Check("KRN10-MESH-DONOR-FROM-LOOPS", () => OldSlab(() =>
         {
             // g.13: правка последней операции детали — грани, чьи контуры не изменились, берут сетку у той же грани
             // прежнего тела (ключ: поверхность по содержанию, контуры побитно, точность гранения). Прежде донором годилась
@@ -270,7 +281,7 @@ static partial class Program
                 if (diff != 0) fails.Add($"seed {seed}: {diff} face mesh(es) differ from the build without donors");
             }
             Require(fails.Count == 0, string.Join("; ", fails));
-        });
+        }));
 
         Check("KRN10-PREVIEW-ACCEPT", () =>
         {

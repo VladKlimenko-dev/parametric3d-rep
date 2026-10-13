@@ -423,6 +423,7 @@ static partial class Program
         if (mode is "krn06asym" or "allA") Krn06AsymChecks();
         if (mode is "krn06lcch" or "allA") Krn06LineCylChamferChecks();
         if (mode is "krn06probe2") Krn06Probe2();
+        if (mode is "pyrcut") PyramidCutRepro();
         if (mode is "krn06ncorner" or "allA") Krn06NCornerChecks();
         if (mode is "krn06incl" or "allA") Krn06InclinedHoleChecks();
         if (mode is "krn06mixed" or "allA") Krn06MixedChecks();
@@ -923,6 +924,7 @@ static partial class Program
         }
         if (mode is "grid") GridSolve();
         if (mode is "sksparse" or "allA") SketchSparseChecks();
+        if (mode is "qlocal" or "allA") Krn10QuadricLocal();
         if (mode is "gridbig") { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); GridSolveSizes(new[] { 12, 20, 30 }); Console.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report()); }
         if (mode is "constraints") K09Constraints();
         if (mode is "vertex") VertexOps();

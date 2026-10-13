@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Exact;
@@ -165,6 +165,284 @@ public static class QuadricCut
         return a;      // наклонная ось: след на грани будет эллипсом
     }
 
+    /// <summary>Мутация P3D_QUADRICROUNDS=0: тело с цилиндрической гранью (скругление, точное отверстие) — отказ, как прежде.</summary>
+    static readonly bool RoundsOff = Environment.GetEnvironmentVariable("P3D_QUADRICROUNDS") == "0";
+
+    /// <summary>Мутация P3D_QUADRICLOCAL=0: тело обязано быть плитой целиком (все грани поперёк оси — на габаритах), как прежде.</summary>
+    /// <summary>Мутация P3D_QUADRICUNWRAP=0: грань с новой кромкой сохраняет обёртку с прежними фасетами, как прежде.</summary>
+    static readonly bool UnwrapOff = Environment.GetEnvironmentVariable("P3D_QUADRICUNWRAP") == "0";
+    static readonly bool LocalOffEnv = Environment.GetEnvironmentVariable("P3D_QUADRICLOCAL") == "0";
+    /// <summary>Для проверок механизмов общей булевой на реалистичных деталях (доноры сеток, слияние рёбер): прежнее правило плиты.</summary>
+    public static bool LocalOffForTests;
+    static bool LocalOff => LocalOffEnv || LocalOffForTests;
+
+    /// <summary>
+    /// KRN-10 (g.13): МЕСТНАЯ ПЛИТА. Прежде тело обязано было быть плитой целиком: любая ступенька, карман или бобышка
+    /// где угодно на детали уводили отверстие на общую булеву (два вычитания у цекования). Теперь проверяется только то,
+    /// что задевает цилиндр отверстия: ось пересекает РОВНО ДВЕ грани поперёк оси (вход и выход), и круг радиуса r лежит в
+    /// каждой с запасом от её кромок; все прочие грани поперёк оси — вне круга; грани вдоль оси — дальше r от оси по их
+    /// следу (а не по бесконечной плоскости); наклонные плоские грани — отказ, как прежде. Уровни входа и выхода — zLow/zHigh.
+    /// </summary>
+    static bool LocalSlab(TSolid body, Vector3d axisAt, double radius, Vector3d dir, out double zLow, out double zHigh)
+    {
+        zLow = zHigh = 0;
+        var levels = new List<double>();
+        foreach (var f in body.Faces)
+        {
+            var src = f.Surface is FacetedSurface fs ? fs.Source : f.Surface;
+            var pl = PlaneOf(src);
+            if (pl == null) continue;                                    // цилиндры проверены выше
+            Vector3d n = pl.F.W.Normalized();
+            double cos = Vector3d.Dot(n, dir);
+            if (Math.Abs(cos) <= 1e-6)
+            {
+                if (!(TraceClearance(f, n, axisAt, dir) > radius + Tol.Weld)) return false;
+                continue;
+            }
+            if (Math.Abs(Math.Abs(cos) - 1) > 1e-9) return false;           // наклонная грань
+            bool inside = OnFace(f, pl, axisAt, dir, out double clear);
+            if (!(clear > radius + Tol.Weld)) return false;
+            if (inside) levels.Add(Vector3d.Dot(pl.F.Origin, dir));
+        }
+        if (levels.Count != 2) return false;
+        zLow = Math.Min(levels[0], levels[1]); zHigh = Math.Max(levels[0], levels[1]);
+        return zHigh - zLow > Tol.Weld;
+    }
+
+    /// <summary>
+    /// Снять с плоской грани обёртку FacetedSurface: поверхность — точный источник, сторона — по исходной грани. У обёртки,
+    /// размеченной от контуров, сторону несут треугольники, а Reversed сброшен; здесь сторона выводится из векторной площади
+    /// внешнего контура исходной грани (контур обходит грань против часовой стрелки, глядя по её внешней нормали).
+    /// </summary>
+    static void Unwrap(TFace face, TFace orig, ISurface3 src)
+    {
+        if (orig.Surface is not FacetedSurface || PlaneOf(src) is not { } pl) { face.Surface = src; return; }
+        var outer = orig.Loops.FirstOrDefault(l => l.IsOuter);
+        Vector3d area = Vector3d.Zero;
+        if (outer != null)
+        {
+            var pts = new List<Vector3d>();
+            foreach (var ce in outer.CoEdges)
+            {
+                var sm = Samples(ce.Edge, out _);
+                if (ce.Reversed) sm.Reverse();
+                pts.AddRange(sm.Take(sm.Count - 1));
+            }
+            for (int i = 0; i < pts.Count; i++) area += Vector3d.Cross(pts[i], pts[(i + 1) % pts.Count]) / 2;
+        }
+        double d = Vector3d.Dot(area, pl.F.W);
+        if (Math.Abs(d) < 1e-12) return;                               // сторону не вывести — обёртка остаётся
+        face.Surface = src;
+        face.Reversed = d < 0;
+    }
+
+    /// <summary>Мутация P3D_QUADRICFRESH=0: перенесённая грань делит обёртку FacetedSurface с прежним телом, как прежде.</summary>
+    static readonly bool FreshOff = Environment.GetEnvironmentVariable("P3D_QUADRICFRESH") == "0";
+
+    /// <summary>
+    /// KRN-10: перенесённая грань получает СВОЮ обёртку (те же треугольники, без видимой сетки и сырого результата разметки).
+    /// Прежде обёртка делилась с прежним телом: видимая сетка, записанная в неё позже (донор следующей булевой), протекала в
+    /// тела прежних перестроений — с переиспользованием сеток и без они расходились (G7-MESH-REUSE-IDENTICAL).
+    /// </summary>
+    static ISurface3 Fresh(ISurface3 s)
+    {
+        if (FreshOff || s is not FacetedSurface fs) return s;
+        var nf = new FacetedSurface(fs.Source, fs.FallbackNormal) { FromLoops = fs.FromLoops };
+        foreach (var t in fs.Facets.ReadView) nf.Facets.Add(t);
+        return nf;
+    }
+
+    /// <summary>Стенка — цилиндр выдавливания дуги радиуса r с центром на оси (dir, axisAt).</summary>
+    static bool CoaxialWall(ISurface3? src, Vector3d axisAt, Vector3d dir, double r)
+    {
+        if (src is not ExtrudedSurface ex || ex.Base is not ArcCurve3 arc) return false;
+        Vector3d d = arc.Frame.Origin - axisAt;
+        Vector3d off = d - dir * Vector3d.Dot(d, dir);
+        return off.Length < Tol.Weld && Math.Abs(arc.Radius - r) < Tol.Weld;
+    }
+
+    /// <summary>Контур — кромка отверстия: все рёбра — дуги радиуса r с центром на оси.</summary>
+    static bool RimOf(TLoop loop, Vector3d axisAt, Vector3d dir, double r)
+    {
+        foreach (var ce in loop.CoEdges)
+        {
+            if (ce.Edge.Curve is not ArcCurve3 arc || Math.Abs(arc.Radius - r) >= Tol.Weld) return false;
+            Vector3d d = arc.Frame.Origin - axisAt;
+            if ((d - dir * Vector3d.Dot(d, dir)).Length >= Tol.Weld) return false;
+        }
+        return loop.CoEdges.Count > 0;
+    }
+
+    /// <summary>Плоскость грани: PlaneSurface или выдавливание отрезка (как в Build); иначе null.</summary>
+    static PlaneSurface? PlaneOf(ISurface3? src)
+    {
+        if (src is PlaneSurface p) return p;
+        if (src is ExtrudedSurface exl && exl.Base is LineCurve3 ln)
+        {
+            Vector3d n = Vector3d.Cross((ln.B - ln.A).Normalized(), exl.Dir.Normalized());
+            if (n.LengthSquared > 1e-18) return new PlaneSurface(Frame3.FromNormal(ln.A, n.Normalized()));
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Грань поперёк оси: лежит ли точка оси на грани (чётность пересечений луча с кромками всех контуров) и расстояние
+    /// от неё до кромок (у отрезков и дуг — точно, у прочих кривых — по выборке с запасом на полухорду).
+    /// </summary>
+    static bool OnFace(TFace f, PlaneSurface pl, Vector3d axisAt, Vector3d dir, out double clearance, double shift = 0)
+    {
+        Vector3d n = pl.F.W.Normalized();
+        Vector3d P = axisAt + dir * (Vector3d.Dot(pl.F.Origin - axisAt, n) / Vector3d.Dot(dir, n));
+        Vector3d eu = (pl.F.U - n * Vector3d.Dot(pl.F.U, n)).Normalized(), ev = Vector3d.Cross(n, eu);
+        P += eu * shift;                                  // точка в кольце между отверстием и головкой (у входа с отверстием)
+        clearance = double.MaxValue; int crossings = 0;
+        foreach (var loop in f.Loops)
+            foreach (var ce in loop.CoEdges)
+            {
+                // дуга: расстояние точно, а выборка нужна, только если дуга может пересечь луч (+eu от P) — иначе 0 пересечений
+                // (у детали со 100 отверстиями выборка всех кромок входной грани на каждое отверстие стоила 250 мс)
+                if (ce.Edge.Curve is ArcCurve3 arc)
+                {
+                    clearance = Math.Min(clearance, EdgeDistance(ce.Edge, P, null!, 0));
+                    Vector3d lc = arc.Frame.Origin - P;
+                    double xc = Vector3d.Dot(lc, eu), yc = Vector3d.Dot(lc, ev), rr = arc.Radius * (1 + 1e-9) + 1e-9;
+                    if (Math.Abs(yc) > rr || xc + rr < 0) continue;
+                }
+                var pts = Samples(ce.Edge, out double pad);
+                if (ce.Edge.Curve is not ArcCurve3) clearance = Math.Min(clearance, EdgeDistance(ce.Edge, P, pts, pad));
+                for (int i = 0; i + 1 < pts.Count; i++)
+                {
+                    double ay = Vector3d.Dot(pts[i] - P, ev), by = Vector3d.Dot(pts[i + 1] - P, ev);
+                    if ((ay > 0) == (by > 0)) continue;
+                    double ax = Vector3d.Dot(pts[i] - P, eu), bx = Vector3d.Dot(pts[i + 1] - P, eu);
+                    if (ax + (bx - ax) * (0 - ay) / (by - ay) > 0) crossings++;
+                }
+            }
+        return (crossings & 1) == 1;
+    }
+
+    /// <summary>Грань вдоль оси: расстояние от оси до её следа на плоскости ⟂ оси (отрезок — оболочка проекций кромок).</summary>
+    static double TraceClearance(TFace f, Vector3d n, Vector3d axisAt, Vector3d dir)
+    {
+        Vector3d t = Vector3d.Cross(n, dir).Normalized();
+        double smin = double.MaxValue, smax = double.MinValue, pad = 0, off = 0; bool any = false;
+        foreach (var loop in f.Loops)
+            foreach (var ce in loop.CoEdges)
+            {
+                var pts = Samples(ce.Edge, out double pd); pad = Math.Max(pad, pd);
+                foreach (var q in pts)
+                {
+                    double sv = Vector3d.Dot(q - axisAt, t);
+                    smin = Math.Min(smin, sv); smax = Math.Max(smax, sv);
+                    if (!any) { off = Vector3d.Dot(q - axisAt, n); any = true; }
+                }
+            }
+        if (!any) return -1;
+        smin -= pad; smax += pad;
+        double along = 0 < smin ? smin : 0 > smax ? -smax : 0;
+        return Math.Sqrt(along * along + off * off);
+    }
+
+    /// <summary>Точки ребра (64 участка у кривой) и запас — половина наибольшей хорды.</summary>
+    static List<Vector3d> Samples(TEdge e, out double pad)
+    {
+        var pts = new List<Vector3d>(); pad = 0;
+        var c = e.Curve;
+        if (c == null || c is LineCurve3) { pts.Add(e.V0.P); pts.Add(e.V1.P); return pts; }
+        const int n = 64;
+        for (int i = 0; i <= n; i++)
+        {
+            pts.Add(c.PointAt(c.T0 + (c.T1 - c.T0) * i / n));
+            if (i > 0) pad = Math.Max(pad, 0.5 * (pts[i] - pts[i - 1]).Length);
+        }
+        return pts;
+    }
+
+    /// <summary>Расстояние от точки P до ребра: отрезок и дуга — точно, прочее — по выборке минус запас.</summary>
+    static double EdgeDistance(TEdge e, Vector3d P, List<Vector3d> pts, double pad)
+    {
+        var c = e.Curve;
+        if (c == null || c is LineCurve3)
+        {
+            Vector3d a = e.V0.P, b = e.V1.P, ab = b - a;
+            double l2 = ab.LengthSquared;
+            double t = l2 < 1e-30 ? 0 : Math.Clamp(Vector3d.Dot(P - a, ab) / l2, 0, 1);
+            return (a + ab * t - P).Length;
+        }
+        if (c is ArcCurve3 arc)
+        {
+            Vector3d l = P - arc.Frame.Origin;
+            double x = Vector3d.Dot(l, arc.Frame.U), y = Vector3d.Dot(l, arc.Frame.V), z = Vector3d.Dot(l, arc.Frame.W);
+            double rho = Math.Sqrt(x * x + y * y);
+            double best = Math.Min((arc.PointAt(0) - P).Length, (arc.PointAt(1) - P).Length);
+            if (rho > 1e-12)
+            {
+                double phi = Math.Atan2(y, x);
+                double lo = Math.Min(arc.A0, arc.A1), hi = Math.Max(arc.A0, arc.A1);
+                double k = Math.Ceiling((lo - phi) / (2 * Math.PI));
+                double ph = phi + k * 2 * Math.PI;
+                if (ph <= hi) best = Math.Min(best, Math.Sqrt((rho - arc.Radius) * (rho - arc.Radius) + z * z));
+            }
+            else best = Math.Min(best, Math.Sqrt(arc.Radius * arc.Radius + z * z));
+            return best;
+        }
+        double m = double.MaxValue;
+        foreach (var q in pts) m = Math.Min(m, (q - P).Length);
+        return m - pad;
+    }
+
+    /// <summary>
+    /// Оценка СНИЗУ расстояния от прямой (axisAt, dir) до куска цилиндрической грани: границы грани в (u, v) по точкам её
+    /// рёбер (с запасом на шаг выборки), сетка 48×48 по этим границам, минимум расстояния минус половина диагонали ячейки
+    /// (расстояние до прямой 1-липшицево, а длина в (R·u, v) не меньше хорды). −1 — границ нет (грань без рёбер).
+    /// </summary>
+    static double PatchClearance(TFace f, CylinderSurface cs, Vector3d axisAt, Vector3d dir)
+    {
+        var uvs = new List<Vector2d>();
+        double padU = 0, padV = 0;
+        foreach (var loop in f.Loops)
+            foreach (var ce in loop.CoEdges)
+            {
+                var c = ce.Edge.Curve;
+                const int n = 64;
+                Vector2d? prev = null;
+                for (int i = 0; i <= n; i++)
+                {
+                    var p = c == null ? (i == 0 ? ce.Edge.V0.P : ce.Edge.V1.P) : c.PointAt(c.T0 + (c.T1 - c.T0) * i / n);
+                    var uv = cs.ProjectToUV(p);
+                    if (prev is { } q)
+                    {
+                        double du = Math.IEEERemainder(uv.X - q.X, 2 * Math.PI);
+                        padU = Math.Max(padU, Math.Abs(du)); padV = Math.Max(padV, Math.Abs(uv.Y - q.Y));
+                    }
+                    uvs.Add(uv); prev = uv;
+                    if (c == null && i == 1) break;
+                    if (c == null) i = n - 1;
+                }
+            }
+        if (uvs.Count == 0) return -1;
+        double u0 = uvs[0].X, umin = 0, umax = 0, vmin = double.MaxValue, vmax = double.MinValue;
+        foreach (var uv in uvs)
+        {
+            double du = Math.IEEERemainder(uv.X - u0, 2 * Math.PI);
+            umin = Math.Min(umin, du); umax = Math.Max(umax, du);
+            vmin = Math.Min(vmin, uv.Y); vmax = Math.Max(vmax, uv.Y);
+        }
+        umin -= padU; umax += padU; vmin -= padV; vmax += padV;
+        if (umax - umin >= 2 * Math.PI - 1e-9) { umin = -Math.PI; umax = Math.PI; }
+        const int g = 48;
+        double hu = (umax - umin) / g * cs.Radius, hv = (vmax - vmin) / g;
+        double best = double.MaxValue;
+        for (int i = 0; i <= g; i++)
+            for (int j = 0; j <= g; j++)
+            {
+                var p = cs.PointAt(new Vector2d(u0 + umin + (umax - umin) * i / g, vmin + (vmax - vmin) * j / g));
+                Vector3d off = (p - axisAt) - dir * Vector3d.Dot(p - axisAt, dir);
+                best = Math.Min(best, off.Length);
+            }
+        return best - 0.5 * Math.Sqrt(hu * hu + hv * hv);
+    }
+
     /// <summary>
     /// Подошёл ли случай: тело из плоских граней, отверстие насквозь вдоль одной из осей.
     /// Ось задаётся направлением; поддержаны X, Y и Z — наклонная требует поворота формы и
@@ -187,7 +465,8 @@ public static class QuadricCut
             bool planar = src is PlaneSurface
                        || (src is ExtrudedSurface exl && exl.Base is LineCurve3);
             bool existingHole = src is ExtrudedSurface exa && exa.Base is ArcCurve3;
-            if (!planar && !existingHole) return false;
+            bool round = !RoundsOff && (src is CylinderSurface || src is RevolvedSurface { Base: LineCurve3 });
+            if (!planar && !existingHole && !round) return false;
         }
 
         // НОВОЕ ОТВЕРСТИЕ НЕ ДОЛЖНО ЗАДЕВАТЬ ПРЕЖНИЕ. Пересекающиеся отверстия дают ребро на
@@ -210,6 +489,25 @@ public static class QuadricCut
             else return false;      // непараллельные отверстия — тот же случай пересечения
         }
 
+        // KRN-10 (g.13): ЦИЛИНДРИЧЕСКИЕ ГРАНИ СКРУГЛЕНИЙ И ТОЧНЫХ ОТВЕРСТИЙ (CylinderSurface) — отверстие их не задевает:
+        // наименьшее расстояние от оси до куска грани больше радиуса (оценка снизу по сетке в (u, v) с поправкой на шаг).
+        foreach (var f in body.Faces)
+        {
+            var src = f.Surface is FacetedSurface fsc ? fsc.Source : f.Surface;
+            if (src is CylinderSurface cs && !(PatchClearance(f, cs, axisAt, dir) > radius + Tol.Weld)) return false;
+            // Конус или цилиндр вращения (зенковка прежней точки): весь лежит в цилиндре радиуса Rmax вокруг своей оси;
+            // ось — параллельна оси отверстия и дальше суммы радиусов, иначе отказ.
+            if (src is RevolvedSurface { Base: LineCurve3 gl } rv)
+            {
+                Vector3d w = rv.Axis.W.Normalized();
+                if (Math.Abs(Math.Abs(Vector3d.Dot(w, dir)) - 1) >= 1e-9) return false;
+                double RadOf(Vector3d q) { var l = q - rv.Axis.Origin; return (l - w * Vector3d.Dot(l, w)).Length; }
+                double rMax = Math.Max(RadOf(gl.A), RadOf(gl.B));
+                var lo2 = axisAt - rv.Axis.Origin;
+                if (!((lo2 - w * Vector3d.Dot(lo2, w)).Length > radius + rMax + Tol.Weld)) return false;
+            }
+        }
+
         // Габариты вдоль оси дают протяжённость сквозного отверстия.
         double lo = double.MaxValue, hi = double.MinValue;
         double rLo = double.MaxValue;
@@ -227,6 +525,8 @@ public static class QuadricCut
         // получалось тело с целой боковиной там, где должен быть пролом. Считается расстояние
         // от оси до КАЖДОЙ грани, параллельной ей.
         if (rLo <= radius + Tol.Weld) return false;
+
+        if (!LocalOff) return LocalSlab(body, axisAt, radius, dir, out zLow, out zHigh);
 
         foreach (var f in body.Faces)
         {
@@ -372,13 +672,18 @@ public static class QuadricCut
             bool isEntry = src is PlaneSurface pl
                            && Math.Abs(Math.Abs(Vector3d.Dot(pl.F.W.Normalized(), dir)) - 1) < 1e-9
                            && Math.Abs(Vector3d.Dot(pl.F.Origin, dir) - entry) < Tol.Weld;
+            if (isEntry && !LocalOff && !OnFace(f, (PlaneSurface)src!, axisAt, dir, out _, (holeRadius + headRadius) / 2)) isEntry = false;
             bool isHoleWall = EdgeRef.Bare(f.Tag) == "quadric:hole" && src is ExtrudedSurface;
+            // KRN-10: у отверстия с несколькими точками стенки прежних точек тоже «quadric:hole» — своя только соосная.
+            if (isHoleWall && !LocalOff && !CoaxialWall(src, axisAt, dir, holeRadius)) isHoleWall = false;
 
-            var face = new TFace { Surface = f.Surface, Reversed = f.Reversed, Tag = f.Tag };
+            var face = new TFace { Surface = Fresh(f.Surface), Reversed = f.Reversed, Tag = f.Tag };
+            if (isEntry && !UnwrapOff) Unwrap(face, f, src!);
 
             foreach (var loop in f.Loops)
             {
-                if (isEntry && !loop.IsOuter)
+                // KRN-10: заменяется только кромка этого отверстия; прочие отверстия входной грани остаются.
+                if (isEntry && !loop.IsOuter && (LocalOff || RimOf(loop, axisAt, dir, holeRadius)))
                 {
                     var hl = face.AddLoop(false);
                     foreach (var e2 in rimEntry) hl.Add(e2, false);
@@ -492,7 +797,7 @@ public static class QuadricCut
                 if (n.LengthSquared > 1e-18) pl = new PlaneSurface(Frame3.FromNormal(ln.A, n.Normalized()));
             }
 
-            var face = new TFace { Surface = f.Surface, Reversed = f.Reversed, Tag = f.Tag };
+            var face = new TFace { Surface = Fresh(f.Surface), Reversed = f.Reversed, Tag = f.Tag };
             foreach (var loop in f.Loops)
             {
                 var nl = face.AddLoop(loop.IsOuter);
@@ -504,8 +809,10 @@ public static class QuadricCut
                           && Math.Abs(Math.Abs(Vector3d.Dot(pl.F.W.Normalized(), dir)) - 1) < 1e-9
                           && Math.Abs(Vector3d.Dot(pl.F.Origin, dir) - baseAt) < Tol.Weld;
 
+            if (isBase && !LocalOff && !OnFace(f, pl!, at, dir, out _)) isBase = false;
             if (isBase)
             {
+                if (!UnwrapOff) Unwrap(face, f, src!);
                 var frame = Frame3.FromNormal(Centre(baseAt), dir);
                 foot = SplitRim(new ArcCurve3(frame, radius, 0, 2 * Math.PI));
                 var ring = face.AddLoop(false);
@@ -643,13 +950,18 @@ public static class QuadricCut
             bool isEntry = src is PlaneSurface pl
                            && Math.Abs(Math.Abs(Vector3d.Dot(pl.F.W.Normalized(), dir)) - 1) < 1e-9
                            && Math.Abs(Vector3d.Dot(pl.F.Origin, dir) - entry) < Tol.Weld;
+            if (isEntry && !LocalOff && !OnFace(f, (PlaneSurface)src!, axisAt, dir, out _, (holeRadius + headRadius) / 2)) isEntry = false;
             bool isHoleWall = EdgeRef.Bare(f.Tag) == "quadric:hole" && src is ExtrudedSurface;
+            // KRN-10: у отверстия с несколькими точками стенки прежних точек тоже «quadric:hole» — своя только соосная.
+            if (isHoleWall && !LocalOff && !CoaxialWall(src, axisAt, dir, holeRadius)) isHoleWall = false;
 
-            var face = new TFace { Surface = f.Surface, Reversed = f.Reversed, Tag = f.Tag };
+            var face = new TFace { Surface = Fresh(f.Surface), Reversed = f.Reversed, Tag = f.Tag };
+            if (isEntry && !UnwrapOff) Unwrap(face, f, src!);
 
             foreach (var loop in f.Loops)
             {
-                if (isEntry && !loop.IsOuter)
+                // KRN-10: заменяется только кромка этого отверстия; прочие отверстия входной грани остаются.
+                if (isEntry && !loop.IsOuter && (LocalOff || RimOf(loop, axisAt, dir, holeRadius)))
                 {
                     var hl = face.AddLoop(false);
                     foreach (var e2 in rimEntry) hl.Add(e2, false);
@@ -828,7 +1140,7 @@ public static class QuadricCut
             // есть: иначе второе отверстие стирало бы первое.
             if (pl == null)
             {
-                var keep = new TFace { Surface = f.Surface, Reversed = f.Reversed, Tag = f.Tag };
+                var keep = new TFace { Surface = Fresh(f.Surface), Reversed = f.Reversed, Tag = f.Tag };
                 foreach (var loop in f.Loops)
                 {
                     var kl = keep.AddLoop(loop.IsOuter);
@@ -845,8 +1157,10 @@ public static class QuadricCut
             double at = Vector3d.Dot(pl.F.Origin, dir);
             bool isBottom = crossed && Math.Abs(at - zLow) < Tol.Weld;
             bool isTop = crossed && Math.Abs(at - zHigh) < Tol.Weld;
+            // KRN-10: на уровне входа/выхода может быть несколько граней (местная плита) — кромка только у той, где ось.
+            if (!LocalOff && (isBottom || isTop) && !OnFace(f, pl, axisAt, dir, out _)) isBottom = isTop = false;
 
-            var face = new TFace { Surface = f.Surface, Reversed = f.Reversed, Tag = f.Tag };
+            var face = new TFace { Surface = Fresh(f.Surface), Reversed = f.Reversed, Tag = f.Tag };
             foreach (var loop in f.Loops)
             {
                 var nl = face.AddLoop(loop.IsOuter);
@@ -878,6 +1192,9 @@ public static class QuadricCut
 
                 var hole = face.AddLoop(false);
                 foreach (var e2 in edges) hole.Add(e2, false);
+                // KRN-10: у грани с новым контуром — точная поверхность, а не обёртка с прежними фасетами (их площадь
+                // без отверстия: точный разметчик отвергал грань, прежний строил сетку, не сшитую со стенкой).
+                if (!UnwrapOff) Unwrap(face, f, src!);
             }
 
             shell.Add(face);

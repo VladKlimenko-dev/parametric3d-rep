@@ -1,0 +1,16 @@
+built: /home/claude/out/base_k42/k01/K01Checks /home/claude/out/base_k42/fprobe/FProbe
+allA: {"passed":297,"failed":0}
+allB: {"passed":143,"failed":0}
+allS: {"passed":3,"failed":0}
+G11POLY: {"passed":2,"failed":0}
+FProbe: {"passed":88,"failed":0}
+A06: 9/9
+G14: OCCT: 52/52 agree; our build failures 0; honest refusals of exact STEP 1
+KRN04: DIFF: agree 110, refused 0, WRONG 0, occt-failed 1, ours-exception 0 (of 111)
+DIFF8: DIFF: agree 199, refused 0, WRONG 0, occt-failed 0, ours-exception 0, bound-violation 0, occt-wrong-arbitrated 2 (of 200)
+DIFF9: DIFF: agree 200, refused 0, WRONG 0, occt-failed 0, ours-exception 0 (of 200)
+DIFF10: DIFF: agree 200, refused 0, WRONG 0, occt-failed 0, ours-exception 0 (of 200)
+DIFF exact: 556
+PERF: PERF: met 9/9
+RELEASE_ID 8dc16c5334e6a6a75ad7dd1d20c97b618c2edb5042c6b2c678c067a86fe16d8c; файлов 567
+PERF holes100 single sample 2327 ms; A/B k41 vs k42 (PERFHOLES=4, same machine, no other load): 1736/1546/1539/1547 vs 1817/1575/1541/1530 ms — no regression

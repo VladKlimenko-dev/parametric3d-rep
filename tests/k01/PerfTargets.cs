@@ -98,6 +98,7 @@ static partial class Program
         p.MarkDirtyFrom(p.Features[0]); p.Rebuild(null);
         var last = p.Features[^1];
         Console.WriteLine($"last feature: {last.GetType().Name} {last.Name}");
+        Console.WriteLine($"integrity: {p.Integrity ?? "ok"}; errors: {string.Join(" | ", p.Features.Where(f => f.Error != null).Select(f => f.Name + ": " + f.Error))}");
         for (int i = 0; i < 3; i++) { p.MarkDirtyFrom(last); using (new KernelContext(KernelSettings.Capture() with { Preview = true }).Enter()) { var r = p.Compute(null); p.Apply(r); } }
         if (Environment.GetEnvironmentVariable("ROUTEDBG") == "1")
         {
