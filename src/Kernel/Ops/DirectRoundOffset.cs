@@ -230,6 +230,30 @@ public static partial class DirectRound
             }
             faces.Add(fd);
         }
+        var solid = FinishFaces(faces, what, ref why);
+        if (solid == null) return null;
+        if (Prov)
+        {
+            // KRN-08 (08.2): происхождение — грань той же поверхности и с теми же точками контура сохранена, прочие изменены
+            var pv = new Provenance { Operation = what + ".rebuild" };
+            foreach (var fd in faces)
+            {
+                if (fd.Made == null || fd.Orig == null) continue;
+                var src = GeometryAudit.AuthoritativeSurface(fd.Orig);
+                var oldPts = fd.Orig.Loops.SelectMany(l => l.CoEdges).Select(c => c.Start.P).ToList();
+                var newPts = fd.Made.Loops.SelectMany(l => l.CoEdges).Select(c => c.Start.P).ToList();
+                bool same = ReferenceEquals(src, fd.Surf) && oldPts.Count == newPts.Count && newPts.All(p => oldPts.Any(q => (p - q).Length < 1e-12));
+                pv.Faces.Add(new FaceProvenance(fd.Made, fd.Orig, same ? FaceOrigin.Kept : FaceOrigin.Modified, null));
+            }
+            solid.SetProvenance(pv);
+        }
+        return solid;
+    }
+
+    /// <summary>Сборка тела из описаний граней: точки граней, сборка, соглашение, разметка, проверки (годность,
+    /// аналитический объём, объём по фасетам), допуски сущностей. null — отказ.</summary>
+    static TSolid? FinishFaces(List<FDesc> faces, string what, ref string? why)
+    {
         foreach (var fd in faces.Where(x => x.Surf.IsPlanar)) fd.Hint = InteriorPoint(fd) ?? fd.Hint;
 
         var solid = Assemble(faces, ref why);

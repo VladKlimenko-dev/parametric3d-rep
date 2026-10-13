@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using OpenTK.Mathematics;
 using Parametric3D.Kernel;
@@ -310,7 +310,8 @@ public static class DocumentFile
         {
             Kind = "loft", Name = lf.Name, Suppressed = lf.Suppressed, Cut = lf.Cut,
             Sections = lf.SectionSketchIds.ToList(),
-            Samples = lf.Samples
+            Samples = lf.Samples,
+            Smooth = lf.Smooth
         },
 
         HoleFeature hf => new FeatureDto
@@ -625,7 +626,7 @@ public static class DocumentFile
 
                 case "loft":
                 {
-                    var lf = new LoftFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut, Samples = fd.Samples };
+                    var lf = new LoftFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut, Samples = fd.Samples, Smooth = fd.Smooth };
                     foreach (uint old in fd.Sections)
                         if (sketchById.TryGetValue(old, out var sk2)) lf.SectionSketchIds.Add(sk2.Id);
                     part.AddFeature(lf);
@@ -1004,6 +1005,7 @@ public static class DocumentFile
         public double[]? Dir { get; set; }
         public List<uint> Sections { get; set; } = new();
         public int Samples { get; set; } = 64;
+        public bool Smooth { get; set; }
         public string HoleKindName { get; set; } = "Simple";
         public bool ThroughAll { get; set; }
         public double HeadDiameter { get; set; } = 12;

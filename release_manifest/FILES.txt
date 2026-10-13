@@ -77,6 +77,8 @@ src/Kernel/Ops/CrossHole.cs
 src/Kernel/Ops/Csg.cs
 src/Kernel/Ops/DirectRound.cs
 src/Kernel/Ops/DirectRoundCylCyl.cs
+src/Kernel/Ops/DirectRoundDraft.cs
+src/Kernel/Ops/DirectRoundLoft.cs
 src/Kernel/Ops/DirectRoundOffset.cs
 src/Kernel/Ops/DirectRoundTangent.cs
 src/Kernel/Ops/DraftOp.cs
@@ -443,8 +445,10 @@ tests/k01/Krn06TanLoop.cs
 tests/k01/Krn06Unequal.cs
 tests/k01/Krn06Variable.cs
 tests/k01/Krn07.cs
+tests/k01/Krn07DraftTangent.cs
 tests/k01/Krn07HoleContract.cs
 tests/k01/Krn07Instances.cs
+tests/k01/Krn07LoftNurbs.cs
 tests/k01/Krn07Nurbs.cs
 tests/k01/Krn07ShellCurved.cs
 tests/k01/Krn07b.cs
