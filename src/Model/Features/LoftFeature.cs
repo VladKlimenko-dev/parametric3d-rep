@@ -1,4 +1,4 @@
-using Parametric3D.Core;
+﻿using Parametric3D.Core;
 using Parametric3D.Kernel.Ops;
 
 namespace Parametric3D.Model.Features;
@@ -16,10 +16,13 @@ public sealed class LoftFeature : Feature
     /// <summary>Сколько точек размечается по длине каждого сечения.</summary>
     public int Samples = 64;
 
+    /// <summary>KRN-07 (07.4): гладкий лофт (интерполяция поперёк сечений) вместо линейчатого.</summary>
+    public bool Smooth;
+
     public LoftFeature(string name = "Loft") { Name = name; }
     static readonly bool LoftSolveOff = Environment.GetEnvironmentVariable("P3D_LOFTSOLVE") == "0";
 
-    public override string Summary => $"Loft ({SectionSketchIds.Count} sections)" + (Cut ? " cut" : "");
+    public override string Summary => $"Loft ({SectionSketchIds.Count} sections{(Smooth ? ", smooth" : "")})" + (Cut ? " cut" : "");
 
     public override void Execute(BuildContext ctx)
     {
@@ -45,7 +48,7 @@ public sealed class LoftFeature : Feature
             sections.Add(prof);
         }
 
-        var solid = LoftOp.Build(sections, Math.Clamp(Samples, 8, 512));
+        var solid = LoftOp.Build(sections, Math.Clamp(Samples, 8, 512), Smooth);
 
         if (Cut) BooleanOp.Subtract(ctx.Bodies, solid, ctx.Warnings);
         else BooleanOp.Unite(ctx.Bodies, solid, ctx.Warnings);

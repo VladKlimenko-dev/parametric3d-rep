@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
@@ -119,6 +119,14 @@ static partial class Program
             {
                 var a = Box(0, 0, 0, 60, 40, 20); var t = PrimitiveOp.Torus(new Vector3d(30, 20, 20), 12, 3);
                 Case("box − torus (general)", () => Bool(a, t, BooleanOp.BooleanKind.Subtract), new[] { a, t }, kept: 5, modified: 1, split: 2, generated: 0, deleted: 0, merged: 0);   // верх — кольцевым пазом надвое
+            }
+            {
+                // 07.6: уклон стенок со скруглениями (пересборка той же топологии): низ на нейтрали — сохранён, прочие изменены
+                var bl0 = new List<TSolid> { Box(0, 0, 0, 60, 40, 20) };
+                FilletOp.RoundEdges(bl0, bl0[0].Edges.Where(e => Math.Abs(e.V0.P.Z - e.V1.P.Z) > 1).Select(EdgeRef.Of).ToList(), 5, new List<string>());
+                var r5 = bl0[0];
+                Case("tangent draft of a rounded box", () => { var bl = new List<TSolid> { r5 }; DraftOp.Apply(bl, new[] { new Vector3d(60, 20, 10) }, Vector3d.Zero, Vector3d.UnitZ, 5, new List<string>()); return bl[0]; },
+                     new[] { r5 }, kept: 1, modified: 9, split: 0, generated: 0, deleted: 0, merged: 0);
             }
             Require(fails.Count == 0, string.Join("; ", fails));
         });

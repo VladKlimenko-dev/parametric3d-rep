@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
@@ -90,7 +90,13 @@ static partial class Program
                 var c = ProfileBuilder.Build(new Frame3(new Vector3d(0, 0, 30), Vector3d.UnitX, Vector3d.UnitY), new List<Parametric3D.Kernel.Curves.ICurve3> {
                     new Parametric3D.Kernel.Curves.ArcCurve3(new Frame3(new Vector3d(0, 0, 30), Vector3d.UnitX, Vector3d.UnitY), 8, 0, 2 * Math.PI) });
                 var r = OperationContract.Run("Loft", new List<TSolid>(), l => l.Add(LoftOp.Build(new[] { a, c })));
-                if (!r.Accepted || r.Accuracy is not { Basis: "faceting (measured)", Measured: { } m } || m > r.Accuracy.Budget) fails.Add($"loft: {r.Outcome} accuracy {r.Accuracy}");
+                // 07.4 (2026-10-13): квадрат → окружность — точный NURBS-лофт (прежде многогранный: основание «faceting (measured)»)
+                if (!r.Accepted || r.Accuracy is not { Basis: "exact B-rep", Measured: { } m } || m > r.Accuracy.Budget) fails.Add($"loft: {r.Outcome} accuracy {r.Accuracy}");
+                // многогранный лофт (сечение — эллипс): отчёт по измеренному гранению
+                var el = ProfileBuilder.Build(new Frame3(new Vector3d(0, 0, 30), Vector3d.UnitX, Vector3d.UnitY), new List<Parametric3D.Kernel.Curves.ICurve3> {
+                    new Parametric3D.Kernel.Curves.EllipseCurve3(new Frame3(new Vector3d(0, 0, 30), Vector3d.UnitX, Vector3d.UnitY), 9, 6, 0, 2 * Math.PI) });
+                var r2 = OperationContract.Run("Loft", new List<TSolid>(), l => l.Add(LoftOp.Build(new[] { a, el })));
+                if (!r2.Accepted || r2.Accuracy is not { Basis: "faceting (measured)", Measured: { } m2 } || m2 > r2.Accuracy.Budget) fails.Add($"loft (ellipse): {r2.Outcome} accuracy {r2.Accuracy}");
             }
             Require(fails.Count == 0, string.Join("; ", fails));
         });

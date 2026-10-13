@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -22,7 +22,15 @@ public static class LoftOp
     static readonly bool OrderOff = Environment.GetEnvironmentVariable("P3D_LOFTORDER") == "0";
     static readonly bool AmbigOff = Environment.GetEnvironmentVariable("P3D_LOFTAMBIG") == "0";
 
-    public static TSolid Build(IReadOnlyList<Profile> sections, int samples = 64)
+    /// <param name="smooth">KRN-07 (07.4): гладкий лофт (интерполяция поперёк сечений степени до 3) вместо линейчатого.</param>
+    public static TSolid Build(IReadOnlyList<Profile> sections, int samples = 64, bool smooth = false)
+    {
+        _smooth = smooth;
+        try { return BuildCore(sections, samples); } finally { _smooth = false; }
+    }
+    [ThreadStatic] static bool _smooth;
+
+    static TSolid BuildCore(IReadOnlyList<Profile> sections, int samples)
     {
         if (sections.Count < 2) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Loft: at least two sections are needed.");
         // KRN-07 (07.4): НЕСКОЛЬКО КОНТУРОВ. Прежде брался только внешний контур — отверстия сечений молча заливались
@@ -31,6 +39,37 @@ public static class LoftOp
         // контуров или неразличимые отверстия — отказ. Мутация P3D_LOFTHOLES=0.
         if (!HolesOff && sections.Any(x => x.Loops.Count > 1)) return BuildWithHoles(sections, samples);
         return BuildSingle(sections, samples);
+    }
+
+    /// <summary>Сечения для точного лофта: внешний контур из отрезков и дуг; целая окружность — на N равных дуг (N — число
+    /// звеньев у сечений-многоугольников), начало — по направлению первой вершины соседнего сечения. null — не подходит.</summary>
+    static List<(List<ICurve3> Loop, Vector3d Normal)>? ExactSections(IReadOnlyList<Profile> sections)
+    {
+        var raw = new List<(List<ICurve3> Loop, Vector3d Normal)>();
+        foreach (var s in sections)
+        {
+            if (s.Loops.Count != 1) return null;
+            var cs = s.Loops[0].Curves;
+            if (cs.Any(c => c is not LineCurve3 && c is not ArcCurve3)) return null;
+            raw.Add((cs.ToList(), s.Plane.W));
+        }
+        int n = raw.Where(r => !(r.Loop.Count == 1 && r.Loop[0] is ArcCurve3 { IsClosed: true })).Select(r => r.Loop.Count).DefaultIfEmpty(1).Max();
+        for (int k = 0; k < raw.Count; k++)
+        {
+            if (!(raw[k].Loop.Count == 1 && raw[k].Loop[0] is ArcCurve3 { IsClosed: true } a) || n == 1) continue;
+            // начало деления — направление первой вершины ближайшего сечения-многоугольника (относительно его центра)
+            var other = raw.Select((r, i) => (r, i)).Where(x => x.r.Loop.Count == n).OrderBy(x => Math.Abs(x.i - k)).FirstOrDefault();
+            double a0 = a.A0;
+            if (other.r.Loop != null)
+            {
+                var oc = other.r.Loop.Aggregate(Vector3d.Zero, (acc, c) => acc + c.PointAt(c.T0)) / n;
+                var d = other.r.Loop[0].PointAt(other.r.Loop[0].T0) - oc;
+                a0 = Math.Atan2(Vector3d.Dot(d, a.Frame.V.Normalized()), Vector3d.Dot(d, a.Frame.U.Normalized()));
+            }
+            double sw = Math.Sign(a.Sweep) * 2 * Math.PI / n;
+            raw[k] = (Enumerable.Range(0, n).Select(i => (ICurve3)new ArcCurve3(a.Frame, a.Radius, a0 + sw * i, a0 + sw * (i + 1))).ToList(), raw[k].Normal);
+        }
+        return raw;
     }
 
     private static Profile OneLoop(Profile s, ProfileLoop l)
@@ -100,6 +139,19 @@ public static class LoftOp
         // кромки — многоугольники. Здесь тело строится вращением точного профиля.
         if (sections.Count == 2 && CoaxialCircles(sections[0], sections[1]) is { } cone)
             return cone;
+
+        // KRN-07 (07.4): ТОЧНЫЙ ЛОФТ — сечения из отрезков и дуг (у всех одно число звеньев; целая окружность делится на
+        // столько дуг, сколько звеньев у соседа) — NURBS-грани по звеньям, линейчатый или гладкий (DirectRound.NurbsLoft).
+        // Гладкий без этого пути не строится (отказ), линейчатый — прежним путём по ломаным. Мутация P3D_LOFTNURBS=0.
+        // многоугольники (без дуг) у линейчатого лофта — прежним точным путём по вершинам (призматоид, P3D_LOFTCORNERS)
+        if (!DirectRound.LoftNurbsOff && ExactSections(sections) is { } secs && (_smooth || secs.Any(x => x.Loop.Any(c => c is ArcCurve3))))
+        {
+            string? why = null;
+            var exact = DirectRound.NurbsLoft(secs, _smooth, ref why);
+            if (exact != null) return exact;
+            if (_smooth) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: the smooth loft declined: " + why);
+        }
+        else if (_smooth) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: a smooth loft needs sections of lines and arcs with the same number of curves.");
 
         var rings = new List<List<Vector3d>>();
         var planes = new List<Frame3>();

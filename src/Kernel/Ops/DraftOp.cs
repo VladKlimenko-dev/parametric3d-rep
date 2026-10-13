@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -38,6 +38,19 @@ public static class DraftOp
                 bodies[0] = t;
                 warnings.Add($"Draft: {degrees:0.###}°, {onFaces.Count} face(s) drafted (exact plane replacement).");
                 return true;
+            }
+            // KRN-07 (07.6): стенки со скруглёнными вертикальными рёбрами — плоскости и касательные цилиндры (конусы)
+            if (TangentFaces(bodies[0], onFaces) is { } sel)
+            {
+                string? whyT = null;
+                var dt = DirectRound.DraftSolid(bodies[0], sel, neutralPoint, m, degrees * Math.PI / 180, out int prop, ref whyT);
+                if (dt != null)
+                {
+                    bodies[0] = dt;
+                    warnings.Add($"Draft: {degrees:0.###}°, {onFaces.Count} face(s) drafted" + (prop > 0 ? $" + {prop} tangent face(s)" : "") + " (exact: planes and cones).");
+                    return true;
+                }
+                why += " | tangent draft: " + whyT;
             }
             if (degrees < 0) { warnings.Add($"Draft: an outward draft is built only by plane replacement, which declined: {why}."); return false; }
             warnings.Add($"Draft: the exact plane replacement declined ({why}); half-space cuts are used.");
@@ -111,6 +124,26 @@ public static class DraftOp
         if (done == 0) return false;
         warnings.Add($"Draft: {degrees:0.###}°, {done} face(s) drafted.");
         return true;
+    }
+
+    /// <summary>Грани под точками (плоские и цилиндрические, точка на поверхности и на сетке грани); null — не все найдены.</summary>
+    static HashSet<TFace>? TangentFaces(TSolid body, IReadOnlyList<Vector3d> probes)
+    {
+        var res = new HashSet<TFace>();
+        foreach (var q in probes)
+        {
+            TFace? hit = null;
+            foreach (var f in body.Faces)
+            {
+                var su = GeometryAudit.AuthoritativeSurface(f);
+                if (su == null || (su.PointAt(su.ProjectToUV(q)) - q).Length > 1e-6) continue;
+                if (MeshDistance(f, q) > 1e-2) continue;
+                hit = f; break;
+            }
+            if (hit == null) return null;
+            res.Add(hit);
+        }
+        return res;
     }
 
     /// <summary>Мутация P3D_DRAFTTWEAK=0: только прежний путь (вычитание полупространств, только внутрь).</summary>
