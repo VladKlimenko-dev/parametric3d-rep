@@ -367,6 +367,7 @@ src/docs/release/PROGRESS_SCORE.txt
 src/docs/release/RESTORE_AND_BACKUP.md
 src/docs/release/SUPPORT_MATRIX.md
 src/docs/release/UI_AVALONIA_STAGE.md
+src/docs/release/UI_VIEW_PALETTE.md
 src/docs/release/VERIFICATION.md
 src/docs/release/make_release.sh
 tests/a01/FixChecks.csproj

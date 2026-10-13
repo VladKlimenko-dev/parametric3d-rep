@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
@@ -97,6 +97,62 @@ static partial class Program
                 Log(new { test = "KRN05-PARTITION", traced = true, named = named4, outcome = r4.Outcome.ToString(), guarantee = r4.Guarantee.ToString() });
                 if (!named4 || (r4.Accepted && r4.Guarantee == GuaranteeLevel.ExactAnalytic)) fails.Add($"lost region bounded by an intersection curve: named {named4}, {r4.Outcome} {r4.Guarantee}");
             }
+            {   // 05.5: целые замкнутые грани — шар, пересекающий верх бруска, и тор, пересекающий его грань: мера целой известна
+                // (шар 4πR, тор 0 по двум мерам); область у полюса — с поправкой по Стоксу. Мутация P3D_PARTPOLE=0.
+                foreach (var (name, tool) in new (string, Func<TSolid>)[] { ("sphere", () => PrimitiveOp.Sphere(new Vector3d(20, 15, 18), 6)), ("torus", () => PrimitiveOp.Torus(new Vector3d(20, 15, 19), 9, 2.5)) })
+                {
+                    var wc = new List<string>();
+                    var rc = BooleanOp.Evaluate(new List<TSolid> { A() }, tool(), BooleanOp.BooleanKind.Unite, OperationPolicy.Strict, wc);
+                    if (!rc.Accepted || rc.Guarantee != GuaranteeLevel.ExactAnalytic || wc.Any(x => x.Contains("partition check"))) fails.Add($"{name} clean: {rc.Outcome} {rc.Guarantee} {string.Join(" | ", wc.Where(x => x.Contains("partition")))}");
+                    var wd = new List<string>();
+                    Parametric3D.Kernel.Analytic.GeneralBoolean.DropClosedRegionForTest = true;
+                    OperationResult rd;
+                    try { rd = BooleanOp.Evaluate(new List<TSolid> { A() }, tool(), BooleanOp.BooleanKind.Unite, OperationPolicy.Strict, wd); }
+                    finally { Parametric3D.Kernel.Analytic.GeneralBoolean.DropClosedRegionForTest = false; }
+                    bool namedC = wd.Any(x => x.Contains("partition check")) || rd.Diagnostics.Any(d => d.Message.Contains("partition check"));
+                    Log(new { test = "KRN05-PARTITION", closed = name, named = namedC, outcome = rd.Outcome.ToString(), guarantee = rd.Guarantee.ToString() });
+                    if (!namedC || (rd.Accepted && rd.Guarantee == GuaranteeLevel.ExactAnalytic)) fails.Add($"lost region of a closed {name} face: named {namedC}, {rd.Outcome} {rd.Guarantee}");
+                }
+                // область конуса до вершины (вершина над бруском, вниз — тоже): мера с началом развёртки в вершине
+                foreach (var (name, tool) in new (string, Func<TSolid>)[] { ("cone apex up", () => PrimitiveOp.Cone(new Vector3d(20, 15, -5), 6, 0, 30)), ("cone apex down", () => Rotated(PrimitiveOp.Cone(new Vector3d(0, 0, -15), 6, 0, 30), Vector3d.Zero, Vector3d.UnitX, 180, new Vector3d(20, 15, 10))) })
+                {
+                    var wc = new List<string>();
+                    var rc = BooleanOp.Evaluate(new List<TSolid> { A() }, tool(), BooleanOp.BooleanKind.Unite, OperationPolicy.Strict, wc);
+                    if (!rc.Accepted || rc.Guarantee != GuaranteeLevel.ExactAnalytic || wc.Any(x => x.Contains("partition check"))) fails.Add($"{name} clean: {rc.Outcome} {rc.Guarantee} {string.Join(" | ", wc.Where(x => x.Contains("partition")))}");
+                    var wd = new List<string>();
+                    Parametric3D.Kernel.Analytic.GeneralBoolean.DropCurvedRegionForTest = true;
+                    OperationResult rd;
+                    try { rd = BooleanOp.Evaluate(new List<TSolid> { A() }, tool(), BooleanOp.BooleanKind.Unite, OperationPolicy.Strict, wd); }
+                    finally { Parametric3D.Kernel.Analytic.GeneralBoolean.DropCurvedRegionForTest = false; }
+                    bool namedC = wd.Any(x => x.Contains("partition check")) || rd.Diagnostics.Any(d => d.Message.Contains("partition check"));
+                    Log(new { test = "KRN05-PARTITION", cone = name, named = namedC, outcome = rd.Outcome.ToString(), guarantee = rd.Guarantee.ToString() });
+                    if (!namedC || (rd.Accepted && rd.Guarantee == GuaranteeLevel.ExactAnalytic)) fails.Add($"lost region of a {name} face: named {namedC}, {rd.Outcome} {rd.Guarantee}");
+                }
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+        Check("KRN05-SHARED-BY-CONSTRUCTION", () =>
+        {
+            // 05.6: общие границы — общие сущности ПО ПОСТРОЕНИЮ: совпадающие куски (отрезки вдоль общей грани двух брусков,
+            // половинки эллипса стыка «на ус» протяжки по ломаной) отождествляются до сборки граней — ребро создаётся один
+            // раз; сшивка после сборки ничего не делает. Мутация P3D_SHAREBUILD=0 (работу делает поздняя сшивка).
+            var fails = new List<string>();
+            long B() => Parametric3D.Kernel.Analytic.GeneralBoolean.BuildSplits + Parametric3D.Kernel.Analytic.GeneralBoolean.BuildMerges;
+            long L() => Parametric3D.Kernel.Analytic.GeneralBoolean.SewSplits + Parametric3D.Kernel.Analytic.GeneralBoolean.SewMerges;
+            long b0 = B(), l0 = L();
+            var u = new List<TSolid> { Box(0, 0, 0, 20, 10, 10) };
+            BooleanOp.Unite(u, Box(20, 0, 0, 10, 10, 10), new List<string>());
+            if (u.Count != 1 || u[0].Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(u[0]).IsValid) fails.Add($"boxes: {u.Count} body(ies) {u.FirstOrDefault()?.Guarantee}");
+            var p = new Parametric3D.Model.Part("sweepL"); var sec = CircleSketch(p, 0, 0, 0, 3);
+            var path = new Parametric3D.Model.Sketching.Sketch("path", new Frame3(Vector3d.Zero, Vector3d.UnitX, Vector3d.UnitZ)); p.Add(path);
+            path.AddEntity(new Parametric3D.Model.Sketching.SkLine(new Parametric3D.Model.Sketching.SkPoint(0, 0), new Parametric3D.Model.Sketching.SkPoint(0, 40)));
+            path.AddEntity(new Parametric3D.Model.Sketching.SkLine(new Parametric3D.Model.Sketching.SkPoint(0, 40), new Parametric3D.Model.Sketching.SkPoint(30, 40)));
+            p.AddFeature(new Parametric3D.Model.Features.SweepFeature { SectionSketchId = sec.Id, PathSketchId = path.Id }); p.Rebuild(null);
+            if (p.Features.Any(f => f.Error != null) || p.Bodies.Count != 1) fails.Add("sweep L failed");
+            long built = B() - b0, late = L() - l0;
+            Log(new { test = "KRN05-SHARED", built, late });
+            if (built == 0) fails.Add("nothing identified at construction");
+            if (late != 0) fails.Add($"late sewing split/merged {late} edge(s)");
             Require(fails.Count == 0, string.Join("; ", fails));
         });
         Check("KRN05-TOUCH-POLICY-REGULARIZED", () =>
