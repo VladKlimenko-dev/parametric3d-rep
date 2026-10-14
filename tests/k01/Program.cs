@@ -435,6 +435,8 @@ static partial class Program
         if (mode is "krn06probe2") Krn06Probe2();
         if (mode is "pyrcut") PyramidCutRepro();
         if (mode is "krn06ncorner" or "allA") Krn06NCornerChecks();
+        if (mode is "drsetback" or "allA") Krn06SetbackCornerChecks();
+        if (mode is "sbprobe") SetbackProbe();
         if (mode is "krn06incl" or "allA") Krn06InclinedHoleChecks();
         if (mode is "krn06mixed" or "allA") Krn06MixedChecks();
         if (mode is "krn06tanprop" or "allA") Krn06TanPropChecks();

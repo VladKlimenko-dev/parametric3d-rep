@@ -168,6 +168,7 @@ public static class TransformOp
         // (процедурный режим) не переносится — она считает проекции на грани исходного тела;
         // копия работает по сечениям, как запасной режим самой поверхности.
         SectionSurface ss => new SectionSurface(ss.Sections.Select(q => Section(q, x)).ToList(), ss.Closed),
+        CornerPatchSurface cp => cp.Mapped(x.Point),
         _ => null
     };
 

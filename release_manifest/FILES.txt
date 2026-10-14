@@ -103,6 +103,7 @@ src/Kernel/Query/BodyQuery.cs
 src/Kernel/Query/BodyQueryDistance.cs
 src/Kernel/Robust/Predicates.cs
 src/Kernel/Surfaces/BandNurbs.cs
+src/Kernel/Surfaces/CornerPatchSurface.cs
 src/Kernel/Surfaces/FacetedSurface.cs
 src/Kernel/Surfaces/ISurface3.cs
 src/Kernel/Surfaces/NurbsSurface.cs

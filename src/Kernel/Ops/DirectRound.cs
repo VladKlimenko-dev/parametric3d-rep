@@ -39,6 +39,60 @@ public static partial class DirectRound
     /// n-угольник (мутация P3D_DRNCORNER=0 — отказ, как прежде).</summary>
     static readonly bool NCorner = Environment.GetEnvironmentVariable("P3D_DRNCORNER") != "0";
     public static long NCorners;
+    /// <summary>
+    /// KRN-06 (06.6, 06.13): УГОЛ БЕЗ ОБЩЕГО ШАРА — отступ лент и N-сторонний лоскут (CornerPatchSurface). Ленты кончаются
+    /// сечениями поперёк оси на отступе от точки встречи контактных прямых; на каждой грани угла контактные прямые соседних
+    /// лент соединяет дуга эллипса, касательная к обеим (рациональная квадратичная с вершиной в точке встречи); лоскут
+    /// касается лент вдоль дуг сечений и граней вдоль дуг эллипсов. Мутация P3D_DRSETBACK=0 — отказ, как прежде.
+    /// </summary>
+    static readonly bool SetbackOn = Environment.GetEnvironmentVariable("P3D_DRSETBACK") != "0";
+    public static long SetbackCorners;
+    /// <summary>Разбор: последний построенный угловой лоскут.</summary>
+    [ThreadStatic] public static CornerPatchSurface? LastPatch;
+    /// <summary>
+    /// Отступ ленты от точки встречи контактных прямых — доля радиуса. Меньше — ближе к сфере, когда общий шар почти есть
+    /// (при общем шаре и отступе 0.1r лоскут отходит от сферического угла на 0.3 % снятого объёма).
+    /// </summary>
+    const double SetbackK = 0.1;
+    const double ThK = 1;
+    /// <summary>Разбор: угол с отступом и там, где общий шар есть (сверка лоскута со сферой).</summary>
+    [ThreadStatic] public static bool ForceSetback;
+    static readonly bool RibBall = Environment.GetEnvironmentVariable("P3D_SETBACKBALL") != "0";
+    static readonly bool RibCompat = Environment.GetEnvironmentVariable("P3D_SETBACKRIB") != "0";
+    const double HK = 2;
+    sealed class Setback
+    {
+        public readonly Dictionary<TEdge, (Vector3d Base, Vector3d T, double Len)> Axis = new();
+        public readonly Dictionary<TEdge, double> A = new();
+        public readonly List<(TFace F, Vector3d Q, TEdge X, TEdge Y)> Faces = new();
+        public readonly List<(Vector3d A, Vector3d B, ICurve3 Arc, Vector3d T)> Arcs = new();
+        public double Sigma;
+    }
+
+    /// <summary>
+    /// Дуга эллипса от p0 до p2, касательная к прямым p0–q и p2–q (рациональная квадратичная с весом w = sin(γ/2), γ — угол
+    /// при q; равные плечи — дуга окружности). Центр — (M − w²q)/(1 − w²), M — середина хорды; сопряжённые полудиаметры:
+    /// к плечу S = (M + wq)/(1 + w) и вдоль хорды; главные оси — поворотом пары. null — вырождение.
+    /// </summary>
+    internal static EllipseCurve3? TangentConic(Vector3d p0, Vector3d q, Vector3d p2)
+    {
+        var a = p0 - q; var b = p2 - q; double la = a.Length, lb = b.Length;
+        if (la < 1e-12 || lb < 1e-12) return null;
+        double gam = Math.Acos(Math.Clamp(Vector3d.Dot(a, b) / (la * lb), -1, 1));
+        if (gam < 1e-6 || gam > Math.PI - 1e-6) return null;
+        double w = Math.Sin(gam / 2);
+        var M = (p0 + p2) / 2; var C = (M - q * (w * w)) / (1 - w * w); var S = (M + q * w) / (1 + w);
+        var U = S - C; double cphi = (M - C).Length / U.Length;
+        if (!(cphi < 1 - 1e-12)) return null;
+        double phi = Math.Acos(cphi);
+        var V = (p2 - p0) / (2 * Math.Sin(phi));
+        double th0 = 0.5 * Math.Atan2(2 * Vector3d.Dot(U, V), U.LengthSquared - V.LengthSquared);
+        var U2 = U * Math.Cos(th0) + V * Math.Sin(th0); var V2 = -U * Math.Sin(th0) + V * Math.Cos(th0);
+        var el = new EllipseCurve3(new Frame3(C, U2, V2), U2.Length, V2.Length, -phi - th0, phi - th0);
+        double sc = Math.Max(1, Math.Max(la, lb));
+        if ((el.PointAt(0) - p0).Length > 1e-9 * sc || (el.PointAt(1) - p2).Length > 1e-9 * sc) return null;
+        return el;
+    }
     static readonly bool TrueNormal = Environment.GetEnvironmentVariable("P3D_DRTRUENORMAL") != "0";
     static readonly bool ChamferOff = Environment.GetEnvironmentVariable("P3D_DIRECTCHAMFER") == "0";
     static readonly bool Prov = Environment.GetEnvironmentVariable("P3D_DRPROVENANCE") != "0";
@@ -480,6 +534,7 @@ public static partial class DirectRound
         if (circs.Count > 0 && !CircularBlends(circs, byFace, blends, r, ch, ref why)) return null;
         if (closedCC.Count > 0 && !CylCylBlends(body, closedCC, byFace, blends, r, ref why)) return null;
         var corners = new Dictionary<Vector3d, (Vector3d C, Vector3d[] Ns, List<(Vector3d A, Vector3d B, ICurve3 Arc)> Arcs)>();
+        var setbacks = new Dictionary<Vector3d, Setback>();
         var asymFix = new List<(FDesc Fb, TEdge E3, Vector3d P, Vector3d R, ICurve3 Sec)>();
         // выпуклость ребра: (n1 × n2)·t1 > 0 по направлению ребра в контуре первой грани
         int? SigmaOf(TEdge e)
@@ -507,6 +562,39 @@ public static partial class DirectRound
             return Math.Abs(cv) < 1e-9 ? null : (cv > 0 ? -1 : 1);
         }
         var sigmaOf = edges.ToDictionary(x => x, x => SigmaOf(x));
+        // угол без общего шара: оси лент, точки встречи контактных прямых на гранях, отступы (06.6, 06.13)
+        Setback? MakeSetback(Vector3d V, List<TEdge> atV, out string? whyS)
+        {
+            whyS = null; var sb = new Setback();
+            foreach (var x in atV)
+            {
+                var fsx = x.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
+                if (fsx.Count != 2 || sigmaOf[x] is not int sgx) { whyS = "setback corner: an edge without two faces or convexity"; return null; }
+                var na = byFace[fsx[0]].N.Normalized(); var nb = byFace[fsx[1]].N.Normalized(); double cc = Vector3d.Dot(na, nb);
+                var Cx = x.V0.P + (na + nb) * (sgx * r / (1 + cc));
+                var far = (x.V0.P - V).Length < 1e-7 ? x.V1.P : x.V0.P; var tx = (far - V).Normalized();
+                sb.Axis[x] = (Cx + tx * Vector3d.Dot(V - Cx, tx), tx, (far - V).Length);
+                sb.Sigma = sgx;
+            }
+            foreach (var F in atV.SelectMany(x => x.CoEdges.Select(c => c.Loop?.Face)).OfType<TFace>().Distinct())
+            {
+                var xs = atV.Where(x => x.CoEdges.Any(c => c.Loop?.Face == F)).ToList();
+                if (xs.Count != 2) { whyS = "setback corner: a face without two blended edges"; return null; }
+                var nF = byFace[F].N.Normalized();
+                var (bx, tx, _) = sb.Axis[xs[0]]; var (by, ty, _) = sb.Axis[xs[1]];
+                var Qf = MeetLines(bx - nF * (sb.Sigma * r), tx, by - nF * (sb.Sigma * r), ty, Math.Max(1, r));
+                if (Qf == null) { whyS = "setback corner: contact lines on a face do not meet"; return null; }
+                sb.Faces.Add((F, Qf.Value, xs[0], xs[1]));
+            }
+            foreach (var x in atV)
+            {
+                var (_, tx, len) = sb.Axis[x];
+                double a = sb.Faces.Where(f => f.X == x || f.Y == x).Max(f => Vector3d.Dot(f.Q - V, tx)) + SetbackK * r;
+                if (!(a > 1e-9) || a > 0.9 * len) { whyS = "setback corner: radius too large for the edge"; return null; }
+                sb.A[x] = a;
+            }
+            return sb;
+        }
         if (Debug != null)
         {
             foreach (var f in body.Faces) Debug($"face {f.Tag} NI {AnalyticVolume.NormalIntegral(f).Normalized():0.###} NA {(f.Loops.First().CoEdges.First().Start.P is var pp ? f.NormalAt(pp) : default):0.###}");
@@ -637,6 +725,34 @@ public static partial class DirectRound
                     if (cornerSel.Any(x => sigmaOf[x] != (int)sigma)) { why = "corner of convex and concave edges"; _mixedSigma = sigmaOf; return null; }
                     var cf = edges.Where(x => x == e || cornerSel.Contains(x)).SelectMany(x => x.CoEdges.Select(c => c.Loop?.Face)).OfType<TFace>().Distinct().ToList();
                     if (cf.Count != inc.Count || cf.Any(f => !byFace[f].Surf.IsPlanar)) { why = "corner faces are not planes, one per edge"; return null; }
+                    if (!setbacks.TryGetValue(V, out var sbk) && !corners.ContainsKey(V))
+                    {
+                        // общий шар? (три грани — всегда; больше — если все смещённые плоскости проходят через одну точку)
+                        var ns0 = cf.Select(f => byFace[f].N).ToArray();
+                        var ds0 = ns0.Select(n => Vector3d.Dot(n, V) + sigma * r).ToArray();
+                        Vector3d? C00 = null;
+                        for (int i0 = 0; i0 < ns0.Length && C00 == null; i0++)
+                            for (int i1 = i0 + 1; i1 < ns0.Length && C00 == null; i1++)
+                                for (int i2 = i1 + 1; i2 < ns0.Length && C00 == null; i2++)
+                                    C00 = Solve3(new[] { ns0[i0], ns0[i1], ns0[i2] }, new[] { ds0[i0], ds0[i1], ds0[i2] });
+                        bool ball = C00 != null && Enumerable.Range(0, ns0.Length).All(i => Math.Abs(Vector3d.Dot(ns0[i], C00.Value) - ds0[i]) <= 1e-9 * Math.Max(1, r));
+                        if ((!ball || ForceSetback) && SetbackOn && !ch && law == null)
+                        {
+                            sbk = MakeSetback(V, edges.Where(x => x == e || cornerSel.Contains(x)).ToList(), out var whyS);
+                            if (sbk == null) { why = whyS; return null; }
+                            setbacks[V] = sbk;
+                        }
+                    }
+                    if (sbk != null)
+                    {
+                        var (sbBase, sbT, _) = sbk.Axis[e]; var axP = sbBase + sbT * sbk.A[e];
+                        var sk1 = axP - n1 * (sigma * r); var sk2 = axP - n2 * (sigma * r);
+                        var sarc = Section(C0, t, e1, e2, r, axP, t, th1, dth);
+                        if ((sarc.PointAt(sarc.T0) - sk1).Length > 1e-7 || (sarc.PointAt(sarc.T1) - sk2).Length > 1e-7) { why = "setback corner: section arc does not meet the contact points"; return null; }
+                        endPts[vi] = (sk1, sk2, sarc);
+                        sbk.Arcs.Add((sk1, sk2, sarc, sbT));
+                        continue;
+                    }
                     if (!corners.TryGetValue(V, out var cr))
                     {
                         var ns = cf.Select(f => byFace[f].N).ToArray();
@@ -862,7 +978,11 @@ public static partial class DirectRound
                         bool fwd = Vector3d.Dot(s.B - s.A, P1 - P0) > 0;
                         var qP0 = i == 1 ? endPts[0].Q1 : endPts[0].Q2; var qP1 = i == 1 ? endPts[1].Q1 : endPts[1].Q2;
                         var qa = fwd ? qP0 : qP1; var qb = fwd ? qP1 : qP0;
-                        var pv = Shorten(loop[(k - 1 + loop.Count) % loop.Count], null, qa); var nx = Shorten(loop[(k + 1) % loop.Count], qb, null);
+                        // у угла с отступом соседнее звено — контактная прямая соседней ленты со своим концом: не трогать
+                        // (между ними встанет дуга эллипса угла)
+                        var vPrev = fwd ? P0 : P1; var vNext = fwd ? P1 : P0;
+                        var pv = setbacks.ContainsKey(vPrev) ? loop[(k - 1 + loop.Count) % loop.Count] : Shorten(loop[(k - 1 + loop.Count) % loop.Count], null, qa);
+                        var nx = setbacks.ContainsKey(vNext) ? loop[(k + 1) % loop.Count] : Shorten(loop[(k + 1) % loop.Count], qb, null);
                         if (pv == null || nx == null) { why = "a neighbour of the edge cannot be shortened"; return null; }
                         loop[(k - 1 + loop.Count) % loop.Count] = pv; loop[(k + 1) % loop.Count] = nx;
                         loop[k] = new Seg { Curve = new LineCurve3(qa, qb), A = qa, B = qb, Id = e };
@@ -957,6 +1077,109 @@ public static partial class DirectRound
                     Fb.Touched = true; done = true;
                 }
             if (!done) { why = "asymmetric chain: the neighbour's third edge not found"; return null; }
+        }
+        // углы с отступом: дуги эллипсов на гранях и N-сторонний лоскут
+        foreach (var (V, sb) in setbacks)
+        {
+            if (sb.Arcs.Count != sb.A.Count) { why = "setback corner with a missing blend"; return null; }
+            var items = new List<(Vector3d A, Vector3d B, ICurve3 C, bool IsArc, Vector3d Dir, Vector3d Q)>();
+            // у дуги в Q — точка оси ленты
+            foreach (var (aA, aB, aC, aT) in sb.Arcs) items.Add((aA, aB, aC, true, aT, sb.Axis.Values.First(ax => Math.Abs(Vector3d.Dot(ax.T, aT)) > 1 - 1e-12 && ((aA - ax.Base) - ax.T * Vector3d.Dot(aA - ax.Base, ax.T)).Length < r * (1 + 1e-9) + 1e-9).Base));
+            foreach (var (F, Qf, X, Y) in sb.Faces)
+            {
+                var Fd = byFace[F]; bool done = false;
+                foreach (var loop in Fd.Loops)
+                    for (int k = 0; k < loop.Count && !done; k++)
+                    {
+                        var s0 = loop[k]; var s1 = loop[(k + 1) % loop.Count];
+                        if (!((s0.Id == X && s1.Id == Y) || (s0.Id == Y && s1.Id == X))) continue;
+                        var cn = TangentConic(s0.B, Qf, s1.A);
+                        if (cn == null) { why = "setback corner: the face conic degenerates"; return null; }
+                        loop.Insert(k + 1, new Seg { Curve = cn, A = s0.B, B = s1.A });
+                        Fd.Touched = true; done = true;
+                        items.Add((s0.B, s1.A, cn, false, Fd.N.Normalized(), Qf));
+                    }
+                if (!done) { why = "setback corner: the contact lines of a face are not neighbours"; return null; }
+            }
+            // цепочка сторон
+            var order = new List<(ICurve3 C, bool Fw, bool IsArc, Vector3d Dir, Vector3d Q, Vector3d AxB)>();
+            var left = items.ToList(); var cur = left[0]; left.RemoveAt(0);
+            order.Add((cur.C, true, cur.IsArc, cur.Dir, cur.Q, cur.Q)); var at = cur.B;
+            while (left.Count > 0)
+            {
+                int i = left.FindIndex(x => (x.A - at).Length < 1e-7 || (x.B - at).Length < 1e-7);
+                if (i < 0) { why = "setback corner: patch sides do not close"; return null; }
+                var x = left[i]; left.RemoveAt(i); bool fw = (x.A - at).Length < 1e-7;
+                order.Add((x.C, fw, x.IsArc, x.Dir, x.Q, x.Q)); at = fw ? x.B : x.A;
+            }
+            if ((at - items[0].A).Length > 1e-7) { why = "setback corner: patch loop not closed"; return null; }
+            Vector3d AtS(ICurve3 c, bool fw, double s0) { double tt = fw ? s0 : 1 - s0; return c.PointAt(c.T0 + (c.T1 - c.T0) * tt); }
+            var mids = order.Select(o => AtS(o.C, o.Fw, 0.5)).ToList();
+            var G = mids.Aggregate(Vector3d.Zero, (x, y) => x + y) / mids.Count;
+            double H = HK * mids.Average(m => (m - G).Length);
+            var sides = new List<CornerPatchSurface.Side>();
+            int mS = order.Count; double kap = CornerPatchSurface.RibbonScale(mS);
+            // производная стороны по её доле s (по обходу)
+            Vector3d DS(int k, double s0) { var o = order[(k % mS + mS) % mS]; const double hs = 1e-6; return (AtS(o.C, o.Fw, s0 + hs) - AtS(o.C, o.Fw, s0 - hs)) / (2 * hs); }
+            for (int k = 0; k < mS; k++)
+            {
+                var o = order[k];
+                // величина ленты: в начале — производная предыдущей стороны в её конце, в конце — следующей в её начале (× κ),
+                // между ними — линейно (P3D_SETBACKRIB=0 — постоянная H)
+                double m0 = RibCompat ? kap * DS(k - 1, 1).Length : H, m1 = RibCompat ? kap * DS(k + 1, 0).Length : H;
+                // лента на шарах: окружность радиуса r через точку стороны C, касательная к T, центр — c = C + r·u (u — к центру
+                // шара); угол поворота θ(d) = Θ(1 − e^{−d|T|/(rΘ)}), Θ = π/2: θ'(0)·r = |T| (касание), насыщение — не дальше
+                // четверти окружности. P3D_SETBACKBALL=0 — прямая лента C + d·T.
+                // лента на шаре радиуса r: центр c, направление w = −u·cos θ + τ̂·sin θ (u — от точки к центру, τ̂ — по T),
+                // R = c + r·w; θ(d) = Θ(1 − e^{−d|T|/(rΘ)}), Θ = π/2: θ'(0)·r = |T| (касание), насыщение — не дальше четверти
+                // окружности. P3D_SETBACKBALL=0 — прямая лента C + d·T.
+                Func<double, double, (Vector3d C, Vector3d W)>? BallRib(Func<double, Vector3d> Cf, Func<double, Vector3d> Tf, Func<double, Vector3d> Uf)
+                {
+                    if (!RibBall) return null;
+                    return (s0, d0) =>
+                    {
+                        var C = Cf(s0); var T = Tf(s0); double tl = T.Length; var u = Uf(s0);
+                        if (tl == 0) return (C + u * r, -u);
+                        double Th = ThK * Math.PI / 2; double th = Th * (1 - Math.Exp(-d0 * tl / (r * Th)));
+                        return (C + u * r, -u * Math.Cos(th) + T / tl * Math.Sin(th));
+                    };
+                }
+                Func<double, double, Vector3d>? PtRib(Func<double, double, (Vector3d C, Vector3d W)>? b) => b == null ? null : (s0, d0) => { var (c, w) = b(s0, d0); return c + w * r; };
+                if (o.IsArc)
+                {
+                    // к оси ленты (центру шара на конце ленты)
+                    var dir = -o.Dir; var oa = o; var axB = o.AxB;
+                    Func<double, Vector3d> Ta = s0 => dir * (m0 + (m1 - m0) * s0);
+                    Func<double, Vector3d> Ca = s0 => AtS(oa.C, oa.Fw, s0);
+                    Func<double, Vector3d> Ua = s0 => { var p = Ca(s0); var c = axB + dir * Vector3d.Dot(p - axB, dir); return (c - p).Normalized(); };
+                    var ba = BallRib(Ca, Ta, Ua);
+                    sides.Add(new CornerPatchSurface.Side(o.C, o.Fw, Ta, PtRib(ba), ba));
+                    continue;
+                }
+                var nF = o.Dir; int kk = k; var of = o;
+                double sgn = Vector3d.Dot(Vector3d.Cross(nF, DS(k, 0.5)), o.Q - AtS(o.C, o.Fw, 0.5)) > 0 ? 1 : -1;
+                // направление поперёк — по касательной самой кривой (не разностью: разность с шагом 1e-6 давала шум 1e-9 мм в
+                // точке лоскута, и проекция на лоскут не сходилась — 65 шагов Ньютона на точку)
+                Func<double, Vector3d> Tf = s0 => { double tt = of.Fw ? s0 : 1 - s0; var tg = of.C.TangentAt(of.C.T0 + (of.C.T1 - of.C.T0) * tt) * (of.Fw ? 1 : -1); return Vector3d.Cross(nF, tg).Normalized() * (sgn * (m0 + (m1 - m0) * s0)); };
+                // к центрам шаров: от грани на сторону σ·n
+                var uF = nF * sb.Sigma;
+                var bf = BallRib(s0 => AtS(of.C, of.Fw, s0), Tf, _ => uF);
+                sides.Add(new CornerPatchSurface.Side(o.C, o.Fw, Tf, PtRib(bf), bf));
+            }
+            var patch = new CornerPatchSurface(sides, r); LastPatch = patch;
+            var dsum = sb.Faces.Aggregate(Vector3d.Zero, (x, f) => x + byFace[f.F].N.Normalized());
+            var pc = patch.PointAt(Vector2d.Zero);
+            bool rev = Vector3d.Dot(patch.NormalAt(Vector2d.Zero), dsum) < 0;
+            var loopP = new List<Seg>();
+            foreach (var o in order)
+            {
+                var pa = AtS(o.C, o.Fw, 0); var pb = AtS(o.C, o.Fw, 1);
+                loopP.Add(new Seg { Curve = o.C, A = pa, B = pb });
+            }
+            var pfd = new FDesc { Surf = patch, Rev = rev, Tag = "round:corner", Touched = true, Hint = pc };
+            pfd.Loops.Add(loopP);
+            blends.Add(pfd);
+            Interlocked.Increment(ref SetbackCorners);
         }
         // угловые сферические треугольники
         foreach (var (V, cr) in corners)

@@ -585,6 +585,16 @@ static partial class Program
                 var fac = GeometryAudit.Faceted(s); if (fac != (0, 0)) fails.Add($"{name}: faceted {fac}");
                 if (!(Math.Abs(dv - want) <= 2e-6 * want + 1e-7)) fails.Add($"{name}: dV {dv:R} vs reference {want:R}");
                 Console.WriteLine($"  {name}: dV {dv:R} reference {want:R} ({(dv - want) / want:E1})");
+                if (name.StartsWith("d8 2"))
+                {
+                    // обмен: лента с законом (стыки — узлы кратности 3) — рациональным B-сплайном в точный STEP и обратно
+                    var wsx = new List<string>(); var swx = new StringWriter(); double vv = AnalyticVolume.Of(b[0]) ?? double.NaN;
+                    bool okx = Parametric3D.Kernel.Export.StepExact.Write(swx, new[] { b[0] }, "law", wsx);
+                    var backx = okx ? Parametric3D.Kernel.Export.StepImport.ReadExactSolids(swx.ToString(), wsx) : new List<TSolid>();
+                    double vbx = backx.Count == 1 ? (AnalyticVolume.Of(backx[0]) ?? Parametric3D.Kernel.Tess.MassProps.Volume(Parametric3D.Kernel.Tess.Tessellator.Tessellate(backx[0]))) : double.NaN;
+                    Console.WriteLine($"  {name}: STEP exact {okx}, back {vbx:R} analytic {(backx.Count == 1 ? AnalyticVolume.Of(backx[0]) != null : false)} {(backx.Count == 1 ? backx[0].Guarantee.ToString() : "")} faces {(backx.Count == 1 ? string.Join(",", backx[0].Faces.Select(f => GeometryAudit.AuthoritativeSurface(f)?.GetType().Name ?? "null").GroupBy(x => x).Select(g => g.Key + ":" + g.Count())) : "")}");
+                    if (!okx || !(Math.Abs(vbx - vv) <= (backx.Count == 1 && AnalyticVolume.Of(backx[0]) != null ? 1e-7 : 1e-3) * vv)) fails.Add($"{name}: STEP round trip {okx} {vbx:R} vs {vv:R} ({string.Join(" | ", wsx.Where(x => x.Contains("not")).Take(2))})");
+                }
             }
             DirectRound.Debug = null;
             if (fails.Count > 0) throw new Exception(string.Join("; ", fails));
@@ -696,6 +706,16 @@ static partial class Program
                 if (b[0].Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(b[0]).IsValid) fails.Add($"{name}: {b[0].Guarantee} {SolidValidator.Validate(b[0]).Summary()}");
                 if (!(Math.Abs(dv - want) <= 2e-6 * want + 1e-7)) fails.Add($"{name}: dV {dv:R} vs reference {want:R}");
                 Console.WriteLine($"  {name}: dV {dv:R} reference {want:R} ({(dv - want) / want:E1})");
+                if (name.StartsWith("d8 2"))
+                {
+                    // обмен: лента с законом (стыки — узлы кратности 3) — рациональным B-сплайном в точный STEP и обратно
+                    var wsx = new List<string>(); var swx = new StringWriter(); double vv = AnalyticVolume.Of(b[0]) ?? double.NaN;
+                    bool okx = Parametric3D.Kernel.Export.StepExact.Write(swx, new[] { b[0] }, "law", wsx);
+                    var backx = okx ? Parametric3D.Kernel.Export.StepImport.ReadExactSolids(swx.ToString(), wsx) : new List<TSolid>();
+                    double vbx = backx.Count == 1 ? (AnalyticVolume.Of(backx[0]) ?? Parametric3D.Kernel.Tess.MassProps.Volume(Parametric3D.Kernel.Tess.Tessellator.Tessellate(backx[0]))) : double.NaN;
+                    Console.WriteLine($"  {name}: STEP exact {okx}, back {vbx:R} analytic {(backx.Count == 1 ? AnalyticVolume.Of(backx[0]) != null : false)} {(backx.Count == 1 ? backx[0].Guarantee.ToString() : "")} faces {(backx.Count == 1 ? string.Join(",", backx[0].Faces.Select(f => GeometryAudit.AuthoritativeSurface(f)?.GetType().Name ?? "null").GroupBy(x => x).Select(g => g.Key + ":" + g.Count())) : "")}");
+                    if (!okx || !(Math.Abs(vbx - vv) <= (backx.Count == 1 && AnalyticVolume.Of(backx[0]) != null ? 1e-7 : 1e-3) * vv)) fails.Add($"{name}: STEP round trip {okx} {vbx:R} vs {vv:R} ({string.Join(" | ", wsx.Where(x => x.Contains("not")).Take(2))})");
+                }
             }
             if (fails.Count > 0) throw new Exception(string.Join("; ", fails));
         });
