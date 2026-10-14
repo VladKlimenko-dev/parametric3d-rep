@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Tess;
 using Parametric3D.Kernel.Topology;
@@ -373,11 +373,21 @@ public sealed class NurbsSurface : ISurface3
     }
 
     /// <summary>Точка и первые производные рациональной поверхности (точно, без разностей): S_u = (A_u − w_u S)/w.</summary>
-    public void Derivs(Vector2d uv, out Vector3d S, out Vector3d Su, out Vector3d Sv)
+    public void Derivs(Vector2d uv, out Vector3d S, out Vector3d Su, out Vector3d Sv) => DerivsCore(uv, false, out S, out Su, out Sv);
+
+    /// <summary>
+    /// KRN-06 (06.14): точка и производные ПРОДОЛЖЕНИЯ поверхности за край области параметров — многочлены крайних
+    /// промежутков (рациональное продолжение того же куска: внутри области — та же точка, у края — гладко). Нужна построителю
+    /// сопряжений: лента у конца ребра продлевается за торец и обрезается им, а грань NURBS часто кончается ровно на торце.
+    /// </summary>
+    public void DerivsExtended(Vector2d uv, out Vector3d S, out Vector3d Su, out Vector3d Sv) => DerivsCore(uv, true, out S, out Su, out Sv);
+
+    void DerivsCore(Vector2d uv, bool extend, out Vector3d S, out Vector3d Su, out Vector3d Sv)
     {
-        double u = Math.Clamp(uv.X, 0, 1), v = Math.Clamp(uv.Y, 0, 1);
+        double uc = Math.Clamp(uv.X, 0, 1), vc = Math.Clamp(uv.Y, 0, 1);
+        double u = extend ? uv.X : uc, v = extend ? uv.Y : vc;
         int nu = CountU, nv = CountV;
-        int su = Span(_ku, nu, _du, u), sv = Span(_kv, nv, _dv, v);
+        int su = Span(_ku, nu, _du, uc), sv = Span(_kv, nv, _dv, vc);
         var Nu = new double[_du + 1]; var dNu = new double[_du + 1]; var Nv = new double[_dv + 1]; var dNv = new double[_dv + 1];
         BasisDers(_ku, su, u, _du, Nu, dNu); BasisDers(_kv, sv, v, _dv, Nv, dNv);
         Vector3d A = Vector3d.Zero, Au = Vector3d.Zero, Av = Vector3d.Zero; double w = 0, wu = 0, wv = 0;

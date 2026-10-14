@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 
@@ -42,6 +42,10 @@ public static class PCurves
                 double budget = ToleranceContext.Current.ModelAccuracy;
                 var pc = For(ce, s, samples, out double dev);
                 for (int m = samples * 2; pc != null && !pc.IsExact && dev > budget && m <= 4096; m *= 2) pc = For(ce, s, m, out dev);
+                // KRN-06 (06.14): процедурная кривая на поверхности, где уплотнение Эрмита упёрлось в шум проекции (грань NURBS,
+                // длинная линия касания: 2e-7 при бюджете 1e-7) — p-кривая проекцией самой кривой (точная по построению).
+                // Мутация P3D_PCPROJPROC=0.
+                if (pc != null && !pc.IsExact && dev > budget && ce.Edge.Curve is ProcCurve3 && ProjProc) pc = For(ce, s, samples, out dev, projected: true);
                 if (pc == null) { st.Skipped++; continue; }
                 ce.PCurve = pc; ce.PCurveDeviation = dev;
                 if (pc.IsExact) { st.Exact++; st.MaxDeviationExact = Math.Max(st.MaxDeviationExact, dev); }
@@ -67,6 +71,7 @@ public static class PCurves
                 if (s == null) { res.Add((ce, null, 0)); continue; }
                 var pc = For(ce, s, samples, out double dev);
                 for (int m = samples * 2; pc != null && !pc.IsExact && dev > budget && m <= 4096; m *= 2) pc = For(ce, s, m, out dev);
+                if (pc != null && !pc.IsExact && dev > budget && ce.Edge.Curve is ProcCurve3 && ProjProc) pc = For(ce, s, samples, out dev, projected: true);
                 res.Add((ce, pc, dev));
             }
         }
@@ -84,7 +89,9 @@ public static class PCurves
         return c.PointAt(c.T0 + (c.T1 - c.T0) * f);
     }
 
-    private static ICurve2? For(TCoEdge ce, ISurface3 s, int n, out double dev)
+    static readonly bool ProjProc = Environment.GetEnvironmentVariable("P3D_PCPROJPROC") != "0";
+
+    private static ICurve2? For(TCoEdge ce, ISurface3 s, int n, out double dev, bool projected = false)
     {
         dev = 0;
         var uv = new Vector2d[n + 1]; var xyz = new Vector3d[n + 1];
@@ -104,7 +111,7 @@ public static class PCurves
         if (Enumerable.Range(0, n + 1).All(i => (line.PointAt((double)i / n) - uv[i]).Length < 1e-9 * scale)) cand = line;
         else if (s.IsPlanar && ConicOnPlane(ce, s, uv, scale) is { } cn) cand = cn;
         else if (s.IsPlanar && ArcThrough(uv) is { } arc) cand = arc;
-        else if (ce.Edge.Curve is IntersectionCurve3 or Geometry.NurbsImplicitCurve3 or Geometry.NurbsNurbsCurve3)
+        else if (projected || ce.Edge.Curve is IntersectionCurve3 or Geometry.NurbsImplicitCurve3 or Geometry.NurbsNurbsCurve3)
             cand = new ProjectedCurve2(t => PoleSafeUV(s, poles, ce, t), uv, perU, perV);
         else cand = HermiteThrough(ce, s, uv, perU, perV) ?? (ICurve2)new Polyline2(uv);
         // Отклонение: середины шагов и сами точки выборки.

@@ -53,7 +53,7 @@ public static partial class DirectRound
             if (fs.Count != 2) { why = "closed blend: edge is not between two faces"; return false; }
             var FA = byFace[fs[0]]; var FB = byFace[fs[1]];
             if (!QuadricBlendsOn && (!FA.IsCyl || !FB.IsCyl)) { why = "cyl/cyl: a face of the closed edge is not a right circular cylinder"; return false; }
-            var shA = Geometry.ExactEdges.ShapeOf(FA.Surf); var shB = Geometry.ExactEdges.ShapeOf(FB.Surf);
+            var shA = BlendShapeOf(FA.Surf); var shB = BlendShapeOf(FB.Surf);
             if (shA == null || shB == null) { why = "closed blend: a face is not a plane, cylinder, cone, sphere or torus"; return false; }
             var E = e.Curve;
             // ребро — отдельный контур каждой из граней
@@ -121,7 +121,7 @@ public static partial class DirectRound
                     int si = Math.Sign(dphi); if (si == 0 || (sgn != 0 && si != sgn)) { mono = false; break; }
                     sgn = si; ang[i] = ang[i - 1] + dphi;
                 }
-                if (!mono || Math.Abs(Math.Abs(ang[m] - ang[0]) - 2 * Math.PI) > 1e-6) continue;
+                if (!mono || Math.Abs(Math.Abs(ang[m] - ang[0]) - 2 * Math.PI) > 1e-6) { Debug?.Invoke($"closed blend: axis {W:0.###} mono {mono} span {Math.Abs(ang[m] - ang[0]):R}"); continue; }
                 // НАЧАЛО ПАРАМЕТРА СДВИНУТО на 0.5 рад от начала исходного ребра (P3D_DRSEAMSHIFT=0 — без сдвига): со швами ленты в
                 // начале ребра разметка ленты у отверстия d30 в валу R20 давала по треугольнику обратной стороны в каждой половине
                 // (проверка стороны отвергает такую сетку — грань не размечалась)
@@ -146,12 +146,12 @@ public static partial class DirectRound
                         var (f1, g1) = Geometry.Ssi.Implicit(shA, x); var (f2, g2) = Geometry.Ssi.Implicit(shB, x);
                         double f3 = Vector3d.Dot(x - O, nphi);
                         var dx = Solve3(new[] { g1, g2, nphi }, new[] { -f1, -f2, -f3 });
-                        if (dx == null) return new Vector3d(double.NaN);
+                        if (dx == null) { Debug?.Invoke($"closed blend: At({t:R}) it {it} x {x:0.######} f1 {f1:E2} g1 {g1:0.###} f2 {f2:E2} g2 {g2:0.###}"); return new Vector3d(double.NaN); }
                         x += dx.Value;
                         if (dx.Value.Length < 1e-15 * Math.Max(1, x.Length)) break;
                     }
                     var (e1, _) = Geometry.Ssi.Implicit(shA, x); var (e2, _) = Geometry.Ssi.Implicit(shB, x);
-                    if (Math.Abs(e1) > 1e-10 || Math.Abs(e2) > 1e-10 || Vector3d.Dot(x - O, uphi) < 0) return new Vector3d(double.NaN);
+                    if (!(Math.Abs(e1) <= 1e-10) || !(Math.Abs(e2) <= 1e-10) || !(Vector3d.Dot(x - O, uphi) >= 0)) { Debug?.Invoke($"closed blend: At({t:R}) seed {Seed(t):0.######} x {x:0.######} e1 {e1:E2} e2 {e2:E2} side {Vector3d.Dot(x - O, uphi):E2}"); return new Vector3d(double.NaN); }
                     return x;
                 }
                 // та же кривая: точки по углу лежат на исходном ребре
@@ -159,7 +159,7 @@ public static partial class DirectRound
                 for (int i = 0; i < 64 && ok; i++)
                 {
                     var q = At(2 * Math.PI * (i + 0.37) / 64);
-                    if (double.IsNaN(q.X) || (E.PointAt(CurveParam.Closest(E, q)) - q).Length > 1e-6) ok = false;
+                    if (double.IsNaN(q.X) || (E.PointAt(CurveParam.Closest(E, q)) - q).Length > 1e-6) { ok = false; Debug?.Invoke($"closed blend: axis {W:0.###} point {i} {q:0.######} off the edge by {(double.IsNaN(q.X) ? double.NaN : (E.PointAt(CurveParam.Closest(E, q)) - q).Length):E2}"); }
                 }
                 if (!ok) continue;
                 edgeAt = At;
@@ -167,11 +167,15 @@ public static partial class DirectRound
             }
             if (edgeAt == null) { why = "closed blend: the edge does not wind once around an axis of its faces"; return false; }
             if (CylParam) { t0 = 0; t1 = 2 * Math.PI; }
-            Vector3d Ed(double t) => CylParam ? edgeAt(t) : E.PointAt(t);
+            var edMemo = new System.Collections.Concurrent.ConcurrentDictionary<double, Vector3d>();
+            var spMemo = new System.Collections.Concurrent.ConcurrentDictionary<double, Vector3d?>();
+            var edF = edgeAt;
+            Vector3d Ed(double t) => !CylParam ? E.PointAt(t) : MemoOn && edMemo.Count < MemoCap ? edMemo.GetOrAdd(t, edF) : edF(t);
             Vector3d Td(double t) { if (!CylParam) return E.TangentAt(t); const double dl = 1e-5; return (edgeAt(t + dl) - edgeAt(t - dl)).Normalized(); }
 
             // хребет в точке ребра: Ньютон на «знаковое расстояние до A = offA, до B = offB, (x − P)·t = 0»
-            Vector3d? Spine(double t)
+            Vector3d? Spine(double t) => MemoOn && spMemo.Count < MemoCap ? spMemo.GetOrAdd(t, SpineCore) : SpineCore(t);
+            Vector3d? SpineCore(double t)
             {
                 var P = Ed(t); var tg = Td(t);
                 var nA = NormalOf(FA, P); var nB = NormalOf(FB, P); double c = Vector3d.Dot(nA, nB);

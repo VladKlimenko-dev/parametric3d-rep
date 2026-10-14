@@ -303,3 +303,94 @@ static partial class Program
         });
     }
 }
+
+static partial class Program
+{
+    static void Krn06NurbsBlendChecks()
+    {
+        Check("KRN06-NURBS-ROLLING-BALL-INVARIANT", () =>
+        {
+            // ГРАНИ NURBS В ПОСТРОИТЕЛЕ КАТЯЩЕГОСЯ ШАРА (06.3, 06.4, 06.14): вал R20 — точный NURBS-лофт двух окружностей (грань
+            // вала — рациональная квадратичная, швы под 45°), то же тело аналитически. Неявная форма грани NURBS — по основанию
+            // перпендикуляра (Ssi.ParamSurf), продолжение за край области — многочлены крайних промежутков. Требуется: кромка
+            // отверстия (замкнутая и в половине вала), стык бобышки, фаска — как у формул (RollingBallCusp, -Cut, ChamferCuspCut);
+            // кромка косого торца в половине вала (ребро плоскость/NURBS без оси — параметр по опорной кривой Чебышёва) — как у
+            // того же тела с аналитическим цилиндром (параметр по углу вокруг оси вала).
+            var fails = new List<string>();
+            if (Environment.GetEnvironmentVariable("P3D_OPENDBG") == "1") { DirectRound.Debug = m => Console.WriteLine("    dr: " + m); Parametric3D.Kernel.Geometry.Ssi.FootDebug = m => Console.WriteLine("    foot: " + m); }
+            double a45 = Math.Sqrt(0.5);
+            Parametric3D.Kernel.Ops.Profile Circle(double x)
+            {
+                var U = new Vector3d(0, a45, a45); var V = new Vector3d(0, -a45, a45);
+                var fr = new Frame3(new Vector3d(x, 0, 0), U, V);
+                // окружность — четыре четверти (у лофта — по грани NURBS на четверть; швы — под 45° к вертикали)
+                return ProfileBuilder.Build(fr, Enumerable.Range(0, 4).Select(k => (Parametric3D.Kernel.Curves.ICurve3)new Parametric3D.Kernel.Curves.ArcCurve3(fr, 20, k * Math.PI / 2, (k + 1) * Math.PI / 2)).ToList());
+            }
+            // три сечения, гладкий лофт (две соосные окружности строятся вращением — цилиндром; линейчатый по трём — шов пролётов)
+            TSolid NShaft() => LoftOp.Build(new List<Parametric3D.Kernel.Ops.Profile> { Circle(-50), Circle(0), Circle(50) }, 64, true);
+            TSolid AShaft() => TransformOp.Copy(PrimitiveOp.Cylinder(new Vector3d(0, 0, -50), 20, 100), TransformOp.Rotate(Vector3d.Zero, Vector3d.UnitY, 90));
+            {
+                var s0 = NShaft();
+                int nn = s0.Faces.Count(f => GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.NurbsSurface);
+                if (nn == 0 || Math.Abs((AnalyticVolume.Of(s0) ?? 0) - Math.PI * 400 * 100) > 1e-9 * Math.PI * 400 * 100) fails.Add($"NURBS shaft: {nn} NURBS faces, V {AnalyticVolume.Of(s0):R}");
+            }
+            List<TEdge> RimEdges(TSolid b, double rho) => b.Edges.Where(e => e.Curve is not (Parametric3D.Kernel.Curves.LineCurve3 or Parametric3D.Kernel.Curves.ArcCurve3) && e.Curve.PointAt((e.Curve.T0 + e.Curve.T1) / 2) is var m && m.Z > 5 && Math.Abs(Math.Sqrt(m.X * m.X + m.Y * m.Y) - rho) < 1e-6).ToList();
+            double Run(TSolid shaft, string name, Action<List<TSolid>> prep, Func<TSolid, List<TEdge>> pick, Action<List<TSolid>, List<EdgeRef>> op)
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var b = new List<TSolid> { shaft }; prep(b);
+                double tPrep = sw.Elapsed.TotalSeconds; long f0c = Parametric3D.Kernel.Geometry.Ssi.ParamFootCalls, f0g = Parametric3D.Kernel.Geometry.Ssi.ParamFootGlobal;
+                double v0 = AnalyticVolume.Of(b[0]) ?? double.NaN; var b0copy = b[0];
+                if (b[0].Guarantee != GuaranteeLevel.ExactAnalytic) { fails.Add($"{name}: input {b[0].Guarantee}"); return double.NaN; }
+                if (Environment.GetEnvironmentVariable("P3D_OPENDBG") == "1")
+                    Console.WriteLine($"    {name}: INPUT {b[0].Guarantee} faces {string.Join(" ", b[0].Faces.Select(f => f.Surface.GetType().Name[..4] + "/" + GeometryAudit.AuthoritativeSurface(f)?.GetType().Name[..4]))} seams tol {string.Join(",", b[0].Edges.Where(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0.P.Y - 14.142) < 0.01).Select(e => e.Tolerance.ToString("E1")))}");
+                var es = pick(b[0]);
+                // кромка может быть разбита булевой точкой, где сходятся лишь те же две грани: выбирается одно звено — построитель
+                // сам сливает цепочку через вершины степени 2
+                if (es.Count == 0) { fails.Add($"{name}: no edges"); return double.NaN; }
+                es = es.Take(1).ToList();
+                var fac0 = GeometryAudit.Faceted(b[0]);
+                long d0 = DirectRound.Built;
+                try { op(b, es.Select(EdgeRef.Of).ToList()); } catch (Exception e) { fails.Add($"{name}: {e.GetType().Name} {e.Message}"); return double.NaN; }
+                if (DirectRound.Built == d0) { fails.Add($"{name}: direct builder not used"); return double.NaN; }
+                var s = b[0];
+                if (s.Guarantee != GuaranteeLevel.ExactAnalytic) fails.Add($"{name}: guarantee {s.Guarantee}");
+                if (!SolidValidator.Validate(s).IsValid) fails.Add($"{name}: invalid");
+                var fac = GeometryAudit.Faceted(s); if (fac.Item1 > fac0.Item1 || fac.Item2 > fac0.Item2) fails.Add($"{name}: faceted {fac} (input {fac0})");
+                var e0 = AnalyticVolume.OfWithError(b0copy);
+                if (Environment.GetEnvironmentVariable("P3D_OPENDBG") == "1") AnalyticVolume.QuadDebug = (f, fi, co) => { if (Math.Abs(fi - co) > 1e-6) Console.WriteLine($"      quad face {f.Id} {GeometryAudit.AuthoritativeSurface(f)?.GetType().Name} tag {f.Tag} fine {fi:R} coarse {co:R} edges {string.Join(",", f.Loops.SelectMany(l => l.CoEdges).Select(c => c.Edge.Curve.GetType().Name + (c.Edge.Curve is Parametric3D.Kernel.Curves.ProcCurve3 pc ? ":" + pc.Kind : "")))}"); };
+                var e1 = AnalyticVolume.OfWithError(s);
+                AnalyticVolume.QuadDebug = null;
+                Console.WriteLine($"    {name}: V0 {e0?.Volume:R} ±{e0?.QuadratureError:E1}, V1 {e1?.Volume:R} ±{e1?.QuadratureError:E1}");
+                Console.WriteLine($"    {name}: prep {tPrep:F1} s, total {sw.Elapsed.TotalSeconds:F1} s, feet {Parametric3D.Kernel.Geometry.Ssi.ParamFootCalls - f0c} (global {Parametric3D.Kernel.Geometry.Ssi.ParamFootGlobal - f0g})");
+                return Math.Abs(v0 - (AnalyticVolume.Of(s) ?? double.NaN));
+            }
+            var w = new List<string>();
+            void Hole(List<TSolid> b, double rho) => BooleanOp.Subtract(b, PrimitiveOp.Cylinder(new Vector3d(0, 0, -40), rho, 80), w);
+            void Half(List<TSolid> b) => BooleanOp.Subtract(b, Box(-60, -60, -60, 120, 60, 120), w);
+            void Round(List<TSolid> b, List<EdgeRef> e, double r) => FilletOp.RoundEdges(b, e, r, new List<string>());
+            void Chamf(List<TSolid> b, List<EdgeRef> e, double d) => FilletOp.ChamferEdges(b, e, d, d, new List<string>());
+            void Cmp(string name, double got, double want, double tol)
+            {
+                if (!(Math.Abs(got - want) <= tol * want)) fails.Add($"{name}: dV {got:R} vs {want:R}");
+                Console.WriteLine($"  {name}: dV {got:R} reference {want:R} ({(got - want) / want:E1})");
+            }
+            Cmp("NURBS closed hole d8 r1", Run(NShaft(), "NURBS closed hole d8 r1", b => Hole(b, 4), b => RimEdges(b, 4), (b, e) => Round(b, e, 1)), RollingBallCusp(20, 4, 1, true), 2e-6);
+            Cmp("NURBS half hole d8 r2", Run(NShaft(), "NURBS half hole d8 r2", b => { Hole(b, 4); Half(b); }, b => RimEdges(b, 4), (b, e) => Round(b, e, 2)), RollingBallCuspCut(20, 4, 2, 0, 0), 2e-6);
+            Cmp("NURBS closed boss R8 r3", Run(NShaft(), "NURBS closed boss R8 r3", b => BooleanOp.Unite(b, PrimitiveOp.Cylinder(new Vector3d(0, 0, 0), 8, 40), w), b => RimEdges(b, 8), (b, e) => Round(b, e, 3)), RollingBallCusp(20, 8, 3, false), 2e-6);
+            Cmp("NURBS closed hole d8 chamfer 1", Run(NShaft(), "NURBS closed hole d8 chamfer 1", b => Hole(b, 4), b => RimEdges(b, 4), (b, e) => Chamf(b, e, 1)), ChamferCuspCut(20, 4, 1, 1, true, double.NaN, 0), 2e-6);
+            // косой плоский срез верха вала (z = 18 + 0.02x): ребро плоскость/вал — дуга эллипса от торца до торца, в одной грани
+            // NURBS (|y| ≤ 10.5 < z); у NURBS нет оси — общий параметр по опорной кривой, у цилиндра — угол вокруг оси вала
+            void Oblique(List<TSolid> b) => BooleanOp.Subtract(b, TransformOp.Copy(Box(-60, -30, 18, 120, 60, 30), TransformOp.Rotate(new Vector3d(0, 0, 18), Vector3d.UnitY, -Math.Atan(0.02) * 180 / Math.PI)), w);
+            List<TEdge> ObliqueEdge(TSolid b) => b.Edges.Where(e => e.Curve is not (Parametric3D.Kernel.Curves.LineCurve3 or Parametric3D.Kernel.Curves.ArcCurve3) && e.Curve.PointAt((e.Curve.T0 + e.Curve.T1) / 2) is var m && m.Z > 15 && m.Y > 3).ToList();
+            double an = Run(AShaft(), "analytic oblique end r2", Oblique, ObliqueEdge, (b, e) => Round(b, e, 2));
+            double nu = Run(NShaft(), "NURBS oblique end r2", Oblique, ObliqueEdge, (b, e) => Round(b, e, 2));
+            Cmp("NURBS oblique end r2 vs analytic", nu, an, 1e-5);
+            double anc = Run(AShaft(), "analytic oblique end chamfer 1.5", Oblique, ObliqueEdge, (b, e) => Chamf(b, e, 1.5));
+            double nuc = Run(NShaft(), "NURBS oblique end chamfer 1.5", Oblique, ObliqueEdge, (b, e) => Chamf(b, e, 1.5));
+            Cmp("NURBS oblique end chamfer 1.5 vs analytic", nuc, anc, 1e-5);
+            DirectRound.Debug = null;
+            if (fails.Count > 0) throw new Exception(string.Join("; ", fails));
+        });
+    }
+}
