@@ -1466,7 +1466,7 @@ public static class GeneralBoolean
         return new List<FaceSplit.Region> { r };
     }
 
-    static ICurve3 SubCurve(ICurve3 c, double lo, double hi)
+    internal static ICurve3 SubCurve(ICurve3 c, double lo, double hi)
     {
         switch (c)
         {
