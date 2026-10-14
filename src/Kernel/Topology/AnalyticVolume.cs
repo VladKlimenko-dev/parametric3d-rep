@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 
@@ -201,6 +201,8 @@ public static class AnalyticVolume
                 return RevolvedIntegral(f, rva, area: true);
             case SectionSurface band when !BandOff && BandRange(f, band) != null:
                 return BandIntegral(f, band, area: true);
+            case SectionSurface ob when BandOpenRange(f, ob) is { } orr:
+                return BandOpenIntegral(f, ob, orr, area: true);
             default: return null;
         }
     }
@@ -524,6 +526,80 @@ public static class AnalyticVolume
         return area ? ar : (cosv > 0 ? vol : -vol);
     }
 
+    /// <summary>Мутация P3D_VOLBANDOPEN=0: грань незамкнутой ленты с краями общего вида не поддержана (null).</summary>
+    static readonly bool BandOpenOff = Environment.GetEnvironmentVariable("P3D_VOLBANDOPEN") == "0";
+
+    /// <summary>
+    /// KRN-06 (06.12, 06.14): ГРАНЬ НЕЗАМКНУТОЙ ЛЕНТЫ — часть поверхности по формуле сечения между её краями v = 0 и v = 1 и двумя
+    /// боковыми рёбрами общего вида (край ленты на торце: v монотонно от 0 до 1). Область в (u, v): v ∈ [0, 1],
+    /// u ∈ [L(v), R(v)]; L и R — точки боковых рёбер с данным v (бисекция по параметру ребра через проекцию). null — грань не такая.
+    /// </summary>
+    internal static (Func<double, double> L, Func<double, double> R)? BandOpenRange(TFace f, SectionSurface ss)
+    {
+        if (BandOpenOff || !ss.IsProcedural || ss.Closed || f.Loops.Count != 1) return null;
+        bool at0 = false, at1 = false; var sides = new List<(ICurve3 C, double UMid)>();
+        foreach (var ce in f.Loops[0].CoEdges)
+        {
+            var c = ce.Edge.Curve;
+            var uv = Enumerable.Range(0, 11).Select(k => ss.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * k / 10.0))).ToList();
+            if (uv.All(q => Math.Abs(q.Y) < 1e-6)) { at0 = true; continue; }
+            if (uv.All(q => Math.Abs(q.Y - 1) < 1e-6)) { at1 = true; continue; }
+            double va = uv[0].Y, vb = uv[^1].Y;
+            if (!(Math.Min(Math.Abs(va), Math.Abs(vb)) < 1e-6 && Math.Abs(Math.Max(va, vb) - 1) < 1e-6)) return null;
+            int sg = Math.Sign(vb - va);
+            for (int k = 1; k < uv.Count; k++) if (Math.Sign(uv[k].Y - uv[k - 1].Y) != sg) return null;
+            sides.Add((c, uv[5].X));
+        }
+        if (!at0 || !at1 || sides.Count != 2) return null;
+        sides.Sort((a, b) => a.UMid.CompareTo(b.UMid));
+        Func<double, double> Make(ICurve3 c)
+        {
+            bool inc = ss.ProjectToUV(c.PointAt(c.T1)).Y > ss.ProjectToUV(c.PointAt(c.T0)).Y;
+            return v =>
+            {
+                double lo = c.T0, hi = c.T1;
+                for (int it = 0; it < 64; it++)
+                {
+                    double md = (lo + hi) / 2, vm = ss.ProjectToUV(c.PointAt(md)).Y;
+                    if ((vm < v) == inc) lo = md; else hi = md;
+                }
+                return ss.ProjectToUV(c.PointAt((lo + hi) / 2)).X;
+            };
+        }
+        return (Make(sides[0].C), Make(sides[1].C));
+    }
+
+    /// <summary>∫∫ (x − o)·N dA (или площадь) грани незамкнутой ленты: Гаусс 12 по v (16 кусков, грубый — 8), по u — Гаусс 12 на
+    /// [L(v), R(v)] (48 кусков, грубый — 24); сторона — как у BandIntegral.</summary>
+    static double? BandOpenIntegral(TFace f, SectionSurface ss, (Func<double, double> L, Func<double, double> R) rg, bool area)
+    {
+        double per = ss.UMax - ss.UMin, h = 1e-6 * Math.Max(1e-9, per);
+        int mv = _coarse > 0 ? 8 : 16, mu = _coarse > 0 ? 24 : 48;
+        var (gx, gw) = Gauss12;
+        double vol = 0, ar = 0; var va = Vector3d.Zero;
+        for (int iv = 0; iv < mv; iv++)
+            for (int kv = 0; kv < gx.Length; kv++)
+            {
+                double v = (iv + (gx[kv] + 1) / 2) / mv, wv = gw[kv] / 2 / mv;
+                double uL = rg.L(v), uR = rg.R(v); if (!(uR > uL)) return null;
+                double pw = (uR - uL) / mu;
+                for (int i = 0; i < mu; i++)
+                    for (int j = 0; j < gx.Length; j++)
+                    {
+                        double u = uL + pw * (i + (gx[j] + 1) / 2), w = gw[j] / 2 * pw * wv;
+                        var s0 = ss.SectionAt(u);
+                        var P = s0.Point(v); var su = (ss.SectionAt(u + h).Point(v) - ss.SectionAt(u - h).Point(v)) / (2 * h); var sv = s0.Deriv(v);
+                        var c = Vector3d.Cross(su, sv);
+                        vol += Vector3d.Dot(P - _origin, c) * w; ar += c.Length * w; va += c * w;
+                    }
+            }
+        var loopsVa = NormalIntegral(f);
+        if (loopsVa.Length < 1e-6 * Math.Max(1e-12, ar) || va.Length < 1e-6 * Math.Max(1e-12, ar)) return null;
+        double cosv = Vector3d.Dot(loopsVa, va) / (loopsVa.Length * va.Length);
+        if (Math.Abs(cosv) < 0.999) return null;
+        return area ? ar : (cosv > 0 ? vol : -vol);
+    }
+
     static readonly (double[] X, double[] W) Gauss12 = (
         new[] { -0.9815606342467192, -0.9041172563704749, -0.7699026741943047, -0.5873179542866175, -0.3678314989981802, -0.1252334085114689,
                  0.1252334085114689, 0.3678314989981802, 0.5873179542866175, 0.7699026741943047, 0.9041172563704749, 0.9815606342467192 },
@@ -602,6 +678,8 @@ public static class AnalyticVolume
                 return RevolvedIntegral(f, rv2);
             case SectionSurface band when !BandOff && BandRange(f, band) != null:
                 return BandIntegral(f, band, area: false);
+            case SectionSurface ob when BandOpenRange(f, ob) is { } orr:
+                return BandOpenIntegral(f, ob, orr, area: false);
             case NurbsSurface when !NurbsVolOff:
             {
                 // KRN-07 N1b: грань NURBS — поток (x − o) по краю (AnalyticFlux, общая параметризация (u, v))

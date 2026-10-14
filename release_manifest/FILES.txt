@@ -81,6 +81,7 @@ src/Kernel/Ops/DirectRoundCylCyl.cs
 src/Kernel/Ops/DirectRoundDraft.cs
 src/Kernel/Ops/DirectRoundLoft.cs
 src/Kernel/Ops/DirectRoundOffset.cs
+src/Kernel/Ops/DirectRoundOpen.cs
 src/Kernel/Ops/DirectRoundTangent.cs
 src/Kernel/Ops/DirectRoundVertex.cs
 src/Kernel/Ops/DraftOp.cs
@@ -446,6 +447,7 @@ tests/k01/Krn06BlendStep.cs
 tests/k01/Krn06CylCyl.cs
 tests/k01/Krn06CylCylPart.cs
 tests/k01/Krn06LineCylCh.cs
+tests/k01/Krn06Open.cs
 tests/k01/Krn06Probe2.cs
 tests/k01/Krn06Quadric.cs
 tests/k01/Krn06TanLoop.cs
@@ -572,4 +574,5 @@ tools/occt_time.py
 tools/perf_targets.py
 tools/progress_score.py
 tools/ref_canal_inclined_hole.py
+tools/ref_rolling_ball_morph.py
 tools/run_baseline.sh

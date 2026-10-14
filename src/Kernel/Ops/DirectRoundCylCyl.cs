@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Topology;
@@ -44,7 +44,7 @@ public static partial class DirectRound
     /// — основания перпендикуляров из хребта на поверхности, лента — дуга радиуса r между ними (поверхность по формуле
     /// сечения, SectionSurface), контуры граней — линии касания вместо ребра. Цилиндр/цилиндр — частный случай.
     /// </summary>
-    static bool CylCylBlends(TSolid body, List<TEdge> loopsE, Dictionary<TFace, FDesc> byFace, List<FDesc> blends, double r, ref string? why)
+    static bool CylCylBlends(TSolid body, List<TEdge> loopsE, Dictionary<TFace, FDesc> byFace, List<FDesc> blends, double r, ref string? why, Func<TEdge, TFace, double>? chDist = null)
     {
         List<(Vector3d A, Vector3d B, Vector3d C)>? tris = null;
         foreach (var e in loopsE)
@@ -95,7 +95,8 @@ public static partial class DirectRound
             double sigma = sigmaVote!.Value;
             // знаковые расстояния хребта до форм (в знаке формы)
             double offA = sigma * sA * r, offB = sigma * sB * r;
-            foreach (var (sh, off) in new[] { (shA, offA), (shB, offB) })
+            bool ch = chDist != null; double dA = ch ? chDist!(e, fs[0]) : r, dB = ch ? chDist!(e, fs[1]) : r;
+            foreach (var (sh, off) in ch ? Array.Empty<(Geometry.Ssi.Shape, double)>() : new[] { (shA, offA), (shB, offB) })
                 if (sh is Geometry.Ssi.Cylinder cy0 && cy0.R + off < 1e-6 || sh is Geometry.Ssi.Sphere sp0 && sp0.R + off < 1e-6 || sh is Geometry.Ssi.Torus to0 && to0.r + off < 1e-6)
                 { why = "closed blend: radius too large for a face"; return false; }
 
@@ -195,8 +196,11 @@ public static partial class DirectRound
             // формулы для поверхности и линий касания (сбой уточнения в обращении — последняя годная точка не берётся:
             // все пробы ниже проверены заранее, и сбой вне них даёт NaN, что отвергнет сетка)
             Vector3d S(double t) => Spine(t) ?? new Vector3d(double.NaN);
-            Vector3d QA(double t) => Foot(FA, S(t));
-            Vector3d QB(double t) => Foot(FB, S(t));
+            // 06.15: фаска — точки граней в плоскости поперёк ребра на хордовом расстоянии d от точки ребра
+            Vector3d ChA(double t) => ChamferPoint(shA, shB, sA, sB, sigma, Ed(t), Td(t), dA);
+            Vector3d ChB(double t) => ChamferPoint(shB, shA, sB, sA, sigma, Ed(t), Td(t), dB);
+            Vector3d QA(double t) => ch ? ChA(t) : Foot(FA, S(t));
+            Vector3d QB(double t) => ch ? ChB(t) : Foot(FB, S(t));
             // 04.2: ЛИНИЯ КАСАНИЯ НЕ ЗАДЕВАЕТ ПОВЕРХНОСТЬ s — строго. Хребет — пересечение уровней F_A = offA, F_B = offB;
             // звено хребта между соседними точками лежит в шаре, где ветвь одна (Ssi.Transversal для полей градиентов F_A,
             // F_B — те же нормали уровней): хребет на звене — в шаре (m, ρ). Точка касания Q = x − offA·∇F_A(x) отходит от
@@ -231,6 +235,7 @@ public static partial class DirectRound
             }
             SweepSection Gen(double t)
             {
+                if (ch) return SweepSection.Line(ChA(t), ChB(t));
                 var x = S(t); var qa = Foot(FA, x); var qb = Foot(FB, x);
                 var e1 = (qa - x).Normalized(); var v2 = (qb - x).Normalized();
                 var e2 = v2 - e1 * Vector3d.Dot(e1, v2);
@@ -246,14 +251,19 @@ public static partial class DirectRound
             for (int i = 0; i <= CylSamples; i++)
             {
                 double t = t0 + (t1 - t0) * i / CylSamples;
-                var x = Spine(t);
+                var x = ch ? Ed(t) : Spine(t);
                 if (x == null) { why = "cyl/cyl: ball centre not found (radius too large?)"; return false; }
                 var P = Ed(t); Ps.Add(P);
-                var qa = Foot(FA, x.Value); var qb = Foot(FB, x.Value);
-                if (Math.Abs((qa - x.Value).Length - r) > 1e-8 * Math.Max(1, r) || Math.Abs((qb - x.Value).Length - r) > 1e-8 * Math.Max(1, r))
+                var qa = ch ? ChA(t) : Foot(FA, x.Value); var qb = ch ? ChB(t) : Foot(FB, x.Value);
+                if (ch)
+                {
+                    if (double.IsNaN(qa.X + qb.X) || Math.Abs((qa - P).Length - dA) > 1e-8 * Math.Max(1, dA) || Math.Abs((qb - P).Length - dB) > 1e-8 * Math.Max(1, dB) || (qa - qb).Length < 1e-6)
+                    { why = "chamfer: chamfer point not found"; return false; }
+                }
+                else if (Math.Abs((qa - x.Value).Length - r) > 1e-8 * Math.Max(1, r) || Math.Abs((qb - x.Value).Length - r) > 1e-8 * Math.Max(1, r))
                 { why = "cyl/cyl: contact not at the ball radius"; return false; }
                 var g = Gen(t);
-                if (!(g.Phi > 1e-3 && g.Phi < Math.PI - 1e-3)) { why = "cyl/cyl: blend arc degenerate"; return false; }
+                if (!ch && !(g.Phi > 1e-3 && g.Phi < Math.PI - 1e-3)) { why = "cyl/cyl: blend arc degenerate"; return false; }
                 widthA = Math.Max(widthA, (qa - P).Length); widthB = Math.Max(widthB, (qb - P).Length);
                 if (prevS != null)
                 {
@@ -310,19 +320,20 @@ public static partial class DirectRound
             FA.Touched = true; FA.Hint = Foot(FA, qam + (qam - Em));
             FB.Touched = true; FB.Hint = Foot(FB, qbm + (qbm - Em));
             // лента: наружу — от хребта у выпуклого, к нему у вогнутого
-            var gm = Gen(tm); var mid = gm.Point(0.5); var want = (mid - gm.C).Normalized() * (-sigma);
+            var gm = Gen(tm); var mid = gm.Point(0.5);
+            var want = ch ? (Geometry.Ssi.Implicit(shA, Em).G * sA + Geometry.Ssi.Implicit(shB, Em).G * sB) : (mid - gm.C).Normalized() * (-sigma);
             var nS = surf.NormalAt(new Vector2d((tm - t0) * kU, 0.5));
             bool rev = Vector3d.Dot(nS, want) < 0;
             if (!CylHalf)
             {
                 // прежде: лента — один пояс без шва (сетка пояса режет его по шву хордой поперёк дуги: у r ≥ 2 прогиб хорды
                 // больше допуска, и разметка отказывала)
-                var cA = new ProcCurve3(QA, t0, t1, true, "rolling-ball contact") { NoEventsOn = (s, a, b) => NoEvents(true, s, a, b) };
-                var cB = new ProcCurve3(QB, t0, t1, true, "rolling-ball contact") { NoEventsOn = (s, a, b) => NoEvents(false, s, a, b) };
+                var cA = new ProcCurve3(QA, t0, t1, true, ch ? "chamfer contact" : "rolling-ball contact") { NoEventsOn = ch ? null : (s, a, b) => NoEvents(true, s, a, b) };
+                var cB = new ProcCurve3(QB, t0, t1, true, ch ? "chamfer contact" : "rolling-ball contact") { NoEventsOn = ch ? null : (s, a, b) => NoEvents(false, s, a, b) };
                 var pA = cA.PointAt(t0); var pB = cB.PointAt(t0);
                 lA.Clear(); lA.Add(new Seg { Curve = cA, A = pA, B = pA });
                 lB.Clear(); lB.Add(new Seg { Curve = cB, A = pB, B = pB });
-                var bl = new FDesc { Surf = surf, Rev = rev, Tag = "round:face", Touched = true, Hint = mid };
+                var bl = new FDesc { Surf = surf, Rev = rev, Tag = ch ? "chamfer:face" : "round:face", Touched = true, Hint = mid };
                 bl.Loops.Add(new List<Seg> { new() { Curve = cA, A = pA, B = pA } });
                 bl.Loops.Add(new List<Seg> { new() { Curve = cB, A = pB, B = pB } });
                 blends.Add(bl);
@@ -333,10 +344,12 @@ public static partial class DirectRound
                 // точки хребта, точные): у каждой грани контур не обходит период, и разметка идёт обычным путём (дуги-швы
                 // гранятся по прогибу). Линии касания — по две половины.
                 double th = (t0 + t1) / 2;
-                ArcCurve3 SecArc(double t) { var g = Gen(t); return new ArcCurve3(new Frame3(g.C, g.E1, g.E2), r, 0, g.Phi); }
+                ICurve3 SecArc(double t) { var g = Gen(t); return ch ? new LineCurve3(g.A, g.B) : new ArcCurve3(new Frame3(g.C, g.E1, g.E2), r, 0, g.Phi); }
                 var a0 = SecArc(t0); var ah = SecArc(th);
-                var cA1 = new ProcCurve3(QA, t0, th, false, "rolling-ball contact") { NoEventsOn = (s, a, b) => NoEvents(true, s, a, b) }; var cA2 = new ProcCurve3(QA, th, t1, false, "rolling-ball contact") { NoEventsOn = (s, a, b) => NoEvents(true, s, a, b) };
-                var cB1 = new ProcCurve3(QB, t0, th, false, "rolling-ball contact") { NoEventsOn = (s, a, b) => NoEvents(false, s, a, b) }; var cB2 = new ProcCurve3(QB, th, t1, false, "rolling-ball contact") { NoEventsOn = (s, a, b) => NoEvents(false, s, a, b) };
+                string kind = ch ? "chamfer contact" : "rolling-ball contact";
+                Func<Geometry.Ssi.Shape, double, double, bool>? evA = ch ? null : (s, a, b) => NoEvents(true, s, a, b), evB = ch ? null : (s, a, b) => NoEvents(false, s, a, b);
+                var cA1 = new ProcCurve3(QA, t0, th, false, kind) { NoEventsOn = evA }; var cA2 = new ProcCurve3(QA, th, t1, false, kind) { NoEventsOn = evA };
+                var cB1 = new ProcCurve3(QB, t0, th, false, kind) { NoEventsOn = evB }; var cB2 = new ProcCurve3(QB, th, t1, false, kind) { NoEventsOn = evB };
                 Vector3d qa0 = QA(t0), qah = QA(th), qb0 = QB(t0), qbh = QB(th);
                 if ((a0.PointAt(0) - qa0).Length > 1e-9 || (a0.PointAt(1) - qb0).Length > 1e-9 || (ah.PointAt(0) - qah).Length > 1e-9 || (ah.PointAt(1) - qbh).Length > 1e-9
                     || (QA(t1) - qa0).Length > 1e-9 || (QB(t1) - qb0).Length > 1e-9)
@@ -347,7 +360,7 @@ public static partial class DirectRound
                 {
                     var qa1 = QA(ta); var qa2 = QA(tb); var qb1 = QB(ta); var qb2 = QB(tb);
                     var hint = Gen((ta + tb) / 2).Point(0.5);
-                    var bl = new FDesc { Surf = surf, Rev = rev, Tag = "round:face", Touched = true, Hint = hint };
+                    var bl = new FDesc { Surf = surf, Rev = rev, Tag = ch ? "chamfer:face" : "round:face", Touched = true, Hint = hint };
                     bl.Loops.Add(new List<Seg>
                     {
                         new() { Curve = cA, A = qa1, B = qa2 },
@@ -361,6 +374,31 @@ public static partial class DirectRound
             Debug?.Invoke($"cyl/cyl: sigma {sigma} sA {sA} sB {sB} offsets {offA:R}/{offB:R} shapes {shA.GetType().Name}/{shB.GetType().Name} strip widths {widthA:G4}/{widthB:G4}");
         }
         return true;
+    }
+
+    /// <summary>
+    /// 06.15: ТОЧКА ФАСКИ на форме sh у точки ребра P: в плоскости поперёк ребра (касательная tg), на хордовом расстоянии d от P,
+    /// по ту сторону, где грань уходит от ребра (направление вдоль грани, противоположное наружной нормали другой грани у
+    /// выпуклого ребра и сонаправленное у вогнутого). Ньютон на F_sh = 0, (x − P)·tg = 0, |x − P|² = d². NaN — не найдена.
+    /// </summary>
+    static Vector3d ChamferPoint(Geometry.Ssi.Shape sh, Geometry.Ssi.Shape other, double sSh, double sOther, double sigma, Vector3d P, Vector3d tg, double d)
+    {
+        var n = Geometry.Ssi.Implicit(sh, P).G; var nO = Geometry.Ssi.Implicit(other, P).G * sOther;
+        var u = Vector3d.Cross(tg, n); if (u.Length < 1e-12) return new Vector3d(double.NaN);
+        u.Normalize(); if (Math.Sign(Vector3d.Dot(u, nO)) != Math.Sign(sigma)) u = -u;
+        var x = P + u * d;
+        for (int it = 0; it < 60; it++)
+        {
+            var (f, g) = Geometry.Ssi.Implicit(sh, x); var w = x - P;
+            var dx = Solve3(new[] { g, tg, w * 2 }, new[] { -f, -Vector3d.Dot(w, tg), d * d - w.LengthSquared });
+            if (dx == null) return new Vector3d(double.NaN);
+            x += dx.Value;
+            if (dx.Value.Length < 1e-15 * Math.Max(1, x.Length)) break;
+        }
+        var wf = x - P;
+        if (Math.Abs(Geometry.Ssi.Implicit(sh, x).F) > 1e-10 || Math.Abs(wf.Length - d) > 1e-10 * Math.Max(1, d) || Math.Abs(Vector3d.Dot(wf, tg)) > 1e-10 * Math.Max(1, d)
+            || Math.Sign(Vector3d.Dot(wf, nO)) != Math.Sign(sigma)) return new Vector3d(double.NaN);
+        return x;
     }
 
     /// <summary>Треугольники тела (сетки граней) — для пробы точки.</summary>

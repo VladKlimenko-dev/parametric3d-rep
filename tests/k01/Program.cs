@@ -395,6 +395,8 @@ static partial class Program
         if (mode is "units" or "allA") UnitsChecks();
         if (mode is "vdirect" or "allA") VertexDirectChecks();
         if (mode is "predicates" or "allA") PredicateChecks();
+        if (mode is "dropen" or "allA") Krn06OpenChecks();
+        if (mode is "dropen" or "drcurvch" or "allA") Krn06CurvedChamferChecks();
         if (mode is "selfone")
         {
             var rnd = new Random(20261011); TSolid a = null!; string d = "";

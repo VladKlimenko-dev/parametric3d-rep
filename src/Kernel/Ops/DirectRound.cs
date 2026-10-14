@@ -94,6 +94,14 @@ public static partial class DirectRound
             if (res2 != null) { res = res2; added = more.Count - refs.Count; Interlocked.Increment(ref TanPropagations); }
             else why += " | with tangent propagation: " + w2;
         }
+        if (res == null && OpenOn && !(_law != null) && _chamfer == null)
+        {
+            // KRN-06 (06.12, 06.14): незамкнутые рёбра между кривыми гранями — катящийся шар с обрезкой торцами
+            string? w3 = null;
+            var r3 = BuildOpen(bodies[k], refs, r, ref w3);
+            if (r3 != null) { res = r3; Interlocked.Increment(ref OpenBuilt); }
+            else { why += " | open curved: " + w3; Interlocked.Increment(ref OpenDeclined); }
+        }
         if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); return false; }
         bodies[k] = res; Interlocked.Increment(ref Built);
         if (added > 0) warnings.Add($"Round: tangent propagation added {added} edge(s) to the selection.");
@@ -123,7 +131,20 @@ public static partial class DirectRound
             _chamfer = (d1, d2, first);
         }
         TSolid? res;
-        try { res = Build(bodies[k], refs, d1, true, ref why); }
+        try
+        {
+            res = Build(bodies[k], refs, d1, true, ref why);
+            // KRN-06 (06.15): рёбра между кривыми гранями (замкнутые и незамкнутые) — фаска на инфраструктуре катящегося шара:
+            // точки граней на хордовом расстоянии в плоскости поперёк ребра, грань — линейчатая по формуле сечения. P3D_DRCURVCH=0 — отказ.
+            if (res == null && CurvedChamfer)
+            {
+                var cm = _chamfer;
+                Func<TEdge, TFace, double> dist = (x, f) => cm is { } c && c.First.TryGetValue(x, out var ff) ? (ReferenceEquals(ff, f) ? c.D1 : c.D2) : d1;
+                string? w2 = null;
+                res = CurvedChamferBuild(bodies[k], refs, d1, dist, ref w2);
+                if (res != null) Interlocked.Increment(ref CurvedChamfers); else why += " | curved chamfer: " + w2;
+            }
+        }
         finally { _chamfer = null; }
         if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); return false; }
         bodies[k] = res; Interlocked.Increment(ref Built);
@@ -393,39 +414,8 @@ public static partial class DirectRound
                 if (ed.CoEdges.Count == 2 && ed.CoEdges[0].Reversed == ed.CoEdges[1].Reversed)
                     Debug($"ORIG same-sense edge {ed.V0.P:0.###}->{ed.V1.P:0.###} faces {ed.CoEdges[0].Loop?.Face?.Tag}/{ed.CoEdges[1].Loop?.Face?.Tag}");
         // описание граней
-        var faces = new List<FDesc>();
-        var byFace = new Dictionary<TFace, FDesc>();
-        foreach (var f in body.Faces)
-        {
-            var src = GeometryAudit.AuthoritativeSurface(f);
-            if (src == null) { why = "face without an exact surface"; return null; }
-            // точная поверхность-источник может быть ориентирована иначе, чем фасетная грань (копия с поворотом):
-            // сторона — по нормали самой грани в точке контура
-            bool rev = f.Reversed;
-            if (SourceSide && !ReferenceEquals(src, f.Surface) && f.Loops.FirstOrDefault()?.CoEdges.FirstOrDefault()?.Start.P is Vector3d sp
-                && Vector3d.Dot(src.NormalAt(src.ProjectToUV(sp)) * (f.Reversed ? -1 : 1), f.NormalAt(sp)) < 0)
-                rev = !rev;
-            var d = new FDesc { Surf = src, Rev = rev, Tag = f.Tag, Hint = f.InteriorHint, Slot = f.MaterialSlot, Orig = f };
-            foreach (var l in f.Loops)
-            {
-                var ord = l.Ordered();
-                if (ord == null) { why = "loop not closed"; return null; }
-                d.Loops.Add(ord.Select(ce => new Seg { Curve = ce.Edge.Curve, A = ce.Start.P, B = ce.End.P, Orig = ce.Edge, Id = ce.Edge }).ToList());
-            }
-            // НОРМАЛЬ ПЛОСКОЙ ГРАНИ — по поверхности и Reversed, не по обходу: контуры входа могут быть обращены (у выдавливания
-            // нижняя грань обходится против своей нормали — соглашение выставит нормализация позже); прежде нормаль из обхода
-            // давала «выпуклое и вогнутое» в углах нижней грани. Мутация P3D_DRTRUENORMAL=0 — нормаль по обходу.
-            if (src.IsPlanar && f.Loops.FirstOrDefault()?.CoEdges.FirstOrDefault()?.Start.P is Vector3d fp)
-                d.N = TrueNormal ? (src.NormalAt(src.ProjectToUV(fp)) * (rev ? -1 : 1)).Normalized() : AnalyticVolume.NormalIntegral(f).Normalized();
-            switch (src)
-            {
-                case ExtrudedSurface { Base: ArcCurve3 ba } exc when Math.Abs(Math.Abs(Vector3d.Dot(ba.Frame.W.Normalized(), exc.Dir.Normalized())) - 1) < 1e-12:
-                    d.IsCyl = true; d.AxO = ba.Frame.Origin; d.AxW = exc.Dir.Normalized(); d.AxR = ba.Radius; break;
-                case CylinderSurface cys:
-                    d.IsCyl = true; d.AxO = cys.Axis.Origin; d.AxW = cys.Axis.W.Normalized(); d.AxR = cys.Radius; break;
-            }
-            faces.Add(d); byFace[f] = d;
-        }
+        var faces = Describe(body, out var byFace, ref why);
+        if (faces == null) return null;
 
         var blends = new List<FDesc>();
         if (tanLoop)
@@ -1347,6 +1337,46 @@ public static partial class DirectRound
             blends.Add(bl);
         }
         return true;
+    }
+
+    /// <summary>Описание граней тела для прямых построителей (точная поверхность, сторона, контуры; плоскость — нормаль, цилиндр — ось).</summary>
+    static List<FDesc>? Describe(TSolid body, out Dictionary<TFace, FDesc> byFace, ref string? why)
+    {
+        var faces = new List<FDesc>();
+        byFace = new Dictionary<TFace, FDesc>();
+        foreach (var f in body.Faces)
+        {
+            var src = GeometryAudit.AuthoritativeSurface(f);
+            if (src == null) { why = "face without an exact surface"; return null; }
+            // точная поверхность-источник может быть ориентирована иначе, чем фасетная грань (копия с поворотом):
+            // сторона — по нормали самой грани в точке контура
+            bool rev = f.Reversed;
+            if (SourceSide && !ReferenceEquals(src, f.Surface) && f.Loops.FirstOrDefault()?.CoEdges.FirstOrDefault()?.Start.P is Vector3d sp
+                && Vector3d.Dot(src.NormalAt(src.ProjectToUV(sp)) * (f.Reversed ? -1 : 1), f.NormalAt(sp)) < 0)
+                rev = !rev;
+            var d = new FDesc { Surf = src, Rev = rev, Tag = f.Tag, Hint = f.InteriorHint, Slot = f.MaterialSlot, Orig = f };
+            foreach (var l in f.Loops)
+            {
+                var ord = l.Ordered();
+                if (ord == null) { why = "loop not closed"; return null; }
+                d.Loops.Add(ord.Select(ce => new Seg { Curve = ce.Edge.Curve, A = ce.Start.P, B = ce.End.P, Orig = ce.Edge, Id = ce.Edge }).ToList());
+            }
+            // НОРМАЛЬ ПЛОСКОЙ ГРАНИ — по поверхности и Reversed, не по обходу: контуры входа могут быть обращены (у выдавливания
+            // нижняя грань обходится против своей нормали — соглашение выставит нормализация позже); прежде нормаль из обхода
+            // давала «выпуклое и вогнутое» в углах нижней грани. Мутация P3D_DRTRUENORMAL=0 — нормаль по обходу.
+            if (src.IsPlanar && f.Loops.FirstOrDefault()?.CoEdges.FirstOrDefault()?.Start.P is Vector3d fp)
+                d.N = TrueNormal ? (src.NormalAt(src.ProjectToUV(fp)) * (rev ? -1 : 1)).Normalized() : AnalyticVolume.NormalIntegral(f).Normalized();
+            switch (src)
+            {
+                case ExtrudedSurface { Base: ArcCurve3 ba } exc when Math.Abs(Math.Abs(Vector3d.Dot(ba.Frame.W.Normalized(), exc.Dir.Normalized())) - 1) < 1e-12:
+                    d.IsCyl = true; d.AxO = ba.Frame.Origin; d.AxW = exc.Dir.Normalized(); d.AxR = ba.Radius; break;
+                case CylinderSurface cys:
+                    d.IsCyl = true; d.AxO = cys.Axis.Origin; d.AxW = cys.Axis.W.Normalized(); d.AxR = cys.Radius; break;
+            }
+            faces.Add(d); byFace[f] = d;
+        }
+
+        return faces;
     }
 
     static TSolid? Assemble(List<FDesc> faces, ref string? why)
