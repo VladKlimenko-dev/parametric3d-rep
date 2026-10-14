@@ -40,8 +40,7 @@ public static class PCurves
                 // давали 4e-4 мм.
                 // KRN-03: не точная — кубическая Эрмита, уплотняется до модельной точности (бюджет); прежде — ломаная до 1e-5 мм.
                 double budget = ToleranceContext.Current.ModelAccuracy;
-                var pc = For(ce, s, samples, out double dev);
-                for (int m = samples * 2; pc != null && !pc.IsExact && dev > budget && m <= 4096; m *= 2) pc = For(ce, s, m, out dev);
+                var pc = Densify(ce, s, samples, budget, out double dev, out _);
                 // KRN-06 (06.14): процедурная кривая на поверхности, где уплотнение Эрмита упёрлось в шум проекции (грань NURBS,
                 // длинная линия касания: 2e-7 при бюджете 1e-7) — p-кривая проекцией самой кривой (точная по построению).
                 // Мутация P3D_PCPROJPROC=0.
@@ -69,9 +68,10 @@ public static class PCurves
             foreach (var ce in face.Loops.SelectMany(l => l.CoEdges))
             {
                 if (s == null) { res.Add((ce, null, 0)); continue; }
-                var pc = For(ce, s, samples, out double dev);
-                for (int m = samples * 2; pc != null && !pc.IsExact && dev > budget && m <= 4096; m *= 2) pc = For(ce, s, m, out dev);
-                if (pc != null && !pc.IsExact && dev > budget && ce.Edge.Curve is ProcCurve3 && ProjProc) pc = For(ce, s, samples, out dev, projected: true);
+                var swT = System.Diagnostics.Stopwatch.StartNew(); int lastM = samples;
+                var pc = Densify(ce, s, samples, budget, out double dev, out lastM);
+                if (pc != null && !pc.IsExact && dev > budget && ce.Edge.Curve is ProcCurve3 && ProjProc) { pc = For(ce, s, samples, out dev, projected: true); lastM = -1; }
+                if (TimeLog && swT.ElapsedMilliseconds > 500) Console.Error.WriteLine($"PCTIME {swT.ElapsedMilliseconds} ms edge {ce.Edge.Id} {ce.Edge.Curve.GetType().Name}{(ce.Edge.Curve is ProcCurve3 pq ? ":" + pq.Kind : "")} surf {s.GetType().Name} pc {pc?.GetType().Name} m {lastM} dev {dev:E2}");
                 res.Add((ce, pc, dev));
             }
         }
@@ -89,6 +89,27 @@ public static class PCurves
         return c.PointAt(c.T0 + (c.T1 - c.T0) * f);
     }
 
+    /// <summary>
+    /// Уплотнение Эрмита до бюджета. KRN-06: у процедурной кривой (точка — корень уравнения) уплотнение упирается в шум
+    /// вычисления: отклонение перестаёт падать (Эрмита — h⁴, удвоение даёт ×1/16), а каждое удвоение вдвое дороже — до 4096
+    /// узлов за минуты на ребро. Застой (удвоение уменьшило отклонение меньше чем втрое) у ProcCurve3 — выход: дальше
+    /// p-кривая проекцией самой кривой. Мутация P3D_PCSTALL=0 — прежнее уплотнение до 4096.
+    /// </summary>
+    static ICurve2? Densify(TCoEdge ce, ISurface3 s, int samples, double budget, out double dev, out int lastM)
+    {
+        lastM = samples;
+        var pc = For(ce, s, samples, out dev);
+        bool proc = ce.Edge.Curve is ProcCurve3 && ProjProc && StallStop;
+        for (int m = samples * 2; pc != null && !pc.IsExact && dev > budget && m <= 4096; m *= 2)
+        {
+            double prev = dev;
+            pc = For(ce, s, m, out dev); lastM = m;
+            if (proc && dev > budget && dev > prev / 3) break;
+        }
+        return pc;
+    }
+    static readonly bool StallStop = Environment.GetEnvironmentVariable("P3D_PCSTALL") != "0";
+    static readonly bool TimeLog = Environment.GetEnvironmentVariable("P3D_PCTIME") == "1";
     static readonly bool ProjProc = Environment.GetEnvironmentVariable("P3D_PCPROJPROC") != "0";
 
     private static ICurve2? For(TCoEdge ce, ISurface3 s, int n, out double dev, bool projected = false)

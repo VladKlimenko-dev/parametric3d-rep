@@ -131,6 +131,7 @@ public static class SolidValidator
         var r = new ValidationReport();
         r.Checked.Add(Representation.BRep);
 
+        using (Diagnostics.Prof.Time("проверка: топология"))
         foreach (var i in TopologyCheck.Validate(solid, closed: options.Closed))
             r.Issues.Add(new ValidationIssue(Representation.BRep, ValidationSeverity.Error, "topology", i.ToString(), i.Id));
 
@@ -139,12 +140,12 @@ public static class SolidValidator
         r.Metrics["brep.faces"] = faces.Count;
         r.Metrics["brep.edges"] = edges.Count;
         r.Metrics["brep.shells"] = solid.Shells.Count;
-        CheckShortEdges(r, edges);
-        CheckLoopOrientation(r, faces);
-        CheckChartPoles(r, faces);
-        CheckLoopConnectivity(r, faces);
-        CheckFaceComponents(r, faces);
-        CheckSignedVolume(r, faces);
+        using (Diagnostics.Prof.Time("проверка: короткие рёбра")) CheckShortEdges(r, edges);
+        using (Diagnostics.Prof.Time("проверка: ориентация контуров")) CheckLoopOrientation(r, faces);
+        using (Diagnostics.Prof.Time("проверка: полюса")) CheckChartPoles(r, faces);
+        using (Diagnostics.Prof.Time("проверка: связность контуров")) CheckLoopConnectivity(r, faces);
+        using (Diagnostics.Prof.Time("проверка: компоненты граней")) CheckFaceComponents(r, faces);
+        using (Diagnostics.Prof.Time("проверка: знак объёма")) CheckSignedVolume(r, faces);
 
         // Окрестность вершины: грани, сходящиеся в ней, связаны через рёбра этой вершины в один
         // веер. Два веера в одной вершине — касание тела самим собой в точке.
@@ -229,7 +230,7 @@ public static class SolidValidator
         // K08: авторитетная геометрия. Кривая ребра, отходящая от смежной поверхности, — это
         // противоречие между 3D-кривой и поверхностью, а не «приближение»: ошибка. Доля
         // аналитических граней и рёбер и ошибка гранения — сведения для вызывающего кода.
-        var geo = GeometryAudit.Of(solid);
+        GeometryAudit geo; using (Diagnostics.Prof.Time("проверка: аудит геометрии")) geo = GeometryAudit.Of(solid);
         r.Metrics["geometry.analyticFaces"] = geo.AnalyticFaces;
         r.Metrics["geometry.analyticEdges"] = geo.AnalyticEdges;
         r.Metrics["geometry.facetedEdges"] = geo.Edges.Count(e => e.Level == GeometryLevel.Faceted);

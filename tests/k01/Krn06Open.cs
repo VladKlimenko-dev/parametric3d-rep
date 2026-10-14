@@ -404,8 +404,9 @@ static partial class Program
     /// R − r от оси вала и ρ + r от оси отверстия (свой Ньютон); сечение — характеристическая окружность огибающей
     /// (центр c − (r r'/|c'|²) c'). Объём — Гаусс–Остроградский по трём полосам, начало на плоскости среза.
     /// </summary>
-    static double RollingBallVarCut(double R, double rho, double rS, double rE, double phiS, double phiEnd, double a, double off, int nL = 8, int nSub = 48)
+    static double RollingBallVarCut(double R, double rho, double rS, double rE, double phiS, double phiEnd, double a, double off, int nL = 8, int nSub = 48, Func<double, double>? lawR = null, Func<double, double>? lawD = null, double[]? knots = null)
     {
+        var knotPhi = new List<double>();
         var n = new Vector3d(-Math.Sin(a), Math.Cos(a), 0); var p0 = n * off + Vector3d.UnitZ * (R - 0.5);
         Vector3d Ep(double phi) { double x = rho * Math.Cos(phi), y = rho * Math.Sin(phi); return new(x, y, Math.Sqrt(R * R - y * y)); }
         Vector3d dE(double phi) { double y = rho * Math.Sin(phi), yp = rho * Math.Cos(phi); return new Vector3d(-rho * Math.Sin(phi), yp, -y * yp / Math.Sqrt(R * R - y * y)); }
@@ -413,7 +414,7 @@ static partial class Program
         double[] g20w = { 0.0176140071391521, 0.0406014298003869, 0.0626720483341091, 0.0832767415767048, 0.1019301198172404, 0.1181945319615184, 0.1316886384491766, 0.1420961093183820, 0.1491729864726037, 0.1527533871307258, 0.1527533871307258, 0.1491729864726037, 0.1420961093183820, 0.1316886384491766, 0.1181945319615184, 0.1019301198172404, 0.0832767415767048, 0.0626720483341091, 0.0406014298003869, 0.0176140071391521 };
         double ArcLen(double f0, double f1)
         {
-            double sum = 0; int pieces = 8;
+            double sum = 0; int pieces = Math.Abs(f1 - f0) < 0.01 ? 1 : 8;
             for (int k = 0; k < pieces; k++)
             {
                 double a0 = f0 + (f1 - f0) * k / pieces, a1 = f0 + (f1 - f0) * (k + 1) / pieces;
@@ -422,7 +423,27 @@ static partial class Program
             return sum;
         }
         double L = Math.Abs(ArcLen(phiS, phiEnd)); double dir = Math.Sign(phiEnd - phiS);
-        double Rad(double phi) => rS + (rE - rS) * dir * ArcLen(phiS, phi) / L;
+        // закон по доле длины σ от конца S: линейный (rS → rE) или заданный (lawR, производная lawD по σ)
+        lawR ??= f => rS + (rE - rS) * f; lawD ??= _ => rE - rS;
+        // доля длины σ(φ): таблица длины на окне ребра (Гаусс 20 по кускам) и кубическая Эрмита с точной производной |E'|
+        const int NT = 2048; double tw0 = Math.Min(phiS, phiEnd) - 0.7, tw1 = Math.Max(phiS, phiEnd) + 0.7, htw = (tw1 - tw0) / NT;
+        var arcTab = new double[NT + 1]; var spdTab = new double[NT + 1];
+        for (int i = 0; i <= NT; i++) { spdTab[i] = dE(tw0 + htw * i).Length; if (i > 0) arcTab[i] = arcTab[i - 1] + ArcLen(tw0 + htw * (i - 1), tw0 + htw * i); }
+        double ArcFromW(double phi)
+        {
+            double x = (phi - tw0) / htw; int i = Math.Clamp((int)Math.Floor(x), 0, NT - 1); double u = x - i;
+            double h00 = 2 * u * u * u - 3 * u * u + 1, h10 = u * u * u - 2 * u * u + u, h01 = -2 * u * u * u + 3 * u * u, h11 = u * u * u - u * u;
+            return h00 * arcTab[i] + h10 * htw * spdTab[i] + h01 * arcTab[i + 1] + h11 * htw * spdTab[i + 1];
+        }
+        double arcS = ArcFromW(phiS);
+        double Sig(double phi) => dir * (ArcFromW(phi) - arcS) / L;
+        double Rad(double phi) => lawR(Sig(phi));
+        foreach (var kf in knots ?? Array.Empty<double>())
+        {
+            double a0 = Math.Min(phiS, phiEnd) - 0.6, b0 = Math.Max(phiS, phiEnd) + 0.6, fa = Sig(a0) - kf;
+            for (int it = 0; it < 100; it++) { double m = (a0 + b0) / 2, fm = Sig(m) - kf; if (fa * fm <= 0) b0 = m; else { a0 = m; fa = fm; } }
+            knotPhi.Add((a0 + b0) / 2);
+        }
         Vector3d C(double phi)
         {
             var e = Ep(phi); var t = dE(phi).Normalized(); double r = Rad(phi);
@@ -447,7 +468,7 @@ static partial class Program
             var c = C(phi); double h = 1e-5;
             var dc = (-C(phi + 2 * h) + 8 * C(phi + h) - 8 * C(phi - h) + C(phi - 2 * h)) / (12 * h);
             // dr/dφ: закон по длине s от конца S; s растёт по φ при dir > 0
-            double r = Rad(phi), k = r * ((rE - rS) / L * dE(phi).Length * dir) / dc.LengthSquared;
+            double r = Rad(phi), k = r * (lawD(Sig(phi)) / L * dE(phi).Length * dir) / dc.LengthSquared;
             var cc = c - dc * k; double rc = Math.Sqrt(r * r - k * k * dc.LengthSquared);
             double yz = Math.Sqrt(c.Y * c.Y + c.Z * c.Z); var qa = new Vector3d(c.X, c.Y * R / yz, c.Z * R / yz);
             double ang = Math.Atan2(c.Y, c.X); var qb = new Vector3d(rho * Math.Cos(ang), rho * Math.Sin(ang), c.Z);
@@ -479,10 +500,13 @@ static partial class Program
                         gPrev = g1;
                     }
                     var pts = new List<double> { lo0 }; pts.AddRange(cuts); pts.Add(lo0 + span);
+                    // изломы закона (узлы σ) — границы кусков квадратуры
+                    foreach (var kp in knotPhi) if (kp > lo0 && kp < lo0 + span) pts.Add(kp);
+                    pts.Sort();
                     for (int i = 0; i + 1 < pts.Count; i++)
                     {
                         double A = pts[i], B = pts[i + 1];
-                        if (!(G((A + B) / 2) > 0)) continue;
+                        if (!(B - A > 1e-14) || !(G((A + B) / 2) > 0)) continue;
                         for (int sIdx = 0; sIdx < nSub; sIdx++)
                             for (int q = 0; q < gx.Length; q++)
                             {
@@ -617,6 +641,100 @@ static partial class Program
                 Console.WriteLine($"  {k}: left {left.Value.dV:R} + right {right.Value.dV:R} = {sum:R}, full {full.Value.dV:R} ({(sum - full.Value.dV) / full.Value.dV:E1}, tol {tol:E1})");
             }
             DirectRound.Debug = null;
+            if (fails.Count > 0) throw new Exception(string.Join("; ", fails));
+        });
+    }
+}
+
+static partial class Program
+{
+    static void Krn06LawAndPlanePlaneChecks()
+    {
+        Check("KRN06-RADIUS-LAW-POINTS", () =>
+        {
+            // ЗАКОН РАДИУСА ПО ТОЧКАМ (06.2): кромка отверстия в половине вала, радиус задан в точках (доля длины от начала
+            // ссылки, радиус) — сплайн без выбросов (RadiusLaw.Points). Эталон — RollingBallVarCut с тем же законом (свои центры,
+            // длина дуги, окружности огибающей).
+            var fails = new List<string>();
+            if (Environment.GetEnvironmentVariable("P3D_OPENDBG") == "1") DirectRound.Debug = m => Console.WriteLine($"    dr {DateTime.Now:HH:mm:ss}: " + m);
+            TSolid Shaft() => TransformOp.Copy(PrimitiveOp.Cylinder(new Vector3d(0, 0, -50), 20, 100), TransformOp.Rotate(Vector3d.Zero, Vector3d.UnitY, 90));
+            var only = Environment.GetEnvironmentVariable("P3D_LAWONLY");
+            foreach (var (name, rho, pts) in new[]
+            {
+                ("d8 1-2-1.2", 4.0, new[] { (0.0, 1.0), (0.5, 2.0), (1.0, 1.2) }),
+                ("d8 2-0.8-1.5-1", 4.0, new[] { (0.0, 2.0), (0.3, 0.8), (0.7, 1.5), (1.0, 1.0) }),
+                ("d30b 1-1.8-1.2", 15.0, new[] { (0.0, 1.0), (0.5, 1.8), (1.0, 1.2) }),
+                ("d30c 2.5-1", 15.0, new[] { (0.0, 2.5), (1.0, 1.0) }),
+            })
+            {
+                if (only != null && !name.StartsWith(only)) continue;
+                var b = new List<TSolid> { Shaft() }; var w = new List<string>();
+                BooleanOp.Subtract(b, Box(-60, -60, -60, 120, 60, 120), w);
+                BooleanOp.Subtract(b, PrimitiveOp.Cylinder(new Vector3d(0, 0, -40), rho, 80), w);
+                double v0 = AnalyticVolume.Of(b[0]) ?? double.NaN;
+                var edges = b[0].Edges.Where(e => e.Curve is not Parametric3D.Kernel.Curves.LineCurve3 && e.Curve.PointAt((e.Curve.T0 + e.Curve.T1) / 2) is var m && m.Z > 5 && Math.Abs(Math.Sqrt(m.X * m.X + m.Y * m.Y) - rho) < 1e-6).ToList();
+                if (edges.Count != 1) { fails.Add($"{name}: edges {edges.Count}"); continue; }
+                var rf = EdgeRef.Of(edges[0]);
+                long n0 = DirectRound.OpenBuilt, ep0 = DirectRound.OpenEndPoints, es0 = DirectRound.OpenEndSections;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                try { FilletOp.RoundEdgesLaw(b, new List<EdgeRef> { rf }, pts.Select(x => (x.Item1, x.Item2)).ToList(), new List<string>()); }
+                catch (Exception e) { fails.Add($"{name}: {e.GetType().Name} {e.Message}"); continue; }
+                if (DirectRound.OpenBuilt == n0) { fails.Add($"{name}: direct builder not used"); continue; }
+                // ЦЕНА (06.2): построение с проверкой — секунды, не минуты (прежде 6,5 мин: уплотнение p-кривых края до 4096
+                // узлов, ~20 точных сечений на точку края из-за шума касательной ребра); сечений на точку края — не больше 6, точек края — не больше 30000
+                double secs = sw.Elapsed.TotalSeconds, perEnd = (double)(DirectRound.OpenEndSections - es0) / Math.Max(1, DirectRound.OpenEndPoints - ep0);
+                Console.WriteLine($"  {name}: built in {secs:F1} s, end points {DirectRound.OpenEndPoints - ep0}, sections per end point {perEnd:F2}");
+                long nEnd = DirectRound.OpenEndPoints - ep0;
+                if (perEnd > 6) fails.Add($"{name}: {perEnd:F1} exact sections per end point (> 6)");
+                if (nEnd > 30000) fails.Add($"{name}: {nEnd} end points evaluated (> 30000: p-curve densification stalled?)");
+                if (secs > 90) fails.Add($"{name}: built in {secs:F0} s (> 90 s)");
+                var law = DirectRound.RadiusLaw.Points(rf.Start, rf.End, pts.Select(x => (x.Item1, x.Item2)).ToList())!;
+                var Ea = new Vector3d(rho, 0, Math.Sqrt(400));
+                bool sAtA = (rf.Start - Ea).Length < (rf.End - Ea).Length;
+                double want = RollingBallVarCut(20, rho, 0, 0, sAtA ? 0 : Math.PI, sAtA ? Math.PI : 0, 0, 0, lawR: law.R, lawD: law.dR, knots: law.Knots);
+                double dv = v0 - (AnalyticVolume.Of(b[0]) ?? double.NaN);
+                if (b[0].Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(b[0]).IsValid) fails.Add($"{name}: {b[0].Guarantee} {SolidValidator.Validate(b[0]).Summary()}");
+                if (!(Math.Abs(dv - want) <= 2e-6 * want + 1e-7)) fails.Add($"{name}: dV {dv:R} vs reference {want:R}");
+                Console.WriteLine($"  {name}: dV {dv:R} reference {want:R} ({(dv - want) / want:E1})");
+            }
+            if (fails.Count > 0) throw new Exception(string.Join("; ", fails));
+        });
+        Check("KRN06-PLANE-PLANE-CURVED-END", () =>
+        {
+            // ПРЯМОЕ РЕБРО ПЛОСКОСТЬ/ПЛОСКОСТЬ С КРИВЫМ ТОРЦОМ (06.9): верхнее переднее ребро плиты 60×40×10, второй конец — на
+            // вогнутом цилиндрическом вырезе (ось Z в (65, 5), R15). Свой построитель плоскость/плоскость отказывает (торец не
+            // плоский), ребро берёт катящийся шар с обрезкой торцом. Эталон: снятое = уголок (1 − π/4)r² сечения, протянутый
+            // от x = 0 до поверхности выреза X(y) = 65 − √(225 − (y − 5)²): V = ∫₀ʳ X(y)·(r − √(r² − (r − y)²)) dy (Гаусс).
+            var fails = new List<string>();
+            foreach (double r in new[] { 1.0, 2.0, 3.5 })
+            {
+                var b = new List<TSolid> { Box(0, 0, 0, 60, 40, 10) }; var w = new List<string>();
+                BooleanOp.Subtract(b, PrimitiveOp.Cylinder(new Vector3d(65, 5, -5), 15, 20), w);
+                double v0 = AnalyticVolume.Of(b[0]) ?? double.NaN;
+                var edges = b[0].Edges.Where(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0.P.Y) < 1e-9 && Math.Abs(e.V1.P.Y) < 1e-9 && Math.Abs(e.V0.P.Z - 10) < 1e-9 && Math.Abs(e.V1.P.Z - 10) < 1e-9).ToList();
+                if (edges.Count != 1) { fails.Add($"r{r}: edges {edges.Count}"); continue; }
+                long n0 = DirectRound.OpenBuilt;
+                try { FilletOp.RoundEdges(b, edges.Select(EdgeRef.Of).ToList(), r, new List<string>()); }
+                catch (Exception e) { fails.Add($"r{r}: {e.GetType().Name} {e.Message}"); continue; }
+                if (DirectRound.OpenBuilt == n0) { fails.Add($"r{r}: curved-end builder not used"); continue; }
+                double[] gx = { -0.9931285991850949, -0.9639719272779138, -0.9122344282513259, -0.8391169718222188, -0.7463319064601508, -0.6360536807265150, -0.5108670019508271, -0.3737060887154195, -0.2277858511416451, -0.0765265211334973, 0.0765265211334973, 0.2277858511416451, 0.3737060887154195, 0.5108670019508271, 0.6360536807265150, 0.7463319064601508, 0.8391169718222188, 0.9122344282513259, 0.9639719272779138, 0.9931285991850949 };
+                double[] gw = { 0.0176140071391521, 0.0406014298003869, 0.0626720483341091, 0.0832767415767048, 0.1019301198172404, 0.1181945319615184, 0.1316886384491766, 0.1420961093183820, 0.1491729864726037, 0.1527533871307258, 0.1527533871307258, 0.1491729864726037, 0.1420961093183820, 0.1316886384491766, 0.1181945319615184, 0.1019301198172404, 0.0832767415767048, 0.0626720483341091, 0.0406014298003869, 0.0176140071391521 };
+                // h(y) = r − √(r² − (r − y)²) имеет корень в y = 0 (касание): подстановка y = r(1 − cos θ) сглаживает
+                double want = 0; int pieces = 16;
+                for (int k = 0; k < pieces; k++)
+                    for (int i = 0; i < 20; i++)
+                    {
+                        double th0 = Math.PI / 2 * k / pieces, th1 = Math.PI / 2 * (k + 1) / pieces, th = (th0 + th1) / 2 + (th1 - th0) / 2 * gx[i], wt = gw[i] / 2 * (th1 - th0);
+                        double y = r * (1 - Math.Cos(th)), dy = r * Math.Sin(th);
+                        double h = r - Math.Sqrt(Math.Max(0, r * r - (r - y) * (r - y)));
+                        double X = 65 - Math.Sqrt(225 - (y - 5) * (y - 5));
+                        want += X * h * dy * wt;
+                    }
+                double dv = v0 - (AnalyticVolume.Of(b[0]) ?? double.NaN);
+                if (b[0].Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(b[0]).IsValid) fails.Add($"r{r}: {b[0].Guarantee} {SolidValidator.Validate(b[0]).Summary()}");
+                if (!(Math.Abs(dv - want) <= 2e-6 * want + 1e-7)) fails.Add($"r{r}: dV {dv:R} vs reference {want:R}");
+                Console.WriteLine($"  r{r}: dV {dv:R} reference {want:R} ({(dv - want) / want:E1})");
+            }
             if (fails.Count > 0) throw new Exception(string.Join("; ", fails));
         });
     }

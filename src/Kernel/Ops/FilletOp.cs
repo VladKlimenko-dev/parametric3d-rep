@@ -304,6 +304,21 @@ public static class FilletOp
         finally { VariableLaw = null; }
     }
 
+    /// <summary>
+    /// KRN-06 (06.2): СКРУГЛЕНИЕ С РАДИУСОМ ПО ТОЧКАМ: (доля длины ребра от начала ссылки, радиус), закон — сплайн без
+    /// выбросов. Прямой построитель катящегося шара; иначе — резцы с тем же законом.
+    /// </summary>
+    public static void RoundEdgesLaw(List<TSolid> bodies, IReadOnlyList<EdgeRef> edges, IReadOnlyList<(double F, double R)> points, List<string> warnings)
+    {
+        if (DirectRound.TryRoundLaw(bodies, edges, points, warnings)) return;
+        var law = DirectRound.RadiusLaw.Points(Vector3d.Zero, Vector3d.Zero, points)
+            ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Round: radius law points must start at 0, end at 1 and increase.");
+        double rMax = points.Max(x => x.R);
+        VariableLaw = t => law.R(Math.Clamp(t, 0, 1));
+        try { Apply(bodies, edges, warnings, "Round", rMax, rMax, true); }
+        finally { VariableLaw = null; }
+    }
+
     /// <summary>ДИАГНОСТИКА: каким путём строится резец.</summary>
     public static Action<string>? PathDebug;
 

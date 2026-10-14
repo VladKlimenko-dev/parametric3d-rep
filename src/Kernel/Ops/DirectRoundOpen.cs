@@ -10,6 +10,9 @@ public static partial class DirectRound
     /// <summary>Мутация P3D_DROPEN=0: незамкнутое ребро между кривыми гранями — отказ прямого построителя (прежний путь резцов).</summary>
     static readonly bool OpenOn = Environment.GetEnvironmentVariable("P3D_DROPEN") != "0";
     public static long OpenBuilt, OpenDeclined;
+    /// <summary>KRN-06: точки края ленты на торцах и точные сечения на них (цена точки края — сечений на точку).</summary>
+    public static long OpenEndPoints, OpenEndSections;
+    [ThreadStatic] static long genCount;
 
     /// <summary>
     /// KRN-06 (06.12, 06.14): СКРУГЛЕНИЕ НЕЗАМКНУТОГО РЕБРА МЕЖДУ ГРАНЯМИ-КВАДРИКАМИ (плоскость, цилиндр, конус, шар, тор; хотя бы
@@ -23,7 +26,7 @@ public static partial class DirectRound
     /// Параметр — угол вокруг оси одной из форм (монотонный вдоль ребра), точки ребра и продления — Ньютоном на A ∩ B в
     /// полуплоскости угла. Мутация P3D_DROPEN=0.
     /// </summary>
-    static TSolid? BuildOpen(TSolid body, IReadOnlyList<EdgeRef> refs, double r, ref string? why, Func<TEdge, TFace, double>? chDist = null, (Vector3d S, double R0, Vector3d E, double R1)? varLaw = null)
+    static TSolid? BuildOpen(TSolid body, IReadOnlyList<EdgeRef> refs, double r, ref string? why, Func<TEdge, TFace, double>? chDist = null, RadiusLaw? varLaw = null)
     {
         if (!OpenOn) { why = "open curved edges: off"; return null; }
         var sel = new List<TEdge>();
@@ -74,11 +77,59 @@ public static partial class DirectRound
     }
 
     static readonly bool Deg2 = Environment.GetEnvironmentVariable("P3D_DRDEG2") != "0";
+    static readonly bool ExactTangent = Environment.GetEnvironmentVariable("P3D_DRTANGENT") != "0";
+    static readonly bool RootOrder = Environment.GetEnvironmentVariable("P3D_DRROOTORDER") != "0";
+    static readonly bool EndSeed = Environment.GetEnvironmentVariable("P3D_DRENDSEED") != "0";
     static readonly bool EndTab = Environment.GetEnvironmentVariable("P3D_DRENDTAB") != "0";
     static readonly bool MemoOn = Environment.GetEnvironmentVariable("P3D_DRMEMO") != "0";
     const int MemoCap = 1 << 18;
 
     static readonly bool ExtendEnds = Environment.GetEnvironmentVariable("P3D_DREXTEND") != "0";
+    static readonly bool OpenPlanePlane = Environment.GetEnvironmentVariable("P3D_DROPENPP") != "0";
+    static readonly bool LawBreaks = Environment.GetEnvironmentVariable("P3D_DRLAWBREAKS") != "0";
+
+    /// <summary>
+    /// ЗАКОН РАДИУСА вдоль ребра (06.2, 06.14): r(σ), σ — доля длины ребра от конца S ссылки (0) до конца E (1); за концами —
+    /// продолжение (у кусочного закона — по крайней касательной). Линейный — две точки; общий — точки (σ, r), сплайн
+    /// Эрмита с касательными по соседям (без выбросов между точками: Фритч — Карлсон).
+    /// </summary>
+    public sealed class RadiusLaw
+    {
+        public Vector3d S, E; public Func<double, double> R = null!, dR = null!;
+        /// <summary>Внутренние узлы закона (доли длины): там закон гладок лишь первого порядка.</summary>
+        public double[] Knots = Array.Empty<double>();
+        public static RadiusLaw Linear(Vector3d s, double r0, Vector3d e, double r1) =>
+            new() { S = s, E = e, R = f => r0 + (r1 - r0) * f, dR = _ => r1 - r0 };
+        public static RadiusLaw? Points(Vector3d s, Vector3d e, IReadOnlyList<(double F, double R)> pts)
+        {
+            var p = pts.OrderBy(x => x.F).ToArray(); int n = p.Length;
+            if (n < 2 || p[0].F > 1e-12 || p[^1].F < 1 - 1e-12) return null;
+            for (int i = 1; i < n; i++) if (!(p[i].F > p[i - 1].F)) return null;
+            var d = new double[n]; var m = new double[n];
+            for (int i = 0; i + 1 < n; i++) d[i] = (p[i + 1].R - p[i].R) / (p[i + 1].F - p[i].F);
+            m[0] = d[0]; m[n - 1] = d[n - 2];
+            for (int i = 1; i + 1 < n; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+            for (int i = 0; i + 1 < n; i++)
+            {
+                if (d[i] == 0) { m[i] = m[i + 1] = 0; continue; }
+                double a = m[i] / d[i], b = m[i + 1] / d[i], h = a * a + b * b;
+                if (h > 9) { double tt = 3 / Math.Sqrt(h); m[i] = tt * a * d[i]; m[i + 1] = tt * b * d[i]; }
+            }
+            (double V, double D) Ev(double f)
+            {
+                if (f <= p[0].F) return (p[0].R + m[0] * (f - p[0].F), m[0]);
+                if (f >= p[^1].F) return (p[^1].R + m[n - 1] * (f - p[^1].F), m[n - 1]);
+                int i = 0; while (i + 2 < n && f > p[i + 1].F) i++;
+                double h = p[i + 1].F - p[i].F, u = (f - p[i].F) / h;
+                double h00 = 2 * u * u * u - 3 * u * u + 1, h10 = u * u * u - 2 * u * u + u, h01 = -2 * u * u * u + 3 * u * u, h11 = u * u * u - u * u;
+                double d00 = 6 * u * u - 6 * u, d10 = 3 * u * u - 4 * u + 1, d01 = -6 * u * u + 6 * u, d11 = 3 * u * u - 2 * u;
+                return (h00 * p[i].R + h10 * h * m[i] + h01 * p[i + 1].R + h11 * h * m[i + 1],
+                        (d00 * p[i].R + d10 * h * m[i] + d01 * p[i + 1].R + d11 * h * m[i + 1]) / h);
+            }
+            // узлы — все точки, концы тоже: за концами закон продолжается касательной, и там он гладок лишь первого порядка
+            return new() { S = s, E = e, R = f => Ev(f).V, dR = f => Ev(f).D, Knots = p.Select(x => x.F).ToArray() };
+        }
+    }
 
     /// <summary>
     /// Конец кривой ребра торца у прежней вершины oldP переносится в точку касания q: укорочение (q на кривой) или ПРОДЛЕНИЕ
@@ -158,7 +209,7 @@ public static partial class DirectRound
         return new ProcCurve3(F, 0, pieces.Count, false, "edge chain");
     }
 
-    static bool OpenBlend(TSolid body, List<TEdge> chain, Dictionary<TFace, FDesc> byFace, List<FDesc> blends, double r, ref string? why, Func<TEdge, TFace, double>? chDist = null, (Vector3d S, double R0, Vector3d E, double R1)? varLaw = null)
+    static bool OpenBlend(TSolid body, List<TEdge> chain, Dictionary<TFace, FDesc> byFace, List<FDesc> blends, double r, ref string? why, Func<TEdge, TFace, double>? chDist = null, RadiusLaw? varLaw = null)
     {
         var e = chain[0];
         var fs = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
@@ -166,7 +217,9 @@ public static partial class DirectRound
         var FA = byFace[fs[0]]; var FB = byFace[fs[1]];
         var shA = BlendShapeOf(FA.Surf); var shB = BlendShapeOf(FB.Surf);
         if (shA == null || shB == null) { why = "open curved: a face is not a plane, cylinder, cone, sphere or torus"; return false; }
-        if (shA is Geometry.Ssi.Plane && shB is Geometry.Ssi.Plane) { why = "open curved: plane/plane edge"; return false; }
+        // плоскость/плоскость: обычно — свой построитель (DirectRound.Build); сюда — когда он отказал (кривые торцы, закон
+        // радиуса); P3D_DROPENPP=0 — отказ, как прежде
+        if (shA is Geometry.Ssi.Plane && shB is Geometry.Ssi.Plane && !OpenPlanePlane) { why = "open curved: plane/plane edge"; return false; }
         var chEnds = ChainEnds(chain);
         var E = ChainCurve(chain, chEnds[0]);
         bool fwd = (E.PointAt(E.T0) - chEnds[0]).Length <= (E.PointAt(E.T0) - chEnds[1]).Length;
@@ -223,6 +276,8 @@ public static partial class DirectRound
         double offA = sigma * sA * r, offB = sigma * sB * r;
         // ПЕРЕМЕННЫЙ РАДИУС (06.14): r(t) задаётся позже (по длине ребра); до того — постоянный r (наибольший — для проверок)
         Func<double, double> Rt = _ => r, dRt = _ => 0;
+        Func<double, double>? fracOf = null;
+        var knotT = new List<double>();                  // параметры хребта узлов закона радиуса
         double OffA(double t) => sigma * sA * Rt(t);
         double OffB(double t) => sigma * sB * Rt(t);
         bool ch = chDist != null; double dA = ch ? chDist!(e, fs[0]) : r, dB = ch ? chDist!(e, fs[1]) : r;
@@ -345,7 +400,21 @@ public static partial class DirectRound
         var spMemo = new System.Collections.Concurrent.ConcurrentDictionary<double, Vector3d?>();
         var edF = edgeAt;
         Vector3d Ed(double t) => MemoOn && edMemo.Count < MemoCap ? edMemo.GetOrAdd(t, edF) : edF(t);
-        Vector3d Td(double t) { double dl = 1e-5; return (edgeAt(t + dl) - edgeAt(t - dl)).Normalized(); }
+        // КАСАТЕЛЬНАЯ РЕБРА — точно: ∇A × ∇B в точке ребра, знак — по ходу t (один раз). Прежде — разность точек ребра с шагом
+        // 1e-5: шум Ньютона 1e-15 давал ~1e-9 в направлении, плоскость хребта качалась, и через разность хребта c' (закон радиуса)
+        // шум сечения ~1e-9 мм — корень края ленты не сходился (секущие, Иллинойс — по 20 сечений на точку края). Две лишние
+        // точки ребра на вызов — тоже прочь. Мутация P3D_DRTANGENT=0 — прежняя разность.
+        double tdSign = 0;
+        Vector3d TdFd(double t) { double dl = 1e-5; return (edgeAt(t + dl) - edgeAt(t - dl)).Normalized(); }
+        Vector3d Td(double t)
+        {
+            if (!ExactTangent) return TdFd(t);
+            var P = Ed(t);
+            var c = Vector3d.Cross(Geometry.Ssi.Implicit(shA, P).G, Geometry.Ssi.Implicit(shB, P).G);
+            if (!(c.Length > 1e-9)) return TdFd(t);
+            if (tdSign == 0) { var fd = TdFd(0.5 * Delta); var Pm = Ed(0.5 * Delta); var cm = Vector3d.Cross(Geometry.Ssi.Implicit(shA, Pm).G, Geometry.Ssi.Implicit(shB, Pm).G); tdSign = Vector3d.Dot(cm, fd) >= 0 ? 1 : -1; }
+            return c.Normalized() * tdSign;
+        }
 
         if (varLaw is { } vl)
         {
@@ -353,7 +422,6 @@ public static partial class DirectRound
             // ЗАКОН — линейно по длине ребра от одного конца к другому, за концами — продолжение той же прямой. s(t) — таблица
             // длин на [−Δ/2, 3Δ/2] (Гаусс по кускам) и кубическая Эрмита с точными производными |E'(t)| в узлах (гладко).
             bool p0IsS = (P0 - vl.S).Length <= (P0 - vl.E).Length;
-            double rP0 = p0IsS ? vl.R0 : vl.R1, rP1 = p0IsS ? vl.R1 : vl.R0;
             const int NS = 1024; double ta = -0.5 * Delta, tb = 1.5 * Delta, hs = (tb - ta) / NS;
             double Speed(double t) { double d = 1e-6 * Math.Max(1e-9, Delta); var a = Ed(t + d); var b = Ed(t - d); return (a - b).Length / (2 * d); }
             var sv = new double[NS + 1]; var dv = new double[NS + 1];
@@ -374,14 +442,24 @@ public static partial class DirectRound
             }
             double s0 = Sof(0, out _), L = Sof(Delta, out _) - s0;
             if (!(L > 0)) { why = "variable radius: zero edge length"; return false; }
-            double slope = (rP1 - rP0) / L;
-            Rt = t => rP0 + slope * (Sof(t, out _) - s0);
-            dRt = t => { Sof(t, out var ds); return slope * ds; };
-            if (!(Math.Min(rP0, rP1) > 0)) { why = "variable radius: non-positive radius"; return false; }
+            // доля длины от конца S ссылки: σ = (s − s0)/L от P0, если P0 — S, иначе 1 − (s − s0)/L
+            double Frac(double t, out double dFrac) { double sv = Sof(t, out var ds); dFrac = (p0IsS ? 1 : -1) * ds / L; return p0IsS ? (sv - s0) / L : 1 - (sv - s0) / L; }
+            Rt = t => vl.R(Frac(t, out _));
+            fracOf = t => Frac(t, out _);
+            foreach (var kf in vl.Knots)
+            {
+                double a = -0.5 * Delta, b = 1.5 * Delta, fa = fracOf(a) - kf, fb = fracOf(b) - kf;
+                if (fa * fb > 0) continue;
+                for (int it = 0; it < 100; it++) { double m = (a + b) / 2, fm = fracOf(m) - kf; if (fa * fm <= 0) { b = m; fb = fm; } else { a = m; fa = fm; } }
+                knotT.Add((a + b) / 2);
+            }
+            dRt = t => { double f = Frac(t, out var df); return vl.dR(f) * df; };
+            for (int i = 0; i <= 64; i++) if (!(vl.R(i / 64.0) > 0)) { why = "variable radius: non-positive radius on the edge"; return false; }
         }
         Vector3d? Spine(double t) => MemoOn && spMemo.Count < MemoCap ? spMemo.GetOrAdd(t, SpineCore) : SpineCore(t);
         Vector3d? SpineCore(double t)
         {
+            using var _ps = Diagnostics.Prof.Time("open: SpineCore");
             var P = Ed(t); if (double.IsNaN(P.X)) return null;
             var tg = Td(t);
             var nA = Geometry.Ssi.Implicit(shA, P).G * sA; var nB = Geometry.Ssi.Implicit(shB, P).G * sB; double c = Vector3d.Dot(nA, nB);
@@ -408,6 +486,8 @@ public static partial class DirectRound
         Vector3d QB(double t) => ch ? ChB(t) : Foot(shB, S(t));
         SweepSection Gen(double t)
         {
+            using var _pg = Diagnostics.Prof.Time("open: Gen");
+            genCount++;
             if (ch) return SweepSection.Line(ChA(t), ChB(t));
             var x = S(t); var qa = Foot(shA, x); var qb = Foot(shB, x);
             // характеристическая окружность огибающей шаров: в плоскости (y − c)·c' = −r r', центр c − (r r'/|c'|²) c',
@@ -415,8 +495,17 @@ public static partial class DirectRound
             var cc = x; double rad = Rt(t);
             if (varLaw != null)
             {
+                // c'(t): центральная разность, у узла закона — односторонняя второго порядка по своей стороне (центральная через
+                // узел сглаживает излом r' и портит формулу сечения на ±h)
                 double hh = 1e-4 * Math.Max(1e-9, Delta);
-                var x1 = S(t + hh); var x0 = S(t - hh); var dc = (x1 - x0) / (2 * hh);
+                Vector3d dc;
+                double? kn = knotT.Count == 0 ? null : knotT.Select(k => (double?)k).OrderBy(k => Math.Abs(k!.Value - t)).First();
+                if (kn is double kt && Math.Abs(kt - t) < 2.5 * hh)
+                {
+                    double sg = t >= kt ? 1 : -1;
+                    dc = (S(t) * (-3) + S(t + sg * hh) * 4 - S(t + sg * 2 * hh)) / (2 * hh) * sg;
+                }
+                else { var x1 = S(t + hh); var x0 = S(t - hh); dc = (x1 - x0) / (2 * hh); }
                 double k = rad * dRt(t) / dc.LengthSquared;
                 cc = x - dc * k; rad = Math.Sqrt(Math.Max(0, rad * rad - k * k * dc.LengthSquared));
             }
@@ -488,6 +577,9 @@ public static partial class DirectRound
         double RootIn(Func<double, double> g, double a, double b)
         {
             double fa = g(a), fb = g(b);
+            // скобка в любом порядке (у начального торца функция убывает по t): прежде узкая скобка по таблице края у него
+            // всегда отказывала и точка искалась полным поиском. Мутация P3D_DRROOTORDER=0.
+            if (RootOrder && fa > 0 && fb < 0) { (a, b) = (b, a); (fa, fb) = (fb, fa); }
             if (!(fa < 0 && fb > 0)) return double.NaN;
             int side = 0;
             for (int it = 0; it < 200; it++)
@@ -504,11 +596,18 @@ public static partial class DirectRound
         double TStar(int k, double v) => Root(k, t => Fend(k, Gen(t).Point(v)));
         // край ленты: корень по таблице (65 проб v) как затравка и узкая скобка — несколько вычислений сечения вместо полусотни
         // (каждая точка края — в разметке, в объёме, в p-кривой). Мутация P3D_DRENDTAB=0 — полный поиск в каждой точке.
-        double[][]? endTab = null;
+        double[][]? endTab = null; SectionSurface? seedSurf = null; double seedLo = 0, seedKU = 1;
         var endMemo = new[] { new System.Collections.Concurrent.ConcurrentDictionary<double, Vector3d>(), new System.Collections.Concurrent.ConcurrentDictionary<double, Vector3d>() };
         Vector3d EndPt(int k, double v) => MemoOn && endTab != null && endMemo[k].Count < MemoCap ? endMemo[k].GetOrAdd(v, vv => EndPtCore(k, vv)) : EndPtCore(k, v);
         double[] tEndA = { double.NaN, double.NaN }, tEndB = { double.NaN, double.NaN };
         Vector3d EndPtCore(int k, double v)
+        {
+            using var _pe = Diagnostics.Prof.Time("open: EndPtCore");
+            long g0 = genCount;
+            try { return EndPtSolve(k, v); }
+            finally { Interlocked.Increment(ref OpenEndPoints); Interlocked.Add(ref OpenEndSections, genCount - g0); }
+        }
+        Vector3d EndPtSolve(int k, double v)
         {
             double t;
             // концы края — те же корни, что у линий касания (точка в точку)
@@ -520,7 +619,31 @@ public static partial class DirectRound
                 double t0 = tab[i] + (tab[i + 1] - tab[i]) * (x - i);
                 double w = 2 * Math.Abs(tab[i + 1] - tab[i]) + 1e-9 * Math.Max(1, Delta);
                 Func<double, double> g = tt => Fend(k, Gen(tt).Point(v));
-                t = RootIn(g, t0 - w, t0 + w);
+                t = double.NaN;
+                // затравка по таблице поверхности (сечения таблицы — дёшево, отход от формулы ≤ 2e-8 мм): корень по таблице, затем
+                // точный корень в скобке ±1e-6·Δ около него — 5–7 точных сечений вместо ~20. Мутация P3D_DRENDSEED=0.
+                if (seedSurf != null && EndSeed)
+                {
+                    double ts = RootIn(tt => Fend(k, seedSurf.SectionAt((tt - seedLo) * seedKU).Point(v)), t0 - w, t0 + w);
+                    if (!double.IsNaN(ts))
+                    {
+                        // точный корень — секущими от корня таблицы (сходимость сверхлинейная, 3–4 сечения); не сошлось или ушло
+                        // дальше ±1e-6·Δ — Иллинойс в этой скобке
+                        double d = 1e-6 * Math.Max(1, Delta), sc = Math.Max(1, Math.Abs(ts));
+                        double x0 = ts, f0 = g(x0), x1 = ts + 1e-9 * sc, f1 = g(x1);
+                        for (int it = 0; it < 12 && double.IsFinite(f0 + f1) && f1 != f0; it++)
+                        {
+                            double x2 = x1 - f1 * (x1 - x0) / (f1 - f0);
+                            if (!(Math.Abs(x2 - ts) <= d)) break;
+                            // шум сечения (разность c' по хребту) — ~1e-12 по t: точнее не сойтись; ход точки ≤ 1e-11 мм
+                            if (Math.Abs(x2 - x1) < 1e-12 * sc) { t = x2; break; }
+                            x0 = x1; f0 = f1; x1 = x2; f1 = g(x1);
+                            if (f1 == 0) { t = x1; break; }
+                        }
+                        if (double.IsNaN(t)) t = RootIn(g, ts - d, ts + d);
+                    }
+                }
+                if (double.IsNaN(t)) t = RootIn(g, t0 - w, t0 + w);
                 if (double.IsNaN(t)) t = TStar(k, v);
             }
             else t = TStar(k, v);
@@ -600,7 +723,12 @@ public static partial class DirectRound
 
         double Lp = 0; for (int i = 1; i < Ps.Count; i++) Lp += (Ps[i] - Ps[i - 1]).Length;
         double kU = Lp / (tHi - tLo);
-        var surf = new SectionSurface(U => Gen(tLo + U / kU), us.Select(t => (t - tLo) * kU).ToList(), secs, false, 0, Lp, null, Math.Max(Lp / 20000, Math.Min(0.25, 0.4 * Math.Min(widthA, widthB)) / 32));
+        // стыки формулы: узлы закона радиуса (закон там гладок лишь первого порядка — таблица не вставляет через них)
+        var breaks = new List<double>();
+        if (LawBreaks) foreach (var kt in knotT) if (kt > tLo && kt < tHi) breaks.Add((kt - tLo) * kU);
+        // шаг таблицы: у закона с узлами — вчетверо мельче (кривизна сечений по u у узла выше)
+        double tabStep = Math.Max(Lp / 20000, Math.Min(0.25, 0.4 * Math.Min(widthA, widthB)) / 32) / (knotT.Count > 0 ? 4 : 1);
+        var surf = new SectionSurface(U => Gen(tLo + U / kU), us.Select(t => (t - tLo) * kU).ToList(), secs, false, 0, Lp, breaks, tabStep);
         {
             double worstTab = 0, worstU = 0;
             for (int i = 0; i < 1000; i++)
@@ -610,9 +738,11 @@ public static partial class DirectRound
                 foreach (double v in new[] { 0.0, 0.5, 1.0 }) { double d = (ta.Point(v) - ex.Point(v)).Length; if (d > worstTab) { worstTab = d; worstU = U; } }
             }
             Debug?.Invoke($"open: table vs formula {worstTab:E2} at t {tLo + worstU / kU:G6} (Δ {Delta:G6}) widths {widthA:G4}/{widthB:G4} Lp {Lp:G5}");
-            if (worstTab > 1e-8) { why = $"open curved: blend surface table deviates from the formula ({worstTab:E1} mm)"; return false; }
+            // таблица — представление формулы: её отход — в пятой доле точности модели (1e-7 → 2e-8 мм)
+            if (worstTab > Math.Max(1e-8, 0.2 * ToleranceContext.Current.ModelAccuracy)) { why = $"open curved: blend surface table deviates from the formula ({worstTab:E1} mm)"; return false; }
         }
 
+        seedSurf = surf; seedLo = tLo; seedKU = kU;
         // КРИВЫЕ: линии касания, края ленты на торцах
         var cA = new ProcCurve3(QA, tA0, tA1, false, ch ? "chamfer contact" : "rolling-ball contact") { NoEventsOn = ch || varLaw != null ? null : (s, a, b) => NoEvents(true, s, a, b) };
         var cB = new ProcCurve3(QB, tB0, tB1, false, ch ? "chamfer contact" : "rolling-ball contact") { NoEventsOn = ch || varLaw != null ? null : (s, a, b) => NoEvents(false, s, a, b) };
@@ -725,7 +855,17 @@ public static partial class DirectRound
         foreach (var fd in faces.Where(x => x.Touched)) fd.Hint = InteriorPoint(fd);
         foreach (var fd in blends.Where(x => x.Surf.IsPlanar && Scan)) fd.Hint = ScanlinePoint(fd);
         var all = faces.Concat(blends).ToList();
+        var swF = System.Diagnostics.Stopwatch.StartNew();
+        bool profWas = Diagnostics.Prof.Enabled; if (Debug != null && ProfDbg) { Diagnostics.Prof.Enabled = true; Diagnostics.Prof.Reset(); }
+        try { return FinishDirectCore(all, op, ref why, swF); }
+        finally { if (Debug != null && ProfDbg) { Debug(Diagnostics.Prof.Report()); Diagnostics.Prof.Enabled = profWas; } }
+    }
+    static readonly bool ProfDbg = Environment.GetEnvironmentVariable("P3D_OPENPROF") == "1";
+    static TSolid? FinishDirectCore(List<FDesc> all, string op, ref string? why, System.Diagnostics.Stopwatch swF)
+    {
+        void Stage(string n) { Debug?.Invoke($"finish: {n} {swF.Elapsed.TotalSeconds:F1}s"); }
         var solid = Assemble(all, ref why);
+        Stage("assembled");
         if (solid == null) return null;
         TopologyConventions.Normalize(solid);
         var w = new List<string>();
@@ -737,6 +877,7 @@ public static partial class DirectRound
                         Debug($"  face {f.Id} {f.Tag} {GeometryAudit.AuthoritativeSurface(f)?.GetType().Name}: " + string.Join(" | ", lp.CoEdges.Select(ce => $"{ce.Edge.Curve.GetType().Name}{(ce.Edge.Curve is ProcCurve3 pc ? ":" + pc.Kind : "")} {ce.Start.P:0.###}->{ce.End.P:0.###}")));
             why = "faces not meshed: " + string.Join(" / ", w.Take(3)); return null;
         }
+        Stage("meshed");
         solid.Guarantee = GuaranteeLevel.ExactAnalytic;
         string? Checks()
         {
@@ -748,13 +889,16 @@ public static partial class DirectRound
                     var ed = solid.Edges.FirstOrDefault(x => iss.ToString().Contains($"(элемент {x.Id})"));
                     Debug($"  invalid: {iss} | edge tol {ed?.Tolerance:E2} curve {ed?.Curve.GetType().Name} {ed?.V0.P:0.###}->{ed?.V1.P:0.###}");
                 }
+            Stage("validated");
             if (!v.IsValid) return "result invalid: " + v.Summary() + " " + string.Join(" / ", v.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(2));
             if (AnalyticVolume.Of(solid) == null) return "no analytic volume";
+            Stage("volume");
             if (BooleanOp.VolumeVsFacets(solid) is { } vf && !vf.Agree) return $"volume {vf.Va:G8} vs facets {vf.Vf:G8}";
             return null;
         }
         if (BooleanOp.PreviewMode) solid.PendingAcceptance = Checks;
         else if (Checks() is { } cw) { why = cw; return null; }
+        Stage("checked");
         Analytic.EntityTolerance.Assign(solid);
         if (Prov)
         {
