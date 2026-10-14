@@ -157,6 +157,17 @@ public static partial class DirectRound
             if (r3 != null) { res = r3; Interlocked.Increment(ref OpenBuilt); }
             else { why += " | open curved: " + w3; Interlocked.Increment(ref OpenDeclined); }
         }
+        if (res == null && CavityOn && !_inDetour && why != null && why.Contains("blend strip"))
+        {
+            // KRN-06 (06.5, 06.9): отверстие или карман в полосе — заполнить, скруглить, вычесть обратно (DirectRoundCavity)
+            var rc = CavityDetour(bodies[k], refs, r, ref why);
+            if (rc != null)
+            {
+                bodies[k] = rc;
+                warnings.Add("Round: direct blend through a cavity in the blend strip (cavity filled, edge rounded, cavity cut back exactly).");
+                return true;
+            }
+        }
         if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); return false; }
         bodies[k] = res; Interlocked.Increment(ref Built);
         if (added > 0) warnings.Add($"Round: tangent propagation added {added} edge(s) to the selection.");
@@ -201,6 +212,17 @@ public static partial class DirectRound
             }
         }
         finally { _chamfer = null; }
+        if (res == null && CavityOn && !_inDetour && why != null && why.Contains("blend strip"))
+        {
+            // KRN-06 (06.5, 06.9): отверстие или карман в полосе фаски — тот же обход полости
+            var rc = CavityDetour(bodies[k], refs, Math.Max(d1, d2), w => TryChamfer(w, refs, d1, d2, new List<string>()), ref why);
+            if (rc != null)
+            {
+                bodies[k] = rc;
+                warnings.Add("Chamfer: direct cut through a cavity in the strip (cavity filled, edge chamfered, cavity cut back exactly).");
+                return true;
+            }
+        }
         if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); return false; }
         bodies[k] = res; Interlocked.Increment(ref Built);
         warnings.Add(unequal ? $"Chamfer: direct cut {d1:0.###}x{d2:0.###} (plane/plane, {refs.Count} edge(s), exact planes)." : $"Chamfer: direct cut (plane/plane, {refs.Count} edge(s), exact planes).");
