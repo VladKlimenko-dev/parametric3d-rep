@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using OpenTK.Mathematics;
 using Parametric3D.Kernel.Tess;
 using Parametric3D.Kernel.Topology;
@@ -144,6 +144,8 @@ public sealed class SectionSurface : ISurface3
 
     /// <summary>Стыки рёбер хребта и продлений: там формула гладкая лишь первого порядка.</summary>
     private readonly double[] _breaks = Array.Empty<double>();
+    /// <summary>Стыки формулы по u (квадратуры делят промежуток в них).</summary>
+    public IReadOnlyList<double> Breaks => _breaks;
 
     public SectionSurface(IReadOnlyList<SweepSection> sections, bool closed)
     {
@@ -219,10 +221,27 @@ public sealed class SectionSurface : ISurface3
         {
             if (wrap) return sec[((k % (n - 1)) + (n - 1)) % (n - 1)];
             if (k >= 0 && k < n) return sec[k];
-            // За концом куска — узел, продолженный линейно (кривизна за стыком другая).
+            // За концом куска — узел, продолженный по своей стороне (кривизна за стыком другая): квадратично по трём узлам
+            // (KRN-06: у стыка закона радиуса линейный узел давал 2e-6 мм отхода таблицы от формулы в крайнем звене);
+            // P3D_SECEXTRAP2=0 — линейно, как прежде.
+            if (Quad && n >= 3) return k < 0 ? Extrap2(sec[0], sec[1], sec[2], -k) : Extrap2(sec[n - 1], sec[n - 2], sec[n - 3], k - (n - 1));
             return k < 0 ? Extrap(sec[0], sec[1], -k) : Extrap(sec[n - 1], sec[n - 2], k - (n - 1));
         }
         return SweepSection.CatmullRom(At(ti - 1), At(ti), At(ti + 1), At(ti + 2), tf);
+    }
+
+    static readonly bool Quad = Environment.GetEnvironmentVariable("P3D_SECEXTRAP2") != "0";
+
+    /// <summary>Продолжение за конец по трём узлам (многочлен Ньютона второй степени): a − kΔ₁ + k(k+1)/2·Δ₂.</summary>
+    private static SweepSection Extrap2(SweepSection a, SweepSection b, SweepSection c, int steps)
+    {
+        double k = steps, c1 = -k, c2 = k * (k + 1) / 2;
+        Vector3d V(Vector3d pa, Vector3d pb, Vector3d pc) => pa + (pb - pa) * c1 + (pa - pb * 2 + pc) * c2;
+        double D(double pa, double pb, double pc) => pa + (pb - pa) * c1 + (pa - 2 * pb + pc) * c2;
+        if (a.IsArc && b.IsArc && c.IsArc)
+            return SweepSection.Arc(V(a.C, b.C, c.C), V(a.E1, b.E1, c.E1).Normalized(), V(a.E2, b.E2, c.E2).Normalized(), D(a.R, b.R, c.R), D(a.Phi, b.Phi, c.Phi));
+        if (!a.IsArc && !b.IsArc && !c.IsArc) return SweepSection.Line(V(a.A, b.A, c.A), V(a.B, b.B, c.B));
+        return Extrap(a, b, steps);
     }
 
     private static SweepSection Extrap(SweepSection a, SweepSection b, int steps)

@@ -593,16 +593,25 @@ public static class AnalyticVolume
             {
                 double v = (iv + (gx[kv] + 1) / 2) / mv, wv = gw[kv] / 2 / mv;
                 double uL = rg.L(v), uR = rg.R(v); if (!(uR > uL)) return null;
-                double pw = (uR - uL) / mu;
-                for (int i = 0; i < mu; i++)
+                // куски по стыкам формулы (узлы закона радиуса): через излом квадратура теряет порядок
+                var cutsU = new List<double> { uL };
+                foreach (var bk in ss.Breaks) if (bk > uL + 1e-12 && bk < uR - 1e-12 && !BandBreaksOff) cutsU.Add(bk);
+                cutsU.Add(uR);
+                for (int piece = 0; piece + 1 < cutsU.Count; piece++)
+                {
+                double pa = cutsU[piece], pb = cutsU[piece + 1];
+                int mp = Math.Max(4, (int)Math.Ceiling(mu * (pb - pa) / (uR - uL)));
+                double pw = (pb - pa) / mp;
+                for (int i = 0; i < mp; i++)
                     for (int j = 0; j < gx.Length; j++)
                     {
-                        double u = uL + pw * (i + (gx[j] + 1) / 2), w = gw[j] / 2 * pw * wv;
+                        double u = pa + pw * (i + (gx[j] + 1) / 2), w = gw[j] / 2 * pw * wv;
                         var s0 = ss.SectionAt(u);
                         var P = s0.Point(v); var su = (ss.SectionAt(u + h).Point(v) - ss.SectionAt(u - h).Point(v)) / (2 * h); var sv = s0.Deriv(v);
                         var c = Vector3d.Cross(su, sv);
                         vol += Vector3d.Dot(P - _origin, c) * w; ar += c.Length * w; va += c * w;
                     }
+                }
             }
         var loopsVa = NormalIntegral(f);
         if (loopsVa.Length < 1e-6 * Math.Max(1e-12, ar) || va.Length < 1e-6 * Math.Max(1e-12, ar)) return null;
@@ -610,6 +619,7 @@ public static class AnalyticVolume
         if (Math.Abs(cosv) < 0.999) return null;
         return area ? ar : (cosv > 0 ? vol : -vol);
     }
+    static readonly bool BandBreaksOff = Environment.GetEnvironmentVariable("P3D_VOLBANDBREAKS") == "0";
 
     static readonly (double[] X, double[] W) Gauss12 = (
         new[] { -0.9815606342467192, -0.9041172563704749, -0.7699026741943047, -0.5873179542866175, -0.3678314989981802, -0.1252334085114689,

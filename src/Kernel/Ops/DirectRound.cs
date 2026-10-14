@@ -280,6 +280,26 @@ public static partial class DirectRound
     static readonly bool VarCurved = Environment.GetEnvironmentVariable("P3D_DRVARCURVED") != "0";
 
     /// <summary>
+    /// KRN-06 (06.2): СКРУГЛЕНИЕ С РАДИУСОМ ПО ТОЧКАМ ребра — (доля длины от начала ссылки, радиус), закон — сплайн без
+    /// выбросов между точками (RadiusLaw.Points). Ребро между любыми гранями ядра (катящийся шар, характеристические
+    /// окружности огибающей). Мутация P3D_DRLAW=0 — отказ.
+    /// </summary>
+    public static bool TryRoundLaw(List<TSolid> bodies, IReadOnlyList<EdgeRef> refs, IReadOnlyList<(double F, double R)> points, List<string> warnings)
+    {
+        if (Off || OffForTest || LawOff || refs.Count != 1 || OwnerBody(bodies, refs) is not int k) return false;
+        var law = RadiusLaw.Points(refs[0].Start, refs[0].End, points);
+        if (law == null) { Debug?.Invoke("declined: radius law points (need σ = 0 and 1, increasing)"); return false; }
+        double rMax = points.Max(x => x.R);
+        string? why = null;
+        var res = BuildOpen(bodies[k], refs, rMax, ref why, null, law);
+        if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); return false; }
+        bodies[k] = res; Interlocked.Increment(ref Built); Interlocked.Increment(ref OpenBuilt);
+        warnings.Add($"Round: direct blend with a radius law ({points.Count} points, rolling ball, exact envelope).");
+        return true;
+    }
+    static readonly bool LawOff = Environment.GetEnvironmentVariable("P3D_DRLAW") == "0";
+
+    /// <summary>
     /// KRN-06 (06.14): ПРЯМОЕ СКРУГЛЕНИЕ С ЛИНЕЙНО МЕНЯЮЩИМСЯ РАДИУСОМ — одно прямое ребро между плоскостями, концы на плоских
     /// торцах. Огибающая шаров — круговой конус (точная поверхность), контакты — прямые, торцы — дуги эллипса (сечение конуса
     /// плоскостью торца, точно). Закон — по ссылке: R(Start) = r0, R(End) = r1, линейно по проекции на ребро.
@@ -299,7 +319,7 @@ public static partial class DirectRound
                 // KRN-06 (06.14): ребро между кривыми гранями — катящийся шар переменного радиуса (закон по длине ребра),
                 // сечения — характеристические окружности огибающей. Мутация P3D_DRVARCURVED=0.
                 string? w2 = null; var law = _law; _law = null;
-                res = BuildOpen(bodies[k], refs, Math.Max(r0, r1), ref w2, null, (S, r0, E, r1));
+                res = BuildOpen(bodies[k], refs, Math.Max(r0, r1), ref w2, null, RadiusLaw.Linear(S, r0, E, r1));
                 _law = law;
                 if (res != null) { curved = true; Interlocked.Increment(ref OpenBuilt); } else why += " | curved variable: " + w2;
             }
