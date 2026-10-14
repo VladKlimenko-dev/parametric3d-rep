@@ -47,6 +47,8 @@ public static partial class DirectRound
     /// </summary>
     static readonly bool SetbackOn = Environment.GetEnvironmentVariable("P3D_DRSETBACK") != "0";
     public static long SetbackCorners;
+    static readonly bool MultiEndOn = Environment.GetEnvironmentVariable("P3D_DRMULTIEND") != "0";
+    public static long MultiEnds;
     /// <summary>Разбор: последний построенный угловой лоскут.</summary>
     [ThreadStatic] public static CornerPatchSurface? LastPatch;
     /// <summary>
@@ -735,7 +737,9 @@ public static partial class DirectRound
                 // вершина степени n > 3 — только угол, где выбраны все n рёбер (06.13)
                 bool nCorner = inc.Count > 3 && NCorner && !ch && Corners && !mixed
                     && others.All(x => edges.Contains(x));
-                if (inc.Count != 3 && !nCorner) { why = $"vertex of degree {inc.Count}"; return null; }
+                // KRN-06 (06.1, 06.9): одно ребро в вершине степени n > 3 — торец из n − 2 граней (MultiEnd)
+                bool multiEnd = inc.Count > 3 && MultiEndOn && !ch && law == null && !mixed && others.All(x => !edges.Contains(x));
+                if (inc.Count != 3 && !nCorner && !multiEnd) { why = $"vertex of degree {inc.Count}"; return null; }
                 if (others.Any(x => x.Curve is not LineCurve3 && !(mixed && x.Curve is ArcCurve3))) { why = "curved neighbour edge"; return null; }
                 if (mixed && edges.Any(x => x != e && ((x.V0.P - V).Length < 1e-7 || (x.V1.P - V).Length < 1e-7))) { why = "plane/cylinder: chains and corners not in this family"; return null; }
                 var cornerSel = edges.Where(x => x != e && ((x.V0.P - V).Length < 1e-7 || (x.V1.P - V).Length < 1e-7)).ToList();
@@ -937,6 +941,91 @@ public static partial class DirectRound
                     ICurve3 marc = ch ? new LineCurve3(m1, m2) : Section(C0, t, e1, e2, r, V, nm, th1, dth);
                     if ((marc.PointAt(marc.T0) - m1).Length > 1e-7 || (marc.PointAt(marc.T1) - m2).Length > 1e-7) { why = "miter arc does not meet the contact points"; return null; }
                     endPts[vi] = (m1, m2, marc);
+                    continue;
+                }
+                if (multiEnd)
+                {
+                    // ТОРЕЦ ИЗ НЕСКОЛЬКИХ ГРАНЕЙ: лента одного ребра в вершине степени n > 3 (вершина пирамиды, стык четырёх граней)
+                    // упирается в n − 2 грани вершины. Грани — по кругу от соседа F1 до соседа F2; на каждой — дуга сечения
+                    // цилиндра её плоскостью, между соседними гранями — точка цилиндра на их общем ребре (корень квадратного
+                    // уравнения на прямой ребра; угол точки — внутри дуги ленты). Рёбра вершины укорачиваются до точек.
+                    // Мутация P3D_DRMULTIEND=0 — отказ, как прежде.
+                    HashSet<TFace> FacesOfE(TEdge x) => x.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().ToHashSet();
+                    var eA = others.FirstOrDefault(x => FacesOfE(x).Contains(fs[0]));
+                    var eB = others.FirstOrDefault(x => FacesOfE(x).Contains(fs[1]));
+                    if (eA == null || eB == null) { why = "multi-face end: neighbour edges not found"; return null; }
+                    var endF = new List<TFace>(); var sharedE = new List<TEdge>();
+                    var curE = eA; var curF = FacesOfE(eA).First(f => f != fs[0]);
+                    for (int guard = 0; guard < inc.Count; guard++)
+                    {
+                        endF.Add(curF);
+                        if (FacesOfE(eB).Contains(curF)) break;
+                        var nxE = others.FirstOrDefault(x => x != curE && FacesOfE(x).Contains(curF));
+                        if (nxE == null) { why = "multi-face end: faces around the vertex not found"; return null; }
+                        sharedE.Add(nxE); curE = nxE; curF = FacesOfE(nxE).First(f => f != curF);
+                    }
+                    if (!FacesOfE(eB).Contains(endF[^1]) || endF.Count != inc.Count - 2) { why = "multi-face end: faces around the vertex do not close"; return null; }
+                    if (endF.Any(f => !byFace[f].Surf.IsPlanar)) { why = "multi-face end: an end face is not planar"; return null; }
+                    // точки: q1 (контакт F1 ∩ первая грань торца), стыки на общих рёбрах, q2
+                    Vector3d? Hit(Vector3d p0, TFace Fe0)
+                    {
+                        var ne0 = byFace[Fe0].N; double tn0 = Vector3d.Dot(t, ne0);
+                        if (Math.Abs(tn0) < 0.1) return null;
+                        return p0 + t * (Vector3d.Dot(V - p0, ne0) / tn0);
+                    }
+                    var pts = new List<Vector3d>();
+                    if (Hit(Q(1, C0), endF[0]) is not { } mq1 || Hit(Q(2, C0), endF[^1]) is not { } mq2) { why = "multi-face end: an end face too oblique"; return null; }
+                    pts.Add(mq1);
+                    double thEnd = th1 + dth;
+                    bool InArc(Vector3d x) { var d = x - C0; d -= t * Vector3d.Dot(d, t); double a = Th(d) - th1; while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return dth > 0 ? a > 1e-9 && a < dth - 1e-9 : a < -1e-9 && a > dth + 1e-9; }
+                    foreach (var x in sharedE)
+                    {
+                        var far = (x.V0.P - V).Length < 1e-7 ? x.V1.P : x.V0.P; var dx = (far - V).Normalized(); double lenX = (far - V).Length;
+                        var w0 = (V - C0) - t * Vector3d.Dot(V - C0, t); var wd = dx - t * Vector3d.Dot(dx, t);
+                        double qa = Vector3d.Dot(wd, wd), qb = 2 * Vector3d.Dot(w0, wd), qc = Vector3d.Dot(w0, w0) - r * r, disc = qb * qb - 4 * qa * qc;
+                        if (!(qa > 1e-18) || disc < 0) { why = "multi-face end: the blend does not cross an edge of the vertex"; return null; }
+                        Vector3d? J = null;
+                        foreach (double lam in new[] { (-qb - Math.Sqrt(disc)) / (2 * qa), (-qb + Math.Sqrt(disc)) / (2 * qa) })
+                            if (lam > 1e-9 && lam < lenX * (1 - 1e-6) && InArc(V + dx * lam)) { J = V + dx * lam; break; }
+                        if (J == null) { why = "radius too large for an edge of the vertex"; return null; }
+                        pts.Add(J.Value);
+                    }
+                    pts.Add(mq2);
+                    foreach (var (q, eN) in new[] { (mq1, eA), (mq2, eB) })
+                    {
+                        var a = eN.V0.P; var b = eN.V1.P; double len = (b - a).Length;
+                        double u = Vector3d.Dot(q - a, b - a) / (len * len), dist = ((a + (b - a) * u) - q).Length;
+                        if (dist > 1e-7 * Math.Max(1, len) || u <= 1e-6 || u >= 1 - 1e-6) { why = "radius too large for a neighbour edge"; return null; }
+                    }
+                    double ThOf(Vector3d x) { var d = x - C0; d -= t * Vector3d.Dot(d, t); return Th(d); }
+                    double Sw(double a0, double a1) { double d = a1 - a0; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
+                    var chainM = new List<(ICurve3 C, Vector3d A, Vector3d B)>();
+                    for (int k = 0; k < endF.Count; k++)
+                    {
+                        var arcK = Section(C0, t, e1, e2, r, V, byFace[endF[k]].N, ThOf(pts[k]), Sw(ThOf(pts[k]), ThOf(pts[k + 1])));
+                        if ((arcK.PointAt(arcK.T0) - pts[k]).Length > 1e-7 || (arcK.PointAt(arcK.T1) - pts[k + 1]).Length > 1e-7) { why = "multi-face end: an end arc does not meet its points"; return null; }
+                        chainM.Add((arcK, pts[k], pts[k + 1]));
+                        // правка грани торца: её два ребра в V — до точек, между ними — дуга
+                        var Fd = byFace[endF[k]]; var prevE = k == 0 ? eA : sharedE[k - 1]; var nextE = k == endF.Count - 1 ? eB : sharedE[k];
+                        bool done = false;
+                        foreach (var loop in Fd.Loops)
+                            for (int j = 0; j < loop.Count && !done; j++)
+                            {
+                                var sg = loop[j];
+                                if ((sg.B - V).Length >= 1e-7) continue;
+                                var nx = loop[(j + 1) % loop.Count];
+                                bool sPrev = OnEdge(sg, prevE);
+                                var pa = sPrev ? pts[k] : pts[k + 1]; var pb = sPrev ? pts[k + 1] : pts[k];
+                                var sNew = Shorten(sg, null, pa); var nNew = Shorten(nx, pb, null);
+                                if (sNew == null || nNew == null) { why = "multi-face end: an edge cannot be shortened"; return null; }
+                                loop[j] = sNew; loop[(j + 1) % loop.Count] = nNew;
+                                loop.Insert(j + 1, new Seg { Curve = arcK, A = pa, B = pb });
+                                Fd.Touched = true; done = true;
+                            }
+                        if (!done) { why = "multi-face end: the vertex not found in an end face"; return null; }
+                    }
+                    endPts[vi] = (mq1, mq2, chainM[0].C); chainOf[vi] = chainM;
+                    Interlocked.Increment(ref MultiEnds);
                     continue;
                 }
                 // торцевая грань: содержит обе соседние прямые, не F1 и не F2

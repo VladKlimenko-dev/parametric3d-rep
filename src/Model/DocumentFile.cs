@@ -199,6 +199,8 @@ public static class DocumentFile
             PathLineId = w.PathLineId,
             Distance = w.LengthFraction.Value,
             Formula = w.LengthFraction.Formula,
+            Twist = Math.Abs(w.Twist.Value) > 0 || w.Twist.Formula != null ? w.Twist.Value : null,
+            TwistFormula = w.Twist.Formula,
             Cut = w.Cut
         },
 
@@ -556,6 +558,7 @@ public static class DocumentFile
                     if (sketchById.TryGetValue(fd.PathSketchId, out var path)) w.PathSketchId = path.Id;
                     w.PathLineId = fd.PathLineId;
                     w.LengthFraction = new ValueRef(fd.Distance) { Formula = fd.Formula };
+                    if (fd.Twist is double tw) w.Twist = new ValueRef(tw) { Formula = fd.TwistFormula };
                     part.AddFeature(w);
                     break;
                 }
@@ -1002,6 +1005,9 @@ public static class DocumentFile
         public List<double> OpenFaces { get; set; } = new();
         /// <summary>KRN-06 (06.14): радиус скругления в конце ребра (переменный радиус); null — постоянный.</summary>
         public double? RadiusEnd { get; set; }
+        /// <summary>KRN-07 (07.3): закрутка протяжки, градусы.</summary>
+        public double? Twist { get; set; }
+        public string? TwistFormula { get; set; }
         public string? RadiusEndFormula { get; set; }
         /// <summary>KRN-07 (07.5): точки граней со своей толщиной оболочки (толщины — в Values/Formulas).</summary>
         public List<double>? ThickFaces { get; set; }

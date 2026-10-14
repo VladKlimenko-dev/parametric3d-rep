@@ -16,6 +16,8 @@ public sealed class SweepFeature : Feature
 
     /// <summary>Доля траектории от 0.001 до 1.0.</summary>
     public ValueRef LengthFraction = new(1.0);
+    /// <summary>KRN-07 (07.3): закрутка сечения вокруг касательной, градусы (линейно по траектории; 0 — без закрутки).</summary>
+    public ValueRef Twist = new(0.0);
 
     public SweepFeature(string name = "Sweep") { Name = name; }
 
@@ -40,9 +42,10 @@ public sealed class SweepFeature : Feature
 
         Kernel.Topology.TSolid? solid = null;
         double frac = LengthFraction.Resolve(ctx.Parameters);
-        if (Math.Abs(frac - 1) < 1e-12 && ResolveChain(ctx) is { Count: > 1 } chain)
+        double twist = Twist.Resolve(ctx.Parameters);
+        if (Math.Abs(frac - 1) < 1e-12 && Math.Abs(twist) < 1e-12 && ResolveChain(ctx) is { Count: > 1 } chain)
             solid = SweepOp.BuildChain(profile, chain, ctx.Warnings);
-        solid ??= SweepOp.Build(profile, path, frac);
+        solid ??= SweepOp.Build(profile, path, frac, twist);
 
         if (Cut) BooleanOp.Subtract(ctx.Bodies, solid, ctx.Warnings);
         else BooleanOp.Unite(ctx.Bodies, solid, ctx.Warnings);

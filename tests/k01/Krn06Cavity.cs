@@ -27,6 +27,41 @@ static partial class Program
         return sum;
     }
 
+    static void Krn06MultiEndChecks()
+    {
+        Check("KRN06-MULTI-FACE-END", () =>
+        {
+            // 06.1/06.9: ОДНО РЕБРО В ВЕРШИНЕ СТЕПЕНИ n > 3 (ребро от вершины пирамиды к основанию между гранями q и q + 1): лента
+            // упирается в n − 2 грани вершины — торец из дуг сечений, стыки на рёбрах вершины. Эталон — независимый расчёт
+            // tools/ref_apex_edge.py: снятое = уголок ребра (дельтоид минус сектор) ∩ тело, ∫∫ длины вдоль ребра внутри тела по
+            // сечению (адаптивная квадратура 1e-13). Совпадение до 1e-9. OpenCascade (BRepFilletAPI_MakeFillet) у трёх случаев
+            // отходит на 4.8e-7…2.3e-7 (25.42051915, 25.45340879, 11.96401800), у трёх — не строит («no suitable edges»).
+            var fails = new List<string>();
+            foreach (var (n, slope2, r, q, want) in new[] { (4, 0.5, 2.0, 0, 25.42053138508321), (4, 0.7, 2.0, 2, 25.453422104109908), (5, 0.5, 2.0, 0, 11.964020768810073), (4, 0.7, 2.0, 0, 23.635367387599835), (4, 0.7, 1.0, 0, 5.950050508655594), (6, 0.7, 1.5, 0, 3.610862672348705) })
+            {
+                string name = $"pyramid {n} slope {slope2} r {r} edge {q}/{q + 1}";
+                var src = PyramidBody(n, slope2); double v0 = AnalyticVolume.Of(src) ?? double.NaN;
+                // нижний конец ребра — точка основания на гранях q и q + 1
+                Vector3d N(int k) { double sl = k % n == 1 ? slope2 : 0.5, th = 2 * Math.PI * (k % n) / n; return new Vector3d(Math.Cos(th), Math.Sin(th), sl); }
+                var A = new Vector3d(20, 20, 40); var na = N(q); var nb = N(q + 1);
+                // na·(p − A) = 0, nb·(p − A) = 0, z = 0 → 2×2 по (x, y)
+                double ra = Vector3d.Dot(na, A) , rb = Vector3d.Dot(nb, A), det = na.X * nb.Y - na.Y * nb.X;
+                var low = new Vector3d((ra * nb.Y - rb * na.Y) / det, (na.X * rb - nb.X * ra) / det, 0);
+                var es = src.Edges.Where(e => (e.V0.P - A).Length < 1e-6 && (e.V1.P - low).Length < 1e-6 || (e.V1.P - A).Length < 1e-6 && (e.V0.P - low).Length < 1e-6).ToList();
+                if (es.Count != 1) { fails.Add($"{name}: edges {es.Count}"); continue; }
+                var bl = new List<TSolid> { src }; long m0 = DirectRound.MultiEnds;
+                try { FilletOp.RoundEdges(bl, es.Select(EdgeRef.Of).ToList(), r, new List<string>()); }
+                catch (Exception ex) { fails.Add($"{name}: {ex.GetType().Name} {ex.Message}"); continue; }
+                var b = bl[0]; double dv = v0 - (AnalyticVolume.Of(b) ?? double.NaN);
+                Console.WriteLine($"  {name}: removed {dv:R} reference {want:R} ({(dv - want) / want:E1})");
+                if (DirectRound.MultiEnds == m0) fails.Add($"{name}: no multi-face end");
+                if (b.Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(b).IsValid) fails.Add($"{name}: {b.Guarantee} {SolidValidator.Validate(b).Summary()}");
+                if (!(Math.Abs(dv - want) <= 1e-9 * want)) fails.Add($"{name}: removed {dv:R} vs reference {want:R}");
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
+
     static void Krn06CavityChecks()
     {
         Check("KRN06-EVENT-RADIUS-TOO-LARGE", () =>

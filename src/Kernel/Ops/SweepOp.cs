@@ -17,12 +17,22 @@ namespace Parametric3D.Kernel.Ops;
 /// </summary>
 public static class SweepOp
 {
-    public static TSolid Build(Profile section, ICurve3 path, double lengthFraction = 1.0)
+    public static TSolid Build(Profile section, ICurve3 path, double lengthFraction = 1.0) => Build(section, path, lengthFraction, 0);
+
+    /// <summary>Протяжка с закруткой сечения вокруг касательной на угол twistDeg (градусы, линейно по траектории).</summary>
+    public static TSolid Build(Profile section, ICurve3 path, double lengthFraction, double twistDeg)
     {
         if (section.IsEmpty) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Sweep: the section is empty or not closed.");
         if (section.HasSelfIntersections) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Sweep: the section contour crosses itself.");
         lengthFraction = Math.Clamp(lengthFraction, 1e-4, 1.0);
         CheckClearance(section, new[] { path }, path.IsClosed);
+        // KRN-07 (07.3): ЗАКРУТКА — только точной протяжкой (рамка без вращения, поворот вокруг касательной); иначе отказ
+        if (Math.Abs(twistDeg) > 1e-12)
+        {
+            string? whyT = null;
+            var tw = path.IsClosed ? null : DirectRound.ExactSweep(section, path, lengthFraction, twistDeg * Math.PI / 180, ref whyT);
+            return tw ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Sweep: twist needs the exact sweep (" + (whyT ?? "closed path") + ").");
+        }
 
         // 1. Дискретизация траектории и построение переносимых фреймов.
         var raw = new List<Vector3d>();
@@ -80,6 +90,14 @@ public static class SweepOp
         // сплайну давала негодное B-rep (6 ошибок проверки) при «успешной» операции. Теперь тело собирается из
         // многоугольников (боковые — без точной поверхности, торцы — плоскости), как многогранный путь булевой; его
         // гранение видно в аудите и отвергается политикой PreserveBRep. Мутация P3D_SWEEPPOLY=0 — прежний путь.
+        // KRN-07 (07.3): ГЛАДКАЯ ОТКРЫТАЯ ТРАЕКТОРИЯ — ТОЧНО: грани по формуле сечения в рамке без вращения (DirectRound.ExactSweep;
+        // мутация P3D_SWEEPEXACT=0 — многогранный путь, как прежде)
+        if (!PolyOff && !path.IsClosed && !((pathPts[0] - pathPts[^1]).Length <= Tol.Weld))
+        {
+            string? whyX = null;
+            var ex = DirectRound.ExactSweep(section, path, lengthFraction, 0, ref whyX);
+            if (ex != null) return ex;
+        }
         if (!PolyOff) return Polyhedral(section, frames, path.IsClosed || (pathPts[0] - pathPts[^1]).Length <= Tol.Weld && lengthFraction >= 1);
 
         // 2. Переносим точки сечения по всем станциям траектории.

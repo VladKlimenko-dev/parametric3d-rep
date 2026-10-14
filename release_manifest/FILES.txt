@@ -83,6 +83,7 @@ src/Kernel/Ops/DirectRoundDraft.cs
 src/Kernel/Ops/DirectRoundLoft.cs
 src/Kernel/Ops/DirectRoundOffset.cs
 src/Kernel/Ops/DirectRoundOpen.cs
+src/Kernel/Ops/DirectRoundSweep.cs
 src/Kernel/Ops/DirectRoundTangent.cs
 src/Kernel/Ops/DirectRoundVertex.cs
 src/Kernel/Ops/DraftOp.cs
@@ -463,6 +464,7 @@ tests/k01/Krn07Instances.cs
 tests/k01/Krn07LoftNurbs.cs
 tests/k01/Krn07Nurbs.cs
 tests/k01/Krn07ShellCurved.cs
+tests/k01/Krn07Sweep.cs
 tests/k01/Krn07b.cs
 tests/k01/Krn07c.cs
 tests/k01/Krn08.cs
@@ -576,6 +578,7 @@ tools/occt_diff.py
 tools/occt_time.py
 tools/perf_targets.py
 tools/progress_score.py
+tools/ref_apex_edge.py
 tools/ref_canal_inclined_hole.py
 tools/ref_rolling_ball_morph.py
 tools/run_baseline.sh

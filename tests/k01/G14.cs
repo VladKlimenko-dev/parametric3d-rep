@@ -171,7 +171,7 @@ static partial class Program
         }
         // KRN-06 (06.12, 06.13): УГОЛ С ОТСТУПОМ И N-СТОРОННИМ ЛОСКУТОМ (вершина пирамиды с разными уклонами; карман) — лоскут
         // в STEP кубическим B-сплайном; НЕЗАМКНУТЫЕ ЛЕНТЫ катящегося шара (закон радиуса, кривой торец) — рациональным
-        // B-сплайном на охвате грани; OpenCascade читает и сверяет объём и площадь
+        // B-сплайном на охвате грани; ТОЧНАЯ ПРОТЯЖКА по кривой Безье и с закруткой; OpenCascade читает и сверяет объём и площадь
         foreach (var (name, make) in new (string, Func<TSolid>)[]
         {
             ("setback corner: irregular pyramid apex r2", () => { var bl = new List<TSolid> { PyramidBody(4, 0.7) }; FilletOp.RoundEdges(bl, bl[0].Edges.Where(e => Math.Abs(e.V0.P.Z - e.V1.P.Z) > 1).Select(EdgeRef.Of).ToList(), 2, new List<string>()); return bl[0]; }),
@@ -192,6 +192,8 @@ static partial class Program
                 FilletOp.RoundEdges(bl, es.Select(EdgeRef.Of).ToList(), 2, new List<string>());
                 return bl[0];
             }),
+            ("exact sweep: ring 1.5/0.5 along a Bezier S", () => SweepOp.Build(Parametric3D.Kernel.Ops.ProfileBuilder.Build(Frame3.XY, new Parametric3D.Kernel.Curves.ICurve3[] { new Parametric3D.Kernel.Curves.ArcCurve3(Frame3.XY, 1.5, 0, 2 * Math.PI), new Parametric3D.Kernel.Curves.ArcCurve3(Frame3.XY, 0.5, 0, 2 * Math.PI) }), new Parametric3D.Kernel.Curves.BezierCurve3(new[] { new Vector3d(0, 0, 0), new Vector3d(0, 0, 20), new Vector3d(20, 0, 20), new Vector3d(20, 0, 40) }))),
+            ("exact sweep: square 2 along a line 40, twist 90°", () => SweepOp.Build(Parametric3D.Kernel.Ops.ProfileBuilder.Build(Frame3.XY, new Parametric3D.Kernel.Curves.ICurve3[] { new Parametric3D.Kernel.Curves.LineCurve3(new(-1, -1, 0), new(1, -1, 0)), new Parametric3D.Kernel.Curves.LineCurve3(new(1, -1, 0), new(1, 1, 0)), new Parametric3D.Kernel.Curves.LineCurve3(new(1, 1, 0), new(-1, 1, 0)), new Parametric3D.Kernel.Curves.LineCurve3(new(-1, 1, 0), new(-1, -1, 0)) }), new Parametric3D.Kernel.Curves.LineCurve3(Vector3d.Zero, new Vector3d(0, 0, 40)), 1, 90)),
             ("setback corner: pocket ceiling r2", () => { var bl = new List<TSolid> { Box(-20, -20, 25, 80, 80, 30) }; BooleanOp.Subtract(bl, PyramidBody(4, 0.7), new List<string>()); FilletOp.RoundEdges(bl, bl[0].Edges.Where(e => (e.V0.P - new Vector3d(20, 20, 40)).Length < 1e-6 || (e.V1.P - new Vector3d(20, 20, 40)).Length < 1e-6).Select(EdgeRef.Of).ToList(), 2, new List<string>()); return bl[0]; }),
         })
         {

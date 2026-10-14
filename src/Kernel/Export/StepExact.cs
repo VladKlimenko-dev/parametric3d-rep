@@ -36,6 +36,7 @@ public static class StepExact
         return (Math.Max(band.UMin, lo - pad), Math.Min(band.UMax, hi + pad));
     }
     static readonly bool StepOpenBandOff = Environment.GetEnvironmentVariable("P3D_STEPOPENBAND") == "0";
+    static readonly bool RailFitOff = Environment.GetEnvironmentVariable("P3D_STEPRAILFIT") == "0";
     static readonly bool StepCornerOff = Environment.GetEnvironmentVariable("P3D_STEPCORNER") == "0";
 
     static readonly bool StepCylOff = Environment.GetEnvironmentVariable("P3D_STEPCYL") == "0";
@@ -217,7 +218,9 @@ public static class StepExact
                 {
                     // K10. Кривая пересечения пишется кубическим B-сплайном через её точки с
                     // ПРОВЕРЕННЫМ отклонением (≤ 1e-4 мм). Прежде — ломаной из 64 отрезков.
-                    var fit = SplineFit.Fit(e.Curve, ToleranceContext.Current.ExportFit);   // KRN-02: бюджет экспорта
+                    // KRN-07 (07.3): рельс точной протяжки — длинная пространственная кривая; при бюджете экспорта 1e-4 её сплайн
+                    // уводил края граней-сплайнов, и объём у OpenCascade отходил на 3.5e-7 — бюджет рельса в 100 раз строже
+                    var fit = SplineFit.Fit(e.Curve, ToleranceContext.Current.ExportFit / (e.Curve is ProcCurve3 { Kind: "sweep rail" } && !RailFitOff ? 100 : 1));   // KRN-02: бюджет экспорта
                     if (fit != null)
                     {
                         var (sp2, dev) = fit.Value;
