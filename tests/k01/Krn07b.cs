@@ -68,8 +68,10 @@ static partial class Program
                 var sp = new SkSpline(new[] { new SkPoint(0, 0), new SkPoint(0, 20), new SkPoint(20, 20), new SkPoint(20, 40) }); path.AddEntity(sp);
                 var pl = new List<Vector2d>(); sp.Tessellate(pl, true); double L = 0; for (int i = 1; i < pl.Count; i++) L += (pl[i] - pl[i - 1]).Length;
                 var (q, f) = Built(p, new SweepFeature { SectionSketchId = sec.Id, PathSketchId = path.Id });
-                Ok("spline path (faceted)", q, f, Math.PI * L, 5e-3);
-                if (q.Bodies.Count == 1 && (q.Bodies[0].Faces.Any(fc => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(fc) is Parametric3D.Kernel.Ops.SweptSurface)
+                Ok("spline path", q, f, Math.PI * L, 5e-3);
+                // 2026-10-15: гладкая открытая траектория — точная протяжка (KRN07-SWEEP-EXACT-SMOOTH-PATH); иначе гранение видно
+                bool exactBody = q.Bodies.Count == 1 && q.Bodies[0].Guarantee == GuaranteeLevel.ExactAnalytic && q.Bodies[0].Faces.All(fc => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(fc) != null);
+                if (q.Bodies.Count == 1 && !exactBody && (q.Bodies[0].Faces.Any(fc => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(fc) is Parametric3D.Kernel.Ops.SweptSurface)
                     || !q.Bodies[0].Faces.Any(fc => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(fc) == null))) fails.Add("spline path: faceting is not visible (no face without an exact surface)");
             }
             {   // правка параметра сечения

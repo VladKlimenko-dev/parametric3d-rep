@@ -23,15 +23,14 @@ public static class BandNurbs
         for (int n = 16; n <= maxN; n *= 2)
         {
             var secs = new SweepSection[n + 1];
-            for (int i = 0; i <= n; i++) { secs[i] = ss.ExactSectionAt(ua + (ub - ua) * i / n); if (!secs[i].IsArc || !(secs[i].Phi > 1e-9 && secs[i].Phi < Math.PI - 1e-6)) return null; }
-            // однородные опорные точки сечений: 3 ряда × (n + 1) сечений
+            // однородные опорные точки сечений: 3 ряда × (n + 1) сечений (дуга — рациональная квадратичная, отрезок — та же
+            // степень 2 с серединой; KRN-07: грани точной протяжки со звеньями-отрезками)
             var H = new Vector4d[3, n + 1];
             for (int i = 0; i <= n; i++)
             {
-                var s = secs[i]; double h = s.Phi / 2, wm = Math.Cos(h);
-                var p0 = s.C + s.E1 * s.R; var p2 = s.C + (s.E1 * Math.Cos(s.Phi) + s.E2 * Math.Sin(s.Phi)) * s.R;
-                var p1 = s.C + (s.E1 + s.E2 * Math.Tan(h)) * s.R;
-                H[0, i] = new Vector4d(p0, 1); H[1, i] = new Vector4d(p1 * wm, wm); H[2, i] = new Vector4d(p2, 1);
+                secs[i] = ss.ExactSectionAt(ua + (ub - ua) * i / n);
+                if (ArcRows(secs[i]) is not { } ar) return null;
+                H[0, i] = ar.P0; H[1, i] = ar.P1; H[2, i] = ar.P2;
             }
             // глобальная кубическая интерполяция по равномерным параметрам t_i = i/n
             int deg = 3, m = n + 1;
@@ -62,12 +61,7 @@ public static class BandNurbs
                 double tm = (i + 0.5) / n; var ex = ss.ExactSectionAt(ua + (ub - ua) * tm);
                 foreach (double v in new[] { 0.0, 0.25, 0.5, 0.75, 1.0 })
                 {
-                    var q = nurbs.PointAt(new Vector2d(tm, v));
-                    // точка рационального сплайна при параметре v — не точка сечения при той же доле угла: мерить расстояние
-                    // до дуги сечения (её плоскость и окружность)
-                    var nrm = Vector3d.Cross(ex.E1, ex.E2).Normalized(); var dq = q - ex.C; double off = Vector3d.Dot(dq, nrm);
-                    var inPlane = dq - nrm * off; double rad = inPlane.Length - ex.R;
-                    dev = Math.Max(dev, Math.Sqrt(off * off + rad * rad));
+                    dev = Math.Max(dev, OffSection(nurbs.PointAt(new Vector2d(tm, v)), ex));
                 }
             }
             if (dev <= budget) return (nurbs, dev);
@@ -75,11 +69,22 @@ public static class BandNurbs
         return null;
     }
 
+    /// <summary>Расстояние точки до сечения: до дуги (её плоскость и окружность) или до прямой отрезка.</summary>
+    static double OffSection(Vector3d q, SweepSection ex)
+    {
+        if (!ex.IsArc) { var d = ex.B - ex.A; double l2 = d.LengthSquared; var w = q - ex.A; return l2 < 1e-300 ? w.Length : (w - d * (Vector3d.Dot(w, d) / l2)).Length; }
+        // точка рационального сплайна при параметре v — не точка сечения при той же доле угла: мерить расстояние до дуги
+        var nrm = Vector3d.Cross(ex.E1, ex.E2).Normalized(); var dq = q - ex.C; double off = Vector3d.Dot(dq, nrm);
+        var inPlane = dq - nrm * off; double rad = inPlane.Length - ex.R;
+        return Math.Sqrt(off * off + rad * rad);
+    }
+
     static readonly bool BreaksOff = Environment.GetEnvironmentVariable("P3D_BANDNURBSBREAKS") == "0";
 
     static (Vector4d P0, Vector4d P1, Vector4d P2)? ArcRows(SweepSection s)
     {
-        if (!s.IsArc || !(s.Phi > 1e-9 && s.Phi < Math.PI - 1e-6)) return null;
+        if (!s.IsArc) return (new Vector4d(s.A, 1), new Vector4d((s.A + s.B) / 2, 1), new Vector4d(s.B, 1));
+        if (!(s.Phi > 1e-9 && s.Phi < Math.PI - 1e-6)) return null;
         double h = s.Phi / 2, wm = Math.Cos(h);
         var p0 = s.C + s.E1 * s.R; var p2 = s.C + (s.E1 * Math.Cos(s.Phi) + s.E2 * Math.Sin(s.Phi)) * s.R;
         var p1 = s.C + (s.E1 + s.E2 * Math.Tan(h)) * s.R;
@@ -121,13 +126,7 @@ public static class BandNurbs
             for (int i = 0; i + 1 < m && dev <= budget; i++)
             {
                 double tm = (g[i] + g[i + 1]) / 2; var ex = ss.ExactSectionAt(ua + (ub - ua) * tm);
-                foreach (double v in new[] { 0.0, 0.25, 0.5, 0.75, 1.0 })
-                {
-                    var q = nurbs.PointAt(new Vector2d(tm, v));
-                    var nrm = Vector3d.Cross(ex.E1, ex.E2).Normalized(); var dq = q - ex.C; double off = Vector3d.Dot(dq, nrm);
-                    var inPlane = dq - nrm * off; double rad = inPlane.Length - ex.R;
-                    dev = Math.Max(dev, Math.Sqrt(off * off + rad * rad));
-                }
+                foreach (double v in new[] { 0.0, 0.25, 0.5, 0.75, 1.0 }) dev = Math.Max(dev, OffSection(nurbs.PointAt(new Vector2d(tm, v)), ex));
             }
             if (dev <= budget) return (nurbs, dev);
         }
