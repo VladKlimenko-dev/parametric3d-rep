@@ -169,6 +169,44 @@ static partial class Program
             }
             catch (Exception ex) { man.Add($"{id}\tnurbs×nurbs: {name}\texception: {ex.Message.Replace('\t', ' ')}\t\t\t\t\t\t\t"); }
         }
+        // KRN-06 (06.12, 06.13): УГОЛ С ОТСТУПОМ И N-СТОРОННИМ ЛОСКУТОМ (вершина пирамиды с разными уклонами; карман) — лоскут
+        // в STEP кубическим B-сплайном; НЕЗАМКНУТЫЕ ЛЕНТЫ катящегося шара (закон радиуса, кривой торец) — рациональным
+        // B-сплайном на охвате грани; OpenCascade читает и сверяет объём и площадь
+        foreach (var (name, make) in new (string, Func<TSolid>)[]
+        {
+            ("setback corner: irregular pyramid apex r2", () => { var bl = new List<TSolid> { PyramidBody(4, 0.7) }; FilletOp.RoundEdges(bl, bl[0].Edges.Where(e => Math.Abs(e.V0.P.Z - e.V1.P.Z) > 1).Select(EdgeRef.Of).ToList(), 2, new List<string>()); return bl[0]; }),
+            ("open rolling ball: hole d8 edge on a half shaft, radius law 2-0.8-1.5-1", () =>
+            {
+                var bl = new List<TSolid> { TransformOp.Copy(PrimitiveOp.Cylinder(new Vector3d(0, 0, -50), 20, 100), TransformOp.Rotate(Vector3d.Zero, Vector3d.UnitY, 90)) };
+                BooleanOp.Subtract(bl, Box(-60, -60, -60, 120, 60, 120), new List<string>());
+                BooleanOp.Subtract(bl, PrimitiveOp.Cylinder(new Vector3d(0, 0, -40), 4, 80), new List<string>());
+                var es = bl[0].Edges.Where(e => e.Curve is not Parametric3D.Kernel.Curves.LineCurve3 && e.Curve.PointAt((e.Curve.T0 + e.Curve.T1) / 2) is var m && m.Z > 5 && Math.Abs(Math.Sqrt(m.X * m.X + m.Y * m.Y) - 4) < 1e-6).ToList();
+                FilletOp.RoundEdgesLaw(bl, es.Select(EdgeRef.Of).ToList(), new List<(double, double)> { (0, 2), (0.3, 0.8), (0.7, 1.5), (1, 1) }, new List<string>());
+                return bl[0];
+            }),
+            ("open rolling ball: plate edge ending on a concave cylinder r2", () =>
+            {
+                var bl = new List<TSolid> { Box(0, 0, 0, 60, 40, 10) };
+                BooleanOp.Subtract(bl, PrimitiveOp.Cylinder(new Vector3d(65, 5, -5), 15, 20), new List<string>());
+                var es = bl[0].Edges.Where(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0.P.Y) < 1e-9 && Math.Abs(e.V1.P.Y) < 1e-9 && Math.Abs(e.V0.P.Z - 10) < 1e-9 && Math.Abs(e.V1.P.Z - 10) < 1e-9).ToList();
+                FilletOp.RoundEdges(bl, es.Select(EdgeRef.Of).ToList(), 2, new List<string>());
+                return bl[0];
+            }),
+            ("setback corner: pocket ceiling r2", () => { var bl = new List<TSolid> { Box(-20, -20, 25, 80, 80, 30) }; BooleanOp.Subtract(bl, PyramidBody(4, 0.7), new List<string>()); FilletOp.RoundEdges(bl, bl[0].Edges.Where(e => (e.V0.P - new Vector3d(20, 20, 40)).Length < 1e-6 || (e.V1.P - new Vector3d(20, 20, 40)).Length < 1e-6).Select(EdgeRef.Of).ToList(), 2, new List<string>()); return bl[0]; }),
+        })
+        {
+            string id = $"c{i++:D2}";
+            try
+            {
+                var b = make(); var bl = new List<TSolid> { b };
+                if (b.Guarantee != Parametric3D.Kernel.GuaranteeLevel.ExactAnalytic) { man.Add($"{id}\t{name}\tnot exact: {b.Guarantee}\t\t\t\t\t\t\t"); continue; }
+                var sw = new StringWriter(); var ws = new List<string>();
+                if (!Parametric3D.Kernel.Export.StepExact.Write(sw, bl, id, ws)) { man.Add($"{id}\t{name}\tno exact step: {string.Join("; ", ws).Replace('\t', ' ')}\t\t\t\t\t\t\t"); continue; }
+                File.WriteAllText(Path.Combine(dir, id + ".step"), sw.ToString());
+                man.Add($"{id}\t{name}\tok\t1\t{b.Faces.Count()}\t{AnalyticVolume.Of(b):R}\t{AnalyticVolume.AreaOf(b):R}\tNaN\tExactAnalytic\tFalse\t0");
+            }
+            catch (Exception ex) { man.Add($"{id}\t{name}\texception: {ex.Message.Replace('\t', ' ')}\t\t\t\t\t\t\t"); }
+        }
         File.WriteAllLines(Path.Combine(dir, "manifest.tsv"), man);
         Console.WriteLine($"G14 dump: {man.Count - 1} cases → {dir}");
     }

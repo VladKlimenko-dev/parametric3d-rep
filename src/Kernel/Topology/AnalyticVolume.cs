@@ -180,6 +180,7 @@ public static class AnalyticVolume
         {
             case PlaneSurface pl: return PlaneArea(f, pl.F.Origin, pl.F.U, pl.F.V);
             case NurbsSurface when !NurbsVolOff: return AnalyticFlux.FaceAreaOf(f);
+            case CornerPatchSurface cpa when WholePatch(f, cpa): return CornerIntegral(f, cpa, (x, n) => n.Length, area: true);
             case ExtrudedSurface exl when exl.Base is LineCurve3 ln:
             {
                 var u = (ln.B - ln.A).Normalized();
@@ -702,6 +703,11 @@ public static class AnalyticVolume
                 return BandIntegral(f, band, area: false);
             case SectionSurface ob when BandOpenRange(f, ob) is { } orr:
                 return BandOpenIntegral(f, ob, orr, area: false);
+            case CornerPatchSurface cpv when WholePatch(f, cpv):
+            {
+                var oc = _origin;
+                return CornerIntegral(f, cpv, (x, n) => Vector3d.Dot(x - oc, n), area: false);
+            }
             case NurbsSurface when !NurbsVolOff:
             {
                 // KRN-07 N1b: грань NURBS — поток (x − o) по краю (AnalyticFlux, общая параметризация (u, v))
@@ -712,6 +718,40 @@ public static class AnalyticVolume
                 _ = coords; _ = form; _ = factor; _ = periodicB;
                 return null;
         }
+    }
+
+    // ------------------------------------------------------------------ угловой лоскут
+    /// <summary>
+    /// KRN-06: грань — весь угловой лоскут (один контур из всех сторон): интеграл по самой области параметров (2D квадратура,
+    /// CornerPatchSurface.Integrate), а не через край — через край каждый узел края стоил внутреннего интеграла с особыми
+    /// производными в вершинах области (5 с на грань). Ошибка — разность N и 2N (в бюджет квадратуры). Часть лоскута
+    /// (грань, обрезанная после) — не поддержана (null). Мутация P3D_CORNERQUAD=0 — интеграла нет.
+    /// </summary>
+    static bool WholePatch(TFace f, CornerPatchSurface cp) => !CornerQuadOff && f.Loops.Count == 1 && f.Loops[0].CoEdges.Count == cp.SideCount;
+    static readonly bool CornerQuadOff = Environment.GetEnvironmentVariable("P3D_CORNERQUAD") == "0";
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<CornerPatchSurface, System.Collections.Concurrent.ConcurrentDictionary<(bool, Vector3d), (double V, double Err)>> CornerMemo = new();
+    static double? CornerIntegral(TFace f, CornerPatchSurface cp, Func<Vector3d, Vector3d, double> g, bool area)
+    {
+        // сходимость — четвёртого порядка (удвоение N — ошибка /16): N = 16 и 8, экстраполяция Ричардсона, остаток —
+        // разность /15 (замер: площадь 1e-7 → 3e-8 отн., поток — 2e-9 отн.). Значение — в памяти лоскута (по началу отсчёта).
+        var memo = CornerMemo.GetOrCreateValue(cp);
+        var key = (area, area ? Vector3d.Zero : _origin);
+        if (!memo.TryGetValue(key, out var res))
+        {
+            double fine = cp.Integrate(g, 16), coarse = cp.Integrate(g, 8);
+            if (!double.IsFinite(fine) || !double.IsFinite(coarse)) return null;
+            res = (fine + (fine - coarse) / 15, Math.Abs(fine - coarse) / 15);
+            memo[key] = res;
+        }
+        _quadErr += res.Err;
+        if (area) return Math.Abs(res.V);
+        // сторона — по обходу контура в области параметров (соглашение K05: внешний контур — против часовой вокруг наружной
+        // нормали): обход против часовой в (u, v) — наружу S_u × S_v. Флаг Reversed для этого не годится: зеркальный перенос
+        // меняет сторону через обход, а не через флаг.
+        var uvl = f.Loops[0].CoEdges.Select(ce => cp.ProjectToUV(ce.Start.P)).ToList();
+        double sa = 0; for (int i = 0; i < uvl.Count; i++) { var a0 = uvl[i]; var b0 = uvl[(i + 1) % uvl.Count]; sa += a0.X * b0.Y - b0.X * a0.Y; }
+        if (Math.Abs(sa) < 1e-9) return null;
+        return res.V * Math.Sign(sa);
     }
 
     // ------------------------------------------------------------------ обход края

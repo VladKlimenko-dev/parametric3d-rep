@@ -20,6 +20,23 @@ public static class StepExact
     /// <summary>Мутация P3D_STEPRATIONAL=0: веса рационального сплайна (кривой и поверхности) не пишутся (прежнее).</summary>
     static readonly bool StepRationalOff = Environment.GetEnvironmentVariable("P3D_STEPRATIONAL") == "0";
     static readonly bool StepBandOff = Environment.GetEnvironmentVariable("P3D_STEPBAND") == "0";
+    /// <summary>
+    /// Промежуток u ленты для записи сплайном: замкнутая лента — между её разрезами; НЕЗАМКНУТАЯ (KRN-06: лента открытого
+    /// ребра, обрезанная торцами) — охват промежутков [L(v), R(v)] грани по 33 пробам v с запасом 1 % (в пределах поверхности):
+    /// грань обрезается своими рёбрами, сплайн её покрывает. Мутация P3D_STEPOPENBAND=0 — незамкнутая лента не пишется.
+    /// </summary>
+    static (double Ua, double Ub)? BandSpan(TFace f, SectionSurface band)
+    {
+        if (Topology.AnalyticVolume.BandRange(f, band) is { } brg) return brg;
+        if (StepOpenBandOff || band.Closed || Topology.AnalyticVolume.BandOpenRange(f, band) is not { } orr) return null;
+        double lo = double.MaxValue, hi = double.MinValue;
+        for (int i = 0; i <= 32; i++) { double v = i / 32.0; lo = Math.Min(lo, orr.L(v)); hi = Math.Max(hi, orr.R(v)); }
+        if (!(hi > lo)) return null;
+        double pad = 0.01 * (hi - lo);
+        return (Math.Max(band.UMin, lo - pad), Math.Min(band.UMax, hi + pad));
+    }
+    static readonly bool StepOpenBandOff = Environment.GetEnvironmentVariable("P3D_STEPOPENBAND") == "0";
+    static readonly bool StepCornerOff = Environment.GetEnvironmentVariable("P3D_STEPCORNER") == "0";
 
     static readonly bool StepCylOff = Environment.GetEnvironmentVariable("P3D_STEPCYL") == "0";
     /// <summary>Мутация g.14 (P3D_STEPNORMAL=0): признак стороны квадрик — по нормали нашей параметризации, как прежде.</summary>
@@ -395,7 +412,7 @@ public static class StepExact
                     // чужая система получила бы многогранник вместо поверхности.
                     // KRN-06: ЛЕНТА КАТЯЩЕГОСЯ ШАРА (поверхность по формуле сечения-дуги) — рациональным B-сплайном на промежутке u
                     // грани (дуга по v точно, по u — интерполяция сечений до 1/10 бюджета экспорта). Мутация P3D_STEPBAND=0.
-                    case SectionSurface band when !StepBandOff && band.IsProcedural && Topology.AnalyticVolume.BandRange(f, band) is { } brg
+                    case SectionSurface band when !StepBandOff && band.IsProcedural && BandSpan(f, band) is { } brg
                                                   && BandNurbs.Fit(band, brg.Ua, brg.Ub, ToleranceContext.Current.ExportFit / (Environment.GetEnvironmentVariable("P3D_BANDDIV") is { } bd ? double.Parse(bd) : 10)) is { } bn:
                     {
                         var ns = bn.S;
@@ -418,6 +435,34 @@ public static class StepExact
                                  $"GEOMETRIC_REPRESENTATION_ITEM()RATIONAL_B_SPLINE_SURFACE(({string.Join(",", wrows)}))REPRESENTATION_ITEM('')SURFACE())");
                         warnings?.Add($"STEP: a rolling-ball blend face is written as a rational B-spline ({ns.CountU}×{ns.CountV} poles, deviation {bn.Deviation:E1} mm).");
                         written = band;
+                        break;
+                    }
+
+                    // KRN-06: УГЛОВОЙ ЛОСКУТ — кубическим B-сплайном по отображению Кунса квадрата на область (до половины бюджета
+                    // экспорта). Мутация P3D_STEPCORNER=0 — честный отказ, как прежде.
+                    case CornerPatchSurface cps when !StepCornerOff && CornerPatchNurbs.Fit(cps, ToleranceContext.Current.ExportFit / 2) is { } cpn:
+                    {
+                        var ns = cpn.S;
+                        var rows = new List<string>();
+                        for (int i = 0; i < ns.CountU; i++)
+                        {
+                            var cols = new List<string>();
+                            for (int j = 0; j < ns.CountV; j++) cols.Add("#" + Point(ns.ControlPoint(i, j)));
+                            rows.Add("(" + string.Join(",", cols) + ")");
+                        }
+                        static (List<int> Mult, List<double> Vals) PackC(IReadOnlyList<double> knots)
+                        {
+                            var mult = new List<int>(); var vals = new List<double>();
+                            foreach (double k in knots) { if (vals.Count > 0 && Math.Abs(vals[^1] - k) < 1e-12) mult[^1]++; else { vals.Add(k); mult.Add(1); } }
+                            return (mult, vals);
+                        }
+                        var (mu, vu) = PackC(ns.KnotsU); var (mv, vv) = PackC(ns.KnotsV);
+                        surf = E($"B_SPLINE_SURFACE_WITH_KNOTS('',{ns.DegreeU},{ns.DegreeV}," +
+                                 $"({string.Join(",", rows)}),.UNSPECIFIED.,.F.,.F.,.F.," +
+                                 $"({string.Join(",", mu)}),({string.Join(",", mv)})," +
+                                 $"({string.Join(",", vu.Select(N))}),({string.Join(",", vv.Select(N))}),.UNSPECIFIED.)");
+                        warnings?.Add($"STEP: a corner patch face is written as a cubic B-spline ({ns.CountU}×{ns.CountV} poles, deviation {cpn.Deviation:E1} mm).");
+                        written = cps;
                         break;
                     }
 

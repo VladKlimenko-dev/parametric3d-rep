@@ -148,17 +148,173 @@ static partial class Program
                 if (!(v < 21333.333333 && v > 21230)) fails.Add($"apex only: V {v:R}");
             }
             {
+                // пирамида с разными уклонами (общего шара нет): не сфера — угол с отступом (KRN06-SETBACK-CORNER)
                 var bl = new List<TSolid> { PyramidBody(4, 0.7) }; var w = new List<string>(); long c0 = DirectRound.NCorners;
-                try
-                {
-                    FilletOp.RoundEdges(bl, bl[0].Edges.Where(e => Math.Abs(e.V0.P.Z - e.V1.P.Z) > 1).Select(EdgeRef.Of).ToList(), 2, w);
-                    if (!SolidValidator.Validate(bl[0]).IsValid) fails.Add($"irregular apex: an invalid body was accepted: {SolidValidator.Validate(bl[0]).Summary()}");
-                }
-                catch (Parametric3D.Core.RebuildException ex) { Log(new { test = "KRN06-N-CORNER", irregular = "refused", ex.Message }); }
-                if (DirectRound.NCorners != c0) fails.Add("irregular apex: the direct builder took a corner without a common ball");
+                FilletOp.RoundEdges(bl, bl[0].Edges.Where(e => Math.Abs(e.V0.P.Z - e.V1.P.Z) > 1).Select(EdgeRef.Of).ToList(), 2, w);
+                if (!SolidValidator.Validate(bl[0]).IsValid) fails.Add($"irregular apex: an invalid body was accepted: {SolidValidator.Validate(bl[0]).Summary()}");
+                if (DirectRound.NCorners != c0) fails.Add("irregular apex: a sphere corner without a common ball");
             }
             Require(fails.Count == 0, string.Join("; ", fails));
         });
+    }
+    static void Krn06SetbackCornerChecks()
+    {
+        Check("KRN06-SETBACK-CORNER", () =>
+        {
+            // 06.6/06.13: УГОЛ БЕЗ ОБЩЕГО ШАРА — вершина пирамиды с разными уклонами граней (смещённые на r плоскости не проходят
+            // через одну точку). Ленты кончаются на отступе, на гранях — дуги эллипсов, угол — N-сторонний лоскут
+            // (CornerPatchSurface). Проверки: прямой построитель взял угол, тело точное и годное; КАСАНИЕ — нормали лоскута и
+            // соседней грани (ленты или плоскости) в 9 точках каждого ребра лоскута совпадают до 1e-8 рад (G1 тождественно по
+            // построению формулы); лоскут не выходит за плоскости граней угла (тело — внутри исходного); объём монотонен по r.
+            // Тот же угол у OpenCascade — заполнение B-сплайном (другая поверхность): объёмы сопоставимы до 1e-3, не равны.
+            var fails = new List<string>();
+            if (Environment.GetEnvironmentVariable("P3D_SBDBG") == "1") DirectRound.Debug = m => { if (m.StartsWith("declined") || m.Contains("invalid") || m.Contains("setback")) Console.WriteLine("    dr " + m); };
+            foreach (var (n, slope2, rs) in new[] { (4, 0.7, new[] { 1.0, 2.0, 3.0 }), (5, 0.7, new[] { 2.0 }), (4, 0.35, new[] { 2.0 }) })
+            {
+                double prev = double.NaN;
+                foreach (double r in rs)
+                {
+                    string name = $"pyramid {n} slope {slope2} r {r}";
+                    var src = PyramidBody(n, slope2); double v0 = AnalyticVolume.Of(src) ?? double.NaN;
+                    var bl = new List<TSolid> { src }; long c0 = DirectRound.SetbackCorners;
+                    try { FilletOp.RoundEdges(bl, bl[0].Edges.Where(e => Math.Abs(e.V0.P.Z - e.V1.P.Z) > 1).Select(EdgeRef.Of).ToList(), r, new List<string>()); }
+                    catch (Exception ex) { fails.Add($"{name}: {ex.GetType().Name} {ex.Message}"); continue; }
+                    var b = bl[0];
+                    if (DirectRound.SetbackCorners == c0) { fails.Add($"{name}: no setback corner"); continue; }
+                    if (b.Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(b).IsValid) { fails.Add($"{name}: {b.Guarantee} {SolidValidator.Validate(b).Summary()}"); continue; }
+                    var patch = b.Faces.Single(f => GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.CornerPatchSurface);
+                    var ps = (Parametric3D.Kernel.Surfaces.CornerPatchSurface)GeometryAudit.AuthoritativeSurface(patch)!;
+                    double worst = 0; int sides = 0;
+                    foreach (var ce in patch.Loops.SelectMany(l => l.CoEdges))
+                    {
+                        var other = ce.Edge.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().First(f => f != patch);
+                        var os = GeometryAudit.AuthoritativeSurface(other)!; sides++;
+                        var c = ce.Edge.Curve;
+                        for (int k = 1; k <= 9; k++)
+                        {
+                            var x = c.PointAt(c.T0 + (c.T1 - c.T0) * k / 10.0);
+                            var na = ps.NormalAt(ps.ProjectToUV(x)); var nb = os.NormalAt(os.ProjectToUV(x));
+                            worst = Math.Max(worst, Vector3d.Cross(na, nb).Length);
+                        }
+                    }
+                    // лоскут — под плоскостями граней вершины (у выпуклой вершины тело не выходит за исходное)
+                    double bulge = double.MinValue; Vector2d bulgeAt = default; int bulgePl = -1;
+                    var planes = src.Faces.Where(f => f.Surface is not null && GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.PlaneSurface).Select(f => (P: ((Parametric3D.Kernel.Surfaces.PlaneSurface)GeometryAudit.AuthoritativeSurface(f)!).F.Origin, N: f.NormalAt(f.Loops[0].CoEdges[0].Start.P))).ToList();
+                    for (int i = 0; i < 400; i++)
+                    {
+                        double ang = 2 * Math.PI * i / 400 * 7, rad = 0.95 * Math.Sqrt((i + 0.5) / 400);
+                        var x = ps.PointAt(new Vector2d(Math.Cos(ang), Math.Sin(ang)) * (rad * Math.Cos(Math.PI / ps.SideCount)));
+                        for (int pi = 0; pi < planes.Count; pi++) { double bv = Vector3d.Dot(x - planes[pi].P, planes[pi].N); if (bv > bulge) { bulge = bv; bulgeAt = new Vector2d(Math.Cos(ang), Math.Sin(ang)) * (rad * Math.Cos(Math.PI / ps.SideCount)); bulgePl = pi; } }
+                    }
+                    double v = AnalyticVolume.Of(b) ?? double.NaN, dv = v0 - v;
+                    Console.WriteLine($"  {name}: removed {dv:R} patch sides {sides} G1 {worst:E1} bulge {bulge:E2} at {bulgeAt:0.###} plane {bulgePl} N {(bulgePl >= 0 ? planes[bulgePl].N : default):0.###}");
+                    Log(new { test = "KRN06-SETBACK-CORNER", n, slope2, r, removed = dv, sides, g1 = worst, bulge });
+                    if (!(worst <= 1e-8)) fails.Add($"{name}: patch normals differ from the neighbours by {worst:E1}");
+                    if (!(bulge <= 1e-9)) fails.Add($"{name}: patch above a face plane by {bulge:E1}");
+                    if (!(dv > 0) || (!double.IsNaN(prev) && !(dv > prev))) fails.Add($"{name}: removed volume {dv:R} not increasing (prev {prev:R})");
+                    prev = dv;
+                    if (n == 4 && r == 2 && slope2 == 0.7)
+                    {
+                        // обмен: точный STEP (лоскут — кубическим B-сплайном) туда и обратно — тот же объём (до 1e-7 при точном объёме
+                        // прочитанного, иначе по сетке до 1e-3, как K10-STEP-ROUNDTRIP); независимо файл читает OpenCascade (G14)
+                        var wsx = new List<string>(); var swx = new StringWriter();
+                        bool okx = Parametric3D.Kernel.Export.StepExact.Write(swx, new[] { b }, "sb", wsx);
+                        var backx = okx ? Parametric3D.Kernel.Export.StepImport.ReadExactSolids(swx.ToString(), wsx) : new List<TSolid>();
+                        double vbx = backx.Count == 1 ? (AnalyticVolume.Of(backx[0]) ?? Parametric3D.Kernel.Tess.MassProps.Volume(Parametric3D.Kernel.Tess.Tessellator.Tessellate(backx[0]))) : double.NaN;
+                        Console.WriteLine($"  {name}: STEP exact {okx}, back {vbx:R} analytic {(backx.Count == 1 ? AnalyticVolume.Of(backx[0]) != null : false)} {(backx.Count == 1 ? backx[0].Guarantee.ToString() : "")} faces {(backx.Count == 1 ? string.Join(",", backx[0].Faces.Select(f => GeometryAudit.AuthoritativeSurface(f)?.GetType().Name ?? "null").GroupBy(x => x).Select(g => g.Key + ":" + g.Count())) : "")}");
+                        if (!okx || !(Math.Abs(vbx - v) <= (backx.Count == 1 && AnalyticVolume.Of(backx[0]) != null ? 1e-7 : 1e-3) * v)) fails.Add($"{name}: STEP round trip {okx} {vbx:R} vs {v:R} ({string.Join(" | ", wsx.Where(x => x.Contains("not")).Take(2))})");
+                        // перенос тела с лоскутом (зеркало и поворот): лоскут переносится формулой, объём и годность — те же
+                        foreach (var (xn, xf) in new[] { ("mirror", TransformOp.Mirror(new Vector3d(0, 0, 0), new Vector3d(1, 0.3, 0))), ("rotate", TransformOp.Rotate(new Vector3d(5, 0, 0), new Vector3d(0.3, 1, 0.2), 37)) })
+                        {
+                            var cp = TransformOp.Copy(b, xf); double vc = AnalyticVolume.Of(cp) ?? double.NaN;
+                            if (!(Math.Abs(vc - v) <= 1e-8 * v) || !SolidValidator.Validate(cp).IsValid || cp.Guarantee != GuaranteeLevel.ExactAnalytic)
+                                fails.Add($"{name} {xn}: V {vc:R} vs {v:R}, {cp.Guarantee} {SolidValidator.Validate(cp).Summary()}");
+                        }
+                    }
+                }
+            }
+            // ВОГНУТЫЙ угол: брусок минус пирамида с разными уклонами — вершина пирамиды становится «потолком» кармана, рёбра
+            // вершины вогнуты, скругление добавляет материал
+            foreach (double r in new[] { 1.0, 2.0 })
+            {
+                string name = $"pocket apex r {r}";
+                var bl = new List<TSolid> { Box(-20, -20, 25, 80, 80, 30) }; BooleanOp.Subtract(bl, PyramidBody(4, 0.7), new List<string>());
+                double v0 = AnalyticVolume.Of(bl[0]) ?? double.NaN; long c0 = DirectRound.SetbackCorners;
+                try { FilletOp.RoundEdges(bl, bl[0].Edges.Where(e => (e.V0.P - new Vector3d(20, 20, 40)).Length < 1e-6 || (e.V1.P - new Vector3d(20, 20, 40)).Length < 1e-6).Select(EdgeRef.Of).ToList(), r, new List<string>()); }
+                catch (Exception ex) { fails.Add($"{name}: {ex.GetType().Name} {ex.Message}"); continue; }
+                var b = bl[0]; double dv = (AnalyticVolume.Of(b) ?? double.NaN) - v0;
+                Console.WriteLine($"  {name}: added {dv:R}");
+                if (DirectRound.SetbackCorners == c0) fails.Add($"{name}: no setback corner");
+                else if (b.Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(b).IsValid) fails.Add($"{name}: {b.Guarantee} {SolidValidator.Validate(b).Summary()}");
+                else if (!(dv > 0)) fails.Add($"{name}: added volume {dv:R}");
+            }
+            // ФОРМА: угол, где общий шар ЕСТЬ (правильная пирамида), принудительно строится с отступом — лоскут близок к
+            // сферическому углу (смесь центров шаров и направлений: при общем центре — на сфере): снятый объём отличается не
+            // больше чем на 1 % (смесь точек лент — на 2 %, прямые ленты — больше)
+            {
+                double vs = double.NaN, vf = double.NaN, v0 = AnalyticVolume.Of(PyramidBody(4)) ?? double.NaN;
+                foreach (bool force in new[] { false, true })
+                {
+                    var b0 = new List<TSolid> { PyramidBody(4) }; DirectRound.ForceSetback = force;
+                    try { FilletOp.RoundEdges(b0, b0[0].Edges.Where(e => Math.Abs(e.V0.P.Z - e.V1.P.Z) > 1).Select(EdgeRef.Of).ToList(), 2, new List<string>()); }
+                    finally { DirectRound.ForceSetback = false; }
+                    if (force) vf = AnalyticVolume.Of(b0[0]) ?? double.NaN; else vs = AnalyticVolume.Of(b0[0]) ?? double.NaN;
+                }
+                double rel = Math.Abs(vf - vs) / (v0 - vs);
+                Console.WriteLine($"  regular apex r2: sphere corner removes {v0 - vs:R}, forced setback {v0 - vf:R} ({rel:P2})");
+                if (!(rel <= 0.01)) fails.Add($"forced setback on a common-ball corner: {rel:P2} of the removed volume off the sphere");
+            }
+            DirectRound.Debug = null;
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
+    static void SetbackProbe()
+    {
+        {
+            var blx = new List<TSolid> { PyramidBody(4, 0.7) };
+            DirectRound.Prof = m => Console.WriteLine("  stage " + m);
+            Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset();
+            var swp = System.Diagnostics.Stopwatch.StartNew();
+            FilletOp.RoundEdges(blx, blx[0].Edges.Where(e => Math.Abs(e.V0.P.Z - e.V1.P.Z) > 1).Select(EdgeRef.Of).ToList(), 2, new List<string>());
+            Console.WriteLine($"round {swp.Elapsed.TotalSeconds:F1} s"); DirectRound.Prof = null;
+            Console.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report()); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false;
+            { var lp = DirectRound.LastPatch!; foreach (int nq in new[] { 4, 8, 16, 32 }) { var swq = System.Diagnostics.Stopwatch.StartNew(); Console.WriteLine($"  N {nq}: area {lp.Integrate((x, n) => n.Length, nq):R} flux {lp.Integrate((x, n) => Vector3d.Dot(x, n), nq):R} ({swq.ElapsedMilliseconds} ms)"); } }
+            { var sw2 = new StringWriter(); var ww = new List<string>(); bool okS = Parametric3D.Kernel.Export.StepExact.Write(sw2, new[] { blx[0] }, "corner", ww); Console.WriteLine($"STEP exact: {okS}; {string.Join(" | ", ww.Take(3))}"); }
+            var b = blx[0]; var cp = TransformOp.Copy(b, TransformOp.Rotate(new Vector3d(5, 0, 0), new Vector3d(0.3, 1, 0.2), 37));
+            var fa = b.Faces.ToList(); var fb = cp.Faces.ToList();
+            Console.WriteLine($"V {AnalyticVolume.Of(b):R} vs {AnalyticVolume.Of(cp):R}; faces {fa.Count} {fb.Count}");
+            for (int i = 0; i < Math.Min(fa.Count, fb.Count); i++)
+            {
+                double? a1 = AnalyticVolume.FaceArea(fa[i]), a2 = AnalyticVolume.FaceArea(fb[i]);
+                if (a1 == null || a2 == null || Math.Abs(a1.Value - a2.Value) > 1e-9 * Math.Max(1, a1.Value))
+                    Console.WriteLine($"  face {i} {fa[i].Tag} {GeometryAudit.AuthoritativeSurface(fa[i])?.GetType().Name}/{GeometryAudit.AuthoritativeSurface(fb[i])?.GetType().Name} area {a1:R} vs {a2:R}");
+            }
+        }
+        foreach (bool force in new[] { false, true })
+        {
+            var b0 = new List<TSolid> { PyramidBody(4) }; DirectRound.ForceSetback = force;
+            FilletOp.RoundEdges(b0, b0[0].Edges.Where(e => Math.Abs(e.V0.P.Z - e.V1.P.Z) > 1).Select(EdgeRef.Of).ToList(), 2, new List<string>());
+            DirectRound.ForceSetback = false;
+            Console.WriteLine($"regular pyramid apex r2 force setback {force}: V {AnalyticVolume.Of(b0[0]):R} (OCC filling 21230.48860214654)");
+        }
+        var bl = new List<TSolid> { PyramidBody(5, 0.7) };
+        try { FilletOp.RoundEdges(bl, bl[0].Edges.Where(e => Math.Abs(e.V0.P.Z - e.V1.P.Z) > 1).Select(EdgeRef.Of).ToList(), 2, new List<string>()); } catch (Exception ex) { Console.WriteLine(ex.Message[..Math.Min(200, ex.Message.Length)]); }
+        var ps = DirectRound.LastPatch!;
+        int N = 60; double worstRt = 0, worst2 = 0; Vector2d at2 = default, atRt = default;
+        double ap = Math.Cos(Math.PI / ps.SideCount);
+        for (int i = 0; i <= N; i++)
+            for (int j = 0; j <= N; j++)
+            {
+                var uv = new Vector2d(-1 + 2.0 * i / N, -1 + 2.0 * j / N);
+                bool inside = true; for (int k = 0; k < ps.SideCount; k++) { var a = ps.Vertex(k); var b = ps.Vertex(k + 1); var e = b - a; if (e.X * (uv.Y - a.Y) - e.Y * (uv.X - a.X) < 0.01) inside = false; }
+                if (!inside) continue;
+                var p = ps.PointAt(uv); var q = ps.ProjectToUV(p); double rt = (q - uv).Length; if (rt > worstRt) { worstRt = rt; atRt = uv; }
+                double h = 0.01; var sec = ps.PointAt(uv + new Vector2d(h, 0)) + ps.PointAt(uv - new Vector2d(h, 0)) - p * 2; double c2 = sec.Length / (h * h);
+                if (c2 > worst2) { worst2 = c2; at2 = uv; }
+            }
+        Console.WriteLine($"roundtrip {worstRt:E2} at {atRt:0.###}; second diff {worst2:G4} at {at2:0.###}");
+        foreach (var uv in new[] { at2, at2 + new Vector2d(0.02, 0), at2 - new Vector2d(0.02, 0), new Vector2d(0, 0) })
+            Console.WriteLine($"  {uv:0.###} -> {ps.PointAt(uv):0.####} n {ps.NormalAt(uv):0.###}");
     }
     static void Krn06InclinedHoleChecks()
     {

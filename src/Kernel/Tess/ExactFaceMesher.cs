@@ -775,6 +775,10 @@ public static partial class ExactFaceMesher
                 return b == null ? null : $"rv[{b}|{P(rv.Axis.Origin)}|{P(rv.Axis.W)}|{N(rv.A0)}:{N(rv.A1)}]";
             }
 
+            // угловой лоскут — экземпляр (формулу по числам не подписать)
+            case Surfaces.CornerPatchSurface cp:
+                return $"cp#{cp.Id}";
+
             default:
                 return null;
         }

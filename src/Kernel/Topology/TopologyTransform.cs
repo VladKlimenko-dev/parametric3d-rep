@@ -76,6 +76,7 @@ public static class TopologyTransform
                 RevolvedSurface rv when C(rv.Base) is { } b => new RevolvedSurface(b, Frame(rv.Axis, x), rv.A0, rv.A1),
                 CylinderSurface cs => new CylinderSurface(Frame(cs.Axis, x), cs.Radius),
                 NurbsSurface ns when !NurbsXformOff => ns.Mapped(x.Point),
+                CornerPatchSurface cp => cp.Mapped(x.Point),
                 SectionSurface ss when !XformProcOff => ss.Mapped(q => q.IsArc
                     ? SweepSection.Arc(x.Point(q.C), x.Direction(q.E1).Normalized(), x.Direction(q.E2).Normalized(), q.R, q.Phi)
                     : SweepSection.Line(x.Point(q.A), x.Point(q.B))),
