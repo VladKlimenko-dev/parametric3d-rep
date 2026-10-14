@@ -23,7 +23,7 @@ public static partial class DirectRound
     /// Параметр — угол вокруг оси одной из форм (монотонный вдоль ребра), точки ребра и продления — Ньютоном на A ∩ B в
     /// полуплоскости угла. Мутация P3D_DROPEN=0.
     /// </summary>
-    static TSolid? BuildOpen(TSolid body, IReadOnlyList<EdgeRef> refs, double r, ref string? why, Func<TEdge, TFace, double>? chDist = null)
+    static TSolid? BuildOpen(TSolid body, IReadOnlyList<EdgeRef> refs, double r, ref string? why, Func<TEdge, TFace, double>? chDist = null, (Vector3d S, double R0, Vector3d E, double R1)? varLaw = null)
     {
         if (!OpenOn) { why = "open curved edges: off"; return null; }
         var sel = new List<TEdge>();
@@ -69,7 +69,7 @@ public static partial class DirectRound
         if (faces == null) return null;
         var blends = new List<FDesc>();
         foreach (var c in chains)
-            if (!OpenBlend(body, c, byFace, blends, r, ref why, chDist)) return null;
+            if (!OpenBlend(body, c, byFace, blends, r, ref why, chDist, varLaw)) return null;
         return FinishDirect(faces, blends, chDist != null ? "chamfer.direct" : "round.direct", ref why);
     }
 
@@ -77,6 +77,58 @@ public static partial class DirectRound
     static readonly bool EndTab = Environment.GetEnvironmentVariable("P3D_DRENDTAB") != "0";
     static readonly bool MemoOn = Environment.GetEnvironmentVariable("P3D_DRMEMO") != "0";
     const int MemoCap = 1 << 18;
+
+    static readonly bool ExtendEnds = Environment.GetEnvironmentVariable("P3D_DREXTEND") != "0";
+
+    /// <summary>
+    /// Конец кривой ребра торца у прежней вершины oldP переносится в точку касания q: укорочение (q на кривой) или ПРОДЛЕНИЕ
+    /// (упор в стенку: q — на продолжении кривой за вершиной; отрезок, дуга, эллипс — по своей формуле; мутация
+    /// P3D_DREXTEND=0 — отказ). Другие кривые — только укорочение.
+    /// </summary>
+    static ICurve3? Reshape(ICurve3 c, Vector3d oldP, Vector3d q, out string? why)
+    {
+        why = null;
+        bool startIsOld = (c.PointAt(c.T0) - oldP).Length < (c.PointAt(c.T1) - oldP).Length;
+        double tq = CurveParam.Closest(c, q);
+        bool interior = (c.PointAt(tq) - q).Length <= 1e-7 && tq > Math.Min(c.T0, c.T1) + 1e-12 && tq < Math.Max(c.T0, c.T1) - 1e-12;
+        if (interior)
+        {
+            double lo = startIsOld ? tq : c.T0, hi = startIsOld ? c.T1 : tq;
+            if (!(hi - lo > 1e-9 * Math.Max(1, Math.Abs(c.T1 - c.T0)))) { why = "blend wider than the end edge"; return null; }
+            return Analytic.GeneralBoolean.SubCurve(c, lo, hi);
+        }
+        if (!ExtendEnds) { why = "contact end is not on the end edge"; return null; }
+        switch (c)
+        {
+            case LineCurve3 ln:
+            {
+                var d = (ln.B - ln.A).Normalized(); var w = q - ln.A;
+                if ((w - d * Vector3d.Dot(w, d)).Length > 1e-7) { why = "contact end is off the end edge line"; return null; }
+                return startIsOld ? new LineCurve3(q, ln.B) : new LineCurve3(ln.A, q);
+            }
+            case ArcCurve3 arc:
+            {
+                var f = arc.Frame; var w = q - f.Origin;
+                if (Math.Abs(Vector3d.Dot(w, f.W.Normalized())) > 1e-7 || Math.Abs(w.Length - arc.Radius) > 1e-7) { why = "contact end is off the end edge circle"; return null; }
+                double th = Math.Atan2(Vector3d.Dot(w, f.V.Normalized()), Vector3d.Dot(w, f.U.Normalized()));
+                double aOld = startIsOld ? arc.A0 : arc.A1;
+                th += 2 * Math.PI * Math.Round((aOld - th) / (2 * Math.PI));
+                return startIsOld ? new ArcCurve3(f, arc.Radius, th, arc.A1) : new ArcCurve3(f, arc.Radius, arc.A0, th);
+            }
+            case EllipseCurve3 el:
+            {
+                var f = el.Frame; var w = q - f.Origin;
+                double th = Math.Atan2(Vector3d.Dot(w, f.V.Normalized()) / el.RV, Vector3d.Dot(w, f.U.Normalized()) / el.RU);
+                double aOld = startIsOld ? el.A0 : el.A1;
+                th += 2 * Math.PI * Math.Round((aOld - th) / (2 * Math.PI));
+                var ne = startIsOld ? new EllipseCurve3(f, el.RU, el.RV, th, el.A1) : new EllipseCurve3(f, el.RU, el.RV, el.A0, th);
+                if ((ne.PointAt(startIsOld ? ne.T0 : ne.T1) - q).Length > 1e-7) { why = "contact end is off the end edge ellipse"; return null; }
+                return ne;
+            }
+        }
+        why = "contact end is not on the end edge (extension of this curve type not supported)";
+        return null;
+    }
 
     /// <summary>Концы цепочки рёбер (по порядку звеньев).</summary>
     static Vector3d[] ChainEnds(List<TEdge> c)
@@ -106,7 +158,7 @@ public static partial class DirectRound
         return new ProcCurve3(F, 0, pieces.Count, false, "edge chain");
     }
 
-    static bool OpenBlend(TSolid body, List<TEdge> chain, Dictionary<TFace, FDesc> byFace, List<FDesc> blends, double r, ref string? why, Func<TEdge, TFace, double>? chDist = null)
+    static bool OpenBlend(TSolid body, List<TEdge> chain, Dictionary<TFace, FDesc> byFace, List<FDesc> blends, double r, ref string? why, Func<TEdge, TFace, double>? chDist = null, (Vector3d S, double R0, Vector3d E, double R1)? varLaw = null)
     {
         var e = chain[0];
         var fs = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
@@ -169,6 +221,10 @@ public static partial class DirectRound
         }
         double sigma = sigmaVote!.Value;
         double offA = sigma * sA * r, offB = sigma * sB * r;
+        // ПЕРЕМЕННЫЙ РАДИУС (06.14): r(t) задаётся позже (по длине ребра); до того — постоянный r (наибольший — для проверок)
+        Func<double, double> Rt = _ => r, dRt = _ => 0;
+        double OffA(double t) => sigma * sA * Rt(t);
+        double OffB(double t) => sigma * sB * Rt(t);
         bool ch = chDist != null; double dA = ch ? chDist!(e, fs[0]) : r, dB = ch ? chDist!(e, fs[1]) : r;
         foreach (var (sh, off) in ch ? Array.Empty<(Geometry.Ssi.Shape, double)>() : new[] { (shA, offA), (shB, offB) })
             if (sh is Geometry.Ssi.Cylinder cy0 && cy0.R + off < 1e-6 || sh is Geometry.Ssi.Sphere sp0 && sp0.R + off < 1e-6 || sh is Geometry.Ssi.Torus to0 && to0.r + off < 1e-6)
@@ -291,24 +347,57 @@ public static partial class DirectRound
         Vector3d Ed(double t) => MemoOn && edMemo.Count < MemoCap ? edMemo.GetOrAdd(t, edF) : edF(t);
         Vector3d Td(double t) { double dl = 1e-5; return (edgeAt(t + dl) - edgeAt(t - dl)).Normalized(); }
 
+        if (varLaw is { } vl)
+        {
+            if (ch) { why = "variable chamfer: not in this family"; return false; }
+            // ЗАКОН — линейно по длине ребра от одного конца к другому, за концами — продолжение той же прямой. s(t) — таблица
+            // длин на [−Δ/2, 3Δ/2] (Гаусс по кускам) и кубическая Эрмита с точными производными |E'(t)| в узлах (гладко).
+            bool p0IsS = (P0 - vl.S).Length <= (P0 - vl.E).Length;
+            double rP0 = p0IsS ? vl.R0 : vl.R1, rP1 = p0IsS ? vl.R1 : vl.R0;
+            const int NS = 1024; double ta = -0.5 * Delta, tb = 1.5 * Delta, hs = (tb - ta) / NS;
+            double Speed(double t) { double d = 1e-6 * Math.Max(1e-9, Delta); var a = Ed(t + d); var b = Ed(t - d); return (a - b).Length / (2 * d); }
+            var sv = new double[NS + 1]; var dv = new double[NS + 1];
+            double[] gx3 = { -0.7745966692414834, 0, 0.7745966692414834 }, gw3 = { 5.0 / 9, 8.0 / 9, 5.0 / 9 };
+            for (int i = 0; i <= NS; i++)
+            {
+                dv[i] = Speed(ta + hs * i);
+                if (i > 0) { double acc = 0; for (int q = 0; q < 3; q++) acc += gw3[q] / 2 * Speed(ta + hs * (i - 0.5 + gx3[q] / 2)); sv[i] = sv[i - 1] + acc * hs; }
+            }
+            if (sv.Any(double.IsNaN) || dv.Any(double.IsNaN)) { why = "variable radius: edge length along the extension not computed"; return false; }
+            double Sof(double t, out double ds)
+            {
+                double x = (t - ta) / hs; int i = Math.Clamp((int)Math.Floor(x), 0, NS - 1); double u = x - i;
+                double h00 = 2 * u * u * u - 3 * u * u + 1, h10 = u * u * u - 2 * u * u + u, h01 = -2 * u * u * u + 3 * u * u, h11 = u * u * u - u * u;
+                double d00 = 6 * u * u - 6 * u, d10 = 3 * u * u - 4 * u + 1, d01 = -6 * u * u + 6 * u, d11 = 3 * u * u - 2 * u;
+                ds = (d00 * sv[i] + d10 * hs * dv[i] + d01 * sv[i + 1] + d11 * hs * dv[i + 1]) / hs;
+                return h00 * sv[i] + h10 * hs * dv[i] + h01 * sv[i + 1] + h11 * hs * dv[i + 1];
+            }
+            double s0 = Sof(0, out _), L = Sof(Delta, out _) - s0;
+            if (!(L > 0)) { why = "variable radius: zero edge length"; return false; }
+            double slope = (rP1 - rP0) / L;
+            Rt = t => rP0 + slope * (Sof(t, out _) - s0);
+            dRt = t => { Sof(t, out var ds); return slope * ds; };
+            if (!(Math.Min(rP0, rP1) > 0)) { why = "variable radius: non-positive radius"; return false; }
+        }
         Vector3d? Spine(double t) => MemoOn && spMemo.Count < MemoCap ? spMemo.GetOrAdd(t, SpineCore) : SpineCore(t);
         Vector3d? SpineCore(double t)
         {
             var P = Ed(t); if (double.IsNaN(P.X)) return null;
             var tg = Td(t);
             var nA = Geometry.Ssi.Implicit(shA, P).G * sA; var nB = Geometry.Ssi.Implicit(shB, P).G * sB; double c = Vector3d.Dot(nA, nB);
-            var x = P + (nA + nB) * (sigma * r / (1 + c));
+            double rr = Rt(t), oA = OffA(t), oB = OffB(t);
+            var x = P + (nA + nB) * (sigma * rr / (1 + c));
             for (int it = 0; it < 60; it++)
             {
                 var (f1, gA) = Geometry.Ssi.Implicit(shA, x); var (f2, gB) = Geometry.Ssi.Implicit(shB, x);
                 double f3 = Vector3d.Dot(x - P, tg);
-                var dx = Solve3(new[] { gA, gB, tg }, new[] { offA - f1, offB - f2, -f3 });
+                var dx = Solve3(new[] { gA, gB, tg }, new[] { oA - f1, oB - f2, -f3 });
                 if (dx == null) return null;
                 x += dx.Value;
                 if (dx.Value.Length < 1e-15 * Math.Max(1, x.Length)) break;
             }
-            double ea = Geometry.Ssi.Implicit(shA, x).F - offA, eb = Geometry.Ssi.Implicit(shB, x).F - offB;
-            if (Math.Abs(ea) > 1e-9 * Math.Max(1, r) || Math.Abs(eb) > 1e-9 * Math.Max(1, r) || Math.Abs(Vector3d.Dot(x - P, tg)) > 1e-9 * Math.Max(1, r)) return null;
+            double ea = Geometry.Ssi.Implicit(shA, x).F - oA, eb = Geometry.Ssi.Implicit(shB, x).F - oB;
+            if (Math.Abs(ea) > 1e-9 * Math.Max(1, rr) || Math.Abs(eb) > 1e-9 * Math.Max(1, rr) || Math.Abs(Vector3d.Dot(x - P, tg)) > 1e-9 * Math.Max(1, rr)) return null;
             return x;
         }
         Vector3d Foot(Geometry.Ssi.Shape sh, Vector3d x) { var (fv, g) = Geometry.Ssi.Implicit(sh, x); return x - g * fv; }
@@ -321,10 +410,20 @@ public static partial class DirectRound
         {
             if (ch) return SweepSection.Line(ChA(t), ChB(t));
             var x = S(t); var qa = Foot(shA, x); var qb = Foot(shB, x);
-            var e1 = (qa - x).Normalized(); var v2 = (qb - x).Normalized();
+            // характеристическая окружность огибающей шаров: в плоскости (y − c)·c' = −r r', центр c − (r r'/|c'|²) c',
+            // радиус √(r² − (r r')²/|c'|²); линии касания на ней лежат (d/dt dist(c, A) = r'). Постоянный радиус — большой круг.
+            var cc = x; double rad = Rt(t);
+            if (varLaw != null)
+            {
+                double hh = 1e-4 * Math.Max(1e-9, Delta);
+                var x1 = S(t + hh); var x0 = S(t - hh); var dc = (x1 - x0) / (2 * hh);
+                double k = rad * dRt(t) / dc.LengthSquared;
+                cc = x - dc * k; rad = Math.Sqrt(Math.Max(0, rad * rad - k * k * dc.LengthSquared));
+            }
+            var e1 = (qa - cc).Normalized(); var v2 = (qb - cc).Normalized();
             var e2 = v2 - e1 * Vector3d.Dot(e1, v2);
             double phi = Math.Atan2(e2.Length, Vector3d.Dot(e1, v2));
-            return SweepSection.Arc(x, e1, e2.Normalized(), r, phi);
+            return SweepSection.Arc(cc, e1, e2.Normalized(), rad, phi);
         }
         bool NoEvents(bool onA, Geometry.Ssi.Shape s, double ta, double tb)
         {
@@ -467,6 +566,7 @@ public static partial class DirectRound
         for (int i = 0; i <= N; i++)
         {
             double t = tLo + (tHi - tLo) * i / N;
+            if (!ch && !(Rt(t) > 1e-6)) { why = "variable radius: radius not positive along the blend (extension)"; return false; }
             var x = ch ? Ed(t) : Spine(t);
             if (x == null) { why = "open curved: ball centre not found (radius too large?)"; return false; }
             var P = Ed(t); Ps.Add(P);
@@ -476,7 +576,7 @@ public static partial class DirectRound
                 if (double.IsNaN(qa.X + qb.X) || Math.Abs((qa - P).Length - dA) > 1e-8 * Math.Max(1, dA) || Math.Abs((qb - P).Length - dB) > 1e-8 * Math.Max(1, dB) || (qa - qb).Length < 1e-6)
                 { why = "open chamfer: chamfer point not found"; return false; }
             }
-            else if (Math.Abs((qa - x.Value).Length - r) > 1e-8 * Math.Max(1, r) || Math.Abs((qb - x.Value).Length - r) > 1e-8 * Math.Max(1, r)) { why = "open curved: contact not at the ball radius"; return false; }
+            else if (Math.Abs((qa - x.Value).Length - Rt(t)) > 1e-8 * Math.Max(1, r) || Math.Abs((qb - x.Value).Length - Rt(t)) > 1e-8 * Math.Max(1, r)) { why = "open curved: contact not at the ball radius"; return false; }
             var g = Gen(t);
             if (!ch && !(g.Phi > 1e-3 && g.Phi < Math.PI - 1e-3)) { why = "open curved: blend arc degenerate"; return false; }
             if (t >= 0 && t <= Delta) { widthA = Math.Max(widthA, (qa - P).Length); widthB = Math.Max(widthB, (qb - P).Length); }
@@ -514,8 +614,8 @@ public static partial class DirectRound
         }
 
         // КРИВЫЕ: линии касания, края ленты на торцах
-        var cA = new ProcCurve3(QA, tA0, tA1, false, ch ? "chamfer contact" : "rolling-ball contact") { NoEventsOn = ch ? null : (s, a, b) => NoEvents(true, s, a, b) };
-        var cB = new ProcCurve3(QB, tB0, tB1, false, ch ? "chamfer contact" : "rolling-ball contact") { NoEventsOn = ch ? null : (s, a, b) => NoEvents(false, s, a, b) };
+        var cA = new ProcCurve3(QA, tA0, tA1, false, ch ? "chamfer contact" : "rolling-ball contact") { NoEventsOn = ch || varLaw != null ? null : (s, a, b) => NoEvents(true, s, a, b) };
+        var cB = new ProcCurve3(QB, tB0, tB1, false, ch ? "chamfer contact" : "rolling-ball contact") { NoEventsOn = ch || varLaw != null ? null : (s, a, b) => NoEvents(false, s, a, b) };
         var end0 = new ProcCurve3(v => EndPt(0, v), 0, 1, false, ch ? "chamfer end" : "rolling-ball end");
         var end1 = new ProcCurve3(v => EndPt(1, v), 0, 1, false, ch ? "chamfer end" : "rolling-ball end");
         Vector3d qa0 = QA(tA0), qa1 = QA(tA1), qb0 = QB(tB0), qb1 = QB(tB1);
@@ -535,19 +635,16 @@ public static partial class DirectRound
         var trimmed = new Dictionary<TEdge, (ICurve3 C, List<(Vector3d Old, Vector3d New)> Moves)>();
         foreach (var (x, moves) in cuts)
         {
-            var c = x.Curve; double lo = c.T0, hi = c.T1;
-            var c0 = c.PointAt(c.T0); var c1 = c.PointAt(c.T1);
+            ICurve3 cur = x.Curve;
             foreach (var (oldP, q) in moves)
             {
-                double tq = CurveParam.Closest(c, q);
-                if ((c.PointAt(tq) - q).Length > 1e-7) { why = "open curved: contact end is not on the end edge"; return false; }
-                if ((c0 - oldP).Length < (c1 - oldP).Length) lo = tq; else hi = tq;
+                var nc = Reshape(cur, oldP, q, out var rwhy);
+                if (nc == null) { why = "open curved: " + rwhy; return false; }
+                cur = nc;
             }
-            if (!(hi - lo > 1e-9 * Math.Max(1, Math.Abs(c.T1 - c.T0)))) { why = "open curved: blend wider than the end edge"; return false; }
-            var sub = Analytic.GeneralBoolean.SubCurve(c, lo, hi);
             foreach (var (oldP, q) in moves)
-                if ((sub.PointAt(sub.T0) - q).Length > 1e-7 && (sub.PointAt(sub.T1) - q).Length > 1e-7) { why = "open curved: trimmed end edge misses the contact point"; return false; }
-            trimmed[x] = (sub, moves);
+                if ((cur.PointAt(cur.T0) - q).Length > 1e-7 && (cur.PointAt(cur.T1) - q).Length > 1e-7) { why = "open curved: trimmed end edge misses the contact point"; return false; }
+            trimmed[x] = (cur, moves);
         }
         // вставка края ленты в торец: между звеньями A∩E и B∩E у прежней вершины
         foreach (var (k, endC, qa, qb) in new[] { (0, (ICurve3)end0, qa0, qb0), (1, end1, qa1, qb1) })
@@ -632,7 +729,14 @@ public static partial class DirectRound
         if (solid == null) return null;
         TopologyConventions.Normalize(solid);
         var w = new List<string>();
-        if (Analytic.PrismBuild.Finish(solid, w) > 0) { why = "faces not meshed: " + string.Join(" / ", w.Take(3)); return null; }
+        if (Analytic.PrismBuild.Finish(solid, w) > 0)
+        {
+            if (Debug != null)
+                foreach (var f in solid.Faces)
+                    foreach (var lp in f.Loops)
+                        Debug($"  face {f.Id} {f.Tag} {GeometryAudit.AuthoritativeSurface(f)?.GetType().Name}: " + string.Join(" | ", lp.CoEdges.Select(ce => $"{ce.Edge.Curve.GetType().Name}{(ce.Edge.Curve is ProcCurve3 pc ? ":" + pc.Kind : "")} {ce.Start.P:0.###}->{ce.End.P:0.###}")));
+            why = "faces not meshed: " + string.Join(" / ", w.Take(3)); return null;
+        }
         solid.Guarantee = GuaranteeLevel.ExactAnalytic;
         string? Checks()
         {
