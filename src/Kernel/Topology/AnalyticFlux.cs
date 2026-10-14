@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 
@@ -299,6 +299,7 @@ public static class AnalyticFlux
     }
 
     static readonly bool BreaksOff = Environment.GetEnvironmentVariable("P3D_FLUXBREAKS") == "0";
+    static readonly bool StencilOff = Environment.GetEnvironmentVariable("P3D_FLUXSTENCIL") == "0";
 
     private static double FaceFlux(TFace f, Param p, Func<Vector3d, Vector3d> F) =>
         FaceIntegral(f, p, (a, t) => Vector3d.Dot(F(p.Point(a, t)), p.Normal(a, t)));
@@ -324,7 +325,13 @@ public static class AnalyticFlux
                 else if (!BreaksOff && c is Geometry.NurbsNurbsCurve3 nnc) { cuts.Add(c.T0); foreach (var b in nnc.Breaks) cuts.Add(c.T0 + (c.T1 - c.T0) * b); cuts.Add(c.T1); }
                 else for (int k = 0; k <= pieces; k++) cuts.Add(c.T0 + (c.T1 - c.T0) * k / pieces);
                 if (!forward) cuts.Reverse();
-                eps = Math.Min(eps, 1e-3 * Enumerable.Range(0, cuts.Count - 1).Min(k => Math.Abs(cuts[k + 1] - cuts[k])));
+                double minPiece = Enumerable.Range(0, cuts.Count - 1).Min(k => Math.Abs(cuts[k + 1] - cuts[k]));
+                eps = Math.Min(eps, 1e-3 * minPiece);
+                // KRN-06 (06.14): производная координаты по параметру кривой — разностью 4-го порядка с шагом 0.004 куска (узлы
+                // Гаусса отстоят от концов на 0.02 куска — шаблон не выходит за кусок). Прежде — центральная разность с шагом
+                // 1e-7 длины кривой: шум проекции (1e-12) делился на шаг, у края грани NURBS процедурной кривой ошибка объёма
+                // была 2e-3 мм³ на теле 1.2e5. Мутация P3D_FLUXSTENCIL=0.
+                double h4 = StencilOff ? 0 : 0.004 * minPiece;
                 for (int k = 0; k + 1 < cuts.Count; k++)
                 {
                     double m = (cuts[k] + cuts[k + 1]) / 2, r = (cuts[k + 1] - cuts[k]) / 2;
@@ -332,11 +339,19 @@ public static class AnalyticFlux
                     {
                         double t = m + r * GX[i];
                         var (a, bq) = p.Coords(c.PointAt(t));
-                        var (aPlus, _) = p.Coords(c.PointAt(t + eps));
-                        var (aMinus, _) = p.Coords(c.PointAt(t - eps));
-                        double da = aPlus - aMinus;
-                        if (p.PeriodicA) { while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; }
-                        double dadt = da / (2 * eps);
+                        double Wrap(double d) { if (p.PeriodicA) { while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; } return d; }
+                        double dadt;
+                        if (h4 > 0)
+                        {
+                            double A(double tt) => Wrap(p.Coords(c.PointAt(tt)).A - a);
+                            dadt = (-A(t + 2 * h4) + 8 * A(t + h4) - 8 * A(t - h4) + A(t - 2 * h4)) / (12 * h4);
+                        }
+                        else
+                        {
+                            var (aPlus, _) = p.Coords(c.PointAt(t + eps));
+                            var (aMinus, _) = p.Coords(c.PointAt(t - eps));
+                            dadt = Wrap(aPlus - aMinus) / (2 * eps);
+                        }
                         sum += GW[i] * r * (-GI(p, g, a, bq)) * dadt;
                     }
                 }

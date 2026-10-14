@@ -58,8 +58,9 @@ public static partial class DirectRound
         public ICurve3 Curve = null!; public Vector3d A, B;      // начало и конец по обходу контура
         public TEdge? Orig;                                      // исходное ребро (если не изменено)
         public TEdge? Id;                                        // исходное ребро звена (сохраняется при укорачивании)
+        public ICurve3? TrimOf;                                  // кривая — часть кривой ребра Id (укорочение, не новая)
         public bool Closed => (A - B).LengthSquared < 1e-24 && Curve is ArcCurve3 { IsClosed: true } or ProcCurve3 { IsClosed: true };
-        public Seg Clone() => new() { Curve = Curve, A = A, B = B, Orig = Orig, Id = Id };
+        public Seg Clone() => new() { Curve = Curve, A = A, B = B, Orig = Orig, Id = Id, TrimOf = TrimOf };
     }
     sealed class FDesc
     {

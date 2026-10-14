@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Topology;
@@ -35,28 +35,92 @@ public static partial class DirectRound
             if ((e.V0.P - e.V1.P).Length < 1e-7) { why = "open curved: closed edge"; return null; }
             if (!sel.Contains(e)) sel.Add(e);
         }
+        // ЦЕПОЧКИ ЧЕРЕЗ ВЕРШИНЫ СТЕПЕНИ 2: булева делит кривую пересечения точками, где сходятся лишь те же две грани (точка
+        // затравки, край куска NURBS) — такое ребро одно по смыслу; звенья сливаются в одно (кривая — подряд по звеньям).
+        // Мутация P3D_DRDEG2=0 — отказ, как прежде.
+        var allE = body.Edges.ToList();
+        List<TEdge> At(Vector3d p) => allE.Where(x => (x.V0.P - p).Length < 1e-7 || (x.V1.P - p).Length < 1e-7).ToList();
+        HashSet<TFace> FacesOf(TEdge x) => x.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().ToHashSet();
+        var chains = new List<List<TEdge>>(); var used = new HashSet<TEdge>();
         foreach (var e in sel)
-            foreach (var p in new[] { e.V0.P, e.V1.P })
-                if (sel.Count(x => x != e && ((x.V0.P - p).Length < 1e-7 || (x.V1.P - p).Length < 1e-7)) > 0) { why = "open curved: selected edges share a vertex"; return null; }
+        {
+            if (used.Contains(e)) continue;
+            var ch = new List<TEdge> { e }; used.Add(e);
+            var fe = FacesOf(e);
+            foreach (bool front in new[] { false, true })
+                for (int guard = 0; guard < 64; guard++)
+                {
+                    var endE = front ? ch[0] : ch[^1];
+                    var other = ChainEnds(ch)[front ? 0 : 1];
+                    var at = At(other);
+                    if (!Deg2 || at.Count != 2) break;
+                    var nx = at.First(x => x != endE);
+                    if (used.Contains(nx) || !FacesOf(nx).SetEquals(fe)) break;
+                    if ((nx.V0.P - nx.V1.P).Length < 1e-7) break;
+                    if (front) ch.Insert(0, nx); else ch.Add(nx);
+                    used.Add(nx);
+                }
+            chains.Add(ch);
+        }
+        foreach (var c in chains)
+            foreach (var p in ChainEnds(c))
+                if (chains.Any(o => o != c && o.Any(x => (x.V0.P - p).Length < 1e-7 || (x.V1.P - p).Length < 1e-7))) { why = "open curved: selected edges share a vertex"; return null; }
         var faces = Describe(body, out var byFace, ref why);
         if (faces == null) return null;
         var blends = new List<FDesc>();
-        foreach (var e in sel)
-            if (!OpenBlend(body, e, byFace, blends, r, ref why, chDist)) return null;
+        foreach (var c in chains)
+            if (!OpenBlend(body, c, byFace, blends, r, ref why, chDist)) return null;
         return FinishDirect(faces, blends, chDist != null ? "chamfer.direct" : "round.direct", ref why);
     }
 
-    static bool OpenBlend(TSolid body, TEdge e, Dictionary<TFace, FDesc> byFace, List<FDesc> blends, double r, ref string? why, Func<TEdge, TFace, double>? chDist = null)
+    static readonly bool Deg2 = Environment.GetEnvironmentVariable("P3D_DRDEG2") != "0";
+    static readonly bool EndTab = Environment.GetEnvironmentVariable("P3D_DRENDTAB") != "0";
+    static readonly bool MemoOn = Environment.GetEnvironmentVariable("P3D_DRMEMO") != "0";
+    const int MemoCap = 1 << 18;
+
+    /// <summary>Концы цепочки рёбер (по порядку звеньев).</summary>
+    static Vector3d[] ChainEnds(List<TEdge> c)
     {
+        if (c.Count == 1) return new[] { c[0].V0.P, c[0].V1.P };
+        static bool Touch(TEdge x, Vector3d p) => (x.V0.P - p).Length < 1e-7 || (x.V1.P - p).Length < 1e-7;
+        var a = Touch(c[1], c[0].V0.P) ? c[0].V1.P : c[0].V0.P;
+        var b = Touch(c[^2], c[^1].V0.P) ? c[^1].V1.P : c[^1].V0.P;
+        return new[] { a, b };
+    }
+
+    /// <summary>Кривая цепочки: звенья подряд от начала P0; параметр t ∈ [0, n], кусок k — звено k (по его параметру, в сторону цепочки).</summary>
+    static ICurve3 ChainCurve(List<TEdge> c, Vector3d p0)
+    {
+        if (c.Count == 1) return c[0].Curve;
+        var pieces = new List<(ICurve3 C, bool Fwd)>(); var at = p0;
+        foreach (var x in c)
+        {
+            var cv = x.Curve; bool fwd = (cv.PointAt(cv.T0) - at).Length <= (cv.PointAt(cv.T1) - at).Length;
+            pieces.Add((cv, fwd)); at = fwd ? cv.PointAt(cv.T1) : cv.PointAt(cv.T0);
+        }
+        Vector3d F(double t)
+        {
+            int k = Math.Clamp((int)Math.Floor(t), 0, pieces.Count - 1); double f = Math.Clamp(t - k, 0, 1);
+            var (cv, fwd) = pieces[k]; return cv.PointAt(fwd ? cv.T0 + (cv.T1 - cv.T0) * f : cv.T1 - (cv.T1 - cv.T0) * f);
+        }
+        return new ProcCurve3(F, 0, pieces.Count, false, "edge chain");
+    }
+
+    static bool OpenBlend(TSolid body, List<TEdge> chain, Dictionary<TFace, FDesc> byFace, List<FDesc> blends, double r, ref string? why, Func<TEdge, TFace, double>? chDist = null)
+    {
+        var e = chain[0];
         var fs = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
         if (fs.Count != 2) { why = "open curved: edge is not between two faces"; return false; }
         var FA = byFace[fs[0]]; var FB = byFace[fs[1]];
-        var shA = Geometry.ExactEdges.ShapeOf(FA.Surf); var shB = Geometry.ExactEdges.ShapeOf(FB.Surf);
+        var shA = BlendShapeOf(FA.Surf); var shB = BlendShapeOf(FB.Surf);
         if (shA == null || shB == null) { why = "open curved: a face is not a plane, cylinder, cone, sphere or torus"; return false; }
         if (shA is Geometry.Ssi.Plane && shB is Geometry.Ssi.Plane) { why = "open curved: plane/plane edge"; return false; }
-        var E = e.Curve;
-        bool fwd = (E.PointAt(E.T0) - e.V0.P).Length <= (E.PointAt(E.T0) - e.V1.P).Length;
-        Vector3d P0 = fwd ? e.V0.P : e.V1.P, P1 = fwd ? e.V1.P : e.V0.P;    // начало и конец по параметру кривой
+        var chEnds = ChainEnds(chain);
+        var E = ChainCurve(chain, chEnds[0]);
+        bool fwd = (E.PointAt(E.T0) - chEnds[0]).Length <= (E.PointAt(E.T0) - chEnds[1]).Length;
+        Vector3d P0 = fwd ? chEnds[0] : chEnds[1], P1 = fwd ? chEnds[1] : chEnds[0];    // начало и конец по параметру кривой
+        var chainSet = chain.ToHashSet();
+        double OffChain(Vector3d q) => chain.Min(x => (x.Curve.PointAt(CurveParam.Closest(x.Curve, q)) - q).Length);
 
         // ОКОНЧАНИЯ: в каждой вершине — ровно три ребра (e, A∩E, B∩E), торец E — квадрика
         var allEdges = body.Edges.ToList();
@@ -64,7 +128,7 @@ public static partial class DirectRound
         for (int k = 0; k < 2; k++)
         {
             var V = k == 0 ? P0 : P1;
-            var at = allEdges.Where(x => x != e && ((x.V0.P - V).Length < 1e-7 || (x.V1.P - V).Length < 1e-7)).ToList();
+            var at = allEdges.Where(x => !chainSet.Contains(x) && ((x.V0.P - V).Length < 1e-7 || (x.V1.P - V).Length < 1e-7)).ToList();
             if (at.Count != 2) { why = $"open curved: end vertex of degree {at.Count + 1} (three faces expected)"; return false; }
             TFace? Other(TEdge x, TFace f) { var xf = x.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList(); return xf.Count == 2 && xf.Contains(f) ? xf.First(y => y != f) : null; }
             var eA = at.FirstOrDefault(x => Other(x, fs[0]) is TFace o && o != fs[1]);
@@ -73,7 +137,7 @@ public static partial class DirectRound
             var fe = Other(eA, fs[0])!;
             if (Other(eB, fs[1]) != fe) { why = "open curved: the two end edges are on different faces"; return false; }
             if ((eA.V0.P - eA.V1.P).Length < 1e-7 || (eB.V0.P - eB.V1.P).Length < 1e-7) { why = "open curved: closed end edge"; return false; }
-            var FE = byFace[fe]; var shE = Geometry.ExactEdges.ShapeOf(FE.Surf);
+            var FE = byFace[fe]; var shE = BlendShapeOf(FE.Surf);
             if (shE == null) { why = "open curved: end face is not a quadric"; return false; }
             double sE = Vector3d.Dot(NormalOf(FE, V), Geometry.Ssi.Implicit(shE, V).G) > 0 ? 1 : -1;
             ends[k] = (FE, shE, eA, eB, V, sE);
@@ -131,6 +195,16 @@ public static partial class DirectRound
             }
             double span = Math.Abs(ang[m] - ang[0]);
             if (!mono || span < 1e-6 || span > 2 * Math.PI - 1e-3) continue;
+            // обусловленность: касательная ребра пересекает полуплоскость угла (ребро вдоль оси — почти в ней: Ньютон плох)
+            {
+                double worstCross = 1;
+                for (int i = 0; i < m; i += 8)
+                {
+                    var tg = (smp[i + 1] - smp[i]).Normalized(); var d = smp[i] - O; var rad = (d - W * Vector3d.Dot(d, W)).Normalized();
+                    worstCross = Math.Min(worstCross, Math.Abs(Vector3d.Dot(tg, Vector3d.Cross(W, rad))));
+                }
+                if (worstCross < 0.3) { Debug?.Invoke($"open: axis {W:0.###} ill-conditioned (tangent across the angle half-plane {worstCross:G3})"); continue; }
+            }
             if (Rad(smp[0]) < 1e-6 || Rad(smp[m]) < 1e-6) continue;
             double ph0 = ang[0]; double dir = sgn;
             var tan0 = (smp[1] - smp[0]).Normalized(); var tan1 = (smp[m] - smp[m - 1]).Normalized();
@@ -167,17 +241,58 @@ public static partial class DirectRound
             for (int i = 0; i < 64 && ok; i++)
             {
                 var q = At(span * (i + 0.37) / 64);
-                if (double.IsNaN(q.X) || (E.PointAt(CurveParam.Closest(E, q)) - q).Length > 1e-6) ok = false;
+                if (double.IsNaN(q.X) || OffChain(q) > 1e-6) ok = false;
             }
             if (!ok) continue;
             edgeAt = At; Delta = span; rad0 = r0; rad1 = r1;
             break;
         }
-        if (edgeAt == null) { why = "open curved: the edge does not turn monotonically around an axis of its faces"; return false; }
-        Vector3d Ed(double t) => edgeAt(t);
+        if (edgeAt == null && GenericParam)
+        {
+            // ОБЩИЙ ПАРАМЕТР (у граней нет подходящей оси — NURBS, ребро без обхода оси): t — миллиметры вдоль гладкой опорной
+            // кривой (многочлен Чебышёва по доле длины ребра); точка ребра — Ньютон на A ∩ B в плоскости поперёк опорной кривой.
+            // Продление за концы — тот же многочлен. Мутация P3D_DRGENPARAM=0 — отказ, как прежде.
+            var rcFit = RefCurve.Fit(E, 1e-3 * Math.Clamp(r, 0.1, 1));   // опорная кривая задаёт лишь плоскости сечений: точность — доли радиуса
+            if (rcFit == null) Debug?.Invoke("open: reference curve not fitted");
+            if (rcFit is { } rc)
+            {
+                Vector3d AtG(double t)
+                {
+                    var c = rc.At(t); var d = rc.D(t).Normalized(); var x = c;
+                    for (int it = 0; it < 40; it++)
+                    {
+                        var (f1, g1) = Geometry.Ssi.Implicit(shA, x); var (f2, g2) = Geometry.Ssi.Implicit(shB, x);
+                        var dx = Solve3(new[] { g1, g2, d }, new[] { -f1, -f2, -Vector3d.Dot(x - c, d) });
+                        if (dx == null || !double.IsFinite(dx.Value.X)) return new Vector3d(double.NaN);
+                        x += dx.Value;
+                        if (dx.Value.Length < 1e-15 * Math.Max(1, x.Length)) break;
+                    }
+                    var (e1, _) = Geometry.Ssi.Implicit(shA, x); var (e2, _) = Geometry.Ssi.Implicit(shB, x);
+                    if (Math.Abs(e1) > 1e-10 || Math.Abs(e2) > 1e-10 || (x - c).Length > 0.25 * Math.Max(r, 1e-3)) return new Vector3d(double.NaN);
+                    return x;
+                }
+                bool ok = (AtG(0) - P0).Length < 1e-5 * Math.Max(1, rc.Length) && (AtG(rc.Length) - P1).Length < 1e-5 * Math.Max(1, rc.Length);
+                for (int i = 0; i < 64 && ok; i++)
+                {
+                    var q = AtG(rc.Length * (i + 0.37) / 64);
+                    if (double.IsNaN(q.X) || OffChain(q) > 1e-6) ok = false;
+                }
+                if (ok) { edgeAt = AtG; Delta = rc.Length; rad0 = rad1 = 1; }
+                else Debug?.Invoke($"open: generic parameter rejected: ends {(AtG(0) - P0).Length:E2} {(AtG(rc.Length) - P1).Length:E2}");
+            }
+        }
+        if (edgeAt == null) { why = "open curved: no smooth parameter for the edge (no axis, reference curve not fitted)"; return false; }
+        // ПАМЯТЬ ВЫЧИСЛЕНИЙ: интегралы объёма и площади, разметка и p-кривые многократно спрашивают те же параметры (узлы
+        // Гаусса — при каждом пересчёте объёма), а каждая точка — Ньютон на A ∩ B и хребет (у грани NURBS — основание
+        // проекцией). Мутация P3D_DRMEMO=0.
+        var edMemo = new System.Collections.Concurrent.ConcurrentDictionary<double, Vector3d>();
+        var spMemo = new System.Collections.Concurrent.ConcurrentDictionary<double, Vector3d?>();
+        var edF = edgeAt;
+        Vector3d Ed(double t) => MemoOn && edMemo.Count < MemoCap ? edMemo.GetOrAdd(t, edF) : edF(t);
         Vector3d Td(double t) { double dl = 1e-5; return (edgeAt(t + dl) - edgeAt(t - dl)).Normalized(); }
 
-        Vector3d? Spine(double t)
+        Vector3d? Spine(double t) => MemoOn && spMemo.Count < MemoCap ? spMemo.GetOrAdd(t, SpineCore) : SpineCore(t);
+        Vector3d? SpineCore(double t)
         {
             var P = Ed(t); if (double.IsNaN(P.X)) return null;
             var tg = Td(t);
@@ -240,7 +355,10 @@ public static partial class DirectRound
         }
 
         // ПРОДЛЕНИЕ И ОБРЕЗКА ТОРЦАМИ. f_k > 0 — снаружи торца k. За концом k сечение целиком снаружи, внутри — целиком внутри.
-        double Fend(int k, Vector3d x) => ends[k].SE * Geometry.Ssi.Implicit(ends[k].ShE, x).F;
+        // знак «за торцом»: обычно снаружи тела (ребро уходит сквозь торец); у упора в стенку (вогнутый конец — материал
+        // за торцом) — внутри. Обрезка та же, функция ориентируется так, чтобы за концом было > 0.
+        var endSign = new double[] { 1, 1 };
+        double Fend(int k, Vector3d x) => endSign[k] * ends[k].SE * Geometry.Ssi.Implicit(ends[k].ShE, x).F;
         bool SectionSide(int k, double t, int want)
         {
             if (!ch && Spine(t) == null) return false;
@@ -251,8 +369,13 @@ public static partial class DirectRound
         var outT = new double[2]; var inT = new double[2];
         for (int k = 0; k < 2; k++)
         {
-            double radk = k == 0 ? rad0 : rad1, step = 2 * r / radk, dk = k == 0 ? -1 : 1, tEnd = k == 0 ? 0 : Delta;
-            if (!(Fend(k, Ed(tEnd + dk * 1e-4 * step)) > 0)) { why = "open curved: the edge does not leave the body through the end face"; return false; }
+            double dk = k == 0 ? -1 : 1, tEnd = k == 0 ? 0 : Delta;
+            double speed = (Ed(tEnd - dk * 1e-4 * Delta) - Ed(tEnd)).Length / (1e-4 * Delta);
+            if (!(speed > 0)) { why = "open curved: edge parameter degenerate at an end"; return false; }
+            double step = Math.Min(2 * r / speed, 0.45 * Delta);
+            double fBeyond = Fend(k, Ed(tEnd + dk * 1e-4 * step)), fBefore = Fend(k, Ed(tEnd - dk * 1e-4 * step));
+            if (!(fBeyond * fBefore < 0)) { why = "open curved: the edge does not cross the end face"; return false; }
+            if (fBeyond < 0) endSign[k] = -1;
             double h = step; bool found = false;
             for (int it = 0; it < 8 && !found; it++, h *= 2) if (SectionSide(k, tEnd + dk * h, 1)) { outT[k] = tEnd + dk * h; found = true; }
             if (!found) { why = "open curved: the blend does not leave the end face (end face too oblique?)"; return false; }
@@ -262,9 +385,10 @@ public static partial class DirectRound
         }
         if (!(inT[0] < inT[1])) { why = "open curved: the edge is too short for the radius"; return false; }
         // корень f_k(сечение(t)(v)) по t в скобке [inT, outT] (Иллинойс), одна смена знака
-        double Root(int k, Func<double, double> g)
+        double Root(int k, Func<double, double> g) => RootIn(g, inT[k], outT[k]);
+        double RootIn(Func<double, double> g, double a, double b)
         {
-            double a = inT[k], b = outT[k], fa = g(a), fb = g(b);
+            double fa = g(a), fb = g(b);
             if (!(fa < 0 && fb > 0)) return double.NaN;
             int side = 0;
             for (int it = 0; it < 200; it++)
@@ -279,7 +403,30 @@ public static partial class DirectRound
             return (a + b) / 2;
         }
         double TStar(int k, double v) => Root(k, t => Fend(k, Gen(t).Point(v)));
-        Vector3d EndPt(int k, double v) { double t = TStar(k, v); return double.IsNaN(t) ? new Vector3d(double.NaN) : Gen(t).Point(v); }
+        // край ленты: корень по таблице (65 проб v) как затравка и узкая скобка — несколько вычислений сечения вместо полусотни
+        // (каждая точка края — в разметке, в объёме, в p-кривой). Мутация P3D_DRENDTAB=0 — полный поиск в каждой точке.
+        double[][]? endTab = null;
+        var endMemo = new[] { new System.Collections.Concurrent.ConcurrentDictionary<double, Vector3d>(), new System.Collections.Concurrent.ConcurrentDictionary<double, Vector3d>() };
+        Vector3d EndPt(int k, double v) => MemoOn && endTab != null && endMemo[k].Count < MemoCap ? endMemo[k].GetOrAdd(v, vv => EndPtCore(k, vv)) : EndPtCore(k, v);
+        double[] tEndA = { double.NaN, double.NaN }, tEndB = { double.NaN, double.NaN };
+        Vector3d EndPtCore(int k, double v)
+        {
+            double t;
+            // концы края — те же корни, что у линий касания (точка в точку)
+            if (v <= 0 && !double.IsNaN(tEndA[k])) return QA(tEndA[k]);
+            if (v >= 1 && !double.IsNaN(tEndB[k])) return QB(tEndB[k]);
+            if (endTab != null && EndTab)
+            {
+                var tab = endTab[k]; int nt = tab.Length - 1; double x = Math.Clamp(v, 0, 1) * nt; int i = Math.Min((int)x, nt - 1);
+                double t0 = tab[i] + (tab[i + 1] - tab[i]) * (x - i);
+                double w = 2 * Math.Abs(tab[i + 1] - tab[i]) + 1e-9 * Math.Max(1, Delta);
+                Func<double, double> g = tt => Fend(k, Gen(tt).Point(v));
+                t = RootIn(g, t0 - w, t0 + w);
+                if (double.IsNaN(t)) t = TStar(k, v);
+            }
+            else t = TStar(k, v);
+            return double.IsNaN(t) ? new Vector3d(double.NaN) : Gen(t).Point(v);
+        }
         // одна смена знака в скобке у каждой пробы v
         for (int k = 0; k < 2; k++)
             foreach (double v in new[] { 0, 0.2, 0.4, 0.6, 0.8, 1.0 })
@@ -289,6 +436,14 @@ public static partial class DirectRound
                 if (changes != 1) { why = $"open curved: blend section crosses end face {changes} times"; return false; }
             }
         double tA0 = TStar(0, 0), tB0 = TStar(0, 1), tA1 = TStar(1, 0), tB1 = TStar(1, 1);
+        tEndA[0] = tA0; tEndA[1] = tA1; tEndB[0] = tB0; tEndB[1] = tB1;
+        endTab = new double[2][];
+        for (int k = 0; k < 2; k++)
+        {
+            endTab[k] = new double[65];
+            for (int i = 0; i <= 64; i++) endTab[k][i] = TStar(k, i / 64.0);
+            if (endTab[k].Any(double.IsNaN)) { why = "open curved: end curve not found"; return false; }
+        }
         if (double.IsNaN(tA0 + tB0 + tA1 + tB1) || !(tA0 < tA1) || !(tB0 < tB1)) { why = "open curved: contact lines do not span between the end faces"; return false; }
 
         // промежуток поверхности — по краям ленты на торцах (пробы v) с запасом 2 % ребра
@@ -331,7 +486,7 @@ public static partial class DirectRound
             us.Add(t); secs.Add(g);
         }
         // зазор: прочие звенья граней A и B дальше полосы
-        var keepA = new HashSet<TEdge> { e, ends[0].EA, ends[1].EA }; var keepB = new HashSet<TEdge> { e, ends[0].EB, ends[1].EB };
+        var keepA = new HashSet<TEdge>(chain) { ends[0].EA, ends[1].EA }; var keepB = new HashSet<TEdge>(chain) { ends[0].EB, ends[1].EB };
         foreach (var (F, keep, w) in new[] { (FA, keepA, widthA), (FB, keepB, widthB) })
             foreach (var sg in F.Loops.SelectMany(l => l))
             {
@@ -369,18 +524,30 @@ public static partial class DirectRound
         for (int i = 0; i <= 16; i++)
             foreach (var ec in new[] { end0, end1 }) if (double.IsNaN(ec.PointAt(i / 16.0).X)) { why = "open curved: end curve not found"; return false; }
 
-        // УКОРОЧЕНИЕ РЁБЕР A∩E и B∩E до точек касания (одна кривая на обе грани ребра)
-        var trimmed = new Dictionary<TEdge, (ICurve3 C, Vector3d Old, Vector3d New)>();
+        // УКОРОЧЕНИЕ РЁБЕР A∩E и B∩E до точек касания (одна кривая на обе грани ребра). Ребро может укорачиваться с обоих концов
+        // (торец — общий у обоих концов, ребро B∩E идёт от одного конца до другого)
+        var cuts = new Dictionary<TEdge, List<(Vector3d Old, Vector3d New)>>();
         foreach (var (x, oldP, q) in new[] { (ends[0].EA, P0, qa0), (ends[0].EB, P0, qb0), (ends[1].EA, P1, qa1), (ends[1].EB, P1, qb1) })
         {
-            var c = x.Curve; double tq = CurveParam.Closest(c, q);
-            if ((c.PointAt(tq) - q).Length > 1e-7) { why = "open curved: contact end is not on the end edge"; return false; }
-            bool startIsOld = (c.PointAt(c.T0) - oldP).Length < (c.PointAt(c.T1) - oldP).Length;
-            double lo = startIsOld ? tq : c.T0, hi = startIsOld ? c.T1 : tq;
-            if (!(Math.Abs(hi - lo) > 1e-9 * Math.Max(1, Math.Abs(c.T1 - c.T0))) || (startIsOld ? tq <= c.T0 : tq >= c.T1)) { why = "open curved: blend wider than the end edge"; return false; }
+            if (!cuts.TryGetValue(x, out var l)) cuts[x] = l = new();
+            l.Add((oldP, q));
+        }
+        var trimmed = new Dictionary<TEdge, (ICurve3 C, List<(Vector3d Old, Vector3d New)> Moves)>();
+        foreach (var (x, moves) in cuts)
+        {
+            var c = x.Curve; double lo = c.T0, hi = c.T1;
+            var c0 = c.PointAt(c.T0); var c1 = c.PointAt(c.T1);
+            foreach (var (oldP, q) in moves)
+            {
+                double tq = CurveParam.Closest(c, q);
+                if ((c.PointAt(tq) - q).Length > 1e-7) { why = "open curved: contact end is not on the end edge"; return false; }
+                if ((c0 - oldP).Length < (c1 - oldP).Length) lo = tq; else hi = tq;
+            }
+            if (!(hi - lo > 1e-9 * Math.Max(1, Math.Abs(c.T1 - c.T0)))) { why = "open curved: blend wider than the end edge"; return false; }
             var sub = Analytic.GeneralBoolean.SubCurve(c, lo, hi);
-            if ((sub.PointAt(startIsOld ? sub.T0 : sub.T1) - q).Length > 1e-7) { why = "open curved: trimmed end edge misses the contact point"; return false; }
-            trimmed[x] = (sub, oldP, q);
+            foreach (var (oldP, q) in moves)
+                if ((sub.PointAt(sub.T0) - q).Length > 1e-7 && (sub.PointAt(sub.T1) - q).Length > 1e-7) { why = "open curved: trimmed end edge misses the contact point"; return false; }
+            trimmed[x] = (sub, moves);
         }
         // вставка края ленты в торец: между звеньями A∩E и B∩E у прежней вершины
         foreach (var (k, endC, qa, qb) in new[] { (0, (ICurve3)end0, qa0, qb0), (1, end1, qa1, qb1) })
@@ -408,19 +575,32 @@ public static partial class DirectRound
         foreach (var F in new[] { FA, FB, ends[0].FE, ends[1].FE }.Distinct())
             foreach (var loop in F.Loops)
                 foreach (var sg in loop)
-                    if (sg.Id != null && trimmed.TryGetValue(sg.Id, out var tr) && (sg.Orig != null || (sg.A - tr.Old).Length < 1e-7 || (sg.B - tr.Old).Length < 1e-7))
+                    if (sg.Id != null && trimmed.TryGetValue(sg.Id, out var tr))
                     {
-                        if ((sg.A - tr.Old).Length < 1e-7) sg.A = tr.New; else if ((sg.B - tr.Old).Length < 1e-7) sg.B = tr.New; else continue;
-                        sg.Curve = tr.C; sg.Orig = null;
+                        bool moved = false;
+                        foreach (var (oldP, q) in tr.Moves)
+                        {
+                            if ((sg.A - oldP).Length < 1e-7) { sg.A = q; moved = true; }
+                            else if ((sg.B - oldP).Length < 1e-7) { sg.B = q; moved = true; }
+                        }
+                        if (moved) { sg.Curve = tr.C; sg.TrimOf = tr.C; sg.Orig = null; }
                     }
         // само ребро — линии касания
         foreach (var (F, cv, a0, a1) in new[] { (FA, (ICurve3)cA, qa0, qa1), (FB, cB, qb0, qb1) })
         {
-            var sg = F.Loops.SelectMany(l => l).Where(x => x.Id == e).ToList();
-            if (sg.Count != 1) { why = "open curved: edge segment not found"; return false; }
-            bool same = (sg[0].A - P0).Length < 1e-7;
-            sg[0].Curve = cv; sg[0].Orig = null;
-            if (same) { sg[0].A = a0; sg[0].B = a1; } else { sg[0].A = a1; sg[0].B = a0; }
+            // звенья цепочки в контуре грани — подряд; заменяются одним звеном (линией касания)
+            var loop = F.Loops.FirstOrDefault(l => l.Any(x => x.Id != null && chainSet.Contains(x.Id)));
+            var idx = loop == null ? new List<int>() : Enumerable.Range(0, loop.Count).Where(i => loop[i].Id != null && chainSet.Contains(loop[i].Id!)).ToList();
+            if (loop == null || idx.Count != chain.Count) { why = "open curved: edge segment not found"; return false; }
+            int n = loop.Count, first = idx.First(i => !idx.Contains((i - 1 + n) % n));
+            for (int k = 0; k < idx.Count; k++) if (!idx.Contains((first + k) % n)) { why = "open curved: chain is not contiguous in the face loop"; return false; }
+            var la = loop[first].A; var lb = loop[(first + idx.Count - 1) % n].B;
+            bool same = (la - P0).Length < 1e-7 && (lb - P1).Length < 1e-7, rev = (la - P1).Length < 1e-7 && (lb - P0).Length < 1e-7;
+            if (!same && !rev) { why = "open curved: chain ends do not match the face loop"; return false; }
+            var ns = new Seg { Curve = cv, Orig = null, Id = e, A = same ? a0 : a1, B = same ? a1 : a0 };
+            var keep = new List<Seg>();
+            for (int k = 0; k < n; k++) { int i = (first + k) % n; if (k == 0) keep.Add(ns); else if (k >= idx.Count) keep.Add(loop[i]); }
+            loop.Clear(); loop.AddRange(keep);
             F.Touched = true;
         }
         double tm = Delta / 2; var Em = Ed(tm); var qam = QA(tm); var qbm = QB(tm);
@@ -458,6 +638,12 @@ public static partial class DirectRound
         {
             if (BooleanOp.ForceAcceptFailure) return "forced acceptance failure (test)";
             var v = SolidValidator.Validate(solid);
+            if (!v.IsValid && Debug != null)
+                foreach (var iss in v.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(20))
+                {
+                    var ed = solid.Edges.FirstOrDefault(x => iss.ToString().Contains($"(элемент {x.Id})"));
+                    Debug($"  invalid: {iss} | edge tol {ed?.Tolerance:E2} curve {ed?.Curve.GetType().Name} {ed?.V0.P:0.###}->{ed?.V1.P:0.###}");
+                }
             if (!v.IsValid) return "result invalid: " + v.Summary() + " " + string.Join(" / ", v.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(2));
             if (AnalyticVolume.Of(solid) == null) return "no analytic volume";
             if (BooleanOp.VolumeVsFacets(solid) is { } vf && !vf.Agree) return $"volume {vf.Va:G8} vs facets {vf.Vf:G8}";
@@ -506,5 +692,78 @@ public static partial class DirectRound
         var blends = new List<FDesc>();
         if (!CylCylBlends(body, es, byFace, blends, d, ref why, dist)) return null;
         return FinishDirect(faces, blends, "chamfer.direct", ref why);
+    }
+}
+
+public static partial class DirectRound
+{
+    static readonly bool GenericParam = Environment.GetEnvironmentVariable("P3D_DRGENPARAM") != "0";
+    /// <summary>Мутация P3D_DRNURBS=0: грани NURBS в построителе катящегося шара — отказ (как прежде).</summary>
+    static readonly bool NurbsBlends = Environment.GetEnvironmentVariable("P3D_DRNURBS") != "0";
+
+    /// <summary>Форма грани для катящегося шара: квадрика — точная неявная; NURBS — по основанию перпендикуляра (Ssi.ParamSurf).</summary>
+    static Geometry.Ssi.Shape? BlendShapeOf(ISurface3? s) =>
+        Geometry.ExactEdges.ShapeOf(s) ?? (NurbsBlends && s is NurbsSurface ? new Geometry.Ssi.ParamSurf(s) : null);
+
+    /// <summary>
+    /// Гладкая опорная кривая ребра для параметра хребта: многочлен Чебышёва по доле длины (интерполяция в узлах Чебышёва;
+    /// степень растёт до невязки ≤ tol на 401 пробе). Параметр — миллиметры, t ∈ [0, Length]; вне — продолжение многочлена.
+    /// </summary>
+    sealed class RefCurve
+    {
+        double[,] _c = null!; int _n; public double Length;
+        public static RefCurve? Fit(ICurve3 E, double tol)
+        {
+            const int M = 400;
+            var pts = new Vector3d[M + 1]; var len = new double[M + 1];
+            for (int i = 0; i <= M; i++) { pts[i] = E.PointAt(E.T0 + (E.T1 - E.T0) * i / M); if (i > 0) len[i] = len[i - 1] + (pts[i] - pts[i - 1]).Length; }
+            double L = len[M]; if (!(L > 1e-9)) return null;
+            // точка ребра при доле длины σ ∈ [0, 1] — вставкой по таблице и уточнением по параметру кривой
+            Vector3d AtFrac(double sg)
+            {
+                double target = sg * L; int lo = 0, hi = M;
+                while (hi - lo > 1) { int md = (lo + hi) / 2; if (len[md] <= target) lo = md; else hi = md; }
+                double f = len[hi] > len[lo] ? (target - len[lo]) / (len[hi] - len[lo]) : 0;
+                return E.PointAt(E.T0 + (E.T1 - E.T0) * (lo + f) / M);
+            }
+            foreach (int n in new[] { 8, 12, 16, 24, 32, 48 })
+            {
+                // узлы Чебышёва x_k = cos(π(k + ½)/(n+1)), σ = (1 − x)/2
+                int m = n + 1; var vals = new Vector3d[m];
+                for (int k = 0; k < m; k++) vals[k] = AtFrac((1 - Math.Cos(Math.PI * (k + 0.5) / m)) / 2);
+                var c = new double[m, 3];
+                for (int j = 0; j < m; j++)
+                {
+                    Vector3d acc = Vector3d.Zero;
+                    for (int k = 0; k < m; k++) acc += vals[k] * Math.Cos(Math.PI * j * (k + 0.5) / m);
+                    acc *= 2.0 / m; c[j, 0] = acc.X; c[j, 1] = acc.Y; c[j, 2] = acc.Z;
+                }
+                var rc = new RefCurve { _c = c, _n = n, Length = L };
+                double worst = 0;
+                for (int i = 0; i <= M; i++) worst = Math.Max(worst, (rc.At(len[i]) - pts[i]).Length);
+                if (worst <= tol) return rc;
+                Debug?.Invoke($"open: reference fit degree {n} worst {worst:E2} (tol {tol:E1}) length {L:G6}");
+            }
+            return null;
+        }
+        // x = 1 − 2σ (узел k=0 — у σ≈0); Кленшоу
+        (Vector3d P, Vector3d D) Eval(double t)
+        {
+            double x = 1 - 2 * t / Length;
+            Vector3d b1 = Vector3d.Zero, b2 = Vector3d.Zero, d1 = Vector3d.Zero, d2 = Vector3d.Zero;
+            for (int j = _n; j >= 1; j--)
+            {
+                var cj = new Vector3d(_c[j, 0], _c[j, 1], _c[j, 2]);
+                var b0 = cj + 2 * x * b1 - b2;
+                var dd0 = 2 * b1 + 2 * x * d1 - d2;
+                b2 = b1; b1 = b0; d2 = d1; d1 = dd0;
+            }
+            var c0 = new Vector3d(_c[0, 0], _c[0, 1], _c[0, 2]);
+            var P = c0 / 2 + x * b1 - b2;
+            var Dx = b1 + x * d1 - d2;              // dP/dx
+            return (P, Dx * (-2 / Length));
+        }
+        public Vector3d At(double t) => Eval(t).P;
+        public Vector3d D(double t) => Eval(t).D;
     }
 }

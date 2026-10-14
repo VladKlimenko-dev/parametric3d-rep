@@ -50,6 +50,8 @@ public static class AnalyticVolume
     static bool PolyhedralAuthoritative(TSolid s) => !PolyVolumeOld && s.Exact != null && s.ExactAuthoritative;
 
     [ThreadStatic] static double _quadErr;
+    /// <summary>Разбор: грань, тонкий и грубый проход квадратуры.</summary>
+    [ThreadStatic] public static Action<TFace, double, double>? QuadDebug;
 
     /// <summary>
     /// g.04: объём и ОЦЕНКА ОШИБКИ интегрирования (квадратура по кривым без замкнутой формулы; у отрезков, дуг, эллипсов и
@@ -555,15 +557,24 @@ public static class AnalyticVolume
         Func<double, double> Make(ICurve3 c)
         {
             bool inc = ss.ProjectToUV(c.PointAt(c.T1)).Y > ss.ProjectToUV(c.PointAt(c.T0)).Y;
+            // точка ребра с данным v — Иллинойс по параметру ребра (v монотонно), до 1e-14 доли промежутка
             return v =>
             {
                 double lo = c.T0, hi = c.T1;
-                for (int it = 0; it < 64; it++)
+                double G(double s) { double vm = ss.ProjectToUV(c.PointAt(s)).Y - v; return inc ? vm : -vm; }
+                double flo = G(lo), fhi = G(hi);
+                if (flo >= 0) return ss.ProjectToUV(c.PointAt(lo)).X;
+                if (fhi <= 0) return ss.ProjectToUV(c.PointAt(hi)).X;
+                int side = 0; double md = (lo + hi) / 2;
+                for (int it = 0; it < 100; it++)
                 {
-                    double md = (lo + hi) / 2, vm = ss.ProjectToUV(c.PointAt(md)).Y;
-                    if ((vm < v) == inc) lo = md; else hi = md;
+                    md = (lo * fhi - hi * flo) / (fhi - flo); double fm = G(md);
+                    if (fm == 0 || hi - lo < 1e-14 * Math.Max(1, Math.Abs(c.T1 - c.T0))) break;
+                    if (fm < 0) { lo = md; flo = fm; if (side == -1) fhi /= 2; side = -1; }
+                    else { hi = md; fhi = fm; if (side == 1) flo /= 2; side = 1; }
+                    if (Math.Abs(fm) < 1e-15) break;
                 }
-                return ss.ProjectToUV(c.PointAt((lo + hi) / 2)).X;
+                return ss.ProjectToUV(c.PointAt(md)).X;
             };
         }
         return (Make(sides[0].C), Make(sides[1].C));
@@ -636,6 +647,7 @@ public static class AnalyticVolume
             // g.04: ОЦЕНКА ОШИБКИ КВАДРАТУРЫ — |I_h − I_2h| / 3 (главный член ошибки I_h; экстраполированное значение точнее —
             // оценка консервативна). Без грубого прохода ошибка неизвестна: 1e-6 от величины.
             _quadErr += coarse == null ? 1e-6 * Math.Abs(fine.Value) : Math.Abs(fine.Value - coarse.Value) / 3;
+            QuadDebug?.Invoke(f, fine.Value, coarse ?? double.NaN);
             return coarse == null ? fine : fine + (fine - coarse) / 3;
         }
         return FaceIntegralCore(f);

@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -29,6 +29,91 @@ public static class Ssi
     public sealed record Cone(Vector3d Apex, Vector3d Axis, double HalfAngle) : Shape;
     /// <summary>Тор: центр, ось, радиус окружности центров R и радиус трубки r.</summary>
     public sealed record Torus(Vector3d C, Vector3d Axis, double R, double r) : Shape;
+    /// <summary>
+    /// KRN-06 (06.14): поверхность общего вида (NURBS) как «неявная форма» для построителя сопряжений: знаковое расстояние —
+    /// по основанию перпендикуляра (проекция Ньютоном с подсказкой своего потока, продолжение за край области — многочлены
+    /// крайних промежутков), градиент — нормаль в основании. Верно в трубке, где проекция единственна (радиус меньше радиуса
+    /// кривизны). Оценок Липшица нет (NormalLip — null): строгие сертификаты событий на таких формах не выдаются.
+    /// </summary>
+    public sealed record ParamSurf(Surfaces.ISurface3 S) : Shape;
+
+    [ThreadStatic] static Dictionary<Surfaces.ISurface3, Vector2d>? _footHints;
+    [ThreadStatic] public static Action<string>? FootDebug;
+    /// <summary>Разбор: вызовы основания на поверхности общего вида и из них — с общей проекцией (без годной подсказки).</summary>
+    public static long ParamFootCalls, ParamFootGlobal;
+
+    static void ParamDerivs(Surfaces.ISurface3 s, Vector2d uv, out Vector3d S, out Vector3d Su, out Vector3d Sv)
+    {
+        if (s is Surfaces.NurbsSurface ns) { ns.DerivsExtended(uv, out S, out Su, out Sv); return; }
+        const double h = 1e-7;
+        S = s.PointAt(uv);
+        Su = (s.PointAt(new Vector2d(uv.X + h, uv.Y)) - s.PointAt(new Vector2d(uv.X - h, uv.Y))) / (2 * h);
+        Sv = (s.PointAt(new Vector2d(uv.X, uv.Y + h)) - s.PointAt(new Vector2d(uv.X, uv.Y - h))) / (2 * h);
+    }
+
+    static bool FootNewton(Surfaces.ISurface3 s, Vector3d x, ref Vector2d uv)
+    {
+        for (int it = 0; it < 40; it++)
+        {
+            ParamDerivs(s, uv, out var S, out var Su, out var Sv);
+            var r = S - x;
+            double a11 = Vector3d.Dot(Su, Su), a12 = Vector3d.Dot(Su, Sv), a22 = Vector3d.Dot(Sv, Sv);
+            double b1 = -Vector3d.Dot(Su, r), b2 = -Vector3d.Dot(Sv, r);
+            double det = a11 * a22 - a12 * a12; if (!(Math.Abs(det) > 1e-300)) return false;
+            double du = (b1 * a22 - b2 * a12) / det, dv = (a11 * b2 - a12 * b1) / det;
+            uv += new Vector2d(du, dv);
+            if (!double.IsFinite(uv.X + uv.Y)) return false;
+            if (Math.Abs(du) + Math.Abs(dv) < 1e-15) break;
+        }
+        ParamDerivs(s, uv, out var S1, out var Su1, out var Sv1);
+        var w = x - S1; double L = w.Length;
+        // ортогональность — относительно max(L, 1e-5 мм): у точки на самой поверхности остаток w — шум округления, и его угол
+        // с касательной ничего не значит (касательный сдвиг основания там ~1e-14 мм)
+        double Lr = Math.Max(L, 1e-3);
+        return Math.Abs(Vector3d.Dot(w, Su1)) <= 1e-9 * Lr * Su1.Length && Math.Abs(Vector3d.Dot(w, Sv1)) <= 1e-9 * Lr * Sv1.Length;
+    }
+
+    /// <summary>Основание перпендикуляра и единичная нормаль поверхности общего вида (нормаль — в знаке s.NormalAt).</summary>
+    public static (Vector3d P, Vector3d N) ParamFoot(Surfaces.ISurface3 s, Vector3d x)
+    {
+        _footHints ??= new Dictionary<Surfaces.ISurface3, Vector2d>(ReferenceEqualityComparer.Instance);
+        Interlocked.Increment(ref ParamFootCalls);
+        // подсказка — только рядом: из далёкой (прежний вызов в другом месте) Ньютон сходится и к дальней стационарной точке
+        // (у продолжения рационального куска — противоположная сторона окружности), где условие ортогональности тоже верно
+        Vector2d uv = default;
+        bool ok = false;
+        if (_footHints.TryGetValue(s, out var hint))
+        {
+            // ЗАЩИТА ОТ ДАЛЬНЕЙ СТАЦИОНАРНОЙ ТОЧКИ: найденное основание не дальше от x, чем точка подсказки (дальняя стационарная
+            // точка — максимум расстояния — всегда дальше), и сдвиг по параметрам умеренный
+            uv = hint; ok = FootNewton(s, x, ref uv) && (uv - hint).Length < 0.5;
+            if (ok) { ParamDerivs(s, uv, out var Pf, out _, out _); ParamDerivs(s, hint, out var Ph, out _, out _); ok = (x - Pf).Length <= (x - Ph).Length * (1 + 1e-12) + 1e-12; }
+        }
+        if (!ok)
+        {
+            Interlocked.Increment(ref ParamFootGlobal);
+            uv = s.ProjectToUV(x); var g0 = uv;
+            ok = FootNewton(s, x, ref uv) && (uv - g0).Length < 0.25;
+        }
+        if (!ok)
+        {
+            if (FootDebug != null)
+            {
+                var g = s.ProjectToUV(x); var u2 = g; bool nok = FootNewton(s, x, ref u2);
+                ParamDerivs(s, u2, out var S2, out var Su2, out var Sv2); var w2 = x - S2;
+                FootDebug($"ParamFoot failed at {x:0.######}: global uv {g:0.######} newton {nok} uv {u2:0.######} L {w2.Length:E3} ortho {Vector3d.Dot(w2, Su2) / Su2.Length:E2} {Vector3d.Dot(w2, Sv2) / Sv2.Length:E2}");
+            }
+            return (new Vector3d(double.NaN), new Vector3d(double.NaN));
+        }
+        _footHints[s] = uv;
+        ParamDerivs(s, uv, out var P, out var Su, out var Sv);
+        var n = Vector3d.Cross(Su, Sv);
+        if (n.LengthSquared < 1e-30) return (P, new Vector3d(double.NaN));
+        n.Normalize();
+        var nRef = s.NormalAt(new Vector2d(Math.Clamp(uv.X, 0, 1), Math.Clamp(uv.Y, 0, 1)));
+        if (Vector3d.Dot(n, nRef) < 0) n = -n;
+        return (P, n);
+    }
 
     public enum Kind { Curves, Empty, Coincident, Tangent }
 
@@ -705,6 +790,11 @@ public static class Ssi
                 var ring = t.C + (rad.LengthSquared > 0 ? rad.Normalized() : Vector3d.UnitX) * t.R;
                 var v = x - ring; double L = v.Length;
                 return (L - t.r, L > 0 ? v / L : w);
+            }
+            case ParamSurf ps:
+            {
+                var (p, n) = ParamFoot(ps.S, x);
+                return (Vector3d.Dot(x - p, n), n);
             }
         }
         throw new NotSupportedException(s.GetType().Name);
