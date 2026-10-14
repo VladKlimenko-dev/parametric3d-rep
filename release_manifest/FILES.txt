@@ -77,6 +77,7 @@ src/Kernel/Ops/BooleanOp.cs
 src/Kernel/Ops/CrossHole.cs
 src/Kernel/Ops/Csg.cs
 src/Kernel/Ops/DirectRound.cs
+src/Kernel/Ops/DirectRoundCavity.cs
 src/Kernel/Ops/DirectRoundCylCyl.cs
 src/Kernel/Ops/DirectRoundDraft.cs
 src/Kernel/Ops/DirectRoundLoft.cs
@@ -445,6 +446,7 @@ tests/k01/Krn05AfterBlend.cs
 tests/k01/Krn05UniteChain.cs
 tests/k01/Krn06Acc.cs
 tests/k01/Krn06BlendStep.cs
+tests/k01/Krn06Cavity.cs
 tests/k01/Krn06CylCyl.cs
 tests/k01/Krn06CylCylPart.cs
 tests/k01/Krn06LineCylCh.cs

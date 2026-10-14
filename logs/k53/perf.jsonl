@@ -1,0 +1,8 @@
+{"kind":"part","seed":1,"features":24,"faces":59,"errors":0,"fullMs":448.6784,"editLastMs":66.747,"editMidMs":250.1165,"previewLastMs":49.1704,"allocMb":187.85054779052734}
+{"kind":"part","seed":2,"features":19,"faces":43,"errors":0,"fullMs":274.2476,"editLastMs":43.3275,"editMidMs":234.7298,"previewLastMs":22.1405,"allocMb":134.63468170166016}
+{"kind":"part","seed":3,"features":22,"faces":42,"errors":0,"fullMs":260.242,"editLastMs":58.9811,"editMidMs":160.2449,"previewLastMs":23.848,"allocMb":123.10729217529297}
+{"kind":"part","seed":4,"features":19,"faces":54,"errors":0,"fullMs":265.9966,"editLastMs":43.1085,"editMidMs":160.2716,"previewLastMs":23.1948,"allocMb":117.34550476074219}
+{"kind":"part","seed":5,"features":18,"faces":40,"errors":0,"fullMs":205.2596,"editLastMs":33.1086,"editMidMs":133.4693,"previewLastMs":20.8099,"allocMb":104.17900085449219}
+{"kind":"part","seed":6,"features":17,"faces":38,"errors":0,"fullMs":209.1601,"editLastMs":47.2808,"editMidMs":91.014,"previewLastMs":24.7654,"allocMb":89.16526794433594}
+{"kind":"holes100","fullMs":2144.2212,"errors":0,"faces":106}
+{"kind":"session","edits":200,"startMb":11.800827026367188,"endMb":7.909934997558594,"growthMb":-3.8908920288085938,"workingSetMb":192.67578125}
