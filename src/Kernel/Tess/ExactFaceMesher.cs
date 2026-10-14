@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -465,6 +465,73 @@ public static partial class ExactFaceMesher
         return snapped;
     }
 
+    static readonly bool CuspOff = Environment.GetEnvironmentVariable("P3D_CUSPDENSE") == "0";
+
+    /// <summary>
+    /// KRN-06 (06.5): ВЕРШИНА-КЛЮВ — два ребра выходят из вершины в одну сторону, касаясь друг друга (край ленты катящегося
+    /// шара на стенке касается окружности цилиндра в точке касания: у грани стенки угол 0°). Зазор между кривыми растёт как
+    /// квадрат расстояния до вершины, а прогиб хорд — как квадрат длины звена: при обычном гранении ломаные у клюва
+    /// пересекаются, и сетка грани не строится. Звенья ребра у такой вершины дробятся к ней в геометрической прогрессии
+    /// (половинами параметра до 1e-6 мм): прогиб становится меньше зазора на всех масштабах. Ребро одно для обеих граней —
+    /// стык остаётся общим. Мутация P3D_CUSPDENSE=0.
+    /// </summary>
+    static List<Vector3d> DensifyAtCusps(TEdge e, List<Vector3d> pts)
+    {
+        if (pts.Count < 2) return pts;
+        var c = e.Curve;
+        bool fwd = (c.PointAt(c.T0) - e.V0.P).LengthSquared <= (c.PointAt(c.T1) - e.V0.P).LengthSquared;
+        Vector3d Leave(TEdge x, TVertex v, out double tEnd, out double tIn)
+        {
+            var cx = x.Curve; bool atStart = (cx.PointAt(cx.T0) - v.P).LengthSquared <= (cx.PointAt(cx.T1) - v.P).LengthSquared;
+            tEnd = atStart ? cx.T0 : cx.T1; tIn = atStart ? cx.T1 : cx.T0;
+            var q = cx.PointAt(tEnd + (tIn - tEnd) * 1e-4); var d = q - v.P;
+            return d.LengthSquared > 0 ? d.Normalized() : Vector3d.Zero;
+        }
+        TEdge? Cusp(TVertex v)
+        {
+            var de = Leave(e, v, out _, out _);
+            if (de == Vector3d.Zero) return null;
+            foreach (var o in v.Edges)
+            {
+                if (ReferenceEquals(o, e) || ReferenceEquals(o.V0, o.V1)) continue;
+                var d = Leave(o, v, out _, out _);
+                if (Vector3d.Dot(d, de) > Math.Cos(3 * Math.PI / 180)) return o;
+            }
+            return null;
+        }
+        var res = pts;
+        foreach (bool atV0 in new[] { true, false })
+        {
+            var v = atV0 ? e.V0 : e.V1;
+            if (Cusp(v) is not { } partner) continue;
+            Leave(e, v, out double tEnd, out double tIn);
+            // параметр первой внутренней точки ломаной со стороны v
+            var nb = atV0 ? res[1] : res[^2];
+            double t1 = CurveParam.Closest(c, nb);
+            var extra = new List<Vector3d>();
+            for (int k = 1; k < 60; k++)
+            {
+                double t = tEnd + (t1 - tEnd) * Math.Pow(0.5, k);
+                var q = c.PointAt(t);
+                if ((q - v.P).Length < 1e-6) break;
+                // ближе к клюву, где зазор до соседней кривой меньше 2e-5 мм, точек не ставить: их склеит сварка сетки, и
+                // контуры пересекутся; последнее звено до вершины — общая с соседом узкая щель
+                var pc = partner.Curve; double gap = (pc.PointAt(CurveParam.Closest(pc, q)) - q).Length;
+                if (gap < 2e-5) break;
+                extra.Add(q);
+            }
+            if (extra.Count == 0) continue;
+            extra.Reverse();                                    // от вершины наружу: ближние первыми
+            var copy = new List<Vector3d>(res);
+            if (atV0) copy.InsertRange(1, extra);
+            else { var rev = new List<Vector3d>(extra); rev.Reverse(); copy.InsertRange(copy.Count - 1, rev); }
+            res = copy;
+            Interlocked.Increment(ref CuspDensified);
+        }
+        return res;
+    }
+    public static long CuspDensified;
+
     private static List<Vector3d> RawEdgePoints(TEdge e)
     {
         // ПОСЧИТАННОЕ ГОДИТСЯ, ТОЛЬКО ЕСЛИ ТОЧНОСТЬ ТА ЖЕ. Прежде сравнения не было, и смена
@@ -486,6 +553,7 @@ public static partial class ExactFaceMesher
         // верную сетку). Замкнутое ребро идёт по параметру своей кривой.
         if (!ReferenceEquals(e.V0, e.V1) && (pts[0] - e.V0.P).LengthSquared > (pts[^1] - e.V0.P).LengthSquared) pts.Reverse();
         pts[0] = e.V0.P; pts[^1] = e.V1.P;                    // концы — точно вершины тела
+        if (!CuspOff && !ReferenceEquals(e.V0, e.V1)) pts = DensifyAtCusps(e, pts);
         e.PolylineCache = pts;
         e.PolylineQuality = want;
         e.PolylineSource = source;

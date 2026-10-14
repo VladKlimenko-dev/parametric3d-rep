@@ -398,6 +398,8 @@ static partial class Program
         if (mode is "dropen" or "allA") Krn06OpenChecks();
         if (mode is "dropen" or "drcurvch" or "allA") Krn06CurvedChamferChecks();
         if (mode is "dropen" or "drnurbs" or "allA") Krn06NurbsBlendChecks();
+        if (mode is "dropen" or "drvarcurved" or "allA") Krn06VariableCurvedChecks();
+        if (mode is "dropen" or "drblocked" or "allA") Krn06BlockedEndChecks();
         if (mode is "selfone")
         {
             var rnd = new Random(20261011); TSolid a = null!; string d = "";

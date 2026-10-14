@@ -277,6 +277,7 @@ public static partial class DirectRound
     static readonly bool UnequalCircleOff = Environment.GetEnvironmentVariable("P3D_DRUNEQUALCIRCLE") == "0";
     /// <summary>Мутация P3D_DRVARIABLE=0: переменный радиус — только обходной путь резцов (прежде).</summary>
     static readonly bool VariableOff = Environment.GetEnvironmentVariable("P3D_DRVARIABLE") == "0";
+    static readonly bool VarCurved = Environment.GetEnvironmentVariable("P3D_DRVARCURVED") != "0";
 
     /// <summary>
     /// KRN-06 (06.14): ПРЯМОЕ СКРУГЛЕНИЕ С ЛИНЕЙНО МЕНЯЮЩИМСЯ РАДИУСОМ — одно прямое ребро между плоскостями, концы на плоских
@@ -292,9 +293,19 @@ public static partial class DirectRound
         {
             string? why = null;
             var res = Build(bodies[k], refs, Math.Max(r0, r1), false, ref why);
+            bool curved = false;
+            if (res == null && OpenOn && VarCurved)
+            {
+                // KRN-06 (06.14): ребро между кривыми гранями — катящийся шар переменного радиуса (закон по длине ребра),
+                // сечения — характеристические окружности огибающей. Мутация P3D_DRVARCURVED=0.
+                string? w2 = null; var law = _law; _law = null;
+                res = BuildOpen(bodies[k], refs, Math.Max(r0, r1), ref w2, null, (S, r0, E, r1));
+                _law = law;
+                if (res != null) { curved = true; Interlocked.Increment(ref OpenBuilt); } else why += " | curved variable: " + w2;
+            }
             if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); return false; }
             bodies[k] = res; Interlocked.Increment(ref Built);
-            warnings.Add($"Round: direct variable blend R{r0:0.###}→R{r1:0.###} (exact cone).");
+            warnings.Add(curved ? $"Round: direct variable blend R{r0:0.###}→R{r1:0.###} (rolling ball, exact envelope)." : $"Round: direct variable blend R{r0:0.###}→R{r1:0.###} (exact cone).");
             return true;
         }
         finally { _law = null; }
