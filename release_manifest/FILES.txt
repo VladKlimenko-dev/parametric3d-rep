@@ -81,6 +81,7 @@ src/Kernel/Ops/DirectRoundCavity.cs
 src/Kernel/Ops/DirectRoundCylCyl.cs
 src/Kernel/Ops/DirectRoundDraft.cs
 src/Kernel/Ops/DirectRoundLoft.cs
+src/Kernel/Ops/DirectRoundLoftGuides.cs
 src/Kernel/Ops/DirectRoundOffset.cs
 src/Kernel/Ops/DirectRoundOpen.cs
 src/Kernel/Ops/DirectRoundSweep.cs
@@ -458,7 +459,9 @@ tests/k01/Krn06TanLoop.cs
 tests/k01/Krn06Unequal.cs
 tests/k01/Krn06Variable.cs
 tests/k01/Krn07.cs
+tests/k01/Krn07DraftSpline.cs
 tests/k01/Krn07DraftTangent.cs
+tests/k01/Krn07Guides.cs
 tests/k01/Krn07HoleContract.cs
 tests/k01/Krn07Instances.cs
 tests/k01/Krn07LoftNurbs.cs

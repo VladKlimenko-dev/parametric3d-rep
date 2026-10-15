@@ -119,6 +119,8 @@ public static class DocumentFile
                 case SkLine l: PointOf(l.A); PointOf(l.B); break;
                 case SkCircle c: PointOf(c.Center); break;
                 case SkArc a: PointOf(a.Center); PointOf(a.Start); PointOf(a.End); break;
+                case SkEllipse el when !SplineSaveOff: PointOf(el.Center); break;
+                case SkSpline sp when !SplineSaveOff: foreach (var q in sp.Ctrl) PointOf(q); break;
             }
 
         foreach (var e in s.Entities)
@@ -135,6 +137,15 @@ public static class DocumentFile
                     break;
                 case SkArc a:
                     dto.Entities.Add(new EntityDto { Id = a.Id, Kind = "arc", A = a.Center.Id, B = a.Start.Id, C = a.End.Id, CCW = a.CCW });
+                    break;
+                // KRN-07 (07.4): СПЛАЙН И ЭЛЛИПС ЭСКИЗА — в файл (опорные точки — ссылками, эллипс — полуоси, поворот, дуга).
+                // Прежде не записывались вовсе: направляющие и сечения-сплайны пропадали при сохранении, лофт из файла
+                // строился без них (объём 1960 вместо 3064). Мутация P3D_SKSPLINESAVE=0.
+                case SkSpline sp when !SplineSaveOff:
+                    dto.Entities.Add(new EntityDto { Id = sp.Id, Kind = "spline", Pts = sp.Ctrl.Select(q => q.Id).ToList() });
+                    break;
+                case SkEllipse el when !SplineSaveOff:
+                    dto.Entities.Add(new EntityDto { Id = el.Id, Kind = "ellipse", A = el.Center.Id, R = el.RU, R2 = el.RV, Rot = el.Rotation, A0 = el.A0, A1 = el.A1 });
                     break;
             }
 
@@ -315,7 +326,9 @@ public static class DocumentFile
             Kind = "loft", Name = lf.Name, Suppressed = lf.Suppressed, Cut = lf.Cut,
             Sections = lf.SectionSketchIds.ToList(),
             Samples = lf.Samples,
-            Smooth = lf.Smooth
+            Smooth = lf.Smooth,
+            Guides = lf.GuideSketchIds.Count > 0 ? lf.GuideSketchIds.ToList() : null,
+            StartTangent = lf.StartTangent, EndTangent = lf.EndTangent
         },
 
         HoleFeature hf => new FeatureDto
@@ -490,6 +503,10 @@ public static class DocumentFile
                     "arc" when byOld.TryGetValue(ed.A, out var c) && byOld.TryGetValue(ed.B, out var st)
                                && byOld.TryGetValue(ed.C, out var en)
                         => s.AddEntity(new SkArc((SkPoint)c, (SkPoint)st, (SkPoint)en) { CCW = ed.CCW }),
+                    "spline" when ed.Pts is { Count: >= 2 } && ed.Pts.All(byOld.ContainsKey)
+                        => s.AddEntity(new SkSpline(ed.Pts.Select(i => (SkPoint)byOld[i]).ToList())),
+                    "ellipse" when byOld.TryGetValue(ed.A, out var ec)
+                        => s.AddEntity(new SkEllipse((SkPoint)ec, ed.R, ed.R2, ed.Rot) { A0 = ed.A0, A1 = ed.A1 }),
                     _ => null
                 };
                 if (made != null) byOld[ed.Id] = made;
@@ -633,9 +650,11 @@ public static class DocumentFile
 
                 case "loft":
                 {
-                    var lf = new LoftFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut, Samples = fd.Samples, Smooth = fd.Smooth };
+                    var lf = new LoftFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut, Samples = fd.Samples, Smooth = fd.Smooth, StartTangent = fd.StartTangent, EndTangent = fd.EndTangent };
                     foreach (uint old in fd.Sections)
                         if (sketchById.TryGetValue(old, out var sk2)) lf.SectionSketchIds.Add(sk2.Id);
+                    foreach (uint old in fd.Guides ?? new())
+                        if (sketchById.TryGetValue(old, out var sk3)) lf.GuideSketchIds.Add(sk3.Id);
                     part.AddFeature(lf);
                     break;
                 }
@@ -913,6 +932,8 @@ public static class DocumentFile
         public List<DimensionDto> Dimensions { get; set; } = new();
     }
 
+    static readonly bool SplineSaveOff = Environment.GetEnvironmentVariable("P3D_SKSPLINESAVE") == "0";
+
     private sealed class EntityDto
     {
         public uint Id { get; set; }
@@ -924,6 +945,11 @@ public static class DocumentFile
         public uint B { get; set; }
         public uint C { get; set; }
         public bool CCW { get; set; } = true;
+        public List<uint>? Pts { get; set; }
+        public double R2 { get; set; }
+        public double Rot { get; set; }
+        public double A0 { get; set; }
+        public double A1 { get; set; }
     }
 
     private sealed class ConstraintDto
@@ -1019,6 +1045,11 @@ public static class DocumentFile
         public List<uint> Sections { get; set; } = new();
         public int Samples { get; set; } = 64;
         public bool Smooth { get; set; }
+        /// <summary>KRN-07 (07.4): эскизы направляющих лофта.</summary>
+        public List<uint>? Guides { get; set; }
+        /// <summary>KRN-07 (07.4): касательные лофта у крайних сечений.</summary>
+        public double StartTangent { get; set; }
+        public double EndTangent { get; set; }
         public string HoleKindName { get; set; } = "Simple";
         public bool ThroughAll { get; set; }
         public double HeadDiameter { get; set; } = 12;

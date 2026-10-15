@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Topology;
@@ -10,6 +10,28 @@ public static partial class DirectRound
     /// <summary>Мутация P3D_DRAFTTANGENT=0: уклон стенок со скруглёнными рёбрами (касательные цилиндры) не строится.</summary>
     internal static readonly bool DraftTangentOff = Environment.GetEnvironmentVariable("P3D_DRAFTTANGENT") == "0";
     public static long DraftTangents;
+    /// <summary>Мутация P3D_DRAFTSPLINE=0: стенка-выдавливание кривой Безье в уклон не входит (отказ, как прежде).</summary>
+    static readonly bool DraftSplineOff = Environment.GetEnvironmentVariable("P3D_DRAFTSPLINE") == "0";
+    public static long DraftSplineWalls;
+    /// <summary>Шаг таблицы стенки Безье (доля параметра): при 1/4096 объём отходил от формулы на 1.1e-9, при 1/32768 — 5e-11.</summary>
+    const double DraftTableStep = 1.0 / 32768;
+
+    /// <summary>Производная кривой Безье (годограф) — точно.</summary>
+    static Vector3d BezD(BezierCurve3 b, double t)
+    {
+        int n = b.P.Length - 1; var d = new Vector3d[n];
+        for (int i = 0; i < n; i++) d[i] = (b.P[i + 1] - b.P[i]) * n;
+        for (int r = 1; r < n; r++) for (int i = 0; i < n - r; i++) d[i] = d[i] * (1 - t) + d[i + 1] * t;
+        return d[0];
+    }
+    static Vector3d BezDD(BezierCurve3 b, double t)
+    {
+        int n = b.P.Length - 1; if (n < 2) return Vector3d.Zero;
+        var d = new Vector3d[n - 1];
+        for (int i = 0; i < n - 1; i++) d[i] = (b.P[i + 2] - b.P[i + 1] * 2 + b.P[i]) * (n * (n - 1));
+        for (int r = 1; r < n - 1; r++) for (int i = 0; i < n - 1 - r; i++) d[i] = d[i] * (1 - t) + d[i + 1] * t;
+        return d[0];
+    }
 
     /// <summary>
     /// KRN-07 (07.6): УКЛОН СТЕНОК СО СКРУГЛЕНИЯМИ. Выбранные стенки (плоскости и цилиндры вдоль направления вытяжки m) и всё,
@@ -49,6 +71,12 @@ public static partial class DirectRound
         {
             var su = GeometryAudit.AuthoritativeSurface(f)!;
             var n = su.NormalAt(su.ProjectToUV(x)).Normalized();
+            // стенка Безье: нормаль по годографу (разностная — с ошибкой 1e-6, касание у вертикального ребра не узнавалось бы)
+            if (!DraftSplineOff && su is ExtrudedSurface { Base: BezierCurve3 bb } exo)
+            {
+                var na = Vector3d.Cross(BezD(bb, TOf(bb, x)), exo.Dir).Normalized();
+                n = Vector3d.Dot(na, n) < 0 ? -na : na;
+            }
             return RevOf(f) ? -n : n;
         }
         (Vector3d O, Vector3d W, double R)? CylOf(TFace f) => GeometryAudit.AuthoritativeSurface(f) switch
@@ -63,7 +91,32 @@ public static partial class DirectRound
             var su = GeometryAudit.AuthoritativeSurface(f);
             if (su == null) return false;
             if (su.IsPlanar) { var p = f.Loops.SelectMany(l => l.CoEdges).FirstOrDefault()?.Start.P; return p != null && Math.Abs(Vector3d.Dot(Out(f, p.Value), m)) < 1e-9; }
+            if (SplOf(f) != null) return true;
             return CylOf(f) is { } c && Math.Abs(Math.Abs(Vector3d.Dot(c.W, m)) - 1) < 1e-9;
+        }
+        // KRN-07 (07.6): СТЕНКА-ВЫДАВЛИВАНИЕ КРИВОЙ БЕЗЬЕ вдоль m. Уклон — линейчатая поверхность X(t, h) = B̄(t) + m·h +
+        // n(t)·δ(h): образующая на нейтрали та же, наклонена на угол a к m в плоскости (m, n(t)) — как у плоскости и конуса;
+        // n — горизонтальная наружная нормаль по годографу (точно). Грань — по формуле сечения (отрезок на каждом t), рёбра с
+        // поперечными плоскостями — эквидистанты B̄ на высоте ребра (процедурные кривые). Мутация P3D_DRAFTSPLINE=0.
+        (BezierCurve3 B, Vector3d Dir)? SplOf(TFace f) => !DraftSplineOff && GeometryAudit.AuthoritativeSurface(f) is ExtrudedSurface { Base: BezierCurve3 bb } exb
+            && Math.Abs(Math.Abs(Vector3d.Dot(exb.Dir.Normalized(), m)) - 1) < 1e-12 ? (bb, exb.Dir) : null;
+        double TOf(BezierCurve3 bb, Vector3d x)
+        {
+            var p0 = bb.PointAt(0); var xp = x - m * Vector3d.Dot(x - p0, m);
+            if ((bb.PointAt(0) - xp).Length < 1e-7) return 0;
+            if ((bb.PointAt(1) - xp).Length < 1e-7) return 1;
+            double bt = 0, bd = double.MaxValue;
+            for (int i = 0; i <= 256; i++) { double t = i / 256.0; double d = (bb.PointAt(t) - xp).Length; if (d < bd) { bd = d; bt = t; } }
+            for (int it = 0; it < 60; it++)
+            {
+                var r = bb.PointAt(bt) - xp; var d1 = BezD(bb, bt); var d2 = BezDD(bb, bt);
+                double f1 = Vector3d.Dot(r, d1), f2 = Vector3d.Dot(d1, d1) + Vector3d.Dot(r, d2);
+                if (Math.Abs(f2) < 1e-300) break;
+                double nt = Math.Clamp(bt - f1 / f2, 0, 1);
+                if (Math.Abs(nt - bt) < 1e-16) { bt = nt; break; }
+                bt = nt;
+            }
+            return bt;
         }
         static List<TFace> FacesOf(TEdge e) => e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
         bool Vertical(TEdge e) => e.Curve is LineCurve3 l && Math.Abs(Math.Abs(Vector3d.Dot((l.B - l.A).Normalized(), m)) - 1) < 1e-9;
@@ -85,11 +138,12 @@ public static partial class DirectRound
                 D.Add(g); propagated++; grew = true;
             }
         }
-        if (!D.Any(f => CylOf(f) != null)) { why = "draft: no tangent cylinders (plane replacement covers this)"; return null; }
+        if (!D.Any(f => CylOf(f) != null || SplOf(f) != null)) { why = "draft: no tangent cylinders (plane replacement covers this)"; return null; }
 
         // поверхности
         var newSurf = new Dictionary<TFace, (ISurface3 S, bool Rev)>();
         var coneR = new Dictionary<TFace, Func<Vector3d, double>>();
+        var splFor = new Dictionary<TFace, (BezierCurve3 B, Func<double, Vector3d> Bn, Func<double, Vector3d> Nn)>();
         double hMin = double.MaxValue, hMax = double.MinValue;
         foreach (var v in body.Vertices) { hMin = Math.Min(hMin, H(v.P)); hMax = Math.Max(hMax, H(v.P)); }
         double pad = 0.1 * Math.Max(1, hMax - hMin);
@@ -122,7 +176,29 @@ public static partial class DirectRound
                 bool rev = Vector3d.Dot(cone.NormalAt(cone.ProjectToUV(qp)), nr) * kappa < 0;
                 newSurf[f] = (cone, rev); coneR[f] = R;
             }
-            else { why = "draft: a drafted face is neither a plane nor a cylinder"; return null; }
+            else if (SplOf(f) is { } sw)
+            {
+                var bb = sw.B;
+                Vector3d Bn(double t) { var p = bb.PointAt(t); return p - m * H(p); }
+                double tp = TOf(bb, probe);
+                double sN = Vector3d.Dot(Vector3d.Cross(BezD(bb, tp), m), no) > 0 ? 1 : -1;
+                Vector3d Nn(double t) => Vector3d.Cross(BezD(bb, t), m).Normalized() * sN;
+                // образующие — ровно по высоте грани (края v = 0, 1 — рёбра с поперечными плоскостями; объём ленты — по ним)
+                var fv = f.Loops.SelectMany(l => l.CoEdges).Select(c => H(c.Start.P)).ToList();
+                double h0 = fv.Min(), h1 = fv.Max();
+                if (!(h1 - h0 > 1e-6)) { why = "draft: a Bezier wall of zero height"; return null; }
+                Vector3d X(double t, double h) => Bn(t) + m * h + Nn(t) * (-ta * sgn * h);
+                SweepSection Gen(double U) => SweepSection.Line(X(U, h0), X(U, h1));
+                var us = Enumerable.Range(0, 257).Select(i => i / 256.0).ToList();
+                var surf = new SectionSurface(Gen, us, us.Select(Gen).ToList(), false, 0, 1, null, DraftTableStep);
+                double worst = 0;
+                for (int i = 0; i < 400; i++) { double U = (i + 0.5) / 400; var tb = surf.SectionAt(U); var exs = surf.ExactSectionAt(U); foreach (double v in new[] { 0.0, 0.5, 1.0 }) worst = Math.Max(worst, (tb.Point(v) - exs.Point(v)).Length); }
+                if (worst > Math.Max(1e-8, 0.2 * ToleranceContext.Current.ModelAccuracy)) { why = $"draft: spline wall table deviates from the formula ({worst:E1} mm)"; return null; }
+                var qp = X(tp, H(probe));
+                bool rev = Vector3d.Dot(surf.NormalAt(surf.ProjectToUV(qp)), no) < 0;
+                newSurf[f] = (surf, rev); splFor[f] = (bb, Bn, Nn);
+            }
+            else { why = "draft: a drafted face is neither a plane, a cylinder nor a Bezier wall"; return null; }
         }
         bool OnSurf(ISurface3 s, Vector3d x) => (s.PointAt(s.ProjectToUV(x)) - x).Length <= tol;
         bool OnAll(IEnumerable<TFace> fs, Vector3d x) => fs.All(f => OnSurf(newSurf[f].S, x));
@@ -208,6 +284,17 @@ public static partial class DirectRound
                     nc = new ArcCurve3(ac.Frame, r, ac.A0, ac.A1);
                 }
             }
+            else if (fs.FirstOrDefault(splFor.ContainsKey) is { } sf)
+            {
+                // ребро стенки Безье с поперечной плоскостью — эквидистанта основания на высоте ребра
+                var other = fs.FirstOrDefault(x => x != sf);
+                if (other == null || D.Contains(other) || newSurf[other].S is not PlaneSurface opl || Math.Abs(Math.Abs(Vector3d.Dot(opl.F.W.Normalized(), m)) - 1) > 1e-9)
+                { why = "draft: an edge of a Bezier wall is not on a plane across the pull direction"; return null; }
+                if (e.V0 == e.V1) { why = "draft: a closed edge on a Bezier wall"; return null; }
+                var (bb, Bn, Nn) = splFor[sf]; double hc = H(e.V0.P);
+                double tA = TOf(bb, e.V0.P), tB = TOf(bb, e.V1.P);
+                nc = new ProcCurve3(q => { double t = tA + (tB - tA) * q; return Bn(t) + m * hc + Nn(t) * (-ta * sgn * hc); }, 0, 1, false, "draft offset");
+            }
             else if (fs.Any(D.Contains)) { why = $"draft: a {e.Curve.GetType().Name} edge on a drafted face"; return null; }
             else nc = e.Curve;
             for (int k = 0; k <= 6; k++)
@@ -223,7 +310,7 @@ public static partial class DirectRound
         }
 
         var res = Rebuild(body, newSurf, vmap, emap, null, (f, h) => D.Contains(f) ? h + Out(f, h) * Delta(h) : h, "draft", ref why);
-        if (res != null) Interlocked.Increment(ref DraftTangents);
+        if (res != null) { Interlocked.Increment(ref DraftTangents); if (splFor.Count > 0) Interlocked.Increment(ref DraftSplineWalls); }
         return res;
     }
 }

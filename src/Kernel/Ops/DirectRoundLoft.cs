@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Topology;
@@ -9,8 +9,11 @@ public static partial class DirectRound
 {
     /// <summary>Мутация P3D_LOFTNURBS=0: лофт по отрезкам и дугам — прежним путём (ломаные, многогранно).</summary>
     internal static readonly bool LoftNurbsOff = Environment.GetEnvironmentVariable("P3D_LOFTNURBS") == "0";
+    static readonly bool LoftHalvesOff = Environment.GetEnvironmentVariable("P3D_LOFTHALVES") == "0";
+    static readonly bool LoftTangentOff = Environment.GetEnvironmentVariable("P3D_LOFTTANGENT") == "0";
     static readonly bool LoftSplineOff = Environment.GetEnvironmentVariable("P3D_LOFTSPLINE") == "0";
     public static long NurbsLofts;
+    public static long GuidedLofts;
 
     /// <summary>
     /// KRN-07 (07.4): ТОЧНЫЙ ЛОФТ ПО ОТРЕЗКАМ И ДУГАМ. Каждое сечение — замкнутый контур из N отрезков и дуг (у всех сечений N
@@ -22,9 +25,36 @@ public static partial class DirectRound
     /// боковые рёбра — NURBS-кривые столбцов опорных точек; торцы — плоские грани по самим сечениям. Тело собирается и
     /// проверяется (годность, аналитический объём, объём по фасетам). null — отказ (причина в why).
     /// </summary>
-    internal static TSolid? NurbsLoft(IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)> sections, bool smooth, ref string? why)
+    internal static TSolid? NurbsLoft(IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)> sections, bool smooth, ref string? why, IReadOnlyList<ICurve3>? guides = null, double tanStart = 0, double tanEnd = 0)
     {
         if (LoftNurbsOff) { why = "NURBS loft is off"; return null; }
+        // KRN-07 (07.4): НАПРАВЛЯЮЩИЕ (DirectRoundLoftGuides.cs). Сечение-окружность делится на дуги в точках направляющих.
+        List<Vector4d[]>? G4 = null;
+        if (guides is { Count: > 0 })
+        {
+            if (LoftGuidesOff) { why = "loft: guide curves are off"; return null; }
+            if (Math.Abs(tanStart) > 1e-12 || Math.Abs(tanEnd) > 1e-12) { why = "loft: end tangency with guide curves is not supported"; return null; }
+            G4 = new List<Vector4d[]>();
+            foreach (var g in guides) { var q = GuideBez(g); if (q == null) { why = $"loft: a guide {g.GetType().Name} is neither a line, a Bezier curve nor an arc under 180°"; return null; } G4.Add(q); }
+            var ns2 = new List<(List<ICurve3> Loop, Vector3d Normal)>();
+            foreach (var sec in sections)
+            {
+                if (sec.Loop.Count == 1 && sec.Loop[0] is ArcCurve3 { IsClosed: true } ca)
+                {
+                    var arcs = SplitCircleAtGuides(ca, G4, ref why);
+                    if (arcs == null) return null;
+                    ns2.Add((arcs, sec.Normal));
+                }
+                else ns2.Add(sec);
+            }
+            sections = ns2;
+        }
+        // все сечения — целые окружности (одно звено): каждое — две полуокружности от своего начала. Грань-«рукав» с одним
+        // швом при кубической поперёк сечений (касательные на концах) разбивалась по контуру неверно (сетка отходила на 9.9 мм);
+        // две грани без шва — как у прочих лофтов. Мутация P3D_LOFTHALVES=0.
+        if (!LoftHalvesOff && sections.All(sec => sec.Loop.Count == 1 && sec.Loop[0] is ArcCurve3 { IsClosed: true }))
+            sections = sections.Select(sec => { var ca = (ArcCurve3)sec.Loop[0]; double hm = (ca.A0 + ca.A1) / 2;
+                return (new List<ICurve3> { new ArcCurve3(ca.Frame, ca.Radius, ca.A0, hm), new ArcCurve3(ca.Frame, ca.Radius, hm, ca.A1) }, sec.Normal); }).ToList();
         int S = sections.Count;
         if (S < 2) { why = "loft: fewer than two sections"; return null; }
         int N = sections[0].Loop.Count;
@@ -49,6 +79,22 @@ public static partial class DirectRound
         var run = cent[^1] - cent[0];
         if (run.Length < 1e-9) { why = "loft: the sections lie on top of each other"; return null; }
         run.Normalize();
+        // порядок сечений: центры идут по ходу строго вперёд (иначе тело перегибается назад — отказ, как у прежнего пути)
+        for (int k = 1; k < S; k++)
+            if (!(Vector3d.Dot(cent[k] - cent[k - 1], run) > 1e-9)) { why = $"loft: the sections are out of order — the loft turns back at section {k + 1}"; return null; }
+        // соседние сечения не пересекаются и не стоят ребром друг к другу: каждое — строго по свою сторону плоскости соседа
+        // (как у прежнего пути; иначе лофт пересекал бы себя)
+        {
+            List<Vector3d> Pts(int k) { var r = new List<Vector3d>(); foreach (var c in sections[k].Loop) for (int i = 0; i < 16; i++) r.Add(c.PointAt(c.T0 + (c.T1 - c.T0) * i / 16.0)); return r; }
+            Vector3d Nk(int k) { var n = sections[k].Normal.Normalized(); return Vector3d.Dot(n, run) < 0 ? -n : n; }
+            for (int k = 0; k + 1 < S; k++)
+            {
+                double tolO = 1e-9 * Math.Max(1, (cent[k + 1] - cent[k]).Length);
+                Vector3d c0 = Pts(k).Aggregate(Vector3d.Zero, (x, y) => x + y) / Pts(k).Count, c1 = Pts(k + 1).Aggregate(Vector3d.Zero, (x, y) => x + y) / Pts(k + 1).Count;
+                if (Pts(k + 1).Any(q => Vector3d.Dot(q - c0, Nk(k)) <= tolO) || Pts(k).Any(q => Vector3d.Dot(q - c1, Nk(k + 1)) >= -tolO))
+                { why = $"loft: sections {k + 1} and {k + 2} intersect or face each other edge-on — the loft would cross itself"; return null; }
+            }
+        }
 
         // обход: у всех сечений против часовой стрелки, если смотреть по ходу (векторная площадь по ходу)
         var loops = new List<List<ICurve3>>();
@@ -61,8 +107,48 @@ public static partial class DirectRound
             if (Vector3d.Dot(area, run) < 0) { l2.Reverse(); l2 = l2.Select(Rev).ToList(); }
             loops.Add(l2);
         }
+        // С НАПРАВЛЯЮЩИМИ: вершина сечения на каждой направляющей (параметр — ближайшая точка, отход ≤ 1e-7), направляющая
+        // идёт по сечениям по порядку (иначе — обращается); поворот сечений — по первой направляющей; все направляющие
+        // обязаны соединять вершины с одним номером
+        int G = G4?.Count ?? 0;
+        var gt = new double[G, S]; var guideAt = Enumerable.Repeat(-1, N).ToArray();
+        if (G4 != null)
+        {
+            var gv = new int[G, S];
+            for (int g = 0; g < G; g++)
+            {
+                for (int pass = 0; pass < 2; pass++)
+                {
+                    for (int k = 0; k < S; k++)
+                    {
+                        int bj = -1; double bd = double.MaxValue, bt = 0;
+                        for (int j = 0; j < N; j++) { var (t, d) = ClosestT(G4[g], Start(loops[k][j])); if (d < bd) { bd = d; bj = j; bt = t; } }
+                        if (bd > GuideTol) { why = $"loft: guide {g + 1} does not pass through a vertex of section {k + 1} ({bd:E1} mm)"; return null; }
+                        gv[g, k] = bj; gt[g, k] = bt;
+                    }
+                    if (gt[g, 0] < gt[g, S - 1]) break;
+                    if (pass == 1) { why = $"loft: guide {g + 1} does not run through the sections in order"; return null; }
+                    G4[g] = G4[g].Reverse().ToArray();
+                }
+                for (int k = 1; k < S; k++) if (!(gt[g, k] > gt[g, k - 1] + 1e-9)) { why = $"loft: guide {g + 1} does not run through the sections in order"; return null; }
+                if (gt[g, 0] > 1e-6 || gt[g, S - 1] < 1 - 1e-6) { why = $"loft: guide {g + 1} extends beyond the first or the last section"; return null; }
+                gt[g, 0] = 0; gt[g, S - 1] = 1;
+            }
+            for (int k = 1; k < S; k++)
+            {
+                int r = ((gv[0, k] - gv[0, 0]) % N + N) % N;
+                loops[k] = Enumerable.Range(0, N).Select(i => loops[k][(i + r) % N]).ToList();
+                for (int g = 0; g < G; g++) gv[g, k] = ((gv[g, k] - r) % N + N) % N;
+            }
+            for (int g = 0; g < G; g++)
+            {
+                for (int k = 1; k < S; k++) if (gv[g, k] != gv[g, 0]) { why = $"loft: guide {g + 1} connects vertices that do not correspond to those of guide 1"; return null; }
+                if (guideAt[gv[g, 0]] >= 0) { why = "loft: two guides pass through one vertex"; return null; }
+                guideAt[gv[g, 0]] = g;
+            }
+        }
         // сопоставление звеньев: начало каждого следующего сечения — поворот, ближайший по вершинам относительно центров
-        for (int k = 1; k < S; k++)
+        for (int k = 1; k < S && G4 == null; k++)
         {
             int best = 0; double bd = double.MaxValue;
             for (int r = 0; r < N; r++)
@@ -161,11 +247,25 @@ public static partial class DirectRound
             if ((H[k, nu - 1].Xyz / H[k, nu - 1].W - H[k, 0].Xyz / H[k, 0].W).Length > 1e-7) { why = "loft: a section does not close"; return null; }
         }
 
+        var faces = new List<FDesc>();
+        if (G4 != null)
+        {
+            if (!GuidedFaces(out var gw)) { why = gw; return null; }
+            goto caps;
+        }
         // поперёк сечений
         var vpar = new double[S];
         for (int k = 1; k < S; k++) vpar[k] = vpar[k - 1] + (cent[k] - cent[k - 1]).Length;
         for (int k = 1; k < S; k++) vpar[k] /= vpar[S - 1];
-        int dv = smooth ? Math.Min(3, S - 1) : 1;
+        // KRN-07 (07.4): КОНТРОЛЬ ФОРМЫ — касательная у первого/последнего сечения по его нормали (по ходу), длина tan·L
+        // (L — расстояние между центрами крайних сечений). В однородных координатах производная (W·P′, 0) — вес не меняется,
+        // проекция идёт по нормали; к интерполяции добавляются строки производных на концах (Пигл — Тиллер, 9.2.2),
+        // параметры концов для узлов удваиваются. Мутация P3D_LOFTTANGENT=0 — условия не ставятся (отказ).
+        bool t0 = Math.Abs(tanStart) > 1e-12, t1 = Math.Abs(tanEnd) > 1e-12;
+        if ((t0 || t1) && LoftTangentOff) { why = "loft: end tangency is off"; return null; }
+        if (t0 || t1) smooth = true;
+        int NQ = S + (t0 ? 1 : 0) + (t1 ? 1 : 0);
+        int dv = smooth ? Math.Min(3, NQ - 1) : 1;
         double[] kv; Vector4d[,] Q;
         if (dv == 1)
         {
@@ -174,33 +274,45 @@ public static partial class DirectRound
         }
         else
         {
-            kv = new double[S + dv + 1];
-            for (int i = 0; i <= dv; i++) { kv[i] = 0; kv[S + i] = 1; }
-            for (int j = 1; j < S - dv; j++) { double sum = 0; for (int i = j; i < j + dv; i++) sum += vpar[i]; kv[j + dv] = sum / dv; }
-            // глобальная интерполяция: A·Q = H по каждому столбцу (4D)
-            var A = new double[S, S];
-            for (int k = 0; k < S; k++) for (int i = 0; i < S; i++) A[k, i] = Basis(kv, dv, i, vpar[k]);
-            Q = new Vector4d[S, nu];
+            var vq = new List<double>(); if (t0) vq.Add(0); vq.AddRange(vpar); if (t1) vq.Add(1);
+            kv = new double[NQ + dv + 1];
+            for (int i = 0; i <= dv; i++) { kv[i] = 0; kv[NQ + i] = 1; }
+            for (int j = 1; j < NQ - dv; j++) { double sum = 0; for (int i = j; i < j + dv; i++) sum += vq[i]; kv[j + dv] = sum / dv; }
+            // глобальная интерполяция: A·Q = R по каждому столбцу (4D); строки — сечения и производные на концах
+            var A = new double[NQ, NQ];
+            for (int k = 0; k < S; k++) for (int i = 0; i < NQ; i++) A[k, i] = Basis(kv, dv, i, vpar[k]);
+            int row = S;
+            double L = (cent[S - 1] - cent[0]).Length;
+            Vector3d NormAlong(int k) { var n = sections[k].Normal.Normalized(); return Vector3d.Dot(n, run) < 0 ? -n : n; }
+            int rS = -1, rE = -1;
+            if (t0) { rS = row++; A[rS, 0] = -dv / kv[dv + 1]; A[rS, 1] = dv / kv[dv + 1]; }
+            if (t1) { rE = row++; double f = dv / (1 - kv[NQ - 1]); A[rE, NQ - 2] = -f; A[rE, NQ - 1] = f; }
+            Q = new Vector4d[NQ, nu];
             var inv = Inverse(A);
             if (inv == null) { why = "loft: interpolation matrix is singular"; return null; }
             for (int c = 0; c < nu; c++)
-                for (int i = 0; i < S; i++)
+            {
+                var rhs = new Vector4d[NQ];
+                for (int k = 0; k < S; k++) rhs[k] = H[k, c];
+                if (t0) rhs[rS] = new Vector4d(NormAlong(0) * (tanStart * L * H[0, c].W), 0);
+                if (t1) rhs[rE] = new Vector4d(NormAlong(S - 1) * (tanEnd * L * H[S - 1, c].W), 0);
+                for (int i = 0; i < NQ; i++)
                 {
                     var acc = Vector4d.Zero;
-                    for (int k = 0; k < S; k++) acc += H[k, c] * inv[i, k];
+                    for (int k = 0; k < NQ; k++) acc += rhs[k] * inv[i, k];
                     Q[i, c] = acc;
                 }
-            for (int i = 0; i < S; i++) for (int c = 0; c < nu; c++) if (!(Q[i, c].W > 1e-6)) { why = "loft: a non-positive weight after interpolation"; return null; }
+            }
+            for (int i = 0; i < NQ; i++) for (int c = 0; c < nu; c++) if (!(Q[i, c].W > 1e-6)) { why = "loft: a non-positive weight after interpolation"; return null; }
         }
 
         // поверхности звеньев (и пролётов у линейчатого)
-        var faces = new List<FDesc>();
         int spans = dv == 1 ? S - 1 : 1;
         ICurve3 SideCurve(int col, int span)
         {
             if (dv == 1) return new LineCurve3(Q[span, col].Xyz / Q[span, col].W, Q[span + 1, col].Xyz / Q[span + 1, col].W);
             var pts = new List<Vector3d>(); var ws = new List<double>();
-            for (int i = 0; i < S; i++) { pts.Add(Q[i, col].Xyz / Q[i, col].W); ws.Add(Q[i, col].W); }
+            for (int i = 0; i < NQ; i++) { pts.Add(Q[i, col].Xyz / Q[i, col].W); ws.Add(Q[i, col].W); }
             return new SplineCurve3(pts, dv, ws, kv);
         }
         var sideCurves = new Dictionary<(int, int), ICurve3>();
@@ -209,7 +321,7 @@ public static partial class DirectRound
             for (int j = 0; j < N; j++)
             {
                 int c0 = colStart[j], cn = D * K[j] + 1;
-                int r0 = dv == 1 ? span : 0, rn = dv == 1 ? 2 : S;
+                int r0 = dv == 1 ? span : 0, rn = dv == 1 ? 2 : NQ;
                 var cp = new Vector3d[cn, rn]; var w = new double[cn, rn];
                 for (int a = 0; a < cn; a++) for (int b = 0; b < rn; b++) { var q = Q[r0 + b, c0 + a]; cp[a, b] = q.Xyz / q.W; w[a, b] = q.W; }
                 var ku = new double[cn + D + 1];
@@ -230,6 +342,7 @@ public static partial class DirectRound
                 fd.Loops.Add(loop);
                 faces.Add(fd);
             }
+        caps:
         // торцы
         foreach (var (k, tag, sgn) in new[] { (0, "loft:start", -1.0), (S - 1, "loft:end", 1.0) })
         {
@@ -248,7 +361,74 @@ public static partial class DirectRound
             solid.SetProvenance(pv);
         }
         Interlocked.Increment(ref NurbsLofts);
+        if (G4 != null) Interlocked.Increment(ref GuidedLofts);
         return solid;
+
+        // ГРАНИ С НАПРАВЛЯЮЩИМИ: звено j × пролёт между сечениями — поверхность Кунса в однородных координатах:
+        // S = (1−v)·C_k(u) + v·C_{k+1}(u) + (1−u)·G_j(v) + u·G_{j+1}(v) − билинейная по углам. Члены (1−v), (1−u) — точно в
+        // базисах (коэффициенты Бернштейна 1 − b/n и абсциссы Гревиля узлового вектора по u), сеть опорных точек — сумма.
+        // Края: v = 0, 1 — сечения, u = 0, 1 — куски направляющих (угловые точки с весом 1, поэтому в проекции — ровно они).
+        bool GuidedFaces(out string? gw)
+        {
+            gw = null;
+            var sideG = new Dictionary<(int, int), (ICurve3 C, Vector4d[] Q)>();
+            (ICurve3 C, Vector4d[] Q) SideG(int j, int span)
+            {
+                j %= N;
+                if (sideG.TryGetValue((j, span), out var r)) return r;
+                var A = Start(loops[span][j]); var B = Start(loops[span + 1][j]);
+                int g = guideAt[j];
+                if (g < 0) r = (new LineCurve3(A, B), new[] { new Vector4d(A, 1), new Vector4d(B, 1) });
+                else
+                {
+                    var sub = SubPiece(G4![g], gt[g, span], gt[g, span + 1]);
+                    sub[0] = new Vector4d(A, 1); sub[^1] = new Vector4d(B, 1);
+                    r = (GuideEdge(guides![g], sub, A, B), sub);
+                }
+                return sideG[(j, span)] = r;
+            }
+            for (int span = 0; span < S - 1; span++)
+                for (int j = 0; j < N; j++)
+                {
+                    int c0 = colStart[j], cn = D * K[j] + 1;
+                    var GL = SideG(j, span).Q; var GR = SideG(j + 1, span).Q;
+                    int Dv = Math.Max(1, Math.Max(GL.Length, GR.Length) - 1);
+                    while (GL.Length - 1 < Dv) GL = Elevate(GL);
+                    while (GR.Length - 1 < Dv) GR = Elevate(GR);
+                    var ku = new double[cn + D + 1];
+                    for (int i = 0; i <= D; i++) { ku[i] = 0; ku[cn + i] = 1; }
+                    for (int p = 1; p < K[j]; p++) for (int i = 0; i < D; i++) ku[D * p + 1 + i] = (double)p / K[j];
+                    var P00 = H[span, c0]; var P10 = H[span, c0 + cn - 1]; var P01 = H[span + 1, c0]; var P11 = H[span + 1, c0 + cn - 1];
+                    var cp = new Vector3d[cn, Dv + 1]; var w = new double[cn, Dv + 1];
+                    for (int a = 0; a < cn; a++)
+                    {
+                        double ga = 0; for (int i = 1; i <= D; i++) ga += ku[a + i]; ga /= D;
+                        for (int b = 0; b <= Dv; b++)
+                        {
+                            double be = (double)b / Dv;
+                            var q = H[span, c0 + a] * (1 - be) + H[span + 1, c0 + a] * be + GL[b] * (1 - ga) + GR[b] * ga
+                                    - (P00 * ((1 - ga) * (1 - be)) + P10 * (ga * (1 - be)) + P01 * ((1 - ga) * be) + P11 * (ga * be));
+                            if (!(q.W > 1e-9)) { gw = "loft: a non-positive weight in a guided patch"; return false; }
+                            cp[a, b] = q.Xyz / q.W; w[a, b] = q.W;
+                        }
+                    }
+                    var kvb = new double[2 * Dv + 2]; for (int i = 0; i <= Dv; i++) { kvb[i] = 0; kvb[Dv + 1 + i] = 1; }
+                    var ns = new NurbsSurface(cp, D, Dv, w, ku, kvb);
+                    var lo = loops[span][j]; var hi = loops[span + 1][j];
+                    var A0 = Start(lo); var B0 = End(lo); var A1 = Start(hi); var B1 = End(hi);
+                    var loop = new List<Seg>
+                    {
+                        new() { Curve = lo, A = A0, B = B0 },
+                        new() { Curve = SideG(j + 1, span).C, A = B0, B = B1 },
+                        new() { Curve = hi, A = B1, B = A1 },
+                        new() { Curve = SideG(j, span).C, A = A1, B = A0 },
+                    };
+                    var fd = new FDesc { Surf = ns, Rev = false, Tag = $"loft:side[{j}]" + (S > 2 ? $".{span}" : ""), Touched = true, Hint = ns.PointAt(new Vector2d(0.5, 0.5)) };
+                    fd.Loops.Add(loop);
+                    faces.Add(fd);
+                }
+            return true;
+        }
     }
 
     /// <summary>Базисная функция B-сплайна N_{i,p}(t) (Кокс — де Бур; правый конец — к последней функции).</summary>
