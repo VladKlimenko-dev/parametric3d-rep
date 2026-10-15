@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Ops;
@@ -76,6 +76,98 @@ static partial class Program
                     var ws = new List<string>(); var sw = new StringWriter();
                     bool ok = Parametric3D.Kernel.Export.StepExact.Write(sw, new[] { b }, "sweep", ws);
                     if (!ok) fails.Add($"{name}: no exact STEP ({string.Join(" | ", ws.Where(x => x.Contains("not")).Take(2))})");
+                }
+                catch (Exception ex) { fails.Add($"{name}: {ex.GetType().Name} {ex.Message}"); }
+            }
+            // ЗАКОН ОРИЕНТАЦИИ «НЕ ПОВОРАЧИВАТЬ»: сечение в плоскости XY переносится параллельно по кривой Безье S (z монотонно
+            // от 0 до 40) — по Кавальери горизонтальное сечение тела на любой высоте — та же фигура: V = A·40
+            foreach (var (fn, prof, area) in new (string, Func<Profile>, double)[] { ("circle r1", profiles[0].Item2, Math.PI), ("square 2", profiles[1].Item2, 4) })
+            {
+                string name = $"bezier S × {fn}, kept orientation"; long c0 = DirectRound.ExactSweeps;
+                try
+                {
+                    var b = SweepOp.Build(prof(), paths[0].Item2, 1, 0, true);
+                    double v = AnalyticVolume.Of(b) ?? double.NaN, want = area * 40;
+                    Console.WriteLine($"  {name}: V {v:R} want {want:R} ({(v - want) / want:E1}) {b.Guarantee}");
+                    if (DirectRound.ExactSweeps == c0) fails.Add($"{name}: not exact");
+                    if (b.Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(b).IsValid) fails.Add($"{name}: {b.Guarantee} {SolidValidator.Validate(b).Summary()}");
+                    if (!(Math.Abs(v - want) <= 1e-8 * want)) fails.Add($"{name}: V {v:R} vs {want:R}");
+                }
+                catch (Exception ex) { fails.Add($"{name}: {ex.GetType().Name} {ex.Message}"); }
+            }
+            // ЗАМКНУТАЯ траектория — эллипс 20×12 (плоскость XZ): трубка круга r1 и квадрат 2×2 с закруткой 360° — без торцов,
+            // рамка замкнута поправкой; V = A·L (L — периметр эллипса квадратурой)
+            {
+                var ell = new EllipseCurve3(new Frame3(new Vector3d(0, 0, 0), Vector3d.UnitX, Vector3d.UnitZ), 20, 12, 0, 2 * Math.PI);
+                double L = LenOf(ell);
+                foreach (var (fn, prof, area, tw) in new (string, Func<Profile>, double, double)[] { ("circle r1", profiles[0].Item2, Math.PI, 0), ("square 2, twist 360°", profiles[1].Item2, 4, 360) })
+                {
+                    string name = $"closed ellipse × {fn}"; long c0 = DirectRound.ExactSweeps;
+                    if (Environment.GetEnvironmentVariable("P3D_DRDBG") == "1") { DirectRound.Debug = m => Console.WriteLine("   [dr] " + m); TopologyConventions.AnchorDebug = m => Console.WriteLine("   [an] " + m); }
+                    try
+                    {
+                        var b = SweepOp.Build(prof(), ell, 1, tw);
+                        double v = AnalyticVolume.Of(b) ?? double.NaN, want = area * L;
+                        Console.WriteLine($"  {name}: V {v:R} want {want:R} ({(v - want) / want:E1}) {b.Guarantee}, {b.Faces.Count()} faces");
+                        if (DirectRound.ExactSweeps == c0) fails.Add($"{name}: not exact");
+                        if (b.Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(b).IsValid) fails.Add($"{name}: {b.Guarantee} {SolidValidator.Validate(b).Summary()}");
+                        if (!(Math.Abs(v - want) <= 1e-8 * want)) fails.Add($"{name}: V {v:R} vs {want:R}");
+                    }
+                    catch (Exception ex) { fails.Add($"{name}: {ex.GetType().Name} {ex.Message}"); }
+                }
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
+}
+
+static partial class Program
+{
+    static void Krn07SplineLoftChecks()
+    {
+        Check("KRN07-LOFT-SPLINE-SECTIONS", () =>
+        {
+            // 07.4: ЛОФТ СО СПЛАЙНОВЫМИ ЗВЕНЬЯМИ СЕЧЕНИЙ (кривая Безье эскиза): «D» — отрезок (−5,0)→(5,0) и кубическая Безье
+            // (5,0)→(5,8)→(−5,8)→(−5,0). Сечения на высотах — подобные копии с центром на оси (λ = 1, 0.5 у линейчатого; 1, 0.75,
+            // 0.5 у гладкого): соответствующие точки лежат на прямых через вершину конуса — тело есть усечённый конус над «D»,
+            // V = h·A·(1 + λ + λ²)/3 (A — площадь «D» по формуле Грина квадратурой). Тело точное (грани NURBS степени 3).
+            var fails = new List<string>();
+            Profile D(double lam, double z)
+            {
+                var pl = new Frame3(new Vector3d(0, 0, z), Vector3d.UnitX, Vector3d.UnitY);
+                Vector3d P(double x, double y) => new(x * lam, y * lam, z);
+                return ProfileBuilder.Build(pl, new ICurve3[] { new LineCurve3(P(-5, 0), P(5, 0)), new BezierCurve3(new[] { P(5, 0), P(5, 8), P(-5, 8), P(-5, 0) }) });
+            }
+            // площадь «D»: ∮ x dy по кривой Безье (отрезок по оси x вклада не даёт)
+            double area = 0;
+            {
+                // x(t)·y'(t) — многочлен 5-й степени: Гаусс по 3 узлам точен; x, y' — по формулам Бернштейна
+                double[] X = { 5, 5, -5, -5 }, Y = { 0, 8, 8, 0 };
+                double Xt(double t) => X[0] * (1 - t) * (1 - t) * (1 - t) + 3 * X[1] * t * (1 - t) * (1 - t) + 3 * X[2] * t * t * (1 - t) + X[3] * t * t * t;
+                double Yd(double t) => 3 * ((Y[1] - Y[0]) * (1 - t) * (1 - t) + 2 * (Y[2] - Y[1]) * t * (1 - t) + (Y[3] - Y[2]) * t * t);
+                double[] gx = { -0.7745966692414834, 0, 0.7745966692414834 }, gw = { 5.0 / 9, 8.0 / 9, 5.0 / 9 };
+                for (int q = 0; q < 3; q++) { double t = 0.5 + 0.5 * gx[q]; area += 0.5 * gw[q] * Xt(t) * Yd(t); }
+                area = Math.Abs(area);
+            }
+            foreach (var (name, secs, smooth, lam) in new (string, Profile[], bool, double)[]
+            {
+                ("ruled D, λ 0.5", new[] { D(1, 0), D(0.5, 20) }, false, 0.5),
+                ("smooth D, λ 1→0.75→0.5", new[] { D(1, 0), D(0.75, 10), D(0.5, 20) }, true, 0.5),
+            })
+            {
+                long c0 = DirectRound.NurbsLofts;
+                try
+                {
+                    var b = LoftOp.Build(secs, 64, smooth);
+                    double v = AnalyticVolume.Of(b) ?? double.NaN, want = 20 * area * (1 + lam + lam * lam) / 3;
+                    Console.WriteLine($"  {name}: V {v:R} want {want:R} ({(v - want) / want:E1}) {b.Guarantee}");
+                    if (DirectRound.NurbsLofts == c0) fails.Add($"{name}: not the exact NURBS loft");
+                    if (b.Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(b).IsValid) fails.Add($"{name}: {b.Guarantee} {SolidValidator.Validate(b).Summary()}");
+                    if (!(Math.Abs(v - want) <= 1e-9 * want)) fails.Add($"{name}: V {v:R} vs {want:R}");
+                    // точный STEP: звенья Безье — B-сплайном (без отказа и без приближения кривой)
+                    var sw = new StringWriter(); var ws = new List<string>();
+                    bool stepOk = Parametric3D.Kernel.Export.StepExact.Write(sw, new[] { b }, "loft", ws);
+                    if (!stepOk || ws.Any(x => x.Contains("not written exactly"))) fails.Add($"{name}: exact STEP refused ({string.Join(" / ", ws.Take(2))})");
                 }
                 catch (Exception ex) { fails.Add($"{name}: {ex.GetType().Name} {ex.Message}"); }
             }

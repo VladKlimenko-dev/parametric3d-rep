@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -20,17 +20,26 @@ public static class SweepOp
     public static TSolid Build(Profile section, ICurve3 path, double lengthFraction = 1.0) => Build(section, path, lengthFraction, 0);
 
     /// <summary>Протяжка с закруткой сечения вокруг касательной на угол twistDeg (градусы, линейно по траектории).</summary>
-    public static TSolid Build(Profile section, ICurve3 path, double lengthFraction, double twistDeg)
+    public static TSolid Build(Profile section, ICurve3 path, double lengthFraction, double twistDeg) => Build(section, path, lengthFraction, twistDeg, false);
+
+    /// <summary>keepOrientation — сечение переносится без поворота (закон ориентации «не поворачивать»), только точно.</summary>
+    public static TSolid Build(Profile section, ICurve3 path, double lengthFraction, double twistDeg, bool keepOrientation)
     {
         if (section.IsEmpty) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Sweep: the section is empty or not closed.");
         if (section.HasSelfIntersections) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Sweep: the section contour crosses itself.");
         lengthFraction = Math.Clamp(lengthFraction, 1e-4, 1.0);
         CheckClearance(section, new[] { path }, path.IsClosed);
+        if (keepOrientation)
+        {
+            string? whyK = null;
+            var kp = DirectRound.ExactSweep(section, path, lengthFraction, twistDeg * Math.PI / 180, true, ref whyK);
+            return kp ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Sweep: the kept orientation needs the exact sweep (" + whyK + ").");
+        }
         // KRN-07 (07.3): ЗАКРУТКА — только точной протяжкой (рамка без вращения, поворот вокруг касательной); иначе отказ
         if (Math.Abs(twistDeg) > 1e-12)
         {
             string? whyT = null;
-            var tw = path.IsClosed ? null : DirectRound.ExactSweep(section, path, lengthFraction, twistDeg * Math.PI / 180, ref whyT);
+            var tw = DirectRound.ExactSweep(section, path, lengthFraction, twistDeg * Math.PI / 180, ref whyT);
             return tw ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Sweep: twist needs the exact sweep (" + (whyT ?? "closed path") + ").");
         }
 
@@ -92,11 +101,12 @@ public static class SweepOp
         // гранение видно в аудите и отвергается политикой PreserveBRep. Мутация P3D_SWEEPPOLY=0 — прежний путь.
         // KRN-07 (07.3): ГЛАДКАЯ ОТКРЫТАЯ ТРАЕКТОРИЯ — ТОЧНО: грани по формуле сечения в рамке без вращения (DirectRound.ExactSweep;
         // мутация P3D_SWEEPEXACT=0 — многогранный путь, как прежде)
-        if (!PolyOff && !path.IsClosed && !((pathPts[0] - pathPts[^1]).Length <= Tol.Weld))
+        if (!PolyOff)
         {
             string? whyX = null;
             var ex = DirectRound.ExactSweep(section, path, lengthFraction, 0, ref whyX);
             if (ex != null) return ex;
+            DirectRound.Debug?.Invoke("sweep: exact declined: " + whyX);
         }
         if (!PolyOff) return Polyhedral(section, frames, path.IsClosed || (pathPts[0] - pathPts[^1]).Length <= Tol.Weld && lengthFraction >= 1);
 

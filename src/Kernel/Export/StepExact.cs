@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -18,6 +18,7 @@ public static class StepExact
 {
     /// <summary>Мутация P3D_STEPBAND=0: лента по формуле и линии касания не пишутся (честный отказ точной записи, прежде).</summary>
     /// <summary>Мутация P3D_STEPRATIONAL=0: веса рационального сплайна (кривой и поверхности) не пишутся (прежнее).</summary>
+    static readonly bool StepBezierOff = Environment.GetEnvironmentVariable("P3D_STEPBEZIER") == "0";
     static readonly bool StepRationalOff = Environment.GetEnvironmentVariable("P3D_STEPRATIONAL") == "0";
     static readonly bool StepBandOff = Environment.GetEnvironmentVariable("P3D_STEPBAND") == "0";
     /// <summary>
@@ -187,6 +188,14 @@ public static class StepExact
                     // Эллипс (сечение цилиндра наклонной плоскостью, K08): полуось 1 — вдоль U рамки.
                     geom = E($"ELLIPSE('',#{Axis(el.Frame)},{N(el.RU)},{N(el.RV)})");
                     return edgeOf[e] = E($"EDGE_CURVE('',#{Vertex(e.V0)},#{Vertex(e.V1)},#{geom},{(SameSense(el.Sweep, e) ? ".T." : ".F.")})");
+                }
+                // KRN-07 (07.4): КРИВАЯ БЕЗЬЕ (звено сечения лофта, эскиз) — B-сплайн степени n с узлами 0, 1 кратности n + 1 —
+                // точно; прежде — отказ точного STEP у лофта со сплайновыми сечениями. Мутация P3D_STEPBEZIER=0.
+                case BezierCurve3 bz when !StepBezierOff:
+                {
+                    int dg = bz.P.Length - 1;
+                    geom = E($"B_SPLINE_CURVE_WITH_KNOTS('',{dg},({string.Join(",", bz.P.Select(q => "#" + Point(q)))}),.UNSPECIFIED.,.F.,.F.,({dg + 1},{dg + 1}),({N(0)},{N(1)}),.UNSPECIFIED.)");
+                    break;
                 }
                 case SplineCurve3 sp:
                 {
