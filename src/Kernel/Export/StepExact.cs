@@ -18,6 +18,7 @@ public static class StepExact
 {
     /// <summary>Мутация P3D_STEPBAND=0: лента по формуле и линии касания не пишутся (честный отказ точной записи, прежде).</summary>
     /// <summary>Мутация P3D_STEPRATIONAL=0: веса рационального сплайна (кривой и поверхности) не пишутся (прежнее).</summary>
+    static readonly bool StepSpindleOff = Environment.GetEnvironmentVariable("P3D_STEPSPINDLE") == "0";
     static readonly bool StepBezierOff = Environment.GetEnvironmentVariable("P3D_STEPBEZIER") == "0";
     static readonly bool StepRationalOff = Environment.GetEnvironmentVariable("P3D_STEPRATIONAL") == "0";
     static readonly bool StepBandOff = Environment.GetEnvironmentVariable("P3D_STEPBAND") == "0";
@@ -412,6 +413,17 @@ public static class StepExact
                         if (off > gen.Radius + Tol.Weld)
                         {
                             surf = E($"TOROIDAL_SURFACE('',#{Axis(new Frame3(centre, rev.Axis.U, rev.Axis.V))},{N(off)},{N(gen.Radius)})");
+                            stepNormal = p => { var rad = Radial(centre, axisW, p); var ring = centre + rad.Normalized() * off; return p - ring; };
+                            break;
+                        }
+                        // 06.11: ВЕРЕТЕНООБРАЗНЫЙ ТОР (большой радиус меньше малого: скругление контура радиусом больше половины
+                        // радиуса дуги, контур над наклонными стенками) — DEGENERATE_TOROIDAL_SURFACE, наружная часть («яблоко»),
+                        // если образующая — снаружи окружности центров. Прежде — отказ точной записи всего тела. Мутация
+                        // P3D_STEPSPINDLE=0.
+                        if (!StepSpindleOff && off > Tol.Weld)
+                        {
+                            var gm = gen.PointAt((gen.T0 + gen.T1) / 2); bool outer = Radial(centre, axisW, gm).Length >= off;
+                            surf = E($"DEGENERATE_TOROIDAL_SURFACE('',#{Axis(new Frame3(centre, rev.Axis.U, rev.Axis.V))},{N(off)},{N(gen.Radius)},{(outer ? ".T." : ".F.")})");
                             stepNormal = p => { var rad = Radial(centre, axisW, p); var ring = centre + rad.Normalized() * off; return p - ring; };
                             break;
                         }
