@@ -1,4 +1,4 @@
-using OpenTK.Graphics.OpenGL4;
+﻿using Parametric3D.Render.Gl;
 using OpenTK.Mathematics;
 using Parametric3D.Core;
 
@@ -132,20 +132,34 @@ public sealed class SceneFramebuffer : IDisposable
     /// Переносит картинку на экран. Разрешение MSAA выполняет сам
     /// glBlitFramebuffer — отдельный проход с шейдером не нужен.
     /// </summary>
-    public void ResolveToScreen(int screenW, int screenH)
+    /// <summary>
+    /// Перенести кадр в кадровый буфер окна (у Avalonia это её собственный буфер с номером target, а не 0) и разрешить
+    /// многовыборочное сглаживание. Размеры совпадают: ES требует этого для разрешения.
+    /// </summary>
+    public void ResolveTo(int target, int screenW, int screenH)
     {
         GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _fbo);
-        GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
+        GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, target);
         GL.ReadBuffer(ReadBufferMode.ColorAttachment0);
-        GL.DrawBuffer(DrawBufferMode.Back);
 
         GL.BlitFramebuffer(0, 0, Width, Height,
                            0, 0, screenW, screenH,
                            ClearBufferMask.ColorBufferBit,
                            BlitFramebufferFilter.Nearest);
 
-        GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
+        GL.BindFramebuffer(FramebufferTarget.Framebuffer, target);
         GL.Viewport(0, 0, screenW, screenH);
+    }
+
+    /// <summary>Пиксели кадра (RGBA, снизу вверх) — для снимков вида в проверках.</summary>
+    public byte[] ReadPixels()
+    {
+        var px = new byte[Width * Height * 4];
+        if (ActualSamples > 1) return px;
+        GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _fbo);
+        GL.ReadBuffer(ReadBufferMode.ColorAttachment0);
+        GL.ReadPixelsRgba(0, 0, Width, Height, px);
+        return px;
     }
 
     public void Dispose()

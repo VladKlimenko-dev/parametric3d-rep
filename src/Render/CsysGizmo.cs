@@ -1,4 +1,4 @@
-using OpenTK.Graphics.OpenGL4;
+using Parametric3D.Render.Gl;
 using OpenTK.Mathematics;
 using Parametric3D.Core;
 
@@ -65,7 +65,7 @@ public sealed class CsysGizmo : IDisposable
     /// </summary>
     /// <param name="mouse">Позиция курсора в координатах контрола (Y вниз).</param>
     /// <param name="controlHeight">Высота контрола в пикселях.</param>
-    public bool HitTest(Camera cam, Point mouse, int controlHeight)
+    public bool HitTest(Camera cam, OpenTK.Mathematics.Vector2i mouse, int controlHeight)
     {
         // Прямоугольник гизмо в координатах контрола.
         int left = MarginPx;

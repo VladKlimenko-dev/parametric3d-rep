@@ -1,4 +1,4 @@
-using OpenTK.Graphics.OpenGL4;
+﻿using Parametric3D.Render.Gl;
 using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
@@ -721,9 +721,11 @@ public sealed class RenderScene : IDisposable
         var md = new Kernel.Tess.MeshData();
         mbOwn.FillInto(md);
         _datumFaces.Upload(md);
-        _datumFaces.BaseColor = new Vector4(0.45f, 0.58f, 0.80f, 0.14f);
-        _datumFaces.HoverColor = new Vector4(0.55f, 0.72f, 0.95f, 0.28f);
-        _datumFaces.SelectColor = new Vector4(0.30f, 0.78f, 0.98f, 0.36f);
+        // цвета плоскостей — из палитры вида (UI_VIEW_PALETTE: плоскость, наведение, выбор)
+        var st = Core.Settings.Current;
+        _datumFaces.BaseColor = st.DatumPlaneColor;
+        _datumFaces.HoverColor = new Vector4(st.HoverColor.Xyz, 0.28f);
+        _datumFaces.SelectColor = new Vector4(st.SelectColor.Xyz, 0.35f);
         _datumFaces.Unlit = true;
 
         // Чужой контекст — та же заливка, заметно прозрачнее; подсветка при наведении
@@ -731,9 +733,9 @@ public sealed class RenderScene : IDisposable
         var mdDim = new Kernel.Tess.MeshData();
         mbDim.FillInto(mdDim);
         _datumFacesDim.Upload(mdDim);
-        _datumFacesDim.BaseColor = new Vector4(0.45f, 0.58f, 0.80f, 0.05f);
-        _datumFacesDim.HoverColor = new Vector4(0.55f, 0.72f, 0.95f, 0.18f);
-        _datumFacesDim.SelectColor = new Vector4(0.30f, 0.78f, 0.98f, 0.26f);
+        _datumFacesDim.BaseColor = new Vector4(st.DatumPlaneColor.Xyz, st.DatumPlaneColor.W * 0.35f);
+        _datumFacesDim.HoverColor = new Vector4(st.HoverColor.Xyz, 0.18f);
+        _datumFacesDim.SelectColor = new Vector4(st.SelectColor.Xyz, 0.26f);
         _datumFacesDim.Unlit = true;
 
         _datumEdges.End();

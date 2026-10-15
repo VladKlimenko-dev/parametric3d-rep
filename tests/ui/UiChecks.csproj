@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Проверки приложения без экрана (Avalonia.Headless): реестр команд, палитра, отмена и повтор, файл, выбор в виде мышью,
+    куб вида, тема. Запуск: Parametric3D.UiChecks [имя проверки]. Сборка без сети — как у приложения (-p:LocalDeps, -p:UiPackages).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Parametric3D.UiChecks</AssemblyName>
+    <NoWarn>$(NoWarn);CS9057</NoWarn>
+    <AvaloniaNameGeneratorIsEnabled>false</AvaloniaNameGeneratorIsEnabled>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(UiPackages)'!=''">
+    <RestoreSources>$(UiPackages)</RestoreSources>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Parametric3D.csproj" />
+    <PackageReference Include="Avalonia.Headless" Version="12.1.4" />
+    <None Include="../../src/App/Assets/icons.tsv" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

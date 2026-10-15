@@ -1,0 +1,71 @@
+<!--
+  Цвета оболочки. Смысловые цвета — из UI_VIEW_PALETTE.md («Цвета UI, совпадающие с видом»): выбор, наведение, ошибка,
+  предупреждение, успех, оси X/Y/Z, добавление, опорные, эскиз. Цвета поверхностей оболочки подобраны к фону вида
+  (графит → почти чёрный в тёмной теме, светло-серый в светлой).
+-->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Dark">
+      <Color x:Key="SystemAccentColor">#2F8CFF</Color>
+      <SolidColorBrush x:Key="P3.WindowBg" Color="#15171C" />
+      <SolidColorBrush x:Key="P3.PanelBg" Color="#1C1F26" />
+      <SolidColorBrush x:Key="P3.PanelBg2" Color="#22262E" />
+      <SolidColorBrush x:Key="P3.Border" Color="#2C313B" />
+      <SolidColorBrush x:Key="P3.HoverBg" Color="#2A303A" />
+      <SolidColorBrush x:Key="P3.PressedBg" Color="#343B47" />
+      <SolidColorBrush x:Key="P3.Text" Color="#E6E8EC" />
+      <SolidColorBrush x:Key="P3.TextDim" Color="#9AA1AD" />
+      <SolidColorBrush x:Key="P3.TextFaint" Color="#6B7280" />
+      <SolidColorBrush x:Key="P3.Accent" Color="#2F8CFF" />
+      <SolidColorBrush x:Key="P3.AccentSoft" Color="#332F8CFF" />
+      <SolidColorBrush x:Key="P3.Hover" Color="#33FFB020" />
+      <SolidColorBrush x:Key="P3.Error" Color="#EF4444" />
+      <SolidColorBrush x:Key="P3.Warning" Color="#F59E0B" />
+      <SolidColorBrush x:Key="P3.Success" Color="#4ADE80" />
+      <SolidColorBrush x:Key="P3.AxisX" Color="#E5484D" />
+      <SolidColorBrush x:Key="P3.AxisY" Color="#30A46C" />
+      <SolidColorBrush x:Key="P3.AxisZ" Color="#3E7BFA" />
+      <SolidColorBrush x:Key="P3.Add" Color="#FF7A1A" />
+      <SolidColorBrush x:Key="P3.Datum" Color="#6EA0FF" />
+      <SolidColorBrush x:Key="P3.Sketch" Color="#FFD64A" />
+      <SolidColorBrush x:Key="P3.OverlayBg" Color="#E01C1F26" />
+      <!-- куб вида -->
+      <SolidColorBrush x:Key="P3.CubeFace" Color="#C9CED6" />
+      <SolidColorBrush x:Key="P3.CubeFaceShade" Color="#9EA5B0" />
+      <SolidColorBrush x:Key="P3.CubeEdge" Color="#5B6270" />
+      <SolidColorBrush x:Key="P3.CubeText" Color="#2A2E36" />
+      <SolidColorBrush x:Key="P3.CubeRing" Color="#8C93A0" />
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Light">
+      <Color x:Key="SystemAccentColor">#176AE6</Color>
+      <SolidColorBrush x:Key="P3.WindowBg" Color="#E9EBEF" />
+      <SolidColorBrush x:Key="P3.PanelBg" Color="#F7F8FA" />
+      <SolidColorBrush x:Key="P3.PanelBg2" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="P3.Border" Color="#D5D9E0" />
+      <SolidColorBrush x:Key="P3.HoverBg" Color="#E6E9EE" />
+      <SolidColorBrush x:Key="P3.PressedBg" Color="#D9DDE4" />
+      <SolidColorBrush x:Key="P3.Text" Color="#1C1E22" />
+      <SolidColorBrush x:Key="P3.TextDim" Color="#5B6270" />
+      <SolidColorBrush x:Key="P3.TextFaint" Color="#8C93A0" />
+      <SolidColorBrush x:Key="P3.Accent" Color="#176AE6" />
+      <SolidColorBrush x:Key="P3.AccentSoft" Color="#29176AE6" />
+      <SolidColorBrush x:Key="P3.Hover" Color="#2EE69100" />
+      <SolidColorBrush x:Key="P3.Error" Color="#D1242F" />
+      <SolidColorBrush x:Key="P3.Warning" Color="#C27803" />
+      <SolidColorBrush x:Key="P3.Success" Color="#168C46" />
+      <SolidColorBrush x:Key="P3.AxisX" Color="#CD2B31" />
+      <SolidColorBrush x:Key="P3.AxisY" Color="#18794E" />
+      <SolidColorBrush x:Key="P3.AxisZ" Color="#2556D6" />
+      <SolidColorBrush x:Key="P3.Add" Color="#EA580C" />
+      <SolidColorBrush x:Key="P3.Datum" Color="#2556D6" />
+      <SolidColorBrush x:Key="P3.Sketch" Color="#1F5FD6" />
+      <SolidColorBrush x:Key="P3.OverlayBg" Color="#EAFFFFFF" />
+      <SolidColorBrush x:Key="P3.CubeFace" Color="#F3F4F6" />
+      <SolidColorBrush x:Key="P3.CubeFaceShade" Color="#D3D7DE" />
+      <SolidColorBrush x:Key="P3.CubeEdge" Color="#8C93A0" />
+      <SolidColorBrush x:Key="P3.CubeText" Color="#2A2E36" />
+      <SolidColorBrush x:Key="P3.CubeRing" Color="#AEB4BF" />
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

@@ -1,78 +1,63 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    Parametric3D — приложение на Avalonia 12 (решение пользователя 2026-10-11, UI_AVALONIA_STAGE.md).
+    Сборка включает ядро (Kernel), модель (Model), общее (Core), рендер (Render) и оболочку (App) —
+    все *.cs под этой папкой, кроме документации.
+
+    Пакеты: обычная сборка берёт их с nuget.org. Сборка без сети (среда разработки ядра):
+      dotnet build -p:LocalDeps=<tools/deps> -p:UiPackages=<каталог .nupkg Avalonia>
+    тогда OpenTK.Mathematics и System.Drawing.Common — проекты из tools/deps, а Avalonia — из локального каталога.
+  -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
-    <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>Parametric3D</RootNamespace>
-    <AssemblyName>Parametric3D</AssemblyName>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
-
-    <!-- Процесс x64.
-
-         Родных библиотек у приложения больше нет, и разрядность ему
-         безразлична, но OpenGL-драйвер и объём памяти под сетки — нет.
-         Задаётся PlatformTarget, а НЕ ограничение Platforms=x64:
-         ограничение требует, чтобы платформу x64 знало и решение,
-         а иначе проект под конфигурацией «Any CPU» просто не собирается,
-         тогда как Visual Studio всё равно ищет exe по пути bin\x64\... -->
+    <RootNamespace>Parametric3D</RootNamespace>
+    <AssemblyName>Parametric3D</AssemblyName>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationIcon Condition="Exists('App\Assets\Icons\app_icon.ico')">App\Assets\Icons\app_icon.ico</ApplicationIcon>
     <PlatformTarget>x64</PlatformTarget>
     <Prefer32Bit>false</Prefer32Bit>
+    <!-- Генераторы Avalonia 12 просят Roslyn 4.14; у .NET 8 SDK — 4.8: компиляция XAML при этом работает. -->
+    <NoWarn>$(NoWarn);CS9057</NoWarn>
+    <!-- Генератор полей x:Name требует Roslyn 4.14 (нет в .NET 8 SDK): поля находятся вручную (*.Names.cs). -->
+    <AvaloniaNameGeneratorIsEnabled>false</AvaloniaNameGeneratorIsEnabled>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(UiPackages)'!=''">
+    <RestoreSources>$(UiPackages)</RestoreSources>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- OpenTK 4.9.4 = OpenGL bindings + math.  OpenTK.GLControl 4.0.2 = WinForms host
-         (это переименованный OpenTK.WinForms; namespace теперь OpenTK.GLControl). -->
-    <PackageReference Include="OpenTK" Version="4.9.4" />
-    <PackageReference Include="OpenTK.GLControl" Version="4.0.2" />
+    <Compile Remove="docs/**" />
+    <None Remove="docs/**" />
+    <AvaloniaResource Include="App/Assets/**" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Иконки тулбаров и дерева ВШИТЫ В СБОРКУ.
-         Раньше они лежали рядом с exe отдельными файлами и подгружались
-         с диска: достаточно было одной неудачной копии при сборке, чтобы
-         кнопки остались без картинок. Встроенный ресурс уехать никуда
-         не может — он часть exe.
-         Имя ресурса собирается из пути: Resources\Toolbar\ok.png
-         превращается в Parametric3D.Resources.Toolbar.ok.png -->
-    <None Remove="Resources\**\*.png" />
-    <EmbeddedResource Include="Resources\**\*.png" />
+    <PackageReference Include="Avalonia" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.4" />
+    <PackageReference Include="Svg.Controls.Skia.Avalonia" Version="12.0.0.17" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   </ItemGroup>
 
-  <!-- Тестам видны внутренние типы: операции ядра проверяются напрямую,
-       а делать их открытыми ради тестов значило бы расширить API без нужды. -->
-  <ItemGroup>
-    <InternalsVisibleTo Include="Parametric3D.Tests" />
+  <ItemGroup Condition="'$(LocalDeps)'!=''">
+    <ProjectReference Include="$(LocalDeps)/OTKMath/OpenTK.Mathematics.csproj" />
+    <ProjectReference Include="$(LocalDeps)/SDCStub/System.Drawing.Common.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(LocalDeps)'==''">
+    <PackageReference Include="OpenTK.Mathematics" Version="4.9.4" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Legacy/ — материалы из старого проекта для справки, в сборку не входят. -->
-    <Compile Remove="Legacy/**" />
-    <None Include="Legacy/**" />
-
-    <!-- Тестовый проект лежит ВНУТРИ папки приложения — так удобнее, когда
-         папка проекта и есть корень. Но SDK-проект берёт все *.cs под собой
-         рекурсивно, и без исключения тесты компилировались бы как часть
-         приложения, где xUnit нет. Ошибка выглядела как «Xunit не найден»
-         в проекте Parametric3D — именно так это и проявилось. -->
-    <Compile Remove="Parametric3D.Tests/**" />
-    <None Remove="Parametric3D.Tests/**" />
-    <EmbeddedResource Remove="Parametric3D.Tests/**" />
-    <Compile Remove="Parametric3D.Verify/**" />
-    <None Remove="Parametric3D.Verify/**" />
-    <EmbeddedResource Remove="Parametric3D.Verify/**" />
-
-    <!-- Прежний мост к родному ядру. Папка Kernel/Native удалена, но
-         распаковка архива поверх старой копии её не стирает, и SDK-проект
-         подхватил бы оставшиеся файлы как исходники — с обращениями
-         к типам, которых больше нет. Исключение здесь страхует от этого;
-         удалить папку всё же стоит. -->
-    <Compile Remove="Kernel/Native/**" />
-    <None Remove="Kernel/Native/**" />
+    <InternalsVisibleTo Include="Parametric3D.UiChecks" />
   </ItemGroup>
 
 </Project>
