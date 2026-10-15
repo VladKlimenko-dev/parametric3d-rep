@@ -50,7 +50,7 @@ public static class LoftOp
         {
             if (s.Loops.Count != 1) return null;
             var cs = s.Loops[0].Curves;
-            if (cs.Any(c => c is not LineCurve3 && c is not ArcCurve3)) return null;
+            if (cs.Any(c => c is not LineCurve3 && c is not ArcCurve3 && c is not BezierCurve3)) return null;
             raw.Add((cs.ToList(), s.Plane.W));
         }
         int n = raw.Where(r => !(r.Loop.Count == 1 && r.Loop[0] is ArcCurve3 { IsClosed: true })).Select(r => r.Loop.Count).DefaultIfEmpty(1).Max();
@@ -144,7 +144,7 @@ public static class LoftOp
         // столько дуг, сколько звеньев у соседа) — NURBS-грани по звеньям, линейчатый или гладкий (DirectRound.NurbsLoft).
         // Гладкий без этого пути не строится (отказ), линейчатый — прежним путём по ломаным. Мутация P3D_LOFTNURBS=0.
         // многоугольники (без дуг) у линейчатого лофта — прежним точным путём по вершинам (призматоид, P3D_LOFTCORNERS)
-        if (!DirectRound.LoftNurbsOff && ExactSections(sections) is { } secs && (_smooth || secs.Any(x => x.Loop.Any(c => c is ArcCurve3))))
+        if (!DirectRound.LoftNurbsOff && ExactSections(sections) is { } secs && (_smooth || secs.Any(x => x.Loop.Any(c => c is ArcCurve3 or BezierCurve3))))
         {
             string? why = null;
             var exact = DirectRound.NurbsLoft(secs, _smooth, ref why);

@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 
 namespace Parametric3D.Kernel.Topology;
 
@@ -827,6 +827,7 @@ public static class TopologyConventions
         return pts.All(q => Math.Abs(Vector3d.Dot(q - c, n)) <= 1e-7 * Math.Max(1, size)) ? (c, n) : null;
     }
 
+    static readonly bool NormSectOff = Environment.GetEnvironmentVariable("P3D_NORMSECT") == "0";
     private static int? SignFromLocalNormal(List<Ring> members)
     {
         foreach (var r in members)
@@ -840,6 +841,10 @@ public static class TopologyConventions
             try { n = f.NormalAt(pts[0]).Normalized(); } catch { continue; }
             double along = Vector3d.Dot(nw.Normalized(), n);
             if (Math.Abs(along) < 0.5) continue;            // кольцо обходит период (не отверстие) — не годится
+            // KRN-07 (07.3): ЕДИНСТВЕННЫЙ КОНТУР ГРАНИ ПО ФОРМУЛЕ СЕЧЕНИЯ — наружный, не отверстие (замкнутая протяжка: тело
+            // из одних таких граней-четырёхугольников, плоских колец нет); наружное: r.Sign · (nw · n) > 0. Прежде — как
+            // отверстие, и тело выворачивалось (объём −408.4). Мутация P3D_NORMSECT=0.
+            if (!NormSectOff && f.Surface is Surfaces.SectionSurface && f.Loops.Count == 1) return r.Sign * Vector3d.Dot(nw, n) > 0 ? 1 : -1;
             // Отверстие: r.Sign · (nw · n) < 0.
             return r.Sign * Vector3d.Dot(nw, n) < 0 ? 1 : -1;
         }

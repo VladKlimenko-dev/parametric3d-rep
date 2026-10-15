@@ -201,6 +201,7 @@ public static class DocumentFile
             Formula = w.LengthFraction.Formula,
             Twist = Math.Abs(w.Twist.Value) > 0 || w.Twist.Formula != null ? w.Twist.Value : null,
             TwistFormula = w.Twist.Formula,
+            KeepOrientation = w.KeepOrientation ? true : null,
             Cut = w.Cut
         },
 
@@ -559,6 +560,7 @@ public static class DocumentFile
                     w.PathLineId = fd.PathLineId;
                     w.LengthFraction = new ValueRef(fd.Distance) { Formula = fd.Formula };
                     if (fd.Twist is double tw) w.Twist = new ValueRef(tw) { Formula = fd.TwistFormula };
+                    w.KeepOrientation = fd.KeepOrientation == true;
                     part.AddFeature(w);
                     break;
                 }
@@ -1008,6 +1010,7 @@ public static class DocumentFile
         /// <summary>KRN-07 (07.3): закрутка протяжки, градусы.</summary>
         public double? Twist { get; set; }
         public string? TwistFormula { get; set; }
+        public bool? KeepOrientation { get; set; }
         public string? RadiusEndFormula { get; set; }
         /// <summary>KRN-07 (07.5): точки граней со своей толщиной оболочки (толщины — в Values/Formulas).</summary>
         public List<double>? ThickFaces { get; set; }

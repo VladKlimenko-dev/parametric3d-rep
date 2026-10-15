@@ -439,6 +439,7 @@ static partial class Program
         if (mode is "drcavity" or "allA") Krn06CavityChecks();
         if (mode is "drmultiend" or "allA") Krn06MultiEndChecks();
         if (mode is "sweepexact" or "allA") Krn07ExactSweepChecks();
+        if (mode is "loftspline" or "allA") Krn07SplineLoftChecks();
         if (mode is "sbprobe") SetbackProbe();
         if (mode is "krn06incl" or "allA") Krn06InclinedHoleChecks();
         if (mode is "krn06mixed" or "allA") Krn06MixedChecks();

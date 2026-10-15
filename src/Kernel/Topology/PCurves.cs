@@ -233,6 +233,7 @@ public static class PCurves
         }
     }
 
+    static readonly bool SectPerOff = Environment.GetEnvironmentVariable("P3D_PCSECTPER") == "0";
     static readonly bool PeriodsOld = Environment.GetEnvironmentVariable("P3D_PCPERIOD") == "0";
 
     /// <summary>
@@ -258,6 +259,15 @@ public static class PCurves
                     if (Math.Abs(rv.Sweep) > 1e-12) cv.Add(2 * Math.PI / Math.Abs(rv.Sweep));
                     if (rv.Base is ArcCurve3 rb && Math.Abs(rb.Sweep) > 1e-12) cu.Add(2 * Math.PI / Math.Abs(rb.Sweep));
                 }
+            }
+            // KRN-07 (07.3): у поверхности по формуле сечения u — миллиметры от начала траектории, промежуток грани может
+            // начинаться не с нуля (треть замкнутой протяжки): проба (0.31, ·) и (1.31, ·) — обе вне промежутка, таблица
+            // прижимает их к краю, и «период 1» находился ложно (p-кривая рельса отходила на 20–30 мм). Проба — внутри
+            // промежутка, кандидат 1 — не для неё. Мутация P3D_PCSECTPER=0.
+            if (!SectPerOff && s is SectionSurface sps)
+            {
+                p = new Vector2d(sps.UMin + 0.3137 * (sps.UMax - sps.UMin), 0.4271);
+                cu.Remove(1);
             }
             double pu = cu.FirstOrDefault(c => Same(p, p + new Vector2d(c, 0)));
             double pv = cv.FirstOrDefault(c => Same(p, p + new Vector2d(0, c)));
