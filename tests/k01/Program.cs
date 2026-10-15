@@ -440,12 +440,15 @@ static partial class Program
         if (mode is "drmultiend" or "allA") Krn06MultiEndChecks();
         if (mode is "sweepexact" or "allA") Krn07ExactSweepChecks();
         if (mode is "loftspline" or "allA") Krn07SplineLoftChecks();
+        if (mode is "loftguides" or "allA") Krn07GuideLoftChecks();
+        if (mode is "lofttangent" or "allA") Krn07LoftTangencyChecks();
         if (mode is "sbprobe") SetbackProbe();
         if (mode is "krn06incl" or "allA") Krn06InclinedHoleChecks();
         if (mode is "krn06mixed" or "allA") Krn06MixedChecks();
         if (mode is "krn06tanprop" or "allA") Krn06TanPropChecks();
         if (mode is "krn07shellc" or "allA") Krn07ShellCurvedChecks();
         if (mode is "krn07drafttan" or "allA") Krn07DraftTangentChecks();
+        if (mode is "draftspline" or "allA") Krn07DraftSplineChecks();
         if (mode is "krn07loftn" or "allA") Krn07LoftNurbsChecks();
         if (mode is "krn04uniq" or "allB") Krn04UniqChecks();
         if (mode is "krn07nurbs" or "allB") Krn07NurbsChecks();

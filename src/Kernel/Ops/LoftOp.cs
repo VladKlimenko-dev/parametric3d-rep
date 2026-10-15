@@ -23,12 +23,24 @@ public static class LoftOp
     static readonly bool AmbigOff = Environment.GetEnvironmentVariable("P3D_LOFTAMBIG") == "0";
 
     /// <param name="smooth">KRN-07 (07.4): гладкий лофт (интерполяция поперёк сечений степени до 3) вместо линейчатого.</param>
-    public static TSolid Build(IReadOnlyList<Profile> sections, int samples = 64, bool smooth = false)
+    /// <param name="guides">KRN-07 (07.4): направляющие кривые — каждая проходит через соответственные вершины всех сечений
+    /// (отрезок, кривая Безье, дуга короче 180°); тело — точное (NURBS-грани Кунса), иначе отказ.</param>
+    /// <param name="tanStart">KRN-07 (07.4): касательная к нормали первого сечения (длина — доля расстояния между центрами
+    /// крайних сечений; 0 — без условия); <paramref name="tanEnd"/> — у последнего. Условие делает лофт гладким.</param>
+    public static TSolid Build(IReadOnlyList<Profile> sections, int samples = 64, bool smooth = false, IReadOnlyList<ICurve3>? guides = null,
+                               double tanStart = 0, double tanEnd = 0)
     {
-        _smooth = smooth;
-        try { return BuildCore(sections, samples); } finally { _smooth = false; }
+        if (guides is { Count: > 0 })
+        {
+            if (Math.Abs(tanStart) > 1e-12 || Math.Abs(tanEnd) > 1e-12)
+                throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: end tangency together with guide curves is not supported.");
+            return Guided(sections, smooth, guides);
+        }
+        _smooth = smooth || Math.Abs(tanStart) > 1e-12 || Math.Abs(tanEnd) > 1e-12; _tan0 = tanStart; _tan1 = tanEnd;
+        try { return BuildCore(sections, samples); } finally { _smooth = false; _tan0 = _tan1 = 0; }
     }
     [ThreadStatic] static bool _smooth;
+    [ThreadStatic] static double _tan0, _tan1;
 
     static TSolid BuildCore(IReadOnlyList<Profile> sections, int samples)
     {
@@ -43,7 +55,18 @@ public static class LoftOp
 
     /// <summary>Сечения для точного лофта: внешний контур из отрезков и дуг; целая окружность — на N равных дуг (N — число
     /// звеньев у сечений-многоугольников), начало — по направлению первой вершины соседнего сечения. null — не подходит.</summary>
-    static List<(List<ICurve3> Loop, Vector3d Normal)>? ExactSections(IReadOnlyList<Profile> sections)
+    static TSolid Guided(IReadOnlyList<Profile> sections, bool smooth, IReadOnlyList<ICurve3> guides)
+    {
+        if (sections.Count < 2) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Loft: at least two sections are needed.");
+        if (sections.Any(x => x.Loops.Count > 1)) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: guide curves with holes in the sections are not supported.");
+        var secs = ExactSections(sections, false)
+                   ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: guide curves need sections of lines, arcs and Bezier curves.");
+        string? why = null;
+        return DirectRound.NurbsLoft(secs, smooth, ref why, guides)
+               ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: the loft along guide curves declined: " + why);
+    }
+
+    static List<(List<ICurve3> Loop, Vector3d Normal)>? ExactSections(IReadOnlyList<Profile> sections, bool splitCircles = true)
     {
         var raw = new List<(List<ICurve3> Loop, Vector3d Normal)>();
         foreach (var s in sections)
@@ -56,7 +79,7 @@ public static class LoftOp
         int n = raw.Where(r => !(r.Loop.Count == 1 && r.Loop[0] is ArcCurve3 { IsClosed: true })).Select(r => r.Loop.Count).DefaultIfEmpty(1).Max();
         for (int k = 0; k < raw.Count; k++)
         {
-            if (!(raw[k].Loop.Count == 1 && raw[k].Loop[0] is ArcCurve3 { IsClosed: true } a) || n == 1) continue;
+            if (!(raw[k].Loop.Count == 1 && raw[k].Loop[0] is ArcCurve3 { IsClosed: true } a) || n == 1 || !splitCircles) continue;
             // начало деления — направление первой вершины ближайшего сечения-многоугольника (относительно его центра)
             var other = raw.Select((r, i) => (r, i)).Where(x => x.r.Loop.Count == n).OrderBy(x => Math.Abs(x.i - k)).FirstOrDefault();
             double a0 = a.A0;
@@ -137,7 +160,7 @@ public static class LoftOp
         // K09. ДВЕ СООСНЫЕ ОКРУЖНОСТИ В ПАРАЛЛЕЛЬНЫХ ПЛОСКОСТЯХ — ЭТО УСЕЧЁННЫЙ КОНУС (или
         // цилиндр). Общий путь сшивает ломаные из 64 точек: объём на 0.4% меньше точного,
         // кромки — многоугольники. Здесь тело строится вращением точного профиля.
-        if (sections.Count == 2 && CoaxialCircles(sections[0], sections[1]) is { } cone)
+        if (sections.Count == 2 && _tan0 == 0 && _tan1 == 0 && CoaxialCircles(sections[0], sections[1]) is { } cone)
             return cone;
 
         // KRN-07 (07.4): ТОЧНЫЙ ЛОФТ — сечения из отрезков и дуг (у всех одно число звеньев; целая окружность делится на
@@ -147,7 +170,7 @@ public static class LoftOp
         if (!DirectRound.LoftNurbsOff && ExactSections(sections) is { } secs && (_smooth || secs.Any(x => x.Loop.Any(c => c is ArcCurve3 or BezierCurve3))))
         {
             string? why = null;
-            var exact = DirectRound.NurbsLoft(secs, _smooth, ref why);
+            var exact = DirectRound.NurbsLoft(secs, _smooth, ref why, null, _tan0, _tan1);
             if (exact != null) return exact;
             if (_smooth) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: the smooth loft declined: " + why);
         }
