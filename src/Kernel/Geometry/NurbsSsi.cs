@@ -636,7 +636,7 @@ public sealed class NurbsImplicitCurve3 : ICurve3
             return b;
         }
     }
-    public ICurve3 Reversed() => new NurbsImplicitCurve3(S, Other, _uv.Reverse().ToList());
+    public ICurve3 Reversed() => new NurbsImplicitCurve3(S, Other, Enumerable.Reverse(_uv).ToList());
     public void Tessellate(List<Vector3d> dst, bool includeFirstPoint)
     {
         for (int i = includeFirstPoint ? 0 : 1; i < _uv.Length; i++) dst.Add(S.PointAt(_uv[i]));
@@ -1158,6 +1158,6 @@ public sealed class NurbsNurbsCurve3 : ICurve3
             b.Add(b.Min - new Vector3d(step)); b.Add(b.Max + new Vector3d(step)); return b;
         }
     }
-    public ICurve3 Reversed() => new NurbsNurbsCurve3(A, B, _q.Reverse().ToList());
+    public ICurve3 Reversed() => new NurbsNurbsCurve3(A, B, Enumerable.Reverse(_q).ToList());
     public void Tessellate(List<Vector3d> dst, bool includeFirstPoint) { for (int i = includeFirstPoint ? 0 : 1; i < _p.Length; i++) dst.Add(_p[i]); }
 }
