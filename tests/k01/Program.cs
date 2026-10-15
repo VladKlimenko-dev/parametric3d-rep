@@ -458,6 +458,7 @@ static partial class Program
         if (mode is "bezdecomp" or "allA") BezierDecompositionChecks();
         if (mode is "equalcyl" or "allA") Krn06EqualCylChecks();
         if (mode is "lawloop" or "allA") Krn06LawLoopChecks();
+        if (mode is "partialv" or "allA") Krn06PartialVertexChecks();
         if (mode is "compprobe") CompositeProbe();
         if (mode is "krn07loftn" or "allA") Krn07LoftNurbsChecks();
         if (mode is "krn04uniq" or "allB") Krn04UniqChecks();

@@ -570,7 +570,7 @@ public static partial class DirectRound
             if (!(speed > 0)) { why = "open curved: edge parameter degenerate at an end"; return false; }
             double step = Math.Min(2 * r / speed, 0.45 * Delta);
             double fBeyond = Fend(k, Ed(tEnd + dk * 1e-4 * step)), fBefore = Fend(k, Ed(tEnd - dk * 1e-4 * step));
-            if (!(fBeyond * fBefore < 0)) { why = "open curved: the edge does not cross the end face"; return false; }
+            if (!(fBeyond * fBefore < 0)) { why = $"open curved: the edge does not cross the end face (end {k} at {ends[k].V}, face {ends[k].FE.Surf.GetType().Name} {ends[k].FE.Tag}, f {fBefore:E2}/{fBeyond:E2})"; return false; }
             if (fBeyond < 0) endSign[k] = -1;
             double h = step; bool found = false;
             for (int it = 0; it < 8 && !found; it++, h *= 2) if (SectionSide(k, tEnd + dk * h, 1)) { outT[k] = tEnd + dk * h; found = true; }

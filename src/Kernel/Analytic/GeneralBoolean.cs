@@ -175,7 +175,14 @@ public static class GeneralBoolean
     [ThreadStatic] public static Action<string, Vector3d>? PointDebug;
     [ThreadStatic] public static Action<string>? TangentDebug;
     /// <summary>Разбор: пропускать касания по рёбрам (P3D_GENTANGENT=1) — НЕ ДЛЯ РАБОТЫ (неверные результаты, r45).</summary>
-    public static readonly bool AllowTangentAlongEdge = Environment.GetEnvironmentVariable("P3D_GENTANGENT") == "1";
+    static readonly bool AllowTangentEnv = Environment.GetEnvironmentVariable("P3D_GENTANGENT") == "1";
+    public static bool AllowTangentAlongEdge => AllowTangentEnv || TangentAlongEdgeScope;
+    /// <summary>
+    /// 06.1/06.9: касание по рёбрам разрешено ТОЛЬКО в пересечении тел «одно тело — разные скругления» (вершина с частью
+    /// выбранных рёбер): ленты касаются граней по своим же рёбрам контакта, грани тел совпадают. Результат сверяется с
+    /// независимым эталоном (KRN06-PARTIAL-VERTEX-SELECTION); в общем случае — прежний отказ.
+    /// </summary>
+    [ThreadStatic] public static bool TangentAlongEdgeScope;
 
     static readonly bool EmptyOff = Environment.GetEnvironmentVariable("P3D_GENEMPTY") == "0";
     /// <summary>Последний вызов Run в этом потоке доказал пустой результат (null с этим признаком — не отказ).</summary>

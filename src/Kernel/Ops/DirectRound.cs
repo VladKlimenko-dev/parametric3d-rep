@@ -159,6 +159,15 @@ public static partial class DirectRound
             if (r3 != null) { res = r3; Interlocked.Increment(ref OpenBuilt); }
             else { why += " | open curved: " + w3; Interlocked.Increment(ref OpenDeclined); }
         }
+        bool partial = false;
+        if (res == null && PartialVertexOn && !_inPartial && refs.Count >= 2 && why != null && why.Contains("vertex of degree"))
+        {
+            // KRN-06 (06.1, 06.9): ВЫБОР ЧАСТИ РЁБЕР ВЕРШИНЫ СТЕПЕНИ n > 3 — этапами (DirectRoundPartial)
+            string? w4 = null;
+            var r4 = BuildPartialVertex(bodies[k], refs, r, ref w4);
+            if (r4 != null) { res = r4; partial = true; Interlocked.Increment(ref PartialVertexBuilt); }
+            else why += " | partial vertex: " + w4;
+        }
         if (res == null && CavityOn && !_inDetour && why != null && why.Contains("blend strip"))
         {
             // KRN-06 (06.5, 06.9): отверстие или карман в полосе — заполнить, скруглить, вычесть обратно (DirectRoundCavity)
@@ -174,6 +183,7 @@ public static partial class DirectRound
         bodies[k] = res; Interlocked.Increment(ref Built);
         if (added > 0) warnings.Add($"Round: tangent propagation added {added} edge(s) to the selection.");
         warnings.Add(staged ? $"Round: direct blend ({refs.Count} edge(s), exact blend surfaces; concave edges first at mixed corners)."
+                   : partial ? $"Round: direct blend ({refs.Count} edge(s), exact blend surfaces; a vertex with part of its edges selected — in stages, the blends trim each other)."
                             : $"Round: direct blend ({refs.Count} edge(s), exact blend surfaces).");
         return true;
     }

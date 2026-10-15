@@ -151,11 +151,36 @@ public static class SsiEvents
             }
             merged.Add(t);
         }
+        // 06.1: КАСАНИЕ У КОНЦА РЕБРА. Дуга торца ленты кончается на линии касания, и поверхность другого операнда (плоскость
+        // грани, касательная к ленте) касается её именно в конце: кратный корень находится с точностью ~√ε (3e-7 по параметру
+        // от конца) — вершина-двойник в 2e-7 мм и ребро такой длины (OCCT: незамкнутая оболочка). Конец на поверхности (|F| ≤
+        // 1e-10) и корень ближе 1e-6·размер к нему — это конец. Мутация P3D_EVENDSNAP=0.
+        if (!EvEndSnapOff && merged.Count > 0)
+        {
+            double len = (e.PointAt(e.T1) - e.PointAt(e.T0)).Length + (e.PointAt((e.T0 + e.T1) / 2) - e.PointAt(e.T0)).Length;
+            double near = 1e-6 * Math.Max(1, len);
+            foreach (var te in new[] { e.T0, e.T1 })
+            {
+                var pe = e.PointAt(te);
+                if (Math.Abs(Ssi.Implicit(s, pe).F) > 1e-10) continue;
+                for (int i = 0; i < merged.Count; i++)
+                    if (merged[i] != te && (e.PointAt(merged[i]) - pe).Length <= near) { merged[i] = te; Interlocked.Increment(ref EndSnaps); }
+            }
+            merged = merged.Distinct().OrderBy(t => t).ToList();
+        }
         return merged;
     }
 
     /// <summary>Замер: рёбра-кривые пересечения со строгими событиями и без них (тогда — выборка и отказ маршрута).</summary>
     public static long TracedCertified, TracedUncertain;
+    /// <summary>Замер: корни у конца ребра, отнесённые к концу (касание у конца).</summary>
+    public static long EndSnaps;
+    static readonly bool EvEndSnapOff = Environment.GetEnvironmentVariable("P3D_EVENDSNAP") == "0";
+    /// <summary>Замер: неотделимые звенья у конца кривой пересечения, отнесённые к вершине.</summary>
+    public static long TracedEndExempt;
+    /// <summary>Мутация P3D_TRACEDEND=0: неотделимое звено у конца кривой — отказ (прежнее).</summary>
+    static readonly bool TracedEndDbg = Environment.GetEnvironmentVariable("P3D_TENDDBG") == "1";
+    static readonly bool TracedEndOff = Environment.GetEnvironmentVariable("P3D_TRACEDEND") == "0";
     /// <summary>Мутация P3D_CONTACTEXCL=0: без доказательства «линия касания шара поверхность не задевает» (отказ маршрута).</summary>
     static readonly bool ContactExclOff = Environment.GetEnvironmentVariable("P3D_CONTACTEXCL") == "0";
     static readonly bool RigorDbg = Environment.GetEnvironmentVariable("P3D_RIGORDBG") == "1";
@@ -188,6 +213,21 @@ public static class SsiEvents
             if (Math.Abs(Ssi.Implicit(sa, p).F) > 1e-9 || Math.Abs(Ssi.Implicit(sb, p).F) > 1e-9) return null;
         var res = new List<double>(); bool ok = true; int budget = 200000;
         double Fs(Vector3d x) => Ssi.Implicit(s, x).F;
+        // ОКРЕСТНОСТЬ КОНЦА: шов двух лент, касающихся общей грани, кончается в точке касания лент (A и B касаются — шара
+        // единственности нет) и касается там плоскости грани. Неотделимое звено (≤ tiny) у конца кривой: событие в нём — в
+        // пределах 1e-8·размер от вершины ребра, т. е. сама вершина (|F_s| в конце ≤ 1e-9 — событие в конце; иначе событий нет)
+        bool EndExempt(double t0, double t1, Vector3d p0, Vector3d p1)
+        {
+            if (TracedEndOff) return false;
+            if (TracedEndDbg) Console.Error.WriteLine($"TEND t {t0:R}..{t1:R} curve {T[0]:R}..{T[^1]:R} n {T.Length} A {sa.GetType().Name} B {sb.GetType().Name} s {s.GetType().Name} p0 {P[0]} p1 {P[^1]} ic {ic.T0:R}..{ic.T1:R}");
+            double near = 1e-8 * Math.Max(1, ext);
+            bool atStart = Math.Max((p0 - P[0]).Length, (p1 - P[0]).Length) <= near, atEnd = Math.Max((p0 - P[^1]).Length, (p1 - P[^1]).Length) <= near;
+            if (!atStart && !atEnd) return false;
+            Interlocked.Increment(ref TracedEndExempt);
+            double te = atStart ? T[0] : T[^1]; var pe = atStart ? P[0] : P[^1];
+            if (Math.Abs(Fs(pe)) <= 1e-9) res.Add(te);
+            return true;
+        }
         void Seg(double t0, double t1, Vector3d p0, Vector3d p1, int depth)
         {
             if (!ok) return;
@@ -198,6 +238,7 @@ public static class SsiEvents
                 if (TracedSplitOff) { ok = false; TracedWhy = "segment not transversal (no split)"; return; }
                 // звено длинно для доказательства (часть кривой перестроена реже): точка кривой посередине — два звена; цепочка
                 // звеньев, каждое в своём шаре единственности, через общую точку — одна связная ветвь
+                if ((2 * r < tiny || depth > 40) && EndExempt(t0, t1, p0, p1)) return;
                 if (2 * r < tiny || depth > 40) { ok = false; TracedWhy = $"segment not transversal at {m:0.###} r {r:G3}"; return; }
                 double tq = (t0 + t1) / 2; var pq = ic.PointAt(tq);
                 if (Math.Abs(Ssi.Implicit(sa, pq).F) > 1e-9 || Math.Abs(Ssi.Implicit(sb, pq).F) > 1e-9) { ok = false; TracedWhy = "mid point off the curve"; return; }
@@ -226,6 +267,7 @@ public static class SsiEvents
                     res.Add((lo + hi) / 2); return;
                 }
             }
+            if ((2 * r < tiny || depth > 60) && EndExempt(t0, t1, p0, p1)) return;
             if (2 * r < tiny || depth > 60) { ok = false; TracedWhy = $"tangency at {m:0.###}"; return; }                  // касание: не отделить
             double tm = (t0 + t1) / 2; var q = ic.PointAt(tm);
             if ((q - m).Length > r) { ok = false; TracedWhy = "point outside ball"; return; }                         // точка кривой вне шара звена
