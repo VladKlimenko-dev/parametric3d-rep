@@ -1,0 +1,356 @@
+# file	group	label	where	stage
+app_icon.svg	Приложение	Значок приложения (окно, панель задач, ярлык); дополнительно app_icon.ico 16–256	окно	U0
+new_part_but.svg	Файл и правка	Новая деталь	меню «Файл», стартовая страница	U0
+new_assembly_but.svg	Файл и правка	Новая сборка	меню «Файл», стартовая страница	U0
+new_freeform_but.svg	Файл и правка	Новое FreeForm-тело (отдельный файл)	меню «Файл», стартовая страница	U4
+open_but.svg	Файл и правка	Открыть	меню «Файл», Ctrl+O	U0
+recent_files_but.svg	Файл и правка	Последние файлы	меню «Файл», стартовая страница	U0
+save_but.svg	Файл и правка	Сохранить	меню «Файл», Ctrl+S	U0
+save_as_but.svg	Файл и правка	Сохранить как	меню «Файл»	U0
+import_but.svg	Файл и правка	Импорт (STEP, IGES, STL)	меню «Файл», Д-01	U0
+export_but.svg	Файл и правка	Экспорт (STEP точный/фасетный, STL, OBJ)	меню «Файл»	U0
+close_doc_but.svg	Файл и правка	Закрыть документ	вкладка документа	U0
+undo_but.svg	Файл и правка	Отменить	заголовок окна, Ctrl+Z	U0
+redo_but.svg	Файл и правка	Вернуть	заголовок окна, Ctrl+Y	U0
+undo_history_but.svg	Файл и правка	Журнал отмены (переход к любому шагу, UI-37)	заголовок окна	U2
+copy_but.svg	Файл и правка	Копировать	КП, Ctrl+C	U2
+paste_but.svg	Файл и правка	Вставить	КП, Ctrl+V	U2
+delete_but.svg	Файл и правка	Удалить	КП, общие команды, Del	U0
+rename_but.svg	Файл и правка	Переименовать	КП операции, дерево	U2
+settings_but.svg	Файл и правка	Настройки	меню	U0
+help_but.svg	Файл и правка	Справка, подсказки первого запуска	меню	U6
+command_palette_but.svg	Файл и правка	Палитра команд с поиском (F)	заголовок окна	U0
+all_commands_but.svg	Файл и правка	«Все команды» — сворачиваемая панель по группам (UI-12)	левая полоса	U0
+properties_but.svg	Файл и правка	Свойства (документа, детали, выбранного)	общие команды	U2
+parameters_but.svg	Файл и правка	Параметры и отношения	меню детали	U2
+material_but.svg	Файл и правка	Материал детали	меню детали	U2
+units_but.svg	Файл и правка	Единицы (мм, дюймы)	настройки, строка состояния	U0
+configurations_but.svg	Файл и правка	Конфигурации (таблица семейства)	меню детали	U6
+theme_but.svg	Файл и правка	Тема: тёмная / светлая	настройки, строка состояния	U0
+more_but.svg	Контекстная панель	«Ещё…» — остальные допустимые операции	КП	U2
+pin_but.svg	Контекстная панель	Закрепить команду в КП / избранное	КП, палитра	U6
+recent_ops_ico.svg	Контекстная панель	Метка строки «Недавние для набора»	КП	U2
+search_ico.svg	Контекстная панель	Поле поиска	КП, палитра, дерево	U0
+breadcrumb_up_but.svg	Контекстная панель	Повысить выбор (крошки, D)	КП, у курсора	U2
+select_similar_but.svg	Контекстная панель	Выбрать похожие	КП	U2
+apply_but.svg	Контекстная панель	Применить (Enter)	мини-панель команды	U2
+cancel_but.svg	Контекстная панель	Отмена (Esc)	мини-панель команды	U2
+mode_add_but.svg	Контекстная панель	Режим операции «Добавить материал»	мини-панель команды	U2
+mode_cut_but.svg	Контекстная панель	Режим операции «Вырезать»	мини-панель команды	U2
+flip_direction_but.svg	Контекстная панель	Перевернуть направление	мини-панель команды	U2
+both_sides_but.svg	Контекстная панель	В обе стороны / симметрично	мини-панель команды	U2
+next_handle_but.svg	Контекстная панель	Следующая ручка (Tab)	мини-панель команды	U2
+sel_vertex_but.svg	Выбор	Режим выбора: вершина / точка (1)	строка состояния, радиальное меню	U1
+sel_edge_but.svg	Выбор	Режим выбора: ребро / кривая (2)	строка состояния	U1
+sel_face_but.svg	Выбор	Режим выбора: грань (3)	строка состояния	U1
+sel_body_but.svg	Выбор	Режим выбора: тело (4)	строка состояния	U1
+sel_feature_but.svg	Выбор	Режим выбора: операция (5)	строка состояния	U1
+sel_filter_but.svg	Выбор	Фильтр типов выбора	строка состояния	U1
+sel_box_but.svg	Выбор	Выбор рамкой	строка состояния	U1
+sel_lasso_but.svg	Выбор	Выбор арканом	строка состояния	U6
+sel_clear_but.svg	Выбор	Снять выбор	общие команды	U1
+sel_tangent_chain_but.svg	Выбор	Касательная цепочка рёбер	крошки	U2
+sel_face_loop_but.svg	Выбор	Контур грани	крошки	U2
+view_front_but.svg	Вид	Вид спереди	меню «Вид», радиальное меню	U1
+view_back_but.svg	Вид	Вид сзади	меню «Вид»	U1
+view_left_but.svg	Вид	Вид слева	меню «Вид»	U1
+view_right_but.svg	Вид	Вид справа	меню «Вид»	U1
+view_top_but.svg	Вид	Вид сверху	меню «Вид»	U1
+view_bottom_but.svg	Вид	Вид снизу	меню «Вид»	U1
+view_iso_but.svg	Вид	Изометрия	меню «Вид»	U1
+view_normal_but.svg	Вид	Вид по нормали (к плоскости эскиза или грани)	меню «Вид», эскиз	U1
+view_fit_but.svg	Вид	Вписать всё (Ctrl+F)	панель вида	U1
+view_zoom_sel_but.svg	Вид	Вписать выбранное	панель вида	U1
+view_perspective_but.svg	Вид	Проекция: перспектива / ортогональ	панель вида	U1
+style_shaded_but.svg	Вид	Стиль: тонированный	панель вида	U1
+style_shaded_edges_but.svg	Вид	Стиль: тонированный с рёбрами	панель вида	U1
+style_wireframe_but.svg	Вид	Стиль: каркас	панель вида	U1
+style_hidden_lines_but.svg	Вид	Стиль: невидимые линии штрихом	панель вида	U1
+style_transparent_but.svg	Вид	Стиль: прозрачный	панель вида	U1
+style_mesh_but.svg	Вид	Стиль: сетка треугольников	панель вида	U1
+section_view_but.svg	Вид	Сечение модели плоскостью	панель вида, Д-20	U2
+hide_but.svg	Вид	Скрыть	общие команды	U1
+isolate_but.svg	Вид	Изолировать	общие команды	U1
+show_all_but.svg	Вид	Показать всё	панель вида	U1
+grid_but.svg	Вид	Сетка	панель вида, эскиз	U1
+datums_visible_but.svg	Вид	Показ опорных элементов	панель вида	U1
+viewcube_home_but.svg	Куб вида	Кнопка «Домой» у куба вида	куб вида	U1
+viewcube_rot_ccw_but.svg	Куб вида	Поворот вида на 90° против часовой стрелки	куб вида	U1
+viewcube_rot_cw_but.svg	Куб вида	Поворот вида на 90° по часовой стрелке	куб вида	U1
+viewcube_arrow_ico.svg	Куб вида	Треугольная стрелка к соседней грани (одна, поворачивается кодом)	куб вида	U1
+env_part_but.svg	Окружение	Деталь (параметрика)	переключатель окружений	U2
+env_sketch_but.svg	Окружение	Эскиз	переключатель окружений	U3
+env_freeform_but.svg	Окружение	FreeForm	переключатель окружений	U4
+env_assembly_but.svg	Окружение	Сборка	переключатель окружений	U5
+sketch_finish_but.svg	Окружение	Выйти из эскиза — принять (всегда видна, UI-12)	эскиз	U3
+sketch_cancel_but.svg	Окружение	Выйти из эскиза — отменить	эскиз	U3
+sk_line_but.svg	Эскиз: рисование	Отрезок (цепочка)	КП ЭС-01, палитра	U3
+sk_centerline_but.svg	Эскиз: рисование	Осевая	КП ЭС-01	U3
+sk_rect_2p_but.svg	Эскиз: рисование	Прямоугольник по двум углам	КП ЭС-01	U3
+sk_rect_center_but.svg	Эскиз: рисование	Прямоугольник от центра	«Ещё…»	U3
+sk_rect_3p_but.svg	Эскиз: рисование	Прямоугольник наклонный по трём точкам	«Ещё…»	U3
+sk_circle_but.svg	Эскиз: рисование	Окружность: центр и радиус	КП ЭС-01	U3
+sk_circle_2p_but.svg	Эскиз: рисование	Окружность по двум точкам	«Ещё…»	U3
+sk_circle_3p_but.svg	Эскиз: рисование	Окружность по трём точкам	«Ещё…»	U3
+sk_arc_3p_but.svg	Эскиз: рисование	Дуга по трём точкам	КП ЭС-01	U3
+sk_arc_center_but.svg	Эскиз: рисование	Дуга: центр и концы	«Ещё…»	U3
+sk_arc_tangent_but.svg	Эскиз: рисование	Дуга касательная к концу	«Ещё…»	U3
+sk_ellipse_but.svg	Эскиз: рисование	Эллипс	«Ещё…»	U3
+sk_spline_but.svg	Эскиз: рисование	Сплайн по точкам	КП ЭС-01	U3
+sk_spline_cv_but.svg	Эскиз: рисование	Сплайн по контрольным точкам	«Ещё…»	U3
+sk_point_but.svg	Эскиз: рисование	Точка	«Ещё…»	U3
+sk_polygon_but.svg	Эскиз: рисование	Многоугольник	«Ещё…»	U3
+sk_slot_but.svg	Эскиз: рисование	Паз	«Ещё…»	U3
+sk_text_but.svg	Эскиз: рисование	Текст	«Ещё…»	U6
+sk_csys_but.svg	Эскиз: рисование	Система координат эскиза	«Ещё…»	U3
+sk_use_edge_but.svg	Эскиз: рисование	Использовать ребро модели (проекция)	КП ЭС-01, ЭС-15	U3
+sk_offset_edge_but.svg	Эскиз: рисование	Смещение ребра	КП ЭС-15	U3
+sk_thicken_edge_but.svg	Эскиз: рисование	Утолщение ребра в две линии	КП ЭС-15	U3
+sk_construction_but.svg	Эскиз: правка	Вспомогательная / геометрическая	КП ЭС-07, ЭС-14	U3
+sk_trim_but.svg	Эскиз: правка	Обрезка	КП ЭС-07	U3
+sk_split_but.svg	Эскиз: правка	Разделить	«Ещё…»	U3
+sk_mirror_but.svg	Эскиз: правка	Зеркало относительно осевой	КП ЭС-13	U3
+sk_transform_but.svg	Эскиз: правка	Перенести, повернуть, масштаб	КП ЭС-14	U3
+sk_offset_but.svg	Эскиз: правка	Смещение цепочки	КП ЭС-07, ЭС-14	U3
+sk_fillet_but.svg	Эскиз: правка	Скругление угла	КП ЭС-08, ЭС-24	U3
+sk_chamfer_but.svg	Эскиз: правка	Фаска угла	КП ЭС-08, ЭС-24	U3
+sk_line_tangent2_but.svg	Эскиз: правка	Отрезок касательный к двум дугам	КП ЭС-11	U3
+sk_snap_grid_but.svg	Эскиз: настройка	Привязка к сетке	строка состояния эскиза	U3
+sk_snap_items_but.svg	Эскиз: настройка	Привязка к элементам	строка состояния эскиза	U3
+sk_setup_but.svg	Эскиз: настройка	Настройка эскиза (плоскость, начало, верх)	КП эскиза	U3
+sk_references_but.svg	Эскиз: настройка	Ссылки эскиза	КП эскиза	U3
+sk_show_conflicts_but.svg	Эскиз: настройка	Показать конфликтующие связи	КП ЭС-20	U3
+con_coincident_but.svg	Эскиз: связи	Совпадение	КП ЭС-03	U3
+con_point_on_but.svg	Эскиз: связи	Точка на кривой	КП ЭС-05, ЭС-06	U3
+con_midpoint_but.svg	Эскиз: связи	Середина	КП ЭС-05	U3
+con_horizontal_but.svg	Эскиз: связи	Горизонтально	КП ЭС-07	U3
+con_vertical_but.svg	Эскиз: связи	Вертикально	КП ЭС-07	U3
+con_parallel_but.svg	Эскиз: связи	Параллельно	КП ЭС-08	U3
+con_perpendicular_but.svg	Эскиз: связи	Перпендикулярно	КП ЭС-08	U3
+con_collinear_but.svg	Эскиз: связи	Коллинеарно	«Ещё…»	U3
+con_tangent_but.svg	Эскиз: связи	Касание	КП ЭС-09	U3
+con_equal_but.svg	Эскиз: связи	Равенство (длин, радиусов)	КП ЭС-08, ЭС-23	U3
+con_concentric_but.svg	Эскиз: связи	Концентрично	КП ЭС-11	U3
+con_symmetric_but.svg	Эскиз: связи	Симметрия	КП ЭС-04	U3
+con_fix_but.svg	Эскиз: связи	Зафиксировать	КП ЭС-02	U3
+dim_smart_but.svg	Эскиз: размеры	Размер (тип по выбору)	КП, палитра	U3
+dim_linear_but.svg	Эскиз: размеры	Линейный размер / расстояние	КП ЭС-03, ЭС-07	U3
+dim_radius_but.svg	Эскиз: размеры	Радиус	КП ЭС-10	U3
+dim_diameter_but.svg	Эскиз: размеры	Диаметр	КП ЭС-10	U3
+dim_angle_but.svg	Эскиз: размеры	Угловой размер	КП ЭС-08	U3
+dim_arc_length_but.svg	Эскиз: размеры	Длина дуги	«Ещё…»	U6
+dim_reference_but.svg	Эскиз: размеры	Справочный / управляющий	КП ЭС-17, Д-46	U3
+dim_link_param_but.svg	Эскиз: размеры	Связать с параметром	КП ЭС-17, Д-46	U3
+dim_arrows_outside_but.svg	Эскиз: размеры	Стрелки снаружи	КП размера	U3
+f_sketch_but.svg	Деталь: формообразование	Эскиз	КП Д-01, Д-02, Д-20	U2
+f_extrude_but.svg	Деталь: формообразование	Выдавливание	КП Д-28, ЭС-16	U2
+f_extrude_thin_but.svg	Деталь: формообразование	Тонкое выдавливание	КП Д-29	U2
+f_revolve_but.svg	Деталь: формообразование	Вращение	КП Д-28, Д-31	U2
+f_sweep_but.svg	Деталь: формообразование	Протяжка	КП Д-25, Д-27	U2
+f_helical_sweep_but.svg	Деталь: формообразование	Винтовая протяжка	КП Д-31	U2
+f_blend_but.svg	Деталь: формообразование	Переход (по сечениям)	КП Д-30	U2
+f_boundary_blend_but.svg	Деталь: формообразование	Граничный переход	КП Д-30	U2
+f_swept_blend_but.svg	Деталь: формообразование	Протяжка с переходом	Позже, Д-44	Позже
+f_rotational_blend_but.svg	Деталь: формообразование	Переход вращением	Позже, Д-45	Позже
+f_fill_but.svg	Деталь: формообразование	Заливка (плоская поверхность)	КП Д-28	U2
+f_surface_extrude_but.svg	Деталь: формообразование	Поверхность выдавливанием / вращением	КП Д-29	U2
+f_hole_but.svg	Деталь: конструктивные	Отверстие	КП Д-01, Д-02, Д-17	U2
+f_hole_coaxial_but.svg	Деталь: конструктивные	Отверстие соосное	КП Д-09, Д-23	U2
+f_hole_radial_but.svg	Деталь: конструктивные	Отверстие радиальное (в стенке цилиндра)	КП Д-03	U2
+f_round_but.svg	Деталь: конструктивные	Скругление рёбер	КП Д-08…Д-12	U2
+f_round_variable_but.svg	Деталь: конструктивные	Переменное скругление (закон радиуса)	КП Д-11	U2
+f_round_full_but.svg	Деталь: конструктивные	Полное скругление	КП Д-07	U2
+f_round_vertex_but.svg	Деталь: конструктивные	Скругление вершины	КП Д-13	U2
+f_chamfer_but.svg	Деталь: конструктивные	Фаска ребра	КП Д-08…Д-11	U2
+f_chamfer_vertex_but.svg	Деталь: конструктивные	Фаска угла (вершины)	КП Д-13	U2
+f_draft_but.svg	Деталь: конструктивные	Уклон	КП Д-02, Д-05, Д-12	U2
+f_shell_but.svg	Деталь: конструктивные	Оболочка	КП Д-02, Д-05, Д-35	U2
+f_rib_but.svg	Деталь: конструктивные	Ребро жёсткости	КП Д-29	U2
+f_thread_but.svg	Деталь: конструктивные	Косметическая резьба	КП Д-03, Д-47	U2
+f_thicken_but.svg	Деталь: конструктивные	Утолщение квилта	КП Д-33	Позже
+f_pattern_linear_but.svg	Деталь: массивы и копии	Массив по направлению	КП Д-39	U2
+f_pattern_circular_but.svg	Деталь: массивы и копии	Массив по оси (круговой)	КП Д-22, Д-39	U2
+f_pattern_curve_but.svg	Деталь: массивы и копии	Массив по кривой	КП Д-40	U2
+f_pattern_points_but.svg	Деталь: массивы и копии	Массив по точкам	КП Д-16, Д-41	U2
+f_pattern_fill_but.svg	Деталь: массивы и копии	Массив заполнением	КП Д-41	U2
+f_mirror_but.svg	Деталь: массивы и копии	Зеркало	КП Д-20, Д-35, Д-38	U2
+f_move_copy_but.svg	Деталь: массивы и копии	Перенос и поворот (копия с переносом)	КП Д-35, Д-38	U2
+f_insert_freeform_but.svg	Деталь: массивы и копии	Вставить FreeForm	КП Д-01	U4
+f_edit_in_freeform_but.svg	Деталь: массивы и копии	Править в FreeForm	КП Д-35	U4
+dir_move_face_but.svg	Деталь: прямая правка	Перенос грани	КП Д-02, Д-05	U2
+dir_delete_face_but.svg	Деталь: прямая правка	Удаление граней (с залечиванием)	КП Д-05	U2
+dir_offset_face_but.svg	Деталь: прямая правка	Смещение граней	КП Д-05	U2
+dir_new_radius_but.svg	Деталь: прямая правка	Новый радиус / диаметр	КП Д-03, Д-47	U2
+dir_replace_face_but.svg	Деталь: прямая правка	Замена грани квилтом	«Ещё…»	Позже
+surf_offset_but.svg	Деталь: поверхности	Смещение поверхности	КП Д-04	U2
+surf_copy_but.svg	Деталь: поверхности	Копия поверхности	КП Д-04, Д-05	U2
+surf_merge_but.svg	Деталь: поверхности	Объединение квилтов	Позже, Д-34	Позже
+surf_trim_but.svg	Деталь: поверхности	Обрезка квилта	Позже, Д-34	Позже
+surf_extend_but.svg	Деталь: поверхности	Продление квилта	Позже, Д-43	Позже
+surf_solidify_but.svg	Деталь: поверхности	Отверждение квилта	Позже, Д-33	Позже
+dat_plane_but.svg	Опорные	Опорная плоскость	КП Д-01 и др.	U2
+dat_plane_offset_but.svg	Опорные	Плоскость со смещением	КП Д-02, Д-20	U2
+dat_plane_mid_but.svg	Опорные	Плоскость посередине	КП Д-06, Д-21	U2
+dat_plane_3pt_but.svg	Опорные	Плоскость через три точки	КП Д-15	U2
+dat_plane_axis_but.svg	Опорные	Плоскость через ось / ребро под углом	КП Д-22, Д-23	U2
+dat_plane_normal_curve_but.svg	Опорные	Плоскость нормально к кривой	КП Д-10, Д-25	U2
+dat_plane_tangent_but.svg	Опорные	Плоскость касательная	КП Д-03, Д-04	U2
+dat_axis_but.svg	Опорные	Опорная ось	КП Д-08, Д-14	U2
+dat_axis_face_but.svg	Опорные	Ось грани вращения	КП Д-03	U2
+dat_axis_intersect_but.svg	Опорные	Ось пересечения плоскостей	КП Д-06, Д-21	U2
+dat_point_but.svg	Опорные	Опорная точка	КП Д-08, Д-13	U2
+dat_point_center_but.svg	Опорные	Точка в центре дуги	КП Д-09	U2
+dat_point_intersect_but.svg	Опорные	Точка пересечения	КП Д-07, Д-12	U2
+dat_csys_but.svg	Опорные	Система координат	КП Д-07, Д-13, Д-42	U2
+dat_curve_points_but.svg	Опорные	Кривая через точки	КП Д-14, Д-16	U2
+dat_curve_equation_but.svg	Опорные	Кривая по уравнению	КП Д-42	U2
+dat_curve_project_but.svg	Опорные	Проекция кривой на грань	Позже, Д-26	Позже
+tree_edit_def_but.svg	Дерево операций	Править определение	КП Д-36	U2
+tree_edit_dims_but.svg	Дерево операций	Править размеры	КП Д-36	U2
+tree_suppress_but.svg	Дерево операций	Подавить	КП Д-36, Д-37	U2
+tree_resume_but.svg	Дерево операций	Вернуть подавленную	КП Д-36	U2
+tree_insert_here_but.svg	Дерево операций	Вставить здесь (строка отката)	КП Д-36	U2
+tree_reorder_but.svg	Дерево операций	Переупорядочить	«Ещё…»	U2
+tree_group_but.svg	Дерево операций	Группа	КП Д-37	U2
+tree_parents_children_but.svg	Дерево операций	Родители и потомки	«Ещё…»	U2
+tree_replace_refs_but.svg	Дерево операций	Заменить ссылки	«Ещё…», UI-34	U2
+tree_rebuild_but.svg	Дерево операций	Перестроить	меню детали	U2
+tree_needs_attention_but.svg	Дерево операций	Список «Требуют внимания» (UI-33)	строка состояния	U2
+an_measure_but.svg	Измерение и анализ	Измерить (расстояние, угол, радиус)	общие команды, Д-06	U2
+an_area_but.svg	Измерение и анализ	Площадь	«Ещё…»	U2
+an_perimeter_but.svg	Измерение и анализ	Периметр / длина	«Ещё…»	U2
+an_mass_but.svg	Измерение и анализ	Массовые свойства	Д-35, СБ-02	U2
+an_zebra_but.svg	Измерение и анализ	Зебра	Д-04, Ф-30	U4
+an_curvature_but.svg	Измерение и анализ	Кривизна (гребёнка)	Д-04	U4
+an_check_body_but.svg	Измерение и анализ	Проверка тела (UI-38)	индикатор детали	U2
+an_heal_but.svg	Измерение и анализ	Залечить (импорт)	индикатор детали	U6
+ff_box_but.svg	FreeForm: примитивы	Брусок	КП Ф-01	U4
+ff_cylinder_but.svg	FreeForm: примитивы	Цилиндр	КП Ф-01	U4
+ff_cone_but.svg	FreeForm: примитивы	Конус	«Ещё…» Ф-01	U4
+ff_sphere_but.svg	FreeForm: примитивы	Шар	«Ещё…» Ф-01	U4
+ff_torus_but.svg	FreeForm: примитивы	Тор	«Ещё…» Ф-01	U4
+ff_cplane_but.svg	FreeForm: примитивы	Плоскость построения	КП Ф-01, Ф-08, Ф-24	U4
+ff_curve_nurbs_but.svg	FreeForm: кривые	NURBS-кривая	«Ещё…» Ф-01	U4
+ff_curve_spiral_but.svg	FreeForm: кривые	Спираль, винтовая линия	«Ещё…» Ф-01	U4
+ff_curve_offset_but.svg	FreeForm: кривые	Смещение кривой	КП Ф-03	U4
+ff_curve_fillet_but.svg	FreeForm: кривые	Скругление углов кривой	«Ещё…» Ф-03	U4
+ff_curve_join_but.svg	FreeForm: кривые	Соединить кривые	КП Ф-04, Ф-06	U4
+ff_curve_extend_but.svg	FreeForm: кривые	Продление кривой	КП Ф-03	U4
+ff_curve_bridge_but.svg	FreeForm: кривые	Мостик между кривыми (G1/G2)	КП Ф-04	U4
+ff_curve_rebuild_but.svg	FreeForm: кривые	Перестроение кривой	КП Ф-03	U4
+ff_curve_extract_but.svg	FreeForm: кривые	Извлечь кривую из ребра	КП Ф-11	U4
+ff_curve_isoparm_but.svg	FreeForm: кривые	Изопараметрическая кривая	«Ещё…» Ф-08	U4
+ff_project_but.svg	FreeForm: кривые	Проекция на грань / лист	КП Ф-05, Ф-07	U4
+ff_imprint_but.svg	FreeForm: кривые	Отпечаток	КП Ф-05, Ф-07	U4
+ff_trim_curve_but.svg	FreeForm: кривые	Обрезка по пересечению	КП Ф-04	U4
+ff_extrude_but.svg	FreeForm: тела	Выдавливание (региона, грани, кривой)	КП Ф-02, Ф-03	U4
+ff_revolve_but.svg	FreeForm: тела	Вращение	КП Ф-02	U4
+ff_sweep_but.svg	FreeForm: тела	Протяжка	«Ещё…» Ф-02	U4
+ff_pipe_but.svg	FreeForm: тела	Труба вдоль кривой	КП Ф-03	U4
+ff_loft_but.svg	FreeForm: тела	Лофт	КП Ф-04, Ф-06	U4
+ff_thicken_but.svg	FreeForm: тела	Утолщение листа	КП Ф-21	U4
+ff_shell_but.svg	FreeForm: тела	Оболочка	КП Ф-09, Ф-16	U4
+ff_surf_ruled_but.svg	FreeForm: поверхности	Линейчатая поверхность	КП Ф-04	U4
+ff_surf_network_but.svg	FreeForm: поверхности	Сетка кривых	КП Ф-06	U4
+ff_surf_patch_but.svg	FreeForm: поверхности	Заплатка	КП Ф-06, Ф-13	U4
+ff_surf_planar_but.svg	FreeForm: поверхности	Плоская поверхность	КП Ф-02, Ф-13	U4
+ff_surf_blend_but.svg	FreeForm: поверхности	Мостик между гранями / краями	КП Ф-10, Ф-12	U4
+ff_surf_extend_but.svg	FreeForm: поверхности	Продление листа	КП Ф-21	U4
+ff_surf_flip_but.svg	FreeForm: поверхности	Обратить нормаль	КП Ф-21	U4
+ff_surf_stitch_but.svg	FreeForm: поверхности	Сшить в тело	Позже, Ф-22	Позже
+ff_cv_edit_but.svg	FreeForm: поверхности	Правка контрольных точек	КП Ф-21, Ф-08	U4
+ff_cv_weight_but.svg	FreeForm: поверхности	Вес точки	Позже, Ф-15	Позже
+ff_insert_knot_but.svg	FreeForm: поверхности	Вставить узел	Позже, Ф-15	Позже
+ff_push_pull_but.svg	FreeForm: прямая правка	Смещение грани (push-pull)	КП Ф-08, Ф-09	U4
+ff_move_but.svg	FreeForm: прямая правка	Перенос (гизмо)	КП Ф-14, Ф-16	U4
+ff_rotate_but.svg	FreeForm: прямая правка	Поворот (гизмо, вокруг оси)	КП Ф-16, Ф-20	U4
+ff_scale_but.svg	FreeForm: прямая правка	Масштаб (гизмо)	КП Ф-16	U4
+ff_align_face_but.svg	FreeForm: прямая правка	Выровнять грань	КП Ф-10	U4
+ff_replace_face_but.svg	FreeForm: прямая правка	Заменить грань	КП Ф-10	U4
+ff_delete_face_but.svg	FreeForm: прямая правка	Удалить грань	КП Ф-08, Ф-09	U4
+ff_draft_face_but.svg	FreeForm: прямая правка	Уклон грани	КП Ф-08, Ф-09	U4
+ff_fillet_but.svg	FreeForm: прямая правка	Скругление рёбер	КП Ф-11	U4
+ff_chamfer_but.svg	FreeForm: прямая правка	Фаска рёбер	КП Ф-11	U4
+ff_union_but.svg	FreeForm: булевы	Объединить	КП Ф-17, Ф-26	U4
+ff_subtract_but.svg	FreeForm: булевы	Вычесть	КП Ф-17	U4
+ff_intersect_but.svg	FreeForm: булевы	Пересечь	КП Ф-17	U4
+ff_split_but.svg	FreeForm: булевы	Разрез (плоскостью, поверхностью, кривой)	КП Ф-18, Ф-19, Ф-07	U4
+ff_mirror_but.svg	FreeForm: копии	Зеркало	КП Ф-16, Ф-18	U4
+ff_symmetry_but.svg	FreeForm: копии	Симметрия (живая половина)	КП Ф-16, Ф-18	U4
+ff_array_linear_but.svg	FreeForm: копии	Прямоугольный массив	КП Ф-16	U4
+ff_array_circular_but.svg	FreeForm: копии	Круговой массив	КП Ф-20	U4
+ff_array_curve_but.svg	FreeForm: копии	Массив вдоль кривой	«Ещё…» Ф-07	U4
+subd_box_but.svg	FreeForm: SubD	SubD-клетка (новое тело)	«Ещё…» Ф-01	U4
+subd_extrude_but.svg	FreeForm: SubD	Выдавить грани клетки	КП Ф-29	U4
+subd_edge_loop_but.svg	FreeForm: SubD	Добавить петлю рёбер	КП Ф-29	U4
+subd_crease_but.svg	FreeForm: SubD	Складка (резкое ребро)	КП Ф-29	U4
+subd_smooth_level_but.svg	FreeForm: SubD	Уровень сглаживания	КП Ф-30	U4
+subd_to_nurbs_but.svg	FreeForm: SubD	Преобразовать в NURBS-тело	КП Ф-30	U4
+step_undo_to_but.svg	FreeForm: шаги	Отменить до этого шага	КП Ф-25	U4
+as_insert_component_but.svg	Сборка	Вставить компонент	КП СБ-01	U5
+as_create_component_but.svg	Сборка	Создать компонент (в контексте)	КП СБ-01, СБ-17	U5
+as_insert_freeform_but.svg	Сборка	Вставить FreeForm-тело	КП СБ-01	U5
+as_skeleton_but.svg	Сборка	Скелетная модель	КП СБ-01	U5
+as_open_component_but.svg	Сборка	Открыть компонент	КП СБ-02	U5
+as_edit_in_context_but.svg	Сборка	Править в контексте	КП СБ-02	U5
+as_replace_but.svg	Сборка	Заменить компонент	КП СБ-02	U5
+as_fix_but.svg	Сборка	Зафиксировать компонент	«Ещё…» СБ-02	U5
+as_pattern_but.svg	Сборка	Массив компонентов	КП СБ-02, СБ-03, СБ-22	U5
+as_pattern_ref_but.svg	Сборка	Массив по образцу (по массиву отверстий)	Позже, СБ-15	Позже
+as_mirror_but.svg	Сборка	Зеркало компонента	КП СБ-03, СБ-14	U5
+as_subassembly_but.svg	Сборка	Подсборка из выбранных	КП СБ-03	U5
+as_explode_but.svg	Сборка	Разнесённый вид	меню сборки	U5
+as_bom_but.svg	Сборка	Спецификация	меню сборки	U5
+as_drag_but.svg	Сборка	Перетащить (проверка движения)	Позже, СБ-19	Позже
+as_flip_but.svg	Сборка	Перевернуть направление ограничения	КП СБ-18	U5
+mate_coincident_but.svg	Сборка: ограничения	Совпадение	КП СБ-04, СБ-08, СБ-09	U5
+mate_distance_but.svg	Сборка: ограничения	Расстояние	КП СБ-04…СБ-11	U5
+mate_angle_but.svg	Сборка: ограничения	Угол	КП СБ-04, СБ-08	U5
+mate_parallel_but.svg	Сборка: ограничения	Параллельно	КП СБ-04, СБ-06, СБ-08	U5
+mate_perpendicular_but.svg	Сборка: ограничения	Перпендикулярно	КП СБ-04, СБ-06	U5
+mate_concentric_but.svg	Сборка: ограничения	Соосность	КП СБ-05, СБ-21	U5
+mate_tangent_but.svg	Сборка: ограничения	Касание	КП СБ-06, СБ-13	U5
+mate_insert_but.svg	Сборка: ограничения	Вставка (болт в отверстие)	КП СБ-21	U5
+mate_point_on_but.svg	Сборка: ограничения	Точка на поверхности / прямой	КП СБ-10, СБ-11	U5
+mate_rigid_but.svg	Сборка: ограничения	Жёсткая связь	КП СБ-03, СБ-07	U5
+joint_pin_but.svg	Сборка: соединения	Шарнир	КП СБ-05, СБ-07	U5
+joint_slider_but.svg	Сборка: соединения	Ползун	«Ещё…» СБ-11	U5
+joint_cylindrical_but.svg	Сборка: соединения	Цилиндрическое соединение	КП СБ-05	U5
+joint_planar_but.svg	Сборка: соединения	Плоскостное соединение	«Ещё…» СБ-04	U5
+joint_ball_but.svg	Сборка: соединения	Шаровое соединение	КП СБ-09	U5
+joint_weld_but.svg	Сборка: соединения	Сварка	Позже, СБ-12	Позже
+tree_part_ico.svg	Дерево: узлы	Деталь	дерево	U2
+tree_assembly_ico.svg	Дерево: узлы	Сборка / подсборка	дерево	U2
+tree_component_ico.svg	Дерево: узлы	Компонент (экземпляр детали)	дерево сборки	U5
+tree_freeform_ico.svg	Дерево: узлы	FreeForm-тело	дерево	U4
+tree_ff_step_ico.svg	Дерево: узлы	Шаг FreeForm	журнал шагов	U4
+tree_body_ico.svg	Дерево: узлы	Тело	дерево	U2
+tree_quilt_ico.svg	Дерево: узлы	Квилт (поверхности без объёма)	дерево	U2
+tree_sketch_ico.svg	Дерево: узлы	Эскиз	дерево	U2
+tree_plane_ico.svg	Дерево: узлы	Опорная плоскость	дерево	U2
+tree_axis_ico.svg	Дерево: узлы	Опорная ось	дерево	U2
+tree_point_ico.svg	Дерево: узлы	Опорная точка	дерево	U2
+tree_csys_ico.svg	Дерево: узлы	Система координат	дерево	U2
+tree_curve_ico.svg	Дерево: узлы	Опорная кривая / 3D-линия	дерево	U2
+tree_group_ico.svg	Дерево: узлы	Группа операций	дерево	U2
+tree_mates_ico.svg	Дерево: узлы	Папка ограничений сборки	дерево сборки	U5
+tree_params_ico.svg	Дерево: узлы	Параметры	дерево	U2
+tree_material_ico.svg	Дерево: узлы	Материал	дерево	U2
+tree_config_ico.svg	Дерево: узлы	Конфигурации	дерево	U6
+state_error_ico.svg	Состояния	Ошибка (операция не построена, конфликт)	дерево, сообщения	U2
+state_warning_ico.svg	Состояния	Предупреждение (неполностью определён эскиз, приближение)	дерево, сообщения	U2
+state_ok_ico.svg	Состояния	Годно (тело проверено)	индикатор детали	U2
+state_info_ico.svg	Состояния	Сведения	сообщения	U0
+state_suppressed_ico.svg	Состояния	Подавлена (наложение на значок)	дерево	U2
+state_rolled_back_ico.svg	Состояния	Ниже строки отката	дерево	U2
+state_lost_ref_ico.svg	Состояния	Потеряна ссылка	дерево	U2
+state_refs_changed_ico.svg	Состояния	Ссылки FreeForm изменились	дерево	U4
+state_building_ico.svg	Состояния	Идёт перестроение / проверка в фоне	дерево, строка состояния	U2
+state_underdefined_ico.svg	Состояния	Эскиз не полностью определён (−)	дерево	U3
+state_overdefined_ico.svg	Состояния	Эскиз переопределён (+)	дерево	U3
+state_fixed_ico.svg	Состояния	Компонент зафиксирован	дерево сборки	U5
+eye_visible_ico.svg	Состояния	Видимость: показан	дерево	U2
+eye_hidden_ico.svg	Состояния	Видимость: скрыт	дерево	U2
+lock_ico.svg	Состояния	Заблокировано	дерево, поля	U2
+fix_suggestion_ico.svg	Состояния	Предложенное исправление (кнопка исправления отказа, UI-32)	сообщения	U2
+rollback_bar_ico.svg	Состояния	Ручка строки отката	дерево	U2

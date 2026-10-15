@@ -1,0 +1,148 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vp="using:Parametric3D.App.Viewport"
+        xmlns:vm="using:Parametric3D.App.ViewModels"
+        x:Class="Parametric3D.App.Views.MainWindow"
+        x:CompileBindings="False"
+        Title="Parametric3D"
+        Width="1400" Height="860" MinWidth="900" MinHeight="560"
+        Background="{DynamicResource P3.WindowBg}">
+
+  <Grid RowDefinitions="Auto,*,Auto">
+
+    <!-- ===== верхняя полоса: меню, документ, отмена, поиск команды, окружение ===== -->
+    <Border Grid.Row="0" Classes="panel" BorderThickness="0,0,0,1" Padding="6,4">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2" x:Name="FilePanel" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0" VerticalAlignment="Center">
+          <TextBlock x:Name="DocTitle" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <Border x:Name="EnvPill" CornerRadius="10" Padding="8,2" Background="{DynamicResource P3.AccentSoft}">
+            <TextBlock x:Name="EnvText" FontSize="12" Text="Деталь" />
+          </Border>
+        </StackPanel>
+        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2" x:Name="EditPanel" />
+        <Button Grid.Column="4" x:Name="SearchButton" Classes="tool" Margin="10,0,0,0" Width="260" HorizontalContentAlignment="Stretch"
+                Background="{DynamicResource P3.PanelBg2}" ToolTip.Tip="Палитра команд (F)">
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <TextBlock Text="⌕" Classes="dim" Margin="0,0,8,0" />
+            <TextBlock Grid.Column="1" Text="Команда…" Classes="dim" />
+            <Border Grid.Column="2" BorderBrush="{DynamicResource P3.Border}" BorderThickness="1" CornerRadius="4" Padding="5,0">
+              <TextBlock Text="F" FontSize="11" Classes="dim" />
+            </Border>
+          </Grid>
+        </Button>
+        <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="2" Margin="8,0,0,0" x:Name="RightPanel" />
+      </Grid>
+    </Border>
+
+    <!-- ===== рабочая область: дерево | вид | свойства ===== -->
+    <Grid Grid.Row="1" x:Name="WorkArea" ColumnDefinitions="260,4,*,Auto">
+
+      <Border Grid.Column="0" x:Name="TreePanel" Classes="panel" BorderThickness="0,0,1,0">
+        <Grid RowDefinitions="Auto,*">
+          <Grid ColumnDefinitions="*,Auto" Margin="10,8,6,4">
+            <TextBlock Text="ДЕРЕВО МОДЕЛИ" Classes="header" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" x:Name="TreeTools" />
+          </Grid>
+          <TreeView Grid.Row="1" x:Name="Tree" Background="Transparent" Margin="2,0,2,4">
+            <TreeView.Styles>
+              <Style Selector="TreeViewItem" x:DataType="vm:TreeNode">
+                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+              </Style>
+            </TreeView.Styles>
+            <TreeView.ItemTemplate>
+              <TreeDataTemplate DataType="vm:TreeNode" ItemsSource="{Binding Children}">
+                <Grid ColumnDefinitions="Auto,*,Auto" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
+                  <Panel Grid.Column="0" Width="18" Height="18" Margin="0,0,6,0">
+                    <Image Source="{Binding Icon}" IsVisible="{Binding HasIcon}" Width="16" Height="16" />
+                    <Border IsVisible="{Binding !HasIcon}" CornerRadius="3" Background="{DynamicResource P3.PanelBg2}"
+                            BorderBrush="{DynamicResource P3.Border}" BorderThickness="1">
+                      <TextBlock Text="{Binding Glyph}" FontSize="8" FontWeight="Bold" HorizontalAlignment="Center"
+                                 VerticalAlignment="Center" Foreground="{DynamicResource P3.TextDim}" />
+                    </Border>
+                  </Panel>
+                  <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                             Classes.err="{Binding HasError}" Classes.dimmed="{Binding IsDim}" />
+                  <ToggleButton Grid.Column="2" Classes="eye" IsVisible="{Binding HasEye}" IsChecked="{Binding IsVisible}"
+                                Width="22" Height="20" Padding="0" Background="Transparent" BorderThickness="0"
+                                ToolTip.Tip="Показать / скрыть">
+                    <Panel>
+                      <Path Stretch="Uniform" Width="14" Height="10" StrokeThickness="1.3"
+                            Stroke="{DynamicResource P3.TextDim}"
+                            Data="M1,5 C3.5,1 10.5,1 13,5 C10.5,9 3.5,9 1,5 Z M7,3.2 A1.8,1.8 0 1 1 6.99,3.2 Z" />
+                      <Path IsVisible="{Binding !IsVisible}" Width="14" Height="12" StrokeThickness="1.5"
+                            Stroke="{DynamicResource P3.TextDim}" Data="M1,11 L13,1" />
+                    </Panel>
+                  </ToggleButton>
+                </Grid>
+              </TreeDataTemplate>
+            </TreeView.ItemTemplate>
+          </TreeView>
+        </Grid>
+      </Border>
+
+      <GridSplitter Grid.Column="1" x:Name="TreeSplitter" Background="Transparent" ResizeDirection="Columns" />
+
+      <!-- вид и надстройки над ним -->
+      <Grid Grid.Column="2" x:Name="ViewArea">
+        <vp:ModelViewport x:Name="View" />
+
+        <!-- панель вида -->
+        <Border Classes="overlay" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,10,0,0" Padding="4,2">
+          <StackPanel Orientation="Horizontal" Spacing="1" x:Name="ViewTools" />
+        </Border>
+
+        <!-- куб вида -->
+        <vp:ViewCube x:Name="Cube" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,10,0" />
+
+        <!-- подсказка у вида -->
+        <Border x:Name="HintBox" Classes="overlay" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="10" Padding="10,6"
+                IsVisible="False">
+          <TextBlock x:Name="HintText" TextWrapping="Wrap" MaxWidth="520" />
+        </Border>
+
+        <!-- сообщение (ошибка команды) -->
+        <Border x:Name="Toast" Classes="overlay" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,18"
+                Padding="12,8" IsVisible="False" BorderBrush="{DynamicResource P3.Error}">
+          <TextBlock x:Name="ToastText" TextWrapping="Wrap" MaxWidth="600" />
+        </Border>
+      </Grid>
+
+      <!-- свойства -->
+      <Border Grid.Column="3" x:Name="PropsPanel" Classes="panel" BorderThickness="1,0,0,0" Width="290" IsVisible="False">
+        <Grid RowDefinitions="Auto,*">
+          <Grid ColumnDefinitions="*,Auto" Margin="12,8,6,4">
+            <TextBlock x:Name="PropsTitle" Text="СВОЙСТВА" Classes="header" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="tool" x:Name="PropsClose" Content="✕" MinWidth="24" MinHeight="24" Padding="2" />
+          </Grid>
+          <ScrollViewer Grid.Row="1">
+            <StackPanel x:Name="PropsBody" Margin="12,4,12,12" Spacing="6" />
+          </ScrollViewer>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- ===== строка состояния ===== -->
+    <Border Grid.Row="2" Classes="panel" BorderThickness="0,1,0,0" Padding="10,3">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+        <TextBlock Grid.Column="0" x:Name="StatusMode" FontSize="12" FontWeight="SemiBold" Margin="0,0,16,0" />
+        <TextBlock Grid.Column="1" x:Name="StatusSel" FontSize="12" Classes="dim" TextTrimming="CharacterEllipsis" />
+        <TextBlock Grid.Column="2" x:Name="StatusBuild" FontSize="12" Margin="16,0" />
+        <TextBlock Grid.Column="3" x:Name="StatusUnits" FontSize="12" Classes="dim" Text="мм" Margin="0,0,16,0" />
+        <TextBlock Grid.Column="4" x:Name="StatusGl" FontSize="12" Classes="dim" />
+      </Grid>
+    </Border>
+
+    <!-- ===== палитра команд (F) ===== -->
+    <Border Grid.Row="0" Grid.RowSpan="3" x:Name="PaletteShade" Background="#55000000" IsVisible="False">
+      <Border x:Name="PaletteBox" Classes="overlay" Width="560" HorizontalAlignment="Center" VerticalAlignment="Top"
+              Margin="0,70,0,0" Padding="8" Background="{DynamicResource P3.PanelBg2}">
+        <StackPanel Spacing="6">
+          <TextBox x:Name="PaletteInput" Watermark="Найти команду: «скругл», «fillet», «сохранить»…" />
+          <ListBox x:Name="PaletteList" MaxHeight="420" Background="Transparent" />
+          <TextBlock Text="Enter — выполнить   ↑↓ — выбрать   Esc — закрыть" FontSize="11" Classes="dim" Margin="4,0" />
+        </StackPanel>
+      </Border>
+    </Border>
+  </Grid>
+</Window>

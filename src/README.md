@@ -1,25 +1,22 @@
-# Parametric3D
+﻿# Parametric3D
 
-Параметрический CAD на C# / OpenTK 4.9.4 / WinForms (.NET 8).
-
-Полная переработка архитектуры: старый код разобран, диагноз и обоснование
-решений — в **[ARCHITECTURE.md](ARCHITECTURE.md)**. Начните с него.
+Параметрический CAD на C# (.NET 8): ядро B-rep (`Kernel`), модель документа (`Model`), рендер OpenGL (`Render`) и
+приложение на **Avalonia 12** (`App`, с 2026-10-16; прежнее приложение WinForms удалено — оно есть в истории
+репозитория). Устройство нового приложения — **[App/README.md](App/README.md)**; задание на интерфейс — ТЗ_UI
+(документ проекта), иконки — `docs/release/UI_ICONS.md`.
 
 ---
 
 ## Сборка
 
-1. Открыть `Parametric3D.csproj` в Visual Studio 2022/2026.
-2. Восстановить пакеты (`OpenTK` 4.9.4, `OpenTK.GLControl` 4.0.2) — VS сделает
-   это сама при первой сборке.
-3. Запустить.
+1. Открыть `Parametric3D.csproj` в Visual Studio 2022/2026 (или `dotnet build src/Parametric3D.csproj`).
+2. Пакеты (Avalonia 12.1.4, Svg.Controls.Skia.Avalonia, CommunityToolkit.Mvvm, OpenTK.Mathematics) — с nuget.org при
+   первой сборке.
+3. Запустить. Аргументы: путь к файлу `.p3d` — открыть; `--sample` — пробная деталь; `--theme light`.
 
-Внешних файлов нет: шейдеры вкомпилированы в сборку строками, абсолютных
-путей в коде не осталось.
+Проверки приложения без экрана — `tests/ui` (Avalonia.Headless): `dotnet run --project tests/ui/UiChecks.csproj`.
 
-> **Код не проверялся компилятором** — в окружении, где он писался, нет .NET SDK.
-> Ошибки при первой сборке ожидаемы. Места повышенного риска перечислены
-> в разделе 11 `ARCHITECTURE.md`.
+> Ниже — описание прежнего приложения (WinForms, до 2026-10-16): уровни работы и мышь в новом приложении заданы ТЗ_UI.
 
 ---
 

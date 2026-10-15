@@ -1,0 +1,8 @@
+{"test":"UI-COMMAND-REGISTRY","ok":true,"error":null}
+{"test":"UI-PALETTE-SEARCH","ok":true,"error":null}
+{"test":"UI-UNDO-REDO","ok":true,"error":null}
+{"test":"UI-FILE-ROUNDTRIP","ok":true,"error":null}
+{"test":"UI-VIEW-PICK","ok":true,"error":null}
+{"test":"UI-VIEWCUBE-ORIENT","ok":true,"error":null}
+{"test":"UI-THEME-ICONS","ok":true,"error":null}
+{"passed":7,"failed":0}

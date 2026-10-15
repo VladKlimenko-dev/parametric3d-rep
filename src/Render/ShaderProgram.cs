@@ -1,4 +1,4 @@
-using OpenTK.Graphics.OpenGL4;
+﻿using Parametric3D.Render.Gl;
 using OpenTK.Mathematics;
 using Parametric3D.Core;
 
@@ -64,10 +64,20 @@ public sealed class ShaderProgram : IDisposable
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Шейдеры написаны для настольного OpenGL 3.3 («#version 330 core») в подмножестве, общем с OpenGL ES 3.0. В контексте
+    /// ES (ANGLE под Windows, EGL) заголовок меняется на «#version 300 es» с точностью highp — остальной текст тот же.
+    /// </summary>
+    internal static string ForContext(string src)
+    {
+        if (!GL.IsEs) return src;
+        return src.Replace("#version 330 core", "#version 300 es\nprecision highp float;\nprecision highp int;");
+    }
+
     private static int Compile(ShaderType type, string src, string label)
     {
         int h = GL.CreateShader(type);
-        GL.ShaderSource(h, ToAscii(src));
+        GL.ShaderSource(h, ForContext(ToAscii(src)));
         GL.CompileShader(h);
         GL.GetShader(h, ShaderParameter.CompileStatus, out int ok);
         if (ok == 0)

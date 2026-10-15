@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-using OpenTK.Graphics.OpenGL4;
+using Parametric3D.Render.Gl;
 using OpenTK.Mathematics;
 
 namespace Parametric3D.Render;

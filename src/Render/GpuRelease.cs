@@ -1,4 +1,4 @@
-using OpenTK.Graphics.OpenGL4;
+using Parametric3D.Render.Gl;
 
 namespace Parametric3D.Render;
 

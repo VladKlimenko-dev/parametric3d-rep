@@ -1,4 +1,4 @@
-namespace Parametric3D.Render;
+﻿namespace Parametric3D.Render;
 
 /// <summary>
 /// Все GLSL-исходники приложения. GLSL 3.30 core — минимум, который держит
@@ -381,9 +381,10 @@ out vec4 oColor;
 
 void main()
 {
+    // palette (UI_VIEW_PALETTE): selection 45 %, hover 35 % over the material
     vec4 base = uBaseColor;
-    if ((vFlags & 2u) != 0u)      base = uSelectColor;
-    else if ((vFlags & 1u) != 0u) base = uHoverColor;
+    if ((vFlags & 2u) != 0u)      base.rgb = mix(base.rgb, uSelectColor.rgb, 0.45);
+    else if ((vFlags & 1u) != 0u) base.rgb = mix(base.rgb, uHoverColor.rgb, 0.35);
 
     if (uUnlit == 1) { oColor = vec4(base.rgb, base.a * uOpacity); return; }
 

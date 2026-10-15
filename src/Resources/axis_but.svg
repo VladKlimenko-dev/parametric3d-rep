@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8" ?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="84" height="99">
-	<path fill="none" stroke="#006400" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" transform="translate(-433.211 -340.69)" d="M451.33502 406.99139L483.46762 391.19141" fill-rule="evenodd"/>
-	<path fill="#006400" transform="matrix(0.897382 -0.441254 0.441254 0.897382 56.9869 47.1917)" d="M0 0L-15 6L-15 -6L0 0Z"/>
-	<path fill="none" stroke="#4444B3" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" transform="translate(-433.211 -340.69)" d="M451.33502 406.99139L451.33481 366.31396" fill-rule="evenodd"/>
-	<path fill="#4444B3" transform="matrix(0 -1 1 0 18.1237 18.1237)" d="M0 0L-15 6L-15 -6L0 0Z"/>
-	<path fill="none" stroke="#8B0000" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" transform="translate(-433.211 -340.69)" d="M451.33502 406.99139L491.48126 419.03152" fill-rule="evenodd"/>
-	<path fill="#8B0000" transform="matrix(0.957851 0.287266 -0.287266 0.957851 65.4541 80.4958)" d="M0 0L-15 6L-15 -6L0 0Z"/>
-</svg>
