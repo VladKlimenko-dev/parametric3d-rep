@@ -58,19 +58,51 @@ public static class ShellOp
             }
             warnings.Add($"Shell: an outward wall by offsetting all faces declined: {whyOffset}."); return false;
         }
-        if (!TweakOff && !outward && faceThickness == null)
+        if (!TweakOff && !outward && (faceThickness == null || !CurvedThickOff))
         {
             bool planarOnly = body.Faces.All(f => PlaneOfFace(f) != null || (!CylTweakOff && CylOfFace(f) != null));
             if (OffsetOpenFaces(body, open) is { } openFaces && !planarOnly)
             {
-                var cavO = DirectRound.OffsetSolid(body, f => openFaces.Contains(f) ? thickness : -thickness, "shell:inner", ref whyOffset);
+                // KRN-07 (07.5): СВОЯ ТОЛЩИНА ГРАНЕЙ У ТЕЛА С КРИВЫМИ ГРАНЯМИ — каждая грань смещается на свою толщину (точка на
+                // грани); касательные соседи с разной толщиной теряют касание — смещение без смены топологии честно
+                // отказывает. Мутация P3D_SHELLCURVEDTHICK=0 — своя толщина только у тел из плоскостей (прежде).
+                Dictionary<TFace, double>? own = null;
+                if (faceThickness != null)
+                {
+                    own = new Dictionary<TFace, double>();
+                    foreach (var (at, tt) in faceThickness)
+                    {
+                        var hit = body.Faces.FirstOrDefault(f => OnAnyFace(f, at));
+                        if (hit == null) { warnings.Add("Shell: a face-thickness point is not on a face of the body."); return false; }
+                        own[hit] = Math.Abs(tt);
+                    }
+                }
+                double TT(TFace f) => own != null && own.TryGetValue(f, out var v) ? v : thickness;
+                var cavO = DirectRound.OffsetSolid(body, f => openFaces.Contains(f) ? TT(f) : -TT(f), "shell:inner", ref whyOffset);
                 if (cavO != null)
                 {
                     BooleanOp.Subtract(bodies, cavO, warnings);
-                    warnings.Add($"Shell: wall {thickness:0.###}, cavity by offsetting all faces (exact).");
+                    warnings.Add($"Shell: wall {thickness:0.###}" + (own != null ? $", {own.Count} face(s) with own thickness" : "") + ", cavity by offsetting all faces (exact).");
                     return true;
                 }
                 ShellDebug?.Invoke("offset solid declined: " + whyOffset);
+                if (own != null) { warnings.Add($"Shell: own face thickness on a body with curved faces — offsetting all faces declined: {whyOffset}."); return false; }
+                // KRN-07 (07.5): ОТКРЫТАЯ ГРАНЬ У СОПРЯЖЕНИЯ — грань, касательная к скруглениям, не сдвигается наружу без потери
+                // касания. Оболочка собирается прямо (DirectRound.ShellOpenAtBlends): наружные грани без открытой, смещённые
+                // внутрь — обращённые, по рёбрам открытой грани — кромки высотой t до образов рёбер (как у распространённых CAD).
+                // Мутация P3D_SHELLOPENBLEND=0.
+                if (openFaces.Count > 0)
+                {
+                    string? whyB = null;
+                    var shB = DirectRound.ShellOpenAtBlends(body, openFaces, thickness, ref whyB);
+                    if (shB != null)
+                    {
+                        bodies[0] = shB; Interlocked.Increment(ref OpenAtBlendShells);
+                        warnings.Add($"Shell: wall {thickness:0.###}, open face(s) at blends — offset faces and lips assembled directly (exact).");
+                        return true;
+                    }
+                    ShellDebug?.Invoke("open face at blends declined: " + whyB);
+                }
             }
         }
         // KRN-07 (07.5): тело из плоских граней — полость сдвигом плоскостей (верно и для вогнутых тел); стенка наружу
@@ -84,10 +116,15 @@ public static class ShellOp
                 var cavT = OffsetBody(body, (f, pl, isOpen) => isOpen ? T(f, pl) : -T(f, pl), open, "shell:inner", ref why, -thickness);
                 // цилиндры с прямыми рёбрами (скруглённые вертикальные рёбра) — смещение всех граней (07.5)
                 bool byOffset = false;
-                if (cavT == null && faceThickness == null && OffsetOpenFaces(body, open) is { } of2)
+                if (cavT == null && (faceThickness == null || !CurvedThickOff) && OffsetOpenFaces(body, open) is { } of2)
                 {
                     byOffset = true;
-                    cavT = DirectRound.OffsetSolid(body, f => of2.Contains(f) ? thickness : -thickness, "shell:inner", ref whyOffset);
+                    // своя толщина граней — по точкам (07.5, как в ветви тел с кривыми гранями)
+                    var own2 = new Dictionary<TFace, double>();
+                    foreach (var (at, tt) in faceThickness ?? Array.Empty<(Vector3d, double)>())
+                        if (body.Faces.FirstOrDefault(f => OnAnyFace(f, at)) is { } hit2) own2[hit2] = Math.Abs(tt);
+                    double TT2(TFace f) => own2.TryGetValue(f, out var v) ? v : thickness;
+                    cavT = DirectRound.OffsetSolid(body, f => of2.Contains(f) ? TT2(f) : -TT2(f), "shell:inner", ref whyOffset);
                     if (cavT == null) ShellDebug?.Invoke("offset solid declined: " + whyOffset + "; plane offset: " + why);
                 }
                 if (cavT != null)
@@ -290,6 +327,27 @@ public static class ShellOp
     static readonly bool TweakOff = Environment.GetEnvironmentVariable("P3D_SHELLTWEAK") == "0";
     /// <summary>Мутация P3D_SHELLCONVEX=0: прежний путь не проверяет выпуклость (вогнутое тело — неверная полость молча).</summary>
     static readonly bool ConvexOff = Environment.GetEnvironmentVariable("P3D_SHELLCONVEX") == "0";
+
+    public static long OpenAtBlendShells;
+
+    static readonly bool CurvedThickOff = Environment.GetEnvironmentVariable("P3D_SHELLCURVEDTHICK") == "0";
+
+    /// <summary>Точка лежит на грани любой поверхности: на поверхности (до допуска гранения) и у её треугольников.</summary>
+    static bool OnAnyFace(TFace f, Vector3d q)
+    {
+        var su = GeometryAudit.AuthoritativeSurface(f);
+        if (su == null || (su.PointAt(su.ProjectToUV(q)) - q).Length > 1e-6) return false;
+        var mb = new Tess.MeshBuilder(); f.Surface.TessellateFace(f, mb); var md = new Tess.MeshData(); mb.FillInto(md);
+        double best = double.MaxValue;
+        for (int i = 0; i + 2 < md.Indices.Length; i += 3)
+        {
+            Vector3d x = mb.PositionsD[md.Indices[i]], y = mb.PositionsD[md.Indices[i + 1]], z = mb.PositionsD[md.Indices[i + 2]];
+            var n = Vector3d.Cross(y - x, z - x); if (n.LengthSquared < 1e-24) continue; n.Normalize();
+            double d = Vector3d.Dot(q - x, n); var qp = q - n * d;
+            if (InTriangle(qp, x, y, z)) best = Math.Min(best, Math.Abs(d));
+        }
+        return best < Math.Max(1e-2, 3 * Tol.Chord);
+    }
 
     static Geometry.Ssi.Plane? PlaneOfFace(TFace f) => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) as Geometry.Ssi.Plane;
 

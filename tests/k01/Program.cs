@@ -450,6 +450,9 @@ static partial class Program
         if (mode is "krn07shellc" or "allA") Krn07ShellCurvedChecks();
         if (mode is "krn07drafttan" or "allA") Krn07DraftTangentChecks();
         if (mode is "draftspline" or "allA") Krn07DraftSplineChecks();
+        if (mode is "draftnonruled" or "allA") Krn07DraftNonRuledChecks();
+        if (mode is "shellown" or "allA") Krn07ShellOwnThicknessChecks();
+        if (mode is "shellopenblend" or "allA") Krn07ShellOpenBlendChecks();
         if (mode is "krn07loftn" or "allA") Krn07LoftNurbsChecks();
         if (mode is "krn04uniq" or "allB") Krn04UniqChecks();
         if (mode is "krn07nurbs" or "allB") Krn07NurbsChecks();
