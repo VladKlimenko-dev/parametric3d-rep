@@ -14,7 +14,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
+    <!-- C# 12 (язык .NET 8) и в новых Visual Studio: в C# 14 у массивов arr.Reverse() — уже Span.Reverse (void, на месте),
+         и код, верный в C# 12, перестаёт собираться или меняет смысл. Так то, что проверено здесь, собирается и у пользователя. -->
+    <LangVersion>12</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>Parametric3D</RootNamespace>
     <AssemblyName>Parametric3D</AssemblyName>

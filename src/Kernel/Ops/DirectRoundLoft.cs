@@ -72,7 +72,7 @@ public static partial class DirectRound
         {
             LineCurve3 l => new LineCurve3(l.B, l.A),
             ArcCurve3 a => new ArcCurve3(a.Frame, a.Radius, a.A1, a.A0),
-            BezierCurve3 bz => new BezierCurve3(bz.P.Reverse()),
+            BezierCurve3 bz => new BezierCurve3(Enumerable.Reverse(bz.P)),
             _ => c,
         };
         var cent = sections.Select(s => s.Loop.Aggregate(Vector3d.Zero, (acc, c) => acc + Start(c)) / N).ToList();
@@ -128,7 +128,7 @@ public static partial class DirectRound
                     }
                     if (gt[g, 0] < gt[g, S - 1]) break;
                     if (pass == 1) { why = $"loft: guide {g + 1} does not run through the sections in order"; return null; }
-                    G4[g] = G4[g].Reverse().ToArray();
+                    G4[g] = Enumerable.Reverse(G4[g]).ToArray();
                 }
                 for (int k = 1; k < S; k++) if (!(gt[g, k] > gt[g, k - 1] + 1e-9)) { why = $"loft: guide {g + 1} does not run through the sections in order"; return null; }
                 if (gt[g, 0] > 1e-6 || gt[g, S - 1] < 1 - 1e-6) { why = $"loft: guide {g + 1} extends beyond the first or the last section"; return null; }

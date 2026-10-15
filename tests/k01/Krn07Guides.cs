@@ -40,7 +40,7 @@ static partial class Program
                 foreach (var (sx, sy) in new[] { (1, 1), (-1, 1), (-1, -1), (1, -1) })
                 {
                     var pts = new[] { new Vector3d(sx * a, sy * a, 0), new Vector3d(sx * c, sy * c, h / 2), new Vector3d(sx * b, sy * b, h) };
-                    gs.Add(new BezierCurve3(reversed ? pts.Reverse() : pts));
+                    gs.Add(new BezierCurve3(reversed ? Enumerable.Reverse(pts) : pts));
                 }
                 return gs;
             }
