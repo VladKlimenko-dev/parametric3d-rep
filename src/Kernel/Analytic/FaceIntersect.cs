@@ -302,6 +302,10 @@ public static class FaceIntersect
     {
         var x0 = c.PointAt(t0);
         double? best = null; double bestRes = 1e-9;
+        // 06.1: ребро, КАСАЮЩЕЕСЯ кривой в точке (шов лент у вершины касается ребра граней), — минимум расстояния вырожден
+        // (сдвиг δ даёт невязку ~δ²): «уточнение» по нему уводило конец куска на 2.5e-8 мм при невязке 1e-16. Такие рёбра —
+        // только если нет ни одного трансверсального. Мутация P3D_REFINETRANS=0.
+        double? bestTan = null; double bestTanRes = 1e-9;
         foreach (var e in a.Face.Loops.Concat(b?.Face.Loops ?? Enumerable.Empty<TLoop>()).SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct())
         {
             var ec = e.Curve;
@@ -324,8 +328,19 @@ public static class FaceIntersect
                 if (Math.Abs(dt) < 1e-16 && Math.Abs(ds) < 1e-16) break;
             }
             double res = (c.PointAt(t) - ec.PointAt(s)).Length;
-            if (res < bestRes && Math.Abs(t - t0) < 1e-3 * Math.Max(1, Math.Abs(c.T1 - c.T0))) { bestRes = res; best = t; }
+            if (!(Math.Abs(t - t0) < 1e-3 * Math.Max(1, Math.Abs(c.T1 - c.T0)))) continue;
+            bool tangent = false;
+            if (!RefineTransOff)
+            {
+                double hh = 1e-6 * Math.Max(1, Math.Abs(c.T1 - c.T0)), gg = 1e-6 * Math.Max(1, Math.Abs(ec.T1 - ec.T0));
+                var dc = c.PointAt(Math.Min(c.T1, t + hh)) - c.PointAt(Math.Max(c.T0, t - hh)); var de = ec.PointAt(Math.Min(ec.T1, s + gg)) - ec.PointAt(Math.Max(ec.T0, s - gg));
+                double sn = Vector3d.Cross(dc, de).Length / Math.Max(1e-300, dc.Length * de.Length);
+                tangent = sn < 1e-4;
+            }
+            if (tangent) { if (res < bestTanRes) { bestTanRes = res; bestTan = t; } }
+            else if (res < bestRes) { bestRes = res; best = t; }
         }
+        best ??= bestTan;
         if (best == null) Interlocked.Increment(ref RefineFails);
         return best;
     }
@@ -339,6 +354,7 @@ public static class FaceIntersect
     }
 
     static readonly bool EventsOff = Environment.GetEnvironmentVariable("P3D_EVENTS") == "0";
+    static readonly bool RefineTransOff = Environment.GetEnvironmentVariable("P3D_REFINETRANS") == "0";
     /// <summary>Замер: сколько кривых обрезано по событиям, сколько интервалов не согласовались (отказ).</summary>
     public static long EventClips, UnresolvedClips;
 

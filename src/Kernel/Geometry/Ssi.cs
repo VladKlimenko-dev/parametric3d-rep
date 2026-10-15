@@ -211,6 +211,7 @@ public static class Ssi
         return r;
     }
 
+    static readonly bool PcTangentOff = Environment.GetEnvironmentVariable("P3D_PCTANGENT") == "0";
     static Result PlaneCylinder(Plane p, Cylinder c, Vector3d bc, double br)
     {
         var n = p.N.Normalized(); var w = c.Axis.Normalized();
@@ -224,7 +225,10 @@ public static class Ssi
             var foot = c.P - n * d;
             var side = Vector3d.Cross(w, n).Normalized();
             double h2 = c.R * c.R - d * d;
-            if (h2 < 1e-18) { var l1 = Line(foot, w, bc, br); l1.Kind = l1.Curves.Count > 0 ? Kind.Tangent : Kind.Empty; return l1; }
+            // касание: по зазору между осью и плоскостью (R − |d| до 1e-12 отн.), а не по h² — у плоскости и ленты, построенных в
+            // разных телах (пересечение тел «одно тело — разные скругления»), зазор 1e-15 давал h ~ 6e-8: две прямые и полосу уже
+            // допуска слияния. Мутация P3D_PCTANGENT=0.
+            if (h2 < 1e-18 || (!PcTangentOff && Math.Abs(c.R - Math.Abs(d)) <= 1e-12 * Math.Max(1, c.R))) { var l1 = Line(foot, w, bc, br); l1.Kind = l1.Curves.Count > 0 ? Kind.Tangent : Kind.Empty; return l1; }
             double h = Math.Sqrt(h2);
             foreach (double sgn in new[] { -1.0, 1.0 })
             {

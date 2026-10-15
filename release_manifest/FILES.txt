@@ -86,6 +86,7 @@ src/Kernel/Ops/DirectRoundLoft.cs
 src/Kernel/Ops/DirectRoundLoftGuides.cs
 src/Kernel/Ops/DirectRoundOffset.cs
 src/Kernel/Ops/DirectRoundOpen.cs
+src/Kernel/Ops/DirectRoundPartial.cs
 src/Kernel/Ops/DirectRoundShellOpen.cs
 src/Kernel/Ops/DirectRoundSweep.cs
 src/Kernel/Ops/DirectRoundTangent.cs
@@ -459,6 +460,7 @@ tests/k01/Krn06CylCylPart.cs
 tests/k01/Krn06LawLoop.cs
 tests/k01/Krn06LineCylCh.cs
 tests/k01/Krn06Open.cs
+tests/k01/Krn06Partial.cs
 tests/k01/Krn06Probe2.cs
 tests/k01/Krn06Quadric.cs
 tests/k01/Krn06TanLoop.cs
@@ -590,6 +592,7 @@ tools/occt_time.py
 tools/perf_targets.py
 tools/progress_score.py
 tools/ref_apex_edge.py
+tools/ref_apex_two_edges.py
 tools/ref_canal_inclined_hole.py
 tools/ref_rolling_ball_morph.py
 tools/run_baseline.sh
