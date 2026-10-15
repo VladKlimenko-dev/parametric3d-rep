@@ -79,3 +79,49 @@ static partial class Program
         });
     }
 }
+
+static partial class Program
+{
+    static void Krn07DraftNonRuledChecks()
+    {
+        Check("KRN07-DRAFT-NONRULED-REFUSED", () =>
+        {
+            // 07.6: грань без образующих вдоль вытяжки (шар, тор, тор скругления контура) уклоном не наклоняется — у неё нет
+            // линии на нейтрали, вокруг которой поворачивать образующие (так же отказывают распространённые CAD). Отказ с
+            // причиной, тело не тронуто (объём и годность прежние).
+            var fails = new List<string>();
+            TSolid RoundedTop()
+            {
+                var bl = new List<TSolid> { Box(0, 0, 0, 60, 40, 20) };
+                FilletOp.RoundEdges(bl, bl[0].Edges.Where(e => e.Curve is LineCurve3 && Math.Abs(e.V0.P.Z - e.V1.P.Z) > 1).Select(EdgeRef.Of).ToList(), 5, new List<string>());
+                FilletOp.RoundEdges(bl, bl[0].Edges.Where(e => Math.Abs(e.V0.P.Z - 20) < 1e-7 && Math.Abs(e.V1.P.Z - 20) < 1e-7).Select(EdgeRef.Of).ToList(), 3, new List<string>());
+                return bl[0];
+            }
+            double q = 3 / Math.Sqrt(2);
+            var cases = new (string Name, Func<TSolid> Make, Vector3d Probe)[]
+            {
+                ("sphere r10", () => PrimitiveOp.Sphere(Vector3d.Zero, 10), new Vector3d(10, 0, 0)),
+                ("torus 20/5", () => PrimitiveOp.Torus(Vector3d.Zero, 20, 5), new Vector3d(25, 0, 0)),
+                ("torus of a rounded top loop", RoundedTop, new Vector3d(5 - (5 - 3 + q) / Math.Sqrt(2) * 0 , 0, 0)),
+            };
+            foreach (var (name, make, probe0) in cases)
+            {
+                var b0 = make(); double v0 = AnalyticVolume.Of(b0) ?? double.NaN;
+                var probe = probe0;
+                if (name.StartsWith("torus of"))
+                {
+                    // точка на торе скругления у угла (0, 0): центр дуги (5, 5), ось — z; середина четверти тора
+                    var dir = new Vector3d(-1, -1, 0).Normalized(); double rc = 5 - 3 + 3 * Math.Cos(Math.PI / 4);
+                    probe = new Vector3d(5, 5, 17) + dir * rc + new Vector3d(0, 0, 3 * Math.Sin(Math.PI / 4));
+                }
+                var bl = new List<TSolid> { b0 }; var w = new List<string>();
+                bool ok = DraftOp.Apply(bl, new[] { probe }, Vector3d.Zero, Vector3d.UnitZ, 5, w);
+                double v = AnalyticVolume.Of(bl[0]) ?? double.NaN;
+                Console.WriteLine($"  {name}: ok {ok}, V {v:R} (was {v0:R}) | {string.Join(" | ", w.Take(2))}");
+                if (ok || !ReferenceEquals(bl[0], b0) && !(Math.Abs(v - v0) <= 1e-12 * Math.Abs(v0)) || !SolidValidator.Validate(bl[0]).IsValid || w.Count == 0)
+                    fails.Add($"{name}: ok {ok}, V {v:R} vs {v0:R} (must refuse with a reason, body untouched)");
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
+}
