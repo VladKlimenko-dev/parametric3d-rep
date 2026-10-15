@@ -27,7 +27,7 @@ public static class StepExact
     /// ребра, обрезанная торцами) — охват промежутков [L(v), R(v)] грани по 33 пробам v с запасом 1 % (в пределах поверхности):
     /// грань обрезается своими рёбрами, сплайн её покрывает. Мутация P3D_STEPOPENBAND=0 — незамкнутая лента не пишется.
     /// </summary>
-    static (double Ua, double Ub)? BandSpan(TFace f, SectionSurface band)
+    internal static (double Ua, double Ub)? BandSpan(TFace f, SectionSurface band)
     {
         if (Topology.AnalyticVolume.BandRange(f, band) is { } brg) return brg;
         if (StepOpenBandOff || band.Closed || Topology.AnalyticVolume.BandOpenRange(f, band) is not { } orr) return null;
@@ -184,6 +184,9 @@ public static class StepExact
                     // вокруг W). Прежде всегда писалось .T.: дуга с отрицательным размахом или кривая,
                     // идущая от V1 к V0, выходила в файле обратной — импорт брал дополнительную дугу.
                     return edgeOf[e] = E($"EDGE_CURVE('',#{Vertex(e.V0)},#{Vertex(e.V1)},#{geom},{(SameSense(a.Sweep, e) ? ".T." : ".F.")})");
+                case ProcCurve3 { ExactConic: { } pel }:
+                    geom = E($"ELLIPSE('',#{Axis(pel.Frame)},{N(pel.RU)},{N(pel.RV)})");
+                    return edgeOf[e] = E($"EDGE_CURVE('',#{Vertex(e.V0)},#{Vertex(e.V1)},#{geom},{(SameSense(pel.Sweep, e) ? ".T." : ".F.")})");
                 case EllipseCurve3 el:
                 {
                     // Эллипс (сечение цилиндра наклонной плоскостью, K08): полуось 1 — вдоль U рамки.

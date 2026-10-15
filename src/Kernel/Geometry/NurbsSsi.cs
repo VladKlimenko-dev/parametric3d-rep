@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 
@@ -45,7 +45,89 @@ sealed class TracedGrid
 /// </summary>
 public static class NurbsSsi
 {
+    /// <summary>Мутация P3D_NURBSSIDE=0: сторона грани NURBS на другой поверхности — прежний общий путь (отказ удостоверения).</summary>
+    static readonly bool SideOff = Environment.GetEnvironmentVariable("P3D_NURBSSIDE") == "0";
+    public static long CoincidentSides;
+
+    /// <summary>
+    /// 06.12/g.08: СТОРОНА ПРЯМОУГОЛЬНИКА ГРАНИ ЦЕЛИКОМ НА ДРУГОЙ ПОВЕРХНОСТИ (лофт на плите: нижний край боковой грани лежит
+    /// в плоскости верха плиты). Прослеживание вдоль самой стороны не удостоверялось («шаг не доказан однозначным»), и
+    /// объединение уходило в многогранный путь. Теперь: G = 0 на стороне (65 проб), а в полосе у стороны G строго монотонна
+    /// поперёк неё (оценка производной по кускам Безье с поправкой на кривизну другой поверхности) — в полосе нулей нет, кроме
+    /// самой стороны. Пересечение = сторона (ломаная в параметрах) + обычный поиск в прямоугольнике без полосы.
+    /// </summary>
     public static Ssi.Result Intersect(NurbsSurface S, double ua, double ub, double va, double vb, Ssi.Shape other, double scale)
+    {
+        if (!SideOff)
+        {
+            double G0(Vector2d q) => Ssi.Implicit(other, S.PointAt(q)).F;
+            double tolF = 1e-9 * Math.Max(1, scale);
+            foreach (int side in new[] { 0, 1, 2, 3 })        // 0: v = va, 1: v = vb, 2: u = ua, 3: u = ub
+            {
+                bool vSide = side < 2; double val = side switch { 0 => va, 1 => vb, 2 => ua, _ => ub };
+                Vector2d At(double f) => vSide ? new Vector2d(ua + (ub - ua) * f, val) : new Vector2d(val, va + (vb - va) * f);
+                bool on = true; for (int k = 0; k <= 64 && on; k++) if (Math.Abs(G0(At(k / 64.0))) > tolF) on = false;
+                if (!on) continue;
+                // полоса у стороны: производная G поперёк стороны одного знака
+                double range = vSide ? vb - va : ub - ua, w = range / 16;
+                var bezS = NurbsTools.Beziers(S); bool proved = false;
+                for (int it = 0; it < 24 && !proved; it++, w /= 2)
+                {
+                    double s0 = side switch { 0 => va, 1 => vb - w, 2 => ua, _ => ub - w }, s1 = s0 + w;
+                    int sg = 0; bool ok = true;
+                    foreach (var bp in bezS)
+                    {
+                        double cu0 = vSide ? Math.Max(ua, bp.U0) : Math.Max(s0, bp.U0), cu1 = vSide ? Math.Min(ub, bp.U1) : Math.Min(s1, bp.U1);
+                        double cv0 = vSide ? Math.Max(s0, bp.V0) : Math.Max(va, bp.V0), cv1 = vSide ? Math.Min(s1, bp.V1) : Math.Min(vb, bp.V1);
+                        if (cu0 >= cu1 || cv0 >= cv1) continue;
+                        var sub = bp.Sub(cu0, cu1, cv0, cv1);
+                        if (sub.DerivBounds() is not { } db) { ok = false; break; }
+                        var c3 = (db.Lo + db.Hi) / 2; double rb = (db.Hi - db.Lo).Length / 2;
+                        if (Ssi.NormalLip(other, c3, rb) is not double kap) { ok = false; break; }
+                        var g0 = Ssi.Implicit(other, c3).G; double del = Math.Min(2, kap * rb);
+                        var dir = vSide ? new Vector2d(0, 1) : new Vector2d(1, 0);
+                        if (sub.DirBound(g0, dir) is not { } d2) { ok = false; break; }
+                        Vector3d dl = vSide ? db.SvLo : db.SuLo, dh = vSide ? db.SvHi : db.SuHi;
+                        double a2 = 0; for (int m = 0; m < 3; m++) { double am = Math.Max(Math.Abs(dl[m]), Math.Abs(dh[m])); a2 += am * am; }
+                        double mag = del * Math.Sqrt(a2);
+                        int sgi = d2.Lo - mag > 0 ? 1 : d2.Hi + mag < 0 ? -1 : 0;
+                        if (sgi == 0 || (sg != 0 && sgi != sg)) { ok = false; break; }
+                        sg = sgi;
+                    }
+                    if (ok && sg != 0) proved = true; else if (w < 1e-7 * range) break;
+                    if (proved)
+                    {
+                        // поиск в прямоугольнике без полосы, затем сторона — отдельная кривая
+                        var rest = side switch
+                        {
+                            0 => Intersect(S, ua, ub, va + w, vb, other, scale),
+                            1 => Intersect(S, ua, ub, va, vb - w, other, scale),
+                            2 => Intersect(S, ua + w, ub, va, vb, other, scale),
+                            _ => Intersect(S, ua, ub - w, va, vb, other, scale),
+                        };
+                        var uv = Enumerable.Range(0, 65).Select(k => At(k / 64.0)).ToList();
+                        var sideC = new NurbsImplicitCurve3(S, other, uv);
+                        // у периодической поверхности противоположная сторона — та же кривая в пространстве (тор: v = 0 и v = 1):
+                        // вторая — не новая ветвь
+                        bool dup = Environment.GetEnvironmentVariable("P3D_SIDEDEDUP") != "0" && rest.Curves.Any(cv =>
+                        {
+                            if (!(Math.Abs(cv.Length - sideC.Length) < 1e-6 * Math.Max(1, sideC.Length))) return false;
+                            return Enumerable.Range(0, 5).All(k => { var q = sideC.PointAt((k + 0.5) / 5); var x = cv.PointAt(Analytic.FaceSplit.ClosestParam(cv, q)); return (x - q).Length < 1e-7 * Math.Max(1, scale); })
+                                   && Math.Abs(cv.Length - sideC.Length) < 1e-6 * Math.Max(1, sideC.Length);
+                        });
+                        if (Environment.GetEnvironmentVariable("P3D_SIDEDBG") == "1") Console.WriteLine($"   [side] {side} [{ua},{ub}]x[{va},{vb}] w {w} rest {rest.Curves.Count} dup {dup} L {sideC.Length} " + string.Join(",", rest.Curves.Select(c => $"{c.GetType().Name}:{c.Length:F4}:{c.PointAt(c.T0)}")));
+                        if (!dup) rest.Curves.Add(sideC);
+                        rest.Kind = Ssi.Kind.Curves;
+                        Interlocked.Increment(ref CoincidentSides);
+                        return rest;
+                    }
+                }
+            }
+        }
+        return IntersectCore(S, ua, ub, va, vb, other, scale);
+    }
+
+    static Ssi.Result IntersectCore(NurbsSurface S, double ua, double ub, double va, double vb, Ssi.Shape other, double scale)
     {
         var r = new Ssi.Result();
         double G(Vector2d q) => Ssi.Implicit(other, S.PointAt(q)).F;

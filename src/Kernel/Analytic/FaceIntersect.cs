@@ -445,6 +445,7 @@ public static class FaceIntersect
             if (!(!closed && e == T1)) { double ew = Wrap(e); e = RefineOnEdge(c, ew, a, b) is { } re ? re + (e - ew) : e; }
             // кусок через конец параметра: начало — в [T0, T1), конец — за T1
             if (closed && s >= T1) { s -= P; e -= P; }
+            if (!closed && !PieceWrapOld) { s = Math.Clamp(s, T0, T1); e = Math.Clamp(e, T0, T1); }
             if (e - s < 1e-12) continue;
             res.Pieces.Add(new Piece(c, s, e, c.PointAt(s), c.PointAt(e > T1 ? e - P : e), false));
         }
@@ -543,10 +544,16 @@ public static class FaceIntersect
             var first = runs[0]; var last = runs[^1];
             runs.RemoveAt(runs.Count - 1); runs[0] = (last.S, first.E + (T1 - T0));   // кусок через конец — параметр за T1
         }
-        foreach (var (s, e) in runs)
+        foreach (var (s0r, e0r) in runs)
         {
+            // 06.12/g.08: у НЕЗАМКНУТОЙ кривой конец за T1 (уточнение корня у самого конца выходит за параметр на 1e-10) — это
+            // конец кривой, а не «по кругу»: прежде точка конца бралась у начала кривой (кусок «из точки в неё же», грань NURBS,
+            // разрезанная дважды, собиралась неверно). Мутация P3D_PIECEWRAP=0.
+            double s = s0r, e = e0r;
+            if (!closed && !PieceWrapOld) { s = Math.Clamp(s, T0, T1); e = Math.Clamp(e, T0, T1); }
             if (e - s < 1e-12) continue;
             res.Pieces.Add(new Piece(c, s, e, c.PointAt(s), c.PointAt(e > T1 ? e - (T1 - T0) : e), false));
         }
     }
+    static readonly bool PieceWrapOld = Environment.GetEnvironmentVariable("P3D_PIECEWRAP") == "0";
 }

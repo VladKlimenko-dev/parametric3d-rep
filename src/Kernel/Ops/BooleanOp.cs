@@ -459,17 +459,23 @@ public static class BooleanOp
         // многогранник (объединение цилиндра с шаром многогранно, затем − брусок: 3301.6 вместо 3354.7 мм³, тождество с
         // многогранным пересечением нарушено на 41 мм³; серия 8 разностного сравнения). Мутация P3D_POLYOPERAND=0.
         if (!PolyOperandOld && (IsPolyhedral(body) || IsPolyhedral(other))) { AnalyticRouteDebug?.Invoke("general declined: polyhedral operand"); return null; }
+        // 06.12/g.08: грани по формуле (ленты, протяжки, угловые лоскуты) — представлением NURBS в пределах точности модели
+        NurbsProxy.Begin();
+        if (NurbsProxy.Of(body, out var pw1) is { } pb) body = pb; else if (pw1 != null) AnalyticRouteDebug?.Invoke("proxy: " + pw1);
+        if (NurbsProxy.Of(other, out var pw2) is { } po) other = po; else if (pw2 != null) AnalyticRouteDebug?.Invoke("proxy: " + pw2);
         var op = kind == BooleanKind.Unite ? Analytic.Bool2.Union : kind == BooleanKind.Subtract ? Analytic.Bool2.Subtract : Analytic.Bool2.Intersect;
         // Сферы (этап 2б) в маршруте — за флагом: на корпусе скругление вершины куба R6 давало итоговую сетку с замечаниями
         // (K09-VERTEX-CHAMFER-AND-ROUND) — дефект дальше в цепочке, разобрать.
         if (!AnalyticSpheres && body.Faces.Concat(other.Faces).Any(fc => Geometry.ExactEdges.ShapeOf(Topology.GeometryAudit.AuthoritativeSurface(fc)) is Geometry.Ssi.Sphere))
         { AnalyticRouteDebug?.Invoke("general declined: sphere faces (P3D_ANALYTICSPHERES=1 to enable)"); return null; }
         TSolid? r;
+        var proxySwaps = new List<(int Face, ISurface3 Proxy, bool Rev)>();
         try
         {
             OperationTrace.Enter("boolean.analytic.general");
             string why;
             using (Diagnostics.Prof.Time("аналитика (общая): сборка")) r = Analytic.GeneralBoolean.Run(body, other, op, out why);
+            if (r != null) proxySwaps = NurbsProxy.Restore(r);
             if (r == null && Analytic.GeneralBoolean.LastProvedEmpty) { AnalyticRouteDebug?.Invoke("general: empty result proved"); return ProvedEmpty; }
             if (r == null)
             {
@@ -545,6 +551,7 @@ public static class BooleanOp
             using (Diagnostics.Prof.Time("аналитика (общая): согласие с CSG"))
             {
                 var cr = new Analytic.Classifier(r); var ca = new Analytic.Classifier(body); var cb = new Analytic.Classifier(other);
+                if (cr.Unsupported != null && NurbsProxy.ProxyView(r, proxySwaps) is { } rView) cr = new Analytic.Classifier(rView);
                 if (cr.Unsupported != null || ca.Unsupported != null || cb.Unsupported != null) { AnalyticRouteDebug?.Invoke("general: classifier unsupported"); return "general route check failed"; }
                 // Точки — в основном в ПЕРЕСЕЧЕНИИ габаритов операндов (там результат меняется: снятые 268 мм³ в теле в десятки
                 // мм проскакивали мимо 128 точек по общему габариту), четверть — по общему.

@@ -1,4 +1,4 @@
-using Parametric3D.Core;
+﻿using Parametric3D.Core;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
 
@@ -19,10 +19,15 @@ public sealed class RoundFeature : Feature
     public ValueRef Radius = new(2);
     /// <summary>KRN-06 (06.14): радиус в конце ребра (линейный закон от Radius в начале ссылки); null — постоянный радиус.</summary>
     public ValueRef? RadiusEnd;
+    /// <summary>
+    /// KRN-06 (06.2): ЗАКОН РАДИУСА ПО ТОЧКАМ — (доля длины F ∈ [0, 1] от начала первой ссылки, радиус); у цепочки (касательного
+    /// контура) — доля длины контура. Пусто — постоянный радиус (или линейный закон RadiusEnd).
+    /// </summary>
+    public readonly List<(double F, ValueRef R)> LawPoints = new();
 
     public RoundFeature(string name = "Round") { Name = name; }
 
-    public override string Summary => $"Round R{Radius}{(RadiusEnd is { } re0 ? "→" + re0 : "")} ({Edges.Count} edges{(Selectors.Count > 0 ? ", " + string.Join(", ", Selectors) : "")})";
+    public override string Summary => $"Round R{Radius}{(LawPoints.Count >= 2 ? " law " + string.Join("/", LawPoints.Select(p => p.R.Value.ToString("0.###"))) : "")}{(RadiusEnd is { } re0 ? "→" + re0 : "")} ({Edges.Count} edges{(Selectors.Count > 0 ? ", " + string.Join(", ", Selectors) : "")})";
 
     public override void Execute(BuildContext ctx)
     {
@@ -56,7 +61,13 @@ public sealed class RoundFeature : Feature
         int w0 = ctx.Warnings.Count;
 
         // K02: через контракт операции — результат проверяется, отказ не меняет тела дерева.
-        if (RadiusEnd is { } re)
+        if (LawPoints.Count >= 2)
+        {
+            var pts = LawPoints.Select(p => (p.F, p.R.Resolve(ctx.Parameters))).ToList();
+            if (pts.Any(p => p.Item2 <= Tol.Weld)) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Round: law radii must be greater than zero.");
+            Kernel.OperationContract.Apply("Round", ctx.Bodies, b => FilletOp.RoundEdgesLaw(b, edges, pts, ctx.Warnings));
+        }
+        else if (RadiusEnd is { } re)
         {
             double r1 = re.Resolve(ctx.Parameters);
             if (r1 <= Tol.Weld) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Round: the end radius must be greater than zero.");
@@ -65,6 +76,7 @@ public sealed class RoundFeature : Feature
         else Kernel.OperationContract.Apply("Round", ctx.Bodies, b => FilletOp.RoundEdges(b, edges, r, ctx.Warnings));
         // KRN-06: прямой построитель (плоскость/плоскость, плоскость/цилиндр) — сопряжение точное; иначе — резец с хордами
         if (!ctx.Warnings.Skip(w0).Any(x => x.StartsWith("Round: direct blend", StringComparison.Ordinal) || x.StartsWith("Round: direct variable blend", StringComparison.Ordinal)))
+            // (у закона по точкам прямой путь пишет «Round: direct blend … radius law»)
             ctx.Warnings.Add("Round: the surface and its edges are exact, but the cut itself " +
                              "is made with a chord approximation — the removed volume is about " +
                              "half a percent larger. Vertices where several rounds meet are " +

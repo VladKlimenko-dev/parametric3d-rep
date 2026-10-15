@@ -364,7 +364,17 @@ public static partial class DirectRound
     /// </summary>
     public static bool TryRoundLaw(List<TSolid> bodies, IReadOnlyList<EdgeRef> refs, IReadOnlyList<(double F, double R)> points, List<string> warnings)
     {
-        if (Off || OffForTest || LawOff || refs.Count != 1 || OwnerBody(bodies, refs) is not int k) return false;
+        if (Off || OffForTest || LawOff || refs.Count == 0 || OwnerBody(bodies, refs) is not int k) return false;
+        if (refs.Count > 1)
+        {
+            // 06.2: закон на цепочке — касательный контур плоской грани
+            string? wl = null;
+            var rl = BuildLawLoop(bodies[k], refs, points, ref wl);
+            if (rl == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: law loop: " + wl); return false; }
+            bodies[k] = rl; Interlocked.Increment(ref Built);
+            warnings.Add($"Round: direct blend of a tangent loop with a radius law ({points.Count} points, rolling ball, exact envelope).");
+            return true;
+        }
         var law = RadiusLaw.Points(refs[0].Start, refs[0].End, points);
         if (law == null) { Debug?.Invoke("declined: radius law points (need σ = 0 and 1, increasing)"); return false; }
         double rMax = points.Max(x => x.R);

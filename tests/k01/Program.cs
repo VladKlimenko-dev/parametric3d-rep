@@ -453,6 +453,12 @@ static partial class Program
         if (mode is "draftnonruled" or "allA") Krn07DraftNonRuledChecks();
         if (mode is "shellown" or "allA") Krn07ShellOwnThicknessChecks();
         if (mode is "shellopenblend" or "allA") Krn07ShellOpenBlendChecks();
+        if (mode is "composite" or "allA") Krn07CompositeChecks();
+        if (mode is "boolband" or "allA") Krn06BoolBandChecks();
+        if (mode is "bezdecomp" or "allA") BezierDecompositionChecks();
+        if (mode is "equalcyl" or "allA") Krn06EqualCylChecks();
+        if (mode is "lawloop" or "allA") Krn06LawLoopChecks();
+        if (mode is "compprobe") CompositeProbe();
         if (mode is "krn07loftn" or "allA") Krn07LoftNurbsChecks();
         if (mode is "krn04uniq" or "allB") Krn04UniqChecks();
         if (mode is "krn07nurbs" or "allB") Krn07NurbsChecks();

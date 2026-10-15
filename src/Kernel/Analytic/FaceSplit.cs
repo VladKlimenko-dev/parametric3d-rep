@@ -115,6 +115,8 @@ public static partial class FaceSplit
             }
         }
         Debug?.Invoke($"split {f.Face.Tag} param sign {sign} cyl {f.Cyl} pieces {pieces.Count} closed {pieces.Count(p => p.Closed)}");
+        if (Debug != null && Environment.GetEnvironmentVariable("P3D_FSCYC") == "1")
+            foreach (var pc in pieces) Debug($"  piece {pc.Curve.GetType().Name} T {pc.T0:G6}..{pc.T1:G6} P0 {pc.P0:0.####} P1 {pc.P1:0.####} at(T0) {pc.Curve.PointAt(pc.T0):0.####} at(T1) {pc.Curve.PointAt(pc.T1):0.####} closed {pc.Closed}");
         Vector2d P(Vector3d x, double uRef)
         {
             if (!f.Cyl) { var pp = f.PlaneUV(x); return new(pp.X, sign * pp.Y); }
@@ -310,6 +312,9 @@ public static partial class FaceSplit
             cy.Area = area;
             cy.Turns = f.Cyl ? (cy.Poly[^1].X - cy.Poly[0].X) / (2 * Math.PI * f.R) : 0;
         }
+        if (Debug != null && Environment.GetEnvironmentVariable("P3D_FSCYC") == "1")
+            foreach (var cy in cycles)
+                Debug($"  cycle area {cy.Area:G6}: " + string.Join(" ", cy.Darts.Select(d => $"{(d.IsPiece ? "P" : "B")}{d.Curve.GetType().Name[0]}[{d.T0:0.####}-{d.T1:0.####}]{d.From}>{d.To}")) + " | nodes " + string.Join(" ", cy.Darts.Select(d => $"{d.From}={nodes[d.From]:G12}")));
 
         // области
         var regions = new List<Region>();
@@ -460,6 +465,11 @@ public static partial class FaceSplit
                 return null;
             }
             r.Inside = inside.Value;
+            if (Debug != null && Environment.GetEnvironmentVariable("P3D_FSCYC") == "1")
+            {
+                var qq = P(inside.Value, 0);
+                                foreach (var poly in polys) Debug($"  poly n {poly.Count} u {poly.Min(p => p.X):G6}..{poly.Max(p => p.X):G6} v {poly.Min(p => p.Y):G6}..{poly.Max(p => p.Y):G6} first {poly[0]} last {poly[^1]} cross {Crossings(poly, qq, per)} q {qq}");
+            }
             if (Debug != null)
             {
                 var qi = P(inside.Value, 0);
@@ -495,6 +505,7 @@ public static partial class FaceSplit
     }
 
     /// <summary>Пересечения луча +v из точки с ломаной (у цилиндра u — по модулю периода per).</summary>
+    static readonly bool CrossWrapOld = Environment.GetEnvironmentVariable("P3D_CROSSWRAP") == "0";
     static int Crossings(List<Vector2d> poly, Vector2d q, double per)
     {
         int n = 0;
@@ -503,7 +514,15 @@ public static partial class FaceSplit
             double ua = poly[i].X, ub = poly[i + 1].X; double lo = Math.Min(ua, ub), hi = Math.Max(ua, ub);
             if (hi - lo < 1e-15) continue;
             double uu = q.X;
-            if (per > 0) { while (uu < lo) uu += per; while (uu - per >= lo) uu -= per; }
+            // q в своём периоде — без сдвига: q + per − per ≠ q в плавающей точке, и куски по обе стороны вершины с u = q
+            // считались оба (тройник равных труб: вершина в верхней точке линзы — дырка не вычиталась). Мутация P3D_CROSSWRAP=0.
+            if (per > 0 && CrossWrapOld) { while (uu < lo) uu += per; while (uu - per >= lo) uu -= per; }
+            else if (per > 0 && !(uu >= lo && uu < hi))
+            {
+                double j0 = Math.Floor((lo - q.X) / per); bool found = false;
+                for (double j = j0 - 1; j <= j0 + 2 && !found; j++) { if (j == 0) continue; double x = q.X + j * per; if (x >= lo && x < hi) { uu = x; found = true; } }
+                if (!found) continue;
+            }
             if (uu < lo || uu >= hi) continue;
             double t = (uu - ua) / (ub - ua); double v = poly[i].Y + (poly[i + 1].Y - poly[i].Y) * t;
             if (v > q.Y) n++;

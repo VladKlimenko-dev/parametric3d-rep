@@ -147,7 +147,11 @@ static partial class Program
             var path = new Parametric3D.Model.Sketching.Sketch("path", new Frame3(Vector3d.Zero, Vector3d.UnitX, Vector3d.UnitZ)); p.Add(path);
             path.AddEntity(new Parametric3D.Model.Sketching.SkLine(new Parametric3D.Model.Sketching.SkPoint(0, 0), new Parametric3D.Model.Sketching.SkPoint(0, 40)));
             path.AddEntity(new Parametric3D.Model.Sketching.SkLine(new Parametric3D.Model.Sketching.SkPoint(0, 40), new Parametric3D.Model.Sketching.SkPoint(30, 40)));
-            p.AddFeature(new Parametric3D.Model.Features.SweepFeature { SectionSketchId = sec.Id, PathSketchId = path.Id }); p.Rebuild(null);
+            p.AddFeature(new Parametric3D.Model.Features.SweepFeature { SectionSketchId = sec.Id, PathSketchId = path.Id });
+            // стык «на ус» — цилиндры равного радиуса: точный распад на половины эллипсов (06.12) совпадающих кусков не даёт;
+            // механизм отождествления проверяется на кусках общего способа (петли «−»/«+» через сёдла)
+            Parametric3D.Kernel.Geometry.Ssi.EqualCylOffForTest = true;
+            try { p.Rebuild(null); } finally { Parametric3D.Kernel.Geometry.Ssi.EqualCylOffForTest = false; }
             if (p.Features.Any(f => f.Error != null) || p.Bodies.Count != 1) fails.Add("sweep L failed");
             long built = B() - b0, late = L() - l0;
             Log(new { test = "KRN05-SHARED", built, late });

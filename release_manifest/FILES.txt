@@ -80,6 +80,8 @@ src/Kernel/Ops/DirectRound.cs
 src/Kernel/Ops/DirectRoundCavity.cs
 src/Kernel/Ops/DirectRoundCylCyl.cs
 src/Kernel/Ops/DirectRoundDraft.cs
+src/Kernel/Ops/DirectRoundEqualCyl.cs
+src/Kernel/Ops/DirectRoundLawLoop.cs
 src/Kernel/Ops/DirectRoundLoft.cs
 src/Kernel/Ops/DirectRoundLoftGuides.cs
 src/Kernel/Ops/DirectRoundOffset.cs
@@ -92,6 +94,7 @@ src/Kernel/Ops/DraftOp.cs
 src/Kernel/Ops/ExtrudeOp.cs
 src/Kernel/Ops/FilletOp.cs
 src/Kernel/Ops/LoftOp.cs
+src/Kernel/Ops/NurbsProxy.cs
 src/Kernel/Ops/PlanarTweak.cs
 src/Kernel/Ops/PrimitiveOp.cs
 src/Kernel/Ops/Profile.cs
@@ -449,9 +452,11 @@ tests/k01/Krn05AfterBlend.cs
 tests/k01/Krn05UniteChain.cs
 tests/k01/Krn06Acc.cs
 tests/k01/Krn06BlendStep.cs
+tests/k01/Krn06BoolBand.cs
 tests/k01/Krn06Cavity.cs
 tests/k01/Krn06CylCyl.cs
 tests/k01/Krn06CylCylPart.cs
+tests/k01/Krn06LawLoop.cs
 tests/k01/Krn06LineCylCh.cs
 tests/k01/Krn06Open.cs
 tests/k01/Krn06Probe2.cs
@@ -460,6 +465,7 @@ tests/k01/Krn06TanLoop.cs
 tests/k01/Krn06Unequal.cs
 tests/k01/Krn06Variable.cs
 tests/k01/Krn07.cs
+tests/k01/Krn07Composite.cs
 tests/k01/Krn07DraftSpline.cs
 tests/k01/Krn07DraftTangent.cs
 tests/k01/Krn07Guides.cs

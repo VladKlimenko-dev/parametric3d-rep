@@ -228,7 +228,10 @@ public static class DocumentFile
             Formula = rf.Radius.Formula,
             Edges = rf.Edges.Select(SaveEdge).ToList(),
             Selectors = rf.Selectors.Count == 0 ? null : rf.Selectors.Select(x => new SelectorDto { Kind = x.Kind.ToString(), Feature = x.FeatureKey, Other = x.OtherKey }).ToList(),
-            RadiusEnd = rf.RadiusEnd?.Value, RadiusEndFormula = rf.RadiusEnd?.Formula
+            RadiusEnd = rf.RadiusEnd?.Value, RadiusEndFormula = rf.RadiusEnd?.Formula,
+            LawF = rf.LawPoints.Count == 0 ? null : rf.LawPoints.Select(p => p.F).ToList(),
+            LawR = rf.LawPoints.Count == 0 ? null : rf.LawPoints.Select(p => p.R.Value).ToList(),
+            LawRFormulas = rf.LawPoints.Count == 0 || rf.LawPoints.All(p => p.R.Formula == null) ? null : rf.LawPoints.Select(p => p.R.Formula).ToList()
         },
 
         ChamferFeature cf => new FeatureDto
@@ -587,6 +590,8 @@ public static class DocumentFile
                     var rf = new RoundFeature(fd.Name) { Suppressed = fd.Suppressed };
                     rf.Radius = new ValueRef(fd.Distance) { Formula = fd.Formula };
                     if (fd.RadiusEnd is double rEnd) rf.RadiusEnd = new ValueRef(rEnd) { Formula = fd.RadiusEndFormula };
+                    if (fd.LawF is { } lf && fd.LawR is { } lr && lf.Count == lr.Count)
+                        for (int i = 0; i < lf.Count; i++) rf.LawPoints.Add((lf[i], new ValueRef(lr[i]) { Formula = fd.LawRFormulas != null && i < fd.LawRFormulas.Count ? fd.LawRFormulas[i] : null }));
                     foreach (var ed in fd.Edges) rf.Edges.Add(LoadEdge(ed));
                     foreach (var sd in fd.Selectors ?? new())
                         if (Enum.TryParse<EdgeSelectorKind>(sd.Kind, out var sk) && sd.Feature != null) rf.Selectors.Add(new EdgeSelector(sk, sd.Feature, sd.Other));
@@ -1038,6 +1043,10 @@ public static class DocumentFile
         public string? TwistFormula { get; set; }
         public bool? KeepOrientation { get; set; }
         public string? RadiusEndFormula { get; set; }
+        /// <summary>KRN-06 (06.2): закон радиуса по точкам (доли длины и радиусы, формулы радиусов).</summary>
+        public List<double>? LawF { get; set; }
+        public List<double>? LawR { get; set; }
+        public List<string?>? LawRFormulas { get; set; }
         /// <summary>KRN-07 (07.5): точки граней со своей толщиной оболочки (толщины — в Values/Formulas).</summary>
         public List<double>? ThickFaces { get; set; }
         public double[]? Point { get; set; }
