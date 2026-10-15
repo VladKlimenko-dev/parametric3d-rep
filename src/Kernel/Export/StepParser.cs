@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 
@@ -385,6 +385,7 @@ public sealed class StepParser
             }
 
             case "TOROIDAL_SURFACE":
+            case "DEGENERATE_TOROIDAL_SURFACE":
             {
                 Frame3 f = Placement(a[1]);
                 double ring = Num(a[2]) * LengthScale, tube = Num(a[3]) * LengthScale;

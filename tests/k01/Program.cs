@@ -430,6 +430,7 @@ static partial class Program
         if (mode is "krn06var" or "allB") Krn06VariableChecks();
         if (mode is "krn06uneq" or "allA") Krn06UnequalChecks();
         if (mode is "krn06tan" or "allA") Krn06TanLoopChecks();
+        if (mode is "krn06tilt" or "allA") Krn06TanTiltChecks();
         if (mode is "krn06asym" or "allA") Krn06AsymChecks();
         if (mode is "krn06lcch" or "allA") Krn06LineCylChamferChecks();
         if (mode is "krn06probe2") Krn06Probe2();

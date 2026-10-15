@@ -12,11 +12,19 @@ public static partial class DirectRound
     /// <summary>06.11: ОТКРЫТЫЕ касательные цепочки (концы — отрезки, торец — плоскость). Мутация P3D_DRTANOPEN=0 — отказ, как прежде.</summary>
     static readonly bool TanOpen = Environment.GetEnvironmentVariable("P3D_DRTANOPEN") != "0";
     public static long TanOpenChains;
+    /// <summary>06.11: r = R у выпуклой дуги контура — лента над дугой — часть шара (фаска — конус до вершины). Мутация P3D_DRPOLEARC=0 — отказ.</summary>
+    static readonly bool PoleArcs = Environment.GetEnvironmentVariable("P3D_DRPOLEARC") != "0";
+    public static long PoleArcBands;
+    /// <summary>06.11: НАКЛОННЫЕ СТЕНКИ (после уклона): плоскости и соосные конусы под одним углом к Fp. Мутация P3D_DRTANTILT=0 — отказ.</summary>
+    static readonly bool TanTilt = Environment.GetEnvironmentVariable("P3D_DRTANTILT") != "0";
+    public static long TiltedLoops;
 
     sealed class TPiece
     {
         public Seg S = null!; public FDesc W = null!; public ArcCurve3? Arc; public double SgnRad;
         public ICurve3 Q1C = null!, Q2C = null!;
+        public bool Pole;
+        public double Sb;                           // синус наклона стенки к Fp (нормаль стенки · n_p)                           // r = R выпуклой дуги: смещённая дуга на Fp — точка (лента — часть шара или конус до вершины)
         public Vector3d? QA1, QA2, QB1, QB2;        // контакты на свободном конце цепочки (иначе — Q1/Q2 в вершине)
         public ICurve3? EndA, EndB;                 // сечение ленты плоскостью торца на свободном конце (от Q1 к Q2)
     }
@@ -69,16 +77,31 @@ public static partial class DirectRound
                 var W = byFace[wf]; var p = new TPiece { S = s, W = W };
                 if (s.Curve is LineCurve3)
                 {
-                    if (!W.Surf.IsPlanar || W.N.Length < 0.5 || Math.Abs(Vector3d.Dot(W.N.Normalized(), np)) > 1e-9) { why = "tangent loop: a wall is not perpendicular to the face"; return false; }
+                    if (!W.Surf.IsPlanar || W.N.Length < 0.5) { why = "tangent loop: a wall is not planar"; return false; }
+                    p.Sb = Vector3d.Dot(W.N.Normalized(), np);
+                    if (Math.Abs(p.Sb) > 1e-9 && !TanTilt) { why = "tangent loop: a wall is not perpendicular to the face"; return false; }
                 }
                 else if (s.Curve is ArcCurve3 a && !a.IsClosed)
                 {
-                    if (!W.IsCyl || Math.Abs(Math.Abs(Vector3d.Dot(W.AxW, np)) - 1) > 1e-12) { why = "tangent loop: an arc's wall is not a cylinder along the face normal"; return false; }
-                    var dO = a.Frame.Origin - W.AxO; double sc = Math.Max(1, a.Radius);
-                    if ((dO - W.AxW * Vector3d.Dot(dO, W.AxW)).Length > 1e-9 * sc || Math.Abs(a.Radius - W.AxR) > 1e-9 * sc) { why = "tangent loop: an arc is not the cylinder's section"; return false; }
+                    double sc = Math.Max(1, a.Radius);
+                    if (W.IsCyl)
+                    {
+                        if (Math.Abs(Math.Abs(Vector3d.Dot(W.AxW, np)) - 1) > 1e-12) { why = "tangent loop: an arc's wall is not a cylinder along the face normal"; return false; }
+                        var dO = a.Frame.Origin - W.AxO;
+                        if ((dO - W.AxW * Vector3d.Dot(dO, W.AxW)).Length > 1e-9 * sc || Math.Abs(a.Radius - W.AxR) > 1e-9 * sc) { why = "tangent loop: an arc is not the cylinder's section"; return false; }
+                    }
+                    else if (TanTilt && W.Surf is RevolvedSurface { Base: LineCurve3 } cone)
+                    {
+                        // конус, соосный дуге (ось ∥ n_p через центр дуги), — стенка после уклона; дуга — его сечение
+                        var cw = cone.Axis.W.Normalized(); var dO = a.Frame.Origin - cone.Axis.Origin;
+                        if (Math.Abs(Math.Abs(Vector3d.Dot(cw, np)) - 1) > 1e-12 || (dO - cw * Vector3d.Dot(dO, cw)).Length > 1e-9 * sc) { why = "tangent loop: an arc's cone is not coaxial"; return false; }
+                        for (int q = 0; q <= 4; q++) { var x = a.PointAt(a.T0 + (a.T1 - a.T0) * q / 4); if ((cone.PointAt(cone.ProjectToUV(x)) - x).Length > 1e-9 * sc) { why = "tangent loop: an arc is not the cone's section"; return false; } }
+                    }
+                    else { why = "tangent loop: an arc's wall is not a cylinder along the face normal"; return false; }
                     p.Arc = a;
                     var m = a.PointAt(0.5); var rad = Radial(a, np, m);
                     p.SgnRad = Vector3d.Dot(NormalOf(W, m), rad) > 0 ? 1 : -1;
+                    p.Sb = Vector3d.Dot(NormalOf(W, m), np);
                 }
                 else { why = "tangent loop: an edge is neither a line nor an open arc"; return false; }
                 pl.Add(p);
@@ -86,7 +109,20 @@ public static partial class DirectRound
             pieces.Add(pl);
         }
         static Vector3d Radial(ArcCurve3 a, Vector3d np, Vector3d x) { var d = x - a.Frame.Origin; d -= np * Vector3d.Dot(d, np); return d.Normalized(); }
-        Vector3d N2(TPiece p, Vector3d x) => p.Arc is { } a ? Radial(a, np, x) * p.SgnRad : p.W.N.Normalized();
+        // n_2 — горизонтальная (в плоскости Fp) наружная нормаль стенки; у наклонной стенки нормаль = cos β·n_2 + sin β·n_p
+        Vector3d N2(TPiece p, Vector3d x) => p.Arc is { } a ? Radial(a, np, x) * p.SgnRad : (p.W.N.Normalized() - np * p.Sb).Normalized();
+        // НАКЛОН: у всех стенок один (касание на стыках); сечение поперёк контура — одно и то же. Шар: центр C = P + σr(n_p + k·n_2),
+        // k = (1 − sin β)/cos β; контакт на Fp — P + σrk·n_2, на стенке — P + σr((1 − sin β)n_p − k sin β·n_2); у фаски — по d от
+        // ребра вдоль каждой грани. При β = 0 — прежние формулы.
+        var allP = pieces.SelectMany(x => x).ToList();
+        double sb = allP[0].Sb;
+        if (allP.Any(q => Math.Abs(q.Sb - sb) > 1e-9)) { why = "tangent loop: the walls are inclined differently"; return false; }
+        if (Math.Abs(sb) <= 1e-12) sb = 0;
+        if (Math.Abs(sb) > 0.95) { why = "tangent loop: the walls are too inclined"; return false; }
+        double cb = Math.Sqrt(1 - sb * sb), kT = ch ? 1 : (1 - sb) / cb;
+        if (sb != 0 && runs.Count != openRun.Count(o => !o)) { why = "tangent chain: inclined walls with an open chain"; return false; }
+        if (sb != 0) Interlocked.Increment(ref TiltedLoops);
+        TPiece PieceAt(Vector3d x) => allP.OrderBy(q => DistToCurve(q.S.Curve, x)).First();
 
         // сторона (выпуклость) — по геометрии: направление от ребра внутрь Fp — ±n_2; выпукло, если против n_2
         double? sigma = null;
@@ -99,9 +135,14 @@ public static partial class DirectRound
             if (sigma == null) sigma = sg; else if (sigma != sg) { why = "tangent loop: convex and concave edges"; return false; }
         }
         double sgm = sigma!.Value;
-        Vector3d Q1(TPiece p, Vector3d x) => x + N2(p, x) * (sgm * r);
-        Vector3d Q2(Vector3d x) => x + np * (sgm * r);
-        Vector3d Cc(TPiece p, Vector3d x) => x + (np + N2(p, x)) * (sgm * r);
+        Vector3d Q1(TPiece p, Vector3d x) => x + N2(p, x) * (sgm * r * kT);
+        Vector3d Q2(Vector3d x)
+        {
+            if (sb == 0) return x + np * (sgm * r);
+            var h = N2(PieceAt(x), x);
+            return ch ? x + (np * cb - h * sb) * (sgm * r) : x + (np * (1 - sb) - h * (kT * sb)) * (sgm * r);
+        }
+        Vector3d Cc(TPiece p, Vector3d x) => x + (np + N2(p, x) * kT) * (sgm * r);
 
         // стыки: касание и непрерывность нормали стенки
         static Vector3d Dir(Seg s, bool atEnd)
@@ -129,10 +170,13 @@ public static partial class DirectRound
         {
             if (p.Arc is { } a)
             {
-                double rho = a.Radius + sgm * r * p.SgnRad;
-                if (!(rho > 1e-6 * Math.Max(1, a.Radius))) { why = "tangent loop: radius too large for an arc of the loop"; return false; }
+                double rho = a.Radius + sgm * r * kT * p.SgnRad;
+                // r = R (до 1e-9 отн.): смещённая дуга вырождается в центр дуги — полюс шара (у фаски — вершина конуса)
+                if (PoleArcs && Math.Abs(rho) <= 1e-9 * Math.Max(1, a.Radius)) { rho = 0; p.Pole = true; }
+                else if (!(rho > 1e-6 * Math.Max(1, a.Radius))) { why = "tangent loop: radius too large for an arc of the loop"; return false; }
                 p.Q1C = new ArcCurve3(new Frame3(a.Frame.Origin, a.Frame.U, a.Frame.V), rho, a.A0, a.A1);
-                p.Q2C = new ArcCurve3(new Frame3(a.Frame.Origin + np * (sgm * r), a.Frame.U, a.Frame.V), a.Radius, a.A0, a.A1);
+                double up2 = ch ? sgm * r * cb : sgm * r * (1 - sb), rho2 = ch ? a.Radius - sgm * r * sb * p.SgnRad : a.Radius - sgm * r * kT * sb * p.SgnRad;
+                p.Q2C = new ArcCurve3(new Frame3(a.Frame.Origin + np * up2, a.Frame.U, a.Frame.V), rho2, a.A0, a.A1);
             }
             else
             {
@@ -195,7 +239,7 @@ public static partial class DirectRound
             for (int k = 1; k < 16; k++)
             {
                 var x = p.Q1C.PointAt(p.Q1C.T0 + (p.Q1C.T1 - p.Q1C.T0) * k / 16.0);
-                foreach (var o in all) if (DistToCurve(o.S.Curve, x) < r * (1 - 1e-6)) { why = "tangent loop: the offset loop runs into itself (radius too large)"; return false; }
+                foreach (var o in all) if (DistToCurve(o.S.Curve, x) < r * kT * (1 - 1e-6)) { why = "tangent loop: the offset loop runs into itself (radius too large)"; return false; }
             }
         var freeNb = new HashSet<Seg>();
         for (int ri = 0; ri < runs.Count; ri++)
@@ -205,7 +249,7 @@ public static partial class DirectRound
                 for (int k = 0; k < 32; k++)
                 {
                     var x = s.Curve.PointAt(s.Curve.T0 + (s.Curve.T1 - s.Curve.T0) * k / 32.0);
-                    foreach (var o in all) if (DistToCurve(o.S.Curve, x) <= r + 1e-7) { why = "tangent loop: another loop of the face lies in the blend strip"; return false; }
+                    foreach (var o in all) if (DistToCurve(o.S.Curve, x) <= r * Math.Max(1, kT) + 1e-7) { why = "tangent loop: another loop of the face lies in the blend strip"; return false; }
                 }
 
         // правка Fp: контур → смещённый (то же направление)
@@ -215,15 +259,17 @@ public static partial class DirectRound
             if (openRun[ri])
             {
                 int ia = (l.IndexOf(runs[ri][0]) - 1 + n0) % n0, ib = (l.IndexOf(runs[ri][^1]) + 1) % n0;
-                var sa = Shorten(l[ia], null, CA1(pl[0])); var sb = Shorten(l[ib], CB1(pl[^1]), null);
-                if (sa == null || sb == null) { why = "tangent chain: an end neighbour cannot be shortened"; return false; }
-                l[ia] = sa; l[ib] = sb;
+                var sa = Shorten(l[ia], null, CA1(pl[0])); var sbS = Shorten(l[ib], CB1(pl[^1]), null);
+                if (sa == null || sbS == null) { why = "tangent chain: an end neighbour cannot be shortened"; return false; }
+                l[ia] = sa; l[ib] = sbS;
             }
             foreach (var p in pl)
             {
                 int k = l.IndexOf(p.S);
+                if (p.Pole) { l.RemoveAt(k); continue; }       // соседние смещённые отрезки сходятся в центре дуги
                 l[k] = new Seg { Curve = p.Q1C, A = CA1(p), B = CB1(p), Id = p.S.Id };
             }
+            if (l.Count < 3) { why = "tangent loop: the offset loop collapses"; return false; }
         }
         Fp.Touched = true;
 
@@ -266,8 +312,9 @@ public static partial class DirectRound
                     }
                     if (ia < 0 && ib < 0) continue;
                     if (ia >= 0 && ib >= 0) { why = "tangent loop: a wall edge joins two joints"; return false; }
-                    if (s.Curve is not LineCurve3 || Math.Abs(Math.Abs(Vector3d.Dot((s.B - s.A).Normalized(), np)) - 1) > 1e-9) { why = "tangent loop: a joint edge of the walls is not along the face normal"; return false; }
-                    var P = ia >= 0 ? s.A : s.B; var far = ia >= 0 ? s.B : s.A; var nP = Q2(P);
+                    var P = ia >= 0 ? s.A : s.B;
+                    var gdir = sb == 0 ? np : (np * cb - N2(PieceAt(P), P) * sb);
+                    if (s.Curve is not LineCurve3 || Math.Abs(Math.Abs(Vector3d.Dot((s.B - s.A).Normalized(), gdir)) - 1) > 1e-9) { why = "tangent loop: a joint edge of the walls is not along the wall generator"; return false; } var far = ia >= 0 ? s.B : s.A; var nP = Q2(P);
                     double len = (far - P).Length, u = Vector3d.Dot(nP - P, far - P) / (len * len);
                     if (!(u > 1e-9 && u < 1 - 1e-9)) { why = "tangent loop: a wall is not taller than the blend"; return false; }
                     var ns = Shorten(s, ia >= 0 ? nP : null, ib >= 0 ? nP : null);
@@ -279,7 +326,9 @@ public static partial class DirectRound
         foreach (var p in all.Where(p => p.Arc != null))
         {
             if (!wallHeight.TryGetValue(p.W, out var h)) { why = "tangent loop: wall height unknown"; return false; }
-            p.W.Hint = p.Q2C.PointAt((p.Q2C.T0 + p.Q2C.T1) / 2) + np * (sgm * (h - r) / 2);
+            var q2m = p.Q2C.PointAt((p.Q2C.T0 + p.Q2C.T1) / 2); var pm = p.S.Curve.PointAt((p.S.Curve.T0 + p.S.Curve.T1) / 2);
+            var u2 = (np * cb - N2(p, pm) * sb) * sgm; double dq = ch ? r : r * kT;
+            p.W.Hint = q2m + u2 * ((h - dq) / 2);
         }
 
         // торцы свободных концов: в вершине V — укоротить звено Fp и ребро стенки, вставить сечение ленты
@@ -311,7 +360,13 @@ public static partial class DirectRound
             int ji = jointPts.FindIndex(x => (x - P).Length < 1e-7);
             if (jointCurve.TryGetValue(ji, out var c)) return c;
             var q1 = Q1(p, P); var q2 = Q2(P); var C = Cc(p, P);
-            c = ch ? new LineCurve3(q1, q2) : new ArcCurve3(new Frame3(C, (q1 - C) / r, (q2 - C) / r), r, 0, Math.PI / 2);
+            if (ch) c = new LineCurve3(q1, q2);
+            else
+            {
+                // дуга сечения шара от Q1 к Q2: угол π/2 − β (между нормалями граней)
+                var e1 = (q1 - C) / r; var d2 = (q2 - C) / r; var e2 = (d2 - e1 * Vector3d.Dot(d2, e1)).Normalized();
+                c = new ArcCurve3(new Frame3(C, e1, e2), r, 0, Math.Atan2(Vector3d.Dot(d2, e2), Vector3d.Dot(d2, e1)));
+            }
             jointCurve[ji] = c; return c;
         }
         foreach (var p in all)
@@ -326,14 +381,15 @@ public static partial class DirectRound
                 new() { Curve = p.Q2C, A = CA2(p), B = CB2(p) },
                 new() { Curve = jB, A = CB2(p), B = CB1(p) },
             };
+            if (p.Pole) { loopB.RemoveAt(0); Interlocked.Increment(ref PoleArcBands); }    // треугольник: полюс, две четверти, дуга стенки
             var xm = p.EndA != null || p.EndB != null ? ((CA1(p) + CB1(p)) / 2 - N2(p, CA1(p)) * (sgm * r)) : p.S.Curve.PointAt((p.S.Curve.T0 + p.S.Curve.T1) / 2);
-            var hint = ch ? (Q1(p, xm) + Q2(xm)) / 2 : Cc(p, xm) - (np + N2(p, xm)).Normalized() * (sgm * r);
+            var hint = ch ? (Q1(p, xm) + Q2(xm)) / 2 : Cc(p, xm) - (np * (1 + sb) + N2(p, xm) * cb).Normalized() * (sgm * r);
             ISurface3 surf; bool rev;
             if (p.Arc is { } a)
             {
                 var O = a.Frame.Origin; var U = Radial(a, np, A); var fr = Frame3.FromNormal(O, np);
-                var Ct = O + np * (sgm * r); double rho = a.Radius + sgm * r * p.SgnRad; var tube = Ct + U * rho;
-                var qP = O + U * rho; var qC = Ct + U * a.Radius;
+                var Ct = O + np * (sgm * r); double rho = a.Radius + sgm * r * kT * p.SgnRad; var tube = Ct + U * rho;
+                var qP = O + U * rho; var qC = p.Q2C.PointAt(p.Q2C.T0) is var q2a ? O + np * Vector3d.Dot(q2a - O, np) + U * (q2a - O - np * Vector3d.Dot(q2a - O, np)).Length : Ct;
                 ICurve3 gen; Vector3d mid, want;
                 if (ch) { gen = new LineCurve3(qP, qC); mid = (qP + qC) / 2; want = (np + U * p.SgnRad).Normalized(); }
                 else
