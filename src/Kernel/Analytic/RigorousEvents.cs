@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Geometry;
 using Parametric3D.Kernel.Surfaces;
@@ -27,7 +27,7 @@ public static class RigorousEvents
 
     public static List<Vector3d>? CurveImplicit(ICurve3 c, Ssi.Shape s)
     {
-        var pieces = RBezierCurve.Of(c); if (pieces == null) return null;
+        var pieces = RBezierCurve.Of(c); if (pieces == null) { if (Environment.GetEnvironmentVariable("P3D_KRAWDBG") == "1") Console.Error.WriteLine($"KRAW no Bezier pieces for {c.GetType().Name}"); return null; }
         var res = new List<Vector3d>();
         foreach (var pc in pieces)
         {
@@ -55,7 +55,7 @@ public static class RigorousEvents
                 Scale = new[] { Math.Max(1e-9, (pc.Box().Hi - pc.Box().Lo).Length) },
             };
             var roots = k.Solve(new[] { (new[] { a0 }, new[] { a1 }) });
-            if (roots == null) return null;
+            if (roots == null) { if (Environment.GetEnvironmentVariable("P3D_KRAWDBG") == "1") Console.Error.WriteLine($"KRAW curve×{s.GetType().Name} piece [{pc.Point(0):0.######}..{pc.Point(1):0.######}] why {k.Why}"); return null; }
             foreach (var r in roots) if (r[0] >= -1e-12 && r[0] <= 1 + 1e-12) res.Add(pc.Point(Math.Clamp(r[0], 0, 1)));
         }
         return res;

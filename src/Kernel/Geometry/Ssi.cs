@@ -286,6 +286,7 @@ public static class Ssi
             r.Kind = r.Curves.Count > 0 ? Kind.Curves : Kind.Empty;
             return r;
         }
+        if (EqualCylOn && !EqualCylOffForTest && EqualRadiiMeeting(c, d, wc, wd) is { } eq) return eq;
         // Общий случай: точка цилиндра D по углу φ: q(φ) = D.P + R_d(cos φ·u + sin φ·v) + s·wd.
         // На цилиндре C: |(q − C.P) − wc((q − C.P)·wc)|² = R_c² — квадратное уравнение по s.
         var fd = Frame3.FromNormal(d.P, wd);
@@ -339,6 +340,52 @@ public static class Ssi
     }
 
     static readonly bool CylIntervalsOff = Environment.GetEnvironmentVariable("P3D_CYLINTERVALS") == "0";
+    static readonly bool EqualCylOn = Environment.GetEnvironmentVariable("P3D_EQUALCYLSSI") != "0";
+    public static long EqualCylSplits;
+    /// <summary>Проверка отождествления кусков при сборке (KRN05-SHARED-BY-CONSTRUCTION): стык «на ус» — общим способом.</summary>
+    public static volatile bool EqualCylOffForTest;
+
+    /// <summary>
+    /// KRN-06 (06.12): ЦИЛИНДРЫ РАВНОГО РАДИУСА С ПЕРЕСЕКАЮЩИМИСЯ ОСЯМИ (тройник, крестовина труб одного диаметра). Пересечение
+    /// распадается на два плоских эллипса в биссекторных плоскостях осей, эллипсы пересекаются в «сёдлах» O ± R·n
+    /// (n = wc × wd / |…|), где поверхности касаются. Дискриминант общего способа там имеет двойные корни — их положение
+    /// найдено лишь до ~1e-7, и концы ветвей с разных граней не сходились в один узел (разбиение граней отказывало). Здесь —
+    /// точно: X(θ) = O + R cos θ·n + R/|m⊥wc| · sin θ·m, m = (wc ± wd)/|…|; четыре половины эллипсов от седла к седлу.
+    /// Мутация P3D_EQUALCYLSSI=0.
+    /// </summary>
+    static Result? EqualRadiiMeeting(Cylinder c, Cylinder d, Vector3d wc, Vector3d wd)
+    {
+        double R = c.R;
+        if (Math.Abs(c.R - d.R) > 1e-12 * Math.Max(1, R)) return null;
+        var nn = Vector3d.Cross(wc, wd); var n = nn.Normalized();
+        var off = d.P - c.P;
+        if (Math.Abs(Vector3d.Dot(off, n)) > 1e-12 * Math.Max(1, R)) return null;
+        // точка встречи осей: c.P + wc·s = d.P + wd·t
+        double cw = Vector3d.Dot(wc, wd), den = 1 - cw * cw;
+        double s0 = (Vector3d.Dot(off, wc) - cw * Vector3d.Dot(off, wd)) / den;
+        var O = c.P + wc * s0;
+        var r = new Result();
+        var sc = new CylinderSurface(Frame3.FromNormal(c.P, wc), c.R);
+        var sd = new CylinderSurface(Frame3.FromNormal(d.P, wd), d.R);
+        foreach (var mm in new[] { wc + wd, wc - wd })
+        {
+            var m = mm.Normalized(); var mp = m - wc * Vector3d.Dot(m, wc); double lam = R / mp.Length;
+            for (int half = 0; half < 2; half++)
+            {
+                var pts = new List<Vector3d>();
+                const int N = 256;
+                for (int k = 0; k <= N; k++)
+                {
+                    double th = Math.PI * (half + k / (double)N);
+                    double cs = k == 0 ? (half == 0 ? 1 : -1) : k == N ? (half == 0 ? -1 : 1) : Math.Cos(th), sn = k == 0 || k == N ? 0 : Math.Sin(th);
+                    pts.Add(O + n * (R * cs) + m * (lam * sn));
+                }
+                r.Curves.Add(new IntersectionCurve3(sc, sd, pts));
+            }
+        }
+        Interlocked.Increment(ref EqualCylSplits);
+        r.Kind = Kind.Curves; return r;
+    }
 
     /// <summary>
     /// KRN-04 (04.1, g.05): ВСЕ ВЕТВИ ПЕРЕСЕЧЕНИЯ ДВУХ ЦИЛИНДРОВ. Образующая D под углом φ пересекает C, когда дискриминант

@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 
 namespace Parametric3D.Kernel.Curves;
@@ -187,6 +187,53 @@ public sealed class SplineCurve3 : ICurve3
         return new SplineCurve3(cp, m, w, knots);
     }
 
+    static readonly bool BezDecompOff = Environment.GetEnvironmentVariable("P3D_BEZDECOMP") == "0";
+
+    List<(SplineCurve3 Piece, double From, double To)> DecomposeA56()
+    {
+        int p = _degree, n = _cp.Length - 1, m = n + p + 1;
+        var U = _knots; double u0 = U[p], u1 = U[n + 1];
+        var Pw = new Vector4d[n + 1]; for (int i = 0; i <= n; i++) Pw[i] = new Vector4d(_cp[i] * _w[i], _w[i]);
+        var res = new List<(SplineCurve3, double, double)>();
+        var Q = new Vector4d[p + 1]; var Qn = new Vector4d[p + 1];
+        for (int i = 0; i <= p; i++) Q[i] = Pw[i];
+        int a = p, b = p + 1; var alphas = new double[p + 1];
+        var unitKnots = Enumerable.Repeat(0.0, p + 1).Concat(Enumerable.Repeat(1.0, p + 1)).ToArray();
+        void Emit(double from, double to)
+        {
+            var cp = new Vector3d[p + 1]; var w = new double[p + 1];
+            for (int i = 0; i <= p; i++) { w[i] = Q[i].W; cp[i] = Math.Abs(Q[i].W) < 1e-300 ? Vector3d.Zero : Q[i].Xyz / Q[i].W; }
+            res.Add((new SplineCurve3(cp, p, w, unitKnots), (from - u0) / (u1 - u0), (to - u0) / (u1 - u0)));
+        }
+        while (b < m)
+        {
+            int i0 = b;
+            while (b < m && U[b + 1] == U[b]) b++;
+            int mult = b - i0 + 1;
+            double ua = U[a], ub = U[b];
+            bool last = b >= m || ub >= u1;
+            if (mult < p && !last)
+            {
+                double numer = U[b] - U[a];
+                for (int j = p; j > mult; j--) alphas[j - mult - 1] = numer / (U[a + j] - U[a]);
+                int r = p - mult;
+                for (int j = 1; j <= r; j++)
+                {
+                    int save = r - j, sIdx = mult + j;
+                    for (int k = p; k >= sIdx; k--) { double al = alphas[k - sIdx]; Q[k] = Q[k] * al + Q[k - 1] * (1 - al); }
+                    Qn[save] = Q[p];
+                }
+            }
+            if (ub > ua) Emit(ua, ub);
+            if (last) break;
+            // следующий кусок: уже вычисленные точки Qn[0..r−1] и исходные опорные
+            for (int i = p - mult; i <= p; i++) Qn[i] = Pw[b - p + i];
+            (Q, Qn) = (Qn, Q);
+            a = b; b++;
+        }
+        return res;
+    }
+
     /// <summary>
     /// РАЗЛОЖЕНИЕ НА КУСКИ БЕЗЬЕ. Каждый внутренний узел поднимается до кратности степени, и
     /// кривая распадается на куски без внутренних узлов. На них работают простые точные
@@ -198,6 +245,11 @@ public sealed class SplineCurve3 : ICurve3
     /// </summary>
     public List<(SplineCurve3 Piece, double From, double To)> ToBezierSegments()
     {
+        // 06.12/g.08: РАЗЛОЖЕНИЕ ВСТАВКОЙ УЗЛОВ (Пигл — Тиллер, A5.6) в однородных координатах — за один проход, O(n·p²).
+        // Прежде — деление остатка в каждом узле с пересчётом узла в параметр остатка: O(n²), и у сплайна в тысячи узлов
+        // погрешность пересчёта сдвигала последние узлы за порог — кусок из двух промежутков, разложение отказывало (события
+        // такой кривой не доказывались). Мутация P3D_BEZDECOMP=0 — прежнее деление.
+        if (!BezDecompOff) return DecomposeA56();
         var breaks = new List<double>();
         for (int i = _degree + 1; i < _knots.Length - _degree - 1; i++)
         {

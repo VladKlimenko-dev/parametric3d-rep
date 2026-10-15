@@ -38,6 +38,14 @@ public static partial class DirectRound
             if ((e.V0.P - e.V1.P).Length < 1e-7) { why = "open curved: closed edge"; return null; }
             if (!sel.Contains(e)) sel.Add(e);
         }
+        // 06.12: СТЫК ЦИЛИНДРОВ РАВНОГО РАДИУСА — половины эллипса между сёдлами (DirectRoundEqualCyl)
+        if (EqualCylOn && chDist == null && varLaw == null)
+        {
+            string? wq = null;
+            var eq = EqualCylTee(body, sel, r, ref wq);
+            if (eq != null) return eq;
+            Debug?.Invoke("open: equal cylinders declined: " + wq); if (Environment.GetEnvironmentVariable("P3D_EQCYLDBG") == "1") Console.WriteLine("   eqcyl: " + wq);
+        }
         // ЦЕПОЧКИ ЧЕРЕЗ ВЕРШИНЫ СТЕПЕНИ 2: булева делит кривую пересечения точками, где сходятся лишь те же две грани (точка
         // затравки, край куска NURBS) — такое ребро одно по смыслу; звенья сливаются в одно (кривая — подряд по звеньям).
         // Мутация P3D_DRDEG2=0 — отказ, как прежде.

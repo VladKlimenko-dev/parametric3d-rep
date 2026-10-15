@@ -665,7 +665,7 @@ public static class GeneralBoolean
                     }
                     if (decided) break;
                 }
-                if (!decided) { SideUndecided++; why = "outward side undecided"; return null; }
+                if (!decided) { SideUndecided++; why = $"outward side undecided ({f.Face.Tag}, {src.GetType().Name}, inside {r.Inside:0.####})"; return null; }
             }
             // СФЕРА — КАРТА ОПЕРАНДА, ПОКА ОНА ВЫПОЛНЯЕТ КОНТРАКТ ОБЛАСТИ (KRN-03, SurfaceDomain): булева не подбирает
             // параметризацию под разметчик. Карта меняется (по правилу SurfaceDomain.SphereAxis) только если полюс карты
@@ -1105,6 +1105,7 @@ public static class GeneralBoolean
         return EdgeRunsByEvents(c, af, out unresolved);
     }
 
+    static readonly bool BndNurbsOff = Environment.GetEnvironmentVariable("P3D_BNDNURBS") == "0";
     static List<(double S, double E)>? EdgeRunsByEvents(ICurve3 c, AnalyticFace dst, out string? unresolved)
     {
         unresolved = null;
@@ -1113,11 +1114,33 @@ public static class GeneralBoolean
         foreach (var g in dst.Face.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct())
         {
             if (g.Curve == null) continue;
+            List<double> evs;
+            // 06.12/g.08: ребро приёмника — кривая «NURBS × поверхность грани» (линия пересечения с гранью NURBS): носитель — сама
+            // поверхность NURBS; события кривой с ней — строго (Кравчик по кускам Безье). Прежде — отказ («выборка»), и
+            // объединение тел с совпадающими гранями (зеркало ручки-протяжки) уходило в многогранный путь. Мутация P3D_BNDNURBS=0.
+            if (!BndNurbsOff && g.Curve is Geometry.NurbsImplicitCurve3 nic && dst.Shape != null && SameShape(nic.Other, dst.Shape))
+            {
+                var rg = RigorousEvents.OnNurbs(c, nic.S, 0, 1, 0, 1);
+                if (rg == null) { unresolved = $"boundary events of a {c.GetType().Name} edge on a NURBS boundary curve are not proven"; return new(); }
+                evs = rg;
+            }
+            else if (!BndSplineOff && dst.Shape is Ssi.Plane bpl && g.Curve is SplineCurve3 bsp && c is ArcCurve3 or LineCurve3)
+            {
+                // 06.2/g.08: край грани — сплайн (представление NURBS ленты по формуле у края плоской грани): события ребра в той же
+                // плоскости — отсутствие доказывается разделением с выпуклыми оболочками кусков Безье (веса > 0; деление пополам),
+                // иначе — отказ. Прежде — выборка и отказ маршрута (отверстие в крышке с переменным скруглением контура).
+                // Мутация P3D_BNDSPLINE=0.
+                if (PlanarSeparated(c, bsp, bpl.P, bpl.N.Normalized()) != true) { unresolved = $"boundary events of a {c.GetType().Name} edge with a spline boundary are not proven"; return new(); }
+                evs = new List<double>();
+            }
+            else
+            {
             var aux = AuxSurface(g.Curve, dst);
             if (aux == null) return null;
-            var evs = SsiEvents.CurveSurface(c, aux, out bool coinc);
+            evs = SsiEvents.CurveSurface(c, aux, out bool coinc);
             // 04.2: события выборкой (кривая без строгого решения) — не доказаны: отказ, а не принятие
             if (SsiEvents.LastUncertain && !BndRigorOff) { unresolved = $"boundary events of a {c.GetType().Name} edge are not proven (sampled)"; return new(); }
+            }
             foreach (var te in evs)
             {
                 var q = c.PointAt(te);
@@ -1146,6 +1169,106 @@ public static class GeneralBoolean
             if (runs.Count > 0 && runs[^1].E == s) runs[^1] = (runs[^1].S, e); else runs.Add((s, e));
         }
         return runs;
+    }
+
+    static readonly bool BndSplineOff = Environment.GetEnvironmentVariable("P3D_BNDSPLINE") == "0";
+
+    /// <summary>
+    /// Кривая c (дуга или отрезок) и рациональный сплайн g в плоскости (O, n) не пересекаются — доказано выпуклыми оболочками
+    /// кусков Безье g (веса положительны: кусок в оболочке своих опорных точек); кусок без разделения делится пополам (де
+    /// Кастельжо в однородных координатах) до глубины 14. true — разделены; false — не доказано; null — не в плоскости.
+    /// </summary>
+    static bool? PlanarSeparated(ICurve3 c, SplineCurve3 g, Vector3d O, Vector3d n)
+    {
+        var u = Math.Abs(n.X) < 0.9 ? Vector3d.Cross(n, Vector3d.UnitX).Normalized() : Vector3d.Cross(n, Vector3d.UnitY).Normalized(); var v = Vector3d.Cross(n, u);
+        Vector2d To2(Vector3d x) { var d = x - O; return new Vector2d(Vector3d.Dot(d, u), Vector3d.Dot(d, v)); }
+        double tol = 1e-9;
+        // c в плоскости
+        for (int k = 0; k <= 8; k++) if (Math.Abs(Vector3d.Dot(c.PointAt(c.T0 + (c.T1 - c.T0) * k / 8) - O, n)) > 1e-7) return null;
+        Func<List<Vector2d>, bool> sep;
+        if (c is ArcCurve3 a)
+        {
+            var o2 = To2(a.Frame.Origin); double rr = a.Radius;
+            sep = poly =>
+            {
+                double dmax = poly.Max(p => (p - o2).Length);
+                if (dmax < rr - tol) return true;
+                var hull = Hull2(poly); double dmin = HullDist(hull, o2);
+                return dmin > rr + tol;
+            };
+        }
+        else
+        {
+            var l = (LineCurve3)c; var A = To2(l.A); var B = To2(l.B);
+            sep = poly =>
+            {
+                var hull = Hull2(poly);
+                var axes = new List<Vector2d>();
+                var d = B - A; if (d.Length > 0) { axes.Add(new Vector2d(-d.Y, d.X).Normalized()); axes.Add(d.Normalized()); }
+                for (int i = 0; i < hull.Count; i++) { var e = hull[(i + 1) % hull.Count] - hull[i]; if (e.Length > 0) axes.Add(new Vector2d(-e.Y, e.X).Normalized()); }
+                foreach (var ax in axes)
+                {
+                    double h0 = hull.Min(p => Vector2d.Dot(p, ax)), h1 = hull.Max(p => Vector2d.Dot(p, ax));
+                    double s0 = Math.Min(Vector2d.Dot(A, ax), Vector2d.Dot(B, ax)), s1 = Math.Max(Vector2d.Dot(A, ax), Vector2d.Dot(B, ax));
+                    if (h1 < s0 - tol || s1 < h0 - tol) return true;
+                }
+                return false;
+            };
+        }
+        var stack = new Stack<(Vector4d[] P, int Depth)>();
+        foreach (var (piece, _, _) in g.ToBezierSegments())
+        {
+            var cp = piece.ControlPoints; var w = piece.Weights;
+            var h = new Vector4d[cp.Count];
+            for (int i = 0; i < cp.Count; i++) { double wi = w != null && w.Count == cp.Count ? w[i] : 1; if (!(wi > 0)) return false; h[i] = new Vector4d(cp[i] * wi, wi); }
+            stack.Push((h, 0));
+        }
+        while (stack.Count > 0)
+        {
+            var (h, depth) = stack.Pop();
+            var poly = h.Select(q => To2(q.Xyz / q.W)).ToList();
+            foreach (var q in h) if (Math.Abs(Vector3d.Dot(q.Xyz / q.W - O, n)) > 1e-6) return false;     // сплайн не в плоскости
+            if (sep(poly)) continue;
+            if (depth >= 14) return false;
+            // де Кастельжо пополам
+            int m = h.Length; var L = new Vector4d[m]; var R = new Vector4d[m]; var tmp = (Vector4d[])h.Clone();
+            for (int r = 0; r < m; r++)
+            {
+                L[r] = tmp[0]; R[m - 1 - r] = tmp[m - 1 - r];
+                for (int i = 0; i < m - 1 - r; i++) tmp[i] = (tmp[i] + tmp[i + 1]) * 0.5;
+            }
+            stack.Push((L, depth + 1)); stack.Push((R, depth + 1));
+        }
+        return true;
+    }
+
+    static List<Vector2d> Hull2(List<Vector2d> pts)
+    {
+        var p = pts.Distinct().OrderBy(q => q.X).ThenBy(q => q.Y).ToList();
+        if (p.Count < 3) return p;
+        double Cr(Vector2d o, Vector2d a, Vector2d b) => (a.X - o.X) * (b.Y - o.Y) - (a.Y - o.Y) * (b.X - o.X);
+        var h = new List<Vector2d>();
+        foreach (var q in p) { while (h.Count >= 2 && Cr(h[^2], h[^1], q) <= 0) h.RemoveAt(h.Count - 1); h.Add(q); }
+        int lo = h.Count + 1;
+        for (int i = p.Count - 2; i >= 0; i--) { var q = p[i]; while (h.Count >= lo && Cr(h[^2], h[^1], q) <= 0) h.RemoveAt(h.Count - 1); h.Add(q); }
+        h.RemoveAt(h.Count - 1);
+        return h;
+    }
+
+    /// <summary>Расстояние от точки до выпуклого многоугольника (0 — внутри).</summary>
+    static double HullDist(List<Vector2d> hull, Vector2d o)
+    {
+        if (hull.Count == 1) return (hull[0] - o).Length;
+        bool inside = hull.Count >= 3;
+        double best = double.MaxValue;
+        for (int i = 0; i < hull.Count; i++)
+        {
+            var a = hull[i]; var b = hull[(i + 1) % hull.Count]; var ab = b - a;
+            double cr = ab.X * (o.Y - a.Y) - ab.Y * (o.X - a.X); if (cr < 0) inside = false;
+            double t = ab.LengthSquared > 0 ? Math.Clamp(Vector2d.Dot(o - a, ab) / ab.LengthSquared, 0, 1) : 0;
+            best = Math.Min(best, (a + ab * t - o).Length);
+        }
+        return inside ? 0 : best;
     }
 
     /// <summary>Поверхность, которая вместе с поверхностью грани задаёт носитель ребра g (см. EdgeRunsByEvents); null — нет.</summary>

@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 
 namespace Parametric3D.Kernel.Surfaces;
 
@@ -12,7 +12,7 @@ namespace Parametric3D.Kernel.Surfaces;
 /// </summary>
 public static class BandNurbs
 {
-    public static (NurbsSurface S, double Deviation)? Fit(SectionSurface ss, double ua, double ub, double budget, int maxN = 1024)
+    public static (NurbsSurface S, double Deviation)? Fit(SectionSurface ss, double ua, double ub, double budget, int maxN = 1024, int minN = 16)
     {
         if (!ss.IsProcedural) return null;
         // KRN-06: стыки формулы внутри промежутка (узлы закона радиуса: сечение — характеристическая окружность, она зависит
@@ -20,7 +20,7 @@ public static class BandNurbs
         // достигался (точный STEP ленты с законом — отказ). Мутация P3D_BANDNURBSBREAKS=0.
         var brk = ss.Breaks.Where(x => x > ua + 1e-9 * (ub - ua) && x < ub - 1e-9 * (ub - ua)).OrderBy(x => x).ToList();
         if (brk.Count > 0 && !BreaksOff) return FitBroken(ss, ua, ub, brk, budget, maxN);
-        for (int n = 16; n <= maxN; n *= 2)
+        for (int n = Math.Max(16, minN); n <= maxN; n *= 2)
         {
             var secs = new SweepSection[n + 1];
             // однородные опорные точки сечений: 3 ряда × (n + 1) сечений (дуга — рациональная квадратичная, отрезок — та же
@@ -79,12 +79,15 @@ public static class BandNurbs
         return Math.Sqrt(off * off + rad * rad);
     }
 
+    static readonly bool PinchOff = Environment.GetEnvironmentVariable("P3D_BANDPINCH") == "0";
     static readonly bool BreaksOff = Environment.GetEnvironmentVariable("P3D_BANDNURBSBREAKS") == "0";
 
     static (Vector4d P0, Vector4d P1, Vector4d P2)? ArcRows(SweepSection s)
     {
         if (!s.IsArc) return (new Vector4d(s.A, 1), new Vector4d((s.A + s.B) / 2, 1), new Vector4d(s.B, 1));
-        if (!(s.Phi > 1e-9 && s.Phi < Math.PI - 1e-6)) return null;
+        // 06.12: сечение, стянутое в точку (лента-«линза» тройника равных труб в сёдлах, φ = 0) — три совпавшие точки с весами 1:
+        // формула та же, ряд непрерывен. Мутация P3D_BANDPINCH=0 — отказ, как прежде.
+        if (!((PinchOff ? s.Phi > 1e-9 : s.Phi >= 0) && s.Phi < Math.PI - 1e-6)) return null;
         double h = s.Phi / 2, wm = Math.Cos(h);
         var p0 = s.C + s.E1 * s.R; var p2 = s.C + (s.E1 * Math.Cos(s.Phi) + s.E2 * Math.Sin(s.Phi)) * s.R;
         var p1 = s.C + (s.E1 + s.E2 * Math.Tan(h)) * s.R;

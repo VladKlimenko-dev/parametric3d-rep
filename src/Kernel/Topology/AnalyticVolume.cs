@@ -466,9 +466,48 @@ public static class AnalyticVolume
     /// (один контур: рёбра на v = 0 и v = 1 и два шва — дуги сечений при постоянном u). Промежуток u — тот из двух между
     /// швами, где лежит середина ребра края. null — грань не такая.
     /// </summary>
+    static readonly bool LensOff = Environment.GetEnvironmentVariable("P3D_VOLLENS") == "0";
     internal static (double Ua, double Ub)? BandRange(TFace f, SectionSurface ss)
     {
-        if (!ss.IsProcedural || !ss.Closed) return null;
+        if (!ss.IsProcedural) return null;
+        // 06.12: ЛЕНТА-«ЛИНЗА» (сечения стягиваются в точку на обоих концах промежутка: стык труб равного радиуса) — контур из
+        // двух рёбер, v = 0 и v = 1, на всём промежутке u. Мутация P3D_VOLLENS=0.
+        if (!ss.Closed)
+        {
+            // 06.2: «ВЕЕР» (луночка шара стыка лент: все сечения через две общие точки, v = 0 и v = 1) — контур из двух сечений
+            // u = UMin и u = UMax. Мутация P3D_VOLFAN=0.
+            if (!FanOff && f.Loops.Count == 1 && f.Loops[0].CoEdges.Count == 2)
+            {
+                var a0 = ss.ExactSectionAt(ss.UMin); var a1 = ss.ExactSectionAt(ss.UMax); var am = ss.ExactSectionAt((ss.UMin + ss.UMax) / 2);
+                double sc = Math.Max(1, (a0.Point(0) - a0.Point(1)).Length);
+                bool fanned = (a0.Point(0) - a1.Point(0)).Length < 1e-9 * sc && (a0.Point(1) - a1.Point(1)).Length < 1e-9 * sc
+                              && (am.Point(0) - a0.Point(0)).Length < 1e-9 * sc && (am.Point(1) - a0.Point(1)).Length < 1e-9 * sc;
+                if (fanned)
+                {
+                    bool u0 = false, u1 = false;
+                    foreach (var ce in f.Loops[0].CoEdges)
+                    {
+                        var c = ce.Edge.Curve; double ulo = 1e300, uhi = -1e300;
+                        for (int k = 0; k <= 8; k++) { var uv = ss.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * (k + 0.5) / 9.5)); ulo = Math.Min(ulo, uv.X); uhi = Math.Max(uhi, uv.X); }
+                        double span = Math.Max(1e-300, ss.UMax - ss.UMin);
+                        if (Math.Abs(ulo - ss.UMin) < 1e-7 * span && Math.Abs(uhi - ss.UMin) < 1e-7 * span) u0 = true;
+                        else if (Math.Abs(ulo - ss.UMax) < 1e-7 * span && Math.Abs(uhi - ss.UMax) < 1e-7 * span) u1 = true;
+                    }
+                    if (u0 && u1) return (ss.UMin, ss.UMax);
+                }
+            }
+            if (LensOff || f.Loops.Count != 1 || f.Loops[0].CoEdges.Count != 2) return null;
+            bool l0 = false, l1 = false;
+            foreach (var ce in f.Loops[0].CoEdges)
+            {
+                var c = ce.Edge.Curve; double vlo = 1e9, vhi = -1e9;
+                for (int k = 0; k <= 8; k++) { var uv = ss.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * (k + 0.5) / 9.5)); vlo = Math.Min(vlo, uv.Y); vhi = Math.Max(vhi, uv.Y); }
+                if (Math.Abs(vlo) < 1e-6 && Math.Abs(vhi) < 1e-6) l0 = true; else if (Math.Abs(vlo - 1) < 1e-6 && Math.Abs(vhi - 1) < 1e-6) l1 = true;
+            }
+            var s0 = ss.ExactSectionAt(ss.UMin); var s1 = ss.ExactSectionAt(ss.UMax);
+            bool pinched = (s0.Point(0) - s0.Point(1)).Length < 1e-9 && (s1.Point(0) - s1.Point(1)).Length < 1e-9;
+            return l0 && l1 && pinched ? (ss.UMin, ss.UMax) : null;
+        }
         double per = ss.UMax - ss.UMin;
         double Wr(double d) { d %= per; if (d < 0) d += per; return d; }
         var cuts = new List<double>(); bool at0 = false, at1 = false; double? edgeMidU = null;
@@ -1060,6 +1099,8 @@ public static class AnalyticVolume
     }
 
     static readonly bool SphDbg = Environment.GetEnvironmentVariable("P3D_SPHDBG") == "1";
+    static readonly bool FanOff = Environment.GetEnvironmentVariable("P3D_VOLFAN") == "0";
+
     static readonly bool SphAreaOff = Environment.GetEnvironmentVariable("P3D_SPHAREA") == "0";
 
     /// <summary>

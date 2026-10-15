@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 
 namespace Parametric3D.Kernel.Curves;
 
@@ -23,6 +23,12 @@ public sealed class ProcCurve3 : ICurve3
     /// [T0, T1] не задевает поверхность; false — не доказано (события ищутся выборкой, маршрут отказывает).
     /// </summary>
     public Func<Geometry.Ssi.Shape, double, double, bool>? NoEventsOn;
+
+    /// <summary>
+    /// 06.12: ТА ЖЕ КРИВАЯ КАК ТОЧНАЯ КОНИКА (линия касания скругления тройника равных труб — плоский эллипс), с тем же
+    /// началом и направлением. Ядро работает с процедурной (параметр — как у ленты), точный STEP пишет конику.
+    /// </summary>
+    public EllipseCurve3? ExactConic;
 
     public double T0 => _t0;
     public double T1 => _t1;
