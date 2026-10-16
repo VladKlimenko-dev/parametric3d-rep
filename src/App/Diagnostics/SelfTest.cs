@@ -27,7 +27,7 @@ namespace Parametric3D.App.Diagnostics;
 /// </summary>
 public sealed class SelfTest
 {
-    public const string Build = "u09";
+    public const string Build = "u10";
 
     private readonly MainWindow _w;
     private readonly Action<string> _progress;
@@ -120,7 +120,7 @@ public sealed class SelfTest
         {
             SystemInfo();
             // отладка: только раздел ручек (P3D_SELFTEST_ONLY=handles)
-            if (Environment.GetEnvironmentVariable("P3D_SELFTEST_ONLY") == "handles") { await Handles(); return; }
+            if (Environment.GetEnvironmentVariable("P3D_SELFTEST_ONLY") == "handles") { await Handles(); await UserEdges(); return; }
             await Operations();
             await RealisticParts();
             await Holes();
@@ -129,6 +129,7 @@ public sealed class SelfTest
             await View();
             await Ui();
             await Handles();
+            await UserEdges();
         }
         finally
         {
@@ -548,6 +549,7 @@ public sealed class SelfTest
     {
         double z = TopZ(p);
         return EdgeRef(p, e => e.Curve is Kernel.Curves.LineCurve3 && Math.Abs(e.V0.P.Z - z) < 1e-6 && Math.Abs(e.V1.P.Z - z) < 1e-6
+                               && Parametric3D.App.Operations.Topo.EdgeHandle(p, e.Id) != null   // острое ребро, не шов скругления
                                && (axis == 0 ? Math.Abs(e.V0.P.Y - e.V1.P.Y) < 1e-6 : Math.Abs(e.V0.P.X - e.V1.P.X) < 1e-6) && (e.V0.P - e.V1.P).Length > 5);
     }
 
@@ -745,6 +747,58 @@ public sealed class SelfTest
             catch (Exception ex) { Line("  сохранить деталь не удалось: " + ex.Message); }
         }
         finally { UserPrefs.Current.PreviewMode = keepMode; }
+    }
+
+    // ---------------------------------------------------------------- u10: скругления и фаски «как пользователь»
+
+    /// <summary>
+    /// 60 случайных острых рёбер реалистичных деталей (с касательной цепочкой, как выбирает окно) — скругление или фаска
+    /// случайного размера. Время каждой операции; сводка по видам ребра и по причинам: годно, медленно (> 250 мс — обходной
+    /// путь резцом), отказ (обычно размер больше соседней грани — так и должно быть). Совпадение красного контура с отказом.
+    /// </summary>
+    private async Task UserEdges()
+    {
+        Head("8в. Скругления и фаски «как пользователь» (случайные рёбра реалистичных деталей)");
+        _phase = "случайные рёбра";
+        var rows = await Task.Run(() =>
+        {
+            var rnd = new Random(2026);
+            var parts = Enumerable.Range(1, 6).Select(sd => { var pp = TestParts.Realistic(sd, 30); pp.Rebuild(null); return pp; }).ToList();
+            var res = new List<(string Kind, double Ms, string? Err, bool Predicted)>();
+            for (int t = 0; t < 60 && !_ct.IsCancellationRequested; t++)
+            {
+                var p = parts[rnd.Next(parts.Count)];
+                var all = Topo.AllEdges(p);
+                var sharp = all.Where(e => e.Curve != null && Topo.EdgeHandle(p, e.Id) != null).ToList();
+                if (sharp.Count == 0) continue;
+                var e0 = sharp[rnd.Next(sharp.Count)];
+                var chain = Topo.TangentChain(e0, all);
+                bool round = rnd.NextDouble() < 0.6;
+                double size = Math.Round(0.5 + rnd.NextDouble() * 4, 1);
+                bool predicted = Topo.EdgeGhostValid(p, chain.Select(c => c.Id), round)?.Invoke(size) ?? true;
+                Feature f;
+                if (round) { var rf = new RoundFeature { Radius = new ValueRef(size) }; foreach (var c in chain) rf.Edges.Add(Kernel.Topology.EdgeRef.Of(c)); f = rf; }
+                else { var cf = new ChamferFeature { Mode = ChamferKind.TwoDistances, D1 = new ValueRef(size), D2 = new ValueRef(size) }; foreach (var c in chain) cf.Edges.Add(Kernel.Topology.EdgeRef.Of(c)); f = cf; }
+                p.AddFeature(f);
+                p.Rebuild(null);
+                double ms = p.LastFeatureMs.TryGetValue(f, out var m) ? m : double.NaN;
+                string kinds = string.Join("+", chain.Select(c => c.Curve is Kernel.Curves.LineCurve3 ? "прямое" : c.Curve is Kernel.Curves.ArcCurve3 ? "дуга" : "кривое").Distinct().OrderBy(x => x));
+                res.Add(($"{(round ? "скругление" : "фаска")} {kinds}", ms, f.Error, predicted));
+                p.RemoveFeature(f); p.Rebuild(null);
+            }
+            return res;
+        });
+        Line($"{"вид",-34} {"число",6} {"медиана, мс",12} {"наиб., мс",10} {"медленно",9} {"отказ",6}");
+        foreach (var g in rows.GroupBy(r => r.Kind).OrderBy(g => g.Key))
+            Line($"{g.Key,-34} {g.Count(),6} {F(Median(g.Select(x => x.Ms).ToList())),12} {F(g.Max(x => x.Ms)),10} {g.Count(x => x.Ms > 250),9} {g.Count(x => x.Err != null),6}");
+        var times = rows.Select(r => r.Ms).ToList();
+        int mism = rows.Count(r => r.Predicted != (r.Err == null));
+        Line($"Всего {rows.Count}: медиана {F(Median(times))} мс, p95 {F(P95(times))} мс, сумма {F(times.Sum())} мс; медленных {rows.Count(r => r.Ms > 250)}, отказов {rows.Count(r => r.Err != null)}");
+        Line($"Красный контур совпал с исходом в {rows.Count - mism} из {rows.Count}");
+        foreach (var g in rows.Where(r => r.Err != null).GroupBy(r => System.Text.RegularExpressions.Regex.Replace(r.Err!, @"[-\d.]+", "#")).Take(6))
+            Line($"  отказ ×{g.Count()}: {Cut(g.Key, 150)}");
+        Count(true);
+        Target("Скругление/фаска случайного ребра, p95", "≤ 500 мс", P95(times), 500);
     }
 
     // ---------------------------------------------------------------- итог

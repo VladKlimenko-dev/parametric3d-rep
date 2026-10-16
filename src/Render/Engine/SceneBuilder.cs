@@ -55,7 +55,14 @@ public static class SceneBuilder
                     {
                         var w = Tr(pt.P, xf);
                         uint pick = s.AddPick(new PickRef(pt.Id, PickKind.DatumPoint, owner, pt), 3, OwnerPartId(owner));
-                        s.Points.Add(new PointInst { P = w, Color = SceneData.Pack(isOrigin ? th.Origin : th.DatumPoint), Px = isOrigin ? th.OriginSize : 7, Shape = isOrigin ? 2u : 1u, Pick = pick });
+                        if (isOrigin)
+                        {
+                            // u10: начало координат — тройка стрелок X/Y/Z (рисует вид поверх); здесь — точка выбора без цвета
+                            var ox = Vector3.TransformVector(Vector3.UnitX, xf); var oy = Vector3.TransformVector(Vector3.UnitY, xf); var oz = Vector3.TransformVector(Vector3.UnitZ, xf);
+                            s.Origins.Add((w, ox.Normalized(), oy.Normalized(), oz.Normalized(), pick));
+                            s.Points.Add(new PointInst { P = w, Color = SceneData.Pack(new Vector4(th.Origin.X, th.Origin.Y, th.Origin.Z, 0)), Px = 14, Shape = 0, Pick = pick });
+                        }
+                        else s.Points.Add(new PointInst { P = w, Color = SceneData.Pack(th.DatumPoint), Px = 7, Shape = 1u, Pick = pick });
                     }
                     break;
                 case DatumAxis ax when show.Axes:
@@ -104,6 +111,8 @@ public static class SceneBuilder
         var item = new MeshItem
         {
             Model = xf, Color = color, PartId = part.Id,
+            MatColor = part.Material is { } pm ? new Vector4(pm.Color.X, pm.Color.Y, pm.Color.Z, 1f) : th.Body,
+            MatSpec = part.Material?.Specular ?? 0.3f, MatShine = part.Material?.Shininess ?? 48, MatMetal = part.Material?.Metallic == true ? 1 : 0,
             Pos = new Vector3[md.Vertices.Length], Nrm = new Vector3[md.Vertices.Length], Pick = new uint[md.Vertices.Length],
             Idx = md.Indices,
         };

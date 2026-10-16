@@ -270,6 +270,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
             _holdUntil = DateTime.MinValue;
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             _scene = SceneBuilder.Build(_doc, _r.Theme, Show, ActivePart, ActiveSketch);
+            _overlayDirty = true;   // u10: стрелки начала координат — из сцены
             _r.ShowAllVertices = Show.Vertices;
             _r.Upload(_scene);
             LastSceneMs = System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;

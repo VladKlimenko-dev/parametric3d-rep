@@ -331,6 +331,10 @@ public sealed class ShellOp : FeatureOp<ShellFeature>
     public override Action<double>? DragValue => v => F.Thickness = new ValueRef(v);
     public override double? DragCurrent => F.Thickness.Value;
     public override string DragLabel => "T";
+    /// <summary>Ручка оболочки: внутрь тела — положительная толщина, наружу — отрицательная (стенка наружу).</summary>
+    public override bool SignedDrag => true;
+    /// <summary>Открытые грани, выбранные в поле (для ручки).</summary>
+    public IReadOnlyList<PickRef> FaceRefs => _faces?.Items ?? (IReadOnlyList<PickRef>)Array.Empty<PickRef>();
 
     protected override void SeedRefs() => Seed(_faces);
 
@@ -382,7 +386,7 @@ public sealed class HoleOp : FeatureOp<HoleFeature>
             _faceCentre = null; _faceNormal = null;
             if (_face.Items.Count > 0 && Refs.PlaneOf(_face.Items[0]) is { } pl)
             {
-                _faceCentre = pl.Frame.Origin;
+                _faceCentre = _face.Items[0] is { Kind: PickKind.Face, Owner: Part fp } fr && Refs.FaceCentre(fp, fr.Id) is { } fc ? fc : pl.Frame.Origin;
                 // грань тела — сверлить внутрь (против нормали); опорная плоскость — против её нормали
                 _faceNormal = pl.Frame.W;
             }

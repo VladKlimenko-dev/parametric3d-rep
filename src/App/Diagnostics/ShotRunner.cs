@@ -30,6 +30,10 @@ public static class ShotRunner
             Console.WriteLine($"handle drag {id}");
             return;
         }
+        if (id.StartsWith("mat:") && w.Session.Part is { } mp && Model.Material.FromLibrary(id[4..]) is { } mm)
+        {
+            mp.Material = mm; w.ViewPort.MarkDirty(); Console.WriteLine("material " + mm.Name); return;
+        }
         switch (id)
         {
             case "ok": w.CommitOperation(); Console.WriteLine("ok"); return;

@@ -100,15 +100,24 @@ public static class PCurves
         lastM = samples;
         var pc = For(ce, s, samples, out dev);
         bool proc = ce.Edge.Curve is ProcCurve3 && ProjProc && StallStop;
+        // u10: ЗАСТОЙ — У ЛЮБОЙ КРИВОЙ. Ребро, которое не лежит на поверхности (хорда «гранёного» ребра обходного пути на
+        // кривой грани), не приближается уплотнением: отклонение 1.16e-2 мм на всех удвоениях до 3 072 узлов, 30–80 мс на
+        // полуребро, 1.5 с на тело. Два удвоения подряд, уменьшившие отклонение меньше чем вдвое, — конец (Эрмита на гладком
+        // ребре даёт ×1/16 на удвоение, кривая пересечения — медленнее, но заметно). Мутация P3D_PCSTALLALL=0 — застой только у процедурных кривых (прежде).
+        int stall = 0;
         for (int m = samples * 2; pc != null && !pc.IsExact && dev > budget && m <= 4096; m *= 2)
         {
             double prev = dev;
             pc = For(ce, s, m, out dev); lastM = m;
             if (proc && dev > budget && dev > prev / 3) break;
+            // застой — отклонение почти не меняется (меньше чем в 1.2 раза за удвоение): кривые пересечения сходятся медленнее
+            // Эрмита, но сходятся (KRN06-CURVED-CHAMFER-EXACT)
+            if (StallAll && dev > budget && dev > prev / 1.2) { if (++stall >= 2) break; } else stall = 0;
         }
         return pc;
     }
     static readonly bool StallStop = Environment.GetEnvironmentVariable("P3D_PCSTALL") != "0";
+    static readonly bool StallAll = Environment.GetEnvironmentVariable("P3D_PCSTALLALL") != "0";
     static readonly bool TimeLog = Environment.GetEnvironmentVariable("P3D_PCTIME") == "1";
     static readonly bool ProjProc = Environment.GetEnvironmentVariable("P3D_PCPROJPROC") != "0";
 

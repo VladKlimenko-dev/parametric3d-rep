@@ -33,6 +33,7 @@ public static class UvMesher
     public static int FullPeriodicFaces;
     internal static readonly bool DropPoleSlivers = Environment.GetEnvironmentVariable("P3D_POLEDROP") != "0";
     internal static readonly bool PoleCutFromNearest = Environment.GetEnvironmentVariable("P3D_POLECUT") != "0";
+    internal static readonly bool StuckOff = Environment.GetEnvironmentVariable("P3D_UVSTUCK") == "0";
     internal static readonly bool StraightSquashOff = Environment.GetEnvironmentVariable("P3D_UVSTRAIGHT") == "0";
     public static readonly double[] PhaseMs = new double[6];   // 0 контуры, 1 треугол., 2 Делоне, 3 внутр. точки, 4 доводка, 5 проверка
 
@@ -517,11 +518,26 @@ public static class UvMesher
             Debug?.Invoke($"pass 0: interior points {uvList.Count - pts0.Count}, h {h:0.###}, tris {T.Count / 3}, area3 {Area3():0.###}");
             // Доводка: где поверхность гнётся сильнее, чем позволяет шаг сетки (кольцо тора малого
             // сечения), — точки в центры «плохих» треугольников и снова Делоне.
+            double prevWorst = double.MaxValue; int stuck = 0; int tris0 = Math.Max(1, T.Count / 3);
             for (int pass = 1; pass < 25 && T.Count / 3 < maxTriangles; pass++)
             {
                 var bad = new List<int>();
-                for (int t = 0; t < T.Count; t += 3) if (Bad(t) > tol) bad.Add(t);
-                Debug?.Invoke($"pass {pass}: bad {bad.Count} of {T.Count / 3}, worst {(bad.Count > 0 ? bad.Max(Bad) : 0):0.####} tol {tol:0.####}");
+                double worstNow = 0;
+                for (int t = 0; t < T.Count; t += 3) { double bt = Bad(t); if (bt > tol) { bad.Add(t); if (bt > worstNow) worstNow = bt; } }
+                // u10: ДОВОДКА БЕЗ УЛУЧШЕНИЯ — СТОП. Худший треугольник у вырожденного места (тор-веретено на углу скругления
+                // радиусом больше угла, параметр у полюса) центрами не исправляется: ошибка 1.34 при допуске 0.02 оставалась
+                // на всех 25 проходах, а сетка росла до 5 000+ треугольников (4 с на грань). Два прохода подряд без
+                // уменьшения худшей ошибки хотя бы на 2 % — конец доводки (дальше решает самопроверка разметки).
+                // Мутация P3D_UVSTUCK=0.
+                if (!StuckOff && bad.Count > 0)
+                {
+                    // только если сетка уже выросла в 25+ раз: у обычной доводки худшая ошибка (у полюса) может стоять, пока остальные
+                    // треугольники ещё улучшаются (G8-CROSS-HOLE-UV-ALL-FACES)
+                    if (worstNow > 0.98 * prevWorst) { if (++stuck >= 3 && T.Count / 3 > 25 * tris0) { Debug?.Invoke($"pass {pass}: no progress (worst {worstNow:0.####}) — refinement stopped"); break; } }
+                    else stuck = 0;
+                    prevWorst = Math.Min(prevWorst, worstNow);
+                }
+                Debug?.Invoke($"pass {pass}: bad {bad.Count} of {T.Count / 3}, worst {worstNow:0.####} tol {tol:0.####}");
                 if (bad.Count == 0) break;
                 foreach (int t in bad)
                 {
