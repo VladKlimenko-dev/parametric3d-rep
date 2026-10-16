@@ -154,6 +154,10 @@ public static class StandardCommands
             CanRun = () => w.Session != null, Run = async () => await w.OpenParameters() });
         r.Add(new AppCommand { Short = "Тест", Id = "app.selftest", Label = "Тест: замер скорости и отчёт", Group = A, Icon = "selftest_but.svg",
             Synonyms = "test self benchmark speed report тест замер скорость отчёт", Run = async () => await w.OpenSelfTest() });
+        foreach (var (mode, label) in new[] { ("auto", "Графика: автоматически (Windows — ANGLE)"), ("angle", "Графика: ANGLE (Direct3D 11)"), ("wgl", "Графика: OpenGL (WGL)"), ("software", "Графика: программная") })
+            r.Add(new AppCommand { Id = "app.gl_" + mode, Label = label, Group = A, Synonyms = "graphics opengl angle wgl direct3d графика",
+                IsChecked = () => (UserPrefs.Current.GlMode ?? "auto") == mode,
+                Run = () => { UserPrefs.Current.GlMode = mode; UserPrefs.Current.Save(); w.ShowToast(Loc.L("Графика сменится при следующем запуске приложения."), error: false); } });
         r.Add(new AppCommand { Id = "palette", Label = "Палитра команд", Group = A, Icon = "command_palette_but.svg", Synonyms = "search command palette",
             Run = () => w.OpenPalette() });
         r.Add(new AppCommand { Short = "−", Id = "tree.collapse", Label = "Свернуть дерево", Group = A, Synonyms = "collapse", Run = () => w.SetTreeExpanded(false) });

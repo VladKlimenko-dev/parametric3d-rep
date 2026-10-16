@@ -27,7 +27,7 @@ namespace Parametric3D.App.Diagnostics;
 /// </summary>
 public sealed class SelfTest
 {
-    public const string Build = "u05";
+    public const string Build = "u06";
 
     private readonly MainWindow _w;
     private readonly Action<string> _progress;
@@ -150,6 +150,7 @@ public sealed class SelfTest
         var v = _w.ViewPort;
         Line($"OpenGL: {(string.IsNullOrEmpty(v.GlInfo) ? "нет" : v.GlInfo)}");
         if (v.GlError != null) Line($"Ошибка OpenGL при запуске: {v.GlError}");
+        Line($"Графика: режим «{Program.GlMode}»; кадр рисуется {(v.RenderOnUiThread switch { true => "в потоке окна", false => "в отдельном потоке", _ => "—" })}");
         Line($"Сглаживание: {v.Msaa}×; выбор под курсором: {(v.GpuPicking ? "видеокарта" : "процессор (OpenGL не готов)")}; ошибок кадра с запуска: {v.FrameErrors}");
         Line($"Масштаб экрана: {v.Scaling:0.##}; окно {_w.Bounds.Width:0}×{_w.Bounds.Height:0}, вид {v.Bounds.Width:0}×{v.Bounds.Height:0}");
         Line($"Язык интерфейса: {(Loc.En ? "EN" : "RU")}; журнал приложения: {AppLog.Path}");

@@ -8,20 +8,50 @@ internal static class Program
     public static void Main(string[] args)
     {
         AppStartup.Args = args;
+        // проверка: шейдеры в виде для OpenGL ES 3 (ANGLE) — в папку, без окна
+        if (AppStartup.Arg("--dump-shaders") is { } dir)
+        {
+            Directory.CreateDirectory(dir);
+            foreach (var f in typeof(Render.Engine.EngineShaders).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+                if (f.GetValue(null) is string src && src.Contains("#version"))
+                    File.WriteAllText(Path.Combine(dir, f.Name + ".glsl"), Render.ShaderProgram.ToEs(src));
+            return;
+        }
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
     /// <summary>
-    /// Отрисовка вида — OpenGL. Под Windows сначала настольный OpenGL (WGL) — тот же, что у прежнего приложения; если
-    /// драйвер его не даёт — OpenGL ES 3 через ANGLE (Direct3D 11). Под Linux — GLX, затем EGL.
+    /// ГРАФИКА. Под Windows по умолчанию — OpenGL ES 3 через ANGLE (Direct3D 11): так рисует и сама Avalonia, и это
+    /// самый надёжный путь на встроенных видеокартах. Настольный OpenGL (WGL) — по выбору: на Intel Iris Xe с WGL
+    /// приложение аварийно завершалось (0xC0000374 — порча кучи в драйвере, 2026-10-16). Под Linux — GLX, затем EGL.
+    /// Выбор: параметр запуска «--gl angle|wgl|glx|egl|software», переменная P3D_GL или меню «Файл → Графика»
+    /// (ui.json, GlMode; действует со следующего запуска).
     /// </summary>
-    public static AppBuilder BuildAvaloniaApp() =>
-        AppBuilder.Configure<App>()
+    public static string GlMode =>
+        (AppStartup.Arg("--gl") ?? Environment.GetEnvironmentVariable("P3D_GL") ?? Services.UserPrefs.Current.GlMode ?? "auto").ToLowerInvariant();
+
+    public static AppBuilder BuildAvaloniaApp()
+    {
+        string m = GlMode;
+        var win = m switch
+        {
+            "wgl" => new[] { Win32RenderingMode.Wgl, Win32RenderingMode.AngleEgl, Win32RenderingMode.Software },
+            "software" => new[] { Win32RenderingMode.Software },
+            _ => new[] { Win32RenderingMode.AngleEgl, Win32RenderingMode.Wgl, Win32RenderingMode.Software },
+        };
+        var x11 = m switch
+        {
+            "egl" or "angle" => new[] { X11RenderingMode.Egl, X11RenderingMode.Glx, X11RenderingMode.Software },
+            "software" => new[] { X11RenderingMode.Software },
+            _ => new[] { X11RenderingMode.Glx, X11RenderingMode.Egl, X11RenderingMode.Software },
+        };
+        return AppBuilder.Configure<App>()
             .UsePlatformDetect()
-            .With(new Win32PlatformOptions { RenderingMode = new[] { Win32RenderingMode.Wgl, Win32RenderingMode.AngleEgl, Win32RenderingMode.Software } })
-            .With(new X11PlatformOptions { RenderingMode = new[] { X11RenderingMode.Glx, X11RenderingMode.Egl, X11RenderingMode.Software } })
+            .With(new Win32PlatformOptions { RenderingMode = win })
+            .With(new X11PlatformOptions { RenderingMode = x11 })
             .WithInterFont()
             .LogToTrace();
+    }
 }
 
 /// <summary>Параметры запуска (проверки: --shot путь, --theme light).</summary>

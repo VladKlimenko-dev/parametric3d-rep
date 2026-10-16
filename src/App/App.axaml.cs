@@ -10,10 +10,25 @@ public partial class App : Application
 {
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
+    /// <summary>Прошлый запуск не дошёл до выхода (аварийное завершение).</summary>
+    public static bool PreviousRunCrashed { get; private set; }
+
     public override void OnFrameworkInitializationCompleted()
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime d)
         {
+            // метка «приложение работает»: осталась от прошлого запуска — тот завершился аварийно (не через выход)
+            try
+            {
+                string flag = Path.Combine(Path.GetDirectoryName(Core.AppLog.Path) ?? ".", "running.flag");
+                PreviousRunCrashed = File.Exists(flag);
+                if (PreviousRunCrashed) Core.AppLog.Write("previous run ended abnormally (no clean exit)");
+                Directory.CreateDirectory(Path.GetDirectoryName(flag)!);
+                File.WriteAllText(flag, DateTime.Now.ToString("O"));
+                d.Exit += (_, _) => { try { File.Delete(flag); } catch { } Core.AppLog.Write("exit"); };
+            }
+            catch { }
+            Core.AppLog.Write($"start {Diagnostics.SelfTest.Build}; graphics mode {Program.GlMode}; {System.Runtime.InteropServices.RuntimeInformation.OSDescription}");
             // Аргументы: путь к файлу детали — открыть; --sample — пробная деталь; --theme light|dark.
             DocumentSession session;
             var file = AppStartup.Args.FirstOrDefault(a => a.EndsWith(DocumentSession.PartExtension, StringComparison.OrdinalIgnoreCase) && File.Exists(a));
