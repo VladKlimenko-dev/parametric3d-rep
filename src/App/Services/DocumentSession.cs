@@ -62,6 +62,14 @@ public sealed class DocumentSession
         return new DocumentSession(doc, null);
     }
 
+    /// <summary>Документ из готовой детали (кнопка «Тест»).</summary>
+    public static DocumentSession FromPart(Part part, string title)
+    {
+        var doc = new Document(title);
+        doc.Root.Add(part);
+        return new DocumentSession(doc, null);
+    }
+
     /// <summary>Пробная деталь — куб 100 (для показа и проверок вида).</summary>
     public static DocumentSession Sample()
     {
@@ -152,7 +160,7 @@ public sealed class DocumentSession
     {
         var part = Part;
         if (part == null || !_history.CanUndo) return;
-        var r = _history.Undo(part, Document.Parameters);
+        var r = _history.Undo(part, Document.Parameters, rebuild: false);
         _history.ClearRedo();
         if (_undoNames.Count > 0) _undoNames.RemoveAt(_undoNames.Count - 1);
         if (r != null) ReplacePart(part, r.Value.Part, r.Value.Parameters);
@@ -168,7 +176,7 @@ public sealed class DocumentSession
     {
         var part = Part;
         if (part == null || !_history.CanUndo) return;
-        var r = _history.Undo(part, Document.Parameters);
+        var r = _history.Undo(part, Document.Parameters, rebuild: false);
         if (r == null) return;
         var name = _undoNames.Count > 0 ? _undoNames[^1] : "";
         if (_undoNames.Count > 0) _undoNames.RemoveAt(_undoNames.Count - 1);
@@ -180,7 +188,7 @@ public sealed class DocumentSession
     {
         var part = Part;
         if (part == null || !_history.CanRedo) return;
-        var r = _history.Redo(part, Document.Parameters);
+        var r = _history.Redo(part, Document.Parameters, rebuild: false);
         if (r == null) return;
         var name = _redoNames.Count > 0 ? _redoNames[^1] : "";
         if (_redoNames.Count > 0) _redoNames.RemoveAt(_redoNames.Count - 1);

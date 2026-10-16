@@ -19,7 +19,7 @@
 | `ViewModels/` | узел дерева модели |
 | `Views/` | главное окно, окно параметров (`ParametersDialog`), простые окна вопросов |
 | `Viewport/` | 3D-вид (`ModelViewport`: OpenGL Avalonia + движок `src/Render/Engine`; режим эскиза — `ModelViewport.Sketch.cs`), выбор (`Selection`, запасной `ScenePicker` без OpenGL), куб вида (`ViewCube`, UI-45) |
-| `Diagnostics/` | снимки вида и сценарии без человека (`--shot`, `--script`) |
+| `Diagnostics/` | кнопка «Тест» (`SelfTest`, `TestParts`: замер скорости и отчёт; `--selftest` — без окна теста), долгие участки потока окна (`UiTimes`), снимки вида и сценарии без человека (`--shot`, `--script`) |
 
 Движок вида — `src/Render/Engine`: `SceneBuilder` собирает сцену из документа (на процессоре, только при изменении),
 `SceneRenderer` рисует кадр (MSAA, свет с гаммой, контур силуэта, рёбра постоянной ширины, штрих невидимых линий,

@@ -423,6 +423,8 @@ public sealed class Part : ModelItem
         /// таких граней и рёбер. При AllowBoundedFaceting — видимое понижение (и предупреждение); при PreserveBRep — отказ.</summary>
         public readonly Dictionary<Feature, (int Faces, int Edges)> GeometryDowngrades = new();
         public readonly Dictionary<Feature, List<uint>> Created = new();
+        /// <summary>UI: время выполнения каждой операции в этом расчёте (мс); операции до точки возобновления — не считались.</summary>
+        public readonly Dictionary<Feature, double> FeatureMs = new();
         /// <summary>K05: что операция сделала с гранями по их устойчивым именам.</summary>
         public readonly Dictionary<Feature, FeatureHistory> History = new();
         /// <summary>Вспомогательная геометрия, построенная деревом (по именам).</summary>
@@ -817,7 +819,12 @@ public sealed class Part : ModelItem
                 using (f.Policy is { } own ? Kernel.OperationPolicyScope.Use(own) : null)
                 using (Kernel.Ops.BooleanOp.FacetingScope())
                 using (Kernel.Diagnostics.Prof.Time("дерево: операция " + f.GetType().Name))
-                    f.Execute(ctx);
+                {
+                    // UI (кнопка «Тест»): время каждой операции последнего расчёта
+                    long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                    try { f.Execute(ctx); }
+                    finally { result.FeatureMs[f] = System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds; }
+                }
                 CheckRange();
                 CheckGuard();
             }
@@ -1174,6 +1181,8 @@ public sealed class Part : ModelItem
 
     /// <summary>Поставка 3: сколько граней последнего применённого результата получили сетку от донора.</summary>
     public int LastMeshFacesReused { get; private set; }
+    /// <summary>UI (кнопка «Тест»): время операций последнего применённого расчёта, мс (только выполненные заново).</summary>
+    public IReadOnlyDictionary<Feature, double> LastFeatureMs { get; private set; } = new Dictionary<Feature, double>();
 
     public bool Apply(BuildResult r)
     {
@@ -1195,6 +1204,7 @@ public sealed class Part : ModelItem
         Warnings.Clear();
         Warnings.AddRange(r.Warnings);
 
+        LastFeatureMs = new Dictionary<Feature, double>(r.FeatureMs);
         foreach (var f in Features)
         {
             f.Error = r.Errors.TryGetValue(f, out var e) ? e : null;

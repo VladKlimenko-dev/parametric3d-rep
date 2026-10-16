@@ -153,9 +153,26 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
 
     private int _frameErrors;
 
+    // ---- замеры для кнопки «Тест»
+    /// <summary>Сколько кадров нарисовано с запуска.</summary>
+    public long FramesRendered { get; private set; }
+    /// <summary>Время последнего кадра на процессоре (подготовка, проход выбора, команды кадра), мс.</summary>
+    public double LastFrameMs { get; private set; }
+    /// <summary>Последняя сборка сцены и загрузка в видеокарту, мс.</summary>
+    public double LastSceneMs { get; private set; }
+    /// <summary>Ошибки OpenGL и исключения кадра с запуска.</summary>
+    public int FrameErrors => _frameErrors;
+    /// <summary>Сглаживание (выборок на пиксель).</summary>
+    public int Msaa => _r.Samples;
+    /// <summary>Сколько запросов выбора под курсором обслужено (наведение и щелчки).</summary>
+    public long PicksServed { get; private set; }
+    /// <summary>Выбор делает видеокарта (иначе — процессор, без OpenGL).</summary>
+    public bool GpuPicking => _glReady;
+
     protected override void OnOpenGlRender(GlInterface gl, int fb)
     {
         if (!_glReady) return;
+        long frameStart = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             double s = Scaling;
@@ -172,14 +189,15 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
                 if (Transition.IsRunning) RequestNextFrameRendering();
             }
 
-            PrepareScene();
+            using (Diagnostics.UiTimes.Measure("вид: подготовка сцены")) PrepareScene();
             var f = Frame(s);
 
             // запросы выбора (мышь) — номер под курсором читается до кадра
             if (_pickRequest is { } pr)
             {
                 _pickRequest = null;
-                uint id = _scene == null ? 0 : _r.Pick(f, (int)(pr.P.X * s), (int)(pr.P.Y * s), PickTolerance);
+                uint id;
+                using (Diagnostics.UiTimes.Measure("вид: проход выбора")) id = _scene == null ? 0 : _r.Pick(f, (int)(pr.P.X * s), (int)(pr.P.Y * s), PickTolerance);
                 var r = id > 0 && _scene != null ? _scene.PickTable[(int)id].Ref : PickRef.Empty;
                 if (!r.IsEmpty && !Selection.Accepts(r.Kind)) r = PickRef.Empty;
                 Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyPick(r, pr));
@@ -187,7 +205,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
 
             if (_overlayDirty || GridStale()) { _overlayDirty = false; var (g, l, pt) = BuildOverlay(); _r.SetOverlay(g, l, pt); }
             if (_flagsDirty) { ApplyFlags(); _flagsDirty = false; }
-            _r.Draw(f, fb);
+            using (Diagnostics.UiTimes.Measure("вид: кадр")) _r.Draw(f, fb);
 
             if (CaptureNextFrame is { } cap)
             {
@@ -197,6 +215,8 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
                 GL.ReadPixelsRgba(0, 0, w, h, px);
                 cap(px, w, h);
             }
+            FramesRendered++;
+            LastFrameMs = System.Diagnostics.Stopwatch.GetElapsedTime(frameStart).TotalMilliseconds;
             for (int i = 0; i < 4; i++)
             {
                 var e = GL.GetError();
@@ -229,9 +249,11 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         }
         if (_sceneDirty)
         {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             _scene = SceneBuilder.Build(_doc, _r.Theme, Show, ActivePart, ActiveSketch);
             _r.ShowAllVertices = Show.Vertices;
             _r.Upload(_scene);
+            LastSceneMs = System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
             _sceneDirty = false;
             _flagsDirty = true;
             Avalonia.Threading.Dispatcher.UIThread.Post(() => SceneRebuilt?.Invoke());
@@ -247,6 +269,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         }
         catch (Exception ex) { AppLog.Write("background rebuild", ex); }
         finally { _rebuilding = false; }
+        if (_doc != null) Diagnostics.UiTimes.Record("модель: применение расчёта в потоке окна", _doc.LastApplyMs);
         _sceneDirty = true;
         Avalonia.Threading.Dispatcher.UIThread.Post(Redraw);
     }
@@ -463,6 +486,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
 
     private void ApplyPick(PickRef r, PickRequest req)
     {
+        PicksServed++;
         if (Selection.SetHover(r))
         {
             _flagsDirty = true;
