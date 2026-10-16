@@ -50,6 +50,9 @@ public abstract class Operation
     /// <summary>После Build: разложить выбор по полям и показать предпросмотр.</summary>
     public virtual void Prime() { }
 
+    /// <summary>Панель построена (до Prime): поля известны операции.</summary>
+    public void BindPanel(OpPanel p) => Panel = p;
+
     /// <summary>Панель построена: выбрать первое незаполненное поле (или первое).</summary>
     public void AttachPanel(OpPanel p)
     {
@@ -119,6 +122,9 @@ public abstract class Operation
     /// <summary>Ручка в виде (п. 6): главное значение операции (радиус, размер фаски, глубина…). null — у операции ручки нет.</summary>
     public virtual Action<double>? DragValue => null;
 
+    /// <summary>u10: величина ручки со знаком (оболочка: внутрь — стенка внутрь, наружу — стенка наружу); одна операция на обе стороны.</summary>
+    public virtual bool SignedDrag => false;
+
     /// <summary>Текущее главное значение (для ручки и подписи), мм.</summary>
     public virtual double? DragCurrent => null;
     /// <summary>Короткое имя главного значения у курсора («R», «D», «T»…).</summary>
@@ -154,7 +160,7 @@ public abstract class Operation
     public void SetDragValue(double v)
     {
         if (DragValue is not { } set) return;
-        set(Math.Round(Math.Max(0.01, v), 2));
+        set(SignedDrag ? Math.Sign(v == 0 ? 1 : v) * Math.Round(Math.Max(0.01, Math.Abs(v)), 2) : Math.Round(Math.Max(0.01, v), 2));
         if (Dragging)
         {
             Panel?.Refresh();
@@ -178,6 +184,8 @@ public abstract class Operation
     }
 
     protected virtual string? BuildError => null;
+    /// <summary>Расчёт операции отказал (полный предпросмотр).</summary>
+    public bool HasBuildError => BuildError != null;
 
     /// <summary>«ОК»: true — операция закончена.</summary>
     public abstract bool Commit();
@@ -217,8 +225,9 @@ public abstract class FeatureOp<T> : Operation where T : Feature
         if (!Editing) SeedRefs();
         if (Panel != null) foreach (var r in Panel.Refs) if (r.Text != null) r.Text.Text = r.Summary;
         Push();
-        // ручку ещё тянут — операция в деталь попадёт, когда отпустят (EndDrag)
-        if (!Dragging)
+        // ручку ещё тянут — операция в деталь попадёт, когда отпустят (EndDrag); u10: не выбрано обязательное (грань
+        // входа отверстия) — тоже позже: прежде пустая операция сразу попадала в деталь и мигала отказом
+        if (!Dragging && (Editing || !MissingRequired))
         {
             if (!Editing) { Part.AddFeature(F); _added = true; }
             else Part.NotifyChanged(F);
@@ -263,11 +272,14 @@ public abstract class FeatureOp<T> : Operation where T : Feature
     {
         Push();
         if (Dragging) return;
-        if (!Editing && !_added) { Part.AddFeature(F); _added = true; return; }
+        if (!Editing && !_added) { if (MissingRequired) return; Part.AddFeature(F); _added = true; return; }
         Part.NotifyChanged(F);
     }
 
     protected override string? BuildError => F?.Error;
+
+    /// <summary>Не выбрано обязательное поле ссылки.</summary>
+    protected bool MissingRequired => Panel != null && Panel.Refs.Any(r => !r.IsSet && !r.Optional);
 
     public override bool Commit()
     {
@@ -382,6 +394,42 @@ public static class Refs
             if (r.Kind == PickKind.Face) return FacePoint(p, r.Id);
         }
         return null;
+    }
+
+    /// <summary>
+    /// u10: СЕРЕДИНА ГРАНИ — центр площади её треугольников (отверстие «в середине грани»). Прежде — центр самого большого
+    /// треугольника сетки, и отверстие вставало в угол грани. Если центр площади вне грани (кольцо, буква «Г») — прежняя
+    /// точка внутри грани.
+    /// </summary>
+    public static Vector3d? FaceCentre(Part p, uint faceId)
+    {
+        var md = p.Mesh;
+        if (md == null) return null;
+        double area = 0; var acc = Vector3d.Zero;
+        var v = md.Vertices; var ix = md.Indices;
+        var tris = new List<(Vector3d A, Vector3d B, Vector3d C)>();
+        for (int i = 0; i + 2 < ix.Length; i += 3)
+        {
+            var a = v[ix[i]];
+            if (a.FaceId != faceId) continue;
+            Vector3d A = new(a.P.X, a.P.Y, a.P.Z), B = new(v[ix[i + 1]].P.X, v[ix[i + 1]].P.Y, v[ix[i + 1]].P.Z), C = new(v[ix[i + 2]].P.X, v[ix[i + 2]].P.Y, v[ix[i + 2]].P.Z);
+            double ar = Vector3d.Cross(B - A, C - A).Length / 2;
+            area += ar; acc += (A + B + C) / 3 * ar;
+            tris.Add((A, B, C));
+        }
+        if (area <= 0) return null;
+        var c = acc / area;
+        // внутри ли грани: проекция на один из её треугольников
+        foreach (var (A, B, C) in tris)
+        {
+            var n = Vector3d.Cross(B - A, C - A);
+            if (n.LengthSquared < 1e-24) continue;
+            var q = c - n * (Vector3d.Dot(c - A, n) / n.LengthSquared);
+            if (Math.Abs(Vector3d.Dot(c - A, n.Normalized())) > 1e-3 * Math.Sqrt(area) + 1e-6) continue;
+            double s1 = Vector3d.Dot(Vector3d.Cross(B - A, q - A), n), s2 = Vector3d.Dot(Vector3d.Cross(C - B, q - B), n), s3 = Vector3d.Dot(Vector3d.Cross(A - C, q - C), n);
+            if (s1 >= -1e-12 && s2 >= -1e-12 && s3 >= -1e-12) return q;
+        }
+        return FacePoint(p, faceId);
     }
 
     /// <summary>Точка внутри грани: центр самого большого её треугольника сетки.</summary>

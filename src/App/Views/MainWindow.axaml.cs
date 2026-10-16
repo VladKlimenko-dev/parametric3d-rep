@@ -285,7 +285,7 @@ public partial class MainWindow : Window
         foreach (var id in new[] { "file.new_part", "file.open", "file.save" }) FilePanel.Children.Add(CmdButton(_reg[id]));
 
         EditPanel.Children.Clear();
-        foreach (var id in new[] { "edit.undo", "edit.redo", "edit.history" }) EditPanel.Children.Add(CmdButton(_reg[id]));
+        foreach (var id in new[] { "edit.undo", "edit.history", "edit.redo" }) EditPanel.Children.Add(CmdButton(_reg[id]));   // u10: журнал — стрелкой справа от «Отменить»
 
         RightPanel.Children.Clear();
         RightPanel.Children.Add(CmdButton(_reg["app.selftest"]));
@@ -337,7 +337,7 @@ public partial class MainWindow : Window
     private static readonly (DisplayStyle Style, string Id)[] Styles =
     {
         (DisplayStyle.Shaded, "style.shaded"), (DisplayStyle.ShadedWithEdges, "style.shaded_edges"), (DisplayStyle.Wireframe, "style.wireframe"),
-        (DisplayStyle.HiddenLines, "style.hidden_lines"), (DisplayStyle.Transparent, "style.transparent"),
+        (DisplayStyle.HiddenLines, "style.hidden_lines"), (DisplayStyle.Transparent, "style.transparent"), (DisplayStyle.Material, "style.material"),
     };
 
     private void UpdateStyleButton()
@@ -547,6 +547,7 @@ public partial class MainWindow : Window
     {
         using var _ui = Diagnostics.UiTimes.Measure("окно: выбор изменился");
         CurrentOperation?.SelectionChanged(View.Selection.Items);
+        if (CurrentOperation is ShellOp && !View.HandleDragging) AttachOpHandle();
         var prim = View.Selection.Primary;
         if (prim.Id != _lastPrimary.Id || View.Selection.IsEmpty)
         {
@@ -564,6 +565,8 @@ public partial class MainWindow : Window
     private string _handleKind = "";
     /// <summary>Контур предпросмотра по величине ручки — наружу и внутрь; снят с геометрии до операции.</summary>
     private Func<double, List<(OpenTK.Mathematics.Vector3d A, OpenTK.Mathematics.Vector3d B)>>? _ghostOut, _ghostIn;
+    /// <summary>u10: выйдет ли операция стороны «наружу»/«внутрь» при величине (контур красный, если нет).</summary>
+    private Func<double, bool>? _validOut, _validIn;
     /// <summary>Ссылки, снятые до операции (после предпросмотра одной операции номера рёбер другие).</summary>
     private Dictionary<uint, Parametric3D.Kernel.Topology.EdgeRef>? _presetEdges;
     private Dictionary<uint, OpenTK.Mathematics.Vector3d>? _presetPoints;
@@ -584,6 +587,7 @@ public partial class MainWindow : Window
         View.Handle = null;
         _handleKind = "";
         _ghostOut = _ghostIn = null;
+        _validOut = _validIn = null;
         _presetEdges = null; _presetPoints = null; _presetOutline = null;
         if (InSketch) return;
         try { UpdateHandleCore(); }
@@ -606,6 +610,8 @@ public partial class MainWindow : Window
                     var ids = sel.Select(r => r.Id).ToList();
                     _ghostOut = Topo.EdgeGhost(part, ids, round: false) is { } go ? v => go(v) : null;
                     _ghostIn = Topo.EdgeGhost(part, ids, round: true) is { } gi ? v => gi(v) : null;
+                    _validOut = Topo.EdgeGhostValid(part, ids, round: false);
+                    _validIn = Topo.EdgeGhostValid(part, ids, round: true);
                     _presetEdges = new();
                     foreach (var id in ids) if (part.FindEdge(id) is { } e) _presetEdges[id] = Parametric3D.Kernel.Topology.EdgeRef.Of(e);
                 }
@@ -616,19 +622,22 @@ public partial class MainWindow : Window
                 _handleKind = "vertex";
                 _ghostOut = Topo.VertexGhost(part, sel[0].Id, round: false) is { } vo ? v => vo(v) : null;
                 _ghostIn = Topo.VertexGhost(part, sel[0].Id, round: true) is { } vi ? v => vi(v) : null;
+                _validOut = _validIn = Topo.VertexGhostValid(part, sel[0].Id);
                 if (Refs.PointOf(sel[0]) is { } vp) _presetPoints = new() { [sel[0].Id] = vp };
                 ShowHint(L("Ручка: потяните внутрь — скругление вершины, наружу — фаска угла"));
                 break;
             case PickKind.Face when sel.Count == 1 && Topo.FaceHandle(part, sel[0].Id) is { } h:
-                View.Handle = new OpHandle(F(h.At), F(h.Out), h.Planar, true);
+                View.Handle = new OpHandle(F(h.At), F(h.Out), true, true);
                 _handleKind = h.Planar ? "face" : "surface";
                 if (h.Planar)
                 {
                     _ghostOut = Topo.FaceGhost(part, sel[0].Id, 1) is { } fo ? v => fo(v) : null;
                     _presetOutline = Topo.FaceOutlineSketch(part, sel[0].Id, L("Эскиз{0}", part.Sketches.Count() + 1));
                 }
+                else _ghostOut = Topo.FaceGhost(part, sel[0].Id, 1) is { } so ? v => so(v) : null;
                 _ghostIn = Topo.FaceGhost(part, sel[0].Id, -1) is { } fi ? v => fi(v) : null;
-                ShowHint(h.Planar ? L("Ручка: потяните наружу — выдавить грань, внутрь — вырез") : L("Ручка: потяните внутрь — оболочка с открытой гранью"));
+                if (!h.Planar) { var sv = Topo.ShellValid(part); _validIn = sv; }
+                ShowHint(h.Planar ? L("Ручка: потяните наружу — выдавить грань, внутрь — вырез") : L("Ручка: оболочка с открытой гранью — внутрь стенка внутрь, наружу — наружу"));
                 break;
             default:
                 ShowHint(null);
@@ -644,6 +653,13 @@ public partial class MainWindow : Window
         return s => (s > 0 ? o?.Invoke(s) : i?.Invoke(-s)) ?? new();
     }
 
+    private Func<double, bool>? SignedValid()
+    {
+        var (o, i) = (_validOut, _validIn);
+        if (o == null && i == null) return null;
+        return s => s > 0 ? o?.Invoke(s) ?? true : i?.Invoke(-s) ?? true;
+    }
+
     /// <summary>
     /// Ручку потянули (п. 6): одна ручка, сторона выбирает операцию. Панель не открывается (если панель свойств закрыта);
     /// пока тянут — полный предпросмотр (деталь считается по ходу) или контур (настройка); величина — у курсора.
@@ -655,7 +671,7 @@ public partial class MainWindow : Window
             cur.LivePreview = FullPreview;
             cur.BeginDrag();
         }
-        View.SetHandleGhost(SignedGhost());
+        View.SetHandleGhost(SignedGhost(), SignedValid());
         ShowHint(null);
     }
 
@@ -672,7 +688,7 @@ public partial class MainWindow : Window
                 StartCut = sg < 0, FlipCut = sg < 0,
                 PreSketch = _ => outline,
             },
-            ("surface", < 0) => new ShellOp(),
+            ("surface", _) => new ShellOp(),
             _ => null,
         };
         return op;
@@ -685,6 +701,7 @@ public partial class MainWindow : Window
         var keepH = View.Handle;
         double hv = View.HandleValue;
         var saved = (_ghostOut, _ghostIn, _presetEdges, _presetPoints, _presetOutline, _handleKind);
+        var savedValid = (_validOut, _validIn);
         op.LivePreview = FullPreview;
         op.BeginDrag();
         _startingHandleOp = true;
@@ -694,7 +711,8 @@ public partial class MainWindow : Window
         View.Handle = keepH;
         View.SetHandleValue(hv);
         (_ghostOut, _ghostIn, _presetEdges, _presetPoints, _presetOutline, _handleKind) = saved;
-        View.SetHandleGhost(SignedGhost());
+        (_validOut, _validIn) = savedValid;
+        View.SetHandleGhost(SignedGhost(), SignedValid());
         View.ShowGhost(hv);
         _handleOp = op;
         _handleOpSign = sign;
@@ -719,6 +737,14 @@ public partial class MainWindow : Window
 
     private void OnHandleDragged(int sign, double v)
     {
+        if (CurrentOperation is { SignedDrag: true } sop && ReferenceEquals(sop, _handleOp))
+        {
+            // одна операция на обе стороны: внутрь (знак −) — положительная величина
+            sop.SetDragValue(sign < 0 ? v : -v);
+            View.Redraw();
+            ShowDragLabel(sop, sign < 0 ? v : -v);
+            return;
+        }
         if (CurrentOperation is { } cur && ReferenceEquals(cur, _handleOp) && _handleOpSign != sign) DropHandleOp();
         if (CurrentOperation == null || !ReferenceEquals(CurrentOperation, _handleOp))
         {
@@ -726,10 +752,19 @@ public partial class MainWindow : Window
             if (!StartHandleOp(sign)) return;
         }
         var op = CurrentOperation!;
+        if (op.SignedDrag) { op.SetDragValue(sign < 0 ? v : -v); ShowDragLabel(op, sign < 0 ? v : -v); View.Redraw(); return; }
         op.SetDragValue(v);
         View.Redraw();
-        string label = $"{(op.DragLabel.Length > 0 ? op.DragLabel + " " : "")}{Math.Round(Math.Max(0.01, v), 2):0.##} {L("мм")}";
+        ShowDragLabel(op, v);
+    }
+
+    private void ShowDragLabel(Operation op, double v)
+    {
+        string label = $"{(op.DragLabel.Length > 0 ? op.DragLabel + " " : "")}{Math.Sign(v) * Math.Round(Math.Max(0.01, Math.Abs(v)), 2):0.##} {L("мм")}";
         SelChipText.Text = L(op.Title) + " · " + label;
+        bool bad = View.GhostBad || op.HasBuildError;
+        DragValueText.Foreground = bad ? Res("P3.Error") : Res("P3.Text");
+        if (bad) label += "  — " + L("не выйдет");
         // панель закрыта — величина у курсора
         if (!PropsPanel.IsVisible)
         {
@@ -738,6 +773,26 @@ public partial class MainWindow : Window
             DragValueBox.Margin = new Thickness(c.X + 18, c.Y + 14, 0, 0);
             DragValueBox.IsVisible = true;
         }
+    }
+
+    /// <summary>
+    /// u10: ручка у операции, начатой командой (оболочка): у первой выбранной открытой грани; тянут внутрь — стенка внутрь,
+    /// наружу — наружу. Выбрали другую грань — ручка переезжает.
+    /// </summary>
+    private void AttachOpHandle()
+    {
+        if (CurrentOperation is not ShellOp sh || InSketch) return;
+        var r = sh.FaceRefs.FirstOrDefault();
+        if (r.Owner is not Part part || Topo.FaceHandle(part, r.Id) is not { } h) return;
+        static Vector3 F(OpenTK.Mathematics.Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
+        View.Handle = new OpHandle(F(h.At), F(h.Out), true, true);
+        _ghostOut = Topo.FaceGhost(part, r.Id, 1) is { } go ? v => go(v) : null;
+        _ghostIn = Topo.FaceGhost(part, r.Id, -1) is { } gi ? v => gi(v) : null;
+        _validOut = null; _validIn = Topo.ShellValid(part);
+        _handleKind = "shell";
+        _handleOp = sh;
+        View.SetHandleValue(-(sh.DragCurrent ?? 0));
+        View.SetHandleGhost(SignedGhost(), SignedValid());
     }
 
     private void OnHandleDragEnded()
@@ -754,6 +809,9 @@ public partial class MainWindow : Window
     private void HideGhostWhenBuilt()
     {
         CurrentOperation?.FlushLive();
+        // полный предпросмотр: расчёт отказал — подпись красная
+        if (CurrentOperation is { } cop && ReferenceEquals(cop, _handleOp) && DragValueBox.IsVisible)
+            DragValueText.Foreground = cop.HasBuildError || View.GhostBad ? Res("P3.Error") : Res("P3.Text");
         if (!View.GhostShown || View.HandleDragging || CurrentOperation is { Dragging: true }) return;
         if (Session.Document.IsBuilding || Session.Document.AllParts().Any(p => p.IsDirty)) return;
         View.ShowGhost(0, show: false);
@@ -996,6 +1054,7 @@ public partial class MainWindow : Window
         {
             op.Build(p);
             p.Finish();
+            op.BindPanel(p);
             op.Prime();
             op.AttachPanel(p);
         }
@@ -1012,6 +1071,7 @@ public partial class MainWindow : Window
         PropsButtons.Children.Add(cancel);
         View.MarkDirty();
         RefreshAfterOp();
+        if (!_startingHandleOp) AttachOpHandle();
     }
 
     public void CommitOperation()
@@ -1312,7 +1372,7 @@ public partial class MainWindow : Window
         {
             PropsTitle.Text = L("ДЕТАЛЬ");
             Row("Имя", part.Name);
-            Row("Материал", part.Material?.Name ?? "—");
+            MaterialRow(part);
             Row("Тел", part.Bodies.Count.ToString());
             if (part.Bodies.Count > 0)
             {
@@ -1334,6 +1394,48 @@ public partial class MainWindow : Window
                 Row("Описание", f.Summary);
                 if (f.Error != null) Row("Ошибка", f.Error);
             }
+        }
+    }
+
+    /// <summary>u10: материал детали — выбор из библиотеки (группы), свойства для массы и расчёта — подсказкой.</summary>
+    private void MaterialRow(Part part)
+    {
+        var lib = Material.Library();
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("110,*") };
+        g.Children.Add(new TextBlock { Text = L("Материал"), Classes = { "dim" }, VerticalAlignment = VerticalAlignment.Center });
+        var cb = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, MaxDropDownHeight = 420 };
+        var items = new List<object>();
+        string? grp = null;
+        int sel = -1;
+        foreach (var m in lib)
+        {
+            if (m.Group != grp) { grp = m.Group; items.Add(new ComboBoxItem { Content = L(grp), IsEnabled = false, FontWeight = FontWeight.SemiBold }); }
+            if (part.Material?.Name == m.Name) sel = items.Count;
+            items.Add(new ComboBoxItem { Content = L(m.Name), Tag = m.Name });
+        }
+        if (sel < 0 && part.Material != null) { sel = items.Count; items.Add(new ComboBoxItem { Content = part.Material.Name, Tag = part.Material.Name }); }
+        cb.ItemsSource = items;
+        cb.SelectedIndex = sel;
+        cb.SelectionChanged += (_, _) =>
+        {
+            if (cb.SelectedItem is not ComboBoxItem { Tag: string name } || Material.FromLibrary(name) is not { } m || part.Material?.Name == name) return;
+            part.Material = m;
+            Session.MarkModified();
+            View.MarkDirty();
+            Dispatcher.UIThread.Post(ShowProperties);
+        };
+        if (part.Material is { } pm)
+            ToolTip.SetTip(cb, $"{pm.Designation}\n" + L("Плотность") + $" {pm.DensityGPerCm3:0.###} " + L("г/см³") +
+                               $"\nE {pm.YoungModulus / 1e9:0.#} GPa, ν {pm.PoissonRatio:0.##}" +
+                               (pm.YieldStrength > 0 ? $"\nσт {pm.YieldStrength / 1e6:0} MPa" : "") + (pm.UltimateStrength > 0 ? $", σв {pm.UltimateStrength / 1e6:0} MPa" : ""));
+        Grid.SetColumn(cb, 1);
+        g.Children.Add(cb);
+        PropsBody.Children.Add(g);
+        if (part.Material is { } mm)
+        {
+            Row("Плотность", $"{mm.DensityGPerCm3:0.###} " + L("г/см³"));
+            if (mm.YoungModulus > 0) Row("Модуль Юнга", $"{mm.YoungModulus / 1e9:0.#} " + L("ГПа") + $", ν {mm.PoissonRatio:0.##}");
+            if (mm.YieldStrength > 0 || mm.UltimateStrength > 0) Row("Прочность", (mm.YieldStrength > 0 ? $"σт {mm.YieldStrength / 1e6:0} " : "") + (mm.UltimateStrength > 0 ? $"σв {mm.UltimateStrength / 1e6:0} " : "") + L("МПа"));
         }
     }
 

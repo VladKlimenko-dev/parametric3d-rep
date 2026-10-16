@@ -32,7 +32,7 @@ public sealed class SceneRenderer : IDisposable
     private ShaderProgram? _mesh, _line, _point, _fill, _bg;
     private int _emptyVao = -1;
 
-    private sealed class MeshGpu { public int Vao = -1, Pos = -1, Nrm = -1, Pick = -1, Ibo = -1, Count; public Matrix4 Model; public Vector4 Color; public int Preview; }
+    private sealed class MeshGpu { public int Vao = -1, Pos = -1, Nrm = -1, Pick = -1, Ibo = -1, Count; public Matrix4 Model; public Vector4 Color, MatColor; public float MatSpec, MatShine, MatMetal; public int Preview; }
     private readonly List<MeshGpu> _meshes = new();
     private sealed class InstGpu { public int Vao = -1, Vbo = -1, Count; }
     private readonly InstGpu _bodyEdges = new(), _lines = new(), _points = new(), _bodyVerts = new();
@@ -74,7 +74,7 @@ public sealed class SceneRenderer : IDisposable
         ReleaseScene();
         foreach (var m in s.Meshes)
         {
-            var g = new MeshGpu { Model = m.Model, Color = m.Color, Count = m.Idx.Length, Preview = m.Preview };
+            var g = new MeshGpu { Model = m.Model, Color = m.Color, MatColor = m.MatColor, MatSpec = m.MatSpec, MatShine = m.MatShine, MatMetal = m.MatMetal, Count = m.Idx.Length, Preview = m.Preview };
             g.Vao = GL.GenVertexArray();
             GL.BindVertexArray(g.Vao);
             g.Pos = Buffer(m.Pos, 12); GL.EnableVertexAttribArray(0); GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 12, 0);
@@ -301,8 +301,8 @@ public sealed class SceneRenderer : IDisposable
         GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
         BindFlags();
 
-        bool faces = Style is DisplayStyle.Shaded or DisplayStyle.ShadedWithEdges;
-        bool edges = Style != DisplayStyle.Shaded;
+        bool faces = Style is DisplayStyle.Shaded or DisplayStyle.ShadedWithEdges or DisplayStyle.Material;
+        bool edges = Style is not (DisplayStyle.Shaded or DisplayStyle.Material);
         bool hidden = Style is DisplayStyle.HiddenLines or DisplayStyle.Transparent;
 
         if (SketchMode)
@@ -515,10 +515,13 @@ public sealed class SceneRenderer : IDisposable
         {
             if (m.Preview != 0) continue;
             _mesh.Set("uModel", m.Model);
-            _mesh.Set("uBase", m.Color);
+            bool mat = Style == DisplayStyle.Material;
+            _mesh.Set("uBase", mat ? m.MatColor : m.Color);
+            _mesh.Set("uMat", mat ? new Vector4(m.MatSpec, m.MatShine, m.MatMetal, 1) : Vector4.Zero);
             GL.BindVertexArray(m.Vao);
             GL.DrawElements(PrimitiveType.Triangles, m.Count, DrawElementsType.UnsignedInt, 0);
         }
+        _mesh.Set("uMat", Vector4.Zero);
         GL.Disable(EnableCap.CullFace);
         GL.Disable(EnableCap.PolygonOffsetFill);
         DrawPreviews(f);

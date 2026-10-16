@@ -52,7 +52,7 @@ public static class StandardCommands
             CanRun = () => w.Session?.CanUndo == true && w.CurrentOperation == null && !w.InSketch, Run = () => w.Session.Undo() });
         r.Add(new AppCommand { Short = "↷", Id = "edit.redo", Label = "Вернуть", Group = E, Icon = "redo_but.svg", Gesture = K(Key.Y, KeyModifiers.Control), Synonyms = "redo повторить",
             CanRun = () => w.Session?.CanRedo == true && w.CurrentOperation == null && !w.InSketch, Run = () => w.Session.Redo() });
-        r.Add(new AppCommand { Short = "Журнал", Id = "edit.history", Label = "Журнал отмены", Group = E, Icon = "undo_history_but.svg", Synonyms = "history undo журнал история",
+        r.Add(new AppCommand { Short = "▾", Id = "edit.history", Label = "Журнал отмены", Group = E, Icon = "undo_history_but.svg", Synonyms = "history undo журнал история",
             Run = () => w.OpenHistory() });
         r.Add(new AppCommand { Short = "Удалить", Id = "edit.delete", Label = "Удалить", Group = E, Icon = "delete_but.svg", Gesture = K(Key.Delete), Synonyms = "delete remove",
             CanRun = () => Modeling() && Deletable(w).Count > 0, Run = () => Delete(w) });
@@ -86,6 +86,7 @@ public static class StandardCommands
         Style("style.wireframe", "Каркас", "style_wireframe_but.svg", DisplayStyle.Wireframe, "wireframe каркас", K(Key.D3, KeyModifiers.Alt));
         Style("style.hidden_lines", "Невидимые линии штрихом", "style_hidden_lines_but.svg", DisplayStyle.HiddenLines, "hidden lines", K(Key.D4, KeyModifiers.Alt));
         Style("style.transparent", "Прозрачный", "style_transparent_but.svg", DisplayStyle.Transparent, "transparent", K(Key.D5, KeyModifiers.Alt));
+        Style("style.material", "Материал", "style_material_but.svg", DisplayStyle.Material, "material материал металл realistic", K(Key.D6, KeyModifiers.Alt));
         r.Add(new AppCommand { Short = "Скрыть", Id = "view.hide", Label = "Скрыть", Group = V, Icon = "hide_but.svg", Synonyms = "hide",
             CanRun = () => w.SelectedItems().Count > 0, Run = () => SetVisible(w, w.SelectedItems(), false) });
         r.Add(new AppCommand { Short = "Изолировать", Id = "view.isolate", Label = "Изолировать", Group = V, Icon = "isolate_but.svg", Synonyms = "isolate",

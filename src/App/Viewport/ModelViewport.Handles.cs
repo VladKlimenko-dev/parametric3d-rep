@@ -60,10 +60,13 @@ public sealed partial class ModelViewport
     private List<(Vector3d A, Vector3d B)>? _ghostLines;
     private int _ghostSign;
 
-    /// <summary>Контур предпросмотра по сдвигу ручки со знаком; null — убрать.</summary>
-    public void SetHandleGhost(Func<double, List<(Vector3d A, Vector3d B)>>? ghost)
+    private Func<double, bool>? _ghostValid;
+    private bool _ghostOk = true;
+
+    /// <summary>Контур предпросмотра по сдвигу ручки со знаком; null — убрать. valid — выйдет ли операция (иначе контур красный).</summary>
+    public void SetHandleGhost(Func<double, List<(Vector3d A, Vector3d B)>>? ghost, Func<double, bool>? valid = null)
     {
-        _ghost = ghost; _ghostLines = null;
+        _ghost = ghost; _ghostLines = null; _ghostValid = valid; _ghostOk = true;
         _overlayDirty = true; Redraw();
     }
 
@@ -73,13 +76,19 @@ public sealed partial class ModelViewport
         if (!show || _ghost == null || Math.Abs(signedValue) < 1e-9) _ghostLines = null;
         else
         {
-            try { _ghostLines = _ghost(signedValue); _ghostSign = Math.Sign(signedValue); }
+            try
+            {
+                _ghostLines = _ghost(signedValue); _ghostSign = Math.Sign(signedValue);
+                _ghostOk = _ghostValid?.Invoke(signedValue) ?? true;
+            }
             catch (Exception ex) { Parametric3D.Core.AppLog.Write("handle ghost", ex); _ghostLines = null; }
         }
         _overlayDirty = true; Redraw();
     }
 
     public bool GhostShown => _ghostLines != null;
+    /// <summary>Контур показывает, что операция не выйдет (красный).</summary>
+    public bool GhostBad => _ghostLines != null && !_ghostOk;
     public int GhostSegments => _ghostLines?.Count ?? 0;
 
     // ---------------------------------------------------------------- геометрия ручки
@@ -158,12 +167,41 @@ public sealed partial class ModelViewport
         if (end) EndHandleDrag();
     }
 
+    /// <summary>
+    /// u10: НАЧАЛО КООРДИНАТ — ТРИ СТРЕЛКИ X/Y/Z (красная, зелёная, синяя) по осям детали, 55 пикселей при любом масштабе;
+    /// наконечник — две чёрточки в плоскости, обращённой к взгляду. Выбор — по точке в начале (сцена).
+    /// </summary>
+    private void AddOriginOverlay(List<LineInst> lines, List<PointInst> pts)
+    {
+        if (_scene == null || ActiveSketch != null || !Show.Origin) return;
+        var th = _r.Theme;
+        float L = (float)(55 * PixelSize);
+        var view = Camera.Forward;
+        var vf = new Vector3((float)view.X, (float)view.Y, (float)view.Z);
+        foreach (var (p, x, y, z, _) in _scene.Origins)
+        {
+            foreach (var (ax, col) in new[] { (x, th.AxisX), (y, th.AxisY), (z, th.AxisZ) })
+            {
+                var tip = p + ax * L;
+                lines.Add(Inst(p, tip, col, 2.4f, 0));
+                var side = Vector3.Cross(ax, vf);
+                if (side.LengthSquared < 1e-8f) side = Vector3.Cross(ax, Vector3.UnitY);
+                if (side.LengthSquared < 1e-8f) side = Vector3.Cross(ax, Vector3.UnitX);
+                side = side.Normalized();
+                float h = L * 0.22f;
+                lines.Add(Inst(tip, tip - ax * h + side * (h * 0.45f), col, 2.4f, 0));
+                lines.Add(Inst(tip, tip - ax * h - side * (h * 0.45f), col, 2.4f, 0));
+            }
+            pts.Add(new PointInst { P = p, Color = SceneData.Pack(new Vector4(0.92f, 0.93f, 0.95f, 1)), Px = 5, Shape = 0 });
+        }
+    }
+
     private void AddHandleOverlay(List<LineInst> lines, List<PointInst> pts)
     {
         var th = _r.Theme;
         if (_ghostLines != null && ActiveSketch == null)
         {
-            var gc = _ghostSign < 0 ? th.HandleAlt : th.Handle;
+            var gc = !_ghostOk ? th.HandleBad : _ghostSign < 0 ? th.HandleAlt : th.Handle;
             foreach (var (a, b) in _ghostLines)
                 lines.Add(Inst(new Vector3((float)a.X, (float)a.Y, (float)a.Z), new Vector3((float)b.X, (float)b.Y, (float)b.Z), gc, 2f, 0));
         }

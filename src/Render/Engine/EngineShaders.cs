@@ -73,6 +73,7 @@ uniform vec4 uError;
 uniform float uOpacity;
 uniform int uMode;          // 0 lit, 1 flat colour, 2 pick
 uniform vec4 uFlat;
+uniform vec4 uMat;          // u10: стиль «Материал» — x сила блика, y резкость, z металл, w включён
 out vec4 oColor;
 " + PickOut + @"
 vec3 toLin(vec3 c) { return pow(c, vec3(2.2)); }
@@ -98,6 +99,26 @@ void main()
     vec3 hemi = mix(vec3(0.16, 0.165, 0.18), vec3(0.40, 0.42, 0.46), N.y * 0.5 + 0.5);
     float d1 = max(dot(N, L1), 0.0);
     float d2 = max(dot(N, L2), 0.0);
+    if (uMat.w > 0.5)
+    {
+        // МАТЕРИАЛ: у металла рассеянного света меньше, блик и отражение — цвета материала; у пластика — белый блик
+        float metal = uMat.z;
+        vec3 Rv = reflect(-V, N);
+        // окружение-студия: тёмный пол, светлое небо, яркая полоса у горизонта
+        vec3 env = mix(vec3(0.05, 0.05, 0.06), vec3(0.62, 0.66, 0.72), smoothstep(-0.35, 0.55, Rv.y))
+                 + vec3(0.55) * exp(-pow((Rv.y - 0.08) * 7.0, 2.0));
+        vec3 kd = b * (1.0 - 0.75 * metal);
+        vec3 diffM = kd * (hemi + d1 * 0.80 * vec3(1.0, 0.98, 0.95) + d2 * 0.28 * vec3(0.85, 0.90, 1.0));
+        vec3 ks = mix(vec3(1.0), b, metal) * uMat.x;
+        float sp1 = pow(max(dot(N, normalize(L1 + V)), 0.0), max(uMat.y, 2.0));
+        float sp2 = pow(max(dot(N, normalize(L2 + V)), 0.0), max(uMat.y * 0.4, 2.0)) * 0.25;
+        float F = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+        vec3 refl = env * mix(vec3(F) * uMat.x * 0.6, b * (0.55 + 0.45 * F), metal);
+        vec3 cm = diffM + ks * (sp1 + sp2) * 1.4 + refl;
+        cm = cm / (1.0 + cm * 0.10);
+        oColor = vec4(pow(cm, vec3(1.0 / 2.2)), uBase.a * uOpacity);
+        return;
+    }
     vec3 diff = b * (hemi + d1 * 0.80 * vec3(1.0, 0.98, 0.95) + d2 * 0.28 * vec3(0.85, 0.90, 1.0));
     float s1 = pow(max(dot(N, normalize(L1 + V)), 0.0), 64.0) * 0.30;
     float s2 = pow(max(dot(N, normalize(L2 + V)), 0.0), 24.0) * 0.06;

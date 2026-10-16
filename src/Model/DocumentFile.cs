@@ -856,6 +856,8 @@ public static class DocumentFile
         public double Specular { get; set; } = 0.25;
         public double Shininess { get; set; } = 48;
         public double Opacity { get; set; } = 1;
+        public bool? Metallic { get; set; }
+        public string? Group { get; set; }
 
         public double[][]? StressStrain { get; set; }
         public double[][]? FatigueCurve { get; set; }
@@ -879,6 +881,8 @@ public static class DocumentFile
         Specular = m.Specular,
         Shininess = m.Shininess,
         Opacity = m.Opacity,
+        Metallic = m.Metallic,
+        Group = m.Group,
         StressStrain = m.StressStrain.Select(p => new[] { p.Strain, p.Stress }).ToArray(),
         FatigueCurve = m.FatigueCurve.Select(p => new[] { p.Cycles, p.Stress }).ToArray()
     };
@@ -899,7 +903,9 @@ public static class DocumentFile
             SpecificHeat = d.SpecificHeat,
             Specular = (float)d.Specular,
             Shininess = (float)d.Shininess,
-            Opacity = d.Opacity
+            Opacity = d.Opacity,
+            Metallic = d.Metallic ?? (Material.FromLibrary(d.Name ?? "")?.Metallic ?? false),
+            Group = d.Group ?? Material.FromLibrary(d.Name ?? "")?.Group ?? "",
         };
 
         if (d.Colour is { Length: >= 3 }) { m.R = d.Colour[0]; m.G = d.Colour[1]; m.B = d.Colour[2]; }

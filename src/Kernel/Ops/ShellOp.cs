@@ -38,24 +38,26 @@ public static class ShellOp
         // граней без смены топологии (DirectRound.OffsetSolid): закрытые грани внутрь на толщину, открытые (только плоские,
         // все соседи — плоские) — наружу. Мутация P3D_OFFSETSOLID=0.
         string? whyOffset = null;
-        if (!TweakOff && outward && faceThickness == null && !body.Faces.All(f => PlaneOfFace(f) != null || (!CylTweakOff && CylOfFace(f) != null))
-            && OffsetOpenFaces(body, open) is { } openOut)
+        // стенка наружу смещением всех граней (DirectRound.OffsetSolid): наружное — все грани наружу (открытые — на месте),
+        // внутреннее — тело с открытыми гранями, вынесенными наружу. null — не вышло (причина в whyOffset).
+        bool? OutwardByOffset(HashSet<TFace> openOut)
         {
-            // стенка наружу у тела с кривыми гранями: наружное — все грани наружу (открытые — на месте), внутреннее — тело
-            // с открытыми гранями, вынесенными наружу
             double t = -thickness;
             var outerO = DirectRound.OffsetSolid(body, f => openOut.Contains(f) ? 0 : t, null, ref whyOffset);
             var innerO = outerO == null ? null : openOut.Count == 0 ? body : DirectRound.OffsetSolid(body, f => openOut.Contains(f) ? t : 0, null, ref whyOffset);
-            if (outerO != null && innerO != null)
-            {
-                foreach (var f in outerO.Faces) if (f.Tag.Length > 0 && !f.Tag.StartsWith("shell:")) f.Tag = "shell:outer:" + EdgeRef.Bare(f.Tag);
-                var res = new List<TSolid> { outerO };
-                BooleanOp.Subtract(res, innerO, warnings);
-                if (res.Count == 0) { warnings.Add("Shell: the outward wall is empty."); return false; }
-                bodies.RemoveAt(0); bodies.InsertRange(0, res);
-                warnings.Add($"Shell: wall {t:0.###} outward, by offsetting all faces (exact).");
-                return true;
-            }
+            if (outerO == null || innerO == null) return null;
+            foreach (var f in outerO.Faces) if (f.Tag.Length > 0 && !f.Tag.StartsWith("shell:")) f.Tag = "shell:outer:" + EdgeRef.Bare(f.Tag);
+            var res = new List<TSolid> { outerO };
+            BooleanOp.Subtract(res, innerO, warnings);
+            if (res.Count == 0) { warnings.Add("Shell: the outward wall is empty."); return false; }
+            bodies.RemoveAt(0); bodies.InsertRange(0, res);
+            warnings.Add($"Shell: wall {t:0.###} outward, by offsetting all faces (exact).");
+            return true;
+        }
+        if (!TweakOff && outward && faceThickness == null && !body.Faces.All(f => PlaneOfFace(f) != null || (!CylTweakOff && CylOfFace(f) != null))
+            && OffsetOpenFaces(body, open) is { } openOut)
+        {
+            if (OutwardByOffset(openOut) is { } done) return done;
             warnings.Add($"Shell: an outward wall by offsetting all faces declined: {whyOffset}."); return false;
         }
         if (!TweakOff && !outward && (faceThickness == null || !CurvedThickOff))
@@ -150,7 +152,10 @@ public static class ShellOp
                     warnings.Add($"Shell: wall {-thickness:0.###} outward, by plane offset (exact).");
                     return true;
                 }
-                warnings.Add($"Shell: an outward wall is built only by plane offset, which declined: {why}."); return false;
+                // u10: плоскости и неполные цилиндры (скругления рёбер) — смещением всех граней, как у тел с кривыми гранями.
+                // Прежде — отказ «цилиндр не ограничен полными окружностями»: стенка наружу у куба со скруглением не строилась.
+                if (!OutwardCylOff && faceThickness == null && OffsetOpenFaces(body, open) is { } openOut2 && OutwardByOffset(openOut2) is { } done2) return done2;
+                warnings.Add($"Shell: an outward wall is built only by plane offset, which declined: {why}" + (whyOffset != null ? $"; offsetting all faces: {whyOffset}" : "") + "."); return false;
             }
             if (!Convex(body)) { warnings.Add($"Shell: a concave body is hollowed only by plane offset, which declined: {why}."); return false; }
         }
@@ -165,14 +170,23 @@ public static class ShellOp
             return false;
         }
         var planes = new List<(Vector3d P, Vector3d N, bool Open)>();
-        var cylinders = new List<(TFace F, ArcCurve3 Arc, Vector3d Dir)>();
+        // цилиндр грани: точка оси, ось, радиус и точка на грани (подсказка для стороны)
+        var cylinders = new List<(TFace F, Vector3d Centre, Vector3d Axis, double R, Vector3d OnFace)>();
 
         foreach (TFace f in body.Faces)
         {
             ISurface3? src = f.Surface is FacetedSurface fs ? fs.Source : f.Surface;
             if (src is ExtrudedSurface cyl && cyl.Base is ArcCurve3 arc)
             {
-                cylinders.Add((f, arc, cyl.Dir));
+                Vector3d ax = cyl.Dir.LengthSquared > 1e-18 ? cyl.Dir.Normalized() : arc.Frame.W.Normalized();
+                cylinders.Add((f, arc.Frame.Origin, ax, arc.Radius, arc.PointAt(0.5)));
+                continue;
+            }
+            // u10: цилиндр как поверхность (грань скругления ребра) — так же, как цилиндр выдавливания дуги
+            if (!CylSurfOff && src is not null && !src.IsPlanar && CylOfFace(f) is { } cs)
+            {
+                var hint = f.Edges.Where(e => e.Curve != null).Select(e => e.Curve!.PointAt(0.5 * (e.Curve.T0 + e.Curve.T1))).FirstOrDefault();
+                cylinders.Add((f, cs.P, cs.Axis.Normalized(), cs.R, hint));
                 continue;
             }
             if (src == null || !src.IsPlanar)
@@ -243,11 +257,9 @@ public static class ShellOp
         // смещении, а в том, как у сферы определяется сторона грани и как полость обрезается —
         // разбирать это надо отдельно.
 
-        foreach (var (f, arc, dir) in cylinders)
+        foreach (var (f, centre, axis, radius, hintOnFace) in cylinders)
         {
-            Vector3d axis = dir.LengthSquared > 1e-18 ? dir.Normalized() : arc.Frame.W.Normalized();
-            Vector3d centre = arc.Frame.Origin;
-            Vector3d onFace = arc.PointAt(0.5);
+            Vector3d onFace = hintOnFace;
             Vector3d rel = onFace - centre;
             Vector3d radial = rel - axis * Vector3d.Dot(rel, axis);
             if (radial.LengthSquared < 1e-18) continue;
@@ -274,8 +286,13 @@ public static class ShellOp
             if (radial.LengthSquared < 1e-18) continue;
             bool convex = Vector3d.Dot(nOut, radial.Normalized()) > 0;
 
-            bool isOpen = open != null && open.Any(q => Math.Abs((q - centre - axis * Vector3d.Dot(q - centre, axis)).Length - arc.Radius) < Tol.Chord);
-            double r = convex ? arc.Radius - (isOpen ? 0 : thickness) : arc.Radius + (isOpen ? 0 : thickness);
+            bool isOpen = open != null && open.Any(q => Math.Abs((q - centre - axis * Vector3d.Dot(q - centre, axis)).Length - radius) < Tol.Chord);
+            double r = convex ? radius - (isOpen ? 0 : thickness) : radius + (isOpen ? 0 : thickness);
+            // u10: ВЫПУКЛОЕ СКРУГЛЕНИЕ ТОНЬШЕ СТЕНКИ — его ограничение лишнее. Полость — точки не ближе толщины к наружной стороне;
+            // у выпуклого ребра со скруглением радиуса R ≤ t эту границу дают сдвинутые плоскости соседних граней (острое
+            // ребро полости), а цилиндр «радиуса R − t ≤ 0» ничего не отсекает. Прежде — отказ «стенка толще тела» уже при
+            // t = R (куб 100 со скруглением R10: оболочка 10 мм не строилась). Мутация P3D_SHELLTHINROUND=0.
+            if (convex && r <= Tol.Weld && !ThinRoundOff) { ShellDebug?.Invoke($"скругление R{radius:0.##} тоньше стенки {thickness:0.##} — не ограничивает полость"); continue; }
             if (r <= Tol.Weld) { warnings.Add("Shell: the wall is thicker than the body."); return false; }
 
             double len = (hi - lo).Length + 4 * pad;
@@ -327,6 +344,11 @@ public static class ShellOp
     static readonly bool TweakOff = Environment.GetEnvironmentVariable("P3D_SHELLTWEAK") == "0";
     /// <summary>Мутация P3D_SHELLCONVEX=0: прежний путь не проверяет выпуклость (вогнутое тело — неверная полость молча).</summary>
     static readonly bool ConvexOff = Environment.GetEnvironmentVariable("P3D_SHELLCONVEX") == "0";
+    /// <summary>u10: мутации — цилиндр-поверхность в пути полупространств (P3D_SHELLCYLSURF=0) и тонкое скругление (P3D_SHELLTHINROUND=0).</summary>
+    static readonly bool CylSurfOff = Environment.GetEnvironmentVariable("P3D_SHELLCYLSURF") == "0";
+    static readonly bool ThinRoundOff = Environment.GetEnvironmentVariable("P3D_SHELLTHINROUND") == "0";
+    /// <summary>u10: мутация P3D_SHELLOUTCYL=0 — стенка наружу у тела из плоскостей и неполных цилиндров только сдвигом плоскостей (прежде).</summary>
+    static readonly bool OutwardCylOff = Environment.GetEnvironmentVariable("P3D_SHELLOUTCYL") == "0";
 
     public static long OpenAtBlendShells;
 

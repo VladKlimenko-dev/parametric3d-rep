@@ -527,6 +527,222 @@ Check("UI-HANDLE-LIVE", () =>
     w.Close();
 });
 
+Check("UI-HOLE-ON-FACE", () =>
+{
+    // п. 3 (u10): отверстие на выбранной грани — одно отверстие в середине грани, без ошибки
+    foreach (bool before in new[] { true, false })
+    {
+        var s = DocumentSession.Sample();
+        var w = Open(s);
+        var vp = w.ViewPort;
+        var part = s.Part!;
+        BuildNow(s);
+        int f0 = part.Features.Count;
+        double v0 = part.Volume;
+        var top = part.Bodies[0].Faces.First(f => Parametric3D.App.Operations.Refs.FacePlane(part, f.Id) is { } pl && pl.N.Z > 0.99);
+        var pick = new PickRef(top.Id, PickKind.Face, part, null);
+        if (before) vp.Selection.Select(pick, additive: false);
+        w.StartOperation(new HoleOp());
+        if (!before)
+        {
+            Require(part.Features.Count == f0, "the hole was added before its entry face was chosen");
+            vp.Selection.Select(pick, additive: false); Dispatcher.UIThread.RunJobs();
+        }
+        BuildNow(s);
+        var h = part.Features[^1] as HoleFeature;
+        Console.WriteLine($"  before={before}: features +{part.Features.Count - f0}, points {h?.Points.Count}, error {h?.Error}, dir {h?.Direction}, volume {v0:0} -> {part.Volume:0}");
+        Require(h != null && h.Error == null && h.Points.Count == 1 && part.Volume < v0 - 1, $"hole failed (before={before}): {h?.Error}");
+        Require(Math.Abs(h!.Points[0].X) < 1e-6 && Math.Abs(h.Points[0].Y) < 1e-6, $"hole not in the middle of the face: {h.Points[0]}");
+        w.CommitOperation();
+        w.Close();
+    }
+});
+
+Check("UI-SHELL-HANDLE", () =>
+{
+    // п. 1 (u10): у оболочки ручка — внутрь стенка внутрь (толщина +), наружу — стенка наружу (толщина −); одна операция
+    UserPrefs.Current.PreviewMode = "full";
+    var s = DocumentSession.Sample();
+    var w = Open(s);
+    var vp = w.ViewPort;
+    var part = s.Part!;
+    BuildNow(s);
+    var top = part.Bodies[0].Faces.First(f => Parametric3D.App.Operations.Refs.FacePlane(part, f.Id) is { } pl && pl.N.Z > 0.99);
+    vp.Selection.Select(new PickRef(top.Id, PickKind.Face, part, null), additive: false);
+    Dispatcher.UIThread.RunJobs();
+    w.StartOperation(new ShellOp());
+    Dispatcher.UIThread.RunJobs();
+    Require(vp.Handle != null, "shell started by command has no handle");
+    var op = w.CurrentOperation;
+    vp.SimulateHandleDrag(-5, end: false);
+    BuildNow(s);
+    var sf = (ShellFeature)part.Features[^1];
+    Require(ReferenceEquals(op, w.CurrentOperation) && Math.Abs(sf.Thickness.Value - 5) < 1e-9 && sf.Error == null, $"inward: thickness {sf.Thickness.Value}, error {sf.Error}");
+    double vIn = part.Volume;
+    vp.SimulateHandleDrag(3, end: true);
+    BuildNow(s);
+    Require(ReferenceEquals(op, w.CurrentOperation) && Math.Abs(sf.Thickness.Value + 3) < 1e-9 && sf.Error == null, $"outward: thickness {sf.Thickness.Value}, error {sf.Error}");
+    Console.WriteLine($"  shell volumes: inward 5 mm {vIn:0}, outward 3 mm {part.Volume:0}");
+    Require(part.Volume > 100000 && Math.Abs(part.Volume - vIn) > 1000, "outward shell volume");
+    w.CommitOperation();
+    w.Close();
+});
+
+if (Environment.GetEnvironmentVariable("P3D_BENCH") == "shell")
+Check("BENCH-SHELL", () =>
+{
+    foreach (string open in new[] { "top", "front", "none" })
+    foreach (double t in new[] { 5.0, 9.9, 10, 12, 20, -5, -12 })
+    {
+        var part = DocumentSession.Sample().Part!;
+        part.Rebuild(null);
+        double zTop = part.Bodies[0].Vertices.Max(v => v.P.Z);
+        var e1 = part.Bodies[0].Edges.First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0.P.Z - zTop) < 1e-6 && Math.Abs(e.V1.P.Z - zTop) < 1e-6 && Math.Abs(e.V0.P.Y - e.V1.P.Y) < 1e-6);
+        var rf = new RoundFeature { Radius = new ValueRef(10) };
+        rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(e1));
+        part.AddFeature(rf); part.Rebuild(null);
+        var sh = new ShellFeature { Thickness = new ValueRef(t) };
+        if (open != "none")
+        {
+            var f = part.Bodies[0].Faces.First(ff => Parametric3D.App.Operations.Refs.FacePlane(part, ff.Id) is { } pl && (open == "top" ? pl.N.Z > 0.99 : pl.N.X > 0.99));
+            sh.OpenFaces.Add(Parametric3D.App.Operations.Refs.FacePoint(part, f.Id)!.Value);
+        }
+        part.AddFeature(sh);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        part.Rebuild(null);
+        Console.WriteLine($"  open {open,-5} T {t,5}: {sw.Elapsed.TotalMilliseconds,6:0} ms volume {part.Volume,10:0} faces {part.Bodies.Sum(b => b.Faces.Count()),3} err {(sh.Error is { } er ? (er.Length > 200 ? er[..200] : er) : "")}");
+        if (sh.Error != null) foreach (var wmsg in part.Warnings.Where(x => x.StartsWith("Shell"))) Console.WriteLine("       " + (wmsg.Length > 300 ? wmsg[..300] : wmsg));
+    }
+});
+
+if (Environment.GetEnvironmentVariable("P3D_BENCH") == "routes")
+Check("BENCH-ROUTES", () =>
+{
+    // где обходной путь: операции дольше 250 мс на реалистичных деталях, причины отказа прямого построителя
+    var reasons = new Dictionary<string, (int N, double Ms)>();
+    var slowByType = new Dictionary<string, (int N, double Ms)>();
+    int total = 0, slow = 0; double all = 0;
+    string? last = null;
+    Parametric3D.Kernel.Ops.DirectRound.Debug = m => { if (m.StartsWith("declined")) last = m; };
+    int n0 = int.Parse(Environment.GetEnvironmentVariable("P3D_SEEDS") ?? "20");
+    for (int seed = 1; seed <= n0; seed++)
+    {
+        var p = Parametric3D.App.Diagnostics.TestParts.Realistic(seed, 40);
+        p.Invalidate();
+        // по одной операции, чтобы ловить причину отказа каждой
+        var feats = p.Features.ToList();
+        p.StageIndex = 0; p.Rebuild(null);
+        for (int i = 1; i <= feats.Count; i++)
+        {
+            last = null;
+            p.StageIndex = i; p.Rebuild(null);
+            var f = feats[i - 1];
+            double ms = p.LastFeatureMs.GetValueOrDefault(f);
+            total++; all += ms;
+            string k = f.GetType().Name.Replace("Feature", "");
+            if (ms > 250)
+            {
+                slow++;
+                var (a1, b1) = slowByType.GetValueOrDefault(k); slowByType[k] = (a1 + 1, b1 + ms);
+                string why = last == null ? "(no direct decline)" : System.Text.RegularExpressions.Regex.Replace(last, @"\(.*?\)|[-\d.]+(E[-+]\d+)?", "#");
+                if (why.Length > 160) why = why[..160];
+                var (a2, b2) = reasons.GetValueOrDefault(k + ": " + why); reasons[k + ": " + why] = (a2 + 1, b2 + ms);
+            }
+        }
+    }
+    Console.WriteLine($"  features {total}, total {all:0} ms, slow (>250 ms) {slow}");
+    foreach (var kv in slowByType.OrderByDescending(x => x.Value.Ms)) Console.WriteLine($"   {kv.Key,-16} {kv.Value.N,4}  {kv.Value.Ms,8:0} ms");
+    foreach (var kv in reasons.OrderByDescending(x => x.Value.Ms).Take(25)) Console.WriteLine($"   {kv.Value.N,4} {kv.Value.Ms,8:0} ms  {kv.Key}");
+});
+
+if (Environment.GetEnvironmentVariable("P3D_BENCH") == "fuzz")
+Check("BENCH-FUZZ", () =>
+{
+    // «как пользователь»: случайное острое ребро (с касательной цепочкой) — скругление или фаска случайного размера
+    var rnd = new Random(int.Parse(Environment.GetEnvironmentVariable("P3D_FUZZSEED") ?? "7"));
+    int trials = int.Parse(Environment.GetEnvironmentVariable("P3D_TRIALS") ?? "120");
+    var classes = new Dictionary<string, (int N, double Ms, int Fail, string Ex)>();
+    string? last = null;
+    Parametric3D.Kernel.Ops.DirectRound.Debug = m => { if (m.StartsWith("declined")) last = m; };
+    var parts = new List<Part>();
+    for (int sd = 1; sd <= 6; sd++) { var pp = Parametric3D.App.Diagnostics.TestParts.Realistic(sd, 30); pp.Rebuild(null); parts.Add(pp); }
+    { var cube = DocumentSession.Sample().Part!; cube.Rebuild(null); parts.Add(cube); }
+    double sumMs = 0; int fails = 0, slowN = 0, mism = 0;
+    for (int t = 0; t < trials; t++)
+    {
+        var p = parts[rnd.Next(parts.Count)];
+        var sharp = p.Bodies.SelectMany(b => b.Edges).Where(e => e.Curve != null && Parametric3D.App.Operations.Topo.FacesOf(p, e).Count() == 2).ToList();
+        sharp = sharp.Where(e =>
+        {
+            var fs = Parametric3D.App.Operations.Topo.FacesOf(p, e).ToList();
+            var c = e.Curve!; var mid = c.PointAt(0.5 * (c.T0 + c.T1));
+            var n1 = Parametric3D.App.Operations.Topo.FaceNormal(p, fs[0], mid); var n2 = Parametric3D.App.Operations.Topo.FaceNormal(p, fs[1], mid);
+            return Math.Abs(Vector3d.Dot(n1, n2)) < 0.995;
+        }).ToList();
+        if (sharp.Count == 0) continue;
+        var e0 = sharp[rnd.Next(sharp.Count)];
+        var chain = Parametric3D.App.Operations.Topo.TangentChain(e0, Parametric3D.App.Operations.Topo.AllEdges(p));
+        bool round = rnd.NextDouble() < 0.6;
+        double size = Math.Round(0.5 + rnd.NextDouble() * (p.Bodies.Count > 0 && p.Name.Contains("cube") ? 30 : 4), 1);
+        Feature f;
+        if (round) { var rf = new RoundFeature { Radius = new ValueRef(size) }; foreach (var c in chain) rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(c)); f = rf; }
+        else { var cf = new ChamferFeature { Mode = ChamferKind.TwoDistances, D1 = new ValueRef(size), D2 = new ValueRef(size) }; foreach (var c in chain) cf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(c)); f = cf; }
+        last = null;
+        bool predicted = Parametric3D.App.Operations.Topo.EdgeGhostValid(p, chain.Select(c => c.Id), round)?.Invoke(size) ?? true;
+        p.AddFeature(f);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        p.Rebuild(null);
+        double ms = sw.Elapsed.TotalMilliseconds;
+        double fms = p.LastFeatureMs.GetValueOrDefault(f);
+        string kinds = string.Join("+", chain.Select(c => c.Curve is Parametric3D.Kernel.Curves.LineCurve3 ? "L" : c.Curve is Parametric3D.Kernel.Curves.ArcCurve3 ? "A" : "C").Distinct().OrderBy(x => x));
+        string why = f.Error != null ? "FAIL " + System.Text.RegularExpressions.Regex.Replace(f.Error, @"[-\d.]+(E[-+]\d+)?", "#")
+                   : fms > 250 ? "SLOW " + (last == null ? "-" : System.Text.RegularExpressions.Regex.Replace(last, @"\(.*?\)|[-\d.]+(E[-+]\d+)?", "#")) : "ok";
+        if (why.Length > 170) why = why[..170];
+        string key = $"{(round ? "R" : "C")} {kinds}: {why}";
+        var (n, sm, fl, ex) = classes.GetValueOrDefault(key);
+        classes[key] = (n + 1, sm + fms, fl + (f.Error != null ? 1 : 0), ex ?? $"part {p.Name} size {size} edge {e0.V0?.P} -> {e0.V1?.P}");
+        sumMs += fms; if (f.Error != null) fails++; if (fms > 250) slowN++;
+        if (predicted != (f.Error == null)) { mism++; Console.WriteLine($"   MISMATCH predicted {(predicted ? "ok" : "fail")}, actual {(f.Error == null ? "ok" : "fail")}: {(round ? "R" : "C")}{size} {kinds} part {p.Name} edge {e0.V0?.P} -> {e0.V1?.P}"); }
+        p.RemoveFeature(f); p.Rebuild(null);
+    }
+    Console.WriteLine($"  trials {trials}: total {sumMs:0} ms, fails {fails}, slow {slowN}, contour mismatches {mism}");
+    foreach (var kv in classes.OrderByDescending(x => x.Value.Ms)) Console.WriteLine($"   {kv.Value.N,4} {kv.Value.Ms,8:0} ms fail {kv.Value.Fail,3}  {kv.Key}\n        e.g. {kv.Value.Ex}");
+});
+
+if (Environment.GetEnvironmentVariable("P3D_BENCH") == "edge")
+Check("BENCH-EDGE", () =>
+{
+    var a = Environment.GetEnvironmentVariable("P3D_EDGE")!.Split(';');   // seed;x,y,z
+    var p = Parametric3D.App.Diagnostics.TestParts.Realistic(int.Parse(a[0]), 30); p.Rebuild(null);
+    var q = a[1].Split(',').Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+    var at = new Vector3d(q[0], q[1], q[2]);
+    var e0 = p.Bodies.SelectMany(b => b.Edges).OrderBy(e => Math.Min((e.V0!.P - at).Length, (e.V1!.P - at).Length)).First();
+    string S(Parametric3D.Kernel.Topology.TFace f) => $"{Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name} {f.Tag}";
+    foreach (var e in Parametric3D.App.Operations.Topo.TangentChain(e0, Parametric3D.App.Operations.Topo.AllEdges(p)))
+    {
+        Console.WriteLine($"  edge {e.Curve?.GetType().Name} {e.V0?.P} -> {e.V1?.P} faces: {string.Join(" | ", Parametric3D.App.Operations.Topo.FacesOf(p, e).Select(S))}");
+        foreach (var v in new[] { e.V0!, e.V1! })
+            Console.WriteLine($"     vertex {v.P} degree {v.Edges.Count()}: {string.Join("; ", v.Edges.Select(x => x.Curve?.GetType().Name + " " + (x.V0 == v ? x.V1!.P : x.V0!.P)))}");
+    }
+    if (Environment.GetEnvironmentVariable("P3D_OP") is { } op)
+    {
+        var chain = Parametric3D.App.Operations.Topo.TangentChain(e0, Parametric3D.App.Operations.Topo.AllEdges(p));
+        double size = double.Parse(op[1..], System.Globalization.CultureInfo.InvariantCulture);
+        Parametric3D.App.Operations.Topo.GhostDebug = m => Console.WriteLine("    ghost: " + m);
+        Console.WriteLine("  predicted: " + (Parametric3D.App.Operations.Topo.EdgeGhostValid(p, chain.Select(c => c.Id), op[0] == 'R')?.Invoke(size)));
+        Feature f;
+        if (op[0] == 'R') { var rf = new RoundFeature { Radius = new ValueRef(size) }; foreach (var c in chain) rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(c)); f = rf; }
+        else { var cf = new ChamferFeature { Mode = ChamferKind.TwoDistances, D1 = new ValueRef(size), D2 = new ValueRef(size) }; foreach (var c in chain) cf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(c)); f = cf; }
+        Parametric3D.Kernel.Ops.DirectRound.Debug = m => { if (!m.StartsWith("face ") && !m.StartsWith("normalize") && !m.Contains("normalize")) Console.WriteLine("    direct: " + (m.Length > 400 ? m[..400] : m)); };
+        Parametric3D.Kernel.Diagnostics.Prof.Enabled = Environment.GetEnvironmentVariable("P3D_PROF") == "1"; Parametric3D.Kernel.Diagnostics.Prof.Reset();
+        if (Environment.GetEnvironmentVariable("P3D_UVDBG") == "1") Parametric3D.Kernel.Tess.UvMesher.Debug = m => Console.WriteLine("    uv: " + (m.Length > 300 ? m[..300] : m));
+        p.AddFeature(f); var sw = System.Diagnostics.Stopwatch.StartNew(); p.Rebuild(null);
+        if (Parametric3D.Kernel.Diagnostics.Prof.Enabled) Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(40)));
+        Console.WriteLine($"  {op}: {sw.Elapsed.TotalMilliseconds:0} ms error {f.Error}");
+        foreach (var w in p.Warnings) Console.WriteLine("    warn " + (w.Length > 300 ? w[..300] : w));
+    }
+});
+
 if (Environment.GetEnvironmentVariable("P3D_BENCH") == "file")
 Check("BENCH-FILE", () =>
 {
@@ -539,6 +755,18 @@ Check("BENCH-FILE", () =>
     Console.WriteLine($"  full rebuild {sw.Elapsed.TotalMilliseconds:0} ms");
     foreach (var f in part.Features) Console.WriteLine($"   {f.Name,-24} {part.LastFeatureMs.GetValueOrDefault(f),8:0} ms  {f.GetType().Name} {f.Error}");
     Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(30)));
+    foreach (var f in part.Features.Where(f => f.Error != null))
+    {
+        if (f is RoundFeature rf2) foreach (var e in rf2.Edges) Console.WriteLine($"   ref {e.Start} -> {e.End} mid {e.Mid} faces {e.FaceA} | {e.FaceB}");
+        if (f is ChamferFeature cf2) foreach (var e in cf2.Edges) Console.WriteLine($"   ref {e.Start} -> {e.End} mid {e.Mid} faces {e.FaceA} | {e.FaceB}");
+        foreach (var w in part.Warnings.Where(x => x.Contains("Round") || x.Contains("Chamfer"))) Console.WriteLine("   warn " + (w.Length > 300 ? w[..300] : w));
+        int at = part.Features.IndexOf(f);
+        // тело до операции: стадия
+        part.StageIndex = at; part.Invalidate(); part.Rebuild(pars);
+        foreach (var e in part.Bodies.SelectMany(b => b.Edges).Where(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && e.V0.P.Z > 49 && e.V1.P.Z > 49))
+            Console.WriteLine($"   body edge {e.V0.P} -> {e.V1.P}");
+        part.StageIndex = -1;
+    }
 });
 
 if (Environment.GetEnvironmentVariable("P3D_BENCH") == "3")

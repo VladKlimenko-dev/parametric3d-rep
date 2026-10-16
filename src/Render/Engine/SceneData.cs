@@ -39,6 +39,9 @@ public sealed class MeshItem
     public int[] Idx = Array.Empty<int>();
     public Matrix4 Model = Matrix4.Identity;
     public Vector4 Color;
+    /// <summary>u10: стиль «Материал» — цвет материала, сила и резкость блика, металл (0/1).</summary>
+    public Vector4 MatColor;
+    public float MatSpec = 0.3f, MatShine = 48, MatMetal;
     public uint PartId;
     /// <summary>Предпросмотр операции (рисуется полупрозрачным цветом добавления или выреза).</summary>
     public int Preview;
@@ -72,6 +75,8 @@ public sealed class SceneData
     public readonly List<LineInst> BodyEdges = new();
     public readonly List<LineInst> Lines = new();
     public readonly List<PointInst> Points = new();
+    /// <summary>u10: начала координат деталей (точка и оси в мире) — стрелки X/Y/Z рисуются поверх, постоянной длины на экране.</summary>
+    public readonly List<(Vector3 P, Vector3 X, Vector3 Y, Vector3 Z, uint Pick)> Origins = new();
     /// <summary>Вершины тел: видны только наведённые и выбранные (или все — по настройке показа).</summary>
     public readonly List<PointInst> BodyVertices = new();
     public readonly List<PlaneItem> Planes = new();
@@ -116,4 +121,6 @@ public enum DisplayStyle
     HiddenLines,
     /// <summary>Полупрозрачные тела, невидимые рёбра — штрихом.</summary>
     Transparent,
+    /// <summary>u10: тонированный цветом и блеском материала детали (металлы — с отражением окружения).</summary>
+    Material,
 }
