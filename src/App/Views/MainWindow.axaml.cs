@@ -51,6 +51,7 @@ public partial class MainWindow : Window
     private Func<Sketch, Operation>? _afterSketch;
     private bool _propsOn;
     public bool PropertiesVisible => _propsOn;
+    public bool OperationPanelVisible => PropsPanel.IsVisible;
 
     public MainWindow() : this(DocumentSession.NewPart()) { }
 
@@ -518,7 +519,9 @@ public partial class MainWindow : Window
         View.ReferencePicked += AddSketchReference;
         View.DimensionEditRequested += EditDimension;
         View.HandleDragStarted += OnHandleDragStarted;
-        View.HandleDragged += v => CurrentOperation?.SetDragValue(v);
+        View.HandleDragged += OnHandleDragged;
+        View.HandleDragEnded += OnHandleDragEnded;
+        View.SceneRebuilt += HideGhostWhenBuilt;
         View.GlReady += info => Dispatcher.UIThread.Post(() =>
         {
             StatusGl.Text = ShortGl(info);
@@ -548,13 +551,27 @@ public partial class MainWindow : Window
     // ================================================================ ручки операций (п. 6)
 
     private string _handleKind = "";
+    /// <summary>Быстрый предпросмотр по величине ручки — наружу и внутрь; снят с геометрии до операции.</summary>
+    private Func<double, List<(OpenTK.Mathematics.Vector3d A, OpenTK.Mathematics.Vector3d B)>>? _ghostOut, _ghostIn;
+    /// <summary>Операция, начатая ручкой, и её знак: повторное перетаскивание той же стрелки продолжает её.</summary>
+    private Operation? _handleOp;
+    private int _handleOpSign;
+    /// <summary>Операция идёт без панели (начата ручкой при закрытой панели свойств).</summary>
+    private bool _opQuiet;
 
     /// <summary>Ручка у выбранного: ребро (с цепочкой), вершина, плоская грань, поверхность.</summary>
     private void UpdateHandle()
     {
         View.Handle = null;
         _handleKind = "";
+        _ghostOut = _ghostIn = null;
         if (InSketch) return;
+        try { UpdateHandleCore(); }
+        catch (Exception ex) { AppLog.Write("handle", ex); }
+    }
+
+    private void UpdateHandleCore()
+    {
         var sel = View.Selection.Items;
         if (sel.Count == 0 || sel[0].Owner is not Part part) { ShowHint(null); return; }
         var k = sel[0].Kind;
@@ -565,16 +582,25 @@ public partial class MainWindow : Window
             case PickKind.Edge when Topo.EdgeHandle(part, sel[0].Id) is { } h:
                 View.Handle = new OpHandle(F(h.At), F(h.Out), true, true);
                 _handleKind = "edge";
+                {
+                    var ids = sel.Select(r => r.Id).ToList();
+                    _ghostOut = Topo.EdgeGhost(part, ids, round: false) is { } go ? v => go(v) : null;
+                    _ghostIn = Topo.EdgeGhost(part, ids, round: true) is { } gi ? v => gi(v) : null;
+                }
                 ShowHint(L("Ручка: наружу — фаска, внутрь — скругление"));
                 break;
             case PickKind.Vertex when sel.Count == 1 && Topo.VertexHandle(part, sel[0].Id) is { } h:
                 View.Handle = new OpHandle(F(h.At), F(h.Out), true, true);
                 _handleKind = "vertex";
+                _ghostOut = Topo.VertexGhost(part, sel[0].Id, round: false) is { } vo ? v => vo(v) : null;
+                _ghostIn = Topo.VertexGhost(part, sel[0].Id, round: true) is { } vi ? v => vi(v) : null;
                 ShowHint(L("Ручка: наружу — фаска угла, внутрь — скругление вершины"));
                 break;
             case PickKind.Face when sel.Count == 1 && Topo.FaceHandle(part, sel[0].Id) is { } h:
                 View.Handle = new OpHandle(F(h.At), F(h.Out), h.Planar, true);
                 _handleKind = h.Planar ? "face" : "surface";
+                if (h.Planar) _ghostOut = Topo.FaceGhost(part, sel[0].Id, 1) is { } fo ? v => fo(v) : null;
+                _ghostIn = Topo.FaceGhost(part, sel[0].Id, -1) is { } fi ? v => fi(v) : null;
                 ShowHint(h.Planar ? L("Ручка: наружу — выдавить грань, внутрь — вырез") : L("Ручка: внутрь — оболочка с открытой гранью"));
                 break;
             default:
@@ -583,8 +609,34 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Ручку потянули (п. 6): операция начинается без перестроения детали — пока тянут, в виде линии быстрого
+    /// предпросмотра, а величина — у курсора (панель свойств открыта — и в её полях). Деталь считается, когда отпустили.
+    /// Повторно потянули ту же стрелку — та же операция; другую — прежняя отменяется.
+    /// </summary>
     private void OnHandleDragStarted(int sign)
     {
+        var ghost = sign > 0 ? _ghostOut : _ghostIn;
+        if (CurrentOperation is { } cur && ReferenceEquals(cur, _handleOp))
+        {
+            if (_handleOpSign == sign)
+            {
+                cur.BeginDrag();
+                View.SetHandleGhost(ghost, sign);
+                return;
+            }
+            // другая стрелка: прежняя операция отменяется, деталь — сразу как до неё (от сохранённого состояния)
+            var keepSel = View.Selection.Items.ToList();
+            var keepH = View.Handle;
+            var (go, gi, kind) = (_ghostOut, _ghostIn, _handleKind);
+            CancelOperation();
+            if (Session.Document.IsBuilding) { ShowToast(L("Деталь ещё считается — потяните ручку ещё раз"), error: false); return; }
+            Session.Document.RebuildDirty();
+            View.Selection.Clear();
+            foreach (var r in keepSel) View.Selection.Select(r, additive: true);
+            View.Handle = keepH;
+            (_ghostOut, _ghostIn, _handleKind) = (go, gi, kind);
+        }
         var sel = View.Selection.Items.ToList();
         if (sel.Count == 0 || sel[0].Owner is not Part part) return;
         uint id = sel[0].Id;
@@ -604,9 +656,50 @@ public partial class MainWindow : Window
         };
         if (op == null) return;
         var keep = View.Handle;
-        StartOperation(op);
+        var (g1, g2) = (_ghostOut, _ghostIn);
+        op.BeginDrag();
+        StartOperation(op, showPanel: false);
+        if (!ReferenceEquals(CurrentOperation, op)) return;
         View.Handle = keep;
+        (_ghostOut, _ghostIn) = (g1, g2);
+        _handleOp = op;
+        _handleOpSign = sign;
+        View.SetHandleGhost(ghost, sign);
         ShowHint(null);
+    }
+
+    private void OnHandleDragged(double v)
+    {
+        if (CurrentOperation is not { } op) return;
+        op.SetDragValue(v);
+        if (op.DragCurrent is { } dv) SelChipText.Text = L(op.Title) + $" · {(op.DragLabel.Length > 0 ? op.DragLabel + " " : "")}{dv:0.##} {L("мм")}";
+        // панель закрыта — величина у курсора
+        if (!PropsPanel.IsVisible)
+        {
+            var c = View.HandleCursor;
+            DragValueText.Text = $"{(op.DragLabel.Length > 0 ? op.DragLabel + " " : "")}{Math.Round(Math.Max(0.01, v), 2):0.##} {L("мм")}";
+            DragValueBox.Margin = new Thickness(c.X + 18, c.Y + 14, 0, 0);
+            DragValueBox.IsVisible = true;
+        }
+    }
+
+    private void OnHandleDragEnded()
+    {
+        DragValueBox.IsVisible = false;
+        if (CurrentOperation is not { } op || !op.Dragging) return;
+        // один расчёт детали — с отпущенной величиной; линии предпросмотра — пока он не готов
+        try { op.EndDrag(); }
+        catch (Exception ex) { AppLog.Write("handle drag end", ex); }
+        if (op.DragCurrent is { } v) View.SetHandleValue(_handleOpSign, v);
+        UpdateContextBar();
+    }
+
+    /// <summary>Деталь посчитана — линии быстрого предпросмотра больше не нужны.</summary>
+    private void HideGhostWhenBuilt()
+    {
+        if (!View.GhostShown || View.HandleDragging || CurrentOperation is { Dragging: true }) return;
+        if (Session.Document.IsBuilding || Session.Document.AllParts().Any(p => p.IsDirty)) return;
+        View.ShowGhost(0, show: false);
     }
 
     // ================================================================ ссылки и размеры эскиза (п. 2.2–2.4)
@@ -771,7 +864,9 @@ public partial class MainWindow : Window
         }
         if (CurrentOperation is { } op)
         {
-            SelChipText.Text = L(op.Title);
+            SelChipText.Text = L(op.Title) + (ReferenceEquals(op, _handleOp) && op.DragCurrent is { } dv
+                ? $" · {(op.DragLabel.Length > 0 ? op.DragLabel + " " : "")}{dv:0.##} {L("мм")}" : "");
+            SelChip.Opacity = 1;
             var ok = new Button { Content = L(op.OkLabel), Classes = { "accent" }, MinWidth = 70 };
             ok.Click += (_, _) => CommitOperation();
             var cancel = new Button { Content = L("Отмена"), MinWidth = 70 };
@@ -819,7 +914,10 @@ public partial class MainWindow : Window
         };
     }
 
-    public void StartOperation(Operation op)
+    public void StartOperation(Operation op) => StartOperation(op, showPanel: true);
+
+    /// <summary>showPanel=false — панель только если панель свойств уже открыта (операция ручкой, п. 6).</summary>
+    public void StartOperation(Operation op, bool showPanel)
     {
         if (CurrentOperation != null) CancelOperation();
         var part = Session.Part;
@@ -829,7 +927,8 @@ public partial class MainWindow : Window
         catch (Exception ex) { AppLog.Write("operation start", ex); ShowToast(L(op.Title) + ": " + ex.Message); return; }
         if (!panel) { RefreshAfterOp(); return; }
         CurrentOperation = op;
-        PropsPanel.IsVisible = true;
+        _opQuiet = !showPanel;
+        PropsPanel.IsVisible = showPanel || _propsOn;
         PropsTitle.Text = L(op.Title).ToUpperInvariant();
         PropsBody.Children.Clear();
         PropsButtons.Children.Clear();
@@ -878,6 +977,9 @@ public partial class MainWindow : Window
     private void EndOperation()
     {
         CurrentOperation = null;
+        _handleOp = null;
+        _opQuiet = false;
+        DragValueBox.IsVisible = false;
         View.Handle = null;
         View.Selection.Filter = InSketch ? PickFilter.Sketch : PickFilter.All;
         if (!InSketch) View.Selection.Clear();
@@ -1136,6 +1238,7 @@ public partial class MainWindow : Window
             PropsPanel.IsVisible = _propsOn;
             if (_propsOn) ShowProperties();
         }
+        else if (_opQuiet) PropsPanel.IsVisible = _propsOn;   // операция ручкой: панель — по кнопке
         RefreshToolStates();
     }
 

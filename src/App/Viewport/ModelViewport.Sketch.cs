@@ -229,7 +229,7 @@ public sealed partial class ModelViewport
         return 10 * e;
     }
 
-    private bool GridStale() => (ActiveSketch != null || _handle != null) && Math.Abs(GridKeyNow() - _gridKey) > 1e-9;
+    private bool GridStale() => (ActiveSketch != null || _handle != null || _ghostLines != null) && Math.Abs(GridKeyNow() - _gridKey) > 1e-9;
     private double GridKeyNow() => Math.Round(Camera.WorldToPx, 4) + Camera.State.Target.X * 1e-3 + Camera.State.Target.Y * 1e-5 + Camera.State.Target.Z * 1e-7
         + Camera.State.Rotation.X * 7 + Camera.State.Rotation.Y * 11 + Camera.State.Rotation.Z * 13 + Camera.State.Rotation.W * 17;
 

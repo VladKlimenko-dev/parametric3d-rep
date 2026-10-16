@@ -27,7 +27,7 @@ namespace Parametric3D.App.Diagnostics;
 /// </summary>
 public sealed class SelfTest
 {
-    public const string Build = "u07";
+    public const string Build = "u08";
 
     private readonly MainWindow _w;
     private readonly Action<string> _progress;
@@ -490,6 +490,46 @@ public sealed class SelfTest
             Count(ok);
             Line($"Скругление в панели: предпросмотр готов через {F(preview)} мс, «ОК» {F(commit)} мс, отмена {F(undo)} мс; {(ok ? "без ошибок" : "ОШИБКА: " + (err ?? "операция не добавлена"))}");
             Target("Скругление в панели: предпросмотр на детали 40 операций", "≤ 1000 мс", preview, 1000);
+        }
+
+        // ручка ребра (п. 6): быстрый предпросмотр при перетаскивании и один расчёт, когда отпустили
+        _phase = "интерфейс: ручка";
+        Step("ручка скругления");
+        part = _w.Session.Part!;
+        var edge2 = part.Bodies.SelectMany(b => b.Edges).FirstOrDefault(e => e.Curve is Kernel.Curves.LineCurve3 && (e.V0.P - e.V1.P).Length > 5);
+        if (edge2 == null) { Line("Ручка: подходящего ребра нет"); Count(false); }
+        else
+        {
+            int f0 = part.Features.Count;
+            v.Selection.Select(new PickRef(edge2.Id, PickKind.Edge, part, null), additive: false);
+            await Task.Delay(100);
+            if (v.Handle == null) { Line("Ручка: у ребра нет ручки"); Count(false); }
+            else
+            {
+                var moves = new List<double>();
+                var sw = Stopwatch.StartNew();
+                for (int i = 1; i <= 20; i++)
+                {
+                    sw.Restart();
+                    v.SimulateHandleDrag(-1, 0.5 + 0.1 * i, end: false);
+                    moves.Add(sw.Elapsed.TotalMilliseconds);
+                    await Task.Delay(16);
+                }
+                bool untouched = part.Features.Count == f0;
+                sw.Restart();
+                v.SimulateHandleDrag(-1, 2.5, end: true);
+                await WaitBuilt();
+                double release = sw.Elapsed.TotalMilliseconds;
+                var rf = part.Features.LastOrDefault() as RoundFeature;
+                bool ok = untouched && rf != null && rf.Error == null && part.Features.Count == f0 + 1;
+                _w.CancelOperation();
+                await WaitBuilt();
+                ok &= part.Features.Count == f0;
+                Count(ok);
+                Line($"Ручка скругления: шаг перетаскивания (предпросмотр линиями) медиана {F(Median(moves))} мс, наибольший {F(moves.Max())} мс; " +
+                     $"отпустили → деталь готова через {F(release)} мс; {(ok ? "без ошибок" : "ОШИБКА" + (untouched ? "" : ": деталь менялась во время перетаскивания") + (rf?.Error is { } er ? ": " + er : ""))}");
+                Target("Ручка: шаг перетаскивания", "≤ 16 мс", Median(moves), 16);
+            }
         }
 
         // эскиз → прямоугольник → выдавливание на новой детали
