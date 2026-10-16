@@ -68,11 +68,11 @@ public sealed class ShaderProgram : IDisposable
     /// Шейдеры написаны для настольного OpenGL 3.3 («#version 330 core») в подмножестве, общем с OpenGL ES 3.0. В контексте
     /// ES (ANGLE под Windows, EGL) заголовок меняется на «#version 300 es» с точностью highp — остальной текст тот же.
     /// </summary>
-    internal static string ForContext(string src)
-    {
-        if (!GL.IsEs) return src;
-        return src.Replace("#version 330 core", "#version 300 es\nprecision highp float;\nprecision highp int;");
-    }
+    internal static string ForContext(string src) => GL.IsEs ? ToEs(src) : src;
+
+    /// <summary>Шейдер GLSL 3.30 → GLSL ES 3.00 (ANGLE, EGL): заголовок и точность (у целочисленных выборок её нет по умолчанию).</summary>
+    public static string ToEs(string src) =>
+        src.Replace("#version 330 core", "#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\nprecision highp usampler2D;");
 
     private static int Compile(ShaderType type, string src, string label)
     {

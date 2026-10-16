@@ -43,6 +43,9 @@ public sealed class SceneRenderer : IDisposable
     // кадровые буферы
     private int _fbo = -1, _colorRb = -1, _depthRb = -1, _w, _h, _samples = 1;
     private int _pickFbo = -1, _pickColor = -1, _pickDepth = -1;
+    // разрешение сглаживания — в свой буфер того же формата: в OpenGL ES перенос из многовыборочного буфера в буфер
+    // другого формата (окно Avalonia под ANGLE может быть BGRA) запрещён, и кадр был бы пустым
+    private int _resolveFbo = -1, _resolveColor = -1;
     public int Samples => _samples;
 
     public int PickCount { get; private set; }
@@ -229,6 +232,16 @@ public sealed class SceneRenderer : IDisposable
             _samples = _samples > 4 ? 4 : 1;      // меньше выборок — или без сглаживания
         }
 
+        if (_samples > 1)
+        {
+            _resolveFbo = GL.GenFramebuffer();
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, _resolveFbo);
+            _resolveColor = GL.GenRenderbuffer();
+            GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, _resolveColor);
+            GL.RenderbufferStorage(RenderbufferTarget.Renderbuffer, RenderbufferStorage.Rgba8, w, h);
+            GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, _resolveColor);
+        }
+
         _pickFbo = GL.GenFramebuffer();
         GL.BindFramebuffer(FramebufferTarget.Framebuffer, _pickFbo);
         _pickColor = GL.GenRenderbuffer();
@@ -335,8 +348,18 @@ public sealed class SceneRenderer : IDisposable
         GL.BindVertexArray(0);
         GL.UseProgram(0);
 
-        // перенос в буфер окна
-        GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _fbo);
+        // перенос в буфер окна: многовыборочный — сначала в свой обычный буфер того же формата
+        int src = _fbo;
+        if (_samples > 1 && _resolveFbo >= 0)
+        {
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _fbo);
+            GL.ReadBuffer(ReadBufferMode.ColorAttachment0);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, _resolveFbo);
+            GL.DrawBuffer(DrawBufferMode.ColorAttachment0);
+            GL.BlitFramebuffer(0, 0, _w, _h, 0, 0, _w, _h, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest);
+            src = _resolveFbo;
+        }
+        GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, src);
         GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, target);
         GL.ReadBuffer(ReadBufferMode.ColorAttachment0);
         GL.BlitFramebuffer(0, 0, _w, _h, 0, 0, _w, _h, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest);
@@ -640,6 +663,7 @@ public sealed class SceneRenderer : IDisposable
         void Fb(ref int r) { if (r >= 0) GL.DeleteFramebuffer(r); r = -1; }
         Rb(ref _colorRb); Rb(ref _depthRb); Fb(ref _fbo);
         Rb(ref _pickColor); Rb(ref _pickDepth); Fb(ref _pickFbo);
+        Rb(ref _resolveColor); Fb(ref _resolveFbo);
     }
 
     public void Dispose()

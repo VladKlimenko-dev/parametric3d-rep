@@ -33,7 +33,9 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     public readonly Selection Selection = new();
     public readonly ViewTransition Transition = new() { Steps = 14 };
 
-    private readonly SceneRenderer _r = new();
+    // новый контекст OpenGL — новый рисовальщик: номера объектов прежнего контекста в новом не значат ничего (и удалять
+    // их там нельзя — это были бы чужие объекты)
+    private SceneRenderer _r = new();
     private readonly ScenePicker _cpuPicker = new();
     private SceneData? _scene;
     private Document? _doc;
@@ -112,6 +114,10 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         {
             bool es = GlVersion.Type == GlProfileType.OpenGLES;
             GL.Load(gl.GetProcAddress, es);
+            var old = _r;
+            _r = new SceneRenderer { Theme = old.Theme, Style = old.Style, ShowAllVertices = old.ShowAllVertices };
+            _scene = null;
+            _overlayDirty = true;
             GlInfo = $"{GL.GetString(StringName.Vendor)} | {GL.GetString(StringName.Renderer)} | {(es ? "OpenGL ES" : "OpenGL")} {GL.GetString(StringName.Version)}";
             AppLog.Write("GL: " + GlInfo);
             _glReady = true;
@@ -127,12 +133,14 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
 
     protected override void OnOpenGlDeinit(GlInterface gl)
     {
+        AppLog.Write("GL: deinit");
         _r.Dispose();
         _glReady = false;
     }
 
     protected override void OnOpenGlLost()
     {
+        AppLog.Write("GL: context lost");
         _glReady = false;
         _sceneDirty = true;
         base.OnOpenGlLost();
@@ -168,10 +176,17 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     public long PicksServed { get; private set; }
     /// <summary>Выбор делает видеокарта (иначе — процессор, без OpenGL).</summary>
     public bool GpuPicking => _glReady;
+    /// <summary>Кадр рисуется в потоке окна (null — кадров ещё не было).</summary>
+    public bool? RenderOnUiThread { get; private set; }
 
     protected override void OnOpenGlRender(GlInterface gl, int fb)
     {
         if (!_glReady) return;
+        if (RenderOnUiThread == null)
+        {
+            RenderOnUiThread = Avalonia.Threading.Dispatcher.UIThread.CheckAccess();
+            AppLog.Write($"GL: render on {(RenderOnUiThread == true ? "UI thread" : "render thread")}");
+        }
         long frameStart = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {

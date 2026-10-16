@@ -11,6 +11,8 @@ public sealed class UserPrefs
     public string Theme { get; set; } = "Dark";
     /// <summary>Язык интерфейса: «ru» или «en» (кнопка у темы).</summary>
     public string Language { get; set; } = "ru";
+    /// <summary>Графика: «auto» (Windows — ANGLE), «angle», «wgl», «software» (со следующего запуска).</summary>
+    public string? GlMode { get; set; } = "auto";
     public List<string> RecentFiles { get; set; } = new();
     public List<string> RecentCommands { get; set; } = new();
     public bool TreeVisible { get; set; } = true;

@@ -32,6 +32,8 @@ public sealed class CommandRegistry
 
     internal void Invoke(AppCommand c)
     {
+        // след для разбора аварий: последние команды — в журнале приложения
+        Core.AppLog.Write("cmd " + c.Id);
         try
         {
             c.Run();

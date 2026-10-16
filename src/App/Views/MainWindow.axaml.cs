@@ -63,6 +63,8 @@ public partial class MainWindow : Window
         WirePalette();
         ApplyTheme(UserPrefs.Current.Theme != "Light");
         SetSession(session);
+        if (App.PreviousRunCrashed)
+            Dispatcher.UIThread.Post(() => ShowToast(L("Прошлый запуск завершился аварийно. Журнал: {0}", AppLog.Path)), DispatcherPriority.Background);
 
         _reg.Failed += (c, ex) => ShowToast($"{c.Text}: {ex.Message}");
         _reg.Executed += c => { if (c.Id != "palette") UserPrefs.Current.AddRecentCommand(c.Id); RefreshToolStates(); };
@@ -455,7 +457,17 @@ public partial class MainWindow : Window
         items.Add(new Separator());
         foreach (var id in new[] { "file.import", "file.export" }) items.Add(Item(_reg[id]));
         items.Add(new Separator());
-        foreach (var id in new[] { "app.parameters", "app.theme", "app.language", "app.exit" }) items.Add(Item(_reg[id]));
+        var gfx = new MenuItem { Header = L("Графика") };
+        foreach (var mode in new[] { "auto", "angle", "wgl", "software" })
+        {
+            var mi = Item(_reg["app.gl_" + mode]);
+            mi.Header = L(_reg["app.gl_" + mode].Label).Split(':', 2)[1].Trim();
+            mi.ToggleType = MenuItemToggleType.Radio;
+            mi.IsChecked = _reg["app.gl_" + mode].IsChecked?.Invoke() == true;
+            gfx.Items.Add(mi);
+        }
+        items.Add(gfx);
+        foreach (var id in new[] { "app.selftest", "app.parameters", "app.theme", "app.language", "app.exit" }) items.Add(Item(_reg[id]));
         new ContextMenu { ItemsSource = items, Placement = PlacementMode.BottomEdgeAlignedLeft }.Open(anchor);
     }
 

@@ -7,7 +7,7 @@
 
 | Папка | Что |
 |---|---|
-| `Program.cs`, `App.axaml` | запуск; OpenGL: под Windows WGL (настольный), затем ANGLE (OpenGL ES 3), под Linux GLX, затем EGL |
+| `Program.cs`, `App.axaml` | запуск; графика: под Windows по умолчанию ANGLE (OpenGL ES 3 поверх Direct3D 11), WGL — по выбору (`--gl`, `P3D_GL`, «Файл → Графика»); под Linux GLX, затем EGL; журнал запуска, команд и аварийного завершения |
 | `Theme/` | цвета оболочки (`Palette.axaml`, тёмная и светлая — по UI_VIEW_PALETTE) и стили кнопок и панелей |
 | `Commands/` | реестр команд (`CommandRegistry`), команда (`AppCommand`: имя, группа, иконка, клавиша, синонимы RU/EN), все команды (`StandardCommands`) |
 | `Localization/` | язык интерфейса: `Loc.L("строка")` и перевод `Strings.En` (кнопка EN/RU у темы) |
