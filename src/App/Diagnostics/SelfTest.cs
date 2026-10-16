@@ -27,7 +27,7 @@ namespace Parametric3D.App.Diagnostics;
 /// </summary>
 public sealed class SelfTest
 {
-    public const string Build = "u04";
+    public const string Build = "u05";
 
     private readonly MainWindow _w;
     private readonly Action<string> _progress;
@@ -366,11 +366,21 @@ public sealed class SelfTest
 
     // ---------------------------------------------------------------- вид (OpenGL этого компьютера)
 
-    private async Task Until(Func<bool> cond, int timeoutMs)
+    private async Task Until(Func<bool> cond, int timeoutMs, bool fine = false)
     {
         var sw = Stopwatch.StartNew();
-        while (!cond() && sw.ElapsedMilliseconds < timeoutMs) { _ct.ThrowIfCancellationRequested(); await Task.Delay(10); }
+        while (!cond() && sw.ElapsedMilliseconds < timeoutMs)
+        {
+            _ct.ThrowIfCancellationRequested();
+            if (fine) await Yield(); else await Task.Delay(10);
+        }
     }
+
+    /// <summary>
+    /// Уступить потоку окна без таймера: Task.Delay под Windows идёт шагами ~15.6 мс, и замер кадров и выбора упирался
+    /// в этот шаг (u04: 37–40 кадров/с при 0.3 мс кадра — это предел таймера, а не видеокарты).
+    /// </summary>
+    private static async Task Yield() => await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
 
     private async Task WaitBuilt(int timeoutMs = 60000)
     {
@@ -412,7 +422,7 @@ public sealed class SelfTest
             {
                 v.Camera.Orbit(6, 1.5f);
                 v.Redraw();
-                await Task.Delay(1);
+                await Yield();
                 if (v.FramesRendered != lastSeen) { lastSeen = v.FramesRendered; times.Add(v.LastFrameMs); }
             }
             double fps = (v.FramesRendered - start) / t.Elapsed.TotalSeconds;
@@ -420,6 +430,7 @@ public sealed class SelfTest
             Line($"{style,-30} {F(fps),9} {F(times.Count > 0 ? times.Average() : double.NaN, "0.00") + " / " + F(times.Count > 0 ? times.Max() : double.NaN, "0.00"),26}");
         }
         _w.SetStyle(DisplayStyle.ShadedWithEdges);
+        Line("Кадров в секунду не больше частоты обновления экрана (обычно 60): при вертикальной синхронизации 55–60 — предел монитора.");
         Count(fpsAll.Count > 0 && fpsAll.Min() >= 20);
         TargetAtLeast("Кадров в секунду при вращении, наименьшее по стилям", "≥ 30", fpsAll.DefaultIfEmpty(0).Min(), 30, "кадров/с");
 
@@ -435,7 +446,7 @@ public sealed class SelfTest
             long before = v.PicksServed;
             var t = Stopwatch.StartNew();
             v.SimulatePick(0.3 + rnd.NextDouble() * 0.4, 0.3 + rnd.NextDouble() * 0.4, select: false);
-            await Until(() => v.PicksServed > before, 3000);
+            await Until(() => v.PicksServed > before, 3000, fine: true);
             lat.Add(t.Elapsed.TotalMilliseconds);
         }
         Line($"Выбор под курсором ({(v.GpuPicking ? "видеокарта" : "процессор")}): медиана {F(Median(lat))} мс, наибольшее {F(lat.Max())} мс (30 наведений)");
