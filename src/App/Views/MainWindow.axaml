@@ -112,7 +112,7 @@
         </Border>
 
         <!-- подсказка у вида -->
-        <Border x:Name="HintBox" Classes="overlay" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="10,0,0,14" Padding="10,6"
+        <Border x:Name="HintBox" Classes="overlay" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,54,0,0" Padding="10,6"
                 IsVisible="False">
           <TextBlock x:Name="HintText" TextWrapping="Wrap" MaxWidth="420" />
         </Border>

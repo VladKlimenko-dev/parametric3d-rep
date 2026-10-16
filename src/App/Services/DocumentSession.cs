@@ -155,6 +155,14 @@ public sealed class DocumentSession
         StateChanged?.Invoke();
     }
 
+    /// <summary>Правка отменена без замены детали (вызывающий сам вернул модель): снимок и имя шага забываются.</summary>
+    public void DiscardEdit()
+    {
+        _history.DropLast();
+        if (_undoNames.Count > 0) _undoNames.RemoveAt(_undoNames.Count - 1);
+        StateChanged?.Invoke();
+    }
+
     /// <summary>Правка отменена («Отмена»): модель — как до BeginEdit, шаг из журнала убирается, повтора нет.</summary>
     public void CancelEdit()
     {

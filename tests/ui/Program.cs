@@ -347,6 +347,96 @@ Check("UI-LANGUAGE", () =>
     w.Close();
 });
 
+Check("UI-TANGENT-CHAIN-CHAMFER", () =>
+{
+    // п. 4: ребро вместе с касательной цепочкой; фаска по цепочке строится годным телом (снимок пользователя — фаска
+    // только части цепочки)
+    var p = Parametric3D.App.Diagnostics.TestParts.Block("chain");
+    p.Rebuild(null);
+    var vertical = p.Bodies[0].Edges.First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0.P.X - 50) < 1e-6 && Math.Abs(e.V0.P.Y - 30) < 1e-6 && Math.Abs(e.V1.P.X - 50) < 1e-6 && Math.Abs(e.V1.P.Y - 30) < 1e-6);
+    var rf = new RoundFeature("R") { Radius = new ValueRef(8) }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(vertical));
+    p.AddFeature(rf); p.Rebuild(null);
+    Require(rf.Error == null, "round: " + rf.Error);
+    // верхнее прямое ребро у скругления: z = 20, y = 30
+    var top = p.Bodies[0].Edges.First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0.P.Z - 20) < 1e-6 && Math.Abs(e.V1.P.Z - 20) < 1e-6 && Math.Abs(e.V0.P.Y - 30) < 1e-6 && Math.Abs(e.V1.P.Y - 30) < 1e-6);
+    var chain = Topo.TangentChain(top);
+    Require(chain.Count == 3, $"chain of the top edge: {chain.Count} edges (expected line + arc + line)");
+    var cf = new ChamferFeature("C") { D1 = new ValueRef(2), D2 = new ValueRef(2) };
+    foreach (var e in chain) cf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(e));
+    p.AddFeature(cf); p.Rebuild(null);
+    Require(cf.Error == null, "chamfer of the chain: " + cf.Error);
+    Require(p.Bodies.All(b => Parametric3D.Kernel.Topology.SolidValidator.Validate(b).IsValid), "chamfered body is not valid");
+});
+
+Check("UI-SKETCH-REFERENCES-DIMS", () =>
+{
+    // п. 2.3–2.4: ребро детали — ссылка эскиза; размеры по умолчанию определяют эскиз полностью (степеней свободы 0)
+    var part = Parametric3D.App.Diagnostics.TestParts.Block("refs");
+    var s = DocumentSession.FromPart(part, "refs");
+    var w = Open(s);
+    s.Document.RebuildDirty();
+    var face = part.Bodies[0].Faces.First(f => Refs.FacePlane(part, f.Id) is { } pl && pl.N.Z > 0.99);
+    w.ViewPort.Selection.Select(new PickRef(face.Id, PickKind.Face, part, null), additive: false);
+    w.StartOperation(new SketchOp());
+    Require(w.InSketch, "sketch did not start on the top face");
+    var sk = w.ViewPort.ActiveSketch!;
+    var edge = part.Bodies[0].Edges.First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0.P.Z - 20) < 1e-6 && Math.Abs(e.V1.P.Z - 20) < 1e-6);
+    Require(SketchReferences.Add(sk, part, new PickRef(edge.Id, PickKind.Edge, part, null)) == null, "reference not added");
+    Require(sk.Entities.Any(e => e.Role == SkRole.Reference), "no reference entity");
+    var rect = new RectangleTool();
+    rect.Click(new SketchInput(sk, new Vector2d(-10, -5), null));
+    rect.Click(new SketchInput(sk, new Vector2d(10, 5), null));
+    sk.Solve(s.Document.Solver);
+    w.ViewPort.RefreshDefaultDimensions();
+    // размеры по умолчанию — «слабые» (как в Creo): показывают, чем определена фигура; заданные вместе — 0 степеней свободы
+    var defaults = sk.Dimensions.Where(d => d.IsDefault).ToList();
+    foreach (var d in defaults) d.Locked = true;
+    s.Document.Solver.Solve(sk, null, out int dof);
+    foreach (var d in defaults) d.Locked = false;
+    Require(dof == 0, $"sketch is not fully defined: {dof} degrees of freedom left");
+    Require(defaults.Any(d => d.Items.Any(i => i.Role == SkRole.Reference || i is SkPoint { Owner.Role: SkRole.Reference } || (i is SkPoint sp && sp.Role == SkRole.Reference))), "no dimension to the reference edge");
+    Require(sk.Dimensions.Count(d => d.IsDefault) >= 4, $"default dimensions: {sk.Dimensions.Count}");
+    w.CancelSketch();
+    Require(!part.Sketches.Contains(sk), "cancelled new sketch is still in the part");
+    w.Close();
+});
+
+Check("UI-CANCEL-KEEPS-PART", () =>
+{
+    // п. 2: «Отмена» новой операции не заменяет деталь (на экране не пропадает) и не оставляет шага отмены
+    var s = DocumentSession.Sample();
+    var w = Open(s);
+    var part = s.Part!;
+    int f0 = part.Features.Count, u0 = s.UndoNames.Count;
+    w.ViewPort.Selection.Select(new PickRef(part.Bodies[0].Edges.First().Id, PickKind.Edge, part, null), additive: false);
+    w.StartOperation(new RoundOp());
+    w.CancelOperation();
+    Require(ReferenceEquals(s.Part, part), "the part was replaced on cancel");
+    Require(part.Features.Count == f0 && s.UndoNames.Count == u0 && !s.CanRedo, "cancel left traces");
+    w.Close();
+});
+
+Check("UI-CTRL-TOGGLE", () =>
+{
+    // п. 7: Ctrl+щелчок — добавить, повторно — убрать
+    var s = DocumentSession.Sample();
+    var w = Open(s);
+    var vp = w.ViewPort;
+    vp.Show.Planes = false; vp.MarkDirty();
+    vp.Camera.State.Rotation = ModelViewport.HomeRotation;
+    vp.ZoomToFit(animate: false);
+    var c = vp.TranslatePoint(new Point(vp.Bounds.Width / 2 + 40, vp.Bounds.Height / 2 - 60), w)!.Value;
+    var c2 = vp.TranslatePoint(new Point(vp.Bounds.Width / 2 - 60, vp.Bounds.Height / 2 + 60), w)!.Value;
+    w.MouseMove(c); w.MouseDown(c, MouseButton.Left); w.MouseUp(c, MouseButton.Left); Dispatcher.UIThread.RunJobs();
+    int n1 = vp.Selection.Count;
+    w.MouseMove(c2); w.MouseDown(c2, MouseButton.Left, RawInputModifiers.Control); w.MouseUp(c2, MouseButton.Left, RawInputModifiers.Control); Dispatcher.UIThread.RunJobs();
+    int n2 = vp.Selection.Count;
+    w.MouseDown(c2, MouseButton.Left, RawInputModifiers.Control); w.MouseUp(c2, MouseButton.Left, RawInputModifiers.Control); Dispatcher.UIThread.RunJobs();
+    int n3 = vp.Selection.Count;
+    Require(n1 >= 1 && n2 > n1 && n3 == n1, $"ctrl toggle: {n1} → {n2} → {n3}");
+    w.Close();
+});
+
 Console.WriteLine(JsonSerializer.Serialize(new { passed, failed }));
 return failed == 0 ? 0 : 1;
 

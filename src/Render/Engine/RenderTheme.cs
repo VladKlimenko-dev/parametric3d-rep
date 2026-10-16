@@ -12,6 +12,12 @@ public sealed class RenderTheme
     public Vector4 Body, Edge, EdgeHidden, Silhouette, Vertex;
     /// <summary>Рёбра в стилях без граней (каркас, невидимые линии): светлые на тёмном фоне, тёмные на светлом.</summary>
     public Vector4 EdgeWire;
+    /// <summary>Рёбра тела в режиме эскиза (кандидаты в ссылки).</summary>
+    public Vector4 SketchRefEdge;
+    /// <summary>Размеры эскиза: по умолчанию (серые), управляющие, справочные, конфликт.</summary>
+    public Vector4 DimDefault, DimLocked, DimReference;
+    /// <summary>Ручки операций у выбранного (как в Plasticity).</summary>
+    public Vector4 Handle, HandleAlt;
     public Vector4 Hover, Select, Error;
     public Vector4 DatumPlane, DatumBorder, DatumAxis, Origin, DatumPoint;
     public Vector4 SketchCurve, SketchConstruction, SketchCenterline, SketchReference, SketchPoint;
@@ -26,7 +32,7 @@ public sealed class RenderTheme
     {
         Dark = true,
         BackgroundTop = C(41, 46, 54), BackgroundBottom = C(18, 20, 25),
-        Body = C(184, 190, 200), Edge = C(20, 22, 26), EdgeWire = C(208, 214, 224), EdgeHidden = C(140, 147, 160, 0.7f), Silhouette = C(20, 22, 26), Vertex = C(20, 22, 26),
+        Body = C(184, 190, 200), Edge = C(20, 22, 26), EdgeWire = C(208, 214, 224), SketchRefEdge = C(150, 160, 176, 0.7f), DimDefault = C(150, 156, 168), DimLocked = C(96, 200, 255), DimReference = C(190, 140, 255), Handle = C(255, 176, 32), HandleAlt = C(96, 200, 255), EdgeHidden = C(140, 147, 160, 0.7f), Silhouette = C(20, 22, 26), Vertex = C(20, 22, 26),
         Hover = C(255, 176, 32), Select = C(47, 140, 255), Error = C(239, 68, 68),
         DatumPlane = C(62, 123, 250, 0.09f), DatumBorder = C(110, 160, 255, 0.85f), DatumAxis = C(110, 160, 255, 0.85f),
         Origin = C(255, 196, 61), DatumPoint = C(110, 160, 255),
@@ -39,7 +45,7 @@ public sealed class RenderTheme
     {
         Dark = false,
         BackgroundTop = C(236, 239, 243), BackgroundBottom = C(206, 212, 221),
-        Body = C(196, 202, 212), Edge = C(28, 30, 34), EdgeWire = C(36, 40, 48), EdgeHidden = C(120, 126, 138, 0.7f), Silhouette = C(28, 30, 34), Vertex = C(28, 30, 34),
+        Body = C(196, 202, 212), Edge = C(28, 30, 34), EdgeWire = C(36, 40, 48), SketchRefEdge = C(90, 98, 112, 0.75f), DimDefault = C(110, 116, 128), DimLocked = C(0, 110, 200), DimReference = C(130, 70, 200), Handle = C(220, 120, 0), HandleAlt = C(0, 110, 200), EdgeHidden = C(120, 126, 138, 0.7f), Silhouette = C(28, 30, 34), Vertex = C(28, 30, 34),
         Hover = C(230, 145, 0), Select = C(23, 106, 230), Error = C(209, 36, 47),
         DatumPlane = C(37, 86, 214, 0.08f), DatumBorder = C(37, 86, 214, 0.85f), DatumAxis = C(37, 86, 214, 0.85f),
         Origin = C(214, 146, 0), DatumPoint = C(37, 86, 214),

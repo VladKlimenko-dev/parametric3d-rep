@@ -23,11 +23,19 @@ public static class ShotRunner
             Console.WriteLine($"{verb} {arg}: hover {w.ViewPort.Selection.Hover.Kind}, selected {w.ViewPort.Selection.Count}");
             return;
         }
+        if (id.StartsWith("hdrag:"))
+        {
+            var a = id[6..].Split(',');
+            w.ViewPort.SimulateHandleDrag(int.Parse(a[0]), double.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture));
+            Console.WriteLine($"handle drag {id}");
+            return;
+        }
         switch (id)
         {
             case "ok": w.CommitOperation(); Console.WriteLine("ok"); return;
             case "cancel": w.CancelOperation(); Console.WriteLine("cancel"); return;
             case "wait": return;
+            case "notool": w.ViewPort.Tool = null; return;
             case "dbg":
                 {
                     var part = w.Session.Part!;

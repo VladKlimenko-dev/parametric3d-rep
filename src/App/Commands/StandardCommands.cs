@@ -137,6 +137,8 @@ public static class StandardCommands
             CanRun = () => w.InSketch, IsChecked = () => w.ConstructionMode, Run = () => w.ToggleConstruction() });
         r.Add(new AppCommand { Short = "Сетка", Id = "sk.grid", Label = "Привязка к сетке", Group = S, Icon = "sk_snap_grid_but.svg", Synonyms = "grid snap сетка",
             CanRun = () => w.InSketch, IsChecked = () => vp.SnapGrid, Run = () => { vp.SnapGrid = !vp.SnapGrid; w.RefreshToolStates(); } });
+        r.Add(new AppCommand { Short = "Ссылки", Id = "sk.references", Label = "Ссылки эскиза", Group = S, Icon = "sk_references_but.svg", Synonyms = "references ссылки проекция ребро",
+            CanRun = () => w.InSketch, IsChecked = () => w.ReferencesPanelOpen, Run = () => w.ToggleReferencesPanel() });
         r.Add(new AppCommand { Short = "Готово", Id = "sk.finish", Label = "Закончить эскиз", Group = S, Icon = "sketch_finish_but.svg", Synonyms = "finish sketch готово выйти", Gesture = K(Key.Enter, KeyModifiers.Control),
             CanRun = () => w.InSketch, Run = () => w.FinishSketch() });
         r.Add(new AppCommand { Short = "Отмена", Id = "sk.cancel", Label = "Отменить эскиз", Group = S, Icon = "sketch_cancel_but.svg", Synonyms = "cancel sketch",

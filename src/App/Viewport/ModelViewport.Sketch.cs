@@ -32,6 +32,54 @@ public sealed partial class ModelViewport
     /// <summary>Привязка к сетке (кнопка панели эскиза).</summary>
     public bool SnapGrid { get; set; } = true;
 
+    /// <summary>Что выбирается в режиме эскиза: эскиз, а также рёбра и вершины тела — кандидаты в ссылки (п. 2.3).</summary>
+    private PickFilter SketchFilter => ActiveSketch == null ? PickFilter.All
+        : _tool != null ? PickFilter.SketchPoints | PickFilter.Edges | PickFilter.Vertices
+        : PickFilter.Sketch | PickFilter.Edges | PickFilter.Vertices;
+
+    /// <summary>Щелчок по ребру или вершине тела в режиме эскиза — добавить в ссылки эскиза.</summary>
+    public event Action<PickRef>? ReferencePicked;
+    /// <summary>Двойной щелчок по размеру эскиза — правка значения.</summary>
+    public event Action<SkDimension, Point>? DimensionEditRequested;
+
+    internal bool TryReference(PickRef r)
+    {
+        if (ActiveSketch == null || r.Owner is not Part || r.Kind is not (PickKind.Edge or PickKind.Vertex)) return false;
+        ReferencePicked?.Invoke(r);
+        return true;
+    }
+
+    /// <summary>Размер под курсором (по подписи), null — нет.</summary>
+    public SkDimension? DimensionAt(Point p)
+    {
+        if (ActiveSketch is not { } sk || ScreenToSketch(p) is not { } q) return null;
+        double px = PixelSize, best = 14 * px;
+        SkDimension? hit = null;
+        foreach (var d in sk.Dimensions)
+        {
+            double dist = (d.TextCenter - q).Length;
+            if (dist < best) { best = dist; hit = d; }
+        }
+        return hit;
+    }
+
+    internal bool TryEditDimension(Point p)
+    {
+        if (DimensionAt(p) is not { } d) return false;
+        DimensionEditRequested?.Invoke(d, p);
+        return true;
+    }
+
+    /// <summary>Размеры по умолчанию (серые) — эскиз определён полностью: каждая точка задана от соседей, ссылок или нуля.</summary>
+    public void RefreshDefaultDimensions()
+    {
+        if (ActiveSketch is not { } sk) return;
+        try { DefaultDimensions.Refresh(sk, _doc?.Solver ?? new NumericSketchSolver()); }
+        catch (Exception ex) { AppLog.Write("default dimensions", ex); }
+        _overlayDirty = true;
+        Redraw();
+    }
+
     public ISketchTool? Tool
     {
         get => _tool;
@@ -39,7 +87,7 @@ public sealed partial class ModelViewport
         {
             _tool = value;
             if (value != null && ActiveSketch == null) _tool = null;
-            Selection.Filter = _tool != null ? PickFilter.SketchPoints : ActiveSketch != null ? PickFilter.Sketch : PickFilter.All;
+            Selection.Filter = SketchFilter;
             _overlayDirty = true;
             ToolChanged?.Invoke();
             Redraw();
@@ -51,7 +99,7 @@ public sealed partial class ModelViewport
         if (ActiveSketch == null) _beforeSketch = Camera.State;
         ActiveSketch = sk;
         Selection.Clear();
-        Selection.Filter = PickFilter.Sketch;
+        Selection.Filter = SketchFilter;
         var to = Camera.State;
         var pl = sk.Plane;
         // «верх» вида — ось плоскости, ближайшая к нынешнему верху (вид не переворачивается)
@@ -61,6 +109,7 @@ public sealed partial class ModelViewport
         to.Target = V3(pl.Origin);
         to.Mode = ProjectionMode.Orthographic;
         if (animate) AnimateTo(to); else { Camera.State = to; CameraChanged?.Invoke(); }
+        RefreshDefaultDimensions();
         _overlayDirty = true;
         MarkDirty();
     }
@@ -153,8 +202,10 @@ public sealed partial class ModelViewport
             MarkDirty();
             SketchEdited?.Invoke();
         }
+        // размеры по умолчанию — когда примитив закончен (не между щелчками одного построения)
+        if (_tool is { Finished: true } || (changed && _tool == null)) RefreshDefaultDimensions();
         if (_tool is { Finished: true } t) _tool = t.Continuous ? t.Restart() : null;
-        if (_tool == null) Selection.Filter = ActiveSketch != null ? PickFilter.Sketch : PickFilter.All;
+        Selection.Filter = SketchFilter;
         _overlayDirty = true;
         ToolChanged?.Invoke();
         Redraw();
@@ -178,15 +229,17 @@ public sealed partial class ModelViewport
         return 10 * e;
     }
 
-    private bool GridStale() => ActiveSketch != null && Math.Abs(GridKeyNow() - _gridKey) > 1e-9;
-    private double GridKeyNow() => Math.Round(Camera.WorldToPx, 4) + Camera.State.Target.X * 1e-3 + Camera.State.Target.Y * 1e-5;
+    private bool GridStale() => (ActiveSketch != null || _handle != null) && Math.Abs(GridKeyNow() - _gridKey) > 1e-9;
+    private double GridKeyNow() => Math.Round(Camera.WorldToPx, 4) + Camera.State.Target.X * 1e-3 + Camera.State.Target.Y * 1e-5 + Camera.State.Target.Z * 1e-7
+        + Camera.State.Rotation.X * 7 + Camera.State.Rotation.Y * 11 + Camera.State.Rotation.Z * 13 + Camera.State.Rotation.W * 17;
 
     private (List<LineInst> Grid, List<LineInst> Lines, List<PointInst> Points) BuildOverlay()
     {
         var grid = new List<LineInst>();
         var lines = new List<LineInst>();
         var pts = new List<PointInst>();
-        if (ActiveSketch is not { } sk) return (grid, lines, pts);
+        AddHandleOverlay(lines, pts);
+        if (ActiveSketch is not { } sk) { _gridKey = GridKeyNow(); return (grid, lines, pts); }
         _gridKey = GridKeyNow();
         var th = _r.Theme;
         var pl = sk.Plane;
@@ -211,6 +264,29 @@ public sealed partial class ModelViewport
         // оси эскиза
         grid.Add(Inst(W(new Vector2d(x0 - n * step, 0)), W(new Vector2d(x0 + n * step, 0)), new Vector4(0.85f, 0.35f, 0.35f, 0.55f), 1.2f, 0));
         grid.Add(Inst(W(new Vector2d(0, y0 - n * step)), W(new Vector2d(0, y0 + n * step)), new Vector4(0.35f, 0.75f, 0.4f, 0.55f), 1.2f, 0));
+
+        // размеры эскиза — поверх, постоянного размера на экране
+        if (Show.Dimensions)
+        {
+            var batch = new DimBatch { PixelSize = PixelSize, Normal = V3(pl.W) };
+            var camR = Vector3.Transform(Vector3.UnitX, Quaternion.Invert(Camera.State.Rotation));
+            var camU = Camera.Up;
+            SketchDimensions.ScreenRight = new Vector2d(Vector3d.Dot(new Vector3d(camR.X, camR.Y, camR.Z), pl.U), Vector3d.Dot(new Vector3d(camR.X, camR.Y, camR.Z), pl.V));
+            SketchDimensions.ScreenUp = new Vector2d(Vector3d.Dot(new Vector3d(camU.X, camU.Y, camU.Z), pl.U), Vector3d.Dot(new Vector3d(camU.X, camU.Y, camU.Z), pl.V));
+            try { SketchDimensions.Build(sk, batch, PixelSize); }
+            catch (Exception ex) { AppLog.Write("dimensions", ex); }
+            foreach (var (a, b, st, _) in batch.Segments)
+            {
+                var dc = st switch
+                {
+                    LineStyle.DimensionConflict or LineStyle.DimensionTextConflict => th.Error,
+                    LineStyle.DimensionReference or LineStyle.DimensionTextReference => th.DimReference,
+                    LineStyle.DimensionLocked or LineStyle.DimensionTextLocked => th.DimLocked,
+                    _ => th.DimDefault,
+                };
+                lines.Add(Inst(a, b, dc, st >= LineStyle.DimensionText ? 1.3f : 1.1f, 0));
+            }
+        }
 
         // резиновая нить инструмента
         if (_tool != null)

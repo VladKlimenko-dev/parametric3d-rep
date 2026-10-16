@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Model;
@@ -33,14 +33,15 @@ public static class SceneBuilder
             Assembly a => a.LocalTransform * parent,
             _ => parent
         };
-        if (!visible) return;
-
-        if (item is Part part) AddPart(part, xf, s, th);
+        // п. 3: скрытая деталь прячет своё тело; её элементы видны или нет по своему глазу (глаз детали переключает их все,
+        // но каждый можно включить отдельно)
+        if (visible && item is Part part) AddPart(part, xf, s, th);
 
         var owner = item;
         var ownerBounds = OwnerBounds(item);
         foreach (var c in item.Children)
         {
+            if (c is Part or Assembly) { Walk(c, xf, s, th, show, active, c.Visible); continue; }
             if (!c.Visible) continue;
             switch (c)
             {
@@ -74,7 +75,6 @@ public static class SceneBuilder
                     AddSketch(sk, xf, s, th, show, OwnerPartId(owner));
                     break;
             }
-            if (c is Part or Assembly) Walk(c, xf, s, th, show, active, true);
         }
     }
 

@@ -11,6 +11,7 @@ using Avalonia.Threading;
 using Parametric3D.App.Commands;
 using Parametric3D.App.Icons;
 using Parametric3D.App.Operations;
+using OpenTK.Mathematics;
 using Parametric3D.App.Services;
 using Parametric3D.App.Sketching;
 using Parametric3D.App.ViewModels;
@@ -108,6 +109,7 @@ public partial class MainWindow : Window
     private void OnReplaced()
     {
         // отмена и повтор меняют деталь целиком: подписка на изменения — у нового корня та же, деталь — новая
+        View.HoldSceneUntilBuilt();
         View.Document = null;
         View.Document = Session.Document;
         View.ActivePart = Session.Part;
@@ -400,7 +402,7 @@ public partial class MainWindow : Window
             ? new[]
             {
                 new[] { "sk.line", "sk.rect", "sk.circle", "sk.circle3", "sk.arc3", "sk.arc_center", "sk.ellipse", "sk.spline", "sk.point", "sk.centerline" },
-                new[] { "sk.construction", "sk.grid" },
+                new[] { "sk.construction", "sk.grid", "sk.references" },
                 new[] { "sk.finish", "sk.cancel" },
             }
             : new[]
@@ -512,6 +514,11 @@ public partial class MainWindow : Window
         View.SceneRebuilt += () => { CurrentOperation?.RefreshStatus(); UpdateStatus(); if (_propsOn && CurrentOperation == null) ShowProperties(); };
         View.ToolChanged += () => { ShowHint(View.Tool != null ? L(View.Tool.Hint) : InSketch ? L("Выберите инструмент слева; Ctrl+Enter — закончить эскиз") : null); RefreshToolStates(); };
         View.SketchEdited += () => { ScheduleTree(); UpdateStatus(); };
+        View.ExpandEdge = r => r.Owner is Part p ? Topo.ChainRefs(p, r) : new List<PickRef> { r };
+        View.ReferencePicked += AddSketchReference;
+        View.DimensionEditRequested += EditDimension;
+        View.HandleDragStarted += OnHandleDragStarted;
+        View.HandleDragged += v => CurrentOperation?.SetDragValue(v);
         View.GlReady += info => Dispatcher.UIThread.Post(() =>
         {
             StatusGl.Text = ShortGl(info);
@@ -534,7 +541,178 @@ public partial class MainWindow : Window
         }
         UpdateStatus();
         UpdateContextBar();
+        if (CurrentOperation == null) UpdateHandle();
         if (_propsOn && CurrentOperation == null) ShowProperties();
+    }
+
+    // ================================================================ ручки операций (п. 6)
+
+    private string _handleKind = "";
+
+    /// <summary>Ручка у выбранного: ребро (с цепочкой), вершина, плоская грань, поверхность.</summary>
+    private void UpdateHandle()
+    {
+        View.Handle = null;
+        _handleKind = "";
+        if (InSketch) return;
+        var sel = View.Selection.Items;
+        if (sel.Count == 0 || sel[0].Owner is not Part part) { ShowHint(null); return; }
+        var k = sel[0].Kind;
+        if (sel.Any(r => r.Kind != k)) return;
+        static Vector3 F(OpenTK.Mathematics.Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
+        switch (k)
+        {
+            case PickKind.Edge when Topo.EdgeHandle(part, sel[0].Id) is { } h:
+                View.Handle = new OpHandle(F(h.At), F(h.Out), true, true);
+                _handleKind = "edge";
+                ShowHint(L("Ручка: наружу — фаска, внутрь — скругление"));
+                break;
+            case PickKind.Vertex when sel.Count == 1 && Topo.VertexHandle(part, sel[0].Id) is { } h:
+                View.Handle = new OpHandle(F(h.At), F(h.Out), true, true);
+                _handleKind = "vertex";
+                ShowHint(L("Ручка: наружу — фаска угла, внутрь — скругление вершины"));
+                break;
+            case PickKind.Face when sel.Count == 1 && Topo.FaceHandle(part, sel[0].Id) is { } h:
+                View.Handle = new OpHandle(F(h.At), F(h.Out), h.Planar, true);
+                _handleKind = h.Planar ? "face" : "surface";
+                ShowHint(h.Planar ? L("Ручка: наружу — выдавить грань, внутрь — вырез") : L("Ручка: внутрь — оболочка с открытой гранью"));
+                break;
+            default:
+                ShowHint(null);
+                break;
+        }
+    }
+
+    private void OnHandleDragStarted(int sign)
+    {
+        var sel = View.Selection.Items.ToList();
+        if (sel.Count == 0 || sel[0].Owner is not Part part) return;
+        uint id = sel[0].Id;
+        Operation? op = (_handleKind, sign) switch
+        {
+            ("edge", > 0) => new ChamferOp(),
+            ("edge", < 0) => new RoundOp(),
+            ("vertex", > 0) => new VertexChamferOp(),
+            ("vertex", < 0) => new VertexRoundOp(),
+            ("face", var sg) => new ExtrudeOp
+            {
+                StartCut = sg < 0, FlipCut = sg < 0,
+                PreSketch = p => Topo.FaceOutlineSketch(p, id, L("Эскиз{0}", p.Sketches.Count() + 1)),
+            },
+            ("surface", < 0) => new ShellOp(),
+            _ => null,
+        };
+        if (op == null) return;
+        var keep = View.Handle;
+        StartOperation(op);
+        View.Handle = keep;
+        ShowHint(null);
+    }
+
+    // ================================================================ ссылки и размеры эскиза (п. 2.2–2.4)
+
+    private bool _refsPanel;
+
+    private void AddSketchReference(PickRef r)
+    {
+        if (View.ActiveSketch is not { } sk || r.Owner is not Part part) return;
+        var err = SketchReferences.Add(sk, part, r);
+        if (err != null) { ShowToast(err, error: false); return; }
+        try { sk.Solve(Session.Document.Solver); } catch (Exception ex) { AppLog.Write("sketch solve", ex); }
+        View.RefreshDefaultDimensions();
+        View.MarkDirty();
+        ScheduleTree();
+        if (_refsPanel) ShowReferencesPanel();
+        else ShowToast(L("Ссылка добавлена: {0}", L(SketchReferences.SourceOf(r).Split(' ')[0]) + " " + SketchReferences.SourceOf(r).Split(' ')[1]), error: false);
+    }
+
+    public void ToggleReferencesPanel()
+    {
+        if (_refsPanel) { _refsPanel = false; PropsPanel.IsVisible = _propsOn; if (_propsOn) ShowProperties(); RefreshToolStates(); return; }
+        View.Tool = null;
+        ShowReferencesPanel();
+    }
+
+    private void ShowReferencesPanel()
+    {
+        if (View.ActiveSketch is not { } sk) return;
+        _refsPanel = true;
+        PropsPanel.IsVisible = true;
+        PropsTitle.Text = L("ССЫЛКИ ЭСКИЗА");
+        PropsBody.Children.Clear();
+        PropsButtons.Children.Clear();
+        PropsBody.Children.Add(new TextBlock { Text = L("Щёлкайте рёбра и вершины детали (подсвечиваются под курсором): они станут ссылками — к ним привязываются точки и размеры эскиза. Начало координат эскиза — ссылка всегда."), TextWrapping = TextWrapping.Wrap, Classes = { "dim" }, FontSize = 12 });
+        var list = SketchReferences.Sources(sk).ToList();
+        PropsBody.Children.Add(new TextBlock { Text = L("Начало координат эскиза"), Margin = new Thickness(0, 8, 0, 0) });
+        foreach (var src in list)
+        {
+            var row = new DockPanel { Margin = new Thickness(0, 2) };
+            var del = new Button { Content = "×", Classes = { "tool" }, Padding = new Thickness(6, 0), MinHeight = 22 };
+            ToolTip.SetTip(del, L("Убрать ссылку"));
+            string s0 = src;
+            del.Click += (_, _) =>
+            {
+                SketchReferences.Remove(sk, s0);
+                sk.NotifyChanged(sk);
+                try { sk.Solve(Session.Document.Solver); } catch { }
+                View.RefreshDefaultDimensions();
+                View.MarkDirty();
+                ShowReferencesPanel();
+            };
+            DockPanel.SetDock(del, Dock.Right);
+            row.Children.Add(del);
+            var parts = src.Split(' ');
+            row.Children.Add(new TextBlock { Text = parts.Length == 2 ? L(parts[0]) + " " + parts[1] : src, VerticalAlignment = VerticalAlignment.Center });
+            PropsBody.Children.Add(row);
+        }
+        var close = new Button { Content = L("Готово"), Classes = { "accent" }, MinWidth = 90 };
+        close.Click += (_, _) => ToggleReferencesPanel();
+        PropsButtons.Children.Add(close);
+        RefreshToolStates();
+    }
+
+    public bool ReferencesPanelOpen => _refsPanel;
+
+    /// <summary>Двойной щелчок по размеру: новое значение (число или формула) — размер становится управляющим.</summary>
+    private void EditDimension(SkDimension d, Point at)
+    {
+        if (View.ActiveSketch is not { } sk) return;
+        bool angle = d.Type == DimensionType.AngleLineLine;
+        var tb = new TextBox { Text = d.Formula ?? d.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), MinWidth = 110 };
+        var ok = new Button { Content = L("ОК"), Classes = { "accent" } };
+        var panel = new StackPanel { Spacing = 6, Margin = new Thickness(4),
+            Children = { new TextBlock { Text = angle ? L("Угол, °") : L("Размер, мм"), Classes = { "dim" }, FontSize = 12 }, tb, ok } };
+        var fl = new Flyout { Content = panel, Placement = PlacementMode.Pointer };
+        void Apply()
+        {
+            string t = (tb.Text ?? "").Trim();
+            double v; string? formula = null;
+            if (!double.TryParse(t.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v))
+            {
+                var table = Session.Part != null ? Session.Document.ScopeFor(Session.Part) : Session.Document.Parameters;
+                if (!table.TryEvaluate(t, out v, out _)) { ShowToast(L("Не число и не формула: {0}", t)); return; }
+                formula = t;
+            }
+            if (v <= 0 && !angle) { ShowToast(L("Размер должен быть больше нуля")); return; }
+            double old = d.Value; bool oldLocked = d.Locked, oldDefault = d.IsDefault; string? oldFormula = d.Formula;
+            d.Value = v; d.Formula = formula; d.Locked = true; d.IsDefault = false; d.Reference = false;
+            var st = sk.Solve(Session.Document.Solver);
+            if (st is SolveStatus.Overconstrained or SolveStatus.Inconsistent)
+            {
+                d.Value = old; d.Formula = oldFormula; d.Locked = oldLocked; d.IsDefault = oldDefault;
+                sk.Solve(Session.Document.Solver);
+                ShowToast(L("Размер противоречит другим связям эскиза"));
+            }
+            sk.BumpStructure();
+            View.RefreshDefaultDimensions();
+            sk.NotifyChanged(sk);
+            View.MarkDirty();
+            fl.Hide();
+        }
+        ok.Click += (_, _) => Apply();
+        tb.KeyDown += (_, e) => { if (e.Key == Key.Enter) { Apply(); e.Handled = true; } else if (e.Key == Key.Escape) { fl.Hide(); e.Handled = true; } };
+        fl.ShowAt(View, showAtPointer: true);
+        Dispatcher.UIThread.Post(() => { tb.Focus(); tb.SelectAll(); }, DispatcherPriority.Input);
     }
 
     private static string ShortGl(string info)
@@ -700,6 +878,7 @@ public partial class MainWindow : Window
     private void EndOperation()
     {
         CurrentOperation = null;
+        View.Handle = null;
         View.Selection.Filter = InSketch ? PickFilter.Sketch : PickFilter.All;
         if (!InSketch) View.Selection.Clear();
         HideOpPanel();
@@ -800,8 +979,9 @@ public partial class MainWindow : Window
         if (View.ActiveSketch is not { } sk) return;
         View.ToolFinish();
         View.ExitSketch();
-        bool empty = sk.Entities.Count == 0;
-        if (empty && _sketchIsNew) Session.CancelEdit();
+        _refsPanel = false;
+        bool empty = sk.Entities.All(e => e.Role == SkRole.Reference);
+        if (empty && _sketchIsNew && sk.Parent is Part owner) { owner.Remove(sk); Session.DiscardEdit(); }
         else
         {
             sk.NotifyChanged(sk);
@@ -823,8 +1003,12 @@ public partial class MainWindow : Window
     public void CancelSketch()
     {
         if (!InSketch) return;
+        var sk = View.ActiveSketch!;
+        _refsPanel = false;
         View.ExitSketch();
-        Session.CancelEdit();
+        // новый эскиз — просто убрать (деталь не заменяется); правка — снимок до неё (вид держит прежнюю деталь)
+        if (_sketchIsNew && sk.Parent is Part owner) { owner.Remove(sk); Session.DiscardEdit(); }
+        else Session.CancelEdit();
         _afterSketch = null;
         ShowHint(null);
         RebuildUi();

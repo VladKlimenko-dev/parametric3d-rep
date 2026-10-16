@@ -219,6 +219,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
             }
 
             if (_overlayDirty || GridStale()) { _overlayDirty = false; var (g, l, pt) = BuildOverlay(); _r.SetOverlay(g, l, pt); }
+            _r.SketchMode = ActiveSketch != null;
             if (_flagsDirty) { ApplyFlags(); _flagsDirty = false; }
             using (Diagnostics.UiTimes.Measure("вид: кадр")) _r.Draw(f, fb);
 
@@ -262,8 +263,11 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
             _rebuilding = true;
             Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = RebuildInBackground());
         }
+        // деталь заменена снимком (отмена правки): пока новая не построена, на экране остаётся прежняя (п. 2)
+        if (_sceneDirty && _holdUntil > DateTime.Now && (_doc.IsBuilding || _doc.AllParts().Any(p => p.IsDirty))) return;
         if (_sceneDirty)
         {
+            _holdUntil = DateTime.MinValue;
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             _scene = SceneBuilder.Build(_doc, _r.Theme, Show, ActivePart, ActiveSketch);
             _r.ShowAllVertices = Show.Vertices;
@@ -274,6 +278,11 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
             Avalonia.Threading.Dispatcher.UIThread.Post(() => SceneRebuilt?.Invoke());
         }
     }
+
+    private DateTime _holdUntil = DateTime.MinValue;
+
+    /// <summary>Не перестраивать сцену, пока детали не посчитаны (не дольше 10 с): деталь не «пропадает» на время расчёта.</summary>
+    public void HoldSceneUntilBuilt() { _holdUntil = DateTime.Now.AddSeconds(10); }
 
     private async Task RebuildInBackground()
     {
@@ -401,7 +410,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
 
     // ================================================================ мышь
 
-    private enum Drag { None, Orbit, Pan, RightPending, Select, Tool }
+    private enum Drag { None, Orbit, Pan, RightPending, Select, Tool, Handle }
     private Drag _drag;
     private Point _last, _down;
 
@@ -419,7 +428,9 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         var props = pt.Properties;
         if (props.IsMiddleButtonPressed) _drag = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? Drag.Pan : Drag.Orbit;
         else if (props.IsRightButtonPressed) _drag = Drag.RightPending;
-        else if (props.IsLeftButtonPressed) _drag = Tool != null ? Drag.Tool : Drag.Select;
+        else if (props.IsLeftButtonPressed) _drag = Tool != null ? Drag.Tool : HandleHit(pt.Position) != 0 ? Drag.Handle : Drag.Select;
+        if (_drag == Drag.Handle) BeginHandleDrag(pt.Position);
+        if (props.IsLeftButtonPressed && e.ClickCount >= 2 && ActiveSketch != null && TryEditDimension(pt.Position)) { _drag = Drag.None; e.Handled = true; return; }
         if (_drag == Drag.Tool && e.ClickCount >= 2) { ToolFinish(); _drag = Drag.None; e.Handled = true; return; }
         if (_drag != Drag.None) { Transition.Cancel(); e.Pointer.Capture(this); }
         e.Handled = true;
@@ -435,6 +446,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         {
             case Drag.Orbit: Camera.Orbit(dx, dy); _last = p; CameraChanged?.Invoke(); Redraw(); return;
             case Drag.Pan: Camera.Pan(dx, dy); _last = p; Redraw(); return;
+            case Drag.Handle: HandleDragMove(p); return;
             case Drag.RightPending:
                 if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > 4) { _drag = Drag.Pan; Camera.Pan(dx, dy); _last = p; Redraw(); }
                 return;
@@ -450,6 +462,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         var was = _drag;
         _drag = Drag.None;
         e.Pointer.Capture(null);
+        if (was == Drag.Handle) { EndHandleDrag(); return; }
         if (was == Drag.RightPending && Tool != null) ToolFinish();
         else if (was == Drag.RightPending) ContextRequested?.Invoke(p);
         else if (was == Drag.Tool && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 6) ToolClick(p);
@@ -509,12 +522,28 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
             Redraw();
         }
         if (!req.Click) return;
-        bool add = req.Mods.HasFlag(KeyModifiers.Shift), remove = req.Mods.HasFlag(KeyModifiers.Control);
-        if (r.IsEmpty) { if (!add && !remove) Selection.Clear(); return; }
-        if (remove) { if (Selection.Contains(r.Id)) Selection.Select(r, additive: true); return; }
-        if (add) { if (!Selection.Contains(r.Id)) Selection.Select(r, additive: true); return; }
-        Selection.Select(r, additive: false);
+        // п. 7: Ctrl — добавить или (повторный щелчок) убрать; Shift — добавить
+        bool toggle = req.Mods.HasFlag(KeyModifiers.Control), add = req.Mods.HasFlag(KeyModifiers.Shift);
+        if (r.IsEmpty) { if (!add && !toggle) Selection.Clear(); return; }
+        if (TryReference(r)) return;
+        // п. 4: ребро — вместе с касательной цепочкой (Alt — одно ребро)
+        var group = r.Kind == PickKind.Edge && !req.Mods.HasFlag(KeyModifiers.Alt) && ExpandEdge != null ? ExpandEdge(r) : new List<PickRef> { r };
+        if (toggle && Selection.Contains(r.Id))
+        {
+            foreach (var g in group) if (Selection.Contains(g.Id)) Selection.Select(g, additive: true);
+            return;
+        }
+        if (toggle || add)
+        {
+            foreach (var g in group) if (!Selection.Contains(g.Id)) Selection.Select(g, additive: true);
+            return;
+        }
+        Selection.Select(group[0], additive: false);
+        foreach (var g in group.Skip(1)) Selection.Select(g, additive: true);
     }
+
+    /// <summary>Ребро → касательная цепочка рёбер (задаёт окно; null — только само ребро).</summary>
+    public Func<PickRef, List<PickRef>>? ExpandEdge;
 
     /// <summary>Навести и выбрать в точке вида (доли размера 0..1) — для сценариев проверок.</summary>
     public void SimulatePick(double fx, double fy, bool select, bool add = false)
