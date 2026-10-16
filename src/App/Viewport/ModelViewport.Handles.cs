@@ -8,31 +8,33 @@ namespace Parametric3D.App.Viewport;
 public sealed record OpHandle(Vector3 At, Vector3 Out, bool Outward, bool Inward);
 
 /// <summary>
-/// РУЧКИ ОПЕРАЦИЙ (как в Plasticity): у выбранного ребра, вершины или грани — стрелка наружу и стрелка внутрь. Тянут за
-/// конец стрелки: направление выбирает операцию (окно сообщает знак), расстояние вдоль стрелки — её величину. Конец
-/// стрелки идёт за курсором вдоль своего направления (на величину операции), а форма результата видна сразу линиями
-/// быстрого предпросмотра (<see cref="HandleGhost"/>) — деталь считается, когда ручку отпустили.
+/// РУЧКА ОПЕРАЦИИ (как в Plasticity): одна у выбранного ребра, вершины или грани — шарик на короткой оси вдоль
+/// направления «наружу». Тянут шарик от его начального места: в одну сторону — одна операция, в другую — другая
+/// (ребро: внутрь — скругление, наружу — фаска; грань: наружу — выдавливание, внутрь — вырез). Шарик идёт за курсором
+/// вдоль оси; величина операции — его сдвиг от начального места (мм), знак — сторона.
 /// </summary>
 public sealed partial class ModelViewport
 {
     private OpHandle? _handle;
-    private int _handleSign;
+    private bool _hDragging, _hStarted;
     private Point _hDown;
     private Vector2 _hAxis;
     private double _hWorldPerPx, _hStartValue;
-    private int _activeSign;
-    private double _activeValue;
+    /// <summary>Сдвиг шарика от начального места, мм (знак — сторона).</summary>
+    private double _hValue;
 
-    /// <summary>Тянуть начали: +1 — наружу, −1 — внутрь.</summary>
-    public event Action<int>? HandleDragStarted;
-    /// <summary>Величина вдоль ручки (мм, всегда положительная).</summary>
-    public event Action<double>? HandleDragged;
+    /// <summary>Тянуть начали (сдвиг больше 4 пикселей).</summary>
+    public event Action? HandleDragStarted;
+    /// <summary>Знак стороны (+1 наружу, −1 внутрь) и величина (мм, положительная).</summary>
+    public event Action<int, double>? HandleDragged;
     public event Action? HandleDragEnded;
 
     /// <summary>Ручку тянут сейчас.</summary>
-    public bool HandleDragging => _handleSign != 0;
+    public bool HandleDragging => _hDragging && _hStarted;
     /// <summary>Где курсор при перетаскивании ручки (координаты вида).</summary>
     public Point HandleCursor { get; private set; }
+    /// <summary>Текущий сдвиг ручки со знаком, мм.</summary>
+    public double HandleValue => _hValue;
 
     public OpHandle? Handle
     {
@@ -40,15 +42,15 @@ public sealed partial class ModelViewport
         set
         {
             _handle = value;
-            if (value == null) { _activeSign = 0; _activeValue = 0; _ghost = null; _ghostLines = null; }
+            if (value == null) { _hValue = 0; _ghost = null; _ghostLines = null; }
             _overlayDirty = true; Redraw();
         }
     }
 
-    /// <summary>Конец ручки этого знака сдвинут на величину операции (операция, начатая ручкой, идёт).</summary>
-    public void SetHandleValue(int sign, double value)
+    /// <summary>Сдвиг ручки со знаком (операция, начатая ручкой, идёт; 0 — ручка на месте).</summary>
+    public void SetHandleValue(double signedValue)
     {
-        _activeSign = sign; _activeValue = Math.Max(0, value);
+        _hValue = signedValue;
         _overlayDirty = true; Redraw();
     }
 
@@ -58,20 +60,20 @@ public sealed partial class ModelViewport
     private List<(Vector3d A, Vector3d B)>? _ghostLines;
     private int _ghostSign;
 
-    /// <summary>Линии предпросмотра по величине ручки; null — убрать.</summary>
-    public void SetHandleGhost(Func<double, List<(Vector3d A, Vector3d B)>>? ghost, int sign)
+    /// <summary>Контур предпросмотра по сдвигу ручки со знаком; null — убрать.</summary>
+    public void SetHandleGhost(Func<double, List<(Vector3d A, Vector3d B)>>? ghost)
     {
-        _ghost = ghost; _ghostSign = sign; _ghostLines = null;
+        _ghost = ghost; _ghostLines = null;
         _overlayDirty = true; Redraw();
     }
 
-    /// <summary>Показать предпросмотр для величины (или скрыть линии, оставив функцию — show=false).</summary>
-    public void ShowGhost(double value, bool show = true)
+    /// <summary>Показать контур для сдвига со знаком (или скрыть — show=false).</summary>
+    public void ShowGhost(double signedValue, bool show = true)
     {
-        if (!show || _ghost == null) _ghostLines = null;
+        if (!show || _ghost == null || Math.Abs(signedValue) < 1e-9) _ghostLines = null;
         else
         {
-            try { _ghostLines = _ghost(value); }
+            try { _ghostLines = _ghost(signedValue); _ghostSign = Math.Sign(signedValue); }
             catch (Exception ex) { Parametric3D.Core.AppLog.Write("handle ghost", ex); _ghostLines = null; }
         }
         _overlayDirty = true; Redraw();
@@ -84,13 +86,9 @@ public sealed partial class ModelViewport
 
     private double HandleLen => 70 * PixelSize;
 
-    /// <summary>Конец стрелки знака: длина стрелки плюс величина (если операция этого знака идёт).</summary>
-    private Vector3 Tip(OpHandle h, int sign)
-    {
-        float baseLen = (float)(sign > 0 ? HandleLen : HandleLen * 0.75);
-        float extra = _activeSign == sign ? (float)_activeValue : 0;
-        return h.At + h.Out * (sign * (baseLen + extra));
-    }
+    /// <summary>Начальное место шарика — на оси наружу от элемента.</summary>
+    private Vector3 Rest(OpHandle h) => h.At + h.Out * (float)HandleLen;
+    private Vector3 Knob(OpHandle h) => Rest(h) + h.Out * (float)_hValue;
 
     private Point? ToScreen(Vector3 w)
     {
@@ -100,38 +98,26 @@ public sealed partial class ModelViewport
         return new Point((c.X / c.W * 0.5 + 0.5) * Camera.ViewportWidth / s, (0.5 - c.Y / c.W * 0.5) * Camera.ViewportHeight / s);
     }
 
-    /// <summary>Под курсором конец ручки: +1 наружу, −1 внутрь, 0 — нет.</summary>
+    /// <summary>Под курсором шарик ручки.</summary>
     private int HandleHit(Point p)
     {
-        if (_handle is not { } h || ActiveSketch != null) return 0;
-        int best = 0; double bd = 14;
-        void Try(Vector3 w, int sign)
-        {
-            if (ToScreen(w) is not { } q) return;
-            double d = Math.Sqrt((q.X - p.X) * (q.X - p.X) + (q.Y - p.Y) * (q.Y - p.Y));
-            if (d < bd) { bd = d; best = sign; }
-        }
-        if (h.Outward) Try(Tip(h, 1), 1);
-        if (h.Inward) Try(Tip(h, -1), -1);
-        return best;
+        if (_handle is not { } h || ActiveSketch != null || ToScreen(Knob(h)) is not { } q) return 0;
+        return Math.Sqrt((q.X - p.X) * (q.X - p.X) + (q.Y - p.Y) * (q.Y - p.Y)) < 14 ? 1 : 0;
     }
-
-    private int _hGrab;
 
     private void BeginHandleDrag(Point p)
     {
         _hDown = p;
-        _handleSign = 0;
-        _hGrab = HandleHit(p);
+        _hDragging = true; _hStarted = false;
         _hAxis = Vector2.Zero;
-        if (_handle is not { } h || _hGrab == 0 || ToScreen(h.At) is not { } a || ToScreen(h.At + h.Out * (float)(HandleLen * _hGrab)) is not { } b) return;
-        // ось на экране — в сторону захваченной стрелки: движение вдоль неё увеличивает величину
+        if (_handle is not { } h || ToScreen(h.At) is not { } a || ToScreen(h.At + h.Out * (float)HandleLen) is not { } b) return;
+        // ось на экране — «наружу»: движение вдоль неё увеличивает сдвиг со знаком
         var axis = new Vector2((float)(b.X - a.X), (float)(b.Y - a.Y));
         float len = axis.Length;
         if (len < 1e-3f) return;
         _hAxis = axis / len;
         _hWorldPerPx = HandleLen / len;
-        _hStartValue = _activeSign == _hGrab ? _activeValue : 0;
+        _hStartValue = _hValue;
     }
 
     private void HandleDragMove(Point p)
@@ -139,36 +125,36 @@ public sealed partial class ModelViewport
         if (_handle is not { } h || _hAxis == Vector2.Zero) return;
         double moved = (p.X - _hDown.X) * _hAxis.X + (p.Y - _hDown.Y) * _hAxis.Y;
         HandleCursor = p;
-        if (_handleSign == 0)
+        if (!_hStarted)
         {
             if (Math.Abs(moved) < 4) return;
-            if (_hGrab > 0 && !h.Outward || _hGrab < 0 && !h.Inward) return;
-            _handleSign = _hGrab;
-            HandleDragStarted?.Invoke(_hGrab);
+            _hStarted = true;
+            HandleDragStarted?.Invoke();
         }
-        double value = Math.Max(0.01, _hStartValue + moved * _hWorldPerPx);
-        // конец стрелки — за курсором вдоль её направления; линии предпросмотра — для этой величины
-        _activeSign = _handleSign; _activeValue = value;
-        if (_ghost != null && _ghostSign == _handleSign) ShowGhost(value);
-        _overlayDirty = true;
-        HandleDragged?.Invoke(value);
+        double v = _hStartValue + moved * _hWorldPerPx;
+        // сторона, на которую нельзя (у поверхности — только внутрь), — шарик стоит на месте
+        if (v > 0 && !h.Outward || v < 0 && !h.Inward) v = 0;
+        _hValue = v;
+        ShowGhost(v);
+        if (Math.Abs(v) > 1e-9) HandleDragged?.Invoke(Math.Sign(v), Math.Abs(v));
         Redraw();
     }
 
     private void EndHandleDrag()
     {
-        if (_handleSign != 0) HandleDragEnded?.Invoke();
-        _handleSign = 0;
+        bool was = _hStarted;
+        _hDragging = false; _hStarted = false;
+        if (was) HandleDragEnded?.Invoke();
     }
 
-    /// <summary>Потянуть ручку (сценарии проверок): знак и величина; end=false — не отпускать.</summary>
-    public void SimulateHandleDrag(int sign, double value, bool end = true)
+    /// <summary>Потянуть ручку (сценарии проверок): сдвиг со знаком; end=false — не отпускать.</summary>
+    public void SimulateHandleDrag(double signedValue, bool end = true)
     {
-        if (_handleSign == 0) { _handleSign = sign; HandleDragStarted?.Invoke(sign); }
-        _activeSign = sign; _activeValue = value;
-        if (_handle is { } h && ToScreen(Tip(h, sign)) is { } tp) HandleCursor = tp;
-        if (_ghost != null && _ghostSign == sign) ShowGhost(value);
-        HandleDragged?.Invoke(value);
+        if (!_hStarted) { _hDragging = true; _hStarted = true; HandleDragStarted?.Invoke(); }
+        _hValue = signedValue;
+        if (_handle is { } h && ToScreen(Knob(h)) is { } tp) HandleCursor = tp;
+        ShowGhost(signedValue);
+        if (Math.Abs(signedValue) > 1e-9) HandleDragged?.Invoke(Math.Sign(signedValue), Math.Abs(signedValue));
         if (end) EndHandleDrag();
     }
 
@@ -179,21 +165,20 @@ public sealed partial class ModelViewport
         {
             var gc = _ghostSign < 0 ? th.HandleAlt : th.Handle;
             foreach (var (a, b) in _ghostLines)
-                lines.Add(Inst(new Vector3((float)a.X, (float)a.Y, (float)a.Z), new Vector3((float)b.X, (float)b.Y, (float)b.Z), gc, 1.8f, 0));
+                lines.Add(Inst(new Vector3((float)a.X, (float)a.Y, (float)a.Z), new Vector3((float)b.X, (float)b.Y, (float)b.Z), gc, 2f, 0));
         }
         if (_handle is not { } h || ActiveSketch != null) return;
-        if (h.Outward)
-        {
-            var tip = Tip(h, 1);
-            lines.Add(Inst(h.At, tip, th.Handle, 2.2f, 0));
-            pts.Add(new PointInst { P = tip, Color = SceneData.Pack(th.Handle), Px = 12, Shape = 0 });
-        }
-        if (h.Inward)
-        {
-            var tip = Tip(h, -1);
-            lines.Add(Inst(h.At, tip, th.HandleAlt, 2.2f, 5));
-            pts.Add(new PointInst { P = tip, Color = SceneData.Pack(th.HandleAlt), Px = 11, Shape = 1 });
-        }
+        // ось: от элемента к начальному месту и дальше в обе стороны (пунктир), шарик — на текущем сдвиге
+        var rest = Rest(h);
+        var knob = Knob(h);
+        float L = (float)HandleLen;
+        lines.Add(Inst(h.At, rest, th.Handle, 1.6f, 0));
+        if (h.Outward) lines.Add(Inst(rest, rest + h.Out * (L * 0.5f), th.Handle, 1.2f, 5));
+        if (h.Inward) lines.Add(Inst(rest, rest - h.Out * (L * 0.5f), th.HandleAlt, 1.2f, 5));
+        if (Math.Abs(_hValue) > 1e-9) lines.Add(Inst(rest, knob, _hValue < 0 ? th.HandleAlt : th.Handle, 2.4f, 0));
+        var kc = _hValue < 0 ? th.HandleAlt : th.Handle;
+        pts.Add(new PointInst { P = rest, Color = SceneData.Pack(th.Handle), Px = 5, Shape = 2 });
+        pts.Add(new PointInst { P = knob, Color = SceneData.Pack(kc), Px = 13, Shape = 0 });
         pts.Add(new PointInst { P = h.At, Color = SceneData.Pack(th.Handle), Px = 6, Shape = 2 });
     }
 }

@@ -13,6 +13,8 @@ public sealed class UserPrefs
     public string Language { get; set; } = "ru";
     /// <summary>Графика: «auto» (Windows — ANGLE), «angle», «wgl», «software» (со следующего запуска).</summary>
     public string? GlMode { get; set; } = "auto";
+    /// <summary>u09: предпросмотр операций ручкой — «full» (деталь считается при перетаскивании) или «contour» (контур).</summary>
+    public string? PreviewMode { get; set; } = "full";
     public List<string> RecentFiles { get; set; } = new();
     public List<string> RecentCommands { get; set; } = new();
     public bool TreeVisible { get; set; } = true;

@@ -142,6 +142,11 @@ public sealed class Document
         return t;
     }
 
+    /// <summary>u09: деталь, чья операция сейчас в живом предпросмотре (ручку тянут): она считается грубо и без проверок.</summary>
+    public Part? PreviewPart { get; set; }
+    /// <summary>Во сколько раз грубее сетка живого предпросмотра.</summary>
+    public double PreviewCoarseness { get; set; } = 4;
+
     private async Task<bool> RunBuild()
     {
         _isBuilding = true;
@@ -155,10 +160,22 @@ public sealed class Document
                 if (dirty.Count == 0) break;
 
                 var solver = Solver;
+                var preview = PreviewPart;
                 var scopes = dirty.ToDictionary(p => p, ScopeFor);
                 var results = await Task.Run(() => dirty.Select(p =>
                 {
-                    try { return (Part: p, Result: p.Compute(scopes[p], solver), Failed: (Exception?)null); }
+                    try
+                    {
+                        // u09: живой предпросмотр ручкой — грубая сетка, проверки отложены (окончательный расчёт — обычный)
+                        if (ReferenceEquals(p, preview))
+                        {
+                            var ks = Kernel.KernelSettings.Capture();
+                            ks = ks with { Preview = true, LivePreview = true, Chord = ks.Chord * PreviewCoarseness };   // угловой шаг не трогается: от него зависит восстановление дуг
+                            using (new Kernel.KernelContext(ks).Enter())
+                                return (Part: p, Result: p.Compute(scopes[p], solver), Failed: (Exception?)null);
+                        }
+                        return (Part: p, Result: p.Compute(scopes[p], solver), Failed: (Exception?)null);
+                    }
                     catch (Exception ex) { return (Part: p, Result: (Part.BuildResult?)null, Failed: ex); }
                 }).ToList());
 

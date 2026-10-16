@@ -437,42 +437,152 @@ Check("UI-CTRL-TOGGLE", () =>
     w.Close();
 });
 
-Check("UI-HANDLE-DRAG-FAST", () =>
+void BuildNow(DocumentSession ses)
 {
-    // п. 6: пока ручку тянут — деталь не перестраивается (линии быстрого предпросмотра), панель не открывается;
-    // отпустили — операция в детали с этой величиной; повторно та же стрелка — та же операция; Esc — как не было
+    for (int k = 0; k < 20; k++)
+    {
+        var t = ses.Document.RebuildDirtyAsync();
+        while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+        if (!ses.Document.AllParts().Any(p => p.IsDirty)) break;
+    }
+    Dispatcher.UIThread.RunJobs();
+}
+
+Check("UI-HANDLE-CONTOUR", () =>
+{
+    // п. 6, предпросмотр контуром: пока тянут — деталь не меняется, панель закрыта; одна ручка: внутрь — скругление,
+    // через начальное место наружу — фаска; отпустили — одна операция; повторно — та же; Esc — следов нет
+    UserPrefs.Current.PreviewMode = "contour";
+    try
+    {
+        var s = DocumentSession.Sample();
+        var w = Open(s);
+        var vp = w.ViewPort;
+        var part = s.Part!;
+        int f0 = part.Features.Count, v0 = part.Version;
+        var edge = part.Bodies[0].Edges.First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3);
+        vp.Selection.Select(new PickRef(edge.Id, PickKind.Edge, part, null), additive: false);
+        Dispatcher.UIThread.RunJobs();
+        Require(vp.Handle != null, "no handle on the edge");
+        vp.SimulateHandleDrag(-3, end: false);
+        Require(w.CurrentOperation is RoundOp, "inward drag did not start a round");
+        int segRound = vp.GhostSegments;
+        vp.SimulateHandleDrag(2, end: false);
+        Require(w.CurrentOperation is ChamferOp, "outward past the rest did not switch to a chamfer");
+        vp.SimulateHandleDrag(-4.5, end: false);
+        Require(w.CurrentOperation is RoundOp, "back inward did not switch to a round");
+        Require(part.Features.Count == f0 && part.Version == v0, "part changed while dragging (contour mode)");
+        // контур: две границы и торцы — у одного прямого ребра 2 + 2·8 отрезков
+        Require(vp.GhostShown && vp.GhostSegments <= 2 + 2 * 8 && segRound > 0, $"outline expected, segments {vp.GhostSegments}");
+        Require(!w.OperationPanelVisible, "panel opened while the properties panel is closed");
+        vp.SimulateHandleDrag(-5, end: true);
+        Require(part.Features.Count == f0 + 1 && part.Features[^1] is RoundFeature rf && Math.Abs(rf.Radius.Value - 5) < 1e-9, "round not added with the dragged value");
+        var op = w.CurrentOperation;
+        vp.SimulateHandleDrag(-6, end: true);
+        Require(ReferenceEquals(op, w.CurrentOperation) && ((RoundFeature)part.Features[^1]).Radius.Value == 6, "second drag did not continue the operation");
+        w.CancelOperation();
+        Require(part.Features.Count == f0 && !vp.GhostShown && s.UndoNames.Count == 0, "cancel left traces");
+        w.Close();
+    }
+    finally { UserPrefs.Current.PreviewMode = "full"; }
+});
+
+Check("UI-HANDLE-LIVE", () =>
+{
+    // полный предпросмотр: операция в детали сразу, считается по ходу (грубо, без проверок); сторона меняет операцию с теми
+    // же рёбрами; отпустили — окончательный расчёт обычной точности; Enter — один шаг отмены
+    UserPrefs.Current.PreviewMode = "full";
     var s = DocumentSession.Sample();
     var w = Open(s);
     var vp = w.ViewPort;
     var part = s.Part!;
-    int f0 = part.Features.Count, v0 = part.Version;
+    BuildNow(s);
+    int f0 = part.Features.Count;
     var edge = part.Bodies[0].Edges.First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3);
     vp.Selection.Select(new PickRef(edge.Id, PickKind.Edge, part, null), additive: false);
     Dispatcher.UIThread.RunJobs();
-    Require(vp.Handle != null, "no handle on the edge");
-    vp.SimulateHandleDrag(-1, 3, end: false);
-    vp.SimulateHandleDrag(-1, 4.5, end: false);
-    Require(w.CurrentOperation is RoundOp, "inward drag did not start a round");
-    Require(part.Features.Count == f0 && part.Version == v0, "part changed while dragging");
-    Require(vp.GhostShown && vp.GhostSegments > 4, $"no quick preview ({vp.GhostSegments})");
-    Require(!w.OperationPanelVisible, "panel opened while the properties panel is closed");
-    vp.SimulateHandleDrag(-1, 5, end: true);
-    Require(part.Features.Count == f0 + 1 && part.Features[^1] is RoundFeature rf && Math.Abs(rf.Radius.Value - 5) < 1e-9, "round not added with the dragged value");
-    var op = w.CurrentOperation;
-    vp.SimulateHandleDrag(-1, 6, end: false);
-    Require(ReferenceEquals(op, w.CurrentOperation) && part.Features.Count == f0 + 1, "second drag did not continue the operation");
-    vp.SimulateHandleDrag(-1, 6, end: true);
-    Require(((RoundFeature)part.Features[^1]).Radius.Value == 6, "second drag value");
-    w.CancelOperation();
-    Require(part.Features.Count == f0 && !vp.GhostShown, "cancel left the round or the preview");
-    // отменили во время перетаскивания — в детали ничего не было
-    vp.Selection.Select(new PickRef(edge.Id, PickKind.Edge, part, null), additive: false);
-    Dispatcher.UIThread.RunJobs();
-    vp.SimulateHandleDrag(1, 2, end: false);
-    Require(w.CurrentOperation is ChamferOp, "outward drag did not start a chamfer");
-    w.CancelOperation();
-    Require(part.Features.Count == f0 && s.UndoNames.Count == 0, "cancel during drag left traces");
+    vp.SimulateHandleDrag(-3, end: false);
+    Require(w.CurrentOperation is RoundOp && part.Features.Count == f0 + 1, "live round not added while dragging");
+    Require(ReferenceEquals(s.Document.PreviewPart, part), "preview part not set");
+    BuildNow(s);
+    Require(part.Features[^1].Error == null && part.Bodies.Count == 1, "live round failed: " + part.Features[^1].Error);
+    int triPreview = part.Mesh?.Indices.Length ?? 0;
+    vp.SimulateHandleDrag(4, end: false);
+    Require(w.CurrentOperation is ChamferOp && part.Features.Count == f0 + 1 && part.Features[^1] is ChamferFeature, "outward did not switch to chamfer");
+    BuildNow(s);
+    var ch = (ChamferFeature)part.Features[^1];
+    Require(ch.Error == null && ch.Edges.Count == 1 && Math.Abs(ch.D1.Value - 4) < 1e-9, $"live chamfer: edges {ch.Edges.Count}, error {ch.Error}");
+    vp.SimulateHandleDrag(-7, end: false);
+    BuildNow(s);
+    var rf = (RoundFeature)part.Features[^1];
+    Require(rf.Error == null && rf.Edges.Count == 1, "switch back to round lost the edge");
+    vp.SimulateHandleDrag(-7, end: true);
+    Require(s.Document.PreviewPart == null, "preview part left after release");
+    BuildNow(s);
+    Require(rf.Error == null && Math.Abs(rf.Radius.Value - 7) < 1e-9, "final round");
+    int triFinal = part.Mesh?.Indices.Length ?? 0;
+    Console.WriteLine($"  preview tris {triPreview / 3}, final tris {triFinal / 3}");
+    w.CommitOperation();
+    Require(part.Features.Count == f0 + 1 && s.UndoNames.Count == 1, $"commit: features {part.Features.Count - f0}, undo {s.UndoNames.Count}");
     w.Close();
+});
+
+if (Environment.GetEnvironmentVariable("P3D_BENCH") == "file")
+Check("BENCH-FILE", () =>
+{
+    var (part, pars) = DocumentStorage.Load(Environment.GetEnvironmentVariable("P3D_FILE")!);
+    part.Rebuild(pars);
+    Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset();
+    Parametric3D.Kernel.Ops.DirectRound.Debug = Environment.GetEnvironmentVariable("P3D_DRDBG") == "1" ? m => { if (!m.StartsWith("face ")) Console.WriteLine("       direct: " + (m.Length > 500 ? m[..500] : m)); } : null;
+    part.Invalidate();
+    var sw = System.Diagnostics.Stopwatch.StartNew(); part.Rebuild(pars);
+    Console.WriteLine($"  full rebuild {sw.Elapsed.TotalMilliseconds:0} ms");
+    foreach (var f in part.Features) Console.WriteLine($"   {f.Name,-24} {part.LastFeatureMs.GetValueOrDefault(f),8:0} ms  {f.GetType().Name} {f.Error}");
+    Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(30)));
+});
+
+if (Environment.GetEnvironmentVariable("P3D_BENCH") == "3")
+Check("BENCH-CHAIN", () =>
+{
+    // скругление цепочки «прямое — дуга прежнего скругления — прямое» на кубе (снимок пользователя)
+    var part = DocumentSession.Sample().Part!;
+    part.Rebuild(null);
+    var e1 = part.Bodies.SelectMany(b => b.Edges).First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && (e.V0.P - e.V1.P).Length > 5);
+    var r1 = new RoundFeature { Radius = new ValueRef(double.Parse(Environment.GetEnvironmentVariable("P3D_R1") ?? "40", System.Globalization.CultureInfo.InvariantCulture)) };
+    r1.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(e1));
+    part.AddFeature(r1); part.Rebuild(null);
+    Console.WriteLine($"  first round: faces {part.Bodies.Sum(b => b.Faces.Count())} err {r1.Error}");
+    // ребро, касательно продолжающееся через дугу скругления
+    var roundFaceIds = r1.CreatedFaceIds.ToHashSet();
+    Parametric3D.Kernel.Topology.TEdge? start = null; List<Parametric3D.Kernel.Topology.TEdge>? chain = null;
+    foreach (var e in part.Bodies.SelectMany(b => b.Edges))
+    {
+        if (e.Curve is not Parametric3D.Kernel.Curves.LineCurve3) continue;
+        var ch = Parametric3D.App.Operations.Topo.TangentChain(e);
+        if (ch.Count >= 3) { start = e; chain = ch; break; }
+    }
+    if (chain == null) { Console.WriteLine("  no chain"); return; }
+    Console.WriteLine($"  chain {chain.Count}: {string.Join(",", chain.Select(c => c.Curve?.GetType().Name))}");
+    var rf = new RoundFeature { Radius = new ValueRef(5) };
+    foreach (var c in chain) rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(c));
+    part.AddFeature(rf); part.Rebuild(null);
+    foreach (var r in new[] { 5.0, 10, 20, 30, 40, 5, 20 })
+    {
+        rf.Radius = new ValueRef(r); part.NotifyChanged(rf);
+        var st = new Dictionary<string, double>(); string last = "start"; long lt = System.Diagnostics.Stopwatch.GetTimestamp();
+        void Hook(string sname) { long n = System.Diagnostics.Stopwatch.GetTimestamp(); st[last] = st.GetValueOrDefault(last) + System.Diagnostics.Stopwatch.GetElapsedTime(lt, n).TotalMilliseconds; last = sname; lt = n; }
+        Parametric3D.Kernel.Diagnostics.Prof.Enabled = Environment.GetEnvironmentVariable("P3D_PROF") == "1" && r == 20; Parametric3D.Kernel.Diagnostics.Prof.Reset();
+        Parametric3D.Kernel.Tess.UvMesher.Debug = Environment.GetEnvironmentVariable("P3D_UVDBG") == "1" ? m => Console.WriteLine("       uv: " + m) : null;
+        var sw = System.Diagnostics.Stopwatch.StartNew(); Part.BuildResult res;
+        double cf = double.Parse(Environment.GetEnvironmentVariable("P3D_COARSE") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+        var ks = Parametric3D.Kernel.KernelSettings.Capture();
+        if (cf > 0) ks = ks with { Preview = true, Chord = ks.Chord * cf, ChordAngle = Math.Min(ks.ChordAngle * cf, 0.6) };
+        using (new Parametric3D.Kernel.KernelContext(ks).WithStageHook(Hook).Enter()) res = part.Compute(null);
+        Hook("end"); double t = sw.Elapsed.TotalMilliseconds; part.Apply(res);
+        Console.WriteLine($"  R {r}: {t:0} ms faces {part.Bodies.Sum(b => b.Faces.Count())} tris {part.Mesh?.Indices.Length / 3} err {rf.Error} | " + string.Join(", ", st.OrderByDescending(k => k.Value).Take(4).Select(k => $"{k.Key}={k.Value:0}")));
+        if (Parametric3D.Kernel.Diagnostics.Prof.Enabled) Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(25)));
+        Console.WriteLine("     tris/face: " + string.Join(" ", part.Bodies.SelectMany(b => b.Faces).Select(f => $"{Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name.Replace("Surface","")}:{(part.Mesh!.FaceRanges.TryGetValue(f.Id, out var fr) ? fr.IndexCount / 3 : -1)}")));
+    }
 });
 
 if (Environment.GetEnvironmentVariable("P3D_BENCH") == "2")
@@ -482,17 +592,21 @@ Check("BENCH-SWEEP", () =>
     part.Rebuild(null);
     var edge = part.Bodies.SelectMany(b => b.Edges).First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && (e.V0.P - e.V1.P).Length > 5);
     var rf = new RoundFeature { Radius = new ValueRef(1) };
-    rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(edge));
+    foreach (var ce in Environment.GetEnvironmentVariable("P3D_CHAIN") == "1" ? Parametric3D.App.Operations.Topo.TangentChain(edge) : new() { edge }) rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(ce));
     part.AddFeature(rf); part.Rebuild(null);
-    foreach (var r in new[] { 1.0, 1.2, 1.4, 1.6, 2, 3, 5, 8, 12, 20, 1.0, 1.4 })
+    foreach (var r in (Environment.GetEnvironmentVariable("P3D_BENCHR") is { } rr ? rr.Split(",").Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray() : new[] { 1.0, 1.2, 1.4, 1.6, 2, 3, 5, 8, 12, 20, 1.0, 1.4 }))
     {
         rf.Radius = new ValueRef(r); part.NotifyChanged(rf);
         var st = new Dictionary<string, double>(); string last = "start"; long lt = System.Diagnostics.Stopwatch.GetTimestamp();
         void Hook(string sname) { long n = System.Diagnostics.Stopwatch.GetTimestamp(); st[last] = st.GetValueOrDefault(last) + System.Diagnostics.Stopwatch.GetElapsedTime(lt, n).TotalMilliseconds; last = sname; lt = n; }
-        Parametric3D.Kernel.Diagnostics.Prof.Enabled = r is 1.4 && Environment.GetEnvironmentVariable("P3D_BENCHPART") == "r"; Parametric3D.Kernel.Diagnostics.Prof.Reset();
+        Parametric3D.Kernel.Diagnostics.Prof.Enabled = r is 1.6 && Environment.GetEnvironmentVariable("P3D_PROF") == "1"; Parametric3D.Kernel.Diagnostics.Prof.Reset();
+        Parametric3D.Kernel.Ops.DirectRound.Debug = Environment.GetEnvironmentVariable("P3D_DRDBG") == "1" ? m => Console.WriteLine("       direct: " + (m.Length > 600 ? m[..600] : m)) : null;
 
         var sw = System.Diagnostics.Stopwatch.StartNew(); Part.BuildResult res;
-        using (new Parametric3D.Kernel.KernelContext(Parametric3D.Kernel.KernelSettings.Capture()).WithStageHook(Hook).Enter()) res = part.Compute(null);
+        double cf = double.Parse(Environment.GetEnvironmentVariable("P3D_COARSE") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+        var ks = Parametric3D.Kernel.KernelSettings.Capture();
+        if (cf > 0) ks = ks with { Preview = true, LivePreview = true, Chord = ks.Chord * cf };
+        using (new Parametric3D.Kernel.KernelContext(ks).WithStageHook(Hook).Enter()) res = part.Compute(null);
         Hook("end");
         double t = sw.Elapsed.TotalMilliseconds; part.Apply(res);
         Console.WriteLine("     " + string.Join(", ", st.OrderByDescending(k => k.Value).Take(5).Select(k => $"{k.Key}={k.Value:0}")));

@@ -39,7 +39,39 @@ public static class ExactAdapter
     [ThreadStatic] public static Action<string>? StaleExactTrace;
 
     /// <summary>Точная форма тела в указанном реестре.</summary>
+    // u09: ТОЧНАЯ ФОРМА ТЕЛА БЕЗ СВОЕЙ — ЗАПОМИНАЕТСЯ ПО ТЕЛУ И ЕГО РЕВИЗИИ. Тело из сохранённого состояния (до правимой
+    // операции) — один и тот же неизменяемый объект на каждом шаге предпросмотра; его перевод в точную форму стоил 0.8 с
+    // из 2.8 с скругления на детали из 40 операций — и повторялся на каждом шаге ручки. Повтор возвращает ту же форму в
+    // реестр плоскостей вызова (как форма, хранимая самим телом) и те же предупреждения; другие настройки ядра (контекст) —
+    // другая запись (G5-CONTEXT-DRIVES-RESULT). Мутация P3D_EXACTINCACHE=0.
+    private sealed class CachedForm { public long Revision; public KernelSettings Settings = null!; public ExactBody Form = null!; }
+    /// <summary>Настройки, от которых зависит форма: все, кроме признаков предпросмотра (проверки, не геометрия входа).</summary>
+    private static KernelSettings FormKey() => KernelSettings.Capture() with { Preview = false, LivePreview = false };
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, CachedForm> _formCache = new();
+    internal static readonly bool FormCacheOff = Environment.GetEnvironmentVariable("P3D_EXACTINCACHE") == "0";
+    public static long FormCacheHits;
+
     public static ExactBody ToExact(TSolid solid, PlaneRegistry registry, List<string>? warnings)
+    {
+        bool cacheable = !FormCacheOff && solid.Exact == null && !(solid.LazyDerivedExact is { } lz0 && lz0.Revision == solid.Revision);
+        var key = cacheable ? FormKey() : null;
+        if (cacheable && _formCache.TryGetValue(solid, out var hit) && hit.Revision == solid.Revision && hit.Settings.Equals(key))
+        {
+            Interlocked.Increment(ref FormCacheHits);
+            return new ExactBody(hit.Form.Solid.Import(registry), hit.Form.Sources);
+        }
+        long rev = solid.Revision;
+        // запоминается только вход без замечаний: грань, которую не удалось разметить, выпадает из формы с предупреждением
+        // (операция затем откажет) — такая форма не должна достаться следующему расчёту (KRN01-G10-INTERRUPT-ALL-OPERATIONS)
+        var local = new List<string>();
+        var made = ToExactCore(solid, registry, local);
+        warnings?.AddRange(local);
+        if (cacheable && solid.Revision == rev && local.Count == 0)
+            _formCache.AddOrUpdate(solid, new CachedForm { Revision = rev, Settings = key!, Form = made });
+        return made;
+    }
+
+    private static ExactBody ToExactCore(TSolid solid, PlaneRegistry registry, List<string>? warnings)
     {
         if (solid.Exact is { } cached)
         {

@@ -132,6 +132,12 @@ public abstract class Operation
 
     public void BeginDrag() => Dragging = true;
 
+    /// <summary>
+    /// u09: полный (живой) предпросмотр — при перетаскивании деталь считается по ходу (грубо, без проверок; один расчёт
+    /// в работе, следующий — с последней величиной). false — предпросмотр контуром, деталь считается, когда отпустили.
+    /// </summary>
+    public bool LivePreview { get; set; }
+
     public virtual void EndDrag()
     {
         if (!Dragging) return;
@@ -139,12 +145,25 @@ public abstract class Operation
         FieldChanged();
     }
 
+    /// <summary>Живой предпросмотр: перенести величину в деталь, когда прежний расчёт готов.</summary>
+    protected virtual void RequestLive() { }
+    /// <summary>Расчёт детали закончился — отправить отложенную величину живого предпросмотра.</summary>
+    public virtual void FlushLive() { }
+
     /// <summary>Значение от ручки: записать; не во время перетаскивания — и перестроить предпросмотр.</summary>
     public void SetDragValue(double v)
     {
         if (DragValue is not { } set) return;
         set(Math.Round(Math.Max(0.01, v), 2));
-        if (Dragging) Panel?.Refresh();
+        if (Dragging)
+        {
+            Panel?.Refresh();
+            if (LivePreview)
+            {
+                try { RequestLive(); }
+                catch (Exception ex) { AppLog.Write("live preview " + Title, ex); }
+            }
+        }
         else FieldChanged();
     }
 
@@ -208,6 +227,37 @@ public abstract class FeatureOp<T> : Operation where T : Feature
     }
 
     private bool _added;
+    private bool _liveDirty;
+
+    protected override void RequestLive()
+    {
+        Push();
+        W.Session.Document.PreviewPart = Part;
+        Part.BeginPreviewSession();
+        if (!Editing && !_added) { Part.AddFeature(F); _added = true; return; }
+        _liveDirty = true;
+        FlushLive();
+    }
+
+    public override void FlushLive()
+    {
+        if (!_liveDirty || !Dragging || W.Session.Document.IsBuilding || Part.IsDirty) return;
+        _liveDirty = false;
+        Part.NotifyChanged(F);
+    }
+
+    /// <summary>Отпустили: после живого предпросмотра — окончательный обычный расчёт операции.</summary>
+    public override void EndDrag()
+    {
+        if (!Dragging) return;
+        _liveDirty = false;
+        if (ReferenceEquals(W.Session.Document.PreviewPart, Part))
+        {
+            W.Session.Document.PreviewPart = null;
+            if (_added) Part.EndPreviewSession(F);
+        }
+        base.EndDrag();
+    }
 
     protected override void Apply()
     {
@@ -238,6 +288,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
     /// </summary>
     public override void Cancel()
     {
+        if (ReferenceEquals(W.Session.Document.PreviewPart, Part)) W.Session.Document.PreviewPart = null;
         if (!Editing) { if (_added) Part.RemoveFeature(F); W.Session.DiscardEdit(); }
         else W.Session.CancelEdit();
     }

@@ -41,12 +41,15 @@ internal static class Fields
 internal sealed class RefCache<TV> where TV : struct
 {
     private readonly Dictionary<uint, TV> _map = new();
+    /// <summary>u09: заранее снятые значения (ручка: рёбра и точки до операции — после предпросмотра их номеров нет).</summary>
+    public Dictionary<uint, TV>? Preset;
     public IEnumerable<TV> Resolve(RefField f, Func<PickRef, TV?> make)
     {
         foreach (var r in f.Items)
         {
             if (!_map.TryGetValue(r.Id, out var v))
             {
+                if (Preset != null && Preset.TryGetValue(r.Id, out var pv)) { _map[r.Id] = pv; yield return pv; continue; }
                 if (make(r) is not { } m) continue;
                 _map[r.Id] = v = m;
             }
@@ -174,6 +177,7 @@ public sealed class RoundOp : FeatureOp<RoundFeature>
     private RefField _edges = null!;
     private readonly RefCache<EdgeRef> _cache = new();
     public RoundOp(RoundFeature? existing = null) : base(existing) { }
+    public Dictionary<uint, EdgeRef>? PresetEdges { set => _cache.Preset = value; }
     public override string Title => "Скругление";
     public override string Icon => "f_round_but.svg";
     protected override RoundFeature Create() => new();
@@ -208,6 +212,7 @@ public sealed class ChamferOp : FeatureOp<ChamferFeature>
     private RefField _edges = null!;
     private readonly RefCache<EdgeRef> _cache = new();
     public ChamferOp(ChamferFeature? existing = null) : base(existing) { }
+    public Dictionary<uint, EdgeRef>? PresetEdges { set => _cache.Preset = value; }
     public override string Title => "Фаска";
     public override string Icon => "f_chamfer_but.svg";
     protected override ChamferFeature Create() => new() { Mode = ChamferKind.TwoDistances };
@@ -249,6 +254,7 @@ public sealed class VertexRoundOp : FeatureOp<VertexRoundFeature>
     private RefField _v = null!;
     private readonly RefCache<Vector3d> _cache = new();
     public VertexRoundOp(VertexRoundFeature? existing = null) : base(existing) { }
+    public Dictionary<uint, Vector3d>? PresetPoints { set => _cache.Preset = value; }
     public override string Title => "Скругление вершины";
     public override string Icon => "f_round_vertex_but.svg";
     protected override VertexRoundFeature Create() => new();
@@ -278,6 +284,7 @@ public sealed class VertexChamferOp : FeatureOp<VertexChamferFeature>
     private RefField _v = null!;
     private readonly RefCache<Vector3d> _cache = new();
     public VertexChamferOp(VertexChamferFeature? existing = null) : base(existing) { }
+    public Dictionary<uint, Vector3d>? PresetPoints { set => _cache.Preset = value; }
     public override string Title => "Фаска угла";
     public override string Icon => "f_chamfer_vertex_but.svg";
     protected override VertexChamferFeature Create() => new();

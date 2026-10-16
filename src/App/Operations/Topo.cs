@@ -176,8 +176,13 @@ public static class Topo
             if (row.Count >= 2) rows.Add(row);
         }
         if (rows.Count == 0) return null;
+        // концы цепочки — точки, где кончается одно выбранное ребро и не начинается другое: там торцевое сечение
+        var ends = rows.SelectMany(r => new[] { r[0].P, r[^1].P }).ToList();
+        bool IsEnd(Vector3d q) => ends.Count(x => (x - q).LengthSquared < 1e-10) == 1;
         return v =>
         {
+            // КОНТУР: две границы полосы на гранях (по всей цепочке) и торцевые сечения у концов цепочки — без внутренних
+            // сечений и диагоналей
             var res = new List<(Vector3d, Vector3d)>();
             foreach (var row in rows)
             {
@@ -187,14 +192,12 @@ public static class Topo
                     var (P, d1, d2) = row[i];
                     var sec = Section(P, d1, d2, v, round);
                     if (sec.Count < 2) continue;
-                    // сечение — у концов и через одно; границы и середина — вдоль ребра
-                    if (i == 0 || i == row.Count - 1 || i % 3 == 0 || row.Count <= 3)
+                    if ((i == 0 || i == row.Count - 1) && IsEnd(P))
                         for (int k = 1; k < sec.Count; k++) res.Add((sec[k - 1], sec[k]));
-                    if (prev != null && prev.Count == sec.Count)
+                    if (prev != null)
                     {
                         res.Add((prev[0], sec[0]));
                         res.Add((prev[^1], sec[^1]));
-                        if (round) res.Add((prev[sec.Count / 2], sec[sec.Count / 2]));
                     }
                     prev = sec;
                 }

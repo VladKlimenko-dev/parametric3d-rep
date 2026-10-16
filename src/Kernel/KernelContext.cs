@@ -61,6 +61,11 @@ public sealed record KernelSettings
     public string? OpTag { get; init; }
     /// <summary>KRN-10 (g.13): предпросмотр — проверки результата откладываются до принятия (BooleanOp.AcceptPreview).</summary>
     public bool Preview { get; init; }
+    /// <summary>
+    /// u09: живой предпросмотр ручкой — итоговые проверки обходных путей операций (полная проверка тела скругления
+    /// резцом) не выполняются: результат показывается и сразу заменяется; окончательный расчёт — обычный, с проверками.
+    /// </summary>
+    public bool LivePreview { get; init; }
     /// <summary>KRN-02: бюджет точности (утверждённая числовая область).</summary>
     public ToleranceContext? Tolerance { get; init; } = ToleranceContext.Default;
 

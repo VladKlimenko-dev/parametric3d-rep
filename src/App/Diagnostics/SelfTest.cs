@@ -27,7 +27,7 @@ namespace Parametric3D.App.Diagnostics;
 /// </summary>
 public sealed class SelfTest
 {
-    public const string Build = "u08";
+    public const string Build = "u09";
 
     private readonly MainWindow _w;
     private readonly Action<string> _progress;
@@ -119,6 +119,8 @@ public sealed class SelfTest
         try
         {
             SystemInfo();
+            // отладка: только раздел ручек (P3D_SELFTEST_ONLY=handles)
+            if (Environment.GetEnvironmentVariable("P3D_SELFTEST_ONLY") == "handles") { await Handles(); return; }
             await Operations();
             await RealisticParts();
             await Holes();
@@ -126,6 +128,7 @@ public sealed class SelfTest
             await Files();
             await View();
             await Ui();
+            await Handles();
         }
         finally
         {
@@ -492,46 +495,6 @@ public sealed class SelfTest
             Target("Скругление в панели: предпросмотр на детали 40 операций", "≤ 1000 мс", preview, 1000);
         }
 
-        // ручка ребра (п. 6): быстрый предпросмотр при перетаскивании и один расчёт, когда отпустили
-        _phase = "интерфейс: ручка";
-        Step("ручка скругления");
-        part = _w.Session.Part!;
-        var edge2 = part.Bodies.SelectMany(b => b.Edges).FirstOrDefault(e => e.Curve is Kernel.Curves.LineCurve3 && (e.V0.P - e.V1.P).Length > 5);
-        if (edge2 == null) { Line("Ручка: подходящего ребра нет"); Count(false); }
-        else
-        {
-            int f0 = part.Features.Count;
-            v.Selection.Select(new PickRef(edge2.Id, PickKind.Edge, part, null), additive: false);
-            await Task.Delay(100);
-            if (v.Handle == null) { Line("Ручка: у ребра нет ручки"); Count(false); }
-            else
-            {
-                var moves = new List<double>();
-                var sw = Stopwatch.StartNew();
-                for (int i = 1; i <= 20; i++)
-                {
-                    sw.Restart();
-                    v.SimulateHandleDrag(-1, 0.5 + 0.1 * i, end: false);
-                    moves.Add(sw.Elapsed.TotalMilliseconds);
-                    await Task.Delay(16);
-                }
-                bool untouched = part.Features.Count == f0;
-                sw.Restart();
-                v.SimulateHandleDrag(-1, 2.5, end: true);
-                await WaitBuilt();
-                double release = sw.Elapsed.TotalMilliseconds;
-                var rf = part.Features.LastOrDefault() as RoundFeature;
-                bool ok = untouched && rf != null && rf.Error == null && part.Features.Count == f0 + 1;
-                _w.CancelOperation();
-                await WaitBuilt();
-                ok &= part.Features.Count == f0;
-                Count(ok);
-                Line($"Ручка скругления: шаг перетаскивания (предпросмотр линиями) медиана {F(Median(moves))} мс, наибольший {F(moves.Max())} мс; " +
-                     $"отпустили → деталь готова через {F(release)} мс; {(ok ? "без ошибок" : "ОШИБКА" + (untouched ? "" : ": деталь менялась во время перетаскивания") + (rf?.Error is { } er ? ": " + er : ""))}");
-                Target("Ручка: шаг перетаскивания", "≤ 16 мс", Median(moves), 16);
-            }
-        }
-
         // эскиз → прямоугольник → выдавливание на новой детали
         _phase = "интерфейс: эскиз и выдавливание";
         Step("эскиз → выдавливание");
@@ -571,6 +534,217 @@ public sealed class SelfTest
             Line($"  {g.Key,-44} ×{g.Count(),-4} наиб. {F(g.Max(x => x.Ms)),8} мс, сумма {F(g.Sum(x => x.Ms)),8} мс");
         if (slow.Count == 0) Line("  нет");
         Target("Наибольшая остановка окна (окно не отвечает)", "≤ 500 мс", _maxStall, 500);
+    }
+
+    // ---------------------------------------------------------------- ручки и последовательности (u09)
+
+    private static PickRef EdgeRef(Part p, Func<Kernel.Topology.TEdge, bool> pick) =>
+        p.Bodies.SelectMany(b => b.Edges).Where(pick).Select(e => new PickRef(e.Id, PickKind.Edge, p, null)).FirstOrDefault();
+
+    private static double TopZ(Part p) => p.Bodies.SelectMany(b => b.Vertices).Max(v => v.P.Z);
+
+    /// <summary>Верхнее прямое ребро (вдоль X или Y) на наибольшей высоте.</summary>
+    private static PickRef TopEdge(Part p, int axis = 0)
+    {
+        double z = TopZ(p);
+        return EdgeRef(p, e => e.Curve is Kernel.Curves.LineCurve3 && Math.Abs(e.V0.P.Z - z) < 1e-6 && Math.Abs(e.V1.P.Z - z) < 1e-6
+                               && (axis == 0 ? Math.Abs(e.V0.P.Y - e.V1.P.Y) < 1e-6 : Math.Abs(e.V0.P.X - e.V1.P.X) < 1e-6) && (e.V0.P - e.V1.P).Length > 5);
+    }
+
+    private static PickRef TopVertex(Part p)
+    {
+        double z = TopZ(p);
+        // вершина, где сходятся только прямые рёбра (скругление вершины — для таких)
+        var tops = p.Bodies.SelectMany(b => b.Vertices).Where(x => Math.Abs(x.P.Z - z) < 1e-6).OrderBy(x => x.P.X + x.P.Y).ToList();
+        var v = tops.FirstOrDefault(x => x.Edges.All(e => e.Curve is Kernel.Curves.LineCurve3)) ?? tops.First();
+        return new PickRef(v.Id, PickKind.Vertex, p, null);
+    }
+
+    private static PickRef TopFace(Part p)
+    {
+        foreach (var f in p.Bodies.SelectMany(b => b.Faces))
+            if (Parametric3D.App.Operations.Refs.FacePlane(p, f.Id) is { } pl && pl.N.Z > 0.999) return new PickRef(f.Id, PickKind.Face, p, null);
+        return default;
+    }
+
+    /// <summary>
+    /// Ручка в окне: тянуть 1.5 с (шаг 16 мс) от 0 до величины со знаком, затем отпустить и подтвердить. Считается: время
+    /// шага в потоке окна, сколько раз деталь обновилась на экране, сколько длится расчёт предпросмотра, за сколько деталь
+    /// догоняет мышь после остановки, время от «отпустили» до готовой детали.
+    /// </summary>
+    private async Task HandleCase(string name, DocumentSession s, Func<Part, PickRef> pick, double target, bool full, bool chain = true)
+    {
+        _ct.ThrowIfCancellationRequested();
+        string mode = full ? "полный" : "контур";
+        Step($"ручка: {name} ({mode})");
+        _phase = $"ручка: {name} ({mode})";
+        UserPrefs.Current.PreviewMode = full ? "full" : "contour";
+        _w.SetSession(s);
+        await WaitBuilt();
+        await Task.Delay(150);
+        var v = _w.ViewPort;
+        var part = s.Part!;
+        int f0 = part.Features.Count;
+        var r = pick(part);
+        if (r.Owner == null) { Line($"{name} ({mode}): нет подходящего элемента"); Count(false); return; }
+        var sel = chain && r.Kind == PickKind.Edge && v.ExpandEdge != null ? v.ExpandEdge(r) : new List<PickRef> { r };
+        v.Selection.Clear();
+        foreach (var x in sel) v.Selection.Select(x, additive: true);
+        await Task.Delay(100);
+        if (v.Handle == null) { Line($"{name} ({mode}): у элемента нет ручки"); Count(false); return; }
+        var doc = s.Document;
+        int scenes = 0;
+        var builds = new List<double>();
+        long bt0 = 0;
+        void OnScene() => scenes++;
+        void OnStart() => bt0 = Stopwatch.GetTimestamp();
+        void OnFinish() { if (bt0 != 0) builds.Add(Stopwatch.GetElapsedTime(bt0).TotalMilliseconds); bt0 = 0; }
+        v.SceneRebuilt += OnScene; doc.BuildStarted += OnStart; doc.BuildFinished += OnFinish;
+        var steps = new List<double>();
+        try
+        {
+            var sw = Stopwatch.StartNew();
+            int n = 0;
+            int scenes0 = scenes;
+            while (sw.ElapsedMilliseconds < 1500)
+            {
+                double f = Math.Min(1, sw.ElapsedMilliseconds / 1500.0);
+                var t = Stopwatch.GetTimestamp();
+                v.SimulateHandleDrag(target * (0.2 + 0.8 * f), end: false);
+                steps.Add(Stopwatch.GetElapsedTime(t).TotalMilliseconds);
+                n++;
+                await Task.Delay(16);
+            }
+            v.SimulateHandleDrag(target, end: false);
+            int liveScenes = scenes - scenes0;
+            // мышь остановилась: деталь догоняет последнюю величину
+            var st = Stopwatch.StartNew();
+            await WaitBuilt();
+            double settle = st.Elapsed.TotalMilliseconds;
+            st.Restart();
+            v.SimulateHandleDrag(target, end: true);
+            await WaitBuilt();
+            await Task.Delay(30);
+            double release = st.Elapsed.TotalMilliseconds;
+            var op = _w.CurrentOperation;
+            string? err = part.Features.Count > f0 ? part.Features[^1].Error : "операция не добавлена";
+            _w.CommitOperation();
+            await WaitBuilt();
+            bool ok = err == null && part.Features.Count == f0 + 1 && part.Integrity == null;
+            Count(ok);
+            double perSec = liveScenes / 1.5;
+            Line($"{name,-44} {mode,-7} шаг {F(Median(steps)),5} мс | обновлений {liveScenes,3} ({F(perSec)}/с), расчёт предпросмотра медиана {F(Median(builds)),7} мс | " +
+                 $"догоняет {F(settle),7} мс | отпустили → готово {F(release),7} мс | {(ok ? "годно" : "ОШИБКА: " + (err ?? part.Integrity))}");
+            if (full) _handleRows.Add((name, Median(builds), perSec));
+        }
+        finally
+        {
+            v.SceneRebuilt -= OnScene; doc.BuildStarted -= OnStart; doc.BuildFinished -= OnFinish;
+            if (_w.CurrentOperation != null) _w.CancelOperation();
+        }
+    }
+
+    private readonly List<(string Name, double BuildMs, double PerSec)> _handleRows = new();
+
+    private async Task Handles()
+    {
+        Head("8б. Ручки операций в окне (предпросмотр полный и контуром)");
+        var keepMode = UserPrefs.Current.PreviewMode;
+        try
+        {
+            Line("шаг — время одного движения мыши в потоке окна; обновлений — сколько раз деталь перерисована за 1.5 с перетаскивания;");
+            Line("расчёт предпросмотра — один расчёт детали при перетаскивании; догоняет — после остановки мыши; отпустили — окончательный расчёт.");
+            DocumentSession Cube() => DocumentSession.Sample();
+            DocumentSession CubeRounded()
+            {
+                var s = DocumentSession.Sample();
+                var p = s.Part!;
+                p.Rebuild(null);
+                var e = TopEdge(p, 0);
+                var rf = new RoundFeature { Radius = new ValueRef(30), Name = "R30" };
+                if (p.FindEdge(e.Id) is { } te) rf.Edges.Add(Kernel.Topology.EdgeRef.Of(te));
+                p.AddFeature(rf);
+                return s;
+            }
+            DocumentSession Heavy() => DocumentSession.FromPart(TestParts.Realistic(1, 40), "40 операций");
+            await HandleCase("куб: скругление ребра R 20", Cube(), p => TopEdge(p), -20, true);
+            await HandleCase("куб: фаска ребра 15", Cube(), p => TopEdge(p), 15, true);
+            await HandleCase("куб: скругление ребра R 20", Cube(), p => TopEdge(p), -20, false);
+            await HandleCase("куб со скруглением: цепочка через дугу R 15", CubeRounded(), p => TopEdge(p, 1), -15, true);
+            await HandleCase("куб: скругление вершины R 15", Cube(), TopVertex, -15, true);
+            await HandleCase("куб: фаска угла 15", Cube(), TopVertex, 15, true);
+            await HandleCase("куб: выдавливание грани 30", Cube(), TopFace, 30, true);
+            await HandleCase("куб: вырез грани 30", Cube(), TopFace, -30, true);
+            await HandleCase("40 операций: скругление ребра R 3", Heavy(), p => EdgeRef(p, e => e.Curve is Kernel.Curves.LineCurve3 && (e.V0.P - e.V1.P).Length > 5), -3, true);
+            await HandleCase("40 операций: скругление ребра R 3", Heavy(), p => EdgeRef(p, e => e.Curve is Kernel.Curves.LineCurve3 && (e.V0.P - e.V1.P).Length > 5), -3, false);
+            await HandleCase("40 операций: фаска ребра 2", Heavy(), p => EdgeRef(p, e => e.Curve is Kernel.Curves.LineCurve3 && (e.V0.P - e.V1.P).Length > 5), 2, true);
+            foreach (var (n, ms, ps) in _handleRows.Where(x => x.Name.StartsWith("куб")))
+                Target($"Ручка, полный предпросмотр — {n}: расчёт шага", "≤ 100 мс", ms, 100);
+
+            // ПОСЛЕДОВАТЕЛЬНО: одна деталь, операции ручками одна за другой (каждая — тянуть, отпустить, ОК)
+            Line("");
+            Line("Последовательность ручками на одной детали (куб 100): тянуть → отпустить → ОК; время от «отпустили» до готовой детали и всей операции:");
+            var seq = DocumentSession.Sample();
+            UserPrefs.Current.PreviewMode = "full";
+            var steps = new (string Name, Func<Part, PickRef> Pick, double V)[]
+            {
+                ("скругление верхнего ребра X R 10", p => TopEdge(p, 0), -10),
+                ("фаска верхнего ребра Y 8", p => TopEdge(p, 1), 8),
+                ("скругление вершины R 6", TopVertex, -6),
+                ("выдавливание верхней грани 20", TopFace, 20),
+                ("скругление верхнего ребра X R 4", p => TopEdge(p, 0), -4),
+                ("вырез верхней грани 5", TopFace, -5),
+                ("фаска верхнего ребра Y 3", p => TopEdge(p, 1), 3),
+                ("скругление верхнего ребра X R 2", p => TopEdge(p, 0), -2),
+            };
+            _w.SetSession(seq);
+            await WaitBuilt();
+            var total = Stopwatch.StartNew();
+            int i = 0;
+            foreach (var (n, pick, val) in steps)
+            {
+                i++;
+                _ct.ThrowIfCancellationRequested();
+                _phase = "последовательность: " + n;
+                var part = seq.Part!;
+                int f0 = part.Features.Count;
+                var r = pick(part);
+                if (r.Owner == null) { Line($"  {i,2}. {n,-36} нет элемента"); Count(false); continue; }
+                var v = _w.ViewPort;
+                var sel = r.Kind == PickKind.Edge && v.ExpandEdge != null ? v.ExpandEdge(r) : new List<PickRef> { r };
+                v.Selection.Clear();
+                foreach (var x in sel) v.Selection.Select(x, additive: true);
+                await Task.Delay(60);
+                if (v.Handle == null) { Line($"  {i,2}. {n,-36} нет ручки"); Count(false); continue; }
+                var sw = Stopwatch.StartNew();
+                for (int k = 1; k <= 10; k++) { v.SimulateHandleDrag(val * k / 10, end: false); await Task.Delay(16); }
+                var rel = Stopwatch.StartNew();
+                v.SimulateHandleDrag(val, end: true);
+                await WaitBuilt();
+                double release = rel.Elapsed.TotalMilliseconds;
+                string? err = part.Features.Count > f0 ? part.Features[^1].Error : "операция не добавлена";
+                double op = part.Features.Count > f0 && part.LastFeatureMs.TryGetValue(part.Features[^1], out var ms) ? ms : double.NaN;
+                _w.CommitOperation();
+                await WaitBuilt();
+                bool ok = err == null && part.Features.Count == f0 + 1;
+                Count(ok);
+                Line($"  {i,2}. {n,-36} отпустили → готово {F(release),7} мс (операция в ядре {F(op),7} мс), всего с перетаскиванием {F(sw.Elapsed.TotalMilliseconds),7} мс  {(ok ? "годно" : "ОШИБКА: " + err)}");
+            }
+            Line($"  Вся последовательность: {F(total.Elapsed.TotalMilliseconds)} мс; операций в детали {seq.Part!.Features.Count}, объём {F(seq.Part.Volume, "0.###")} мм³");
+            // полный пересчёт той же детали
+            var pp = seq.Part!;
+            var fs = await Task.Run(() => { pp.Invalidate(); var sw = Stopwatch.StartNew(); pp.Rebuild(null); return sw.Elapsed.TotalMilliseconds; });
+            Line($"  Полный пересчёт получившейся детали: {F(fs)} мс");
+            Line("  по операциям: " + string.Join("; ", pp.Features.Select(f => $"{f.Name} {F(pp.LastFeatureMs.TryGetValue(f, out var fm) ? fm : double.NaN, "0")}")));
+            try
+            {
+                var file = Path.Combine(Path.GetDirectoryName(ReportPath) ?? ".", $"P3D_sequence_{_started:yyyyMMdd_HHmmss}.p3d");
+                seq.SaveAs(file);
+                Line($"  Деталь последовательности сохранена: {file}");
+            }
+            catch (Exception ex) { Line("  сохранить деталь не удалось: " + ex.Message); }
+        }
+        finally { UserPrefs.Current.PreviewMode = keepMode; }
     }
 
     // ---------------------------------------------------------------- итог
