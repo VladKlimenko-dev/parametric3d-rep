@@ -1,4 +1,4 @@
-using Parametric3D.Core;
+﻿using Parametric3D.Core;
 using Parametric3D.Model;
 using Parametric3D.Model.Features;
 using Parametric3D.Model.Sketching;
@@ -117,7 +117,9 @@ public sealed class Selection
     /// SketchCurve скрываются и отрезок, и дуга, и сплайн, и это
     /// разные вещи для пользователя.
     /// </summary>
-    public static string KindName(PickRef r) => r.Target switch
+    public static string KindName(PickRef r) => Loc.L(KindNameRu(r));
+
+    public static string KindNameRu(PickRef r) => r.Target switch
     {
         Assembly => "Сборка",
         Part => "Деталь",
@@ -151,7 +153,9 @@ public sealed class Selection
     };
 
     /// <summary>Подтип грани или ребра по геометрии (плоская, цилиндр, прямое, дуга…), если деталь известна.</summary>
-    public static string? Subtype(PickRef r)
+    public static string? Subtype(PickRef r) => SubtypeRu(r) is { } s ? Loc.L(s) : null;
+
+    private static string? SubtypeRu(PickRef r)
     {
         if (r.Owner is not Part p) return null;
         try
@@ -159,7 +163,7 @@ public sealed class Selection
             if (r.Kind == PickKind.Face && p.FindFace(r.Id) is { } f)
             {
                 string n = f.Surface?.GetType().Name ?? "";
-                return n.Contains("Plane") ? "плоская" : n.Contains("Cylind") ? "цилиндр" : n.Contains("Cone") ? "конус"
+                return n.Contains("Plane") || Operations.Refs.FacePlane(p, r.Id) != null ? "плоская" : n.Contains("Cylind") ? "цилиндр" : n.Contains("Cone") ? "конус"
                      : n.Contains("Sphere") ? "шар" : n.Contains("Torus") ? "тор" : n.Contains("Nurbs") || n.Contains("Spline") ? "свободная" : null;
             }
             if (r.Kind == PickKind.Edge && p.FindEdge(r.Id) is { } e)

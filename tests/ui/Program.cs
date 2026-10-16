@@ -8,6 +8,11 @@ using OpenTK.Mathematics;
 using Parametric3D.App;
 using Parametric3D.App.Commands;
 using Parametric3D.App.Icons;
+using Parametric3D.App.Operations;
+using Parametric3D.App.Sketching;
+using Parametric3D.App.ViewModels;
+using Parametric3D.Model;
+using Parametric3D.Model.Sketching;
 using Parametric3D.App.Services;
 using Parametric3D.App.Viewport;
 using Parametric3D.App.Views;
@@ -59,7 +64,10 @@ Check("UI-COMMAND-REGISTRY", () =>
     var bad = reg.All.Where(c => c.Icon != null && !known.Contains(c.Icon)).Select(c => $"{c.Id}:{c.Icon}").ToList();
     Require(bad.Count == 0, "icons not in UI_ICONS: " + string.Join(", ", bad));
     // клавиши без конфликтов
-    var g = reg.All.Where(c => c.Gesture != null).GroupBy(c => c.Gesture!.ToString()).Where(x => x.Count() > 1).Select(x => x.Key).ToList();
+    // одна клавиша допустима у операции модели и у инструмента эскиза (они не доступны одновременно)
+    var g = reg.All.Where(c => c.Gesture != null).GroupBy(c => c.Gesture!.ToString())
+        .Where(x => x.Count() > 1 && !(x.Count() == 2 && x.Select(c => c.Group).OrderBy(n => n).SequenceEqual(new[] { "Модель", "Эскиз" })))
+        .Select(x => x.Key).ToList();
     Require(g.Count == 0, "gesture conflicts: " + string.Join(", ", g));
     w.Close();
 });
@@ -141,7 +149,7 @@ Check("UI-VIEW-PICK", () =>
     var s = DocumentSession.Sample();
     var w = Open(s);
     var vp = w.ViewPort;
-    vp.ShowDatumPlanes = false;
+    vp.Show.Planes = false; vp.MarkDirty();
     vp.Camera.State.Rotation = ModelViewport.HomeRotation;
     vp.ZoomToFit(animate: false);
     var c = vp.TranslatePoint(new Point(vp.Bounds.Width / 2, vp.Bounds.Height / 2), w)!.Value;
@@ -224,6 +232,118 @@ Check("UI-THEME-ICONS", () =>
     Require(r.Contains("stroke=\"#E6E8EC\"") && r.Contains("#FF7A1A") && r.Contains("fill:#E6E8EC") && r.Contains("stroke:#E6E8EC"), r);
     // без файла иконки — подпись
     Require(IconProvider.Get("no_such_icon_but.svg") == null, "missing icon");
+    w.Close();
+});
+
+
+Check("UI-TREE-VISIBILITY", () =>
+{
+    // п. 4: глаз детали скрывает всё внутри; п. 5: «свернуть дерево» сворачивает и деталь; п. 13: перестройка дерева
+    // (глаз эскиза) не сворачивает развёрнутое
+    var s = DocumentSession.Sample();
+    var w = Open(s);
+    var part = s.Part!;
+    var tree = w.FindControl<TreeView>("Tree")!;
+    var root = ((IEnumerable<TreeNode>)tree.ItemsSource!).First();
+    Require(root.Item == part, "tree root is not the part");
+    root.IsVisible = false;
+    Require(part.Descendants().All(d => !d.Visible), "hiding the part did not hide its children");
+    Require(root.SelfAndDescendants().Where(n => n.HasEye).All(n => !n.IsVisible), "child eyes are still open");
+    root.IsVisible = true;
+    Require(part.Descendants().All(d => d.Visible), "showing the part did not show its children");
+    var feat = w.AllNodes.First(n => n.Item is Feature && n.Children.Count > 0);
+    feat.IsExpanded = true;
+    var sk = feat.Children.First(n => n.Item is Sketch);
+    sk.IsVisible = !sk.IsVisible;
+    w.RebuildTree();
+    Require(w.AllNodes.First(n => n.Item == feat.Item).IsExpanded, "rebuild collapsed the feature branch");
+    w.SetTreeExpanded(false);
+    Require(!w.AllNodes.First().IsExpanded, "collapse does not collapse the part");
+    w.SetTreeExpanded(true);
+    Require(w.AllNodes.First().IsExpanded, "expand does not expand the part");
+    w.Close();
+});
+
+Check("UI-OPERATION-ROUND", () =>
+{
+    // операция в панели: выбор до команды → поле ссылок, предпросмотр в модели, «ОК» — один шаг отмены, «Отмена» — как было
+    var s = DocumentSession.Sample();
+    var w = Open(s);
+    var part = s.Part!;
+    int f0 = part.Features.Count, u0 = s.UndoNames.Count;
+    var edge = part.Bodies[0].Edges.First();
+    w.ViewPort.Selection.Select(new PickRef(edge.Id, PickKind.Edge, part, null), additive: false);
+    Require(w.SuggestedOps().Contains("op.round"), "edge does not suggest a round");
+    w.StartOperation(new RoundOp());
+    Require(w.CurrentOperation != null && part.Features.Count == f0 + 1, "round was not started with a preview");
+    var round = (RoundFeature)part.Features.Last();
+    Require(round.Edges.Count == 1, $"edges from the selection: {round.Edges.Count}");
+    s.Document.RebuildDirty();
+    Require(round.Error == null, "round error: " + round.Error);
+    w.CommitOperation();
+    Require(w.CurrentOperation == null && s.UndoNames.Count == u0 + 1, "commit is not one undo step");
+    // отмена новой операции
+    w.ViewPort.Selection.Select(new PickRef(part.Bodies[0].Edges.Last().Id, PickKind.Edge, part, null), additive: false);
+    w.StartOperation(new ChamferOp());
+    w.CancelOperation();
+    Require(s.Part!.Features.Count == f0 + 1 && s.UndoNames.Count == u0 + 1, "cancel did not restore the model");
+    Require(!s.CanRedo, "cancel left a redo step");
+    w.Close();
+});
+
+Check("UI-SKETCH-EXTRUDE", () =>
+{
+    // эскиз на плоскости → прямоугольник → закончить → выдавливание по нему (эскиз сначала, п. 3 и 9)
+    var s = DocumentSession.NewPart();
+    var w = Open(s);
+    var part = s.Part!;
+    w.SelectItem(part.PlaneXY);
+    w.StartOperation(new SketchOp { Then = sk => new ExtrudeOp { SeedSketch = sk } });
+    Require(w.InSketch, "sketch mode did not start on the selected plane");
+    var sketch = w.ViewPort.ActiveSketch!;
+    var rect = new RectangleTool();
+    rect.Click(new SketchInput(sketch, new Vector2d(-20, -10), null));
+    Require(rect.Click(new SketchInput(sketch, new Vector2d(20, 10), null)), "rectangle not created");
+    w.FinishSketch();
+    Require(!w.InSketch && w.CurrentOperation is ExtrudeOp, "extrude did not follow the sketch");
+    w.CommitOperation();
+    s.Document.RebuildDirty();
+    Require(part.Bodies.Count == 1 && Math.Abs(part.Volume - 40 * 20 * 20) < 1e-6, $"volume {part.Volume}");
+    w.Close();
+});
+
+Check("UI-PARAMETERS-SCOPE", () =>
+{
+    // параметры по уровням: формула детали видит параметр документа, своё имя закрывает документное; файл хранит оба уровня
+    var s = DocumentSession.NewPart();
+    var part = s.Part!;
+    s.Document.Parameters.Add("W", 30, Parametric3D.Model.Params.ParamKind.Real, "mm");
+    s.Document.Parameters.Add("H", 5, Parametric3D.Model.Params.ParamKind.Real, "mm");
+    part.LocalParameters.Add("H", 7, Parametric3D.Model.Params.ParamKind.Real, "mm");
+    part.LocalParameters.AddFormula("D", "W + H", "mm");
+    var t = s.Document.ScopeFor(part);
+    Require(t.TryValue("D", out double d) && Math.Abs(d - 37) < 1e-9, $"D = {d}");
+    Require(s.Document.Parameters.TryValue("H", out double h) && h == 5, "document H changed");
+    string path = Path.Combine(Path.GetTempPath(), $"uiparams_{Guid.NewGuid():N}.p3d");
+    s.SaveAs(path);
+    var s2 = DocumentSession.Open(path);
+    var t2 = s2.Document.ScopeFor(s2.Part!);
+    Require(s2.Part!.LocalParameters.Count == 2 && t2.TryValue("D", out double d2) && Math.Abs(d2 - 37) < 1e-9, "part parameters were not saved");
+    File.Delete(path);
+});
+
+Check("UI-LANGUAGE", () =>
+{
+    // язык (п. 2): английские подписи команд и обратно; у каждой команды на панелях есть перевод
+    var w = Open(DocumentSession.NewPart());
+    Loc.Set(true);
+    var reg = CommandRegistry.Instance;
+    Require(reg["file.save"].Text == "Save" && reg["op.extrude"].Text == "Extrude", "english labels");
+    var missing = reg.All.Where(c => c.Text == c.Label || c.ShortText == (c.Short ?? c.Label) && c.Short != null && c.Short.Any(ch => ch >= 'А' && ch <= 'я'))
+        .Where(c => c.Label.Any(ch => ch >= 'А' && ch <= 'я')).Select(c => c.Id).ToList();
+    Loc.Set(false);
+    Require(reg["file.save"].Text == "Сохранить", "russian labels");
+    Require(missing.Count == 0, "no translation: " + string.Join(", ", missing));
     w.Close();
 });
 

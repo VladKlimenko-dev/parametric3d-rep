@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Model;
@@ -146,7 +146,7 @@ public sealed class ScenePicker
     }
 
     /// <summary>Выбирать ли вершины тела. Пока выключено (см. AddPart).</summary>
-    public static bool PickBodyVertices = false;
+    public static bool PickBodyVertices = true;
 
     private void AddPart(Part part, Matrix4 xf)
     {
@@ -289,9 +289,9 @@ public sealed class ScenePicker
 
             if (!Project(w, out Vector2 s, out _)) continue;
 
-            float halfW = (float)(Render.StrokeFont.Width(Render.DimensionRenderer.Label(d))
-                                  * Render.DimensionRenderer.TextHeightPx * 0.5) + 4f;
-            float halfH = (float)(Render.DimensionRenderer.TextHeightPx * 0.5) + 4f;
+            const double TextHeightPx = 12;
+            float halfW = (float)(Render.StrokeFont.Width(d.Value.ToString("0.##")) * TextHeightPx * 0.5) + 4f;
+            float halfH = (float)(TextHeightPx * 0.5) + 4f;
 
             Vector2 delta = s - _mouse;
             if (Math.Abs(delta.X) > halfW || Math.Abs(delta.Y) > halfH) continue;

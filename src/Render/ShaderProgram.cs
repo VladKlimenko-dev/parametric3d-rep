@@ -96,6 +96,8 @@ public sealed class ShaderProgram : IDisposable
     }
 
     public void Set(string n, int v) { int l = Loc(n); if (l >= 0) GL.Uniform1(l, v); }
+    public void Set(string n, uint v) { int l = Loc(n); if (l >= 0) GL.Uniform1(l, v); }
+    public void Set(string n, bool v) { int l = Loc(n); if (l >= 0) GL.Uniform1(l, v ? 1 : 0); }
     public void Set(string n, float v) { int l = Loc(n); if (l >= 0) GL.Uniform1(l, v); }
     public void Set(string n, Vector2 v) { int l = Loc(n); if (l >= 0) GL.Uniform2(l, v); }
     public void Set(string n, Vector3 v) { int l = Loc(n); if (l >= 0) GL.Uniform3(l, v); }

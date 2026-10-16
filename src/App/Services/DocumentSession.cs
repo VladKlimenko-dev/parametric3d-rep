@@ -36,6 +36,14 @@ public sealed class DocumentSession
         Document.Root.Changed += _ => { if (!Modified) { Modified = true; StateChanged?.Invoke(); } };
     }
 
+    /// <summary>Изменение без шага отмены (видимость глазом в дереве): только отметка «изменён».</summary>
+    public void MarkModified()
+    {
+        if (Modified) return;
+        Modified = true;
+        StateChanged?.Invoke();
+    }
+
     public string Title => FilePath != null ? Path.GetFileNameWithoutExtension(FilePath) : Document.Title;
 
     /// <summary>Деталь документа (у документа сборки — первая деталь, если есть).</summary>
@@ -48,7 +56,7 @@ public sealed class DocumentSession
     /// <summary>Новая деталь: три плоскости и начало координат (Д-01).</summary>
     public static DocumentSession NewPart()
     {
-        string name = $"Деталь{++_counter}";
+        string name = Loc.L("Деталь") + (++_counter);
         var doc = new Document(name);
         doc.Root.AddPart(name);
         return new DocumentSession(doc, null);
@@ -109,15 +117,45 @@ public sealed class DocumentSession
     public void Edit(string name, Action action)
     {
         var part = Part;
-        if (part != null) { _history.Record(part, Document.Parameters); _undoNames.Add(name); _redoNames.Clear(); }
+        BeginEdit(name);
         try { action(); }
         catch
         {
             // правка упала на полпути — модель возвращается к снимку до неё
-            if (part != null) { Undo(); if (_redoNames.Count > 0) _redoNames[^1] += " (не выполнено)"; }
+            if (part != null) CancelEdit();
             throw;
         }
         Modified = true;
+        StateChanged?.Invoke();
+    }
+
+    /// <summary>Начать правку, которая длится (панель операции, эскиз): снимок до неё — один шаг отмены.</summary>
+    public void BeginEdit(string name)
+    {
+        var part = Part;
+        if (part == null) return;
+        _history.Record(part, Document.Parameters);
+        _undoNames.Add(name);
+        _redoNames.Clear();
+    }
+
+    /// <summary>Правка закончена («ОК»): имя шага можно уточнить.</summary>
+    public void CommitEdit(string? name = null)
+    {
+        if (name != null && _undoNames.Count > 0) _undoNames[^1] = name;
+        Modified = true;
+        StateChanged?.Invoke();
+    }
+
+    /// <summary>Правка отменена («Отмена»): модель — как до BeginEdit, шаг из журнала убирается, повтора нет.</summary>
+    public void CancelEdit()
+    {
+        var part = Part;
+        if (part == null || !_history.CanUndo) return;
+        var r = _history.Undo(part, Document.Parameters);
+        _history.ClearRedo();
+        if (_undoNames.Count > 0) _undoNames.RemoveAt(_undoNames.Count - 1);
+        if (r != null) ReplacePart(part, r.Value.Part, r.Value.Parameters);
         StateChanged?.Invoke();
     }
 

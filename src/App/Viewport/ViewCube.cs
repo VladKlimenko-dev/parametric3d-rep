@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -20,8 +20,15 @@ namespace Parametric3D.App.Viewport;
 /// в виде по нормали к грани — изогнутые стрелки (поворот на 90° вокруг взгляда) и треугольники у сторон (к соседней
 /// грани). Переходы — плавные (ModelViewport.AnimateTo), центр и масштаб не меняются.
 /// </summary>
-public sealed class ViewCube : Control
+public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
 {
+    /// <summary>Куб принимает мышь всей площадью кнопок и граней (не только по нарисованным линиям), п. 11.</summary>
+    bool Avalonia.Rendering.ICustomHitTest.HitTest(APoint p)
+    {
+        var h = HitTest(p);
+        return h.Extra != Extra.None || h.Region != default;
+    }
+
     public ModelViewport? Viewport { get; set; }
 
     private const double Margin = 1.25;      // доля полуразмера контрола под куб с кольцом
@@ -149,7 +156,7 @@ public sealed class ViewCube : Control
         var o = Proj(f.N); var pu = Proj(f.N + f.U); var pv = Proj(f.N + f.V);
         var ux = pu - o; var vy = pv - o;
         double len = 0.42;                 // высота строки в единицах грани
-        var ft = new FormattedText(f.Label, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+        var ft = new FormattedText(Loc.L(f.Label), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
             new Typeface(FontFamily.Default, FontStyle.Normal, FontWeight.Bold), 100, brush);
         double sx = Math.Min(len, 1.62 / (ft.Width / 100)) / 100;          // высота len, ширина ≤ 1.62 единицы
         var m = new Matrix(ux.X * sx, ux.Y * sx, -vy.X * sx, -vy.Y * sx, o.X, o.Y);
@@ -185,7 +192,7 @@ public sealed class ViewCube : Control
         }
     }
 
-    private Rect HomeRect => new(2, 2, 22, 22);
+    private Rect HomeRect => new(4, 4, 24, 24);
     private Rect CcwRect => new(Bounds.Width - 50, 2, 22, 22);
     private Rect CwRect => new(Bounds.Width - 26, 2, 22, 22);
 
@@ -269,11 +276,11 @@ public sealed class ViewCube : Control
 
     private (Vector3i Region, Extra Extra) HitTest(APoint p)
     {
-        if (HomeRect.Contains(p)) return (default, Extra.Home);
+        if (HomeRect.Inflate(4).Contains(p)) return (default, Extra.Home);
         if (AlignedFace() != null)
         {
-            if (CcwRect.Contains(p)) return (default, Extra.RotCcw);
-            if (CwRect.Contains(p)) return (default, Extra.RotCw);
+            if (CcwRect.Inflate(3).Contains(p)) return (default, Extra.RotCcw);
+            if (CwRect.Inflate(3).Contains(p)) return (default, Extra.RotCw);
             foreach (var (e, tp) in Triangles())
                 if (Math.Abs(p.X - tp.X) <= 9 && Math.Abs(p.Y - tp.Y) <= 9) return (default, e);
         }

@@ -30,12 +30,14 @@ public sealed partial class TreeNode : ObservableObject
     public IImage? Icon => IconProvider.Get(IconFile);
     public bool HasIcon => Icon != null;
     public string Glyph { get; }
-    public string Tooltip => Error != null ? $"{Name}\n{Error}" : $"{KindLabel(Item)}: {Name}";
+    private readonly string? _summary;
+    public string Tooltip => Error != null ? $"{Name}\n{Error}" : $"{KindLabel(Item)}: {Name}" + (_summary != null ? $"\n{_summary}" : "");
 
     public TreeNode(ModelItem item, Part? part)
     {
         Item = item;
-        _name = item is Feature f ? f.Summary : item.Name;
+        _name = item.Name;
+        _summary = item is Feature f ? f.Summary : null;
         _isVisible = item.Visible;
         Error = item.Error;
         IsDim = item.Suppressed || (item is Feature fe && part != null && part.IsBeyondStage(fe));
@@ -49,10 +51,39 @@ public sealed partial class TreeNode : ObservableObject
         if (Item.Visible == value) return;
         Item.Visible = value;
         Item.VisibleUserSet = true;
+        // деталь и сборка: глаз переключает и всё внутри (п. 4) — элементы скрытой детали не видны и не выбираются
+        if (Item is Part or Assembly)
+        {
+            foreach (var d in Item.Descendants()) { d.Visible = value; d.VisibleUserSet = true; }
+            foreach (var n in SelfAndDescendants()) if (!ReferenceEquals(n, this)) n.SetVisibleSilently(value);
+        }
         VisibilityToggled?.Invoke(this);
     }
 
+    /// <summary>Глаз узла без события (каскад от родителя).</summary>
+    private void SetVisibleSilently(bool v)
+    {
+        _cascading = true;
+        try { IsVisible = v; } finally { _cascading = false; }
+    }
+    private bool _cascading;
+
+    partial void OnIsExpandedChanged(bool value)
+    {
+        if (!_building) ExpandedChanged?.Invoke(this);
+    }
+    private bool _building;
+
     public static event Action<TreeNode>? VisibilityToggled;
+    /// <summary>Узел свёрнут или развёрнут пользователем — окно запоминает (дерево перестраивается и не теряет его).</summary>
+    public static event Action<TreeNode>? ExpandedChanged;
+
+    /// <summary>Состояние «развёрнут» без события (восстановление после перестройки дерева).</summary>
+    public void RestoreExpanded(bool v)
+    {
+        _building = true;
+        try { IsExpanded = v; } finally { _building = false; }
+    }
 
     public static string IconOf(ModelItem item) => item switch
     {
@@ -84,7 +115,9 @@ public sealed partial class TreeNode : ObservableObject
         _ => "",
     };
 
-    public static string KindLabel(ModelItem item) => item switch
+    public static string KindLabel(ModelItem item) => Loc.L(KindLabelRu(item));
+
+    public static string KindLabelRu(ModelItem item) => item switch
     {
         Assembly => "Сборка",
         Part => "Деталь",
@@ -136,7 +169,7 @@ public sealed partial class TreeNode : ObservableObject
                     if (item.Children.FirstOrDefault(x => x.Id == id) is Sketch s)
                     {
                         child.Children.Add(new TreeNode(s, owner));
-                        child.IsExpanded = false;
+                        child.RestoreExpanded(false);
                     }
             node.Children.Add(child);
         }

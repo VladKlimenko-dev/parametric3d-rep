@@ -1,16 +1,21 @@
 using Avalonia.Input;
+using Parametric3D.App.Operations;
 using Parametric3D.App.Services;
+using Parametric3D.App.Sketching;
 using Parametric3D.App.Views;
+using Parametric3D.Core;
 using Parametric3D.Model;
 using Parametric3D.Model.Features;
 using Parametric3D.Model.Sketching;
 using Parametric3D.Render;
+using Parametric3D.Render.Engine;
 
 namespace Parametric3D.App.Commands;
 
 /// <summary>
-/// Команды этапов U0–U1: файл, правка, вид, тема, палитра. Имена иконок — из UI_ICONS.md; клавиши — таблица 0.6 ТЗ_UI
-/// (стандартные сочетания Windows) и Ctrl+F «вписать».
+/// Команды приложения: файл, правка, вид (стиль, проекция, «Опорные»), операции модели, инструменты эскиза, приложение
+/// (тема, язык, свойства, параметры). Имена — по-русски (на экране — Loc.L), иконки — UI_ICONS.md, клавиши — ТЗ_UI 0.6.
+/// Виды спереди/сверху/справа — только в палитре и в кубе вида (п. 8).
 /// </summary>
 public static class StandardCommands
 {
@@ -20,6 +25,8 @@ public static class StandardCommands
         r.Clear();
         var vp = w.ViewPort;
         KeyGesture K(Key k, KeyModifiers m = KeyModifiers.None) => new(k, m);
+        bool HasPart() => w.Session?.Part != null;
+        bool Modeling() => HasPart() && !w.InSketch;
 
         // ------------------------------------------------------------ файл
         const string F = "Файл";
@@ -30,9 +37,9 @@ public static class StandardCommands
         r.Add(new AppCommand { Short = "Открыть", Id = "file.open", Label = "Открыть…", Group = F, Icon = "open_but.svg", Gesture = K(Key.O, KeyModifiers.Control), Synonyms = "open",
             Run = async () => await w.OpenAsync() });
         r.Add(new AppCommand { Short = "Сохранить", Id = "file.save", Label = "Сохранить", Group = F, Icon = "save_but.svg", Gesture = K(Key.S, KeyModifiers.Control), Synonyms = "save",
-            CanRun = () => w.Session?.Part != null, Run = async () => await w.SaveAsync(false) });
+            CanRun = HasPart, Run = async () => await w.SaveAsync(false) });
         r.Add(new AppCommand { Id = "file.save_as", Label = "Сохранить как…", Group = F, Icon = "save_as_but.svg", Gesture = K(Key.S, KeyModifiers.Control | KeyModifiers.Shift), Synonyms = "save as",
-            CanRun = () => w.Session?.Part != null, Run = async () => await w.SaveAsync(true) });
+            CanRun = HasPart, Run = async () => await w.SaveAsync(true) });
         r.Add(new AppCommand { Id = "file.import", Label = "Импорт (STEP, IGES)…", Group = F, Icon = "import_but.svg", Synonyms = "import step iges",
             Run = async () => await w.ImportAsync() });
         r.Add(new AppCommand { Id = "file.export", Label = "Экспорт (STEP, STL, OBJ)…", Group = F, Icon = "export_but.svg", Synonyms = "export step stl obj",
@@ -42,61 +49,149 @@ public static class StandardCommands
         // ------------------------------------------------------------ правка
         const string E = "Правка";
         r.Add(new AppCommand { Short = "↶", Id = "edit.undo", Label = "Отменить", Group = E, Icon = "undo_but.svg", Gesture = K(Key.Z, KeyModifiers.Control), Synonyms = "undo",
-            CanRun = () => w.Session?.CanUndo == true, Run = () => w.Session.Undo() });
+            CanRun = () => w.Session?.CanUndo == true && w.CurrentOperation == null && !w.InSketch, Run = () => w.Session.Undo() });
         r.Add(new AppCommand { Short = "↷", Id = "edit.redo", Label = "Вернуть", Group = E, Icon = "redo_but.svg", Gesture = K(Key.Y, KeyModifiers.Control), Synonyms = "redo повторить",
-            CanRun = () => w.Session?.CanRedo == true, Run = () => w.Session.Redo() });
+            CanRun = () => w.Session?.CanRedo == true && w.CurrentOperation == null && !w.InSketch, Run = () => w.Session.Redo() });
         r.Add(new AppCommand { Short = "Журнал", Id = "edit.history", Label = "Журнал отмены", Group = E, Icon = "undo_history_but.svg", Synonyms = "history undo журнал история",
             Run = () => w.OpenHistory() });
-        r.Add(new AppCommand { Id = "edit.delete", Label = "Удалить", Group = E, Icon = "delete_but.svg", Gesture = K(Key.Delete), Synonyms = "delete remove",
-            CanRun = () => Deletable(w).Count > 0, Run = () => Delete(w) });
-        r.Add(new AppCommand { Id = "edit.clear_selection", Label = "Снять выбор", Group = E, Icon = "sel_clear_but.svg", Synonyms = "deselect clear",
+        r.Add(new AppCommand { Short = "Удалить", Id = "edit.delete", Label = "Удалить", Group = E, Icon = "delete_but.svg", Gesture = K(Key.Delete), Synonyms = "delete remove",
+            CanRun = () => Modeling() && Deletable(w).Count > 0, Run = () => Delete(w) });
+        r.Add(new AppCommand { Short = "Изменить", Id = "edit.feature", Label = "Изменить операцию", Group = E, Icon = "tree_edit_def_but.svg", Synonyms = "edit definition редактировать",
+            CanRun = () => Modeling() && w.SelectedItems().Any(i => i is Feature or Sketch), Run = () => w.EditSelected() });
+        r.Add(new AppCommand { Short = "Подавить", Id = "edit.suppress", Label = "Подавить / вернуть", Group = E, Icon = "tree_suppress_but.svg", Synonyms = "suppress resume",
+            CanRun = () => Modeling() && w.SelectedItems().Any(i => i is Feature), Run = () => Suppress(w) });
+        r.Add(new AppCommand { Short = "×", Id = "edit.clear_selection", Label = "Снять выбор", Group = E, Icon = "sel_clear_but.svg", Synonyms = "deselect clear",
             Run = () => vp.Selection.Clear() });
 
         // ------------------------------------------------------------ вид
         const string V = "Вид";
-        void Orient(string id, string label, string icon, ViewOrientation o, string syn, KeyGesture? g = null) =>
-            r.Add(new AppCommand { Short = label.Replace("Вид ", ""), Id = id, Label = label, Group = V, Icon = icon, Synonyms = syn, Gesture = g, Run = () => vp.AnimateTo(Camera.OrientationQuat(o)) });
-        Orient("view.front", "Вид спереди", "view_front_but.svg", ViewOrientation.Front, "front");
-        Orient("view.back", "Вид сзади", "view_back_but.svg", ViewOrientation.Back, "back");
-        Orient("view.left", "Вид слева", "view_left_but.svg", ViewOrientation.Left, "left");
-        Orient("view.right", "Вид справа", "view_right_but.svg", ViewOrientation.Right, "right");
-        Orient("view.top", "Вид сверху", "view_top_but.svg", ViewOrientation.Top, "top");
-        Orient("view.bottom", "Вид снизу", "view_bottom_but.svg", ViewOrientation.Bottom, "bottom");
-        r.Add(new AppCommand { Short = "Изо", Id = "view.iso", Label = "Изометрия (исходный вид)", Group = V, Icon = "view_iso_but.svg", Synonyms = "iso isometric home домой",
+        void Orient(string id, string label, ViewOrientation o, string syn) =>
+            r.Add(new AppCommand { Id = id, Label = label, Group = V, Synonyms = syn, Run = () => vp.AnimateTo(Camera.OrientationQuat(o)) });
+        Orient("view.front", "Вид спереди", ViewOrientation.Front, "front");
+        Orient("view.back", "Вид сзади", ViewOrientation.Back, "back");
+        Orient("view.left", "Вид слева", ViewOrientation.Left, "left");
+        Orient("view.right", "Вид справа", ViewOrientation.Right, "right");
+        Orient("view.top", "Вид сверху", ViewOrientation.Top, "top");
+        Orient("view.bottom", "Вид снизу", ViewOrientation.Bottom, "bottom");
+        r.Add(new AppCommand { Short = "Домой", Id = "view.home", Label = "Исходный вид (изометрия)", Group = V, Icon = "view_iso_but.svg", Gesture = K(Key.H), Synonyms = "iso isometric home домой",
             Run = () => vp.GoHome() });
         r.Add(new AppCommand { Short = "Вписать", Id = "view.fit", Label = "Вписать всё", Group = V, Icon = "view_fit_but.svg", Gesture = K(Key.F, KeyModifiers.Control), Synonyms = "fit zoom all",
             Run = () => vp.ZoomToFit() });
-        r.Add(new AppCommand { Short = "Персп.", Id = "view.perspective", Label = "Перспектива", Group = V, Icon = "view_perspective_but.svg", Synonyms = "perspective ortho ортогональная проекция",
-            IsChecked = () => vp.Camera.State.Mode == ProjectionMode.Perspective, Run = () => vp.ToggleProjection() });
-        r.Add(new AppCommand { Short = "Опорные", Id = "view.datums", Label = "Опорные элементы", Group = V, Icon = "datums_visible_but.svg", Synonyms = "datums planes плоскости",
-            IsChecked = () => vp.ShowDatumPlanes, Run = () => vp.ShowDatumPlanes = !vp.ShowDatumPlanes });
-        void Style(string id, string label, string icon, BodyViewMode m, string syn) =>
-            r.Add(new AppCommand { Id = id, Label = label, Group = V, Icon = icon, Synonyms = "style стиль " + syn, IsChecked = () => vp.BodyMode == m, Run = () => vp.BodyMode = m });
-        Style("style.shaded", "Тонированный", "style_shaded_but.svg", BodyViewMode.Shaded, "shaded");
-        Style("style.shaded_edges", "Тонированный с рёбрами", "style_shaded_edges_but.svg", BodyViewMode.ShadedWithEdges, "edges");
-        Style("style.transparent", "Прозрачный", "style_transparent_but.svg", BodyViewMode.Transparent, "transparent");
-        Style("style.mesh", "Сетка треугольников", "style_mesh_but.svg", BodyViewMode.Mesh, "mesh wireframe каркас");
-        Style("style.volume_mesh", "Объёмная сетка", "style_mesh_but.svg", BodyViewMode.VolumeMesh, "volume mesh");
-        r.Add(new AppCommand { Id = "view.hide", Label = "Скрыть", Group = V, Icon = "hide_but.svg", Synonyms = "hide",
+        r.Add(new AppCommand { Short = "Персп.", Id = "view.projection", Label = "Проекция: перспектива / ортогональ", Group = V, Icon = "view_perspective_but.svg", Gesture = K(Key.P), Synonyms = "perspective ortho ортогональная проекция изо",
+            IsChecked = () => vp.IsPerspective, Run = () => vp.ToggleProjection() });
+        void Style(string id, string label, string icon, DisplayStyle m, string syn, KeyGesture? g = null) =>
+            r.Add(new AppCommand { Id = id, Label = label, Group = V, Icon = icon, Synonyms = "style стиль " + syn, Gesture = g, IsChecked = () => vp.Style == m, Run = () => w.SetStyle(m) });
+        Style("style.shaded", "Тонированный", "style_shaded_but.svg", DisplayStyle.Shaded, "shaded", K(Key.D1, KeyModifiers.Alt));
+        Style("style.shaded_edges", "Тонированный с рёбрами", "style_shaded_edges_but.svg", DisplayStyle.ShadedWithEdges, "edges", K(Key.D2, KeyModifiers.Alt));
+        Style("style.wireframe", "Каркас", "style_wireframe_but.svg", DisplayStyle.Wireframe, "wireframe каркас", K(Key.D3, KeyModifiers.Alt));
+        Style("style.hidden_lines", "Невидимые линии штрихом", "style_hidden_lines_but.svg", DisplayStyle.HiddenLines, "hidden lines", K(Key.D4, KeyModifiers.Alt));
+        Style("style.transparent", "Прозрачный", "style_transparent_but.svg", DisplayStyle.Transparent, "transparent", K(Key.D5, KeyModifiers.Alt));
+        r.Add(new AppCommand { Short = "Скрыть", Id = "view.hide", Label = "Скрыть", Group = V, Icon = "hide_but.svg", Synonyms = "hide",
             CanRun = () => w.SelectedItems().Count > 0, Run = () => SetVisible(w, w.SelectedItems(), false) });
-        r.Add(new AppCommand { Id = "view.isolate", Label = "Изолировать", Group = V, Icon = "isolate_but.svg", Synonyms = "isolate",
+        r.Add(new AppCommand { Short = "Изолировать", Id = "view.isolate", Label = "Изолировать", Group = V, Icon = "isolate_but.svg", Synonyms = "isolate",
             CanRun = () => w.SelectedItems().Count > 0, Run = () => Isolate(w) });
-        r.Add(new AppCommand { Id = "view.show_all", Label = "Показать всё", Group = V, Icon = "show_all_but.svg", Synonyms = "show all unhide",
+        r.Add(new AppCommand { Short = "Показать всё", Id = "view.show_all", Label = "Показать всё", Group = V, Icon = "show_all_but.svg", Synonyms = "show all unhide",
             Run = () => SetVisible(w, w.Session.Document.Root.Descendants().Where(i => i is not Feature).ToList(), true) });
+        r.Add(new AppCommand { Short = "Опорные", Id = "view.datums", Label = "Опорные элементы: показать / скрыть", Group = V, Icon = "datums_visible_but.svg", Synonyms = "datums planes плоскости",
+            IsChecked = () => vp.Show.Planes || vp.Show.Axes || vp.Show.Points, Run = () => w.ToggleDatums() });
+        foreach (var (key, label) in ShowItems)
+            r.Add(new AppCommand { Id = "show." + key, Label = "Показывать: " + label, Group = V, Synonyms = "show показать " + key,
+                IsChecked = () => GetShow(vp.Show, key), Run = () => { SetShow(vp.Show, key, !GetShow(vp.Show, key)); vp.MarkDirty(); w.RefreshToolStates(); } });
+
+        // ------------------------------------------------------------ модель (операции)
+        const string M = "Модель";
+        void Op(string id, string label, string shortLabel, string icon, Func<Operation> make, string syn, KeyGesture? g = null) =>
+            r.Add(new AppCommand { Id = id, Label = label, Short = shortLabel, Group = M, Icon = icon, Synonyms = syn, Gesture = g, CanRun = Modeling, Run = () => w.StartOperation(make()) });
+        Op("op.sketch", "Эскиз", "Эскиз", "f_sketch_but.svg", () => new SketchOp(), "sketch эскиз", K(Key.S));
+        Op("op.extrude", "Выдавливание", "Выдавить", "f_extrude_but.svg", () => w.SketchFirst(new ExtrudeOp()), "extrude выдавить", K(Key.E));
+        Op("op.cut", "Вырез выдавливанием", "Вырез", "f_extrude_but.svg", () => w.SketchFirst(new ExtrudeOp { StartCut = true }), "cut вырез");
+        Op("op.revolve", "Вращение", "Вращение", "f_revolve_but.svg", () => w.SketchFirst(new RevolveOp()), "revolve вращать");
+        Op("op.hole", "Отверстие", "Отверстие", "f_hole_but.svg", () => new HoleOp(), "hole отверстие");
+        Op("op.round", "Скругление", "Скругление", "f_round_but.svg", () => new RoundOp(), "round fillet скругление", K(Key.R));
+        Op("op.chamfer", "Фаска", "Фаска", "f_chamfer_but.svg", () => new ChamferOp(), "chamfer фаска", K(Key.C));
+        Op("op.vertex_round", "Скругление вершины", "Скругл. вершины", "f_round_vertex_but.svg", () => new VertexRoundOp(), "vertex round вершина");
+        Op("op.vertex_chamfer", "Фаска угла", "Фаска угла", "f_chamfer_vertex_but.svg", () => new VertexChamferOp(), "vertex chamfer corner угол");
+        Op("op.shell", "Оболочка", "Оболочка", "f_shell_but.svg", () => new ShellOp(), "shell оболочка стенка");
+        Op("op.plane", "Опорная плоскость", "Плоскость", "dat_plane_but.svg", () => new PlaneOp(), "datum plane offset плоскость");
+        Op("op.mirror", "Зеркало", "Зеркало", "f_mirror_but.svg", () => new MirrorOp(), "mirror зеркало");
+        Op("op.pattern_linear", "Линейный массив", "Массив", "f_pattern_linear_but.svg", () => new LinearPatternOp(), "pattern linear массив");
+        Op("op.pattern_circular", "Круговой массив", "Кр. массив", "f_pattern_circular_but.svg", () => new CircularPatternOp(), "pattern circular массив круговой");
+
+        // ------------------------------------------------------------ эскиз
+        const string S = "Эскиз";
+        void Tool(string id, string label, string shortLabel, string icon, Func<ISketchTool> make, string syn, KeyGesture? g = null) =>
+            r.Add(new AppCommand { Id = id, Label = label, Short = shortLabel, Group = S, Icon = icon, Synonyms = syn, Gesture = g, CanRun = () => w.InSketch,
+                IsChecked = () => vp.Tool != null && vp.Tool.GetType() == make().GetType() && vp.Tool.Title == make().Title,
+                Run = () => w.SetTool(make()) });
+        Tool("sk.line", "Отрезок", "Отрезок", "sk_line_but.svg", () => new LineTool(), "line отрезок", K(Key.L));
+        Tool("sk.rect", "Прямоугольник", "Прямоуг.", "sk_rect_2p_but.svg", () => new RectangleTool(), "rectangle прямоугольник", K(Key.R));
+        Tool("sk.circle", "Окружность", "Окружн.", "sk_circle_but.svg", () => new CircleTool(), "circle окружность", K(Key.C));
+        Tool("sk.circle3", "Окружность по 3 точкам", "Окр. 3т", "sk_circle_3p_but.svg", () => new CircleTool(true), "circle 3 points");
+        Tool("sk.arc3", "Дуга по 3 точкам", "Дуга", "sk_arc_3p_but.svg", () => new ArcTool(true), "arc дуга", K(Key.A));
+        Tool("sk.arc_center", "Дуга от центра", "Дуга ц.", "sk_arc_center_but.svg", () => new ArcTool(false), "arc center");
+        Tool("sk.ellipse", "Эллипс", "Эллипс", "sk_ellipse_but.svg", () => new EllipseTool(), "ellipse эллипс");
+        Tool("sk.spline", "Сплайн", "Сплайн", "sk_spline_but.svg", () => new SplineTool(), "spline сплайн");
+        Tool("sk.point", "Точка", "Точка", "sk_point_but.svg", () => new PointTool(), "point точка");
+        Tool("sk.centerline", "Осевая линия", "Осевая", "sk_centerline_but.svg", () => new LineTool(false) { Role = SkRole.Centerline }, "centerline axis осевая");
+        r.Add(new AppCommand { Short = "Вспом.", Id = "sk.construction", Label = "Вспомогательная геометрия", Group = S, Icon = "sk_construction_but.svg", Synonyms = "construction вспомогательная", Gesture = K(Key.G),
+            CanRun = () => w.InSketch, IsChecked = () => w.ConstructionMode, Run = () => w.ToggleConstruction() });
+        r.Add(new AppCommand { Short = "Сетка", Id = "sk.grid", Label = "Привязка к сетке", Group = S, Icon = "sk_snap_grid_but.svg", Synonyms = "grid snap сетка",
+            CanRun = () => w.InSketch, IsChecked = () => vp.SnapGrid, Run = () => { vp.SnapGrid = !vp.SnapGrid; w.RefreshToolStates(); } });
+        r.Add(new AppCommand { Short = "Готово", Id = "sk.finish", Label = "Закончить эскиз", Group = S, Icon = "sketch_finish_but.svg", Synonyms = "finish sketch готово выйти", Gesture = K(Key.Enter, KeyModifiers.Control),
+            CanRun = () => w.InSketch, Run = () => w.FinishSketch() });
+        r.Add(new AppCommand { Short = "Отмена", Id = "sk.cancel", Label = "Отменить эскиз", Group = S, Icon = "sketch_cancel_but.svg", Synonyms = "cancel sketch",
+            CanRun = () => w.InSketch, Run = () => w.CancelSketch() });
 
         // ------------------------------------------------------------ приложение
         const string A = "Приложение";
         r.Add(new AppCommand { Short = "◐", Id = "app.theme", Label = "Тема: тёмная / светлая", Group = A, Icon = "theme_but.svg", Synonyms = "theme dark light тема",
             Run = () => w.ApplyTheme(!w.IsDark) });
+        r.Add(new AppCommand { Short = "EN", Id = "app.language", Label = "Язык: русский / английский", Group = A, Icon = "language_but.svg", Synonyms = "language english russian язык",
+            Run = () => w.ToggleLanguage() });
         r.Add(new AppCommand { Short = "Свойства", Id = "app.properties", Label = "Свойства", Group = A, Icon = "properties_but.svg", Synonyms = "properties info свойства масса объём",
-            Run = () => w.ShowProperties() });
+            IsChecked = () => w.PropertiesVisible, Run = () => w.ToggleProperties() });
+        r.Add(new AppCommand { Short = "Параметры", Id = "app.parameters", Label = "Параметры", Group = A, Icon = "parameters_but.svg", Synonyms = "parameters relations параметры переменные формулы",
+            CanRun = () => w.Session != null, Run = async () => await w.OpenParameters() });
         r.Add(new AppCommand { Id = "palette", Label = "Палитра команд", Group = A, Icon = "command_palette_but.svg", Synonyms = "search command palette",
             Run = () => w.OpenPalette() });
         r.Add(new AppCommand { Short = "−", Id = "tree.collapse", Label = "Свернуть дерево", Group = A, Synonyms = "collapse", Run = () => w.SetTreeExpanded(false) });
         r.Add(new AppCommand { Short = "+", Id = "tree.expand", Label = "Развернуть дерево", Group = A, Synonyms = "expand", Run = () => w.SetTreeExpanded(true) });
     }
 
-    // ------------------------------------------------------------ удаление и видимость
+    /// <summary>Список «Опорные» (п. 12): ключ ShowOptions — подпись.</summary>
+    public static readonly (string Key, string Label)[] ShowItems =
+    {
+        ("planes", "Плоскости"), ("axes", "Оси"), ("origin", "Начало координат"), ("points", "Точки"), ("lines", "Линии"),
+        ("vertices", "Вершины"), ("centerlines", "Осевые линии"), ("sketches", "Эскизы"), ("dimensions", "Размеры"),
+        ("annotations", "Обозначения"), ("measurements", "Измерения"),
+    };
+
+    public static bool GetShow(ShowOptions s, string key) => key switch
+    {
+        "planes" => s.Planes, "axes" => s.Axes, "origin" => s.Origin, "points" => s.Points, "lines" => s.Lines,
+        "vertices" => s.Vertices, "centerlines" => s.Centerlines, "sketches" => s.Sketches, "dimensions" => s.Dimensions,
+        "annotations" => s.Annotations, "measurements" => s.Measurements, _ => false,
+    };
+
+    public static void SetShow(ShowOptions s, string key, bool v)
+    {
+        switch (key)
+        {
+            case "planes": s.Planes = v; break;
+            case "axes": s.Axes = v; break;
+            case "origin": s.Origin = v; break;
+            case "points": s.Points = v; break;
+            case "lines": s.Lines = v; break;
+            case "vertices": s.Vertices = v; break;
+            case "centerlines": s.Centerlines = v; break;
+            case "sketches": s.Sketches = v; break;
+            case "dimensions": s.Dimensions = v; break;
+            case "annotations": s.Annotations = v; break;
+            case "measurements": s.Measurements = v; break;
+        }
+    }
+
+    // ------------------------------------------------------------ удаление, подавление, видимость
 
     /// <summary>Что можно удалить из выбранного: операции, эскизы, опорные (кроме базовых плоскостей и начала).</summary>
     private static List<ModelItem> Deletable(MainWindow w)
@@ -111,7 +206,7 @@ public static class StandardCommands
     {
         var items = Deletable(w);
         var part = w.Session.Part!;
-        string name = items.Count == 1 ? $"Удалить «{(items[0] is Feature f ? f.Summary : items[0].Name)}»" : $"Удалить ({items.Count})";
+        string name = items.Count == 1 ? Loc.L("Удалить «{0}»", items[0].Name) : Loc.L("Удалить ({0})", items.Count);
         w.Session.Edit(name, () =>
         {
             foreach (var it in items)
@@ -125,9 +220,21 @@ public static class StandardCommands
         w.ViewPort.MarkDirty();
     }
 
+    private static void Suppress(MainWindow w)
+    {
+        var fs = w.SelectedItems().OfType<Feature>().ToList();
+        bool to = !fs.All(f => f.Suppressed);
+        w.Session.Edit(to ? Loc.L("Подавить") : Loc.L("Вернуть"), () => { foreach (var f in fs) f.Suppressed = to; });
+        w.ViewPort.MarkDirty();
+    }
+
     private static void SetVisible(MainWindow w, List<ModelItem> items, bool visible)
     {
-        foreach (var i in items) { i.Visible = visible; i.VisibleUserSet = true; }
+        foreach (var i in items)
+        {
+            i.Visible = visible; i.VisibleUserSet = true;
+            if (i is Part or Assembly) foreach (var d in i.Descendants()) { d.Visible = visible; d.VisibleUserSet = true; }
+        }
         w.ViewPort.MarkDirty();
         w.RebuildTree();
     }

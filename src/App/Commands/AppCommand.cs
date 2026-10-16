@@ -27,7 +27,12 @@ public sealed class AppCommand : ICommand
 
     public bool Enabled => CanRun?.Invoke() ?? true;
 
-    public string Tooltip => Gesture != null ? $"{Label}  ({Format(Gesture)})" : Label;
+    /// <summary>Имя на текущем языке.</summary>
+    public string Text => Loc.L(Label);
+    /// <summary>Подпись кнопки на текущем языке.</summary>
+    public string ShortText => Loc.L(Short ?? Label);
+
+    public string Tooltip => Gesture != null ? $"{Text}  ({Format(Gesture)})" : Text;
 
     public static string Format(KeyGesture g)
     {

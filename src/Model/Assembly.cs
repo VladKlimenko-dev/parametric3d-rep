@@ -10,6 +10,9 @@ public sealed class Assembly : ModelItem
     /// <summary>m.x4: система единиц сборки для ввода и показа; детали хранят свою, геометрия — в мм.</summary>
     public Core.UnitSystem Units = Core.UnitSystem.Metric;
 
+    /// <summary>UI: параметры уровня сборки (между деталью и документом). У корня документа не используются — там таблица документа.</summary>
+    public readonly Params.ParameterTable LocalParameters = new();
+
 
     /// <summary>
     /// Исполнения: именованные наборы отличий. Хранится только отличие от основной модели —

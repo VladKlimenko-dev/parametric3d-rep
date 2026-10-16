@@ -9,6 +9,41 @@ namespace Parametric3D.App.Diagnostics;
 /// </summary>
 public static class ShotRunner
 {
+    /// <summary>
+    /// Шаг сценария: id команды; hover:x,y / pick:x,y / add:x,y — навести, выбрать, добавить (доли размера вида);
+    /// click:x,y — щелчок инструмента эскиза; ok / cancel — кнопки панели операции; esc.
+    /// </summary>
+    private static void Step(MainWindow w, string id)
+    {
+        if (id.Split(':') is [var verb, var arg] && verb is "hover" or "pick" or "add" or "click")
+        {
+            var xy = arg.Split(',').Select(v => double.Parse(v, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            if (verb == "click") w.ViewPort.SimulateToolClick(xy[0], xy[1]);
+            else w.ViewPort.SimulatePick(xy[0], xy[1], verb != "hover", verb == "add");
+            Console.WriteLine($"{verb} {arg}: hover {w.ViewPort.Selection.Hover.Kind}, selected {w.ViewPort.Selection.Count}");
+            return;
+        }
+        switch (id)
+        {
+            case "ok": w.CommitOperation(); Console.WriteLine("ok"); return;
+            case "cancel": w.CancelOperation(); Console.WriteLine("cancel"); return;
+            case "wait": return;
+            case "dbg":
+                {
+                    var part = w.Session.Part!;
+                    Console.WriteLine($"camera fwd {w.ViewPort.Camera.Forward} pos {w.ViewPort.Camera.Position} sketch W {w.ViewPort.ActiveSketch?.Plane.W} O {w.ViewPort.ActiveSketch?.Plane.Origin}");
+                    var meshIds = part.Mesh?.Vertices.Select(v => v.FaceId).Distinct().OrderBy(x => x).ToList() ?? new();
+                    var bodyIds = part.Bodies.SelectMany(b => b.Faces).Select(f => f.Id).OrderBy(x => x).ToList();
+                    foreach (var f in part.Bodies.SelectMany(b => b.Faces)) Console.WriteLine($"face {f.Id}: {f.Surface?.GetType().Name} auth {Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name} plane {Model.Features.SketchFaceRef.PlaneOf(f) != null}");
+                    Console.WriteLine($"mesh faces [{string.Join(",", meshIds)}] body faces [{string.Join(",", bodyIds)}] sel {w.ViewPort.Selection.Primary.Id} owner {w.ViewPort.Selection.Primary.Owner?.GetHashCode()} part {part.GetHashCode()}");
+                    return;
+                }
+        }
+        var c = Commands.CommandRegistry.Instance.Find(id);
+        Console.WriteLine(c == null ? $"no command {id}" : $"run {id} (enabled {c.Enabled})");
+        c?.Execute();
+    }
+
     public static void Start(MainWindow w, string path, Action exit)
     {
         var steps = (AppStartup.Arg("--script") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
@@ -17,22 +52,18 @@ public static class ShotRunner
         int stage = 0;
         t.Tick += (_, _) =>
         {
+            // шаги — по одному за такт (выбор видеокартой приходит со следующим кадром)
+            if (stage == 0 && steps.Count > 0)
+            {
+                t.Interval = TimeSpan.FromSeconds(0.7);
+                var id = steps[0];
+                steps.RemoveAt(0);
+                try { Step(w, id); }
+                catch (Exception ex) { Console.WriteLine($"step {id}: {ex.Message}"); }
+                return;
+            }
             if (stage == 0)
             {
-                foreach (var id in steps)
-                {
-                    // hover:x,y / pick:x,y / add:x,y — доли размера вида
-                    if (id.Split(':') is [var verb, var arg] && verb is "hover" or "pick" or "add")
-                    {
-                        var xy = arg.Split(',').Select(v => double.Parse(v, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
-                        w.ViewPort.SimulatePick(xy[0], xy[1], verb != "hover", verb == "add");
-                        Console.WriteLine($"{verb} {arg}: hover {w.ViewPort.Selection.Hover.Kind}, selected {w.ViewPort.Selection.Count}");
-                        continue;
-                    }
-                    var c = Commands.CommandRegistry.Instance.Find(id);
-                    Console.WriteLine(c == null ? $"no command {id}" : $"run {id}");
-                    c?.Execute();
-                }
                 stage = 1;
                 t.Interval = TimeSpan.FromSeconds(1.5);
                 return;
