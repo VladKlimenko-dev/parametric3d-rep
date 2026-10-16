@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Text;
 using OpenTK.Mathematics;
 
@@ -15,7 +15,7 @@ namespace Parametric3D.Render.Gl;
 
 public enum BufferTarget : uint { ArrayBuffer = 0x8892, ElementArrayBuffer = 0x8893 }
 public enum BufferUsageHint : uint { StaticDraw = 0x88E4, DynamicDraw = 0x88E8, StreamDraw = 0x88E0 }
-public enum VertexAttribPointerType : uint { Float = 0x1406 }
+public enum VertexAttribPointerType : uint { Float = 0x1406, UnsignedByte = 0x1401 }
 public enum VertexAttribIntegerType : uint { Int = 0x1404, UnsignedInt = 0x1405 }
 public enum PrimitiveType : uint { Points = 0, Lines = 1, LineStrip = 3, Triangles = 4, TriangleStrip = 5 }
 public enum DrawElementsType : uint { UnsignedInt = 0x1405 }
@@ -60,6 +60,7 @@ public static unsafe class GL
     private static delegate* unmanaged<int, uint*, void> _genBuffers, _genVertexArrays, _genRenderbuffers, _genFramebuffers, _deleteBuffers, _deleteVertexArrays, _deleteRenderbuffers, _deleteFramebuffers, _drawBuffers;
     private static delegate* unmanaged<int, int, int, int, void> _viewport;
     private static delegate* unmanaged<int, int, void> _uniform1i;
+    private static delegate* unmanaged<int, uint, void> _uniform1ui;
     private static delegate* unmanaged<int, float, void> _uniform1f;
     private static delegate* unmanaged<int, float, float, void> _uniform2f;
     private static delegate* unmanaged<int, float, float, float, void> _uniform3f;
@@ -77,6 +78,7 @@ public static unsafe class GL
     private static delegate* unmanaged<uint, int, uint, int, int, void> _renderbufferStorageMultisample;
     private static delegate* unmanaged<uint, uint, int, int, void> _renderbufferStorage;
     private static delegate* unmanaged<uint, uint, uint, uint, void> _framebufferRenderbuffer;
+    private static delegate* unmanaged<uint, uint, uint, uint, int, void> _framebufferTexture2D;
     private static delegate* unmanaged<int, int, int, int, int, int, int, int, uint, uint, void> _blitFramebuffer;
     private static delegate* unmanaged<uint, int, int, int, void> _drawArraysInstanced;
     private static delegate* unmanaged<uint, int, int, void> _drawArrays;
@@ -89,6 +91,12 @@ public static unsafe class GL
     private static delegate* unmanaged<uint, int*, void> _getIntegerv;
     private static delegate* unmanaged<int, int, int, int, uint, uint, void*, void> _readPixels;
     private static delegate* unmanaged<int, int, int, int, void> _scissor;
+    private static delegate* unmanaged<int, uint*, void> _genTextures, _deleteTextures;
+    private static delegate* unmanaged<uint, uint, void> _bindTexture, _pixelStorei;
+    private static delegate* unmanaged<uint, uint, int, void> _texParameteri;
+    private static delegate* unmanaged<uint, void> _activeTexture;
+    private static delegate* unmanaged<uint, int, int, int, int, int, uint, uint, void*, void> _texImage2D;
+    private static delegate* unmanaged<uint, int, int, int, int, int, uint, uint, void*, void> _texSubImage2D;
 
     /// <summary>Загрузить адреса функций текущего контекста.</summary>
     public static void Load(Func<string, IntPtr> proc, bool isEs)
@@ -139,6 +147,7 @@ public static unsafe class GL
         _viewport = (delegate* unmanaged<int, int, int, int, void>)P("glViewport");
         _scissor = (delegate* unmanaged<int, int, int, int, void>)P("glScissor");
         _uniform1i = (delegate* unmanaged<int, int, void>)P("glUniform1i");
+        _uniform1ui = (delegate* unmanaged<int, uint, void>)P("glUniform1ui");
         _uniform1f = (delegate* unmanaged<int, float, void>)P("glUniform1f");
         _uniform2f = (delegate* unmanaged<int, float, float, void>)P("glUniform2f");
         _uniform3f = (delegate* unmanaged<int, float, float, float, void>)P("glUniform3f");
@@ -162,6 +171,7 @@ public static unsafe class GL
         _renderbufferStorageMultisample = (delegate* unmanaged<uint, int, uint, int, int, void>)P("glRenderbufferStorageMultisample");
         _renderbufferStorage = (delegate* unmanaged<uint, uint, int, int, void>)P("glRenderbufferStorage");
         _framebufferRenderbuffer = (delegate* unmanaged<uint, uint, uint, uint, void>)P("glFramebufferRenderbuffer");
+        _framebufferTexture2D = (delegate* unmanaged<uint, uint, uint, uint, int, void>)P("glFramebufferTexture2D");
         _blitFramebuffer = (delegate* unmanaged<int, int, int, int, int, int, int, int, uint, uint, void>)P("glBlitFramebuffer");
         _drawArraysInstanced = (delegate* unmanaged<uint, int, int, int, void>)P("glDrawArraysInstanced");
         _drawArrays = (delegate* unmanaged<uint, int, int, void>)P("glDrawArrays");
@@ -173,8 +183,40 @@ public static unsafe class GL
         _polygonOffset = (delegate* unmanaged<float, float, void>)P("glPolygonOffset");
         _getIntegerv = (delegate* unmanaged<uint, int*, void>)P("glGetIntegerv");
         _readPixels = (delegate* unmanaged<int, int, int, int, uint, uint, void*, void>)P("glReadPixels");
+        _genTextures = (delegate* unmanaged<int, uint*, void>)P("glGenTextures");
+        _deleteTextures = (delegate* unmanaged<int, uint*, void>)P("glDeleteTextures");
+        _bindTexture = (delegate* unmanaged<uint, uint, void>)P("glBindTexture");
+        _pixelStorei = (delegate* unmanaged<uint, uint, void>)P("glPixelStorei");
+        _texParameteri = (delegate* unmanaged<uint, uint, int, void>)P("glTexParameteri");
+        _activeTexture = (delegate* unmanaged<uint, void>)P("glActiveTexture");
+        _texImage2D = (delegate* unmanaged<uint, int, int, int, int, int, uint, uint, void*, void>)P("glTexImage2D");
+        _texSubImage2D = (delegate* unmanaged<uint, int, int, int, int, int, uint, uint, void*, void>)P("glTexSubImage2D");
         Loaded = true;
     }
+
+    // ------------------------------------------------------------------ текстуры (RGBA8, без фильтрации)
+    public static int GenTexture() { uint h; _genTextures(1, &h); return (int)h; }
+    public static void DeleteTexture(int h) { uint x = (uint)h; _deleteTextures(1, &x); }
+    public static void ActiveTexture(int unit) => _activeTexture(0x84C0u + (uint)unit);
+    public static void BindTexture2D(int h) => _bindTexture(0x0DE1, (uint)h);
+    /// <summary>Текстура RGBA8 без мип-уровней и фильтрации (для texelFetch).</summary>
+    public static void TexImageRgba8(int w, int h, byte[]? data)
+    {
+        _pixelStorei(0x0CF5, 1);   // UNPACK_ALIGNMENT
+        _texParameteri(0x0DE1, 0x2801, 0x2600);   // MIN_FILTER = NEAREST
+        _texParameteri(0x0DE1, 0x2800, 0x2600);   // MAG_FILTER = NEAREST
+        _texParameteri(0x0DE1, 0x2802, 0x812F);   // WRAP_S = CLAMP_TO_EDGE
+        _texParameteri(0x0DE1, 0x2803, 0x812F);   // WRAP_T
+        if (data == null) _texImage2D(0x0DE1, 0, 0x8058, w, h, 0, 0x1908, 0x1401, null);
+        else fixed (byte* p = data) _texImage2D(0x0DE1, 0, 0x8058, w, h, 0, 0x1908, 0x1401, p);
+    }
+    public static void TexSubImageRgba8(int x, int y, int w, int h, byte[] data, int offset)
+    {
+        _pixelStorei(0x0CF5, 1);
+        fixed (byte* p = &data[offset]) _texSubImage2D(0x0DE1, 0, x, y, w, h, 0x1908, 0x1401, p);
+    }
+    public static void FramebufferTexture2D(FramebufferTarget t, FramebufferAttachment a, int tex)
+        => _framebufferTexture2D((uint)t, (uint)a, 0x0DE1, (uint)tex, 0);
 
     // ------------------------------------------------------------------ буферы
     public static int GenBuffer() { uint h; _genBuffers(1, &h); return (int)h; }
@@ -309,6 +351,7 @@ public static unsafe class GL
     }
 
     public static void Uniform1(int l, int v) => _uniform1i(l, v);
+    public static void Uniform1(int l, uint v) => _uniform1ui(l, v);
     public static void Uniform1(int l, float v) => _uniform1f(l, v);
     public static void Uniform2(int l, Vector2 v) => _uniform2f(l, v.X, v.Y);
     public static void Uniform3(int l, Vector3 v) => _uniform3f(l, v.X, v.Y, v.Z);

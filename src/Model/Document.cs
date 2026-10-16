@@ -73,6 +73,22 @@ public sealed class Document
     }
 
     /// <summary>K06: параметры изменились; детали пересчитают только зависимые операции.</summary>
+    /// <summary>
+    /// UI: ТАБЛИЦА ПАРАМЕТРОВ ДЛЯ РАСЧЁТА ДЕТАЛИ — по уровням: деталь → сборки над ней → документ. Пустые уровни
+    /// пропускаются; если своих параметров нет нигде, это таблица документа (как прежде).
+    /// </summary>
+    public ParameterTable ScopeFor(Part part)
+    {
+        var chain = new List<ParameterTable>();
+        if (part.LocalParameters.Count > 0) chain.Add(part.LocalParameters);
+        for (var a = part.Parent; a != null && !ReferenceEquals(a, Root); a = a.Parent)
+            if (a is Assembly asm && asm.LocalParameters.Count > 0) chain.Add(asm.LocalParameters);
+        if (chain.Count == 0) return Parameters;
+        for (int i = 0; i < chain.Count; i++) chain[i].Parent = i + 1 < chain.Count ? chain[i + 1] : Parameters;
+        for (int i = chain.Count - 1; i >= 0; i--) { chain[i].Geometry = Parameters.Geometry; chain[i].Units = Parameters.Units; chain[i].Recalculate(); }
+        return chain[0];
+    }
+
     public void ParametersChanged()
     {
         foreach (var p in AllParts()) p.ParametersChanged();
@@ -135,11 +151,11 @@ public sealed class Document
                 var dirty = AllParts().Where(p => p.IsDirty).ToList();
                 if (dirty.Count == 0) break;
 
-                var parameters = Parameters;
                 var solver = Solver;
+                var scopes = dirty.ToDictionary(p => p, ScopeFor);
                 var results = await Task.Run(() => dirty.Select(p =>
                 {
-                    try { return (Part: p, Result: p.Compute(parameters, solver), Failed: (Exception?)null); }
+                    try { return (Part: p, Result: p.Compute(scopes[p], solver), Failed: (Exception?)null); }
                     catch (Exception ex) { return (Part: p, Result: (Part.BuildResult?)null, Failed: ex); }
                 }).ToList());
 
@@ -188,7 +204,7 @@ public sealed class Document
         foreach (var p in AllParts())
         {
             if (!p.IsDirty) continue;
-            p.Rebuild(Parameters, Solver);
+            p.Rebuild(ScopeFor(p), Solver);
             any = true;
         }
         return any;

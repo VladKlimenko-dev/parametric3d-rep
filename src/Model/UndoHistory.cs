@@ -1,4 +1,4 @@
-using Parametric3D.Model.Params;
+﻿using Parametric3D.Model.Params;
 
 namespace Parametric3D.Model;
 
@@ -46,10 +46,17 @@ public sealed class UndoHistory
         return Restore(snap);
     }
 
+    /// <summary>UI: забыть последний снимок (правка отменена до того, как что-то изменила, — «Отмена» в панели операции).</summary>
+    public void DropLast() { if (_undo.Count > 0) _undo.RemoveAt(_undo.Count - 1); }
+
+    /// <summary>UI: очистить повтор (отменённая через «Отмена» правка не должна возвращаться повтором).</summary>
+    public void ClearRedo() => _redo.Clear();
+
     static (Part Part, ParameterTable Parameters) Restore(string snap)
     {
         var (p, t) = DocumentFile.Load(snap);
-        p.Rebuild(null);
+        if (p.LocalParameters.Count > 0) { p.LocalParameters.Parent = t; p.LocalParameters.Recalculate(); }
+        p.Rebuild(p.LocalParameters.Count > 0 ? p.LocalParameters : t);
         return (p, t);
     }
 }

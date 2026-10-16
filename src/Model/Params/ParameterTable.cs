@@ -1,4 +1,4 @@
-using Parametric3D.Core;
+﻿using Parametric3D.Core;
 
 namespace Parametric3D.Model.Params;
 
@@ -50,6 +50,21 @@ public sealed class ParameterTable : IValueResolver
 
     public IGeometryResolver? Geometry;
     public event Action? Changed;
+
+    /// <summary>
+    /// UI-ПАРАМЕТРЫ ПО УРОВНЯМ (как в Creo): таблица детали или сборки ссылается на таблицу уровня выше (сборка, документ).
+    /// Имя, которого нет в своей таблице, ищется выше; своё имя закрывает такое же имя уровня выше.
+    /// </summary>
+    public ParameterTable? Parent;
+
+    /// <summary>Есть ли имя в этой таблице или выше.</summary>
+    public bool HasScoped(string name) => _map.ContainsKey(name) || (Parent?.HasScoped(name) ?? false);
+
+    /// <summary>Параметр по имени — свой или уровня выше.</summary>
+    public Parameter? FindScoped(string name) => Find(name) ?? Parent?.FindScoped(name);
+
+    private Quantity? QuantityOf(string n) =>
+        _map.TryGetValue(n, out var p) ? (p.Error == null ? p.Quantity : null) : Parent?.QuantityOf(n);
     /// <summary>m.x4: система единиц документа — число без единицы в формуле с величинами берёт её единицу.</summary>
     public UnitSystem Units = UnitSystem.Metric;
     static readonly bool UnitCheckOff = Environment.GetEnvironmentVariable("P3D_PARAMUNITS") == "0";
@@ -113,7 +128,8 @@ public sealed class ParameterTable : IValueResolver
 
     public bool TryValue(string name, out double value)
     {
-        if (_map.TryGetValue(name, out var p) && p.Error == null) { value = p.Value; return true; }
+        if (_map.TryGetValue(name, out var p)) { value = p.Value; return p.Error == null; }
+        if (Parent != null) return Parent.TryValue(name, out value);
         value = 0;
         return false;
     }
@@ -132,7 +148,7 @@ public sealed class ParameterTable : IValueResolver
     {
         value = default; error = null;
         if (!ExprParser.TryParse(formula, out Expr? e, out error) || e == null) return false;
-        try { value = ExprUnits.Evaluate(e, n => _map.TryGetValue(n, out var p) && p.Error == null ? p.Quantity : null, Units, Geometry); return true; }
+        try { value = ExprUnits.Evaluate(e, QuantityOf, Units, Geometry); return true; }
         catch (Exception ex) { error = ex.Message; return false; }
     }
 
@@ -171,12 +187,13 @@ public sealed class ParameterTable : IValueResolver
                 var refs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 p.Compiled.CollectRefs(refs);
                 foreach (var r in refs)
-                    if (_map.TryGetValue(r, out var dep) && !ReferenceEquals(dep, p))
-                        list.Add(dep);
-                    else if (!_map.ContainsKey(r))
+                    if (_map.TryGetValue(r, out var dep))
+                    {
+                        if (!ReferenceEquals(dep, p)) list.Add(dep);
+                        else p.Error = "Formula refers to itself.";
+                    }
+                    else if (!(Parent?.HasScoped(r) ?? false))
                         p.Error = $"Unknown parameter '{r}'.";
-                    else if (ReferenceEquals(_map[r], p))
-                        p.Error = "Formula refers to itself.";
             }
             deps[p] = list;
         }
@@ -202,7 +219,7 @@ public sealed class ParameterTable : IValueResolver
                     if (!UnitCheckOff && !string.IsNullOrWhiteSpace(p.Unit))
                     {
                         var unit = Parametric3D.Core.Units.Parse(p.Unit);
-                        var q = ExprUnits.Evaluate(p.Compiled, n => _map.TryGetValue(n, out var o) && o.Error == null ? o.Quantity : null, Units, Geometry);
+                        var q = ExprUnits.Evaluate(p.Compiled, QuantityOf, Units, Geometry);
                         if (q.Bare && q.Dim.IsNone) p.Number = unit.ToInternal(q.Value);
                         else if (q.Dim != unit.Dim) p.Error = $"The formula gives {q.Dim}, the parameter is {unit.Dim} ({p.Unit}).";
                         else p.Number = q.Value;

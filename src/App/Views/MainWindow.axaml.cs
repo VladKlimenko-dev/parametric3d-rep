@@ -10,21 +10,28 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Parametric3D.App.Commands;
 using Parametric3D.App.Icons;
+using Parametric3D.App.Operations;
 using Parametric3D.App.Services;
+using Parametric3D.App.Sketching;
 using Parametric3D.App.ViewModels;
 using Parametric3D.App.Viewport;
 using Parametric3D.Core;
+using Parametric3D.Kernel;
 using Parametric3D.Model;
 using Parametric3D.Model.Features;
 using Parametric3D.Model.Sketching;
 using Parametric3D.Render;
+using Parametric3D.Render.Engine;
+using static Parametric3D.App.Loc;
 
 namespace Parametric3D.App.Views;
 
 /// <summary>
-/// ГЛАВНОЕ ОКНО (этапы U0–U1): верхняя полоса (файл, документ и окружение, отмена, поиск команды), дерево модели,
-/// 3D-вид с панелью вида и кубом вида, панель свойств, строка состояния, палитра команд (F). Все кнопки строятся из
-/// реестра команд (StandardCommands) — те же команды доступны в палитре и по клавишам.
+/// ГЛАВНОЕ ОКНО: верхняя полоса (файл, документ, отмена, поиск команды, параметры, свойства, тема, язык), дерево модели,
+/// 3D-вид с полосой команд слева (операции или инструменты эскиза), панелью вида сверху (вписать, проекция, стиль,
+/// «Опорные» со списком), кубом вида и полосой выбора снизу (что выбрано и какие операции к нему подходят — как в
+/// Plasticity), правая панель — параметры операции или свойства, строка состояния, палитра команд (F).
+/// Все кнопки — из реестра команд (StandardCommands): те же команды есть в палитре и на клавишах.
 /// </summary>
 public partial class MainWindow : Window
 {
@@ -32,66 +39,81 @@ public partial class MainWindow : Window
     public ModelViewport ViewPort => View;
     private readonly CommandRegistry _reg = CommandRegistry.Instance;
     private List<TreeNode> _roots = new();
-    private bool _syncingTree;
+    private bool _syncingTree, _treePending;
     private DispatcherTimer? _toastTimer;
+    private readonly Dictionary<uint, bool> _expand = new();
+
+    public Operation? CurrentOperation { get; private set; }
+    public bool InSketch => View.ActiveSketch != null;
+    public bool ConstructionMode { get; private set; }
+    private bool _sketchIsNew;
+    private Func<Sketch, Operation>? _afterSketch;
+    private bool _propsOn;
+    public bool PropertiesVisible => _propsOn;
 
     public MainWindow() : this(DocumentSession.NewPart()) { }
 
     public MainWindow(DocumentSession session)
     {
         InitializeComponent();
+        Loc.Set(UserPrefs.Current.Language == "en");
         StandardCommands.Register(this);
-        BuildToolbars();
         WireView();
         WireTree();
         WirePalette();
         ApplyTheme(UserPrefs.Current.Theme != "Light");
         SetSession(session);
 
-        _reg.Failed += (c, ex) => ShowToast($"{c.Label}: {ex.Message}");
+        _reg.Failed += (c, ex) => ShowToast($"{c.Text}: {ex.Message}");
         _reg.Executed += c => { if (c.Id != "palette") UserPrefs.Current.AddRecentCommand(c.Id); RefreshToolStates(); };
         KeyDown += OnWindowKeyDown;
         Dispatcher.UIThread.UnhandledException += (_, e) =>
         {
             AppLog.Write("unhandled", e.Exception);
-            ShowToast("Внутренняя ошибка: " + e.Exception.Message);
+            ShowToast(L("Внутренняя ошибка: ") + e.Exception.Message);
             e.Handled = true;
         };
         Closing += OnClosing;
-        PropsClose.Click += (_, _) => PropsPanel.IsVisible = false;
         SearchButton.Click += (_, _) => OpenPalette();
-        TreeNode.VisibilityToggled += _ => { View.MarkDirty(); Session.Document.Root.NotifyChanged(Session.Document.Root); };
+        TreeNode.VisibilityToggled += _ => { View.MarkDirty(); Session.MarkModified(); };
+        TreeNode.ExpandedChanged += n => _expand[n.Item.Id] = n.IsExpanded;
     }
 
     // ================================================================ документ
 
     public void SetSession(DocumentSession s)
     {
+        if (CurrentOperation != null) { CurrentOperation = null; HideOpPanel(); }
+        if (InSketch) View.ExitSketch(false);
         if (Session != null) { Session.Replaced -= OnReplaced; Session.StateChanged -= OnStateChanged; Session.Document.BuildStarted -= OnBuild; Session.Document.BuildFinished -= OnBuild; }
         Session = s;
         s.Replaced += OnReplaced;
         s.StateChanged += OnStateChanged;
         s.Document.BuildStarted += OnBuild;
         s.Document.BuildFinished += OnBuild;
-        s.Document.Root.Changed += _ => Dispatcher.UIThread.Post(RebuildTree, DispatcherPriority.Background);
+        s.Document.Root.Changed += _ => ScheduleTree();
+        _expand.Clear();
         View.Document = s.Document;
         View.ActivePart = s.Part;
         View.DarkTheme = _dark;
         RebuildTree();
+        RebuildUi();
         OnStateChanged();
         Dispatcher.UIThread.Post(() => View.ZoomToFit(false), DispatcherPriority.Background);
     }
 
     private void OnReplaced()
     {
+        // отмена и повтор меняют деталь целиком: подписка на изменения — у нового корня та же, деталь — новая
         View.Document = null;
         View.Document = Session.Document;
         View.ActivePart = Session.Part;
         View.DarkTheme = _dark;
         RebuildTree();
+        UpdateContextBar();
     }
 
-    private void OnBuild() => Dispatcher.UIThread.Post(() => { UpdateStatus(); RebuildTree(); View.MarkDirty(); });
+    private void OnBuild() => Dispatcher.UIThread.Post(() => { UpdateStatus(); ScheduleTree(); View.MarkDirty(); });
 
     private void OnStateChanged()
     {
@@ -105,9 +127,10 @@ public partial class MainWindow : Window
     public async Task<bool> ConfirmDiscard()
     {
         if (!Session.Modified) return true;
-        var r = await Dialogs.Ask(this, "Несохранённые изменения", $"Сохранить изменения в «{Session.Title}»?", "Сохранить", "Не сохранять", "Отмена");
-        if (r == "Сохранить") return await SaveAsync(false);
-        return r == "Не сохранять";
+        string save = L("Сохранить"), discard = L("Не сохранять"), cancel = L("Отмена");
+        var r = await Dialogs.Ask(this, L("Несохранённые изменения"), L("Сохранить изменения в «{0}»?", Session.Title), save, discard, cancel);
+        if (r == save) return await SaveAsync(false);
+        return r == discard;
     }
 
     private bool _closingConfirmed;
@@ -125,17 +148,17 @@ public partial class MainWindow : Window
         {
             var f = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
-                Title = "Сохранить деталь",
+                Title = L("Сохранить деталь"),
                 SuggestedFileName = Session.Title + DocumentSession.PartExtension,
                 DefaultExtension = DocumentSession.PartExtension,
-                FileTypeChoices = new[] { new FilePickerFileType("Деталь Parametric3D") { Patterns = new[] { "*" + DocumentSession.PartExtension } } },
+                FileTypeChoices = new[] { new FilePickerFileType(L("Деталь Parametric3D")) { Patterns = new[] { "*" + DocumentSession.PartExtension } } },
             });
             path = f?.TryGetLocalPath();
             if (path == null) return false;
         }
         Session.SaveAs(path);
         UserPrefs.Current.AddRecentFile(path);
-        ShowToast($"Сохранено: {path}", error: false);
+        ShowToast(L("Сохранено: {0}", path), error: false);
         return true;
     }
 
@@ -146,9 +169,9 @@ public partial class MainWindow : Window
         {
             var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = "Открыть",
+                Title = L("Открыть"),
                 AllowMultiple = false,
-                FileTypeFilter = new[] { new FilePickerFileType("Деталь Parametric3D") { Patterns = new[] { "*" + DocumentSession.PartExtension } } },
+                FileTypeFilter = new[] { new FilePickerFileType(L("Деталь Parametric3D")) { Patterns = new[] { "*" + DocumentSession.PartExtension } } },
             });
             path = files.FirstOrDefault()?.TryGetLocalPath();
             if (path == null) return;
@@ -162,7 +185,7 @@ public partial class MainWindow : Window
         if (!await ConfirmDiscard()) return;
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Импорт",
+            Title = L("Импорт"),
             FileTypeFilter = new[] { new FilePickerFileType("STEP, IGES") { Patterns = new[] { "*.step", "*.stp", "*.iges", "*.igs" } } },
         });
         var path = files.FirstOrDefault()?.TryGetLocalPath();
@@ -175,14 +198,14 @@ public partial class MainWindow : Window
     public async Task ExportAsync()
     {
         var part = Session.Part;
-        if (part == null || part.Bodies.Count == 0) { ShowToast("Экспорт: в детали ещё нет тела."); return; }
+        if (part == null || part.Bodies.Count == 0) { ShowToast(L("Экспорт: в детали ещё нет тела.")); return; }
         var f = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Экспорт",
+            Title = L("Экспорт"),
             SuggestedFileName = Session.Title + ".step",
             FileTypeChoices = new[]
             {
-                new FilePickerFileType("STEP точный (B-rep)") { Patterns = new[] { "*.step", "*.stp" } },
+                new FilePickerFileType(L("STEP точный (B-rep)")) { Patterns = new[] { "*.step", "*.stp" } },
                 new FilePickerFileType("STL") { Patterns = new[] { "*.stl" } },
                 new FilePickerFileType("OBJ") { Patterns = new[] { "*.obj" } },
             },
@@ -195,58 +218,215 @@ public partial class MainWindow : Window
 
     // ================================================================ панели и кнопки
 
-    private Button ToolButton(AppCommand c, double icon = 20)
+    private readonly List<(Control Button, AppCommand Cmd)> _toggles = new();
+    private Button? _projButton, _styleButton;
+    private ToggleButton? _datumsButton;
+
+    private Control CmdButton(AppCommand c, double icon = 20, bool text = false, double minWidth = 0)
     {
-        var b = new Button { Classes = { "tool" }, Command = c, Content = IconProvider.Content(c.Icon, c.Short ?? c.Label, icon), Tag = c };
-        ToolTip.SetTip(b, c.Tooltip);
+        bool hasIcon = IconProvider.Exists(c.Icon);
+        Control content = hasIcon && !text
+            ? IconProvider.Content(c.Icon, c.ShortText, icon)
+            : new TextBlock { Text = c.ShortText, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+        if (hasIcon && text)
+            content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { IconProvider.Content(c.Icon, c.ShortText, icon), content } };
+        Control b;
+        if (c.IsChecked != null)
+        {
+            var t = new ToggleButton { Classes = { "tool" }, Content = content, IsChecked = c.IsChecked(), MinWidth = minWidth };
+            t.Click += (_, _) => { c.Execute(); RefreshToolStates(); };
+            _toggles.Add((t, c));
+            b = t;
+        }
+        else b = new Button { Classes = { "tool" }, Command = c, Content = content, MinWidth = minWidth };
+        if (b is ContentControl cc) cc.HorizontalContentAlignment = text ? HorizontalAlignment.Left : HorizontalAlignment.Center;
+        ToolTip.SetTip(b, c.Tooltip + (c.Description != null ? "\n" + L(c.Description) : ""));
+        b.Tag = c;
         return b;
     }
 
-    private ToggleButton ToggleTool(AppCommand c, double icon = 20)
+    private static Border Separator(bool vertical) => vertical
+        ? new Border { Width = 1, Margin = new Thickness(4, 6), Background = Brushes.Gray, Opacity = 0.35 }
+        : new Border { Height = 1, Margin = new Thickness(4, 4), Background = Brushes.Gray, Opacity = 0.35 };
+
+    /// <summary>Пересобрать все панели (смена языка, темы, режима эскиза).</summary>
+    public void RebuildUi()
     {
-        var b = new ToggleButton { Classes = { "tool" }, Content = IconProvider.Content(c.Icon, c.Short ?? c.Label, icon), Tag = c, IsChecked = c.IsChecked?.Invoke() };
-        b.Click += (_, _) => { c.Execute(); b.IsChecked = c.IsChecked?.Invoke(); };
-        ToolTip.SetTip(b, c.Tooltip);
-        return b;
+        _toggles.Clear();
+        BuildTopBar();
+        BuildViewTools();
+        BuildCommandBar();
+        TreeTools.Children.Clear();
+        TreeTools.Children.Add(CmdButton(_reg["tree.collapse"], 16));
+        TreeTools.Children.Add(CmdButton(_reg["tree.expand"], 16));
+        TreeHeader.Text = L("ДЕРЕВО МОДЕЛИ");
+        SearchText.Text = L("Найти команду…");
+        PaletteHelp.Text = L("↑↓ — выбор, Enter — выполнить, Esc — закрыть. Поиск по-русски и по-английски.");
+        UpdateContextBar();
+        UpdateStatus();
+        if (CurrentOperation == null && _propsOn) ShowProperties();
+        RefreshToolStates();
     }
 
-    private readonly List<ToggleButton> _toggles = new();
-
-    private void BuildToolbars()
+    private void BuildTopBar()
     {
-        // меню «Файл» — кнопка с выпадающим списком
-        var fileBtn = new Button { Classes = { "tool" }, Content = IconProvider.Content(null, "☰", 20) };
-        fileBtn.Content = new TextBlock { Text = "☰", FontSize = 16 };
-        ToolTip.SetTip(fileBtn, "Файл");
+        FilePanel.Children.Clear();
+        var fileBtn = new Button { Classes = { "tool" }, Content = new TextBlock { Text = "☰", FontSize = 16 } };
+        ToolTip.SetTip(fileBtn, L("Файл"));
         fileBtn.Click += (_, _) => OpenFileMenu(fileBtn);
         FilePanel.Children.Add(fileBtn);
-        foreach (var id in new[] { "file.new_part", "file.open", "file.save" }) FilePanel.Children.Add(ToolButton(_reg[id]));
+        foreach (var id in new[] { "file.new_part", "file.open", "file.save" }) FilePanel.Children.Add(CmdButton(_reg[id]));
 
-        foreach (var id in new[] { "edit.undo", "edit.redo", "edit.history" }) EditPanel.Children.Add(ToolButton(_reg[id]));
-        RightPanel.Children.Add(ToolButton(_reg["app.theme"]));
-        RightPanel.Children.Add(ToolButton(_reg["app.properties"]));
+        EditPanel.Children.Clear();
+        foreach (var id in new[] { "edit.undo", "edit.redo", "edit.history" }) EditPanel.Children.Add(CmdButton(_reg[id]));
 
-        foreach (var id in new[] { "view.fit", "view.iso", "view.front", "view.top", "view.right" }) ViewTools.Children.Add(ToolButton(_reg[id], 18));
-        ViewTools.Children.Add(new Border { Width = 1, Margin = new Thickness(4, 6), Background = Brushes.Gray, Opacity = 0.4 });
-        var persp = ToggleTool(_reg["view.perspective"], 18); _toggles.Add(persp); ViewTools.Children.Add(persp);
-        var styleBtn = new Button { Classes = { "tool" }, Content = IconProvider.Content("style_shaded_edges_but.svg", "Стиль", 18) };
-        ToolTip.SetTip(styleBtn, "Стиль отображения");
-        styleBtn.Click += (_, _) => OpenStyleMenu(styleBtn);
-        ViewTools.Children.Add(styleBtn);
-        var datums = ToggleTool(_reg["view.datums"], 18); _toggles.Add(datums); ViewTools.Children.Add(datums);
-
-        TreeTools.Children.Add(ToolButton(_reg["tree.collapse"], 16));
-        TreeTools.Children.Add(ToolButton(_reg["tree.expand"], 16));
+        RightPanel.Children.Clear();
+        RightPanel.Children.Add(CmdButton(_reg["app.parameters"]));
+        RightPanel.Children.Add(CmdButton(_reg["app.properties"]));
+        RightPanel.Children.Add(Separator(true));
+        RightPanel.Children.Add(CmdButton(_reg["app.theme"]));
+        // язык — рядом с темой (п. 2): на кнопке — язык, на который переключит
+        var lang = new Button { Classes = { "tool" }, Content = new TextBlock { Text = Loc.En ? "RU" : "EN", FontWeight = FontWeight.SemiBold, FontSize = 12 } };
+        ToolTip.SetTip(lang, Loc.En ? "Переключить на русский" : "Switch to English");
+        lang.Click += (_, _) => ToggleLanguage();
+        RightPanel.Children.Add(lang);
     }
 
-    private void RefreshToolStates()
+    private void BuildViewTools()
     {
-        foreach (var t in _toggles) if (t.Tag is AppCommand c) t.IsChecked = c.IsChecked?.Invoke();
+        ViewTools.Children.Clear();
+        ViewTools.Children.Add(CmdButton(_reg["view.fit"], 18));
+        // проекция: одна кнопка, щелчок переключает (п. 7)
+        _projButton = new Button { Classes = { "tool" }, MinWidth = 64 };
+        _projButton.Click += (_, _) => { View.ToggleProjection(); UpdateProjectionButton(!View.IsPerspective); };
+        ToolTip.SetTip(_projButton, _reg["view.projection"].Tooltip);
+        ViewTools.Children.Add(_projButton);
+        UpdateProjectionButton(View.IsPerspective);
+        // стиль — выпадающий список
+        _styleButton = new Button { Classes = { "tool" } };
+        ToolTip.SetTip(_styleButton, L("Стиль отображения"));
+        _styleButton.Click += (_, _) => OpenStyleMenu(_styleButton);
+        ViewTools.Children.Add(_styleButton);
+        UpdateStyleButton();
+        ViewTools.Children.Add(Separator(true));
+        // «Опорные»: кнопка показать/скрыть и стрелка со списком (п. 12)
+        _datumsButton = new ToggleButton { Classes = { "tool" }, Content = new TextBlock { Text = L("Опорные"), FontSize = 12 }, Padding = new Thickness(8, 4, 4, 4) };
+        _datumsButton.Click += (_, _) => { ToggleDatums(); };
+        ToolTip.SetTip(_datumsButton, _reg["view.datums"].Tooltip);
+        var arrow = new Button { Classes = { "tool" }, Content = new TextBlock { Text = "▾", FontSize = 12 }, MinWidth = 18, Padding = new Thickness(3, 4) };
+        ToolTip.SetTip(arrow, L("Что показывать"));
+        arrow.Click += (_, _) => OpenShowFlyout(arrow);
+        ViewTools.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 0, Children = { _datumsButton, arrow } });
+        _datumsButton.IsChecked = _reg["view.datums"].IsChecked!();
+    }
+
+    private void UpdateProjectionButton(bool perspective)
+    {
+        if (_projButton == null) return;
+        _projButton.Content = new TextBlock { Text = perspective ? L("Персп.") : L("Орто"), FontSize = 12 };
+    }
+
+    private static readonly (DisplayStyle Style, string Id)[] Styles =
+    {
+        (DisplayStyle.Shaded, "style.shaded"), (DisplayStyle.ShadedWithEdges, "style.shaded_edges"), (DisplayStyle.Wireframe, "style.wireframe"),
+        (DisplayStyle.HiddenLines, "style.hidden_lines"), (DisplayStyle.Transparent, "style.transparent"),
+    };
+
+    private void UpdateStyleButton()
+    {
+        if (_styleButton == null) return;
+        var c = _reg[Styles.First(s => s.Style == View.Style).Id];
+        _styleButton.Content = new StackPanel
+        {
+            Orientation = Orientation.Horizontal, Spacing = 4,
+            Children = { new TextBlock { Text = c.Text, FontSize = 12 }, new TextBlock { Text = "▾", FontSize = 11, Classes = { "dim" } } },
+        };
+    }
+
+    public void SetStyle(DisplayStyle s)
+    {
+        View.Style = s;
+        UpdateStyleButton();
+        RefreshToolStates();
+    }
+
+    private void OpenStyleMenu(Control anchor)
+    {
+        var items = new List<object>();
+        foreach (var (_, id) in Styles)
+        {
+            var mi = Item(_reg[id]);
+            mi.ToggleType = MenuItemToggleType.Radio;
+            mi.IsChecked = _reg[id].IsChecked?.Invoke() == true;
+            items.Add(mi);
+        }
+        new ContextMenu { ItemsSource = items, Placement = PlacementMode.BottomEdgeAlignedLeft }.Open(anchor);
+    }
+
+    /// <summary>Кнопка «Опорные»: если показано что-то из опорных — скрыть все, иначе показать все.</summary>
+    public void ToggleDatums()
+    {
+        var s = View.Show;
+        bool any = s.Planes || s.Axes || s.Points || s.Origin;
+        s.Planes = s.Axes = s.Points = s.Origin = !any;
+        View.MarkDirty();
+        RefreshToolStates();
+    }
+
+    private void OpenShowFlyout(Control anchor)
+    {
+        var sp = new StackPanel { Spacing = 2, Margin = new Thickness(4) };
+        sp.Children.Add(new TextBlock { Text = L("ПОКАЗЫВАТЬ"), Classes = { "header" }, Margin = new Thickness(2, 0, 0, 4) });
+        foreach (var (key, label) in StandardCommands.ShowItems)
+        {
+            var cb = new CheckBox { Content = L(label), IsChecked = StandardCommands.GetShow(View.Show, key) };
+            cb.IsCheckedChanged += (_, _) => { StandardCommands.SetShow(View.Show, key, cb.IsChecked == true); View.MarkDirty(); RefreshToolStates(); };
+            sp.Children.Add(cb);
+        }
+        var fl = new Flyout { Content = sp, Placement = PlacementMode.BottomEdgeAlignedLeft };
+        fl.ShowAt(anchor);
+    }
+
+    /// <summary>Полоса команд слева: операции модели или инструменты эскиза (п. 3, 9).</summary>
+    private void BuildCommandBar()
+    {
+        CommandStack.Children.Clear();
+        string[][] groups = InSketch
+            ? new[]
+            {
+                new[] { "sk.line", "sk.rect", "sk.circle", "sk.circle3", "sk.arc3", "sk.arc_center", "sk.ellipse", "sk.spline", "sk.point", "sk.centerline" },
+                new[] { "sk.construction", "sk.grid" },
+                new[] { "sk.finish", "sk.cancel" },
+            }
+            : new[]
+            {
+                new[] { "op.sketch" },
+                new[] { "op.extrude", "op.cut", "op.revolve" },
+                new[] { "op.hole", "op.round", "op.chamfer", "op.vertex_round", "op.shell" },
+                new[] { "op.plane" },
+                new[] { "op.mirror", "op.pattern_linear", "op.pattern_circular" },
+            };
+        CommandStack.Children.Add(new TextBlock
+        {
+            Text = InSketch ? L("ЭСКИЗ") : L("ОПЕРАЦИИ"), Classes = { "header" }, Margin = new Thickness(6, 2, 6, 4),
+        });
+        for (int g = 0; g < groups.Length; g++)
+        {
+            if (g > 0) CommandStack.Children.Add(Separator(false));
+            foreach (var id in groups[g]) CommandStack.Children.Add(CmdButton(_reg[id], 20, text: true, minWidth: 128));
+        }
+    }
+
+    public void RefreshToolStates()
+    {
+        foreach (var (b, c) in _toggles) if (b is ToggleButton t) t.IsChecked = c.IsChecked?.Invoke();
+        if (_datumsButton != null) _datumsButton.IsChecked = _reg["view.datums"].IsChecked!();
+        UpdateStyleButton();
     }
 
     private MenuItem Item(AppCommand c) => new()
     {
-        Header = c.Label,
+        Header = c.Text,
         Command = c,
         InputGesture = c.Gesture,
         Icon = IconProvider.Get(c.Icon) is { } img ? new Image { Source = img, Width = 16, Height = 16 } : null,
@@ -256,13 +436,13 @@ public partial class MainWindow : Window
     {
         var items = new List<object>();
         foreach (var id in new[] { "file.new_part", "file.sample", "file.open" }) items.Add(Item(_reg[id]));
-        var recent = new MenuItem { Header = "Последние файлы" };
+        var recent = new MenuItem { Header = L("Последние файлы") };
         var rec = UserPrefs.Current.RecentFiles.Where(File.Exists).ToList();
         foreach (var p in rec)
         {
             var mi = new MenuItem { Header = Path.GetFileName(p) };
             ToolTip.SetTip(mi, p);
-            mi.Click += async (_, _) => { try { await OpenAsync(p); } catch (Exception ex) { ShowToast("Открыть: " + ex.Message); } };
+            mi.Click += async (_, _) => { try { await OpenAsync(p); } catch (Exception ex) { ShowToast(L("Открыть: ") + ex.Message); } };
             recent.Items.Add(mi);
         }
         recent.IsEnabled = rec.Count > 0;
@@ -272,26 +452,11 @@ public partial class MainWindow : Window
         items.Add(new Separator());
         foreach (var id in new[] { "file.import", "file.export" }) items.Add(Item(_reg[id]));
         items.Add(new Separator());
-        foreach (var id in new[] { "app.theme", "app.exit" }) items.Add(Item(_reg[id]));
-        var menu = new ContextMenu { ItemsSource = items, Placement = PlacementMode.BottomEdgeAlignedLeft };
-        menu.Open(anchor);
-    }
-
-    private void OpenStyleMenu(Control anchor)
-    {
-        var items = new List<object>();
-        foreach (var id in new[] { "style.shaded", "style.shaded_edges", "style.transparent", "style.mesh", "style.volume_mesh" })
-        {
-            var c = _reg[id];
-            var mi = Item(c);
-            mi.ToggleType = MenuItemToggleType.Radio;
-            mi.IsChecked = c.IsChecked?.Invoke() == true;
-            items.Add(mi);
-        }
+        foreach (var id in new[] { "app.parameters", "app.theme", "app.language", "app.exit" }) items.Add(Item(_reg[id]));
         new ContextMenu { ItemsSource = items, Placement = PlacementMode.BottomEdgeAlignedLeft }.Open(anchor);
     }
 
-    // ================================================================ тема
+    // ================================================================ тема и язык
 
     private bool _dark = true;
     public bool IsDark => _dark;
@@ -304,11 +469,19 @@ public partial class MainWindow : Window
         View.DarkTheme = dark;
         UserPrefs.Current.Theme = dark ? "Dark" : "Light";
         UserPrefs.Current.Save();
-        // иконки перекрашены — пересоздать содержимое кнопок
-        foreach (var panel in new Panel[] { FilePanel, EditPanel, RightPanel, ViewTools, TreeTools })
-            foreach (var b in panel.Children.OfType<ContentControl>())
-                if (b.Tag is AppCommand c) b.Content = IconProvider.Content(c.Icon, c.Short ?? c.Label, panel == ViewTools ? 18 : panel == TreeTools ? 16 : 20);
-        if (Session != null) RebuildTree();
+        if (Session != null) { RebuildUi(); RebuildTree(); }
+        Cube.InvalidateVisual();
+    }
+
+    public void ToggleLanguage()
+    {
+        Loc.Set(!Loc.En);
+        UserPrefs.Current.Language = Loc.En ? "en" : "ru";
+        UserPrefs.Current.Save();
+        RebuildUi();
+        RebuildTree();
+        if (CurrentOperation != null) PropsTitle.Text = L(CurrentOperation.Title).ToUpperInvariant();
+        ShowHint(View.Tool != null ? L(View.Tool.Hint) : null);
         Cube.InvalidateVisual();
     }
 
@@ -317,16 +490,35 @@ public partial class MainWindow : Window
     private void WireView()
     {
         Cube.Viewport = View;
-        View.CameraChanged += () => Cube.Sync();
+        View.CameraChanged += () => { Cube.Sync(); UpdateProjectionButton(View.IsPerspective); };
         View.HoverChanged += h => UpdateStatus(h);
-        View.Selection.Changed += () => { SyncTreeFromSelection(); UpdateStatus(); if (PropsPanel.IsVisible) ShowProperties(); };
-        View.ContextRequested += p => OpenViewContextMenu();
+        View.Selection.Changed += OnSelectionChanged;
+        View.ContextRequested += _ => OpenViewContextMenu();
+        View.SceneRebuilt += () => { CurrentOperation?.RefreshStatus(); UpdateStatus(); if (_propsOn && CurrentOperation == null) ShowProperties(); };
+        View.ToolChanged += () => { ShowHint(View.Tool != null ? L(View.Tool.Hint) : InSketch ? L("Выберите инструмент слева; Ctrl+Enter — закончить эскиз") : null); RefreshToolStates(); };
+        View.SketchEdited += () => { ScheduleTree(); UpdateStatus(); };
         View.GlReady += info => Dispatcher.UIThread.Post(() =>
         {
             StatusGl.Text = ShortGl(info);
             ToolTip.SetTip(StatusGl, info);
         });
         Dispatcher.UIThread.Post(() => { if (View.GlError != null) ShowToast("OpenGL: " + View.GlError); }, DispatcherPriority.Background);
+    }
+
+    private PickRef _lastPrimary;
+
+    private void OnSelectionChanged()
+    {
+        CurrentOperation?.SelectionChanged(View.Selection.Items);
+        var prim = View.Selection.Primary;
+        if (prim.Id != _lastPrimary.Id || View.Selection.IsEmpty)
+        {
+            _lastPrimary = prim;
+            SyncTreeFromSelection();
+        }
+        UpdateStatus();
+        UpdateContextBar();
+        if (_propsOn && CurrentOperation == null) ShowProperties();
     }
 
     private static string ShortGl(string info)
@@ -340,8 +532,286 @@ public partial class MainWindow : Window
     private void OpenViewContextMenu()
     {
         var items = new List<object>();
-        foreach (var id in new[] { "view.hide", "view.isolate", "view.show_all", "view.fit", "app.properties", "edit.delete" }) items.Add(Item(_reg[id]));
+        var ids = View.Selection.IsEmpty
+            ? new[] { "view.fit", "view.home", "view.show_all", "op.sketch", "app.parameters" }
+            : SuggestedOps().Concat(new[] { "view.hide", "view.isolate", "edit.delete", "app.properties" }).Distinct().ToArray();
+        foreach (var id in ids) items.Add(Item(_reg[id]));
         new ContextMenu { ItemsSource = items }.Open(View);
+    }
+
+    // ================================================================ полоса выбора и операций (как в Plasticity)
+
+    /// <summary>Операции, подходящие к выбранному (п. 17).</summary>
+    public List<string> SuggestedOps()
+    {
+        var res = new List<string>();
+        var sel = View.Selection.Items;
+        if (InSketch || sel.Count == 0) return res;
+        bool planar = sel.Any(Refs.IsPlanar), face = sel.Any(r => r.Kind == PickKind.Face);
+        bool edge = sel.Any(r => r.Kind == PickKind.Edge), vertex = sel.Any(r => r.Kind == PickKind.Vertex);
+        bool sketch = sel.Any(Refs.IsSketch), linear = sel.Any(Refs.IsLinear), axis = sel.Any(r => r.Kind == PickKind.DatumAxis);
+        bool feature = sel.Any(r => r.Target is Feature), part = sel.Any(r => r.Kind == PickKind.Body);
+        if (sketch) res.AddRange(new[] { "op.extrude", "op.cut", "op.revolve", "edit.feature" });
+        if (planar) res.AddRange(new[] { "op.sketch", "op.extrude", "op.plane", "op.mirror" });
+        if (face) res.AddRange(new[] { "op.hole", "op.shell" });
+        if (edge) res.AddRange(new[] { "op.round", "op.chamfer" });
+        if (vertex) res.AddRange(new[] { "op.vertex_round", "op.vertex_chamfer" });
+        if (linear && !sketch) res.Add("op.pattern_linear");
+        if (axis || linear && !sketch) res.Add("op.pattern_circular");
+        if (feature) res.AddRange(new[] { "edit.feature", "edit.suppress", "edit.delete" });
+        if (part) res.AddRange(new[] { "view.isolate", "app.parameters", "app.properties" });
+        return res.Distinct().ToList();
+    }
+
+    private void UpdateContextBar()
+    {
+        ContextOps.Children.Clear();
+        if (InSketch && View.ActiveSketch is { } sk)
+        {
+            SelChipText.Text = L("Эскиз «{0}»", sk.Name);
+            ContextOps.Children.Add(CmdButton(_reg["sk.finish"], 18, text: true));
+            ContextOps.Children.Add(CmdButton(_reg["sk.cancel"], 18, text: true));
+            ContextBar.IsVisible = true;
+            return;
+        }
+        if (CurrentOperation is { } op)
+        {
+            SelChipText.Text = L(op.Title);
+            var ok = new Button { Content = L(op.OkLabel), Classes = { "accent" }, MinWidth = 70 };
+            ok.Click += (_, _) => CommitOperation();
+            var cancel = new Button { Content = L("Отмена"), MinWidth = 70 };
+            cancel.Click += (_, _) => CancelOperation();
+            ContextOps.Children.Add(ok);
+            ContextOps.Children.Add(cancel);
+            ContextBar.IsVisible = true;
+            return;
+        }
+        var sel = View.Selection;
+        if (sel.IsEmpty)
+        {
+            SelChipText.Text = L("Выберите грань, ребро, вершину, плоскость или эскиз — здесь появятся подходящие операции");
+            SelChip.Opacity = 0.75;
+            ContextBar.IsVisible = Session?.Part != null;
+            return;
+        }
+        SelChip.Opacity = 1;
+        SelChipText.Text = sel.Describe();
+        foreach (var id in SuggestedOps())
+        {
+            var c = _reg[id];
+            var b = CmdButton(c, 18, text: true);
+            if (id == "edit.feature" && sel.Items.Any(Refs.IsSketch)) ((ContentControl)b).Content = new TextBlock { Text = L("Изменить эскиз"), FontSize = 12 };
+            ContextOps.Children.Add(b);
+        }
+        if (_reg["view.hide"].Enabled) ContextOps.Children.Add(CmdButton(_reg["view.hide"], 18, text: true));
+        var clear = CmdButton(_reg["edit.clear_selection"], 18);
+        ContextOps.Children.Add(clear);
+        ContextBar.IsVisible = true;
+    }
+
+    // ================================================================ операции
+
+    /// <summary>Выдавливание или вращение без эскиза, но с выбранной плоскостью — сначала эскиз на ней, потом операция.</summary>
+    public Operation SketchFirst(Operation op)
+    {
+        var sel = View.Selection.Items;
+        if (sel.Any(Refs.IsSketch) || !sel.Any(Refs.IsPlanar)) return op;
+        return op switch
+        {
+            ExtrudeOp e => new SketchOp { Then = sk => new ExtrudeOp { SeedSketch = sk, StartCut = e.StartCut } },
+            RevolveOp => new SketchOp { Then = sk => new RevolveOp { SeedSketch = sk } },
+            _ => op,
+        };
+    }
+
+    public void StartOperation(Operation op)
+    {
+        if (CurrentOperation != null) CancelOperation();
+        var part = Session.Part;
+        if (part == null) { ShowToast(L("Нет детали")); return; }
+        bool panel;
+        try { panel = op.Begin(this, part); }
+        catch (Exception ex) { AppLog.Write("operation start", ex); ShowToast(L(op.Title) + ": " + ex.Message); return; }
+        if (!panel) { RefreshAfterOp(); return; }
+        CurrentOperation = op;
+        PropsPanel.IsVisible = true;
+        PropsTitle.Text = L(op.Title).ToUpperInvariant();
+        PropsBody.Children.Clear();
+        PropsButtons.Children.Clear();
+        var p = new OpPanel(PropsBody, op);
+        try
+        {
+            op.Build(p);
+            p.Finish();
+            op.Prime();
+            op.AttachPanel(p);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write("operation " + op.Title, ex);
+            ShowToast(L(op.Title) + ": " + ex.Message);
+        }
+        var ok = new Button { Content = L(op.OkLabel), Classes = { "accent" }, MinWidth = 90 };
+        ok.Click += (_, _) => CommitOperation();
+        var cancel = new Button { Content = L("Отмена"), MinWidth = 90 };
+        cancel.Click += (_, _) => CancelOperation();
+        PropsButtons.Children.Add(ok);
+        PropsButtons.Children.Add(cancel);
+        View.MarkDirty();
+        RefreshAfterOp();
+    }
+
+    public void CommitOperation()
+    {
+        if (CurrentOperation is not { } op) return;
+        bool done;
+        try { done = op.Commit(); }
+        catch (Exception ex) { AppLog.Write("operation commit", ex); ShowToast(L(op.Title) + ": " + ex.Message); return; }
+        if (!done) return;
+        if (ReferenceEquals(CurrentOperation, op)) EndOperation();
+    }
+
+    public void CancelOperation()
+    {
+        if (CurrentOperation is not { } op) return;
+        CurrentOperation = null;
+        try { op.Cancel(); }
+        catch (Exception ex) { AppLog.Write("operation cancel", ex); }
+        EndOperation();
+    }
+
+    private void EndOperation()
+    {
+        CurrentOperation = null;
+        View.Selection.Filter = InSketch ? PickFilter.Sketch : PickFilter.All;
+        if (!InSketch) View.Selection.Clear();
+        HideOpPanel();
+        View.MarkDirty();
+        RefreshAfterOp();
+    }
+
+    private void HideOpPanel()
+    {
+        PropsButtons.Children.Clear();
+        PropsPanel.IsVisible = _propsOn;
+        if (_propsOn) ShowProperties();
+    }
+
+    private void RefreshAfterOp()
+    {
+        _reg.RefreshAll();
+        BuildCommandBar();
+        UpdateContextBar();
+        UpdateStatus();
+        RefreshToolStates();
+    }
+
+    /// <summary>Изменить выбранное: операцию — в панели, эскиз — в режиме эскиза.</summary>
+    public void EditSelected()
+    {
+        var item = SelectedItems().FirstOrDefault(i => i is Feature or Sketch);
+        if (item == null)
+        {
+            var sk = View.Selection.Items.Select(Refs.SketchOf).FirstOrDefault(s => s != null);
+            if (sk != null) item = sk;
+        }
+        EditItem(item);
+    }
+
+    private void EditItem(ModelItem? item)
+    {
+        switch (item)
+        {
+            case Sketch sk: EditSketch(sk); break;
+            case Feature f:
+                if (OperationFactory.ForEdit(f) is { } op) StartOperation(op);
+                else ShowToast(L("Правка этой операции в панели пока не поддерживается"), error: false);
+                break;
+        }
+    }
+
+    // ================================================================ эскиз
+
+    public void BeginNewSketch(Part part, Frame3 frame, uint sourceId, string planeName, Func<Sketch, Operation>? then)
+    {
+        Session.BeginEdit(L("Эскиз"));
+        var sk = new Sketch(L("Эскиз{0}", part.Sketches.Count() + 1), frame);
+        sk.SetBasePlane(frame, sourceId, planeName);
+        SketchFaceRef.AttachById(sk, part.Bodies, sourceId);
+        part.Add(sk);
+        _sketchIsNew = true;
+        _afterSketch = then;
+        EnterSketchUi(sk);
+    }
+
+    public void EditSketch(Sketch sk)
+    {
+        if (CurrentOperation != null) CancelOperation();
+        if (InSketch) FinishSketch();
+        Session.BeginEdit(L("Изменить эскиз «{0}»", sk.Name));
+        _sketchIsNew = false;
+        _afterSketch = null;
+        EnterSketchUi(sk);
+    }
+
+    private void EnterSketchUi(Sketch sk)
+    {
+        ConstructionMode = false;
+        View.EnterSketch(sk);
+        View.Tool = new LineTool();
+        RebuildUi();
+        ScheduleTree();
+    }
+
+    public void SetTool(ISketchTool t)
+    {
+        if (!InSketch) return;
+        if (ConstructionMode && t.Role == SkRole.Object) t.Role = SkRole.Construction;
+        View.Tool = t;
+        RefreshToolStates();
+    }
+
+    public void ToggleConstruction()
+    {
+        ConstructionMode = !ConstructionMode;
+        if (View.Tool is { } t && t.Role != SkRole.Centerline) t.Role = ConstructionMode ? SkRole.Construction : SkRole.Object;
+        RefreshToolStates();
+    }
+
+    public void FinishSketch()
+    {
+        if (View.ActiveSketch is not { } sk) return;
+        View.ToolFinish();
+        View.ExitSketch();
+        bool empty = sk.Entities.Count == 0;
+        if (empty && _sketchIsNew) Session.CancelEdit();
+        else
+        {
+            sk.NotifyChanged(sk);
+            Session.CommitEdit();
+        }
+        ShowHint(null);
+        RebuildUi();
+        ScheduleTree();
+        var then = _afterSketch;
+        _afterSketch = null;
+        if (!empty && then != null)
+        {
+            // эскиз из снимка после отмены — тот же объект в детали (правка не отменялась)
+            View.Selection.Clear();
+            StartOperation(then(sk));
+        }
+    }
+
+    public void CancelSketch()
+    {
+        if (!InSketch) return;
+        View.ExitSketch();
+        Session.CancelEdit();
+        _afterSketch = null;
+        ShowHint(null);
+        RebuildUi();
+        ScheduleTree();
     }
 
     // ================================================================ дерево
@@ -360,15 +830,41 @@ public partial class MainWindow : Window
             View.HighlightFromTree(node?.Item);
         }, RoutingStrategies.Tunnel);
         Tree.PointerExited += (_, _) => View.HighlightFromTree(null);
-        Tree.DoubleTapped += (_, _) => { if (Tree.SelectedItem is TreeNode n) ZoomToItem(n.Item); };
+        Tree.DoubleTapped += (_, e) =>
+        {
+            if ((e.Source as StyledElement)?.DataContext is not TreeNode n) return;
+            if (n.Item is Feature or Sketch) EditItem(n.Item);
+            else if (n.Item is Part) View.ZoomToFit();
+        };
+        Tree.ContextRequested += (_, e) =>
+        {
+            if ((e.Source as StyledElement)?.DataContext is not TreeNode n) return;
+            SelectItem(n.Item);
+            var ids = new List<string>();
+            if (n.Item is Feature or Sketch) ids.Add("edit.feature");
+            if (n.Item is Feature) ids.Add("edit.suppress");
+            ids.AddRange(SuggestedOps().Where(i => i != "edit.feature" && i != "edit.suppress"));
+            ids.AddRange(new[] { "view.hide", "view.isolate", "edit.delete" });
+            var items = ids.Distinct().Select(id => (object)Item(_reg[id])).ToList();
+            new ContextMenu { ItemsSource = items }.Open((Control)e.Source!);
+            e.Handled = true;
+        };
+    }
+
+    private void ScheduleTree()
+    {
+        if (_treePending) return;
+        _treePending = true;
+        Dispatcher.UIThread.Post(() => { _treePending = false; RebuildTree(); }, DispatcherPriority.Background);
     }
 
     public void RebuildTree()
     {
-        var expanded = new HashSet<uint>(_roots.SelectMany(r => r.SelfAndDescendants()).Where(n => !n.IsExpanded).Select(n => n.Item.Id));
+        // состояние «развёрнут» живёт между перестройками (п. 13): глаз эскиза не сворачивает ветку
+        foreach (var n in AllNodes) _expand[n.Item.Id] = n.IsExpanded;
         _roots = TreeNode.Build(Session.Document);
         foreach (var n in _roots.SelectMany(r => r.SelfAndDescendants()))
-            if (expanded.Contains(n.Item.Id)) n.IsExpanded = false;
+            if (_expand.TryGetValue(n.Item.Id, out bool ex)) n.RestoreExpanded(ex);
         _syncingTree = true;
         Tree.ItemsSource = _roots;
         _syncingTree = false;
@@ -377,9 +873,11 @@ public partial class MainWindow : Window
 
     public IEnumerable<TreeNode> AllNodes => _roots.SelectMany(r => r.SelfAndDescendants());
 
+    /// <summary>Свернуть или развернуть всё, включая деталь (п. 5).</summary>
     public void SetTreeExpanded(bool expanded)
     {
-        foreach (var n in AllNodes) if (n.Children.Count > 0 && n != _roots.FirstOrDefault()) n.IsExpanded = expanded;
+        foreach (var n in AllNodes.ToList())
+            if (n.Children.Count > 0) { n.IsExpanded = expanded; _expand[n.Item.Id] = expanded; }
     }
 
     /// <summary>Выбор элемента модели (из дерева): в выделение вида.</summary>
@@ -397,7 +895,9 @@ public partial class MainWindow : Window
             Line3DItem ln => new PickRef(ln.Id, PickKind.DatumAxis, ln.Parent, ln),
             _ => PickRef.Empty
         };
-        if (r.IsEmpty) View.Selection.Clear();
+        if (r.IsEmpty) { View.Selection.Clear(); return; }
+        // в операции выбор из дерева добавляется в активное поле (если подходит)
+        if (CurrentOperation?.ActiveRef is { } f2 && !f2.Single && f2.Accept(r)) View.Selection.Select(r, additive: true);
         else View.Selection.Select(r, additive: false);
     }
 
@@ -410,11 +910,6 @@ public partial class MainWindow : Window
         _syncingTree = false;
     }
 
-    private void ZoomToItem(ModelItem item)
-    {
-        if (item is Part) View.ZoomToFit();
-    }
-
     /// <summary>Выбранные элементы модели (из выделения вида).</summary>
     public List<ModelItem> SelectedItems()
     {
@@ -422,49 +917,79 @@ public partial class MainWindow : Window
         foreach (var r in View.Selection.Items)
         {
             if (r.Target is ModelItem mi) { res.Add(mi); continue; }
+            if (r.Kind is PickKind.Face or PickKind.Edge or PickKind.Vertex) continue;
             var it = Session.Document.Root.Descendants().FirstOrDefault(x => x.Id == r.Id);
             if (it != null) res.Add(it);
         }
         return res;
     }
 
-    // ================================================================ свойства
+    // ================================================================ свойства (повторный щелчок — скрыть, п. 16)
+
+    public void ToggleProperties()
+    {
+        _propsOn = !_propsOn;
+        if (CurrentOperation == null)
+        {
+            PropsPanel.IsVisible = _propsOn;
+            if (_propsOn) ShowProperties();
+        }
+        RefreshToolStates();
+    }
 
     public void ShowProperties()
     {
-        PropsPanel.IsVisible = true;
         PropsBody.Children.Clear();
+        PropsButtons.Children.Clear();
         var sel = View.Selection;
         var part = Session.Part;
         if (sel.IsEmpty && part != null)
         {
-            PropsTitle.Text = "ДЕТАЛЬ";
+            PropsTitle.Text = L("ДЕТАЛЬ");
             Row("Имя", part.Name);
             Row("Материал", part.Material?.Name ?? "—");
             Row("Тел", part.Bodies.Count.ToString());
             if (part.Bodies.Count > 0)
             {
-                var s = Settings.Current;
-                Row("Объём", $"{part.Volume / 1000.0:0.###} см³");
-                Row("Площадь", $"{part.Area / 100.0:0.###} см²");
-                Row("Масса", $"{part.Mass:0.####} кг");
+                Row("Объём", $"{part.Volume / 1000.0:0.###} " + L("см³"));
+                Row("Площадь", $"{part.Area / 100.0:0.###} " + L("см²"));
+                Row("Масса", $"{part.Mass:0.####} " + L("кг"));
             }
             Row("Операций", part.Children.OfType<Feature>().Count().ToString());
+            Row("Параметров", $"{Session.Document.Parameters.Count} + {part.LocalParameters.Count}");
             return;
         }
-        PropsTitle.Text = "ВЫБРАНО";
+        PropsTitle.Text = L("ВЫБРАНО");
         Row("Выбрано", sel.Count.ToString());
-        foreach (var r in sel.Items.Take(12)) Row(Selection.KindName(r), Selection.Label(r));
+        foreach (var r in sel.Items.Take(12))
+        {
+            Row(Selection.KindName(r), Selection.Label(r));
+            if (r.Target is Feature f)
+            {
+                Row("Описание", f.Summary);
+                if (f.Error != null) Row("Ошибка", f.Error);
+            }
+        }
     }
 
     private void Row(string k, string v)
     {
         var g = new Grid { ColumnDefinitions = new ColumnDefinitions("110,*") };
-        g.Children.Add(new TextBlock { Text = k, Classes = { "dim" }, TextWrapping = TextWrapping.Wrap });
+        g.Children.Add(new TextBlock { Text = L(k), Classes = { "dim" }, TextWrapping = TextWrapping.Wrap });
         var t = new SelectableTextBlock { Text = v, TextWrapping = TextWrapping.Wrap };
         Grid.SetColumn(t, 1);
         g.Children.Add(t);
         PropsBody.Children.Add(g);
+    }
+
+    // ================================================================ параметры (п. 10)
+
+    public async Task OpenParameters()
+    {
+        ModelItem? start = SelectedItems().FirstOrDefault(i => i is Part or Assembly) ?? (ModelItem?)Session.Part;
+        var dlg = new ParametersDialog(Session, start);
+        await dlg.ShowDialog(this);
+        if (dlg.Applied) { View.MarkDirty(); UpdateStatus(); }
     }
 
     // ================================================================ строка состояния и сообщения
@@ -475,13 +1000,17 @@ public partial class MainWindow : Window
     {
         if (hover != null) _hoverText = hover;
         var part = Session?.Part;
-        StatusMode.Text = part != null ? $"Деталь «{part.Name}»" : "Сборка";
-        string sel = View.Selection.IsEmpty ? "" : "Выбрано: " + View.Selection.Describe();
-        StatusSel.Text = string.IsNullOrEmpty(_hoverText) ? sel : (sel.Length > 0 ? sel + "   ·   " : "") + "Под курсором: " + _hoverText;
+        StatusMode.Text = InSketch ? L("Эскиз «{0}»", View.ActiveSketch!.Name)
+            : CurrentOperation != null ? L(CurrentOperation.Title)
+            : part != null ? L("Деталь «{0}»", part.Name) : L("Сборка");
+        string sel = View.Selection.IsEmpty ? "" : L("Выбрано: ") + View.Selection.Describe();
+        StatusSel.Text = string.IsNullOrEmpty(_hoverText) ? sel : (sel.Length > 0 ? sel + "   ·   " : "") + L("Под курсором: ") + _hoverText;
+        StatusUnits.Text = L("мм");
+        EnvText.Text = InSketch ? L("Эскиз") : CurrentOperation != null ? L("Операция") : L("Деталь");
         if (Session == null) return;
         int errors = Session.Document.Root.Descendants().Count(i => i.Error != null);
-        if (Session.Document.IsBuilding) { StatusBuild.Text = "Перестроение…"; StatusBuild.Foreground = Res("P3.Warning"); }
-        else if (errors > 0) { StatusBuild.Text = $"Требуют внимания: {errors}"; StatusBuild.Foreground = Res("P3.Error"); }
+        if (Session.Document.IsBuilding) { StatusBuild.Text = L("Перестроение…"); StatusBuild.Foreground = Res("P3.Warning"); }
+        else if (errors > 0) { StatusBuild.Text = L("Требуют внимания: {0}", errors); StatusBuild.Foreground = Res("P3.Error"); }
         else StatusBuild.Text = "";
     }
 
@@ -511,12 +1040,12 @@ public partial class MainWindow : Window
     {
         var items = new List<object>();
         var names = Session.UndoNames;
-        if (names.Count == 0) items.Add(new MenuItem { Header = "Журнал пуст", IsEnabled = false });
+        if (names.Count == 0) items.Add(new MenuItem { Header = L("Журнал пуст"), IsEnabled = false });
         for (int i = names.Count - 1; i >= 0; i--)
         {
             int steps = names.Count - i;
             var mi = new MenuItem { Header = $"{i + 1}. {names[i]}" };
-            ToolTip.SetTip(mi, steps == 1 ? "Отменить этот шаг" : $"Отменить {steps} шагов — до состояния перед этим");
+            ToolTip.SetTip(mi, steps == 1 ? L("Отменить этот шаг") : L("Отменить {0} шагов — до состояния перед этим", steps));
             mi.Click += (_, _) => Session.UndoTo(steps);
             items.Add(mi);
         }
@@ -539,9 +1068,19 @@ public partial class MainWindow : Window
         if (!inText && e.KeyModifiers == KeyModifiers.None && e.Key == Key.F) { OpenPalette(); e.Handled = true; return; }
         if (e.Key == Key.Escape && !inText)
         {
-            if (Toast.IsVisible) { Toast.IsVisible = false; e.Handled = true; return; }
-            if (!View.Selection.IsEmpty) { View.Selection.Clear(); e.Handled = true; return; }
-            if (PropsPanel.IsVisible) { PropsPanel.IsVisible = false; e.Handled = true; return; }
+            e.Handled = true;
+            if (Toast.IsVisible) { Toast.IsVisible = false; return; }
+            if (InSketch && View.Tool != null) { View.Tool = null; return; }
+            if (CurrentOperation != null) { CancelOperation(); return; }
+            if (!View.Selection.IsEmpty) { View.Selection.Clear(); return; }
+            if (InSketch) return;
+            if (_propsOn) { ToggleProperties(); return; }
+            return;
+        }
+        if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None && !inText)
+        {
+            if (InSketch && View.Tool != null) { View.ToolFinish(); e.Handled = true; return; }
+            if (CurrentOperation != null) { CommitOperation(); e.Handled = true; return; }
         }
         if (inText) return;
         var c = _reg.ByGesture(e);
@@ -597,18 +1136,17 @@ public partial class MainWindow : Window
     private Control PaletteRow(AppCommand c)
     {
         var g = new Grid { ColumnDefinitions = new ColumnDefinitions("28,*,Auto,Auto"), Opacity = c.Enabled ? 1 : 0.45 };
-        var icon = IconProvider.Content(c.Icon, c.Label, 18);
-        g.Children.Add(icon);
-        var t = new TextBlock { Text = c.Label, VerticalAlignment = VerticalAlignment.Center };
+        if (IconProvider.Get(c.Icon) is { } img) g.Children.Add(new Image { Source = img, Width = 18, Height = 18 });
+        var t = new TextBlock { Text = c.Text, VerticalAlignment = VerticalAlignment.Center };
         Grid.SetColumn(t, 1); g.Children.Add(t);
-        var grp = new TextBlock { Text = c.Group, Classes = { "dim" }, FontSize = 11, Margin = new Thickness(10, 0), VerticalAlignment = VerticalAlignment.Center };
+        var grp = new TextBlock { Text = L(c.Group), Classes = { "dim" }, FontSize = 11, Margin = new Thickness(10, 0), VerticalAlignment = VerticalAlignment.Center };
         Grid.SetColumn(grp, 2); g.Children.Add(grp);
         if (c.Gesture != null)
         {
             var k = new TextBlock { Text = AppCommand.Format(c.Gesture), Classes = { "dim" }, FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
             Grid.SetColumn(k, 3); g.Children.Add(k);
         }
-        ToolTip.SetTip(g, c.Description ?? c.Label);
+        ToolTip.SetTip(g, c.Description != null ? L(c.Description) : c.Text);
         return g;
     }
 

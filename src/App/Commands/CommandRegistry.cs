@@ -50,9 +50,15 @@ public sealed class CommandRegistry
     /// <summary>Команда по клавише (null — нет такой или недоступна).</summary>
     public AppCommand? ByGesture(KeyEventArgs e)
     {
+        // одна клавиша — разные команды в разных режимах (R: скругление или прямоугольник в эскизе): берётся доступная
+        AppCommand? any = null;
         foreach (var c in _order)
-            if (c.Gesture != null && c.Gesture.Matches(e)) return c;
-        return null;
+            if (c.Gesture != null && c.Gesture.Matches(e))
+            {
+                if (c.Enabled) return c;
+                any ??= c;
+            }
+        return any;
     }
 
     /// <summary>
@@ -65,9 +71,9 @@ public sealed class CommandRegistry
         var res = new List<(AppCommand C, int Score)>();
         foreach (var c in _order)
         {
-            string hay = $"{c.Label} {c.Group} {c.Synonyms} {c.Id}".ToLowerInvariant();
+            string hay = $"{c.Label} {Loc.EnOf(c.Label)} {c.Group} {Loc.EnOf(c.Group)} {c.Synonyms} {c.Id}".ToLowerInvariant();
             if (!words.All(w => hay.Contains(w))) continue;
-            int score = words.Length == 0 ? 0 : c.Label.ToLowerInvariant().StartsWith(words[0]) ? 0 : 1;
+            int score = words.Length == 0 ? 0 : c.Text.ToLowerInvariant().StartsWith(words[0]) || c.Label.ToLowerInvariant().StartsWith(words[0]) ? 0 : 1;
             res.Add((c, score));
         }
         return res.OrderBy(r => r.Score).Select(r => r.C).ToList();

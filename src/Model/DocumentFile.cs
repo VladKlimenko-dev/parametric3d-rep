@@ -32,6 +32,27 @@ public static class DocumentFile
 
     // ------------------------------------------------------------------ запись
 
+    private static List<ParamDto> ParamsOut(ParameterTable? t) => t?.All.Select(p => new ParamDto
+    {
+        Name = p.Name,
+        Kind = p.Kind.ToString(),
+        Number = p.Number,
+        Formula = string.IsNullOrEmpty(p.Formula) ? null : p.Formula,
+        Unit = string.IsNullOrEmpty(p.Unit) ? null : p.Unit,
+        Comment = string.IsNullOrEmpty(p.Comment) ? null : p.Comment,
+    }).ToList() ?? new List<ParamDto>();
+
+    private static void ParamsIn(List<ParamDto> src, ParameterTable table)
+    {
+        foreach (var p in src)
+        {
+            var kind = Enum.TryParse<ParamKind>(p.Kind, out var k) ? k : ParamKind.Real;
+            var par = table.Add(p.Name, p.Number, kind, p.Unit ?? "");
+            if (p.Formula != null) par.Formula = p.Formula;
+            if (p.Comment != null) par.Comment = p.Comment;
+        }
+    }
+
     public static string Save(Part part, ParameterTable? parameters = null)
     {
         var doc = new DocDto
@@ -39,14 +60,8 @@ public static class DocumentFile
             Version = CurrentVersion,
             Name = part.Name,
             Units = part.Units.ToDictionary(),
-            Parameters = parameters?.All.Select(p => new ParamDto
-            {
-                Name = p.Name,
-                Kind = p.Kind.ToString(),
-                Number = p.Number,
-                Formula = string.IsNullOrEmpty(p.Formula) ? null : p.Formula,
-                Unit = string.IsNullOrEmpty(p.Unit) ? null : p.Unit
-            }).ToList() ?? new List<ParamDto>(),
+            Parameters = ParamsOut(parameters),
+            PartParameters = part.LocalParameters.Count > 0 ? ParamsOut(part.LocalParameters) : null,
             Configurations = part.Configurations.Select(c => new ConfigDto
             {
                 Name = c.Name,
@@ -444,15 +459,17 @@ public static class DocumentFile
 
         var units = Core.UnitSystem.FromDictionary(doc.Units);                  // m.x4: система единиц документа
         var table = new ParameterTable { Units = units };
-        foreach (var p in doc.Parameters)
-        {
-            var kind = Enum.TryParse<ParamKind>(p.Kind, out var k) ? k : ParamKind.Real;
-            var par = table.Add(p.Name, p.Number, kind, p.Unit ?? "");
-            if (p.Formula != null) par.Formula = p.Formula;
-        }
+        ParamsIn(doc.Parameters, table);
         table.Recalculate();
 
         var part = new Part(doc.Name) { ActiveConfiguration = doc.ActiveConfiguration ?? "", Units = units };
+        if (doc.PartParameters is { Count: > 0 } pp)
+        {
+            part.LocalParameters.Units = units;
+            part.LocalParameters.Parent = table;
+            ParamsIn(pp, part.LocalParameters);
+            part.LocalParameters.Recalculate();
+        }
 
         if (doc.Material is { } md) part.Material = Load(md);
 
@@ -790,6 +807,8 @@ public static class DocumentFile
         /// <summary>m.x4: система единиц документа (размерность → обозначение); нет — мм, кг, с, градус.</summary>
         public Dictionary<string, string>? Units { get; set; }
         public List<ParamDto> Parameters { get; set; } = new();
+        /// <summary>UI: параметры уровня детали (нет — только параметры документа).</summary>
+        public List<ParamDto>? PartParameters { get; set; }
         public List<SketchDto> Sketches { get; set; } = new();
         public List<FeatureDto> Features { get; set; } = new();
         public List<ConfigDto> Configurations { get; set; } = new();
@@ -923,6 +942,7 @@ public static class DocumentFile
         public double Number { get; set; }
         public string? Formula { get; set; }
         public string? Unit { get; set; }
+        public string? Comment { get; set; }
     }
 
     private sealed class SketchDto

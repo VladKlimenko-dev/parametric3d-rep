@@ -1,28 +1,30 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Input;
 using Avalonia.OpenGL;
 using Avalonia.OpenGL.Controls;
-using Avalonia.Threading;
 using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Model;
+using Parametric3D.Model.Features;
 using Parametric3D.Model.Sketching;
 using Parametric3D.Render;
+using Parametric3D.Render.Engine;
 using Parametric3D.Render.Gl;
 
 namespace Parametric3D.App.Viewport;
 
 /// <summary>
-/// 3D-ВИД МОДЕЛИ (этап U1): контекст OpenGL от Avalonia, рендер прежнего приложения (RenderScene, фон, сетка),
-/// камера, наведение и выбор, плавные переходы вида.
+/// 3D-ВИД МОДЕЛИ на движке Render/Engine (SceneRenderer): контекст OpenGL от Avalonia, камера, наведение и выбор,
+/// плавные переходы вида, стили и список «что показывать».
 ///
 /// Мышь (ТЗ_UI, 0.6): средняя — вращать, Shift+средняя или правая с перетаскиванием — сдвиг, колесо — масштаб к курсору;
-/// левая — выбрать, Shift/Ctrl — добавить / исключить. Короткий правый щелчок — общие команды (событие ContextRequested).
+/// левая — выбрать, Shift — добавить, Ctrl — исключить. Короткий правый щелчок — общие команды (ContextRequested).
 ///
-/// Вид отрисовывает кадр в свой кадровый буфер с MSAA и переносит его в буфер Avalonia (номер fb в OnOpenGlRender).
-/// Всё, что меняет буферы GPU (сборка сцены, подсветка), делается только в OnOpenGlRender — там контекст текущий.
+/// Выбор под курсором — проходом выбора видеокарты (один пиксель, заслонение учтено, во всех стилях, вершины и рёбра
+/// тела ловятся с допуском). Без OpenGL (проверки без экрана) — расчётом на процессоре (ScenePicker).
+/// Всё, что трогает видеокарту, делается только в OnOpenGlRender: мышь лишь запоминает запрос.
 /// </summary>
-public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICustomHitTest
+public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICustomHitTest
 {
     /// <summary>Вид принимает мышь всей площадью (и до первого кадра, и без OpenGL).</summary>
     public bool HitTest(Point p) => new Rect(Bounds.Size).Contains(p);
@@ -31,39 +33,34 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
     public readonly Selection Selection = new();
     public readonly ViewTransition Transition = new() { Steps = 14 };
 
-    private readonly RenderStyles _styles = new();
-    private readonly RenderContext _ctx = new();
-    private readonly BackgroundRenderer _background = new();
-    private readonly SceneFramebuffer _fbo = new();
-    private readonly RenderScene _scene = new();
-    private readonly ScenePicker _picker = new();
-
+    private readonly SceneRenderer _r = new();
+    private readonly ScenePicker _cpuPicker = new();
+    private SceneData? _scene;
     private Document? _doc;
-    private bool _glReady, _sceneDirty = true, _highlightDirty = true, _rebuilding;
-    private DispatcherTimer? _anim;
+    private bool _glReady, _sceneDirty = true, _flagsDirty = true, _rebuilding;
 
-    /// <summary>Сведения о контексте («производитель | устройство | версия») — для строки состояния и журнала.</summary>
+    /// <summary>Допуск выбора линий и точек, логические пиксели.</summary>
+    public float PickTolerance = 5f;
+
     public string GlInfo { get; private set; } = "";
     public string? GlError { get; private set; }
     public event Action<string>? GlReady;
-
-    /// <summary>Наведение изменилось (подпись — для строки состояния).</summary>
     public event Action<string>? HoverChanged;
-    /// <summary>Камера изменилась (куб вида следует за ней).</summary>
     public event Action? CameraChanged;
-    /// <summary>Короткий правый щелчок вне команды — общие команды (UI-11).</summary>
     public event Action<Point>? ContextRequested;
+    /// <summary>Сцена перестроена (после перестроения модели) — панели обновляют сведения.</summary>
+    public event Action? SceneRebuilt;
 
     public ModelViewport()
     {
         Camera.State.Rotation = HomeRotation;
         Focusable = true;
         ClipToBounds = true;
-        Selection.Changed += () => { _highlightDirty = true; Redraw(); };
+        Selection.Changed += () => { _flagsDirty = true; Redraw(); };
         Transition.Completed += (_, _) => CameraChanged?.Invoke();
     }
 
-    // ================================================================ документ
+    // ================================================================ документ и показ
 
     public Document? Document
     {
@@ -73,57 +70,39 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
             if (ReferenceEquals(_doc, value)) return;
             if (_doc != null) _doc.Invalidated -= OnDocInvalidated;
             _doc = value;
-            if (_doc != null) { _doc.Invalidated += OnDocInvalidated; _paletteDirty = true; }
+            if (_doc != null) _doc.Invalidated += OnDocInvalidated;
             Selection.Clear();
             Selection.SetHover(PickRef.Empty);
-            _sceneDirty = true;
-            Redraw();
+            MarkDirty();
         }
     }
 
-    private void OnDocInvalidated() { _sceneDirty = true; Redraw(); }
+    private void OnDocInvalidated() => MarkDirty();
 
-    /// <summary>Активная деталь (уровень детали): её элементы выбираются, чужие — с пониженным приоритетом.</summary>
     public Part? ActivePart { get; set; }
 
-    public BodyViewMode BodyMode
+    /// <summary>Стиль тел (по умолчанию — тонированный с рёбрами).</summary>
+    public DisplayStyle Style
     {
-        get => _scene.BodyMode;
-        set { if (_scene.BodyMode == value) return; _scene.BodyMode = value; _sceneDirty = true; Redraw(); }
+        get => _r.Style;
+        set { _r.Style = value; Redraw(); }
     }
 
-    public bool ShowDatumPlanes
-    {
-        get => _scene.ShowDatumPlanes;
-        set { _scene.ShowDatumPlanes = value; _sceneDirty = true; Redraw(); }
-    }
+    /// <summary>Что показывать (кнопка «Опорные» и её список). После правки — MarkDirty.</summary>
+    public ShowOptions Show { get; } = new();
 
-    public void MarkDirty() { _sceneDirty = true; Redraw(); }
+    public void MarkDirty() { _sceneDirty = true; _flagsDirty = true; Redraw(); }
 
-    private bool _dark = true;
-    /// <summary>Тема вида (UI_VIEW_PALETTE): цвета пишутся в настройки активного документа.</summary>
     public bool DarkTheme
     {
-        get => _dark;
-        set { _dark = value; ApplyPalette(); }
+        get => _r.Theme.Dark;
+        set { _r.Theme = value ? RenderTheme.DarkTheme() : RenderTheme.LightTheme(); MarkDirty(); }
     }
 
-    private bool _paletteDirty = true;
-    private void ApplyPalette() { _paletteDirty = true; _sceneDirty = true; Redraw(); }
-
-    /// <summary>Исходный вид: изометрия спереди-справа-сверху, вся модель в окне.</summary>
-    public void GoHome()
-    {
-        var cam = new Camera { State = Camera.State, ViewportWidth = Camera.ViewportWidth, ViewportHeight = Camera.ViewportHeight };
-        cam.State.Rotation = HomeRotation;
-        FitInto(cam);
-        AnimateTo(cam.State);
-    }
-
-    public static Quaternion HomeRotation => ViewMath.LookFrom(new Vector3(1, 1, 1), Vector3.UnitY);
-
-    /// <summary>Перерисовать (кадр будет нарисован в ближайшем проходе композиции).</summary>
     public void Redraw() => RequestNextFrameRendering();
+
+    /// <summary>Таблица выбора текущей сцены (для подсказок и проверок).</summary>
+    public SceneData? Scene => _scene;
 
     // ================================================================ OpenGL
 
@@ -135,10 +114,8 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
             GL.Load(gl.GetProcAddress, es);
             GlInfo = $"{GL.GetString(StringName.Vendor)} | {GL.GetString(StringName.Renderer)} | {(es ? "OpenGL ES" : "OpenGL")} {GL.GetString(StringName.Version)}";
             AppLog.Write("GL: " + GlInfo);
-            _background.Top = _styles.BackgroundTop;
-            _background.Bottom = _styles.BackgroundBottom;
             _glReady = true;
-            _sceneDirty = true;
+            MarkDirty();
             GlReady?.Invoke(GlInfo);
         }
         catch (Exception ex)
@@ -150,13 +127,7 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
 
     protected override void OnOpenGlDeinit(GlInterface gl)
     {
-        try
-        {
-            _scene.Dispose();
-            _fbo.Dispose();
-            _background.Dispose();
-        }
-        catch (Exception ex) { AppLog.Write("GL deinit", ex); }
+        _r.Dispose();
         _glReady = false;
     }
 
@@ -170,17 +141,17 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
     protected override void OnSizeChanged(Avalonia.Controls.SizeChangedEventArgs e)
     {
         base.OnSizeChanged(e);
-        // размер окна камеры — сразу (выбор под курсором до первого кадра)
         double s = Scaling;
         Camera.ViewportWidth = Math.Max(1, (int)Math.Round(e.NewSize.Width * s));
         Camera.ViewportHeight = Math.Max(1, (int)Math.Round(e.NewSize.Height * s));
     }
 
-    /// <summary>Масштаб экрана (физических пикселей на логический).</summary>
     public double Scaling => Avalonia.Controls.TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
 
     /// <summary>Снимок следующего кадра (RGBA снизу вверх, ширина, высота) — для проверок.</summary>
     public Action<byte[], int, int>? CaptureNextFrame;
+
+    private int _frameErrors;
 
     protected override void OnOpenGlRender(GlInterface gl, int fb)
     {
@@ -192,9 +163,8 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
             int h = Math.Max(1, (int)Math.Round(Bounds.Height * s));
             Camera.ViewportWidth = w;
             Camera.ViewportHeight = h;
-            _fbo.Resize(w, h);
+            _r.Resize(w, h);
 
-            // анимация перехода
             if (Transition.IsRunning)
             {
                 var st = Camera.State;
@@ -203,34 +173,21 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
             }
 
             PrepareScene();
+            var f = Frame(s);
 
-            _fbo.Bind();
-            _fbo.Clear(new Vector4(0, 0, 0, 0));
-            _background.Draw();
+            // запросы выбора (мышь) — номер под курсором читается до кадра
+            if (_pickRequest is { } pr)
+            {
+                _pickRequest = null;
+                uint id = _scene == null ? 0 : _r.Pick(f, (int)(pr.P.X * s), (int)(pr.P.Y * s), PickTolerance);
+                var r = id > 0 && _scene != null ? _scene.PickTable[(int)id].Ref : PickRef.Empty;
+                if (!r.IsEmpty && !Selection.Accepts(r.Kind)) r = PickRef.Empty;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyPick(r, pr));
+            }
 
-            _ctx.Styles = _styles;
-            _ctx.View = Camera.ViewMatrix;
-            _ctx.Proj = Camera.ProjMatrix;
-            _ctx.Model = Matrix4.Identity;
-            _ctx.CamPos = Camera.Position;
-            _ctx.Viewport = new Vector2(w, h);
-            _ctx.WorldToPx = Camera.WorldToPx;
-            _ctx.LineWidthScale = (float)s;
-            _ctx.Opacity = 1f;
-
-            GL.Enable(EnableCap.DepthTest);
-            GL.DepthFunc(DepthFunction.Lequal);
-            GL.Enable(EnableCap.Blend);
-            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-            GL.Disable(EnableCap.CullFace);
-
-            if (_doc != null) _scene.Draw(_ctx);
-
-            _fbo.ResolveTo(fb, w, h);
-            GL.Disable(EnableCap.DepthTest);
-            GL.Disable(EnableCap.Blend);
-            GL.Disable(EnableCap.PolygonOffsetFill);
-            GL.DepthMask(true);
+            if (_overlayDirty || GridStale()) { _overlayDirty = false; var (g, l, pt) = BuildOverlay(); _r.SetOverlay(g, l, pt); }
+            if (_flagsDirty) { ApplyFlags(); _flagsDirty = false; }
+            _r.Draw(f, fb);
 
             if (CaptureNextFrame is { } cap)
             {
@@ -240,48 +197,45 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
                 GL.ReadPixelsRgba(0, 0, w, h, px);
                 cap(px, w, h);
             }
-
             for (int i = 0; i < 4; i++)
             {
                 var e = GL.GetError();
                 if (e == ErrorCode.NoError) break;
-                AppLog.Write($"GL error 0x{(int)e:X4}");
+                if (_frameErrors++ < 20) AppLog.Write($"GL error 0x{(int)e:X4}");
             }
         }
         catch (Exception ex)
         {
-            AppLog.Write("frame", ex);
+            if (_frameErrors++ < 20) AppLog.Write("frame", ex);
         }
     }
 
+    private SceneRenderer.FrameParams Frame(double scale) => new()
+    {
+        View = Camera.ViewMatrix,
+        Proj = Camera.ProjMatrix,
+        Near = Camera.State.Mode == ProjectionMode.Perspective ? Camera.ZNear * 1.01f : 0f,
+        Scale = (float)scale,
+    };
+
     private void PrepareScene()
     {
-        if (_doc == null) return;
-
-        // ПЕРЕСБОРКА — В ФОНЕ: кадр рисует прежние тела, по готовности сцена перестраивается.
+        if (_doc == null) { if (_scene != null) { _scene = new SceneData(); _r.Upload(_scene); } return; }
+        // перестроение модели — только из потока окна (результат применяется к модели там же, где её правят)
         if (!_doc.IsBuilding && !_rebuilding && _doc.AllParts().Any(p => p.IsDirty))
-            _ = RebuildInBackground();
-
-        ModelItem? owner = ActivePart ?? (ModelItem)_doc.Root;
-        if (!ReferenceEquals(owner, _scene.ActiveOwner)) { _scene.ActiveOwner = owner; _sceneDirty = true; }
-
-        if (_paletteDirty)
         {
-            ViewPalette.Apply(Settings.Current, _dark);
-            _styles.Reload();
-            _background.Top = _styles.BackgroundTop;
-            _background.Bottom = _styles.BackgroundBottom;
-            _paletteDirty = false;
-            _sceneDirty = true;
+            _rebuilding = true;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = RebuildInBackground());
         }
         if (_sceneDirty)
         {
-            _scene.Sync(_doc);
-            _scene.ResetAllFlags();
+            _scene = SceneBuilder.Build(_doc, _r.Theme, Show, ActivePart, ActiveSketch);
+            _r.ShowAllVertices = Show.Vertices;
+            _r.Upload(_scene);
             _sceneDirty = false;
-            _highlightDirty = true;
+            _flagsDirty = true;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => SceneRebuilt?.Invoke());
         }
-        if (_highlightDirty) { ApplyHighlight(); _highlightDirty = false; }
     }
 
     private async Task RebuildInBackground()
@@ -289,52 +243,71 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
         _rebuilding = true;
         try
         {
-            if (_doc != null && await _doc.RebuildDirtyAsync()) _sceneDirty = true;
+            if (_doc != null && !_doc.IsBuilding && await _doc.RebuildDirtyAsync()) _sceneDirty = true;
         }
         catch (Exception ex) { AppLog.Write("background rebuild", ex); }
         finally { _rebuilding = false; }
-        Redraw();
+        _sceneDirty = true;
+        Avalonia.Threading.Dispatcher.UIThread.Post(Redraw);
     }
 
-    private void ApplyHighlight()
-    {
-        _scene.ClearFlags();
-        foreach (var r in Selection.Items) Apply(r, Selection.FlagSelected);
-        if (!Selection.Hover.IsEmpty && !Selection.Contains(Selection.Hover.Id)) Apply(Selection.Hover, Selection.FlagHover);
-        if (_treeHover != null) ApplyItem(_treeHover, Selection.FlagHover);
-
-        void Apply(PickRef r, uint flags)
-        {
-            if (r.Target is Part part) { _scene.SetPartFlags(part.Id, flags); return; }
-            if (r.Target is Sketch sketch) { _scene.SetSketchFlags(sketch.Id, flags); return; }
-            if (r.Kind == PickKind.Body) { _scene.SetPartFlags(r.Id, flags); return; }
-            _scene.SetFlags(r.Id, flags);
-        }
-    }
+    // ================================================================ подсветка
 
     private ModelItem? _treeHover;
 
-    private void ApplyItem(ModelItem item, uint flags)
-    {
-        switch (item)
-        {
-            case Part p: _scene.SetPartFlags(p.Id, flags); break;
-            case Sketch sk: _scene.SetSketchFlags(sk.Id, flags); break;
-            case Model.Features.Feature f:
-                foreach (uint id in f.CreatedFaceIds) _scene.SetFlags(id, flags);
-                foreach (uint id in f.ConsumedSketchIds()) _scene.SetSketchFlags(id, flags);
-                break;
-            default: _scene.SetFlags(item.Id, flags); break;
-        }
-    }
-
-    /// <summary>Наведение в дереве: подсветить элемент в виде (null — снять).</summary>
     public void HighlightFromTree(ModelItem? item)
     {
         if (ReferenceEquals(_treeHover, item)) return;
         _treeHover = item;
-        _highlightDirty = true;
+        _flagsDirty = true;
         Redraw();
+    }
+
+    private void ApplyFlags()
+    {
+        _r.ClearFlags();
+        if (_scene == null) return;
+        // ошибки операций — красным по созданным ими граням
+        if (_doc != null)
+            foreach (var f in _doc.Root.Descendants().OfType<Feature>())
+                if (f.Error != null) foreach (var id in f.CreatedFaceIds) Set(id, 8);
+        foreach (var r in Selection.Items) SetRef(r, 2);
+        if (!Selection.Hover.IsEmpty && !Selection.Contains(Selection.Hover.Id)) SetRef(Selection.Hover, 1);
+        if (_treeHover != null) SetItem(_treeHover, 1);
+    }
+
+    private void Set(uint id, byte flag)
+    {
+        if (_scene!.ById.TryGetValue(id, out var l)) foreach (int i in l) _r.SetFlags(i, flag);
+    }
+
+    private void SetRef(PickRef r, byte flag)
+    {
+        if (r.Target is Sketch sk) { SetItem(sk, flag); return; }
+        if (r.Kind is PickKind.Body or PickKind.Feature or PickKind.Assembly && r.Target is ModelItem mi) { SetItem(mi, flag); return; }
+        Set(r.Id, flag);
+    }
+
+    private void SetItem(ModelItem item, byte flag)
+    {
+        var t = _scene!.PickTable;
+        switch (item)
+        {
+            case Part p:
+                for (int i = 1; i < t.Count; i++) if (t[i].PartId == p.Id) _r.SetFlags(i, flag);
+                break;
+            case Sketch sk:
+                for (int i = 1; i < t.Count; i++) if (t[i].SketchId == sk.Id) _r.SetFlags(i, flag);
+                break;
+            case Feature f:
+                foreach (uint id in f.CreatedFaceIds) Set(id, flag);
+                foreach (uint id in f.ConsumedSketchIds()) for (int i = 1; i < t.Count; i++) if (t[i].SketchId == id) _r.SetFlags(i, flag);
+                break;
+            case Assembly a:
+                foreach (var p in a.Descendants().OfType<Part>()) SetItem(p, flag);
+                break;
+            default: Set(item.Id, flag); break;
+        }
     }
 
     // ================================================================ камера
@@ -354,12 +327,20 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
 
     public void AnimateTo(ViewOrientation o) => AnimateTo(Camera.OrientationQuat(o));
 
-    /// <summary>Вписать всю модель (или заданный габарит).</summary>
+    public void GoHome()
+    {
+        var cam = new Camera { State = Camera.State, ViewportWidth = Camera.ViewportWidth, ViewportHeight = Camera.ViewportHeight };
+        cam.State.Rotation = HomeRotation;
+        FitInto(cam);
+        AnimateTo(cam.State);
+    }
+
+    public static Quaternion HomeRotation => ViewMath.LookFrom(new Vector3(1, 1, 1), Vector3.UnitY);
+
     public void ZoomToFit(bool animate = true)
     {
         if (_doc == null) return;
-        var t = Camera.State;
-        var cam = new Camera { State = t, ViewportWidth = Camera.ViewportWidth, ViewportHeight = Camera.ViewportHeight };
+        var cam = new Camera { State = Camera.State, ViewportWidth = Camera.ViewportWidth, ViewportHeight = Camera.ViewportHeight };
         FitInto(cam);
         if (animate) AnimateTo(cam.State); else { Camera.State = cam.State; CameraChanged?.Invoke(); Redraw(); }
     }
@@ -371,6 +352,8 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
         else cam.ZoomToFit((Vector3)b.Min, (Vector3)b.Max);
     }
 
+    public bool IsPerspective => Camera.State.Mode == ProjectionMode.Perspective;
+
     public void ToggleProjection()
     {
         var t = Camera.State;
@@ -380,9 +363,12 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
 
     // ================================================================ мышь
 
-    private enum Drag { None, Orbit, Pan, RightPending, Select }
+    private enum Drag { None, Orbit, Pan, RightPending, Select, Tool }
     private Drag _drag;
     private Point _last, _down;
+
+    private sealed record PickRequest(Point P, bool Click, KeyModifiers Mods);
+    private PickRequest? _pickRequest;
 
     private Vector2i Px(Point p) { double s = Scaling; return new Vector2i((int)(p.X * s), (int)(p.Y * s)); }
 
@@ -395,7 +381,8 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
         var props = pt.Properties;
         if (props.IsMiddleButtonPressed) _drag = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? Drag.Pan : Drag.Orbit;
         else if (props.IsRightButtonPressed) _drag = Drag.RightPending;
-        else if (props.IsLeftButtonPressed) _drag = Drag.Select;
+        else if (props.IsLeftButtonPressed) _drag = Tool != null ? Drag.Tool : Drag.Select;
+        if (_drag == Drag.Tool && e.ClickCount >= 2) { ToolFinish(); _drag = Drag.None; e.Handled = true; return; }
         if (_drag != Drag.None) { Transition.Cancel(); e.Pointer.Capture(this); }
         e.Handled = true;
     }
@@ -414,7 +401,8 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
                 if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > 4) { _drag = Drag.Pan; Camera.Pan(dx, dy); _last = p; Redraw(); }
                 return;
         }
-        UpdateHover(p);
+        if (Tool != null) ToolMove(p);
+        RequestPick(p, click: false, KeyModifiers.None);
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
@@ -424,8 +412,10 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
         var was = _drag;
         _drag = Drag.None;
         e.Pointer.Capture(null);
-        if (was == Drag.RightPending) ContextRequested?.Invoke(p);
-        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4) ClickSelect(p, e.KeyModifiers);
+        if (was == Drag.RightPending && Tool != null) ToolFinish();
+        else if (was == Drag.RightPending) ContextRequested?.Invoke(p);
+        else if (was == Drag.Tool && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 6) ToolClick(p);
+        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4) RequestPick(p, click: true, e.KeyModifiers);
     }
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
@@ -435,6 +425,7 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
         var px = Px(e.GetPosition(this));
         Camera.Zoom((float)e.Delta.Y, px.X, px.Y);
         CameraChanged?.Invoke();
+        if (ActiveSketch != null) _overlayDirty = true;
         Redraw();
         e.Handled = true;
     }
@@ -442,45 +433,54 @@ public sealed class ModelViewport : OpenGlControlBase, Avalonia.Rendering.ICusto
     protected override void OnPointerExited(PointerEventArgs e)
     {
         base.OnPointerExited(e);
-        if (Selection.SetHover(PickRef.Empty)) { _highlightDirty = true; HoverChanged?.Invoke(""); Redraw(); }
+        _pickRequest = null;
+        if (Selection.SetHover(PickRef.Empty)) { _flagsDirty = true; HoverChanged?.Invoke(""); Redraw(); }
     }
 
-    private PickRef PickAt(Point p)
+    /// <summary>Выбор под курсором: видеокартой в следующем кадре или сразу на процессоре (без OpenGL).</summary>
+    private void RequestPick(Point p, bool click, KeyModifiers mods)
+    {
+        var req = new PickRequest(p, click, mods);
+        if (!_glReady)
+        {
+            ApplyPick(CpuPick(p), req);
+            return;
+        }
+        // щелчок не теряется: наведение, запрошенное раньше, им заменяется
+        if (_pickRequest is { Click: true } && !click) return;
+        _pickRequest = req;
+        Redraw();
+    }
+
+    private PickRef CpuPick(Point p)
     {
         if (_doc == null) return PickRef.Empty;
-        _picker.ActiveOwner = ActivePart ?? (ModelItem)_doc.Root;
-        var hits = _picker.PickAll(_doc, Camera, Px(p), _scene.ShowDatumPlanes, null);
-        foreach (var h in hits)
+        _cpuPicker.ActiveOwner = ActivePart ?? (ModelItem)_doc.Root;
+        foreach (var h in _cpuPicker.PickAll(_doc, Camera, Px(p), Show.Planes, null))
             if (Selection.Accepts(h.Ref.Kind)) return h.Ref;
         return PickRef.Empty;
     }
 
-    private void UpdateHover(Point p)
+    private void ApplyPick(PickRef r, PickRequest req)
     {
-        var r = PickAt(p);
         if (Selection.SetHover(r))
         {
-            _highlightDirty = true;
+            _flagsDirty = true;
             HoverChanged?.Invoke(r.IsEmpty ? "" : Selection.DescribeHover());
             Redraw();
         }
+        if (!req.Click) return;
+        bool add = req.Mods.HasFlag(KeyModifiers.Shift), remove = req.Mods.HasFlag(KeyModifiers.Control);
+        if (r.IsEmpty) { if (!add && !remove) Selection.Clear(); return; }
+        if (remove) { if (Selection.Contains(r.Id)) Selection.Select(r, additive: true); return; }
+        if (add) { if (!Selection.Contains(r.Id)) Selection.Select(r, additive: true); return; }
+        Selection.Select(r, additive: false);
     }
 
     /// <summary>Навести и выбрать в точке вида (доли размера 0..1) — для сценариев проверок.</summary>
     public void SimulatePick(double fx, double fy, bool select, bool add = false)
     {
         var p = new Point(Bounds.Width * fx, Bounds.Height * fy);
-        UpdateHover(p);
-        if (select) ClickSelect(p, add ? KeyModifiers.Shift : KeyModifiers.None);
-    }
-
-    private void ClickSelect(Point p, KeyModifiers mods)
-    {
-        var r = PickAt(p);
-        bool add = mods.HasFlag(KeyModifiers.Shift), remove = mods.HasFlag(KeyModifiers.Control);
-        if (r.IsEmpty) { if (!add && !remove) Selection.Clear(); return; }
-        if (remove) { if (Selection.Contains(r.Id)) Selection.Select(r, additive: true); return; }
-        if (add) { if (!Selection.Contains(r.Id)) Selection.Select(r, additive: true); return; }
-        Selection.Select(r, additive: false);
+        RequestPick(p, select, add ? KeyModifiers.Shift : KeyModifiers.None);
     }
 }
