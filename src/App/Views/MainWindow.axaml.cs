@@ -470,6 +470,17 @@ public partial class MainWindow : Window
             gfx.Items.Add(mi);
         }
         items.Add(gfx);
+        var pv = new MenuItem { Header = L("Предпросмотр операций") };
+        foreach (var mode in new[] { "full", "contour" })
+        {
+            var c = _reg["app.preview_" + mode];
+            var mi = Item(c);
+            mi.Header = L(c.Label).Split(':', 2)[1].Trim();
+            mi.ToggleType = MenuItemToggleType.Radio;
+            mi.IsChecked = c.IsChecked?.Invoke() == true;
+            pv.Items.Add(mi);
+        }
+        items.Add(pv);
         foreach (var id in new[] { "app.selftest", "app.parameters", "app.theme", "app.language", "app.exit" }) items.Add(Item(_reg[id]));
         new ContextMenu { ItemsSource = items, Placement = PlacementMode.BottomEdgeAlignedLeft }.Open(anchor);
     }
@@ -544,20 +555,28 @@ public partial class MainWindow : Window
         }
         UpdateStatus();
         UpdateContextBar();
-        if (CurrentOperation == null) UpdateHandle();
+        if (CurrentOperation == null && !_switchingHandle) UpdateHandle();
         if (_propsOn && CurrentOperation == null) ShowProperties();
     }
 
     // ================================================================ ручки операций (п. 6)
 
     private string _handleKind = "";
-    /// <summary>Быстрый предпросмотр по величине ручки — наружу и внутрь; снят с геометрии до операции.</summary>
+    /// <summary>Контур предпросмотра по величине ручки — наружу и внутрь; снят с геометрии до операции.</summary>
     private Func<double, List<(OpenTK.Mathematics.Vector3d A, OpenTK.Mathematics.Vector3d B)>>? _ghostOut, _ghostIn;
-    /// <summary>Операция, начатая ручкой, и её знак: повторное перетаскивание той же стрелки продолжает её.</summary>
+    /// <summary>Ссылки, снятые до операции (после предпросмотра одной операции номера рёбер другие).</summary>
+    private Dictionary<uint, Parametric3D.Kernel.Topology.EdgeRef>? _presetEdges;
+    private Dictionary<uint, OpenTK.Mathematics.Vector3d>? _presetPoints;
+    private Sketch? _presetOutline;
+    /// <summary>Операция, начатая ручкой, и её сторона: в другую сторону — другая операция.</summary>
     private Operation? _handleOp;
     private int _handleOpSign;
     /// <summary>Операция идёт без панели (начата ручкой при закрытой панели свойств).</summary>
     private bool _opQuiet;
+    private bool _switchingHandle, _startingHandleOp;
+
+    /// <summary>u09: полный предпросмотр (деталь считается при перетаскивании) или контуром (настройка в меню «Файл»).</summary>
+    public bool FullPreview => (UserPrefs.Current.PreviewMode ?? "full") != "contour";
 
     /// <summary>Ручка у выбранного: ребро (с цепочкой), вершина, плоская грань, поверхность.</summary>
     private void UpdateHandle()
@@ -565,6 +584,7 @@ public partial class MainWindow : Window
         View.Handle = null;
         _handleKind = "";
         _ghostOut = _ghostIn = null;
+        _presetEdges = null; _presetPoints = null; _presetOutline = null;
         if (InSketch) return;
         try { UpdateHandleCore(); }
         catch (Exception ex) { AppLog.Write("handle", ex); }
@@ -586,22 +606,29 @@ public partial class MainWindow : Window
                     var ids = sel.Select(r => r.Id).ToList();
                     _ghostOut = Topo.EdgeGhost(part, ids, round: false) is { } go ? v => go(v) : null;
                     _ghostIn = Topo.EdgeGhost(part, ids, round: true) is { } gi ? v => gi(v) : null;
+                    _presetEdges = new();
+                    foreach (var id in ids) if (part.FindEdge(id) is { } e) _presetEdges[id] = Parametric3D.Kernel.Topology.EdgeRef.Of(e);
                 }
-                ShowHint(L("Ручка: наружу — фаска, внутрь — скругление"));
+                ShowHint(L("Ручка: потяните внутрь — скругление, наружу — фаска"));
                 break;
             case PickKind.Vertex when sel.Count == 1 && Topo.VertexHandle(part, sel[0].Id) is { } h:
                 View.Handle = new OpHandle(F(h.At), F(h.Out), true, true);
                 _handleKind = "vertex";
                 _ghostOut = Topo.VertexGhost(part, sel[0].Id, round: false) is { } vo ? v => vo(v) : null;
                 _ghostIn = Topo.VertexGhost(part, sel[0].Id, round: true) is { } vi ? v => vi(v) : null;
-                ShowHint(L("Ручка: наружу — фаска угла, внутрь — скругление вершины"));
+                if (Refs.PointOf(sel[0]) is { } vp) _presetPoints = new() { [sel[0].Id] = vp };
+                ShowHint(L("Ручка: потяните внутрь — скругление вершины, наружу — фаска угла"));
                 break;
             case PickKind.Face when sel.Count == 1 && Topo.FaceHandle(part, sel[0].Id) is { } h:
                 View.Handle = new OpHandle(F(h.At), F(h.Out), h.Planar, true);
                 _handleKind = h.Planar ? "face" : "surface";
-                if (h.Planar) _ghostOut = Topo.FaceGhost(part, sel[0].Id, 1) is { } fo ? v => fo(v) : null;
+                if (h.Planar)
+                {
+                    _ghostOut = Topo.FaceGhost(part, sel[0].Id, 1) is { } fo ? v => fo(v) : null;
+                    _presetOutline = Topo.FaceOutlineSketch(part, sel[0].Id, L("Эскиз{0}", part.Sketches.Count() + 1));
+                }
                 _ghostIn = Topo.FaceGhost(part, sel[0].Id, -1) is { } fi ? v => fi(v) : null;
-                ShowHint(h.Planar ? L("Ручка: наружу — выдавить грань, внутрь — вырез") : L("Ручка: внутрь — оболочка с открытой гранью"));
+                ShowHint(h.Planar ? L("Ручка: потяните наружу — выдавить грань, внутрь — вырез") : L("Ручка: потяните внутрь — оболочка с открытой гранью"));
                 break;
             default:
                 ShowHint(null);
@@ -609,75 +636,105 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// Ручку потянули (п. 6): операция начинается без перестроения детали — пока тянут, в виде линии быстрого
-    /// предпросмотра, а величина — у курсора (панель свойств открыта — и в её полях). Деталь считается, когда отпустили.
-    /// Повторно потянули ту же стрелку — та же операция; другую — прежняя отменяется.
-    /// </summary>
-    private void OnHandleDragStarted(int sign)
+    /// <summary>Контур по сдвигу ручки со знаком: наружу — своя операция, внутрь — своя.</summary>
+    private Func<double, List<(OpenTK.Mathematics.Vector3d A, OpenTK.Mathematics.Vector3d B)>>? SignedGhost()
     {
-        var ghost = sign > 0 ? _ghostOut : _ghostIn;
+        if (FullPreview) return null;
+        var (o, i) = (_ghostOut, _ghostIn);
+        return s => (s > 0 ? o?.Invoke(s) : i?.Invoke(-s)) ?? new();
+    }
+
+    /// <summary>
+    /// Ручку потянули (п. 6): одна ручка, сторона выбирает операцию. Панель не открывается (если панель свойств закрыта);
+    /// пока тянут — полный предпросмотр (деталь считается по ходу) или контур (настройка); величина — у курсора.
+    /// </summary>
+    private void OnHandleDragStarted()
+    {
         if (CurrentOperation is { } cur && ReferenceEquals(cur, _handleOp))
         {
-            if (_handleOpSign == sign)
-            {
-                cur.BeginDrag();
-                View.SetHandleGhost(ghost, sign);
-                return;
-            }
-            // другая стрелка: прежняя операция отменяется, деталь — сразу как до неё (от сохранённого состояния)
-            var keepSel = View.Selection.Items.ToList();
-            var keepH = View.Handle;
-            var (go, gi, kind) = (_ghostOut, _ghostIn, _handleKind);
-            CancelOperation();
-            if (Session.Document.IsBuilding) { ShowToast(L("Деталь ещё считается — потяните ручку ещё раз"), error: false); return; }
-            Session.Document.RebuildDirty();
-            View.Selection.Clear();
-            foreach (var r in keepSel) View.Selection.Select(r, additive: true);
-            View.Handle = keepH;
-            (_ghostOut, _ghostIn, _handleKind) = (go, gi, kind);
+            cur.LivePreview = FullPreview;
+            cur.BeginDrag();
         }
-        var sel = View.Selection.Items.ToList();
-        if (sel.Count == 0 || sel[0].Owner is not Part part) return;
-        uint id = sel[0].Id;
+        View.SetHandleGhost(SignedGhost());
+        ShowHint(null);
+    }
+
+    private Operation? MakeHandleOp(int sign)
+    {
         Operation? op = (_handleKind, sign) switch
         {
-            ("edge", > 0) => new ChamferOp(),
-            ("edge", < 0) => new RoundOp(),
-            ("vertex", > 0) => new VertexChamferOp(),
-            ("vertex", < 0) => new VertexRoundOp(),
-            ("face", var sg) => new ExtrudeOp
+            ("edge", < 0) => new RoundOp { PresetEdges = _presetEdges },
+            ("edge", > 0) => new ChamferOp { PresetEdges = _presetEdges },
+            ("vertex", < 0) => new VertexRoundOp { PresetPoints = _presetPoints },
+            ("vertex", > 0) => new VertexChamferOp { PresetPoints = _presetPoints },
+            ("face", var sg) when _presetOutline is { } outline => new ExtrudeOp
             {
                 StartCut = sg < 0, FlipCut = sg < 0,
-                PreSketch = p => Topo.FaceOutlineSketch(p, id, L("Эскиз{0}", p.Sketches.Count() + 1)),
+                PreSketch = _ => outline,
             },
             ("surface", < 0) => new ShellOp(),
             _ => null,
         };
-        if (op == null) return;
-        var keep = View.Handle;
-        var (g1, g2) = (_ghostOut, _ghostIn);
-        op.BeginDrag();
-        StartOperation(op, showPanel: false);
-        if (!ReferenceEquals(CurrentOperation, op)) return;
-        View.Handle = keep;
-        (_ghostOut, _ghostIn) = (g1, g2);
-        _handleOp = op;
-        _handleOpSign = sign;
-        View.SetHandleGhost(ghost, sign);
-        ShowHint(null);
+        return op;
     }
 
-    private void OnHandleDragged(double v)
+    /// <summary>Начать операцию ручки этой стороны; ручка, её сдвиг и ссылки — прежние.</summary>
+    private bool StartHandleOp(int sign)
     {
-        if (CurrentOperation is not { } op) return;
+        if (MakeHandleOp(sign) is not { } op) return false;
+        var keepH = View.Handle;
+        double hv = View.HandleValue;
+        var saved = (_ghostOut, _ghostIn, _presetEdges, _presetPoints, _presetOutline, _handleKind);
+        op.LivePreview = FullPreview;
+        op.BeginDrag();
+        _startingHandleOp = true;
+        try { StartOperation(op, showPanel: false); }
+        finally { _startingHandleOp = false; }
+        if (!ReferenceEquals(CurrentOperation, op)) return false;
+        View.Handle = keepH;
+        View.SetHandleValue(hv);
+        (_ghostOut, _ghostIn, _presetEdges, _presetPoints, _presetOutline, _handleKind) = saved;
+        View.SetHandleGhost(SignedGhost());
+        View.ShowGhost(hv);
+        _handleOp = op;
+        _handleOpSign = sign;
+        return true;
+    }
+
+    /// <summary>Ручку перевели через начальное место: прежняя операция отменяется (выбор и ручка остаются).</summary>
+    private void DropHandleOp()
+    {
+        if (CurrentOperation is not { } old) return;
+        _switchingHandle = true;
+        try
+        {
+            CurrentOperation = null;
+            _handleOp = null;
+            try { old.Cancel(); }
+            catch (Exception ex) { AppLog.Write("handle switch", ex); }
+            View.Selection.Filter = PickFilter.All;
+        }
+        finally { _switchingHandle = false; }
+    }
+
+    private void OnHandleDragged(int sign, double v)
+    {
+        if (CurrentOperation is { } cur && ReferenceEquals(cur, _handleOp) && _handleOpSign != sign) DropHandleOp();
+        if (CurrentOperation == null || !ReferenceEquals(CurrentOperation, _handleOp))
+        {
+            if (CurrentOperation != null) CancelOperation();
+            if (!StartHandleOp(sign)) return;
+        }
+        var op = CurrentOperation!;
         op.SetDragValue(v);
-        if (op.DragCurrent is { } dv) SelChipText.Text = L(op.Title) + $" · {(op.DragLabel.Length > 0 ? op.DragLabel + " " : "")}{dv:0.##} {L("мм")}";
+        View.Redraw();
+        string label = $"{(op.DragLabel.Length > 0 ? op.DragLabel + " " : "")}{Math.Round(Math.Max(0.01, v), 2):0.##} {L("мм")}";
+        SelChipText.Text = L(op.Title) + " · " + label;
         // панель закрыта — величина у курсора
         if (!PropsPanel.IsVisible)
         {
             var c = View.HandleCursor;
-            DragValueText.Text = $"{(op.DragLabel.Length > 0 ? op.DragLabel + " " : "")}{Math.Round(Math.Max(0.01, v), 2):0.##} {L("мм")}";
+            DragValueText.Text = L(op.Title) + "  " + label;
             DragValueBox.Margin = new Thickness(c.X + 18, c.Y + 14, 0, 0);
             DragValueBox.IsVisible = true;
         }
@@ -687,16 +744,16 @@ public partial class MainWindow : Window
     {
         DragValueBox.IsVisible = false;
         if (CurrentOperation is not { } op || !op.Dragging) return;
-        // один расчёт детали — с отпущенной величиной; линии предпросмотра — пока он не готов
+        // окончательный расчёт детали — с отпущенной величиной; контур — пока он не готов
         try { op.EndDrag(); }
         catch (Exception ex) { AppLog.Write("handle drag end", ex); }
-        if (op.DragCurrent is { } v) View.SetHandleValue(_handleOpSign, v);
         UpdateContextBar();
     }
 
-    /// <summary>Деталь посчитана — линии быстрого предпросмотра больше не нужны.</summary>
+    /// <summary>Деталь посчитана — контур предпросмотра больше не нужен; живой предпросмотр — следующая величина.</summary>
     private void HideGhostWhenBuilt()
     {
+        CurrentOperation?.FlushLive();
         if (!View.GhostShown || View.HandleDragging || CurrentOperation is { Dragging: true }) return;
         if (Session.Document.IsBuilding || Session.Document.AllParts().Any(p => p.IsDirty)) return;
         View.ShowGhost(0, show: false);
@@ -928,6 +985,8 @@ public partial class MainWindow : Window
         if (!panel) { RefreshAfterOp(); return; }
         CurrentOperation = op;
         _opQuiet = !showPanel;
+        // операция не от ручки — ручка у выбора убирается (её операция — другая)
+        if (!_startingHandleOp) { View.Handle = null; _handleOp = null; }
         PropsPanel.IsVisible = showPanel || _propsOn;
         PropsTitle.Text = L(op.Title).ToUpperInvariant();
         PropsBody.Children.Clear();

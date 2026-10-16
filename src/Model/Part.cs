@@ -515,6 +515,30 @@ public sealed class Part : ModelItem
         SetDirty();
     }
 
+    // u09: ЖИВОЙ ПРЕДПРОСМОТР РУЧКОЙ. Пока тянут, операция считается в режиме предпросмотра (грубая сетка, проверки
+    // отложены); доноры сетки для окончательного расчёта — тела, опубликованные ДО начала перетаскивания: грубые грани
+    // предпросмотра не должны стать сеткой результата.
+    private List<Kernel.Topology.TSolid>? _donorKeep;
+
+    /// <summary>Начало живого предпросмотра: запомнить опубликованные тела как доноров сетки окончательного расчёта.</summary>
+    public void BeginPreviewSession() { _donorKeep ??= Bodies.ToList(); }
+
+    /// <summary>
+    /// Конец живого предпросмотра операции f: результат и сохранённые состояния с неё — предпросмотровые (грубые) —
+    /// забываются, пересчёт с f обычным расчётом; доноры сетки — тела до перетаскивания.
+    /// </summary>
+    public void EndPreviewSession(Feature? f)
+    {
+        int i = f == null ? -1 : Features.IndexOf(f);
+        if (i >= 0)
+        {
+            _checkpoints.RemoveAll(c => c.After >= i);
+            _lastResult = null;
+            DirtyFromIndex(i);
+            SetDirty();
+        }
+    }
+
     /// <summary>Опустить отметку пересчёта до названного места.</summary>
     private void DirtyFromIndex(int at) => _dirtyFrom = Math.Min(_dirtyFrom, Math.Max(0, at));
 
@@ -584,7 +608,12 @@ public sealed class Part : ModelItem
     {
         if (_lastInputs is { } last)
         {
-            if (!(last.Settings with { Preview = false }).Equals(settings with { Preview = false }) || last.Policy != Policy || !last.Limits.Equals(Limits))
+            // u09: точность сетки предпросмотра (грубее обычной) — не «изменились настройки»: пересчёт всего дерева не нужен,
+            // операция предпросмотра потом пересчитывается обычным расчётом (EndPreviewSession)
+            static Kernel.KernelSettings Norm(Kernel.KernelSettings k, bool anyPreview) =>
+                anyPreview ? k with { Preview = false, LivePreview = false, Chord = 0, ChordAngle = 0 } : k with { Preview = false };
+            bool anyPv = last.Settings.Preview || settings.Preview || last.Settings.LivePreview || settings.LivePreview;
+            if (!Norm(last.Settings, anyPv).Equals(Norm(settings, anyPv)) || last.Policy != Policy || !last.Limits.Equals(Limits))
                 _dirtyFrom = 0;                               // настройки ядра или политика изменились
             else if (last.Stage != EffectiveStage)
                 DirtyFromIndex(Math.Min(last.Stage, EffectiveStage));   // полоска сдвинулась
@@ -738,7 +767,11 @@ public sealed class Part : ModelItem
         // Вызванный внутри чужого контекста расчёт наследует его настройки, отмену и наблюдателя
         // этапов; политика и пределы — свои, детали.
         // Поставка 3: прежний опубликованный результат — доноры сетки неизменённых граней.
-        var previousBodies = Bodies.ToList();
+        // u09: после живого предпросмотра — доноры до перетаскивания (грубые грани предпросмотра в результат не идут)
+        var keep = _donorKeep;
+        bool previewNow = Kernel.KernelSettings.Capture().Preview;
+        var previousBodies = !previewNow && keep != null ? keep : Bodies.ToList();
+        if (!previewNow && keep != null) _donorKeep = null;
         var outer = Kernel.KernelContext.Current;
         var context = new Kernel.KernelContext(Kernel.KernelSettings.Capture(), Policy,
                                                Limits == Kernel.KernelLimits.None && outer != null ? outer.Limits : Limits,

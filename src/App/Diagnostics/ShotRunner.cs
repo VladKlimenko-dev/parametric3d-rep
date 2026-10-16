@@ -26,7 +26,7 @@ public static class ShotRunner
         if (id.StartsWith("hdrag:") || id.StartsWith("hhold:"))
         {
             var a = id[6..].Split(',');
-            w.ViewPort.SimulateHandleDrag(int.Parse(a[0]), double.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture), end: id.StartsWith("hdrag:"));
+            w.ViewPort.SimulateHandleDrag(int.Parse(a[0]) * double.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture), end: id.StartsWith("hdrag:"));
             Console.WriteLine($"handle drag {id}");
             return;
         }

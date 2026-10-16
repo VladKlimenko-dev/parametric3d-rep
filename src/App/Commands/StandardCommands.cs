@@ -160,6 +160,10 @@ public static class StandardCommands
             r.Add(new AppCommand { Id = "app.gl_" + mode, Label = label, Group = A, Synonyms = "graphics opengl angle wgl direct3d графика",
                 IsChecked = () => (UserPrefs.Current.GlMode ?? "auto") == mode,
                 Run = () => { UserPrefs.Current.GlMode = mode; UserPrefs.Current.Save(); w.ShowToast(Loc.L("Графика сменится при следующем запуске приложения."), error: false); } });
+        foreach (var (mode, label) in new[] { ("full", "Предпросмотр: полный (деталь считается при перетаскивании)"), ("contour", "Предпросмотр: контуром (деталь считается, когда отпустили)") })
+            r.Add(new AppCommand { Id = "app.preview_" + mode, Label = label, Group = A, Synonyms = "preview handle live contour предпросмотр ручка контур",
+                IsChecked = () => (UserPrefs.Current.PreviewMode ?? "full") == mode,
+                Run = () => { UserPrefs.Current.PreviewMode = mode; UserPrefs.Current.Save(); } });
         r.Add(new AppCommand { Id = "palette", Label = "Палитра команд", Group = A, Icon = "command_palette_but.svg", Synonyms = "search command palette",
             Run = () => w.OpenPalette() });
         r.Add(new AppCommand { Short = "−", Id = "tree.collapse", Label = "Свернуть дерево", Group = A, Synonyms = "collapse", Run = () => w.SetTreeExpanded(false) });

@@ -686,7 +686,7 @@ public static class FilletOp
         // скруглений без общего шара (пирамида с разными уклонами граней) давал микрорёбра 1e-6 мм у основания и сетку с
         // рёбрами кратности 4 — тело принималось (защитная проверка смотрит объём и открытые рёбра своей разметки).
         // Негодный итог — откат и отказ. Мутация P3D_FILLETFINALCHECK=0.
-        if (!FinalCheckOff && done > 0)
+        if (!FinalCheckOff && done > 0 && !KernelSettings.Capture().LivePreview)
             foreach (var b in bodies.Where(x => !original.Any(o => ReferenceEquals(o, x))))
             {
                 ValidationReport vr;

@@ -521,6 +521,7 @@ public static class UvMesher
             {
                 var bad = new List<int>();
                 for (int t = 0; t < T.Count; t += 3) if (Bad(t) > tol) bad.Add(t);
+                Debug?.Invoke($"pass {pass}: bad {bad.Count} of {T.Count / 3}, worst {(bad.Count > 0 ? bad.Max(Bad) : 0):0.####} tol {tol:0.####}");
                 if (bad.Count == 0) break;
                 foreach (int t in bad)
                 {
