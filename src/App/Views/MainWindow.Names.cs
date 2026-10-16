@@ -31,6 +31,8 @@ public partial class MainWindow
     private TextBlock SelChipText = null!;
     private StackPanel ContextOps = null!;
     private Border HintBox = null!;
+    private Border DragValueBox = null!;
+    private TextBlock DragValueText = null!;
     private TextBlock HintText = null!;
     private Border Toast = null!;
     private TextBlock ToastText = null!;
@@ -77,6 +79,8 @@ public partial class MainWindow
         SelChipText = this.FindControl<TextBlock>("SelChipText")!;
         ContextOps = this.FindControl<StackPanel>("ContextOps")!;
         HintBox = this.FindControl<Border>("HintBox")!;
+        DragValueBox = this.FindControl<Border>("DragValueBox")!;
+        DragValueText = this.FindControl<TextBlock>("DragValueText")!;
         HintText = this.FindControl<TextBlock>("HintText")!;
         Toast = this.FindControl<Border>("Toast")!;
         ToastText = this.FindControl<TextBlock>("ToastText")!;

@@ -33,6 +33,7 @@ public static class UvMesher
     public static int FullPeriodicFaces;
     internal static readonly bool DropPoleSlivers = Environment.GetEnvironmentVariable("P3D_POLEDROP") != "0";
     internal static readonly bool PoleCutFromNearest = Environment.GetEnvironmentVariable("P3D_POLECUT") != "0";
+    internal static readonly bool StraightSquashOff = Environment.GetEnvironmentVariable("P3D_UVSTRAIGHT") == "0";
     public static readonly double[] PhaseMs = new double[6];   // 0 контуры, 1 треугол., 2 Делоне, 3 внутр. точки, 4 доводка, 5 проверка
 
     /// <summary>
@@ -485,6 +486,33 @@ public static class UvMesher
                     Inc(i0, t3); Inc(i1, t2); Inc(i2, t2); Inc(i2, t3); Inc(m, tri); Inc(m, t2); Inc(m, t3);
                     last = m;
                 }
+            // u08: ПРЯМОЕ НАПРАВЛЕНИЕ — СЖАТО В МЕТРИКЕ ДЕЛОНЕ. Длинная узкая полоса (скругление ребра 100 мм радиусом
+            // 1.4 мм): в метрике поверхности Делоне соединял точки дуги на одном конце с далёкими по углу точками другого
+            // конца, такие стороны отходили от поверхности, и доводка центрами плодила 1 258 треугольников вместо 32 (и
+            // 100–1 400 мс на одно скругление — ручка операции «думала» секунду). Вдоль образующей поверхность не гнётся,
+            // длина треугольника там не стоит ничего: сжатие этого направления до доли шага кривого даёт «лесенку» по
+            // одинаковому углу. Мутация P3D_UVSTRAIGHT=0 — прежнее.
+            // Только «лесенка»: область без отверстий, и все точки края — на двух концах полосы по прямому направлению (у
+            // скругления — дуги концов, стороны — образующие). Иначе сжатая метрика вела точки кривого края (кромка
+            // отверстия, срез у шва) к далёким по углу: объём −0.2 % (G2-UV-MESH), точный маршрут → многогранный
+            // (KRN04-REFINE-AT-CLOSED-EDGE-SEAM).
+            bool Ladder(bool alongY)
+            {
+                if (pieces.Any(pc => pc.Item2.Count > 0)) return false;
+                double lo = alongY ? minY : minX, hi = alongY ? maxY : maxX, eps = 1e-6 * (hi - lo);
+                foreach (var (a2, b2) in boundary)
+                    foreach (int i in new[] { a2, b2 })
+                    {
+                        double c = alongY ? M(i).Y : M(i).X;
+                        if (Math.Abs(c - lo) > eps && Math.Abs(c - hi) > eps) return false;
+                    }
+                return true;
+            }
+            if (!StraightSquashOff && spanX > 1e-12 && spanY > 1e-12)
+            {
+                if (kx > 1e-12 && ky <= 1e-12 && spanY > 4 * hx && Ladder(alongY: true)) sv *= 0.25 * hx / spanY;
+                else if (ky > 1e-12 && kx <= 1e-12 && spanX > 4 * hy && Ladder(alongY: false)) su *= 0.25 * hy / spanX;
+            }
             Delaunay();
             Debug?.Invoke($"pass 0: interior points {uvList.Count - pts0.Count}, h {h:0.###}, tris {T.Count / 3}, area3 {Area3():0.###}");
             // Доводка: где поверхность гнётся сильнее, чем позволяет шаг сетки (кольцо тора малого

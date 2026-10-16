@@ -23,10 +23,10 @@ public static class ShotRunner
             Console.WriteLine($"{verb} {arg}: hover {w.ViewPort.Selection.Hover.Kind}, selected {w.ViewPort.Selection.Count}");
             return;
         }
-        if (id.StartsWith("hdrag:"))
+        if (id.StartsWith("hdrag:") || id.StartsWith("hhold:"))
         {
             var a = id[6..].Split(',');
-            w.ViewPort.SimulateHandleDrag(int.Parse(a[0]), double.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture));
+            w.ViewPort.SimulateHandleDrag(int.Parse(a[0]), double.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture), end: id.StartsWith("hdrag:"));
             Console.WriteLine($"handle drag {id}");
             return;
         }

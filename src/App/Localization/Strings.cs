@@ -14,6 +14,7 @@ public static class Strings
         ["Внутренняя ошибка: "] = "Internal error: ",
         ["Нет детали"] = "No part",
         ["Ручка: наружу — фаска, внутрь — скругление"] = "Handle: outward — chamfer, inward — round",
+        ["Деталь ещё считается — потяните ручку ещё раз"] = "The part is still computing — drag the handle again",
         ["Ручка: наружу — фаска угла, внутрь — скругление вершины"] = "Handle: outward — corner chamfer, inward — vertex round",
         ["Ручка: наружу — выдавить грань, внутрь — вырез"] = "Handle: outward — extrude the face, inward — cut",
         ["Ручка: внутрь — оболочка с открытой гранью"] = "Handle: inward — shell with this face open",

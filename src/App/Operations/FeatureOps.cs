@@ -97,6 +97,8 @@ public sealed class ExtrudeOp : FeatureOp<ExtrudeFeature>
     /// <summary>Выдавливание контура грани ручкой: вырез — внутрь (против нормали грани).</summary>
     public bool FlipCut;
     public override Action<double>? DragValue => v => F.Side1.Distance = new ValueRef(v);
+    public override double? DragCurrent => F.Side1.Distance.Value;
+    public override string DragLabel => "H";
 
     protected override void SeedRefs()
     {
@@ -187,6 +189,8 @@ public sealed class RoundOp : FeatureOp<RoundFeature>
     }
 
     public override Action<double>? DragValue => v => F.Radius = new ValueRef(v);
+    public override double? DragCurrent => F.Radius.Value;
+    public override string DragLabel => "R";
 
     protected override void SeedRefs() => Seed(_edges);
 
@@ -226,6 +230,8 @@ public sealed class ChamferOp : FeatureOp<ChamferFeature>
     private bool _equal = true;
 
     public override Action<double>? DragValue => v => { F.D1 = new ValueRef(v); if (_equal || F.Mode == ChamferKind.DistanceAngle) F.D2 = new ValueRef(v); };
+    public override double? DragCurrent => F.D1.Value;
+    public override string DragLabel => "D";
 
     protected override void SeedRefs() => Seed(_edges);
 
@@ -255,6 +261,8 @@ public sealed class VertexRoundOp : FeatureOp<VertexRoundFeature>
     }
 
     public override Action<double>? DragValue => v => F.Radius = new ValueRef(v);
+    public override double? DragCurrent => F.Radius.Value;
+    public override string DragLabel => "R";
 
     protected override void SeedRefs() => Seed(_v);
 
@@ -282,6 +290,8 @@ public sealed class VertexChamferOp : FeatureOp<VertexChamferFeature>
     }
 
     public override Action<double>? DragValue => v => F.Distance = new ValueRef(v);
+    public override double? DragCurrent => F.Distance.Value;
+    public override string DragLabel => "D";
 
     protected override void SeedRefs() => Seed(_v);
 
@@ -312,6 +322,8 @@ public sealed class ShellOp : FeatureOp<ShellFeature>
     }
 
     public override Action<double>? DragValue => v => F.Thickness = new ValueRef(v);
+    public override double? DragCurrent => F.Thickness.Value;
+    public override string DragLabel => "T";
 
     protected override void SeedRefs() => Seed(_faces);
 

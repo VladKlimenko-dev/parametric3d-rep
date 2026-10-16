@@ -119,12 +119,33 @@ public abstract class Operation
     /// <summary>Ручка в виде (п. 6): главное значение операции (радиус, размер фаски, глубина…). null — у операции ручки нет.</summary>
     public virtual Action<double>? DragValue => null;
 
-    /// <summary>Значение от ручки: записать и перестроить предпросмотр.</summary>
+    /// <summary>Текущее главное значение (для ручки и подписи), мм.</summary>
+    public virtual double? DragCurrent => null;
+    /// <summary>Короткое имя главного значения у курсора («R», «D», «T»…).</summary>
+    public virtual string DragLabel => "";
+
+    /// <summary>
+    /// Идёт перетаскивание ручки: значение пишется в операцию и в поля панели, но деталь не перестраивается — в виде
+    /// быстрый предпросмотр линиями. Деталь считается один раз — когда ручку отпустили (EndDrag).
+    /// </summary>
+    public bool Dragging { get; private set; }
+
+    public void BeginDrag() => Dragging = true;
+
+    public virtual void EndDrag()
+    {
+        if (!Dragging) return;
+        Dragging = false;
+        FieldChanged();
+    }
+
+    /// <summary>Значение от ручки: записать; не во время перетаскивания — и перестроить предпросмотр.</summary>
     public void SetDragValue(double v)
     {
         if (DragValue is not { } set) return;
         set(Math.Round(Math.Max(0.01, v), 2));
-        FieldChanged();
+        if (Dragging) Panel?.Refresh();
+        else FieldChanged();
     }
 
     /// <summary>Строка состояния панели: чего не хватает или ошибка перестроения.</summary>
@@ -177,14 +198,22 @@ public abstract class FeatureOp<T> : Operation where T : Feature
         if (!Editing) SeedRefs();
         if (Panel != null) foreach (var r in Panel.Refs) if (r.Text != null) r.Text.Text = r.Summary;
         Push();
-        if (!Editing) Part.AddFeature(F);
-        else Part.NotifyChanged(F);
+        // ручку ещё тянут — операция в деталь попадёт, когда отпустят (EndDrag)
+        if (!Dragging)
+        {
+            if (!Editing) { Part.AddFeature(F); _added = true; }
+            else Part.NotifyChanged(F);
+        }
         RefreshStatus();
     }
+
+    private bool _added;
 
     protected override void Apply()
     {
         Push();
+        if (Dragging) return;
+        if (!Editing && !_added) { Part.AddFeature(F); _added = true; return; }
         Part.NotifyChanged(F);
     }
 
@@ -197,6 +226,8 @@ public abstract class FeatureOp<T> : Operation where T : Feature
             W.ShowToast(L("Выберите: {0}", L(m.Label).ToLowerInvariant()));
             return false;
         }
+        if (Dragging) EndDrag();
+        if (!Editing && !_added) { Part.AddFeature(F); _added = true; }
         W.Session.CommitEdit();
         return true;
     }
@@ -207,7 +238,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
     /// </summary>
     public override void Cancel()
     {
-        if (!Editing) { Part.RemoveFeature(F); W.Session.DiscardEdit(); }
+        if (!Editing) { if (_added) Part.RemoveFeature(F); W.Session.DiscardEdit(); }
         else W.Session.CancelEdit();
     }
 }
