@@ -109,7 +109,7 @@ public sealed class OpPanel
         return f;
     }
 
-    public void Number(string label, Func<ValueRef> get, Action<ValueRef> set, string unit = "мм")
+    public void Number(string label, Func<ValueRef> get, Action<ValueRef> set, string unit = "мм", Func<bool>? visible = null)
     {
         var tb = new TextBox { Text = Show(get()), MinWidth = 60 };
         var unitText = new TextBlock { Text = L(unit), Classes = { "dim" }, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) };
@@ -138,21 +138,23 @@ public sealed class OpPanel
         };
         tb.LostFocus += (_, _) => Commit();
         ToolTip.SetTip(tb, L("Число или формула с параметрами; ↑↓ — шаг 1, Shift — 10, Ctrl — 0.1; Enter — применить"));
-        Row(label, dock);
+        When(Row(label, dock), visible);
+        _numbers.Add((tb, get));
     }
 
-    public void Check(string label, Func<bool> get, Action<bool> set)
+    public void Check(string label, Func<bool> get, Action<bool> set, Func<bool>? visible = null)
     {
         var cb = new CheckBox { IsChecked = get(), Content = L(label) };
         cb.IsCheckedChanged += (_, _) => { set(cb.IsChecked == true); _op.FieldChanged(); };
         _host.Children.Add(cb);
+        When(cb, visible);
     }
 
-    public void Choice(string label, string[] options, Func<int> get, Action<int> set)
+    public void Choice(string label, string[] options, Func<int> get, Action<int> set, Func<bool>? visible = null)
     {
         var cb = new ComboBox { ItemsSource = options.Select(o => L(o)).ToList(), SelectedIndex = get(), HorizontalAlignment = HorizontalAlignment.Stretch };
         cb.SelectionChanged += (_, _) => { if (cb.SelectedIndex >= 0) { set(cb.SelectedIndex); _op.FieldChanged(); } };
-        Row(label, cb);
+        When(Row(label, cb), visible);
     }
 
     /// <summary>Переключатель из двух-трёх кнопок (Добавить / Вырезать).</summary>
@@ -171,7 +173,28 @@ public sealed class OpPanel
         Row(label, sp);
     }
 
-    public void Finish() => _host.Children.Add(Status);
+    public void Finish() { _host.Children.Add(Status); Refresh(); }
+
+    // ------------------------------------------------------------------ зависимые поля
+
+    private readonly List<(Control C, Func<bool> Visible)> _conditional = new();
+    private readonly List<(TextBox Box, Func<ValueRef> Get)> _numbers = new();
+
+    /// <summary>Поле видно только при условии (например, угол — только у фаски «расстояние и угол»).</summary>
+    private void When(Control c, Func<bool>? visible)
+    {
+        if (visible == null) return;
+        _conditional.Add((c, visible));
+        c.IsVisible = visible();
+    }
+
+    /// <summary>После изменения: показать нужные поля, обновить числа, изменённые извне (ручкой в виде).</summary>
+    public void Refresh()
+    {
+        foreach (var (c, v) in _conditional) c.IsVisible = v();
+        foreach (var (tb, get) in _numbers)
+            if (!tb.IsFocused) tb.Text = Show(get());
+    }
 
     // ------------------------------------------------------------------ числа и формулы
 

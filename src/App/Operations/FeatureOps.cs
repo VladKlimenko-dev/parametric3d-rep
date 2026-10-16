@@ -61,26 +61,46 @@ public sealed class ExtrudeOp : FeatureOp<ExtrudeFeature>
 {
     public Sketch? SeedSketch;
     public bool StartCut;
+    /// <summary>Эскиз, создаваемый вместе с операцией (контур грани ручкой): входит в тот же шаг отмены.</summary>
+    public Func<Part, Sketch?>? PreSketch;
+    private Sketch? _created;
     private RefField _sk = null!;
     public ExtrudeOp(ExtrudeFeature? existing = null) : base(existing) { }
     public override string Title => StartCut ? "Вырез выдавливанием" : "Выдавливание";
     public override string Icon => "f_extrude_but.svg";
-    protected override ExtrudeFeature Create() => new() { Cut = StartCut };
+    protected override ExtrudeFeature Create()
+    {
+        var f = new ExtrudeFeature { Cut = StartCut };
+        if (FlipCut) f.Side1.Flip = true;
+        return f;
+    }
 
     public override void Build(OpPanel p)
     {
         _sk = p.Ref(Fields.Sketch());
         if (Editing && F.SketchId != 0) _sk.Kept = 1;
         p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
-        p.Choice("Глубина до", new[] { "На расстояние", "Насквозь" }, () => F.Side1.End == EndType.ThroughAll ? 1 : 0,
-            v => F.Side1.End = v == 1 ? EndType.ThroughAll : EndType.Distance);
-        p.Number("Глубина", () => F.Side1.Distance, v => F.Side1.Distance = v);
+        p.Choice("Глубина до", new[] { "На расстояние", "Насквозь", "До следующей грани" }, () => EndIndex(F.Side1.End),
+            v => F.Side1.End = EndOf(v));
+        p.Number("Глубина", () => F.Side1.Distance, v => F.Side1.Distance = v, visible: () => F.Side1.End == EndType.Distance);
         p.Check("Обратное направление", () => F.Side1.Flip, v => F.Side1.Flip = v);
-        p.Check("Симметрично", () => F.Symmetric, v => F.Symmetric = v);
+        p.Check("Симметрично", () => F.Symmetric, v => { F.Symmetric = v; if (v) F.TwoSided = false; });
+        p.Check("Вторая сторона", () => F.TwoSided, v => { F.TwoSided = v; if (v) F.Symmetric = false; }, visible: () => !F.Symmetric);
+        p.Choice("Вторая: до", new[] { "На расстояние", "Насквозь", "До следующей грани" }, () => EndIndex(F.Side2.End),
+            v => F.Side2.End = EndOf(v), visible: () => F.TwoSided);
+        p.Number("Глубина 2", () => F.Side2.Distance, v => F.Side2.Distance = v, visible: () => F.TwoSided && F.Side2.End == EndType.Distance);
     }
+
+    private static int EndIndex(EndType e) => e switch { EndType.ThroughAll => 1, EndType.ToNext => 2, _ => 0 };
+    private static EndType EndOf(int i) => i switch { 1 => EndType.ThroughAll, 2 => EndType.ToNext, _ => EndType.Distance };
+
+    /// <summary>Выдавливание контура грани ручкой: вырез — внутрь (против нормали грани).</summary>
+    public bool FlipCut;
+    public override Action<double>? DragValue => v => F.Side1.Distance = new ValueRef(v);
 
     protected override void SeedRefs()
     {
+        if (PreSketch != null && PreSketch(Part) is { } made) { Part.Add(made); _created = made; SeedSketch = made; }
         if (SeedSketch != null) _sk.Take(new[] { Fields.SketchRef(SeedSketch) });
         else Seed(_sk);
     }
@@ -88,6 +108,12 @@ public sealed class ExtrudeOp : FeatureOp<ExtrudeFeature>
     protected override void Push()
     {
         if (_sk.Items.Count > 0 && Refs.SketchOf(_sk.Items[0]) is { } sk) F.SketchId = sk.Id;
+    }
+
+    public override void Cancel()
+    {
+        base.Cancel();
+        if (_created != null) Part.Remove(_created);
     }
 }
 
@@ -114,6 +140,7 @@ public sealed class RevolveOp : FeatureOp<RevolveFeature>
         p.Note("Без оси — осевая линия эскиза.");
         p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
         p.Number("Угол", () => F.EndAngle, v => F.EndAngle = v, "°");
+        p.Number("Начальный угол", () => F.StartAngle, v => F.StartAngle = v, "°");
     }
 
     protected override void SeedRefs()
@@ -154,7 +181,12 @@ public sealed class RoundOp : FeatureOp<RoundFeature>
         _edges = p.Ref(Fields.Edges());
         if (Editing) _edges.Kept = F.Edges.Count + F.Selectors.Count;
         p.Number("Радиус", () => F.Radius, v => F.Radius = v);
+        p.Check("Переменный радиус", () => F.RadiusEnd != null, v => F.RadiusEnd = v ? F.Radius : null);
+        p.Number("Радиус в конце", () => F.RadiusEnd ?? F.Radius, v => F.RadiusEnd = v, visible: () => F.RadiusEnd != null);
+        p.Note("Касательно продолжающие рёбра выбираются вместе (Alt — одно ребро).");
     }
+
+    public override Action<double>? DragValue => v => F.Radius = new ValueRef(v);
 
     protected override void SeedRefs() => Seed(_edges);
 
@@ -180,8 +212,20 @@ public sealed class ChamferOp : FeatureOp<ChamferFeature>
     {
         _edges = p.Ref(Fields.Edges());
         if (Editing) _edges.Kept = F.Edges.Count + F.Selectors.Count;
-        p.Number("Размер", () => F.D1, v => { F.D1 = v; F.D2 = v; });
+        _equal = !Editing || (F.Mode == ChamferKind.TwoDistances && Math.Abs(F.D1.Value - F.D2.Value) < 1e-12 && F.D1.Formula == F.D2.Formula);
+        p.Choice("Тип фаски", new[] { "Равные катеты (D × D)", "Два катета (D1 × D2)", "Катет и угол (D × A)" },
+            () => F.Mode == ChamferKind.DistanceAngle ? 2 : _equal ? 0 : 1,
+            v => { F.Mode = v == 2 ? ChamferKind.DistanceAngle : ChamferKind.TwoDistances; _equal = v == 0; if (_equal) F.D2 = F.D1; });
+        p.Number("Катет D1", () => F.D1, v => { F.D1 = v; if (_equal) F.D2 = v; });
+        p.Number("Катет D2", () => F.D2, v => F.D2 = v, visible: () => !_equal && F.Mode == ChamferKind.TwoDistances);
+        p.Number("Угол", () => F.Angle, v => F.Angle = v, "°", visible: () => F.Mode == ChamferKind.DistanceAngle);
+        p.Check("Поменять катеты местами", () => false, v => { if (v) (F.D1, F.D2) = (F.D2, F.D1); }, visible: () => !_equal && F.Mode == ChamferKind.TwoDistances);
+        p.Note("Касательно продолжающие рёбра выбираются вместе (Alt — одно ребро).");
     }
+
+    private bool _equal = true;
+
+    public override Action<double>? DragValue => v => { F.D1 = new ValueRef(v); if (_equal || F.Mode == ChamferKind.DistanceAngle) F.D2 = new ValueRef(v); };
 
     protected override void SeedRefs() => Seed(_edges);
 
@@ -210,6 +254,8 @@ public sealed class VertexRoundOp : FeatureOp<VertexRoundFeature>
         p.Number("Радиус", () => F.Radius, v => F.Radius = v);
     }
 
+    public override Action<double>? DragValue => v => F.Radius = new ValueRef(v);
+
     protected override void SeedRefs() => Seed(_v);
 
     protected override void Push()
@@ -234,6 +280,8 @@ public sealed class VertexChamferOp : FeatureOp<VertexChamferFeature>
         if (Editing) _v.Kept = 1;
         p.Number("Размер", () => F.Distance, v => F.Distance = v);
     }
+
+    public override Action<double>? DragValue => v => F.Distance = new ValueRef(v);
 
     protected override void SeedRefs() => Seed(_v);
 
@@ -262,6 +310,8 @@ public sealed class ShellOp : FeatureOp<ShellFeature>
         p.Number("Толщина", () => F.Thickness, v => F.Thickness = v);
         p.Note("Отрицательная толщина — стенка наружу.");
     }
+
+    public override Action<double>? DragValue => v => F.Thickness = new ValueRef(v);
 
     protected override void SeedRefs() => Seed(_faces);
 
@@ -297,10 +347,11 @@ public sealed class HoleOp : FeatureOp<HoleFeature>
         p.Note("Без точек — отверстие в середине грани.");
         p.Choice("Вид", new[] { "Простое", "С цекованием", "С зенковкой" }, () => (int)F.Kind, v => F.Kind = (HoleKind)v);
         p.Number("Диаметр", () => F.Diameter, v => F.Diameter = v);
-        p.Number("Глубина", () => F.Depth, v => F.Depth = v);
         p.Check("Насквозь", () => F.ThroughAll, v => F.ThroughAll = v);
-        p.Number("Диаметр головки", () => F.HeadDiameter, v => F.HeadDiameter = v);
-        p.Number("Глубина головки", () => F.HeadDepth, v => F.HeadDepth = v);
+        p.Number("Глубина", () => F.Depth, v => F.Depth = v, visible: () => !F.ThroughAll);
+        p.Number("Диаметр головки", () => F.HeadDiameter, v => F.HeadDiameter = v, visible: () => F.Kind != HoleKind.Simple);
+        p.Number("Глубина головки", () => F.HeadDepth, v => F.HeadDepth = v, visible: () => F.Kind == HoleKind.Counterbore);
+        p.Number("Угол зенковки", () => F.HeadAngle, v => F.HeadAngle = v, "°", visible: () => F.Kind == HoleKind.Countersink);
     }
 
     protected override void SeedRefs() => Seed(_face, _pts);
@@ -472,7 +523,14 @@ public sealed class PlaneOp : Operation
         return true;
     }
 
-    public override void Cancel() => W.Session.CancelEdit();
+    public override void Cancel()
+    {
+        // новая плоскость — убрать её; деталь не заменяется и не перестраивается целиком
+        if (_dp != null) Part.Remove(_dp);
+        W.Session.DiscardEdit();
+    }
+
+    public override Action<double>? DragValue => v => _offset = new ValueRef(v);
 }
 
 // ====================================================================== эскиз
@@ -493,10 +551,21 @@ public sealed class SketchOp : Operation
         var sel = W.ViewPort.Selection.Items.FirstOrDefault(Refs.IsPlanar);
         if (!sel.IsEmpty && Refs.PlaneOf(sel) is { } pl)
         {
-            W.BeginNewSketch(Part, pl.Frame, pl.SourceId, pl.Name, Then);
+            W.BeginNewSketch(Part, SketchFrame(sel, pl.Frame), pl.SourceId, pl.Name, Then);
             return false;
         }
         return true;
+    }
+
+    /// <summary>
+    /// Плоскость эскиза на грани: начало — проекция начала координат детали на плоскость грани, чтобы размеры до нуля
+    /// эскиза были размерами от начала детали (как в Creo).
+    /// </summary>
+    public static Frame3 SketchFrame(PickRef r, Frame3 f)
+    {
+        if (r.Kind != PickKind.Face) return f;
+        var n = f.W.Normalized();
+        return Frame3.FromNormal(n * Vector3d.Dot(f.Origin, n), n);
     }
 
     public override void Build(OpPanel p)
@@ -514,7 +583,7 @@ public sealed class SketchOp : Operation
             W.ShowToast(L("Выберите плоскость или плоскую грань"));
             return false;
         }
-        W.BeginNewSketch(Part, pl.Frame, pl.SourceId, pl.Name, Then);
+        W.BeginNewSketch(Part, SketchFrame(_pl.Items[0], pl.Frame), pl.SourceId, pl.Name, Then);
         return true;
     }
 

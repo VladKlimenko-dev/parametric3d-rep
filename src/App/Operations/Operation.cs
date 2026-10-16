@@ -110,10 +110,22 @@ public abstract class Operation
     {
         try { Apply(); }
         catch (Exception ex) { AppLog.Write("operation " + Title, ex); W.ShowToast(L(Title) + ": " + ex.Message); }
+        Panel?.Refresh();
         RefreshStatus();
     }
 
     protected abstract void Apply();
+
+    /// <summary>Ручка в виде (п. 6): главное значение операции (радиус, размер фаски, глубина…). null — у операции ручки нет.</summary>
+    public virtual Action<double>? DragValue => null;
+
+    /// <summary>Значение от ручки: записать и перестроить предпросмотр.</summary>
+    public void SetDragValue(double v)
+    {
+        if (DragValue is not { } set) return;
+        set(Math.Round(Math.Max(0.01, v), 2));
+        FieldChanged();
+    }
 
     /// <summary>Строка состояния панели: чего не хватает или ошибка перестроения.</summary>
     public virtual void RefreshStatus()
@@ -189,7 +201,15 @@ public abstract class FeatureOp<T> : Operation where T : Feature
         return true;
     }
 
-    public override void Cancel() => W.Session.CancelEdit();
+    /// <summary>
+    /// «Отмена» (п. 2): новая операция просто убирается из детали — деталь не заменяется снимком, расчёт продолжается от
+    /// сохранённого состояния перед операцией, и на экране сразу прежняя деталь. Правка готовой — снимок до правки.
+    /// </summary>
+    public override void Cancel()
+    {
+        if (!Editing) { Part.RemoveFeature(F); W.Session.DiscardEdit(); }
+        else W.Session.CancelEdit();
+    }
 }
 
 /// <summary>Чтение ссылок: плоскость, прямая, точка, эскиз — из того, что выбрано в виде или дереве.</summary>

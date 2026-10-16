@@ -23,6 +23,11 @@ public sealed class SceneRenderer : IDisposable
     public RenderTheme Theme = RenderTheme.DarkTheme();
     public DisplayStyle Style = DisplayStyle.ShadedWithEdges;
     public bool ShowAllVertices;
+    /// <summary>
+    /// Режим эскиза: тела не рисуются и не заслоняют эскиз — их рёбра и вершины видны тонко, поверх, как кандидаты в
+    /// ссылки эскиза (наведение подсвечивает, выбор — тоже без заслонения).
+    /// </summary>
+    public bool SketchMode;
 
     private ShaderProgram? _mesh, _line, _point, _fill, _bg;
     private int _emptyVao = -1;
@@ -300,6 +305,15 @@ public sealed class SceneRenderer : IDisposable
         bool edges = Style != DisplayStyle.Shaded;
         bool hidden = Style is DisplayStyle.HiddenLines or DisplayStyle.Transparent;
 
+        if (SketchMode)
+        {
+            GL.Disable(EnableCap.DepthTest);
+            DrawLines(_bodyEdges, f, 0f, colorOverride: Theme.SketchRefEdge);
+            DrawPoints(_bodyVerts, f, 0f, onlyFlagged: false);
+            GL.Enable(EnableCap.DepthTest);
+            goto afterBodies;
+        }
+
         // тела: тонированные — освещённые грани и контур; иначе — только глубина (для заслонения рёбер)
         if (faces) DrawMeshes(f, lit: true, opacity: 1f);
         else DrawMeshDepthOnly(f);
@@ -325,8 +339,11 @@ public sealed class SceneRenderer : IDisposable
         // наведённые и выбранные рёбра видны и в тонированном стиле
         if (!edges) DrawLinesFlaggedOnly(_bodyEdges, f);
 
+    afterBodies:
         // сетка эскиза — под плоскостями и линиями, с глубиной
+        GL.DepthMask(false);   // сетка не заслоняет линии эскиза, лежащие на ней
         DrawLines(_ovGrid, f, 3e-4f);
+        GL.DepthMask(true);
 
         // опорные плоскости — прозрачные, после тел
         DrawPlanes(f, pick: false);
@@ -334,7 +351,7 @@ public sealed class SceneRenderer : IDisposable
         // линии и точки опорных элементов и эскизов
         DrawLines(_lines, f, 4e-5f);
         DrawPoints(_points, f, 6e-5f, onlyFlagged: false);
-        DrawPoints(_bodyVerts, f, 8e-5f, onlyFlagged: !ShowAllVertices);
+        if (!SketchMode) DrawPoints(_bodyVerts, f, 8e-5f, onlyFlagged: !ShowAllVertices);
 
         // построение инструмента — поверх всего
         if (_ovLines.Count > 0 || _ovPoints.Count > 0)
@@ -413,14 +430,17 @@ public sealed class SceneRenderer : IDisposable
         SetCamera(_mesh, f);
         _mesh.Set("uMode", 2);
         _mesh.Set("uOutlinePx", 0f);
-        foreach (var m in _meshes)
-        {
-            if (m.Preview != 0) continue;
-            _mesh.Set("uModel", m.Model);
-            GL.BindVertexArray(m.Vao);
-            GL.DrawElements(PrimitiveType.Triangles, m.Count, DrawElementsType.UnsignedInt, 0);
-        }
+        if (!SketchMode)
+            foreach (var m in _meshes)
+            {
+                if (m.Preview != 0) continue;
+                _mesh.Set("uModel", m.Model);
+                GL.BindVertexArray(m.Vao);
+                GL.DrawElements(PrimitiveType.Triangles, m.Count, DrawElementsType.UnsignedInt, 0);
+            }
         GL.Disable(EnableCap.PolygonOffsetFill);
+        // в эскизе тела не заслоняют: рёбра и вершины ловятся сквозь
+        if (SketchMode) GL.Disable(EnableCap.DepthTest);
 
         // рёбра и линии — полосой допуска; точки и вершины — квадратом
         _line!.Use();
@@ -430,8 +450,18 @@ public sealed class SceneRenderer : IDisposable
         _line.Set("uPickMode", 0);
         _point!.Use();
         _point.Set("uPickMode", 1);
-        DrawPointsRaw(_points, f, 8e-4f, onlyFlagged: false, sizeOverride: tolPx * 2.6f);
-        DrawPointsRaw(_bodyVerts, f, 8e-4f, onlyFlagged: false, sizeOverride: tolPx * 2.6f);
+        if (SketchMode)
+        {
+            // точки эскиза главнее вершин тела
+            DrawPointsRaw(_bodyVerts, f, 8e-4f, onlyFlagged: false, sizeOverride: tolPx * 2.6f);
+            DrawPointsRaw(_points, f, 8e-4f, onlyFlagged: false, sizeOverride: tolPx * 2.6f);
+            GL.Enable(EnableCap.DepthTest);
+        }
+        else
+        {
+            DrawPointsRaw(_points, f, 8e-4f, onlyFlagged: false, sizeOverride: tolPx * 2.6f);
+            DrawPointsRaw(_bodyVerts, f, 8e-4f, onlyFlagged: false, sizeOverride: tolPx * 2.6f);
+        }
         _point.Set("uPickMode", 0);
 
         var px = new byte[4];

@@ -202,6 +202,34 @@ public static class DefaultDimensions
             placed.Add(p);
         }
 
+        // 3б. UI (2026-10-16): привязка к ССЫЛКАМ эскиза (рёбра и вершины тела, спроецированные в эскиз) — до нуля эскиза:
+        //     деталь размеряется от своей геометрии, как в Creo. Сначала до ближайшей точки ссылки, затем до прямой ссылки.
+        var refEntities = sk.Entities.Where(e => e.Role == SkRole.Reference).ToList();
+        // точки ссылок — вершины (отдельные точки) и центры дуг и окружностей; от рёбер — перпендикуляр до прямой
+        var refPoints = refEntities.OfType<SkPoint>()
+            .Concat(refEntities.OfType<SkCircle>().Select(c => c.Center))
+            .Concat(refEntities.OfType<SkArc>().Select(a => a.Center)).Distinct().ToList();
+        var refLines = refEntities.OfType<SkLine>().ToList();
+        foreach (var p in points)
+        {
+            SkLine? nl = null; double lb = double.MaxValue;
+            foreach (var l in refLines)
+            {
+                var ab = l.B.P - l.A.P;
+                if (ab.LengthSquared < 1e-18) continue;
+                double dist = Math.Abs(ab.X * (p.P.Y - l.A.P.Y) - ab.Y * (p.P.X - l.A.P.X)) / ab.Length;   // до прямой
+                if (dist < lb && dist > 1e-9) { lb = dist; nl = l; }
+            }
+            if (nl != null) yield return new Candidate(DimensionType.DistancePointLine, lb, p, nl);
+            SkPoint? nr = null; double nb = double.MaxValue;
+            foreach (var q in refPoints)
+            {
+                double dist = (q.P - p.P).LengthSquared;
+                if (dist < nb && dist > 1e-12) { nb = dist; nr = q; }
+            }
+            if (nr != null) yield return new Candidate(DimensionType.DistancePointPoint, (p.P - nr.P).Length, p, nr);
+        }
+
         // 4. Привязка к нулю эскиза — в последнюю очередь и только для
         //    точек, которые иначе остались бы ни к чему не привязаны.
         foreach (var p in points)
