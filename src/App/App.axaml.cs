@@ -23,6 +23,14 @@ public partial class App : Application
             var w = new MainWindow(session);
             d.MainWindow = w;
             if (AppStartup.Arg("--shot") is { } shot) Diagnostics.ShotRunner.Start(w, shot, () => d.Shutdown());
+            // --selftest: кнопка «Тест» без человека — отчёт и выход (путь отчёта — в стандартный вывод)
+            if (AppStartup.Flag("--selftest"))
+                Avalonia.Threading.DispatcherTimer.RunOnce(async () =>
+                {
+                    var path = await Diagnostics.SelfTest.RunAsync(w, Console.WriteLine, CancellationToken.None);
+                    Console.WriteLine("REPORT " + path);
+                    d.Shutdown();
+                }, TimeSpan.FromSeconds(3));
         }
         base.OnFrameworkInitializationCompleted();
     }

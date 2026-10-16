@@ -13,6 +13,11 @@ public static class Strings
         ["мм"] = "mm", ["шт"] = "pcs", ["см³"] = "cm³", ["см²"] = "cm²", ["кг"] = "kg",
         ["Внутренняя ошибка: "] = "Internal error: ",
         ["Нет детали"] = "No part",
+        ["Тест"] = "Test", ["Тест: замер скорости и отчёт"] = "Test: speed measurement and report", ["Начать"] = "Start", ["Повторить"] = "Run again",
+        ["Остановить"] = "Stop", ["Закрыть"] = "Close", ["Копировать отчёт"] = "Copy report", ["Открыть папку"] = "Open folder",
+        ["Отчёт: {0}"] = "Report: {0}", ["Отчёт скопирован в буфер обмена."] = "The report is copied to the clipboard.",
+        ["Приложение построит детали и замерит время: каждую операцию отдельно, реалистичные детали (полное перестроение, правка, предпросмотр, память), 100 отверстий, долгую сессию, файл и экспорт, затем вид на OpenGL этого компьютера (кадры в секунду во всех стилях, выбор под курсором) и сценарии интерфейса. Займёт 2–5 минут; во время теста не трогайте мышь над окном. Документ откроется снова по окончании. Отчёт сохраняется в файл — пришлите его."] =
+            "The application will build parts and measure time: each operation separately, realistic parts (full rebuild, edit, preview, memory), 100 holes, a long session, file and export, then the view on this computer's OpenGL (frames per second in every style, picking under the cursor) and UI scenarios. It takes 2–5 minutes; keep the mouse off the window meanwhile. Your document is reopened at the end. The report is saved to a file — please send it.",
 
         // ---------------------------------------------------------------- группы команд
         ["Файл"] = "File", ["Правка"] = "Edit", ["Вид"] = "View", ["Модель"] = "Model", ["Эскиз"] = "Sketch", ["Приложение"] = "Application",

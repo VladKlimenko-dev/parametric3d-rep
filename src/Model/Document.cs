@@ -77,6 +77,9 @@ public sealed class Document
     /// UI: ТАБЛИЦА ПАРАМЕТРОВ ДЛЯ РАСЧЁТА ДЕТАЛИ — по уровням: деталь → сборки над ней → документ. Пустые уровни
     /// пропускаются; если своих параметров нет нигде, это таблица документа (как прежде).
     /// </summary>
+    /// <summary>UI (кнопка «Тест»): сколько длилось последнее применение результатов расчёта (в потоке окна), мс.</summary>
+    public double LastApplyMs { get; private set; }
+
     public ParameterTable ScopeFor(Part part)
     {
         var chain = new List<ParameterTable>();
@@ -160,6 +163,7 @@ public sealed class Document
                 }).ToList());
 
                 bool again = false;
+                long applyStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 foreach (var (part, result, failed) in results)
                 {
                     if (failed != null)
@@ -181,6 +185,7 @@ public sealed class Document
                     else again = true;               // деталь изменили во время расчёта
                 }
 
+                LastApplyMs = System.Diagnostics.Stopwatch.GetElapsedTime(applyStart).TotalMilliseconds;
                 if (!again) break;
             }
         }

@@ -83,6 +83,7 @@ public partial class MainWindow : Window
 
     public void SetSession(DocumentSession s)
     {
+        using var _ui = Diagnostics.UiTimes.Measure("окно: открыть документ");
         if (CurrentOperation != null) { CurrentOperation = null; HideOpPanel(); }
         if (InSketch) View.ExitSketch(false);
         if (Session != null) { Session.Replaced -= OnReplaced; Session.StateChanged -= OnStateChanged; Session.Document.BuildStarted -= OnBuild; Session.Document.BuildFinished -= OnBuild; }
@@ -252,6 +253,7 @@ public partial class MainWindow : Window
     /// <summary>Пересобрать все панели (смена языка, темы, режима эскиза).</summary>
     public void RebuildUi()
     {
+        using var _ui = Diagnostics.UiTimes.Measure("окно: пересобрать панели");
         _toggles.Clear();
         BuildTopBar();
         BuildViewTools();
@@ -281,6 +283,7 @@ public partial class MainWindow : Window
         foreach (var id in new[] { "edit.undo", "edit.redo", "edit.history" }) EditPanel.Children.Add(CmdButton(_reg[id]));
 
         RightPanel.Children.Clear();
+        RightPanel.Children.Add(CmdButton(_reg["app.selftest"]));
         RightPanel.Children.Add(CmdButton(_reg["app.parameters"]));
         RightPanel.Children.Add(CmdButton(_reg["app.properties"]));
         RightPanel.Children.Add(Separator(true));
@@ -509,6 +512,7 @@ public partial class MainWindow : Window
 
     private void OnSelectionChanged()
     {
+        using var _ui = Diagnostics.UiTimes.Measure("окно: выбор изменился");
         CurrentOperation?.SelectionChanged(View.Selection.Items);
         var prim = View.Selection.Primary;
         if (prim.Id != _lastPrimary.Id || View.Selection.IsEmpty)
@@ -565,6 +569,7 @@ public partial class MainWindow : Window
 
     private void UpdateContextBar()
     {
+        using var _ui = Diagnostics.UiTimes.Measure("окно: полоса выбора");
         ContextOps.Children.Clear();
         if (InSketch && View.ActiveSketch is { } sk)
         {
@@ -860,6 +865,7 @@ public partial class MainWindow : Window
 
     public void RebuildTree()
     {
+        using var _ui = Diagnostics.UiTimes.Measure("окно: дерево");
         // состояние «развёрнут» живёт между перестройками (п. 13): глаз эскиза не сворачивает ветку
         foreach (var n in AllNodes) _expand[n.Item.Id] = n.IsExpanded;
         _roots = TreeNode.Build(Session.Document);
@@ -939,6 +945,7 @@ public partial class MainWindow : Window
 
     public void ShowProperties()
     {
+        using var _ui = Diagnostics.UiTimes.Measure("окно: свойства");
         PropsBody.Children.Clear();
         PropsButtons.Children.Clear();
         var sel = View.Selection;
@@ -990,6 +997,15 @@ public partial class MainWindow : Window
         var dlg = new ParametersDialog(Session, start);
         await dlg.ShowDialog(this);
         if (dlg.Applied) { View.MarkDirty(); UpdateStatus(); }
+    }
+
+    // ================================================================ тест (замер скорости и отчёт)
+
+    public async Task OpenSelfTest()
+    {
+        if (CurrentOperation != null) CancelOperation();
+        if (InSketch) CancelSketch();
+        await new SelfTestWindow(this).ShowDialog(this);
     }
 
     // ================================================================ строка состояния и сообщения

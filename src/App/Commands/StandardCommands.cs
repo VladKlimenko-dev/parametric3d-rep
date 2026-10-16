@@ -152,6 +152,8 @@ public static class StandardCommands
             IsChecked = () => w.PropertiesVisible, Run = () => w.ToggleProperties() });
         r.Add(new AppCommand { Short = "Параметры", Id = "app.parameters", Label = "Параметры", Group = A, Icon = "parameters_but.svg", Synonyms = "parameters relations параметры переменные формулы",
             CanRun = () => w.Session != null, Run = async () => await w.OpenParameters() });
+        r.Add(new AppCommand { Short = "Тест", Id = "app.selftest", Label = "Тест: замер скорости и отчёт", Group = A, Icon = "selftest_but.svg",
+            Synonyms = "test self benchmark speed report тест замер скорость отчёт", Run = async () => await w.OpenSelfTest() });
         r.Add(new AppCommand { Id = "palette", Label = "Палитра команд", Group = A, Icon = "command_palette_but.svg", Synonyms = "search command palette",
             Run = () => w.OpenPalette() });
         r.Add(new AppCommand { Short = "−", Id = "tree.collapse", Label = "Свернуть дерево", Group = A, Synonyms = "collapse", Run = () => w.SetTreeExpanded(false) });

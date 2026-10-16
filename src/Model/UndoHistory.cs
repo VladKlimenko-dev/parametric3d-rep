@@ -29,21 +29,21 @@ public sealed class UndoHistory
     }
 
     /// <summary>Отменить: текущее состояние уходит в повтор, возвращается деталь предыдущего снимка (перестроенная).</summary>
-    public (Part Part, ParameterTable Parameters)? Undo(Part current, ParameterTable? parameters = null)
+    public (Part Part, ParameterTable Parameters)? Undo(Part current, ParameterTable? parameters = null, bool rebuild = true)
     {
         if (_undo.Count == 0) return null;
         _redo.Add(DocumentFile.Save(current, parameters));
         var snap = _undo[^1]; _undo.RemoveAt(_undo.Count - 1);
-        return Restore(snap);
+        return Restore(snap, rebuild);
     }
 
     /// <summary>Повторить отменённое.</summary>
-    public (Part Part, ParameterTable Parameters)? Redo(Part current, ParameterTable? parameters = null)
+    public (Part Part, ParameterTable Parameters)? Redo(Part current, ParameterTable? parameters = null, bool rebuild = true)
     {
         if (_redo.Count == 0) return null;
         _undo.Add(DocumentFile.Save(current, parameters));
         var snap = _redo[^1]; _redo.RemoveAt(_redo.Count - 1);
-        return Restore(snap);
+        return Restore(snap, rebuild);
     }
 
     /// <summary>UI: забыть последний снимок (правка отменена до того, как что-то изменила, — «Отмена» в панели операции).</summary>
@@ -52,11 +52,12 @@ public sealed class UndoHistory
     /// <summary>UI: очистить повтор (отменённая через «Отмена» правка не должна возвращаться повтором).</summary>
     public void ClearRedo() => _redo.Clear();
 
-    static (Part Part, ParameterTable Parameters) Restore(string snap)
+    /// <summary>rebuild: false — деталь возвращается «грязной», перестраивает её вызывающий (приложение — в фоне, без остановки окна).</summary>
+    static (Part Part, ParameterTable Parameters) Restore(string snap, bool rebuild)
     {
         var (p, t) = DocumentFile.Load(snap);
         if (p.LocalParameters.Count > 0) { p.LocalParameters.Parent = t; p.LocalParameters.Recalculate(); }
-        p.Rebuild(p.LocalParameters.Count > 0 ? p.LocalParameters : t);
+        if (rebuild) p.Rebuild(p.LocalParameters.Count > 0 ? p.LocalParameters : t);
         return (p, t);
     }
 }
