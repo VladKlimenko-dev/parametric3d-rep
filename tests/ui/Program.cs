@@ -706,6 +706,74 @@ Check("UI-SHELL-OUT-CONE", () =>
     }
 });
 
+// u12b: оболочка внутрь толще скругления (R4 цепочкой «ребро — дуга R24 — ребро», стенка 5.31): смещённый тор и цилиндры
+// исчезают — их полосы заостряются, полость — смещение острого тела. Проверка объёма: стенка тела со скруглением R4 = стенка
+// без него минус снятый скруглением объём (полость у обоих одна и та же)
+Check("UI-SHELL-SHARPEN", () =>
+{
+    var path = Path.Combine(AppContext.BaseDirectory, "data", "shell_sharpen.p3d");
+    double Vol(Part q) => q.Bodies.Sum(b => Parametric3D.Kernel.Topology.AnalyticVolume.Of(b) ?? double.NaN);
+    foreach (double t in new[] { 5.31, 8.0 })
+    {
+        var (p1, pr1) = DocumentStorage.Load(path); var sh1 = p1.Features.OfType<ShellFeature>().Single(); sh1.Thickness = new ValueRef(t);
+        p1.Invalidate(); p1.Rebuild(pr1);
+        if (sh1.Error != null) throw new Exception($"shell {t}: {sh1.Error} {string.Join(" ", p1.Warnings.Where(w => w.StartsWith("Shell")))}");
+        double wall = Vol(p1);
+        var r4 = p1.Features.OfType<RoundFeature>().Single(r => Math.Abs(r.Radius.Value - 4) < 1e-9);
+        p1.RemoveFeature(sh1); p1.Rebuild(pr1); double bodyR = Vol(p1);
+        p1.RemoveFeature(r4); p1.Rebuild(pr1); double bodyS = Vol(p1);
+        p1.AddFeature(sh1); p1.Rebuild(pr1); double wallS = Vol(p1);
+        double want = wallS - (bodyS - bodyR);
+        Console.WriteLine($"  shell {t} over R4: wall {wall:F4}, sharp wall {wallS:F4} − removed {bodyS - bodyR:F4} = {want:F4}");
+        if (Math.Abs(wall - want) > 1e-6 * want) throw new Exception($"wall {wall} vs {want}");
+    }
+});
+
+// u12b: куб 100, скругление R5 ребра x = 50, z = 50, стенка НАРУЖУ 2.82 с открытой гранью x = 50 (касательной к скруглению).
+// Прежде: «ребро не кончается в смещённых вершинах» — точка касания уходила по открытой плоскости на нижний из двух корней.
+// Объём стенки — по формуле: наружное тело (сечение 102.82 × 105.64 без угла у цилиндра R7.82) минус куб без угла R5
+Check("UI-SHELL-OUT-TANGENT", () =>
+{
+    var s = DocumentSession.Sample(); var p = s.Part!; p.Rebuild(null);
+    double xMax = p.Bodies.SelectMany(b => b.Edges).Max(e => Math.Max(e.V0!.P.X, e.V1!.P.X));
+    double zMax = p.Bodies.SelectMany(b => b.Edges).Max(e => Math.Max(e.V0!.P.Z, e.V1!.P.Z));
+    var edge = p.Bodies.SelectMany(b => b.Edges).First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0!.P.X - xMax) < 1e-6 && Math.Abs(e.V1!.P.X - xMax) < 1e-6 && Math.Abs(e.V0.P.Z - zMax) < 1e-6 && Math.Abs(e.V1.P.Z - zMax) < 1e-6);
+    var rf = new RoundFeature { Radius = new ValueRef(5) }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(edge)); p.AddFeature(rf); p.Rebuild(null);
+    var face = p.Bodies.SelectMany(b => b.Faces).First(f => Parametric3D.App.Operations.Refs.FacePlane(p, f.Id) is { } pl && pl.N.X > 0.99 && Math.Abs(pl.P.X - xMax) < 1e-6);
+    var sh = new ShellFeature("Shell") { Thickness = new ValueRef(-2.82) }; sh.OpenFaces.Add(Parametric3D.App.Operations.Refs.FacePoint(p, face.Id)!.Value); sh.OpenFaceNames.Add(face.Tag); p.AddFeature(sh); p.Rebuild(null);
+    if (sh.Error != null) throw new Exception(sh.Error + " " + string.Join(" ", p.Warnings.Where(w => w.StartsWith("Shell"))));
+    double v = p.Bodies.Sum(b => Parametric3D.Kernel.Topology.AnalyticVolume.Of(b) ?? double.NaN);
+    // угол у цилиндра R7.82 (ось — 5 от краёв): прямоугольник 5 × 7.82 минус часть круга в нём
+    double R = 7.82, inCircle = 0; int n = 200000;
+    for (int i = 0; i < n; i++) { double x = (i + 0.5) / n * 5; inCircle += Math.Min(7.82, Math.Sqrt(Math.Max(R * R - x * x, 0))) * 5 / n; }
+    double aOut = 102.82 * 105.64 - (5 * 7.82 - inCircle), aBody = 10000 - (25 - Math.PI * 25 / 4);
+    double want = aOut * 105.64 - aBody * 100;
+    Console.WriteLine($"  outward 2.82 at a tangent open face: volume {v:F4}, formula {want:F4}");
+    if (Math.Abs(v - want) > 1e-3) throw new Exception($"volume {v} vs {want}");
+});
+
+// u12b: куб 100, скругление R20 одного нижнего ребра (y = 50, z = −50), оболочка 5 с открытым низом: открытая грань касается
+// скругления по одному ребру и встречает боковины под углом по трём. Полость — тело, смещённое внутрь целиком, продлённое
+// сквозь образ дна (у касания — стенка y = 30 вдоль нормали, у острых рёбер — продолжения смещённых боковин). Объём — по формуле
+Check("UI-SHELL-OPEN-MIXED", () =>
+{
+    var s = DocumentSession.Sample(); var p = s.Part!; p.Rebuild(null);
+    double yMax = p.Bodies.SelectMany(b => b.Edges).Max(e => Math.Max(e.V0!.P.Y, e.V1!.P.Y));
+    double zMin = p.Bodies.SelectMany(b => b.Edges).Min(e => Math.Min(e.V0!.P.Z, e.V1!.P.Z));
+    var edge = p.Bodies.SelectMany(b => b.Edges).First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0!.P.Y - yMax) < 1e-6 && Math.Abs(e.V1!.P.Y - yMax) < 1e-6 && Math.Abs(e.V0.P.Z - zMin) < 1e-6 && Math.Abs(e.V1.P.Z - zMin) < 1e-6);
+    var rf = new RoundFeature { Radius = new ValueRef(20) }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(edge)); p.AddFeature(rf); p.Rebuild(null);
+    var face = p.Bodies.SelectMany(b => b.Faces).First(f => Parametric3D.App.Operations.Refs.FacePlane(p, f.Id) is { } pl && Math.Abs(pl.N.Z) > 0.99 && Math.Abs(pl.P.Z - zMin) < 1e-6);
+    var sh = new ShellFeature("Shell") { Thickness = new ValueRef(5) }; sh.OpenFaces.Add(Parametric3D.App.Operations.Refs.FacePoint(p, face.Id)!.Value); sh.OpenFaceNames.Add(face.Tag); p.AddFeature(sh); p.Rebuild(null);
+    var w = p.Warnings.FirstOrDefault(x => x.StartsWith("Shell")) ?? "";
+    if (sh.Error != null) throw new Exception(sh.Error + " " + w);
+    double v = p.Bodies.Sum(b => Parametric3D.Kernel.Topology.AnalyticVolume.Of(b) ?? double.NaN);
+    double body = 1e6 - 100 * (400 - Math.PI * 400 / 4);
+    double inner = 90 * (8100 - (225 - Math.PI * 225 / 4)), plug = 90 * 75 * 5;
+    double want = body - inner - plug;
+    Console.WriteLine($"  shell 5, open bottom (one tangent edge): volume {v:F4}, formula {want:F4}; {w}");
+    if (Math.Abs(v - want) > 1e-3) throw new Exception($"volume {v} vs {want}");
+});
+
 // u12 (замечание 15): зеркало ОПЕРАЦИИ — скругление верхнего ребра куба R20 отражается на противоположное ребро (прежде
 // отражалось и объединялось тело: скругление заполнялось, деталь становилась кубом без ошибки)
 Check("UI-MIRROR-OPS", () =>
@@ -830,6 +898,96 @@ Check("BENCH-SHELL-OUT", () =>
         foreach (var w in p.Warnings.TakeLast(3)) Console.WriteLine("    warn " + (w.Length > 400 ? w[..400] : w));
         Parametric3D.Kernel.Ops.DirectRound.Debug = null; Parametric3D.Kernel.Ops.ShellOp.ShellDebug = null;
     }
+});
+
+if (Environment.GetEnvironmentVariable("P3D_BENCH") == "shellfuzz")
+Check("BENCH-SHELL-FUZZ", () =>
+{
+    // u12b: «как пользователь» — куб 100, 1–3 скругления/фаски случайных рёбер (с касательной цепочкой), затем оболочка
+    // случайной толщины внутрь или наружу с открытой гранью (плоской или кривой) или без
+    var rnd = new Random(int.Parse(Environment.GetEnvironmentVariable("P3D_FUZZSEED") ?? "3"));
+    int trials = int.Parse(Environment.GetEnvironmentVariable("P3D_TRIALS") ?? "60");
+    var classes = new Dictionary<string, (int N, double Ms, string Ex)>();
+    int fails = 0; double total = 0;
+    for (int t = 0; t < trials; t++)
+    {
+        var s = DocumentSession.Sample(); var p = s.Part!; p.Rebuild(null);
+        var log = new List<string>();
+        int nOps = 1 + rnd.Next(3);
+        bool preOk = true;
+        for (int k = 0; k < nOps; k++)
+        {
+            var sharp = p.Bodies.SelectMany(b => b.Edges).Where(e => e.Curve != null && Parametric3D.App.Operations.Topo.FacesOf(p, e).Count() == 2).Where(e =>
+            {
+                var fs = Parametric3D.App.Operations.Topo.FacesOf(p, e).ToList(); var c = e.Curve!; var mid = c.PointAt(0.5 * (c.T0 + c.T1));
+                return Math.Abs(Vector3d.Dot(Parametric3D.App.Operations.Topo.FaceNormal(p, fs[0], mid), Parametric3D.App.Operations.Topo.FaceNormal(p, fs[1], mid))) < 0.995;
+            }).ToList();
+            if (sharp.Count == 0) break;
+            var e0 = sharp[rnd.Next(sharp.Count)];
+            var chain = Parametric3D.App.Operations.Topo.TangentChain(e0, Parametric3D.App.Operations.Topo.AllEdges(p));
+            bool round = rnd.NextDouble() < 0.6; double size = Math.Round(3 + rnd.NextDouble() * 40);
+            Feature f;
+            if (round) { var rf = new RoundFeature { Radius = new ValueRef(size) }; foreach (var c in chain) rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(c)); f = rf; }
+            else { var cf = new ChamferFeature { Mode = ChamferKind.TwoDistances, D1 = new ValueRef(size), D2 = new ValueRef(size) }; foreach (var c in chain) cf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(c)); f = cf; }
+            p.AddFeature(f); p.Rebuild(null);
+            if (f.Error != null) { p.RemoveFeature(f); p.Rebuild(null); continue; }
+            log.Add($"{(round ? "R" : "C")}{size}x{chain.Count}@{e0.V0!.P.X:0},{e0.V0.P.Y:0},{e0.V0.P.Z:0}");
+        }
+        if (!preOk) continue;
+        double v0 = p.Bodies.Sum(b => Parametric3D.Kernel.Topology.AnalyticVolume.Of(b) ?? double.NaN);
+        double th = Math.Round((0.5 + rnd.NextDouble() * 9.5) * (rnd.NextDouble() < 0.6 ? 1 : -1), 2);
+        var faces = p.Bodies.SelectMany(b => b.Faces).ToList();
+        int mode = rnd.Next(4); // 0 — без открытой, 1–2 — плоская, 3 — любая
+        var sh = new ShellFeature("Shell") { Thickness = new ValueRef(th) };
+        string open = "none";
+        if (mode > 0)
+        {
+            var cand = mode < 3 ? faces.Where(f => Parametric3D.App.Operations.Refs.FacePlane(p, f.Id) != null).ToList() : faces;
+            var fo = cand[rnd.Next(cand.Count)];
+            if (Parametric3D.App.Operations.Refs.FacePoint(p, fo.Id) is { } fp) { sh.OpenFaces.Add(fp); sh.OpenFaceNames.Add(fo.Tag); open = (Parametric3D.App.Operations.Refs.FacePlane(p, fo.Id) != null ? "plane " : "curved ") + fo.Tag; }
+        }
+        // треугольники наружной поверхности до оболочки (без открытых граней) — для замера толщины стенки
+        var outerTris = new List<(Vector3d, Vector3d, Vector3d)>();
+        foreach (var fo in p.Bodies.SelectMany(b => b.Faces))
+        {
+            if (fo.Surface is not Parametric3D.Kernel.Surfaces.FacetedSurface fsx) continue;
+            bool isOpen = sh.OpenFaces.Any(q => fsx.Facets.ReadView.Any(tr => Parametric3D.Kernel.Ops.DirectRound.DistToTriangle(q, tr.Item1, tr.Item2, tr.Item3) < 1e-6));
+            if (!isOpen || th < 0) foreach (var tr in fsx.Facets.ReadView) outerTris.Add(tr);
+        }
+        p.AddFeature(sh);
+        var sw = System.Diagnostics.Stopwatch.StartNew(); p.Rebuild(null); double ms = sw.Elapsed.TotalMilliseconds; total += ms;
+        string thick = "";
+        if (sh.Error == null)
+        {
+            string tagW = th > 0 ? "shell:inner" : "shell:outer";
+            // каждая вершина внутренней поверхности (грани shell:inner, кроме продлений) — в t от наружной
+            double lo = double.MaxValue, hi = 0;
+            foreach (var b in p.Bodies)
+                foreach (var vx in b.Vertices)
+                {
+                    var fsV = b.Edges.Where(e => e.V0 == vx || e.V1 == vx).SelectMany(e => e.CoEdges.Select(c => c.Loop?.Face)).OfType<Parametric3D.Kernel.Topology.TFace>().Distinct().ToList();
+                    if (fsV.Count == 0 || !fsV.All(f => f.Tag.StartsWith(tagW))) continue;
+                    double dmin = outerTris.Min(tr => Parametric3D.Kernel.Ops.DirectRound.DistToTriangle(vx.P, tr.Item1, tr.Item2, tr.Item3));
+                    lo = Math.Min(lo, dmin); hi = Math.Max(hi, dmin);
+                }
+            double at = Math.Abs(th), chord = 0.05 + 0.01 * at;
+            if (lo != double.MaxValue && (lo < at - chord || hi > at + chord)) thick = $" WALL {lo:F3}..{hi:F3} (t {th})";
+        }
+        double v1 = p.Bodies.Sum(b => Parametric3D.Kernel.Topology.AnalyticVolume.Of(b) ?? double.NaN);
+        string w = p.Warnings.FirstOrDefault(x => x.StartsWith("Shell")) ?? "";
+        string res = sh.Error != null ? "FAIL " + w : (th > 0 ? v1 < v0 : v1 > 0) ? (w.Contains("exact") ? "ok exact" : "ok " + w) : $"BAD VOLUME {v0:F0}->{v1:F0} " + w;
+        res = System.Text.RegularExpressions.Regex.Replace(res, @"[-\d.]+(E[-+]\d+)?", "#"); if (res.Length > 200) res = res[..200];
+        if (thick != "") res = "THICKNESS " + res;
+        if (sh.Error != null) fails++;
+        string key = $"{(th > 0 ? "in" : "out")} {(mode == 0 ? "closed" : open.StartsWith("plane") ? "plane" : "curved")}: {res}";
+        var (n, sm, ex) = classes.GetValueOrDefault(key);
+        string example = $"t {th} open {open} ops {string.Join(" ", log)}{thick}";
+        classes[key] = (n + 1, sm + ms, ex ?? example);
+        if (Environment.GetEnvironmentVariable("P3D_SHOWALL") == "1" || ((sh.Error != null || thick != "") && Environment.GetEnvironmentVariable("P3D_SHOWFAIL") == "1")) Console.WriteLine($"   #{t} {ms,6:0} ms {key}\n        {example}");
+        if (sh.Error != null && Environment.GetEnvironmentVariable("P3D_SAVEDIR") is { } sd) { sh.Error = null; Parametric3D.Model.DocumentStorage.Save(Path.Combine(sd, $"shf{t}.p3d"), p); }
+    }
+    Console.WriteLine($"  trials {trials}: total {total:0} ms, fails {fails}");
+    foreach (var kv in classes.OrderByDescending(x => x.Value.N)) Console.WriteLine($"   {kv.Value.N,4} {kv.Value.Ms,8:0} ms  {kv.Key}\n        e.g. {kv.Value.Ex}");
 });
 
 if (Environment.GetEnvironmentVariable("P3D_BENCH") == "shellround")
@@ -1070,7 +1228,7 @@ Check("BENCH-FILE", () =>
     Parametric3D.Kernel.Ops.ShellOp.ShellDebug = Environment.GetEnvironmentVariable("P3D_DRDBG") == "1" ? m => Console.WriteLine("       shell: " + m) : null;
     part.Invalidate();
     var sw = System.Diagnostics.Stopwatch.StartNew(); part.Rebuild(pars);
-    Console.WriteLine($"  full rebuild {sw.Elapsed.TotalMilliseconds:0} ms");
+    Console.WriteLine($"  full rebuild {sw.Elapsed.TotalMilliseconds:0} ms, bodies {part.Bodies.Count}, volume {part.Bodies.Sum(b => Parametric3D.Kernel.Topology.AnalyticVolume.Of(b) ?? double.NaN):F3}, faces {part.Bodies.Sum(b => b.Faces.Count())}, valid {part.Bodies.All(b => Parametric3D.Kernel.Topology.SolidValidator.Validate(b).IsValid)}");
     foreach (var w in part.Warnings.Where(w => w.StartsWith("Shell"))) Console.WriteLine("   shellwarn " + (w.Length > 600 ? w[..600] : w));
     foreach (var f in part.Features) Console.WriteLine($"   {f.Name,-24} {part.LastFeatureMs.GetValueOrDefault(f),8:0} ms  {f.GetType().Name} {f.Error}");
     Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(30)));

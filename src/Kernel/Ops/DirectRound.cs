@@ -115,8 +115,9 @@ public static partial class DirectRound
         public TEdge? Orig;                                      // исходное ребро (если не изменено)
         public TEdge? Id;                                        // исходное ребро звена (сохраняется при укорачивании)
         public ICurve3? TrimOf;                                  // кривая — часть кривой ребра Id (укорочение, не новая)
+        public double Tol;                                       // u12b: допуск нового ребра (наследуется от ребра-образца)
         public bool Closed => (A - B).LengthSquared < 1e-24 && Curve is ArcCurve3 { IsClosed: true } or ProcCurve3 { IsClosed: true };
-        public Seg Clone() => new() { Curve = Curve, A = A, B = B, Orig = Orig, Id = Id, TrimOf = TrimOf };
+        public Seg Clone() => new() { Curve = Curve, A = A, B = B, Orig = Orig, Id = Id, TrimOf = TrimOf, Tol = Tol };
     }
     sealed class FDesc
     {
@@ -1838,6 +1839,7 @@ public static partial class DirectRound
                         bool curveFwd = (c0 - s.A).Length <= (c0 - s.B).Length;
                         found = new TEdge { V0 = curveFwd ? va : vb, V1 = curveFwd ? vb : va, Curve = cv };
                         if (s.Orig != null) { found.Tolerance = s.Orig.Tolerance; found.Tag = s.Orig.Tag; found.Attr = s.Orig.Attr; }
+                        if (s.Tol > found.Tolerance) found.Tolerance = s.Tol;
                         va.Edges.Add(found); if (vb != va) vb.Edges.Add(found);
                         edges.Add((found, mid));
                         rev = !curveFwd;

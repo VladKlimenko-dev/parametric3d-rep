@@ -44,11 +44,61 @@ public static class ShellOp
         string? whyOffset = null;
         // стенка наружу смещением всех граней (DirectRound.OffsetSolid): наружное — все грани наружу (открытые — на месте),
         // внутреннее — тело с открытыми гранями, вынесенными наружу. null — не вышло (причина в whyOffset).
+        // u12b: полость — тело, смещённое внутрь целиком, продлённое сквозь образы открытых граней (DirectRound.ExtendThroughOpen)
+        TSolid? ExtendCavity(IReadOnlyCollection<TFace> openFaces, ref string? whyE)
+        {
+            var innerAll = DirectRound.OffsetSolid(body, f => -thickness, "shell:inner", ref whyE);
+            List<TFace>? imgs = innerAll == null ? null : new List<TFace>();
+            if (innerAll != null)
+                foreach (var F in openFaces)
+                {
+                    var p0 = F.Loops[0].CoEdges[0].Start.P; var sF = GeometryAudit.AuthoritativeSurface(F)!;
+                    var nF = (sF.NormalAt(sF.ProjectToUV(p0)) * (Vector3d.Dot(sF.NormalAt(sF.ProjectToUV(p0)), F.NormalAt(p0)) < 0 ? -1 : 1)).Normalized(); var target = p0 - nF * thickness;
+                    var g = innerAll.Faces.FirstOrDefault(x => GeometryAudit.AuthoritativeSurface(x) is { IsPlanar: true } && x.Loops.Count > 0 && x.Loops[0].CoEdges.Count > 0
+                        && Vector3d.Dot(x.NormalAt(x.Loops[0].CoEdges[0].Start.P).Normalized(), nF) > 1 - 1e-9 && Math.Abs(Vector3d.Dot(x.Loops[0].CoEdges[0].Start.P - target, nF)) < 1e-7);
+                    if (g == null) { whyE = "the offset of an open face is not found"; imgs = null; break; }
+                    imgs!.Add(g);
+                }
+            return imgs == null ? null : DirectRound.ExtendThroughOpen(innerAll!, imgs, 2 * thickness, ref whyE, hMin: 1.02 * thickness);
+        }
         bool? OutwardByOffset(HashSet<TFace> openOut)
         {
             double t = -thickness;
-            var outerO = DirectRound.OffsetSolid(body, f => openOut.Contains(f) ? 0 : t, null, ref whyOffset);
+            var outerO = ForceOutBool ? null : DirectRound.OffsetSolid(body, f => openOut.Contains(f) ? 0 : t, null, ref whyOffset);
             var innerO = outerO == null ? null : openOut.Count == 0 ? body : DirectRound.OffsetSolid(body, f => openOut.Contains(f) ? t : 0, null, ref whyOffset);
+            // u12b: открытую грань не вынести наружу той же топологией (касательное к ней скругление остаётся на месте) — вычитается
+            // само тело: его открытая грань лежит в плоскости открытой грани наружного тела, и общая часть уходит вместе с ним
+            // (булева с совпадающими гранями). Мутация P3D_SHELLINNERBODY=0.
+            if (outerO != null && innerO == null && !InnerBodyOff) { innerO = body; whyOffset = null; }
+            if (outerO == null && openOut.Count > 0 && !OutBoolOff)
+            {
+                // u12b: открытая грань на месте не даёт наружного тела той же топологией (касательные к ней скругления, вершины
+                // нескольких лент) — стенка булевыми: всё тело наружу на t, срез плоскостью каждой открытой грани (стенка вровень с
+                // ней), минус тело, продлённое сквозь открытые грани. Мутация P3D_SHELLOUTBOOL=0.
+                string? w2 = null;
+                var all = DirectRound.OffsetSolid(body, f => t, null, ref w2);
+                var ext = all == null ? null : DirectRound.ExtendThroughOpen(body, openOut, 2 * t, ref w2, hMin: 1.02 * t);
+                if (all != null && ext != null)
+                {
+                    var res2 = new List<TSolid> { all };
+                    double big = 10 * (body.Bounds.Max - body.Bounds.Min).Length + 10 * t;
+                    foreach (var F in openOut)
+                    {
+                        var p0 = F.Loops[0].CoEdges[0].Start.P; var sF = GeometryAudit.AuthoritativeSurface(F)!;
+                        var nF = (sF.NormalAt(sF.ProjectToUV(p0)) * (Vector3d.Dot(sF.NormalAt(sF.ProjectToUV(p0)), F.NormalAt(p0)) < 0 ? -1 : 1)).Normalized();
+                        BooleanOp.Intersect(res2, HalfSpace(p0, -nF, big), warnings);
+                    }
+                    if (res2.Count > 0) BooleanOp.Subtract(res2, ext, warnings);
+                    if (res2.Count > 0)
+                    {
+                        foreach (var b in res2) foreach (var f in b.Faces) if (f.Tag.Length > 0 && !f.Tag.StartsWith("shell:")) f.Tag = "shell:outer:" + EdgeRef.Bare(f.Tag);
+                        bodies.RemoveAt(0); bodies.InsertRange(0, res2);
+                        warnings.Add($"Shell: wall {t:0.###} outward, by offsetting all faces, cut flush with the open face(s)" + (res2.All(b => b.Guarantee == GuaranteeLevel.ExactAnalytic) ? " (exact)." : "."));
+                        return true;
+                    }
+                }
+                ShellDebug?.Invoke("outward by booleans declined: " + w2);
+            }
             if (outerO == null || innerO == null) return null;
             foreach (var f in outerO.Faces) if (f.Tag.Length > 0 && !f.Tag.StartsWith("shell:")) f.Tag = "shell:outer:" + EdgeRef.Bare(f.Tag);
             var res = new List<TSolid> { outerO };
@@ -84,7 +134,9 @@ public static class ShellOp
                     }
                 }
                 double TT(TFace f) => own != null && own.TryGetValue(f, out var v) ? v : thickness;
-                var cavO = DirectRound.OffsetSolid(body, f => openFaces.Contains(f) ? TT(f) : -TT(f), "shell:inner", ref whyOffset);
+                // u12b: открытая грань выносится наружу лишь на четверть толщины — полости довольно выйти за неё; на всю толщину точка
+                // на касательном шве (фаска на дуге) уходила вдоль шва за вершину смещённого конуса. Мутация P3D_SHELLOPENPUSH=0.
+                var cavO = DirectRound.OffsetSolid(body, f => openFaces.Contains(f) ? OpenPush(TT(f)) : -TT(f), "shell:inner", ref whyOffset);
                 if (cavO != null)
                 {
                     BooleanOp.Subtract(bodies, cavO, warnings);
@@ -108,6 +160,19 @@ public static class ShellOp
                         return true;
                     }
                     ShellDebug?.Invoke("open face at blends declined: " + whyB);
+                    // u12b: открытая грань касается одних соседей и встречает других под углом — полость смещением тела,
+                    // продлённого сквозь открытую грань (DirectRound.ExtendThroughOpen). Мутация P3D_SHELLEXTEND=0.
+                    // Полость: тело, смещённое внутрь целиком (открытая грань тоже), продлённое сквозь образы открытых граней на 2t:
+                    // у касаний — стенка вдоль нормали (кромка, как у сборки «у сопряжений»), у острых рёбер — продолжение соседа.
+                    string? whyE = null;
+                    var cavE = ExtendCavity(openFaces, ref whyE);
+                    if (cavE != null)
+                    {
+                        BooleanOp.Subtract(bodies, cavE, warnings);
+                        warnings.Add($"Shell: wall {thickness:0.###}, cavity by offsetting all faces and extending it through the open face(s) (exact).");
+                        return true;
+                    }
+                    ShellDebug?.Invoke("extended body declined: " + whyE);
                 }
             }
         }
@@ -121,7 +186,7 @@ public static class ShellOp
             {
                 var cavT = OffsetBody(body, (f, pl, isOpen) => isOpen ? T(f, pl) : -T(f, pl), open, "shell:inner", ref why, -thickness);
                 // цилиндры с прямыми рёбрами (скруглённые вертикальные рёбра) — смещение всех граней (07.5)
-                bool byOffset = false;
+                bool byOffset = false, extended = false;
                 if (cavT == null && (faceThickness == null || !CurvedThickOff) && OffsetOpenFaces(body, open) is { } of2)
                 {
                     byOffset = true;
@@ -130,13 +195,21 @@ public static class ShellOp
                     foreach (var (at, tt) in faceThickness ?? Array.Empty<(Vector3d, double)>())
                         if (body.Faces.FirstOrDefault(f => OnAnyFace(f, at)) is { } hit2) own2[hit2] = Math.Abs(tt);
                     double TT2(TFace f) => own2.TryGetValue(f, out var v) ? v : thickness;
-                    cavT = DirectRound.OffsetSolid(body, f => of2.Contains(f) ? TT2(f) : -TT2(f), "shell:inner", ref whyOffset);
+                    cavT = DirectRound.OffsetSolid(body, f => of2.Contains(f) ? OpenPush(TT2(f)) : -TT2(f), "shell:inner", ref whyOffset);
                     if (cavT == null) ShellDebug?.Invoke("offset solid declined: " + whyOffset + "; plane offset: " + why);
+                    // u12b: открытая грань у скругления — полость продлением (быстрее и точнее пересечения полупространств)
+                    if (cavT == null && own2.Count == 0 && of2.Count > 0 && !ExtendPlanarOff)
+                    {
+                        string? whyE2 = null;
+                        cavT = ExtendCavity(of2, ref whyE2);
+                        if (cavT != null) extended = true; else ShellDebug?.Invoke("extended body declined: " + whyE2);
+                    }
                 }
                 if (cavT != null)
                 {
                     BooleanOp.Subtract(bodies, cavT, warnings);
-                    warnings.Add(byOffset ? $"Shell: wall {thickness:0.###}, cavity by offsetting all faces (exact)." : $"Shell: wall {thickness:0.###}, cavity by plane offset (exact).");
+                    warnings.Add(extended ? $"Shell: wall {thickness:0.###}, cavity by offsetting all faces and extending it through the open face(s) (exact)."
+                               : byOffset ? $"Shell: wall {thickness:0.###}, cavity by offsetting all faces (exact)." : $"Shell: wall {thickness:0.###}, cavity by plane offset (exact).");
                     return true;
                 }
             }
@@ -362,6 +435,13 @@ public static class ShellOp
         return true;
     }
 
+    /// <summary>Разбор: стенка наружу сразу булевыми (сверка с прямым путём).</summary>
+    static readonly bool ForceOutBool = Environment.GetEnvironmentVariable("P3D_SHELLOUTFORCEBOOL") == "1";
+    static readonly bool ExtendPlanarOff = Environment.GetEnvironmentVariable("P3D_SHELLEXTENDPLANAR") == "0";
+    static readonly bool OutBoolOff = Environment.GetEnvironmentVariable("P3D_SHELLOUTBOOL") == "0";
+    static readonly bool OpenPushOff = Environment.GetEnvironmentVariable("P3D_SHELLOPENPUSH") == "0";
+    static double OpenPush(double t) => OpenPushOff ? t : 0.25 * t;
+    static readonly bool InnerBodyOff = Environment.GetEnvironmentVariable("P3D_SHELLINNERBODY") == "0";
     static readonly bool SnapOff = Environment.GetEnvironmentVariable("P3D_SHELLSNAP") == "0";
     static Vector3d SnapToFace(TSolid body, Vector3d q)
     {
