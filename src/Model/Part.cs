@@ -133,6 +133,8 @@ public sealed class Part : ModelItem
     public readonly List<TSolid> Bodies = new();
     /// <summary>u13h: имена тел последнего расчёта (тела FreeForm); у параметрической детали — «Тело N».</summary>
     public readonly List<string> BodyNameList = new();
+    /// <summary>u13k: SubD-клетки тел последнего расчёта (по имени тела).</summary>
+    public readonly Dictionary<string, SubDCage> CagesByBody = new();
     /// <summary>u13h: документ — FreeForm-тело (отдельный файл): тела не объединяются, окружение FreeForm открыто сразу.</summary>
     public bool FreeFormDoc;
     /// <summary>u13h: FreeForm-документ вставлен в сборку или деталь — пересекающиеся тела объединяются (решение 2026-10-13).</summary>
@@ -445,6 +447,8 @@ public sealed class Part : ModelItem
         public readonly List<TSolid> Bodies = new();
         /// <summary>u13h: имена тел (FreeForm), по порядку Bodies.</summary>
         public readonly List<string> BodyNames = new();
+        /// <summary>u13k: SubD-клетки тел (по имени тела).</summary>
+        public readonly Dictionary<string, SubDCage> Cages = new();
         /// <summary>u13: квилты результата.</summary>
         public readonly List<Quilt> Quilts = new();
         /// <summary>Поставка 3: сколько граней получили сетку от донора (прежнего результата детали).</summary>
@@ -1068,6 +1072,7 @@ public sealed class Part : ModelItem
 
         result.Bodies.AddRange(ctx.Bodies);
         result.BodyNames.AddRange(ctx.Bodies.Select(ctx.NameOf));
+        foreach (var kv in ctx.Cages) if (result.BodyNames.Contains(kv.Key)) result.Cages[kv.Key] = kv.Value;
         result.Quilts.AddRange(ctx.Quilts);
         result.Warnings.AddRange(ctx.Warnings);
 
@@ -1297,6 +1302,8 @@ public sealed class Part : ModelItem
         Bodies.AddRange(r.Bodies);
         BodyNameList.Clear();
         BodyNameList.AddRange(r.BodyNames);
+        CagesByBody.Clear();
+        foreach (var kv in r.Cages) CagesByBody[kv.Key] = kv.Value;
         Warnings.Clear();
         Warnings.AddRange(r.Warnings);
         Downgrades.Clear();

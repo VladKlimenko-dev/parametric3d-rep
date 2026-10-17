@@ -80,15 +80,26 @@ public static class FFSurfaces
         return FFCurves.Solve(a, q.ToArray());
     }
 
+    /// <summary>Интерполяция сетки с РАВНОМЕРНЫМИ параметрами: узлы сетки — точки (i/n, j/m) поверхности (общие края лоскутов).</summary>
+    public static NurbsSurface InterpolateUniform(Vector3d[,] q, int pu = 3, int pv = 3) => Interpolate(q, pu, pv, uniform: true);
+
     /// <summary>Интерполяция сетки q[i, j] (i — вдоль u, j — вдоль v) NURBS-поверхностью степеней pu, pv.</summary>
-    public static NurbsSurface Interpolate(Vector3d[,] q, int pu = 3, int pv = 3)
+    public static NurbsSurface Interpolate(Vector3d[,] q, int pu = 3, int pv = 3, bool uniform = false)
     {
         int nu = q.GetLength(0), nv = q.GetLength(1);
         if (nu < 2 || nv < 2) throw new RebuildException(OperationOutcome.InvalidInput, "Surface: the point grid is smaller than 2×2.");
         pu = Math.Clamp(pu, 1, nu - 1); pv = Math.Clamp(pv, 1, nv - 1);
         var u = new double[nu]; var v = new double[nv];
-        for (int j = 0; j < nv; j++) { var col = Enumerable.Range(0, nu).Select(i => q[i, j]).ToList(); var cu = FFCurves.ChordParams(col); for (int i = 0; i < nu; i++) u[i] += cu[i] / nv; }
-        for (int i = 0; i < nu; i++) { var row = Enumerable.Range(0, nv).Select(j => q[i, j]).ToList(); var cv = FFCurves.ChordParams(row); for (int j = 0; j < nv; j++) v[j] += cv[j] / nu; }
+        if (uniform)
+        {
+            for (int i = 0; i < nu; i++) u[i] = (double)i / (nu - 1);
+            for (int j = 0; j < nv; j++) v[j] = (double)j / (nv - 1);
+        }
+        else
+        {
+            for (int j = 0; j < nv; j++) { var col = Enumerable.Range(0, nu).Select(i => q[i, j]).ToList(); var cu = FFCurves.ChordParams(col); for (int i = 0; i < nu; i++) u[i] += cu[i] / nv; }
+            for (int i = 0; i < nu; i++) { var row = Enumerable.Range(0, nv).Select(j => q[i, j]).ToList(); var cv = FFCurves.ChordParams(row); for (int j = 0; j < nv; j++) v[j] += cv[j] / nu; }
+        }
         u[0] = 0; u[^1] = 1; v[0] = 0; v[^1] = 1;
         var ku = Knots(u, pu); var kv = Knots(v, pv);
         var r = new Vector3d[nu, nv];

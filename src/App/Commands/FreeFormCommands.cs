@@ -103,6 +103,14 @@ public static class FreeFormCommands
         Op("ff.surf_flip", "Обратить нормаль", "Обратить", "ff_surf_flip_but.svg", () => new FFSurfaceOp { Mode = FFSurfMode.Flip }, "flip normal обратить нормаль");
         Op("ff.surf_stitch", "Сшить в тело", "Сшить", "ff_surf_stitch_but.svg", () => new FFStitchOp(), "stitch sew solid сшить тело");
 
+        // u13k: SubD
+        Op("subd.box", "SubD-клетка (новое тело)", "SubD-клетка", "subd_box_but.svg", () => new SubDOp { Mode = SubDMode.Box }, "subd cage box subdivision клетка подразделение");
+        Op("subd.extrude", "Выдавить грани клетки", "Выдавить грани", "subd_extrude_but.svg", () => new SubDOp { Mode = SubDMode.Extrude }, "subd extrude faces выдавить грани клетки");
+        Op("subd.edge_loop", "Добавить петлю рёбер", "Петля рёбер", "subd_edge_loop_but.svg", () => new SubDOp { Mode = SubDMode.EdgeLoop }, "subd edge loop cut петля рёбер");
+        Op("subd.crease", "Складка (резкое ребро)", "Складка", "subd_crease_but.svg", () => new SubDOp { Mode = SubDMode.Crease }, "subd crease sharp складка резкое ребро");
+        Op("subd.smooth_level", "Уровень сглаживания", "Уровень", "subd_smooth_level_but.svg", () => new SubDOp { Mode = SubDMode.Level }, "subd smooth level уровень сглаживания");
+        Op("subd.to_nurbs", "Преобразовать в NURBS-тело", "В NURBS", "subd_to_nurbs_but.svg", () => new SubDOp { Mode = SubDMode.ToNurbs }, "subd to nurbs convert преобразовать nurbs");
+
         Op("ff.mirror", "Зеркало тел", "Зеркало", "ff_mirror_but.svg", () => new FFMirrorOp { Mode = FFMirrorMode.Copy }, "mirror copy зеркало отражение");
         Op("ff.symmetry", "Симметрия (живая половина)", "Симметрия", "ff_symmetry_but.svg", () => new FFMirrorOp { Mode = FFMirrorMode.Symmetry }, "symmetry live mirror симметрия половина");
         Op("ff.array_linear", "Прямоугольный массив тел", "Массив", "ff_array_linear_but.svg", () => new FFArrayOp { Kind = FFArrayKind.Linear }, "array linear rectangular массив прямоугольный");
@@ -170,7 +178,7 @@ public static class FreeFormCommands
         _savedGrid = w.ViewPort.ModelGrid;
         w.ViewPort.GridFrame = part.ConstructionPlane;
         w.ViewPort.ModelGrid = true;
-        if (rebuildUi) { w.RebuildUi(); w.RebuildTree(); w.ViewPort.MarkDirty(); }
+        if (rebuildUi) { w.RebuildUi(); w.RebuildTree(); w.UpdateCages(); w.ViewPort.MarkDirty(); }
     }
     private static int _savedStage = -1;
     private static bool _savedGrid;
@@ -186,7 +194,7 @@ public static class FreeFormCommands
         part.Invalidate();
         w.ViewPort.ModelGrid = _savedGrid;
         w.ViewPort.GridFrame = Frame3.XY;
-        w.RebuildUi(); w.RebuildTree(); w.ViewPort.MarkDirty();
+        w.RebuildUi(); w.RebuildTree(); w.UpdateCages(); w.ViewPort.MarkDirty();
     }
 
     /// <summary>«Править в FreeForm»: узел FreeForm после всех операций детали, вход — её тело (подпись и копия запоминаются).</summary>
