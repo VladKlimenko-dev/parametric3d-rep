@@ -451,6 +451,36 @@ public static class DocumentFile
             d.FaceNames = ct.OnFaceNames.Count > 0 ? ct.OnFaceNames.ToList() : null;
         }),
 
+        SurfaceFeature sf => Dto("surface", sf, d =>
+        {
+            PutS(d, "mode", sf.Mode.ToString()); d.SketchId = sf.SketchId; d.AxisEntityId = sf.AxisEntityId; PutV(d, "depth", sf.Depth); PutV(d, "angle", sf.Angle);
+            if (sf.Flip) Flag(d, "flip");
+            d.OpenFaces = sf.OnFaces.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList();
+            d.FaceNames = sf.OnFaceNames.Count > 0 ? sf.OnFaceNames.ToList() : null;
+        }),
+        QuiltEditFeature qe => Dto("quilt_edit", qe, d =>
+        {
+            PutS(d, "mode", qe.Mode.ToString()); d.Sources = qe.Sources.ToList(); PutV(d, "distance", qe.Distance);
+            d.Point = new[] { qe.PlaneAt.X, qe.PlaneAt.Y, qe.PlaneAt.Z }; d.Dir = new[] { qe.PlaneNormal.X, qe.PlaneNormal.Y, qe.PlaneNormal.Z };
+            if (qe.Flip) Flag(d, "flip");
+        }),
+        QuiltSolidFeature qs => Dto("quilt_solid", qs, d =>
+        {
+            PutS(d, "mode", qs.Mode.ToString()); PutS(d, "source", qs.Source); PutV(d, "thickness", qs.Thickness);
+            if (qs.Flip) Flag(d, "flip");
+            d.OpenFaces = qs.OnFaces.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList();
+            d.FaceNames = qs.OnFaceNames.Count > 0 ? qs.OnFaceNames.ToList() : null;
+        }),
+        BlendFeature bf => Dto("blend", bf, d =>
+        {
+            PutS(d, "mode", bf.Mode.ToString()); d.Sections = bf.SectionSketchIds.ToList(); d.PathSketchId = bf.PathSketchId; d.AxisEntityId = bf.AxisEntityId;
+            if (bf.AsSurface) Flag(d, "surface");
+            (d.Num ??= new())["steps"] = bf.Steps; d.Num["points"] = bf.Points;
+        }),
+        InsertBodyFeature ib => Dto("insert_body", ib, d =>
+        {
+            PutS(d, "step", ib.Step); PutS(d, "source", ib.SourceName); d.Point = new[] { ib.Offset.X, ib.Offset.Y, ib.Offset.Z };
+        }),
         HelicalSweepFeature hs => Dto("helical_sweep", hs, d =>
         {
             d.SketchId = hs.SketchId; d.AxisId = hs.AxisId; d.AxisEntityId = hs.AxisEntityId;
@@ -839,6 +869,49 @@ public static class DocumentFile
                     for (int i = 0; i + 2 < fd.OpenFaces.Count; i += 3) ct.OnFaces.Add(new Vector3d(fd.OpenFaces[i], fd.OpenFaces[i + 1], fd.OpenFaces[i + 2]));
                     if (fd.FaceNames != null) ct.OnFaceNames.AddRange(fd.FaceNames);
                     part.AddFeature(ct);
+                    break;
+                }
+                case "surface":
+                {
+                    var sf = new SurfaceFeature(fd.Name) { Suppressed = fd.Suppressed, Depth = GetV(fd, "depth", 20), Angle = GetV(fd, "angle", 360), AxisEntityId = fd.AxisEntityId, Flip = HasFlag(fd, "flip") };
+                    if (Enum.TryParse<SurfaceKind>(GetS(fd, "mode"), out var sm)) sf.Mode = sm;
+                    if (sketchById.TryGetValue(fd.SketchId, out var ssk)) sf.SketchId = ssk.Id;
+                    for (int i = 0; i + 2 < fd.OpenFaces.Count; i += 3) sf.OnFaces.Add(new Vector3d(fd.OpenFaces[i], fd.OpenFaces[i + 1], fd.OpenFaces[i + 2]));
+                    if (fd.FaceNames != null) sf.OnFaceNames.AddRange(fd.FaceNames);
+                    part.AddFeature(sf);
+                    break;
+                }
+                case "quilt_edit":
+                {
+                    var qe = new QuiltEditFeature(fd.Name) { Suppressed = fd.Suppressed, Distance = GetV(fd, "distance", 5), PlaneAt = Vec(fd.Point), Flip = HasFlag(fd, "flip") };
+                    var qn = Vec(fd.Dir); if (qn.LengthSquared > 1e-18) qe.PlaneNormal = qn;
+                    if (Enum.TryParse<QuiltEditKind>(GetS(fd, "mode"), out var qm)) qe.Mode = qm;
+                    if (fd.Sources != null) qe.Sources.AddRange(fd.Sources);
+                    part.AddFeature(qe);
+                    break;
+                }
+                case "quilt_solid":
+                {
+                    var qs = new QuiltSolidFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut, Source = GetS(fd, "source") ?? "", Thickness = GetV(fd, "thickness", 2), Flip = HasFlag(fd, "flip") };
+                    if (Enum.TryParse<QuiltSolidKind>(GetS(fd, "mode"), out var sm2)) qs.Mode = sm2;
+                    for (int i = 0; i + 2 < fd.OpenFaces.Count; i += 3) qs.OnFaces.Add(new Vector3d(fd.OpenFaces[i], fd.OpenFaces[i + 1], fd.OpenFaces[i + 2]));
+                    if (fd.FaceNames != null) qs.OnFaceNames.AddRange(fd.FaceNames);
+                    part.AddFeature(qs);
+                    break;
+                }
+                case "blend":
+                {
+                    var bf = new BlendFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut, AxisEntityId = fd.AxisEntityId, AsSurface = HasFlag(fd, "surface"), Steps = (int)GetD(fd, "steps", 16), Points = (int)GetD(fd, "points", 48) };
+                    if (Enum.TryParse<BlendKind>(GetS(fd, "mode"), out var bm)) bf.Mode = bm;
+                    foreach (uint old in fd.Sections) if (sketchById.TryGetValue(old, out var bs)) bf.SectionSketchIds.Add(bs.Id);
+                    if (sketchById.TryGetValue(fd.PathSketchId, out var bp)) bf.PathSketchId = bp.Id;
+                    part.AddFeature(bf);
+                    break;
+                }
+                case "insert_body":
+                {
+                    var ib = new InsertBodyFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut, Step = GetS(fd, "step") ?? "", SourceName = GetS(fd, "source") ?? "", Offset = Vec(fd.Point) };
+                    part.AddFeature(ib);
                     break;
                 }
                 case "helical_sweep":

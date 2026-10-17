@@ -456,7 +456,8 @@ public partial class MainWindow : Window
             : new[]
             {
                 (new[] { "op.sketch" }, Array.Empty<string>()),
-                (new[] { "op.extrude", "op.cut", "op.revolve" }, new[] { "op.extrude_thin", "op.sweep", "op.helical_sweep", "op.loft", "op.rib" }),
+                (new[] { "op.extrude", "op.cut", "op.revolve" }, new[] { "op.extrude_thin", "op.sweep", "op.helical_sweep", "op.loft", "op.boundary_blend", "op.swept_blend", "op.rotational_blend", "op.rib", "op.insert_body" }),
+                (Array.Empty<string>(), new[] { "op.surface_extrude", "op.surface_revolve", "op.fill", "op.surf_copy", "op.surf_offset", "op.surf_merge", "op.surf_trim", "op.surf_extend", "op.thicken", "op.surf_solidify", "op.replace_face" }),
                 (new[] { "op.hole", "op.round", "op.chamfer", "op.shell" }, new[] { "op.round_variable", "op.full_round", "op.vertex_round", "op.vertex_chamfer", "op.draft", "op.hole_coaxial", "op.hole_radial", "op.thread" }),
                 (Array.Empty<string>(), new[] { "op.face_offset", "op.face_move", "op.face_radius", "op.face_delete", "op.move_copy" }),
                 (Array.Empty<string>(), new[] { "an.measure", "an.area", "an.perimeter", "an.mass", "an.zebra", "an.curvature", "an.check_body", "an.heal" }),
@@ -478,7 +479,7 @@ public partial class MainWindow : Window
                 // u13: группа без основных кнопок — подпись группы вместо «Ещё…»
                 string moreLabel = groups[g].Main.Length > 0 ? "Ещё…" : groups[g].More[0] switch
                 {
-                    "op.face_offset" => "Прямая правка ▸", "an.measure" => "Анализ ▸", "tree.rebuild" => "Дерево ▸", _ => "Ещё…",
+                    "op.face_offset" => "Прямая правка ▸", "an.measure" => "Анализ ▸", "tree.rebuild" => "Дерево ▸", "op.surface_extrude" => "Поверхности ▸", _ => "Ещё…",
                 };
                 var b = new Button { Content = L(moreLabel), Classes = { "tool" }, MinWidth = 128, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 2) };
                 b.Click += (_, _) =>

@@ -72,6 +72,9 @@ public sealed class BuildContext
     public readonly Dictionary<string, Frame3> Planes = new();
     public readonly Dictionary<string, (Vector3d At, Vector3d Dir)> Axes = new();
     public readonly Dictionary<string, Vector3d> Points = new();
+    /// <summary>u13: квилты (поверхности без объёма), построенные к текущему шагу: по ключу создавшей операции.</summary>
+    public readonly List<Quilt> Quilts = new();
+    public Quilt? QuiltByKey(string key) => Quilts.LastOrDefault(q => q.Key == key);
 
     /// <summary>
     /// СНИМОК СОСТОЯНИЯ ПЕРЕД ОПЕРАЦИЕЙ. Операция может изменить тела и вспомогательную
@@ -89,10 +92,12 @@ public sealed class BuildContext
         public readonly Dictionary<string, Frame3> Planes;
         public readonly Dictionary<string, (Vector3d At, Vector3d Dir)> Axes;
         public readonly Dictionary<string, Vector3d> Points;
+        public readonly List<Quilt> Quilts;
 
         internal Snapshot(BuildContext c)
         {
             Bodies = new List<TSolid>(c.Bodies);
+            Quilts = new List<Quilt>(c.Quilts);
             Warnings = c.Warnings.Count;
             Planes = new Dictionary<string, Frame3>(c.Planes);
             Axes = new Dictionary<string, (Vector3d, Vector3d)>(c.Axes);
@@ -120,6 +125,9 @@ public sealed class BuildContext
 
         Points.Clear();
         foreach (var kv in s.Points) Points[kv.Key] = kv.Value;
+
+        Quilts.Clear();
+        Quilts.AddRange(s.Quilts);
     }
 
     /// <summary>Плоскость по имени; пустое имя означает XY детали.</summary>

@@ -813,6 +813,114 @@ Check("UI-U13E-DATUMS-HOLES", () =>
 });
 Vector3d V(OpenTK.Mathematics.Vector3 v) => new(v.X, v.Y, v.Z);
 
+// u13f: поверхности (квилты): выдавливание, вращение, заливка, копия, смещение, обрезка, продление, объединение,
+// утолщение, отверждение, замена грани; переходы граничный, с протяжкой и вращением; вставка тела
+Check("UI-U13F-SURFACES", () =>
+{
+    var s = DocumentSession.NewPart(); var w = Open(s); var part = s.Part!;
+    double QArea(string key) => Parametric3D.Model.Features.QuiltUtilT.Area(part.Quilts.First(q => q.Key == key));
+    // поверхность выдавливанием незамкнутого отрезка 20 на 10 → 200; утолщение 2 → 20·10·2
+    var ln = DrawSketch(w, part, part.PlaneXY, sk => { var l = new LineTool(chain: false); l.Click(new SketchInput(sk, Vector2d.Zero, null)); l.Click(new SketchInput(sk, new Vector2d(20, 0), null)); });
+    var se = new SurfaceFeature { SketchId = ln.Id, Depth = new ValueRef(10) }; part.AddFeature(se); s.Document.RebuildDirty();
+    Console.WriteLine($"  surface extrude: error {se.Error}, quilts {part.Quilts.Count}, area {QArea(se.Key):F6}");
+    Require(se.Error == null && Math.Abs(QArea(se.Key) - 200) < 1e-6, "surface extrude");
+    Require(part.Mesh != null && part.Mesh.Indices.Length > 0, "quilt mesh shown");
+    var th = new QuiltSolidFeature { Source = se.Key, Thickness = new ValueRef(2) }; part.AddFeature(th); s.Document.RebuildDirty();
+    Console.WriteLine($"  thicken: error {th.Error}, volume {part.Volume:F6}");
+    Require(th.Error == null && Math.Abs(part.Volume - 400) < 1e-6, "thicken");
+    part.RemoveFeature(th); s.Document.RebuildDirty();
+    // продление на 5 — площадь больше
+    var ex = new QuiltEditFeature { Mode = QuiltEditKind.Extend, Distance = new ValueRef(5) }; ex.Sources.Add(se.Key); part.AddFeature(ex); s.Document.RebuildDirty();
+    Console.WriteLine($"  extend: error {ex.Error}, area {(ex.Error == null ? QArea(ex.Key) : 0):F4}");
+    Require(ex.Error == null && QArea(ex.Key) > 200 + 2 * 5 * 20 - 1e-6, "extend");
+    part.RemoveFeature(ex); part.RemoveFeature(se); s.Document.RebuildDirty();
+
+    // заливка 20×10 → утолщение 3 = 600; обрезка по x = 5 → 50 (другая сторона — 150)
+    var fs = DrawSketch(w, part, part.PlaneXY, sk => Rect(sk, 0, 0, 20, 10));
+    var fill = new SurfaceFeature { Mode = SurfaceKind.Fill, SketchId = fs.Id }; part.AddFeature(fill); s.Document.RebuildDirty();
+    if (Environment.GetEnvironmentVariable("P3D_SAVE_SURF") is { } sp) File.WriteAllText(sp, Parametric3D.Model.DocumentFile.Save(part, s.Document.ScopeFor(part)));
+    Require(fill.Error == null && Math.Abs(QArea(fill.Key) - 200) < 1e-6, $"fill {fill.Error}");
+    var tr = new QuiltEditFeature { Mode = QuiltEditKind.Trim, PlaneAt = new Vector3d(5, 0, 0), PlaneNormal = Vector3d.UnitX }; tr.Sources.Add(fill.Key); part.AddFeature(tr); s.Document.RebuildDirty();
+    Console.WriteLine($"  trim: error {tr.Error}, area {(tr.Error == null ? QArea(tr.Key) : 0):F6}");
+    Require(tr.Error == null && Math.Abs(QArea(tr.Key) - 50) < 1e-6, "trim");
+    var th2 = new QuiltSolidFeature { Source = tr.Key, Thickness = new ValueRef(3) }; part.AddFeature(th2); s.Document.RebuildDirty();
+    Console.WriteLine($"  thicken fill: error {th2.Error}, volume {part.Volume:F6}");
+    Require(th2.Error == null && Math.Abs(part.Volume - 150) < 1e-6, "thicken trimmed fill");
+    part.RemoveFeature(th2); part.RemoveFeature(tr); part.RemoveFeature(fill); s.Document.RebuildDirty();
+
+    // поверхность вращением: образующая x = 10 высотой 20 вокруг оси → цилиндр, площадь 2π·10·20; утолщение 2 внутрь
+    var rv = DrawSketch(w, part, part.PlaneXZ, sk =>
+    {
+        var l = new LineTool(chain: false); l.Click(new SketchInput(sk, new Vector2d(10, 0), null)); l.Click(new SketchInput(sk, new Vector2d(10, 20), null));
+        var c = new LineTool(chain: false); c.Click(new SketchInput(sk, new Vector2d(0, -5), null)); c.Click(new SketchInput(sk, new Vector2d(0, 25), null));
+        sk.Entities.OfType<SkLine>().Last().Role = SkRole.Centerline;
+    });
+    var sr = new SurfaceFeature { Mode = SurfaceKind.Revolve, SketchId = rv.Id }; part.AddFeature(sr); s.Document.RebuildDirty();
+    Console.WriteLine($"  surface revolve: error {sr.Error}, area {(sr.Error == null ? QArea(sr.Key) : 0):F4}");
+    Require(sr.Error == null && Math.Abs(QArea(sr.Key) - 2 * Math.PI * 200) < 1e-3 * 1256, "surface revolve");
+    var th3 = new QuiltSolidFeature { Source = sr.Key, Thickness = new ValueRef(2) }; part.AddFeature(th3); s.Document.RebuildDirty();
+    Console.WriteLine($"  thicken cylinder: error {th3.Error}, volume {part.Volume:F4} want {Math.PI * 36 * 20:F4}; parent faces {string.Join(",", part.Quilts.FirstOrDefault()?.Parent.Faces.Select(f => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name) ?? new string[0])}; {string.Join(" | ", part.Warnings.TakeLast(4))}");
+    Require(th3.Error == null && Math.Abs(part.Volume - Math.PI * 36 * 20) < 1e-6 * 2262, "thicken cylinder");
+    part.RemoveFeature(th3); part.RemoveFeature(sr); s.Document.RebuildDirty();
+    w.Close();
+
+    // брусок: копия верхней грани и смещение на 5; замена верхней грани заливкой на высоте 15
+    var s2 = DocumentSession.NewPart(); var w2 = Open(s2); var p2 = s2.Part!;
+    var b = DrawSketch(w2, p2, p2.PlaneXY, sk => Rect(sk, 0, 0, 40, 20));
+    var e = new ExtrudeFeature { SketchId = b.Id }; e.Side1.Distance = new ValueRef(10); p2.AddFeature(e); s2.Document.RebuildDirty(); p2.Rebuild(null);
+    var top = p2.Bodies[0].Faces.First(f => Refs.FacePlane(p2, f.Id) is { } pl && pl.N.Z > 0.99);
+    var cp = new SurfaceFeature { Mode = SurfaceKind.Copy }; cp.OnFaces.Add(Parametric3D.Model.Features.FaceRefs.Inside(top)); p2.AddFeature(cp);
+    var of = new QuiltEditFeature { Mode = QuiltEditKind.Offset, Distance = new ValueRef(5) }; of.Sources.Add(cp.Key); p2.AddFeature(of); s2.Document.RebuildDirty();
+    var oq = p2.Quilts.First(q => q.Key == of.Key);
+    var oz = oq.Faces.SelectMany(f => f.Loops.SelectMany(l => l.CoEdges)).Select(c => c.Start.P.Z).ToList();
+    Console.WriteLine($"  offset copy: error {cp.Error}/{of.Error}, area {Parametric3D.Model.Features.QuiltUtilT.Area(oq):F4}, z {oz.Min():F4}..{oz.Max():F4}");
+    Require(cp.Error == null && of.Error == null && Math.Abs(Parametric3D.Model.Features.QuiltUtilT.Area(oq) - 800) < 1e-6 && oz.All(z => Math.Abs(z - 15) < 1e-9), "offset surface");
+    p2.RemoveFeature(of); p2.RemoveFeature(cp);
+    var pl15 = new DatumPlane("P15", Parametric3D.Kernel.Frame3.XY.Translated(new Vector3d(0, 0, 15))); p2.Add(pl15);
+    var big = DrawSketch(w2, p2, pl15, sk => Rect(sk, -10, -10, 50, 30));
+    var f15 = new SurfaceFeature { Mode = SurfaceKind.Fill, SketchId = big.Id }; p2.AddFeature(f15); s2.Document.RebuildDirty(); p2.Rebuild(null);
+    top = p2.Bodies[0].Faces.First(f => Refs.FacePlane(p2, f.Id) is { } pl && pl.N.Z > 0.99 && Math.Abs(pl.P.Z - 10) < 1e-9);
+    var rp = new QuiltSolidFeature { Mode = QuiltSolidKind.ReplaceFace, Source = f15.Key }; rp.OnFaces.Add(Parametric3D.Model.Features.FaceRefs.Inside(top)); p2.AddFeature(rp); s2.Document.RebuildDirty();
+    Console.WriteLine($"  replace face: error {rp.Error}, volume {p2.Volume:F6}; {string.Join(" | ", p2.Warnings.Where(x => x.Contains("dbg")))}");
+    Require(rp.Error == null && Math.Abs(p2.Volume - 12000) < 1e-6, "replace face");
+    // вставка тела: копия бруска со сдвигом по X на 100 — объём удваивается
+    var step = Parametric3D.Model.Exchange.Write(p2, Parametric3D.Model.Exchange.Format.Step);
+    var ib = new InsertBodyFeature { Step = step, SourceName = "box", Offset = new Vector3d(100, 0, 0) }; p2.AddFeature(ib); s2.Document.RebuildDirty();
+    Console.WriteLine($"  insert body: error {ib.Error}, volume {p2.Volume:F4}");
+    Require(ib.Error == null && Math.Abs(p2.Volume - 24000) < 1e-3, "insert body");
+    var json = Parametric3D.Model.DocumentFile.Save(p2, s2.Document.ScopeFor(p2));
+    var (p3, _) = Parametric3D.Model.DocumentFile.Load(json);
+    Require(p3.Features.OfType<QuiltSolidFeature>().Count() == 1 && p3.Features.OfType<InsertBodyFeature>().Single().Step.Length == step.Length, "saved");
+    w2.Close();
+
+    // переходы
+    var s4 = DocumentSession.NewPart(); var w4 = Open(s4); var p4 = s4.Part!;
+    var a = DrawSketch(w4, p4, p4.PlaneXY, sk => Rect(sk, -10, -10, 10, 10));
+    var p40 = new DatumPlane("P40", Parametric3D.Kernel.Frame3.FromNormal(new Vector3d(0, 0, 40), Vector3d.UnitZ)); p4.Add(p40);
+    var b4 = DrawSketch(w4, p4, p40, sk => Rect(sk, -5, -5, 5, 5));
+    var bb = new BlendFeature { Mode = BlendKind.Boundary }; bb.SectionSketchIds.Add(a.Id); bb.SectionSketchIds.Add(b4.Id); p4.AddFeature(bb); s4.Document.RebuildDirty();
+    Console.WriteLine($"  boundary blend: error {bb.Error}, volume {p4.Volume:F4}");
+    Require(bb.Error == null && Math.Abs(p4.Volume - 40.0 / 3 * 700) < 1e-6 * 9333, "boundary blend");
+    p4.RemoveFeature(bb); s4.Document.RebuildDirty();
+    // с протяжкой: круги r5 и r2 на концах прямой траектории 40 → усечённый конус
+    var c0 = DrawSketch(w4, p4, p4.PlaneXY, sk => { var c = new CircleTool(); c.Click(new SketchInput(sk, Vector2d.Zero, null)); c.Click(new SketchInput(sk, new Vector2d(5, 0), null)); });
+    var c1 = DrawSketch(w4, p4, p40, sk => { var c = new CircleTool(); c.Click(new SketchInput(sk, Vector2d.Zero, null)); c.Click(new SketchInput(sk, new Vector2d(2, 0), null)); });
+    var path = DrawSketch(w4, p4, p4.PlaneXZ, sk => { var l = new LineTool(chain: false); l.Click(new SketchInput(sk, Vector2d.Zero, null)); l.Click(new SketchInput(sk, new Vector2d(0, 40), null)); });
+    var sb = new BlendFeature { Mode = BlendKind.Swept, PathSketchId = path.Id }; sb.SectionSketchIds.Add(c0.Id); sb.SectionSketchIds.Add(c1.Id); p4.AddFeature(sb); s4.Document.RebuildDirty();
+    double cone = Math.PI / 3 * 40 * (25 + 10 + 4);
+    Console.WriteLine($"  swept blend: error {sb.Error}, volume {p4.Volume:F4} want {cone:F4}");
+    Require(sb.Error == null && Math.Abs(p4.Volume - cone) < 0.01 * cone, "swept blend");
+    p4.RemoveFeature(sb); s4.Document.RebuildDirty();
+    // вращением: квадраты 5×5 на радиусе 20–25 в плоскостях XZ и YZ (90°) — по Паппу 25·(π/2)·22.5
+    var q0 = DrawSketch(w4, p4, p4.PlaneXZ, sk => { Rect(sk, 20, 0, 25, 5); var l = new LineTool(chain: false); l.Click(new SketchInput(sk, new Vector2d(0, -5), null)); l.Click(new SketchInput(sk, new Vector2d(0, 10), null)); sk.Entities.OfType<SkLine>().Last().Role = SkRole.Centerline; });
+    var q1 = DrawSketch(w4, p4, p4.PlaneYZ, sk => Rect(sk, 20, 0, 25, 5));
+    var rb = new BlendFeature { Mode = BlendKind.Rotational }; rb.SectionSketchIds.Add(q0.Id); rb.SectionSketchIds.Add(q1.Id); p4.AddFeature(rb); s4.Document.RebuildDirty();
+    double pap = 25 * Math.PI / 2 * 22.5;
+    Console.WriteLine($"  rotational blend: error {rb.Error}, volume {p4.Volume:F4} want {pap:F4}");
+    Require(rb.Error == null && Math.Abs(p4.Volume - pap) < 0.02 * pap, "rotational blend");
+    w4.Close();
+});
+
 // u13: опорные элементы кнопок (плоскость посередине и касательная, ось грани, точка в центре дуги) и уклон
 Check("UI-U13-DATUMS-DRAFT", () =>
 {

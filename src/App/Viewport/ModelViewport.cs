@@ -319,10 +319,16 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         if (_doc != null)
             foreach (var f in _doc.Root.Descendants().OfType<Feature>())
                 if (f.Error != null) foreach (var id in f.CreatedFaceIds) Set(id, 8);
+        // u13: грани квилтов (поверхностей) — признак 16 (оттенок поверхности)
+        if (_doc != null)
+            foreach (var p in _doc.AllParts())
+                foreach (var q in p.Quilts) foreach (var sq in Simple(q)) foreach (var f in sq.Faces) Set(f.Id, 16);
         foreach (var r in Selection.Items) SetRef(r, 2);
         if (!Selection.Hover.IsEmpty && !Selection.Contains(Selection.Hover.Id)) SetRef(Selection.Hover, 1);
         if (_treeHover != null) SetItem(_treeHover, 1);
     }
+
+    private static IEnumerable<Quilt> Simple(Quilt q) => q.Parts.Count > 0 ? q.Parts.SelectMany(Simple) : new[] { q };
 
     private void Set(uint id, byte flag)
     {
