@@ -46,8 +46,40 @@ public sealed class DocumentSession
 
     public string Title => FilePath != null ? Path.GetFileNameWithoutExtension(FilePath) : Document.Title;
 
-    /// <summary>Деталь документа (у документа сборки — первая деталь, если есть).</summary>
-    public Part? Part => Document.AllParts().FirstOrDefault();
+    /// <summary>Деталь документа (у документа сборки — компонент, правимый в контексте, иначе первая деталь).</summary>
+    public Part? Part => ActivePart != null && Document.AllParts().Contains(ActivePart) ? ActivePart : (IsAssembly ? null : Document.AllParts().FirstOrDefault());
+
+    /// <summary>u13: документ сборки (компоненты — детали корня).</summary>
+    public bool IsAssembly { get; private set; }
+    public Assembly RootAssembly => Document.Root;
+    /// <summary>u13: компонент, правимый в контексте сборки (null — режим сборки).</summary>
+    public Part? ActivePart { get; set; }
+    public const string AssemblyExtension = ".p3a";
+
+    /// <summary>u13: новая сборка — пустой корень с плоскостями.</summary>
+    public static DocumentSession NewAssembly()
+    {
+        string name = Loc.L("Сборка") + (++_counter);
+        var doc = new Document(name);
+        return new DocumentSession(doc, null) { IsAssembly = true };
+    }
+
+    /// <summary>u13: открыть сборку (.p3a): компоненты — в корень документа.</summary>
+    public static DocumentSession OpenAssembly(string path)
+    {
+        var (asm, parameters) = AssemblyFile.Load(File.ReadAllText(path));
+        var doc = new Document(Path.GetFileNameWithoutExtension(path));
+        MoveInto(asm, doc.Root);
+        CopyParameters(parameters, doc.Parameters);
+        doc.FilePath = path;
+        return new DocumentSession(doc, path) { IsAssembly = true, Modified = false };
+    }
+
+    static void MoveInto(Assembly from, Assembly to)
+    {
+        foreach (var c in from.Children.Where(c => c is Parametric3D.Model.Part or Parametric3D.Model.Assembly).ToList()) { from.Children.Remove(c); c.Parent = null; to.Add(c); }
+        to.ExplodedViews.Clear(); to.ExplodedViews.AddRange(from.ExplodedViews);
+    }
 
     // ================================================================ создание и файлы
 
@@ -83,6 +115,7 @@ public sealed class DocumentSession
 
     public static DocumentSession Open(string path)
     {
+        if (path.EndsWith(AssemblyExtension, StringComparison.OrdinalIgnoreCase)) return OpenAssembly(path);
         var (part, parameters) = DocumentStorage.Load(path);
         var doc = new Document(Path.GetFileNameWithoutExtension(path));
         doc.Root.Add(part);
@@ -108,8 +141,12 @@ public sealed class DocumentSession
 
     public void SaveAs(string path)
     {
-        var part = Part ?? throw new InvalidOperationException("the document has no part");
-        DocumentStorage.Save(path, part, Document.Parameters);
+        if (IsAssembly) DocumentStorage.WriteAtomic(path, AssemblyFile.Save(Document.Root, Document.Parameters));
+        else
+        {
+            var part = Part ?? throw new InvalidOperationException("the document has no part");
+            DocumentStorage.Save(path, part, Document.Parameters);
+        }
         FilePath = path;
         Document.FilePath = path;
         Modified = false;
@@ -140,6 +177,12 @@ public sealed class DocumentSession
     /// <summary>Начать правку, которая длится (панель операции, эскиз): снимок до неё — один шаг отмены.</summary>
     public void BeginEdit(string name)
     {
+        if (IsAssembly)
+        {
+            _asmUndo.Add(AssemblyFile.Save(Document.Root, Document.Parameters)); _asmRedo.Clear();
+            _undoNames.Add(name); _redoNames.Clear();
+            return;
+        }
         var part = Part;
         if (part == null) return;
         _history.Record(part, Document.Parameters);
@@ -158,6 +201,7 @@ public sealed class DocumentSession
     /// <summary>Правка отменена без замены детали (вызывающий сам вернул модель): снимок и имя шага забываются.</summary>
     public void DiscardEdit()
     {
+        if (IsAssembly) { if (_asmUndo.Count > 0) _asmUndo.RemoveAt(_asmUndo.Count - 1); if (_undoNames.Count > 0) _undoNames.RemoveAt(_undoNames.Count - 1); StateChanged?.Invoke(); return; }
         _history.DropLast();
         if (_undoNames.Count > 0) _undoNames.RemoveAt(_undoNames.Count - 1);
         StateChanged?.Invoke();
@@ -166,6 +210,15 @@ public sealed class DocumentSession
     /// <summary>Правка отменена («Отмена»): модель — как до BeginEdit, шаг из журнала убирается, повтора нет.</summary>
     public void CancelEdit()
     {
+        if (IsAssembly)
+        {
+            if (_asmUndo.Count == 0) return;
+            var snap = _asmUndo[^1]; _asmUndo.RemoveAt(_asmUndo.Count - 1);
+            if (_undoNames.Count > 0) _undoNames.RemoveAt(_undoNames.Count - 1);
+            RestoreAssembly(snap);
+            StateChanged?.Invoke();
+            return;
+        }
         var part = Part;
         if (part == null || !_history.CanUndo) return;
         var r = _history.Undo(part, Document.Parameters, rebuild: false);
@@ -175,13 +228,36 @@ public sealed class DocumentSession
         StateChanged?.Invoke();
     }
 
-    public bool CanUndo => _history.CanUndo;
-    public bool CanRedo => _history.CanRedo;
+    public bool CanUndo => IsAssembly ? _asmUndo.Count > 0 : _history.CanUndo;
+    public bool CanRedo => IsAssembly ? _asmRedo.Count > 0 : _history.CanRedo;
+    private readonly List<string> _asmUndo = new(), _asmRedo = new();
+
+    /// <summary>u13: сборка из снимка — компоненты заменяются; правимый в контексте — тот же по номеру.</summary>
+    private void RestoreAssembly(string json)
+    {
+        int active = ActivePart == null ? -1 : Document.AllParts().ToList().IndexOf(ActivePart);
+        var (asm, parameters) = AssemblyFile.Load(json);
+        foreach (var c in Document.Root.Children.Where(c => c is Parametric3D.Model.Part or Parametric3D.Model.Assembly).ToList()) Document.Root.Remove(c);
+        MoveInto(asm, Document.Root);
+        CopyParameters(parameters, Document.Parameters);
+        ActivePart = active >= 0 ? Document.AllParts().ElementAtOrDefault(active) : null;
+        Modified = true;
+        Replaced?.Invoke();
+    }
     public IReadOnlyList<string> UndoNames => _undoNames;
     public IReadOnlyList<string> RedoNames => _redoNames;
 
     public void Undo()
     {
+        if (IsAssembly)
+        {
+            if (_asmUndo.Count == 0) return;
+            _asmRedo.Add(AssemblyFile.Save(Document.Root, Document.Parameters));
+            var snap = _asmUndo[^1]; _asmUndo.RemoveAt(_asmUndo.Count - 1);
+            var nm = _undoNames.Count > 0 ? _undoNames[^1] : ""; if (_undoNames.Count > 0) _undoNames.RemoveAt(_undoNames.Count - 1); _redoNames.Add(nm);
+            RestoreAssembly(snap); StateChanged?.Invoke();
+            return;
+        }
         var part = Part;
         if (part == null || !_history.CanUndo) return;
         var r = _history.Undo(part, Document.Parameters, rebuild: false);
@@ -194,6 +270,15 @@ public sealed class DocumentSession
 
     public void Redo()
     {
+        if (IsAssembly)
+        {
+            if (_asmRedo.Count == 0) return;
+            _asmUndo.Add(AssemblyFile.Save(Document.Root, Document.Parameters));
+            var snap = _asmRedo[^1]; _asmRedo.RemoveAt(_asmRedo.Count - 1);
+            var nm = _redoNames.Count > 0 ? _redoNames[^1] : ""; if (_redoNames.Count > 0) _redoNames.RemoveAt(_redoNames.Count - 1); _undoNames.Add(nm);
+            RestoreAssembly(snap); StateChanged?.Invoke();
+            return;
+        }
         var part = Part;
         if (part == null || !_history.CanRedo) return;
         var r = _history.Redo(part, Document.Parameters, rebuild: false);

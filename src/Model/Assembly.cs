@@ -60,8 +60,8 @@ public sealed class Assembly : ModelItem
         var done = new HashSet<Part>();
         var stuck = new List<string>();
 
-        // Деталь без сопряжения считается стоящей на месте.
-        foreach (var p in parts) if (p.AssemblyMate == null) done.Add(p);
+        // Деталь без сопряжения считается стоящей на месте; зафиксированная (u13) — тоже.
+        foreach (var p in parts) if (p.AssemblyMate == null || p.Fixed) done.Add(p);
 
         bool moved = true;
         while (moved)
@@ -86,7 +86,9 @@ public sealed class Assembly : ModelItem
         foreach (var p in parts)
         {
             var active = p.Constraints.Where(c => c.Enabled).ToList();
-            if (active.Count == 0) continue;
+            if (active.Count == 0 || p.Fixed) continue;
+            // u13: сначала — Левенберг–Марквардт по шести координатам (точно); не сошлось — прежний спуск
+            if (SolveLM(p, active)) continue;
 
             double Total()
             {
@@ -217,6 +219,68 @@ public sealed class Assembly : ModelItem
 
         return stuck;
     }
+    /// <summary>u13: Левенберг–Марквардт: сдвиг и малый поворот (вектор) от текущего положения, численный якобиан.</summary>
+    private static bool SolveLM(Part p, List<AssemblyConstraint> cs)
+    {
+        var t = new Vector3d(p.Translation.X, p.Translation.Y, p.Translation.Z);
+        var q = new Quaterniond(p.Rotation.X, p.Rotation.Y, p.Rotation.Z, p.Rotation.W).Normalized();
+        List<double> R(Vector3d tt, Quaterniond qq) { var r = new List<double>(); foreach (var c in cs) c.ResidualVector(tt, qq, r); return r; }
+        static double N2(List<double> r) => r.Sum(x => x * x);
+        (Vector3d, Quaterniond) Step(double[] x, Vector3d t0, Quaterniond q0)
+        {
+            var w = new Vector3d(x[3], x[4], x[5]); double a = w.Length;
+            var dq = a < 1e-15 ? Quaterniond.Identity : Quaterniond.FromAxisAngle(w / a, a);
+            return (t0 + new Vector3d(x[0], x[1], x[2]), (dq * q0).Normalized());
+        }
+        var r0 = R(t, q); double f0 = N2(r0);
+        double lambda = 1e-3;
+        for (int it = 0; it < 200 && f0 > 1e-20; it++)
+        {
+            int m = r0.Count; var J = new double[m, 6]; const double h = 1e-7;
+            for (int k = 0; k < 6; k++)
+            {
+                var x = new double[6]; x[k] = h;
+                var (tk, qk) = Step(x, t, q); var rk = R(tk, qk);
+                for (int i = 0; i < m; i++) J[i, k] = (rk[i] - r0[i]) / h;
+            }
+            var A = new double[6, 6]; var g = new double[6];
+            for (int a = 0; a < 6; a++)
+            {
+                for (int b = 0; b < 6; b++) { double s = 0; for (int i = 0; i < m; i++) s += J[i, a] * J[i, b]; A[a, b] = s; }
+                double gs = 0; for (int i = 0; i < m; i++) gs += J[i, a] * r0[i]; g[a] = -gs;
+            }
+            bool improved = false;
+            for (int tries = 0; tries < 12; tries++)
+            {
+                var M = (double[,])A.Clone(); var b2 = (double[])g.Clone();
+                for (int a = 0; a < 6; a++) M[a, a] += lambda * (1 + A[a, a]);
+                if (!Gauss6(M, b2)) { lambda *= 10; continue; }
+                var (tn, qn) = Step(b2, t, q); var rn = R(tn, qn); double fn = N2(rn);
+                if (fn < f0) { t = tn; q = qn; r0 = rn; f0 = fn; lambda = Math.Max(1e-12, lambda / 10); improved = true; break; }
+                lambda *= 10;
+            }
+            if (!improved) break;
+        }
+        if (f0 > 1e-8) return false;
+        p.Translation = new Vector3((float)t.X, (float)t.Y, (float)t.Z);
+        p.Rotation = new Quaternion((float)q.X, (float)q.Y, (float)q.Z, (float)q.W);
+        return true;
+    }
+
+    private static bool Gauss6(double[,] a, double[] b)
+    {
+        int n = 6;
+        for (int c = 0; c < n; c++)
+        {
+            int piv = c; for (int r = c + 1; r < n; r++) if (Math.Abs(a[r, c]) > Math.Abs(a[piv, c])) piv = r;
+            if (Math.Abs(a[piv, c]) < 1e-300) return false;
+            if (piv != c) { for (int k = 0; k < n; k++) (a[c, k], a[piv, k]) = (a[piv, k], a[c, k]); (b[c], b[piv]) = (b[piv], b[c]); }
+            for (int r = c + 1; r < n; r++) { double f = a[r, c] / a[c, c]; for (int k = c; k < n; k++) a[r, k] -= f * a[c, k]; b[r] -= f * b[c]; }
+        }
+        for (int c = n - 1; c >= 0; c--) { double s = b[c]; for (int k = c + 1; k < n; k++) s -= a[c, k] * b[k]; b[c] = s / a[c, c]; }
+        return true;
+    }
+
     public IEnumerable<Assembly> SubAssemblies => Children.OfType<Assembly>();
 
     /// <summary>

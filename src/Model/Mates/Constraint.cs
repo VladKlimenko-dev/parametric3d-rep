@@ -177,4 +177,53 @@ public sealed class AssemblyConstraint
     }
 
     private static Vector3 ToF(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
+
+    /// <summary>
+    /// u13: НЕВЯЗКА ВЕКТОРОМ (со знаком) — для решателя Левенберга–Марквардта: положение детали задано точно (сдвиг t и
+    /// поворот q, двойная точность), каждая компонента гладкая.
+    /// </summary>
+    public void ResidualVector(Vector3d t, Quaterniond q, List<double> into)
+    {
+        var (bo, ba) = InBase();
+        var po = t + Vector3d.Transform(PartOrigin, q);
+        var pa = Vector3d.Transform(PartAxis, q);
+        var bn = ba.LengthSquared < 1e-18 ? Vector3d.UnitZ : ba.Normalized();
+        var pn = pa.LengthSquared < 1e-18 ? Vector3d.UnitZ : pa.Normalized();
+        var d = po - bo;
+        Vector3d Perp(Vector3d v) => v - bn * Vector3d.Dot(v, bn);
+        const double W = 10;   // поворот весомее: 0.1 рад ~ 1 мм
+        switch (Kind)
+        {
+            case ConstraintKind.Default:
+            case ConstraintKind.CoordinateSystem:
+                into.Add(d.X); into.Add(d.Y); into.Add(d.Z);
+                { var e = (pn - bn) * W; into.Add(e.X); into.Add(e.Y); into.Add(e.Z); }
+                break;
+            case ConstraintKind.Mate:
+                into.Add(Vector3d.Dot(d, bn) - Offset);
+                { var e = (pn + bn) * W; into.Add(e.X); into.Add(e.Y); into.Add(e.Z); }
+                break;
+            case ConstraintKind.Align:
+                into.Add(Vector3d.Dot(d, bn) - Offset);
+                { var e = (pn - bn) * W; into.Add(e.X); into.Add(e.Y); into.Add(e.Z); }
+                break;
+            case ConstraintKind.Orient:
+                into.Add((Vector3d.Dot(pn, bn) - Math.Cos(Angle * Math.PI / 180)) * W);
+                break;
+            case ConstraintKind.Insert:
+            case ConstraintKind.Cylindrical:
+                { var e = Perp(d); into.Add(e.X); into.Add(e.Y); into.Add(e.Z); }
+                { var c = Vector3d.Cross(pn, bn) * W; into.Add(c.X); into.Add(c.Y); into.Add(c.Z); }
+                break;
+            case ConstraintKind.PointOnLine:
+                { var e = Perp(d); into.Add(e.X); into.Add(e.Y); into.Add(e.Z); }
+                break;
+            case ConstraintKind.PointOnSurface:
+                into.Add(Vector3d.Dot(d, bn) - Offset);
+                break;
+            case ConstraintKind.Tangent:
+                into.Add(Math.Abs(Vector3d.Dot(d, bn)) - Offset);
+                break;
+        }
+    }
 }

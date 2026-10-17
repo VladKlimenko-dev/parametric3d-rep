@@ -921,6 +921,93 @@ Check("UI-U13F-SURFACES", () =>
     w4.Close();
 });
 
+// u13g: сборка — компоненты, ограничения, соединения, массивы, зеркало, спецификация, разнесённый вид, файл, отмена
+Part CubePart(string name, double side) { var p = new Part(name); TestGeometry.AddCube(p, side); return p; }
+Part CylPart(string name, double r, double h)
+{
+    var p = new Part(name);
+    var sk = new Sketch("S", p.PlaneXY.Frame); sk.SetBasePlane(p.PlaneXY.Frame, p.PlaneXY.Id, "XY"); p.Add(sk);
+    sk.AddEntity(new SkCircle(new SkPoint(0, 0), r));
+    var e = new ExtrudeFeature("Cyl") { SketchId = sk.Id }; e.Side1.Distance = new ValueRef(h); p.AddFeature(e);
+    return p;
+}
+Check("UI-U13G-ASSEMBLY", () =>
+{
+    var s = DocumentSession.NewAssembly(); var w = Open(s);
+    Require(s.IsAssembly && s.Part == null, "assembly mode");
+    var a = AssemblyCommands.AddComponent(w, CubePart("Основание", 40), "add A");
+    var b = AssemblyCommands.AddComponent(w, CubePart("Кубик", 20), "add B");
+    Require(a.Fixed && !b.Fixed && b.Translation.X > 20, $"placement {b.Translation}");
+    Vector3d Wc(Part p) => AssemblyCommands.ToWorld(p, (p.Bounds.Min + p.Bounds.Max) / 2);
+    PickRef Face(Part p, Vector3d n) { var f = p.Bodies[0].Faces.First(x => Refs.FacePlane(p, x.Id) is { } pl && (pl.N - n).Length < 1e-9); return new PickRef(f.Id, PickKind.Face, p, null); }
+    // совпадение: низ кубика на верх основания; затем две боковые и вторая пара — кубик встаёт в угол
+    w.ViewPort.Selection.Clear(); Select(w, Face(b, -Vector3d.UnitZ)); Select(w, Face(a, Vector3d.UnitZ));
+    AssemblyCommands.Constrain(w, AssemblyCommands.MateCmd.Coincident);
+    w.ViewPort.Selection.Clear(); Select(w, Face(b, -Vector3d.UnitX)); Select(w, Face(a, -Vector3d.UnitX));
+    var plan = AssemblyCommands.Plan(AssemblyCommands.MateCmd.Distance, AssemblyCommands.GeoOf(Face(b, -Vector3d.UnitX))!.Value, AssemblyCommands.GeoOf(Face(a, -Vector3d.UnitX))!.Value, 0, out var why);
+    // выравнивание боковых: плоскости одного направления — «перевернуть» совпадение
+    var mate = AssemblyCommands.Plan(AssemblyCommands.MateCmd.Coincident, AssemblyCommands.GeoOf(Face(b, -Vector3d.UnitX))!.Value, AssemblyCommands.GeoOf(Face(a, -Vector3d.UnitX))!.Value, 0, out why)!;
+    mate[0].C.Kind = Parametric3D.Model.Mates.ConstraintKind.Align;
+    var mate2 = AssemblyCommands.Plan(AssemblyCommands.MateCmd.Coincident, AssemblyCommands.GeoOf(Face(b, -Vector3d.UnitY))!.Value, AssemblyCommands.GeoOf(Face(a, -Vector3d.UnitY))!.Value, 0, out why)!;
+    mate2[0].C.Kind = Parametric3D.Model.Mates.ConstraintKind.Align;
+    AssemblyCommands.Apply(w, mate.Concat(mate2).ToList(), "align");
+    var bc = Wc(b);
+    Console.WriteLine($"  cube placed: centre {bc}, constraints {b.Constraints.Count}");
+    Require((bc - new Vector3d(-10, -10, 30)).Length < 1e-3, $"cube in the corner {bc}");
+    // отмена последнего шага — ограничений два → одно
+    s.Undo(); var b1 = s.Document.Root.Children.OfType<Part>().First(p => p.Name == "Кубик");
+    Require(b1.Constraints.Count == 1, $"undo constraints {b1.Constraints.Count}");
+    s.Redo(); b = s.Document.Root.Children.OfType<Part>().First(p => p.Name == "Кубик"); a = s.Document.Root.Children.OfType<Part>().First(p => p.Name == "Основание");
+    Require(b.Constraints.Count == 3, "redo");
+    // соединение «шарнир»: вал R5 в цилиндр R5 (ось к оси)
+    var shaft = AssemblyCommands.AddComponent(w, CylPart("Вал", 5, 30), "add shaft");
+    var hub = AssemblyCommands.AddComponent(w, CylPart("Втулка", 5, 10), "add hub");
+    s.Document.RebuildDirty();
+    PickRef Side(Part p) { var f = p.Bodies[0].Faces.First(x => Parametric3D.Kernel.Ops.DirectEdit.RadiusAfter(x, 0) is { } rr && Math.Abs(rr - 5) < 1e-9); return new PickRef(f.Id, PickKind.Face, p, null); }
+    shaft.Fixed = true;
+    w.ViewPort.Selection.Clear(); Select(w, Side(hub)); Select(w, Side(shaft));
+    AssemblyCommands.Joint(w, Parametric3D.Model.Mates.MateType.Pin);
+    var hc = AssemblyCommands.ToWorld(hub, Vector3d.Zero); var sc = AssemblyCommands.ToWorld(shaft, Vector3d.Zero);
+    var hz = AssemblyCommands.DirToWorld(hub, Vector3d.UnitZ);
+    Console.WriteLine($"  pin: hub origin {hc}, shaft origin {sc}, hub axis {hz}");
+    Require(hub.Mates.Count == 1 && Math.Abs(Math.Abs(hz.Z) - 1) < 1e-4 && Math.Abs(hc.X - sc.X) < 1e-3 && Math.Abs(hc.Y - sc.Y) < 1e-3, "pin joint");
+    // массив кубика: 3 шт. с шагом 30 по Y; спецификация: «Кубик» ×3
+    var copies = AssemblyCommands.Pattern(w, b, 3, new Vector3d(0, 30, 0));
+    Require(copies.Count == 2 && Math.Abs(copies[1].Translation.Y - b.Translation.Y - 60) < 1e-3, "pattern");
+    var bom = AssemblyCommands.Bom(w);
+    Console.WriteLine("  bom: " + string.Join("; ", bom.Select(r => $"{r.Name} x{r.Count}")));
+    Require(bom.Any(r => r.Name == "Кубик" && r.Count == 3) && bom.Any(r => r.Name == "Основание" && r.Count == 1), "bom");
+    // зеркало кубика относительно плоскости YZ сборки: объём тот же, центр по X — с другой стороны
+    var m = AssemblyCommands.Mirror(w, b, Vector3d.Zero, Vector3d.UnitX); s.Document.RebuildDirty();
+    var mc = Wc(m); bc = Wc(b);
+    Console.WriteLine($"  mirror: centre {mc} (source {bc}), volume {m.Volume:F3}");
+    Require(Math.Abs(mc.X + bc.X) < 1e-3 && Math.Abs(m.Volume - 8000) < 1e-3, "mirror component");
+    // разнесённый вид: туда и обратно
+    var t0 = b.Translation;
+    AssemblyCommands.ToggleExplode(w); Require((b.Translation - t0).Length > 1, "exploded");
+    AssemblyCommands.ToggleExplode(w); Require((b.Translation - t0).Length < 1e-5, "collapsed");
+    // запись и чтение сборки
+    var path = Path.Combine(Path.GetTempPath(), "u13g_test.p3a");
+    s.SaveAs(path);
+    var s2 = DocumentSession.Open(path);
+    var parts2 = s2.Document.Root.Children.OfType<Part>().ToList();
+    Console.WriteLine($"  reopened: {parts2.Count} components, fixed {parts2.Count(p => p.Fixed)}, constraints {parts2.Sum(p => p.Constraints.Count)}, joints {parts2.Sum(p => p.Mates.Count)}");
+    Require(s2.IsAssembly && parts2.Count == s.Document.Root.Children.OfType<Part>().Count() && parts2.Sum(p => p.Constraints.Count) == s.Document.Root.Children.OfType<Part>().Sum(p => p.Constraints.Count) && parts2.Sum(p => p.Mates.Count) == 1, "assembly file");
+    // правка в контексте: операции — над компонентом
+    AssemblyCommands.EditInContext(w, b);
+    Require(s.Part == b && w.ViewPort.ActivePart == b, "edit in context");
+    AssemblyCommands.EditInContext(w, null);
+    Require(s.Part == null, "back to assembly");
+    // замена компонента: ограничения переходят к новому
+    var nb = CubePart("Кубик2", 20);
+    AssemblyCommands.Replace(w, b, nb);
+    Require(nb.Constraints.Count == 3 && !s.Document.Root.Children.Contains(b), "replace keeps constraints");
+    // дерево: компоненты и папка ограничений
+    var roots = TreeNode.Build(s.Document, assembly: true);
+    Require(roots[0].Children.Any(n => n.Item is InfoItem { Role: "mates" } mm && n.Children.Count >= 4) && roots[0].Children.Count(n => n.Item is Part) >= 5, "assembly tree");
+    w.Close();
+});
+
 // u13: опорные элементы кнопок (плоскость посередине и касательная, ось грани, точка в центре дуги) и уклон
 Check("UI-U13-DATUMS-DRAFT", () =>
 {

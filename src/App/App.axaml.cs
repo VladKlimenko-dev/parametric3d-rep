@@ -31,7 +31,7 @@ public partial class App : Application
             Core.AppLog.Write($"start {Diagnostics.SelfTest.Build}; graphics mode {Program.GlMode}; {System.Runtime.InteropServices.RuntimeInformation.OSDescription}");
             // Аргументы: путь к файлу детали — открыть; --sample — пробная деталь; --theme light|dark.
             DocumentSession session;
-            var file = AppStartup.Args.FirstOrDefault(a => a.EndsWith(DocumentSession.PartExtension, StringComparison.OrdinalIgnoreCase) && File.Exists(a));
+            var file = AppStartup.Args.FirstOrDefault(a => (a.EndsWith(DocumentSession.PartExtension, StringComparison.OrdinalIgnoreCase) || a.EndsWith(DocumentSession.AssemblyExtension, StringComparison.OrdinalIgnoreCase)) && File.Exists(a));
             try { session = file != null ? DocumentSession.Open(file) : AppStartup.Flag("--sample") ? DocumentSession.Sample() : DocumentSession.NewPart(); }
             catch (Exception ex) { Core.AppLog.Write("open at start", ex); session = DocumentSession.NewPart(); }
             if (AppStartup.Arg("--theme") is { } th) UserPrefs.Current.Theme = th.Equals("light", StringComparison.OrdinalIgnoreCase) ? "Light" : "Dark";

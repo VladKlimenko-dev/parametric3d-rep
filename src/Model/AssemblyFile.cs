@@ -51,6 +51,7 @@ public static class AssemblyFile
                 Document = DocumentFile.Save(p, parameters),
                 Translation = new[] { (double)p.Translation.X, p.Translation.Y, p.Translation.Z },
                 Rotation = new[] { (double)p.Rotation.X, p.Rotation.Y, p.Rotation.Z, p.Rotation.W },
+                Fixed = p.Fixed, Skeleton = p.Skeleton, SourcePath = p.SourcePath, Hidden = !p.Visible, SubAssembly = p.SubAssembly,
                 Constraints = p.Constraints.Select(c => new ConstraintDto
                 {
                     Kind = c.Kind.ToString(),
@@ -80,7 +81,8 @@ public static class AssemblyFile
                     MinValue = double.IsInfinity(m.MinValue) ? null : m.MinValue,
                     MaxValue = double.IsInfinity(m.MaxValue) ? null : m.MaxValue,
                     PartFaceTag = m.PartFaceTag,
-                    BaseFaceTag = m.BaseFaceTag
+                    BaseFaceTag = m.BaseFaceTag,
+                    SlotNormal = m.SlotNormal.LengthSquared > 0 ? new[] { m.SlotNormal.X, m.SlotNormal.Y, m.SlotNormal.Z } : null
                 }).ToList()
             }).ToList()
         };
@@ -112,6 +114,7 @@ public static class AssemblyFile
             part.Translation = new Vector3((float)pd.Translation[0], (float)pd.Translation[1], (float)pd.Translation[2]);
             part.Rotation = new Quaternion((float)pd.Rotation[0], (float)pd.Rotation[1],
                                            (float)pd.Rotation[2], (float)pd.Rotation[3]);
+            part.Fixed = pd.Fixed; part.Skeleton = pd.Skeleton; part.SourcePath = pd.SourcePath; part.Visible = !pd.Hidden; part.SubAssembly = pd.SubAssembly;
             asm.Children.Add(part);
             parts.Add(part);
         }
@@ -151,7 +154,8 @@ public static class AssemblyFile
                     Offset = md.Offset,
                     LimitEnabled = md.LimitEnabled,
                     PartFaceTag = md.PartFaceTag,
-                    BaseFaceTag = md.BaseFaceTag
+                    BaseFaceTag = md.BaseFaceTag,
+                    SlotNormal = md.SlotNormal == null ? Vector3d.Zero : Vec(md.SlotNormal)
                 };
                 if (md.MinValue is { } lo) m.MinValue = lo;
                 if (md.MaxValue is { } hi) m.MaxValue = hi;
@@ -210,6 +214,11 @@ public static class AssemblyFile
         public double[] Rotation { get; set; } = { 0, 0, 0, 1 };
         public List<MateDto> Mates { get; set; } = new();
         public List<ConstraintDto> Constraints { get; set; } = new();
+        public bool Fixed { get; set; }
+        public bool Skeleton { get; set; }
+        public string? SubAssembly { get; set; }
+        public string? SourcePath { get; set; }
+        public bool Hidden { get; set; }
     }
 
     private sealed class ConstraintDto
@@ -242,5 +251,6 @@ public static class AssemblyFile
         public double? MaxValue { get; set; }
         public string? PartFaceTag { get; set; }
         public string? BaseFaceTag { get; set; }
+        public double[]? SlotNormal { get; set; }
     }
 }
