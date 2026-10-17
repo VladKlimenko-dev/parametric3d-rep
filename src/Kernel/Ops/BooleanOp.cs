@@ -391,7 +391,10 @@ public static class BooleanOp
             }
             var src = fs.Source;
             if (VolDbg) { double vff = 0, sgn = 0; foreach (var (a, b, c) in fs.Facets.ReadView) { vff += Vector3d.Dot(a - o, Vector3d.Cross(b - o, c - o)) / 6; if (src != null) { var m = (a + b + c) / 3; var n = src.NormalAt(src.ProjectToUV(m)); if (f.Reversed) n = -n; sgn += Vector3d.Dot(Vector3d.Cross(b - a, c - a), n); } }
-                          Console.Error.WriteLine($"VOLDBG {f.Tag} {src?.GetType().Name} rev {f.Reversed} facets {fs.Facets.Count} vol {vff:G6} orient {Math.Sign(sgn)}"); }
+                          Console.Error.WriteLine($"VOLDBG {f.Tag} {src?.GetType().Name} rev {f.Reversed} facets {fs.Facets.Count} vol {vff:G8} an {Topology.AnalyticVolume.FaceVolumeAt(f, o):G8} orient {Math.Sign(sgn)}");
+                          if (src is not null && !src.IsPlanar && Topology.AnalyticVolume.FaceVolumeAt(f, o) is { } anf && Math.Abs(anf - vff) > 0.01 * Math.Abs(vff))
+                          { Console.Error.WriteLine($"  surf {src}  area facets {fs.Facets.ReadView.Sum(t => Vector3d.Cross(t.Item2 - t.Item1, t.Item3 - t.Item1).Length / 2):G8} an {Topology.AnalyticVolume.FaceArea(f):G8}");
+                            foreach (var lp in f.Loops) { Console.Error.WriteLine($"  loop outer {lp.IsOuter}"); foreach (var ce in lp.CoEdges) Console.Error.WriteLine($"    {ce.Edge.Curve.GetType().Name} rev {ce.Reversed} {ce.Start.P} -> {ce.End.P} mid {ce.Edge.Curve.PointAt((ce.Edge.Curve.T0 + ce.Edge.Curve.T1) / 2)} pc {ce.PCurve?.GetType().Name}"); } } }
             if (src == null || src.IsPlanar) continue;
             double kr = Geometry.ExactEdges.ShapeOf(src) switch
             {

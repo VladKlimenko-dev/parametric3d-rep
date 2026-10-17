@@ -19,5 +19,6 @@
     <ProjectReference Include="../../src/Parametric3D.csproj" />
     <PackageReference Include="Avalonia.Headless" Version="12.1.4" />
     <None Include="../../src/App/Assets/icons.tsv" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="data/*.p3d" CopyToOutputDirectory="PreserveNewest" LinkBase="data" />
   </ItemGroup>
 </Project>

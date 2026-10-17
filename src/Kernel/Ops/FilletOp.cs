@@ -51,6 +51,8 @@ public static class FilletOp
     /// <summary>ДИАГНОСТИКА: каждый построенный резец — до вычитания, в том числе откаченный.</summary>
     public static Action<TSolid>? BuiltTool;
 
+    static readonly bool FillerPieceOff = Environment.GetEnvironmentVariable("P3D_FILLERPIECE") == "0";
+    public static long FillerPiecesDropped;
     /// <summary>ДИАГНОСТИКА: прибавка у вогнутого ребра, которую операция только что успешно прибавила.</summary>
     public static Action<TSolid>? AppliedAddition;
 
@@ -621,7 +623,33 @@ public static class FilletOp
             BuiltTool?.Invoke(tool);
 
             // У вогнутого ребра скругление и фаска ПРИБАВЛЯЮТ материал.
-            if (adds) BooleanOp.Unite(bodies, tool, warnings);
+            if (adds)
+            {
+                var eW = Resolve(bodies, wanted, out _);
+                var toolU = eW != null ? ShellOp.ClipFillerAtCurvedEnds(bodies, eW, tool, warnings) : tool;
+                // u12: ПРИБАВКА — ТОЛЬКО КУСОК ПУСТОТЫ У САМОГО РЕБРА. Резец вогнутого ребра может пройти сквозь тонкую стенку
+                // (оболочка 2 мм, скругление R80 снаружи, внутреннее R60): его часть по ту сторону стенки прибавлялась к телу
+                // посторонним уголком. Пустая часть резца (резец минус тело) делится на куски; прибавляется кусок у ребра.
+                // Мутация P3D_FILLERPIECE=0.
+                if (!FillerPieceOff && eW != null && bodies.Count == 1)
+                {
+                    var empty = new List<TSolid> { toolU }; var wE = new List<string>();
+                    try { BooleanOp.Subtract(empty, TopologyClone.Deep(bodies[0]), wE); } catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { empty.Clear(); }
+                    if (Environment.GetEnvironmentVariable("P3D_CLIPDBG") == "1") Console.WriteLine($"FILLERPIECES {empty.Count}: {string.Join(" | ", empty.Select(b => $"{b.Bounds.Min} {b.Bounds.Max} V {AnalyticVolume.Of(b):F1}"))} warn {string.Join(" / ", wE.TakeLast(2))}");
+                    if (empty.Count > 1)
+                    {
+                        var mid = eW.Curve.PointAt(0.5 * (eW.Curve.T0 + eW.Curve.T1));
+                        double Dist(TSolid b) => b.Faces.SelectMany(f => f.Edges).Select(x => x.Curve).Where(c => c != null)
+                            .SelectMany(c => Enumerable.Range(0, 9).Select(i => c!.PointAt(c.T0 + (c.T1 - c.T0) * i / 8.0))).Select(q => (q - mid).Length).DefaultIfEmpty(double.MaxValue).Min();
+                        var near = empty.OrderBy(Dist).First();
+                        var far = empty.Where(b => !ReferenceEquals(b, near)).ToList();
+                        // прибавляется только кусок пустоты у ребра
+                        toolU = near; Interlocked.Increment(ref FillerPiecesDropped);
+                        warnings.Add($"{what}: {far.Count} part(s) of the concave filler beyond a thin wall dropped.");
+                    }
+                }
+                BooleanOp.Unite(bodies, toolU, warnings);
+            }
             else BooleanOp.Subtract(bodies, tool, warnings);
 
             string? broke;

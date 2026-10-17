@@ -136,6 +136,13 @@ public static class AnalyticVolume
         finally { _origin = prev; }
     }
 
+    /// <summary>Разбор: вклад грани в объём (∫x·n/3) относительно заданного начала.</summary>
+    public static double? FaceVolumeAt(TFace f, Vector3d origin)
+    {
+        var prev = _origin; _origin = origin;
+        try { return FaceIntegral(f) / 3; } finally { _origin = prev; }
+    }
+
     static Vector3d CentreOf(TSolid solid)
     {
         var lo = new Vector3d(double.MaxValue); var hi = new Vector3d(double.MinValue); bool any = false;

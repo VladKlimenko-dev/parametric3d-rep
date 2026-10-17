@@ -573,6 +573,52 @@ public static class ShellOp
         return ExtrudeOp.Build(profile, n * r);
     }
 
+    /// <summary>
+    /// u12: ПРИБАВКА У ВОГНУТОГО РЕБРА НЕ ВЫХОДИТ СКВОЗЬ КРИВОЙ ТОРЕЦ. Резец прибавки продлён за концы ребра; у торца-плоскости
+    /// продление уходит в материал стенки (союз его не замечает), а у торца-цилиндра тонкой стенки (оболочка 2 мм, скругление
+    /// R80, внутреннее скругление R60) — сквозь стенку наружу: на теле появлялся посторонний уголок. Резец обрезается по
+    /// стороне пустоты цилиндрических торцов (внутри вогнутого, снаружи выпуклого). Мутация P3D_FILLERCLIP=0.
+    /// </summary>
+    internal static TSolid ClipFillerAtCurvedEnds(List<TSolid> bodies, TEdge e, TSolid tool, List<string> warnings)
+    {
+        if (FillerClipOff) return tool;
+        var body = bodies.FirstOrDefault(b => b.Edges.Contains(e));
+        if (body == null) return tool;
+        var adj = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().ToHashSet();
+        var ends = new HashSet<TFace>();
+        foreach (var x in body.Edges)
+        {
+            if (ReferenceEquals(x, e)) continue;
+            bool touches = x.V0 == e.V0 || x.V1 == e.V0 || x.V0 == e.V1 || x.V1 == e.V1
+                || (x.V0.P - e.V0.P).Length < 1e-7 || (x.V1.P - e.V0.P).Length < 1e-7 || (x.V0.P - e.V1.P).Length < 1e-7 || (x.V1.P - e.V1.P).Length < 1e-7;
+            if (!touches) continue;
+            foreach (var c in x.CoEdges) if (c.Loop?.Face is { } f && !adj.Contains(f)) ends.Add(f);
+        }
+        var (lo, hi) = Bounds(tool);
+        if (ClipDbg) Console.WriteLine($"FILLERCLIP edge {e.V0.P}->{e.V1.P} ends {string.Join(" | ", ends.Select(f => $"{GeometryAudit.AuthoritativeSurface(f)?.GetType().Name} {f.Tag}"))} tool {lo} {hi}");
+        double pad = (hi - lo).Length + 10, len = 4 * pad;
+        var cur = new List<TSolid> { tool };
+        foreach (var f in ends)
+        {
+            if (CylOfFace(f) is not { } cy || PlanarTweak.CylConvex(f) is not bool convex) continue;
+            var ax = cy.Axis.Normalized();
+            var tube = Cylinder(cy.P - ax * len, ax * (2 * len), cy.R);
+            if (convex) BooleanOp.Subtract(cur, tube, warnings);
+            else
+            {
+                var outside = new List<TSolid> { Box(lo - new Vector3d(pad), hi + new Vector3d(pad)) };
+                BooleanOp.Subtract(outside, tube, warnings);
+                if (outside.Count > 0) BooleanOp.Subtract(cur, outside[0], warnings);
+            }
+            if (cur.Count != 1) return tool;
+            Interlocked.Increment(ref FillerClips);
+        }
+        return cur[0];
+    }
+    static readonly bool ClipDbg = Environment.GetEnvironmentVariable("P3D_CLIPDBG") == "1";
+    static readonly bool FillerClipOff = Environment.GetEnvironmentVariable("P3D_FILLERCLIP") == "0";
+    public static long FillerClips;
+
     /// <summary>Цилиндр: окружность радиуса r в начале, выдавленная вдоль dir.</summary>
     private static TSolid Cylinder(Vector3d at, Vector3d dir, double r)
     {
