@@ -36,6 +36,13 @@ public sealed class SceneRenderer : IDisposable
     private readonly List<MeshGpu> _meshes = new();
     private sealed class InstGpu { public int Vao = -1, Vbo = -1, Count; }
     private readonly InstGpu _bodyEdges = new(), _lines = new(), _points = new(), _bodyVerts = new();
+    // u12: сетка вида / сетка FEA — линии треугольников, строятся по требованию (стиль, новая сцена, размер элемента)
+    private readonly InstGpu _meshLines = new();
+    private readonly List<MeshItem> _meshCpu = new();
+    private (DisplayStyle Style, float H, int Version) _meshLinesKey = (DisplayStyle.Shaded, 0, -1);
+    private int _sceneVersion;
+    /// <summary>u12: размер элемента сетки FEA, доля диагонали габарита (0 — по умолчанию 1/30).</summary>
+    public float FeaElementFraction = 1f / 15;
     // надстройка: сетка эскиза (с глубиной), построение инструмента и привязки (поверх всего) — меняются без пересборки сцены
     private readonly InstGpu _ovGrid = new(), _ovLines = new(), _ovPoints = new();
     private int _planeVao = -1, _planeVbo = -1;
@@ -72,6 +79,7 @@ public sealed class SceneRenderer : IDisposable
     {
         EnsureShaders();
         ReleaseScene();
+        _meshCpu.Clear(); _meshCpu.AddRange(s.Meshes.Where(m => m.Preview == 0)); _sceneVersion++;
         foreach (var m in s.Meshes)
         {
             var g = new MeshGpu { Model = m.Model, Color = m.Color, MatColor = m.MatColor, MatSpec = m.MatSpec, MatShine = m.MatShine, MatMetal = m.MatMetal, Count = m.Idx.Length, Preview = m.Preview };
@@ -301,7 +309,8 @@ public sealed class SceneRenderer : IDisposable
         GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
         BindFlags();
 
-        bool faces = Style is DisplayStyle.Shaded or DisplayStyle.ShadedWithEdges or DisplayStyle.Material;
+        bool meshStyle = Style is DisplayStyle.ViewMesh or DisplayStyle.FeaMesh;
+        bool faces = Style is DisplayStyle.Shaded or DisplayStyle.ShadedWithEdges or DisplayStyle.Material || meshStyle;
         bool edges = Style is not (DisplayStyle.Shaded or DisplayStyle.Material);
         bool hidden = Style is DisplayStyle.HiddenLines or DisplayStyle.Transparent;
 
@@ -318,6 +327,11 @@ public sealed class SceneRenderer : IDisposable
         if (faces) DrawMeshes(f, lit: true, opacity: 1f);
         else DrawMeshDepthOnly(f);
         if (faces) DrawOutline(f);
+        if (meshStyle)
+        {
+            EnsureMeshLines();
+            DrawLines(_meshLines, f, 1e-5f, colorOverride: Style == DisplayStyle.FeaMesh ? new Vector4(0.10f, 0.30f, 0.75f, 0.9f) : new Vector4(0.25f, 0.27f, 0.32f, 0.9f));
+        }
 
         // рёбра: невидимые — штрихом под гранями
         if (hidden && _bodyEdges.Count > 0)
@@ -669,6 +683,45 @@ public sealed class SceneRenderer : IDisposable
     }
 
     // ================================================================ освобождение
+
+    /// <summary>
+    /// u12: линии сетки. Вид — стороны треугольников показа (каждая один раз). FEA — каждый треугольник делится на n²
+    /// равных (n — по длиннейшей стороне и размеру элемента): равномерная сетка заданного шага поверх граней.
+    /// </summary>
+    private void EnsureMeshLines()
+    {
+        float diag = 0;
+        var lo = new Vector3(float.MaxValue); var hi = new Vector3(float.MinValue);
+        foreach (var m in _meshCpu) foreach (var p0 in m.Pos) { var p = Vector3.TransformPosition(p0, m.Model); lo = Vector3.ComponentMin(lo, p); hi = Vector3.ComponentMax(hi, p); }
+        if (_meshCpu.Count > 0) diag = (hi - lo).Length;
+        float h = Math.Max(1e-6f, diag * (FeaElementFraction > 0 ? FeaElementFraction : 1f / 15));
+        var key = (Style, Style == DisplayStyle.FeaMesh ? h : 0f, _sceneVersion);
+        if (key == _meshLinesKey && _meshLines.Vao >= 0) return;
+        _meshLinesKey = key;
+        Del(ref _meshLines.Vbo);
+        if (_meshLines.Vao >= 0) { GL.DeleteVertexArray(_meshLines.Vao); _meshLines.Vao = -1; }
+        var lines = new List<LineInst>();
+        uint col = SceneData.Pack(new Vector4(0, 0, 0, 1));
+        void Add(Vector3 a, Vector3 b) { if (lines.Count < 2_000_000) lines.Add(new LineInst { A = a, B = b, Color = col, Width = 1f }); }
+        foreach (var m in _meshCpu)
+        {
+            Vector3 P(int i) => Vector3.TransformPosition(m.Pos[i], m.Model);
+            if (Style == DisplayStyle.ViewMesh)
+            {
+                var seen = new HashSet<(int, int)>();
+                for (int t = 0; t + 2 < m.Idx.Length; t += 3)
+                    for (int k = 0; k < 3; k++)
+                    {
+                        int a = m.Idx[t + k], b = m.Idx[t + (k + 1) % 3];
+                        if (seen.Add(a < b ? (a, b) : (b, a))) Add(P(a), P(b));
+                    }
+                continue;
+            }
+            var wp = m.Pos.Select(q => Vector3.TransformPosition(q, m.Model)).ToArray();
+            foreach (var (a, b2) in FeaRemesh.Lines(wp, m.Idx, m.Pick, h)) Add(a, b2);
+        }
+        UploadLines(_meshLines, lines);
+    }
 
     private void ReleaseScene()
     {

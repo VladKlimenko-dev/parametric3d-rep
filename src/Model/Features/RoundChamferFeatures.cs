@@ -27,6 +27,16 @@ public sealed class RoundFeature : Feature
 
     public RoundFeature(string name = "Round") { Name = name; }
 
+    public override void ExecuteTransformed(BuildContext ctx, Kernel.Ops.TransformOp.Xform x)
+    {
+        if (Selectors.Count > 0) base.ExecuteTransformed(ctx, x);
+        var c = new RoundFeature(Name) { Radius = Radius, RadiusEnd = RadiusEnd, Key = Key + "x" + ctx.Warnings.Count };
+        c.LawPoints.AddRange(LawPoints);
+        foreach (var e in Edges) c.Edges.Add(Xf(e, x));
+        c.Execute(ctx);
+    }
+    internal static EdgeRef Xf(EdgeRef e, Kernel.Ops.TransformOp.Xform x) => new(x.Point(e.Start), x.Point(e.End), e.Mid is { } m ? x.Point(m) : null);
+
     public override string Summary => $"Round R{Radius}{(LawPoints.Count >= 2 ? " law " + string.Join("/", LawPoints.Select(p => p.R.Value.ToString("0.###"))) : "")}{(RadiusEnd is { } re0 ? "→" + re0 : "")} ({Edges.Count} edges{(Selectors.Count > 0 ? ", " + string.Join(", ", Selectors) : "")})";
 
     public override void Execute(BuildContext ctx)
@@ -102,13 +112,23 @@ public sealed class ChamferFeature : Feature
     public ValueRef D1 = new(1);
     public ValueRef D2 = new(1);
     public ValueRef Angle = new(45);
+    /// <summary>u12: переменная фаска — размер в конце цепочки (равные катеты от D1 до SizeEnd плавно по длине); null — постоянная.</summary>
+    public ValueRef? SizeEnd;
 
     /// <summary>KRN-08 (08.3): рёбра по роли, разрешаются при каждой перестройке.</summary>
     public readonly List<EdgeSelector> Selectors = new();
 
     public ChamferFeature(string name = "Chamfer") { Name = name; }
 
-    public override string Summary => Mode == ChamferKind.TwoDistances
+    public override void ExecuteTransformed(BuildContext ctx, Kernel.Ops.TransformOp.Xform x)
+    {
+        if (Selectors.Count > 0) base.ExecuteTransformed(ctx, x);
+        var c = new ChamferFeature(Name) { Mode = Mode, D1 = D1, D2 = D2, Angle = Angle, SizeEnd = SizeEnd, Key = Key + "x" + ctx.Warnings.Count };
+        foreach (var e in Edges) c.Edges.Add(RoundFeature.Xf(e, x));
+        c.Execute(ctx);
+    }
+
+    public override string Summary => SizeEnd is { } se ? $"Chamfer {D1}→{se} ({Edges.Count} edges)" : Mode == ChamferKind.TwoDistances
         ? $"Chamfer {D1}x{D2} ({Edges.Count} edges)"
         : $"Chamfer {D1}x{Angle}\u00b0 ({Edges.Count} edges)";
 
@@ -130,6 +150,19 @@ public sealed class ChamferFeature : Feature
 
         if (d1 <= Tol.Weld || d2 <= Tol.Weld)
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Chamfer: distances must be greater than zero.");
+
+        if (SizeEnd is { } se)
+        {
+            double e1 = se.Resolve(ctx.Parameters);
+            if (e1 <= Tol.Weld) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Chamfer: the end size must be greater than zero.");
+            Kernel.OperationContract.Apply("Chamfer", ctx.Bodies, b =>
+            {
+                if (!Kernel.Ops.DirectRound.TryChamferVariable(b, edges, d1, e1, ctx.Warnings, out var why))
+                    throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported,
+                        $"Chamfer: a variable chamfer is built for an edge or a tangent chain of a planar face with walls square to it — here: {why}");
+            });
+            return;
+        }
 
         // ФАСКА ТОЧНА. Срез — плоскость, а плоскости булева режет без
         // приближения, в отличие от дуги скругления. Несимметричная фаска

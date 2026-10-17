@@ -91,6 +91,14 @@ public sealed class ExtrudeFeature : Feature
         return (arc.Frame.Origin, arc.Radius);
     }
 
+    /// <summary>u12: преобразование резца (зеркало/массив операций); null — обычное выполнение.</summary>
+    private Kernel.Ops.TransformOp.Xform? _x;
+    public override void ExecuteTransformed(BuildContext ctx, Kernel.Ops.TransformOp.Xform x)
+    {
+        _x = x;
+        try { Execute(ctx); } finally { _x = null; }
+    }
+
     public override void Execute(BuildContext ctx)
     {
         var sketch = ctx.FindSketch(SketchId)
@@ -131,6 +139,14 @@ public sealed class ExtrudeFeature : Feature
         }
 
         var solid = ExtrudeOp.Build(shifted, dir);
+        (Vector3d Centre, double Radius)? circ = CircleOf(shifted);
+        if (_x is { } xf)
+        {
+            // копия операции: резец и окружность точного пути — под преобразованием
+            solid = Kernel.Topology.TopologyTransform.Apply(solid, xf) ?? Kernel.Ops.TransformOp.Copy(solid, xf);
+            if (circ is { } cc) circ = (xf.Point(cc.Centre), cc.Radius);
+            dir = xf.Direction(dir);
+        }
 
         if (Cut)
         {
@@ -139,7 +155,7 @@ public sealed class ExtrudeFeature : Feature
             // обязан граниться. Именно знание замысла и позволяет резать точно: во всяком
             // вычитании цилиндра, случившемся внутри другой операции, такого знания нет
             // (проверено на оболочке: там внутренняя труба уходила в точный путь и ошибалась).
-            if (ExactCircularCuts && ctx.Bodies.Count == 1 && CircleOf(shifted) is { } circle)
+            if (ExactCircularCuts && ctx.Bodies.Count == 1 && circ is { } circle)
             {
                 var (centre, radius) = circle;
                 Vector3d axis = dir.LengthSquared < 1e-18 ? Vector3d.UnitZ : dir.Normalized();
@@ -164,7 +180,7 @@ public sealed class ExtrudeFeature : Feature
             // БОБЫШКА ПО ОКРУЖНОСТИ — ТОЧНЫМ ПУТЁМ. Замысел тот же, что у выреза, только материал
             // добавляется: эскиз из одной окружности, выдавленный от грани, — цилиндрический
             // прилив, и резец не обязан граниться.
-            if (ExactCircularCuts && ctx.Bodies.Count == 1 && CircleOf(shifted) is { } boss)
+            if (ExactCircularCuts && ctx.Bodies.Count == 1 && circ is { } boss)
             {
                 var (centre, radius) = boss;
                 Vector3d axis = dir.LengthSquared < 1e-18 ? Vector3d.UnitZ : dir.Normalized();

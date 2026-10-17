@@ -411,7 +411,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
 
     // ================================================================ мышь
 
-    private enum Drag { None, Orbit, Pan, RightPending, Select, Tool, Handle }
+    private enum Drag { None, Orbit, Pan, RightPending, Select, Tool, Handle, Dim }
     private Drag _drag;
     private Point _last, _down;
 
@@ -431,6 +431,8 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         else if (props.IsRightButtonPressed) _drag = Drag.RightPending;
         else if (props.IsLeftButtonPressed) _drag = Tool != null ? Drag.Tool : HandleHit(pt.Position) != 0 ? Drag.Handle : Drag.Select;
         if (_drag == Drag.Handle) BeginHandleDrag(pt.Position);
+        // u12 (замечание 17): подпись размера эскиза тащится мышью (двойной щелчок — правка значения, ниже)
+        else if (props.IsLeftButtonPressed && e.ClickCount < 2 && ActiveSketch != null && BeginDimensionDrag(pt.Position)) _drag = Drag.Dim;
         if (props.IsLeftButtonPressed && e.ClickCount >= 2 && ActiveSketch != null && TryEditDimension(pt.Position)) { _drag = Drag.None; e.Handled = true; return; }
         if (_drag == Drag.Tool && e.ClickCount >= 2) { ToolFinish(); _drag = Drag.None; e.Handled = true; return; }
         if (_drag != Drag.None) { Transition.Cancel(); e.Pointer.Capture(this); }
@@ -448,11 +450,13 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
             case Drag.Orbit: Camera.Orbit(dx, dy); _last = p; CameraChanged?.Invoke(); Redraw(); return;
             case Drag.Pan: Camera.Pan(dx, dy); _last = p; Redraw(); return;
             case Drag.Handle: HandleDragMove(p); return;
+            case Drag.Dim: DimensionDragMove(p); return;
             case Drag.RightPending:
                 if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > 4) { _drag = Drag.Pan; Camera.Pan(dx, dy); _last = p; Redraw(); }
                 return;
         }
         if (Tool != null) ToolMove(p);
+        if (ActiveSketch != null) UpdateDimensionHover(p);
         RequestPick(p, click: false, KeyModifiers.None);
     }
 
@@ -464,6 +468,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         _drag = Drag.None;
         e.Pointer.Capture(null);
         if (was == Drag.Handle) { EndHandleDrag(); return; }
+        if (was == Drag.Dim) { if (!EndDimensionDrag()) RequestPick(p, click: true, e.KeyModifiers); return; }
         if (was == Drag.RightPending && Tool != null) ToolFinish();
         else if (was == Drag.RightPending) ContextRequested?.Invoke(p);
         else if (was == Drag.Tool && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 6) ToolClick(p);

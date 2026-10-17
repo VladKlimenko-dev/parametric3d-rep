@@ -570,6 +570,7 @@ public sealed class Part : ModelItem
     /// </summary>
     public BuildResult Compute(ParameterTable? parameters, ISketchSolver? solver, CancellationToken cancellation)
     {
+        if (RebuildLog) Console.WriteLine($"REBUILD {Name} features {Features.Count} dirty {IsDirty} {string.Join(" < ", Environment.StackTrace.Split('\n').Skip(2).Take(7).Select(l => l.Trim()))}");
         int dirtyAtStart = _dirtyFrom;
         // KRN-08 (08.6): с чем считался результат, кроме самих операций, — для проверки при применении.
         var inputs = (EffectiveStage, Policy, Limits);
@@ -1112,6 +1113,7 @@ public sealed class Part : ModelItem
     /// <summary>KRN-03: инвариант оболочек после каждой операции (P3D_SHELLFIX=0 — выключить, для мутационной проверки).</summary>
     internal static readonly bool EnforceShellInvariant = Environment.GetEnvironmentVariable("P3D_SHELLFIX") != "0";
     static readonly bool FeatStat = Environment.GetEnvironmentVariable("P3D_FEATSTAT") == "1";
+    static readonly bool RebuildLog = Environment.GetEnvironmentVariable("P3D_REBUILDLOG") == "1";
     static readonly bool ShellStat = Environment.GetEnvironmentVariable("P3D_SHELLSTAT") == "1";
     static void ShellStatOf(Kernel.Topology.TSolid b, Feature f)
     {

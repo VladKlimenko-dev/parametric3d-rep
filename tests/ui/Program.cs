@@ -588,6 +588,178 @@ Check("UI-SHELL-HANDLE", () =>
     w.Close();
 });
 
+// u12 (замечания 1, 2): переменный радиус и переменная фаска на цепочке «ребро — дуга R30 — ребро» — плавно по всей длине,
+// точная лента (закон по длине цепочки), без резца и гранения
+Check("UI-VAR-CHAIN", () =>
+{
+    foreach (bool ch in new[] { false, true })
+    {
+        var s = DocumentSession.Sample(); var p = s.Part!; p.Rebuild(null);
+        double zMax = p.Bodies.SelectMany(b => b.Edges).Max(e => Math.Max(e.V0!.P.Z, e.V1!.P.Z));
+        var top = p.Bodies.SelectMany(b => b.Edges).Where(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0!.P.Z - zMax) < 1e-6 && Math.Abs(e.V1!.P.Z - zMax) < 1e-6).OrderBy(e => e.V0!.P.X + e.V1!.P.X).First();
+        var r30 = new RoundFeature { Radius = new ValueRef(30), Name = "R30" }; r30.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(top)); p.AddFeature(r30); p.Rebuild(null);
+        var arc = p.Bodies.SelectMany(b => b.Edges).First(e => e.Curve is Parametric3D.Kernel.Curves.ArcCurve3 a && Math.Abs(a.Radius - 30) < 1e-6);
+        var chain = Parametric3D.App.Operations.Topo.TangentChain(arc, Parametric3D.App.Operations.Topo.AllEdges(p));
+        if (chain.Count != 3) throw new Exception($"chain of {chain.Count}");
+        Feature f;
+        if (ch) { var cf = new ChamferFeature { Mode = ChamferKind.TwoDistances, D1 = new ValueRef(10), D2 = new ValueRef(10), SizeEnd = new ValueRef(20) }; foreach (var c in chain) cf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(c)); f = cf; }
+        else { var rf = new RoundFeature { Radius = new ValueRef(10), RadiusEnd = new ValueRef(20) }; foreach (var c in chain) rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(c)); f = rf; }
+        p.AddFeature(f); var sw = System.Diagnostics.Stopwatch.StartNew(); p.Rebuild(null);
+        if (f.Error != null) throw new Exception((ch ? "chamfer: " : "round: ") + f.Error);
+        string want = ch ? "direct variable chamfer" : "radius law";
+        if (!p.Warnings.Any(w => w.Contains(want))) throw new Exception("not the exact path: " + string.Join(" | ", p.Warnings));
+        if (p.Warnings.Any(w => w.Contains("Geometry downgrade"))) throw new Exception("faceted faces: " + string.Join(" | ", p.Warnings));
+        Console.WriteLine($"  variable {(ch ? "chamfer" : "round")} 10→20 on line–arc–line: {sw.Elapsed.TotalMilliseconds:0} ms, faces {p.Bodies.Sum(b => b.Faces.Count())}");
+    }
+});
+
+// u12 (замечание 8): оболочка с открытой лентой скругления (кривая грань): полость выходит сквозь ленту; закрытая оболочка
+// куба со скруглением R20 и стенкой 2 — полость по сектору ленты (прежде весь цилиндр R18 отсекал полость: 116 000 вместо 878 000)
+Check("UI-SHELL-OPEN-ROUND", () =>
+{
+    foreach (bool open in new[] { true, false })
+    {
+        var s = DocumentSession.Sample(); var p = s.Part!; p.Rebuild(null);
+        double zMax = p.Bodies.SelectMany(b => b.Edges).Max(e => Math.Max(e.V0!.P.Z, e.V1!.P.Z));
+        var top = p.Bodies.SelectMany(b => b.Edges).Where(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0!.P.Z - zMax) < 1e-6 && Math.Abs(e.V1!.P.Z - zMax) < 1e-6).OrderBy(e => e.V0!.P.X + e.V1!.P.X).First();
+        var rf = new RoundFeature { Radius = new ValueRef(20) }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(top)); p.AddFeature(rf); p.Rebuild(null);
+        double v0 = p.Bodies.Sum(b => Parametric3D.Kernel.Topology.AnalyticVolume.Of(b) ?? double.NaN);
+        var face = p.Bodies.SelectMany(b => b.Faces).First(f => f.Tag.Contains("round:face"));
+        var sh = new ShellFeature("Shell") { Thickness = new ValueRef(2) };
+        if (open) { sh.OpenFaces.Add(Parametric3D.App.Operations.Refs.FacePoint(p, face.Id)!.Value); sh.OpenFaceNames.Add(face.Tag); }
+        p.AddFeature(sh); p.Rebuild(null);
+        if (sh.Error != null) throw new Exception($"open {open}: {sh.Error}");
+        double v = p.Bodies.Sum(b => Parametric3D.Kernel.Topology.AnalyticVolume.Of(b) ?? double.NaN);
+        Console.WriteLine($"  shell 2 (open round {open}): volume {v:F1} of {v0:F1}; {p.Warnings.LastOrDefault(w => w.StartsWith("Shell: wall"))}");
+        if (!(v < 0.15 * v0)) throw new Exception($"open {open}: the cavity is too small (volume {v:F1} of {v0:F1})");
+        if (open && !p.Warnings.Any(w => w.Contains("1 face(s) left open") || w.Contains("open"))) throw new Exception("the round face did not open");
+    }
+});
+
+// u12 (замечание 11): кромка (касательный стык) — не ребро: края ленты скругления — кромки, рёбра куба — нет
+Check("UI-SEAM-EDGES", () =>
+{
+    var s = DocumentSession.Sample(); var p = s.Part!; p.Rebuild(null);
+    var top = p.Bodies.SelectMany(b => b.Edges).First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3);
+    if (Parametric3D.Kernel.Topology.EdgeClass.IsTangentSeam(top)) throw new Exception("a cube edge taken for a seam");
+    var rf = new RoundFeature { Radius = new ValueRef(20) }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(top)); p.AddFeature(rf); p.Rebuild(null);
+    var face = p.Bodies.SelectMany(b => b.Faces).First(f => f.Tag.Contains("round:face"));
+    var seams = face.Edges.Where(Parametric3D.Kernel.Topology.EdgeClass.IsTangentSeam).Count();
+    var all = p.Bodies.SelectMany(b => b.Edges).Count(Parametric3D.Kernel.Topology.EdgeClass.IsTangentSeam);
+    if (seams != 2 || all != 2) throw new Exception($"seams on the round {seams}, in the body {all} (want 2 and 2)");
+    Console.WriteLine($"  seams: {all} (the two lines along the round)");
+});
+
+// u12 (замечание 15): зеркало ОПЕРАЦИИ — скругление верхнего ребра куба R20 отражается на противоположное ребро (прежде
+// отражалось и объединялось тело: скругление заполнялось, деталь становилась кубом без ошибки)
+Check("UI-MIRROR-OPS", () =>
+{
+    var s = DocumentSession.Sample(); var p = s.Part!; p.Rebuild(null);
+    double zMax = p.Bodies.SelectMany(b => b.Edges).Max(e => Math.Max(e.V0!.P.Z, e.V1!.P.Z));
+    double yMin = p.Bodies.SelectMany(b => b.Edges).Min(e => Math.Min(e.V0!.P.Y, e.V1!.P.Y));
+    var top = p.Bodies.SelectMany(b => b.Edges).First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0!.P.Z - zMax) < 1e-6 && Math.Abs(e.V1!.P.Z - zMax) < 1e-6 && Math.Abs(e.V0.P.Y - yMin) < 1e-6 && Math.Abs(e.V1.P.Y - yMin) < 1e-6);
+    double v0 = p.Bodies.Sum(b => Parametric3D.Kernel.Topology.AnalyticVolume.Of(b) ?? double.NaN);
+    var rf = new RoundFeature { Radius = new ValueRef(20), Name = "R20" }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(top)); p.AddFeature(rf);
+    p.Rebuild(null); double v1 = p.Bodies.Sum(b => Parametric3D.Kernel.Topology.AnalyticVolume.Of(b) ?? double.NaN);
+    var bb = p.Bodies[0].Bounds; var c = (bb.Min + bb.Max) / 2;
+    var mf = new MirrorFeature("Mirror") { At = c, Normal = Vector3d.UnitY }; mf.Sources.Add(rf.Key); p.AddFeature(mf);
+    var sw = System.Diagnostics.Stopwatch.StartNew(); p.Rebuild(null);
+    if (rf.Error != null || mf.Error != null) throw new Exception($"errors: {rf.Error} / {mf.Error}");
+    double v = p.Bodies.Sum(b => Parametric3D.Kernel.Topology.AnalyticVolume.Of(b) ?? double.NaN), want = v0 - 2 * (v0 - v1);
+    if (!(Math.Abs(v - want) < 1e-6 * want)) throw new Exception($"volume {v:F3}, want {want:F3}");
+    Console.WriteLine($"  mirror of a round: {sw.Elapsed.TotalMilliseconds:0} ms, volume {v:F3} (want {want:F3})");
+});
+
+// u12 (замечание 18): массив ОПЕРАЦИИ — вырез Ø10 в кубе со скруглением R30 повторяется 3 раза; прежде массив копировал всё
+// тело (три смещённых куба объединялись, перестроение не кончалось)
+Check("UI-PATTERN-OPS", () =>
+{
+    foreach (double step in new[] { 15.0, 5.0 })
+    {
+        var s = DocumentSession.Sample(); var p = s.Part!; p.Rebuild(null);
+        double zMax = p.Bodies.SelectMany(b => b.Edges).Max(e => Math.Max(e.V0!.P.Z, e.V1!.P.Z));
+        var top = p.Bodies.SelectMany(b => b.Edges).Where(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0!.P.Z - zMax) < 1e-6 && Math.Abs(e.V1!.P.Z - zMax) < 1e-6).OrderBy(e => e.V0!.P.X + e.V1!.P.X).First();
+        var r30 = new RoundFeature { Radius = new ValueRef(30), Name = "R30" }; r30.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(top)); p.AddFeature(r30);
+        var sk = Parametric3D.App.Diagnostics.TestParts.CircleSketch(p, zMax, 10, 0, 5);
+        var cut = new ExtrudeFeature("Cut") { SketchId = sk.Id, Cut = true }; cut.Side1.Distance = new ValueRef(20); cut.Side1.Flip = true; p.AddFeature(cut);
+        var lp = new LinearPatternFeature("Pattern") { Step = new Vector3d(step, 0, 0), Count = new ValueRef(3) }; lp.Sources.Add(cut.Key); p.AddFeature(lp);
+        var sw = System.Diagnostics.Stopwatch.StartNew(); p.Rebuild(null); double ms = sw.Elapsed.TotalMilliseconds;
+        if (cut.Error != null || lp.Error != null) throw new Exception($"step {step}: errors {cut.Error} / {lp.Error}");
+        double v = p.Bodies.Sum(b => Parametric3D.Kernel.Topology.AnalyticVolume.Of(b) ?? double.NaN);
+        double want = 1e6 - (1 - Math.PI / 4) * 900 * 100 - 3 * Math.PI * 25 * 20;
+        Console.WriteLine($"  pattern of a cut (step {step}): {ms:0} ms, volume {v:F3}{(step >= 10 ? $" (want {want:F3})" : "")}, bodies {p.Bodies.Count}");
+        if (step >= 10 && !(Math.Abs(v - want) < 0.5)) throw new Exception($"volume {v:F3}, want {want:F3}");
+        if (ms > 20000) throw new Exception($"step {step}: {ms:0} ms");
+    }
+});
+
+// u11: открытое скругление вогнутого прямого ребра между плоскостями, концы — на наклонных плоских торцах: лента — точный
+// цилиндр (а не таблица сечений), края на торцах — эллипсы; объём — как у пути сечений (315690.4877073967), время — доли секунды
+Check("UI-OPEN-CYL", () =>
+{
+    var p = Parametric3D.App.Diagnostics.TestParts.Realistic(4, 30); p.Rebuild(null);
+    var at = new Vector3d(71.68894768445239, 30.120455190595457, 10);
+    var e0 = p.Bodies.SelectMany(b => b.Edges).OrderBy(e => Math.Min((e.V0!.P - at).Length, (e.V1!.P - at).Length)).First();
+    var rf = new RoundFeature { Radius = new ValueRef(2.1) };
+    foreach (var c in Parametric3D.App.Operations.Topo.TangentChain(e0, Parametric3D.App.Operations.Topo.AllEdges(p))) rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(c));
+    p.AddFeature(rf); var sw = System.Diagnostics.Stopwatch.StartNew(); p.Rebuild(null); double ms = sw.Elapsed.TotalMilliseconds;
+    if (rf.Error != null) throw new Exception("round failed: " + rf.Error);
+    if (!p.Warnings.Any(w => w.Contains("direct blend"))) throw new Exception("not the direct route: " + string.Join(" | ", p.Warnings));
+    var cyl = p.Bodies.SelectMany(b => b.Faces).Where(f => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.CylinderSurface cs && Math.Abs(cs.Radius - 2.1) < 1e-9).ToList();
+    if (Environment.GetEnvironmentVariable("P3D_OPENCYL") != "0" && cyl.Count == 0) throw new Exception("blend is not an exact cylinder");
+    double v = p.Bodies.Sum(b => Parametric3D.Kernel.Topology.AnalyticVolume.Of(b) ?? double.NaN);
+    if (!(Math.Abs(v - 315690.4877073967) < 1e-6)) throw new Exception($"volume {v:R}");
+    Console.WriteLine($"  open round R2.1: {ms:0} ms, cylinder faces {cyl.Count}, volume {v:F6}");
+});
+
+if (Environment.GetEnvironmentVariable("P3D_BENCH") == "shellcurved")
+Check("BENCH-SHELL-CURVED", () =>
+{
+    // u12 (замечание 8): оболочка с открытой кривой гранью (лента скругления R20)
+    foreach (double t in new[] { 2.0, 5.0, -3.0 })
+    {
+        var s = DocumentSession.Sample(); var p = s.Part!; p.Rebuild(null);
+        double zMax = p.Bodies.SelectMany(b => b.Edges).Max(e => Math.Max(e.V0!.P.Z, e.V1!.P.Z));
+        var top = p.Bodies.SelectMany(b => b.Edges).Where(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0!.P.Z - zMax) < 1e-6 && Math.Abs(e.V1!.P.Z - zMax) < 1e-6).OrderBy(e => e.V0!.P.X + e.V1!.P.X).First();
+        var rf = new RoundFeature { Radius = new ValueRef(20), Name = "R20" }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(top)); p.AddFeature(rf); p.Rebuild(null);
+        var face = p.Bodies.SelectMany(b => b.Faces).First(f => f.Tag.Contains("round:face"));
+        var c = Parametric3D.App.Operations.Refs.FacePoint(p, face.Id)!.Value;
+        var sh = new ShellFeature("Shell") { Thickness = new ValueRef(t) }; sh.OpenFaces.Add(c); sh.OpenFaceNames.Add(face.Tag); p.AddFeature(sh);
+        Parametric3D.Kernel.Ops.DirectRound.Debug = null;
+        Parametric3D.Kernel.Ops.ShellOp.ShellDebug = Environment.GetEnvironmentVariable("P3D_SHDBG") == "1" ? m => Console.WriteLine("    sh: " + m) : null;
+        var sw = System.Diagnostics.Stopwatch.StartNew(); p.Rebuild(null);
+        Console.WriteLine($"  shell t {t}: {sw.Elapsed.TotalMilliseconds:0} ms error {sh.Error} volume {p.Bodies.Sum(b => Parametric3D.Kernel.Topology.AnalyticVolume.Of(b) ?? double.NaN):F1}");
+        foreach (var w in p.Warnings.TakeLast(3)) Console.WriteLine("    warn " + (w.Length > 250 ? w[..250] : w));
+    }
+});
+
+if (Environment.GetEnvironmentVariable("P3D_BENCH") == "var")
+Check("BENCH-VAR", () =>
+{
+    // u12 (замечание 1): куб 100, R30 верхнего ребра, затем цепочка «ребро — дуга R30 — ребро» переменным радиусом 10 → 20
+    var s = DocumentSession.Sample(); var p = s.Part!; p.Rebuild(null);
+    double zMax = p.Bodies.SelectMany(b => b.Edges).Max(e => Math.Max(e.V0!.P.Z, e.V1!.P.Z));
+    var top = p.Bodies.SelectMany(b => b.Edges).Where(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0!.P.Z - zMax) < 1e-6 && Math.Abs(e.V1!.P.Z - zMax) < 1e-6).OrderBy(e => e.V0!.P.X + e.V1!.P.X).First();
+    var r30 = new RoundFeature { Radius = new ValueRef(30), Name = "R30" }; r30.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(top)); p.AddFeature(r30); p.Rebuild(null);
+    if (r30.Error != null) throw new Exception("R30: " + r30.Error);
+    var arc = p.Bodies.SelectMany(b => b.Edges).First(e => e.Curve is Parametric3D.Kernel.Curves.ArcCurve3 a && Math.Abs(a.Radius - 30) < 1e-6);
+    var chain = Parametric3D.App.Operations.Topo.TangentChain(arc, Parametric3D.App.Operations.Topo.AllEdges(p));
+    foreach (var e in chain) Console.WriteLine($"  chain {e.Curve?.GetType().Name} {e.V0!.P} -> {e.V1!.P}");
+    double r0 = double.Parse(Environment.GetEnvironmentVariable("P3D_R0") ?? "10"), r1 = double.Parse(Environment.GetEnvironmentVariable("P3D_R1") ?? "20");
+    Feature f;
+    if (Environment.GetEnvironmentVariable("P3D_CH") == "1") { var cf = new ChamferFeature { Mode = ChamferKind.TwoDistances, D1 = new ValueRef(r0), D2 = new ValueRef(r0), SizeEnd = new ValueRef(r1) }; foreach (var c in chain) cf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(c)); f = cf; }
+    else { var rf = new RoundFeature { Radius = new ValueRef(r0), RadiusEnd = new ValueRef(r1), Name = "var" }; foreach (var c in chain) rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(c)); f = rf; }
+    Parametric3D.Kernel.Ops.DirectRound.Debug = m => { if (m.StartsWith("declined") || m.StartsWith("build declined")) Console.WriteLine("    direct: " + (m.Length > 300 ? m[..300] : m)); };
+    Parametric3D.Kernel.Diagnostics.Prof.Enabled = Environment.GetEnvironmentVariable("P3D_PROF") == "1"; Parametric3D.Kernel.Diagnostics.Prof.Reset();
+    if (Environment.GetEnvironmentVariable("P3D_UVDBG") == "1") Parametric3D.Kernel.Tess.UvMesher.Debug = m => Console.WriteLine("    uv: " + (m.Length > 300 ? m[..300] : m));
+    p.AddFeature(f); var sw = System.Diagnostics.Stopwatch.StartNew(); p.Rebuild(null);
+    Console.WriteLine($"  var: {sw.Elapsed.TotalMilliseconds:0} ms error {f.Error}");
+    if (Parametric3D.Kernel.Diagnostics.Prof.Enabled) Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(70)));
+    foreach (var w in p.Warnings) Console.WriteLine("    warn " + (w.Length > 300 ? w[..300] : w));
+    foreach (var fc in p.Bodies.SelectMany(b => b.Faces)) Console.WriteLine($"    face {Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(fc)?.GetType().Name} {fc.Surface.GetType().Name} {fc.Tag}");
+    if (Environment.GetEnvironmentVariable("P3D_SAVE") is { } sv) Parametric3D.Model.DocumentStorage.Save(sv, p);
+});
+
 if (Environment.GetEnvironmentVariable("P3D_BENCH") == "shell")
 Check("BENCH-SHELL", () =>
 {
@@ -738,7 +910,7 @@ Check("BENCH-EDGE", () =>
         if (Environment.GetEnvironmentVariable("P3D_UVDBG") == "1") Parametric3D.Kernel.Tess.UvMesher.Debug = m => Console.WriteLine("    uv: " + (m.Length > 300 ? m[..300] : m));
         p.AddFeature(f); var sw = System.Diagnostics.Stopwatch.StartNew(); p.Rebuild(null);
         if (Parametric3D.Kernel.Diagnostics.Prof.Enabled) Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(40)));
-        Console.WriteLine($"  {op}: {sw.Elapsed.TotalMilliseconds:0} ms error {f.Error}");
+        Console.WriteLine($"  {op}: {sw.Elapsed.TotalMilliseconds:0} ms error {f.Error} volume {p.Bodies.Sum(b => Parametric3D.Kernel.Topology.AnalyticVolume.Of(b) ?? double.NaN):R}");
         foreach (var w in p.Warnings) Console.WriteLine("    warn " + (w.Length > 300 ? w[..300] : w));
     }
 });
@@ -808,7 +980,7 @@ Check("BENCH-CHAIN", () =>
         using (new Parametric3D.Kernel.KernelContext(ks).WithStageHook(Hook).Enter()) res = part.Compute(null);
         Hook("end"); double t = sw.Elapsed.TotalMilliseconds; part.Apply(res);
         Console.WriteLine($"  R {r}: {t:0} ms faces {part.Bodies.Sum(b => b.Faces.Count())} tris {part.Mesh?.Indices.Length / 3} err {rf.Error} | " + string.Join(", ", st.OrderByDescending(k => k.Value).Take(4).Select(k => $"{k.Key}={k.Value:0}")));
-        if (Parametric3D.Kernel.Diagnostics.Prof.Enabled) Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(25)));
+        if (Parametric3D.Kernel.Diagnostics.Prof.Enabled) Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(70)));
         Console.WriteLine("     tris/face: " + string.Join(" ", part.Bodies.SelectMany(b => b.Faces).Select(f => $"{Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name.Replace("Surface","")}:{(part.Mesh!.FaceRanges.TryGetValue(f.Id, out var fr) ? fr.IndexCount / 3 : -1)}")));
     }
 });

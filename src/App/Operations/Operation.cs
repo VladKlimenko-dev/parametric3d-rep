@@ -23,6 +23,7 @@ namespace Parametric3D.App.Operations;
 public abstract class Operation
 {
     protected MainWindow W = null!;
+    public MainWindow Window => W;
     protected Part Part = null!;
     public OpPanel? Panel { get; private set; }
     public RefField? ActiveRef { get; private set; }
@@ -82,7 +83,10 @@ public abstract class Operation
             foreach (var r in Panel.Refs)
                 if (r.Box != null) r.Box.BorderBrush = ReferenceEquals(r, f) ? W.Res("P3.Accent") : W.Res("P3.Border");
         var sel = W.ViewPort.Selection;
-        sel.Filter = f?.Filter ?? PickFilter.All;
+        // u12: фильтр — активного поля и незаполненных прочих (выбранное, подходящее другому полю, уходит туда)
+        var flt = f?.Filter ?? PickFilter.All;
+        if (f != null && Panel != null) foreach (var r in Panel.Refs) if (!ReferenceEquals(r, f) && !r.IsSet) flt |= r.Filter;
+        sel.Filter = flt;
         Syncing = true;
         try
         {
@@ -96,6 +100,13 @@ public abstract class Operation
     public void SelectionChanged(IReadOnlyList<PickRef> items)
     {
         if (Syncing || ActiveRef is not { } f) return;
+        // u12: выбранное не подходит активному полю, но подходит другому — идёт туда (плоская грань при поле «Эскиз» —
+        // в поле «Плоскость»; вершина при поле «Грань входа» — в «Точки»)
+        if (items.Count > 0 && !items.Any(f.Accept) && Panel?.Refs.FirstOrDefault(r => !ReferenceEquals(r, f) && items.Any(r.Accept)) is { } other)
+        {
+            if (other.Take(items)) RefChanged(other);
+            return;
+        }
         if (!f.Take(items)) return;
         RefChanged(f);
         // одиночное поле заполнено — дальше следующее пустое

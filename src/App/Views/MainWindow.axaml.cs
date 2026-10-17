@@ -338,6 +338,7 @@ public partial class MainWindow : Window
     {
         (DisplayStyle.Shaded, "style.shaded"), (DisplayStyle.ShadedWithEdges, "style.shaded_edges"), (DisplayStyle.Wireframe, "style.wireframe"),
         (DisplayStyle.HiddenLines, "style.hidden_lines"), (DisplayStyle.Transparent, "style.transparent"), (DisplayStyle.Material, "style.material"),
+        (DisplayStyle.ViewMesh, "style.view_mesh"), (DisplayStyle.FeaMesh, "style.fea_mesh"),
     };
 
     private void UpdateStyleButton()
@@ -522,7 +523,7 @@ public partial class MainWindow : Window
         View.CameraChanged += () => { Cube.Sync(); UpdateProjectionButton(View.IsPerspective); };
         View.HoverChanged += h => UpdateStatus(h);
         View.Selection.Changed += OnSelectionChanged;
-        View.ContextRequested += _ => OpenViewContextMenu();
+        View.ContextRequested += p => { if (InSketch && View.DimensionAt(p) is { } dm) OpenDimensionMenu(dm); else OpenViewContextMenu(); };
         View.SceneRebuilt += () => { CurrentOperation?.RefreshStatus(); UpdateStatus(); if (_propsOn && CurrentOperation == null) ShowProperties(); };
         View.ToolChanged += () => { ShowHint(View.Tool != null ? L(View.Tool.Hint) : InSketch ? L("Выберите инструмент слева; Ctrl+Enter — закончить эскиз") : null); RefreshToolStates(); };
         View.SketchEdited += () => { ScheduleTree(); UpdateStatus(); };
@@ -548,6 +549,7 @@ public partial class MainWindow : Window
         using var _ui = Diagnostics.UiTimes.Measure("окно: выбор изменился");
         CurrentOperation?.SelectionChanged(View.Selection.Items);
         if (CurrentOperation is ShellOp && !View.HandleDragging) AttachOpHandle();
+        else if (CurrentOperation is RoundOp or ChamferOp && !View.HandleDragging && !_startingHandleOp && (_handleOpFixed || !ReferenceEquals(CurrentOperation, _handleOp))) AttachOpHandle();
         var prim = View.Selection.Primary;
         if (prim.Id != _lastPrimary.Id || View.Selection.IsEmpty)
         {
@@ -556,6 +558,7 @@ public partial class MainWindow : Window
         }
         UpdateStatus();
         UpdateContextBar();
+        RefreshToolStates();     // u12: кнопки операций — по выбранному
         if (CurrentOperation == null && !_switchingHandle) UpdateHandle();
         if (_propsOn && CurrentOperation == null) ShowProperties();
     }
@@ -737,6 +740,15 @@ public partial class MainWindow : Window
 
     private void OnHandleDragged(int sign, double v)
     {
+        if (_handleOpFixed && CurrentOperation is { } fop0 && ReferenceEquals(fop0, _handleOp))
+        {
+            // операция, начатая командой: сторона ручки не выбирает операцию; со знаком — наружу плюс (плоскость)
+            double val = fop0.SignedDrag ? (sign > 0 ? v : -v) : Math.Abs(v);
+            fop0.SetDragValue(val);
+            View.Redraw();
+            ShowDragLabel(fop0, val);
+            return;
+        }
         if (CurrentOperation is { SignedDrag: true } sop && ReferenceEquals(sop, _handleOp))
         {
             // одна операция на обе стороны: внутрь (знак −) — положительная величина
@@ -781,7 +793,10 @@ public partial class MainWindow : Window
     /// </summary>
     private void AttachOpHandle()
     {
-        if (CurrentOperation is not ShellOp sh || InSketch) return;
+        if (InSketch) return;
+        if (CurrentOperation is RoundOp or ChamferOp) { AttachEdgeOpHandle(); return; }
+        if (CurrentOperation is PlaneOp) { RefreshPlaneHandle(); return; }
+        if (CurrentOperation is not ShellOp sh) return;
         var r = sh.FaceRefs.FirstOrDefault();
         if (r.Owner is not Part part || Topo.FaceHandle(part, r.Id) is not { } h) return;
         static Vector3 F(OpenTK.Mathematics.Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
@@ -793,6 +808,50 @@ public partial class MainWindow : Window
         _handleOp = sh;
         View.SetHandleValue(-(sh.DragCurrent ?? 0));
         View.SetHandleGhost(SignedGhost(), SignedValid());
+    }
+
+    /// <summary>
+    /// u12 (замечание 7): ручка у скругления и фаски, начатых командой — у первого выбранного ребра поля; тянут в любую
+    /// сторону — величина этой операции (операция не меняется). Выбрали другие рёбра — ручка переезжает.
+    /// </summary>
+    private bool _handleOpFixed;
+
+    /// <summary>u12 (замечание 14): ручка плоскости — у способов со смещением и углом (по точкам — без ручки).</summary>
+    public void RefreshPlaneHandle()
+    {
+        if (CurrentOperation is not PlaneOp op || View.HandleDragging) return;
+        View.Handle = null; _handleOp = null; _handleOpFixed = false;
+        if (op.HandleAt() is { } h)
+        {
+            static Vector3 F(OpenTK.Mathematics.Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
+            View.Handle = new OpHandle(F(h.At), F(h.Out), true, true);
+            _ghostOut = _ghostIn = null; _validOut = _validIn = null;
+            _handleKind = "plane"; _handleOp = op; _handleOpFixed = true;
+            View.SetHandleValue(op.DragCurrent ?? 0);
+            View.SetHandleGhost(null, null);
+        }
+        View.MarkDirty();
+    }
+    private void AttachEdgeOpHandle()
+    {
+        var op = CurrentOperation!;
+        bool round = op is RoundOp;
+        var refs = op is RoundOp ro ? ro.EdgeRefs : ((ChamferOp)op).EdgeRefs;
+        View.Handle = null; _handleOp = null; _handleOpFixed = false;
+        var r = refs.FirstOrDefault();
+        if (r.Owner is not Part part || Topo.EdgeHandle(part, r.Id) is not { } h) { View.MarkDirty(); return; }
+        static Vector3 F(OpenTK.Mathematics.Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
+        View.Handle = new OpHandle(F(h.At), F(h.Out), true, true);
+        var ids = refs.Where(x => x.Owner == part).Select(x => x.Id).ToList();
+        var g = Topo.EdgeGhost(part, ids, round) is { } gg ? (Func<double, List<(OpenTK.Mathematics.Vector3d A, OpenTK.Mathematics.Vector3d B)>>)(v => gg(v)) : null;
+        _ghostOut = _ghostIn = g;
+        _validOut = _validIn = Topo.EdgeGhostValid(part, ids, round);
+        _handleKind = "edge-op";
+        _handleOp = op; _handleOpFixed = true;
+        double cur = op.DragCurrent ?? 0;
+        View.SetHandleValue(round ? -cur : cur);
+        View.SetHandleGhost(SignedGhost(), SignedValid());
+        View.MarkDirty();
     }
 
     private void OnHandleDragEnded()
@@ -885,6 +944,7 @@ public partial class MainWindow : Window
     private void EditDimension(SkDimension d, Point at)
     {
         if (View.ActiveSketch is not { } sk) return;
+        if (d.UserLocked) { ShowToast(L("Размер заблокирован — снимите замок (правая кнопка → «Разблокировать»)"), error: false); return; }
         bool angle = d.Type == DimensionType.AngleLineLine;
         var tb = new TextBox { Text = d.Formula ?? d.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), MinWidth = 110 };
         var ok = new Button { Content = L("ОК"), Classes = { "accent" } };
@@ -929,6 +989,68 @@ public partial class MainWindow : Window
         if (parts.Length < 3) return info;
         var w = parts[2].Split(' ');
         return w[0] == "OpenGL" && w.Length > 2 && w[1] == "ES" ? $"OpenGL ES {w[2]}" : string.Join(" ", w.Take(2));
+    }
+
+    /// <summary>
+    /// u12 (замечание 17): меню размера эскиза (правая кнопка): сделать сильным, замок, справочный, стрелки внутри/снаружи;
+    /// у радиуса и диаметра — одна стрелка, радиус ↔ диаметр, диаметр как обычный размер.
+    /// </summary>
+    private void OpenDimensionMenu(SkDimension d)
+    {
+        if (View.ActiveSketch is not { } sk) return;
+        var items = new List<object>();
+        void Add(string label, bool enabled, Action act, string? icon = null, bool? check = null)
+        {
+            var mi = new MenuItem { Header = (check == true ? "✓ " : "") + L(label), IsEnabled = enabled };
+            if (icon != null && IconProvider.Get(icon) is { } img) mi.Icon = new Image { Source = img, Width = 16, Height = 16 };
+            mi.Click += (_, _) =>
+            {
+                var before = Model.Sketching.SketchState.Capture(sk);
+                act();
+                var st = sk.Solve(Session.Document.Solver);
+                if (st is SolveStatus.Overconstrained or SolveStatus.Inconsistent)
+                {
+                    before.RestoreInto(sk); sk.Solve(Session.Document.Solver);
+                    ShowToast(L("Размер противоречит другим связям эскиза"));
+                }
+                sk.BumpStructure();
+                View.RefreshDefaultDimensions();
+                sk.NotifyChanged(sk);
+                View.MarkDirty();
+            };
+            items.Add(mi);
+        }
+        bool radial = d.Type is DimensionType.Radius or DimensionType.Diameter;
+        Add("Сделать сильным", d.IsDefault || !d.Locked, () => { d.IsDefault = false; d.Locked = true; d.Reference = false; });
+        Add(d.UserLocked ? "Разблокировать" : "Заблокировать", !d.Reference, () =>
+        {
+            d.UserLocked = !d.UserLocked;
+            if (d.UserLocked) { d.IsDefault = false; d.Locked = true; }
+        }, d.UserLocked ? "sk_unlock_but.svg" : "sk_lock_but.svg");
+        Add(d.Reference ? "Сделать управляющим" : "Сделать справочным", !d.UserLocked, () =>
+        {
+            d.Reference = !d.Reference;
+            if (d.Reference) { d.Locked = false; d.IsDefault = false; } else { d.Locked = true; }
+        });
+        items.Add(new Separator());
+        Add("Стрелки снаружи (наружный размер)", true, () => d.Arrows = ArrowPlacement.Outside, check: d.Arrows == ArrowPlacement.Outside);
+        Add("Стрелки внутри (внутренний размер)", true, () => d.Arrows = ArrowPlacement.Inside, check: d.Arrows == ArrowPlacement.Inside);
+        Add("Стрелки — автоматически", true, () => d.Arrows = ArrowPlacement.Auto, check: d.Arrows == ArrowPlacement.Auto);
+        if (radial)
+        {
+            items.Add(new Separator());
+            Add("Одна стрелка", true, () => d.SingleArrow = !d.SingleArrow, check: d.SingleArrow);
+            if (d.Type == DimensionType.Radius)
+                Add("Сделать диаметром", !d.UserLocked, () => { d.Type = DimensionType.Diameter; d.Value *= 2; d.Formula = d.Formula == null ? null : $"({d.Formula})*2"; });
+            else
+            {
+                Add("Сделать радиусом", !d.UserLocked, () => { d.Type = DimensionType.Radius; d.Value /= 2; d.Formula = d.Formula == null ? null : $"({d.Formula})/2"; d.DiameterAsLinear = false; });
+                Add("Показать как размер", true, () => d.DiameterAsLinear = !d.DiameterAsLinear, check: d.DiameterAsLinear);
+            }
+        }
+        items.Add(new Separator());
+        Add("Изменить значение…", !d.UserLocked, () => Dispatcher.UIThread.Post(() => EditDimension(d, default)));
+        new ContextMenu { ItemsSource = items }.Open(View);
     }
 
     private void OpenViewContextMenu()
@@ -1044,7 +1166,7 @@ public partial class MainWindow : Window
         CurrentOperation = op;
         _opQuiet = !showPanel;
         // операция не от ручки — ручка у выбора убирается (её операция — другая)
-        if (!_startingHandleOp) { View.Handle = null; _handleOp = null; }
+        if (!_startingHandleOp) { View.Handle = null; _handleOp = null; _handleOpFixed = false; }
         PropsPanel.IsVisible = showPanel || _propsOn;
         PropsTitle.Text = L(op.Title).ToUpperInvariant();
         PropsBody.Children.Clear();
@@ -1096,7 +1218,7 @@ public partial class MainWindow : Window
     private void EndOperation()
     {
         CurrentOperation = null;
-        _handleOp = null;
+        _handleOp = null; _handleOpFixed = false;
         _opQuiet = false;
         DragValueBox.IsVisible = false;
         View.Handle = null;
@@ -1357,7 +1479,14 @@ public partial class MainWindow : Window
             PropsPanel.IsVisible = _propsOn;
             if (_propsOn) ShowProperties();
         }
-        else if (_opQuiet) PropsPanel.IsVisible = _propsOn;   // операция ручкой: панель — по кнопке
+        else
+        {
+            // u12 (замечание 6): во время операции кнопка «Свойства» прячет и показывает панель операции (прежде — только у
+            // операции ручкой; у начатой командой панель не уходила)
+            _propsOn = !PropsPanel.IsVisible;
+            PropsPanel.IsVisible = _propsOn;
+            if (!_propsOn) DragValueBox.IsVisible = false;
+        }
         RefreshToolStates();
     }
 

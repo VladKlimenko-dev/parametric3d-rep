@@ -20,7 +20,8 @@ internal static class Fields
         Describe = r => L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?"),
     };
 
-    public static RefField Edges() => new() { Label = "Рёбра", Filter = PickFilter.Edges, Accept = r => r.Kind == PickKind.Edge };
+    // u12: кромка (граница касательных граней) не берётся — скруглять и срезать там нечего
+    public static RefField Edges() => new() { Label = "Рёбра", Filter = PickFilter.Edges, Accept = r => r.Kind == PickKind.Edge && !Topo.IsSeam(r) };
 
     public static RefField Vertex() => new() { Label = "Вершина", Filter = PickFilter.Vertices, Accept = r => r.Kind == PickKind.Vertex, Single = true };
 
@@ -31,8 +32,46 @@ internal static class Fields
 
     public static RefField Line(string label, bool optional = false) => new()
     {
-        Label = label, Filter = PickFilter.Edges | PickFilter.Datums | PickFilter.SketchCurves, Accept = Refs.IsLinear, Single = true, Optional = optional,
+        Label = label, Filter = PickFilter.Edges | PickFilter.Datums | PickFilter.SketchCurves, Accept = r => Refs.IsLinear(r) && !Topo.IsSeam(r), Single = true, Optional = optional,
     };
+
+    /// <summary>
+    /// u12 (замечание 10): «Плоскость» перед «Эскизом» у выдавливания и вращения: эскиза ещё нет — выбирают грань или
+    /// опорную плоскость, приложение создаёт на ней эскиз и переходит в его правку; по завершении эскиза — снова эта
+    /// операция с этим эскизом.
+    /// </summary>
+    public static RefField SketchPlane() => new()
+    {
+        Label = "Плоскость", Filter = PickFilter.Faces | PickFilter.Datums, Accept = Refs.IsPlanar, Single = true, Optional = true,
+    };
+    public static void SketchOnPlane(Operation op, RefField? plane, RefField sk, Func<Sketch, Operation> then)
+    {
+        if (plane == null || plane.Items.Count == 0 || sk.Items.Count > 0) return;
+        if (Refs.PlaneOf(plane.Items[0]) is not { } pl) return;
+        var at = plane.Items[0];
+        var w = op.Window; var part = w.Session.Part;
+        if (part == null) return;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (!ReferenceEquals(w.CurrentOperation, op)) return;
+            w.CancelOperation();
+            w.BeginNewSketch(part, SketchOp.SketchFrame(at, pl.Frame), pl.SourceId, pl.Name, then);
+        });
+    }
+
+    /// <summary>u12: операции дерева для зеркала и массивов операций (выбор в дереве).</summary>
+    public static RefField Features() => new()
+    {
+        Label = "Операции", Filter = PickFilter.None, Optional = true,
+        Accept = r => r.Kind == PickKind.Feature && r.Target is Feature f && f is not (MirrorFeature or LinearPatternFeature or CircularPatternFeature),
+        Describe = r => (r.Target as Feature)?.Name ?? "?",
+    };
+    public static void PushSources(RefField f, List<string> sources)
+    {
+        if (!f.Touched) return;
+        sources.Clear();
+        foreach (var r in f.Items) if (r.Target is Feature ft && !sources.Contains(ft.Key)) sources.Add(ft.Key);
+    }
 
     public static PickRef SketchRef(Sketch sk) => new(sk.Id, PickKind.SketchCurve, sk.Parent, sk);
 }
@@ -80,6 +119,7 @@ public sealed class ExtrudeOp : FeatureOp<ExtrudeFeature>
 
     public override void Build(OpPanel p)
     {
+        if (!Editing) _plane = p.Ref(Fields.SketchPlane());
         _sk = p.Ref(Fields.Sketch());
         if (Editing && F.SketchId != 0) _sk.Kept = 1;
         p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
@@ -110,9 +150,12 @@ public sealed class ExtrudeOp : FeatureOp<ExtrudeFeature>
         else Seed(_sk);
     }
 
+    private RefField? _plane;
     protected override void Push()
     {
         if (_sk.Items.Count > 0 && Refs.SketchOf(_sk.Items[0]) is { } sk) F.SketchId = sk.Id;
+        bool cut = F.Cut;
+        Fields.SketchOnPlane(this, _plane, _sk, sk => new ExtrudeOp { SeedSketch = sk, StartCut = cut });
     }
 
     public override void Cancel()
@@ -133,6 +176,7 @@ public sealed class RevolveOp : FeatureOp<RevolveFeature>
 
     public override void Build(OpPanel p)
     {
+        if (!Editing) _plane = p.Ref(Fields.SketchPlane());
         _sk = p.Ref(Fields.Sketch());
         if (Editing && F.SketchId != 0) _sk.Kept = 1;
         _axis = p.Ref(new RefField
@@ -154,9 +198,11 @@ public sealed class RevolveOp : FeatureOp<RevolveFeature>
         else Seed(_sk);
     }
 
+    private RefField? _plane;
     protected override void Push()
     {
         if (_sk.Items.Count > 0 && Refs.SketchOf(_sk.Items[0]) is { } sk) F.SketchId = sk.Id;
+        Fields.SketchOnPlane(this, _plane, _sk, s2 => new RevolveOp { SeedSketch = s2 });
         if (_axis.Touched)
         {
             F.AxisId = 0; F.AxisEntityId = 0;
@@ -177,6 +223,8 @@ public sealed class RoundOp : FeatureOp<RoundFeature>
     private RefField _edges = null!;
     private readonly RefCache<EdgeRef> _cache = new();
     public RoundOp(RoundFeature? existing = null) : base(existing) { }
+    /// <summary>u12: выбранные рёбра поля (ручка операции, начатой командой).</summary>
+    public IReadOnlyList<PickRef> EdgeRefs => _edges?.Items ?? (IReadOnlyList<PickRef>)Array.Empty<PickRef>();
     public Dictionary<uint, EdgeRef>? PresetEdges { set => _cache.Preset = value; }
     public override string Title => "Скругление";
     public override string Icon => "f_round_but.svg";
@@ -212,6 +260,7 @@ public sealed class ChamferOp : FeatureOp<ChamferFeature>
     private RefField _edges = null!;
     private readonly RefCache<EdgeRef> _cache = new();
     public ChamferOp(ChamferFeature? existing = null) : base(existing) { }
+    public IReadOnlyList<PickRef> EdgeRefs => _edges?.Items ?? (IReadOnlyList<PickRef>)Array.Empty<PickRef>();
     public Dictionary<uint, EdgeRef>? PresetEdges { set => _cache.Preset = value; }
     public override string Title => "Фаска";
     public override string Icon => "f_chamfer_but.svg";
@@ -224,11 +273,14 @@ public sealed class ChamferOp : FeatureOp<ChamferFeature>
         _equal = !Editing || (F.Mode == ChamferKind.TwoDistances && Math.Abs(F.D1.Value - F.D2.Value) < 1e-12 && F.D1.Formula == F.D2.Formula);
         p.Choice("Тип фаски", new[] { "Равные катеты (D × D)", "Два катета (D1 × D2)", "Катет и угол (D × A)" },
             () => F.Mode == ChamferKind.DistanceAngle ? 2 : _equal ? 0 : 1,
-            v => { F.Mode = v == 2 ? ChamferKind.DistanceAngle : ChamferKind.TwoDistances; _equal = v == 0; if (_equal) F.D2 = F.D1; });
+            v => { F.Mode = v == 2 ? ChamferKind.DistanceAngle : ChamferKind.TwoDistances; _equal = v == 0; if (_equal) F.D2 = F.D1; else F.SizeEnd = null; });
         p.Number("Катет D1", () => F.D1, v => { F.D1 = v; if (_equal) F.D2 = v; });
         p.Number("Катет D2", () => F.D2, v => F.D2 = v, visible: () => !_equal && F.Mode == ChamferKind.TwoDistances);
         p.Number("Угол", () => F.Angle, v => F.Angle = v, "°", visible: () => F.Mode == ChamferKind.DistanceAngle);
         p.Check("Поменять катеты местами", () => false, v => { if (v) (F.D1, F.D2) = (F.D2, F.D1); }, visible: () => !_equal && F.Mode == ChamferKind.TwoDistances);
+        // u12: переменная фаска — равные катеты от D1 в начале цепочки до размера в конце, плавно по длине
+        p.Check("Переменный размер", () => F.SizeEnd != null, v => { F.SizeEnd = v ? F.D1 : null; if (v) { _equal = true; F.Mode = ChamferKind.TwoDistances; F.D2 = F.D1; } }, visible: () => _equal && F.Mode == ChamferKind.TwoDistances);
+        p.Number("Размер в конце", () => F.SizeEnd ?? F.D1, v => F.SizeEnd = v, visible: () => F.SizeEnd != null);
         p.Note("Касательно продолжающие рёбра выбираются вместе (Alt — одно ребро).");
     }
 
@@ -412,14 +464,19 @@ public sealed class MirrorOp : FeatureOp<MirrorFeature>
 
     public override void Build(OpPanel p)
     {
+        _src = p.Ref(Fields.Features());
+        if (Editing) _src.Kept = F.Sources.Count;
         _pl = p.Ref(Fields.Plane("Плоскость зеркала"));
         if (Editing) _pl.Kept = 1;
+        p.Note("Операции (выбор в дереве) — отражаются они; без них — отражается и объединяется всё тело.");
     }
+    private RefField _src = null!;
 
-    protected override void SeedRefs() => Seed(_pl);
+    protected override void SeedRefs() => Seed(_src, _pl);
 
     protected override void Push()
     {
+        Fields.PushSources(_src, F.Sources);
         if (!_pl.Touched || _pl.Items.Count == 0 || Refs.PlaneOf(_pl.Items[0]) is not { } pl) return;
         F.At = pl.Frame.Origin;
         F.Normal = pl.Frame.W;
@@ -441,6 +498,8 @@ public sealed class LinearPatternOp : FeatureOp<LinearPatternFeature>
 
     public override void Build(OpPanel p)
     {
+        _src = p.Ref(Fields.Features());
+        if (Editing) _src.Kept = F.Sources.Count;
         _dir = p.Ref(Fields.Line("Направление"));
         if (Editing) _dir.Kept = 1;
         p.Number("Шаг", () => _spacing, v => _spacing = v);
@@ -448,10 +507,12 @@ public sealed class LinearPatternOp : FeatureOp<LinearPatternFeature>
         p.Check("Обратное направление", () => _flip, v => _flip = v);
     }
 
-    protected override void SeedRefs() => Seed(_dir);
+    private RefField _src = null!;
+    protected override void SeedRefs() => Seed(_src, _dir);
 
     protected override void Push()
     {
+        Fields.PushSources(_src, F.Sources);
         Vector3d d = F.Step.LengthSquared > 1e-18 ? F.Step.Normalized() : Vector3d.UnitX;
         if (_dir.Touched && _dir.Items.Count > 0 && Refs.LineOf(_dir.Items[0]) is { } ln) d = ln.Dir;
         if (_flip) { d = -d; _flip = false; }
@@ -469,16 +530,20 @@ public sealed class CircularPatternOp : FeatureOp<CircularPatternFeature>
 
     public override void Build(OpPanel p)
     {
+        _src = p.Ref(Fields.Features());
+        if (Editing) _src.Kept = F.Sources.Count;
         _axis = p.Ref(Fields.Line("Ось", optional: true));
         if (Editing) _axis.Kept = 1;
         p.Note("Без оси — ось Z через начало координат.");
         p.Number("Количество", () => F.Count, v => F.Count = v, "шт");
     }
 
-    protected override void SeedRefs() => Seed(_axis);
+    private RefField _src = null!;
+    protected override void SeedRefs() => Seed(_src, _axis);
 
     protected override void Push()
     {
+        Fields.PushSources(_src, F.Sources);
         if (!_axis.Touched) return;
         if (_axis.Items.Count > 0 && Refs.LineOf(_axis.Items[0]) is { } ln) { F.At = ln.At; F.Axis = ln.Dir; }
         else { F.At = Vector3d.Zero; F.Axis = Vector3d.UnitZ; }
@@ -489,12 +554,19 @@ public sealed class CircularPatternOp : FeatureOp<CircularPatternFeature>
 
 public sealed class PlaneOp : Operation
 {
-    private RefField _base = null!;
-    private ValueRef _offset = new(20);
+    // u12 (замечание 14): СПОСОБ ПОСТРОЕНИЯ ПЛОСКОСТИ — выбор в панели (прежде только смещение от плоскости); у способов со
+    // смещением и углом — ручка (тянут — смещение), у построенных по точкам — без ручки.
+    private RefField _base = null!, _pts = null!, _line = null!;
+    private ValueRef _offset = new(20), _angle = new(30);
     private bool _flip;
+    private int _by;      // 0 смещение, 1 три точки, 2 прямая и точка, 3 параллельно через точку, 4 под углом, 5 перпендикулярно прямой
     private DatumPlane? _dp;
     public override string Title => "Плоскость";
     public override string Icon => "dat_plane_but.svg";
+    public override bool SignedDrag => true;
+    /// <summary>Ручка есть у способов со смещением (смещение) и углом (угол).</summary>
+    public bool HasHandle => _by is 0 or 4;
+    public static readonly string[] Methods = { "Смещение от плоскости", "Через три точки", "Через прямую и точку", "Параллельно через точку", "Под углом к плоскости", "Перпендикулярно прямой" };
 
     protected override bool Start()
     {
@@ -504,44 +576,85 @@ public sealed class PlaneOp : Operation
 
     public override void Build(OpPanel p)
     {
-        _base = p.Ref(Fields.Plane("От плоскости"));
-        p.Number("Смещение", () => _offset, v => _offset = v);
-        p.Check("Обратное направление", () => _flip, v => _flip = v);
+        p.Choice("Способ", Methods, () => _by, v => { _by = v; });
+        _base = p.Ref(new RefField { Label = "Плоскость", Filter = PickFilter.Faces | PickFilter.Datums, Accept = Refs.IsPlanar, Single = true, Optional = true });
+        _line = p.Ref(new RefField { Label = "Прямая (ось)", Filter = PickFilter.Edges | PickFilter.Datums | PickFilter.SketchCurves, Accept = Refs.IsLinear, Single = true, Optional = true });
+        _pts = p.Ref(new RefField { Label = "Точки", Filter = PickFilter.Vertices | PickFilter.SketchPoints | PickFilter.Datums, Accept = r => r.Kind is PickKind.Vertex or PickKind.SketchPoint or PickKind.DatumPoint, Optional = true });
+        p.Number("Смещение", () => _offset, v => _offset = v, visible: () => _by == 0);
+        p.Number("Угол", () => _angle, v => _angle = v, "°", visible: () => _by == 4);
+        p.Check("Обратное направление", () => _flip, v => _flip = v, visible: () => _by is 0 or 4);
+        p.Note("Смещение — плоскость; три точки — точки; прямая и точка — прямая и точка; параллельно — плоскость и точка; под углом — плоскость и прямая в ней; перпендикулярно — прямая (и точка).");
     }
 
     public override void Prime()
     {
-        Seed(_base);
-        if (_base.Text != null) _base.Text.Text = _base.Summary;
+        Seed(_base, _line, _pts);
+        // способ — по выбранному: три точки, прямая и точка, плоскость и точка
+        if (_pts.Items.Count >= 3) _by = 1;
+        else if (_line.Items.Count > 0 && _pts.Items.Count > 0) _by = 2;
+        else if (_base.Items.Count > 0 && _pts.Items.Count > 0) _by = 3;
+        else if (_base.Items.Count > 0 && _line.Items.Count > 0) _by = 4;
+        else if (_line.Items.Count > 0) _by = 5;
+        foreach (var f in new[] { _base, _line, _pts }) if (f.Text != null) f.Text.Text = f.Summary;
+        Panel?.Refresh();
         Apply();
         RefreshStatus();
     }
 
+    private (Frame3 F, DatumPlaneMode M, uint Src)? Compute()
+    {
+        var pts = _pts.Items.Select(Refs.PointOf).OfType<Vector3d>().ToList();
+        var ln = _line.Items.Count > 0 ? Refs.LineOf(_line.Items[0]) : null;
+        var pl = _base.Items.Count > 0 ? Refs.PlaneOf(_base.Items[0]) : null;
+        double sgn = _flip ? -1 : 1;
+        try
+        {
+            switch (_by)
+            {
+                case 0 when pl is { } b: return (b.Frame.OffsetAlongNormal(_offset.Value * sgn), DatumPlaneMode.OffsetFromFace, b.SourceId);
+                case 1 when pts.Count >= 3: return (DatumBuilder.PlaneThroughPoints(pts[0], pts[1], pts[2]), DatumPlaneMode.ThreePoints, 0);
+                case 2 when ln is { } l && pts.Count >= 1: return (DatumBuilder.PlaneThroughLineAndPoint(l.At, l.Dir, pts[0]), DatumPlaneMode.LineAndPoint, 0);
+                case 3 when pl is { } b && pts.Count >= 1: return (DatumBuilder.PlaneParallelThroughPoint(b.Frame, pts[0]), DatumPlaneMode.ParallelThroughPoint, b.SourceId);
+                case 4 when pl is { } b && ln is { } l: return (DatumBuilder.PlaneAtAngle(b.Frame, l.At, l.Dir, _angle.Value * sgn), DatumPlaneMode.AngleToFace, b.SourceId);
+                case 5 when ln is { } l: return (DatumBuilder.PlaneNormalToLine(l.Dir, pts.Count > 0 ? pts[0] : l.At), DatumPlaneMode.NormalToLine, 0);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException) { W.ShowToast(L(Title) + ": " + ex.Message); }
+        return null;
+    }
+
     protected override void Apply()
     {
-        if (_base.Items.Count == 0 || Refs.PlaneOf(_base.Items[0]) is not { } pl) return;
-        double d = _offset.Value * (_flip ? -1 : 1);
-        var frame = pl.Frame.OffsetAlongNormal(d);
+        if (Compute() is not { } c) return;
         if (_dp == null)
         {
-            _dp = new DatumPlane(L("Плоскость{0}", Part.Planes.Count() + 1), frame) { Mode = DatumPlaneMode.OffsetFromFace, Offset = d };
-            _dp.References.Add(pl.SourceId);
+            _dp = new DatumPlane(L("Плоскость{0}", Part.Planes.Count() + 1), c.F) { Mode = c.M, Offset = _by == 0 ? _offset.Value * (_flip ? -1 : 1) : 0 };
+            if (c.Src != 0) _dp.References.Add(c.Src);
             Part.Add(_dp);
         }
         else
         {
-            _dp.Frame = frame;
-            _dp.Offset = d;
+            _dp.Frame = c.F; _dp.Mode = c.M;
+            _dp.Offset = _by == 0 ? _offset.Value * (_flip ? -1 : 1) : 0;
             _dp.References.Clear();
-            _dp.References.Add(pl.SourceId);
+            if (c.Src != 0) _dp.References.Add(c.Src);
             _dp.NotifyChanged(_dp);
         }
         W.ViewPort.MarkDirty();
+        W.RefreshPlaneHandle();
+    }
+
+    /// <summary>Ручка: начало и нормаль базовой плоскости (смещение) — тянут вдоль нормали.</summary>
+    public (Vector3d At, Vector3d Out)? HandleAt()
+    {
+        if (!HasHandle || _base.Items.Count == 0 || Refs.PlaneOf(_base.Items[0]) is not { } b) return null;
+        var at = _base.Items[0] is { Kind: PickKind.Face, Owner: Part fp } fr && Refs.FaceCentre(fp, fr.Id) is { } fc ? fc : b.Frame.Origin;
+        return (at, b.Frame.W.Normalized());
     }
 
     public override bool Commit()
     {
-        if (_dp == null) { W.ShowToast(L("Выберите плоскость или плоскую грань")); return false; }
+        if (_dp == null) { W.ShowToast(L("Выберите ссылки для способа «{0}»", L(Methods[_by]))); return false; }
         W.Session.CommitEdit();
         return true;
     }
@@ -553,7 +666,13 @@ public sealed class PlaneOp : Operation
         W.Session.DiscardEdit();
     }
 
-    public override Action<double>? DragValue => v => _offset = new ValueRef(v);
+    public override Action<double>? DragValue => v =>
+    {
+        if (_by == 4) { _angle = new ValueRef(v); return; }
+        _flip = false; _offset = new ValueRef(v);
+    };
+    public override double? DragCurrent => _by == 4 ? _angle.Value : _offset.Value * (_flip ? -1 : 1);
+    public override string DragLabel => _by == 4 ? "∠" : "d";
 }
 
 // ====================================================================== эскиз
@@ -577,6 +696,12 @@ public sealed class SketchOp : Operation
             W.BeginNewSketch(Part, SketchFrame(sel, pl.Frame), pl.SourceId, pl.Name, Then);
             return false;
         }
+        // u12 (замечание 13): выбрана цепочка рёбер (кромок) в одной плоскости — эскиз в этой плоскости
+        if (Topo.CoplanarFrame(W.ViewPort.Selection.Items) is { } cf)
+        {
+            W.BeginNewSketch(Part, cf, 0, L("по рёбрам"), Then);
+            return false;
+        }
         return true;
     }
 
@@ -597,7 +722,12 @@ public sealed class SketchOp : Operation
         p.Note("Выберите опорную плоскость (в виде или в дереве) или плоскую грань тела.");
     }
 
-    protected override void Apply() { }
+    /// <summary>u12 (замечание 13): плоскость выбрана — сразу в эскиз, без кнопки «Начать эскиз».</summary>
+    protected override void Apply()
+    {
+        if (_pl.Items.Count > 0 && Refs.PlaneOf(_pl.Items[0]) is not null)
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (ReferenceEquals(W.CurrentOperation, this)) W.CommitOperation(); });
+    }
 
     public override bool Commit()
     {

@@ -146,6 +146,17 @@ public sealed class SkDimension
 
     /// <summary>Размер управляет геометрией и участвует в решении.</summary>
     public bool IsDriving => Enabled && Locked && !Reference && !Conflict;
+
+    /// <summary>
+    /// u12: ЗАМОК (оранжевый): сильный размер, который не меняется ни перетаскиванием геометрии, ни «сделать слабым»;
+    /// значение правится только после снятия замка. Слабый (серый) — IsDefault, сильный (голубой) — заданный
+    /// пользователем (Locked: управляет эскизом).
+    /// </summary>
+    public bool UserLocked;
+    /// <summary>u12: радиус/диаметр — одной стрелкой (от центра к окружности или снаружи).</summary>
+    public bool SingleArrow;
+    /// <summary>u12: диаметр — как обычный размер между двумя точками окружности (размерная линия с выносными).</summary>
+    public bool DiameterAsLinear;
     public bool Enabled = true;
 
     /// <summary>Смещение текста размера от измеряемой геометрии.</summary>

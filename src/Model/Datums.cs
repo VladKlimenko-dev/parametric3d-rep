@@ -11,7 +11,8 @@ public enum DatumPlaneMode
     LineAndPoint,
     OffsetFromFace,    // грань/плоскость + расстояние
     ParallelThroughPoint,
-    AngleToFace        // грань + ребро (ось) + угол
+    AngleToFace,       // грань + ребро (ось) + угол
+    NormalToLine       // u12: перпендикулярно прямой через точку
 }
 
 public sealed class DatumPlane : ModelItem

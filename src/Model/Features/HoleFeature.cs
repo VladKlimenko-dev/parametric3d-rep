@@ -135,6 +135,15 @@ public sealed class HoleFeature : Feature
 
     private int Count => Points.Count;
 
+    /// <summary>u12: преобразование точек и направления (зеркало/массив операций); null — обычное выполнение.</summary>
+    private Kernel.Ops.TransformOp.Xform? _x;
+    public override void ExecuteTransformed(BuildContext ctx, Kernel.Ops.TransformOp.Xform x)
+    {
+        _x = x;
+        try { Execute(ctx); } finally { _x = null; }
+    }
+    private Vector3d DirW => (_x is { } xf ? xf.Direction(Direction) : Direction).Normalized();
+
     public override void Execute(BuildContext ctx)
     {
         if (ctx.Bodies.Count == 0) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: no body.");
@@ -149,8 +158,9 @@ public sealed class HoleFeature : Feature
                 at.Add(sk.Plane.ToWorld(new Vector2d(p.X, p.Y)));
 
         if (at.Count == 0) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: no positions given.");
+        if (_x is { } xp) at = at.Select(xp.Point).ToList();
 
-        Vector3d dir = Direction.Normalized();
+        Vector3d dir = DirW;
         double depth = ThroughAll ? Extent(ctx.Bodies) * 3 : Depth.Resolve(ctx.Parameters);
         if (depth <= Tol.Weld) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: the depth must be greater than zero.");
 
@@ -161,7 +171,7 @@ public sealed class HoleFeature : Feature
         {
             var bb = ctx.Bodies[0].Bounds; bb = bb.Expanded(0.1 * bb.Diagonal + Tol.Weld);
             double rr = Math.Max(d, Kind == HoleKind.Simple ? 0 : HeadDiameter.Resolve(ctx.Parameters)) / 2;
-            var dn = Direction.Normalized();
+            var dn = DirW;
             bool Misses(Vector3d q)
             {
                 var a0 = q - dn * rr; var a1 = q + dn * depth;

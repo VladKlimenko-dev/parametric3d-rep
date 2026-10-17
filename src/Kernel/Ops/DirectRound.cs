@@ -137,6 +137,7 @@ public static partial class DirectRound
         string? why = null;
         _mixedSigma = null;
         var res = Build(bodies[k], refs, r, false, ref why);
+        if (res == null) Debug?.Invoke("build declined: " + why);
         bool staged = false;
         if (res == null && _mixedSigma is { } ms && MixedOn) { _mixedSigma = null; res = BuildMixed(bodies[k], refs, r, ms, ref why); staged = res != null; }
         _mixedSigma = null;
@@ -398,12 +399,36 @@ public static partial class DirectRound
     static readonly bool LawOff = Environment.GetEnvironmentVariable("P3D_DRLAW") == "0";
 
     /// <summary>
+    /// u12: ФАСКА С ПЕРЕМЕННЫМ РАЗМЕРОМ — равные катеты d от d0 до d1 плавно по длине цепочки (ребро или касательная цепочка
+    /// контура плоской грани со стенками ⟂ грани: отрезки — плоскости, дуги — цилиндры). Лента — линейчатая (отрезок между
+    /// контактами), точно по формуле. Мутация P3D_VARCHAMFER=0 — отказ.
+    /// </summary>
+    public static bool TryChamferVariable(List<TSolid> bodies, IReadOnlyList<EdgeRef> refs, double d0, double d1, List<string> warnings, out string? why)
+    {
+        why = null;
+        if (VarChamferOff) { why = "off"; return false; }
+        if (Off || OffForTest || refs.Count == 0 || OwnerBody(bodies, refs) is not int k) { why = "edges not on one body"; return false; }
+        var res = BuildLawLoop(bodies[k], refs, new[] { (0.0, d0), (1.0, d1) }, ref why, ch: true);
+        if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: variable chamfer: " + why); return false; }
+        bodies[k] = res; Interlocked.Increment(ref Built);
+        warnings.Add($"Chamfer: direct variable chamfer {d0:0.###}→{d1:0.###} ({refs.Count} edge(s), exact ruled surface).");
+        return true;
+    }
+    static readonly bool VarChamferOff = Environment.GetEnvironmentVariable("P3D_VARCHAMFER") == "0";
+    static readonly bool VarChainOff = Environment.GetEnvironmentVariable("P3D_VARCHAIN") == "0";
+
+    /// <summary>
     /// KRN-06 (06.14): ПРЯМОЕ СКРУГЛЕНИЕ С ЛИНЕЙНО МЕНЯЮЩИМСЯ РАДИУСОМ — одно прямое ребро между плоскостями, концы на плоских
     /// торцах. Огибающая шаров — круговой конус (точная поверхность), контакты — прямые, торцы — дуги эллипса (сечение конуса
     /// плоскостью торца, точно). Закон — по ссылке: R(Start) = r0, R(End) = r1, линейно по проекции на ребро.
     /// </summary>
     public static bool TryRoundVariable(List<TSolid> bodies, IReadOnlyList<EdgeRef> refs, double r0, double r1, List<string> warnings)
     {
+        // u12: ЦЕПОЧКА РЁБЕР — радиус плавно по длине всей цепочки от её конца у начала первой ссылки к другому концу (закон
+        // по двум точкам на касательном контуре плоской грани: огибающая шаров, точно). Прежде цепочка уходила резцом с
+        // R = max(r0, r1) — неровные края, гранение. Мутация P3D_VARCHAIN=0.
+        if (refs.Count > 1 && !VarChainOff && !Off && !OffForTest && !VariableOff && r0 > 0 && r1 > 0)
+            return TryRoundLaw(bodies, refs, new[] { (0.0, r0), (1.0, r1) }, warnings);
         if (Off || OffForTest || VariableOff || refs.Count != 1 || !(r0 > 0) || !(r1 > 0) || Math.Abs(r1 - r0) < 1e-12 || OwnerBody(bodies, refs) is not int k) return false;
         var S = refs[0].Start; var E = refs[0].End; double l2 = (E - S).LengthSquared; if (l2 < 1e-18) return false;
         _law = x => r0 + (r1 - r0) * Vector3d.Dot(x - S, E - S) / l2;
@@ -1372,7 +1397,7 @@ public static partial class DirectRound
         if (Debug != null) foreach (var f in solid.Faces.Where(x => x.Tag == "round:face")) Debug($"after normalize: loopsVec {AnalyticVolume.NormalIntegral(f):0.###} rev {f.Reversed}");
         var w = new List<string>();
         Stage("mesh");
-        if (Analytic.PrismBuild.Finish(solid, w) > 0) { why = "faces not meshed: " + string.Join(" / ", w.Take(3)); return null; }
+        if (Analytic.PrismBuild.Finish(solid, w, BooleanOp.DonorFrom(body)) > 0) { why = "faces not meshed: " + string.Join(" / ", w.Take(3)); return null; }
         solid.Guarantee = GuaranteeLevel.ExactAnalytic;
         // KRN-10 (g.13): проверки результата — сразу или, в предпросмотре, при принятии (BooleanOp.AcceptPreview)
         string? Checks()

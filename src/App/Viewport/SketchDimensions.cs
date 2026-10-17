@@ -360,12 +360,32 @@ public static class SketchDimensions
         double textHalf = StrokeFont.Width(Label(d)) * TextHeightPx * px * 0.5;
         bool diameter = d.Type == DimensionType.Diameter;
 
+        // u12: ДИАМЕТР КАК ОБЫЧНЫЙ РАЗМЕР — между двумя точками окружности поперёк направления на подпись: выносные линии
+        // и размерная линия со стрелками, подпись посередине
+        if (diameter && d.DiameterAsLinear)
+        {
+            var t = ScreenRight.LengthSquared > 1e-12 ? ScreenRight.Normalized() : new Vector2d(1, 0);
+            var n = new Vector2d(-t.Y, t.X);
+            double off = Vector2d.Dot(d.TextOffset, n);
+            if (Math.Abs(off) < radius + 10 * px) off = (off < 0 ? -1 : 1) * (radius + 24 * px);
+            var a0 = center - t * radius; var b0 = center + t * radius;
+            var a1 = a0 + n * off; var b1 = b0 + n * off;
+            double sg = Math.Sign(off), gap = GapPx * px * sg, over = OverrunPx * px * sg;
+            Line(batch, plane, style, a0 + n * gap, a1 + n * over);
+            Line(batch, plane, style, b0 + n * gap, b1 + n * over);
+            Line(batch, plane, style, a1, b1);
+            Arrow(batch, plane, style, a1, t, px);
+            Arrow(batch, plane, style, b1, -t, px);
+            Text(batch, plane, style, d, (a1 + b1) * 0.5 + n * (sg * TextHeightPx * px * 0.8), t, n, px);
+            return;
+        }
+
         if (!outside)
         {
             Vector2d from = diameter ? center - dir * radius : center;
             Line(batch, plane, style, from, onCurve);
             Arrow(batch, plane, style, onCurve, -dir, px);
-            if (diameter) Arrow(batch, plane, style, from, dir, px);
+            if (diameter && !d.SingleArrow) Arrow(batch, plane, style, from, dir, px);
 
             Vector2d at = diameter ? center : center + dir * (radius * 0.5);
             Text(batch, plane, style, d, at, dir, nrm, px);
@@ -379,9 +399,9 @@ public static class SketchDimensions
         {
             // Линия замера остаётся внутри окружности, наружу уходит
             // только её продолжение под подпись.
-            Line(batch, plane, style, center - dir * radius, onCurve);
+            Line(batch, plane, style, d.SingleArrow ? center : center - dir * radius, onCurve);
             Arrow(batch, plane, style, onCurve, -dir, px);
-            Arrow(batch, plane, style, center - dir * radius, dir, px);
+            if (!d.SingleArrow) Arrow(batch, plane, style, center - dir * radius, dir, px);
             Line(batch, plane, style, onCurve, textAt + dir * textHalf);
             Text(batch, plane, style, d, textAt, dir, nrm, px);
             return;

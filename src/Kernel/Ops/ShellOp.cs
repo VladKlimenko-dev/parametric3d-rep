@@ -34,6 +34,10 @@ public static class ShellOp
         { warnings.Add("Shell: a face thickness must be non-zero and of the same sign as the wall thickness."); return false; }
 
         TSolid body = bodies[0];
+        // u12: точка открытой грани — с сетки показа (центр треугольника): у кривой грани она отходит от поверхности на
+        // прогиб хорды, и проверка «точка на грани» (1e-6) её не узнавала — лента скругления не открывалась. Точка
+        // переносится на точную поверхность ближайшей грани (если там же и её треугольники). Мутация P3D_SHELLSNAP=0.
+        if (open != null && !SnapOff) open = open.Select(q => SnapToFace(body, q)).ToList();
         // KRN-07 (07.5): ТЕЛО С КРИВЫМИ ГРАНЯМИ (шар, тор, скругления, цилиндры с прямыми рёбрами) — полость смещением всех
         // граней без смены топологии (DirectRound.OffsetSolid): закрытые грани внутрь на толщину, открытые (только плоские,
         // все соседи — плоские) — наружу. Мутация P3D_OFFSETSOLID=0.
@@ -169,6 +173,13 @@ public static class ShellOp
             warnings.Add("Shell: the body is concave; its cavity cannot be built as an intersection of half-spaces.");
             return false;
         }
+        // u12: путь пересечения полупространств своей толщины граней не знает — при ней честный отказ (прежде сюда с ней не
+        // доходили: весь цилиндр скругления отсекал полость, и путь отказывал сам)
+        if (faceThickness != null && faceThickness.Count > 0)
+        {
+            warnings.Add("Shell: per-face thickness could not be kept by offsetting the faces (tangent neighbours with different thickness).");
+            return false;
+        }
         var planes = new List<(Vector3d P, Vector3d N, bool Open)>();
         // цилиндр грани: точка оси, ось, радиус и точка на грани (подсказка для стороны)
         var cylinders = new List<(TFace F, Vector3d Centre, Vector3d Axis, double R, Vector3d OnFace)>();
@@ -257,6 +268,7 @@ public static class ShellOp
         // смещении, а в том, как у сферы определяется сторона грани и как полость обрезается —
         // разбирать это надо отдельно.
 
+        int openCyl = 0;
         foreach (var (f, centre, axis, radius, hintOnFace) in cylinders)
         {
             Vector3d onFace = hintOnFace;
@@ -286,7 +298,15 @@ public static class ShellOp
             if (radial.LengthSquared < 1e-18) continue;
             bool convex = Vector3d.Dot(nOut, radial.Normalized()) > 0;
 
-            bool isOpen = open != null && open.Any(q => Math.Abs((q - centre - axis * Vector3d.Dot(q - centre, axis)).Length - radius) < Tol.Chord);
+            bool isOpen = open != null && open.Any(q => Math.Abs((q - centre - axis * Vector3d.Dot(q - centre, axis)).Length - radius) < Tol.Chord && OnAnyFace(f, q));
+            // u12 (замечание 8): НЕПОЛНЫЙ ВЫПУКЛЫЙ ЦИЛИНДР (лента скругления) ОГРАНИЧИВАЕТ ПОЛОСТЬ ТОЛЬКО В СВОЁМ СЕКТОРЕ. Прежде
+            // весь цилиндр R − t отсекал полость везде (куб 100 со скруглением R20, стенка 2: полость 116 000 вместо 884 000 мм³),
+            // а открытая лента скругления не открывалась (точка открытия сверялась только с плоскостями). Сектор — между
+            // радиусами крайних точек грани; открытая лента полость не ограничивает (полость выходит сквозь неё, стенки соседних
+            // граней кончаются на её поверхности). Мутация P3D_SHELLSECTOR=0.
+            (Vector3d D1, Vector3d D2)? sector = !SectorOff && convex ? Sector(f, centre, axis, radial.Normalized()) : null;
+            if (isOpen) openCyl++;
+            if (isOpen && sector != null) { ShellDebug?.Invoke($"открытая лента R{radius:0.##} — полость сквозь неё"); continue; }
             double r = convex ? radius - (isOpen ? 0 : thickness) : radius + (isOpen ? 0 : thickness);
             // u10: ВЫПУКЛОЕ СКРУГЛЕНИЕ ТОНЬШЕ СТЕНКИ — его ограничение лишнее. Полость — точки не ближе толщины к наружной стороне;
             // у выпуклого ребра со скруглением радиуса R ≤ t эту границу дают сдвинутые плоскости соседних граней (острое
@@ -297,7 +317,23 @@ public static class ShellOp
 
             double len = (hi - lo).Length + 4 * pad;
             TSolid tube = Cylinder(centre - axis * len, axis * (2 * len), r);
-            if (convex)
+            if (convex && sector is { } sc)
+            {
+                // сектор ленты: брус без полупространств по ту сторону двух плоскостей через ось и крайние радиусы, минус цилиндр
+                var wedge = new List<TSolid> { Box(lo - new Vector3d(pad, pad, pad), hi + new Vector3d(pad, pad, pad)) };
+                foreach (var (d, other) in new[] { (sc.D1, sc.D2), (sc.D2, sc.D1) })
+                {
+                    var m = Vector3d.Cross(axis, d).Normalized();
+                    if (Vector3d.Dot(m, other) > 0) m = -m;
+                    BooleanOp.Subtract(wedge, HalfSpace(centre, m, len), warnings);
+                    if (wedge.Count == 0) break;
+                }
+                if (wedge.Count == 0) continue;
+                BooleanOp.Subtract(wedge, tube, warnings);
+                if (wedge.Count == 0) continue;
+                foreach (var piece in wedge.ToList()) BooleanOp.Subtract(cav, piece, warnings);
+            }
+            else if (convex)
             {
                 // Вне цилиндра: большой брус минус цилиндр.
                 var outside = new List<TSolid> { Box(lo - new Vector3d(pad, pad, pad), hi + new Vector3d(pad, pad, pad)) };
@@ -322,8 +358,50 @@ public static class ShellOp
         }
 
         BooleanOp.Subtract(bodies, cavity, warnings);
-        warnings.Add($"Shell: wall {thickness:0.###}, {planes.Count(x => x.Open)} face(s) left open.");
+        warnings.Add($"Shell: wall {thickness:0.###}, {planes.Count(x => x.Open) + openCyl} face(s) left open.");
         return true;
+    }
+
+    static readonly bool SnapOff = Environment.GetEnvironmentVariable("P3D_SHELLSNAP") == "0";
+    static Vector3d SnapToFace(TSolid body, Vector3d q)
+    {
+        Vector3d best = q; double bd = Math.Max(1e-2, 3 * Tol.Chord);
+        foreach (var f in body.Faces)
+        {
+            var su = GeometryAudit.AuthoritativeSurface(f);
+            if (su == null) continue;
+            var p = su.PointAt(su.ProjectToUV(q));
+            double d = (p - q).Length;
+            if (d < 1e-9) return q;
+            if (d < bd && OnAnyFace(f, p)) { bd = d; best = p; }
+        }
+        return best;
+    }
+    static readonly bool SectorOff = Environment.GetEnvironmentVariable("P3D_SHELLSECTOR") == "0";
+
+    /// <summary>
+    /// u12: угловой сектор неполной цилиндрической грани — крайние радиальные направления её точек (по рёбрам) от середины;
+    /// null — грань охватывает полуокружность и больше (тогда ограничивает весь цилиндр).
+    /// </summary>
+    static (Vector3d D1, Vector3d D2)? Sector(TFace f, Vector3d centre, Vector3d axis, Vector3d midRadial)
+    {
+        double amin = 0, amax = 0; bool any = false;
+        var perp = Vector3d.Cross(axis, midRadial);
+        foreach (var e in f.Edges)
+        {
+            if (e.Curve == null) continue;
+            for (int i = 0; i <= 16; i++)
+            {
+                var q = e.Curve.PointAt(e.Curve.T0 + (e.Curve.T1 - e.Curve.T0) * i / 16.0) - centre;
+                q -= axis * Vector3d.Dot(q, axis);
+                if (q.LengthSquared < 1e-18) continue;
+                double a = Math.Atan2(Vector3d.Dot(q, perp), Vector3d.Dot(q, midRadial));
+                if (!any) { amin = amax = a; any = true; } else { amin = Math.Min(amin, a); amax = Math.Max(amax, a); }
+            }
+        }
+        if (!any || amax - amin >= Math.PI - 1e-6 || amax - amin < 1e-9) return null;
+        Vector3d Dir(double a) => midRadial * Math.Cos(a) + perp * Math.Sin(a);
+        return (Dir(amin), Dir(amax));
     }
 
     /// <summary>Открытые грани по точкам — только плоские (null — точка не на плоской грани).</summary>

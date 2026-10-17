@@ -30,8 +30,11 @@ public static partial class DirectRound
     /// хребта). Так же в начале контура, где закон замыкается с изломом r′. null-путь — отказ с причиной.
     /// </summary>
     static bool TangentLoopLawBlends(List<TEdge> sel, Dictionary<TFace, FDesc> byFace, RadiusLaw law, Vector3d start, Vector3d next,
-                                             List<FDesc> blends, ref string? why)
+                                             List<FDesc> blends, ref string? why, bool ch = false)
     {
+        // u12: ch — ФАСКА С ПЕРЕМЕННЫМ РАЗМЕРОМ: те же контакты Q₁ (на Fp) и Q₂ (на стенке) на расстоянии d(s) от ребра, сечение —
+        // отрезок Q₁Q₂ (линейчатая лента). На касательном стыке сечения совпадают (луночки нет); «на ус» — не в этом семействе.
+        string tagF = ch ? "chamfer:face" : "round:face", contactName = ch ? "chamfer contact" : "rolling-ball contact";
         if (!LawLoopOn) { why = "law loop: off"; return false; }
         var faceSets = sel.Select(e => e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList()).ToList();
         if (faceSets.Any(s => s.Count != 2)) { why = "law loop: an edge is not between two faces"; return false; }
@@ -129,6 +132,7 @@ public static partial class DirectRound
             if (Vector3d.Dot(Tan(k, len[k]), Tan(k2, 0)) < 1 - 1e-9)
             {
                 if (!MitreOn) { why = "law loop: a joint is not tangent"; return false; }
+                if (ch) { why = "variable chamfer: a sharp joint in the chain"; return false; }
                 if (P[k].Arc != null || P[k2].Arc != null) { why = "law chain: a sharp joint next to an arc"; return false; }
                 if (Vector3d.Dot(Tan(k, len[k]), Tan(k2, 0)) < -0.9) { why = "law chain: a sharp joint folds back"; return false; }
                 mitre[k] = true; continue;
@@ -191,6 +195,7 @@ public static partial class DirectRound
         }
         SweepSection? Sec(int k, double sg)
         {
+            if (ch) { var a1 = Q1(k, sg); var a2 = Q2(k, sg); return (a2 - a1).Length > 1e-9 ? SweepSection.Line(a1, a2) : null; }
             var C = Cn(k, sg); var d = dC(k, sg); double dl = d.Length, r = Rk(k, sg), rp = dRk(k, sg);
             double del = -r * rp / dl; if (!(Math.Abs(del) < r)) return null;
             var Cc = C + d * (del / dl); double rho = Math.Sqrt(r * r - del * del);
@@ -208,6 +213,7 @@ public static partial class DirectRound
             {
                 double sg = len[k] * q / 16; var sc = Sec(k, sg);
                 if (sc == null) { why = "law loop: the radius changes too fast (no characteristic circle)"; return false; }
+                if (ch) continue;
                 double r0 = Rk(k, sg), e1 = Math.Abs((Q1(k, sg) - sc.Value.C).Length - sc.Value.R), e2 = Math.Abs((Q2(k, sg) - sc.Value.C).Length - sc.Value.R);
                 if (e1 > 1e-9 * Math.Max(1, r0) || e2 > 1e-9 * Math.Max(1, r0)) { why = "law loop: characteristic circle misses a contact"; return false; }
             }
@@ -341,8 +347,8 @@ public static partial class DirectRound
                 foreach (double v in new[] { 0.0, 0.5, 1.0 }) worst = Math.Max(worst, (tb.Point(v) - ex.Point(v)).Length);
             }
             if (worst > Math.Max(1e-8, 0.2 * ToleranceContext.Current.ModelAccuracy)) { why = $"law loop: section table {worst:E1}"; return false; }
-            cQ1[k] = new ProcCurve3(sg => Q1(kk, sg), A1p(k), B1p(k), false, "rolling-ball contact");
-            cQ2[k] = new ProcCurve3(sg => Q2(kk, sg), A2p(k), B2p(k), false, "rolling-ball contact");
+            cQ1[k] = new ProcCurve3(sg => Q1(kk, sg), A1p(k), B1p(k), false, contactName);
+            cQ2[k] = new ProcCurve3(sg => Q2(kk, sg), A2p(k), B2p(k), false, contactName);
         }
 
         // правка Fp: звено → кривая контакта Q₁ (то же направление обхода)
@@ -453,6 +459,12 @@ public static partial class DirectRound
             int k2 = (k + 1) % n;
             var sa = Sec(k, len[k])!.Value; var sb = Sec(k2, 0)!.Value;
             double sc = Math.Max(1, Rk(k, len[k]));
+            if (ch)
+            {
+                if ((sa.Point(0) - sb.Point(0)).Length > 1e-9 * sc || (sa.Point(1) - sb.Point(1)).Length > 1e-9 * sc) { why = "variable chamfer: joint sections differ"; return false; }
+                endArc[k] = startArc[k2] = new LineCurve3(sa.Point(0), sa.Point(1));
+                continue;
+            }
             bool same = !mitre[k] && (sa.C - sb.C).Length < 1e-12 * sc && Math.Abs(sa.R - sb.R) < 1e-12 * sc && (sa.E2 - sb.E2).Length < 1e-12 && Math.Abs(sa.Phi - sb.Phi) < 1e-12;
             if (!mitre[k] && (sa.Point(0) - sb.Point(0)).Length > 1e-9 * sc || (sa.Point(1) - sb.Point(1)).Length > 1e-9 * sc) { why = $"law loop: joint sections do not share the contacts (joint {k}: {sa.Point(0)} / {sb.Point(0)}, {sa.Point(1)} / {sb.Point(1)}; r {Rk(k, len[k])} / {Rk(k2, 0)}; P {Pt(k, len[k])} / {Pt(k2, 0)}; n2 {N2(k, Pt(k, len[k]))} / {N2(k2, Pt(k2, 0))}; σ {sgm}; Q1 {Q1(k, len[k])} / {Q1(k2, 0)}; sec C {sa.C} {sa.R} {sa.E1} / {sb.C} {sb.R} {sb.E1})"; return false; }
             var aA = ArcOf(sa);
@@ -587,7 +599,7 @@ public static partial class DirectRound
             };
             double sm = len[k] / 2; var mid = surf[k].ExactSectionAt(sm).Point(0.5);
             var want = (mid - Cn(k, sm)).Normalized() * -sgm;          // наружу из материала: у выпуклого (σ = −1) — от центра шара
-            var bl = new FDesc { Surf = surf[k], Tag = "round:face", Touched = true, Hint = mid };
+            var bl = new FDesc { Surf = surf[k], Tag = tagF, Touched = true, Hint = mid };
             bl.Rev = Vector3d.Dot(surf[k].NormalAt(surf[k].ProjectToUV(mid)), want) < 0;
             bl.Loops.Add(loopB);
             blends.Add(bl);
@@ -600,7 +612,7 @@ public static partial class DirectRound
     /// KRN-06 (06.2): ЗАКОН РАДИУСА НА ЦЕПОЧКЕ РЁБЕР — касательный контур плоской грани (TangentLoopLawBlends); доля F — по
     /// длине контура от начала первой ссылки в сторону её конца.
     /// </summary>
-    static TSolid? BuildLawLoop(TSolid body, IReadOnlyList<EdgeRef> refs, IReadOnlyList<(double F, double R)> points, ref string? why)
+    static TSolid? BuildLawLoop(TSolid body, IReadOnlyList<EdgeRef> refs, IReadOnlyList<(double F, double R)> points, ref string? why, bool ch = false)
     {
         var sel = new List<TEdge>();
         var whole = FilletOp.WholeNamedEdges(new List<TSolid> { body }, refs);
@@ -619,7 +631,7 @@ public static partial class DirectRound
         var faces = Describe(body, out var byFace, ref why);
         if (faces == null) return null;
         var blends = new List<FDesc>();
-        if (!TangentLoopLawBlends(sel, byFace, law, st, nx, blends, ref why)) return null;
-        return FinishDirect(faces, blends, "round.direct", ref why);
+        if (!TangentLoopLawBlends(sel, byFace, law, st, nx, blends, ref why, ch)) return null;
+        return FinishDirect(faces, blends, ch ? "chamfer.direct" : "round.direct", ref why);
     }
 }

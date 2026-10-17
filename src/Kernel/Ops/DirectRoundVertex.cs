@@ -167,7 +167,7 @@ public static partial class DirectRound
         if (solid == null) return null;
         TopologyConventions.Normalize(solid);
         var w = new List<string>();
-        if (Analytic.PrismBuild.Finish(solid, w) > 0) { why = "faces not meshed: " + string.Join(" / ", w.Take(2)); return null; }
+        if (Analytic.PrismBuild.Finish(solid, w, BooleanOp.DonorFrom(body)) > 0) { why = "faces not meshed: " + string.Join(" / ", w.Take(2)); return null; }
         solid.Guarantee = GuaranteeLevel.ExactAnalytic;
         var val = SolidValidator.Validate(solid);
         if (!val.IsValid) { why = "result invalid: " + val.Summary(); return null; }

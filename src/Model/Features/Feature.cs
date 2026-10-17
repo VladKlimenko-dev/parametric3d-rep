@@ -162,6 +162,15 @@ public abstract class Feature : ModelItem
     public abstract void Execute(BuildContext ctx);
 
     /// <summary>
+    /// u12: ПОВТОР ОПЕРАЦИИ ПОД ПРЕОБРАЗОВАНИЕМ — зеркало и массивы операций (не тела): скругление на зеркальном ребре,
+    /// вырез в каждой копии. Операция, которая этого не умеет, отказывает с причиной (прежде зеркало тела объединяло
+    /// деталь с её отражением: скругление ребра заполнялось отражённым углом, деталь становилась кубом без ошибки).
+    /// </summary>
+    public virtual void ExecuteTransformed(BuildContext ctx, Kernel.Ops.TransformOp.Xform x) =>
+        throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported,
+            $"{Name}: this operation cannot be repeated by a mirror or a pattern (supported: extrude, cut, hole, round, chamfer).");
+
+    /// <summary>
     /// K05. ПОСТОЯННЫЙ КЛЮЧ ОПЕРАЦИИ — основа устойчивых имён её граней. Номер Id выдаётся заново
     /// при каждом запуске программы, имя пользователь может поменять; ключ сохраняется в
     /// документе и не меняется. Грани, которые операция порождает, получают подпись

@@ -1,5 +1,6 @@
 using OpenTK.Mathematics;
 using Parametric3D.Core;
+using Parametric3D.Kernel;
 using Parametric3D.Kernel.Ops;
 
 namespace Parametric3D.Model.Features;
@@ -13,6 +14,8 @@ public sealed class MirrorFeature : Feature
 {
     public Vector3d At;
     public Vector3d Normal = Vector3d.UnitX;
+    /// <summary>u12: ключи операций для повтора (зеркало операций); пусто — зеркало тела.</summary>
+    public readonly List<string> Sources = new();
 
     public MirrorFeature(string name = "Mirror") { Name = name; }
 
@@ -23,6 +26,7 @@ public sealed class MirrorFeature : Feature
         if (ctx.Bodies.Count == 0) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Mirror: no body.");
         if (Normal.LengthSquared < 1e-18) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Mirror: the plane normal is not set.");
 
+        if (Sources.Count > 0) { FeatureReplay.Run(ctx, this, Sources, new[] { TransformOp.Mirror(At, Normal.Normalized()) }, "Mirror"); return; }
         bool mirrored = false;
         Kernel.OperationContract.Apply("Mirror", ctx.Bodies, b => mirrored = TransformOp.MirrorBody(b, At, Normal.Normalized(), ctx.Warnings, Key));
         if (!mirrored)
@@ -41,6 +45,8 @@ public sealed class LinearPatternFeature : Feature
     internal static readonly bool CopyLimitOff = Environment.GetEnvironmentVariable("P3D_COPYLIMIT") == "0";
     public Vector3d Step = new(20, 0, 0);
     public ValueRef Count = new(3);
+    /// <summary>u12: ключи операций для повтора (массив операций); пусто — массив тела.</summary>
+    public readonly List<string> Sources = new();
 
     public LinearPatternFeature(string name = "Linear pattern") { Name = name; }
 
@@ -58,6 +64,7 @@ public sealed class LinearPatternFeature : Feature
         if (Step.LengthSquared <= Tol.Weld * Tol.Weld)
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Linear pattern: the step must be greater than zero.");
 
+        if (Sources.Count > 0) { FeatureReplay.Run(ctx, this, Sources, Enumerable.Range(1, n - 1).Select(i => TransformOp.Move(Step * i)).ToList(), "Linear pattern"); return; }
         bool patterned = false;
         Kernel.OperationContract.Apply("LinearPattern", ctx.Bodies, b => patterned = TransformOp.LinearPattern(b, Step, n, ctx.Warnings, Key));
         if (!patterned)
@@ -73,6 +80,8 @@ public sealed class CircularPatternFeature : Feature
     public Vector3d At;
     public Vector3d Axis = Vector3d.UnitZ;
     public ValueRef Count = new(4);
+    /// <summary>u12: ключи операций для повтора (массив операций); пусто — массив тела.</summary>
+    public readonly List<string> Sources = new();
 
     public CircularPatternFeature(string name = "Circular pattern") { Name = name; }
 
@@ -89,9 +98,46 @@ public sealed class CircularPatternFeature : Feature
         if (!CopyLimitOff && n > MaxCopies) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"Circular pattern: the count {n} exceeds the limit of {MaxCopies} copies.");
         if (Axis.LengthSquared < 1e-18) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Circular pattern: the axis is not set.");
 
+        if (Sources.Count > 0) { FeatureReplay.Run(ctx, this, Sources, Enumerable.Range(1, n - 1).Select(i => TransformOp.Rotate(At, Axis.Normalized(), 360.0 * i / n)).ToList(), "Circular pattern"); return; }
         bool rotated = false;
         Kernel.OperationContract.Apply("CircularPattern", ctx.Bodies, b => rotated = TransformOp.CircularPattern(b, At, Axis.Normalized(), n, ctx.Warnings, Key));
         if (!rotated)
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Circular pattern: the copies could not be built.");
+    }
+}
+
+/// <summary>
+/// u12: ЗЕРКАЛО И МАССИВЫ ОПЕРАЦИЙ. Выбранные операции дерева (до этой) повторяются под каждым преобразованием на текущем
+/// теле — каждая своим путём (вырез — резец под преобразованием, скругление — на ребре в отражённом месте). Прежде
+/// повторялось всё тело: массив выреза 3 × 5 мм объединял три смещённых куба (перестроение надолго), зеркало скругления
+/// объединяло деталь с отражением — скругление заполнялось, ошибки не было.
+/// </summary>
+internal static class FeatureReplay
+{
+    public static void Run(BuildContext ctx, Feature owner, IReadOnlyList<string> keys, IReadOnlyList<TransformOp.Xform> xs, string what)
+    {
+        if (ctx.Bodies.Count == 0) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"{what}: no body.");
+        var all = ctx.Part.Features.ToList();
+        int me = all.IndexOf(owner);
+        var src = all.Where((f, i) => keys.Contains(f.Key) && (me < 0 || i < me)).ToList();
+        if (src.Count != keys.Distinct().Count())
+            throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"{what}: {keys.Distinct().Count() - src.Count} selected operation(s) are missing or come after the {what.ToLowerInvariant()}.");
+        src = src.Where(f => !f.Suppressed).ToList();
+        if (src.Count == 0) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"{what}: all selected operations are suppressed.");
+        int k = 0;
+        foreach (var x in xs)
+        {
+            k++;
+            foreach (var f in src)
+            {
+                KernelContext.Checkpoint("pattern.feature");
+                try { f.ExecuteTransformed(ctx, x); }
+                catch (RebuildException ex)
+                {
+                    throw new RebuildException(ex.Outcome, $"{what}: copy {k} of «{f.Name}» failed — {ex.Message}");
+                }
+            }
+        }
+        ctx.Warnings.Add($"{what}: {src.Count} operation(s) repeated {xs.Count} time(s).");
     }
 }

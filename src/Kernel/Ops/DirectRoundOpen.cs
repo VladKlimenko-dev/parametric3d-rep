@@ -761,6 +761,18 @@ public static partial class DirectRound
         { why = "open curved: end curves do not meet the contact lines"; return false; }
         for (int i = 0; i <= 16; i++)
             foreach (var ec in new[] { end0, end1 }) if (double.IsNaN(ec.PointAt(i / 16.0).X)) { why = "open curved: end curve not found"; return false; }
+        // u11: ПЛОСКОСТЬ/ПЛОСКОСТЬ, постоянный радиус, прямое ребро — лента точно цилиндр, линии касания — прямые, края на
+        // плоских торцах — дуги эллипсов (окружностей). Аналитика вместо сечений: разметка, p-кривые, проверки и объём —
+        // формулами (у тела из 40 граней 2 с → доли секунды). Всё сверяется с формулой сечений; иначе — прежний путь.
+        // Мутация P3D_OPENCYL=0.
+        ISurface3 bSurf = surf; ICurve3 bA = cA, bB = cB, bE0 = end0, bE1 = end1;
+        if (OpenCylOn && !ch && varLaw == null && knotT.Count == 0 && chain.Count == 1 && chain[0].Curve is LineCurve3
+            && shA is Geometry.Ssi.Plane && shB is Geometry.Ssi.Plane && ends[0].ShE is Geometry.Ssi.Plane pe0 && ends[1].ShE is Geometry.Ssi.Plane pe1
+            && OpenCylinder(Spine, Gen, QA, QB, EndPt, r, tLo, tHi, tA0, tA1, tB0, tB1, pe0, pe1) is { } oc)
+        {
+            bSurf = oc.S; bA = oc.A; bB = oc.B; bE0 = oc.E0; bE1 = oc.E1;
+            Debug?.Invoke("open: blend is an exact cylinder");
+        }
 
         // УКОРОЧЕНИЕ РЁБЕР A∩E и B∩E до точек касания (одна кривая на обе грани ребра). Ребро может укорачиваться с обоих концов
         // (торец — общий у обоих концов, ребро B∩E идёт от одного конца до другого)
@@ -785,7 +797,7 @@ public static partial class DirectRound
             trimmed[x] = (cur, moves);
         }
         // вставка края ленты в торец: между звеньями A∩E и B∩E у прежней вершины
-        foreach (var (k, endC, qa, qb) in new[] { (0, (ICurve3)end0, qa0, qb0), (1, end1, qa1, qb1) })
+        foreach (var (k, endC, qa, qb) in new[] { (0, bE0, qa0, qb0), (1, bE1, qa1, qb1) })
         {
             var (FEk, _, eA, eB, V, _) = ends[k];
             bool done = false;
@@ -821,7 +833,7 @@ public static partial class DirectRound
                         if (moved) { sg.Curve = tr.C; sg.TrimOf = tr.C; sg.Orig = null; }
                     }
         // само ребро — линии касания
-        foreach (var (F, cv, a0, a1) in new[] { (FA, (ICurve3)cA, qa0, qa1), (FB, cB, qb0, qb1) })
+        foreach (var (F, cv, a0, a1) in new[] { (FA, bA, qa0, qa1), (FB, bB, qb0, qb1) })
         {
             // звенья цепочки в контуре грани — подряд; заменяются одним звеном (линией касания)
             var loop = F.Loops.FirstOrDefault(l => l.Any(x => x.Id != null && chainSet.Contains(x.Id)));
@@ -843,18 +855,85 @@ public static partial class DirectRound
         // лента
         var gm = Gen(tm); var mid = gm.Point(0.5);
         var want = ch ? (Geometry.Ssi.Implicit(shA, Em).G * sA + Geometry.Ssi.Implicit(shB, Em).G * sB) : (mid - gm.C).Normalized() * (-sigma);
-        var nS = surf.NormalAt(new Vector2d((tm - tLo) * kU, 0.5));
-        var bl = new FDesc { Surf = surf, Rev = Vector3d.Dot(nS, want) < 0, Tag = ch ? "chamfer:face" : "round:face", Touched = true, Hint = mid };
+        var nS = ReferenceEquals(bSurf, surf) ? surf.NormalAt(new Vector2d((tm - tLo) * kU, 0.5)) : bSurf.NormalAt(bSurf.ProjectToUV(mid));
+        var bl = new FDesc { Surf = bSurf, Rev = Vector3d.Dot(nS, want) < 0, Tag = ch ? "chamfer:face" : "round:face", Touched = true, Hint = mid };
         bl.Loops.Add(new List<Seg>
         {
-            new() { Curve = cA, A = qa0, B = qa1 },
-            new() { Curve = end1, A = qa1, B = qb1 },
-            new() { Curve = cB, A = qb1, B = qb0 },
-            new() { Curve = end0, A = qb0, B = qa0 },
+            new() { Curve = bA, A = qa0, B = qa1 },
+            new() { Curve = bE1, A = qa1, B = qb1 },
+            new() { Curve = bB, A = qb1, B = qb0 },
+            new() { Curve = bE0, A = qb0, B = qa0 },
         });
         blends.Add(bl);
         Debug?.Invoke($"open: sigma {sigma} shapes {shA.GetType().Name}/{shB.GetType().Name} ends {ends[0].ShE.GetType().Name}/{ends[1].ShE.GetType().Name} t [{tLo:G5}, {tHi:G5}] contacts A [{tA0:G6}, {tA1:G6}] B [{tB0:G6}, {tB1:G6}] Δ {Delta:G6}");
         return true;
+    }
+
+    static readonly bool OpenCylOn = Environment.GetEnvironmentVariable("P3D_OPENCYL") != "0";
+
+    /// <summary>u11: точная цилиндрическая лента открытого скругления плоскость/плоскость (см. вызов); null — не сошлось с сечениями.</summary>
+    static (CylinderSurface S, ICurve3 A, ICurve3 B, ICurve3 E0, ICurve3 E1)? OpenCylinder(Func<double, Vector3d?> spine, Func<double, SweepSection> gen,
+        Func<double, Vector3d> qa, Func<double, Vector3d> qb, Func<int, double, Vector3d> endPt, double r, double tLo, double tHi,
+        double tA0, double tA1, double tB0, double tB1, Geometry.Ssi.Plane pe0, Geometry.Ssi.Plane pe1)
+    {
+        if (spine(tLo) is not { } s0 || spine(tHi) is not { } s1) return null;
+        var W = s1 - s0; double len = W.Length; if (!(len > 1e-9)) return null; W /= len;
+        double tol = 1e-9 * Math.Max(1, r);
+        double DAx(Vector3d p) { var d = p - s0; return (d - W * Vector3d.Dot(d, W)).Length; }
+        // хребет — прямая, сечения — на радиусе от неё
+        for (int i = 0; i <= 16; i++)
+        {
+            double t = tLo + (tHi - tLo) * i / 16.0;
+            if (spine(t) is not { } x || DAx(x) > tol) return null;
+            var g = gen(t);
+            foreach (double v in new[] { 0, 0.25, 0.5, 0.75, 1.0 }) if (Math.Abs(DAx(g.Point(v)) - r) > tol) return null;
+        }
+        var e1 = qa(0.5 * (tA0 + tA1)) - s0; e1 -= W * Vector3d.Dot(e1, W); if (!(e1.Length > 1e-9)) return null; e1 = e1.Normalized();
+        var cyl = new CylinderSurface(new Frame3(s0, e1, Vector3d.Cross(W, e1).Normalized()), r);
+        if ((cyl.Axis.W - W).Length > 1e-9) return null;
+        // линии касания — прямые
+        LineCurve3? Line(Func<double, Vector3d> f, double t0, double t1)
+        {
+            var a = f(t0); var b = f(t1); if (!((b - a).Length > 1e-9)) return null;
+            var ln = new LineCurve3(a, b);
+            for (int i = 1; i < 8; i++) { var p = f(t0 + (t1 - t0) * i / 8.0); var d = p - a; var u = (b - a).Normalized(); if ((d - u * Vector3d.Dot(d, u)).Length > tol) return null; }
+            return ln;
+        }
+        var la = Line(qa, tA0, tA1); var lb = Line(qb, tB0, tB1);
+        if (la == null || lb == null) return null;
+        // края на торцах: плоскость ∩ цилиндр — эллипс (окружность у прямого торца)
+        ICurve3? End(int k, Geometry.Ssi.Plane pl)
+        {
+            var n = pl.N.Normalized(); double cosT = Vector3d.Dot(n, W);
+            if (!(Math.Abs(cosT) > 1e-3)) return null;
+            var c = s0 + W * (Vector3d.Dot(pl.P - s0, n) / cosT);
+            var minor = Vector3d.Cross(n, W);
+            Vector3d major;
+            if (minor.Length < 1e-12) { major = e1 - n * Vector3d.Dot(e1, n); major = major.Normalized(); minor = Vector3d.Cross(n, major).Normalized(); }
+            else { minor = minor.Normalized(); major = Vector3d.Cross(minor, n).Normalized(); }
+            double ru = r / Math.Abs(cosT), rv = r;
+            var fr = new Frame3(c, major, minor);
+            double Ang(Vector3d p) { var d = p - c; return Math.Atan2(Vector3d.Dot(d, minor) / rv, Vector3d.Dot(d, major) / ru); }
+            var pa = endPt(k, 0); var pb = endPt(k, 1); var pm = endPt(k, 0.5);
+            double a0 = Ang(pa), a1 = Ang(pb), am = Ang(pm);
+            double Norm(double x) { while (x < a0) x += 2 * Math.PI; while (x >= a0 + 2 * Math.PI) x -= 2 * Math.PI; return x; }
+            double a1p = Norm(a1), amp = Norm(am);
+            if (amp > a1p) a1p -= 2 * Math.PI;   // ход в обратную сторону
+            if (!(Math.Abs(a1p - a0) > 1e-9 && Math.Abs(a1p - a0) < Math.PI)) return null;
+            var el = new EllipseCurve3(fr, ru, rv, a0, a1p);
+            if ((el.PointAt(0) - pa).Length > 1e-9 || (el.PointAt(1) - pb).Length > 1e-9) return null;
+            // точки края — на эллипсе (по плоскости и по оси)
+            for (int i = 1; i < 8; i++)
+            {
+                var p = endPt(k, i / 8.0);
+                if (Math.Abs(Vector3d.Dot(p - c, n)) > tol || Math.Abs(DAx(p) - r) > tol) return null;
+            }
+            if (ru == rv && minor.Length > 0) return new ArcCurve3(new Frame3(c, major, minor), r, a0, a1p);
+            return el;
+        }
+        var e0c = End(0, pe0); var e1c = End(1, pe1);
+        if (e0c == null || e1c == null) return null;
+        return (cyl, la, lb, e0c, e1c);
     }
 
     /// <summary>Сборка, нормализация, разметка, проверки, происхождение — общий конец прямых построителей.</summary>
@@ -877,7 +956,7 @@ public static partial class DirectRound
         if (solid == null) return null;
         TopologyConventions.Normalize(solid);
         var w = new List<string>();
-        if (Analytic.PrismBuild.Finish(solid, w) > 0)
+        if (Analytic.PrismBuild.Finish(solid, w, BooleanOp.DonorFrom(all.Where(d => d.Orig != null).Select(d => d.Orig!))) > 0)
         {
             if (Debug != null)
                 foreach (var f in solid.Faces)
