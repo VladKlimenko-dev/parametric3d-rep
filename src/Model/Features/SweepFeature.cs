@@ -61,6 +61,8 @@ public sealed class SweepFeature : Feature
         {
             var l = ctx.Part.FindById<Line3DItem>(PathLineId);
             if (l != null) return new LineCurve3(l.A, l.B);
+            // u13: опорная кривая (через точки, по уравнению, проекция)
+            if (ctx.Part.FindById<DatumCurve>(PathLineId) is { Points.Count: >= 2 } dc) return new PolylineCurve3(dc.Points);
         }
         if (PathSketchId != 0)
         {

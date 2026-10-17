@@ -340,12 +340,12 @@ public static class Refs
 
     public static bool IsPlanar(PickRef r)
     {
-        if (r.Kind == PickKind.DatumPlane) return true;
+        if (r.Kind == PickKind.DatumPlane || r.Target is DatumCsys) return true;
         if (r.Kind != PickKind.Face || r.Owner is not Part p) return false;
         return FacePlane(p, r.Id) != null;
     }
 
-    public static bool IsLinear(PickRef r) => r.Kind == PickKind.DatumAxis
+    public static bool IsLinear(PickRef r) => r.Kind == PickKind.DatumAxis && r.Target is not DatumCurve
         || r.Kind == PickKind.Edge && r.Owner is Part p && p.FindEdge(r.Id) is { } e && (e.Curve?.GetType().Name.Contains("Line") ?? false)
         || r.Target is SkLine;
 
@@ -353,6 +353,7 @@ public static class Refs
     public static (Frame3 Frame, uint SourceId, string Name)? PlaneOf(PickRef r)
     {
         if (r.Target is DatumPlane dp) return (dp.Frame, dp.Id, dp.Name);
+        if (r.Target is DatumCsys cs) return (cs.Frame, cs.Id, cs.Name);
         if (r.Kind == PickKind.Face && r.Owner is Part p && FacePlane(p, r.Id) is { } pn)
             return (Frame3.FromNormal(pn.P, pn.N), r.Id, L("Грань #{0}", r.Id));
         return null;
@@ -390,6 +391,7 @@ public static class Refs
         switch (r.Target)
         {
             case DatumAxis ax: return (ax.Origin, ax.Direction.Normalized());
+            case DatumCsys cs: return (cs.Frame.Origin, cs.Frame.W.Normalized());
             case Line3DItem ln: return (ln.A, (ln.B - ln.A).Normalized());
             case SkLine sl when r.Owner is Sketch sk:
                 {
@@ -411,6 +413,7 @@ public static class Refs
         switch (r.Target)
         {
             case DatumPoint pt: return pt.P;
+            case DatumCsys cs: return cs.Frame.Origin;
             case SkPoint sp when r.Owner is Sketch sk: return sk.Plane.ToWorld(sp.P);
         }
         if (r.Owner is Part p)

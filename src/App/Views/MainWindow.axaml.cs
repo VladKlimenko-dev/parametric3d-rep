@@ -457,12 +457,12 @@ public partial class MainWindow : Window
             {
                 (new[] { "op.sketch" }, Array.Empty<string>()),
                 (new[] { "op.extrude", "op.cut", "op.revolve" }, new[] { "op.extrude_thin", "op.sweep", "op.helical_sweep", "op.loft", "op.rib" }),
-                (new[] { "op.hole", "op.round", "op.chamfer", "op.shell" }, new[] { "op.round_variable", "op.vertex_round", "op.vertex_chamfer", "op.draft", "op.thread" }),
+                (new[] { "op.hole", "op.round", "op.chamfer", "op.shell" }, new[] { "op.round_variable", "op.full_round", "op.vertex_round", "op.vertex_chamfer", "op.draft", "op.hole_coaxial", "op.hole_radial", "op.thread" }),
                 (Array.Empty<string>(), new[] { "op.face_offset", "op.face_move", "op.face_radius", "op.face_delete", "op.move_copy" }),
                 (Array.Empty<string>(), new[] { "an.measure", "an.area", "an.perimeter", "an.mass", "an.zebra", "an.curvature", "an.check_body", "an.heal" }),
-                (new[] { "op.plane" }, new[] { "op.plane_offset", "op.plane_mid", "op.plane_3pt", "op.plane_axis", "op.plane_normal_curve", "op.plane_tangent", "op.axis", "op.axis_face", "op.axis_intersect", "op.point", "op.point_center", "op.point_intersect" }),
+                (new[] { "op.plane" }, new[] { "op.plane_offset", "op.plane_mid", "op.plane_3pt", "op.plane_axis", "op.plane_normal_curve", "op.plane_tangent", "op.axis", "op.axis_face", "op.axis_intersect", "op.point", "op.point_center", "op.point_intersect", "op.csys", "op.curve_points", "op.curve_equation", "op.curve_project" }),
                 (new[] { "op.mirror", "op.pattern_linear", "op.pattern_circular" }, new[] { "op.pattern_points", "op.pattern_curve", "op.pattern_fill", "op.move_copy" }),
-                (Array.Empty<string>(), new[] { "tree.rebuild", "tree.needs_attention", "tree.resume", "tree.insert_here", "tree.reorder_up", "tree.reorder_down", "tree.edit_dims" }),
+                (Array.Empty<string>(), new[] { "tree.rebuild", "tree.needs_attention", "tree.resume", "tree.insert_here", "tree.reorder_up", "tree.reorder_down", "tree.edit_dims", "tree.group", "tree.parents_children", "tree.replace_refs" }),
             };
         CommandStack.Children.Add(new TextBlock
         {
@@ -1182,6 +1182,10 @@ public partial class MainWindow : Window
             case "material": Commands.DocCommands.MaterialMenu(this, null); break;
             case "configs": _reg["part.configurations"].Execute(); break;
             case "body": View.Selection.Select(new PickRef(ii.Owner.Id, PickKind.Body, ii.Owner.Parent, ii.Owner), additive: false); break;
+            case "group":
+                View.Selection.Clear();
+                foreach (var f in ii.Owner.Features.Where(x => x.Group == ii.Name)) View.Selection.Select(new PickRef(f.Id, PickKind.Feature, f.Parent, f), additive: true);
+                break;
         }
     }
 
@@ -1510,7 +1514,8 @@ public partial class MainWindow : Window
             SelectItem(n.Item);
             var ids = new List<string>();
             if (n.Item is Feature or Sketch) ids.Add("edit.feature");
-            if (n.Item is Feature) ids.AddRange(new[] { "edit.suppress", "tree.resume", "tree.edit_dims", "tree.insert_here", "tree.reorder_up", "tree.reorder_down" });
+            if (n.Item is Feature) ids.AddRange(new[] { "edit.suppress", "tree.resume", "tree.edit_dims", "tree.insert_here", "tree.reorder_up", "tree.reorder_down", "tree.group", "tree.parents_children", "tree.replace_refs" });
+            if (n.Item is Sketch) ids.Add("tree.replace_refs");
             ids.AddRange(SuggestedOps().Where(i => i != "edit.feature" && i != "edit.suppress"));
             ids.AddRange(new[] { "edit.rename", "edit.copy", "edit.paste", "view.hide", "view.isolate", "edit.delete" });
             if (n.Item is Part) ids.AddRange(new[] { "part.material", "part.units", "part.configurations", "an.mass", "an.check_body" });

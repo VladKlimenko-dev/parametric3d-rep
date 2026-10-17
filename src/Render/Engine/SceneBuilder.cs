@@ -78,6 +78,22 @@ public static class SceneBuilder
                         s.Lines.Add(Line(Tr(ln.A, xf), Tr(ln.B, xf), th.DatumAxis, th.DatumWidth, 0, pick));
                     }
                     break;
+                case DatumCsys cs when show.Axes:
+                    {
+                        uint pick = s.AddPick(new PickRef(cs.Id, PickKind.DatumPoint, owner, cs), 3, OwnerPartId(owner));
+                        var o = cs.Frame.Origin; double L = cs.DisplayLength;
+                        s.Lines.Add(Line(Tr(o, xf), Tr(o + cs.Frame.U * L, xf), new Vector4(0.90f, 0.30f, 0.30f, 1), th.DatumWidth * 1.4f, 0, pick));
+                        s.Lines.Add(Line(Tr(o, xf), Tr(o + cs.Frame.V * L, xf), new Vector4(0.30f, 0.80f, 0.35f, 1), th.DatumWidth * 1.4f, 0, pick));
+                        s.Lines.Add(Line(Tr(o, xf), Tr(o + cs.Frame.W * L, xf), new Vector4(0.35f, 0.55f, 0.95f, 1), th.DatumWidth * 1.4f, 0, pick));
+                        s.Points.Add(new PointInst { P = Tr(o, xf), Color = SceneData.Pack(th.DatumPoint), Px = 7, Shape = 1u, Pick = pick });
+                    }
+                    break;
+                case DatumCurve dc when show.Lines && dc.Points.Count >= 2:
+                    {
+                        uint pick = s.AddPick(new PickRef(dc.Id, PickKind.DatumAxis, owner, dc), 2, OwnerPartId(owner));
+                        for (int i = 1; i < dc.Points.Count; i++) s.Lines.Add(Line(Tr(dc.Points[i - 1], xf), Tr(dc.Points[i], xf), th.DatumAxis, th.DatumWidth * 1.2f, 0, pick));
+                    }
+                    break;
                 case Sketch sk when show.Sketches || ReferenceEquals(sk, _activeSketch):
                     AddSketch(sk, xf, s, th, show, OwnerPartId(owner));
                     break;

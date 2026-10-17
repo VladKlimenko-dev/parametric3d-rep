@@ -135,11 +135,15 @@ public sealed class ScenePicker
                 case Line3DItem ln:
                     AddSegment3(ln.A, ln.B, xf, new PickRef(ln.Id, PickKind.DatumAxis, item, ln));
                     break;
+                case DatumCsys cs: AddPoint(cs.Frame.Origin, xf, new PickRef(cs.Id, PickKind.DatumPoint, item, cs)); break;
+                case DatumCurve dc:
+                    for (int k = 1; k < dc.Points.Count; k++) AddSegment3(dc.Points[k - 1], dc.Points[k], xf, new PickRef(dc.Id, PickKind.DatumAxis, item, dc));
+                    break;
                 case Sketch sk: AddSketch(sk, xf, sk == activeSketch); break;
             }
 
             // Базовые элементы чужого владельца — после своих.
-            if (foreign && c is DatumPlane or DatumPoint or DatumAxis or Line3DItem) Demote(beforeChild);
+            if (foreign && c is DatumPlane or DatumPoint or DatumAxis or Line3DItem or DatumCsys or DatumCurve) Demote(beforeChild);
 
             Walk(c, xf, datumPlanes, activeSketch);
         }

@@ -301,3 +301,58 @@ public sealed class CosmeticThreadFeature : Feature
         Internal = r1 < r0;
     }
 }
+
+/// <summary>
+/// ПОЛНОЕ СКРУГЛЕНИЕ: средняя грань между двумя параллельными боковыми заменяется полуцилиндром, касательным к обеим
+/// (радиус — половина расстояния между ними). Грани: боковая, средняя, боковая. Делается вырезом полосы толщиной w/2 под
+/// средней гранью и добавлением цилиндра радиуса w/2 по длине средней грани.
+/// </summary>
+public sealed class FullRoundFeature : Feature
+{
+    public readonly List<Vector3d> OnFaces = new();
+    public readonly List<string?> OnFaceNames = new();
+    public FullRoundFeature(string name = "Full round") { Name = name; }
+    public override string Summary => "Full round";
+
+    public override void Execute(BuildContext ctx)
+    {
+        if (ctx.Bodies.Count == 0) throw new RebuildException(OperationOutcome.InvalidInput, "Full round: no body.");
+        if (OnFaces.Count != 3) throw new RebuildException(OperationOutcome.InvalidInput, "Full round: select a side face, the middle face and the other side face.");
+        var body = ctx.Bodies[0];
+        var fs = FacePick.Resolve(body, OnFaces, OnFaceNames, "Full round");
+        if (fs.Count != 3) throw new RebuildException(OperationOutcome.InvalidInput, "Full round: three different faces are needed.");
+        (Vector3d P, Vector3d N) Plane(TFace f)
+        {
+            var src = GeometryAudit.AuthoritativeSurface(f);
+            if (src is not { IsPlanar: true }) throw new RebuildException(OperationOutcome.InvalidInput, "Full round: the faces must be planar.");
+            var p = f.Loops[0].CoEdges[0].Start.P; return (p, f.NormalAt(p).Normalized());
+        }
+        var a = Plane(fs[0]); var m = Plane(fs[1]); var b = Plane(fs[2]);
+        if (Vector3d.Dot(a.N, b.N) > -1 + 1e-9) throw new RebuildException(OperationOutcome.InvalidInput, "Full round: the side faces must be parallel and face away from each other.");
+        double w = Math.Abs(Vector3d.Dot(b.P - a.P, a.N));
+        if (w < Tol.Weld) throw new RebuildException(OperationOutcome.InvalidInput, "Full round: the side faces coincide.");
+        if (Math.Abs(Vector3d.Dot(a.N, m.N)) > 1e-6) throw new RebuildException(OperationOutcome.InvalidInput, "Full round: the middle face must be perpendicular to the side faces.");
+        var e = Vector3d.Cross(a.N, m.N).Normalized();
+        var mv = fs[1].Loops.SelectMany(l => l.CoEdges).Select(c => c.Start.P).ToList();
+        double s0 = mv.Min(v => Vector3d.Dot(v, e)), s1 = mv.Max(v => Vector3d.Dot(v, e));
+        // точка на средней грани посередине между боковыми, в начале длины
+        var q = m.P - a.N * (Vector3d.Dot(m.P - a.P, a.N) + w / 2);
+        q += e * (s0 - Vector3d.Dot(q, e));
+        double r = w / 2, len = s1 - s0, eps = 1e-3 * Math.Max(1, w);
+        // вырез: прямоугольник поперёк (по ширине — от A до B, по высоте — от M вниз на r), длина — по средней грани
+        var fr = new Frame3(q, a.N, m.N);
+        Vector3d C(double x, double y) => q + a.N * x + m.N * y;
+        var rect = new List<Kernel.Curves.ICurve3>
+        {
+            new Kernel.Curves.LineCurve3(C(-r, -r), C(r, -r)), new Kernel.Curves.LineCurve3(C(r, -r), C(r, eps)),
+            new Kernel.Curves.LineCurve3(C(r, eps), C(-r, eps)), new Kernel.Curves.LineCurve3(C(-r, eps), C(-r, -r)),
+        };
+        var cutter = ExtrudeOp.Build(ProfileBuilder.Build(fr, rect), e * len);
+        var axisAt = q - m.N * r;
+        var circFrame = new Frame3(axisAt, a.N, m.N);
+        var circle = new List<Kernel.Curves.ICurve3> { new Kernel.Curves.ArcCurve3(circFrame, r, 0, 2 * Math.PI) };
+        var cyl = ExtrudeOp.Build(ProfileBuilder.Build(circFrame, circle), e * len);
+        BooleanOp.Subtract(ctx.Bodies, cutter, ctx.Warnings);
+        BooleanOp.Unite(ctx.Bodies, cyl, ctx.Warnings);
+    }
+}

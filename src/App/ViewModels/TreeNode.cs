@@ -124,6 +124,9 @@ public sealed partial class TreeNode : ObservableObject
         InfoItem { Role: "material" } => "tree_material_ico.svg",
         InfoItem { Role: "configs" } => "tree_config_ico.svg",
         InfoItem { Role: "body" } => "tree_body_ico.svg",
+        InfoItem { Role: "group" } => "tree_group_ico.svg",
+        DatumCsys => "tree_csys_ico.svg",
+        DatumCurve => "tree_curve_ico.svg",
         HelicalSweepFeature => "f_helical_sweep_but.svg",
         MoveCopyFeature => "f_move_copy_but.svg",
         FaceEditFeature { Mode: FaceEditMode.Radius } => "dir_new_radius_but.svg",
@@ -169,6 +172,9 @@ public sealed partial class TreeNode : ObservableObject
         InfoItem { Role: "material" } => "Материал",
         InfoItem { Role: "configs" } => "Исполнения",
         InfoItem { Role: "body" } => "Тело",
+        InfoItem { Role: "group" } => "Группа",
+        DatumCsys => "Система координат",
+        DatumCurve => "Кривая",
         HelicalSweepFeature => "Винтовая протяжка",
         MoveCopyFeature => "Перенос и поворот",
         FaceEditFeature => "Правка граней",
@@ -223,10 +229,22 @@ public sealed partial class TreeNode : ObservableObject
             for (int bi = 0; bi < pp.Bodies.Count; bi++) node.Children.Add(new TreeNode(new InfoItem("body", Loc.L("Тело {0}", bi + 1), pp) { Index = bi }, pp));
         }
         var consumed = new HashSet<uint>(item.Children.OfType<Feature>().SelectMany(f => f.ConsumedSketchIds()));
+        var groups = new Dictionary<string, TreeNode>();
         foreach (var c in item.Children)
         {
             if (c is Sketch sk && consumed.Contains(sk.Id)) continue;
             var child = BuildItem(c, owner);
+            // u13: операции группы — внутри узла группы (на месте первой из них)
+            var target = node;
+            if (c is Feature gf && !string.IsNullOrEmpty(gf.Group) && item is Part gp)
+            {
+                if (!groups.TryGetValue(gf.Group, out var gn))
+                {
+                    gn = new TreeNode(new InfoItem("group", gf.Group, gp), gp);
+                    groups[gf.Group] = gn; node.Children.Add(gn);
+                }
+                target = gn;
+            }
             if (c is Feature f)
                 foreach (var id in f.ConsumedSketchIds())
                     if (item.Children.FirstOrDefault(x => x.Id == id) is Sketch s)
@@ -234,7 +252,7 @@ public sealed partial class TreeNode : ObservableObject
                         child.Children.Add(new TreeNode(s, owner));
                         child.RestoreExpanded(false);
                     }
-            node.Children.Add(child);
+            target.Children.Add(child);
         }
         return node;
     }

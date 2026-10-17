@@ -130,3 +130,23 @@ public sealed class Line3DItem : ModelItem
     public Vector3d A, B;
     public Line3DItem(string name, Vector3d a, Vector3d b) { Name = name; A = a; B = b; }
 }
+
+/// <summary>u13: опорная система координат: начало и три оси (рамка). Плоскость XY рамки — для эскиза, ось Z — для осей.</summary>
+public sealed class DatumCsys : ModelItem
+{
+    public override ItemKind Kind => ItemKind.DatumCsys;
+    public Frame3 Frame = Frame3.XY;
+    public double DisplayLength = 30;
+    public DatumCsys(string name, Frame3 frame) { Name = name; Frame = frame; }
+}
+
+/// <summary>u13: опорная кривая в пространстве — ломаная точек (через точки, по уравнению, проекция на грань).</summary>
+public sealed class DatumCurve : ModelItem
+{
+    public override ItemKind Kind => ItemKind.DatumAxis;
+    public readonly List<Vector3d> Points = new();
+    /// <summary>Как построена (для показа): «через точки», «x(t)=…», «проекция».</summary>
+    public string Source = "";
+    public DatumCurve(string name, IEnumerable<Vector3d> pts, string source = "") { Name = name; Points.AddRange(pts); Source = source; }
+    public double Length { get { double l = 0; for (int i = 1; i < Points.Count; i++) l += (Points[i] - Points[i - 1]).Length; return l; } }
+}

@@ -148,6 +148,16 @@ public sealed class OpPanel
         _numbers.Add((tb, get));
     }
 
+    /// <summary>u13: строка текста (формула кривой и т. п.): применяется по Enter и при уходе из поля.</summary>
+    public void Text(string label, Func<string> get, Action<string> set, Func<bool>? visible = null)
+    {
+        var tb = new TextBox { Text = get(), MinWidth = 120 };
+        void Commit() { var t = tb.Text ?? ""; if (t == get()) return; set(t); _op.FieldChanged(); }
+        tb.KeyDown += (_, e) => { if (e.Key == Key.Enter) { Commit(); e.Handled = true; } };
+        tb.LostFocus += (_, _) => Commit();
+        When(Row(label, tb), visible);
+    }
+
     public void Check(string label, Func<bool> get, Action<bool> set, Func<bool>? visible = null)
     {
         var cb = new CheckBox { IsChecked = get(), Content = L(label) };
