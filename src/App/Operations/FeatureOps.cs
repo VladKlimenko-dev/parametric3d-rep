@@ -435,7 +435,8 @@ public sealed class HoleOp : FeatureOp<HoleFeature>
     {
         if (_face.Touched)
         {
-            _faceCentre = null; _faceNormal = null;
+            // u12: грань не найдена по номеру (предпросмотр перестроил деталь) — прежние центр и нормаль остаются
+            if (_face.Items.Count == 0) { _faceCentre = null; _faceNormal = null; }
             if (_face.Items.Count > 0 && Refs.PlaneOf(_face.Items[0]) is { } pl)
             {
                 _faceCentre = _face.Items[0] is { Kind: PickKind.Face, Owner: Part fp } fr && Refs.FaceCentre(fp, fr.Id) is { } fc ? fc : pl.Frame.Origin;

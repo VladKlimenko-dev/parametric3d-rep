@@ -45,7 +45,10 @@ public sealed class RefField
     /// <summary>Взять подходящее из выбора вида; true — что-то изменилось.</summary>
     public bool Take(IEnumerable<PickRef> sel)
     {
-        var ok = sel.Where(Accept).ToList();
+        // u12: уже взятое поле не теряет: после перестроения предпросмотра номер грани в детали другой, и проверка «подходит ли»
+        // (плоская ли грань) по старому номеру не проходит — поле опустошалось, операция выпадала, деталь возвращалась, поле
+        // снова заполнялось: отверстие мигало при каждом движении мыши
+        var ok = sel.Where(r => Accept(r) || Items.Any(i => i.Id == r.Id && i.Kind == r.Kind)).ToList();
         if (Single && ok.Count > 1) ok = ok.Skip(ok.Count - 1).ToList();
         if (ok.Count == Items.Count && ok.Select(r => r.Id).SequenceEqual(Items.Select(r => r.Id))) return false;
         Items.Clear();
