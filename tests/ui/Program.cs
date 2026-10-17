@@ -1255,6 +1255,129 @@ Check("UI-U13I-CURVES", () =>
     w.Close();
 });
 
+// u13j: поверхности FreeForm — линейчатая, сетка кривых, заплатка, плоская, мостик краёв, продление, обращение,
+// опорные точки, вес, узел, сшивка в тело, отверждение и замена грани NURBS-квилтом, запись.
+Check("UI-U13J-SURFACES", () =>
+{
+    double QArea(Quilt q)
+    {
+        double a = 0;
+        foreach (var f in q.Faces)
+        {
+            var mb = new Parametric3D.Kernel.Tess.MeshBuilder(); f.Surface.TessellateFace(f, mb); var md = new Parametric3D.Kernel.Tess.MeshData(); mb.FillInto(md);
+            for (int i = 0; i + 2 < md.Indices.Length; i += 3) { var p0 = mb.PositionsD[md.Indices[i]]; a += Vector3d.Cross(mb.PositionsD[md.Indices[i + 1]] - p0, mb.PositionsD[md.Indices[i + 2]] - p0).Length / 2; }
+        }
+        return a;
+    }
+    var s = FreeFormCommands.NewFreeForm(); var w = Open(s); var part = s.Part!;
+    var node = part.Features.OfType<FreeFormFeature>().Single();
+    T Add<T>(T f) where T : Feature { f.FreeForm = node.Key; f.Frozen = true; part.AddFeature(f); s.Document.RebuildDirty(); Require(f.Error == null, $"{f.GetType().Name}: {f.Error}"); return f; }
+    DatumCurve Curve(string n, params Vector3d[] p) { var c = new DatumCurve(n, p); part.Add(c); return c; }
+    PickRef CRef(DatumCurve c) => new(c.Id, PickKind.DatumAxis, part, c);
+    // линейчатая между отрезками: полоса 40 × √(30² + 10²)
+    var a = Curve("A", new(0, 0, 0), new(40, 0, 0)); var b = Curve("B", new(0, 30, 10), new(40, 30, 10));
+    w.ViewPort.Selection.Clear(); Select(w, CRef(a)); Select(w, CRef(b));
+    var ro = new FFSurfaceOp { Mode = FFSurfMode.Ruled }; w.StartOperation(ro); w.CommitOperation(); s.Document.RebuildDirty();
+    var ruled = part.Features.OfType<FFNurbsQuiltFeature>().Last();
+    var rq = part.Quilts.Single(q => q.Key == ruled.Key);
+    double want = 40 * Math.Sqrt(1000);
+    Console.WriteLine($"  ruled: error {ruled.Error}, quilt area {QArea(rq):F4} want {want:F4}, grid {ruled.Def.Nu}×{ruled.Def.Nv}");
+    Require(ruled.Error == null && rq.Nurbs != null && Math.Abs(QArea(rq) - want) < 1e-6 * want && ruled.Frozen, "ruled surface");
+    // продление края U1 на 10: площадь + 10 × √1000 (вдоль полосы)
+    var ext = Add(new FFNurbsQuiltFeature { ReplacesKey = ruled.Key, Def = NurbsDef.Of(FFSurfaces.Extend(rq.Nurbs!, 1, 10)) });
+    rq = part.Quilts.Single(q => q.Key == ruled.Key);
+    Console.WriteLine($"  extend: area {QArea(rq):F4} want {want * 1.25:F4}");
+    Require(Math.Abs(QArea(rq) - want * 1.25) < 1e-3 * want, "extend surface");
+    // опорная точка командой (выбрана поверхность → правка поверхности), сдвиг по Z на 5
+    var face = rq.Faces.First();
+    w.ViewPort.Selection.Clear(); Select(w, new PickRef(face.Id, PickKind.Face, part, null));
+    CommandRegistry.Instance["ff.cv_edit"].Execute();
+    Require(w.CurrentOperation is FFSurfaceOp, "cv edit dispatches to the surface");
+    var cvF = (FFNurbsQuiltFeature)w.CurrentOperation!.EditedFeature!;
+    w.CommitOperation(); s.Document.RebuildDirty();
+    rq = part.Quilts.Single(q => q.Key == ruled.Key);
+    Console.WriteLine($"  cv edit: error {cvF.Error}, replaces {cvF.ReplacesKey == ruled.Key}, cp00 {rq.Nurbs!.ControlPoint(0, 0)}");
+    Require(cvF.Error == null && cvF.ReplacesKey == ruled.Key && Math.Abs(rq.Nurbs!.ControlPoint(0, 0).Z - 5) < 1e-9, "cv edit");
+    // вставка узла: форма та же; вес: форма меняется; обращение: нормаль наоборот
+    var s0 = rq.Nurbs!; var k = s0.InsertKnotU(0.37);
+    double kd = 0; for (int i = 0; i <= 10; i++) for (int j = 0; j <= 10; j++) kd = Math.Max(kd, (s0.PointAt(new Vector2d(i / 10.0, j / 10.0)) - k.PointAt(new Vector2d(i / 10.0, j / 10.0))).Length);
+    Require(k.CountU == s0.CountU + 1 && kd < 1e-9, $"knot keeps the shape ({kd})");
+    var fl = FFSurfaces.Flip(NurbsDef.Of(s0)).Surface;
+    var c0 = s0.PointAt(new Vector2d(0.5, 0.5));
+    Require(Vector3d.Dot(s0.NormalAt(new Vector2d(0.5, 0.5)), fl.NormalAt(fl.ProjectToUV(c0))) < -0.99, "flip normal");
+    // сетка кривых: параболоид z = (x² + y²)/100 по трём кривым U и трём V
+    List<Vector3d> Par(Func<double, Vector3d> f) => Enumerable.Range(0, 41).Select(i => f(i)).ToList();
+    Vector3d Z(double x, double y) => new(x, y, (x * x + y * y) / 100);
+    var us = new[] { 0.0, 20, 40 }.Select(y => (IReadOnlyList<Vector3d>)Par(t => Z(t, y))).ToList();
+    var vs = new[] { 0.0, 20, 40 }.Select(x => (IReadOnlyList<Vector3d>)Par(t => Z(x, t))).ToList();
+    var net = FFSurfaces.Network(us, vs);
+    double ndev = FFSurfaces.Deviation(net, us.Concat(vs).SelectMany(c => c));
+    double cdev = (net.PointAt(net.ProjectToUV(Z(10, 10))) - Z(10, 10)).Length;
+    Console.WriteLine($"  network: deviation from curves {ndev:E2}, from the paraboloid at (10,10) {cdev:E2}");
+    Require(ndev < 0.05 && cdev < 0.2, "network surface");
+    // заплатка по квадрату 20 (четыре стороны) — плоская, площадь 400
+    var sq = new[] { new Vector3d(0, 0, 50), new(20, 0, 50), new(20, 20, 50), new(0, 20, 50) };
+    var sides = Enumerable.Range(0, 4).Select(i => (IReadOnlyList<Vector3d>)new[] { sq[i], sq[(i + 1) % 4] }).ToList();
+    var patch = FFSurfaces.Patch(sides);
+    var pq = FFSurfaces.Quilt(patch, "p", "patch");
+    Console.WriteLine($"  patch: area {QArea(pq):F6}");
+    Require(Math.Abs(QArea(pq) - 400) < 1e-6, "coons patch");
+    // плоская поверхность по замкнутому квадрату и утолщение 2 → 800
+    var loop = Curve("Loop", new(100, 0, 0), new(120, 0, 0), new(120, 20, 0), new(100, 20, 0), new(100, 0, 0));
+    var pl = Add(new FFPlanarQuiltFeature { Boundary = { new(100, 0, 0), new(120, 0, 0), new(120, 20, 0), new(100, 20, 0), new(100, 0, 0) } });
+    var th = Add(new QuiltSolidFeature { Source = pl.Key, Thickness = new ValueRef(2) });
+    Console.WriteLine($"  planar + thicken: volume {part.Volume:F6}");
+    Require(Math.Abs(part.Volume - 800) < 1e-6, "planar surface and thicken");
+    // сшивка шести плоских граней куба 10 (обход — наружу) → тело 1000
+    var cube = new[] {
+        new[] { new Vector3d(200, 0, 0), new(200, 10, 0), new(210, 10, 0), new(210, 0, 0) },
+        new[] { new Vector3d(200, 0, 10), new(210, 0, 10), new(210, 10, 10), new(200, 10, 10) },
+        new[] { new Vector3d(200, 0, 0), new(210, 0, 0), new(210, 0, 10), new(200, 0, 10) },
+        new[] { new Vector3d(200, 10, 0), new(200, 10, 10), new(210, 10, 10), new(210, 10, 0) },
+        new[] { new Vector3d(200, 0, 0), new(200, 0, 10), new(200, 10, 10), new(200, 10, 0) },
+        new[] { new Vector3d(210, 0, 0), new(210, 10, 0), new(210, 10, 10), new(210, 0, 10) } };
+    var keys = new List<string>();
+    foreach (var f4 in cube) { var pf = new FFPlanarQuiltFeature(); pf.Boundary.AddRange(f4); pf.Boundary.Add(f4[0]); Add(pf); keys.Add(pf.Key); }
+    double v0 = part.Volume;
+    var st = new FFStitchFeature(); st.Sources.AddRange(keys); Add(st);
+    Console.WriteLine($"  stitch: error {st.Error}, volume added {part.Volume - v0:F6}, bodies {part.Bodies.Count}, quilts left {part.Quilts.Count}");
+    Require(Math.Abs(part.Volume - v0 - 1000) < 1e-6 && part.Bodies.Count == 2, "stitch into a body");
+    // мостик между верхними рёбрами двух брусков (G1 к верхним граням)
+    var b1 = Add(new FFPrimitiveFeature { Shape = FFPrimitive.Box, Origin = new Vector3d(0, 100, 0), A = new ValueRef(20), B = new ValueRef(20), C = new ValueRef(10) });
+    var b2 = Add(new FFPrimitiveFeature { Shape = FFPrimitive.Box, Origin = new Vector3d(60, 100, 0), A = new ValueRef(20), B = new ValueRef(20), C = new ValueRef(10) });
+    Parametric3D.Kernel.Topology.TEdge TopEdge(double x) => part.Bodies.SelectMany(bb => bb.Edges).First(e => Math.Abs(e.V0.P.Z - 10) < 1e-9 && Math.Abs(e.V1.P.Z - 10) < 1e-9 && Math.Abs(e.V0.P.X - x) < 1e-9 && Math.Abs(e.V1.P.X - x) < 1e-9);
+    var ea = TopEdge(10); var eb = TopEdge(50);
+    w.ViewPort.Selection.Clear(); Select(w, new PickRef(ea.Id, PickKind.Edge, part, null)); Select(w, new PickRef(eb.Id, PickKind.Edge, part, null));
+    var bo = new FFSurfaceOp { Mode = FFSurfMode.Blend }; w.StartOperation(bo); w.CommitOperation(); s.Document.RebuildDirty();
+    var blend = part.Features.OfType<FFNurbsQuiltFeature>().Last();
+    var bq = part.Quilts.Single(q => q.Key == blend.Key);
+    var mid = bq.Nurbs!.PointAt(new Vector2d(0.5, 0.5));
+    var tan = bq.Nurbs.NormalAt(new Vector2d(0.5, 0.0));
+    Console.WriteLine($"  blend: error {blend.Error}, mid {mid}, normal at the first edge {tan}");
+    Require(blend.Error == null && Math.Abs(mid.X - 30) < 1e-6 && Math.Abs(mid.Z - 10) < 1e-6 && Math.Abs(Math.Abs(tan.Z) - 1) < 1e-6, "edge blend G1 (flat between two tops)");
+    // замена верхней грани бруска (20×20, z = 10) выпуклой NURBS-поверхностью z = 10 + 5·sin(πu)·sin(πv) над ней:
+    // объём растёт на 5·400·(2/π)²
+    var gq = new Vector3d[17, 17];
+    for (int i = 0; i <= 16; i++) for (int j = 0; j <= 16; j++) { double u = i / 16.0, v = j / 16.0; gq[i, j] = new Vector3d(-10 + 20 * u, 90 + 20 * v, 10 + 5 * Math.Sin(Math.PI * u) * Math.Sin(Math.PI * v)); }
+    var bump = Add(new FFNurbsQuiltFeature { Def = NurbsDef.Of(FFSurfaces.Interpolate(gq)), QuiltName = "Bump" });
+    string b1name = part.BodyNameOf(ea.Id)!;
+    var rf = new QuiltSolidFeature { Mode = QuiltSolidKind.ReplaceFace, Source = bump.Key, FFBody = b1name };
+    rf.OnFaces.Add(new Vector3d(0, 100, 10));
+    double vr0 = part.Volume;
+    Add(rf);
+    double vbump = 5 * 400 * 4 / (Math.PI * Math.PI);
+    Console.WriteLine($"  replace face by NURBS: error {rf.Error}, volume added {part.Volume - vr0:F3} want {vbump:F3}");
+    Require(Math.Abs(part.Volume - vr0 - vbump) < 0.01 * vbump, "replace face by a NURBS surface");
+    // запись и чтение: те же квилты и объём
+    var path = Path.Combine(Path.GetTempPath(), "u13j_surf.p3d");
+    s.SaveAs(path);
+    var s2 = DocumentSession.Open(path); s2.Document.RebuildDirty();
+    Console.WriteLine($"  reopened: quilts {s2.Part!.Quilts.Count} (was {part.Quilts.Count}), volume {s2.Part.Volume:F4} (was {part.Volume:F4})");
+    Require(s2.Part.Quilts.Count == part.Quilts.Count && Math.Abs(s2.Part.Volume - part.Volume) < 1e-6 * part.Volume
+            && s2.Part.Quilts.Any(q => q.Nurbs != null && Math.Abs(q.Nurbs.ControlPoint(0, 0).Z - 5) < 1e-9), "save and load surfaces");
+    w.Close();
+});
+
 // u13: опорные элементы кнопок (плоскость посередине и касательная, ось грани, точка в центре дуги) и уклон
 Check("UI-U13-DATUMS-DRAFT", () =>
 {

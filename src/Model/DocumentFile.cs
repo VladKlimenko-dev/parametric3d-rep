@@ -519,6 +519,9 @@ public static class DocumentFile
             d.OpenFaces = fi.OnFaces.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList();
             d.FaceNames = fi.OnFaceNames.Count > 0 ? fi.OnFaceNames.ToList() : null;
         }),
+        FFNurbsQuiltFeature nq => Dto("ff_nurbs", nq, d => { d.Nurbs = nq.Def.Pack(); PutS(d, "replaces", nq.ReplacesKey); PutS(d, "quilt", nq.QuiltName.Length > 0 ? nq.QuiltName : null); }),
+        FFPlanarQuiltFeature pq => Dto("ff_planar", pq, d => d.OpenFaces = pq.Boundary.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList()),
+        FFStitchFeature st => Dto("ff_stitch", st, d => d.Sources = st.Sources.ToList()),
         FFAlignFaceFeature fl => Dto("ff_align_face", fl, d =>
         {
             PutV(d, "offset", fl.Offset); d.Point = V3(fl.PlaneAt); d.Dir = V3(fl.Normal);
@@ -1025,6 +1028,27 @@ public static class DocumentFile
                     part.AddFeature(fi);
                     break;
                 }
+                case "ff_nurbs":
+                {
+                    var nq = new FFNurbsQuiltFeature(fd.Name) { Suppressed = fd.Suppressed, ReplacesKey = GetS(fd, "replaces"), QuiltName = GetS(fd, "quilt") ?? "" };
+                    if (NurbsDef.Unpack(fd.Nurbs) is { } nd) nq.Def = nd;
+                    part.AddFeature(nq);
+                    break;
+                }
+                case "ff_planar":
+                {
+                    var pq = new FFPlanarQuiltFeature(fd.Name) { Suppressed = fd.Suppressed };
+                    for (int i = 0; i + 2 < fd.OpenFaces.Count; i += 3) pq.Boundary.Add(new Vector3d(fd.OpenFaces[i], fd.OpenFaces[i + 1], fd.OpenFaces[i + 2]));
+                    part.AddFeature(pq);
+                    break;
+                }
+                case "ff_stitch":
+                {
+                    var st = new FFStitchFeature(fd.Name) { Suppressed = fd.Suppressed };
+                    if (fd.Sources != null) st.Sources.AddRange(fd.Sources);
+                    part.AddFeature(st);
+                    break;
+                }
                 case "ff_align_face":
                 {
                     var fl = new FFAlignFaceFeature(fd.Name) { Suppressed = fd.Suppressed, Offset = GetV(fd, "offset", 0), PlaneAt = Vec(fd.Point), Normal = Vec(fd.Dir) };
@@ -1454,6 +1478,8 @@ public static class DocumentFile
         public Dictionary<string, double>? Num { get; set; }
         public Dictionary<string, string?>? Str { get; set; }
         public List<string>? Flags { get; set; }
+        /// <summary>u13j: NURBS-поверхность шага FreeForm (NurbsDef.Pack).</summary>
+        public List<double>? Nurbs { get; set; }
         public string Kind { get; set; } = "";
         public string Name { get; set; } = "";
         public bool Suppressed { get; set; }

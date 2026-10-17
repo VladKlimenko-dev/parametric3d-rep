@@ -829,6 +829,9 @@ public static class OperationFactory
         FFAlignFaceFeature x => new FFAlignFaceOp(x),
         FFPipeFeature x => new FFPipeOp(x),
         FFImprintFeature x => new FFImprintOp(x),
+        FFNurbsQuiltFeature x => new FFSurfaceOp(x),
+        FFPlanarQuiltFeature x => new FFPlanarOp(x),
+        FFStitchFeature x => new FFStitchOp(x),
         _ => null,
     };
 }
