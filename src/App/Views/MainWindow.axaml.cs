@@ -1080,10 +1080,19 @@ public partial class MainWindow : Window
         bool edge = sel.Any(r => r.Kind == PickKind.Edge), vertex = sel.Any(r => r.Kind == PickKind.Vertex);
         bool sketch = sel.Any(Refs.IsSketch), linear = sel.Any(Refs.IsLinear), axis = sel.Any(r => r.Kind == PickKind.DatumAxis);
         bool feature = sel.Any(r => r.Target is Feature), part = sel.Any(r => r.Kind == PickKind.Body);
+        bool curved = sel.Any(r => r.Kind == PickKind.Face && !Refs.IsPlanar(r));
+        int planes = sel.Count(Refs.IsPlanar), sketches = sel.Where(Refs.IsSketch).Select(r => Refs.SketchOf(r)!.Id).Distinct().Count();
+        bool arc = sel.Any(r => r.Kind == PickKind.Edge && Session.Part?.FindEdge(r.Id)?.Curve is Kernel.Curves.ArcCurve3);
         if (sketch) res.AddRange(new[] { "op.extrude", "op.cut", "op.revolve", "edit.feature" });
+        // u13: эскизы — протяжка и переход (два и больше), ребро жёсткости
+        if (sketches >= 2) res.AddRange(new[] { "op.loft", "op.sweep" });
+        if (sketch) res.Add("op.rib");
         if (planar) res.AddRange(new[] { "op.sketch", "op.extrude", "op.plane", "op.mirror" });
-        if (face) res.AddRange(new[] { "op.hole", "op.shell" });
-        if (edge) res.AddRange(new[] { "op.round", "op.chamfer" });
+        if (planes >= 2) res.AddRange(new[] { "op.plane_mid", "op.axis_intersect" });
+        if (face) res.AddRange(new[] { "op.hole", "op.shell", "op.draft" });
+        if (curved) res.AddRange(new[] { "op.axis_face", "op.plane_tangent" });
+        if (edge) res.AddRange(new[] { "op.round", "op.chamfer", "op.round_variable" });
+        if (arc) res.Add("op.point_center");
         if (vertex) res.AddRange(new[] { "op.vertex_round", "op.vertex_chamfer" });
         if (linear && !sketch) res.Add("op.pattern_linear");
         if (axis || linear && !sketch) res.Add("op.pattern_circular");
@@ -1391,7 +1400,7 @@ public partial class MainWindow : Window
             SelectItem(n.Item);
             var ids = new List<string>();
             if (n.Item is Feature or Sketch) ids.Add("edit.feature");
-            if (n.Item is Feature) ids.Add("edit.suppress");
+            if (n.Item is Feature) ids.AddRange(new[] { "edit.suppress", "tree.resume", "tree.edit_dims", "tree.insert_here", "tree.reorder_up", "tree.reorder_down" });
             ids.AddRange(SuggestedOps().Where(i => i != "edit.feature" && i != "edit.suppress"));
             ids.AddRange(new[] { "view.hide", "view.isolate", "edit.delete" });
             var items = ids.Distinct().Select(id => (object)Item(_reg[id])).ToList();

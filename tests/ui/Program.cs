@@ -312,6 +312,137 @@ Check("UI-SKETCH-EXTRUDE", () =>
     w.Close();
 });
 
+// u13: эскиз на плоскости с рисованием инструментами (для проверок операций по эскизам)
+Sketch DrawSketch(MainWindow w, Part part, ModelItem plane, Action<Sketch> draw)
+{
+    w.ViewPort.Selection.Clear();
+    w.SelectItem(plane);
+    w.StartOperation(new SketchOp());
+    Require(w.InSketch, "sketch mode did not start");
+    var sk = w.ViewPort.ActiveSketch!;
+    draw(sk);
+    w.FinishSketch();
+    w.ViewPort.Selection.Clear();
+    return sk;
+}
+void Rect(Sketch sk, double x0, double y0, double x1, double y1) { var r = new RectangleTool(); r.Click(new SketchInput(sk, new Vector2d(x0, y0), null)); r.Click(new SketchInput(sk, new Vector2d(x1, y1), null)); }
+void Select(MainWindow w, PickRef r) => w.ViewPort.Selection.Select(r, additive: true);
+
+// u13: переход по сечениям (квадраты 20 и 10 на высоте 40 — усечённая пирамида) и протяжка (круг R5 по отрезку 50)
+Check("UI-U13-LOFT-SWEEP", () =>
+{
+    var s = DocumentSession.NewPart(); var w = Open(s); var part = s.Part!;
+    var a = DrawSketch(w, part, part.PlaneXY, sk => Rect(sk, -10, -10, 10, 10));
+    var p40 = new DatumPlane("P40", Parametric3D.Kernel.Frame3.FromNormal(new Vector3d(0, 0, 40), Vector3d.UnitZ)); part.Add(p40);
+    var b = DrawSketch(w, part, p40, sk => Rect(sk, -5, -5, 5, 5));
+    Select(w, new PickRef(a.Id, PickKind.SketchCurve, part, a)); Select(w, new PickRef(b.Id, PickKind.SketchCurve, part, b));
+    w.StartOperation(new LoftOp());
+    w.CommitOperation(); s.Document.RebuildDirty();
+    var loft = part.Features.OfType<LoftFeature>().Single();
+    double want = 40.0 / 3 * (400 + 100 + 200);
+    Console.WriteLine($"  loft: error {loft.Error}, volume {part.Volume:F4} want {want:F4}");
+    Require(loft.Error == null && Math.Abs(part.Volume - want) < 1e-6 * want, $"loft volume {part.Volume} ({loft.Error})");
+    w.Close();
+
+    var s2 = DocumentSession.NewPart(); var w2 = Open(s2); var p2 = s2.Part!;
+    var sec = DrawSketch(w2, p2, p2.PlaneXY, sk => { var c = new CircleTool(); c.Click(new SketchInput(sk, Vector2d.Zero, null)); c.Click(new SketchInput(sk, new Vector2d(5, 0), null)); });
+    var path = DrawSketch(w2, p2, p2.PlaneXZ, sk => { var l = new LineTool(chain: false); l.Click(new SketchInput(sk, Vector2d.Zero, null)); l.Click(new SketchInput(sk, new Vector2d(0, 50), null)); });
+    Select(w2, new PickRef(sec.Id, PickKind.SketchCurve, p2, sec)); Select(w2, new PickRef(path.Id, PickKind.SketchCurve, p2, path));
+    w2.StartOperation(new SweepOp());
+    w2.CommitOperation(); s2.Document.RebuildDirty();
+    var sw = p2.Features.OfType<SweepFeature>().Single();
+    double want2 = Math.PI * 25 * 50;
+    Console.WriteLine($"  sweep: error {sw.Error}, volume {p2.Volume:F4} want {want2:F4}");
+    Require(sw.Error == null && Math.Abs(p2.Volume - want2) < 1e-3 * want2, $"sweep volume {p2.Volume} ({sw.Error})");
+    w2.Close();
+});
+
+// u13: опорные элементы кнопок (плоскость посередине и касательная, ось грани, точка в центре дуги) и уклон
+Check("UI-U13-DATUMS-DRAFT", () =>
+{
+    var s = DocumentSession.Sample(); var w = Open(s); var part = s.Part!; part.Rebuild(null);
+    var fx = part.Bodies[0].Faces.Where(f => Refs.FacePlane(part, f.Id) is { } pl && Math.Abs(Math.Abs(pl.N.X) - 1) < 1e-9).ToList();
+    Require(fx.Count == 2, "two x faces");
+    w.ViewPort.Selection.Clear(); foreach (var f in fx) Select(w, new PickRef(f.Id, PickKind.Face, part, null));
+    int n0 = part.Planes.Count();
+    w.StartOperation(new PlaneOp { InitialMethod = 6 }); w.CommitOperation();
+    var mid = part.Planes.Last();
+    Console.WriteLine($"  mid plane: {mid.Frame.Origin} n {mid.Frame.W}");
+    Require(part.Planes.Count() == n0 + 1 && Math.Abs(mid.Frame.Origin.X) < 1e-9 && Math.Abs(Math.Abs(mid.Frame.W.X) - 1) < 1e-9, "mid plane");
+    // уклон 5° боковой грани +x от нижней
+    double v0 = part.Volume;
+    var bottom = part.Bodies[0].Faces.First(f => Refs.FacePlane(part, f.Id) is { } pl && pl.N.Z < -0.99);
+    w.ViewPort.Selection.Clear(); Select(w, new PickRef(fx[0].Id, PickKind.Face, part, null));
+    var dop = new DraftOp(); w.StartOperation(dop);
+    var f0 = part.Features.OfType<DraftFeature>().LastOrDefault();
+    // нейтральная плоскость — нижняя грань (поле второе)
+    w.ViewPort.Selection.Select(new PickRef(bottom.Id, PickKind.Face, part, null), additive: true);
+    w.CommitOperation(); s.Document.RebuildDirty();
+    var dr = part.Features.OfType<DraftFeature>().Single();
+    Console.WriteLine($"  draft: error {dr.Error}, volume {v0:F2} -> {part.Volume:F2}");
+    Require(dr.Error == null && Math.Abs(part.Volume - v0) > 1, $"draft {dr.Error}");
+    w.Close();
+
+    // ось грани и точка в центре дуги — у скругления
+    var s2 = DocumentSession.Sample(); var w2 = Open(s2); var p2 = s2.Part!; p2.Rebuild(null);
+    double zMax = p2.Bodies[0].Vertices.Max(v => v.P.Z);
+    var e = p2.Bodies[0].Edges.First(x => x.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(x.V0.P.Z - zMax) < 1e-6 && Math.Abs(x.V1.P.Z - zMax) < 1e-6);
+    var rf = new RoundFeature { Radius = new ValueRef(10) }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(e)); p2.AddFeature(rf); p2.Rebuild(null);
+    var cyl = p2.Bodies[0].Faces.First(f => f.Tag.Contains("round:face"));
+    w2.ViewPort.Selection.Clear(); Select(w2, new PickRef(cyl.Id, PickKind.Face, p2, null));
+    w2.StartOperation(new AxisOp { InitialMethod = 3 }); w2.CommitOperation();
+    var ax = p2.Children.OfType<DatumAxis>().Last();
+    var ed = (e.V1.P - e.V0.P).Normalized();
+    Console.WriteLine($"  face axis: {ax.Origin} dir {ax.Direction}");
+    Require(Math.Abs(Math.Abs(Vector3d.Dot(ax.Direction.Normalized(), ed)) - 1) < 1e-9, "face axis direction");
+    w2.ViewPort.Selection.Clear(); Select(w2, new PickRef(cyl.Id, PickKind.Face, p2, null));
+    w2.StartOperation(new PlaneOp { InitialMethod = 7 }); w2.CommitOperation();
+    var tp = p2.Planes.Last(); var rad = tp.Frame.Origin - ax.Origin; rad -= ax.Direction.Normalized() * Vector3d.Dot(rad, ax.Direction.Normalized());
+    Console.WriteLine($"  tangent plane at {tp.Frame.Origin}, distance from axis {rad.Length:F6}");
+    Require(Math.Abs(rad.Length - 10) < 1e-6 && Math.Abs(Vector3d.Dot(tp.Frame.W.Normalized(), rad.Normalized())) > 1 - 1e-9, "tangent plane");
+    var arc = p2.Bodies[0].Edges.First(x => x.Curve is Parametric3D.Kernel.Curves.ArcCurve3);
+    w2.ViewPort.Selection.Clear(); Select(w2, new PickRef(arc.Id, PickKind.Edge, p2, null));
+    w2.StartOperation(new PointOp { InitialMethod = 1 }); w2.CommitOperation();
+    var pt = p2.Children.OfType<DatumPoint>().Last();
+    Console.WriteLine($"  arc centre point {pt.P} (arc centre {((Parametric3D.Kernel.Curves.ArcCurve3)arc.Curve).Frame.Origin})");
+    Require((pt.P - ((Parametric3D.Kernel.Curves.ArcCurve3)arc.Curve).Frame.Origin).Length < 1e-9, "arc centre");
+    w2.Close();
+});
+
+// u13: команды дерева — вставить здесь, переупорядочить (с отказом, если ломается), вернуть подавленную, размеры операции
+Check("UI-U13-TREE", () =>
+{
+    var s = DocumentSession.Sample(); var w = Open(s); var part = s.Part!; part.Rebuild(null);
+    double zMax = part.Bodies[0].Vertices.Max(v => v.P.Z);
+    var es = part.Bodies[0].Edges.Where(x => x.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(x.V0.P.Z - zMax) < 1e-6 && Math.Abs(x.V1.P.Z - zMax) < 1e-6).ToList();
+    es = new List<Parametric3D.Kernel.Topology.TEdge> { es[0], es.First(x => x.V0 != es[0].V0 && x.V0 != es[0].V1 && x.V1 != es[0].V0 && x.V1 != es[0].V1) };   // противоположные рёбра
+    var r1 = new RoundFeature { Radius = new ValueRef(10), Name = "R10" }; r1.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(es[0])); part.AddFeature(r1);
+    var c1 = new ChamferFeature { Mode = ChamferKind.TwoDistances, D1 = new ValueRef(5), D2 = new ValueRef(5), Name = "C5" }; c1.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(es[1])); part.AddFeature(c1);
+    s.Document.RebuildDirty();
+    double vAll = part.Volume;
+    // вставить здесь после скругления: фаска вне расчёта
+    w.SelectItem(r1); TreeCommands.InsertHere(w); s.Document.RebuildDirty();
+    Require(part.InInsertMode && part.IsBeyondStage(c1) && !part.IsBeyondStage(r1), "insert here");
+    Require(TreeCommands.NeedsAttention(part).Any(x => x.F == c1), "needs attention lists the rolled-back feature");
+    w.SelectItem(r1); TreeCommands.InsertHere(w); s.Document.RebuildDirty();
+    Require(!part.InInsertMode && Math.Abs(part.Volume - vAll) < 1e-6, "insert mode ended");
+    // переупорядочить: фаска выше скругления (независимы) — объём тот же
+    w.SelectItem(c1); TreeCommands.Reorder(w, -1); s.Document.RebuildDirty();
+    Require(part.Features.IndexOf(c1) < part.Features.IndexOf(r1) && Math.Abs(part.Volume - vAll) < 1e-6, $"reorder: volume {part.Volume} vs {vAll}");
+    // подавить и вернуть
+    w.Session.Edit("s", () => r1.Suppressed = true); s.Document.RebuildDirty();
+    w.ViewPort.Selection.Clear(); TreeCommands.Resume(w); s.Document.RebuildDirty();
+    Require(!r1.Suppressed && Math.Abs(part.Volume - vAll) < 1e-6, "resume");
+    // размеры операции: радиус скругления меняется через список чисел
+    var vals = TreeCommands.Values(r1);
+    Require(vals.Any(v => v.Name == "Radius"), "round values");
+    w.Session.Edit("r", () => { vals.First(v => v.Name == "Radius").Set(new ValueRef(12)); part.NotifyChanged(r1); }); s.Document.RebuildDirty();
+    Require(Math.Abs(r1.Radius.Value - 12) < 1e-12 && part.Volume < vAll, "edit value");
+    TreeCommands.Rebuild(w);
+    Require(part.Features.All(f => f.Error == null), "rebuild");
+    w.Close();
+});
+
 Check("UI-PARAMETERS-SCOPE", () =>
 {
     // параметры по уровням: формула детали видит параметр документа, своё имя закрывает документное; файл хранит оба уровня

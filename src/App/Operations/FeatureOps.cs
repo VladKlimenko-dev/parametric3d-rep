@@ -226,9 +226,11 @@ public sealed class RoundOp : FeatureOp<RoundFeature>
     /// <summary>u12: выбранные рёбра поля (ручка операции, начатой командой).</summary>
     public IReadOnlyList<PickRef> EdgeRefs => _edges?.Items ?? (IReadOnlyList<PickRef>)Array.Empty<PickRef>();
     public Dictionary<uint, EdgeRef>? PresetEdges { set => _cache.Preset = value; }
-    public override string Title => "Скругление";
-    public override string Icon => "f_round_but.svg";
-    protected override RoundFeature Create() => new();
+    public override string Title => Variable ? "Переменное скругление" : "Скругление";
+    public override string Icon => Variable ? "f_round_variable_but.svg" : "f_round_but.svg";
+    /// <summary>u13: кнопка «Переменное скругление» — радиус в конце сразу включён (вдвое больше начального).</summary>
+    public bool Variable;
+    protected override RoundFeature Create() { var f = new RoundFeature(); if (Variable) f.RadiusEnd = new ValueRef(f.Radius.Value * 2); return f; }
 
     public override void Build(OpPanel p)
     {
@@ -567,11 +569,15 @@ public sealed class PlaneOp : Operation
     public override bool SignedDrag => true;
     /// <summary>Ручка есть у способов со смещением (смещение) и углом (угол).</summary>
     public bool HasHandle => _by is 0 or 4;
-    public static readonly string[] Methods = { "Смещение от плоскости", "Через три точки", "Через прямую и точку", "Параллельно через точку", "Под углом к плоскости", "Перпендикулярно прямой" };
+    public static readonly string[] Methods = { "Смещение от плоскости", "Через три точки", "Через прямую и точку", "Параллельно через точку", "Под углом к плоскости", "Перпендикулярно прямой или кривой", "Посередине между плоскостями", "Касательно к грани в точке" };
+    /// <summary>u13: способ, заданный кнопкой (плоскость посередине, касательная, нормально к кривой…); −1 — по выбору.</summary>
+    public int InitialMethod = -1;
+    private RefField _base2 = null!, _face = null!;
 
     protected override bool Start()
     {
         W.Session.BeginEdit(L(Title));
+        if (InitialMethod >= 0) _by = InitialMethod;
         return true;
     }
 
@@ -579,24 +585,32 @@ public sealed class PlaneOp : Operation
     {
         p.Choice("Способ", Methods, () => _by, v => { _by = v; });
         _base = p.Ref(new RefField { Label = "Плоскость", Filter = PickFilter.Faces | PickFilter.Datums, Accept = Refs.IsPlanar, Single = true, Optional = true });
-        _line = p.Ref(new RefField { Label = "Прямая (ось)", Filter = PickFilter.Edges | PickFilter.Datums | PickFilter.SketchCurves, Accept = Refs.IsLinear, Single = true, Optional = true });
+        _base2 = p.Ref(new RefField { Label = "Вторая плоскость", Filter = PickFilter.Faces | PickFilter.Datums, Accept = Refs.IsPlanar, Single = true, Optional = true });
+        _line = p.Ref(new RefField { Label = "Прямая (ось) или кривая", Filter = PickFilter.Edges | PickFilter.Datums | PickFilter.SketchCurves, Accept = r => Refs.IsLinear(r) || r.Kind is PickKind.Edge or PickKind.SketchCurve, Single = true, Optional = true });
+        _face = p.Ref(new RefField { Label = "Кривая грань", Filter = PickFilter.Faces, Accept = r => r.Kind == PickKind.Face && !Refs.IsPlanar(r), Single = true, Optional = true });
         _pts = p.Ref(new RefField { Label = "Точки", Filter = PickFilter.Vertices | PickFilter.SketchPoints | PickFilter.Datums, Accept = r => r.Kind is PickKind.Vertex or PickKind.SketchPoint or PickKind.DatumPoint, Optional = true });
         p.Number("Смещение", () => _offset, v => _offset = v, visible: () => _by == 0);
         p.Number("Угол", () => _angle, v => _angle = v, "°", visible: () => _by == 4);
         p.Check("Обратное направление", () => _flip, v => _flip = v, visible: () => _by is 0 or 4);
-        p.Note("Смещение — плоскость; три точки — точки; прямая и точка — прямая и точка; параллельно — плоскость и точка; под углом — плоскость и прямая в ней; перпендикулярно — прямая (и точка).");
+        p.Note("Смещение — плоскость; три точки — точки; прямая и точка — прямая и точка; параллельно — плоскость и точка; под углом — плоскость и прямая в ней; перпендикулярно — прямая или кривая (и точка); посередине — две плоскости; касательно — кривая грань (и точка).");
     }
 
     public override void Prime()
     {
-        Seed(_base, _line, _pts);
+        // вторая плоскость — второй выбранной плоской ссылкой (выбор снят раскладкой по полям — взять до неё)
+        var planes = W.ViewPort.Selection.Items.Where(Refs.IsPlanar).ToList();
+        Seed(_base, _line, _pts, _face);
+        if (planes.Count >= 2 && _base.Items.Count > 0 && planes.FirstOrDefault(x => x.Id != _base.Items[0].Id) is { IsEmpty: false } other) _base2.Take(new[] { other });
         // способ — по выбранному: три точки, прямая и точка, плоскость и точка
-        if (_pts.Items.Count >= 3) _by = 1;
-        else if (_line.Items.Count > 0 && _pts.Items.Count > 0) _by = 2;
+        if (InitialMethod >= 0) { }
+        else if (_pts.Items.Count >= 3) _by = 1;
+        else if (planes.Count >= 2) _by = 6;
+        else if (_face.Items.Count > 0) _by = 7;
+        else if (_line.Items.Count > 0 && _pts.Items.Count > 0) _by = Refs.IsLinear(_line.Items[0]) ? 2 : 5;
         else if (_base.Items.Count > 0 && _pts.Items.Count > 0) _by = 3;
         else if (_base.Items.Count > 0 && _line.Items.Count > 0) _by = 4;
         else if (_line.Items.Count > 0) _by = 5;
-        foreach (var f in new[] { _base, _line, _pts }) if (f.Text != null) f.Text.Text = f.Summary;
+        foreach (var f in new[] { _base, _base2, _line, _pts, _face }) if (f.Text != null) f.Text.Text = f.Summary;
         Panel?.Refresh();
         Apply();
         RefreshStatus();
@@ -617,7 +631,32 @@ public sealed class PlaneOp : Operation
                 case 2 when ln is { } l && pts.Count >= 1: return (DatumBuilder.PlaneThroughLineAndPoint(l.At, l.Dir, pts[0]), DatumPlaneMode.LineAndPoint, 0);
                 case 3 when pl is { } b && pts.Count >= 1: return (DatumBuilder.PlaneParallelThroughPoint(b.Frame, pts[0]), DatumPlaneMode.ParallelThroughPoint, b.SourceId);
                 case 4 when pl is { } b && ln is { } l: return (DatumBuilder.PlaneAtAngle(b.Frame, l.At, l.Dir, _angle.Value * sgn), DatumPlaneMode.AngleToFace, b.SourceId);
-                case 5 when ln is { } l: return (DatumBuilder.PlaneNormalToLine(l.Dir, pts.Count > 0 ? pts[0] : l.At), DatumPlaneMode.NormalToLine, 0);
+                case 5 when ln is { } l && Refs.IsLinear(_line.Items[0]): return (DatumBuilder.PlaneNormalToLine(l.Dir, pts.Count > 0 ? pts[0] : l.At), DatumPlaneMode.NormalToLine, 0);
+                case 5 when _line.Items.Count > 0 && MoreFields.CurveOf(_line.Items[0]) is { } cv:
+                {
+                    // нормально к кривой: в точке (или в середине кривой), нормаль — касательная кривой
+                    var at = pts.Count > 0 ? pts[0] : cv.PointAt(0.5 * (cv.T0 + cv.T1));
+                    double t = AxisOp.ClosestT(cv, at);
+                    return (DatumBuilder.PlaneNormalToLine(cv.TangentAt(t), cv.PointAt(t)), DatumPlaneMode.NormalToLine, 0);
+                }
+                case 6 when pl is { } a && _base2.Items.Count > 0 && Refs.PlaneOf(_base2.Items[0]) is { } b2:
+                {
+                    // посередине: параллельные — на полпути по нормали; пересекающиеся — биссектор через линию пересечения
+                    var na = a.Frame.W.Normalized(); var nb = b2.Frame.W.Normalized();
+                    if (Math.Abs(Math.Abs(Vector3d.Dot(na, nb)) - 1) < 1e-9)
+                        return (Frame3.FromNormal(a.Frame.Origin + na * (Vector3d.Dot(b2.Frame.Origin - a.Frame.Origin, na) / 2), na), DatumPlaneMode.ParallelThroughPoint, a.SourceId);
+                    var (at, _) = DatumBuilder.AxisOfPlanes(a.Frame, b2.Frame);
+                    var n = (na - nb).Normalized();
+                    return (Frame3.FromNormal(at, n), DatumPlaneMode.AngleToFace, a.SourceId);
+                }
+                case 7 when _face.Items.Count > 0 && MoreFields.FaceOf(_face.Items[0]) is { } fc:
+                {
+                    // касательно к грани: в выбранной точке (или в середине грани)
+                    var src = GeometryAudit.AuthoritativeSurface(fc);
+                    var p0 = pts.Count > 0 ? pts[0] : Refs.PointOf(_face.Items[0]) ?? fc.Loops[0].CoEdges[0].Start.P;
+                    var q = src != null ? src.PointAt(src.ProjectToUV(p0)) : p0;
+                    return (Frame3.FromNormal(q, fc.NormalAt(q).Normalized()), DatumPlaneMode.ParallelThroughPoint, _face.Items[0].Id);
+                }
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException) { W.ShowToast(L(Title) + ": " + ex.Message); }
@@ -760,6 +799,10 @@ public static class OperationFactory
         MirrorFeature x => new MirrorOp(x),
         LinearPatternFeature x => new LinearPatternOp(x),
         CircularPatternFeature x => new CircularPatternOp(x),
+        SweepFeature x => new SweepOp(x),
+        LoftFeature x => new LoftOp(x),
+        DraftFeature x => new DraftOp(x),
+        RibFeature x => new RibOp(x),
         _ => null,
     };
 }

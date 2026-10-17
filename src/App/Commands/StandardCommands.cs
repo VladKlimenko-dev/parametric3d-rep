@@ -129,6 +129,14 @@ public static class StandardCommands
             ["op.mirror"] = () => Fits(x => IsFeat(x) || PlaneLike(x)),
             ["op.pattern_linear"] = () => Fits(x => IsFeat(x) || (Refs.IsLinear(x) && !Topo.IsSeam(x))),
             ["op.pattern_circular"] = () => Fits(x => IsFeat(x) || (Refs.IsLinear(x) && !Topo.IsSeam(x))),
+            // u13
+            ["op.round_variable"] = () => Fits(RealEdge),
+            ["op.sweep"] = () => Fits(SketchLike),
+            ["op.loft"] = () => Fits(SketchLike),
+            ["op.draft"] = () => Fits(x => x.Kind == PickKind.Face || PlaneLike(x)),
+            ["op.rib"] = () => Fits(SketchLike),
+            ["op.axis"] = () => Fits(x => !IsFeat(x)),
+            ["op.point"] = () => Fits(x => !IsFeat(x)),
         };
         void Op(string id, string label, string shortLabel, string icon, Func<Operation> make, string syn, KeyGesture? g = null) =>
             r.Add(new AppCommand { Id = id, Label = label, Short = shortLabel, Group = M, Icon = icon, Synonyms = syn, Gesture = g,
@@ -147,6 +155,24 @@ public static class StandardCommands
         Op("op.mirror", "Зеркало", "Зеркало", "f_mirror_but.svg", () => new MirrorOp(), "mirror зеркало");
         Op("op.pattern_linear", "Линейный массив", "Массив", "f_pattern_linear_but.svg", () => new LinearPatternOp(), "pattern linear массив");
         Op("op.pattern_circular", "Круговой массив", "Кр. массив", "f_pattern_circular_but.svg", () => new CircularPatternOp(), "pattern circular массив круговой");
+        // u13: кнопки таблицы иконок — формообразование, конструктивные, опорные
+        Op("op.round_variable", "Переменное скругление", "Перем. скругл.", "f_round_variable_but.svg", () => new RoundOp { Variable = true }, "variable round fillet переменное скругление");
+        Op("op.sweep", "Протяжка", "Протяжка", "f_sweep_but.svg", () => new SweepOp(), "sweep протяжка траектория");
+        Op("op.loft", "Переход по сечениям", "Переход", "f_blend_but.svg", () => new LoftOp(), "loft blend переход сечения");
+        Op("op.draft", "Уклон", "Уклон", "f_draft_but.svg", () => new DraftOp(), "draft уклон литейный");
+        Op("op.rib", "Ребро жёсткости", "Ребро", "f_rib_but.svg", () => new RibOp(), "rib ребро жёсткости");
+        Op("op.axis", "Опорная ось", "Ось", "dat_axis_but.svg", () => new AxisOp(), "datum axis ось");
+        Op("op.point", "Опорная точка", "Точка", "dat_point_but.svg", () => new PointOp(), "datum point точка");
+        Op("op.plane_offset", "Плоскость со смещением", "Пл. смещение", "dat_plane_offset_but.svg", () => new PlaneOp { InitialMethod = 0 }, "plane offset плоскость смещение");
+        Op("op.plane_3pt", "Плоскость через три точки", "Пл. 3 точки", "dat_plane_3pt_but.svg", () => new PlaneOp { InitialMethod = 1 }, "plane three points плоскость три точки");
+        Op("op.plane_axis", "Плоскость через ось под углом", "Пл. под углом", "dat_plane_axis_but.svg", () => new PlaneOp { InitialMethod = 4 }, "plane angle axis плоскость угол ось");
+        Op("op.plane_normal_curve", "Плоскость нормально к кривой", "Пл. ⟂ кривой", "dat_plane_normal_curve_but.svg", () => new PlaneOp { InitialMethod = 5 }, "plane normal curve плоскость нормаль кривая");
+        Op("op.plane_mid", "Плоскость посередине", "Пл. посередине", "dat_plane_mid_but.svg", () => new PlaneOp { InitialMethod = 6 }, "mid plane midplane плоскость посередине");
+        Op("op.plane_tangent", "Плоскость касательная", "Пл. касательная", "dat_plane_tangent_but.svg", () => new PlaneOp { InitialMethod = 7 }, "tangent plane плоскость касательная");
+        Op("op.axis_face", "Ось грани вращения", "Ось грани", "dat_axis_face_but.svg", () => new AxisOp { InitialMethod = 3 }, "axis face cylinder ось грани цилиндр");
+        Op("op.axis_intersect", "Ось пересечения плоскостей", "Ось пересеч.", "dat_axis_intersect_but.svg", () => new AxisOp { InitialMethod = 2 }, "axis intersection planes ось пересечение");
+        Op("op.point_center", "Точка в центре дуги", "Центр дуги", "dat_point_center_but.svg", () => new PointOp { InitialMethod = 1 }, "point centre arc точка центр дуги");
+        Op("op.point_intersect", "Точка пересечения", "Точка пересеч.", "dat_point_intersect_but.svg", () => new PointOp { InitialMethod = 3 }, "point intersection точка пересечение");
 
         // ------------------------------------------------------------ эскиз
         const string S = "Эскиз";
@@ -199,6 +225,16 @@ public static class StandardCommands
             Run = () => w.OpenPalette() });
         r.Add(new AppCommand { Short = "−", Id = "tree.collapse", Label = "Свернуть дерево", Group = A, Synonyms = "collapse", Run = () => w.SetTreeExpanded(false) });
         r.Add(new AppCommand { Short = "+", Id = "tree.expand", Label = "Развернуть дерево", Group = A, Synonyms = "expand", Run = () => w.SetTreeExpanded(true) });
+        // u13: команды дерева операций (таблица иконок)
+        bool HasPartT() => w.Session.Part != null && !w.InSketch;
+        bool OneFeature() => HasPartT() && w.SelectedItems().OfType<Parametric3D.Model.Features.Feature>().Count() == 1;
+        r.Add(new AppCommand { Id = "tree.resume", Label = "Вернуть подавленную", Group = E, Icon = "tree_resume_but.svg", Synonyms = "resume unsuppress вернуть подавленную", CanRun = HasPartT, Run = () => TreeCommands.Resume(w) });
+        r.Add(new AppCommand { Id = "tree.insert_here", Label = "Вставить здесь (строка отката)", Group = E, Icon = "tree_insert_here_but.svg", Synonyms = "insert here rollback строка отката вставить", CanRun = HasPartT, Run = () => TreeCommands.InsertHere(w) });
+        r.Add(new AppCommand { Id = "tree.reorder_up", Label = "Переупорядочить: выше", Group = E, Icon = "tree_reorder_but.svg", Synonyms = "reorder up move переставить выше", CanRun = OneFeature, Run = () => TreeCommands.Reorder(w, -1) });
+        r.Add(new AppCommand { Id = "tree.reorder_down", Label = "Переупорядочить: ниже", Group = E, Icon = "tree_reorder_but.svg", Synonyms = "reorder down move переставить ниже", CanRun = OneFeature, Run = () => TreeCommands.Reorder(w, +1) });
+        r.Add(new AppCommand { Id = "tree.rebuild", Label = "Перестроить", Group = E, Icon = "tree_rebuild_but.svg", Synonyms = "rebuild regenerate перестроить", Gesture = K(Key.B, KeyModifiers.Control), CanRun = HasPartT, Run = () => TreeCommands.Rebuild(w) });
+        r.Add(new AppCommand { Id = "tree.edit_dims", Label = "Править размеры", Group = E, Icon = "tree_edit_dims_but.svg", Synonyms = "edit dimensions размеры числа", CanRun = OneFeature, Run = () => TreeCommands.EditDims(w) });
+        r.Add(new AppCommand { Id = "tree.needs_attention", Label = "Требуют внимания", Group = E, Icon = "tree_needs_attention_but.svg", Synonyms = "errors attention ошибки внимание", CanRun = HasPartT, Run = () => TreeCommands.ShowNeedsAttention(w) });
     }
 
     /// <summary>Список «Опорные» (п. 12): ключ ShowOptions — подпись.</summary>
