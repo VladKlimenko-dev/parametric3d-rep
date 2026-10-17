@@ -20,6 +20,30 @@ public static partial class DirectRound
     /// (до 1e-9 отн.) — иначе отказ (смещение не той формы, ребро исчезло бы и т. п.). Тело собирается заново, проверка
     /// годности, объём — аналитический и по фасетам. null — отказ (причина в why).
     /// </summary>
+    /// <summary>
+    /// Смещение ленты из дуг (катящийся шар): радиус каждого сечения R + σd (σ — сторона нормали относительно центра). null —
+    /// не лента из дуг или нормаль не радиальна (переменный радиус, отрезки).
+    /// </summary>
+    static SectionSurface? SectionOffset(SectionSurface ss, Vector3d probe, Vector3d no, double d, double tol)
+    {
+        if (!ss.IsProcedural) return null;
+        double u0 = ss.UMin, u1 = ss.UMax;
+        for (int i = 0; i <= 6; i++)
+        {
+            var sec = ss.ExactSectionAt(u0 + (u1 - u0) * i / 6.0);
+            if (!sec.IsArc || !(sec.R > 0)) return null;
+            for (int k = 0; k <= 4; k++)
+            {
+                var uv = new Vector2d(u0 + (u1 - u0) * i / 6.0, k / 4.0);
+                var p = ss.PointAt(uv); var n = ss.NormalAt(uv).Normalized(); var rad = p - sec.C;
+                if (rad.Length < 1e-9 || Vector3d.Cross(n, rad.Normalized()).Length > 1e-7) return null;
+            }
+        }
+        var uvp = ss.ProjectToUV(probe); var sp = ss.ExactSectionAt(uvp.X);
+        double sgn = Vector3d.Dot(probe - sp.C, no) > 0 ? 1 : -1;
+        return ss.Mapped(sec => sec.IsArc ? SweepSection.Arc(sec.C, sec.E1, sec.E2, sec.R + sgn * d, sec.Phi) : sec);
+    }
+
     /// <summary>Расстояние от точки до треугольника (для проверок).</summary>
     public static double DistToTriangle(Vector3d p, Vector3d a, Vector3d b, Vector3d c) => (ClosestOnTri(p, a, b, c) - p).Length;
     /// <summary>Ближайшая к p точка треугольника abc (Эриксон, «Real-Time Collision Detection», 5.1.5).</summary>
@@ -34,6 +58,7 @@ public static partial class DirectRound
         double va = d3 * d6 - d5 * d4; if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) return b + (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6)));
         double den = 1 / (va + vb + vc); return a + ab * (vb * den) + ac * (vc * den);
     }
+    static readonly bool SectionOffOff = Environment.GetEnvironmentVariable("P3D_OFFSETSECTION") == "0";
     static readonly bool NearTanOff = Environment.GetEnvironmentVariable("P3D_OFFSETNEARTAN") == "0";
     static readonly bool AcrossOff = Environment.GetEnvironmentVariable("P3D_OFFSETACROSS") == "0";
     static readonly bool LineOnOff = Environment.GetEnvironmentVariable("P3D_OFFSETLINEON") == "0";
@@ -160,6 +185,14 @@ public static partial class DirectRound
                     if (!(R > tol)) { why = "offset: a sphere or torus radius vanishes"; return null; }
                     ns = new RevolvedSurface(new ArcCurve3(ga.Frame, R, ga.A0, ga.A1), rv.Axis, rv.A0, rv.A1); break;
                 }
+            }
+            if (ns == null && src is SectionSurface ssf && !SectionOffOff)
+            {
+                // u12b: ЛЕНТА КАТЯЩЕГОСЯ ШАРА (сечения — дуги, нормаль через центр дуги) — смещение по нормали: та же формула с
+                // радиусом сечения R ± d. Годится, только если нормаль в пробах радиальна. Мутация P3D_OFFSETSECTION=0.
+                if (SectionOffset(ssf, probe, no, d, tol) is { } so) ns = so;
+                else { why = "offset: a SectionSurface face is not a rolling-ball band"; return null; }
+                if (ns is SectionSurface { } nss && nss.SectionAt(0.5 * (nss.UMin + nss.UMax)).R <= tol) { why = "offset: a blend radius vanishes"; return null; }
             }
             if (ns == null) { why = $"offset: a {src.GetType().Name} face is not supported"; return null; }
             var p2 = probe + no * d;

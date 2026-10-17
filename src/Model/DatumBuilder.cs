@@ -129,13 +129,16 @@ public static class DatumBuilder
     /// </summary>
     public static (Vector3d At, Vector3d Dir) AxisOfFace(TFace face)
     {
-        var src = face.Surface is Kernel.Surfaces.FacetedSurface fs ? fs.Source : face.Surface;
+        var src = Kernel.Topology.GeometryAudit.AuthoritativeSurface(face) ?? (face.Surface is Kernel.Surfaces.FacetedSurface fs ? fs.Source : face.Surface);
         switch (src)
         {
             case Kernel.Surfaces.ExtrudedSurface ex when ex.Base is ArcCurve3 arc:
                 return (arc.Frame.Origin, ex.Dir.Normalized());
             case Kernel.Surfaces.RevolvedSurface rev:
                 return (rev.Axis.Origin, rev.Axis.W);
+            // u13: цилиндр как поверхность (лента скругления, точная грань после булевых)
+            case Kernel.Surfaces.CylinderSurface cs:
+                return (cs.Axis.Origin, cs.Axis.W.Normalized());
             default:
                 throw new InvalidOperationException("Ось грани: грань не цилиндрическая и не коническая.");
         }

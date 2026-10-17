@@ -290,7 +290,9 @@ public abstract class FeatureOp<T> : Operation where T : Feature
     protected override string? BuildError => F?.Error;
 
     /// <summary>Не выбрано обязательное поле ссылки.</summary>
-    protected bool MissingRequired => Panel != null && Panel.Refs.Any(r => !r.IsSet && !r.Optional);
+    protected bool MissingRequired => (Panel != null && Panel.Refs.Any(r => !r.IsSet && !r.Optional)) || MissingRequiredExtra;
+    /// <summary>u13: своё условие «не хватает ссылок» (переход — не меньше двух сечений).</summary>
+    protected virtual bool MissingRequiredExtra => false;
 
     public override bool Commit()
     {
