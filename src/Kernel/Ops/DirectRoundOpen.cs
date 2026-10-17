@@ -773,6 +773,15 @@ public static partial class DirectRound
             bSurf = oc.S; bA = oc.A; bB = oc.B; bE0 = oc.E0; bE1 = oc.E1;
             Debug?.Invoke("open: blend is an exact cylinder");
         }
+        // u12: ФАСКА ПРЯМОГО РЕБРА МЕЖДУ ПЛОСКОСТЯМИ, концы на плоских торцах — лента точно плоскость, контакты и края на
+        // торцах — отрезки (прежде прямые рёбра в незамкнутую фаску не принимались, и фаска шла резцом). Мутация P3D_OPENCYL=0.
+        else if (OpenCylOn && ch && varLaw == null && chain.Count == 1 && chain[0].Curve is LineCurve3
+            && shA is Geometry.Ssi.Plane && shB is Geometry.Ssi.Plane && ends[0].ShE is Geometry.Ssi.Plane && ends[1].ShE is Geometry.Ssi.Plane
+            && OpenChamferPlane(QA, QB, EndPt, tA0, tA1, tB0, tB1) is { } op)
+        {
+            bSurf = op.S; bA = op.A; bB = op.B; bE0 = op.E0; bE1 = op.E1;
+            Debug?.Invoke("open: chamfer is an exact plane");
+        }
 
         // УКОРОЧЕНИЕ РЁБЕР A∩E и B∩E до точек касания (одна кривая на обе грани ребра). Ребро может укорачиваться с обоих концов
         // (торец — общий у обоих концов, ребро B∩E идёт от одного конца до другого)
@@ -870,6 +879,29 @@ public static partial class DirectRound
     }
 
     static readonly bool OpenCylOn = Environment.GetEnvironmentVariable("P3D_OPENCYL") != "0";
+
+    /// <summary>u12: плоская лента незамкнутой фаски плоскость/плоскость; null — точки не в одной плоскости или края не прямые.</summary>
+    static (PlaneSurface S, ICurve3 A, ICurve3 B, ICurve3 E0, ICurve3 E1)? OpenChamferPlane(Func<double, Vector3d> qa, Func<double, Vector3d> qb,
+        Func<int, double, Vector3d> endPt, double tA0, double tA1, double tB0, double tB1)
+    {
+        Vector3d a0 = qa(tA0), a1 = qa(tA1), b0 = qb(tB0), b1 = qb(tB1);
+        var n = Vector3d.Cross(a1 - a0, b0 - a0);
+        if (n.LengthSquared < 1e-18) return null;
+        n.Normalize();
+        double scale = Math.Max(1, Math.Max((a1 - a0).Length, (b0 - a0).Length)), tol = 1e-9 * scale;
+        bool OnPl(Vector3d x) => Math.Abs(Vector3d.Dot(x - a0, n)) <= tol;
+        bool OnSeg(Vector3d p, Vector3d q, Vector3d x) { var d = q - p; double u = Vector3d.Dot(x - p, d) / d.LengthSquared; return (p + d * u - x).Length <= tol; }
+        if (!OnPl(b1)) return null;
+        for (int i = 1; i < 8; i++)
+        {
+            double f = i / 8.0;
+            if (!OnSeg(a0, a1, qa(tA0 + (tA1 - tA0) * f)) || !OnSeg(b0, b1, qb(tB0 + (tB1 - tB0) * f))) return null;
+            if (!OnSeg(a0, b0, endPt(0, f)) || !OnSeg(a1, b1, endPt(1, f))) return null;
+        }
+        if ((endPt(0, 0) - a0).Length > tol || (endPt(0, 1) - b0).Length > tol || (endPt(1, 0) - a1).Length > tol || (endPt(1, 1) - b1).Length > tol) return null;
+        var pl = new PlaneSurface(Frame3.FromNormal(a0, n));
+        return (pl, new LineCurve3(a0, a1), new LineCurve3(b0, b1), new LineCurve3(a0, b0), new LineCurve3(a1, b1));
+    }
 
     /// <summary>u11: точная цилиндрическая лента открытого скругления плоскость/плоскость (см. вызов); null — не сошлось с сечениями.</summary>
     static (CylinderSurface S, ICurve3 A, ICurve3 B, ICurve3 E0, ICurve3 E1)? OpenCylinder(Func<double, Vector3d?> spine, Func<double, SweepSection> gen,
@@ -1018,7 +1050,8 @@ public static partial class DirectRound
             if (e == null) { why = "edge not resolved"; return null; }
             if (!es.Contains(e)) es.Add(e);
         }
-        if (es.Any(e => e.Curve is LineCurve3)) { why = "straight edges are not in this family"; return null; }
+        // u12: одно прямое ребро между плоскостями (незамкнутое) — тем же построителем, лента — плоскость (OpenChamferPlane)
+        if (es.Any(e => e.Curve is LineCurve3) && !(OpenCylOn && es.Count == 1)) { why = "straight edges are not in this family"; return null; }
         bool closed = es.All(e => ReferenceEquals(e.V0, e.V1) || (e.V0.P - e.V1.P).Length < 1e-7);
         if (!closed) return BuildOpen(body, refs, d, ref why, dist);
         if (es.Any(e => !(ReferenceEquals(e.V0, e.V1) || (e.V0.P - e.V1.P).Length < 1e-7))) { why = "closed and open edges in one chamfer"; return null; }

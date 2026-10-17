@@ -20,6 +20,11 @@ public static partial class DirectRound
     /// (до 1e-9 отн.) — иначе отказ (смещение не той формы, ребро исчезло бы и т. п.). Тело собирается заново, проверка
     /// годности, объём — аналитический и по фасетам. null — отказ (причина в why).
     /// </summary>
+    static readonly bool ConeExtOff = Environment.GetEnvironmentVariable("P3D_OFFSETCONEEXT") == "0";
+    static readonly bool OffsetProcOff = Environment.GetEnvironmentVariable("P3D_OFFSETPROC") == "0";
+    static readonly bool OffsetConflictOff = Environment.GetEnvironmentVariable("P3D_OFFSETSLIDE") == "0";
+    public static long OffsetSlides;
+    static readonly bool OffsetNewtonOff = Environment.GetEnvironmentVariable("P3D_OFFSETNEWTON") == "0";
     internal static TSolid? OffsetSolid(TSolid body, Func<TFace, double> offset, string? tag, ref string? why)
     {
         if (OffsetSolidOff) { why = "offset of curved faces is off"; return null; }
@@ -77,7 +82,28 @@ public static partial class DirectRound
                     // конус (цилиндр, плоское кольцо) вращения: образующая сдвигается вдоль наружной нормали (в её меридиане)
                     var sg = rvl.NormalAt(rvl.ProjectToUV(gl.PointAt(0.5))).Normalized() * (RevOf(f) ? -1 : 1);
                     var sh = sg * d;
-                    ns = new RevolvedSurface(new LineCurve3(gl.A + sh, gl.B + sh), rvl.Axis, rvl.A0, rvl.A1); break;
+                    var ga2 = gl.A + sh; var gb2 = gl.B + sh;
+                    if (!ConeExtOff)
+                    {
+                        // u12b: ОБРАЗУЮЩАЯ ПРОДЛЕВАЕТСЯ. Грань смещённого тела шире сдвинутого отрезка (соседи тоже сдвинуты, их пересечение
+                        // с конусом уходит за концы): за концом образующей проекция на поверхность зажималась, интеграл объёма грани
+                        // считался по чужой области (Part3: фаска 15 на дуге R40, оболочка наружу 3.66 — площадь 1169 вместо 1336,
+                        // объём не сходился с фасетами). Продление — на 2|d| + 10% длины с каждого конца, не дальше оси (вершины
+                        // конуса). Мутация P3D_OFFSETCONEEXT=0.
+                        var ax = rvl.Axis.W.Normalized(); var ao = rvl.Axis.Origin;
+                        double Rad(Vector3d q) { var r0 = q - ao; return (r0 - ax * Vector3d.Dot(r0, ax)).Length; }
+                        var dir = gb2 - ga2; double len = dir.Length;
+                        if (len > tol)
+                        {
+                            dir /= len; double ext = 2 * Math.Abs(d) + 0.1 * len;
+                            double ra = Rad(ga2), rb = Rad(gb2), dr = (rb - ra) / len; // радиус вдоль образующей линеен (меридиан)
+                            double ea = ext, eb = ext;
+                            if (dr > 1e-12) ea = Math.Min(ext, 0.9 * ra / dr);   // к вершине со стороны A
+                            if (dr < -1e-12) eb = Math.Min(ext, 0.9 * rb / -dr); // к вершине со стороны B
+                            ga2 -= dir * ea; gb2 += dir * eb;
+                        }
+                    }
+                    ns = new RevolvedSurface(new LineCurve3(ga2, gb2), rvl.Axis, rvl.A0, rvl.A1); break;
                 }
                 case RevolvedSurface { Base: ArcCurve3 ga } rv:
                 {
@@ -104,7 +130,17 @@ public static partial class DirectRound
 
         // вершины
         var vmap = new Dictionary<TVertex, Vector3d>();
-        List<TFace> FacesAt(TVertex v) => v.Edges.SelectMany(e => e.CoEdges.Select(c => c.Loop?.Face)).OfType<TFace>().Distinct().ToList();
+        // u12: грани вершины — по рёбрам тела (у тел после булевых список рёбер вершины бывает пуст: вершина «без граней»
+        // давала отказ «нет согласованного положения»)
+        var facesAtV = new Dictionary<TVertex, HashSet<TFace>>();
+        foreach (var e in body.Edges)
+            foreach (var vx in new[] { e.V0, e.V1 })
+            {
+                if (!facesAtV.TryGetValue(vx, out var hs)) facesAtV[vx] = hs = new HashSet<TFace>();
+                foreach (var c in e.CoEdges) if (c.Loop?.Face is { } ff) hs.Add(ff);
+            }
+        List<TFace> FacesAt(TVertex v) => facesAtV.TryGetValue(v, out var hs) && hs.Count > 0 ? hs.ToList()
+            : v.Edges.SelectMany(e => e.CoEdges.Select(c => c.Loop?.Face)).OfType<TFace>().Distinct().ToList();
         Vector3d? Move(Vector3d x, IReadOnlyList<TFace> fs)
         {
             var ns = new List<(Vector3d N, double D)>();
@@ -112,7 +148,13 @@ public static partial class DirectRound
             {
                 var n = Out(f, x); double d = newSurf[f].D;
                 int j = ns.FindIndex(q => (q.N - n).Length < 1e-9);
-                if (j >= 0) { if (Math.Abs(ns[j].D - d) > tol) return null; continue; }
+                if (j >= 0)
+                {
+                    // u12: КАСАТЕЛЬНЫЕ ГРАНИ С РАЗНЫМ СДВИГОМ (открытая грань стоит, касательное к ней скругление смещается: стенка
+                    // наружу) — касание теряется, точка уходит вдоль неподвижной грани до пересечения со смещённой (шов → ребро)
+                    if (Math.Abs(ns[j].D - d) > tol) return OffsetConflictOff ? null : SlideSolve(x, fs, n);
+                    continue;
+                }
                 ns.Add((n, d));
             }
             Vector3d? r = ns.Count switch
@@ -122,8 +164,104 @@ public static partial class DirectRound
                 _ => Three(ns),
             };
             if (r == null) return null;
+            // u12: КРИВАЯ ГРАНЬ В ВЕРШИНЕ — точное положение уточняется Ньютоном по смещённым поверхностям. Касательные
+            // плоскости в старой точке дают положение точно лишь у плоскостей и при сдвиге вдоль нормали кривой грани; у
+            // вершины «скругление — фаска — торец» (стенка наружу) точка уходит вдоль фаски, и цилиндр R + t её не нёс —
+            // отказ «вершина без согласованного положения». Мутация P3D_OFFSETNEWTON=0.
+            if (!OffsetNewtonOff && fs.Any(f => !OnSurf(newSurf[f].S, r.Value))) r = Refine(r.Value, fs);
+            if (r == null) return null;
             foreach (var f in fs) if (!OnSurf(newSurf[f].S, r.Value)) return null;
             return r;
+            Vector3d? Refine(Vector3d y, IReadOnlyList<TFace> faces)
+            {
+                // различные смещённые поверхности (одна на совпадающие)
+                var surfs = new List<ISurface3>();
+                foreach (var f in faces) { var sf = newSurf[f].S; if (!surfs.Any(o => ReferenceEquals(o, sf))) surfs.Add(sf); }
+                for (int it = 0; it < 40; it++)
+                {
+                    var rows = new List<(Vector3d N, double G)>();
+                    foreach (var sf in surfs)
+                    {
+                        var uv = sf.ProjectToUV(y); var q = sf.PointAt(uv); var n = sf.NormalAt(uv);
+                        if (!(n.LengthSquared > 1e-18)) return null;
+                        n.Normalize();
+                        double g = Vector3d.Dot(y - q, n);
+                        if (rows.Any(rw => (rw.N - n).Length < 1e-9 || (rw.N + n).Length < 1e-9)) { if (Math.Abs(g) > tol) { /* та же нормаль, другая поверхность */ } continue; }
+                        rows.Add((n, g));
+                    }
+                    double worst = rows.Count == 0 ? 0 : rows.Max(rw => Math.Abs(rw.G));
+                    if (worst <= 0.1 * tol) return y;
+                    // шаг: наименьшая поправка, гасящая отклонения по нормалям (1, 2 или 3 независимые строки)
+                    Vector3d step;
+                    if (rows.Count == 1) step = -rows[0].N * rows[0].G;
+                    else if (rows.Count == 2)
+                    {
+                        var (a, ga) = rows[0]; var (b, gb) = rows[1];
+                        double c = Vector3d.Dot(a, b), det = 1 - c * c; if (det < 1e-12) return null;
+                        double ka = (-ga + c * gb) / det, kb = (-gb + c * ga) / det;
+                        step = a * ka + b * kb;
+                    }
+                    else
+                    {
+                        Vector3d? st = null;
+                        for (int i0 = 0; i0 < rows.Count && st == null; i0++)
+                            for (int i1 = i0 + 1; i1 < rows.Count && st == null; i1++)
+                                for (int i2 = i1 + 1; i2 < rows.Count && st == null; i2++)
+                                    st = Solve3(new[] { rows[i0].N, rows[i1].N, rows[i2].N }, new[] { -rows[i0].G, -rows[i1].G, -rows[i2].G });
+                        if (st == null) return null;
+                        step = st.Value;
+                    }
+                    y += step;
+                    if (step.Length > 10 * Math.Max(1, Math.Abs(newSurf[faces[0]].D)) + 1) return null;
+                }
+                return null;
+            }
+            // точка на всех смещённых поверхностях, найденная от старта, сдвинутого вдоль общей касательной плоскости в сторону
+            // каждой из граней (касание: первый порядок вырожден — нужен шаг поперёк); Гаусс — Ньютон с затуханием
+            Vector3d? SlideSolve(Vector3d x0, IReadOnlyList<TFace> faces, Vector3d n0)
+            {
+                var surfs = new List<ISurface3>();
+                foreach (var f in faces) { var sf = newSurf[f].S; if (!surfs.Any(o => ReferenceEquals(o, sf))) surfs.Add(sf); }
+                double dmax = faces.Max(f => Math.Abs(newSurf[f].D));
+                foreach (var f in faces)
+                {
+                    // сторона грани: точка её контура подальше от x0, спроецированная на касательную плоскость
+                    var pts = f.Edges.Where(e => e.Curve != null).SelectMany(e => Enumerable.Range(0, 5).Select(i => e.Curve!.PointAt(e.Curve.T0 + (e.Curve.T1 - e.Curve.T0) * i / 4.0))).ToList();
+                    if (pts.Count == 0) continue;
+                    var far = pts.OrderByDescending(q => (q - x0).LengthSquared).First();
+                    var tau = far - x0; tau -= n0 * Vector3d.Dot(tau, n0);
+                    if (tau.LengthSquared < 1e-18) continue;
+                    tau.Normalize();
+                    foreach (double sc in new[] { 1.0, 4.0, 16.0, 0.25 })
+                    {
+                        var y = x0 + tau * (sc * Math.Max(dmax, 1e-3)) + n0 * faces.Where(g => Math.Abs(Vector3d.Dot(Out(g, x0), n0)) < 0.999).Select(g => 0.0).DefaultIfEmpty(0).First();
+                        bool ok = false;
+                        for (int it = 0; it < 80; it++)
+                        {
+                            // строки: нормаль и отклонение каждой поверхности
+                            double[,] JtJ = new double[3, 3]; double[] Jtg = new double[3]; double worst = 0;
+                            foreach (var sf in surfs)
+                            {
+                                var uv = sf.ProjectToUV(y); var q = sf.PointAt(uv); var nn = sf.NormalAt(uv);
+                                if (!(nn.LengthSquared > 1e-18)) { worst = double.NaN; break; }
+                                nn.Normalize(); double g = Vector3d.Dot(y - q, nn); worst = Math.Max(worst, Math.Abs(g));
+                                double[] r = { nn.X, nn.Y, nn.Z };
+                                for (int a2 = 0; a2 < 3; a2++) { Jtg[a2] += r[a2] * g; for (int b2 = 0; b2 < 3; b2++) JtJ[a2, b2] += r[a2] * r[b2]; }
+                            }
+                            if (double.IsNaN(worst)) break;
+                            if (worst <= 0.1 * tol) { ok = true; break; }
+                            double lam = 1e-9 + 1e-3 * (JtJ[0, 0] + JtJ[1, 1] + JtJ[2, 2]);
+                            for (int a2 = 0; a2 < 3; a2++) JtJ[a2, a2] += lam;
+                            var st = Solve3(new[] { new Vector3d(JtJ[0, 0], JtJ[0, 1], JtJ[0, 2]), new Vector3d(JtJ[1, 0], JtJ[1, 1], JtJ[1, 2]), new Vector3d(JtJ[2, 0], JtJ[2, 1], JtJ[2, 2]) }, new[] { -Jtg[0], -Jtg[1], -Jtg[2] });
+                            if (st == null) break;
+                            y += st.Value;
+                            if ((y - x0).Length > 100 * Math.Max(dmax, 1e-3) + 1) break;
+                        }
+                        if (ok && Vector3d.Dot(y - x0, tau) > 0 && faces.All(g => OnSurf(newSurf[g].S, y))) { Interlocked.Increment(ref OffsetSlides); return y; }
+                    }
+                }
+                return null;
+            }
             Vector3d? Two((Vector3d N, double D) a, (Vector3d N, double D) b)
             {
                 double c = Vector3d.Dot(a.N, b.N), det = 1 - c * c;
@@ -144,8 +282,20 @@ public static partial class DirectRound
         foreach (var v in body.Vertices)
         {
             var p = Move(v.P, FacesAt(v));
-            if (p == null) { why = "offset: a vertex has no consistent position on the offset faces"; return null; }
+            if (p == null)
+            {
+                Debug?.Invoke($"offset vertex {v.P}: faces {string.Join(" | ", FacesAt(v).Select(f => $"{GeometryAudit.AuthoritativeSurface(f)?.GetType().Name} {f.Tag} n {Out(f, v.P)} d {newSurf[f].D}"))}");
+                why = "offset: a vertex has no consistent position on the offset faces"; return null;
+            }
             vmap[v] = p.Value;
+        }
+
+        // процедурная смещённая кривая ребра: внутренние точки — смещением, концы — точно смещённые вершины
+        ProcCurve3 ProcOffset(TEdge e, ICurve3 oc, IReadOnlyList<TFace> fs)
+        {
+            bool fw = (oc.PointAt(oc.T0) - e.V0.P).Length <= (oc.PointAt(oc.T0) - e.V1.P).Length;
+            var a = vmap[fw ? e.V0 : e.V1]; var b = vmap[fw ? e.V1 : e.V0];
+            return new ProcCurve3(t => t <= oc.T0 ? a : t >= oc.T1 ? b : Move(oc.PointAt(t), fs) ?? new Vector3d(double.NaN), oc.T0, oc.T1, false, "offset edge");
         }
 
         // рёбра
@@ -178,6 +328,13 @@ public static partial class DirectRound
                     break;
                 }
             }
+            if (nc == null && !OffsetProcOff)
+            {
+                // u12: кривая общего вида (пересечение, сплайн) — точками смещения той же параметризации
+                var fs3 = fs; var oc3 = e.Curve;
+                if (Move(oc3.PointAt(oc3.T0), fs3) != null && Move(oc3.PointAt(oc3.T1), fs3) != null)
+                    nc = ProcOffset(e, oc3, fs3);
+            }
             if (nc == null) { why = $"offset: a {e.Curve.GetType().Name} edge is not supported"; return null; }
             // проверка: точки новой кривой — смещённые точки старой (та же параметризация) и лежат на обеих смещённых гранях
             for (int k = 0; k <= 6; k++)
@@ -187,6 +344,19 @@ public static partial class DirectRound
                 var want = k == 0 || k == 6 ? (Vector3d?)null : Move(e.Curve.PointAt(t), fs);
                 // отрезок: смещённые точки — на прямой (концы могут сдвинуться вдоль неё); дуга — та же параметризация
                 double off = want == null ? 0 : nc is LineCurve3 nl ? DistToLine(nl, want.Value) : (want.Value - q).Length;
+                if (want != null && off > tol && !OffsetProcOff && !(nc is ProcCurve3) && e.Curve is ArcCurve3 oa)
+                {
+                    // u12: смещённая дуга — не окружность (ось кривой грани не строго ⟂ плоскости дуги, тело после булевых):
+                    // кривая — точками смещения той же параметризации (процедурная, точна по построению). Мутация P3D_OFFSETPROC=0.
+                    var fs2 = fs; var oc = e.Curve;
+                    var p0 = Move(oc.PointAt(oc.T0), fs2); var p1 = Move(oc.PointAt(oc.T1), fs2);
+                    if (p0 != null && p1 != null)
+                    {
+                        nc = ProcOffset(e, oc, fs2);
+                        k = -1; continue;
+                    }
+                }
+                if (want != null && off > tol) Debug?.Invoke($"offset edge {e.V0.P}->{e.V1.P} curve {e.Curve} faces {string.Join(" | ", fs.Select(f => $"{GeometryAudit.AuthoritativeSurface(f)} {f.Tag}"))} want {want} got {q}");
                 if (want != null && off > tol) { why = $"offset: the new edge curve does not follow the offset points ({e.Curve.GetType().Name}, k {k}, off {off:G3}, faces {string.Join("/", fs.Select(f => GeometryAudit.AuthoritativeSurface(f)?.GetType().Name))})"; return null; }
                 foreach (var f in fs) if (!OnSurf(newSurf[f].S, q)) { why = "offset: the new edge curve leaves an offset face"; return null; }
             }
