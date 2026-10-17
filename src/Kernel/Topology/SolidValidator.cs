@@ -107,18 +107,62 @@ public static class SolidValidator
     /// <summary>Проверить тело; сетку — если передана, иначе построить показную.</summary>
     public static ValidationReport Validate(TSolid solid, MeshData? mesh = null, ValidationOptions? options = null)
     {
-        using var _oh = Diagnostics.Overhead.Scope();
         options ??= new ValidationOptions();
+        return ValidateCore(solid, mesh, options);
+    }
+
+    static ValidationReport Copy(ValidationReport r) { var c = new ValidationReport(); c.Merge(r); return c; }
+    /// <summary>Раздел проверки из памяти: ревизия, точная форма (ссылка), настройки ядра — иначе заново.</summary>
+    static ValidationReport Section(TSolid solid, string key, Func<ValidationReport> run)
+    {
+        if (ValCacheOff) return run();
+        var ks = KernelSettings.Capture() with { Preview = false, LivePreview = false };
+        long rev = solid.Revision; var ex = solid.Exact; ulong fp = TopoFingerprint.Of(solid);
+        var e = _valCache.GetValue(solid, _ => new ValEntry());
+        lock (e)
+        {
+            if (e.Revision != rev || e.Print != fp || !ReferenceEquals(e.Exact, ex) || e.Settings == null || !e.Settings.Equals(ks))
+            { e.Sections.Clear(); e.Revision = rev; e.Print = fp; e.Exact = ex; e.Settings = ks; }
+            if (e.Sections.TryGetValue(key, out var hit)) { Interlocked.Increment(ref ValidationCacheHits); return Copy(hit); }
+        }
+        var rep = run();
+        if (solid.Revision == rev && ReferenceEquals(ex, solid.Exact) && TopoFingerprint.Of(solid) == fp)
+            lock (e) if (e.Revision == rev && e.Print == fp && ReferenceEquals(e.Exact, ex)) e.Sections[key] = Copy(rep);
+        return rep;
+    }
+    private sealed class ValEntry
+    {
+        public long Revision = long.MinValue; public ulong Print; public object? Exact; public KernelSettings? Settings;
+        public readonly Dictionary<string, ValidationReport> Sections = new();
+    }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, ValEntry> _valCache = new();
+    static readonly bool ValCacheOff = Environment.GetEnvironmentVariable("P3D_VALCACHE") == "0";
+    /// <summary>u11: разделов проверки тела из памяти (разбор).</summary>
+    public static long ValidationCacheHits;
+
+    static ValidationReport ValidateCore(TSolid solid, MeshData? mesh, ValidationOptions options)
+    {
+        using var _oh = Diagnostics.Overhead.Scope();
         var report = new ValidationReport();
 
-        if (options.CheckBRep) using (Diagnostics.Prof.Time("проверка: B-rep")) report.Merge(ValidateBRep(solid, options));
-        if (options.CheckExact && solid.Exact != null) using (Diagnostics.Prof.Time("проверка: точное тело")) report.Merge(ValidateExact(solid.Exact.Solid, options));
-        if (options.CheckBRep && options.CheckPCurves) using (Diagnostics.Prof.Time("проверка: p-кривые")) report.Merge(ValidatePCurves(solid, options));
+        // u11: РАЗДЕЛЫ ПРОВЕРКИ — ИЗ ПАМЯТИ ПО ОТДЕЛЬНОСТИ. Деталь проверяет тело со своей сеткой показа (без точной формы), а
+        // построитель только что проверил ту же ревизию целиком: B-rep и p-кривые не зависят от сетки — берутся готовыми
+        // (0.3–0.7 с у процедурной ленты). Сетка, переданная извне, разбирается всегда. Мутация P3D_VALCACHE=0.
+        string ok = $"{options.Closed}|{options.MaxListed}";
+        if (options.CheckBRep) using (Diagnostics.Prof.Time("проверка: B-rep")) report.Merge(Section(solid, "brep|" + ok, () => ValidateBRep(solid, options)));
+        if (options.CheckExact && solid.Exact != null) using (Diagnostics.Prof.Time("проверка: точное тело")) report.Merge(Section(solid, "exact|" + ok, () => ValidateExact(solid.Exact.Solid, options)));
+        if (options.CheckBRep && options.CheckPCurves) using (Diagnostics.Prof.Time("проверка: p-кривые")) report.Merge(Section(solid, "pc|" + ok, () => ValidatePCurves(solid, options)));
         if (TorStat) TorusStat(solid);
         if (options.CheckMesh || options.CheckSelfIntersections)
         {
-            using (Diagnostics.Prof.Time("проверка: сетка тела")) mesh ??= Tessellator.Tessellate(solid);
-            using (Diagnostics.Prof.Time("проверка: сетка — разбор")) report.Merge(ValidateMesh(mesh, options));
+            if (mesh == null)
+                report.Merge(Section(solid, $"mesh|{ok}|{options.CheckSelfIntersections}|{BitConverter.DoubleToInt64Bits(Core.Tol.Chord)}|{BitConverter.DoubleToInt64Bits(Core.Tol.ChordAngle)}", () =>
+                {
+                    MeshData m;
+                    using (Diagnostics.Prof.Time("проверка: сетка тела")) m = Tessellator.Tessellate(solid);
+                    using (Diagnostics.Prof.Time("проверка: сетка — разбор")) return ValidateMesh(m, options);
+                }));
+            else using (Diagnostics.Prof.Time("проверка: сетка — разбор")) report.Merge(ValidateMesh(mesh, options));
         }
         return report;
     }
@@ -618,6 +662,7 @@ public static class SolidValidator
         var solid = faces.FirstOrDefault()?.Shell?.Solid;
         if (solid == null || solid.TopologyConvention < TopologyConventions.Version) return;
         double? v;
+        if (VolDbg) Console.WriteLine($"VOLSIGN solid {System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(solid):x} rev {solid.Revision} fp {TopoFingerprint.Of(solid):x} {string.Join(" < ", Environment.StackTrace.Split('\n').Skip(3).Take(4).Select(l => l.Trim().Split(" in ")[0]))}");
         try { v = AnalyticVolume.Of(solid); } catch { return; }
         if (v is not { } vol || double.IsNaN(vol)) return;
         r.Metrics["brep.exactVolume"] = vol;
@@ -626,6 +671,7 @@ public static class SolidValidator
                 $"точный объём тела отрицателен ({vol:G8}): контуры и стороны граней вывернуты", null));
     }
 
+    static readonly bool VolDbg = Environment.GetEnvironmentVariable("P3D_VOLDBG") == "1";
     internal static readonly bool LoopStat = Environment.GetEnvironmentVariable("P3D_LOOPSTAT") == "1";
 
     /// <summary>KRN-03 замер (P3D_TORSTAT=1): торические грани — контуры, отклонение p-кривых, разметчик и причина отказа.</summary>

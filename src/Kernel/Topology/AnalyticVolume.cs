@@ -74,10 +74,35 @@ public static class AnalyticVolume
     public static double? Of(TSolid solid)
     {
         if (solid.TopologyConvention < TopologyConventions.Version) return null;
-        var v = OfCore(solid);
-        if (v is { } vv && PolyhedralAuthoritative(solid) && !AgreesWithPolyhedron(solid, vv)) { PolyVolumeRejected++; return null; }
+        // u11: ОБЪЁМ ТЕЛА ЗАПОМИНАЕТСЯ по телу, его ревизии, отпечатку состава (TopoFingerprint) и настройкам ядра. Тело после построения не меняется (правка —
+        // новая ревизия), а объём одного и того же тела считался 3–4 раза за операцию: построитель, его проверка, проверка
+        // детали — у ленты процедурного скругления это 0.2–0.3 с каждый раз. Повтор добавляет ту же ошибку квадратуры.
+        // Мутация P3D_VOLCACHE=0.
+        KernelSettings? key = VolCacheOff ? null : KernelSettings.Capture() with { Preview = false, LivePreview = false };
+        ulong fp = key == null ? 0 : TopoFingerprint.Of(solid);
+        if (key != null && _volCache.TryGetValue(solid, out var hit) && hit.Revision == solid.Revision && hit.Print == fp && hit.Key.Equals(key))
+        {
+            _quadErr += hit.Quad;
+            return hit.Volume;
+        }
+        long rev = solid.Revision;
+        // ошибка квадратуры этого тела — отдельно от накопленной (накопленная бывает бесконечной: ∞ − ∞ давало NaN в границе)
+        double q0 = _quadErr; _quadErr = 0;
+        double? v; double quad;
+        try
+        {
+            v = OfCore(solid);
+            if (v is { } vv && PolyhedralAuthoritative(solid) && !AgreesWithPolyhedron(solid, vv)) { PolyVolumeRejected++; v = null; }
+        }
+        finally { quad = _quadErr; _quadErr = q0 + quad; }
+        if (key != null && solid.Revision == rev && TopoFingerprint.Of(solid) == fp)
+            _volCache.AddOrUpdate(solid, new VolEntry { Revision = rev, Print = fp, Key = key, Volume = v, Quad = quad });
         return v;
     }
+
+    private sealed class VolEntry { public long Revision; public ulong Print; public KernelSettings Key = null!; public double? Volume; public double Quad; }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, VolEntry> _volCache = new();
+    static readonly bool VolCacheOff = Environment.GetEnvironmentVariable("P3D_VOLCACHE") == "0";
 
     /// <summary>Разбор: сколько раз интеграл многогранного тела отвергнут сверкой с его точной многогранной формой.</summary>
     public static int PolyVolumeRejected;
@@ -157,6 +182,20 @@ public static class AnalyticVolume
     /// <summary>Мутация P3D_AREARICH=0: площадь грани с кривыми общего вида — ломаной без поправки Ричардсона (прежнее).</summary>
     static readonly bool AreaRichOff = Environment.GetEnvironmentVariable("P3D_AREARICH") == "0";
 
+    /// <summary>
+    /// u12: ПЛОЩАДЬ ДЛЯ САМОПРОВЕРКИ РАЗМЕТКИ — допуск проверки 0.5 %, точность 1e-9 там не нужна: у лент по формуле сечения
+    /// квадратура в 8 раз реже и без прохода Ричардсона (2 с → 0.1 с на ленту переменного радиуса). Прочие грани — как FaceArea.
+    /// Мутация P3D_ROUGHAREA=0 — полная площадь.
+    /// </summary>
+    public static double? FaceAreaRough(TFace f)
+    {
+        if (RoughAreaOff || GeometryAudit.AuthoritativeSurface(f) is not SectionSurface) return FaceArea(f);
+        _rough = true;
+        try { return FaceAreaCore(f); } finally { _rough = false; }
+    }
+    [ThreadStatic] static bool _rough;
+    static readonly bool RoughAreaOff = Environment.GetEnvironmentVariable("P3D_ROUGHAREA") == "0";
+
     public static double? FaceArea(TFace f)
     {
         // KRN-07 (g.14, сверка с OpenCascade): площадь грани с кривыми общего вида (сплайн, кривая пересечения) — как у
@@ -204,8 +243,8 @@ public static class AnalyticVolume
                 return RevolvedIntegral(f, rva, area: true);
             case SectionSurface band when !BandOff && BandRange(f, band) != null:
                 return BandIntegral(f, band, area: true);
-            case SectionSurface ob when BandOpenRange(f, ob) is { } orr:
-                return BandOpenIntegral(f, ob, orr, area: true);
+            case SectionSurface ob when Prof1("лента: область", () => BandOpenRange(f, ob)) is { } orr:
+                return Prof1("лента: площадь", () => BandOpenIntegral(f, ob, orr, area: true));
             default: return null;
         }
     }
@@ -545,7 +584,7 @@ public static class AnalyticVolume
     {
         if (BandRange(f, ss) is not { } rg) return null;
         double per = ss.UMax - ss.UMin, h = 1e-6 * Math.Max(1e-9, per);
-        int m = _coarse > 0 ? 48 : 96;
+        int m = _rough ? 16 : _coarse > 0 ? 48 : 96;
         var (gx, gw) = Gauss12;
         double vol = 0, ar = 0; var va = Vector3d.Zero; double pw = (rg.Ub - rg.Ua) / m;
         for (int i = 0; i < m; i++)
@@ -561,7 +600,7 @@ public static class AnalyticVolume
                     vol += Vector3d.Dot(P - _origin, c) * w; ar += c.Length * w; va += c * w;
                 }
             }
-        var loopsVa = NormalIntegral(f);
+        Vector3d loopsVa; using (Diagnostics.Prof.Time("лента: нормаль по контуру")) loopsVa = NormalIntegral(f);
         if (loopsVa.Length < 1e-6 * Math.Max(1e-12, ar) || va.Length < 1e-6 * Math.Max(1e-12, ar)) return null;   // знак не определить
         double cosv = Vector3d.Dot(loopsVa, va) / (loopsVa.Length * va.Length);
         if (Math.Abs(cosv) < 0.999) return null;                                                      // контуры не той поверхности
@@ -579,6 +618,35 @@ public static class AnalyticVolume
     internal static (Func<double, double> L, Func<double, double> R)? BandOpenRange(TFace f, SectionSurface ss)
     {
         if (BandOpenOff || !ss.IsProcedural || ss.Closed || f.Loops.Count != 1) return null;
+        // u12: ОБЛАСТЬ ЛЕНТЫ — ИЗ ПАМЯТИ. Площадь (самопроверка разметки), объём (три раза за операцию) и поток спрашивают одни
+        // и те же края L(v), R(v) в тех же узлах Гаусса; каждый — Иллинойс по ребру с проекцией (у края на торце — ещё и корень
+        // процедурной кривой): 2.9 с из 3.0 с разметки ленты переменного радиуса. Память — по грани, её поверхности и кривым
+        // контура (ссылки), значения — по v. Мутация P3D_BANDRANGECACHE=0.
+        if (!BandRangeCacheOff)
+        {
+            var curves = f.Loops[0].CoEdges.Select(ce => (object)ce.Edge.Curve).ToArray();
+            if (_bandRange.TryGetValue(f, out var hit) && ReferenceEquals(hit.S, ss) && hit.Curves.Length == curves.Length && hit.Curves.Zip(curves).All(z => ReferenceEquals(z.First, z.Second)))
+                return hit.R;
+            var r = BandOpenRangeCore(f, ss);
+            if (r is { } rr)
+            {
+                var mL = new System.Collections.Concurrent.ConcurrentDictionary<double, double>(); var mR = new System.Collections.Concurrent.ConcurrentDictionary<double, double>();
+                Func<double, double> L = v => mL.GetOrAdd(v, rr.L), R = v => mR.GetOrAdd(v, rr.R);
+                r = (L, R);
+            }
+            _bandRange.AddOrUpdate(f, new BandRangeEntry { S = ss, Curves = curves, R = r });
+            return r;
+        }
+        return BandOpenRangeCore(f, ss);
+    }
+    private sealed class BandRangeEntry { public SectionSurface S = null!; public object[] Curves = null!; public (Func<double, double> L, Func<double, double> R)? R; }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TFace, BandRangeEntry> _bandRange = new();
+    static T Prof1<T>(string n, Func<T> f) { using (Diagnostics.Prof.Time(n)) return f(); }
+    static readonly bool LinearSideOff = Environment.GetEnvironmentVariable("P3D_BANDLINSIDE") == "0";
+    static readonly bool BandRangeCacheOff = Environment.GetEnvironmentVariable("P3D_BANDRANGECACHE") == "0";
+
+    static (Func<double, double> L, Func<double, double> R)? BandOpenRangeCore(TFace f, SectionSurface ss)
+    {
         bool at0 = false, at1 = false; var sides = new List<(ICurve3 C, double UMid)>();
         foreach (var ce in f.Loops[0].CoEdges)
         {
@@ -597,6 +665,21 @@ public static class AnalyticVolume
         Func<double, double> Make(ICurve3 c)
         {
             bool inc = ss.ProjectToUV(c.PointAt(c.T1)).Y > ss.ProjectToUV(c.PointAt(c.T0)).Y;
+            // u12: БОКОВОЕ РЕБРО — САМО СЕЧЕНИЕ ИЛИ КРАЙ ПО ДОЛЕ v: параметр ребра линеен по v (сечение-дуга по углу, сечение-
+            // отрезок, край ленты на торце из корней по v) — точка с данным v берётся прямо, без поиска по ребру.
+            // только сечения (дуга, отрезок) и края ленты на торце, построенные корнем по доле v; шов «на ус» (кубика у вершины)
+            // и прочие процедурные кривые — прежним поиском
+            if (!LinearSideOff && (c is ArcCurve3 or LineCurve3 || c is ProcCurve3 { Kind: "blend end" or "rolling-ball end" or "chamfer end" }))
+            {
+                bool lin = true;
+                foreach (double t in new[] { 0, 1e-3, 3e-3, 0.01, 0.05, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 0.95, 0.99, 0.997, 0.999, 1 })
+                {
+                    if (!lin) break;
+                    double vq = ss.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * t)).Y;
+                    if (Math.Abs(vq - (inc ? t : 1 - t)) > 1e-10) lin = false;
+                }
+                if (lin) return v => ss.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * (inc ? v : 1 - v))).X;
+            }
             // точка ребра с данным v — Иллинойс по параметру ребра (v монотонно), до 1e-14 доли промежутка
             return v =>
             {
@@ -625,7 +708,7 @@ public static class AnalyticVolume
     static double? BandOpenIntegral(TFace f, SectionSurface ss, (Func<double, double> L, Func<double, double> R) rg, bool area)
     {
         double per = ss.UMax - ss.UMin, h = 1e-6 * Math.Max(1e-9, per);
-        int mv = _coarse > 0 ? 8 : 16, mu = _coarse > 0 ? 24 : 48;
+        int mv = _rough ? 3 : _coarse > 0 ? 8 : 16, mu = _rough ? 8 : _coarse > 0 ? 24 : 48;
         var (gx, gw) = Gauss12;
         double vol = 0, ar = 0; var va = Vector3d.Zero;
         for (int iv = 0; iv < mv; iv++)
@@ -653,7 +736,7 @@ public static class AnalyticVolume
                     }
                 }
             }
-        var loopsVa = NormalIntegral(f);
+        Vector3d loopsVa; using (Diagnostics.Prof.Time("лента: нормаль по контуру")) loopsVa = NormalIntegral(f);
         if (loopsVa.Length < 1e-6 * Math.Max(1e-12, ar) || va.Length < 1e-6 * Math.Max(1e-12, ar)) return null;
         double cosv = Vector3d.Dot(loopsVa, va) / (loopsVa.Length * va.Length);
         if (Math.Abs(cosv) < 0.999) return null;
@@ -1601,7 +1684,25 @@ public static class AnalyticVolume
     /// ∫∫ n dA по грани = ½ ∮ x × dx (векторная площадь; верна для любой поверхности с
     /// краем — через край по настоящим кривым).
     /// </summary>
+    /// <summary>u12: ∮ ½ x × dx по контурам грани — из памяти (грань, кривые и обход контуров, начало отсчёта, шаг): у ленты с
+    /// процедурными краями — 20 мс на вызов, 31 вызов за скругление. Мутация P3D_NORMALCACHE=0.</summary>
     public static Vector3d NormalIntegral(TFace f)
+    {
+        if (NormalCacheOff) return NormalIntegralCore(f);
+        var key = new List<object> { _origin, _coarse };
+        foreach (var l in f.Loops) foreach (var ce in l.CoEdges) { key.Add(ce.Edge.Curve); key.Add(ce.Reversed); key.Add(ce.Edge.V0); key.Add(ce.Edge.V0.P); }
+        var arr = key.ToArray();
+        if (_normCache.TryGetValue(f, out var hit) && hit.Key.Length == arr.Length && hit.Key.Zip(arr).All(z => z.First is ValueType ? z.First.Equals(z.Second) : ReferenceEquals(z.First, z.Second)))
+            return hit.V;
+        var v = NormalIntegralCore(f);
+        _normCache.AddOrUpdate(f, new NormEntry { Key = arr, V = v });
+        return v;
+    }
+    private sealed class NormEntry { public object[] Key = null!; public Vector3d V; }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TFace, NormEntry> _normCache = new();
+    static readonly bool NormalCacheOff = Environment.GetEnvironmentVariable("P3D_NORMALCACHE") == "0";
+
+    static Vector3d NormalIntegralCore(TFace f)
     {
         var sum = Vector3d.Zero;
         foreach (var loop in f.Loops)

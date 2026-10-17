@@ -46,6 +46,7 @@ static partial class Program
         ["Kernel.Ops.DirectRound.TanOpenChains"] = "06.11: счётчик открытых касательных цепочек (разбор)",
         ["Kernel.Ops.DirectRound.NCorners"] = "06.13: счётчик углов степени > 3 (разбор)",
         ["Kernel.Exact.ExactAdapter.FormCacheHits"] = "u09: счётчик повторов точной формы входа из памяти (Interlocked, разбор)",
+        ["Kernel.Topology.SolidValidator.ValidationCacheHits"] = "u11: счётчик проверок тела из памяти (Interlocked, разбор)",
         ["Kernel.Ops.FilletOp.FinalCheckRefusals"] = "g.02: счётчик отказов итоговой проверки обходного пути скругления (разбор)",
         ["Kernel.Diagnostics.Overhead._ticks"] = "g.13: время проверок и разметки сверх B-rep (Interlocked, только замер)",
         ["Kernel.Tess.ExactFaceMesher.ObjDumpPath"] = "отладочная выгрузка",

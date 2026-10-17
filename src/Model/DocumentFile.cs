@@ -179,7 +179,12 @@ public static class DocumentFile
                 Items = d.Items.Select(i => i.Id).ToList(),
                 Value = d.Value,
                 Locked = d.Locked,
-                Reference = d.Reference
+                Reference = d.Reference,
+                // u12: вид размера сохраняется (место подписи, слабый/сильный/замок, стрелки, формула)
+                Formula = d.Formula, IsDefault = d.IsDefault ? true : null, UserPlaced = d.UserPlaced ? true : null,
+                Offset = d.UserPlaced ? new[] { d.TextOffset.X, d.TextOffset.Y } : null,
+                Arrows = d.Arrows == ArrowPlacement.Auto ? null : d.Arrows.ToString(),
+                UserLocked = d.UserLocked ? true : null, SingleArrow = d.SingleArrow ? true : null, AsLinear = d.DiameterAsLinear ? true : null
             });
 
         return dto;
@@ -259,6 +264,7 @@ public static class DocumentFile
             Distance2 = cf.D2.Value,
             Formula2 = cf.D2.Formula,
             ChamferMode = cf.Mode.ToString(),
+            RadiusEnd = cf.SizeEnd?.Value, RadiusEndFormula = cf.SizeEnd?.Formula,
             Edges = cf.Edges.Select(SaveEdge).ToList(),
             Selectors = cf.Selectors.Count == 0 ? null : cf.Selectors.Select(x => new SelectorDto { Kind = x.Kind.ToString(), Feature = x.FeatureKey, Other = x.OtherKey }).ToList()
         },
@@ -301,14 +307,16 @@ public static class DocumentFile
         {
             Kind = "mirror", Name = mf.Name, Suppressed = mf.Suppressed,
             Point = new[] { mf.At.X, mf.At.Y, mf.At.Z },
-            Dir = new[] { mf.Normal.X, mf.Normal.Y, mf.Normal.Z }
+            Dir = new[] { mf.Normal.X, mf.Normal.Y, mf.Normal.Z },
+            Sources = mf.Sources.Count == 0 ? null : mf.Sources.ToList()
         },
 
         LinearPatternFeature lp => new FeatureDto
         {
             Kind = "linear", Name = lp.Name, Suppressed = lp.Suppressed,
             Dir = new[] { lp.Step.X, lp.Step.Y, lp.Step.Z },
-            Distance = lp.Count.Value, Formula = lp.Count.Formula
+            Distance = lp.Count.Value, Formula = lp.Count.Formula,
+            Sources = lp.Sources.Count == 0 ? null : lp.Sources.ToList()
         },
 
         CircularPatternFeature cp => new FeatureDto
@@ -316,7 +324,8 @@ public static class DocumentFile
             Kind = "circular", Name = cp.Name, Suppressed = cp.Suppressed,
             Point = new[] { cp.At.X, cp.At.Y, cp.At.Z },
             Dir = new[] { cp.Axis.X, cp.Axis.Y, cp.Axis.Z },
-            Distance = cp.Count.Value, Formula = cp.Count.Formula
+            Distance = cp.Count.Value, Formula = cp.Count.Formula,
+            Sources = cp.Sources.Count == 0 ? null : cp.Sources.ToList()
         },
 
         DraftFeature df => new FeatureDto
@@ -549,6 +558,11 @@ public static class DocumentFile
                 var dim = s.AddDimension(type, dd.Value, items);
                 dim.Locked = dd.Locked;
                 dim.Reference = dd.Reference;
+                dim.Formula = dd.Formula;
+                dim.IsDefault = dd.IsDefault == true; dim.UserPlaced = dd.UserPlaced == true;
+                if (dd.Offset is { Length: 2 } off) dim.TextOffset = new OpenTK.Mathematics.Vector2d(off[0], off[1]);
+                if (dd.Arrows != null && Enum.TryParse<ArrowPlacement>(dd.Arrows, out var ap)) dim.Arrows = ap;
+                dim.UserLocked = dd.UserLocked == true; dim.SingleArrow = dd.SingleArrow == true; dim.DiameterAsLinear = dd.AsLinear == true;
             }
 
             part.Children.Add(s);
@@ -622,6 +636,7 @@ public static class DocumentFile
                     var mf = new MirrorFeature(fd.Name) { Suppressed = fd.Suppressed, At = Vec(fd.Point) };
                     var n = Vec(fd.Dir);
                     if (n.LengthSquared > 1e-18) mf.Normal = n;
+                    if (fd.Sources != null) mf.Sources.AddRange(fd.Sources);
                     part.AddFeature(mf);
                     break;
                 }
@@ -630,6 +645,7 @@ public static class DocumentFile
                 {
                     var lp = new LinearPatternFeature(fd.Name) { Suppressed = fd.Suppressed, Step = Vec(fd.Dir) };
                     lp.Count = new ValueRef(fd.Distance) { Formula = fd.Formula };
+                    if (fd.Sources != null) lp.Sources.AddRange(fd.Sources);
                     part.AddFeature(lp);
                     break;
                 }
@@ -640,6 +656,7 @@ public static class DocumentFile
                     var ax = Vec(fd.Dir);
                     if (ax.LengthSquared > 1e-18) cp.Axis = ax;
                     cp.Count = new ValueRef(fd.Distance) { Formula = fd.Formula };
+                    if (fd.Sources != null) cp.Sources.AddRange(fd.Sources);
                     part.AddFeature(cp);
                     break;
                 }
@@ -757,6 +774,7 @@ public static class DocumentFile
                     cf.D1 = new ValueRef(fd.Distance) { Formula = fd.Formula };
                     cf.D2 = new ValueRef(fd.Distance2) { Formula = fd.Formula2 };
                     if (Enum.TryParse<ChamferKind>(fd.ChamferMode, out var km)) cf.Mode = km;
+                    if (fd.RadiusEnd is double cEnd) cf.SizeEnd = new ValueRef(cEnd) { Formula = fd.RadiusEndFormula };
                     foreach (var ed in fd.Edges) cf.Edges.Add(LoadEdge(ed));
                     foreach (var sd in fd.Selectors ?? new())
                         if (Enum.TryParse<EdgeSelectorKind>(sd.Kind, out var sk) && sd.Feature != null) cf.Selectors.Add(new EdgeSelector(sk, sd.Feature, sd.Other));
@@ -997,6 +1015,14 @@ public static class DocumentFile
         public double Value { get; set; }
         public bool Locked { get; set; }
         public bool Reference { get; set; }
+        public string? Formula { get; set; }
+        public bool? IsDefault { get; set; }
+        public bool? UserPlaced { get; set; }
+        public double[]? Offset { get; set; }
+        public string? Arrows { get; set; }
+        public bool? UserLocked { get; set; }
+        public bool? SingleArrow { get; set; }
+        public bool? AsLinear { get; set; }
     }
 
     /// <summary>По выходе из области присваивает ключ операции, добавленной в деталь внутри неё.</summary>
@@ -1064,6 +1090,8 @@ public static class DocumentFile
         public List<double> OpenFaces { get; set; } = new();
         /// <summary>KRN-06 (06.14): радиус скругления в конце ребра (переменный радиус); null — постоянный.</summary>
         public double? RadiusEnd { get; set; }
+        /// <summary>u12: зеркало и массивы операций — ключи повторяемых операций.</summary>
+        public List<string>? Sources { get; set; }
         /// <summary>KRN-07 (07.3): закрутка протяжки, градусы.</summary>
         public double? Twist { get; set; }
         public string? TwistFormula { get; set; }

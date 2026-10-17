@@ -35,6 +35,8 @@ public static class UvMesher
     internal static readonly bool PoleCutFromNearest = Environment.GetEnvironmentVariable("P3D_POLECUT") != "0";
     internal static readonly bool StuckOff = Environment.GetEnvironmentVariable("P3D_UVSTUCK") == "0";
     internal static readonly bool StraightSquashOff = Environment.GetEnvironmentVariable("P3D_UVSTRAIGHT") == "0";
+    internal static readonly bool DivergeOff = Environment.GetEnvironmentVariable("P3D_UVDIVERGE") == "0";
+    internal static readonly bool UnsquashOff = Environment.GetEnvironmentVariable("P3D_UVUNSQUASH") == "0";
     public static readonly double[] PhaseMs = new double[6];   // 0 контуры, 1 треугол., 2 Делоне, 3 внутр. точки, 4 доводка, 5 проверка
 
     /// <summary>
@@ -63,6 +65,8 @@ public static class UvMesher
         var (perU, perV) = Periods(s);
         Vector3d P(Vector2d q) => Eval(s, q, perU, perV);
 
+        var swPh = System.Diagnostics.Stopwatch.StartNew(); string phName = "uv: контуры";
+        void Ph(string next) { if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Add(phName + " " + s.GetType().Name, (long)(swPh.Elapsed.TotalSeconds * System.Diagnostics.Stopwatch.Frequency)); swPh.Restart(); phName = next; }
         // Контуры: (uv, xyz) по точкам рёбер, развёрнутые непрерывно.
         // Шов — ребро, которое грань проходит дважды (в обе стороны): в параметрах это граница
         // периода, а не край области; его полурёбра пропускаются, и контур делится на цепочки
@@ -283,6 +287,7 @@ public static class UvMesher
         // Триангуляция областей; общие точки (разрезы) сводятся по (u, v); точкам границы — их точки рёбер.
         var key = new Dictionary<(double, double), Vector3d>();
         foreach (var (po, ph) in pieces) foreach (var x in po.Concat(ph.SelectMany(h => h))) key[(x.Uv.X, x.Uv.Y)] = x.X;
+        Ph("uv: триангуляция");
         var uvList = new List<Vector2d>(); var index = new Dictionary<(double, double), int>();
         var tris = new List<int>();
         foreach (var (po, ph) in pieces)
@@ -311,6 +316,7 @@ public static class UvMesher
         double Orient(int a, int b, int c) { var p = uvList[a]; var q = uvList[b]; var r = uvList[c]; return (q.X - p.X) * (r.Y - p.Y) - (q.Y - p.Y) * (r.X - p.X); }
         double Area3() { double ar = 0; for (int t = 0; t < T.Count; t += 3) ar += Vector3d.Cross(xyz[T[t + 1]] - xyz[T[t]], xyz[T[t + 2]] - xyz[T[t]]).Length / 2; return ar; }
 
+        Ph("uv: Делоне и доводка");
         // G2. ОГРАНИЧЕННАЯ ТРИАНГУЛЯЦИЯ ДЕЛОНЕ В МЕТРИКЕ ПОВЕРХНОСТИ.
         // Начало — ушная триангуляция области (она верна, но с длинными тонкими треугольниками);
         // затем перевороты внутренних рёбер к Делоне в масштабированных параметрах (u·|Su|, v·|Sv|)
@@ -509,16 +515,20 @@ public static class UvMesher
                     }
                 return true;
             }
+            double su0 = su, sv0 = sv; bool squashed = false;
             if (!StraightSquashOff && spanX > 1e-12 && spanY > 1e-12)
             {
-                if (kx > 1e-12 && ky <= 1e-12 && spanY > 4 * hx && Ladder(alongY: true)) sv *= 0.25 * hx / spanY;
-                else if (ky > 1e-12 && kx <= 1e-12 && spanX > 4 * hy && Ladder(alongY: false)) su *= 0.25 * hy / spanX;
+                if (kx > 1e-12 && ky <= 1e-12 && spanY > 4 * hx && Ladder(alongY: true)) { sv *= 0.25 * hx / spanY; squashed = true; }
+                else if (ky > 1e-12 && kx <= 1e-12 && spanX > 4 * hy && Ladder(alongY: false)) { su *= 0.25 * hy / spanX; squashed = true; }
             }
             Delaunay();
             Debug?.Invoke($"pass 0: interior points {uvList.Count - pts0.Count}, h {h:0.###}, tris {T.Count / 3}, area3 {Area3():0.###}");
             // Доводка: где поверхность гнётся сильнее, чем позволяет шаг сетки (кольцо тора малого
             // сечения), — точки в центры «плохих» треугольников и снова Делоне.
             double prevWorst = double.MaxValue; int stuck = 0; int tris0 = Math.Max(1, T.Count / 3);
+            // u12: снимок перед вставкой центров — если доводка разошлась (худшая ошибка выросла втрое: косые полосы у
+            // скошенного края цилиндра, ошибка 0.04 → 1.7 мм), сетка возвращается к снимку. Мутация P3D_UVDIVERGE=0.
+            List<int>? snapT = null; int snapN = 0; double snapWorst = double.MaxValue; double lastWorst = double.NaN;
             for (int pass = 1; pass < 25 && T.Count / 3 < maxTriangles; pass++)
             {
                 var bad = new List<int>();
@@ -529,6 +539,7 @@ public static class UvMesher
                 // на всех 25 проходах, а сетка росла до 5 000+ треугольников (4 с на грань). Два прохода подряд без
                 // уменьшения худшей ошибки хотя бы на 2 % — конец доводки (дальше решает самопроверка разметки).
                 // Мутация P3D_UVSTUCK=0.
+                lastWorst = bad.Count == 0 ? 0 : worstNow;
                 if (!StuckOff && bad.Count > 0)
                 {
                     // только если сетка уже выросла в 25+ раз: у обычной доводки худшая ошибка (у полюса) может стоять, пока остальные
@@ -538,7 +549,29 @@ public static class UvMesher
                     prevWorst = Math.Min(prevWorst, worstNow);
                 }
                 Debug?.Invoke($"pass {pass}: bad {bad.Count} of {T.Count / 3}, worst {worstNow:0.####} tol {tol:0.####}");
+                // u12: «ЛЕСЕНКА» НЕ ЛЕГЛА — назад к метрике поверхности. Перекошенная полоса (концы с разным числом точек, скошенный
+                // конец: цилиндр скругления, срезанный лентой переменного радиуса) давала в сжатой метрике косые иглы; доводка
+                // центрами там расходилась (ошибка 0.02 → 1.7 мм, «рваный» край и гранение на экране). Мутация P3D_UVUNSQUASH=0.
+                if (squashed && bad.Count > 0 && !UnsquashOff)
+                {
+                    squashed = false; su = su0; sv = sv0;
+                    Delaunay();
+                    Debug?.Invoke("ladder squash undone: refining in the surface metric");
+                    continue;
+                }
+                if (Debug != null && Environment.GetEnvironmentVariable("P3D_UVDUMP") is { } dumpDir)
+                {
+                    // разбор: область и сетка в параметрах (точки, треугольники, стороны края) — по проходам
+                    var sbd = new System.Text.StringBuilder();
+                    sbd.Append("P ").AppendJoin(' ', uvList.Select(q => $"{q.X * su:R},{q.Y * sv:R}")).Append('\n');
+                    sbd.Append("T ").AppendJoin(' ', T).Append('\n');
+                    sbd.Append("B ").AppendJoin(' ', boundary.Select(e => $"{e.Item1},{e.Item2}")).Append('\n');
+                    sbd.Append("X ").AppendJoin(' ', bad).Append('\n');
+                    System.IO.Directory.CreateDirectory(dumpDir);
+                    System.IO.File.WriteAllText(System.IO.Path.Combine(dumpDir, $"{s.GetType().Name}_{face.GetHashCode():x}_p{pass}.txt"), sbd.ToString());
+                }
                 if (bad.Count == 0) break;
+                if (snapT == null || worstNow < snapWorst) { snapT = new List<int>(T); snapN = uvList.Count; snapWorst = worstNow; }
                 foreach (int t in bad)
                 {
                     int i0 = T[t], i1 = T[t + 1], i2 = T[t + 2];
@@ -548,6 +581,18 @@ public static class UvMesher
                     T.AddRange(new[] { i1, i2, m, i2, i0, m });
                 }
                 Delaunay();
+            }
+            // доводка кончилась без сходимости (стоп «нет улучшения», предел проходов или треугольников), а лучшая сетка
+            // была раньше — возврат к ней
+            if (!DivergeOff && snapT != null && T.Count / 3 > 0)
+            {
+                double fin = 0; for (int t = 0; t < T.Count; t += 3) { double bt = Bad(t); if (bt > tol && bt > fin) fin = bt; }
+                if (fin > snapWorst * 1.5)
+                {
+                    T.Clear(); T.AddRange(snapT);
+                    uvList.RemoveRange(snapN, uvList.Count - snapN); xyz.RemoveRange(snapN, xyz.Count - snapN);
+                    Debug?.Invoke($"refinement did not converge (worst {fin:0.####}, best {snapWorst:0.####}) — best mesh kept");
+                }
             }
         }
 
@@ -597,6 +642,7 @@ public static class UvMesher
             if (fixedCount == 0) break;
         }
 
+        Ph("uv: самопроверка");
         // САМОПРОВЕРКА. Разметка принимается, только если (1) треугольники покрывают область в
         // (u, v) ровно — сумма их площадей равна площади области, и все обходятся в одну сторону;
         // (2) площадь сетки сходится с точной площадью грани. Иначе — отказ с причиной: ушная
@@ -645,7 +691,7 @@ public static class UvMesher
                 if (shortest > 1e-24 && Vector3d.Cross(B3 - A3, C3 - A3).Length <= 1e-9 * longest) flat++;
             }
             if (flat > 0) { why = $"{flat} triangle(s) of zero area in space remain"; return null; }
-            double? exact = AnalyticVolume.FaceArea(face);
+            double? exact; using (Diagnostics.Prof.Time("uv: самопроверка — точная площадь " + s.GetType().Name)) exact = AnalyticVolume.FaceAreaRough(face);
             if (exact is { } ex && Math.Abs(ex) > 1e-9)
             {
                 double a3 = 0; for (int t = 0; t < T.Count; t += 3) a3 += Vector3d.Cross(xyz[T[t + 1]] - xyz[T[t]], xyz[T[t + 2]] - xyz[T[t]]).Length / 2;

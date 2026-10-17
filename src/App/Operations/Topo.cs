@@ -37,6 +37,44 @@ public static class Topo
                               || e.V0 != null && (e.V0.P - v.P).LengthSquared < 1e-14 || e.V1 != null && (e.V1.P - v.P).LengthSquared < 1e-14);
     }
 
+    /// <summary>u12: кромка (граница касательных граней) — не ребро: скругление, фаска, массив по ней недоступны.</summary>
+    public static bool IsSeam(PickRef r) => r.Kind == PickKind.Edge && r.Owner is Part p && p.FindEdge(r.Id) is { } e && Parametric3D.Kernel.Topology.EdgeClass.IsTangentSeam(e);
+
+    /// <summary>
+    /// u12 (замечание 13): плоскость цепочки рёбер (кромок) — если все выбранные рёбра лежат в одной плоскости и не на одной
+    /// прямой: начало — центр точек, нормаль — по наибольшему разбросу. Иначе null.
+    /// </summary>
+    public static Frame3? CoplanarFrame(IReadOnlyList<PickRef> sel)
+    {
+        if (sel.Count == 0 || sel.Any(r => r.Kind != PickKind.Edge || r.Owner is not Part)) return null;
+        var pts = new List<Vector3d>();
+        foreach (var r in sel)
+        {
+            if (((Part)r.Owner!).FindEdge(r.Id) is not { Curve: { } c }) return null;
+            for (int i = 0; i <= 8; i++) pts.Add(c.PointAt(c.T0 + (c.T1 - c.T0) * i / 8.0));
+        }
+        var o = pts.Aggregate(Vector3d.Zero, (a, b) => a + b) / pts.Count;
+        double scale = pts.Max(q => (q - o).Length);
+        if (!(scale > 1e-9)) return null;
+        // нормаль: наибольшее векторное произведение пар направлений от центра
+        Vector3d n = Vector3d.Zero; double best = 0;
+        for (int i = 0; i < pts.Count; i++)
+            for (int j = i + 1; j < pts.Count; j += 3)
+            {
+                var c = Vector3d.Cross(pts[i] - o, pts[j] - o);
+                if (c.Length > best) { best = c.Length; n = c; }
+            }
+        if (!(best > 1e-6 * scale * scale)) return null;          // на одной прямой
+        n = n.Normalized();
+        if (pts.Any(q => Math.Abs(Vector3d.Dot(q - o, n)) > 1e-6 * Math.Max(1, scale))) return null;
+        // нормаль — от тела (по нормалям граней рёбер)
+        var part = (Part)sel[0].Owner!;
+        var e0 = part.FindEdge(sel[0].Id)!; var m = e0.Curve.PointAt(0.5 * (e0.Curve.T0 + e0.Curve.T1));
+        var fn = FacesOf(part, e0).Select(f => FaceNormal(part, f, m)).Aggregate(Vector3d.Zero, (a, b) => a + b);
+        if (Vector3d.Dot(fn, n) < 0) n = -n;
+        return Frame3.FromNormal(n * Vector3d.Dot(o, n), n);
+    }
+
     public static IReadOnlyList<TEdge> AllEdges(Part p) => p.Bodies.SelectMany(b => b.Edges).ToList();
 
     /// <summary>П. 4: ребро и все рёбра, касательно продолжающие его через вершины (цепочка G1).</summary>
@@ -94,6 +132,7 @@ public static class Topo
         var fs = FacesOf(p, e).ToList();
         // u10: шов касательных граней (край скругления) — не ребро: ручки нет (скруглить/срезать там нечего)
         if (fs.Count == 2 && Vector3d.Dot(FaceNormal(p, fs[0], mid), FaceNormal(p, fs[1], mid)) > 0.9995) return null;
+        if (Parametric3D.Kernel.Topology.EdgeClass.IsTangentSeam(e)) return null;
         foreach (var f in fs) n += FaceNormal(p, f, mid);
         if (n.LengthSquared < 1e-12) return null;
         return (mid, n.Normalized());

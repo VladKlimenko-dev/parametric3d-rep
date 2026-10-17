@@ -83,6 +83,7 @@ public sealed class SketchState
                 Locked = d.Locked,
                 IsDefault = d.IsDefault,
                 UserPlaced = d.UserPlaced,
+                UserLocked = d.UserLocked, SingleArrow = d.SingleArrow, DiameterAsLinear = d.DiameterAsLinear,
                 Arrows = d.Arrows,
                 TextOffset = d.TextOffset,
                 Formula = d.Formula

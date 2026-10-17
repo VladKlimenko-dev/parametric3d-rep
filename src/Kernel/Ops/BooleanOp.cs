@@ -2475,6 +2475,23 @@ public static class BooleanOp
     }
 
     /// <summary>
+    /// u11: доноры сетки для прямых построителей (скругление, фаска, смещение): грани исходного тела с тем же строгим
+    /// ключом (поверхность по содержанию, контуры побитово) отдают готовую сетку — неизменённые грани не размечаются
+    /// заново (у тела из 40 граней — 0.25 с на каждое скругление). Мутация P3D_DIRECTDONOR=0.
+    /// </summary>
+    internal static Func<TFace, FacetedSurface?>? DonorFrom(TSolid body) => DonorFrom(body.Faces);
+    internal static Func<TFace, FacetedSurface?>? DonorFrom(IEnumerable<TFace> faces)
+    {
+        if (!ReuseFaceMeshes || DirectDonorOff) return null;
+        var donors = new Dictionary<string, FacetedSurface>();
+        foreach (var f in faces)
+            if (f.Surface is FacetedSurface dfs && dfs.Facets.Count > 0 && (dfs.Display != null || dfs.FromLoops) && MeshDonorKey(f) is { } k) donors.TryAdd(k, dfs);
+        if (donors.Count == 0) return null;
+        return f => MeshDonorKey(f) is { } k && donors.TryGetValue(k, out var d) ? d : null;
+    }
+    static readonly bool DirectDonorOff = Environment.GetEnvironmentVariable("P3D_DIRECTDONOR") == "0";
+
+    /// <summary>
     /// Ключ исходной поверхности донора. Точные поверхности (плоскость, выдавливание и вращение отрезка или дуги) — ПО
     /// СОДЕРЖАНИЮ: вид и биты всех определяющих чисел (аналитический путь создаёт новые объекты поверхностей на каждом
     /// перестроении — по ссылке донор не находился бы, а разметчик видит те же входные данные). Прочие — по ссылке.

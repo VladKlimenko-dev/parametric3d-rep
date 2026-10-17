@@ -87,6 +87,8 @@ public static class StandardCommands
         Style("style.hidden_lines", "Невидимые линии штрихом", "style_hidden_lines_but.svg", DisplayStyle.HiddenLines, "hidden lines", K(Key.D4, KeyModifiers.Alt));
         Style("style.transparent", "Прозрачный", "style_transparent_but.svg", DisplayStyle.Transparent, "transparent", K(Key.D5, KeyModifiers.Alt));
         Style("style.material", "Материал", "style_material_but.svg", DisplayStyle.Material, "material материал металл realistic", K(Key.D6, KeyModifiers.Alt));
+        Style("style.view_mesh", "Сетка вида", "style_mesh_but.svg", DisplayStyle.ViewMesh, "mesh triangles сетка треугольники вида", K(Key.D7, KeyModifiers.Alt));
+        Style("style.fea_mesh", "Сетка FEA", "style_fea_mesh_but.svg", DisplayStyle.FeaMesh, "fea mesh расчёт сетка элементы мкэ", K(Key.D8, KeyModifiers.Alt));
         r.Add(new AppCommand { Short = "Скрыть", Id = "view.hide", Label = "Скрыть", Group = V, Icon = "hide_but.svg", Synonyms = "hide",
             CanRun = () => w.SelectedItems().Count > 0, Run = () => SetVisible(w, w.SelectedItems(), false) });
         r.Add(new AppCommand { Short = "Изолировать", Id = "view.isolate", Label = "Изолировать", Group = V, Icon = "isolate_but.svg", Synonyms = "isolate",
@@ -101,8 +103,36 @@ public static class StandardCommands
 
         // ------------------------------------------------------------ модель (операции)
         const string M = "Модель";
+        // u12 (замечание 12): ОПЕРАЦИЯ ДОСТУПНА, ЕСЛИ ПОДХОДИТ ВЫБРАННОЕ. Пустой выбор — всё доступно (ссылки выбираются
+        // в панели); иначе каждый выбранный элемент должен годиться операции: кромка (касательный стык) — не ребро для
+        // скругления, фаски и массива; вершина — только для операций вершины; операции дерева — для зеркала и массивов.
+        IReadOnlyList<PickRef> Sel() => vp.Selection.Items;
+        bool Fits(Func<PickRef, bool> ok) { var l = Sel(); return l.Count == 0 || l.All(ok); }
+        bool IsFeat(PickRef x) => x.Kind == PickKind.Feature && x.Target is Feature;
+        bool RealEdge(PickRef x) => x.Kind == PickKind.Edge && !Topo.IsSeam(x);
+        bool PlaneLike(PickRef x) => Refs.IsPlanar(x);
+        bool SketchLike(PickRef x) => Refs.IsSketch(x) || x.Target is Sketch;
+        bool Pointy(PickRef x) => x.Kind is PickKind.Vertex or PickKind.SketchPoint or PickKind.DatumPoint;
+        var fits = new Dictionary<string, Func<bool>>
+        {
+            ["op.sketch"] = () => Fits(x => PlaneLike(x) || x.Kind == PickKind.Edge) && (Sel().Count == 0 || Sel().Any(PlaneLike) || Topo.CoplanarFrame(Sel()) != null),
+            ["op.extrude"] = () => Fits(x => SketchLike(x) || PlaneLike(x)),
+            ["op.cut"] = () => Fits(x => SketchLike(x) || PlaneLike(x)),
+            ["op.revolve"] = () => Fits(x => SketchLike(x) || PlaneLike(x) || Refs.IsLinear(x)),
+            ["op.hole"] = () => Fits(x => PlaneLike(x) || Pointy(x)),
+            ["op.round"] = () => Fits(RealEdge),
+            ["op.chamfer"] = () => Fits(RealEdge),
+            ["op.vertex_round"] = () => Fits(x => x.Kind == PickKind.Vertex),
+            ["op.vertex_chamfer"] = () => Fits(x => x.Kind == PickKind.Vertex),
+            ["op.shell"] = () => Fits(x => x.Kind == PickKind.Face),
+            ["op.plane"] = () => Fits(x => !IsFeat(x)),
+            ["op.mirror"] = () => Fits(x => IsFeat(x) || PlaneLike(x)),
+            ["op.pattern_linear"] = () => Fits(x => IsFeat(x) || (Refs.IsLinear(x) && !Topo.IsSeam(x))),
+            ["op.pattern_circular"] = () => Fits(x => IsFeat(x) || (Refs.IsLinear(x) && !Topo.IsSeam(x))),
+        };
         void Op(string id, string label, string shortLabel, string icon, Func<Operation> make, string syn, KeyGesture? g = null) =>
-            r.Add(new AppCommand { Id = id, Label = label, Short = shortLabel, Group = M, Icon = icon, Synonyms = syn, Gesture = g, CanRun = Modeling, Run = () => w.StartOperation(make()) });
+            r.Add(new AppCommand { Id = id, Label = label, Short = shortLabel, Group = M, Icon = icon, Synonyms = syn, Gesture = g,
+                CanRun = () => Modeling() && (w.CurrentOperation != null || !fits.TryGetValue(id, out var f) || f()), Run = () => w.StartOperation(make()) });
         Op("op.sketch", "Эскиз", "Эскиз", "f_sketch_but.svg", () => new SketchOp(), "sketch эскиз", K(Key.S));
         Op("op.extrude", "Выдавливание", "Выдавить", "f_extrude_but.svg", () => w.SketchFirst(new ExtrudeOp()), "extrude выдавить", K(Key.E));
         Op("op.cut", "Вырез выдавливанием", "Вырез", "f_extrude_but.svg", () => w.SketchFirst(new ExtrudeOp { StartCut = true }), "cut вырез");

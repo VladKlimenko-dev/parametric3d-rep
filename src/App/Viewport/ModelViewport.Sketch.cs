@@ -63,6 +63,62 @@ public sealed partial class ModelViewport
         return hit;
     }
 
+    /// <summary>u12: размер под курсором (подсветка) и перетаскиваемый.</summary>
+    public SkDimension? HoverDimension { get; private set; }
+    public SkDimension? DraggedDimension { get; private set; }
+    private Vector2d _dimDragStart, _dimOffsetStart;
+    private bool _dimMoved;
+
+    /// <summary>Наведение в эскизе: размер под курсором подсвечивается.</summary>
+    internal void UpdateDimensionHover(Point p)
+    {
+        if (ActiveSketch == null) { if (HoverDimension != null) { HoverDimension = null; _overlayDirty = true; Redraw(); } return; }
+        var d = DimensionAt(p);
+        if (ReferenceEquals(d, HoverDimension)) return;
+        HoverDimension = d; _overlayDirty = true; Redraw();
+    }
+
+    /// <summary>Нажали на подпись размера — её можно тащить мышью (место подписи; значение не меняется).</summary>
+    internal bool BeginDimensionDrag(Point p)
+    {
+        if (ActiveSketch == null || DimensionAt(p) is not { } d || ScreenToSketch(p) is not { } q) return false;
+        DraggedDimension = d; _dimDragStart = q; _dimOffsetStart = d.TextOffset; _dimMoved = false;
+        return true;
+    }
+
+    internal void DimensionDragMove(Point p)
+    {
+        if (DraggedDimension is not { } d || ScreenToSketch(p) is not { } q) return;
+        var delta = q - _dimDragStart;
+        if (!_dimMoved && delta.Length < 3 * PixelSize) return;
+        if (!_dimMoved && !d.UserPlaced && ActiveSketch is { } skd)
+        {
+            // подпись ещё не ставили (сторона выбрана автоматически): смещение берётся от нынешнего места подписи —
+            // по составляющей поперёк размера знак тот, что сейчас на экране (без скачка на другую сторону)
+            var before = d.TextCenter;
+            d.UserPlaced = true;
+            var probe = new DimBatch { PixelSize = PixelSize };
+            try { SketchDimensions.Build(skd, probe, PixelSize); } catch { }
+            if ((d.TextCenter - before).Length > 4 * PixelSize) { _dimOffsetStart = -_dimOffsetStart; d.TextOffset = _dimOffsetStart; try { SketchDimensions.Build(skd, probe, PixelSize); } catch { } }
+            if ((d.TextCenter - before).Length > 4 * PixelSize) _dimOffsetStart = d.TextOffset = -_dimOffsetStart;   // не помогло — как было
+        }
+        _dimMoved = true;
+        d.TextOffset = _dimOffsetStart + delta;
+        d.UserPlaced = true;
+        _overlayDirty = true;
+        Redraw();
+    }
+
+    /// <summary>Отпустили размер; true — его тащили (щелчок без движения — обычный выбор).</summary>
+    internal bool EndDimensionDrag()
+    {
+        var d = DraggedDimension; DraggedDimension = null;
+        if (d == null || !_dimMoved) return false;
+        ActiveSketch?.NotifyChanged(ActiveSketch);
+        _overlayDirty = true; Redraw();
+        return true;
+    }
+
     internal bool TryEditDimension(Point p)
     {
         if (DimensionAt(p) is not { } d) return false;
@@ -276,7 +332,10 @@ public sealed partial class ModelViewport
             SketchDimensions.ScreenUp = new Vector2d(Vector3d.Dot(new Vector3d(camU.X, camU.Y, camU.Z), pl.U), Vector3d.Dot(new Vector3d(camU.X, camU.Y, camU.Z), pl.V));
             try { SketchDimensions.Build(sk, batch, PixelSize); }
             catch (Exception ex) { AppLog.Write("dimensions", ex); }
-            foreach (var (a, b, st, _) in batch.Segments)
+            // u12 (замечание 17): слабый — серый, сильный — голубой, с замком — оранжевый; под курсором — ярче и толще
+            var byId = new Dictionary<uint, SkDimension>();
+            foreach (var dd in sk.Dimensions) byId[dd.Id] = dd;
+            foreach (var (a, b, st, dimId) in batch.Segments)
             {
                 var dc = st switch
                 {
@@ -285,7 +344,15 @@ public sealed partial class ModelViewport
                     LineStyle.DimensionLocked or LineStyle.DimensionTextLocked => th.DimLocked,
                     _ => th.DimDefault,
                 };
-                lines.Add(Inst(a, b, dc, st >= LineStyle.DimensionText ? 1.3f : 1.1f, 0));
+                bool hov = false;
+                if (byId.TryGetValue(dimId, out var dm))
+                {
+                    if (dm.UserLocked && !dm.Conflict && !dm.Reference) dc = th.DimUserLocked;
+                    hov = ReferenceEquals(dm, HoverDimension) || ReferenceEquals(dm, DraggedDimension);
+                }
+                float wd = st >= LineStyle.DimensionText ? 1.3f : 1.1f;
+                if (hov) { dc = new Vector4(MathF.Min(1, dc.X * 1.25f + 0.15f), MathF.Min(1, dc.Y * 1.25f + 0.15f), MathF.Min(1, dc.Z * 1.25f + 0.15f), 1); wd *= 1.9f; }
+                lines.Add(Inst(a, b, dc, wd, 0));
             }
         }
 

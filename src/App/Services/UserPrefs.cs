@@ -15,6 +15,8 @@ public sealed class UserPrefs
     public string? GlMode { get; set; } = "auto";
     /// <summary>u09: предпросмотр операций ручкой — «full» (деталь считается при перетаскивании) или «contour» (контур).</summary>
     public string? PreviewMode { get; set; } = "full";
+    /// <summary>u12: версия файла настроек; до 12 — предпросмотр сбрасывается на «полный» (самопроверка могла сохранить «контур»).</summary>
+    public int PrefsVersion { get; set; } = 12;
     public List<string> RecentFiles { get; set; } = new();
     public List<string> RecentCommands { get; set; } = new();
     public bool TreeVisible { get; set; } = true;
@@ -29,7 +31,13 @@ public sealed class UserPrefs
     {
         try
         {
-            if (File.Exists(FilePath)) return JsonSerializer.Deserialize<UserPrefs>(File.ReadAllText(FilePath)) ?? new UserPrefs();
+            if (File.Exists(FilePath))
+            {
+                var json = File.ReadAllText(FilePath);
+                var p = JsonSerializer.Deserialize<UserPrefs>(json) ?? new UserPrefs();
+                if (!json.Contains("\"PrefsVersion\"") || p.PrefsVersion < 12) { p.PreviewMode = "full"; p.PrefsVersion = 12; }
+                return p;
+            }
         }
         catch (Exception ex) { Core.AppLog.Write("prefs load", ex); }
         return new UserPrefs();

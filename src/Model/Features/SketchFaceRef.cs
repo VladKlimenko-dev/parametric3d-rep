@@ -22,7 +22,19 @@ public static class SketchFaceRef
     /// <summary>Плоскость грани (точка, внешняя нормаль) или null, если грань не плоская.</summary>
     public static (Vector3d P, Vector3d N)? PlaneOf(TFace f)
     {
-        if (GeometryAudit.AuthoritativeSurface(f) is not PlaneSurface ps) return null;
+        var src = GeometryAudit.AuthoritativeSurface(f);
+        // u12: сторона выдавленного отрезка — тоже плоскость (боковые грани куба из эскиза): эскиз на ней держится за грань
+        if (src is Kernel.Surfaces.ExtrudedSurface { Base: Kernel.Curves.LineCurve3 ln } ex && ex.Dir.LengthSquared > 1e-18)
+        {
+            var nn = Vector3d.Cross(ln.B - ln.A, ex.Dir);
+            if (nn.LengthSquared < 1e-18) return null;
+            nn = nn.Normalized();
+            // сторона — как у нормали грани
+            var mid = (ln.A + ln.B) / 2 + ex.Dir * 0.5;
+            if (Vector3d.Dot(f.NormalAt(mid), nn) < 0) nn = -nn;
+            return (ln.A, nn);
+        }
+        if (src is not PlaneSurface ps) return null;
         return (ps.F.Origin, f.Reversed ? -ps.F.W : ps.F.W);
     }
 

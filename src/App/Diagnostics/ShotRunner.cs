@@ -30,6 +30,21 @@ public static class ShotRunner
             Console.WriteLine($"handle drag {id}");
             return;
         }
+        if (id.StartsWith("snap:"))
+        {
+            // промежуточный снимок кадра (разбор мигания): snap:имя → рядом с основным снимком
+            var path = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(AppStartup.Arg("--shot") ?? ".") ?? ".", id[5..] + ".png");
+            w.ViewPort.CaptureNextFrame = (px, pw, ph) => { Shots.SavePng(path, px, pw, ph, flip: true); Console.WriteLine("SNAP " + path); };
+            w.ViewPort.Redraw();
+            return;
+        }
+        if (id.StartsWith("rot:"))
+        {
+            // поворот вида: наклон (вокруг X) и разворот (вокруг Y), градусы — как изометрия «домой»
+            var a = id[4..].Split(',').Select(v => float.Parse(v, System.Globalization.CultureInfo.InvariantCulture) * MathF.PI / 180).ToArray();
+            w.ViewPort.AnimateTo(OpenTK.Mathematics.Quaternion.FromAxisAngle(OpenTK.Mathematics.Vector3.UnitX, a[0]) * OpenTK.Mathematics.Quaternion.FromAxisAngle(OpenTK.Mathematics.Vector3.UnitY, a[1]));
+            Console.WriteLine("rot " + id); return;
+        }
         if (id.StartsWith("mat:") && w.Session.Part is { } mp && Model.Material.FromLibrary(id[4..]) is { } mm)
         {
             mp.Material = mm; w.ViewPort.MarkDirty(); Console.WriteLine("material " + mm.Name); return;
