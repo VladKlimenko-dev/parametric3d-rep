@@ -70,6 +70,7 @@ public static class SketchDimensions
                 case DimensionType.Diameter:
                 case DimensionType.EllipseRadiusU:
                 case DimensionType.EllipseRadiusV:
+                case DimensionType.ArcLength:
                     BuildRadial(d, plane, batch, pixelSize, style);
                     break;
 

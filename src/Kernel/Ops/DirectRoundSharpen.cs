@@ -18,6 +18,9 @@ public static partial class DirectRound
     /// <summary>Разбор: сколько тел заострено перед смещением.</summary>
     public static int OffsetSharpened;
 
+    internal static double? OffsetRadiusOf(TFace f, double d) => OffsetRadius(f, d);
+    internal static TSolid? SharpenFaces(TSolid body, HashSet<TFace> vanish, double tol, ref string? why) => Sharpen(body, vanish, tol, out _, ref why);
+
     /// <summary>Радиус смещённой поверхности (цилиндр, круговое выдавливание, тор и шар); null — у грани нет радиуса.</summary>
     static double? OffsetRadius(TFace f, double d)
     {

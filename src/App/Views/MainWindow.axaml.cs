@@ -396,24 +396,33 @@ public partial class MainWindow : Window
         fl.ShowAt(anchor);
     }
 
-    /// <summary>Полоса команд слева: операции модели или инструменты эскиза (п. 3, 9).</summary>
+    /// <summary>Полоса команд слева: операции модели или инструменты эскиза (п. 3, 9). u13: у группы — «Ещё…» (кнопки таблицы).</summary>
     private void BuildCommandBar()
     {
         CommandStack.Children.Clear();
-        string[][] groups = InSketch
+        (string[] Main, string[] More)[] groups = InSketch
             ? new[]
             {
-                new[] { "sk.line", "sk.rect", "sk.circle", "sk.circle3", "sk.arc3", "sk.arc_center", "sk.ellipse", "sk.spline", "sk.point", "sk.centerline" },
-                new[] { "sk.construction", "sk.grid", "sk.references" },
-                new[] { "sk.finish", "sk.cancel" },
+                (new[] { "sk.line", "sk.rect", "sk.circle", "sk.arc3", "sk.spline", "sk.point", "sk.centerline" },
+                 new[] { "sk.rect_center", "sk.rect_3p", "sk.circle3", "sk.circle_2p", "sk.arc_center", "sk.arc_tangent", "sk.ellipse", "sk.ellipse_5p", "sk.spline_through", "sk.spline_cv", "sk.polygon", "sk.slot", "sk.text", "sk.csys" }),
+                (new[] { "sk.trim", "sk.fillet", "sk.offset" },
+                 new[] { "sk.split", "sk.chamfer", "sk.mirror", "sk.transform", "sk.line_tangent2", "sk.use_edge", "sk.offset_edge", "sk.thicken_edge" }),
+                (new[] { "dim.smart", "con.coincident", "con.horizontal", "con.vertical", "con.tangent" },
+                 new[] { "dim.linear", "dim.radius", "dim.diameter", "dim.angle", "dim.arc_length", "dim.area", "dim.reference", "dim.link_param", "dim.arrows_outside", "dim.lock",
+                         "con.point_on", "con.midpoint", "con.parallel", "con.perpendicular", "con.collinear", "con.equal", "con.concentric", "con.symmetric", "con.fix" }),
+                (new[] { "sk.construction", "sk.grid", "sk.references" },
+                 new[] { "sk.snap_items", "sk.show_open_ends", "sk.show_filled", "sk.show_conflicts", "sk.setup" }),
+                (new[] { "sk.finish", "sk.cancel" }, Array.Empty<string>()),
             }
             : new[]
             {
-                new[] { "op.sketch" },
-                new[] { "op.extrude", "op.cut", "op.revolve" },
-                new[] { "op.hole", "op.round", "op.chamfer", "op.vertex_round", "op.shell" },
-                new[] { "op.plane" },
-                new[] { "op.mirror", "op.pattern_linear", "op.pattern_circular" },
+                (new[] { "op.sketch" }, Array.Empty<string>()),
+                (new[] { "op.extrude", "op.cut", "op.revolve" }, new[] { "op.extrude_thin", "op.sweep", "op.helical_sweep", "op.loft", "op.rib" }),
+                (new[] { "op.hole", "op.round", "op.chamfer", "op.shell" }, new[] { "op.round_variable", "op.vertex_round", "op.vertex_chamfer", "op.draft", "op.thread" }),
+                (Array.Empty<string>(), new[] { "op.face_offset", "op.face_move", "op.face_radius", "op.face_delete", "op.move_copy" }),
+                (new[] { "op.plane" }, new[] { "op.plane_offset", "op.plane_mid", "op.plane_3pt", "op.plane_axis", "op.plane_normal_curve", "op.plane_tangent", "op.axis", "op.axis_face", "op.axis_intersect", "op.point", "op.point_center", "op.point_intersect" }),
+                (new[] { "op.mirror", "op.pattern_linear", "op.pattern_circular" }, new[] { "op.pattern_points", "op.pattern_curve", "op.pattern_fill", "op.move_copy" }),
+                (Array.Empty<string>(), new[] { "tree.rebuild", "tree.needs_attention", "tree.resume", "tree.insert_here", "tree.reorder_up", "tree.reorder_down", "tree.edit_dims" }),
             };
         CommandStack.Children.Add(new TextBlock
         {
@@ -422,7 +431,19 @@ public partial class MainWindow : Window
         for (int g = 0; g < groups.Length; g++)
         {
             if (g > 0) CommandStack.Children.Add(Separator(false));
-            foreach (var id in groups[g]) CommandStack.Children.Add(CmdButton(_reg[id], 20, text: true, minWidth: 128));
+            foreach (var id in groups[g].Main) if (_reg.Find(id) is { } c) CommandStack.Children.Add(CmdButton(c, 20, text: true, minWidth: 128));
+            if (groups[g].More.Length > 0)
+            {
+                var more = groups[g].More.Where(id => _reg.Find(id) != null).ToArray();
+                var b = new Button { Content = L("Ещё…"), Classes = { "tool" }, MinWidth = 128, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 2) };
+                b.Click += (_, _) =>
+                {
+                    var sp = new StackPanel { Spacing = 1 };
+                    foreach (var id in more) sp.Children.Add(CmdButton(_reg[id], 18, text: true, minWidth: 220));
+                    new Flyout { Content = new ScrollViewer { Content = sp, MaxHeight = 560 }, Placement = PlacementMode.RightEdgeAlignedTop }.ShowAt(b);
+                };
+                CommandStack.Children.Add(b);
+            }
         }
     }
 
@@ -888,6 +909,8 @@ public partial class MainWindow : Window
     private void AddSketchReference(PickRef r)
     {
         if (View.ActiveSketch is not { } sk || r.Owner is not Part part) return;
+        // u13: режим «использовать / сместить / утолщить ребро» — ребро становится основной геометрией эскиза
+        if (Commands.SketchEditCommands.OnModelEdge(this, sk, part, r)) { ScheduleTree(); return; }
         var err = SketchReferences.Add(sk, part, r);
         if (err != null) { ShowToast(err, error: false); return; }
         try { sk.Solve(Session.Document.Solver); } catch (Exception ex) { AppLog.Write("sketch solve", ex); }
@@ -1031,26 +1054,26 @@ public partial class MainWindow : Window
         {
             d.UserLocked = !d.UserLocked;
             if (d.UserLocked) { d.IsDefault = false; d.Locked = true; }
-        }, d.UserLocked ? "sk_unlock_but.svg" : "sk_lock_but.svg");
+        }, d.UserLocked ? "dim_lock_ico.svg" : "dim_unlock_ico.svg");
         Add(d.Reference ? "Сделать управляющим" : "Сделать справочным", !d.UserLocked, () =>
         {
             d.Reference = !d.Reference;
             if (d.Reference) { d.Locked = false; d.IsDefault = false; } else { d.Locked = true; }
-        });
+        }, "dim_reference_but.svg");
         items.Add(new Separator());
-        Add("Стрелки снаружи (наружный размер)", true, () => d.Arrows = ArrowPlacement.Outside, check: d.Arrows == ArrowPlacement.Outside);
+        Add("Стрелки снаружи (наружный размер)", true, () => d.Arrows = ArrowPlacement.Outside, d.Type == DimensionType.Diameter ? "dim_diameter_outside_ico.svg" : d.Type == DimensionType.Radius ? "dim_radius_outside_ico.svg" : d.Type == DimensionType.AngleLineLine ? "dim_angle_outside_ico.svg" : "dim_arrows_outside_but.svg", check: d.Arrows == ArrowPlacement.Outside);
         Add("Стрелки внутри (внутренний размер)", true, () => d.Arrows = ArrowPlacement.Inside, check: d.Arrows == ArrowPlacement.Inside);
         Add("Стрелки — автоматически", true, () => d.Arrows = ArrowPlacement.Auto, check: d.Arrows == ArrowPlacement.Auto);
         if (radial)
         {
             items.Add(new Separator());
-            Add("Одна стрелка", true, () => d.SingleArrow = !d.SingleArrow, check: d.SingleArrow);
+            Add("Одна стрелка", true, () => d.SingleArrow = !d.SingleArrow, d.Type == DimensionType.Diameter ? "dim_diameter_arrow_ico.svg" : "dim_radius_arrow_ico.svg", check: d.SingleArrow);
             if (d.Type == DimensionType.Radius)
                 Add("Сделать диаметром", !d.UserLocked, () => { d.Type = DimensionType.Diameter; d.Value *= 2; d.Formula = d.Formula == null ? null : $"({d.Formula})*2"; });
             else
             {
                 Add("Сделать радиусом", !d.UserLocked, () => { d.Type = DimensionType.Radius; d.Value /= 2; d.Formula = d.Formula == null ? null : $"({d.Formula})/2"; d.DiameterAsLinear = false; });
-                Add("Показать как размер", true, () => d.DiameterAsLinear = !d.DiameterAsLinear, check: d.DiameterAsLinear);
+                Add("Показать как размер", true, () => d.DiameterAsLinear = !d.DiameterAsLinear, "dim_diameter_size_ico.svg", check: d.DiameterAsLinear);
             }
         }
         items.Add(new Separator());
@@ -1089,14 +1112,15 @@ public partial class MainWindow : Window
         if (sketch) res.Add("op.rib");
         if (planar) res.AddRange(new[] { "op.sketch", "op.extrude", "op.plane", "op.mirror" });
         if (planes >= 2) res.AddRange(new[] { "op.plane_mid", "op.axis_intersect" });
-        if (face) res.AddRange(new[] { "op.hole", "op.shell", "op.draft" });
-        if (curved) res.AddRange(new[] { "op.axis_face", "op.plane_tangent" });
+        if (face) res.AddRange(new[] { "op.hole", "op.shell", "op.draft", "op.face_offset" });
+        if (curved) res.AddRange(new[] { "op.axis_face", "op.plane_tangent", "op.face_radius", "op.thread" });
         if (edge) res.AddRange(new[] { "op.round", "op.chamfer", "op.round_variable" });
         if (arc) res.Add("op.point_center");
         if (vertex) res.AddRange(new[] { "op.vertex_round", "op.vertex_chamfer" });
         if (linear && !sketch) res.Add("op.pattern_linear");
         if (axis || linear && !sketch) res.Add("op.pattern_circular");
         if (feature) res.AddRange(new[] { "edit.feature", "edit.suppress", "edit.delete" });
+        if (feature && sketch) res.AddRange(new[] { "op.pattern_points", "op.pattern_curve", "op.pattern_fill" });
         if (part) res.AddRange(new[] { "view.isolate", "app.parameters", "app.properties" });
         return res.Distinct().ToList();
     }
@@ -1319,6 +1343,7 @@ public partial class MainWindow : Window
     public void SetTool(ISketchTool t)
     {
         if (!InSketch) return;
+        Commands.SketchEditCommands.Mode = Commands.SketchEditCommands.EdgeMode.None;
         if (ConstructionMode && t.Role == SkRole.Object) t.Role = SkRole.Construction;
         View.Tool = t;
         RefreshToolStates();
@@ -1333,6 +1358,7 @@ public partial class MainWindow : Window
 
     public void FinishSketch()
     {
+        Commands.SketchEditCommands.Mode = Commands.SketchEditCommands.EdgeMode.None;
         if (View.ActiveSketch is not { } sk) return;
         View.ToolFinish();
         View.ExitSketch();
@@ -1689,6 +1715,7 @@ public partial class MainWindow : Window
         {
             e.Handled = true;
             if (Toast.IsVisible) { Toast.IsVisible = false; return; }
+            if (InSketch && Commands.SketchEditCommands.Mode != Commands.SketchEditCommands.EdgeMode.None) { Commands.SketchEditCommands.Mode = Commands.SketchEditCommands.EdgeMode.None; return; }
             if (InSketch && View.Tool != null) { View.Tool = null; return; }
             if (CurrentOperation != null) { CancelOperation(); return; }
             if (!View.Selection.IsEmpty) { View.Selection.Clear(); return; }

@@ -190,6 +190,25 @@ public static class DocumentFile
         return dto;
     }
 
+    // u13: общие поля новых операций (числа, формулы, флаги по имени)
+    private static FeatureDto Dto(string kind, Feature f, Action<FeatureDto> fill)
+    {
+        var d = new FeatureDto { Kind = kind, Name = f.Name, Suppressed = f.Suppressed, Cut = f.Cut };
+        fill(d); return d;
+    }
+    private static void PutV(FeatureDto d, string key, ValueRef v)
+    {
+        (d.Num ??= new())[key] = v.Value;
+        if (v.Formula != null) (d.Str ??= new())[key] = v.Formula;
+    }
+    private static void PutS(FeatureDto d, string key, string? v) { if (v != null) (d.Str ??= new())[key] = v; }
+    private static void Flag(FeatureDto d, string key) => (d.Flags ??= new()).Add(key);
+    private static ValueRef GetV(FeatureDto d, string key, double dflt)
+        => new(d.Num != null && d.Num.TryGetValue(key, out var v) ? v : dflt) { Formula = d.Str != null && d.Str.TryGetValue(key, out var f) ? f : null };
+    private static double GetD(FeatureDto d, string key, double dflt) => d.Num != null && d.Num.TryGetValue(key, out var v) ? v : dflt;
+    private static string? GetS(FeatureDto d, string key) => d.Str != null && d.Str.TryGetValue(key, out var v) ? v : null;
+    private static bool HasFlag(FeatureDto d, string key) => d.Flags?.Contains(key) == true;
+
     private static FeatureDto? SaveFeature(Feature f) => f switch
     {
         ExtrudeFeature e => new FeatureDto
@@ -203,7 +222,10 @@ public static class DocumentFile
             Flip = e.Side1.Flip,
             TwoSided = e.TwoSided,
             Symmetric = e.Symmetric,
-            Cut = e.Cut
+            Cut = e.Cut,
+            Num = e.Thin is { } th ? new() { ["thin"] = th.Value } : null,
+            Str = e.Thin is { Formula: { } tf } ? new() { ["thin"] = tf } : null,
+            Flags = e.ThinOutside ? new() { "thinOutside" } : null,
         },
         RevolveFeature r => new FeatureDto
         {
@@ -347,6 +369,37 @@ public static class DocumentFile
             Distance = rb.Thickness.Value, Formula = rb.Thickness.Formula,
             Distance2 = rb.MaxLength.Value, Formula2 = rb.MaxLength.Formula
         },
+
+        MoveCopyFeature mc => Dto("move_copy", mc, d =>
+        {
+            PutV(d, "dx", mc.Dx); PutV(d, "dy", mc.Dy); PutV(d, "dz", mc.Dz); PutV(d, "angle", mc.Angle);
+            d.Point = new[] { mc.AxisAt.X, mc.AxisAt.Y, mc.AxisAt.Z }; d.Dir = new[] { mc.AxisDir.X, mc.AxisDir.Y, mc.AxisDir.Z };
+            if (mc.Copy) Flag(d, "copy");
+        }),
+        FaceEditFeature fe => Dto("face_edit", fe, d =>
+        {
+            PutS(d, "mode", fe.Mode.ToString()); PutV(d, "distance", fe.Distance); PutV(d, "radius", fe.Radius);
+            d.OpenFaces = fe.OnFaces.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList();
+            d.FaceNames = fe.OnFaceNames.Count > 0 ? fe.OnFaceNames.ToList() : null;
+        }),
+        PointsPatternFeature pp => Dto("points_pattern", pp, d =>
+        {
+            PutS(d, "mode", pp.Mode.ToString()); d.SketchId = pp.SketchId;
+            PutV(d, "count", pp.Count); PutV(d, "spacing", pp.Spacing); PutV(d, "margin", pp.Margin);
+            d.Sources = pp.Sources.Count == 0 ? null : pp.Sources.ToList();
+        }),
+        CosmeticThreadFeature ct => Dto("thread", ct, d =>
+        {
+            PutV(d, "pitch", ct.Pitch); PutV(d, "length", ct.Length);
+            d.OpenFaces = ct.OnFaces.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList();
+            d.FaceNames = ct.OnFaceNames.Count > 0 ? ct.OnFaceNames.ToList() : null;
+        }),
+
+        HelicalSweepFeature hs => Dto("helical_sweep", hs, d =>
+        {
+            d.SketchId = hs.SketchId; d.AxisId = hs.AxisId; d.AxisEntityId = hs.AxisEntityId;
+            PutV(d, "pitch", hs.Pitch); PutV(d, "turns", hs.Turns); if (hs.LeftHand) Flag(d, "left");
+        }),
 
         LoftFeature lf => new FeatureDto
         {
@@ -587,6 +640,8 @@ public static class DocumentFile
                     e.TwoSided = fd.TwoSided;
                     e.Symmetric = fd.Symmetric;
                     e.Cut = fd.Cut;
+                    if (fd.Num != null && fd.Num.TryGetValue("thin", out var thin)) e.Thin = new ValueRef(thin) { Formula = fd.Str != null && fd.Str.TryGetValue("thin", out var tf) ? tf : null };
+                    e.ThinOutside = fd.Flags?.Contains("thinOutside") == true;
                     part.AddFeature(e);
                     break;
                 }
@@ -684,6 +739,48 @@ public static class DocumentFile
                     rb.Thickness = new ValueRef(fd.Distance) { Formula = fd.Formula };
                     rb.MaxLength = new ValueRef(fd.Distance2) { Formula = fd.Formula2 };
                     part.AddFeature(rb);
+                    break;
+                }
+
+                case "move_copy":
+                {
+                    var mc = new MoveCopyFeature(fd.Name) { Suppressed = fd.Suppressed, Dx = GetV(fd, "dx", 0), Dy = GetV(fd, "dy", 0), Dz = GetV(fd, "dz", 0), Angle = GetV(fd, "angle", 0), AxisAt = Vec(fd.Point), Copy = HasFlag(fd, "copy") };
+                    var ad = Vec(fd.Dir); if (ad.LengthSquared > 1e-18) mc.AxisDir = ad;
+                    part.AddFeature(mc);
+                    break;
+                }
+                case "face_edit":
+                {
+                    var fe = new FaceEditFeature(fd.Name) { Suppressed = fd.Suppressed, Distance = GetV(fd, "distance", 2), Radius = GetV(fd, "radius", 5) };
+                    if (Enum.TryParse<FaceEditMode>(GetS(fd, "mode"), out var fm)) fe.Mode = fm;
+                    for (int i = 0; i + 2 < fd.OpenFaces.Count; i += 3) fe.OnFaces.Add(new Vector3d(fd.OpenFaces[i], fd.OpenFaces[i + 1], fd.OpenFaces[i + 2]));
+                    if (fd.FaceNames != null) fe.OnFaceNames.AddRange(fd.FaceNames);
+                    part.AddFeature(fe);
+                    break;
+                }
+                case "points_pattern":
+                {
+                    var ppf = new PointsPatternFeature(fd.Name) { Suppressed = fd.Suppressed, Count = GetV(fd, "count", 4), Spacing = GetV(fd, "spacing", 10), Margin = GetV(fd, "margin", 0) };
+                    if (Enum.TryParse<PointsPatternMode>(GetS(fd, "mode"), out var pm)) ppf.Mode = pm;
+                    if (sketchById.TryGetValue(fd.SketchId, out var psk)) ppf.SketchId = psk.Id;
+                    if (fd.Sources != null) ppf.Sources.AddRange(fd.Sources);
+                    part.AddFeature(ppf);
+                    break;
+                }
+                case "thread":
+                {
+                    var ct = new CosmeticThreadFeature(fd.Name) { Suppressed = fd.Suppressed, Pitch = GetV(fd, "pitch", 1.5), Length = GetV(fd, "length", 0) };
+                    for (int i = 0; i + 2 < fd.OpenFaces.Count; i += 3) ct.OnFaces.Add(new Vector3d(fd.OpenFaces[i], fd.OpenFaces[i + 1], fd.OpenFaces[i + 2]));
+                    if (fd.FaceNames != null) ct.OnFaceNames.AddRange(fd.FaceNames);
+                    part.AddFeature(ct);
+                    break;
+                }
+                case "helical_sweep":
+                {
+                    var hs = new HelicalSweepFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut, AxisId = fd.AxisId, AxisEntityId = fd.AxisEntityId };
+                    if (sketchById.TryGetValue(fd.SketchId, out var hsk)) hs.SketchId = hsk.Id;
+                    hs.Pitch = GetV(fd, "pitch", 5); hs.Turns = GetV(fd, "turns", 3); hs.LeftHand = HasFlag(fd, "left");
+                    part.AddFeature(hs);
                     break;
                 }
 
@@ -1062,6 +1159,10 @@ public static class DocumentFile
         public List<string?>? FaceNames { get; set; }
         /// <summary>K02: своя политика операции; null — как у детали.</summary>
         public string? Policy { get; set; }
+        /// <summary>u13: числа, строки и флаги новых операций по имени (без отдельного поля на каждое).</summary>
+        public Dictionary<string, double>? Num { get; set; }
+        public Dictionary<string, string?>? Str { get; set; }
+        public List<string>? Flags { get; set; }
         public string Kind { get; set; } = "";
         public string Name { get; set; } = "";
         public bool Suppressed { get; set; }
