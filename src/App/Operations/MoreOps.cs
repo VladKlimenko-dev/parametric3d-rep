@@ -57,8 +57,9 @@ public sealed class SweepOp : FeatureOp<SweepFeature>
     public override void Build(OpPanel p)
     {
         _sec = p.Ref(new RefField { Label = "Сечение", Filter = PickFilter.SketchCurves, Accept = Refs.IsSketch, Single = true, Describe = r => L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?") });
-        _path = p.Ref(new RefField { Label = "Траектория", Filter = PickFilter.SketchCurves, Accept = Refs.IsSketch, Single = true, Describe = r => L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?") });
-        if (Editing) { _sec.Kept = F.SectionSketchId != 0 ? 1 : 0; _path.Kept = F.PathSketchId != 0 ? 1 : 0; }
+        _path = p.Ref(new RefField { Label = "Траектория", Filter = PickFilter.SketchCurves | PickFilter.Datums, Accept = r => Refs.IsSketch(r) || r.Target is DatumCurve or Line3DItem, Single = true,
+            Describe = r => r.Target is DatumCurve or Line3DItem ? L("Кривая «{0}»", ((ModelItem)r.Target!).Name) : L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?") });
+        if (Editing) { _sec.Kept = F.SectionSketchId != 0 ? 1 : 0; _path.Kept = F.PathSketchId != 0 || F.PathLineId != 0 ? 1 : 0; }
         p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
         p.Number("Закрутка", () => F.Twist, v => F.Twist = v, "°");
         p.Number("Доля траектории", () => F.LengthFraction, v => F.LengthFraction = v, "");
@@ -72,12 +73,14 @@ public sealed class SweepOp : FeatureOp<SweepFeature>
         var sk = W.ViewPort.Selection.Items.Where(Refs.IsSketch).GroupBy(r => Refs.SketchOf(r)!.Id).Select(g => g.First()).ToList();
         if (sk.Count > 0) _sec.Take(new[] { sk[0] });
         if (sk.Count > 1) _path.Take(new[] { sk[1] });
+        else if (W.ViewPort.Selection.Items.FirstOrDefault(r => r.Target is DatumCurve or Line3DItem) is { IsEmpty: false } dc) _path.Take(new[] { dc });
     }
 
     protected override void Push()
     {
         if (_sec.Items.Count > 0 && Refs.SketchOf(_sec.Items[0]) is { } s) F.SectionSketchId = s.Id;
-        if (_path.Items.Count > 0 && Refs.SketchOf(_path.Items[0]) is { } t) F.PathSketchId = t.Id;
+        if (_path.Items.Count > 0 && _path.Items[0].Target is DatumCurve or Line3DItem) { F.PathLineId = ((ModelItem)_path.Items[0].Target!).Id; F.PathSketchId = 0; }
+        else if (_path.Items.Count > 0 && Refs.SketchOf(_path.Items[0]) is { } t) { F.PathSketchId = t.Id; F.PathLineId = 0; }
     }
 }
 

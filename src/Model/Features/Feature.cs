@@ -177,6 +177,8 @@ public abstract class Feature : ModelItem
     /// «#ключ/имя», и две операции выдавливания больше не дают граням одинаковых имён.
     /// </summary>
     public string Key = NewKey();
+    /// <summary>u13: группа операций в дереве (папка); пусто — без группы.</summary>
+    public string? Group;
 
     /// <summary>
     /// K02. Политика этой операции: null — как у детали. Позволяет разрешить приближённый путь

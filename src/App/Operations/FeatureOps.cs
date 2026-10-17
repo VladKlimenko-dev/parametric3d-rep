@@ -814,6 +814,7 @@ public static class OperationFactory
         FaceEditFeature x => new FaceEditOp(x),
         PointsPatternFeature x => new PointsPatternOp(x),
         CosmeticThreadFeature x => new CosmeticThreadOp(x),
+        FullRoundFeature x => new FullRoundOp(x),
         _ => null,
     };
 }

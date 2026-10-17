@@ -721,6 +721,98 @@ Check("UI-U13D-CONTEXT", () =>
     w.Close();
 });
 
+// u13e: система координат, опорные кривые (через точки, уравнение, проекция), протяжка по кривой, соосное и радиальное
+// отверстия, полное скругление, группа, родители и потомки, замена эскиза, сохранение опорных элементов
+Check("UI-U13E-DATUMS-HOLES", () =>
+{
+    var s = DocumentSession.NewPart(); var w = Open(s); var part = s.Part!;
+    var b = DrawSketch(w, part, part.PlaneXY, sk => Rect(sk, 0, 0, 40, 20));
+    var e = new ExtrudeFeature { SketchId = b.Id }; e.Side1.Distance = new ValueRef(10); part.AddFeature(e); s.Document.RebuildDirty(); part.Rebuild(null);
+    // система координат по трём плоскостям детали — в начале
+    w.ViewPort.Selection.Clear(); foreach (var pl in new[] { part.PlaneXY, part.PlaneXZ, part.PlaneYZ }) Select(w, new PickRef(pl.Id, PickKind.DatumPlane, part, pl));
+    var cop = new CsysOp(); w.StartOperation(cop); w.CommitOperation();
+    var cs = part.Children.OfType<DatumCsys>().Single();
+    Require(cs.Frame.Origin.Length < 1e-9, $"csys origin {cs.Frame.Origin}");
+    // кривая по уравнению: винтовая линия R50, 2 витка
+    var eq = CurveOp.Equation(s.Document.ScopeFor(part), "50*cos(t)", "50*sin(t)", "t/10", 0, 720, 200, out var why);
+    Require(eq != null && eq.Count == 201 && (eq[^1] - new Vector3d(50, 0, 72)).Length < 1e-9, $"equation curve {why}");
+    // через точки: гладкая проходит через точки
+    var q = new List<Vector3d> { new(0, 0, 0), new(10, 5, 0), new(20, 0, 5), new(30, 5, 5) };
+    var tp = CurveOp.ThroughPoints(q, false, true);
+    Require(q.All(x => tp.Any(y => (x - y).Length < 1e-9)), "through points");
+    // проекция отрезка на верхнюю грань вдоль −Z
+    var top = part.Bodies[0].Faces.First(f => Refs.FacePlane(part, f.Id) is { } pl && pl.N.Z > 0.99);
+    var tris = new List<(Vector3d, Vector3d, Vector3d)>();
+    var md = part.Mesh!; for (int i = 0; i + 2 < md.Indices.Length; i += 3) if (md.Vertices[md.Indices[i]].FaceId == top.Id) tris.Add((V(md.Vertices[md.Indices[i]].P), V(md.Vertices[md.Indices[i + 1]].P), V(md.Vertices[md.Indices[i + 2]].P)));
+    var pr = CurveOp.Project(Enumerable.Range(0, 11).Select(i => new Vector3d(5 + 3 * i, 10, 50)), -Vector3d.UnitZ, tris);
+    Require(pr.Count == 11 && pr.All(x => Math.Abs(x.Z - 10) < 1e-6), "projection");
+    // соосное отверстие Ø6 на оси отверстия Ø4 в (10, 10) — с верхней грани насквозь
+    var hs = DrawSketch(w, part, part.PlaneXY, sk => { var c = new CircleTool(); c.Click(new SketchInput(sk, new Vector2d(10, 10), null)); c.Click(new SketchInput(sk, new Vector2d(12, 10), null)); });
+    var cut = new ExtrudeFeature { SketchId = hs.Id, Cut = true }; cut.Side1.Distance = new ValueRef(10); part.AddFeature(cut); s.Document.RebuildDirty(); part.Rebuild(null);
+    var cylFace = part.Bodies[0].Faces.First(f => Parametric3D.Kernel.Ops.DirectEdit.RadiusAfter(f, 0) is { } rr && Math.Abs(rr - 2) < 1e-9);
+    top = part.Bodies[0].Faces.First(f => Refs.FacePlane(part, f.Id) is { } pl && pl.N.Z > 0.99);
+    w.ViewPort.Selection.Clear(); Select(w, new PickRef(cylFace.Id, PickKind.Face, part, null)); Select(w, new PickRef(top.Id, PickKind.Face, part, null));
+    var hop = new AxialHoleOp(); w.StartOperation(hop);
+    var hf = part.Features.OfType<HoleFeature>().Last(); hf.ThroughAll = true; hf.Diameter = new ValueRef(6);
+    w.CommitOperation(); s.Document.RebuildDirty();
+    Console.WriteLine($"  coaxial: error {hf.Error}, at {hf.Points.FirstOrDefault()}, dir {hf.Direction}, volume {part.Volume:F4}");
+    Require(hf.Error == null && Math.Abs(part.Volume - (8000 - Math.PI * 9 * 10)) < 1e-4, "coaxial hole");
+    // группа, родители и потомки
+    TreeCommands.SetGroup(w, new Feature[] { cut, hf }, "Отверстия");
+    var roots = TreeNode.Build(s.Document);
+    var grp = roots[0].Children.FirstOrDefault(n => n.Item is InfoItem { Role: "group" });
+    Require(grp != null && grp.Children.Count == 2, "group node");
+    var redge = part.Bodies[0].Edges.First(x => x.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(x.V0.P.Z - 10) < 1e-6 && Math.Abs(x.V1.P.Z - 10) < 1e-6 && Math.Abs(x.V0.P.Y - 20) < 1e-9 && Math.Abs(x.V1.P.Y - 20) < 1e-9);
+    var rnd = new RoundFeature { Radius = new ValueRef(2) }; rnd.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(redge)); part.AddFeature(rnd); s.Document.RebuildDirty();
+    var par = TreeCommands.Parents(part, rnd);
+    Console.WriteLine($"  parents of round: {string.Join(", ", par.Select(x => x.Name))}");
+    Require(par.Contains(e) && TreeCommands.Children(part, e).Contains(rnd), "parents and children");
+    part.RemoveFeature(rnd); s.Document.RebuildDirty();
+    Require(TreeCommands.Parents(part, cut).Any(x => x is Sketch), "sketch parent");
+    // сохранение и загрузка: опорные элементы и группа
+    var cv = new DatumCurve("K", tp, "through points"); part.Add(cv);
+    var json = Parametric3D.Model.DocumentFile.Save(part, s.Document.ScopeFor(part));
+    var (p2, _) = Parametric3D.Model.DocumentFile.Load(json);
+    Require(p2.Children.OfType<DatumCsys>().Count() == 1 && p2.Children.OfType<DatumCurve>().Single().Points.Count == tp.Count, "datums saved");
+    Require(p2.Features.Count(f => f.Group == "Отверстия") == 2, "group saved");
+    // замена эскиза выдавливания: прямоугольник 40×30
+    var b2 = DrawSketch(w, part, part.PlaneXY, sk => Rect(sk, 0, 0, 40, 30));
+    TreeCommands.ReplaceSketch(w, e, b2); s.Document.RebuildDirty();
+    Console.WriteLine($"  replace sketch: volume {part.Volume:F4}");
+    Require(e.SketchId == b2.Id && Math.Abs(part.Volume - (12000 - Math.PI * 9 * 10)) < 1e-4, "replace sketch");
+    w.Close();
+
+    // радиальное отверстие Ø4 насквозь в цилиндре R10 высотой 40
+    var s3 = DocumentSession.NewPart(); var w3 = Open(s3); var p3 = s3.Part!;
+    var cs3 = DrawSketch(w3, p3, p3.PlaneXY, sk => { var c = new CircleTool(); c.Click(new SketchInput(sk, Vector2d.Zero, null)); c.Click(new SketchInput(sk, new Vector2d(10, 0), null)); });
+    var ce = new ExtrudeFeature { SketchId = cs3.Id }; ce.Side1.Distance = new ValueRef(40); p3.AddFeature(ce); s3.Document.RebuildDirty(); p3.Rebuild(null);
+    double v3 = p3.Volume;
+    var side = p3.Bodies[0].Faces.First(f => Parametric3D.Kernel.Ops.DirectEdit.RadiusAfter(f, 0) is { } rr && Math.Abs(rr - 10) < 1e-9);
+    var pt = DrawSketch(w3, p3, p3.PlaneXZ, sk => sk.AddEntity(new SkPoint(new Vector2d(10, 20))));
+    var ptRef = new PickRef(pt.Entities.OfType<SkPoint>().First().Id, PickKind.SketchPoint, pt, pt.Entities.OfType<SkPoint>().First());
+    w3.ViewPort.Selection.Clear(); Select(w3, new PickRef(side.Id, PickKind.Face, p3, null)); Select(w3, ptRef);
+    var rop = new AxialHoleOp { Radial = true }; w3.StartOperation(rop);
+    var rh = p3.Features.OfType<HoleFeature>().Last(); rh.ThroughAll = true; rh.Diameter = new ValueRef(4);
+    w3.CommitOperation(); s3.Document.RebuildDirty();
+    double removed = v3 - p3.Volume, approx = Math.PI * 4 * 20;
+    Console.WriteLine($"  radial: error {rh.Error}, at {rh.Points.FirstOrDefault()}, dir {rh.Direction}, removed {removed:F3} (≈ {approx:F3})");
+    Require(rh.Error == null && removed > 0.97 * approx && removed < approx, "radial hole");
+    w3.Close();
+
+    // полное скругление ребра 10 × 40 × 20: верхняя грань → полуцилиндр R5
+    var s4 = DocumentSession.NewPart(); var w4 = Open(s4); var p4 = s4.Part!;
+    var rs = DrawSketch(w4, p4, p4.PlaneXY, sk => Rect(sk, 0, 0, 10, 40));
+    var re = new ExtrudeFeature { SketchId = rs.Id }; re.Side1.Distance = new ValueRef(20); p4.AddFeature(re); s4.Document.RebuildDirty(); p4.Rebuild(null);
+    Vector3d FaceN(Vector3d n) { var f = p4.Bodies[0].Faces.First(x => Refs.FacePlane(p4, x.Id) is { } pl && (pl.N - n).Length < 1e-9); return Parametric3D.Model.Features.FaceRefs.Inside(f); }
+    var fr = new FullRoundFeature(); fr.OnFaces.Add(FaceN(-Vector3d.UnitX)); fr.OnFaces.Add(FaceN(Vector3d.UnitZ)); fr.OnFaces.Add(FaceN(Vector3d.UnitX));
+    p4.AddFeature(fr); s4.Document.RebuildDirty();
+    double want = 8000 - 2000 + Math.PI * 25 / 2 * 40;
+    Console.WriteLine($"  full round: error {fr.Error}, volume {p4.Volume:F4} want {want:F4}, faces {p4.Bodies.FirstOrDefault()?.Faces.Count()}");
+    Require(fr.Error == null && Math.Abs(p4.Volume - want) < 1e-3 * want, "full round");
+    w4.Close();
+});
+Vector3d V(OpenTK.Mathematics.Vector3 v) => new(v.X, v.Y, v.Z);
+
 // u13: опорные элементы кнопок (плоскость посередине и касательная, ось грани, точка в центре дуги) и уклон
 Check("UI-U13-DATUMS-DRAFT", () =>
 {

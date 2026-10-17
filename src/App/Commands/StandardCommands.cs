@@ -142,6 +142,10 @@ public static class StandardCommands
             ["op.pattern_curve"] = () => Fits(x => IsFeat(x) || SketchLike(x)),
             ["op.pattern_fill"] = () => Fits(x => IsFeat(x) || SketchLike(x)),
             ["op.thread"] = () => Fits(x => x.Kind == PickKind.Face),
+            // u13e
+            ["op.full_round"] = () => Fits(x => x.Kind == PickKind.Face),
+            ["op.hole_coaxial"] = () => Fits(x => x.Kind is PickKind.Face or PickKind.Edge or PickKind.DatumAxis or PickKind.DatumPlane),
+            ["op.hole_radial"] = () => Fits(x => x.Kind is PickKind.Face or PickKind.Vertex or PickKind.SketchPoint or PickKind.DatumPoint),
         };
         void Op(string id, string label, string shortLabel, string icon, Func<Operation> make, string syn, KeyGesture? g = null) =>
             r.Add(new AppCommand { Id = id, Label = label, Short = shortLabel, Group = M, Icon = icon, Synonyms = syn, Gesture = g,
@@ -186,6 +190,14 @@ public static class StandardCommands
         Op("op.pattern_points", "Массив по точкам", "По точкам", "f_pattern_points_but.svg", () => new PointsPatternOp(), "pattern points sketch массив точки");
         Op("op.pattern_curve", "Массив по кривой", "По кривой", "f_pattern_curve_but.svg", () => new PointsPatternOp { StartMode = PointsPatternMode.Curve }, "pattern curve path массив кривая");
         Op("op.pattern_fill", "Массив заполнением", "Заполнение", "f_pattern_fill_but.svg", () => new PointsPatternOp { StartMode = PointsPatternMode.Fill }, "pattern fill grid массив заполнение сетка");
+        // u13e
+        Op("op.full_round", "Полное скругление", "Полн. скругл.", "f_round_full_but.svg", () => new FullRoundOp(), "full round полное скругление");
+        Op("op.hole_coaxial", "Отверстие соосное", "Соосное", "f_hole_coaxial_but.svg", () => new AxialHoleOp(), "coaxial hole соосное отверстие");
+        Op("op.hole_radial", "Отверстие радиальное", "Радиальное", "f_hole_radial_but.svg", () => new AxialHoleOp { Radial = true }, "radial hole радиальное отверстие");
+        Op("op.csys", "Система координат", "СК", "dat_csys_but.svg", () => new CsysOp(), "csys coordinate system система координат");
+        Op("op.curve_points", "Кривая через точки", "Кривая т.", "dat_curve_points_but.svg", () => new CurveOp(), "curve through points кривая через точки");
+        Op("op.curve_equation", "Кривая по уравнению", "Кривая ур.", "dat_curve_equation_but.svg", () => new CurveOp { Mode = 1 }, "curve equation кривая уравнение формула");
+        Op("op.curve_project", "Проекция кривой на грань", "Проекция", "dat_curve_project_but.svg", () => new CurveOp { Mode = 2 }, "project curve проекция кривой");
         Op("op.thread", "Косметическая резьба", "Резьба", "f_thread_but.svg", () => new CosmeticThreadOp(), "cosmetic thread резьба");
         Op("op.axis_intersect", "Ось пересечения плоскостей", "Ось пересеч.", "dat_axis_intersect_but.svg", () => new AxisOp { InitialMethod = 2 }, "axis intersection planes ось пересечение");
         Op("op.point_center", "Точка в центре дуги", "Центр дуги", "dat_point_center_but.svg", () => new PointOp { InitialMethod = 1 }, "point centre arc точка центр дуги");
@@ -316,6 +328,9 @@ public static class StandardCommands
         r.Add(new AppCommand { Id = "tree.rebuild", Label = "Перестроить", Group = E, Icon = "tree_rebuild_but.svg", Synonyms = "rebuild regenerate перестроить", Gesture = K(Key.B, KeyModifiers.Control), CanRun = HasPartT, Run = () => TreeCommands.Rebuild(w) });
         r.Add(new AppCommand { Id = "tree.edit_dims", Label = "Править размеры", Group = E, Icon = "tree_edit_dims_but.svg", Synonyms = "edit dimensions размеры числа", CanRun = OneFeature, Run = () => TreeCommands.EditDims(w) });
         r.Add(new AppCommand { Id = "tree.needs_attention", Label = "Требуют внимания", Group = E, Icon = "tree_needs_attention_but.svg", Synonyms = "errors attention ошибки внимание", CanRun = HasPartT, Run = () => TreeCommands.ShowNeedsAttention(w) });
+        r.Add(new AppCommand { Id = "tree.group", Label = "Группа (папка операций)", Group = E, Icon = "tree_group_but.svg", Synonyms = "group folder группа папка", CanRun = () => HasPartT() && w.SelectedItems().OfType<Parametric3D.Model.Features.Feature>().Any(), Run = () => TreeCommands.Group(w) });
+        r.Add(new AppCommand { Id = "tree.parents_children", Label = "Родители и потомки", Group = E, Icon = "tree_parents_children_but.svg", Synonyms = "parents children dependencies родители потомки зависимости", CanRun = OneFeature, Run = () => TreeCommands.ShowParentsChildren(w) });
+        r.Add(new AppCommand { Id = "tree.replace_refs", Label = "Заменить ссылки", Group = E, Icon = "tree_replace_refs_but.svg", Synonyms = "replace references redefine заменить ссылки", CanRun = () => HasPartT() && w.SelectedItems().Count == 1, Run = () => TreeCommands.ReplaceRefs(w) });
         ViewSelectCommands.Register(r, w);
         DocCommands.Register(r, w);
         ContextCommands.Register(r, w);

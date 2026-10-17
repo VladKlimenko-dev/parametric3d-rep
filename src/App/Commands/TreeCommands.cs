@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using Parametric3D.App.Views;
 using Parametric3D.Model;
 using Parametric3D.Model.Features;
+using Parametric3D.Model.Sketching;
 using static Parametric3D.App.Loc;
 
 namespace Parametric3D.App.Commands;
@@ -168,5 +169,167 @@ public static class TreeCommands
         lb.SelectionChanged += (_, _) => { if (lb.SelectedItem is ListBoxItem { Tag: Feature f }) { w.SelectItem(f); } };
         win.Content = new StackPanel { Margin = new Thickness(16), Spacing = 10, Children = { new TextBlock { Text = L("Операции с ошибкой и ниже строки отката:") }, lb } };
         await win.ShowDialog(w);
+    }
+
+    // ---------------------------------------------------------------- u13e: группа, родители и потомки, замена ссылок
+
+    /// <summary>Группа: выбранные операции — в папку (имя спрашивается); все уже в одной группе — разгруппировать.</summary>
+    public static async void Group(MainWindow w)
+    {
+        var part = w.Session.Part; var fs = Selected(w);
+        if (part == null || fs.Count == 0) { w.ShowToast(L("Выберите операции в дереве"), error: false); return; }
+        if (fs.All(f => !string.IsNullOrEmpty(f.Group) && f.Group == fs[0].Group))
+        {
+            w.Session.Edit(L("Разгруппировать"), () => { foreach (var f in fs) f.Group = null; });
+            w.RebuildTree(); return;
+        }
+        var name = await Dialogs.Prompt(w, L("Группа"), L("Имя группы:"), L("Группа {0}", part.Features.Select(f => f.Group).Where(g => g != null).Distinct().Count() + 1));
+        if (string.IsNullOrWhiteSpace(name)) return;
+        SetGroup(w, fs, name.Trim());
+    }
+
+    public static void SetGroup(MainWindow w, IEnumerable<Feature> fs, string? name)
+    {
+        var list = fs.ToList();
+        w.Session.Edit(L("Группа"), () => { foreach (var f in list) f.Group = name; });
+        w.RebuildTree();
+    }
+
+    /// <summary>Ссылается ли операция на операцию с ключом key (грани и рёбра «#ключ/…», повтор операций, селекторы).</summary>
+    public static bool RefersTo(Feature f, string key)
+    {
+        string tag = "#" + key + "/";
+        var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        bool Walk(object? o, int depth)
+        {
+            if (o == null || depth > 4) return false;
+            if (o is string str) return str == key || str.Contains(tag, StringComparison.Ordinal);
+            if (o.GetType().IsPrimitive || o is OpenTK.Mathematics.Vector3d) return false;
+            if (!o.GetType().IsValueType && !seen.Add(o)) return false;
+            if (o is System.Collections.IEnumerable en) { foreach (var x in en) if (Walk(x, depth + 1)) return true; return false; }
+            if (o.GetType().Namespace?.StartsWith("Parametric3D") != true && !o.GetType().IsGenericType) return false;
+            foreach (var fi in o.GetType().GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+            {
+                if (fi.Name is "Parent" or "Children" or "Name" or "Key" or "Group" or "Error" or "_x" || fi.Name.Contains("Changed")) continue;
+                if (Walk(fi.GetValue(o), depth + 1)) return true;
+            }
+            return false;
+        }
+        return Walk(f, 0);
+    }
+
+    /// <summary>Родители операции: её эскизы, опорные элементы и операции, на грани и рёбра которых она опирается.</summary>
+    public static List<ModelItem> Parents(Part part, Feature f)
+    {
+        var res = new List<ModelItem>();
+        var sk = Parametric3D.Model.Dependencies.SketchesOf(f);
+        res.AddRange(part.Sketches.Where(s => sk.Contains(s.Id)));
+        foreach (var d in part.Children.Where(c => c is DatumPlane or DatumAxis or DatumPoint or DatumCsys or DatumCurve or Line3DItem))
+            if (Parametric3D.Model.Dependencies.DependsOnItem(f, part, d)) res.Add(d);
+        int me = part.Features.IndexOf(f);
+        foreach (var g in part.Features.Take(Math.Max(0, me)))
+            if (RefersTo(f, g.Key) || part.Sketches.Any(s => sk.Contains(s.Id) && s.BaseFaceTag is { } t && t.StartsWith("#" + g.Key + "/"))) res.Add(g);
+        return res;
+    }
+
+    /// <summary>Потомки: операции ниже, опирающиеся на эту (или на эскизы на её гранях).</summary>
+    public static List<Feature> Children(Part part, Feature f)
+    {
+        int me = part.Features.IndexOf(f);
+        return part.Features.Skip(me + 1).Where(g => Parents(part, g).Contains(f)).ToList();
+    }
+
+    public static async void ShowParentsChildren(MainWindow w)
+    {
+        var part = w.Session.Part; var f = Selected(w).FirstOrDefault();
+        if (part == null || f == null) { w.ShowToast(L("Выберите операцию в дереве"), error: false); return; }
+        var par = Parents(part, f); var ch = Children(part, f);
+        var win = new Window { Title = L("Родители и потомки — {0}", f.Name), SizeToContent = SizeToContent.WidthAndHeight, WindowStartupLocation = WindowStartupLocation.CenterOwner, ShowInTaskbar = false };
+        win.Bind(Window.BackgroundProperty, win.GetResourceObservable("P3.PanelBg"));
+        ListBox List(IEnumerable<ModelItem> items)
+        {
+            var lb = new ListBox { MinWidth = 260, MaxHeight = 300 };
+            foreach (var it in items) lb.Items.Add(new ListBoxItem { Content = $"{TreeKind(it)}: {it.Name}", Tag = it });
+            if (lb.Items.Count == 0) lb.Items.Add(new ListBoxItem { Content = L("нет"), IsEnabled = false });
+            lb.SelectionChanged += (_, _) => { if (lb.SelectedItem is ListBoxItem { Tag: ModelItem m }) w.SelectItem(m); };
+            return lb;
+        }
+        win.Content = new StackPanel
+        {
+            Margin = new Thickness(16), Spacing = 8, Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Children =
+            {
+                new StackPanel { Spacing = 6, Children = { new TextBlock { Text = L("Родители (на что опирается):") }, List(par) } },
+                new StackPanel { Spacing = 6, Children = { new TextBlock { Text = L("Потомки (что опирается на неё):") }, List(ch) } },
+            },
+        };
+        await win.ShowDialog(w);
+    }
+
+    static string TreeKind(ModelItem it) => Parametric3D.App.ViewModels.TreeNode.KindLabel(it);
+
+    /// <summary>
+    /// Заменить ссылки: эскиз операции — на другой эскиз; плоскость эскиза — на другую плоскость (опорную или грань);
+    /// грани и рёбра — правкой операции.
+    /// </summary>
+    public static async void ReplaceRefs(MainWindow w)
+    {
+        var part = w.Session.Part; if (part == null) return;
+        var sel = w.SelectedItems();
+        if (sel.FirstOrDefault() is Sketch sk0)
+        {
+            // эскиз + выбранная плоскость (вторым) — сразу; иначе — список плоскостей
+            var planes = part.Children.OfType<DatumPlane>().Cast<ModelItem>().Concat(part.Children.OfType<DatumCsys>()).ToList();
+            var pick = await Choose(w, L("Новая плоскость эскиза «{0}»", sk0.Name), planes);
+            if (pick != null) ReplaceSketchPlane(w, sk0, pick);
+            return;
+        }
+        var f = sel.OfType<Feature>().FirstOrDefault();
+        if (f == null) { w.ShowToast(L("Выберите операцию или эскиз"), error: false); return; }
+        var fi = f.GetType().GetField("SketchId") ?? f.GetType().GetField("SectionSketchId");
+        if (fi != null && fi.FieldType == typeof(uint))
+        {
+            var cur = (uint)fi.GetValue(f)!;
+            var used = new HashSet<uint>(part.Features.Where(x => x != f).SelectMany(x => x.ConsumedSketchIds()));
+            var cands = part.Sketches.Where(s => s.Id != cur && !used.Contains(s.Id)).Cast<ModelItem>().ToList();
+            var pick = await Choose(w, L("Новый эскиз для «{0}»", f.Name), cands);
+            if (pick is Sketch ns) ReplaceSketch(w, f, ns);
+            return;
+        }
+        w.ShowToast(L("Ссылки на грани и рёбра — в правке операции"), error: false);
+        w.EditSelected();
+    }
+
+    public static void ReplaceSketch(MainWindow w, Feature f, Sketch ns)
+    {
+        var part = w.Session.Part!;
+        var fi = f.GetType().GetField("SketchId") ?? f.GetType().GetField("SectionSketchId");
+        if (fi == null) return;
+        w.Session.Edit(L("Заменить ссылки"), () => { fi.SetValue(f, ns.Id); part.NotifyChanged(f); });
+        w.Session.Document.RebuildDirty(); w.ViewPort.MarkDirty(); w.RebuildTree();
+    }
+
+    public static void ReplaceSketchPlane(MainWindow w, Sketch sk, ModelItem plane)
+    {
+        var fr = plane switch { DatumPlane dp => dp.Frame, DatumCsys cs => cs.Frame, _ => (Parametric3D.Kernel.Frame3?)null };
+        if (fr is not { } frame) return;
+        w.Session.Edit(L("Заменить ссылки"), () => sk.SetBasePlane(frame, plane.Id, plane.Name));
+        w.Session.Document.RebuildDirty(); w.ViewPort.MarkDirty(); w.RebuildTree();
+    }
+
+    static async Task<ModelItem?> Choose(MainWindow w, string title, List<ModelItem> items)
+    {
+        if (items.Count == 0) { w.ShowToast(L("Подходящих элементов нет"), error: false); return null; }
+        ModelItem? res = null;
+        var win = new Window { Title = title, SizeToContent = SizeToContent.WidthAndHeight, WindowStartupLocation = WindowStartupLocation.CenterOwner, ShowInTaskbar = false };
+        win.Bind(Window.BackgroundProperty, win.GetResourceObservable("P3.PanelBg"));
+        var lb = new ListBox { MinWidth = 320, MaxHeight = 360 };
+        foreach (var it in items) lb.Items.Add(new ListBoxItem { Content = $"{TreeKind(it)}: {it.Name}", Tag = it });
+        var ok = new Button { Content = L("ОК"), Classes = { "accent" } };
+        ok.Click += (_, _) => { res = (lb.SelectedItem as ListBoxItem)?.Tag as ModelItem; win.Close(); };
+        lb.DoubleTapped += (_, _) => { res = (lb.SelectedItem as ListBoxItem)?.Tag as ModelItem; win.Close(); };
+        win.Content = new StackPanel { Margin = new Thickness(16), Spacing = 10, Children = { lb, ok } };
+        await win.ShowDialog(w);
+        return res;
     }
 }

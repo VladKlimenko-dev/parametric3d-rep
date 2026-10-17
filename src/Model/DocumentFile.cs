@@ -71,6 +71,7 @@ public static class DocumentFile
                 Hidden = c.HiddenParts.ToList()
             }).ToList(),
             ActiveConfiguration = part.ActiveConfiguration,
+            Datums = SaveDatums(part),
 
             Material = Save(part.Material),
 
@@ -104,7 +105,9 @@ public static class DocumentFile
             Features = part.Features.Select(f =>
             {
                 var d = SaveFeature(f) ?? throw new InvalidOperationException($"Feature '{f.Name}' ({f.GetType().Name}) cannot be saved.");
-                d.Key = f.Key; d.Policy = f.Policy?.ToString(); return d;
+                d.Key = f.Key; d.Policy = f.Policy?.ToString();
+                if (!string.IsNullOrEmpty(f.Group)) (d.Str ??= new())["group"] = f.Group;
+                return d;
             }).ToList()
         };
         return JsonSerializer.Serialize(doc, Opts);
@@ -188,6 +191,54 @@ public static class DocumentFile
             });
 
         return dto;
+    }
+
+    static List<double> V(params Vector3d[] vs) => vs.SelectMany(v => new[] { v.X, v.Y, v.Z }).ToList();
+    static Vector3d At(List<double> p, int i) => new(p[3 * i], p[3 * i + 1], p[3 * i + 2]);
+
+    private static List<DatumDto>? SaveDatums(Part part)
+    {
+        var res = new List<DatumDto>();
+        foreach (var c in part.Children)
+        {
+            DatumDto? d = c switch
+            {
+                DatumPlane dp when !ReferenceEquals(dp, part.PlaneXY) && !ReferenceEquals(dp, part.PlaneXZ) && !ReferenceEquals(dp, part.PlaneYZ)
+                    => new DatumDto { Kind = "plane", P = V(dp.Frame.Origin, dp.Frame.U, dp.Frame.V), Mode = dp.Mode.ToString(), Offset = dp.Offset },
+                DatumAxis ax => new DatumDto { Kind = "axis", P = V(ax.Origin, ax.Direction) },
+                DatumPoint pt when !ReferenceEquals(pt, part.Origin) => new DatumDto { Kind = "point", P = V(pt.P) },
+                Line3DItem ln => new DatumDto { Kind = "line", P = V(ln.A, ln.B) },
+                DatumCsys cs => new DatumDto { Kind = "csys", P = V(cs.Frame.Origin, cs.Frame.U, cs.Frame.V) },
+                DatumCurve dc => new DatumDto { Kind = "curve", P = V(dc.Points.ToArray()), Source = dc.Source },
+                _ => null,
+            };
+            if (d == null) continue;
+            d.Name = c.Name; d.Hidden = !c.Visible;
+            res.Add(d);
+        }
+        return res.Count > 0 ? res : null;
+    }
+
+    private static void LoadDatums(Part part, List<DatumDto>? list)
+    {
+        if (list == null) return;
+        foreach (var d in list)
+        {
+            ModelItem? it = d.Kind switch
+            {
+                "plane" when d.P.Count >= 9 => new DatumPlane(d.Name, new Frame3(At(d.P, 0), At(d.P, 1), At(d.P, 2)))
+                    { Mode = Enum.TryParse<DatumPlaneMode>(d.Mode, out var m) ? m : DatumPlaneMode.Standard, Offset = d.Offset },
+                "axis" when d.P.Count >= 6 => new DatumAxis(d.Name, At(d.P, 0), At(d.P, 1)),
+                "point" when d.P.Count >= 3 => new DatumPoint(d.Name, At(d.P, 0)),
+                "line" when d.P.Count >= 6 => new Line3DItem(d.Name, At(d.P, 0), At(d.P, 1)),
+                "csys" when d.P.Count >= 9 => new DatumCsys(d.Name, new Frame3(At(d.P, 0), At(d.P, 1), At(d.P, 2))),
+                "curve" when d.P.Count >= 6 => new DatumCurve(d.Name, Enumerable.Range(0, d.P.Count / 3).Select(i => At(d.P, i)), d.Source ?? ""),
+                _ => null,
+            };
+            if (it == null) continue;
+            it.Visible = !d.Hidden;
+            part.Add(it);
+        }
     }
 
     // u13: общие поля новых операций (числа, формулы, флаги по имени)
@@ -388,6 +439,11 @@ public static class DocumentFile
             PutV(d, "count", pp.Count); PutV(d, "spacing", pp.Spacing); PutV(d, "margin", pp.Margin);
             d.Sources = pp.Sources.Count == 0 ? null : pp.Sources.ToList();
         }),
+        FullRoundFeature fr => Dto("full_round", fr, d =>
+        {
+            d.OpenFaces = fr.OnFaces.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList();
+            d.FaceNames = fr.OnFaceNames.Count > 0 ? fr.OnFaceNames.ToList() : null;
+        }),
         CosmeticThreadFeature ct => Dto("thread", ct, d =>
         {
             PutV(d, "pitch", ct.Pitch); PutV(d, "length", ct.Length);
@@ -560,6 +616,7 @@ public static class DocumentFile
             foreach (string h in cd.Hidden) cfg.HiddenParts.Add(h);
             part.Configurations.Add(cfg);
         }
+        LoadDatums(part, doc.Datums);
         var sketchById = new Dictionary<uint, Sketch>();
 
         foreach (var sd in doc.Sketches)
@@ -627,7 +684,8 @@ public static class DocumentFile
         {
             var known = new HashSet<Feature>(part.Features);
             using var keyScope = new KeyOnAdd(part, known, string.IsNullOrEmpty(fd.Key) ? $"legacy{featureIndex}" : fd.Key!,
-                                              fd.Policy != null && Enum.TryParse<Kernel.OperationPolicy>(fd.Policy, out var pol) ? pol : null);
+                                              fd.Policy != null && Enum.TryParse<Kernel.OperationPolicy>(fd.Policy, out var pol) ? pol : null,
+                                              fd.Str != null && fd.Str.TryGetValue("group", out var grp) ? grp : null);
             featureIndex++;
             switch (fd.Kind)
             {
@@ -765,6 +823,14 @@ public static class DocumentFile
                     if (sketchById.TryGetValue(fd.SketchId, out var psk)) ppf.SketchId = psk.Id;
                     if (fd.Sources != null) ppf.Sources.AddRange(fd.Sources);
                     part.AddFeature(ppf);
+                    break;
+                }
+                case "full_round":
+                {
+                    var fr = new FullRoundFeature(fd.Name) { Suppressed = fd.Suppressed };
+                    for (int i = 0; i + 2 < fd.OpenFaces.Count; i += 3) fr.OnFaces.Add(new Vector3d(fd.OpenFaces[i], fd.OpenFaces[i + 1], fd.OpenFaces[i + 2]));
+                    if (fd.FaceNames != null) fr.OnFaceNames.AddRange(fd.FaceNames);
+                    part.AddFeature(fr);
                     break;
                 }
                 case "thread":
@@ -915,9 +981,22 @@ public static class DocumentFile
 
     // ------------------------------------------------------------------ записи файла
 
+    /// <summary>u13: опорные элементы, созданные пользователем (плоскости, оси, точки, системы координат, кривые, линии).</summary>
+    private sealed class DatumDto
+    {
+        public string Kind { get; set; } = "";
+        public string Name { get; set; } = "";
+        public bool Hidden { get; set; }
+        public List<double> P { get; set; } = new();
+        public string? Source { get; set; }
+        public string? Mode { get; set; }
+        public double Offset { get; set; }
+    }
+
     private sealed class DocDto
     {
         public int Version { get; set; }
+        public List<DatumDto>? Datums { get; set; }
         public string Name { get; set; } = "деталь";
         /// <summary>m.x4: система единиц документа (размерность → обозначение); нет — мм, кг, с, градус.</summary>
         public Dictionary<string, string>? Units { get; set; }
@@ -1123,12 +1202,12 @@ public static class DocumentFile
     }
 
     /// <summary>По выходе из области присваивает ключ операции, добавленной в деталь внутри неё.</summary>
-    private readonly struct KeyOnAdd(Part part, HashSet<Feature> known, string key, Kernel.OperationPolicy? policy) : IDisposable
+    private readonly struct KeyOnAdd(Part part, HashSet<Feature> known, string key, Kernel.OperationPolicy? policy, string? group = null) : IDisposable
     {
         public void Dispose()
         {
             foreach (var f in part.Features)
-                if (!known.Contains(f)) { f.Key = key; f.Policy = policy; }
+                if (!known.Contains(f)) { f.Key = key; f.Policy = policy; if (group != null) f.Group = group; }
         }
     }
 
