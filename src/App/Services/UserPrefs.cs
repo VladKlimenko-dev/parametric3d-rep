@@ -19,6 +19,8 @@ public sealed class UserPrefs
     public int PrefsVersion { get; set; } = 12;
     public List<string> RecentFiles { get; set; } = new();
     public List<string> RecentCommands { get; set; } = new();
+    /// <summary>u13: закреплённые команды контекстной панели.</summary>
+    public List<string> PinnedCommands { get; set; } = new();
     public bool TreeVisible { get; set; } = true;
     public double TreeWidth { get; set; } = 260;
 

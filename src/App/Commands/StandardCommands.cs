@@ -65,14 +65,7 @@ public static class StandardCommands
 
         // ------------------------------------------------------------ вид
         const string V = "Вид";
-        void Orient(string id, string label, ViewOrientation o, string syn) =>
-            r.Add(new AppCommand { Id = id, Label = label, Group = V, Synonyms = syn, Run = () => vp.AnimateTo(Camera.OrientationQuat(o)) });
-        Orient("view.front", "Вид спереди", ViewOrientation.Front, "front");
-        Orient("view.back", "Вид сзади", ViewOrientation.Back, "back");
-        Orient("view.left", "Вид слева", ViewOrientation.Left, "left");
-        Orient("view.right", "Вид справа", ViewOrientation.Right, "right");
-        Orient("view.top", "Вид сверху", ViewOrientation.Top, "top");
-        Orient("view.bottom", "Вид снизу", ViewOrientation.Bottom, "bottom");
+        // u13: стандартные виды — ViewSelectCommands (с иконками и клавишами)
         r.Add(new AppCommand { Short = "Домой", Id = "view.home", Label = "Исходный вид (изометрия)", Group = V, Icon = "view_iso_but.svg", Gesture = K(Key.H), Synonyms = "iso isometric home домой",
             Run = () => vp.GoHome() });
         r.Add(new AppCommand { Short = "Вписать", Id = "view.fit", Label = "Вписать всё", Group = V, Icon = "view_fit_but.svg", Gesture = K(Key.F, KeyModifiers.Control), Synonyms = "fit zoom all",
@@ -323,6 +316,10 @@ public static class StandardCommands
         r.Add(new AppCommand { Id = "tree.rebuild", Label = "Перестроить", Group = E, Icon = "tree_rebuild_but.svg", Synonyms = "rebuild regenerate перестроить", Gesture = K(Key.B, KeyModifiers.Control), CanRun = HasPartT, Run = () => TreeCommands.Rebuild(w) });
         r.Add(new AppCommand { Id = "tree.edit_dims", Label = "Править размеры", Group = E, Icon = "tree_edit_dims_but.svg", Synonyms = "edit dimensions размеры числа", CanRun = OneFeature, Run = () => TreeCommands.EditDims(w) });
         r.Add(new AppCommand { Id = "tree.needs_attention", Label = "Требуют внимания", Group = E, Icon = "tree_needs_attention_but.svg", Synonyms = "errors attention ошибки внимание", CanRun = HasPartT, Run = () => TreeCommands.ShowNeedsAttention(w) });
+        ViewSelectCommands.Register(r, w);
+        DocCommands.Register(r, w);
+        ContextCommands.Register(r, w);
+        ContextCommands.RegisterEnv(r, w);
     }
 
     /// <summary>Список «Опорные» (п. 12): ключ ShowOptions — подпись.</summary>

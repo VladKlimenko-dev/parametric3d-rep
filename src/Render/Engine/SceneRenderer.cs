@@ -505,8 +505,14 @@ public sealed class SceneRenderer : IDisposable
         p.Set("uSelect", Theme.Select);
     }
 
+    /// <summary>u13: плоскость сечения (n, d) — отсекается dot(n, p) + d > 0; нулевая — без сечения.</summary>
+    public Vector4 ClipPlane;
+    /// <summary>u13: зебра на гранях.</summary>
+    public bool Zebra;
+
     private void SetCamera(ShaderProgram p, FrameParams f)
     {
+        p.Set("uClip", ClipPlane);
         p.Set("uView", f.View);
         p.Set("uProj", f.Proj);
         p.Set("uViewport", new Vector2(_w, _h));
@@ -524,7 +530,8 @@ public sealed class SceneRenderer : IDisposable
         _mesh.Set("uError", Theme.Error);
         GL.Enable(EnableCap.PolygonOffsetFill);
         GL.PolygonOffset(1.5f, 6f);
-        if (opacity >= 1f) { GL.Enable(EnableCap.CullFace); GL.CullFace(TriangleFace.Back); }
+        if (opacity >= 1f && ClipPlane == Vector4.Zero) { GL.Enable(EnableCap.CullFace); GL.CullFace(TriangleFace.Back); }
+        _mesh.Set("uZebra", Zebra ? 1 : 0);
         foreach (var m in _meshes)
         {
             if (m.Preview != 0) continue;
@@ -536,6 +543,7 @@ public sealed class SceneRenderer : IDisposable
             GL.DrawElements(PrimitiveType.Triangles, m.Count, DrawElementsType.UnsignedInt, 0);
         }
         _mesh.Set("uMat", Vector4.Zero);
+        _mesh.Set("uZebra", 0);
         GL.Disable(EnableCap.CullFace);
         GL.Disable(EnableCap.PolygonOffsetFill);
         DrawPreviews(f);

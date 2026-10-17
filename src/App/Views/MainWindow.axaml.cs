@@ -79,6 +79,7 @@ public partial class MainWindow : Window
         };
         Closing += OnClosing;
         SearchButton.Click += (_, _) => OpenPalette();
+        EnvPill.PointerPressed += (_, _) => Commands.ContextCommands.EnvMenu(this, EnvPill);
         TreeNode.VisibilityToggled += _ => { View.MarkDirty(); Session.MarkModified(); };
         TreeNode.ExpandedChanged += n => _expand[n.Item.Id] = n.IsExpanded;
     }
@@ -92,6 +93,7 @@ public partial class MainWindow : Window
         if (InSketch) View.ExitSketch(false);
         if (Session != null) { Session.Replaced -= OnReplaced; Session.StateChanged -= OnStateChanged; Session.Document.BuildStarted -= OnBuild; Session.Document.BuildFinished -= OnBuild; }
         Session = s;
+        Commands.DisplayUnits.Inch = s.Part?.Units.Length == "in";
         s.Replaced += OnReplaced;
         s.StateChanged += OnStateChanged;
         s.Document.BuildStarted += OnBuild;
@@ -286,12 +288,15 @@ public partial class MainWindow : Window
 
         EditPanel.Children.Clear();
         foreach (var id in new[] { "edit.undo", "edit.history", "edit.redo" }) EditPanel.Children.Add(CmdButton(_reg[id]));   // u10: журнал — стрелкой справа от «Отменить»
+        foreach (var id in new[] { "edit.copy", "edit.paste" }) EditPanel.Children.Add(CmdButton(_reg[id]));
 
         RightPanel.Children.Clear();
         RightPanel.Children.Add(CmdButton(_reg["app.selftest"]));
         RightPanel.Children.Add(CmdButton(_reg["app.parameters"]));
         RightPanel.Children.Add(CmdButton(_reg["app.properties"]));
         RightPanel.Children.Add(Separator(true));
+        RightPanel.Children.Add(CmdButton(_reg["app.settings"]));
+        RightPanel.Children.Add(CmdButton(_reg["app.help"]));
         RightPanel.Children.Add(CmdButton(_reg["app.theme"]));
         // язык — рядом с темой (п. 2): на кнопке — язык, на который переключит
         var lang = new Button { Classes = { "tool" }, Content = new TextBlock { Text = Loc.En ? "RU" : "EN", FontWeight = FontWeight.SemiBold, FontSize = 12 } };
@@ -326,6 +331,40 @@ public partial class MainWindow : Window
         arrow.Click += (_, _) => OpenShowFlyout(arrow);
         ViewTools.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 0, Children = { _datumsButton, arrow } });
         _datumsButton.IsChecked = _reg["view.datums"].IsChecked!();
+        // u13: виды, выбор, анализ — списки кнопок таблицы иконок
+        ViewTools.Children.Add(Separator(true));
+        ViewTools.Children.Add(ListButton("Виды ▾", new[] { "view.front", "view.back", "view.left", "view.right", "view.top", "view.bottom", "view.normal", "view.zoom_sel", "view.section", "view.grid" }));
+        ViewTools.Children.Add(ListButton("Выбор ▾", new[] { "sel.vertex", "sel.edge", "sel.face", "sel.body", "sel.feature", "sel.filter", "sel.box", "sel.lasso", "sel.tangent_chain", "sel.face_loop" }));
+        ViewTools.Children.Add(ListButton("Анализ ▾", new[] { "an.measure", "an.area", "an.perimeter", "an.mass", "an.zebra", "an.curvature", "an.check_body", "an.heal" }));
+    }
+
+    /// <summary>u13: кнопка со списком команд (вид, выбор, анализ).</summary>
+    private Button ListButton(string text, string[] ids)
+    {
+        var b = new Button { Classes = { "tool" }, Content = new TextBlock { Text = L(text), FontSize = 12 }, Padding = new Thickness(8, 4) };
+        b.Click += (_, _) =>
+        {
+            var sp = new StackPanel { Spacing = 1 };
+            foreach (var id in ids) if (_reg.Find(id) is { } c) sp.Children.Add(CmdButton(c, 18, text: true, minWidth: 220));
+            new Flyout { Content = new ScrollViewer { Content = sp, MaxHeight = 560 }, Placement = PlacementMode.BottomEdgeAlignedLeft }.ShowAt(b);
+        };
+        return b;
+    }
+
+    /// <summary>u13: рамка или аркан выбора поверх вида.</summary>
+    private void ShowRegion(IReadOnlyList<Point>? poly)
+    {
+        RegionCanvas.Children.Clear();
+        if (poly == null || poly.Count < 2) return;
+        bool crossing = View.RegionMode == ModelViewport.RegionKind.Box && poly.Count == 4 && poly[2].X < poly[0].X;
+        var pg = new Avalonia.Controls.Shapes.Polygon
+        {
+            Points = new Avalonia.Collections.AvaloniaList<Point>(poly),
+            Stroke = Res("P3.Accent"), StrokeThickness = 1,
+            StrokeDashArray = crossing ? new Avalonia.Collections.AvaloniaList<double> { 4, 3 } : null,
+            Fill = new SolidColorBrush(Color.FromArgb(28, 80, 150, 255)),
+        };
+        RegionCanvas.Children.Add(pg);
     }
 
     private void UpdateProjectionButton(bool perspective)
@@ -420,6 +459,7 @@ public partial class MainWindow : Window
                 (new[] { "op.extrude", "op.cut", "op.revolve" }, new[] { "op.extrude_thin", "op.sweep", "op.helical_sweep", "op.loft", "op.rib" }),
                 (new[] { "op.hole", "op.round", "op.chamfer", "op.shell" }, new[] { "op.round_variable", "op.vertex_round", "op.vertex_chamfer", "op.draft", "op.thread" }),
                 (Array.Empty<string>(), new[] { "op.face_offset", "op.face_move", "op.face_radius", "op.face_delete", "op.move_copy" }),
+                (Array.Empty<string>(), new[] { "an.measure", "an.area", "an.perimeter", "an.mass", "an.zebra", "an.curvature", "an.check_body", "an.heal" }),
                 (new[] { "op.plane" }, new[] { "op.plane_offset", "op.plane_mid", "op.plane_3pt", "op.plane_axis", "op.plane_normal_curve", "op.plane_tangent", "op.axis", "op.axis_face", "op.axis_intersect", "op.point", "op.point_center", "op.point_intersect" }),
                 (new[] { "op.mirror", "op.pattern_linear", "op.pattern_circular" }, new[] { "op.pattern_points", "op.pattern_curve", "op.pattern_fill", "op.move_copy" }),
                 (Array.Empty<string>(), new[] { "tree.rebuild", "tree.needs_attention", "tree.resume", "tree.insert_here", "tree.reorder_up", "tree.reorder_down", "tree.edit_dims" }),
@@ -435,7 +475,12 @@ public partial class MainWindow : Window
             if (groups[g].More.Length > 0)
             {
                 var more = groups[g].More.Where(id => _reg.Find(id) != null).ToArray();
-                var b = new Button { Content = L("Ещё…"), Classes = { "tool" }, MinWidth = 128, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 2) };
+                // u13: группа без основных кнопок — подпись группы вместо «Ещё…»
+                string moreLabel = groups[g].Main.Length > 0 ? "Ещё…" : groups[g].More[0] switch
+                {
+                    "op.face_offset" => "Прямая правка ▸", "an.measure" => "Анализ ▸", "tree.rebuild" => "Дерево ▸", _ => "Ещё…",
+                };
+                var b = new Button { Content = L(moreLabel), Classes = { "tool" }, MinWidth = 128, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 2) };
                 b.Click += (_, _) =>
                 {
                     var sp = new StackPanel { Spacing = 1 };
@@ -465,8 +510,8 @@ public partial class MainWindow : Window
     private void OpenFileMenu(Control anchor)
     {
         var items = new List<object>();
-        foreach (var id in new[] { "file.new_part", "file.sample", "file.open" }) items.Add(Item(_reg[id]));
-        var recent = new MenuItem { Header = L("Последние файлы") };
+        foreach (var id in new[] { "file.new_doc", "file.new_part", "file.new_assembly", "file.new_freeform", "file.sample", "file.open", "file.insert_part" }) if (_reg.Find(id) is { } fc) items.Add(Item(fc));
+        var recent = new MenuItem { Header = L("Последние файлы"), Icon = null };
         var rec = UserPrefs.Current.RecentFiles.Where(File.Exists).ToList();
         foreach (var p in rec)
         {
@@ -478,9 +523,11 @@ public partial class MainWindow : Window
         recent.IsEnabled = rec.Count > 0;
         items.Add(recent);
         items.Add(new Separator());
-        foreach (var id in new[] { "file.save", "file.save_as" }) items.Add(Item(_reg[id]));
+        foreach (var id in new[] { "file.save", "file.save_as", "file.close" }) items.Add(Item(_reg[id]));
         items.Add(new Separator());
         foreach (var id in new[] { "file.import", "file.export" }) items.Add(Item(_reg[id]));
+        items.Add(new Separator());
+        foreach (var id in new[] { "part.material", "part.units", "part.configurations", "app.settings", "app.all_commands", "app.help" }) items.Add(Item(_reg[id]));
         items.Add(new Separator());
         var gfx = new MenuItem { Header = L("Графика") };
         foreach (var mode in new[] { "auto", "angle", "wgl", "software" })
@@ -547,6 +594,7 @@ public partial class MainWindow : Window
         View.ContextRequested += p => { if (InSketch && View.DimensionAt(p) is { } dm) OpenDimensionMenu(dm); else OpenViewContextMenu(); };
         View.SceneRebuilt += () => { CurrentOperation?.RefreshStatus(); UpdateStatus(); if (_propsOn && CurrentOperation == null) ShowProperties(); };
         View.ToolChanged += () => { ShowHint(View.Tool != null ? L(View.Tool.Hint) : InSketch ? L("Выберите инструмент слева; Ctrl+Enter — закончить эскиз") : null); RefreshToolStates(); };
+        View.RegionChanged += ShowRegion;
         View.SketchEdited += () => { ScheduleTree(); UpdateStatus(); };
         View.ExpandEdge = r => r.Owner is Part p ? Topo.ChainRefs(p, r) : new List<PickRef> { r };
         View.ReferencePicked += AddSketchReference;
@@ -1125,6 +1173,21 @@ public partial class MainWindow : Window
         return res.Distinct().ToList();
     }
 
+    /// <summary>u13: узлы детали без своего элемента — параметры, материал, исполнения, тело.</summary>
+    private void OpenInfo(InfoItem ii)
+    {
+        switch (ii.Role)
+        {
+            case "params": _reg["app.parameters"].Execute(); break;
+            case "material": Commands.DocCommands.MaterialMenu(this, null); break;
+            case "configs": _reg["part.configurations"].Execute(); break;
+            case "body": View.Selection.Select(new PickRef(ii.Owner.Id, PickKind.Body, ii.Owner.Parent, ii.Owner), additive: false); break;
+        }
+    }
+
+    /// <summary>u13: обновить контекстную панель (после закрепления команд).</summary>
+    public void RefreshContext() => UpdateContextBar();
+
     private void UpdateContextBar()
     {
         using var _ui = Diagnostics.UiTimes.Measure("окно: полоса выбора");
@@ -1148,6 +1211,9 @@ public partial class MainWindow : Window
             cancel.Click += (_, _) => CancelOperation();
             ContextOps.Children.Add(ok);
             ContextOps.Children.Add(cancel);
+            // u13: режим и направление операции, следующее поле
+            foreach (var id in new[] { "ctx.mode_add", "ctx.mode_cut", "ctx.flip", "ctx.both_sides", "ctx.next" })
+                if (_reg.Find(id) is { Enabled: true } oc) ContextOps.Children.Add(CmdButton(oc, 18, text: true));
             ContextBar.IsVisible = true;
             return;
         }
@@ -1168,6 +1234,23 @@ public partial class MainWindow : Window
             if (id == "edit.feature" && sel.Items.Any(Refs.IsSketch)) ((ContentControl)b).Content = new TextBlock { Text = L("Изменить эскиз"), FontSize = 12 };
             ContextOps.Children.Add(b);
         }
+        // u13: закреплённые и недавние для набора, повысить, похожие, ещё, поиск
+        var have = SuggestedOps().ToHashSet();
+        foreach (var id in UserPrefs.Current.PinnedCommands)
+            if (!have.Contains(id) && _reg.Find(id) is { Enabled: true } pc) { ContextOps.Children.Add(CmdButton(pc, 18, text: true)); have.Add(id); }
+        var recentOps = UserPrefs.Current.RecentCommands.Where(id => id.StartsWith("op.") && !have.Contains(id)).Select(_reg.Find).OfType<AppCommand>().Where(c => c.Enabled).Take(3).ToList();
+        if (recentOps.Count > 0)
+        {
+            ContextOps.Children.Add(new TextBlock { Text = "⟲", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 2, 0), Classes = { "dim" } });
+            ToolTip.SetTip(ContextOps.Children[^1], L("Недавние для набора"));
+            foreach (var c in recentOps) ContextOps.Children.Add(CmdButton(c, 18, text: true));
+        }
+        foreach (var id in new[] { "ctx.up", "ctx.similar", "ctx.more", "ctx.search", "ctx.pin" })
+            if (_reg.Find(id) is { Enabled: true } xc)
+            {
+                var xb = CmdButton(xc, 18, text: id == "ctx.more");
+                ContextOps.Children.Add(xb);
+            }
         if (_reg["view.hide"].Enabled) ContextOps.Children.Add(CmdButton(_reg["view.hide"], 18, text: true));
         var clear = CmdButton(_reg["edit.clear_selection"], 18);
         ContextOps.Children.Add(clear);
@@ -1419,6 +1502,7 @@ public partial class MainWindow : Window
             if ((e.Source as StyledElement)?.DataContext is not TreeNode n) return;
             if (n.Item is Feature or Sketch) EditItem(n.Item);
             else if (n.Item is Part) View.ZoomToFit();
+            else if (n.Item is InfoItem ii) OpenInfo(ii);
         };
         Tree.ContextRequested += (_, e) =>
         {
@@ -1428,8 +1512,9 @@ public partial class MainWindow : Window
             if (n.Item is Feature or Sketch) ids.Add("edit.feature");
             if (n.Item is Feature) ids.AddRange(new[] { "edit.suppress", "tree.resume", "tree.edit_dims", "tree.insert_here", "tree.reorder_up", "tree.reorder_down" });
             ids.AddRange(SuggestedOps().Where(i => i != "edit.feature" && i != "edit.suppress"));
-            ids.AddRange(new[] { "view.hide", "view.isolate", "edit.delete" });
-            var items = ids.Distinct().Select(id => (object)Item(_reg[id])).ToList();
+            ids.AddRange(new[] { "edit.rename", "edit.copy", "edit.paste", "view.hide", "view.isolate", "edit.delete" });
+            if (n.Item is Part) ids.AddRange(new[] { "part.material", "part.units", "part.configurations", "an.mass", "an.check_body" });
+            var items = ids.Distinct().Where(id => _reg.Find(id) != null).Select(id => (object)Item(_reg[id])).ToList();
             new ContextMenu { ItemsSource = items }.Open((Control)e.Source!);
             e.Handled = true;
         };
@@ -1650,12 +1735,14 @@ public partial class MainWindow : Window
             : part != null ? L("Деталь «{0}»", part.Name) : L("Сборка");
         string sel = View.Selection.IsEmpty ? "" : L("Выбрано: ") + View.Selection.Describe();
         StatusSel.Text = string.IsNullOrEmpty(_hoverText) ? sel : (sel.Length > 0 ? sel + "   ·   " : "") + L("Под курсором: ") + _hoverText;
-        StatusUnits.Text = L("мм");
+        StatusUnits.Text = L(Commands.DisplayUnits.LengthUnit);
         EnvText.Text = InSketch ? L("Эскиз") : CurrentOperation != null ? L("Операция") : L("Деталь");
         if (Session == null) return;
         int errors = Session.Document.Root.Descendants().Count(i => i.Error != null);
-        if (Session.Document.IsBuilding) { StatusBuild.Text = L("Перестроение…"); StatusBuild.Foreground = Res("P3.Warning"); }
-        else if (errors > 0) { StatusBuild.Text = L("Требуют внимания: {0}", errors); StatusBuild.Foreground = Res("P3.Error"); }
+        // u13: значки состояния — идёт перестроение, требуют внимания, годно
+        if (Session.Document.IsBuilding) { StatusBuild.Text = "⟳ " + L("Перестроение…"); StatusBuild.Foreground = Res("P3.Warning"); }
+        else if (errors > 0) { StatusBuild.Text = "! " + L("Требуют внимания: {0}", errors); StatusBuild.Foreground = Res("P3.Error"); }
+        else if (part != null && part.Bodies.Count > 0) { StatusBuild.Text = "✓ " + L("Построено"); StatusBuild.Foreground = Res("P3.TextDim"); }
         else StatusBuild.Text = "";
     }
 

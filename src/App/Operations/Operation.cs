@@ -201,6 +201,17 @@ public abstract class Operation
     /// <summary>«ОК»: true — операция закончена.</summary>
     public abstract bool Commit();
     public abstract void Cancel();
+
+    /// <summary>u13: операция дерева, которую строит команда (для кнопок контекстной панели: добавить/вырезать, направление).</summary>
+    public virtual Feature? EditedFeature => null;
+
+    /// <summary>u13: следующее поле выбора (Tab).</summary>
+    public void NextField()
+    {
+        if (Panel == null || Panel.Refs.Count == 0) return;
+        int i = ActiveRef == null ? -1 : Panel.Refs.IndexOf(ActiveRef);
+        Activate(Panel.Refs[(i + 1) % Panel.Refs.Count]);
+    }
 }
 
 /// <summary>Операция дерева построения: Feature добавляется в деталь сразу и правится полями (живой предпросмотр).</summary>
@@ -288,6 +299,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
     }
 
     protected override string? BuildError => F?.Error;
+    public override Feature? EditedFeature => F;
 
     /// <summary>Не выбрано обязательное поле ссылки.</summary>
     protected bool MissingRequired => (Panel != null && Panel.Refs.Any(r => !r.IsSet && !r.Optional)) || MissingRequiredExtra;

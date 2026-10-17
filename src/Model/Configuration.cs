@@ -97,3 +97,48 @@ public sealed class Configuration
         return missing;
     }
 }
+
+/// <summary>
+/// u13: ПРИМЕНЕНИЕ ИСПОЛНЕНИЙ. При первом переходе с основной модели запоминается её состояние (значения переменных-чисел и
+/// погашенные операции); исполнение = основная модель + свои значения и погашения; «основная» возвращает запомненное.
+/// </summary>
+public static class Configurations
+{
+    sealed class Snapshot { public readonly Dictionary<string, double> Values = new(); public readonly HashSet<string> Suppressed = new(); }
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Part, Snapshot> Base = new();
+
+    /// <summary>Исполнение из текущего состояния: значения всех числовых переменных (без формул) и погашенные операции.</summary>
+    public static Configuration Capture(Part part, Params.ParameterTable table, string name)
+    {
+        var cfg = new Configuration(name);
+        foreach (var p in table.All) if (string.IsNullOrEmpty(p.Formula) && p.Kind == Params.ParamKind.Real) cfg.Parameters[p.Name] = p.Number;
+        foreach (var f in part.Features) if (f.Suppressed) cfg.SuppressedFeatures.Add(f.Name);
+        return cfg;
+    }
+
+    public static void Apply(Part part, Params.ParameterTable table, string name)
+    {
+        if (part.ActiveConfiguration == "" && !Base.TryGetValue(part, out _))
+        {
+            var snap = new Snapshot();
+            foreach (var p in table.All) if (string.IsNullOrEmpty(p.Formula) && p.Kind == Params.ParamKind.Real) snap.Values[p.Name] = p.Number;
+            foreach (var f in part.Features) if (f.Suppressed) snap.Suppressed.Add(f.Name);
+            Base.AddOrUpdate(part, snap);
+        }
+        Base.TryGetValue(part, out var b);
+        var cfg = name == "" ? null : part.Configurations.FirstOrDefault(c => c.Name == name) ?? throw new ArgumentException($"no configuration {name}");
+        foreach (var p in table.All)
+        {
+            if (!string.IsNullOrEmpty(p.Formula) || p.Kind != Params.ParamKind.Real) continue;
+            if (cfg != null && cfg.Parameters.TryGetValue(p.Name, out var v)) p.Number = v;
+            else if (b != null && b.Values.TryGetValue(p.Name, out var bv)) p.Number = bv;
+        }
+        foreach (var f in part.Features)
+            f.Suppressed = (b?.Suppressed.Contains(f.Name) ?? f.Suppressed && cfg == null) || (cfg?.SuppressedFeatures.Contains(f.Name) ?? false);
+        part.ActiveConfiguration = name;
+        if (name == "") Base.Remove(part);
+        table.Recalculate();
+        part.Invalidate();
+    }
+}
+

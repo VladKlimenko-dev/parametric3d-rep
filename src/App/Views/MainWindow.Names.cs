@@ -22,6 +22,7 @@ public partial class MainWindow
     private GridSplitter TreeSplitter = null!;
     private Grid ViewArea = null!;
     private Parametric3D.App.Viewport.ModelViewport View = null!;
+    private Canvas RegionCanvas = null!;
     private Border CommandBar = null!;
     private StackPanel CommandStack = null!;
     private StackPanel ViewTools = null!;
@@ -31,9 +32,9 @@ public partial class MainWindow
     private TextBlock SelChipText = null!;
     private StackPanel ContextOps = null!;
     private Border HintBox = null!;
+    private TextBlock HintText = null!;
     private Border DragValueBox = null!;
     private TextBlock DragValueText = null!;
-    private TextBlock HintText = null!;
     private Border Toast = null!;
     private TextBlock ToastText = null!;
     private Border PropsPanel = null!;
@@ -70,6 +71,7 @@ public partial class MainWindow
         TreeSplitter = this.FindControl<GridSplitter>("TreeSplitter")!;
         ViewArea = this.FindControl<Grid>("ViewArea")!;
         View = this.FindControl<Parametric3D.App.Viewport.ModelViewport>("View")!;
+        RegionCanvas = this.FindControl<Canvas>("RegionCanvas")!;
         CommandBar = this.FindControl<Border>("CommandBar")!;
         CommandStack = this.FindControl<StackPanel>("CommandStack")!;
         ViewTools = this.FindControl<StackPanel>("ViewTools")!;
@@ -79,9 +81,9 @@ public partial class MainWindow
         SelChipText = this.FindControl<TextBlock>("SelChipText")!;
         ContextOps = this.FindControl<StackPanel>("ContextOps")!;
         HintBox = this.FindControl<Border>("HintBox")!;
+        HintText = this.FindControl<TextBlock>("HintText")!;
         DragValueBox = this.FindControl<Border>("DragValueBox")!;
         DragValueText = this.FindControl<TextBlock>("DragValueText")!;
-        HintText = this.FindControl<TextBlock>("HintText")!;
         Toast = this.FindControl<Border>("Toast")!;
         ToastText = this.FindControl<TextBlock>("ToastText")!;
         PropsPanel = this.FindControl<Border>("PropsPanel")!;
