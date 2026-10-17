@@ -17,6 +17,8 @@ public sealed class Quilt
     /// <summary>u13: точное утолщение (поверхность выдавливанием/вращением — полоса из цепочки и её эквидистанты): толщина,
     /// другая сторона → тело; null — общим путём.</summary>
     public Func<double, bool, TSolid?>? Thicken;
+    /// <summary>u13j: NURBS-поверхность квилта FreeForm (правка опорных точек, продление, обращение).</summary>
+    public Kernel.Surfaces.NurbsSurface? Nurbs;
     /// <summary>Объединённый квилт — из нескольких основ.</summary>
     public readonly List<Quilt> Parts = new();
 

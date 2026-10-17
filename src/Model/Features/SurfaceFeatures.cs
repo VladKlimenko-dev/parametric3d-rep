@@ -430,7 +430,14 @@ public sealed class QuiltSolidFeature : Feature
                 // столб: контур грани вдоль нормали — от глубины под самой низкой точкой квилта до size вверх
                 var outer = face.Loops[0].CoEdges.Select(c => c.Edge?.Curve).OfType<ICurve3>().ToList();
                 var fr = Frame3.FromNormal(fp, fn);
+                // высота квилта над гранью — по вершинам и по разметке граней (выпуклая поверхность выше своего края)
                 var qpts = QuiltUtil.Simple(q).SelectMany(p => p.Faces).SelectMany(f => f.Loops.SelectMany(l => l.CoEdges)).Select(c => Vector3d.Dot(c.Start.P - fp, fn)).ToList();
+                foreach (var qf in QuiltUtil.Simple(q).SelectMany(p => p.Faces))
+                {
+                    var mb = new Kernel.Tess.MeshBuilder();
+                    try { qf.Surface.TessellateFace(qf, mb); } catch { continue; }
+                    foreach (var mp in mb.PositionsD) qpts.Add(Vector3d.Dot(mp - fp, fn));
+                }
                 double low = Math.Min(0, qpts.Min()), high = Math.Max(0, qpts.Max());
                 double gap = 0.05 * Math.Max(1, high - low);
                 var prof = ProfileBuilder.Build(fr, outer);

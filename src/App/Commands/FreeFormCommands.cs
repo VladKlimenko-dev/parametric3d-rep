@@ -85,9 +85,23 @@ public static class FreeFormCommands
         Op("ff.project", "Проекция кривой на грань", "Проекция", "ff_project_but.svg", () => new CurveOp { Mode = 2 }, "project curve face проекция");
         Op("ff.imprint", "Отпечаток кривой", "Отпечаток", "ff_imprint_but.svg", () => new FFImprintOp(), "imprint split face отпечаток");
         Op("ff.pipe", "Труба вдоль кривой", "Труба", "ff_pipe_but.svg", () => new FFPipeOp(), "pipe tube труба");
-        Op("ff.cv_edit", "Правка опорных точек", "Опорные точки", "ff_cv_edit_but.svg", () => new FFCurveOp { Mode = FFCurveMode.CvEdit }, "cv edit control points опорные точки");
-        Op("ff.cv_weight", "Вес опорной точки", "Вес", "ff_cv_weight_but.svg", () => new FFCurveOp { Mode = FFCurveMode.CvWeight }, "cv weight вес точки");
-        Op("ff.insert_knot", "Вставить узел", "Узел", "ff_insert_knot_but.svg", () => new FFCurveOp { Mode = FFCurveMode.InsertKnot }, "insert knot узел");
+        // опорные точки, вес, узел: выбрана поверхность FreeForm — у поверхности, иначе — у кривой
+        bool QuiltSel() => w.ViewPort.Selection.Items.Any(QuiltFields.IsQuiltFace);
+        Op("ff.cv_edit", "Правка опорных точек", "Опорные точки", "ff_cv_edit_but.svg", () => QuiltSel() ? new FFSurfaceOp { Mode = FFSurfMode.CvEdit } : new FFCurveOp { Mode = FFCurveMode.CvEdit }, "cv edit control points опорные точки");
+        Op("ff.cv_weight", "Вес опорной точки", "Вес", "ff_cv_weight_but.svg", () => QuiltSel() ? new FFSurfaceOp { Mode = FFSurfMode.CvWeight } : new FFCurveOp { Mode = FFCurveMode.CvWeight }, "cv weight вес точки");
+        Op("ff.insert_knot", "Вставить узел", "Узел", "ff_insert_knot_but.svg", () => QuiltSel() ? new FFSurfaceOp { Mode = FFSurfMode.Knot } : new FFCurveOp { Mode = FFCurveMode.InsertKnot }, "insert knot узел");
+
+        // u13j: поверхности
+        Op("ff.surf_ruled", "Линейчатая поверхность", "Линейчатая", "ff_surf_ruled_but.svg", () => new FFSurfaceOp { Mode = FFSurfMode.Ruled }, "ruled surface линейчатая поверхность");
+        Op("ff.surf_network", "Сетка кривых", "Сетка", "ff_surf_network_but.svg", () => new FFSurfaceOp { Mode = FFSurfMode.Network }, "network surface gordon сетка кривых");
+        Op("ff.surf_patch", "Заплатка", "Заплатка", "ff_surf_patch_but.svg", () => new FFSurfaceOp { Mode = FFSurfMode.Patch }, "patch fill coons заплатка");
+        Op("ff.surf_planar", "Плоская поверхность", "Плоская", "ff_surf_planar_but.svg", () => new FFPlanarOp(), "planar surface плоская поверхность");
+        Op("ff.surf_blend", "Мостик между краями", "Мостик краёв", "ff_surf_blend_but.svg", () => new FFSurfaceOp { Mode = FFSurfMode.Blend }, "blend surface bridge edges мостик края");
+        Op("ff.surf_extend", "Продление поверхности", "Продлить пов.", "ff_surf_extend_but.svg",
+            () => w.ViewPort.Selection.Items.FirstOrDefault(QuiltFields.IsQuiltFace) is { Owner: Model.Part qp } qr && qp.QuiltOfFace(qr.Id)?.Nurbs == null
+                ? new QuiltEditOp { StartMode = QuiltEditKind.Extend } : new FFSurfaceOp { Mode = FFSurfMode.Extend }, "extend surface продлить поверхность");
+        Op("ff.surf_flip", "Обратить нормаль", "Обратить", "ff_surf_flip_but.svg", () => new FFSurfaceOp { Mode = FFSurfMode.Flip }, "flip normal обратить нормаль");
+        Op("ff.surf_stitch", "Сшить в тело", "Сшить", "ff_surf_stitch_but.svg", () => new FFStitchOp(), "stitch sew solid сшить тело");
 
         Op("ff.mirror", "Зеркало тел", "Зеркало", "ff_mirror_but.svg", () => new FFMirrorOp { Mode = FFMirrorMode.Copy }, "mirror copy зеркало отражение");
         Op("ff.symmetry", "Симметрия (живая половина)", "Симметрия", "ff_symmetry_but.svg", () => new FFMirrorOp { Mode = FFMirrorMode.Symmetry }, "symmetry live mirror симметрия половина");

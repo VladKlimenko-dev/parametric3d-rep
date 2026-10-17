@@ -385,6 +385,12 @@ public sealed class FFCurveOp : Operation
                 target.NotifyChanged(target);
             }
             if (Mode == FFCurveMode.Join && _replace) HideSources();
+            // опорные точки правки — ломаной поверх модели
+            if (Mode is FFCurveMode.CvEdit or FFCurveMode.CvWeight or FFCurveMode.InsertKnot or FFCurveMode.Rebuild or FFCurveMode.Nurbs && target.Control is { Count: >= 2 } cvs)
+            {
+                var col = new Vector4(0.95f, 0.55f, 0.15f, 1);
+                W.ViewPort.SetAnnotations(Enumerable.Range(1, target.Control!.Count - 1).Select(i => (target.Control[i - 1], target.Control[i], col)));
+            }
         }
         catch (RebuildException ex) { _error = ex.Message; }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { _error = ex.Message; }
@@ -419,11 +425,13 @@ public sealed class FFCurveOp : Operation
     public override bool Commit()
     {
         if (_error != null || Result == null) { W.ShowToast(_error ?? L("Кривая не построена — проверьте ссылки")); return false; }
+        W.ViewPort.SetAnnotations(Array.Empty<(Vector3d, Vector3d, Vector4)>());
         W.Session.CommitEdit(); return true;
     }
 
     public override void Cancel()
     {
+        W.ViewPort.SetAnnotations(Array.Empty<(Vector3d, Vector3d, Vector4)>());
         RestoreEdited();
         foreach (var (c, v) in _hidden) c.Visible = v;
         if (_dc != null) Part.Remove(_dc);
