@@ -543,11 +543,16 @@ public partial class MainWindow : Window
     }
 
     private PickRef _lastPrimary;
+    private List<(uint, PickKind)> _lastSelIds = new();
 
     private void OnSelectionChanged()
     {
         using var _ui = Diagnostics.UiTimes.Measure("окно: выбор изменился");
-        CurrentOperation?.SelectionChanged(View.Selection.Items);
+        // u12: наведение тоже извещает об изменении выбора — операции передаётся только изменившийся выбор
+        var ids = View.Selection.Items.Select(r => (r.Id, r.Kind)).ToList();
+        bool selChanged = !ids.SequenceEqual(_lastSelIds);
+        _lastSelIds = ids;
+        if (selChanged) CurrentOperation?.SelectionChanged(View.Selection.Items);
         if (CurrentOperation is ShellOp && !View.HandleDragging) AttachOpHandle();
         else if (CurrentOperation is RoundOp or ChamferOp && !View.HandleDragging && !_startingHandleOp && (_handleOpFixed || !ReferenceEquals(CurrentOperation, _handleOp))) AttachOpHandle();
         var prim = View.Selection.Primary;
