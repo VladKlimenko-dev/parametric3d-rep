@@ -54,12 +54,13 @@ public static class ContextCommands
     {
         const string En = "Окружение";
         r.Add(new AppCommand { Id = "env.part", Label = "Окружение: деталь (параметрика)", Short = "Деталь", Group = En, Icon = "env_part_but.svg", Synonyms = "part environment деталь окружение",
-            IsChecked = () => !w.InSketch && w.Session?.Part != null,
-            Run = () => { if (w.InSketch) w.FinishSketch(); else if (w.CurrentOperation != null) w.CancelOperation(); } });
+            IsChecked = () => !w.InSketch && !w.InFreeForm && w.Session?.Part != null,
+            Run = () => { if (w.InSketch) w.FinishSketch(); else if (w.CurrentOperation != null) w.CancelOperation(); else if (w.InFreeForm && w.Session.Part?.FreeFormDoc != true) FreeFormCommands.Exit(w); } });
         r.Add(new AppCommand { Id = "env.sketch", Label = "Окружение: эскиз", Short = "Эскиз", Group = En, Icon = "env_sketch_but.svg", Synonyms = "sketch environment эскиз окружение",
             IsChecked = () => w.InSketch, CanRun = () => w.Session?.Part != null, Run = () => { if (!w.InSketch) CommandRegistry.Instance.Find("op.sketch")?.Execute(); } });
         r.Add(new AppCommand { Id = "env.freeform", Label = "Окружение: FreeForm", Short = "FreeForm", Group = En, Icon = "env_freeform_but.svg", Synonyms = "freeform environment окружение",
-            Run = () => CommandRegistry.Instance.Find("file.new_freeform")?.Execute() });
+            IsChecked = () => w.InFreeForm,
+            Run = () => { if (w.InFreeForm) return; if (w.Session?.Part != null && !(w.Session.IsAssembly && w.Session.ActivePart == null)) CommandRegistry.Instance.Find("op.edit_in_freeform")?.Execute(); else CommandRegistry.Instance.Find("file.new_freeform")?.Execute(); } });
         r.Add(new AppCommand { Id = "env.assembly", Label = "Окружение: сборка", Short = "Сборка", Group = En, Icon = "env_assembly_but.svg", Synonyms = "assembly environment сборка окружение",
             IsChecked = () => w.Session?.IsAssembly == true && w.Session.ActivePart == null,
             Run = () => { if (w.Session.IsAssembly) AssemblyCommands.EditInContext(w, null); else CommandRegistry.Instance.Find("file.new_assembly")?.Execute(); } });

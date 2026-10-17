@@ -40,8 +40,18 @@ public static class TopologyTransform
         _ => null
     };
 
-    public static TSolid? Apply(TSolid src, TransformOp.Xform x)
+    /// <summary>u13h (FreeForm): равномерный масштаб тела в k раз от точки c — точно (радиусы дуг и цилиндров умножаются на k).</summary>
+    public static TSolid? Scaled(TSolid src, Vector3d c, double k)
     {
+        if (!(k > 1e-9) || !double.IsFinite(k)) return null;
+        return Apply(src, new TransformOp.Xform(p => c + (p - c) * k, d => d * k, false), k);
+    }
+
+    public static TSolid? Apply(TSolid src, TransformOp.Xform x) => Apply(src, x, 1.0);
+
+    static TSolid? Apply(TSolid src, TransformOp.Xform x, double k)
+    {
+        bool scaled = Math.Abs(k - 1) > 1e-15;
         if (src.Exact != null && src.ExactAuthoritative) return null;     // рациональная многогранная форма не поворачивается точно
         var curves = new Dictionary<ICurve3, ICurve3>(ReferenceEqualityComparer.Instance);
         var surfs = new Dictionary<ISurface3, ISurface3>(ReferenceEqualityComparer.Instance);
@@ -51,15 +61,15 @@ public static class TopologyTransform
             ICurve3? r = c switch
             {
                 LineCurve3 l => new LineCurve3(x.Point(l.A), x.Point(l.B)),
-                ArcCurve3 a => new ArcCurve3(Frame(a.Frame, x), a.Radius, x.Flips ? -a.A0 : a.A0, x.Flips ? -a.A1 : a.A1),
-                EllipseCurve3 e => new EllipseCurve3(Frame(e.Frame, x), e.RU, e.RV, x.Flips ? -e.A0 : e.A0, x.Flips ? -e.A1 : e.A1),
+                ArcCurve3 a => new ArcCurve3(Frame(a.Frame, x), a.Radius * k, x.Flips ? -a.A0 : a.A0, x.Flips ? -a.A1 : a.A1),
+                EllipseCurve3 e => new EllipseCurve3(Frame(e.Frame, x), e.RU * k, e.RV * k, x.Flips ? -e.A0 : e.A0, x.Flips ? -e.A1 : e.A1),
                 SplineCurve3 sp => new SplineCurve3(sp.ControlPoints.Select(x.Point).ToList(), sp.Degree, sp.Weights, sp.Knots),
                 // KRN-06 (06.12): формула переносится отображением точки; кривая пересечения — те же поверхности, перенесённые
-                ProcCurve3 pc when !XformProcOff => pc.Mapped(x.Point),
-                IntersectionCurve3 ic when !XformProcOff && S(ic.A) is { } ia && S(ic.B) is { } ib => new IntersectionCurve3(ia, ib, ic.Seed.Select(x.Point).ToList()),
+                ProcCurve3 pc when !XformProcOff && !scaled => pc.Mapped(x.Point),
+                IntersectionCurve3 ic when !XformProcOff && !scaled && S(ic.A) is { } ia && S(ic.B) is { } ib => new IntersectionCurve3(ia, ib, ic.Seed.Select(x.Point).ToList()),
                 // KRN-07 (07.8): кривая «NURBS × неявная» — те же параметры на перенесённом сплайне и перенесённая форма
                 Geometry.NurbsNurbsCurve3 nn when !NurbsXformOff && S(nn.A) is NurbsSurface na && S(nn.B) is NurbsSurface nb => new Geometry.NurbsNurbsCurve3(na, nb, nn.Seed),
-                Geometry.NurbsImplicitCurve3 nc when !NurbsXformOff && S(nc.S) is NurbsSurface ns2 && ShapeMapped(nc.Other, x) is { } sh2 => new Geometry.NurbsImplicitCurve3(ns2, sh2, nc.SeedUV),
+                Geometry.NurbsImplicitCurve3 nc when !NurbsXformOff && !scaled && S(nc.S) is NurbsSurface ns2 && ShapeMapped(nc.Other, x) is { } sh2 => new Geometry.NurbsImplicitCurve3(ns2, sh2, nc.SeedUV),
                 _ => null
             };
             if (r != null) curves[c] = r;
@@ -74,10 +84,10 @@ public static class TopologyTransform
                 PlaneSurface pl => new PlaneSurface(Frame(pl.F, x)),
                 ExtrudedSurface ex when C(ex.Base) is { } b => new ExtrudedSurface(b, x.Direction(ex.Dir)),
                 RevolvedSurface rv when C(rv.Base) is { } b => new RevolvedSurface(b, Frame(rv.Axis, x), rv.A0, rv.A1),
-                CylinderSurface cs => new CylinderSurface(Frame(cs.Axis, x), cs.Radius),
+                CylinderSurface cs => new CylinderSurface(Frame(cs.Axis, x), cs.Radius * k),
                 NurbsSurface ns when !NurbsXformOff => ns.Mapped(x.Point),
                 CornerPatchSurface cp => cp.Mapped(x.Point),
-                SectionSurface ss when !XformProcOff => ss.Mapped(q => q.IsArc
+                SectionSurface ss when !XformProcOff && !scaled => ss.Mapped(q => q.IsArc
                     ? SweepSection.Arc(x.Point(q.C), x.Direction(q.E1).Normalized(), x.Direction(q.E2).Normalized(), q.R, q.Phi)
                     : SweepSection.Line(x.Point(q.A), x.Point(q.B))),
                 _ => null
@@ -112,7 +122,8 @@ public static class TopologyTransform
         {
             if (f.Surface is FacetedSurface fs)
             {
-                var nf = new FacetedSurface(S(fs.Source), x.Direction(fs.FallbackNormal));
+                var fbn = x.Direction(fs.FallbackNormal);
+                var nf = new FacetedSurface(S(fs.Source), fbn.LengthSquared > 1e-30 ? fbn.Normalized() : fbn);
                 foreach (var (a, b, c) in fs.Facets.ReadView) nf.Facets.Add(x.Flips ? (x.Point(a), x.Point(c), x.Point(b)) : (x.Point(a), x.Point(b), x.Point(c)));
                 // видимая сетка (вершины швов на точных рёбрах) — переносится тоже: без неё показывались бы Facets, а они
                 // у соседних граней не согласованы (отверстие: 8 сторон без пары)

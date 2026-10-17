@@ -71,6 +71,8 @@ public sealed partial class TreeNode : ObservableObject
             return lost ? ("state_lost_ref_ico.svg", "⚑", Loc.L("Потеряна ссылка")) : ("state_error_ico.svg", "!", Loc.L("Ошибка"));
         }
         if (item.Suppressed) return ("state_suppressed_ico.svg", "⏸", Loc.L("Подавлена"));
+        // u13h: узел FreeForm — ссылки изменились (вход отличается от запомненного)
+        if (item is FreeFormFeature { RefsChanged: true }) return ("state_refs_changed_ico.svg", "↯", Loc.L("Ссылки FreeForm изменились: «Обновить ссылки»"));
         if (item is Feature f && part != null && part.IsBeyondStage(f)) return ("state_rolled_back_ico.svg", "↓", Loc.L("Ниже строки отката"));
         if (item is Sketch sk)
         {
@@ -78,6 +80,17 @@ public sealed partial class TreeNode : ObservableObject
             if (sk.Entities.Count > 0 && sk.DegreesOfFreedom > 0) return ("state_underdefined_ico.svg", "−", Loc.L("Эскиз не полностью определён"));
         }
         if (item is Feature fw && part != null && part.Downgrades.TryGetValue(fw, out var dg)) return ("state_warning_ico.svg", "⚠", Loc.L("Приближение: гранёных граней {0}, рёбер {1}", dg.Faces, dg.Edges));
+        // u13h: шаг FreeForm — зафиксирован (замок) или ещё правится; компонент сборки — закреплён
+        if (item is Feature { FreeForm: not null } st && item is not FreeFormFeature)
+            return st.Frozen ? ("lock_ico.svg", "🔒", Loc.L("Шаг зафиксирован")) : ("unlocked_ico.svg", "", Loc.L("Шаг правится (параметры доступны до завершения команды)"));
+        if (item is Part { Fixed: true }) return ("lock_ico.svg", "🔒", Loc.L("Закреплён"));
+        // u13h: деталь — идёт перестроение; есть сообщения; тело проверено и годно
+        if (item is Part pt)
+        {
+            if (pt.IsDirty) return ("state_building_ico.svg", "…", Loc.L("Идёт перестроение"));
+            if (pt.Error == null && pt.Warnings.Count > 0) return ("state_info_ico.svg", "i", Loc.L("Сведения: сообщений {0}", pt.Warnings.Count));
+            if (pt.Error == null && pt.Bodies.Count > 0 && pt.Integrity == null) return ("state_ok_ico.svg", "✓", Loc.L("Годно (тело проверено)"));
+        }
         return ("", "", "");
     }
 
@@ -127,6 +140,10 @@ public sealed partial class TreeNode : ObservableObject
         InfoItem { Role: "configs" } => "tree_config_ico.svg",
         InfoItem { Role: "body" } => "tree_body_ico.svg",
         InfoItem { Role: "group" } => "tree_group_ico.svg",
+        InfoItem { Role: "quilt" } => "tree_quilt_ico.svg",
+        InfoItem { Role: "rollback" } => "rollback_bar_ico.svg",
+        FreeFormFeature => "tree_freeform_ico.svg",
+        Feature { FreeForm: not null } => "tree_ff_step_ico.svg",
         InfoItem { Role: "subassembly" } => "as_subassembly_but.svg",
         InfoItem { Role: "mates" } => "tree_mates_ico.svg",
         InfoItem { Role: "constraint" } => "mate_coincident_but.svg",
@@ -280,16 +297,30 @@ public sealed partial class TreeNode : ObservableObject
             node.Children.Add(new TreeNode(new InfoItem("params", Loc.L("Параметры"), pp), pp));
             node.Children.Add(new TreeNode(new InfoItem("material", Loc.L("Материал: {0}", pp.Material?.Name ?? "—"), pp), pp));
             if (pp.Configurations.Count > 0) node.Children.Add(new TreeNode(new InfoItem("configs", Loc.L("Исполнения ({0}){1}", pp.Configurations.Count, pp.ActiveConfiguration.Length > 0 ? ": " + pp.ActiveConfiguration : ""), pp), pp));
-            for (int bi = 0; bi < pp.Bodies.Count; bi++) node.Children.Add(new TreeNode(new InfoItem("body", Loc.L("Тело {0}", bi + 1), pp) { Index = bi }, pp));
+            for (int bi = 0; bi < pp.Bodies.Count; bi++) node.Children.Add(new TreeNode(new InfoItem("body", bi < pp.BodyNameList.Count ? Loc.L(pp.BodyNameList[bi]) : Loc.L("Тело {0}", bi + 1), pp) { Index = bi }, pp));
+            // u13h: квилты (поверхности без объёма)
+            for (int qi = 0; qi < pp.Quilts.Count; qi++) node.Children.Add(new TreeNode(new InfoItem("quilt", Loc.L("Квилт «{0}»", pp.Quilts[qi].Name), pp) { Index = qi }, pp));
         }
         var consumed = new HashSet<uint>(item.Children.OfType<Feature>().SelectMany(f => f.ConsumedSketchIds()));
         var groups = new Dictionary<string, TreeNode>();
+        var ffNodes = new Dictionary<string, TreeNode>();
+        // u13h: ручка строки отката (режим вставки) — узел на её месте; двойной щелчок — строка в конец
+        bool barDone = item is not Part { InInsertMode: true };
+        TreeNode Bar(Part bp) => new(new InfoItem("rollback", Loc.L("— строка отката —"), bp), bp);
         foreach (var c in item.Children)
         {
+            if (!barDone && c is Feature bf && item is Part bpp && bpp.Features.IndexOf(bf) >= bpp.EffectiveStage) { node.Children.Add(Bar(bpp)); barDone = true; }
             if (c is Sketch sk && consumed.Contains(sk.Id)) continue;
             var child = BuildItem(c, owner);
             // u13: операции группы — внутри узла группы (на месте первой из них)
             var target = node;
+            // u13h: шаги FreeForm — внутри своего узла FreeForm (журнал шагов)
+            if (c is Feature ffs && ffs.FreeForm != null && c is not FreeFormFeature && ffNodes.TryGetValue(ffs.FreeForm, out var ffn))
+            {
+                ffn.Children.Add(child);
+                continue;
+            }
+            if (c is FreeFormFeature ffm) ffNodes[ffm.Key] = child;
             if (c is Feature gf && !string.IsNullOrEmpty(gf.Group) && item is Part gp)
             {
                 if (!groups.TryGetValue(gf.Group, out var gn))
@@ -308,6 +339,7 @@ public sealed partial class TreeNode : ObservableObject
                     }
             target.Children.Add(child);
         }
+        if (!barDone && item is Part bpe) node.Children.Add(Bar(bpe));
         return node;
     }
 

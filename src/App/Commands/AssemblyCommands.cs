@@ -256,6 +256,8 @@ public static class AssemblyCommands
             var s = DocumentSession.Open(path);
             part = s.Part ?? throw new InvalidDataException(L("В файле нет детали"));
             s.Document.Root.Remove(part);
+            // u13h: FreeForm-тело в сборке — пересекающиеся тела объединяются (решение 2026-10-13)
+            if (part.FreeFormDoc) { part.MergeFreeForm = true; part.Invalidate(); }
         }
         else part = Exchange.Read(File.ReadAllText(path), out _, warnings) ?? throw new InvalidDataException(string.Join("; ", warnings));
         part.SourcePath = path;

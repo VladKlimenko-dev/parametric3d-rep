@@ -231,15 +231,41 @@ public abstract class FeatureOp<T> : Operation where T : Feature
 
     protected override bool Start()
     {
+        // u13h: шаг FreeForm зафиксирован при завершении команды — параметры не правятся (как в Plasticity)
+        if (_existing is { Frozen: true })
+        {
+            W.ShowToast(L("Шаг FreeForm зафиксирован: параметры вернуть — «Отменить до этого шага»"));
+            return false;
+        }
         W.Session.BeginEdit(Editing ? L("Изменить «{0}»", L(Title)) : L(Title));
         if (_existing != null) F = _existing;
         else
         {
             F = Create();
             F.Name = L(Title);
+            // u13h: открыт узел FreeForm — новая операция становится его шагом
+            if (Part.EditingFreeForm is { } ff && F is not FreeFormFeature) F.FreeForm = ff;
         }
         return true;
     }
+
+    /// <summary>u13h: тело FreeForm, которое правит шаг: тело первой выбранной грани, ребра или вершины (нет — новое тело).</summary>
+    private void PushFreeForm()
+    {
+        if (F.FreeForm == null || F is IFreeFormNative || Panel == null) return;
+        foreach (var r in Panel.Refs)
+        {
+            if (!r.Touched && Editing) continue;
+            foreach (var it in r.Items)
+                if (it.Kind is PickKind.Face or PickKind.Edge or PickKind.Vertex && it.Owner is Part p)
+                {
+                    if (!_ffNames.TryGetValue(it.Id, out var n)) { n = p.BodyNameOf(it.Id); if (n != null) _ffNames[it.Id] = n; }
+                    if (n != null) { F.FFBody = n; return; }
+                }
+        }
+        if (!Editing) F.FFBody = null;
+    }
+    private readonly Dictionary<uint, string?> _ffNames = new();
 
     /// <summary>Вызывается после Build: ссылки из выбора, затем операция — в деталь.</summary>
     public override void Prime()
@@ -247,6 +273,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
         if (!Editing) SeedRefs();
         if (Panel != null) foreach (var r in Panel.Refs) if (r.Text != null) r.Text.Text = r.Summary;
         Push();
+        PushFreeForm();
         // ручку ещё тянут — операция в деталь попадёт, когда отпустят (EndDrag); u10: не выбрано обязательное (грань
         // входа отверстия) — тоже позже: прежде пустая операция сразу попадала в деталь и мигала отказом
         if (!Dragging && (Editing || !MissingRequired))
@@ -263,6 +290,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
     protected override void RequestLive()
     {
         Push();
+        PushFreeForm();
         W.Session.Document.PreviewPart = Part;
         Part.BeginPreviewSession();
         if (!Editing && !_added) { Part.AddFeature(F); _added = true; return; }
@@ -293,6 +321,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
     protected override void Apply()
     {
         Push();
+        PushFreeForm();
         if (Dragging) return;
         if (!Editing && !_added) { if (MissingRequired) return; Part.AddFeature(F); _added = true; return; }
         Part.NotifyChanged(F);
@@ -315,6 +344,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
         }
         if (Dragging) EndDrag();
         if (!Editing && !_added) { Part.AddFeature(F); _added = true; }
+        if (F.FreeForm != null && F is not FreeFormFeature) F.Frozen = true;
         W.Session.CommitEdit();
         return true;
     }

@@ -1008,6 +1008,136 @@ Check("UI-U13G-ASSEMBLY", () =>
     w.Close();
 });
 
+// u13h: FreeForm — документ, заготовки, булевы между телами, перенос/масштаб, разрез, зеркало и симметрия, массивы, шаги
+// на своём теле (скругление, push-pull, выравнивание), фиксация шагов, «отменить до шага», запись, «Править в FreeForm»
+// с автоматическим объединением и «ссылки изменились».
+Check("UI-U13H-FREEFORM", () =>
+{
+    var s = FreeFormCommands.NewFreeForm(); var w = Open(s); var part = s.Part!;
+    Require(part.FreeFormDoc && w.InFreeForm, "freeform document opens in the FreeForm environment");
+    Require(CommandRegistry.Instance["ff.box"].Enabled && !CommandRegistry.Instance["op.edit_in_freeform"].Enabled, "freeform commands");
+    var node = part.Features.OfType<FreeFormFeature>().Single();
+    // брусок 40×30×20 командой (панель), «ОК» — шаг узла, зафиксирован
+    CommandRegistry.Instance["ff.box"].Execute();
+    Require(w.CurrentOperation is FFPrimitiveOp, "box op");
+    w.CommitOperation(); s.Document.RebuildDirty();
+    var box = part.Features.OfType<FFPrimitiveFeature>().Single();
+    Console.WriteLine($"  box: error {box.Error}, volume {part.Volume:F6}, bodies {string.Join(",", part.BodyNameList)}, frozen {box.Frozen}");
+    Require(box.FreeForm == node.Key && box.Frozen && box.Error == null && Math.Abs(part.Volume - 24000) < 1e-6, "box step");
+    // правка зафиксированного шага не открывается
+    w.ViewPort.Selection.Clear(); w.ViewPort.Selection.Select(new PickRef(box.Id, PickKind.Feature, part, box), additive: false);
+    w.EditSelected();
+    Require(w.CurrentOperation == null, "frozen step is not editable");
+    T Add<T>(T f) where T : Feature { f.FreeForm = node.Key; f.Frozen = true; part.AddFeature(f); s.Document.RebuildDirty(); Require(f.Error == null, $"{f.GetType().Name}: {f.Error}"); return f; }
+    // цилиндр R10 H40 — второе тело (FreeForm-документ тела не объединяет)
+    var cyl = Add(new FFPrimitiveFeature { Shape = FFPrimitive.Cylinder, A = new ValueRef(10), B = new ValueRef(40) });
+    double vc = Math.PI * 100 * 40;
+    Console.WriteLine($"  cylinder: bodies {part.Bodies.Count} ({string.Join(",", part.BodyNameList)}), volume {part.Volume:F6}");
+    Require(part.Bodies.Count == 2 && part.BodyNameList.SequenceEqual(new[] { "Тело 1", "Тело 2" }) && Math.Abs(part.Volume - (24000 + vc)) < 1e-6 * vc, "two bodies");
+    // вычесть: Тело 1 − Тело 2 → отверстие R10 сквозь брусок (высота 20)
+    var sub = Add(new FFBooleanFeature { Op = FFBool.Subtract, Target = "Тело 1", Tools = { "Тело 2" } });
+    double v1 = 24000 - Math.PI * 100 * 20;
+    Console.WriteLine($"  subtract: bodies {part.Bodies.Count}, volume {part.Volume:F6} want {v1:F6}");
+    Require(part.Bodies.Count == 1 && Math.Abs(part.Volume - v1) < 1e-6 * v1, "subtract");
+    // копия переносом на 100 по X и масштаб копии ×0.5 → объём копии /8
+    var mv = Add(new FFTransformFeature { Mode = FFXform.Move, BodyNames = { "Тело 1" }, Dx = new ValueRef(100), Copy = true });
+    // имена не переиспользуются: копия — «Тело 3» («Тело 2» был цилиндр)
+    var sc = Add(new FFTransformFeature { Mode = FFXform.Scale, BodyNames = { "Тело 3" }, Factor = new ValueRef(0.5), AxisAt = new Vector3d(100, 0, 0) });
+    Console.WriteLine($"  copy + scale: bodies {string.Join(",", part.BodyNameList)}, volume {part.Volume:F6}");
+    Require(part.Bodies.Count == 2 && Math.Abs(part.Volume - v1 * 1.125) < 1e-6 * v1, "copy and exact scale");
+    // разрез тела 1 плоскостью z = 5 → два тела, объём тот же
+    var sp = Add(new FFSplitFeature { Body = "Тело 1", PlaneAt = new Vector3d(0, 0, 5), Normal = Vector3d.UnitZ });
+    Console.WriteLine($"  split: bodies {string.Join(",", part.BodyNameList)}, volume {part.Volume:F6}");
+    Require(part.Bodies.Count == 3 && part.BodyNameList.Contains("Тело 1.2") && Math.Abs(part.Volume - v1 * 1.125) < 1e-6 * v1, "split");
+    // объединить части обратно
+    var un = Add(new FFBooleanFeature { Op = FFBool.Union, Target = "Тело 1", Tools = { "Тело 1.2" } });
+    Require(part.Bodies.Count == 2 && Math.Abs(part.Volume - v1 * 1.125) < 1e-6 * v1, "union back");
+    // зеркальная копия тела 3 через плоскость x = 0 и прямоугольный массив тела 1 (3 шт. по Y с шагом 50)
+    var mi = Add(new FFMirrorFeature { Mode = FFMirrorMode.Copy, BodyNames = { "Тело 3" }, PlaneAt = Vector3d.Zero, Normal = Vector3d.UnitX });
+    var ar = Add(new FFArrayFeature { Kind = FFArrayKind.Linear, BodyNames = { "Тело 1" }, Count = new ValueRef(3), Step = new Vector3d(0, 50, 0) });
+    Console.WriteLine($"  mirror + array: bodies {part.Bodies.Count} ({string.Join(",", part.BodyNameList)}), volume {part.Volume:F3}");
+    Require(part.Bodies.Count == 5 && Math.Abs(part.Volume - v1 * (3 + 0.25)) < 1e-6 * v1, "mirror and array");
+    // скругление ребра тела «Тело 1 [2]» (шаг на своём теле): ребро бруска длиной 40 вдоль X, R3
+    int bi = part.BodyNameList.IndexOf("Тело 1 [2]");
+    var edge = part.Bodies[bi].Edges.First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0.P.Z - 20) < 1e-6 && Math.Abs(e.V1.P.Z - 20) < 1e-6 && Math.Abs(Math.Abs(e.V0.P.X - e.V1.P.X) - 40) < 1e-6 && Math.Abs(e.V0.P.Y - 65) < 1e-6);
+    var rf = new RoundFeature("R") { Radius = new ValueRef(3), FFBody = "Тело 1 [2]" }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(edge));
+    double before = part.Volume;
+    Add(rf);
+    double cut = (1 - Math.PI / 4) * 9 * 40;
+    Console.WriteLine($"  fillet on one body: volume {part.Volume:F4}, removed {before - part.Volume:F4} want {cut:F4}, bodies {part.Bodies.Count}");
+    Require(part.Bodies.Count == 5 && Math.Abs(before - part.Volume - cut) < 1e-3, "fillet in its own body");
+    // push-pull: верх тела «Тело 1 [3]» +5 (брусок с отверстием: + 5 × (1200 − 100π))
+    int b3 = part.BodyNameList.IndexOf("Тело 1 [3]");
+    var top = part.Bodies[b3].Faces.First(f => Parametric3D.Kernel.Ops.PlanarTweak.OutwardNormal(f) is { } n && n.Z > 0.99);
+    var pp = new FaceEditFeature { Mode = FaceEditMode.Offset, Distance = new ValueRef(5), FFBody = "Тело 1 [3]" };
+    pp.OnFaces.Add(Refs.FacePoint(part, top.Id)!.Value);
+    before = part.Volume; Add(pp);
+    double grow = 5 * (1200 - Math.PI * 100);
+    Console.WriteLine($"  push-pull: added {part.Volume - before:F4} want {grow:F4}");
+    Require(Math.Abs(part.Volume - before - grow) < 1e-3, "push-pull");
+    // выровнять: верх того же тела — к плоскости z = 30 (было 25)
+    b3 = part.BodyNameList.IndexOf("Тело 1 [3]");
+    top = part.Bodies[b3].Faces.First(f => Parametric3D.Kernel.Ops.PlanarTweak.OutwardNormal(f) is { } n && n.Z > 0.99);
+    var al = new FFAlignFaceFeature { PlaneAt = new Vector3d(0, 0, 30), Normal = Vector3d.UnitZ, FFBody = "Тело 1 [3]" };
+    al.OnFaces.Add(Refs.FacePoint(part, top.Id)!.Value);
+    before = part.Volume; Add(al);
+    Console.WriteLine($"  align: added {part.Volume - before:F4} want {grow:F4}");
+    Require(Math.Abs(part.Volume - before - grow) < 1e-3, "align face");
+    // дерево: узел FreeForm со своим журналом шагов
+    var roots = TreeNode.Build(s.Document);
+    var ffNode = roots[0].SelfAndDescendants().First(n => n.Item is FreeFormFeature);
+    Console.WriteLine($"  tree: freeform node with {ffNode.Children.Count} steps, icon {ffNode.IconFile}");
+    Require(ffNode.Children.Count == part.Features.Count - 1 && ffNode.IconFile == "tree_freeform_ico.svg" && ffNode.Children[0].IconFile == "tree_ff_step_ico.svg", "freeform tree");
+    // запись и чтение: те же тела и признаки шагов
+    double vAll = part.Volume;
+    var path = Path.Combine(Path.GetTempPath(), "u13h_ff.p3d");
+    s.SaveAs(path);
+    var s2 = DocumentSession.Open(path); s2.Document.RebuildDirty(); var p2 = s2.Part!;
+    Console.WriteLine($"  reopened: freeform {p2.FreeFormDoc}, steps {p2.Features.Count}, volume {p2.Volume:F4}, bodies {p2.Bodies.Count}");
+    Require(p2.FreeFormDoc && p2.Features.Count == part.Features.Count && p2.Features.Skip(1).All(f => f.FreeForm == node.Key && f.Frozen)
+            && p2.Features.OfType<RoundFeature>().Single().FFBody == "Тело 1 [2]" && Math.Abs(p2.Volume - vAll) < 1e-6 * vAll && p2.Bodies.Count == 5, "save and load");
+    // «отменить до шага» (зеркало): зеркало и всё после него убираются одним шагом отмены
+    FreeFormCommands.UndoTo(w, mi); s.Document.RebuildDirty();
+    Console.WriteLine($"  undo to mirror: steps {part.Features.Count}, bodies {part.Bodies.Count}");
+    Require(!part.Features.Contains(mi) && !part.Features.Contains(al) && part.Bodies.Count == 2 && Math.Abs(part.Volume - v1 * 1.125) < 1e-6 * v1, "undo to step");
+    s.Undo(); s.Document.RebuildDirty();
+    Require(s.Part!.Features.Count == p2.Features.Count, "undo of undo-to");
+    w.Close();
+
+    // «Править в FreeForm» параметрической детали: куб 40; шар R10 в углу — после «Готово» тела объединяются
+    var s3 = DocumentSession.NewPart(); var w3 = Open(s3); var p3 = s3.Part!;
+    var sk = DrawSketch(w3, p3, p3.PlaneXY, k => Rect(k, 0, 0, 40, 40));
+    var ex = new ExtrudeFeature { SketchId = sk.Id }; ex.Side1.Distance = new ValueRef(40); p3.AddFeature(ex); s3.Document.RebuildDirty();
+    FreeFormCommands.EditInFreeForm(w3);
+    Require(w3.InFreeForm && p3.Features.Last() is FreeFormFeature { InputSig.Length: > 0 }, "edit in freeform");
+    var ffn = (FreeFormFeature)p3.Features.Last();
+    var sph = new FFPrimitiveFeature { Shape = FFPrimitive.Sphere, A = new ValueRef(10), Origin = new Vector3d(40, 40, 40), FreeForm = ffn.Key, Frozen = true };
+    p3.AddFeature(sph); s3.Document.RebuildDirty();
+    Console.WriteLine($"  in freeform: bodies {p3.Bodies.Count} ({string.Join(",", p3.BodyNameList)}), volume {p3.Volume:F3}");
+    Require(p3.Bodies.Count == 2 && p3.BodyNameList[0] == "Исходное тело", "separate while editing");
+    FreeFormCommands.Exit(w3); s3.Document.RebuildDirty();
+    double vu = 64000 + 4.0 / 3 * Math.PI * 1000 * 7 / 8;
+    Console.WriteLine($"  done: bodies {p3.Bodies.Count}, volume {p3.Volume:F3} want {vu:F3}");
+    Require(!w3.InFreeForm && p3.Bodies.Count == 1 && Math.Abs(p3.Volume - vu) < 1e-3, "auto union on embedding");
+    // тело выше в дереве изменилось: шаги не перестраиваются, узел — «ссылки изменились»; «Обновить ссылки» — по новой форме
+    ex.Side1.Distance = new ValueRef(60); p3.NotifyChanged(ex); s3.Document.RebuildDirty();
+    Console.WriteLine($"  upstream changed: refs changed {ffn.RefsChanged}, volume {p3.Volume:F3}");
+    Require(ffn.RefsChanged && Math.Abs(p3.Volume - vu) < 1e-2, "references changed — stored input");
+    Require(TreeNode.StateOf(ffn, p3).File == "state_refs_changed_ico.svg", "refs changed state");
+    w3.ViewPort.Selection.Clear(); w3.ViewPort.Selection.Select(new PickRef(ffn.Id, PickKind.Feature, p3, ffn), additive: false);
+    FreeFormCommands.UpdateRefs(w3, ffn); s3.Document.RebuildDirty();
+    // брусок 40×40×60, центр шара (40,40,40) на вертикальном ребре: внутри — четверть шара
+    double vn = 96000 + 4.0 / 3 * Math.PI * 1000 * 3 / 4;
+    Console.WriteLine($"  update refs: refs changed {ffn.RefsChanged}, volume {p3.Volume:F3} want {vn:F3}");
+    Require(!ffn.RefsChanged && Math.Abs(p3.Volume - vn) < 1e-2, "update references");
+    // предложенное исправление: отказ операции — варианты
+    var sug = FreeFormCommands.Suggestions(new RoundFeature("x") { Error = "Round: the radius 500 is too large" });
+    Require(sug.Any(x => x.Command == "edit.feature") && sug.Any(x => x.Command == "edit.suppress"), "fix suggestions");
+    var lost = FreeFormCommands.Suggestions(new RoundFeature("y") { Error = "Round: the edge no longer exists" });
+    Require(lost[0].Command == "tree.replace_refs", "lost reference suggestion");
+    w3.Close();
+});
+
 // u13: опорные элементы кнопок (плоскость посередине и касательная, ось грани, точка в центре дуги) и уклон
 Check("UI-U13-DATUMS-DRAFT", () =>
 {

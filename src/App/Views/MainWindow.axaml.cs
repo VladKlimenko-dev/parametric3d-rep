@@ -46,6 +46,8 @@ public partial class MainWindow : Window
 
     public Operation? CurrentOperation { get; private set; }
     public bool InSketch => View.ActiveSketch != null;
+    /// <summary>u13h: открыто окружение FreeForm (узел FreeForm правится; у FreeForm-документа — всегда).</summary>
+    public bool InFreeForm => !InSketch && Session?.Part?.EditingFreeForm != null && !(Session.IsAssembly && Session.ActivePart == null);
     public bool ConstructionMode { get; private set; }
     private bool _sketchIsNew;
     private Func<Sketch, Operation>? _afterSketch;
@@ -104,6 +106,8 @@ public partial class MainWindow : Window
         View.Document = s.Document;
         View.ActivePart = s.Part;
         View.DarkTheme = _dark;
+        // u13h: FreeForm-документ открывается сразу в окружении FreeForm
+        if (s.Part is { FreeFormDoc: true } ffp && !s.IsAssembly) Commands.FreeFormCommands.EnterDocument(this, ffp, rebuildUi: false);
         RebuildTree();
         RebuildUi();
         OnStateChanged();
@@ -118,9 +122,18 @@ public partial class MainWindow : Window
         View.Document = Session.Document;
         View.ActivePart = Session.Part;
         View.DarkTheme = _dark;
+        // u13h: отмена заменила деталь — открытый узел FreeForm остаётся открытым (если он ещё есть)
+        if (FreeFormKey is { } ffk && Session.Part is { } np)
+        {
+            if (np.Features.Any(f => f is FreeFormFeature && f.Key == ffk)) np.EditingFreeForm = ffk;
+            else { FreeFormKey = null; RebuildUi(); }
+        }
         RebuildTree();
         UpdateContextBar();
     }
+
+    /// <summary>u13h: ключ открытого узла FreeForm (переживает замену детали при отмене).</summary>
+    public string? FreeFormKey;
 
     private void OnBuild() => Dispatcher.UIThread.Post(() => { UpdateStatus(); ScheduleTree(); View.MarkDirty(); });
 
@@ -441,7 +454,22 @@ public partial class MainWindow : Window
     {
         CommandStack.Children.Clear();
         bool asmMode = !InSketch && Session?.IsAssembly == true && Session.ActivePart == null;
-        (string[] Main, string[] More)[] groups = asmMode
+        bool ffMode = !asmMode && InFreeForm;
+        (string[] Main, string[] More)[] groups = ffMode
+            ? new[]
+            {
+                (new[] { "ff.box", "ff.cylinder", "ff.cplane" }, new[] { "ff.cone", "ff.sphere", "ff.torus", "subd.box", "ff.curve_nurbs", "ff.curve_spiral" }),
+                (new[] { "ff.extrude", "ff.revolve", "ff.loft" }, new[] { "ff.sweep", "ff.pipe", "ff.thicken", "ff.shell" }),
+                (new[] { "ff.push_pull", "ff.move", "ff.rotate", "ff.scale" }, new[] { "ff.align_face", "ff.replace_face", "ff.delete_face", "ff.draft_face" }),
+                (new[] { "ff.fillet", "ff.chamfer" }, Array.Empty<string>()),
+                (new[] { "ff.union", "ff.subtract", "ff.intersect", "ff.split" }, Array.Empty<string>()),
+                (new[] { "ff.mirror", "ff.symmetry", "ff.array_linear" }, new[] { "ff.array_circular", "ff.array_curve" }),
+                (Array.Empty<string>(), new[] { "ff.curve_offset", "ff.curve_fillet", "ff.curve_join", "ff.curve_extend", "ff.curve_bridge", "ff.curve_rebuild", "ff.curve_extract", "ff.curve_isoparm", "ff.project", "ff.imprint", "ff.trim_curve" }),
+                (Array.Empty<string>(), new[] { "ff.surf_ruled", "ff.surf_network", "ff.surf_patch", "ff.surf_planar", "ff.surf_blend", "ff.surf_extend", "ff.surf_flip", "ff.surf_stitch", "ff.cv_edit", "ff.cv_weight", "ff.insert_knot" }),
+                (Array.Empty<string>(), new[] { "subd.extrude", "subd.edge_loop", "subd.crease", "subd.smooth_level", "subd.to_nurbs" }),
+                (new[] { "ff.step_undo_to", "ff.finish" }, new[] { "ff.update_refs", "an.measure", "an.zebra", "an.curvature", "an.check_body" }),
+            }
+            : asmMode
             ? new[]
             {
                 (new[] { "as.insert_component", "as.create_component", "as.edit_in_context" }, new[] { "as.insert_freeform", "as.skeleton", "as.open_component", "as.replace", "file.insert_part" }),
@@ -478,7 +506,7 @@ public partial class MainWindow : Window
             };
         CommandStack.Children.Add(new TextBlock
         {
-            Text = InSketch ? L("ЭСКИЗ") : asmMode ? L("СБОРКА") : L("ОПЕРАЦИИ"), Classes = { "header" }, Margin = new Thickness(6, 2, 6, 4),
+            Text = InSketch ? L("ЭСКИЗ") : asmMode ? L("СБОРКА") : ffMode ? L("FREEFORM") : L("ОПЕРАЦИИ"), Classes = { "header" }, Margin = new Thickness(6, 2, 6, 4),
         });
         for (int g = 0; g < groups.Length; g++)
         {
@@ -490,7 +518,7 @@ public partial class MainWindow : Window
                 // u13: группа без основных кнопок — подпись группы вместо «Ещё…»
                 string moreLabel = groups[g].Main.Length > 0 ? "Ещё…" : groups[g].More[0] switch
                 {
-                    "op.face_offset" => "Прямая правка ▸", "an.measure" => "Анализ ▸", "tree.rebuild" => "Дерево ▸", "op.surface_extrude" => "Поверхности ▸", _ => "Ещё…",
+                    "op.face_offset" => "Прямая правка ▸", "an.measure" => "Анализ ▸", "ff.curve_offset" => "Кривые ▸", "ff.surf_ruled" => "Поверхности ▸", "subd.extrude" => "SubD ▸", "tree.rebuild" => "Дерево ▸", "op.surface_extrude" => "Поверхности ▸", _ => "Ещё…",
                 };
                 var b = new Button { Content = L(moreLabel), Classes = { "tool" }, MinWidth = 128, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 2) };
                 b.Click += (_, _) =>
@@ -1173,6 +1201,18 @@ public partial class MainWindow : Window
             if (Commands.AssemblyCommands.SelectedComponents(this).Count > 0) res.AddRange(new[] { "as.edit_in_context", "as.fix", "as.open_component", "as.pattern", "as.mirror", "as.replace" });
             return res.Distinct().ToList();
         }
+        // u13h: окружение FreeForm — команды FreeForm по выбору
+        if (InFreeForm)
+        {
+            int bodies = sel.Where(r => r.Kind == PickKind.Face && r.Owner is Part bp).Select(r => ((Part)r.Owner!).BodyNameOf(r.Id)).Where(n => n != null).Distinct().Count();
+            if (sel.Any(r => r.Target is Feature { FreeForm: not null } and not FreeFormFeature)) res.AddRange(new[] { "ff.step_undo_to", "edit.feature" });
+            if (sel.Any(r => r.Kind == PickKind.Face)) res.AddRange(new[] { "ff.push_pull", "ff.move", "ff.delete_face", "ff.draft_face", "ff.shell", "ff.split" });
+            if (sel.Any(Refs.IsPlanar)) res.AddRange(new[] { "ff.cplane", "ff.extrude", "ff.align_face" });
+            if (bodies >= 2) res.InsertRange(0, new[] { "ff.union", "ff.subtract", "ff.intersect" });
+            if (sel.Any(r => r.Kind == PickKind.Edge)) res.AddRange(new[] { "ff.fillet", "ff.chamfer" });
+            if (sel.Any(Refs.IsSketch)) res.AddRange(new[] { "ff.extrude", "ff.revolve", "ff.loft" });
+            return res.Distinct().ToList();
+        }
         bool planar = sel.Any(Refs.IsPlanar), face = sel.Any(r => r.Kind == PickKind.Face);
         bool edge = sel.Any(r => r.Kind == PickKind.Edge), vertex = sel.Any(r => r.Kind == PickKind.Vertex);
         bool sketch = sel.Any(Refs.IsSketch), linear = sel.Any(Refs.IsLinear), axis = sel.Any(r => r.Kind == PickKind.DatumAxis);
@@ -1194,6 +1234,10 @@ public partial class MainWindow : Window
         if (linear && !sketch) res.Add("op.pattern_linear");
         if (axis || linear && !sketch) res.Add("op.pattern_circular");
         if (feature) res.AddRange(new[] { "edit.feature", "edit.suppress", "edit.delete" });
+        // u13h: операция с отказом — предложенное исправление; узел FreeForm — правка и обновление ссылок
+        if (sel.Any(r => r.Target is Feature { Error: not null })) res.Insert(0, "tree.fix");
+        if (sel.Any(r => r.Target is FreeFormFeature)) res.InsertRange(0, new[] { "edit.feature", "ff.update_refs" });
+        if (face || edge) res.Add("op.edit_in_freeform");
         if (feature && sketch) res.AddRange(new[] { "op.pattern_points", "op.pattern_curve", "op.pattern_fill" });
         if (part) res.AddRange(new[] { "view.isolate", "app.parameters", "app.properties" });
         return res.Distinct().ToList();
@@ -1208,6 +1252,7 @@ public partial class MainWindow : Window
             case "material": Commands.DocCommands.MaterialMenu(this, null); break;
             case "configs": _reg["part.configurations"].Execute(); break;
             case "body": View.Selection.Select(new PickRef(ii.Owner.Id, PickKind.Body, ii.Owner.Parent, ii.Owner), additive: false); break;
+            case "rollback": Session.Edit(L("Строка отката — в конец"), () => ii.Owner.EndInsertMode(resume: true)); View.MarkDirty(); RebuildTree(); break;
             case "group":
                 View.Selection.Clear();
                 foreach (var f in ii.Owner.Features.Where(x => x.Group == ii.Name)) View.Selection.Select(new PickRef(f.Id, PickKind.Feature, f.Parent, f), additive: true);
@@ -1275,7 +1320,9 @@ public partial class MainWindow : Window
         var recentOps = UserPrefs.Current.RecentCommands.Where(id => id.StartsWith("op.") && !have.Contains(id)).Select(_reg.Find).OfType<AppCommand>().Where(c => c.Enabled).Take(3).ToList();
         if (recentOps.Count > 0)
         {
-            ContextOps.Children.Add(new TextBlock { Text = "⟲", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 2, 0), Classes = { "dim" } });
+            ContextOps.Children.Add(IconProvider.Get("recent_ops_ico.svg") is { } ri
+                ? new Image { Source = ri, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 2, 0) }
+                : new TextBlock { Text = "⟲", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 2, 0), Classes = { "dim" } });
             ToolTip.SetTip(ContextOps.Children[^1], L("Недавние для набора"));
             foreach (var c in recentOps) ContextOps.Children.Add(CmdButton(c, 18, text: true));
         }
@@ -1417,6 +1464,10 @@ public partial class MainWindow : Window
         switch (item)
         {
             case Sketch sk: EditSketch(sk); break;
+            case FreeFormFeature ffn when Session.Part is { } ffp: Commands.FreeFormCommands.Enter(this, ffp, ffn); break;
+            case Feature { Frozen: true }:
+                ShowToast(L("Шаг FreeForm зафиксирован: параметры вернуть — «Отменить до этого шага»"), error: false);
+                break;
             case Feature f:
                 if (OperationFactory.ForEdit(f) is { } op) StartOperation(op);
                 else ShowToast(L("Правка этой операции в панели пока не поддерживается"), error: false);
@@ -1771,7 +1822,7 @@ public partial class MainWindow : Window
         string sel = View.Selection.IsEmpty ? "" : L("Выбрано: ") + View.Selection.Describe();
         StatusSel.Text = string.IsNullOrEmpty(_hoverText) ? sel : (sel.Length > 0 ? sel + "   ·   " : "") + L("Под курсором: ") + _hoverText;
         StatusUnits.Text = L(Commands.DisplayUnits.LengthUnit);
-        EnvText.Text = InSketch ? L("Эскиз") : CurrentOperation != null ? L("Операция") : Session?.IsAssembly == true ? (Session.ActivePart != null ? L("Компонент «{0}»", Session.ActivePart.Name) : L("Сборка")) : L("Деталь");
+        EnvText.Text = InSketch ? L("Эскиз") : CurrentOperation != null ? L("Операция") : InFreeForm ? L("FreeForm") : Session?.IsAssembly == true ? (Session.ActivePart != null ? L("Компонент «{0}»", Session.ActivePart.Name) : L("Сборка")) : L("Деталь");
         if (Session == null) return;
         int errors = Session.Document.Root.Descendants().Count(i => i.Error != null);
         // u13: значки состояния — идёт перестроение, требуют внимания, годно

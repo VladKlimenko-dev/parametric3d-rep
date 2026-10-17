@@ -820,6 +820,13 @@ public static class OperationFactory
         QuiltSolidFeature x => new QuiltSolidOp(x),
         BlendFeature x => new BlendOp(x),
         InsertBodyFeature x => new InsertBodyOp(x),
+        FFPrimitiveFeature x => new FFPrimitiveOp(x),
+        FFBooleanFeature x => new FFBooleanOp(x),
+        FFSplitFeature x => new FFSplitOp(x),
+        FFTransformFeature x => new FFTransformOp(x),
+        FFMirrorFeature x => new FFMirrorOp(x),
+        FFArrayFeature x => new FFArrayOp(x),
+        FFAlignFaceFeature x => new FFAlignFaceOp(x),
         _ => null,
     };
 }
