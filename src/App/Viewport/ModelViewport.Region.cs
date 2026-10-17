@@ -179,10 +179,16 @@ public sealed partial class ModelViewport
     public bool ModelGrid { get => _modelGrid; set { _modelGrid = value; _overlayDirty = true; Redraw(); } }
     private bool _modelGrid;
 
+    /// <summary>u13k: клетки SubD (FreeForm) — тонкие линии поверх модели; складки — красным.</summary>
+    public readonly List<(Vector3d A, Vector3d B, bool Crease)> CageLines = new();
+    public void SetCages(IEnumerable<(Vector3d A, Vector3d B, bool Crease)> lines) { CageLines.Clear(); CageLines.AddRange(lines); _overlayDirty = true; Redraw(); }
+
     private void AddExtraOverlay(List<Render.Engine.LineInst> grid, List<Render.Engine.LineInst> lines)
     {
         static Vector3 F(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
         foreach (var (a, b, c) in Annotations) lines.Add(Inst(F(a), F(b), c, 1.2f, 0));
+        if (Annotations.Count == 0)
+            foreach (var (a, b, cr) in CageLines) lines.Add(Inst(F(a), F(b), cr ? new Vector4(1f, 0.4f, 0.3f, 0.9f) : new Vector4(0.35f, 0.75f, 1f, 0.55f), 1f, 0));
         if (!_modelGrid || ActiveSketch != null) return;
         var th = _r.Theme;
         double step = GridStep();

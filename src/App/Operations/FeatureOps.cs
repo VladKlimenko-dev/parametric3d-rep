@@ -832,6 +832,7 @@ public static class OperationFactory
         FFNurbsQuiltFeature x => new FFSurfaceOp(x),
         FFPlanarQuiltFeature x => new FFPlanarOp(x),
         FFStitchFeature x => new FFStitchOp(x),
+        FFSubDFeature x => new SubDOp(x),
         _ => null,
     };
 }

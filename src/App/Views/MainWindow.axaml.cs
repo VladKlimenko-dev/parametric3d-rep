@@ -135,7 +135,18 @@ public partial class MainWindow : Window
     /// <summary>u13h: ключ открытого узла FreeForm (переживает замену детали при отмене).</summary>
     public string? FreeFormKey;
 
-    private void OnBuild() => Dispatcher.UIThread.Post(() => { UpdateStatus(); ScheduleTree(); View.MarkDirty(); });
+    private void OnBuild() => Dispatcher.UIThread.Post(() => { UpdateStatus(); ScheduleTree(); UpdateCages(); View.MarkDirty(); });
+
+    /// <summary>u13k: клетки SubD тел детали — в окружении FreeForm поверх модели.</summary>
+    public void UpdateCages()
+    {
+        var part = Session?.Part;
+        if (!InFreeForm || part == null || part.CagesByBody.Count == 0) { if (View.CageLines.Count > 0) View.SetCages(Array.Empty<(Vector3d, Vector3d, bool)>()); return; }
+        var lines = new List<(Vector3d, Vector3d, bool)>();
+        foreach (var c in part.CagesByBody.Values)
+            foreach (var (a, b) in c.EdgeFaces().Keys) lines.Add((c.V[a], c.V[b], c.Creases.Contains((a, b))));
+        View.SetCages(lines);
+    }
 
     private void OnStateChanged()
     {

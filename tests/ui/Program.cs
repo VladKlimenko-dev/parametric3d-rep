@@ -1378,6 +1378,82 @@ Check("UI-U13J-SURFACES", () =>
     w.Close();
 });
 
+// u13k: SubD — клетка-брусок, уровни, складки (все рёбра — брусок точно), выдавливание граней, петля рёбер, в NURBS,
+// перенос с клеткой, выбор граней и рёбер тела → клетка, запись.
+Check("UI-U13K-SUBD", () =>
+{
+    var s = FreeFormCommands.NewFreeForm(); var w = Open(s); var part = s.Part!;
+    var node = part.Features.OfType<FreeFormFeature>().Single();
+    CommandRegistry.Instance["subd.box"].Execute();
+    Require(w.CurrentOperation is SubDOp, "subd box op");
+    w.CommitOperation(); s.Document.RebuildDirty();
+    var box = part.Features.OfType<FFSubDFeature>().Single();
+    var name = part.BodyNameList.Single();
+    double v2 = part.Volume;
+    Console.WriteLine($"  box cage: error {box.Error}, body {name}, volume L2 {v2:F2}, faces {part.Bodies[0].Faces.Count()}, cage {part.CagesByBody[name].V.Count}/{part.CagesByBody[name].F.Count}");
+    Require(box.Error == null && part.CagesByBody.ContainsKey(name) && part.Bodies[0].Faces.Count() == 6 && v2 > 6000 && v2 < 14400
+            && part.Bodies[0].Edges.All(e => e.CoEdges.Count == 2), "subd body from the box cage");
+    // уровни 3 и 4 — объём сходится (разница < 2 %; между 2 и 3 — больше)
+    var c3 = part.CagesByBody[name];
+    double v3 = MeshVol(c3.ToSolid(3)), v4 = MeshVol(c3.ToSolid(4));
+    Console.WriteLine($"  volume L3 {v3:F2}, L4 {v4:F2}");
+    Require(Math.Abs(v4 - v3) < 0.02 * v3 && Math.Abs(v4 - v3) < Math.Abs(v3 - v2), "levels converge");
+    // все рёбра — складки: тело — брусок точно
+    var cr = part.CagesByBody[name].Clone(); foreach (var k in cr.EdgeFaces().Keys) cr.Creases.Add(k);
+    double vc = MeshVol(cr.ToSolid(2));
+    Console.WriteLine($"  all creased: volume {vc:F6}");
+    Require(Math.Abs(vc - 24000) < 1e-6, "all creases keep the box");
+    // выдавить верхнюю грань клетки командой: выбрана грань тела → грань клетки
+    var top = part.Bodies[0].Faces.First(f => SubDCage.FaceOfTag(f.Tag) == 1);
+    w.ViewPort.Selection.Clear(); Select(w, new PickRef(top.Id, PickKind.Face, part, null));
+    var ex = new SubDOp { Mode = SubDMode.Extrude }; w.StartOperation(ex); w.CommitOperation(); s.Document.RebuildDirty();
+    var exF = part.Features.OfType<FFSubDFeature>().Last();
+    var cg = part.CagesByBody[name];
+    Console.WriteLine($"  extrude: error {exF.Error}, cage {cg.V.Count}/{cg.F.Count}, volume {part.Volume:F2}, bodies {part.Bodies.Count}");
+    Require(exF.Error == null && exF.Body == name && cg.V.Count == 12 && cg.F.Count == 10 && part.Volume > v2 + 1000 && part.Bodies.Count == 1, "extrude cage face");
+    // петля рёбер: вертикальное ребро тела нижнего яруса → кольцо из 4 боковых граней
+    var vEdge = part.Bodies[0].Edges.First(e => e.FaceA != null && e.FaceB != null && SubDRefs.CageEdge(new PickRef(e.Id, PickKind.Edge, part, null), cg) is { } ce && Math.Abs(cg.V[ce.Item1].Z - cg.V[ce.Item2].Z) > 15 && cg.V[ce.Item1].Z < 1 + Math.Min(cg.V[ce.Item1].Z, cg.V[ce.Item2].Z) && Math.Min(cg.V[ce.Item1].Z, cg.V[ce.Item2].Z) < 1e-6);
+    w.ViewPort.Selection.Clear(); Select(w, new PickRef(vEdge.Id, PickKind.Edge, part, null));
+    var lo = new SubDOp { Mode = SubDMode.EdgeLoop }; w.StartOperation(lo); w.CommitOperation(); s.Document.RebuildDirty();
+    cg = part.CagesByBody[name];
+    Console.WriteLine($"  edge loop: error {part.Features.Last().Error}, cage {cg.V.Count}/{cg.F.Count}, closed {cg.IsClosed()}");
+    Require(part.Features.Last().Error == null && cg.V.Count == 16 && cg.F.Count == 14 && cg.IsClosed(), "edge loop");
+    // складка: два ребра тела → рёбра клетки
+    var edges = part.Bodies[0].Edges.Where(e => e.FaceA != null && e.FaceB != null && SubDRefs.CageEdge(new PickRef(e.Id, PickKind.Edge, part, null), cg) != null)
+        .GroupBy(e => SubDRefs.CageEdge(new PickRef(e.Id, PickKind.Edge, part, null), cg)).Select(g => g.First()).Take(2).ToList();
+    w.ViewPort.Selection.Clear(); foreach (var e in edges) Select(w, new PickRef(e.Id, PickKind.Edge, part, null));
+    var cro = new SubDOp { Mode = SubDMode.Crease }; w.StartOperation(cro); w.CommitOperation(); s.Document.RebuildDirty();
+    Require(part.CagesByBody[name].Creases.Count == 2, $"crease ({part.CagesByBody[name].Creases.Count})");
+    // перенос тела SubD — клетка вместе с ним
+    double z0 = part.CagesByBody[name].V.Min(p => p.X);
+    var mv = new FFTransformFeature { Mode = FFXform.Move, BodyNames = { name }, Dx = new ValueRef(100), FreeForm = node.Key, Frozen = true };
+    part.AddFeature(mv); s.Document.RebuildDirty();
+    Require(mv.Error == null && Math.Abs(part.CagesByBody[name].V.Min(p => p.X) - z0 - 100) < 1e-9, "move carries the cage");
+    // запись и чтение
+    var path = Path.Combine(Path.GetTempPath(), "u13k_subd.p3d");
+    s.SaveAs(path);
+    var s2 = DocumentSession.Open(path); s2.Document.RebuildDirty();
+    Console.WriteLine($"  reopened: volume {s2.Part!.Volume:F3} (was {part.Volume:F3}), cages {s2.Part.CagesByBody.Count}, creases {s2.Part.CagesByBody.Values.First().Creases.Count}");
+    Require(Math.Abs(s2.Part.Volume - part.Volume) < 1e-6 * part.Volume && s2.Part.CagesByBody.Values.First().Creases.Count == 2, "save and load subd");
+    // в NURBS: грани — NURBS-лоскуты через точки предельной поверхности, тело замкнуто; объём — в 2 % от подразделения
+    // уровня 5 (подразделение сходится к пределу снаружи, разметка лоскутов — хорды изнутри)
+    double vs = MeshVol(part.CagesByBody[name].ToSolid(5));
+    w.ViewPort.Selection.Clear(); Select(w, new PickRef(part.Bodies[0].Faces.First().Id, PickKind.Face, part, null));
+    var tn = new SubDOp { Mode = SubDMode.ToNurbs }; w.StartOperation(tn); w.CommitOperation(); s.Document.RebuildDirty();
+    var nb = part.Bodies[0];
+    int nurbsFaces = nb.Faces.Count(f => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.NurbsSurface);
+    Console.WriteLine($"  to NURBS: error {part.Features.Last().Error}, faces {nb.Faces.Count()} (NURBS {nurbsFaces}), open edges {nb.Edges.Count(e => e.CoEdges.Count < 2)}, volume {part.Volume:F2} (subd L5 {vs:F2}), cages {part.CagesByBody.Count}");
+    Require(part.Features.Last().Error == null && nurbsFaces == nb.Faces.Count() && nb.Edges.All(e => e.CoEdges.Count == 2) && Math.Abs(part.Volume - vs) < 0.02 * vs && part.Volume < vs && part.CagesByBody.Count == 0, "subd to nurbs");
+    w.Close();
+});
+
+double MeshVol(Parametric3D.Kernel.Topology.TSolid b)
+{
+    var md = Parametric3D.Kernel.Tess.Tessellator.Tessellate(b); double v = 0;
+    for (int i = 0; i + 2 < md.Indices.Length; i += 3) { var p0 = md.Vertices[md.Indices[i]].P; var p1 = md.Vertices[md.Indices[i + 1]].P; var p2 = md.Vertices[md.Indices[i + 2]].P; v += Vector3.Dot(p0, Vector3.Cross(p1, p2)) / 6.0; }
+    return v;
+}
+
 // u13: опорные элементы кнопок (плоскость посередине и касательная, ось грани, точка в центре дуги) и уклон
 Check("UI-U13-DATUMS-DRAFT", () =>
 {

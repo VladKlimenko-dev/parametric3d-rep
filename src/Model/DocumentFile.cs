@@ -522,6 +522,7 @@ public static class DocumentFile
         FFNurbsQuiltFeature nq => Dto("ff_nurbs", nq, d => { d.Nurbs = nq.Def.Pack(); PutS(d, "replaces", nq.ReplacesKey); PutS(d, "quilt", nq.QuiltName.Length > 0 ? nq.QuiltName : null); }),
         FFPlanarQuiltFeature pq => Dto("ff_planar", pq, d => d.OpenFaces = pq.Boundary.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList()),
         FFStitchFeature st => Dto("ff_stitch", st, d => d.Sources = st.Sources.ToList()),
+        FFSubDFeature sd => Dto("ff_subd", sd, d => { d.Cage = sd.Cage.Pack(); PutS(d, "body", sd.Body); if (sd.ToNurbs) Flag(d, "nurbs"); }),
         FFAlignFaceFeature fl => Dto("ff_align_face", fl, d =>
         {
             PutV(d, "offset", fl.Offset); d.Point = V3(fl.PlaneAt); d.Dir = V3(fl.Normal);
@@ -1049,6 +1050,9 @@ public static class DocumentFile
                     part.AddFeature(st);
                     break;
                 }
+                case "ff_subd":
+                    part.AddFeature(new FFSubDFeature(fd.Name) { Suppressed = fd.Suppressed, Cage = SubDCage.Unpack(fd.Cage) ?? new SubDCage(), Body = GetS(fd, "body"), ToNurbs = HasFlag(fd, "nurbs") });
+                    break;
                 case "ff_align_face":
                 {
                     var fl = new FFAlignFaceFeature(fd.Name) { Suppressed = fd.Suppressed, Offset = GetV(fd, "offset", 0), PlaneAt = Vec(fd.Point), Normal = Vec(fd.Dir) };
@@ -1478,6 +1482,8 @@ public static class DocumentFile
         public Dictionary<string, double>? Num { get; set; }
         public Dictionary<string, string?>? Str { get; set; }
         public List<string>? Flags { get; set; }
+        /// <summary>u13k: SubD-клетка шага FreeForm (SubDCage.Pack).</summary>
+        public List<double>? Cage { get; set; }
         /// <summary>u13j: NURBS-поверхность шага FreeForm (NurbsDef.Pack).</summary>
         public List<double>? Nurbs { get; set; }
         public string Kind { get; set; } = "";

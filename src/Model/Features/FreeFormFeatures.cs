@@ -49,6 +49,8 @@ public static class FreeFormExec
     public static void Join(BuildContext ctx, BuildContext sub, List<TSolid> targets)
     {
         var names = targets.Select(ctx.NameOf).ToList();
+        // тело изменено обычной операцией — оно больше не SubD (клетка не описывает его форму)
+        foreach (var n in names) ctx.Cages.Remove(n);
         int at = ctx.Bodies.Count;
         foreach (var t in targets) { int i = ctx.Bodies.IndexOf(t); if (i >= 0) at = Math.Min(at, i); }
         foreach (var t in targets) ctx.Bodies.Remove(t);
@@ -84,6 +86,7 @@ public static class FreeFormExec
         if (ctx.Bodies.Count < 2) return;
         var all = ctx.Bodies.ToList();
         var first = all.Select(ctx.NameOf).ToList();
+        ctx.Cages.Clear();
         ctx.Bodies.Clear();
         foreach (var b in all) BooleanOp.Unite(ctx.Bodies, b, ctx.Warnings);
         if (ctx.Bodies.Count < all.Count) ctx.Warnings.Add($"FreeForm: {all.Count} bodies merged into {ctx.Bodies.Count} (intersecting bodies are united on embedding).");
@@ -274,6 +277,7 @@ public sealed class FFBooleanFeature : Feature, IFreeFormNative
         if (list.Count == 0 && Op != FFBool.Subtract) throw new RebuildException(OperationOutcome.Empty, $"{Name}: the bodies do not intersect — the result is empty.");
         int at = ctx.Bodies.IndexOf(target);
         string name = ctx.NameOf(target);
+        ctx.Cages.Remove(name);
         ctx.Bodies.Remove(target);
         if (!KeepTools) foreach (var t in tools) ctx.Bodies.Remove(t);
         at = Math.Clamp(at, 0, ctx.Bodies.Count);
@@ -338,8 +342,21 @@ public sealed class FFTransformFeature : Feature, IFreeFormNative
                     break;
                 }
             }
-            if (Copy) { ctx.BodyNames[moved] = ctx.NewBodyName(); ctx.Bodies.Add(moved); }
-            else { ctx.Bodies[ctx.Bodies.IndexOf(b)] = moved; ctx.BodyNames[moved] = n; }
+            // SubD-клетка переносится тем же отображением (подразделение аффинно-инвариантно)
+            SubDCage? cage = null;
+            if (ctx.Cages.TryGetValue(n, out var c0))
+            {
+                var prm2 = ctx.Parameters;
+                Func<Vector3d, Vector3d> map = Mode switch
+                {
+                    FFXform.Scale => p => AxisAt + (p - AxisAt) * Factor.Resolve(prm2),
+                    FFXform.Rotate => TransformOp.Rotate(AxisAt, AxisDir.Normalized(), Angle.Resolve(prm2)).Point,
+                    _ => TransformOp.Move(new Vector3d(Dx.Resolve(prm2), Dy.Resolve(prm2), Dz.Resolve(prm2))).Point,
+                };
+                cage = c0.Mapped(map, false);
+            }
+            if (Copy) { var nn = ctx.NewBodyName(); ctx.BodyNames[moved] = nn; ctx.Bodies.Add(moved); if (cage != null) ctx.Cages[nn] = cage; }
+            else { ctx.Bodies[ctx.Bodies.IndexOf(b)] = moved; ctx.BodyNames[moved] = n; if (cage != null) ctx.Cages[n] = cage; }
         }
     }
 }
@@ -361,6 +378,7 @@ public sealed class FFSplitFeature : Feature, IFreeFormNative
         if (plus.Count == 0 || minus.Count == 0) throw new RebuildException(OperationOutcome.InvalidInput, $"{Name}: the plane does not cross the body «{Body}».");
         int at = ctx.Bodies.IndexOf(b);
         ctx.Bodies.RemoveAt(at);
+        ctx.Cages.Remove(Body);
         var parts = plus.Concat(minus).ToList();
         for (int i = 0; i < parts.Count; i++)
         {
@@ -396,7 +414,8 @@ public sealed class FFMirrorFeature : Feature, IFreeFormNative
             if (Mode == FFMirrorMode.Copy)
             {
                 var m = FreeFormExec.Map(b, x);
-                ctx.BodyNames[m] = ctx.NewBodyName(); ctx.Bodies.Add(m);
+                var mn = ctx.NewBodyName(); ctx.BodyNames[m] = mn; ctx.Bodies.Add(m);
+                if (ctx.Cages.TryGetValue(n, out var mc)) ctx.Cages[mn] = mc.Mapped(x.Point, true);
                 continue;
             }
             // половина по нормали: тело, целиком лежащее с одной стороны, не режется
@@ -406,6 +425,7 @@ public sealed class FFMirrorFeature : Feature, IFreeFormNative
             foreach (var h in plus.ToList()) BooleanOp.Unite(list, FreeFormExec.Map(h, x), ctx.Warnings);
             int at = ctx.Bodies.IndexOf(b);
             ctx.Bodies.RemoveAt(at);
+            ctx.Cages.Remove(n);
             for (int i = 0; i < list.Count; i++)
             {
                 ctx.Bodies.Insert(at + i, list[i]);
@@ -516,7 +536,9 @@ public sealed class FFArrayFeature : Feature, IFreeFormNative
             foreach (var x in xs)
             {
                 var c = FreeFormExec.Map(b, x);
-                ctx.Bodies.Add(c); ctx.BodyNames[c] = $"{n} [{k++}]";
+                var an = $"{n} [{k++}]";
+                ctx.Bodies.Add(c); ctx.BodyNames[c] = an;
+                if (ctx.Cages.TryGetValue(n, out var ac)) ctx.Cages[an] = ac.Mapped(x.Point, x.Flips);
             }
         }
     }
@@ -648,5 +670,38 @@ public sealed class FFImprintFeature : Feature
         string? why = null;
         var res = ImprintOp.Apply(body, face, pts, smooth, ref why);
         ctx.Bodies[0] = res ?? throw new RebuildException(OperationOutcome.Unsupported, $"{Name}: the curve cannot be imprinted ({why}).");
+    }
+}
+
+
+/// <summary>
+/// SUBD-ТЕЛО FREEFORM: клетка (геометрия шага без параметров) и уровень сглаживания; правка клетки — новый шаг с полной
+/// клеткой того же тела (Body). «В NURBS» — тело из NURBS-лоскутов, клетка больше не хранится.
+/// </summary>
+public sealed class FFSubDFeature : Feature, IFreeFormNative
+{
+    public SubDCage Cage = new();
+    public string? Body;
+    public bool ToNurbs;
+    public FFSubDFeature(string name = "SubD") { Name = name; }
+    public override string Summary => ToNurbs ? $"SubD → NURBS ({Cage.F.Count} cage faces)" : $"SubD cage {Cage.V.Count} vertices, {Cage.F.Count} faces, level {Cage.Level}";
+
+    public override void Execute(BuildContext ctx)
+    {
+        if (Cage.F.Count == 0) throw new RebuildException(OperationOutcome.InvalidInput, $"{Name}: the cage is empty.");
+        var solid = ToNurbs ? Cage.ToNurbs(Math.Max(2, Cage.Level), out _) : Cage.ToSolid(Cage.Level);
+        string name;
+        if (Body != null && ctx.BodyByName(Body) is { } old)
+        {
+            name = Body;
+            ctx.Bodies[ctx.Bodies.IndexOf(old)] = solid;
+        }
+        else
+        {
+            name = Body ?? ctx.NewBodyName();
+            ctx.Bodies.Add(solid);
+        }
+        ctx.BodyNames[solid] = name;
+        if (ToNurbs) ctx.Cages.Remove(name); else ctx.Cages[name] = Cage;
     }
 }

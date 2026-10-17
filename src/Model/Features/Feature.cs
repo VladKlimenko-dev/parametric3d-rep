@@ -77,6 +77,8 @@ public sealed class BuildContext
     public Quilt? QuiltByKey(string key) => Quilts.LastOrDefault(q => q.Key == key);
     /// <summary>u13h: имена тел FreeForm (по самому телу: номер в списке меняется после булевых).</summary>
     public readonly Dictionary<TSolid, string> BodyNames = new(ReferenceEqualityComparer.Instance);
+    /// <summary>u13k: SubD-клетки тел FreeForm (по имени тела).</summary>
+    public readonly Dictionary<string, SubDCage> Cages = new();
     /// <summary>Имя тела: заданное FreeForm-шагом или «Тело N» по месту в списке.</summary>
     public string NameOf(TSolid b) => BodyNames.TryGetValue(b, out var n) ? n : "Тело " + (Bodies.IndexOf(b) + 1);
     public TSolid? BodyByName(string name) => Bodies.FirstOrDefault(b => NameOf(b) == name);
@@ -112,9 +114,11 @@ public sealed class BuildContext
         public readonly Dictionary<string, Vector3d> Points;
         public readonly List<Quilt> Quilts;
         public readonly Dictionary<TSolid, string> BodyNames;
+        public readonly Dictionary<string, SubDCage> Cages;
 
         internal Snapshot(BuildContext c)
         {
+            Cages = new Dictionary<string, SubDCage>(c.Cages);
             BodyNames = new Dictionary<TSolid, string>(c.BodyNames, ReferenceEqualityComparer.Instance);
             Bodies = new List<TSolid>(c.Bodies);
             Quilts = new List<Quilt>(c.Quilts);
@@ -150,6 +154,8 @@ public sealed class BuildContext
         Quilts.AddRange(s.Quilts);
         BodyNames.Clear();
         foreach (var kv in s.BodyNames) BodyNames[kv.Key] = kv.Value;
+        Cages.Clear();
+        foreach (var kv in s.Cages) Cages[kv.Key] = kv.Value;
     }
 
     /// <summary>Плоскость по имени; пустое имя означает XY детали.</summary>
