@@ -54,15 +54,15 @@ public static class ContextCommands
     {
         const string En = "Окружение";
         r.Add(new AppCommand { Id = "env.part", Label = "Окружение: деталь (параметрика)", Short = "Деталь", Group = En, Icon = "env_part_but.svg", Synonyms = "part environment деталь окружение",
-            IsChecked = () => !w.InSketch && w.Session?.Part != null && w.Session.Document.Root.Children.OfType<Assembly>().Count() == 0,
+            IsChecked = () => !w.InSketch && w.Session?.Part != null,
             Run = () => { if (w.InSketch) w.FinishSketch(); else if (w.CurrentOperation != null) w.CancelOperation(); } });
         r.Add(new AppCommand { Id = "env.sketch", Label = "Окружение: эскиз", Short = "Эскиз", Group = En, Icon = "env_sketch_but.svg", Synonyms = "sketch environment эскиз окружение",
             IsChecked = () => w.InSketch, CanRun = () => w.Session?.Part != null, Run = () => { if (!w.InSketch) CommandRegistry.Instance.Find("op.sketch")?.Execute(); } });
         r.Add(new AppCommand { Id = "env.freeform", Label = "Окружение: FreeForm", Short = "FreeForm", Group = En, Icon = "env_freeform_but.svg", Synonyms = "freeform environment окружение",
             Run = () => CommandRegistry.Instance.Find("file.new_freeform")?.Execute() });
         r.Add(new AppCommand { Id = "env.assembly", Label = "Окружение: сборка", Short = "Сборка", Group = En, Icon = "env_assembly_but.svg", Synonyms = "assembly environment сборка окружение",
-            IsChecked = () => w.Session?.Document.Root.Children.OfType<Assembly>().Any() == true,
-            Run = () => CommandRegistry.Instance.Find("file.new_assembly")?.Execute() });
+            IsChecked = () => w.Session?.IsAssembly == true && w.Session.ActivePart == null,
+            Run = () => { if (w.Session.IsAssembly) AssemblyCommands.EditInContext(w, null); else CommandRegistry.Instance.Find("file.new_assembly")?.Execute(); } });
     }
 
     public static void EnvMenu(MainWindow w, Control anchor)

@@ -461,6 +461,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
                 if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > 4) { _drag = Drag.Pan; Camera.Pan(dx, dy); _last = p; Redraw(); }
                 return;
         }
+        if (ComponentDragMove(p)) return;
         if (RegionMove(p)) return;
         if (Tool != null) ToolMove(p);
         if (ActiveSketch != null) UpdateDimensionHover(p);
@@ -479,6 +480,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         if (was == Drag.RightPending && Tool != null) ToolFinish();
         else if (was == Drag.RightPending) ContextRequested?.Invoke(p);
         else if (was == Drag.Tool && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 6) ToolClick(p);
+        else if (was == Drag.Select && ComponentDragEnd()) { }
         else if (was == Drag.Select && RegionEnd(p, e.KeyModifiers)) { }
         else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4) RequestPick(p, click: true, e.KeyModifiers);
     }

@@ -26,7 +26,8 @@ public sealed partial class TreeNode : ObservableObject
     public bool HasError => Error != null;
     public bool IsDim { get; private set; }
     public bool HasEye { get; }
-    public string IconFile { get; }
+    private readonly string _iconFile;
+    public string IconFile => ComponentIcon ?? _iconFile;
     public IImage? Icon => IconProvider.Get(IconFile);
     public bool HasIcon => Icon != null;
     public string Glyph { get; }
@@ -35,12 +36,13 @@ public sealed partial class TreeNode : ObservableObject
 
     /// <summary>u13: значок состояния поверх значка узла (ошибка, предупреждение, подавлена, ниже строки отката, потеряна
     /// ссылка, эскиз не определён или переопределён); без файла значка — знак.</summary>
-    public string StateFile { get; } = "";
+    private readonly string _stateFile = "", _stateGlyph = "", _stateTip = "";
+    public string StateFile => StateFileOverride?.File ?? _stateFile;
     public IImage? StateIcon => StateFile.Length == 0 ? null : IconProvider.Get(StateFile);
     public bool HasStateIcon => StateIcon != null;
-    public string StateGlyph { get; } = "";
+    public string StateGlyph => StateFileOverride?.Glyph ?? _stateGlyph;
     public bool HasStateGlyph => StateGlyph.Length > 0 && !HasStateIcon;
-    public string StateTip { get; } = "";
+    public string StateTip => StateFileOverride?.Tip ?? _stateTip;
     /// <summary>u13: глаз — значками, если они есть (иначе рисунок).</summary>
     public IImage? EyeOn => IconProvider.Get("eye_visible_ico.svg");
     public IImage? EyeOff => IconProvider.Get("eye_hidden_ico.svg");
@@ -56,9 +58,9 @@ public sealed partial class TreeNode : ObservableObject
         Error = item.Error;
         IsDim = item.Suppressed || (item is Feature fe && part != null && part.IsBeyondStage(fe));
         HasEye = item is not Feature and not InfoItem;
-        IconFile = IconOf(item);
+        _iconFile = IconOf(item);
         Glyph = IconProvider.Abbrev(KindLabel(item));
-        (StateFile, StateGlyph, StateTip) = StateOf(item, part);
+        (_stateFile, _stateGlyph, _stateTip) = StateOf(item, part);
     }
 
     public static (string File, string Glyph, string Tip) StateOf(ModelItem item, Part? part)
@@ -125,6 +127,10 @@ public sealed partial class TreeNode : ObservableObject
         InfoItem { Role: "configs" } => "tree_config_ico.svg",
         InfoItem { Role: "body" } => "tree_body_ico.svg",
         InfoItem { Role: "group" } => "tree_group_ico.svg",
+        InfoItem { Role: "subassembly" } => "as_subassembly_but.svg",
+        InfoItem { Role: "mates" } => "tree_mates_ico.svg",
+        InfoItem { Role: "constraint" } => "mate_coincident_but.svg",
+        InfoItem { Role: "joint" } => "joint_pin_but.svg",
         DatumCsys => "tree_csys_ico.svg",
         DatumCurve => "tree_curve_ico.svg",
         HelicalSweepFeature => "f_helical_sweep_but.svg",
@@ -173,6 +179,10 @@ public sealed partial class TreeNode : ObservableObject
         InfoItem { Role: "configs" } => "Исполнения",
         InfoItem { Role: "body" } => "Тело",
         InfoItem { Role: "group" } => "Группа",
+        InfoItem { Role: "subassembly" } => "Подсборка",
+        InfoItem { Role: "mates" } => "Ограничения",
+        InfoItem { Role: "constraint" } => "Ограничение",
+        InfoItem { Role: "joint" } => "Соединение",
         DatumCsys => "Система координат",
         DatumCurve => "Кривая",
         HelicalSweepFeature => "Винтовая протяжка",
@@ -207,14 +217,58 @@ public sealed partial class TreeNode : ObservableObject
     };
 
     /// <summary>Дерево документа: деталь документа детали — корень; у сборки — сборка.</summary>
-    public static List<TreeNode> Build(Document doc)
+    public static List<TreeNode> Build(Document doc, bool assembly = false)
     {
         var res = new List<TreeNode>();
         var parts = doc.Root.Children.OfType<Part>().ToList();
-        if (parts.Count == 1 && doc.Root.Children.OfType<Assembly>().Count() == 0) res.Add(BuildItem(parts[0], parts[0]));
-        else res.Add(BuildItem(doc.Root, null));
+        if (!assembly && parts.Count == 1 && doc.Root.Children.OfType<Assembly>().Count() == 0) res.Add(BuildItem(parts[0], parts[0]));
+        else res.Add(BuildAssembly(doc.Root, doc.Title));
         return res;
     }
+
+    /// <summary>u13: сборка — компоненты (по подсборкам), опорные сборки, папка ограничений и соединений.</summary>
+    private static TreeNode BuildAssembly(Assembly asm, string title)
+    {
+        var node = new TreeNode(asm, null) { Name = title };
+        var subs = new Dictionary<string, TreeNode>();
+        foreach (var c in asm.Children)
+        {
+            if (c is Part p)
+            {
+                var pn = BuildItem(p, p);
+                pn.SetComponent(p);
+                var target = node;
+                if (!string.IsNullOrEmpty(p.SubAssembly))
+                {
+                    if (!subs.TryGetValue(p.SubAssembly, out var sn)) { sn = new TreeNode(new InfoItem("subassembly", p.SubAssembly, p), p); subs[p.SubAssembly] = sn; node.Children.Add(sn); }
+                    target = sn;
+                }
+                pn.RestoreExpanded(false);
+                target.Children.Add(pn);
+            }
+            else if (c is not Assembly) node.Children.Add(new TreeNode(c, null));
+            else node.Children.Add(BuildAssembly((Assembly)c, c.Name));
+        }
+        var mates = new TreeNode(new InfoItem("mates", Loc.L("Ограничения и соединения"), asm.Children.OfType<Part>().FirstOrDefault() ?? new Part("-")), null);
+        foreach (var p in asm.Children.OfType<Part>())
+        {
+            int i = 0;
+            foreach (var c in p.Constraints) mates.Children.Add(new TreeNode(new InfoItem("constraint", $"{c.Name}: {p.Name}{(c.BasePart != null ? " → " + c.BasePart.Name : "")}", p) { Index = i++ }, null));
+            foreach (var m in p.Mates) mates.Children.Add(new TreeNode(new InfoItem("joint", $"{m.Name}: {p.Name}{(m.BasePart != null ? " → " + m.BasePart.Name : "")}", p) { Index = i++ }, null));
+        }
+        if (mates.Children.Count > 0) node.Children.Add(mates);
+        return node;
+    }
+
+    /// <summary>Узел детали — компонент сборки: свой значок и состояние «зафиксирован».</summary>
+    private void SetComponent(Part p)
+    {
+        ComponentIcon = "tree_component_ico.svg";
+        if (p.Fixed && StateFileOverride == null) StateFileOverride = ("state_fixed_ico.svg", "⚓", Loc.L("Зафиксирован"));
+        if (p.Skeleton) ComponentIcon = "as_skeleton_but.svg";
+    }
+    private string? ComponentIcon;
+    private (string File, string Glyph, string Tip)? StateFileOverride;
 
     private static TreeNode BuildItem(ModelItem item, Part? part)
     {

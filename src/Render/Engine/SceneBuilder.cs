@@ -39,10 +39,13 @@ public static class SceneBuilder
 
         var owner = item;
         var ownerBounds = OwnerBounds(item);
+        // u13: компонент сборки (не правимый в контексте) — без своих стандартных плоскостей и начала координат
+        bool component = item is Part cp && cp.Parent is Assembly pa && pa.Children.OfType<Part>().Count() > 1 && !ReferenceEquals(active, cp);
         foreach (var c in item.Children)
         {
             if (c is Part or Assembly) { Walk(c, xf, s, th, show, active, c.Visible); continue; }
             if (!c.Visible) continue;
+            if (component && item is Part cpp && (ReferenceEquals(c, cpp.PlaneXY) || ReferenceEquals(c, cpp.PlaneXZ) || ReferenceEquals(c, cpp.PlaneYZ) || ReferenceEquals(c, cpp.Origin))) continue;
             switch (c)
             {
                 case DatumPlane dp when show.Planes:

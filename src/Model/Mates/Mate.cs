@@ -16,7 +16,13 @@ public enum MateType
     /// <summary>Свободное вращение вокруг точки (шарнир-шар).</summary>
     Ball,
     /// <summary>Жёсткая фиксация.</summary>
-    Weld
+    Weld,
+    /// <summary>u13: шар в цилиндре — свободное вращение и сдвиг вдоль оси.</summary>
+    BallCylinder,
+    /// <summary>u13: паз — сдвиг вдоль оси паза и вращение вокруг нормали плоскости паза.</summary>
+    Slot,
+    /// <summary>u13: шесть степеней свободы (связь только записана).</summary>
+    Free
 }
 
 /// <summary>
@@ -112,6 +118,8 @@ public sealed class Mate : ModelItem
     public Vector2d PlanarOffset; // Planar
     public double PlanarAngle;    // Planar
     public Quaternion BallRotation = Quaternion.Identity;
+    /// <summary>u13: нормаль плоскости паза (соединение «паз»).</summary>
+    public Vector3d SlotNormal;
 
     // Пределы
     public bool LimitEnabled;
@@ -127,6 +135,9 @@ public sealed class Mate : ModelItem
         MateType.Cylinder => 2,
         MateType.Planar => 3,
         MateType.Ball => 3,
+        MateType.BallCylinder => 4,
+        MateType.Slot => 2,
+        MateType.Free => 6,
         _ => 0
     };
 
@@ -151,6 +162,7 @@ public sealed class Mate : ModelItem
 
     public void ApplyTo(Part part)
     {
+        if (Type == MateType.Free) return;
         ClampFree();
         // Опорная геометрия базовой детали переводится в координаты сборки её текущим
         // положением: так цепочка считается от звена к звену.
@@ -192,6 +204,18 @@ public sealed class Mate : ModelItem
             case MateType.Ball:
                 rot = BallRotation;
                 break;
+            case MateType.BallCylinder:
+                rot = BallRotation;
+                pos += aAxis * Offset;
+                break;
+            case MateType.Slot:
+                {
+                    // ось паза — AssemblyAxis; нормаль плоскости паза — PlanarNormal (в координатах базы)
+                    var n = SlotNormal.LengthSquared < 1e-18 ? Kernel.Frame3.FromNormal(Vector3d.Zero, aAxis).U : SlotNormal.Normalized();
+                    pos += aAxis * Offset;
+                    rot = Quaternion.FromAxisAngle(ToF(n), (float)Angle) * align;
+                    break;
+                }
         }
 
         Vector3d offsetInPart = -PartOrigin;
@@ -223,11 +247,12 @@ public sealed class Mate : ModelItem
 
         // У ползуна и цилиндра сдвиг вдоль оси — свобода, а не невязка.
         Vector3d delta = at - baseOrigin;
-        if (Type is MateType.Slider or MateType.Cylinder)
+        if (Type is MateType.Slider or MateType.Cylinder or MateType.BallCylinder or MateType.Slot)
             delta -= baseAxis.Normalized() * Vector3d.Dot(delta, baseAxis.Normalized());
+        if (Type == MateType.Free) return (0, 0);
 
         double cos = Math.Clamp(Vector3d.Dot(dir, baseAxis.Normalized()), -1, 1);
-        double angle = Type == MateType.Ball ? 0 : Math.Acos(Math.Abs(cos)) * 180 / Math.PI;
+        double angle = Type is MateType.Ball or MateType.BallCylinder or MateType.Slot ? 0 : Math.Acos(Math.Abs(cos)) * 180 / Math.PI;
         return (delta.Length, angle);
     }
 

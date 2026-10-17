@@ -93,6 +93,7 @@ public partial class MainWindow : Window
         if (InSketch) View.ExitSketch(false);
         if (Session != null) { Session.Replaced -= OnReplaced; Session.StateChanged -= OnStateChanged; Session.Document.BuildStarted -= OnBuild; Session.Document.BuildFinished -= OnBuild; }
         Session = s;
+        View.ActivePart = s.ActivePart;
         Commands.DisplayUnits.Inch = s.Part?.Units.Length == "in";
         s.Replaced += OnReplaced;
         s.StateChanged += OnStateChanged;
@@ -156,10 +157,10 @@ public partial class MainWindow : Window
         {
             var f = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
-                Title = L("Сохранить деталь"),
-                SuggestedFileName = Session.Title + DocumentSession.PartExtension,
-                DefaultExtension = DocumentSession.PartExtension,
-                FileTypeChoices = new[] { new FilePickerFileType(L("Деталь Parametric3D")) { Patterns = new[] { "*" + DocumentSession.PartExtension } } },
+                Title = L(Session.IsAssembly ? "Сохранить сборку" : "Сохранить деталь"),
+                SuggestedFileName = Session.Title + (Session.IsAssembly ? DocumentSession.AssemblyExtension : DocumentSession.PartExtension),
+                DefaultExtension = Session.IsAssembly ? DocumentSession.AssemblyExtension : DocumentSession.PartExtension,
+                FileTypeChoices = new[] { Session.IsAssembly ? new FilePickerFileType(L("Сборка Parametric3D")) { Patterns = new[] { "*" + DocumentSession.AssemblyExtension } } : new FilePickerFileType(L("Деталь Parametric3D")) { Patterns = new[] { "*" + DocumentSession.PartExtension } } },
             });
             path = f?.TryGetLocalPath();
             if (path == null) return false;
@@ -179,7 +180,7 @@ public partial class MainWindow : Window
             {
                 Title = L("Открыть"),
                 AllowMultiple = false,
-                FileTypeFilter = new[] { new FilePickerFileType(L("Деталь Parametric3D")) { Patterns = new[] { "*" + DocumentSession.PartExtension } } },
+                FileTypeFilter = new[] { new FilePickerFileType(L("Деталь или сборка Parametric3D")) { Patterns = new[] { "*" + DocumentSession.PartExtension, "*" + DocumentSession.AssemblyExtension } } },
             });
             path = files.FirstOrDefault()?.TryGetLocalPath();
             if (path == null) return;
@@ -439,7 +440,17 @@ public partial class MainWindow : Window
     private void BuildCommandBar()
     {
         CommandStack.Children.Clear();
-        (string[] Main, string[] More)[] groups = InSketch
+        bool asmMode = !InSketch && Session?.IsAssembly == true && Session.ActivePart == null;
+        (string[] Main, string[] More)[] groups = asmMode
+            ? new[]
+            {
+                (new[] { "as.insert_component", "as.create_component", "as.edit_in_context" }, new[] { "as.insert_freeform", "as.skeleton", "as.open_component", "as.replace", "file.insert_part" }),
+                (new[] { "mate.coincident", "mate.concentric", "mate.distance" }, new[] { "mate.angle", "mate.parallel", "mate.perpendicular", "mate.tangent", "mate.insert", "mate.point_on", "mate.rigid", "as.flip" }),
+                (new[] { "joint.fixed", "joint.pin", "joint.slider" }, new[] { "joint.cylindrical", "joint.bearing", "joint.planar", "joint.ball", "joint.slot", "joint.weld", "joint.gimbal" }),
+                (new[] { "as.fix", "as.drag" }, new[] { "as.pattern", "as.pattern_ref", "as.mirror", "as.subassembly" }),
+                (new[] { "as.explode", "as.bom" }, Array.Empty<string>()),
+            }
+            : InSketch
             ? new[]
             {
                 (new[] { "sk.line", "sk.rect", "sk.circle", "sk.arc3", "sk.spline", "sk.point", "sk.centerline" },
@@ -467,7 +478,7 @@ public partial class MainWindow : Window
             };
         CommandStack.Children.Add(new TextBlock
         {
-            Text = InSketch ? L("ЭСКИЗ") : L("ОПЕРАЦИИ"), Classes = { "header" }, Margin = new Thickness(6, 2, 6, 4),
+            Text = InSketch ? L("ЭСКИЗ") : asmMode ? L("СБОРКА") : L("ОПЕРАЦИИ"), Classes = { "header" }, Margin = new Thickness(6, 2, 6, 4),
         });
         for (int g = 0; g < groups.Length; g++)
         {
@@ -596,6 +607,8 @@ public partial class MainWindow : Window
         View.SceneRebuilt += () => { CurrentOperation?.RefreshStatus(); UpdateStatus(); if (_propsOn && CurrentOperation == null) ShowProperties(); };
         View.ToolChanged += () => { ShowHint(View.Tool != null ? L(View.Tool.Hint) : InSketch ? L("Выберите инструмент слева; Ctrl+Enter — закончить эскиз") : null); RefreshToolStates(); };
         View.RegionChanged += ShowRegion;
+        View.ComponentDragStarted += _ => Session.BeginEdit(L("Перетащить компонент"));
+        View.ComponentDragEnded += _ => { Session.CommitEdit(); Commands.AssemblyCommands.Solve(this); };
         View.SketchEdited += () => { ScheduleTree(); UpdateStatus(); };
         View.ExpandEdge = r => r.Owner is Part p ? Topo.ChainRefs(p, r) : new List<PickRef> { r };
         View.ReferencePicked += AddSketchReference;
@@ -1148,6 +1161,18 @@ public partial class MainWindow : Window
         var res = new List<string>();
         var sel = View.Selection.Items;
         if (InSketch || sel.Count == 0) return res;
+        if (Session.IsAssembly && Session.ActivePart == null)
+        {
+            // u13: сборка — ограничения и соединения по двум ссылкам, команды компонента
+            int geo = sel.Count(r => Commands.AssemblyCommands.GeoOf(r) != null);
+            bool axes = sel.Count(r => Commands.AssemblyCommands.GeoOf(r) is { Kind: Commands.AssemblyCommands.GeoKind.Axis }) >= 2;
+            bool twoPlanes = sel.Count(r => Commands.AssemblyCommands.GeoOf(r) is { Kind: Commands.AssemblyCommands.GeoKind.Plane }) >= 2;
+            if (geo >= 2 && twoPlanes) res.AddRange(new[] { "mate.coincident", "mate.distance", "mate.parallel", "mate.angle", "joint.planar" });
+            if (geo >= 2 && axes) res.AddRange(new[] { "mate.concentric", "mate.insert", "joint.pin", "joint.cylindrical", "joint.slider" });
+            if (geo >= 2 && !twoPlanes && !axes) res.AddRange(new[] { "mate.coincident", "mate.tangent", "mate.point_on" });
+            if (Commands.AssemblyCommands.SelectedComponents(this).Count > 0) res.AddRange(new[] { "as.edit_in_context", "as.fix", "as.open_component", "as.pattern", "as.mirror", "as.replace" });
+            return res.Distinct().ToList();
+        }
         bool planar = sel.Any(Refs.IsPlanar), face = sel.Any(r => r.Kind == PickKind.Face);
         bool edge = sel.Any(r => r.Kind == PickKind.Edge), vertex = sel.Any(r => r.Kind == PickKind.Vertex);
         bool sketch = sel.Any(Refs.IsSketch), linear = sel.Any(Refs.IsLinear), axis = sel.Any(r => r.Kind == PickKind.DatumAxis);
@@ -1189,6 +1214,10 @@ public partial class MainWindow : Window
                 break;
         }
     }
+
+    /// <summary>u13: ограничение или соединение, выбранное в дереве сборки.</summary>
+    public (Part Part, int Index)? SelectedTreeConstraint() =>
+        Tree.SelectedItem is TreeNode { Item: InfoItem { Role: "constraint" or "joint" } ii } ? (ii.Owner, ii.Index) : null;
 
     /// <summary>u13: обновить контекстную панель (после закрепления команд).</summary>
     public void RefreshContext() => UpdateContextBar();
@@ -1538,7 +1567,7 @@ public partial class MainWindow : Window
         using var _ui = Diagnostics.UiTimes.Measure("окно: дерево");
         // состояние «развёрнут» живёт между перестройками (п. 13): глаз эскиза не сворачивает ветку
         foreach (var n in AllNodes) _expand[n.Item.Id] = n.IsExpanded;
-        _roots = TreeNode.Build(Session.Document);
+        _roots = TreeNode.Build(Session.Document, Session.IsAssembly);
         foreach (var n in _roots.SelectMany(r => r.SelfAndDescendants()))
             if (_expand.TryGetValue(n.Item.Id, out bool ex)) n.RestoreExpanded(ex);
         _syncingTree = true;
@@ -1742,7 +1771,7 @@ public partial class MainWindow : Window
         string sel = View.Selection.IsEmpty ? "" : L("Выбрано: ") + View.Selection.Describe();
         StatusSel.Text = string.IsNullOrEmpty(_hoverText) ? sel : (sel.Length > 0 ? sel + "   ·   " : "") + L("Под курсором: ") + _hoverText;
         StatusUnits.Text = L(Commands.DisplayUnits.LengthUnit);
-        EnvText.Text = InSketch ? L("Эскиз") : CurrentOperation != null ? L("Операция") : L("Деталь");
+        EnvText.Text = InSketch ? L("Эскиз") : CurrentOperation != null ? L("Операция") : Session?.IsAssembly == true ? (Session.ActivePart != null ? L("Компонент «{0}»", Session.ActivePart.Name) : L("Сборка")) : L("Деталь");
         if (Session == null) return;
         int errors = Session.Document.Root.Descendants().Count(i => i.Error != null);
         // u13: значки состояния — идёт перестроение, требуют внимания, годно

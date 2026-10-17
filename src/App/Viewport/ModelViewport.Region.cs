@@ -14,6 +14,40 @@ namespace Parametric3D.App.Viewport;
 public sealed partial class ModelViewport
 {
     public enum RegionKind { Box, Lasso }
+    /// <summary>u13: сборка — протяжка левой кнопкой двигает выбранный компонент (в плоскости вида).</summary>
+    public bool DragComponents;
+    /// <summary>Компонент перетаскивается: начало и конец (окно решает ограничения и записывает шаг отмены).</summary>
+    public event Action<Part>? ComponentDragStarted, ComponentDragEnded;
+    private Part? _dragPart;
+
+    private bool ComponentDragMove(Point p)
+    {
+        if (!DragComponents || _drag != Drag.Select) return false;
+        if (_dragPart == null)
+        {
+            if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4) return false;
+            _dragPart = Selection.Items.Select(r => r.Target as Part ?? r.Owner as Part).OfType<Part>().FirstOrDefault(x => !x.Fixed);
+            if (_dragPart == null) return false;
+            ComponentDragStarted?.Invoke(_dragPart);
+            _last = _down;
+        }
+        double s = Scaling; float k = 1f / Math.Max(1e-6f, Camera.WorldToPx);
+        float dx = (float)((p.X - _last.X) * s) * k, dy = (float)((p.Y - _last.Y) * s) * k;
+        var right = Vector3.Transform(Vector3.UnitX, Quaternion.Invert(Camera.State.Rotation));
+        _dragPart.Translation += right * dx - Camera.Up * dy;
+        _last = p;
+        MarkDirty();
+        return true;
+    }
+
+    private bool ComponentDragEnd()
+    {
+        if (_dragPart == null) return false;
+        var p = _dragPart; _dragPart = null;
+        ComponentDragEnded?.Invoke(p);
+        return true;
+    }
+
     /// <summary>u13: щелчок по ребру выбирает касательную цепочку.</summary>
     public bool AutoChain = true;
     /// <summary>u13: замена выбранного щелчком (режим «операция»: грань → операция).</summary>

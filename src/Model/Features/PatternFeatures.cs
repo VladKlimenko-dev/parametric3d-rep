@@ -16,6 +16,8 @@ public sealed class MirrorFeature : Feature
     public Vector3d Normal = Vector3d.UnitX;
     /// <summary>u12: ключи операций для повтора (зеркало операций); пусто — зеркало тела.</summary>
     public readonly List<string> Sources = new();
+    /// <summary>u13: тело заменяется отражённым (зеркальный компонент сборки), без объединения с исходным.</summary>
+    public bool ReplaceBody;
 
     public MirrorFeature(string name = "Mirror") { Name = name; }
 
@@ -27,6 +29,12 @@ public sealed class MirrorFeature : Feature
         if (Normal.LengthSquared < 1e-18) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Mirror: the plane normal is not set.");
 
         if (Sources.Count > 0) { FeatureReplay.Run(ctx, this, Sources, new[] { TransformOp.Mirror(At, Normal.Normalized()) }, "Mirror"); return; }
+        if (ReplaceBody)
+        {
+            var x = TransformOp.Mirror(At, Normal.Normalized());
+            for (int i = 0; i < ctx.Bodies.Count; i++) ctx.Bodies[i] = Kernel.Topology.TopologyTransform.Apply(ctx.Bodies[i], x) ?? TransformOp.Copy(ctx.Bodies[i], x);
+            return;
+        }
         bool mirrored = false;
         Kernel.OperationContract.Apply("Mirror", ctx.Bodies, b => mirrored = TransformOp.MirrorBody(b, At, Normal.Normalized(), ctx.Warnings, Key));
         if (!mirrored)

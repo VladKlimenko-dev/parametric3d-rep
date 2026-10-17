@@ -82,6 +82,14 @@ public sealed class Part : ModelItem
     /// <summary>Положение детали в сборке.</summary>
     public Vector3 Translation = Vector3.Zero;
     public Quaternion Rotation = Quaternion.Identity;
+    /// <summary>u13: компонент сборки зафиксирован (решатель его не двигает).</summary>
+    public bool Fixed;
+    /// <summary>u13: скелетная модель сборки (опорная геометрия; не входит в спецификацию и массу).</summary>
+    public bool Skeleton;
+    /// <summary>u13: подсборка компонента (группа в дереве и спецификации); пусто — в корне.</summary>
+    public string? SubAssembly;
+    /// <summary>u13: путь файла, из которого вставлен компонент (замена, открытие).</summary>
+    public string? SourcePath;
 
     /// <summary>
     /// Связи детали со сборкой. Первая ставит деталь на место, остальные проверяются на

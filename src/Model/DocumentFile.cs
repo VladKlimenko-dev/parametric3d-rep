@@ -381,7 +381,8 @@ public static class DocumentFile
             Kind = "mirror", Name = mf.Name, Suppressed = mf.Suppressed,
             Point = new[] { mf.At.X, mf.At.Y, mf.At.Z },
             Dir = new[] { mf.Normal.X, mf.Normal.Y, mf.Normal.Z },
-            Sources = mf.Sources.Count == 0 ? null : mf.Sources.ToList()
+            Sources = mf.Sources.Count == 0 ? null : mf.Sources.ToList(),
+            Flags = mf.ReplaceBody ? new() { "replace" } : null
         },
 
         LinearPatternFeature lp => new FeatureDto
@@ -780,6 +781,7 @@ public static class DocumentFile
                     var n = Vec(fd.Dir);
                     if (n.LengthSquared > 1e-18) mf.Normal = n;
                     if (fd.Sources != null) mf.Sources.AddRange(fd.Sources);
+                    mf.ReplaceBody = HasFlag(fd, "replace");
                     part.AddFeature(mf);
                     break;
                 }
