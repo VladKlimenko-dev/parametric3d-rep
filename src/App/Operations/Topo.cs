@@ -333,11 +333,21 @@ public static class Topo
     /// грани (или касательно продолжающей её). Скругление R150 у куба 100 уводит границу за край грани, фаска шире соседней
     /// грани — на другую грань: контур красный (u10).
     /// </summary>
+    static readonly bool GhostArcOff = Environment.GetEnvironmentVariable("P3D_GHOSTARC") == "0";
     public static Func<double, bool>? EdgeGhostValid(Part p, IEnumerable<uint> edgeIds, bool round)
     {
         var onLike = OnFaceLikeTest(p);
         var onBody = OnBodyTest(p);
         var samples = new List<(Vector3d P, Vector3d D1, Vector3d D2, Vector3d N1, Vector3d N2)>();
+        // u12b: ребро-дуга — полоса к центру дуги не шире её радиуса (скругление R4.2 на верхнем ребре бобышки R3.5 прежде
+        // показывалось годным: точка касания за осью снова попадала на торец). Предел — по каждой стороне (P3D_GHOSTARC=0)
+        // Только у полной окружности (все выбранные рёбра — дуги одного круга, вместе 2π): у дуги в цепочке с прямыми полоса за
+        // центром обрезается соседями, и ядро такое строит (угол скруглённого контура, торец паза).
+        var arcLimits = new List<(Vector3d P, Vector3d D, double Lim)>();
+        var selArcs = edgeIds.Distinct().Select(i => p.FindEdge(i)?.Curve).ToList();
+        bool fullCircle = selArcs.Count > 0 && selArcs.All(x => x is Parametric3D.Kernel.Curves.ArcCurve3) && selArcs.Cast<Parametric3D.Kernel.Curves.ArcCurve3>() is var arcs
+            && arcs.All(a => (a.Frame.Origin - arcs.First().Frame.Origin).Length < 1e-6 && Math.Abs(a.Radius - arcs.First().Radius) < 1e-6)
+            && arcs.Sum(a => Math.Abs(a.A1 - a.A0)) >= 2 * Math.PI - 1e-6;
         foreach (var id in edgeIds.Distinct())
         {
             if (p.FindEdge(id) is not { Curve: { } c } e) continue;
@@ -357,6 +367,14 @@ public static class Topo
                 // кривая грань — нормаль Zero: точка проверяется только «на теле»
                 Vector3d N(TFace f) => Refs.FacePlane(p, f.Id) is { } pl ? pl.N : Vector3d.Zero;
                 if (d1 != Vector3d.Zero && d2 != Vector3d.Zero) samples.Add((at, d1, d2, N(faces[0]), N(faces[1])));
+                if (!GhostArcOff && fullCircle && c is Parametric3D.Kernel.Curves.ArcCurve3 arc)
+                    foreach (var d in new[] { d1, d2 })
+                    {
+                        if (d == Vector3d.Zero) continue;
+                        var w = arc.Frame.W.Normalized(); var dp = d - w * Vector3d.Dot(d, w);   // составляющая в плоскости дуги
+                        var toC = arc.Frame.Origin - at;
+                        if (Vector3d.Dot(dp, toC) > 0 && dp.Length > 0.1) arcLimits.Add((at, d, arc.Radius / dp.Length));
+                    }
             }
         }
         if (samples.Count == 0) return null;
@@ -374,6 +392,8 @@ public static class Topo
                 // плоская грань: точка на ней же (та же нормаль); кривая — на теле с нормалью грани в точке ребра не проверить
                 // точно, тогда достаточно «на грани с близкой нормалью» по месту
                 bool Ok(Vector3d q, Vector3d n) => n == Vector3d.Zero ? onBody(new[] { q }) : onLike(q, n);
+                foreach (var (ap, ad, lim) in arcLimits)
+                    if (ap == P && (ad == d1 || ad == d2) && dist >= lim * (1 - 1e-9)) { GhostDebug?.Invoke($"fail at {P}: band {dist} beyond the arc radius limit {lim}"); return false; }
                 if (!Ok(P + d1 * dist, n1) || !Ok(P + d2 * dist, n2))
                 {
                     GhostDebug?.Invoke($"fail at {P}: d1 {d1} n1 {n1} ok {Ok(P + d1 * dist, n1)}; d2 {d2} n2 {n2} ok {Ok(P + d2 * dist, n2)}; dist {dist}");

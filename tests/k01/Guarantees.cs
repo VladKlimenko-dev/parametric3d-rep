@@ -50,6 +50,8 @@ static partial class Program
         ["Kernel.Ops.FilletOp.FillerPiecesDropped"] = "u12a: счётчик отброшенных кусков прибавки за тонкой стенкой (Interlocked, разбор)",
         ["Kernel.Ops.ShellOp.FillerClips"] = "u12a: счётчик обрезок прибавки по кривому торцу (Interlocked, разбор)",
         ["Kernel.Ops.DirectRound.OffsetSlides"] = "u12a: счётчик вершин смещения, сдвинутых вдоль касательной грани (Interlocked, разбор)",
+        ["Kernel.Ops.DirectRound.OffsetSharpened"] = "u12b: счётчик тел, заострённых перед смещением (исчезающие сопряжения; Interlocked, разбор)",
+        ["Kernel.Ops.DirectRound.ExtendedThroughOpen"] = "u12b: счётчик тел, продлённых сквозь открытую грань оболочки (Interlocked, разбор)",
         ["Kernel.Ops.FilletOp.FinalCheckRefusals"] = "g.02: счётчик отказов итоговой проверки обходного пути скругления (разбор)",
         ["Kernel.Diagnostics.Overhead._ticks"] = "g.13: время проверок и разметки сверх B-rep (Interlocked, только замер)",
         ["Kernel.Tess.ExactFaceMesher.ObjDumpPath"] = "отладочная выгрузка",

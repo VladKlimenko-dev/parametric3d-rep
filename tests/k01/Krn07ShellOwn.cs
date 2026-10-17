@@ -38,12 +38,15 @@ static partial class Program
                 if (!ok || bl.Count != 1 || b.Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(b).IsValid || !(Math.Abs(v - want) <= 1e-9 * want))
                     fails.Add($"{name}: ok {ok}, V {v:R} vs {want:R}, {b.Guarantee} {SolidValidator.Validate(b).Summary()} | {string.Join(" | ", w.Take(2))}");
             }
-            // касание теряется — отказ, тело не тронуто
+            // u12b: касание теряется — шов скользит: внутренняя плоскость x = 57 срезает цилиндр R3 по ребру (прежде — честный
+            // отказ). Стенка толще, чем при 2 везде, но не больше, чем на слой 1 мм у грани x = 60 (18 × 36)
             {
-                var b0 = RBox(); double v0 = AnalyticVolume.Of(b0) ?? double.NaN; var bl = new List<TSolid> { b0 }; var w = new List<string>();
+                var b0 = RBox(); var bl = new List<TSolid> { b0 }; var w = new List<string>();
                 bool ok = ShellOp.Hollow(bl, 2, new[] { new Vector3d(30, 20, 20) }, w, new[] { (new Vector3d(60, 20, 10), 3.0) });
-                Console.WriteLine($"  tangent wall with another thickness: ok {ok} | {string.Join(" | ", w.Take(2))}");
-                if (ok || !(Math.Abs((AnalyticVolume.Of(bl[0]) ?? 0) - v0) < 1e-9 * v0)) fails.Add($"tangent wall with another thickness: ok {ok} (must refuse, body untouched)");
+                double v = AnalyticVolume.Of(bl[0]) ?? double.NaN, vu = (60 * 40 - k * 25) * 20 - (56 * 36 - k * 9) * 18;
+                Console.WriteLine($"  tangent wall with another thickness: ok {ok}, V {v:R} (uniform 2: {vu:R}) | {string.Join(" | ", w.Take(2))}");
+                if (!ok || bl[0].Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(bl[0]).IsValid || !(v - vu > 0 && v - vu < 18 * 36))
+                    fails.Add($"tangent wall with another thickness: ok {ok}, V {v:R} vs uniform {vu:R}, {bl[0].Guarantee}");
             }
             Require(fails.Count == 0, string.Join("; ", fails));
         });

@@ -362,6 +362,21 @@ static partial class Program
             Console.WriteLine(string.Join(" | ", ww));
             return;
         }
+        if (mode is "seq")   // диагностика порядка: группы по очереди (seq negative guarantees krn07)
+        {
+            foreach (var g in args.Skip(1))
+                switch (g)
+                {
+                    case "sphere": Sphere(); break;
+                    case "negative": Negative(); SelfXChecks(); break;
+                    case "guarantees": Guarantees(); Representations(); break;
+                    case "krn02": Krn02(); break;
+                    case "krn03": Krn03(); break;
+                    case "krn05": Krn05(); break;
+                    case "krn07": Krn07(); break;
+                }
+            return;
+        }
         if (mode is "sphere" or "allA") Sphere();
         if (mode is "negative" or "allA") Negative();
         if (mode is "selfx2" or "negative" or "allA") SelfXChecks();
