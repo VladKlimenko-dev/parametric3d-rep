@@ -40,12 +40,15 @@ uniform vec2 uViewport;
 uniform float uOutlinePx;
 out vec3 vN;
 out vec3 vV;
+out vec3 vW;
 flat out uint vFlags;
 flat out uint vPick;
 " + Flags + @"
 void main()
 {
-    vec4 vp = uView * (uModel * vec4(aPos, 1.0));
+    vec4 wp = uModel * vec4(aPos, 1.0);
+    vW = wp.xyz;
+    vec4 vp = uView * wp;
     vec3 n = normalize(mat3(uView * uModel) * aNrm);
     vN = n;
     vV = vp.xyz;
@@ -64,8 +67,11 @@ void main()
     public const string MeshFrag = @"#version 330 core
 in vec3 vN;
 in vec3 vV;
+in vec3 vW;
 flat in uint vFlags;
 flat in uint vPick;
+uniform vec4 uClip;         // u13: плоскость сечения (n, d): отсекается dot(n, p) + d > 0; n = 0 — нет
+uniform int uZebra;         // u13: зебра — полосы отражения
 uniform vec4 uBase;
 uniform vec4 uHover;
 uniform vec4 uSelect;
@@ -80,6 +86,7 @@ vec3 toLin(vec3 c) { return pow(c, vec3(2.2)); }
 
 void main()
 {
+    if (dot(uClip.xyz, uClip.xyz) > 0.0 && dot(uClip.xyz, vW) + uClip.w > 0.0) discard;
     if (uMode == 2) { oColor = encodePick(vPick); return; }
     if (uMode == 1) { oColor = uFlat; return; }
 
@@ -119,6 +126,16 @@ void main()
         oColor = vec4(pow(cm, vec3(1.0 / 2.2)), uBase.a * uOpacity);
         return;
     }
+    if (uZebra == 1)
+    {
+        vec3 Rz = reflect(-V, N);
+        float st = smoothstep(0.45, 0.55, abs(fract(Rz.y * 5.0) * 2.0 - 1.0));
+        vec3 cz = mix(vec3(0.06), vec3(0.96), st);
+        if (!gl_FrontFacing) cz *= 0.4;
+        oColor = vec4(cz, uBase.a * uOpacity);
+        return;
+    }
+    if (!gl_FrontFacing && dot(uClip.xyz, uClip.xyz) > 0.0) b *= 0.45;   // u13: внутренность в сечении темнее
     vec3 diff = b * (hemi + d1 * 0.80 * vec3(1.0, 0.98, 0.95) + d2 * 0.28 * vec3(0.85, 0.90, 1.0));
     float s1 = pow(max(dot(N, normalize(L1 + V)), 0.0), 64.0) * 0.30;
     float s2 = pow(max(dot(N, normalize(L2 + V)), 0.0), 24.0) * 0.06;
@@ -149,6 +166,7 @@ uniform vec4 uHover;
 uniform vec4 uSelect;
 uniform vec4 uColorOverride;
 uniform float uDashOverride;
+out vec3 vW;
 out float vAcross;
 out float vAlong;
 flat out float vHalf;
@@ -195,6 +213,7 @@ void main()
     float z = c.z / c.w - uDepthBias;
     gl_Position = vec4(s / uViewport * 2.0 - 1.0, z, 1.0);
 
+    vW = atB ? aB : aA;
     vAcross = side * ext;
     vAlong = atB ? len : 0.0;
     vHalf = half_;
@@ -204,6 +223,8 @@ void main()
 }";
 
     public const string LineFrag = @"#version 330 core
+in vec3 vW;
+uniform vec4 uClip;
 in float vAcross;
 in float vAlong;
 flat in float vHalf;
@@ -215,6 +236,7 @@ out vec4 oColor;
 " + PickOut + @"
 void main()
 {
+    if (dot(uClip.xyz, uClip.xyz) > 0.0 && dot(uClip.xyz, vW) + uClip.w > 0.0) discard;
     float d = abs(vAcross);
     if (uPickMode == 1)
     {

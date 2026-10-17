@@ -114,6 +114,9 @@ public sealed class OpPanel
 
     public void Number(string label, Func<ValueRef> get, Action<ValueRef> set, string unit = "мм", Func<bool>? visible = null)
     {
+        // u13: длины — в единицах детали (мм или дюймы); формулы — как записаны
+        bool inch = unit == "мм" && Commands.DisplayUnits.Inch;
+        if (inch) { var g0 = get; var s0 = set; get = () => { var v = g0(); return v.Formula != null ? v : new ValueRef(v.Value / Commands.DisplayUnits.InchMm); }; set = v => s0(v.Formula != null ? v : new ValueRef(v.Value * Commands.DisplayUnits.InchMm)); unit = "дюйм"; }
         var tb = new TextBox { Text = Show(get()), MinWidth = 60 };
         var unitText = new TextBlock { Text = L(unit), Classes = { "dim" }, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) };
         var dock = new DockPanel();
@@ -148,7 +151,9 @@ public sealed class OpPanel
     public void Check(string label, Func<bool> get, Action<bool> set, Func<bool>? visible = null)
     {
         var cb = new CheckBox { IsChecked = get(), Content = L(label) };
-        cb.IsCheckedChanged += (_, _) => { set(cb.IsChecked == true); _op.FieldChanged(); };
+        bool sync = false;
+        cb.IsCheckedChanged += (_, _) => { if (sync) return; set(cb.IsChecked == true); _op.FieldChanged(); };
+        _syncers.Add(() => { sync = true; cb.IsChecked = get(); sync = false; });
         _host.Children.Add(cb);
         When(cb, visible);
     }
@@ -173,6 +178,7 @@ public sealed class OpPanel
             buttons.Add(b);
             sp.Children.Add(b);
         }
+        _syncers.Add(() => { int g = get(); for (int j = 0; j < buttons.Count; j++) buttons[j].IsChecked = j == g; });
         Row(label, sp);
     }
 
@@ -182,6 +188,7 @@ public sealed class OpPanel
 
     private readonly List<(Control C, Func<bool> Visible)> _conditional = new();
     private readonly List<(TextBox Box, Func<ValueRef> Get)> _numbers = new();
+    private readonly List<Action> _syncers = new();
 
     /// <summary>Поле видно только при условии (например, угол — только у фаски «расстояние и угол»).</summary>
     private void When(Control c, Func<bool>? visible)
@@ -197,6 +204,7 @@ public sealed class OpPanel
         foreach (var (c, v) in _conditional) c.IsVisible = v();
         foreach (var (tb, get) in _numbers)
             if (!tb.IsFocused) tb.Text = Show(get());
+        foreach (var a in _syncers) a();
     }
 
     // ------------------------------------------------------------------ числа и формулы

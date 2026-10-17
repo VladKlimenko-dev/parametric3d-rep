@@ -455,6 +455,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
                 if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > 4) { _drag = Drag.Pan; Camera.Pan(dx, dy); _last = p; Redraw(); }
                 return;
         }
+        if (RegionMove(p)) return;
         if (Tool != null) ToolMove(p);
         if (ActiveSketch != null) UpdateDimensionHover(p);
         RequestPick(p, click: false, KeyModifiers.None);
@@ -472,6 +473,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         if (was == Drag.RightPending && Tool != null) ToolFinish();
         else if (was == Drag.RightPending) ContextRequested?.Invoke(p);
         else if (was == Drag.Tool && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 6) ToolClick(p);
+        else if (was == Drag.Select && RegionEnd(p, e.KeyModifiers)) { }
         else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4) RequestPick(p, click: true, e.KeyModifiers);
     }
 
@@ -532,8 +534,10 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         bool toggle = req.Mods.HasFlag(KeyModifiers.Control), add = req.Mods.HasFlag(KeyModifiers.Shift);
         if (r.IsEmpty) { if (!add && !toggle) Selection.Clear(); return; }
         if (TryReference(r)) return;
-        // п. 4: ребро — вместе с касательной цепочкой (Alt — одно ребро)
-        var group = r.Kind == PickKind.Edge && !req.Mods.HasFlag(KeyModifiers.Alt) && ExpandEdge != null ? ExpandEdge(r) : new List<PickRef> { r };
+        // u13: режим выбора «операция» и др. — щелчок по грани заменяется (операция, создавшая грань)
+        if (PickMap != null) { r = PickMap(r); if (r.IsEmpty) return; }
+        // п. 4: ребро — вместе с касательной цепочкой (Alt — одно ребро; u13: выключаемо кнопкой)
+        var group = r.Kind == PickKind.Edge && AutoChain && !req.Mods.HasFlag(KeyModifiers.Alt) && ExpandEdge != null ? ExpandEdge(r) : new List<PickRef> { r };
         if (toggle && Selection.Contains(r.Id))
         {
             foreach (var g in group) if (Selection.Contains(g.Id)) Selection.Select(g, additive: true);

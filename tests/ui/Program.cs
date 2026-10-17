@@ -18,6 +18,7 @@ using Parametric3D.App.Viewport;
 using Parametric3D.App.Views;
 using Parametric3D.Core;
 using Parametric3D.Model.Features;
+using Parametric3D.Model.Params;
 using Parametric3D.Render;
 
 // ПРОВЕРКИ ПРИЛОЖЕНИЯ (этапы U0–U1) без экрана: Avalonia.Headless, вид — без OpenGL (выбор под курсором считается на
@@ -577,6 +578,147 @@ Check("UI-U13C-FEATURES", () =>
     var json = Parametric3D.Model.DocumentFile.Save(p4);
     Require(json.Contains("points_pattern") && json.Contains("\"thread\""), "saved kinds");
     w4.Close();
+});
+
+// u13d: вид, выбор (режимы, рамка, контур грани), измерение и анализ
+Check("UI-U13D-VIEW-SELECT", () =>
+{
+    var s = DocumentSession.NewPart(); var w = Open(s); var part = s.Part!;
+    var b = DrawSketch(w, part, part.PlaneXY, sk => Rect(sk, 0, 0, 40, 20));
+    var e = new ExtrudeFeature { SketchId = b.Id }; e.Side1.Distance = new ValueRef(10); part.AddFeature(e); s.Document.RebuildDirty(); part.Rebuild(null);
+    var vp = w.ViewPort;
+    foreach (var id in new[] { "view.front", "view.top", "view.grid", "view.grid", "an.zebra", "an.zebra", "view.section", "view.section" })
+        CommandRegistry.Instance.Find(id)!.Run!();
+    Require(vp.SectionPlane == null && !vp.Zebra && !vp.ModelGrid, "toggles return");
+    vp.Camera.State.Rotation = Parametric3D.Render.Camera.OrientationQuat(Parametric3D.Render.ViewOrientation.Isometric); vp.ZoomToFit(animate: false);
+    // рамка на весь вид в режиме граней — шесть граней бруска
+    ViewSelectCommands.SetMode(w, ViewSelectCommands.SelMode.Face);
+    double W = vp.Camera.ViewportWidth / vp.Scaling, H = vp.Camera.ViewportHeight / vp.Scaling;
+    var all = vp.ItemsInRegion(new[] { new Avalonia.Point(0, 0), new Avalonia.Point(W, 0), new Avalonia.Point(W, H), new Avalonia.Point(0, H) }, crossing: false);
+    Console.WriteLine($"  region: {all.Count} items, kinds {string.Join(",", all.Select(x => x.Kind).Distinct())}");
+    Require(all.Count == 6 && all.All(x => x.Kind == PickKind.Face), "box select faces");
+    // режим «операция»: грань → выдавливание
+    ViewSelectCommands.SetMode(w, ViewSelectCommands.SelMode.Feature);
+    var mapped = vp.PickMap!(all[0]);
+    Require(mapped.Kind == PickKind.Feature && ReferenceEquals(mapped.Target, e), "feature mode");
+    ViewSelectCommands.SetMode(w, ViewSelectCommands.SelMode.Feature);   // повторно — выключить
+    Require(ViewSelectCommands.Mode == ViewSelectCommands.SelMode.All && vp.PickMap == null && vp.Selection.Filter == PickFilter.All, "mode off");
+    // контур верхней грани, площадь и периметр
+    var top = part.Bodies[0].Faces.First(f => Refs.FacePlane(part, f.Id) is { } pl && pl.N.Z > 0.99);
+    vp.Selection.Clear(); Select(w, new PickRef(top.Id, PickKind.Face, part, null));
+    Require(Math.Abs(ViewSelectCommands.SelectedArea(w) - 800) < 1e-6, $"area {ViewSelectCommands.SelectedArea(w)}");
+    Require(Math.Abs(ViewSelectCommands.SelectedLength(w) - 120) < 1e-6, $"perimeter {ViewSelectCommands.SelectedLength(w)}");
+    Require(ViewSelectCommands.FaceLoop(w) == 4 && vp.Selection.Items.All(x => x.Kind == PickKind.Edge), "face loop");
+    // измерение двух вершин по диагонали
+    var vs = part.Bodies[0].Vertices.ToList();
+    var v0 = vs.First(v => v.P.Length < 1e-9); var v1 = vs.First(v => (v.P - new Vector3d(40, 20, 10)).Length < 1e-9);
+    vp.Selection.Clear(); Select(w, new PickRef(v0.Id, PickKind.Vertex, part, null)); Select(w, new PickRef(v1.Id, PickKind.Vertex, part, null));
+    var m = ViewSelectCommands.Measure(w);
+    Console.WriteLine("  measure: " + string.Join(" | ", m));
+    Require(m.Any(x => x.Contains(Math.Sqrt(2100).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))), "measure distance");
+    // гребёнка кривизны: скругление R5 — постоянная кривизна
+    var edge = part.Bodies[0].Edges.First(x => x.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(x.V0.P.Z - 10) < 1e-6 && Math.Abs(x.V1.P.Z - 10) < 1e-6 && Math.Abs(x.V0.P.Y) < 1e-9 && Math.Abs(x.V1.P.Y) < 1e-9);
+    var rf = new RoundFeature { Radius = new ValueRef(5) }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(edge)); part.AddFeature(rf); s.Document.RebuildDirty(); part.Rebuild(null);
+    var arc = part.Bodies[0].Edges.First(x => x.Curve is Parametric3D.Kernel.Curves.ArcCurve3 a && Math.Abs(a.Radius - 5) < 1e-9);
+    vp.Selection.Clear(); Select(w, new PickRef(arc.Id, PickKind.Edge, part, null));
+    var comb = ViewSelectCommands.CurvatureComb(w, scale: 10);
+    var ac = ((Parametric3D.Kernel.Curves.ArcCurve3)arc.Curve).Frame.Origin;
+    var spikes = comb.Where(c => Math.Abs((c.A - ac).Length - 5) < 1e-6 && (c.B - c.A).Length > 1e-9 && Math.Abs(Vector3d.Dot((c.B - c.A).Normalized(), (c.A - ac).Normalized())) > 0.999).Select(c => (c.B - c.A).Length).ToList();
+    Console.WriteLine($"  comb: {comb.Count} lines, spike {spikes.Min():F4}..{spikes.Max():F4}");
+    Require(comb.Count > 0 && spikes.All(x => Math.Abs(x - 10.0 / 5) < 1e-3), "curvature comb of R5");
+    var chk = ViewSelectCommands.CheckBodies(part);
+    Require(chk.Count == 1 && chk[0].Contains("годно") || chk[0].Contains("valid"), "check body: " + string.Join(";", chk));
+    var mt = ViewSelectCommands.MassText(part);
+    Require(mt.Contains("7785.398"), "mass text: " + mt);
+    w.Close();
+});
+
+// u13d: копировать/вставить операции, исполнения (переменные и погашения), единицы
+Check("UI-U13D-DOC", () =>
+{
+    var s = DocumentSession.NewPart(); var w = Open(s); var part = s.Part!;
+    var table = s.Document.ScopeFor(part); table.Add("H", 10, ParamKind.Real, "mm");
+    var b = DrawSketch(w, part, part.PlaneXY, sk => Rect(sk, 0, 0, 40, 20));
+    var e = new ExtrudeFeature { SketchId = b.Id }; e.Side1.Distance = new ValueRef(10) { Formula = "H" }; part.AddFeature(e); s.Document.RebuildDirty();
+    var hole = DrawSketch(w, part, part.PlaneXY, sk => { var c = new CircleTool(); c.Click(new SketchInput(sk, new Vector2d(5, 5), null)); c.Click(new SketchInput(sk, new Vector2d(7, 5), null)); });
+    var cut = new ExtrudeFeature { SketchId = hole.Id, Cut = true, Name = "Hole" }; cut.Side1.Distance = new ValueRef(100); part.AddFeature(cut); s.Document.RebuildDirty();
+    double v1 = part.Volume;
+    Require(Math.Abs(v1 - (8000 - Math.PI * 40)) < 1e-6, $"base volume {v1}");
+    // копировать и вставить вырез: ещё одна операция и эскиз, объём тот же (то же место)
+    int nf = part.Features.Count, ns = part.Children.OfType<Sketch>().Count();
+    w.SelectItem(cut); Require(DocCommands.Copy(w) == 1, "copy");
+    var pasted = DocCommands.Paste(w); s.Document.RebuildDirty();
+    Console.WriteLine($"  paste: {pasted.Count}, features {part.Features.Count}, sketches {part.Children.OfType<Sketch>().Count()}, volume {part.Volume:F6}, error {pasted.FirstOrDefault()?.Error}");
+    Require(pasted.Count == 1 && part.Features.Count == nf + 1 && part.Children.OfType<Sketch>().Count() == ns + 1 && pasted[0].Error == null && Math.Abs(part.Volume - v1) < 1e-6, "paste");
+    Require(pasted[0].Key != cut.Key && pasted[0].Name != cut.Name, "pasted key and name");
+    part.RemoveFeature(pasted[0]); s.Document.RebuildDirty();
+    // исполнения: «Высокая» — H = 20; «Без отверстия» — вырез погашен
+    table.Find("H")!.Number = 20; table.Recalculate();
+    part.Configurations.Add(Configurations.Capture(part, table, "Высокая"));
+    table.Find("H")!.Number = 10; table.Recalculate(); cut.Suppressed = true;
+    part.Configurations.Add(Configurations.Capture(part, table, "Без отверстия"));
+    cut.Suppressed = false; part.Invalidate(); s.Document.RebuildDirty();
+    Configurations.Apply(part, table, "Высокая"); s.Document.RebuildDirty();
+    double vHigh = part.Volume;
+    Configurations.Apply(part, table, "Без отверстия"); s.Document.RebuildDirty();
+    double vNo = part.Volume;
+    Configurations.Apply(part, table, ""); s.Document.RebuildDirty();
+    double vBase = part.Volume;
+    Console.WriteLine($"  configurations: high {vHigh:F3}, no hole {vNo:F3}, base {vBase:F3}");
+    Require(Math.Abs(vHigh - (16000 - Math.PI * 80)) < 1e-6 && Math.Abs(vNo - 8000) < 1e-6 && Math.Abs(vBase - v1) < 1e-6 && !cut.Suppressed && part.ActiveConfiguration == "", "configurations");
+    // единицы: дюймы в поле операции
+    DocCommands.ToggleUnits(w);
+    Require(DisplayUnits.Inch && part.Units.Length == "in", "inch on");
+    DocCommands.ToggleUnits(w);
+    Require(!DisplayUnits.Inch, "inch off");
+    var json = Parametric3D.Model.DocumentFile.Save(part, table);
+    Require(json.Contains("Высокая"), "configurations saved");
+    w.Close();
+});
+
+// u13d: контекстная панель (повысить, похожие, режим, направление, ещё) и состояния дерева
+Check("UI-U13D-CONTEXT", () =>
+{
+    var s = DocumentSession.NewPart(); var w = Open(s); var part = s.Part!;
+    var b = DrawSketch(w, part, part.PlaneXY, sk => Rect(sk, 0, 0, 40, 20));
+    var e = new ExtrudeFeature { SketchId = b.Id }; e.Side1.Distance = new ValueRef(10); part.AddFeature(e); s.Document.RebuildDirty(); part.Rebuild(null);
+    var vp = w.ViewPort;
+    // похожие: верхняя грань → нижняя той же площади
+    var top = part.Bodies[0].Faces.First(f => Refs.FacePlane(part, f.Id) is { } pl && pl.N.Z > 0.99);
+    vp.Selection.Clear(); Select(w, new PickRef(top.Id, PickKind.Face, part, null));
+    Require(ContextCommands.SelectSimilar(w) == 1, $"similar faces {vp.Selection.Count}");
+    // повысить: вершина → три ребра → четыре... грани → тело
+    var v0 = part.Bodies[0].Vertices.First(v => v.P.Length < 1e-9);
+    vp.Selection.Clear(); Select(w, new PickRef(v0.Id, PickKind.Vertex, part, null));
+    Require(ContextCommands.Promote(w) == 3, "vertex → edges");
+    Require(ContextCommands.Promote(w) == 3 && vp.Selection.Items.All(x => x.Kind == PickKind.Face), $"edges → faces {vp.Selection.Count}");
+    Require(ContextCommands.Promote(w) == 1 && vp.Selection.Primary.Kind == PickKind.Body, "faces → body");
+    // режим и направление в операции выдавливания
+    vp.Selection.Clear();
+    var op = new ExtrudeOp { SeedSketch = b }; w.StartOperation(op);
+    var f = (ExtrudeFeature)op.EditedFeature!;
+    var reg = CommandRegistry.Instance;
+    Require(reg.Find("ctx.mode_cut")!.Enabled && reg.Find("ctx.flip")!.Enabled && reg.Find("ctx.both_sides")!.Enabled, "op context commands");
+    reg.Find("ctx.mode_cut")!.Run!(); Require(f.Cut, "cut mode");
+    reg.Find("ctx.mode_add")!.Run!(); Require(!f.Cut, "add mode");
+    reg.Find("ctx.flip")!.Run!(); Require(f.Side1.Flip, "flip");
+    reg.Find("ctx.both_sides")!.Run!(); Require(f.Symmetric, "both sides");
+    reg.Find("ctx.next")!.Run!();
+    w.CancelOperation();
+    // «ещё»: допустимые операции вне предложенных
+    vp.Selection.Clear(); Select(w, new PickRef(top.Id, PickKind.Face, part, null));
+    var more = ContextCommands.MoreOps(w);
+    Require(more.Count > 0 && more.All(c => c.Id.StartsWith("op.")) && !more.Any(c => w.SuggestedOps().Contains(c.Id)), "more ops");
+    // состояния дерева: подавленная операция и узлы детали
+    e.Suppressed = true; s.Document.RebuildDirty();
+    var st = TreeNode.StateOf(e, part);
+    Require(st.File == "state_suppressed_ico.svg", "suppressed state");
+    e.Suppressed = false; s.Document.RebuildDirty();
+    var roots = TreeNode.Build(s.Document);
+    var infos = roots[0].Children.Where(n => n.Item is InfoItem).Select(n => ((InfoItem)n.Item).Role).ToList();
+    Console.WriteLine($"  tree info nodes: {string.Join(",", infos)}");
+    Require(infos.Contains("params") && infos.Contains("material") && infos.Contains("body"), "info nodes");
+    w.Close();
 });
 
 // u13: опорные элементы кнопок (плоскость посередине и касательная, ось грани, точка в центре дуги) и уклон

@@ -187,6 +187,8 @@ public sealed class Part : ModelItem
     public double Mass => Volume * 1e-9 * Material.Density;   // мм^3 -> м^3
     public Bounds3 Bounds { get; private set; } = Bounds3.Empty;
     public readonly List<string> Warnings = new();
+    /// <summary>u13: операции последнего перестроения с не точными гранями (гранение) — значок «приближение» в дереве.</summary>
+    public readonly Dictionary<Feature, (int Faces, int Edges)> Downgrades = new();
 
     private bool _dirty = true;
     public bool IsDirty => _dirty;
@@ -1238,6 +1240,8 @@ public sealed class Part : ModelItem
         Bodies.AddRange(r.Bodies);
         Warnings.Clear();
         Warnings.AddRange(r.Warnings);
+        Downgrades.Clear();
+        foreach (var kv in r.GeometryDowngrades) Downgrades[kv.Key] = kv.Value;
 
         LastFeatureMs = new Dictionary<Feature, double>(r.FeatureMs);
         foreach (var f in Features)
