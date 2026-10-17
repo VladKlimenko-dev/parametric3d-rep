@@ -72,6 +72,9 @@ public static class DocumentFile
             }).ToList(),
             ActiveConfiguration = part.ActiveConfiguration,
             Datums = SaveDatums(part),
+            FreeForm = part.FreeFormDoc, MergeFreeForm = part.MergeFreeForm,
+            ConstructionPlane = part.ConstructionPlane.Origin == Vector3d.Zero && part.ConstructionPlane.W == Vector3d.UnitZ && part.ConstructionPlane.U == Vector3d.UnitX ? null
+                : new[] { part.ConstructionPlane.Origin.X, part.ConstructionPlane.Origin.Y, part.ConstructionPlane.Origin.Z, part.ConstructionPlane.U.X, part.ConstructionPlane.U.Y, part.ConstructionPlane.U.Z, part.ConstructionPlane.V.X, part.ConstructionPlane.V.Y, part.ConstructionPlane.V.Z },
 
             Material = Save(part.Material),
 
@@ -107,6 +110,9 @@ public static class DocumentFile
                 var d = SaveFeature(f) ?? throw new InvalidOperationException($"Feature '{f.Name}' ({f.GetType().Name}) cannot be saved.");
                 d.Key = f.Key; d.Policy = f.Policy?.ToString();
                 if (!string.IsNullOrEmpty(f.Group)) (d.Str ??= new())["group"] = f.Group;
+                if (f.FreeForm != null) (d.Str ??= new())["ff"] = f.FreeForm;
+                if (f.FFBody != null) (d.Str ??= new())["ffbody"] = f.FFBody;
+                if (f.Frozen) (d.Flags ??= new()).Add("frozen");
                 return d;
             }).ToList()
         };
@@ -252,6 +258,7 @@ public static class DocumentFile
         (d.Num ??= new())[key] = v.Value;
         if (v.Formula != null) (d.Str ??= new())[key] = v.Formula;
     }
+    private static double[] V3(Vector3d v) => new[] { v.X, v.Y, v.Z };
     private static void PutS(FeatureDto d, string key, string? v) { if (v != null) (d.Str ??= new())[key] = v; }
     private static void Flag(FeatureDto d, string key) => (d.Flags ??= new()).Add(key);
     private static ValueRef GetV(FeatureDto d, string key, double dflt)
@@ -478,6 +485,33 @@ public static class DocumentFile
             if (bf.AsSurface) Flag(d, "surface");
             (d.Num ??= new())["steps"] = bf.Steps; d.Num["points"] = bf.Points;
         }),
+        FreeFormFeature ffn => Dto("freeform", ffn, d => { PutS(d, "input", ffn.InputStep.Length > 0 ? ffn.InputStep : null); PutS(d, "sig", ffn.InputSig.Length > 0 ? ffn.InputSig : null); }),
+        FFPrimitiveFeature pr => Dto("ff_primitive", pr, d =>
+        {
+            PutS(d, "shape", pr.Shape.ToString()); PutV(d, "a", pr.A); PutV(d, "b", pr.B); PutV(d, "c", pr.C);
+            d.Point = V3(pr.Origin); d.Dir = new[] { pr.U.X, pr.U.Y, pr.U.Z, pr.V.X, pr.V.Y, pr.V.Z };
+        }),
+        FFBooleanFeature fb => Dto("ff_boolean", fb, d => { PutS(d, "op", fb.Op.ToString()); PutS(d, "target", fb.Target); d.Sources = fb.Tools.ToList(); if (fb.KeepTools) Flag(d, "keep"); }),
+        FFTransformFeature ft => Dto("ff_transform", ft, d =>
+        {
+            PutS(d, "mode", ft.Mode.ToString()); d.Sources = ft.BodyNames.ToList();
+            PutV(d, "dx", ft.Dx); PutV(d, "dy", ft.Dy); PutV(d, "dz", ft.Dz); PutV(d, "angle", ft.Angle); PutV(d, "factor", ft.Factor);
+            d.Point = V3(ft.AxisAt); d.Dir = V3(ft.AxisDir); if (ft.Copy) Flag(d, "copy");
+        }),
+        FFSplitFeature fs => Dto("ff_split", fs, d => { PutS(d, "body", fs.Body); d.Point = V3(fs.PlaneAt); d.Dir = V3(fs.Normal); }),
+        FFMirrorFeature fm => Dto("ff_mirror", fm, d => { PutS(d, "mode", fm.Mode.ToString()); d.Sources = fm.BodyNames.ToList(); d.Point = V3(fm.PlaneAt); d.Dir = V3(fm.Normal); }),
+        FFArrayFeature fa => Dto("ff_array", fa, d =>
+        {
+            PutS(d, "kind", fa.Kind.ToString()); d.Sources = fa.BodyNames.ToList(); PutV(d, "count", fa.Count); PutV(d, "count2", fa.Count2); PutV(d, "angle", fa.Angle);
+            PutS(d, "curve", fa.CurveName.Length > 0 ? fa.CurveName : null); if (fa.Align) Flag(d, "align");
+            d.Point = V3(fa.AxisAt); d.Dir = V3(fa.AxisDir); d.ThickFaces = new List<double> { fa.Step.X, fa.Step.Y, fa.Step.Z, fa.Step2.X, fa.Step2.Y, fa.Step2.Z };
+        }),
+        FFAlignFaceFeature fl => Dto("ff_align_face", fl, d =>
+        {
+            PutV(d, "offset", fl.Offset); d.Point = V3(fl.PlaneAt); d.Dir = V3(fl.Normal);
+            d.OpenFaces = fl.OnFaces.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList();
+            d.FaceNames = fl.OnFaceNames.Count > 0 ? fl.OnFaceNames.ToList() : null;
+        }),
         InsertBodyFeature ib => Dto("insert_body", ib, d =>
         {
             PutS(d, "step", ib.Step); PutS(d, "source", ib.SourceName); d.Point = new[] { ib.Offset.X, ib.Offset.Y, ib.Offset.Z };
@@ -648,6 +682,9 @@ public static class DocumentFile
             part.Configurations.Add(cfg);
         }
         LoadDatums(part, doc.Datums);
+        part.FreeFormDoc = doc.FreeForm; part.MergeFreeForm = doc.MergeFreeForm;
+        if (doc.ConstructionPlane is { Length: 9 } cpl)
+            try { part.ConstructionPlane = new Frame3(new Vector3d(cpl[0], cpl[1], cpl[2]), new Vector3d(cpl[3], cpl[4], cpl[5]), new Vector3d(cpl[6], cpl[7], cpl[8])); } catch { }
         var sketchById = new Dictionary<uint, Sketch>();
 
         foreach (var sd in doc.Sketches)
@@ -716,7 +753,8 @@ public static class DocumentFile
             var known = new HashSet<Feature>(part.Features);
             using var keyScope = new KeyOnAdd(part, known, string.IsNullOrEmpty(fd.Key) ? $"legacy{featureIndex}" : fd.Key!,
                                               fd.Policy != null && Enum.TryParse<Kernel.OperationPolicy>(fd.Policy, out var pol) ? pol : null,
-                                              fd.Str != null && fd.Str.TryGetValue("group", out var grp) ? grp : null);
+                                              fd.Str != null && fd.Str.TryGetValue("group", out var grp) ? grp : null,
+                                              GetS(fd, "ff"), GetS(fd, "ffbody"), HasFlag(fd, "frozen"));
             featureIndex++;
             switch (fd.Kind)
             {
@@ -910,6 +948,62 @@ public static class DocumentFile
                     part.AddFeature(bf);
                     break;
                 }
+                case "freeform":
+                    part.AddFeature(new FreeFormFeature(fd.Name) { Suppressed = fd.Suppressed, InputStep = GetS(fd, "input") ?? "", InputSig = GetS(fd, "sig") ?? "" });
+                    break;
+                case "ff_primitive":
+                {
+                    var pr = new FFPrimitiveFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut, A = GetV(fd, "a", 40), B = GetV(fd, "b", 30), C = GetV(fd, "c", 20), Origin = Vec(fd.Point) };
+                    if (Enum.TryParse<FFPrimitive>(GetS(fd, "shape"), out var sh)) pr.Shape = sh;
+                    if (fd.Dir is { Length: 6 } uv) { pr.U = new Vector3d(uv[0], uv[1], uv[2]); pr.V = new Vector3d(uv[3], uv[4], uv[5]); }
+                    part.AddFeature(pr);
+                    break;
+                }
+                case "ff_boolean":
+                {
+                    var fb = new FFBooleanFeature(fd.Name) { Suppressed = fd.Suppressed, Target = GetS(fd, "target") ?? "", KeepTools = HasFlag(fd, "keep") };
+                    if (Enum.TryParse<FFBool>(GetS(fd, "op"), out var bo)) fb.Op = bo;
+                    if (fd.Sources != null) fb.Tools.AddRange(fd.Sources);
+                    part.AddFeature(fb);
+                    break;
+                }
+                case "ff_transform":
+                {
+                    var ft = new FFTransformFeature(fd.Name) { Suppressed = fd.Suppressed, Dx = GetV(fd, "dx", 0), Dy = GetV(fd, "dy", 0), Dz = GetV(fd, "dz", 0), Angle = GetV(fd, "angle", 0), Factor = GetV(fd, "factor", 1), AxisAt = Vec(fd.Point), AxisDir = Vec(fd.Dir), Copy = HasFlag(fd, "copy") };
+                    if (Enum.TryParse<FFXform>(GetS(fd, "mode"), out var xm)) ft.Mode = xm;
+                    if (fd.Sources != null) ft.BodyNames.AddRange(fd.Sources);
+                    part.AddFeature(ft);
+                    break;
+                }
+                case "ff_split":
+                    part.AddFeature(new FFSplitFeature(fd.Name) { Suppressed = fd.Suppressed, Body = GetS(fd, "body") ?? "", PlaneAt = Vec(fd.Point), Normal = Vec(fd.Dir) });
+                    break;
+                case "ff_mirror":
+                {
+                    var fm2 = new FFMirrorFeature(fd.Name) { Suppressed = fd.Suppressed, PlaneAt = Vec(fd.Point), Normal = Vec(fd.Dir) };
+                    if (Enum.TryParse<FFMirrorMode>(GetS(fd, "mode"), out var mm)) fm2.Mode = mm;
+                    if (fd.Sources != null) fm2.BodyNames.AddRange(fd.Sources);
+                    part.AddFeature(fm2);
+                    break;
+                }
+                case "ff_array":
+                {
+                    var fa = new FFArrayFeature(fd.Name) { Suppressed = fd.Suppressed, Count = GetV(fd, "count", 3), Count2 = GetV(fd, "count2", 1), Angle = GetV(fd, "angle", 360),
+                        CurveName = GetS(fd, "curve") ?? "", Align = HasFlag(fd, "align"), AxisAt = Vec(fd.Point), AxisDir = Vec(fd.Dir) };
+                    if (Enum.TryParse<FFArrayKind>(GetS(fd, "kind"), out var ak)) fa.Kind = ak;
+                    if (fd.Sources != null) fa.BodyNames.AddRange(fd.Sources);
+                    if (fd.ThickFaces is { Count: 6 } st) { fa.Step = new Vector3d(st[0], st[1], st[2]); fa.Step2 = new Vector3d(st[3], st[4], st[5]); }
+                    part.AddFeature(fa);
+                    break;
+                }
+                case "ff_align_face":
+                {
+                    var fl = new FFAlignFaceFeature(fd.Name) { Suppressed = fd.Suppressed, Offset = GetV(fd, "offset", 0), PlaneAt = Vec(fd.Point), Normal = Vec(fd.Dir) };
+                    for (int i = 0; i + 2 < fd.OpenFaces.Count; i += 3) fl.OnFaces.Add(new Vector3d(fd.OpenFaces[i], fd.OpenFaces[i + 1], fd.OpenFaces[i + 2]));
+                    if (fd.FaceNames != null) fl.OnFaceNames.AddRange(fd.FaceNames);
+                    part.AddFeature(fl);
+                    break;
+                }
                 case "insert_body":
                 {
                     var ib = new InsertBodyFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut, Step = GetS(fd, "step") ?? "", SourceName = GetS(fd, "source") ?? "", Offset = Vec(fd.Point) };
@@ -1085,6 +1179,10 @@ public static class DocumentFile
         public MaterialDto? Material { get; set; }
         public InfoDto? Info { get; set; }
         public List<FaceSetDto> FaceSets { get; set; } = new();
+        /// <summary>u13h: документ — FreeForm-тело; объединять тела при встраивании; плоскость построения (9 чисел).</summary>
+        public bool FreeForm { get; set; }
+        public bool MergeFreeForm { get; set; }
+        public double[]? ConstructionPlane { get; set; }
     }
 
     private sealed class FaceSetDto
@@ -1277,12 +1375,17 @@ public static class DocumentFile
     }
 
     /// <summary>По выходе из области присваивает ключ операции, добавленной в деталь внутри неё.</summary>
-    private readonly struct KeyOnAdd(Part part, HashSet<Feature> known, string key, Kernel.OperationPolicy? policy, string? group = null) : IDisposable
+    private readonly struct KeyOnAdd(Part part, HashSet<Feature> known, string key, Kernel.OperationPolicy? policy, string? group = null,
+                                     string? ff = null, string? ffBody = null, bool frozen = false) : IDisposable
     {
         public void Dispose()
         {
             foreach (var f in part.Features)
-                if (!known.Contains(f)) { f.Key = key; f.Policy = policy; if (group != null) f.Group = group; }
+                if (!known.Contains(f))
+                {
+                    f.Key = key; f.Policy = policy; if (group != null) f.Group = group;
+                    f.FreeForm = ff; f.FFBody = ffBody; f.Frozen = frozen;
+                }
         }
     }
 

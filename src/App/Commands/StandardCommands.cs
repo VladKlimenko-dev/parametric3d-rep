@@ -357,6 +357,7 @@ public static class StandardCommands
         ContextCommands.Register(r, w);
         ContextCommands.RegisterEnv(r, w);
         AssemblyCommands.Register(r, w);
+        FreeFormCommands.Register(r, w);
     }
 
     /// <summary>Список «Опорные» (п. 12): ключ ShowOptions — подпись.</summary>

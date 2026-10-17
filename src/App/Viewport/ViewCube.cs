@@ -214,6 +214,16 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
         DrawIconOr(dc, "viewcube_rot_cw_but.svg", CwRect, _hoverExtra == Extra.RotCw ? accent : dim, ArcArrow(CwRect, true));
         foreach (var (e, p) in Triangles())
         {
+            // u13h: значок стрелки (один, смотрит вверх) поворачивается кодом к своей стороне
+            if (IconProvider.Get("viewcube_arrow_ico.svg") is { } arrow)
+            {
+                double deg = e switch { Extra.Up => 0, Extra.Right => 90, Extra.Down => 180, _ => 270 };
+                var rr = new Rect(p.X - 8, p.Y - 8, 16, 16);
+                using (dc.PushTransform(Matrix.CreateTranslation(-p.X, -p.Y) * Matrix.CreateRotation(deg * Math.PI / 180) * Matrix.CreateTranslation(p.X, p.Y)))
+                using (dc.PushOpacity(_hoverExtra == e ? 1.0 : 0.7))
+                    arrow.Draw(dc, new Rect(arrow.Size), rr);
+                continue;
+            }
             var g = new StreamGeometry();
             using (var ctx = g.Open())
             {

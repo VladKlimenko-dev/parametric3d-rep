@@ -131,6 +131,29 @@ public sealed class Part : ModelItem
     // --------------------------------------------------- результат построения
 
     public readonly List<TSolid> Bodies = new();
+    /// <summary>u13h: имена тел последнего расчёта (тела FreeForm); у параметрической детали — «Тело N».</summary>
+    public readonly List<string> BodyNameList = new();
+    /// <summary>u13h: документ — FreeForm-тело (отдельный файл): тела не объединяются, окружение FreeForm открыто сразу.</summary>
+    public bool FreeFormDoc;
+    /// <summary>u13h: FreeForm-документ вставлен в сборку или деталь — пересекающиеся тела объединяются (решение 2026-10-13).</summary>
+    public bool MergeFreeForm;
+    /// <summary>u13h: узел FreeForm, открытый для правки (его тела не объединяются, пока идёт правка). Не сохраняется.</summary>
+    public string? EditingFreeForm;
+    /// <summary>u13h: плоскость построения FreeForm (заготовки и кривые ставятся на неё).</summary>
+    public Frame3 ConstructionPlane = Frame3.XY;
+
+    /// <summary>Имя тела, которому принадлежит грань, ребро или вершина (по последнему расчёту).</summary>
+    public string? BodyNameOf(uint entityId)
+    {
+        for (int i = 0; i < Bodies.Count; i++)
+        {
+            var b = Bodies[i];
+            if (b.Faces.Any(f => f.Id == entityId) || b.Edges.Any(e => e.Id == entityId) || b.Vertices.Any(v => v.Id == entityId))
+                return i < BodyNameList.Count ? BodyNameList[i] : "Тело " + (i + 1);
+        }
+        return null;
+    }
+    public string BodyName(int index) => index < BodyNameList.Count ? BodyNameList[index] : "Тело " + (index + 1);
     /// <summary>u13: квилты (поверхности) последнего перестроения.</summary>
     public readonly List<Quilt> Quilts = new();
 
@@ -420,6 +443,8 @@ public sealed class Part : ModelItem
         internal ParameterTable? ParamTable;
         internal Dictionary<string, double>? ParamSnapshot;
         public readonly List<TSolid> Bodies = new();
+        /// <summary>u13h: имена тел (FreeForm), по порядку Bodies.</summary>
+        public readonly List<string> BodyNames = new();
         /// <summary>u13: квилты результата.</summary>
         public readonly List<Quilt> Quilts = new();
         /// <summary>Поставка 3: сколько граней получили сетку от донора (прежнего результата детали).</summary>
@@ -870,7 +895,14 @@ public sealed class Part : ModelItem
                 {
                     // UI (кнопка «Тест»): время каждой операции последнего расчёта
                     long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-                    try { f.Execute(ctx); }
+                    try
+                    {
+                        // u13h: шаг FreeForm — на своём теле; конец узла FreeForm в параметрической детали — пересекающиеся тела объединяются
+                        if (f.FreeForm != null) FreeFormExec.Run(f, ctx); else f.Execute(ctx);
+                        if (f.FreeForm != null && (!FreeFormDoc || MergeFreeForm) && EditingFreeForm != f.FreeForm
+                            && (fi + 1 >= Math.Min(stage, Features.Count) || Features[fi + 1].FreeForm != f.FreeForm))
+                            FreeFormExec.AutoUnion(ctx);
+                    }
                     finally { result.FeatureMs[f] = System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds; }
                 }
                 CheckRange();
@@ -972,6 +1004,9 @@ public sealed class Part : ModelItem
                     }
                     ctx.Bodies.RemoveAt(bi);
                     ctx.Bodies.InsertRange(bi, sp.Bodies);
+                    // u13h: куски тела FreeForm — с именем тела («Тело 1», «Тело 1.2»…)
+                    if (ctx.BodyNames.TryGetValue(b, out var bn))
+                        for (int k = 0; k < sp.Bodies.Count; k++) ctx.BodyNames[sp.Bodies[k]] = k == 0 ? bn : $"{bn}.{k + 1}";
                     ctx.Warnings.Add($"Shells normalized after {f.GetType().Name}: {why} → {sp.Bodies.Count} bod{(sp.Bodies.Count == 1 ? "y" : "ies")}, {sp.Cavities} cavit{(sp.Cavities == 1 ? "y" : "ies")}.");
                 }
             // KRN-01 (ворота g.03): ГЕОМЕТРИЯ НОВЫХ ТЕЛ — ПО САМОЙ B-rep, А НЕ ПО ЯРЛЫКАМ. Прежде политика PreserveBRep соблюдалась
@@ -1032,6 +1067,7 @@ public sealed class Part : ModelItem
         }
 
         result.Bodies.AddRange(ctx.Bodies);
+        result.BodyNames.AddRange(ctx.Bodies.Select(ctx.NameOf));
         result.Quilts.AddRange(ctx.Quilts);
         result.Warnings.AddRange(ctx.Warnings);
 
@@ -1259,6 +1295,8 @@ public sealed class Part : ModelItem
 
         Bodies.Clear();
         Bodies.AddRange(r.Bodies);
+        BodyNameList.Clear();
+        BodyNameList.AddRange(r.BodyNames);
         Warnings.Clear();
         Warnings.AddRange(r.Warnings);
         Downgrades.Clear();

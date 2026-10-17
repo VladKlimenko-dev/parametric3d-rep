@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Input;
 using OpenTK.Mathematics;
 using Parametric3D.Core;
+using Parametric3D.Kernel;
 using Parametric3D.Model;
 using Parametric3D.Model.Sketching;
 
@@ -186,19 +187,25 @@ public sealed partial class ModelViewport
         var th = _r.Theme;
         double step = GridStep();
         var c3 = Camera.State.Target;
+        var gf = GridFrame;
+        var loc = gf.ToLocal2(new Vector3d(c3.X, c3.Y, c3.Z));
         double half = Math.Max(Bounds.Width, Bounds.Height) * PixelSize * 0.75;
         int n = (int)Math.Min(200, Math.Ceiling(half / step));
-        double x0 = Math.Round(c3.X / step) * step, y0 = Math.Round(c3.Y / step) * step;
+        double x0 = Math.Round(loc.X / step) * step, y0 = Math.Round(loc.Y / step) * step;
         var minor = th.Dark ? new Vector4(1, 1, 1, 0.05f) : new Vector4(0, 0, 0, 0.06f);
         var major = th.Dark ? new Vector4(1, 1, 1, 0.11f) : new Vector4(0, 0, 0, 0.12f);
         for (int i = -n; i <= n; i++)
         {
             double x = x0 + i * step, y = y0 + i * step;
             bool mx = Math.Abs(Math.Round(x / step) % 5) < 0.5, my = Math.Abs(Math.Round(y / step) % 5) < 0.5;
-            grid.Add(Inst(new Vector3((float)x, (float)(y0 - n * step), 0), new Vector3((float)x, (float)(y0 + n * step), 0), mx ? major : minor, 1f, 0));
-            grid.Add(Inst(new Vector3((float)(x0 - n * step), (float)y, 0), new Vector3((float)(x0 + n * step), (float)y, 0), my ? major : minor, 1f, 0));
+            grid.Add(Inst(F(gf.ToWorld(x, y0 - n * step)), F(gf.ToWorld(x, y0 + n * step)), mx ? major : minor, 1f, 0));
+            grid.Add(Inst(F(gf.ToWorld(x0 - n * step, y)), F(gf.ToWorld(x0 + n * step, y)), my ? major : minor, 1f, 0));
         }
     }
+
+    /// <summary>u13h: плоскость сетки детали (в FreeForm — плоскость построения).</summary>
+    public Frame3 GridFrame { get => _gridFrame; set { _gridFrame = value; _overlayDirty = true; Redraw(); } }
+    private Frame3 _gridFrame = Frame3.XY;
 
     static IEnumerable<Part> Parts(ModelItem it)
     {

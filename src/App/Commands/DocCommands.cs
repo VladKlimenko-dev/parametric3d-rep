@@ -246,6 +246,7 @@ public static class DocCommands
             var s = DocumentSession.Open(path);
             s.Document.RebuildDirty();
             var part = s.Part ?? throw new InvalidDataException(L("В файле нет детали"));
+            if (part.FreeFormDoc) { part.MergeFreeForm = true; part.Rebuild(s.Document.ScopeFor(part)); }
             if (part.Bodies.Count == 0) part.Rebuild(s.Document.ScopeFor(part));
             return Exchange.Write(part, Exchange.Format.Step, warnings);
         }

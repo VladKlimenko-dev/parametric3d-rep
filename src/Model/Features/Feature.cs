@@ -75,6 +75,24 @@ public sealed class BuildContext
     /// <summary>u13: квилты (поверхности без объёма), построенные к текущему шагу: по ключу создавшей операции.</summary>
     public readonly List<Quilt> Quilts = new();
     public Quilt? QuiltByKey(string key) => Quilts.LastOrDefault(q => q.Key == key);
+    /// <summary>u13h: имена тел FreeForm (по самому телу: номер в списке меняется после булевых).</summary>
+    public readonly Dictionary<TSolid, string> BodyNames = new(ReferenceEqualityComparer.Instance);
+    /// <summary>Имя тела: заданное FreeForm-шагом или «Тело N» по месту в списке.</summary>
+    public string NameOf(TSolid b) => BodyNames.TryGetValue(b, out var n) ? n : "Тело " + (Bodies.IndexOf(b) + 1);
+    public TSolid? BodyByName(string name) => Bodies.FirstOrDefault(b => NameOf(b) == name);
+    /// <summary>Новое имя тела «Тело N» (N — больше всех занятых).</summary>
+    public string NewBodyName()
+    {
+        int max = 0;
+        foreach (var b in Bodies)
+        {
+            var n = NameOf(b);
+            if (n.StartsWith("Тело ") && int.TryParse(n[5..].Split('.')[0], out int k)) max = Math.Max(max, k);
+        }
+        foreach (var n in BodyNames.Values)
+            if (n.StartsWith("Тело ") && int.TryParse(n[5..].Split('.')[0], out int k)) max = Math.Max(max, k);
+        return "Тело " + (max + 1);
+    }
 
     /// <summary>
     /// СНИМОК СОСТОЯНИЯ ПЕРЕД ОПЕРАЦИЕЙ. Операция может изменить тела и вспомогательную
@@ -93,9 +111,11 @@ public sealed class BuildContext
         public readonly Dictionary<string, (Vector3d At, Vector3d Dir)> Axes;
         public readonly Dictionary<string, Vector3d> Points;
         public readonly List<Quilt> Quilts;
+        public readonly Dictionary<TSolid, string> BodyNames;
 
         internal Snapshot(BuildContext c)
         {
+            BodyNames = new Dictionary<TSolid, string>(c.BodyNames, ReferenceEqualityComparer.Instance);
             Bodies = new List<TSolid>(c.Bodies);
             Quilts = new List<Quilt>(c.Quilts);
             Warnings = c.Warnings.Count;
@@ -128,6 +148,8 @@ public sealed class BuildContext
 
         Quilts.Clear();
         Quilts.AddRange(s.Quilts);
+        BodyNames.Clear();
+        foreach (var kv in s.BodyNames) BodyNames[kv.Key] = kv.Value;
     }
 
     /// <summary>Плоскость по имени; пустое имя означает XY детали.</summary>
@@ -187,6 +209,12 @@ public abstract class Feature : ModelItem
     public string Key = NewKey();
     /// <summary>u13: группа операций в дереве (папка); пусто — без группы.</summary>
     public string? Group;
+    /// <summary>u13h: шаг FreeForm-тела — ключ его узла FreeForm (FreeFormFeature); null — обычная операция дерева.</summary>
+    public string? FreeForm;
+    /// <summary>u13h: тело FreeForm, которое правит шаг (по имени); null — шаг создаёт новое тело (вырез — по всем телам).</summary>
+    public string? FFBody;
+    /// <summary>u13h: шаг зафиксирован (команда завершена): параметры больше не правятся — только «отменить до этого шага».</summary>
+    public bool Frozen;
 
     /// <summary>
     /// K02. Политика этой операции: null — как у детали. Позволяет разрешить приближённый путь
