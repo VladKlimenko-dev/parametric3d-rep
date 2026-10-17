@@ -215,7 +215,8 @@ public static class DocumentFile
                 DatumPoint pt when !ReferenceEquals(pt, part.Origin) => new DatumDto { Kind = "point", P = V(pt.P) },
                 Line3DItem ln => new DatumDto { Kind = "line", P = V(ln.A, ln.B) },
                 DatumCsys cs => new DatumDto { Kind = "csys", P = V(cs.Frame.Origin, cs.Frame.U, cs.Frame.V) },
-                DatumCurve dc => new DatumDto { Kind = "curve", P = V(dc.Points.ToArray()), Source = dc.Source },
+                DatumCurve dc => new DatumDto { Kind = "curve", P = V(dc.Points.ToArray()), Source = dc.Source,
+                    Cv = dc.IsNurbs ? V(dc.Control!.ToArray()) : null, Wt = dc.IsNurbs ? dc.Weights : null, Kn = dc.IsNurbs ? dc.Knots : null, Deg = dc.IsNurbs ? dc.Degree : null },
                 _ => null,
             };
             if (d == null) continue;
@@ -242,6 +243,11 @@ public static class DocumentFile
                 _ => null,
             };
             if (it == null) continue;
+            if (it is DatumCurve ndc && d.Cv is { Count: >= 6 } cv)
+            {
+                ndc.Control = Enumerable.Range(0, cv.Count / 3).Select(i => At(cv, i)).ToList();
+                ndc.Weights = d.Wt; ndc.Knots = d.Kn; ndc.Degree = d.Deg ?? 3;
+            }
             it.Visible = !d.Hidden;
             part.Add(it);
         }
@@ -505,6 +511,13 @@ public static class DocumentFile
             PutS(d, "kind", fa.Kind.ToString()); d.Sources = fa.BodyNames.ToList(); PutV(d, "count", fa.Count); PutV(d, "count2", fa.Count2); PutV(d, "angle", fa.Angle);
             PutS(d, "curve", fa.CurveName.Length > 0 ? fa.CurveName : null); if (fa.Align) Flag(d, "align");
             d.Point = V3(fa.AxisAt); d.Dir = V3(fa.AxisDir); d.ThickFaces = new List<double> { fa.Step.X, fa.Step.Y, fa.Step.Z, fa.Step2.X, fa.Step2.Y, fa.Step2.Z };
+        }),
+        FFPipeFeature fp => Dto("ff_pipe", fp, d => { PutS(d, "curve", fp.CurveName.Length > 0 ? fp.CurveName : null); d.SketchId = fp.SketchId; PutV(d, "radius", fp.Radius); PutV(d, "inner", fp.Inner); }),
+        FFImprintFeature fi => Dto("ff_imprint", fi, d =>
+        {
+            PutS(d, "curve", fi.CurveName.Length > 0 ? fi.CurveName : null); d.SketchId = fi.SketchId;
+            d.OpenFaces = fi.OnFaces.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList();
+            d.FaceNames = fi.OnFaceNames.Count > 0 ? fi.OnFaceNames.ToList() : null;
         }),
         FFAlignFaceFeature fl => Dto("ff_align_face", fl, d =>
         {
@@ -996,6 +1009,22 @@ public static class DocumentFile
                     part.AddFeature(fa);
                     break;
                 }
+                case "ff_pipe":
+                {
+                    var fp = new FFPipeFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut, CurveName = GetS(fd, "curve") ?? "", Radius = GetV(fd, "radius", 3), Inner = GetV(fd, "inner", 0) };
+                    if (sketchById.TryGetValue(fd.SketchId, out var psk)) fp.SketchId = psk.Id;
+                    part.AddFeature(fp);
+                    break;
+                }
+                case "ff_imprint":
+                {
+                    var fi = new FFImprintFeature(fd.Name) { Suppressed = fd.Suppressed, CurveName = GetS(fd, "curve") ?? "" };
+                    if (sketchById.TryGetValue(fd.SketchId, out var isk)) fi.SketchId = isk.Id;
+                    for (int i = 0; i + 2 < fd.OpenFaces.Count; i += 3) fi.OnFaces.Add(new Vector3d(fd.OpenFaces[i], fd.OpenFaces[i + 1], fd.OpenFaces[i + 2]));
+                    if (fd.FaceNames != null) fi.OnFaceNames.AddRange(fd.FaceNames);
+                    part.AddFeature(fi);
+                    break;
+                }
                 case "ff_align_face":
                 {
                     var fl = new FFAlignFaceFeature(fd.Name) { Suppressed = fd.Suppressed, Offset = GetV(fd, "offset", 0), PlaneAt = Vec(fd.Point), Normal = Vec(fd.Dir) };
@@ -1160,6 +1189,11 @@ public static class DocumentFile
         public string? Source { get; set; }
         public string? Mode { get; set; }
         public double Offset { get; set; }
+        /// <summary>u13i: NURBS опорной кривой.</summary>
+        public List<double>? Cv { get; set; }
+        public List<double>? Wt { get; set; }
+        public List<double>? Kn { get; set; }
+        public int? Deg { get; set; }
     }
 
     private sealed class DocDto

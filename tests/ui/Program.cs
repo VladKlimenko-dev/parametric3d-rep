@@ -1138,6 +1138,123 @@ Check("UI-U13H-FREEFORM", () =>
     w3.Close();
 });
 
+// u13i: кривые FreeForm и тела из кривых — интерполяция и перестроение NURBS, спираль, эквидистанта, скругление углов,
+// соединение, продление, мостик, обрезка, изопараметрическая, вставка узла и вес, труба, отпечаток, команды и запись.
+Check("UI-U13I-CURVES", () =>
+{
+    double Len(IReadOnlyList<Vector3d> q) { double l = 0; for (int i = 1; i < q.Count; i++) l += (q[i] - q[i - 1]).Length; return l; }
+    // интерполяция: кривая проходит точки; перестроение окружности 8 опорными — отклонение < 0.5 % радиуса
+    var pts = new List<Vector3d> { new(0, 0, 0), new(10, 5, 0), new(20, -3, 2), new(30, 4, 0), new(40, 0, 5) };
+    var ip = FFCurves.Interpolate(pts, 3);
+    var ipPts = FFCurves.Sample(ip, 400);
+    double dev = FFCurves.Deviation(pts, ipPts);
+    Console.WriteLine($"  interpolate: control points {ip.ControlPoints.Count}, deviation {dev:E2}");
+    Require(dev < 1e-3 && ip.ControlPoints.Count == pts.Count, "interpolation through points");
+    var circle = Enumerable.Range(0, 201).Select(i => new Vector3d(20 * Math.Cos(i * Math.PI / 100), 20 * Math.Sin(i * Math.PI / 100), 0)).ToList();
+    var half = circle.Take(101).ToList();
+    var fit = FFCurves.Fit(half, 8, 3);
+    double fdev = FFCurves.Deviation(half, FFCurves.Sample(fit, 400));
+    Console.WriteLine($"  rebuild half circle R20 with 8 control points: deviation {fdev:E2}");
+    Require(fdev < 0.1 && fit.ControlPoints.Count == 8 && (fit.PointAt(0) - half[0]).Length < 1e-9 && (fit.PointAt(1) - half[^1]).Length < 1e-9, "rebuild");
+    // вставка узла не меняет форму; вес точки — меняет
+    var ins = fit.WithUnitKnots().InsertKnot(0.37);
+    double kdev = FFCurves.Deviation(FFCurves.Sample(fit, 200), FFCurves.Sample(ins, 400));
+    Require(ins.ControlPoints.Count == 9 && kdev < 1e-6, $"insert knot keeps the shape ({kdev})");
+    // спираль: 3 витка R20, шаг 10 — высота 30, радиус 20
+    var sp = FFCurves.Spiral(Parametric3D.Kernel.Frame3.XY, 20, 20, 10, 3);
+    Require(Math.Abs(sp[^1].Z - 30) < 1e-9 && sp.All(p => Math.Abs(Math.Sqrt(p.X * p.X + p.Y * p.Y) - 20) < 1e-9), "spiral");
+    // эквидистанта квадрата 20 наружу на 2 → периметр 96; скругление углов R2 → 4·16 + 4π
+    var sq = new List<Vector3d> { new(0, 0, 0), new(20, 0, 0), new(20, 20, 0), new(0, 20, 0), new(0, 0, 0) };
+    var off = FFCurves.Offset(sq, Vector3d.UnitZ, -2);
+    Console.WriteLine($"  offset square: perimeter {Len(off):F6}");
+    Require(Math.Abs(Len(off) - 96) < 1e-9, "offset");
+    var fil = FFCurves.FilletCorners(sq, 2, out int nk, 64);
+    Console.WriteLine($"  fillet corners: {nk}, length {Len(fil):F4} want {64 + 4 * Math.PI:F4}");
+    Require(nk == 4 && Math.Abs(Len(fil) - (64 + 4 * Math.PI)) < 0.01, "curve fillet");
+    // соединение, продление, мостик, обрезка
+    var j = FFCurves.Join(new List<IReadOnlyList<Vector3d>> { new[] { new Vector3d(0, 0, 0), new Vector3d(10, 0, 0) }, new[] { new Vector3d(20, 5, 0), new Vector3d(10, 0, 0) } }, 1e-6);
+    Require(j.Count == 3 && (j[^1] - new Vector3d(20, 5, 0)).Length < 1e-12, "join");
+    var ex = FFCurves.Extend(new[] { new Vector3d(0, 0, 0), new Vector3d(10, 0, 0) }, 5, false, true, false);
+    Require((ex[^1] - new Vector3d(15, 0, 0)).Length < 1e-12, "extend line");
+    var arcEx = FFCurves.Extend(half, 10, false, true, true);
+    Require(arcEx.All(p => Math.Abs(p.Length - 20) < 1e-6) && Math.Abs(Len(arcEx) - Len(half) - 10) < 0.01, "extend along the arc");
+    var br = FFCurves.Bridge(new[] { new Vector3d(-10, 0, 0), new Vector3d(0, 0, 0) }, new[] { new Vector3d(20, 10, 0), new Vector3d(30, 10, 0) }, g2: false);
+    var t0 = (br[1] - br[0]).Normalized(); var t1 = (br[^1] - br[^2]).Normalized();
+    Require((br[0] - Vector3d.Zero).Length < 1e-12 && (br[^1] - new Vector3d(20, 10, 0)).Length < 1e-12 && t0.X > 0.999 && t1.X > 0.999, "bridge G1 tangents");
+    var br2 = FFCurves.Bridge(half, new[] { new Vector3d(-40, 30, 0), new Vector3d(-50, 30, 0) }, g2: true);
+    Require(br2.Count == 65, "bridge G2");
+    var tr = FFCurves.TrimByPlane(new[] { new Vector3d(0, 0, 0), new Vector3d(10, 0, 0) }, new Vector3d(4, 0, 0), Vector3d.UnitX, keepStart: true);
+    Require((tr[^1] - new Vector3d(4, 0, 0)).Length < 1e-12, "trim by plane");
+    var tc = FFCurves.TrimByCurve(new[] { new Vector3d(0, 0, 0), new Vector3d(10, 0, 0) }, new[] { new Vector3d(6, -5, 0), new Vector3d(6, 5, 0) }, false, 1e-6);
+    Require((tc[0] - new Vector3d(6, 0, 0)).Length < 1e-12 && tc.Count == 2, "trim by curve");
+
+    // в окне: FreeForm-документ; опорные кривые командами; труба вдоль прямой и спирали; отпечаток на грани бруска
+    var s = FreeFormCommands.NewFreeForm(); var w = Open(s); var part = s.Part!;
+    var node = part.Features.OfType<FreeFormFeature>().Single();
+    var dps = new[] { new Vector3d(0, 0, 0), new Vector3d(0, 0, 50) }.Select((p, i) => { var d = new DatumPoint($"P{i}", p); part.Add(d); return d; }).ToList();
+    w.ViewPort.Selection.Clear(); foreach (var d in dps) Select(w, new PickRef(d.Id, PickKind.DatumPoint, part, d));
+    var cop = new FFCurveOp { Mode = FFCurveMode.Nurbs }; w.StartOperation(cop); w.CommitOperation();
+    var line = part.Children.OfType<DatumCurve>().Last();
+    Require(line.IsNurbs && Math.Abs(line.Length - 50) < 1e-9, $"nurbs curve command (length {line.Length})");
+    var pipe = new FFPipeFeature { CurveName = line.Name, Radius = new ValueRef(3), Inner = new ValueRef(2), FreeForm = node.Key, Frozen = true };
+    part.AddFeature(pipe); s.Document.RebuildDirty();
+    Console.WriteLine($"  pipe R3/r2 L50: error {pipe.Error}, volume {part.Volume:F4} want {Math.PI * 5 * 50:F4}");
+    Require(pipe.Error == null && Math.Abs(part.Volume - Math.PI * 5 * 50) < 0.02 * Math.PI * 5 * 50, "pipe");
+    // спираль командой (центр — начало плоскости построения), труба R1 вдоль неё: объём ≈ π·1²·длина
+    var spo = new FFCurveOp { Mode = FFCurveMode.Spiral }; w.ViewPort.Selection.Clear(); w.StartOperation(spo); w.CommitOperation();
+    var helix = part.Children.OfType<DatumCurve>().Last();
+    double hl = helix.Length;
+    var pipe2 = new FFPipeFeature { CurveName = helix.Name, Radius = new ValueRef(1), FreeForm = node.Key, Frozen = true };
+    double v0 = part.Volume;
+    part.AddFeature(pipe2); s.Document.RebuildDirty();
+    Console.WriteLine($"  pipe along helix (length {hl:F2}): error {pipe2.Error}, volume {part.Volume - v0:F3} want {Math.PI * hl:F3}, bodies {part.Bodies.Count}");
+    Require(pipe2.Error == null && Math.Abs(part.Volume - v0 - Math.PI * hl) < 0.03 * Math.PI * hl && part.Bodies.Count == 2, "pipe along a helix");
+    // перестроение спирали на месте (12 опорных) и «Отмена» — кривая как была
+    var before = helix.Points.ToList();
+    w.ViewPort.Selection.Clear(); Select(w, new PickRef(helix.Id, PickKind.DatumAxis, part, helix));
+    var rb = new FFCurveOp { Mode = FFCurveMode.Rebuild }; w.StartOperation(rb);
+    Require(helix.IsNurbs && helix.Control!.Count == 8, "rebuild in place (preview)");
+    w.CancelOperation();
+    Require(!helix.IsNurbs && helix.Points.SequenceEqual(before), "cancel restores the curve");
+    // брусок 40×30×20 и отпечаток квадрата 10 на верхней грани: грань делится, объём тот же
+    var box = new FFPrimitiveFeature { Shape = FFPrimitive.Box, Origin = new Vector3d(100, 0, 0), FreeForm = node.Key, Frozen = true };
+    part.AddFeature(box); s.Document.RebuildDirty();
+    int bi = part.BodyNameList.IndexOf("Тело 3");
+    Console.WriteLine($"  box: error {box.Error}, bodies {string.Join(",", part.BodyNameList)}");
+    int faces0 = part.Bodies[bi].Faces.Count();
+    var sqc = new DatumCurve("Квадрат", new[] { new Vector3d(95, -5, 20), new Vector3d(105, -5, 20), new Vector3d(105, 5, 20), new Vector3d(95, 5, 20), new Vector3d(95, -5, 20) }); part.Add(sqc);
+    var im = new FFImprintFeature { CurveName = "Квадрат", FFBody = "Тело 3", FreeForm = node.Key, Frozen = true };
+    var topF = part.Bodies[bi].Faces.First(f => Parametric3D.Kernel.Ops.PlanarTweak.OutwardNormal(f) is { } n && n.Z > 0.99);
+    im.OnFaces.Add(Refs.FacePoint(part, topF.Id)!.Value);
+    double vb = part.Volume;
+    part.AddFeature(im); s.Document.RebuildDirty();
+    bi = part.BodyNameList.IndexOf("Тело 3");
+    Console.WriteLine($"  imprint closed square: error {im.Error}, faces {faces0} → {part.Bodies[bi].Faces.Count()}, volume change {part.Volume - vb:E2}");
+    Require(im.Error == null && part.Bodies[bi].Faces.Count() == faces0 + 1 && Math.Abs(part.Volume - vb) < 1e-6, "imprint closed curve");
+    // незамкнутая: прямая поперёк верхней грани (x = 110)
+    var cross = new DatumCurve("Поперёк", new[] { new Vector3d(110, -10, 20), new Vector3d(110, 10, 20) }); part.Add(cross);
+    var im2 = new FFImprintFeature { CurveName = "Поперёк", FFBody = "Тело 3", FreeForm = node.Key, Frozen = true };
+    im2.OnFaces.Add(new Vector3d(115, 10, 20));
+    int faces1 = part.Bodies[bi].Faces.Count();
+    part.AddFeature(im2); s.Document.RebuildDirty();
+    bi = part.BodyNameList.IndexOf("Тело 3");
+    Console.WriteLine($"  imprint open line: error {im2.Error}, faces {faces1} → {part.Bodies[bi].Faces.Count()}, volume change {part.Volume - vb:E2}");
+    Require(im2.Error == null && part.Bodies[bi].Faces.Count() == faces1 + 1 && Math.Abs(part.Volume - vb) < 1e-6, "imprint open curve");
+    // запись и чтение: NURBS опорной кривой
+    var path = Path.Combine(Path.GetTempPath(), "u13i_curves.p3d");
+    s.SaveAs(path);
+    var s2 = DocumentSession.Open(path); s2.Document.RebuildDirty();
+    var l2 = s2.Part!.Children.OfType<DatumCurve>().First(c => c.Name == line.Name);
+    Require(l2.IsNurbs && l2.Control!.Count == line.Control!.Count && Math.Abs(s2.Part.Volume - part.Volume) < 1e-6 * part.Volume, "save and load curves");
+    // изопараметрическая кривая цилиндра R5: точки на радиусе 5
+    var cyl = CylPart("Цилиндр", 5, 30); cyl.Rebuild(null);
+    var side = cyl.Bodies[0].Faces.First(f => Parametric3D.Kernel.Ops.DirectEdit.RadiusAfter(f, 0) is { } rr && Math.Abs(rr - 5) < 1e-9);
+    var iso = FFCurves.Isoparm(side, alongV: true, 0.25);
+    Console.WriteLine($"  isoparm on a cylinder: {iso.Count} points, z {iso.Min(p => p.Z):F3}..{iso.Max(p => p.Z):F3}");
+    Require(iso.All(p => Math.Abs(Math.Sqrt(p.X * p.X + p.Y * p.Y) - 5) < 1e-6) && iso.Max(p => p.Z) - iso.Min(p => p.Z) > 29, "isoparm");
+    w.Close();
+});
+
 // u13: опорные элементы кнопок (плоскость посередине и касательная, ось грани, точка в центре дуги) и уклон
 Check("UI-U13-DATUMS-DRAFT", () =>
 {

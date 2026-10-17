@@ -827,6 +827,8 @@ public static class OperationFactory
         FFMirrorFeature x => new FFMirrorOp(x),
         FFArrayFeature x => new FFArrayOp(x),
         FFAlignFaceFeature x => new FFAlignFaceOp(x),
+        FFPipeFeature x => new FFPipeOp(x),
+        FFImprintFeature x => new FFImprintOp(x),
         _ => null,
     };
 }
