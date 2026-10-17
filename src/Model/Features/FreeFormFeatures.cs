@@ -64,8 +64,9 @@ public static class FreeFormExec
             else if (targets.Count == 1) name = fresh == 0 ? names[0] : $"{names[0]}.{fresh + 1}";
             else name = "";
             if (!sub.BodyNames.ContainsKey(b)) fresh++;
+            if (name.Length == 0) name = ctx.NewBodyName();      // до вставки: безымянное тело иначе само заняло бы «Тело N»
             ctx.Bodies.Insert(at++, b);
-            ctx.BodyNames[b] = name.Length > 0 ? name : ctx.NewBodyName();
+            ctx.BodyNames[b] = name;
         }
         ctx.Warnings.AddRange(sub.Warnings);
         ctx.Quilts.Clear(); ctx.Quilts.AddRange(sub.Quilts);
@@ -87,7 +88,7 @@ public static class FreeFormExec
         foreach (var b in all) BooleanOp.Unite(ctx.Bodies, b, ctx.Warnings);
         if (ctx.Bodies.Count < all.Count) ctx.Warnings.Add($"FreeForm: {all.Count} bodies merged into {ctx.Bodies.Count} (intersecting bodies are united on embedding).");
         for (int i = 0; i < ctx.Bodies.Count; i++)
-            if (!ctx.BodyNames.ContainsKey(ctx.Bodies[i])) ctx.BodyNames[ctx.Bodies[i]] = i < first.Count ? first[i] : ctx.NewBodyName();
+            if (!ctx.BodyNames.ContainsKey(ctx.Bodies[i])) ctx.BodyNames[ctx.Bodies[i]] = i < first.Count ? first[i] : "Тело " + (i + 1);
     }
 
     /// <summary>Подпись формы тел (не зависит от номеров граней): число граней и вершины, округлённые до 1e-5 мм.</summary>
@@ -337,7 +338,7 @@ public sealed class FFTransformFeature : Feature, IFreeFormNative
                     break;
                 }
             }
-            if (Copy) { ctx.Bodies.Add(moved); ctx.BodyNames[moved] = ctx.NewBodyName(); }
+            if (Copy) { ctx.BodyNames[moved] = ctx.NewBodyName(); ctx.Bodies.Add(moved); }
             else { ctx.Bodies[ctx.Bodies.IndexOf(b)] = moved; ctx.BodyNames[moved] = n; }
         }
     }
@@ -395,7 +396,7 @@ public sealed class FFMirrorFeature : Feature, IFreeFormNative
             if (Mode == FFMirrorMode.Copy)
             {
                 var m = FreeFormExec.Map(b, x);
-                ctx.Bodies.Add(m); ctx.BodyNames[m] = ctx.NewBodyName();
+                ctx.BodyNames[m] = ctx.NewBodyName(); ctx.Bodies.Add(m);
                 continue;
             }
             // половина по нормали: тело, целиком лежащее с одной стороны, не режется
@@ -553,5 +554,99 @@ public sealed class FFAlignFaceFeature : Feature
             return (PlaneAt + n * off, n);
         }, ref why);
         ctx.Bodies[0] = res ?? throw new RebuildException(OperationOutcome.Unsupported, $"{Name}: the faces could not be aligned ({why}).");
+    }
+}
+
+/// <summary>Кривая операции FreeForm: опорная кривая по имени или кривые эскиза (сшитые по концам).</summary>
+public static class FFCurveSource
+{
+    public static List<Vector3d> Points(BuildContext ctx, string curveName, uint sketchId, string what)
+    {
+        if (curveName.Length > 0)
+        {
+            var dc = ctx.Part.Descendants().OfType<DatumCurve>().FirstOrDefault(x => x.Name == curveName)
+                     ?? throw new RebuildException(OperationOutcome.InvalidInput, $"{what}: the curve «{curveName}» is not found.");
+            return dc.Points.ToList();
+        }
+        if (sketchId != 0 && ctx.FindSketch(sketchId) is { } sk)
+        {
+            var parts = new List<IReadOnlyList<Vector3d>>();
+            foreach (var e in sk.Entities.Where(e => e.Role == Sketching.SkRole.Object && e is not Sketching.SkPoint))
+            {
+                var l = new List<Vector3d>(); e.ToCurve3(sk.Plane).Tessellate(l, true); if (l.Count >= 2) parts.Add(l);
+            }
+            if (parts.Count == 1) return parts[0].ToList();
+            if (parts.Count > 1) return FFCurves.Join(parts, 1e-4);
+        }
+        throw new RebuildException(OperationOutcome.InvalidInput, $"{what}: no curve.");
+    }
+
+    public static ICurve3 Curve(BuildContext ctx, string curveName, uint sketchId, string what)
+    {
+        // прямая (все точки на отрезке концов) — точным отрезком: труба вдоль неё — точный цилиндр
+        var pts0 = FFCurves.Dedup(Points(ctx, curveName, sketchId, what));
+        if (pts0.Count >= 2)
+        {
+            var a = pts0[0]; var b = pts0[^1];
+            if ((b - a).Length > Tol.Weld && pts0.All(p => (FFCurves.Closest(a, b, p) - p).Length < 1e-9 * Math.Max(1, (b - a).Length))) return new LineCurve3(a, b);
+        }
+        if (curveName.Length > 0 && ctx.Part.Descendants().OfType<DatumCurve>().FirstOrDefault(x => x.Name == curveName) is { } dc) return dc.Curve3();
+        return new PolylineCurve3(FFCurves.Dedup(Points(ctx, curveName, sketchId, what)) is var q && q.Count >= 2 ? (IEnumerable<Vector3d>)q : throw new RebuildException(OperationOutcome.InvalidInput, $"{what}: the curve is too short."));
+    }
+}
+
+/// <summary>ТРУБА вдоль кривой: круг радиуса R (и отверстие r) протягивается по кривой — новое тело (вырез — из тел).</summary>
+public sealed class FFPipeFeature : Feature
+{
+    public string CurveName = "";
+    public uint SketchId;
+    public ValueRef Radius = new(3), Inner = new(0);
+    public FFPipeFeature(string name = "Pipe") { Name = name; }
+    public override string Summary => $"Pipe R{Radius}{(Inner.Value > 0 ? $" / r{Inner}" : "")} along «{(CurveName.Length > 0 ? CurveName : "sketch")}»";
+
+    public override void Execute(BuildContext ctx)
+    {
+        double r = Radius.Resolve(ctx.Parameters), ri = Inner.Resolve(ctx.Parameters);
+        if (!(r > Tol.Weld)) throw new RebuildException(OperationOutcome.InvalidInput, $"{Name}: the radius must be positive.");
+        if (ri < 0 || ri >= r - Tol.Weld) throw new RebuildException(OperationOutcome.InvalidInput, $"{Name}: the inner radius must be less than the radius.");
+        var path = FFCurveSource.Curve(ctx, CurveName, SketchId, Name);
+        var p0 = path.PointAt(path.T0); var t0 = path.TangentAt(path.T0).Normalized();
+        var fr = Frame3.FromNormal(p0, t0);
+        var loops = new List<ICurve3> { new ArcCurve3(fr, r, 0, 2 * Math.PI) };
+        if (ri > Tol.Weld) loops.Add(new ArcCurve3(fr, ri, 0, 2 * Math.PI));
+        var solid = SweepOp.Build(ProfileBuilder.Build(fr, loops), path);
+        if (Cut) BooleanOp.Subtract(ctx.Bodies, solid, ctx.Warnings);
+        else BooleanOp.Unite(ctx.Bodies, solid, ctx.Warnings);
+    }
+}
+
+/// <summary>
+/// ОТПЕЧАТОК кривой на плоской грани: грань делится по кривой (форма тела не меняется). Замкнутая кривая — область внутри
+/// неё; незамкнутая — поперёк грани (область по одну сторону, до края грани). Делается вычитанием и возвратом тонкой
+/// призмы области: внутренние грани взаимно уничтожаются, на грани остаётся новое ребро.
+/// </summary>
+public sealed class FFImprintFeature : Feature
+{
+    public readonly List<Vector3d> OnFaces = new();
+    public readonly List<string?> OnFaceNames = new();
+    public string CurveName = "";
+    public uint SketchId;
+    public FFImprintFeature(string name = "Imprint") { Name = name; }
+    public override string Summary => $"Imprint «{(CurveName.Length > 0 ? CurveName : "sketch")}» on a face";
+
+    public override void Execute(BuildContext ctx)
+    {
+        if (ctx.Bodies.Count == 0) throw new RebuildException(OperationOutcome.InvalidInput, $"{Name}: no body.");
+        var body = ctx.Bodies[0];
+        var face = FacePick.Resolve(body, OnFaces, OnFaceNames, Name).FirstOrDefault() ?? throw new RebuildException(OperationOutcome.InvalidInput, $"{Name}: no face.");
+        var pts = FFCurveSource.Points(ctx, CurveName, SketchId, Name);
+        // гладкая опорная кривая, лежащая в плоскости грани, — одним ребром-сплайном
+        SplineCurve3? smooth = null;
+        if (CurveName.Length > 0 && ctx.Part.Descendants().OfType<DatumCurve>().FirstOrDefault(x => x.Name == CurveName) is { IsNurbs: true } dc
+            && SketchFaceRef.PlaneOf(face) is { } pl && dc.Control!.All(c => Math.Abs(Vector3d.Dot(c - pl.P, pl.N.Normalized())) < 1e-9))
+            smooth = dc.Spline;
+        string? why = null;
+        var res = ImprintOp.Apply(body, face, pts, smooth, ref why);
+        ctx.Bodies[0] = res ?? throw new RebuildException(OperationOutcome.Unsupported, $"{Name}: the curve cannot be imprinted ({why}).");
     }
 }

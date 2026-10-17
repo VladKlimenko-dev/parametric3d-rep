@@ -149,4 +149,32 @@ public sealed class DatumCurve : ModelItem
     public string Source = "";
     public DatumCurve(string name, IEnumerable<Vector3d> pts, string source = "") { Name = name; Points.AddRange(pts); Source = source; }
     public double Length { get { double l = 0; for (int i = 1; i < Points.Count; i++) l += (Points[i] - Points[i - 1]).Length; return l; } }
+
+    /// <summary>u13i: NURBS-определение (FreeForm): опорные точки, веса, узлы, степень; есть — точки кривой считаются по нему.</summary>
+    public List<Vector3d>? Control;
+    public List<double>? Weights;
+    public List<double>? Knots;
+    public int Degree = 3;
+    public bool IsNurbs => Control is { Count: >= 2 };
+    public Kernel.Curves.SplineCurve3? Spline => IsNurbs ? new Kernel.Curves.SplineCurve3(Control!, Degree, Weights, Knots) : null;
+
+    /// <summary>Задать NURBS-определение и пересчитать точки.</summary>
+    public void SetSpline(Kernel.Curves.SplineCurve3 s, int samples = 0)
+    {
+        Control = s.ControlPoints.ToList(); Weights = s.Weights.ToList(); Knots = s.Knots.ToList(); Degree = s.Degree;
+        Resample(samples);
+    }
+
+    /// <summary>Точки по NURBS-определению (по умолчанию — 24 на опорную точку, не меньше 64).</summary>
+    public void Resample(int samples = 0)
+    {
+        if (Spline is not { } sp) return;
+        int n = samples > 0 ? samples : Math.Max(64, Control!.Count * 24);
+        Points.Clear();
+        for (int i = 0; i <= n; i++) Points.Add(sp.PointAt(sp.T0 + (sp.T1 - sp.T0) * i / n));
+    }
+
+    /// <summary>Кривая ядра: сплайн или ломаная.</summary>
+    public Kernel.Curves.ICurve3 Curve3() => Spline is { } sp ? sp : new Kernel.Curves.PolylineCurve3(Points);
+    public bool IsClosed => Points.Count > 2 && (Points[0] - Points[^1]).Length < 1e-6;
 }

@@ -70,6 +70,25 @@ public static class FreeFormCommands
         Op("ff.sweep", "Протяжка", "Протяжка", "ff_sweep_but.svg", () => new SweepOp(), "sweep протяжка");
         Op("ff.loft", "Лофт", "Лофт", "ff_loft_but.svg", () => new LoftOp(), "loft лофт переход сечения");
 
+        // u13i: кривые и тела из кривых
+        Op("ff.curve_nurbs", "NURBS-кривая", "NURBS", "ff_curve_nurbs_but.svg", () => new FFCurveOp { Mode = FFCurveMode.Nurbs }, "nurbs curve spline control points кривая сплайн");
+        Op("ff.curve_spiral", "Спираль", "Спираль", "ff_curve_spiral_but.svg", () => new FFCurveOp { Mode = FFCurveMode.Spiral }, "spiral helix спираль винтовая");
+        Op("ff.curve_offset", "Смещение кривой", "Смещ. кривой", "ff_curve_offset_but.svg", () => new FFCurveOp { Mode = FFCurveMode.Offset }, "offset curve эквидистанта смещение кривой");
+        Op("ff.curve_fillet", "Скругление углов кривой", "Скругл. кривой", "ff_curve_fillet_but.svg", () => new FFCurveOp { Mode = FFCurveMode.Fillet }, "fillet curve corners скругление углов кривой");
+        Op("ff.curve_join", "Соединить кривые", "Соединить", "ff_curve_join_but.svg", () => new FFCurveOp { Mode = FFCurveMode.Join }, "join curves соединить кривые");
+        Op("ff.curve_extend", "Продление кривой", "Продлить", "ff_curve_extend_but.svg", () => new FFCurveOp { Mode = FFCurveMode.Extend }, "extend curve продлить кривую");
+        Op("ff.curve_bridge", "Мостик между кривыми", "Мостик", "ff_curve_bridge_but.svg", () => new FFCurveOp { Mode = FFCurveMode.Bridge }, "bridge blend curve g1 g2 мостик");
+        Op("ff.curve_rebuild", "Перестроение кривой", "Перестроить", "ff_curve_rebuild_but.svg", () => new FFCurveOp { Mode = FFCurveMode.Rebuild }, "rebuild refit curve перестроить кривую");
+        Op("ff.curve_extract", "Кривая из рёбер", "Из рёбер", "ff_curve_extract_but.svg", () => new FFCurveOp { Mode = FFCurveMode.Extract }, "extract edge curve duplicate извлечь ребро");
+        Op("ff.curve_isoparm", "Изопараметрическая кривая", "Изопараметр.", "ff_curve_isoparm_but.svg", () => new FFCurveOp { Mode = FFCurveMode.Isoparm }, "isoparm iso curve изопараметрическая");
+        Op("ff.trim_curve", "Обрезка кривой", "Обрезать", "ff_trim_curve_but.svg", () => new FFCurveOp { Mode = FFCurveMode.Trim }, "trim curve intersection обрезка кривой");
+        Op("ff.project", "Проекция кривой на грань", "Проекция", "ff_project_but.svg", () => new CurveOp { Mode = 2 }, "project curve face проекция");
+        Op("ff.imprint", "Отпечаток кривой", "Отпечаток", "ff_imprint_but.svg", () => new FFImprintOp(), "imprint split face отпечаток");
+        Op("ff.pipe", "Труба вдоль кривой", "Труба", "ff_pipe_but.svg", () => new FFPipeOp(), "pipe tube труба");
+        Op("ff.cv_edit", "Правка опорных точек", "Опорные точки", "ff_cv_edit_but.svg", () => new FFCurveOp { Mode = FFCurveMode.CvEdit }, "cv edit control points опорные точки");
+        Op("ff.cv_weight", "Вес опорной точки", "Вес", "ff_cv_weight_but.svg", () => new FFCurveOp { Mode = FFCurveMode.CvWeight }, "cv weight вес точки");
+        Op("ff.insert_knot", "Вставить узел", "Узел", "ff_insert_knot_but.svg", () => new FFCurveOp { Mode = FFCurveMode.InsertKnot }, "insert knot узел");
+
         Op("ff.mirror", "Зеркало тел", "Зеркало", "ff_mirror_but.svg", () => new FFMirrorOp { Mode = FFMirrorMode.Copy }, "mirror copy зеркало отражение");
         Op("ff.symmetry", "Симметрия (живая половина)", "Симметрия", "ff_symmetry_but.svg", () => new FFMirrorOp { Mode = FFMirrorMode.Symmetry }, "symmetry live mirror симметрия половина");
         Op("ff.array_linear", "Прямоугольный массив тел", "Массив", "ff_array_linear_but.svg", () => new FFArrayOp { Kind = FFArrayKind.Linear }, "array linear rectangular массив прямоугольный");
