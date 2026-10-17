@@ -142,6 +142,10 @@ public static class StandardCommands
             ["op.pattern_curve"] = () => Fits(x => IsFeat(x) || SketchLike(x)),
             ["op.pattern_fill"] = () => Fits(x => IsFeat(x) || SketchLike(x)),
             ["op.thread"] = () => Fits(x => x.Kind == PickKind.Face),
+            // u13f
+            ["op.surface_extrude"] = () => Fits(SketchLike), ["op.surface_revolve"] = () => Fits(SketchLike), ["op.fill"] = () => Fits(SketchLike),
+            ["op.surf_copy"] = () => Fits(x => x.Kind == PickKind.Face),
+            ["op.boundary_blend"] = () => Fits(SketchLike), ["op.swept_blend"] = () => Fits(SketchLike), ["op.rotational_blend"] = () => Fits(SketchLike),
             // u13e
             ["op.full_round"] = () => Fits(x => x.Kind == PickKind.Face),
             ["op.hole_coaxial"] = () => Fits(x => x.Kind is PickKind.Face or PickKind.Edge or PickKind.DatumAxis or PickKind.DatumPlane),
@@ -190,6 +194,23 @@ public static class StandardCommands
         Op("op.pattern_points", "Массив по точкам", "По точкам", "f_pattern_points_but.svg", () => new PointsPatternOp(), "pattern points sketch массив точки");
         Op("op.pattern_curve", "Массив по кривой", "По кривой", "f_pattern_curve_but.svg", () => new PointsPatternOp { StartMode = PointsPatternMode.Curve }, "pattern curve path массив кривая");
         Op("op.pattern_fill", "Массив заполнением", "Заполнение", "f_pattern_fill_but.svg", () => new PointsPatternOp { StartMode = PointsPatternMode.Fill }, "pattern fill grid массив заполнение сетка");
+        // u13f: поверхности и переходы
+        Op("op.surface_extrude", "Поверхность выдавливанием", "Пов. выдавл.", "f_surface_extrude_but.svg", () => new SurfaceOp(), "surface extrude поверхность выдавливание квилт");
+        Op("op.surface_revolve", "Поверхность вращением", "Пов. вращ.", "f_surface_extrude_but.svg", () => new SurfaceOp { StartMode = SurfaceKind.Revolve }, "surface revolve поверхность вращение квилт");
+        Op("op.fill", "Заливка (плоская поверхность)", "Заливка", "f_fill_but.svg", () => new SurfaceOp { StartMode = SurfaceKind.Fill }, "fill flat surface заливка плоская поверхность");
+        Op("op.surf_copy", "Копия поверхности", "Копия пов.", "surf_copy_but.svg", () => new SurfaceOp { StartMode = SurfaceKind.Copy }, "copy surface копия поверхности граней");
+        Op("op.surf_offset", "Смещение поверхности", "Смещ. пов.", "surf_offset_but.svg", () => new QuiltEditOp(), "offset surface смещение поверхности");
+        Op("op.surf_merge", "Объединение квилтов", "Объединить", "surf_merge_but.svg", () => new QuiltEditOp { StartMode = QuiltEditKind.Merge }, "merge quilts объединение квилтов");
+        Op("op.surf_trim", "Обрезка квилта", "Обрезать", "surf_trim_but.svg", () => new QuiltEditOp { StartMode = QuiltEditKind.Trim }, "trim surface обрезка квилта");
+        Op("op.surf_extend", "Продление квилта", "Продлить", "surf_extend_but.svg", () => new QuiltEditOp { StartMode = QuiltEditKind.Extend }, "extend surface продление квилта");
+        Op("op.surf_solidify", "Отверждение квилта", "Отвердить", "surf_solidify_but.svg", () => new QuiltSolidOp { StartMode = QuiltSolidKind.Solidify }, "solidify отверждение квилта");
+        Op("op.thicken", "Утолщение квилта", "Утолщить", "f_thicken_but.svg", () => new QuiltSolidOp(), "thicken утолщение квилта");
+        Op("op.replace_face", "Замена грани квилтом", "Заменить грань", "dir_replace_face_but.svg", () => new QuiltSolidOp { StartMode = QuiltSolidKind.ReplaceFace }, "replace face замена грани");
+        Op("op.boundary_blend", "Граничный переход", "Гран. переход", "f_boundary_blend_but.svg", () => new BlendOp(), "boundary blend граничный переход");
+        Op("op.swept_blend", "Протяжка с переходом", "Протяжка-переход", "f_swept_blend_but.svg", () => new BlendOp { StartMode = BlendKind.Swept }, "swept blend протяжка переход");
+        Op("op.rotational_blend", "Переход вращением", "Переход вращ.", "f_rotational_blend_but.svg", () => new BlendOp { StartMode = BlendKind.Rotational }, "rotational blend переход вращением");
+        r.Add(new AppCommand { Id = "op.insert_body", Label = "Вставить FreeForm / тело из файла", Short = "Вставить тело", Group = M, Icon = "f_insert_freeform_but.svg", Synonyms = "insert freeform body step вставить тело",
+            CanRun = Modeling, Run = async () => await DocCommands.InsertBody(w) });
         // u13e
         Op("op.full_round", "Полное скругление", "Полн. скругл.", "f_round_full_but.svg", () => new FullRoundOp(), "full round полное скругление");
         Op("op.hole_coaxial", "Отверстие соосное", "Соосное", "f_hole_coaxial_but.svg", () => new AxialHoleOp(), "coaxial hole соосное отверстие");

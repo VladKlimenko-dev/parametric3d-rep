@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Platform.Storage;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -233,6 +234,43 @@ public static class DocCommands
         }
         win.Content = new ScrollViewer { Content = sp };
         await win.ShowDialog(w);
+    }
+
+    // ---------------------------------------------------------------- вставить тело
+
+    /// <summary>Текст STEP тел файла: STEP/IGES — чтением, деталь Parametric3D — перестроением и записью STEP.</summary>
+    public static string StepOf(string path, List<string> warnings)
+    {
+        if (path.EndsWith(DocumentSession.PartExtension, StringComparison.OrdinalIgnoreCase))
+        {
+            var s = DocumentSession.Open(path);
+            s.Document.RebuildDirty();
+            var part = s.Part ?? throw new InvalidDataException(L("В файле нет детали"));
+            if (part.Bodies.Count == 0) part.Rebuild(s.Document.ScopeFor(part));
+            return Exchange.Write(part, Exchange.Format.Step, warnings);
+        }
+        var text = System.IO.File.ReadAllText(path);
+        if (Exchange.Guess(text) == Exchange.Format.Step) return text;
+        var p2 = Exchange.Read(text, out _, warnings) ?? throw new InvalidDataException(string.Join("; ", warnings));
+        return Exchange.Write(p2, Exchange.Format.Step, warnings);
+    }
+
+    public static async Task InsertBody(MainWindow w)
+    {
+        var files = await w.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+        {
+            Title = L("Вставить тело"), AllowMultiple = false,
+            FileTypeFilter = new[] { new Avalonia.Platform.Storage.FilePickerFileType(L("Тела: деталь, STEP, IGES")) { Patterns = new[] { "*" + DocumentSession.PartExtension, "*.step", "*.stp", "*.iges", "*.igs" } } },
+        });
+        var path = files.FirstOrDefault()?.TryGetLocalPath();
+        if (path == null) return;
+        try
+        {
+            var warnings = new List<string>();
+            var step = StepOf(path, warnings);
+            w.StartOperation(new Operations.InsertBodyOp { Step = step, Source = System.IO.Path.GetFileName(path) });
+        }
+        catch (Exception ex) { w.ShowToast(L("Вставить тело: {0}", ex.Message)); }
     }
 
     // ---------------------------------------------------------------- материал, единицы, исполнения

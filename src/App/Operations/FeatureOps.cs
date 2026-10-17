@@ -815,6 +815,11 @@ public static class OperationFactory
         PointsPatternFeature x => new PointsPatternOp(x),
         CosmeticThreadFeature x => new CosmeticThreadOp(x),
         FullRoundFeature x => new FullRoundOp(x),
+        SurfaceFeature x => new SurfaceOp(x),
+        QuiltEditFeature x => new QuiltEditOp(x),
+        QuiltSolidFeature x => new QuiltSolidOp(x),
+        BlendFeature x => new BlendOp(x),
+        InsertBodyFeature x => new InsertBodyOp(x),
         _ => null,
     };
 }

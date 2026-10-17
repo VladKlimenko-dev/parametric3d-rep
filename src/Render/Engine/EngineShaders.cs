@@ -91,6 +91,7 @@ void main()
     if (uMode == 1) { oColor = uFlat; return; }
 
     vec3 base = uBase.rgb;
+    if ((vFlags & 16u) != 0u)     base = mix(base, vec3(0.95, 0.72, 0.30), 0.55);   // u13: поверхность (квилт)
     if ((vFlags & 8u) != 0u)      base = mix(base, uError.rgb, 0.55);
     if ((vFlags & 2u) != 0u)      base = mix(base, uSelect.rgb, 0.45);
     else if ((vFlags & 1u) != 0u) base = mix(base, uHover.rgb, 0.35);

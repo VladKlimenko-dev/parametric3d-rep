@@ -123,6 +123,8 @@ public sealed class Part : ModelItem
     // --------------------------------------------------- результат построения
 
     public readonly List<TSolid> Bodies = new();
+    /// <summary>u13: квилты (поверхности) последнего перестроения.</summary>
+    public readonly List<Quilt> Quilts = new();
 
     /// <summary>
     /// До какой операции ведётся расчёт: число выполняемых операций
@@ -410,6 +412,8 @@ public sealed class Part : ModelItem
         internal ParameterTable? ParamTable;
         internal Dictionary<string, double>? ParamSnapshot;
         public readonly List<TSolid> Bodies = new();
+        /// <summary>u13: квилты результата.</summary>
+        public readonly List<Quilt> Quilts = new();
         /// <summary>Поставка 3: сколько граней получили сетку от донора (прежнего результата детали).</summary>
         public int MeshFacesReused;
         public readonly List<string> Warnings = new();
@@ -1020,6 +1024,7 @@ public sealed class Part : ModelItem
         }
 
         result.Bodies.AddRange(ctx.Bodies);
+        result.Quilts.AddRange(ctx.Quilts);
         result.Warnings.AddRange(ctx.Warnings);
 
         // ТОЧНАЯ РАЗМЕТКА — ОДИН РАЗ, В КОНЦЕ. Во время перестроения она отложена: промежуточные
@@ -1080,11 +1085,19 @@ public sealed class Part : ModelItem
                 }
                 if (b.Guarantee == Kernel.GuaranteeLevel.Approximate) result.Approximate = true;
             }
+            foreach (var q in result.Quilts) if (QuiltMesh(q) is { } qm) all.Add(qm);
             result.Mesh = all.Count == 1 ? all[0] : Merge(all);
 
             ValidationIntegrity(result);
             if (result.Mesh != null && !result.Mesh.Whole)
                 result.IntegrityError ??= $"Integrity: {result.Mesh.BrokenFaces.Count} face(s) missing from the mesh.";
+        }
+
+        // u13: деталь только из квилтов — сетка из них
+        if (result.Bodies.Count == 0 && result.Quilts.Count > 0)
+        {
+            var qs = result.Quilts.Select(QuiltMesh).OfType<MeshData>().ToList();
+            if (qs.Count > 0) { result.Mesh = qs.Count == 1 ? qs[0] : Merge(qs); foreach (var q in qs) result.Bounds.Add(q.Bounds); }
         }
 
         // Вспомогательная геометрия дерева отдаётся вместе с телами: на неё ссылаются
@@ -1254,6 +1267,7 @@ public sealed class Part : ModelItem
         HideConsumedSketches();
 
         Mesh = r.Mesh;
+        Quilts.Clear(); Quilts.AddRange(r.Quilts);
         Volume = r.Volume;
         Area = r.Area;
         VolumeError = r.VolumeError;
@@ -1307,9 +1321,40 @@ public sealed class Part : ModelItem
     }
 
     /// <summary>Ищет топологический элемент по id во всех телах детали.</summary>
-    public TFace? FindFace(uint id) => Bodies.SelectMany(b => b.Faces).FirstOrDefault(f => f.Id == id);
-    public TEdge? FindEdge(uint id) => Bodies.SelectMany(b => b.Edges).FirstOrDefault(e => e.Id == id);
-    public TVertex? FindVertex(uint id) => Bodies.SelectMany(b => b.Vertices).FirstOrDefault(v => v.Id == id);
+    public TFace? FindFace(uint id) => Bodies.SelectMany(b => b.Faces).FirstOrDefault(f => f.Id == id) ?? Quilts.SelectMany(q => q.Faces).FirstOrDefault(f => f.Id == id);
+    public TEdge? FindEdge(uint id) => Bodies.SelectMany(b => b.Edges).FirstOrDefault(e => e.Id == id) ?? Quilts.SelectMany(q => q.Faces.SelectMany(f => f.Edges)).FirstOrDefault(e => e.Id == id);
+    public TVertex? FindVertex(uint id) => Bodies.SelectMany(b => b.Vertices).FirstOrDefault(v => v.Id == id) ?? Quilts.SelectMany(q => q.Faces.SelectMany(f => f.Edges).SelectMany(e => new[] { e.V0, e.V1 })).FirstOrDefault(v => v.Id == id);
+    /// <summary>u13: квилт, которому принадлежит грань.</summary>
+    public Quilt? QuiltOfFace(uint faceId) => Quilts.FirstOrDefault(q => q.Faces.Any(f => f.Id == faceId));
+
+    /// <summary>u13: сетка квилта — треугольники, рёбра и вершины только его граней (тесселяция тела-основы).</summary>
+    public static MeshData? QuiltMesh(Quilt q)
+    {
+        MeshData md;
+        try { md = Tessellator.Tessellate(q.Parent); } catch { return null; }
+        var faceIds = q.Faces.Select(f => f.Id).ToHashSet();
+        var edges = q.Faces.SelectMany(f => f.Edges).ToHashSet();
+        var edgeIds = edges.Select(e => e.Id).ToHashSet();
+        var vIds = edges.SelectMany(e => new[] { e.V0, e.V1 }).Where(v => v != null).Select(v => v.Id).ToHashSet();
+        var res = new MeshData();
+        var map = new Dictionary<int, int>(); var vs = new List<MeshVertex>(); var ix = new List<int>();
+        for (int i = 0; i + 2 < md.Indices.Length; i += 3)
+        {
+            if (!faceIds.Contains(md.Vertices[md.Indices[i]].FaceId)) continue;
+            for (int k = 0; k < 3; k++)
+            {
+                int o = md.Indices[i + k];
+                if (!map.TryGetValue(o, out int n)) { n = vs.Count; vs.Add(md.Vertices[o]); map[o] = n; }
+                ix.Add(n);
+            }
+        }
+        if (ix.Count == 0) return null;
+        res.Vertices = vs.ToArray(); res.Indices = ix.ToArray();
+        foreach (var e in md.EdgePolylines) if (edgeIds.Contains(e.EdgeId)) res.EdgePolylines.Add(e);
+        foreach (var p in md.Points) if (vIds.Contains(p.VertexId)) res.Points.Add(p);
+        var b = Bounds3.Empty; foreach (var v in vs) b.Add(new OpenTK.Mathematics.Vector3d(v.P.X, v.P.Y, v.P.Z)); res.Bounds = b;
+        return res;
+    }
 }
 
 /// <summary>
