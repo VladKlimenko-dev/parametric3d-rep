@@ -33,6 +33,11 @@ public sealed class ExtrudeFeature : Feature
     public readonly ExtrudeSide Side1 = new();
     public readonly ExtrudeSide Side2 = new();
 
+    /// <summary>u13: тонкое выдавливание — стенка толщиной Thin по контуру (торцы открыты); null — сплошное.</summary>
+    public ValueRef? Thin;
+    /// <summary>Стенка тонкого выдавливания — наружу от контура (иначе внутрь).</summary>
+    public bool ThinOutside;
+
     /// <summary>Габарит сцены — им заменяется «насквозь».</summary>
     public double ThroughAllSize = 10000;
 
@@ -146,6 +151,27 @@ public sealed class ExtrudeFeature : Feature
             solid = Kernel.Topology.TopologyTransform.Apply(solid, xf) ?? Kernel.Ops.TransformOp.Copy(solid, xf);
             if (circ is { } cc) circ = (xf.Point(cc.Centre), cc.Radius);
             dir = xf.Direction(dir);
+        }
+
+        if (Thin is { } thinRef)
+        {
+            // u13: ТОНКОЕ ВЫДАВЛИВАНИЕ — полость резца с открытыми торцами (плоские грани поперёк направления): стенка по контуру
+            double t = Math.Abs(thinRef.Resolve(ctx.Parameters));
+            if (t <= Tol.Weld) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Extrude: the thin wall must be thicker than zero.");
+            var axisN = dir.Normalized();
+            var caps = new List<Vector3d>();
+            foreach (var f in solid.Faces)
+            {
+                var srf = Kernel.Topology.GeometryAudit.AuthoritativeSurface(f);
+                if (srf is not { IsPlanar: true } || f.Loops.Count == 0 || f.Loops[0].CoEdges.Count == 0) continue;
+                var p0 = f.Loops[0].CoEdges[0].Start.P;
+                if (Math.Abs(Vector3d.Dot(f.NormalAt(p0).Normalized(), axisN)) > 1 - 1e-9) caps.Add(Kernel.Geometry.ExactCylinderCut.InteriorPoint(f, srf));
+            }
+            var tool = new List<Kernel.Topology.TSolid> { solid };
+            if (!ShellOp.Hollow(tool, ThinOutside ? -t : t, caps, ctx.Warnings))
+                throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Extrude: the thin wall could not be built.");
+            solid = tool[0];
+            circ = null;
         }
 
         if (Cut)

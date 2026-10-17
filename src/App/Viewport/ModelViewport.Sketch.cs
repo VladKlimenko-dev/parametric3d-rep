@@ -31,6 +31,12 @@ public sealed partial class ModelViewport
 
     /// <summary>Привязка к сетке (кнопка панели эскиза).</summary>
     public bool SnapGrid { get; set; } = true;
+    /// <summary>u13: привязка к элементам эскиза (точкам и кривым); выключена — только сетка.</summary>
+    public bool SnapItems { get; set; } = true;
+    /// <summary>u13: показ открытых концов контура (точки, к которым не примыкает другой конец).</summary>
+    public bool ShowOpenEnds { get; set; }
+    /// <summary>u13: заливка (штриховка) замкнутых областей эскиза.</summary>
+    public bool ShowFilled { get; set; }
 
     /// <summary>Что выбирается в режиме эскиза: эскиз, а также рёбра и вершины тела — кандидаты в ссылки (п. 2.3).</summary>
     private PickFilter SketchFilter => ActiveSketch == null ? PickFilter.All
@@ -209,12 +215,21 @@ public sealed partial class ModelViewport
         if (ActiveSketch is not { } sk || ScreenToSketch(p) is not { } q) return null;
         double tol = PixelSize * Settings.Current.SnapTolerancePx;
         SkPoint? best = null; double bd = tol;
-        foreach (var pt in sk.AllPoints())
-        {
-            double d = (pt.P - q).Length;
-            if (d < bd) { bd = d; best = pt; }
-        }
+        if (SnapItems)
+            foreach (var pt in sk.AllPoints())
+            {
+                double d = (pt.P - q).Length;
+                if (d < bd) { bd = d; best = pt; }
+            }
         if (best != null) return new SketchInput(sk, best.P, best);
+        // u13: привязка к кривой — ближайшая точка отрезка, дуги, окружности (точка эскиза не ловится)
+        if (SnapItems)
+        {
+            SkEntity? ce = null; double cd = tol * 0.6;
+            foreach (var e in sk.Entities) { if (e is SkPoint) continue; double d = e.DistanceTo(q); if (d < cd) { cd = d; ce = e; } }
+            if (ce is SkLine sl) { var ab = sl.B.P - sl.A.P; double t = Math.Clamp(Vector2d.Dot(q - sl.A.P, ab) / Math.Max(ab.LengthSquared, 1e-30), 0, 1); return new SketchInput(sk, sl.A.P + ab * t, null); }
+            if (ce is SkCircle or SkArc && Parametric3D.App.Sketching.SkGeom.CircleOf(ce) is { } cc && (q - cc.C).Length > 1e-12) return new SketchInput(sk, cc.C + (q - cc.C).Normalized() * cc.R, null);
+        }
         if (SnapGrid)
         {
             double step = GridStep();
@@ -356,6 +371,22 @@ public sealed partial class ModelViewport
             }
         }
 
+        // u13: открытые концы контура и заливка замкнутых областей
+        if (ActiveSketch is { } skd)
+        {
+            if (ShowOpenEnds)
+            {
+                try { SketchDiagnostics.Update(skd); } catch { }
+                foreach (var p in skd.AllPoints().Where(p => p.Dangling && p.Owner != null && p.Role != SkRole.Construction))
+                    pts.Add(new PointInst { P = W(p.P), Color = SceneData.Pack(th.Error), Px = 10, Shape = 1 });
+            }
+            if (ShowFilled)
+            {
+                var hc = th.SketchCurve; hc.W = 0.35f;
+                foreach (var (a, b) in Hatch(skd)) lines.Add(Inst(W(a), W(b), hc, 1f, 0));
+            }
+        }
+
         // резиновая нить инструмента
         if (_tool != null)
         {
@@ -369,6 +400,38 @@ public sealed partial class ModelViewport
             if (_snap != null) pts.Add(new PointInst { P = W(_snap.P), Color = SceneData.Pack(th.Select), Px = 11, Shape = 1 });
         }
         return (grid, lines, pts);
+    }
+
+    /// <summary>Штриховка замкнутых областей эскиза под 45° (чёт-нечет по всем контурам профиля).</summary>
+    private static List<(Vector2d, Vector2d)> Hatch(Sketch sk)
+    {
+        var res = new List<(Vector2d, Vector2d)>();
+        Kernel.Ops.Profile prof;
+        try { prof = sk.ToProfile(); } catch { return res; }
+        var loops = prof.Loops.Select(l => { try { return l.Sample(sk.Plane); } catch { return new List<Vector2d>(); } }).Where(l => l.Count >= 3).ToList();
+        if (loops.Count == 0) return res;
+        // поворот на 45°: штрихи — горизонтали в повёрнутых координатах
+        const double c = 0.70710678118654752, s = 0.70710678118654752;
+        Vector2d R(Vector2d p) => new(p.X * c + p.Y * s, -p.X * s + p.Y * c);
+        Vector2d Rinv(Vector2d p) => new(p.X * c - p.Y * s, p.X * s + p.Y * c);
+        var rl = loops.Select(l => l.Select(R).ToList()).ToList();
+        double y0 = rl.SelectMany(x => x).Min(p => p.Y), y1 = rl.SelectMany(x => x).Max(p => p.Y);
+        double ext = rl.SelectMany(x => x).Max(p => p.X) - rl.SelectMany(x => x).Min(p => p.X);
+        double step = Math.Max((y1 - y0) / 60, Math.Max(ext, y1 - y0) / 80);
+        if (!(step > 0)) return res;
+        for (double y = y0 + step / 2; y < y1; y += step)
+        {
+            var xs = new List<double>();
+            foreach (var l in rl)
+                for (int i = 0; i < l.Count; i++)
+                {
+                    var a = l[i]; var b = l[(i + 1) % l.Count];
+                    if ((a.Y <= y && b.Y > y) || (b.Y <= y && a.Y > y)) xs.Add(a.X + (y - a.Y) / (b.Y - a.Y) * (b.X - a.X));
+                }
+            xs.Sort();
+            for (int k = 0; k + 1 < xs.Count; k += 2) res.Add((Rinv(new Vector2d(xs[k], y)), Rinv(new Vector2d(xs[k + 1], y))));
+        }
+        return res;
     }
 
     private static LineInst Inst(Vector3 a, Vector3 b, Vector4 c, float w, float dash) =>

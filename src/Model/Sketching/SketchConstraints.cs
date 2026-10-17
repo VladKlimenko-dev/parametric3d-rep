@@ -31,6 +31,8 @@ public enum DimensionType
 
     /// <summary>Большая полуось эллипса.</summary>
     EllipseRadiusU,
+    /// <summary>u13: длина дуги (R·|угол|).</summary>
+    ArcLength = 100,
     /// <summary>Малая полуось эллипса.</summary>
     EllipseRadiusV
 }
@@ -246,6 +248,10 @@ public static class DimensionMeasure
             case DimensionType.Diameter:
                 if (it.Count >= 1 && it[0] is SkCircle dc) return dc.Radius * 2;
                 if (it.Count >= 1 && it[0] is SkArc da) return da.Radius * 2;
+                break;
+
+            case DimensionType.ArcLength:
+                if (it.Count >= 1 && it[0] is SkArc al) return al.Radius * Math.Abs(al.Sweep);
                 break;
 
             case DimensionType.EllipseRadiusU:

@@ -396,7 +396,7 @@ public static class ExactCylinderCut
     }
 
     /// <summary>Точка внутри грани (центр наибольшего треугольника её сетки) на её поверхности.</summary>
-    static Vector3d InteriorPoint(TFace f, ISurface3 src)
+    public static Vector3d InteriorPoint(TFace f, ISurface3 src)
     {
         var mb = new Tess.MeshBuilder(); mb.BeginFace(f.Id); f.Surface.TessellateFace(f, mb); mb.EndFace();
         var md = new Tess.MeshData(); mb.FillInto(md);

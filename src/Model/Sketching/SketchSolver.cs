@@ -486,6 +486,19 @@ public sealed class NumericSketchSolver : ISketchSolver
                             fns.Add(dst => dst.Add(Math.Abs(DistPointLine(ta.Center.P, tl3)) - ta.Radius));
                         else if (it[0] is SkArc ta2 && it[1] is SkLine tl4)
                             fns.Add(dst => dst.Add(Math.Abs(DistPointLine(ta2.Center.P, tl4)) - ta2.Radius));
+                        // u13: касание дуг (и дуги с окружностью) — как у окружностей: внешнее или внутреннее, ближнее
+                        else if ((it[0] is SkArc || it[1] is SkArc) && (it[0] is SkArc or SkCircle) && (it[1] is SkArc or SkCircle))
+                        {
+                            SkPoint C0 = it[0] is SkArc a0 ? a0.Center : ((SkCircle)it[0]).Center, C1 = it[1] is SkArc a1 ? a1.Center : ((SkCircle)it[1]).Center;
+                            var e0 = it[0]; var e1 = it[1];
+                            double R(SkEntity e) => e is SkArc aa ? aa.Radius : ((SkCircle)e).Radius;
+                            fns.Add(dst =>
+                            {
+                                double d = (C0.P - C1.P).Length, r0 = R(e0), r1 = R(e1);
+                                double outer = Math.Abs(d - (r0 + r1)), inner = Math.Abs(d - Math.Abs(r0 - r1));
+                                dst.Add(outer <= inner ? d - (r0 + r1) : d - Math.Abs(r0 - r1));
+                            });
+                        }
                         else if (it[0] is SkCircle c1 && it[1] is SkCircle c2)
                             fns.Add(dst =>
                             {
@@ -503,6 +516,9 @@ public sealed class NumericSketchSolver : ISketchSolver
                         if (it[0] is SkLine ea && it[1] is SkLine eb) fns.Add(dst => dst.Add(ea.Length - eb.Length));
                         else if (it[0] is SkCircle ec && it[1] is SkCircle ed) fns.Add(dst => dst.Add(ec.Radius - ed.Radius));
                         else if (it[0] is SkArc ga && it[1] is SkArc gb) fns.Add(dst => dst.Add(ga.Radius - gb.Radius));
+                        // u13: дуга и окружность (кнопка «Равенство»)
+                        else if (it[0] is SkArc ha && it[1] is SkCircle hc) fns.Add(dst => dst.Add(ha.Radius - hc.Radius));
+                        else if (it[0] is SkCircle hc2 && it[1] is SkArc ha2) fns.Add(dst => dst.Add(hc2.Radius - ha2.Radius));
                     }
                     break;
 
@@ -593,6 +609,9 @@ public sealed class NumericSketchSolver : ISketchSolver
 
                 case DimensionType.EllipseRadiusU:
                     if (it.Count >= 1 && it[0] is SkEllipse eu) fns.Add(dst => dst.Add(eu.RU - d.Value));
+                    break;
+                case DimensionType.ArcLength:
+                    if (it.Count >= 1 && it[0] is SkArc alc) fns.Add(dst => dst.Add(alc.Radius * Math.Abs(alc.Sweep) - d.Value));
                     break;
 
                 case DimensionType.EllipseRadiusV:

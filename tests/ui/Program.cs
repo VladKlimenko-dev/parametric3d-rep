@@ -357,6 +357,228 @@ Check("UI-U13-LOFT-SWEEP", () =>
     w2.Close();
 });
 
+// u13b: кнопки эскиза — связи, размеры (в т. ч. длина дуги), обрезка, скругление угла, новые инструменты рисования, смещение, зеркало
+Check("UI-U13B-SKETCH", () =>
+{
+    var s = DocumentSession.NewPart(); var w = Open(s); var part = s.Part!;
+    w.ViewPort.Selection.Clear(); w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp());
+    Require(w.InSketch, "sketch mode");
+    var sk = w.ViewPort.ActiveSketch!; var solver = s.Document.Solver;
+    void Pick(params SkEntity[] es) { w.ViewPort.Selection.Clear(); foreach (var e in es) w.ViewPort.Selection.Select(new PickRef(e.Id, e is SkPoint ? PickKind.SketchPoint : PickKind.SketchCurve, sk, e), additive: true); }
+    SkLine Line(double x0, double y0, double x1, double y1) { var t = new LineTool(chain: false); t.Click(new SketchInput(sk, new Vector2d(x0, y0), null)); t.Click(new SketchInput(sk, new Vector2d(x1, y1), null)); return sk.Entities.OfType<SkLine>().Last(); }
+    int Count<T>() => sk.Entities.OfType<T>().Count();
+
+    // связи: горизонтально, параллельно, равенство
+    var l1 = Line(0, 0, 10, 1); Pick(l1);
+    Require(SketchCommands.Constrain(w, ConstraintType.Horizontal) && Math.Abs(l1.A.P.Y - l1.B.P.Y) < 1e-7, "horizontal");
+    var l2 = Line(0, 5, 8, 9); Pick(l1, l2);
+    Require(SketchCommands.Constrain(w, ConstraintType.Parallel) && Math.Abs(l1.Direction.X * l2.Direction.Y - l1.Direction.Y * l2.Direction.X) < 1e-7, "parallel");
+    Pick(l1, l2);
+    Require(SketchCommands.Constrain(w, ConstraintType.Equal) && Math.Abs((l1.B.P - l1.A.P).Length - (l2.B.P - l2.A.P).Length) < 1e-6, "equal");
+    // размер отрезка → 20: оба отрезка 20 (равенство)
+    Pick(l1); var d1 = SketchCommands.Dimension(w, SketchCommands.DimKind.Linear);
+    Require(d1 != null && !d1.Reference, "linear dimension");
+    d1!.Value = 20; sk.Solve(solver);
+    Console.WriteLine($"  lines: {(l1.B.P - l1.A.P).Length:F6} {(l2.B.P - l2.A.P).Length:F6}");
+    Require(Math.Abs((l1.B.P - l1.A.P).Length - 20) < 1e-6 && Math.Abs((l2.B.P - l2.A.P).Length - 20) < 1e-6, "dimension drives both lines");
+    // противоречивая связь снимается: вертикально к горизонтальному отрезку с длиной 20
+    int nc = sk.Constraints.Count; Pick(l1);
+    Require(!SketchCommands.Constrain(w, ConstraintType.Vertical) && sk.Constraints.Count == nc, "conflicting constraint reverted");
+    // коллинеарно
+    var l3 = Line(30, 3, 40, 4); Pick(l1, l3);
+    Require(SketchCommands.Constrain(w, ConstraintType.Parallel, collinear: true), "collinear");
+    double off = (l3.A.P - l1.A.P).X * l1.Direction.Y - (l3.A.P - l1.A.P).Y * l1.Direction.X;
+    Require(Math.Abs(off) < 1e-6, $"collinear offset {off}");
+
+    // длина дуги: дуга R10 на 90°, размер 2π·10/4 → задать 20 (радиус свободен, сохраняется угол? — проверяем R·sweep)
+    var c = sk.AddEntity(new SkPoint(new Vector2d(0, -50))); var a0 = sk.AddEntity(new SkPoint(new Vector2d(10, -50))); var a1 = sk.AddEntity(new SkPoint(new Vector2d(0, -40)));
+    var arc = sk.AddEntity(new SkArc(c, a0, a1));
+    Pick(arc); var da = SketchCommands.Dimension(w, SketchCommands.DimKind.ArcLength);
+    Require(da != null && Math.Abs(da.Value - Math.PI * 5) < 1e-6, $"arc length {da?.Value}");
+    Pick(arc); var dr = SketchCommands.Dimension(w, SketchCommands.DimKind.Radius);
+    Require(dr != null, "radius dimension");
+    da!.Value = 10 * Math.PI / 3; sk.Solve(solver); // 60° при R10
+    double sweep = Math.Abs(Math.Atan2(((arc.Start.P - c.P).X * (arc.End.P - c.P).Y - (arc.Start.P - c.P).Y * (arc.End.P - c.P).X), Vector2d.Dot(arc.Start.P - c.P, arc.End.P - c.P)));
+    Console.WriteLine($"  arc: R {arc.Radius:F6} sweep {sweep * 180 / Math.PI:F4}°");
+    Require(Math.Abs(arc.Radius - 10) < 1e-6 && Math.Abs(sweep - Math.PI / 3) < 1e-6, "arc length drives sweep");
+
+    // обрезка: крест, убрать правую половину горизонтального
+    var h = Line(100, 0, 120, 0); var v = Line(110, -10, 110, 10);
+    Require(TrimTool.Trim(sk, h, new Vector2d(117, 0)), "trim");
+    var hl = sk.Entities.OfType<SkLine>().Where(l => Math.Abs(l.A.P.Y) < 1e-9 && Math.Abs(l.B.P.Y) < 1e-9 && Math.Min(l.A.P.X, l.B.P.X) >= 99).ToList();
+    Console.WriteLine($"  trim: {string.Join(" ", hl.Select(l => $"[{l.A.P.X:F3},{l.B.P.X:F3}]"))}");
+    Require(hl.Count == 1 && Math.Abs(Math.Max(hl[0].A.P.X, hl[0].B.P.X) - 110) < 1e-6, "trimmed to the cross");
+    int nl = Count<SkLine>();
+    Require(TrimTool.Split(sk, v, new Vector2d(110, 5)) && Count<SkLine>() == nl + 1, "split");
+
+    // скругление угла прямоугольника R3
+    Rect(sk, 200, 0, 220, 10); int na = Count<SkArc>();
+    Require(CornerTool.Apply(sk, new Vector2d(220, 10), false, 3) && Count<SkArc>() == na + 1 && Math.Abs(sk.Entities.OfType<SkArc>().Last().Radius - 3) < 1e-6, "corner fillet");
+    int nl2 = Count<SkLine>();
+    Require(CornerTool.Apply(sk, new Vector2d(200, 0), true, 2) && Count<SkLine>() == nl2 + 1, "corner chamfer");
+
+    // инструменты: многоугольник 6, паз, прямоугольник от центра и по трём точкам, окружность по двум точкам
+    int n0 = Count<SkLine>(); var pg = new PolygonTool(6); pg.Click(new SketchInput(sk, new Vector2d(300, 0), null)); pg.Click(new SketchInput(sk, new Vector2d(310, 0), null));
+    Require(Count<SkLine>() == n0 + 6, "polygon 6");
+    n0 = Count<SkLine>(); na = Count<SkArc>(); var sl = new SlotTool();
+    sl.Click(new SketchInput(sk, new Vector2d(300, 50), null)); sl.Click(new SketchInput(sk, new Vector2d(330, 50), null)); sl.Click(new SketchInput(sk, new Vector2d(330, 55), null));
+    Require(Count<SkLine>() == n0 + 2 && Count<SkArc>() == na + 2, "slot");
+    n0 = Count<SkLine>(); var rc = new RectCenterTool(); rc.Click(new SketchInput(sk, new Vector2d(400, 0), null)); rc.Click(new SketchInput(sk, new Vector2d(405, 3), null));
+    var rcl = sk.Entities.OfType<SkLine>().Skip(n0).Where(l => l.Role != SkRole.Construction).ToList();
+    Require(rcl.Count == 4 && Math.Abs(rcl.Min(l => Math.Min(l.A.P.X, l.B.P.X)) - 395) < 1e-6, "centre rectangle");
+    n0 = Count<SkLine>(); var r3 = new Rect3PTool();
+    foreach (var q in new[] { new Vector2d(500, 0), new Vector2d(508, 6), new Vector2d(505, 12) }) r3.Click(new SketchInput(sk, q, null));
+    var r3l = sk.Entities.OfType<SkLine>().Skip(n0).ToList();
+    Require(r3l.Count == 4 && r3l.Any(l => Math.Abs((l.B.P - l.A.P).Length - 10) < 1e-6), "3-point rectangle");
+    int ncir = Count<SkCircle>(); var c2 = new Circle2PTool(); c2.Click(new SketchInput(sk, new Vector2d(600, 0), null)); c2.Click(new SketchInput(sk, new Vector2d(610, 0), null));
+    Require(Count<SkCircle>() == ncir + 1 && Math.Abs(sk.Entities.OfType<SkCircle>().Last().Radius - 5) < 1e-6, "2-point circle");
+
+    // эллипс по пяти точкам: полуоси 8 и 3, поворот 30°
+    double ang = Math.PI / 6; var pts5 = Enumerable.Range(0, 5).Select(i => { double t = i * 1.1; var e = new Vector2d(8 * Math.Cos(t), 3 * Math.Sin(t)); return new Vector2d(700 + e.X * Math.Cos(ang) - e.Y * Math.Sin(ang), e.X * Math.Sin(ang) + e.Y * Math.Cos(ang)); }).ToList();
+    var el = Ellipse5PTool.Fit(pts5);
+    Console.WriteLine($"  ellipse: {el?.Center.P} {el?.RU:F6} {el?.RV:F6}");
+    Require(el != null && (el.Center.P - new Vector2d(700, 0)).Length < 1e-6 && Math.Abs(Math.Max(el.RU, el.RV) - 8) < 1e-6 && Math.Abs(Math.Min(el.RU, el.RV) - 3) < 1e-6, "5-point ellipse");
+    // сплайн через точки проходит через них
+    var q4 = new List<Vector2d> { new(800, 0), new(810, 5), new(820, -3), new(830, 2) };
+    var cv = SplineThroughTool.Interpolate(q4);
+    Vector2d Bez(List<Vector2d> P, double t) { var b = P.ToList(); for (int k = b.Count - 1; k > 0; k--) for (int i = 0; i < k; i++) b[i] = b[i] * (1 - t) + b[i + 1] * t; return b[0]; }
+    double tot = 0; var tq = new List<double> { 0 }; for (int i = 1; i < q4.Count; i++) { tot += (q4[i] - q4[i - 1]).Length; tq.Add(tot); }
+    Require(cv != null && q4.Select((q, i) => (Bez(cv, tq[i] / tot) - q).Length).Max() < 1e-7, "spline through points");
+
+    // смещение контура прямоугольника на 2 наружу: квадрат 10 → 14
+    Rect(sk, 900, 0, 910, 10);
+    var rect = sk.Entities.OfType<SkLine>().TakeLast(4).ToList();
+    var offs = SketchEditCommands.OffsetChain(sk, rect.Cast<SkEntity>().ToList(), 2);
+    var xs = offs.OfType<SkLine>().SelectMany(l => new[] { l.A.P.X, l.B.P.X }).ToList();
+    Console.WriteLine($"  offset: {offs.Count} lines, x {xs.Min():F4}..{xs.Max():F4}");
+    Require(offs.Count == 4 && (Math.Abs(Math.Abs(xs.Max() - xs.Min()) - 14) < 1e-6 || Math.Abs(Math.Abs(xs.Max() - xs.Min()) - 6) < 1e-6), "offset chain");
+    // зеркало отрезка относительно вертикальной оси x=1000
+    var m = Line(1003, 0, 1005, 4); var ax = Line(1000, -10, 1000, 10);
+    int nm = Count<SkLine>(); Pick(m, ax); SketchEditCommands.Mirror(w);
+    var mir = sk.Entities.OfType<SkLine>().Last();
+    Require(Count<SkLine>() == nm + 1 && new[] { mir.A.P.X, mir.B.P.X }.Order().SequenceEqual(new[] { 995.0, 997.0 }.Select(x => x), new Tol()), $"mirror {mir.A.P} {mir.B.P}");
+    // площадь: отдельный эскиз — квадрат 10 с отверстием R2
+    w.FinishSketch();
+    w.ViewPort.Selection.Clear(); w.SelectItem(part.PlaneXZ); w.StartOperation(new SketchOp());
+    var ska = w.ViewPort.ActiveSketch!; Rect(ska, 0, 0, 10, 10);
+    var ct = new CircleTool(); ct.Click(new SketchInput(ska, new Vector2d(5, 5), null)); ct.Click(new SketchInput(ska, new Vector2d(7, 5), null));
+    var ar = SketchCommands.Area(ska);
+    Console.WriteLine($"  area: {ar}");
+    Require(ar is { } aa && Math.Abs(aa.Area - (100 - Math.PI * 4)) < 1e-6 && aa.Regions == 1, "area");
+    w.FinishSketch();
+    var st = sk.Solve(solver);
+    Console.WriteLine($"  solve: {st}, entities {sk.Entities.Count}, constraints {sk.Constraints.Count}");
+    Require(st is not (SolveStatus.Overconstrained or SolveStatus.Inconsistent), $"sketch solves: {st}");
+    w.Close();
+});
+
+// u13c: тонкое выдавливание, винтовая протяжка, перенос/копия, прямая правка граней, массивы по точкам/кривой/заполнением, резьба
+Check("UI-U13C-FEATURES", () =>
+{
+    // тонкое выдавливание: квадрат 20, стенка 2 внутрь, высота 10 → (400 − 256)·10
+    var s = DocumentSession.NewPart(); var w = Open(s); var part = s.Part!;
+    var a = DrawSketch(w, part, part.PlaneXY, sk => Rect(sk, -10, -10, 10, 10));
+    var ex = new ExtrudeFeature { SketchId = a.Id, Thin = new ValueRef(2) }; ex.Side1.Distance = new ValueRef(10); part.AddFeature(ex); s.Document.RebuildDirty();
+    Console.WriteLine($"  thin: error {ex.Error}, volume {part.Volume:F6}");
+    Require(ex.Error == null && Math.Abs(part.Volume - 1440) < 1e-6, $"thin extrude {part.Volume} {ex.Error}");
+    ex.ThinOutside = true; part.NotifyChanged(ex); s.Document.RebuildDirty();
+    Console.WriteLine($"  thin outside: error {ex.Error}, volume {part.Volume:F6}");
+    Require(ex.Error == null && Math.Abs(part.Volume - (576 - 400) * 10) < 1e-6, $"thin outside {part.Volume} {ex.Error}");
+    w.Close();
+
+    // винтовая протяжка: круг r1 на расстоянии 10 от оси, шаг 5, 3 витка
+    var s2 = DocumentSession.NewPart(); var w2 = Open(s2); var p2 = s2.Part!;
+    var sec = DrawSketch(w2, p2, p2.PlaneXZ, sk =>
+    {
+        var c = new CircleTool(); c.Click(new SketchInput(sk, new Vector2d(10, 0), null)); c.Click(new SketchInput(sk, new Vector2d(11, 0), null));
+        var cl = new LineTool(chain: false); cl.Click(new SketchInput(sk, new Vector2d(0, -5), null)); cl.Click(new SketchInput(sk, new Vector2d(0, 5), null));
+        sk.Entities.OfType<SkLine>().Last().Role = SkRole.Centerline;
+    });
+    var hs = new HelicalSweepFeature { SketchId = sec.Id, Pitch = new ValueRef(5), Turns = new ValueRef(3) }; p2.AddFeature(hs); s2.Document.RebuildDirty();
+    double wantH = Math.PI * 3 * Math.Sqrt(Math.Pow(2 * Math.PI * 10, 2) + 25);
+    Console.WriteLine($"  helical: error {hs.Error}, volume {p2.Volume:F3} want {wantH:F3}");
+    Require(hs.Error == null && Math.Abs(p2.Volume - wantH) < 0.02 * wantH, $"helical sweep {p2.Volume} ({hs.Error})");
+    var zs = p2.Bodies[0].Vertices.Select(v => v.P.Z).ToList();
+    Require(zs.Count == 0 || zs.Max() - zs.Min() > 14, "helix height");
+    w2.Close();
+
+    // брусок 40×20×10 для прямой правки, копии, массивов
+    (DocumentSession S, MainWindow W, Part P, Sketch Sk) Box()
+    {
+        var sb = DocumentSession.NewPart(); var wb = Open(sb); var pb = sb.Part!;
+        var b = DrawSketch(wb, pb, pb.PlaneXY, sk => Rect(sk, 0, 0, 40, 20));
+        var e = new ExtrudeFeature { SketchId = b.Id }; e.Side1.Distance = new ValueRef(10); pb.AddFeature(e); sb.Document.RebuildDirty();
+        Require(Math.Abs(pb.Volume - 8000) < 1e-6, "box");
+        return (sb, wb, pb, b);
+    }
+    var (s3, w3, p3, _) = Box();
+    var mc = new MoveCopyFeature { Dx = new ValueRef(100), Copy = true }; p3.AddFeature(mc); s3.Document.RebuildDirty();
+    Require(mc.Error == null && Math.Abs(p3.Volume - 16000) < 1e-6, $"copy {p3.Volume} {mc.Error}");
+    mc.Copy = false; mc.Angle = new ValueRef(90); p3.NotifyChanged(mc); s3.Document.RebuildDirty();
+    var bx = p3.Bodies[0].Vertices.Select(v => v.P).ToList();
+    Console.WriteLine($"  move: x {bx.Min(v => v.X):F3}..{bx.Max(v => v.X):F3} y {bx.Min(v => v.Y):F3}..{bx.Max(v => v.Y):F3}");
+    Require(mc.Error == null && Math.Abs(p3.Volume - 8000) < 1e-6 && Math.Abs(bx.Min(v => v.X) - 80) < 1e-6 && Math.Abs(bx.Max(v => v.Y) - 40) < 1e-6, "move + rotate");
+    p3.RemoveFeature(mc); s3.Document.RebuildDirty();
+    // смещение верхней грани на 5 → 40·20·15; через операцию UI
+    var top = p3.Bodies[0].Faces.First(f => Refs.FacePlane(p3, f.Id) is { } pl && pl.N.Z > 0.99);
+    w3.ViewPort.Selection.Clear(); Select(w3, new PickRef(top.Id, PickKind.Face, p3, null));
+    var fop = new FaceEditOp(); w3.StartOperation(fop);
+    var fe = p3.Features.OfType<FaceEditFeature>().Last(); fe.Distance = new ValueRef(5);
+    w3.CommitOperation(); s3.Document.RebuildDirty();
+    Console.WriteLine($"  offset face: error {fe.Error}, volume {p3.Volume:F6}");
+    Require(fe.Error == null && Math.Abs(p3.Volume - 12000) < 1e-6, $"offset face {p3.Volume} {fe.Error}");
+    p3.RemoveFeature(fe); s3.Document.RebuildDirty();
+    // скругление R5 верхнего ребра → новый радиус 3 → удаление скругления
+    double zMax = 10;
+    var edge = p3.Bodies[0].Edges.First(x => x.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(x.V0.P.Z - zMax) < 1e-6 && Math.Abs(x.V1.P.Z - zMax) < 1e-6 && Math.Abs(x.V0.P.Y - x.V1.P.Y) < 1e-9 && Math.Abs(x.V0.P.Y) < 1e-9);
+    var rf = new RoundFeature { Radius = new ValueRef(5) }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(edge)); p3.AddFeature(rf); s3.Document.RebuildDirty();
+    double vR5 = p3.Volume, cut5 = (25 - Math.PI * 25 / 4) * 40;
+    Require(Math.Abs(vR5 - (8000 - cut5)) < 1e-6, $"round {vR5}");
+    var rface = p3.Bodies[0].Faces.First(f => f.Tag.Contains("round:face"));
+    var at = Parametric3D.Model.Features.FaceRefs.Inside(rface);
+    var nr = new FaceEditFeature { Mode = FaceEditMode.Radius, Radius = new ValueRef(3) }; nr.OnFaces.Add(at); p3.AddFeature(nr); s3.Document.RebuildDirty();
+    double cut3 = (9 - Math.PI * 9 / 4) * 40;
+    Console.WriteLine($"  new radius: error {nr.Error}, volume {p3.Volume:F6} want {8000 - cut3:F6}");
+    Require(nr.Error == null && Math.Abs(p3.Volume - (8000 - cut3)) < 1e-6, $"new radius {p3.Volume} {nr.Error}");
+    nr.Mode = FaceEditMode.Delete; p3.NotifyChanged(nr); s3.Document.RebuildDirty();
+    Console.WriteLine($"  delete round: error {nr.Error}, volume {p3.Volume:F6}");
+    Require(nr.Error == null && Math.Abs(p3.Volume - 8000) < 1e-6, $"delete round {p3.Volume} {nr.Error}");
+    // резьба на цилиндре: отверстие Ø6 насквозь
+    p3.RemoveFeature(nr); p3.RemoveFeature(rf); s3.Document.RebuildDirty();
+    w3.Close();
+
+    // массивы: вырез-круг r2 в (5,5) и копии в точках, по кривой, заполнением
+    var (s4, w4, p4, _) = Box();
+    var hole = DrawSketch(w4, p4, p4.PlaneXY, sk => { var c = new CircleTool(); c.Click(new SketchInput(sk, new Vector2d(5, 5), null)); c.Click(new SketchInput(sk, new Vector2d(7, 5), null)); });
+    var cut = new ExtrudeFeature { SketchId = hole.Id, Cut = true }; cut.Side1.Distance = new ValueRef(10); p4.AddFeature(cut); s4.Document.RebuildDirty();
+    double vHole = Math.PI * 4 * 10;
+    Require(Math.Abs(p4.Volume - (8000 - vHole)) < 1e-6, $"hole {p4.Volume}");
+    var pts = DrawSketch(w4, p4, p4.PlaneXY, sk => { foreach (var q in new[] { new Vector2d(5, 5), new Vector2d(15, 5), new Vector2d(25, 15) }) sk.AddEntity(new SkPoint(q)); });
+    var pp = new PointsPatternFeature { SketchId = pts.Id }; pp.Sources.Add(cut.Key); p4.AddFeature(pp); s4.Document.RebuildDirty();
+    Console.WriteLine($"  points pattern: error {pp.Error}, volume {p4.Volume:F6}");
+    Require(pp.Error == null && Math.Abs(p4.Volume - (8000 - 3 * vHole)) < 1e-6, $"points pattern {p4.Volume} {pp.Error}");
+    p4.RemoveFeature(pp);
+    var path = DrawSketch(w4, p4, p4.PlaneXY, sk => { var l = new LineTool(chain: false); l.Click(new SketchInput(sk, new Vector2d(5, 5), null)); l.Click(new SketchInput(sk, new Vector2d(35, 5), null)); });
+    var pc = new PointsPatternFeature { SketchId = path.Id, Mode = PointsPatternMode.Curve, Count = new ValueRef(4) }; pc.Sources.Add(cut.Key); p4.AddFeature(pc); s4.Document.RebuildDirty();
+    Console.WriteLine($"  curve pattern: error {pc.Error}, volume {p4.Volume:F6}");
+    Require(pc.Error == null && Math.Abs(p4.Volume - (8000 - 4 * vHole)) < 1e-6, $"curve pattern {p4.Volume} {pc.Error}");
+    p4.RemoveFeature(pc);
+    var region = DrawSketch(w4, p4, p4.PlaneXY, sk => { Rect(sk, 1, 1, 39, 19); sk.AddEntity(new SkPoint(new Vector2d(5, 5))); });
+    var pf = new PointsPatternFeature { SketchId = region.Id, Mode = PointsPatternMode.Fill, Spacing = new ValueRef(10), Margin = new ValueRef(2) }; pf.Sources.Add(cut.Key); p4.AddFeature(pf); s4.Document.RebuildDirty();
+    // сетка от (5,5) с шагом 10: x 5,15,25,35; y 5,15 → 8 мест (все дальше 2 от края области 1..39×1..19)
+    Console.WriteLine($"  fill pattern: error {pf.Error}, volume {p4.Volume:F6}");
+    Require(pf.Error == null && Math.Abs(p4.Volume - (8000 - 8 * vHole)) < 1e-6, $"fill pattern {p4.Volume} {pf.Error}");
+    // резьба на стенке отверстия
+    var hf = p4.Bodies[0].Faces.First(f => Parametric3D.Kernel.Ops.DirectEdit.RadiusAfter(f, 0) is { } rr && Math.Abs(rr - 2) < 1e-9);
+    var th = new CosmeticThreadFeature(); th.OnFaces.Add(Parametric3D.Model.Features.FaceRefs.Inside(hf)); p4.AddFeature(th); s4.Document.RebuildDirty();
+    Console.WriteLine($"  thread: error {th.Error}, d {th.Diameter} internal {th.Internal}");
+    Require(th.Error == null && Math.Abs(th.Diameter - 4) < 1e-9 && th.Internal, "thread");
+    // сохранение и загрузка: новые операции переживают файл
+    var json = Parametric3D.Model.DocumentFile.Save(p4);
+    Require(json.Contains("points_pattern") && json.Contains("\"thread\""), "saved kinds");
+    w4.Close();
+});
+
 // u13: опорные элементы кнопок (плоскость посередине и касательная, ось грани, точка в центре дуги) и уклон
 Check("UI-U13-DATUMS-DRAFT", () =>
 {
@@ -1486,3 +1708,4 @@ Console.WriteLine(JsonSerializer.Serialize(new { passed, failed }));
 return failed == 0 ? 0 : 1;
 
 sealed class CheckFailed : Exception { public CheckFailed(string m) : base(m) { } }
+sealed class Tol : IEqualityComparer<double> { public bool Equals(double a, double b) => Math.Abs(a - b) < 1e-6; public int GetHashCode(double x) => 0; }

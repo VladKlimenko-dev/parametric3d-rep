@@ -117,6 +117,7 @@ public static class StandardCommands
         {
             ["op.sketch"] = () => Fits(x => PlaneLike(x) || x.Kind == PickKind.Edge) && (Sel().Count == 0 || Sel().Any(PlaneLike) || Topo.CoplanarFrame(Sel()) != null),
             ["op.extrude"] = () => Fits(x => SketchLike(x) || PlaneLike(x)),
+            ["op.extrude_thin"] = () => Fits(x => SketchLike(x) || PlaneLike(x)),
             ["op.cut"] = () => Fits(x => SketchLike(x) || PlaneLike(x)),
             ["op.revolve"] = () => Fits(x => SketchLike(x) || PlaneLike(x) || Refs.IsLinear(x)),
             ["op.hole"] = () => Fits(x => PlaneLike(x) || Pointy(x)),
@@ -137,12 +138,24 @@ public static class StandardCommands
             ["op.rib"] = () => Fits(SketchLike),
             ["op.axis"] = () => Fits(x => !IsFeat(x)),
             ["op.point"] = () => Fits(x => !IsFeat(x)),
+            // u13c
+            ["op.helical_sweep"] = () => Fits(x => SketchLike(x) || x.Target is DatumAxis),
+            ["op.move_copy"] = () => Fits(x => Refs.IsLinear(x)),
+            ["op.face_offset"] = () => Fits(x => x.Kind == PickKind.Face),
+            ["op.face_move"] = () => Fits(x => x.Kind == PickKind.Face),
+            ["op.face_radius"] = () => Fits(x => x.Kind == PickKind.Face),
+            ["op.face_delete"] = () => Fits(x => x.Kind == PickKind.Face),
+            ["op.pattern_points"] = () => Fits(x => IsFeat(x) || SketchLike(x)),
+            ["op.pattern_curve"] = () => Fits(x => IsFeat(x) || SketchLike(x)),
+            ["op.pattern_fill"] = () => Fits(x => IsFeat(x) || SketchLike(x)),
+            ["op.thread"] = () => Fits(x => x.Kind == PickKind.Face),
         };
         void Op(string id, string label, string shortLabel, string icon, Func<Operation> make, string syn, KeyGesture? g = null) =>
             r.Add(new AppCommand { Id = id, Label = label, Short = shortLabel, Group = M, Icon = icon, Synonyms = syn, Gesture = g,
                 CanRun = () => Modeling() && (w.CurrentOperation != null || !fits.TryGetValue(id, out var f) || f()), Run = () => w.StartOperation(make()) });
         Op("op.sketch", "Эскиз", "Эскиз", "f_sketch_but.svg", () => new SketchOp(), "sketch эскиз", K(Key.S));
         Op("op.extrude", "Выдавливание", "Выдавить", "f_extrude_but.svg", () => w.SketchFirst(new ExtrudeOp()), "extrude выдавить", K(Key.E));
+        Op("op.extrude_thin", "Тонкое выдавливание", "Тонкое", "f_extrude_thin_but.svg", () => w.SketchFirst(new ExtrudeOp { StartThin = true }), "thin extrude тонкое выдавливание стенка");
         Op("op.cut", "Вырез выдавливанием", "Вырез", "f_extrude_but.svg", () => w.SketchFirst(new ExtrudeOp { StartCut = true }), "cut вырез");
         Op("op.revolve", "Вращение", "Вращение", "f_revolve_but.svg", () => w.SketchFirst(new RevolveOp()), "revolve вращать");
         Op("op.hole", "Отверстие", "Отверстие", "f_hole_but.svg", () => new HoleOp(), "hole отверстие");
@@ -170,6 +183,17 @@ public static class StandardCommands
         Op("op.plane_mid", "Плоскость посередине", "Пл. посередине", "dat_plane_mid_but.svg", () => new PlaneOp { InitialMethod = 6 }, "mid plane midplane плоскость посередине");
         Op("op.plane_tangent", "Плоскость касательная", "Пл. касательная", "dat_plane_tangent_but.svg", () => new PlaneOp { InitialMethod = 7 }, "tangent plane плоскость касательная");
         Op("op.axis_face", "Ось грани вращения", "Ось грани", "dat_axis_face_but.svg", () => new AxisOp { InitialMethod = 3 }, "axis face cylinder ось грани цилиндр");
+        // u13c
+        Op("op.helical_sweep", "Винтовая протяжка", "Винтовая", "f_helical_sweep_but.svg", () => new HelicalSweepOp(), "helical sweep helix spring thread coil винтовая пружина");
+        Op("op.move_copy", "Перенос и поворот", "Перенос", "f_move_copy_but.svg", () => new MoveCopyOp(), "move copy rotate translate перенос поворот копия");
+        Op("op.face_offset", "Смещение граней", "Смещ. граней", "dir_offset_face_but.svg", () => new FaceEditOp(), "offset faces push pull смещение граней");
+        Op("op.face_move", "Перенос грани", "Перенос грани", "dir_move_face_but.svg", () => new FaceEditOp { MoveFace = true }, "move face push pull перенос грани");
+        Op("op.face_radius", "Новый радиус", "Радиус", "dir_new_radius_but.svg", () => new FaceEditOp { StartMode = FaceEditMode.Radius }, "new radius diameter радиус диаметр изменить");
+        Op("op.face_delete", "Удаление граней", "Удалить грани", "dir_delete_face_but.svg", () => new FaceEditOp { StartMode = FaceEditMode.Delete }, "delete face remove fillet удалить грань скругление");
+        Op("op.pattern_points", "Массив по точкам", "По точкам", "f_pattern_points_but.svg", () => new PointsPatternOp(), "pattern points sketch массив точки");
+        Op("op.pattern_curve", "Массив по кривой", "По кривой", "f_pattern_curve_but.svg", () => new PointsPatternOp { StartMode = PointsPatternMode.Curve }, "pattern curve path массив кривая");
+        Op("op.pattern_fill", "Массив заполнением", "Заполнение", "f_pattern_fill_but.svg", () => new PointsPatternOp { StartMode = PointsPatternMode.Fill }, "pattern fill grid массив заполнение сетка");
+        Op("op.thread", "Косметическая резьба", "Резьба", "f_thread_but.svg", () => new CosmeticThreadOp(), "cosmetic thread резьба");
         Op("op.axis_intersect", "Ось пересечения плоскостей", "Ось пересеч.", "dat_axis_intersect_but.svg", () => new AxisOp { InitialMethod = 2 }, "axis intersection planes ось пересечение");
         Op("op.point_center", "Точка в центре дуги", "Центр дуги", "dat_point_center_but.svg", () => new PointOp { InitialMethod = 1 }, "point centre arc точка центр дуги");
         Op("op.point_intersect", "Точка пересечения", "Точка пересеч.", "dat_point_intersect_but.svg", () => new PointOp { InitialMethod = 3 }, "point intersection точка пересечение");
@@ -196,6 +220,70 @@ public static class StandardCommands
             CanRun = () => w.InSketch, IsChecked = () => vp.SnapGrid, Run = () => { vp.SnapGrid = !vp.SnapGrid; w.RefreshToolStates(); } });
         r.Add(new AppCommand { Short = "Ссылки", Id = "sk.references", Label = "Ссылки эскиза", Group = S, Icon = "sk_references_but.svg", Synonyms = "references ссылки проекция ребро",
             CanRun = () => w.InSketch, IsChecked = () => w.ReferencesPanelOpen, Run = () => w.ToggleReferencesPanel() });
+        // u13: инструменты рисования и правки эскиза (таблица иконок)
+        Tool("sk.rect_center", "Прямоугольник от центра", "Прям. ц.", "sk_rect_center_but.svg", () => new RectCenterTool(), "rectangle center прямоугольник центр");
+        Tool("sk.rect_3p", "Прямоугольник по трём точкам", "Прям. 3т", "sk_rect_3p_but.svg", () => new Rect3PTool(), "rectangle 3 points наклонный прямоугольник");
+        Tool("sk.circle_2p", "Окружность по двум точкам", "Окр. 2т", "sk_circle_2p_but.svg", () => new Circle2PTool(), "circle 2 points diameter окружность диаметр");
+        Tool("sk.arc_tangent", "Дуга касательная", "Дуга кас.", "sk_arc_tangent_but.svg", () => new ArcTangentTool(), "tangent arc касательная дуга");
+        Tool("sk.ellipse_3p", "Эллипс (центр и оси)", "Эллипс 3т", "sk_ellipse_3p_but.svg", () => new EllipseTool(), "ellipse эллипс оси");
+        Tool("sk.ellipse_5p", "Эллипс по пяти точкам", "Эллипс 5т", "sk_ellipse_5p_but.svg", () => new Ellipse5PTool(), "ellipse 5 points эллипс пять точек");
+        Tool("sk.spline_through", "Сплайн через точки", "Сплайн т.", "sk_spline_but.svg", () => new SplineThroughTool(), "spline through points сплайн через точки");
+        Tool("sk.spline_cv", "Сплайн по контрольным точкам", "Сплайн КТ", "sk_spline_cv_but.svg", () => new SplineTool(), "spline control points сплайн контрольные");
+        Tool("sk.slot", "Паз", "Паз", "sk_slot_but.svg", () => new SlotTool(), "slot паз");
+        Tool("sk.csys", "Система координат эскиза", "СК эскиза", "sk_csys_but.svg", () => new SketchCsysTool(), "sketch coordinate system origin начало система координат");
+        Tool("sk.trim", "Обрезка", "Обрезка", "sk_trim_but.svg", () => new TrimTool(), "trim обрезка", K(Key.T));
+        Tool("sk.split", "Разделить", "Разделить", "sk_split_but.svg", () => new TrimTool(split: true), "split разделить");
+        Tool("sk.line_tangent2", "Отрезок касательный к двум дугам", "Кас. 2 дуг", "sk_line_tangent2_but.svg", () => new LineTangent2Tool(), "tangent line two arcs касательная");
+        void SkCmd(string id, string label, string icon, Action run, string syn) =>
+            r.Add(new AppCommand { Id = id, Label = label, Group = S, Icon = icon, Synonyms = syn, CanRun = () => w.InSketch, Run = run });
+        SkCmd("sk.polygon", "Многоугольник", "sk_polygon_but.svg", () => SketchEditCommands.Polygon(w), "polygon многоугольник");
+        SkCmd("sk.text", "Текст", "sk_text_but.svg", () => SketchEditCommands.Text(w), "text текст надпись");
+        SkCmd("sk.fillet", "Скругление угла", "sk_fillet_but.svg", () => SketchEditCommands.Corner(w, false), "sketch fillet скругление угла");
+        SkCmd("sk.chamfer", "Фаска угла", "sk_chamfer_but.svg", () => SketchEditCommands.Corner(w, true), "sketch chamfer фаска угла");
+        SkCmd("sk.mirror", "Зеркало относительно осевой", "sk_mirror_but.svg", () => SketchEditCommands.Mirror(w), "sketch mirror зеркало осевая");
+        SkCmd("sk.transform", "Перенести, повернуть, масштаб", "sk_transform_but.svg", () => SketchEditCommands.Transform(w), "move rotate scale перенести повернуть масштаб");
+        SkCmd("sk.offset", "Смещение цепочки", "sk_offset_but.svg", () => SketchEditCommands.Offset(w), "offset смещение цепочки");
+        SkCmd("sk.use_edge", "Использовать ребро модели", "sk_use_edge_but.svg", () => SketchEditCommands.StartEdgeMode(w, SketchEditCommands.EdgeMode.Use), "use edge project проекция ребро");
+        SkCmd("sk.offset_edge", "Смещение ребра", "sk_offset_edge_but.svg", () => SketchEditCommands.StartEdgeMode(w, SketchEditCommands.EdgeMode.Offset), "offset edge смещение ребра");
+        SkCmd("sk.thicken_edge", "Утолщение ребра", "sk_thicken_edge_but.svg", () => SketchEditCommands.StartEdgeMode(w, SketchEditCommands.EdgeMode.Thicken), "thicken edge утолщение ребра");
+        SkCmd("sk.setup", "Настройка эскиза", "sk_setup_but.svg", () => SketchEditCommands.Setup(w), "sketch setup настройка плоскость");
+        SkCmd("sk.show_conflicts", "Показать конфликтующие связи", "sk_show_conflicts_but.svg", () => SketchEditCommands.ShowConflicts(w), "conflicts конфликты связи");
+        r.Add(new AppCommand { Id = "sk.snap_items", Label = "Привязка к элементам", Group = S, Icon = "sk_snap_items_but.svg", Synonyms = "snap items привязка элементы", CanRun = () => w.InSketch, IsChecked = () => vp.SnapItems, Run = () => { vp.SnapItems = !vp.SnapItems; w.RefreshToolStates(); } });
+        r.Add(new AppCommand { Id = "sk.show_open_ends", Label = "Показ открытых концов", Group = S, Icon = "sk_show_open_ends_but.svg", Synonyms = "open ends открытые концы", CanRun = () => w.InSketch, IsChecked = () => vp.ShowOpenEnds, Run = () => { vp.ShowOpenEnds = !vp.ShowOpenEnds; vp.MarkDirty(); w.RefreshToolStates(); } });
+        r.Add(new AppCommand { Id = "sk.show_filled", Label = "Заливка замкнутых областей", Group = S, Icon = "sk_show_filled_shapes_but.svg", Synonyms = "fill shapes заливка области", CanRun = () => w.InSketch, IsChecked = () => vp.ShowFilled, Run = () => { vp.ShowFilled = !vp.ShowFilled; vp.MarkDirty(); w.RefreshToolStates(); } });
+
+        // u13: связи и размеры эскиза кнопками (таблица иконок)
+        void Con(string id, string label, string icon, Parametric3D.Model.Sketching.ConstraintType t, string syn, KeyGesture? g = null, bool collinear = false) =>
+            r.Add(new AppCommand { Id = id, Label = label, Group = S, Icon = icon, Synonyms = "constraint связь " + syn, Gesture = g, CanRun = () => w.InSketch, Run = () => SketchCommands.Constrain(w, t, collinear) });
+        Con("con.coincident", "Совпадение", "con_coincident_but.svg", Parametric3D.Model.Sketching.ConstraintType.Coincident, "coincident совпадение");
+        Con("con.point_on", "Точка на кривой", "con_point_on_but.svg", Parametric3D.Model.Sketching.ConstraintType.PointOnEntity, "point on curve точка на кривой");
+        Con("con.midpoint", "Середина", "con_midpoint_but.svg", Parametric3D.Model.Sketching.ConstraintType.MidPoint, "midpoint середина");
+        Con("con.horizontal", "Горизонтально", "con_horizontal_but.svg", Parametric3D.Model.Sketching.ConstraintType.Horizontal, "horizontal горизонтально", K(Key.H, KeyModifiers.Shift));
+        Con("con.vertical", "Вертикально", "con_vertical_but.svg", Parametric3D.Model.Sketching.ConstraintType.Vertical, "vertical вертикально", K(Key.V, KeyModifiers.Shift));
+        Con("con.parallel", "Параллельно", "con_parallel_but.svg", Parametric3D.Model.Sketching.ConstraintType.Parallel, "parallel параллельно");
+        Con("con.perpendicular", "Перпендикулярно", "con_perpendicular_but.svg", Parametric3D.Model.Sketching.ConstraintType.Perpendicular, "perpendicular перпендикулярно");
+        Con("con.collinear", "Коллинеарно", "con_collinear_but.svg", Parametric3D.Model.Sketching.ConstraintType.Parallel, "collinear коллинеарно на одной прямой", collinear: true);
+        Con("con.tangent", "Касание", "con_tangent_but.svg", Parametric3D.Model.Sketching.ConstraintType.Tangent, "tangent касание", K(Key.T, KeyModifiers.Shift));
+        Con("con.equal", "Равенство", "con_equal_but.svg", Parametric3D.Model.Sketching.ConstraintType.Equal, "equal равенство равные", K(Key.E, KeyModifiers.Shift));
+        Con("con.concentric", "Концентрично", "con_concentric_but.svg", Parametric3D.Model.Sketching.ConstraintType.Concentric, "concentric концентрично соосно");
+        Con("con.symmetric", "Симметрия", "con_symmetric_but.svg", Parametric3D.Model.Sketching.ConstraintType.Symmetric, "symmetric симметрия");
+        Con("con.fix", "Зафиксировать", "con_fix_but.svg", Parametric3D.Model.Sketching.ConstraintType.Fix, "fix lock зафиксировать");
+        void Dim(string id, string label, string icon, SketchCommands.DimKind k, string syn, KeyGesture? g = null) =>
+            r.Add(new AppCommand { Id = id, Label = label, Group = S, Icon = icon, Synonyms = "dimension размер " + syn, Gesture = g, CanRun = () => w.InSketch, Run = () => SketchCommands.Dimension(w, k) });
+        Dim("dim.smart", "Размер", "dim_smart_but.svg", SketchCommands.DimKind.Smart, "smart dimension размер", K(Key.D));
+        Dim("dim.linear", "Линейный размер", "dim_linear_but.svg", SketchCommands.DimKind.Linear, "linear distance length линейный расстояние длина");
+        Dim("dim.radius", "Радиус", "dim_radius_but.svg", SketchCommands.DimKind.Radius, "radius радиус");
+        Dim("dim.diameter", "Диаметр", "dim_diameter_but.svg", SketchCommands.DimKind.Diameter, "diameter диаметр");
+        Dim("dim.angle", "Угловой размер", "dim_angle_but.svg", SketchCommands.DimKind.Angle, "angle угол угловой");
+        Dim("dim.arc_length", "Длина дуги", "dim_arc_length_but.svg", SketchCommands.DimKind.ArcLength, "arc length длина дуги");
+        r.Add(new AppCommand { Id = "dim.reference", Label = "Справочный / управляющий", Group = S, Icon = "dim_reference_but.svg", Synonyms = "reference driven справочный управляющий", CanRun = () => w.InSketch, Run = () => SketchCommands.ToggleReference(w) });
+        r.Add(new AppCommand { Id = "dim.link_param", Label = "Связать с параметром", Group = S, Icon = "dim_link_param_but.svg", Synonyms = "link parameter formula параметр формула", CanRun = () => w.InSketch, Run = () => SketchCommands.LinkParam(w) });
+        r.Add(new AppCommand { Id = "dim.arrows_outside", Label = "Стрелки снаружи", Group = S, Icon = "dim_arrows_outside_but.svg", Synonyms = "arrows outside стрелки снаружи", CanRun = () => w.InSketch,
+            Run = () => SketchCommands.OnDimensions(w, d => d.Arrows = d.Arrows == Parametric3D.Model.Sketching.ArrowPlacement.Outside ? Parametric3D.Model.Sketching.ArrowPlacement.Auto : Parametric3D.Model.Sketching.ArrowPlacement.Outside) });
+        r.Add(new AppCommand { Id = "dim.lock", Label = "Заблокировать размер", Group = S, Icon = "dim_lock_ico.svg", Synonyms = "lock dimension замок заблокировать", CanRun = () => w.InSketch,
+            Run = () => SketchCommands.OnDimensions(w, d => { if (d.Reference) return; d.UserLocked = !d.UserLocked; if (d.UserLocked) { d.IsDefault = false; d.Locked = true; } }) });
+        r.Add(new AppCommand { Id = "dim.area", Label = "Площадь области", Short = "Площадь", Group = S, Icon = "dim_area_but.svg", Synonyms = "area площадь область", CanRun = () => w.InSketch,
+            Run = () => SketchCommands.ShowArea(w) });
         r.Add(new AppCommand { Short = "Готово", Id = "sk.finish", Label = "Закончить эскиз", Group = S, Icon = "sketch_finish_but.svg", Synonyms = "finish sketch готово выйти", Gesture = K(Key.Enter, KeyModifiers.Control),
             CanRun = () => w.InSketch, Run = () => w.FinishSketch() });
         r.Add(new AppCommand { Short = "Отмена", Id = "sk.cancel", Label = "Отменить эскиз", Group = S, Icon = "sketch_cancel_but.svg", Synonyms = "cancel sketch",

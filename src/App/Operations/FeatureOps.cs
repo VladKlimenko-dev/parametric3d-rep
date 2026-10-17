@@ -108,12 +108,13 @@ public sealed class ExtrudeOp : FeatureOp<ExtrudeFeature>
     private Sketch? _created;
     private RefField _sk = null!;
     public ExtrudeOp(ExtrudeFeature? existing = null) : base(existing) { }
-    public override string Title => StartCut ? "Вырез выдавливанием" : "Выдавливание";
+    public override string Title => StartThin ? "Тонкое выдавливание" : StartCut ? "Вырез выдавливанием" : "Выдавливание";
     public override string Icon => "f_extrude_but.svg";
     protected override ExtrudeFeature Create()
     {
         var f = new ExtrudeFeature { Cut = StartCut };
         if (FlipCut) f.Side1.Flip = true;
+        if (StartThin) f.Thin = new ValueRef(2);
         return f;
     }
 
@@ -132,7 +133,12 @@ public sealed class ExtrudeOp : FeatureOp<ExtrudeFeature>
         p.Choice("Вторая: до", new[] { "На расстояние", "Насквозь", "До следующей грани" }, () => EndIndex(F.Side2.End),
             v => F.Side2.End = EndOf(v), visible: () => F.TwoSided);
         p.Number("Глубина 2", () => F.Side2.Distance, v => F.Side2.Distance = v, visible: () => F.TwoSided && F.Side2.End == EndType.Distance);
+        p.Check("Тонкое (стенка)", () => F.Thin != null, v => F.Thin = v ? (F.Thin ?? new ValueRef(2)) : null);
+        p.Number("Толщина стенки", () => F.Thin ?? new ValueRef(2), v => F.Thin = v, visible: () => F.Thin != null);
+        p.Check("Стенка наружу", () => F.ThinOutside, v => F.ThinOutside = v, visible: () => F.Thin != null);
     }
+    /// <summary>u13: кнопка «тонкое выдавливание» — сразу со стенкой.</summary>
+    public bool StartThin;
 
     private static int EndIndex(EndType e) => e switch { EndType.ThroughAll => 1, EndType.ToNext => 2, _ => 0 };
     private static EndType EndOf(int i) => i switch { 1 => EndType.ThroughAll, 2 => EndType.ToNext, _ => EndType.Distance };
@@ -154,8 +160,8 @@ public sealed class ExtrudeOp : FeatureOp<ExtrudeFeature>
     protected override void Push()
     {
         if (_sk.Items.Count > 0 && Refs.SketchOf(_sk.Items[0]) is { } sk) F.SketchId = sk.Id;
-        bool cut = F.Cut;
-        Fields.SketchOnPlane(this, _plane, _sk, sk => new ExtrudeOp { SeedSketch = sk, StartCut = cut });
+        bool cut = F.Cut, thin = F.Thin != null;
+        Fields.SketchOnPlane(this, _plane, _sk, sk => new ExtrudeOp { SeedSketch = sk, StartCut = cut, StartThin = thin });
     }
 
     public override void Cancel()
@@ -803,6 +809,11 @@ public static class OperationFactory
         LoftFeature x => new LoftOp(x),
         DraftFeature x => new DraftOp(x),
         RibFeature x => new RibOp(x),
+        HelicalSweepFeature x => new HelicalSweepOp(x),
+        MoveCopyFeature x => new MoveCopyOp(x),
+        FaceEditFeature x => new FaceEditOp(x),
+        PointsPatternFeature x => new PointsPatternOp(x),
+        CosmeticThreadFeature x => new CosmeticThreadOp(x),
         _ => null,
     };
 }
