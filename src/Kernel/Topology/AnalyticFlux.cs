@@ -23,6 +23,9 @@ namespace Parametric3D.Kernel.Topology;
 public static class AnalyticFlux
 {
     public const int Steps = 1024;
+    /// <summary>m.q2: множитель числа кусков квадратуры (оценка ошибки — разность расчётов с 1 и 2).</summary>
+    [ThreadStatic] public static int _pieceScale;
+    public static int PieceScale { get => _pieceScale <= 0 ? 1 : _pieceScale; set => _pieceScale = value; }
 
     private sealed class Param
     {
@@ -270,7 +273,7 @@ public static class AnalyticFlux
     {
         double lo = p.B0, hi = b;
         if (hi == lo) return 0;
-        int pieces = 4;
+        int pieces = 4 * PieceScale;
         double sum = 0, step = (hi - lo) / pieces;
         for (int k = 0; k < pieces; k++)
         {
@@ -315,7 +318,7 @@ public static class AnalyticFlux
                 var e = ce.Edge; var c = e.Curve;
                 bool curveForward = (c.PointAt(c.T0) - e.V0.P).LengthSquared <= (c.PointAt(c.T1) - e.V0.P).LengthSquared || ReferenceEquals(e.V0, e.V1);
                 bool forward = ce.Reversed ? !curveForward : curveForward;
-                int pieces = c is LineCurve3 ? 1 : 16;
+                int pieces = c is LineCurve3 ? PieceScale : 16 * PieceScale;
                 double t0 = forward ? c.T0 : c.T1, t1 = forward ? c.T1 : c.T0;
                 double span = (t1 - t0) / pieces, eps = 1e-7 * Math.Abs(c.T1 - c.T0);
                 // KRN-07 N1b: кривая с изломами параметризации (точки затравки кривой пересечения) — куски между изломами
@@ -324,6 +327,12 @@ public static class AnalyticFlux
                 if (!BreaksOff && c is Geometry.NurbsImplicitCurve3 nic) { cuts.Add(c.T0); foreach (var b in nic.Breaks) cuts.Add(c.T0 + (c.T1 - c.T0) * b); cuts.Add(c.T1); }
                 else if (!BreaksOff && c is Geometry.NurbsNurbsCurve3 nnc) { cuts.Add(c.T0); foreach (var b in nnc.Breaks) cuts.Add(c.T0 + (c.T1 - c.T0) * b); cuts.Add(c.T1); }
                 else for (int k = 0; k <= pieces; k++) cuts.Add(c.T0 + (c.T1 - c.T0) * k / pieces);
+                if (PieceScale > 1 && (c is Geometry.NurbsImplicitCurve3 || c is Geometry.NurbsNurbsCurve3) && !BreaksOff)
+                {
+                    var fine = new List<double> { cuts[0] };
+                    for (int k = 0; k + 1 < cuts.Count; k++) for (int j = 1; j <= PieceScale; j++) fine.Add(cuts[k] + (cuts[k + 1] - cuts[k]) * j / PieceScale);
+                    cuts = fine;
+                }
                 if (!forward) cuts.Reverse();
                 double minPiece = Enumerable.Range(0, cuts.Count - 1).Min(k => Math.Abs(cuts[k + 1] - cuts[k]));
                 eps = Math.Min(eps, 1e-3 * minPiece);

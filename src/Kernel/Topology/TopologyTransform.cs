@@ -87,7 +87,7 @@ public static class TopologyTransform
                 CylinderSurface cs => new CylinderSurface(Frame(cs.Axis, x), cs.Radius * k),
                 NurbsSurface ns when !NurbsXformOff => ns.Mapped(x.Point),
                 CornerPatchSurface cp => cp.Mapped(x.Point),
-                SectionSurface ss when !XformProcOff && !scaled => ss.Mapped(q => q.IsArc
+                SectionSurface ss when !XformProcOff && !scaled => ss.Mapped(q => q.IsBezier ? q.MapBezier(x.Point) : q.IsArc
                     ? SweepSection.Arc(x.Point(q.C), x.Direction(q.E1).Normalized(), x.Direction(q.E2).Normalized(), q.R, q.Phi)
                     : SweepSection.Line(x.Point(q.A), x.Point(q.B))),
                 _ => null

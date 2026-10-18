@@ -23,6 +23,8 @@ public static partial class DirectRound
     /// собирается и проверяется как у прямых сопряжений (годность, объём по формуле поверхности, объём по фасетам).
     /// Замкнутая траектория — без торцов, рамка замыкается поправкой закрутки, грани — по кускам. null — отказ (причина в why).
     /// </summary>
+    static readonly bool SweepBezierOff = Environment.GetEnvironmentVariable("P3D_SWEEPBEZIER") == "0";
+
     internal static TSolid? ExactSweep(Profile section, ICurve3 path, double frac, double twistRad, ref string? why) =>
         ExactSweep(section, path, frac, twistRad, false, ref why);
 
@@ -40,7 +42,8 @@ public static partial class DirectRound
         bool closedP = path.IsClosed && frac >= 1 - 1e-12;
         if (closedP && ClosedSweepOff) { why = "exact sweep: closed path"; return null; }
         if (closedP && Math.Abs(Math.IEEERemainder(twistRad, 2 * Math.PI)) > 1e-9) { why = "exact sweep: a closed path needs a twist of whole turns"; return null; }
-        if (section.Loops.SelectMany(l => l.Curves).Any(c => c is not (LineCurve3 or ArcCurve3))) { why = "exact sweep: a section curve is neither a line nor an arc"; return null; }
+        // m.s1: звено сечения — отрезок, дуга или кривая Безье (её формула в рамке — опорные точки в рамке; P3D_SWEEPBEZIER=0 — отказ)
+        if (section.Loops.SelectMany(l => l.Curves).Any(c => c is not (LineCurve3 or ArcCurve3) && !((c is BezierCurve3 || c is SplineCurve3 sp0 && sp0.Weights.All(w => Math.Abs(w - 1) < 1e-12)) && !SweepBezierOff))) { why = "exact sweep: a section curve is neither a line, an arc nor a Bezier curve"; return null; }
         double s0 = path.T0, s1 = path.T0 + (path.T1 - path.T0) * Math.Clamp(frac, 1e-4, 1);
         double hs = 1e-6 * (s1 - s0);
         Vector3d Tan(double s) { var d = path.PointAt(s + hs) - path.PointAt(s - hs); return d.Normalized(); }
@@ -117,6 +120,8 @@ public static partial class DirectRound
             foreach (var c in loop.Curves)
             {
                 if (c is ArcCurve3 a) { int m = Math.Max(1, (int)Math.Ceiling(Math.Abs(a.A1 - a.A0) / (Math.PI / 2) - 1e-9)); for (int k = 0; k < m; k++) lsegs.Add(new ArcCurve3(a.Frame, a.Radius, a.A0 + (a.A1 - a.A0) * k / m, a.A0 + (a.A1 - a.A0) * (k + 1) / m)); }
+                // сплайн без весов — куски Безье (вставкой узлов, точно)
+                else if (c is SplineCurve3 spc) foreach (var (piece, _, _) in spc.ToBezierSegments()) lsegs.Add(new BezierCurve3(piece.ControlPoints));
                 else lsegs.Add(c);
             }
             // ЗВЕНЬЯ СЕЧЕНИЯ: дуги — куски ≤ 90° (лента одним рациональным куском в STEP); у каждого — формула сечения в рамке
@@ -125,6 +130,7 @@ public static partial class DirectRound
                 var A = c.PointAt(c.T0); var B = c.PointAt(c.T1);
                 Func<double, SweepSection> gen;
                 if (c is LineCurve3) gen = U => { double s = s0 + U / kU; return SweepSection.Line(MapP(s, A), MapP(s, B)); };
+                else if (c is BezierCurve3 bz) { var cps = bz.P; gen = U => { double s = s0 + U / kU; return SweepSection.Bezier(cps.Select(q => MapP(s, q)).ToArray()); }; }
                 else
                 {
                     var a = (ArcCurve3)c; var C0 = a.Frame.Origin; var e1 = (A - C0).Normalized();
@@ -200,6 +206,7 @@ public static partial class DirectRound
             switch (c)
             {
                 case LineCurve3 l: return new LineCurve3(MapP(s, l.A), MapP(s, l.B));
+                case BezierCurve3 b: return new BezierCurve3(b.P.Select(q => MapP(s, q)));
                 case ArcCurve3 a:
                 {
                     var o = MapP(s, a.Frame.Origin); var u = MapD(s, a.Frame.U); var v = MapD(s, a.Frame.V);

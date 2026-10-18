@@ -407,6 +407,9 @@ static partial class Program
         if (mode is "prov" or "allA") ProvenanceChecks();
         if (mode is "query" or "allA") QueryChecks();
         if (mode is "query" or "allA") QueryChecks2();
+        if (mode is "q2" or "query" or "allA") Q2MassChecks();
+        if (mode is "q2x") { Q2Explain(args[1]); return; }
+        if (mode is "q2dump") { Q2Dump(args.Length > 1 ? args[1] : "q2out"); return; }
         if (mode is "units" or "allA") UnitsChecks();
         if (mode is "vdirect" or "allA") VertexDirectChecks();
         if (mode is "predicates" or "allA") PredicateChecks();
@@ -455,6 +458,7 @@ static partial class Program
         if (mode is "drcavity" or "allA") Krn06CavityChecks();
         if (mode is "drmultiend" or "allA") Krn06MultiEndChecks();
         if (mode is "sweepexact" or "allA") Krn07ExactSweepChecks();
+        if (mode is "sweepexact" or "sweepbez" or "allA") Krn07SweepBezierSectionChecks();
         if (mode is "loftspline" or "allA") Krn07SplineLoftChecks();
         if (mode is "loftguides" or "allA") Krn07GuideLoftChecks();
         if (mode is "lofttangent" or "allA") Krn07LoftTangencyChecks();
