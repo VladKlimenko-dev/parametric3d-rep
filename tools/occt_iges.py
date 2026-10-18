@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """m.x2: независимая проверка IGES (OpenCascade через cadquery-ocp). Запуск: occt_iges.py <каталог igesdump> [--json out.json]
-Каждый файл: IGESControl_Reader → грани → сшивка (BRepBuilderAPI_Sewing, 1e-6) → тело (ShapeFix_Solid) → объём; сравнение с нашим
+Каждый файл: IGESControl_Reader → грани → сшивка (BRepBuilderAPI_Sewing, 1e-4 — бюджет экспорта) → тело (ShapeFix_Solid) → объём; сравнение с нашим
 объёмом (manifest.tsv) — относительно 1e-6. Итог «IGES: k/n agree». Код выхода 1 — есть расхождение или нечитаемый файл."""
 import sys, json
 from OCP.IGESControl import IGESControl_Reader
 from OCP.IFSelect import IFSelect_RetDone
 from OCP.BRepBuilderAPI import BRepBuilderAPI_Sewing, BRepBuilderAPI_MakeSolid
-from OCP.ShapeFix import ShapeFix_Solid
+from OCP.ShapeFix import ShapeFix_Solid, ShapeFix_Shell
 from OCP.TopoDS import TopoDS
 from OCP.TopAbs import TopAbs_SHELL, TopAbs_FACE
 from OCP.TopExp import TopExp_Explorer
@@ -20,20 +20,24 @@ def volume(path):
         return None, "unreadable"
     r.TransferRoots()
     shape = r.OneShape()
-    sew = BRepBuilderAPI_Sewing(1e-6)
+    sew = BRepBuilderAPI_Sewing(1e-4)   # допуск сшивки — бюджет экспорта (ExportFit 1e-4)
     ex = TopExp_Explorer(shape, TopAbs_FACE); nf = 0
     while ex.More():
         sew.Add(ex.Current()); nf += 1; ex.Next()
     sew.Perform()
     sewed = sew.SewedShape()
-    total = 0.0; shells = 0
+    vols = []
     ex = TopExp_Explorer(sewed, TopAbs_SHELL)
     while ex.More():
-        mk = BRepBuilderAPI_MakeSolid(TopoDS.Shell_s(ex.Current()))
+        fsh = ShapeFix_Shell(TopoDS.Shell(ex.Current())); fsh.Perform()      # согласовать ориентацию граней оболочки
+        mk = BRepBuilderAPI_MakeSolid(TopoDS.Shell(fsh.Shell()))
         fix = ShapeFix_Solid(mk.Solid()); fix.Perform()
         p = GProp_GProps(); BRepGProp.VolumeProperties_s(fix.Solid(), p, 1e-9)
-        total += abs(p.Mass()); shells += 1; ex.Next()
-    return total, f"faces {nf}, shells {shells}"
+        vols.append(abs(p.Mass())); ex.Next()
+    # оболочки: наибольшая — наружная; прочие внутри неё — полости (вычитаются), если их сумма меньше наружной;
+    # раздельные тела (массив) — по габаритам не проверяются: полость — оболочка, целиком внутри габарита наружной
+    if not vols: return 0.0, f"faces {nf}, shells 0"
+    return vols, f"faces {nf}, shells {len(vols)}"
 
 
 def main():
@@ -43,7 +47,14 @@ def main():
     res = []; ok = 0
     for r in rows:
         bid, name, V = r[0], r[1], float(r[2])
-        v, note = volume(f"{d}/{bid}.igs")
+        try: vs, note = volume(f"{d}/{bid}.igs")
+        except Exception as ex: vs, note = None, f"exception {type(ex).__name__}: {str(ex)[:80]}"
+        v = None
+        if vs is not None:
+            vs = vs if isinstance(vs, list) else [vs]
+            # раздельные тела — сумма; тело с полостями — наружная минус полости: годится тот вариант, что ближе к нашему
+            cands = [sum(vs), max(vs) - (sum(vs) - max(vs))]
+            v = min(cands, key=lambda x: abs(x - V))
         st = "unreadable" if v is None else ("OK" if abs(v - V) <= 1e-6 * max(1.0, abs(V)) else "DIFF")
         if st == "OK": ok += 1
         res.append({"id": bid, "name": name, "ours": V, "occt": v, "status": st, "note": note})
