@@ -48,6 +48,9 @@ if python3 -c "import OCP" 2>/dev/null; then
     timeout 1200 python3 "$ROOT/tools/occt_time.py" "$OUT/d8" "$OUT/d8/occt_time.tsv" > /dev/null 2>&1
     echo "DIFF exact: $(cat "$OUT"/d8/manifest.tsv "$OUT"/d9/manifest.tsv "$OUT"/d10/manifest.tsv 2>/dev/null | grep -o ExactAnalytic | wc -l)"
   fi
+  # KRN-11 (11.7): каждый отказ и расхождение прогона — в таблице «Отказы корпуса» журнала ограничений (с воспроизводителем)
+  python3 "$ROOT/tools/refusals_check.py" "$OUT" > "$OUT/refusals.log" 2>&1
+  echo "REFUSALS: $(tail -1 "$OUT/refusals.log")"
 else echo "G14: SKIPPED (OCP not installed: pip install cadquery-ocp)"; fi
 # g.13 / m.v1 / m.v2: замеры по целям пользователя (один процесс, после всех наборов) и сравнение с целями
 timeout 1800 "$OUT/k01/K01Checks" perftargets "$OUT/perf.jsonl" > "$OUT/perf_run.log" 2>&1

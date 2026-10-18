@@ -46,6 +46,88 @@ static partial class Program
             }
             Require(fails.Count == 0, string.Join("; ", fails));
         });
+        Check("KRN05-SAME-DOMAIN-MERGE-CYLINDER", () =>
+        {
+            // 05.7: грани одного цилиндра (наклонное отверстие r2 сквозь два бруска друг на друге — у каждого своя часть стенки отверстия)
+            // сливаются при объединении брусков только при доказанной площади (точная площадь слитой стенки = сумме частей);
+            // испорченное слияние (потерян контур) — отвергается, тело годно
+            var fails = new List<string>();
+            TSolid Hole() => Rotated(PrimitiveOp.Cylinder(new Vector3d(0, 0, -20), 2, 40), Vector3d.Zero, Vector3d.UnitX, 10, new Vector3d(10, 5, 10));
+            TSolid Part(double z0)
+            {
+                var r = BooleanOp.Evaluate(new List<TSolid> { Box(0, 0, z0, 20, 10, 10) }, Hole(), BooleanOp.BooleanKind.Subtract, OperationPolicy.Strict, new List<string>());
+                return r.Bodies[0];
+            }
+            double want = (AnalyticVolume.Of(Part(0)) ?? double.NaN) + (AnalyticVolume.Of(Part(10)) ?? double.NaN);
+            OperationResult U(bool corrupt)
+            {
+                var a = Part(0); var b2 = Part(10);
+                Parametric3D.Kernel.Analytic.GeneralBoolean.CorruptMergeForTest = corrupt;
+                try { return BooleanOp.Evaluate(new List<TSolid> { a }, b2, BooleanOp.BooleanKind.Unite, OperationPolicy.Strict, new List<string>()); }
+                finally { Parametric3D.Kernel.Analytic.GeneralBoolean.CorruptMergeForTest = false; }
+            }
+            int refused0 = Parametric3D.Kernel.Analytic.GeneralBoolean.MergesRefused;
+            var r0 = U(false);
+            if (!(r0.Accepted && r0.Bodies.Count == 1)) fails.Add($"clean: {r0.Outcome}");
+            else
+            {
+                var b = r0.Bodies[0]; double v = AnalyticVolume.Of(b) ?? double.NaN;
+                int cyl = b.Faces.Count(f => GeometryAudit.AuthoritativeSurface(f) is { IsPlanar: false });
+                Console.WriteLine($"  clean: V {v:R}, curved faces {cyl}, faces {b.Faces.Count()}, {r0.Guarantee}");
+                if (Math.Abs(v - want) > 1e-9 * want || cyl != 1 || !SolidValidator.Validate(b).IsValid) fails.Add($"clean: V={v:R}, curved faces {cyl} (want 1)");
+            }
+            if (Parametric3D.Kernel.Analytic.GeneralBoolean.MergesRefused != refused0) fails.Add("clean: a merge was refused");
+            var r1 = U(true);
+            if (!(r1.Accepted && r1.Bodies.Count == 1)) fails.Add($"corrupted merge: {r1.Outcome}");
+            else
+            {
+                var b = r1.Bodies[0]; double v = AnalyticVolume.Of(b) ?? double.NaN;
+                Console.WriteLine($"  corrupted: V {v:R}, faces {b.Faces.Count()}, refused {Parametric3D.Kernel.Analytic.GeneralBoolean.MergesRefused - refused0}");
+                if (Math.Abs(v - want) > 1e-9 * want || !SolidValidator.Validate(b).IsValid) fails.Add($"corrupted merge accepted: V={v:R} valid {SolidValidator.Validate(b).IsValid}");
+                if (Parametric3D.Kernel.Analytic.GeneralBoolean.MergesRefused <= refused0) fails.Add("corrupted merge: the proof did not refuse it");
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+        Check("KRN05-UNIFY-SIDES-PROVEN", () =>
+        {
+            // 05.7: слоистая призма (2.5D): два бруска друг на друге, у каждого сквозное отверстие r3 по одной оси — при объединении
+            // стенки отверстия двух слоёв и боковины объединяются только при доказанной площади; испорченное объединение (потерян
+            // контур стенки отверстия) — отвергается, тело точное и годное
+            var fails = new List<string>();
+            TSolid Layer(double z0)
+            {
+                var r = BooleanOp.Evaluate(new List<TSolid> { Box(0, 0, z0, 20, 10, 10) }, PrimitiveOp.Cylinder(new Vector3d(10, 5, z0 - 1), 3, 12), BooleanOp.BooleanKind.Subtract, OperationPolicy.Strict, new List<string>());
+                return r.Bodies[0];
+            }
+            double want = 20 * 10 * 20 - Math.PI * 9 * 20;
+            OperationResult U(bool corrupt)
+            {
+                var a = Layer(0); var b2 = Layer(10);
+                Parametric3D.Kernel.Analytic.GeneralBoolean.CorruptMergeForTest = corrupt;
+                try { return BooleanOp.Evaluate(new List<TSolid> { a }, b2, BooleanOp.BooleanKind.Unite, OperationPolicy.Strict, new List<string>()); }
+                finally { Parametric3D.Kernel.Analytic.GeneralBoolean.CorruptMergeForTest = false; }
+            }
+            int refused0 = Parametric3D.Kernel.Analytic.GeneralBoolean.MergesRefused;
+            var r0 = U(false);
+            if (!(r0.Accepted && r0.Bodies.Count == 1)) fails.Add($"clean: {r0.Outcome}");
+            else
+            {
+                var b = r0.Bodies[0]; double v = AnalyticVolume.Of(b) ?? double.NaN;
+                Console.WriteLine($"  unify clean: V {v:R}, faces {b.Faces.Count()}, {r0.Guarantee}");
+                if (Math.Abs(v - want) > 1e-9 * want || b.Faces.Count() != 7 || !SolidValidator.Validate(b).IsValid) fails.Add($"clean: V={v:R}, faces {b.Faces.Count()} (want 7)");
+            }
+            if (Parametric3D.Kernel.Analytic.GeneralBoolean.MergesRefused != refused0) fails.Add("clean: a merge was refused");
+            var r1 = U(true);
+            if (!(r1.Accepted && r1.Bodies.Count == 1)) fails.Add($"corrupted: {r1.Outcome}");
+            else
+            {
+                var b = r1.Bodies[0]; double v = AnalyticVolume.Of(b) ?? double.NaN;
+                Console.WriteLine($"  unify corrupted: V {v:R}, faces {b.Faces.Count()}, refused {Parametric3D.Kernel.Analytic.GeneralBoolean.MergesRefused - refused0}");
+                if (Math.Abs(v - want) > 1e-9 * want || !SolidValidator.Validate(b).IsValid) fails.Add($"corrupted accepted: V={v:R} valid {SolidValidator.Validate(b).IsValid}");
+                if (Parametric3D.Kernel.Analytic.GeneralBoolean.MergesRefused <= refused0) fails.Add("corrupted: the proof did not refuse it");
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
         Check("KRN05-PARTITION-CHECKED", () =>
         {
             // 05.5: разбиение каждой входной грани проверяется — площади областей (точно) = площадь грани. Без внесённой
