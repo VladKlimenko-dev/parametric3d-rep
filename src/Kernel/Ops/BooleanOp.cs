@@ -413,6 +413,7 @@ public static class BooleanOp
     static readonly bool TolStats = Environment.GetEnvironmentVariable("P3D_TOLSTATS") == "1";
     /// <summary>KRN-03: раздельные компоненты результата — отдельные тела, полости — оболочки (P3D_SPLITCOMPONENTS=0 — прежнее).</summary>
     static readonly bool SplitComponents = Environment.GetEnvironmentVariable("P3D_SPLITCOMPONENTS") != "0";
+    static readonly bool SplitProvOff = Environment.GetEnvironmentVariable("P3D_SPLITPROV") == "0";
     /// <summary>
     /// KRN-02: допуск операции = max(модельная точность, измеренный допуск операндов) — вместо глобальных 2e-5 мм.
     /// Меньше модельной точности он не бывает; грязные (импортированные, аппроксимированные) операнды его поднимают.
@@ -1136,6 +1137,17 @@ public static class BooleanOp
                     Topology.ShellComponents.Outcome split; using (Diagnostics.Prof.Time("булева: компоненты результата")) split = Topology.ShellComponents.Split(b);
                     if (split.Warning != null) result.Diagnostics.Add(new OperationDiagnostic("components", "components", split.Warning));
                     if (split.Bodies.Count == 1 && ReferenceEquals(split.Bodies[0], b)) continue;
+                    // m.h2: карта происхождения тела — по его компонентам (грани те же объекты); удалённые — у первого
+                    if (b.Provenance is { } pvAll && !SplitProvOff)
+                        for (int si = 0; si < split.Bodies.Count; si++)
+                        {
+                            var sb = split.Bodies[si]; var fs = sb.Faces.ToHashSet(ReferenceEqualityComparer.Instance);
+                            var sp = new Topology.Provenance { Operation = pvAll.Operation + " (component)" };
+                            foreach (var fp in pvAll.Faces) if (fs.Contains(fp.Result)) sp.Faces.Add(fp);
+                            foreach (var m in pvAll.Merged) if (fs.Contains(m.Into)) sp.Merged.Add(m);
+                            if (si == 0) sp.Deleted.AddRange(pvAll.Deleted);
+                            if (sp.Faces.Count == fs.Count) sb.SetProvenance(sp);
+                        }
                     work.RemoveAt(i); work.InsertRange(i, split.Bodies);
                 }
             var fresh = work.Where(b => !bodies.Any(x => ReferenceEquals(x, b)) && (!ReferenceEquals(b, other) || bodies.Count == 0)).ToList();
@@ -1211,6 +1223,7 @@ public static class BooleanOp
             result.FallbackUsed = trace.Fallback;
             // KRN-01 (01.5): карта происхождения — у единственного тела результата, если построитель её записал
             if (work.Count == 1 && work[0].Provenance is { } pvm) result.ProvenanceMap = pvm;
+            result.ProvenanceMaps = OperationResult.MapsFor("Boolean." + kind, bodies.Append(other).ToList(), work);
             result.Guarantee = level;
             result.Status = approximate ? OperationStatus.SucceededApproximate : OperationStatus.Succeeded;
             result.Bodies = work;

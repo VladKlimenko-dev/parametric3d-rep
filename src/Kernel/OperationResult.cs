@@ -152,6 +152,43 @@ public sealed class OperationResult
     /// Годна для ревизии тела, при которой записана (см. TSolid.Provenance).</summary>
     public Topology.Provenance? ProvenanceMap { get; internal set; }
 
+    /// <summary>
+    /// m.h2 / 08.2: КАРТЫ ПРОИСХОЖДЕНИЯ ПО ТЕЛАМ РЕЗУЛЬТАТА (в порядке Bodies): тело-вход без изменений — все грани сохранены;
+    /// новое тело — запись построителя (если она относительно входа) или по тождеству поверхностей; грань входа «удалена» —
+    /// только если ни одно тело её не унаследовало. Так карта есть у каждой операции, у многогранного пути и у многотельного
+    /// результата. Мутация P3D_PROVALL=0 — пусто, как прежде (только ProvenanceMap одного тела).
+    /// </summary>
+    public IReadOnlyList<Topology.Provenance> ProvenanceMaps { get; internal set; } = Array.Empty<Topology.Provenance>();
+    static readonly bool ProvAllOff = Environment.GetEnvironmentVariable("P3D_PROVALL") == "0";
+
+    internal static IReadOnlyList<Topology.Provenance> MapsFor(string name, IReadOnlyList<TSolid> inputs, IReadOnlyList<TSolid> results)
+    {
+        if (ProvAllOff || results.Count == 0) return Array.Empty<Topology.Provenance>();
+        var inputSet = new HashSet<TSolid>(inputs, ReferenceEqualityComparer.Instance);
+        var maps = new List<Topology.Provenance>();
+        foreach (var b in results)
+        {
+            if (inputSet.Contains(b))
+            {
+                var kept = new Topology.Provenance { Operation = name + " (body unchanged)" };
+                foreach (var f in b.Faces) kept.Faces.Add(new Topology.FaceProvenance(f, f, Topology.FaceOrigin.Kept));
+                maps.Add(kept); continue;
+            }
+            if (b.Provenance is { } pv && Topology.ProvenanceBySurface.Covers(pv, b, inputs)) { maps.Add(pv); continue; }
+            maps.Add(Topology.ProvenanceBySurface.Compose(name, inputs, b));
+        }
+        if (maps.Count > 1)
+        {
+            // грань входа, унаследованная хоть одним телом, — не удалена
+            var used = new HashSet<Topology.TFace>(maps.SelectMany(m => m.Faces).Where(x => x.Source != null).Select(x => x.Source!).Concat(maps.SelectMany(m => m.Merged.Select(x => x.Source))), ReferenceEqualityComparer.Instance);
+            foreach (var m in maps) m.Deleted.RemoveAll(used.Contains);
+            var del = maps.SelectMany(m => m.Deleted).Distinct(ReferenceEqualityComparer.Instance).Cast<Topology.TFace>().ToList();
+            foreach (var m in maps) m.Deleted.Clear();
+            maps[0].Deleted.AddRange(del);
+        }
+        return maps;
+    }
+
     /// <summary>Исход отказа по его коду.</summary>
     public static OperationOutcome OutcomeOf(string? failureCode) => failureCode switch
     {
@@ -428,6 +465,7 @@ public static class OperationContract
         // (те же объекты кривых рёбер) — сохранена, иначе изменена; несколько граней от одной — разделена; поверхность,
         // которой у входа не было, — новая; грани входа без наследников — удалены. Не по именам и не по геометрии.
         else if (fresh.Count == 1 && !SurfaceProvOff) result.ProvenanceMap = Topology.ProvenanceBySurface.Compose(name, bodies, fresh[0]);
+        result.ProvenanceMaps = OperationResult.MapsFor(name, bodies, work);
         return result;
     }
 

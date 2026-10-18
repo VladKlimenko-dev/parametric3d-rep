@@ -119,6 +119,7 @@ public static class VertexOp
     public static void Chamfer(List<TSolid> bodies, Vector3d point, double[] d, List<string> warnings)
     {
         if (bodies.Count == 0) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Vertex chamfer: no body.");
+        { var bk = BodyAt(bodies, point, "Vertex chamfer"); if (VertexOpCurved.IsCurved(bk, point) && VertexOpCurved.Chamfer(bodies, bodies.IndexOf(bk), point, d, warnings)) return; }
         var c = Find(BodyAt(bodies, point, "Vertex chamfer"), point);
         int n = c.Dirs.Length;
         if (d.Length == 1) d = Enumerable.Repeat(d[0], n).ToArray();
@@ -141,6 +142,7 @@ public static class VertexOp
     {
         if (bodies.Count == 0) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Vertex round: no body.");
         if (r <= Tol.Weld) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Vertex round: the radius must be greater than zero.");
+        { var bk = BodyAt(bodies, point, "Vertex round"); if (VertexOpCurved.IsCurved(bk, point) && VertexOpCurved.Round(bodies, bodies.IndexOf(bk), point, r, warnings)) return; }
         var c = Find(BodyAt(bodies, point, "Vertex round"), point);
         int n = c.Dirs.Length;
         var (centre, cut) = RoundGeometry(c, r);

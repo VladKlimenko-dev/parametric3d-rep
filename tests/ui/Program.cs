@@ -139,7 +139,10 @@ Check("UI-FILE-ROUNDTRIP", () =>
     string m1 = ExportService.Export(s2, step), m2 = ExportService.Export(s2, stl);
     Require(File.Exists(step) && m1.Contains("точный"), "STEP: " + m1);
     Require(File.Exists(stl) && m2.Contains("замкнута"), "STL: " + m2);
-    foreach (var f in new[] { path, step, stl }) File.Delete(f);
+    // m.x2: IGES из интерфейса — записан, прочитан обратно с тем же объёмом
+    string igs = Path.ChangeExtension(path, ".igs"); string m3 = ExportService.Export(s2, igs);
+    Require(File.Exists(igs) && m3.Contains("объём сходится"), "IGES: " + m3);
+    foreach (var f in new[] { path, step, stl, igs }) File.Delete(f);
     w.Close();
 });
 

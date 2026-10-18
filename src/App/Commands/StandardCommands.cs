@@ -42,7 +42,7 @@ public static class StandardCommands
             CanRun = HasPart, Run = async () => await w.SaveAsync(true) });
         r.Add(new AppCommand { Id = "file.import", Label = "Импорт (STEP, IGES)…", Group = F, Icon = "import_but.svg", Synonyms = "import step iges",
             Run = async () => await w.ImportAsync() });
-        r.Add(new AppCommand { Id = "file.export", Label = "Экспорт (STEP, STL, OBJ)…", Group = F, Icon = "export_but.svg", Synonyms = "export step stl obj",
+        r.Add(new AppCommand { Id = "file.export", Label = "Экспорт (STEP, IGES, STL, OBJ)…", Group = F, Icon = "export_but.svg", Synonyms = "export step iges stl obj",
             CanRun = () => w.Session?.Part?.Bodies.Count > 0, Run = async () => await w.ExportAsync() });
         r.Add(new AppCommand { Id = "app.exit", Label = "Выход", Group = F, Synonyms = "exit quit закрыть", Run = () => w.Close() });
 
