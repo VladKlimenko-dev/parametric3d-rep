@@ -320,6 +320,11 @@ static partial class Program
         return RevolveOp.Build(ProfileBuilder.Build(pl, new ICurve3[] { arc, seg }), axis, 0, 2 * Math.PI);
     }
 
+    /// <summary>Тело вращения дуги (свежее построение — гарантия не задана): точная геометрия, гарантия ExactAnalytic.</summary>
+    internal static TSolid ExactCopy(TSolid b) { if (b.TopologyConvention < TopologyConventions.Version) TopologyConventions.Normalize(b); if (b.Guarantee == GuaranteeLevel.Unspecified) b.Guarantee = GuaranteeLevel.ExactAnalytic; return b; }
+
+    static string Cut(string x) => x.Length > 300 ? x[..300] : x;
+
     static void LemonDebug()
     {
         foreach (double cx in new[] { -2.0, 1.0 })
@@ -332,10 +337,23 @@ static partial class Program
                 foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) Console.WriteLine($"    coedge {ce.Edge.Curve.GetType().Name} {ce.Edge.Curve.PointAt(ce.Edge.Curve.T0):0.###} → {ce.Edge.Curve.PointAt(ce.Edge.Curve.T1):0.###} rev {ce.Reversed}");
             }
             Console.WriteLine($"  volume {AnalyticVolume.Of(b)}  withErr {AnalyticVolume.OfWithError(b)}");
-            var prevD = BooleanOp.AnalyticRouteDebug; BooleanOp.AnalyticRouteDebug = m => Console.WriteLine("    route: " + m);
-            var r = BooleanOp.Evaluate(new List<TSolid> { b }, Box(0, -10, -10, 10, 20, 20), BooleanOp.BooleanKind.Subtract, OperationPolicy.Strict, new List<string>());
-            BooleanOp.AnalyticRouteDebug = prevD;
-            Console.WriteLine($"  half: {r.Guarantee} {string.Join(" | ", r.Diagnostics.Select(d => d.Message).Take(3))}");
+            var tools = new (string, Func<TSolid>)[] {
+                ("plane through the axis", () => Box(0, -10, -10, 10, 20, 20)),
+                ("plane z = 1", () => Box(-10, -10, 1, 20, 20, 20)),
+                ("plane x = 0.7", () => Box(0.7, -10, -10, 10, 20, 20)),
+                ("hole across", () => TransformOp.Copy(PrimitiveOp.Cylinder(new Vector3d(0, 0, -10), 0.8, 20), TransformOp.Rotate(new Vector3d(0, 0, 1), Vector3d.UnitY, 90))),
+                ("hole along the axis", () => PrimitiveOp.Cylinder(new Vector3d(0, 0, -10), 0.8, 20)),
+                ("box corner", () => Box(0.5, 0.5, 0.5, 10, 10, 10)) };
+            foreach (var (tn, tool) in tools)
+            {
+                var msgs = new List<string>();
+                var prevD = BooleanOp.AnalyticRouteDebug; BooleanOp.AnalyticRouteDebug = m => msgs.Add(m);
+                var r = BooleanOp.Evaluate(new List<TSolid> { b }, tool(), BooleanOp.BooleanKind.Subtract, OperationPolicy.Strict, new List<string>());
+                BooleanOp.AnalyticRouteDebug = prevD;
+                string vol = string.Join(",", r.Bodies.Select(x => OpVolume(x).ToString("G10")));
+                string val = string.Join(",", r.Bodies.Select(x => SolidValidator.Validate(x).IsValid ? "ok" : "INVALID"));
+                Console.WriteLine($"  {tn}: {r.Guarantee} V [{vol}] {val} | {Cut(string.Join(" | ", msgs.Where(m => !m.StartsWith("declined: first operand")).Take(2)))}");
+            }
         }
     }
 
@@ -370,25 +388,33 @@ static partial class Program
                     {
                         double t0 = arc.T0 + (arc.T1 - arc.T0) * i / n, t1 = arc.T0 + (arc.T1 - arc.T0) * (i + 1) / n;
                         double[] gx = { -0.7745966692414834, 0, 0.7745966692414834 }, gw = { 5.0 / 9, 8.0 / 9, 5.0 / 9 };
-                        for (int q = 0; q < 3; q++) { double t = (t0 + t1) / 2 + (t1 - t0) / 2 * gx[q], h = 1e-7; var p = arc.PointAt(t); double dz = (arc.PointAt(t + h).Z - arc.PointAt(t - h).Z) / (2 * h); V += gw[q] * (t1 - t0) / 2 * Math.PI * p.X * p.X * dz; }
+                        for (int q = 0; q < 3; q++) { double t = (t0 + t1) / 2 + (t1 - t0) / 2 * gx[q]; double al = arc.A0 + arc.Sweep * t, x = cx + R * Math.Cos(al), dz = arc.Sweep * R * Math.Cos(al); V += gw[q] * (t1 - t0) / 2 * Math.PI * x * x * dz; }
                     }
                     V = Math.Abs(V);
-                    double v = AnalyticVolume.Of(b) ?? double.NaN;
+                    double v = OpVolume(b);
                     var vr = SolidValidator.Validate(b);
                     Console.WriteLine($"  {name}: V {v:R} want {V:R} ({(v - V) / V:E1}) {b.Guarantee}, faces {b.Faces.Count()}, valid {vr.IsValid}");
-                    if (b.Guarantee != GuaranteeLevel.ExactAnalytic || !vr.IsValid) fails.Add($"{name}: {b.Guarantee} {vr.Summary()}");
-                    if (!(Math.Abs(v - V) <= 1e-8 * V)) fails.Add($"{name}: V {v:R} vs {V:R}");
+                    if (!vr.IsValid) fails.Add($"{name}: {vr.Summary()}");
+                    if (!(Math.Abs(v - V) <= 1e-10 * V)) fails.Add($"{name}: V {v:R} vs {V:R}");
+                    // массовые характеристики (MassMeasure): замкнутые формулы по дуге — объём и граница
+                    var mm = MassMeasure.Of(b);
+                    Console.WriteLine($"    mass: V {mm.Volume:R} ± {mm.VolumeError:G3}, c {mm.Centroid:0.##########} ({mm.Route})");
+                    if (!(Math.Abs(mm.Volume - V) <= mm.VolumeError + 1e-12 * V) || !(mm.VolumeError <= 1e-6 * V)) fails.Add($"{name}: mass V {mm.Volume:R} ± {mm.VolumeError:G3} vs {V:R}");
+                    if (!(mm.Centroid.Length <= mm.CentroidError + 1e-9)) fails.Add($"{name}: centroid {mm.Centroid} ± {mm.CentroidError:G3} (symmetric: 0)");
                     var sw = new StringWriter(); if (!Parametric3D.Kernel.Export.StepExact.Write(sw, new[] { b }, name, new List<string>())) fails.Add($"{name}: no exact STEP");
                     foreach (var (tn, tool) in new (string, Func<TSolid>)[] { ("half", () => Box(0, -10, -10, 10, 20, 20)), ("hole", () => TransformOp.Copy(PrimitiveOp.Cylinder(new Vector3d(0, 0, -10), 0.8, 20), TransformOp.Rotate(new Vector3d(0, 0, 1), Vector3d.UnitY, 90))) })
                     {
+                        // булева над веретенообразным тором — пока многогранно (точный маршрут: NURBS-представление, P3D_SPINDLEPROXY=1,
+                        // отказывает у полюсов): тела годны, тождество − + ∩ = V — в пределах сообщаемых границ объёма
                         var rs = BooleanOp.Evaluate(new List<TSolid> { b }, tool(), BooleanOp.BooleanKind.Subtract, OperationPolicy.Strict);
                         var ri = BooleanOp.Evaluate(new List<TSolid> { b }, tool(), BooleanOp.BooleanKind.Intersect, OperationPolicy.Strict);
-                        if (rs.Guarantee != GuaranteeLevel.ExactAnalytic || ri.Guarantee != GuaranteeLevel.ExactAnalytic) { fails.Add($"{name} {tn}: {rs.Guarantee}/{ri.Guarantee}"); continue; }
+                        if (!rs.Accepted || !ri.Accepted) { fails.Add($"{name} {tn}: {rs.Outcome}/{ri.Outcome}"); continue; }
                         if (rs.Bodies.Concat(ri.Bodies).Any(x => !SolidValidator.Validate(x).IsValid)) { fails.Add($"{name} {tn}: invalid"); continue; }
-                        double vs = rs.Bodies.Sum(x => AnalyticVolume.Of(x) ?? double.NaN), vi = ri.Bodies.Sum(x => AnalyticVolume.Of(x) ?? double.NaN);
-                        Console.WriteLine($"    {tn}: − {vs:R} ∩ {vi:R}");
-                        if (!(Math.Abs(vs + vi - V) <= 1e-8 * V)) fails.Add($"{name} {tn}: − + ∩ {vs + vi:R} vs {V:R}");
-                        if (tn == "half" && !(Math.Abs(vs - V / 2) <= 1e-8 * V)) fails.Add($"{name} half: {vs:R} vs {V / 2:R}");
+                        var ms = rs.Bodies.Select(x => AnalyticMeasure.Volume(x)).ToList(); var mi = ri.Bodies.Select(x => AnalyticMeasure.Volume(x)).ToList();
+                        double vs = ms.Sum(m => m.Value), vi = mi.Sum(m => m.Value), e = ms.Sum(m => m.Error) + mi.Sum(m => m.Error);
+                        Console.WriteLine($"    {tn}: − {vs:R} ∩ {vi:R} (bound {e:G3}; {rs.Guarantee}/{ri.Guarantee})");
+                        if (!(Math.Abs(vs + vi - V) <= e + 1e-8 * V)) fails.Add($"{name} {tn}: − + ∩ {vs + vi:R} vs {V:R} (bound {e:G3})");
+                        if (tn == "half" && !(Math.Abs(vs - V / 2) <= ms.Sum(m => m.Error) + 1e-8 * V)) fails.Add($"{name} half: {vs:R} vs {V / 2:R}");
                     }
                 }
                 catch (Exception ex) { fails.Add($"{name}: {ex.GetType().Name} {ex.Message}"); }

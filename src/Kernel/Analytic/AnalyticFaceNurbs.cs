@@ -21,6 +21,7 @@ public sealed partial class AnalyticFace
     internal Vector3d ParamLo, ParamHi;
     internal List<(Vector3d A, Vector3d B, Vector3d C)>? ParamTris;
     internal static readonly bool NurbsBoolOff = Environment.GetEnvironmentVariable("P3D_NURBSBOOL") == "0";
+    static readonly bool WholeOff = Environment.GetEnvironmentVariable("P3D_NURBSWHOLE") == "0";
 
     static AnalyticFace? OfNurbs(TFace f, Surfaces.NurbsSurface ns, out string? why)
     {
@@ -48,6 +49,15 @@ public sealed partial class AnalyticFace
                 uvs.Add(uv);
             }
         }
+        // m.t3: ЦЕЛАЯ ЗАМКНУТАЯ ПОВЕРХНОСТЬ (грань без рёбер: «лимон», «яблоко» — края параметров — полюса и шов) — вся область
+        // параметров узлового вектора. P3D_NURBSWHOLE=0 — отказ, как прежде.
+        if (uvs.Count == 0 && !WholeOff && f.Loops.All(l => l.CoEdges.Count == 0))
+        {
+            fp.PUa = ns.KnotsU[ns.DegreeU]; fp.PUb = ns.KnotsU[ns.KnotsU.Count - ns.DegreeU - 1]; fp.PVa = ns.KnotsV[ns.DegreeV]; fp.PVb = ns.KnotsV[ns.KnotsV.Count - ns.DegreeV - 1];
+            fp.FullSurface = true;
+        }
+        else
+        {
         if (uvs.Count == 0) { why = $"face {f.Id}: NURBS face without a boundary"; return null; }
         fp.PUa = uvs.Min(x => x.X); fp.PUb = uvs.Max(x => x.X); fp.PVa = uvs.Min(x => x.Y); fp.PVb = uvs.Max(x => x.Y);
         if (!(fp.PUb - fp.PUa > 1e-6 && fp.PVb - fp.PVa > 1e-6)) { why = $"face {f.Id}: NURBS face of zero parameter area"; return null; }
@@ -60,6 +70,7 @@ public sealed partial class AnalyticFace
                 if (!fp.InitTrim(out why)) return null;
                 break;
             }
+        }
         // скорости — по сетке 17×17 с запасом в полтора раза (оценка «мм на единицу параметра» для допуска у края)
         double su = 0, sv = 0, h = 1e-6;
         for (int i = 0; i <= 16; i++)

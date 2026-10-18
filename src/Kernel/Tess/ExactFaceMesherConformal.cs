@@ -127,6 +127,11 @@ public static partial class ExactFaceMesher
                 var dc = a.Frame.Origin - o;
                 if ((dc - w * Vector3d.Dot(dc, w)).Length > 1e-9 * Math.Max(1, a.Radius))      // центр дуги не на оси — тор
                 {
+                    // m.t3: ВЕРЕТЕНООБРАЗНЫЙ ТОР С ПОЛЮСАМИ («лимон», «яблоко»: окружность образующей пересекает ось). Конформная
+                    // координата вдоль меридиана ψ = ∫R dφ/ρ, ρ = A + R cos φ (A — центр в полуплоскости образующей, |A| < R):
+                    // ψ = R/q·ln|(R + A cos φ + q sin φ)/(A + R cos φ)|, q = √(R² − A²); w = e^{±ψ + iθ} — полюс в нуле (± — какой
+                    // полюс внутри грани). Обратное — делением пополам по φ ∈ (−φ*, φ*), cos φ* = −A/R. Мутация P3D_SPINDLEMAP=0.
+                    if (!SpindleOff && SpindleMaps(o, w, a, rv2, Axial) is { } sm) { maps.AddRange(sm); break; }
                     if (hint is { } th && !TorusOff) maps.AddRange(TorusMaps(o + w * Vector3d.Dot(dc, w), w, (dc - w * Vector3d.Dot(dc, w)).Length, a.Radius, all, loops, th));
                     break;
                 }
@@ -164,6 +169,45 @@ public static partial class ExactFaceMesher
             }
         }
         return maps;
+    }
+
+    static readonly bool SpindleOff = Environment.GetEnvironmentVariable("P3D_SPINDLEMAP") == "0";
+
+    static List<ConformalMap>? SpindleMaps(Vector3d o, Vector3d w, ArcCurve3 a, RevolvedSurface rv,
+        Func<Vector3d, Vector3d, Func<double, double, double>, Func<double, (double H, double R)?>, string, ConformalMap?> axial)
+    {
+        var C = a.Frame.Origin; double R = a.Radius;
+        double zc = Vector3d.Dot(C - o, w); var radC = C - o - w * zc;
+        var pm = a.PointAt((a.T0 + a.T1) / 2) - o; var radP = pm - w * Vector3d.Dot(pm, w);
+        double A = radC.Length * (Vector3d.Dot(radC, radP) >= 0 ? 1 : -1);
+        if (!(Math.Abs(A) < R * (1 - 1e-9))) return null;                     // окружность не пересекает ось — обычный тор
+        double q = Math.Sqrt(R * R - A * A), phiS = Math.Acos(-A / R);
+        double Psi(double phi) => R / q * Math.Log(Math.Abs((R + A * Math.Cos(phi) + q * Math.Sin(phi)) / (A + R * Math.Cos(phi))));
+        double PhiOf(double h, double r) => Math.Atan2(h - zc, r - A);
+        double? PhiAt(double psi)
+        {
+            double lo = -phiS, hi = phiS;
+            for (int it = 0; it < 200 && hi - lo > 1e-16; it++) { double m = (lo + hi) / 2; if (Psi(m) < psi) lo = m; else hi = m; }
+            return (lo + hi) / 2;
+        }
+        var maps = new List<ConformalMap>();
+        foreach (double sg in new[] { 1.0, -1.0 })
+        {
+            var m = axial(o, w, (h, r) =>
+            {
+                double phi = PhiOf(h, r);
+                if (!(Math.Abs(phi) < phiS)) return sg > 0 ? double.NegativeInfinity : double.PositiveInfinity;
+                double ps = sg * Psi(phi);
+                return double.IsFinite(ps) ? ps : (phi * sg < 0 ? double.NegativeInfinity : double.PositiveInfinity);
+            }, l =>
+            {
+                if (double.IsNegativeInfinity(l)) { double pp = -sg * phiS; return (zc + R * Math.Sin(pp), 0); }
+                if (PhiAt(sg * l) is not { } phi) return null;
+                return (zc + R * Math.Sin(phi), Math.Max(0, A + R * Math.Cos(phi)));
+            }, sg > 0 ? "spindle-" : "spindle+");
+            if (m != null) maps.Add(m);
+        }
+        return maps.Count > 0 ? maps : null;
     }
 
     // Тор — НЕ ВКЛЮЧЁН (P3D_CONFORMALTORUS=1 — включить для разбора). Отображение проверено (якобиан одного знака на сетке

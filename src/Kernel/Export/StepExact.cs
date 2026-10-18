@@ -93,6 +93,8 @@ public static class StepExact
         return Vector3d.Dot(best.Normalized(), sn.Normalized()) >= 0;
     }
 
+    static readonly string NumFmt = "0." + new string('#', int.TryParse(Environment.GetEnvironmentVariable("P3D_STEPDIGITS"), out var dg) ? Math.Clamp(dg, 6, 17) : 15);
+
     public static bool Write(TextWriter w, IEnumerable<TSolid> bodies, string name, List<string>? warnings = null) =>
         Write(w, bodies, name, warnings, null);
 
@@ -133,7 +135,9 @@ public static class StepExact
         var lines = new List<string>();
         int E(string s) { lines.Add($"#{++id}={s};"); return id; }
 
-        string N(double v) => v.ToString("0.#########", System.Globalization.CultureInfo.InvariantCulture)
+        // m.t3: 15 знаков после запятой (было 9): у вырожденного тора с полюсами («лимон») под поворотом OpenCascade при 9 знаках
+        // не строил тело (объём 0, BRepCheck — негодно); направления и полюса — с полной точностью. P3D_STEPDIGITS=9 — прежнее.
+        string N(double v) => v.ToString(NumFmt, System.Globalization.CultureInfo.InvariantCulture)
                               is { } t && t.Contains('.') ? t : v.ToString("0", System.Globalization.CultureInfo.InvariantCulture) + ".";
 
         var pointOf = new Dictionary<(long, long, long), int>();

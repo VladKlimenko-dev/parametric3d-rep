@@ -46,6 +46,32 @@ static partial class Program
         { double r = 12, V = 4.0 / 3 * Math.PI * r * r * r; Add("sphere r12", PrimitiveOp.Sphere(Vector3d.Zero, r), V, Vector3d.Zero, Diag(0.4 * V * r * r, 0.4 * V * r * r, 0.4 * V * r * r)); }
         { double r = 10, h = 24, V = Math.PI * r * r * h / 3; Add("cone r10 h24", PrimitiveOp.Cone(Vector3d.Zero, r, 0, h), V, new(0, 0, h / 4), Diag(3.0 / 80 * V * (4 * r * r + h * h), 3.0 / 80 * V * (4 * r * r + h * h), 0.3 * V * r * r)); }
         { double R = 20, r = 6, V = 2 * Math.PI * Math.PI * R * r * r; Add("torus R20 r6", PrimitiveOp.Torus(Vector3d.Zero, R, r), V, Vector3d.Zero, Diag(V * (R * R / 2 + 5.0 / 8 * r * r), V * (R * R / 2 + 5.0 / 8 * r * r), V * (R * R + 0.75 * r * r))); }
+        // m.t3: «лимон» и «яблоко» (веретенообразный тор с полюсами в (0, 0, ±4)): эталон — сечениями z = R sin θ (кольцо
+        // ρi…ρo, ρ± = A ± R cos θ), Гаусс по θ — независимо от формулы Грина в MassMeasure
+        foreach (var (nm, A) in new[] { ("lemon (spindle torus, poles)", -2.0), ("apple (spindle torus, poles)", 1.0) })
+        {
+            double R = Math.Sqrt(A * A + 16), th4 = Math.Asin(4 / R);
+            double V = 0, Jz = 0, Jx = 0;
+            void Slice(double t0, double t1, bool annulus)
+            {
+                double[] gx = { -0.9602898564975363, -0.7966664774136267, -0.5255324099163290, -0.1834346424956498, 0.1834346424956498, 0.5255324099163290, 0.7966664774136267, 0.9602898564975363 };
+                double[] gw = { 0.1012285362903763, 0.2223810344533745, 0.3137066458778873, 0.3626837833783620, 0.3626837833783620, 0.3137066458778873, 0.2223810344533745, 0.1012285362903763 };
+                for (int k = 0; k < 64; k++)
+                {
+                    double a0 = t0 + (t1 - t0) * k / 64, a1 = t0 + (t1 - t0) * (k + 1) / 64;
+                    for (int q = 0; q < 8; q++)
+                    {
+                        double th = (a0 + a1) / 2 + (a1 - a0) / 2 * gx[q], wq = gw[q] * (a1 - a0) / 2 * R * Math.Cos(th);
+                        double z = R * Math.Sin(th), ro = A + R * Math.Cos(th), ri = annulus ? A - R * Math.Cos(th) : 0;
+                        double d2 = ro * ro - ri * ri, d4 = Math.Pow(ro, 4) - Math.Pow(ri, 4);
+                        V += wq * Math.PI * d2; Jz += wq * Math.PI / 2 * d4; Jx += wq * (Math.PI / 4 * d4 + Math.PI * d2 * z * z);
+                    }
+                }
+            }
+            Slice(-th4, th4, false);
+            if (A > 0) { Slice(th4, Math.PI / 2, true); Slice(-Math.PI / 2, -th4, true); }
+            Add(nm, Lemon(A), V, Vector3d.Zero, Diag(Jx, Jx, Jz));
+        }
         {
             // плита 60×40×20 с отверстием r8 по оси z в точке (20, 20): моменты — разностью (относительно начала)
             double a = 60, b = 40, c = 20, r = 8, Vb = a * b * c, Vc = Math.PI * r * r * c;

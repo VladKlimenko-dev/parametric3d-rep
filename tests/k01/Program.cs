@@ -494,7 +494,8 @@ static partial class Program
         if (mode == "thinprobe") { ThinProbe(); return; }
         if (mode == "touchprobe") { TouchProbe(); return; }
         if (mode is "pointtouch" or "allA") PointTangencyChecks();
-        if (mode is "toruspole") TorusPoleChecks();   // m.t3: в работе (в allA — когда пройдёт)
+        if (mode is "toruspole" or "allA") TorusPoleChecks();
+        if (mode is "seams") SeamChecks();
         if (mode == "lemondbg") { LemonDebug(); return; }
         if (mode == "avfar") { AvFarProbe(); AvFarScene(); return; }
         if (mode == "cylcyl") { CylCylProbe(); return; }

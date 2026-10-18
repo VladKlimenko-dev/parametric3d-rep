@@ -997,3 +997,54 @@ static partial class Program
         }
     }
 }
+
+static partial class Program
+{
+    static void SeamChecks()
+    {
+        Check("KRN03-SEAM-NOT-A-CUT", () =>
+        {
+            // 03.3 / m.t2: ШОВ — ДВА ИСПОЛЬЗОВАНИЯ РЕБРА, НЕ ФИЗИЧЕСКИЙ РАЗРЕЗ. Тело вращения (вал-цилиндр, шар, конус, тор)
+            // поворачивается вокруг своей оси на угол α — шов (меридиан) переезжает; один и тот же резец (поперечное отверстие,
+            // паз, шар) в одном месте пространства. Результат не зависит от α: объём (до 1e-9), число граней и рёбер, площадь
+            // (до 1e-9), годность; шов не делит грань, сквозь которую проходит разрез (граней столько же, как при шве вдали),
+            // сетка показа замкнута (без трещины по шву).
+            var fails = new List<string>();
+            var cases = new (string Name, Func<TSolid> Body, Vector3d O, Vector3d W, Func<TSolid> Tool, BooleanOp.BooleanKind Kind)[]
+            {
+                ("shaft × cross hole", () => PrimitiveOp.Cylinder(Vector3d.Zero, 10, 60), Vector3d.Zero, Vector3d.UnitZ,
+                    () => TransformOp.Copy(PrimitiveOp.Cylinder(new Vector3d(0, 0, -20), 3, 40), TransformOp.Rotate(new Vector3d(0, 0, 30), Vector3d.UnitY, 90)), BooleanOp.BooleanKind.Subtract),
+                ("shaft × slot", () => PrimitiveOp.Cylinder(Vector3d.Zero, 10, 60), Vector3d.Zero, Vector3d.UnitZ, () => Box(6, -3, 20, 10, 6, 20), BooleanOp.BooleanKind.Subtract),
+                ("sphere × hole", () => PrimitiveOp.Sphere(Vector3d.Zero, 10), Vector3d.Zero, Vector3d.UnitZ,
+                    () => TransformOp.Copy(PrimitiveOp.Cylinder(new Vector3d(0, 2, -20), 3, 40), TransformOp.Rotate(Vector3d.Zero, Vector3d.UnitY, 90)), BooleanOp.BooleanKind.Subtract),
+                ("cone × ball", () => PrimitiveOp.Cone(Vector3d.Zero, 10, 4, 20), Vector3d.Zero, Vector3d.UnitZ, () => PrimitiveOp.Sphere(new Vector3d(7.5, 0, 8), 3), BooleanOp.BooleanKind.Subtract),
+                ("torus × box", () => PrimitiveOp.Torus(Vector3d.Zero, 20, 5), Vector3d.Zero, Vector3d.UnitZ, () => Box(15, -4, -10, 15, 8, 20), BooleanOp.BooleanKind.Subtract),
+                ("shaft ∩ slab", () => PrimitiveOp.Cylinder(Vector3d.Zero, 10, 60), Vector3d.Zero, Vector3d.UnitZ, () => Box(-20, -4, 10, 40, 8, 40), BooleanOp.BooleanKind.Intersect),
+            };
+            foreach (var (name, body, o, w, tool, kind) in cases)
+            {
+                (double V, double A, int F, int E)? first = null;
+                foreach (double deg in new[] { 0.0, 0.7, 90, 180, 211 })
+                {
+                    try
+                    {
+                        var b = deg == 0 ? body() : TransformOp.Copy(body(), TransformOp.Rotate(o, w, deg));
+                        var r = BooleanOp.Evaluate(new List<TSolid> { b }, tool(), kind, OperationPolicy.Strict);
+                        if (!r.Accepted || r.Guarantee != GuaranteeLevel.ExactAnalytic) { fails.Add($"{name} α={deg}: {r.Outcome} {r.Guarantee}"); continue; }
+                        var bad = r.Bodies.Select(x => SolidValidator.Validate(x)).FirstOrDefault(x => !x.IsValid);
+                        if (bad != null) { fails.Add($"{name} α={deg}: {bad.Summary()}"); continue; }
+                        double V = r.Bodies.Sum(OpVolume), A = r.Bodies.Sum(x => AnalyticVolume.AreaOf(x) ?? double.NaN);
+                        int F = r.Bodies.Sum(x => x.Faces.Count()), E = r.Bodies.Sum(x => x.Edges.Count());
+                        // сетка показа замкнута (без трещины по шву) — проверка Mesh в Validate (выше)
+                        if (first is not { } f0) { first = (V, A, F, E); Console.WriteLine($"  {name}: V {V:R} A {A:R} faces {F} edges {E}"); continue; }
+                        if (!(Math.Abs(V - f0.V) <= 1e-9 * Math.Max(1, f0.V))) fails.Add($"{name} α={deg}: V {V:R} vs {f0.V:R}");
+                        if (!(Math.Abs(A - f0.A) <= 1e-9 * Math.Max(1, f0.A))) fails.Add($"{name} α={deg}: area {A:R} vs {f0.A:R}");
+                        if (F != f0.F || E != f0.E) fails.Add($"{name} α={deg}: faces/edges {F}/{E} vs {f0.F}/{f0.E}");
+                    }
+                    catch (Exception ex) { fails.Add($"{name} α={deg}: {ex.GetType().Name} {ex.Message}"); }
+                }
+            }
+            Require(fails.Count == 0, string.Join("; ", fails.Take(8)));
+        });
+    }
+}
