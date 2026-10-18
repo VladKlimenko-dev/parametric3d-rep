@@ -495,7 +495,7 @@ static partial class Program
         if (mode == "touchprobe") { TouchProbe(); return; }
         if (mode is "pointtouch" or "allA") PointTangencyChecks();
         if (mode is "toruspole" or "allA") TorusPoleChecks();
-        if (mode is "seams") SeamChecks();
+        if (mode is "seams" or "allA") SeamChecks();
         if (mode == "lemondbg") { LemonDebug(); return; }
         if (mode == "avfar") { AvFarProbe(); AvFarScene(); return; }
         if (mode == "cylcyl") { CylCylProbe(); return; }

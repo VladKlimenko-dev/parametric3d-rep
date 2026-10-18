@@ -1013,12 +1013,12 @@ static partial class Program
             var cases = new (string Name, Func<TSolid> Body, Vector3d O, Vector3d W, Func<TSolid> Tool, BooleanOp.BooleanKind Kind)[]
             {
                 ("shaft × cross hole", () => PrimitiveOp.Cylinder(Vector3d.Zero, 10, 60), Vector3d.Zero, Vector3d.UnitZ,
-                    () => TransformOp.Copy(PrimitiveOp.Cylinder(new Vector3d(0, 0, -20), 3, 40), TransformOp.Rotate(new Vector3d(0, 0, 30), Vector3d.UnitY, 90)), BooleanOp.BooleanKind.Subtract),
+                    () => TransformOp.Copy(PrimitiveOp.Cylinder(new Vector3d(0, 1, 10), 3, 40), TransformOp.Rotate(new Vector3d(0, 1, 30), Vector3d.UnitY, 90)), BooleanOp.BooleanKind.Subtract),
                 ("shaft × slot", () => PrimitiveOp.Cylinder(Vector3d.Zero, 10, 60), Vector3d.Zero, Vector3d.UnitZ, () => Box(6, -3, 20, 10, 6, 20), BooleanOp.BooleanKind.Subtract),
                 ("sphere × hole", () => PrimitiveOp.Sphere(Vector3d.Zero, 10), Vector3d.Zero, Vector3d.UnitZ,
                     () => TransformOp.Copy(PrimitiveOp.Cylinder(new Vector3d(0, 2, -20), 3, 40), TransformOp.Rotate(Vector3d.Zero, Vector3d.UnitY, 90)), BooleanOp.BooleanKind.Subtract),
                 ("cone × ball", () => PrimitiveOp.Cone(Vector3d.Zero, 10, 4, 20), Vector3d.Zero, Vector3d.UnitZ, () => PrimitiveOp.Sphere(new Vector3d(7.5, 0, 8), 3), BooleanOp.BooleanKind.Subtract),
-                ("torus × box", () => PrimitiveOp.Torus(Vector3d.Zero, 20, 5), Vector3d.Zero, Vector3d.UnitZ, () => Box(15, -4, -10, 15, 8, 20), BooleanOp.BooleanKind.Subtract),
+                ("torus × box", () => PrimitiveOp.Torus(Vector3d.Zero, 20, 5), Vector3d.Zero, Vector3d.UnitZ, () => Box(17, -4, -10, 15, 8, 20), BooleanOp.BooleanKind.Subtract),
                 ("shaft ∩ slab", () => PrimitiveOp.Cylinder(Vector3d.Zero, 10, 60), Vector3d.Zero, Vector3d.UnitZ, () => Box(-20, -4, 10, 40, 8, 40), BooleanOp.BooleanKind.Intersect),
             };
             foreach (var (name, body, o, w, tool, kind) in cases)
