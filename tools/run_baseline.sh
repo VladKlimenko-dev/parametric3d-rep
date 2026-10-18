@@ -18,6 +18,10 @@ if python3 -c "import OCP" 2>/dev/null; then
   "$OUT/k01/K01Checks" g14dump "$OUT/g14" > "$OUT/g14_dump.log" 2>&1
   python3 "$ROOT/tools/occt_check.py" "$OUT/g14" --json "$OUT/g14/occt.json" > "$OUT/g14.log" 2>&1
   echo "G14: $(tail -1 "$OUT/g14.log")"
+  # Матрица m.q2: объём, центр масс и тензор инерции с границей ошибки — сверка с OpenCascade (VolumeProperties)
+  "$OUT/k01/K01Checks" q2dump "$OUT/q2" > "$OUT/q2_dump.log" 2>&1
+  python3 "$ROOT/tools/occt_mass.py" "$OUT/q2" --json "$OUT/q2/occt.json" > "$OUT/q2.log" 2>&1
+  echo "Q2MASS: $(tail -1 "$OUT/q2.log")"
   # Ворота g.05 (KRN-04): каталог событий пересечения (узкие интервалы, касания, вершины, швы, петли, полюса) — OpenCascade
   "$OUT/k01/K01Checks" krn04dump "$OUT/krn04" > "$OUT/krn04_dump.log" 2>&1
   python3 "$ROOT/tools/occt_diff.py" "$OUT/krn04" --json "$OUT/krn04/occt.json" > "$OUT/krn04.log" 2>&1

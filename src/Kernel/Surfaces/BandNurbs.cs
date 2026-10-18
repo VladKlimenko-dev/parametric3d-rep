@@ -23,14 +23,16 @@ public static class BandNurbs
         for (int n = Math.Max(16, minN); n <= maxN; n *= 2)
         {
             var secs = new SweepSection[n + 1];
-            // однородные опорные точки сечений: 3 ряда × (n + 1) сечений (дуга — рациональная квадратичная, отрезок — та же
-            // степень 2 с серединой; KRN-07: грани точной протяжки со звеньями-отрезками)
-            var H = new Vector4d[3, n + 1];
+            // однородные опорные точки сечений: R рядов × (n + 1) сечений (дуга — рациональная квадратичная, отрезок — та же
+            // степень 2 с серединой; KRN-07: грани точной протяжки со звеньями-отрезками; m.s1: звено-кривая Безье — её опорные
+            // точки, степень по v — её степень)
+            int NR = RowCount(ss.ExactSectionAt(ua));
+            var H = new Vector4d[NR, n + 1];
             for (int i = 0; i <= n; i++)
             {
                 secs[i] = ss.ExactSectionAt(ua + (ub - ua) * i / n);
-                if (ArcRows(secs[i]) is not { } ar) return null;
-                H[0, i] = ar.P0; H[1, i] = ar.P1; H[2, i] = ar.P2;
+                if (Rows(secs[i]) is not { } ar || ar.Length != NR) return null;
+                for (int r = 0; r < NR; r++) H[r, i] = ar[r];
             }
             // глобальная кубическая интерполяция по равномерным параметрам t_i = i/n
             int deg = 3, m = n + 1;
@@ -40,21 +42,21 @@ public static class BandNurbs
             for (int j = 1; j < m - deg; j++) knots[j + deg] = t.Skip(j).Take(deg).Average();
             var A = new double[m, m];
             for (int i = 0; i < m; i++) { var nb = Basis(knots, deg, t[i], m); for (int j = 0; j < m; j++) A[i, j] = nb[j]; }
-            var D = new Vector4d[3, m];
-            for (int row = 0; row < 3; row++)
+            var D = new Vector4d[NR, m];
+            for (int row = 0; row < NR; row++)
             {
                 var rhs = new Vector4d[m]; for (int i = 0; i < m; i++) rhs[i] = H[row, i];
                 var sol = Solve(A, rhs, m); if (sol == null) return null;
                 for (int j = 0; j < m; j++) D[row, j] = sol[j];
             }
-            var cp = new Vector3d[m, 3]; var w = new double[m, 3];
+            var cp = new Vector3d[m, NR]; var w = new double[m, NR];
             for (int j = 0; j < m; j++)
-                for (int row = 0; row < 3; row++)
+                for (int row = 0; row < NR; row++)
                 {
                     var d = D[row, j]; if (!(d.W > 1e-9)) return null;
                     cp[j, row] = d.Xyz / d.W; w[j, row] = d.W;
                 }
-            var nurbs = new NurbsSurface(cp, deg, 2, w, knots, new double[] { 0, 0, 0, 1, 1, 1 });
+            var nurbs = new NurbsSurface(cp, deg, NR - 1, w, knots, VKnots(NR));
             double dev = 0;
             for (int i = 0; i < n; i++)
             {
@@ -72,6 +74,21 @@ public static class BandNurbs
     /// <summary>Расстояние точки до сечения: до дуги (её плоскость и окружность) или до прямой отрезка.</summary>
     static double OffSection(Vector3d q, SweepSection ex)
     {
+        if (ex.IsBezier)
+        {
+            // ближайшая точка кривой Безье: пробы, затем Ньютон по (P(v) − q)·P'(v) = 0
+            double bv = 0, bd = double.MaxValue;
+            for (int k = 0; k <= 64; k++) { double v = k / 64.0; double d = (ex.Point(v) - q).LengthSquared; if (d < bd) { bd = d; bv = v; } }
+            for (int it = 0; it < 30; it++)
+            {
+                const double h = 1e-5;
+                double g(double v) => Vector3d.Dot(ex.Point(v) - q, ex.Deriv(v));
+                double g0 = g(bv), gd = (g(bv + h) - g(bv - h)) / (2 * h);
+                if (!(Math.Abs(gd) > 1e-300)) break;
+                double nv = Math.Clamp(bv - g0 / gd, 0, 1); if (Math.Abs(nv - bv) < 1e-15) { bv = nv; break; } bv = nv;
+            }
+            return Math.Min(Math.Sqrt(bd), (ex.Point(bv) - q).Length);
+        }
         if (!ex.IsArc) { var d = ex.B - ex.A; double l2 = d.LengthSquared; var w = q - ex.A; return l2 < 1e-300 ? w.Length : (w - d * (Vector3d.Dot(w, d) / l2)).Length; }
         // точка рационального сплайна при параметре v — не точка сечения при той же доле угла: мерить расстояние до дуги
         var nrm = Vector3d.Cross(ex.E1, ex.E2).Normalized(); var dq = q - ex.C; double off = Vector3d.Dot(dq, nrm);
@@ -81,6 +98,16 @@ public static class BandNurbs
 
     static readonly bool PinchOff = Environment.GetEnvironmentVariable("P3D_BANDPINCH") == "0";
     static readonly bool BreaksOff = Environment.GetEnvironmentVariable("P3D_BANDNURBSBREAKS") == "0";
+
+    static int RowCount(SweepSection s) => s.IsBezier ? s.Q!.Length : 3;
+    static double[] VKnots(int nr) { var k = new double[2 * nr]; for (int i = nr; i < 2 * nr; i++) k[i] = 1; return k; }
+
+    /// <summary>Однородные опорные точки сечения по v (дуга, отрезок — 3; кривая Безье — свои, веса 1).</summary>
+    static Vector4d[]? Rows(SweepSection s)
+    {
+        if (s.IsBezier) return s.Q!.Select(p => new Vector4d(p, 1)).ToArray();
+        return ArcRows(s) is { } r ? new[] { r.P0, r.P1, r.P2 } : null;
+    }
 
     static (Vector4d P0, Vector4d P1, Vector4d P2)? ArcRows(SweepSection s)
     {
@@ -111,20 +138,21 @@ public static class BandNurbs
             var U = kn.ToArray(); int m = U.Length - 4;
             var g = new double[m]; for (int i = 0; i < m; i++) g[i] = (U[i + 1] + U[i + 2] + U[i + 3]) / 3;
             var A = new double[m, m]; for (int i = 0; i < m; i++) { var nb = Basis(U, 3, g[i], m); for (int j = 0; j < m; j++) A[i, j] = nb[j]; }
-            var rows = new Vector4d[3][]; for (int r = 0; r < 3; r++) rows[r] = new Vector4d[m];
+            int NR = RowCount(ss.ExactSectionAt(ua));
+            var rows = new Vector4d[NR][]; for (int r = 0; r < NR; r++) rows[r] = new Vector4d[m];
             for (int i = 0; i < m; i++)
             {
                 // на стыке — сечение со своей стороны не нужно: формула непрерывна, точка Гревиля на стыке — само сечение
-                if (ArcRows(ss.ExactSectionAt(ua + (ub - ua) * g[i])) is not { } ar) return null;
-                rows[0][i] = ar.P0; rows[1][i] = ar.P1; rows[2][i] = ar.P2;
+                if (Rows(ss.ExactSectionAt(ua + (ub - ua) * g[i])) is not { } ar || ar.Length != NR) return null;
+                for (int r = 0; r < NR; r++) rows[r][i] = ar[r];
             }
-            var cp = new Vector3d[m, 3]; var w = new double[m, 3];
-            for (int r = 0; r < 3; r++)
+            var cp = new Vector3d[m, NR]; var w = new double[m, NR];
+            for (int r = 0; r < NR; r++)
             {
                 var sol = Solve(A, rows[r], m); if (sol == null) return null;
                 for (int j = 0; j < m; j++) { if (!(sol[j].W > 1e-9)) return null; cp[j, r] = sol[j].Xyz / sol[j].W; w[j, r] = sol[j].W; }
             }
-            var nurbs = new NurbsSurface(cp, 3, 2, w, U, new double[] { 0, 0, 0, 1, 1, 1 });
+            var nurbs = new NurbsSurface(cp, 3, NR - 1, w, U, VKnots(NR));
             double dev = 0;
             for (int i = 0; i + 1 < m && dev <= budget; i++)
             {

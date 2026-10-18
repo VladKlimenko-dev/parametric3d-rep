@@ -175,3 +175,78 @@ static partial class Program
         });
     }
 }
+
+static partial class Program
+{
+    static void Krn07SweepBezierSectionChecks()
+    {
+        Check("KRN07-SWEEP-BEZIER-SECTION", () =>
+        {
+            // m.s1: ТОЧНАЯ ПРОТЯЖКА СЕЧЕНИЯ СО ЗВЕНЬЯМИ-КРИВЫМИ БЕЗЬЕ. Грань звена — формула «опорные точки Безье в рамке без
+            // вращения» (SweepSection.Bezier), STEP — B-сплайн степени звена по v. Эталоны:
+            //  — «линза» из двух кубических Безье, симметричная по обеим осям (центр тяжести на траектории) — V = A·L (Папп),
+            //    в том числе с закруткой 180°;
+            //  — «D» (отрезок и кубическая Безье) с сохранённой ориентацией по S-кривой (z от 0 до 40) — V = A·40 (Кавальери).
+            // A — по формуле Грина квадратурой Гаусса (у многочлена точно). Мутация P3D_SWEEPBEZIER=0 — не точно (ловится).
+            var fails = new List<string>();
+            static Vector3d P(double x, double y) => new(x, y, 0);
+            var lens = new ICurve3[] { new BezierCurve3(new[] { P(2, 0), P(1, 1.5), P(-1, 1.5), P(-2, 0) }), new BezierCurve3(new[] { P(-2, 0), P(-1, -1.5), P(1, -1.5), P(2, 0) }) };
+            var dee = new ICurve3[] { new LineCurve3(P(-2, -1), P(2, -1)), new BezierCurve3(new[] { P(2, -1), P(2, 3), P(-2, 3), P(-2, -1) }) };
+            double AreaOf(ICurve3[] loop)
+            {
+                double[] gx = { -0.7745966692414834, 0, 0.7745966692414834 }, gw = { 5.0 / 9, 8.0 / 9, 5.0 / 9 };
+                double a = 0;
+                // 64 равных кусков по параметру (узлы сплайна 0.5 — на границе кусков): Гаусс 3 точки точен на каждом
+                foreach (var c in loop)
+                    for (int m = 0; m < 64; m++)
+                        for (int q = 0; q < 3; q++)
+                        {
+                            double ha = (c.T1 - c.T0) / 64, t = c.T0 + ha * (m + 0.5 + 0.5 * gx[q]), h = 1e-7 * (c.T1 - c.T0);
+                            var p = c.PointAt(t); var d = (c.PointAt(t + h) - c.PointAt(t - h)) / (2 * h);
+                            a += gw[q] * 0.5 * ha * 0.5 * (p.X * d.Y - p.Y * d.X);
+                        }
+                return Math.Abs(a);
+            }
+            double LenOf(ICurve3 c)
+            {
+                double[] gx = { -0.9061798459386640, -0.5384693101056831, 0, 0.5384693101056831, 0.9061798459386640 }, gw = { 0.2369268850561891, 0.4786286704993665, 0.5688888888888889, 0.4786286704993665, 0.2369268850561891 };
+                double sum = 0; int n = 2000;
+                for (int i = 0; i < n; i++)
+                {
+                    double a = c.T0 + (c.T1 - c.T0) * i / n, b = c.T0 + (c.T1 - c.T0) * (i + 1) / n;
+                    for (int q = 0; q < 5; q++) { double t = (a + b) / 2 + (b - a) / 2 * gx[q], h = 1e-6 * (c.T1 - c.T0); sum += gw[q] * (b - a) / 2 * (c.PointAt(t + h) - c.PointAt(t - h)).Length / (2 * h); }
+                }
+                return sum;
+            }
+            var S = new BezierCurve3(new[] { new Vector3d(0, 0, 0), new Vector3d(0, 0, 20), new Vector3d(20, 0, 20), new Vector3d(20, 0, 40) });
+            var S3 = new BezierCurve3(new[] { new Vector3d(0, 0, 0), new Vector3d(0, 0, 15), new Vector3d(10, 12, 25), new Vector3d(25, 5, 30), new Vector3d(30, 20, 45) });
+            var cases = new (string Name, ICurve3[] Loop, ICurve3 Path, double Twist, bool Keep, Func<double, double> Want)[]
+            {
+                ("lens × bezier S", lens, S, 0, false, a => a * LenOf(S)),
+                ("lens × bezier 3D", lens, S3, 0, false, a => a * LenOf(S3)),
+                ("lens × bezier S, twist 180°", lens, S, 180, false, a => a * LenOf(S)),
+                ("D × bezier S, kept orientation", dee, S, 0, true, a => a * 40),
+                // сплайн без весов (5 опорных точек, степень 3, два куска) — разложение на куски Безье; «капля» над отрезком
+                ("spline drop × bezier S, kept orientation", new ICurve3[] { new LineCurve3(P(-2, -1), P(2, -1)), new SplineCurve3(new[] { P(2, -1), P(3, 2), P(0, 4), P(-3, 2), P(-2, -1) }, 3) }, S, 0, true, a => a * 40),
+            };
+            foreach (var (name, loop, path, tw, keep, want) in cases)
+            {
+                long c0 = DirectRound.ExactSweeps;
+                try
+                {
+                    var prof = ProfileBuilder.Build(Frame3.XY, loop);
+                    var b = SweepOp.Build(prof, path, 1, tw, keep);
+                    double v = AnalyticVolume.Of(b) ?? double.NaN, w = want(AreaOf(loop));
+                    Console.WriteLine($"  {name}: V {v:R} want {w:R} ({(v - w) / w:E1}) {b.Guarantee}, {b.Faces.Count()} faces");
+                    if (DirectRound.ExactSweeps == c0) fails.Add($"{name}: not exact");
+                    if (b.Guarantee != GuaranteeLevel.ExactAnalytic || !SolidValidator.Validate(b).IsValid) fails.Add($"{name}: {b.Guarantee} {SolidValidator.Validate(b).Summary()}");
+                    if (!(Math.Abs(v - w) <= 1e-8 * w)) fails.Add($"{name}: V {v:R} vs {w:R}");
+                    var ws = new List<string>(); var sw = new StringWriter();
+                    if (!Parametric3D.Kernel.Export.StepExact.Write(sw, new[] { b }, "sweep", ws)) fails.Add($"{name}: no exact STEP ({string.Join(" | ", ws.Take(2))})");
+                }
+                catch (Exception ex) { fails.Add($"{name}: {ex.GetType().Name} {ex.Message}"); }
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
+}

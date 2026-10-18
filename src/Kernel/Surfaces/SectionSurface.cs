@@ -16,17 +16,29 @@ public readonly struct SweepSection
     public readonly Vector3d A, B;                 // отрезок
     public readonly Vector3d C, E1, E2;            // дуга: C + (E1·cos φv + E2·sin φv)·R
     public readonly double R, Phi;
+    /// <summary>m.s1: звено-кривая Безье — опорные точки (A, B — концы); null — отрезок или дуга.</summary>
+    public readonly Vector3d[]? Q;
+    public bool IsBezier => Q != null;
+    /// <summary>Отрезок (не дуга и не кривая Безье).</summary>
+    public bool IsLine => !IsArc && Q == null;
 
-    private SweepSection(bool arc, Vector3d a, Vector3d b, Vector3d c, Vector3d e1, Vector3d e2, double r, double phi)
-    { IsArc = arc; A = a; B = b; C = c; E1 = e1; E2 = e2; R = r; Phi = phi; }
+    private SweepSection(bool arc, Vector3d a, Vector3d b, Vector3d c, Vector3d e1, Vector3d e2, double r, double phi, Vector3d[]? q = null)
+    { IsArc = arc; A = a; B = b; C = c; E1 = e1; E2 = e2; R = r; Phi = phi; Q = q; }
 
     public static SweepSection Line(Vector3d a, Vector3d b) => new(false, a, b, default, default, default, 0, 0);
+
+    /// <summary>Сечение — кривая Безье по опорным точкам (степень = число точек − 1).</summary>
+    public static SweepSection Bezier(Vector3d[] q) => new(false, q[0], q[^1], default, default, default, 0, 0, q);
+
+    /// <summary>То же сечение под отображением точек (у кривой Безье — опорные точки; аффинное отображение точно).</summary>
+    public SweepSection MapBezier(Func<Vector3d, Vector3d> f) => Bezier(Q!.Select(f).ToArray());
 
     public static SweepSection Arc(Vector3d centre, Vector3d e1, Vector3d e2, double r, double phi)
         => new(true, default, default, centre, e1, e2, r, phi);
 
     public Vector3d Point(double v)
     {
+        if (Q != null) { var w = (Vector3d[])Q.Clone(); for (int k = w.Length - 1; k > 0; k--) for (int i = 0; i < k; i++) w[i] = w[i] * (1 - v) + w[i + 1] * v; return w[0]; }
         if (!IsArc) return A + (B - A) * v;
         double t = Phi * v;
         return C + (E1 * Math.Cos(t) + E2 * Math.Sin(t)) * R;
@@ -35,13 +47,29 @@ public readonly struct SweepSection
     /// <summary>Производная по v (не единичная).</summary>
     public Vector3d Deriv(double v)
     {
+        if (Q != null)
+        {
+            int n = Q.Length - 1; if (n == 0) return Vector3d.Zero;
+            var w = new Vector3d[n]; for (int i = 0; i < n; i++) w[i] = (Q[i + 1] - Q[i]) * n;
+            for (int k = n - 1; k > 0; k--) for (int i = 0; i < k; i++) w[i] = w[i] * (1 - v) + w[i + 1] * v;
+            return w[0];
+        }
         if (!IsArc) return B - A;
         double t = Phi * v;
         return (E2 * Math.Cos(t) - E1 * Math.Sin(t)) * (R * Phi);
     }
 
     public SweepSection Shifted(Vector3d by) =>
-        IsArc ? Arc(C + by, E1, E2, R, Phi) : Line(A + by, B + by);
+        Q != null ? MapBezier(p => p + by) : IsArc ? Arc(C + by, E1, E2, R, Phi) : Line(A + by, B + by);
+
+    /// <summary>Покомпонентная смесь опорных точек кривых Безье одной степени (null — сечения не такие).</summary>
+    internal static SweepSection? BezierMix(SweepSection[] s, Func<Vector3d[], Vector3d> mix)
+    {
+        if (s.Any(x => x.Q == null || x.Q.Length != s[0].Q!.Length)) return null;
+        var q = new Vector3d[s[0].Q!.Length];
+        for (int i = 0; i < q.Length; i++) q[i] = mix(s.Select(x => x.Q![i]).ToArray());
+        return Bezier(q);
+    }
 
     /// <summary>Кубическая интерполяция Катмулла — Рома между s1 и s2 (t ∈ [0, 1]).</summary>
     public static SweepSection CatmullRom(SweepSection s0, SweepSection s1, SweepSection s2, SweepSection s3, double t)
@@ -56,6 +84,7 @@ public readonly struct SweepSection
             double t2 = t * t, t3 = t2 * t;
             return (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (3 * b - a - 3 * c + d) * t3) * 0.5;
         }
+        if (BezierMix(new[] { s0, s1, s2, s3 }, p => V(p[0], p[1], p[2], p[3], t)) is { } bz) return bz;
         if (s1.IsArc && s0.IsArc && s2.IsArc && s3.IsArc)
         {
             Vector3d e1 = V(s0.E1, s1.E1, s2.E1, s3.E1, t).Normalized();
@@ -63,7 +92,7 @@ public readonly struct SweepSection
             e2 = (e2 - e1 * Vector3d.Dot(e2, e1)).Normalized();
             return Arc(V(s0.C, s1.C, s2.C, s3.C, t), e1, e2, D(s0.R, s1.R, s2.R, s3.R, t), D(s0.Phi, s1.Phi, s2.Phi, s3.Phi, t));
         }
-        if (!s1.IsArc && !s0.IsArc && !s2.IsArc && !s3.IsArc)
+        if (s1.IsLine && s0.IsLine && s2.IsLine && s3.IsLine)
             return Line(V(s0.A, s1.A, s2.A, s3.A, t), V(s0.B, s1.B, s2.B, s3.B, t));
         return t < 0.5 ? s1 : s2;
     }
@@ -167,7 +196,15 @@ public sealed class SectionSurface : ISurface3
             // Дуга между пробами выпирает не больше чем на R·(1 − cos(Δ/2)).
             double pad = 1e-9;
             foreach (var sec in new[] { _s[i], _s[(i + 1) % _s.Length] })
-                if (sec.IsArc) pad = Math.Max(pad, sec.R * (1 - Math.Cos(Math.Abs(sec.Phi) * (1 + 2 * VReach) / 32)));
+                if (sec.IsBezier)
+                {
+                    // кривая Безье между пробами (шаг dv = 1/8 по продолжению): отход хорды ≤ dv²/8 · max|P''| (вторая производная —
+                    // по пробам с запасом 2)
+                    double d2 = 0, hv = 1e-3;
+                    for (int k = 0; k <= 32; k++) { double v = -VReach + (1 + 2 * VReach) * k / 32.0; d2 = Math.Max(d2, ((sec.Deriv(v + hv) - sec.Deriv(v - hv)) / (2 * hv)).Length); }
+                    double dv = (1 + 2 * VReach) / 16; pad = Math.Max(pad, 2 * d2 * dv * dv / 8);
+                }
+                else if (sec.IsArc) pad = Math.Max(pad, sec.R * (1 - Math.Cos(Math.Abs(sec.Phi) * (1 + 2 * VReach) / 32)));
             _lo[i] = lo - new Vector3d(pad); _hi[i] = hi + new Vector3d(pad);
         }
         _planar = ComputePlanar();
@@ -238,9 +275,10 @@ public sealed class SectionSurface : ISurface3
         double k = steps, c1 = -k, c2 = k * (k + 1) / 2;
         Vector3d V(Vector3d pa, Vector3d pb, Vector3d pc) => pa + (pb - pa) * c1 + (pa - pb * 2 + pc) * c2;
         double D(double pa, double pb, double pc) => pa + (pb - pa) * c1 + (pa - 2 * pb + pc) * c2;
+        if (SweepSection.BezierMix(new[] { a, b, c }, p => V(p[0], p[1], p[2])) is { } bz) return bz;
         if (a.IsArc && b.IsArc && c.IsArc)
             return SweepSection.Arc(V(a.C, b.C, c.C), V(a.E1, b.E1, c.E1).Normalized(), V(a.E2, b.E2, c.E2).Normalized(), D(a.R, b.R, c.R), D(a.Phi, b.Phi, c.Phi));
-        if (!a.IsArc && !b.IsArc && !c.IsArc) return SweepSection.Line(V(a.A, b.A, c.A), V(a.B, b.B, c.B));
+        if (a.IsLine && b.IsLine && c.IsLine) return SweepSection.Line(V(a.A, b.A, c.A), V(a.B, b.B, c.B));
         return Extrap(a, b, steps);
     }
 
@@ -248,10 +286,11 @@ public sealed class SectionSurface : ISurface3
     {
         // a + (a − b)·steps, покомпонентно.
         double k = steps;
+        if (SweepSection.BezierMix(new[] { a, b }, p => p[0] + (p[0] - p[1]) * k) is { } bz) return bz;
         if (a.IsArc && b.IsArc)
             return SweepSection.Arc(a.C + (a.C - b.C) * k, (a.E1 + (a.E1 - b.E1) * k).Normalized(),
                                     (a.E2 + (a.E2 - b.E2) * k).Normalized(), a.R + (a.R - b.R) * k, a.Phi + (a.Phi - b.Phi) * k);
-        if (!a.IsArc && !b.IsArc) return SweepSection.Line(a.A + (a.A - b.A) * k, a.B + (a.B - b.B) * k);
+        if (a.IsLine && b.IsLine) return SweepSection.Line(a.A + (a.A - b.A) * k, a.B + (a.B - b.B) * k);
         return a;
     }
 
@@ -722,7 +761,7 @@ public sealed class SectionSurface : ISurface3
     {
         if (_s.Any(x => x.IsArc)) return false;
         var pts = new List<Vector3d>();
-        foreach (var x in _s) { pts.Add(x.A); pts.Add(x.B); }
+        foreach (var x in _s) { if (x.Q != null) pts.AddRange(x.Q); else { pts.Add(x.A); pts.Add(x.B); } }
 
         Vector3d o = pts[0];
         Vector3d far = pts.OrderByDescending(q => (q - o).LengthSquared).First();
@@ -754,6 +793,7 @@ public sealed class SectionSurface : ISurface3
         int nv = 1;
         foreach (var x in _s)
             if (x.IsArc) nv = Math.Max(nv, (int)Math.Ceiling(Math.Abs(x.Phi) / Core.Tol.ChordAngle - 1e-9));
+            else if (x.IsBezier) nv = Math.Max(nv, 12 * (x.Q!.Length - 1));
         int nu = Strips;
         int start = mb.VertexCount;
         for (int i = 0; i <= nu; i++)

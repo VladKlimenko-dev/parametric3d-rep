@@ -174,6 +174,7 @@ public static class TransformOp
 
     private static SweepSection Section(SweepSection s, Xform x)
     {
+        if (s.IsBezier) return s.MapBezier(x.Point);
         if (!s.IsArc) return SweepSection.Line(x.Point(s.A), x.Point(s.B));
         Vector3d e1 = x.Direction(s.E1).Normalized();
         Vector3d e2 = x.Direction(s.E2).Normalized();
