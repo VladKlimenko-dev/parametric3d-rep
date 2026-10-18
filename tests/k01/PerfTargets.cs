@@ -54,7 +54,9 @@ static partial class Program
             p.MarkDirtyFrom(p.Features[0]);
             var sw = Stopwatch.StartNew(); p.Rebuild(null); double full = sw.Elapsed.TotalMilliseconds;
             Emit(new { kind = "holes100", fullMs = full, errors = p.Features.Count(f => f.Error != null), faces = p.Bodies.Sum(b => b.Faces.Count()) });
+            IoTimes(Emit, Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outPath))!, "io"), "holes100", p.Bodies.ToList());
         }
+        { var p = RealisticPart(1, 40, out _); p.Rebuild(null); IoTimes(Emit, Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outPath))!, "io"), "part1", p.Bodies.ToList()); }
         {
             var p = RealisticPart(7, 40, out _);
             var last = p.Features[^1]; var mid = p.Features[p.Features.Count / 2];
@@ -71,6 +73,41 @@ static partial class Program
 
 static partial class Program
 {
+    /// <summary>
+    /// m.v2: ИМПОРТ/ЭКСПОРТ — ВРЕМЯ И ПАМЯТЬ. Точный STEP (запись, чтение обратно с проверкой объёма), IGES (запись, чтение),
+    /// STL (разметка + двоичная запись); медиана из 3, выделения на чтение STEP. Файлы STEP — в каталог io (их же читает и пишет
+    /// OpenCascade: tools/occt_io_time.py — для сравнения в perf_targets.py).
+    /// </summary>
+    static void IoTimes(Action<object> emit, string dir, string name, List<Parametric3D.Kernel.Topology.TSolid> bodies)
+    {
+        Directory.CreateDirectory(dir);
+        static double Med(List<double> v) { var s = v.OrderBy(x => x).ToList(); return s[s.Count / 2]; }
+        var sw = new Stopwatch(); var tW = new List<double>(); var tR = new List<double>(); var tIw = new List<double>(); var tIr = new List<double>(); var tS = new List<double>();
+        string step = ""; string iges = ""; int back = 0; double vIn = bodies.Sum(OpVolume), vBack = double.NaN; double allocMb = 0;
+        for (int i = 0; i < 3; i++)
+        {
+            sw.Restart(); var tw = new StringWriter(); bool ok = Parametric3D.Kernel.Export.StepExact.Write(tw, bodies, name, new List<string>()); tW.Add(sw.Elapsed.TotalMilliseconds);
+            if (!ok) { emit(new { kind = "io", name, error = "no exact STEP" }); return; }
+            step = tw.ToString();
+            GC.Collect(); long a0 = GC.GetTotalAllocatedBytes(true);
+            sw.Restart(); var rb = Parametric3D.Kernel.Export.StepImport.ReadExactSolids(step); tR.Add(sw.Elapsed.TotalMilliseconds);
+            allocMb = (GC.GetTotalAllocatedBytes(true) - a0) / 1048576.0;
+            back = rb.Count; vBack = rb.Sum(OpVolume);
+            sw.Restart(); iges = Parametric3D.Kernel.Export.IgesSolid.Write(bodies); tIw.Add(sw.Elapsed.TotalMilliseconds);
+            sw.Restart(); Parametric3D.Kernel.Export.IgesImport.Read(iges); tIr.Add(sw.Elapsed.TotalMilliseconds);
+            sw.Restart();
+            var tris = Parametric3D.Kernel.Export.MeshExport.Triangles(bodies);
+            using (var ms = new MemoryStream()) Parametric3D.Kernel.Export.MeshExport.WriteStlBinary(ms, tris);
+            tS.Add(sw.Elapsed.TotalMilliseconds);
+        }
+        File.WriteAllText(Path.Combine(dir, name + ".step"), step);
+        static double F(double x) => double.IsFinite(x) ? x : -1;      // JSON: не число → −1
+        Console.WriteLine($"io {name}: volume in {vIn:R}, back {vBack:R} ({back} bodies)");
+        vIn = F(vIn); vBack = F(vBack);
+        emit(new { kind = "io", name, faces = bodies.Sum(b => b.Faces.Count()), stepKb = step.Length / 1024.0, stepWriteMs = Med(tW), stepReadMs = Med(tR), stepReadAllocMb = allocMb,
+                   bodiesBack = back, volumeIn = vIn, volumeBack = vBack, igesWriteMs = Med(tIw), igesReadMs = Med(tIr), stlMs = Med(tS) });
+    }
+
     /// <summary>Разбор g.13: профиль предпросмотра правки последней операции и полного перестроения детали (PERFSEED).</summary>
     static void PerfProfile()
     {

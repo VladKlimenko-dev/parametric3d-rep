@@ -22,6 +22,25 @@ if parts:
     target('правка средней операции, макс.', max(r['editMidMs'] for r in parts), 1000, 'мс')
     target('полное перестроение детали ≤ 25 операций, макс.', max(r['fullMs'] for r in parts), 2000, 'мс')
     target('выделения памяти на полное перестроение, макс.', max(r['allocMb'] for r in parts), 500, 'МБ')
+# m.v2: импорт/экспорт (STEP точный, IGES, STL) — деталь со 100 отверстиями и деталь K08; сравнение чтения/записи STEP с
+# OpenCascade на тех же файлах (io/occt_io.tsv, tools/occt_io_time.py)
+occio = {}
+pio = os.path.join(out, 'io', 'occt_io.tsv')
+if os.path.exists(pio):
+    for l in open(pio):
+        f = l.rstrip('\n').split('\t')
+        if len(f) >= 3: occio[f[0]] = (float(f[1]), float(f[2]))
+for r in perf:
+    if r['kind'] != 'io' or 'error' in r: continue
+    n = r['name']
+    target(f'{n}: экспорт точного STEP', r['stepWriteMs'], 2000, 'мс')
+    target(f'{n}: импорт точного STEP (объём сходится)', r['stepReadMs'] if r['volumeIn'] > 0 and abs(r['volumeBack'] - r['volumeIn']) <= 1e-6 * abs(r['volumeIn']) else None, 3000, 'мс')
+    target(f'{n}: выделения памяти на импорт STEP', r['stepReadAllocMb'], 500, 'МБ')
+    target(f'{n}: экспорт сетки STL (разметка + запись)', r['stlMs'], 3000, 'мс')
+    print(f"справка {n}: STEP {r['stepKb']:.0f} КБ, граней {r['faces']}; IGES запись {r['igesWriteMs']:.0f} мс, чтение {r['igesReadMs']:.0f} мс; STL {r['stlMs']:.0f} мс")
+    if n in occio:
+        print(f"справка {n}: OpenCascade чтение STEP {occio[n][0]:.0f} мс, запись {occio[n][1]:.0f} мс; наши — {r['stepReadMs']:.0f} и {r['stepWriteMs']:.0f} мс")
+        target(f'{n}: импорт STEP / OpenCascade', r['stepReadMs'] / max(occio[n][0], 1e-3), 5, '×')
 for r in perf:
     if r['kind'] == 'holes100': target('деталь со 100 отверстиями, полное перестроение', r['fullMs'], 3000, 'мс')
     if r['kind'] == 'session': target('долгая сессия (200 правок): рост управляемой памяти', r['growthMb'], 50, 'МБ')

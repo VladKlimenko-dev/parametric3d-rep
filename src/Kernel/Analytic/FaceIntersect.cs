@@ -27,6 +27,10 @@ public static class FaceIntersect
         public readonly List<Piece> Pieces = new();
         /// <summary>KRN-04: события не согласуются с классификацией интервалов (пропущенное событие) — отказ.</summary>
         public string? Unresolved;
+        /// <summary>m.b3: точки касания поверхностей (касание в точке: шар × плоскость, шар × шар).</summary>
+        public readonly List<Vector3d> TangentPoints = new();
+        /// <summary>m.b3: кривые касания (окружность касания соосных тел: тор или шар на плоскости, шар в цилиндре) — разрез ли это.</summary>
+        public readonly List<ICurve3> TangentCurves = new();
         public override string ToString() => $"{Kind}: {Pieces.Count} piece(s)";
     }
 
@@ -139,7 +143,8 @@ public static class FaceIntersect
         using (Diagnostics.Prof.Time("пары: SSI")) ssi = Ssi.Intersect(a.Shape, b.Shape, centre, radius);
         if (ssi.Uncertified != null) { res.Kind = Kind.Unresolved; res.Unresolved = ssi.Uncertified; return res; }
         if (ssi.Kind == Ssi.Kind.Coincident) { res.Kind = Kind.Coincident; return res; }
-        if (ssi.Kind == Ssi.Kind.Tangent) { res.Kind = Kind.Tangent; return res; }
+        if (ssi.Kind == Ssi.Kind.Tangent) { res.Kind = Kind.Tangent; res.TangentPoints.AddRange(ssi.Points); return res; }
+        if (ssi.AllTangent) res.TangentCurves.AddRange(ssi.Curves);
         using (Diagnostics.Prof.Time("пары: события и обрезка")) foreach (var c in ssi.Curves) Clip(c, a, b, res);
         using (Diagnostics.Prof.Time("пары: удостоверение событий")) if (!EventCertOff && !EventsOff && res.Unresolved == null) CertifyEvents(a, b, ssi, res);
         if (Debug != null && (a.Tor || b.Tor))

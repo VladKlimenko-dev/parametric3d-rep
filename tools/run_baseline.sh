@@ -43,5 +43,6 @@ if python3 -c "import OCP" 2>/dev/null; then
 else echo "G14: SKIPPED (OCP not installed: pip install cadquery-ocp)"; fi
 # g.13 / m.v1 / m.v2: замеры по целям пользователя (один процесс, после всех наборов) и сравнение с целями
 timeout 1800 "$OUT/k01/K01Checks" perftargets "$OUT/perf.jsonl" > "$OUT/perf_run.log" 2>&1
+python3 -c "import OCP" 2>/dev/null && timeout 1200 python3 "$ROOT/tools/occt_io_time.py" "$OUT/io" "$OUT/io/occt_io.tsv" > /dev/null 2>&1
 python3 "$ROOT/tools/perf_targets.py" "$OUT" > "$OUT/perf.txt" 2>&1; echo "PERF: $(tail -1 "$OUT/perf.txt")"
 bash tools/make_manifest.sh "$OUT/k01/K01Checks"
