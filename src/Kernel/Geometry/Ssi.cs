@@ -122,6 +122,8 @@ public static class Ssi
         public Kind Kind;
         public readonly List<ICurve3> Curves = new();
         public readonly List<Vector3d> Points = new();     // касание в точке
+        /// <summary>m.b3: все кривые — касание (кратный корень профилей соосных тел: окружность касания), а не пересечение.</summary>
+        public bool AllTangent;
         /// <summary>g.05: прослеживание не удостоверено (непояснённая ячейка исключения по Липшицу) — причина.</summary>
         public string? Uncertified;
         public override string ToString() => $"{Kind}: {Curves.Count} curve(s) [{string.Join(", ", Curves.Select(c => c.GetType().Name))}], {Points.Count} point(s)";
@@ -684,13 +686,13 @@ public static class Ssi
         var pa = ProfileOf(a, o, w); var pb = ProfileOf(b, o, w);
         if (pa == null || pb == null) return null;
         var pts = new List<Vector2d>();
-        bool coincide = false;
+        bool coincide = false, tangent = false;
         switch (pa, pb)
         {
             case (PLine l1, PLine l2): coincide = LineLine(l1, l2, pts); break;
-            case (PLine l, PCircle c): LineCircle(l, c, pts); break;
-            case (PCircle c, PLine l): LineCircle(l, c, pts); break;
-            case (PCircle c1, PCircle c2): coincide = CircleCircle(c1, c2, pts); break;
+            case (PLine l, PCircle c): tangent = LineCircle(l, c, pts); break;
+            case (PCircle c, PLine l): tangent = LineCircle(l, c, pts); break;
+            case (PCircle c1, PCircle c2): coincide = CircleCircle(c1, c2, pts, out tangent); break;
         }
         var r = new Result();
         if (coincide) { r.Kind = Kind.Coincident; return r; }
@@ -702,6 +704,7 @@ public static class Ssi
             r.Curves.Add(new ArcCurve3(new Frame3(centre, frame.U, frame.V), q.X, 0, 2 * Math.PI));
         }
         r.Kind = r.Curves.Count > 0 ? Kind.Curves : r.Points.Count > 0 ? Kind.Tangent : Kind.Empty;
+        r.AllTangent = tangent && r.Curves.Count > 0;
         return r;
     }
 
@@ -715,18 +718,21 @@ public static class Ssi
         return false;
     }
 
-    static void LineCircle(PLine l, PCircle c, List<Vector2d> pts)
+    /// <returns>Касание (кратный корень): одна точка.</returns>
+    static bool LineCircle(PLine l, PCircle c, List<Vector2d> pts)
     {
         var d = l.D.Normalized(); var f = l.P - c.C;
         double bq = Vector2d.Dot(f, d), cq = f.LengthSquared - c.R * c.R, disc = bq * bq - cq;
-        if (disc < -1e-12) return;
+        if (disc < -1e-12) return false;
         double sq = Math.Sqrt(Math.Max(0, disc));
         pts.Add(l.P + d * (-bq - sq));
         if (sq > 1e-12) pts.Add(l.P + d * (-bq + sq));
+        return sq <= 1e-12;
     }
 
-    static bool CircleCircle(PCircle a, PCircle b, List<Vector2d> pts)
+    static bool CircleCircle(PCircle a, PCircle b, List<Vector2d> pts, out bool tangent)
     {
+        tangent = false;
         var d = b.C - a.C; double L = d.Length;
         if (L < 1e-12) return Math.Abs(a.R - b.R) < 1e-12;
         if (L > a.R + b.R + 1e-12 || L < Math.Abs(a.R - b.R) - 1e-12) return false;
@@ -735,6 +741,7 @@ public static class Ssi
         double y = Math.Sqrt(Math.Max(0, y2));
         pts.Add(a.C + n * x + m * y);
         if (y > 1e-12) pts.Add(a.C + n * x - m * y);
+        tangent = y <= 1e-12;
         return false;
     }
 

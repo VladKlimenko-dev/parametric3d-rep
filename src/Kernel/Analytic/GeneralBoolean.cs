@@ -322,6 +322,13 @@ public static class GeneralBoolean
                     // касание в ТОЧКЕ ничего не делит: сфера × плоскость, сфера × сфера; плоскость ⟂ оси конуса через его
                     // вершину (точка — вершина)
                     if (AllowTangentAlongEdge && (x.Sph || y.Sph) && !(x.Cyl || y.Cyl)) continue;
+                    // m.b3: КАСАНИЕ В ТОЧКЕ ВНУТРИ ГРАНЕЙ (шар на плоскости, шар в шаре; снаружи и изнутри) — разреза нет: точка
+                    // поверхности не делит ни одну грань. Безопасно, если точка не у границы ни одной из граней (там касание
+                    // встречается с рёбрами — своё событие) или вне одной из граней (касания нет вовсе). Тела с касанием —
+                    // отдельные оболочки (снаружи) или полость, касающаяся грани в точке (изнутри). Мутация P3D_POINTTOUCH=0.
+                    if (!PointTouchOff && (x.Sph || y.Sph) && !(x.Cyl || y.Cyl || x.Cone || y.Cone || x.Tor || y.Tor || x.Band || y.Band || x.Param || y.Param)
+                        && r.TangentPoints.Count > 0 && r.TangentPoints.All(tp => PointTouchClear(tp, x) && PointTouchClear(tp, y) || x.Contains(tp) == false || y.Contains(tp) == false))
+                    { Interlocked.Increment(ref PointTouches); continue; }
                     if (AllowTangentAlongEdge && (x.Cone ^ y.Cone) && !(x.Cone ? y : x).Cyl && !(x.Cone ? y : x).Sph)
                     {
                         var kn = x.Cone ? x : y; var pl = x.Cone ? y : x;
@@ -340,6 +347,13 @@ public static class GeneralBoolean
                     why = onEdge ? "tangent surfaces along an edge (not yet supported)" : $"tangent contact inside both faces (not supported): {Kind(x)} × {Kind(y)}";
                     return null;
                 }
+                // m.b3: КАСАНИЕ ПО ОКРУЖНОСТИ (тор или шар на плоскости, шар в цилиндре того же радиуса — кратный корень профилей
+                // соосных тел): поверхность по одну сторону от другой, окружность касания ничего не делит. Если каждая окружность
+                // внутри обеих граней (вдали от границ) или вне одной из них — разреза нет (тела — отдельные оболочки или полость,
+                // касающаяся грани по окружности). Иначе — как прежде. Мутация P3D_CIRCLETOUCH=0.
+                if (!CircleTouchOff && r.TangentCurves.Count > 0 && !AllowTangentAlongEdge
+                    && r.TangentCurves.All(c => CurveTouchClear(c, x, y)))
+                { Interlocked.Increment(ref CircleTouches); continue; }
                 // Кусок, лежащий НА ГРАНИЦЕ грани (соединение «на ус»: пересечение цилиндров — в плоскости среза, совпадает с
                 // эллипсом-границей), её не делит — для неё отбрасывается (для другой грани может быть настоящим разрезом).
                 foreach (var p in r.Pieces)
@@ -1434,6 +1448,34 @@ public static class GeneralBoolean
     /// Касание плоскости с цилиндром (или параллельных цилиндров) идёт по образующей; безопасно, если каждая её точка,
     /// лежащая внутри обеих граней, лежит на границе хотя бы одной из них. Прочие касания — небезопасны.
     /// </summary>
+    static readonly bool PointTouchOff = Environment.GetEnvironmentVariable("P3D_POINTTOUCH") == "0";
+    /// <summary>m.b3: касаний в точке, пропущенных разбором (счётчик).</summary>
+    public static long PointTouches;
+    /// <summary>Точка касания внутри грани и далеко от её границы (запас — 1e-4 размера поверхности и допуск операции).</summary>
+    static bool PointTouchClear(Vector3d p, AnalyticFace f)
+    {
+        if (f.Contains(p) == false) return false;
+        double margin = Math.Max(100 * TolV, f.Sph ? 1e-4 * f.R : 1e-6);
+        return f.BoundaryDistance(p) > margin;
+    }
+
+    static readonly bool CircleTouchOff = Environment.GetEnvironmentVariable("P3D_CIRCLETOUCH") == "0";
+    /// <summary>m.b3: касаний по окружности, пропущенных разбором (счётчик).</summary>
+    public static long CircleTouches;
+    /// <summary>Кривая касания целиком внутри обеих граней вдали от границ — или целиком вне одной из них.</summary>
+    static bool CurveTouchClear(ICurve3 c, AnalyticFace x, AnalyticFace y)
+    {
+        bool allClear = true, outX = true, outY = true;
+        for (int i = 0; i < 64; i++)
+        {
+            var p = c.PointAt(c.T0 + (c.T1 - c.T0) * (i + 0.5) / 64);
+            if (!(PointTouchClear(p, x) && PointTouchClear(p, y))) allClear = false;
+            if (x.Contains(p) != false) outX = false;
+            if (y.Contains(p) != false) outY = false;
+        }
+        return allClear || outX || outY;
+    }
+
     static bool TangentOnBoundary(AnalyticFace x, AnalyticFace y)
     {
         if (x.Cone || y.Cone || x.Sph || y.Sph) return false;               // касания конусов и сфер — не разбираются
