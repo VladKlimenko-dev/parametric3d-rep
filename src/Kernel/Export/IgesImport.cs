@@ -16,6 +16,8 @@ namespace Parametric3D.Kernel.Export;
 /// </summary>
 public static class IgesImport
 {
+    internal static readonly bool Iges122Old = Environment.GetEnvironmentVariable("P3D_IGES122") == "old";
+    internal static readonly bool Iges120Old = Environment.GetEnvironmentVariable("P3D_IGES120") == "old";
     /// <summary>Прочитать тело. Возвращает null, если обрезанных поверхностей в файле нет.</summary>
     public static TSolid? Read(string text, List<string>? warnings = null)
     {
@@ -211,7 +213,9 @@ public static class IgesImport
             if (baseEntity == null) return null;
 
             var c = Curve(baseEntity.Value, at);
-            return c == null ? null : new ExtrudedSurface(c, ex.Dir);
+            // m.x2: по описанию IGES у 122 — КОНЕЦ образующей (точка), а не вектор: перенос = конец − начало направляющей.
+            // Прежде вектор — так и писали, и OpenCascade читал наш цилиндр косым (площадь ≈ 0). P3D_IGES122=old — прежнее.
+            return c == null ? null : new ExtrudedSurface(c, Iges122Old ? ex.Dir : ex.Dir - c.PointAt(c.T0));
         }
 
         if (IgesParser.SplineSurface(e) is { } ns) return ns;
@@ -225,7 +229,9 @@ public static class IgesImport
             if (Curve(axisEntity.Value, at) is not LineCurve3 axisLine) return null;
             var gen = Curve(genEntity.Value, at);
             if (gen == null) return null;
-            var dir = (axisLine.B - axisLine.A);
+            // m.x2: положительный угол 120 — против часовой, если смотреть с начала оси к концу (так пишет и читает OpenCascade:
+            // ось цилиндра вокруг +Z — от (0, 0, 1) к (0, 0, 0)); прежде — наоборот. P3D_IGES120=old — прежнее.
+            var dir = Iges120Old ? (axisLine.B - axisLine.A) : (axisLine.A - axisLine.B);
             if (dir.LengthSquared < 1e-18) return null;
             return new RevolvedSurface(gen, Frame3.FromNormal(axisLine.A, dir.Normalized()), rv.A0, rv.A1);
         }
