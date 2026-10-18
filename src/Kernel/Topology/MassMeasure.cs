@@ -185,6 +185,17 @@ public static class MassMeasure
                                           (b - a) * w.Y * w.X, a + (b - a) * w.Y * w.Y, (b - a) * w.Y * w.Z,
                                           (b - a) * w.Z * w.X, (b - a) * w.Z * w.Y, a + (b - a) * w.Z * w.Z);
                     }
+                    else if (!SpindleOff && SpindleMoments(rv, arc, w, ax, out V, out c, out Sc, out var eqProbe, out var eqRadial))
+                    {
+                        // m.t3: «лимон», «яблоко» — тело между дугой и осью; наружу у точки наибольшего ρ — от оси
+                        double sg;
+                        try { sg = Vector3d.Dot(f.NormalAt(eqProbe), eqRadial) >= 0 ? 1 : -1; } catch { return null; }
+                        var yS = c - o;
+                        var SyS = new Matrix3d(Sc.M11 + V * yS.X * yS.X, Sc.M12 + V * yS.X * yS.Y, Sc.M13 + V * yS.X * yS.Z,
+                                               Sc.M21 + V * yS.Y * yS.X, Sc.M22 + V * yS.Y * yS.Y, Sc.M23 + V * yS.Y * yS.Z,
+                                               Sc.M31 + V * yS.Z * yS.X, Sc.M32 + V * yS.Z * yS.Y, Sc.M33 + V * yS.Z * yS.Z);
+                        return new[] { V, V * yS.X, V * yS.Y, V * yS.Z, SyS.M11, SyS.M22, SyS.M33, SyS.M12, SyS.M23, SyS.M13 }.Select(v => sg * v).ToArray();
+                    }
                     else return null;
                     // знак: наружная нормаль грани от центра трубки (шар — от центра) — тело внутри, иначе полость
                     var probe = rv.PointAt(new Vector2d(0.3, 0.4));
@@ -352,6 +363,50 @@ public static class MassMeasure
             nt.Add((a, ab, ca)); nt.Add((ab, b, bc)); nt.Add((ca, bc, c)); nt.Add((ab, bc, ca));
         }
         fm.T.Clear(); fm.T.AddRange(nt);
+    }
+
+    static readonly bool SpindleOff = Environment.GetEnvironmentVariable("P3D_MASSSPINDLE") == "0";
+
+    /// <summary>
+    /// m.t3: МОМЕНТЫ ТЕЛА ВРАЩЕНИЯ ОБЛАСТИ «ДУГА ОТ ОСИ ДО ОСИ» (веретенообразный тор: «лимон», «яблоко»; шар со смещённым
+    /// центром дуги). По Грину в полуплоскости (ρ, z): V = ∮πρ² dz, M_z = ∮πρ²z dz, S_zz = ∮πρ²z² dz, S_⊥ = ∮πρ⁴/4 dz —
+    /// по дуге (отрезок оси вклада не даёт); подынтегральные — тригонометрические многочлены степени ≤ 5 по углу дуги, Гаусс
+    /// по 8 точкам на 64 кусках точен до округления. Центр масс — на оси.
+    /// </summary>
+    static bool SpindleMoments(RevolvedSurface rv, ArcCurve3 arc, Vector3d w, Vector3d ax, out double V, out Vector3d c, out Matrix3d Sc, out Vector3d probe, out Vector3d radial)
+    {
+        V = 0; c = default; Sc = default; probe = default; radial = default;
+        var p0 = arc.PointAt(arc.T0) - ax; var p1 = arc.PointAt(arc.T1) - ax;
+        double R = arc.Radius, eps = 1e-9 * Math.Max(1, R);
+        if ((p0 - w * Vector3d.Dot(p0, w)).Length > eps || (p1 - w * Vector3d.Dot(p1, w)).Length > eps) return false;   // концы — на оси
+        double[] gx = { -0.9602898564975363, -0.7966664774136267, -0.5255324099163290, -0.1834346424956498, 0.1834346424956498, 0.5255324099163290, 0.7966664774136267, 0.9602898564975363 };
+        double[] gw = { 0.1012285362903763, 0.2223810344533745, 0.3137066458778873, 0.3626837833783620, 0.3626837833783620, 0.3137066458778873, 0.2223810344533745, 0.1012285362903763 };
+        double v = 0, mz = 0, szz = 0, sp = 0;
+        const int K = 64;
+        double rhoMax = -1;
+        for (int k = 0; k < K; k++)
+        {
+            double t0 = arc.T0 + (arc.T1 - arc.T0) * k / K, t1 = arc.T0 + (arc.T1 - arc.T0) * (k + 1) / K;
+            for (int q = 0; q < 8; q++)
+            {
+                double t = (t0 + t1) / 2 + (t1 - t0) / 2 * gx[q], wq = gw[q] * (t1 - t0) / 2;
+                var pt = arc.PointAt(t) - ax; double z = Vector3d.Dot(pt, w); var rr = pt - w * z; double rho = rr.Length;
+                // dz/dt — точно по кадру дуги: точка = C + R(U cos α + V sin α), α = A0 + Sweep·t
+                var F = arc.Frame; double al = arc.A0 + arc.Sweep * t;
+                double dz = Vector3d.Dot((F.V * Math.Cos(al) - F.U * Math.Sin(al)) * (R * arc.Sweep), w);
+                v += wq * Math.PI * rho * rho * dz; mz += wq * Math.PI * rho * rho * z * dz; szz += wq * Math.PI * rho * rho * z * z * dz; sp += wq * Math.PI * Math.Pow(rho, 4) / 4 * dz;
+                if (rho > rhoMax) { rhoMax = rho; probe = arc.PointAt(t); radial = rho > 0 ? rr / rho : Vector3d.UnitX; }
+            }
+        }
+        double sgn = v >= 0 ? 1 : -1; v *= sgn; mz *= sgn; szz *= sgn; sp *= sgn;
+        if (!(v > 0)) return false;
+        double zb = mz / v; V = v; c = ax + w * zb;
+        double a = sp, b = szz - v * zb * zb;                    // ⊥ оси и вдоль оси — относительно центра масс
+        Sc = new Matrix3d(a + (b - a) * w.X * w.X, (b - a) * w.X * w.Y, (b - a) * w.X * w.Z,
+                          (b - a) * w.Y * w.X, a + (b - a) * w.Y * w.Y, (b - a) * w.Y * w.Z,
+                          (b - a) * w.Z * w.X, (b - a) * w.Z * w.Y, a + (b - a) * w.Z * w.Z);
+        // кадр поворота: образующая в полуплоскости — поверхность вращения через ось rv.Axis (её точка — ax)
+        return true;
     }
 
     static double MaxDiff(Matrix3d a, Matrix3d b) =>

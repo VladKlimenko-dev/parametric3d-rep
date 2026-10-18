@@ -139,7 +139,7 @@ matrix	Геометрия	m.g5	1	Пространственные кривые	G
 matrix	Геометрия	m.g6	1	p-кривые на гранях	KRN03-PCURVES
 matrix	Топология	m.t1	1	Ориентированные полурёбра, контуры	allA/allB, loop-orientation
 matrix	Топология	m.t2	0.5	Швы периодических граней	нормализация; SurfaceDomain — нет
-matrix	Топология	m.t3	0.5	Полюса, вершина конуса	KRN03-DRILL-TIP, KRN03-SPHERE-CAP-BY-LOOP; тор, метрика — нет
+matrix	Топология	m.t3	1	Полюса, вершина конуса	вершина конуса (KRN03-DRILL-TIP), полюса шара (KRN03-SPHERE-CAP-BY-LOOP), метрика конуса (03.9, KRN02-UV-METRIC-PHYSICAL-TOLERANCE), тор — домен (03.8); 2026-10-18: полюса веретенообразного тора («лимон», «яблоко» — вращение дуги от оси до оси): тело годно, объём точно (до 5e-15; P3D_POLEWHOLE=0 ловится), массовые характеристики замкнуто (MassMeasure, Q2 с OpenCascade), точный STEP (DEGENERATE_TOROIDAL_SURFACE; 15 знаков — при 9 OpenCascade не строил повёрнутый «лимон»), G14 c66–c68; булевы над ним — многогранно, годно, тождества в границах (KRN03-TORUS-POLE-LEMON-APPLE)
 matrix	Топология	m.t4	1	Несколько оболочек, полости	KRN03-SHELL-INVARIANT-ALL-OPS, KRN03-BODIES-AND-CAVITIES
 matrix	Топология	m.t5	1	Несколько тел	KRN03-MULTIBODY-OPS, KRN03-SHELL-INVARIANT-ALL-OPS
 matrix	Boolean	m.b1	1	U/S/I плоскость/цилиндр/конус	G14, G18, K08

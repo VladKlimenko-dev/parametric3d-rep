@@ -89,7 +89,7 @@ MinFeature 1e-4, HalfSizeBox 5e5, MaxEntityTolerance 1e-5 мм) — часть �
 |---|---|---|---|---|
 | Ориентированные полурёбра, контуры | Согласованная ориентация, проверка | `TopologyConventions`, `SolidValidator` | allA/allB | Принято (корпус) |
 | Швы периодических граней | Два использования ребра, не разрез | `Classifier`, `FaceSplit` (шов исключён) | G15–G17 | Частично |
-| Полюса, вершина конуса | Законное вырождение ≠ микроребро | `SolidValidator` (degenerate/micro-edge), `UvMesher.PoleDomain` | KRN03-SHORT-EDGES, KRN03-DRILL-TIP, KRN03-SPHERE-CAP-BY-LOOP | Частично (метрика конуса, тор — нет) |
+| Полюса, вершина конуса | Законное вырождение ≠ микроребро | `SolidValidator` (degenerate/micro-edge), `UvMesher.PoleDomain`, объём и моменты целой поверхности вращения от оси до оси (`AnalyticVolume`, `MassMeasure.SpindleMoments`) | KRN03-SHORT-EDGES, KRN03-DRILL-TIP, KRN03-SPHERE-CAP-BY-LOOP, KRN02-UV-METRIC-PHYSICAL-TOLERANCE, KRN03-TORUS-POLE-LEMON-APPLE, G14 c66–c68 | Да: вершина конуса, полюса шара, метрика конуса; полюса веретенообразного тора («лимон», «яблоко») — годно, объём и моменты точно, точный STEP; булевы над ним — многогранно (годно) |
 | Несколько оболочек, полости | Внешняя/внутренние оболочки области материала | `ShellComponents` (инвариант после каждой операции детали) | KRN03-SHELL-INVARIANT-ALL-OPS, KRN03-BODIES-AND-CAVITIES | Принято (корпус) |
 | Несколько тел | Раздельные тела не смешиваются с полостями | `Part.Bodies`, `BooleanOp.EvaluateMany`, `ShellComponents.Invariant` | KRN03-MULTIBODY-OPS, KRN03-SHELL-INVARIANT-ALL-OPS | Принято (корпус) |
 

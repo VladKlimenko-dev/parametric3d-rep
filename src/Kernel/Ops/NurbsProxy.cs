@@ -67,7 +67,21 @@ public static class NurbsProxy
     }
     static readonly bool ViewOff = Environment.GetEnvironmentVariable("P3D_PROXYVIEW") == "0";
 
-    static bool Formula(TFace f) => GeometryAudit.AuthoritativeSurface(f) is SectionSurface { IsProcedural: true } or CornerPatchSurface;
+    // m.t3: грань веретенообразного тора с полюсами («лимон», «яблоко») — NURBS для булевой (точно: рациональная биквадратная
+    // поверхность вращения дуги). ВЫКЛЮЧЕНО (P3D_SPINDLEPROXY=1 — включить для разбора): разбиение целой грани без рёбер
+    // замкнутой кривой («отверстие ни в какой области») и удостоверение ветвей у полюсов пока отказывают — булева идёт
+    // многогранно, как прежде, годно.
+    static readonly bool SpindleOff = Environment.GetEnvironmentVariable("P3D_SPINDLEPROXY") != "1";
+    static bool Spindle(ISurface3? s) => !SpindleOff && s is RevolvedSurface rv && RevolvedNurbs.IsSpindle(rv);
+    /// <summary>Точка грани: начало первого полуребра; у грани без рёбер (целая поверхность) — точка середины образующей.</summary>
+    static Vector3d ProbeOf(TFace f, ISurface3? src)
+    {
+        var ce = f.Loops.SelectMany(l => l.CoEdges).FirstOrDefault();
+        if (ce != null) return ce.Start.P;
+        if (src is RevolvedSurface rv) return rv.PointAt(new Vector2d((rv.Base.T0 + rv.Base.T1) / 2, 0.37));
+        return f.Surface.PointAt(new Vector2d(0.5, 0.5));
+    }
+    static bool Formula(TFace f) => GeometryAudit.AuthoritativeSurface(f) is SectionSurface { IsProcedural: true } or CornerPatchSurface || Spindle(GeometryAudit.AuthoritativeSurface(f));
 
     public static TSolid? Of(TSolid s, out string? why)
     {
@@ -90,19 +104,19 @@ public static class NurbsProxy
             {
                 SectionSurface { IsProcedural: true } ss when Export.StepExact.BandSpan(f, ss) is { } sp => BandNurbs.Fit(ss, sp.Ua, sp.Ub, budget, 4096, nMax),
                 CornerPatchSurface cp => CornerPatchNurbs.Fit(cp, budget, 64),
+                RevolvedSurface rvs when Spindle(rvs) && RevolvedNurbs.Of(rvs) is { } rn => (rn, 0.0),
                 _ => null,
             };
-            if (src is SectionSurface or CornerPatchSurface)
+            if (src is SectionSurface or CornerPatchSurface || Spindle(src))
             {
                 if (fit == null) { why = $"face {f.Id}: no NURBS representation within {budget:E1} mm"; return null; }
                 {
-                    var probe0 = f.InteriorHint ?? f.Loops[0].CoEdges[0].Start.P;
+                    var probe0 = f.InteriorHint ?? ProbeOf(f, src);
                     var rec = new Rec { Orig = f.Surface, OrigRev = f.Reversed, Verts = f.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Start.P).ToList(), Probe = probe0, ProbeN = f.NormalAt(probe0) };
                     _faces?.TryAdd(fit.Value.S, rec);
                 }
                 // сторона: нормаль NURBS в точке грани против прежней нормали грани
-                var p = f.Loops[0].CoEdges[0].Start.P;
-                var hint = f.InteriorHint ?? p;
+                var hint = f.InteriorHint ?? ProbeOf(f, src);
                 var before = f.NormalAt(hint);
                 var ns = fit.Value.S;
                 var after = ns.NormalAt(ns.ProjectToUV(hint)) * (f.Reversed ? -1 : 1);

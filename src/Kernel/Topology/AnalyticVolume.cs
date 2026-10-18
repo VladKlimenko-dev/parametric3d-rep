@@ -1381,6 +1381,7 @@ public static class AnalyticVolume
         return area ? Math.Abs(eps.Value * sum + Htot * L) : sum + eps.Value * Htot * L;
     }
     static readonly bool TorusRestOff = Environment.GetEnvironmentVariable("P3D_TORUSREST") == "0";
+    static readonly bool PoleWholeOff = Environment.GetEnvironmentVariable("P3D_POLEWHOLE") == "0";
     private static double RevolvedIntegral(TFace f, RevolvedSurface rv, bool area = false)
     {
         // KRN-02: грань — ВСЯ поверхность вращения (нет контура или только швы: рёбра, оба раза использованные этой гранью) —
@@ -1414,7 +1415,11 @@ public static class AnalyticVolume
         // Постоянная интегрирования: H = 0 в полюсе образующей (ρ = 0 на конце), иначе форма
         // −H dθ особая в полюсе, который может лежать на грани (крышка тела вращения).
         bool pole0 = rs[0] < 1e-9, poleN = rs[N] < 1e-9;
-        if (pole0 && poleN) return double.NaN;
+        // m.t3: ВСЯ поверхность с полюсами на обоих концах образующей (шар не на оси — «лимон», «яблоко» веретенообразного тора;
+        // любая образующая от оси до оси): замкнутая поверхность — интеграл по всей образующей (отрезок оси вклада не даёт).
+        // Мутация P3D_POLEWHOLE=0 — NaN, как прежде.
+        bool poleWhole = whole && pole0 && poleN && !PoleWholeOff;
+        if (pole0 && poleN && !poleWhole) return double.NaN;
         if (poleN) { double hN = H[N]; for (int i = 0; i <= N; i++) H[i] -= hN; }
 
         // Параметр точки на образующей — через проекцию поверхности (поворот в меридиан и
@@ -1450,7 +1455,9 @@ public static class AnalyticVolume
             var U = bar.Frame.U.Normalized(); var W = bar.Frame.W.Normalized(); var V = Vector3d.Cross(W, U);
             var er = rc > 1e-12 ? radial / rc : Vector3d.Zero;
             double R = bar.Radius;
-            bool meridian = rc > 1e-12 && Math.Abs(Vector3d.Dot(W, Vector3d.Cross(er, w))) > 1 - 1e-12 && rc > R * (1 + 1e-12);
+            // m.t3: у объёма подынтегральное зависит от ρ² — формула верна и у веретенообразного тора (ρc < R: «лимон», «яблоко»);
+            // у площади (ρ|C′|) — нет, там ρc > R
+            bool meridian = rc > 1e-12 && Math.Abs(Vector3d.Dot(W, Vector3d.Cross(er, w))) > 1 - 1e-12 && (rc > R * (1 + 1e-12) || (!area && !PoleWholeOff));
             if (meridian)
             {
                 double sigma = Vector3d.Dot(Vector3d.Cross(U, V), Vector3d.Cross(er, w)) > 0 ? 1 : -1;
@@ -1473,7 +1480,7 @@ public static class AnalyticVolume
         }
         if (whole)
         {
-            if (!closedBaseEarly()) return double.NaN;
+            if (!closedBaseEarly() && !poleWhole) return double.NaN;
             double htot = exactH != null ? exactH(1) : H[N];
             // знак: на наружном экваторе (наибольший ρ образующей) наружная нормаль грани смотрит от оси — тело внутри
             int iMax = 0; for (int i = 1; i <= N; i++) if (rs[i] > rs[iMax]) iMax = i;
