@@ -78,6 +78,50 @@ static partial class Program
             Require(fails.Count == 0, string.Join("; ", fails));
         });
     }
+
+    /// <summary>
+    /// m.g4: ОБОЛОЧКА ТЕЛА СО СТЕНКАМИ ПО КРИВЫМ БЕЗЬЕ («стадион» c = 10, b = 8, вынос 8, H = 20). Сечение полости — эквидистанта
+    /// контура внутрь на t: площадь A − L·t + π·t² (точно, пока t меньше наименьшего радиуса кривизны 6). Закрытая полость —
+    /// высота H − 2t, открытый верх — H − t. Стенки смещаются точно (поверхность смещения по нормали), объём — интегралом
+    /// (до 1e-6: рёбра полости после булевой — по формуле сечения стенки; бюджет интегрирования ядра 1e-5).
+    /// </summary>
+    static void Krn07ShellBezierChecks()
+    {
+        Check("KRN07-SHELL-BEZIER-WALLS", () =>
+        {
+            var fails = new List<string>();
+            var (loop, A, L) = BezierStadium(10, 8, 8);
+            const double H = 20;
+            if (Environment.GetEnvironmentVariable("P3D_SHELLDBG") == "1") { ShellOp.ShellDebug = m => Console.WriteLine("   [shell] " + m); DirectRound.Debug = m => Console.WriteLine("   [dr] " + m); }
+            if (Environment.GetEnvironmentVariable("P3D_SHELLMESHDBG") == "1") Parametric3D.Kernel.Tess.ExactFaceMesher.TryDebug = m => Console.WriteLine("   [mesh] " + m);
+            TSolid Body() => ExtrudeOp.Build(ProfileBuilder.Build(new Frame3(Vector3d.Zero, Vector3d.UnitX, Vector3d.UnitY), loop), new Vector3d(0, 0, H));
+            foreach (var (name, t, open) in new (string, double, Vector3d[]?)[]
+            {
+                ("closed shell t = 1", 1, null), ("open top, t = 1.5", 1.5, new[] { new Vector3d(0, 0, H) }), ("open bottom, t = 2", 2, new[] { new Vector3d(0, 0, 0) }),
+            }.Where(_ => Environment.GetEnvironmentVariable("P3D_SHELLNURBSONLY") != "1"))
+            {
+                var bl = new List<TSolid> { Body() }; var w = new List<string>();
+                if (Environment.GetEnvironmentVariable("P3D_SHELLDBG") == "1")
+                {
+                    string? wy = null; var off = DirectRound.OffsetSolid(Body(), f => -t, "x", ref wy);
+                    Console.WriteLine($"     offset solid: {(off == null ? wy : $"V {AnalyticVolume.Of(off):R} want {(A - L * t + Math.PI * t * t) * (H - 2 * t):R}")}");
+                    if (off != null) foreach (var vx in off.Vertices) Console.WriteLine($"       V {vx.P.X:R} {vx.P.Y:R} {vx.P.Z:R}");
+                    if (off != null) foreach (var fc in off.Faces) Console.WriteLine($"       {GeometryAudit.AuthoritativeSurface(fc)?.GetType().Name} int {AnalyticVolume.FaceIntegral(fc)} area {AnalyticVolume.FaceArea(fc)} edges {string.Join(",", fc.Edges.Select(e => e.Curve.GetType().Name))}");
+                }
+                bool ok = ShellOp.Hollow(bl, t, open, w);
+                double cav = (A - L * t + Math.PI * t * t) * (H - (open == null ? 2 : 1) * t), want = A * H - cav;
+                var b = bl[0]; double v = AnalyticVolume.Of(b) ?? double.NaN;
+                var vr = SolidValidator.Validate(b);
+                Console.WriteLine($"  {name}: ok {ok}, V {v:R} want {want:R} ({(v - want) / want:E1}) {b.Guarantee}, {b.Faces.Count()} faces, valid {vr.IsValid} | {string.Join(" | ", w.Take(3))}");
+                if (Environment.GetEnvironmentVariable("P3D_SHELLDBG") == "1")
+                    foreach (var fc in b.Faces) Console.WriteLine($"     face {fc.Tag} {fc.Surface.GetType().Name}/{GeometryAudit.AuthoritativeSurface(fc)?.GetType().Name} int {AnalyticVolume.FaceIntegral(fc)} edges {string.Join(",", fc.Edges.Select(e => e.Curve.GetType().Name))}");
+                if (!ok) { fails.Add($"{name}: refused ({string.Join(" | ", w.Take(3))})"); continue; }
+                if (!vr.IsValid) fails.Add($"{name}: {vr.Summary()}");
+                if (!(Math.Abs(v - want) <= 1e-6 * want)) fails.Add($"{name}: V {v:R} vs {want:R}");
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
 }
 
 static partial class Program

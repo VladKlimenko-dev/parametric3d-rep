@@ -157,10 +157,46 @@ public static class AnalyticFlux
                 return Revolved(f, rv);
             case NurbsSurface ns:
                 return General(ns);
+            // m.x2: выдавливание сплайна — α = параметр сплайна, β = сдвиг вдоль Dir; P_α × P_β = B′(α) × Dir (B′ — разностью).
+            // P3D_EXTSPLINEVOL=0 — не поддержано (прежде).
+            case ExtrudedSurface { Base: SplineCurve3 or BezierCurve3 } exs when !ExtSplineOff && exs.Dir.LengthSquared > 1e-18:
+            {
+                return new Param
+                {
+                    Coords = x => { var uv = exs.ProjectToUV(x); return (uv.X, uv.Y); },
+                    Point = (a, b) => exs.PointAt(new Vector2d(a, b)),
+                    Normal = (a, b) =>
+                    {
+                        const double h = 1e-6;
+                        var bs = exs.Base; double a0 = Math.Max(bs.T0, a - h), a1 = Math.Min(bs.T1, a + h);
+                        return Vector3d.Cross((bs.PointAt(a1) - bs.PointAt(a0)) / (a1 - a0), exs.Dir);
+                    },
+                    PeriodicA = false,
+                    B0 = 0
+                };
+            }
+            // m.g4: поверхность смещения (оболочка свободных форм) — в параметрах исходной; P_α × P_β — центральными разностями
+            case OffsetSurface ofs when !OffsetVolOff:
+                return new Param
+                {
+                    Coords = x => { var uv = ofs.ProjectToUV(x); return (uv.X, uv.Y); },
+                    Point = (a, b) => ofs.PointAt(new Vector2d(a, b)),
+                    Normal = (a, b) =>
+                    {
+                        const double h = 1e-5;
+                        var su = (ofs.PointAt(new Vector2d(a + h, b)) - ofs.PointAt(new Vector2d(a - h, b))) / (2 * h);
+                        var sv = (ofs.PointAt(new Vector2d(a, b + h)) - ofs.PointAt(new Vector2d(a, b - h))) / (2 * h);
+                        return Vector3d.Cross(su, sv);
+                    },
+                    PeriodicA = false,
+                    B0 = 0
+                };
             default:
                 return null;
         }
     }
+    internal static readonly bool OffsetVolOff = Environment.GetEnvironmentVariable("P3D_OFFSETVOL") == "0";
+    internal static readonly bool ExtSplineOff = Environment.GetEnvironmentVariable("P3D_EXTSPLINEVOL") == "0";
 
     private static Param Plane(Vector3d p0, Vector3d u0, Vector3d v0)
     {

@@ -58,6 +58,8 @@ public static partial class DirectRound
         double va = d3 * d6 - d5 * d4; if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) return b + (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6)));
         double den = 1 / (va + vb + vc); return a + ab * (vb * den) + ac * (vc * den);
     }
+    static readonly bool MoveDbg = Environment.GetEnvironmentVariable("P3D_OFFSETMOVEDBG") == "1";
+    static readonly bool FreeFormOff = Environment.GetEnvironmentVariable("P3D_OFFSETFREEFORM") == "0";
     static readonly bool SectionOffOff = Environment.GetEnvironmentVariable("P3D_OFFSETSECTION") == "0";
     static readonly bool NearTanOff = Environment.GetEnvironmentVariable("P3D_OFFSETNEARTAN") == "0";
     static readonly bool AcrossOff = Environment.GetEnvironmentVariable("P3D_OFFSETACROSS") == "0";
@@ -186,6 +188,18 @@ public static partial class DirectRound
                     ns = new RevolvedSurface(new ArcCurve3(ga.Frame, R, ga.A0, ga.A1), rv.Axis, rv.A0, rv.A1); break;
                 }
             }
+            // m.g4: СТЕНКА СВОБОДНОЙ ФОРМЫ (выдавливание сплайна или кривой Безье) — поверхность смещения по нормали на ±d (та же
+            // параметризация, нормаль та же); вершины и рёбра — Ньютоном по смещённым поверхностям (Move, ProcOffset), объём —
+            // интегралом по параметрам. Годится, пока d меньше наименьшего радиуса кривизны (проверка годности тела после).
+            // P3D_OFFSETFREEFORM=0 — прежний отказ.
+            if (ns == null && !FreeFormOff && src is ExtrudedSurface { Base: SplineCurve3 or BezierCurve3 })
+            {
+                var uvp = src.ProjectToUV(probe); var nb = src.NormalAt(uvp);
+                if (nb.LengthSquared > 1e-24)
+                {
+                    ns = new OffsetSurface(src, Vector3d.Dot(nb, no) >= 0 ? d : -d);
+                }
+            }
             if (ns == null && src is SectionSurface ssf && !SectionOffOff)
             {
                 // u12b: ЛЕНТА КАТЯЩЕГОСЯ ШАРА (сечения — дуги, нормаль через центр дуги) — смещение по нормали: та же формула с
@@ -240,14 +254,15 @@ public static partial class DirectRound
                 2 => Two(ns[0], ns[1]),
                 _ => Three(ns),
             };
-            if (r == null) return null;
+            if (r == null) { if (MoveDbg) Debug?.Invoke($"move {x}: no solution of the tangent planes ({ns.Count} normals: {string.Join(" ", ns.Select(q => q.N + "/" + q.D))})"); return null; }
             // u12: КРИВАЯ ГРАНЬ В ВЕРШИНЕ — точное положение уточняется Ньютоном по смещённым поверхностям. Касательные
             // плоскости в старой точке дают положение точно лишь у плоскостей и при сдвиге вдоль нормали кривой грани; у
             // вершины «скругление — фаска — торец» (стенка наружу) точка уходит вдоль фаски, и цилиндр R + t её не нёс —
             // отказ «вершина без согласованного положения». Мутация P3D_OFFSETNEWTON=0.
+            var r0 = r;
             if (!OffsetNewtonOff && fs.Any(f => !OnSurf(newSurf[f].S, r.Value))) r = Refine(r.Value, fs);
-            if (r == null) return null;
-            foreach (var f in fs) if (!OnSurf(newSurf[f].S, r.Value)) return null;
+            if (r == null) { if (MoveDbg) Debug?.Invoke($"move {x}: refine failed from {r0}, off {string.Join(",", fs.Select(f => { var sf = newSurf[f].S; return (sf.PointAt(sf.ProjectToUV(r0!.Value)) - r0.Value).Length.ToString("E2"); }))}"); return null; }
+            foreach (var f in fs) if (!OnSurf(newSurf[f].S, r.Value)) { if (MoveDbg) Debug?.Invoke($"move {x}: final point off a surface"); return null; }
             return r;
             Vector3d? Refine(Vector3d y, IReadOnlyList<TFace> faces)
             {

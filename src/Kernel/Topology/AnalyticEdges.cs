@@ -117,6 +117,21 @@ public static class AnalyticEdges
                 warnings?.Add($"Edges: {ex.Replaced} exact intersection curve(s), {ex.VerticesSnapped} vertex(es) on the exact surface intersection.");
             }
         }
+        // m.x2: стенка-выдавливание сплайна — вершины на точное пересечение, рёбра поперёк — сдвинутым сплайном
+        {
+            bool wasValid = !Geometry.SplineWallEdges.Off && SolidValidator.ValidateBRep(solid).IsValid;
+            var vSnap = solid.Edges.SelectMany(e => new[] { e.V0, e.V1 }).Distinct().Select(v => (v, v.P, v.Tolerance)).ToList();
+            var eSnap = solid.Edges.Select(e => (e, e.Curve, e.Tolerance)).ToList();
+            int sw = Geometry.SplineWallEdges.Apply(solid);
+            if (sw > 0 && wasValid && !SolidValidator.ValidateBRep(solid).IsValid)
+            {
+                foreach (var (v, p, t) in vSnap) { v.P = p; v.Tolerance = t; }
+                foreach (var (e, c, t) in eSnap) { e.Curve = c; e.Tolerance = t; e.PolylineCache = null; }
+                warnings?.Add("Edges: spline-wall exact edges were rolled back (the body would fail the B-rep check).");
+                sw = 0;
+            }
+            if (sw > 0) { curvesReplaced = true; warnings?.Add($"Edges: {sw} spline-wall vertex(es)/edge(s) made exact."); }
+        }
         if (curvesReplaced && !Ops.BooleanOp.DeferMeshing && Ops.BooleanOp.ExactMeshing)
         {
             solid.DisplayMeshKey = null;

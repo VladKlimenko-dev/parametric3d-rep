@@ -176,7 +176,7 @@ public static class AnalyticVolume
     /// повёрнутый и срезанный бруском: отрезок + дуга), формулой вращения считалась неверно (интеграл 1487 вместо 432 —
     /// объём пересечения на 352 мм³ больше; разностное сравнение с OpenCascade). Возвращает плоскую рамку или null.
     /// </summary>
-    static (Vector3d P0, Vector3d U, Vector3d V)? FlatRevolved(ISurface3? s)
+    internal static (Vector3d P0, Vector3d U, Vector3d V)? FlatRevolved(ISurface3? s)
     {
         if (FlatRevOff || s is not RevolvedSurface rv || rv.Base is not LineCurve3 gl) return null;
         var w = rv.Axis.W.Normalized();
@@ -225,6 +225,8 @@ public static class AnalyticVolume
         switch (GeometryAudit.AuthoritativeSurface(f))
         {
             case PlaneSurface pl: return PlaneArea(f, pl.F.Origin, pl.F.U, pl.F.V);
+            case ExtrudedSurface { Base: SplineCurve3 or BezierCurve3 } when !AnalyticFlux.ExtSplineOff: return AnalyticFlux.FaceAreaOf(f);
+            case OffsetSurface when !AnalyticFlux.OffsetVolOff: return AnalyticFlux.FaceAreaOf(f);
             case NurbsSurface when !NurbsVolOff: return AnalyticFlux.FaceAreaOf(f);
             case CornerPatchSurface cpa when WholePatch(f, cpa): return CornerIntegral(f, cpa, (x, n) => n.Length, area: true);
             case ExtrudedSurface exl when exl.Base is LineCurve3 ln:
@@ -239,7 +241,7 @@ public static class AnalyticVolume
                 return CylinderArea(f, arc.Frame.Origin, ex.Dir.Normalized(), arc.Frame.U.Normalized(), arc.Radius);
             case CylinderSurface cs:
                 return CylinderArea(f, cs.Axis.Origin, cs.Axis.W.Normalized(), cs.Axis.U.Normalized(), cs.Radius);
-            case RevolvedSurface rv when rv.Base is ArcCurve3 ba && Math.Abs(Math.Abs(rv.Sweep) - 2 * Math.PI) < 1e-9:
+            case RevolvedSurface rv when rv.Base is ArcCurve3 ba && (Math.Abs(Math.Abs(rv.Sweep) - 2 * Math.PI) < 1e-9 || !SphPartialOff):
             {
                 var axis = rv.Axis.W.Normalized();
                 var d = ba.Frame.Origin - rv.Axis.Origin;
@@ -819,7 +821,7 @@ public static class AnalyticVolume
                 return CylinderIntegral(f, arc.Frame.Origin, ex.Dir.Normalized(), arc.Frame.U.Normalized(), arc.Radius);
             case CylinderSurface cs:
                 return CylinderIntegral(f, cs.Axis.Origin, cs.Axis.W.Normalized(), cs.Axis.U.Normalized(), cs.Radius);
-            case RevolvedSurface rv when rv.Base is ArcCurve3 ba && Math.Abs(Math.Abs(rv.Sweep) - 2 * Math.PI) < 1e-9:
+            case RevolvedSurface rv when rv.Base is ArcCurve3 ba && (Math.Abs(Math.Abs(rv.Sweep) - 2 * Math.PI) < 1e-9 || !SphPartialOff):
             {
                 var axis = rv.Axis.W.Normalized();
                 var d = ba.Frame.Origin - rv.Axis.Origin;
@@ -836,6 +838,16 @@ public static class AnalyticVolume
             {
                 var oc = _origin;
                 return CornerIntegral(f, cpv, (x, n) => Vector3d.Dot(x - oc, n), area: false);
+            }
+            case OffsetSurface when !AnalyticFlux.OffsetVolOff:
+            {
+                var oo = _origin;
+                return AnalyticFlux.FaceFluxOf(f, x => x - oo);
+            }
+            case ExtrudedSurface { Base: SplineCurve3 or BezierCurve3 } when !AnalyticFlux.ExtSplineOff:
+            {
+                var oe = _origin;
+                return AnalyticFlux.FaceFluxOf(f, x => x - oe);
             }
             case NurbsSurface when !NurbsVolOff:
             {
@@ -1058,6 +1070,9 @@ public static class AnalyticVolume
         return poly;
     }
 
+    /// <summary>m.x2: и часть оборота (клин шара из IGES OpenCascade, 4.28…2π) — дуга с центром на оси: грань шара, интеграл —
+    /// телесным углом (прежде — общая формула вращения, NaN у образующей до полюса). P3D_SPHPARTIAL=0 — прежнее.</summary>
+    static readonly bool SphPartialOff = Environment.GetEnvironmentVariable("P3D_SPHPARTIAL") == "0";
     static readonly bool ArcCoarseOff = Environment.GetEnvironmentVariable("P3D_ARCCOARSE") == "0";
     static readonly bool PoleDeepOff = Environment.GetEnvironmentVariable("P3D_SPHPOLEDEEP") == "0";
 
@@ -1191,6 +1206,7 @@ public static class AnalyticVolume
     static readonly bool SphDbg = Environment.GetEnvironmentVariable("P3D_SPHDBG") == "1";
     static readonly bool FanOff = Environment.GetEnvironmentVariable("P3D_VOLFAN") == "0";
 
+    static readonly bool SphFanApexOff = Environment.GetEnvironmentVariable("P3D_SPHFANAPEX") == "0";
     static readonly bool SphAreaOff = Environment.GetEnvironmentVariable("P3D_SPHAREA") == "0";
 
     /// <summary>
@@ -1211,6 +1227,18 @@ public static class AnalyticVolume
         {
             var u = pts.Select(q => (q - c).Normalized()).ToList();
             if ((pts[0] - pts[^1]).Length < 1e-12) u.RemoveAt(u.Count - 1);
+            // m.x2: вершина веера — точка контура, дальняя от его плоскости (Ньюэлл): у контура «пояс по большому кругу + меридиан
+            // шва к полюсу» веер из точки пояса вырождался (Ω = 4π — целый шар у купола над гранью). P3D_SPHFANAPEX=0 — из первой.
+            if (!SphFanApexOff && u.Count > 3)
+            {
+                var nw = Vector3d.Zero; for (int i = 0; i < u.Count; i++) nw += Vector3d.Cross(u[i], u[(i + 1) % u.Count]);
+                if (nw.Length > 1e-12)
+                {
+                    nw.Normalize(); int k = 0; double best = -1;
+                    for (int i = 0; i < u.Count; i++) { double d = Math.Abs(Vector3d.Dot(u[i], nw)); if (d > best) { best = d; k = i; } }
+                    if (best > 1e-3 && k > 0) u = u.Skip(k).Concat(u.Take(k)).ToList();
+                }
+            }
             double om = 0;
             for (int i = 1; i + 1 < u.Count; i++)
             {
