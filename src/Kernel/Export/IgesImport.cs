@@ -17,7 +17,11 @@ namespace Parametric3D.Kernel.Export;
 public static class IgesImport
 {
     internal static readonly bool Iges122Old = Environment.GetEnvironmentVariable("P3D_IGES122") == "old";
-    internal static readonly bool Iges120Old = Environment.GetEnvironmentVariable("P3D_IGES120") == "old";
+    // m.x2: ось 120 — направление от начала к концу (A→B), угол — против часовой вокруг него (спецификация; OpenCascade читает
+    // так же: с этим отрезки поверхностей вращения — четверти скруглений углов, кольцо 90° — сходятся). P3D_IGES120=ab — обратное (k64).
+    static readonly bool Iges120MirrorOff = Environment.GetEnvironmentVariable("P3D_IGES120MIRROR") == "0";
+    static readonly bool Iges120XformOff = Environment.GetEnvironmentVariable("P3D_IGES120XFORM") == "0";
+    internal static readonly bool Iges120Old = Environment.GetEnvironmentVariable("P3D_IGES120") != "ab";
     /// <summary>Прочитать тело. Возвращает null, если обрезанных поверхностей в файле нет.</summary>
     public static TSolid? Read(string text, List<string>? warnings = null)
     {
@@ -115,6 +119,13 @@ public static class IgesImport
 
             var outer = Loop(At(tr.Value.Outer), At);
             if (outer.Count > 0) Sew(face, outer, true);
+            // m.x2: СТОРОНА ГРАНИ — ПО КОНТУРУ В ПАРАМЕТРАХ. У 144 знака стороны нет: внешний контур в параметрах против часовой
+            // — наружу S_u × S_v поверхности файла, по часовой — внутрь. Прежде сторона бралась от нашей поверхности, и у грани
+            // на замкнутой поверхности (угол скругления вершины — кусок шара) разметка брала дополнение: объём на 4πR³/3 меньше.
+            // P3D_IGESPARAMSIDE=0 — прежде.
+            if (!ParamSideOff && !surface.IsPlanar && At(tr.Value.Outer) is { Type: IgesFile.TypeCurveOnSurface } cos && cos.Data.Count >= 3
+                && ParamArea(At((int)cos.Data[2]), At) is double pa && Math.Abs(pa) > 1e-12)
+                face.Reversed = (pa > 0) != NormalAgrees(surface);
 
             foreach (int h in tr.Value.Holes)
             {
@@ -229,11 +240,27 @@ public static class IgesImport
             if (Curve(axisEntity.Value, at) is not LineCurve3 axisLine) return null;
             var gen = Curve(genEntity.Value, at);
             if (gen == null) return null;
-            // m.x2: положительный угол 120 — против часовой, если смотреть с начала оси к концу (так пишет и читает OpenCascade:
-            // ось цилиндра вокруг +Z — от (0, 0, 1) к (0, 0, 0)); прежде — наоборот. P3D_IGES120=old — прежнее.
+            // m.x2: матрица у самой поверхности вращения (OpenCascade: ось и образующая — в своей системе, 124 — у 120)
+            bool mirrored = false;
+            if (e.Matrix != 0 && !Iges120XformOff)
+            {
+                axisLine = Xform(axisLine, e.Matrix, at) as LineCurve3 ?? axisLine;
+                gen = Xform(gen, e.Matrix, at);
+                // зеркальная матрица (определитель < 0; OpenCascade пишет такие) меняет и направление поворота: против часовой
+                // в своей системе — по часовой в общей; ось — в обратную сторону. P3D_IGES120MIRROR=0 — прежде.
+                if (at(e.Matrix) is { Type: 124 } mx && mx.Data.Count >= 12 && !Iges120MirrorOff)
+                {
+                    var d = mx.Data;
+                    double det = d[0] * (d[5] * d[10] - d[6] * d[9]) - d[1] * (d[4] * d[10] - d[6] * d[8]) + d[2] * (d[4] * d[9] - d[5] * d[8]);
+                    mirrored = det < 0;
+                }
+            }
+            // m.x2: положительный угол 120 — против часовой вокруг направления оси от начала к концу (A→B); P3D_IGES120=ab — обратное.
             var dir = Iges120Old ? (axisLine.B - axisLine.A) : (axisLine.A - axisLine.B);
+            if (mirrored) dir = -dir;
             if (dir.LengthSquared < 1e-18) return null;
-            return new RevolvedSurface(gen, Frame3.FromNormal(axisLine.A, dir.Normalized()), rv.A0, rv.A1);
+            var axF = Frame3.FromNormal(axisLine.A, dir.Normalized());
+            return new RevolvedSurface(gen, axF, rv.A0, rv.A1);
         }
 
         return null;
@@ -270,11 +297,73 @@ public static class IgesImport
         ICurve3? c = null;
         if (IgesParser.Line(e) is { } ln) c = new LineCurve3(ln.A, ln.B);
         else if (IgesParser.Arc(e) is { } arc) c = arc;
-        else if (IgesParser.Spline(e) is { } sp) c = sp;
+        else if (IgesParser.Spline(e) is { } sp) c = !ArcRecogOff && AsArc(sp) is { } sa ? sa : sp;
         if (c == null || e.Matrix == 0) return c;
+        return Xform(c, e.Matrix, at);
+    }
+
+    /// <summary>
+    /// m.x2: РАЦИОНАЛЬНЫЙ СПЛАЙН — ДУГА ОКРУЖНОСТИ (так пишут дуги в наклонной плоскости и образующие вращения): узнаётся по
+    /// окружности через начало, середину и конец, проверенной по 32 точкам (1e-9 от радиуса). Образующая-дуга даёт шар/тор
+    /// с точными интегралами (прежде — сплайн, и объём грани угла скругления вершины был NaN). P3D_IGESARCRECOG=0 — прежде.
+    /// </summary>
+    static ArcCurve3? AsArc(SplineCurve3 sp)
+    {
+        if (sp.Weights.All(x => Math.Abs(x - 1) < 1e-15) && sp.Degree < 2) return null;
+        Vector3d a = sp.PointAt(sp.T0), m = sp.PointAt((sp.T0 + sp.T1) / 2), b = sp.PointAt(sp.T1);
+        if ((a - b).Length < 1e-12) return null;
+        var ab = b - a; var am = m - a; var n = Vector3d.Cross(am, ab);
+        if (n.LengthSquared < 1e-24) return null;
+        // центр окружности через три точки
+        var cc = a + (Vector3d.Cross(n, am) * ab.LengthSquared + Vector3d.Cross(ab, n) * am.LengthSquared) / (2 * n.LengthSquared);
+        double r = (a - cc).Length; if (r < 1e-9) return null;
+        for (int i = 0; i <= 32; i++)
+        {
+            var q = sp.PointAt(sp.T0 + (sp.T1 - sp.T0) * i / 32.0);
+            if (Math.Abs((q - cc).Length - r) > 1e-9 * Math.Max(1, r) || Math.Abs(Vector3d.Dot(q - a, n.Normalized())) > 1e-9 * Math.Max(1, r)) return null;
+        }
+        var U = (a - cc).Normalized(); var W = Vector3d.Cross(a - cc, m - cc).Normalized(); var V = Vector3d.Cross(W, U);
+        double a1 = Math.Atan2(Vector3d.Dot(b - cc, V), Vector3d.Dot(b - cc, U)); if (a1 <= 1e-12) a1 += 2 * Math.PI;
+        return new ArcCurve3(new Frame3(cc, U, V), r, 0, a1);
+    }
+    static readonly bool ParamSideOff = Environment.GetEnvironmentVariable("P3D_IGESPARAMSIDE") == "0";
+    static readonly bool ArcRecogOff = Environment.GetEnvironmentVariable("P3D_IGESARCRECOG") == "0";
+
+    /// <summary>Площадь со знаком контура в параметрах (кривые составной по порядку, каждая — по своему ходу); null — нет.</summary>
+    static double? ParamArea(IgesParser.Entity? e, Func<int, IgesParser.Entity?> at)
+    {
+        if (e == null) return null;
+        var curves = Loop(e, at);
+        if (curves.Count == 0) return null;
+        var pts = new List<Vector2d>();
+        foreach (var c in curves) for (int i = 0; i < 32; i++) { var p = c.PointAt(c.T0 + (c.T1 - c.T0) * i / 32.0); pts.Add(new Vector2d(p.X, p.Y)); }
+        double sa = 0; for (int i = 0; i < pts.Count; i++) { var a = pts[i]; var b = pts[(i + 1) % pts.Count]; sa += a.X * b.Y - b.X * a.Y; }
+        return sa / 2;
+    }
+
+    /// <summary>Наша нормаль поверхности — та же, что S_u × S_v в параметрах IGES (у 120: u — образующая, v — угол).</summary>
+    static bool NormalAgrees(ISurface3 s)
+    {
+        if (s is not RevolvedSurface rs) return true;
+        var g = rs.Base; var o = rs.Axis.Origin; var w = rs.Axis.W.Normalized();
+        for (int i = 1; i < 8; i++)
+        {
+            double t = g.T0 + (g.T1 - g.T0) * i / 8.0;
+            var p = g.PointAt(t); var r = p - o; r -= w * Vector3d.Dot(r, w);
+            if (r.Length < 1e-9) continue;
+            var nIges = Vector3d.Cross(g.TangentAt(t), Vector3d.Cross(w, r));
+            if (nIges.Length < 1e-12) continue;
+            return Vector3d.Dot(nIges, rs.NormalAt(rs.ProjectToUV(p))) >= 0;
+        }
+        return true;
+    }
+
+    /// <summary>Кривая под матрицей 124 (номер записи матрицы); не 124 — без изменений.</summary>
+    private static ICurve3 Xform(ICurve3 c, int matrix, Func<int, IgesParser.Entity?> at)
+    {
         // K10: матрица преобразования (124): дуга в наклонной плоскости задаётся в своей
         // плоскости XY и матрицей — так пишут почти все системы.
-        var m = at(e.Matrix);
+        var m = at(matrix);
         if (m == null || m.Value.Type != 124 || m.Value.Data.Count < 12) return c;
         var d = m.Value.Data;
         Vector3d P(Vector3d q) => new(d[0] * q.X + d[1] * q.Y + d[2] * q.Z + d[3], d[4] * q.X + d[5] * q.Y + d[6] * q.Z + d[7], d[8] * q.X + d[9] * q.Y + d[10] * q.Z + d[11]);

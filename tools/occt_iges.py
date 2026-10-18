@@ -34,6 +34,15 @@ def volume(path):
         fix = ShapeFix_Solid(mk.Solid()); fix.Perform()
         p = GProp_GProps(); BRepGProp.VolumeProperties_s(fix.Solid(), p, 1e-9)
         vols.append(abs(p.Mass())); ex.Next()
+    # грань, замкнутая сама по себе (целый шар), сшивкой в оболочку не попадает — своей оболочкой
+    from OCP.BRep import BRep_Builder
+    from OCP.TopoDS import TopoDS_Shell
+    ex = TopExp_Explorer(sewed, TopAbs_FACE, TopAbs_SHELL)
+    while ex.More():
+        bb = BRep_Builder(); sh = TopoDS_Shell(); bb.MakeShell(sh); bb.Add(sh, ex.Current())
+        mk = BRepBuilderAPI_MakeSolid(sh); fix = ShapeFix_Solid(mk.Solid()); fix.Perform()
+        p = GProp_GProps(); BRepGProp.VolumeProperties_s(fix.Solid(), p, 1e-9)
+        vols.append(abs(p.Mass())); ex.Next()
     # оболочки: наибольшая — наружная; прочие внутри неё — полости (вычитаются), если их сумма меньше наружной;
     # раздельные тела (массив) — по габаритам не проверяются: полость — оболочка, целиком внутри габарита наружной
     if not vols: return 0.0, f"faces {nf}, shells 0"

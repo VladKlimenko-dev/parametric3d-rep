@@ -1014,6 +1014,31 @@ static partial class Program
 }
 static partial class Program
 {
+    /// <summary>
+    /// m.x2: ФАЙЛЫ OPENCASCADE (tests/stepfiles/occt_iges, написаны tools/occt_iges_write.py в режиме граней 144): шар, клин
+    /// шара, пояс шара, конус, тор и его часть, цилиндр по наклонной оси, вычитания, скругление всех рёбер, вращение и
+    /// выдавливание. Наш импорт — объём как у OpenCascade (1e-6). OpenCascade ставит матрицу 124 у самой поверхности 120
+    /// (и зеркальную), начальный угол не 0, ось — от начала к концу.
+    /// </summary>
+    static void OcctIgesFiles()
+    {
+        Check("K10-IGES-OCCT-FILES", () =>
+        {
+            var dir = Path.GetDirectoryName(Fixture("occt_iges/manifest.tsv"))!;
+            var bad = new List<string>(); int n = 0;
+            foreach (var row in File.ReadAllLines(Path.Combine(dir, "manifest.tsv")).Skip(1))
+            {
+                var c = row.Split('\t'); n++; double V = double.Parse(c[2], System.Globalization.CultureInfo.InvariantCulture);
+                double back = double.NaN;
+                try { var b = Parametric3D.Kernel.Export.IgesImport.Read(File.ReadAllText(Path.Combine(dir, c[0] + ".igs")), new List<string>()); if (b != null) back = OpVolume(b); }
+                catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { }
+                if (!(Math.Abs(back - V) <= 1e-6 * Math.Max(1, V))) bad.Add($"{c[0]} {c[1]}: {back:G9} vs {V:G9}");
+            }
+            Console.WriteLine($"IGES OpenCascade files: {n - bad.Count}/{n}");
+            Require(n >= 17 && bad.Count == 0, string.Join("; ", bad));
+        });
+    }
+
     static void ForeignIges()
     {
         Check("K10-IGES-FOREIGN-BOX-HOLE", () =>

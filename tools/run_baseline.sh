@@ -26,6 +26,10 @@ if python3 -c "import OCP" 2>/dev/null; then
   "$OUT/k01/K01Checks" igesdump "$OUT/iges" > "$OUT/iges_dump.log" 2>&1
   python3 "$ROOT/tools/occt_iges.py" "$OUT/iges" --json "$OUT/iges/occt.json" > "$OUT/iges.log" 2>&1
   echo "IGES: $(tail -1 "$OUT/iges.log")"
+  # m.x2: обратная сторона — OpenCascade пишет тела (режим граней 144), наш импорт читает (объём до 1e-6)
+  python3 "$ROOT/tools/occt_iges_write.py" "$OUT/oiges" > /dev/null 2>&1
+  "$OUT/k01/K01Checks" igesreadall "$OUT/oiges" > "$OUT/oiges.log" 2>&1
+  echo "IGESREAD: $(grep 'IGES read' "$OUT/oiges.log")"
   # Ворота g.05 (KRN-04): каталог событий пересечения (узкие интервалы, касания, вершины, швы, петли, полюса) — OpenCascade
   "$OUT/k01/K01Checks" krn04dump "$OUT/krn04" > "$OUT/krn04_dump.log" 2>&1
   python3 "$ROOT/tools/occt_diff.py" "$OUT/krn04" --json "$OUT/krn04/occt.json" > "$OUT/krn04.log" 2>&1

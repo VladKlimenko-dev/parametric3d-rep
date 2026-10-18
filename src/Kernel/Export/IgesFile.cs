@@ -59,6 +59,15 @@ public sealed class IgesFile
 
     public int Count => _entities.Count;
 
+    /// <summary>m.x2: откат — убрать сущности, добавленные после отметки Count (попытка записи грани не удалась: без этого
+    /// в файле оставались ничьи поверхности, и OpenCascade читал их лишними гранями).</summary>
+    public void Truncate(int count)
+    {
+        if (count >= _entities.Count) return;
+        _entities.RemoveRange(count, _entities.Count - count);
+        foreach (var k in _xform.Keys.Where(k => k > 2 * count - 1).ToList()) _xform.Remove(k);
+    }
+
     /// <summary>Отрезок: два конца.</summary>
     public int AddLine(Vector3d a, Vector3d b) =>
         Add(TypeLine, new[] { a.X, a.Y, a.Z, b.X, b.Y, b.Z });
@@ -189,12 +198,12 @@ public sealed class IgesFile
     /// Кривая в параметрах (u, v) по точкам: на прямой (изолиния — окружность пояса, шов) — отрезок (110, z = 0); иначе —
     /// кубический сплайн, проходящий через точки (126; гладкий: у ломаной в каждой вершине C0, и читатель делил ребро по ним).
     /// </summary>
-    public int AddParamPolyline(IReadOnlyList<Vector2d> uv)
+    public int AddParamPolyline(IReadOnlyList<Vector2d> uv, bool cubic = true)
     {
         var a = uv[0]; var b = uv[^1]; var ab = b - a; double L = ab.Length;
         bool straight = L > 1e-12 && uv.All(q => Math.Abs((q.X - a.X) * ab.Y - (q.Y - a.Y) * ab.X) / L < 1e-9);
         if (straight) return Add(TypeLine, new[] { a.X, a.Y, 0, b.X, b.Y, 0 });
-        if (uv.Count >= 4 && !PolyOld) { int sp = ParamCubic(uv); if (sp != 0) return sp; }
+        if (uv.Count >= 4 && !PolyOld && cubic) { int sp = ParamCubic(uv); if (sp != 0) return sp; }
         return ParamPolyline1(uv);
     }
     static readonly bool PolyOld = Environment.GetEnvironmentVariable("P3D_IGESPOLY") == "old";

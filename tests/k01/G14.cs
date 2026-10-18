@@ -36,6 +36,15 @@ static partial class Program
             var p = new Part("cv2"); TestGeometry.AddCube(p, 60);
             p.AddFeature(new CutSphere(-15, 0, 0, 6)); p.AddFeature(new CutSolid(() => PrimitiveOp.Cylinder(new Vector3d(15, 0, -5), 5, 10))); return p;
         }, 216000 - 4.0 / 3 * Math.PI * 216 - Math.PI * 25 * 10));
+        // m.x2: шапки шара (грань вращения с полюсом внутри и одним поясом) — купол на грани куба и купол с отверстием
+        res.Add(("dome: sphere R8 united at the top face of a cube 60", () =>
+        {
+            var p = new Part("dom"); TestGeometry.AddCube(p, 60); p.AddFeature(new UniteSolid(() => PrimitiveOp.Sphere(new Vector3d(0, 0, 30), 8))); return p;
+        }, 216000 + 2.0 / 3 * Math.PI * 512));
+        res.Add(("dome: sphere R8 at an offset centre (z = 27) united at the top face", () =>
+        {
+            var p = new Part("do2"); TestGeometry.AddCube(p, 60); p.AddFeature(new UniteSolid(() => PrimitiveOp.Sphere(new Vector3d(5, -4, 27), 8))); return p;
+        }, 216000 + Math.PI * 25 * (3 * 8 - 5) / 3));
         res.Add(("sphere cavity R6, then a through hole r5 elsewhere", () =>
         {
             var p = new Part("cvh"); TestGeometry.AddCube(p, 60);
@@ -66,6 +75,10 @@ static partial class Program
     internal sealed class CutSolid(Func<TSolid> tool) : Feature
     {
         public override void Execute(BuildContext c) => BooleanOp.Subtract(c.Bodies, tool(), c.Warnings);
+    }
+    internal sealed class UniteSolid(Func<TSolid> tool) : Feature
+    {
+        public override void Execute(BuildContext c) => BooleanOp.Unite(c.Bodies, tool(), c.Warnings);
     }
 
     static void G14Explain(string which)
@@ -315,6 +328,30 @@ static partial class Program
     /// обратно нашим импортом (объём по нормализованной копии) и — tools/occt_iges.py — OpenCascade (сшивка граней в тело,
     /// объём). manifest.tsv: id, имя, наш объём, объём прочитанного обратно, граней записано, пропущено.
     /// </summary>
+    /// <summary>
+    /// m.x2: каталог g.14 через IGES туда и обратно (наш импорт): объём прочитанного — как у тела (1e-6). Полости — шар целой
+    /// гранью (граница — меридиан шва туда и обратно), плоскость — нормалью наружу грани (у граней-сеток сторона в сетке).
+    /// </summary>
+    static void IgesCatalogueBack()
+    {
+        Check("K10-IGES-CATALOGUE-BACK", () =>
+        {
+            var bad = new List<string>(); int n = 0;
+            foreach (var (name, build, _) in G14Catalogue())
+            {
+                var p = build(); var r = p.Compute(null); p.Apply(r);
+                if (p.Features.Any(f => f.Error != null) || p.Bodies.Count == 0) continue;
+                n++;
+                double back = double.NaN;
+                try { var b = Parametric3D.Kernel.Export.IgesImport.Read(Parametric3D.Kernel.Export.IgesSolid.Write(p.Bodies, new List<string>()), new List<string>()); if (b != null) back = OpVolume(b); }
+                catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { }
+                if (!(Math.Abs(back - p.Volume) <= 1e-6 * Math.Max(1, p.Volume))) bad.Add($"{name}: {back:G9} vs {p.Volume:G9}");
+            }
+            Console.WriteLine($"IGES catalogue back: {n - bad.Count}/{n}");
+            Require(n >= 40 && bad.Count == 0, string.Join("; ", bad));
+        });
+    }
+
     static void IgesDump(string dir)
     {
         Directory.CreateDirectory(dir);

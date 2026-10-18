@@ -469,6 +469,7 @@ static partial class Program
         if (mode is "krn07shellc" or "allA") Krn07ShellCurvedChecks();
         if (mode is "krn07drafttan" or "allA") Krn07DraftTangentChecks();
         if (mode is "draftspline" or "allA") Krn07DraftSplineChecks();
+        if (mode is "shellbezier" or "allA") Krn07ShellBezierChecks();
         if (mode is "draftnonruled" or "allA") Krn07DraftNonRuledChecks();
         if (mode is "shellown" or "allA") Krn07ShellOwnThicknessChecks();
         if (mode is "shellopenblend" or "allA") Krn07ShellOpenBlendChecks();
@@ -584,6 +585,65 @@ static partial class Program
         if (mode is "g14s") { G14Scenario(args[1], args[2]); return; }
         if (mode is "g14x") { G14Explain(args[1]); return; }
         if (mode is "g14dump") { G14Dump(args.Length > 1 ? args[1] : "g14out"); return; }
+        if (mode is "igesreadall")
+        {
+            // m.x2: обратная проверка — файлы OpenCascade (tools/occt_iges_write.py) читаются нашим импортом; объём — относительно 1e-6
+            var dir = args[1]; int okc = 0, n = 0;
+            foreach (var row in File.ReadAllLines(Path.Combine(dir, "manifest.tsv")).Skip(1))
+            {
+                var c = row.Split('\t'); n++; double V = double.Parse(c[2], System.Globalization.CultureInfo.InvariantCulture);
+                double back = double.NaN; string note = "";
+                try
+                {
+                    var wl = new List<string>(); var b = Parametric3D.Kernel.Export.IgesImport.Read(File.ReadAllText(Path.Combine(dir, c[0] + ".igs")), wl);
+                    if (b != null) back = OpVolume(b);
+                    note = string.Join(" | ", wl.Where(x => !x.Contains("face(s) read") && !x.Contains(" 0 left as is")).Take(2));
+                }
+                catch (Exception ex) { note = ex.GetType().Name + ": " + ex.Message; }
+                bool ok = Math.Abs(back - V) <= 1e-6 * Math.Max(1, V); if (ok) okc++;
+                Console.WriteLine($"{c[0]} {(ok ? "OK  " : "DIFF")} occt {V:G9} ours {back:G9}  {c[1]}  {(ok ? "" : note)}");
+            }
+            Console.WriteLine($"IGES read (OpenCascade files): {okc}/{n} agree");
+            return;
+        }
+        if (mode is "igesread")
+        {
+            var wr = new List<string>(); var br = Parametric3D.Kernel.Export.IgesImport.Read(File.ReadAllText(args[1]), wr);
+            if (br == null) { Console.WriteLine("null"); return; }
+            if (args.Length > 2) AnalyticVolume.Debug = m => Console.WriteLine("AV " + m);
+            foreach (var f in br.Faces.Where(x => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(x) is Parametric3D.Kernel.Surfaces.NurbsSurface))
+            {
+                var ns = (Parametric3D.Kernel.Surfaces.NurbsSurface)Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)!;
+                foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) { var c = ce.Edge.Curve; Console.WriteLine("  NB " + string.Join(" ", Enumerable.Range(0, 5).Select(i => ns.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * i / 4)).ToString()))); }
+            }
+            foreach (var f in br.Faces) if (Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.RevolvedSurface rvd)
+            {
+                var wv = rvd.Axis.W.Normalized(); string extra = "";
+                if (rvd.Base is Parametric3D.Kernel.Curves.ArcCurve3 ac) { var d = ac.Frame.Origin - rvd.Axis.Origin; extra = $"arc R {ac.Radius} centre off axis {(d - wv * Vector3d.Dot(d, wv)).Length:E2} A {ac.A0}..{ac.A1}"; }
+                Console.WriteLine($"  RV sweep {rvd.Sweep} A {rvd.A0}..{rvd.A1} base {rvd.Base.GetType().Name} {extra} ends {rvd.Base.PointAt(rvd.Base.T0)} {rvd.Base.PointAt(rvd.Base.T1)}");
+                foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) Console.WriteLine($"     ce {ce.Edge.Curve.GetType().Name} {ce.Edge.V0.P} -> {ce.Edge.V1.P} rev {ce.Reversed}");
+            }
+            foreach (var f in br.Faces) Console.WriteLine($"FV {f.Surface.GetType().Name}/{(f.Surface as Parametric3D.Kernel.Surfaces.FacetedSurface)?.Source?.GetType().Name}/{Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name} {AnalyticVolume.FaceVolumeAt(f, Vector3d.Zero)?.ToString() ?? "null"} rev {f.Reversed}");
+            Console.WriteLine($"op {OpVolume(br)} analytic {AnalyticVolume.Of(br)} tess {Parametric3D.Kernel.Tess.MassProps.Volume(Parametric3D.Kernel.Tess.Tessellator.Tessellate(br))}");
+            var mdr = Parametric3D.Kernel.Tess.Tessellator.Tessellate(br);
+            foreach (var kv in mdr.FaceRanges)
+            {
+                double sv = 0, ar = 0;
+                for (int i = kv.Value.IndexStart; i < kv.Value.IndexStart + kv.Value.IndexCount; i += 3)
+                {
+                    var a = mdr.Vertices[mdr.Indices[i]].P; var b = mdr.Vertices[mdr.Indices[i + 1]].P; var c = mdr.Vertices[mdr.Indices[i + 2]].P;
+                    sv += OpenTK.Mathematics.Vector3.Dot(a, OpenTK.Mathematics.Vector3.Cross(b, c)) / 6; ar += OpenTK.Mathematics.Vector3.Cross(b - a, c - a).Length / 2;
+                }
+                Console.WriteLine($"  face {kv.Key} area {ar:0.###} sv {sv:0.###}");
+            }
+            foreach (var f in br.Faces)
+            {
+                Console.WriteLine($"F {f.Surface.GetType().Name} rev {f.Reversed} loops {f.Loops.Count} ce {f.Loops.Sum(l => l.CoEdges.Count)}");
+                if (args.Length > 2) foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) Console.WriteLine($"   ce {ce.Edge.Curve.GetType().Name} {ce.Edge.V0.P:0.###}->{ce.Edge.V1.P:0.###} rev {ce.Reversed} uses {ce.Edge.CoEdges.Count} h {ce.Edge.GetHashCode()}");
+            }
+            foreach (var x in wr) Console.WriteLine("W " + x);
+            return;
+        }
         if (mode is "igesdump") { IgesDump(args.Length > 1 ? args[1] : "igesout"); return; }
         if (mode is "krn03m") Krn03Measure();
         if (mode is "krn03p") Krn03MeasurePCurves();
@@ -933,8 +993,10 @@ static partial class Program
         if (mode is "m8001") Real8001Mesh();
         if (mode is "brb") BrbProbe();
         if (mode is "stepfaces") StepFaces();
-        if (mode is "stepreal" or "allB") { StepRealistic(); StepShaft(); ForeignStep(); ForeignNurbs(); IgesRoundTrip(); ForeignIges(); }
+        if (mode is "stepreal" or "allB") { StepRealistic(); StepShaft(); ForeignStep(); ForeignNurbs(); IgesRoundTrip(); ForeignIges(); OcctIgesFiles(); IgesCatalogueBack(); }
         if (mode is "figes") ForeignIges();
+        if (mode is "igescat") IgesCatalogueBack();
+        if (mode is "igesocct") OcctIgesFiles();
         if (mode is "soak") SoakTest();
         if (mode is "gendet") GenDeterminism();
         if (mode is "sameedit") SoakSameEdit();

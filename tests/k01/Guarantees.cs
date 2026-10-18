@@ -63,7 +63,7 @@ static partial class Program
     /// <summary>Счётчики статистики: только наблюдение, на результат не влияют (гонки дают лишь неточный счёт).</summary>
     static readonly string[] StatisticsPrefixes =
     {
-        "Kernel.Exact.ExactBsp.", "Kernel.Exact.PlaneRegistry.Total", "Kernel.Ops.VertexSnap.",
+        "Kernel.Exact.ExactBsp.", "Kernel.Exact.PlaneRegistry.Total", "Kernel.Ops.VertexSnap.", "Kernel.Geometry.SplineWallEdges.VerticesSnapped", "Kernel.Geometry.SplineWallEdges.CurvesReplaced",
         "Kernel.Tess.AnalysisMesher.Rounds", "Kernel.Tess.Cdt.Merged", "Kernel.Tess.Tessellator.",
         "Kernel.Topology.TopologyHeal.Removed", "Kernel.Exact.ExactAdapter.StaleExactUses",
         "Kernel.Tess.ExactFaceMesher.Chord", "Kernel.Tess.ExactFaceMesher.Refine", "Kernel.Tess.ExactFaceMesher.Skip",

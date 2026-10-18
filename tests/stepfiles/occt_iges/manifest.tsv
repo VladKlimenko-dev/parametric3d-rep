@@ -1,0 +1,18 @@
+id	name	volume
+o00	box	1680.0
+o01	cylinder	785.3981633974481
+o02	cylinder 1.2 rad	150.0
+o03	cylinder tilted	452.38934211693027
+o04	sphere	1436.7550402417326
+o05	sphere wedge 2 rad	288.0
+o06	sphere zone	723.2374934270524
+o07	cone frustum	527.7875658030853
+o08	cone apex	183.25957145940458
+o09	torus	3553.057584392165
+o10	torus 2 rad	1130.973355292325
+o11	box minus cylinder	43978.76140340507
+o12	box minus sphere	47095.22131576614
+o13	box plus cylinder	52712.3889803847
+o14	box all edges fillet 2	5804.696111127531
+o15	revolve rectangle 90 deg	589.0486225480861
+o16	prism of circular segment	208.73989584826688

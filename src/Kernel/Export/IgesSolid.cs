@@ -51,16 +51,19 @@ public static class IgesSolid
                 // m.x2: грань вращения (цилиндр, конус, шар, тор, поверхность вращения отрезка или дуги) — поверхностью вращения
                 // (120) со швом там, где нет местных контуров, и с кривыми границ ещё и в параметрах (как пишет OpenCascade).
                 // P3D_IGESPCURVE=0 — прежняя запись.
+                int mark = f.Count;
                 if (!PCurveOff && NurbsFace(f, face) is int trimmedN)
                 {
                     if (!string.IsNullOrEmpty(face.Tag)) f.Label(trimmedN, face.Tag);
                     written++; continue;
                 }
+                if (!TruncOff) f.Truncate(mark);
                 if (!PCurveOff && RevolvedFace(f, face) is int trimmedR)
                 {
                     if (!string.IsNullOrEmpty(face.Tag)) f.Label(trimmedR, face.Tag);
                     written++; continue;
                 }
+                if (!TruncOff) f.Truncate(mark);   // m.x2: неудавшаяся попытка — без ничьих сущностей (P3D_IGESTRUNC=0 — прежде)
                 int surface = Surface(f, face, warnings);
                 if (surface == 0) { skipped++; continue; }
 
@@ -128,8 +131,10 @@ public static class IgesSolid
 
         switch (src)
         {
+            // m.x2: нормаль плоскости — наружу грани (по обходу внешнего контура, Ньюэлл: у граней-сеток сторона — в сетке, не в Reversed): у 144 знака стороны нет,
+            // и контур, пройденный по ходу грани, должен идти против часовой относительно нормали. P3D_IGESPLANESENSE=0 — прежде.
             case PlaneSurface pl:
-                return f.AddPlane(pl.F.W, pl.F.Origin);
+                return f.AddPlane(PlaneSenseOff ? pl.F.W : OutwardPlaneNormal(face, pl.F.W), pl.F.Origin);
 
             // m.x2: цилиндр с осью не вдоль Z — поверхность вращения отрезка (дуга IGES (100) — только в плоскости XY)
             case ExtrudedSurface exr when exr.Base is ArcCurve3 arcr && !BeltOff && Math.Abs(Math.Abs(Vector3d.Dot(arcr.Frame.W.Normalized(), Vector3d.UnitZ)) - 1) > 1e-9:
@@ -160,7 +165,7 @@ public static class IgesSolid
 
             case RevolvedSurface rev:
             {
-                int axis = IgesImport.Iges120Old ? f.AddLine(rev.Axis.Origin, rev.Axis.Origin + rev.Axis.W) : f.AddLine(rev.Axis.Origin + rev.Axis.W, rev.Axis.Origin);   // 120: ось — от конца к началу
+                int axis = IgesImport.Iges120Old ? f.AddLine(rev.Axis.Origin, rev.Axis.Origin + rev.Axis.W) : f.AddLine(rev.Axis.Origin + rev.Axis.W, rev.Axis.Origin);   // 120: ось — от начала к концу (A→B)
                 int gen = Curve(f, rev.Base);
                 return gen == 0 ? 0 : f.AddRevolved(axis, gen, rev.A0, rev.A1);
             }
@@ -175,6 +180,22 @@ public static class IgesSolid
 
     static readonly bool BeltOff = Environment.GetEnvironmentVariable("P3D_IGESBELT") == "0";
     static readonly bool PCurveOff = Environment.GetEnvironmentVariable("P3D_IGESPCURVE") == "0";
+    static Vector3d OutwardPlaneNormal(TFace face, Vector3d w)
+    {
+        var outer = face.Loops.FirstOrDefault(l => l.IsOuter && l.CoEdges.Count > 0) ?? face.Loops.FirstOrDefault(l => l.CoEdges.Count > 0);
+        if (outer == null) return face.Reversed ? -w : w;
+        var pts = new List<Vector3d>();
+        foreach (var c in Oriented(outer)) for (int i = 0; i < 32; i++) pts.Add(c.PointAt(c.T0 + (c.T1 - c.T0) * i / 32.0));
+        var nw = Vector3d.Zero; var p0 = pts.Count > 0 ? pts[0] : Vector3d.Zero;
+        for (int i = 0; i < pts.Count; i++) nw += Vector3d.Cross(pts[i] - p0, pts[(i + 1) % pts.Count] - p0);
+        if (nw.Length < 1e-12) return face.Reversed ? -w : w;
+        return Vector3d.Dot(nw, w) < 0 ? -w : w;
+    }
+    static readonly bool PatchOff = Environment.GetEnvironmentVariable("P3D_IGESPATCH") == "0";
+    static readonly bool CapOff = Environment.GetEnvironmentVariable("P3D_IGESCAP") == "0";
+    static readonly bool TruncOff = Environment.GetEnvironmentVariable("P3D_IGESTRUNC") == "0";
+    static readonly bool PlaneSenseOff = Environment.GetEnvironmentVariable("P3D_IGESPLANESENSE") == "0";
+    static readonly bool WholeOff = Environment.GetEnvironmentVariable("P3D_IGESWHOLE") == "0";
     static readonly bool GenArc = Environment.GetEnvironmentVariable("P3D_IGESGENARC") == "1";
     static readonly bool SplitDbg = Environment.GetEnvironmentVariable("P3D_IGESSPLITDBG") == "1";
     static readonly bool ArcXformOff = Environment.GetEnvironmentVariable("P3D_IGESARC124") == "0";
@@ -185,6 +206,7 @@ public static class IgesSolid
     /// контур-прямоугольник «пояс A, шов, пояс B, шов назад». Пояс один (шапка с полюсом) или ни одного у полного оборота —
     /// null (прежняя запись).
     /// </summary>
+    static int? Rf(int line) { if (SplitDbg) Console.Error.WriteLine($"RevolvedFace: null at {line}"); return null; }
     static int? RevolvedFace(IgesFile f, TFace face)
     {
         var src = face.Surface is FacetedSurface fs ? fs.Source : face.Surface;
@@ -194,13 +216,13 @@ public static class IgesSolid
             case CylinderSurface cs:
             {
                 o = cs.Axis.Origin; w = cs.Axis.W.Normalized(); var e = cs.Axis.U.Normalized();
-                if (Extent(face, o, w) is not { } ex) return null;
+                if (Extent(face, o, w) is not { } ex) return Rf(223);
                 G = new LineCurve3(o + e * cs.Radius + w * ex.Lo, o + e * cs.Radius + w * ex.Hi); a0 = 0; a1 = 2 * Math.PI; break;
             }
             case ExtrudedSurface { Base: ArcCurve3 arc } exs when Math.Abs(Math.Abs(Vector3d.Dot(arc.Frame.W.Normalized(), exs.Dir.Normalized())) - 1) < 1e-9:
             {
                 o = arc.Frame.Origin; w = exs.Dir.Normalized(); var e = arc.Frame.U.Normalized();
-                if (Extent(face, o, w) is not { } ex) return null;
+                if (Extent(face, o, w) is not { } ex) return Rf(229);
                 G = new LineCurve3(o + e * arc.Radius + w * ex.Lo, o + e * arc.Radius + w * ex.Hi);
                 if (arc.IsClosed) { a0 = 0; a1 = 2 * Math.PI; }
                 else
@@ -213,19 +235,23 @@ public static class IgesSolid
             }
             case RevolvedSurface rv when rv.Base is LineCurve3 or ArcCurve3:
                 o = rv.Axis.Origin; w = rv.Axis.W.Normalized(); G = rv.Base; a0 = rv.A0; a1 = rv.A1;
-                if (rv.Base is ArcCurve3 ga && Math.Abs(Vector3d.Dot(ga.Frame.W.Normalized(), w)) > 1e-9) return null;   // дуга не в меридиане
+                if (rv.Base is ArcCurve3 ga && Math.Abs(Vector3d.Dot(ga.Frame.W.Normalized(), w)) > 1e-9) return Rf(242);   // дуга не в меридиане
                 break;
-            default: return null;
+            default: return Rf(244);
         }
         if (a1 < a0) (a0, a1) = (a1, a0);
         bool full = a1 - a0 > 2 * Math.PI - 1e-9;
         // опорное направление e0 — радиальное направление образующей (её точки в полуплоскости угла 0)
         var gm = G.PointAt((G.T0 + G.T1) / 2) - o; gm -= w * Vector3d.Dot(gm, w);
-        if (gm.Length < 1e-12) return null;
+        if (gm.Length < 1e-12) return Rf(250);
         var e0 = gm.Normalized(); var e1 = Vector3d.Cross(w, e0);
         double Ang(Vector3d p) { var d = p - o; return Math.Atan2(Vector3d.Dot(d, e1), Vector3d.Dot(d, e0)); }
         var loops = face.Loops.Where(l => l.CoEdges.Count > 0).Select(l => (L: l, C: Oriented(l))).Where(x => x.C.Count > 0).ToList();
-        if (loops.Count == 0) return null;
+        // целый шар (дуга от полюса до полюса, полный оборот, без контуров): граница — меридиан шва туда и обратно (как у
+        // OpenCascade: в параметрах — два отрезка при v = 2π и v = 0, без вырожденных кривых полюсов). P3D_IGESWHOLE=0 — прежняя запись.
+        bool OnAxis(Vector3d p) { var d = p - o; d -= w * Vector3d.Dot(d, w); return d.Length < 1e-9; }
+        bool whole = !WholeOff && loops.Count == 0 && full && G is ArcCurve3 && OnAxis(G.PointAt(G.T0)) && OnAxis(G.PointAt(G.T1));
+        if (loops.Count == 0 && !whole) return Rf(259);
         var belts = loops.Where(x => Math.Abs(Winding(x.L, o, w)) > Math.PI).ToList();
         var locals = loops.Where(x => Math.Abs(Winding(x.L, o, w)) <= Math.PI).ToList();
         // полный оборот с собственным швом (ребро, пройденное гранью дважды) — контур уже прямоугольник; шов — у этого ребра
@@ -233,8 +259,25 @@ public static class IgesSolid
         foreach (var ce in face.Loops.SelectMany(l => l.CoEdges)) uses[ce.Edge] = uses.GetValueOrDefault(ce.Edge) + 1;
         var seamEdge = uses.Where(kv => kv.Value == 2).Select(kv => kv.Key).FirstOrDefault();
         bool ownSeam = full && belts.Count == 0 && seamEdge != null;
-        if (full && belts.Count != 2 && !ownSeam) return null;
-        if (!full && belts.Count != 0) return null;
+        bool cap = !CapOff && full && belts.Count == 1 && !ownSeam && (OnAxis(G.PointAt(G.T0)) || OnAxis(G.PointAt(G.T1)));
+        // m.x2: КУСОК ВНУТРИ ПОЛНОГО ОБОРОТА (контуры не обходят ось: угол скругления вершины на шаре, часть цилиндра, у которой
+        // поверхность — целый цилиндр): контур — внешний в параметрах, шов — в свободном промежутке углов. Дополнение (грань —
+        // всё, кроме куска) исключается: у образующей без полюсов оно касалось бы краёв образующей; полюс — вне сетки грани.
+        // Замкнутая образующая (тор) — прежней записью. P3D_IGESPATCH=0 — прежде.
+        bool patch = false;
+        if (!PatchOff && full && belts.Count == 0 && !ownSeam && !whole && loops.Count >= 1 && !(G is ArcCurve3 { IsClosed: true }))
+        {
+            patch = true;
+            foreach (var pe in new[] { G.PointAt(G.T0), G.PointAt(G.T1) }.Where(OnAxis))
+            {
+                if (face.Surface is not FacetedSurface pfs || pfs.Facets.Count == 0) { patch = false; break; }
+                double scale = Math.Max(1, (G.PointAt(G.T0) - G.PointAt(G.T1)).Length);
+                double dmin = pfs.Facets.Min(t => Math.Min((t.Item1 - pe).Length, Math.Min((t.Item2 - pe).Length, (t.Item3 - pe).Length)));
+                if (dmin < 1e-3 * scale) { patch = false; break; }
+            }
+        }
+        if (full && belts.Count != 2 && !ownSeam && !whole && !cap && !patch) return Rf(267);
+        if (!full && belts.Count != 0) return Rf(268);
         // шов: середина наибольшего свободного промежутка углов (у полного оборота); у части — начало промежутка
         double th;
         if (ownSeam) th = Ang(seamEdge!.Curve.PointAt((seamEdge.Curve.T0 + seamEdge.Curve.T1) / 2));
@@ -247,7 +290,7 @@ public static class IgesSolid
             {
                 occ.Sort(); double best = -1;
                 for (int i = 0; i < occ.Count; i++) { double x0 = occ[i], x1 = i + 1 < occ.Count ? occ[i + 1] : occ[0] + 2 * Math.PI; if (x1 - x0 > best) { best = x1 - x0; th = (x0 + x1) / 2; } }
-                if (best < 1e-3) return null;
+                if (best < 1e-3) return Rf(281);
             }
         }
         else th = a0;
@@ -260,11 +303,11 @@ public static class IgesSolid
             ArcCurve3 a => new ArcCurve3(new Frame3(Rot(a.Frame.Origin, th), Rot(a.Frame.Origin + a.Frame.U, th) - Rot(a.Frame.Origin, th), Rot(a.Frame.Origin + a.Frame.V, th) - Rot(a.Frame.Origin, th)), a.Radius, a.A0, a.A1),
             _ => null
         };
-        if (Gs == null) return null;
+        if (Gs == null) return Rf(294);
         // образующая-дуга — дугой 100 (с матрицей 124): у читателя — окружность (периодическая), и у грани трубки шов узнаётся;
         // параметр u — угол дуги в её системе (как в записи AddArc). Прежде — рациональный сплайн (не периодический).
         // (опыт: дугой 100 — у OpenCascade отрезок тора хуже; пока — рациональным сплайном; P3D_IGESGENARC=1 — дугой)
-        SplineCurve3? gsp = Gs is ArcCurve3 gArc && !GenArc ? ArcAsRational(gArc) : null;
+        SplineCurve3? gsp = Gs is ArcCurve3 gArc && !GenArc && !whole && !cap ? ArcAsRational(gArc) : null;   // целый шар — дугой 100, как у OpenCascade
         bool closedGen = Gs is ArcCurve3 { IsClosed: true };
         double uPer = Gs is ArcCurve3 && gsp == null ? 2 * Math.PI : 1;
         // система дуги-образующей как в AddArc: обход против часовой; углы начала/конца
@@ -304,31 +347,60 @@ public static class IgesSolid
         double thG = Ang(Gs.PointAt((Gs.T0 + Gs.T1) / 2));
         (int Model, int Param) Boundary(List<ICurve3> curves)
         {
-            var model = new List<int>(); var pars = new List<List<Vector2d>>();
+            var model = new List<int>(); var pars = new List<List<Vector2d>>(); var cub = new List<bool>();
             double? prevV = null, prevU = null;
             foreach (var c in curves)
             {
-                var pts = new List<Vector2d>(); const int K = 24;
+                var pts = new List<Vector2d>(); int K = PcK(c);
                 for (int i = 0; i <= K; i++)
                 {
                     var q = c.PointAt(c.T0 + (c.T1 - c.T0) * i / K);
                     var rq = q - o; rq -= w * Vector3d.Dot(rq, w);
-                    double v = rq.Length < 1e-9 && prevV != null ? prevV.Value : Ang(q) - thG;
+                    // точка на оси (полюс): угол — по соседней точке кривой
+                    double v = rq.Length < 1e-9 ? (prevV ?? Ang(c.PointAt(c.T0 + (c.T1 - c.T0) * 1e-3)) - thG) : Ang(q) - thG;
                     if (prevV is { } pv) { while (v - pv > Math.PI) v -= 2 * Math.PI; while (v - pv < -Math.PI) v += 2 * Math.PI; }
                     double uq = UOf(q);
                     // замкнутая образующая (окружность тора): параметр 0 и 1 — одна точка; по соседней точке
                     if (closedGen && prevU is { } pu) { while (uq - pu > uPer / 2) uq -= uPer; while (uq - pu < -uPer / 2) uq += uPer; }
                     prevV = v; prevU = uq; pts.Add(new Vector2d(uq, v));
                 }
-                pars.Add(pts); model.Add(CurveOriented(f, c));
+                pars.Add(pts); cub.Add(PcGenOff || !General(c)); model.Add(CurveOriented(f, c));
             }
             // сдвиг на 2π: контур — в [0, ta]; у замкнутой образующей — u в [0, 1]
             double mn = pars.SelectMany(x => x).Min(q => q.Y);
             double sh = -2 * Math.PI * Math.Floor((mn + 1e-7) / (2 * Math.PI));
             double shu = closedGen ? -uPer * Math.Floor((pars.SelectMany(x => x).Min(q => q.X) - (gsp == null && Gs is ArcCurve3 ? ga0 : 0)) / uPer + 1e-7) : 0;
-            var ids = pars.Select(x => f.AddParamPolyline(x.Select(q => new Vector2d(q.X + shu, q.Y + sh)).ToList())).ToList();
+            var ids = pars.Select((x, k) => f.AddParamPolyline(x.Select(q => new Vector2d(q.X + shu, q.Y + sh)).ToList(), cub[k])).ToList();
             if (model.Any(x => x == 0)) return (0, 0);
             return (model.Count == 1 ? model[0] : f.AddComposite(model), ids.Count == 1 ? ids[0] : f.AddComposite(ids));
+        }
+        // пояса на угле шва: каждый делится там, где проходит угол th
+        List<ICurve3>? FromSeam(List<ICurve3> belt)
+        {
+            for (int i = 0; i < belt.Count; i++)
+            {
+                var c = belt[i]; const int N = 256; double D(double t) { double d = Ang(c.PointAt(t)) - th; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
+                double prev = D(c.T0);
+                if (Math.Abs(prev) < 1e-9) return belt.Skip(i).Concat(belt.Take(i)).ToList();
+                for (int j = 1; j <= N; j++)
+                {
+                    double t = c.T0 + (c.T1 - c.T0) * j / N, dv = D(t);
+                    if (Math.Sign(dv) != Math.Sign(prev) && Math.Abs(dv - prev) < Math.PI)
+                    {
+                        double lo = c.T0 + (c.T1 - c.T0) * (j - 1) / N, hi = t, slo = Math.Sign(prev);
+                        for (int it = 0; it < 100; it++) { double m = (lo + hi) / 2; if (Math.Sign(D(m)) == slo) lo = m; else hi = m; }
+                        if (SplitAt(c, (lo + hi) / 2) is not { } sp) return null;
+                        RegisterSplit(c, (lo + hi) / 2);
+                        var res = new List<ICurve3>();
+                        if (sp.Tail != null) res.Add(sp.Tail);
+                        res.AddRange(belt.Skip(i + 1)); res.AddRange(belt.Take(i));
+                        if (sp.Head != null) res.Add(sp.Head);
+                        return res;
+                    }
+                    prev = dv;
+                }
+            }
+            return null;
         }
         (int, int) outer; var holes = new List<(int, int)>();
         if (tube)
@@ -360,12 +432,20 @@ public static class IgesSolid
             if (VOf(la) > VOf(lb)) (la, lb) = (lb, la);
             double va = VOf(la), vb = VOf(lb);
             var A = FromPoint(la, Rot(p0, va)); var B = FromPoint(lb, Rot(p0, vb));
-            if (A == null || B == null) return null;
+            if (A == null || B == null) return Rf(394);
             // шов вдоль оборота через точку u = 0
-            var zc = o + w * Vector3d.Dot(p0 - o, w); var rdir = p0 - zc; double rr = rdir.Length; if (rr < 1e-9) return null;
+            var zc = o + w * Vector3d.Dot(p0 - o, w); var rdir = p0 - zc; double rr = rdir.Length; if (rr < 1e-9) return Rf(396);
             var fr = new Frame3(zc, rdir, Vector3d.Cross(w, rdir));
             var seamFwd = new ArcCurve3(fr, rr, va, vb);
             outer = Boundary(new List<ICurve3>(A) { seamFwd }.Concat(B).Append(seamFwd.Reversed()).ToList());
+        }
+        else if (whole)
+        {
+            double u0 = UOf(Gs.PointAt(Gs.T0)), u1 = UOf(Gs.PointAt(Gs.T1));
+            int mA = CurveOriented(f, Gs.Reversed()), mB = CurveOriented(f, Gs);
+            int pA = f.AddParamPolyline(new List<Vector2d> { new(u1, ta), new(u0, ta) });
+            int pB = f.AddParamPolyline(new List<Vector2d> { new(u0, 0), new(u1, 0) });
+            outer = mA == 0 || mB == 0 ? (0, 0) : (f.AddComposite(new List<int> { mA, mB }), f.AddComposite(new List<int> { pA, pB }));
         }
         else if (ownSeam)
         {
@@ -373,40 +453,48 @@ public static class IgesSolid
             outer = Boundary(withSeam.C);
             foreach (var l in loops.Where(x => !ReferenceEquals(x.L, withSeam.L))) holes.Add(Boundary(l.C));
         }
+        else if (patch)
+        {
+            var outerP = loops.FirstOrDefault(x => x.L.IsOuter); if (outerP.L == null) outerP = loops[0];
+            outer = Boundary(outerP.C);
+            foreach (var l in loops.Where(x => !ReferenceEquals(x.L, outerP.L))) holes.Add(Boundary(l.C));
+        }
+        else if (cap)
+        {
+            // m.x2: ШАПКА С ПОЛЮСОМ (кусок шара, конус до вершины; угол скругления вершины): как у OpenCascade — меридиан шва от
+            // полюса к поясу, пояс целиком, меридиан обратно к полюсу; сторона полюса в параметрах — без кривой (вырождена).
+            // Прежде — прежняя запись без кривых в параметрах, и OpenCascade и наш импорт брали дополнение грани. P3D_IGESCAP=0.
+            var A = FromSeam(belts[0].C); if (A == null) return Rf(9001);
+            var sB = A[0].PointAt(A[0].T0);
+            Vector3d q0 = Gs.PointAt(Gs.T0), q1 = Gs.PointAt(Gs.T1);
+            Vector3d pole;
+            if (OnAxis(q0) != OnAxis(q1)) pole = OnAxis(q0) ? q0 : q1;
+            else if (face.Surface is FacetedSurface ffs && ffs.Facets.Count > 0)
+            {
+                double D(Vector3d p) => ffs.Facets.Min(t => Math.Min((t.Item1 - p).LengthSquared, Math.Min((t.Item2 - p).LengthSquared, (t.Item3 - p).LengthSquared)));
+                pole = D(q0) <= D(q1) ? q0 : q1;
+            }
+            else
+            {
+                // сторона области: слева от хода пояса при взгляде с наружной нормали
+                var c0 = A[0]; var pa = c0.PointAt(c0.T0); var pb = c0.PointAt(c0.T0 + (c0.T1 - c0.T0) * 1e-3);
+                double dv = Ang(pb) - Ang(pa); while (dv > Math.PI) dv -= 2 * Math.PI; while (dv < -Math.PI) dv += 2 * Math.PI;
+                double tg = 0, bd = double.MaxValue; for (int i = 0; i <= 64; i++) { double t = Gs.T0 + (Gs.T1 - Gs.T0) * i / 64; double d = (Rot(Gs.PointAt(t), Ang(sB) - th) - sB).Length; if (d < bd) { bd = d; tg = t; } }
+                var r = sB - o; r -= w * Vector3d.Dot(r, w);
+                var nIges = Vector3d.Cross(Rot(Gs.PointAt(Math.Min(Gs.T1, tg + 1e-6)), Ang(sB) - th) - Rot(Gs.PointAt(Math.Max(Gs.T0, tg - 1e-6)), Ang(sB) - th), Vector3d.Cross(w, r));
+                var nOut = src!.NormalAt(src.ProjectToUV(sB)) * (face.Reversed ? -1 : 1);
+                double side = -Math.Sign(dv) * Math.Sign(Vector3d.Dot(nIges, nOut));   // < 0 — к началу образующей
+                pole = side < 0 ? q0 : q1;
+            }
+            var seamBack = Seam(src!, sB, pole); if (seamBack == null) return Rf(9002);
+            outer = Boundary(new List<ICurve3> { seamBack.Reversed() }.Concat(A).Append(seamBack).ToList());
+        }
         else if (full)
         {
-            // пояса на угле шва: каждый делится там, где проходит угол th
-            List<ICurve3>? FromSeam(List<ICurve3> belt)
-            {
-                for (int i = 0; i < belt.Count; i++)
-                {
-                    var c = belt[i]; const int N = 256; double D(double t) { double d = Ang(c.PointAt(t)) - th; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
-                    double prev = D(c.T0);
-                    if (Math.Abs(prev) < 1e-9) return belt.Skip(i).Concat(belt.Take(i)).ToList();
-                    for (int j = 1; j <= N; j++)
-                    {
-                        double t = c.T0 + (c.T1 - c.T0) * j / N, dv = D(t);
-                        if (Math.Sign(dv) != Math.Sign(prev) && Math.Abs(dv - prev) < Math.PI)
-                        {
-                            double lo = c.T0 + (c.T1 - c.T0) * (j - 1) / N, hi = t, slo = Math.Sign(prev);
-                            for (int it = 0; it < 100; it++) { double m = (lo + hi) / 2; if (Math.Sign(D(m)) == slo) lo = m; else hi = m; }
-                            if (SplitAt(c, (lo + hi) / 2) is not { } sp) return null;
-                            RegisterSplit(c, (lo + hi) / 2);
-                            var res = new List<ICurve3>();
-                            if (sp.Tail != null) res.Add(sp.Tail);
-                            res.AddRange(belt.Skip(i + 1)); res.AddRange(belt.Take(i));
-                            if (sp.Head != null) res.Add(sp.Head);
-                            return res;
-                        }
-                        prev = dv;
-                    }
-                }
-                return null;
-            }
             var A = FromSeam(belts[0].C); var B = FromSeam(belts[1].C);
-            if (A == null || B == null) return null;
+            if (A == null || B == null) return Rf(446);
             var sA = A[0].PointAt(A[0].T0); var sB = B[0].PointAt(B[0].T0);
-            var seam = Seam(src!, sA, sB); if (seam == null) return null;
+            var seam = Seam(src!, sA, sB); if (seam == null) return Rf(448);
             var all = new List<ICurve3>(A) { seam }; all.AddRange(B); all.Add(seam.Reversed());
             outer = Boundary(all);
         }
@@ -416,8 +504,8 @@ public static class IgesSolid
             outer = Boundary(outerL.C);
             foreach (var l in loops.Where(x => !ReferenceEquals(x.L, outerL.L))) holes.Add(Boundary(l.C));
         }
-        if (full && !ownSeam && !tube) foreach (var l in locals) holes.Add(Boundary(l.C));
-        if (outer.Item1 == 0 || holes.Any(h => h.Item1 == 0)) return null;
+        if (full && !ownSeam && !tube && !patch) foreach (var l in locals) holes.Add(Boundary(l.C));
+        if (outer.Item1 == 0 || holes.Any(h => h.Item1 == 0)) return Rf(459);
         return f.AddTrimmedParam(surf, outer, holes);
     }
 
@@ -452,7 +540,7 @@ public static class IgesSolid
             Vector2d? prev = null;
             foreach (var c in curves)
             {
-                var pts = new List<Vector2d>(); const int K = 24;
+                var pts = new List<Vector2d>(); int K = PcK(c);
                 for (int i = 0; i <= K; i++)
                 {
                     var q = c.PointAt(c.T0 + (c.T1 - c.T0) * i / K);
@@ -464,7 +552,7 @@ public static class IgesSolid
                     }
                     pts.Add(uv); prev = uv;
                 }
-                ids.Add(f.AddParamPolyline(pts)); model.Add(CurveOriented(f, c));
+                ids.Add(f.AddParamPolyline(pts, PcGenOff || !General(c))); model.Add(CurveOriented(f, c));
             }
             if (model.Any(x => x == 0)) return (0, 0);
             return (model.Count == 1 ? model[0] : f.AddComposite(model), ids.Count == 1 ? ids[0] : f.AddComposite(ids));
@@ -524,8 +612,41 @@ public static class IgesSolid
         LineCurve3 l => new LineCurve3(l.PointAt(a), l.PointAt(b)),
         ArcCurve3 r => new ArcCurve3(r.Frame, r.Radius, r.A0 + r.Sweep * a, r.A0 + r.Sweep * b),
         EllipseCurve3 e => new EllipseCurve3(e.Frame, e.RU, e.RV, e.A0 + (e.A1 - e.A0) * a, e.A0 + (e.A1 - e.A0) * b),
+        _ when !PieceOff => new Piece(c, a, b, false),
         _ => null
     };
+
+    /// <summary>
+    /// m.x2: КУСОК КРИВОЙ ОБЩЕГО ВИДА (кривая пересечения, кривая по формуле) — в параметре самой кривой [A, B] (обратный —
+    /// с параметром A + B − t). Прежде такая кривая не делилась, и пояс грани вращения не разрезался на угле шва (стык
+    /// цилиндров протяжки по ломаной писался прежней записью). Пишется сплайном (Curve). P3D_IGESPIECE=0 — прежде.
+    /// </summary>
+    sealed class Piece : ICurve3
+    {
+        readonly ICurve3 _c; readonly double _a, _b; readonly bool _rev;
+        public Piece(ICurve3 c, double a, double b, bool rev) { _c = c; _a = a; _b = b; _rev = rev; }
+        public double T0 => _a;
+        public double T1 => _b;
+        public bool IsClosed => false;
+        double Map(double t) => _rev ? _a + _b - t : t;
+        public Vector3d PointAt(double t) => _c.PointAt(Map(t));
+        public Vector3d TangentAt(double t) => _rev ? -_c.TangentAt(Map(t)) : _c.TangentAt(Map(t));
+        public double Length { get { double l = 0; var p = PointAt(_a); for (int i = 1; i <= 128; i++) { var q = PointAt(_a + (_b - _a) * i / 128.0); l += (q - p).Length; p = q; } return l; } }
+        public Bounds3 Bounds { get { var bb = Bounds3.Empty; for (int i = 0; i <= 64; i++) bb.Add(PointAt(_a + (_b - _a) * i / 64.0)); return bb; } }
+        public ICurve3 Reversed() => new Piece(_c, _a, _b, !_rev);
+        public void Tessellate(List<Vector3d> dst, bool includeFirstPoint) { for (int i = includeFirstPoint ? 0 : 1; i <= 64; i++) dst.Add(PointAt(_a + (_b - _a) * i / 64.0)); }
+    }
+    /// <summary>m.x2: точек кривой в параметрах — 24 у отрезка, дуги, эллипса; 96 у кривой общего вида (кубическая
+    /// интерполяция по 24 точкам отходила на 1e-3 мм от кривой — OpenCascade разворачивал стык цилиндров протяжки в пять
+    /// оборотов). P3D_IGESPCK=24 — прежде.</summary>
+    static int PcK(ICurve3 c) => !General(c) || PcKOld ? 24 : 96;
+    /// <summary>Кривая общего вида (пересечения, по формуле, кусок такой): её кривая в параметрах — ломаной (96 точек), не
+    /// кубической интерполяцией: у стыка цилиндров протяжки кубическая давала OpenCascade лишние обороты грани.
+    /// P3D_IGESPCGEN=0 — кубической (как у прочих).</summary>
+    static bool General(ICurve3 c) => c is not (LineCurve3 or ArcCurve3 or EllipseCurve3 or SplineCurve3);
+    static readonly bool PcGenOff = Environment.GetEnvironmentVariable("P3D_IGESPCGEN") == "0";
+    static readonly bool PcKOld = Environment.GetEnvironmentVariable("P3D_IGESPCK") == "24";
+    static readonly bool PieceOff = Environment.GetEnvironmentVariable("P3D_IGESPIECE") == "0";
 
     /// <summary>Зарегистрировать деление куска контура в его параметре t (переводится в параметр кривой ребра).</summary>
     static void RegisterSplit(ICurve3 piece, double t)
@@ -566,8 +687,16 @@ public static class IgesSolid
             if (ce.Reversed) ranges.Reverse();
             foreach (var (ra, rb) in ranges)
             {
-                ICurve3 pc = ranges.Count == 1 ? c : Sub(c, ra, rb)!;
-                if (ce.Reversed) pc = pc.Reversed();
+                ICurve3 pc;
+                // кривая общего вида — куском в её собственном параметре (обратный ход — тем же параметром наоборот): деление
+                // в реестре по параметру куска переводится в параметр ребра линейно
+                if (!PieceOff && c is not (LineCurve3 or ArcCurve3 or EllipseCurve3 or SplineCurve3))
+                    pc = new Piece(c, Math.Min(ra, rb), Math.Max(ra, rb), ce.Reversed);
+                else
+                {
+                    pc = ranges.Count == 1 ? c : Sub(c, ra, rb)!;
+                    if (ce.Reversed) pc = pc.Reversed();
+                }
                 _pieces?.TryAdd(pc, (ce.Edge, ce.Reversed ? rb : ra, ce.Reversed ? ra : rb));
                 res.Add(pc);
             }
@@ -655,6 +784,7 @@ public static class IgesSolid
             case ArcCurve3 a: { double am = a.A0 + a.Sweep * t; return (new ArcCurve3(a.Frame, a.Radius, a.A0, am), new ArcCurve3(a.Frame, a.Radius, am, a.A1)); }
             case EllipseCurve3 e: { double am = e.A0 + (e.A1 - e.A0) * t; return (new EllipseCurve3(e.Frame, e.RU, e.RV, e.A0, am), new EllipseCurve3(e.Frame, e.RU, e.RV, am, e.A1)); }
         }
+        if (!PieceOff) return (new Piece(c, c.T0, t, false), new Piece(c, t, c.T1, false));
         return null;
     }
 
@@ -734,8 +864,15 @@ public static class IgesSolid
         // KRN-06: эллипс (стык цепочки, наклонный торец ленты) — аффинный образ дуги: точный рациональный B-сплайн.
         EllipseCurve3 el when !IgesCylOff => f.AddSpline(EllipseAsRational(el)),
 
+        // m.x2: кривая пересечения (плоскость × выдавливание сплайна и т. п.) и кривая по формуле — кубическим B-сплайном с
+        // проверенным отходом (бюджет экспорта / 100: плоская грань и сплайновая поверхность по разные стороны кривой — объём
+        // у OpenCascade отходил на 3e-6 при 1e-4), как в STEP; прежде — 0, и контур грани выпадал (грань без границы).
+        // P3D_IGESFIT=0 — прежде.
+        _ when c != null && !FitOff && SplineFit.Fit(c, ToleranceContext.Current.ExportFit / 100) is { } fit => f.AddSpline(fit.Spline),
+
         _ => 0
     };
+    static readonly bool FitOff = Environment.GetEnvironmentVariable("P3D_IGESFIT") == "0";
 
     /// <summary>
     /// Дуга окружности как рациональный квадратичный B-сплайн (точное представление): куски

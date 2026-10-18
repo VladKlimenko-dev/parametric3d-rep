@@ -272,10 +272,30 @@ public static class LoftOp
             if (!v.IsValid)
                 throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Loft: the lofted body is not a valid solid (self-crossing or folded bands) — " + v.Summary());
         }
+        // m.x2/KRN-07: многоугольники с равным числом сторон — точным линейчатым лофтом (NURBS-грань на сторону; прежде — одна
+        // грань-сетка без поверхности, IGES/STEP её не писали). Порядок и неоднозначность уже проверены выше; точное тело
+        // принимается, только если его объём близок к объёму призматоида по вершинам (1e-3: стороны-скрученные четырёхугольники
+        // у призматоида — два треугольника; так проверяется соответствие вершин). P3D_LOFTPOLYEXACT=0 — прежнее.
+        if (matched && !PolyExactOff && !DirectRound.LoftNurbsOff && ExactSections(sections) is { } psecs
+            && psecs.All(x => x.Loop.Count == psecs[0].Loop.Count && x.Loop.All(c => c is LineCurve3)))
+        {
+            string? pwhy = null;
+            try
+            {
+                var exact = DirectRound.NurbsLoft(psecs, false, ref pwhy, null, _tan0, _tan1);
+                double? ve = exact == null ? null : AnalyticVolume.Of(exact);
+                double vp = Tess.MassProps.Volume(Tess.Tessellator.Tessellate(solid));
+                if (exact != null && ve is { } a && Math.Abs(a - vp) <= 1e-3 * Math.Max(1, vp)) return exact;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException && !KernelContext.IsCancellation(ex)) { }
+        }
         return solid;
     }
     static readonly bool ValidOff = Environment.GetEnvironmentVariable("P3D_LOFTVALID") == "0";
 
+    /// <summary>m.x2/KRN-07: многоугольные сечения с равным числом сторон — тоже точным линейчатым лофтом (NURBS-грани по
+    /// сторонам; прежде — одна граня-сетка без поверхности, IGES/STEP её не писали). P3D_LOFTPOLYEXACT=0 — прежний путь.</summary>
+    static readonly bool PolyExactOff = Environment.GetEnvironmentVariable("P3D_LOFTPOLYEXACT") == "0";
     static readonly bool CornersOff = Environment.GetEnvironmentVariable("P3D_LOFTCORNERS") == "0";
 
     private static List<Vector3d> Poly(ICurve3 c) { var t = new List<Vector3d>(); c.Tessellate(t, true); return t; }
