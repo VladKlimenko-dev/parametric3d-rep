@@ -58,6 +58,7 @@ public static partial class DirectRound
         double va = d3 * d6 - d5 * d4; if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) return b + (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6)));
         double den = 1 / (va + vb + vc); return a + ab * (vb * den) + ac * (vc * den);
     }
+    static readonly bool ProcTrimOff = Environment.GetEnvironmentVariable("P3D_OFFSETPROCTRIM") == "0";
     static readonly bool MoveDbg = Environment.GetEnvironmentVariable("P3D_OFFSETMOVEDBG") == "1";
     static readonly bool FreeFormOff = Environment.GetEnvironmentVariable("P3D_OFFSETFREEFORM") == "0";
     static readonly bool SectionOffOff = Environment.GetEnvironmentVariable("P3D_OFFSETSECTION") == "0";
@@ -192,12 +193,15 @@ public static partial class DirectRound
             // параметризация, нормаль та же); вершины и рёбра — Ньютоном по смещённым поверхностям (Move, ProcOffset), объём —
             // интегралом по параметрам. Годится, пока d меньше наименьшего радиуса кривизны (проверка годности тела после).
             // P3D_OFFSETFREEFORM=0 — прежний отказ.
-            if (ns == null && !FreeFormOff && src is ExtrudedSurface { Base: SplineCurve3 or BezierCurve3 })
+            if (ns == null && !FreeFormOff && src is NurbsSurface or ExtrudedSurface { Base: SplineCurve3 or BezierCurve3 })
             {
                 var uvp = src.ProjectToUV(probe); var nb = src.NormalAt(uvp);
                 if (nb.LengthSquared > 1e-24)
                 {
-                    ns = new OffsetSurface(src, Vector3d.Dot(nb, no) >= 0 ? d : -d);
+                    double sd = Vector3d.Dot(nb, no) >= 0 ? d : -d;
+                    // NURBS — NURBS-поверхностью через точки смещения (отход ≤ 1e-7 мм): разметка, интегралы, обмен — как у прочих
+                    if (src is NurbsSurface nsrc) { if (OffsetNurbs.Fit(nsrc, sd, 1e-7) is { } nfit) ns = nfit.S; }
+                    else ns = new OffsetSurface(src, sd);
                 }
             }
             if (ns == null && src is SectionSurface ssf && !SectionOffOff)
@@ -520,12 +524,36 @@ public static partial class DirectRound
             vmap[v] = p.Value;
         }
 
+        var procTrim = new Dictionary<TEdge, (double S0, double S1)>();
         // процедурная смещённая кривая ребра: внутренние точки — смещением, концы — точно смещённые вершины
         ProcCurve3 ProcOffset(TEdge e, ICurve3 oc, IReadOnlyList<TFace> fs)
         {
             bool fw = (oc.PointAt(oc.T0) - e.V0.P).Length <= (oc.PointAt(oc.T0) - e.V1.P).Length;
             var a = vmap[fw ? e.V0 : e.V1]; var b = vmap[fw ? e.V1 : e.V0];
-            return new ProcCurve3(t => t <= oc.T0 ? a : t >= oc.T1 ? b : Move(oc.PointAt(t), fs) ?? new Vector3d(double.NaN), oc.T0, oc.T1, false, "offset edge");
+            double t0 = oc.T0, t1 = oc.T1;
+            if (!ProcTrimOff)
+            {
+                // m.g4: У ОСТРОГО УГЛА (третья грань вершины встречает две грани ребра под углом) смещённое ребро короче: его концы —
+                // смещённые вершины, а смещение точки старого ребра у самого конца уходит мимо вершины (кривая пересечения двух
+                // смещённых граней продолжается за третью). Пределы параметра — точки, чьё смещение попадает в вершины (поиск по
+                // расстоянию); вершина вне хода (смещение наружу у вогнутого угла) — прежние пределы. P3D_OFFSETPROCTRIM=0.
+                double span = oc.T1 - oc.T0;
+                double Near(double lo, double hi, Vector3d target)
+                {
+                    double D(double t) => Move(oc.PointAt(t), fs) is { } q ? (q - target).Length : double.MaxValue;
+                    double bt = lo, bd = D(lo);
+                    for (int k = 1; k <= 32; k++) { double t = lo + (hi - lo) * k / 32; double dd = D(t); if (dd < bd) { bd = dd; bt = t; } }
+                    double l2 = Math.Max(lo, bt - (hi - lo) / 32), h2 = Math.Min(hi, bt + (hi - lo) / 32);
+                    for (int it = 0; it < 80; it++) { double m1 = l2 + (h2 - l2) / 3, m2 = h2 - (h2 - l2) / 3; if (D(m1) < D(m2)) h2 = m2; else l2 = m1; }
+                    double tt = (l2 + h2) / 2; return D(tt) <= 1e-7 * Math.Max(1, scale) ? tt : double.NaN;
+                }
+                if (Move(oc.PointAt(oc.T0 + 1e-6 * span), fs) is { } qa && (qa - a).Length > 1e-6 * Math.Max(1, scale) && Near(oc.T0, oc.T0 + 0.5 * span, a) is var ta && double.IsFinite(ta)) t0 = ta;
+                if (Move(oc.PointAt(oc.T1 - 1e-6 * span), fs) is { } qb && (qb - b).Length > 1e-6 * Math.Max(1, scale) && Near(oc.T1 - 0.5 * span, oc.T1, b) is var tb && double.IsFinite(tb)) t1 = tb;
+            }
+            double T0 = oc.T0, T1 = oc.T1, s0 = t0, s1 = t1;
+            procTrim[e] = (s0, s1);
+            // параметр новой кривой — прежние пределы [T0, T1], отображённые линейно на [t0, t1]
+            return new ProcCurve3(t => t <= T0 ? a : t >= T1 ? b : Move(oc.PointAt(s0 + (s1 - s0) * (t - T0) / (T1 - T0)), fs) ?? new Vector3d(double.NaN), T0, T1, false, "offset edge");
         }
 
         // рёбра
@@ -623,6 +651,7 @@ public static partial class DirectRound
             for (int k = 0; k <= 6; k++)
             {
                 double t = e.Curve.T0 + (e.Curve.T1 - e.Curve.T0) * k / 6.0;
+                if (nc is ProcCurve3 && procTrim.TryGetValue(e, out var pt)) t = pt.S0 + (pt.S1 - pt.S0) * k / 6.0;
                 var q = nc.PointAt(nc.T0 + (nc.T1 - nc.T0) * k / 6.0);
                 var want = k == 0 || k == 6 ? (Vector3d?)null : Move(e.Curve.PointAt(t), fs);
                 // отрезок: смещённые точки — на прямой (концы могут сдвинуться вдоль неё); дуга — та же параметризация

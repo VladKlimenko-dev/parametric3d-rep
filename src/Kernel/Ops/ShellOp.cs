@@ -137,6 +137,12 @@ public static class ShellOp
                 // u12b: открытая грань выносится наружу лишь на четверть толщины — полости довольно выйти за неё; на всю толщину точка
                 // на касательном шве (фаска на дуге) уходила вдоль шва за вершину смещённого конуса. Мутация P3D_SHELLOPENPUSH=0.
                 var cavO = DirectRound.OffsetSolid(body, f => openFaces.Contains(f) ? OpenPush(TT(f)) : -TT(f), "shell:inner", ref whyOffset);
+                if (cavO != null && openFaces.Count == 0 && own == null && !NestOff && Nest(body, cavO) is { } nested)
+                {
+                    bodies[0] = nested;
+                    warnings.Add($"Shell: wall {thickness:0.###}, closed cavity by offsetting all faces — an inner shell (exact).");
+                    return true;
+                }
                 if (cavO != null)
                 {
                     BooleanOp.Subtract(bodies, cavO, warnings);
@@ -436,6 +442,40 @@ public static class ShellOp
     }
 
     /// <summary>Разбор: стенка наружу сразу булевыми (сверка с прямым путём).</summary>
+    /// <summary>
+    /// m.g4: ЗАКРЫТАЯ ПОЛОСТЬ — ВНУТРЕННЕЙ ОБОЛОЧКОЙ, без булевой. Смещённое внутрь тело (проверено на годность, без
+    /// самопересечений) лежит строго внутри исходного: результат — копия тела и оболочка полости с вывернутыми гранями.
+    /// Булева общего вида перетрассировала бы и рёбра наружных граней свободной формы (объём уходил на 1e-5). Тело проверяется;
+    /// негодно — null (тогда булева). P3D_SHELLNEST=0 — всегда булева.
+    /// </summary>
+    static TSolid? Nest(TSolid body, TSolid cavity)
+    {
+        try
+        {
+            var res = TopologyClone.Deep(body); var cav = TopologyClone.Deep(cavity);   // полость не трогается: при отказе — булева
+            res.BeginEdit("ShellOp.Nest", EditKind.Derive); cav.BeginEdit("ShellOp.Nest", EditKind.Derive);
+            // соглашение о контурах — у каждой части до сборки (после — перевернуло бы вывернутые грани полости обратно)
+            if (res.TopologyConvention < TopologyConventions.Version) TopologyConventions.Normalize(res);
+            if (cav.TopologyConvention < TopologyConventions.Version) TopologyConventions.Normalize(cav);
+            foreach (var f in cav.Faces.ToList()) Export.StepImport.FlipFace(f);
+            foreach (var sh in cav.Shells.ToList()) { cav.Shells.Remove(sh); sh.Solid = res; res.Shells.Add(sh); }
+            // гарантия: полость точная, тело точное или без контракта (примитив, вращение — точные поверхности) — точный результат
+            res.Guarantee = cavity.Guarantee == GuaranteeLevel.ExactAnalytic && body.Guarantee is GuaranteeLevel.ExactAnalytic or GuaranteeLevel.Unspecified
+                && res.Faces.All(x => GeometryAudit.AuthoritativeSurface(x) != null) ? GuaranteeLevel.ExactAnalytic : body.Guarantee;
+            res.DisplayMeshKey = null;
+            if (cav.TopologyConvention >= TopologyConventions.Version && res.TopologyConvention >= TopologyConventions.Version) { }
+            else return null;
+            var vr = SolidValidator.Validate(res);
+            if (!vr.IsValid) { ShellDebug?.Invoke("nest: invalid " + vr.Summary() + " " + string.Join(" / ", vr.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(2))); return null; }
+            if (AnalyticVolume.Of(res) is not double v || !(v > 0)) { ShellDebug?.Invoke("nest: no volume"); return null; }
+            // сторона полости: объём результата = объём тела − объём полости (иначе грани полости не вывернулись — булева)
+            if (AnalyticVolume.Of(body) is not double vb || AnalyticVolume.Of(cavity) is not double vc || !(Math.Abs(v - (vb - vc)) <= 1e-9 * vb + 1e-12))
+            { ShellDebug?.Invoke($"nest: volume {v} vs {(AnalyticVolume.Of(body) ?? double.NaN) - (AnalyticVolume.Of(cavity) ?? double.NaN)}"); return null; }
+            return res;
+        }
+        catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { return null; }
+    }
+    static readonly bool NestOff = Environment.GetEnvironmentVariable("P3D_SHELLNEST") == "0";
     static readonly bool ForceOutBool = Environment.GetEnvironmentVariable("P3D_SHELLOUTFORCEBOOL") == "1";
     static readonly bool ExtendPlanarOff = Environment.GetEnvironmentVariable("P3D_SHELLEXTENDPLANAR") == "0";
     static readonly bool OutBoolOff = Environment.GetEnvironmentVariable("P3D_SHELLOUTBOOL") == "0";

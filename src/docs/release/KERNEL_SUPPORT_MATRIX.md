@@ -79,7 +79,7 @@ MinFeature 1e-4, HalfSizeBox 5e5, MaxEntityTolerance 1e-5 мм) — часть �
 | Плоскость, цилиндр, конус | Точная поверхность в B-rep, точные запросы | 1e-11 мм³ объём | `PlaneSurface`, `ExtrudedSurface`, `RevolvedSurface`, `Ssi` | G15–G18, K08 | Принято (корпус) |
 | Сфера | То же | грань из окружностей — замкнутая форма (Гаусс–Бонне), сверка с OpenCascade 1e-8 | `RevolvedSurface`; карты по контракту `SurfaceDomain`; разметка — `StereoChart` | G15-SPHERE, G18-SPHERE, KRN03-SPHERE-CHART-CONTRACT, G14 | Принято (корпус) |
 | Тор | То же | объём, площадь — замкнутый вид (1e-12) | `RevolvedSurface`, `Ssi.Torus`; домен — квадрат периодов (`UvMesher`) | KRN03-TORUS-DOMAIN, G05-TORUS-EXACT-ROUTE, G05-TORUS-OCCT-CASES | Да (с 2026-10-11: разбиение, классификатор, булева в точном маршруте; полнота замкнутых внутренних ветвей — см. g.05) |
-| NURBS-поверхность | Запросы, SSI, обрезка, булева, экспорт | — | `NurbsSurface` | нет | Не проверено / Нет (только вычисление точек) |
+| NURBS-поверхность | Запросы, SSI, обрезка, булева, экспорт | Булевы с плоскостью, квадриками, тором и NURBS; скругление и фаска рёбер; уклон стенок, линейчатых вдоль вытяжки; оболочка (смещение NURBS-поверхностью, отход ≤ 1e-7 мм); STEP и IGES | `NurbsSurface`, `OffsetNurbs`, `DirectRound` | KRN07-NURBS-*, KRN06-NURBS-ROLLING-BALL-INVARIANT, KRN07-DRAFT-NURBS-WALLS, KRN07-SHELL-NURBS-LOFT, g.14, m.x2 | Да (2026-10-19); уклон грани без образующих вдоль вытяжки — честный отказ |
 | Пространственные кривые | Отрезок, дуга, эллипс, сплайн, трасса | 1e-12 … 1e-8 мм | `Curves/*` | G16, K10 | Принято (корпус) |
 | p-кривые на гранях | Согласованы с 3D-кривой в бюджете | модельная точность | `PCurves`, `SolidValidator.ValidatePCurves` | KRN03-PCURVES | Принято (корпус) |
 

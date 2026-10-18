@@ -555,8 +555,23 @@ public static class PrismBuild
                 if (closedChain || Math.Abs(Math.Abs(sweep) - 2 * Math.PI) < 1e-9) sweep = Math.Sign(cr.Sweep) * 2 * Math.PI;
                 surf = new ExtrudedSurface(new ArcCurve3(new Frame3(P3(cr.C, lo), U, V), cr.R, t0, t0 + sweep), d * (hi - lo));
             }
+            if (GeneralBoolean.CorruptMergeForTest && loops.Count > 1) { GeneralBoolean.CorruptMergeForTest = false; loops.RemoveAt(loops.Count - 1); }
             var nf = new TFace { Surface = surf, Reversed = false, Tag = members[0].Tag };
             foreach (var l in loops) { var tl = nf.AddLoop(true); foreach (var (e, r) in l) tl.Add(e, r); }
+            // 05.7: ДОКАЗАТЕЛЬСТВО ОБЪЕДИНЕНИЯ — точная площадь объединённой грани равна сумме площадей частей (по кривым рёбер; знак —
+            // обход), иначе части остаются раздельными (площадь не считается — тоже). P3D_UNIFYPROOF=0 — без доказательства.
+            if (!UnifyProofOff)
+            {
+                double? am = Topology.AnalyticVolume.FaceArea(nf);
+                double sum = 0; bool okA = am != null;
+                foreach (var m in members) { if (Topology.AnalyticVolume.FaceArea(m) is double a1) sum += Math.Abs(a1); else okA = false; }
+                if (!okA || Math.Abs(Math.Abs(am!.Value) - sum) > 1e-9 * sum + 1e-12)
+                {
+                    foreach (var ce in nf.Loops.SelectMany(l => l.CoEdges)) ce.Edge.CoEdges.Remove(ce);
+                    GeneralBoolean.MergesRefused++;
+                    continue;
+                }
+            }
             foreach (var m in members)
             {
                 // полурёбра убираемой грани отсоединяются от рёбер (иначе ребро «видит» лишние грани)
@@ -575,6 +590,7 @@ public static class PrismBuild
     /// граней), убирается: отрезки сливаются в один во всех контурах.
     /// </summary>
     /// <summary>Мутация P3D_MERGEFAST=0: слияние с полным пересчётом соседства после каждого шага (прежнее, квадратичное).</summary>
+    static readonly bool UnifyProofOff = Environment.GetEnvironmentVariable("P3D_UNIFYPROOF") == "0";
     static readonly bool MergeFastOff = Environment.GetEnvironmentVariable("P3D_MERGEFAST") == "0";
     /// <summary>Проверки: прежнее слияние в этом потоке (сравнение результатов).</summary>
     [ThreadStatic] internal static bool MergeOldForTest;

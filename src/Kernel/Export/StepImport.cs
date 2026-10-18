@@ -627,7 +627,7 @@ public static class StepImport
     static readonly bool OrientLocalOff = Environment.GetEnvironmentVariable("P3D_ORIENTLOCAL") == "0";
 
     /// <summary>Развернуть грань целиком: сторона, обход контуров, фасеты (область та же).</summary>
-    static void FlipFace(TFace f)
+    internal static void FlipFace(TFace f)
     {
         f.Reversed = !f.Reversed;
         foreach (var l in f.Loops)

@@ -854,6 +854,7 @@ public static class GeneralBoolean
     static readonly bool MergeCurvedOff = Environment.GetEnvironmentVariable("P3D_MERGECURVED") == "0";
     static readonly bool MergeDbg = Environment.GetEnvironmentVariable("P3D_MERGEDBG") == "1";
 
+    static readonly bool MergeCylProofOff = Environment.GetEnvironmentVariable("P3D_MERGECYLPROOF") == "0";
     static readonly bool MergeProofOff = Environment.GetEnvironmentVariable("P3D_MERGEPROOF") == "0";
     /// <summary>Проверка KRN05: выбросить последний контур при следующем слиянии (один раз).</summary>
     [ThreadStatic] public static bool CorruptMergeForTest;
@@ -921,7 +922,8 @@ public static class GeneralBoolean
         var nf = new TFace { Surface = f1.Surface, Reversed = f1.Reversed, Tag = f1.Tag, MaterialSlot = f1.MaterialSlot };
         // m.b2 / 05.7: КРИВЫЕ ГРАНИ (шар, конус, тор) — доказательство площадью: точная площадь слитой грани равна сумме площадей
         // двух граней (иначе не сливать); площадь не считается — не сливать
-        if (curved && !MergeProofOff)
+        // 05.7: и цилиндр — доказательство той же площадью (прежде цилиндры сливались без него). P3D_MERGECYLPROOF=0 — прежде.
+        if ((curved || (shp0 is Geometry.Ssi.Cylinder && !MergeCylProofOff)) && !MergeProofOff)
         {
             // несущая слитой грани — та из двух, чья образующая покрывает всю слитую область (у конуса, срезанного выше, образующая
             // не доходит до вершины): площадь считается с каждой; годна та, что равна сумме площадей частей

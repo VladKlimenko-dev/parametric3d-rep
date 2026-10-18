@@ -80,6 +80,42 @@ static partial class Program
     }
 
     /// <summary>
+    /// m.g4: УКЛОН СТЕНОК NURBS. То же тело «стадион», но лофтом двух одинаковых сечений (z = 0 и 20): стенки — грани NURBS,
+    /// линейчатые вдоль вытяжки. Уклон — та же формула эквидистанты, что у стенок-выдавливаний (KRN07-DRAFT-BEZIER-WALLS).
+    /// </summary>
+    static void Krn07DraftNurbsChecks()
+    {
+        Check("KRN07-DRAFT-NURBS-WALLS", () =>
+        {
+            var fails = new List<string>();
+            var (loop, A, L) = BezierStadium(10, 8, 8);
+            const double H = 20;
+            Parametric3D.Kernel.Ops.Profile Sec(double z) => ProfileBuilder.Build(new Frame3(new Vector3d(0, 0, z), Vector3d.UnitX, Vector3d.UnitY),
+                loop.Select(c => c switch { LineCurve3 l => (ICurve3)new LineCurve3(l.A + new Vector3d(0, 0, z), l.B + new Vector3d(0, 0, z)), BezierCurve3 b => new BezierCurve3(b.P.Select(q => q + new Vector3d(0, 0, z))), _ => c }).ToList());
+            TSolid Body() => LoftOp.Build(new[] { Sec(0), Sec(H) }, 64, false);
+            double Want(double deg, double z0, double sg) { double t = Math.Tan(deg * Math.PI / 180); double Ar(double z) { double d = t * sg * (z - z0); return A - L * d + Math.PI * d * d; } return H / 6 * (Ar(0) + 4 * Ar(H / 2) + Ar(H)); }
+            var rightMid = new Vector3d(10 + 6, 0, H / 2);
+            foreach (var (name, z0, deg, sg) in new (string, double, double, double)[] { ("NURBS wall 5°, neutral at bottom", 0, 5, 1), ("NURBS wall 4°, neutral at top", H, 4, -1), ("NURBS wall −3°", 0, -3, 1) })
+            {
+                var body0 = Body();
+                int nurbs = body0.Faces.Count(f => GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.NurbsSurface);
+                if (nurbs < 2 || !SolidValidator.Validate(body0).IsValid) { fails.Add($"{name}: the lofted body has {nurbs} NURBS walls, valid {SolidValidator.Validate(body0).IsValid}"); continue; }
+                var bl = new List<TSolid> { body0 }; var w = new List<string>(); long d0 = DirectRound.DraftSplineWalls;
+                bool ok = DraftOp.Apply(bl, new[] { rightMid }, new Vector3d(0, 0, z0), Vector3d.UnitZ, deg, w);
+                var b = bl[0]; double v = AnalyticVolume.Of(b) ?? double.NaN, want = Want(deg, z0, sg);
+                Console.WriteLine($"  {name}: ok {ok}, V {v:R} want {want:R} ({(v - want) / want:E1}) {b.Guarantee}, {b.Faces.Count()} faces ({nurbs} NURBS walls) | {string.Join(" | ", w.Take(2))}");
+                if (!ok || DirectRound.DraftSplineWalls == d0) fails.Add($"{name}: not the wall draft ({string.Join(" | ", w.Take(3))})");
+                else
+                {
+                    if (!SolidValidator.Validate(b).IsValid) fails.Add($"{name}: {SolidValidator.Validate(b).Summary()}");
+                    if (!(Math.Abs(v - want) <= 1e-8 * want)) fails.Add($"{name}: V {v:R} vs {want:R}");
+                }
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
+
+    /// <summary>
     /// m.g4: ОБОЛОЧКА ТЕЛА СО СТЕНКАМИ ПО КРИВЫМ БЕЗЬЕ («стадион» c = 10, b = 8, вынос 8, H = 20). Сечение полости — эквидистанта
     /// контура внутрь на t: площадь A − L·t + π·t² (точно, пока t меньше наименьшего радиуса кривизны 6). Закрытая полость —
     /// высота H − 2t, открытый верх — H − t. Стенки смещаются точно (поверхность смещения по нормали), объём — интегралом
@@ -126,6 +162,57 @@ static partial class Program
 
 static partial class Program
 {
+    /// <summary>
+    /// m.g4: ОБОЛОЧКА ТЕЛА С ГРАНЯМИ NURBS (гладкий лофт сечений «D» из отрезка и кривой Безье). Закрытая оболочка t = 0.5:
+    /// годна, узлы сеток внутренних граней — на расстоянии t от исходного тела (1e-6), объём = V(тело) − V(смещённое тело).
+    /// </summary>
+    static void Krn07ShellNurbsChecks()
+    {
+        Check("KRN07-SHELL-NURBS-LOFT", () =>
+        {
+            if (Environment.GetEnvironmentVariable("P3D_SHELLDBG") == "1") { ShellOp.ShellDebug = m => Console.WriteLine("   [shell] " + m); DirectRound.Debug = m => Console.WriteLine("   [dr] " + m); }
+            if (Environment.GetEnvironmentVariable("P3D_SHELLMESHDBG") == "1") Parametric3D.Kernel.Tess.ExactFaceMesher.TryDebug = m => Console.WriteLine("   [mesh] " + m);
+            var fails = new List<string>();
+            Parametric3D.Kernel.Ops.Profile D(double lam, double z) { Vector3d P(double x, double y) => new(x * lam, y * lam, z); return ProfileBuilder.Build(new Frame3(new Vector3d(0, 0, z), Vector3d.UnitX, Vector3d.UnitY), new ICurve3[] { new LineCurve3(P(-5, 0), P(5, 0)), new BezierCurve3(new[] { P(5, 0), P(5, 8), P(-5, 8), P(-5, 0) }) }); }
+            TSolid Loft() => LoftOp.Build(new[] { D(1, 0), D(0.75, 10), D(0.5, 20) }, 64, true);
+            foreach (var (t, open) in new (double, Vector3d[]?)[] { (0.5, null), (1.0, null), (0.5, new[] { new Vector3d(0, 1, 20) }) })
+            {
+                var body0 = Loft(); double v0 = AnalyticVolume.Of(body0) ?? double.NaN;
+                string? wy = null; var cav = DirectRound.OffsetSolid(Loft(), f => -t, "x", ref wy); double vc = cav == null ? double.NaN : AnalyticVolume.Of(cav) ?? double.NaN;
+                var bl = new List<TSolid> { Loft() }; var w = new List<string>();
+                bool ok = ShellOp.Hollow(bl, t, open, w); var b = bl[0]; double v = AnalyticVolume.Of(b) ?? double.NaN;
+                double worst = 0; int n = 0;
+                foreach (var f in b.Faces.Where(x => x.Tag.StartsWith("shell:inner") && x.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface))
+                    foreach (var (a0, _, _) in ((Parametric3D.Kernel.Surfaces.FacetedSurface)f.Surface).Facets.Take(200))
+                    {
+                        // узел сетки — на точную поверхность своей грани (сетка многогранного результата отходит на прогиб хорды)
+                        var sf = GeometryAudit.AuthoritativeSurface(f)!; var a = sf.PointAt(sf.ProjectToUV(a0));
+                        double dm = double.MaxValue;
+                        foreach (var g in body0.Faces)
+                        {
+                            var sg = GeometryAudit.AuthoritativeSurface(g)!;
+                            if (open != null && open.Any(o => (sg.PointAt(sg.ProjectToUV(o)) - o).Length < 1e-6)) continue;   // открытая грань
+                            dm = Math.Min(dm, (sg.PointAt(sg.ProjectToUV(a)) - a).Length);
+                        }
+                        worst = Math.Max(worst, Math.Abs(dm - t)); n++;
+                    }
+                var vr = SolidValidator.Validate(b);
+                Console.WriteLine($"  NURBS loft shell t = {t}{(open != null ? " open top" : "")}: ok {ok}, V {v:R}, body {v0:R} − offset {vc:R} = {v0 - vc:R}, {n} inner points off t by ≤ {worst:E1}, valid {vr.IsValid} {b.Guarantee} | {wy} | {string.Join(" | ", w.Take(2))}");
+                if (!ok || !vr.IsValid) { fails.Add($"t {t}: ok {ok}, {vr.Summary()} ({wy}; {string.Join(" | ", w.Take(2))})"); continue; }
+                // закрытая — объём тела минус смещённое тело; открытая — объём против сетки (1e-3) и больше закрытой той же толщины
+                if (open == null && !(Math.Abs(v - (v0 - vc)) <= 1e-6 * v)) fails.Add($"t {t}: V {v:R} vs {v0 - vc:R}");
+                if (open != null)
+                {
+                    double vt = Parametric3D.Kernel.Tess.MassProps.Volume(Parametric3D.Kernel.Tess.Tessellator.Tessellate(b));
+                    Console.WriteLine($"    open: tessellated {vt:R}");
+                    if (!(Math.Abs(v - vt) <= 1e-3 * v) || !(v < v0 - vc)) fails.Add($"t {t} open: V {v:R}, mesh {vt:R}, closed {v0 - vc:R}");
+                }
+                if (n < 50 || !(worst <= 1e-6)) fails.Add($"t {t}: inner points off the offset distance by {worst:E1} ({n} points)");
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
+
     static void Krn07DraftNonRuledChecks()
     {
         Check("KRN07-DRAFT-NONRULED-REFUSED", () =>
