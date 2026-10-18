@@ -66,7 +66,7 @@ public static class Strings
         // ---------------------------------------------------------------- файл
         ["Новая"] = "New", ["Новая деталь"] = "New part", ["Пробная деталь (куб 100)"] = "Sample part (cube 100)",
         ["Открыть"] = "Open", ["Открыть…"] = "Open…", ["Открыть: "] = "Open: ", ["Сохранить"] = "Save", ["Сохранить как…"] = "Save as…",
-        ["Импорт"] = "Import", ["Импорт (STEP, IGES)…"] = "Import (STEP, IGES)…", ["Экспорт"] = "Export", ["Экспорт (STEP, STL, OBJ)…"] = "Export (STEP, STL, OBJ)…",
+        ["Импорт"] = "Import", ["Импорт (STEP, IGES)…"] = "Import (STEP, IGES)…", ["Экспорт"] = "Export", ["Экспорт (STEP, IGES, STL, OBJ)…"] = "Export (STEP, IGES, STL, OBJ)…",
         ["Выход"] = "Exit", ["Последние файлы"] = "Recent files", ["Сохранить деталь"] = "Save part", ["Деталь Parametric3D"] = "Parametric3D part",
         ["Сохранено: {0}"] = "Saved: {0}", ["Не сохранять"] = "Don't save", ["Несохранённые изменения"] = "Unsaved changes",
         ["Сохранить изменения в «{0}»?"] = "Save changes to “{0}”?", ["Экспорт: в детали ещё нет тела."] = "Export: the part has no body yet.",

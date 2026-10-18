@@ -298,8 +298,19 @@ static partial class Program
         Run("cone on its side on a box (line contact)", Box(-20, -20, -10, 40, 40, 10), Rotated(PrimitiveOp.Cone(Vector3d.Zero, 4, 0, 10), Vector3d.Zero, Vector3d.UnitY, 90 - Math.Atan(0.4) * 180 / Math.PI, new Vector3d(0, 0, 0)));
         Run("sphere touching a box edge", Box(-10, -10, -10, 20, 20, 10), PrimitiveOp.Sphere(new Vector3d(10 + 3, 0, 3), Math.Sqrt(18)));
         Run("sphere touching a box vertex", Box(-10, -10, -10, 20, 20, 10), PrimitiveOp.Sphere(new Vector3d(13, 13, 3), Math.Sqrt(27)));
+        Run("coaxial cylinders, same radius, overlapping", PrimitiveOp.Cylinder(Vector3d.Zero, 5, 20), PrimitiveOp.Cylinder(new Vector3d(0, 0, 10), 5, 20));
+        Run("coaxial cylinders, same radius, end to end", PrimitiveOp.Cylinder(Vector3d.Zero, 5, 20), PrimitiveOp.Cylinder(new Vector3d(0, 0, 20), 5, 20));
+        Run("cylinder in a tube bore (same radius)", Rotated(PrimitiveOp.Cylinder(Vector3d.Zero, 8, 20), Vector3d.Zero, Vector3d.UnitZ, 0, Vector3d.Zero), PrimitiveOp.Cylinder(new Vector3d(0, 0, -5), 8, 10));
+        Run("sphere and its upper half", PrimitiveOp.Sphere(Vector3d.Zero, 6), HalfSphere());
+        Run("same sphere, shifted copy rotated", PrimitiveOp.Sphere(Vector3d.Zero, 6), Rotated(PrimitiveOp.Sphere(Vector3d.Zero, 6), Vector3d.Zero, new Vector3d(1, 1, 0), 40, Vector3d.Zero));
+        Run("coaxial cones, same angle", PrimitiveOp.Cone(Vector3d.Zero, 10, 2, 16), PrimitiveOp.Cone(new Vector3d(0, 0, 8), 5, 0, 10));
+        Run("same torus, rotated about its axis", PrimitiveOp.Torus(Vector3d.Zero, 12, 3), Rotated(PrimitiveOp.Torus(Vector3d.Zero, 12, 3), Vector3d.Zero, Vector3d.UnitZ, 33, Vector3d.Zero));
+        Run("torus and its half", PrimitiveOp.Torus(Vector3d.Zero, 12, 3), HalfTorus());
         Run("sphere cut by a plane through its centre", Box(-10, -10, -10, 20, 20, 10), PrimitiveOp.Sphere(new Vector3d(0, 0, 0), 5));
     }
+
+    static TSolid HalfSphere() { var r = BooleanOp.Evaluate(new List<TSolid> { PrimitiveOp.Sphere(Vector3d.Zero, 6) }, Box(-10, -10, 0, 20, 20, 10), BooleanOp.BooleanKind.Intersect, OperationPolicy.Strict); return r.Bodies[0]; }
+    static TSolid HalfTorus() { var r = BooleanOp.Evaluate(new List<TSolid> { PrimitiveOp.Torus(Vector3d.Zero, 12, 3) }, Box(-20, 0, -10, 40, 20, 20), BooleanOp.BooleanKind.Intersect, OperationPolicy.Strict); return r.Bodies[0]; }
 
     static TSolid Rotated(TSolid s, Vector3d at, Vector3d axis, double deg, Vector3d move)
     {
@@ -420,6 +431,75 @@ static partial class Program
                 catch (Exception ex) { fails.Add($"{name}: {ex.GetType().Name} {ex.Message}"); }
             }
             Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
+}
+
+static partial class Program
+{
+    static void CoincidentChecks()
+    {
+        Check("KRN05-COINCIDENT-CURVED-EXACT", () =>
+        {
+            // m.b2 / 05.3 / 05.7: СОВПАДАЮЩИЕ КРИВЫЕ ПОВЕРХНОСТИ — точно. Соосные цилиндры одного радиуса (внахлёст и встык),
+            // шар и его половина, копия шара под поворотом (несущая та же, шов в другом месте), тор и его половина, копия тора
+            // под поворотом вокруг оси, соосные конусы одного угла: ExactAnalytic, объёмы — формулами (до 1e-9), годность;
+            // совпавшие грани одной несущей сливаются (у ∪ цилиндров внахлёст — одна боковая грань: 3 грани), кратность —
+            // три тела с общей гранью за одну операцию и цепочкой дают одно и то же. Сдвиг совпадающей грани на 1e-9 (меньше
+            // точности модели) — то же, что совпадение.
+            var fails = new List<string>();
+            double Cyl(double r, double h) => Math.PI * r * r * h;
+            double Ball(double r) => 4.0 / 3 * Math.PI * r * r * r;
+            double Tor(double R0, double r0) => 2 * Math.PI * Math.PI * R0 * r0 * r0;
+            double ConeV(double r1, double r2, double h) => Math.PI * h * (r1 * r1 + r1 * r2 + r2 * r2) / 3;
+            var cases = new (string Name, Func<TSolid> A, Func<TSolid> B, double U, double I, double S, int? UFaces)[]
+            {
+                ("coaxial cylinders, overlapping", () => PrimitiveOp.Cylinder(Vector3d.Zero, 5, 20), () => PrimitiveOp.Cylinder(new Vector3d(0, 0, 10), 5, 20), Cyl(5, 30), Cyl(5, 10), Cyl(5, 10), 3),
+                ("coaxial cylinders, end to end", () => PrimitiveOp.Cylinder(Vector3d.Zero, 5, 20), () => PrimitiveOp.Cylinder(new Vector3d(0, 0, 20), 5, 20), Cyl(5, 40), 0, Cyl(5, 20), 3),
+                ("coaxial cylinders, 1e-9 gap", () => PrimitiveOp.Cylinder(Vector3d.Zero, 5, 20), () => PrimitiveOp.Cylinder(new Vector3d(0, 0, 20 + 1e-9), 5, 20), Cyl(5, 40), 0, Cyl(5, 20), 3),
+                ("coaxial cylinders, rotated copy", () => PrimitiveOp.Cylinder(Vector3d.Zero, 5, 20), () => Rotated(PrimitiveOp.Cylinder(new Vector3d(0, 0, 5), 5, 20), Vector3d.Zero, Vector3d.UnitZ, 47, Vector3d.Zero), Cyl(5, 25), Cyl(5, 15), Cyl(5, 5), 3),
+                ("sphere and its upper half", () => PrimitiveOp.Sphere(Vector3d.Zero, 6), HalfSphere, Ball(6), Ball(6) / 2, Ball(6) / 2, 1),
+                ("sphere and a rotated copy", () => PrimitiveOp.Sphere(Vector3d.Zero, 6), () => Rotated(PrimitiveOp.Sphere(Vector3d.Zero, 6), Vector3d.Zero, new Vector3d(1, 1, 0), 40, Vector3d.Zero), Ball(6), Ball(6), 0, 1),
+                ("torus and its half", () => PrimitiveOp.Torus(Vector3d.Zero, 12, 3), HalfTorus, Tor(12, 3), Tor(12, 3) / 2, Tor(12, 3) / 2, 1),
+                ("torus and a copy rotated about its axis", () => PrimitiveOp.Torus(Vector3d.Zero, 12, 3), () => Rotated(PrimitiveOp.Torus(Vector3d.Zero, 12, 3), Vector3d.Zero, Vector3d.UnitZ, 33, Vector3d.Zero), Tor(12, 3), Tor(12, 3), 0, 1),
+                ("coaxial cones, same angle", () => PrimitiveOp.Cone(Vector3d.Zero, 10, 2, 16), () => PrimitiveOp.Cone(new Vector3d(0, 0, 8), 6, 0, 12), ConeV(10, 2, 16) + ConeV(2, 0, 4), ConeV(6, 2, 8), ConeV(10, 6, 8), 2),
+            };
+            foreach (var (name, A, B, U, I, S, uf) in cases)
+            {
+                foreach (var (kind, want) in new[] { (BooleanOp.BooleanKind.Unite, U), (BooleanOp.BooleanKind.Intersect, I), (BooleanOp.BooleanKind.Subtract, S) })
+                {
+                    try
+                    {
+                        var r = BooleanOp.Evaluate(new List<TSolid> { A() }, B(), kind, OperationPolicy.Strict);
+                        if (!r.Accepted || r.Guarantee != GuaranteeLevel.ExactAnalytic) { fails.Add($"{name} {kind}: {r.Outcome} {r.Guarantee}"); continue; }
+                        if (want == 0) { if (r.Outcome != OperationOutcome.Empty) fails.Add($"{name} {kind}: {r.Outcome}, want empty"); continue; }
+                        var bad = r.Bodies.Select(x => SolidValidator.Validate(x)).FirstOrDefault(x => !x.IsValid);
+                        if (bad != null) { fails.Add($"{name} {kind}: {bad.Summary()}"); continue; }
+                        double v = r.Bodies.Sum(OpVolume); int nf = r.Bodies.Sum(x => x.Faces.Count());
+                        Console.WriteLine($"  {name} {kind}: V {v:R} want {want:R}, {r.Bodies.Count} bodies, {nf} faces");
+                        if (!(Math.Abs(v - want) <= 1e-9 * Math.Max(1, want))) fails.Add($"{name} {kind}: V {v:R} vs {want:R}");
+                        if (r.Bodies.Count != 1) fails.Add($"{name} {kind}: {r.Bodies.Count} bodies");
+                        if (kind == BooleanOp.BooleanKind.Unite && uf is int wf && nf != wf) fails.Add($"{name} ∪: {nf} faces, want {wf} (same-domain faces merged)");
+                    }
+                    catch (Exception ex) { fails.Add($"{name} {kind}: {ex.GetType().Name} {ex.Message}"); }
+                }
+            }
+            // КРАТНОСТЬ: три бруска на одной плоскости z = 0..10 вплотную (общие грани x = 10, x = 20) — одной операцией и цепочкой:
+            // одно тело 30×10×10, 6 граней (слиты)
+            {
+                var r1 = BooleanOp.Evaluate(new List<TSolid> { Box(0, 0, 0, 10, 10, 10) }, Box(10, 0, 0, 10, 10, 10), BooleanOp.BooleanKind.Unite, OperationPolicy.Strict);
+                var r2 = r1.Accepted ? BooleanOp.Evaluate(r1.Bodies.ToList(), Box(20, 0, 0, 10, 10, 10), BooleanOp.BooleanKind.Unite, OperationPolicy.Strict) : r1;
+                var many = new List<TSolid> { Box(0, 0, 0, 10, 10, 10), Box(20, 0, 0, 10, 10, 10) };
+                var r3 = BooleanOp.Evaluate(many, Box(10, 0, 0, 10, 10, 10), BooleanOp.BooleanKind.Unite, OperationPolicy.Strict);
+                foreach (var (nm, r) in new[] { ("chain", r2), ("one operation", r3) })
+                {
+                    double v = r.Bodies.Sum(OpVolume); int nf = r.Bodies.Sum(x => x.Faces.Count());
+                    Console.WriteLine($"  three boxes, {nm}: {r.Guarantee} bodies {r.Bodies.Count} V {v:R} faces {nf}");
+                    if (!r.Accepted || r.Guarantee != GuaranteeLevel.ExactAnalytic || r.Bodies.Count != 1 || !(Math.Abs(v - 3000) <= 1e-9 * 3000) || nf != 6 || !SolidValidator.Validate(r.Bodies[0]).IsValid)
+                        fails.Add($"three boxes {nm}: {r.Outcome} {r.Guarantee} bodies {r.Bodies.Count} V {v:R} faces {nf}");
+                }
+            }
+            Require(fails.Count == 0, string.Join("; ", fails.Take(8)));
         });
     }
 }

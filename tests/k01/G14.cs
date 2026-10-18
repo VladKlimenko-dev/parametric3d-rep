@@ -205,6 +205,9 @@ static partial class Program
             ("spindle torus with poles: lemon (m.t3)", () => ExactCopy(Lemon(-2))),
             ("spindle torus with poles: apple (m.t3)", () => ExactCopy(Lemon(1))),
             ("spindle torus with poles: lemon, rotated (m.t3)", () => ExactCopy(TransformOp.Copy(Lemon(-2), TransformOp.Rotate(Vector3d.Zero, new Vector3d(1, 2, 3), 33)))),
+            ("curved vertex: D corner chamfer 2 (m.f3)", () => { var bl = new List<TSolid> { DBody() }; VertexOp.Chamfer(bl, new Vector3d(10, 0, 20), new[] { 2.0 }, new List<string>()); return bl[0]; }),
+            ("curved vertex: D corner round 2 (m.f3)", () => { var bl = new List<TSolid> { DBody() }; VertexOp.Round(bl, new Vector3d(10, 0, 20), 2, new List<string>()); return bl[0]; }),
+            ("curved vertex: D pocket corner round 2, concave (m.f3)", () => { var bl = new List<TSolid> { Box(-20, -20, 0, 40, 40, 20) }; BooleanOp.Subtract(bl, TransformOp.Copy(DBody(), TransformOp.Move(new Vector3d(0, 0, 10))), new List<string>()); VertexOp.Round(bl, new Vector3d(10, 0, 10), 2, new List<string>()); return bl[0]; }),
             ("NURBS loft: Bezier \"D\" sections, smooth, λ 1→0.75→0.5", () => { Parametric3D.Kernel.Ops.Profile D(double lam, double z) { Vector3d P(double x, double y) => new(x * lam, y * lam, z); return Parametric3D.Kernel.Ops.ProfileBuilder.Build(new Frame3(new Vector3d(0, 0, z), Vector3d.UnitX, Vector3d.UnitY), new Parametric3D.Kernel.Curves.ICurve3[] { new Parametric3D.Kernel.Curves.LineCurve3(P(-5, 0), P(5, 0)), new Parametric3D.Kernel.Curves.BezierCurve3(new[] { P(5, 0), P(5, 8), P(-5, 8), P(-5, 0) }) }); } return LoftOp.Build(new[] { D(1, 0), D(0.75, 10), D(0.5, 20) }, 64, true); }),
             ("guided loft: square 5 → 3, four quadratic Bezier guides", () => { Parametric3D.Kernel.Ops.Profile Sq(double a, double z) { Vector3d P(double x, double y) => new(x, y, z); return Parametric3D.Kernel.Ops.ProfileBuilder.Build(new Frame3(new Vector3d(0, 0, z), Vector3d.UnitX, Vector3d.UnitY), new Parametric3D.Kernel.Curves.ICurve3[] { new Parametric3D.Kernel.Curves.LineCurve3(P(-a, -a), P(a, -a)), new Parametric3D.Kernel.Curves.LineCurve3(P(a, -a), P(a, a)), new Parametric3D.Kernel.Curves.LineCurve3(P(a, a), P(-a, a)), new Parametric3D.Kernel.Curves.LineCurve3(P(-a, a), P(-a, -a)) }); } var gs = new[] { (1, 1), (-1, 1), (-1, -1), (1, -1) }.Select(q => (Parametric3D.Kernel.Curves.ICurve3)new Parametric3D.Kernel.Curves.BezierCurve3(new[] { new Vector3d(q.Item1 * 5, q.Item2 * 5, 0), new Vector3d(q.Item1 * 7, q.Item2 * 7, 15), new Vector3d(q.Item1 * 3, q.Item2 * 3, 30) })).ToList(); return LoftOp.Build(new[] { Sq(5, 0), Sq(3, 30) }, 64, false, gs); }),
             ("guided loft: circle r10 → r10, two bulging arc guides", () => { Parametric3D.Kernel.Ops.Profile Ci(double z) => Parametric3D.Kernel.Ops.ProfileBuilder.Build(new Frame3(new Vector3d(0, 0, z), Vector3d.UnitX, Vector3d.UnitY), new Parametric3D.Kernel.Curves.ICurve3[] { new Parametric3D.Kernel.Curves.ArcCurve3(new Frame3(new Vector3d(0, 0, z), Vector3d.UnitX, Vector3d.UnitY), 10, 0, 2 * Math.PI) }); double t = Math.Atan2(15, 36); var g1 = new Parametric3D.Kernel.Curves.ArcCurve3(new Frame3(new Vector3d(-26, 0, 15), Vector3d.UnitX, Vector3d.UnitZ), 39, -t, t); var g2 = new Parametric3D.Kernel.Curves.ArcCurve3(new Frame3(new Vector3d(26, 0, 15), -Vector3d.UnitX, Vector3d.UnitZ), 39, -t, t); return LoftOp.Build(new[] { Ci(0), Ci(30) }, 64, false, new Parametric3D.Kernel.Curves.ICurve3[] { g1, g2 }); }),
@@ -303,4 +306,38 @@ static partial class Program
         return res;
     }
 
+}
+
+static partial class Program
+{
+    /// <summary>
+    /// m.x2: IGES — независимая проверка. Тела каталога g.14 пишутся в IGES (IgesSolid: обрезанные поверхности), читаются
+    /// обратно нашим импортом (объём по нормализованной копии) и — tools/occt_iges.py — OpenCascade (сшивка граней в тело,
+    /// объём). manifest.tsv: id, имя, наш объём, объём прочитанного обратно, граней записано, пропущено.
+    /// </summary>
+    static void IgesDump(string dir)
+    {
+        Directory.CreateDirectory(dir);
+        var man = new List<string> { "id\tname\tvolume\tback\tfaces\tskipped" };
+        int i = 0;
+        foreach (var (name, build, _) in G14Catalogue())
+        {
+            string id = $"i{i++:D2}";
+            try
+            {
+                var p = build(); var r = p.Compute(null); p.Apply(r);
+                if (p.Features.Any(f => f.Error != null) || p.Bodies.Count == 0) continue;
+                var w = new List<string>();
+                string text = Parametric3D.Kernel.Export.IgesSolid.Write(p.Bodies, w);
+                int skipped = w.Count(x => x.Contains("skipped") || x.Contains("not written"));
+                File.WriteAllText(Path.Combine(dir, id + ".igs"), text);
+                double back = double.NaN;
+                try { var b = Parametric3D.Kernel.Export.IgesImport.Read(text, new List<string>()); if (b != null) back = OpVolume(b); } catch { }
+                man.Add($"{id}\t{name}\t{p.Volume:R}\t{back:R}\t{p.Bodies.Sum(b => b.Faces.Count())}\t{skipped}");
+            }
+            catch (Exception ex) { man.Add($"{id}\t{name}\tNaN\tNaN\t0\texception: {ex.Message.Replace('\t', ' ')}"); }
+        }
+        File.WriteAllLines(Path.Combine(dir, "manifest.tsv"), man);
+        Console.WriteLine($"iges dump: {man.Count - 1} bodies → {dir}");
+    }
 }

@@ -11,6 +11,23 @@ namespace Parametric3D.Kernel.Topology;
 /// </summary>
 public static class ProvenanceBySurface
 {
+    /// <summary>Грань результата лежит на поверхности грани-источника (середины её рёбер — на поверхности до 1e-6 мм).</summary>
+    static bool OnSourceSurface(TFace r, TFace src)
+    {
+        var s = src.Surface is FacetedSurface fs && fs.Source != null ? fs.Source : src.Surface;
+        int n = 0;
+        foreach (var ce in r.Loops.SelectMany(l => l.CoEdges).Take(6))
+        {
+            var c = ce.Edge.Curve; var p = c.PointAt((c.T0 + c.T1) / 2);
+            try { if ((s.PointAt(s.ProjectToUV(p)) - p).Length > 1e-6) return false; } catch { return false; }
+            n++;
+        }
+        return n > 0;
+    }
+
+    /// <summary>Пометка производной грани (на другой поверхности, чем грань-источник: стенка оболочки, копия).</summary>
+    public const string Derived = "derived: another surface than the source face";
+    static readonly bool DerivedOff = Environment.GetEnvironmentVariable("P3D_PROVDERIVED") == "0";
     static object Key(TFace f) => f.Surface is FacetedSurface fs && fs.Source != null ? fs.Source : f.Surface;
 
     /// <summary>Карта годна для результата: каждая грань результата в ней, источники — грани входа.</summary>
@@ -47,12 +64,28 @@ public static class ProvenanceBySurface
             var bs = bySurf.Of(f);
             pv.Faces.Add(bs ?? new FaceProvenance(f, null, FaceOrigin.Generated));
         }
+        // m.h2: ПРОИЗВОДНАЯ ГРАНЬ (стенка оболочки — смещённая копия грани, экземпляр массива) приходит к той же грани входа
+        // через копию тела, но лежит на ДРУГОЙ поверхности. Если от грани входа есть и грань на её собственной поверхности —
+        // производные — изменённые копии (как Modified у смещения и переноса в OpenCascade), а не «части» грани. P3D_PROVDERIVED=0 — как прежде (разделена).
+        if (!DerivedOff)
+            foreach (var g in pv.Faces.Where(x => x.Source != null).GroupBy(x => x.Source!, ReferenceEqualityComparer.Instance).ToList())
+            {
+                var list = g.ToList(); if (list.Count < 2) continue;
+                var sf = (TFace)g.Key;
+                var on = list.ToDictionary(x => x.Result, x => OnSourceSurface(x.Result, sf), (IEqualityComparer<TFace>)ReferenceEqualityComparer.Instance);
+                if (!on.Values.Any(v => v) || on.Values.All(v => v)) continue;
+                foreach (var x in list.Where(x => !on[x.Result]))
+                {
+                    int i = pv.Faces.IndexOf(x);
+                    pv.Faces[i] = new FaceProvenance(x.Result, x.Source, FaceOrigin.Modified, Derived);
+                }
+            }
         var used = new HashSet<TFace>(pv.Faces.Where(x => x.Source != null).Select(x => x.Source!), ReferenceEqualityComparer.Instance);
         // разделение: несколько граней результата от одной грани входа
         for (int i = 0; i < pv.Faces.Count; i++)
         {
             var x = pv.Faces[i];
-            if (x.Source != null && x.Kind != FaceOrigin.Split && pv.Faces.Count(y => ReferenceEquals(y.Source, x.Source)) > 1)
+            if (x.Source != null && x.Kind != FaceOrigin.Split && x.Note != Derived && pv.Faces.Count(y => ReferenceEquals(y.Source, x.Source) && y.Note != Derived) > 1)
                 pv.Faces[i] = x with { Kind = FaceOrigin.Split };
         }
         foreach (var f in inputSet) if (!used.Contains(f)) pv.Deleted.Add(f);

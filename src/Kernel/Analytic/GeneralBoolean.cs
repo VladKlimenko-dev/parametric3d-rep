@@ -815,6 +815,7 @@ public static class GeneralBoolean
             {
                 if (fs.Count != 2 || ReferenceEquals(fs[0], fs[1])) continue;
                 var f1 = fs[0]; var f2 = fs[1];
+                if (MergeDbg && shape[f1] is not Geometry.Ssi.Plane) Console.Error.WriteLine($"PAIR {shape[f1]?.GetType().Name}/{shape[f2]?.GetType().Name} same {SameSurface(shape[f1], shape[f2])}");
                 if (!SameSurface(shape[f1], shape[f2])) continue;
                 var m = e.Curve.PointAt((e.Curve.T0 + e.Curve.T1) / 2);
                 if (Vector3d.Dot(f1.NormalAt(m), f2.NormalAt(m)) <= 0) continue;
@@ -839,9 +840,19 @@ public static class GeneralBoolean
                     var w = d.P - c.P; w -= u * Vector3d.Dot(w, u);
                     return w.Length < 1e-9;
                 }
+            // m.b2 / 05.7: шар, конус (та же пола), тор — одна несущая (P3D_MERGECURVED=0 — только плоскость и цилиндр)
+            case (Geometry.Ssi.Sphere s1, Geometry.Ssi.Sphere s2) when !MergeCurvedOff:
+                return (s1.C - s2.C).Length < 1e-9 && Math.Abs(s1.R - s2.R) < 1e-9;
+            case (Geometry.Ssi.Cone k1, Geometry.Ssi.Cone k2) when !MergeCurvedOff:
+                return (k1.Apex - k2.Apex).Length < 1e-9 && Vector3d.Dot(k1.Axis.Normalized(), k2.Axis.Normalized()) > 1 - 1e-12 && Math.Abs(k1.HalfAngle - k2.HalfAngle) < 1e-12;
+            case (Geometry.Ssi.Torus t1, Geometry.Ssi.Torus t2) when !MergeCurvedOff:
+                return (t1.C - t2.C).Length < 1e-9 && Math.Abs(Math.Abs(Vector3d.Dot(t1.Axis.Normalized(), t2.Axis.Normalized())) - 1) < 1e-12
+                       && Math.Abs(t1.R - t2.R) < 1e-9 && Math.Abs(t1.r - t2.r) < 1e-9;
         }
         return false;
     }
+    static readonly bool MergeCurvedOff = Environment.GetEnvironmentVariable("P3D_MERGECURVED") == "0";
+    static readonly bool MergeDbg = Environment.GetEnvironmentVariable("P3D_MERGEDBG") == "1";
 
     static readonly bool MergeProofOff = Environment.GetEnvironmentVariable("P3D_MERGEPROOF") == "0";
     /// <summary>Проверка KRN05: выбросить последний контур при следующем слиянии (один раз).</summary>
@@ -889,7 +900,10 @@ public static class GeneralBoolean
             }
             loops.Add(loop);
         }
-        if (loops.Count == 0) return false;
+        var shp0 = Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f1));
+        bool curved = shp0 is Geometry.Ssi.Sphere or Geometry.Ssi.Cone or Geometry.Ssi.Torus;
+        // m.b2: две части замкнутой поверхности (шар, тор), общие рёбра которых — вся граница: слитая грань — вся поверхность
+        if (loops.Count == 0 && !(curved && shp0 is not Geometry.Ssi.Cone && !MergeCurvedOff)) return false;
         if (CorruptMergeForTest && loops.Count > 1) { CorruptMergeForTest = false; loops.RemoveAt(loops.Count - 1); }
         // KRN-05 (05.7): СЛИЯНИЕ — ТОЛЬКО ПРИ ДОКАЗАННОЙ ЭКВИВАЛЕНТНОСТИ ОБЛАСТИ. У плоских граней точная знаковая площадь
         // контуров слитой грани (квадратура по кривым рёбер) равна сумме площадей двух граней: общие рёбра взаимно
@@ -905,6 +919,40 @@ public static class GeneralBoolean
             if (Math.Abs(am - (a1 + a2)) > 1e-9 * (Math.Abs(a1) + Math.Abs(a2)) + 1e-12) { MergesRefused++; return false; }
         }
         var nf = new TFace { Surface = f1.Surface, Reversed = f1.Reversed, Tag = f1.Tag, MaterialSlot = f1.MaterialSlot };
+        // m.b2 / 05.7: КРИВЫЕ ГРАНИ (шар, конус, тор) — доказательство площадью: точная площадь слитой грани равна сумме площадей
+        // двух граней (иначе не сливать); площадь не считается — не сливать
+        if (curved && !MergeProofOff)
+        {
+            // несущая слитой грани — та из двух, чья образующая покрывает всю слитую область (у конуса, срезанного выше, образующая
+            // не доходит до вершины): площадь считается с каждой; годна та, что равна сумме площадей частей
+            double? a1 = Topology.AnalyticVolume.FaceArea(f1), a2 = Topology.AnalyticVolume.FaceArea(f2);
+            TFace? pick = null;
+            var cands = new List<TFace> { f1, f2 };
+            // у конуса — ещё общая несущая: образующая-отрезок, покрывающая обе (отрезки на одной прямой — от крайней точки до крайней)
+            if (GeometryAudit.AuthoritativeSurface(f1) is Surfaces.RevolvedSurface { Base: LineCurve3 l1 } r1 && GeometryAudit.AuthoritativeSurface(f2) is Surfaces.RevolvedSurface { Base: LineCurve3 l2 } r2
+                && f1.Surface is not Surfaces.FacetedSurface)
+            {
+                var d = (l1.B - l1.A).Normalized(); var pts = new[] { l1.A, l1.B, l2.A, l2.B };
+                double lo = pts.Min(q => Vector3d.Dot(q - l1.A, d)), hi = pts.Max(q => Vector3d.Dot(q - l1.A, d));
+                var span = new LineCurve3(l1.A + d * lo, l1.A + d * hi);
+                var rv = new Surfaces.RevolvedSurface(span, r1.Axis, r1.A0, r1.A1);
+                var probeP = l1.PointAt(0.5); var n0 = r1.NormalAt(r1.ProjectToUV(probeP)); var n1 = rv.NormalAt(rv.ProjectToUV(probeP));
+                cands.Add(new TFace { Surface = rv, Reversed = f1.Reversed ^ (Vector3d.Dot(n0, n1) < 0) });
+            }
+            foreach (var src in cands)
+            {
+                var tf = new TFace { Surface = src.Surface, Reversed = src.Reversed, Tag = f1.Tag, MaterialSlot = f1.MaterialSlot, InteriorHint = f1.InteriorHint ?? f2.InteriorHint };
+                if (loops.Count == 0) tf.AddLoop(true);
+                else for (int li = 0; li < loops.Count; li++) { var tl0 = tf.AddLoop(true); foreach (var (e, r) in loops[li]) tl0.Add(e, r); }
+                double? am = Topology.AnalyticVolume.FaceArea(tf);
+                foreach (var ce in tf.Loops.SelectMany(l => l.CoEdges).ToList()) ce.Edge.CoEdges.Remove(ce);
+                if (MergeDbg) Console.Error.WriteLine($"MERGE {shp0?.GetType().Name} loops {loops.Count} area merged {am} parts {a1} + {a2}");
+                if (am is { } vm && a1 is { } v1 && a2 is { } v2 && Math.Abs(Math.Abs(vm) - (Math.Abs(v1) + Math.Abs(v2))) <= 1e-9 * (Math.Abs(v1) + Math.Abs(v2)) + 1e-12) { pick = src; break; }   // площади — по модулю (знак — обход контура)
+            }
+            if (pick == null) { MergesRefused++; return false; }
+            nf = new TFace { Surface = pick.Surface, Reversed = pick.Reversed, Tag = f1.Tag, MaterialSlot = f1.MaterialSlot, InteriorHint = f1.InteriorHint ?? f2.InteriorHint };
+            if (loops.Count == 0) nf.AddLoop(true);
+        }
         // Наружный контур плоской грани — с НАИБОЛЬШЕЙ по модулю площадью (не по знаку относительно нормали: у обращённой
         // грани резца знак уходил не туда — единственный контур помечался отверстием, «ни одно кольцо не ограничивает
         // область», и результат терял аналитический объём); единственный контур — наружный; у цилиндров — все (пояса).

@@ -496,6 +496,9 @@ static partial class Program
         if (mode is "pointtouch" or "allA") PointTangencyChecks();
         if (mode is "toruspole" or "allA") TorusPoleChecks();
         if (mode is "seams" or "allA") SeamChecks();
+        if (mode is "coincident" or "allA") CoincidentChecks();
+        if (mode is "provall" or "allA") ProvenanceAllOpsChecks();
+        if (mode is "vertexcurved" or "allA") VertexCurvedChecks();
         if (mode == "lemondbg") { LemonDebug(); return; }
         if (mode == "avfar") { AvFarProbe(); AvFarScene(); return; }
         if (mode == "cylcyl") { CylCylProbe(); return; }
@@ -581,6 +584,7 @@ static partial class Program
         if (mode is "g14s") { G14Scenario(args[1], args[2]); return; }
         if (mode is "g14x") { G14Explain(args[1]); return; }
         if (mode is "g14dump") { G14Dump(args.Length > 1 ? args[1] : "g14out"); return; }
+        if (mode is "igesdump") { IgesDump(args.Length > 1 ? args[1] : "igesout"); return; }
         if (mode is "krn03m") Krn03Measure();
         if (mode is "krn03p") Krn03MeasurePCurves();
         if (mode is "krn03v") Krn03MeasurePCurveValidation();

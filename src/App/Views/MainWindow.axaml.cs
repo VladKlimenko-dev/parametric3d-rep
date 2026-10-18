@@ -239,6 +239,7 @@ public partial class MainWindow : Window
             FileTypeChoices = new[]
             {
                 new FilePickerFileType(L("STEP точный (B-rep)")) { Patterns = new[] { "*.step", "*.stp" } },
+                new FilePickerFileType("IGES") { Patterns = new[] { "*.igs", "*.iges" } },
                 new FilePickerFileType("STL") { Patterns = new[] { "*.stl" } },
                 new FilePickerFileType("OBJ") { Patterns = new[] { "*.obj" } },
             },
