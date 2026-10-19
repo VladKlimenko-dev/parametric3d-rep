@@ -275,7 +275,9 @@ public sealed partial class ModelViewport
         }
         // размеры по умолчанию — когда примитив закончен (не между щелчками одного построения)
         if (_tool is { Finished: true } || (changed && _tool == null)) RefreshDefaultDimensions();
-        if (_tool is { Finished: true } t) _tool = t.Continuous ? t.Restart() : null;
+        // п. 12: фигура построена — инструмент снимается (режим по умолчанию: выбор и перетаскивание), без Esc;
+        // повтор инструмента — настройка SketchToolRepeat
+        if (_tool is { Finished: true } t) _tool = t.Continuous && Settings.Current.SketchToolRepeat ? t.Restart() : null;
         Selection.Filter = SketchFilter;
         _overlayDirty = true;
         ToolChanged?.Invoke();
@@ -457,5 +459,154 @@ public sealed partial class ModelViewport
             }
         }
         return best;
+    }
+
+    // ============================================================ п. 6: перетаскивание вершин и фигур эскиза
+
+    private SkPoint? _dragPoint;
+    private Dictionary<SkPoint, Vector2d>? _dragShape;
+    private Vector2d _geomFrom;
+    private bool _geomMoved;
+
+    /// <summary>Что сейчас тащат: вершину или фигуру (для подсказки и проверок).</summary>
+    public string SketchDragKind => _dragPoint != null ? "point" : _dragShape != null ? "shape" : "";
+
+    /// <summary>Точку можно тянуть: не ссылка, не зафиксирована (флаг или связь «Зафиксировать» на ней или её элементе).</summary>
+    public static bool IsMovable(Sketch sk, SkPoint p)
+    {
+        if (p.Fixed || p.Role == SkRole.Reference || p.Owner is { } o && (o.Fixed || o.Role == SkRole.Reference)) return false;
+        foreach (var c in sk.Constraints)
+            if (c.Enabled && c.Type == ConstraintType.Fix && c.Items.Any(it => ReferenceEquals(it, p) || p.Owner != null && ReferenceEquals(it, p.Owner)))
+                return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Фигура, к которой принадлежит элемент: элементы, связанные общими точками и связями «Совпадение»
+    /// (прямоугольник — четыре отрезка, паз — отрезки с дугами). Возвращает все их точки.
+    /// </summary>
+    public static HashSet<SkPoint> ShapePoints(Sketch sk, SkEntity start)
+    {
+        var owners = new Dictionary<SkPoint, List<SkEntity>>();
+        foreach (var e in sk.Entities)
+            foreach (var h in e.Handles) { if (!owners.TryGetValue(h, out var l)) owners[h] = l = new(); l.Add(e); }
+        var links = new Dictionary<SkPoint, List<SkPoint>>();
+        foreach (var c in sk.Constraints)
+        {
+            if (!c.Enabled || c.Type != ConstraintType.Coincident) continue;
+            var ps = c.Items.OfType<SkPoint>().ToList();
+            for (int a = 0; a < ps.Count; a++)
+                for (int b = 0; b < ps.Count; b++)
+                    if (a != b) { if (!links.TryGetValue(ps[a], out var l)) links[ps[a]] = l = new(); l.Add(ps[b]); }
+        }
+        var seenE = new HashSet<SkEntity>();
+        var pts = new HashSet<SkPoint>();
+        var stack = new Stack<SkEntity>();
+        stack.Push(start);
+        while (stack.Count > 0)
+        {
+            var e = stack.Pop();
+            if (!seenE.Add(e) || e.Role == SkRole.Reference) continue;
+            foreach (var h in e.Handles)
+            {
+                if (!pts.Add(h)) continue;
+                var near = new List<SkPoint> { h };
+                if (links.TryGetValue(h, out var lk)) near.AddRange(lk);
+                foreach (var q in near)
+                {
+                    pts.Add(q);
+                    if (owners.TryGetValue(q, out var es)) foreach (var x in es) stack.Push(x);
+                    if (q.Owner != null) stack.Push(q.Owner);
+                }
+            }
+        }
+        return pts;
+    }
+
+    internal bool BeginSketchDrag(Point p, Avalonia.Input.KeyModifiers mods)
+    {
+        _dragPoint = null; _dragShape = null; _geomMoved = false;
+        if (ActiveSketch is not { } sk || _tool != null || ScreenToSketch(p) is not { } q) return false;
+        if (mods.HasFlag(Avalonia.Input.KeyModifiers.Control) || mods.HasFlag(Avalonia.Input.KeyModifiers.Shift)) return false;
+        if (ConstraintGlyphAt(p) is { IsEmpty: false }) return false;
+        double tol = PixelSize * Settings.Current.SnapTolerancePx;
+        SkPoint? best = null; double bd = tol;
+        foreach (var pt in sk.AllPoints())
+        {
+            double d = (pt.P - q).Length;
+            if (d < bd) { bd = d; best = pt; }
+        }
+        if (best != null)
+        {
+            if (!IsMovable(sk, best)) return false;
+            _dragPoint = best; _geomFrom = q;
+            _dragShape = new Dictionary<SkPoint, Vector2d> { [best] = best.P };
+            return true;
+        }
+        SkEntity? ce = null; double cd = tol * 0.7;
+        foreach (var e in sk.Entities)
+        {
+            if (e is SkPoint || e.Role == SkRole.Reference) continue;
+            double d = e.DistanceTo(q);
+            if (d < cd) { cd = d; ce = e; }
+        }
+        if (ce == null) return false;
+        var shape = ShapePoints(sk, ce);
+        if (shape.Count == 0 || shape.Any(x => !IsMovable(sk, x))) return false;
+        _dragShape = shape.ToDictionary(x => x, x => x.P);
+        _geomFrom = q;
+        return true;
+    }
+
+    /// <summary>Тянуть к точке плоскости эскиза (для проверок — без мыши).</summary>
+    public void SketchDragTo(Vector2d q)
+    {
+        if (ActiveSketch is not { } sk || _dragShape == null) return;
+        var delta = q - _geomFrom;
+        if (!_geomMoved && delta.Length < 3 * PixelSize) return;
+        _geomMoved = true;
+        foreach (var (pt, start) in _dragShape) pt.P = start + delta;
+        var solver = _doc?.Solver ?? new NumericSketchSolver();
+        var num = solver as NumericSketchSolver;
+        double w0 = num?.DragWeight ?? 0;
+        try
+        {
+            // перетаскивание: курсор держит точку в 100 раз крепче, чем остальные держатся на месте
+            // (вес всё равно много меньше веса связей — связи не нарушаются)
+            if (num != null) { num.DragWeight = Math.Max(w0, num.Regularization * 100); if (_dragPoint == null) num.DraggedPoints = _dragShape.Keys.ToHashSet(); }
+            sk.Solve(solver, _dragPoint ?? _dragShape.Keys.First());
+        }
+        catch (Exception ex) { AppLog.Write("sketch drag", ex); }
+        finally { if (num != null) { num.DraggedPoints = null; num.DragWeight = w0; } }
+        _overlayDirty = true;
+        MarkDirty();
+    }
+
+    internal void SketchDragMove(Point p)
+    {
+        if (ScreenToSketch(p) is { } q) SketchDragTo(q);
+    }
+
+    /// <summary>Отпустили; true — тащили (щелчок без движения — обычный выбор).</summary>
+    public bool EndSketchDrag()
+    {
+        bool moved = _geomMoved && _dragShape != null;
+        _dragPoint = null; _dragShape = null; _geomMoved = false;
+        if (!moved || ActiveSketch is not { } sk) return false;
+        sk.NotifyChanged(sk);
+        RefreshDefaultDimensions();
+        SketchEdited?.Invoke();
+        MarkDirty();
+        return true;
+    }
+
+    /// <summary>Начать перетаскивание в точке плоскости эскиза (для проверок).</summary>
+    public bool BeginSketchDragAt(Vector2d q)
+    {
+        if (ActiveSketch is not { } sk) return false;
+        var w = Project(sk.Plane.ToWorld(q));
+        if (w is not { } pt || !BeginSketchDrag(pt, Avalonia.Input.KeyModifiers.None)) return false;
+        _geomFrom = q;   // точно (экранная точка округлена до пикселя)
+        return true;
     }
 }

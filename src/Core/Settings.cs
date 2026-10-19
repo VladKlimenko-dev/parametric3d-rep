@@ -255,6 +255,9 @@ public sealed class Settings
     public float ConstraintGlyphSizePx = 10f;
     /// <summary>Сторона значка-картинки ограничения (иконки con_*), пикселей.</summary>
     public float ConstraintIconSizePx = 16f;
+
+    /// <summary>Инструмент эскиза остаётся включённым после построения фигуры (прежнее поведение); false — снимается.</summary>
+    public bool SketchToolRepeat = false;
     /// <summary>Просвет между соседними значками в строке.</summary>
     public float ConstraintGlyphSpacingPx = 4f;
     /// <summary>Вынос строки значков от линии или узла.</summary>

@@ -66,6 +66,15 @@ public sealed class NumericSketchSolver : ISketchSolver
     /// </summary>
     public double DragWeight = 1e-4;
 
+    /// <summary>
+    /// Перетаскивание фигуры целиком: все её точки удерживаются как перетаскиваемая (вес DragWeight),
+    /// чтобы решатель не возвращал одну из них, восстанавливая ограничения за счёт остальных. Null — нет.
+    /// </summary>
+    public HashSet<SkPoint>? DraggedPoints;
+
+    private bool IsDragged(SkPoint? p, SkPoint? dragged) =>
+        p != null && (p == dragged || (DraggedPoints != null && DraggedPoints.Contains(p)));
+
     /// <summary>KRN-10 (10.8): с какого числа переменных связной части — разреженная алгебра (меньше — плотная).</summary>
     public const int SparseMin = 150;
     static readonly bool SparseOff = Environment.GetEnvironmentVariable("P3D_SKSPARSE") == "0";
@@ -676,7 +685,7 @@ public sealed class NumericSketchSolver : ISketchSolver
         for (int i = 0; i < vars.Count; i++)
         {
             double w = Regularization;
-            if (dragged != null && vars[i].Point == dragged) w = DragWeight;
+            if (IsDragged(vars[i].Point, dragged)) w = DragWeight;
             buf.Add(w * (x[i] - vars[i].Start));
         }
 
@@ -988,7 +997,7 @@ public sealed class NumericSketchSolver : ISketchSolver
             vars[j].Set(x[j]);
             // Строка регуляризации переменной j — диагональ.
             double w = Regularization;
-            if (dragged != null && vars[j].Point == dragged) w = DragWeight;
+            if (IsDragged(vars[j].Point, dragged)) w = DragWeight;
             int rr = sp.ConstraintRows + j;
             if (rr < rows) { cols[rr].Add(j); vals[rr].Add(w); }
         }

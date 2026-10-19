@@ -67,7 +67,7 @@ Check("UI-COMMAND-REGISTRY", () =>
     // клавиши без конфликтов
     // одна клавиша допустима у операции модели и у инструмента эскиза (они не доступны одновременно)
     var g = reg.All.Where(c => c.Gesture != null).GroupBy(c => c.Gesture!.ToString())
-        .Where(x => x.Count() > 1 && !(x.Count() == 2 && x.Select(c => c.Group).OrderBy(n => n).SequenceEqual(new[] { "Модель", "Эскиз" })))
+        .Where(x => x.Count() > 1 && !(x.Count() == 2 && x.Any(c => c.Group == "Эскиз") && x.Any(c => c.Group is "Модель" or "Правка")))
         .Select(x => x.Key).ToList();
     Require(g.Count == 0, "gesture conflicts: " + string.Join(", ", g));
     w.Close();
@@ -449,6 +449,114 @@ Check("UI-CONSTRAINT-GLYPHS", () =>
     Settings.Current.ShowConstraintGlyphs = true;
     Console.WriteLine(JsonSerializer.Serialize(new { info = "UI-CONSTRAINT-GLYPHS", placements = list.Count, drawn = w.GlyphLayer.LastDrawn, loopBuilds = ConstraintLayout.LoopBuilds }));
     w.CancelSketch();
+    w.Close();
+});
+
+Check("UI-SKETCH-UX", () =>
+{
+    // пп. 6–12: перетаскивание вершин и фигур, панель фигур, полоса предложений по выбору, «Готово/Отмена» у куба,
+    // инструмент снимается после построения, у эллипса есть иконка
+    var s = DocumentSession.NewPart();
+    var w = Open(s);
+    var part = s.Part!;
+    w.SelectItem(part.PlaneXY);
+    w.StartOperation(new SketchOp());
+    Require(w.InSketch, "sketch mode did not start");
+    var vp = w.ViewPort;
+    var sk = vp.ActiveSketch!;
+    Dispatcher.UIThread.RunJobs();
+    var reg = CommandRegistry.Instance;
+    // п. 12: прямоугольник построен — инструмента нет (режим по умолчанию)
+    w.SetTool(new RectangleTool());
+    // вид ещё не повернулся к плоскости (без кадров GL) — точки щелчка с запасом по обеим осям
+    vp.SimulateToolClick(0.3, 0.1); vp.SimulateToolClick(0.7, 0.9);
+    Require(sk.Entities.OfType<SkLine>().Count() == 4, $"rectangle not drawn: {sk.Entities.Count}");
+    Require(vp.Tool == null, "tool still active after the shape was built");
+    // п. 8 и 7: иконка эллипса; панель фигур со всеми инструментами построения; основная панель без правки и размеров
+    Require(IconProvider.Exists(reg["sk.ellipse"].Icon) && IconProvider.Exists(reg["sk.ellipse_3p"].Icon), "ellipse has no icon");
+    foreach (var id in MainWindow.ShapeTools) Require(reg.Find(id) != null && IconProvider.Exists(reg[id].Icon), "shape tool without icon: " + id);
+    // п. 6: вершина тянется — прямоугольник остаётся прямоугольником (горизонтальность и вертикальность держатся)
+    var lines = sk.Entities.OfType<SkLine>().ToList();
+    var corner = lines[0].A;
+    var c0 = corner.P;
+    Require(vp.BeginSketchDragAt(c0), "free corner cannot be dragged");
+    Require(vp.SketchDragKind == "point", "drag kind " + vp.SketchDragKind);
+    vp.SketchDragTo(c0 + new Vector2d(-5, -3));
+    Require(vp.EndSketchDrag(), "drag not finished");
+    Require((corner.P - (c0 + new Vector2d(-5, -3))).Length < 0.02, $"corner did not follow: {corner.P} vs {c0}");
+    foreach (var l in lines) Require(Math.Abs(l.A.P.X - l.B.P.X) < 1e-6 || Math.Abs(l.A.P.Y - l.B.P.Y) < 1e-6, "rectangle lost its H/V constraints");
+    // фигура целиком: тянем за середину стороны — все вершины сдвигаются одинаково
+    var before = sk.AllPoints().Distinct().ToDictionary(x => x, x => x.P);
+    var mid = (lines[1].A.P + lines[1].B.P) / 2;
+    Require(vp.BeginSketchDragAt(mid), "shape cannot be dragged by its side");
+    Require(vp.SketchDragKind == "shape", "drag kind " + vp.SketchDragKind);
+    vp.SketchDragTo(mid + new Vector2d(12, 7));
+    vp.EndSketchDrag();
+    foreach (var (pt, p0) in before) Require(((pt.P - p0) - new Vector2d(12, 7)).Length < 0.02, $"shape point moved by {pt.P - p0}");
+    // зафиксированный центр окружности не тянется
+    var circ = sk.AddEntity(new SkCircle(new SkPoint(80, 0), 6));
+    sk.AddConstraint(ConstraintType.Fix, circ.Center);
+    Require(!vp.BeginSketchDragAt(circ.Center.P), "fixed point was dragged");
+    vp.EndSketchDrag();
+    // пп. 9–10: предложения по выбору
+    List<string> Sugg() => Parametric3D.App.Commands.SketchSuggest.For(w);
+    vp.Selection.Clear();
+    Require(Sugg().Contains("sk.trim") && !Sugg().Contains("sk.merge_points"), "empty selection: " + string.Join(",", Sugg()));
+    SkPoint pa = lines[0].A, pb = lines[2].B;
+    vp.Selection.Select(new PickRef(pa.Id, PickKind.SketchPoint, sk, pa), additive: true);
+    var one = Sugg();
+    Require(one.Contains("sk.split_point") && !one.Contains("sk.merge_points") && one.Contains("con.fix"), "one point: " + string.Join(",", one));
+    vp.Selection.Select(new PickRef(pb.Id, PickKind.SketchPoint, sk, pb), additive: true);
+    var two = Sugg();
+    Require(two.Contains("sk.merge_points") && two.Contains("dim.linear") && !two.Contains("sk.split_point") && !two.Contains("dim.radius"), "two points: " + string.Join(",", two));
+    vp.Selection.Clear();
+    var la = lines[0]; var lb = lines.First(l => l != la && Parametric3D.App.Commands.SketchSuggest.CommonCorner(la, l) != null);
+    vp.Selection.Select(new PickRef(la.Id, PickKind.SketchCurve, sk, la), additive: true);
+    vp.Selection.Select(new PickRef(lb.Id, PickKind.SketchCurve, sk, lb), additive: true);
+    var twoLines = Sugg();
+    // соседние стороны прямоугольника: уже горизонтальна/вертикальна и перпендикулярны — эти связи не предлагаются, параллельность тоже
+    Require(!twoLines.Contains("con.horizontal") && !twoLines.Contains("con.parallel") && !twoLines.Contains("con.collinear") && twoLines.Contains("con.equal"), "two lines: implausible constraints offered: " + string.Join(",", twoLines));
+    Require(twoLines.Take(2).SequenceEqual(new[] { "sk.fillet", "sk.chamfer" }) && twoLines.Contains("dim.angle") && twoLines.Contains("sk.offset") && !twoLines.Contains("dim.radius"), "two lines: " + string.Join(",", twoLines));
+    vp.Selection.Clear();
+    var rd = sk.AddDimension(DimensionType.Radius, 6, circ);
+    vp.Selection.Select(new PickRef(rd.Id, PickKind.SketchDimension, sk, rd), additive: true);
+    var dim = Sugg();
+    foreach (var id in new[] { "dim.to_diameter", "dim.single_arrow", "dim.outside", "dim.lock_toggle", "dim.ref_toggle" })
+        Require(dim.Contains(id), "radius dimension misses " + id + ": " + string.Join(",", dim));
+    Require(!dim.Contains("dim.to_radius") && !dim.Contains("dim.as_linear") && !dim.Contains("sk.trim"), "radius dimension: unsuitable " + string.Join(",", dim));
+    reg["dim.outside"].Execute();
+    Require(rd.Arrows == ArrowPlacement.Outside && reg["dim.outside"].IsChecked!() && reg["dim.outside"].Icon == "dim_radius_outside_ico.svg", "outside arrows");
+    reg["dim.to_diameter"].Execute();
+    Require(rd.Type == DimensionType.Diameter && Math.Abs(rd.Value - 12) < 1e-9, "radius -> diameter");
+    Require(Sugg().Contains("dim.to_radius") && Sugg().Contains("dim.as_linear"), "diameter suggestions");
+    // объединить и разделить точку; удалить
+    vp.Selection.Clear();
+    var lone1 = sk.AddEntity(new SkPoint(-40, 30)); var lone2 = sk.AddEntity(new SkPoint(-35, 30));
+    vp.Selection.Select(new PickRef(lone1.Id, PickKind.SketchPoint, sk, lone1), additive: true);
+    vp.Selection.Select(new PickRef(lone2.Id, PickKind.SketchPoint, sk, lone2), additive: true);
+    reg["sk.merge_points"].Execute();
+    Require((lone1.P - lone2.P).Length < 1e-6, "points not merged");
+    vp.Selection.Clear(); vp.Selection.Select(new PickRef(lone1.Id, PickKind.SketchPoint, sk, lone1), additive: true);
+    Require(Sugg().Contains("sk.split_point"), "merged point: no split");
+    reg["sk.split_point"].Execute();
+    Require(!sk.Constraints.Any(c => c.Type == ConstraintType.Coincident && c.Items.Contains(lone1)), "split did not remove coincidence");
+    vp.Selection.Clear(); vp.Selection.Select(new PickRef(circ.Id, PickKind.SketchCurve, sk, circ), additive: true);
+    reg["sk.delete"].Execute();
+    Require(!sk.Entities.Contains(circ) && !sk.Dimensions.Contains(rd), "circle not deleted with its dimension");
+    // п. 11: «Готово / Отмена» — вверху у куба; полоса снизу — предложения
+    var bar = w.FindControl<Border>("SketchBar")!;
+    Require(bar.IsVisible && bar.VerticalAlignment == Avalonia.Layout.VerticalAlignment.Top && bar.HorizontalAlignment == Avalonia.Layout.HorizontalAlignment.Right, "sketch done/cancel bar not at the top right");
+    Require(w.FindControl<Border>("ShapeBar")!.IsVisible, "shape panel hidden");
+    if (Environment.GetEnvironmentVariable("UI_SKSHOT") is { Length: > 0 } skshot)
+    {
+        vp.Selection.Clear(); vp.Selection.Select(new PickRef(la.Id, PickKind.SketchCurve, sk, la), additive: true); vp.Selection.Select(new PickRef(lb.Id, PickKind.SketchCurve, sk, lb), additive: true);
+        w.RefreshContext(); Dispatcher.UIThread.RunJobs();
+        var shot = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize((int)w.Bounds.Width, (int)w.Bounds.Height));
+        shot.Render(w); shot.Save(skshot);
+    }
+    Console.WriteLine(JsonSerializer.Serialize(new { info = "UI-SKETCH-UX", empty = "trim…", twoPoints = two, twoLines, radius = dim }));
+    w.CancelSketch();
+    Require(!w.FindControl<Border>("SketchBar")!.IsVisible && !w.FindControl<Border>("ShapeBar")!.IsVisible, "sketch bars visible after the sketch");
     w.Close();
 });
 

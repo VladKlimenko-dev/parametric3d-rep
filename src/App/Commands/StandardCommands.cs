@@ -236,7 +236,7 @@ public static class StandardCommands
         Tool("sk.circle3", "Окружность по 3 точкам", "Окр. 3т", "sk_circle_3p_but.svg", () => new CircleTool(true), "circle 3 points");
         Tool("sk.arc3", "Дуга по 3 точкам", "Дуга", "sk_arc_3p_but.svg", () => new ArcTool(true), "arc дуга", K(Key.A));
         Tool("sk.arc_center", "Дуга от центра", "Дуга ц.", "sk_arc_center_but.svg", () => new ArcTool(false), "arc center");
-        Tool("sk.ellipse", "Эллипс", "Эллипс", "sk_ellipse_but.svg", () => new EllipseTool(), "ellipse эллипс");
+        Tool("sk.ellipse", "Эллипс", "Эллипс", "sk_ellipse_3p_but.svg", () => new EllipseTool(), "ellipse эллипс");
         Tool("sk.spline", "Сплайн", "Сплайн", "sk_spline_but.svg", () => new SplineTool(), "spline сплайн");
         Tool("sk.point", "Точка", "Точка", "sk_point_but.svg", () => new PointTool(), "point точка");
         Tool("sk.centerline", "Осевая линия", "Осевая", "sk_centerline_but.svg", () => new LineTool(false) { Role = SkRole.Centerline }, "centerline axis осевая");
@@ -310,6 +310,7 @@ public static class StandardCommands
             Run = () => SketchCommands.OnDimensions(w, d => { if (d.Reference) return; d.UserLocked = !d.UserLocked; if (d.UserLocked) { d.IsDefault = false; d.Locked = true; } }) });
         r.Add(new AppCommand { Id = "dim.area", Label = "Площадь области", Short = "Площадь", Group = S, Icon = "dim_area_but.svg", Synonyms = "area площадь область", CanRun = () => w.InSketch,
             Run = () => SketchCommands.ShowArea(w) });
+        SketchSuggest.Register(r, w);
         r.Add(new AppCommand { Short = "Готово", Id = "sk.finish", Label = "Закончить эскиз", Group = S, Icon = "sketch_finish_but.svg", Synonyms = "finish sketch готово выйти", Gesture = K(Key.Enter, KeyModifiers.Control),
             CanRun = () => w.InSketch, Run = () => w.FinishSketch() });
         r.Add(new AppCommand { Short = "Отмена", Id = "sk.cancel", Label = "Отменить эскиз", Group = S, Icon = "sketch_cancel_but.svg", Synonyms = "cancel sketch",
