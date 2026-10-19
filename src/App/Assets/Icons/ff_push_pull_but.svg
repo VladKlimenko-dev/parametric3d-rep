@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="159" height="141" viewBox="0 0 159 141" preserveAspectRatio="xMidYMid meet">
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-2611.66 -6091.15)" d="M2707.613 6133.0972L2708.3428 6205.0728L2743.395 6190.6504L2743.3953 6120.5039L2707.613 6133.0972Z"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-2611.66 -6091.15)" d="M2689.4739 6190.0601L2707.613 6181.9277" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-2611.66 -6091.15)" d="M2639.5337 6190.0601L2689.4739 6192.957L2688.7444 6120.9814L2638.7031 6118.1968L2639.5337 6190.0601Z"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-2611.66 -6091.15)" d="M2658.2751 6191.1475L2689.4734 6192.957L2688.8562 6132.0532L2707.6133 6133.0972L2708.3428 6205.0728L2658.4026 6202.1758L2658.2751 6191.1475Z" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-2611.66 -6091.15)" d="M2688.8567 6132.0537L2707.6133 6133.0972L2743.3953 6120.5039L2689.4739 6119.25L2685.0693 6120.7773L2688.7444 6120.9819L2688.8567 6132.0537Z" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-2611.66 -6091.15)" d="M2658.4031 6202.1753L2681.3479 6192.957" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-2611.66 -6091.15)" d="M2656.4448 6156.0239L2697.3152 6166.3823" fill-rule="evenodd"/>
+	<path transform="matrix(-0.969351 -0.245682 0.245682 -0.969351 33.1562 61.9258)" d="M0 0L-24 9.6000004L-24 -9.6000004L0 0Z"/>
+	<path transform="matrix(0.969351 0.245681 -0.245681 0.969351 96.3218 77.9351)" d="M0 0L-22 8.8000002L-22 -8.8000002L0 0Z"/>
+</svg>

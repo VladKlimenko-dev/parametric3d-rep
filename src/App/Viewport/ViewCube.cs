@@ -221,7 +221,7 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
                 var rr = new Rect(p.X - 8, p.Y - 8, 16, 16);
                 using (dc.PushTransform(Matrix.CreateTranslation(-p.X, -p.Y) * Matrix.CreateRotation(deg * Math.PI / 180) * Matrix.CreateTranslation(p.X, p.Y)))
                 using (dc.PushOpacity(_hoverExtra == e ? 1.0 : 0.7))
-                    arrow.Draw(dc, new Rect(arrow.Size), rr);
+                    arrow.Draw(dc, new Rect(arrow.Size), IconProvider.Fit(arrow.Size, rr));
                 continue;
             }
             var g = new StreamGeometry();
@@ -243,7 +243,7 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
 
     private static void DrawIconOr(DrawingContext dc, string icon, Rect r, IBrush brush, Geometry fallback)
     {
-        if (IconProvider.Get(icon) is { } img) { img.Draw(dc, new Rect(img.Size), r); return; }
+        if (IconProvider.Get(icon) is { } img) { img.Draw(dc, new Rect(img.Size), IconProvider.Fit(img.Size, r)); return; }
         dc.DrawGeometry(null, new Pen(brush, 1.6, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round), fallback);
     }
 

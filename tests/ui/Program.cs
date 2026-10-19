@@ -234,11 +234,60 @@ Check("UI-THEME-ICONS", () =>
     string svg = "<svg><path stroke=\"#000000\" fill=\"#FF7A1A\"/><path style=\"fill:black;stroke:#000\"/></svg>";
     string r = IconProvider.Recolor(svg, "#E6E8EC");
     Require(r.Contains("stroke=\"#E6E8EC\"") && r.Contains("#FF7A1A") && r.Contains("fill:#E6E8EC") && r.Contains("stroke:#E6E8EC"), r);
+    // контур без fill (по умолчанию чёрный) и почти чёрный #191919 — тоже цвет темы; серые и белые — как есть
+    string r2 = IconProvider.Recolor("<svg width=\"2\"><path d=\"M0 0\"/><path fill=\"#191919\"/><path fill=\"#CCCCCC\"/></svg>", "#E6E8EC");
+    Require(r2.StartsWith("<svg fill=\"#E6E8EC\"") && !r2.Contains("#191919") && r2.Contains("#CCCCCC"), r2);
     // без файла иконки — подпись
     Require(IconProvider.Get("no_such_icon_but.svg") == null, "missing icon");
     w.Close();
 });
 
+
+Check("UI-ICONS-USER-SET", () =>
+{
+    // набор иконок пользователя (icons1, 331 файл): каждый вшит, читается, пропорции рисунка = пропорциям файла (viewBox =
+    // width × height), при вписывании в квадрат кнопки — по центру без растяжения; иконка языка — по текущему языку
+    var w = Open(DocumentSession.NewPart());
+    var files = Avalonia.Platform.AssetLoader.GetAssets(new Uri("avares://Parametric3D/App/Assets/Icons/"), null).Select(u => u.AbsolutePath.Split('/').Last()).Where(n => n.EndsWith(".svg")).ToList();
+    Require(files.Count >= 331, $"icons embedded: {files.Count}");
+    var bad = new List<string>();
+    foreach (var f in files)
+    {
+        var img = IconProvider.Get(f);
+        if (img == null) { bad.Add(f + ": not loaded"); continue; }
+        using var st = Avalonia.Platform.AssetLoader.Open(IconProvider.UriOf(f)); var text = new StreamReader(st).ReadToEnd();
+        var m = System.Text.RegularExpressions.Regex.Match(text, "viewBox=\"[-\\d.]+ [-\\d.]+ ([\\d.]+) ([\\d.]+)\"");
+        if (!m.Success || !text.Contains("preserveAspectRatio=\"xMidYMid meet\"")) { bad.Add(f + ": no viewBox/preserveAspectRatio"); continue; }
+        double vw = double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture), vh = double.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
+        if (Math.Abs(img.Size.Width / img.Size.Height - vw / vh) > 1e-6) bad.Add($"{f}: drawing {img.Size} vs file {vw}x{vh}");
+        var r = IconProvider.Fit(img.Size, new Rect(0, 0, 24, 24));
+        if (Math.Abs(r.Width / r.Height - vw / vh) > 1e-6 || r.Width > 24.0001 || r.Height > 24.0001 || Math.Abs(r.Center.X - 12) > 1e-9 || Math.Abs(r.Center.Y - 12) > 1e-9) bad.Add($"{f}: fit {r}");
+    }
+    Require(bad.Count == 0, string.Join("; ", bad.Take(8)));
+    // лист иконок (по запросу: UI_ICONSHEET=путь.png): каждая — в квадрате 32×32 с рамкой, по 24 в ряду
+    if (Environment.GetEnvironmentVariable("UI_ICONSHEET") is { Length: > 0 } sheet)
+    {
+        int cols = 24, cell = 40, rows = (files.Count + cols - 1) / cols;
+        var rtb = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize(cols * cell, rows * cell));
+        using (var dc = rtb.CreateDrawingContext())
+        {
+            dc.FillRectangle(new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#1E2128")), new Rect(0, 0, cols * cell, rows * cell));
+            var pen = new Avalonia.Media.Pen(new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#3A3F4A")), 1);
+            for (int i = 0; i < files.Count; i++)
+            {
+                var box = new Rect(i % cols * cell + 4, i / cols * cell + 4, 32, 32);
+                dc.DrawRectangle(null, pen, box);
+                var img = IconProvider.Get(files[i])!;
+                img.Draw(dc, new Rect(img.Size), IconProvider.Fit(img.Size, box.Deflate(2)));
+            }
+        }
+        rtb.Save(sheet); File.WriteAllLines(sheet + ".txt", files.Select((f, i) => $"{i / 24},{i % 24} {f}"));
+    }
+    // команды: иконка есть у каждой команды, для которой файл передан
+    var lang = CommandRegistry.Instance.All.First(c => c.Id == "app.language");
+    Require(lang.Icon == (Loc.En ? "language_en_but.svg" : "language_ru_but.svg"), "language icon " + lang.Icon);
+    w.Close();
+});
 
 Check("UI-TREE-VISIBILITY", () =>
 {

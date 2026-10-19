@@ -4721,3 +4721,10 @@ P3D_CACHEKEYTOL, P3D_LOOPEXACT, P3D_PCENDFIX, P3D_TREEPROV, P3D_PROVINFER — л
 ExtrudeFeature.ToolsReused в перечень статистики; KRN10-PAIRS-PARALLEL-SAME — в прогоне параллельно шли замеры большой
 модели, одиночный прогон проходит), allB 145/0, KRN11-BIG-MODEL, KRN10-TOOL-REUSE, KRN03-LOOP-ORIENTATION-EXACT,
 KRN06-PARTIAL-VERTEX-SELECTION — проходят на итоговой сборке; UI 46/0.
+
+## UI: набор иконок пользователя icons1
+
+- 331 SVG в `src/App/Assets/Icons/`, все используются; добавлены viewBox и preserveAspectRatio (пропорции при масштабировании),
+  рисование в кубе вида — вписанным (`IconProvider.Fit`); перекраска контуров без fill и почти чёрного; иконка языка — по
+  текущему языку (`AppCommand.IconOf`); заголовок «Общие» и языки в настройках — с иконками. `UI-ICONS-USER-SET` (UI 47/0).
+  Подробно — UI_ICONS.md, раздел «Набор иконок пользователя icons1».

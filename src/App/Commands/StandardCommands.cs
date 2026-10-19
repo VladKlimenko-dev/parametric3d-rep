@@ -301,7 +301,7 @@ public static class StandardCommands
         Dim("dim.radius", "Радиус", "dim_radius_but.svg", SketchCommands.DimKind.Radius, "radius радиус");
         Dim("dim.diameter", "Диаметр", "dim_diameter_but.svg", SketchCommands.DimKind.Diameter, "diameter диаметр");
         Dim("dim.angle", "Угловой размер", "dim_angle_but.svg", SketchCommands.DimKind.Angle, "angle угол угловой");
-        Dim("dim.arc_length", "Длина дуги", "dim_arc_length_but.svg", SketchCommands.DimKind.ArcLength, "arc length длина дуги");
+        Dim("dim.arc_length", "Длина дуги", "dim_curve_length_but.svg", SketchCommands.DimKind.ArcLength, "arc length длина дуги");
         r.Add(new AppCommand { Id = "dim.reference", Label = "Справочный / управляющий", Group = S, Icon = "dim_reference_but.svg", Synonyms = "reference driven справочный управляющий", CanRun = () => w.InSketch, Run = () => SketchCommands.ToggleReference(w) });
         r.Add(new AppCommand { Id = "dim.link_param", Label = "Связать с параметром", Group = S, Icon = "dim_link_param_but.svg", Synonyms = "link parameter formula параметр формула", CanRun = () => w.InSketch, Run = () => SketchCommands.LinkParam(w) });
         r.Add(new AppCommand { Id = "dim.arrows_outside", Label = "Стрелки снаружи", Group = S, Icon = "dim_arrows_outside_but.svg", Synonyms = "arrows outside стрелки снаружи", CanRun = () => w.InSketch,
@@ -319,7 +319,7 @@ public static class StandardCommands
         const string A = "Приложение";
         r.Add(new AppCommand { Short = "◐", Id = "app.theme", Label = "Тема: тёмная / светлая", Group = A, Icon = "theme_but.svg", Synonyms = "theme dark light тема",
             Run = () => w.ApplyTheme(!w.IsDark) });
-        r.Add(new AppCommand { Short = "EN", Id = "app.language", Label = "Язык: русский / английский", Group = A, Icon = "language_but.svg", Synonyms = "language english russian язык",
+        r.Add(new AppCommand { Short = "EN", Id = "app.language", Label = "Язык: русский / английский", Group = A, Icon = "language_but.svg", IconOf = () => Loc.En ? "language_en_but.svg" : "language_ru_but.svg", Synonyms = "language english russian язык",
             Run = () => w.ToggleLanguage() });
         r.Add(new AppCommand { Short = "Свойства", Id = "app.properties", Label = "Свойства", Group = A, Icon = "properties_but.svg", Synonyms = "properties info свойства масса объём",
             IsChecked = () => w.PropertiesVisible, Run = () => w.ToggleProperties() });

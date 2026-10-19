@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="102" height="102" viewBox="0 0 102 102" preserveAspectRatio="xMidYMid meet">
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1179.83 -3186.66)" d="M1230.6158 3222.8501L1243.4153 3230.2708L1230.6158 3237.6912L1217.8164 3230.2708L1230.6158 3222.8501Z"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1179.83 -3186.66)" d="M1230.5945 3237.7319L1230.6136 3252.0466L1217.8134 3244.6562L1217.8134 3230.2705L1230.5945 3237.7319Z" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1179.83 -3186.66)" d="M1230.6342 3237.7319L1230.615 3252.0466L1243.4153 3244.6562L1243.4153 3230.2705L1230.6342 3237.7319Z" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1179.83 -3186.66)" d="M1230.613 3211.4839L1207.8463 3224.6289L1207.8463 3250.2151M1230.6155 3211.4839L1253.3822 3224.6284L1253.3822 3250.2148L1230.6169 3263.4131L1207.8518 3250.2148" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1179.83 -3186.66)" d="M1207.8518 3250.2151L1217.8134 3244.5269" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1179.83 -3186.66)" d="M1230.6141 3222.8501L1230.6151 3211.8196" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1179.83 -3186.66)" d="M1243.4153 3244.5266L1253.3822 3250.2148" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1179.83 -3186.66)" d="M1236.5001 3202.5134C1252.1373 3206.6658 1266.6791 3219.7422 1266.6791 3237.4482C1266.6791 3257.3662 1250.5323 3273.5132 1230.6143 3273.5132C1210.6962 3273.5132 1194.5494 3257.3662 1194.5494 3237.4482" fill-rule="evenodd"/>
+	<path transform="matrix(-0.99309 -0.117352 0.117352 -0.99309 50.7861 14.7212)" d="M0 0L-12 7.2000003L-12 -7.2000003L0 0Z"/>
+</svg>
