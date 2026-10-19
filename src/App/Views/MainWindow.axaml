@@ -120,9 +120,8 @@
 
         <!-- все команды (UI-12): вертикальная полоса слева -->
         <Border x:Name="CommandBar" Classes="overlay" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,10,0,0" Padding="3">
-          <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="620">
-            <StackPanel x:Name="CommandStack" Spacing="1" />
-          </ScrollViewer>
+          <!-- все пункты всегда видны: не помещаются по высоте вида — следующий столбец, без прокрутки -->
+          <WrapPanel x:Name="CommandStack" Orientation="Vertical" />
         </Border>
 
         <!-- панель вида -->

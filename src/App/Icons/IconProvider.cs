@@ -16,7 +16,6 @@ namespace Parametric3D.App.Icons;
 public static class IconProvider
 {
     private static readonly Dictionary<(string, string), IImage?> _cache = new();
-    private static readonly Regex Black = new(@"(?<=(fill|stroke|color|stop-color)\s*[:=]\s*[""']?)\s*(#000000|#000|black|rgb\(\s*0\s*,\s*0\s*,\s*0\s*\))", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>Цвет, в который перекрашивается чёрный (задаётся при смене темы).</summary>
     public static Color Foreground { get; private set; } = Color.Parse("#E6E8EC");
@@ -72,17 +71,57 @@ public static class IconProvider
     }
 
     /// <summary>Перекрасить чистый чёрный (fill, stroke, color, stop-color) в цвет темы.</summary>
+    /// <summary>
+    /// Перекраска под тему. Иконки нарисованы для СВЕТЛОЙ темы. Светлая тема (цвет текста тёмный): чистый чёрный — в цвет
+    /// текста, прочее как нарисовано. ТЁМНАЯ тема (цвет текста светлый): серые тона обращаются по яркости — чёрный (и почти
+    /// чёрный, и контур без fill — по умолчанию чёрный) становится цветом текста (белым), белый — чёрным, светло-серый —
+    /// тёмно-серым (L → 255 − L); цветные акценты (оранжевый, синий, красный…) не трогаются.
+    /// </summary>
     public static string Recolor(string svg, string hex)
     {
-        var r = Black.Replace(svg, hex);
-        // почти чёрный (#191919 и темнее — каналы ≤ 0x20) — тоже цвет текста: на тёмной теме иначе не виден
-        r = NearBlack.Replace(r, m => int.Parse(m.Groups[2].Value, System.Globalization.NumberStyles.HexNumber) is var v && ((v >> 16) & 255) <= 0x20 && ((v >> 8) & 255) <= 0x20 && (v & 255) <= 0x20 ? m.Groups[1].Value + hex : m.Value);
+        var fg = Color.Parse(hex);
+        bool dark = fg.R * 0.299 + fg.G * 0.587 + fg.B * 0.114 > 128;
+        string r = ColorToken.Replace(svg, m =>
+        {
+            var c = ParseColor(m.Groups[2].Value);
+            if (c == null) return m.Value;
+            var (cr, cg, cb) = c.Value;
+            bool gray = Math.Abs(cr - cg) <= 12 && Math.Abs(cg - cb) <= 12 && Math.Abs(cr - cb) <= 12;
+            if (!gray) return m.Value;
+            int l = (cr + cg + cb) / 3;
+            if (l <= 0x20) return m.Groups[1].Value + hex;                         // чёрный — цвет текста
+            if (!dark) return m.Value;                                             // светлая тема — как нарисовано
+            int inv = 255 - l;
+            return m.Groups[1].Value + $"#{inv:X2}{inv:X2}{inv:X2}";
+        });
         // контур без fill по умолчанию чёрный (SVG): заливка по умолчанию у корня — цвет текста; явные заливки не трогаются
         var root = RootTag.Match(r);
         if (root.Success && !root.Value.Contains(" fill=")) r = r.Insert(root.Index + 4, $" fill=\"{hex}\"");
         return r;
     }
-    private static readonly Regex NearBlack = new(@"((?:fill|stroke|color|stop-color)\s*[:=]\s*[""']?\s*)#([0-9a-fA-F]{6})\b", RegexOptions.Compiled);
+
+    private static readonly Regex ColorToken = new(@"((?:fill|stroke|color|stop-color)\s*[:=]\s*[""']?\s*)(#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b|black\b|white\b|rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\))", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static (int R, int G, int B)? ParseColor(string v)
+    {
+        v = v.Trim().ToLowerInvariant();
+        if (v == "black") return (0, 0, 0);
+        if (v == "white") return (255, 255, 255);
+        if (v.StartsWith("rgb"))
+        {
+            var n = Regex.Matches(v, @"\d+").Select(x => int.Parse(x.Value)).ToArray();
+            return n.Length == 3 ? (n[0], n[1], n[2]) : null;
+        }
+        if (v.StartsWith('#'))
+        {
+            string h = v[1..];
+            if (h.Length == 3) h = string.Concat(h.Select(ch => $"{ch}{ch}"));
+            if (h.Length != 6) return null;
+            int x = Convert.ToInt32(h, 16);
+            return ((x >> 16) & 255, (x >> 8) & 255, x & 255);
+        }
+        return null;
+    }
     private static readonly Regex RootTag = new(@"<svg\b[^>]*>", RegexOptions.Compiled);
 
     /// <summary>

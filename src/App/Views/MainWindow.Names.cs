@@ -24,7 +24,7 @@ public partial class MainWindow
     private Parametric3D.App.Viewport.ModelViewport View = null!;
     private Canvas RegionCanvas = null!;
     private Border CommandBar = null!;
-    private StackPanel CommandStack = null!;
+    private WrapPanel CommandStack = null!;
     private StackPanel ViewTools = null!;
     private Parametric3D.App.Viewport.ViewCube Cube = null!;
     private Border ContextBar = null!;
@@ -73,7 +73,7 @@ public partial class MainWindow
         View = this.FindControl<Parametric3D.App.Viewport.ModelViewport>("View")!;
         RegionCanvas = this.FindControl<Canvas>("RegionCanvas")!;
         CommandBar = this.FindControl<Border>("CommandBar")!;
-        CommandStack = this.FindControl<StackPanel>("CommandStack")!;
+        CommandStack = this.FindControl<WrapPanel>("CommandStack")!;
         ViewTools = this.FindControl<StackPanel>("ViewTools")!;
         Cube = this.FindControl<Parametric3D.App.Viewport.ViewCube>("Cube")!;
         ContextBar = this.FindControl<Border>("ContextBar")!;

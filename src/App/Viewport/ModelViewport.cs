@@ -103,6 +103,12 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
 
     public void Redraw() => RequestNextFrameRendering();
 
+    /// <summary>Цвета вида (для надстроек поверх него — значков ограничений и т. п.).</summary>
+    public RenderTheme Theme => _r.Theme;
+
+    /// <summary>Кадр нарисован (вызывается в потоке окна): надстройки поверх вида перерисовываются вслед за ним.</summary>
+    public event Action? FrameDrawn;
+
     /// <summary>Таблица выбора текущей сцены (для подсказок и проверок).</summary>
     public SceneData? Scene => _scene;
 
@@ -232,6 +238,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
                 cap(px, w, h);
             }
             FramesRendered++;
+            if (FrameDrawn != null) Avalonia.Threading.Dispatcher.UIThread.Post(() => FrameDrawn?.Invoke(), Avalonia.Threading.DispatcherPriority.Render);
             LastFrameMs = System.Diagnostics.Stopwatch.GetElapsedTime(frameStart).TotalMilliseconds;
             for (int i = 0; i < 4; i++)
             {
@@ -531,6 +538,8 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     private void ApplyPick(PickRef r, PickRequest req)
     {
         PicksServed++;
+        // значки ограничений рисуются поверх вида (не в кадре GL) — ловятся здесь и важнее того, что под ними
+        if (ConstraintGlyphAt(req.P) is { IsEmpty: false } glyph && Selection.Accepts(glyph.Kind)) r = glyph;
         if (Selection.SetHover(r))
         {
             _flagsDirty = true;

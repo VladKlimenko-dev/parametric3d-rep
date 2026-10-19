@@ -437,4 +437,25 @@ public sealed partial class ModelViewport
 
     private static LineInst Inst(Vector3 a, Vector3 b, Vector4 c, float w, float dash) =>
         new() { A = a, B = b, Color = SceneData.Pack(c), Width = w, Dash = dash, Pick = 0 };
+
+    /// <summary>Значок ограничения под точкой экрана (DIP) в активном эскизе; Empty — нет.</summary>
+    public PickRef ConstraintGlyphAt(Point p)
+    {
+        if (ActiveSketch is not { } sk || !Settings.Current.ShowConstraintGlyphs) return PickRef.Empty;
+        PickRef best = PickRef.Empty; double bestD = double.MaxValue;
+        foreach (var c in sk.Constraints)
+        {
+            if (!c.Enabled) continue;
+            double half = ConstraintLayout.SizePx(c.Type) * 0.5 + 3;
+            foreach (var g in c.GlyphPositions)
+            {
+                if (Project(sk.Plane.ToWorld(g)) is not { } q) continue;
+                double dx = Math.Abs(q.X - p.X), dy = Math.Abs(q.Y - p.Y);
+                if (dx > half || dy > half) continue;
+                double d = dx * dx + dy * dy;
+                if (d < bestD) { bestD = d; best = new PickRef(c.Id, PickKind.SketchConstraint, sk, c); }
+            }
+        }
+        return best;
+    }
 }

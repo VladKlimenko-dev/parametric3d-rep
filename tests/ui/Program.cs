@@ -236,7 +236,12 @@ Check("UI-THEME-ICONS", () =>
     Require(r.Contains("stroke=\"#E6E8EC\"") && r.Contains("#FF7A1A") && r.Contains("fill:#E6E8EC") && r.Contains("stroke:#E6E8EC"), r);
     // контур без fill (по умолчанию чёрный) и почти чёрный #191919 — тоже цвет темы; серые и белые — как есть
     string r2 = IconProvider.Recolor("<svg width=\"2\"><path d=\"M0 0\"/><path fill=\"#191919\"/><path fill=\"#CCCCCC\"/></svg>", "#E6E8EC");
-    Require(r2.StartsWith("<svg fill=\"#E6E8EC\"") && !r2.Contains("#191919") && r2.Contains("#CCCCCC"), r2);
+    Require(r2.StartsWith("<svg fill=\"#E6E8EC\"") && !r2.Contains("#191919") && r2.Contains("#333333"), r2);
+    // тёмная тема: белое → чёрное, светло-серое → тёмно-серое, чёрное → цвет текста; цветное — как есть; светлая — как нарисовано
+    string r3 = IconProvider.Recolor("<svg fill=\"none\"><path fill=\"white\" stroke=\"black\"/><path fill=\"#ccc\"/><path fill=\"#6EA0FF\"/></svg>", "#E6E8EC");
+    Require(r3.Contains("fill=\"#000000\"") && r3.Contains("stroke=\"#E6E8EC\"") && r3.Contains("fill=\"#333333\"") && r3.Contains("#6EA0FF"), r3);
+    string r4 = IconProvider.Recolor("<svg fill=\"none\"><path fill=\"white\" stroke=\"black\"/><path fill=\"#ccc\"/></svg>", "#1C1E22");
+    Require(r4.Contains("fill=\"white\"") && r4.Contains("stroke=\"#1C1E22\"") && r4.Contains("fill=\"#ccc\""), r4);
     // без файла иконки — подпись
     Require(IconProvider.Get("no_such_icon_but.svg") == null, "missing icon");
     w.Close();
@@ -379,6 +384,71 @@ Check("UI-SKETCH-EXTRUDE", () =>
     w.CommitOperation();
     s.Document.RebuildDirty();
     Require(part.Bodies.Count == 1 && Math.Abs(part.Volume - 40 * 20 * 20) < 1e-6, $"volume {part.Volume}");
+    w.Close();
+});
+
+Check("UI-CONSTRAINT-GLYPHS", () =>
+{
+    // значки ограничений на эскизе (правила прежнего приложения): у линии — строкой вдоль неё СНАРУЖИ замкнутого
+    // контура, у узла/центра — под ним; иконки con_* поверх вида, ловятся мышью; конфликт — красная рамка
+    var s = DocumentSession.NewPart();
+    var w = Open(s);
+    var part = s.Part!;
+    w.SelectItem(part.PlaneXY);
+    w.StartOperation(new SketchOp());
+    Require(w.InSketch, "sketch mode did not start");
+    var sk = w.ViewPort.ActiveSketch!;
+    var rect = new RectangleTool();
+    rect.Click(new SketchInput(sk, new Vector2d(-20, -10), null));
+    Require(rect.Click(new SketchInput(sk, new Vector2d(20, 10), null)), "rectangle not created");
+    var circ = sk.AddEntity(new SkCircle(new SkPoint(50, 0), 6));
+    sk.AddConstraint(ConstraintType.Fix, circ.Center);
+    Dispatcher.UIThread.RunJobs();
+    double px = w.ViewPort.PixelSize;
+    var list = ConstraintLayout.Build(sk, px);
+    int expected = sk.Constraints.Where(c => c.Enabled).Sum(c => c.Items.Count(i => ConstraintLayout.TryAnchor(i, out _, out _, out _)));
+    Require(list.Count > 0 && list.Count <= expected, $"placements {list.Count} of {expected}");
+    foreach (var t in Enum.GetValues<ConstraintType>())
+        Require(IconProvider.Exists(ConstraintLayout.IconOf(t)), "no icon for " + t);
+    // горизонтальность верхней и нижней сторон — снаружи прямоугольника, вертикальность — слева/справа снаружи
+    foreach (var c in sk.Constraints.Where(c => c.Type is ConstraintType.Horizontal or ConstraintType.Vertical))
+        foreach (var g in c.GlyphPositions)
+            Require(Math.Abs(g.X) > 20 || Math.Abs(g.Y) > 10, $"{c.Type} glyph inside the closed contour at {g}");
+    // совпадения углов: одна строка на угол (не два значка друг на друге), под узлом
+    var coinc = sk.Constraints.Where(c => c.Type == ConstraintType.Coincident).SelectMany(c => c.GlyphPositions).ToList();
+    Require(coinc.Count == 4, $"coincident glyphs {coinc.Count}");
+    Require(coinc.All(g => sk.AllPoints().Any(p => Math.Abs(p.P.X - g.X) < 1e-6 && p.P.Y > g.Y)), "coincident glyph is not below its node");
+    var fix = sk.Constraints.First(c => c.Type == ConstraintType.Fix);
+    Require(fix.GlyphPositions.Count == 1 && fix.GlyphPositions[0].Y < 0 && Math.Abs(fix.GlyphPositions[0].X - 50) < 1e-6, "fix glyph is not below the circle centre");
+    // шаг строки — не меньше размера значка (не наезжают)
+    var row = list.GroupBy(p => Math.Round(p.Center.Y / px)).Where(g => g.Count() > 1).SelectMany(g => g.OrderBy(p => p.Center.X).Zip(g.OrderBy(p => p.Center.X).Skip(1)));
+    foreach (var (a, b) in row) Require((b.Center - a.Center).Length >= Settings.Current.ConstraintIconSizePx * px * 0.99 || Math.Abs(b.Center.X - a.Center.X) < 1e-9, "glyphs overlap in a row");
+    // значки не наезжают друг на друга (строка, задевшая соседей, отодвигается)
+    for (int i = 0; i < list.Count; i++)
+        for (int j = i + 1; j < list.Count; j++)
+            Require(Math.Abs(list[i].Center.X - list[j].Center.X) >= Settings.Current.ConstraintIconSizePx * px * 0.99
+                 || Math.Abs(list[i].Center.Y - list[j].Center.Y) >= Settings.Current.ConstraintIconSizePx * px * 0.99, $"glyphs {list[i].Constraint.Type} and {list[j].Constraint.Type} overlap");
+    // попадание мышью: значок над точкой экрана, где он нарисован
+    if (w.ViewPort.Project(sk.Plane.ToWorld(fix.GlyphPositions[0])) is { } q)
+    {
+        var hit = w.ViewPort.ConstraintGlyphAt(q);
+        Require(hit.Kind == PickKind.SketchConstraint && hit.Id == fix.Id, "glyph is not picked at its screen position");
+        Require(w.ViewPort.ConstraintGlyphAt(new Avalonia.Point(q.X + 60, q.Y + 60)).Id != fix.Id, "glyph picked far away");
+    }
+    // отрисовка слоя: все значки; конфликт — другим цветом рамки
+    var rtb = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize(Math.Max(64, (int)w.GlyphLayer.Bounds.Width), Math.Max(64, (int)w.GlyphLayer.Bounds.Height)));
+    using (var ctx = rtb.CreateDrawingContext())
+    {
+        ctx.FillRectangle(w.ViewPort.Theme.Dark ? Avalonia.Media.Brushes.Black : Avalonia.Media.Brushes.White, new Avalonia.Rect(rtb.Size));
+        w.GlyphLayer.Render(ctx);
+    }
+    Require(w.GlyphLayer.LastDrawn > 0, "glyph layer drew nothing");
+    if (Environment.GetEnvironmentVariable("UI_GLYPHSHOT") is { Length: > 0 } shot) rtb.Save(shot);
+    Settings.Current.ShowConstraintGlyphs = false;
+    Require(ConstraintLayout.Build(sk, px).Count == 0 && fix.GlyphPositions.Count == 0, "glyphs shown while switched off");
+    Settings.Current.ShowConstraintGlyphs = true;
+    Console.WriteLine(JsonSerializer.Serialize(new { info = "UI-CONSTRAINT-GLYPHS", placements = list.Count, drawn = w.GlyphLayer.LastDrawn, loopBuilds = ConstraintLayout.LoopBuilds }));
+    w.CancelSketch();
     w.Close();
 });
 
