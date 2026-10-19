@@ -281,7 +281,24 @@ Check("UI-ICONS-USER-SET", () =>
                 img.Draw(dc, new Rect(img.Size), IconProvider.Fit(img.Size, box.Deflate(2)));
             }
         }
-        rtb.Save(sheet); File.WriteAllLines(sheet + ".txt", files.Select((f, i) => $"{i / 24},{i % 24} {f}"));
+        rtb.Save(sheet);
+        // крупно — выбранные (UI_ICONBIG=имя,имя): по 160 px
+        if (Environment.GetEnvironmentVariable("UI_ICONBIG") is { Length: > 0 } big)
+        {
+            var names = big.Split(','); var rb = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize(names.Length * 180, 180));
+            using (var dc2 = rb.CreateDrawingContext())
+            {
+                dc2.FillRectangle(new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#1E2128")), new Rect(0, 0, names.Length * 180, 180));
+                for (int i = 0; i < names.Length; i++)
+                {
+                    var box = new Rect(i * 180 + 10, 10, 160, 160); var im = IconProvider.Get(names[i])!;
+                    dc2.DrawRectangle(null, new Avalonia.Media.Pen(new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#3A3F4A")), 1), box);
+                    im.Draw(dc2, new Rect(im.Size), IconProvider.Fit(im.Size, box));
+                }
+            }
+            rb.Save(sheet + ".big.png");
+        }
+        File.WriteAllLines(sheet + ".txt", files.Select((f, i) => $"{i / 24},{i % 24} {f}"));
     }
     // команды: иконка есть у каждой команды, для которой файл передан
     var lang = CommandRegistry.Instance.All.First(c => c.Id == "app.language");
