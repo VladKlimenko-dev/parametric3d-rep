@@ -22,6 +22,15 @@ public sealed class Document
     public bool Modified;
 
     public readonly Assembly Root;
+
+    /// <summary>
+    /// Документ сборки. У документа детали корень — служебная сборка: её опорные элементы (начало, плоскости) не существуют
+    /// для пользователя — не рисуются и не выбираются (иначе у детали двойные плоскости).
+    /// </summary>
+    public bool IsAssembly { get; set; }
+
+    /// <summary>Корень — служебный (документ одной детали): опорные элементы корня не показываются.</summary>
+    public bool RootIsHidden => !IsAssembly && Root.Children.OfType<Part>().Count() == 1 && !Root.Children.OfType<Assembly>().Any();
     public readonly ParameterTable Parameters = new();
 
     /// <summary>

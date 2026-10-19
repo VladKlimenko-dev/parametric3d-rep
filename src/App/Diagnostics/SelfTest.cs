@@ -121,6 +121,7 @@ public sealed class SelfTest
             SystemInfo();
             // отладка: только раздел ручек (P3D_SELFTEST_ONLY=handles)
             if (Environment.GetEnvironmentVariable("P3D_SELFTEST_ONLY") == "handles") { await Handles(); await UserEdges(); return; }
+            if (Environment.GetEnvironmentVariable("P3D_SELFTEST_ONLY") == "cancel") { await CancelAndFailure(); return; }
             await Operations();
             await RealisticParts();
             await Holes();
@@ -130,6 +131,7 @@ public sealed class SelfTest
             await Ui();
             await Handles();
             await UserEdges();
+            await CancelAndFailure();
         }
         finally
         {
@@ -535,6 +537,111 @@ public sealed class SelfTest
             Line($"  {g.Key,-44} ×{g.Count(),-4} наиб. {F(g.Max(x => x.Ms)),8} мс, сумма {F(g.Sum(x => x.Ms)),8} мс");
         if (slow.Count == 0) Line("  нет");
         Target("Наибольшая остановка окна (окно не отвечает)", "≤ 500 мс", _maxStall, 500);
+    }
+
+    // ---------------------------------------------------------------- отмена и отказ (KRN-09, 09.10)
+
+    /// <summary>
+    /// ПРИЛОЖЕНИЕ ПРИ ОТМЕНЕ И ОТКАЗЕ: операция, которую ядро не может выполнить (скругление больше тела), — ошибка у
+    /// операции, деталь и окно живы, отмена правки возвращает исходное; «Отмена» операции во время предпросмотра —
+    /// модель как была, без шага «вернуть»; правка детали во время фонового расчёта (расчёт прерывается — результат
+    /// устарел) — итог совпадает с расчётом с нуля; испорченный файл — отказ открытия, открытая деталь не тронута.
+    /// После каждого шага — кадр вида рисуется (окно не повисло).
+    /// </summary>
+    private async Task CancelAndFailure()
+    {
+        Head("9. Отмена и отказ");
+        var v = _w.ViewPort;
+        async Task<bool> Alive()
+        {
+            long f0 = v.FramesRendered; v.Redraw();
+            await Until(() => v.FramesRendered > f0 || string.IsNullOrEmpty(v.GlInfo), 5000);
+            return v.FramesRendered > f0 || string.IsNullOrEmpty(v.GlInfo);
+        }
+
+        // а) отказ ядра: скругление радиусом больше тела
+        _phase = "отмена и отказ: отказ операции";
+        Step("отказ операции");
+        var part = TestParts.Block("cancel");
+        var s = DocumentSession.FromPart(part, "cancel");
+        _w.SetSession(s);
+        await WaitBuilt();
+        double v0 = part.Volume; int f0 = part.Features.Count, u0 = s.UndoNames.Count;
+        var edge = EdgeRef(part, e => e.Curve is Kernel.Curves.LineCurve3 && (e.V0.P - e.V1.P).Length > 10);
+        v.Selection.Select(edge, additive: false);
+        _w.StartOperation(new RoundOp());
+        await WaitBuilt();
+        var rf = part.Features.LastOrDefault() as RoundFeature;
+        string? err = null;
+        if (rf != null) { rf.Radius = new ValueRef(500); part.MarkDirtyFrom(rf); v.MarkDirty(); await WaitBuilt(); err = rf.Error; }
+        bool aliveA = await Alive();
+        _w.CommitOperation();
+        await WaitBuilt();
+        bool keptA = Math.Abs(part.Volume - v0) < 1e-6 * v0 && part.Bodies.Count == 1;
+        _w.Session.Undo();
+        await WaitBuilt();
+        var pa = _w.Session.Part!;
+        bool undoA = pa.Features.Count == f0 && Math.Abs(pa.Volume - v0) < 1e-6 * v0 && pa.Features.All(f => f.Error == null);
+        bool okA = rf != null && err != null && aliveA && keptA && undoA && await Alive();
+        Count(okA);
+        Line($"Отказ операции (скругление R500 на бруске 100×60×20): ошибка у операции — {(err != null ? "да («" + err.Split('\n')[0] + "»)" : "НЕТ")}; окно рисует — {(aliveA ? "да" : "НЕТ")}; тело после «ОК» не изменилось — {(keptA ? "да" : "НЕТ")}; отмена правки вернула исходное — {(undoA ? "да" : "НЕТ")}");
+
+        // б) «Отмена» во время предпросмотра
+        _phase = "отмена и отказ: отмена предпросмотра";
+        Step("отмена предпросмотра");
+        int okB = 0, triesB = 6;
+        for (int i = 0; i < triesB; i++)
+        {
+            var p = _w.Session.Part!; int fc = p.Features.Count, uc = _w.Session.UndoNames.Count;
+            v.Selection.Select(EdgeRef(p, e => e.Curve is Kernel.Curves.LineCurve3 && (e.V0.P - e.V1.P).Length > 10), additive: false);
+            _w.StartOperation(i % 2 == 0 ? new ChamferOp() : new RoundOp());
+            if (i >= 2) await Task.Delay(15 * i);                         // разные мгновения: до расчёта, во время, после
+            _w.CancelOperation();
+            await WaitBuilt();
+            var q = _w.Session.Part!;
+            if (q.Features.Count == fc && _w.Session.UndoNames.Count == uc && !_w.Session.CanRedo && Math.Abs(q.Volume - v0) < 1e-6 * v0 && _w.CurrentOperation == null) okB++;
+        }
+        bool aliveB = await Alive();
+        Count(okB == triesB && aliveB);
+        Line($"«Отмена» операции во время предпросмотра: {okB}/{triesB} — модель как была, без шага «вернуть»; окно рисует — {(aliveB ? "да" : "НЕТ")}");
+
+        // в) правка во время фонового расчёта: результат устаревшего расчёта выбрасывается
+        _phase = "отмена и отказ: правка во время расчёта";
+        Step("правка во время расчёта");
+        var big = await Task.Run(() => TestParts.Realistic(5, 24));
+        var sb = DocumentSession.FromPart(big, "busy");
+        _w.SetSession(sb);
+        await WaitBuilt(120000);
+        double vRef = big.Volume; int interrupted = 0, okC = 0, triesC = 5;
+        var rnd = new Random(7);
+        for (int i = 0; i < triesC; i++)
+        {
+            big.MarkDirtyFrom(big.Features[rnd.Next(1, big.Features.Count)]);
+            var t = sb.Document.RebuildDirtyAsync();
+            await Task.Delay(20 + rnd.Next(80));
+            if (sb.Document.IsBuilding) interrupted++;
+            big.MarkDirtyFrom(big.Features[rnd.Next(1, big.Features.Count)]);   // правка во время расчёта
+            v.MarkDirty();
+            await t;
+            await WaitBuilt(120000);
+            if (Math.Abs(big.Volume - vRef) <= 1e-6 * vRef && big.Features.All(f => f.Error == null)) okC++;
+        }
+        bool aliveC = await Alive();
+        Count(okC == triesC && aliveC);
+        Line($"Правка во время фонового расчёта: {okC}/{triesC} итогов совпали с расчётом с нуля (прервано расчётов: {interrupted}); окно рисует — {(aliveC ? "да" : "НЕТ")}");
+
+        // г) испорченный файл: отказ открытия, открытая деталь на месте
+        _phase = "отмена и отказ: испорченный файл";
+        Step("испорченный файл");
+        string bad = Path.Combine(Path.GetTempPath(), "p3d_selftest_bad" + DocumentSession.PartExtension);
+        File.WriteAllText(bad, "{ not a part");
+        var before = _w.Session;
+        bool refused = false;
+        try { _w.SetSession(DocumentSession.Open(bad)); } catch { refused = true; }
+        bool okD = refused && ReferenceEquals(_w.Session, before) && await Alive();
+        try { File.Delete(bad); } catch { }
+        Count(okD);
+        Line($"Испорченный файл: открытие отклонено — {(refused ? "да" : "НЕТ")}; открытая деталь на месте, окно рисует — {(okD ? "да" : "НЕТ")}");
     }
 
     // ---------------------------------------------------------------- ручки и последовательности (u09)

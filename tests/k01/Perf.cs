@@ -107,7 +107,12 @@ static partial class Program
         foreach (var (name, run) in PerfScenarios)
         {
             if (only != null && only != name) continue;
-            for (int i = 0; i < 2; i++) run();                                   // прогрев
+            // KRN-00 (00.4): «холодный» прогон — первый в процессе (JIT, кэши ядра пусты), с выделенной памятью; затем прогрев
+            GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+            long c0 = GC.GetAllocatedBytesForCurrentThread();
+            var cold = Stopwatch.StartNew(); run(); cold.Stop();
+            double coldMs = cold.Elapsed.TotalMilliseconds, coldMB = (GC.GetAllocatedBytesForCurrentThread() - c0) / 1e6;
+            run();                                                               // прогрев
             var ms = new List<double>(); var mb = new List<double>();
             for (int i = 0; i < n; i++)
             {
@@ -125,7 +130,7 @@ static partial class Program
             try { run(); } finally { Prof.Enabled = false; }
             long tessCalls = Tessellator.Calls, tessRepeats = Tessellator.Repeats;
             var top = Prof.Report().Split('\n').Where(l => l.Trim().Length > 0).Take(int.TryParse(Environment.GetEnvironmentVariable("PERF_TOP"), out var tk) ? tk : 14).ToList();
-            Log(new { perf = name, runs = n, medianMs = Math.Round(Rank(ms, .5), 2), p95Ms = Math.Round(Rank(ms, .95), 2),
+            Log(new { perf = name, runs = n, coldMs = Math.Round(coldMs, 2), coldAllocMB = Math.Round(coldMB, 1), medianMs = Math.Round(Rank(ms, .5), 2), p95Ms = Math.Round(Rank(ms, .95), 2),
                       minMs = Math.Round(ms[0], 2), samples = order, medianAllocMB = Math.Round(Rank(mb, .5), 1), tessCalls, tessRepeats, profile = top });
         }
     }

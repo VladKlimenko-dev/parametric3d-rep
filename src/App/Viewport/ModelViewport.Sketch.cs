@@ -368,8 +368,10 @@ public sealed partial class ModelViewport
                     if (dm.UserLocked && !dm.Conflict && !dm.Reference) dc = th.DimUserLocked;
                     hov = ReferenceEquals(dm, HoverDimension) || ReferenceEquals(dm, DraggedDimension);
                 }
-                float wd = st >= LineStyle.DimensionText ? 1.3f : 1.1f;
-                if (hov) { dc = new Vector4(MathF.Min(1, dc.X * 1.25f + 0.15f), MathF.Min(1, dc.Y * 1.25f + 0.15f), MathF.Min(1, dc.Z * 1.25f + 0.15f), 1); wd *= 1.9f; }
+                // текст — контуры глифов ГОСТ: тонкой линией (толстая сливала цифры)
+                bool txt = st >= LineStyle.DimensionText;
+                float wd = txt ? Settings.Current.DimensionTextOutlineWidth : 1.1f;
+                if (hov) { dc = new Vector4(MathF.Min(1, dc.X * 1.25f + 0.15f), MathF.Min(1, dc.Y * 1.25f + 0.15f), MathF.Min(1, dc.Z * 1.25f + 0.15f), 1); wd *= txt ? 1.3f : 1.9f; }
                 lines.Add(Inst(a, b, dc, wd, 0));
             }
         }

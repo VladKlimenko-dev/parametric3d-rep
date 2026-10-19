@@ -24,8 +24,20 @@ public sealed partial class TreeNode : ObservableObject
 
     public string? Error { get; private set; }
     public bool HasError => Error != null;
-    public bool IsDim { get; private set; }
+    public bool IsDim { get; internal set; }
     public bool HasEye { get; }
+
+    /// <summary>Строка отката (детали, сборки или подсборки): рисуется цветной полосой, тянется мышью.</summary>
+    public bool IsBar => Item is InfoItem { Role: "rollback" or "asm_rollback" or "sub_rollback" };
+    public bool IsNotBar => !IsBar;
+    /// <summary>Цвет строки: деталь — оранжевая, сборка — синяя, подсборка — фиолетовая.</summary>
+    public IBrush? BarBrush => Item is InfoItem { Role: var r } ? r switch
+    {
+        "rollback" => new SolidColorBrush(Color.FromRgb(245, 158, 11)),
+        "asm_rollback" => new SolidColorBrush(Color.FromRgb(59, 130, 246)),
+        "sub_rollback" => new SolidColorBrush(Color.FromRgb(168, 85, 247)),
+        _ => null,
+    } : null;
     private readonly string _iconFile;
     public string IconFile => ComponentIcon ?? _iconFile;
     public IImage? Icon => IconProvider.Get(IconFile);
@@ -141,7 +153,7 @@ public sealed partial class TreeNode : ObservableObject
         InfoItem { Role: "body" } => "tree_body_ico.svg",
         InfoItem { Role: "group" } => "tree_group_ico.svg",
         InfoItem { Role: "quilt" } => "tree_quilt_ico.svg",
-        InfoItem { Role: "rollback" } => "rollback_bar_ico.svg",
+        InfoItem { Role: "rollback" or "asm_rollback" or "sub_rollback" } => "rollback_bar_ico.svg",
         FreeFormFeature => "tree_freeform_ico.svg",
         Feature { FreeForm: not null } => "tree_ff_step_ico.svg",
         InfoItem { Role: "subassembly" } => "as_subassembly_but.svg",
@@ -248,8 +260,13 @@ public sealed partial class TreeNode : ObservableObject
     {
         var node = new TreeNode(asm, null) { Name = title };
         var subs = new Dictionary<string, TreeNode>();
+        // строка отката сборки — между компонентами (синяя); у подсборки — своя в конце (фиолетовая)
+        int compIndex = 0; bool asmBar = false;
+        TreeNode AsmBar() => new(new InfoItem("asm_rollback", Loc.L("— строка отката сборки —"), asm.Children.OfType<Part>().FirstOrDefault() ?? new Part("-")) { Asm = asm }, null);
         foreach (var c in asm.Children)
         {
+            if (c is Part && !asmBar && asm.StageIndex >= 0 && compIndex == asm.StageIndex) { node.Children.Add(AsmBar()); asmBar = true; }
+            if (c is Part) compIndex++;
             if (c is Part p)
             {
                 var pn = BuildItem(p, p);
@@ -261,11 +278,14 @@ public sealed partial class TreeNode : ObservableObject
                     target = sn;
                 }
                 pn.RestoreExpanded(false);
+                if (asm.IsBeyondStage(p)) pn.IsDim = true;
                 target.Children.Add(pn);
             }
             else if (c is not Assembly) node.Children.Add(new TreeNode(c, null));
             else node.Children.Add(BuildAssembly((Assembly)c, c.Name));
         }
+        foreach (var sn in subs.Values) sn.Children.Add(new TreeNode(new InfoItem("sub_rollback", Loc.L("— строка отката подсборки —"), ((InfoItem)sn.Item).Owner), null));
+        if (!asmBar) node.Children.Add(AsmBar());
         var mates = new TreeNode(new InfoItem("mates", Loc.L("Ограничения и соединения"), asm.Children.OfType<Part>().FirstOrDefault() ?? new Part("-")), null);
         foreach (var p in asm.Children.OfType<Part>())
         {
@@ -305,7 +325,8 @@ public sealed partial class TreeNode : ObservableObject
         var groups = new Dictionary<string, TreeNode>();
         var ffNodes = new Dictionary<string, TreeNode>();
         // u13h: ручка строки отката (режим вставки) — узел на её месте; двойной щелчок — строка в конец
-        bool barDone = item is not Part { InInsertMode: true };
+        // строка отката детали — всегда (в конце или на месте режима вставки); тянется мышью между операциями
+        bool barDone = item is not Part;
         TreeNode Bar(Part bp) => new(new InfoItem("rollback", Loc.L("— строка отката —"), bp), bp);
         foreach (var c in item.Children)
         {
@@ -357,6 +378,8 @@ public sealed class InfoItem : ModelItem
     public readonly string Role;
     public readonly Part Owner;
     public int Index;
+    /// <summary>Строка отката сборки — её сборка (у строки детали — null).</summary>
+    public Assembly? Asm;
     public InfoItem(string role, string name, Part owner) { Role = role; Name = name; Owner = owner; }
 }
 

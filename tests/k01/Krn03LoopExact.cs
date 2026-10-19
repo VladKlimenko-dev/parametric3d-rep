@@ -47,7 +47,7 @@ static partial class Program
             { var l = new List<TSolid> { Box(0, 0, 0, 30, 20, 10) }; var b0 = l[0]; FilletOp.RoundEdges(l, b0.Edges.Select(EdgeRef.Of).ToList(), 2, w); bodies.Add(("rounded box", l[0])); }
             { var c = PrimitiveOp.Cylinder(Vector3d.Zero, 8, 15); var l = new List<TSolid> { c }; FilletOp.RoundEdges(l, c.Edges.Where(e => e.Curve is Parametric3D.Kernel.Curves.ArcCurve3).Select(EdgeRef.Of).ToList(), 2, w); bodies.Add(("rounded cylinder", l[0])); }
             foreach (var (n, b) in bodies.ToList()) bodies.Add((n + " rotated", TransformOp.Copy(b, rx)));
-            int curved = 0, caught = 0;
+            int curved = 0, caught = 0, faceted = 0, facetedCaught = 0;
             foreach (var (name, b0) in bodies)
             {
                 // проверка — у тела, приведённого к соглашению о полурёбрах (сырой примитив ещё не приведён)
@@ -61,8 +61,24 @@ static partial class Program
                 {
                     var c = TopologyClone.Deep(b); c.Guarantee = GuaranteeLevel.ExactAnalytic; c.TopologyConvention = b.TopologyConvention;
                     var cf = c.Faces.ElementAt(fi);
-                    // грань с фасетами — нормаль задают фасеты (своя проверка); здесь — грани на точной поверхности без фасет
-                    if (cf.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface) continue;
+                    // грань с фасетами (2026-10-19, вечер): проверка по точной поверхности-источнику; порча — обход контура
+                    // обращён (нормаль граней с фасетами задают фасеты, флаг Reversed у них стороны не меняет)
+                    if (cf.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface && Environment.GetEnvironmentVariable("P3D_LOOPFACETED") != "1") continue;
+                    if (cf.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface)
+                    {
+                        if (Parametric3D.Kernel.Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(cf)) is not (Parametric3D.Kernel.Geometry.Ssi.Cylinder or Parametric3D.Kernel.Geometry.Ssi.Cone or Parametric3D.Kernel.Geometry.Ssi.Sphere)) continue;
+                        if (!cf.Loops.SelectMany(l => l.CoEdges).GroupBy(x => x.Edge).Any(g => g.Count() == 1)) continue;
+                        faceted++;
+                        foreach (var lp in cf.Loops)
+                        {
+                            var ces = lp.CoEdges.ToList(); lp.CoEdges.Clear();
+                            foreach (var x in Enumerable.Reverse(ces)) { x.Reversed = !x.Reversed; lp.CoEdges.Add(x); }
+                        }
+                        var rf = SolidValidator.Validate(c);
+                        if (rf.Issues.Any(i => i.Code == "loop-orientation" && i.Message.Contains("по точной поверхности"))) facetedCaught++;
+                        else fails.Add($"{name}: faceted face {fi} {cf.Tag} with reversed loops not reported by the exact check: {rf.Summary()}");
+                        continue;
+                    }
                     if (Parametric3D.Kernel.Geometry.ExactEdges.ShapeOf(cf.Surface) is not (Parametric3D.Kernel.Geometry.Ssi.Cylinder or Parametric3D.Kernel.Geometry.Ssi.Cone or Parametric3D.Kernel.Geometry.Ssi.Sphere)) continue;
                     // грань без собственного края (целый шар) — контуров нет, обращение ловит знак объёма, не эта проверка
                     var uses = cf.Loops.SelectMany(l => l.CoEdges).GroupBy(x => x.Edge).ToList();
@@ -74,7 +90,8 @@ static partial class Program
                     else fails.Add($"{name}: face {fi} {cf.Tag} ({GeometryAudit.AuthoritativeSurface(cf)?.GetType().Name}) with reversed normal not reported: {rc.Summary()}");
                 }
             }
-            Log(new { test = "KRN03-LOOP-ORIENTATION-EXACT", bodies = bodies.Count, curvedFaces = curved, caught });
+            Log(new { test = "KRN03-LOOP-ORIENTATION-EXACT", bodies = bodies.Count, curvedFaces = curved, caught, facetedFaces = faceted, facetedCaught });
+            if (faceted < 1 && Environment.GetEnvironmentVariable("P3D_LOOPFACETED") == "1") fails.Add("no faceted curved face exercised");
             if (curved < 2) fails.Add($"only {curved} curved faces exercised");
             Require(fails.Count == 0, string.Join("; ", fails.Take(8)));
         });

@@ -77,6 +77,7 @@ public sealed class ScenePicker
         _mouse = new Vector2(mouse.X, mouse.Y);
         cam.ScreenRay(mouse.X, mouse.Y, out _rayO, out _rayD);
 
+        _hiddenRoot = doc.RootIsHidden ? doc.Root : null;
         Walk(doc.Root, Matrix4.Identity, datumPlanesVisible, activeSketch);
 
         // ЗАКРЫТОЕ ТЕЛОМ НЕ ВЫБИРАЕТСЯ. Точка, ребро или плоскость за ближайшей гранью тела под курсором не ловятся:
@@ -103,6 +104,8 @@ public sealed class ScenePicker
 
     // ------------------------------------------------------------ обход модели
 
+    private Assembly? _hiddenRoot;
+
     private void Walk(ModelItem item, Matrix4 parent, bool datumPlanes, Sketch? activeSketch)
     {
         Matrix4 xf = item switch
@@ -125,6 +128,10 @@ public sealed class ScenePicker
         foreach (var c in item.Children)
         {
             if (!c.Visible && c != activeSketch) { continue; }
+            // служебный корень документа детали: его опорных элементов нет
+            if (ReferenceEquals(item, _hiddenRoot) && c is not (Part or Assembly)) continue;
+            if (c is Part cpart && item is Assembly stageAsm && stageAsm.IsBeyondStage(cpart)) continue;
+            if (activeSketch != null && c is DatumPlane) continue;               // в правке эскиза плоскости не показываются
 
             int beforeChild = _hits.Count;
             switch (c)
