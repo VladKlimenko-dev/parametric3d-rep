@@ -104,6 +104,42 @@ public sealed class ExtrudeFeature : Feature
         try { Execute(ctx); } finally { _x = null; }
     }
 
+    string? _toolKey; Kernel.Topology.TSolid? _tool;
+    static readonly bool ToolReuseOff = Environment.GetEnvironmentVariable("P3D_TOOLREUSE") == "0";
+    /// <summary>Разбор: сколько резцов выдавливания взято из памяти.</summary>
+    public static long ToolsReused;
+
+    string? ToolKey(Profile shifted, Vector3d dir, BuildContext ctx)
+    {
+        var sb = new System.Text.StringBuilder();
+        static string V(Vector3d v) => $"{BitConverter.DoubleToInt64Bits(v.X):X}/{BitConverter.DoubleToInt64Bits(v.Y):X}/{BitConverter.DoubleToInt64Bits(v.Z):X}";
+        sb.Append(V(dir)).Append('|').Append(V(shifted.Plane.Origin)).Append(V(shifted.Plane.W)).Append(V(shifted.Plane.U));
+        foreach (var l in shifted.Loops)
+        {
+            sb.Append(l.IsOuter ? "|O" : "|I");
+            foreach (var c in l.Curves)
+            {
+                // ключ — полное описание кривой; неизвестный вид — без памяти (по точкам кривую не опознать)
+                switch (c)
+                {
+                    case Kernel.Curves.LineCurve3 ln: sb.Append(";L").Append(V(ln.A)).Append(V(ln.B)); break;
+                    case Kernel.Curves.ArcCurve3 a: sb.Append(";A").Append(V(a.Frame.Origin)).Append(V(a.Frame.U)).Append(V(a.Frame.W)).Append(BitConverter.DoubleToInt64Bits(a.Radius)).Append('/').Append(BitConverter.DoubleToInt64Bits(a.A0)).Append('/').Append(BitConverter.DoubleToInt64Bits(a.A1)); break;
+                    case Kernel.Curves.EllipseCurve3 el: sb.Append(";E").Append(V(el.Frame.Origin)).Append(V(el.Frame.U)).Append(V(el.Frame.W)).Append(BitConverter.DoubleToInt64Bits(el.RU)).Append('/').Append(BitConverter.DoubleToInt64Bits(el.RV)).Append('/').Append(BitConverter.DoubleToInt64Bits(el.A0)).Append('/').Append(BitConverter.DoubleToInt64Bits(el.A1)); break;
+                    case Kernel.Curves.SplineCurve3 sp:
+                        sb.Append(";S").Append(sp.Degree);
+                        foreach (var q in sp.ControlPoints) sb.Append(V(q));
+                        if (sp.Weights != null) foreach (var w in sp.Weights) sb.Append('w').Append(BitConverter.DoubleToInt64Bits(w));
+                        if (sp.Knots != null) foreach (var k in sp.Knots) sb.Append('k').Append(BitConverter.DoubleToInt64Bits(k));
+                        break;
+                    default: return null;
+                }
+            }
+        }
+        if (Thin is { } th) sb.Append("|thin").Append(BitConverter.DoubleToInt64Bits(th.Resolve(ctx.Parameters))).Append(ThinOutside);
+        sb.Append('|').Append(Kernel.KernelSettings.Capture() with { Preview = false, LivePreview = false });
+        return sb.ToString();
+    }
+
     public override void Execute(BuildContext ctx)
     {
         var sketch = ctx.FindSketch(SketchId)
@@ -143,7 +179,13 @@ public sealed class ExtrudeFeature : Feature
             shifted.Loops.Add(nl);
         }
 
-        var solid = ExtrudeOp.Build(shifted, dir);
+        // KRN-10 (10.4): РЕЗЕЦ НЕИЗМЕННОЙ ОПЕРАЦИИ — ИЗ ПАМЯТИ. После правки предыдущей операции эта перестраивается заново,
+        // но её резец (выдавливание профиля, тонкая стенка) от тела не зависит: ключ — профиль (кривые побитно), сдвиг,
+        // направление, тонкая стенка. Совпал — копия запомненного резца (поверхности общие, топология своя). Мутация P3D_TOOLREUSE=0.
+        string? key = _x == null && !ToolReuseOff ? ToolKey(shifted, dir, ctx) : null;
+        bool reused = key != null && key == _toolKey && _tool != null;
+        var solid = reused ? Kernel.Topology.TopologyClone.Deep(_tool!) : ExtrudeOp.Build(shifted, dir);
+        if (reused) System.Threading.Interlocked.Increment(ref ToolsReused);
         (Vector3d Centre, double Radius)? circ = CircleOf(shifted);
         if (_x is { } xf)
         {
@@ -153,7 +195,7 @@ public sealed class ExtrudeFeature : Feature
             dir = xf.Direction(dir);
         }
 
-        if (Thin is { } thinRef)
+        if (Thin is { } thinRef && !reused)
         {
             // u13: ТОНКОЕ ВЫДАВЛИВАНИЕ — полость резца с открытыми торцами (плоские грани поперёк направления): стенка по контуру
             double t = Math.Abs(thinRef.Resolve(ctx.Parameters));
@@ -173,6 +215,8 @@ public sealed class ExtrudeFeature : Feature
             solid = tool[0];
             circ = null;
         }
+        if (Thin != null) circ = null;
+        if (key != null && !reused) { _tool = Kernel.Topology.TopologyClone.Deep(solid); _toolKey = key; }
 
         if (Cut)
         {
