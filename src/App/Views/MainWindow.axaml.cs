@@ -528,16 +528,12 @@ public partial class MainWindow : Window
             : InSketch
             ? new[]
             {
-                (new[] { "sk.line", "sk.rect", "sk.circle", "sk.arc3", "sk.spline", "sk.point", "sk.centerline" },
-                 new[] { "sk.rect_center", "sk.rect_3p", "sk.circle3", "sk.circle_2p", "sk.arc_center", "sk.arc_tangent", "sk.ellipse", "sk.ellipse_5p", "sk.spline_through", "sk.spline_cv", "sk.polygon", "sk.slot", "sk.text", "sk.csys" }),
-                (new[] { "sk.trim", "sk.fillet", "sk.offset" },
-                 new[] { "sk.split", "sk.chamfer", "sk.mirror", "sk.transform", "sk.line_tangent2", "sk.use_edge", "sk.offset_edge", "sk.thicken_edge" }),
+                // фигуры — своя панель (п. 7); размеры и правка фигур — в полосе предложений снизу (пп. 9–10);
+                // «Готово / Отмена» — вверху у куба (п. 11)
                 (new[] { "dim.smart", "con.coincident", "con.horizontal", "con.vertical", "con.tangent" },
-                 new[] { "dim.linear", "dim.radius", "dim.diameter", "dim.angle", "dim.arc_length", "dim.area", "dim.reference", "dim.link_param", "dim.arrows_outside", "dim.lock",
-                         "con.point_on", "con.midpoint", "con.parallel", "con.perpendicular", "con.collinear", "con.equal", "con.concentric", "con.symmetric", "con.fix" }),
+                 new[] { "con.point_on", "con.midpoint", "con.parallel", "con.perpendicular", "con.collinear", "con.equal", "con.concentric", "con.symmetric", "con.fix" }),
                 (new[] { "sk.construction", "sk.grid", "sk.references" },
                  new[] { "sk.snap_items", "sk.show_open_ends", "sk.show_filled", "sk.show_conflicts", "sk.setup" }),
-                (new[] { "sk.finish", "sk.cancel" }, Array.Empty<string>()),
             }
             : new[]
             {
@@ -577,7 +573,46 @@ public partial class MainWindow : Window
                 CommandStack.Children.Add(b);
             }
         }
+        BuildSketchBars();
     }
+
+    /// <summary>Инструменты построения на панели фигур (п. 7) — все, без «Ещё…».</summary>
+    internal static readonly string[] ShapeTools =
+    {
+        "sk.line", "sk.centerline", "sk.rect", "sk.rect_center", "sk.rect_3p", "sk.circle", "sk.circle_2p", "sk.circle3",
+        "sk.arc3", "sk.arc_center", "sk.arc_tangent", "sk.ellipse", "sk.ellipse_5p", "sk.spline_through", "sk.spline_cv",
+        "sk.slot", "sk.polygon", "sk.point", "sk.text", "sk.csys",
+    };
+
+    private void BuildSketchBars()
+    {
+        ShapeStack.Children.Clear();
+        SketchBarStack.Children.Clear();
+        ShapeBar.IsVisible = SketchBar.IsVisible = InSketch;
+        if (!InSketch) return;
+        ShapeHeader.Text = L("ФИГУРЫ");
+        foreach (var id in ShapeTools)
+            if (_reg.Find(id) is { } c) { var b = CmdButton(c, 22); b.Width = 38; b.Height = 36; ShapeStack.Children.Add(b); }
+        foreach (var id in new[] { "sk.finish", "sk.cancel" })
+            if (_reg.Find(id) is { } c) SketchBarStack.Children.Add(CmdButton(c, 18, text: true));
+        PlaceSketchBars();
+        CommandBar.SizeChanged -= OnCommandBarSize; CommandBar.SizeChanged += OnCommandBarSize;
+        Cube.SizeChanged -= OnCommandBarSize; Cube.SizeChanged += OnCommandBarSize;
+    }
+
+    private void OnCommandBarSize(object? s, SizeChangedEventArgs e) => PlaceSketchBars();
+
+    /// <summary>Панель фигур — справа от панели команд; «Готово / Отмена» — слева от куба вида.</summary>
+    private void PlaceSketchBars()
+    {
+        double cmdW = CommandBar.Bounds.Width > 0 ? CommandBar.Bounds.Width : 140;
+        ShapeBar.Margin = new Thickness(10 + cmdW + 6, 10, 0, 0);
+        double cubeW = Cube.Bounds.Width > 0 ? Cube.Bounds.Width : 130;
+        SketchBar.Margin = new Thickness(0, 10, 10 + cubeW + 8, 0);
+    }
+
+    /// <summary>Правка значения размера (из полосы предложений).</summary>
+    public void EditDimensionValue(SkDimension d) => Dispatcher.UIThread.Post(() => EditDimension(d, default));
 
     public void RefreshToolStates()
     {
@@ -687,7 +722,7 @@ public partial class MainWindow : Window
         ViewArea.Children.Insert(ViewArea.Children.IndexOf(RegionCanvas) + 1, GlyphLayer);
         View.ComponentDragStarted += _ => Session.BeginEdit(L("Перетащить компонент"));
         View.ComponentDragEnded += _ => { Session.CommitEdit(); Commands.AssemblyCommands.Solve(this); };
-        View.SketchEdited += () => { ScheduleTree(); UpdateStatus(); };
+        View.SketchEdited += () => { ScheduleTree(); UpdateStatus(); UpdateContextBar(); };
         View.ExpandEdge = r => r.Owner is Part p ? Topo.ChainRefs(p, r) : new List<PickRef> { r };
         View.ReferencePicked += AddSketchReference;
         View.DimensionEditRequested += EditDimension;
@@ -1323,9 +1358,18 @@ public partial class MainWindow : Window
         ContextOps.Children.Clear();
         if (InSketch && View.ActiveSketch is { } sk)
         {
-            SelChipText.Text = L("Эскиз «{0}»", sk.Name);
-            ContextOps.Children.Add(CmdButton(_reg["sk.finish"], 18, text: true));
-            ContextOps.Children.Add(CmdButton(_reg["sk.cancel"], 18, text: true));
+            // пп. 9–10: полоса предложений эскиза — только подходящие к выбранному операции (иконками, подпись в подсказке)
+            var ops = Commands.SketchSuggest.For(this);
+            bool any = !View.Selection.IsEmpty;
+            SelChip.Opacity = any ? 1 : 0.75;
+            SelChipText.Text = any ? View.Selection.Describe() : L("Эскиз «{0}»: выберите точки, кривые или размер — здесь появятся подходящие операции", sk.Name);
+            foreach (var id in ops)
+            {
+                var b = CmdButton(_reg[id], 20);
+                if (b is Layoutable lb) lb.MinWidth = 34;
+                ContextOps.Children.Add(b);
+            }
+            if (any) ContextOps.Children.Add(CmdButton(_reg["edit.clear_selection"], 18));
             ContextBar.IsVisible = true;
             return;
         }

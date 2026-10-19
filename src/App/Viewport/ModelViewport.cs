@@ -424,7 +424,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
 
     // ================================================================ мышь
 
-    private enum Drag { None, Orbit, Pan, RightPending, Select, Tool, Handle, Dim }
+    private enum Drag { None, Orbit, Pan, RightPending, Select, Tool, Handle, Dim, SketchGeom }
     private Drag _drag;
     private Point _last, _down;
 
@@ -446,6 +446,8 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         if (_drag == Drag.Handle) BeginHandleDrag(pt.Position);
         // u12 (замечание 17): подпись размера эскиза тащится мышью (двойной щелчок — правка значения, ниже)
         else if (props.IsLeftButtonPressed && e.ClickCount < 2 && ActiveSketch != null && BeginDimensionDrag(pt.Position)) _drag = Drag.Dim;
+        // п. 6: свободные вершины и фигуры эскиза тащатся мышью (без инструмента)
+        else if (props.IsLeftButtonPressed && e.ClickCount < 2 && _drag == Drag.Select && ActiveSketch != null && BeginSketchDrag(pt.Position, e.KeyModifiers)) _drag = Drag.SketchGeom;
         if (props.IsLeftButtonPressed && e.ClickCount >= 2 && ActiveSketch != null && TryEditDimension(pt.Position)) { _drag = Drag.None; e.Handled = true; return; }
         if (_drag == Drag.Tool && e.ClickCount >= 2) { ToolFinish(); _drag = Drag.None; e.Handled = true; return; }
         if (_drag != Drag.None) { Transition.Cancel(); e.Pointer.Capture(this); }
@@ -464,6 +466,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
             case Drag.Pan: Camera.Pan(dx, dy); _last = p; Redraw(); return;
             case Drag.Handle: HandleDragMove(p); return;
             case Drag.Dim: DimensionDragMove(p); return;
+            case Drag.SketchGeom: SketchDragMove(p); return;
             case Drag.RightPending:
                 if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > 4) { _drag = Drag.Pan; Camera.Pan(dx, dy); _last = p; Redraw(); }
                 return;
@@ -484,6 +487,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         e.Pointer.Capture(null);
         if (was == Drag.Handle) { EndHandleDrag(); return; }
         if (was == Drag.Dim) { if (!EndDimensionDrag()) RequestPick(p, click: true, e.KeyModifiers); return; }
+        if (was == Drag.SketchGeom) { if (!EndSketchDrag()) RequestPick(p, click: true, e.KeyModifiers); return; }
         if (was == Drag.RightPending && Tool != null) ToolFinish();
         else if (was == Drag.RightPending) ContextRequested?.Invoke(p);
         else if (was == Drag.Tool && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 6) ToolClick(p);

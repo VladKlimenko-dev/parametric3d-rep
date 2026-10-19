@@ -271,6 +271,17 @@ public static class SketchEditCommands
         double v; try { v = Num(text.Trim()); } catch { return; }
         if (!(v > 0)) return;
         if (chamfer) CornerTool.Distance = v; else CornerTool.Radius = v;
+        // выбраны два отрезка с общим концом — угол обрабатывается сразу (без щелчка по углу)
+        if (w.ViewPort.ActiveSketch is { } sk && SketchCommands.Picked(w) is [SkLine a, SkLine b] && SketchSuggest.CommonCorner(a, b) is { } at)
+        {
+            if (CornerTool.Apply(sk, at, chamfer, v))
+            {
+                w.ViewPort.Selection.Clear();
+                sk.Solve(w.Session.Document.Solver); sk.NotifyChanged(sk); w.ViewPort.RefreshDefaultDimensions(); w.ViewPort.MarkDirty();
+            }
+            else w.ShowToast(L(chamfer ? "Фаска не помещается на отрезках" : "Скругление не помещается на отрезках"));
+            return;
+        }
         w.SetTool(new CornerTool(chamfer));
     }
 
