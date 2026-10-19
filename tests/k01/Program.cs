@@ -491,6 +491,8 @@ static partial class Program
         if (mode is "krn07inst" or "allA") Krn07InstanceChecks();
         if (mode is "krn10pairs" or "allA") Krn10PairChecks();
         if (mode is "krn10prepared" or "allA") Krn10PreparedChecks();
+        if (mode is "krn11big" or "allB") Krn11BigModelChecks();
+        if (mode is "krn10toolreuse" or "allA") Krn10ToolReuseChecks();
         if (mode is "krn08provtree" or "allA") Krn08ProvTreeChecks();
         if (mode is "krn03igespc" or "allA") Krn03IgesPCurveChecks();
         if (mode is "krn02fargeneral" or "allA") Krn02FarGeneralChecks();

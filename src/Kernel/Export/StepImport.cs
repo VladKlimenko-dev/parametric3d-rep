@@ -474,6 +474,7 @@ public static class StepImport
     [ThreadStatic] public static int DonorReused;
 
     /// <summary>Возвращает число граней, не построенных по контурам (оставленных как есть).</summary>
+    static readonly bool MissDbg = Environment.GetEnvironmentVariable("P3D_DONORMISS") == "1";
     internal static int MeshFacesFromLoops(TSolid solid, List<string>? warnings, string format,
                                            Func<TFace, Surfaces.FacetedSurface?>? donor = null)
     {
@@ -493,6 +494,7 @@ public static class StepImport
                 built++; DonorReused++;
                 continue;
             }
+            if (donor != null && MissDbg) Console.Error.WriteLine($"DONORMISS {format} {f2.Tag} {Topology.GeometryAudit.AuthoritativeSurface(f2)?.GetType().Name} loops {f2.Loops.Count} coedges {f2.Loops.Sum(l => l.CoEdges.Count)}");
             // Грань, у которой контур — ОДИН ШОВ (полный шар, замкнутая поверхность):
             // строить по такому контуру нечего, у неё остаётся своя точная сетка.
             // Шов — ОДНО ребро, пройденное контуром дважды. Контур из одной замкнутой кромки (стенка

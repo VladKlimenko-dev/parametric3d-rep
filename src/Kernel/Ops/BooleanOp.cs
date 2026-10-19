@@ -726,6 +726,29 @@ public static class BooleanOp
                 if (f.Surface is FacetedSurface dfs && dfs.Facets.Count > 0 && (dfs.Display != null || (dfs.FromLoops && !DonorLoopsOff)) && MeshDonorKey(f) is { } k) donors.TryAdd(k, dfs);
             if (donors.Count > 0) donor = f => MeshDonorKey(f) is { } k && donors.TryGetValue(k, out var d) ? d : null;
             if (DonorDbg) Console.Error.WriteLine($"DONORDBG prism: body faces {body.Faces.Count()}, with display {body.Faces.Count(f => f.Surface is FacetedSurface fs && fs.Display != null)}, donors {donors.Count}");
+            if (DonorKeyDbg && donor != null)
+            {
+                var d0 = donor; var byTag = body.Faces.GroupBy(f => f.Tag).ToDictionary(g => g.Key, g => g.ToList());
+                donor = f =>
+                {
+                    var r0 = d0(f);
+                    static string VS(TFace q) => string.Join(";", q.Loops.SelectMany(l => l.CoEdges).Select(c => $"{c.Start.P.X:R},{c.Start.P.Y:R},{c.Start.P.Z:R}").OrderBy(x => x, StringComparer.Ordinal));
+                    if (r0 == null && body.Faces.FirstOrDefault(c => VS(c) == VS(f)) is { } same)
+                    {
+                        var k1 = MeshDonorKey(f) ?? "null"; var k0 = MeshDonorKey(same) ?? "null";
+                        int at = Enumerable.Range(0, Math.Min(k0.Length, k1.Length)).TakeWhile(i => k0[i] == k1[i]).Count();
+                        Console.Error.WriteLine($"SAMEVERTS {f.Tag} surf {f.Surface.GetType().Name} vs {same.Surface.GetType().Name}/{(same.Surface as FacetedSurface)?.Source?.GetType().Name} rev {f.Reversed}/{same.Reversed} at {at}: new …{k1.Substring(Math.Max(0, at - 20), Math.Min(80, k1.Length - Math.Max(0, at - 20)))} old …{k0.Substring(Math.Max(0, at - 20), Math.Min(80, k0.Length - Math.Max(0, at - 20)))}");
+                    }
+                    else if (r0 == null && byTag.TryGetValue(f.Tag, out var cands))
+                    {
+                        var k1 = MeshDonorKey(f) ?? "null";
+                        var k0 = cands.Select(c => MeshDonorKey(c) ?? "null").OrderBy(k => -Enumerable.Range(0, Math.Min(k.Length, k1.Length)).TakeWhile(i => k[i] == k1[i]).Count()).First();
+                        int at = Enumerable.Range(0, Math.Min(k0.Length, k1.Length)).TakeWhile(i => k0[i] == k1[i]).Count();
+                        Console.Error.WriteLine($"KEYDIFF {f.Tag} at {at}/{k1.Length}: new …{k1.Substring(Math.Max(0, at - 30), Math.Min(90, k1.Length - Math.Max(0, at - 30)))} old …{k0.Substring(Math.Max(0, at - 30), Math.Min(90, k0.Length - Math.Max(0, at - 30)))}");
+                    }
+                    return r0;
+                };
+            }
         }
         using (Diagnostics.Prof.Time("аналитика: завершение (соглашение, разметка)")) unmeshed = Analytic.PrismBuild.Finish(r, w, donor);
         // ПРОВЕРКА РЕЗУЛЬТАТА. Каждая грань размечается точным разметчиком по общим ломаным рёбер и проверяет себя сама:
@@ -769,6 +792,7 @@ public static class BooleanOp
     /// <summary>Мутация P3D_DONORLOOPS=0: донором — только грань с сеткой отображения (у точных маршрутов её нет — доноров нет).</summary>
     static readonly bool DonorLoopsOff = Environment.GetEnvironmentVariable("P3D_DONORLOOPS") == "0";
     static readonly bool DonorDbg = Environment.GetEnvironmentVariable("P3D_DONORDBG") == "1";
+    static readonly bool DonorKeyDbg = Environment.GetEnvironmentVariable("P3D_DONORKEYDBG") == "1";
     internal static string? MeshDonorKey(TFace f)
     {
         var src = Topology.GeometryAudit.AuthoritativeSurface(f);

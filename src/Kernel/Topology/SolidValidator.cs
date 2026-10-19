@@ -728,7 +728,9 @@ public static class SolidValidator
         // (влево по обходу, если смотреть с наружной нормали) обязан вести внутрь грани, шаг вправо — наружу; принадлежность —
         // чётностью пересечений в параметрах грани (от обхода не зависит). Ребро шва (дважды в грани) и неоднозначный шаг
         // (оба внутри или оба снаружи — узкая грань) не голосуют. Мутация P3D_LOOPEXACT=0.
-        if (!LoopExactOff)
+        // только у тела, приведённого к соглашению о полурёбрах (обход против часовой у наружной нормали): у сырого примитива
+        // вращения (конус) все контуры обходят по часовой — соглашение ему ещё не применено
+        if (!LoopExactOff && solid != null && solid.TopologyConvention >= TopologyConventions.Version)
             foreach (var f in faces)
             {
                 // грань с фасетами — её нормаль задают фасеты (у них своя проверка выше); здесь — грани без фасет
@@ -748,10 +750,8 @@ public static class SolidValidator
     {
         Analytic.AnalyticFace? af;
         try { af = Analytic.AnalyticFace.Of(f, out _); } catch { return null; }
-        // только цилиндр выдавливания (ExtrudedSurface дуги, CylinderSurface): у граней вращения (конус, шар, диск) проба
-        // на телах корпуса давала ложные срабатывания на годных телах — их согласие не проверяется этим способом
-        if (af == null || af.Band || af.Param || af.Tor || af.FullSurface || !af.Cyl || af.Cone
-            || GeometryAudit.AuthoritativeSurface(f) is not (Surfaces.ExtrudedSurface or Surfaces.CylinderSurface)) return null;
+        // цилиндр, конус, шар (диск вращения — нет: плоская форма, у плоских граней своя проверка ролей колец)
+        if (af == null || af.Band || af.Param || af.Tor || af.FullSurface || !(af.Cyl || af.Sph)) return null;
         var uses = new Dictionary<TEdge, int>(ReferenceEqualityComparer.Instance);
         foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) uses[ce.Edge] = uses.GetValueOrDefault(ce.Edge) + 1;
         int against = 0, agree = 0;
