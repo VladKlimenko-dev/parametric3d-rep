@@ -277,6 +277,7 @@ public static class Strings
         ["Вставить"] = "Paste",
         ["Переименовать"] = "Rename",
         ["Настройки"] = "Settings",
+        ["Общие"] = "General",
         ["Справка и подсказки"] = "Help and tips",
         ["Все команды"] = "All commands",
         ["Материал детали"] = "Part material",

@@ -178,6 +178,15 @@ public static class DocCommands
         var gl = new ComboBox { ItemsSource = new[] { "auto", "angle", "wgl", "software" }, SelectedItem = prefs.GlMode ?? "auto", MinWidth = 200 };
         var units = new ComboBox { ItemsSource = new[] { L("Миллиметры"), L("Дюймы") }, SelectedIndex = DisplayUnits.Inch ? 1 : 0, MinWidth = 200 };
         Control Row(string label, Control c) => new DockPanel { Children = { new TextBlock { Text = L(label), Width = 200, VerticalAlignment = VerticalAlignment.Center }, c } };
+        // заголовок «Общие» и языки — иконками пользователя (нет файла — только текст)
+        static Control WithIcon(string? icon, string text, double size = 16)
+        {
+            var sp = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            if (Icons.IconProvider.Get(icon) is { } img) sp.Children.Add(new Image { Source = img, Width = size, Height = size, Stretch = Avalonia.Media.Stretch.Uniform });
+            sp.Children.Add(new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center });
+            return sp;
+        }
+        lang.ItemsSource = new[] { WithIcon("language_ru_but.svg", "Русский"), WithIcon("language_en_but.svg", "English") };
         var ok = new Button { Content = L("ОК"), Classes = { "accent" }, MinWidth = 96, HorizontalAlignment = HorizontalAlignment.Right };
         ok.Click += (_, _) =>
         {
@@ -192,7 +201,7 @@ public static class DocCommands
         win.Content = new StackPanel
         {
             Margin = new Thickness(18), Spacing = 10,
-            Children = { Row("Тема", theme), Row("Язык", lang), Row("Предпросмотр операций", prev), Row("Графика (со следующего запуска)", gl), Row("Единицы длины", units), ok },
+            Children = { WithIcon("settings_general_ico.svg", L("Общие"), 20), Row("Тема", theme), Row("Язык", lang), Row("Предпросмотр операций", prev), Row("Графика (со следующего запуска)", gl), Row("Единицы длины", units), ok },
         };
         await win.ShowDialog(w);
     }

@@ -62,8 +62,28 @@ public static class IconProvider
         return img;
     }
 
+    /// <summary>Прямоугольник внутри dst с пропорциями исходного рисунка, по центру (сохранение пропорций при рисовании).</summary>
+    public static Rect Fit(Size src, Rect dst)
+    {
+        if (src.Width <= 0 || src.Height <= 0) return dst;
+        double k = Math.Min(dst.Width / src.Width, dst.Height / src.Height);
+        double w = src.Width * k, h = src.Height * k;
+        return new Rect(dst.X + (dst.Width - w) / 2, dst.Y + (dst.Height - h) / 2, w, h);
+    }
+
     /// <summary>Перекрасить чистый чёрный (fill, stroke, color, stop-color) в цвет темы.</summary>
-    public static string Recolor(string svg, string hex) => Black.Replace(svg, hex);
+    public static string Recolor(string svg, string hex)
+    {
+        var r = Black.Replace(svg, hex);
+        // почти чёрный (#191919 и темнее — каналы ≤ 0x20) — тоже цвет текста: на тёмной теме иначе не виден
+        r = NearBlack.Replace(r, m => int.Parse(m.Groups[2].Value, System.Globalization.NumberStyles.HexNumber) is var v && ((v >> 16) & 255) <= 0x20 && ((v >> 8) & 255) <= 0x20 && (v & 255) <= 0x20 ? m.Groups[1].Value + hex : m.Value);
+        // контур без fill по умолчанию чёрный (SVG): заливка по умолчанию у корня — цвет текста; явные заливки не трогаются
+        var root = RootTag.Match(r);
+        if (root.Success && !root.Value.Contains(" fill=")) r = r.Insert(root.Index + 4, $" fill=\"{hex}\"");
+        return r;
+    }
+    private static readonly Regex NearBlack = new(@"((?:fill|stroke|color|stop-color)\s*[:=]\s*[""']?\s*)#([0-9a-fA-F]{6})\b", RegexOptions.Compiled);
+    private static readonly Regex RootTag = new(@"<svg\b[^>]*>", RegexOptions.Compiled);
 
     /// <summary>
     /// Содержимое кнопки: иконка заданного размера или, если её нет, короткая подпись. Подпись — первые буквы слов

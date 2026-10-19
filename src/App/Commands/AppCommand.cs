@@ -13,7 +13,10 @@ public sealed class AppCommand : ICommand
     public required string Label { get; init; }
     public string Group { get; init; } = "";
     /// <summary>Имя файла иконки из UI_ICONS.md (например, «save_but.svg»).</summary>
-    public string? Icon { get; init; }
+    public string? Icon { get => IconOf?.Invoke() ?? _icon; init => _icon = value; }
+    private readonly string? _icon;
+    /// <summary>Иконка по состоянию (например, язык интерфейса); null — постоянная Icon.</summary>
+    public Func<string?>? IconOf { get; init; }
     public KeyGesture? Gesture { get; init; }
     /// <summary>Слова для поиска в палитре: английское имя, синонимы.</summary>
     public string Synonyms { get; init; } = "";
