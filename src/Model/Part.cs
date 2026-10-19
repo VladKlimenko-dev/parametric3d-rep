@@ -436,6 +436,42 @@ public sealed class Part : ModelItem
     /// <summary>
     /// Результат пересборки, собранный без изменения самой детали.
     /// </summary>
+    /// <summary>KRN-08 (08.2): тело после операции дерева и карта происхождения его граней.</summary>
+    public sealed class BodyProvenance
+    {
+        readonly Lazy<Kernel.Topology.Provenance?> _map;
+        public TSolid Body { get; }
+        public bool Unchanged { get; }
+        public bool Inferred { get; }
+        /// <summary>Карта происхождения (выведенная — по запросу: перестроение её не считает).</summary>
+        public Kernel.Topology.Provenance? Map => _map.Value;
+        public BodyProvenance(TSolid body, bool unchanged, Kernel.Topology.Provenance? map, IReadOnlyList<TSolid>? before = null)
+        { Body = body; Unchanged = unchanged; _map = new(() => map); _edges = new(() => EdgesFor(before, body, unchanged)); }
+        public BodyProvenance(TSolid body, Func<Kernel.Topology.Provenance?> infer, IReadOnlyList<TSolid> before)
+        { Body = body; Inferred = true; _map = new(infer); _edges = new(() => EdgesFor(before, body, false)); }
+        readonly Lazy<(List<Kernel.Topology.EdgeProvenance> Edges, List<Kernel.Topology.TEdge> Deleted)?> _edges;
+        /// <summary>KRN-08 (08.2): происхождение рёбер (выведенное по кривым, по запросу); null — не вывести.</summary>
+        public (List<Kernel.Topology.EdgeProvenance> Edges, List<Kernel.Topology.TEdge> Deleted)? Edges => _edges.Value;
+        static (List<Kernel.Topology.EdgeProvenance>, List<Kernel.Topology.TEdge>)? EdgesFor(IReadOnlyList<TSolid>? before, TSolid body, bool unchanged)
+        {
+            if (before == null || unchanged) return null;
+            try { return Kernel.Topology.ProvenanceInfer.EdgesOf(before, body); }
+            catch (Exception ex) when (!Kernel.KernelContext.IsCancellation(ex)) { return null; }
+        }
+    }
+    static readonly bool TreeProvOff = Environment.GetEnvironmentVariable("P3D_TREEPROV") == "0";
+    static readonly bool ProvInferOff = Environment.GetEnvironmentVariable("P3D_PROVINFER") == "0";
+    static BodyProvenance InferFor(IReadOnlyList<TSolid> before, TSolid after, string name)
+    {
+        var inputs = before.ToList();
+        return new BodyProvenance(after, () => InferProvenance(inputs, after, name), inputs);
+    }
+    static Kernel.Topology.Provenance? InferProvenance(IReadOnlyList<TSolid> before, TSolid after, string name)
+    {
+        try { return Kernel.Topology.ProvenanceInfer.Of(before, after, name); }
+        catch (Exception ex) when (!Kernel.KernelContext.IsCancellation(ex)) { return null; }
+    }
+
     public sealed class BuildResult
     {
         public int Version;
@@ -468,6 +504,10 @@ public sealed class Part : ModelItem
         public readonly Dictionary<Feature, List<uint>> Created = new();
         /// <summary>UI: время выполнения каждой операции в этом расчёте (мс); операции до точки возобновления — не считались.</summary>
         public readonly Dictionary<Feature, double> FeatureMs = new();
+        /// <summary>KRN-08 (08.2): ПРОИСХОЖДЕНИЕ НА УРОВНЕ ДЕРЕВА — у каждой выполненной операции тела после неё: то же тело, что
+        /// до (Unchanged), или новое с картой происхождения граней своего построителя (Map); построитель карты не пишет — карта
+        /// выведена по несущим поверхностям (Inferred). Мутация P3D_TREEPROV=0.</summary>
+        public readonly Dictionary<Feature, List<BodyProvenance>> Provenance = new();
         /// <summary>K05: что операция сделала с гранями по их устойчивым именам.</summary>
         public readonly Dictionary<Feature, FeatureHistory> History = new();
         /// <summary>Вспомогательная геометрия, построенная деревом (по именам).</summary>
@@ -911,6 +951,11 @@ public sealed class Part : ModelItem
                 }
                 CheckRange();
                 CheckGuard();
+                if (!TreeProvOff)
+                    result.Provenance[f] = ctx.Bodies.Select(b => saved.Bodies.Any(x => ReferenceEquals(x, b))
+                        ? new BodyProvenance(b, true, null)
+                        : b.Provenance is { } own || ProvInferOff ? new BodyProvenance(b, false, b.Provenance, ProvInferOff ? null : saved.Bodies.ToList())
+                        : InferFor(saved.Bodies, b, f.Name)).ToList();
             }
             catch (RebuildException ex)
             {

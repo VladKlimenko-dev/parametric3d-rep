@@ -72,6 +72,7 @@ public sealed class Assembly : ModelItem
                 if (done.Contains(p)) continue;
                 var m = p.AssemblyMate!;
                 if (m.BasePart != null && !done.Contains(m.BasePart)) continue;   // база ещё не на месте
+                if (m.Invalid(p) != null) continue;                                // KRN-11: недопустимое — деталь на месте, в списке
                 m.ApplyTo(p);
                 done.Add(p);
                 moved = true;
@@ -292,7 +293,12 @@ public sealed class Assembly : ModelItem
     public List<(Part A, Part B, double Volume)> Interferences(double minVolume = 1.0)
     {
         var found = new List<(Part, Part, double)>();
-        var parts = Parts.Where(p => p.Bodies.Count > 0).ToList();
+        // KRN-11 (11.2): деталь с нечисловым положением (испорченный файл, внешнее задание) не участвует — прежде булева
+        // над копией с NaN бросала исключение на всю сборку. Мутация P3D_MATEGUARD=0.
+        static bool Finite(Part p) => float.IsFinite(p.Translation.X) && float.IsFinite(p.Translation.Y) && float.IsFinite(p.Translation.Z)
+            && float.IsFinite(p.Rotation.X) && float.IsFinite(p.Rotation.Y) && float.IsFinite(p.Rotation.Z) && float.IsFinite(p.Rotation.W);
+        bool guard = Environment.GetEnvironmentVariable("P3D_MATEGUARD") != "0";
+        var parts = Parts.Where(p => p.Bodies.Count > 0 && (!guard || Finite(p))).ToList();
 
         static Kernel.Ops.TransformOp.Xform Place(Part p)
         {

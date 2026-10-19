@@ -490,6 +490,16 @@ static partial class Program
         if (mode is "krn07hole" or "allA") Krn07HoleContractChecks();
         if (mode is "krn07inst" or "allA") Krn07InstanceChecks();
         if (mode is "krn10pairs" or "allA") Krn10PairChecks();
+        if (mode is "krn10prepared" or "allA") Krn10PreparedChecks();
+        if (mode is "krn08provtree" or "allA") Krn08ProvTreeChecks();
+        if (mode is "krn03igespc" or "allA") Krn03IgesPCurveChecks();
+        if (mode is "krn02fargeneral" or "allA") Krn02FarGeneralChecks();
+        if (mode is "krn03loopexact" or "allA") Krn03LoopExactChecks();
+        if (mode is "normalprobe") NormalProbe();
+        if (mode is "krn05multi" or "allA") Krn05MultiBodyChecks();
+        if (mode is "krn02caches" or "allA") Krn02CacheChecks();
+        if (mode is "krn10unify" or "allA") Krn10UnifyLocalChecks();
+        if (mode is "unifyprof") UnifyProf();
         if (mode is "krn09heal" or "allA") Krn09ImportHealChecks();
         if (mode == "swprobe") { SweepLoftProbe(); return; }
         if (mode == "patprobe") { PatternProbe(); return; }
@@ -1047,6 +1057,9 @@ static partial class Program
         if (mode is "sksparse" or "allA") SketchSparseChecks();
         if (mode is "qlocal" or "allA") Krn10QuadricLocal();
         if (mode is "krn11qual" or "allA") Krn11Qualification();
+        if (mode is "krn11qualops" or "allA") Krn11QualOpsChecks();
+        if (mode is "krn11asmneg" or "allA") Krn11AsmNegativeChecks();
+        if (mode is "qualopsdbg") QualOpsDebug();
         if (mode is "gridbig") { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); GridSolveSizes(new[] { 12, 20, 30 }); Console.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report()); }
         if (mode is "constraints") K09Constraints();
         if (mode is "vertex") VertexOps();

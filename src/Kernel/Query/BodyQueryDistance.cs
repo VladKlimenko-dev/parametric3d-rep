@@ -31,7 +31,7 @@ public static partial class BodyQuery
     /// <summary>Классификатор для многих точек одного тела (строится один раз).</summary>
     public static Func<Vector3d, PointClass> Classifier(TSolid body) { var c = new Classifier(body); return p => Of(c.Classify(p)); }
 
-    static PointClass Of(int? c) => c switch { 1 => PointClass.Inside, -1 => PointClass.Outside, 0 => PointClass.OnBoundary, _ => PointClass.Unknown };
+    internal static PointClass Of(int? c) => c switch { 1 => PointClass.Inside, -1 => PointClass.Outside, 0 => PointClass.OnBoundary, _ => PointClass.Unknown };
 
     /// <summary>Подножие перпендикуляра из p на грань NURBS, если оно внутри грани (иначе null).</summary>
     static readonly bool NurbsFootOff = Environment.GetEnvironmentVariable("P3D_QUERYNURBS") == "0";

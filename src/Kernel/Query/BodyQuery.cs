@@ -24,7 +24,11 @@ public static partial class BodyQuery
     public readonly record struct ClosestResult(double Distance, Vector3d Point, string Where);
 
     /// <summary>Ближайшая точка тела (его границы) к p; null — у тела есть грань без точной проекции.</summary>
-    public static ClosestResult? Closest(TSolid body, Vector3d p)
+    public static ClosestResult? Closest(TSolid body, Vector3d p) => ClosestCore(body, p, null, null);
+
+    /// <summary>KRN-10 (10.2): ядро Closest; faces/boxes — грани и их консервативные габариты из PreparedBody (грань, чей
+    /// габарит дальше лучшего найденного, пропускается: ближайшая точка грани не ближе её габарита).</summary>
+    internal static ClosestResult? ClosestCore(TSolid body, Vector3d p, IReadOnlyList<AnalyticFace>? faces, IReadOnlyList<(Vector3d Lo, Vector3d Hi)>? boxes)
     {
         double best = double.MaxValue; Vector3d bp = default; string where = "";
         void Try(Vector3d q, string w) { double d = (q - p).Length; if (d < best) { best = d; bp = q; where = w; } }
@@ -55,10 +59,15 @@ public static partial class BodyQuery
                     break;
             }
         }
+        int fi = -1;
         foreach (var f in body.Faces)
         {
-            var af = AnalyticFace.Of(f, out _);
+            fi++;
+            var af = faces != null ? faces[fi] : AnalyticFace.Of(f, out _);
             if (af == null) return null;
+            if (!af.Param && af.Shape is not (Ssi.Plane or Ssi.Cylinder or Ssi.Sphere or Ssi.Cone or Ssi.Torus)) return null;
+            // габарит грани дальше лучшего — грань не ближе (мутация P3D_PREPAREDPRUNE=0)
+            if (boxes != null && !PreparedBody.PruneOff && BoxDistance(boxes[fi], p) > best) { PreparedBody.PrunedFaces++; continue; }
             // m.q3: грань NURBS — подножие перпендикуляра Ньютоном из ближайших треугольников грани
             if (af.Param) { if (NurbsFoot(af, p) is { } qn) Try(qn, "face"); continue; }
             if (af.Shape is not (Ssi.Plane or Ssi.Cylinder or Ssi.Sphere or Ssi.Cone or Ssi.Torus)) return null;
@@ -117,7 +126,14 @@ public static partial class BodyQuery
     }
 
     /// <summary>Опорная функция тела по направлению d: max d·x по телу; null — грань без точной формы.</summary>
-    public static double? Support(TSolid body, Vector3d d)
+    public static double? Support(TSolid body, Vector3d d) => SupportCore(body, d, null);
+
+    internal static double BoxDistance((Vector3d Lo, Vector3d Hi) b, Vector3d p)
+    {
+        var q = Vector3d.Clamp(p, b.Lo, b.Hi); return (q - p).Length;
+    }
+
+    internal static double? SupportCore(TSolid body, Vector3d d, IReadOnlyList<AnalyticFace>? faces)
     {
         d = d.Normalized();
         double best = double.MinValue;
@@ -172,9 +188,11 @@ public static partial class BodyQuery
                 }
             }
         }
+        int fi = -1;
         foreach (var f in body.Faces)
         {
-            var af = AnalyticFace.Of(f, out _);
+            fi++;
+            var af = faces != null ? faces[fi] : AnalyticFace.Of(f, out _);
             if (af == null) return null;
             // m.q3: грань NURBS — внутренний максимум d·S(u, v) подъёмом по параметрам из лучших вершин треугольников
             if (af.Param) { foreach (var q in NurbsSupportCandidates(af, d)) if (af.Contains(q) == true) Try(q); continue; }

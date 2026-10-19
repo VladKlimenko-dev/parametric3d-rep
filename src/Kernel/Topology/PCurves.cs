@@ -134,6 +134,7 @@ public static class PCurves
             if (perU > 0) uv[i].X -= perU * Math.Round((uv[i].X - uv[i - 1].X) / perU);
             if (perV > 0) uv[i].Y -= perV * Math.Round((uv[i].Y - uv[i - 1].Y) / perV);
         }
+        if (!EndFixOff && n >= 2) { FixEnd(s, uv, 0, 1, perU, perV); FixEnd(s, uv, n, n - 1, perU, perV); }
         double scale = Math.Max(1, uv.Max(p => Math.Max(Math.Abs(p.X), Math.Abs(p.Y))));
         ICurve2 cand;
         // Отрезок: все точки — на прямой A→B с параметром, пропорциональным t.
@@ -164,6 +165,31 @@ public static class PCurves
     }
 
     /// <summary>
+    /// KRN-03 (03.11): КОНЕЦ ПОЛУРЕБРА НА ВЫРОЖДЕНИИ ИЛИ НА ШВЕ КАРТЫ. (1) Конец на оси неполного тела вращения (полюс, которого
+    /// SurfaceDomain не знает: у неполного оборота полюсов «нет») — угол проекции произвольный (1.57 вместо 0): параметр, вдоль
+    /// которого точка не движется, берётся у соседней точки выборки. (2) Конец на шве замкнутого, но не продолжаемого
+    /// периодически параметра (замкнутая образующая-сплайн из IGES: 0 ≡ 1) — тот из краёв 0/1, что ближе к соседу.
+    /// Прежде p-кривые таких рёбер отходили на 1e-3…7e-3 мм (IGES OpenCascade, наш IGES повёрнутого тора). Мутация P3D_PCENDFIX=0.
+    /// </summary>
+    static void FixEnd(ISurface3 s, Vector2d[] uv, int i, int j, double perU, double perV)
+    {
+        var q = uv[i]; var nb = uv[j];
+        double sc = Math.Max(1, s.PointAt(q).Length), tol = 1e-12 * sc;
+        bool Same(Vector2d a, Vector2d b) { try { return (s.PointAt(a) - s.PointAt(b)).Length <= 1e-9 * sc; } catch { return false; } }
+        // (1) вырождение: смена параметра не двигает точку
+        if (Same(q, new Vector2d(nb.X, q.Y)) && Math.Abs(nb.X - q.X) > 1e-9) q.X = nb.X;
+        if (Same(q, new Vector2d(q.X, nb.Y)) && Math.Abs(nb.Y - q.Y) > 1e-9) q.Y = nb.Y;
+        // (2) шов замкнутого параметра без периодического продолжения
+        if (perU <= 0 && (Math.Abs(q.X) < 1e-9 || Math.Abs(q.X - 1) < 1e-9))
+        { var alt = new Vector2d(1 - Math.Round(q.X), q.Y); if (Same(q, alt) && Math.Abs(alt.X - nb.X) < Math.Abs(q.X - nb.X)) q = alt; }
+        if (perV <= 0 && (Math.Abs(q.Y) < 1e-9 || Math.Abs(q.Y - 1) < 1e-9))
+        { var alt = new Vector2d(q.X, 1 - Math.Round(q.Y)); if (Same(q, alt) && Math.Abs(alt.Y - nb.Y) < Math.Abs(q.Y - nb.Y)) q = alt; }
+        _ = tol;
+        uv[i] = q;
+    }
+    static readonly bool EndFixOff = Environment.GetEnvironmentVariable("P3D_PCENDFIX") == "0";
+
+    /// <summary>
     /// KRN-03: Эрмита по узлам выборки; производная по t в узле — центральной разностью по проекции точек ребра (у концов —
     /// односторонней второго порядка), с развёрткой периода к значению узла. Сбой проекции (полюс) — null.
     /// </summary>
@@ -190,7 +216,7 @@ public static class PCurves
         for (int i = 0; i < T.Length; i++)
         {
             double t = T[i];
-            P[i] = i == 0 ? uv[0] : UV(t, prev); prev = P[i];
+            P[i] = i == 0 ? uv[0] : i == T.Length - 1 && !EndFixOff ? uv[n] : UV(t, prev); prev = P[i];
             Vector2d Right() { var f1 = UV(t + dt, P[i]); var f2 = UV(t + 2 * dt, P[i]); return (-3 * P[i] + 4 * f1 - f2) / (2 * dt); }
             Vector2d Left() { var f1 = UV(t - dt, P[i]); var f2 = UV(t - 2 * dt, P[i]); return (3 * P[i] - 4 * f1 + f2) / (2 * dt); }
             if (i == 0) Dl[i] = Dr[i] = Right();

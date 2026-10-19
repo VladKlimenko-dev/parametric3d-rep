@@ -146,7 +146,7 @@ public sealed class Mate : ModelItem
     /// Свободная координата в пределах: у шарнира и ползуна это угол и сдвиг, у цилиндра —
     /// обе. Пределы хранились, но не применялись, и шарнир проворачивался за свой упор.
     /// </summary>
-    public double Clamp(double v) => LimitEnabled ? Math.Clamp(v, MinValue, MaxValue) : v;
+    public double Clamp(double v) => LimitEnabled && (GuardOff || MinValue <= MaxValue) ? Math.Clamp(v, MinValue, MaxValue) : v;
 
     /// <summary>Приводит свободные координаты к пределам (на случай задания их извне).</summary>
     public void ClampFree()
@@ -160,9 +160,31 @@ public sealed class Mate : ModelItem
         }
     }
 
+    /// <summary>
+    /// KRN-11 (11.2): НЕДОПУСТИМОЕ СОПРЯЖЕНИЕ — причина или null. Нулевая или нечисловая ось, нечисловая точка, нечисловые
+    /// свободные координаты, пределы «от» больше «до», сопряжение детали с собой. Такое сопряжение не применяется (прежде:
+    /// NaN в положении детали — деталь пропадала с экрана — или исключение Math.Clamp). Мутация P3D_MATEGUARD=0.
+    /// </summary>
+    public string? Invalid(Part part)
+    {
+        if (GuardOff) return null;
+        static bool F(Vector3d v) => double.IsFinite(v.X) && double.IsFinite(v.Y) && double.IsFinite(v.Z);
+        if (ReferenceEquals(BasePart, part)) return "the part is mated to itself";
+        if (!F(AssemblyAxis) || AssemblyAxis.LengthSquared < 1e-24) return "assembly axis is zero or not a number";
+        if (!F(PartAxis) || PartAxis.LengthSquared < 1e-24) return "part axis is zero or not a number";
+        if (!F(AssemblyOrigin) || !F(PartOrigin)) return "reference point is not a number";
+        if (!double.IsFinite(Angle) || !double.IsFinite(Offset) || !double.IsFinite(PlanarAngle) || !double.IsFinite(PlanarOffset.X) || !double.IsFinite(PlanarOffset.Y)) return "free coordinate is not a number";
+        if (Type is MateType.Slot && !F(SlotNormal)) return "slot normal is not a number";
+        if (LimitEnabled && (double.IsNaN(MinValue) || double.IsNaN(MaxValue) || MinValue > MaxValue)) return $"limits from {MinValue} to {MaxValue}";
+        var q = BallRotation; if (Type is MateType.Ball or MateType.BallCylinder && !(float.IsFinite(q.X) && float.IsFinite(q.Y) && float.IsFinite(q.Z) && float.IsFinite(q.W) && q.LengthSquared > 1e-12f)) return "ball rotation is not a rotation";
+        return null;
+    }
+    static readonly bool GuardOff = Environment.GetEnvironmentVariable("P3D_MATEGUARD") == "0";
+
     public void ApplyTo(Part part)
     {
         if (Type == MateType.Free) return;
+        if (Invalid(part) != null) return;
         ClampFree();
         // Опорная геометрия базовой детали переводится в координаты сборки её текущим
         // положением: так цепочка считается от звена к звену.
