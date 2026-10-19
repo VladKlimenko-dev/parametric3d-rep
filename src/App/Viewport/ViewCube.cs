@@ -157,7 +157,7 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
         var ux = pu - o; var vy = pv - o;
         double len = 0.42;                 // высота строки в единицах грани
         var ft = new FormattedText(Loc.L(f.Label), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-            new Typeface(ViewFont, FontStyle.Normal, FontWeight.Normal), 100, brush);
+            new Typeface(FontFamily.Default, FontStyle.Normal, FontWeight.Bold), 100, brush);
         double sx = Math.Min(len, 1.62 / (ft.Width / 100)) / 100;          // высота len, ширина ≤ 1.62 единицы
         var m = new Matrix(ux.X * sx, ux.Y * sx, -vy.X * sx, -vy.Y * sx, o.X, o.Y);
         using (dc.PushTransform(m))
@@ -187,7 +187,7 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
         {
             var p = Proj(new Vector3(0, -1, 0) + dir * (float)RingR);
             var ft = new FormattedText(lbl, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-                new Typeface(ViewFont, FontStyle.Normal, FontWeight.Normal), 11, Res("P3.Text", "#E6E8EC"));
+                new Typeface(FontFamily.Default, FontStyle.Normal, FontWeight.Bold), 11, Res("P3.Text", "#E6E8EC"));
             dc.DrawText(ft, new APoint(p.X - ft.Width / 2, p.Y - ft.Height / 2));
         }
     }
@@ -240,9 +240,6 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
             dc.DrawGeometry(_hoverExtra == e ? accent : dim, null, g);
         }
     }
-
-    /// <summary>Текст в окне вида — шрифтом ГОСТ тип А.</summary>
-    internal static readonly FontFamily ViewFont = new(Parametric3D.Render.GostFont.AvaloniaUri);
 
     private static void DrawIconOr(DrawingContext dc, string icon, Rect r, IBrush brush, Geometry fallback)
     {
