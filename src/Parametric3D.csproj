@@ -38,6 +38,8 @@
     <Compile Remove="docs/**" />
     <None Remove="docs/**" />
     <AvaloniaResource Include="App/Assets/**" />
+    <!-- шрифт текста в окне вида (ГОСТ тип А): ещё и как встроенный ресурс — для штрихового текста размеров (Render.GostFont) -->
+    <EmbeddedResource Include="App/Assets/Fonts/GOST_A.TTF" LogicalName="GOST_A.TTF" />
   </ItemGroup>
 
   <ItemGroup>

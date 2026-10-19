@@ -253,6 +253,8 @@ public sealed class Settings
 
     /// <summary>Сторона клетки значка, пикселей.</summary>
     public float ConstraintGlyphSizePx = 10f;
+    /// <summary>Сторона значка-картинки ограничения (иконки con_*), пикселей.</summary>
+    public float ConstraintIconSizePx = 16f;
     /// <summary>Просвет между соседними значками в строке.</summary>
     public float ConstraintGlyphSpacingPx = 4f;
     /// <summary>Вынос строки значков от линии или узла.</summary>

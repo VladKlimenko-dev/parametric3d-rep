@@ -60,6 +60,8 @@ public partial class MainWindow : Window
     public MainWindow(DocumentSession session)
     {
         InitializeComponent();
+        // весь текст поверх окна вида (подсказки, значение при перетаскивании, панели вида, сообщения) — шрифтом ГОСТ тип А
+        ViewArea.SetValue(Avalonia.Controls.Documents.TextElement.FontFamilyProperty, ViewCube.ViewFont);
         Loc.Set(UserPrefs.Current.Language == "en");
         StandardCommands.Register(this);
         WireView();
@@ -336,7 +338,7 @@ public partial class MainWindow : Window
         ViewTools.Children.Clear();
         ViewTools.Children.Add(CmdButton(_reg["view.fit"], 18));
         // проекция: одна кнопка, щелчок переключает (п. 7)
-        _projButton = new Button { Classes = { "tool" }, MinWidth = 64 };
+        _projButton = new ToggleButton { Classes = { "tool" } };
         _projButton.Click += (_, _) => { View.ToggleProjection(); UpdateProjectionButton(!View.IsPerspective); };
         ToolTip.SetTip(_projButton, _reg["view.projection"].Tooltip);
         ViewTools.Children.Add(_projButton);
@@ -349,30 +351,32 @@ public partial class MainWindow : Window
         UpdateStyleButton();
         ViewTools.Children.Add(Separator(true));
         // «Опорные»: кнопка показать/скрыть и стрелка со списком (п. 12)
-        _datumsButton = new ToggleButton { Classes = { "tool" }, Content = new TextBlock { Text = L("Опорные"), FontSize = 12 }, Padding = new Thickness(8, 4, 4, 4) };
+        _datumsButton = new ToggleButton { Classes = { "tool" }, Content = IconProvider.Content(_reg["view.datums"].Icon, L("Опорные"), 18) };
         _datumsButton.Click += (_, _) => { ToggleDatums(); };
         ToolTip.SetTip(_datumsButton, _reg["view.datums"].Tooltip);
-        var arrow = new Button { Classes = { "tool" }, Content = new TextBlock { Text = "▾", FontSize = 12 }, MinWidth = 18, Padding = new Thickness(3, 4) };
+        var arrow = new Button { Classes = { "tool" }, Content = Chevron(), MinWidth = 14, Padding = new Thickness(2, 4) };
         ToolTip.SetTip(arrow, L("Что показывать"));
         arrow.Click += (_, _) => OpenShowFlyout(arrow);
         ViewTools.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 0, Children = { _datumsButton, arrow } });
         _datumsButton.IsChecked = _reg["view.datums"].IsChecked!();
         // u13: виды, выбор, анализ — списки кнопок таблицы иконок
         ViewTools.Children.Add(Separator(true));
-        ViewTools.Children.Add(ListButton("Виды ▾", new[] { "view.front", "view.back", "view.left", "view.right", "view.top", "view.bottom", "view.normal", "view.zoom_sel", "view.section", "view.grid" }));
-        ViewTools.Children.Add(ListButton("Выбор ▾", new[] { "sel.vertex", "sel.edge", "sel.face", "sel.body", "sel.feature", "sel.filter", "sel.box", "sel.lasso", "sel.tangent_chain", "sel.face_loop" }));
-        ViewTools.Children.Add(ListButton("Анализ ▾", new[] { "an.measure", "an.area", "an.perimeter", "an.mass", "an.zebra", "an.curvature", "an.check_body", "an.heal" }));
+        ViewTools.Children.Add(ListButton("Виды ▾", "view_iso_but.svg", new[] { "view.front", "view.back", "view.left", "view.right", "view.top", "view.bottom", "view.normal", "view.zoom_sel", "view.section", "view.grid" }));
+        ViewTools.Children.Add(ListButton("Выбор ▾", "sel_filter_but.svg", new[] { "sel.vertex", "sel.edge", "sel.face", "sel.body", "sel.feature", "sel.filter", "sel.box", "sel.lasso", "sel.tangent_chain", "sel.face_loop" }));
+        ViewTools.Children.Add(ListButton("Анализ ▾", null, new[] { "an.measure", "an.area", "an.perimeter", "an.mass", "an.zebra", "an.curvature", "an.check_body", "an.heal" }));
     }
 
     /// <summary>u13: кнопка со списком команд (вид, выбор, анализ).</summary>
-    private Button ListButton(string text, string[] ids)
+    private Button ListButton(string text, string? icon, string[] ids)
     {
-        var b = new Button { Classes = { "tool" }, Content = new TextBlock { Text = L(text), FontSize = 12 }, Padding = new Thickness(8, 4) };
+        // с иконкой — только иконка и стрелка списка (подпись — в подсказке); без иконки (пока «Анализ») — текст
+        var b = new Button { Classes = { "tool" }, Content = icon != null && IconProvider.Exists(icon) ? IconWithChevron(icon, L(text)) : new TextBlock { Text = L(text), FontSize = 12 }, Padding = new Thickness(icon != null ? 4 : 8, 4) };
+        if (icon != null) ToolTip.SetTip(b, L(text).TrimEnd('▾', ' '));
         b.Click += (_, _) =>
         {
-            var sp = new StackPanel { Spacing = 1 };
+            var sp = ListColumns();
             foreach (var id in ids) if (_reg.Find(id) is { } c) sp.Children.Add(CmdButton(c, 18, text: true, minWidth: 220));
-            new Flyout { Content = new ScrollViewer { Content = sp, MaxHeight = 560 }, Placement = PlacementMode.BottomEdgeAlignedLeft }.ShowAt(b);
+            new Flyout { Content = sp, Placement = PlacementMode.BottomEdgeAlignedLeft }.ShowAt(b);
         };
         return b;
     }
@@ -393,10 +397,16 @@ public partial class MainWindow : Window
         RegionCanvas.Children.Add(pg);
     }
 
+    /// <summary>Слой значков ограничений поверх вида.</summary>
+    internal ConstraintGlyphLayer GlyphLayer { get; private set; } = null!;
+
     private void UpdateProjectionButton(bool perspective)
     {
         if (_projButton == null) return;
-        _projButton.Content = new TextBlock { Text = perspective ? L("Персп.") : L("Орто"), FontSize = 12 };
+        // только иконка: нажата — перспектива, отжата — ортогональ; режим — в подсказке
+        _projButton.Content = IconProvider.Content("view_perspective_but.svg", perspective ? L("Персп.") : L("Орто"), 18);
+        if (_projButton is ToggleButton tp) tp.IsChecked = perspective;
+        ToolTip.SetTip(_projButton, _reg["view.projection"].Tooltip + " — " + (perspective ? L("сейчас перспектива") : L("сейчас ортогональ")));
     }
 
     private static readonly (DisplayStyle Style, string Id)[] Styles =
@@ -410,11 +420,8 @@ public partial class MainWindow : Window
     {
         if (_styleButton == null) return;
         var c = _reg[Styles.First(s => s.Style == View.Style).Id];
-        _styleButton.Content = new StackPanel
-        {
-            Orientation = Orientation.Horizontal, Spacing = 4,
-            Children = { new TextBlock { Text = c.Text, FontSize = 12 }, new TextBlock { Text = "▾", FontSize = 11, Classes = { "dim" } } },
-        };
+        _styleButton.Content = IconWithChevron(c.Icon, c.Text);
+        ToolTip.SetTip(_styleButton, L("Стиль отображения") + ": " + c.Text);
     }
 
     public void SetStyle(DisplayStyle s)
@@ -462,8 +469,36 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Полоса команд слева: операции модели или инструменты эскиза (п. 3, 9). u13: у группы — «Ещё…» (кнопки таблицы).</summary>
+    /// <summary>Высота столбца панели команд — по высоте вида (за вычетом полей): лишнее уходит в следующий столбец.</summary>
+    private void FitCommandBar()
+    {
+        double h = ViewArea.Bounds.Height - CommandBar.Margin.Top - CommandBar.Padding.Top - CommandBar.Padding.Bottom - 10;
+        if (h > 100) CommandStack.MaxHeight = h;
+    }
+
+    /// <summary>Маленькая стрелка «список» (рисунок, не текст).</summary>
+    private static Control Chevron() => new Avalonia.Controls.Shapes.Path
+    {
+        Data = Geometry.Parse("M0,0 L4,4 L8,0"), StrokeThickness = 1.4, Width = 8, Height = 5, Stretch = Stretch.Uniform,
+        StrokeLineCap = PenLineCap.Round, StrokeJoin = PenLineJoin.Round, VerticalAlignment = VerticalAlignment.Center,
+        Stroke = new SolidColorBrush(IconProvider.Foreground),
+    };
+
+    /// <summary>Иконка и стрелка списка; нет иконки — подпись.</summary>
+    private static Control IconWithChevron(string? icon, string label) => new StackPanel
+    {
+        Orientation = Orientation.Horizontal, Spacing = 3,
+        Children = { IconProvider.Content(icon, label, 18), Chevron() },
+    };
+
+    /// <summary>Список команд всплывающего меню: все пункты видны — не помещаются по высоте окна, следующий столбец (без прокрутки).</summary>
+    private WrapPanel ListColumns() => new() { Orientation = Orientation.Vertical, MaxHeight = Math.Max(200, Bounds.Height - 120) };
+
+    private bool _fitHooked;
     private void BuildCommandBar()
     {
+        if (!_fitHooked) { ViewArea.SizeChanged += (_, _) => FitCommandBar(); _fitHooked = true; }
+        FitCommandBar();
         CommandStack.Children.Clear();
         bool asmMode = !InSketch && Session?.IsAssembly == true && Session.ActivePart == null;
         bool ffMode = !asmMode && InFreeForm;
@@ -522,7 +557,7 @@ public partial class MainWindow : Window
         });
         for (int g = 0; g < groups.Length; g++)
         {
-            if (g > 0) CommandStack.Children.Add(Separator(false));
+            if (g > 0) { var sep = Separator(false); sep.Width = 128; CommandStack.Children.Add(sep); }
             foreach (var id in groups[g].Main) if (_reg.Find(id) is { } c) CommandStack.Children.Add(CmdButton(c, 20, text: true, minWidth: 128));
             if (groups[g].More.Length > 0)
             {
@@ -535,9 +570,9 @@ public partial class MainWindow : Window
                 var b = new Button { Content = L(moreLabel), Classes = { "tool" }, MinWidth = 128, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 2) };
                 b.Click += (_, _) =>
                 {
-                    var sp = new StackPanel { Spacing = 1 };
+                    var sp = ListColumns();
                     foreach (var id in more) sp.Children.Add(CmdButton(_reg[id], 18, text: true, minWidth: 220));
-                    new Flyout { Content = new ScrollViewer { Content = sp, MaxHeight = 560 }, Placement = PlacementMode.RightEdgeAlignedTop }.ShowAt(b);
+                    new Flyout { Content = sp, Placement = PlacementMode.RightEdgeAlignedTop }.ShowAt(b);
                 };
                 CommandStack.Children.Add(b);
             }
@@ -647,6 +682,9 @@ public partial class MainWindow : Window
         View.SceneRebuilt += () => { CurrentOperation?.RefreshStatus(); UpdateStatus(); if (_propsOn && CurrentOperation == null) ShowProperties(); };
         View.ToolChanged += () => { ShowHint(View.Tool != null ? L(View.Tool.Hint) : InSketch ? L("Выберите инструмент слева; Ctrl+Enter — закончить эскиз") : null); RefreshToolStates(); };
         View.RegionChanged += ShowRegion;
+        // значки ограничений эскиза — поверх вида, под панелями
+        GlyphLayer = new ConstraintGlyphLayer(View);
+        ViewArea.Children.Insert(ViewArea.Children.IndexOf(RegionCanvas) + 1, GlyphLayer);
         View.ComponentDragStarted += _ => Session.BeginEdit(L("Перетащить компонент"));
         View.ComponentDragEnded += _ => { Session.CommitEdit(); Commands.AssemblyCommands.Solve(this); };
         View.SketchEdited += () => { ScheduleTree(); UpdateStatus(); };

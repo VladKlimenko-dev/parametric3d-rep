@@ -254,8 +254,7 @@ public sealed class ScenePicker
         {
             if (!c.Enabled || c.GlyphPositions.Count == 0) continue;
 
-            float box = (float)(Core.Settings.Current.ConstraintGlyphSizePx
-                                * Render.ConstraintGlyphs.Scale(c.Type) * 0.5) + 3f;
+            float box = (float)(Render.ConstraintLayout.SizePx(c.Type) * 0.5) + 3f;
 
             foreach (var g in c.GlyphPositions)
             {

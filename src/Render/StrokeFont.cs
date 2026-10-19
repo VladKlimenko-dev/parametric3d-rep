@@ -29,8 +29,18 @@ public static class StrokeFont
 
     private static readonly Dictionary<char, double[][]> _glyphs = Build();
 
+    /// <summary>Текст в окне вида — шрифтом ГОСТ тип А (Render.GostFont); P3D_STROKEFONT=1 — прежний штриховой.</summary>
+    public static bool UseGost => !GostOff && GostFont.Available;
+    private static readonly bool GostOff = Environment.GetEnvironmentVariable("P3D_STROKEFONT") == "1";
+
     public static double Width(string text)
     {
+        if (UseGost)
+        {
+            double gw = 0;
+            foreach (char c in text) gw += GostFont.Glyph(c) is { } g ? g.Advance * S.DimensionTextWidthScale * S.DimensionTextSpacing : Advance;
+            return gw;
+        }
         double w = 0;
         foreach (char c in text) w += c is '.' or ',' ? NarrowAdvance : Advance;
         return w;
@@ -51,6 +61,17 @@ public static class StrokeFont
 
         foreach (char c in text)
         {
+            if (UseGost && GostFont.Glyph(c) is { } gg)
+            {
+                foreach (var ct in gg.Contours)
+                {
+                    var line = new List<Vector2d>(ct.Length);
+                    foreach (var q in ct) line.Add(origin + dirX * ((pen + q.X * wide) * size) + dirY * (q.Y * size));
+                    if (line.Count >= 2) dst.Add(line);
+                }
+                pen += gg.Advance * S.DimensionTextWidthScale * S.DimensionTextSpacing;
+                continue;
+            }
             if (_glyphs.TryGetValue(c, out var strokes))
             {
                 foreach (var s in strokes)
