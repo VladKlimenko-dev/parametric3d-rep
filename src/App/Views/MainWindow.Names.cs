@@ -23,7 +23,7 @@ public partial class MainWindow
     private Grid ViewArea = null!;
     private Parametric3D.App.Viewport.ModelViewport View = null!;
     private Canvas RegionCanvas = null!;
-    private Border ShapeBar = null!, SketchBar = null!;
+    private Border ShapeBar = null!, SketchBar = null!, ViewBar = null!;
     private WrapPanel ShapeStack = null!;
     private TextBlock ShapeHeader = null!;
     private StackPanel SketchBarStack = null!;
@@ -77,6 +77,7 @@ public partial class MainWindow
         View = this.FindControl<Parametric3D.App.Viewport.ModelViewport>("View")!;
         RegionCanvas = this.FindControl<Canvas>("RegionCanvas")!;
         ShapeBar = this.FindControl<Border>("ShapeBar")!;
+        ViewBar = this.FindControl<Border>("ViewBar")!;
         SketchBar = this.FindControl<Border>("SketchBar")!;
         ShapeStack = this.FindControl<WrapPanel>("ShapeStack")!;
         ShapeHeader = this.FindControl<TextBlock>("ShapeHeader")!;

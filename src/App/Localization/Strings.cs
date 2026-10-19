@@ -278,6 +278,7 @@ public static class Strings
         ["Переименовать"] = "Rename",
         ["Настройки"] = "Settings",
         ["Общие"] = "General",
+        ["Перетащите панель; у края вида она прилипает. Двойной щелчок — на место"] = "Drag the panel; it docks at the view edges. Double-click — back to its place",
         ["ФИГУРЫ"] = "SHAPES",
         ["Эскиз «{0}»: выберите точки, кривые или размер — здесь появятся подходящие операции"] = "Sketch “{0}”: select points, curves or a dimension — matching operations appear here",
         ["Сделать радиусом"] = "Make radius",

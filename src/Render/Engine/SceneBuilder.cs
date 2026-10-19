@@ -44,7 +44,8 @@ public static class SceneBuilder
         foreach (var c in item.Children)
         {
             if (c is Part or Assembly) { Walk(c, xf, s, th, show, active, c.Visible); continue; }
-            if (!c.Visible) continue;
+            // эскиз в правке рисуется всегда — даже если в дереве он скрыт (иначе правят невидимое: видны только размеры)
+            if (!c.Visible && !ReferenceEquals(c, _activeSketch)) continue;
             if (component && item is Part cpp && (ReferenceEquals(c, cpp.PlaneXY) || ReferenceEquals(c, cpp.PlaneXZ) || ReferenceEquals(c, cpp.PlaneYZ) || ReferenceEquals(c, cpp.Origin))) continue;
             switch (c)
             {
