@@ -57,6 +57,16 @@ public static class EdgeProjection
                 break;
             }
         }
+        // ТОЧНАЯ ОКРУЖНОСТЬ ИЛИ ПРЯМАЯ ПОД ДРУГИМ ИМЕНЕМ (кривая пересечения шара или цилиндра с плоскостью грани,
+        // часть кривой после деления ребра): в плоскости эскиза и на одной окружности (прямой) до 1e-7 мм — дуга (отрезок),
+        // а не ломаная. Ломаная из хорд давала контур, на 1e-4…1e-3 мм расходящийся с гранью: выдавливание грани ручкой
+        // оставляло щели-полоски, общая булева отказывала («a face cycle runs into a used piece»). Мутация P3D_PROJFIT=0.
+        if (!FitOff && Recognize(sk, c) is { } rec)
+        {
+            if (rec.C is not { } ctr) { Mark(new SkLine(pool.Get(rec.A), pool.Get(rec.B))); return res; }
+            if (rec.Closed) { Mark(new SkCircle(pool.Get(ctr), rec.R)); return res; }
+            Mark(new SkArc(pool.Get(ctr), pool.Get(rec.A), pool.Get(rec.B), rec.Ccw)); return res;
+        }
         // общий случай — ломаная
         var pts = new List<Vector3d>();
         c.Tessellate(pts, true);
@@ -64,6 +74,52 @@ public static class EdgeProjection
         for (int i = 1; i < p2.Count; i++)
             if ((p2[i] - p2[i - 1]).Length > 1e-7) Mark(new SkLine(pool.Get(p2[i - 1]), pool.Get(p2[i])));
         return res;
+    }
+
+    static readonly bool FitOff = Environment.GetEnvironmentVariable("P3D_PROJFIT") == "0";
+    /// <summary>Разбор: сколько кривых общего вида узнано дугой или отрезком.</summary>
+    public static int Recognized;
+
+    /// <summary>
+    /// Кривая в плоскости эскиза — отрезок или дуга (окружность) с точностью 1e-7 мм по 65 точкам; иначе null.
+    /// Концы — точные концы кривой (вершины ребра).
+    /// </summary>
+    public static (Vector2d A, Vector2d B, Vector2d? C, double R, bool Ccw, bool Closed)? Recognize(Sketch sk, ICurve3 c)
+    {
+        const int N = 64; const double tol = 1e-7;
+        var n = sk.Plane.W.Normalized(); var o = sk.Plane.Origin;
+        var p3 = new Vector3d[N + 1];
+        for (int i = 0; i <= N; i++) p3[i] = c.PointAt(c.T0 + (c.T1 - c.T0) * i / N);
+        if (p3.Any(q => Math.Abs(Vector3d.Dot(q - o, n)) > tol)) return null;
+        var p = p3.Select(q => On(sk, q)).ToArray();
+        bool closed = (p[0] - p[N]).Length < tol;
+        double span = 0; for (int i = 1; i <= N; i++) span += (p[i] - p[i - 1]).Length;
+        if (span < 1e-6) return null;
+        if (!closed)
+        {
+            var d = (p[N] - p[0]); double L = d.Length;
+            if (L > 1e-9)
+            {
+                var u = d / L;
+                if (p.All(q => Math.Abs((q.X - p[0].X) * u.Y - (q.Y - p[0].Y) * u.X) < tol)) { Recognized++; return (p[0], p[N], null, 0, true, false); }
+            }
+        }
+        var sa = closed ? SkArc.FromThreePoints(p[0], p[N / 3], p[2 * N / 3]) : SkArc.FromThreePoints(p[0], p[N / 2], p[N]);
+        if (sa == null) return null;
+        var ctr = sa.Center.P; double r = (p[0] - ctr).Length;
+        if (r > 1e6 || p.Any(q => Math.Abs((q - ctr).Length - r) > tol)) return null;
+        // направление обхода — по знаку поворота (проверка монотонности угла: дуга не обходит окружность дважды)
+        double turn = 0;
+        for (int i = 1; i <= N; i++)
+        {
+            double a0 = Math.Atan2(p[i - 1].Y - ctr.Y, p[i - 1].X - ctr.X), a1 = Math.Atan2(p[i].Y - ctr.Y, p[i].X - ctr.X);
+            double da = a1 - a0; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+            if (i > 1 && Math.Sign(da) != Math.Sign(turn)) return null;
+            turn += da;
+        }
+        if (Math.Abs(turn) > 2 * Math.PI + 1e-6) return null;
+        Recognized++;
+        return (p[0], p[N], ctr, r, turn > 0, closed);
     }
 }
 

@@ -52,6 +52,64 @@ MainWindow Open(DocumentSession s)
     return w;
 }
 
+if (only == "probe-load")
+{
+    // разбор: скругления на реальной детали, перезагрузка из снимка (как «отменить»/«вернуть») — время операции до и после
+    var part = Parametric3D.App.Diagnostics.TestParts.Realistic(3, 12);
+    part.Rebuild(null);
+    long Mem() { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); return GC.GetTotalMemory(true); }
+    Console.WriteLine($"PROBE memory start: {Mem() / 1048576.0:0.0} MB");
+    var rnd = new Random(11);
+    for (int i = 0; i < 24; i++)
+    {
+        if (i == 8 || i == 16)
+        {
+            var (p2, _) = DocumentFile.Load(DocumentFile.Save(part, null)); p2.Rebuild(null); part = p2;
+            Console.WriteLine($"PROBE memory before reload: {Mem() / 1048576.0:0.0} MB");
+            Console.WriteLine($"PROBE reload: {part.Features.Count} features, bodies {part.Bodies.Count}, guarantee {string.Join(",", part.Bodies.Select(b => b.Guarantee))}");
+        }
+        var edges = part.Bodies.SelectMany(b => b.Edges).Where(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && (e.V0.P - e.V1.P).Length > 6
+                     && Topo.EdgeHandle(part, e.Id) != null).ToList();
+        var e = edges[rnd.Next(edges.Count)];
+        Feature f;
+        if (i % 2 == 0) { var rf = new RoundFeature { Radius = new ValueRef(0.5 + rnd.NextDouble()) }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(e)); f = rf; }
+        else { var cf = new ChamferFeature { D1 = new ValueRef(0.5 + rnd.NextDouble()), D2 = new ValueRef(0.7) }; cf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(e)); f = cf; }
+        part.AddFeature(f);
+        bool prof = i == 7 || i == 14;
+        if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        part.Rebuild(null);
+        if (prof) { Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(25))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
+        Console.WriteLine($"PROBE edit {i}: {sw.ElapsedMilliseconds} ms, feature {(part.LastFeatureMs.TryGetValue(f, out var ms) ? ms : -1):0} ms, err {f.Error?.Split('\n')[0]}");
+        if (f.Error != null && Environment.GetEnvironmentVariable("P3D_PROBESAVE") is { Length: > 0 } dir) File.WriteAllText(Path.Combine(dir, $"probe_fail_{i}.p3d"), DocumentFile.Save(part, null));
+    }
+    {
+        double vi = part.Volume; var errs = part.Features.Select(x => x.Error != null).ToList();
+        if (Environment.GetEnvironmentVariable("P3D_PROBESAVE") is { Length: > 0 } dir2) File.WriteAllText(Path.Combine(dir2, "probe_end.p3d"), DocumentFile.Save(part, null));
+        part.Invalidate(); part.Rebuild(null);
+        var errs2 = part.Features.Select(x => x.Error != null).ToList();
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        Console.WriteLine($"PROBE memory: {GC.GetTotalMemory(true) / 1048576.0:0.0} MB, features {part.Features.Count}, faces {part.Bodies.Sum(b => b.Faces.Count())}");
+        foreach (var asm in new[] { typeof(Part).Assembly, typeof(Parametric3D.Kernel.Topology.TSolid).Assembly, typeof(MainWindow).Assembly }.Distinct())
+            foreach (var t in asm.GetTypes())
+                foreach (var fi in t.GetFields(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+                {
+                    if (fi.FieldType.IsGenericTypeDefinition || t.IsGenericTypeDefinition) continue;
+                    object? v; try { v = fi.GetValue(null); } catch { continue; }
+                    int n = v switch { System.Collections.ICollection c => c.Count, _ => -1 };
+                    if (n < 0 && v != null && v.GetType().GetProperty("Count") is { } cp && cp.PropertyType == typeof(int)) { try { n = (int)cp.GetValue(v)!; } catch { } }
+                    if (n > 200) Console.WriteLine($"PROBE static {t.FullName}.{fi.Name}: {n} ({v!.GetType().Name})");
+                }
+        Console.WriteLine($"PROBE scratch: incremental {vi:R} vs from scratch {part.Volume:R}; failed features incremental [{string.Join(",", errs.Select((e, j) => e ? j : -1).Where(j => j >= 0))}] scratch [{string.Join(",", errs2.Select((e, j) => e ? j : -1).Where(j => j >= 0))}]");
+        Console.WriteLine($"PROBE memory after scratch: {Mem() / 1048576.0:0.0} MB");
+        part.ForgetCheckpoints();
+        Console.WriteLine($"PROBE memory without checkpoints: {Mem() / 1048576.0:0.0} MB");
+        part = null!;
+        Console.WriteLine($"PROBE memory without the part: {Mem() / 1048576.0:0.0} MB");
+    }
+    return 0;
+}
+
 string IconsTsv = Path.Combine(AppContext.BaseDirectory, "icons.tsv");
 
 Check("UI-COMMAND-REGISTRY", () =>
@@ -652,6 +710,47 @@ Check("UI-DELETE-FEATURE-SKETCH", () =>
     var p2 = s.Part!;
     Require(p2.Features.OfType<ExtrudeFeature>().Any() && p2.Sketches.Any(k => p2.Features.OfType<ExtrudeFeature>().First().ConsumedSketchIds().Contains(k.Id)), "undo did not restore the feature with its sketch");
     w.Close();
+});
+
+Check("UI-FACE-OUTLINE-ARCS", () =>
+{
+    // Кнопка «Тест», последовательность ручками: эскиз верхней грани после скругления вершины. Дуга скругления на грани
+    // (кривая общего вида: пересечение шара с плоскостью) приходила в эскиз ломаной из 23 хорд — профиль расходился с гранью
+    // на 5e-4 мм, выдавливание грани шло приближённым путём. Теперь — дуга (EdgeProjection.Recognize). Мутация P3D_PROJFIT=0.
+    var s = DocumentSession.Sample();
+    var part = s.Part!;
+    s.Document.RebuildDirty();
+    // как в последовательности: R10 на верхнем ребре вдоль X, фаска 8 на верхнем ребре вдоль Y, затем вершина
+    double zt = part.Bodies[0].Vertices.Max(v => v.P.Z);
+    bool Top(Parametric3D.Kernel.Topology.TEdge e) => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0.P.Z - zt) < 1e-6 && Math.Abs(e.V1.P.Z - zt) < 1e-6;
+    var ex0 = part.Bodies[0].Edges.Where(e => Top(e) && Math.Abs(e.V0.P.Y - e.V1.P.Y) < 1e-6).OrderBy(e => e.V0.P.Y).First();
+    var rf0 = new RoundFeature { Radius = new ValueRef(10) }; rf0.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(ex0)); part.AddFeature(rf0); s.Document.RebuildDirty();
+    var ey0 = part.Bodies[0].Edges.Where(e => Top(e) && Math.Abs(e.V0.P.X - e.V1.P.X) < 1e-6).OrderByDescending(e => e.V0.P.X).First();
+    var cf0 = new ChamferFeature { D1 = new ValueRef(8), D2 = new ValueRef(8) }; cf0.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(ey0)); part.AddFeature(cf0); s.Document.RebuildDirty();
+    var corner = part.Bodies[0].Vertices.Where(v => Math.Abs(v.P.Z - zt) < 1e-6).OrderBy(v => v.P.X - v.P.Y).First().P;   // угол (−x, +y) — прямые рёбра
+    part.AddFeature(new VertexRoundFeature { Vertex = corner, Radius = new ValueRef(6) });
+    s.Document.RebuildDirty();
+    Require(part.Features.All(f => f.Error == null), string.Join("; ", part.Features.Where(f => f.Error != null).Select(f => f.Name + ": " + f.Error)));
+    var top = part.Bodies[0].Faces.Where(f => Refs.FacePlane(part, f.Id) is { } pl && pl.N.Z > 0.99).OrderByDescending(f => Refs.FacePlane(part, f.Id)!.Value.P.Z).First();
+    var sk = Parametric3D.App.Operations.Topo.FaceOutlineSketch(part, top.Id, "t");
+    Require(sk != null, "no outline sketch");
+    int arcs = sk!.Entities.OfType<SkArc>().Count(), lines = sk.Entities.OfType<SkLine>().Count();
+    Console.WriteLine($"  outline: {arcs} arc(s), {lines} line(s); corner {corner}; edges {string.Join(" ", top.Edges.Select(e => e.Curve.GetType().Name))}");
+    Require(arcs >= 1 && lines <= 8, $"outline came as {lines} lines and {arcs} arcs");
+    var prof = sk.ToProfile();
+    Require(prof.Loops.Count == 1, $"outline profile has {prof.Loops.Count} loops");
+    // кривая общего вида (кривая пересечения, часть ребра) — дугой и отрезком, если она ими является; эллипс — ломаной
+    var sk2 = new Sketch("r", Parametric3D.Kernel.Frame3.XY);
+    var pool = new EdgeProjection.PointPool(SkRole.Object, "");
+    var arcC = new Parametric3D.Kernel.Curves.ProcCurve3(t => new Vector3d(3 + 5 * Math.Cos(t), -2 + 5 * Math.Sin(t), 0), 0.3, 2.1, false, "test-arc");
+    var lineC = new Parametric3D.Kernel.Curves.ProcCurve3(t => new Vector3d(1 + 2 * t, 4 - t, 0), 0, 1, false, "test-line");
+    var ellC = new Parametric3D.Kernel.Curves.ProcCurve3(t => new Vector3d(6 * Math.Cos(t), 3 * Math.Sin(t), 0), 0, 1.5, false, "test-ellipse");
+    var ea = EdgeProjection.Project(sk2, arcC, pool, SkRole.Object, ""); var el = EdgeProjection.Project(sk2, lineC, pool, SkRole.Object, "");
+    var ee = EdgeProjection.Project(sk2, ellC, pool, SkRole.Object, "");
+    Console.WriteLine($"  generic: arc -> {string.Join(",", ea.Select(x => x.GetType().Name))}; line -> {string.Join(",", el.Select(x => x.GetType().Name))}; ellipse -> {ee.Count} entities");
+    Require(ea.Count == 1 && ea[0] is SkArc a1 && Math.Abs((a1.Center.P - new Vector2d(3, -2)).Length) < 1e-7 && a1.CCW, "generic arc was not recognised");
+    Require(el.Count == 1 && el[0] is SkLine, "generic line was not recognised");
+    Require(ee.Count > 2 && ee.All(x => x is SkLine), "an ellipse must stay a polyline");
 });
 
 Check("UI-ROLLBACK-BAR", () =>

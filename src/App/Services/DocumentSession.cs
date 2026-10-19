@@ -222,6 +222,7 @@ public sealed class DocumentSession
         var part = Part;
         if (part == null || !_history.CanUndo) return;
         var r = _history.Undo(part, Document.Parameters, rebuild: false);
+        if (Environment.GetEnvironmentVariable("P3D_LOADDBG") == "1") Console.WriteLine($"LOAD cancel-edit: adopted {_history.LastAdopted} of {part.Features.Count}");
         _history.ClearRedo();
         if (_undoNames.Count > 0) _undoNames.RemoveAt(_undoNames.Count - 1);
         if (r != null) ReplacePart(part, r.Value.Part, r.Value.Parameters);

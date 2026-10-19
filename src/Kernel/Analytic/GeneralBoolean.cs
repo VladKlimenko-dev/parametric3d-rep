@@ -183,6 +183,12 @@ public static class GeneralBoolean
     /// независимым эталоном (KRN06-PARTIAL-VERTEX-SELECTION); в общем случае — прежний отказ.
     /// </summary>
     [ThreadStatic] public static bool TangentAlongEdgeScope;
+    static readonly bool TangentDbg = Environment.GetEnvironmentVariable("P3D_TANGENTDBG") == "1";
+    static readonly bool TangentClipOff = Environment.GetEnvironmentVariable("P3D_TANGENTCLIP") == "0";
+    /// <summary>Статистика: касание поверхностей без касания граней (прямая касания вне общей части граней).</summary>
+    public static long TangentMissFaces;
+    /// <summary>Статистика: касание по ребру, общему для обеих граней (разреза не нужно).</summary>
+    public static long TangentOnBothEdges;
 
     static readonly bool EmptyOff = Environment.GetEnvironmentVariable("P3D_GENEMPTY") == "0";
     /// <summary>Последний вызов Run в этом потоке доказал пустой результат (null с этим признаком — не отказ).</summary>
@@ -222,13 +228,23 @@ public static class GeneralBoolean
     /// <summary>KRN-08 (08.2): происхождение граней последнего результата Run в этом потоке (до доводки маршрутом).</summary>
     [ThreadStatic] public static Topology.Provenance? LastProvenance;
     [ThreadStatic] static Dictionary<TFace, TFace>? _src;             // грань результата → грань операнда
-    [ThreadStatic] static List<(TFace Source, TFace Into)>? _merged;   // слившиеся при объединении граней (совпадающие области)
+    [ThreadStatic] static List<(TFace Source, TFace Into)>? _merged;
+    [ThreadStatic] static HashSet<TFace>? _aFaces;                     // грани первого операнда (имя слитой грани — от них)
+    /// <summary>
+    /// ИМЯ СЛИТОЙ ГРАНИ — ОТ ПЕРВОГО ОПЕРАНДА. Совпадающие грани двух операндов (стенка бруска и стенка добавленного выдавливания
+    /// в одной плоскости) сливаются в одну; прежде она брала имя той из двух, что раньше шла в списке граней оболочки, — часто
+    /// грани резца, и ссылки последующих элементов на стенку бруска (скругление её ребра) переставали находиться. Теперь
+    /// приоритет у грани первого операнда (детали, к которой добавляют). Мутация P3D_MERGETAGA=0.
+    /// </summary>
+    static readonly bool MergeTagAOff = Environment.GetEnvironmentVariable("P3D_MERGETAGA") == "0";
+    /// <summary>Разбор: сколько слияний взяли имя грани первого операнда вместо второго.</summary>
+    public static int MergeTagFromA;   // слившиеся при объединении граней (совпадающие области)
     static readonly bool ProvOff = Environment.GetEnvironmentVariable("P3D_PROVENANCE") == "0";
 
     public static TSolid? Run(TSolid a, TSolid b, Bool2 op, out string why)
     {
         LastProvedEmpty = false; LastProvenance = null;
-        _src = ProvOff ? null : new Dictionary<TFace, TFace>(ReferenceEqualityComparer.Instance); _merged = new();
+        _src = ProvOff ? null : new Dictionary<TFace, TFace>(ReferenceEqualityComparer.Instance); _merged = new(); _aFaces = null;
         var keptCount = new Dictionary<TFace, int>(ReferenceEqualityComparer.Instance);
         var cutFace = new HashSet<TFace>(ReferenceEqualityComparer.Instance);
         var boundaryOf = new Dictionary<TFace, TFace>(ReferenceEqualityComparer.Instance);   // область на совпадающей грани другого
@@ -242,6 +258,7 @@ public static class GeneralBoolean
         var a0 = a; var b0 = b;
         var swPrep = System.Diagnostics.Stopwatch.StartNew();
         a = Conventional(a); b = Conventional(b);
+        if (!MergeTagAOff) _aFaces = new HashSet<TFace>(a.Faces, ReferenceEqualityComparer.Instance);
         // копия ради соглашения — те же грани в том же порядке: происхождение — на грани исходных операндов
         var orig = new Dictionary<TFace, TFace>(ReferenceEqualityComparer.Instance);
         foreach (var (x, x0) in new[] { (a, a0), (b, b0) })
@@ -343,8 +360,24 @@ public static class GeneralBoolean
                         }
                         continue;
                     }
+                    // 2026-10-20 (кнопка «Тест»: выдавливание верхней грани детали со скруглением вершины): ПОВЕРХНОСТИ касаются
+                    // по прямой, но ГРАНИ — нет: прямая касания, обрезанная обеими гранями, пуста или вырождена в точку (стенка
+                    // резца — выше грани тела, касание только у угла). Разреза не нужно и не добавляется ничего — касания нет.
+                    // Мутация P3D_TANGENTCLIP=0.
+                    // Касание ПО РЕБРУ, общему для обеих граней (скругление тела × дно резца, стоящего на грани тела: прямая
+                    // касания — граница и цилиндра скругления, и дна резца): ни одну грань оно не делит — куски на границе
+                    // отбрасываются в обеих. Прежний пропуск касаний «по ребру одной из граней» давал неверные объёмы (K09);
+                    // здесь — только если каждый кусок прямой касания лежит на границе ОБЕИХ граней.
+                    if (!TangentClipOff && TangentLine(x, y) is { } tl0)
+                    {
+                        double minLen = 10 * ToleranceContext.Current.ModelAccuracy;
+                        var pcs = FaceIntersect.ClipCurve(tl0, x, y);
+                        if (pcs.All(pc => !pc.Closed && (pc.P1 - pc.P0).Length <= minLen)) { Interlocked.Increment(ref TangentMissFaces); continue; }
+                        if (onEdge && pcs.All(pc => OnBoundary(pc, x) && OnBoundary(pc, y))) { Interlocked.Increment(ref TangentOnBothEdges); continue; }
+                    }
                     string Kind(AnalyticFace q) => q.Sph ? "sphere" : q.Cone ? "cone" : q.Cyl ? "cylinder" : "plane";
                     why = onEdge ? "tangent surfaces along an edge (not yet supported)" : $"tangent contact inside both faces (not supported): {Kind(x)} × {Kind(y)}";
+                    if (TangentDbg) why += $" [{x.Face.Tag} × {y.Face.Tag}; line {(TangentLine(x, y) is { } tdl ? tdl.ToString() : "-")}]";
                     return null;
                 }
                 // m.b3: КАСАНИЕ ПО ОКРУЖНОСТИ (тор или шар на плоскости, шар в цилиндре того же радиуса — кратный корень профилей
@@ -836,6 +869,13 @@ public static class GeneralBoolean
                 if (Vector3d.Dot(f1.NormalAt(m), f2.NormalAt(m)) <= 0) { rejected.Add((e, f1, f2)); continue; }
                 Diagnostics.Prof.Count("общая: попыток слияния", 1);
                 bool corrupt = CorruptMergeForTest;                         // испорченная проверкой попытка — не окончательна
+                if (_aFaces != null && _src != null && _src.TryGetValue(f1, out var o1) && _src.TryGetValue(f2, out var o2)
+                    && !_aFaces.Contains(o1) && _aFaces.Contains(o2) && f1.Tag != f2.Tag)
+                {
+                    if (Merge(shell, f2, f1)) { Interlocked.Increment(ref MergeTagFromA); again = true; merges++; shape.Remove(f1); shape.Remove(f2); break; }
+                    if (!corrupt) rejected.Add((e, f1, f2));
+                    continue;
+                }
                 if (Merge(shell, f1, f2)) { again = true; merges++; shape.Remove(f1); shape.Remove(f2); break; }
                 if (!corrupt) rejected.Add((e, f1, f2));
             }

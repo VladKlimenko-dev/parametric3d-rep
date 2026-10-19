@@ -63,7 +63,6 @@ static partial class Program
                     var cf = c.Faces.ElementAt(fi);
                     // грань с фасетами (2026-10-19, вечер): проверка по точной поверхности-источнику; порча — обход контура
                     // обращён (нормаль граней с фасетами задают фасеты, флаг Reversed у них стороны не меняет)
-                    if (cf.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface && Environment.GetEnvironmentVariable("P3D_LOOPFACETED") != "1") continue;
                     if (cf.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface)
                     {
                         if (Parametric3D.Kernel.Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(cf)) is not (Parametric3D.Kernel.Geometry.Ssi.Cylinder or Parametric3D.Kernel.Geometry.Ssi.Cone or Parametric3D.Kernel.Geometry.Ssi.Sphere)) continue;
@@ -91,7 +90,7 @@ static partial class Program
                 }
             }
             Log(new { test = "KRN03-LOOP-ORIENTATION-EXACT", bodies = bodies.Count, curvedFaces = curved, caught, facetedFaces = faceted, facetedCaught });
-            if (faceted < 1 && Environment.GetEnvironmentVariable("P3D_LOOPFACETED") == "1") fails.Add("no faceted curved face exercised");
+            if (faceted < 1 && Environment.GetEnvironmentVariable("P3D_LOOPFACETED") != "0") fails.Add("no faceted curved face exercised");
             if (curved < 2) fails.Add($"only {curved} curved faces exercised");
             Require(fails.Count == 0, string.Join("; ", fails.Take(8)));
         });

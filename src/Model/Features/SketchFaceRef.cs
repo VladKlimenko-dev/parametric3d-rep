@@ -20,6 +20,8 @@ public static class SketchFaceRef
     internal static readonly bool Off = Environment.GetEnvironmentVariable("P3D_SKETCHFACE") == "0";
 
     /// <summary>Плоскость грани (точка, внешняя нормаль) или null, если грань не плоская.</summary>
+    static readonly bool PlaneSideOff = Environment.GetEnvironmentVariable("P3D_PLANEOFSIDE") == "0";
+
     public static (Vector3d P, Vector3d N)? PlaneOf(TFace f)
     {
         var src = GeometryAudit.AuthoritativeSurface(f);
@@ -35,7 +37,17 @@ public static class SketchFaceRef
             return (ln.A, nn);
         }
         if (src is not PlaneSurface ps) return null;
-        return (ps.F.Origin, f.Reversed ? -ps.F.W : ps.F.W);
+        var n = f.Reversed ? -ps.F.W : ps.F.W;
+        // ИСПРАВЛЕНО (2026-10-20): у грани с фасетами (после булевой) сторону задают фасеты, а не флаг Reversed (булева ставит
+        // Reversed = false всем граням) — нормаль плоскости-источника могла смотреть ВНУТРЬ тела. Ручка «выдавить грань»
+        // на нижней грани такой детали считала её верхней и ставила эскиз на дно (найдено кнопкой «Тест»). Сторона — по
+        // нормали самой грани (FacetedSurface — по фасетам). P3D_PLANEOFSIDE=0 — как прежде.
+        if (!PlaneSideOff && f.Surface is Kernel.Surfaces.FacetedSurface)
+        {
+            var at = f.Loops.SelectMany(l => l.CoEdges).Select(c => c.Edge.V0?.P).FirstOrDefault(v => v != null) ?? ps.F.Origin;
+            if (Vector3d.Dot(f.NormalAt(at), n) < 0) n = -n;
+        }
+        return (ps.F.Origin, n);
     }
 
     /// <summary>Переносит рамку на плоскость (p, n): начало и U проецируются, нормаль — n со стороной старой W.</summary>
