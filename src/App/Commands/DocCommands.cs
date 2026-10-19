@@ -187,22 +187,77 @@ public static class DocCommands
             return sp;
         }
         lang.ItemsSource = new[] { WithIcon("language_ru_but.svg", "Русский"), WithIcon("language_en_but.svg", "English") };
+        // вкладка «Вид»: размеры текста и кнопок, цвета (UserPrefs.Look)
+        var look = prefs.Look.Clone();
+        NumericUpDown Num(double v, double min, double max, double step) => new NumericUpDown { Value = (decimal)v, Minimum = (decimal)min, Maximum = (decimal)max, Increment = (decimal)step, MinWidth = 200, FormatString = step < 1 ? "0.##" : "0" };
+        var fUi = Num(look.UiFontSize, 9, 22, 1); var fStrip = Num(look.StripButtonPx, 22, 64, 1); var fStripIcon = Num(look.StripIconPx, 12, 48, 1);
+        var fPanelIcon = Num(look.PanelIconPx, 12, 40, 1); var fDim = Num(look.DimensionTextPx, 6, 40, 1); var fDimLine = Num(look.DimensionTextLine, 0.3, 3, 0.05);
+        var fCon = Num(look.ConstraintIconPx, 8, 48, 1);
+        Control ColorBox(string value, out TextBox tb)
+        {
+            var t = new TextBox { Text = value, Watermark = L("по теме (#RRGGBB)"), MinWidth = 160 };
+            var sw = new Border { Width = 24, Height = 24, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1), BorderBrush = Avalonia.Media.Brushes.Gray, Margin = new Thickness(6, 0, 0, 0) };
+            void Upd() => sw.Background = UiLook.ParseColor(t.Text) is { } c ? new Avalonia.Media.SolidColorBrush(c) : Avalonia.Media.Brushes.Transparent;
+            t.TextChanged += (_, _) => Upd(); Upd();
+            tb = t;
+            return new StackPanel { Orientation = Orientation.Horizontal, Children = { t, sw } };
+        }
+        var cSkD = ColorBox(look.SketchColorDark, out var tSkD); var cSkL = ColorBox(look.SketchColorLight, out var tSkL);
+        var cBgTD = ColorBox(look.BackgroundTopDark, out var tBgTD); var cBgBD = ColorBox(look.BackgroundBottomDark, out var tBgBD);
+        var cBgTL = ColorBox(look.BackgroundTopLight, out var tBgTL); var cBgBL = ColorBox(look.BackgroundBottomLight, out var tBgBL);
+        var resetLook = new Button { Content = L("Сбросить вид"), HorizontalAlignment = HorizontalAlignment.Left };
+        resetLook.Click += (_, _) =>
+        {
+            var d = new LookPrefs();
+            fUi.Value = (decimal)d.UiFontSize; fStrip.Value = (decimal)d.StripButtonPx; fStripIcon.Value = (decimal)d.StripIconPx; fPanelIcon.Value = (decimal)d.PanelIconPx;
+            fDim.Value = (decimal)d.DimensionTextPx; fDimLine.Value = (decimal)d.DimensionTextLine; fCon.Value = (decimal)d.ConstraintIconPx;
+            foreach (var t in new[] { tSkD, tSkL, tBgTD, tBgBD, tBgTL, tBgBL }) t.Text = "";
+        };
         var ok = new Button { Content = L("ОК"), Classes = { "accent" }, MinWidth = 96, HorizontalAlignment = HorizontalAlignment.Right };
         ok.Click += (_, _) =>
         {
+            double D(NumericUpDown n, double dflt) => n.Value is { } v ? (double)v : dflt;
+            look.UiFontSize = D(fUi, 13); look.StripButtonPx = D(fStrip, 34); look.StripIconPx = D(fStripIcon, 20); look.PanelIconPx = D(fPanelIcon, 20);
+            look.DimensionTextPx = D(fDim, 12); look.DimensionTextLine = D(fDimLine, 0.75); look.ConstraintIconPx = D(fCon, 16);
+            look.SketchColorDark = tSkD.Text?.Trim() ?? ""; look.SketchColorLight = tSkL.Text?.Trim() ?? "";
+            look.BackgroundTopDark = tBgTD.Text?.Trim() ?? ""; look.BackgroundBottomDark = tBgBD.Text?.Trim() ?? "";
+            look.BackgroundTopLight = tBgTL.Text?.Trim() ?? ""; look.BackgroundBottomLight = tBgBL.Text?.Trim() ?? "";
+            prefs.Look = look;
             if ((theme.SelectedIndex == 0) != w.IsDark) w.ApplyTheme(theme.SelectedIndex == 0);
             if ((lang.SelectedIndex == 1) != (prefs.Language == "en")) w.ToggleLanguage();
             prefs.PreviewMode = prev.SelectedIndex == 1 ? "contour" : "full";
             prefs.GlMode = gl.SelectedItem as string ?? "auto";
             if ((units.SelectedIndex == 1) != DisplayUnits.Inch) ToggleUnits(w);
             prefs.Save();
+            w.ApplyLook();
             win.Close();
         };
-        win.Content = new StackPanel
+        var general = new StackPanel
         {
-            Margin = new Thickness(18), Spacing = 10,
-            Children = { WithIcon("settings_general_ico.svg", L("Общие"), 20), Row("Тема", theme), Row("Язык", lang), Row("Предпросмотр операций", prev), Row("Графика (со следующего запуска)", gl), Row("Единицы длины", units), ok },
+            Margin = new Thickness(6, 12, 6, 6), Spacing = 10,
+            Children = { Row("Тема", theme), Row("Язык", lang), Row("Предпросмотр операций", prev), Row("Графика (со следующего запуска)", gl), Row("Единицы длины", units) },
         };
+        var visual = new StackPanel
+        {
+            Margin = new Thickness(6, 12, 6, 6), Spacing = 8,
+            Children =
+            {
+                Row("Размер текста интерфейса", fUi), Row("Кнопка полосы у края вида, пикс.", fStrip), Row("Иконка на кнопке полосы, пикс.", fStripIcon),
+                Row("Иконка на кнопках панелей, пикс.", fPanelIcon), Row("Высота цифр размеров, пикс.", fDim), Row("Толщина линии цифр размеров", fDimLine),
+                Row("Значки связей эскиза, пикс.", fCon), Row("Линии эскиза (тёмная тема)", cSkD), Row("Линии эскиза (светлая тема)", cSkL),
+                Row("Фон вида сверху (тёмная)", cBgTD), Row("Фон вида снизу (тёмная)", cBgBD), Row("Фон вида сверху (светлая)", cBgTL), Row("Фон вида снизу (светлая)", cBgBL),
+                resetLook,
+            },
+        };
+        var tabs = new TabControl
+        {
+            ItemsSource = new[]
+            {
+                new TabItem { Header = WithIcon("settings_general_ico.svg", L("Общие"), 18), Content = general },
+                new TabItem { Header = WithIcon("theme_but.svg", L("Вид"), 18), Content = visual },
+            },
+        };
+        win.Content = new StackPanel { Margin = new Thickness(18), Spacing = 10, Children = { tabs, ok } };
         await win.ShowDialog(w);
     }
 

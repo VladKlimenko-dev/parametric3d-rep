@@ -70,7 +70,12 @@
                     </Border>
                   </Panel>
                   <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                             Classes.err="{Binding HasError}" Classes.dimmed="{Binding IsDim}" />
+                             Classes.err="{Binding HasError}" Classes.dimmed="{Binding IsDim}" IsVisible="{Binding IsNotBar}" />
+                  <!-- строка отката: цветная полоса (деталь — оранжевая, сборка — синяя, подсборка — фиолетовая); тянется мышью -->
+                  <Grid Grid.Column="1" Grid.ColumnSpan="2" IsVisible="{Binding IsBar}" Cursor="SizeNorthSouth" Background="Transparent" MinWidth="120">
+                    <Border Height="4" CornerRadius="2" Background="{Binding BarBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Name}" FontSize="10" Foreground="{Binding BarBrush}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-3,4,0" />
+                  </Grid>
                   <ToggleButton Grid.Column="2" Classes="eye" IsVisible="{Binding HasEye}" IsChecked="{Binding IsVisible}"
                                 Width="22" Height="20" Padding="0" Background="Transparent" BorderThickness="0">
                     <Panel>

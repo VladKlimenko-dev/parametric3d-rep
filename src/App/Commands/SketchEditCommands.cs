@@ -286,14 +286,18 @@ public static class SketchEditCommands
     }
 
     /// <summary>Настройка эскиза: перевернуть плоскость, начало и верх — в исходное.</summary>
-    public static async void Setup(MainWindow w)
+    /// <summary>
+    /// Настройка эскиза — особый режим (SketchSetupOp): общий вид детали, стрелки нормали и «верха», плоскость-основа,
+    /// основа и смещение нулевой точки, «верх» по ребру, грани, плоскости или точке. Из правки эскиза — правка
+    /// завершается и после «ОК»/«Отмены» возобновляется.
+    /// </summary>
+    public static void Setup(MainWindow w)
     {
-        var sk = Sk(w); if (sk == null) return;
-        var r = await Dialogs.Ask(w, L("Настройка эскиза"), L("Плоскость «{0}», начало: {1}.", sk.PlaneDescription, L(sk.OriginDescription)), L("Перевернуть"), L("Верх — +Y"), L("Начало — в начало детали"), L("Закрыть"));
-        if (r == L("Перевернуть")) sk.Flip();
-        else if (r == L("Верх — +Y")) sk.SetUpVector(new Vector2d(0, 1));
-        else if (r == L("Начало — в начало детали")) { var nW = sk.BaseFrame.W.Normalized(); sk.SetOrigin(nW * Vector3d.Dot(sk.BaseFrame.Origin, nW), L("Начало детали")); }
-        else return;
-        Done(w, sk);
+        var sk = Sk(w) ?? w.SelectedItems().OfType<Sketch>().FirstOrDefault();
+        if (sk == null) { w.ShowToast(L("Выберите эскиз"), error: false); return; }
+        bool back = w.InSketch;
+        if (back) w.FinishSketch();
+        if (w.Session.Part?.Sketches.FirstOrDefault(s => s.Id == sk.Id) is not { } live) return;
+        w.StartOperation(new Parametric3D.App.Operations.SketchSetupOp(live, back));
     }
 }

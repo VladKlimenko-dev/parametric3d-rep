@@ -201,6 +201,8 @@ public sealed class Settings
 
     /// <summary>Толщина штриха цифр. Задаётся отдельно от размерных линий.</summary>
     public float DimensionTextStrokeWidth = 1.1f;
+    /// <summary>Толщина линии контуров глифов шрифта ГОСТ у подписей размеров, пикселей.</summary>
+    public float DimensionTextOutlineWidth = 0.75f;
 
     /// <summary>Показывать единицы измерения в подписи размера.</summary>
     public bool DimensionShowUnits = false;

@@ -17,13 +17,16 @@ public static class SceneBuilder
     {
         var s = new SceneData();
         _activeSketch = activeSketch;
+        _hiddenRoot = doc.RootIsHidden ? doc.Root : null;
         try { Walk(doc.Root, Matrix4.Identity, s, th, show, activeOwner, doc.Root.Visible); }
-        finally { _activeSketch = null; }
+        finally { _activeSketch = null; _hiddenRoot = null; }
         return s;
     }
 
     /// <summary>Эскиз в правке: виден всегда (и при скрытых эскизах), его точки выбираются (привязка, размеры).</summary>
     [ThreadStatic] private static Sketch? _activeSketch;
+    /// <summary>Служебный корень документа детали: его опорные элементы не рисуются.</summary>
+    [ThreadStatic] private static Assembly? _hiddenRoot;
 
     private static void Walk(ModelItem item, Matrix4 parent, SceneData s, RenderTheme th, ShowOptions show, ModelItem? active, bool visible)
     {
@@ -43,13 +46,16 @@ public static class SceneBuilder
         bool component = item is Part cp && cp.Parent is Assembly pa && pa.Children.OfType<Part>().Count() > 1 && !ReferenceEquals(active, cp);
         foreach (var c in item.Children)
         {
+            if (c is Part cpart && item is Assembly stageAsm && stageAsm.IsBeyondStage(cpart)) continue;   // ниже строки отката сборки
             if (c is Part or Assembly) { Walk(c, xf, s, th, show, active, c.Visible); continue; }
+            if (ReferenceEquals(item, _hiddenRoot)) continue;
             // эскиз в правке рисуется всегда — даже если в дереве он скрыт (иначе правят невидимое: видны только размеры)
             if (!c.Visible && !ReferenceEquals(c, _activeSketch)) continue;
             if (component && item is Part cpp && (ReferenceEquals(c, cpp.PlaneXY) || ReferenceEquals(c, cpp.PlaneXZ) || ReferenceEquals(c, cpp.PlaneYZ) || ReferenceEquals(c, cpp.Origin))) continue;
             switch (c)
             {
-                case DatumPlane dp when show.Planes:
+                // в правке эскиза опорные плоскости не показываются (мешают чертить; плоскость эскиза задаёт сетка)
+                case DatumPlane dp when show.Planes && _activeSketch == null:
                     FitDatumPlane(dp, owner, ownerBounds);
                     AddPlane(dp, xf, s, th, OwnerPartId(owner));
                     break;

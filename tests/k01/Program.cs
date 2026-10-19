@@ -512,6 +512,8 @@ static partial class Program
         if (mode is "toruspole" or "allA") TorusPoleChecks();
         if (mode is "seams" or "allA") SeamChecks();
         if (mode is "coincident" or "allA") CoincidentChecks();
+        if (mode is "krn05overlay" or "allA") Krn05OverlayChecks();
+        if (mode is "krn05probe") Krn05OverlayProbe();
         if (mode is "provall" or "allA") ProvenanceAllOpsChecks();
         if (mode is "vertexcurved" or "allA") VertexCurvedChecks();
         if (mode == "lemondbg") { LemonDebug(); return; }

@@ -71,6 +71,7 @@ public static class DocumentFile
                 Hidden = c.HiddenParts.ToList()
             }).ToList(),
             ActiveConfiguration = part.ActiveConfiguration,
+            Stage = part.InInsertMode ? part.StageIndex : null,
             Datums = SaveDatums(part),
             FreeForm = part.FreeFormDoc, MergeFreeForm = part.MergeFreeForm,
             ConstructionPlane = part.ConstructionPlane.Origin == Vector3d.Zero && part.ConstructionPlane.W == Vector3d.UnitZ && part.ConstructionPlane.U == Vector3d.UnitX ? null
@@ -126,7 +127,12 @@ public static class DocumentFile
             s.Plane.Origin.X, s.Plane.Origin.Y, s.Plane.Origin.Z,
             s.Plane.U.X, s.Plane.U.Y, s.Plane.U.Z,
             s.Plane.V.X, s.Plane.V.Y, s.Plane.V.Z
-        }, BaseFaceTag = s.BaseFaceTag };
+        }, BaseFaceTag = s.BaseFaceTag,
+            PlaneRef = s.PlaneDescription, BasePlaneId = s.BasePlaneId,
+            BaseFrame = new[] { s.BaseFrame.Origin.X, s.BaseFrame.Origin.Y, s.BaseFrame.Origin.Z, s.BaseFrame.U.X, s.BaseFrame.U.Y, s.BaseFrame.U.Z, s.BaseFrame.V.X, s.BaseFrame.V.Y, s.BaseFrame.V.Z },
+            Up = new[] { s.UpVector.X, s.UpVector.Y }, UpRef = s.UpDescription.Length > 0 ? s.UpDescription : null,
+            OriginRef = s.OriginDescription, OriginBase = s.OriginBase is { } ob ? new[] { ob.X, ob.Y, ob.Z } : null,
+            OriginOffset = s.OriginOffset == Vector2d.Zero ? null : new[] { s.OriginOffset.X, s.OriginOffset.Y } };
 
         // ТОЧКИ, НА КОТОРЫЕ ССЫЛАЮТСЯ ЛИНИИ И ДУГИ, ЗАПИСЫВАЮТСЯ ВСЕГДА. Эскиз, собранный кодом
         // (TestGeometry, мастера), хранит концы отрезков только в самих отрезках; прежде такие
@@ -711,6 +717,14 @@ public static class DocumentFile
                 new Vector3d(sd.Plane[3], sd.Plane[4], sd.Plane[5]),
                 new Vector3d(sd.Plane[6], sd.Plane[7], sd.Plane[8]));
             var s = new Sketch(sd.Name, frame) { BaseFaceTag = sd.BaseFaceTag };
+            if (sd.PlaneRef != null) s.PlaneDescription = sd.PlaneRef;
+            s.BasePlaneId = sd.BasePlaneId;
+            s.BaseFrame = sd.BaseFrame is { Length: 9 } bf ? new Frame3(new Vector3d(bf[0], bf[1], bf[2]), new Vector3d(bf[3], bf[4], bf[5]), new Vector3d(bf[6], bf[7], bf[8])) : frame;
+            if (sd.Up is { Length: 2 } up) s.UpVector = new Vector2d(up[0], up[1]);
+            if (sd.UpRef != null) s.UpDescription = sd.UpRef;
+            if (sd.OriginRef != null) s.OriginDescription = sd.OriginRef;
+            if (sd.OriginBase is { Length: 3 } obs) s.OriginBase = new Vector3d(obs[0], obs[1], obs[2]);
+            if (sd.OriginOffset is { Length: 2 } oo) s.OriginOffset = new Vector2d(oo[0], oo[1]);
 
             var byOld = new Dictionary<uint, SkEntity>();
             foreach (var ed in sd.Entities.Where(x => x.Kind == "point"))
@@ -1202,6 +1216,7 @@ public static class DocumentFile
             }
         }
 
+        if (doc.Stage is int stg && stg >= 0 && stg < part.Features.Count) part.StageIndex = part.ClampStage(stg);
         return (part, table);
     }
 
@@ -1245,6 +1260,8 @@ public static class DocumentFile
         public bool FreeForm { get; set; }
         public bool MergeFreeForm { get; set; }
         public double[]? ConstructionPlane { get; set; }
+        /// <summary>Строка отката (режим вставки): сколько операций в расчёте; нет — в конце.</summary>
+        public int? Stage { get; set; }
     }
 
     private sealed class FaceSetDto
@@ -1387,6 +1404,15 @@ public static class DocumentFile
         public double[] Plane { get; set; } = Array.Empty<double>();
         /// <summary>KRN-08: имя грани, на которой стоит эскиз.</summary>
         public string? BaseFaceTag { get; set; }
+        /// <summary>Настройка эскиза: плоскость-базис (имя, ид, рамка без поворота «верха»), «верх», нулевая точка.</summary>
+        public string? PlaneRef { get; set; }
+        public uint BasePlaneId { get; set; }
+        public double[]? BaseFrame { get; set; }
+        public double[]? Up { get; set; }
+        public string? UpRef { get; set; }
+        public string? OriginRef { get; set; }
+        public double[]? OriginBase { get; set; }
+        public double[]? OriginOffset { get; set; }
         public List<EntityDto> Entities { get; set; } = new();
         public List<ConstraintDto> Constraints { get; set; } = new();
         public List<DimensionDto> Dimensions { get; set; } = new();

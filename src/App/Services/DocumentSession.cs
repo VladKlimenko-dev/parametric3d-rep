@@ -50,7 +50,7 @@ public sealed class DocumentSession
     public Part? Part => ActivePart != null && Document.AllParts().Contains(ActivePart) ? ActivePart : (IsAssembly ? null : Document.AllParts().FirstOrDefault());
 
     /// <summary>u13: документ сборки (компоненты — детали корня).</summary>
-    public bool IsAssembly { get; private set; }
+    public bool IsAssembly { get => Document.IsAssembly; private set => Document.IsAssembly = value; }
     public Assembly RootAssembly => Document.Root;
     /// <summary>u13: компонент, правимый в контексте сборки (null — режим сборки).</summary>
     public Part? ActivePart { get; set; }

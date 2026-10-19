@@ -42,6 +42,35 @@ public sealed class Sketch : ModelItem
     /// <summary>Откуда взята нулевая точка. Пусто — геометрический центр.</summary>
     public string OriginDescription = "Geometric center";
 
+    /// <summary>Настройка эскиза: точка-основа нулевой точки (в мире) и смещение нуля от неё в осях эскиза.</summary>
+    public Vector3d? OriginBase;
+    public Vector2d OriginOffset;
+
+    /// <summary>Настройка эскиза: чем задан «верх» (точка, ребро, грань, плоскость); пусто — осью плоскости-базиса.</summary>
+    public string UpDescription = "";
+
+    /// <summary>Нулевая точка — от основы со смещением (в осях эскиза); основы нет — на месте.</summary>
+    public void SetOriginOffset(Vector2d offset)
+    {
+        OriginOffset = offset;
+        if (OriginBase is not { } b) return;
+        var at = Plane.ToWorld(Plane.ToLocal2(b) + offset);
+        Plane = new Frame3(at, Plane.U, Plane.V);
+        BumpStructure();
+        NotifyChanged(this);
+    }
+
+    /// <summary>«Верх» эскиза по направлению в мире (проекция на плоскость-базис); вырождено — false.</summary>
+    public bool SetUpDirection(Vector3d worldDir, string description)
+    {
+        var u = BaseFrame.U; var v = BaseFrame.V;
+        var d = new Vector2d(Vector3d.Dot(worldDir, u), Vector3d.Dot(worldDir, v));
+        if (d.Length < 1e-9) return false;
+        SetUpVector(d);
+        UpDescription = description;
+        return true;
+    }
+
     /// <summary>
     /// Взгляд с обратной стороны плоскости-базиса.
     ///
@@ -149,7 +178,8 @@ public sealed class Sketch : ModelItem
 
     public void SetOrigin(Vector3d worldPoint, string description)
     {
-        Vector2d uv = Plane.ToLocal2(worldPoint);
+        OriginBase = worldPoint;
+        Vector2d uv = Plane.ToLocal2(worldPoint) + OriginOffset;
         Vector3d moved = Plane.ToWorld(uv);
 
         Plane = new Frame3(moved, Plane.U, Plane.V);
@@ -311,7 +341,8 @@ public sealed class Sketch : ModelItem
             if (string.IsNullOrWhiteSpace(d.Formula)) { d.Error = null; continue; }
             if (table.TryEvaluate(d.Formula!, out double v, out string? err))
             {
-                d.Value = v;
+                // координатный размер: формула задаёт расстояние, знак (сторона от нуля) — прежний
+                d.Value = d.Type is DimensionType.CoordX or DimensionType.CoordY && d.Value < 0 && v > 0 ? -v : v;
                 d.Error = null;
             }
             else d.Error = err;

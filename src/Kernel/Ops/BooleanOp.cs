@@ -880,6 +880,8 @@ public static class BooleanOp
     static readonly bool MultiBodyEach = Environment.GetEnvironmentVariable("P3D_MULTIBODY") != "0";
     /// <summary>Мутация P3D_UNITELOOP=0: присоединение к слитому набору из нескольких тел — снова многотельным путём (прежде).</summary>
     static readonly bool UniteLoopOff = Environment.GetEnvironmentVariable("P3D_UNITELOOP") == "0";
+    static readonly bool UniteKeepOff = Environment.GetEnvironmentVariable("P3D_UNITEKEEP") == "0";
+    static readonly bool ManyTrace = Environment.GetEnvironmentVariable("P3D_MANYTRACE") == "1";
 
     /// <summary>
     /// KRN-03: операция над набором тел сводится к операциям над одним телом. Вычитание — каждое тело, задетое резцом по
@@ -898,6 +900,7 @@ public static class BooleanOp
         OperationResult Sub(IReadOnlyList<TSolid> bs, TSolid t, BooleanKind k)
         {
             var r = Evaluate(bs, t, k, policy, warn);
+            if (ManyTrace) Console.Error.WriteLine($"MANY {k}: [{string.Join(",", bs.Select(b => b.Faces.Count() + "f/" + b.Guarantee))}] + {t.Faces.Count()}f/{t.Guarantee} → {r.Outcome} {r.Guarantee} [{string.Join(",", r.Bodies.Select(b => b.Faces.Count() + "f"))}]");
             foreach (var d in r.Diagnostics) result.Diagnostics.Add(d with { Stage = "body/" + d.Stage });
             if (r.Status == OperationStatus.Failed) { failed = r; return r; }
             if (r.Bodies.Count > 0) levels.Add(r.Guarantee);
@@ -947,7 +950,13 @@ public static class BooleanOp
                         if (!Overlap(BoxOf(m), BoxOf(cur))) { rest.Add(m); continue; }
                         var r = Sub(new[] { m }, cur, kind); if (failed != null) break;
                         if (r.Bodies.Count == 1) { cur = r.Bodies[0]; continue; }
-                        // тела не слились (касание, раздельные куски): последний — присоединяемое, прочие — остаются в наборе
+                        // тела не слились (общего объёма нет: касание или зазор в габарите). ИСПРАВЛЕНО (KRN05-OVERLAY-MULTIPLICITY):
+                        // прежде присоединяемым считалось ПОСЛЕДНЕЕ тело результата, прочие уходили в набор; порядок тел
+                        // результата не задан — у повёрнутых брусков присоединяемым становилось тело набора, а само
+                        // присоединяемое оставалось в наборе и с дальнейшими телами уже не сливалось (два пересекающихся тела
+                        // в итоге, объём с двойным счётом). Объединение двух связных тел без общего объёма — они же; поэтому
+                        // в наборе остаётся m, присоединяемое — прежнее. Мутация P3D_UNITEKEEP=0 — как прежде.
+                        if (!UniteKeepOff) { rest.Add(m); continue; }
                         for (int j = 0; j + 1 < r.Bodies.Count; j++) rest.Add(r.Bodies[j]);
                         if (r.Bodies.Count > 0) cur = r.Bodies[^1];
                     }

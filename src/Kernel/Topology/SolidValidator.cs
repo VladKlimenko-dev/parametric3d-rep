@@ -733,8 +733,10 @@ public static class SolidValidator
         if (!LoopExactOff && solid != null && solid.TopologyConvention >= TopologyConventions.Version)
             foreach (var f in faces)
             {
-                // грань с фасетами — её нормаль задают фасеты (у них своя проверка выше); здесь — грани без фасет
-                if (f.Surface is Surfaces.FacetedSurface || GeometryAudit.AuthoritativeSurface(f) is not { IsPlanar: false } || f.Loops.Count == 0) continue;
+                // грань с фасетами: прежде — только проверка по фасетам (выше); 2026-10-19 (вечер) — и по её точной поверхности
+                // (источнику фасет), если он есть: нормаль — от источника, не от фасет. P3D_LOOPFACETED=0 — как прежде.
+                if (f.Surface is Surfaces.FacetedSurface { Source: var fsrc } && (fsrc == null || LoopFacetedOff)) continue;
+                if (GeometryAudit.AuthoritativeSurface(f) is not { IsPlanar: false } || f.Loops.Count == 0) continue;
                 if (LoopAgainstNormal(f) is not { } why) continue;
                 bad++;
                 if (bad <= 5) r.Issues.Add(new ValidationIssue(Representation.BRep, sev, "loop-orientation",
@@ -743,6 +745,10 @@ public static class SolidValidator
         r.Metrics["brep.loopOrientationErrors"] = bad;
     }
     static readonly bool LoopExactOff = Environment.GetEnvironmentVariable("P3D_LOOPEXACT") == "0";
+    // грани с фасетами — пока по включению (P3D_LOOPFACETED=1): у промежуточного тела ступенчатого построителя частичной
+    // вершины (KRN06-PARTIAL-VERTEX-SELECTION) проверка находит «материал справа» у грани скругления, где объём и годность
+    // согласны — причина не разобрана (вероятно, сторона фасет у узкой полосы); до разбора не включается по умолчанию
+    static readonly bool LoopFacetedOff = Environment.GetEnvironmentVariable("P3D_LOOPFACETED") != "1";
     static readonly bool LoopDbg = Environment.GetEnvironmentVariable("P3D_LOOPDBG") == "1";
 
     /// <summary>Контур грани против её нормали (по точной поверхности) — причина; согласован или не решить — null.</summary>
@@ -755,6 +761,7 @@ public static class SolidValidator
         var uses = new Dictionary<TEdge, int>(ReferenceEqualityComparer.Instance);
         foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) uses[ce.Edge] = uses.GetValueOrDefault(ce.Edge) + 1;
         int against = 0, agree = 0;
+        int? facetSign = null;
         foreach (var l in f.Loops)
             foreach (var ce in l.CoEdges)
             {
@@ -763,7 +770,18 @@ public static class SolidValidator
                 var p = c.PointAt(tm); var tg = (c.PointAt(tm + h) - c.PointAt(tm - h)) * (ce.Reversed ? -1 : 1);
                 double len = (c.PointAt(t1) - c.PointAt(t0)).Length + (c.PointAt(tm) - c.PointAt(t0)).Length;
                 if (tg.LengthSquared < 1e-30 || len < 1e-6) continue;
-                Vector3d n; try { n = f.NormalAt(p); } catch { continue; }
+                // нормаль — точной поверхности (у грани с фасетами — их источника), со знаком грани
+                Vector3d n;
+                try
+                {
+                    var sf = GeometryAudit.AuthoritativeSurface(f) ?? f.Surface; n = sf.NormalAt(sf.ProjectToUV(p));
+                    // сторона: у точной грани — флаг Reversed; у грани с фасетами — согласие фасет с источником (по всей грани,
+                    // а не по одной опорной нормали: у широкой кривой грани одна нормаль сторону не задаёт)
+                    // (флаг Reversed грани поверх стороны поверхности — у обеих, как в TFace.NormalAt)
+                    if (f.Surface is Surfaces.FacetedSurface ffs) { facetSign ??= FacetSign(ffs); if (facetSign == 0) return null; n *= facetSign.Value; }
+                    if (f.Reversed) n = -n;
+                }
+                catch { continue; }
                 var side = Vector3d.Cross(n, tg); if (side.LengthSquared < 1e-30) continue; side.Normalize();
                 double eps = Math.Max(1e-3 * len, 100 * ToleranceContext.Current.ModelAccuracy);
                 bool? left = af.Contains(af.ProjectTo(p + side * eps)), right = af.Contains(af.ProjectTo(p - side * eps));
@@ -773,6 +791,21 @@ public static class SolidValidator
                 break;                                                     // одно ребро на контур
             }
         return against > 0 && agree == 0 ? $"{against} контур(ов) — материал справа от обхода" : null;
+    }
+
+    /// <summary>Сторона фасет относительно нормали источника: +1 / −1; 0 — не согласованы (решить нельзя).</summary>
+    static int FacetSign(Surfaces.FacetedSurface fs)
+    {
+        if (fs.Source is not { } src) return 0;
+        double pos = 0, neg = 0;
+        foreach (var (a, b, c) in fs.Facets)
+        {
+            var x = Vector3d.Cross(b - a, c - a); double ar = x.Length; if (ar < 1e-30) continue;
+            Vector3d ns; try { ns = src.NormalAt(src.ProjectToUV((a + b + c) / 3)); } catch { continue; }
+            if (ns.LengthSquared < 1e-30) continue;
+            if (Vector3d.Dot(x, ns) > 0) pos += ar; else neg += ar;
+        }
+        return pos > 9 * neg ? 1 : neg > 9 * pos ? -1 : 0;
     }
 
     static bool OnRevolveAxis(Surfaces.ISurface3? sf, OpenTK.Mathematics.Vector3d p)

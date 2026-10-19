@@ -103,6 +103,9 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
 
     public void Redraw() => RequestNextFrameRendering();
 
+    /// <summary>Щелчок по виду (без протяжки) — сначала сюда: true — щелчок обработан (стрелка настройки эскиза), выбора нет.</summary>
+    public Func<Point, bool>? ClickInterceptor;
+
     /// <summary>Цвета вида (для надстроек поверх него — значков ограничений и т. п.).</summary>
     public RenderTheme Theme => _r.Theme;
 
@@ -493,6 +496,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         else if (was == Drag.Tool && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 6) ToolClick(p);
         else if (was == Drag.Select && ComponentDragEnd()) { }
         else if (was == Drag.Select && RegionEnd(p, e.KeyModifiers)) { }
+        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4 && ClickInterceptor?.Invoke(p) == true) { }
         else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4) RequestPick(p, click: true, e.KeyModifiers);
     }
 

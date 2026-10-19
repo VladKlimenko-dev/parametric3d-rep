@@ -50,6 +50,21 @@ public sealed class Assembly : ModelItem
     public IEnumerable<Part> Parts => Children.OfType<Part>();
 
     /// <summary>
+    /// СТРОКА ОТКАТА СБОРКИ: сколько компонентов (по порядку) в модели; −1 — все. Компоненты ниже строки не показываются,
+    /// не участвуют в сопряжениях и проверках (как подавленные) — как строка отката детали и как в Creo.
+    /// </summary>
+    public int StageIndex = -1;
+
+    /// <summary>Компонент ниже строки отката сборки.</summary>
+    public bool IsBeyondStage(Part p)
+    {
+        if (StageIndex < 0) return false;
+        int i = 0;
+        foreach (var q in Parts) { if (ReferenceEquals(q, p)) return i >= StageIndex; i++; }
+        return false;
+    }
+
+    /// <summary>
     /// РАССТАНОВКА ДЕТАЛЕЙ ПО ЦЕПОЧКЕ СОПРЯЖЕНИЙ. Деталь ставится только после своей базовой,
     /// иначе её положение считалось бы от старого места базы. Кольцевая зависимость (А от Б, Б
     /// от А) неразрешима: такие детали остаются на месте, а их имена возвращаются списком.

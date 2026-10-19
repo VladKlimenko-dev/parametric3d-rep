@@ -25,6 +25,8 @@ public sealed class UserPrefs
     public double TreeWidth { get; set; } = 260;
     /// <summary>Места панелей поверх вида: «Сторона|доля» (прилипла) или «Free|x|y».</summary>
     public Dictionary<string, string> PanelPlaces { get; set; } = new();
+    /// <summary>Визуальные настройки (вкладка «Вид»): размеры текста и кнопок, цвета.</summary>
+    public LookPrefs Look { get; set; } = new();
 
     public static string Dir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Parametric3D");
     public static string FilePath => Path.Combine(Dir, "ui.json");

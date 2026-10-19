@@ -49,6 +49,24 @@ public static class ShotRunner
         {
             mp.Material = mm; w.ViewPort.MarkDirty(); Console.WriteLine("material " + mm.Name); return;
         }
+        if (id.StartsWith("select:"))
+        {
+            // выбрать элемент модели по имени (как щелчок в дереве)
+            var name = id[7..];
+            var it = w.Session.Document.Root.Descendants().FirstOrDefault(x => x.Name == name);
+            if (it != null) w.SelectItem(it);
+            Console.WriteLine($"select {name}: {(it != null ? "ok" : "not found")}");
+            return;
+        }
+        if (id.StartsWith("dock:"))
+        {
+            // dock:панель,сторона[,доля] — прилепить панель (проверка расстановки)
+            var a = id[5..].Split(',');
+            if (w.Docks.TryGetValue(a[0], out var d) && Enum.TryParse<Views.DockablePanel.Side>(a[1], out var side))
+                d.DockTo(side, a.Length > 2 ? double.Parse(a[2], System.Globalization.CultureInfo.InvariantCulture) : 0.5);
+            Console.WriteLine("dock " + id);
+            return;
+        }
         switch (id)
         {
             case "ok": w.CommitOperation(); Console.WriteLine("ok"); return;

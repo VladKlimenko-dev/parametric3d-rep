@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Parametric3D.App.Commands;
 using Parametric3D.App.Icons;
 using Parametric3D.App.Operations;
@@ -60,6 +61,7 @@ public partial class MainWindow : Window
     public MainWindow(DocumentSession session)
     {
         InitializeComponent();
+        FontSize = UiLook.UiFontSize;
         // шрифт ГОСТ тип А — только у объектов вида (размеры эскиза, подписи куба вида); меню и панели — шрифтом интерфейса
         Loc.Set(UserPrefs.Current.Language == "en");
         StandardCommands.Register(this);
@@ -96,6 +98,7 @@ public partial class MainWindow : Window
         if (InSketch) View.ExitSketch(false);
         if (Session != null) { Session.Replaced -= OnReplaced; Session.StateChanged -= OnStateChanged; Session.Document.BuildStarted -= OnBuild; Session.Document.BuildFinished -= OnBuild; }
         Session = s;
+        UiLook.ApplyToRender(View.Theme);                // настройки отрисовки — у документа свои; визуальные — пользователя
         View.ActivePart = s.ActivePart;
         Commands.DisplayUnits.Inch = s.Part?.Units.Length == "in";
         s.Replaced += OnReplaced;
@@ -291,7 +294,7 @@ public partial class MainWindow : Window
         _toggles.Clear();
         BuildTopBar();
         BuildViewTools();
-        if (_docks.TryGetValue("view", out var vd) && !vd.Horizontal) DockablePanel.Reorient(ViewTools, false);
+        if (_docks.Count > 0) FitViewTools();
         BuildCommandBar();
         TreeTools.Children.Clear();
         TreeTools.Children.Add(CmdButton(_reg["tree.collapse"], 16));
@@ -475,7 +478,7 @@ public partial class MainWindow : Window
         if (_cmdHorizontal)
         {
             CommandStack.MaxHeight = double.PositiveInfinity;
-            CommandStack.MaxWidth = Math.Max(300, ViewArea.Bounds.Width - 60);
+            CommandStack.MaxWidth = Math.Max(300, ViewArea.Bounds.Width - 40);
             return;
         }
         CommandStack.MaxWidth = double.PositiveInfinity;
@@ -490,32 +493,59 @@ public partial class MainWindow : Window
     private bool _cmdHorizontal;
     internal IReadOnlyDictionary<string, DockablePanel> Docks => _docks;
 
+    private DockManager _dockMgr = null!;
+    private PanelMode _viewMode = PanelMode.Float;
+
+    /// <summary>Панель вида у стороны — полоса: кнопки одного размера (как у прочих полос).</summary>
+    private void FitViewTools()
+    {
+        DockablePanel.Reorient(ViewTools, _viewMode != PanelMode.StripV);
+        bool strip = _viewMode is PanelMode.StripV or PanelMode.StripH;
+        foreach (var c in ViewTools.Children.OfType<Layoutable>())
+        {
+            if (c is Border { Child: null }) continue;
+            c.MinHeight = strip ? UiLook.StripButtonPx : 0;
+            c.MinWidth = _viewMode == PanelMode.StripV ? UiLook.StripButtonPx : 0;
+        }
+    }
+
+    private PanelMode _cmdMode = PanelMode.Float, _shapeMode = PanelMode.Float, _sketchMode = PanelMode.Float, _ctxMode = PanelMode.Float;
+
+    /// <summary>Кнопка полосы у стороны вида: иконка, размер — один для всех полос (UiLook).</summary>
+    private Control StripButton(AppCommand c)
+    {
+        var b = CmdButton(c, UiLook.StripIconPx);
+        if (b is Layoutable l) { l.Width = UiLook.StripButtonPx; l.Height = UiLook.StripButtonPx; l.MinWidth = 0; }
+        if (b is TemplatedControl tc) tc.Padding = new Thickness(0);
+        return b;
+    }
+
     private void SetupDocks()
     {
+        _dockMgr = new DockManager(ViewArea);
+        _dockMgr.Obstacles.Add(Cube);
         void Add(DockablePanel d) { _docks[d.Key] = d; d.Moved += () => { if (d.Key is "commands" or "shapes") PlaceSketchBars(); }; }
-        Add(new DockablePanel("commands", CommandBar, ViewArea, false, h => { _cmdHorizontal = h; CommandStack.Orientation = h ? Orientation.Horizontal : Orientation.Vertical; BuildCommandBar(); }));
-        Add(new DockablePanel("shapes", ShapeBar, ViewArea, false, h =>
+        Add(new DockablePanel("commands", CommandBar, _dockMgr, false, m => { _cmdMode = m; _cmdHorizontal = m is PanelMode.StripH or PanelMode.Row; FitCommandBar(); BuildCommandBar(); }));
+        Add(new DockablePanel("shapes", ShapeBar, _dockMgr, false, m => { _shapeMode = m; BuildSketchBars(); }));
+        Add(new DockablePanel("view", ViewBar, _dockMgr, true, m => { _viewMode = m; FitViewTools(); }));
+        Add(new DockablePanel("sketch", SketchBar, _dockMgr, true, m => { _sketchMode = m; BuildSketchBars(); }));
+        Add(new DockablePanel("context", ContextBar, _dockMgr, true, m =>
         {
-            if (ShapeStack.Parent is StackPanel outer) outer.Orientation = h ? Orientation.Horizontal : Orientation.Vertical;
-            ShapeStack.Width = h ? double.NaN : 120;
-            ShapeStack.MaxWidth = h ? Math.Max(300, ViewArea.Bounds.Width - 120) : double.PositiveInfinity;
-        }));
-        Add(new DockablePanel("view", ViewBar, ViewArea, true, h => DockablePanel.Reorient(ViewTools, h)));
-        Add(new DockablePanel("sketch", SketchBar, ViewArea, true, h => DockablePanel.Reorient(SketchBarStack, h)));
-        Add(new DockablePanel("context", ContextBar, ViewArea, true, h =>
-        {
+            _ctxMode = m;
+            bool h = m != PanelMode.StripV;
             if (SelChip.Parent is StackPanel inner) DockablePanel.Reorient(inner, h);
             DockablePanel.Reorient(ContextOps, h);
             SelChipText.MaxWidth = h ? double.PositiveInfinity : 200;
             SelChipText.TextWrapping = h ? TextWrapping.NoWrap : TextWrapping.Wrap;
+            UpdateContextBar();
         }));
         bool restored = false;
         ViewArea.SizeChanged += (_, _) =>
         {
             if (!restored && ViewArea.Bounds.Width > 50) { restored = true; foreach (var d in _docks.Values) d.Restore(); }
-            foreach (var d in _docks.Values) d.Relayout();
+            _dockMgr.Relayout();
         };
-        foreach (var d in _docks.Values) d.Panel.SizeChanged += (_, _) => d.Relayout();
+        foreach (var d in _docks.Values) d.Panel.SizeChanged += (_, _) => _dockMgr.Relayout();
     }
 
     /// <summary>Маленькая стрелка «список» (рисунок, не текст).</summary>
@@ -589,19 +619,30 @@ public partial class MainWindow : Window
                 (new[] { "op.mirror", "op.pattern_linear", "op.pattern_circular" }, new[] { "op.pattern_points", "op.pattern_curve", "op.pattern_fill", "op.move_copy" }),
                 (Array.Empty<string>(), new[] { "tree.rebuild", "tree.needs_attention", "tree.resume", "tree.insert_here", "tree.reorder_up", "tree.reorder_down", "tree.edit_dims", "tree.group", "tree.parents_children", "tree.replace_refs" }),
             };
-        CommandStack.Children.Add(new TextBlock
-        {
-            Text = InSketch ? L("ЭСКИЗ") : asmMode ? L("СБОРКА") : ffMode ? L("FREEFORM") : L("ОПЕРАЦИИ"), Classes = { "header" }, Margin = new Thickness(6, 2, 6, 4),
-        });
+        bool strip = _cmdMode is PanelMode.StripV or PanelMode.StripH;
+        bool horiz = _cmdMode is PanelMode.StripH or PanelMode.Row;
+        CommandStack.Orientation = horiz ? Orientation.Horizontal : Orientation.Vertical;
+        if (!strip)
+            CommandStack.Children.Add(new TextBlock
+            {
+                Text = InSketch ? L("ЭСКИЗ") : asmMode ? L("СБОРКА") : ffMode ? L("FREEFORM") : L("ОПЕРАЦИИ"), Classes = { "header" }, Margin = new Thickness(6, 2, 6, 4),
+                VerticalAlignment = VerticalAlignment.Center,
+            });
         for (int g = 0; g < groups.Length; g++)
         {
-            if (g > 0)
+            if (g > 0 && (groups[g].Main.Length > 0 || strip))
             {
-                var sep = Separator(_cmdHorizontal);
-                if (_cmdHorizontal) sep.Height = 28; else sep.Width = 128;
+                var sep = Separator(horiz);
+                if (horiz) sep.Height = strip ? UiLook.StripButtonPx - 8 : 28; else sep.Width = strip ? UiLook.StripButtonPx - 6 : 128;
                 CommandStack.Children.Add(sep);
             }
-            foreach (var id in groups[g].Main) if (_reg.Find(id) is { } c) CommandStack.Children.Add(CmdButton(c, 20, text: true, minWidth: _cmdHorizontal ? 0 : 128));
+            // полоса у стороны: все кнопки группы (и из «Ещё…») — иконками, одного размера
+            if (strip)
+            {
+                foreach (var id in groups[g].Main.Concat(groups[g].More)) if (_reg.Find(id) is { } c) CommandStack.Children.Add(StripButton(c));
+                continue;
+            }
+            foreach (var id in groups[g].Main) if (_reg.Find(id) is { } c) CommandStack.Children.Add(CmdButton(c, 20, text: true, minWidth: horiz ? 0 : 128));
             if (groups[g].More.Length > 0)
             {
                 var more = groups[g].More.Where(id => _reg.Find(id) != null).ToArray();
@@ -610,7 +651,7 @@ public partial class MainWindow : Window
                 {
                     "op.face_offset" => "Прямая правка ▸", "an.measure" => "Анализ ▸", "ff.curve_offset" => "Кривые ▸", "ff.surf_ruled" => "Поверхности ▸", "subd.extrude" => "SubD ▸", "tree.rebuild" => "Дерево ▸", "op.surface_extrude" => "Поверхности ▸", _ => "Ещё…",
                 };
-                var b = new Button { Content = L(moreLabel), Classes = { "tool" }, MinWidth = _cmdHorizontal ? 0 : 128, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 2) };
+                var b = new Button { Content = L(moreLabel), Classes = { "tool" }, MinWidth = horiz ? 0 : 128, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 2) };
                 b.Click += (_, _) =>
                 {
                     var sp = ListColumns();
@@ -638,10 +679,25 @@ public partial class MainWindow : Window
         ShapeBar.IsVisible = SketchBar.IsVisible = InSketch;
         if (!InSketch) return;
         ShapeHeader.Text = L("ФИГУРЫ");
+        // фигуры: по умолчанию — сетка в три столбца; у стороны — полоса иконок; в углу — ряд с названиями
+        bool shStrip = _shapeMode is PanelMode.StripV or PanelMode.StripH, shHoriz = _shapeMode is PanelMode.StripH or PanelMode.Row;
+        ShapeHeader.IsVisible = !shStrip;
+        if (ShapeStack.Parent is StackPanel outer) outer.Orientation = shHoriz ? Orientation.Horizontal : Orientation.Vertical;
+        ShapeStack.Orientation = shHoriz || _shapeMode == PanelMode.Float ? Orientation.Horizontal : Orientation.Vertical;
+        ShapeStack.Width = _shapeMode == PanelMode.Float ? 120 : double.NaN;
+        ShapeStack.MaxWidth = shHoriz ? Math.Max(300, ViewArea.Bounds.Width - 60) : double.PositiveInfinity;
+        ShapeStack.MaxHeight = _shapeMode == PanelMode.StripV ? Math.Max(200, ViewArea.Bounds.Height - 30) : double.PositiveInfinity;
         foreach (var id in ShapeTools)
-            if (_reg.Find(id) is { } c) { var b = CmdButton(c, 22); b.Width = 38; b.Height = 36; ShapeStack.Children.Add(b); }
+            if (_reg.Find(id) is { } c)
+            {
+                Control b = shStrip ? StripButton(c) : _shapeMode == PanelMode.Row ? CmdButton(c, 18, text: true) : CmdButton(c, 22);
+                if (_shapeMode == PanelMode.Float) { b.Width = 38; b.Height = 36; }
+                ShapeStack.Children.Add(b);
+            }
+        bool skStrip = _sketchMode is PanelMode.StripV or PanelMode.StripH;
         foreach (var id in new[] { "sk.finish", "sk.cancel" })
-            if (_reg.Find(id) is { } c) SketchBarStack.Children.Add(CmdButton(c, 18, text: true));
+            if (_reg.Find(id) is { } c) SketchBarStack.Children.Add(skStrip ? StripButton(c) : CmdButton(c, 18, text: true));
+        DockablePanel.Reorient(SketchBarStack, _sketchMode != PanelMode.StripV);
         PlaceSketchBars();
         CommandBar.SizeChanged -= OnCommandBarSize; CommandBar.SizeChanged += OnCommandBarSize;
         Cube.SizeChanged -= OnCommandBarSize; Cube.SizeChanged += OnCommandBarSize;
@@ -737,12 +793,23 @@ public partial class MainWindow : Window
     private bool _dark = true;
     public bool IsDark => _dark;
 
+    /// <summary>Применить визуальные настройки (вкладка «Вид»): шрифт, размеры кнопок и полос, цвета вида, размеры подписей.</summary>
+    public void ApplyLook()
+    {
+        FontSize = UiLook.UiFontSize;
+        UiLook.ApplyToRender(View.Theme);
+        View.MarkDirty();
+        RebuildUi();
+        _dockMgr?.Relayout();
+    }
+
     public void ApplyTheme(bool dark)
     {
         _dark = dark;
         if (Application.Current is { } app) app.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
         IconProvider.SetForeground(Color.Parse(dark ? "#E6E8EC" : "#1C1E22"));
         View.DarkTheme = dark;
+        UiLook.ApplyToRender(View.Theme);
         UserPrefs.Current.Theme = dark ? "Dark" : "Light";
         UserPrefs.Current.Save();
         if (Session != null) { RebuildUi(); RebuildTree(); }
@@ -771,7 +838,7 @@ public partial class MainWindow : Window
         View.Selection.Changed += OnSelectionChanged;
         View.ContextRequested += p => { if (InSketch && View.DimensionAt(p) is { } dm) OpenDimensionMenu(dm); else OpenViewContextMenu(); };
         View.SceneRebuilt += () => { CurrentOperation?.RefreshStatus(); UpdateStatus(); if (_propsOn && CurrentOperation == null) ShowProperties(); };
-        View.ToolChanged += () => { ShowHint(View.Tool != null ? L(View.Tool.Hint) : InSketch ? L("Выберите инструмент слева; Ctrl+Enter — закончить эскиз") : null); RefreshToolStates(); };
+        View.ToolChanged += () => { ShowHint(View.Tool != null ? L(View.Tool.Hint) : null); RefreshToolStates(); };
         View.RegionChanged += ShowRegion;
         // значки ограничений эскиза — поверх вида, под панелями
         GlyphLayer = new ConstraintGlyphLayer(View);
@@ -1206,7 +1273,9 @@ public partial class MainWindow : Window
         if (View.ActiveSketch is not { } sk) return;
         if (d.UserLocked) { ShowToast(L("Размер заблокирован — снимите замок (правая кнопка → «Разблокировать»)"), error: false); return; }
         bool angle = d.Type == DimensionType.AngleLineLine;
-        var tb = new TextBox { Text = d.Formula ?? d.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), MinWidth = 110 };
+        // координатный размер хранит знак (сторона от нуля, нужна решателю); показывается и вводится расстояние — без знака
+        bool signedCoord = d.Type is DimensionType.CoordX or DimensionType.CoordY;
+        var tb = new TextBox { Text = d.Formula ?? (signedCoord ? Math.Abs(d.Value) : d.Value).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), MinWidth = 110 };
         var ok = new Button { Content = L("ОК"), Classes = { "accent" } };
         var panel = new StackPanel { Spacing = 6, Margin = new Thickness(4),
             Children = { new TextBlock { Text = angle ? L("Угол, °") : L("Размер, мм"), Classes = { "dim" }, FontSize = 12 }, tb, ok } };
@@ -1223,6 +1292,7 @@ public partial class MainWindow : Window
             }
             if (v <= 0 && !angle) { ShowToast(L("Размер должен быть больше нуля")); return; }
             double old = d.Value; bool oldLocked = d.Locked, oldDefault = d.IsDefault; string? oldFormula = d.Formula;
+            if (signedCoord && old < 0) v = -v;                                      // сторона от нуля — прежняя
             d.Value = v; d.Formula = formula; d.Locked = true; d.IsDefault = false; d.Reference = false;
             var st = sk.Solve(Session.Document.Solver);
             if (st is SolveStatus.Overconstrained or SolveStatus.Inconsistent)
@@ -1376,6 +1446,8 @@ public partial class MainWindow : Window
         if (linear && !sketch) res.Add("op.pattern_linear");
         if (axis || linear && !sketch) res.Add("op.pattern_circular");
         if (feature) res.AddRange(new[] { "edit.feature", "edit.suppress", "edit.delete" });
+        // эскиз (в том числе оставшийся без операции) — удаляется отсюда же
+        if (sketch && sel.Any(r => r.Target is Sketch)) res.AddRange(new[] { "sk.setup", "edit.delete" });
         // u13h: операция с отказом — предложенное исправление; узел FreeForm — правка и обновление ссылок
         if (sel.Any(r => r.Target is Feature { Error: not null })) res.Insert(0, "tree.fix");
         if (sel.Any(r => r.Target is FreeFormFeature)) res.InsertRange(0, new[] { "edit.feature", "ff.update_refs" });
@@ -1413,20 +1485,24 @@ public partial class MainWindow : Window
     {
         using var _ui = Diagnostics.UiTimes.Measure("окно: полоса выбора");
         ContextOps.Children.Clear();
+        // у стороны вида — полоса иконок без текста (подпись выбора скрыта)
+        SelChip.IsVisible = _ctxMode is not (PanelMode.StripV or PanelMode.StripH);
         if (InSketch && View.ActiveSketch is { } sk)
         {
             // пп. 9–10: полоса предложений эскиза — только подходящие к выбранному операции (иконками, подпись в подсказке)
             var ops = Commands.SketchSuggest.For(this);
             bool any = !View.Selection.IsEmpty;
             SelChip.Opacity = any ? 1 : 0.75;
-            SelChipText.Text = any ? View.Selection.Describe() : L("Эскиз «{0}»: выберите точки, кривые или размер — здесь появятся подходящие операции", sk.Name);
+            SelChipText.Text = View.Tool != null && !string.IsNullOrEmpty(_sketchHint) ? _sketchHint
+                : any ? View.Selection.Describe() : L("Эскиз «{0}»: выберите точки, кривые или размер — здесь появятся подходящие операции; Ctrl+Enter — закончить эскиз", sk.Name);
+            if (View.Tool != null) SelChip.Opacity = 1;
             foreach (var id in ops)
             {
-                var b = CmdButton(_reg[id], 20);
+                var b = CtxButton(_reg[id], 20);
                 if (b is Layoutable lb) lb.MinWidth = 34;
                 ContextOps.Children.Add(b);
             }
-            if (any) ContextOps.Children.Add(CmdButton(_reg["edit.clear_selection"], 18));
+            if (any) ContextOps.Children.Add(CtxButton(_reg["edit.clear_selection"], 18));
             ContextBar.IsVisible = true;
             return;
         }
@@ -1443,7 +1519,7 @@ public partial class MainWindow : Window
             ContextOps.Children.Add(cancel);
             // u13: режим и направление операции, следующее поле
             foreach (var id in new[] { "ctx.mode_add", "ctx.mode_cut", "ctx.flip", "ctx.both_sides", "ctx.next" })
-                if (_reg.Find(id) is { Enabled: true } oc) ContextOps.Children.Add(CmdButton(oc, 18, text: true));
+                if (_reg.Find(id) is { Enabled: true } oc) ContextOps.Children.Add(CtxButton(oc, 18, text: true));
             ContextBar.IsVisible = true;
             return;
         }
@@ -1460,14 +1536,14 @@ public partial class MainWindow : Window
         foreach (var id in SuggestedOps())
         {
             var c = _reg[id];
-            var b = CmdButton(c, 18, text: true);
+            var b = CtxButton(c, 18, text: true);
             if (id == "edit.feature" && sel.Items.Any(Refs.IsSketch)) ((ContentControl)b).Content = new TextBlock { Text = L("Изменить эскиз"), FontSize = 12 };
             ContextOps.Children.Add(b);
         }
         // u13: закреплённые и недавние для набора, повысить, похожие, ещё, поиск
         var have = SuggestedOps().ToHashSet();
         foreach (var id in UserPrefs.Current.PinnedCommands)
-            if (!have.Contains(id) && _reg.Find(id) is { Enabled: true } pc) { ContextOps.Children.Add(CmdButton(pc, 18, text: true)); have.Add(id); }
+            if (!have.Contains(id) && _reg.Find(id) is { Enabled: true } pc) { ContextOps.Children.Add(CtxButton(pc, 18, text: true)); have.Add(id); }
         var recentOps = UserPrefs.Current.RecentCommands.Where(id => id.StartsWith("op.") && !have.Contains(id)).Select(_reg.Find).OfType<AppCommand>().Where(c => c.Enabled).Take(3).ToList();
         if (recentOps.Count > 0)
         {
@@ -1475,19 +1551,23 @@ public partial class MainWindow : Window
                 ? new Image { Source = ri, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 2, 0) }
                 : new TextBlock { Text = "⟲", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 2, 0), Classes = { "dim" } });
             ToolTip.SetTip(ContextOps.Children[^1], L("Недавние для набора"));
-            foreach (var c in recentOps) ContextOps.Children.Add(CmdButton(c, 18, text: true));
+            foreach (var c in recentOps) ContextOps.Children.Add(CtxButton(c, 18, text: true));
         }
         foreach (var id in new[] { "ctx.up", "ctx.similar", "ctx.more", "ctx.search", "ctx.pin" })
             if (_reg.Find(id) is { Enabled: true } xc)
             {
-                var xb = CmdButton(xc, 18, text: id == "ctx.more");
+                var xb = CtxButton(xc, 18, text: id == "ctx.more");
                 ContextOps.Children.Add(xb);
             }
-        if (_reg["view.hide"].Enabled) ContextOps.Children.Add(CmdButton(_reg["view.hide"], 18, text: true));
-        var clear = CmdButton(_reg["edit.clear_selection"], 18);
+        if (_reg["view.hide"].Enabled) ContextOps.Children.Add(CtxButton(_reg["view.hide"], 18, text: true));
+        var clear = CtxButton(_reg["edit.clear_selection"], 18);
         ContextOps.Children.Add(clear);
         ContextBar.IsVisible = true;
     }
+
+    /// <summary>Кнопка полосы выбора: у стороны вида — кнопка полосы (иконка, один размер), иначе — обычная.</summary>
+    private Control CtxButton(AppCommand c, double icon, bool text = false) =>
+        _ctxMode is PanelMode.StripV or PanelMode.StripH ? StripButton(c) : CmdButton(c, icon, text: text);
 
     // ================================================================ операции
 
@@ -1719,6 +1799,43 @@ public partial class MainWindow : Window
 
     // ================================================================ дерево
 
+    private TreeNode? _barDrag;
+
+    /// <summary>
+    /// Строка отката — к узлу дерева: ниже узла (lower) или выше. Деталь: после операции (её эскиз — вместе с ней), выше
+    /// первой операции — 0; сборка: после компонента. Ниже строки — не в расчёте (подавлены). Один шаг отмены.
+    /// </summary>
+    public bool MoveRollbackBar(TreeNode bar, TreeNode target, bool lower)
+    {
+        if (bar.Item is InfoItem { Role: "rollback", Owner: var part })
+        {
+            var item = target.Item;
+            if (item is Sketch tsk && part.Features.FirstOrDefault(f => f.ConsumedSketchIds().Contains(tsk.Id)) is { } owner) { item = owner; lower = true; }
+            int at;
+            if (item is Feature f && part.Features.Contains(f)) at = part.Features.IndexOf(f) + (lower ? 1 : 0);
+            else if (ReferenceEquals(item, part) || item is InfoItem { Role: "params" or "material" or "configs" or "body" or "quilt" } ii && ii.Owner == part) at = 0;
+            else if (item is DatumPlane or DatumPoint or DatumAxis or Sketch && item.Parent == part) at = 0;
+            else return false;
+            int stage = at >= part.Features.Count ? -1 : part.ClampStage(at);
+            if (stage == part.StageIndex || (stage < 0 && !part.InInsertMode)) return false;
+            Session.Edit(L("Строка отката"), () => { if (stage < 0) part.EndInsertMode(resume: true); else { part.StageIndex = stage; part.Invalidate(); } });
+        }
+        else if (bar.Item is InfoItem { Role: "asm_rollback", Asm: { } asm })
+        {
+            var parts = asm.Parts.ToList();
+            int at;
+            if (target.Item is Part tp && parts.Contains(tp)) at = parts.IndexOf(tp) + (lower ? 1 : 0);
+            else if (ReferenceEquals(target.Item, asm)) at = 0;
+            else return false;
+            int stage = at >= parts.Count ? -1 : at;
+            if (stage == asm.StageIndex) return false;
+            Session.Edit(L("Строка отката сборки"), () => { asm.StageIndex = stage; asm.NotifyChanged(asm); });
+        }
+        else return false;
+        View.MarkDirty(); RebuildTree();
+        return true;
+    }
+
     private void WireTree()
     {
         Tree.SelectionChanged += (_, _) =>
@@ -1733,6 +1850,26 @@ public partial class MainWindow : Window
             View.HighlightFromTree(node?.Item);
         }, RoutingStrategies.Tunnel);
         Tree.PointerExited += (_, _) => View.HighlightFromTree(null);
+        // (23:43) п. 16: строка отката тянется мышью между элементами дерева
+        Tree.AddHandler(PointerPressedEvent, (_, e) =>
+        {
+            if ((e.Source as StyledElement)?.DataContext is TreeNode { IsBar: true } bn && e.GetCurrentPoint(Tree).Properties.IsLeftButtonPressed && bn.Item is InfoItem { Role: "rollback" or "asm_rollback" })
+            {
+                _barDrag = bn; e.Pointer.Capture(Tree); e.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
+        Tree.AddHandler(PointerReleasedEvent, (_, e) =>
+        {
+            if (_barDrag is not { } bn) return;
+            _barDrag = null; e.Pointer.Capture(null); e.Handled = true;
+            var hit = Tree.InputHitTest(e.GetPosition(Tree)) as Visual;
+            var tvi = hit?.FindAncestorOfType<TreeViewItem>(includeSelf: true);
+            if (tvi?.DataContext is TreeNode target)
+            {
+                bool lower = e.GetPosition(tvi).Y > Math.Min(tvi.Bounds.Height, 24) / 2;
+                MoveRollbackBar(bn, target, lower);
+            }
+        }, RoutingStrategies.Tunnel);
         Tree.DoubleTapped += (_, e) =>
         {
             if ((e.Source as StyledElement)?.DataContext is not TreeNode n) return;
@@ -1747,7 +1884,7 @@ public partial class MainWindow : Window
             var ids = new List<string>();
             if (n.Item is Feature or Sketch) ids.Add("edit.feature");
             if (n.Item is Feature) ids.AddRange(new[] { "edit.suppress", "tree.resume", "tree.edit_dims", "tree.insert_here", "tree.reorder_up", "tree.reorder_down", "tree.group", "tree.parents_children", "tree.replace_refs" });
-            if (n.Item is Sketch) ids.Add("tree.replace_refs");
+            if (n.Item is Sketch) ids.AddRange(new[] { "sk.setup", "tree.replace_refs" });
             ids.AddRange(SuggestedOps().Where(i => i != "edit.feature" && i != "edit.suppress"));
             ids.AddRange(new[] { "edit.rename", "edit.copy", "edit.paste", "view.hide", "view.isolate", "edit.delete" });
             if (n.Item is Part) ids.AddRange(new[] { "part.material", "part.units", "part.configurations", "an.mass", "an.check_body" });
@@ -1999,9 +2136,13 @@ public partial class MainWindow : Window
 
     public void ShowHint(string? text)
     {
+        // в эскизе подсказка — в нижней полосе (отдельная плашка сверху лишняя)
+        if (InSketch) { HintBox.IsVisible = false; HintText.Text = text ?? ""; if (_sketchHint != text) { _sketchHint = text; UpdateContextBar(); } return; }
+        _sketchHint = null;
         HintBox.IsVisible = !string.IsNullOrEmpty(text);
         HintText.Text = text ?? "";
     }
+    private string? _sketchHint;
 
     // ================================================================ журнал отмены (UI-37)
 

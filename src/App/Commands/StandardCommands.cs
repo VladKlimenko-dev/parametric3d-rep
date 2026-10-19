@@ -272,7 +272,8 @@ public static class StandardCommands
         SkCmd("sk.use_edge", "Использовать ребро модели", "sk_use_edge_but.svg", () => SketchEditCommands.StartEdgeMode(w, SketchEditCommands.EdgeMode.Use), "use edge project проекция ребро");
         SkCmd("sk.offset_edge", "Смещение ребра", "sk_offset_edge_but.svg", () => SketchEditCommands.StartEdgeMode(w, SketchEditCommands.EdgeMode.Offset), "offset edge смещение ребра");
         SkCmd("sk.thicken_edge", "Утолщение ребра", "sk_thicken_edge_but.svg", () => SketchEditCommands.StartEdgeMode(w, SketchEditCommands.EdgeMode.Thicken), "thicken edge утолщение ребра");
-        SkCmd("sk.setup", "Настройка эскиза", "sk_setup_but.svg", () => SketchEditCommands.Setup(w), "sketch setup настройка плоскость");
+        r.Add(new AppCommand { Id = "sk.setup", Label = "Настройка эскиза", Group = S, Icon = "sk_setup_but.svg", Synonyms = "sketch setup настройка плоскость",
+            CanRun = () => w.InSketch || w.SelectedItems().OfType<Parametric3D.Model.Sketching.Sketch>().Any(), Run = () => SketchEditCommands.Setup(w) });
         SkCmd("sk.show_conflicts", "Показать конфликтующие связи", "sk_show_conflicts_but.svg", () => SketchEditCommands.ShowConflicts(w), "conflicts конфликты связи");
         r.Add(new AppCommand { Id = "sk.snap_items", Label = "Привязка к элементам", Group = S, Icon = "sk_snap_items_but.svg", Synonyms = "snap items привязка элементы", CanRun = () => w.InSketch, IsChecked = () => vp.SnapItems, Run = () => { vp.SnapItems = !vp.SnapItems; w.RefreshToolStates(); } });
         r.Add(new AppCommand { Id = "sk.show_open_ends", Label = "Показ открытых концов", Group = S, Icon = "sk_show_open_ends_but.svg", Synonyms = "open ends открытые концы", CanRun = () => w.InSketch, IsChecked = () => vp.ShowOpenEnds, Run = () => { vp.ShowOpenEnds = !vp.ShowOpenEnds; vp.MarkDirty(); w.RefreshToolStates(); } });
@@ -414,7 +415,14 @@ public static class StandardCommands
         {
             foreach (var it in items)
             {
-                if (it is Feature f) part.RemoveFeature(f);
+                if (it is Feature f)
+                {
+                    // эскизы операции уходят вместе с ней, если ими больше никто не пользуется (прежде оставались скрытыми)
+                    var own = f.ConsumedSketchIds().ToHashSet();
+                    part.RemoveFeature(f);
+                    foreach (var sk in part.Sketches.Where(k => own.Contains(k.Id)).ToList())
+                        if (!part.Features.Any(o => o.ConsumedSketchIds().Contains(sk.Id))) part.Remove(sk);
+                }
                 else part.Remove(it);
             }
             part.Invalidate();

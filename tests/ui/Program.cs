@@ -563,33 +563,50 @@ Check("UI-SKETCH-UX", () =>
 
 Check("UI-PANELS-DOCK", () =>
 {
-    // (21:04) п. 3: панели поверх вида перемещаются и прилипают к сторонам (у боков — вертикальные, сверху/снизу —
-    // горизонтальные), место запоминается; п. 2: шрифт ГОСТ — у объектов вида, не у меню; п. 1: эскиз в правке виден,
-    // даже если в дереве скрыт
+    // (21:04) п. 3 и (23:43) пп. 4–9, 11: панели перемещаются и прилипают: у левой/правой стороны — вертикальная полоса
+    // иконок, у верхней/нижней — горизонтальная полоса иконок, все кнопки без «Ещё…», в углу — ряд с названиями; панели на
+    // одной стороне не перекрываются (рядом, если помещается, иначе дальше от края); полосы одной толщины; место
+    // запоминается. п. 2: шрифт ГОСТ — у объектов вида, не у меню; п. 1: эскиз в правке виден, даже если в дереве скрыт
     var s = DocumentSession.NewPart();
     var w = Open(s);
     var docks = w.Docks;
     Require(new[] { "commands", "shapes", "view", "sketch", "context" }.All(docks.ContainsKey), "docks: " + string.Join(",", docks.Keys));
-    var view = docks["view"];
-    var tools = w.FindControl<StackPanel>("ViewTools")!;
-    view.DockTo(DockablePanel.Side.Left, 0.5); Dispatcher.UIThread.RunJobs();
-    Require(!view.Horizontal && tools.Orientation == Avalonia.Layout.Orientation.Vertical && view.Panel.HorizontalAlignment == Avalonia.Layout.HorizontalAlignment.Left, "view bar did not dock left vertically");
     var area = w.FindControl<Grid>("ViewArea")!;
-    view.MoveTo(area.Bounds.Width - view.Panel.Bounds.Width - 20, 300); Dispatcher.UIThread.RunJobs();
-    view.Snap(); Dispatcher.UIThread.RunJobs();
-    Require(view.Docked == DockablePanel.Side.Right && !view.Horizontal && view.Panel.HorizontalAlignment == Avalonia.Layout.HorizontalAlignment.Right, $"no snap to the right side: {view.Docked}");
-    view.MoveTo(300, 300); view.Snap();
-    Require(view.Docked == DockablePanel.Side.Free, "snapped while far from the edges");
-    var cmd = docks["commands"];
-    cmd.DockTo(DockablePanel.Side.Bottom, 0.5); Dispatcher.UIThread.RunJobs();
+    void Run() { Dispatcher.UIThread.RunJobs(); area.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    var view = docks["view"]; var cmd = docks["commands"]; var ctx = docks["context"];
+    var tools = w.FindControl<StackPanel>("ViewTools")!;
     var stack = w.FindControl<WrapPanel>("CommandStack")!;
-    Require(cmd.Horizontal && stack.Orientation == Avalonia.Layout.Orientation.Horizontal && cmd.Panel.VerticalAlignment == Avalonia.Layout.VerticalAlignment.Bottom, "command bar did not turn horizontal at the bottom");
+    view.DockTo(DockablePanel.Side.Left, 0.5); Run();
+    Require(view.Mode == PanelMode.StripV && tools.Orientation == Avalonia.Layout.Orientation.Vertical && view.Panel.Bounds.X <= cmd.Panel.Bounds.Right + 10 && !view.Panel.Bounds.Intersects(cmd.Panel.Bounds), $"view bar did not dock left as a vertical strip (next to the command bar): {view.Mode} x {view.Panel.Bounds.X}");
+    view.MoveTo(area.Bounds.Width - view.Panel.Bounds.Width - 20, 300); Run();
+    view.Snap(); Run();
+    Require(view.Docked == DockablePanel.Side.Right && view.Mode == PanelMode.StripV && area.Bounds.Width - view.Panel.Bounds.Right < 20, $"no snap to the right side: {view.Docked} {view.Panel.Bounds} area {area.Bounds}");
+    view.MoveTo(300, 300); view.Snap();
+    Require(view.Docked == DockablePanel.Side.Free && view.Mode == PanelMode.Float, "snapped while far from the edges");
+    // команды у нижней стороны: горизонтальная полоса, все кнопки иконками одного размера, без заголовка и «Ещё…»
+    cmd.DockTo(DockablePanel.Side.Bottom, 0.5); Run();
+    var btns = stack.Children.OfType<Avalonia.Controls.Primitives.TemplatedControl>().ToList();
+    Require(cmd.Mode == PanelMode.StripH && stack.Orientation == Avalonia.Layout.Orientation.Horizontal, "command bar did not turn into a horizontal strip");
+    Require(!stack.Children.OfType<TextBlock>().Any() && btns.All(b => b.Tag is AppCommand), "strip has a header or a «More…» button");
+    Require(btns.Count > 20 && btns.All(b => Math.Abs(b.Bounds.Height - UiLook.StripButtonPx) < 0.5), $"strip buttons: {btns.Count}, heights {string.Join(",", btns.Select(b => b.Bounds.Height).Distinct())}");
+    // вторая панель к той же стороне: не перекрывает первую
+    ctx.DockTo(DockablePanel.Side.Bottom, 0.5); Run();
+    Require(!cmd.Panel.Bounds.Intersects(ctx.Panel.Bounds), $"two panels at the bottom overlap: {cmd.Panel.Bounds} / {ctx.Panel.Bounds}");
+    Require(Math.Abs(cmd.Panel.Bounds.Height - ctx.Panel.Bounds.Height) < 1.5 || cmd.Panel.Bounds.Height > 2 * ctx.Panel.Bounds.Height - 2, $"strip thickness differs: {cmd.Panel.Bounds.Height} vs {ctx.Panel.Bounds.Height}");
+    // третья — к верху: рядом, если помещается; угол — ряд с названиями, без перекрытия
+    view.DockTo(DockablePanel.Side.Top, 0.5); Run();
+    ctx.DockTo(DockablePanel.Side.TopLeft); Run();
+    Require(ctx.Mode == PanelMode.Row, "corner dock is not a row");
+    var all = docks.Values.Where(d => d.Panel.IsVisible).Select(d => d.Panel.Bounds).ToList();
+    for (int a = 0; a < all.Count; a++) for (int b = a + 1; b < all.Count; b++)
+            Require(!all[a].Intersects(all[b].Deflate(0.5)), $"panels overlap: {all[a]} / {all[b]}");
     cmd.Save();
     Require(UserPrefs.Current.PanelPlaces.TryGetValue("commands", out var saved) && saved.StartsWith("Bottom"), "place not saved: " + saved);
-    cmd.Reset(); cmd.Restore(); Dispatcher.UIThread.RunJobs();
-    Require(cmd.Docked == DockablePanel.Side.Bottom && cmd.Horizontal, "place not restored");
+    cmd.Reset(); cmd.Restore(); Run();
+    Require(cmd.Docked == DockablePanel.Side.Bottom && cmd.Mode == PanelMode.StripH, "place not restored");
     foreach (var d in docks.Values) { d.Reset(); d.Save(); }
-    Require(!view.UserPlaced && view.Horizontal && tools.Orientation == Avalonia.Layout.Orientation.Horizontal && !cmd.Horizontal, "reset");
+    Run();
+    Require(!view.UserPlaced && view.Horizontal && tools.Orientation == Avalonia.Layout.Orientation.Horizontal && !cmd.Horizontal && stack.Children.OfType<TextBlock>().Any(), "reset");
     Require(UserPrefs.Current.PanelPlaces.Count == 0, "places left after reset");
     // шрифт ГОСТ только у вида: панели — шрифтом интерфейса
     var gost = Parametric3D.Render.GostFont.Family;
@@ -605,6 +622,140 @@ Check("UI-PANELS-DOCK", () =>
     var scene = Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions(), part, sk);
     Require(scene.Lines.Count(l => scene.PickTable[(int)l.Pick].Ref.Kind == PickKind.SketchCurve) >= 4, "hidden active sketch is not drawn");
     w.CancelSketch();
+    w.Close();
+});
+
+Check("UI-DELETE-FEATURE-SKETCH", () =>
+{
+    // (23:43) п. 14: удаление операции убирает и её эскиз (если им больше никто не пользуется); оставшийся эскиз удаляется
+    var s = DocumentSession.Sample();
+    var w = Open(s);
+    var part = s.Part!;
+    s.Document.RebuildDirty();
+    var ex = part.Features.OfType<ExtrudeFeature>().First();
+    var sk = part.Sketches.First(k => ex.ConsumedSketchIds().Contains(k.Id));
+    w.SelectItem(ex);
+    var del = CommandRegistry.Instance["edit.delete"];
+    Require(del.Enabled, "delete is disabled for the feature");
+    del.Execute();
+    Require(!part.Features.Contains(ex), "feature not deleted");
+    Require(!part.Sketches.Contains(sk), "the feature's sketch is left behind");
+    // эскиз без операции удаляется сам по себе
+    var sk2 = new Sketch("free", Parametric3D.Kernel.Frame3.XY); part.Add(sk2);
+    w.SelectItem(sk2);
+    Require(del.Enabled, "delete is disabled for a free sketch");
+    del.Execute();
+    Require(!part.Sketches.Contains(sk2), "a free sketch cannot be deleted");
+    // отмена возвращает операцию вместе с эскизом
+    s.Undo();
+    s.Undo();
+    var p2 = s.Part!;
+    Require(p2.Features.OfType<ExtrudeFeature>().Any() && p2.Sketches.Any(k => p2.Features.OfType<ExtrudeFeature>().First().ConsumedSketchIds().Contains(k.Id)), "undo did not restore the feature with its sketch");
+    w.Close();
+});
+
+Check("UI-ROLLBACK-BAR", () =>
+{
+    // (23:43) п. 16: строка отката в дереве — всегда (деталь — оранжевая, сборка — синяя), тянется мышью между элементами:
+    // ниже строки — не в расчёте; отмена правки возвращает. п. 13: у документа детали опорных элементов служебной сборки
+    // нет (в сцене их не рисуют); у сборки — есть. п. 2: в правке эскиза опорные плоскости не рисуются.
+    var part = Parametric3D.App.Diagnostics.TestParts.Realistic(3, 5);
+    var s = DocumentSession.FromPart(part, "rb");
+    var w = Open(s);
+    s.Document.RebuildDirty();
+    double vAll = part.Volume;
+    w.RebuildTree();
+    var nodes = w.AllNodes.ToList();
+    var bar = nodes.FirstOrDefault(n => n.IsBar);
+    Require(bar != null && bar.BarBrush != null && bar.Item is InfoItem { Role: "rollback" }, "no part rollback bar in the tree");
+    var f0 = nodes.First(n => n.Item == part.Features[0]);
+    Require(w.MoveRollbackBar(bar!, f0, lower: true), "bar did not move");
+    s.Document.RebuildDirty();
+    Require(part.StageIndex == 1 && part.Features.Skip(1).All(part.IsBeyondStage), $"stage {part.StageIndex}");
+    Require(Math.Abs(part.Volume - vAll) > 1e-6, "volume did not change below the bar");
+    w.RebuildTree();
+    Require(w.AllNodes.Where(n => n.Item is Feature f && part.Features.IndexOf(f) >= 1).All(n => n.IsDim), "features below the bar are not dimmed");
+    s.Undo(); s.Document.RebuildDirty();
+    var p2 = s.Part!;
+    Require(!p2.InInsertMode && Math.Abs(p2.Volume - vAll) < 1e-6 * vAll, "undo did not return the bar");
+    // служебный корень документа детали: его плоскостей в сцене нет
+    var scene = Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions());
+    var root = s.Document.Root;
+    Require(!scene.PickTable.Skip(1).Any(e => e.Ref.Target == root.PlaneXY || e.Ref.Target == root.Origin || e.Ref.Id == root.PlaneXY.Id), "part document draws the hidden root datums");
+    Require(scene.PickTable.Skip(1).Any(e => e.Ref.Id == p2.PlaneXY.Id), "part datums are not drawn");
+    w.Close();
+    // сборка: опорные корня есть; строка отката сборки — компоненты ниже не рисуются
+    var sa = DocumentSession.NewAssembly(); var wa = Open(sa);
+    var a = AssemblyCommands.AddComponent(wa, CubePart("A", 40), "add A");
+    var b = AssemblyCommands.AddComponent(wa, CubePart("B", 20), "add B");
+    sa.Document.RebuildDirty();
+    wa.RebuildTree();
+    var abar = wa.AllNodes.FirstOrDefault(n => n.Item is InfoItem { Role: "asm_rollback" });
+    Require(abar != null, "no assembly rollback bar");
+    var sceneA = Parametric3D.Render.Engine.SceneBuilder.Build(sa.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions());
+    Require(sceneA.PickTable.Skip(1).Any(e => e.Ref.Id == sa.Document.Root.PlaneXY.Id), "assembly datums are not drawn");
+    var an = wa.AllNodes.First(n => n.Item == a);
+    Require(wa.MoveRollbackBar(abar!, an, lower: true), "assembly bar did not move");
+    Require(sa.Document.Root.IsBeyondStage(b) && !sa.Document.Root.IsBeyondStage(a), "component below the bar");
+    var sceneB = Parametric3D.Render.Engine.SceneBuilder.Build(sa.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions());
+    Require(!sceneB.PickTable.Skip(1).Any(e => e.PartId == b.Id), "component below the assembly bar is drawn");
+    wa.Close();
+    // в правке эскиза опорные плоскости не рисуются
+    var s3 = DocumentSession.Sample(); var w3 = Open(s3); var p3 = s3.Part!;
+    w3.SelectItem(p3.PlaneXY); w3.StartOperation(new SketchOp());
+    var sceneS = Parametric3D.Render.Engine.SceneBuilder.Build(s3.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions(), p3, w3.ViewPort.ActiveSketch);
+    Require(!sceneS.PickTable.Skip(1).Any(e => e.Ref.Kind == PickKind.DatumPlane), "datum planes are drawn in sketch mode");
+    w3.CancelSketch(); w3.Close();
+});
+
+Check("UI-SKETCH-SETUP", () =>
+{
+    // (23:43) п. 15: настройка эскиза — особый режим: стрелки нормали и «верха» в виде, щелчок по стрелке нормали —
+    // взгляд с обратной стороны (тело выдавливается в другую сторону); новая плоскость-основа; основа нуля и смещение
+    var s = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Block("setup"), "setup");
+    var w = Open(s);
+    var part = s.Part!;
+    s.Document.RebuildDirty();
+    var sk = part.Sketches.First();
+    double z0 = part.Bounds.Min.Z, z1 = part.Bounds.Max.Z;
+    w.SelectItem(sk);
+    var cmd = CommandRegistry.Instance["sk.setup"];
+    Require(cmd.Enabled, "setup is disabled for a selected sketch");
+    cmd.Execute();
+    Require(w.CurrentOperation is SketchSetupOp, "setup mode did not start");
+    Require(w.ViewPort.Annotations.Count >= 10, $"arrows are not shown: {w.ViewPort.Annotations.Count} lines");
+    var op = (SketchSetupOp)w.CurrentOperation!;
+    var n0 = op.Sketch.Plane.W;
+    op.FlipView();
+    Require(Vector3d.Dot(op.Sketch.Plane.W, n0) < -0.99, "normal did not flip");
+    w.CommitOperation();
+    s.Document.RebuildDirty();
+    var p1 = s.Part!;
+    Console.WriteLine($"  flipped: z {p1.Bounds.Min.Z:0.##}..{p1.Bounds.Max.Z:0.##} (was {z0:0.##}..{z1:0.##})");
+    Require(Math.Abs(p1.Bounds.Min.Z - (z0 - (z1 - z0))) < 1e-6 || Math.Abs(p1.Bounds.Max.Z - z0) < 1e-6, "flip did not turn the body to the other side");
+    Require(w.ViewPort.Annotations.Count == 0, "arrows left after the setup");
+    // новая плоскость-основа: XZ — тело вдоль Y
+    var sk1 = p1.Sketches.First(); w.SelectItem(sk1); cmd.Execute();
+    var op2 = (SketchSetupOp)w.CurrentOperation!;
+    w.ViewPort.Selection.Select(new PickRef(p1.PlaneXZ.Id, PickKind.DatumPlane, p1, p1.PlaneXZ), additive: false);
+    Require(op2.Sketch.BasePlaneId == p1.PlaneXZ.Id && op2.Sketch.PlaneDescription.Contains("XZ"), $"base plane not changed: {op2.Sketch.PlaneDescription}");
+    // основа нулевой точки — начало детали, смещение 10 по X эскиза
+    w.ViewPort.Selection.Select(new PickRef(p1.Origin.Id, PickKind.DatumPoint, p1, p1.Origin), additive: false);
+    Require(op2.Sketch.OriginBase is { } ob && ob.Length < 1e-9, "origin base not set");
+    op2.Sketch.SetOriginOffset(new Vector2d(10, 0));
+    Require((op2.Sketch.Plane.Origin - op2.Sketch.Plane.U * 10).Length < 1e-9, $"origin offset: {op2.Sketch.Plane.Origin}");
+    w.CommitOperation();
+    s.Document.RebuildDirty();
+    var p2 = s.Part!;
+    Console.WriteLine($"  on XZ: bounds {p2.Bounds.Min:0.##} .. {p2.Bounds.Max:0.##}");
+    Require(p2.Bounds.Max.Y - p2.Bounds.Min.Y < 21 && p2.Bounds.Max.Z - p2.Bounds.Min.Z > 59, "body is not along Y after the new base plane (XZ)");
+    // настройка сохраняется в файле
+    var path = Path.Combine(Path.GetTempPath(), "p3d_setup" + DocumentSession.PartExtension);
+    s.SaveAs(path);
+    var s2 = DocumentSession.Open(path);
+    var skr = s2.Part!.Sketches.First();
+    Require(skr.PlaneDescription.Contains("XZ") && skr.OriginOffset.X == 10 && skr.OriginBase != null, $"setup not saved: {skr.PlaneDescription} {skr.OriginOffset}");
+    File.Delete(path);
     w.Close();
 });
 
