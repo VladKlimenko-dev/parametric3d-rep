@@ -221,7 +221,7 @@ public static partial class DirectRound
                     var a0 = nb.A; var b0 = nb.B; double len = (b0 - a0).Length;
                     if (nb.Curve is not LineCurve3) { why = "tangent chain: the neighbour at the end is not a line"; return false; }
                     double u = Vector3d.Dot(q1 - a0, b0 - a0) / (len * len), dist = (a0 + (b0 - a0) * u - q1).Length;
-                    if (dist > 1e-7 * Math.Max(1, len) || u <= 1e-6 || u >= 1 - 1e-6) { why = "tangent chain: radius too large for the end neighbour"; return false; }
+                    if (dist > 1e-7 * Math.Max(1, len) || u <= 1e-6 || u >= 1 - 1e-6) { why = $"tangent chain: radius too large for the end neighbour (end {(atA ? "A" : "B")} at {V:0.###}, neighbour {a0:0.###}→{b0:0.###}, u {u:G4}, off {dist:G3})"; return false; }
                 }
                 if (atA) { p.QA1 = q1; p.QA2 = q2; p.EndA = sec; } else { p.QB1 = q1; p.QB2 = q2; p.EndB = sec; }
                 var l1 = p.Q1C; var l2 = p.Q2C;

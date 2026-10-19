@@ -122,6 +122,7 @@ public sealed class SelfTest
             // отладка: только раздел ручек (P3D_SELFTEST_ONLY=handles)
             if (Environment.GetEnvironmentVariable("P3D_SELFTEST_ONLY") == "handles") { await Handles(); await UserEdges(); return; }
             if (Environment.GetEnvironmentVariable("P3D_SELFTEST_ONLY") == "cancel") { await CancelAndFailure(); return; }
+            if (Environment.GetEnvironmentVariable("P3D_SELFTEST_ONLY") == "load") { await Load(); return; }
             await Operations();
             await RealisticParts();
             await Holes();
@@ -132,6 +133,7 @@ public sealed class SelfTest
             await Handles();
             await UserEdges();
             await CancelAndFailure();
+            await Load();
         }
         finally
         {
@@ -644,6 +646,111 @@ public sealed class SelfTest
         Line($"Испорченный файл: открытие отклонено — {(refused ? "да" : "НЕТ")}; открытая деталь на месте, окно рисует — {(okD ? "да" : "НЕТ")}");
     }
 
+    /// <summary>
+    /// 10. НАГРУЗКА (KRN-11 11.5, «приложение под нагрузкой»): долгая сессия правки в окне — 80 операций скругления и фаски
+    /// на разных рёбрах реальной детали (команда, величина, «ОК»), каждые 10 — три «отменить» и три «вернуть»; окно рисует
+    /// после каждой; память после сборки мусора — без роста сверх запаса; в конце — полный пересчёт с нуля даёт тот же
+    /// объём, а отмена всех правок сессии — исходную деталь.
+    /// </summary>
+    private async Task Load()
+    {
+        Head("10. Нагрузка: долгая сессия правки");
+        var v = _w.ViewPort;
+        async Task<bool> Alive()
+        {
+            long f0 = v.FramesRendered; v.Redraw();
+            await Until(() => v.FramesRendered > f0 || string.IsNullOrEmpty(v.GlInfo), 5000);
+            return v.FramesRendered > f0 || string.IsNullOrEmpty(v.GlInfo);
+        }
+        static long Managed() { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); return GC.GetTotalMemory(true); }
+        _phase = "нагрузка: подготовка";
+        var part = await Task.Run(() => TestParts.Realistic(3, 12));
+        var s = DocumentSession.FromPart(part, "load");
+        _w.SetSession(s);
+        await WaitBuilt(120000);
+        double v0 = s.Part!.Volume; int feat0 = s.Part.Features.Count, undo0 = s.UndoNames.Count;
+        const int N = 80;
+        int done = 0, refused = 0, dead = 0, undoOk = 0, undoTries = 0;
+        var undoWhy = new List<string>();
+        long mem10 = 0; double ws10 = 0;
+        var times = new List<double>();
+        var rnd = new Random(11);
+        var total = Stopwatch.StartNew();
+        for (int i = 0; i < N; i++)
+        {
+            _ct.ThrowIfCancellationRequested();
+            _phase = $"нагрузка: правка {i + 1}";
+            if (i % 10 == 0) Step($"правка {i + 1} из {N}");
+            if (Environment.GetEnvironmentVariable("P3D_LOADDBG") == "1" && times.Count > 0) Console.WriteLine($"LOAD edit {i}: {times[^1]:0} ms, features {_w.Session.Part!.Features.Count}, last build {(_w.Session.Part!.Features.Count > 0 && _w.Session.Part.LastFeatureMs.TryGetValue(_w.Session.Part.Features[^1], out var lm) ? lm : -1):0} ms");
+            var p = _w.Session.Part!;
+            var edges = p.Bodies.SelectMany(b => b.Edges).Where(e => e.Curve is Kernel.Curves.LineCurve3 && (e.V0.P - e.V1.P).Length > 6
+                                                                     && Parametric3D.App.Operations.Topo.EdgeHandle(p, e.Id) != null).ToList();
+            if (edges.Count == 0) break;
+            var e = edges[rnd.Next(edges.Count)];
+            v.Selection.Select(new PickRef(e.Id, PickKind.Edge, p, null), additive: false);
+            int fc = p.Features.Count;
+            var sw = Stopwatch.StartNew();
+            bool round = i % 2 == 0;
+            _w.StartOperation(round ? new RoundOp() : new ChamferOp());
+            await WaitBuilt();
+            var last = p.Features.Count > fc ? p.Features[^1] : null;
+            double size = 0.5 + rnd.NextDouble();
+            if (last is RoundFeature rf) { rf.Radius = new ValueRef(size); p.MarkDirtyFrom(rf); }
+            else if (last is ChamferFeature cf) { cf.D1 = new ValueRef(size); cf.D2 = new ValueRef(size); p.MarkDirtyFrom(cf); }
+            v.MarkDirty();
+            await WaitBuilt();
+            string? err = last?.Error;
+            if (err == null && last != null) { _w.CommitOperation(); done++; } else { _w.CancelOperation(); refused++; }
+            await WaitBuilt();
+            times.Add(sw.Elapsed.TotalMilliseconds);
+            if (!await Alive()) dead++;
+            if (i == 9) { mem10 = Managed(); ws10 = Environment.WorkingSet / 1048576.0; }
+            if (i % 10 == 9)
+            {
+                undoTries++;
+                var q = _w.Session.Part!; double vq = q.Volume; int fq = q.Features.Count;
+                for (int k = 0; k < 3 && _w.Session.UndoNames.Count > undo0; k++) { _w.Session.Undo(); await WaitBuilt(); }
+                for (int k = 0; k < 3 && _w.Session.CanRedo; k++) { _w.Session.Redo(); await WaitBuilt(); }
+                var q2 = _w.Session.Part!;
+                if (q2.Features.Count == fq && Math.Abs(q2.Volume - vq) <= 1e-6 * Math.Max(1, vq) && q2.Features.All(f => f.Error == null)) undoOk++;
+                else if (undoWhy.Count < 3)
+                    undoWhy.Add($"после правки {i + 1}: операций {q2.Features.Count}/{fq}, объём {q2.Volume:0.###}/{vq:0.###}, ошибки: {string.Join("; ", q2.Features.Where(f => f.Error != null).Select(f => f.Name + " — " + f.Error!.Split('\n')[0][..Math.Min(120, f.Error!.Split('\n')[0].Length)]))}");
+            }
+        }
+        double secs = total.Elapsed.TotalSeconds;
+        long memEnd = Managed(); double wsEnd = Environment.WorkingSet / 1048576.0;
+        double growMb = (memEnd - mem10) / 1048576.0;
+        // пересчёт с нуля — тот же объём
+        _phase = "нагрузка: пересчёт с нуля";
+        var pe = _w.Session.Part!; double ve = pe.Volume;
+        string? saved = null;
+        try { saved = Path.Combine(Path.GetDirectoryName(ReportPath) ?? ".", $"P3D_load_{_started:yyyyMMdd_HHmmss}.p3d"); File.WriteAllText(saved, DocumentFile.Save(pe, _w.Session.Document.Parameters)); }
+        catch { saved = null; }
+        await Task.Run(() => { pe.Invalidate(); pe.Rebuild(null); });
+        bool same = Math.Abs(pe.Volume - ve) <= 1e-6 * Math.Max(1, ve) && pe.Features.All(f => f.Error == null);
+        string sameWhy = same ? "" : $" (объём {pe.Volume:0.###} против {ve:0.###}; ошибки после пересчёта: {string.Join("; ", pe.Features.Where(f => f.Error != null).Select(f => f.Name + " — " + f.Error!.Split('\n')[0][..Math.Min(140, f.Error!.Split('\n')[0].Length)]))})";
+        // отмена всех правок сессии — исходная деталь
+        _phase = "нагрузка: отмена всех правок";
+        int guard = 0;
+        while (_w.Session.UndoNames.Count > undo0 && guard++ < 1000) { _w.Session.Undo(); await WaitBuilt(); }
+        var p0 = _w.Session.Part!;
+        bool back = p0.Features.Count == feat0 && Math.Abs(p0.Volume - v0) <= 1e-6 * v0;
+        bool alive = await Alive();
+        times.Sort();
+        double med = times.Count > 0 ? times[times.Count / 2] : double.NaN, p95 = times.Count > 0 ? times[(int)(times.Count * 0.95)] : double.NaN;
+        bool memOk = growMb < 64;
+        bool ok = dead == 0 && done >= N / 2 && undoOk == undoTries && same && back && alive && memOk;
+        Count(ok);
+        Line($"Правок: {done} принято, {refused} отклонено ядром (отказ — с сообщением, деталь не меняется) из {N} за {secs:0.0} с; на правку медиана {F(med)} мс, p95 {F(p95)} мс");
+        var ls = _stalls.Where(x => x.Phase.StartsWith("нагрузка")).ToList();
+        Line($"Окно рисует после каждой правки — {(dead == 0 ? "да" : $"НЕТ ({dead})")}; остановок окна дольше 100 мс за раздел: {ls.Count}{(ls.Count > 0 ? $", наибольшая {F(ls.Max(x => x.Ms))} мс" : "")}");
+        Line($"«Отменить» ×3 и «вернуть» ×3 каждые 10 правок: деталь та же — {undoOk}/{undoTries}");
+        foreach (var w in undoWhy) Line("    " + w);
+        Line($"Память после сборки мусора: после 10 правок {mem10 / 1048576.0:0.0} МБ, после {N} — {memEnd / 1048576.0:0.0} МБ (рост {growMb:+0.0;-0.0} МБ, допустимо < 64); рабочий набор {ws10:0} → {wsEnd:0} МБ — {(memOk ? "годно" : "РОСТ")}");
+        if (saved != null) Line($"Деталь сессии сохранена: {saved}");
+        Line($"Пересчёт с нуля после сессии: тот же объём — {(same ? "да" : "НЕТ" + sameWhy)}; отмена всех правок вернула исходную деталь — {(back ? "да" : "НЕТ")}; итог — {(ok ? "годно" : "ОШИБКА")}");
+    }
+
     // ---------------------------------------------------------------- ручки и последовательности (u09)
 
     private static PickRef EdgeRef(Part p, Func<Kernel.Topology.TEdge, bool> pick) =>
@@ -655,9 +762,12 @@ public sealed class SelfTest
     private static PickRef TopEdge(Part p, int axis = 0)
     {
         double z = TopZ(p);
-        return EdgeRef(p, e => e.Curve is Kernel.Curves.LineCurve3 && Math.Abs(e.V0.P.Z - z) < 1e-6 && Math.Abs(e.V1.P.Z - z) < 1e-6
+        bool Sharp(Kernel.Topology.TEdge e) => e.Curve is Kernel.Curves.LineCurve3 && Math.Abs(e.V0.P.Z - z) < 1e-6 && Math.Abs(e.V1.P.Z - z) < 1e-6
                                && Parametric3D.App.Operations.Topo.EdgeHandle(p, e.Id) != null   // острое ребро, не шов скругления
-                               && (axis == 0 ? Math.Abs(e.V0.P.Y - e.V1.P.Y) < 1e-6 : Math.Abs(e.V0.P.X - e.V1.P.X) < 1e-6) && (e.V0.P - e.V1.P).Length > 5);
+                               && (e.V0.P - e.V1.P).Length > 5;
+        var r = EdgeRef(p, e => Sharp(e) && (axis == 0 ? Math.Abs(e.V0.P.Y - e.V1.P.Y) < 1e-6 : Math.Abs(e.V0.P.X - e.V1.P.X) < 1e-6));
+        // по нужной оси острого верхнего ребра нет (вырез верхней грани снял верх целиком) — любое острое верхнее
+        return r.Owner != null ? r : EdgeRef(p, Sharp);
     }
 
     private static PickRef TopVertex(Part p)
@@ -804,7 +914,7 @@ public sealed class SelfTest
                 ("скругление верхнего ребра X R 4", p => TopEdge(p, 0), -4),
                 ("вырез верхней грани 5", TopFace, -5),
                 ("фаска верхнего ребра Y 3", p => TopEdge(p, 1), 3),
-                ("скругление верхнего ребра X R 2", p => TopEdge(p, 0), -2),
+                ("скругление верхнего ребра X R 1.5", p => TopEdge(p, 0), -1.5),   // R2 ровно съедает соседнее R4 целиком (вырожденный случай)
             };
             _w.SetSession(seq);
             await WaitBuilt();
@@ -817,8 +927,10 @@ public sealed class SelfTest
                 _phase = "последовательность: " + n;
                 var part = seq.Part!;
                 int f0 = part.Features.Count;
+                if (MeshOffFaces(part) is { Length: > 0 } off) Line($"      сетка не согласована с телом перед шагом: {off}");
                 var r = pick(part);
                 if (r.Owner == null) { Line($"  {i,2}. {n,-36} нет элемента"); Count(false); continue; }
+                if (r.Kind == PickKind.Face && Refs.FacePlane(part, r.Id) is { } fpl) Line($"      грань #{r.Id}: точка {fpl.P:0.##}, нормаль {fpl.N:0.##}");
                 var v = _w.ViewPort;
                 var sel = r.Kind == PickKind.Edge && v.ExpandEdge != null ? v.ExpandEdge(r) : new List<PickRef> { r };
                 v.Selection.Clear();
@@ -854,6 +966,23 @@ public sealed class SelfTest
             catch (Exception ex) { Line("  сохранить деталь не удалось: " + ex.Message); }
         }
         finally { UserPrefs.Current.PreviewMode = keepMode; }
+    }
+
+    /// <summary>Сетка показа и тело: грани, чьи треугольники не лежат на их поверхности (номера граней сетки устарели).</summary>
+    private static string MeshOffFaces(Part part)
+    {
+        if (part.Mesh is not { } md) return "";
+        var faces = part.Bodies.SelectMany(b => b.Faces).GroupBy(f => f.Id).ToDictionary(g => g.Key, g => g.First());
+        var bad = new Dictionary<uint, double>();
+        foreach (var v in md.Vertices)
+        {
+            if (!faces.TryGetValue(v.FaceId, out var f)) { bad[v.FaceId] = double.PositiveInfinity; continue; }
+            var q = new Vector3d(v.P.X, v.P.Y, v.P.Z);
+            var src = GeometryAudit.AuthoritativeSurface(f) ?? f.Surface;
+            double d; try { d = (src.PointAt(src.ProjectToUV(q)) - q).Length; } catch { continue; }
+            if (d > 0.05 && (!bad.TryGetValue(v.FaceId, out var w0) || d > w0)) bad[v.FaceId] = d;
+        }
+        return string.Join(", ", bad.Take(6).Select(kv => $"#{kv.Key} {(faces.TryGetValue(kv.Key, out var ff) ? ff.Tag : "нет грани")} {kv.Value:G3}"));
     }
 
     // ---------------------------------------------------------------- u10: скругления и фаски «как пользователь»

@@ -263,7 +263,7 @@ public sealed class Part : ModelItem
             if (f is Feature feat) MarkDirtyFrom(feat);
             else if (f is Sketching.Sketch sk) SketchChanged(sk);
             else if (f is DatumPlane or DatumAxis or DatumPoint) DatumChanged((ModelItem)f);
-            else ForgetCheckpoints();
+            else if (_removingFeature == 0 || RemoveMissingOff) ForgetCheckpoints();   // удаление операции: отметку ставит RemoveFeature
         };
     }
 
@@ -366,8 +366,14 @@ public sealed class Part : ModelItem
     public void RemoveFeature(Feature f)
     {
         int at = Features.IndexOf(f);
+        // операции нет в дереве — отметку пересчёта не трогать (номер −1 давал «с нулевой»)
+        if (at < 0 && !RemoveMissingOff) { _removingFeature++; try { Remove(f); } finally { _removingFeature--; } return; }
         Features.Remove(f);
-        Remove(f);
+        // u-нагрузка: удаление из дерева детали извещало «изменилась сама деталь» — все сохранённые состояния забывались, и
+        // «Отмена» новой операции (её удаление) пересчитывала всё дерево с нуля (деталь из 40 операций — ~30 с). Отметка
+        // пересчёта — с места удалённой операции, ниже. Мутация P3D_REMOVEMISSING=0.
+        _removingFeature++;
+        try { Remove(f); } finally { _removingFeature--; }
 
         // Удаление сказывается на всём, что стояло после неё.
         DirtyFromIndex(Math.Max(0, at));
@@ -558,6 +564,153 @@ public sealed class Part : ModelItem
     /// операции не правят на месте — они создают новые; если эта привычка нарушится, проверка
     /// равенства полному пересчёту это поймает.
     /// </summary>
+    /// <summary>
+    /// u-нагрузка (2026-10-20): ОТМЕНА, ПОВТОР И «ОТМЕНА» ОПЕРАЦИИ БЕЗ ПЕРЕСЧЁТА ВСЕГО ДЕРЕВА. Восстановление идёт по снимку
+    /// документа — новая деталь из файла, которая прежде перестраивалась с нуля: на детали из 40 операций «отмена» правки в
+    /// конце дерева стоила ~25 с. Теперь новая деталь перенимает у текущей сохранённые состояния и итоги операций общей
+    /// начальной части дерева: операции, совпадающие в обоих снимках побитово (запись в файле), при тех же параметрах, полоске,
+    /// материале и эскизах, которыми они пользуются. Пересчёт — с первой различающейся. Возвращает число перенятых операций
+    /// (−1 — ничего: другие настройки детали или параметры). Мутация P3D_ADOPT=0.
+    /// </summary>
+    public int AdoptBuildState(Part current, string currentJson, string freshJson)
+    {
+        // расчёт текущей детали идёт (фоновый предпросмотр) — её сохранённые состояния меняются: не перенимать
+        if (AdoptOff || current._lastInputs == null || !UseCheckpoints || Volatile.Read(ref current._computing) > 0)
+        {
+            if (Environment.GetEnvironmentVariable("P3D_ADOPTDBG") == "1") Console.WriteLine($"ADOPT refused: off {AdoptOff}, inputs {current._lastInputs != null}, computing {current._computing}");
+            return -1;
+        }
+        try
+        {
+            // номера эскизов, элементов эскизов и опорных объектов назначаются при каждой загрузке заново — сравнение по
+            // порядку появления (номер → «#n»), а не по значению
+            var ca = CanonIds(System.Text.Json.Nodes.JsonNode.Parse(currentJson)!.AsObject());
+            var cb = CanonIds(System.Text.Json.Nodes.JsonNode.Parse(freshJson)!.AsObject());
+            var pa = ca.Where(x => x.Key is not ("Features" or "Sketches" or "Info")).ToDictionary(x => x.Key, x => x.Value?.ToJsonString() ?? "null");
+            var pb = cb.Where(x => x.Key is not ("Features" or "Sketches" or "Info")).ToDictionary(x => x.Key, x => x.Value?.ToJsonString() ?? "null");
+            if (pa.Count != pb.Count || pa.Any(kv => !pb.TryGetValue(kv.Key, out var v) || v != kv.Value))
+            {
+                if (Environment.GetEnvironmentVariable("P3D_ADOPTDBG") == "1") Console.WriteLine($"ADOPT refused: document settings differ ({string.Join(",", pa.Where(kv => !pb.TryGetValue(kv.Key, out var v) || v != kv.Value).Select(kv => kv.Key))})");
+                return -1;
+            }
+            if (ca["Features"] is not System.Text.Json.Nodes.JsonArray fa || cb["Features"] is not System.Text.Json.Nodes.JsonArray fb) return -1;
+            // эскизы, которые различаются (или есть только в одном снимке)
+            static Dictionary<string, string> Sk(System.Text.Json.Nodes.JsonObject r)
+            {
+                var d = new Dictionary<string, string>();
+                if (r["Sketches"] is System.Text.Json.Nodes.JsonArray ss)
+                    foreach (var s in ss) if (s is System.Text.Json.Nodes.JsonObject so) d[so["Id"]?.ToJsonString() ?? "?"] = so.ToJsonString();
+                return d;
+            }
+            var sa = Sk(ca); var sb = Sk(cb);
+            var changed = sa.Keys.Union(sb.Keys).Where(k => !sa.TryGetValue(k, out var x) || !sb.TryGetValue(k, out var y) || x != y).ToList();
+            var la = fa.Select(x => x?.ToJsonString() ?? "").ToList(); var lb = fb.Select(x => x?.ToJsonString() ?? "").ToList();
+            int k = 0;
+            while (k < la.Count && k < lb.Count && k < current.Features.Count && k < Features.Count && la[k] == lb[k]
+                   && !changed.Any(id => la[k].Contains(id))
+                   && current.Features[k].GetType() == Features[k].GetType())
+                k++;
+            if (Environment.GetEnvironmentVariable("P3D_ADOPTDBG") == "1")
+            {
+                Console.WriteLine($"ADOPT k {k} of {la.Count}/{lb.Count}; changed sketches {string.Join(",", changed)}");
+                if (k < la.Count && k < lb.Count && la[k] != lb[k])
+                {
+                    int d = 0; while (d < la[k].Length && d < lb[k].Length && la[k][d] == lb[k][d]) d++;
+                    Console.WriteLine($"  feature {k} differs at {d}: «{la[k].Substring(Math.Max(0, d - 60), Math.Min(120, la[k].Length - Math.Max(0, d - 60)))}» vs «{lb[k].Substring(Math.Max(0, d - 60), Math.Min(120, lb[k].Length - Math.Max(0, d - 60)))}»");
+                }
+                foreach (var id in changed.Take(2))
+                    if (sa.TryGetValue(id, out var x) && sb.TryGetValue(id, out var y)) { int d = 0; while (d < x.Length && d < y.Length && x[d] == y[d]) d++; Console.WriteLine($"  sketch {id} differs at {d}: «{x.Substring(Math.Max(0, d - 80), Math.Min(160, x.Length - Math.Max(0, d - 80)))}» vs «{y.Substring(Math.Max(0, d - 80), Math.Min(160, y.Length - Math.Max(0, d - 80)))}»"); }
+            }
+            if (k == 0) return 0;
+            // перенять: состояния после операций 0..k−1, итоги этих операций, входы прежнего расчёта
+            var map = new Dictionary<Feature, Feature>(ReferenceEqualityComparer.Instance);
+            for (int i = 0; i < k; i++) map[current.Features[i]] = Features[i];
+            _checkpoints.Clear();
+            _checkpoints.AddRange(current._checkpoints.Where(c => c.After < k));
+            foreach (var (of, nf) in map)
+            {
+                if (current._records.TryGetValue(of, out var rec)) _records[nf] = rec;
+                if (current._retried.Contains(of)) _retried.Add(nf);
+            }
+            _lastInputs = current._lastInputs; _lastParams = current._lastParams;
+            _lastResult = null;
+            _dirtyFrom = k;
+            _donorKeep = current.Bodies.ToList();                      // доноры сетки неизменённых граней
+            return k;
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidOperationException) { return -1; }
+    }
+
+    /// <summary>Номера объектов документа (свойство «Id») — порядковыми метками «#n»; ссылки на них (…Id, …Ids, A/B/C, Pts, Items) — теми же.</summary>
+    static System.Text.Json.Nodes.JsonObject CanonIds(System.Text.Json.Nodes.JsonObject root)
+    {
+        var map = new Dictionary<string, string>();
+        void Collect(System.Text.Json.Nodes.JsonNode? n)
+        {
+            if (n is System.Text.Json.Nodes.JsonObject o)
+                foreach (var (k, v) in o)
+                {
+                    if (k == "Id" && v is System.Text.Json.Nodes.JsonValue jv && jv.ToJsonString() is var t && t != "0" && !map.ContainsKey(t)) map[t] = $"\"#{map.Count}\"";
+                    Collect(v);
+                }
+            else if (n is System.Text.Json.Nodes.JsonArray a) foreach (var x in a) Collect(x);
+        }
+        Collect(root);
+        static bool RefName(string k) => k == "Id" || k.EndsWith("Id") || k is "A" or "B" or "C";
+        static bool RefList(string k) => k.EndsWith("Ids") || k is "Pts" or "Items";
+        void Rewrite(System.Text.Json.Nodes.JsonNode? n)
+        {
+            if (n is System.Text.Json.Nodes.JsonObject o)
+            {
+                foreach (var k in o.Select(x => x.Key).ToList())
+                {
+                    var v = o[k];
+                    if (RefName(k) && v is System.Text.Json.Nodes.JsonValue && map.TryGetValue(v.ToJsonString(), out var c)) o[k] = System.Text.Json.Nodes.JsonNode.Parse(c);
+                    else if (RefList(k) && v is System.Text.Json.Nodes.JsonArray arr)
+                    {
+                        for (int i = 0; i < arr.Count; i++)
+                            if (arr[i] is System.Text.Json.Nodes.JsonValue && map.TryGetValue(arr[i]!.ToJsonString(), out var c2)) arr[i] = System.Text.Json.Nodes.JsonNode.Parse(c2);
+                    }
+                    else Rewrite(v);
+                }
+            }
+            else if (n is System.Text.Json.Nodes.JsonArray a) foreach (var x in a) Rewrite(x);
+        }
+        Rewrite(root);
+        return root;
+    }
+    private int _computing;
+    static readonly bool BuildDbg = Environment.GetEnvironmentVariable("P3D_BUILDDBG") == "1";
+    private int _removingFeature;
+    internal static readonly bool RemoveMissingOff = Environment.GetEnvironmentVariable("P3D_REMOVEMISSING") == "0";
+    /// <summary>Разбор: сколько сохранённых состояний держит деталь.</summary>
+    public int CheckpointCount => _checkpoints.Count;
+    internal static readonly bool AdoptOff = Environment.GetEnvironmentVariable("P3D_ADOPT") == "0";
+
+    /// <summary>Итог выполнения операции (для операций до начала пересчёта).</summary>
+    private sealed class FeatureRecord
+    {
+        public string? Error; public Kernel.OperationOutcome? Outcome; public List<uint> Created = new();
+        public IReadOnlyList<string>? Entities; public AmbiguousReferenceException? Ambiguity; public (int, int)? Downgrade;
+        public FeatureHistory? History; public double? Ms;
+        public static FeatureRecord Of(Feature f, BuildResult r) => new()
+        {
+            Error = r.Errors.GetValueOrDefault(f), Outcome = r.Outcomes.TryGetValue(f, out var o) ? o : null,
+            Created = r.Created.TryGetValue(f, out var c) ? new List<uint>(c) : new(), Entities = r.ErrorEntities.GetValueOrDefault(f),
+            Ambiguity = r.Ambiguities.GetValueOrDefault(f), Downgrade = r.GeometryDowngrades.TryGetValue(f, out var d) ? d : null,
+            History = r.History.GetValueOrDefault(f), Ms = r.FeatureMs.TryGetValue(f, out var ms) ? ms : null,   // происхождение держит тела — не хранится
+        };
+        public void CopyTo(Feature f, BuildResult r)
+        {
+            r.Errors[f] = Error; if (Outcome is { } o) r.Outcomes[f] = o; r.Created[f] = new List<uint>(Created);
+            if (Entities != null) r.ErrorEntities[f] = Entities; if (Ambiguity != null) r.Ambiguities[f] = Ambiguity;
+            if (Downgrade is { } d) r.GeometryDowngrades[f] = d; if (History != null) r.History[f] = History;
+            if (Ms is { } ms) r.FeatureMs[f] = ms;
+        }
+    }
+    private readonly Dictionary<Feature, FeatureRecord> _records = new(ReferenceEqualityComparer.Instance);
+    internal static readonly bool KeepRecordsOff = Environment.GetEnvironmentVariable("P3D_KEEPRECORDS") == "0";
+
     private sealed class Checkpoint
     {
         public int After;                       // номер операции, после которой снято
@@ -584,6 +737,7 @@ public sealed class Part : ModelItem
     /// <summary>Забыть сохранённое: нужно, когда поменялось то, что не привязано к операции.</summary>
     public void ForgetCheckpoints()
     {
+        if (BuildDbg) Console.WriteLine($"BUILD {Name}: forget checkpoints < {string.Join(" < ", Environment.StackTrace.Split('\n').Skip(2).Take(6).Select(l => l.Trim()))}");
         _checkpoints.Clear();
         _dirtyFrom = 0;
     }
@@ -623,7 +777,11 @@ public sealed class Part : ModelItem
     }
 
     /// <summary>Опустить отметку пересчёта до названного места.</summary>
-    private void DirtyFromIndex(int at) => _dirtyFrom = Math.Min(_dirtyFrom, Math.Max(0, at));
+    private void DirtyFromIndex(int at)
+    {
+        if (BuildDbg && at <= 0) Console.WriteLine($"BUILD {Name}: dirty from {at} < {string.Join(" < ", Environment.StackTrace.Split('\n').Skip(2).Take(6).Select(l => l.Trim()))}");
+        _dirtyFrom = Math.Min(_dirtyFrom, Math.Max(0, at));
+    }
 
     /// <summary>Пересборка сразу, в текущем потоке: вычислить и применить.</summary>
     public void Rebuild(ParameterTable? parameters, ISketchSolver? solver = null)
@@ -655,6 +813,7 @@ public sealed class Part : ModelItem
     {
         if (RebuildLog) Console.WriteLine($"REBUILD {Name} features {Features.Count} dirty {IsDirty} {string.Join(" < ", Environment.StackTrace.Split('\n').Skip(2).Take(7).Select(l => l.Trim()))}");
         int dirtyAtStart = _dirtyFrom;
+        Interlocked.Increment(ref _computing);
         // KRN-08 (08.6): с чем считался результат, кроме самих операций, — для проверки при применении.
         var inputs = (EffectiveStage, Policy, Limits);
         var snap = Dependencies.Snapshot(parameters);
@@ -677,6 +836,7 @@ public sealed class Part : ModelItem
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(inner).Throw();
             throw;
         }
+        finally { Interlocked.Decrement(ref _computing); }
     }
 
     // K06: то, от чего зависел последний расчёт, кроме самих операций.
@@ -698,11 +858,14 @@ public sealed class Part : ModelItem
                 anyPreview ? k with { Preview = false, LivePreview = false, Chord = 0, ChordAngle = 0 } : k with { Preview = false };
             bool anyPv = last.Settings.Preview || settings.Preview || last.Settings.LivePreview || settings.LivePreview;
             if (!Norm(last.Settings, anyPv).Equals(Norm(settings, anyPv)) || last.Policy != Policy || !last.Limits.Equals(Limits))
+            {
+                if (BuildDbg) Console.WriteLine($"BUILD {Name}: outside change — settings {!Norm(last.Settings, anyPv).Equals(Norm(settings, anyPv))} ({last.Settings} → {settings}), policy {last.Policy != Policy}, limits {!last.Limits.Equals(Limits)}");
                 _dirtyFrom = 0;                               // настройки ядра или политика изменились
+            }
             else if (last.Stage != EffectiveStage)
                 DirtyFromIndex(Math.Min(last.Stage, EffectiveStage));   // полоска сдвинулась
         }
-        else _dirtyFrom = 0;
+        else { if (BuildDbg) Console.WriteLine($"BUILD {Name}: no previous inputs"); _dirtyFrom = 0; }
 
         var now = Dependencies.Snapshot(parameters);
         if (_lastParams != null)
@@ -804,14 +967,30 @@ public sealed class Part : ModelItem
         // «ничего не изменилось», и следующий расчёт без правок выдавал тот же сбой, не пробуя снова (перебор прерываний:
         // 28 случаев из 404). Теперь следующий расчёт начинается с первой сбойной операции (с конца, если сбой — в разметке).
         // P3D_RETRYFAIL=0 — прежнее.
+        // u-нагрузка (2026-10-20): ПОВТОР — ОДИН РАЗ. Сбой, повторившийся при повторе (та же операция, тот же ввод — отказ
+        // детерминирован), больше не повторяется при каждой следующей правке: прежде каждая правка в конце дерева пересчитывала
+        // всё от первой сбойной операции — на долгой сессии правки (кнопка «Тест», раздел «Нагрузка») время правки росло с
+        // 0.2 до 17 с за 24 правки. Операция, выполненная без сбоя, из списка повторённых выходит. Мутация P3D_RETRYONCE=0.
         if (RetryAfterFailure)
         {
+            foreach (var f in Features)
+                if (computed.Outcomes.TryGetValue(f, out var o0) && o0 != Kernel.OperationOutcome.InternalFailure) _retried.Remove(f);
+            _retried.RemoveWhere(f => !Features.Contains(f));
             int firstFail = -1;
             for (int i = 0; i < Features.Count; i++)
-                if (computed.Outcomes.TryGetValue(Features[i], out var o) && o == Kernel.OperationOutcome.InternalFailure) { firstFail = i; break; }
+                if (computed.Outcomes.TryGetValue(Features[i], out var o) && o == Kernel.OperationOutcome.InternalFailure)
+                {
+                    if (!RetryOnceOff && i < computed.StartedAt && !KeepRecordsOff) continue;                       // не выполнялась — итог прежнего расчёта
+                    if (!RetryOnceOff && _retried.Contains(Features[i])) continue;                                   // уже повторена — сбой постоянный
+                    firstFail = i; break;
+                }
             if (firstFail >= 0 || computed.IntegrityError != null)
             {
                 _lastResult = null;
+                // все сбойные этого расчёта повторяются одним следующим расчётом (с первой) — не по одной на правку
+                if (firstFail >= 0)
+                    for (int i = firstFail; i < Features.Count; i++)
+                        if (computed.Outcomes.TryGetValue(Features[i], out var o2) && o2 == Kernel.OperationOutcome.InternalFailure) _retried.Add(Features[i]);
                 DirtyFromIndex(firstFail >= 0 ? firstFail : Features.Count - 1);
             }
         }
@@ -823,6 +1002,9 @@ public sealed class Part : ModelItem
     internal static readonly bool StaleInputsOff = Environment.GetEnvironmentVariable("P3D_STALEINPUTS") == "0";
     internal static readonly bool GeometryGuard = Environment.GetEnvironmentVariable("P3D_GEOMGUARD") != "0";
     internal static readonly bool RetryAfterFailure = Environment.GetEnvironmentVariable("P3D_RETRYFAIL") != "0";
+    internal static readonly bool RetryOnceOff = Environment.GetEnvironmentVariable("P3D_RETRYONCE") == "0";
+    /// <summary>Операции, сбой которых уже повторялся (повтор — один раз).</summary>
+    private readonly HashSet<Feature> _retried = new(ReferenceEqualityComparer.Instance);
 
     private BuildResult ComputeFull(ParameterTable? parameters, ISketchSolver? solver, CancellationToken cancellation,
                                     Kernel.KernelSettings settingsNow)
@@ -872,6 +1054,7 @@ public sealed class Part : ModelItem
         // НАЧАЛО ПЕРЕСЧЁТА: последнее сохранённое состояние перед изменённой операцией. Операции
         // до него уже выполнены, и их результат лежит в сохранённом; повторять их незачем.
         int from = 0;
+        int dirtyNote = _dirtyFrom;
 
         if (UseCheckpoints && _dirtyFrom < int.MaxValue)
         {
@@ -885,6 +1068,7 @@ public sealed class Part : ModelItem
         else _checkpoints.Clear();
 
         result.StartedAt = from;
+        if (BuildDbg) Console.WriteLine($"BUILD {Name}: from {from} of {Features.Count} (dirty {dirtyNote}), preview {previewNow}, checkpoints {_checkpoints.Count}");
         _checkpoints.RemoveAll(c => c.After >= from);
 
         // ОТМЕТКА СБРАСЫВАЕТСЯ СРАЗУ. Иначе она остаётся опущенной навсегда: первая же правка
@@ -902,7 +1086,15 @@ public sealed class Part : ModelItem
             result.Errors[f] = null;
             result.Created[f] = new List<uint>();
 
-            if (fi < from) continue;
+            // ИТОГ ОПЕРАЦИИ ДО НАЧАЛА ПЕРЕСЧЁТА — ИЗ ЕЁ ПРЕЖНЕГО РАСЧЁТА. Прежде у операций до сохранённого состояния, с
+            // которого начат пересчёт, ошибка, исход, созданные грани, история и происхождение обнулялись: правка в конце
+            // дерева «чинила» сбойную операцию выше (её ошибка пропадала из дерева), пока та не выполнялась снова. Мутация
+            // P3D_KEEPRECORDS=0.
+            if (fi < from)
+            {
+                if (!KeepRecordsOff && _records.TryGetValue(f, out var rec)) rec.CopyTo(f, result);
+                continue;
+            }
             if (fi >= stage) continue;
             if (f.Suppressed) continue;
 
@@ -1101,6 +1293,7 @@ public sealed class Part : ModelItem
 
             result.Executed++;
 
+            _records[f] = FeatureRecord.Of(f, result);
             // Состояние после операции запоминается: следующая правка начнёт отсюда.
             if (UseCheckpoints)
                 using (Kernel.Diagnostics.Prof.Time("дерево: снимок после операции"))

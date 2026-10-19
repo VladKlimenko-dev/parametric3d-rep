@@ -390,8 +390,14 @@ static partial class Program
                     return bl;
                 }
             }
-            Parametric3D.Kernel.Analytic.GeneralBoolean.PairsMaxConcurrent = 0;
-            var p2 = Run(2); long conc = Parametric3D.Kernel.Analytic.GeneralBoolean.PairsMaxConcurrent;
+            // одновременность зависит от загрузки машины (на занятом стенде два потока могли ни разу не перекрыться — ложный
+            // отказ в общем прогоне): до 5 попыток, пока пары не пойдут одновременно; совпадение результата — каждый раз
+            List<TSolid> p2 = null!; long conc = 0;
+            for (int attempt = 0; attempt < 5 && conc < 2; attempt++)
+            {
+                Parametric3D.Kernel.Analytic.GeneralBoolean.PairsMaxConcurrent = 0;
+                p2 = Run(2); conc = Parametric3D.Kernel.Analytic.GeneralBoolean.PairsMaxConcurrent;
+            }
             var p1 = Run(1);
             string Sig(List<TSolid> b) => string.Join("|", b.Select(x => $"{AnalyticVolume.Of(x):R};{string.Join(",", x.Vertices.Select(v => $"{v.P.X:R},{v.P.Y:R},{v.P.Z:R}").OrderBy(z => z))}"));
             bool same = Sig(p1) == Sig(p2);

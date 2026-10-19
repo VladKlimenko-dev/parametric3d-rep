@@ -745,10 +745,8 @@ public static class SolidValidator
         r.Metrics["brep.loopOrientationErrors"] = bad;
     }
     static readonly bool LoopExactOff = Environment.GetEnvironmentVariable("P3D_LOOPEXACT") == "0";
-    // грани с фасетами — пока по включению (P3D_LOOPFACETED=1): у промежуточного тела ступенчатого построителя частичной
-    // вершины (KRN06-PARTIAL-VERTEX-SELECTION) проверка находит «материал справа» у грани скругления, где объём и годность
-    // согласны — причина не разобрана (вероятно, сторона фасет у узкой полосы); до разбора не включается по умолчанию
-    static readonly bool LoopFacetedOff = Environment.GetEnvironmentVariable("P3D_LOOPFACETED") != "1";
+    // грани с фасетами — по точной поверхности-источнику; P3D_LOOPFACETED=0 — только по фасетам (как прежде)
+    static readonly bool LoopFacetedOff = Environment.GetEnvironmentVariable("P3D_LOOPFACETED") == "0";
     static readonly bool LoopDbg = Environment.GetEnvironmentVariable("P3D_LOOPDBG") == "1";
 
     /// <summary>Контур грани против её нормали (по точной поверхности) — причина; согласован или не решить — null.</summary>
@@ -785,7 +783,27 @@ public static class SolidValidator
                 var side = Vector3d.Cross(n, tg); if (side.LengthSquared < 1e-30) continue; side.Normalize();
                 double eps = Math.Max(1e-3 * len, 100 * ToleranceContext.Current.ModelAccuracy);
                 bool? left = af.Contains(af.ProjectTo(p + side * eps)), right = af.Contains(af.ProjectTo(p - side * eps));
-                if (LoopDbg) Console.Error.WriteLine($"LOOPX {f.Tag} cyl {af.Cyl} cone {af.Cone} sph {af.Sph} edge {c.GetType().Name} p {p} side {side} eps {eps:G3} left {left} right {right}");
+                if (LoopDbg)
+                {
+                    string cls = "";
+                    try
+                    {
+                        if (f.Shell?.Solid is { } sol)
+                        {
+                            var pb = Query.PreparedBody.For(sol);
+                            var ql = p + side * eps; var qr = p - side * eps; double dn = eps * 0.5;
+                            cls = $" L(in {pb.Classify(ql - n * dn)} out {pb.Classify(ql + n * dn)}) R(in {pb.Classify(qr - n * dn)} out {pb.Classify(qr + n * dn)})";
+                        }
+                    }
+                    catch (Exception ex) { cls = " cls " + ex.GetType().Name; }
+                    if (af.Cyl && left == false && right == true)
+                    {
+                        var ql = af.ProjectTo(p + side * eps); var qr = af.ProjectTo(p - side * eps);
+                        Console.Error.WriteLine($"LOOPSEG left th {af.Theta(ql):R} h {af.H(ql):R}; right th {af.Theta(qr):R} h {af.H(qr):R}; p th {af.Theta(p):R} h {af.H(p):R}");
+                        foreach (var sg in af.Bounds) Console.Error.WriteLine($"LOOPSEG  kind {sg.Kind} A {sg.A} B {sg.B} C {sg.C} R {sg.R} T0 {sg.T0} sw {sg.Sweep}");
+                    }
+                    Console.Error.WriteLine($"LOOPX {f.Tag} cyl {af.Cyl} cone {af.Cone} sph {af.Sph} faceted {f.Surface is Surfaces.FacetedSurface} sign {facetSign} rev {f.Reversed} edge {c.GetType().Name} p {p} n {n} side {side} eps {eps:G3} left {left} right {right}{cls}");
+                }
                 if (left == true && right == false) agree++;
                 else if (left == false && right == true) against++;
                 break;                                                     // одно ребро на контур

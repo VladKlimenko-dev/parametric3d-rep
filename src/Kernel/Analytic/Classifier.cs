@@ -557,6 +557,33 @@ public sealed partial class AnalyticFace
     }
 
 
+    /// <summary>
+    /// 03.12 (2026-10-20): ОБЩИЙ КОНЕЦ ОТРЕЗКОВ ЛОМАНЫХ — ОДНО ЧИСЛО. Отрезки двух рёбер, сходящихся в вершине, считают угол
+    /// вершины каждый сам — расхождение ~1e-15 рад; луч точки, θ которой попал между двумя значениями, пересекал оба
+    /// полуоткрытых интервала (двойной счёт: точка грани скругления у вершины — «снаружи»; найдено проверкой согласия
+    /// контуров по точной поверхности). Сырые углы концов, отличающиеся меньше 1e-11, приводятся к одному. P3D_RAYCANON=0 — как прежде.
+    /// </summary>
+    double RayCanon(double a)
+    {
+        if (RayCanonOff) return a;
+        var map = _rayCanon;
+        if (map == null)
+        {
+            map = new Dictionary<double, double>();
+            var all = Bounds.Where(x => x.R == 1).SelectMany(x => new[] { x.T0, x.Sweep }).Distinct().OrderBy(x => x).ToList();
+            double rep = double.NaN, prev = double.NaN;
+            foreach (var x in all)
+            {
+                if (double.IsNaN(prev) || x - prev > 1e-11) rep = x;
+                map[x] = rep; prev = x;
+            }
+            _rayCanon = map;
+        }
+        return map.TryGetValue(a, out var c) ? c : a;
+    }
+    Dictionary<double, double>? _rayCanon;
+    static readonly bool RayCanonOff = Environment.GetEnvironmentVariable("P3D_RAYCANON") == "0";
+
     /// <summary>Точка внутри грани (в параметрах); null — сомнительно (ближе допуска к границе).</summary>
     /// <summary>Точка (на поверхности) внутри грани; null — сомнительно (ближе допуска к границе).</summary>
     public bool? Contains(Vector3d q) => Contains(q, Tol);
@@ -638,7 +665,7 @@ public sealed partial class AnalyticFace
                             // ровно в одном отрезке. Прежде концы сдвигались на 2π с округлением: луч точки ровно на шве
                             // развёртки (θ = π) проходил через вершину кромки и считался дважды или ни разу в зависимости от
                             // знака 1e-16 в координате точки кривой (KRN04-REFINE-AT-CLOSED-EDGE-SEAM). Мутация P3D_CYLRAYEXACT=0.
-                            double r0 = s.T0, r1 = s.Sweep, tq = Canon(th);
+                            double r0 = RayCanon(s.T0), r1 = RayCanon(s.Sweep), tq = Canon(th);
                             if (r0 == r1) break;
                             double mn = Math.Min(r0, r1), mx = Math.Max(r0, r1);
                             bool wraps = mx - mn > Math.PI;

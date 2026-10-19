@@ -15,6 +15,8 @@ public sealed class UndoHistory
     /// <summary>Сколько шагов отмены хранится (старые отбрасываются).</summary>
     public int Limit { get; init; } = 200;
 
+    /// <summary>Разбор: сколько операций начала дерева перенято при последнем восстановлении (−1 — не перенято).</summary>
+    public int LastAdopted { get; private set; } = -1;
     public bool CanUndo => _undo.Count > 0;
     public bool CanRedo => _redo.Count > 0;
     public int UndoCount => _undo.Count;
@@ -32,18 +34,20 @@ public sealed class UndoHistory
     public (Part Part, ParameterTable Parameters)? Undo(Part current, ParameterTable? parameters = null, bool rebuild = true)
     {
         if (_undo.Count == 0) return null;
-        _redo.Add(DocumentFile.Save(current, parameters));
+        var now = DocumentFile.Save(current, parameters);
+        _redo.Add(now);
         var snap = _undo[^1]; _undo.RemoveAt(_undo.Count - 1);
-        return Restore(snap, rebuild);
+        var r = Restore(snap, rebuild, current, now, out int k); LastAdopted = k; return r;
     }
 
     /// <summary>Повторить отменённое.</summary>
     public (Part Part, ParameterTable Parameters)? Redo(Part current, ParameterTable? parameters = null, bool rebuild = true)
     {
         if (_redo.Count == 0) return null;
-        _undo.Add(DocumentFile.Save(current, parameters));
+        var now = DocumentFile.Save(current, parameters);
+        _undo.Add(now);
         var snap = _redo[^1]; _redo.RemoveAt(_redo.Count - 1);
-        return Restore(snap, rebuild);
+        var r = Restore(snap, rebuild, current, now, out int k); LastAdopted = k; return r;
     }
 
     /// <summary>UI: забыть последний снимок (правка отменена до того, как что-то изменила, — «Отмена» в панели операции).</summary>
@@ -53,9 +57,11 @@ public sealed class UndoHistory
     public void ClearRedo() => _redo.Clear();
 
     /// <summary>rebuild: false — деталь возвращается «грязной», перестраивает её вызывающий (приложение — в фоне, без остановки окна).</summary>
-    static (Part Part, ParameterTable Parameters) Restore(string snap, bool rebuild)
+    static (Part Part, ParameterTable Parameters) Restore(string snap, bool rebuild, Part? current, string? currentJson, out int adopted)
     {
         var (p, t) = DocumentFile.Load(snap);
+        // u-нагрузка: общая с текущей деталью начальная часть дерева не пересчитывается (сохранённые состояния переносятся)
+        adopted = current != null && currentJson != null ? p.AdoptBuildState(current, currentJson, snap) : -1;
         if (p.LocalParameters.Count > 0) { p.LocalParameters.Parent = t; p.LocalParameters.Recalculate(); }
         if (rebuild) p.Rebuild(p.LocalParameters.Count > 0 ? p.LocalParameters : t);
         return (p, t);

@@ -475,6 +475,35 @@ public static class StepImport
 
     /// <summary>Возвращает число граней, не построенных по контурам (оставленных как есть).</summary>
     static readonly bool MissDbg = Environment.GetEnvironmentVariable("P3D_DONORMISS") == "1";
+    static readonly bool DonorEdgeCheckOff = Environment.GetEnvironmentVariable("P3D_DONOREDGES") == "0";
+    /// <summary>Разбор: доноры сетки, отвергнутые из-за другой разбивки рёбер.</summary>
+    public static int DonorEdgeMismatch;
+
+    /// <summary>
+    /// ДОНОР ГОДИТСЯ, ТОЛЬКО ЕСЛИ ЕГО КРАЙ — ТЕ ЖЕ ТОЧКИ, ЧТО СЕЙЧАС ДАЮТ РЁБРА ГРАНИ. Ключ донора сравнивает поверхность и
+    /// кривые контуров побитово, но разбивка ребра зависит и от соседей в его вершинах (дробление у вершины-клюва, где рёбра
+    /// выходят касаясь друг друга): после прямого скругления у той же дуги шара и стенки выдавливания соседство вершины
+    /// стало другим, грань стенки взяла старую сетку донора, а шар разметился заново с дроблением у клюва — 28 сторон без
+    /// пары, скругление отвергнуто («result invalid: open-edge»). Край донора (стороны треугольников без пары) сверяется с
+    /// точками рёбер (EdgePoints) — множества совпадают до 1e-9 мм, иначе грань размечается заново. Мутация P3D_DONOREDGES=0.
+    /// </summary>
+    static bool DonorFitsEdges(TFace f, Surfaces.FacetedSurface dn)
+    {
+        if (DonorEdgeCheckOff) return true;
+        static (long, long, long) K(Vector3d p) => ((long)Math.Round(p.X * 1e9), (long)Math.Round(p.Y * 1e9), (long)Math.Round(p.Z * 1e9));
+        var need = new HashSet<(long, long, long)>();
+        foreach (var ce in f.Loops.SelectMany(l => l.CoEdges))
+            foreach (var q in Tess.ExactFaceMesher.EdgePoints(ce.Edge)) need.Add(K(q));
+        var sides = new Dictionary<((long, long, long), (long, long, long)), int>();
+        void Side((long, long, long) a, (long, long, long) b) { var k = a.CompareTo(b) < 0 ? (a, b) : (b, a); sides[k] = sides.GetValueOrDefault(k) + 1; }
+        foreach (var (A, B, C) in dn.Facets.ReadView) { var a = K(A); var b = K(B); var c = K(C); Side(a, b); Side(b, c); Side(c, a); }
+        var edge = new HashSet<(long, long, long)>();
+        foreach (var (k, n) in sides) if (n == 1) { edge.Add(k.Item1); edge.Add(k.Item2); }
+        if (edge.SetEquals(need)) return true;
+        Interlocked.Increment(ref DonorEdgeMismatch);
+        if (MissDbg) Console.Error.WriteLine($"DONOREDGES {f.Tag}: donor rim {edge.Count} points, edges {need.Count}, common {edge.Count(need.Contains)}");
+        return false;
+    }
     internal static int MeshFacesFromLoops(TSolid solid, List<string>? warnings, string format,
                                            Func<TFace, Surfaces.FacetedSurface?>? donor = null)
     {
@@ -484,7 +513,7 @@ public static class StepImport
         {
             // Донор (аналитический маршрут): та же грань у операнда — по строгому ключу (поверхность по содержанию,
             // контуры с параметрами кривых побитово) — даёт готовую сетку: разметчик получил бы те же входные данные.
-            if (donor?.Invoke(f2) is { } dn)
+            if (donor?.Invoke(f2) is { } dn && DonorFitsEdges(f2, dn))
             {
                 var copy = new Surfaces.FacetedSurface(dn.Source, dn.FallbackNormal);
                 foreach (var t in dn.Facets.ReadView) copy.Facets.Add(t);
@@ -492,9 +521,10 @@ public static class StepImport
                 copy.FromLoops = true;
                 f2.Surface = copy;
                 built++; DonorReused++;
+                if (MissDbg) Console.Error.WriteLine($"DONORHIT {format} {f2.Tag} " + string.Join(" ", f2.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge.Curve.GetType().Name[0] + (ce.Edge.Curve is Parametric3D.Kernel.Curves.ArcCurve3 ac ? $"[{ac.Frame.Origin.X:0.###},{ac.Frame.Origin.Y:0.###},{ac.Frame.Origin.Z:0.###} r{ac.Radius:0.###}]" : ""))));
                 continue;
             }
-            if (donor != null && MissDbg) Console.Error.WriteLine($"DONORMISS {format} {f2.Tag} {Topology.GeometryAudit.AuthoritativeSurface(f2)?.GetType().Name} loops {f2.Loops.Count} coedges {f2.Loops.Sum(l => l.CoEdges.Count)}");
+            if (donor != null && MissDbg) Console.Error.WriteLine($"DONORMISS {format} {f2.Tag} {Topology.GeometryAudit.AuthoritativeSurface(f2)?.GetType().Name} loops {f2.Loops.Count} coedges {f2.Loops.Sum(l => l.CoEdges.Count)} " + string.Join(" ", f2.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge.Curve.GetType().Name[0] + (ce.Edge.Curve is Parametric3D.Kernel.Curves.ArcCurve3 ac ? $"[{ac.Frame.Origin.X:0.###},{ac.Frame.Origin.Y:0.###},{ac.Frame.Origin.Z:0.###} r{ac.Radius:0.###}]" : ""))));
             // Грань, у которой контур — ОДИН ШОВ (полный шар, замкнутая поверхность):
             // строить по такому контуру нечего, у неё остаётся своя точная сетка.
             // Шов — ОДНО ребро, пройденное контуром дважды. Контур из одной замкнутой кромки (стенка
