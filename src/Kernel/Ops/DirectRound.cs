@@ -594,12 +594,20 @@ public static partial class DirectRound
                     }
                     groups.Add(g);
                 }
-                if (groups.Any(g => !g.Any(x => circs.Contains(x)))) { why = "tangent chains: a chain without arcs next to tangent chains"; return null; }
+                // KRN-11 (11.2): цепочка без дуг (прямые рёбра контура грани рядом с отверстием из двух полудуг) — обычным
+                // путём прямых рёбер, а не отказом. Мутация P3D_DRTANMIXED=0 — прежний отказ.
+                if (groups.Any(g => !g.Any(x => circs.Contains(x))) && (TanMixedOff || ch && _chamfer != null)) { why = "tangent chains: a chain without arcs next to tangent chains"; return null; }
             }
             else groups.Add(allT);
+            // группа только из дуг (окружность отверстия) — построителем окружностей; только из отрезков — путём прямых рёбер
+            var straight = new List<TEdge>(); var circles = new List<TEdge>();
             foreach (var g in groups)
+            {
+                if (!TanMixedOff && !g.Any(x => circs.Contains(x))) { straight.AddRange(g); continue; }
+                if (!TanMixedOff && g.All(x => circs.Contains(x))) { circles.AddRange(g); continue; }
                 if (!TangentLoopBlends(g, byFace, r, ch, blends, ref why)) return null;
-            edges.Clear(); circs.Clear();
+            }
+            edges.Clear(); circs.Clear(); edges.AddRange(straight); circs.AddRange(circles);
         }
         if (circs.Count > 0 && !CircularBlends(circs, byFace, blends, r, ch, ref why)) return null;
         if (closedCC.Count > 0 && !CylCylBlends(body, closedCC, byFace, blends, r, ref why)) return null;
@@ -1627,6 +1635,18 @@ public static partial class DirectRound
     /// отверстие). Контакты — окружность радиуса ρ на плоскости и окружность радиуса R на цилиндре в σr от плоскости. Лента —
     /// тор (скругление: дуга радиуса r в меридиане, повёрнутая вокруг оси) или конус (фаска: отрезок). Мутация P3D_DRCIRCLES=0.
     /// </summary>
+    static readonly bool SeamRimOff = Environment.GetEnvironmentVariable("P3D_DRSEAMRIM") == "0";
+    static readonly bool TanMixedOff = Environment.GetEnvironmentVariable("P3D_DRTANMIXED") == "0";
+
+    /// <summary>Дуги окружности в контуре — подряд (по кругу).</summary>
+    static bool ContiguousMine(List<Seg> l, List<TEdge> arcs)
+    {
+        bool M(int i) => l[i].Id != null && arcs.Contains(l[i].Id!);
+        int starts = 0;
+        for (int i = 0; i < l.Count; i++) if (M(i) && !M((i + l.Count - 1) % l.Count)) starts++;
+        return starts == 1 || starts == 0 && l.All(sg => sg.Id != null && arcs.Contains(sg.Id));
+    }
+
     static bool CircularBlends(List<TEdge> circs, Dictionary<TFace, FDesc> byFace, List<FDesc> blends, double r, bool ch, ref string? why)
     {
         // окружность ребра может быть одним замкнутым ребром или цепочкой дуг (отверстие операции «отверстие» — четверти):
@@ -1661,10 +1681,20 @@ public static partial class DirectRound
             // контуры: у плоскости и у цилиндра окружность — отдельный контур только из этих дуг; цилиндр — пояс из двух окружностей
             bool Whole(List<Seg> l) => l.Count == arcs.Count && l.All(sg => sg.Id != null && arcs.Contains(sg.Id));
             var lp = Fp.Loops.FirstOrDefault(Whole); var lc = Fc.Loops.FirstOrDefault(Whole);
-            if (lp == null || lc == null) { why = "circle: not a loop of its own"; return false; }
-            if (Fc.Loops.Count != 2) { why = "circle: cylinder face is not a band between two circles"; return false; }
-            var otherLoop = Fc.Loops.First(l => l != lc);
-            if (otherLoop.Any(sg => sg.Curve is not ArcCurve3)) { why = "circle: cylinder's other edge is not a circle"; return false; }
+            // KRN-11 (11.2): ЦИЛИНДР СО ШВОМ (примитив, выдавливание круга) — в контурах грани, кроме двух окружностей, тот же
+            // отрезок шва дважды (один контур [окружность, шов, окружность, шов] или, после нормализации копии, кольца
+            // [окружность] и [шов, окружность, шов]). Конец шва на окружности сдвигается вместе с ней. Мутация P3D_DRSEAMRIM=0.
+            var allFc = Fc.Loops.SelectMany(l => l).ToList();
+            var seamSegs = allFc.Where(sg => sg.Curve is LineCurve3).ToList();
+            bool seamForm = !SeamRimOff && seamSegs.Count == 2 && ReferenceEquals(seamSegs[0].Curve, seamSegs[1].Curve)
+                && allFc.Count(sg => sg.Id != null && arcs.Contains(sg.Id)) == arcs.Count
+                && Fc.Loops.All(l => !l.Any(sg => sg.Id != null && arcs.Contains(sg.Id)) || ContiguousMine(l, arcs));
+            ICurve3? seamC = seamForm ? seamSegs[0].Curve : null;
+            if (!seamForm) seamSegs.Clear();
+            if (lp == null || lc == null && !seamForm) { why = "circle: not a loop of its own"; return false; }
+            if (!seamForm && Fc.Loops.Count != 2) { why = "circle: cylinder face is not a band between two circles"; return false; }
+            var otherLoop = seamForm ? allFc.Where(sg => !ReferenceEquals(sg.Curve, seamC) && !(sg.Id != null && arcs.Contains(sg.Id))).ToList() : Fc.Loops.First(l => l != lc);
+            if (otherLoop.Count == 0 || otherLoop.Any(sg => sg.Curve is not ArcCurve3)) { why = "circle: cylinder's other edge is not a circle"; return false; }
             var oa = (ArcCurve3)otherLoop[0].Curve;
             // сторона материала цилиндра (s) — по наружной нормали грани в точке ребра
             var p = arc.PointAt(arc.T0); var radial = p - O; radial -= ax * Vector3d.Dot(radial, ax); radial.Normalize();
@@ -1715,8 +1745,32 @@ public static partial class DirectRound
                 return new Seg { Curve = na, A = fw ? na.PointAt(na.T0) : na.PointAt(na.T1), B = fw ? na.PointAt(na.T1) : na.PointAt(na.T0) };
             }
             var newP = lp.Select(sg => Moved(sg, O, rho)).ToList();
-            var newC = lc.Select(sg => Moved(sg, O + shift, R)).ToList();
-            lp.Clear(); lp.AddRange(newP); lc.Clear(); lc.AddRange(newC);
+            List<Seg> newC;
+            if (seamForm)
+            {
+                // шов: конец на этой окружности сдвигается вдоль оси; оба вхождения — одна новая кривая
+                bool OnCircle(Vector3d q) => Math.Abs(Vector3d.Dot(q - O, np)) < 1e-9 * Math.Max(1, R);
+                LineCurve3? ns = null; newC = new List<Seg>();
+                foreach (var l in Fc.Loops)
+                {
+                    var cut = new List<Seg>();
+                    foreach (var sg in l)
+                    {
+                        if (sg.Id != null && arcs.Contains(sg.Id)) { var mv = Moved(sg, O + shift, R); cut.Add(mv); newC.Add(mv); continue; }
+                        if (!ReferenceEquals(sg.Curve, seamC)) { cut.Add(sg); continue; }
+                        var a2 = OnCircle(sg.A) ? sg.A + shift : sg.A; var b2 = OnCircle(sg.B) ? sg.B + shift : sg.B;
+                        if (ns == null) ns = new LineCurve3(a2, b2);
+                        cut.Add(new Seg { Curve = ns, A = a2, B = b2 });
+                    }
+                    l.Clear(); l.AddRange(cut);
+                }
+            }
+            else
+            {
+                newC = lc!.Select(sg => Moved(sg, O + shift, R)).ToList();
+                lc.Clear(); lc.AddRange(newC);
+            }
+            lp.Clear(); lp.AddRange(newP);
             Fp.Touched = true;
             Fc.Hint = (O + shift + oa.Frame.Origin) / 2 + radial * R;   // середина пояса цилиндра
             // лента: тор (дуга в меридиане) или конус (отрезок), вращением вокруг оси

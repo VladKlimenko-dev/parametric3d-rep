@@ -117,6 +117,9 @@ public static class SolidValidator
     {
         if (ValCacheOff) return run();
         var ks = KernelSettings.Capture() with { Preview = false, LivePreview = false };
+        // 02.6: ключ памяти — со всеми настройками, в т. ч. бюджетом точности (смена единиц/масштаба — новая проверка).
+        // Мутация P3D_CACHEKEYTOL=0: ключ без бюджета точности.
+        if (CacheKeyTolOff) ks = ks with { Tolerance = ToleranceContext.Default };
         long rev = solid.Revision; var ex = solid.Exact; ulong fp = TopoFingerprint.Of(solid);
         var e = _valCache.GetValue(solid, _ => new ValEntry());
         lock (e)
@@ -137,6 +140,7 @@ public static class SolidValidator
     }
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, ValEntry> _valCache = new();
     static readonly bool ValCacheOff = Environment.GetEnvironmentVariable("P3D_VALCACHE") == "0";
+    static readonly bool CacheKeyTolOff = Environment.GetEnvironmentVariable("P3D_CACHEKEYTOL") == "0";
     /// <summary>u11: разделов проверки тела из памяти (разбор).</summary>
     public static long ValidationCacheHits;
 
@@ -720,7 +724,55 @@ public static class SolidValidator
                         $"контуры грани {f.Tag} ({(f.Surface is Surfaces.FacetedSurface fz ? fz.Source?.GetType().Name : f.Surface.GetType().Name)}, rev {f.Reversed}, контуров {f.Loops.Count}) не согласованы с её нормалью: векторная площадь по контурам {nl:0.####}, по фасетам {nf:0.####} (площадь {area:G6})", f.Id));
             }
         }
+        // KRN-03 (03.12): ТОЧНЫЕ КРИВЫЕ ГРАНИ (цилиндр, конус, шар) — БЕЗ ФАСЕТ: у середины ребра контура шаг в сторону n × t
+        // (влево по обходу, если смотреть с наружной нормали) обязан вести внутрь грани, шаг вправо — наружу; принадлежность —
+        // чётностью пересечений в параметрах грани (от обхода не зависит). Ребро шва (дважды в грани) и неоднозначный шаг
+        // (оба внутри или оба снаружи — узкая грань) не голосуют. Мутация P3D_LOOPEXACT=0.
+        if (!LoopExactOff)
+            foreach (var f in faces)
+            {
+                // грань с фасетами — её нормаль задают фасеты (у них своя проверка выше); здесь — грани без фасет
+                if (f.Surface is Surfaces.FacetedSurface || GeometryAudit.AuthoritativeSurface(f) is not { IsPlanar: false } || f.Loops.Count == 0) continue;
+                if (LoopAgainstNormal(f) is not { } why) continue;
+                bad++;
+                if (bad <= 5) r.Issues.Add(new ValidationIssue(Representation.BRep, sev, "loop-orientation",
+                    $"контуры грани {f.Tag} ({f.Surface.GetType().Name}, rev {f.Reversed}) не согласованы с её нормалью по точной поверхности: {why}", f.Id));
+            }
         r.Metrics["brep.loopOrientationErrors"] = bad;
+    }
+    static readonly bool LoopExactOff = Environment.GetEnvironmentVariable("P3D_LOOPEXACT") == "0";
+    static readonly bool LoopDbg = Environment.GetEnvironmentVariable("P3D_LOOPDBG") == "1";
+
+    /// <summary>Контур грани против её нормали (по точной поверхности) — причина; согласован или не решить — null.</summary>
+    internal static string? LoopAgainstNormal(TFace f)
+    {
+        Analytic.AnalyticFace? af;
+        try { af = Analytic.AnalyticFace.Of(f, out _); } catch { return null; }
+        // только цилиндр выдавливания (ExtrudedSurface дуги, CylinderSurface): у граней вращения (конус, шар, диск) проба
+        // на телах корпуса давала ложные срабатывания на годных телах — их согласие не проверяется этим способом
+        if (af == null || af.Band || af.Param || af.Tor || af.FullSurface || !af.Cyl || af.Cone
+            || GeometryAudit.AuthoritativeSurface(f) is not (Surfaces.ExtrudedSurface or Surfaces.CylinderSurface)) return null;
+        var uses = new Dictionary<TEdge, int>(ReferenceEqualityComparer.Instance);
+        foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) uses[ce.Edge] = uses.GetValueOrDefault(ce.Edge) + 1;
+        int against = 0, agree = 0;
+        foreach (var l in f.Loops)
+            foreach (var ce in l.CoEdges)
+            {
+                if (uses[ce.Edge] != 1) continue;
+                var c = ce.Edge.Curve; double t0 = c.T0, t1 = c.T1, tm = (t0 + t1) / 2, h = (t1 - t0) * 1e-4;
+                var p = c.PointAt(tm); var tg = (c.PointAt(tm + h) - c.PointAt(tm - h)) * (ce.Reversed ? -1 : 1);
+                double len = (c.PointAt(t1) - c.PointAt(t0)).Length + (c.PointAt(tm) - c.PointAt(t0)).Length;
+                if (tg.LengthSquared < 1e-30 || len < 1e-6) continue;
+                Vector3d n; try { n = f.NormalAt(p); } catch { continue; }
+                var side = Vector3d.Cross(n, tg); if (side.LengthSquared < 1e-30) continue; side.Normalize();
+                double eps = Math.Max(1e-3 * len, 100 * ToleranceContext.Current.ModelAccuracy);
+                bool? left = af.Contains(af.ProjectTo(p + side * eps)), right = af.Contains(af.ProjectTo(p - side * eps));
+                if (LoopDbg) Console.Error.WriteLine($"LOOPX {f.Tag} cyl {af.Cyl} cone {af.Cone} sph {af.Sph} edge {c.GetType().Name} p {p} side {side} eps {eps:G3} left {left} right {right}");
+                if (left == true && right == false) agree++;
+                else if (left == false && right == true) against++;
+                break;                                                     // одно ребро на контур
+            }
+        return against > 0 && agree == 0 ? $"{against} контур(ов) — материал справа от обхода" : null;
     }
 
     static bool OnRevolveAxis(Surfaces.ISurface3? sf, OpenTK.Mathematics.Vector3d p)

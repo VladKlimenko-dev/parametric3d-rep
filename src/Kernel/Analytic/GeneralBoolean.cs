@@ -765,7 +765,7 @@ public static class GeneralBoolean
         // размечалась к «первому» полюсу оси, и булева переворачивала ось поверхности, пока сетка не ляжет на сторону
         // области (8 переворотов из 14 сцен, 2 отказа). Теперь разметчик выбирает полюс по обходу края (материал слева),
         // и топология не зависит от разметчика.
-        UnifyFaces(shell);
+        using (Diagnostics.Prof.Time("общая: слияние граней одной несущей")) UnifyFaces(shell);
         PrismBuild.MergeCollinearEdges(shell);
         if (_src != null)
         {
@@ -802,26 +802,64 @@ public static class GeneralBoolean
     /// оставшиеся полурёбра собираются в контуры по вершинам; у плоской грани контур с площадью > 0 относительно наружной
     /// нормали — наружный. Неоднозначная вершина (касание контуров) — группа не сливается.
     /// </summary>
-    static void UnifyFaces(TShell shell)
+    /// <summary>
+    /// KRN-10 (10.6): ЛОКАЛЬНОЕ ОБНОВЛЕНИЕ СОСЕДСТВА. Решение о паре (ребро, грань, грань) зависит только от этих граней
+    /// (несущие, нормали, контуры двух граней): отвергнутая пара запоминается, форма грани считается один раз на грань —
+    /// после слияния заново проверяются только пары с новой гранью. Порядок обхода и результат — прежние (тот же первый
+    /// годный по порядку граней), проверок — по числу пар, а не «слияний × пар». Мутация P3D_MERGELOCAL=0 — полный пересчёт.
+    /// Возвращает число слияний.
+    /// </summary>
+    static int UnifyFaces(TShell shell)
     {
+        bool local = !MergeLocalOff && !UnifyOldForTest;
+        var shape = new Dictionary<TFace, Geometry.Ssi.Shape?>(ReferenceEqualityComparer.Instance);
+        var rejected = new HashSet<(TEdge, TFace, TFace)>();
+        int merges = 0;
         for (bool again = true; again;)
         {
             again = false;
+            Diagnostics.Prof.Count("общая: проходов слияния", 1);
             var faces = shell.Faces.ToList();
-            var shape = faces.ToDictionary(f => f, f => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)), (IEqualityComparer<TFace>)ReferenceEqualityComparer.Instance);
+            if (!local) shape.Clear();
+            foreach (var f in faces) if (!shape.ContainsKey(f)) shape[f] = Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f));
             var byEdge = new Dictionary<TEdge, List<TFace>>(ReferenceEqualityComparer.Instance);
             foreach (var f in faces) foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) { if (!byEdge.TryGetValue(ce.Edge, out var l)) byEdge[ce.Edge] = l = new(); l.Add(f); }
             foreach (var (e, fs) in byEdge)
             {
                 if (fs.Count != 2 || ReferenceEquals(fs[0], fs[1])) continue;
                 var f1 = fs[0]; var f2 = fs[1];
+                if (local && rejected.Contains((e, f1, f2))) continue;
+                UnifyChecks++;
                 if (MergeDbg && shape[f1] is not Geometry.Ssi.Plane) Console.Error.WriteLine($"PAIR {shape[f1]?.GetType().Name}/{shape[f2]?.GetType().Name} same {SameSurface(shape[f1], shape[f2])}");
-                if (!SameSurface(shape[f1], shape[f2])) continue;
+                if (!SameSurface(shape[f1], shape[f2])) { rejected.Add((e, f1, f2)); continue; }
                 var m = e.Curve.PointAt((e.Curve.T0 + e.Curve.T1) / 2);
-                if (Vector3d.Dot(f1.NormalAt(m), f2.NormalAt(m)) <= 0) continue;
-                if (Merge(shell, f1, f2)) { again = true; break; }
+                if (Vector3d.Dot(f1.NormalAt(m), f2.NormalAt(m)) <= 0) { rejected.Add((e, f1, f2)); continue; }
+                Diagnostics.Prof.Count("общая: попыток слияния", 1);
+                bool corrupt = CorruptMergeForTest;                         // испорченная проверкой попытка — не окончательна
+                if (Merge(shell, f1, f2)) { again = true; merges++; shape.Remove(f1); shape.Remove(f2); break; }
+                if (!corrupt) rejected.Add((e, f1, f2));
             }
         }
+        return merges;
+    }
+    static readonly bool MergeLocalOff = Environment.GetEnvironmentVariable("P3D_MERGELOCAL") == "0";
+    /// <summary>Проверки: полный пересчёт соседства в этом потоке (сравнение результатов).</summary>
+    [ThreadStatic] public static bool UnifyOldForTest;
+    /// <summary>Разбор: сколько пар граней проверено слиянием одной несущей.</summary>
+    public static long UnifyChecks;
+
+    /// <summary>
+    /// KRN-10 (10.6): СЛИЯНИЕ ГРАНЕЙ ОДНОЙ НЕСУЩЕЙ НА ГОТОВОМ ТЕЛЕ (после отпечатков, импорта): соседние грани на одной
+    /// поверхности с одной стороной — одна грань (с доказательством площади, как в общей булевой). Возвращает число слияний;
+    /// тело правится на месте (открытая правка).
+    /// </summary>
+    public static int UnifySameDomain(TSolid solid)
+    {
+        solid.BeginEdit("GeneralBoolean.UnifySameDomain", EditKind.Derive);
+        int n = 0;
+        foreach (var sh in solid.Shells) { n += UnifyFaces(sh); if (n > 0) PrismBuild.MergeCollinearEdges(sh); }
+        if (n > 0) TopologyConventions.Normalize(solid);
+        return n;
     }
 
     internal static bool SameSurface(Geometry.Ssi.Shape? a, Geometry.Ssi.Shape? b)

@@ -41,6 +41,9 @@ public sealed class Classifier
         }
     }
 
+    /// <summary>KRN-10 (10.2): классификатор по готовым точным формам граней (PreparedBody).</summary>
+    internal Classifier(List<AnalyticFace> faces) { _faces.AddRange(faces); }
+
     static readonly Vector3d[] Dirs =
     {
         new Vector3d(0.5383, 0.6189, 0.5718).Normalized(), new Vector3d(-0.3271, 0.8147, -0.4789).Normalized(),
