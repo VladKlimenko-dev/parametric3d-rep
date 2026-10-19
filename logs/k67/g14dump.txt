@@ -1,0 +1,2 @@
+{"runtime":".NET 8.0.31","cpu":2,"os":"Ubuntu 24.04.5 LTS","args":["g14dump","/tmp/claude-0/g14x"]}
+G14 dump: 95 cases → /tmp/claude-0/g14x
