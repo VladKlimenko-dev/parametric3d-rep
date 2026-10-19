@@ -138,7 +138,7 @@
         </Border>
 
         <!-- панель вида -->
-        <Border Classes="overlay" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,10,0,0" Padding="4,2">
+        <Border x:Name="ViewBar" Classes="overlay" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,10,0,0" Padding="4,2">
           <StackPanel Orientation="Horizontal" Spacing="1" x:Name="ViewTools" />
         </Border>
 

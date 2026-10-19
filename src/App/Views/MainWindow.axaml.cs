@@ -60,8 +60,7 @@ public partial class MainWindow : Window
     public MainWindow(DocumentSession session)
     {
         InitializeComponent();
-        // весь текст поверх окна вида (подсказки, значение при перетаскивании, панели вида, сообщения) — шрифтом ГОСТ тип А
-        ViewArea.SetValue(Avalonia.Controls.Documents.TextElement.FontFamilyProperty, ViewCube.ViewFont);
+        // шрифт ГОСТ тип А — только у объектов вида (размеры эскиза, подписи куба вида); меню и панели — шрифтом интерфейса
         Loc.Set(UserPrefs.Current.Language == "en");
         StandardCommands.Register(this);
         WireView();
@@ -292,6 +291,7 @@ public partial class MainWindow : Window
         _toggles.Clear();
         BuildTopBar();
         BuildViewTools();
+        if (_docks.TryGetValue("view", out var vd) && !vd.Horizontal) DockablePanel.Reorient(ViewTools, false);
         BuildCommandBar();
         TreeTools.Children.Clear();
         TreeTools.Children.Add(CmdButton(_reg["tree.collapse"], 16));
@@ -472,8 +472,50 @@ public partial class MainWindow : Window
     /// <summary>Высота столбца панели команд — по высоте вида (за вычетом полей): лишнее уходит в следующий столбец.</summary>
     private void FitCommandBar()
     {
+        if (_cmdHorizontal)
+        {
+            CommandStack.MaxHeight = double.PositiveInfinity;
+            CommandStack.MaxWidth = Math.Max(300, ViewArea.Bounds.Width - 60);
+            return;
+        }
+        CommandStack.MaxWidth = double.PositiveInfinity;
         double h = ViewArea.Bounds.Height - CommandBar.Margin.Top - CommandBar.Padding.Top - CommandBar.Padding.Bottom - 10;
+        if (_docks.TryGetValue("commands", out var d) && d.UserPlaced) h = ViewArea.Bounds.Height - 40;
         if (h > 100) CommandStack.MaxHeight = h;
+    }
+
+    // ================================================================ п. 3 (21:04): панели перемещаются и прилипают к сторонам вида
+
+    private readonly Dictionary<string, DockablePanel> _docks = new();
+    private bool _cmdHorizontal;
+    internal IReadOnlyDictionary<string, DockablePanel> Docks => _docks;
+
+    private void SetupDocks()
+    {
+        void Add(DockablePanel d) { _docks[d.Key] = d; d.Moved += () => { if (d.Key is "commands" or "shapes") PlaceSketchBars(); }; }
+        Add(new DockablePanel("commands", CommandBar, ViewArea, false, h => { _cmdHorizontal = h; CommandStack.Orientation = h ? Orientation.Horizontal : Orientation.Vertical; BuildCommandBar(); }));
+        Add(new DockablePanel("shapes", ShapeBar, ViewArea, false, h =>
+        {
+            if (ShapeStack.Parent is StackPanel outer) outer.Orientation = h ? Orientation.Horizontal : Orientation.Vertical;
+            ShapeStack.Width = h ? double.NaN : 120;
+            ShapeStack.MaxWidth = h ? Math.Max(300, ViewArea.Bounds.Width - 120) : double.PositiveInfinity;
+        }));
+        Add(new DockablePanel("view", ViewBar, ViewArea, true, h => DockablePanel.Reorient(ViewTools, h)));
+        Add(new DockablePanel("sketch", SketchBar, ViewArea, true, h => DockablePanel.Reorient(SketchBarStack, h)));
+        Add(new DockablePanel("context", ContextBar, ViewArea, true, h =>
+        {
+            if (SelChip.Parent is StackPanel inner) DockablePanel.Reorient(inner, h);
+            DockablePanel.Reorient(ContextOps, h);
+            SelChipText.MaxWidth = h ? double.PositiveInfinity : 200;
+            SelChipText.TextWrapping = h ? TextWrapping.NoWrap : TextWrapping.Wrap;
+        }));
+        bool restored = false;
+        ViewArea.SizeChanged += (_, _) =>
+        {
+            if (!restored && ViewArea.Bounds.Width > 50) { restored = true; foreach (var d in _docks.Values) d.Restore(); }
+            foreach (var d in _docks.Values) d.Relayout();
+        };
+        foreach (var d in _docks.Values) d.Panel.SizeChanged += (_, _) => d.Relayout();
     }
 
     /// <summary>Маленькая стрелка «список» (рисунок, не текст).</summary>
@@ -553,8 +595,13 @@ public partial class MainWindow : Window
         });
         for (int g = 0; g < groups.Length; g++)
         {
-            if (g > 0) { var sep = Separator(false); sep.Width = 128; CommandStack.Children.Add(sep); }
-            foreach (var id in groups[g].Main) if (_reg.Find(id) is { } c) CommandStack.Children.Add(CmdButton(c, 20, text: true, minWidth: 128));
+            if (g > 0)
+            {
+                var sep = Separator(_cmdHorizontal);
+                if (_cmdHorizontal) sep.Height = 28; else sep.Width = 128;
+                CommandStack.Children.Add(sep);
+            }
+            foreach (var id in groups[g].Main) if (_reg.Find(id) is { } c) CommandStack.Children.Add(CmdButton(c, 20, text: true, minWidth: _cmdHorizontal ? 0 : 128));
             if (groups[g].More.Length > 0)
             {
                 var more = groups[g].More.Where(id => _reg.Find(id) != null).ToArray();
@@ -563,7 +610,7 @@ public partial class MainWindow : Window
                 {
                     "op.face_offset" => "Прямая правка ▸", "an.measure" => "Анализ ▸", "ff.curve_offset" => "Кривые ▸", "ff.surf_ruled" => "Поверхности ▸", "subd.extrude" => "SubD ▸", "tree.rebuild" => "Дерево ▸", "op.surface_extrude" => "Поверхности ▸", _ => "Ещё…",
                 };
-                var b = new Button { Content = L(moreLabel), Classes = { "tool" }, MinWidth = 128, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 2) };
+                var b = new Button { Content = L(moreLabel), Classes = { "tool" }, MinWidth = _cmdHorizontal ? 0 : 128, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 2) };
                 b.Click += (_, _) =>
                 {
                     var sp = ListColumns();
@@ -605,10 +652,19 @@ public partial class MainWindow : Window
     /// <summary>Панель фигур — справа от панели команд; «Готово / Отмена» — слева от куба вида.</summary>
     private void PlaceSketchBars()
     {
-        double cmdW = CommandBar.Bounds.Width > 0 ? CommandBar.Bounds.Width : 140;
-        ShapeBar.Margin = new Thickness(10 + cmdW + 6, 10, 0, 0);
-        double cubeW = Cube.Bounds.Width > 0 ? Cube.Bounds.Width : 130;
-        SketchBar.Margin = new Thickness(0, 10, 10 + cubeW + 8, 0);
+        // по умолчанию: фигуры — справа от панели команд (если та не перенесена), «Готово / Отмена» — слева от куба;
+        // перенесённые пользователем панели не трогаются
+        if (!(_docks.TryGetValue("shapes", out var sd) && sd.UserPlaced))
+        {
+            bool cmdDefault = !(_docks.TryGetValue("commands", out var cd) && cd.UserPlaced);
+            double cmdW = cmdDefault && CommandBar.Bounds.Width > 0 ? CommandBar.Bounds.Width : cmdDefault ? 140 : 0;
+            ShapeBar.Margin = new Thickness(10 + cmdW + (cmdDefault ? 6 : 0), 10, 0, 0);
+        }
+        if (!(_docks.TryGetValue("sketch", out var kd) && kd.UserPlaced))
+        {
+            double cubeW = Cube.Bounds.Width > 0 ? Cube.Bounds.Width : 130;
+            SketchBar.Margin = new Thickness(0, 10, 10 + cubeW + 8, 0);
+        }
     }
 
     /// <summary>Правка значения размера (из полосы предложений).</summary>
@@ -720,6 +776,7 @@ public partial class MainWindow : Window
         // значки ограничений эскиза — поверх вида, под панелями
         GlyphLayer = new ConstraintGlyphLayer(View);
         ViewArea.Children.Insert(ViewArea.Children.IndexOf(RegionCanvas) + 1, GlyphLayer);
+        SetupDocks();
         View.ComponentDragStarted += _ => Session.BeginEdit(L("Перетащить компонент"));
         View.ComponentDragEnded += _ => { Session.CommitEdit(); Commands.AssemblyCommands.Solve(this); };
         View.SketchEdited += () => { ScheduleTree(); UpdateStatus(); UpdateContextBar(); };

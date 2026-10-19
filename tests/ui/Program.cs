@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using OpenTK.Mathematics;
 using Parametric3D.App;
 using Parametric3D.App.Commands;
@@ -557,6 +558,53 @@ Check("UI-SKETCH-UX", () =>
     Console.WriteLine(JsonSerializer.Serialize(new { info = "UI-SKETCH-UX", empty = "trim…", twoPoints = two, twoLines, radius = dim }));
     w.CancelSketch();
     Require(!w.FindControl<Border>("SketchBar")!.IsVisible && !w.FindControl<Border>("ShapeBar")!.IsVisible, "sketch bars visible after the sketch");
+    w.Close();
+});
+
+Check("UI-PANELS-DOCK", () =>
+{
+    // (21:04) п. 3: панели поверх вида перемещаются и прилипают к сторонам (у боков — вертикальные, сверху/снизу —
+    // горизонтальные), место запоминается; п. 2: шрифт ГОСТ — у объектов вида, не у меню; п. 1: эскиз в правке виден,
+    // даже если в дереве скрыт
+    var s = DocumentSession.NewPart();
+    var w = Open(s);
+    var docks = w.Docks;
+    Require(new[] { "commands", "shapes", "view", "sketch", "context" }.All(docks.ContainsKey), "docks: " + string.Join(",", docks.Keys));
+    var view = docks["view"];
+    var tools = w.FindControl<StackPanel>("ViewTools")!;
+    view.DockTo(DockablePanel.Side.Left, 0.5); Dispatcher.UIThread.RunJobs();
+    Require(!view.Horizontal && tools.Orientation == Avalonia.Layout.Orientation.Vertical && view.Panel.HorizontalAlignment == Avalonia.Layout.HorizontalAlignment.Left, "view bar did not dock left vertically");
+    var area = w.FindControl<Grid>("ViewArea")!;
+    view.MoveTo(area.Bounds.Width - view.Panel.Bounds.Width - 20, 300); Dispatcher.UIThread.RunJobs();
+    view.Snap(); Dispatcher.UIThread.RunJobs();
+    Require(view.Docked == DockablePanel.Side.Right && !view.Horizontal && view.Panel.HorizontalAlignment == Avalonia.Layout.HorizontalAlignment.Right, $"no snap to the right side: {view.Docked}");
+    view.MoveTo(300, 300); view.Snap();
+    Require(view.Docked == DockablePanel.Side.Free, "snapped while far from the edges");
+    var cmd = docks["commands"];
+    cmd.DockTo(DockablePanel.Side.Bottom, 0.5); Dispatcher.UIThread.RunJobs();
+    var stack = w.FindControl<WrapPanel>("CommandStack")!;
+    Require(cmd.Horizontal && stack.Orientation == Avalonia.Layout.Orientation.Horizontal && cmd.Panel.VerticalAlignment == Avalonia.Layout.VerticalAlignment.Bottom, "command bar did not turn horizontal at the bottom");
+    cmd.Save();
+    Require(UserPrefs.Current.PanelPlaces.TryGetValue("commands", out var saved) && saved.StartsWith("Bottom"), "place not saved: " + saved);
+    cmd.Reset(); cmd.Restore(); Dispatcher.UIThread.RunJobs();
+    Require(cmd.Docked == DockablePanel.Side.Bottom && cmd.Horizontal, "place not restored");
+    foreach (var d in docks.Values) { d.Reset(); d.Save(); }
+    Require(!view.UserPlaced && view.Horizontal && tools.Orientation == Avalonia.Layout.Orientation.Horizontal && !cmd.Horizontal, "reset");
+    Require(UserPrefs.Current.PanelPlaces.Count == 0, "places left after reset");
+    // шрифт ГОСТ только у вида: панели — шрифтом интерфейса
+    var gost = Parametric3D.Render.GostFont.Family;
+    var panelText = stack.GetVisualDescendants().OfType<TextBlock>().ToList();
+    Require(panelText.Count > 0 && panelText.All(t => !t.FontFamily.Name.Contains(gost)), "menu text uses the GOST font");
+    // эскиз в правке, скрытый в дереве, — всё равно в сцене
+    var part = s.Part!;
+    w.SelectItem(part.PlaneXY);
+    w.StartOperation(new SketchOp());
+    var sk = w.ViewPort.ActiveSketch!;
+    Rect(sk, 0, 0, 30, 20);
+    sk.Visible = false;
+    var scene = Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions(), part, sk);
+    Require(scene.Lines.Count(l => scene.PickTable[(int)l.Pick].Ref.Kind == PickKind.SketchCurve) >= 4, "hidden active sketch is not drawn");
+    w.CancelSketch();
     w.Close();
 });
 

@@ -363,8 +363,11 @@ public sealed class SceneRenderer : IDisposable
         DrawPlanes(f, pick: false);
 
         // линии и точки опорных элементов и эскизов
+        // в эскизе его линии и точки не заслоняются ничем (плоскость эскиза может совпадать с гранью или опорной плоскостью)
+        if (SketchMode) GL.Disable(EnableCap.DepthTest);
         DrawLines(_lines, f, 4e-5f);
         DrawPoints(_points, f, 6e-5f, onlyFlagged: false);
+        if (SketchMode) GL.Enable(EnableCap.DepthTest);
         if (!SketchMode) DrawPoints(_bodyVerts, f, 8e-5f, onlyFlagged: !ShowAllVertices);
 
         // построение инструмента — поверх всего
