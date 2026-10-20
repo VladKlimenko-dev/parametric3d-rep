@@ -660,8 +660,10 @@ Check("UI-TOOLBAR-TRAY", () =>
     Run();
     string[] names = { "CommandBar", "ViewBar", "ShapeBar", "SketchBar" };
     foreach (var n in names) Require(w.FindControl<Border>(n)!.Parent == tray, n + " is not in the toolbar tray");
-    Require(w.FindControl<Border>("ContextBar")!.GetVisualAncestors().Contains(trayBorder), "context bar is not in the tray");
-    Require(!area.Children.OfType<Border>().Any(b => names.Contains(b.Name) || b.Name == "ContextBar"), "a tool panel is still over the view");
+    // (13:09): панель предложенных операций — внизу вида, поверх него (не в полосе)
+    var ctxBar = w.FindControl<Border>("ContextBar")!;
+    Require(ctxBar.Parent == area && ctxBar.VerticalAlignment == Avalonia.Layout.VerticalAlignment.Bottom && !ctxBar.GetVisualAncestors().Contains(trayBorder), "context bar is not at the bottom of the view");
+    Require(!area.Children.OfType<Border>().Any(b => names.Contains(b.Name)), "a tool panel is still over the view");
     var trayBox = trayBorder.Bounds; var areaTop = area.TranslatePoint(new Avalonia.Point(0, 0), w)!.Value.Y;
     Require(areaTop >= trayBorder.TranslatePoint(new Avalonia.Point(0, trayBox.Height), w)!.Value.Y - 0.5, "the view starts above the end of the tray");
     var stack = w.FindControl<WrapPanel>("CommandStack")!;
@@ -691,6 +693,133 @@ Check("UI-TOOLBAR-TRAY", () =>
     var scene = Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions(), part, sk);
     Require(scene.Lines.Count(l => scene.PickTable[(int)l.Pick].Ref.Kind == PickKind.SketchCurve) >= 4, "hidden active sketch is not drawn");
     w.CancelSketch();
+    w.Close();
+});
+
+Check("UI-HIDE-TOGGLE", () =>
+{
+    // (13:09) п. 4: «Скрыть / показать выбранное» — переключатель: второй щелчок возвращает видимость
+    var s = DocumentSession.Sample();
+    var w = Open(s);
+    var part = s.Part!;
+    s.Document.RebuildDirty();
+    var items = new ModelItem[] { part.PlaneXY, part.PlaneYZ };
+    w.SelectItem(items[0]);
+    w.ViewPort.Selection.Select(new PickRef(items[1].Id, PickKind.DatumPlane, part, items[1]), additive: true);
+    var cmd = CommandRegistry.Instance["view.hide"];
+    var sel = w.SelectedItems();
+    Console.WriteLine($"  selected {sel.Count}: {string.Join(",", sel.Select(i => i.Name))}");
+    Require(sel.Count >= 1 && cmd.Enabled && cmd.IsChecked?.Invoke() != true, "hide command state");
+    cmd.Execute();
+    Require(sel.All(i => !i.Visible) && cmd.IsChecked?.Invoke() == true && cmd.Icon == "eye_hidden_ico.svg", "first click hides");
+    cmd.Execute();
+    Require(sel.All(i => i.Visible) && cmd.IsChecked?.Invoke() != true, "second click shows again");
+    w.Close();
+});
+
+Check("UI-FF-GIZMO", () =>
+{
+    // (13:09) пп. 5–6: гизмо переноса, поворота и масштаба тел FreeForm; переключатель Local / Global
+    var s = FreeFormCommands.NewFreeForm(); var w = Open(s); var part = s.Part!;
+    var node = part.Features.OfType<FreeFormFeature>().Single();
+    var vp = w.ViewPort;
+    var box = new FFPrimitiveFeature { Shape = FFPrimitive.Box, A = new ValueRef(40), B = new ValueRef(30), C = new ValueRef(20), FreeForm = node.Key, Frozen = true };
+    part.AddFeature(box); s.Document.RebuildDirty();
+    Require(box.Error == null && Math.Abs(part.Volume - 24000) < 1e-6, "box");
+    void Run() { Dispatcher.UIThread.RunJobs(); s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs(); }
+    (Vector3d Min, Vector3d Max) BB(Vector3d? x = null, Vector3d? y = null)
+    {
+        var X = x ?? Vector3d.UnitX; var Y = y ?? Vector3d.UnitY;
+        return FreeFormExec.BoundsIn(part.Bodies, X, Y, Vector3d.Cross(X, Y))!.Value;
+    }
+    bool Near(Vector3d a, Vector3d b, double tol = 1e-6) => (a - b).Length < tol;
+    string V(Vector3d v) => $"({v.X:F4}, {v.Y:F4}, {v.Z:F4})";
+    FFTransformOp Start(FFXform mode)
+    {
+        vp.Selection.Clear(); Select(w, new PickRef(part.Bodies[0].Faces.First().Id, PickKind.Face, part, null));
+        var op = new FFTransformOp { Mode = mode };
+        w.StartOperation(op); Run(); op.RefreshGizmo();
+        return op;
+    }
+    void Drag(GizmoPart p, Vector3d d, double ang = 0, KeyModifiers m = KeyModifiers.None)
+    {
+        vp.SimulateGizmoDrag(new GizmoDrag(p, d, ang, m)); Run(); w.CurrentOperation!.RefreshGizmo();
+    }
+    FFTransformOp.Local = false;
+
+    // перенос: открыт тождественным (тело на месте, без ошибки), гизмо — в середине тела, оси детали
+    var mo = Start(FFXform.Move);
+    var mf = (FFTransformFeature)mo.EditedFeature!;
+    Console.WriteLine($"  move: gizmo {vp.Gizmo}, error {mf.Error}, volume {part.Volume:F4}");
+    Require(vp.Gizmo is { Mode: GizmoMode.Move } g0 && Near(g0.Origin, new(0, 0, 10)) && Near(g0.X, Vector3d.UnitX) && mf.Error == null && Math.Abs(part.Volume - 24000) < 1e-6, "move gizmo at the body centre, identity step");
+    Require(vp.GizmoHit(new Avalonia.Point(-100, -100)) == GizmoPart.None, "gizmo hit off the view");
+    Drag(GizmoPart.AxisX, new(15, 0, 0));
+    Drag(GizmoPart.PlaneXY, new(5, 7, 0));
+    var bm = BB();
+    Console.WriteLine($"  move: shift ({mf.Dx}, {mf.Dy}, {mf.Dz}), box {V(bm.Min)}–{V(bm.Max)}, gizmo {V(vp.Gizmo!.Origin)}");
+    Require(Near(bm.Min, new(0, -8, 0)) && Near(bm.Max, new(40, 22, 20)) && Near(vp.Gizmo!.Origin, new(20, 7, 10)), "move by axis, then by plane");
+    w.CommitOperation(); Run();
+
+    // масштаб: без SHIFT — тянется сторона (противоположная стоит), SHIFT — в обе стороны, CTRL — пропорции
+    Start(FFXform.Scale);
+    Drag(GizmoPart.AxisX, new(20, 0, 0));
+    var b1 = BB();
+    Console.WriteLine($"  scale X one side: {V(b1.Min)}–{V(b1.Max)}");
+    Require(Near(b1.Min, new(0, -8, 0)) && Near(b1.Max, new(60, 22, 20)), "scale one side");
+    Drag(GizmoPart.AxisY, new(0, 6, 0), 0, KeyModifiers.Shift);
+    var b2 = BB();
+    Console.WriteLine($"  scale Y both sides: {V(b2.Min)}–{V(b2.Max)}");
+    Require(Near(b2.Min, new(0, -14, 0)) && Near(b2.Max, new(60, 28, 20)), "scale both sides (SHIFT)");
+    Drag(GizmoPart.AxisZ, new(0, 0, 10), 0, KeyModifiers.Control);
+    var b3 = BB();
+    var sf = (FFTransformFeature)w.CurrentOperation!.EditedFeature!;
+    Console.WriteLine($"  scale Z keep ratio: {V(b3.Min)}–{V(b3.Max)}, S ({sf.Sx}, {sf.Sy}, {sf.Sz}), volume {part.Volume:F4}");
+    Require(Near(b3.Max - b3.Min, new(90, 63, 30)) && Math.Abs(b3.Min.Z) < 1e-6 && ((b3.Min + b3.Max).Xy * 0.5 - new Vector2d(30, 7)).Length < 1e-6, "scale keeping the aspect ratio (CTRL)");
+    Require(Math.Abs(part.Volume - 90 * 63 * 30) < 1e-6 * 90 * 63 * 30, "scaled volume");
+    // угол — пропорционально по диагонали, SHIFT — от середины
+    double diag = (b3.Max - b3.Min).Length, along = diag / 2;
+    Drag(GizmoPart.Uniform, new Vector3d(along, along, along) / Math.Sqrt(3), 0, KeyModifiers.Shift);
+    var b4 = BB();
+    Console.WriteLine($"  scale corner: {V(b4.Min)}–{V(b4.Max)}");
+    Require(Near(b4.Max - b4.Min, new(180, 126, 60), 1e-4) && Near((b4.Min + b4.Max) * 0.5, (b3.Min + b3.Max) * 0.5, 1e-4), "uniform scale by the corner");
+    w.CancelOperation(); Run();
+    Require(Near(BB().Max - BB().Min, new(40, 30, 20)), "cancel restores the body");
+
+    // поворот: кольца; два поворота подряд складываются в один (ось через середину тела)
+    var ro = Start(FFXform.Rotate);
+    Require(vp.Gizmo is { Mode: GizmoMode.Rotate } gr && Near(gr.Origin, new(20, 7, 10)), "rotate gizmo at the body centre");
+    Drag(GizmoPart.AxisZ, Vector3d.Zero, 90);
+    var r1 = BB();
+    Console.WriteLine($"  rotate Z 90: {V(r1.Min)}–{V(r1.Max)}");
+    Require(Near(r1.Max - r1.Min, new(30, 40, 20), 1e-5) && Near((r1.Min + r1.Max) * 0.5, new(20, 7, 10), 1e-5), "rotate about Z");
+    Drag(GizmoPart.AxisX, Vector3d.Zero, 90);
+    var r2 = BB();
+    var rf = (FFTransformFeature)ro.EditedFeature!;
+    Console.WriteLine($"  then X 90: {V(r2.Min)}–{V(r2.Max)}, axis {V(rf.AxisDir)} angle {rf.Angle}");
+    Require(Near(r2.Max - r2.Min, new(30, 20, 40), 1e-5) && Near((r2.Min + r2.Max) * 0.5, new(20, 7, 10), 1e-5) && Math.Abs(rf.Angle.Value - 120) < 1e-3, "two rotations compose into one");
+    w.CancelOperation(); Run();
+
+    // Local: тело повёрнуто на 30° вокруг Z — оси гизмо по телу; перенос по локальной X
+    var rot = new FFTransformFeature { Mode = FFXform.Rotate, BodyNames = { "Тело 1" }, AxisAt = new(20, 7, 10), AxisDir = Vector3d.UnitZ, Angle = new ValueRef(30), FreeForm = node.Key, Frozen = true };
+    part.AddFeature(rot); Run();
+    Require(rot.Error == null, "rotate step: " + rot.Error);
+    CommandRegistry.Instance["ff.xform_local"].Execute();
+    Require(FFTransformOp.Local && CommandRegistry.Instance["ff.xform_local"].Icon == "ff_xform_local_but.svg", "local toggle");
+    var lo = Start(FFXform.Move);
+    var c30 = Math.Cos(Math.PI / 6); var s30 = Math.Sin(Math.PI / 6);
+    Console.WriteLine($"  local gizmo: X {V(vp.Gizmo!.X)} Y {V(vp.Gizmo!.Y)} origin {V(vp.Gizmo!.Origin)}");
+    Require(Near(vp.Gizmo!.X, new(c30, s30, 0), 1e-9) && Near(vp.Gizmo!.Y, new(-s30, c30, 0), 1e-9) && Near(vp.Gizmo!.Origin, new(20, 7, 10), 1e-6), "local frame of the rotated body");
+    var before = BB(vp.Gizmo!.X, vp.Gizmo!.Y);
+    Drag(GizmoPart.AxisX, new(10, 0, 0));
+    var after = BB(new(c30, s30, 0), new(-s30, c30, 0));
+    Require(Near(after.Min - before.Min, new(10, 0, 0), 1e-5) && Near(after.Max - after.Min, new(40, 30, 20), 1e-5), "move along the local X");
+    // Global: сдвиг тот же в мире, числа — по осям детали
+    CommandRegistry.Instance["ff.xform_local"].Execute(); Run();
+    var lf = (FFTransformFeature)lo.EditedFeature!;
+    Console.WriteLine($"  global: shift ({lf.Dx}, {lf.Dy}, {lf.Dz}), gizmo X {V(vp.Gizmo!.X)}");
+    Require(!FFTransformOp.Local && Near(vp.Gizmo!.X, Vector3d.UnitX) && Math.Abs(lf.Dx.Value - 10 * c30) < 1e-3 && Math.Abs(lf.Dy.Value - 10 * s30) < 1e-3, "switch to global keeps the shift");
+    w.CommitOperation(); Run();
+    Require(vp.Gizmo == null, "gizmo removed after the operation");
     w.Close();
 });
 

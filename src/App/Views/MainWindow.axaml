@@ -38,7 +38,6 @@
     <!-- ===== панели инструментов (12:28): все панели — в полосе над видом, не поверх него ===== -->
     <Border Grid.Row="1" x:Name="ToolTrayBorder" Classes="panel" BorderThickness="0,0,0,1" Padding="4,2">
       <Grid>
-        <!-- последняя — выбор и предлагаемые операции (наименьшая ширина постоянная: смена выбора реже перекладывает ряды) -->
         <WrapPanel x:Name="ToolTray" Orientation="Horizontal" VerticalAlignment="Center">
           <Border x:Name="CommandBar" Classes="toolbar" Margin="2" Padding="3">
             <!-- все пункты всегда видны: не помещаются по высоте вида — следующий столбец, без прокрутки -->
@@ -55,14 +54,6 @@
           </Border>
           <Border x:Name="ViewBar" Classes="toolbar" Margin="2" Padding="4,2">
             <StackPanel Orientation="Horizontal" Spacing="1" x:Name="ViewTools" />
-          </Border>
-          <Border x:Name="ContextBar" VerticalAlignment="Center" MinWidth="280" Classes="toolbar" Margin="2" Padding="6,4">
-            <StackPanel Orientation="Horizontal" Spacing="4">
-              <Border x:Name="SelChip" CornerRadius="6" Padding="8,3" Background="{DynamicResource P3.AccentSoft}" VerticalAlignment="Center">
-                <TextBlock x:Name="SelChipText" FontSize="12" />
-              </Border>
-              <StackPanel x:Name="ContextOps" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" />
-            </StackPanel>
           </Border>
         </WrapPanel>
 
@@ -87,7 +78,7 @@
             <TreeView.ItemTemplate>
               <TreeDataTemplate DataType="vm:TreeNode" ItemsSource="{Binding Children}">
                 <Grid ColumnDefinitions="Auto,*,Auto" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
-                  <Panel Grid.Column="0" Width="18" Height="18" Margin="0,0,6,0">
+                  <Panel Grid.Column="0" Width="18" Height="18" Margin="0,0,6,0" IsVisible="{Binding IsNotBar}">
                     <Image Source="{Binding Icon}" IsVisible="{Binding HasIcon}" Width="16" Height="16" />
                     <Border IsVisible="{Binding !HasIcon}" CornerRadius="3" Background="{DynamicResource P3.PanelBg2}"
                             BorderBrush="{DynamicResource P3.Border}" BorderThickness="1">
@@ -105,10 +96,10 @@
                   </Panel>
                   <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                              Classes.err="{Binding HasError}" Classes.dimmed="{Binding IsDim}" IsVisible="{Binding IsNotBar}" />
-                  <!-- строка отката: цветная полоса (деталь — оранжевая, сборка — синяя, подсборка — фиолетовая); тянется мышью -->
-                  <Grid Grid.Column="1" Grid.ColumnSpan="2" IsVisible="{Binding IsBar}" Cursor="SizeNorthSouth" Background="Transparent" MinWidth="120">
+                  <!-- строка отката: только цветная полоса во всю ширину (деталь — оранжевая, сборка — синяя, подсборка —
+                       фиолетовая), без значка и подписи (13:09); тянется мышью; имя — во всплывающей подсказке -->
+                  <Grid Grid.Column="0" Grid.ColumnSpan="3" IsVisible="{Binding IsBar}" Cursor="SizeNorthSouth" Background="Transparent" MinWidth="120" MinHeight="12">
                     <Border Height="4" CornerRadius="2" Background="{Binding BarBrush}" VerticalAlignment="Center" />
-                    <TextBlock Text="{Binding Name}" FontSize="10" Foreground="{Binding BarBrush}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-3,4,0" />
                   </Grid>
                   <ToggleButton Grid.Column="2" Classes="eye" IsVisible="{Binding HasEye}" IsChecked="{Binding IsVisible}"
                                 Width="22" Height="20" Padding="0" Background="Transparent" BorderThickness="0">
@@ -169,6 +160,16 @@
         <vp:ViewCube x:Name="Cube" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,10,0" />
 
         
+
+        <!-- панель выбора и предлагаемых операций — внизу вида (13:09) -->
+        <Border x:Name="ContextBar" Classes="overlay" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,14" Padding="6,4">
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <Border x:Name="SelChip" CornerRadius="6" Padding="8,3" Background="{DynamicResource P3.AccentSoft}" VerticalAlignment="Center">
+              <TextBlock x:Name="SelChipText" FontSize="12" />
+            </Border>
+            <StackPanel x:Name="ContextOps" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" />
+          </StackPanel>
+        </Border>
 
         <!-- подсказка у вида -->
         <Border x:Name="HintBox" Classes="overlay" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,54,0,0" Padding="10,6"

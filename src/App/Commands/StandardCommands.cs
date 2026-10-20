@@ -82,8 +82,13 @@ public static class StandardCommands
         Style("style.material", "Материал", "style_material_but.svg", DisplayStyle.Material, "material материал металл realistic", K(Key.D6, KeyModifiers.Alt));
         Style("style.view_mesh", "Сетка вида", "style_mesh_but.svg", DisplayStyle.ViewMesh, "mesh triangles сетка треугольники вида", K(Key.D7, KeyModifiers.Alt));
         Style("style.fea_mesh", "Сетка FEA", "style_fea_mesh_but.svg", DisplayStyle.FeaMesh, "fea mesh расчёт сетка элементы мкэ", K(Key.D8, KeyModifiers.Alt));
-        r.Add(new AppCommand { Short = "Скрыть", Id = "view.hide", Label = "Скрыть", Group = V, Icon = "hide_but.svg", Synonyms = "hide",
-            CanRun = () => w.SelectedItems().Count > 0, Run = () => SetVisible(w, w.SelectedItems(), false) });
+        // 13:09: КНОПКА-ПЕРЕКЛЮЧАТЕЛЬ. Выбранное скрыто — повторный щелчок возвращает видимость (выбор остаётся после
+        // скрытия, поэтому вторым щелчком скрытое показывается обратно); значок — «скрыть» или «показать»
+        static bool AllHidden(List<ModelItem> s) => s.Count > 0 && s.All(i => !i.Visible);
+        r.Add(new AppCommand { Short = "Скрыть / показать", Id = "view.hide", Label = "Скрыть / показать выбранное", Group = V, Synonyms = "hide show скрыть показать",
+            IconOf = () => AllHidden(w.SelectedItems()) ? "eye_hidden_ico.svg" : "hide_but.svg",
+            IsChecked = () => AllHidden(w.SelectedItems()),
+            CanRun = () => w.SelectedItems().Count > 0, Run = () => { var s = w.SelectedItems(); SetVisible(w, s, AllHidden(s)); w.RefreshToolStates(); w.UpdateContextBarPublic(); } });
         r.Add(new AppCommand { Short = "Изолировать", Id = "view.isolate", Label = "Изолировать", Group = V, Icon = "isolate_but.svg", Synonyms = "isolate",
             CanRun = () => w.SelectedItems().Count > 0, Run = () => Isolate(w) });
         r.Add(new AppCommand { Short = "Показать всё", Id = "view.show_all", Label = "Показать всё", Group = V, Icon = "show_all_but.svg", Synonyms = "show all unhide",

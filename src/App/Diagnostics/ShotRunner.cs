@@ -30,6 +30,23 @@ public static class ShotRunner
             Console.WriteLine($"handle drag {id}");
             return;
         }
+        if (id.StartsWith("gdrag:") || id.StartsWith("ghold:"))
+        {
+            // 13:09: гизмо — gdrag:часть,dx,dy,dz,угол[,shift|ctrl]; часть — номер GizmoPart (0–2 оси, 3–5 плоскости, 6 угол)
+            var a = id[6..].Split(',');
+            double D(int i) => double.Parse(a[i], System.Globalization.CultureInfo.InvariantCulture);
+            var mods = a.Length > 5 ? (a[5] == "shift" ? Avalonia.Input.KeyModifiers.Shift : a[5] == "ctrl" ? Avalonia.Input.KeyModifiers.Control : Avalonia.Input.KeyModifiers.None) : Avalonia.Input.KeyModifiers.None;
+            w.ViewPort.SimulateGizmoDrag(new Viewport.GizmoDrag((Viewport.GizmoPart)int.Parse(a[0]), new OpenTK.Mathematics.Vector3d(D(1), D(2), D(3)), D(4), mods), end: id.StartsWith("gdrag:"));
+            Console.WriteLine($"gizmo drag {id}: {w.ViewPort.Gizmo}");
+            return;
+        }
+        if (id.StartsWith("body:") && w.Session.Part is { } bp && int.TryParse(id[5..], out int bi) && bi < bp.Bodies.Count)
+        {
+            // выбрать грань тела N (как щелчок по телу в виде)
+            w.ViewPort.Selection.Select(new Parametric3D.Core.PickRef(bp.Bodies[bi].Faces.First().Id, Parametric3D.Core.PickKind.Face, bp, null), additive: false);
+            Console.WriteLine($"body {bi}: selected {w.ViewPort.Selection.Count}");
+            return;
+        }
         if (id.StartsWith("snap:"))
         {
             // промежуточный снимок кадра (разбор мигания): snap:имя → рядом с основным снимком

@@ -521,13 +521,11 @@ public partial class MainWindow : Window
         _shapeMode = PanelMode.StripH;
         _viewMode = PanelMode.StripH;
         _sketchMode = PanelMode.StripH;
-        _ctxMode = PanelMode.StripH;
-        foreach (var b in new Control[] { CommandBar, ShapeBar, SketchBar, ViewBar, ContextBar })
-            ToolTip.SetTip(b, b == CommandBar ? L("Операции") : b == ShapeBar ? L("Фигуры") : b == SketchBar ? L("Эскиз") : b == ViewBar ? L("Вид") : L("Выбор"));
+        _ctxMode = PanelMode.Float;   // выбор и предлагаемые операции — внизу вида (13:09), не в полосе
+        foreach (var b in new Control[] { CommandBar, ShapeBar, SketchBar, ViewBar })
+            ToolTip.SetTip(b, b == CommandBar ? L("Операции") : b == ShapeBar ? L("Фигуры") : b == SketchBar ? L("Эскиз") : L("Вид"));
         if (SelChip.Parent is StackPanel inner) DockablePanel.Reorient(inner, true);
         DockablePanel.Reorient(ContextOps, true);
-        SelChipText.TextTrimming = TextTrimming.CharacterEllipsis;
-        SelChipText.MaxWidth = 120;
     }
 
     /// <summary>Маленькая стрелка «список» (рисунок, не текст).</summary>
@@ -559,7 +557,7 @@ public partial class MainWindow : Window
             {
                 (new[] { "ff.box", "ff.cylinder", "ff.cplane" }, new[] { "ff.cone", "ff.sphere", "ff.torus", "subd.box", "ff.curve_nurbs", "ff.curve_spiral" }),
                 (new[] { "ff.extrude", "ff.revolve", "ff.loft" }, new[] { "ff.sweep", "ff.pipe", "ff.thicken", "ff.shell" }),
-                (new[] { "ff.push_pull", "ff.move", "ff.rotate", "ff.scale" }, new[] { "ff.align_face", "ff.replace_face", "ff.delete_face", "ff.draft_face" }),
+                (new[] { "ff.push_pull", "ff.move", "ff.rotate", "ff.scale", "ff.xform_local" }, new[] { "ff.align_face", "ff.replace_face", "ff.delete_face", "ff.draft_face" }),
                 (new[] { "ff.fillet", "ff.chamfer" }, Array.Empty<string>()),
                 (new[] { "ff.union", "ff.subtract", "ff.intersect", "ff.split" }, Array.Empty<string>()),
                 (new[] { "ff.mirror", "ff.symmetry", "ff.array_linear" }, new[] { "ff.array_circular", "ff.array_curve" }),
@@ -831,6 +829,25 @@ public partial class MainWindow : Window
         View.HandleDragStarted += OnHandleDragStarted;
         View.HandleDragged += OnHandleDragged;
         View.HandleDragEnded += OnHandleDragEnded;
+        View.GizmoDragStarted += part =>
+        {
+            if (CurrentOperation is not { } op) return;
+            op.LivePreview = true;
+            op.BeginDrag();
+            try { op.GizmoStart(part); } catch (Exception ex) { AppLog.Write("gizmo start", ex); }
+        };
+        View.GizmoDragged += d =>
+        {
+            if (CurrentOperation is not { } op) return;
+            try { op.GizmoMove(d); } catch (Exception ex) { AppLog.Write("gizmo drag", ex); }
+            View.Redraw();
+        };
+        View.GizmoDragEnded += () =>
+        {
+            if (CurrentOperation is not { } op) return;
+            try { op.GizmoEnd(); op.EndDrag(); } catch (Exception ex) { AppLog.Write("gizmo end", ex); }
+            UpdateContextBar();
+        };
         View.SceneRebuilt += HideGhostWhenBuilt;
         View.GlReady += info => Dispatcher.UIThread.Post(() =>
         {
@@ -1171,6 +1188,7 @@ public partial class MainWindow : Window
     private void HideGhostWhenBuilt()
     {
         CurrentOperation?.FlushLive();
+        if (CurrentOperation is { Dragging: false } gop && !View.GizmoDragging) gop.RefreshGizmo();
         // полный предпросмотр: расчёт отказал — подпись красная
         if (CurrentOperation is { } cop && ReferenceEquals(cop, _handleOp) && DragValueBox.IsVisible)
             DragValueText.Foreground = cop.HasBuildError || View.GhostBad ? Res("P3.Error") : Res("P3.Text");
@@ -1543,6 +1561,9 @@ public partial class MainWindow : Window
         ContextBar.IsVisible = true;
     }
 
+    /// <summary>Пересобрать полосу выбора (после команды, меняющей состояние выбранного: «скрыть / показать»).</summary>
+    public void UpdateContextBarPublic() => UpdateContextBar();
+
     /// <summary>Кнопка полосы выбора: у стороны вида — кнопка полосы (иконка, один размер), иначе — обычная.</summary>
     private Control CtxButton(AppCommand c, double icon, bool text = false) =>
         _ctxMode is PanelMode.StripV or PanelMode.StripH ? StripButton(c) : CmdButton(c, icon, text: text);
@@ -1605,6 +1626,8 @@ public partial class MainWindow : Window
         View.MarkDirty();
         RefreshAfterOp();
         if (!_startingHandleOp) AttachOpHandle();
+        try { op.RefreshGizmo(); } catch (Exception ex) { AppLog.Write("gizmo", ex); }
+        if (View.Gizmo != null) ShowHint(null);   // подсказка ручки выбора — не к этой операции
     }
 
     public void CommitOperation()
@@ -1633,6 +1656,7 @@ public partial class MainWindow : Window
         _opQuiet = false;
         DragValueBox.IsVisible = false;
         View.Handle = null;
+        View.Gizmo = null;
         View.Selection.Filter = InSketch ? PickFilter.Sketch : PickFilter.All;
         if (!InSketch) View.Selection.Clear();
         HideOpPanel();

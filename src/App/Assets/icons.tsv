@@ -266,6 +266,8 @@ ff_cv_weight_but.svg	FreeForm: поверхности	Вес точки	Позж
 ff_insert_knot_but.svg	FreeForm: поверхности	Вставить узел	Позже, Ф-15	Позже
 ff_push_pull_but.svg	FreeForm: прямая правка	Смещение грани (push-pull)	КП Ф-08, Ф-09	U4
 ff_move_but.svg	FreeForm: прямая правка	Перенос (гизмо)	КП Ф-14, Ф-16	U4
+ff_xform_global_but.svg	FreeForm: прямая правка	Гизмо: оси детали (Global)	команда ff.xform_local, выключено	U13
+ff_xform_local_but.svg	FreeForm: прямая правка	Гизмо: оси тела (Local)	команда ff.xform_local, включено	U13
 ff_rotate_but.svg	FreeForm: прямая правка	Поворот (гизмо, вокруг оси)	КП Ф-16, Ф-20	U4
 ff_scale_but.svg	FreeForm: прямая правка	Масштаб (гизмо)	КП Ф-16	U4
 ff_align_face_but.svg	FreeForm: прямая правка	Выровнять грань	КП Ф-10	U4

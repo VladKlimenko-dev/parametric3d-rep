@@ -115,6 +115,84 @@ public static class FreeFormExec
     /// <summary>Переместить тело по отображению: точно (граф B-rep), иначе — пересборкой.</summary>
     public static TSolid Map(TSolid b, TransformOp.Xform x) => TopologyTransform.Apply(b, x) ?? TransformOp.Copy(b, x);
 
+    /// <summary>
+    /// 13:09: ЛОКАЛЬНАЯ РАМКА ТЕЛА (переключатель Local/Global гизмо): преобладающие направления тела — оси цилиндров и
+    /// вращения (с весом их длины), прямые рёбра (по длине), нормали плоских граней; первое направление — самое весомое,
+    /// второе — самое весомое поперёк него (|cos| &lt; 0.1). Оси переставляются и обращаются, чтобы стоять ближе всего к
+    /// осям детали (повёрнутый брусок: X — ребро, ближайшее к X детали). Ни одного направления (шар) — оси детали.
+    /// </summary>
+    public static (Vector3d X, Vector3d Y, Vector3d Z) LocalFrame(TSolid body)
+    {
+        var dirs = new List<(Vector3d D, double W)>();
+        void Add(Vector3d d, double w)
+        {
+            if (!(w > 0) || d.LengthSquared < 1e-18) return;
+            d = d.Normalized();
+            for (int i = 0; i < dirs.Count; i++)
+                if (Math.Abs(Vector3d.Dot(dirs[i].D, d)) > 0.9995) { dirs[i] = (dirs[i].D, dirs[i].W + w); return; }
+            dirs.Add((d, w));
+        }
+        var bb = Bounds3.Empty;
+        foreach (var v in body.Vertices) bb.Add(v.P);
+        double size = bb.IsEmpty ? 1 : Math.Max(1e-6, (bb.Max - bb.Min).Length);
+        foreach (var f in body.Faces)
+            switch (f.Surface)
+            {
+                case Parametric3D.Kernel.Surfaces.CylinderSurface c: Add(c.Axis.W, 2 * size); break;
+                case Parametric3D.Kernel.Surfaces.RevolvedSurface r: Add(r.Axis.W, 2 * size); break;
+                case Parametric3D.Kernel.Surfaces.PlaneSurface pl: Add(pl.F.W, 0.25 * size); break;
+            }
+        foreach (var e in body.Edges)
+            if (e.Curve is LineCurve3 ln) Add(ln.B - ln.A, (ln.B - ln.A).Length);
+        var ux = Vector3d.UnitX; var uy = Vector3d.UnitY; var uz = Vector3d.UnitZ;
+        if (dirs.Count == 0) return (ux, uy, uz);
+        dirs.Sort((a, b) => b.W.CompareTo(a.W));
+        var a1 = dirs[0].D;
+        Vector3d? a2 = null;
+        foreach (var (d, _) in dirs.Skip(1)) if (Math.Abs(Vector3d.Dot(d, a1)) < 0.1) { a2 = d; break; }
+        if (a2 == null)
+        {
+            // одно направление (цилиндр): второе — ось детали, дальше всего от первого
+            var g = new[] { ux, uy, uz }.OrderBy(v => Math.Abs(Vector3d.Dot(v, a1))).First();
+            a2 = g;
+        }
+        var b2 = (a2.Value - a1 * Vector3d.Dot(a2.Value, a1)).Normalized();
+        var b3 = Vector3d.Cross(a1, b2).Normalized();
+        // перестановка и знаки: ближе всего к осям детали, правая тройка
+        var axes = new[] { a1, b2, b3 };
+        Vector3d best0 = ux, best1 = uy; double bestScore = double.NegativeInfinity;
+        foreach (var perm in new[] { new[] { 0, 1, 2 }, new[] { 0, 2, 1 }, new[] { 1, 0, 2 }, new[] { 1, 2, 0 }, new[] { 2, 0, 1 }, new[] { 2, 1, 0 } })
+        {
+            var x = axes[perm[0]]; var y = axes[perm[1]];
+            if (Vector3d.Dot(x, ux) < 0) x = -x;
+            if (Vector3d.Dot(y, uy) < 0) y = -y;
+            var z = Vector3d.Cross(x, y);
+            double score = Vector3d.Dot(x, ux) + Vector3d.Dot(y, uy) + Vector3d.Dot(z, uz);
+            if (score > bestScore + 1e-12) { bestScore = score; best0 = x; best1 = y; }
+        }
+        return (best0, best1, Vector3d.Cross(best0, best1).Normalized());
+    }
+
+    /// <summary>13:09: габарит тел в рамке (X, Y, Z — единичные, взаимно перпендикулярные): min и max координат по осям, по сетке тел.</summary>
+    public static (Vector3d Min, Vector3d Max)? BoundsIn(IEnumerable<TSolid> bodies, Vector3d x, Vector3d y, Vector3d z)
+    {
+        var mn = new Vector3d(double.MaxValue); var mx = new Vector3d(double.MinValue);
+        bool any = false;
+        foreach (var b in bodies)
+        {
+            IEnumerable<Vector3d> pts;
+            try { pts = Parametric3D.Kernel.Tess.Tessellator.Tessellate(b).Vertices.Select(v => new Vector3d(v.P.X, v.P.Y, v.P.Z)); }
+            catch (Exception) { pts = b.Vertices.Select(v => v.P); }
+            foreach (var p in pts.Concat(b.Vertices.Select(v => v.P)))
+            {
+                var q = new Vector3d(Vector3d.Dot(p, x), Vector3d.Dot(p, y), Vector3d.Dot(p, z));
+                mn = Vector3d.ComponentMin(mn, q); mx = Vector3d.ComponentMax(mx, q);
+                any = true;
+            }
+        }
+        return any ? (mn, mx) : null;
+    }
+
     public static double Size(IEnumerable<TSolid> bodies)
     {
         var bb = Bounds3.Empty;
@@ -297,21 +375,55 @@ public sealed class FFTransformFeature : Feature, IFreeFormNative
     public FFXform Mode;
     public readonly List<string> BodyNames = new();
     public ValueRef Dx = new(0), Dy = new(0), Dz = new(0), Angle = new(0), Factor = new(1);
+    /// <summary>
+    /// 13:09 (гизмо): масштаб по осям рамки (умножается на Factor) и РАМКА операции — направления осей X, Y (Z = X × Y):
+    /// глобальная (по умолчанию — оси детали) или локальная (рамка тела). Сдвиг Dx, Dy, Dz — по осям этой рамки.
+    /// </summary>
+    public ValueRef Sx = new(1), Sy = new(1), Sz = new(1);
+    public Vector3d FrameX = Vector3d.UnitX, FrameY = Vector3d.UnitY;
+    public Vector3d FrameZ => Vector3d.Cross(FrameX, FrameY).Normalized();
     public Vector3d AxisAt;
     public Vector3d AxisDir = Vector3d.UnitZ;
+    /// <summary>Сдвиг в мировых координатах (Dx, Dy, Dz — по осям рамки).</summary>
+    public Vector3d Shift(Parametric3D.Model.Params.ParameterTable? prm) => FrameX.Normalized() * Dx.Resolve(prm) + FrameY.Normalized() * Dy.Resolve(prm) + FrameZ * Dz.Resolve(prm);
     public bool Copy;
     public FFTransformFeature(string name = "Transform") { Name = name; }
     public override string Summary => Mode switch
     {
         FFXform.Rotate => $"Rotate {Angle}° ({BodyNames.Count} bodies){(Copy ? ", copy" : "")}",
-        FFXform.Scale => $"Scale ×{Factor} ({BodyNames.Count} bodies){(Copy ? ", copy" : "")}",
+        FFXform.Scale => (Sx.Value != 1 || Sy.Value != 1 || Sz.Value != 1 ? $"Scale ×{Factor} ({Sx}, {Sy}, {Sz})" : $"Scale ×{Factor}") + $" ({BodyNames.Count} bodies){(Copy ? ", copy" : "")}",
         _ => $"Move ({Dx}, {Dy}, {Dz}) ({BodyNames.Count} bodies){(Copy ? ", copy" : "")}",
     };
+
+    // 13:09 (гизмо): операция открывается с нулевым сдвигом / углом 0 / масштабом 1 и тянется гизмо — тождественное
+    // преобразование без копии оставляет тело как есть, без ошибки (прежде — отказ «сдвиг нулевой»). Копия тождеством —
+    // по-прежнему отказ (тело поверх тела). Мутация P3D_XFORMIDENTITY=0.
+    public static readonly bool IdentityPass = Environment.GetEnvironmentVariable("P3D_XFORMIDENTITY") != "0";
+
+    /// <summary>Преобразование тождественное (при текущих значениях).</summary>
+    public bool IsIdentity(Parametric3D.Model.Params.ParameterTable? prm)
+    {
+        switch (Mode)
+        {
+            case FFXform.Scale:
+            {
+                double k = Factor.Resolve(prm);
+                return Math.Abs(k * Sx.Resolve(prm) - 1) < 1e-12 && Math.Abs(k * Sy.Resolve(prm) - 1) < 1e-12 && Math.Abs(k * Sz.Resolve(prm) - 1) < 1e-12;
+            }
+            case FFXform.Rotate: return Math.Abs(Angle.Resolve(prm)) < 1e-9;
+            default: return Shift(prm).Length < Tol.Weld;
+        }
+    }
 
     public override void Execute(BuildContext ctx)
     {
         if (BodyNames.Count == 0) throw new RebuildException(OperationOutcome.InvalidInput, $"{Name}: no bodies selected.");
         var prm = ctx.Parameters;
+        if (IdentityPass && !Copy && IsIdentity(prm))
+        {
+            foreach (var n in BodyNames) FreeFormExec.Body(ctx, n, Name);
+            return;
+        }
         foreach (var n in BodyNames)
         {
             var b = FreeFormExec.Body(ctx, n, Name);
@@ -321,9 +433,19 @@ public sealed class FFTransformFeature : Feature, IFreeFormNative
                 case FFXform.Scale:
                 {
                     double k = Factor.Resolve(prm);
-                    if (!(k > 1e-6)) throw new RebuildException(OperationOutcome.InvalidInput, $"{Name}: the scale factor must be positive.");
-                    if (Math.Abs(k - 1) < 1e-12) throw new RebuildException(OperationOutcome.InvalidInput, $"{Name}: the scale factor is 1.");
-                    moved = TopologyTransform.Scaled(b, AxisAt, k) ?? throw new RebuildException(OperationOutcome.Unsupported, $"{Name}: the body «{n}» cannot be scaled exactly (procedural surfaces).");
+                    double sx = k * Sx.Resolve(prm), sy = k * Sy.Resolve(prm), sz = k * Sz.Resolve(prm);
+                    if (!(sx > 1e-6 && sy > 1e-6 && sz > 1e-6)) throw new RebuildException(OperationOutcome.InvalidInput, $"{Name}: the scale factor must be positive.");
+                    if (Math.Abs(sx - 1) < 1e-12 && Math.Abs(sy - 1) < 1e-12 && Math.Abs(sz - 1) < 1e-12) throw new RebuildException(OperationOutcome.InvalidInput, $"{Name}: the scale factor is 1.");
+                    if (Math.Abs(sx - sy) < 1e-15 && Math.Abs(sy - sz) < 1e-15)
+                        moved = TopologyTransform.Scaled(b, AxisAt, sx) ?? throw new RebuildException(OperationOutcome.Unsupported, $"{Name}: the body «{n}» cannot be scaled exactly (procedural surfaces).");
+                    else
+                    {
+                        // по осям: точно, где форма это допускает; иначе — перенос по треугольникам (тело гранёное)
+                        var X = FrameX.Normalized(); var Z = FrameZ; var Y = Vector3d.Cross(Z, X);
+                        Vector3d Lm(Vector3d d) => X * (sx * Vector3d.Dot(X, d)) + Y * (sy * Vector3d.Dot(Y, d)) + Z * (sz * Vector3d.Dot(Z, d));
+                        moved = TopologyTransform.ScaledAxes(b, AxisAt, X, Y, Z, sx, sy, sz)
+                                ?? TransformOp.Copy(b, new TransformOp.Xform(p => AxisAt + Lm(p - AxisAt), Lm, false));
+                    }
                     break;
                 }
                 case FFXform.Rotate:
@@ -336,7 +458,7 @@ public sealed class FFTransformFeature : Feature, IFreeFormNative
                 }
                 default:
                 {
-                    var by = new Vector3d(Dx.Resolve(prm), Dy.Resolve(prm), Dz.Resolve(prm));
+                    var by = Shift(prm);
                     if (by.Length < Tol.Weld) throw new RebuildException(OperationOutcome.InvalidInput, $"{Name}: the shift is zero.");
                     moved = FreeFormExec.Map(b, TransformOp.Move(by));
                     break;
@@ -349,9 +471,13 @@ public sealed class FFTransformFeature : Feature, IFreeFormNative
                 var prm2 = ctx.Parameters;
                 Func<Vector3d, Vector3d> map = Mode switch
                 {
-                    FFXform.Scale => p => AxisAt + (p - AxisAt) * Factor.Resolve(prm2),
+                    FFXform.Scale => p =>
+                    {
+                        var X = FrameX.Normalized(); var Z = FrameZ; var Y = Vector3d.Cross(Z, X); double k2 = Factor.Resolve(prm2); var d = p - AxisAt;
+                        return AxisAt + X * (k2 * Sx.Resolve(prm2) * Vector3d.Dot(X, d)) + Y * (k2 * Sy.Resolve(prm2) * Vector3d.Dot(Y, d)) + Z * (k2 * Sz.Resolve(prm2) * Vector3d.Dot(Z, d));
+                    },
                     FFXform.Rotate => TransformOp.Rotate(AxisAt, AxisDir.Normalized(), Angle.Resolve(prm2)).Point,
-                    _ => TransformOp.Move(new Vector3d(Dx.Resolve(prm2), Dy.Resolve(prm2), Dz.Resolve(prm2))).Point,
+                    _ => TransformOp.Move(Shift(prm2)).Point,
                 };
                 cage = c0.Mapped(map, false);
             }
