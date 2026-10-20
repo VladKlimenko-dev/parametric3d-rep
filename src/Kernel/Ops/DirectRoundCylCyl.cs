@@ -387,9 +387,12 @@ public static partial class DirectRound
     /// </summary>
     static Vector3d ChamferPoint(Geometry.Ssi.Shape sh, Geometry.Ssi.Shape other, double sSh, double sOther, double sigma, Vector3d P, Vector3d tg, double d)
     {
+        // 17:31: точка ребра за концом продления может не найтись (NaN) — фаска отказывает, а не падает (Math.Sign(NaN))
+        if (!double.IsFinite(P.X + P.Y + P.Z + tg.X + tg.Y + tg.Z + d)) return new Vector3d(double.NaN);
         var n = Geometry.Ssi.Implicit(sh, P).G; var nO = Geometry.Ssi.Implicit(other, P).G * sOther;
-        var u = Vector3d.Cross(tg, n); if (u.Length < 1e-12) return new Vector3d(double.NaN);
-        u.Normalize(); if (Math.Sign(Vector3d.Dot(u, nO)) != Math.Sign(sigma)) u = -u;
+        var u = Vector3d.Cross(tg, n); if (!(u.Length >= 1e-12)) return new Vector3d(double.NaN);
+        u.Normalize(); if (!double.IsFinite(Vector3d.Dot(u, nO))) return new Vector3d(double.NaN);
+        if (Math.Sign(Vector3d.Dot(u, nO)) != Math.Sign(sigma)) u = -u;
         var x = P + u * d;
         for (int it = 0; it < 60; it++)
         {
@@ -400,6 +403,7 @@ public static partial class DirectRound
             if (dx.Value.Length < 1e-15 * Math.Max(1, x.Length)) break;
         }
         var wf = x - P;
+        if (!double.IsFinite(x.X + x.Y + x.Z)) return new Vector3d(double.NaN);
         if (Math.Abs(Geometry.Ssi.Implicit(sh, x).F) > 1e-10 || Math.Abs(wf.Length - d) > 1e-10 * Math.Max(1, d) || Math.Abs(Vector3d.Dot(wf, tg)) > 1e-10 * Math.Max(1, d)
             || Math.Sign(Vector3d.Dot(wf, nO)) != Math.Sign(sigma)) return new Vector3d(double.NaN);
         return x;

@@ -78,8 +78,10 @@ public static class AnalyticVolume
         // новая ревизия), а объём одного и того же тела считался 3–4 раза за операцию: построитель, его проверка, проверка
         // детали — у ленты процедурного скругления это 0.2–0.3 с каждый раз. Повтор добавляет ту же ошибку квадратуры.
         // Мутация P3D_VOLCACHE=0.
+        // 17:31: как у проверок — без отложенной разметки и сетки показа в ключе (мутация P3D_VALKEYDISPLAY=0 — прежний ключ)
         KernelSettings? key = VolCacheOff ? null : KernelSettings.Capture() with { Preview = false, LivePreview = false };
-        ulong fp = key == null ? 0 : TopoFingerprint.Of(solid);
+        if (key != null && !SolidValidator.KeyDisplayOff) key = key with { DeferMeshing = false };
+        ulong fp = key == null ? 0 : TopoFingerprint.Of(solid, display: SolidValidator.KeyDisplayOff);
         if (key != null && _volCache.TryGetValue(solid, out var hit) && hit.Revision == solid.Revision && hit.Print == fp && hit.Key.Equals(key))
         {
             _quadErr += hit.Quad;
@@ -95,7 +97,7 @@ public static class AnalyticVolume
             if (v is { } vv && PolyhedralAuthoritative(solid) && !AgreesWithPolyhedron(solid, vv)) { PolyVolumeRejected++; v = null; }
         }
         finally { quad = _quadErr; _quadErr = q0 + quad; }
-        if (key != null && solid.Revision == rev && TopoFingerprint.Of(solid) == fp)
+        if (key != null && solid.Revision == rev && TopoFingerprint.Of(solid, display: SolidValidator.KeyDisplayOff) == fp)
             _volCache.AddOrUpdate(solid, new VolEntry { Revision = rev, Print = fp, Key = key, Volume = v, Quad = quad });
         return v;
     }

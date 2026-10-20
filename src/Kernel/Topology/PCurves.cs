@@ -98,6 +98,14 @@ public static class PCurves
     static ICurve2? Densify(TCoEdge ce, ISurface3 s, int samples, double budget, out double dev, out int lastM)
     {
         lastM = samples;
+        // 17:31 (фаска ребра цилиндр ∪ шар — 1.6 с на одно полуребро, дважды): у ПРОЦЕДУРНОЙ кривой (линия касания ленты,
+        // точка — корень уравнения) уплотнение Эрмита упирается в шум корня и удваивает выборку до застоя, а итог — та же
+        // p-кривая проекцией. Сразу проекцией; Эрмита — только если проекция не легла. Мутация P3D_PCPROCFIRST=0.
+        if (ProcFirst && ProjProc && ce.Edge.Curve is ProcCurve3)
+        {
+            var pp = For(ce, s, samples, out dev, projected: true);
+            if (pp != null && dev <= budget) { lastM = -1; return pp; }
+        }
         var pc = For(ce, s, samples, out dev);
         bool proc = ce.Edge.Curve is ProcCurve3 && ProjProc && StallStop;
         // u10: ЗАСТОЙ — У ЛЮБОЙ КРИВОЙ. Ребро, которое не лежит на поверхности (хорда «гранёного» ребра обходного пути на
@@ -116,13 +124,18 @@ public static class PCurves
         }
         return pc;
     }
+    static readonly bool ProcFirst = Environment.GetEnvironmentVariable("P3D_PCPROCFIRST") != "0";
     static readonly bool StallStop = Environment.GetEnvironmentVariable("P3D_PCSTALL") != "0";
     static readonly bool StallAll = Environment.GetEnvironmentVariable("P3D_PCSTALLALL") != "0";
     static readonly bool TimeLog = Environment.GetEnvironmentVariable("P3D_PCTIME") == "1";
     static readonly bool ProjProc = Environment.GetEnvironmentVariable("P3D_PCPROJPROC") != "0";
 
+    /// <summary>Разбор: сколько выборок p-кривых построено (каждая — n точек ребра с проекцией).</summary>
+    public static long Samplings;
+
     private static ICurve2? For(TCoEdge ce, ISurface3 s, int n, out double dev, bool projected = false)
     {
+        Interlocked.Increment(ref Samplings);
         dev = 0;
         var uv = new Vector2d[n + 1]; var xyz = new Vector3d[n + 1];
         var poles = SurfaceDomain.Poles(s);

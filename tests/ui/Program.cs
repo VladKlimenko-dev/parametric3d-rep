@@ -111,6 +111,54 @@ if (only == "probe-load")
     return 0;
 }
 
+if (only == "probe-ffround")
+{
+    // 17:31: FreeForm цилиндр ∪ шар, скругление / фаска ребра пересечения и верхней кромки — время шагов
+    var s = FreeFormCommands.NewFreeForm(); var part = s.Part!;
+    var node = part.Features.OfType<FreeFormFeature>().Single();
+    long Step(Feature f, string name)
+    {
+        f.FreeForm = node.Key; f.Frozen = true; part.AddFeature(f);
+        bool prof = Environment.GetEnvironmentVariable("P3D_PROBEPROF") == name;
+        if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        s.Document.RebuildDirty();
+        if (prof) { Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(30))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
+        Console.WriteLine($"PROBE {name}: {sw.ElapsedMilliseconds} ms, feature {(part.LastFeatureMs.TryGetValue(f, out var ms) ? ms : -1):0} ms, err {f.Error?.Split('\n')[0]}, bodies {part.Bodies.Count}, guarantee {string.Join(",", part.Bodies.Select(b => b.Guarantee))}");
+        return sw.ElapsedMilliseconds;
+    }
+    Step(new FFPrimitiveFeature { Shape = FFPrimitive.Cylinder, A = new ValueRef(15), B = new ValueRef(40) }, "cylinder");
+    Step(new FFPrimitiveFeature { Shape = FFPrimitive.Sphere, A = new ValueRef(20) }, "sphere");
+    Step(new FFTransformFeature { Mode = FFXform.Move, BodyNames = { "Тело 1" }, Dx = new ValueRef(8), Dz = new ValueRef(5) }, "move");
+    Step(new FFBooleanFeature { Op = FFBool.Union, Target = "Тело 1", Tools = { "Тело 2" } }, "union");
+    string Kind(Parametric3D.Kernel.Topology.TEdge e) => string.Join("/", e.CoEdges.Select(c => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(c.Loop.Face)?.GetType().Name).OrderBy(x => x));
+    foreach (var (name, kind, round) in new[] { ("round intersection", "ExtrudedSurface/RevolvedSurface", true), ("chamfer intersection", "ExtrudedSurface/RevolvedSurface", false), ("round top", "ExtrudedSurface/PlaneSurface", true) })
+    {
+        var body = part.Bodies[0];
+        var e = body.Edges.First(x => Kind(x) == kind && (kind.Contains("Plane") ? ReferenceEquals(x.V0, x.V1) : !ReferenceEquals(x.V0, x.V1)));
+        Feature f;
+        if (round) { var rf = new RoundFeature { Radius = new ValueRef(5) }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(e)); f = rf; }
+        else { var cf = new ChamferFeature { D1 = new ValueRef(3), D2 = new ValueRef(3) }; cf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(e)); f = cf; }
+        f.FFBody = part.BodyName(0);
+        if (Environment.GetEnvironmentVariable("P3D_PROBEPREVIEW") == "1")
+        {
+            // как живой предпросмотр ручкой: проверки отложены, сетка грубее
+            f.FreeForm = node.Key; part.AddFeature(f);
+            var ks = Parametric3D.Kernel.KernelSettings.Capture();
+            ks = ks with { Preview = true, LivePreview = true, Chord = ks.Chord * 4 };
+            var swp = System.Diagnostics.Stopwatch.StartNew();
+            Part.BuildResult res;
+            using (new Parametric3D.Kernel.KernelContext(ks).Enter()) res = part.Compute(null, null);
+            Console.WriteLine($"PROBE preview {name}: compute {swp.ElapsedMilliseconds} ms, feature {(res.FeatureMs.TryGetValue(f, out var fm) ? fm : -1):0} ms");
+            part.RemoveFeature(f); s.Document.RebuildDirty();
+            continue;
+        }
+        Step(f, name);
+        part.RemoveFeature(f); s.Document.RebuildDirty();
+    }
+    return 0;
+}
+
 if (only == "probe-leak")
 {
     // разбор: держит ли окно детали, заменённые отменой/повтором

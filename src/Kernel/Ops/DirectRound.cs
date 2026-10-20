@@ -132,6 +132,10 @@ public static partial class DirectRound
     /// <summary>Проверки обходного пути (страховка резца): прямой построитель выключен в этом потоке.</summary>
     [ThreadStatic] public static bool OffForTest;
 
+    static readonly bool CircleClosedRetry = Environment.GetEnvironmentVariable("P3D_DRCIRCLECLOSED") != "0";
+    [ThreadStatic] static bool _circleAsClosed;
+    static readonly bool OpenGenericRetry = Environment.GetEnvironmentVariable("P3D_DROPENGENERIC") != "0";
+
     public static bool TryRound(List<TSolid> bodies, IReadOnlyList<EdgeRef> refs, double r, List<string> warnings)
     {
         if (Off || OffForTest || refs.Count == 0 || !(r > 0) || OwnerBody(bodies, refs) is not int k) return false;
@@ -139,6 +143,18 @@ public static partial class DirectRound
         _mixedSigma = null;
         var res = Build(bodies[k], refs, r, false, ref why);
         if (res == null) Debug?.Invoke("build declined: " + why);
+        if (res == null && CircleClosedRetry && why != null && why.StartsWith("circle:"))
+        {
+            // 17:31: ОКРУЖНОСТЬ ПЛОСКОСТЬ/ЦИЛИНДР, ГДЕ ЦИЛИНДР — НЕ ПОЯС ИЗ ДВУХ ОКРУЖНОСТЕЙ (верхняя кромка цилиндра, нижний край
+            // которого — кривая пересечения с шаром): построитель тора отказывал, и скругление шло резцами и булевой (секунды,
+            // многогранный результат). Повтор — общим построителем замкнутых рёбер (катящийся шар, лента по формуле; ему
+            // второй край цилиндра не нужен). Мутация P3D_DRCIRCLECLOSED=0.
+            string? wc = null;
+            _circleAsClosed = true;
+            try { res = Build(bodies[k], refs, r, false, ref wc); }
+            finally { _circleAsClosed = false; }
+            if (res == null) { why += " | as a closed edge: " + wc; Debug?.Invoke("closed-edge retry declined: " + wc); }
+        }
         bool staged = false;
         if (res == null && _mixedSigma is { } ms && MixedOn) { _mixedSigma = null; res = BuildMixed(bodies[k], refs, r, ms, ref why); staged = res != null; }
         _mixedSigma = null;
@@ -158,6 +174,17 @@ public static partial class DirectRound
             // KRN-06 (06.12, 06.14): незамкнутые рёбра между кривыми гранями — катящийся шар с обрезкой торцами
             string? w3 = null;
             var r3 = BuildOpen(bodies[k], refs, r, ref w3);
+            if (r3 == null && OpenGenericRetry && w3 != null && (w3.Contains("does not leave the end face") || w3.Contains("no blend section inside the end face")))
+            {
+                // 17:31 (цилиндр ∪ шар, ребро пересечения кончается на торце цилиндра): угол вокруг оси цилиндра за концом ребра
+                // складывается (кривая пересечения поворачивает назад по углу), продление по углу не выходит за торец — повтор
+                // с параметром по длине опорной кривой. Мутация P3D_DROPENGENERIC=0.
+                string? w5 = null;
+                _forceGeneric = true;
+                try { r3 = BuildOpen(bodies[k], refs, r, ref w5); }
+                finally { _forceGeneric = false; }
+                if (r3 == null) w3 += " | generic parameter: " + w5;
+            }
             if (r3 != null) { res = r3; Interlocked.Increment(ref OpenBuilt); }
             else { why += " | open curved: " + w3; Interlocked.Increment(ref OpenDeclined); }
         }
@@ -222,6 +249,15 @@ public static partial class DirectRound
                 Func<TEdge, TFace, double> dist = (x, f) => cm is { } c && c.First.TryGetValue(x, out var ff) ? (ReferenceEquals(ff, f) ? c.D1 : c.D2) : d1;
                 string? w2 = null;
                 res = CurvedChamferBuild(bodies[k], refs, d1, dist, ref w2);
+                if (res == null && OpenGenericRetry && w2 != null && (w2.Contains("does not leave the end face") || w2.Contains("no blend section inside the end face")))
+                {
+                    // 17:31: как у скругления — продление по длине опорной кривой ходом по A ∩ B
+                    string? w6 = null;
+                    _forceGeneric = true;
+                    try { res = CurvedChamferBuild(bodies[k], refs, d1, dist, ref w6); }
+                    finally { _forceGeneric = false; }
+                    if (res == null) w2 += " | generic parameter: " + w6;
+                }
                 if (res != null) Interlocked.Increment(ref CurvedChamfers); else why += " | curved chamfer: " + w2;
             }
         }
@@ -524,7 +560,7 @@ public static partial class DirectRound
             if (e == null) { why = "edge not resolved"; return null; }
             // окружность между плоскостью и цилиндром, ось ⟂ плоскости — тор (06.11); прочие замкнутые окружности (плоскость/конус,
             // цилиндр/шар…) — общий построитель замкнутых рёбер (06.12/06.14), P3D_DRQUADRIC=0 — прежний отказ
-            if (e.Curve is ArcCurve3 && Circles && !(QuadricBlendsOn && CylCyl && !ch && ReferenceEquals(e.V0, e.V1) && !PlaneCylCircle(e))) { if (!circs.Contains(e)) circs.Add(e); continue; }
+            if (e.Curve is ArcCurve3 && Circles && !(_circleAsClosed && ReferenceEquals(e.V0, e.V1)) && !(QuadricBlendsOn && CylCyl && !ch && ReferenceEquals(e.V0, e.V1) && !PlaneCylCircle(e))) { if (!circs.Contains(e)) circs.Add(e); continue; }
             if (e.Curve is ArcCurve3 && QuadricBlendsOn && CylCyl && !ch && ReferenceEquals(e.V0, e.V1)) { if (!closedCC.Contains(e)) closedCC.Add(e); continue; }
             // замкнутое ребро-кривая (цилиндр/цилиндр, 06.12) — скругление; P3D_DRCYLCYL=0 — прежний построитель
             if (CylCyl && !ch && e.Curve is not (LineCurve3 or ArcCurve3) && ReferenceEquals(e.V0, e.V1)) { if (!closedCC.Contains(e)) closedCC.Add(e); continue; }

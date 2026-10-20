@@ -11,7 +11,10 @@ namespace Parametric3D.Kernel.Topology;
 /// </summary>
 public static class TopoFingerprint
 {
-    public static ulong Of(TSolid s)
+    public static ulong Of(TSolid s) => Of(s, true);
+
+    /// <summary>display=false — без сетки показа граней (FacetedSurface.Display: её строит показ после операции; проверкам тела она не нужна).</summary>
+    public static ulong Of(TSolid s, bool display)
     {
         ulong h = 1469598103934665603UL;
         void M(ulong x) { h ^= x + 0x9E3779B97F4A7C15UL + (h << 6) + (h >> 2); h *= 1099511628211UL; }
@@ -24,7 +27,7 @@ public static class TopoFingerprint
             foreach (var f in sh.Faces)
             {
                 R(f); R(f.Surface); M(f.Reversed ? 3UL : 4UL);
-                if (f.Surface is FacetedSurface fs) { M((ulong)fs.Facets.Count); R(fs.Display); }
+                if (f.Surface is FacetedSurface fs) { M((ulong)fs.Facets.Count); if (display) R(fs.Display); }
                 M((ulong)f.Loops.Count);
                 foreach (var l in f.Loops)
                 {
