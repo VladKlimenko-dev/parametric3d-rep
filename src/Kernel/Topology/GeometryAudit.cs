@@ -90,6 +90,7 @@ public sealed class GeometryAudit
             }
             double chord = 0;
             if (f.Surface is FacetedSurface fsc && CachedChord(fsc, s) is double cc) chord = cc;
+            else if (f.Surface is FacetedSurface fsh && ChordByContent(fsh, s) is double ch2) chord = ch2;
             else if (f.Surface is FacetedSurface fs)
             {
                 // Ошибка гранения: наибольший отход центров и середин сторон треугольников.
@@ -104,6 +105,7 @@ public sealed class GeometryAudit
                     chord = Math.Max(chord, Distance(s, (p + q) / 2));
                 }
                 StoreChord(fs, s, chord);
+                StoreChordByContent(fs, s, chord);
             }
             a.Faces.Add(new FaceGeometry(f.Id, s.GetType().Name, GeometryLevel.Analytic, chord));
         }
@@ -178,7 +180,7 @@ public sealed class GeometryAudit
     [ThreadStatic] static bool _cacheOffForTests;
     public static bool CacheOffForTests { get => _cacheOffForTests; set => _cacheOffForTests = value; }
     static bool UseCache => !CacheOff && !_cacheOffForTests;
-    public static long CacheHits;
+    public static long CacheHits, CacheMisses, ChordMemoHits;
     sealed class OffBox { public readonly List<(ISurface3 S, bool Exact, double D)> L = new(); }
     static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ICurve3, OffBox> _off = new();
     sealed class ChordBox { public ISurface3? S; public int N; public double D; }
@@ -190,8 +192,38 @@ public sealed class GeometryAudit
         var box = _off.GetValue(c, _ => new OffBox());
         lock (box) foreach (var (S, X, D) in box.L) if (ReferenceEquals(S, s) && X == exact) { Interlocked.Increment(ref CacheHits); return D; }
         double d = exact ? (Geometry.ExactEdges.ShapeOf(s) is { } h2 ? CurveOffExact(c, h2) : double.NaN) : CurveOff(c, s);
+        Interlocked.Increment(ref CacheMisses);
         lock (box) box.L.Add((s, exact, d));
         return d;
+    }
+    // 23:50 (скорость): ОШИБКА ГРАНЕНИЯ — И У НЕЗАМОРОЖЕННОЙ ГРАНИ, ПО СОДЕРЖАНИЮ: треугольники гранения (все точки побитово) и
+    // поверхность. Построитель, его проверка и проверка детали аудируют одно тело 3 раза, а грань ещё не заморожена — и каждый
+    // раз до 2000 проекций на поверхность (у ленты по формуле — 40–70 мс). Мутация P3D_AUDITCHORDMEMO=0.
+    static readonly bool ChordMemoOff = Environment.GetEnvironmentVariable("P3D_AUDITCHORDMEMO") == "0";
+    sealed class ChordContent { public ISurface3? S; public ulong H; public double D; }
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<FacetedSurface, ChordContent> _chordContent = new();
+    static ulong FacetHash(FacetedSurface fs)
+    {
+        ulong h = 1469598103934665603UL;
+        void M(double d) { h ^= (ulong)BitConverter.DoubleToInt64Bits(d) + 0x9E3779B97F4A7C15UL + (h << 6) + (h >> 2); h *= 1099511628211UL; }
+        var list = fs.Facets.ReadView;
+        h ^= (ulong)list.Count;
+        for (int i = 0; i < list.Count; i++) { var (a, b, c) = list[i]; M(a.X); M(a.Y); M(a.Z); M(b.X); M(b.Y); M(b.Z); M(c.X); M(c.Y); M(c.Z); }
+        return h;
+    }
+    static double? ChordByContent(FacetedSurface fs, ISurface3 s)
+    {
+        if (ChordMemoOff || !UseCache || !_chordContent.TryGetValue(fs, out var b)) return null;
+        ulong h = FacetHash(fs);
+        lock (b) { if (ReferenceEquals(b.S, s) && b.H == h) { Interlocked.Increment(ref CacheHits); Interlocked.Increment(ref ChordMemoHits); return b.D; } }
+        return null;
+    }
+    static void StoreChordByContent(FacetedSurface fs, ISurface3 s, double d)
+    {
+        if (ChordMemoOff || !UseCache) return;
+        ulong h = FacetHash(fs);
+        var b = _chordContent.GetValue(fs, _ => new ChordContent());
+        lock (b) { b.S = s; b.H = h; b.D = d; }
     }
     static double? CachedChord(FacetedSurface fs, ISurface3 s)
     {

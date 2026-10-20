@@ -202,6 +202,7 @@ if (only == "probe-ffall")
         ("subtract cone-box", new[] { () => (Feature)Prim(FFPrimitive.Cone, 15, 5, 30), () => Prim(FFPrimitive.Box, 40, 40, 10, 0, 0, 25) }, _ => Bool(FFBool.Subtract)),
         ("union torus+box", new[] { () => (Feature)Prim(FFPrimitive.Torus, 20, 5), () => Prim(FFPrimitive.Box, 12, 10, 20, 20, 0, -10) }, _ => Bool(FFBool.Union)),
         ("union torus+box tangent", new[] { () => (Feature)Prim(FFPrimitive.Torus, 20, 5), () => Prim(FFPrimitive.Box, 10, 10, 20, 20, 0, -10) }, _ => Bool(FFBool.Union)),
+        ("union torus+box outer tangent", new[] { () => (Feature)Prim(FFPrimitive.Torus, 20, 5), () => Prim(FFPrimitive.Box, 9, 10, 20, 20.5, 0, -10) }, _ => Bool(FFBool.Union)),
         ("round box edge", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20) }, p => EdgeOp(p, Line, true, 3)),
         ("chamfer box edge", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20) }, p => EdgeOp(p, Line, false, 3)),
         ("round cyl top", new[] { () => (Feature)Prim(FFPrimitive.Cylinder, 15, 40) }, p => EdgeOp(p, Closed, true, 3)),
@@ -215,6 +216,7 @@ if (only == "probe-ffall")
         ("split", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Cylinder, 6, 40, 0, 0, 0, -10), () => Bool(FFBool.Subtract) }, _ => new FFSplitFeature { Body = "Тело 1", PlaneAt = new OpenTK.Mathematics.Vector3d(0, 0, 10), Normal = OpenTK.Mathematics.Vector3d.UnitZ }),
     };
     string? onlyScene = Environment.GetEnvironmentVariable("P3D_PROBESCENE");
+    if (Environment.GetEnvironmentVariable("P3D_PROBEROUTE") == "1") Parametric3D.Kernel.Ops.BooleanOp.AnalyticRouteDebug = m => Console.WriteLine("  route: " + m);
     var totals = new Dictionary<string, List<double>>();
     for (int rep = 0; rep < reps; rep++)
         foreach (var (name, setup, op) in scenes)
@@ -227,13 +229,16 @@ if (only == "probe-ffall")
             bool prof = rep == reps - 1 && Environment.GetEnvironmentVariable("P3D_PROBEPROF") is { } pp && (pp == name || pp == "all");
             if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
             part.AddFeature(f);
+            long ah0 = Parametric3D.Kernel.Topology.GeometryAudit.CacheHits, am0 = Parametric3D.Kernel.Topology.GeometryAudit.CacheMisses;
             var sw = System.Diagnostics.Stopwatch.StartNew();
             s.Document.RebuildDirty();
             double ms = sw.Elapsed.TotalMilliseconds;
-            if (prof) { Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(25))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
+            if (prof) Console.WriteLine($"  audit cache hits {Parametric3D.Kernel.Topology.GeometryAudit.CacheHits - ah0} misses {Parametric3D.Kernel.Topology.GeometryAudit.CacheMisses - am0}");
+            if (prof) { Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(int.TryParse(Environment.GetEnvironmentVariable("P3D_PROBEPROFN"), out var ppn) ? ppn : 25))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
             double fms = part.LastFeatureMs.TryGetValue(f, out var fm) ? fm : -1;
             (totals.TryGetValue(name, out var l) ? l : totals[name] = new List<double>()).Add(ms);
-            Console.WriteLine($"PROBE {name}: {ms:0} ms, feature {fms:0} ms, err {f.Error?.Split('\n')[0]}, bodies {part.Bodies.Count}, faces {part.Bodies.Sum(b => b.Faces.Count())}, guarantee {string.Join(",", part.Bodies.Select(b => b.Guarantee).Distinct())}");
+            if (Environment.GetEnvironmentVariable("P3D_PROBEWARN") == "1") foreach (var wn in part.Warnings.Distinct()) Console.WriteLine("  warn: " + wn.Split('\n')[0]);
+            Console.WriteLine($"PROBE {name}: {ms:0} ms, feature {fms:0} ms, err {f.Error?.Split('\n')[0]}, bodies {part.Bodies.Count}, faces {part.Bodies.Sum(b => b.Faces.Count())}, vol {part.Volume:R}, guarantee {string.Join(",", part.Bodies.Select(b => b.Guarantee).Distinct())}");
         }
     foreach (var (name, l) in totals) Console.WriteLine($"MIN {name}: {l.Min():0} ms");
     Console.WriteLine($"SUM of minima: {totals.Values.Sum(l => l.Min()):0} ms");

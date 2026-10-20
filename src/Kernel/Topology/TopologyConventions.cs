@@ -908,6 +908,26 @@ public static class TopologyConventions
         var raw = RingPointsRaw(r); if (sign < 0) raw.Reverse(); return raw;
     }
 
+    // 23:50 (скорость): ТОЧКИ КРИВОЙ РЕБРА — ИЗ ПАМЯТИ ПО САМОЙ КРИВОЙ (объект неизменен; копия тела делит кривые) и точности.
+    // Соглашение после каждой операции заново гранило все кольца тела: деталь со 100 отверстиями — 10 000 гранений окружностей
+    // за перестроение. Выдаётся копия. Мутация P3D_RINGPTSMEMO=0.
+    static readonly bool RingPtsMemoOff = Environment.GetEnvironmentVariable("P3D_RINGPTSMEMO") == "0";
+    sealed class CurvePts { public double Chord, Angle; public List<Vector3d> P = null!; }
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Curves.ICurve3, CurvePts> _curvePts = new();
+    public static long RingPtsMemoHits;
+    static List<Vector3d> CurvePoints(Curves.ICurve3 c)
+    {
+        double ch = Core.Tol.Chord, an = Core.Tol.ChordAngle;
+        if (!RingPtsMemoOff && _curvePts.TryGetValue(c, out var e))
+        {
+            lock (e) if (e.Chord == ch && e.Angle == an) { Interlocked.Increment(ref RingPtsMemoHits); return new List<Vector3d>(e.P); }
+        }
+        var seg = new List<Vector3d>();
+        c.Tessellate(seg, true);
+        if (!RingPtsMemoOff) { var b = _curvePts.GetValue(c, _ => new CurvePts()); lock (b) { b.Chord = ch; b.Angle = an; b.P = new List<Vector3d>(seg); } }
+        return seg;
+    }
+
     private static List<Vector3d> RingPointsRaw(Ring r)
     {
         Diagnostics.Prof.Count("соглашение: разметок колец", 1);
@@ -915,8 +935,7 @@ public static class TopologyConventions
         var pts = new List<Vector3d>();
         foreach (var (ce, dir) in r.Items)
         {
-            var seg = new List<Vector3d>();
-            ce.Edge.Curve.Tessellate(seg, true);
+            var seg = CurvePoints(ce.Edge.Curve);
             if (seg.Count == 0) continue;
             if (!ReferenceEquals(ce.Edge.V0, ce.Edge.V1) && (seg[0] - ce.Edge.V0.P).LengthSquared > (seg[^1] - ce.Edge.V0.P).LengthSquared) seg.Reverse();   // замкнутое ребро — по параметру кривой
             if (dir < 0) seg.Reverse();

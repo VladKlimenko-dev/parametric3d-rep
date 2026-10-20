@@ -433,6 +433,7 @@ static partial class Program
         }
         if (Environment.GetEnvironmentVariable("MERGEDBG") == "1") Parametric3D.Kernel.Analytic.GeneralBoolean.MergeDebug = (a, b) => Console.WriteLine($"MERGE {(a - b).Length:G3} at {a:0.######}");
         if (mode is "torus" or "allA") TorusRouteChecks();
+        if (mode is "torustouch" or "allA") TorusTouchChecks();
         if (mode is "longchain" or "allA") LongChainChecks();
         if (mode is "longhist" or "allA") LongHistoryChecks();
         if (mode is "dround" or "allA") DirectRoundChecksRun();

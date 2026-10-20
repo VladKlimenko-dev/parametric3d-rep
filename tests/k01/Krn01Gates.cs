@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
@@ -115,6 +115,7 @@ static partial class Program
             cases.Add(("boolean torus cut", () => { var p = new Part("bt"); TestGeometry.AddCube(p, 60); p.AddFeature(new CutTorus(30, 30, 30, 10, 3)); return p; }));
             cases.Add(("boolean spline-prism cut", () => { var p = new Part("bsp"); TestGeometry.AddCube(p, 60); p.AddFeature(new CutSplinePrism(30, 30, 30, 10, 6, 8)); return p; }));
 
+            if (Environment.GetEnvironmentVariable("P3D_G10ONLY") is { } g10) cases = cases.Where(c => c.Name.Contains(g10)).ToList();   // разбор: одна операция
             bool verifyWas = Part.VerifyPublishedBodies; Part.VerifyPublishedBodies = true;
             int interruptions = 0, escaped = 0, refused = 0;
             var report = new List<string>();

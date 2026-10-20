@@ -1698,10 +1698,14 @@ public sealed class FeatureHistory
             if (!HistSigOff && faces.Count == old.Count)
                 using (Kernel.Diagnostics.Prof.Time("история: подписи"))
                 {
-                    if (SameRegionSignature(faces, old)) exact = true;
-                    // плоские грани: число контуров (компонент границы) — инвариант области; разное — область другая
-                    else if (faces.Concat(old).All(x => Kernel.Topology.GeometryAudit.AuthoritativeSurface(x) is Kernel.Surfaces.PlaneSurface)
-                             && faces.Sum(x => x.Loops.Count) != old.Sum(x => x.Loops.Count)) exact = false;
+                    // плоские грани: число контуров (компонент границы) — инвариант области; разное — область другая. 23:50: проверка
+                    // — до подписей (подпись включает контуры: при разном их числе подписи разные, ответ тот же), — грань со 100
+                    // отверстиями не строит строку подписи на каждой операции. Мутация P3D_HISTLOOPSFIRST=0.
+                    bool planarLoopsDiffer = faces.Concat(old).All(x => Kernel.Topology.GeometryAudit.AuthoritativeSurface(x) is Kernel.Surfaces.PlaneSurface)
+                                             && faces.Sum(x => x.Loops.Count) != old.Sum(x => x.Loops.Count);
+                    if (planarLoopsDiffer && !HistLoopsFirstOff) { exact = false; Interlocked.Increment(ref HistLoopsFirstHits); }
+                    else if (SameRegionSignature(faces, old)) exact = true;
+                    else if (planarLoopsDiffer) exact = false;
                 }
             if (exact == null)
             using (Kernel.Diagnostics.Prof.Time("история: точное"))
@@ -1738,8 +1742,7 @@ public sealed class FeatureHistory
         static string EdgeSig(IEnumerable<Kernel.Topology.TEdge> es) =>
             string.Join(";", es.Select(e => EdgeInfo(e).Sig).OrderBy(x => x, StringComparer.Ordinal));
         var _pe = Kernel.Diagnostics.Prof.Time("история: рёбра");
-        var eb = before.SelectMany(x => x.Edges).GroupBy(EdgeName).ToDictionary(g => g.Key, g => EdgeSig(g));
-        var ea = after.SelectMany(x => x.Edges).GroupBy(EdgeName).ToDictionary(g => g.Key, g => EdgeSig(g));
+        var eb = EdgeMap(before); var ea = EdgeMap(after);
         foreach (var (name, sig) in ea)
         {
             if (!eb.TryGetValue(name, out var old)) h.EdgesGenerated.Add(name);
@@ -2051,6 +2054,35 @@ public sealed class FeatureHistory
         return s;
     }
 
+    // 23:50 (скорость): КАРТА «ИМЯ РЕБРА → ПОДПИСЬ» ТЕЛА — ИЗ ПАМЯТИ по телу, его ревизии и отпечатку состава. Тела «до»
+    // операции — это тела «после» предыдущей: их карта строилась на прошлом шаге (деталь со 100 отверстиями — 2 мс строк на шаг).
+    // Несколько тел — общая карта, если имена в них не пересекаются (иначе — прежняя сборка по всем рёбрам). Мутация P3D_EDGEMAPMEMO=0.
+    static readonly bool EdgeMapMemoOff = Environment.GetEnvironmentVariable("P3D_EDGEMAPMEMO") == "0";
+    sealed class EdgeMapBox { public long Rev; public ulong Print; public Dictionary<string, string> Map = null!; }
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Kernel.Topology.TSolid, EdgeMapBox> _edgeMaps = new();
+    public static long EdgeMapMemoHits;
+    static Dictionary<string, string> EdgeMapRaw(IEnumerable<Kernel.Topology.TSolid> solids) =>
+        solids.SelectMany(x => x.Edges).GroupBy(e => EdgeInfo(e).Name)
+              .ToDictionary(g => g.Key, g => string.Join(";", g.Select(e => EdgeInfo(e).Sig).OrderBy(x => x, StringComparer.Ordinal)));
+    static Dictionary<string, string> EdgeMap(IReadOnlyList<Kernel.Topology.TSolid> solids)
+    {
+        if (EdgeMapMemoOff || HistCacheOff) return EdgeMapRaw(solids);
+        var maps = new List<Dictionary<string, string>>();
+        foreach (var sd in solids)
+        {
+            long rev = sd.Revision; ulong fp = Kernel.Topology.TopoFingerprint.Of(sd, display: false);
+            foreach (var f in sd.Faces) fp = (fp ^ (ulong)(uint)string.GetHashCode(f.Tag ?? "", StringComparison.Ordinal)) * 1099511628211UL;   // имена граней — в ключе
+            if (_edgeMaps.TryGetValue(sd, out var b) && b.Rev == rev && b.Print == fp) { Interlocked.Increment(ref EdgeMapMemoHits); maps.Add(b.Map); continue; }
+            var m = EdgeMapRaw(new[] { sd });
+            _edgeMaps.AddOrUpdate(sd, new EdgeMapBox { Rev = rev, Print = fp, Map = m });
+            maps.Add(m);
+        }
+        if (maps.Count == 1) return maps[0];
+        var all = new Dictionary<string, string>();
+        foreach (var m in maps) foreach (var (k, v) in m) if (!all.TryAdd(k, v)) return EdgeMapRaw(solids);
+        return all;
+    }
+
     internal static (string Name, string Sig) EdgeInfo(Kernel.Topology.TEdge e)
     {
         var face0 = e.CoEdges.FirstOrDefault()?.Loop?.Face;
@@ -2080,6 +2112,9 @@ public sealed class FeatureHistory
         return sa.SequenceEqual(sb);
     }
 
+    static readonly bool HistLoopsFirstOff = Environment.GetEnvironmentVariable("P3D_HISTLOOPSFIRST") == "0";
+    public static long HistLoopsFirstHits;
+    static readonly bool HistKeyCheapOff = Environment.GetEnvironmentVariable("P3D_HISTKEYCHEAP") == "0";
     static readonly bool HistRefEnvOff = Environment.GetEnvironmentVariable("P3D_HISTREF") == "0";
     [ThreadStatic] static bool _histRefOffForTests;
     /// <summary>Сравнение (KRN10-HISTORY-BY-REFERENCE): прежние подписи в этом потоке.</summary>
@@ -2104,7 +2139,9 @@ public sealed class FeatureHistory
         var sx = Kernel.Topology.GeometryAudit.AuthoritativeSurface(x);
         if (sx == null || !ReferenceEquals(sx, Kernel.Topology.GeometryAudit.AuthoritativeSurface(y)) || x.Reversed != y.Reversed) return false;
         // подпись была бы null (поверхность не по содержанию) — решают прежние сравнения, как прежде
-        if (sx is not Kernel.Surfaces.CylinderSurface && Kernel.Ops.BooleanOp.SourceKey(sx) is not string) return false;
+        // 23:50 (скорость): признак ключа по содержанию — без построения строки ключа (история детали со 100 отверстиями: 5 550
+        // сравнений, 220 МБ строк). Мутация P3D_HISTKEYCHEAP=0.
+        if (sx is not Kernel.Surfaces.CylinderSurface && !(HistKeyCheapOff ? Kernel.Ops.BooleanOp.SourceKey(sx) is string : Kernel.Ops.BooleanOp.HasContentKey(sx))) return false;
         if (x.Loops.Count != y.Loops.Count) return false;
         for (int i = 0; i < x.Loops.Count; i++)
         {

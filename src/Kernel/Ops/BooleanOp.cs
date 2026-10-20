@@ -441,6 +441,9 @@ public static class BooleanOp
     /// <summary>KRN-10 (g.13): режим предпросмотра текущего вычисления — проверки результата откладываются до принятия.</summary>
     internal static bool PreviewMode => !PreviewOff && KernelContext.Current?.Settings.Preview == true;
     static readonly bool PreviewOff = Environment.GetEnvironmentVariable("P3D_PREVIEW") == "0";
+    static readonly bool CsgParOff = Environment.GetEnvironmentVariable("P3D_CSGPAR") == "0";
+    /// <summary>Пачек точек согласия с CSG, классифицированных в несколько потоков.</summary>
+    public static long CsgParallelBatches;
     /// <summary>Мутация: P3D_PREVIEWCHECKS=0 — принятие предпросмотра без проверок.</summary>
     static readonly bool PreviewChecksOff = Environment.GetEnvironmentVariable("P3D_PREVIEWCHECKS") == "0";
     static readonly bool PreviewPrismOff = Environment.GetEnvironmentVariable("P3D_PREVIEWPRISM") == "0";
@@ -560,7 +563,11 @@ public static class BooleanOp
             // согласие с CSG по точкам
             using (Diagnostics.Prof.Time("аналитика (общая): согласие с CSG"))
             {
-                var cr = new Analytic.Classifier(r); var ca = new Analytic.Classifier(body); var cb = new Analytic.Classifier(other);
+                // 23:50: классификаторы операндов — по формам граней, уже построенным общим маршрутом (P3D_CLSREUSE=0 — заново)
+                var forms = PreviewMode ? null : Analytic.GeneralBoolean.LastOperandForms;
+                Analytic.Classifier Cls(TSolid s) => forms != null && !Analytic.GeneralBoolean.ClsReuseOffPublic && s.Faces.All(forms.ContainsKey)
+                    ? new Analytic.Classifier(s.Faces.Select(f => forms[f]).ToList()) : new Analytic.Classifier(s);
+                var cr = new Analytic.Classifier(r); var ca = Cls(body); var cb = Cls(other);
                 if (cr.Unsupported != null && NurbsProxy.ProxyView(r, proxySwaps) is { } rView) cr = new Analytic.Classifier(rView);
                 if (cr.Unsupported != null || ca.Unsupported != null || cb.Unsupported != null) { AnalyticRouteDebug?.Invoke("general: classifier unsupported"); return "general route check failed"; }
                 // Точки — в основном в ПЕРЕСЕЧЕНИИ габаритов операндов (там результат меняется: снятые 268 мм³ в теле в десятки
@@ -570,11 +577,29 @@ public static class BooleanOp
                 bool hasI = ilo.X < ihi.X && ilo.Y < ihi.Y && ilo.Z < ihi.Z;
                 lo = Vector3d.ComponentMin(lo, lo2); hi = Vector3d.ComponentMax(hi, hi2);
                 var rnd = new Random(20261006); int decided = 0, disagree = 0;
-                for (int i = 0; i < 800 && decided < 256; i++)
+                // 23:50 (скорость): точки — те же (тот же ряд случайных чисел), классификация — пачками в несколько потоков;
+                // решения — по порядку точек, с той же остановкой на 256 решённых. Мутация P3D_CSGPAR=0.
+                var pts = new Vector3d[800];
+                for (int i = 0; i < 800; i++)
                 {
                     var (bl, bh) = hasI && i % 4 != 0 ? (ilo, ihi) : (lo, hi);
-                    var p = new Vector3d(bl.X + (bh.X - bl.X) * rnd.NextDouble(), bl.Y + (bh.Y - bl.Y) * rnd.NextDouble(), bl.Z + (bh.Z - bl.Z) * rnd.NextDouble());
-                    int? a = ca.Classify(p), b = cb.Classify(p), c = cr.Classify(p);
+                    pts[i] = new Vector3d(bl.X + (bh.X - bl.X) * rnd.NextDouble(), bl.Y + (bh.Y - bl.Y) * rnd.NextDouble(), bl.Z + (bh.Z - bl.Z) * rnd.NextDouble());
+                }
+                var cls = new (int? A, int? B, int? C)[800]; int done = 0;
+                int csgThreads = CsgParOff ? 1 : Math.Min(Tess.Tessellator.Threads, Environment.ProcessorCount);
+                for (int i = 0; i < 800 && decided < 256; i++)
+                {
+                    if (i >= done)
+                    {
+                        // первая точка — в этом потоке (ленивые таблицы классификаторов строятся один раз), дальше — пачками
+                        int n = i == 0 || csgThreads <= 1 ? 1 : Math.Min(800 - i, Math.Max(8, 4 * csgThreads));
+                        int from = i;
+                        if (n == 1) cls[i] = (ca.Classify(pts[i]), cb.Classify(pts[i]), cr.Classify(pts[i]));
+                        else { System.Threading.Tasks.Parallel.For(from, from + n, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = csgThreads }, j => cls[j] = (ca.Classify(pts[j]), cb.Classify(pts[j]), cr.Classify(pts[j]))); Interlocked.Increment(ref CsgParallelBatches); }
+                        done = from + n;
+                    }
+                    var p = pts[i];
+                    var (a, b, c) = cls[i];
                     if (a is not (1 or -1) || b is not (1 or -1) || c is not (1 or -1)) continue;
                     bool expect = op switch { Analytic.Bool2.Union => a == 1 || b == 1, Analytic.Bool2.Intersect => a == 1 && b == 1, _ => a == 1 && b != 1 };
                     decided++; if ((c == 1) != expect) { disagree++; if (disagree <= 4) CsgDisagreeProbe?.Invoke(p, a.Value, b.Value, c.Value, r); }
@@ -2551,6 +2576,15 @@ public static class BooleanOp
     /// СОДЕРЖАНИЮ: вид и биты всех определяющих чисел (аналитический путь создаёт новые объекты поверхностей на каждом
     /// перестроении — по ссылке донор не находился бы, а разметчик видит те же входные данные). Прочие — по ссылке.
     /// </summary>
+    /// <summary>23:50: у поверхности есть ключ по содержанию (SourceKey — строка) — без построения строки.</summary>
+    internal static bool HasContentKey(ISurface3 s) => s switch
+    {
+        PlaneSurface => true,
+        ExtrudedSurface e => e.Base is LineCurve3 or ArcCurve3,
+        RevolvedSurface r => r.Base is LineCurve3 or ArcCurve3,
+        _ => false,
+    };
+
     internal static object SourceKey(ISurface3 s)
     {
         static void F(System.Text.StringBuilder b, Frame3 f) { V(b, f.Origin); V(b, f.U); V(b, f.V); V(b, f.W); }

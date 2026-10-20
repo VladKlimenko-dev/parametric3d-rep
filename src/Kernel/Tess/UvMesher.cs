@@ -39,7 +39,9 @@ public static class UvMesher
     internal static readonly bool UnsquashOff = Environment.GetEnvironmentVariable("P3D_UVUNSQUASH") == "0";
     static readonly bool RimGridOff = Environment.GetEnvironmentVariable("P3D_UVRIMGRID") == "0";
     static readonly bool BadMemoOff = Environment.GetEnvironmentVariable("P3D_UVBADMEMO") == "0";
-    static readonly bool CurvMaxOff = Environment.GetEnvironmentVariable("P3D_UVCURVMAX") != "1";   // k82: включается P3D_UVCURVMAX=1 (по умолчанию — после полного прогона)
+    static readonly bool CurvMaxOff = Environment.GetEnvironmentVariable("P3D_UVCURVMAX") != "1";   // включение — P3D_UVCURVMAX=1 (k83: 4 проверки сеток не проходят, разобрать)
+    static readonly bool StraightRowsOff = Environment.GetEnvironmentVariable("P3D_UVSTRAIGHTROWS") != "1";   // включение — P3D_UVSTRAIGHTROWS=1
+    static readonly double TwoCurvScale = double.TryParse(Environment.GetEnvironmentVariable("P3D_UVTWOCURV"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var tcs) ? tcs : 1.0;   // 0.85 и мельче — у тора d8_0091 стороны «в одну сторону» (разобрать: P3D_UVTWOCURV)
     static readonly bool RowLocOff = Environment.GetEnvironmentVariable("P3D_UVROWLOC") == "0";
     public static readonly double[] PhaseMs = new double[6];   // 0 контуры, 1 треугол., 2 Делоне, 3 внутр. точки, 4 доводка, 5 проверка
 
@@ -454,6 +456,8 @@ public static class UvMesher
                 double first = (p1 - p2).Length / (2 * d);
                 if (first < 1e-12) return 0;
                 double k = ((p1 + p2 - 2 * p0) / (d * d)).Length / (first * first);
+                // шум разностной второй производной (~1e-9 1/мм у образующей цилиндра) — не кривизна: радиус больше 10 км — прямая
+                if (!CurvMaxOff && k < 1e-7) return 0;
                 return double.IsFinite(k) ? k : 0;
             }
             var cMid = (uvList.Aggregate(Vector2d.Zero, (acc, q) => acc + q)) / uvList.Count;
@@ -466,7 +470,9 @@ public static class UvMesher
                 double k = CurvAt(cMid, dir);
                 if (CurvMaxOff) return k;
                 int stepB = Math.Max(1, uvList.Count / 32);
-                for (int i = 0; i < uvList.Count; i += stepB) k = Math.Max(k, CurvAt(uvList[i], dir));
+                // пробы — на 0.9 пути от середины к точкам края: сама точка края лежит на краю области параметров (NURBS там
+                // зажимает параметр — излом, «кривизна» 800 у плоского лоскута), а выпуклая смесь двух точек области — внутри
+                for (int i = 0; i < uvList.Count; i += stepB) k = Math.Max(k, CurvAt(cMid + (uvList[i] - cMid) * 0.9, dir));
                 return k;
             }
             double hx = h, hy = h;
@@ -475,6 +481,29 @@ public static class UvMesher
             double cf = CurvMaxOff ? 8 : 6;
             hx = kx > 1e-12 ? Math.Max(h, Math.Sqrt(cf * tol / kx)) : Math.Max(h, spanX);
             hy = ky > 1e-12 ? Math.Max(h, Math.Sqrt(cf * tol / ky)) : Math.Max(h, spanY);
+            // обе стороны гнутся (тор, шар): отходы по двум направлениям складываются на косой стороне — шаги мельче
+            if (!CurvMaxOff && TwoCurvScale < 1 && kx > 1e-12 && ky > 1e-12) { double sh = TwoCurvScale; hx = Math.Max(h, hx * sh); hy = Math.Max(h, hy * sh); }
+            // 23:50 (скорость): ПРЯМОЕ НАПРАВЛЕНИЕ — СТРОКИ НЕ РЕЖЕ 4 ШАГОВ КРИВОГО, если грань не «лесенка» (полоса скругления с
+            // точками края только на концах — там нужна именно лесенка). Прежде шаг вдоль образующей был во всю грань: одна
+            // строка точек посередине, а у стенки цилиндра с вырезом посередине — ни одной; доводка центрами шла 14 проходов
+            // (объединение двух цилиндров: 3 грани по 40–120 мс). Мутация P3D_UVSTRAIGHTROWS=0.
+            if (!StraightRowsOff)
+            {
+                bool LadderPre(bool alongY)
+                {
+                    if (pieces.Any(pc => pc.Item2.Count > 0)) return false;
+                    double lo = alongY ? minY : minX, hi = alongY ? maxY : maxX, eps = 1e-6 * (hi - lo);
+                    foreach (var (a2, b2) in boundary)
+                        foreach (int i in new[] { a2, b2 })
+                        {
+                            double c = alongY ? M(i).Y : M(i).X;
+                            if (Math.Abs(c - lo) > eps && Math.Abs(c - hi) > eps) return false;
+                        }
+                    return true;
+                }
+                if (kx > 1e-12 && ky <= 1e-12 && hy > 4 * hx && !LadderPre(alongY: true)) hy = Math.Max(h, 4 * hx);
+                else if (ky > 1e-12 && kx <= 1e-12 && hx > 4 * hy && !LadderPre(alongY: false)) hx = Math.Max(h, 4 * hy);
+            }
             // Сетка не реже точек края по кривому направлению, не чаще бюджета.
             int budget = Math.Max(0, maxTriangles / 3);
             while (spanX * spanY / (hx * hy) > budget) { hx *= 1.5; hy *= 1.5; }
@@ -645,7 +674,7 @@ public static class UvMesher
             }
             Ph("uv: Делоне после точек");
             Delaunay();
-            Debug?.Invoke($"pass 0: interior points {uvList.Count - pts0.Count}, h {h:0.###}, tris {T.Count / 3}, area3 {Area3():0.###}");
+            Debug?.Invoke($"pass 0: interior points {uvList.Count - pts0.Count}, h {h:0.###} hx {hx:0.###} hy {hy:0.###} kx {kx:G3} ky {ky:G3} span {spanX:0.##}x{spanY:0.##}, tris {T.Count / 3}, area3 {Area3():0.###}");
             // Доводка: где поверхность гнётся сильнее, чем позволяет шаг сетки (кольцо тора малого
             // сечения), — точки в центры «плохих» треугольников и снова Делоне.
             Ph("uv: доводка");

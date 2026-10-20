@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Topology;
 using Parametric3D.Model;
 using Parametric3D.Model.Features;
@@ -78,6 +78,25 @@ public static class KernelWarmup
                 Add(f);
                 part.RemoveFeature(f); part.Rebuild(null);
             }
+        // 23:50: прочие виды поверхностей и операций (первая операция с тором, конусом, шаром в бруске — тоже без компиляции):
+        // своя деталь на каждую, чтобы тела не мешали друг другу
+        void Scene(params Feature[] fs)
+        {
+            var p2 = new Part("warm-up 2") { FreeFormDoc = true }; var n2 = new FreeFormFeature("warm-up 2"); p2.AddFeature(n2);
+            foreach (var f in fs) { f.FreeForm = n2.Key; f.Frozen = true; p2.AddFeature(f); p2.Rebuild(null); if (f.Error != null) { errors++; Core.AppLog.Write($"warm-up: {f.Name}: {f.Error.Split('\n')[0]}"); } }
+        }
+        Scene(new FFPrimitiveFeature { Shape = FFPrimitive.Torus, A = new ValueRef(10), B = new ValueRef(3) },
+              new FFPrimitiveFeature { Shape = FFPrimitive.Box, A = new ValueRef(6), B = new ValueRef(6), C = new ValueRef(12), Origin = new Vector3d(10, 0, -6) },
+              new FFBooleanFeature { Op = FFBool.Union, Target = "Тело 1", Tools = { "Тело 2" } });
+        Scene(new FFPrimitiveFeature { Shape = FFPrimitive.Cone, A = new ValueRef(8), B = new ValueRef(3), C = new ValueRef(15) },
+              new FFPrimitiveFeature { Shape = FFPrimitive.Box, A = new ValueRef(20), B = new ValueRef(20), C = new ValueRef(5), Origin = new Vector3d(0, 0, 12) },
+              new FFBooleanFeature { Op = FFBool.Subtract, Target = "Тело 1", Tools = { "Тело 2" } });
+        Scene(new FFPrimitiveFeature { Shape = FFPrimitive.Box, A = new ValueRef(20), B = new ValueRef(16), C = new ValueRef(10) },
+              new FFPrimitiveFeature { Shape = FFPrimitive.Sphere, A = new ValueRef(6), Origin = new Vector3d(10, 8, 10) },
+              new FFBooleanFeature { Op = FFBool.Subtract, Target = "Тело 1", Tools = { "Тело 2" } },
+              new FFPrimitiveFeature { Shape = FFPrimitive.Cylinder, A = new ValueRef(3), B = new ValueRef(20), Origin = new Vector3d(-4, 0, -5), Cut = true },
+              new FFMirrorFeature { BodyNames = { "Тело 1" }, PlaneAt = new Vector3d(15, 0, 0) },
+              new FFArrayFeature { BodyNames = { "Тело 1" }, Count = new ValueRef(2), Step = new Vector3d(0, 40, 0) });
         // параметрическая деталь: эскиз → выдавливание, скругление
         var sample = Parametric3D.App.Diagnostics.TestParts.Realistic(1, 2);
         sample.Rebuild(null);
