@@ -38,6 +38,15 @@ public static class UvMesher
     internal static readonly bool DivergeOff = Environment.GetEnvironmentVariable("P3D_UVDIVERGE") == "0";
     internal static readonly bool UnsquashOff = Environment.GetEnvironmentVariable("P3D_UVUNSQUASH") == "0";
     static readonly bool RimGridOff = Environment.GetEnvironmentVariable("P3D_UVRIMGRID") == "0";
+    /// <summary>Перемешивание ключа стороны (у long.GetHashCode = a ^ b — сплошные совпадения у соседних номеров).</summary>
+    sealed class LongMix : IEqualityComparer<long>
+    {
+        public static readonly LongMix Instance = new();
+        public bool Equals(long x, long y) => x == y;
+        public int GetHashCode(long k) { ulong h = (ulong)k * 0x9E3779B97F4A7C15UL; return (int)(h >> 32) ^ (int)h; }
+    }
+    static readonly bool IncrDelOff = Environment.GetEnvironmentVariable("P3D_UVINCRDEL") == "0";
+    static readonly bool LongKeysOff = Environment.GetEnvironmentVariable("P3D_UVLONGKEYS") == "0";
     static readonly bool BadMemoOff = Environment.GetEnvironmentVariable("P3D_UVBADMEMO") == "0";
     static readonly bool CurvMaxOff = Environment.GetEnvironmentVariable("P3D_UVCURVMAX") != "1";   // включение — P3D_UVCURVMAX=1 (k83: 4 проверки сеток не проходят, разобрать)
     static readonly bool StraightRowsOff = Environment.GetEnvironmentVariable("P3D_UVSTRAIGHTROWS") != "1";   // включение — P3D_UVSTRAIGHTROWS=1
@@ -323,6 +332,7 @@ public static class UvMesher
         double Area3() { double ar = 0; for (int t = 0; t < T.Count; t += 3) ar += Vector3d.Cross(xyz[T[t + 1]] - xyz[T[t]], xyz[T[t + 2]] - xyz[T[t]]).Length / 2; return ar; }
 
         Ph("uv: Делоне и доводка");
+        double delMs0 = 0; System.Diagnostics.Stopwatch? swRef = null;
         // G2. ОГРАНИЧЕННАЯ ТРИАНГУЛЯЦИЯ ДЕЛОНЕ В МЕТРИКЕ ПОВЕРХНОСТИ.
         // Начало — ушная триангуляция области (она верна, но с длинными тонкими треугольниками);
         // затем перевороты внутренних рёбер к Делоне в масштабированных параметрах (u·|Su|, v·|Sv|)
@@ -341,27 +351,52 @@ public static class UvMesher
             double o = (M(b).X - M(a).X) * (M(c).Y - M(a).Y) - (M(b).Y - M(a).Y) * (M(c).X - M(a).X);
             return o > 0 ? det > 1e-12 * Math.Abs(det + 1) : det < -1e-12 * Math.Abs(det - 1);
         }
-        void Delaunay()
+        HashSet<long>? boundaryL = null;
+        void Delaunay(List<int>? touched = null)
         {
             var swD = System.Diagnostics.Stopwatch.StartNew();
-            try { DelaunayCore(); } finally { PhaseMs[2] += swD.Elapsed.TotalMilliseconds; }
+            try { DelaunayCore(touched); } finally { PhaseMs[2] += swD.Elapsed.TotalMilliseconds; }
         }
-        void DelaunayCore()
+        void DelaunayCore(List<int>? touched)
         {
             // Перевороты Лоусона по очереди рёбер с соседством треугольников: каждое ребро
             // проверяется, только когда меняется его окрестность. Прежде на каждом круге заново
             // строилась карта всех рёбер (до 200 кругов) — это была основная стоимость разметки.
             int nt = T.Count / 3;
             var nbr = new int[T.Count];
+            // 23:50 (скорость): ключ стороны — одно число (long), а не пара: словарь сторон строится на каждом проходе доводки
+            // (тор: 15 проходов по 19 000 треугольников), край — тем же ключом. Порядок и решения те же. Мутация P3D_UVLONGKEYS=0.
+            if (!LongKeysOff)
+            {
+                static long K(int a, int b) => ((long)a << 32) | (uint)b;
+                var edgeAtL = new Dictionary<long, int>(T.Count, LongMix.Instance);
+                for (int t = 0; t < T.Count; t += 3)
+                    for (int k = 0; k < 3; k++) edgeAtL[K(T[t + k], T[t + (k + 1) % 3])] = t + k;
+                for (int t = 0; t < T.Count; t += 3)
+                    for (int k = 0; k < 3; k++)
+                        nbr[t + k] = edgeAtL.TryGetValue(K(T[t + (k + 1) % 3], T[t + k]), out int o) ? o / 3 * 3 : -1;
+                if (boundaryL == null || boundaryL.Count != boundary.Count) { boundaryL = new HashSet<long>(boundary.Count, LongMix.Instance); foreach (var (ba, bb) in boundary) boundaryL.Add(K(ba, bb)); }
+            }
+            else
+            {
             var edgeAt = new Dictionary<(int, int), int>(T.Count);
             for (int t = 0; t < T.Count; t += 3)
                 for (int k = 0; k < 3; k++) edgeAt[(T[t + k], T[t + (k + 1) % 3])] = t + k;
             for (int t = 0; t < T.Count; t += 3)
                 for (int k = 0; k < 3; k++)
                     nbr[t + k] = edgeAt.TryGetValue((T[t + (k + 1) % 3], T[t + k]), out int o) ? o / 3 * 3 : -1;
+            }
             int EdgeIndex(int tri, int u, int v) { for (int k = 0; k < 3; k++) if (T[tri + k] == u && T[tri + (k + 1) % 3] == v) return k; return -1; }
             void Repoint(int tri, int u, int v, int newNbr) { if (tri < 0) return; int k = EdgeIndex(tri, u, v); if (k >= 0) nbr[tri + k] = newNbr; }
             var stack = new Stack<(int T, int A, int B)>();
+            // 23:50 (скорость): после вставки центров — только стороны изменённых треугольников: прочие сошлись к Делоне на прошлом
+            // проходе и не менялись (их четвёрки точек те же — перевороты там невозможны). Мутация P3D_UVINCRDEL=0 — все стороны.
+            if (touched != null && !IncrDelOff)
+            {
+                foreach (int t in touched)
+                    for (int k = 0; k < 3; k++) if (nbr[t + k] >= 0) stack.Push((t, T[t + k], T[t + (k + 1) % 3]));
+            }
+            else
             for (int t = 0; t < T.Count; t += 3)
                 for (int k = 0; k < 3; k++) if (nbr[t + k] >= 0) stack.Push((t, T[t + k], T[t + (k + 1) % 3]));
             int guard = 0, limit = 50 * T.Count + 1000;
@@ -370,7 +405,7 @@ public static class UvMesher
                 var (t, a, b) = stack.Pop();
                 int k = EdgeIndex(t, a, b);
                 if (k < 0) continue;                                   // треугольник уже изменился
-                if (boundary.Contains(a < b ? (a, b) : (b, a))) continue;
+                if (boundaryL != null ? boundaryL.Contains(a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a) : boundary.Contains(a < b ? (a, b) : (b, a))) continue;
                 int n = nbr[t + k];
                 if (n < 0) continue;
                 int kn = EdgeIndex(n, b, a);
@@ -678,6 +713,7 @@ public static class UvMesher
             // Доводка: где поверхность гнётся сильнее, чем позволяет шаг сетки (кольцо тора малого
             // сечения), — точки в центры «плохих» треугольников и снова Делоне.
             Ph("uv: доводка");
+            delMs0 = PhaseMs[2]; swRef = System.Diagnostics.Stopwatch.StartNew();
             double prevWorst = double.MaxValue; int stuck = 0; int tris0 = Math.Max(1, T.Count / 3);
             // u12: снимок перед вставкой центров — если доводка разошлась (худшая ошибка выросла втрое: косые полосы у
             // скошенного края цилиндра, ошибка 0.04 → 1.7 мм), сетка возвращается к снимку. Мутация P3D_UVDIVERGE=0.
@@ -725,15 +761,17 @@ public static class UvMesher
                 }
                 if (bad.Count == 0) break;
                 if (snapT == null || worstNow < snapWorst) { snapT = new List<int>(T); snapN = uvList.Count; snapWorst = worstNow; }
+                var touchedT = new List<int>(bad.Count * 3);
                 foreach (int t in bad)
                 {
                     int i0 = T[t], i1 = T[t + 1], i2 = T[t + 2];
                     var c = (uvList[i0] + uvList[i1] + uvList[i2]) / 3;
                     int m = uvList.Count; uvList.Add(c); xyz.Add(P(c));
                     T[t] = i0; T[t + 1] = i1; T[t + 2] = m;
+                    touchedT.Add(t); touchedT.Add(T.Count); touchedT.Add(T.Count + 3);
                     T.AddRange(new[] { i1, i2, m, i2, i0, m });
                 }
-                Delaunay();
+                Delaunay(touchedT);
             }
             // доводка кончилась без сходимости (стоп «нет улучшения», предел проходов или треугольников), а лучшая сетка
             // была раньше — возврат к ней
@@ -753,6 +791,7 @@ public static class UvMesher
         // точки одной образующей) удаляются переворотом их длинной стороны: в пространстве они
         // нулевой площади, сварка сетки их выбрасывала, и на их месте оставались непарные стороны
         // (50 таких у стенки бобышки — сетка тела открывалась в ядре).
+        if (Debug != null && !s.IsPlanar) Debug($"refine timing: total {swRef?.Elapsed.TotalMilliseconds:0.0} ms, delaunay {PhaseMs[2] - delMs0:0.0} ms, tris {T.Count / 3}");
         Ph("uv: вырожденные");
         for (int round = 0; round < 50; round++)
         {

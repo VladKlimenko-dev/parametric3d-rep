@@ -1,4 +1,4 @@
-using Parametric3D.Kernel.Curves;
+﻿using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Geometry;
 using System.Diagnostics;
 using Parametric3D.Kernel.Ops;
@@ -1349,6 +1349,7 @@ static partial class Program
                     Console.WriteLine($"G2VOL {GeometryAudit.AuthoritativeSurface(f)?.GetType().Name} loops {f.Loops.Count} uv {vU:0.###} old {vO:0.###} area {area:0.###} exact {exact:0.###}");
                 }
                 if (name == "box with a hole") Console.WriteLine($"G2DBG {GeometryAudit.AuthoritativeSurface(f)?.GetType().Name} mesh {area:0.###} exact {exact:0.###} tris {T.Count / 3} pts {P.Count}");
+                if (Environment.GetEnvironmentVariable("P3D_G2FACES") == "1") Console.WriteLine($"G2FACE {name} face {f.Id} {GeometryAudit.AuthoritativeSurface(f)?.GetType().Name} loops {f.Loops.Count} area {area:R} exact {exact:R} tris {T.Count / 3}");
                 if (exact is { } ex && Math.Abs(ex) > 1e-9) worstArea = Math.Max(worstArea, Math.Abs(area - Math.Abs(ex)) / Math.Abs(ex));
                 if (exact is { } ex2 && Math.Abs(ex2) > 1e-9 && Math.Abs(area - Math.Abs(ex2)) / Math.Abs(ex2) > 1e-2)
                     Console.WriteLine($"G2BAD {name} face {f.Id} {GeometryAudit.AuthoritativeSurface(f)?.GetType().Name} loops {f.Loops.Count} outer {f.Loops.Count(l => l.IsOuter)} area {area:0.###} exact {ex2:0.###} seams {f.Loops.SelectMany(l => l.CoEdges).GroupBy(c => c.Edge).Count(g => g.Count() > 1)}");
