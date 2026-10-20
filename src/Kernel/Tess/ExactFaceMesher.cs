@@ -807,6 +807,31 @@ public static partial class ExactFaceMesher
         }
     }
 
+    static readonly bool FaceMemoOff = Environment.GetEnvironmentVariable("P3D_FACEMESHMEMO") == "0";
+    /// <summary>Разбор: сеток граней из памяти грани.</summary>
+    public static long FaceMemoHits;
+    /// <summary>
+    /// Ключ памяти сетки грани: состав грани и ТОЧКИ ЕЁ РЁБЕР (разбиение общего ребра зависит и от соседней грани: сосед
+    /// изменился — та же грань с теми же кривыми режется по-другому, и старая сетка разошлась бы с соседом).
+    /// </summary>
+    static ulong MemoKey(TFace f)
+    {
+        ulong h = Topology.AnalyticVolume.FaceKey(f, sourceOnly: true, side: false);
+        foreach (var l in f.Loops)
+            foreach (var ce in l.CoEdges)
+                foreach (var p in EdgePoints(ce.Edge))
+                {
+                    h ^= (ulong)BitConverter.DoubleToInt64Bits(p.X) + 0x9E3779B97F4A7C15UL + (h << 6) + (h >> 2); h *= 1099511628211UL;
+                    h ^= (ulong)BitConverter.DoubleToInt64Bits(p.Y) + 0x9E3779B97F4A7C15UL + (h << 6) + (h >> 2); h *= 1099511628211UL;
+                    h ^= (ulong)BitConverter.DoubleToInt64Bits(p.Z) + 0x9E3779B97F4A7C15UL + (h << 6) + (h >> 2); h *= 1099511628211UL;
+                }
+        return h;
+    }
+
+    private sealed class FaceMemo { public ulong Key; public bool Reversed; public string Tol = ""; public string? Why; public List<Vector3d>? N; public (List<Vector3d> P, List<int> T)? M; }
+    // по составу грани (копия тела — те же поверхности и кривые, другие объекты граней): ограниченная память, сброс при переполнении
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<ulong, FaceMemo> _faceMemo = new();
+
     private static string? KeyOf(TFace f)
     {
         var src = f.Surface is FacetedSurface fs ? fs.Source : f.Surface;
@@ -888,7 +913,50 @@ public static partial class ExactFaceMesher
                         : (new List<Vector3d>(known.M.Value.P), new List<int>(known.M.Value.T));
                 }
 
-        var made = MeshUncached(f, out why, out normals);
+        // 20:17 (скорость): ТА ЖЕ ГРАНЬ — ТА ЖЕ СЕТКА. Построитель размечает грани нового тела для своих проверок, а деталь
+        // сразу после — для показа, и каждая грань считалась дважды (лента скругления — 0.1–0.3 с). Память — по самой грани
+        // (объект), её составу (поверхность, кривые и концы рёбер — AnalyticVolume.FaceKey) и точности; копии, как у общей
+        // памяти. Мутация P3D_FACEMESHMEMO=0.
+        ulong fk = 0; string tolKey = "";
+        bool memoHit = false; string? memoWhy = null; List<Vector3d>? memoN = null; (List<Vector3d> P, List<int> T)? memoM = null;
+        if (!FaceMemoOff && Snap == null)
+        {
+            // сторона грани в ключ не входит: та же грань с другой стороной (соглашение о сторонах после построителя) — та же
+            // сетка с обратным обходом треугольников и обратными нормалями
+            fk = MemoKey(f); tolKey = Core.Tol.Chord.ToString("R") + ":" + Core.Tol.ChordAngle.ToString("R");
+            if (_faceMemo.TryGetValue(fk, out var fm) && fm.Key == fk && fm.Tol == tolKey)
+            {
+                Interlocked.Increment(ref FaceMemoHits);
+                bool flip = fm.Reversed != f.Reversed;
+                memoWhy = fm.Why;
+                memoN = fm.N == null ? null : flip ? fm.N.Select(n => -n).ToList() : new List<Vector3d>(fm.N);
+                if (fm.M != null)
+                {
+                    var tt = new List<int>(fm.M.Value.T);
+                    if (flip) for (int i = 0; i + 2 < tt.Count; i += 3) (tt[i + 1], tt[i + 2]) = (tt[i + 2], tt[i + 1]);
+                    memoM = (new List<Vector3d>(fm.M.Value.P), tt);
+                }
+                memoHit = true;
+            }
+        }
+        if (!memoHit && Environment.GetEnvironmentVariable("P3D_FMDBG") == "1")
+        {
+            var sf0 = f.Surface is FacetedSurface fz ? fz.Source : f.Surface;
+            string Ce(TCoEdge ce) => ce.Edge.Curve.GetType().Name + "#" + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(ce.Edge.Curve) + (ce.Reversed ? "-" : "+") + ce.Edge.V0.P.ToString();
+            Console.Error.WriteLine("FMMISS " + sf0?.GetType().Name + "#" + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(sf0) + " key " + fk.ToString("x") + " rev " + f.Reversed + " faceted " + (f.Surface is FacetedSurface) + " loops [" + string.Join("|", f.Loops.Select(l => string.Join(",", l.CoEdges.Select(Ce)))) + "]");
+        }
+        // память даёт сырую сетку; самопроверка по треугольникам гранения (ниже) — как у посчитанной
+        (List<Vector3d> P, List<int> T)? made;
+        if (memoHit) { made = memoM; why = memoWhy; normals = memoN; }
+        else made = MeshUncached(f, out why, out normals);
+        // в память — только посчитанные сетки: отказ разметки у грани без треугольников гранения у её гранёной копии мог бы
+        // смениться сеткой по ним (иначе копия получала бы чужой отказ)
+        if (!memoHit && made != null && !FaceMemoOff && Snap == null && MemoKey(f) == fk)
+        {
+            if (_faceMemo.Count > 4096) _faceMemo.Clear();
+            _faceMemo[fk] = new FaceMemo { Key = fk, Tol = tolKey, Why = why, Reversed = f.Reversed, N = normals == null ? null : new List<Vector3d>(normals),
+                M = made is { } mm0 ? (new List<Vector3d>(mm0.P), new List<int>(mm0.T)) : null };
+        }
         if (MeshTrace && made is { } mtr && Topology.GeometryAudit.AuthoritativeSurface(f) is { } fsr2) Console.Error.WriteLine($"MESHTRACE   result folded {Folded(fsr2, mtr.P, mtr.T)} tris {mtr.T.Count / 3}");
 
         // САМОПРОВЕРКА ПО ТРЕУГОЛЬНИКАМ ГРАНИ. Сетка по контурам принимается, только если её

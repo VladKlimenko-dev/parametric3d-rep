@@ -373,105 +373,102 @@ public static partial class DirectRound
             // ОБЩИЙ ПАРАМЕТР (у граней нет подходящей оси — NURBS, ребро без обхода оси): t — миллиметры вдоль гладкой опорной
             // кривой (многочлен Чебышёва по доле длины ребра); точка ребра — Ньютон на A ∩ B в плоскости поперёк опорной кривой.
             // Продление за концы — тот же многочлен. Мутация P3D_DRGENPARAM=0 — отказ, как прежде.
-            var rcFit = RefCurve.Fit(E, 1e-3 * Math.Clamp(r, 0.1, 1));   // опорная кривая задаёт лишь плоскости сечений: точность — доли радиуса
+            // 17:31: ПРОДЛЕНИЕ ЗА КОНЦЫ — ХОДОМ ПО A ∩ B (шаг h, предиктор по касательной ∇A × ∇B, корректор Ньютоном в
+            // плоскости поперёк неё), а опорная кривая — многочлен Чебышёва по ребру ВМЕСТЕ С ходом за концами: продолжение
+            // многочлена ребра за конец уходит от кривой пересечения (цилиндр ∪ шар: у торца кривая поворачивает к оси цилиндра),
+            // а одна гладкая опорная кривая на всём промежутке даёт гладкий параметр (таблица ленты вставляется пятой степенью).
+            // Параметр t = 0 и t = Δ — у концов ребра (плоскость сечения через конец). Мутация P3D_DRMARCH=0 — многочлен ребра.
+            double hM = Math.Clamp(0.02 * r, 0.005, 0.25), sExt = 2.5 * r + 3;
+            Vector3d TanAB(Vector3d x)
+            {
+                var (_, g1) = Geometry.Ssi.Implicit(shA, x); var (_, g2) = Geometry.Ssi.Implicit(shB, x);
+                var tg = Vector3d.Cross(g1, g2); double l = tg.Length; return l > 1e-300 ? tg / l : new Vector3d(double.NaN);
+            }
+            Vector3d? OnAB(Vector3d seed, Vector3d n, double reach)
+            {
+                var x = seed;
+                for (int it = 0; it < 40; it++)
+                {
+                    var (f1, g1) = Geometry.Ssi.Implicit(shA, x); var (f2, g2) = Geometry.Ssi.Implicit(shB, x);
+                    var dx = Solve3(new[] { g1, g2, n }, new[] { -f1, -f2, -Vector3d.Dot(x - seed, n) });
+                    if (dx == null || !double.IsFinite(dx.Value.X)) return null;
+                    x += dx.Value;
+                    if (dx.Value.Length < 1e-15 * Math.Max(1, x.Length)) break;
+                }
+                var (e1, _) = Geometry.Ssi.Implicit(shA, x); var (e2, _) = Geometry.Ssi.Implicit(shB, x);
+                return Math.Abs(e1) > 1e-10 || Math.Abs(e2) > 1e-10 || (x - seed).Length > reach ? null : x;
+            }
+            List<Vector3d> March(Vector3d start, Vector3d inner)
+            {
+                var pts = new List<Vector3d>();
+                var x = start; var tg = TanAB(x); if (Vector3d.Dot(tg, start - inner) < 0) tg = -tg;
+                for (double sAcc = 0; sAcc < sExt && double.IsFinite(tg.X);)
+                {
+                    var nx = OnAB(x + tg * hM, tg, 4 * hM); if (nx == null) break;
+                    var t2 = TanAB(nx.Value); if (Vector3d.Dot(t2, tg) < 0) t2 = -t2;
+                    if (Vector3d.Dot(t2, tg) < 0.9) break;          // излом или касание поверхностей — ход не продолжается
+                    sAcc += (nx.Value - x).Length; x = nx.Value; tg = t2; pts.Add(x);
+                }
+                return pts;
+            }
+            ICurve3 refSrc = E;
+            // только при повторе после отказа продления по углу (у прочих рёбер с общим параметром — прежний многочлен ребра)
+            bool marchHere = MarchExt && _forceGeneric;
+            if (marchHere)
+            {
+                const int Me = 400;
+                var edgePts = Enumerable.Range(0, Me + 1).Select(i => E.PointAt(E.T0 + (E.T1 - E.T0) * i / Me)).ToList();
+                var ext0 = March(edgePts[0], edgePts[Math.Min(4, Me)]); var ext1 = March(edgePts[^1], edgePts[Math.Max(0, Me - 4)]);
+                var poly = new List<Vector3d>(); ext0.Reverse(); poly.AddRange(ext0); poly.AddRange(edgePts); poly.AddRange(ext1);
+                var cum = new double[poly.Count]; for (int i = 1; i < poly.Count; i++) cum[i] = cum[i - 1] + (poly[i] - poly[i - 1]).Length;
+                double Ltot = cum[^1];
+                Vector3d PolyAt(double s)
+                {
+                    s = Math.Clamp(s, 0, Ltot); int lo = 0, hi = poly.Count - 1;
+                    while (hi - lo > 1) { int md = (lo + hi) / 2; if (cum[md] <= s) lo = md; else hi = md; }
+                    double f = cum[hi] > cum[lo] ? (s - cum[lo]) / (cum[hi] - cum[lo]) : 0;
+                    return poly[lo] + (poly[hi] - poly[lo]) * f;
+                }
+                if (Ltot > 1e-9) refSrc = new ProcCurve3(PolyAt, 0, Ltot, false, "blend reference");
+                Debug?.Invoke($"open: march extension {ext0.Count}/{ext1.Count} steps of {hM:G3} mm");
+            }
+            var rcFit = RefCurve.Fit(refSrc, 1e-3 * Math.Clamp(r, 0.1, 1));   // опорная кривая задаёт лишь плоскости сечений: точность — доли радиуса
             if (rcFit == null) Debug?.Invoke("open: reference curve not fitted");
             if (rcFit is { } rc)
             {
-                // 17:31: ПРОДЛЕНИЕ ЗА КОНЦЫ — ХОДОМ ПО A ∩ B (шаг h, предиктор по касательной ∇A × ∇B, корректор Ньютоном в
-                // плоскости поперёк неё), а не продолжением многочлена: многочлен степени 8 за концом уходит от кривой
-                // пересечения за доли миллиметра (цилиндр ∪ шар: кривая у торца поворачивает к оси цилиндра). Точка продления —
-                // Ньютон на A ∩ B в плоскости поперёк хода через точку ломаной хода. Мутация P3D_DRMARCH=0.
-                double hM = Math.Clamp(0.02 * r, 0.005, 0.25), sMax = 12 * r + 20;
-                var march = new List<Vector3d>?[2];
-                Vector3d TanAB(Vector3d x)
+                Vector3d AtCore(double t)
                 {
-                    var (_, g1) = Geometry.Ssi.Implicit(shA, x); var (_, g2) = Geometry.Ssi.Implicit(shB, x);
-                    var tg = Vector3d.Cross(g1, g2); double l = tg.Length; return l > 1e-300 ? tg / l : new Vector3d(double.NaN);
+                    var c = rc.At(t); var d = rc.D(t).Normalized();
+                    return OnAB(c, d, 0.25 * Math.Max(r, 1e-3)) ?? new Vector3d(double.NaN);
                 }
-                Vector3d? OnAB(Vector3d seed, Vector3d n)
+                // t опорной кривой, где плоскость сечения проходит через точку q (конец ребра): (q − c(t))·c'(t) = 0
+                double TAt(Vector3d q)
                 {
-                    var x = seed;
-                    for (int it = 0; it < 40; it++)
+                    double best = 0, bd = double.MaxValue;
+                    for (int i = 0; i <= 400; i++) { double t = rc.Length * i / 400; double d = (rc.At(t) - q).Length; if (d < bd) { bd = d; best = t; } }
+                    double tt = best;
+                    for (int it = 0; it < 50; it++)
                     {
-                        var (f1, g1) = Geometry.Ssi.Implicit(shA, x); var (f2, g2) = Geometry.Ssi.Implicit(shB, x);
-                        var dx = Solve3(new[] { g1, g2, n }, new[] { -f1, -f2, -Vector3d.Dot(x - seed, n) });
-                        if (dx == null || !double.IsFinite(dx.Value.X)) return null;
-                        x += dx.Value;
-                        if (dx.Value.Length < 1e-15 * Math.Max(1, x.Length)) break;
+                        double h = 1e-6 * Math.Max(1, rc.Length);
+                        double g(double x) => Vector3d.Dot(q - rc.At(x), rc.D(x).Normalized());
+                        double g0 = g(tt), d = (g(tt + h) - g(tt - h)) / (2 * h);
+                        if (!(Math.Abs(d) > 1e-300)) break;
+                        double step = g0 / d; tt -= step;
+                        if (Math.Abs(step) < 1e-14 * Math.Max(1, rc.Length)) break;
                     }
-                    var (e1, _) = Geometry.Ssi.Implicit(shA, x); var (e2, _) = Geometry.Ssi.Implicit(shB, x);
-                    return Math.Abs(e1) > 1e-10 || Math.Abs(e2) > 1e-10 || (x - seed).Length > 4 * hM ? null : x;
+                    return tt;
                 }
-                List<Vector3d> March(int k, Vector3d start, Vector3d inner)
-                {
-                    var pts = new List<Vector3d> { start };
-                    var x = start; var tg = TanAB(x); if (Vector3d.Dot(tg, start - inner) < 0) tg = -tg;
-                    for (double sAcc = 0; sAcc < sMax && double.IsFinite(tg.X);)
-                    {
-                        var pred = x + tg * hM;
-                        var nx = OnAB(pred, tg); if (nx == null) break;
-                        var t2 = TanAB(nx.Value); if (Vector3d.Dot(t2, tg) < 0) t2 = -t2;
-                        if (Vector3d.Dot(t2, tg) < 0.9) break;          // излом или касание поверхностей — ход не продолжается
-                        sAcc += (nx.Value - x).Length; x = nx.Value; tg = t2; pts.Add(x);
-                    }
-                    return pts;
-                }
-                Vector3d ExtAt(int k, double s)
-                {
-                    var pl = march[k];
-                    if (pl == null)
-                    {
-                        double tE = k == 0 ? 0 : rc.Length, tI = k == 0 ? Math.Min(rc.Length, 0.5) : Math.Max(0, rc.Length - 0.5);
-                        var a = AtGCore(tE); var b = AtGCore(tI);
-                        if (double.IsNaN(a.X) || double.IsNaN(b.X)) return new Vector3d(double.NaN);
-                        pl = march[k] = March(k, a, b);
-                    }
-                    double fi = s / hM; int i = (int)Math.Floor(fi);
-                    if (i + 1 >= pl.Count) return new Vector3d(double.NaN);
-                    var seed = pl[i] + (pl[i + 1] - pl[i]) * (fi - i);
-                    var n = (pl[i + 1] - pl[i]).Normalized();
-                    return OnAB(seed, n) ?? new Vector3d(double.NaN);
-                }
-                // скорость параметра у концов (мм кривой на единицу t): продление идёт с той же скоростью — без излома параметра
-                var speedEnd = new double[2];
-                double SpeedAt(int k)
-                {
-                    if (speedEnd[k] > 0) return speedEnd[k];
-                    double tE = k == 0 ? 0 : rc.Length, hh = 1e-4 * Math.Max(1, rc.Length), dir = k == 0 ? 1 : -1;
-                    var a = AtGCore(tE); var b = AtGCore(tE + dir * hh); var c2 = AtGCore(tE + dir * 2 * hh);
-                    // односторонняя разность второго порядка
-                    var d = (a * (-3) + b * 4 - c2) / (2 * hh);
-                    return speedEnd[k] = double.IsFinite(d.Length) && d.Length > 0 ? d.Length : 1;
-                }
-                Vector3d AtG(double t)
-                {
-                    if (MarchExt && t < 0) return ExtAt(0, -t * SpeedAt(0));
-                    if (MarchExt && t > rc.Length) return ExtAt(1, (t - rc.Length) * SpeedAt(1));
-                    return AtGCore(t);
-                }
-                Vector3d AtGCore(double t)
-                {
-                    var c = rc.At(t); var d = rc.D(t).Normalized(); var x = c;
-                    for (int it = 0; it < 40; it++)
-                    {
-                        var (f1, g1) = Geometry.Ssi.Implicit(shA, x); var (f2, g2) = Geometry.Ssi.Implicit(shB, x);
-                        var dx = Solve3(new[] { g1, g2, d }, new[] { -f1, -f2, -Vector3d.Dot(x - c, d) });
-                        if (dx == null || !double.IsFinite(dx.Value.X)) return new Vector3d(double.NaN);
-                        x += dx.Value;
-                        if (dx.Value.Length < 1e-15 * Math.Max(1, x.Length)) break;
-                    }
-                    var (e1, _) = Geometry.Ssi.Implicit(shA, x); var (e2, _) = Geometry.Ssi.Implicit(shB, x);
-                    if (Math.Abs(e1) > 1e-10 || Math.Abs(e2) > 1e-10 || (x - c).Length > 0.25 * Math.Max(r, 1e-3)) return new Vector3d(double.NaN);
-                    return x;
-                }
-                bool ok = (AtG(0) - P0).Length < 1e-5 * Math.Max(1, rc.Length) && (AtG(rc.Length) - P1).Length < 1e-5 * Math.Max(1, rc.Length);
+                double tS = marchHere ? TAt(P0) : 0, tE = marchHere ? TAt(P1) : rc.Length;
+                Vector3d AtG(double t) => AtCore(t + tS);
+                double D = tE - tS;
+                bool ok = D > 0 && (AtG(0) - P0).Length < 1e-5 * Math.Max(1, rc.Length) && (AtG(D) - P1).Length < 1e-5 * Math.Max(1, rc.Length);
                 for (int i = 0; i < 64 && ok; i++)
                 {
-                    var q = AtG(rc.Length * (i + 0.37) / 64);
+                    var q = AtG(D * (i + 0.37) / 64);
                     if (double.IsNaN(q.X) || OffChain(q) > 1e-6) ok = false;
                 }
-                if (ok) { edgeAt = AtG; Delta = rc.Length; rad0 = rad1 = 1; }
-                else Debug?.Invoke($"open: generic parameter rejected: ends {(AtG(0) - P0).Length:E2} {(AtG(rc.Length) - P1).Length:E2}");
+                if (ok) { edgeAt = AtG; Delta = D; rad0 = rad1 = 1; }
+                else Debug?.Invoke($"open: generic parameter rejected: ends {(AtG(0) - P0).Length:E2} {(AtG(D) - P1).Length:E2}");
             }
         }
         if (edgeAt == null) { why = "open curved: no smooth parameter for the edge (no axis, reference curve not fitted)"; return false; }
@@ -744,7 +741,15 @@ public static partial class DirectRound
             foreach (double v in new[] { 0, 0.2, 0.4, 0.6, 0.8, 1.0 })
             {
                 int changes = 0; double prev = Fend(k, Gen(inT[k]).Point(v));
-                for (int i = 1; i <= 32; i++) { double f = Fend(k, Gen(inT[k] + (outT[k] - inT[k]) * i / 32.0).Point(v)); if (Math.Sign(f) != Math.Sign(prev)) changes++; prev = f; }
+                // 20:17: сечение в скобке не находится (хребет не сошёлся) — отказ с причиной, а не исключение Math.Sign(NaN);
+                // причина ведёт к повтору с параметром по опорной кривой
+                if (double.IsNaN(prev)) { why = "open curved: no blend section inside the end face (section undefined in the end bracket)"; return false; }
+                for (int i = 1; i <= 32; i++)
+                {
+                    double f = Fend(k, Gen(inT[k] + (outT[k] - inT[k]) * i / 32.0).Point(v));
+                    if (double.IsNaN(f)) { why = "open curved: no blend section inside the end face (section undefined in the end bracket)"; return false; }
+                    if (Math.Sign(f) != Math.Sign(prev)) changes++; prev = f;
+                }
                 if (changes != 1) { why = $"open curved: blend section crosses end face {changes} times"; return false; }
             }
         double tA0 = TStar(0, 0), tB0 = TStar(0, 1), tA1 = TStar(1, 0), tB1 = TStar(1, 1);
@@ -818,7 +823,7 @@ public static partial class DirectRound
         if (LawBreaks) foreach (var kt in knotT) if (kt > tLo && kt < tHi) breaks.Add((kt - tLo) * kU);
         // шаг таблицы: у закона с узлами — вчетверо мельче (кривизна сечений по u у узла выше)
         double tabStep = Math.Max(Lp / 20000, Math.Min(0.25, 0.4 * Math.Min(widthA, widthB)) / 32) / (knotT.Count > 0 ? 4 : 1);
-        var surf = new SectionSurface(U => Gen(tLo + U / kU), us.Select(t => (t - tLo) * kU).ToList(), secs, false, 0, Lp, breaks, tabStep);
+        var surf = new SectionSurface(U => Gen(tLo + U / kU), us.Select(t => (t - tLo) * kU).ToList(), secs, false, 0, Lp, breaks, tabStep) { ParallelTable = true };
         {
             double worstTab = 0, worstU = 0;
             for (int i = 0; i < 1000; i++)

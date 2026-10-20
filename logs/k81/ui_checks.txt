@@ -1,0 +1,197 @@
+{"test":"UI-COMMAND-REGISTRY","ok":true,"error":null}
+{"test":"UI-PALETTE-SEARCH","ok":true,"error":null}
+{"test":"UI-UNDO-REDO","ok":true,"error":null}
+{"test":"UI-FILE-ROUNDTRIP","ok":true,"error":null}
+{"test":"UI-VIEW-PICK","ok":true,"error":null}
+{"test":"UI-VIEWCUBE-ORIENT","ok":true,"error":null}
+{"test":"UI-THEME-ICONS","ok":true,"error":null}
+{"test":"UI-ICONS-USER-SET","ok":true,"error":null}
+{"test":"UI-TREE-VISIBILITY","ok":true,"error":null}
+{"test":"UI-OPERATION-ROUND","ok":true,"error":null}
+{"test":"UI-SKETCH-EXTRUDE","ok":true,"error":null}
+{"info":"UI-CONSTRAINT-GLYPHS","placements":9,"drawn":9,"loopBuilds":1}
+{"test":"UI-CONSTRAINT-GLYPHS","ok":true,"error":null}
+{"info":"UI-SKETCH-UX","empty":"trim\u2026","twoPoints":["sk.merge_points","con.horizontal","con.vertical","dim.linear","con.fix","sk.delete"],"twoLines":["sk.fillet","sk.chamfer","con.equal","dim.angle","sk.offset","sk.transform","sk.construction","sk.trim","con.fix","sk.delete"],"radius":["dim.to_diameter","dim.single_arrow","dim.outside","dim.make_strong","dim.lock_toggle","dim.ref_toggle","dim.link_param","dim.edit_value"]}
+{"test":"UI-SKETCH-UX","ok":true,"error":null}
+{"test":"UI-TOOLBAR-TRAY","ok":true,"error":null}
+  selected 2: XY,YZ
+{"test":"UI-HIDE-TOGGLE","ok":true,"error":null}
+  move: gizmo GizmoSpec { Mode = Move, Origin = (0, 0, 10), X = (1, 0, 0), Y = (0, 1, 0), Z = (0, 0, 1) }, error , volume 24000.0000
+  move: shift (20, 7, 0), box (0.0000, -8.0000, 0.0000)–(40.0000, 22.0000, 20.0000), gizmo (20.0000, 7.0000, 10.0000)
+  scale X one side: (0.0000, -8.0000, 0.0000)–(60.0000, 22.0000, 20.0000)
+  scale Y both sides: (0.0000, -14.0000, 0.0000)–(60.0000, 28.0000, 20.0000)
+  scale Z keep ratio: (-15.0000, -24.5000, 0.0000)–(75.0000, 38.5000, 30.0000), S (2.25, 2.1, 1.5), volume 170100.0000
+  scale corner: (-60.0000, -56.0000, -15.0000)–(120.0000, 70.0000, 45.0000)
+  rotate Z 90: (5.0000, -13.0000, 0.0000)–(35.0000, 27.0000, 20.0000)
+  then X 90: (5.0000, -3.0000, -10.0000)–(35.0000, 17.0000, 30.0000), axis (0.5774, -0.5774, 0.5774) angle 120
+  local gizmo: X (0.8660, 0.5000, 0.0000) Y (-0.5000, 0.8660, 0.0000) origin (20.0000, 7.0000, 10.0000)
+  global: shift (8.66, 5, 0), gizmo X (1.0000, 0.0000, 0.0000)
+{"test":"UI-FF-GIZMO","ok":true,"error":null}
+  fallback: mode wgl → angle, toast «Сбой видеодрайвера (OpenGL WGL). Со следующего запуска графика — ANGLE (Direct3D 11); перезапустите приложение.»
+{"test":"UI-FRAME-GUARD","ok":true,"error":null}
+  warm-up: 6648 ms, errors 0; code optimized
+{"test":"UI-KERNEL-WARMUP","ok":true,"error":null}
+{"test":"UI-DELETE-FEATURE-SKETCH","ok":true,"error":null}
+  outline: 1 arc(s), 4 line(s); corner (-50, 50, 50); edges LineCurve3 ArcCurve3 LineCurve3 LineCurve3 LineCurve3
+  generic: arc -> SkArc; line -> SkLine; ellipse -> 16 entities
+{"test":"UI-FACE-OUTLINE-ARCS","ok":true,"error":null}
+{"test":"UI-ROLLBACK-BAR","ok":true,"error":null}
+  flipped: z -20..0 (was 0..20)
+  on XZ: bounds (-40, -20, -30) .. (60, 0, 30)
+{"test":"UI-SKETCH-SETUP","ok":true,"error":null}
+  loft: error , volume 9333.3333 want 9333.3333
+  sweep: error , volume 3926.9908 want 3926.9908
+{"test":"UI-U13-LOFT-SWEEP","ok":true,"error":null}
+  lines: 20.000000 20.000000
+  arc: R 10.000000 sweep 60.0000°
+  trim: [100.000,110.000]
+  ellipse: (700, -1.1150802503578916E-14) 8.000000 3.000000
+  offset: 4 lines, x 902.0000..908.0000
+  area: (87.43362938623454, 1)
+  solve: Singular, entities 49, constraints 80
+{"test":"UI-U13B-SKETCH","ok":true,"error":null}
+  thin: error , volume 1440.000000
+  thin outside: error , volume 1760.000000
+  helical: error , volume 593.003 want 594.048
+  move: x 80.000..100.000 y 0.000..40.000
+  offset face: error , volume 12000.000000
+  new radius: error , volume 7922.743339 want 7922.743339
+  delete round: error , volume 8000.000000
+  points pattern: error , volume 7623.008882
+  curve pattern: error , volume 7497.345175
+  fill pattern: error , volume 6994.690351
+  thread: error , d 4 internal True
+{"test":"UI-U13C-FEATURES","ok":true,"error":null}
+  region: 6 items, kinds Face
+  measure: Вершина: (0; 0; 0) | Вершина: (40; 20; 10) | Расстояние: 45.826 (dX 40, dY 20, dZ 10)
+  comb: 97 lines, spike 2.0000..2.0000
+{"test":"UI-U13D-VIEW-SELECT","ok":true,"error":null}
+  paste: 1, features 3, sketches 3, volume 7874.336294, error 
+  configurations: high 15748.673, no hole 8000.000, base 7874.336
+{"test":"UI-U13D-DOC","ok":true,"error":null}
+  tree info nodes: params,material,body,rollback
+{"test":"UI-U13D-CONTEXT","ok":true,"error":null}
+  coaxial: error , at (10, 10, 10), dir (-0, -0, -1), volume 7717.2567
+  parents of round: Extrude
+  replace sketch: volume 11717.2567
+  radial: error , at (10, 0, 20), dir (-1, -0, -0), removed 250.064 (≈ 251.327)
+  full round: error , volume 7570.7963 want 7570.7963, faces 6
+{"test":"UI-U13E-DATUMS-HOLES","ok":true,"error":null}
+  surface extrude: error , quilts 1, area 200.000000
+  thicken: error , volume 400.000000
+  extend: error , area 623.6068
+  trim: error , area 50.000000
+  thicken fill: error , volume 150.000000
+  surface revolve: error , area 1256.2280
+  thicken cylinder: error , volume 2261.9467 want 2261.9467; parent faces ; 
+  offset copy: error /, area 800.0000, z 15.0000..15.0000
+  replace face: error , volume 12000.000000; 
+  insert body: error , volume 24000.0000
+  boundary blend: error , volume 9333.3333
+  swept blend: error , volume 1628.9669 want 1633.6282
+  rotational blend: error , volume 882.1543 want 883.5729
+{"test":"UI-U13F-SURFACES","ok":true,"error":null}
+  cube placed: centre (-10, -10, 30), constraints 3
+  pin: hub origin (5, 0, 0), shaft origin (5, 0, 0), hub axis (0, 0, 1)
+  bom: Вал x1; Втулка x1; Кубик x3; Основание x1
+  mirror: centre (10, -10, 30) (source (-10, -10, 30)), volume 8000.000
+  reopened: 7 components, fixed 2, constraints 3, joints 1
+{"test":"UI-U13G-ASSEMBLY","ok":true,"error":null}
+  box: error , volume 24000.000000, bodies Тело 1, frozen True
+  cylinder: bodies 2 (Тело 1,Тело 2), volume 36566.370614
+  subtract: bodies 1, volume 17716.814693 want 17716.814693
+  copy + scale: bodies Тело 1,Тело 3, volume 19931.416529
+  split: bodies Тело 1,Тело 1.2,Тело 3, volume 19931.416529
+  mirror + array: bodies 5 (Тело 1,Тело 3,Тело 4,Тело 1 [2],Тело 1 [3]), volume 57579.648
+  fillet on one body: volume 57502.3911, removed 77.2567 want 77.2567, bodies 5
+  push-pull: added 4429.2037 want 4429.2037
+  align: added 4429.2037 want 4429.2037
+  tree: freeform node with 12 steps, icon tree_freeform_ico.svg
+  reopened: freeform True, steps 13, volume 66360.7984, bodies 5
+  undo to mirror: steps 8, bodies 2
+  in freeform: bodies 2 (Исходное тело,Тело 1), volume 68188.790
+  done: bodies 1, volume 67665.191 want 67665.191
+  upstream changed: refs changed True, volume 67665.191
+  update refs: refs changed False, volume 99141.593 want 99141.593
+{"test":"UI-U13H-FREEFORM","ok":true,"error":null}
+  interpolate: control points 5, deviation 3.36E-004
+  rebuild half circle R20 with 8 control points: deviation 5.20E-003
+  offset square: perimeter 96.000000
+  fillet corners: 4, length 76.5661 want 76.5664
+  pipe R3/r2 L50: error , volume 785.3982 want 785.3982
+  pipe along helix (length 378.06): error , volume 1183.218 want 1187.722, bodies 2
+  box: error , bodies Тело 1,Тело 2,Тело 3
+  imprint closed square: error , faces 6 → 7, volume change 0.00E+000
+  imprint open line: error , faces 7 → 8, volume change 0.00E+000
+  isoparm on a cylinder: 97 points, z 0.000..30.000
+{"test":"UI-U13I-CURVES","ok":true,"error":null}
+  ruled: error , quilt area 1264.9111 want 1264.9111, grid 25×2
+  extend: area 1581.1388 want 1581.1388
+  cv edit: error , replaces True, cp00 (0, 0, 5)
+  network: deviation from curves 3.90E-003, from the paraboloid at (10,10) 4.38E-004
+  patch: area 400.000000
+  planar + thicken: volume 800.000000
+  stitch: error , volume added 1000.000000, bodies 2, quilts left 1
+  blend: error , mid (29.99999999999999, 99.99999999999999, 10.000000000000002), normal at the first edge (-4.440892098500856E-16, -1.5987211554602584E-15, -1)
+  replace face by NURBS: error , volume added 810.560 want 810.569
+  reopened: quilts 3 (was 3), volume 10610.5599 (was 10610.5599)
+{"test":"UI-U13J-SURFACES","ok":true,"error":null}
+  box cage: error , body Тело 1, volume L2 8402.81, faces 6, cage 8/6
+  volume L3 7993.87, L4 7894.23
+  all creased: volume 24000.000000
+  extrude: error , cage 12/10, volume 18675.53, bodies 1
+  edge loop: error , cage 16/14, closed True
+  reopened: volume 21417.940 (was 21417.940), cages 1, creases 2
+  to NURBS: error , faces 56 (NURBS 56), open edges 0, volume 20518.24 (subd L5 20737.83), cages 0
+{"test":"UI-U13K-SUBD","ok":true,"error":null}
+  mid plane: (0, 16.66666603088379, -16.66666603088379) n (-1, 0, 0)
+  draft: error , volume 1000000.00 -> 973796.11
+  face axis: (-50, -40, 40) dir (1, 0, 0)
+  tangent plane at (-16.66666603088379, -49.99189869233356, 40.4024431911997), distance from axis 10.000000
+  arc centre point (50, -40, 40) (arc centre (50, -40, 40))
+{"test":"UI-U13-DATUMS-DRAFT","ok":true,"error":null}
+{"test":"UI-U13-TREE","ok":true,"error":null}
+{"test":"UI-PARAMETERS-SCOPE","ok":true,"error":null}
+{"test":"UI-LANGUAGE","ok":true,"error":null}
+{"test":"UI-TANGENT-CHAIN-CHAMFER","ok":true,"error":null}
+{"test":"UI-SKETCH-REFERENCES-DIMS","ok":true,"error":null}
+{"test":"UI-CANCEL-KEEPS-PART","ok":true,"error":null}
+{"test":"UI-CTRL-TOGGLE","ok":true,"error":null}
+{"test":"UI-HANDLE-CONTOUR","ok":true,"error":null}
+  preview tris 66, final tris 80
+{"test":"UI-HANDLE-LIVE","ok":true,"error":null}
+  before=True: features +1, points 1, error , dir (-0, -0, -1), volume 1000000 -> 999435
+  before=False: features +1, points 1, error , dir (-0, -0, -1), volume 1000000 -> 999435
+{"test":"UI-HOLE-ON-FACE","ok":true,"error":null}
+  shell volumes: inward 5 mm 230500, outward 3 mm 157308
+{"test":"UI-SHELL-HANDLE","ok":true,"error":null}
+  variable round 10→20 on line–arc–line: 2428 ms, faces 11
+  variable chamfer 10→20 on line–arc–line: 394 ms, faces 10
+{"test":"UI-VAR-CHAIN","ok":true,"error":null}
+  shell 2 (open round True): volume 109879.7 of 991415.9; Shell: wall 2, 1 face(s) left open.
+  shell 2 (open round False): volume 113354.9 of 991415.9; Shell: wall 2, cavity by offsetting all faces (exact).
+{"test":"UI-SHELL-OPEN-ROUND","ok":true,"error":null}
+  seams: 2 (the two lines along the round)
+{"test":"UI-SEAM-EDGES","ok":true,"error":null}
+  inner round R60 after shell: vertices beyond the R80 wall 0
+  inner chamfer 40 after shell: vertices beyond the R80 wall 0
+{"test":"UI-SHELL-INNER-BLEND","ok":true,"error":null}
+  outward shell -3.66: Shell: wall 3.66 outward, by offsetting all faces (exact).
+  outward shell -8: Shell: wall 8 outward, by offsetting all faces (exact).
+  outward shell -16: Shell: wall 16 outward, by offsetting all faces (exact).
+{"test":"UI-SHELL-OUT-CONE","ok":true,"error":null}
+  shell 5.31 over R4: wall 237632.7314, sharp wall 238279.2689 − removed 646.5375 = 237632.7314
+  shell 8 over R4: wall 342894.6998, sharp wall 343541.2367 − removed 646.5375 = 342894.6992
+{"test":"UI-SHELL-SHARPEN","ok":true,"error":null}
+  outward 2.82 at a tangent open face: volume 147686.2526, formula 147686.2526
+{"test":"UI-SHELL-OUT-TANGENT","ok":true,"error":null}
+  shell 5, open bottom (one tangent edge): volume 233011.6137, formula 233011.6137; Shell: wall 5, cavity by offsetting all faces and extending it through the open face(s) (exact).
+{"test":"UI-SHELL-OPEN-MIXED","ok":true,"error":null}
+  mirror of a round: 9 ms, volume 982831.853 (want 982831.853)
+{"test":"UI-MIRROR-OPS","ok":true,"error":null}
+  pattern of a cut (step 15): 18 ms, volume 975973.446 (want 975973.446), bodies 1
+  pattern of a cut (step 5): 262 ms, volume 977201.807, bodies 1
+{"test":"UI-PATTERN-OPS","ok":true,"error":null}
+  open round R2.1: 101 ms, cylinder faces 1, volume 315690.487707
+{"test":"UI-OPEN-CYL","ok":true,"error":null}
+{"passed":58,"failed":0}

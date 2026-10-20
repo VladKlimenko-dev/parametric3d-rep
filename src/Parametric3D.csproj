@@ -28,6 +28,10 @@
     <NoWarn>$(NoWarn);CS9057</NoWarn>
     <!-- Генератор полей x:Name требует Roslyn 4.14 (нет в .NET 8 SDK): поля находятся вручную (*.Names.cs). -->
     <AvaloniaNameGeneratorIsEnabled>false</AvaloniaNameGeneratorIsEnabled>
+    <!-- 20:17 (скорость): код оптимизируется и в отладочной сборке (Debug) — ядро без оптимизации медленнее в разы, а
+         приложение обычно запускают из Visual Studio как есть. Отладка шагами по ядру — Release не нужен: переменные,
+         убранные оптимизатором, видны хуже, но точки останова работают. -->
+    <Optimize>true</Optimize>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(UiPackages)'!=''">

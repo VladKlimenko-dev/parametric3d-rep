@@ -39,10 +39,12 @@ static partial class Program
         });
         Check("KRN05-HANDLE-SEQUENCE", () =>
         {
+            if (Environment.GetEnvironmentVariable("P3D_HSDBG") == "1") Parametric3D.Kernel.Ops.DirectRound.Debug = m => { if (m.Contains("declined") || m.Contains("invalid") || m.Contains("not meshed")) Console.WriteLine("   dr: " + m); };
             var (part, _) = DocumentFile.Load(File.ReadAllText(Fixture("seq_handles_k75.p3d")));
             ((RoundFeature)part.Features[7]).Radius = new ValueRef(1.5);
             part.StageIndex = part.Features.Count; part.Invalidate(); part.Rebuild(null);
             var b = part.Bodies.Single();
+            if (Environment.GetEnvironmentVariable("P3D_HSDBG") == "1") foreach (var wq in part.Warnings) Console.WriteLine("   warn: " + wq);
             var errs = part.Features.Where(f => f.Error != null).Select(f => f.Name + ": " + f.Error).ToList();
             var v = SolidValidator.Validate(b);
             Log(new { test = "KRN05-HANDLE-SEQUENCE", volume = part.Volume, guarantee = b.Guarantee.ToString(), errors = errs, valid = v.Summary(), mergeTagA = Parametric3D.Kernel.Analytic.GeneralBoolean.MergeTagFromA, donorEdgeMismatch = Parametric3D.Kernel.Export.StepImport.DonorEdgeMismatch });

@@ -120,7 +120,7 @@ public static class SolidValidator
         // детали после операции берёт разделы, только что посчитанные построителем (скругление: B-rep 2 × 0.9 с). Мутация
         // P3D_VALKEYDISPLAY=0 — прежний ключ.
         var ks = KernelSettings.Capture() with { Preview = false, LivePreview = false };
-        if (!ValKeyDisplayOff) ks = ks with { DeferMeshing = false };
+        if (!ValKeyDisplayOff) ks = ks with { DeferMeshing = false, BooleanThreads = 1 };   // число потоков результата не меняет
         // 02.6: ключ памяти — со всеми настройками, в т. ч. бюджетом точности (смена единиц/масштаба — новая проверка).
         // Мутация P3D_CACHEKEYTOL=0: ключ без бюджета точности.
         if (CacheKeyTolOff) ks = ks with { Tolerance = ToleranceContext.Default };

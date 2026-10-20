@@ -71,6 +71,34 @@ public readonly struct SweepSection
         return Bezier(q);
     }
 
+    /// <summary>
+    /// ВСТАВКА ПЯТОЙ СТЕПЕНИ (Лагранж по шести узлам −2…3) между s[2] и s[3] (t ∈ [0, 1]): ошибка ~h⁶ (у Катмулла — Рома ~h³),
+    /// таблица формулы та же по точности при шаге в разы крупнее (меньше точных сечений).
+    /// </summary>
+    public static SweepSection Lagrange6(SweepSection[] s, double t) => Lagrange6(s[0], s[1], s[2], s[3], s[4], s[5], t);
+
+    public static SweepSection Lagrange6(in SweepSection s0, in SweepSection s1, in SweepSection s2, in SweepSection s3, in SweepSection s4, in SweepSection s5, double t)
+    {
+        // веса Лагранжа узлов −2…3 в точке t (без выделения памяти: формула — в каждой точке квадратуры и разметки)
+        double a = t + 2, b = t + 1, c = t, d = t - 1, e = t - 2, f = t - 3;
+        double w0 = -(b * c * d * e * f) / 120, w1 = (a * c * d * e * f) / 24, w2 = -(a * b * d * e * f) / 12;
+        double w3 = (a * b * c * e * f) / 12, w4 = -(a * b * c * d * f) / 24, w5 = (a * b * c * d * e) / 120;
+        Vector3d V(Vector3d p0, Vector3d p1, Vector3d p2, Vector3d p3, Vector3d p4, Vector3d p5) => p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3 + p4 * w4 + p5 * w5;
+        double D(double p0, double p1, double p2, double p3, double p4, double p5) => p0 * w0 + p1 * w1 + p2 * w2 + p3 * w3 + p4 * w4 + p5 * w5;
+        if (s0.IsArc && s1.IsArc && s2.IsArc && s3.IsArc && s4.IsArc && s5.IsArc)
+        {
+            Vector3d e1 = V(s0.E1, s1.E1, s2.E1, s3.E1, s4.E1, s5.E1).Normalized();
+            Vector3d e2 = V(s0.E2, s1.E2, s2.E2, s3.E2, s4.E2, s5.E2);
+            e2 = (e2 - e1 * Vector3d.Dot(e2, e1)).Normalized();
+            return Arc(V(s0.C, s1.C, s2.C, s3.C, s4.C, s5.C), e1, e2, D(s0.R, s1.R, s2.R, s3.R, s4.R, s5.R), D(s0.Phi, s1.Phi, s2.Phi, s3.Phi, s4.Phi, s5.Phi));
+        }
+        if (s0.IsLine && s1.IsLine && s2.IsLine && s3.IsLine && s4.IsLine && s5.IsLine)
+            return Line(V(s0.A, s1.A, s2.A, s3.A, s4.A, s5.A), V(s0.B, s1.B, s2.B, s3.B, s4.B, s5.B));
+        var arr = new[] { s0, s1, s2, s3, s4, s5 };
+        if (BezierMix(arr, p => V(p[0], p[1], p[2], p[3], p[4], p[5])) is { } bz) return bz;
+        return CatmullRom(s1, s2, s3, s4, t);
+    }
+
     /// <summary>Кубическая интерполяция Катмулла — Рома между s1 и s2 (t ∈ [0, 1]).</summary>
     public static SweepSection CatmullRom(SweepSection s0, SweepSection s1, SweepSection s2, SweepSection s3, double t)
     {
@@ -264,8 +292,21 @@ public sealed class SectionSurface : ISurface3
             if (Quad && n >= 3) return k < 0 ? Extrap2(sec[0], sec[1], sec[2], -k) : Extrap2(sec[n - 1], sec[n - 2], sec[n - 3], k - (n - 1));
             return k < 0 ? Extrap(sec[0], sec[1], -k) : Extrap(sec[n - 1], sec[n - 2], k - (n - 1));
         }
+        if (HighOrder && n >= 6)
+        {
+            // узлы −2…3 вокруг промежутка; у краёв куска — сдвинутое окно внутри куска (не продолжение за стык)
+            if (wrap) return SweepSection.Lagrange6(At(ti - 2), At(ti - 1), At(ti), At(ti + 1), At(ti + 2), At(ti + 3), tf);
+            int lo = Math.Clamp(ti - 2, 0, n - 6);
+            return SweepSection.Lagrange6(sec[lo], sec[lo + 1], sec[lo + 2], sec[lo + 3], sec[lo + 4], sec[lo + 5], tf + (ti - lo - 2));
+        }
         return SweepSection.CatmullRom(At(ti - 1), At(ti), At(ti + 1), At(ti + 2), tf);
     }
+    /// <summary>
+    /// Таблица формулы — вставкой пятой степени, шаг таблицы крупнее в TabScale раз (меньше точных сечений; точность — та же
+    /// или лучше: построители сверяют таблицу с формулой). Мутация P3D_SECHIGH=0 — Катмулл — Ром и прежний шаг.
+    /// </summary>
+    static readonly bool HighOrder = Environment.GetEnvironmentVariable("P3D_SECHIGH") != "0";
+    static readonly double TabScale = double.TryParse(Environment.GetEnvironmentVariable("P3D_SECTABK"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var tk) ? tk : 8;
 
     static readonly bool Quad = Environment.GetEnvironmentVariable("P3D_SECEXTRAP2") != "0";
 
@@ -302,7 +343,7 @@ public sealed class SectionSurface : ISurface3
     {
         if (_gen == null || _stationU == null) return null;
         var g = _gen;
-        return new SectionSurface(u => map(g(u)), _stationU, _s.Select(map).ToList(), Closed, _u0, _u1, _breaks, _tableStep);
+        return new SectionSurface(u => map(g(u)), _stationU, _s.Select(map).ToList(), Closed, _u0, _u1, _breaks, _tableStep) { ParallelTable = ParallelTable };
     }
 
     /// <summary>Сечение по самой формуле (без таблицы) — для проверок.</summary>
@@ -316,6 +357,11 @@ public sealed class SectionSurface : ISurface3
     // Катмулла — Рома (погрешность ~h⁴·кривизна³ — нанометры). Так работают промышленные ядра
     // с поверхностями качения шара: формула — определение, в работе — плотное приближение.
     private sealed record Tab(double[] Start, (double H, SweepSection[] S)[] Pieces);
+    /// <summary>Формула сечения допускает вызовы из нескольких потоков (таблица считается параллельно).</summary>
+    public bool ParallelTable { get; init; }
+    static readonly bool ParOff = Environment.GetEnvironmentVariable("P3D_SECPAR") == "0";
+    /// <summary>Разбор: точных сечений, посчитанных для таблиц формулы.</summary>
+    public static long TableSections, ParallelTables;
     private Tab? _tab;
     /// <summary>KRN-06 (06.12): шаг таблицы формулы, заданный построителем (0 — по умолчанию: 0.25 мм и 1/20 ширины). Лента
     /// катящегося шара просит мельче: кубическая вставка с шагом 0.15 мм отходила от формулы на 1e-6 мм при допуске p-кривой 1e-7.</summary>
@@ -328,6 +374,8 @@ public sealed class SectionSurface : ISurface3
         var mid = _s[_s.Length / 2];
         double width = Math.Max((mid.Point(1) - mid.Point(0)).Length, 1e-3);
         double h0 = _tableStep > 0 ? _tableStep : Math.Min(0.25, width / 20);
+        // формула со стыками (закон радиуса — по кускам многочлен, гладкий лишь первого порядка в узлах): шаг крупнее лишь вдвое
+        if (HighOrder) h0 *= _breaks.Length > 0 ? Math.Min(2, TabScale) : TabScale;
         var cuts = new List<double> { _u0 };
         cuts.AddRange(_breaks);
         cuts.Add(_u1);
@@ -337,17 +385,27 @@ public sealed class SectionSurface : ISurface3
         {
             double a = cuts[p], b = cuts[p + 1];
             if (b - a < 1e-12) continue;
-            int n = Math.Clamp((int)Math.Ceiling((b - a) / h0), 2, 20000);
+            int n = Math.Clamp((int)Math.Ceiling((b - a) / h0), HighOrder ? 6 : 2, 20000);
             double h = (b - a) / n;
             var arr = new SweepSection[n + 1];
             // Узлы на самом стыке — изнутри куска: формула на стыке берёт одно из рёбер.
-            for (int k = 0; k <= n; k++)
+            void Node(int k)
             {
                 double u = a + h * k;
                 if (k == 0 && p > 0) u += 1e-9;
                 if (k == n && p + 2 < cuts.Count) u -= 1e-9;
                 arr[k] = _gen!(u);
             }
+            // 20:17 (скорость): узлы таблицы независимы — в несколько потоков, если формула построителя это допускает
+            // (ParallelTable; на 16 потоках пользователя таблица ленты — в разы быстрее). Мутация P3D_SECPAR=0.
+            int threads = Ops.BooleanOp.Threads;
+            if (ParallelTable && !ParOff && n >= 64 && threads > 1 && Environment.ProcessorCount > 1)
+            {
+                System.Threading.Tasks.Parallel.For(0, n + 1, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = threads }, Node);
+                Interlocked.Increment(ref ParallelTables);
+            }
+            else for (int k = 0; k <= n; k++) Node(k);
+            Interlocked.Add(ref TableSections, n + 1);
             starts.Add(a); pieces.Add((h, arr));
         }
         t = new Tab(starts.ToArray(), pieces.ToArray());

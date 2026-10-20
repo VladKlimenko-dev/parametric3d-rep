@@ -64,7 +64,7 @@ static partial class Program
     static readonly string[] StatisticsPrefixes =
     {
         "Kernel.Exact.ExactBsp.", "Kernel.Exact.PlaneRegistry.Total", "Kernel.Ops.VertexSnap.", "Kernel.Geometry.SplineWallEdges.VerticesSnapped", "Kernel.Geometry.SplineWallEdges.CurvesReplaced",
-        "Kernel.Tess.AnalysisMesher.Rounds", "Kernel.Tess.Cdt.Merged", "Kernel.Tess.Tessellator.", "Kernel.Topology.PCurves.Samplings",
+        "Kernel.Tess.AnalysisMesher.Rounds", "Kernel.Tess.Cdt.Merged", "Kernel.Tess.Tessellator.", "Kernel.Topology.PCurves.Samplings", "Kernel.Tess.ExactFaceMesher.FaceMemoHits", "Kernel.Surfaces.SectionSurface.TableSections", "Kernel.Surfaces.SectionSurface.ParallelTables", "Kernel.Ops.DirectRound.Exceptions", "Kernel.Topology.AnalyticVolume.BandPoints", "Kernel.Topology.AnalyticVolume.AreasComputed",
         "Kernel.Topology.TopologyHeal.Removed", "Kernel.Exact.ExactAdapter.StaleExactUses",
         "Kernel.Tess.ExactFaceMesher.Chord", "Kernel.Tess.ExactFaceMesher.Refine", "Kernel.Tess.ExactFaceMesher.Skip",
         "Kernel.Tess.ExactFaceMesher.PoleDeclined", "Kernel.Tess.ExactFaceMesher.RejectedByArea",

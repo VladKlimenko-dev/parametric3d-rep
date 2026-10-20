@@ -80,7 +80,7 @@ public static class AnalyticVolume
         // Мутация P3D_VOLCACHE=0.
         // 17:31: как у проверок — без отложенной разметки и сетки показа в ключе (мутация P3D_VALKEYDISPLAY=0 — прежний ключ)
         KernelSettings? key = VolCacheOff ? null : KernelSettings.Capture() with { Preview = false, LivePreview = false };
-        if (key != null && !SolidValidator.KeyDisplayOff) key = key with { DeferMeshing = false };
+        if (key != null && !SolidValidator.KeyDisplayOff) key = key with { DeferMeshing = false, BooleanThreads = 1 };
         ulong fp = key == null ? 0 : TopoFingerprint.Of(solid, display: SolidValidator.KeyDisplayOff);
         if (key != null && _volCache.TryGetValue(solid, out var hit) && hit.Revision == solid.Revision && hit.Print == fp && hit.Key.Equals(key))
         {
@@ -129,7 +129,9 @@ public static class AnalyticVolume
             double sum = 0;
             foreach (var f in solid.Faces)
             {
-                var c = FaceIntegral(f);
+                double? c;
+                using (Diagnostics.Prof.Time("объём: грань " + (GeometryAudit.AuthoritativeSurface(f)?.GetType().Name ?? "?")))
+                    c = FaceIntegral(f);
                 if (c == null || double.IsNaN(c.Value)) return null;
                 sum += c.Value;
             }
@@ -205,7 +207,48 @@ public static class AnalyticVolume
     [ThreadStatic] static bool _rough;
     static readonly bool RoughAreaOff = Environment.GetEnvironmentVariable("P3D_ROUGHAREA") == "0";
 
+    // 20:17 (скорость): ПЛОЩАДЬ ГРАНИ ЗАПОМИНАЕТСЯ по грани и её составу (поверхность, сторона, кривые и концы рёбер
+    // контуров): самопроверка разметки, объём и деталь спрашивали площадь той же ленты по 2–4 раза (у процедурной ленты —
+    // 0.1–0.3 с каждый раз). Мутация P3D_AREACACHE=0.
+    static readonly bool AreaCacheOff = Environment.GetEnvironmentVariable("P3D_AREACACHE") == "0";
+    private sealed class AreaEntry { public ulong Key; public double? Area; public KernelSettings Settings = null!; }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TFace, AreaEntry> _areaCache = new();
+    internal static ulong FaceKey(TFace f, bool sourceOnly = false, bool side = true)
+    {
+        ulong h = 1469598103934665603UL;
+        void M(ulong x) { h ^= x + 0x9E3779B97F4A7C15UL + (h << 6) + (h >> 2); h *= 1099511628211UL; }
+        void R(object? o) => M(o == null ? 0UL : (ulong)(uint)System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o));
+        void D(double d) => M((ulong)BitConverter.DoubleToInt64Bits(d));
+        if (sourceOnly)
+        {
+            // поверхность-хозяин: у гранёной — её источник (обёртка гранения у копии тела — другой объект)
+            var src = f.Surface is FacetedSurface fsq ? fsq.Source : f.Surface;
+            R(src); if (src == null && f.Surface is FacetedSurface fsn) M((ulong)fsn.Facets.Count + 7);
+        }
+        else { R(f.Surface); if (f.Surface is FacetedSurface fs) R(fs.Source); }
+        if (side) M(f.Reversed ? 1UL : 2UL);
+        M((ulong)f.Loops.Count);
+        foreach (var l in f.Loops)
+        {
+            M(l.IsOuter ? 3UL : 4UL); M((ulong)l.CoEdges.Count);
+            foreach (var ce in l.CoEdges) { R(ce.Edge.Curve); M(ce.Reversed ? 5UL : 6UL); var a = ce.Edge.V0.P; var b = ce.Edge.V1.P; D(a.X); D(a.Y); D(a.Z); D(b.X); D(b.Y); D(b.Z); }
+        }
+        return h;
+    }
+
     public static double? FaceArea(TFace f)
+    {
+        if (AreaCacheOff || _coarse != 0 || _rough) return FaceAreaUncached(f);
+        var ks = KernelSettings.Capture() with { Preview = false, LivePreview = false, DeferMeshing = false, BooleanThreads = 1 };
+        ulong key = FaceKey(f);
+        if (_areaCache.TryGetValue(f, out var e) && e.Key == key && e.Settings.Equals(ks)) return e.Area;
+        var v = FaceAreaUncached(f);
+        Interlocked.Increment(ref AreasComputed);
+        if (FaceKey(f) == key) _areaCache.AddOrUpdate(f, new AreaEntry { Key = key, Area = v, Settings = ks });
+        return v;
+    }
+
+    static double? FaceAreaUncached(TFace f)
     {
         // KRN-07 (g.14, сверка с OpenCascade): площадь грани с кривыми общего вида (сплайн, кривая пересечения) — как у
         // интеграла объёма: проход с половиной шагов и поправка Ричардсона (ломаная — ошибка ∝ шаг²; четверть круга с краем
@@ -717,10 +760,37 @@ public static class AnalyticVolume
 
     /// <summary>∫∫ (x − o)·N dA (или площадь) грани незамкнутой ленты: Гаусс 12 по v (16 кусков, грубый — 8), по u — Гаусс 12 на
     /// [L(v), R(v)] (48 кусков, грубый — 24); сторона — как у BandIntegral.</summary>
+    // 20:17 (скорость): КВАДРАТУРА ЛЕНТЫ — ПО СХОДИМОСТИ. Прежде всегда сетка 48 × 16 кусков Гаусса-12 (тонкий проход) и
+    // 24 × 8 (грубый, для оценки ошибки) — 110 тыс. точек ленты на проход. Теперь тонкий проход начинается с 24 × 8 и сверяется с
+    // 12 × 4: сошлись (разность ≤ 1e-11 величины) — он и есть результат, а грубым проходом квадратуры объёма служит 12 × 4
+    // (оценка ошибки — та же разность); нет — прежние 48 × 16 и 24 × 8. Мутация P3D_BANDADAPT=0.
+    static readonly bool BandAdaptOff = Environment.GetEnvironmentVariable("P3D_BANDADAPT") == "0";
+    [ThreadStatic] static (TFace F, bool Area, double Coarse)? _bandCoarse;
+
     static double? BandOpenIntegral(TFace f, SectionSurface ss, (Func<double, double> L, Func<double, double> R) rg, bool area)
     {
+        if (BandAdaptOff || _rough) return BandOpenIntegralAt(f, ss, rg, area, _rough ? 8 : _coarse > 0 ? 24 : 48, _rough ? 3 : _coarse > 0 ? 8 : 16);
+        if (_coarse > 0)
+        {
+            // грубый проход после адаптивного тонкого — его же сверочное значение
+            if (_bandCoarse is { } bc && ReferenceEquals(bc.F, f) && bc.Area == area) { _bandCoarse = null; return bc.Coarse; }
+            return BandOpenIntegralAt(f, ss, rg, area, 24, 8);
+        }
+        var a = BandOpenIntegralAt(f, ss, rg, area, 24, 8);
+        var b = BandOpenIntegralAt(f, ss, rg, area, 12, 4);
+        if (a is { } av && b is { } bv && Math.Abs(av - bv) <= 1e-11 * Math.Max(1e-9, Math.Abs(av))) { _bandCoarse = (f, area, bv); return av; }
+        var c = BandOpenIntegralAt(f, ss, rg, area, 48, 16);
+        _bandCoarse = a is { } a2 ? (f, area, a2) : null;
+        return c;
+    }
+
+    /// <summary>Разбор: точек квадратуры ленты и посчитанных (не из памяти) площадей граней.</summary>
+    public static long BandPoints, AreasComputed;
+
+    static double? BandOpenIntegralAt(TFace f, SectionSurface ss, (Func<double, double> L, Func<double, double> R) rg, bool area, int mu, int mv)
+    {
+        Interlocked.Add(ref BandPoints, (long)mu * mv * 144);
         double per = ss.UMax - ss.UMin, h = 1e-6 * Math.Max(1e-9, per);
-        int mv = _rough ? 3 : _coarse > 0 ? 8 : 16, mu = _rough ? 8 : _coarse > 0 ? 24 : 48;
         var (gx, gw) = Gauss12;
         double vol = 0, ar = 0; var va = Vector3d.Zero;
         for (int iv = 0; iv < mv; iv++)

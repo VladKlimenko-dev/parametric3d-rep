@@ -114,12 +114,21 @@ if (only == "probe-load")
 if (only == "probe-ffround")
 {
     // 17:31: FreeForm цилиндр ∪ шар, скругление / фаска ребра пересечения и верхней кромки — время шагов
+    if (Environment.GetEnvironmentVariable("P3D_PROBEWARM") == "1")
+    {
+        var swW = System.Diagnostics.Stopwatch.StartNew();
+        Parametric3D.App.Diagnostics.KernelWarmup.Run();
+        Console.WriteLine($"PROBE warm-up: {swW.ElapsedMilliseconds} ms, feature 0 ms");
+    }
+    int repsAll = int.TryParse(Environment.GetEnvironmentVariable("P3D_PROBEREPS"), out var rpa) ? rpa : 1;
+    for (int repAll = 0; repAll < repsAll; repAll++)
+    {
     var s = FreeFormCommands.NewFreeForm(); var part = s.Part!;
     var node = part.Features.OfType<FreeFormFeature>().Single();
     long Step(Feature f, string name)
     {
         f.FreeForm = node.Key; f.Frozen = true; part.AddFeature(f);
-        bool prof = Environment.GetEnvironmentVariable("P3D_PROBEPROF") == name;
+        bool prof = Environment.GetEnvironmentVariable("P3D_PROBEPROF") is { } pp && (pp == name || pp == "all");
         if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
         var sw = System.Diagnostics.Stopwatch.StartNew();
         s.Document.RebuildDirty();
@@ -155,6 +164,7 @@ if (only == "probe-ffround")
         }
         Step(f, name);
         part.RemoveFeature(f); s.Document.RebuildDirty();
+    }
     }
     return 0;
 }
@@ -893,6 +903,20 @@ Check("UI-FRAME-GUARD", () =>
     Require(!ok && vp.FrameFailuresInRow == 1 && ModelViewport.FrameFailuresTotal >= 1, "failed frame is not contained");
     Require(newMode == "angle" && toast != null, "WGL frame failure does not switch the graphics to ANGLE");
     Require(vp.RunFrameGuarded(() => { }) && vp.FrameFailuresInRow == 0, "a good frame resets the failure count");
+    w.Close();
+});
+
+Check("UI-KERNEL-WARMUP", () =>
+{
+    // (20:17) прогрев ядра в фоне после открытия окна: сцена прогрева строится без ошибок и не трогает документ
+    var s = DocumentSession.NewPart(); var w = Open(s);
+    int before = s.Part!.Features.Count;
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    int errors = Parametric3D.App.Diagnostics.KernelWarmup.Run();
+    Console.WriteLine($"  warm-up: {sw.ElapsedMilliseconds} ms, errors {errors}; {Parametric3D.App.Diagnostics.KernelWarmup.BuildInfo}");
+    Require(errors == 0, $"warm-up scene: {errors} feature(s) failed");
+    Require(s.Part!.Features.Count == before && !s.Modified, "warm-up touched the user's document");
+    Require(Parametric3D.App.Diagnostics.KernelWarmup.Enabled, "warm-up is off");
     w.Close();
 });
 
