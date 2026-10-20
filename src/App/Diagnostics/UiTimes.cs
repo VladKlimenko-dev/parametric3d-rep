@@ -33,7 +33,50 @@ public static class UiTimes
     {
         private readonly string _name;
         private readonly long _t0;
-        public Scope(string name) { _name = name; _t0 = Stopwatch.GetTimestamp(); }
-        public void Dispose() => Record(_name, Stopwatch.GetElapsedTime(_t0).TotalMilliseconds);
+        public Scope(string name) { _name = name; _t0 = Stopwatch.GetTimestamp(); Current = name; }
+        public void Dispose() { Current = null; Record(_name, Stopwatch.GetElapsedTime(_t0).TotalMilliseconds); }
+    }
+
+    /// <summary>Участок, который выполняется сейчас (для сторожа зависаний).</summary>
+    public static volatile string? Current;
+}
+
+/// <summary>
+/// СТОРОЖ ЗАВИСАНИЙ ОКНА (12:28, «приложение зависло, затем AccessViolation в Avalonia.OpenGL»): таймер окна отмечает
+/// «жив» каждые 200 мс; отдельный поток раз в секунду проверяет отметку — окно не отвечало дольше 3 с — запись в журнал
+/// приложения (%LOCALAPPDATA%/Parametric3D/app.log): сколько, какой участок выполнялся, что было последним в журнале
+/// долгих участков, режим графики. После возврата — запись о длительности.
+/// </summary>
+public static class UiWatchdog
+{
+    static long _beat = Stopwatch.GetTimestamp();
+    static Thread? _thread;
+
+    public static void Start()
+    {
+        if (_thread != null) return;
+        var t = new Avalonia.Threading.DispatcherTimer(TimeSpan.FromMilliseconds(200), Avalonia.Threading.DispatcherPriority.Background,
+            (_, _) => Interlocked.Exchange(ref _beat, Stopwatch.GetTimestamp()));
+        t.Start();
+        _thread = new Thread(Watch) { IsBackground = true, Name = "P3D UI watchdog" };
+        _thread.Start();
+    }
+
+    static void Watch()
+    {
+        bool stalled = false; double worst = 0;
+        while (true)
+        {
+            Thread.Sleep(1000);
+            double s = Stopwatch.GetElapsedTime(Interlocked.Read(ref _beat)).TotalSeconds;
+            if (s > 3 && !stalled)
+            {
+                stalled = true;
+                var last = UiTimes.Since(DateTime.Now.AddSeconds(-30)).LastOrDefault();
+                Parametric3D.Core.AppLog.Write($"UI stall: the window has not responded for {s:0.0} s; running: {UiTimes.Current ?? "—"}; last slow part: {last.Name} {last.Ms:0} ms; graphics {Program.GlMode}");
+            }
+            if (stalled) worst = Math.Max(worst, s);
+            if (stalled && s < 1) { Parametric3D.Core.AppLog.Write($"UI stall ended after {worst:0.0} s"); stalled = false; worst = 0; }
+        }
     }
 }

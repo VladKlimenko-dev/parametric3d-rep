@@ -8,7 +8,7 @@
         Width="1440" Height="880" MinWidth="980" MinHeight="600"
         Background="{DynamicResource P3.WindowBg}">
 
-  <Grid RowDefinitions="Auto,*,Auto">
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
 
     <!-- ===== верхняя полоса: файл, документ и окружение, отмена, поиск, параметры, тема, язык, свойства ===== -->
     <Border Grid.Row="0" Classes="panel" BorderThickness="0,0,0,1" Padding="6,4">
@@ -35,8 +35,42 @@
       </Grid>
     </Border>
 
+    <!-- ===== панели инструментов (12:28): все панели — в полосе над видом, не поверх него ===== -->
+    <Border Grid.Row="1" x:Name="ToolTrayBorder" Classes="panel" BorderThickness="0,0,0,1" Padding="4,2">
+      <Grid>
+        <!-- последняя — выбор и предлагаемые операции (наименьшая ширина постоянная: смена выбора реже перекладывает ряды) -->
+        <WrapPanel x:Name="ToolTray" Orientation="Horizontal" VerticalAlignment="Center">
+          <Border x:Name="CommandBar" Classes="toolbar" Margin="2" Padding="3">
+            <!-- все пункты всегда видны: не помещаются по высоте вида — следующий столбец, без прокрутки -->
+            <WrapPanel x:Name="CommandStack" Orientation="Vertical" />
+          </Border>
+          <Border x:Name="ShapeBar" Classes="toolbar" Margin="2" Padding="3" IsVisible="False">
+            <StackPanel>
+              <TextBlock x:Name="ShapeHeader" Classes="header" Margin="6,2,6,4" />
+              <WrapPanel x:Name="ShapeStack" Orientation="Horizontal" Width="120" />
+            </StackPanel>
+          </Border>
+          <Border x:Name="SketchBar" Classes="toolbar" Margin="2" Padding="4,2" IsVisible="False">
+            <StackPanel x:Name="SketchBarStack" Orientation="Horizontal" Spacing="2" />
+          </Border>
+          <Border x:Name="ViewBar" Classes="toolbar" Margin="2" Padding="4,2">
+            <StackPanel Orientation="Horizontal" Spacing="1" x:Name="ViewTools" />
+          </Border>
+          <Border x:Name="ContextBar" VerticalAlignment="Center" MinWidth="280" Classes="toolbar" Margin="2" Padding="6,4">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <Border x:Name="SelChip" CornerRadius="6" Padding="8,3" Background="{DynamicResource P3.AccentSoft}" VerticalAlignment="Center">
+                <TextBlock x:Name="SelChipText" FontSize="12" />
+              </Border>
+              <StackPanel x:Name="ContextOps" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" />
+            </StackPanel>
+          </Border>
+        </WrapPanel>
+
+      </Grid>
+    </Border>
+
     <!-- ===== рабочая область: дерево | вид | правая панель (свойства или операция) ===== -->
-    <Grid Grid.Row="1" x:Name="WorkArea" ColumnDefinitions="270,4,*,Auto">
+    <Grid Grid.Row="2" x:Name="WorkArea" ColumnDefinitions="270,4,*,Auto">
 
       <Border Grid.Column="0" x:Name="TreePanel" Classes="panel" BorderThickness="0,0,1,0">
         <Grid RowDefinitions="Auto,*">
@@ -123,42 +157,18 @@
         <vp:ModelViewport x:Name="View" />
         <Canvas x:Name="RegionCanvas" IsHitTestVisible="False" />
 
-        <!-- все команды (UI-12): вертикальная полоса слева -->
-        <Border x:Name="CommandBar" Classes="overlay" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,10,0,0" Padding="3">
-          <!-- все пункты всегда видны: не помещаются по высоте вида — следующий столбец, без прокрутки -->
-          <WrapPanel x:Name="CommandStack" Orientation="Vertical" />
-        </Border>
+        
 
-        <!-- п. 7: отдельная панель фигур эскиза (все инструменты построения сразу, иконками) -->
-        <Border x:Name="ShapeBar" Classes="overlay" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="160,10,0,0" Padding="3" IsVisible="False">
-          <StackPanel>
-            <TextBlock x:Name="ShapeHeader" Classes="header" Margin="6,2,6,4" />
-            <WrapPanel x:Name="ShapeStack" Orientation="Horizontal" Width="120" />
-          </StackPanel>
-        </Border>
+        
 
-        <!-- п. 11: «Готово / Отмена» эскиза — вверху, слева от куба вида -->
-        <Border x:Name="SketchBar" Classes="overlay" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,150,0" Padding="4,2" IsVisible="False">
-          <StackPanel x:Name="SketchBarStack" Orientation="Horizontal" Spacing="2" />
-        </Border>
+        
 
-        <!-- панель вида -->
-        <Border x:Name="ViewBar" Classes="overlay" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,10,0,0" Padding="4,2">
-          <StackPanel Orientation="Horizontal" Spacing="1" x:Name="ViewTools" />
-        </Border>
+        
 
         <!-- куб вида -->
         <vp:ViewCube x:Name="Cube" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,10,0" />
 
-        <!-- панель выбора и предлагаемых операций (как в Plasticity) -->
-        <Border x:Name="ContextBar" Classes="overlay" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,14" Padding="6,4">
-          <StackPanel Orientation="Horizontal" Spacing="4">
-            <Border x:Name="SelChip" CornerRadius="6" Padding="8,3" Background="{DynamicResource P3.AccentSoft}" VerticalAlignment="Center">
-              <TextBlock x:Name="SelChipText" FontSize="12" />
-            </Border>
-            <StackPanel x:Name="ContextOps" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" />
-          </StackPanel>
-        </Border>
+        
 
         <!-- подсказка у вида -->
         <Border x:Name="HintBox" Classes="overlay" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,54,0,0" Padding="10,6"
@@ -192,7 +202,7 @@
     </Grid>
 
     <!-- ===== строка состояния ===== -->
-    <Border Grid.Row="2" Classes="panel" BorderThickness="0,1,0,0" Padding="10,3">
+    <Border Grid.Row="3" Classes="panel" BorderThickness="0,1,0,0" Padding="10,3">
       <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
         <TextBlock Grid.Column="0" x:Name="StatusMode" FontSize="12" FontWeight="SemiBold" Margin="0,0,16,0" />
         <TextBlock Grid.Column="1" x:Name="StatusSel" FontSize="12" Classes="dim" TextTrimming="CharacterEllipsis" />
@@ -203,7 +213,7 @@
     </Border>
 
     <!-- ===== палитра команд (F) ===== -->
-    <Border Grid.Row="0" Grid.RowSpan="3" x:Name="PaletteShade" Background="#55000000" IsVisible="False">
+    <Border Grid.Row="0" Grid.RowSpan="4" x:Name="PaletteShade" Background="#55000000" IsVisible="False">
       <Border x:Name="PaletteBox" Classes="overlay" Width="580" HorizontalAlignment="Center" VerticalAlignment="Top"
               Margin="0,70,0,0" Padding="8" Background="{DynamicResource P3.PanelBg2}">
         <StackPanel Spacing="6">

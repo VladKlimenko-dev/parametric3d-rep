@@ -294,7 +294,7 @@ public partial class MainWindow : Window
         _toggles.Clear();
         BuildTopBar();
         BuildViewTools();
-        if (_docks.Count > 0) FitViewTools();
+        FitViewTools();
         BuildCommandBar();
         TreeTools.Children.Clear();
         TreeTools.Children.Add(CmdButton(_reg["tree.collapse"], 16));
@@ -475,25 +475,14 @@ public partial class MainWindow : Window
     /// <summary>Высота столбца панели команд — по высоте вида (за вычетом полей): лишнее уходит в следующий столбец.</summary>
     private void FitCommandBar()
     {
-        if (_cmdHorizontal)
-        {
-            CommandStack.MaxHeight = double.PositiveInfinity;
-            CommandStack.MaxWidth = Math.Max(300, ViewArea.Bounds.Width - 40);
-            return;
-        }
+        CommandStack.MaxHeight = double.PositiveInfinity;
         CommandStack.MaxWidth = double.PositiveInfinity;
-        double h = ViewArea.Bounds.Height - CommandBar.Margin.Top - CommandBar.Padding.Top - CommandBar.Padding.Bottom - 10;
-        if (_docks.TryGetValue("commands", out var d) && d.UserPlaced) h = ViewArea.Bounds.Height - 40;
-        if (h > 100) CommandStack.MaxHeight = h;
     }
 
     // ================================================================ п. 3 (21:04): панели перемещаются и прилипают к сторонам вида
 
-    private readonly Dictionary<string, DockablePanel> _docks = new();
     private bool _cmdHorizontal;
-    internal IReadOnlyDictionary<string, DockablePanel> Docks => _docks;
 
-    private DockManager _dockMgr = null!;
     private PanelMode _viewMode = PanelMode.Float;
 
     /// <summary>Панель вида у стороны — полоса: кнопки одного размера (как у прочих полос).</summary>
@@ -520,32 +509,25 @@ public partial class MainWindow : Window
         return b;
     }
 
+    /// <summary>
+    /// ПАНЕЛИ ИНСТРУМЕНТОВ — В ПОЛОСЕ НАД ВИДОМ (12:28). Прежде панели плавали поверх вида и прилипали к его сторонам
+    /// (DockManager): размещение пересчитывалось на каждое изменение размеров вида и самих панелей — цикл раскладки
+    /// мог не сходиться (окно «зависало» ещё до первого объекта), а панели закрывали модель. Теперь все панели — группы
+    /// иконок одного размера в полосе (ToolTray, переносится в следующий ряд, если не помещается); вид — целиком под ней.
+    /// </summary>
     private void SetupDocks()
     {
-        _dockMgr = new DockManager(ViewArea);
-        _dockMgr.Obstacles.Add(Cube);
-        void Add(DockablePanel d) { _docks[d.Key] = d; d.Moved += () => { if (d.Key is "commands" or "shapes") PlaceSketchBars(); }; }
-        Add(new DockablePanel("commands", CommandBar, _dockMgr, false, m => { _cmdMode = m; _cmdHorizontal = m is PanelMode.StripH or PanelMode.Row; FitCommandBar(); BuildCommandBar(); }));
-        Add(new DockablePanel("shapes", ShapeBar, _dockMgr, false, m => { _shapeMode = m; BuildSketchBars(); }));
-        Add(new DockablePanel("view", ViewBar, _dockMgr, true, m => { _viewMode = m; FitViewTools(); }));
-        Add(new DockablePanel("sketch", SketchBar, _dockMgr, true, m => { _sketchMode = m; BuildSketchBars(); }));
-        Add(new DockablePanel("context", ContextBar, _dockMgr, true, m =>
-        {
-            _ctxMode = m;
-            bool h = m != PanelMode.StripV;
-            if (SelChip.Parent is StackPanel inner) DockablePanel.Reorient(inner, h);
-            DockablePanel.Reorient(ContextOps, h);
-            SelChipText.MaxWidth = h ? double.PositiveInfinity : 200;
-            SelChipText.TextWrapping = h ? TextWrapping.NoWrap : TextWrapping.Wrap;
-            UpdateContextBar();
-        }));
-        bool restored = false;
-        ViewArea.SizeChanged += (_, _) =>
-        {
-            if (!restored && ViewArea.Bounds.Width > 50) { restored = true; foreach (var d in _docks.Values) d.Restore(); }
-            _dockMgr.Relayout();
-        };
-        foreach (var d in _docks.Values) d.Panel.SizeChanged += (_, _) => _dockMgr.Relayout();
+        _cmdMode = PanelMode.StripH; _cmdHorizontal = true;
+        _shapeMode = PanelMode.StripH;
+        _viewMode = PanelMode.StripH;
+        _sketchMode = PanelMode.StripH;
+        _ctxMode = PanelMode.StripH;
+        foreach (var b in new Control[] { CommandBar, ShapeBar, SketchBar, ViewBar, ContextBar })
+            ToolTip.SetTip(b, b == CommandBar ? L("Операции") : b == ShapeBar ? L("Фигуры") : b == SketchBar ? L("Эскиз") : b == ViewBar ? L("Вид") : L("Выбор"));
+        if (SelChip.Parent is StackPanel inner) DockablePanel.Reorient(inner, true);
+        DockablePanel.Reorient(ContextOps, true);
+        SelChipText.TextTrimming = TextTrimming.CharacterEllipsis;
+        SelChipText.MaxWidth = 120;
     }
 
     /// <summary>Маленькая стрелка «список» (рисунок, не текст).</summary>
@@ -566,10 +548,8 @@ public partial class MainWindow : Window
     /// <summary>Список команд всплывающего меню: все пункты видны — не помещаются по высоте окна, следующий столбец (без прокрутки).</summary>
     private WrapPanel ListColumns() => new() { Orientation = Orientation.Vertical, MaxHeight = Math.Max(200, Bounds.Height - 120) };
 
-    private bool _fitHooked;
     private void BuildCommandBar()
     {
-        if (!_fitHooked) { ViewArea.SizeChanged += (_, _) => FitCommandBar(); _fitHooked = true; }
         FitCommandBar();
         CommandStack.Children.Clear();
         bool asmMode = !InSketch && Session?.IsAssembly == true && Session.ActivePart == null;
@@ -639,7 +619,29 @@ public partial class MainWindow : Window
             // полоса у стороны: все кнопки группы (и из «Ещё…») — иконками, одного размера
             if (strip)
             {
-                foreach (var id in groups[g].Main.Concat(groups[g].More)) if (_reg.Find(id) is { } c) CommandStack.Children.Add(StripButton(c));
+                // полоса над видом: основные — иконками; остальные группы — выпадающим списком (стрелка) с подписями
+                foreach (var id in groups[g].Main) if (_reg.Find(id) is { } c) CommandStack.Children.Add(StripButton(c));
+                var moreS = groups[g].More.Where(id => _reg.Find(id) != null).ToArray();
+                if (moreS.Length > 0)
+                {
+                    string tip = groups[g].Main.Length > 0 ? L("Ещё…") : L(groups[g].More[0] switch
+                    {
+                        "op.face_offset" => "Прямая правка", "an.measure" => "Анализ", "ff.curve_offset" => "Кривые", "ff.surf_ruled" => "Поверхности", "subd.extrude" => "SubD", "tree.rebuild" => "Дерево", "op.surface_extrude" => "Поверхности", _ => "Ещё…",
+                    });
+                    var ic0 = _reg.Find(moreS[0])?.Icon;
+                    Control face = groups[g].Main.Length > 0 ? Chevron()
+                        : IconProvider.Get(ic0) != null ? IconWithChevron(ic0, tip)
+                        : new StackPanel { Orientation = Orientation.Horizontal, Spacing = 3, Children = { new TextBlock { Text = tip, FontSize = 12, VerticalAlignment = VerticalAlignment.Center }, Chevron() } };
+                    var mb = new Button { Content = face, Classes = { "tool" }, Height = UiLook.StripButtonPx, MinWidth = groups[g].Main.Length > 0 ? 16 : UiLook.StripButtonPx, Padding = new Thickness(3, 0) };
+                    ToolTip.SetTip(mb, tip);
+                    mb.Click += (_, _) =>
+                    {
+                        var sp = ListColumns();
+                        foreach (var id in moreS) sp.Children.Add(CmdButton(_reg[id], 18, text: true, minWidth: 220));
+                        new Flyout { Content = sp, Placement = PlacementMode.BottomEdgeAlignedLeft }.ShowAt(mb);
+                    };
+                    CommandStack.Children.Add(mb);
+                }
                 continue;
             }
             foreach (var id in groups[g].Main) if (_reg.Find(id) is { } c) CommandStack.Children.Add(CmdButton(c, 20, text: true, minWidth: horiz ? 0 : 128));
@@ -698,29 +700,6 @@ public partial class MainWindow : Window
         foreach (var id in new[] { "sk.finish", "sk.cancel" })
             if (_reg.Find(id) is { } c) SketchBarStack.Children.Add(skStrip ? StripButton(c) : CmdButton(c, 18, text: true));
         DockablePanel.Reorient(SketchBarStack, _sketchMode != PanelMode.StripV);
-        PlaceSketchBars();
-        CommandBar.SizeChanged -= OnCommandBarSize; CommandBar.SizeChanged += OnCommandBarSize;
-        Cube.SizeChanged -= OnCommandBarSize; Cube.SizeChanged += OnCommandBarSize;
-    }
-
-    private void OnCommandBarSize(object? s, SizeChangedEventArgs e) => PlaceSketchBars();
-
-    /// <summary>Панель фигур — справа от панели команд; «Готово / Отмена» — слева от куба вида.</summary>
-    private void PlaceSketchBars()
-    {
-        // по умолчанию: фигуры — справа от панели команд (если та не перенесена), «Готово / Отмена» — слева от куба;
-        // перенесённые пользователем панели не трогаются
-        if (!(_docks.TryGetValue("shapes", out var sd) && sd.UserPlaced))
-        {
-            bool cmdDefault = !(_docks.TryGetValue("commands", out var cd) && cd.UserPlaced);
-            double cmdW = cmdDefault && CommandBar.Bounds.Width > 0 ? CommandBar.Bounds.Width : cmdDefault ? 140 : 0;
-            ShapeBar.Margin = new Thickness(10 + cmdW + (cmdDefault ? 6 : 0), 10, 0, 0);
-        }
-        if (!(_docks.TryGetValue("sketch", out var kd) && kd.UserPlaced))
-        {
-            double cubeW = Cube.Bounds.Width > 0 ? Cube.Bounds.Width : 130;
-            SketchBar.Margin = new Thickness(0, 10, 10 + cubeW + 8, 0);
-        }
     }
 
     /// <summary>Правка значения размера (из полосы предложений).</summary>
@@ -800,7 +779,6 @@ public partial class MainWindow : Window
         UiLook.ApplyToRender(View.Theme);
         View.MarkDirty();
         RebuildUi();
-        _dockMgr?.Relayout();
     }
 
     public void ApplyTheme(bool dark)
@@ -1486,7 +1464,7 @@ public partial class MainWindow : Window
         using var _ui = Diagnostics.UiTimes.Measure("окно: полоса выбора");
         ContextOps.Children.Clear();
         // у стороны вида — полоса иконок без текста (подпись выбора скрыта)
-        SelChip.IsVisible = _ctxMode is not (PanelMode.StripV or PanelMode.StripH);
+        SelChip.IsVisible = _ctxMode is not PanelMode.StripV;
         if (InSketch && View.ActiveSketch is { } sk)
         {
             // пп. 9–10: полоса предложений эскиза — только подходящие к выбранному операции (иконками, подпись в подсказке)

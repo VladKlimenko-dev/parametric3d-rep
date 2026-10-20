@@ -159,9 +159,18 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     {
         base.OnSizeChanged(e);
         double s = Scaling;
+        _renderScale = s; _renderW = e.NewSize.Width; _renderH = e.NewSize.Height;
         Camera.ViewportWidth = Math.Max(1, (int)Math.Round(e.NewSize.Width * s));
         Camera.ViewportHeight = Math.Max(1, (int)Math.Round(e.NewSize.Height * s));
     }
+
+    /// <summary>
+    /// Размер и масштаб для кадра — снимок из потока окна (12:28): кадр OpenGL может рисоваться в потоке отрисовки, а
+    /// Bounds и поиск окна (RenderScaling) — свойства дерева элементов, читать их можно только из потока окна.
+    /// </summary>
+    private volatile float _renderScaleF = 1;
+    private double _renderScale { get => _renderScaleF; set => _renderScaleF = (float)value; }
+    private double _renderW, _renderH;
 
     public double Scaling => Avalonia.Controls.TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
 
@@ -199,9 +208,11 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         long frameStart = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
-            double s = Scaling;
-            int w = Math.Max(1, (int)Math.Round(Bounds.Width * s));
-            int h = Math.Max(1, (int)Math.Round(Bounds.Height * s));
+            bool ui = Avalonia.Threading.Dispatcher.UIThread.CheckAccess();
+            double s = ui ? Scaling : _renderScale;
+            double bw = ui ? Bounds.Width : _renderW, bh = ui ? Bounds.Height : _renderH;
+            int w = Math.Max(1, (int)Math.Round(bw * s));
+            int h = Math.Max(1, (int)Math.Round(bh * s));
             Camera.ViewportWidth = w;
             Camera.ViewportHeight = h;
             _r.Resize(w, h);
