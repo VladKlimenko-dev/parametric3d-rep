@@ -825,6 +825,44 @@ public static class AnalyticVolume
         double per = ss.UMax - ss.UMin, h = 1e-6 * Math.Max(1e-9, per);
         var (gx, gw) = Gauss12;
         double vol = 0, ar = 0; var va = Vector3d.Zero;
+        // 21.10 (скорость): ряды квадратуры по v — в несколько потоков, суммы рядов складываются по порядку (результат
+        // детерминирован; от прежнего — в последних битах). Мутация P3D_BANDPAR=0.
+        var origin = _origin;
+        int thrB = Math.Min(Tess.Tessellator.Threads, Environment.ProcessorCount);
+        if (!BandParOff && thrB > 1 && mv * gx.Length >= 8)
+        {
+            int rows = mv * gx.Length;
+            var pv = new double[rows]; var pa2 = new double[rows]; var pva = new Vector3d[rows]; var bad = new bool[rows];
+            System.Threading.Tasks.Parallel.For(0, rows, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = thrB }, rix =>
+            {
+                int iv = rix / gx.Length, kv = rix % gx.Length;
+                double v = (iv + (gx[kv] + 1) / 2) / mv, wv = gw[kv] / 2 / mv;
+                double uL = rg.L(v), uR = rg.R(v); if (!(uR > uL)) { bad[rix] = true; return; }
+                var cutsU = new List<double> { uL };
+                foreach (var bk in ss.Breaks) if (bk > uL + 1e-12 && bk < uR - 1e-12 && !BandBreaksOff) cutsU.Add(bk);
+                cutsU.Add(uR);
+                double rv = 0, ra = 0; var rva = Vector3d.Zero;
+                for (int piece = 0; piece + 1 < cutsU.Count; piece++)
+                {
+                    double pa = cutsU[piece], pb = cutsU[piece + 1];
+                    int mp = Math.Max(4, (int)Math.Ceiling(mu * (pb - pa) / (uR - uL)));
+                    double pw = (pb - pa) / mp;
+                    for (int i = 0; i < mp; i++)
+                        for (int j = 0; j < gx.Length; j++)
+                        {
+                            double u = pa + pw * (i + (gx[j] + 1) / 2), w = gw[j] / 2 * pw * wv;
+                            var s0 = ss.SectionAt(u);
+                            var P = s0.Point(v); var su = (ss.SectionAt(u + h).Point(v) - ss.SectionAt(u - h).Point(v)) / (2 * h); var sv = s0.Deriv(v);
+                            var c = Vector3d.Cross(su, sv);
+                            rv += Vector3d.Dot(P - origin, c) * w; ra += c.Length * w; rva += c * w;
+                        }
+                }
+                pv[rix] = rv; pa2[rix] = ra; pva[rix] = rva;
+            });
+            Interlocked.Increment(ref BandParallelRuns);
+            for (int rix = 0; rix < rows; rix++) { if (bad[rix]) return null; vol += pv[rix]; ar += pa2[rix]; va += pva[rix]; }
+        }
+        else
         for (int iv = 0; iv < mv; iv++)
             for (int kv = 0; kv < gx.Length; kv++)
             {
@@ -856,6 +894,9 @@ public static class AnalyticVolume
         if (Math.Abs(cosv) < 0.999) return null;
         return area ? ar : (cosv > 0 ? vol : -vol);
     }
+    static readonly bool BandParOff = Environment.GetEnvironmentVariable("P3D_BANDPAR") != "1";   // включение — P3D_BANDPAR=1 (на 2 ядрах выигрыша нет)
+    /// <summary>Сколько раз квадратура ленты шла рядами в несколько потоков.</summary>
+    public static long BandParallelRuns;
     static readonly bool BandBreaksOff = Environment.GetEnvironmentVariable("P3D_VOLBANDBREAKS") == "0";
 
     static readonly (double[] X, double[] W) Gauss12 = (

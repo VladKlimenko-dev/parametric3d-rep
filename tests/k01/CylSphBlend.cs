@@ -42,12 +42,12 @@ static partial class Program
             int iInter = edges.FindIndex(e => Kind(e) == "ExtrudedSurface/RevolvedSurface" && !ReferenceEquals(e.V0, e.V1));
             int iTop = edges.FindIndex(e => Kind(e) == "ExtrudedSurface/PlaneSurface" && ReferenceEquals(e.V0, e.V1));
             Require(iInter >= 0 && iTop >= 0, $"edges: intersection {iInter}, top {iTop} ({string.Join(", ", edges.Select(Kind))})");
-            long endPts = 0, tabSecs = 0, parTabs = 0, loopPar = 0, auditPar = 0, volPar = 0, openPar = 0;
+            long endPts = 0, tabSecs = 0, parTabs = 0, loopPar = 0, auditPar = 0, volPar = 0, openPar = 0, fitEv = 0, rootEv = 0;
             (TSolid? B, string Msg, double Ms) Run(int ei, bool round, double d)
             {
                 var b = new List<TSolid> { TopologyClone.Deep(body) }; var w = new List<string>();
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                long e0 = DirectRound.OpenEndPoints, ts0 = Parametric3D.Kernel.Surfaces.SectionSurface.TableSections, pt0 = Parametric3D.Kernel.Surfaces.SectionSurface.ParallelTables, lp0 = Parametric3D.Kernel.Export.StepImport.LoopMeshParallelRuns, ap0 = Parametric3D.Kernel.Topology.GeometryAudit.ParallelRuns, vp0 = Parametric3D.Kernel.Topology.AnalyticVolume.ParallelRuns, op0 = DirectRound.OpenParallelRuns;
+                long e0 = DirectRound.OpenEndPoints, ts0 = Parametric3D.Kernel.Surfaces.SectionSurface.TableSections, pt0 = Parametric3D.Kernel.Surfaces.SectionSurface.ParallelTables, lp0 = Parametric3D.Kernel.Export.StepImport.LoopMeshParallelRuns, ap0 = Parametric3D.Kernel.Topology.GeometryAudit.ParallelRuns, vp0 = Parametric3D.Kernel.Topology.AnalyticVolume.ParallelRuns, op0 = DirectRound.OpenParallelRuns, fe0 = DirectRound.FitEvals, re0 = DirectRound.EndRootEvals;
                 try
                 {
                     var er = new List<EdgeRef> { EdgeRef.Of(b[0].Edges.ElementAt(ei)) };
@@ -57,7 +57,7 @@ static partial class Program
                     return (b[0], string.Join("; ", w.Take(2)), sw.Elapsed.TotalMilliseconds);
                 }
                 catch (Exception ex) { return (null, ex.Message, sw.Elapsed.TotalMilliseconds); }
-                finally { endPts = DirectRound.OpenEndPoints - e0; tabSecs = Parametric3D.Kernel.Surfaces.SectionSurface.TableSections - ts0; parTabs = Parametric3D.Kernel.Surfaces.SectionSurface.ParallelTables - pt0; loopPar = Parametric3D.Kernel.Export.StepImport.LoopMeshParallelRuns - lp0; auditPar = Parametric3D.Kernel.Topology.GeometryAudit.ParallelRuns - ap0; volPar = Parametric3D.Kernel.Topology.AnalyticVolume.ParallelRuns - vp0; openPar = DirectRound.OpenParallelRuns - op0; }
+                finally { endPts = DirectRound.OpenEndPoints - e0; tabSecs = Parametric3D.Kernel.Surfaces.SectionSurface.TableSections - ts0; parTabs = Parametric3D.Kernel.Surfaces.SectionSurface.ParallelTables - pt0; loopPar = Parametric3D.Kernel.Export.StepImport.LoopMeshParallelRuns - lp0; auditPar = Parametric3D.Kernel.Topology.GeometryAudit.ParallelRuns - ap0; volPar = Parametric3D.Kernel.Topology.AnalyticVolume.ParallelRuns - vp0; openPar = DirectRound.OpenParallelRuns - op0; fitEv = DirectRound.FitEvals - fe0; rootEv = DirectRound.EndRootEvals - re0; }
             }
             foreach (var (name, ei, round, d) in new[] { ("round intersection R5", iInter, true, 5.0), ("chamfer intersection 3", iInter, false, 3.0), ("round top R5", iTop, true, 5.0) })
             {
@@ -97,6 +97,11 @@ static partial class Program
                     if (Environment.ProcessorCount > 1 && auditPar < 1) fails.Add($"{name}: the geometry audit was not parallel");
                     if (Environment.ProcessorCount > 1 && volPar < 1) fails.Add($"{name}: the volume was not computed in parallel");
                     if (Environment.ProcessorCount > 1 && name.Contains("intersection") && openPar < 1) fails.Add($"{name}: the open builder probes were not parallel");
+                    // 21.10: кривые ленты — вставкой пятой степени (P3D_DRFIT5=0 — кубической, вдвое-вчетверо больше точек); край на
+                    // торцах — продолжением корней (P3D_DRSTARCONT=0 — полный поиск в каждой точке)
+                    Log(new { test = "KRN06-FF-CYL-SPHERE-BLENDS", name, fitEv, rootEv });
+                    if (name.Contains("intersection") && fitEv > 3000) fails.Add($"{name}: {fitEv} exact points for the blend curves");
+                    if (name.Contains("intersection") && rootEv > 1500) fails.Add($"{name}: {rootEv} end-face evaluations for the end curves");
                     if (bandPts > 60000) fails.Add($"{name}: {bandPts} band quadrature points for the volume");
                     if (areas != 1) fails.Add($"{name}: face area computed {areas} times for two requests");
                     if (memoHits < 1) fails.Add($"{name}: no face mesh taken from memory for a copy of the body");
