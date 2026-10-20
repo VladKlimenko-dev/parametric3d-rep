@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
@@ -31,22 +31,22 @@ static partial class Program
             int iInter = edges.FindIndex(e => Kind(e) == "ExtrudedSurface/RevolvedSurface" && !ReferenceEquals(e.V0, e.V1));
             int iTop = edges.FindIndex(e => Kind(e) == "ExtrudedSurface/PlaneSurface" && ReferenceEquals(e.V0, e.V1));
             Require(iInter >= 0 && iTop >= 0, $"edges: intersection {iInter}, top {iTop} ({string.Join(", ", edges.Select(Kind))})");
-            long endPts = 0, tabSecs = 0, parTabs = 0;
+            long endPts = 0, tabSecs = 0, parTabs = 0, loopPar = 0, auditPar = 0, volPar = 0, openPar = 0;
             (TSolid? B, string Msg, double Ms) Run(int ei, bool round, double d)
             {
                 var b = new List<TSolid> { TopologyClone.Deep(body) }; var w = new List<string>();
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                long e0 = DirectRound.OpenEndPoints, ts0 = Parametric3D.Kernel.Surfaces.SectionSurface.TableSections, pt0 = Parametric3D.Kernel.Surfaces.SectionSurface.ParallelTables;
+                long e0 = DirectRound.OpenEndPoints, ts0 = Parametric3D.Kernel.Surfaces.SectionSurface.TableSections, pt0 = Parametric3D.Kernel.Surfaces.SectionSurface.ParallelTables, lp0 = Parametric3D.Kernel.Export.StepImport.LoopMeshParallelRuns, ap0 = Parametric3D.Kernel.Topology.GeometryAudit.ParallelRuns, vp0 = Parametric3D.Kernel.Topology.AnalyticVolume.ParallelRuns, op0 = DirectRound.OpenParallelRuns;
                 try
                 {
                     var er = new List<EdgeRef> { EdgeRef.Of(b[0].Edges.ElementAt(ei)) };
                     // четыре потока, как в приложении (у проверок по умолчанию — один)
-                    using (new KernelContext(KernelSettings.Capture() with { BooleanThreads = 4 }).Enter())
+                    using (new KernelContext(KernelSettings.Capture() with { BooleanThreads = 4, MeshThreads = 4 }).Enter())
                         if (round) FilletOp.RoundEdges(b, er, d, w); else FilletOp.ChamferEdges(b, er, d, d, w);
                     return (b[0], string.Join("; ", w.Take(2)), sw.Elapsed.TotalMilliseconds);
                 }
                 catch (Exception ex) { return (null, ex.Message, sw.Elapsed.TotalMilliseconds); }
-                finally { endPts = DirectRound.OpenEndPoints - e0; tabSecs = Parametric3D.Kernel.Surfaces.SectionSurface.TableSections - ts0; parTabs = Parametric3D.Kernel.Surfaces.SectionSurface.ParallelTables - pt0; }
+                finally { endPts = DirectRound.OpenEndPoints - e0; tabSecs = Parametric3D.Kernel.Surfaces.SectionSurface.TableSections - ts0; parTabs = Parametric3D.Kernel.Surfaces.SectionSurface.ParallelTables - pt0; loopPar = Parametric3D.Kernel.Export.StepImport.LoopMeshParallelRuns - lp0; auditPar = Parametric3D.Kernel.Topology.GeometryAudit.ParallelRuns - ap0; volPar = Parametric3D.Kernel.Topology.AnalyticVolume.ParallelRuns - vp0; openPar = DirectRound.OpenParallelRuns - op0; }
             }
             foreach (var (name, ei, round, d) in new[] { ("round intersection R5", iInter, true, 5.0), ("chamfer intersection 3", iInter, false, 3.0), ("round top R5", iTop, true, 5.0) })
             {
@@ -80,9 +80,20 @@ static partial class Program
                     if (tabSecs > 4000) fails.Add($"{name}: {tabSecs} exact sections for the formula tables");
                     // таблица ленты — в несколько потоков (P3D_SECPAR), если их больше одного
                     if (Environment.ProcessorCount > 1 && parTabs < 1) fails.Add($"{name}: the formula table was not computed in parallel");
+                    // 20:17: грани результата размечаются параллельно (P3D_LOOPMESHPAR=0 — по одной)
+                    if (Environment.ProcessorCount > 1 && loopPar < 1) fails.Add($"{name}: faces were not meshed in parallel");
+                    // аудит геометрии (P3D_AUDITPAR=0) и объём (P3D_VOLPAR=0) — по рёбрам/граням параллельно
+                    if (Environment.ProcessorCount > 1 && auditPar < 1) fails.Add($"{name}: the geometry audit was not parallel");
+                    if (Environment.ProcessorCount > 1 && volPar < 1) fails.Add($"{name}: the volume was not computed in parallel");
+                    if (Environment.ProcessorCount > 1 && name.Contains("intersection") && openPar < 1) fails.Add($"{name}: the open builder probes were not parallel");
                     if (bandPts > 60000) fails.Add($"{name}: {bandPts} band quadrature points for the volume");
                     if (areas != 1) fails.Add($"{name}: face area computed {areas} times for two requests");
                     if (memoHits < 1) fails.Add($"{name}: no face mesh taken from memory for a copy of the body");
+                    // 20:17: разбор той же сетки (тело и его копия, сетка показа — из памяти граней) — из памяти (P3D_MESHVALMEMO=0)
+                    var md1 = Parametric3D.Kernel.Tess.Tessellator.Tessellate(TopologyClone.Deep(b)); var md2 = Parametric3D.Kernel.Tess.Tessellator.Tessellate(TopologyClone.Deep(b));
+                    var r1 = SolidValidator.ValidateMesh(md1); long mv0 = SolidValidator.MeshValMemoHits; var r2 = SolidValidator.ValidateMesh(md2);
+                    if (SolidValidator.MeshValMemoHits <= mv0) fails.Add($"{name}: the same mesh was analysed again (no memory)");
+                    if (r1.Summary() != r2.Summary() || r1.Metrics.Count != r2.Metrics.Count) fails.Add($"{name}: mesh analysis from memory differs");
                 }
                 if (samplings > coedges + 2) fails.Add($"{name}: {samplings} p-curve samplings for {coedges} coedges");
                 var val = SolidValidator.Validate(b);
@@ -123,6 +134,16 @@ static partial class Program
                 double v21 = AnalyticVolume.Of(b2[0]) ?? double.NaN;
                 Log(new { test = "KRN06-FF-CYL-SPHERE-BLENDS", name = "holed cylinder round top R4", guarantee = b2[0].Guarantee.ToString(), removed = (v20 - v21).ToString("R"), want, msg = string.Join("; ", w2.Take(2)) });
                 if (b2[0].Guarantee != GuaranteeLevel.ExactAnalytic || !(Math.Abs(v20 - v21 - want) < 1e-6 * want)) fails.Add($"holed cylinder round: guarantee {b2[0].Guarantee}, removed {v20 - v21:R} want {want:R}");
+            }
+            // ряд размеров ребра пересечения (в том числе умолчания команд: скругление R2, фаска 1 — фаска 1 отказывала:
+            // «blend range beyond the extension» не вёл к повтору с опорной кривой)
+            foreach (var (rnd, sz) in new[] { (true, 0.5), (true, 1.0), (true, 2.0), (true, 3.0), (true, 8.0), (false, 0.5), (false, 1.0), (false, 2.0), (false, 5.0) })
+            {
+                var (bq, msgq, _) = Run(iInter, rnd, sz);
+                if (bq == null) { fails.Add($"{(rnd ? "round" : "chamfer")} {sz} on the intersection: {msgq}"); continue; }
+                if (bq.Guarantee != GuaranteeLevel.ExactAnalytic) fails.Add($"{(rnd ? "round" : "chamfer")} {sz} on the intersection: guarantee {bq.Guarantee}");
+                double vq = AnalyticVolume.Of(bq) ?? double.NaN;
+                if (!(vq > v0)) fails.Add($"{(rnd ? "round" : "chamfer")} {sz} on the intersection: volume {vq:R} not above {v0:R}");
             }
             // прогрев ядра (малая сцена: цилиндр R6 ∪ шар R8): ребро пересечения R1 — продление по углу отказывает внутри скобки
             // торца (сечение не находится); прежде — исключение Math.Sign(NaN) на всю операцию, теперь — повтор с опорной кривой

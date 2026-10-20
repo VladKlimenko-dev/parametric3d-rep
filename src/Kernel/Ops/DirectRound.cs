@@ -135,6 +135,8 @@ public static partial class DirectRound
     static readonly bool CircleAnyOther = Environment.GetEnvironmentVariable("P3D_DRCIRCLEANY") != "0";
     static readonly bool CircleClosedRetry = Environment.GetEnvironmentVariable("P3D_DRCIRCLECLOSED") != "0";
     [ThreadStatic] static bool _circleAsClosed;
+    /// <summary>Отказ продления по углу, после которого — повтор с параметром по опорной кривой.</summary>
+    static bool RetryReason(string w) => w.Contains("does not leave the end face") || w.Contains("no blend section inside the end face") || w.Contains("blend range beyond the extension");
     static readonly bool OpenGenericRetry = Environment.GetEnvironmentVariable("P3D_DROPENGENERIC") != "0";
 
     // 20:17: ОШИБКА ВЫЧИСЛЕНИЯ В ПРЯМОМ ПОСТРОИТЕЛЕ (NaN в Math.Sign и т. п.) — его отказ, а не отказ всей операции: дальше —
@@ -205,7 +207,7 @@ public static partial class DirectRound
             // KRN-06 (06.12, 06.14): незамкнутые рёбра между кривыми гранями — катящийся шар с обрезкой торцами
             string? w3 = null;
             var r3 = BuildOpen(bodies[k], refs, r, ref w3);
-            if (r3 == null && OpenGenericRetry && w3 != null && (w3.Contains("does not leave the end face") || w3.Contains("no blend section inside the end face")))
+            if (r3 == null && OpenGenericRetry && w3 != null && RetryReason(w3))
             {
                 // 17:31 (цилиндр ∪ шар, ребро пересечения кончается на торце цилиндра): угол вокруг оси цилиндра за концом ребра
                 // складывается (кривая пересечения поворачивает назад по углу), продление по углу не выходит за торец — повтор
@@ -280,7 +282,7 @@ public static partial class DirectRound
                 Func<TEdge, TFace, double> dist = (x, f) => cm is { } c && c.First.TryGetValue(x, out var ff) ? (ReferenceEquals(ff, f) ? c.D1 : c.D2) : d1;
                 string? w2 = null;
                 res = CurvedChamferBuild(bodies[k], refs, d1, dist, ref w2);
-                if (res == null && OpenGenericRetry && w2 != null && (w2.Contains("does not leave the end face") || w2.Contains("no blend section inside the end face")))
+                if (res == null && OpenGenericRetry && w2 != null && RetryReason(w2))
                 {
                     // 17:31: как у скругления — продление по длине опорной кривой ходом по A ∩ B
                     string? w6 = null;

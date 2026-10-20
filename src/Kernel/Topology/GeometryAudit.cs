@@ -61,6 +61,9 @@ public sealed class GeometryAudit
     /// </summary>
     /// <summary>Мутация P3D_AUDITPROC=0: кривая по формуле (линия касания катящегося шара) — не точная.</summary>
     static readonly bool AuditProcOff = Environment.GetEnvironmentVariable("P3D_AUDITPROC") == "0";
+    static readonly bool AuditParOff = Environment.GetEnvironmentVariable("P3D_AUDITPAR") == "0";
+    /// <summary>Сколько раз отходы рёбер мерились параллельно.</summary>
+    public static long ParallelRuns;
 
     public static (int Faces, int Edges) Faceted(TSolid solid)
     {
@@ -111,21 +114,42 @@ public sealed class GeometryAudit
         // Прежде для ВСЕХ тел — не меньше 1e-4 мм (в 1000× грубее модельной точности) и + 1.5 × ошибка гранения.
         var budget = ToleranceContext.Current;
         bool exactBody = solid.Guarantee is GuaranteeLevel.ExactAnalytic or GuaranteeLevel.ExactQuadric;
-        foreach (var e in solid.Edges)
+        var edgeList = solid.Edges.ToList();
+        var offs = new (double A, double B)[edgeList.Count];
+        bool useCache = UseCache;   // признак проверок — у потока вызова
+        void Measure(int i)
         {
-            string kind = e.Curve.GetType().Name;
-            bool analytic = e.Curve is LineCurve3 or ArcCurve3 or EllipseCurve3 or SplineCurve3 or IntersectionCurve3 || (e.Curve is ProcCurve3 && !AuditProcOff);
+            var e = edgeList[i];
             var faces = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
             var sa = faces.Count > 0 ? AuthoritativeSurface(faces[0]) : null;
             var sb = faces.Count > 1 ? AuthoritativeSurface(faces[1]) : sa;
-            double da = sa == null || sa is FacetedSurface ? double.NaN : Off(e.Curve, sa, false);
-            double db = sb == null || sb is FacetedSurface ? double.NaN : Off(e.Curve, sb, false);
+            double da = sa == null || sa is FacetedSurface ? double.NaN : Off(e.Curve, sa, false, useCache);
+            double db = sb == null || sb is FacetedSurface ? double.NaN : Off(e.Curve, sb, false, useCache);
             if (exactBody)
             {
                 // точное расстояние до элементарной поверхности (проекция на поверхность численная — её шум 1e-9…1e-8)
-                if (sa != null && Off(e.Curve, sa, true) is var xa && !double.IsNaN(xa)) da = xa;
-                if (sb != null && Off(e.Curve, sb, true) is var xb && !double.IsNaN(xb)) db = xb;
+                if (sa != null && Off(e.Curve, sa, true, useCache) is var xa && !double.IsNaN(xa)) da = xa;
+                if (sb != null && Off(e.Curve, sb, true, useCache) is var xb && !double.IsNaN(xb)) db = xb;
             }
+            offs[i] = (da, db);
+        }
+        // 20:17 (скорость): ОТХОДЫ РЁБЕР — ПАРАЛЛЕЛЬНО. Отход кривой от поверхности — 17 проекций точки на поверхность; у ленты
+        // скругления (поверхность по формуле) проекция дорогая, и аудит шёл ~60 мс одним потоком. Каждое ребро — функция только
+        // своих кривой и поверхностей (память аудита — под замком); итог собирается по порядку. Мутация P3D_AUDITPAR=0.
+        int threads = Tess.Tessellator.Threads;
+        if (!AuditParOff && threads > 1 && Environment.ProcessorCount > 1 && edgeList.Count >= 4)
+        {
+            System.Threading.Tasks.Parallel.For(0, edgeList.Count, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = threads }, Measure);
+            Interlocked.Increment(ref ParallelRuns);
+        }
+        else for (int i = 0; i < edgeList.Count; i++) Measure(i);
+        for (int ei = 0; ei < edgeList.Count; ei++)
+        {
+            var e = edgeList[ei];
+            string kind = e.Curve.GetType().Name;
+            bool analytic = e.Curve is LineCurve3 or ArcCurve3 or EllipseCurve3 or SplineCurve3 or IntersectionCurve3 || (e.Curve is ProcCurve3 && !AuditProcOff);
+            var faces = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
+            var (da, db) = offs[ei];
 
             // Допуск согласования учитывает и заявленную ошибку гранения смежных граней: точная
             // булева шла по гранёным операндам, и точки её рёбер лежат на хордах, а не на самой
@@ -160,9 +184,9 @@ public sealed class GeometryAudit
     sealed class ChordBox { public ISurface3? S; public int N; public double D; }
     static readonly System.Runtime.CompilerServices.ConditionalWeakTable<FacetedSurface, ChordBox> _chord = new();
 
-    static double Off(ICurve3 c, ISurface3 s, bool exact)
+    static double Off(ICurve3 c, ISurface3 s, bool exact, bool useCache)
     {
-        if (!UseCache) return exact ? (Geometry.ExactEdges.ShapeOf(s) is { } h ? CurveOffExact(c, h) : double.NaN) : CurveOff(c, s);
+        if (!useCache) return exact ? (Geometry.ExactEdges.ShapeOf(s) is { } h ? CurveOffExact(c, h) : double.NaN) : CurveOff(c, s);
         var box = _off.GetValue(c, _ => new OffBox());
         lock (box) foreach (var (S, X, D) in box.L) if (ReferenceEquals(S, s) && X == exact) { Interlocked.Increment(ref CacheHits); return D; }
         double d = exact ? (Geometry.ExactEdges.ShapeOf(s) is { } h2 ? CurveOffExact(c, h2) : double.NaN) : CurveOff(c, s);

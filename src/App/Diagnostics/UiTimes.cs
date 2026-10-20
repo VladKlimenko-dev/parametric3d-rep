@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 namespace Parametric3D.App.Diagnostics;
 
@@ -9,6 +9,8 @@ namespace Parametric3D.App.Diagnostics;
 public static class UiTimes
 {
     public const double ThresholdMs = 40;
+    /// <summary>Разбор (P3D_UITIMESALL=1): запоминать все участки, не только долгие.</summary>
+    static readonly bool All = Environment.GetEnvironmentVariable("P3D_UITIMESALL") == "1";
     private static readonly object Gate = new();
     private static readonly List<(DateTime At, string Name, double Ms)> _slow = new();
 
@@ -16,7 +18,7 @@ public static class UiTimes
 
     public static void Record(string name, double ms)
     {
-        if (ms < ThresholdMs) return;
+        if (ms < ThresholdMs && !All) return;
         lock (Gate)
         {
             _slow.Add((DateTime.Now, name, ms));

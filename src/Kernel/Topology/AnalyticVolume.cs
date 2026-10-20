@@ -80,7 +80,7 @@ public static class AnalyticVolume
         // Мутация P3D_VOLCACHE=0.
         // 17:31: как у проверок — без отложенной разметки и сетки показа в ключе (мутация P3D_VALKEYDISPLAY=0 — прежний ключ)
         KernelSettings? key = VolCacheOff ? null : KernelSettings.Capture() with { Preview = false, LivePreview = false };
-        if (key != null && !SolidValidator.KeyDisplayOff) key = key with { DeferMeshing = false, BooleanThreads = 1 };
+        if (key != null && !SolidValidator.KeyDisplayOff) key = key with { DeferMeshing = false, BooleanThreads = 1, MeshThreads = 1 };
         ulong fp = key == null ? 0 : TopoFingerprint.Of(solid, display: SolidValidator.KeyDisplayOff);
         if (key != null && _volCache.TryGetValue(solid, out var hit) && hit.Revision == solid.Revision && hit.Print == fp && hit.Key.Equals(key))
         {
@@ -105,6 +105,9 @@ public static class AnalyticVolume
     private sealed class VolEntry { public long Revision; public ulong Print; public KernelSettings Key = null!; public double? Volume; public double Quad; }
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, VolEntry> _volCache = new();
     static readonly bool VolCacheOff = Environment.GetEnvironmentVariable("P3D_VOLCACHE") == "0";
+    static readonly bool VolParOff = Environment.GetEnvironmentVariable("P3D_VOLPAR") == "0";
+    /// <summary>Сколько раз объём тела считался по граням параллельно.</summary>
+    public static long ParallelRuns;
 
     /// <summary>Разбор: сколько раз интеграл многогранного тела отвергнут сверкой с его точной многогранной формой.</summary>
     public static int PolyVolumeRejected;
@@ -127,6 +130,35 @@ public static class AnalyticVolume
         try
         {
             double sum = 0;
+            // 20:17 (скорость): ГРАНИ — ПАРАЛЛЕЛЬНО. Вклад грани — функция только её самой (начало отсчёта — общее, передаётся
+            // в поток); сумма — по порядку граней (тот же результат до бита), ошибка квадратуры — суммой вкладов потоков.
+            // Мутация P3D_VOLPAR=0.
+            var faceList = solid.Faces.ToList();
+            int threads = Tess.Tessellator.Threads;
+            if (!VolParOff && threads > 1 && Environment.ProcessorCount > 1 && faceList.Count >= 4 && _coarse == 0 && !_rough && QuadDebug == null)
+            {
+                var parts = new double?[faceList.Count]; var quads = new double[faceList.Count];
+                var origin = _origin;
+                System.Threading.Tasks.Parallel.For(0, faceList.Count, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = threads }, i =>
+                {
+                    var o0 = _origin; double q0 = _quadErr; var bc0 = _bandCoarse;
+                    _origin = origin; _quadErr = 0; _bandCoarse = null;
+                    try
+                    {
+                        using (Diagnostics.Prof.Time("объём: грань " + (GeometryAudit.AuthoritativeSurface(faceList[i])?.GetType().Name ?? "?")))
+                            parts[i] = FaceIntegral(faceList[i]);
+                        quads[i] = _quadErr;
+                    }
+                    finally { _origin = o0; _quadErr = q0; _bandCoarse = bc0; }
+                });
+                Interlocked.Increment(ref ParallelRuns);
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    if (parts[i] is not { } c2 || double.IsNaN(c2)) return null;
+                    sum += c2; _quadErr += quads[i];
+                }
+                return sum / 3;
+            }
             foreach (var f in solid.Faces)
             {
                 double? c;
@@ -239,7 +271,7 @@ public static class AnalyticVolume
     public static double? FaceArea(TFace f)
     {
         if (AreaCacheOff || _coarse != 0 || _rough) return FaceAreaUncached(f);
-        var ks = KernelSettings.Capture() with { Preview = false, LivePreview = false, DeferMeshing = false, BooleanThreads = 1 };
+        var ks = KernelSettings.Capture() with { Preview = false, LivePreview = false, DeferMeshing = false, BooleanThreads = 1, MeshThreads = 1 };
         ulong key = FaceKey(f);
         if (_areaCache.TryGetValue(f, out var e) && e.Key == key && e.Settings.Equals(ks)) return e.Area;
         var v = FaceAreaUncached(f);

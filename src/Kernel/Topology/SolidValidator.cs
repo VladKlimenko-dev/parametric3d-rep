@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Exact;
 using Parametric3D.Kernel.Tess;
 
@@ -120,7 +120,7 @@ public static class SolidValidator
         // детали после операции берёт разделы, только что посчитанные построителем (скругление: B-rep 2 × 0.9 с). Мутация
         // P3D_VALKEYDISPLAY=0 — прежний ключ.
         var ks = KernelSettings.Capture() with { Preview = false, LivePreview = false };
-        if (!ValKeyDisplayOff) ks = ks with { DeferMeshing = false, BooleanThreads = 1 };   // число потоков результата не меняет
+        if (!ValKeyDisplayOff) ks = ks with { DeferMeshing = false, BooleanThreads = 1, MeshThreads = 1 };   // число потоков результата не меняет
         // 02.6: ключ памяти — со всеми настройками, в т. ч. бюджетом точности (смена единиц/масштаба — новая проверка).
         // Мутация P3D_CACHEKEYTOL=0: ключ без бюджета точности.
         if (CacheKeyTolOff) ks = ks with { Tolerance = ToleranceContext.Default };
@@ -384,9 +384,35 @@ public static class SolidValidator
 
     // ================================================================ Mesh
 
+    /// <summary>
+    /// 20:17 (скорость): РАЗБОР СЕТКИ — ИЗ ПАМЯТИ ПО СОДЕРЖАНИЮ. Построитель разбирает сетку своего тела, деталь сразу после —
+    /// сетку показа того же тела (грани — из памяти разметки, сетка та же до бита): 30–60 мс дважды. Ключ — точки (float, как
+    /// их видит разбор), номера, неразмеченные грани и параметры разбора; при совпадении — копия отчёта. Мутация P3D_MESHVALMEMO=0.
+    /// </summary>
     public static ValidationReport ValidateMesh(MeshData mesh, ValidationOptions? options = null)
     {
         options ??= new ValidationOptions();
+        if (MeshValMemoOff) return ValidateMeshCore(mesh, options);
+        ulong h = 1469598103934665603UL;
+        void Mix(ulong x) { h ^= x + 0x9E3779B97F4A7C15UL + (h << 6) + (h >> 2); h *= 1099511628211UL; }
+        Mix((ulong)mesh.Vertices.Length); Mix((ulong)mesh.Indices.Length);
+        foreach (var v in mesh.Vertices) { Mix(BitConverter.SingleToUInt32Bits(v.P.X) | ((ulong)BitConverter.SingleToUInt32Bits(v.P.Y) << 32)); Mix(BitConverter.SingleToUInt32Bits(v.P.Z)); }
+        foreach (int i in mesh.Indices) Mix((ulong)(uint)i);
+        foreach (var (f, why) in mesh.BrokenFaces) { Mix(f); Mix((ulong)why.GetHashCode()); }
+        var key = (h, $"{options.Closed}|{options.MaxListed}|{options.CheckSelfIntersections}|{TJunctionSeverity}|{ToleranceContext.Current.ModelAccuracy:R}");
+        if (_meshValMemo.TryGetValue(key, out var hit)) { Interlocked.Increment(ref MeshValMemoHits); return Copy(hit); }
+        var rep = ValidateMeshCore(mesh, options);
+        if (_meshValMemo.Count > 256) _meshValMemo.Clear();
+        _meshValMemo[key] = Copy(rep);
+        return rep;
+    }
+    static readonly bool MeshValMemoOff = Environment.GetEnvironmentVariable("P3D_MESHVALMEMO") == "0";
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<(ulong, string), ValidationReport> _meshValMemo = new();
+    /// <summary>Разбор: отчётов разбора сетки из памяти.</summary>
+    public static long MeshValMemoHits;
+
+    static ValidationReport ValidateMeshCore(MeshData mesh, ValidationOptions options)
+    {
         var r = new ValidationReport();
         r.Checked.Add(Representation.Mesh);
 

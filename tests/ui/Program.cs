@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -166,6 +166,117 @@ if (only == "probe-ffround")
         part.RemoveFeature(f); s.Document.RebuildDirty();
     }
     }
+    return 0;
+}
+
+if (only == "probe-ffall")
+{
+    // 23:50: «скорость всех операций» — набор FreeForm-операций (заготовки, булевы всех видов, скругления/фаски разных рёбер,
+    // перенос/поворот/масштаб, зеркало, массив, разрез). Каждая — в своём документе; время пересчёта детали и операции.
+    // P3D_PROBEREPS — повторы, P3D_PROBEPROF=<имя>|all — профиль ядра, P3D_PROBEWARM=1 — прогрев.
+    if (Environment.GetEnvironmentVariable("P3D_PROBEWARM") == "1") Parametric3D.App.Diagnostics.KernelWarmup.Run();
+    int reps = int.TryParse(Environment.GetEnvironmentVariable("P3D_PROBEREPS"), out var rpx) ? rpx : 1;
+    string KindOf(Parametric3D.Kernel.Topology.TEdge e) => string.Join("/", e.CoEdges.Select(c => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(c.Loop.Face)?.GetType().Name).OrderBy(x => x));
+    FFPrimitiveFeature Prim(FFPrimitive sh, double a, double b = 0, double c = 0, double x = 0, double y = 0, double z = 0) =>
+        new() { Shape = sh, A = new ValueRef(a), B = new ValueRef(b > 0 ? b : 30), C = new ValueRef(c > 0 ? c : 20), Origin = new OpenTK.Mathematics.Vector3d(x, y, z) };
+    Feature Bool(FFBool op) => new FFBooleanFeature { Op = op, Target = "Тело 1", Tools = { "Тело 2" } };
+    Feature EdgeOp(Part part, Func<Parametric3D.Kernel.Topology.TEdge, bool> pick, bool round, double d)
+    {
+        var e = part.Bodies[0].Edges.First(pick);
+        Feature f;
+        if (round) { var rf = new RoundFeature { Radius = new ValueRef(d) }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(e)); f = rf; }
+        else { var cf = new ChamferFeature { D1 = new ValueRef(d), D2 = new ValueRef(d) }; cf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(e)); f = cf; }
+        f.FFBody = part.BodyName(0); return f;
+    }
+    bool Line(Parametric3D.Kernel.Topology.TEdge e) => e.Curve is Parametric3D.Kernel.Curves.LineCurve3;
+    bool Closed(Parametric3D.Kernel.Topology.TEdge e) => ReferenceEquals(e.V0, e.V1);
+    var scenes = new List<(string Name, Func<Feature>[] Setup, Func<Part, Feature> Op)>
+    {
+        ("box", new Func<Feature>[0], _ => Prim(FFPrimitive.Box, 40, 30, 20)),
+        ("torus", new Func<Feature>[0], _ => Prim(FFPrimitive.Torus, 20, 5)),
+        ("union box+cyl", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Cylinder, 8, 30, 0, 10, 0, 5) }, _ => Bool(FFBool.Union)),
+        ("subtract box-cyl", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Cylinder, 6, 40, 0, 0, 0, -10) }, _ => Bool(FFBool.Subtract)),
+        ("subtract box-sphere", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Sphere, 12, 0, 0, 20, 15, 20) }, _ => Bool(FFBool.Subtract)),
+        ("intersect box*sphere", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Sphere, 22, 0, 0, 0, 0, 10) }, _ => Bool(FFBool.Intersect)),
+        ("union cyl+cyl", new[] { () => (Feature)Prim(FFPrimitive.Cylinder, 10, 40), () => new FFPrimitiveFeature { Shape = FFPrimitive.Cylinder, A = new ValueRef(7), B = new ValueRef(50), Origin = new OpenTK.Mathematics.Vector3d(-25, 0, 20), U = OpenTK.Mathematics.Vector3d.UnitY, V = OpenTK.Mathematics.Vector3d.UnitZ } }, _ => Bool(FFBool.Union)),
+        ("subtract cone-box", new[] { () => (Feature)Prim(FFPrimitive.Cone, 15, 5, 30), () => Prim(FFPrimitive.Box, 40, 40, 10, 0, 0, 25) }, _ => Bool(FFBool.Subtract)),
+        ("union torus+box", new[] { () => (Feature)Prim(FFPrimitive.Torus, 20, 5), () => Prim(FFPrimitive.Box, 12, 10, 20, 20, 0, -10) }, _ => Bool(FFBool.Union)),
+        ("union torus+box tangent", new[] { () => (Feature)Prim(FFPrimitive.Torus, 20, 5), () => Prim(FFPrimitive.Box, 10, 10, 20, 20, 0, -10) }, _ => Bool(FFBool.Union)),
+        ("round box edge", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20) }, p => EdgeOp(p, Line, true, 3)),
+        ("chamfer box edge", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20) }, p => EdgeOp(p, Line, false, 3)),
+        ("round cyl top", new[] { () => (Feature)Prim(FFPrimitive.Cylinder, 15, 40) }, p => EdgeOp(p, Closed, true, 3)),
+        ("round hole edge", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Cylinder, 6, 40, 0, 0, 0, -10), () => Bool(FFBool.Subtract) }, p => EdgeOp(p, e => Closed(e) && KindOf(e).Contains("Extruded"), true, 2)),
+        ("round box-sphere edge", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Sphere, 12, 0, 0, 20, 15, 20), () => Bool(FFBool.Subtract) }, p => EdgeOp(p, e => !Line(e) && KindOf(e).Contains("Revolved"), true, 2)),
+        ("move", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Cylinder, 6, 40, 0, 0, 0, -10), () => Bool(FFBool.Subtract) }, _ => new FFTransformFeature { Mode = FFXform.Move, BodyNames = { "Тело 1" }, Dx = new ValueRef(10) }),
+        ("rotate", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Cylinder, 6, 40, 0, 0, 0, -10), () => Bool(FFBool.Subtract) }, _ => new FFTransformFeature { Mode = FFXform.Rotate, BodyNames = { "Тело 1" }, Angle = new ValueRef(30) }),
+        ("scale xyz", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Sphere, 12, 0, 0, 20, 15, 20), () => Bool(FFBool.Subtract) }, _ => new FFTransformFeature { Mode = FFXform.Scale, BodyNames = { "Тело 1" }, Factor = new ValueRef(1.5) }),
+        ("mirror", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Cylinder, 6, 40, 0, 0, 0, -10), () => Bool(FFBool.Subtract) }, _ => new FFMirrorFeature { BodyNames = { "Тело 1" }, PlaneAt = new OpenTK.Mathematics.Vector3d(30, 0, 0) }),
+        ("array 4", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Cylinder, 6, 40, 0, 0, 0, -10), () => Bool(FFBool.Subtract) }, _ => new FFArrayFeature { BodyNames = { "Тело 1" }, Count = new ValueRef(4), Step = new OpenTK.Mathematics.Vector3d(50, 0, 0) }),
+        ("split", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Cylinder, 6, 40, 0, 0, 0, -10), () => Bool(FFBool.Subtract) }, _ => new FFSplitFeature { Body = "Тело 1", PlaneAt = new OpenTK.Mathematics.Vector3d(0, 0, 10), Normal = OpenTK.Mathematics.Vector3d.UnitZ }),
+    };
+    string? onlyScene = Environment.GetEnvironmentVariable("P3D_PROBESCENE");
+    var totals = new Dictionary<string, List<double>>();
+    for (int rep = 0; rep < reps; rep++)
+        foreach (var (name, setup, op) in scenes)
+        {
+            if (onlyScene != null && onlyScene != name) continue;
+            var s = FreeFormCommands.NewFreeForm(); var part = s.Part!;
+            var node = part.Features.OfType<FreeFormFeature>().Single();
+            foreach (var mk in setup) { var f0 = mk(); f0.FreeForm = node.Key; f0.Frozen = true; part.AddFeature(f0); s.Document.RebuildDirty(); }
+            var f = op(part); f.FreeForm = node.Key; f.Frozen = true;
+            bool prof = rep == reps - 1 && Environment.GetEnvironmentVariable("P3D_PROBEPROF") is { } pp && (pp == name || pp == "all");
+            if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
+            part.AddFeature(f);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            s.Document.RebuildDirty();
+            double ms = sw.Elapsed.TotalMilliseconds;
+            if (prof) { Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(25))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
+            double fms = part.LastFeatureMs.TryGetValue(f, out var fm) ? fm : -1;
+            (totals.TryGetValue(name, out var l) ? l : totals[name] = new List<double>()).Add(ms);
+            Console.WriteLine($"PROBE {name}: {ms:0} ms, feature {fms:0} ms, err {f.Error?.Split('\n')[0]}, bodies {part.Bodies.Count}, faces {part.Bodies.Sum(b => b.Faces.Count())}, guarantee {string.Join(",", part.Bodies.Select(b => b.Guarantee).Distinct())}");
+        }
+    foreach (var (name, l) in totals) Console.WriteLine($"MIN {name}: {l.Min():0} ms");
+    Console.WriteLine($"SUM of minima: {totals.Values.Sum(l => l.Min()):0} ms");
+    return 0;
+}
+
+if (only == "probe-ffui")
+{
+    // 20:17: та же сцена, что probe-ffround, но через окно: команда «Скругление» на выбранном ребре, «ОК» — время шагов окна
+    var s = FreeFormCommands.NewFreeForm(); var w = Open(s); var part = s.Part!;
+    var node = part.Features.OfType<FreeFormFeature>().Single();
+    void Add(Feature f) { f.FreeForm = node.Key; f.Frozen = true; part.AddFeature(f); s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs(); }
+    if (Environment.GetEnvironmentVariable("P3D_PROBEWARM") == "1") Parametric3D.App.Diagnostics.KernelWarmup.Run();
+    Add(new FFPrimitiveFeature { Shape = FFPrimitive.Cylinder, A = new ValueRef(15), B = new ValueRef(40) });
+    Add(new FFPrimitiveFeature { Shape = FFPrimitive.Sphere, A = new ValueRef(20) });
+    Add(new FFTransformFeature { Mode = FFXform.Move, BodyNames = { "Тело 1" }, Dx = new ValueRef(8), Dz = new ValueRef(5) });
+    Add(new FFBooleanFeature { Op = FFBool.Union, Target = "Тело 1", Tools = { "Тело 2" } });
+    string Kind(Parametric3D.Kernel.Topology.TEdge e) => string.Join("/", e.CoEdges.Select(c => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(c.Loop.Face)?.GetType().Name).OrderBy(x => x));
+    for (int rep = 0; rep < 2; rep++)
+    foreach (var (name, kind, cmd) in new[] { ("round intersection", "ExtrudedSurface/RevolvedSurface", "ff.fillet"), ("chamfer intersection", "ExtrudedSurface/RevolvedSurface", "ff.chamfer"), ("round top", "ExtrudedSurface/PlaneSurface", "ff.fillet") })
+    {
+        var e = part.Bodies[0].Edges.First(x => Kind(x) == kind && (kind.Contains("Plane") ? ReferenceEquals(x.V0, x.V1) : !ReferenceEquals(x.V0, x.V1)));
+        w.ViewPort.Selection.Clear(); w.ViewPort.Selection.Select(new PickRef(e.Id, PickKind.Edge, part, null), additive: false);
+        bool prof = Environment.GetEnvironmentVariable("P3D_PROBEPROF") is { } pp && (pp == name || pp == "all") && rep == 1;
+        if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
+        var probeT0 = DateTime.Now;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        CommandRegistry.Instance[cmd].Execute();
+        long tStart = sw.ElapsedMilliseconds;
+        s.Document.RebuildDirty();
+        long tRebuilt = sw.ElapsedMilliseconds;
+        Dispatcher.UIThread.RunJobs();
+        long tBuilt = sw.ElapsedMilliseconds;
+        var f = (Feature?)w.CurrentOperation?.EditedFeature;
+        w.CommitOperation(); s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+        long tDone = sw.ElapsedMilliseconds;
+        if (prof) { Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(40))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
+        foreach (var g in Parametric3D.App.Diagnostics.UiTimes.Since(probeT0).GroupBy(x => x.Name).OrderByDescending(g => g.Sum(x => x.Ms)).Take(12))
+            Console.WriteLine($"  ui: {g.Key} {g.Sum(x => x.Ms):0.0} ms ×{g.Count()}");
+        Console.WriteLine($"PROBE ui {name}: start {tStart} ms, rebuilt {tRebuilt} ms, built {tBuilt} ms, committed {tDone} ms, feature {(f != null && part.LastFeatureMs.TryGetValue(f, out var fm) ? fm : -1):0} ms, err {f?.Error?.Split('\n')[0]}");
+        if (f != null) { part.RemoveFeature(f); s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs(); }
+    }
+    w.Close();
     return 0;
 }
 

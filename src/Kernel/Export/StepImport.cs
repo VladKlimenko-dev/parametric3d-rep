@@ -504,16 +504,54 @@ public static class StepImport
         if (MissDbg) Console.Error.WriteLine($"DONOREDGES {f.Tag}: donor rim {edge.Count} points, edges {need.Count}, common {edge.Count(need.Contains)}");
         return false;
     }
+    static readonly bool LoopMeshParallel = Environment.GetEnvironmentVariable("P3D_LOOPMESHPAR") != "0";
+    /// <summary>Сколько раз грани тела размечались по контурам параллельно.</summary>
+    public static long LoopMeshParallelRuns;
     internal static int MeshFacesFromLoops(TSolid solid, List<string>? warnings, string format,
                                            Func<TFace, Surfaces.FacetedSurface?>? donor = null)
     {
         using var _oh = Diagnostics.Overhead.Scope();
         int built = 0, failed = 0;
-        foreach (var f2 in solid.Faces.ToList())
+        var faceList = solid.Faces.ToList();
+        // 20:17 (скорость): ДОНОР И СЕТКИ ГРАНЕЙ — ЗАРАНЕЕ, ПАРАЛЛЕЛЬНО. Грани размечались по одной (скругление на пересечении
+        // цилиндра и шара: 310 мс на 5 граней, из них 2–3 кривые по ~100 мс). Построитель сетки грани уже идёт параллельно в
+        // разметке отображения (Tessellator); точки рёбер считаются заранее последовательно — общий кэш ребра у соседних
+        // граней. Порядок и решения те же: результат каждой грани — функция её самой. Мутация P3D_LOOPMESHPAR=0.
+        var donors = new Surfaces.FacetedSurface?[faceList.Count];
+        var pre = new ((List<Vector3d> P, List<int> T)? M, string? Why)?[faceList.Count];
+        for (int i = 0; i < faceList.Count; i++)
+            if (donor?.Invoke(faceList[i]) is { } dn0 && DonorFitsEdges(faceList[i], dn0)) donors[i] = dn0;
+        if (LoopMeshParallel && Tess.Tessellator.Threads > 1 && Environment.ProcessorCount > 1)
         {
+            var todo = new List<int>();
+            for (int i = 0; i < faceList.Count; i++)
+            {
+                var fi = faceList[i];
+                if (donors[i] != null || fi.Loops.All(l => l.CoEdges.Count == 0)) continue;
+                if (fi.Loops.All(l => l.CoEdges.Count >= 2 && l.CoEdges.Select(c => c.Edge).Distinct().Count() <= 1)) continue;
+                todo.Add(i);
+            }
+            if (todo.Count > 1)
+            {
+                foreach (var e in solid.Edges) Tess.ExactFaceMesher.EdgePoints(e);
+                System.Threading.Tasks.Parallel.ForEach(todo, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = Tess.Tessellator.Threads }, i =>
+                {
+                    var fi = faceList[i];
+                    using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("разметка грани: " + (Topology.GeometryAudit.AuthoritativeSurface(fi)?.GetType().Name ?? "?") + (Topology.GeometryAudit.AuthoritativeSurface(fi) is Surfaces.RevolvedSurface rvp ? "/" + Geometry.ExactEdges.ShapeOf(rvp)?.GetType().Name : "")) : null)
+                    {
+                        try { var m = Tess.ExactFaceMesher.Mesh(fi, out var w, out _); pre[i] = (m, w); }
+                        catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { pre[i] = null; }
+                    }
+                });
+                Interlocked.Increment(ref LoopMeshParallelRuns);
+            }
+        }
+        for (int fIdx = 0; fIdx < faceList.Count; fIdx++)
+        {
+            var f2 = faceList[fIdx];
             // Донор (аналитический маршрут): та же грань у операнда — по строгому ключу (поверхность по содержанию,
             // контуры с параметрами кривых побитово) — даёт готовую сетку: разметчик получил бы те же входные данные.
-            if (donor?.Invoke(f2) is { } dn && DonorFitsEdges(f2, dn))
+            if (donors[fIdx] is { } dn)
             {
                 var copy = new Surfaces.FacetedSurface(dn.Source, dn.FallbackNormal);
                 foreach (var t in dn.Facets.ReadView) copy.Facets.Add(t);
@@ -537,7 +575,8 @@ public static class StepImport
             if (seamOnly) { failed++; continue; }
 
             (List<Vector3d> P, List<int> T)? got2; string? why2;
-            using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("разметка грани: " + (Topology.GeometryAudit.AuthoritativeSurface(f2)?.GetType().Name ?? "?") + (Topology.GeometryAudit.AuthoritativeSurface(f2) is Surfaces.RevolvedSurface rvp ? "/" + Geometry.ExactEdges.ShapeOf(rvp)?.GetType().Name : "")) : null)
+            if (pre[fIdx] is { } pr) { got2 = pr.M; why2 = pr.Why; }
+            else using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("разметка грани: " + (Topology.GeometryAudit.AuthoritativeSurface(f2)?.GetType().Name ?? "?") + (Topology.GeometryAudit.AuthoritativeSurface(f2) is Surfaces.RevolvedSurface rvp ? "/" + Geometry.ExactEdges.ShapeOf(rvp)?.GetType().Name : "")) : null)
                 got2 = Tess.ExactFaceMesher.Mesh(f2, out why2, out _);
             if (got2 == null)
             {

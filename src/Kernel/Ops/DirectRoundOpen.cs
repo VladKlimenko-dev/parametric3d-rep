@@ -755,23 +755,37 @@ public static partial class DirectRound
         double tA0 = TStar(0, 0), tB0 = TStar(0, 1), tA1 = TStar(1, 0), tB1 = TStar(1, 1);
         tEndA[0] = tA0; tEndA[1] = tA1; tEndB[0] = tB0; tEndB[1] = tB1;
         endTab = new double[2][];
-        for (int k = 0; k < 2; k++)
+        // 20:17 (скорость): НЕЗАВИСИМЫЕ ПРОБЫ — В НЕСКОЛЬКО ПОТОКОВ (корни края на торцах, хребет и сечения сверок, сверка таблицы
+        // с формулой): каждая проба — функция только своего параметра (память хребта и ребра — общая потокобезопасная), решения
+        // принимаются по порядку проб, как прежде. Мутация P3D_DROPENPAR=0.
+        int parThreads = OpenPar ? Math.Max(1, Math.Min(Tess.Tessellator.Threads, Environment.ProcessorCount)) : 1;
+        void For(int n, Action<int> body)
         {
-            endTab[k] = new double[65];
-            for (int i = 0; i <= 64; i++) endTab[k][i] = TStar(k, i / 64.0);
-            if (endTab[k].Any(double.IsNaN)) { why = "open curved: end curve not found"; return false; }
+            if (parThreads > 1 && n >= 8) { System.Threading.Tasks.Parallel.For(0, n, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = parThreads }, body); Interlocked.Increment(ref OpenParallelRuns); }
+            else for (int i = 0; i < n; i++) body(i);
         }
+        endTab[0] = new double[65]; endTab[1] = new double[65];
+        For(130, j => { int k = j / 65, i = j % 65; endTab[k][i] = TStar(k, i / 64.0); });
+        for (int k = 0; k < 2; k++)
+            if (endTab[k].Any(double.IsNaN)) { why = "open curved: end curve not found"; return false; }
         if (double.IsNaN(tA0 + tB0 + tA1 + tB1) || !(tA0 < tA1) || !(tB0 < tB1)) { why = "open curved: contact lines do not span between the end faces"; return false; }
 
         // промежуток поверхности — по краям ленты на торцах (пробы v) с запасом 2 % ребра
         double tLo = double.MaxValue, tHi = double.MinValue;
+        var tsv = new double[34];
+        For(34, j => tsv[j] = TStar(j / 17, (j % 17) / 16.0));
         for (int i = 0; i <= 16; i++)
         {
-            double v = i / 16.0, t0s = TStar(0, v), t1s = TStar(1, v);
+            double t0s = tsv[i], t1s = tsv[17 + i];
             if (double.IsNaN(t0s + t1s)) { why = "open curved: end curve not found"; return false; }
             tLo = Math.Min(tLo, t0s); tHi = Math.Max(tHi, t1s);
         }
-        tLo -= 0.02 * Delta; tHi += 0.02 * Delta;
+        // запас 2 % ребра, но не дальше продления за торец (малый радиус на длинном ребре: продление — пара радиусов, а 2 %
+        // ребра длиннее — «blend range beyond the extension»). Мутация P3D_DRMARGINCLAMP=0.
+        // запас — не больше половины пути до продления: вторая половина — узлы таблицы за используемым промежутком (у самого
+        // края таблицы вставка отходит от формулы на 1e-7 мм)
+        if (MarginClamp) { tLo -= Math.Min(0.02 * Delta, Math.Max(0, 0.5 * (tLo - outT[0]))); tHi += Math.Min(0.02 * Delta, Math.Max(0, 0.5 * (outT[1] - tHi))); }
+        else { tLo -= 0.02 * Delta; tHi += 0.02 * Delta; }
         // поверхность — с запасом ещё 5 % за используемым промежутком: у краёв таблицы формулы вставка Катмулла–Рома опирается
         // на продолженный линейно узел и отходит от формулы на 1e-7 мм; сверка таблицы — на используемом промежутке
         double useLo = tLo, useHi = tHi;
@@ -781,11 +795,22 @@ public static partial class DirectRound
         const int N = 256;
         var us = new List<double>(); var secs = new List<SweepSection>(); var Ps = new List<Vector3d>();
         Vector3d? prevS = null, prevA = null, prevB = null; Vector3d prevT = default; double widthA = 0, widthB = 0;
+        // хребет, точки фаски и сечения проб — заранее, параллельно (решения — ниже, по порядку)
+        var preX = new Vector3d?[N + 1]; var preG = new SweepSection?[N + 1];
+        For(N + 1, i =>
+        {
+            double t = tLo + (tHi - tLo) * i / N;
+            if (!ch && !(Rt(t) > 1e-6)) return;
+            var xx = ch ? Ed(t) : Spine(t);
+            preX[i] = xx;
+            if (xx == null) return;
+            preG[i] = Gen(t);
+        });
         for (int i = 0; i <= N; i++)
         {
             double t = tLo + (tHi - tLo) * i / N;
             if (!ch && !(Rt(t) > 1e-6)) { why = "variable radius: radius not positive along the blend (extension)"; return false; }
-            var x = ch ? Ed(t) : Spine(t);
+            var x = preX[i];
             if (x == null) { why = "open curved: ball centre not found (radius too large?)"; return false; }
             var P = Ed(t); Ps.Add(P);
             var qa = ch ? ChA(t) : Foot(shA, x.Value); var qb = ch ? ChB(t) : Foot(shB, x.Value);
@@ -795,7 +820,7 @@ public static partial class DirectRound
                 { why = "open chamfer: chamfer point not found"; return false; }
             }
             else if (Math.Abs((qa - x.Value).Length - Rt(t)) > 1e-8 * Math.Max(1, r) || Math.Abs((qb - x.Value).Length - Rt(t)) > 1e-8 * Math.Max(1, r)) { why = "open curved: contact not at the ball radius"; return false; }
-            var g = Gen(t);
+            var g = preG[i] ?? Gen(t);
             if (!ch && !(g.Phi > 1e-3 && g.Phi < Math.PI - 1e-3)) { why = "open curved: blend arc degenerate"; return false; }
             if (t >= 0 && t <= Delta) { widthA = Math.Max(widthA, (qa - P).Length); widthB = Math.Max(widthB, (qb - P).Length); }
             if (prevS != null && (Vector3d.Dot(x.Value - prevS.Value, prevT) <= 0 || Vector3d.Dot(qa - prevA!.Value, prevT) <= 0 || Vector3d.Dot(qb - prevB!.Value, prevT) <= 0))
@@ -826,12 +851,17 @@ public static partial class DirectRound
         var surf = new SectionSurface(U => Gen(tLo + U / kU), us.Select(t => (t - tLo) * kU).ToList(), secs, false, 0, Lp, breaks, tabStep) { ParallelTable = true };
         {
             double worstTab = 0, worstU = 0;
-            for (int i = 0; i < 1000; i++)
+            var devs = new double[1000];
+            surf.SectionAt(((useLo - tLo) + (useHi - useLo) * 0.5) * kU);   // таблица — до проб (строится один раз)
+            For(1000, i =>
             {
                 double U = ((useLo - tLo) + (useHi - useLo) * (i + 0.5) / 1000) * kU;
                 var ta = surf.SectionAt(U); var ex = surf.ExactSectionAt(U);
-                foreach (double v in new[] { 0.0, 0.5, 1.0 }) { double d = (ta.Point(v) - ex.Point(v)).Length; if (d > worstTab) { worstTab = d; worstU = U; } }
-            }
+                double dm = 0;
+                foreach (double v in new[] { 0.0, 0.5, 1.0 }) dm = Math.Max(dm, (ta.Point(v) - ex.Point(v)).Length);
+                devs[i] = dm;
+            });
+            for (int i = 0; i < 1000; i++) if (devs[i] > worstTab) { worstTab = devs[i]; worstU = ((useLo - tLo) + (useHi - useLo) * (i + 0.5) / 1000) * kU; }
             Debug?.Invoke($"open: table vs formula {worstTab:E2} at t {tLo + worstU / kU:G6} (Δ {Delta:G6}) widths {widthA:G4}/{widthB:G4} Lp {Lp:G5}");
             // таблица — представление формулы: её отход — в пятой доле точности модели (1e-7 → 2e-8 мм)
             if (worstTab > Math.Max(1e-8, 0.2 * ToleranceContext.Current.ModelAccuracy)) { why = $"open curved: blend surface table deviates from the formula ({worstTab:E1} mm)"; return false; }
@@ -1076,6 +1106,10 @@ public static partial class DirectRound
         finally { if (Debug != null && ProfDbg) { Debug(Diagnostics.Prof.Report()); Diagnostics.Prof.Enabled = profWas; } }
     }
     static readonly bool ProfDbg = Environment.GetEnvironmentVariable("P3D_OPENPROF") == "1";
+    static readonly bool MarginClamp = Environment.GetEnvironmentVariable("P3D_DRMARGINCLAMP") != "0";
+    static readonly bool OpenPar = Environment.GetEnvironmentVariable("P3D_DROPENPAR") != "0";
+    /// <summary>Сколько раз пробы открытого построителя считались в несколько потоков.</summary>
+    public static long OpenParallelRuns;
     static readonly bool FitCurves = Environment.GetEnvironmentVariable("P3D_DRFITCURVES") != "0";
     const double FitTol = 1e-9;
 
