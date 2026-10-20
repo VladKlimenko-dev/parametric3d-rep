@@ -362,6 +362,24 @@ public static class FaceIntersect
     static readonly bool RefineTransOff = Environment.GetEnvironmentVariable("P3D_REFINETRANS") == "0";
     /// <summary>Замер: сколько кривых обрезано по событиям, сколько интервалов не согласовались (отказ).</summary>
     public static long EventClips, UnresolvedClips;
+    /// <summary>
+    /// ТОЧНОЕ РАССТОЯНИЕ ДО КРАЯ ГРАНИ — по кривым рёбер (ближайшая точка кривой), а не по ломаной края классификатора: у
+    /// дуги эллипса хорды ломаной отходят от кривой на 6e-7 мм — больше точности модели. Фаска вертикального ребра у
+    /// угловой фаски: грань резца лежит в плоскости угловой фаски, пересечение резца со скруглением — ТО ЖЕ ребро
+    /// «скругление — угловая фаска» (до 1e-14), но по ломаной оно было «в 6e-7 от края», и общий маршрут отказывал («a part
+    /// of the intersection inside both faces is narrower than the merge tolerance»), операция шла многогранным путём —
+    /// тело детали теряло точность (сессия «Нагрузка»: с 19-й операции все дальнейшие — многогранные). Только для этой
+    /// проверки (редкий путь). Мутация P3D_EXACTBOUNDARY=0.
+    /// </summary>
+    static double ExactBoundaryDistance(AnalyticFace f, Vector3d m)
+    {
+        double d = double.MaxValue;
+        foreach (var ed in f.Face.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct())
+            if (ed.Curve != null) d = Math.Min(d, (ed.Curve.PointAt(FaceSplit.ClosestParam(ed.Curve, m)) - m).Length);
+        return d;
+    }
+    static readonly bool ExactBoundaryOff = Environment.GetEnvironmentVariable("P3D_EXACTBOUNDARY") == "0";
+    static readonly bool NarrowDbg = Environment.GetEnvironmentVariable("P3D_NARROWDBG") == "1";
 
     static void Clip(ICurve3 c, AnalyticFace a, AnalyticFace b, Result res)
     {
@@ -422,6 +440,17 @@ public static class FaceIntersect
             {
                 Interlocked.Increment(ref UnresolvedClips);
                 res.Unresolved = $"interval [{s:R}, {e:R}] of {c.GetType().Name} changes side without an event ({g1:G3}, {g2:G3}, {g3:G3})";
+                if (NarrowDbg)
+                {
+                    var mm = c.PointAt(Wrap(s + (e - s) * 0.5));
+                    Console.WriteLine($"NOEVENT {a.Face.Tag}×{b.Face.Tag} mid {mm:0.#########}");
+                    foreach (var ff in new[] { a, b })
+                        foreach (var ed in ff.Face.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct())
+                        {
+                            double dd = (ed.Curve.PointAt(FaceSplit.ClosestParam(ed.Curve, mm)) - mm).Length;
+                            if (dd < 1e-3) Console.WriteLine($"   near edge of {ff.Face.Tag}: {ed.Curve.GetType().Name} {ed.V0.P:0.######}->{ed.V1.P:0.######} dist {dd:G4} events {string.Join(",", EventsOn(ed.Curve, ReferenceEquals(ff, a) ? b : a, res).Select(t => t.ToString("G6")))}");
+                        }
+                }
                 return;
             }
             inside[i] = g2 > 0;
@@ -434,9 +463,17 @@ public static class FaceIntersect
             {
                 var m = c.PointAt(Wrap(s + (e - s) * 0.5)); double acc = FaceSplit.MergeExact;
                 if ((c.PointAt(Wrap(s)) - c.PointAt(Wrap(e))).Length > acc && a.Contains(m, 0) == true && b.Contains(m, 0) == true
-                    && Math.Min(a.BoundaryDistance(m), b.BoundaryDistance(m)) > acc)
+                    && Math.Min(a.BoundaryDistance(m), b.BoundaryDistance(m)) > acc
+                    && (ExactBoundaryOff || Math.Min(ExactBoundaryDistance(a, m), ExactBoundaryDistance(b, m)) > acc))
                 {
                     res.Unresolved = $"a part of the intersection inside both faces is narrower than the merge tolerance (at {m:0.#########})";
+                    if (NarrowDbg) Console.WriteLine($"NARROW {a.Face.Tag}×{b.Face.Tag} {c.GetType().Name} [{s:G9},{e:G9}] len {(c.PointAt(Wrap(s)) - c.PointAt(Wrap(e))).Length:G4} g {g1:G3}/{g2:G3}/{g3:G3} bdA {a.BoundaryDistance(m):G4} bdB {b.BoundaryDistance(m):G4} ends {c.PointAt(Wrap(s)):0.#########} {c.PointAt(Wrap(e)):0.#########}");
+                    if (NarrowDbg)
+                        foreach (var ed in a.Face.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct())
+                        {
+                            double dd = (ed.Curve.PointAt(FaceSplit.ClosestParam(ed.Curve, m)) - m).Length;
+                            if (dd < 1e-3) Console.WriteLine($"   near edge {ed.Curve.GetType().Name} {ed.V0.P:0.######}->{ed.V1.P:0.######} dist {dd:G4} faces {string.Join(" | ", ed.CoEdges.Select(ce => ce.Loop?.Face?.Tag))}");
+                        }
                     return;
                 }
             }

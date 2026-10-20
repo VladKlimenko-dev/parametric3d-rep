@@ -24,6 +24,7 @@ public static class NurbsProxy
     static readonly bool RestoreOff = Environment.GetEnvironmentVariable("P3D_PROXYRESTORE") == "0";
 
     /// <summary>Начать сбор замен (перед заменой обоих операндов).</summary>
+    internal static void ReleaseThreadState() { _faces = null; _rows = null; }
     public static void Begin() { _faces = new(ReferenceEqualityComparer.Instance); _rows = new(ReferenceEqualityComparer.Instance); }
 
     /// <summary>

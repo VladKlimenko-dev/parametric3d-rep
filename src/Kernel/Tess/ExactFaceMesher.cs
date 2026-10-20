@@ -33,6 +33,7 @@ public static partial class ExactFaceMesher
     // одновременно), и общие статические поля путались между собой: тест радиуса кромки падал
     // через раз только в полном наборе.
     [ThreadStatic] public static string? LastGrouping;
+    internal static void ReleaseThreadState() { LastGrouping = null; TwinOf = null; }
 
     /// <summary>Порог уточнения последней грани (диагностика).</summary>
     [ThreadStatic] public static double LastTol;

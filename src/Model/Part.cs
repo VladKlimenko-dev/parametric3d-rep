@@ -680,6 +680,7 @@ public sealed class Part : ModelItem
         return root;
     }
     private int _computing;
+    static readonly bool FeatTrace = Environment.GetEnvironmentVariable("P3D_FEATTRACE") == "1";
     static readonly bool BuildDbg = Environment.GetEnvironmentVariable("P3D_BUILDDBG") == "1";
     private int _removingFeature;
     internal static readonly bool RemoveMissingOff = Environment.GetEnvironmentVariable("P3D_REMOVEMISSING") == "0";
@@ -836,7 +837,7 @@ public sealed class Part : ModelItem
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(inner).Throw();
             throw;
         }
-        finally { Interlocked.Decrement(ref _computing); }
+        finally { Interlocked.Decrement(ref _computing); Kernel.Diagnostics.ThreadState.Release(); }
     }
 
     // K06: то, от чего зависел последний расчёт, кроме самих операций.
@@ -1099,6 +1100,7 @@ public sealed class Part : ModelItem
             if (f.Suppressed) continue;
 
             Kernel.KernelContext.Checkpoint("feature");
+            if (FeatTrace) Console.WriteLine($"FEAT {fi} {f.GetType().Name} {f.Name}");
 
             var before = FaceIds(ctx.Bodies);
 

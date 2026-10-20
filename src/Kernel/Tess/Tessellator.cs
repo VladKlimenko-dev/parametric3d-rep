@@ -27,6 +27,7 @@ public static class Tessellator
     }
 
     [ThreadStatic] private static TSolid? LastSolid;
+    internal static void ReleaseThreadState() { LastSolid = null; }
     [ThreadStatic] private static bool LastFacets;
 
     /// <summary>
