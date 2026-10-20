@@ -60,9 +60,10 @@ if (only == "probe-load")
     long Mem() { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); return GC.GetTotalMemory(true); }
     Console.WriteLine($"PROBE memory start: {Mem() / 1048576.0:0.0} MB");
     var rnd = new Random(11);
-    for (int i = 0; i < 24; i++)
+    int nEdits = int.TryParse(Environment.GetEnvironmentVariable("P3D_PROBEN"), out var pn) ? pn : 24;
+    for (int i = 0; i < nEdits; i++)
     {
-        if (i == 8 || i == 16)
+        if ((i == 8 || i == 16) && nEdits == 24)
         {
             var (p2, _) = DocumentFile.Load(DocumentFile.Save(part, null)); p2.Rebuild(null); part = p2;
             Console.WriteLine($"PROBE memory before reload: {Mem() / 1048576.0:0.0} MB");
@@ -107,6 +108,32 @@ if (only == "probe-load")
         part = null!;
         Console.WriteLine($"PROBE memory without the part: {Mem() / 1048576.0:0.0} MB");
     }
+    return 0;
+}
+
+if (only == "probe-leak")
+{
+    // разбор: держит ли окно детали, заменённые отменой/повтором
+    var s0 = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 12), "leak");
+    var w0 = Open(s0);
+    s0.Document.RebuildDirty();
+    var weak = new List<WeakReference>();
+    var rnd = new Random(5);
+    for (int i = 0; i < 6; i++)
+    {
+        var p = s0.Part!;
+        weak.Add(new WeakReference(p));
+        var e = p.Bodies.SelectMany(b => b.Edges).Where(x => x.Curve is Parametric3D.Kernel.Curves.LineCurve3 && (x.V0.P - x.V1.P).Length > 6).ElementAt(rnd.Next(10));
+        w0.ViewPort.Selection.Select(new PickRef(e.Id, PickKind.Edge, p, null), additive: false);
+        w0.StartOperation(new RoundOp()); Dispatcher.UIThread.RunJobs(); s0.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+        w0.CommitOperation(); s0.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+        weak.Add(new WeakReference(s0.Part));
+        s0.Undo(); s0.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+        s0.Redo(); s0.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+    }
+    w0.ViewPort.Selection.Clear(); Dispatcher.UIThread.RunJobs();
+    for (int k = 0; k < 3; k++) { GC.Collect(); GC.WaitForPendingFinalizers(); }
+    Console.WriteLine($"LEAK parts alive {weak.Count(x => x.IsAlive)} of {weak.Count}; memory {GC.GetTotalMemory(true) / 1048576.0:0.0} MB");
     return 0;
 }
 

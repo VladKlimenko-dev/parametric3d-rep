@@ -726,6 +726,9 @@ public sealed class SelfTest
         string? saved = null;
         try { saved = Path.Combine(Path.GetDirectoryName(ReportPath) ?? ".", $"P3D_load_{_started:yyyyMMdd_HHmmss}.p3d"); File.WriteAllText(saved, DocumentFile.Save(pe, _w.Session.Document.Parameters)); }
         catch { saved = null; }
+        long memCk = Managed(); int nCk = pe.CheckpointCount;
+        pe.ForgetCheckpoints();
+        long memNoCk = Managed();
         await Task.Run(() => { pe.Invalidate(); pe.Rebuild(null); });
         bool same = Math.Abs(pe.Volume - ve) <= 1e-6 * Math.Max(1, ve) && pe.Features.All(f => f.Error == null);
         string sameWhy = same ? "" : $" (объём {pe.Volume:0.###} против {ve:0.###}; ошибки после пересчёта: {string.Join("; ", pe.Features.Where(f => f.Error != null).Select(f => f.Name + " — " + f.Error!.Split('\n')[0][..Math.Min(140, f.Error!.Split('\n')[0].Length)]))})";
@@ -747,6 +750,7 @@ public sealed class SelfTest
         Line($"«Отменить» ×3 и «вернуть» ×3 каждые 10 правок: деталь та же — {undoOk}/{undoTries}");
         foreach (var w in undoWhy) Line("    " + w);
         Line($"Память после сборки мусора: после 10 правок {mem10 / 1048576.0:0.0} МБ, после {N} — {memEnd / 1048576.0:0.0} МБ (рост {growMb:+0.0;-0.0} МБ, допустимо < 64); рабочий набор {ws10:0} → {wsEnd:0} МБ — {(memOk ? "годно" : "РОСТ")}");
+        Line($"    из них сохранённые состояния детали ({nCk}): {(memCk - memNoCk) / 1048576.0:0.0} МБ; без них — {memNoCk / 1048576.0:0.0} МБ");
         if (saved != null) Line($"Деталь сессии сохранена: {saved}");
         Line($"Пересчёт с нуля после сессии: тот же объём — {(same ? "да" : "НЕТ" + sameWhy)}; отмена всех правок вернула исходную деталь — {(back ? "да" : "НЕТ")}; итог — {(ok ? "годно" : "ОШИБКА")}");
     }

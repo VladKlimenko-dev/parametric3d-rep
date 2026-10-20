@@ -29,6 +29,7 @@ public static class PrismBuild
     [ThreadStatic] public static double LastVolume;
     /// <summary>Тело последней сборки до объединения граней (боковые грани — прямоугольные полосы).</summary>
     [ThreadStatic] public static TSolid? LastPreUnify;
+    internal static void ReleaseThreadState() { LastPreUnify = null; LastPreUnifyMap = null; LastProvenance = null; }
     /// <summary>Для каждой грани копии (по порядку) — грань результата, в которую она вошла.</summary>
     [ThreadStatic] public static List<TFace>? LastPreUnifyMap;
     /// <summary>Объёмы операндов последней булевой по слоям (для независимой сверки распознавания).</summary>

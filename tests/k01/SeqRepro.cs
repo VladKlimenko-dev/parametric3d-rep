@@ -34,8 +34,7 @@ static partial class Program
         foreach (var f in part.Features)
             Console.WriteLine($"  {i++,2} {f.GetType().Name,-22} {f.Name,-28} {f.Summary} {(f.Error == null ? "ok" : "ERROR: " + f.Error)}");
         if (Environment.GetEnvironmentVariable("P3D_SEQEDGES") is { Length: > 0 } fe && int.TryParse(fe, out int fi))
-            if (part.Features[fi] is Parametric3D.Model.Features.RoundFeature rf)
-                foreach (var e in rf.Edges) Console.WriteLine($"  ref {e.Start:0.###} -> {e.End:0.###} mid {e.Mid:0.###} faces {e.FaceA} | {e.FaceB}");
+            foreach (var e in (part.Features[fi] as Parametric3D.Model.Features.RoundFeature)?.Edges ?? (part.Features[fi] as Parametric3D.Model.Features.ChamferFeature)?.Edges ?? new()) Console.WriteLine($"  ref {e.Start:0.###} -> {e.End:0.###} mid {e.Mid:0.###} faces {e.FaceA} | {e.FaceB}");
         // согласие сетки показа с телом: треугольники с номером грани лежат на её поверхности
         if (part.Mesh is { } md)
         {

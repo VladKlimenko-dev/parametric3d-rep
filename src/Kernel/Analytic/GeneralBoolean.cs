@@ -229,7 +229,9 @@ public static class GeneralBoolean
     [ThreadStatic] public static Topology.Provenance? LastProvenance;
     [ThreadStatic] static Dictionary<TFace, TFace>? _src;             // грань результата → грань операнда
     [ThreadStatic] static List<(TFace Source, TFace Into)>? _merged;
-    [ThreadStatic] static HashSet<TFace>? _aFaces;                     // грани первого операнда (имя слитой грани — от них)
+    [ThreadStatic] static HashSet<TFace>? _aFaces;
+    /// <summary>Отпустить поточные ссылки на тела последней операции (см. Diagnostics.ThreadState).</summary>
+    internal static void ReleaseThreadState() { _src = null; _merged = null; _aFaces = null; LastProvenance = null; }                     // грани первого операнда (имя слитой грани — от них)
     /// <summary>
     /// ИМЯ СЛИТОЙ ГРАНИ — ОТ ПЕРВОГО ОПЕРАНДА. Совпадающие грани двух операндов (стенка бруска и стенка добавленного выдавливания
     /// в одной плоскости) сливаются в одну; прежде она брала имя той из двух, что раньше шла в списке граней оболочки, — часто

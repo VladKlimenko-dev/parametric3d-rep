@@ -207,7 +207,13 @@ public static class BooleanOp
     }
 
     /// <summary>Последнее тело, отвергнутое проверкой результата (только для разбора отказа).</summary>
-    [ThreadStatic] public static TSolid? LastInvalidResult;
+    /// <summary>Слабая ссылка: тело для разбора не держится в памяти потока (u-нагрузка: до 80 МБ на поток).</summary>
+    public static TSolid? LastInvalidResult
+    {
+        get => _lastInvalid != null && _lastInvalid.TryGetTarget(out var t) ? t : null;
+        set => _lastInvalid = value == null ? null : new WeakReference<TSolid>(value);
+    }
+    [ThreadStatic] static WeakReference<TSolid>? _lastInvalid;
 
     /// <summary>Вид булевой операции для типизированного вызова.</summary>
     public enum BooleanKind { Unite, Subtract, Intersect }
