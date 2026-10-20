@@ -117,6 +117,7 @@ public abstract class Operation
     {
         if (f.Text != null) f.Text.Text = f.Summary;
         FieldChanged();
+        RefreshGizmo();
     }
 
     /// <summary>Поле изменено — перенести в модель и перестроить предпросмотр.</summary>
@@ -172,6 +173,30 @@ public abstract class Operation
     {
         if (DragValue is not { } set) return;
         set(SignedDrag ? Math.Sign(v == 0 ? 1 : v) * Math.Round(Math.Max(0.01, Math.Abs(v)), 2) : Math.Round(Math.Max(0.01, v), 2));
+        if (Dragging)
+        {
+            Panel?.Refresh();
+            if (LivePreview)
+            {
+                try { RequestLive(); }
+                catch (Exception ex) { AppLog.Write("live preview " + Title, ex); }
+            }
+        }
+        else FieldChanged();
+    }
+
+    // ---------------------------------------------------------------- 13:09: гизмо (FreeForm: перенос, поворот, масштаб)
+
+    /// <summary>Поставить / обновить гизмо операции в виде (тела выбраны, деталь посчитана). Без гизмо — ничего.</summary>
+    public virtual void RefreshGizmo() { }
+    /// <summary>Гизмо потянули: начало, накопленное перемещение, отпустили.</summary>
+    public virtual void GizmoStart(Parametric3D.App.Viewport.GizmoPart part) { }
+    public virtual void GizmoMove(Parametric3D.App.Viewport.GizmoDrag d) { }
+    public virtual void GizmoEnd() { }
+
+    /// <summary>Значения от гизмо записаны: во время перетаскивания — живой предпросмотр, иначе — перестроить.</summary>
+    protected void GizmoValuesChanged()
+    {
         if (Dragging)
         {
             Panel?.Refresh();

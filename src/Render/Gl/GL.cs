@@ -98,6 +98,17 @@ public static unsafe class GL
     private static delegate* unmanaged<uint, int, int, int, int, int, uint, uint, void*, void> _texImage2D;
     private static delegate* unmanaged<uint, int, int, int, int, int, uint, uint, void*, void> _texSubImage2D;
 
+    /// <summary>
+    /// ЗАЩИТА ОТ ЧТЕНИЯ ЗА КОНЦОМ МАССИВА (12:28/13:09: AccessViolation в Avalonia.OpenGL, выход 0xC0000409 под Windows):
+    /// размер, переданный в OpenGL вместе с указателем на массив, не больше массива — иначе драйвер читает (или пишет) чужую
+    /// память, и сбой всплывает позже в другом месте. Нарушение — исключение (кадр его ловит и пишет в журнал), а не
+    /// порча памяти.
+    /// </summary>
+    static void Guard(long need, long have, string fn)
+    {
+        if (need < 0 || need > have) throw new InvalidOperationException($"{fn}: {need} elements/bytes requested, the array holds {have}");
+    }
+
     /// <summary>Загрузить адреса функций текущего контекста.</summary>
     public static void Load(Func<string, IntPtr> proc, bool isEs)
     {
@@ -207,11 +218,13 @@ public static unsafe class GL
         _texParameteri(0x0DE1, 0x2800, 0x2600);   // MAG_FILTER = NEAREST
         _texParameteri(0x0DE1, 0x2802, 0x812F);   // WRAP_S = CLAMP_TO_EDGE
         _texParameteri(0x0DE1, 0x2803, 0x812F);   // WRAP_T
+        if (data != null) Guard((long)w * h * 4, data.LongLength, "glTexImage2D");
         if (data == null) _texImage2D(0x0DE1, 0, 0x8058, w, h, 0, 0x1908, 0x1401, null);
         else fixed (byte* p = data) _texImage2D(0x0DE1, 0, 0x8058, w, h, 0, 0x1908, 0x1401, p);
     }
     public static void TexSubImageRgba8(int x, int y, int w, int h, byte[] data, int offset)
     {
+        Guard((long)w * h * 4, data.LongLength - offset, "glTexSubImage2D");
         _pixelStorei(0x0CF5, 1);
         fixed (byte* p = &data[offset]) _texSubImage2D(0x0DE1, 0, x, y, w, h, 0x1908, 0x1401, p);
     }
@@ -236,15 +249,18 @@ public static unsafe class GL
     public static void BufferData(BufferTarget t, int size, IntPtr data, BufferUsageHint u) => _bufferData((uint)t, size, (void*)data, (uint)u);
     public static void BufferData<T>(BufferTarget t, int size, T[] data, BufferUsageHint u) where T : unmanaged
     {
+        Guard(size, (long)data.Length * sizeof(T), "glBufferData");
         fixed (T* p = data) _bufferData((uint)t, size, p, (uint)u);
     }
     public static void BufferSubData(BufferTarget t, IntPtr offset, int size, IntPtr data) => _bufferSubData((uint)t, offset, size, (void*)data);
     public static void BufferSubData<T>(BufferTarget t, IntPtr offset, int size, T[] data) where T : unmanaged
     {
+        Guard(size, (long)data.Length * sizeof(T), "glBufferSubData");
         fixed (T* p = data) _bufferSubData((uint)t, offset, size, p);
     }
     public static void BufferSubData<T>(BufferTarget t, IntPtr offset, int size, ref T data) where T : unmanaged
     {
+        Guard(size, sizeof(T), "glBufferSubData");
         fixed (T* p = &data) _bufferSubData((uint)t, offset, size, p);
     }
 
@@ -299,6 +315,7 @@ public static unsafe class GL
     /// <summary>Пиксели RGBA8 (снизу вверх, как в OpenGL).</summary>
     public static void ReadPixelsRgba(int x, int y, int w, int h, byte[] dst)
     {
+        Guard((long)w * h * 4, dst.LongLength, "glReadPixels");
         fixed (byte* p = dst) _readPixels(x, y, w, h, 0x1908, 0x1401, p);
     }
 
@@ -356,9 +373,9 @@ public static unsafe class GL
     public static void Uniform2(int l, Vector2 v) => _uniform2f(l, v.X, v.Y);
     public static void Uniform3(int l, Vector3 v) => _uniform3f(l, v.X, v.Y, v.Z);
     public static void Uniform4(int l, Vector4 v) => _uniform4f(l, v.X, v.Y, v.Z, v.W);
-    public static void Uniform1(int l, int count, float[] v) { fixed (float* p = v) _uniform1fv(l, count, p); }
-    public static void Uniform1(int l, int count, int[] v) { fixed (int* p = v) _uniform1iv(l, count, p); }
-    public static void Uniform4(int l, int count, float[] v) { fixed (float* p = v) _uniform4fv(l, count, p); }
+    public static void Uniform1(int l, int count, float[] v) { Guard(count, v.Length, "glUniform1fv"); fixed (float* p = v) _uniform1fv(l, count, p); }
+    public static void Uniform1(int l, int count, int[] v) { Guard(count, v.Length, "glUniform1iv"); fixed (int* p = v) _uniform1iv(l, count, p); }
+    public static void Uniform4(int l, int count, float[] v) { Guard(4L * count, v.Length, "glUniform4fv"); fixed (float* p = v) _uniform4fv(l, count, p); }
     public static void UniformMatrix4(int l, bool transpose, ref Matrix4 m)
     {
         fixed (Matrix4* p = &m) _uniformMatrix4fv(l, 1, (byte)(transpose ? 1 : 0), (float*)p);

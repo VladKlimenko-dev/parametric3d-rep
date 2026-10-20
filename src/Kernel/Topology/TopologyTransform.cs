@@ -49,16 +49,70 @@ public static class TopologyTransform
 
     public static TSolid? Apply(TSolid src, TransformOp.Xform x) => Apply(src, x, 1.0);
 
-    static TSolid? Apply(TSolid src, TransformOp.Xform x, double k)
+    /// <summary>
+    /// 13:09 (FreeForm, масштаб гизмо по осям): МАСШТАБ ПО ОСЯМ — свой коэффициент вдоль каждой оси рамки (u, v, w —
+    /// ортонормированные) от точки c. Точно переносятся: отрезки, дуги и эллипсы (дуга становится дугой эллипса — главные
+    /// оси по сопряжённым полудиаметрам), сплайны и NURBS (по управляющим точкам), плоскости, поверхности выдавливания
+    /// перенесённой кривой; цилиндр и поверхность вращения — если ось вдоль одной из осей рамки, а поперёк масштаб один.
+    /// Иначе (шар, тор, косой цилиндр…) — null: вызывающий берёт перенос по треугольникам. Равные коэффициенты — Scaled.
+    /// </summary>
+    public static TSolid? ScaledAxes(TSolid src, Vector3d c, Vector3d u, Vector3d v, Vector3d w, double sx, double sy, double sz)
     {
-        bool scaled = Math.Abs(k - 1) > 1e-15;
+        if (!(sx > 1e-9 && sy > 1e-9 && sz > 1e-9) || !double.IsFinite(sx + sy + sz)) return null;
+        if (Math.Abs(sx - sy) < 1e-15 && Math.Abs(sy - sz) < 1e-15) return Scaled(src, c, sx);
+        u = u.Normalized(); v = v.Normalized(); w = w.Normalized();
+        Vector3d L(Vector3d d) => u * (sx * Vector3d.Dot(u, d)) + v * (sy * Vector3d.Dot(v, d)) + w * (sz * Vector3d.Dot(w, d));
+        var x = new TransformOp.Xform(p => c + L(p - c), L, false);
+        return Apply(src, x, 1.0, (u, v, w, sx, sy, sz));
+    }
+
+    /// <summary>Эллипс по центру и сопряжённым полудиаметрам a, b (точка: c + a·cos t + b·sin t) на углах [t0, t1].</summary>
+    static ICurve3 EllipseConjugate(Vector3d c, Vector3d a, Vector3d b, double t0, double t1)
+    {
+        double ab = Vector3d.Dot(a, b), aa = a.LengthSquared, bb = b.LengthSquared;
+        double th = 0.5 * Math.Atan2(2 * ab, aa - bb);
+        var e1 = a * Math.Cos(th) + b * Math.Sin(th);
+        var e2 = -a * Math.Sin(th) + b * Math.Cos(th);
+        double r1 = e1.Length, r2 = e2.Length;
+        var f = new Frame3(c, e1 / r1, e2 / r2);
+        // знак второй оси рамки: Frame3 строит V = W × U — совпадает с e2 (e2 ⟂ e1); при необходимости — обратный обход
+        double sgn = Vector3d.Dot(f.V, e2) >= 0 ? 1 : -1;
+        if (Math.Abs(r1 - r2) <= 1e-12 * Math.Max(r1, r2)) return new ArcCurve3(f, r1, sgn * (t0 - th), sgn * (t1 - th));
+        return new EllipseCurve3(f, r1, r2, sgn * (t0 - th), sgn * (t1 - th));
+    }
+
+    static TSolid? Apply(TSolid src, TransformOp.Xform x, double k, (Vector3d U, Vector3d V, Vector3d W, double Sx, double Sy, double Sz)? axes = null)
+    {
+        bool scaled = Math.Abs(k - 1) > 1e-15 || axes != null;
+        bool affine = axes != null;
+        // ось вдоль оси рамки и поперёк один коэффициент — коэффициент поперёк; иначе null
+        double? CrossScale(Vector3d dir)
+        {
+            var a = axes!.Value; dir = dir.Normalized();
+            if (Math.Abs(Math.Abs(Vector3d.Dot(dir, a.U)) - 1) < 1e-12 && Math.Abs(a.Sy - a.Sz) < 1e-15) return a.Sy;
+            if (Math.Abs(Math.Abs(Vector3d.Dot(dir, a.V)) - 1) < 1e-12 && Math.Abs(a.Sx - a.Sz) < 1e-15) return a.Sx;
+            if (Math.Abs(Math.Abs(Vector3d.Dot(dir, a.W)) - 1) < 1e-12 && Math.Abs(a.Sx - a.Sy) < 1e-15) return a.Sx;
+            return null;
+        }
+        Frame3 PlaneFrame(Frame3 f)
+        {
+            var uu = x.Direction(f.U); var vv = x.Direction(f.V);
+            return new Frame3(x.Point(f.Origin), uu, vv);
+        }
         if (src.Exact != null && src.ExactAuthoritative) return null;     // рациональная многогранная форма не поворачивается точно
         var curves = new Dictionary<ICurve3, ICurve3>(ReferenceEqualityComparer.Instance);
         var surfs = new Dictionary<ISurface3, ISurface3>(ReferenceEqualityComparer.Instance);
         ICurve3? C(ICurve3 c)
         {
             if (curves.TryGetValue(c, out var m)) return m;
-            ICurve3? r = c switch
+            ICurve3? r = affine ? c switch
+            {
+                LineCurve3 l => new LineCurve3(x.Point(l.A), x.Point(l.B)),
+                ArcCurve3 a => EllipseConjugate(x.Point(a.Frame.Origin), x.Direction(a.Frame.U * a.Radius), x.Direction(a.Frame.V * a.Radius), a.A0, a.A1),
+                EllipseCurve3 e => EllipseConjugate(x.Point(e.Frame.Origin), x.Direction(e.Frame.U * e.RU), x.Direction(e.Frame.V * e.RV), e.A0, e.A1),
+                SplineCurve3 sp => new SplineCurve3(sp.ControlPoints.Select(x.Point).ToList(), sp.Degree, sp.Weights, sp.Knots),
+                _ => null
+            } : c switch
             {
                 LineCurve3 l => new LineCurve3(x.Point(l.A), x.Point(l.B)),
                 ArcCurve3 a => new ArcCurve3(Frame(a.Frame, x), a.Radius * k, x.Flips ? -a.A0 : a.A0, x.Flips ? -a.A1 : a.A1),
@@ -79,7 +133,15 @@ public static class TopologyTransform
         {
             if (s == null) return null;
             if (surfs.TryGetValue(s, out var m)) return m;
-            ISurface3? r = s switch
+            ISurface3? r = affine ? s switch
+            {
+                PlaneSurface pl => new PlaneSurface(PlaneFrame(pl.F)),
+                ExtrudedSurface ex when C(ex.Base) is { } b => new ExtrudedSurface(b, x.Direction(ex.Dir)),
+                CylinderSurface cs when CrossScale(cs.Axis.W) is { } q => new CylinderSurface(Frame(cs.Axis, x), cs.Radius * q),
+                RevolvedSurface rv when CrossScale(rv.Axis.W) is not null && C(rv.Base) is { } b => new RevolvedSurface(b, Frame(rv.Axis, x), rv.A0, rv.A1),
+                NurbsSurface ns when !NurbsXformOff => ns.Mapped(x.Point),
+                _ => null
+            } : s switch
             {
                 PlaneSurface pl => new PlaneSurface(Frame(pl.F, x)),
                 ExtrudedSurface ex when C(ex.Base) is { } b => new ExtrudedSurface(b, x.Direction(ex.Dir)),
@@ -148,7 +210,7 @@ public static class TopologyTransform
                     foreach (var ce in l.CoEdges.ToList()) { ce.Edge.CoEdges.Remove(ce); l.CoEdges.Remove(ce); }
                     for (int i = items.Count - 1; i >= 0; i--) l.Add(items[i].Edge, !items[i].Reversed);
                 }
-            if (x.Flips) foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) { ce.PCurve = null; ce.PCurveDeviation = 0; }
+            if (x.Flips || affine) foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) { ce.PCurve = null; ce.PCurveDeviation = 0; }
         }
         // сторона грани: нормаль копии — как перенесённая наружная нормаль оригинала
         var dstFaces = dst.Faces.ToList();

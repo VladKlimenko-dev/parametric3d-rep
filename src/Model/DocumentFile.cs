@@ -509,6 +509,12 @@ public static class DocumentFile
             PutS(d, "mode", ft.Mode.ToString()); d.Sources = ft.BodyNames.ToList();
             PutV(d, "dx", ft.Dx); PutV(d, "dy", ft.Dy); PutV(d, "dz", ft.Dz); PutV(d, "angle", ft.Angle); PutV(d, "factor", ft.Factor);
             d.Point = V3(ft.AxisAt); d.Dir = V3(ft.AxisDir); if (ft.Copy) Flag(d, "copy");
+            // 13:09: масштаб по осям и рамка операции (глобальная — не пишется)
+            if (ft.Sx.Value != 1 || ft.Sx.Formula != null) PutV(d, "sx", ft.Sx);
+            if (ft.Sy.Value != 1 || ft.Sy.Formula != null) PutV(d, "sy", ft.Sy);
+            if (ft.Sz.Value != 1 || ft.Sz.Formula != null) PutV(d, "sz", ft.Sz);
+            if ((ft.FrameX - Vector3d.UnitX).Length > 1e-15 || (ft.FrameY - Vector3d.UnitY).Length > 1e-15)
+                d.ThickFaces = new List<double> { ft.FrameX.X, ft.FrameX.Y, ft.FrameX.Z, ft.FrameY.X, ft.FrameY.Y, ft.FrameY.Z };
         }),
         FFSplitFeature fs => Dto("ff_split", fs, d => { PutS(d, "body", fs.Body); d.Point = V3(fs.PlaneAt); d.Dir = V3(fs.Normal); }),
         FFMirrorFeature fm => Dto("ff_mirror", fm, d => { PutS(d, "mode", fm.Mode.ToString()); d.Sources = fm.BodyNames.ToList(); d.Point = V3(fm.PlaneAt); d.Dir = V3(fm.Normal); }),
@@ -1002,6 +1008,8 @@ public static class DocumentFile
                 {
                     var ft = new FFTransformFeature(fd.Name) { Suppressed = fd.Suppressed, Dx = GetV(fd, "dx", 0), Dy = GetV(fd, "dy", 0), Dz = GetV(fd, "dz", 0), Angle = GetV(fd, "angle", 0), Factor = GetV(fd, "factor", 1), AxisAt = Vec(fd.Point), AxisDir = Vec(fd.Dir), Copy = HasFlag(fd, "copy") };
                     if (Enum.TryParse<FFXform>(GetS(fd, "mode"), out var xm)) ft.Mode = xm;
+                    ft.Sx = GetV(fd, "sx", 1); ft.Sy = GetV(fd, "sy", 1); ft.Sz = GetV(fd, "sz", 1);
+                    if (fd.ThickFaces is { Count: 6 } fr) { ft.FrameX = new Vector3d(fr[0], fr[1], fr[2]); ft.FrameY = new Vector3d(fr[3], fr[4], fr[5]); }
                     if (fd.Sources != null) ft.BodyNames.AddRange(fd.Sources);
                     part.AddFeature(ft);
                     break;

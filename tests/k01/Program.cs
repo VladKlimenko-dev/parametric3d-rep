@@ -523,6 +523,7 @@ static partial class Program
         if (mode is "adopt" or "allA") AdoptChecks();
         if (mode is "memrelease" or "allA") MemReleaseChecks();
         if (mode is "coplanartool" or "allA") CoplanarToolChecks();
+        if (mode is "scaleaxes" or "allA") ScaleAxesChecks();
         if (mode is "krn05probe") Krn05OverlayProbe();
         if (mode is "loadrebuild") { LoadRebuild(args[1]); return; }
         if (mode is "provall" or "allA") ProvenanceAllOpsChecks();

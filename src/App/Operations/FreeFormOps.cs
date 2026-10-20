@@ -201,17 +201,17 @@ public sealed class FFTransformOp : FeatureOp<FFTransformFeature>
     public FFXform Mode;
     private RefField _bodies = null!, _axis = null!, _center = null!;
     private readonly BodyNameCache _names = new();
+    /// <summary>13:09: переключатель Local / Global (команда ff.xform_local): оси гизмо — рамка тела или оси детали.</summary>
+    public static bool Local;
     public FFTransformOp(FFTransformFeature? existing = null) : base(existing) { if (existing != null) Mode = existing.Mode; }
     public override string Title => Mode switch { FFXform.Rotate => "Поворот тел", FFXform.Scale => "Масштаб тел", _ => "Перенос тел" };
     public override string Icon => Mode switch { FFXform.Rotate => "ff_rotate_but.svg", FFXform.Scale => "ff_scale_but.svg", _ => "ff_move_but.svg" };
     protected override FFTransformFeature Create()
     {
+        // 13:09: операция открывается тождественной (сдвиг 0, угол 0, масштаб 1) — тело тянут гизмо или вводят числа;
+        // тождество без копии тело не меняет (FFTransformFeature.IdentityPass)
         var fr = FFPlane.Of(Part);
-        var f = new FFTransformFeature { Mode = Mode, AxisAt = fr.Origin, AxisDir = fr.W };
-        if (Mode == FFXform.Move) f.Dx = new(20);
-        if (Mode == FFXform.Rotate) f.Angle = new(45);
-        if (Mode == FFXform.Scale) f.Factor = new(1.5);
-        return f;
+        return new FFTransformFeature { Mode = Mode, AxisAt = fr.Origin, AxisDir = fr.W };
     }
 
     public override void Build(OpPanel p)
@@ -230,6 +230,9 @@ public sealed class FFTransformOp : FeatureOp<FFTransformFeature>
                 _center = p.Ref(FFFields.Point("Центр (иначе — начало плоскости построения)"));
                 if (Editing) _center.Kept = 1;
                 p.Number("Коэффициент", () => F.Factor, v => F.Factor = v, "");
+                p.Number("По оси X", () => F.Sx, v => F.Sx = v, "");
+                p.Number("По оси Y", () => F.Sy, v => F.Sy = v, "");
+                p.Number("По оси Z", () => F.Sz, v => F.Sz = v, "");
                 break;
             default:
                 p.Number("Сдвиг X", () => F.Dx, v => F.Dx = v);
@@ -238,6 +241,7 @@ public sealed class FFTransformOp : FeatureOp<FFTransformFeature>
                 break;
         }
         p.Check("Копия (новое тело)", () => F.Copy, v => F.Copy = v);
+        p.Note("Гизмо: оси, плоскости" + (Mode == FFXform.Scale ? ", угол — пропорционально; SHIFT — в обе стороны от центра, CTRL — сохраняя пропорции." : Mode == FFXform.Rotate ? " — кольца; CTRL — шаг 15°." : ", центр — свободно в плоскости вида."));
     }
 
     protected override void SeedRefs() => Seed(_bodies, _axis, _center);
@@ -253,8 +257,177 @@ public sealed class FFTransformOp : FeatureOp<FFTransformFeature>
     protected override void Push()
     {
         if (_bodies.Touched) { F.BodyNames.Clear(); F.BodyNames.AddRange(_names.Resolve(_bodies)); }
-        if (_axis.Touched && _axis.Items.Count > 0 && Refs.LineOf(_axis.Items[0]) is { } ln) { F.AxisAt = ln.At; F.AxisDir = ln.Dir; }
+        if (_axis.Touched && _axis.Items.Count > 0 && Refs.LineOf(_axis.Items[0]) is { } ln) { F.AxisAt = ln.At; F.AxisDir = ln.Dir; _pivotFixed = true; }
         if (_center.Touched && _center.Items.Count > 0 && Refs.PointOf(_center.Items[0]) is { } c) F.AxisAt = c;
+    }
+
+    // ---------------------------------------------------------------- 13:09: гизмо
+
+    private bool _pivotFixed;
+
+    /// <summary>Показанные тела операции (по именам, последний расчёт детали).</summary>
+    private List<Parametric3D.Kernel.Topology.TSolid> ShownBodies()
+    {
+        var res = new List<Parametric3D.Kernel.Topology.TSolid>();
+        for (int i = 0; i < Part.Bodies.Count; i++)
+            if (F.BodyNames.Contains(Part.BodyName(i))) res.Add(Part.Bodies[i]);
+        return res;
+    }
+
+    private static bool Same(Vector3d a, Vector3d b) => (a.Normalized() - b.Normalized()).Length < 1e-9;
+
+    public override void RefreshGizmo()
+    {
+        if (F == null || F.BodyNames.Count == 0) { W.ViewPort.Gizmo = null; return; }
+        var bodies = ShownBodies();
+        if (bodies.Count == 0) { W.ViewPort.Gizmo = null; return; }
+        var (X, Y, Z) = Local ? FreeFormExec.LocalFrame(bodies[0]) : (Vector3d.UnitX, Vector3d.UnitY, Vector3d.UnitZ);
+        if (Mode == FFXform.Move)
+        {
+            // сдвиг сохраняется в мире; числа — по осям новой рамки
+            if (!Same(X, F.FrameX) || !Same(Y, F.FrameY))
+            {
+                var w = F.FrameX.Normalized() * F.Dx.Value + F.FrameY.Normalized() * F.Dy.Value + F.FrameZ * F.Dz.Value;
+                F.FrameX = X; F.FrameY = Y;
+                F.Dx = new ValueRef(Math.Round(Vector3d.Dot(w, X), 4)); F.Dy = new ValueRef(Math.Round(Vector3d.Dot(w, Y), 4)); F.Dz = new ValueRef(Math.Round(Vector3d.Dot(w, F.FrameZ), 4));
+                Panel?.Refresh();
+            }
+        }
+        else if (Mode == FFXform.Scale)
+        {
+            bool axesSet = Math.Abs(F.Sx.Value - 1) > 1e-12 || Math.Abs(F.Sy.Value - 1) > 1e-12 || Math.Abs(F.Sz.Value - 1) > 1e-12;
+            if (!Same(X, F.FrameX) || !Same(Y, F.FrameY))
+            {
+                // масштаб по осям уже задан в прежней рамке — рамка остаётся (иначе тело изменилось бы)
+                if (axesSet) { X = F.FrameX.Normalized(); Z = F.FrameZ; Y = Vector3d.Cross(Z, X); }
+                else { F.FrameX = X; F.FrameY = Y; }
+            }
+        }
+        Vector3d origin;
+        if (Mode == FFXform.Rotate && (Math.Abs(F.Angle.Value) > 1e-12 || _pivotFixed)) origin = F.AxisAt;
+        else
+        {
+            if (FreeFormExec.BoundsIn(bodies, X, Y, Z) is not { } bb) { W.ViewPort.Gizmo = null; return; }
+            var c = (bb.Min + bb.Max) * 0.5;
+            origin = X * c.X + Y * c.Y + Z * c.Z;
+            if (Mode == FFXform.Rotate) F.AxisAt = origin;   // поворот вокруг середины тела
+        }
+        W.ShowHint(null);
+        W.ViewPort.Gizmo = new GizmoSpec(Mode switch { FFXform.Rotate => GizmoMode.Rotate, FFXform.Scale => GizmoMode.Scale, _ => GizmoMode.Move }, origin, X, Y, Z);
+    }
+
+    private GizmoSpec? _g0;
+    private double _dx0, _dy0, _dz0, _ang0;
+    private Vector3d _s0, _a0, _bbMin, _bbMax, _dir0;
+
+    public override void GizmoStart(GizmoPart part)
+    {
+        _g0 = W.ViewPort.Gizmo;
+                _dx0 = F.Dx.Value; _dy0 = F.Dy.Value; _dz0 = F.Dz.Value;
+        _ang0 = F.Angle.Value; _dir0 = F.AxisDir;
+        double k = F.Factor.Value;
+        _s0 = new Vector3d(k * F.Sx.Value, k * F.Sy.Value, k * F.Sz.Value);
+        if (_g0 is { } g)
+        {
+            _a0 = new Vector3d(Vector3d.Dot(F.AxisAt, g.X), Vector3d.Dot(F.AxisAt, g.Y), Vector3d.Dot(F.AxisAt, g.Z));
+            if (FreeFormExec.BoundsIn(ShownBodies(), g.X, g.Y, g.Z) is { } bb) { _bbMin = bb.Min; _bbMax = bb.Max; }
+        }
+    }
+
+    public override void GizmoMove(GizmoDrag d)
+    {
+        if (_g0 is not { } g) return;
+        switch (Mode)
+        {
+            case FFXform.Move:
+            {
+                F.Dx = new ValueRef(Math.Round(_dx0 + d.Delta.X, 3)); F.Dy = new ValueRef(Math.Round(_dy0 + d.Delta.Y, 3)); F.Dz = new ValueRef(Math.Round(_dz0 + d.Delta.Z, 3));
+                W.ViewPort.Gizmo = g with { Origin = g.Origin + g.X * d.Delta.X + g.Y * d.Delta.Y + g.Z * d.Delta.Z };
+                break;
+            }
+            case FFXform.Rotate:
+            {
+                if (d.Part is < GizmoPart.AxisX or > GizmoPart.AxisZ) return;
+                var axis = d.Part == GizmoPart.AxisX ? g.X : d.Part == GizmoPart.AxisY ? g.Y : g.Z;
+                var (dir, ang) = ComposeRotation(_dir0, _ang0, axis, d.AngleDeg);
+                F.AxisDir = dir; F.Angle = new ValueRef(Math.Round(ang, 3)); F.AxisAt = g.Origin;
+                break;
+            }
+            case FFXform.Scale:
+            {
+                var (s, c, center) = ScaleFromDrag(d, _s0, _a0, _bbMin, _bbMax);
+                F.Factor = new ValueRef(1);
+                F.Sx = new ValueRef(s.X); F.Sy = new ValueRef(s.Y); F.Sz = new ValueRef(s.Z);
+                F.AxisAt = g.X * c.X + g.Y * c.Y + g.Z * c.Z;
+                W.ViewPort.Gizmo = g with { Origin = g.X * center.X + g.Y * center.Y + g.Z * center.Z };
+                break;
+            }
+        }
+        GizmoValuesChanged();
+    }
+
+    public override void GizmoEnd() => _g0 = null;
+
+    /// <summary>Поворот (dir0, deg0), затем поворот вокруг axis на deg (оси через одну точку): одна ось и угол (−180…180].</summary>
+    public static (Vector3d Dir, double Deg) ComposeRotation(Vector3d dir0, double deg0, Vector3d axis, double deg)
+    {
+        static (double W, Vector3d V) Q(Vector3d k, double degs) { double h = degs * Math.PI / 360; return (Math.Cos(h), k.Normalized() * Math.Sin(h)); }
+        var q1 = Q(dir0.LengthSquared > 1e-18 ? dir0 : Vector3d.UnitZ, deg0);
+        var q2 = Q(axis, deg);
+        // q = q2 · q1 (сначала q1)
+        double w = q2.W * q1.W - Vector3d.Dot(q2.V, q1.V);
+        var v = q1.V * q2.W + q2.V * q1.W + Vector3d.Cross(q2.V, q1.V);
+        if (w < 0) { w = -w; v = -v; }
+        double sn = v.Length;
+        if (sn < 1e-12) return (dir0, 0);
+        double a = 2 * Math.Atan2(sn, w) * 180 / Math.PI;
+        return (v / sn, a);
+    }
+
+    /// <summary>
+    /// Масштаб от гизмо (в осях рамки): s0 — масштаб до перетаскивания, a0 — его центр, [bbMin, bbMax] — габарит показанного
+    /// тела. Ось / плоскость — по своим осям: без SHIFT тянется сторона под курсором (противоположная стоит), с SHIFT —
+    /// в обе стороны от середины; CTRL — все оси одинаково (пропорции). Угол — пропорционально по диагонали габарита.
+    /// Новый масштаб складывается с прежним в один: s = t·s0, центр C из b(1−t) + t·a0(1−s0) = C(1 − t·s0).
+    /// Возвращает масштаб, центр и новую середину габарита.
+    /// </summary>
+    public static (Vector3d S, Vector3d C, Vector3d Center) ScaleFromDrag(GizmoDrag d, Vector3d s0, Vector3d a0, Vector3d bbMin, Vector3d bbMax)
+    {
+        bool shift = d.Mods.HasFlag(Avalonia.Input.KeyModifiers.Shift), ctrl = d.Mods.HasFlag(Avalonia.Input.KeyModifiers.Control);
+        var e = bbMax - bbMin;
+        var mid = (bbMin + bbMax) * 0.5;
+        double[] t = { 1, 1, 1 }, b = { mid.X, mid.Y, mid.Z };
+        double[] dd = { d.Delta.X, d.Delta.Y, d.Delta.Z }, ee = { Math.Max(e.X, 1e-6), Math.Max(e.Y, 1e-6), Math.Max(e.Z, 1e-6) }, mn = { bbMin.X, bbMin.Y, bbMin.Z };
+        double k = shift ? 2 : 1;
+        var axes = new List<int>();
+        if (d.Part is >= GizmoPart.AxisX and <= GizmoPart.AxisZ) axes.Add((int)d.Part);
+        else if (d.Part is >= GizmoPart.PlaneYZ and <= GizmoPart.PlaneXY) { int n = (int)d.Part - 3; axes.Add((n + 1) % 3); axes.Add((n + 2) % 3); }
+        if (d.Part == GizmoPart.Uniform)
+        {
+            double along = (d.Delta.X + d.Delta.Y + d.Delta.Z) / Math.Sqrt(3);
+            double tt = Math.Max(0.02, 1 + k * along / Math.Max(e.Length, 1e-6));
+            for (int i = 0; i < 3; i++) { t[i] = tt; b[i] = shift ? b[i] : mn[i]; }
+        }
+        else
+        {
+            foreach (int i in axes) { t[i] = Math.Max(0.02, 1 + k * dd[i] / ee[i]); if (!shift) b[i] = mn[i]; }
+            if (ctrl && axes.Count > 0)
+            {
+                double tt = axes.Select(i => t[i]).OrderByDescending(x => Math.Abs(x - 1)).First();
+                for (int i = 0; i < 3; i++) t[i] = tt;
+            }
+        }
+        double[] s0a = { s0.X, s0.Y, s0.Z }, a0a = { a0.X, a0.Y, a0.Z };
+        var S = new double[3]; var C = new double[3]; var M = new double[3];
+        for (int i = 0; i < 3; i++)
+        {
+            S[i] = Math.Round(t[i] * s0a[i], 4);
+            double ti = S[i] / s0a[i];
+            double den = 1 - S[i];
+            C[i] = Math.Abs(den) > 1e-9 ? (b[i] * (1 - ti) + ti * a0a[i] * (1 - s0a[i])) / den : a0a[i];
+            M[i] = b[i] + ti * (new[] { mid.X, mid.Y, mid.Z }[i] - b[i]);
+        }
+        return (new Vector3d(S[0], S[1], S[2]), new Vector3d(C[0], C[1], C[2]), new Vector3d(M[0], M[1], M[2]));
     }
 }
 

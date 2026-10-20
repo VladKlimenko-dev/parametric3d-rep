@@ -438,7 +438,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
 
     // ================================================================ мышь
 
-    private enum Drag { None, Orbit, Pan, RightPending, Select, Tool, Handle, Dim, SketchGeom }
+    private enum Drag { None, Orbit, Pan, RightPending, Select, Tool, Handle, Dim, SketchGeom, Gizmo }
     private Drag _drag;
     private Point _last, _down;
 
@@ -456,8 +456,9 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         var props = pt.Properties;
         if (props.IsMiddleButtonPressed) _drag = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? Drag.Pan : Drag.Orbit;
         else if (props.IsRightButtonPressed) _drag = Drag.RightPending;
-        else if (props.IsLeftButtonPressed) _drag = Tool != null ? Drag.Tool : HandleHit(pt.Position) != 0 ? Drag.Handle : Drag.Select;
+        else if (props.IsLeftButtonPressed) _drag = Tool != null ? Drag.Tool : HandleHit(pt.Position) != 0 ? Drag.Handle : GizmoHit(pt.Position) != GizmoPart.None ? Drag.Gizmo : Drag.Select;
         if (_drag == Drag.Handle) BeginHandleDrag(pt.Position);
+        else if (_drag == Drag.Gizmo) BeginGizmoDrag(pt.Position, GizmoHit(pt.Position));
         // u12 (замечание 17): подпись размера эскиза тащится мышью (двойной щелчок — правка значения, ниже)
         else if (props.IsLeftButtonPressed && e.ClickCount < 2 && ActiveSketch != null && BeginDimensionDrag(pt.Position)) _drag = Drag.Dim;
         // п. 6: свободные вершины и фигуры эскиза тащатся мышью (без инструмента)
@@ -479,6 +480,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
             case Drag.Orbit: Camera.Orbit(dx, dy); _last = p; CameraChanged?.Invoke(); Redraw(); return;
             case Drag.Pan: Camera.Pan(dx, dy); _last = p; Redraw(); return;
             case Drag.Handle: HandleDragMove(p); return;
+            case Drag.Gizmo: GizmoDragMove(p, e.KeyModifiers); return;
             case Drag.Dim: DimensionDragMove(p); return;
             case Drag.SketchGeom: SketchDragMove(p); return;
             case Drag.RightPending:
@@ -487,6 +489,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         }
         if (ComponentDragMove(p)) return;
         if (RegionMove(p)) return;
+        if (_drag == Drag.None && UpdateGizmoHover(p)) return;
         if (Tool != null) ToolMove(p);
         if (ActiveSketch != null) UpdateDimensionHover(p);
         RequestPick(p, click: false, KeyModifiers.None);
@@ -500,6 +503,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         _drag = Drag.None;
         e.Pointer.Capture(null);
         if (was == Drag.Handle) { EndHandleDrag(); return; }
+        if (was == Drag.Gizmo) { EndGizmoDrag(); return; }
         if (was == Drag.Dim) { if (!EndDimensionDrag()) RequestPick(p, click: true, e.KeyModifiers); return; }
         if (was == Drag.SketchGeom) { if (!EndSketchDrag()) RequestPick(p, click: true, e.KeyModifiers); return; }
         if (was == Drag.RightPending && Tool != null) ToolFinish();

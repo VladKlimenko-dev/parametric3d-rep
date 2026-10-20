@@ -54,6 +54,18 @@ public static class FreeFormCommands
         Op("ff.move", "Перенос тел", "Перенос", "ff_move_but.svg", () => new FFTransformOp { Mode = FFXform.Move }, "move translate gizmo перенос сдвиг");
         Op("ff.rotate", "Поворот тел", "Поворот", "ff_rotate_but.svg", () => new FFTransformOp { Mode = FFXform.Rotate }, "rotate gizmo поворот вращать");
         Op("ff.scale", "Масштаб тел", "Масштаб", "ff_scale_but.svg", () => new FFTransformOp { Mode = FFXform.Scale }, "scale gizmo масштаб");
+        // 13:09: переключатель Local / Global — оси гизмо переноса, поворота и масштаба: рамка тела или оси детали
+        r.Add(new AppCommand { Id = "ff.xform_local", Label = "Оси гизмо: тела (Local) / детали (Global)", Short = "Local / Global", Group = G,
+            Synonyms = "local global gizmo frame coordinates локальные глобальные оси координаты",
+            IconOf = () => FFTransformOp.Local ? "ff_xform_local_but.svg" : "ff_xform_global_but.svg",
+            IsChecked = () => FFTransformOp.Local, CanRun = FF,
+            Run = () =>
+            {
+                FFTransformOp.Local = !FFTransformOp.Local;
+                try { w.CurrentOperation?.RefreshGizmo(); w.CurrentOperation?.FieldChanged(); } catch (Exception ex) { Parametric3D.Core.AppLog.Write("gizmo frame", ex); }
+                w.ShowToast(FFTransformOp.Local ? L("Оси гизмо — локальные (тела)") : L("Оси гизмо — глобальные (детали)"));
+                w.RefreshToolStates();
+            } });
 
         Op("ff.push_pull", "Вытянуть грань", "Push-pull", "ff_push_pull_but.svg", () => new FaceEditOp { MoveFace = true }, "push pull offset face вытянуть сместить грань");
         Op("ff.align_face", "Выровнять грань", "Выровнять", "ff_align_face_but.svg", () => new FFAlignFaceOp(), "align face coplanar выровнять грань");

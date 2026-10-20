@@ -8,6 +8,13 @@ internal static class Program
     public static void Main(string[] args)
     {
         AppStartup.Args = args;
+        // АВАРИЙНОЕ ЗАВЕРШЕНИЕ (13:09: выход 0xC0000409 — необработанное исключение вне потока окна): полный текст
+        // исключения с трассой — в журнал приложения до завершения процесса
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            try { Core.AppLog.Write($"FATAL unhandled exception (terminating {e.IsTerminating}) on thread {Environment.CurrentManagedThreadId} «{System.Threading.Thread.CurrentThread.Name}»", e.ExceptionObject as Exception); } catch { }
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) => { try { Core.AppLog.Write("unobserved task exception", e.Exception); e.SetObserved(); } catch { } };
         // проверка: шейдеры в виде для OpenGL ES 3 (ANGLE) — в папку, без окна
         if (AppStartup.Arg("--dump-shaders") is { } dir)
         {
