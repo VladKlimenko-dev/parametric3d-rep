@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Topology;
@@ -20,7 +20,7 @@ namespace Parametric3D.Kernel.Tess;
 /// </summary>
 public static class UvMesher
 {
-    public static Action<string>? Debug;
+    public static Action<string>? Debug = Environment.GetEnvironmentVariable("P3D_UVDBG") == "1" ? m => Console.Error.WriteLine("UV " + m) : null;
     /// <summary>KRN-03: сколько раз полюс шапки выбран по обходу края / не удалось решить.</summary>
     public static int PolePicksByLoop, PoleUndecided, PoleCutsMoved;
     /// <summary>KRN-03: разрез к полюсу от ближайшей к полюсу точки края (P3D_POLECUT=0 — от начала края, для мутации).</summary>
@@ -37,6 +37,10 @@ public static class UvMesher
     internal static readonly bool StraightSquashOff = Environment.GetEnvironmentVariable("P3D_UVSTRAIGHT") == "0";
     internal static readonly bool DivergeOff = Environment.GetEnvironmentVariable("P3D_UVDIVERGE") == "0";
     internal static readonly bool UnsquashOff = Environment.GetEnvironmentVariable("P3D_UVUNSQUASH") == "0";
+    static readonly bool RimGridOff = Environment.GetEnvironmentVariable("P3D_UVRIMGRID") == "0";
+    static readonly bool BadMemoOff = Environment.GetEnvironmentVariable("P3D_UVBADMEMO") == "0";
+    static readonly bool CurvMaxOff = Environment.GetEnvironmentVariable("P3D_UVCURVMAX") != "1";   // k82: включается P3D_UVCURVMAX=1 (по умолчанию — после полного прогона)
+    static readonly bool RowLocOff = Environment.GetEnvironmentVariable("P3D_UVROWLOC") == "0";
     public static readonly double[] PhaseMs = new double[6];   // 0 контуры, 1 треугол., 2 Делоне, 3 внутр. точки, 4 доводка, 5 проверка
 
     /// <summary>
@@ -396,7 +400,20 @@ public static class UvMesher
         double onRimDbg() { double m = 0; int w = -1; foreach (var (a, b) in boundary) { double d = (P(uvList[a]) - xyz[a]).Length; if (d > m) { m = d; w = a; } } if (w >= 0 && m > 1e-9) Debug?.Invoke($"worst boundary point #{w}/{uvList.Count}: uv {uvList[w]} x {xyz[w]} P(uv) {P(uvList[w])}"); return m; }
         Delaunay();
         var onRim = new HashSet<int>(boundary.SelectMany(e => new[] { e.Item1, e.Item2 }));
+        // 20:17 (скорость): ОЦЕНКА ТРЕУГОЛЬНИКА — ИЗ ПАМЯТИ ПО ТРОЙКЕ ВЕРШИН. Она зависит только от его вершин (точки, край
+        // неизменны), а доводка пересчитывала её у всех треугольников на каждом проходе (4 точки поверхности на треугольник).
+        // Мутация P3D_UVBADMEMO=0.
+        var badMemo = new Dictionary<(int, int, int), double>();
         double Bad(int t)
+        {
+            if (BadMemoOff) return BadCore(t);
+            int a0 = T[t], a1 = T[t + 1], a2 = T[t + 2];
+            if (a0 > a1) (a0, a1) = (a1, a0); if (a1 > a2) (a1, a2) = (a2, a1); if (a0 > a1) (a0, a1) = (a1, a0);
+            ref double slot = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(badMemo, (a0, a1, a2), out bool known);
+            if (!known) slot = BadCore(t);
+            return slot;
+        }
+        double BadCore(int t)
         {
             int i0 = T[t], i1 = T[t + 1], i2 = T[t + 2];
             // «Ухо» на краю (все три вершины — точки края, одна сторона — край): его не улучшить,
@@ -430,20 +447,34 @@ public static class UvMesher
             // вдоль образующей кривизны нет, и точки там не нужны. Прежде шаг был одинаковым по
             // обоим направлениям (шаг края): цилиндр с высотой в несколько окружностей получал в
             // 30 раз больше треугольников, чем нужно (тест последовательностей A01).
-            double Curv(Vector2d dir)
+            double CurvAt(Vector2d c0, Vector2d dir)
             {
-                var c0 = (uvList.Aggregate(Vector2d.Zero, (acc, q) => acc + q)) / uvList.Count;
                 double d = 1e-3;
                 var p0 = P(c0); var p1 = P(c0 + dir * d); var p2 = P(c0 - dir * d);
                 double first = (p1 - p2).Length / (2 * d);
                 if (first < 1e-12) return 0;
-                return ((p1 + p2 - 2 * p0) / (d * d)).Length / (first * first);
+                double k = ((p1 + p2 - 2 * p0) / (d * d)).Length / (first * first);
+                return double.IsFinite(k) ? k : 0;
+            }
+            var cMid = (uvList.Aggregate(Vector2d.Zero, (acc, q) => acc + q)) / uvList.Count;
+            // 23:50 (скорость): КРИВИЗНА — НАИБОЛЬШАЯ ПО ГРАНИ, шаг — по отходу центра треугольника (k·s²/6, а не середины стороны
+            // k·s²/8). Прежде кривизна бралась в одной точке (середина параметров), а у тора она вдоль кольца у внутренней стороны
+            // в 1.7 раза больше: правильная сетка выходила грубой, и доводка центрами шла 15 проходов (19 000 треугольников,
+            // 0.2–0.4 с на грань). Пробы — середина и до 32 точек края. Мутация P3D_UVCURVMAX=0 — прежнее.
+            double Curv(Vector2d dir)
+            {
+                double k = CurvAt(cMid, dir);
+                if (CurvMaxOff) return k;
+                int stepB = Math.Max(1, uvList.Count / 32);
+                for (int i = 0; i < uvList.Count; i += stepB) k = Math.Max(k, CurvAt(uvList[i], dir));
+                return k;
             }
             double hx = h, hy = h;
             double kx = Curv(new Vector2d(1, 0)), ky = Curv(new Vector2d(0, 1));
             double spanX = maxX - minX, spanY = maxY - minY;
-            hx = kx > 1e-12 ? Math.Max(h, Math.Sqrt(8 * tol / kx)) : Math.Max(h, spanX);
-            hy = ky > 1e-12 ? Math.Max(h, Math.Sqrt(8 * tol / ky)) : Math.Max(h, spanY);
+            double cf = CurvMaxOff ? 8 : 6;
+            hx = kx > 1e-12 ? Math.Max(h, Math.Sqrt(cf * tol / kx)) : Math.Max(h, spanX);
+            hy = ky > 1e-12 ? Math.Max(h, Math.Sqrt(cf * tol / ky)) : Math.Max(h, spanY);
             // Сетка не реже точек края по кривому направлению, не чаще бюджета.
             int budget = Math.Max(0, maxTriangles / 3);
             while (spanX * spanY / (hx * hy) > budget) { hx *= 1.5; hy *= 1.5; }
@@ -460,9 +491,58 @@ public static class UvMesher
             var inc = new Dictionary<int, List<int>>();
             void Inc(int v, int t) { if (!inc.TryGetValue(v, out var l)) inc[v] = l = new List<int>(); l.Add(t); }
             for (int t = 0; t < T.Count; t += 3) { Inc(T[t], t); Inc(T[t + 1], t); Inc(T[t + 2], t); }
+            // 20:17 (скорость): ПОИСК ТРЕУГОЛЬНИКА ТОЧКИ — ПО ОТРЕЗКАМ СТРОКИ. Точки правильной сетки идут строками; на строке y
+            // треугольники дают непересекающиеся отрезки по x (строятся раз на строку, по возрастанию). Вставка точки делит
+            // треугольник на три — его отрезок заменяется отрезками частей. Треугольник, строго содержащий точку, один — ответ
+            // тот же, что у перебора. Прежде точка вне области (вырез шара) перебирала все тысячи треугольников: 40–60 мс на
+            // грань шара. Мутация P3D_UVROWLOC=0.
+            List<(double X0, double X1, int T)>? rowIdx = null; double rowY = 0; int rowPos = -1;
+            bool Span(int t, double y, out double x0, out double x1)
+            {
+                Vector2d A = M(T[t]), B = M(T[t + 1]), C = M(T[t + 2]);
+                x0 = double.MaxValue; x1 = double.MinValue;
+                if (y < Math.Min(A.Y, Math.Min(B.Y, C.Y)) || y > Math.Max(A.Y, Math.Max(B.Y, C.Y))) return false;
+                void Side(Vector2d P1, Vector2d P2, ref double a0, ref double a1)
+                {
+                    double ylo = Math.Min(P1.Y, P2.Y), yhi = Math.Max(P1.Y, P2.Y);
+                    if (y < ylo || y > yhi) return;
+                    if (yhi - ylo < 1e-300) { a0 = Math.Min(a0, Math.Min(P1.X, P2.X)); a1 = Math.Max(a1, Math.Max(P1.X, P2.X)); return; }
+                    double xx = P1.X + (P2.X - P1.X) * (y - P1.Y) / (P2.Y - P1.Y);
+                    a0 = Math.Min(a0, xx); a1 = Math.Max(a1, xx);
+                }
+                Side(A, B, ref x0, ref x1); Side(B, C, ref x0, ref x1); Side(C, A, ref x0, ref x1);
+                return x0 <= x1;
+            }
+            void BuildRow(double y)
+            {
+                rowIdx ??= new List<(double, double, int)>(); rowIdx.Clear(); rowY = y;
+                for (int t = 0; t < T.Count; t += 3) if (Span(t, y, out var x0, out var x1)) rowIdx.Add((x0, x1, t));
+                rowIdx.Sort((a, b) => a.X0.CompareTo(b.X0));
+            }
+            int RowLocate(Vector2d q)
+            {
+                var ri = rowIdx!; rowPos = -1;
+                int lo2 = 0, hi2 = ri.Count - 1, pos = -1;
+                while (lo2 <= hi2) { int md = (lo2 + hi2) / 2; if (ri[md].X0 <= q.X) { pos = md; lo2 = md + 1; } else hi2 = md - 1; }
+                // отрезки соседних треугольников касаются концами; содержащий точку строго — среди ближайших
+                for (int j = Math.Max(0, pos - 3); j <= Math.Min(ri.Count - 1, pos + 1); j++)
+                    if (InTri(q, ri[j].T)) { rowPos = j; return ri[j].T; }
+                // запасной путь (вырожденные отрезки): перебор строки
+                for (int j = 0; j < ri.Count; j++) if (InTri(q, ri[j].T)) { rowPos = j; return ri[j].T; }
+                return -1;
+            }
+            void RowSplit(int tri, int t2, int t3)
+            {
+                if (rowIdx == null || rowPos < 0) return;
+                var parts = new List<(double, double, int)>(3);
+                foreach (int t in new[] { tri, t2, t3 }) if (Span(t, rowY, out var x0, out var x1)) parts.Add((x0, x1, t));
+                parts.Sort((a, b) => a.Item1.CompareTo(b.Item1));
+                rowIdx.RemoveAt(rowPos); rowIdx.InsertRange(rowPos, parts);
+            }
             int last = -1;
             int Locate(Vector2d q)
             {
+                if (rowIdx != null) return RowLocate(q);
                 if (last >= 0 && inc.TryGetValue(last, out var l0))
                 {
                     var seen = new HashSet<int>();
@@ -475,24 +555,66 @@ public static class UvMesher
                 for (int t = 0; t < T.Count; t += 3) if (InTri(q, t)) return t;
                 return -1;
             }
+            Ph("uv: внутренние точки");
+            // 20:17 (скорость): БЛИЗОСТЬ К КРАЮ — ПО СЕТКЕ ЯЧЕЕК. Прежде каждая точка правильной сетки сверялась со ВСЕМИ сторонами
+            // края (шар с вырезом: тысячи точек × сотни сторон — 30–40 мс из 70 на грань). Ячейка — не меньше порога: сторона ближе
+            // порога к точке задевает ячейку точки или соседнюю; сторона записана во все ячейки своей коробки. Ответ тот же.
+            // Мутация P3D_UVRIMGRID=0.
+            double nearThr = 0.5 * Math.Min(hx, hy);
+            Dictionary<(long, long), List<int>>? rimGrid = null; double cell = nearThr;
+            if (!RimGridOff && nearThr > 0 && rimEdges.Count > 16)
+            {
+                double sx = 0, sy = 0; foreach (var e in rimEdges) { var d = M(e.Item1) - M(e.Item2); sx = Math.Max(sx, Math.Abs(d.X)); sy = Math.Max(sy, Math.Abs(d.Y)); }
+                cell = Math.Max(nearThr, Math.Max(sx, sy) * 0.5);   // ячейка не мельче половины самой длинной стороны: сторона — в немногих ячейках
+                if (cell > 0 && (maxX - minX) / cell < 4096 && (maxY - minY) / cell < 4096)
+                {
+                    rimGrid = new Dictionary<(long, long), List<int>>();
+                    for (int ei = 0; ei < rimEdges.Count; ei++)
+                    {
+                        var a2 = M(rimEdges[ei].Item1); var b2 = M(rimEdges[ei].Item2);
+                        long x0 = (long)Math.Floor(Math.Min(a2.X, b2.X) / cell), x1 = (long)Math.Floor(Math.Max(a2.X, b2.X) / cell);
+                        long y0 = (long)Math.Floor(Math.Min(a2.Y, b2.Y) / cell), y1 = (long)Math.Floor(Math.Max(a2.Y, b2.Y) / cell);
+                        for (long gx = x0; gx <= x1; gx++)
+                            for (long gy = y0; gy <= y1; gy++)
+                            {
+                                if (!rimGrid.TryGetValue((gx, gy), out var l)) rimGrid[(gx, gy)] = l = new List<int>();
+                                l.Add(ei);
+                            }
+                    }
+                }
+            }
+            bool NearRim(Vector2d q)
+            {
+                if (rimGrid == null) return rimEdges.Any(e => DistSeg(q, M(e.Item1), M(e.Item2)) < nearThr);
+                long cx = (long)Math.Floor(q.X / cell), cy = (long)Math.Floor(q.Y / cell);
+                for (long gx = cx - 1; gx <= cx + 1; gx++)
+                    for (long gy = cy - 1; gy <= cy + 1; gy++)
+                        if (rimGrid.TryGetValue((gx, gy), out var l))
+                            foreach (int ei in l) if (DistSeg(q, M(rimEdges[ei].Item1), M(rimEdges[ei].Item2)) < nearThr) return true;
+                return false;
+            }
             int row = 0;
             for (double y = minY + hy / 2; y < maxY; y += hy * (hx == hy ? 0.8660254 : 1), row++)
+            {
+                if (!RowLocOff && T.Count / 3 > 64) BuildRow(y); else rowIdx = null;
                 for (double x = minX + (row % 2 == 0 ? hx / 2 : hx); x < maxX; x += hx)
                 {
                     var q = new Vector2d(x, y);
                     int tri = Locate(q);
                     if (tri < 0) continue;                                   // вне области
-                    if (rimEdges.Any(e => DistSeg(q, M(e.Item1), M(e.Item2)) < 0.5 * Math.Min(hx, hy))) continue;
+                    if (NearRim(q)) continue;
                     var uvq = new Vector2d(x / su, y / sv);
                     int m = uvList.Count; uvList.Add(uvq); xyz.Add(P(uvq));
                     int i0 = T[tri], i1 = T[tri + 1], i2 = T[tri + 2];
                     int t2 = T.Count, t3 = T.Count + 3;
                     T[tri] = i0; T[tri + 1] = i1; T[tri + 2] = m;
                     T.AddRange(new[] { i1, i2, m, i2, i0, m });
+                    RowSplit(tri, t2, t3);
                     inc[i2].Remove(tri);
                     Inc(i0, t3); Inc(i1, t2); Inc(i2, t2); Inc(i2, t3); Inc(m, tri); Inc(m, t2); Inc(m, t3);
                     last = m;
                 }
+            }
             // u08: ПРЯМОЕ НАПРАВЛЕНИЕ — СЖАТО В МЕТРИКЕ ДЕЛОНЕ. Длинная узкая полоса (скругление ребра 100 мм радиусом
             // 1.4 мм): в метрике поверхности Делоне соединял точки дуги на одном конце с далёкими по углу точками другого
             // конца, такие стороны отходили от поверхности, и доводка центрами плодила 1 258 треугольников вместо 32 (и
@@ -521,10 +643,12 @@ public static class UvMesher
                 if (kx > 1e-12 && ky <= 1e-12 && spanY > 4 * hx && Ladder(alongY: true)) { sv *= 0.25 * hx / spanY; squashed = true; }
                 else if (ky > 1e-12 && kx <= 1e-12 && spanX > 4 * hy && Ladder(alongY: false)) { su *= 0.25 * hy / spanX; squashed = true; }
             }
+            Ph("uv: Делоне после точек");
             Delaunay();
             Debug?.Invoke($"pass 0: interior points {uvList.Count - pts0.Count}, h {h:0.###}, tris {T.Count / 3}, area3 {Area3():0.###}");
             // Доводка: где поверхность гнётся сильнее, чем позволяет шаг сетки (кольцо тора малого
             // сечения), — точки в центры «плохих» треугольников и снова Делоне.
+            Ph("uv: доводка");
             double prevWorst = double.MaxValue; int stuck = 0; int tris0 = Math.Max(1, T.Count / 3);
             // u12: снимок перед вставкой центров — если доводка разошлась (худшая ошибка выросла втрое: косые полосы у
             // скошенного края цилиндра, ошибка 0.04 → 1.7 мм), сетка возвращается к снимку. Мутация P3D_UVDIVERGE=0.
@@ -590,7 +714,7 @@ public static class UvMesher
                 if (fin > snapWorst * 1.5)
                 {
                     T.Clear(); T.AddRange(snapT);
-                    uvList.RemoveRange(snapN, uvList.Count - snapN); xyz.RemoveRange(snapN, xyz.Count - snapN);
+                    uvList.RemoveRange(snapN, uvList.Count - snapN); xyz.RemoveRange(snapN, xyz.Count - snapN); badMemo.Clear();
                     Debug?.Invoke($"refinement did not converge (worst {fin:0.####}, best {snapWorst:0.####}) — best mesh kept");
                 }
             }
@@ -600,6 +724,7 @@ public static class UvMesher
         // точки одной образующей) удаляются переворотом их длинной стороны: в пространстве они
         // нулевой площади, сварка сетки их выбрасывала, и на их месте оставались непарные стороны
         // (50 таких у стенки бобышки — сетка тела открывалась в ядре).
+        Ph("uv: вырожденные");
         for (int round = 0; round < 50; round++)
         {
             double scaleUv = 0; for (int i = 0; i < uvList.Count; i++) scaleUv = Math.Max(scaleUv, uvList[i].LengthSquared);

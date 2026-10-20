@@ -45,7 +45,7 @@ static partial class Program
             for (int ei = 0; ei < edgeList.Count; ei++)
             {
                 var e = edgeList[ei];
-                foreach (var (op, r) in new[] { ("round", name == "warm" ? 1.0 : 5.0), ("chamfer", name == "warm" ? 0.8 : 3.0) })
+                foreach (var (op, r) in new[] { ("round", name == "warm" ? 1.0 : 5.0), ("chamfer", name == "warm" ? 0.8 : 3.0), ("chamfer", 1.0), ("round", 2.0), ("round", 0.5), ("chamfer", 0.5) })
                 {
                     var b = new List<TSolid> { TopologyClone.Deep(body) };
                     var ww = new List<string>();
