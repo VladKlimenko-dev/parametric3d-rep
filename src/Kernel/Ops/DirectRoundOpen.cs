@@ -633,6 +633,8 @@ public static partial class DirectRound
             for (int i = 0; i <= 16; i++) { double f = Fend(k, g.Point(i / 16.0)); if (double.IsNaN(f) || Math.Sign(f) != want) return false; }
             return true;
         }
+        IDisposable? _phase = null; void Phase(string n) { _phase?.Dispose(); _phase = Diagnostics.Prof.Time("open: этап " + n); }
+        Phase("торцы");
         var outT = new double[2]; var inT = new double[2];
         for (int k = 0; k < 2; k++)
         {
@@ -680,7 +682,7 @@ public static partial class DirectRound
             }
             return (a + b) / 2;
         }
-        double TStar(int k, double v) => Root(k, t => Fend(k, Gen(t).Point(v)));
+        double TStar(int k, double v) => Root(k, t => { Interlocked.Increment(ref EndRootEvals); return Fend(k, Gen(t).Point(v)); });
         // край ленты: корень по таблице (65 проб v) как затравка и узкая скобка — несколько вычислений сечения вместо полусотни
         // (каждая точка края — в разметке, в объёме, в p-кривой). Мутация P3D_DRENDTAB=0 — полный поиск в каждой точке.
         double[][]? endTab = null; SectionSurface? seedSurf = null; double seedLo = 0, seedKU = 1;
@@ -736,6 +738,7 @@ public static partial class DirectRound
             else t = TStar(k, v);
             return double.IsNaN(t) ? new Vector3d(double.NaN) : Gen(t).Point(v);
         }
+        Phase("знак в скобке");
         // одна смена знака в скобке у каждой пробы v
         for (int k = 0; k < 2; k++)
             foreach (double v in new[] { 0, 0.2, 0.4, 0.6, 0.8, 1.0 })
@@ -764,16 +767,48 @@ public static partial class DirectRound
             if (parThreads > 1 && n >= 8) { System.Threading.Tasks.Parallel.For(0, n, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = parThreads }, body); Interlocked.Increment(ref OpenParallelRuns); }
             else for (int i = 0; i < n; i++) body(i);
         }
+        Phase("таблица края");
         endTab[0] = new double[65]; endTab[1] = new double[65];
-        For(130, j => { int k = j / 65, i = j % 65; endTab[k][i] = TStar(k, i / 64.0); });
+        if (StarCont)
+        {
+            // 21.10 (скорость): КРАЙ ЛЕНТЫ ПРОДОЛЖЕНИЕМ. Корень t*(v) на торце k гладко зависит от v: соседний корень — затравка, скобка
+            // ±(2·шаг соседей) около него (расширяется, пока знак не сменится); Иллинойс в узкой скобке — 6–8 сечений вместо 20–30
+            // в полной [inT, outT]. Концы — те же корни, что у линий касания. Два торца — параллельно. Мутация P3D_DRSTARCONT=0.
+            endTab[0][0] = tA0; endTab[0][64] = tB0; endTab[1][0] = tA1; endTab[1][64] = tB1;
+            For(2, k =>
+            {
+                double prev = endTab[k][0], prev2 = double.NaN;
+                for (int i = 1; i < 64; i++)
+                {
+                    double v = i / 64.0;
+                    double guess = double.IsNaN(prev2) ? prev : 2 * prev - prev2;
+                    double w = Math.Max(1e-9 * Math.Max(1, Delta), double.IsNaN(prev2) ? Math.Abs(endTab[k][64] - endTab[k][0]) / 32 : 2 * Math.Abs(prev - prev2));
+                    double r = double.NaN;
+                    Func<double, double> g = tt => { Interlocked.Increment(ref EndRootEvals); return Fend(k, Gen(tt).Point(v)); };
+                    double lo = Math.Min(inT[k], outT[k]), hi = Math.Max(inT[k], outT[k]);
+                    for (int it = 0; it < 8 && double.IsNaN(r); it++, w *= 4)
+                    {
+                        double a = Math.Max(lo, guess - w), b = Math.Min(hi, guess + w);
+                        double fa = g(a), fb = g(b);
+                        if (double.IsNaN(fa + fb) || Math.Sign(fa) == Math.Sign(fb)) continue;
+                        r = RootIn(g, a, b);
+                    }
+                    if (double.IsNaN(r)) { r = TStar(k, v); Interlocked.Increment(ref StarContFallbacks); }
+                    endTab[k][i] = r; prev2 = prev; prev = r;
+                }
+            });
+        }
+        else For(130, j => { int k = j / 65, i = j % 65; endTab[k][i] = TStar(k, i / 64.0); });
         for (int k = 0; k < 2; k++)
             if (endTab[k].Any(double.IsNaN)) { why = "open curved: end curve not found"; return false; }
         if (double.IsNaN(tA0 + tB0 + tA1 + tB1) || !(tA0 < tA1) || !(tB0 < tB1)) { why = "open curved: contact lines do not span between the end faces"; return false; }
 
+        Phase("промежуток");
         // промежуток поверхности — по краям ленты на торцах (пробы v) с запасом 2 % ребра
         double tLo = double.MaxValue, tHi = double.MinValue;
         var tsv = new double[34];
-        For(34, j => tsv[j] = TStar(j / 17, (j % 17) / 16.0));
+        if (StarCont) for (int j = 0; j < 34; j++) tsv[j] = endTab[j / 17][(j % 17) * 4];   // те же v (i/16 = 4i/64) — из таблицы края
+        else For(34, j => tsv[j] = TStar(j / 17, (j % 17) / 16.0));
         for (int i = 0; i <= 16; i++)
         {
             double t0s = tsv[i], t1s = tsv[17 + i];
@@ -791,6 +826,7 @@ public static partial class DirectRound
         double useLo = tLo, useHi = tHi;
         tLo = Math.Max(outT[0], tLo - 0.05 * Delta); tHi = Math.Min(outT[1], tHi + 0.05 * Delta);
         if (!(tLo <= useLo && tHi >= useHi)) { why = "open curved: blend range beyond the extension"; return false; }
+        Phase("сверки");
         // СВЕРКИ по пробам на всём продлённом промежутке: хребет, касание на радиусе, ход вперёд, дуга меньше полуокружности
         const int N = 256;
         var us = new List<double>(); var secs = new List<SweepSection>(); var Ps = new List<Vector3d>();
@@ -828,6 +864,7 @@ public static partial class DirectRound
             prevS = x; prevA = qa; prevB = qb; prevT = Td(t);
             us.Add(t); secs.Add(g);
         }
+        Phase("зазор");
         // зазор: прочие звенья граней A и B дальше полосы
         var keepA = new HashSet<TEdge>(chain) { ends[0].EA, ends[1].EA }; var keepB = new HashSet<TEdge>(chain) { ends[0].EB, ends[1].EB };
         foreach (var (F, keep, w) in new[] { (FA, keepA, widthA), (FB, keepB, widthB) })
@@ -848,6 +885,7 @@ public static partial class DirectRound
         if (LawBreaks) foreach (var kt in knotT) if (kt > tLo && kt < tHi) breaks.Add((kt - tLo) * kU);
         // шаг таблицы: у закона с узлами — вчетверо мельче (кривизна сечений по u у узла выше)
         double tabStep = Math.Max(Lp / 20000, Math.Min(0.25, 0.4 * Math.Min(widthA, widthB)) / 32) / (knotT.Count > 0 ? 4 : 1);
+        Phase("таблица");
         var surf = new SectionSurface(U => Gen(tLo + U / kU), us.Select(t => (t - tLo) * kU).ToList(), secs, false, 0, Lp, breaks, tabStep) { ParallelTable = true };
         {
             double worstTab = 0, worstU = 0;
@@ -867,21 +905,30 @@ public static partial class DirectRound
             if (worstTab > Math.Max(1e-8, 0.2 * ToleranceContext.Current.ModelAccuracy)) { why = $"open curved: blend surface table deviates from the formula ({worstTab:E1} mm)"; return false; }
         }
 
+        Phase("кривые");
         seedSurf = surf; seedLo = tLo; seedKU = kU;
         // КРИВЫЕ: линии касания, края ленты на торцах
         // 17:31: ЛИНИИ КАСАНИЯ И КРАЯ ЛЕНТЫ — ВСТАВКОЙ ЭРМИТА по точным точкам (отход ≤ 1e-9 мм, сверено в серединах всех
         // промежутков): точная точка — корень (хребет, касание, край на торце, 0.05–0.2 мс), а разметка, p-кривые, объём и
         // проверки спрашивают их тысячи раз (скругление ребра цилиндр ∪ шар: 30 тыс. сечений, 1.5 с). Мутация P3D_DRFITCURVES=0.
         Func<double, Vector3d> fQA = QA, fQB = QB, fE0 = v => EndPt(0, v), fE1 = v => EndPt(1, v);
+        if (FitDbg) Console.Error.WriteLine($"FITPROC start");
         if (FitCurves)
         {
-            fQA = FitProc(QA, tA0, tA1, FitTol) ?? fQA; fQB = FitProc(QB, tB0, tB1, FitTol) ?? fQB;
-            fE0 = FitProc(fE0, 0, 1, FitTol) ?? fE0; fE1 = FitProc(fE1, 0, 1, FitTol) ?? fE1;
+            // четыре кривые — одновременно (P3D_DRFITPAR=0 — по очереди)
+            Func<double, Vector3d>? rA = null, rB = null, r0 = null, r1 = null; var e0f = fE0; var e1f = fE1;
+            if (!FitParOff && Environment.ProcessorCount > 1 && Tess.Tessellator.Threads > 1)
+                System.Threading.Tasks.Parallel.Invoke(() => rA = FitProc(QA, tA0, tA1, FitTol), () => rB = FitProc(QB, tB0, tB1, FitTol),
+                                                       () => r0 = FitProc(e0f, 0, 1, FitTol), () => r1 = FitProc(e1f, 0, 1, FitTol));
+            else { rA = FitProc(QA, tA0, tA1, FitTol); rB = FitProc(QB, tB0, tB1, FitTol); r0 = FitProc(e0f, 0, 1, FitTol); r1 = FitProc(e1f, 0, 1, FitTol); }
+            fQA = rA ?? fQA; fQB = rB ?? fQB; fE0 = r0 ?? fE0; fE1 = r1 ?? fE1;
         }
         var cA = new ProcCurve3(fQA, tA0, tA1, false, ch ? "chamfer contact" : "rolling-ball contact") { NoEventsOn = ch || varLaw != null ? null : (s, a, b) => NoEvents(true, s, a, b) };
         var cB = new ProcCurve3(fQB, tB0, tB1, false, ch ? "chamfer contact" : "rolling-ball contact") { NoEventsOn = ch || varLaw != null ? null : (s, a, b) => NoEvents(false, s, a, b) };
         var end0 = new ProcCurve3(fE0, 0, 1, false, ch ? "chamfer end" : "rolling-ball end");
         var end1 = new ProcCurve3(fE1, 0, 1, false, ch ? "chamfer end" : "rolling-ball end");
+        if (FitDbg) Console.Error.WriteLine($"FITPROC curves made");
+        Phase("концы и сборка");
         Vector3d qa0 = QA(tA0), qa1 = QA(tA1), qb0 = QB(tB0), qb1 = QB(tB1);
         if ((end0.PointAt(0) - qa0).Length > 1e-9 || (end0.PointAt(1) - qb0).Length > 1e-9 || (end1.PointAt(0) - qa1).Length > 1e-9 || (end1.PointAt(1) - qb1).Length > 1e-9)
         { why = "open curved: end curves do not meet the contact lines"; return false; }
@@ -1108,6 +1155,16 @@ public static partial class DirectRound
     static readonly bool ProfDbg = Environment.GetEnvironmentVariable("P3D_OPENPROF") == "1";
     static readonly bool MarginClamp = Environment.GetEnvironmentVariable("P3D_DRMARGINCLAMP") != "0";
     static readonly bool OpenPar = Environment.GetEnvironmentVariable("P3D_DROPENPAR") != "0";
+    static readonly bool FitDbg = Environment.GetEnvironmentVariable("P3D_FITDBG") == "1";
+    static readonly bool Fit5Off = Environment.GetEnvironmentVariable("P3D_DRFIT5") == "0";
+    static readonly bool FitParOff = Environment.GetEnvironmentVariable("P3D_DRFITPAR") == "0";
+    /// <summary>Сколько раз точки вставки кривых ленты считались в несколько потоков.</summary>
+    public static long FitParallelRuns;
+    /// <summary>Точных точек, взятых вставками кривых ленты; вычислений функции края на торцах при поиске корней.</summary>
+    public static long FitEvals, EndRootEvals;
+    static readonly bool StarCont = Environment.GetEnvironmentVariable("P3D_DRSTARCONT") != "0";
+    /// <summary>Корни края ленты, найденные полным поиском (продолжение не нашло скобку).</summary>
+    public static long StarContFallbacks;
     /// <summary>Сколько раз пробы открытого построителя считались в несколько потоков.</summary>
     public static long OpenParallelRuns;
     static readonly bool FitCurves = Environment.GetEnvironmentVariable("P3D_DRFITCURVES") != "0";
@@ -1121,25 +1178,85 @@ public static partial class DirectRound
     static Func<double, Vector3d>? FitProc(Func<double, Vector3d> f, double a, double b, double tol)
     {
         if (!(b > a)) return null;
-        int n = 32;
+        var swFit = System.Diagnostics.Stopwatch.StartNew();
+        int n = Fit5Off ? 32 : 16;
         var pts = new Vector3d[n + 1];
-        for (int i = 0; i <= n; i++) pts[i] = f(a + (b - a) * i / n);
+        // 21.10 (скорость): точки кривой — в несколько потоков (каждая — функция своего параметра: хребет, касание, край на
+        // торце; память — потокобезопасная); вставка та же. Мутация P3D_DRFITPAR=0.
+        void Fill(Vector3d[] dst, int count, Func<int, double> at)
+        {
+            int thr = FitParOff ? 1 : Math.Min(Tess.Tessellator.Threads, Environment.ProcessorCount);
+            if (thr > 1 && count >= 16) { System.Threading.Tasks.Parallel.For(0, count, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = thr }, i => dst[i] = f(at(i))); Interlocked.Increment(ref FitParallelRuns); }
+            else for (int i = 0; i < count; i++) dst[i] = f(at(i));
+        }
+        Fill(pts, n + 1, i => a + (b - a) * i / n);
+        Interlocked.Add(ref FitEvals, n + 1);
         while (true)
         {
             if (pts.Any(p => !double.IsFinite(p.X + p.Y + p.Z))) return null;
             var mids = new Vector3d[n];
-            for (int i = 0; i < n; i++) mids[i] = f(a + (b - a) * (i + 0.5) / n);
+            int nn = n; Fill(mids, n, i => a + (b - a) * (i + 0.5) / nn);
+            Interlocked.Add(ref FitEvals, n);
             if (mids.Any(p => !double.IsFinite(p.X + p.Y + p.Z))) return null;
-            var interp = Hermite(pts, a, b);
+            var interp = !Fit5Off && n >= 8 ? Hermite5(pts, a, b) : Hermite(pts, a, b);
             double worst = 0;
             for (int i = 0; i < n; i++) worst = Math.Max(worst, (interp(a + (b - a) * (i + 0.5) / n) - mids[i]).Length);
-            if (worst <= tol) return interp;
-            if (n >= 4096) return null;
+            if (worst <= tol) { if (FitDbg) Console.Error.WriteLine($"FITPROC n {n} worst {worst:E2} {swFit.Elapsed.TotalMilliseconds:0.0} ms"); return interp; }
+            if (n >= 4096) { if (FitDbg) Console.Error.WriteLine($"FITPROC failed n {n} worst {worst:E2}"); return null; }
             var np = new Vector3d[2 * n + 1];
             for (int i = 0; i <= n; i++) np[2 * i] = pts[i];
             for (int i = 0; i < n; i++) np[2 * i + 1] = mids[i];
             pts = np; n *= 2;
         }
+    }
+
+    /// <summary>
+    /// 21.10 (скорость): ВСТАВКА ПЯТОЙ СТЕПЕНИ — Эрмит по точкам, первым и вторым производным (разности шестого порядка по
+    /// соседним точкам, у краёв — односторонние): отход ∝ h⁶ против h⁴ у кубической — линия касания с отходом 1e-9 мм — по
+    /// ~100 точкам вместо 1024 (каждая точка — хребет катящегося шара). Отход сверяется в серединах всех промежутков, как прежде.
+    /// Мутация P3D_DRFIT5=0.
+    /// </summary>
+    static Func<double, Vector3d> Hermite5(Vector3d[] p, double a, double b)
+    {
+        int n = p.Length - 1; double h = (b - a) / n;
+        var d1 = new Vector3d[n + 1]; var d2 = new Vector3d[n + 1];
+        for (int i = 0; i <= n; i++)
+        {
+            int j = Math.Clamp(i - 3, 0, n - 6);            // 7 точек j..j+6, i — внутри окна
+            double x = i - j;                                // положение i в окне (0..6)
+            // производные многочлена Лагранжа по 7 точкам в узле x (весовые коэффициенты считаются напрямую)
+            Vector3d D1 = Vector3d.Zero, D2 = Vector3d.Zero;
+            for (int m = 0; m <= 6; m++)
+            {
+                // L_m(x) = Π_{q≠m} (x−q)/(m−q); L'_m и L''_m — по правилу произведения
+                double den = 1; for (int q = 0; q <= 6; q++) if (q != m) den *= m - q;
+                double s1 = 0, s2 = 0;
+                for (int q = 0; q <= 6; q++)
+                {
+                    if (q == m) continue;
+                    double pr = 1; for (int r = 0; r <= 6; r++) if (r != m && r != q) pr *= x - r;
+                    s1 += pr;
+                    for (int r = 0; r <= 6; r++)
+                    {
+                        if (r == m || r == q) continue;
+                        double pr2 = 1; for (int t = 0; t <= 6; t++) if (t != m && t != q && t != r) pr2 *= x - t;
+                        s2 += pr2;
+                    }
+                }
+                D1 += p[j + m] * (s1 / den); D2 += p[j + m] * (s2 / den);
+            }
+            d1[i] = D1 / h; d2[i] = D2 / (h * h);
+        }
+        return t =>
+        {
+            double x = (Math.Clamp(t, a, b) - a) / h; int i = Math.Min((int)Math.Floor(x), n - 1); double u = x - i;
+            if (u <= 0) return p[i];
+            if (u >= 1) return p[i + 1];
+            double u2 = u * u, u3 = u2 * u, u4 = u3 * u, u5 = u4 * u;
+            double h0 = 1 - 10 * u3 + 15 * u4 - 6 * u5, h1 = u - 6 * u3 + 8 * u4 - 3 * u5, h2 = 0.5 * u2 - 1.5 * u3 + 1.5 * u4 - 0.5 * u5;
+            double g0 = 10 * u3 - 15 * u4 + 6 * u5, g1 = -4 * u3 + 7 * u4 - 3 * u5, g2 = 0.5 * u3 - u4 + 0.5 * u5;
+            return p[i] * h0 + d1[i] * (h * h1) + d2[i] * (h * h * h2) + p[i + 1] * g0 + d1[i + 1] * (h * g1) + d2[i + 1] * (h * h * g2);
+        };
     }
 
     static Func<double, Vector3d> Hermite(Vector3d[] p, double a, double b)
