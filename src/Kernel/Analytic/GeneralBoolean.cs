@@ -40,6 +40,18 @@ public static class GeneralBoolean
     static readonly bool VMergeDbg = Environment.GetEnvironmentVariable("P3D_VMERGEDBG") == "1";
     [ThreadStatic] public static Action<Vector3d, Vector3d>? MergeDebug;
     static readonly bool BndRigorOff = Environment.GetEnvironmentVariable("P3D_BNDRIGOR") == "0";
+    sealed class FaceOut { public string? Fail; public bool Cut; public TFace? Boundary; public readonly List<FaceSplit.Region> Kept = new(); public Exception? Error; }
+    static readonly bool PrepParOff = Environment.GetEnvironmentVariable("P3D_PREPPAR") == "0";
+    /// <summary>Сколько раз формы граней операндов строились в несколько потоков.</summary>
+    public static long PrepParallelRuns;
+    /// <summary>Формы граней операндов последней общей булевой в этом потоке (для проверки согласия с CSG).</summary>
+    [ThreadStatic] internal static Dictionary<TFace, AnalyticFace>? LastOperandForms;
+    internal static bool ClsReuseOffPublic => ClsReuseOff;
+    static readonly bool ClsReuseOff = Environment.GetEnvironmentVariable("P3D_CLSREUSE") == "0";
+    static readonly bool SelectParOff = Environment.GetEnvironmentVariable("P3D_SELECTPAR") == "0";
+    /// <summary>Сколько раз области граней отбирались в несколько потоков.</summary>
+    public static long SelectParallelRuns;
+    static readonly bool PointTouchTorOff = Environment.GetEnvironmentVariable("P3D_POINTTOUCHTOR") == "0";
     static readonly bool PartStat = Environment.GetEnvironmentVariable("P3D_PARTSTAT") == "1";
     /// <summary>Проверка KRN05: внести потерю последней области у первой разрезанной грани (один раз).</summary>
     [ThreadStatic] public static bool DropRegionForTest;
@@ -271,8 +283,27 @@ public static class GeneralBoolean
             }
         TFace Orig(TFace f) => orig.TryGetValue(f, out var o) ? o : f;
         var fa = new List<AnalyticFace>(); var fb = new List<AnalyticFace>();
-        foreach (var f in a.Faces) { var x = AnalyticFace.Of(f, out var w); if (x == null) { why = "first operand: " + w; return null; } fa.Add(x); }
-        foreach (var f in b.Faces) { var x = AnalyticFace.Of(f, out var w); if (x == null) { why = "second operand: " + w; return null; } fb.Add(x); }
+        // 23:50 (скорость): точные формы граней операндов — в несколько потоков (форма — функция своей грани); отказ — первый по
+        // порядку граней, как прежде. Мутация P3D_PREPPAR=0.
+        var allF = a.Faces.Select(f => (F: f, A: true)).Concat(b.Faces.Select(f => (F: f, A: false))).ToList();
+        var built = new (AnalyticFace? X, string? W, Exception? E)[allF.Count];
+        int thrP = Ops.BooleanOp.Threads;
+        if (!PrepParOff && thrP > 1 && Environment.ProcessorCount > 1 && allF.Count > 2)
+        {
+            System.Threading.Tasks.Parallel.For(0, allF.Count, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = thrP }, i =>
+            {
+                try { var x = AnalyticFace.Of(allF[i].F, out var w); built[i] = (x, w, null); }
+                catch (Exception ex) { built[i] = (null, null, ex); }
+            });
+            Interlocked.Increment(ref PrepParallelRuns);
+        }
+        for (int i = 0; i < allF.Count; i++)
+        {
+            var (x, w, e) = built[i].X == null && built[i].E == null && built[i].W == null ? (AnalyticFace.Of(allF[i].F, out var w1), w1, (Exception?)null) : built[i];
+            if (e != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(e).Throw();
+            if (x == null) { why = (allF[i].A ? "first operand: " : "second operand: ") + w; return null; }
+            (allF[i].A ? fa : fb).Add(x);
+        }
 
         Diagnostics.Prof.Add("общая: подготовка граней и классификаторов", swPrep.ElapsedTicks);
         // 1. Куски пересечения пар граней.
@@ -348,6 +379,12 @@ public static class GeneralBoolean
                     if (!PointTouchOff && (x.Sph || y.Sph) && !(x.Cyl || y.Cyl || x.Cone || y.Cone || x.Tor || y.Tor || x.Band || y.Band || x.Param || y.Param)
                         && r.TangentPoints.Count > 0 && r.TangentPoints.All(tp => PointTouchClear(tp, x) && PointTouchClear(tp, y) || x.Contains(tp) == false || y.Contains(tp) == false))
                     { Interlocked.Increment(ref PointTouches); continue; }
+                    // 23:50: то же — плоскость, касающаяся внешнего экватора тора (точка эллиптическая: тор по одну сторону плоскости,
+                    // касание — одна точка; седловое касание внутреннего экватора сюда не приходит — Ssi отказывает). Мутация P3D_POINTTOUCHTOR=0.
+                    if (!PointTouchOff && !PointTouchTorOff && (x.Tor ^ y.Tor) && !(x.Tor ? y : x).Cyl && !(x.Tor ? y : x).Cone && !(x.Tor ? y : x).Sph && !(x.Tor ? y : x).Tor
+                        && !(x.Band || y.Band || x.Param || y.Param)
+                        && r.TangentPoints.Count > 0 && r.TangentPoints.All(tp => PointTouchClear(tp, x) && PointTouchClear(tp, y) || x.Contains(tp) == false || y.Contains(tp) == false))
+                    { Interlocked.Increment(ref PointTouches); continue; }
                     if (AllowTangentAlongEdge && (x.Cone ^ y.Cone) && !(x.Cone ? y : x).Cyl && !(x.Cone ? y : x).Sph)
                     {
                         var kn = x.Cone ? x : y; var pl = x.Cone ? y : x;
@@ -377,7 +414,7 @@ public static class GeneralBoolean
                         if (pcs.All(pc => !pc.Closed && (pc.P1 - pc.P0).Length <= minLen)) { Interlocked.Increment(ref TangentMissFaces); continue; }
                         if (onEdge && pcs.All(pc => OnBoundary(pc, x) && OnBoundary(pc, y))) { Interlocked.Increment(ref TangentOnBothEdges); continue; }
                     }
-                    string Kind(AnalyticFace q) => q.Sph ? "sphere" : q.Cone ? "cone" : q.Cyl ? "cylinder" : "plane";
+                    string Kind(AnalyticFace q) => q.Sph ? "sphere" : q.Cone ? "cone" : q.Cyl ? "cylinder" : q.Tor ? "torus" : "plane";
                     why = onEdge ? "tangent surfaces along an edge (not yet supported)" : $"tangent contact inside both faces (not supported): {Kind(x)} × {Kind(y)}";
                     if (TangentDbg) why += $" [{x.Face.Tag} × {y.Face.Tag}; line {(TangentLine(x, y) is { } tdl ? tdl.ToString() : "-")}]";
                     return null;
@@ -425,19 +462,66 @@ public static class GeneralBoolean
         var cutsA = onA.Values.SelectMany(l => l).Where(p => !p.Closed).SelectMany(p => new[] { p.P0, p.P1 }).Concat(extraCuts).ToList();
         var cutsB = onB.Values.SelectMany(l => l).Where(p => !p.Closed).SelectMany(p => new[] { p.P0, p.P1 }).Concat(extraCuts).ToList();
         Classifier clA, clB;
-        using (Diagnostics.Prof.Time("общая: классификаторы операндов")) { clA = new Classifier(a); clB = new Classifier(b); }
+        // 23:50 (скорость): классификаторы — по уже построенным точным формам граней тех же операндов (fa, fb: те же грани в
+        // том же порядке), а не построением форм заново (до 50 мс у граней с кривыми краями). Мутация P3D_CLSREUSE=0.
+        using (Diagnostics.Prof.Time("общая: классификаторы операндов"))
+        {
+            if (!ClsReuseOff)
+            {
+                clA = new Classifier(fa); clB = new Classifier(fb);
+                // формы граней операндов — и для проверки согласия с CSG после построения (тот же поток, те же грани)
+                var lf = new Dictionary<TFace, AnalyticFace>(ReferenceEqualityComparer.Instance);
+                foreach (var x in fa) lf[x.Face] = x; foreach (var x in fb) lf[x.Face] = x;
+                LastOperandForms = lf;
+            }
+            else { clA = new Classifier(a); clB = new Classifier(b); }
+        }
         if (clA.Unsupported != null || clB.Unsupported != null) { why = "classifier: " + (clA.Unsupported ?? clB.Unsupported); return null; }
 
         var kept = new List<(AnalyticFace F, FaceSplit.Region R, bool Flip)>();
         bool Select(List<AnalyticFace> faces, Dictionary<AnalyticFace, List<FaceIntersect.Piece>> on, List<Vector3d> cuts, Classifier other, bool isA, out string w)
         {
-            foreach (var f in faces)
+            // 23:50 (скорость): ГРАНИ РАЗБИВАЮТСЯ И КЛАССИФИЦИРУЮТСЯ В НЕСКОЛЬКО ПОТОКОВ. Работа грани (разбиение, проверка разбиения,
+            // класс областей) — функция только её самой и неизменных операндов; итоги (оставленные области, разрезанные грани,
+            // совпадающие грани) применяются по порядку граней, первый отказ по порядку — тот же, исключение грани — в её очередь.
+            // Контекст потока (допуски операции, начало координат) передаётся. Разбор (отладочные выводы, внесённые потери) —
+            // последовательно. Мутация P3D_SELECTPAR=0.
+            int thr = Ops.BooleanOp.Threads;
+            bool par = !SelectParOff && thr > 1 && Environment.ProcessorCount > 1 && faces.Count > 1 && FaceSplit.Debug == null && Classifier.Debug == null && FaceIntersect.Debug == null
+                       && !PartSkipDbg && !PartStat && !DropRegionForTest && !DropCurvedRegionForTest && !DropClosedRegionForTest && !DropTracedRegionForTest;
+            var outs = new FaceOut?[faces.Count];
+            if (par)
             {
+                var tolO = FaceSplit.TolOverride; var epsO = Region2Ops.EpsOverride; var orgO = PrismBuild.LocalOrigin; var boxO = Region2Ops.BoxOffForTests;
+                System.Threading.Tasks.Parallel.For(0, faces.Count, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = thr }, i =>
+                {
+                    var t0 = FaceSplit.TolOverride; var e0 = Region2Ops.EpsOverride; var o0 = PrismBuild.LocalOrigin; var b0 = Region2Ops.BoxOffForTests;
+                    FaceSplit.TolOverride = tolO; Region2Ops.EpsOverride = epsO; PrismBuild.LocalOrigin = orgO; Region2Ops.BoxOffForTests = boxO;
+                    try { outs[i] = Work(faces[i]); }
+                    catch (Exception ex) { outs[i] = new FaceOut { Error = ex }; }
+                    finally { FaceSplit.TolOverride = t0; Region2Ops.EpsOverride = e0; PrismBuild.LocalOrigin = o0; Region2Ops.BoxOffForTests = b0; }
+                });
+                Interlocked.Increment(ref SelectParallelRuns);
+            }
+            for (int i = 0; i < faces.Count; i++)
+            {
+                var f = faces[i];
+                var o = outs[i] ?? Work(f);
+                if (o.Error != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(o.Error).Throw();
+                if (o.Fail != null) { w = o.Fail; return false; }
+                if (o.Cut) cutFace.Add(f.Face);
+                if (o.Boundary != null) boundaryOf[f.Face] = o.Boundary;
+                foreach (var r in o.Kept) { kept.Add((f, r, !isA && op == Bool2.Subtract)); keptCount[f.Face] = keptCount.GetValueOrDefault(f.Face) + 1; }
+            }
+            w = ""; return true;
+            FaceOut Work(AnalyticFace f)
+            {
+                var o = new FaceOut();
                 // лента катящегося шара (пассивная грань) — целиком одна область, с теми же рёбрами
                 List<FaceSplit.Region>? regs; string? sw;
                 if (f.Band) { regs = BandRegion(f); sw = null; }
                 else if (f.Param && on[f].Count == 0) { regs = ParamRegion(f); sw = null; } else regs = FaceSplit.Split(f, on[f], cuts, out sw);
-                if (regs == null) { w = $"face split: {sw}"; return false; }
+                if (regs == null) { o.Fail = $"face split: {sw}"; return o; }
                 // ЦЕЛАЯ ЗАМКНУТАЯ ПОВЕРХНОСТЬ без кусков разреза (полость-шар у тела, вложенного в другое): областей разбиение
                 // не строит (контуров нет) — грань целиком одна область. Прежде грань молча терялась: шар-полость исчезал
                 // из результата следующей булевой (две полости в кубе — объём на 905 мм³ больше, принято). Иная грань без
@@ -458,7 +542,7 @@ public static class GeneralBoolean
                         whole.InsideCandidates.Add(f.O + e1 * f.R);
                         regs = new List<FaceSplit.Region> { whole };
                     }
-                    else if (!FaceLossOld) { w = "face split: no region for a face (the face would be lost)"; return false; }
+                    else if (!FaceLossOld) { o.Fail = "face split: no region for a face (the face would be lost)"; return o; }
                 }
                 // KRN-05 (05.5): РАЗБИЕНИЕ ГРАНИ ПРОВЕРЯЕТСЯ — области покрывают грань без потерь и наложений: сумма их
                 // площадей (в той же мере развёртки) равна площади грани без разреза. Прежде не проверялось: потерянная или
@@ -500,7 +584,7 @@ public static class GeneralBoolean
                         double sum2 = 0;
                         if (f.Tor) { sum2 = Math.Abs(regs.Sum(r => MeasureTor2(f, r, org0))); bad |= sum2 > 1e-7 * Math.PI * (f.R + f.Rm) * (f.R + f.Rm) + 2 * TolV * (f.R + f.Rm) * lsum + 1e-12; }
                         if (PartStat) Console.Error.WriteLine($"PARTSTAT full {(f.Sph ? "sph" : "tor")} regs {regs.Count} sum {sum:G6} a0 {a0:G6} sum2 {sum2:G6}");
-                        if (bad) { w = $"face split: the regions of the closed face {f.Face.Tag} cover {sum:G10} (second measure {sum2:G6}) of {a0:G10} (partition check)"; return false; }
+                        if (bad) { o.Fail = $"face split: the regions of the closed face {f.Face.Tag} cover {sum:G10} (second measure {sum2:G6}) of {a0:G10} (partition check)"; return o; }
                     }
                     else if (whole is { Count: 1 })
                     {
@@ -510,16 +594,16 @@ public static class GeneralBoolean
                         double tolAbs = 2 * TolV * (lw + regs.Sum(r => { Measure(f, r, org, out double l2); return l2; }));
                         if (PartStat) Console.Error.WriteLine($"PARTSTAT {(f.Cyl ? "cyl" : f.Cone ? "cone" : f.Tor ? "tor" : f.Sph ? "sph" : "plane")} regs {regs.Count} rel {(sum - a0) / a0:E2} a0 {a0:G6}");
                         if (Math.Abs(sum - a0) > 1e-7 * Math.Abs(a0) + tolAbs + 1e-12)
-                        { w = $"face split: the regions of face {f.Face.Tag} cover {sum:G10} of {a0:G10} (partition check)"; return false; }
+                        { o.Fail = $"face split: the regions of face {f.Face.Tag} cover {sum:G10} of {a0:G10} (partition check)"; return o; }
                         if (f.Tor && poleOk)
                         {
                             double s2 = Math.Abs(regs.Sum(r => MeasureTor2(f, r, org))), w2 = Math.Abs(MeasureTor2(f, whole[0], org));
                             if (Math.Abs(s2 - w2) > 1e-7 * Math.Max(w2, Math.PI * (f.R + f.Rm) * (f.R + f.Rm)) + 2 * TolV * (f.R + f.Rm) * (lw + regs.Sum(r => { Measure(f, r, org, out double l3); return l3; })) + 1e-12)
-                            { w = $"face split: the regions of face {f.Face.Tag} cover {s2:G10} of {w2:G10} (second measure, partition check)"; return false; }
+                            { o.Fail = $"face split: the regions of face {f.Face.Tag} cover {s2:G10} of {w2:G10} (second measure, partition check)"; return o; }
                         }
                     }
                 }
-                if (on[f].Count > 0 || regs.Count > 1) cutFace.Add(f.Face);
+                if (on[f].Count > 0 || regs.Count > 1) o.Cut = true;
                 foreach (var r in regs)
                 {
                     // точка «на границе» без совпадающей грани (касание) — следующий кандидат
@@ -530,15 +614,15 @@ public static class GeneralBoolean
                             var c2 = other.Classify(alt);
                             if (c2 is 1 or -1) { c = c2; r.Inside = alt; break; }
                         }
-                    if (c == null) { w = "classification failed"; return false; }
+                    if (c == null) { o.Fail = "classification failed"; return o; }
                     bool keep;
                     if (c == 0)
                     {
                         // НА ГРАНИЦЕ ДРУГОГО ТЕЛА (совпадающие грани): по наружным нормалям.
                         var oth = (isA ? fb : fa).FirstOrDefault(g => g.SurfaceDistance(r.Inside) < 1e-7 && g.Contains(r.Inside) != false);
-                        if (oth == null) { w = "a region on the other body's boundary without a coincident face"; return false; }
+                        if (oth == null) { o.Fail = "a region on the other body's boundary without a coincident face"; return o; }
                         bool same = Vector3d.Dot(f.Face.NormalAt(r.Inside), oth.Face.NormalAt(r.Inside)) > 0;
-                        boundaryOf[f.Face] = oth.Face;
+                        o.Boundary = oth.Face;
                         keep = op switch
                         {
                             Bool2.Union => isA && same,          // совпадают — одна копия (A); навстречу — внутренний стык
@@ -556,12 +640,12 @@ public static class GeneralBoolean
                             _ => isA ? !inside : inside,
                         };
                     }
-                    if (keep) { kept.Add((f, r, !isA && op == Bool2.Subtract)); keptCount[f.Face] = keptCount.GetValueOrDefault(f.Face) + 1; }
+                    if (keep) o.Kept.Add(r);
                     FaceSplit.Debug?.Invoke($"region class: {(isA ? "A" : "B")} {f.Face.Tag} {f.Shape?.GetType().Name} class {c} keep {keep} inside {r.Inside}");
                     if (f.Sph) FaceSplit.Debug?.Invoke($"sphere region: unbounded {r.Unbounded} inside {r.Inside} class {c} keep {keep} loops {r.Loops.Count}");
                 }
+                return o;
             }
-            w = ""; return true;
         }
         var swSel = System.Diagnostics.Stopwatch.StartNew();
         bool selOk = Select(fa, onA, cutsA, clB, true, out why) && Select(fb, onB, cutsB, clA, false, out why);

@@ -22,8 +22,19 @@ static partial class Program
             var cyl = FFPrimitiveFeature.Make(FFPrimitive.Cylinder, new Frame3(new Vector3d(8, 0, 5), Vector3d.UnitX, Vector3d.UnitY), 15, 40, 0);
             var sph = FFPrimitiveFeature.Make(FFPrimitive.Sphere, new Frame3(Vector3d.Zero, Vector3d.UnitX, Vector3d.UnitY), 20, 0, 0);
             var list = new List<TSolid> { cyl };
-            BooleanOp.Unite(list, sph, new List<string>());
+            long csg0 = BooleanOp.CsgParallelBatches, sel0 = Parametric3D.Kernel.Analytic.GeneralBoolean.SelectParallelRuns, cf0 = Parametric3D.Kernel.Analytic.Classifier.FacesBuilt, pp0 = Parametric3D.Kernel.Analytic.GeneralBoolean.PrepParallelRuns;
+            int opFaces = cyl.Faces.Count() + sph.Faces.Count();
+            // 23:50: согласие с CSG — пачками в несколько потоков, как в приложении (P3D_CSGPAR=0 — по одной точке)
+            using (new KernelContext(KernelSettings.Capture() with { BooleanThreads = 4, MeshThreads = 4 }).Enter()) BooleanOp.Unite(list, sph, new List<string>());
             Require(list.Count == 1, "union is one body");
+            if (Environment.ProcessorCount > 1 && BooleanOp.CsgParallelBatches <= csg0) fails.Add("union: CSG agreement points were not classified in parallel");
+            // 23:50: разбиение и отбор областей граней — в несколько потоков (P3D_SELECTPAR=0 — по одной грани)
+            if (Environment.ProcessorCount > 1 && Parametric3D.Kernel.Analytic.GeneralBoolean.SelectParallelRuns <= sel0) fails.Add("union: face regions were not selected in parallel");
+            // 23:50: классификаторы общего маршрута — по уже построенным формам граней (P3D_CLSREUSE=0 — заново): форм по граням тела
+            // строят только проверки результата (результат и оба операнда)
+            if (Environment.ProcessorCount > 1 && Parametric3D.Kernel.Analytic.GeneralBoolean.PrepParallelRuns <= pp0) fails.Add("union: operand face forms were not built in parallel");
+            long cfBuilt = Parametric3D.Kernel.Analytic.Classifier.FacesBuilt - cf0;
+            if (cfBuilt > list[0].Faces.Count()) fails.Add($"union: {cfBuilt} face forms built by classifiers (operands {opFaces}, result {list[0].Faces.Count()})");
             var body = list[0];
             double v0 = AnalyticVolume.Of(body) ?? OpVolume(body);
             string Kind(TEdge e) => string.Join("/", e.CoEdges.Select(c => GeometryAudit.AuthoritativeSurface(c.Loop.Face)?.GetType().Name).OrderBy(x => x));
@@ -94,6 +105,10 @@ static partial class Program
                     var r1 = SolidValidator.ValidateMesh(md1); long mv0 = SolidValidator.MeshValMemoHits; var r2 = SolidValidator.ValidateMesh(md2);
                     if (SolidValidator.MeshValMemoHits <= mv0) fails.Add($"{name}: the same mesh was analysed again (no memory)");
                     if (r1.Summary() != r2.Summary() || r1.Metrics.Count != r2.Metrics.Count) fails.Add($"{name}: mesh analysis from memory differs");
+                    // 23:50: ошибка гранения незамороженной грани — из памяти по содержанию (P3D_AUDITCHORDMEMO=0)
+                    var ga1 = GeometryAudit.Of(b); long cm0 = GeometryAudit.ChordMemoHits; var ga2 = GeometryAudit.Of(b);
+                    if (b.Faces.Any(f => f.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface fz && !((IFreezable)fz).IsFrozen) && GeometryAudit.ChordMemoHits <= cm0) fails.Add($"{name}: facet chord error measured again (no memory)");
+                    if (ga1.MaxChordError != ga2.MaxChordError) fails.Add($"{name}: chord error from memory differs");
                 }
                 if (samplings > coedges + 2) fails.Add($"{name}: {samplings} p-curve samplings for {coedges} coedges");
                 var val = SolidValidator.Validate(b);

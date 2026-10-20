@@ -18,8 +18,14 @@ static partial class Program
         void Emit(object o) { var s = System.Text.Json.JsonSerializer.Serialize(o); w.WriteLine(s); w.Flush(); Console.WriteLine(s); }
         static double Med(List<double> v) { var s = v.OrderBy(x => x).ToList(); return s[s.Count / 2]; }
         { var p0 = RealisticPart(99, 20, out _); p0.MarkDirtyFrom(p0.Features[^1]); p0.Rebuild(null); }   // прогрев
+        // 23:50: разбор — только часть замера (P3D_PERFONLY=parts|holes) и профиль ядра (P3D_PERFPROF=1)
+        string? only = Environment.GetEnvironmentVariable("P3D_PERFONLY");
+        bool profOn = Environment.GetEnvironmentVariable("P3D_PERFPROF") == "1";
+        void ProfStart() { if (profOn) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); } }
+        void ProfEnd() { if (profOn) { Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(30))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; } }
         foreach (int seed in new[] { 1, 2, 3, 4, 5, 6 })
         {
+            if (only != null && only != "parts") break;
             var p = RealisticPart(seed, 40, out _);
             var sw = new Stopwatch();
             GC.Collect(); long a0 = GC.GetTotalAllocatedBytes(true);
@@ -39,6 +45,7 @@ static partial class Program
             Emit(new { kind = "part", seed, features = p.Features.Count, faces = p.Bodies.Sum(b => b.Faces.Count()), errors = p.Features.Count(f => f.Error != null),
                        fullMs = full, editLastMs = Med(lastT), editMidMs = Med(midT), previewLastMs = Med(prevT), allocMb });
         }
+        if (only is null or "holes")
         {
             var p = new Part("perfholes");
             TestGeometry.AddCube(p, 200);
@@ -52,10 +59,13 @@ static partial class Program
             }
             p.Rebuild(null);
             p.MarkDirtyFrom(p.Features[0]);
+            ProfStart();
             var sw = Stopwatch.StartNew(); p.Rebuild(null); double full = sw.Elapsed.TotalMilliseconds;
-            Emit(new { kind = "holes100", fullMs = full, errors = p.Features.Count(f => f.Error != null), faces = p.Bodies.Sum(b => b.Faces.Count()) });
-            IoTimes(Emit, Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outPath))!, "io"), "holes100", p.Bodies.ToList());
+            ProfEnd();
+            Emit(new { kind = "holes100", edgeMapHits = Parametric3D.Model.FeatureHistory.EdgeMapMemoHits, fullMs = full, errors = p.Features.Count(f => f.Error != null), faces = p.Bodies.Sum(b => b.Faces.Count()) });
+            if (only == null) IoTimes(Emit, Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outPath))!, "io"), "holes100", p.Bodies.ToList());
         }
+        if (only != null) return;
         { var p = RealisticPart(1, 40, out _); p.Rebuild(null); IoTimes(Emit, Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outPath))!, "io"), "part1", p.Bodies.ToList()); }
         {
             var p = RealisticPart(7, 40, out _);

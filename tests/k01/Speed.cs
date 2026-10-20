@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Parametric3D.Kernel;
 using Parametric3D.Model;
 
@@ -157,7 +157,9 @@ static partial class Program
             double ratio = (double)b.Rings / Math.Max(1, a.Rings);
             Require(ratio <= 12, $"ring tessellations grow {ratio:0.0}× for 3× holes ({a.Rings} → {b.Rings})");
             // подпись грани считается один раз на объект грани: грани результата операции — вход следующей
-            Require(b.SigComputed <= 0.6 * b.SigAsked, $"face signatures recomputed: {b.SigComputed} of {b.SigAsked} requests");
+            // 23:50: плоская грань с новым отверстием решается числом контуров до подписей (P3D_HISTLOOPSFIRST) — подписи почти не
+            // спрашиваются (48 отверстий: 4 запроса вместо сотен); доля пересчёта проверяется, когда запросов много
+            Require(b.SigAsked <= 16 || b.SigComputed <= 0.6 * b.SigAsked, $"face signatures recomputed: {b.SigComputed} of {b.SigAsked} requests");
         });
     }
 }

@@ -1,0 +1,6 @@
+{"runtime":".NET 8.0.31","cpu":2,"os":"Ubuntu 24.04.5 LTS","args":["krn10"]}
+{"test":"KRN10-TREE-OVERHEAD-NOT-QUADRATIC","mesh16":0,"rings16":304,"faces16":22,"mesh48":0,"rings48":2448,"faces48":54,"sigAsked":4,"sigComputed":4}
+{"test":"KRN10-TREE-OVERHEAD-NOT-QUADRATIC","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":1,"failed":0}

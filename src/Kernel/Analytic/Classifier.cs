@@ -36,10 +36,13 @@ public sealed class Classifier
         foreach (var f in faces)
         {
             var af = AnalyticFace.Of(f, out var why);
+            Interlocked.Increment(ref FacesBuilt);
             if (af == null) { Unsupported = why; return; }
             _faces.Add(af);
         }
     }
+    /// <summary>Разбор: точных форм граней, построенных классификаторами по граням тела.</summary>
+    public static long FacesBuilt;
 
     /// <summary>KRN-10 (10.2): классификатор по готовым точным формам граней (PreparedBody).</summary>
     internal Classifier(List<AnalyticFace> faces) { _faces.AddRange(faces); }

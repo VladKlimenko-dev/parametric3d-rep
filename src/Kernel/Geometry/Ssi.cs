@@ -822,8 +822,28 @@ public static class Ssi
                 r.Curves.Add(new ArcCurve3(new Frame3(t.C + dirIn * (sgn * t.R), dirIn, w), t.r, 0, 2 * Math.PI));
             r.Kind = Kind.Curves; return r;
         }
+        // 23:50: ПЛОСКОСТЬ, ПАРАЛЛЕЛЬНАЯ ОСИ, НА РАССТОЯНИИ R + r ИЛИ R − r ОТ ЦЕНТРА — касание экватора. Внешний: касание в одной
+        // точке (тор — по одну сторону плоскости) — ответ сразу, без прослеживания. Внутренний (седло): две ветви пересекаются в
+        // точке касания — прослеживание её не удостоверяет и шло 1.5–3 с до отказа; отказ (причина) — сразу. Мутация P3D_PLTORTAN=0.
+        if (!PlaneTorusTangentOff && Math.Abs(Vector3d.Dot(n, w)) < 1e-12)
+        {
+            double sd = Vector3d.Dot(n, t.C - p.P), tolT = 1e-9 * Math.Max(1, t.R + t.r);
+            if (Math.Abs(Math.Abs(sd) - (t.R + t.r)) <= tolT)
+            {
+                r.Kind = Kind.Tangent; r.Points.Add(t.C - n * Math.Sign(sd) * (t.R + t.r));
+                Interlocked.Increment(ref PlaneTorusTangents); return r;
+            }
+            if (t.R > t.r && Math.Abs(Math.Abs(sd) - (t.R - t.r)) <= tolT)
+            {
+                r.Kind = Kind.Curves; r.Uncertified = $"plane tangent to the torus at its inner equator (saddle point {t.C - n * Math.Sign(sd) * (t.R - t.r):0.######})";
+                Interlocked.Increment(ref PlaneTorusTangents); return r;
+            }
+        }
         return Trace(p, t, t.C, t.R + t.r + 1);
     }
+    static readonly bool PlaneTorusTangentOff = Environment.GetEnvironmentVariable("P3D_PLTORTAN") == "0";
+    /// <summary>Касаний плоскости и тора по экватору, решённых сразу.</summary>
+    public static long PlaneTorusTangents;
 
     // ---------------------------------------------------------------- общее прослеживание
 
