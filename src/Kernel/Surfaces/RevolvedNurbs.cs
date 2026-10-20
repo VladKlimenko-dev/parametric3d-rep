@@ -39,6 +39,16 @@ public static class RevolvedNurbs
         return (P, W, K.ToArray());
     }
 
+    /// <summary>
+    /// k78: образующая — дуга (шар, тор: биквадратная) или ОТРЕЗОК (конус, цилиндр вращения: степень 1 по образующей) —
+    /// для неравномерного масштаба тела (TopologyTransform.ScaledAxes: рациональная сетка переносится аффинно точно).
+    /// </summary>
+    public static NurbsSurface? Of(RevolvedSurface rv, bool lines)
+    {
+        if (!lines || rv.Base is not LineCurve3 ln) return Of(rv);
+        return Build(rv, new List<Vector3d> { ln.A, ln.B }, new List<double> { 1, 1 }, new double[] { 0, 0, 1, 1 }, 1);
+    }
+
     public static NurbsSurface? Of(RevolvedSurface rv)
     {
         if (rv.Base is not ArcCurve3 a) return null;
@@ -47,6 +57,11 @@ public static class RevolvedNurbs
         double sg = Math.Sign(a.A1 - a.A0);
         Vector3d Tan(double t) => (V * Math.Cos(t) - U * Math.Sin(t)) * sg;
         var (bp, bw, ku) = ArcPieces(At, Tan, R, a.A0, a.A1);
+        return Build(rv, bp, bw, ku, 2);
+    }
+
+    static NurbsSurface Build(RevolvedSurface rv, List<Vector3d> bp, List<double> bw, double[] ku, int degU)
+    {
         // окружность оборота: единичные (cx, cy) от угла A0 до A1
         var (cp, cw, kv) = ArcPieces(t => new Vector3d(Math.Cos(t), Math.Sin(t), 0), t => new Vector3d(-Math.Sin(t), Math.Cos(t), 0) * Math.Sign(rv.A1 - rv.A0), 1, rv.A0, rv.A1);
         var o = rv.Axis.Origin; var w = rv.Axis.W.Normalized();
@@ -57,6 +72,6 @@ public static class RevolvedNurbs
             for (int j = 0; j < cp.Count; j++) { net[i, j] = o + w * z + rad * cp[j].X + perp * cp[j].Y; wt[i, j] = bw[i] * cw[j]; }
         }
         // параметры: u ∈ [0, 1] по образующей (узлы ku), v ∈ [0, 1] по обороту
-        return new NurbsSurface(net, 2, 2, wt, ku, kv);
+        return new NurbsSurface(net, degU, 2, wt, ku, kv);
     }
 }

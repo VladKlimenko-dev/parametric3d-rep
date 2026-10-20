@@ -823,6 +823,19 @@ Check("UI-FF-GIZMO", () =>
     w.Close();
 });
 
+Check("UI-FRAME-GUARD", () =>
+{
+    // (14:51, журнал пользователя): отказ кадра Avalonia («Unable to configure OpenGL FBO») не снимает приложение — кадр вида
+    // идёт через обёртку: исключение — в журнал, кадр повторяется
+    var w = Open(DocumentSession.NewPart());
+    var vp = w.ViewPort;
+    Require(vp.UpdateGuarded, "frame guard is not installed (Avalonia OpenGlControlBase._update not found)");
+    bool ok = vp.RunFrameGuarded(() => throw new Avalonia.OpenGL.OpenGlException("Unable to configure OpenGL FBO"));
+    Require(!ok && vp.FrameFailuresInRow == 1 && ModelViewport.FrameFailuresTotal >= 1, "failed frame is not contained");
+    Require(vp.RunFrameGuarded(() => { }) && vp.FrameFailuresInRow == 0, "a good frame resets the failure count");
+    w.Close();
+});
+
 Check("UI-DELETE-FEATURE-SKETCH", () =>
 {
     // (23:43) п. 14: удаление операции убирает и её эскиз (если им больше никто не пользуется); оставшийся эскиз удаляется
