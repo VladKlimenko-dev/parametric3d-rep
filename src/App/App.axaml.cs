@@ -15,6 +15,7 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        if (!Avalonia.Controls.Design.IsDesignMode) Diagnostics.UiWatchdog.Start();
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime d)
         {
             // метка «приложение работает»: осталась от прошлого запуска — тот завершился аварийно (не через выход)

@@ -629,9 +629,9 @@ Check("UI-SKETCH-UX", () =>
     vp.Selection.Clear(); vp.Selection.Select(new PickRef(circ.Id, PickKind.SketchCurve, sk, circ), additive: true);
     reg["sk.delete"].Execute();
     Require(!sk.Entities.Contains(circ) && !sk.Dimensions.Contains(rd), "circle not deleted with its dimension");
-    // п. 11: «Готово / Отмена» — вверху у куба; полоса снизу — предложения
+    // п. 11 (с 12:28 — в полосе панелей над видом): «Готово / Отмена» видны; полоса снизу — предложения
     var bar = w.FindControl<Border>("SketchBar")!;
-    Require(bar.IsVisible && bar.VerticalAlignment == Avalonia.Layout.VerticalAlignment.Top && bar.HorizontalAlignment == Avalonia.Layout.HorizontalAlignment.Right, "sketch done/cancel bar not at the top right");
+    Require(bar.IsVisible && bar.Parent == w.FindControl<WrapPanel>("ToolTray"), "sketch done/cancel bar is not in the toolbar tray");
     Require(w.FindControl<Border>("ShapeBar")!.IsVisible, "shape panel hidden");
     if (Environment.GetEnvironmentVariable("UI_SKSHOT") is { Length: > 0 } skshot)
     {
@@ -646,61 +646,45 @@ Check("UI-SKETCH-UX", () =>
     w.Close();
 });
 
-Check("UI-PANELS-DOCK", () =>
+Check("UI-TOOLBAR-TRAY", () =>
 {
-    // (21:04) п. 3 и (23:43) пп. 4–9, 11: панели перемещаются и прилипают: у левой/правой стороны — вертикальная полоса
-    // иконок, у верхней/нижней — горизонтальная полоса иконок, все кнопки без «Ещё…», в углу — ряд с названиями; панели на
-    // одной стороне не перекрываются (рядом, если помещается, иначе дальше от края); полосы одной толщины; место
-    // запоминается. п. 2: шрифт ГОСТ — у объектов вида, не у меню; п. 1: эскиз в правке виден, даже если в дереве скрыт
+    // (12:28): все панели инструментов — в полосе над видом, не поверх вида: операции, вид, выбор; в эскизе — ещё фигуры и
+    // «Готово / Отмена». Кнопки — иконки одного размера; у групп «Ещё…» — выпадающий список. Вид — целиком под полосой.
+    // Шрифт ГОСТ — только у объектов вида; эскиз в правке, скрытый в дереве, — всё равно в сцене
     var s = DocumentSession.NewPart();
     var w = Open(s);
-    var docks = w.Docks;
-    Require(new[] { "commands", "shapes", "view", "sketch", "context" }.All(docks.ContainsKey), "docks: " + string.Join(",", docks.Keys));
+    var tray = w.FindControl<WrapPanel>("ToolTray")!;
+    var trayBorder = w.FindControl<Border>("ToolTrayBorder")!;
     var area = w.FindControl<Grid>("ViewArea")!;
-    void Run() { Dispatcher.UIThread.RunJobs(); area.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
-    var view = docks["view"]; var cmd = docks["commands"]; var ctx = docks["context"];
-    var tools = w.FindControl<StackPanel>("ViewTools")!;
-    var stack = w.FindControl<WrapPanel>("CommandStack")!;
-    view.DockTo(DockablePanel.Side.Left, 0.5); Run();
-    Require(view.Mode == PanelMode.StripV && tools.Orientation == Avalonia.Layout.Orientation.Vertical && view.Panel.Bounds.X <= cmd.Panel.Bounds.Right + 10 && !view.Panel.Bounds.Intersects(cmd.Panel.Bounds), $"view bar did not dock left as a vertical strip (next to the command bar): {view.Mode} x {view.Panel.Bounds.X}");
-    view.MoveTo(area.Bounds.Width - view.Panel.Bounds.Width - 20, 300); Run();
-    view.Snap(); Run();
-    Require(view.Docked == DockablePanel.Side.Right && view.Mode == PanelMode.StripV && area.Bounds.Width - view.Panel.Bounds.Right < 20, $"no snap to the right side: {view.Docked} {view.Panel.Bounds} area {area.Bounds}");
-    view.MoveTo(300, 300); view.Snap();
-    Require(view.Docked == DockablePanel.Side.Free && view.Mode == PanelMode.Float, "snapped while far from the edges");
-    // команды у нижней стороны: горизонтальная полоса, все кнопки иконками одного размера, без заголовка и «Ещё…»
-    cmd.DockTo(DockablePanel.Side.Bottom, 0.5); Run();
-    var btns = stack.Children.OfType<Avalonia.Controls.Primitives.TemplatedControl>().ToList();
-    Require(cmd.Mode == PanelMode.StripH && stack.Orientation == Avalonia.Layout.Orientation.Horizontal, "command bar did not turn into a horizontal strip");
-    Require(!stack.Children.OfType<TextBlock>().Any() && btns.All(b => b.Tag is AppCommand), "strip has a header or a «More…» button");
-    Require(btns.Count > 20 && btns.All(b => Math.Abs(b.Bounds.Height - UiLook.StripButtonPx) < 0.5), $"strip buttons: {btns.Count}, heights {string.Join(",", btns.Select(b => b.Bounds.Height).Distinct())}");
-    // вторая панель к той же стороне: не перекрывает первую
-    ctx.DockTo(DockablePanel.Side.Bottom, 0.5); Run();
-    Require(!cmd.Panel.Bounds.Intersects(ctx.Panel.Bounds), $"two panels at the bottom overlap: {cmd.Panel.Bounds} / {ctx.Panel.Bounds}");
-    Require(Math.Abs(cmd.Panel.Bounds.Height - ctx.Panel.Bounds.Height) < 1.5 || cmd.Panel.Bounds.Height > 2 * ctx.Panel.Bounds.Height - 2, $"strip thickness differs: {cmd.Panel.Bounds.Height} vs {ctx.Panel.Bounds.Height}");
-    // третья — к верху: рядом, если помещается; угол — ряд с названиями, без перекрытия
-    view.DockTo(DockablePanel.Side.Top, 0.5); Run();
-    ctx.DockTo(DockablePanel.Side.TopLeft); Run();
-    Require(ctx.Mode == PanelMode.Row, "corner dock is not a row");
-    var all = docks.Values.Where(d => d.Panel.IsVisible).Select(d => d.Panel.Bounds).ToList();
-    for (int a = 0; a < all.Count; a++) for (int b = a + 1; b < all.Count; b++)
-            Require(!all[a].Intersects(all[b].Deflate(0.5)), $"panels overlap: {all[a]} / {all[b]}");
-    cmd.Save();
-    Require(UserPrefs.Current.PanelPlaces.TryGetValue("commands", out var saved) && saved.StartsWith("Bottom"), "place not saved: " + saved);
-    cmd.Reset(); cmd.Restore(); Run();
-    Require(cmd.Docked == DockablePanel.Side.Bottom && cmd.Mode == PanelMode.StripH, "place not restored");
-    foreach (var d in docks.Values) { d.Reset(); d.Save(); }
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
     Run();
-    Require(!view.UserPlaced && view.Horizontal && tools.Orientation == Avalonia.Layout.Orientation.Horizontal && !cmd.Horizontal && stack.Children.OfType<TextBlock>().Any(), "reset");
-    Require(UserPrefs.Current.PanelPlaces.Count == 0, "places left after reset");
+    string[] names = { "CommandBar", "ViewBar", "ShapeBar", "SketchBar" };
+    foreach (var n in names) Require(w.FindControl<Border>(n)!.Parent == tray, n + " is not in the toolbar tray");
+    Require(w.FindControl<Border>("ContextBar")!.GetVisualAncestors().Contains(trayBorder), "context bar is not in the tray");
+    Require(!area.Children.OfType<Border>().Any(b => names.Contains(b.Name) || b.Name == "ContextBar"), "a tool panel is still over the view");
+    var trayBox = trayBorder.Bounds; var areaTop = area.TranslatePoint(new Avalonia.Point(0, 0), w)!.Value.Y;
+    Require(areaTop >= trayBorder.TranslatePoint(new Avalonia.Point(0, trayBox.Height), w)!.Value.Y - 0.5, "the view starts above the end of the tray");
+    var stack = w.FindControl<WrapPanel>("CommandStack")!;
+    var cmdBtns = stack.Children.OfType<Avalonia.Controls.Primitives.TemplatedControl>().Where(b => b.Tag is AppCommand).ToList();
+    Require(cmdBtns.Count >= 10 && cmdBtns.All(b => Math.Abs(b.Bounds.Height - UiLook.StripButtonPx) < 0.5), $"command icons: {cmdBtns.Count}, heights {string.Join(",", cmdBtns.Select(b => b.Bounds.Height).Distinct())}");
+    Require(stack.Children.OfType<Button>().Any(b => b.Tag is not AppCommand), "no drop-down for the remaining commands");
+    Require(!stack.Children.OfType<TextBlock>().Any(), "the tray has a text header");
+    // окно уже: полоса переносится, панели не перекрываются
+    w.Width = 1000; Run();
+    var vis = tray.Children.OfType<Control>().Where(c => c.IsVisible).Select(c => c.Bounds).ToList();
+    for (int a = 0; a < vis.Count; a++) for (int b = a + 1; b < vis.Count; b++)
+            Require(!vis[a].Intersects(vis[b].Deflate(0.5)), $"toolbars overlap: {vis[a]} / {vis[b]}");
+    w.Width = 1400; Run();
     // шрифт ГОСТ только у вида: панели — шрифтом интерфейса
     var gost = Parametric3D.Render.GostFont.Family;
-    var panelText = stack.GetVisualDescendants().OfType<TextBlock>().ToList();
-    Require(panelText.Count > 0 && panelText.All(t => !t.FontFamily.Name.Contains(gost)), "menu text uses the GOST font");
-    // эскиз в правке, скрытый в дереве, — всё равно в сцене
+    var panelText = tray.GetVisualDescendants().OfType<TextBlock>().ToList();
+    Require(panelText.All(t => !t.FontFamily.Name.Contains(gost)), "toolbar text uses the GOST font");
+    // эскиз: фигуры и «Готово / Отмена» — в полосе
     var part = s.Part!;
     w.SelectItem(part.PlaneXY);
     w.StartOperation(new SketchOp());
+    Run();
+    Require(w.FindControl<Border>("ShapeBar")!.IsVisible && w.FindControl<Border>("SketchBar")!.IsVisible, "sketch toolbars are not shown in the tray");
     var sk = w.ViewPort.ActiveSketch!;
     Rect(sk, 0, 0, 30, 20);
     sk.Visible = false;

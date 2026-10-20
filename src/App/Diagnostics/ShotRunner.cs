@@ -58,15 +58,6 @@ public static class ShotRunner
             Console.WriteLine($"select {name}: {(it != null ? "ok" : "not found")}");
             return;
         }
-        if (id.StartsWith("dock:"))
-        {
-            // dock:панель,сторона[,доля] — прилепить панель (проверка расстановки)
-            var a = id[5..].Split(',');
-            if (w.Docks.TryGetValue(a[0], out var d) && Enum.TryParse<Views.DockablePanel.Side>(a[1], out var side))
-                d.DockTo(side, a.Length > 2 ? double.Parse(a[2], System.Globalization.CultureInfo.InvariantCulture) : 0.5);
-            Console.WriteLine("dock " + id);
-            return;
-        }
         switch (id)
         {
             case "ok": w.CommitOperation(); Console.WriteLine("ok"); return;

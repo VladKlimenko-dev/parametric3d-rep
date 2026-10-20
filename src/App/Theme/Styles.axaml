@@ -62,6 +62,13 @@
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="8" />
   </Style>
+  <!-- панель инструментов в полосе над видом (12:28): рамка группы, без тени и скругления оверлея -->
+  <Style Selector="Border.toolbar">
+    <Setter Property="Background" Value="{DynamicResource P3.PanelBg2}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource P3.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="4" />
+  </Style>
   <Style Selector="TreeViewItem">
     <Setter Property="MinHeight" Value="26" />
     <Setter Property="Padding" Value="2,0" />
