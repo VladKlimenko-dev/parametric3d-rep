@@ -227,6 +227,7 @@ public static class AnalyticVolume
             case PlaneSurface pl: return PlaneArea(f, pl.F.Origin, pl.F.U, pl.F.V);
             case ExtrudedSurface { Base: SplineCurve3 or BezierCurve3 } when !AnalyticFlux.ExtSplineOff: return AnalyticFlux.FaceAreaOf(f);
             case OffsetSurface when !AnalyticFlux.OffsetVolOff: return AnalyticFlux.FaceAreaOf(f);
+            case NurbsSurface nsw when !NurbsVolOff && WholeNurbs(f, nsw): return NurbsDomainIntegral(f, nsw, area: true);
             case NurbsSurface when !NurbsVolOff: return AnalyticFlux.FaceAreaOf(f);
             case CornerPatchSurface cpa when WholePatch(f, cpa): return CornerIntegral(f, cpa, (x, n) => n.Length, area: true);
             case ExtrudedSurface exl when exl.Base is LineCurve3 ln:
@@ -849,6 +850,8 @@ public static class AnalyticVolume
                 var oe = _origin;
                 return AnalyticFlux.FaceFluxOf(f, x => x - oe);
             }
+            case NurbsSurface nsw when !NurbsVolOff && WholeNurbs(f, nsw):
+                return NurbsDomainIntegral(f, nsw, area: false);
             case NurbsSurface when !NurbsVolOff:
             {
                 // KRN-07 N1b: грань NURBS — поток (x − o) по краю (AnalyticFlux, общая параметризация (u, v))
@@ -868,6 +871,56 @@ public static class AnalyticVolume
     /// производными в вершинах области (5 с на грань). Ошибка — разность N и 2N (в бюджет квадратуры). Часть лоскута
     /// (грань, обрезанная после) — не поддержана (null). Мутация P3D_CORNERQUAD=0 — интеграла нет.
     /// </summary>
+    // k78: ГРАНЬ — ВСЯ ОБЛАСТЬ ПАРАМЕТРОВ NURBS (замкнутый лоскут: шар, тор, конус, перенесённые неравномерным масштабом —
+    // TopologyTransform.ScaledAxes): все рёбра лежат на краю области [u0,u1]×[v0,v1] (шов, полюс, край). Интеграл по краю
+    // здесь не годится: проекция точки шва даёт один край области из двух, и вклады шва взаимно гасятся (объём шара — 0).
+    // Тогда интеграл — прямо по области (Гаусс по пролётам узлов), сторона — по нормали грани. Мутация P3D_WHOLENURBS=0.
+    static readonly bool WholeNurbsOff = Environment.GetEnvironmentVariable("P3D_WHOLENURBS") == "0";
+    static bool WholeNurbs(TFace f, NurbsSurface ns) =>
+        !WholeNurbsOff && (f.Loops.All(l => l.CoEdges.Count == 0) || ns.WholeDomainBoundary(f) != null);
+
+    static double? NurbsDomainIntegral(TFace f, NurbsSurface ns, bool area)
+    {
+        var o = _origin;
+        double Integrate(int sub)
+        {
+            var ku = ns.KnotsU.Distinct().OrderBy(x => x).ToList(); var kv = ns.KnotsV.Distinct().OrderBy(x => x).ToList();
+            double sum = 0;
+            for (int i = 0; i + 1 < ku.Count; i++)
+                for (int si = 0; si < sub; si++)
+                {
+                    double a0 = ku[i] + (ku[i + 1] - ku[i]) * si / sub, a1 = ku[i] + (ku[i + 1] - ku[i]) * (si + 1) / sub, ma = (a0 + a1) / 2, ra = (a1 - a0) / 2;
+                    for (int j = 0; j + 1 < kv.Count; j++)
+                        for (int sj = 0; sj < sub; sj++)
+                        {
+                            double b0 = kv[j] + (kv[j + 1] - kv[j]) * sj / sub, b1 = kv[j] + (kv[j + 1] - kv[j]) * (sj + 1) / sub, mb = (b0 + b1) / 2, rb = (b1 - b0) / 2;
+                            for (int gi = 0; gi < GL8X.Length; gi++)
+                                for (int gj = 0; gj < GL8X.Length; gj++)
+                                {
+                                    ns.Derivs(new Vector2d(ma + ra * GL8X[gi], mb + rb * GL8X[gj]), out var S, out var Su, out var Sv);
+                                    var n = Vector3d.Cross(Su, Sv);
+                                    double g = area ? n.Length : Vector3d.Dot(S - o, n);
+                                    sum += GL8W[gi] * GL8W[gj] * ra * rb * g;
+                                }
+                        }
+                }
+            return sum;
+        }
+        double fine = Integrate(4), coarse = Integrate(2);
+        if (!double.IsFinite(fine) || !double.IsFinite(coarse)) return null;
+        _quadErr += Math.Abs(fine - coarse);
+        if (area) return Math.Abs(fine);
+        // сторона: нормаль S_u × S_v против наружной нормали грани в точке внутри области
+        ns.Derivs(new Vector2d(0.37 * (ns.KnotsU[^1] + ns.KnotsU[0]) + 0.13 * ns.KnotsU[0], 0.41 * ns.KnotsV[^1] + 0.59 * ns.KnotsV[0]), out var P, out var pu, out var pv);
+        var nn = Vector3d.Cross(pu, pv);
+        Vector3d outN; try { outN = f.NormalAt(P); } catch { return null; }
+        double d = Vector3d.Dot(nn, outN);
+        if (Math.Abs(d) < 1e-12 * nn.Length) return null;
+        return fine * Math.Sign(d);
+    }
+    static readonly double[] GL8X = { -0.9602898564975363, -0.7966664774136267, -0.5255324099163290, -0.1834346424956498, 0.1834346424956498, 0.5255324099163290, 0.7966664774136267, 0.9602898564975363 };
+    static readonly double[] GL8W = { 0.1012285362903763, 0.2223810344533745, 0.3137066458778873, 0.3626837833783620, 0.3626837833783620, 0.3137066458778873, 0.2223810344533745, 0.1012285362903763 };
+
     static bool WholePatch(TFace f, CornerPatchSurface cp) => !CornerQuadOff && f.Loops.Count == 1 && f.Loops[0].CoEdges.Count == cp.SideCount;
     static readonly bool CornerQuadOff = Environment.GetEnvironmentVariable("P3D_CORNERQUAD") == "0";
     static readonly System.Runtime.CompilerServices.ConditionalWeakTable<CornerPatchSurface, System.Collections.Concurrent.ConcurrentDictionary<(bool, Vector3d), (double V, double Err)>> CornerMemo = new();

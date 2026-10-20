@@ -60,6 +60,52 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         ClipToBounds = true;
         Selection.Changed += () => { _flagsDirty = true; Redraw(); };
         Transition.Completed += (_, _) => CameraChanged?.Invoke();
+        InstallUpdateGuard();
+    }
+
+    // ---------------------------------------------------------------- 14:51: защита кадра от отказа FBO Avalonia
+
+    // Журнал пользователя (Windows, Intel Iris Xe, WGL): «Unable to configure OpenGL FBO … GL_NO_ERROR» из
+    // OpenGlControlBaseResources.BeginDraw — проверка полноты кадрового буфера Avalonia (глубина + текстура цепочки) не
+    // проходит на изменении размера вида (панель операции открылась). Из очереди окна это исключение ловилось и
+    // записывалось, но из перерисовки по WM_PAINT (WndProc) оно не может пройти через родной кадр — процесс снимается с
+    // кодом 0xC0000409. Кадр вида запускается делегатом OpenGlControlBase._update (Avalonia 12.1): он подменяется обёрткой,
+    // отказ кадра записывается в журнал (первый и каждый 50-й), кадр повторяется через 30…300 мс. Мутация P3D_GLUPDATEGUARD=0.
+    static readonly bool UpdateGuardOff = Environment.GetEnvironmentVariable("P3D_GLUPDATEGUARD") == "0";
+    static readonly System.Reflection.FieldInfo? UpdateField =
+        typeof(OpenGlControlBase).GetField("_update", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+    /// <summary>Обёртка кадра поставлена.</summary>
+    public bool UpdateGuarded { get; private set; }
+    /// <summary>Отказы кадра подряд и всего.</summary>
+    public int FrameFailuresInRow { get; private set; }
+    public static int FrameFailuresTotal;
+
+    private void InstallUpdateGuard()
+    {
+        if (UpdateGuardOff || UpdateField?.GetValue(this) is not Action orig) return;
+        try { UpdateField.SetValue(this, (Action)(() => RunFrameGuarded(orig))); UpdateGuarded = true; }
+        catch (Exception ex) { Parametric3D.Core.AppLog.Write("frame guard", ex); }
+    }
+
+    /// <summary>Кадр под защитой: отказ — в журнал и повтор кадра; true — кадр прошёл.</summary>
+    public bool RunFrameGuarded(Action frame)
+    {
+        try
+        {
+            frame();
+            FrameFailuresInRow = 0;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            FrameFailuresInRow++;
+            int total = System.Threading.Interlocked.Increment(ref FrameFailuresTotal);
+            if (total == 1 || total % 50 == 0)
+                Parametric3D.Core.AppLog.Write($"frame failed ({total} total, {FrameFailuresInRow} in a row; view {Bounds.Width:F0}×{Bounds.Height:F0} @{_renderScale:F2})", ex);
+            int delay = Math.Min(300, 30 * FrameFailuresInRow);
+            Avalonia.Threading.DispatcherTimer.RunOnce(() => { try { RequestNextFrameRendering(); } catch { } }, TimeSpan.FromMilliseconds(delay));
+            return false;
+        }
     }
 
     // ================================================================ документ и показ

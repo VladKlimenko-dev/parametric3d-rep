@@ -28,6 +28,10 @@ public static class TopologyTransform
 
     /// <summary>Мутация P3D_NURBSXFORM=0: тело с гранью NURBS не переносится точно (прежнее: отказ переноса).</summary>
     static readonly bool NurbsXformOff = Environment.GetEnvironmentVariable("P3D_NURBSXFORM") == "0";
+    // k78: НЕРАВНОМЕРНЫЙ МАСШТАБ ПОВЕРХНОСТИ ВРАЩЕНИЯ (шар, тор, конус, наклонный цилиндр вращения) — точно: образующая-дуга
+    // или отрезок переводится в рациональный B-сплайн (RevolvedNurbs), его сетка переносится аффинно (рациональные сплайны
+    // аффинно инвариантны). Прежде — null, и тело шло по треугольникам. Мутация P3D_AFFINEREVNURBS=0.
+    static readonly bool AffineRevNurbsOff = Environment.GetEnvironmentVariable("P3D_AFFINEREVNURBS") == "0";
 
     /// <summary>Неявная форма при отображении (перенос, поворот, зеркало сохраняют расстояния).</summary>
     static Geometry.Ssi.Shape? ShapeMapped(Geometry.Ssi.Shape s, TransformOp.Xform x) => s switch
@@ -139,6 +143,9 @@ public static class TopologyTransform
                 ExtrudedSurface ex when C(ex.Base) is { } b => new ExtrudedSurface(b, x.Direction(ex.Dir)),
                 CylinderSurface cs when CrossScale(cs.Axis.W) is { } q => new CylinderSurface(Frame(cs.Axis, x), cs.Radius * q),
                 RevolvedSurface rv when CrossScale(rv.Axis.W) is not null && C(rv.Base) is { } b => new RevolvedSurface(b, Frame(rv.Axis, x), rv.A0, rv.A1),
+                // плоское кольцо вращения (отрезок поперёк оси) — плоскость
+                RevolvedSurface rv when !AffineRevNurbsOff && AnalyticVolume.FlatRevolved(rv) is { } fr => new PlaneSurface(new Frame3(x.Point(fr.P0), x.Direction(fr.U), x.Direction(fr.V))),
+                RevolvedSurface rv when !AffineRevNurbsOff && !NurbsXformOff && RevolvedNurbs.Of(rv, lines: true) is { } rn => rn.Mapped(x.Point),
                 NurbsSurface ns when !NurbsXformOff => ns.Mapped(x.Point),
                 _ => null
             } : s switch

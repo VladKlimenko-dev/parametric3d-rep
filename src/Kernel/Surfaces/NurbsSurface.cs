@@ -452,6 +452,38 @@ public sealed class NurbsSurface : ISurface3
 
     // ------------------------------------------------------------------ гранение
 
+    // k78: ГРАНЬ — ВСЯ ОБЛАСТЬ ПАРАМЕТРОВ ЗАМКНУТОГО ЛОСКУТА (шар, тор, конус после неравномерного масштаба): рёбра лежат на
+    // краю области, шов рёбер не имеет. Признак нужен объёму и площади (AnalyticVolume.WholeNurbs).
+    public (double U0, double U1, double V0, double V1) Domain => (_ku[_du], _ku[_ku.Length - 1 - _du], _kv[_dv], _kv[_kv.Length - 1 - _dv]);
+
+    /// <summary>
+    /// Все рёбра грани лежат на краю области параметров (и на поверхности); отдаёт точки ломаных контуров в параметрах.
+    /// Грань без рёбер — не сюда (вся область и так). null — не вся область.
+    /// </summary>
+    public List<Vector2d>? WholeDomainBoundary(TFace face)
+    {
+        if (face.Loops.All(l => l.CoEdges.Count == 0)) return null;
+        var (u0, u1, v0, v1) = Domain;
+        double tu = 1e-7 * (u1 - u0), tv = 1e-7 * (v1 - v0);
+        var res = new List<Vector2d>();
+        foreach (var l in face.Loops)
+        {
+            if (l.CoEdges.Count == 0) continue;
+            foreach (var p in l.TessellatePolyline())
+            {
+                var uv = ProjectToUV(p);
+                if ((PointAt(uv) - p).Length > Math.Max(1e-7, Tol.Weld)) return null;
+                bool onU = Math.Abs(uv.X - u0) < tu || Math.Abs(uv.X - u1) < tu, onV = Math.Abs(uv.Y - v0) < tv || Math.Abs(uv.Y - v1) < tv;
+                if (!onU && !onV) return null;
+                res.Add(uv);
+            }
+        }
+        // хотя бы одно направление замкнуто (иначе это обычный лоскут с краями — общий путь)
+        bool closedV = Enumerable.Range(0, 5).All(k => { double u = u0 + (u1 - u0) * k / 4; return (PointAt(new Vector2d(u, v0)) - PointAt(new Vector2d(u, v1))).Length < 1e-9 * Math.Max(1, PointAt(new Vector2d(u, v0)).Length); });
+        bool closedU = Enumerable.Range(0, 5).All(k => { double v = v0 + (v1 - v0) * k / 4; return (PointAt(new Vector2d(u0, v)) - PointAt(new Vector2d(u1, v))).Length < 1e-9 * Math.Max(1, PointAt(new Vector2d(u0, v)).Length); });
+        return closedU || closedV ? res : null;
+    }
+
     public void TessellateFace(TFace face, MeshBuilder mb)
     {
         // ГРАНЕНИЕ ИДЁТ ПО КОНТУРУ ГРАНИ, а не по всей области параметров: иначе у вырезанного

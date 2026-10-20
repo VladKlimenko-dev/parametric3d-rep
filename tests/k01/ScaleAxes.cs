@@ -9,8 +9,8 @@ static partial class Program
     /// <summary>
     /// МАСШТАБ ПО ОСЯМ (13:09, гизмо FreeForm): брусок, профиль с дугой (стенка выдавливания — дуга → дуга эллипса),
     /// цилиндр вдоль оси масштаба с равным поперечным коэффициентом — точно (объём = исходный × sx·sy·sz до 1e-9, тело
-    /// годное, гарантия не ниже исходной); цилиндр поперёк неравного масштаба — стенка с дугой эллипса; шар при неравном масштабе — null (вызывающий переносит по
-    /// треугольникам).
+    /// годное, гарантия не ниже исходной); цилиндр поперёк неравного масштаба — стенка с дугой эллипса; k78: шар, тор, конус при неравном масштабе — рациональный B-сплайн (сетка поверхности вращения
+    /// переносится аффинно точно; объём — по сетке, если формулы нет).
     /// В повёрнутой рамке — то же.
     /// </summary>
     static void ScaleAxesChecks()
@@ -38,7 +38,11 @@ static partial class Program
                 ("rounded profile", Rounded(), Vector3d.UnitX, Vector3d.UnitY, 1.7, 0.6, 2.2, true),
                 ("cylinder along Z", PrimitiveOp.Cylinder(new Vector3d(5, 5, 0), 4, 10), Vector3d.UnitX, Vector3d.UnitY, 1.5, 1.5, 2, true),
                 ("cylinder across (elliptic wall)", PrimitiveOp.Cylinder(new Vector3d(5, 5, 0), 4, 10), Vector3d.UnitX, Vector3d.UnitY, 2, 1, 1, true),
-                ("sphere non-uniform", PrimitiveOp.Sphere(new Vector3d(0, 0, 0), 5), Vector3d.UnitX, Vector3d.UnitY, 2, 1, 1, false),
+                // k78: поверхность вращения при неравном масштабе — рациональный B-сплайн (P3D_AFFINEREVNURBS)
+                ("sphere non-uniform", PrimitiveOp.Sphere(new Vector3d(0, 0, 0), 5), Vector3d.UnitX, Vector3d.UnitY, 2, 1, 0.7, true),
+                ("sphere rotated frame", PrimitiveOp.Sphere(new Vector3d(3, -2, 1), 5), rot, rotY, 1.3, 0.8, 1.6, true),
+                ("torus non-uniform", PrimitiveOp.Torus(new Vector3d(0, 0, 0), 12, 3), Vector3d.UnitX, Vector3d.UnitY, 1.5, 1, 0.8, true),
+                ("cone non-uniform", PrimitiveOp.Cone(new Vector3d(0, 0, 0), 6, 2, 10), Vector3d.UnitX, Vector3d.UnitY, 1.4, 0.9, 1.2, true),
             };
             foreach (var (name, b, u, v, sx, sy, sz, exact) in cases)
             {
@@ -53,7 +57,7 @@ static partial class Program
                 double tol = double.IsNaN(v1a) ? 5e-3 : 1e-9;   // нет формулы объёма (стенка с дугой эллипса) — по сетке
                 if (!r.Edges.Any(e => e.Curve is EllipseCurve3) && name.Contains("elliptic")) fails.Add($"{name}: no ellipse edges");
                 Log(new { test = "KRN-FF-SCALE-AXES", name, v0 = v0.ToString("R"), v1 = v1.ToString("R"), want = want.ToString("R"), guarantee = r.Guarantee.ToString(), valid = val.Summary() });
-                if (!val.IsValid) fails.Add($"{name}: {val.Summary()}");
+                if (!val.IsValid) { fails.Add($"{name}: {val.Summary()}"); if (Environment.GetEnvironmentVariable("P3D_SADBG") == "1") foreach (var iss in val.Issues.Take(6)) Console.WriteLine("   issue " + iss); }
                 if (!(Math.Abs(v1 - want) <= tol * want)) fails.Add($"{name}: volume {v1:R} vs {want:R}");
                 if (r.Guarantee < b.Guarantee) fails.Add($"{name}: guarantee {r.Guarantee} < {b.Guarantee}");
             }
