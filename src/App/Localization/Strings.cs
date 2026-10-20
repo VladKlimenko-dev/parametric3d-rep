@@ -770,6 +770,7 @@ public static class Strings
         ["Скрыть / показать"] = "Hide / show", ["Скрыть / показать выбранное"] = "Hide / show selected",
         ["Оси гизмо: тела (Local) / детали (Global)"] = "Gizmo axes: body (Local) / part (Global)", ["Local / Global"] = "Local / Global",
         ["Оси гизмо — локальные (тела)"] = "Gizmo axes: local (body)", ["Оси гизмо — глобальные (детали)"] = "Gizmo axes: global (part)",
+        ["Сбой видеодрайвера (OpenGL WGL). Со следующего запуска графика — ANGLE (Direct3D 11); перезапустите приложение."] = "Graphics driver failure (OpenGL WGL). From the next start the graphics use ANGLE (Direct3D 11); please restart the application.",
         ["По оси X"] = "Along X", ["По оси Y"] = "Along Y", ["По оси Z"] = "Along Z",
         ["Масштаб"] = "Scale",
         ["Вытянуть грань"] = "Push-pull face",

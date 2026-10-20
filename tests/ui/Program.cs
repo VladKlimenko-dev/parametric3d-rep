@@ -830,8 +830,20 @@ Check("UI-FRAME-GUARD", () =>
     var w = Open(DocumentSession.NewPart());
     var vp = w.ViewPort;
     Require(vp.UpdateGuarded, "frame guard is not installed (Avalonia OpenGlControlBase._update not found)");
+    // (15:57) режим WGL: первый отказ кадра переводит графику на ANGLE со следующего запуска (сохранено сразу)
+    var prefs = Parametric3D.App.Services.UserPrefs.Current;
+    string? oldMode = prefs.GlMode;
+    prefs.GlMode = "wgl";
+    string? toast = null;
+    Action<string> onFallback = m => toast = m;
+    ModelViewport.GraphicsFallback += onFallback;
     bool ok = vp.RunFrameGuarded(() => throw new Avalonia.OpenGL.OpenGlException("Unable to configure OpenGL FBO"));
+    ModelViewport.GraphicsFallback -= onFallback;
+    string? newMode = prefs.GlMode;
+    prefs.GlMode = oldMode; prefs.Save();
+    Console.WriteLine($"  fallback: mode wgl → {newMode}, toast «{toast}»");
     Require(!ok && vp.FrameFailuresInRow == 1 && ModelViewport.FrameFailuresTotal >= 1, "failed frame is not contained");
+    Require(newMode == "angle" && toast != null, "WGL frame failure does not switch the graphics to ANGLE");
     Require(vp.RunFrameGuarded(() => { }) && vp.FrameFailuresInRow == 0, "a good frame resets the failure count");
     w.Close();
 });

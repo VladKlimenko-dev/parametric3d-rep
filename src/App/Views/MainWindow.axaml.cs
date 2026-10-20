@@ -829,6 +829,7 @@ public partial class MainWindow : Window
         View.HandleDragStarted += OnHandleDragStarted;
         View.HandleDragged += OnHandleDragged;
         View.HandleDragEnded += OnHandleDragEnded;
+        ModelViewport.GraphicsFallback += msg => Dispatcher.UIThread.Post(() => ShowToast(msg));
         View.GizmoDragStarted += part =>
         {
             if (CurrentOperation is not { } op) return;

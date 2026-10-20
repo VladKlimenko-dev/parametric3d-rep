@@ -80,6 +80,29 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     public int FrameFailuresInRow { get; private set; }
     public static int FrameFailuresTotal;
 
+    // 15:57 (второй журнал): с обёрткой отказ кадра записан, но вслед за ним процесс снят без исключения — падение в
+    // драйвере (WGL, Intel Iris Xe; так же — 0xC0000374 2026-10-16). Настольный OpenGL на этой машине ненадёжен: при
+    // первом отказе кадра в режиме WGL графика переводится на ANGLE (Direct3D 11) со следующего запуска — до падения
+    // (ui.json сохраняется сразу), окно сообщает об этом. Мутация P3D_WGLFALLBACK=0.
+    static readonly bool WglFallbackOff = Environment.GetEnvironmentVariable("P3D_WGLFALLBACK") == "0";
+    static bool _wglFallbackDone;
+    /// <summary>Графика переведена с WGL на ANGLE (текст для окна).</summary>
+    public static event Action<string>? GraphicsFallback;
+
+    private static void WglFallback()
+    {
+        if (WglFallbackOff || _wglFallbackDone || Program.GlMode != "wgl") return;
+        _wglFallbackDone = true;
+        try
+        {
+            Services.UserPrefs.Current.GlMode = "angle";
+            Services.UserPrefs.Current.Save();
+            Parametric3D.Core.AppLog.Write("graphics: frame failure under WGL — switched to ANGLE from the next start");
+            GraphicsFallback?.Invoke(Loc.L("Сбой видеодрайвера (OpenGL WGL). Со следующего запуска графика — ANGLE (Direct3D 11); перезапустите приложение."));
+        }
+        catch (Exception ex) { Parametric3D.Core.AppLog.Write("graphics fallback", ex); }
+    }
+
     private void InstallUpdateGuard()
     {
         if (UpdateGuardOff || UpdateField?.GetValue(this) is not Action orig) return;
@@ -102,6 +125,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
             int total = System.Threading.Interlocked.Increment(ref FrameFailuresTotal);
             if (total == 1 || total % 50 == 0)
                 Parametric3D.Core.AppLog.Write($"frame failed ({total} total, {FrameFailuresInRow} in a row; view {Bounds.Width:F0}×{Bounds.Height:F0} @{_renderScale:F2})", ex);
+            WglFallback();
             int delay = Math.Min(300, 30 * FrameFailuresInRow);
             Avalonia.Threading.DispatcherTimer.RunOnce(() => { try { RequestNextFrameRendering(); } catch { } }, TimeSpan.FromMilliseconds(delay));
             return false;
