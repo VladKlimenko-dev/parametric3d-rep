@@ -132,11 +132,42 @@ public static partial class DirectRound
     /// <summary>Проверки обходного пути (страховка резца): прямой построитель выключен в этом потоке.</summary>
     [ThreadStatic] public static bool OffForTest;
 
+    static readonly bool CircleAnyOther = Environment.GetEnvironmentVariable("P3D_DRCIRCLEANY") != "0";
     static readonly bool CircleClosedRetry = Environment.GetEnvironmentVariable("P3D_DRCIRCLECLOSED") != "0";
     [ThreadStatic] static bool _circleAsClosed;
     static readonly bool OpenGenericRetry = Environment.GetEnvironmentVariable("P3D_DROPENGENERIC") != "0";
 
+    // 20:17: ОШИБКА ВЫЧИСЛЕНИЯ В ПРЯМОМ ПОСТРОИТЕЛЕ (NaN в Math.Sign и т. п.) — его отказ, а не отказ всей операции: дальше —
+    // прежний путь (резец и булева). Прежде исключение уходило в операцию («Round refused (exception at round.build)»).
+    // Мутация P3D_DRCATCH=0.
+    static readonly bool CatchOff = Environment.GetEnvironmentVariable("P3D_DRCATCH") == "0";
+    public static long Exceptions;
+
     public static bool TryRound(List<TSolid> bodies, IReadOnlyList<EdgeRef> refs, double r, List<string> warnings)
+    {
+        if (CatchOff) return TryRoundCore(bodies, refs, r, warnings);
+        try { FaultInjection.Hit("direct.round"); return TryRoundCore(bodies, refs, r, warnings); }
+        catch (Exception ex) when (ex is ArithmeticException or ArgumentException or IndexOutOfRangeException or InvalidOperationException or NullReferenceException or InjectedFaultException { Stage: "direct.round" } && !KernelContext.IsCancellation(ex))
+        {
+            Interlocked.Increment(ref Exceptions);
+            Debug?.Invoke("direct round: exception " + ex.GetType().Name + ": " + ex.Message);
+            return false;
+        }
+    }
+
+    public static bool TryChamfer(List<TSolid> bodies, IReadOnlyList<EdgeRef> refs, double d1, double d2, List<string> warnings)
+    {
+        if (CatchOff) return TryChamferCore(bodies, refs, d1, d2, warnings);
+        try { return TryChamferCore(bodies, refs, d1, d2, warnings); }
+        catch (Exception ex) when (ex is ArithmeticException or ArgumentException or IndexOutOfRangeException or InvalidOperationException or NullReferenceException && !KernelContext.IsCancellation(ex))
+        {
+            Interlocked.Increment(ref Exceptions);
+            Debug?.Invoke("direct chamfer: exception " + ex.GetType().Name + ": " + ex.Message);
+            return false;
+        }
+    }
+
+    static bool TryRoundCore(List<TSolid> bodies, IReadOnlyList<EdgeRef> refs, double r, List<string> warnings)
     {
         if (Off || OffForTest || refs.Count == 0 || !(r > 0) || OwnerBody(bodies, refs) is not int k) return false;
         string? why = null;
@@ -223,7 +254,7 @@ public static partial class DirectRound
     /// ребра; лента — плоскость; торцы, стыки цепочек — отрезки; угол из трёх рёбер — плоский треугольник.
     /// Мутация P3D_DIRECTCHAMFER=0.
     /// </summary>
-    public static bool TryChamfer(List<TSolid> bodies, IReadOnlyList<EdgeRef> refs, double d1, double d2, List<string> warnings)
+    static bool TryChamferCore(List<TSolid> bodies, IReadOnlyList<EdgeRef> refs, double d1, double d2, List<string> warnings)
     {
         bool unequal = Math.Abs(d1 - d2) > 1e-9 * Math.Max(1, d1);
         if (Off || OffForTest || ChamferOff || refs.Count == 0 || !(d1 > 0) || !(d2 > 0) || (unequal && UnequalOff) || OwnerBody(bodies, refs) is not int k) return false;
@@ -1730,8 +1761,11 @@ public static partial class DirectRound
             if (lp == null || lc == null && !seamForm) { why = "circle: not a loop of its own"; return false; }
             if (!seamForm && Fc.Loops.Count != 2) { why = "circle: cylinder face is not a band between two circles"; return false; }
             var otherLoop = seamForm ? allFc.Where(sg => !ReferenceEquals(sg.Curve, seamC) && !(sg.Id != null && arcs.Contains(sg.Id))).ToList() : Fc.Loops.First(l => l != lc);
-            if (otherLoop.Count == 0 || otherLoop.Any(sg => sg.Curve is not ArcCurve3)) { why = "circle: cylinder's other edge is not a circle"; return false; }
-            var oa = (ArcCurve3)otherLoop[0].Curve;
+            // 20:17: другой край цилиндра — любая кривая (дно цилиндра в шаре — кривая пересечения): нужна лишь высота пояса —
+            // ближайшая к окружности точка другого края вдоль оси. Прежде — только окружность, и скругление кромки уходило в
+            // общий построитель (лента по формуле, 1–2 с) вместо тора. Мутация P3D_DRCIRCLEANY=0.
+            if (otherLoop.Count == 0 || (!CircleAnyOther && otherLoop.Any(sg => sg.Curve is not ArcCurve3))) { why = "circle: cylinder's other edge is not a circle"; return false; }
+            var oa = otherLoop[0].Curve as ArcCurve3;
             // сторона материала цилиндра (s) — по наружной нормали грани в точке ребра
             var p = arc.PointAt(arc.T0); var radial = p - O; radial -= ax * Vector3d.Dot(radial, ax); radial.Normalize();
             var nc = Fc.Surf.NormalAt(Fc.Surf.ProjectToUV(p)) * (Fc.Rev ? -1 : 1);
@@ -1770,7 +1804,9 @@ public static partial class DirectRound
                     }
             // место на цилиндре: другая окружность дальше r вдоль оси в сторону σ·n_p
             var shift = np * (sigma * dC);
-            if (Vector3d.Dot(oa.Frame.Origin - O, np * sigma) <= dC + 1e-7) { why = "circle: cylinder face shorter than the blend"; return false; }
+            double otherAx = oa != null && otherLoop.All(sg => sg.Curve is ArcCurve3) ? Vector3d.Dot(oa.Frame.Origin - O, np * sigma)
+                : otherLoop.Min(sg => Enumerable.Range(0, 65).Min(k => Vector3d.Dot(sg.Curve.PointAt(sg.Curve.T0 + (sg.Curve.T1 - sg.Curve.T0) * k / 64.0) - O, np * sigma)));
+            if (otherAx <= dC + 1e-7) { why = "circle: cylinder face shorter than the blend"; return false; }
             // новые дуги — те же угловые пределы и рамки, другой радиус (плоскость) и сдвиг вдоль оси (цилиндр); звено идёт
             // в ту же сторону, что прежнее
             Seg Moved(Seg sg, Vector3d centre, double rad)
@@ -1808,7 +1844,7 @@ public static partial class DirectRound
             }
             lp.Clear(); lp.AddRange(newP);
             Fp.Touched = true;
-            Fc.Hint = (O + shift + oa.Frame.Origin) / 2 + radial * R;   // середина пояса цилиндра
+            Fc.Hint = O + shift + np * (sigma * (otherAx - dC) / 2) + radial * R;   // середина пояса цилиндра (выше другого края по всей окружности)
             // лента: тор (дуга в меридиане) или конус (отрезок), вращением вокруг оси
             var Ct = O + shift; var U = radial; var Wm = np;           // меридиан — плоскость (U, n_p)
             var tube = Ct + U * rho;

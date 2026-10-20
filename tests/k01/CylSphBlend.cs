@@ -31,20 +31,22 @@ static partial class Program
             int iInter = edges.FindIndex(e => Kind(e) == "ExtrudedSurface/RevolvedSurface" && !ReferenceEquals(e.V0, e.V1));
             int iTop = edges.FindIndex(e => Kind(e) == "ExtrudedSurface/PlaneSurface" && ReferenceEquals(e.V0, e.V1));
             Require(iInter >= 0 && iTop >= 0, $"edges: intersection {iInter}, top {iTop} ({string.Join(", ", edges.Select(Kind))})");
-            long endPts = 0;
+            long endPts = 0, tabSecs = 0, parTabs = 0;
             (TSolid? B, string Msg, double Ms) Run(int ei, bool round, double d)
             {
                 var b = new List<TSolid> { TopologyClone.Deep(body) }; var w = new List<string>();
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                long e0 = DirectRound.OpenEndPoints;
+                long e0 = DirectRound.OpenEndPoints, ts0 = Parametric3D.Kernel.Surfaces.SectionSurface.TableSections, pt0 = Parametric3D.Kernel.Surfaces.SectionSurface.ParallelTables;
                 try
                 {
                     var er = new List<EdgeRef> { EdgeRef.Of(b[0].Edges.ElementAt(ei)) };
-                    if (round) FilletOp.RoundEdges(b, er, d, w); else FilletOp.ChamferEdges(b, er, d, d, w);
+                    // четыре потока, как в приложении (у проверок по умолчанию — один)
+                    using (new KernelContext(KernelSettings.Capture() with { BooleanThreads = 4 }).Enter())
+                        if (round) FilletOp.RoundEdges(b, er, d, w); else FilletOp.ChamferEdges(b, er, d, d, w);
                     return (b[0], string.Join("; ", w.Take(2)), sw.Elapsed.TotalMilliseconds);
                 }
                 catch (Exception ex) { return (null, ex.Message, sw.Elapsed.TotalMilliseconds); }
-                finally { endPts = DirectRound.OpenEndPoints - e0; }
+                finally { endPts = DirectRound.OpenEndPoints - e0; tabSecs = Parametric3D.Kernel.Surfaces.SectionSurface.TableSections - ts0; parTabs = Parametric3D.Kernel.Surfaces.SectionSurface.ParallelTables - pt0; }
             }
             foreach (var (name, ei, round, d) in new[] { ("round intersection R5", iInter, true, 5.0), ("chamfer intersection 3", iInter, false, 3.0), ("round top R5", iTop, true, 5.0) })
             {
@@ -63,6 +65,25 @@ static partial class Program
                 Log(new { test = "KRN06-FF-CYL-SPHERE-BLENDS", name, cached, endPts, samplings, coedges });
                 if (!cached) fails.Add($"{name}: validation after the operation is not taken from memory");
                 if (ei == iInter && endPts > 1500) fails.Add($"{name}: {endPts} exact end-curve points (curves not fitted?)");
+                // 20:17: таблица формулы ленты — пятой степени, шаг крупнее (P3D_SECHIGH); квадратура ленты — по сходимости
+                // (P3D_BANDADAPT); площадь грани — из памяти (P3D_AREACACHE); сетка той же грани копии тела — из памяти (P3D_FACEMESHMEMO)
+                if (ei == iInter)
+                {
+                    var cl = TopologyClone.Deep(b);
+                    long bp0 = AnalyticVolume.BandPoints; AnalyticVolume.Of(cl); long bandPts = AnalyticVolume.BandPoints - bp0;
+                    var bf = cl.Faces.First(f => GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.SectionSurface);
+                    long ac0 = AnalyticVolume.AreasComputed; AnalyticVolume.FaceArea(bf); AnalyticVolume.FaceArea(bf); long areas = AnalyticVolume.AreasComputed - ac0;
+                    var mw = new List<string>();
+                    BooleanOp.MeshExactlySolid(TopologyClone.Deep(b), mw);
+                    long mh0 = Parametric3D.Kernel.Tess.ExactFaceMesher.FaceMemoHits; BooleanOp.MeshExactlySolid(TopologyClone.Deep(b), mw); long memoHits = Parametric3D.Kernel.Tess.ExactFaceMesher.FaceMemoHits - mh0;
+                    Log(new { test = "KRN06-FF-CYL-SPHERE-BLENDS", name, tabSecs, bandPts, areas, memoHits });
+                    if (tabSecs > 4000) fails.Add($"{name}: {tabSecs} exact sections for the formula tables");
+                    // таблица ленты — в несколько потоков (P3D_SECPAR), если их больше одного
+                    if (Environment.ProcessorCount > 1 && parTabs < 1) fails.Add($"{name}: the formula table was not computed in parallel");
+                    if (bandPts > 60000) fails.Add($"{name}: {bandPts} band quadrature points for the volume");
+                    if (areas != 1) fails.Add($"{name}: face area computed {areas} times for two requests");
+                    if (memoHits < 1) fails.Add($"{name}: no face mesh taken from memory for a copy of the body");
+                }
                 if (samplings > coedges + 2) fails.Add($"{name}: {samplings} p-curve samplings for {coedges} coedges");
                 var val = SolidValidator.Validate(b);
                 double v1 = AnalyticVolume.Of(b) ?? double.NaN;
@@ -77,10 +98,51 @@ static partial class Program
                 }
                 else
                 {
+                    // кромка плоскость/цилиндр — тор (P3D_DRCIRCLEANY), а не лента по формуле
+                    if (!b.Faces.Any(f => GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.RevolvedSurface { Base: Parametric3D.Kernel.Curves.ArcCurve3 }))
+                        fails.Add($"{name}: the blend is not a torus");
+                    if (b.Faces.Count() != body.Faces.Count() + 1) fails.Add($"{name}: {b.Faces.Count()} faces (one torus band expected)");
                     double R = 15, r = d, xb = r * (10 - 3 * Math.PI) / (3 * (4 - Math.PI));
                     double want = 2 * Math.PI * (R - xb) * r * r * (1 - Math.PI / 4);
                     if (!(Math.Abs(v0 - v1 - want) < 1e-6 * want)) fails.Add($"{name}: removed {v0 - v1:R} want {want:R}");
                 }
+            }
+            // цилиндр с поперечным отверстием в стенке (грань цилиндра — не пояс из двух окружностей): кромка — общим
+            // построителем замкнутых рёбер (P3D_DRCIRCLECLOSED), точно
+            {
+                var c2 = FFPrimitiveFeature.Make(FFPrimitive.Cylinder, new Frame3(Vector3d.Zero, Vector3d.UnitX, Vector3d.UnitY), 15, 40, 0);
+                var hole = FFPrimitiveFeature.Make(FFPrimitive.Cylinder, new Frame3(new Vector3d(0, 0, 15), Vector3d.UnitY, Vector3d.UnitZ), 3, 40, 0);
+                var l2 = new List<TSolid> { c2 }; BooleanOp.Subtract(l2, hole, new List<string>());
+                var top = l2[0].Edges.ToList().FindIndex(e => ReferenceEquals(e.V0, e.V1) && e.Curve is Parametric3D.Kernel.Curves.ArcCurve3 a && Math.Abs(a.Frame.Origin.Z - 40) < 1e-9);
+                Require(top >= 0, "holed cylinder: top edge");
+                var b2 = new List<TSolid> { l2[0] }; var w2 = new List<string>();
+                double v20 = AnalyticVolume.Of(l2[0]) ?? double.NaN;
+                try { FilletOp.RoundEdges(b2, new List<EdgeRef> { EdgeRef.Of(l2[0].Edges.ElementAt(top)) }, 4, w2); }
+                catch (Exception ex) { fails.Add("holed cylinder round: " + ex.Message); }
+                double R = 15, r = 4, xb = r * (10 - 3 * Math.PI) / (3 * (4 - Math.PI)), want = 2 * Math.PI * (R - xb) * r * r * (1 - Math.PI / 4);
+                double v21 = AnalyticVolume.Of(b2[0]) ?? double.NaN;
+                Log(new { test = "KRN06-FF-CYL-SPHERE-BLENDS", name = "holed cylinder round top R4", guarantee = b2[0].Guarantee.ToString(), removed = (v20 - v21).ToString("R"), want, msg = string.Join("; ", w2.Take(2)) });
+                if (b2[0].Guarantee != GuaranteeLevel.ExactAnalytic || !(Math.Abs(v20 - v21 - want) < 1e-6 * want)) fails.Add($"holed cylinder round: guarantee {b2[0].Guarantee}, removed {v20 - v21:R} want {want:R}");
+            }
+            // прогрев ядра (малая сцена: цилиндр R6 ∪ шар R8): ребро пересечения R1 — продление по углу отказывает внутри скобки
+            // торца (сечение не находится); прежде — исключение Math.Sign(NaN) на всю операцию, теперь — повтор с опорной кривой
+            {
+                var c3 = FFPrimitiveFeature.Make(FFPrimitive.Cylinder, new Frame3(new Vector3d(3, 0, 2), Vector3d.UnitX, Vector3d.UnitY), 6, 16, 0);
+                var s3 = FFPrimitiveFeature.Make(FFPrimitive.Sphere, new Frame3(Vector3d.Zero, Vector3d.UnitX, Vector3d.UnitY), 8, 0, 0);
+                var l3 = new List<TSolid> { c3 }; BooleanOp.Unite(l3, s3, new List<string>());
+                int i3 = l3[0].Edges.ToList().FindIndex(e => Kind(e) == "ExtrudedSurface/RevolvedSurface" && !ReferenceEquals(e.V0, e.V1));
+                var b3 = new List<TSolid> { l3[0] }; var w3 = new List<string>();
+                try { FilletOp.RoundEdges(b3, new List<EdgeRef> { EdgeRef.Of(l3[0].Edges.ElementAt(i3)) }, 1, w3); if (b3[0].Guarantee != GuaranteeLevel.ExactAnalytic) fails.Add($"small scene round: guarantee {b3[0].Guarantee}"); }
+                catch (Exception ex) { fails.Add("small scene round: " + ex.Message); }
+                // ошибка вычисления в прямом построителе — его отказ, операция идёт прежним путём (P3D_DRCATCH)
+                var b4 = new List<TSolid> { TopologyClone.Deep(body) }; var w4 = new List<string>();
+                long ex0 = DirectRound.Exceptions;
+                try
+                {
+                    using (FaultInjection.Arm("direct.round")) FilletOp.RoundEdges(b4, new List<EdgeRef> { EdgeRef.Of(b4[0].Edges.ElementAt(iTop)) }, 5, w4);
+                    if (DirectRound.Exceptions != ex0 + 1) fails.Add("fault in the direct builder not counted");
+                }
+                catch (Exception ex) { fails.Add("fault in the direct builder stops the round: " + ex.Message); }
             }
             Require(fails.Count == 0, string.Join(" | ", fails));
         });

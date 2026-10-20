@@ -291,7 +291,7 @@ public static partial class DirectRound
             // по u не больше 0.25 мм и 1/20 ширины сечения — с параметром ребра [0, 1] шаг был бы в десятки мм
             double Lp = 0; for (int i = 1; i < Ps.Count; i++) Lp += (Ps[i] - Ps[i - 1]).Length;
             double kU = Lp / (t1 - t0);
-                        var surf = new SectionSurface(U => Gen(t0 + U / kU), us.Select(t => (t - t0) * kU).ToList(), secs, true, 0, Lp, null, CylTable ? Math.Max(Lp / 20000, Math.Min(0.25, 0.4 * Math.Min(widthA, widthB)) / 32) : 0);
+                        var surf = new SectionSurface(U => Gen(t0 + U / kU), us.Select(t => (t - t0) * kU).ToList(), secs, true, 0, Lp, null, CylTable ? Math.Max(Lp / 20000, Math.Min(0.25, 0.4 * Math.Min(widthA, widthB)) / 32) : 0) { ParallelTable = true };
             // таблица формулы против самой формулы: расхождение — в пределах допуска p-кривой
             {
                 double worstTab = 0;

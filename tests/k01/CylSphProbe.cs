@@ -16,6 +16,7 @@ static partial class Program
             ("coaxial", new(0, 0, 5), Vector3d.UnitZ),
             ("offset", new(8, 0, 5), Vector3d.UnitZ),
             ("inside", new(4, 0, 5), Vector3d.UnitZ),
+            ("warm", new(3, 0, 2), Vector3d.UnitZ),
             ("tilted", new(5, 0, 5), new Vector3d(0.3, 0, 1).Normalized()),
         };
         if (Environment.GetEnvironmentVariable("P3D_CSDBG") == "1") DirectRound.Debug = m => Console.WriteLine("      dr: " + m);
@@ -25,8 +26,9 @@ static partial class Program
             if (args.Length > 1 && !name.StartsWith(args[1])) continue;
             var u = Vector3d.Cross(Vector3d.UnitY, ax).Normalized(); if (u.LengthSquared < 0.5) u = Vector3d.UnitX;
             var v = Vector3d.Cross(ax, u);
-            var cyl = FFPrimitiveFeature.Make(FFPrimitive.Cylinder, new Frame3(at, u, v), 15, 40, 0);
-            var sph = FFPrimitiveFeature.Make(FFPrimitive.Sphere, new Frame3(Vector3d.Zero, Vector3d.UnitX, Vector3d.UnitY), 20, 0, 0);
+            bool wm = name == "warm";
+            var cyl = FFPrimitiveFeature.Make(FFPrimitive.Cylinder, new Frame3(at, u, v), wm ? 6 : 15, wm ? 16 : 40, 0);
+            var sph = FFPrimitiveFeature.Make(FFPrimitive.Sphere, new Frame3(Vector3d.Zero, Vector3d.UnitX, Vector3d.UnitY), wm ? 8 : 20, 0, 0);
             var w = new List<string>();
             var sw = Stopwatch.StartNew();
             var list = new List<TSolid> { cyl };
@@ -43,7 +45,7 @@ static partial class Program
             for (int ei = 0; ei < edgeList.Count; ei++)
             {
                 var e = edgeList[ei];
-                foreach (var (op, r) in new[] { ("round", 5.0), ("chamfer", 3.0) })
+                foreach (var (op, r) in new[] { ("round", name == "warm" ? 1.0 : 5.0), ("chamfer", name == "warm" ? 0.8 : 3.0) })
                 {
                     var b = new List<TSolid> { TopologyClone.Deep(body) };
                     var ww = new List<string>();

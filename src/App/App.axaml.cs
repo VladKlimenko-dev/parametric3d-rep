@@ -29,7 +29,7 @@ public partial class App : Application
                 d.Exit += (_, _) => { try { File.Delete(flag); } catch { } Core.AppLog.Write("exit"); };
             }
             catch { }
-            Core.AppLog.Write($"start {Diagnostics.SelfTest.Build}; graphics mode {Program.GlMode}; {System.Runtime.InteropServices.RuntimeInformation.OSDescription}");
+            Core.AppLog.Write($"start {Diagnostics.SelfTest.Build}; graphics mode {Program.GlMode}; {System.Runtime.InteropServices.RuntimeInformation.OSDescription}; {Diagnostics.KernelWarmup.BuildInfo}");
             // Аргументы: путь к файлу детали — открыть; --sample — пробная деталь; --theme light|dark.
             DocumentSession session;
             var file = AppStartup.Args.FirstOrDefault(a => (a.EndsWith(DocumentSession.PartExtension, StringComparison.OrdinalIgnoreCase) || a.EndsWith(DocumentSession.AssemblyExtension, StringComparison.OrdinalIgnoreCase)) && File.Exists(a));
@@ -39,6 +39,8 @@ public partial class App : Application
             var w = new MainWindow(session);
             d.MainWindow = w;
             if (AppStartup.Arg("--shot") is { } shot) Diagnostics.ShotRunner.Start(w, shot, () => d.Shutdown());
+            // 20:17: прогрев ядра в фоне (первая операция — без компиляции кода ядра); не в проверочных запусках
+            else if (!AppStartup.Flag("--selftest")) Diagnostics.KernelWarmup.Start();
             // --selftest: кнопка «Тест» без человека — отчёт и выход (путь отчёта — в стандартный вывод)
             if (AppStartup.Flag("--selftest"))
                 Avalonia.Threading.DispatcherTimer.RunOnce(async () =>
