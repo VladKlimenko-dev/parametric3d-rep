@@ -621,6 +621,7 @@ public static class FilletOp
                 volumeBefore = knownVolume ??= TotalVolume(before);
 
             BuiltTool?.Invoke(tool);
+            bool quickCut = false;
 
             // У вогнутого ребра скругление и фаска ПРИБАВЛЯЮТ материал.
             if (adds)
@@ -650,10 +651,21 @@ public static class FilletOp
                 }
                 BooleanOp.Unite(bodies, toolU, warnings);
             }
+            else if (PreviewCsgNow && bodies.Count == 1 && MeshCsg(bodies[0], tool, subtract: true) is { } quick)
+            {
+                bodies[0] = quick; Interlocked.Increment(ref PreviewCsgCuts); quickCut = true;
+            }
             else BooleanOp.Subtract(bodies, tool, warnings);
 
             string? broke;
             double volumeAfter;
+            if (quickCut)
+            {
+                // предпросмотр по сеткам: стыки кусков не согласованы (открытые рёбра законны), проверяется только объём
+                volumeAfter = TotalVolume(bodies);
+                broke = volumeAfter > volumeBefore * (1 + 1e-3) || volumeBefore - volumeAfter > weight * 1.5 + 1e-6 ? $"the preview cut changed the volume from {volumeBefore:0.###} to {volumeAfter:0.###}" : null;
+            }
+            else
             using (Diagnostics.Prof.Time("скругление: защитная проверка"))
                 broke = Damage(bodies, volumeBefore, weight, adds, out volumeAfter);
             if (broke == null) knownVolume = volumeAfter;
@@ -728,7 +740,7 @@ public static class FilletOp
             }
 
         if (done == 0 && edges.Count > 0)
-            throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, $"{what}: none of the selected edges could be processed.")
+            throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, $"{what}: none of the selected edges could be processed." + (warnings.Count > 0 ? "\n" + string.Join("\n", warnings.Take(4)) : ""))
             { Entities = EdgeNames(bodies, edges) };
 
         // ОТЧЁТ ОБЯЗАТЕЛЕН, А НЕ ПО СЛУЧАЮ.
@@ -765,6 +777,57 @@ public static class FilletOp
     static readonly bool FinalCheckOff = Environment.GetEnvironmentVariable("P3D_FILLETFINALCHECK") == "0";
     /// <summary>Число отказов итоговой проверки обходного пути (разбор).</summary>
     public static long FinalCheckRefusals;
+    // 21.10 (снимок пользователя 17:40): кромка цилиндра, концы которой лежат на шаре того же тела, — резец продлевается
+    // по углу, пока сечение не уйдёт в шар целиком, и из него вычитается шар: скругление обрезано шаром, шар не тронут.
+    // Мутация P3D_ARCBALLTRIM=0 — прежнее продление (выемка в шаре).
+    static readonly bool ArcBallTrimOff = Environment.GetEnvironmentVariable("P3D_ARCBALLTRIM") == "0";
+    public static long ArcBallTrims;
+    // 21.10: БЫСТРЫЙ ПРЕДПРОСМОТР ОБХОДНОГО ПУТИ — рез по сеткам показа (двоичное разбиение без точного переходника, проверок
+    // и сборки колец): секунды точной булевой → доли секунды. Результат гранёный, только для вида; «ОК» считает точно.
+    // Мутация P3D_PREVIEWCSG=0.
+    static readonly bool PreviewCsgOff = Environment.GetEnvironmentVariable("P3D_PREVIEWCSG") == "0"
+                                         || Environment.GetEnvironmentVariable("P3D_FASTPREVIEW") == "0";
+    public static long PreviewCsgCuts;
+    static bool PreviewCsgNow => !PreviewCsgOff && KernelSettings.Capture().LivePreview;
+
+    /// <summary>Резцы предпросмотра, уже разрезанные по сеткам (обрезка шаром): многоугольники вместо тела.</summary>
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, List<CsgPolygon>> PreviewPolys = new();
+
+    /// <summary>Треугольники сетки показа тела, метка — грань (+ смещение).</summary>
+    static List<CsgPolygon> MeshPolys(TSolid s, uint offset, Dictionary<uint, ISurface3?>? sources)
+    {
+        var md = Tessellator.Tessellate(s, facets: true);
+        var surf = s.Faces.ToDictionary(f => f.Id, f => f.Surface);
+        var res = new List<CsgPolygon>(md.Indices.Length / 3);
+        for (int i = 0; i + 2 < md.Indices.Length; i += 3)
+        {
+            var a = md.Vertices[md.Indices[i]]; var b = md.Vertices[md.Indices[i + 1]]; var c = md.Vertices[md.Indices[i + 2]];
+            var pa = new Vector3d(a.P.X, a.P.Y, a.P.Z); var pb = new Vector3d(b.P.X, b.P.Y, b.P.Z); var pc = new Vector3d(c.P.X, c.P.Y, c.P.Z);
+            if (Vector3d.Cross(pb - pa, pc - pa).LengthSquared < 1e-20) continue;
+            uint tag = a.FaceId + offset;
+            if (sources != null && !sources.ContainsKey(tag)) sources[tag] = surf.TryGetValue(a.FaceId, out var sf) ? sf : null;
+            res.Add(new CsgPolygon(new List<Vector3d> { pa, pb, pc }, tag));
+        }
+        return res;
+    }
+
+    /// <summary>Тело − резец (или ∪) по сеткам показа; null — не вышло.</summary>
+    private static TSolid? MeshCsg(TSolid body, TSolid tool, bool subtract)
+    {
+        using var _p = Diagnostics.Prof.Time("скругление: рез по сеткам (предпросмотр)");
+        var sources = new Dictionary<uint, ISurface3?>();
+        List<CsgPolygon> Polys(TSolid s, uint offset) => PreviewPolys.TryGetValue(s, out var ready) ? ready : MeshPolys(s, offset, sources);
+        List<CsgPolygon> pa0, pt0;
+        using (Diagnostics.Prof.Time("  предпросмотр: сетки тел")) { pa0 = Polys(body, 0); pt0 = Polys(tool, 1u << 30); }
+        if (pa0.Count == 0 || pt0.Count == 0) return null;
+        List<CsgPolygon>? r;
+        using (Diagnostics.Prof.Time("  предпросмотр: рез")) r = MeshCut.Run(pa0, pt0, subtract);
+        if (r == null || r.Count == 0) return null;
+        TSolid solid;
+        using (Diagnostics.Prof.Time("  предпросмотр: тело")) solid = BooleanOp.SolidFromPolygons(r, sources);
+        solid.TopologyConvention = TopologyConventions.Version;   // куски без согласования вершин: соглашение — не для показа
+        return solid;
+    }
 
     private static string? Damage(List<TSolid> bodies, double volumeBefore, double toolWeight, bool adds, out double after)
     {
@@ -2394,8 +2457,80 @@ public static class FilletOp
         if (actual < 0)
             return "the revolved tool came out inside out";
 
+        if (!adds && !ArcBallTrimOff && EndBall(bodies, edge, flat, round) is { } ball)
+        {
+            // Сечение (контур резца) по точкам; поворот вокруг оси — формула Родрига.
+            var pts = new List<Vector3d>();
+            foreach (var c in curves) for (int i = 0; i <= 8; i++) pts.Add(c.PointAt(c.T0 + (c.T1 - c.T0) * i / 8.0));
+            Vector3d Rot(Vector3d x, double a)
+            {
+                var v = x - centre; double ca = Math.Cos(a), sa = Math.Sin(a);
+                return centre + v * ca + Vector3d.Cross(spin, v) * sa + spin * (Vector3d.Dot(spin, v) * (1 - ca));
+            }
+            bool Inside(double a) => pts.All(x => (Rot(x, a) - ball.C).Length < ball.R - 1e-3 * ball.R);
+            double Reach(double from, int dir)
+            {
+                double stepA = Math.PI / 180;
+                for (double ext = stepA; ext < Math.PI; ext += stepA)
+                    if (Inside(from + dir * ext)) return ext + stepA;
+                return double.NaN;
+            }
+            double e0 = Reach(-half, -1), e1 = Reach(half, +1);
+            if (double.IsFinite(e0) && double.IsFinite(e1) && e0 + e1 + 2 * half < 2 * Math.PI - 1e-3)
+            {
+                double lo2 = -half - e0, hi2 = half + e1;
+                var made2 = RevolveOp.Build(profile, Frame3.FromNormal(centre, spin), lo2, hi2, null);
+                var parts = new List<TSolid> { made2 };
+                var w2 = new List<string>();
+                var ballSolid = PrimitiveOp.Sphere(ball.C, ball.R);
+                if (PreviewCsgNow && MeshPolys(made2, 1u << 29, null) is { Count: > 0 } wp && MeshCut.Run(wp, MeshPolys(ballSolid, 1u << 28, null), subtract: true) is { Count: > 0 } tp)
+                {
+                    // предпросмотр: резец остаётся многоугольниками (тело из них не собирается — его режут и так по сеткам)
+                    PreviewPolys.AddOrUpdate(made2, tp);
+                    Interlocked.Increment(ref ArcBallTrims);
+                    tool = made2;
+                    return null;
+                }
+                else
+                    try { BooleanOp.Subtract(parts, ballSolid, w2); }
+                    catch (RebuildException) { parts.Clear(); }
+                if (parts.Count == 1)
+                {
+                    Interlocked.Increment(ref ArcBallTrims);
+                    tool = parts[0];
+                    return null;
+                }
+            }
+        }
+
         tool = made;
         return null;
+    }
+
+    /// <summary>Шар, на котором лежат оба конца дуги (грань-шар тела у вершины, кроме граней самой кромки; материал — внутри
+    /// шара). Нет — null.</summary>
+    private static (Vector3d C, double R)? EndBall(List<TSolid> bodies, TEdge edge, TFace flat, TFace round)
+    {
+        if (ReferenceEquals(edge.V0, edge.V1)) return null;
+        (Vector3d C, double R)? found = null;
+        foreach (var v in new[] { edge.V0, edge.V1 })
+        {
+            (Vector3d C, double R)? here = null;
+            foreach (var b in bodies)
+                foreach (var f in b.Faces)
+                {
+                    if (ReferenceEquals(f, flat) || ReferenceEquals(f, round)) continue;
+                    if (!f.Edges.Any(e => ReferenceEquals(e.V0, v) || ReferenceEquals(e.V1, v))) continue;
+                    if (Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) is not Geometry.Ssi.Sphere sp) continue;
+                    var n = f.NormalAt(v.P);
+                    if (Vector3d.Dot(n, v.P - sp.C) <= 0) continue;   // вогнутая сферическая грань (полость) — не тот случай
+                    here = (sp.C, sp.R);
+                }
+            if (here == null) return null;
+            if (found is { } fd && ((fd.C - here.Value.C).Length > 1e-6 || Math.Abs(fd.R - here.Value.R) > 1e-6)) return null;
+            found = here;
+        }
+        return found;
     }
 
     /// <summary>Аналитическая поверхность под гранёной обёрткой, если она там есть.</summary>

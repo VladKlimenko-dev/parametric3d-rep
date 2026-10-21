@@ -120,6 +120,8 @@ if (only == "probe-ffround")
         Parametric3D.App.Diagnostics.KernelWarmup.Run();
         Console.WriteLine($"PROBE warm-up: {swW.ElapsedMilliseconds} ms, feature 0 ms");
     }
+    if (Environment.GetEnvironmentVariable("P3D_PROBEDRDBG") == "1") Parametric3D.Kernel.Ops.DirectRound.Debug = m => Console.WriteLine("  DR: " + m);
+    if (Environment.GetEnvironmentVariable("P3D_PROBEARDBG") == "1") Parametric3D.Kernel.Ops.BooleanOp.AnalyticRouteDebug = m => Console.WriteLine("  AR: " + m);
     int repsAll = int.TryParse(Environment.GetEnvironmentVariable("P3D_PROBEREPS"), out var rpa) ? rpa : 1;
     for (int repAll = 0; repAll < repsAll; repAll++)
     {
@@ -133,20 +135,28 @@ if (only == "probe-ffround")
         var sw = System.Diagnostics.Stopwatch.StartNew();
         s.Document.RebuildDirty();
         if (prof) { Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(30))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
-        Console.WriteLine($"PROBE {name}: {sw.ElapsedMilliseconds} ms, feature {(part.LastFeatureMs.TryGetValue(f, out var ms) ? ms : -1):0} ms, err {f.Error?.Split('\n')[0]}, bodies {part.Bodies.Count}, guarantee {string.Join(",", part.Bodies.Select(b => b.Guarantee))}");
+        Console.WriteLine($"PROBE {name}: {sw.ElapsedMilliseconds} ms, feature {(part.LastFeatureMs.TryGetValue(f, out var ms) ? ms : -1):0} ms, err {(Environment.GetEnvironmentVariable("P3D_PROBEFULLERR") == "1" ? f.Error : f.Error?.Split('\n')[0])}, bodies {part.Bodies.Count}, guarantee {string.Join(",", part.Bodies.Select(b => b.Guarantee))}");
+        if (Environment.GetEnvironmentVariable("P3D_PROBEFULLERR") == "1") { Console.WriteLine($"  volume {part.Volume:0.###}"); foreach (var wn in part.Warnings) Console.WriteLine("  warn: " + wn); }
         return sw.ElapsedMilliseconds;
     }
-    Step(new FFPrimitiveFeature { Shape = FFPrimitive.Cylinder, A = new ValueRef(15), B = new ValueRef(40) }, "cylinder");
-    Step(new FFPrimitiveFeature { Shape = FFPrimitive.Sphere, A = new ValueRef(20) }, "sphere");
-    Step(new FFTransformFeature { Mode = FFXform.Move, BodyNames = { "Тело 1" }, Dx = new ValueRef(8), Dz = new ValueRef(5) }, "move");
+    double PEnv(string n, double d) => double.TryParse(Environment.GetEnvironmentVariable(n), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : d;
+    Step(new FFPrimitiveFeature { Shape = FFPrimitive.Cylinder, A = new ValueRef(PEnv("P3D_PROBECYLR", 15)), B = new ValueRef(PEnv("P3D_PROBECYLH", 40)) }, "cylinder");
+    Step(new FFPrimitiveFeature { Shape = FFPrimitive.Sphere, A = new ValueRef(PEnv("P3D_PROBESPHR", 20)) }, "sphere");
+    Step(new FFTransformFeature { Mode = FFXform.Move, BodyNames = { "Тело 1" }, Dx = new ValueRef(PEnv("P3D_PROBEDX", 8)), Dz = new ValueRef(PEnv("P3D_PROBEDZ", 5)) }, "move");
     Step(new FFBooleanFeature { Op = FFBool.Union, Target = "Тело 1", Tools = { "Тело 2" } }, "union");
     string Kind(Parametric3D.Kernel.Topology.TEdge e) => string.Join("/", e.CoEdges.Select(c => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(c.Loop.Face)?.GetType().Name).OrderBy(x => x));
-    foreach (var (name, kind, round) in new[] { ("round intersection", "ExtrudedSurface/RevolvedSurface", true), ("chamfer intersection", "ExtrudedSurface/RevolvedSurface", false), ("round top", "ExtrudedSurface/PlaneSurface", true) })
+    foreach (var (name, kind, round) in new[] { ("round intersection", "ExtrudedSurface/RevolvedSurface", true), ("chamfer intersection", "ExtrudedSurface/RevolvedSurface", false), ("round top", "ExtrudedSurface/PlaneSurface", true), ("round bottom", "PlaneSurface/RevolvedSurface", true), ("round both", "ExtrudedSurface/RevolvedSurface", true), ("round rim", "ExtrudedSurface/PlaneSurface", true) })
     {
+        if (Environment.GetEnvironmentVariable("P3D_PROBEONLY") is { Length: > 0 } po && !po.Split(',').Contains(name)) continue;
         var body = part.Bodies[0];
-        var e = body.Edges.First(x => Kind(x) == kind && (kind.Contains("Plane") ? ReferenceEquals(x.V0, x.V1) : !ReferenceEquals(x.V0, x.V1)));
+        if (!body.Edges.Any(x => Kind(x) == kind)) { Console.WriteLine($"PROBE {name}: no edge {kind}; kinds: {string.Join(", ", body.Edges.Select(Kind).Distinct())}"); continue; }
+        var e = body.Edges.First(x => Kind(x) == kind && (name == "round rim" ? !ReferenceEquals(x.V0, x.V1) : kind.StartsWith("Extruded") && kind.Contains("Plane") ? ReferenceEquals(x.V0, x.V1) : kind.Contains("Plane") || !ReferenceEquals(x.V0, x.V1)));
         Feature f;
-        if (round) { var rf = new RoundFeature { Radius = new ValueRef(5) }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(e)); f = rf; }
+        double rProbe = (name == "round bottom" && double.TryParse(Environment.GetEnvironmentVariable("P3D_PROBER"), System.Globalization.CultureInfo.InvariantCulture, out var rpv)) ? rpv : 5;
+        if (name is "round both" or "round rim") rProbe = PEnv("P3D_PROBER", 5);
+        if (round) { var rf = new RoundFeature { Radius = new ValueRef(rProbe) }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(e));
+            if (name == "round both") foreach (var e2 in body.Edges.Where(x => Kind(x) == "PlaneSurface/RevolvedSurface")) rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(e2));
+            f = rf; }
         else { var cf = new ChamferFeature { D1 = new ValueRef(3), D2 = new ValueRef(3) }; cf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(e)); f = cf; }
         f.FFBody = part.BodyName(0);
         if (Environment.GetEnvironmentVariable("P3D_PROBEPREVIEW") == "1")
@@ -154,19 +164,32 @@ if (only == "probe-ffround")
             // как живой предпросмотр ручкой: проверки отложены, сетка грубее
             f.FreeForm = node.Key; part.AddFeature(f);
             var ks = Parametric3D.Kernel.KernelSettings.Capture();
-            ks = ks with { Preview = true, LivePreview = true, Chord = ks.Chord * 4 };
+            ks = ks with { Preview = true, LivePreview = true, Chord = ks.Chord * 4, ChordAngle = ks.ChordAngle * (double.TryParse(Environment.GetEnvironmentVariable("P3D_PROBEANGK"), System.Globalization.CultureInfo.InvariantCulture, out var angk) ? angk : 1) };
             bool profP = Environment.GetEnvironmentVariable("P3D_PROBEPROF") is { } ppp && (ppp == name || ppp == "all");
             if (profP) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
             var swp = System.Diagnostics.Stopwatch.StartNew();
             Part.BuildResult res;
             using (new Parametric3D.Kernel.KernelContext(ks).Enter()) res = part.Compute(null, null);
             if (profP) { Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(30))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
-            Console.WriteLine($"PROBE preview {name}: compute {swp.ElapsedMilliseconds} ms, feature {(res.FeatureMs.TryGetValue(f, out var fm) ? fm : -1):0} ms, err {res.Errors.GetValueOrDefault(f)?.Split('\n')[0]}, tris {(res.Mesh?.Indices.Length ?? 0) / 3}, defects {(res.Mesh == null ? -1 : Parametric3D.Kernel.Tess.MeshData.FloatDefects(res.Mesh))}, vol {res.Volume:0.##}");
+            Console.WriteLine($"PROBE preview {name}: compute {swp.ElapsedMilliseconds} ms, feature {(res.FeatureMs.TryGetValue(f, out var fm) ? fm : -1):0} ms, err {(Environment.GetEnvironmentVariable("P3D_PROBEFULLERR") == "1" ? res.Errors.GetValueOrDefault(f) : res.Errors.GetValueOrDefault(f)?.Split('\n')[0])}, tris {(res.Mesh?.Indices.Length ?? 0) / 3}, defects {(res.Mesh == null ? -1 : Parametric3D.Kernel.Tess.MeshData.FloatDefects(res.Mesh))}, vol {res.Volume:0.##}");
+            if (Environment.GetEnvironmentVariable("P3D_PROBESAVE") is { Length: > 0 } svp && res.Mesh != null)
+            {
+                var mm = res.Mesh; using var ow = new StreamWriter(Path.Combine(svp, "pv_" + name.Replace(' ', '_') + ".obj"));
+                foreach (var mv in mm.Vertices) ow.WriteLine(FormattableString.Invariant($"v {mv.P.X} {mv.P.Y} {mv.P.Z}"));
+                for (int i = 0; i < mm.Indices.Length; i += 3) ow.WriteLine($"f {mm.Indices[i] + 1} {mm.Indices[i + 1] + 1} {mm.Indices[i + 2] + 1}");
+            }
+            if (Environment.GetEnvironmentVariable("P3D_PROBECHAIN") == "1" && name != "round bottom") { s.Document.RebuildDirty(); continue; }
             part.RemoveFeature(f); s.Document.RebuildDirty();
             continue;
         }
         Step(f, name);
-        part.RemoveFeature(f); s.Document.RebuildDirty();
+        if (Environment.GetEnvironmentVariable("P3D_PROBESAVE") is { Length: > 0 } sv && part.Bodies.Count > 0 && f.Error == null)
+        {
+            var b0 = part.Bodies[0];
+            Console.WriteLine($"PROBE {name}: faces {b0.Faces.Count()}, edges {b0.Edges.Count()}, volume {part.Volume:0.###}, issues {string.Join("; ", Parametric3D.Kernel.Topology.SolidValidator.Validate(b0).Issues.Take(5).Select(i => i.ToString()))}");
+            using (var ow = new StreamWriter(Path.Combine(sv, name.Replace(' ', '_') + ".obj"))) Parametric3D.Kernel.Export.MeshExport.WriteObj(ow, Parametric3D.Kernel.Export.MeshExport.Triangles(part.Bodies), name);
+        }
+        if (Environment.GetEnvironmentVariable("P3D_PROBECHAIN") != "1") { part.RemoveFeature(f); s.Document.RebuildDirty(); }
     }
     }
     return 0;
@@ -250,7 +273,7 @@ if (only == "probe-ffall")
             double fms = part.LastFeatureMs.TryGetValue(f, out var fm) ? fm : -1;
             (totals.TryGetValue(name, out var l) ? l : totals[name] = new List<double>()).Add(ms);
             if (Environment.GetEnvironmentVariable("P3D_PROBEWARN") == "1") foreach (var wn in part.Warnings.Distinct()) Console.WriteLine("  warn: " + wn.Split('\n')[0]);
-            Console.WriteLine($"PROBE {name}: {ms:0} ms, feature {fms:0} ms, err {f.Error?.Split('\n')[0]}, bodies {part.Bodies.Count}, faces {part.Bodies.Sum(b => b.Faces.Count())}, vol {part.Volume:R}, guarantee {string.Join(",", part.Bodies.Select(b => b.Guarantee).Distinct())}");
+            Console.WriteLine($"PROBE {name}: {ms:0} ms, feature {fms:0} ms, err {(Environment.GetEnvironmentVariable("P3D_PROBEFULLERR") == "1" ? f.Error : f.Error?.Split('\n')[0])}, bodies {part.Bodies.Count}, faces {part.Bodies.Sum(b => b.Faces.Count())}, vol {part.Volume:R}, guarantee {string.Join(",", part.Bodies.Select(b => b.Guarantee).Distinct())}");
         }
     foreach (var (name, l) in totals) Console.WriteLine($"MIN {name}: {l.Min():0} ms");
     Console.WriteLine($"SUM of minima: {totals.Values.Sum(l => l.Min()):0} ms");
@@ -2710,6 +2733,55 @@ Check("UI-OP-PREVIEW-FAST", () =>
     Console.WriteLine($"  {(rep == 0 ? "cold" : "warm")}: preview {tPreview} ms, exact after commit {tExact} ms");
     w.Close();
     }
+});
+
+Check("UI-ROUND-RIM-BALL", () =>
+{
+    // 21.10 (снимок пользователя 17:40): цилиндр ∪ шар, скругление R5 нижней кромки цилиндра (дуга торца, концы на шаре).
+    // Прежде: резец по дуге с продлением за концы врезался в шар (выемка; точный расчёт — отказ, в предпросмотре без проверки —
+    // испорченное тело), предпросмотр шёл 4–6 с. Теперь резец продлевается, пока сечение не уйдёт в шар, и из него вычитается
+    // шар; предпросмотр — рез по сеткам. Мутации P3D_ARCBALLTRIM=0, P3D_PREVIEWCSG=0.
+    var s = FreeFormCommands.NewFreeForm(); var w = Open(s); var part = s.Part!;
+    var node = part.Features.OfType<FreeFormFeature>().Single();
+    void Add(Feature f) { f.FreeForm = node.Key; f.Frozen = true; part.AddFeature(f); s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs(); }
+    Add(new FFPrimitiveFeature { Shape = FFPrimitive.Cylinder, A = new ValueRef(15), B = new ValueRef(40) });
+    Add(new FFPrimitiveFeature { Shape = FFPrimitive.Sphere, A = new ValueRef(20) });
+    Add(new FFTransformFeature { Mode = FFXform.Move, BodyNames = { "Тело 1" }, Dx = new ValueRef(8), Dz = new ValueRef(5) });
+    Add(new FFBooleanFeature { Op = FFBool.Union, Target = "Тело 1", Tools = { "Тело 2" } });
+    double v0 = part.Volume;
+    string Kind(Parametric3D.Kernel.Topology.TEdge e) => string.Join("/", e.CoEdges.Select(c => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(c.Loop.Face)?.GetType().Name).OrderBy(x => x));
+    var e = part.Bodies[0].Edges.First(x => Kind(x) == "ExtrudedSurface/PlaneSurface" && !ReferenceEquals(x.V0, x.V1));
+    w.ViewPort.Selection.Clear(); w.ViewPort.Selection.Select(new PickRef(e.Id, PickKind.Edge, part, null), additive: false);
+    long trims0 = Parametric3D.Kernel.Ops.FilletOp.ArcBallTrims, csg0 = Parametric3D.Kernel.Ops.FilletOp.PreviewCsgCuts;
+    CommandRegistry.Instance["ff.fillet"].Execute();
+    s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+    var op = w.CurrentOperation!; var f = (Feature)op.EditedFeature!;
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    op.DragValue!(5); op.FieldChanged(); s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+    long tPreview = sw.ElapsedMilliseconds;
+    Require(f.Error == null && part.Bodies.Count == 1, "preview R5 failed: " + f.Error);
+    double vPreview = part.Volume;
+    Require(Parametric3D.Kernel.Ops.FilletOp.PreviewCsgCuts > csg0, "the preview cut was not made on the meshes");
+    sw.Restart();
+    w.CommitOperation(); s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+    long tExact = sw.ElapsedMilliseconds;
+    Require(f.Error == null && part.Bodies.Count == 1 && !part.Bodies[0].IsPreview, "exact R5 failed: " + f.Error);
+    Require(Parametric3D.Kernel.Ops.FilletOp.ArcBallTrims > trims0, "the cutter was not trimmed by the sphere");
+    double removed = v0 - part.Volume;
+    // ожидаемо (Монте-Карло по формулам): 158 мм³ + недобор гранения ~120 мм³; выемка в шаре снимала бы больше
+    Require(removed > 100 && removed < 330, $"removed volume {removed:0.#} (expected ≈ 160–280)");
+    Require(Math.Abs(vPreview - part.Volume) < 0.01 * part.Volume, $"preview volume {vPreview:0.#} vs exact {part.Volume:0.#}");
+    // шар не тронут: точка шара у продолжения кромки внутри шара (под торцом цилиндра, вне цилиндра) — материал
+    var tris = Parametric3D.Kernel.Voxels.Occupancy.Triangles(Parametric3D.Kernel.Tess.Tessellator.Tessellate(part.Bodies[0], facets: true));
+    foreach (double ang in new[] { 80.0, 90.0, 110.0, -90.0 })
+    {
+        double a = ang * Math.PI / 180;
+        var q = new OpenTK.Mathematics.Vector3d(8 + 15.5 * Math.Cos(a), 15.5 * Math.Sin(a), 5.5);   // у кромки, внутри шара
+        if (q.Length > 19.5) continue;
+        Require(Parametric3D.Kernel.Voxels.PointInSolid.Test(tris, q), $"the sphere is grooved at {q}");
+    }
+    Console.WriteLine($"  preview {tPreview} ms (volume {vPreview:0.#}), exact after commit {tExact} ms (volume {part.Volume:0.#}, removed {removed:0.#})");
+    w.Close();
 });
 
 Check("UI-HOLE-ON-FACE", () =>

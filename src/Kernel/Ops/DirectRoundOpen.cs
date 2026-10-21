@@ -658,6 +658,14 @@ public static partial class DirectRound
             if (!found) { why = "open curved: the blend does not leave the end face (end face too oblique?)"; return false; }
             h = step; found = false;
             for (int it = 0; it < 8 && !found; it++, h *= 2) if (SectionSide(k, tEnd - dk * h, -1)) { inT[k] = tEnd - dk * h; found = true; }
+            if (!found && Debug != null)
+                for (double hh = step; hh <= step * 256; hh *= 2)
+                {
+                    double tt = tEnd - dk * hh; var sp = Spine(tt);
+                    string fsx = "";
+                    if (sp != null) { var g = Gen(tt); fsx = string.Join(" ", Enumerable.Range(0, 5).Select(i => Fend(k, g.Point(i / 4.0)).ToString("F2"))); }
+                    Debug($"open end {k} inside: t {tt:F4} (Δ {Delta:F4}) spine {(sp == null ? "null" : sp.Value.ToString("0.##"))} edge {Ed(tt):0.##} f [{fsx}]");
+                }
             if (!found) { why = "open curved: no blend section inside the end face"; return false; }
         }
         if (!(inT[0] < inT[1])) { why = "open curved: the edge is too short for the radius"; return false; }
