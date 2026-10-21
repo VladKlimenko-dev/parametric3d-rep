@@ -31,6 +31,7 @@ static partial class Program
                 }
                 return p;
             }
+            long la0 = Part.LazyAreas;
             long h0 = TopologyConventions.RingPtsMemoHits, em0 = FeatureHistory.EdgeMapMemoHits, lf0 = FeatureHistory.HistLoopsFirstHits;
             var p1 = Build(); p1.Rebuild(null);
             long hits = TopologyConventions.RingPtsMemoHits - h0;
@@ -38,6 +39,10 @@ static partial class Program
             Require(p1.Features.All(f => f.Error == null), "holes failed");
             Require(Math.Abs(p1.Volume - (1e6 - 12 * Math.PI * 4 * 100)) < 1e-6 * 1e6, $"volume {p1.Volume}");
             Require(hits >= 12, $"ring points taken from memory {hits} times");
+            // 21.10: площадь детали — по запросу (P3D_LAZYAREA=0 — на каждом перестроении); при чтении — та же, что по телам
+            Require(Part.LazyAreas > la0, "part area was computed eagerly");
+            double aSum = p1.Bodies.Sum(b => AnalyticVolume.AreaOf(b) ?? double.NaN);
+            Require(Math.Abs(p1.Area - aSum) <= 1e-9 * aSum, $"part area {p1.Area} vs bodies {aSum}");
             // 23:50: история рёбер — карта тела «до» операции из памяти (P3D_EDGEMAPMEMO=0)
             // плоская грань с новым отверстием — «изменена» по числу контуров, без строк подписей (P3D_HISTLOOPSFIRST=0)
             Require(FeatureHistory.HistLoopsFirstHits - lf0 >= 10, $"planar loop-count decisions {FeatureHistory.HistLoopsFirstHits - lf0}");

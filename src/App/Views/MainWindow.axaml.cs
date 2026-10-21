@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -2008,7 +2008,14 @@ public partial class MainWindow : Window
             if (part.Bodies.Count > 0)
             {
                 Row("Объём", $"{part.Volume / 1000.0:0.###} " + L("см³"));
-                Row("Площадь", $"{part.Area / 100.0:0.###} " + L("см²"));
+                // 21.10: площадь — по запросу; не посчитана — считается в фоне, панель обновляется (поток окна не ждёт квадратуру)
+                if (part.AreaPending)
+                {
+                    Row("Площадь", "…");
+                    var pp = part;
+                    _ = Task.Run(() => { _ = pp.Area; }).ContinueWith(_ => Dispatcher.UIThread.Post(() => { if (ReferenceEquals(Session.Part, pp) && _propsOn && CurrentOperation == null && View.Selection.IsEmpty) ShowProperties(); }));
+                }
+                else Row("Площадь", $"{part.Area / 100.0:0.###} " + L("см²"));
                 Row("Масса", $"{part.Mass:0.####} " + L("кг"));
             }
             Row("Операций", part.Children.OfType<Feature>().Count().ToString());

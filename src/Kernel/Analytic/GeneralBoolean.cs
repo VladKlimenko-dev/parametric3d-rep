@@ -520,7 +520,7 @@ public static class GeneralBoolean
                 // лента катящегося шара (пассивная грань) — целиком одна область, с теми же рёбрами
                 List<FaceSplit.Region>? regs; string? sw;
                 if (f.Band) { regs = BandRegion(f); sw = null; }
-                else if (f.Param && on[f].Count == 0) { regs = ParamRegion(f); sw = null; } else regs = FaceSplit.Split(f, on[f], cuts, out sw);
+                else if (f.Param && on[f].Count == 0) { regs = ParamRegion(f); sw = null; } else using (Diagnostics.Prof.Time("общая: разбиение грани")) regs = FaceSplit.Split(f, on[f], cuts, out sw);
                 if (regs == null) { o.Fail = $"face split: {sw}"; return o; }
                 // ЦЕЛАЯ ЗАМКНУТАЯ ПОВЕРХНОСТЬ без кусков разреза (полость-шар у тела, вложенного в другое): областей разбиение
                 // не строит (контуров нет) — грань целиком одна область. Прежде грань молча терялась: шар-полость исчезал
@@ -577,8 +577,10 @@ public static class GeneralBoolean
                     {
                         // целая замкнутая поверхность: мера целой известна — сфера ∬ dθ∧dh = 4πR, тор — 0 (обе меры)
                         var org0 = f.O;
-                        double sum = Math.Abs(regs.Sum(r => Measure(f, r, org0, out _))), a0 = f.Sph ? 4 * Math.PI * f.R : 0;
-                        double lsum = regs.Sum(r => { Measure(f, r, org0, out double l2); return l2; });
+                        // 21.10: мера и длина границы каждой области — одним расчётом (прежде мера считалась второй раз ради длины)
+                        var mm0 = regs.Select(r => { double mv0 = Measure(f, r, org0, out double ml0); return (V: mv0, L: ml0); }).ToList();
+                        double sum = Math.Abs(mm0.Sum(x => x.V)), a0 = f.Sph ? 4 * Math.PI * f.R : 0;
+                        double lsum = mm0.Sum(x => x.L);
                         double tolAbs = 2 * TolV * lsum;
                         bool bad = Math.Abs(sum - a0) > 1e-7 * Math.Max(a0, f.Tor ? 2 * Math.PI * f.R * 2 * f.Rm : 0) + tolAbs + 1e-12;
                         double sum2 = 0;
@@ -589,16 +591,17 @@ public static class GeneralBoolean
                     else if (whole is { Count: 1 })
                     {
                         var org = whole[0].Loops[0][0].At(0);
-                        double sum = Math.Abs(regs.Sum(r => Measure(f, r, org, out _))), a0 = Math.Abs(Measure(f, whole[0], org, out double lw));
+                        var mm1 = regs.Select(r => { double mv1 = Measure(f, r, org, out double ml1); return (V: mv1, L: ml1); }).ToList();
+                        double sum = Math.Abs(mm1.Sum(x => x.V)), a0 = Math.Abs(Measure(f, whole[0], org, out double lw));
                         // допуск: точки разреза сводятся в пределах TolV — щель/наложение шириной TolV вдоль всей границы
-                        double tolAbs = 2 * TolV * (lw + regs.Sum(r => { Measure(f, r, org, out double l2); return l2; }));
+                        double tolAbs = 2 * TolV * (lw + mm1.Sum(x => x.L));
                         if (PartStat) Console.Error.WriteLine($"PARTSTAT {(f.Cyl ? "cyl" : f.Cone ? "cone" : f.Tor ? "tor" : f.Sph ? "sph" : "plane")} regs {regs.Count} rel {(sum - a0) / a0:E2} a0 {a0:G6}");
                         if (Math.Abs(sum - a0) > 1e-7 * Math.Abs(a0) + tolAbs + 1e-12)
                         { o.Fail = $"face split: the regions of face {f.Face.Tag} cover {sum:G10} of {a0:G10} (partition check)"; return o; }
                         if (f.Tor && poleOk)
                         {
                             double s2 = Math.Abs(regs.Sum(r => MeasureTor2(f, r, org))), w2 = Math.Abs(MeasureTor2(f, whole[0], org));
-                            if (Math.Abs(s2 - w2) > 1e-7 * Math.Max(w2, Math.PI * (f.R + f.Rm) * (f.R + f.Rm)) + 2 * TolV * (f.R + f.Rm) * (lw + regs.Sum(r => { Measure(f, r, org, out double l3); return l3; })) + 1e-12)
+                            if (Math.Abs(s2 - w2) > 1e-7 * Math.Max(w2, Math.PI * (f.R + f.Rm) * (f.R + f.Rm)) + 2 * TolV * (f.R + f.Rm) * (lw + mm1.Sum(x => x.L)) + 1e-12)
                             { o.Fail = $"face split: the regions of face {f.Face.Tag} cover {s2:G10} of {w2:G10} (second measure, partition check)"; return o; }
                         }
                     }
@@ -607,7 +610,7 @@ public static class GeneralBoolean
                 foreach (var r in regs)
                 {
                     // точка «на границе» без совпадающей грани (касание) — следующий кандидат
-                    var c = other.Classify(r.Inside);
+                    int? c; using (Diagnostics.Prof.Time("общая: класс области")) c = other.Classify(r.Inside);
                     if (c == 0 && !(isA ? fb : fa).Any(g => g.SurfaceDistance(r.Inside) < 1e-7 && g.Contains(r.Inside) != false && g.Shape is Geometry.Ssi.Plane == f.Shape is Geometry.Ssi.Plane && FaceIntersect.Of(f, g).Kind == FaceIntersect.Kind.Coincident))
                         foreach (var alt in r.InsideCandidates)
                         {

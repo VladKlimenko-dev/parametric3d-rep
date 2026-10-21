@@ -61,6 +61,7 @@ public sealed class GeometryAudit
     /// </summary>
     /// <summary>Мутация P3D_AUDITPROC=0: кривая по формуле (линия касания катящегося шара) — не точная.</summary>
     static readonly bool AuditProcOff = Environment.GetEnvironmentVariable("P3D_AUDITPROC") == "0";
+    static readonly bool ChordParOff = Environment.GetEnvironmentVariable("P3D_AUDITCHORDPAR") == "0";
     static readonly bool AuditParOff = Environment.GetEnvironmentVariable("P3D_AUDITPAR") == "0";
     /// <summary>Сколько раз отходы рёбер мерились параллельно.</summary>
     public static long ParallelRuns;
@@ -98,6 +99,28 @@ public sealed class GeometryAudit
                 // зависели от хорды отображения
                 var list = fs.Facets.ReadView;
                 int step = Math.Max(1, list.Count / 2000);
+                int thrC = ChordParOff ? 1 : Math.Min(Tess.Tessellator.Threads, Environment.ProcessorCount);
+                int samples = (list.Count + step - 1) / step;
+                if (thrC > 1 && samples >= 256)
+                {
+                    // 21.10 (скорость): пробы — кусками в несколько потоков (внутри куска — по порядку: тёплый старт проекции у
+                    // поверхности по формуле — свой у потока); наибольший отход от порядка не зависит — ответ тот же. P3D_AUDITCHORDPAR=0.
+                    int chunks = Math.Min(thrC * 2, samples / 64);
+                    var part = new double[chunks];
+                    System.Threading.Tasks.Parallel.For(0, chunks, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = thrC }, c =>
+                    {
+                        double m = 0;
+                        for (int k = c * samples / chunks; k < (c + 1) * samples / chunks; k++)
+                        {
+                            var (p, q, r) = list[k * step];
+                            m = Math.Max(m, Distance(s, (p + q + r) / 3));
+                            m = Math.Max(m, Distance(s, (p + q) / 2));
+                        }
+                        part[c] = m;
+                    });
+                    foreach (var m in part) chord = Math.Max(chord, m);
+                }
+                else
                 for (int i = 0; i < list.Count; i += step)
                 {
                     var (p, q, r) = list[i];
