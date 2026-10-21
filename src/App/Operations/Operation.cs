@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using OpenTK.Mathematics;
@@ -303,10 +303,32 @@ public abstract class FeatureOp<T> : Operation where T : Feature
         // входа отверстия) — тоже позже: прежде пустая операция сразу попадала в деталь и мигала отказом
         if (!Dragging && (Editing || !MissingRequired))
         {
+            BeginOpPreview();
             if (!Editing) { Part.AddFeature(F); _added = true; }
             else Part.NotifyChanged(F);
         }
         RefreshStatus();
+    }
+
+    // 21.10 (запрос 15:30): ПРЕДПРОСМОТР ОПЕРАЦИИ — БЫСТРЫЙ И ПРИБЛИЖЁННЫЙ, ТОЧНЫЙ РАСЧЁТ — ПРИ ПОДТВЕРЖДЕНИИ. Пока панель
+    // операции открыта, деталь считается в режиме предпросмотра (грубая сетка, проверки и точные уточнения отложены — как у
+    // перетаскивания ручки); «ОК» — результат предпросмотра забывается, операция считается обычным точным расчётом.
+    // Выключение — P3D_OPPREVIEW=0 (как прежде: каждый шаг — точный).
+    public static bool OpPreviewOn = Environment.GetEnvironmentVariable("P3D_OPPREVIEW") != "0";
+    private bool _opPreview;
+    private void BeginOpPreview()
+    {
+        if (!OpPreviewOn) return;
+        W.Session.Document.PreviewPart = Part;
+        Part.BeginPreviewSession();
+        _opPreview = true;
+    }
+    private void EndOpPreview(bool recompute)
+    {
+        if (!_opPreview) return;
+        _opPreview = false;
+        if (ReferenceEquals(W.Session.Document.PreviewPart, Part)) W.Session.Document.PreviewPart = null;
+        if (recompute && _added) Part.EndPreviewSession(F);
     }
 
     private bool _added;
@@ -335,7 +357,8 @@ public abstract class FeatureOp<T> : Operation where T : Feature
     {
         if (!Dragging) return;
         _liveDirty = false;
-        if (ReferenceEquals(W.Session.Document.PreviewPart, Part))
+        if (_opPreview) { if (_added) Part.NotifyChanged(F); }      // панель ещё открыта — предпросмотр продолжается
+        else if (ReferenceEquals(W.Session.Document.PreviewPart, Part))
         {
             W.Session.Document.PreviewPart = null;
             if (_added) Part.EndPreviewSession(F);
@@ -348,6 +371,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
         Push();
         PushFreeForm();
         if (Dragging) return;
+        BeginOpPreview();
         if (!Editing && !_added) { if (MissingRequired) return; Part.AddFeature(F); _added = true; return; }
         Part.NotifyChanged(F);
     }
@@ -370,6 +394,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
         if (Dragging) EndDrag();
         if (!Editing && !_added) { Part.AddFeature(F); _added = true; }
         if (F.FreeForm != null && F is not FreeFormFeature) F.Frozen = true;
+        EndOpPreview(recompute: true);                                 // точный расчёт — с подтверждённой операции
         W.Session.CommitEdit();
         return true;
     }
@@ -381,6 +406,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
     public override void Cancel()
     {
         if (ReferenceEquals(W.Session.Document.PreviewPart, Part)) W.Session.Document.PreviewPart = null;
+        _opPreview = false;
         if (!Editing) { if (_added) Part.RemoveFeature(F); W.Session.DiscardEdit(); }
         else W.Session.CancelEdit();
     }

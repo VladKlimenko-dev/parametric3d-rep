@@ -221,6 +221,9 @@ public sealed class Part : ModelItem
     public double Area => _areaFrom?.Area ?? 0;
     /// <summary>Площадь ещё не посчитана (чтение Area её посчитает — у ленты скругления это десятки мс).</summary>
     public bool AreaPending => _areaFrom?.AreaPending ?? false;
+    /// <summary>21.10: быстрый приближённый предпросмотр операции (LivePreview): без точного объёма и аудита. P3D_FASTPREVIEW=0 — прежний.</summary>
+    public static readonly bool FastPreview = Environment.GetEnvironmentVariable("P3D_FASTPREVIEW") != "0";
+    public static long FastPreviewBodies, FastPreviewMeshSkips;
     static readonly bool LazyAreaOff = Environment.GetEnvironmentVariable("P3D_LAZYAREA") == "0";
     /// <summary>Тел, площадь которых отложена до запроса.</summary>
     public static long LazyAreas;
@@ -1279,7 +1282,8 @@ public sealed class Part : ModelItem
             // AllowBoundedFaceting — видимое понижение (GeometryDowngrades и предупреждение). P3D_GEOMGUARD=0 — прежнее.
             _pInv.Dispose();
             var _pAud = Kernel.Diagnostics.Prof.Time("дерево: аудит геометрии");
-            if (GeometryGuard && result.Errors[f] == null)
+            // 21.10: быстрый предпросмотр операции — аудит геометрии новых тел при подтверждении (точный расчёт), не на каждом шаге
+            if (GeometryGuard && result.Errors[f] == null && !(FastPreview && Kernel.KernelSettings.Capture().LivePreview))
             {
                 int nf = 0, ne = 0;
                 foreach (var b in ctx.Bodies)
@@ -1347,7 +1351,12 @@ public sealed class Part : ModelItem
             // Поставка 3: доноры сетки — грани прежнего опубликованного результата этой детали (снимок при входе).
             using var donors = Kernel.Ops.BooleanOp.UseMeshDonors(previousBodies);
             foreach (var b in result.Bodies)
+            {
+                // 21.10: быстрый предпросмотр — тело, все грани которого уже размечены построителем (сетка по контурам), идёт на
+                // экран с этой сеткой; окончательная согласованная разметка — при подтверждении операции
+                if (FastPreview && settingsNow.LivePreview && b.Faces.All(fc => fc.Surface is Kernel.Surfaces.FacetedSurface fsx && fsx.Facets.Count > 0)) { Interlocked.Increment(ref FastPreviewMeshSkips); continue; }
                 Kernel.Ops.BooleanOp.MeshExactlySolid(b, result.Warnings);
+            }
             result.MeshFacesReused = donors.Reused;
         }
 
@@ -1364,6 +1373,15 @@ public sealed class Part : ModelItem
                 all.Add(md);
                 // K08: объём и площадь — по настоящим кривым рёбер, когда все грани тела
                 // аналитические (плоскость, цилиндр, сфера); иначе — по сетке, и это помечается.
+                // 21.10: быстрый предпросмотр — объём по сетке (точный — при подтверждении операции). Мутация P3D_FASTPREVIEW=0.
+                if (FastPreview && settingsNow.LivePreview)
+                {
+                    result.Volume += MassProps.Volume(md); result.AddArea(MassProps.Area(md)); result.MassFromMesh = true;
+                    result.Bounds.Add(md.Bounds);
+                    if (ValidateResults) result.DeferredValidation.Add((b, md));
+                    Interlocked.Increment(ref FastPreviewBodies);
+                    continue;
+                }
                 var ve = Kernel.Topology.AnalyticVolume.OfWithError(b);
                 double? av = ve?.Volume, aa = av == null || !LazyAreaOff ? null : Kernel.Topology.AnalyticVolume.AreaOf(b);
                 if (av != null && (aa != null || !LazyAreaOff))

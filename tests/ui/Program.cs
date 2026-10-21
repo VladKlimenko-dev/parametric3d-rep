@@ -155,10 +155,13 @@ if (only == "probe-ffround")
             f.FreeForm = node.Key; part.AddFeature(f);
             var ks = Parametric3D.Kernel.KernelSettings.Capture();
             ks = ks with { Preview = true, LivePreview = true, Chord = ks.Chord * 4 };
+            bool profP = Environment.GetEnvironmentVariable("P3D_PROBEPROF") is { } ppp && (ppp == name || ppp == "all");
+            if (profP) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
             var swp = System.Diagnostics.Stopwatch.StartNew();
             Part.BuildResult res;
             using (new Parametric3D.Kernel.KernelContext(ks).Enter()) res = part.Compute(null, null);
-            Console.WriteLine($"PROBE preview {name}: compute {swp.ElapsedMilliseconds} ms, feature {(res.FeatureMs.TryGetValue(f, out var fm) ? fm : -1):0} ms");
+            if (profP) { Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(30))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
+            Console.WriteLine($"PROBE preview {name}: compute {swp.ElapsedMilliseconds} ms, feature {(res.FeatureMs.TryGetValue(f, out var fm) ? fm : -1):0} ms, err {res.Errors.GetValueOrDefault(f)?.Split('\n')[0]}, tris {(res.Mesh?.Indices.Length ?? 0) / 3}, defects {(res.Mesh == null ? -1 : Parametric3D.Kernel.Tess.MeshData.FloatDefects(res.Mesh))}, vol {res.Volume:0.##}");
             part.RemoveFeature(f); s.Document.RebuildDirty();
             continue;
         }
@@ -231,7 +234,16 @@ if (only == "probe-ffall")
             part.AddFeature(f);
             long ah0 = Parametric3D.Kernel.Topology.GeometryAudit.CacheHits, am0 = Parametric3D.Kernel.Topology.GeometryAudit.CacheMisses;
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            s.Document.RebuildDirty();
+            if (Environment.GetEnvironmentVariable("P3D_PROBEPREVIEW") == "1")
+            {
+                // 21.10: как предпросмотр операции в окне (Document: Preview + LivePreview, сетка грубее)
+                var ksP = Parametric3D.Kernel.KernelSettings.Capture();
+                ksP = ksP with { Preview = true, LivePreview = true, Chord = ksP.Chord * s.Document.PreviewCoarseness };
+                Part.BuildResult resP;
+                using (new Parametric3D.Kernel.KernelContext(ksP).Enter()) resP = part.Compute(null, null);
+                part.Apply(resP);
+            }
+            else s.Document.RebuildDirty();
             double ms = sw.Elapsed.TotalMilliseconds;
             if (prof) Console.WriteLine($"  audit cache hits {Parametric3D.Kernel.Topology.GeometryAudit.CacheHits - ah0} misses {Parametric3D.Kernel.Topology.GeometryAudit.CacheMisses - am0}");
             if (prof) { Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(int.TryParse(Environment.GetEnvironmentVariable("P3D_PROBEPROFN"), out var ppn) ? ppn : 25))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
@@ -2643,14 +2655,61 @@ Check("UI-HANDLE-LIVE", () =>
     var rf = (RoundFeature)part.Features[^1];
     Require(rf.Error == null && rf.Edges.Count == 1, "switch back to round lost the edge");
     vp.SimulateHandleDrag(-7, end: true);
-    Require(s.Document.PreviewPart == null, "preview part left after release");
+    // 21.10: панель операции ещё открыта — предпросмотр продолжается (быстрый, приближённый); точный расчёт — при «ОК»
+    // (P3D_OPPREVIEW=0 — прежнее: окончательный расчёт сразу после отпускания)
+    if (Environment.GetEnvironmentVariable("P3D_OPPREVIEW") != "0") Require(ReferenceEquals(s.Document.PreviewPart, part), "operation preview ended on release (panel still open)");
+    else Require(s.Document.PreviewPart == null, "preview part left after release");
     BuildNow(s);
     Require(rf.Error == null && Math.Abs(rf.Radius.Value - 7) < 1e-9, "final round");
+    w.CommitOperation();
+    Require(s.Document.PreviewPart == null, "preview part left after commit");
+    BuildNow(s);
+    Require(rf.Error == null && part.Bodies.Count == 1 && !part.Bodies[0].IsPreview && Math.Abs(part.Volume - (Parametric3D.Kernel.Topology.AnalyticVolume.Of(part.Bodies[0]) ?? double.NaN)) < 1e-6 * Math.Max(1, part.Volume), "exact build after commit: " + rf.Error);
     int triFinal = part.Mesh?.Indices.Length ?? 0;
     Console.WriteLine($"  preview tris {triPreview / 3}, final tris {triFinal / 3}");
-    w.CommitOperation();
     Require(part.Features.Count == f0 + 1 && s.UndoNames.Count == 1, $"commit: features {part.Features.Count - f0}, undo {s.UndoNames.Count}");
     w.Close();
+});
+
+Check("UI-OP-PREVIEW-FAST", () =>
+{
+    // 21.10 (запрос 15:30): пока панель операции открыта — быстрый приближённый предпросмотр (сетка грубее, объём по сетке,
+    // проверки, аудит и окончательная разметка отложены); «ОК» — точный расчёт. FreeForm: цилиндр ∪ шар, скругление R5 ребра
+    // пересечения. P3D_OPPREVIEW=0 / P3D_FASTPREVIEW=0 — прежнее.
+    for (int rep = 0; rep < 2; rep++) { // второй проход — тёплый замер
+    var s = FreeFormCommands.NewFreeForm(); var w = Open(s); var part = s.Part!;
+    var node = part.Features.OfType<FreeFormFeature>().Single();
+    void Add(Feature f) { f.FreeForm = node.Key; f.Frozen = true; part.AddFeature(f); s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs(); }
+    Add(new FFPrimitiveFeature { Shape = FFPrimitive.Cylinder, A = new ValueRef(15), B = new ValueRef(40) });
+    Add(new FFPrimitiveFeature { Shape = FFPrimitive.Sphere, A = new ValueRef(20) });
+    Add(new FFTransformFeature { Mode = FFXform.Move, BodyNames = { "Тело 1" }, Dx = new ValueRef(8), Dz = new ValueRef(5) });
+    Add(new FFBooleanFeature { Op = FFBool.Union, Target = "Тело 1", Tools = { "Тело 2" } });
+    string Kind(Parametric3D.Kernel.Topology.TEdge e) => string.Join("/", e.CoEdges.Select(c => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(c.Loop.Face)?.GetType().Name).OrderBy(x => x));
+    var e = part.Bodies[0].Edges.First(x => Kind(x) == "ExtrudedSurface/RevolvedSurface" && !ReferenceEquals(x.V0, x.V1));
+    w.ViewPort.Selection.Clear(); w.ViewPort.Selection.Select(new PickRef(e.Id, PickKind.Edge, part, null), additive: false);
+    long fb0 = Part.FastPreviewBodies;
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    CommandRegistry.Instance["ff.fillet"].Execute();
+    s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+    long tPreview = sw.ElapsedMilliseconds;
+    var f = (Feature?)w.CurrentOperation?.EditedFeature;
+    Require(f != null && f.Error == null && part.Bodies.Count == 1, "preview round failed: " + f?.Error);
+    bool on = Environment.GetEnvironmentVariable("P3D_OPPREVIEW") != "0";
+    if (on)
+    {
+        Require(ReferenceEquals(s.Document.PreviewPart, part), "the open operation is not previewed");
+        Require(Part.FastPreviewBodies > fb0, "the preview was not the fast one (exact volume and checks)");
+    }
+    sw.Restart();
+    w.CommitOperation(); s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+    long tExact = sw.ElapsedMilliseconds;
+    Require(s.Document.PreviewPart == null, "preview part left after commit");
+    Require(f!.Error == null && part.Bodies.Count == 1 && part.Bodies[0].Guarantee == Parametric3D.Kernel.GuaranteeLevel.ExactAnalytic && !part.Bodies[0].IsPreview, "exact result after commit: " + f.Error);
+    double va = Parametric3D.Kernel.Topology.AnalyticVolume.Of(part.Bodies[0]) ?? double.NaN;
+    Require(Math.Abs(part.Volume - va) < 1e-6 * va, $"part volume {part.Volume} vs exact {va} after commit");
+    Console.WriteLine($"  {(rep == 0 ? "cold" : "warm")}: preview {tPreview} ms, exact after commit {tExact} ms");
+    w.Close();
+    }
 });
 
 Check("UI-HOLE-ON-FACE", () =>
