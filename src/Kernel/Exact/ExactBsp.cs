@@ -705,8 +705,10 @@ public static class ExactBsp
                 var b = new List<ExactPolygon>(list.Count);
                 foreach (var p in list) Split(r, p, node.Plane!.Value, f, b, f, b);
                 ClipNodes++;
-                if (f.Count > 0 && node.Front != null) work.Push((node.Front, f));       // спереди без ветви — снаружи A
+                // порядок обхода — как у перевёрнутого дерева (ClipPolygons кладёт в стек свою «переднюю» = нашу заднюю, затем
+                // «заднюю» = нашу переднюю): тот же порядок кусков на выходе, то же слияние граней дальше
                 if (b.Count > 0) { if (node.Back != null) work.Push((node.Back, b)); else outp.AddRange(b); }   // сзади без ветви — внутри
+                if (f.Count > 0 && node.Front != null) work.Push((node.Front, f));       // спереди без ветви — снаружи A
             }
             return outp;
         }

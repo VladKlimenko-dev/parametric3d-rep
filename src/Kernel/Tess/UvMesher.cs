@@ -53,8 +53,14 @@ public static class UvMesher
     static readonly bool FastPvEnv = Environment.GetEnvironmentVariable("P3D_FASTPREVIEW") != "0";
     static bool FastPv => FastPvEnv && KernelContext.Current?.Settings.LivePreview == true;
     static bool CurvMaxOff => !(CurvMaxEnv || FastPv);   // включение — P3D_UVCURVMAX=1 (k83: 4 проверки сеток не проходят, разобрать)
+    // включение — P3D_UVSTRAIGHTROWS=1 (21.10: по умолчанию — G2-UV-MESH «вал с поперечным отверстием», ошибка площади 2.6e-3)
     static readonly bool StraightRowsEnv = Environment.GetEnvironmentVariable("P3D_UVSTRAIGHTROWS") == "1";
-    static bool StraightRowsOff => !(StraightRowsEnv || FastPv);   // включение — P3D_UVSTRAIGHTROWS=1
+    static bool StraightRowsOff => !(StraightRowsEnv || FastPv);
+    static readonly bool EdgeRefineOff = Environment.GetEnvironmentVariable("P3D_UVEDGEREFINE") == "0";
+    public static long EdgeRefines;
+    // включение — P3D_UVTWOCURVSTART=1 (по умолчанию: G05-TORUS-EXACT-ROUTE «плита сквозь трубку» уходит в многогранный путь)
+    static readonly bool TwoCurvStartOff = Environment.GetEnvironmentVariable("P3D_UVTWOCURVSTART") != "1";
+    public static long TwoCurvStarts;
     static readonly double TwoCurvScale = double.TryParse(Environment.GetEnvironmentVariable("P3D_UVTWOCURV"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var tcs) ? tcs : 1.0;   // 0.85 и мельче — у тора d8_0091 стороны «в одну сторону» (разобрать: P3D_UVTWOCURV)
     static readonly bool RowLocOff = Environment.GetEnvironmentVariable("P3D_UVROWLOC") == "0";
     public static readonly double[] PhaseMs = new double[6];   // 0 контуры, 1 треугол., 2 Делоне, 3 внутр. точки, 4 доводка, 5 проверка
@@ -523,6 +529,10 @@ public static class UvMesher
             hy = ky > 1e-12 ? Math.Max(h, Math.Sqrt(cf * tol / ky)) : Math.Max(h, spanY);
             // обе стороны гнутся (тор, шар): отходы по двум направлениям складываются на косой стороне — шаги мельче
             if (!CurvMaxOff && TwoCurvScale < 1 && kx > 1e-12 && ky > 1e-12) { double sh = TwoCurvScale; hx = Math.Max(h, hx * sh); hy = Math.Max(h, hy * sh); }
+            // 21.10 (скорость, включается P3D_UVTWOCURVSTART=1): обе стороны гнутся (тор, шар) — шаг правильной сетки мельче на
+            // √2: отходы по двум направлениям складываются, и с шагом «по одному направлению» 3/4 треугольников первой сетки
+            // выходили за допуск (тор: доводка 4 600 → 11 800 треугольников, 0.1 с).
+            else if (CurvMaxOff && !TwoCurvStartOff && kx > 1e-12 && ky > 1e-12) { hx = Math.Max(h, hx * 0.7071); hy = Math.Max(h, hy * 0.7071); Interlocked.Increment(ref TwoCurvStarts); }
             // 23:50 (скорость): ПРЯМОЕ НАПРАВЛЕНИЕ — СТРОКИ НЕ РЕЖЕ 4 ШАГОВ КРИВОГО, если грань не «лесенка» (полоса скругления с
             // точками края только на концах — там нужна именно лесенка). Прежде шаг вдоль образующей был во всю грань: одна
             // строка точек посередине, а у стенки цилиндра с вырезом посередине — ни одной; доводка центрами шла 14 проходов
@@ -767,10 +777,33 @@ public static class UvMesher
                 if (bad.Count == 0) break;
                 if (snapT == null || worstNow < snapWorst) { snapT = new List<int>(T); snapN = uvList.Count; snapWorst = worstNow; }
                 var touchedT = new List<int>(bad.Count * 3);
+                var splitEdges = EdgeRefineOff ? null : new HashSet<(int, int)>();
                 foreach (int t in bad)
                 {
                     int i0 = T[t], i1 = T[t + 1], i2 = T[t + 2];
                     var c = (uvList[i0] + uvList[i1] + uvList[i2]) / 3;
+                    // 21.10 (скорость): точка — у середины стороны с наибольшим отходом от поверхности (не на самой стороне: внутри
+                    // треугольника, Делоне перекинет сторону), если отход стороны больше отхода центра: у вытянутых треугольников
+                    // цилиндра центр не укорачивает длинную сторону, и доводка шла 9–10 проходов. Сторона по краю не делится (точки
+                    // края общие с соседями). Мутация P3D_UVEDGEREFINE=0.
+                    if (splitEdges != null)
+                    {
+                        double wc = (P(c) - (xyz[i0] + xyz[i1] + xyz[i2]) / 3).Length, best = wc; (int, int)? be = null;
+                        foreach (var (x, y) in new[] { (i0, i1), (i1, i2), (i2, i0) })
+                        {
+                            var e = x < y ? (x, y) : (y, x);
+                            if (boundary.Contains(e)) continue;
+                            double we = (P((uvList[x] + uvList[y]) / 2) - (xyz[x] + xyz[y]) / 2).Length;
+                            if (we > best * 1.2) { best = we; be = e; }
+                        }
+                        if (be is { } ee)
+                        {
+                            if (!splitEdges.Add(ee)) continue;                    // соседний треугольник уже делит эту сторону
+                            var mid = (uvList[ee.Item1] + uvList[ee.Item2]) / 2;
+                            c = mid + (c - mid) * 0.02;
+                            Interlocked.Increment(ref EdgeRefines);
+                        }
+                    }
                     int m = uvList.Count; uvList.Add(c); xyz.Add(P(c));
                     T[t] = i0; T[t + 1] = i1; T[t + 2] = m;
                     touchedT.Add(t); touchedT.Add(T.Count); touchedT.Add(T.Count + 3);

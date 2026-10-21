@@ -1103,8 +1103,65 @@ public static partial class ExactFaceMesher
         return nPos > 0 && nNeg > 0;
     }
 
+    static readonly bool TorusGridOff = Environment.GetEnvironmentVariable("P3D_TORUSGRID") == "0";
+    public static long TorusGrids;
+
+    private static (List<Vector3d> P, List<int> T, List<Vector3d> N)? FullTorusGrid(TFace f)
+    {
+        if (Topology.GeometryAudit.AuthoritativeSurface(f) is not RevolvedSurface rv || rv.Base is not Curves.ArcCurve3 prof) return null;
+        if (Math.Abs(Math.Abs(rv.Sweep) - 2 * Math.PI) > 1e-9 || !prof.IsClosed) return null;
+        if (Geometry.ExactEdges.ShapeOf(rv) is not Geometry.Ssi.Torus) return null;
+        var uses = new Dictionary<TEdge, int>(ReferenceEqualityComparer.Instance);
+        foreach (var l in f.Loops) foreach (var ce in l.CoEdges) uses[ce.Edge] = uses.GetValueOrDefault(ce.Edge) + 1;
+        if (Environment.GetEnvironmentVariable("P3D_TGDBG") == "1") Console.Error.WriteLine($"TORUSGRID uses {string.Join(",", uses.Values)} curves {string.Join(",", uses.Keys.Select(e => e.Curve.GetType().Name))}");
+        if (uses.Count < 1 || uses.Count > 2 || uses.Values.Any(n => n != 2)) return null;
+        TEdge? profSeam = null, ringSeam = null;
+        foreach (var e in uses.Keys)
+        {
+            if (e.Curve is not Curves.ArcCurve3 ac || !ac.IsClosed) return null;
+            if (Math.Abs(ac.Radius - prof.Radius) < 1e-9 * Math.Max(1, prof.Radius) && uses.Count == 2) profSeam = e; else ringSeam = e;
+        }
+        if (ringSeam == null) return null;
+        // шов-образующая есть не всегда (тело вращения полного оборота хранит только шов-окружность): шаг вокруг трубы — по допуску
+        int nu = profSeam != null ? EdgePoints(profSeam).Count - 1 : GeomUtil.ArcSegments(prof.Radius, 2 * Math.PI), nv = EdgePoints(ringSeam).Count - 1;
+        if (nu < 3 || nv < 3) return null;
+        var P = new List<Vector3d>(nu * nv); var N = new List<Vector3d>(nu * nv);
+        for (int j = 0; j < nv; j++)
+            for (int i = 0; i < nu; i++)
+            {
+                var uv = new Vector2d((double)i / nu, (double)j / nv);
+                P.Add(rv.PointAt(uv));
+                var n = rv.NormalAt(uv); N.Add(n.LengthSquared > 0 ? n.Normalized() : n);
+            }
+        int Ix(int i, int j) => (j % nv) * nu + (i % nu);
+        var T = new List<int>(nu * nv * 6);
+        for (int j = 0; j < nv; j++)
+            for (int i = 0; i < nu; i++)
+            {
+                int a = Ix(i, j), b = Ix(i + 1, j), c = Ix(i + 1, j + 1), d = Ix(i, j + 1);
+                T.AddRange(new[] { a, b, c, a, c, d });
+            }
+        Orient(f, P, T);
+        // сторона нормалей — по треугольникам
+        var nTri = Vector3d.Cross(P[T[1]] - P[T[0]], P[T[2]] - P[T[0]]);
+        if (Vector3d.Dot(nTri, N[T[0]]) < 0) for (int k = 0; k < N.Count; k++) N[k] = -N[k];
+        var chk = Validate(f, rv, P, T, out var whyG);
+        if (Environment.GetEnvironmentVariable("P3D_TGDBG") == "1") Console.Error.WriteLine($"TORUSGRID nu {nu} nv {nv} ok {chk != null} why {whyG}");
+        if (chk == null) return null;
+        return (chk.Value.P, chk.Value.T, N.Count == chk.Value.P.Count ? N : null!);
+    }
+
     private static (List<Vector3d> P, List<int> T)? MeshUncached(TFace f, out string? why, out List<Vector3d>? normals)
     {
+        // 21.10 (скорость): ЦЕЛЫЙ ТОР (грань без контуров, кроме двух швов) — правильной сеткой по точкам швов: тор-заготовка
+        // и тор после булевой, не задевшей его, шли разметкой в параметрах с доводкой (0.1–0.16 с, 12 000 треугольников).
+        // Мутация P3D_TORUSGRID=0.
+        if (!TorusGridOff && f.Surface is not FacetedSurface && FullTorusGrid(f) is { } tg)
+        {
+            normals = tg.N; why = null;
+            Interlocked.Increment(ref TorusGrids);
+            return (tg.P, tg.T);
+        }
         if (MeshTrace) Console.Error.WriteLine($"MESHTRACE {DateTime.Now:HH:mm:ss.fff} face {f.Tag} {Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name} loops {f.Loops.Count} ces {f.Loops.Sum(l => l.CoEdges.Count)} faceted {f.Surface is FacetedSurface}");
         // g.05: ОСТРЫЙ КОНУС С ОДНИМ КОНТУРОМ — кольцами к вершине ДО разметки в параметрах (только образующая-отрезок: у сферы
         // ось карты не обязана проходить через центр шапки — кольца по меридианам складываются, отказ маршрута). У вершины
