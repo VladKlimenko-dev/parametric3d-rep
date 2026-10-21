@@ -22,37 +22,82 @@ public static class MeshCut
         public Node? Front, Back;
     }
 
+    public enum Op { Subtract, Union, Intersect }
+
     /// <summary>A − T (subtract) или A ∪ T; null — вход пустой.</summary>
-    public static List<CsgPolygon>? Run(List<CsgPolygon> a, List<CsgPolygon> t, bool subtract)
+    public static List<CsgPolygon>? Run(List<CsgPolygon> a, List<CsgPolygon> t, bool subtract) => Run(a, t, subtract ? Op.Subtract : Op.Union);
+
+    public static List<CsgPolygon>? Run(List<CsgPolygon> a, List<CsgPolygon> t, Op op)
     {
         if (a.Count == 0 || t.Count == 0) return null;
         var boxA = Box(a); var boxT = Box(t);
         double pad = 1e-6 * Math.Max(1, (boxA.Max - boxA.Min).Length);
         var aNear = new List<CsgPolygon>(); var res = new List<CsgPolygon>();
-        foreach (var p in a) if (Overlaps(p, boxT, pad)) aNear.Add(p); else res.Add(p);      // вдали от T — снаружи T
+        foreach (var p in a) if (Overlaps(p, boxT, pad)) aNear.Add(p); else if (op != Op.Intersect) res.Add(p);   // вдали от T — снаружи T
         var tNear = t.Where(p => Overlaps(p, boxA, pad)).ToList();                             // вдали от A — снаружи A
         var gridA = new RayGrid(a); var gridT = new RayGrid(t);
 
-        // куски A: остаются, если сторона материала A у куска — снаружи T. Делят кусок только соседние (по рамке)
-        // многоугольники другого тела: дерево на каждый многоугольник из десятков, а не из тысяч.
+        // куски A: вычитание и объединение — остаются, если сторона материала A у куска снаружи T; пересечение — если внутри.
+        // Делят кусок только соседние (по рамке) многоугольники другого тела: дерево на каждый многоугольник из десятков.
         var hashT = new BoxHash(tNear); var hashA = new BoxHash(aNear);
         foreach (var p in aNear)
             foreach (var f in Split(Build(hashT.Near(p)), p))
             {
                 var c = Centroid(f); double h = Probe(f);
-                if (!gridT.Inside(c - f.N * h)) res.Add(f);
+                bool inT = gridT.Inside(c - f.N * h);
+                if (op == Op.Intersect ? inT : !inT) res.Add(f);
             }
-        // куски T: вычитание — остаются (вывернутыми), если снаружи T у куска материал A; объединение — если снаружи A
+        // куски T: вычитание — остаются (вывернутыми), если снаружи T у куска материал A; объединение — если снаружи A;
+        // пересечение — если внутри A
         foreach (var p in tNear)
             foreach (var f in Split(Build(hashA.Near(p)), p))
             {
                 var c = Centroid(f); double h = Probe(f);
-                bool insideA = gridA.Inside(c + f.N * h);
-                if (subtract && insideA) { f.Flip(); res.Add(f); }
-                else if (!subtract && !gridA.Inside(c - f.N * h)) res.Add(f);
+                if (op == Op.Subtract) { if (gridA.Inside(c + f.N * h)) { f.Flip(); res.Add(f); } }
+                else
+                {
+                    bool inA = gridA.Inside(c - f.N * h);
+                    if (op == Op.Intersect ? inA : !inA) res.Add(f);
+                }
             }
-        if (!subtract) foreach (var p in t) if (!Overlaps(p, boxA, pad)) res.Add(p);
+        if (op == Op.Union) foreach (var p in t) if (!Overlaps(p, boxA, pad)) res.Add(p);
         return res;
+    }
+
+    /// <summary>Треугольники сетки показа тела, метка — грань (+ смещение); источники граней — в sources.</summary>
+    public static List<CsgPolygon> MeshPolys(Topology.TSolid s, uint offset, Dictionary<uint, Surfaces.ISurface3?>? sources)
+    {
+        var md = Tess.Tessellator.Tessellate(s, facets: true);
+        var surf = s.Faces.ToDictionary(f => f.Id, f => f.Surface);
+        var res = new List<CsgPolygon>(md.Indices.Length / 3);
+        for (int i = 0; i + 2 < md.Indices.Length; i += 3)
+        {
+            var a = md.Vertices[md.Indices[i]]; var b = md.Vertices[md.Indices[i + 1]]; var c = md.Vertices[md.Indices[i + 2]];
+            var pa = new Vector3d(a.P.X, a.P.Y, a.P.Z); var pb = new Vector3d(b.P.X, b.P.Y, b.P.Z); var pc = new Vector3d(c.P.X, c.P.Y, c.P.Z);
+            if (Vector3d.Cross(pb - pa, pc - pa).LengthSquared < 1e-20) continue;
+            uint tag = a.FaceId + offset;
+            if (sources != null && !sources.ContainsKey(tag)) sources[tag] = surf.TryGetValue(a.FaceId, out var sf) ? sf : null;
+            res.Add(new CsgPolygon(new List<Vector3d> { pa, pb, pc }, tag));
+        }
+        return res;
+    }
+
+    /// <summary>
+    /// 21.10: БУЛЕВА ПРЕДПРОСМОТРА ПО СЕТКАМ — тело из кусков (гранёное, без согласования вершин на стыках). null — не вышло.
+    /// </summary>
+    public static Topology.TSolid? Solid(Topology.TSolid a, Topology.TSolid b, Op op)
+    {
+        var sources = new Dictionary<uint, Surfaces.ISurface3?>();
+        var pa = MeshPolys(a, 0, sources); var pb = MeshPolys(b, 1u << 30, sources);
+        var r = Run(pa, pb, op);
+        if (r == null || r.Count == 0) return null;
+        Topology.TSolid solid;
+        BooleanOp.PreviewMeshBuild = true;
+        try { solid = BooleanOp.SolidFromPolygons(r, sources); }
+        finally { BooleanOp.PreviewMeshBuild = false; }
+        solid.TopologyConvention = Topology.TopologyConventions.Version;
+        BooleanOp.MarkPreviewMesh(solid);
+        return solid;
     }
 
     static double Probe(CsgPolygon f)

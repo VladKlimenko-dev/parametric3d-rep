@@ -1197,7 +1197,7 @@ public static class BooleanOp
                 for (int i = work.Count - 1; i >= 0; i--)
                 {
                     var b = work[i];
-                    if (bodies.Any(x => ReferenceEquals(x, b)) || (ReferenceEquals(b, other) && bodies.Count > 0) || b.IsPublished) continue;
+                    if (bodies.Any(x => ReferenceEquals(x, b)) || (ReferenceEquals(b, other) && bodies.Count > 0) || b.IsPublished || IsPreviewMesh(b)) continue;
                     Topology.ShellComponents.Outcome split; using (Diagnostics.Prof.Time("булева: компоненты результата")) split = Topology.ShellComponents.Split(b);
                     if (split.Warning != null) result.Diagnostics.Add(new OperationDiagnostic("components", "components", split.Warning));
                     if (split.Bodies.Count == 1 && ReferenceEquals(split.Bodies[0], b)) continue;
@@ -1218,6 +1218,7 @@ public static class BooleanOp
 
             foreach (var b in fresh)
             {
+                if (IsPreviewMesh(b)) continue;
                 // K05: опубликованное тело приводится к соглашению о полурёбрах до проверки.
                 if (b.TopologyConvention < Topology.TopologyConventions.Version) using (Diagnostics.Prof.Time("булева: соглашение результата")) Topology.TopologyConventions.Normalize(b);
                 // g.13: тело предпросмотра (проверки маршрута отложены) — и эта проверка при принятии (P3D_PREVIEWPRISM=0 — сразу)
@@ -1564,8 +1565,28 @@ public static class BooleanOp
         return ExtrudeOp.Build(ProfileBuilder.Build(plane, c), new Vector3d(0, 0, z1 - z0));
     }
 
+    // 21.10 (скорость предпросмотра): пока панель операции открыта, булева, ушедшая с точного маршрута на разбиение
+    // пространства (тор ∪ брусок с касанием в седловой точке — 1 с на каждый шаг ручки), идёт по сеткам показа (MeshCut).
+    // Тело гранёное, только для вида; «ОК» — точный расчёт. Мутация P3D_PREVIEWMESHBOOL=0.
+    static readonly bool PreviewMeshBoolOff = Environment.GetEnvironmentVariable("P3D_PREVIEWMESHBOOL") == "0"
+                                              || Environment.GetEnvironmentVariable("P3D_FASTPREVIEW") == "0";
+    public static long PreviewMeshBooleans;
+    /// <summary>Сборка тела предпросмотра по сеткам: стыки кусков без пары — законны (не отказ «открытый результат»).</summary>
+    [ThreadStatic] internal static bool PreviewMeshBuild;
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, object> _previewMeshBodies = new();
+    /// <summary>Тело предпросмотра по сеткам: куски без согласования вершин — не делится на компоненты и не проверяется.</summary>
+    internal static void MarkPreviewMesh(TSolid b) => _previewMeshBodies.AddOrUpdate(b, true);
+    internal static bool IsPreviewMesh(TSolid b) => _previewMeshBodies.TryGetValue(b, out _);
+
     private static bool TryExact(List<TSolid> bodies, TSolid other, List<string> warnings, bool subtract, bool intersect = false)
     {
+        if (!PreviewMeshBoolOff && KernelSettings.Capture().LivePreview && bodies.Count > 0)
+        {
+            Topology.TSolid? quick;
+            using (Diagnostics.Prof.Time("булева: предпросмотр по сеткам"))
+                quick = MeshCut.Solid(bodies[0], other, intersect ? MeshCut.Op.Intersect : subtract ? MeshCut.Op.Subtract : MeshCut.Op.Union);
+            if (quick != null) { bodies[0] = quick; Interlocked.Increment(ref PreviewMeshBooleans); return true; }
+        }
         try
         {
             OperationTrace.Enter("boolean.exact");
@@ -4129,7 +4150,7 @@ public static class BooleanOp
         // K02/K08: результат с непарными граничными сторонами — открытое тело. Прежде это было
         // только предупреждение, и операция «успешно» теряла бобышку целиком (объём 320 000 вместо
         // 322 038 у реалистичной детали при прогибе 0.002 мм). Теперь это отказ операции.
-        if (lonelyByTag.Count > 0)
+        if (lonelyByTag.Count > 0 && !PreviewMeshBuild)
             OperationTrace.Report(OperationCodes.OpenResult,
                 $"{lonelyByTag.Sum(kv => kv.Value.Count)} boundary side(s) without a partner on {lonelyByTag.Count} face(s)");
 

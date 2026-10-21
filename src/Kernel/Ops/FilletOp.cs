@@ -793,23 +793,7 @@ public static class FilletOp
     /// <summary>Резцы предпросмотра, уже разрезанные по сеткам (обрезка шаром): многоугольники вместо тела.</summary>
     static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, List<CsgPolygon>> PreviewPolys = new();
 
-    /// <summary>Треугольники сетки показа тела, метка — грань (+ смещение).</summary>
-    static List<CsgPolygon> MeshPolys(TSolid s, uint offset, Dictionary<uint, ISurface3?>? sources)
-    {
-        var md = Tessellator.Tessellate(s, facets: true);
-        var surf = s.Faces.ToDictionary(f => f.Id, f => f.Surface);
-        var res = new List<CsgPolygon>(md.Indices.Length / 3);
-        for (int i = 0; i + 2 < md.Indices.Length; i += 3)
-        {
-            var a = md.Vertices[md.Indices[i]]; var b = md.Vertices[md.Indices[i + 1]]; var c = md.Vertices[md.Indices[i + 2]];
-            var pa = new Vector3d(a.P.X, a.P.Y, a.P.Z); var pb = new Vector3d(b.P.X, b.P.Y, b.P.Z); var pc = new Vector3d(c.P.X, c.P.Y, c.P.Z);
-            if (Vector3d.Cross(pb - pa, pc - pa).LengthSquared < 1e-20) continue;
-            uint tag = a.FaceId + offset;
-            if (sources != null && !sources.ContainsKey(tag)) sources[tag] = surf.TryGetValue(a.FaceId, out var sf) ? sf : null;
-            res.Add(new CsgPolygon(new List<Vector3d> { pa, pb, pc }, tag));
-        }
-        return res;
-    }
+    static List<CsgPolygon> MeshPolys(TSolid s, uint offset, Dictionary<uint, ISurface3?>? sources) => MeshCut.MeshPolys(s, offset, sources);
 
     /// <summary>Тело − резец (или ∪) по сеткам показа; null — не вышло.</summary>
     private static TSolid? MeshCsg(TSolid body, TSolid tool, bool subtract)
@@ -824,7 +808,12 @@ public static class FilletOp
         using (Diagnostics.Prof.Time("  предпросмотр: рез")) r = MeshCut.Run(pa0, pt0, subtract);
         if (r == null || r.Count == 0) return null;
         TSolid solid;
-        using (Diagnostics.Prof.Time("  предпросмотр: тело")) solid = BooleanOp.SolidFromPolygons(r, sources);
+        using (Diagnostics.Prof.Time("  предпросмотр: тело"))
+        {
+            BooleanOp.PreviewMeshBuild = true;
+            try { solid = BooleanOp.SolidFromPolygons(r, sources); }
+            finally { BooleanOp.PreviewMeshBuild = false; }
+        }
         solid.TopologyConvention = TopologyConventions.Version;   // куски без согласования вершин: соглашение — не для показа
         return solid;
     }
