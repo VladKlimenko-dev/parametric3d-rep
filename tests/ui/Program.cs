@@ -228,6 +228,9 @@ if (only == "probe-ffall")
     {
         ("box", new Func<Feature>[0], _ => Prim(FFPrimitive.Box, 40, 30, 20)),
         ("torus", new Func<Feature>[0], _ => Prim(FFPrimitive.Torus, 20, 5)),
+        ("sphere", new Func<Feature>[0], _ => Prim(FFPrimitive.Sphere, 20)),
+        ("cylinder", new Func<Feature>[0], _ => Prim(FFPrimitive.Cylinder, 15, 40)),
+        ("cone", new Func<Feature>[0], _ => Prim(FFPrimitive.Cone, 15, 40, 5)),
         ("union box+cyl", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Cylinder, 8, 30, 0, 10, 0, 5) }, _ => Bool(FFBool.Union)),
         ("subtract box-cyl", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Cylinder, 6, 40, 0, 0, 0, -10) }, _ => Bool(FFBool.Subtract)),
         ("subtract box-sphere", new[] { () => (Feature)Prim(FFPrimitive.Box, 40, 30, 20), () => Prim(FFPrimitive.Sphere, 12, 0, 0, 20, 15, 20) }, _ => Bool(FFBool.Subtract)),
@@ -2839,6 +2842,33 @@ Check("UI-POLY-FAST", () =>
         Console.WriteLine($"  union {ms1} ms (eager caps: {ms2} ms), volume {v1:0.###}, faces {f1}, display tris {md.Indices.Length / 3}");
     }
     finally { Parametric3D.Kernel.Exact.ExactBsp.LazyCapsOff = Environment.GetEnvironmentVariable("P3D_LAZYCAPS") == "0"; }
+});
+
+Check("UI-MESH-FAST", () =>
+{
+    // 21.10 (скорость разметки): целый тор — правильной сеткой по точкам шва (P3D_TORUSGRID=0); доводка — точкой у середины стороны с наибольшим отходом (P3D_UVEDGEREFINE=0).
+    long tg0 = Parametric3D.Kernel.Tess.ExactFaceMesher.TorusGrids, er0 = Parametric3D.Kernel.Tess.UvMesher.EdgeRefines;
+    (Part P, double Exact) Make(params Feature[] fs)
+    {
+        var s = FreeFormCommands.NewFreeForm(); var part = s.Part!;
+        var node = part.Features.OfType<FreeFormFeature>().Single();
+        foreach (var f in fs) { f.FreeForm = node.Key; f.Frozen = true; part.AddFeature(f); s.Document.RebuildDirty(); }
+        return (part, Parametric3D.Kernel.Topology.AnalyticVolume.Of(part.Bodies[0]) ?? double.NaN);
+    }
+    var (tor, tv) = Make(new FFPrimitiveFeature { Shape = FFPrimitive.Torus, A = new ValueRef(20), B = new ValueRef(5) });
+    Require(Parametric3D.Kernel.Tess.ExactFaceMesher.TorusGrids > tg0, "the whole torus was not meshed by the seam grid");
+    var tm = tor.Mesh!;
+    Require(Parametric3D.Kernel.Tess.MeshData.FloatDefects(tm) == 0, "the torus mesh has defects");
+    Require(Math.Abs(Parametric3D.Kernel.Tess.MassProps.Volume(tm) - tv) < 5e-3 * tv, $"torus mesh volume {Parametric3D.Kernel.Tess.MassProps.Volume(tm):0.#} vs {tv:0.#}");
+    var (cc, cv) = Make(new FFPrimitiveFeature { Shape = FFPrimitive.Cylinder, A = new ValueRef(10), B = new ValueRef(40) },
+        new FFPrimitiveFeature { Shape = FFPrimitive.Cylinder, A = new ValueRef(7), B = new ValueRef(50), Origin = new OpenTK.Mathematics.Vector3d(-25, 0, 20), U = OpenTK.Mathematics.Vector3d.UnitY, V = OpenTK.Mathematics.Vector3d.UnitZ },
+        new FFBooleanFeature { Op = FFBool.Union, Target = "Тело 1", Tools = { "Тело 2" } });
+    Require(cc.Bodies.Count == 1 && cc.Bodies[0].Guarantee == Parametric3D.Kernel.GuaranteeLevel.ExactAnalytic, "cyl ∪ cyl not exact");
+    Require(Parametric3D.Kernel.Tess.UvMesher.EdgeRefines > er0, "refinement did not split long sides");
+    var cm = cc.Mesh!;
+    Require(Parametric3D.Kernel.Tess.MeshData.FloatDefects(cm) == 0, "cyl ∪ cyl mesh has defects");
+    Require(Math.Abs(Parametric3D.Kernel.Tess.MassProps.Volume(cm) - cv) < 5e-3 * cv, $"cyl ∪ cyl mesh volume {Parametric3D.Kernel.Tess.MassProps.Volume(cm):0.#} vs {cv:0.#}");
+    Console.WriteLine($"  torus tris {tm.Indices.Length / 3}, cyl ∪ cyl tris {cm.Indices.Length / 3}");
 });
 
 Check("UI-HOLE-ON-FACE", () =>
