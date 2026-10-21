@@ -1,4 +1,4 @@
-using Parametric3D.Kernel;
+﻿using Parametric3D.Kernel;
 using OpenTK.Mathematics;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
@@ -302,7 +302,9 @@ static partial class Program
             var t = PrimitiveOp.Torus(c, R, r); var b = mkB();
             var A = boxFirst ? b : t; var B = boxFirst ? t : b;
             Func<Vector3d, bool> inA = boxFirst ? inB : InTorus, inBB = boxFirst ? InTorus : inB;
+            if (Environment.GetEnvironmentVariable("P3D_TORDBG") == "1") BooleanOp.AnalyticRouteDebug = m => Console.WriteLine($"  {name} route: {m}");
             var res = BooleanOp.Evaluate(new List<TSolid> { A }, B, k, OperationPolicy.Strict, new List<string>());
+            BooleanOp.AnalyticRouteDebug = null;
             double vol = res.Bodies.Sum(x => AnalyticVolume.Of(x) ?? double.NaN);
             var rnd = new Random(7); var lo = c - new Vector3d(16, 16, 12); var hi = c + new Vector3d(16, 16, 12); int nIn = 0, N = 400000;
             for (int i = 0; i < N; i++)

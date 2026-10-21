@@ -20,6 +20,7 @@ namespace Parametric3D.Kernel.Tess;
 /// </summary>
 public static class UvMesher
 {
+    static readonly bool InvDbg = Environment.GetEnvironmentVariable("P3D_UVINVDBG") == "1";
     public static Action<string>? Debug = Environment.GetEnvironmentVariable("P3D_UVDBG") == "1" ? m => Console.Error.WriteLine("UV " + m) : null;
     /// <summary>KRN-03: сколько раз полюс шапки выбран по обходу края / не удалось решить.</summary>
     public static int PolePicksByLoop, PoleUndecided, PoleCutsMoved;
@@ -340,6 +341,7 @@ public static class UvMesher
         // пополам без переворотов плодило десятки тысяч игл.
         var T = new List<int>(tris);
         double Orient(int a, int b, int c) { var p = uvList[a]; var q = uvList[b]; var r = uvList[c]; return (q.X - p.X) * (r.Y - p.Y) - (q.Y - p.Y) * (r.X - p.X); }
+        string InvStat() { int pos = 0, neg = 0; for (int t = 0; t + 2 < T.Count; t += 3) { double o = Orient(T[t], T[t + 1], T[t + 2]); if (o > 0) pos++; else if (o < 0) neg++; } return $"orient +{pos}/-{neg}"; }
         double Area3() { double ar = 0; for (int t = 0; t < T.Count; t += 3) ar += Vector3d.Cross(xyz[T[t + 1]] - xyz[T[t]], xyz[T[t + 2]] - xyz[T[t]]).Length / 2; return ar; }
 
         Ph("uv: Делоне и доводка");
@@ -722,12 +724,12 @@ public static class UvMesher
                 if (kx > 1e-12 && ky <= 1e-12 && spanY > 4 * hx && Ladder(alongY: true)) { sv *= 0.25 * hx / spanY; squashed = true; }
                 else if (ky > 1e-12 && kx <= 1e-12 && spanX > 4 * hy && Ladder(alongY: false)) { su *= 0.25 * hy / spanX; squashed = true; }
             }
-            Ph("uv: Делоне после точек");
+            Ph("uv: Делоне после точек"); if (Debug != null && InvDbg) Debug($"stage {"uv: Делоне после точек"}: {InvStat()}");
             Delaunay();
             Debug?.Invoke($"pass 0: interior points {uvList.Count - pts0.Count}, h {h:0.###} hx {hx:0.###} hy {hy:0.###} kx {kx:G3} ky {ky:G3} span {spanX:0.##}x{spanY:0.##}, tris {T.Count / 3}, area3 {Area3():0.###}");
             // Доводка: где поверхность гнётся сильнее, чем позволяет шаг сетки (кольцо тора малого
             // сечения), — точки в центры «плохих» треугольников и снова Делоне.
-            Ph("uv: доводка");
+            Ph("uv: доводка"); if (Debug != null && InvDbg) Debug($"stage {"uv: доводка"}: {InvStat()}");
             delMs0 = PhaseMs[2]; swRef = System.Diagnostics.Stopwatch.StartNew();
             double prevWorst = double.MaxValue; int stuck = 0; int tris0 = Math.Max(1, T.Count / 3);
             // u12: снимок перед вставкой центров — если доводка разошлась (худшая ошибка выросла втрое: косые полосы у
@@ -830,7 +832,7 @@ public static class UvMesher
         // нулевой площади, сварка сетки их выбрасывала, и на их месте оставались непарные стороны
         // (50 таких у стенки бобышки — сетка тела открывалась в ядре).
         if (Debug != null && !s.IsPlanar) Debug($"refine timing: total {swRef?.Elapsed.TotalMilliseconds:0.0} ms, delaunay {PhaseMs[2] - delMs0:0.0} ms, tris {T.Count / 3}");
-        Ph("uv: вырожденные");
+        Ph("uv: вырожденные"); if (Debug != null && InvDbg) Debug($"stage {"uv: вырожденные"}: {InvStat()}");
         for (int round = 0; round < 50; round++)
         {
             double scaleUv = 0; for (int i = 0; i < uvList.Count; i++) scaleUv = Math.Max(scaleUv, uvList[i].LengthSquared);
@@ -873,7 +875,7 @@ public static class UvMesher
             if (fixedCount == 0) break;
         }
 
-        Ph("uv: самопроверка");
+        Ph("uv: самопроверка"); if (Debug != null && InvDbg) Debug($"stage {"uv: самопроверка"}: {InvStat()}");
         // САМОПРОВЕРКА. Разметка принимается, только если (1) треугольники покрывают область в
         // (u, v) ровно — сумма их площадей равна площади области, и все обходятся в одну сторону;
         // (2) площадь сетки сходится с точной площадью грани. Иначе — отказ с причиной: ушная

@@ -2871,6 +2871,33 @@ Check("UI-MESH-FAST", () =>
     Console.WriteLine($"  torus tris {tm.Indices.Length / 3}, cyl ∪ cyl tris {cm.Indices.Length / 3}");
 });
 
+Check("UI-PREVIEW-MESHBOOL", () =>
+{
+    // 21.10 (скорость предпросмотра): булева, ушедшая с точного маршрута на разбиение пространства (тор ∪ брусок с касанием в
+    // седловой точке), в предпросмотре идёт по сеткам показа — тело только для вида; точный расчёт — после. Мутация
+    // P3D_PREVIEWMESHBOOL=0.
+    var s = FreeFormCommands.NewFreeForm(); var part = s.Part!;
+    var node = part.Features.OfType<FreeFormFeature>().Single();
+    void Add(Feature f) { f.FreeForm = node.Key; f.Frozen = true; part.AddFeature(f); s.Document.RebuildDirty(); }
+    Add(new FFPrimitiveFeature { Shape = FFPrimitive.Torus, A = new ValueRef(20), B = new ValueRef(5) });
+    Add(new FFPrimitiveFeature { Shape = FFPrimitive.Box, A = new ValueRef(10), B = new ValueRef(10), C = new ValueRef(20), Origin = new OpenTK.Mathematics.Vector3d(20, 0, -10) });
+    var u = new FFBooleanFeature { Op = FFBool.Union, Target = "Тело 1", Tools = { "Тело 2" } };
+    u.FreeForm = node.Key; u.Frozen = true; part.AddFeature(u);
+    long m0 = Parametric3D.Kernel.Ops.BooleanOp.PreviewMeshBooleans;
+    var ks = Parametric3D.Kernel.KernelSettings.Capture();
+    ks = ks with { Preview = true, LivePreview = true, Chord = ks.Chord * s.Document.PreviewCoarseness };
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    Part.BuildResult res;
+    using (new Parametric3D.Kernel.KernelContext(ks).Enter()) res = part.Compute(null, null);
+    long tPrev = sw.ElapsedMilliseconds;
+    Require(res.Errors.GetValueOrDefault(u) == null && res.Bodies.Count == 1, "preview union failed: " + res.Errors.GetValueOrDefault(u));
+    Require(Parametric3D.Kernel.Ops.BooleanOp.PreviewMeshBooleans > m0, "the preview boolean was not made on the meshes");
+    sw.Restart(); s.Document.RebuildDirty(); long tExact = sw.ElapsedMilliseconds;
+    Require(u.Error == null && part.Bodies.Count == 1 && part.Bodies[0].Guarantee == Parametric3D.Kernel.GuaranteeLevel.ExactPolyhedral, "exact union failed: " + u.Error);
+    Require(Math.Abs(res.Volume - part.Volume) < 1e-2 * part.Volume, $"preview volume {res.Volume:0.#} vs exact {part.Volume:0.#}");
+    Console.WriteLine($"  preview {tPrev} ms (volume {res.Volume:0.##}), exact {tExact} ms (volume {part.Volume:0.##})");
+});
+
 Check("UI-HOLE-ON-FACE", () =>
 {
     // п. 3 (u10): отверстие на выбранной грани — одно отверстие в середине грани, без ошибки
