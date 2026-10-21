@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Topology;
 
 namespace Parametric3D.Kernel.Tess;
@@ -116,6 +116,8 @@ public static class Tessellator
     // дефекты связности во float, строится и видимая сетка граней (DisplaySnapshot), и берётся та, где дефектов меньше
     // (серия 9, случай 50: фасеты плоской грани x = 6.43 после второй булевой не согласованы с соседями — 45 сторон без
     // пары, видимая сетка годна). Мутация P3D_POLYCHOICE=0.
+    static readonly bool PolyNormalFastOff = Environment.GetEnvironmentVariable("P3D_POLYNORMALFAST") == "0";
+    static readonly bool PolySrcDbg = Environment.GetEnvironmentVariable("P3D_POLYSRCDBG") == "1";
     static readonly bool PolyChoiceOff = Environment.GetEnvironmentVariable("P3D_POLYCHOICE") == "0";
     // g.11: ТРЕТИЙ ИСТОЧНИК — САМИ ТОЧНЫЕ МНОГОУГОЛЬНИКИ ТЕЛА (ExactAdapter.ToCsg: кольца без T-стыков, вершины реестра
     // общие): фасеты граней бывают переразмечены (плоская грань после восстановления дуг — брусок минус тор: 159 сторон без
@@ -126,15 +128,35 @@ public static class Tessellator
     {
         bool poly = !facets && !PolyDisplayOff && PolyFacetsOnly && solid.Exact != null && solid.ExactAuthoritative;
         if (!poly) return TessellateCore(solid, facets, 0);
+        // 21.10 (скорость): сетка показа многогранного тела — одна на тело, его ревизию, точную форму и допуски (её строили
+        // итоговая проверка скругления и деталь: по 0.2–0.45 с); выдаётся копия. Мутация P3D_POLYMESHMEMO=0.
+        var memoKey = (solid.Revision, solid.Exact, Core.Tol.Chord, Core.Tol.ChordAngle);
+        if (!PolyMeshMemoOff && _polyMemo.TryGetValue(solid, out var pm) && pm.Key.Equals(memoKey)) { Interlocked.Increment(ref PolyMeshMemoHits); return pm.Mesh.Clone(); }
+        var made = TessellatePoly(solid, facets);
+        if (!PolyMeshMemoOff && made.Whole) _polyMemo.AddOrUpdate(solid, new PolyMemo { Key = memoKey, Mesh = made.Clone() });
+        return made;
+    }
+
+    sealed class PolyMemo { public (long, Exact.ExactBody?, double, double) Key; public MeshData Mesh = null!; }
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, PolyMemo> _polyMemo = new();
+    static readonly bool PolyMeshMemoOff = Environment.GetEnvironmentVariable("P3D_POLYMESHMEMO") == "0";
+    public static long PolyMeshMemoHits;
+
+    static MeshData TessellatePoly(TSolid solid, bool facets)
+    {
         MeshData? best = null; int bestD = int.MaxValue;
         foreach (int src in PolyFromExactOff ? new[] { 0, 1 } : new[] { 2, 0, 1 })
         {
             if (src == 1 && PolyChoiceOff) continue;
+            // видимая сетка граней (разметка по точной геометрии) — только когда до неё дошло (деталь её не строит заранее)
+            if (src != 2 && !facets) { try { Ops.BooleanOp.MeshExactlySolid(solid); } catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { } }
             MeshData md;
-            try { md = TessellateCore(solid, facets, src); }
+            var swSrc = System.Diagnostics.Stopwatch.StartNew();
+            try { using (Diagnostics.Prof.Time("показ многогранного: источник " + src)) md = TessellateCore(solid, facets, src); }
             catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { continue; }
             if (md.Indices.Length == 0) continue;
             int d = md.BrokenFaces.Count > 0 ? int.MaxValue - 1 : MeshData.FloatDefects(md);   // повреждённая грань хуже любых дефектов
+            if (PolySrcDbg) Console.Error.WriteLine($"POLYSRC {src}: {swSrc.ElapsedMilliseconds} ms, tris {md.Indices.Length / 3}, defects {d}");
             if (d < bestD) { best = md; bestD = d; }
             if (d == 0 || (PolyChoiceOff && src == 0)) break;
         }
@@ -221,7 +243,8 @@ public static class Tessellator
         if (fromExact && polyAuth)
         {
             // многоугольники точной формы по меткам → грани (по исходной метке грани)
-            var csg = Exact.ExactAdapter.ToCsg(solid.Exact!.Solid);
+            List<Ops.CsgPolygon> csg;
+            using (Diagnostics.Prof.Time("  показ: многоугольники точной формы")) csg = Exact.ExactAdapter.ToCsgForDisplay(solid.Exact!.Solid);
             var byTag = new Dictionary<uint, List<int>>();
             for (int i = 0; i < faces.Count; i++) if (faces[i].SourceTag != 0) { if (!byTag.TryGetValue(faces[i].SourceTag, out var l)) byTag[faces[i].SourceTag] = l = new(); l.Add(i); }
             for (int i = 0; i < faces.Count; i++)
@@ -233,6 +256,8 @@ public static class Tessellator
             }
             // несколько граней с одной меткой (грань разделена на области) — многоугольник к той, чей треугольник разбиения ближе
             var cents = new Dictionary<int, List<Vector3d>>();
+            var shapeOf = new Dictionary<Surfaces.ISurface3, Geometry.Ssi.Shape?>(ReferenceEqualityComparer.Instance);
+            var rawMemo = new Dictionary<(Surfaces.ISurface3, Vector3d), Vector3d>();
             List<Vector3d> CentsOf(int i) { if (!cents.TryGetValue(i, out var l)) { l = new(); if (faces[i].Surface is Surfaces.FacetedSurface fz) foreach (var (a, b, c) in fz.Facets.ReadView) l.Add((a + b + c) / 3); cents[i] = l; } return l; }
             foreach (var cp in csg)
             {
@@ -245,10 +270,26 @@ public static class Tessellator
                 }
                 var face = faces[fi]; var mbF = parts[fi];
                 var srcS = face.Surface is Surfaces.FacetedSurface fsx ? fsx.Source : face.Surface;
+                // 21.10 (скорость): нормаль квадрики — градиентом её уравнения (без проекции на поверхность Ньютоном), и одна на
+                // точку грани (точка входит в несколько многоугольников): показ многогранного тела тор ∪ брусок 585 мс → ~100 мс.
+                // Мутация P3D_POLYNORMALFAST=0.
+                Geometry.Ssi.Shape? shp = null;
+                if (!PolyNormalFastOff && srcS != null && !srcS.IsPlanar)
+                {
+                    if (!shapeOf.TryGetValue(srcS, out shp)) shapeOf[srcS] = shp = Geometry.ExactEdges.ShapeOf(srcS) is { } sh0 && sh0 is not Geometry.Ssi.ParamSurf ? sh0 : null;
+                }
+                Vector3d Raw(Vector3d p)
+                {
+                    if (shp != null) return Geometry.Ssi.Implicit(shp, p).G;
+                    if (!PolyNormalFastOff && rawMemo.TryGetValue((srcS!, p), out var rm)) return rm;
+                    var n0 = srcS!.NormalAt(srcS.ProjectToUV(p));
+                    if (!PolyNormalFastOff) rawMemo[(srcS, p)] = n0;
+                    return n0;
+                }
                 Vector3d Nrm(Vector3d p)
                 {
                     if (srcS == null || srcS.IsPlanar) return cp.N;
-                    try { var n = srcS.NormalAt(srcS.ProjectToUV(p)); if (n.LengthSquared < 1e-24) return cp.N; n = n.Normalized(); return Vector3d.Dot(n, cp.N) >= 0.866 ? n : Vector3d.Dot(-n, cp.N) >= 0.866 ? -n : cp.N; } catch { return cp.N; }
+                    try { var n = Raw(p); if (n.LengthSquared < 1e-24) return cp.N; n = n.Normalized(); return Vector3d.Dot(n, cp.N) >= 0.866 ? n : Vector3d.Dot(-n, cp.N) >= 0.866 ? -n : cp.N; } catch { return cp.N; }
                 }
                 for (int k = 1; k + 1 < cp.V.Count; k++)
                 {
@@ -274,7 +315,7 @@ public static class Tessellator
         // треугольники появляются при сведении точек соседних граней; для показа и расчёта они
         // вредны, а булева читает те же треугольники и без них распадается — измерено, двадцать
         // одна проверка ядра. Поэтому чистка стоит здесь, а не в самой сборке.
-        mb.FillInto(md, weld: true, fine: polyAuth && PolyFacetsOnly && PolyFine);
+        using (Diagnostics.Prof.Time("  показ: сборка сетки")) mb.FillInto(md, weld: true, fine: polyAuth && PolyFacetsOnly && PolyFine);
 
         // ОХВАТ СЕТКИ: 89 тел из ста вместо 90. Проверено, что ни общая разметка (P3D_QMESH=0),
         // ни запас габарита тут ни при чём — число то же. Значит, одно тело изменилось от

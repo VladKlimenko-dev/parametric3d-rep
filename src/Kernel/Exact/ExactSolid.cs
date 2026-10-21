@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace Parametric3D.Kernel.Exact;
 
@@ -61,7 +61,21 @@ public sealed class ExactSolid
 
     // ======================================================== измерения
     /// <summary>Объём в кубических миллиметрах — точной дробью.</summary>
+    // 21.10 (скорость): объём неизменяемого тела — один раз (его спрашивают отпечаток, объём детали, граница ошибки, проверка
+    // знака: тор ∪ брусок с касанием — 276 мс на каждый вопрос). Мутация P3D_EXACTVOLMEMO=0.
+    static readonly bool VolMemoOff = Environment.GetEnvironmentVariable("P3D_EXACTVOLMEMO") == "0";
+    private BigRational? _volume;
+    public static long VolumeMemoHits;
+
     public BigRational VolumeMm3()
+    {
+        if (!VolMemoOff && _volume is { } known) { Interlocked.Increment(ref VolumeMemoHits); return known; }
+        var v = VolumeMm3Core();
+        if (!VolMemoOff) _volume = v;
+        return v;
+    }
+
+    private BigRational VolumeMm3Core()
     {
         BigRational vol = BigRational.Zero;
 

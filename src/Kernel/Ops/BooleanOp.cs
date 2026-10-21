@@ -1665,6 +1665,7 @@ public static class BooleanOp
             using (Diagnostics.Prof.Time("экран: сборка тела (FromPolygons)"))
                 { PathDebug?.Invoke("путь: точный"); result = FromPolygons(csg, sources, warnings, tJunctionFree: true); }
             result.Exact = new Exact.ExactBody(exactResult, sources);
+            Exact.ExactAdapter.RememberCsg(exactResult, csg);
 
             bodies[0] = result;
             return true;

@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Topology;
@@ -388,6 +388,37 @@ public static class ExactAdapter
         if (keep.Count == 0) { dropped = 0; ringsOut = rings; return polys; }
         if (dropped == 0) { ringsOut = rings; return polys; }
         return keep;
+    }
+
+    // 21.10 (скорость): многоугольники точной формы, уже посчитанные булевой для сборки тела (с кольцами и источниками), —
+    // показу того же тела (Tessellator, источник 2) заново не считаются: тор ∪ брусок с касанием — 220 мс. Мутация
+    // P3D_CSGMEMO=0.
+    static readonly bool CsgMemoOff = Environment.GetEnvironmentVariable("P3D_CSGMEMO") == "0";
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ExactSolid, List<CsgPolygon>> _csgMemo = new();
+    public static long CsgMemoHits;
+    public static void RememberCsg(ExactSolid solid, List<CsgPolygon> csg) { if (!CsgMemoOff) _csgMemo.AddOrUpdate(solid, csg); }
+    /// <summary>
+    /// Объём тела по запомненным многоугольникам (double: те же вершины, переведённые в мм) — для сверок с допуском и объёма
+    /// детали: рациональный объём того же многогранника — 0.25 с на тор ∪ брусок. null — многоугольники не запомнены.
+    /// Мутация P3D_APPROXVOL=0.
+    /// </summary>
+    public static double? ApproxVolume(ExactSolid solid)
+    {
+        if (ApproxVolOff || CsgMemoOff || !_csgMemo.TryGetValue(solid, out var polys)) return null;
+        double v = 0;
+        foreach (var p in polys)
+            for (int i = 1; i + 1 < p.V.Count; i++) v += Vector3d.Dot(p.V[0], Vector3d.Cross(p.V[i], p.V[i + 1]));
+        Interlocked.Increment(ref ApproxVolumes);
+        return v / 6;
+    }
+    static readonly bool ApproxVolOff = Environment.GetEnvironmentVariable("P3D_APPROXVOL") == "0";
+    public static long ApproxVolumes;
+
+    /// <summary>Многоугольники для показа: запомненные булевой, иначе — ToCsg.</summary>
+    public static List<CsgPolygon> ToCsgForDisplay(ExactSolid solid)
+    {
+        if (!CsgMemoOff && _csgMemo.TryGetValue(solid, out var got)) { Interlocked.Increment(ref CsgMemoHits); return got; }
+        return ToCsg(solid);
     }
 
     public static List<CsgPolygon> ToCsg(ExactSolid solid, IReadOnlyDictionary<uint, ISurface3?>? sources = null,
