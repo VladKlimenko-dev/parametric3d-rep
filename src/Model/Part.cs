@@ -216,7 +216,14 @@ public sealed class Part : ModelItem
     public bool InInsertMode => StageIndex >= 0 && StageIndex < Features.Count;
     public MeshData? Mesh { get; private set; }
     public double Volume { get; private set; }
-    public double Area { get; private set; }
+    BuildResult? _areaFrom;
+    /// <summary>Площадь поверхности тел детали (21.10: по запросу — из результата последнего перестроения).</summary>
+    public double Area => _areaFrom?.Area ?? 0;
+    /// <summary>Площадь ещё не посчитана (чтение Area её посчитает — у ленты скругления это десятки мс).</summary>
+    public bool AreaPending => _areaFrom?.AreaPending ?? false;
+    static readonly bool LazyAreaOff = Environment.GetEnvironmentVariable("P3D_LAZYAREA") == "0";
+    /// <summary>Тел, площадь которых отложена до запроса.</summary>
+    public static long LazyAreas;
     /// <summary>g.04: граница ошибки объёма детали (мм³).</summary>
     public double VolumeError { get; private set; }
     public double Mass => Volume * 1e-9 * Material.Density;   // мм^3 -> м^3
@@ -522,7 +529,20 @@ public sealed class Part : ModelItem
         public readonly Dictionary<string, Vector3d> Points = new();
 
         public MeshData? Mesh;
-        public double Volume, Area;
+        public double Volume;
+        // 21.10 (скорость): ПЛОЩАДЬ ДЕТАЛИ — ПО ЗАПРОСУ. Её смотрят свойства и выражения, а считалась она на каждом перестроении
+        // (у ленты скругления — квадратура в два прохода, 60–130 мс). Части площади — числа или отложенные расчёты тел; сумма —
+        // при первом чтении, один раз. Мутация P3D_LAZYAREA=0 — сразу.
+        double _areaNow; List<Func<double>>? _areaLater; readonly object _areaLock = new();
+        public double Area
+        {
+            get { lock (_areaLock) { if (_areaLater != null) { foreach (var f in _areaLater) _areaNow += f(); _areaLater = null; } return _areaNow; } }
+            set { lock (_areaLock) { _areaNow = value; _areaLater = null; } }
+        }
+        public void AddArea(double a) { lock (_areaLock) _areaNow += a; }
+        public void AddAreaLater(Func<double> f) { lock (_areaLock) (_areaLater ??= new()).Add(f); }
+        public void ShareAreaFrom(BuildResult o) { lock (o._areaLock) lock (_areaLock) { _areaNow = o._areaNow; _areaLater = o._areaLater == null ? null : new List<Func<double>>(o._areaLater); } }
+        public bool AreaPending { get { lock (_areaLock) return _areaLater != null; } }
         /// <summary>g.04: граница ошибки объёма (сумма по телам; ∞ — неизвестна).</summary>
         public double VolumeError;
         /// <summary>K08: объём или площадь хотя бы одного тела взяты по сетке (с ошибкой гранения).</summary>
@@ -943,8 +963,9 @@ public sealed class Part : ModelItem
             // Прежде такое перестроение шло по ветке «отметки нет» и пересчитывало всё дерево.
             var last = _lastResult!;
             var same = new BuildResult { Version = Version, StartedAt = Features.Count, Executed = 0,
-                                         Mesh = last.Mesh, Volume = last.Volume, Area = last.Area, VolumeError = last.VolumeError, Bounds = last.Bounds,
+                                         Mesh = last.Mesh, Volume = last.Volume, VolumeError = last.VolumeError, Bounds = last.Bounds,
                                          Approximate = last.Approximate, IntegrityError = last.IntegrityError, MassFromMesh = last.MassFromMesh };
+            same.ShareAreaFrom(last);
             same.Bodies.AddRange(last.Bodies); same.Warnings.AddRange(last.Warnings);
             foreach (var kv in last.Errors) same.Errors[kv.Key] = kv.Value;
             foreach (var kv in last.Outcomes) same.Outcomes[kv.Key] = kv.Value;
@@ -1344,10 +1365,12 @@ public sealed class Part : ModelItem
                 // K08: объём и площадь — по настоящим кривым рёбер, когда все грани тела
                 // аналитические (плоскость, цилиндр, сфера); иначе — по сетке, и это помечается.
                 var ve = Kernel.Topology.AnalyticVolume.OfWithError(b);
-                double? av = ve?.Volume, aa = av == null ? null : Kernel.Topology.AnalyticVolume.AreaOf(b);
-                if (av != null && aa != null)
+                double? av = ve?.Volume, aa = av == null || !LazyAreaOff ? null : Kernel.Topology.AnalyticVolume.AreaOf(b);
+                if (av != null && (aa != null || !LazyAreaOff))
                 {
-                    result.Volume += av.Value; result.Area += aa.Value;
+                    result.Volume += av.Value;
+                    if (aa != null) result.AddArea(aa.Value);
+                    else { var bb = b; var mdd = md; result.AddAreaLater(() => Kernel.Topology.AnalyticVolume.AreaOf(bb) ?? MassProps.Area(mdd)); Interlocked.Increment(ref LazyAreas); }
                     // g.04: граница ошибки объёма (как AnalyticMeasure.Volume: допуски сущностей × площадь + измеренная квадратура +
                     // округление) — сверяется с бюджетом интегрирования
                     // граница — та же, что у AnalyticMeasure.Volume (у многогранного тела — с расхождением интеграла и многогранника)
@@ -1361,9 +1384,9 @@ public sealed class Part : ModelItem
                     result.VolumeError += Kernel.Topology.AnalyticMeasure.Volume(b, md).Error;
                     // g.02: многогранное тело, чей интеграл не согласен с точной многогранной формой, — объём этой формы
                     // (рациональная арифметика), площадь — по сетке
-                    result.Volume += b.Exact.Solid.VolumeMm3().ToDouble(); result.Area += MassProps.Area(md); result.MassFromMesh = true;
+                    result.Volume += b.Exact.Solid.VolumeMm3().ToDouble(); result.AddArea(MassProps.Area(md)); result.MassFromMesh = true;
                 }
-                else { result.Volume += MassProps.Volume(md); result.Area += MassProps.Area(md); result.MassFromMesh = true; result.VolumeError += Kernel.Topology.AnalyticMeasure.Volume(b, md).Error; }
+                else { result.Volume += MassProps.Volume(md); result.AddArea(MassProps.Area(md)); result.MassFromMesh = true; result.VolumeError += Kernel.Topology.AnalyticMeasure.Volume(b, md).Error; }
                 result.Bounds.Add(md.Bounds);
                 if (ValidateResults)
                 {
@@ -1562,7 +1585,7 @@ public sealed class Part : ModelItem
         Mesh = r.Mesh;
         Quilts.Clear(); Quilts.AddRange(r.Quilts);
         Volume = r.Volume;
-        Area = r.Area;
+        _areaFrom = r;
         VolumeError = r.VolumeError;
         Bounds = r.Bounds;
         _dirty = false;
