@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using OpenTK.Mathematics;
 
 namespace Parametric3D.Kernel.Tess;
@@ -89,6 +89,17 @@ public sealed class MeshData
     public readonly List<(uint VertexId, Vector3 P)> Points = new();
 
     public Bounds3 Bounds;
+
+    /// <summary>Копия (массивы и списки — свои; ломаные рёбер — общие, они не меняются).</summary>
+    public MeshData Clone()
+    {
+        var c = new MeshData { Vertices = (MeshVertex[])Vertices.Clone(), Indices = (int[])Indices.Clone(), Bounds = Bounds };
+        c.BrokenFaces.AddRange(BrokenFaces);
+        foreach (var kv in FaceRanges) c.FaceRanges[kv.Key] = kv.Value;
+        c.EdgePolylines.AddRange(EdgePolylines);
+        c.Points.AddRange(Points);
+        return c;
+    }
 }
 
 /// <summary>Накопитель треугольников. Ведёт учёт диапазонов по граням.</summary>
@@ -220,11 +231,12 @@ public sealed class MeshBuilder
         if (weld && fine && !CollapseOff)
         {
             if (LocalSnapOn) GlobalSnapClean(snapOnly: true);
-            CollapseSubFloatEdges(); GlobalSnapClean(snapOnly: false);
+            using (Diagnostics.Prof.Time("    сетка: стягивание (1)")) CollapseSubFloatEdges();
+            using (Diagnostics.Prof.Time("    сетка: щепки (1)")) GlobalSnapClean(snapOnly: false);
             // второй проход: после сшивки щепок условие звена у коротких рёбер часто выполняется (S-ROUNDHOLE: ребро 7.5e-6 мм
             // у сшитой трещины в плоскости z=20 — иначе наложение треугольников на доли шага float). Мутация P3D_SECONDPASS=0.
-            if (!SecondPassOff) { CollapseSubFloatEdges(); GlobalSnapClean(snapOnly: false); }
-            CanonicalPositions(); WeldWithinFaces();
+            if (!SecondPassOff) using (Diagnostics.Prof.Time("    сетка: второй проход")) { CollapseSubFloatEdges(); GlobalSnapClean(snapOnly: false); }
+            using (Diagnostics.Prof.Time("    сетка: канон и сварка")) { CanonicalPositions(); WeldWithinFaces(); }
         }
         else if (weld) { CanonicalPositions(); WeldWithinFaces(); }
 

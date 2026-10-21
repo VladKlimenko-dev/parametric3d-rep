@@ -223,7 +223,8 @@ public sealed class Part : ModelItem
     public bool AreaPending => _areaFrom?.AreaPending ?? false;
     /// <summary>21.10: быстрый приближённый предпросмотр операции (LivePreview): без точного объёма и аудита. P3D_FASTPREVIEW=0 — прежний.</summary>
     public static readonly bool FastPreview = Environment.GetEnvironmentVariable("P3D_FASTPREVIEW") != "0";
-    public static long FastPreviewBodies, FastPreviewMeshSkips;
+    public static long FastPreviewBodies, FastPreviewMeshSkips, PolyLazyMeshSkips;
+    static readonly bool PolyLazyMeshOff = Environment.GetEnvironmentVariable("P3D_POLYLAZYMESH") == "0";
     static readonly bool LazyAreaOff = Environment.GetEnvironmentVariable("P3D_LAZYAREA") == "0";
     /// <summary>Тел, площадь которых отложена до запроса.</summary>
     public static long LazyAreas;
@@ -1355,6 +1356,10 @@ public sealed class Part : ModelItem
                 // 21.10: быстрый предпросмотр — тело, все грани которого уже размечены построителем (сетка по контурам), идёт на
                 // экран с этой сеткой; окончательная согласованная разметка — при подтверждении операции
                 if (FastPreview && settingsNow.LivePreview && b.Faces.All(fc => fc.Surface is Kernel.Surfaces.FacetedSurface fsx && fsx.Facets.Count > 0)) { Interlocked.Increment(ref FastPreviewMeshSkips); continue; }
+                // 21.10 (скорость): тело с авторитетной многогранной формой показывается многоугольниками самой формы (Tessellator,
+                // источник 2); видимая сетка граней нужна, только если у тех дефекты — тогда её строит сам показ. Тор ∪ брусок с
+                // касанием: 0.45–0.57 с разметки, результат которой не показывался. Мутация P3D_POLYLAZYMESH=0.
+                if (!PolyLazyMeshOff && b.Exact != null && b.ExactAuthoritative) { Interlocked.Increment(ref PolyLazyMeshSkips); continue; }
                 Kernel.Ops.BooleanOp.MeshExactlySolid(b, result.Warnings);
             }
             result.MeshFacesReused = donors.Reused;
@@ -1369,7 +1374,8 @@ public sealed class Part : ModelItem
             var all = new List<MeshData>();
             foreach (var b in result.Bodies)
             {
-                var md = Tessellator.Tessellate(b);
+                MeshData md;
+                using (Kernel.Diagnostics.Prof.Time("деталь: сетка тела")) md = Tessellator.Tessellate(b);
                 all.Add(md);
                 // K08: объём и площадь — по настоящим кривым рёбер, когда все грани тела
                 // аналитические (плоскость, цилиндр, сфера); иначе — по сетке, и это помечается.
@@ -1382,7 +1388,9 @@ public sealed class Part : ModelItem
                     Interlocked.Increment(ref FastPreviewBodies);
                     continue;
                 }
-                var ve = Kernel.Topology.AnalyticVolume.OfWithError(b);
+                var _pVol = Kernel.Diagnostics.Prof.Time("деталь: объём");
+                (double Volume, double QuadratureError)? ve;
+                using (Kernel.Diagnostics.Prof.Time("  деталь: объём по формулам")) ve = Kernel.Topology.AnalyticVolume.OfWithError(b);
                 double? av = ve?.Volume, aa = av == null || !LazyAreaOff ? null : Kernel.Topology.AnalyticVolume.AreaOf(b);
                 if (av != null && (aa != null || !LazyAreaOff))
                 {
@@ -1399,14 +1407,17 @@ public sealed class Part : ModelItem
                 }
                 else if (b.Exact != null && b.ExactAuthoritative)
                 {
-                    result.VolumeError += Kernel.Topology.AnalyticMeasure.Volume(b, md).Error;
+                    using (Kernel.Diagnostics.Prof.Time("  деталь: граница ошибки объёма")) result.VolumeError += Kernel.Topology.AnalyticMeasure.Volume(b, md).Error;
                     // g.02: многогранное тело, чей интеграл не согласен с точной многогранной формой, — объём этой формы
                     // (рациональная арифметика), площадь — по сетке
-                    result.Volume += b.Exact.Solid.VolumeMm3().ToDouble(); result.AddArea(MassProps.Area(md)); result.MassFromMesh = true;
+                    using (Kernel.Diagnostics.Prof.Time("  деталь: объём точной формы")) result.Volume += Kernel.Exact.ExactAdapter.ApproxVolume(b.Exact.Solid) ?? b.Exact.Solid.VolumeMm3().ToDouble();
+                    result.AddArea(MassProps.Area(md)); result.MassFromMesh = true;
                 }
                 else { result.Volume += MassProps.Volume(md); result.AddArea(MassProps.Area(md)); result.MassFromMesh = true; result.VolumeError += Kernel.Topology.AnalyticMeasure.Volume(b, md).Error; }
+                _pVol.Dispose();
                 result.Bounds.Add(md.Bounds);
                 if (ValidateResults)
+                using (Kernel.Diagnostics.Prof.Time("деталь: проверка тела"))
                 {
                     // g.13: в предпросмотре проверка сетки тела откладывается до принятия (P3D_PREVIEWVALIDATE=0 — сразу)
                     if (settingsNow.Preview && !PreviewValidateOff) result.DeferredValidation.Add((b, md));
@@ -1418,7 +1429,7 @@ public sealed class Part : ModelItem
             foreach (var q in result.Quilts) if (QuiltMesh(q) is { } qm) all.Add(qm);
             result.Mesh = all.Count == 1 ? all[0] : Merge(all);
 
-            ValidationIntegrity(result);
+            using (Kernel.Diagnostics.Prof.Time("деталь: целостность")) ValidationIntegrity(result);
             if (result.Mesh != null && !result.Mesh.Whole)
                 result.IntegrityError ??= $"Integrity: {result.Mesh.BrokenFaces.Count} face(s) missing from the mesh.";
         }

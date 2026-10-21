@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 namespace Parametric3D.Kernel.Exact;
 
 /// <summary>
@@ -177,6 +177,10 @@ public static class ExactBsp
     /// Полость выходит сама: если B внутри A и грани A в коробку не заходят,
     /// крышки — все шесть граней коробки, кусок — сама коробка.
     /// </summary>
+    /// <summary>P3D_LAZYCAPS=0 — прежнее (дерево всего тела); проверка KRN сравнивает оба пути.</summary>
+    public static bool LazyCapsOff = Environment.GetEnvironmentVariable("P3D_LAZYCAPS") == "0";
+    public static long LazyCapsRuns;
+
     public static List<ExactPolygon> LocalInBox(PlaneRegistry R, IReadOnlyList<ExactPolygon> A, IReadOnlyList<ExactPolygon> B,
                                                 IReadOnlyList<ExactPolygon> box, HashSet<int> boxPlanes, bool subtract)
     {
@@ -194,9 +198,13 @@ public static class ExactBsp
 
         using (Diagnostics.Prof.Time("  бсп: крышки"))
         {
-            var aInv = new Node(R, A);
-            aInv.Invert();
-            caps = aInv.ClipPolygons(box);              // грани коробки внутри A
+            if (!LazyCapsOff) { caps = Node.InsideLazy(R, A, box); Interlocked.Increment(ref LazyCapsRuns); }   // грани коробки внутри A (дерево A — только где нужно)
+            else
+            {
+                var aInv = new Node(R, A);
+                aInv.Invert();
+                caps = aInv.ClipPolygons(box);              // грани коробки внутри A
+            }
         }
 
         var piece = new List<ExactPolygon>(inside.Count + caps.Count);
@@ -248,6 +256,7 @@ public static class ExactBsp
     private static List<ExactPolygon> SubtractAll(PlaneRegistry R, IReadOnlyList<ExactPolygon> A, IReadOnlyList<ExactPolygon> B)
     {
         if (A.Count == 0) return new List<ExactPolygon>();
+
         Node a, b;
         using (Diagnostics.Prof.Time("  бсп: дерево тела")) a = new(R, A);
         using (Diagnostics.Prof.Time("  бсп: дерево резца")) b = Caged(R, B);
@@ -656,6 +665,52 @@ public static class ExactBsp
         /// сами посещения уходило около секунды из двух. Теперь выжившие складываются сразу в
         /// один список, а спуск идёт по стеку.
         /// </summary>
+        private sealed class Lazy
+        {
+            public OPlane? Plane; public List<ExactPolygon>? Pending; public Lazy? Front, Back; public bool Built;
+        }
+
+        /// <summary>
+        /// 21.10 (скорость): ЧАСТИ МНОГОУГОЛЬНИКОВ query ВНУТРИ ТЕЛА A — по дереву A, которое строится лишь там, куда спускаются
+        /// запросы (те же секущие, тот же порядок разбиения, что у Build: ответ тот же, что у Node(A).Invert().ClipPolygons).
+        /// Крышки локальной булевой (шесть граней коробки) прежде строили всё дерево тела: тор ∪ брусок — 0.5 с.
+        /// </summary>
+        public static List<ExactPolygon> InsideLazy(PlaneRegistry r, IReadOnlyList<ExactPolygon> A, IReadOnlyList<ExactPolygon> query)
+        {
+            var outp = new List<ExactPolygon>();
+            if (A.Count == 0) return outp;
+            var root = new Lazy { Pending = new List<ExactPolygon>(A) };
+            var dump = new List<ExactPolygon>();
+            void Expand(Lazy n)
+            {
+                if (n.Built) return;
+                var list = n.Pending!;
+                n.Plane = ChooseSplitter(r, list);
+                var f = new List<ExactPolygon>(); var b = new List<ExactPolygon>();
+                foreach (var p in list) Split(r, p, n.Plane.Value, dump, dump, f, b);
+                dump.Clear();
+                BuildNodes++;
+                if (f.Count > 0) n.Front = new Lazy { Pending = f };
+                if (b.Count > 0) n.Back = new Lazy { Pending = b };
+                n.Pending = null; n.Built = true;
+            }
+            var work = new Stack<(Lazy Node, List<ExactPolygon> List)>();
+            work.Push((root, new List<ExactPolygon>(query)));
+            while (work.Count > 0)
+            {
+                var (node, list) = work.Pop();
+                if (list.Count == 0) continue;
+                Expand(node);
+                var f = new List<ExactPolygon>(list.Count);
+                var b = new List<ExactPolygon>(list.Count);
+                foreach (var p in list) Split(r, p, node.Plane!.Value, f, b, f, b);
+                ClipNodes++;
+                if (f.Count > 0 && node.Front != null) work.Push((node.Front, f));       // спереди без ветви — снаружи A
+                if (b.Count > 0) { if (node.Back != null) work.Push((node.Back, b)); else outp.AddRange(b); }   // сзади без ветви — внутри
+            }
+            return outp;
+        }
+
         public List<ExactPolygon> ClipPolygons(IReadOnlyList<ExactPolygon> polys0)
         {
             var polys = polys0 as List<ExactPolygon> ?? new List<ExactPolygon>(polys0);

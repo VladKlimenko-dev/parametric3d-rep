@@ -2761,6 +2761,7 @@ Check("UI-ROUND-RIM-BALL", () =>
     var e = part.Bodies[0].Edges.First(x => Kind(x) == "ExtrudedSurface/PlaneSurface" && !ReferenceEquals(x.V0, x.V1));
     w.ViewPort.Selection.Clear(); w.ViewPort.Selection.Select(new PickRef(e.Id, PickKind.Edge, part, null), additive: false);
     long trims0 = Parametric3D.Kernel.Ops.FilletOp.ArcBallTrims, csg0 = Parametric3D.Kernel.Ops.FilletOp.PreviewCsgCuts;
+    long abort0 = Parametric3D.Kernel.Ops.BooleanOp.MeshEarlyAborts;
     CommandRegistry.Instance["ff.fillet"].Execute();
     s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
     var op = w.CurrentOperation!; var f = (Feature)op.EditedFeature!;
@@ -2788,8 +2789,56 @@ Check("UI-ROUND-RIM-BALL", () =>
         if (q.Length > 19.5) continue;
         Require(Parametric3D.Kernel.Voxels.PointInSolid.Test(tris, q), $"the sphere is grooved at {q}");
     }
-    Console.WriteLine($"  preview {tPreview} ms (volume {vPreview:0.#}), exact after commit {tExact} ms (volume {part.Volume:0.#}, removed {removed:0.#})");
+    // видимая сетка граней многогранного тела (деталь её не строит; показ — многоугольниками формы): одна грань не строится —
+    // остальные не считаются (P3D_MESHEARLYABORT=0 — прежнее)
+    var swM = System.Diagnostics.Stopwatch.StartNew();
+    Parametric3D.Kernel.Ops.BooleanOp.MeshExactlySolid(part.Bodies[0]);
+    Require(Parametric3D.Kernel.Ops.BooleanOp.MeshEarlyAborts > abort0, "the face meshing went on after a face failed");
+    Console.WriteLine($"  preview {tPreview} ms (volume {vPreview:0.#}), exact after commit {tExact} ms (volume {part.Volume:0.#}, removed {removed:0.#}), face meshing {swM.ElapsedMilliseconds} ms");
     w.Close();
+});
+
+Check("UI-POLY-FAST", () =>
+{
+    // 21.10 (скорость многогранного пути): тор ∪ брусок с касанием в седловой точке (точный маршрут отказывает — разбиение
+    // пространства). Деталь не размечает грани заранее (показ — многоугольниками формы, запомненными булевой), объём — по ним
+    // (double), рациональный объём — один раз; крышки локальной булевой — по дереву тела, построенному лишь где нужно.
+    // Мутации P3D_POLYLAZYMESH=0, P3D_CSGMEMO=0, P3D_APPROXVOL=0, P3D_EXACTVOLMEMO=0, P3D_LAZYCAPS=0.
+    (double Vol, int Faces, long Ms, Part P) Build()
+    {
+        var s = FreeFormCommands.NewFreeForm(); var part = s.Part!;
+        var node = part.Features.OfType<FreeFormFeature>().Single();
+        void Add(Feature f) { f.FreeForm = node.Key; f.Frozen = true; part.AddFeature(f); s.Document.RebuildDirty(); }
+        Add(new FFPrimitiveFeature { Shape = FFPrimitive.Torus, A = new ValueRef(20), B = new ValueRef(5) });
+        Add(new FFPrimitiveFeature { Shape = FFPrimitive.Box, A = new ValueRef(10), B = new ValueRef(10), C = new ValueRef(20), Origin = new OpenTK.Mathematics.Vector3d(20, 0, -10) });
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Add(new FFBooleanFeature { Op = FFBool.Union, Target = "Тело 1", Tools = { "Тело 2" } });
+        return (part.Volume, part.Bodies.Sum(b => b.Faces.Count()), sw.ElapsedMilliseconds, part);
+    }
+    long lazy0 = Part.PolyLazyMeshSkips, memo0 = Parametric3D.Kernel.Exact.ExactAdapter.CsgMemoHits, appr0 = Parametric3D.Kernel.Exact.ExactAdapter.ApproxVolumes, caps0 = Parametric3D.Kernel.Exact.ExactBsp.LazyCapsRuns;
+    var (v1, f1, ms1, p1) = Build();
+    var b1 = p1.Bodies.Single();
+    Require(b1.Guarantee == Parametric3D.Kernel.GuaranteeLevel.ExactPolyhedral && b1.Exact != null && b1.ExactAuthoritative, $"expected the polyhedral route, got {b1.Guarantee}");
+    Require(Part.PolyLazyMeshSkips > lazy0, "the part meshed the faces of the polyhedral body in advance");
+    Require(Parametric3D.Kernel.Exact.ExactAdapter.CsgMemoHits > memo0, "the display recomputed the exact polygons");
+    Require(Parametric3D.Kernel.Exact.ExactAdapter.ApproxVolumes > appr0, "the part volume was taken in rational arithmetic");
+    Require(Parametric3D.Kernel.Exact.ExactBsp.LazyCapsRuns > caps0, "the caps of the local boolean built the whole body tree");
+    double vx = b1.Exact!.Solid.VolumeMm3().ToDouble();
+    long vh0 = Parametric3D.Kernel.Exact.ExactSolid.VolumeMemoHits;
+    Require(b1.Exact.Solid.VolumeMm3().ToDouble() == vx && Parametric3D.Kernel.Exact.ExactSolid.VolumeMemoHits > vh0, "the exact volume is not remembered");
+    Require(Math.Abs(v1 - vx) <= 1e-9 * vx, $"part volume {v1:R} vs exact {vx:R}");
+    var md = p1.Mesh!;
+    Require(Parametric3D.Kernel.Tess.MeshData.FloatDefects(md) == 0, "the display mesh has defects");
+    Require(Math.Abs(Parametric3D.Kernel.Tess.MassProps.Volume(md) - vx) < 1e-3 * vx, "display mesh volume differs from the body");
+    // крышки: ленивое дерево = полное дерево (тот же объём и те же грани)
+    Parametric3D.Kernel.Exact.ExactBsp.LazyCapsOff = true;
+    try
+    {
+        var (v2, f2, ms2, _) = Build();
+        Require(Math.Abs(v2 - v1) <= 1e-9 * v1 && f2 == f1, $"lazy caps changed the result: volume {v1:R} vs {v2:R}, faces {f1} vs {f2}");
+        Console.WriteLine($"  union {ms1} ms (eager caps: {ms2} ms), volume {v1:0.###}, faces {f1}, display tris {md.Indices.Length / 3}");
+    }
+    finally { Parametric3D.Kernel.Exact.ExactBsp.LazyCapsOff = Environment.GetEnvironmentVariable("P3D_LAZYCAPS") == "0"; }
 });
 
 Check("UI-HOLE-ON-FACE", () =>

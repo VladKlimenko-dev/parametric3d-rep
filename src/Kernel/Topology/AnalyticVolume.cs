@@ -119,7 +119,7 @@ public static class AnalyticVolume
     static bool AgreesWithPolyhedron(TSolid s, double v)
     {
         double vp;
-        try { vp = s.Exact!.Solid.VolumeMm3().ToDouble(); } catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { return false; }
+        try { vp = Exact.ExactAdapter.ApproxVolume(s.Exact!.Solid) ?? s.Exact!.Solid.VolumeMm3().ToDouble(); } catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { return false; }
         return Math.Abs(v - vp) <= 1e-2 * Math.Abs(vp) + 1e-9;
     }
 
