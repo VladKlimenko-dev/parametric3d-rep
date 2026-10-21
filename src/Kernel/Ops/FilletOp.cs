@@ -627,12 +627,12 @@ public static class FilletOp
             if (adds)
             {
                 var eW = Resolve(bodies, wanted, out _);
-                var toolU = eW != null ? ShellOp.ClipFillerAtCurvedEnds(bodies, eW, tool, warnings) : tool;
+                var toolU = eW != null && !PreClipped.TryGetValue(tool, out _) ? ShellOp.ClipFillerAtCurvedEnds(bodies, eW, tool, warnings) : tool;
                 // u12: ПРИБАВКА — ТОЛЬКО КУСОК ПУСТОТЫ У САМОГО РЕБРА. Резец вогнутого ребра может пройти сквозь тонкую стенку
                 // (оболочка 2 мм, скругление R80 снаружи, внутреннее R60): его часть по ту сторону стенки прибавлялась к телу
                 // посторонним уголком. Пустая часть резца (резец минус тело) делится на куски; прибавляется кусок у ребра.
                 // Мутация P3D_FILLERPIECE=0.
-                if (!FillerPieceOff && eW != null && bodies.Count == 1)
+                if (!FillerPieceOff && eW != null && bodies.Count == 1 && !PreClipped.TryGetValue(tool, out _))
                 {
                     var empty = new List<TSolid> { toolU }; var wE = new List<string>();
                     try { BooleanOp.Subtract(empty, TopologyClone.Deep(bodies[0]), wE); } catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { empty.Clear(); }
@@ -2042,6 +2042,9 @@ public static class FilletOp
         if (!flat.Surface.IsPlanar) return "neither face at this arc is planar";
         if (round.Surface.IsPlanar) return "both faces at this arc are planar";
 
+        if (!SphereArcOff && Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(round)) is Geometry.Ssi.Sphere sph)
+            return BuildArcSphereTool(bodies, edge, arc, flat, round, sph, d1, rounding, out tool, out adds);
+
         ExtrudedSurface? cylinder = Unwrap(round.Surface);
 
         if (cylinder == null || cylinder.Base is not ArcCurve3)
@@ -2492,7 +2495,7 @@ public static class FilletOp
                     return null;
                 }
                 else
-                    try { BooleanOp.Subtract(parts, ballSolid, w2); }
+                    try { using (Diagnostics.Prof.Time("скругление: резец минус шар")) BooleanOp.Subtract(parts, ballSolid, w2); }
                     catch (RebuildException) { parts.Clear(); }
                 if (parts.Count == 1)
                 {
@@ -2504,6 +2507,182 @@ public static class FilletOp
         }
 
         tool = made;
+        return null;
+    }
+
+    // 21.10 (запрос 19:45, черновик): ВОГНУТОЕ РЕБРО «ПЛОСКОСТЬ / ШАР» (торец цилиндра, приставленного к шару, снизу): прибавка — тело
+    // вращения сечения «плоскость — дуга катящегося шара — шар» вокруг оси через центр шара по нормали плоскости, продлённое за
+    // концы ребра и обрезанное цилиндрическими/плоскими торцами (остаётся сторона ребра). Мутация P3D_SPHEREARC=0 — отказ.
+    // ПОКА ВКЛЮЧАЕТСЯ ЯВНО (P3D_SPHEREARC=1): форма верная, но многогранный союз оставляет вдоль линий касания десятки
+    // граней-щепок (площадь тысячные мм²), а это рёбра на экране и в выборе. Нужен прямой построитель (без булевой).
+    static readonly bool SphereArcOff = Environment.GetEnvironmentVariable("P3D_SPHEREARC") != "1";
+    public static long SphereArcFillers;
+    static readonly bool SphereArcAlignOff = Environment.GetEnvironmentVariable("P3D_SPHEREARCALIGN") == "0";
+
+    /// <summary>Углы точек вокруг оси spin от направления radial, попавшие в (lo, hi), плюс lo и hi (как WallAngles).</summary>
+    private static List<double>? AnglesOf(List<Vector3d> pts, Vector3d centre, Vector3d spin, Vector3d radial, double lo, double hi)
+    {
+        double r = 1e-6;
+        foreach (var p in pts) { var d = p - centre; d -= spin * Vector3d.Dot(d, spin); r = Math.Max(r, d.Length); }
+        double gap = 0.01 / r;
+        var inner = new List<double>();
+        foreach (var p in pts)
+        {
+            var d = p - centre; d -= spin * Vector3d.Dot(d, spin);
+            if (d.LengthSquared < 1e-18) continue;
+            double a = Math.Atan2(Vector3d.Dot(Vector3d.Cross(radial, d), spin), Vector3d.Dot(radial, d));
+            foreach (double cand in new[] { a, a - 2 * Math.PI, a + 2 * Math.PI })
+                if (cand > lo + gap && cand < hi - gap) inner.Add(cand);
+        }
+        inner.Sort();
+        var clean = new List<double> { lo };
+        foreach (double a in inner) if (a - clean[^1] > gap) clean.Add(a);
+        if (hi - clean[^1] <= gap && clean.Count > 1) clean.RemoveAt(clean.Count - 1);
+        clean.Add(hi);
+        return clean.Count >= 2 ? clean : null;
+    }
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, object> PreClipped = new();
+
+    private static string? BuildArcSphereTool(List<TSolid> bodies, TEdge edge, ArcCurve3 arc, TFace flat, TFace round,
+        Geometry.Ssi.Sphere sph, double r, bool rounding, out TSolid? tool, out bool adds)
+    {
+        tool = null; adds = false;
+        if (!rounding) return "a chamfer between a plane and a sphere is not implemented yet";
+        if (ReferenceEquals(edge.V0, edge.V1)) return "a closed plane/sphere circle is not handled by the cutter route";
+        var mid = edge.Curve.PointAt(0.5 * (edge.Curve.T0 + edge.Curve.T1));
+        var n = flat.NormalAt(mid);
+        if (n.LengthSquared < 1e-18) return "the planar face has no normal";
+        n = n.Normalized();                                            // наружу плоской грани — в пустоту
+        var nS = round.NormalAt(mid); if (nS.LengthSquared < 1e-18) return "the sphere face has no normal";
+        bool sphereConvex = Vector3d.Dot(nS, mid - sph.C) > 0;          // материал внутри шара
+        if (!sphereConvex) return "a concave spherical face at a plane/sphere edge is not handled yet";
+        double d0 = Vector3d.Dot(sph.C - mid, n);                       // высота центра шара над плоскостью (по n)
+        var oc = sph.C - n * d0;                                        // центр окружности ребра
+        double rhoE = (mid - oc).Length;
+        foreach (var v in new[] { edge.V0.P, edge.V1.P })
+            if (Math.Abs((v - oc).Length - rhoE) > 1e-4 * Math.Max(1, rhoE) || Math.Abs(Vector3d.Dot(v - mid, n)) > 1e-6 * Math.Max(1, rhoE))
+                return "the edge is not the plane/sphere circle";
+        var er = (mid - oc) / rhoE;
+        // выпуклое ребро (пустота снаружи шара и над плоскостью по n — вогнутое): проба у ребра в пустом углу
+        var probe = mid + n * (1e-3 * r) + er * (1e-3 * r);
+        bool concave = (probe - sph.C).Length > sph.R;                  // в пустом углу: вне шара и над плоскостью
+        if (!concave) return "a convex plane/sphere edge is not handled by the cutter route yet";
+        adds = true;
+        double h = r - d0;                                              // высота центра катящегося шара относительно центра сферы
+        double rr = sph.R + r;
+        if (rr * rr - h * h <= 0) return "the round does not fit between the plane and the sphere";
+        double rhoC = Math.Sqrt(rr * rr - h * h);
+        if (rhoC <= rhoE) return "the round does not fit between the plane and the sphere";
+        var q = oc + er * rhoC + n * r;                                 // центр катящегося шара в сечении
+        var tPlane = oc + er * rhoC;
+        var tSph = sph.C + (q - sph.C) * (sph.R / rr);
+        double strip = Math.Max(3 * Tol.Chord, 1e-3 * r);
+        var fr = new Frame3(q, er, n);
+        double thS = Math.Atan2(Vector3d.Dot(tSph - q, n), Vector3d.Dot(tSph - q, er));
+        if (thS < 0) thS += 2 * Math.PI;
+        var ballArc = new ArcCurve3(fr, r, thS, 1.5 * Math.PI);
+        // верх сечения — ровно в плоскости грани (совпадение плоскостей союз разбирает; полоска в материал у торцов легла бы
+        // на цилиндр стенки — совпадающие куски поверхностей дают микрорёбра); у шара — полоска внутрь шара
+        var tIn = tSph + (sph.C - tSph).Normalized() * strip;
+        var k = mid + (sph.C - mid).Normalized() * strip;
+        k -= n * Vector3d.Dot(k - mid, n);
+        var curves = new List<ICurve3> { ballArc, new LineCurve3(tSph, tIn), new LineCurve3(tIn, k), new LineCurve3(k, tPlane) };
+        var profile = ProfileBuilder.Build(new Frame3(oc, er, n), curves);
+        if (profile.IsEmpty) return "the plane/sphere round cross-section did not close";
+        double Ang(Vector3d v) { var w = v - oc; w -= n * Vector3d.Dot(w, n); return Math.Atan2(Vector3d.Dot(Vector3d.Cross(er, w), n), Vector3d.Dot(er, w)); }
+        double aa = Ang(edge.V0.P), ab = Ang(edge.V1.P);
+        if (Math.Sign(aa) == Math.Sign(ab)) return "the plane/sphere edge spans no angle around its middle";
+        double lo = Math.Min(aa, ab), hi = Math.Max(aa, ab);
+        // торцы у концов: грани вершин, кроме самих граней ребра
+        var ends = new List<TFace>();
+        foreach (var b in bodies) foreach (var f in b.Faces)
+        {
+            if (ReferenceEquals(f, flat) || ReferenceEquals(f, round)) continue;
+            if (f.Edges.Any(e => ReferenceEquals(e.V0, edge.V0) || ReferenceEquals(e.V1, edge.V0) || ReferenceEquals(e.V0, edge.V1) || ReferenceEquals(e.V1, edge.V1))) ends.Add(f);
+        }
+        // продление за концы — на четверть оборота (или до встречи продлений); обрезка — торцами
+        double room = 2 * Math.PI - (hi - lo) - 1e-3;
+        double ext = Math.Min(Math.PI / 4, room / 2);
+        // узлы по углу — по меридианам гранёного шара (ось та же): иначе две гранёные версии касающихся поверхностей
+        // перемежаются, и союз оставляет щепки вдоль линии касания (у шара — десятки граней площадью тысячные мм²)
+        List<double>? breaks = null;
+        if (!SphereArcAlignOff && GeometryAudit.AuthoritativeSurface(round) is RevolvedSurface rsS)
+        {
+            var ax = rsS.Axis.W.Normalized();
+            var offAxis = (rsS.Axis.Origin - oc) - n * Vector3d.Dot(rsS.Axis.Origin - oc, n);
+            if (Math.Abs(Math.Abs(Vector3d.Dot(ax, n)) - 1) < 1e-9 && offAxis.Length < 1e-7 * Math.Max(1, sph.R))
+            {
+                int segs = rsS.Angles?.Length - 1 ?? rsS.AngularSegments;
+                if (segs <= 0)
+                {
+                    // как RevolvedSurface.TessellateFace: по наибольшему радиусу образующей
+                    var bp = new List<Vector3d>(); rsS.Base.Tessellate(bp, true); double maxR = 0;
+                    foreach (var bq in bp) { var l = bq - rsS.Axis.Origin; maxR = Math.Max(maxR, (l - rsS.Axis.W * Vector3d.Dot(l, rsS.Axis.W)).Length); }
+                    segs = GeomUtil.ArcSegments(maxR, rsS.Sweep);
+                }
+                if (segs > 0)
+                {
+                    double um = 0.5 * (rsS.Base.T0 + rsS.Base.T1);
+                    var mer = new List<Vector3d>();
+                    for (int i = 0; i <= segs; i++)
+                    {
+                        double v = rsS.Angles != null ? (rsS.Angles[i] - rsS.A0) / rsS.Sweep : (double)i / segs;
+                        mer.Add(rsS.PointAt(new Vector2d(um, v)));
+                    }
+                    breaks = AnglesOf(mer, oc, n, er, lo - ext, hi + ext);
+                }
+            }
+        }
+        if (Environment.GetEnvironmentVariable("P3D_SPHEREARCDBG") == "1")
+            Console.WriteLine($"SPHEREARC round {GeometryAudit.AuthoritativeSurface(round)?.GetType().Name} segs {(GeometryAudit.AuthoritativeSurface(round) as RevolvedSurface)?.AngularSegments} angles {(GeometryAudit.AuthoritativeSurface(round) as RevolvedSurface)?.Angles?.Length} axis {(GeometryAudit.AuthoritativeSurface(round) as RevolvedSurface)?.Axis.W} n {n} breaks {breaks?.Count}");
+        var made = RevolveOp.Build(profile, Frame3.FromNormal(oc, n), lo - ext, hi + ext, breaks);
+        var cur = new List<TSolid> { made }; var w = new List<string>();
+        var (blo, bhi) = (made.Bounds.Min, made.Bounds.Max);
+        double pad = (bhi - blo).Length + 10;
+        foreach (var f in Environment.GetEnvironmentVariable("P3D_SPHEREARCNOTRIM") == "1" ? new List<TFace>() : ends)
+        {
+            var shp = Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f));
+            TSolid? keep = null;
+            if (shp is Geometry.Ssi.Cylinder cy)
+            {
+                var ax = cy.Axis.Normalized();
+                double ra = ((mid - cy.P) - ax * Vector3d.Dot(mid - cy.P, ax)).Length;
+                // трубка — той же окружностью, что стенка (тот же центр, оси, радиус): гранёные версии совпадают, рез по ней
+                // не оставляет щепок вдоль кромки торца
+                TSolid tube;
+                if (Environment.GetEnvironmentVariable("P3D_SPHEREARCTUBE") != "0" && GeometryAudit.AuthoritativeSurface(f) is ExtrudedSurface wex && wex.Base is ArcCurve3 wa)
+                {
+                    var wd = wex.Dir.Normalized(); var fr0 = wa.Frame;
+                    var shifted = new Frame3(fr0.Origin - wd * 4 * pad, fr0.U, fr0.V);
+                    var circle = new ArcCurve3(shifted, wa.Radius, wa.A0, wa.A0 + 2 * Math.PI);
+                    tube = ExtrudeOp.Build(ProfileBuilder.Build(shifted, new List<ICurve3> { circle }), wd * 8 * pad);
+                }
+                else tube = ShellOp.CylinderSolid(cy.P - ax * 4 * pad, ax * 8 * pad, cy.R);
+                if (ra < cy.R) keep = tube;                                // ребро внутри цилиндра торца — остаётся внутренность
+                else { var outside = new List<TSolid> { ShellOp.BoxSolid(blo - new Vector3d(pad), bhi + new Vector3d(pad)) }; BooleanOp.Subtract(outside, tube, w); keep = outside.Count == 1 ? outside[0] : null; }
+            }
+            else if (shp is Geometry.Ssi.Plane pl)
+            {
+                var pn = pl.N.Normalized(); if (Vector3d.Dot(mid - pl.P, pn) < 0) pn = -pn;
+                keep = ShellOp.HalfSpaceSolid(pl.P, pn, 4 * pad);
+            }
+            else continue;
+            if (keep == null) return "the plane/sphere round could not be trimmed at its ends";
+            var res = new List<TSolid>();
+            foreach (var c in cur) { var one = new List<TSolid> { c }; BooleanOp.Intersect(one, keep, w); res.AddRange(one); }
+            if (res.Count == 0) return "the plane/sphere round vanished when trimmed at its ends";
+            // кусок у ребра (продление может выйти за торец и вернуться)
+            cur = new List<TSolid> { res.OrderBy(x => (x.Bounds.Center - mid).Length).First() };
+        }
+        tool = cur[0];
+        if (Environment.GetEnvironmentVariable("P3D_SPHEREARCDBG") == "1")
+        {
+            Console.WriteLine($"SPHEREARC ends {string.Join(",", ends.Select(f => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f))?.GetType().Name))} lo {lo:F3} hi {hi:F3} ext {ext:F3} rhoE {rhoE:F3} rhoC {rhoC:F3} tool faces {tool.Faces.Count()} vol {AnalyticVolume.Of(tool)}");
+            using var ow = new StreamWriter("/tmp/claude-0/rb/spherearc_tool.obj");
+            Export.MeshExport.WriteObj(ow, Export.MeshExport.Triangles(new[] { tool }), "tool");
+        }
+        PreClipped.AddOrUpdate(tool, true);
+        Interlocked.Increment(ref SphereArcFillers);
         return null;
     }
 

@@ -2427,6 +2427,10 @@ public static class BooleanOp
     private static string Bucket(int n) =>
         n < 50 ? "<50" : n < 200 ? "50-200" : n < 800 ? "200-800" : n < 3000 ? "800-3000" : ">3000";
 
+    static readonly bool EarlyAbortOff = Environment.GetEnvironmentVariable("P3D_MESHEARLYABORT") == "0";
+    public static long MeshEarlyAborts;
+    static double FacetArea(FacetedSurface fs) { double a = 0; foreach (var (x, y, z) in fs.Facets) a += Vector3d.Cross(y - x, z - x).Length / 2; return a; }
+    static readonly bool MeshFaceDbg = Environment.GetEnvironmentVariable("P3D_MESHFACEDBG") == "1";
     static readonly bool MeshAgainDbg = Environment.GetEnvironmentVariable("P3D_MESHAGAIN") == "1";
     /// <summary>g.13: быстрые проверки сетки тела (грубый ключ повторов, стороны без владельцев); P3D_MESHCHECKFAST=0 — прежние.</summary>
     static readonly bool MeshChecksFastEnvOff = Environment.GetEnvironmentVariable("P3D_MESHCHECKFAST") == "0";
@@ -2749,6 +2753,7 @@ public static class BooleanOp
             ((List<Vector3d> P, List<int> T)? M, string? Why, List<Vector3d>? Norms)>();
         {
             var todo = solid.Faces.Where(f => !skip.Contains(f) && f.Surface is FacetedSurface).ToList();
+            int failedAny = 0;
             using (Diagnostics.Prof.Time("сетка: точки рёбер (подготовка)"))
                 foreach (var f in todo)
                     foreach (var e in f.Edges) ExactFaceMesher.EdgePoints(e);
@@ -2766,6 +2771,9 @@ public static class BooleanOp
             {
                 void One(TFace f)
                 {
+                    // 21.10: одна грань не построилась — тело остаётся на треугольниках разбиения целиком (ниже), остальные
+                    // грани считать незачем (скругление кромки на шаре: 4 из 9 граней отказывали по 0.6–1.6 с каждая)
+                    if (!EarlyAbortOff && !PerFaceAdoption && Volatile.Read(ref failedAny) == 1) return;
                     try
                     {
                         // ВРЕМЯ КАЖДОЙ ГРАНИ ОТДЕЛЬНО. Раскладка по потокам упирается в самую
@@ -2797,10 +2805,12 @@ public static class BooleanOp
                         // здесь число точек контура, падала на пустой ссылке, и перехват ниже это
                         // глушил — в отчёт не попадало ничего, а причина выглядела загадкой.
                         Diagnostics.Prof.Add($"грань {FaceKindName(f)}", dt);
+                        if (MeshFaceDbg) Console.Error.WriteLine($"MESHFACE {f.Id} {FaceKindName(f)} src {(((FacetedSurface)f.Surface).Source?.GetType().Name)} facets {((FacetedSurface)f.Surface).Facets.Count} edges {f.Edges.Count()} -> tris {(mm?.T.Count ?? 0) / 3} {dt * 1000.0 / System.Diagnostics.Stopwatch.Frequency:0} ms why {w2}");
 
                         prepared[f] = (mm, w2, n2);
+                        if (mm == null && FacetArea((FacetedSurface)f.Surface) >= 1e-6) Interlocked.Exchange(ref failedAny, 1);
                     }
-                    catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { run.Faulted = true; prepared[f] = (null, ex.Message, null); }
+                    catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { run.Faulted = true; prepared[f] = (null, ex.Message, null); Interlocked.Exchange(ref failedAny, 1); }
                 }
 
                 if (Threads > 1 && Environment.ProcessorCount > 1)
@@ -2810,6 +2820,12 @@ public static class BooleanOp
                         One);
                 else
                     foreach (var f in todo) One(f);
+            }
+            if (!EarlyAbortOff && !PerFaceAdoption && failedAny == 1)
+            {
+                Interlocked.Increment(ref MeshEarlyAborts);
+                MeshDebug?.Invoke($"[{OpTag}] грань не построилась — тело на прежней сетке, остальные грани не считались");
+                return;
             }
         }
 
