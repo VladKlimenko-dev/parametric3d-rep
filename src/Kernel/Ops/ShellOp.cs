@@ -739,6 +739,10 @@ public static class ShellOp
     static readonly bool FillerClipOff = Environment.GetEnvironmentVariable("P3D_FILLERCLIP") == "0";
     public static long FillerClips;
 
+    internal static TSolid CylinderSolid(Vector3d at, Vector3d dir, double r) => Cylinder(at, dir, r);
+    internal static TSolid BoxSolid(Vector3d lo, Vector3d hi) => Box(lo, hi);
+    internal static TSolid HalfSpaceSolid(Vector3d at, Vector3d n, double size) => HalfSpace(at, n, size);
+
     /// <summary>Цилиндр: окружность радиуса r в начале, выдавленная вдоль dir.</summary>
     private static TSolid Cylinder(Vector3d at, Vector3d dir, double r)
     {

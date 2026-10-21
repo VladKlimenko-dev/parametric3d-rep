@@ -134,7 +134,7 @@ if (only == "probe-ffround")
         if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
         var sw = System.Diagnostics.Stopwatch.StartNew();
         s.Document.RebuildDirty();
-        if (prof) { Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(30))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
+        if (prof) { Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(int.TryParse(Environment.GetEnvironmentVariable("P3D_PROBEPROFN"), out var pfn) ? pfn : 30))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
         Console.WriteLine($"PROBE {name}: {sw.ElapsedMilliseconds} ms, feature {(part.LastFeatureMs.TryGetValue(f, out var ms) ? ms : -1):0} ms, err {(Environment.GetEnvironmentVariable("P3D_PROBEFULLERR") == "1" ? f.Error : f.Error?.Split('\n')[0])}, bodies {part.Bodies.Count}, guarantee {string.Join(",", part.Bodies.Select(b => b.Guarantee))}");
         if (Environment.GetEnvironmentVariable("P3D_PROBEFULLERR") == "1") { Console.WriteLine($"  volume {part.Volume:0.###}"); foreach (var wn in part.Warnings) Console.WriteLine("  warn: " + wn); }
         return sw.ElapsedMilliseconds;
@@ -186,7 +186,15 @@ if (only == "probe-ffround")
         if (Environment.GetEnvironmentVariable("P3D_PROBESAVE") is { Length: > 0 } sv && part.Bodies.Count > 0 && f.Error == null)
         {
             var b0 = part.Bodies[0];
-            Console.WriteLine($"PROBE {name}: faces {b0.Faces.Count()}, edges {b0.Edges.Count()}, volume {part.Volume:0.###}, issues {string.Join("; ", Parametric3D.Kernel.Topology.SolidValidator.Validate(b0).Issues.Take(5).Select(i => i.ToString()))}");
+            Console.WriteLine($"PROBE {name}: exact {b0.Exact != null}, auth {b0.ExactAuthoritative}, faceted {b0.Faces.Count(x => x.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface)} [{string.Join(" ", b0.Faces.GroupBy(x => (x.Surface as Parametric3D.Kernel.Surfaces.FacetedSurface)?.Source?.GetType().Name ?? x.Surface.GetType().Name).Select(g => g.Key + ":" + g.Count()))}], faces {b0.Faces.Count()}, edges {b0.Edges.Count()}, volume {part.Volume:0.###}, issues {string.Join("; ", Parametric3D.Kernel.Topology.SolidValidator.Validate(b0).Issues.Take(5).Select(i => i.ToString()))}");
+            if (Environment.GetEnvironmentVariable("P3D_PROBEFACES") == "1")
+                foreach (var fc in b0.Faces)
+                {
+                    var fsx = fc.Surface as Parametric3D.Kernel.Surfaces.FacetedSurface;
+                    double ar = 0; if (fsx != null) foreach (var (a, b, c) in fsx.Facets) ar += OpenTK.Mathematics.Vector3d.Cross(b - a, c - a).Length / 2;
+                    var cen = OpenTK.Mathematics.Vector3d.Zero; int cn = 0; if (fsx != null) foreach (var (a, b, c) in fsx.Facets) { cen += a + b + c; cn += 3; }
+                    Console.WriteLine($"  face {fc.Id} {fc.Tag} src {fsx?.Source?.GetType().Name} facets {fsx?.Facets.Count} area {ar:0.###} loops {fc.Loops.Count} edges {fc.Edges.Count()} at {(cn > 0 ? cen / cn : cen):0.##}");
+                }
             using (var ow = new StreamWriter(Path.Combine(sv, name.Replace(' ', '_') + ".obj"))) Parametric3D.Kernel.Export.MeshExport.WriteObj(ow, Parametric3D.Kernel.Export.MeshExport.Triangles(part.Bodies), name);
         }
         if (Environment.GetEnvironmentVariable("P3D_PROBECHAIN") != "1") { part.RemoveFeature(f); s.Document.RebuildDirty(); }
