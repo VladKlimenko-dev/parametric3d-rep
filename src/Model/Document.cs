@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Model.Params;
@@ -235,7 +235,14 @@ public sealed class Document
         foreach (var p in AllParts())
         {
             if (!p.IsDirty) continue;
-            p.Rebuild(ScopeFor(p), Solver);
+            // 21.10: деталь в предпросмотре операции — тем же режимом, что и фоновый расчёт (грубая сетка, проверки отложены)
+            if (ReferenceEquals(p, PreviewPart))
+            {
+                var ks = Kernel.KernelSettings.Capture();
+                ks = ks with { Preview = true, LivePreview = true, Chord = ks.Chord * PreviewCoarseness };
+                using (new Kernel.KernelContext(ks).Enter()) p.Rebuild(ScopeFor(p), Solver);
+            }
+            else p.Rebuild(ScopeFor(p), Solver);
             any = true;
         }
         return any;

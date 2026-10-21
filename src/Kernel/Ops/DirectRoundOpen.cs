@@ -885,24 +885,26 @@ public static partial class DirectRound
         if (LawBreaks) foreach (var kt in knotT) if (kt > tLo && kt < tHi) breaks.Add((kt - tLo) * kU);
         // шаг таблицы: у закона с узлами — вчетверо мельче (кривизна сечений по u у узла выше)
         double tabStep = Math.Max(Lp / 20000, Math.Min(0.25, 0.4 * Math.Min(widthA, widthB)) / 32) / (knotT.Count > 0 ? 4 : 1);
+        if (FastPreviewNow) tabStep *= 4;   // 21.10: быстрый предпросмотр — таблица реже (отход ~1e-6 мм, на экране не видно)
         Phase("таблица");
         var surf = new SectionSurface(U => Gen(tLo + U / kU), us.Select(t => (t - tLo) * kU).ToList(), secs, false, 0, Lp, breaks, tabStep) { ParallelTable = true };
         {
             double worstTab = 0, worstU = 0;
+            int nChk = FastPreviewNow ? 100 : 1000;
             var devs = new double[1000];
             surf.SectionAt(((useLo - tLo) + (useHi - useLo) * 0.5) * kU);   // таблица — до проб (строится один раз)
-            For(1000, i =>
+            For(FastPreviewNow ? 100 : 1000, i =>
             {
-                double U = ((useLo - tLo) + (useHi - useLo) * (i + 0.5) / 1000) * kU;
+                double U = ((useLo - tLo) + (useHi - useLo) * (i + 0.5) / nChk) * kU;
                 var ta = surf.SectionAt(U); var ex = surf.ExactSectionAt(U);
                 double dm = 0;
                 foreach (double v in new[] { 0.0, 0.5, 1.0 }) dm = Math.Max(dm, (ta.Point(v) - ex.Point(v)).Length);
                 devs[i] = dm;
             });
-            for (int i = 0; i < 1000; i++) if (devs[i] > worstTab) { worstTab = devs[i]; worstU = ((useLo - tLo) + (useHi - useLo) * (i + 0.5) / 1000) * kU; }
+            for (int i = 0; i < nChk; i++) if (devs[i] > worstTab) { worstTab = devs[i]; worstU = ((useLo - tLo) + (useHi - useLo) * (i + 0.5) / nChk) * kU; }
             Debug?.Invoke($"open: table vs formula {worstTab:E2} at t {tLo + worstU / kU:G6} (Δ {Delta:G6}) widths {widthA:G4}/{widthB:G4} Lp {Lp:G5}");
             // таблица — представление формулы: её отход — в пятой доле точности модели (1e-7 → 2e-8 мм)
-            if (worstTab > Math.Max(1e-8, 0.2 * ToleranceContext.Current.ModelAccuracy)) { why = $"open curved: blend surface table deviates from the formula ({worstTab:E1} mm)"; return false; }
+            if (worstTab > (FastPreviewNow ? 1e-4 : Math.Max(1e-8, 0.2 * ToleranceContext.Current.ModelAccuracy))) { why = $"open curved: blend surface table deviates from the formula ({worstTab:E1} mm)"; return false; }
         }
 
         Phase("кривые");
@@ -915,12 +917,14 @@ public static partial class DirectRound
         if (FitDbg) Console.Error.WriteLine($"FITPROC start");
         if (FitCurves)
         {
+            // 21.10: быстрый предпросмотр операции — кривые ленты с отходом 1e-6 мм (на экране не видно; точные — при подтверждении)
+            double fitTol = FastPreviewNow ? 1e-6 : FitTol;
             // четыре кривые — одновременно (P3D_DRFITPAR=0 — по очереди)
             Func<double, Vector3d>? rA = null, rB = null, r0 = null, r1 = null; var e0f = fE0; var e1f = fE1;
             if (!FitParOff && Environment.ProcessorCount > 1 && Tess.Tessellator.Threads > 1)
-                System.Threading.Tasks.Parallel.Invoke(() => rA = FitProc(QA, tA0, tA1, FitTol), () => rB = FitProc(QB, tB0, tB1, FitTol),
-                                                       () => r0 = FitProc(e0f, 0, 1, FitTol), () => r1 = FitProc(e1f, 0, 1, FitTol));
-            else { rA = FitProc(QA, tA0, tA1, FitTol); rB = FitProc(QB, tB0, tB1, FitTol); r0 = FitProc(e0f, 0, 1, FitTol); r1 = FitProc(e1f, 0, 1, FitTol); }
+                System.Threading.Tasks.Parallel.Invoke(() => rA = FitProc(QA, tA0, tA1, fitTol), () => rB = FitProc(QB, tB0, tB1, fitTol),
+                                                       () => r0 = FitProc(e0f, 0, 1, fitTol), () => r1 = FitProc(e1f, 0, 1, fitTol));
+            else { rA = FitProc(QA, tA0, tA1, fitTol); rB = FitProc(QB, tB0, tB1, fitTol); r0 = FitProc(e0f, 0, 1, fitTol); r1 = FitProc(e1f, 0, 1, fitTol); }
             fQA = rA ?? fQA; fQB = rB ?? fQB; fE0 = r0 ?? fE0; fE1 = r1 ?? fE1;
         }
         var cA = new ProcCurve3(fQA, tA0, tA1, false, ch ? "chamfer contact" : "rolling-ball contact") { NoEventsOn = ch || varLaw != null ? null : (s, a, b) => NoEvents(true, s, a, b) };
@@ -1169,6 +1173,9 @@ public static partial class DirectRound
     public static long OpenParallelRuns;
     static readonly bool FitCurves = Environment.GetEnvironmentVariable("P3D_DRFITCURVES") != "0";
     const double FitTol = 1e-9;
+    /// <summary>21.10: идёт быстрый предпросмотр операции (живой предпросмотр в контексте). P3D_FASTPREVIEW=0 — нет.</summary>
+    static bool FastPreviewNow => FastPreviewOn && KernelContext.Current?.Settings.LivePreview == true;
+    static readonly bool FastPreviewOn = Environment.GetEnvironmentVariable("P3D_FASTPREVIEW") != "0";
 
     /// <summary>
     /// Кубическая вставка Эрмита по точкам f на [a, b] (производные — разностью 4-го порядка по соседним узлам): число

@@ -48,8 +48,13 @@ public static class UvMesher
     static readonly bool IncrDelOff = Environment.GetEnvironmentVariable("P3D_UVINCRDEL") == "0";
     static readonly bool LongKeysOff = Environment.GetEnvironmentVariable("P3D_UVLONGKEYS") == "0";
     static readonly bool BadMemoOff = Environment.GetEnvironmentVariable("P3D_UVBADMEMO") == "0";
-    static readonly bool CurvMaxOff = Environment.GetEnvironmentVariable("P3D_UVCURVMAX") != "1";   // включение — P3D_UVCURVMAX=1 (k83: 4 проверки сеток не проходят, разобрать)
-    static readonly bool StraightRowsOff = Environment.GetEnvironmentVariable("P3D_UVSTRAIGHTROWS") != "1";   // включение — P3D_UVSTRAIGHTROWS=1
+    static readonly bool CurvMaxEnv = Environment.GetEnvironmentVariable("P3D_UVCURVMAX") == "1";
+    // 21.10: в быстром предпросмотре операции шаг по кривизне и строки — включены (сетка только для вида)
+    static readonly bool FastPvEnv = Environment.GetEnvironmentVariable("P3D_FASTPREVIEW") != "0";
+    static bool FastPv => FastPvEnv && KernelContext.Current?.Settings.LivePreview == true;
+    static bool CurvMaxOff => !(CurvMaxEnv || FastPv);   // включение — P3D_UVCURVMAX=1 (k83: 4 проверки сеток не проходят, разобрать)
+    static readonly bool StraightRowsEnv = Environment.GetEnvironmentVariable("P3D_UVSTRAIGHTROWS") == "1";
+    static bool StraightRowsOff => !(StraightRowsEnv || FastPv);   // включение — P3D_UVSTRAIGHTROWS=1
     static readonly double TwoCurvScale = double.TryParse(Environment.GetEnvironmentVariable("P3D_UVTWOCURV"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var tcs) ? tcs : 1.0;   // 0.85 и мельче — у тора d8_0091 стороны «в одну сторону» (разобрать: P3D_UVTWOCURV)
     static readonly bool RowLocOff = Environment.GetEnvironmentVariable("P3D_UVROWLOC") == "0";
     public static readonly double[] PhaseMs = new double[6];   // 0 контуры, 1 треугол., 2 Делоне, 3 внутр. точки, 4 доводка, 5 проверка

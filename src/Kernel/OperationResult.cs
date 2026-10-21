@@ -1,4 +1,4 @@
-using Parametric3D.Kernel.Topology;
+﻿using Parametric3D.Kernel.Topology;
 
 namespace Parametric3D.Kernel;
 
@@ -398,8 +398,12 @@ public static class OperationContract
         warnings?.AddRange(w);
         var fresh = work.Where(b => !bodies.Any(o => ReferenceEquals(o, b))).ToList();
         bool approximate = work.Any(b => b.Guarantee == GuaranteeLevel.Approximate);
+        // 21.10: быстрый предпросмотр операции (живой предпросмотр) — проверка B-rep и политика геометрии при подтверждении
+        // (точный расчёт), не на каждом шаге. P3D_FASTPREVIEW=0 — всегда.
+        bool fastPv = Environment.GetEnvironmentVariable("P3D_FASTPREVIEW") != "0" && KernelSettings.Capture().LivePreview;
         foreach (var b in fresh)
         {
+            if (fastPv) break;
             var v = SolidValidator.ValidateBRep(b);
             if (!v.IsValid)
             {
@@ -413,7 +417,7 @@ public static class OperationContract
             }
         }
         // KRN-01 (ворота g.03): политика PreserveBRep — новые тела только из точных граней и рёбер (по самой B-rep).
-        if (KernelSettings.Capture().GeometryPolicy == GeometryPolicy.PreserveBRep && GeometryGuard)
+        if (!fastPv && KernelSettings.Capture().GeometryPolicy == GeometryPolicy.PreserveBRep && GeometryGuard)
         {
             int nf = fresh.Sum(b => { var (f1, e1) = GeometryAudit.Faceted(b); return f1 + e1; });
             if (nf > 0)

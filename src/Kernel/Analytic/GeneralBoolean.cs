@@ -41,6 +41,7 @@ public static class GeneralBoolean
     [ThreadStatic] public static Action<Vector3d, Vector3d>? MergeDebug;
     static readonly bool BndRigorOff = Environment.GetEnvironmentVariable("P3D_BNDRIGOR") == "0";
     sealed class FaceOut { public string? Fail; public bool Cut; public TFace? Boundary; public readonly List<FaceSplit.Region> Kept = new(); public Exception? Error; }
+    static readonly bool FastPvEnv = Environment.GetEnvironmentVariable("P3D_FASTPREVIEW") != "0";
     static readonly bool PrepParOff = Environment.GetEnvironmentVariable("P3D_PREPPAR") == "0";
     /// <summary>Сколько раз формы граней операндов строились в несколько потоков.</summary>
     public static long PrepParallelRuns;
@@ -568,7 +569,8 @@ public static class GeneralBoolean
                     Console.Error.WriteLine($"PARTSKIP {(f.Sph ? "sph" : f.Cone ? "cone" : f.Cyl ? "cyl" : f.Tor ? "tor" : "plane")} full {f.FullSurface} wlen {f.W.LengthSquared > 0.5} apex {regs.Any(r => r.ApexAbove)} unb {regs.Any(r => r.Unbounded)} curves {string.Join(",", regs.SelectMany(r => r.Loops.SelectMany(l => l.Select(d => d.Curve.GetType().Name))).Distinct())}");
                 using var _pc = Diagnostics.Prof.Time("общая: проверка разбиения");
                 using var _pco = Diagnostics.Overhead.Scope();          // проверка, а не построение (g.13)
-                if (!PartitionOff && on[f].Count > 0 && regs.Count > 0 && measurable)
+                // 21.10: быстрый предпросмотр операции — проверка разбиения при подтверждении (точный расчёт)
+                if (!PartitionOff && on[f].Count > 0 && regs.Count > 0 && measurable && !(FastPvEnv && KernelContext.Current?.Settings.LivePreview == true))
                 {
                     // плоская грань: площади точно (квадратура Гаусса по кривым областей); по ломаным разметка областей и
                     // целой грани разная — расхождение до 2.6e-4 при верном разбиении (измерено на krn05)
