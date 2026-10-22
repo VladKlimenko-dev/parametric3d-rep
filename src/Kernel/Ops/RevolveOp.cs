@@ -18,6 +18,9 @@ public static class RevolveOp
     /// Нужны, когда тело вращения режет вдоль уже гранёной поверхности (резец по дуге):
     /// его вершины по углу должны совпасть с вершинами той поверхности.
     /// </param>
+    public static readonly bool HintOff = Environment.GetEnvironmentVariable("P3D_REVOLVEHINT") == "0";
+    public static long HintsSet;
+
     public static TSolid Build(Profile profile, Frame3 axis, double a0, double a1,
                                IReadOnlyList<double>? angles = null)
     {
@@ -150,6 +153,9 @@ public static class RevolveOp
                 // Граница поверхности вращения. При полном обороте это только
                 // две заметаемые окружности: шов по профилю входит в неё
                 // дважды с противоположным обходом и сокращается.
+                // k94: точка грани ПОЛНОГО оборота — середина кривой профиля, повёрнутая на средний угол. Без неё классификатор
+                // общего пути отказывал по тору («torus face without an interior point»). P3D_REVOLVEHINT=0 — прежнее.
+                if (!HintOff && full) { var cc = loop.Curves[i]; f.InteriorHint = Rot(cc.PointAt(0.5 * (cc.T0 + cc.T1)), axis, 0.5 * (a0 + a1)); System.Threading.Interlocked.Increment(ref HintsSet); }
                 var fl = f.AddLoop(true);
                 if (!full) fl.Add(es[i], esRev[i]);
                 if (ea[j] != null) fl.Add(ea[j]!, eaRev[j]);

@@ -1259,6 +1259,8 @@ public sealed class Part : ModelItem
                 {
                     var b = ctx.Bodies[bi];
                     if (saved.Bodies.Any(x => ReferenceEquals(x, b))) continue;
+                    // k94: тело предпросмотра по сеткам (две перекрывающиеся оболочки заполнителя) — не делится; расчёт по «ОК» точный
+                    if (Kernel.Ops.BooleanOp.IsPreviewMesh(b)) continue;
                     var why = Kernel.Topology.ShellComponents.Invariant(b);
                     if (why == null) continue;
                     var sp = Kernel.Topology.ShellComponents.Split(b);

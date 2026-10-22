@@ -317,8 +317,21 @@ if (only == "probe-ffui")
         long tStart = sw.ElapsedMilliseconds;
         s.Document.RebuildDirty();
         long tRebuilt = sw.ElapsedMilliseconds;
+        bool profJobs = Environment.GetEnvironmentVariable("P3D_PROBEJOBS") == "1" && rep == 1;
+        var gcP0 = GC.GetTotalPauseDuration(); int gc0 = GC.CollectionCount(0), gc2 = GC.CollectionCount(2);
+        if (profJobs) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
         Dispatcher.UIThread.RunJobs();
+        if (Environment.GetEnvironmentVariable("P3D_PROBEJOBS") == "1") Console.WriteLine($"  jobs: gc pause {(GC.GetTotalPauseDuration() - gcP0).TotalMilliseconds:0} ms, gen0 {GC.CollectionCount(0) - gc0}, gen2 {GC.CollectionCount(2) - gc2}");
+        if (profJobs) { Console.WriteLine("  jobs profile:\n" + string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(15))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
         long tBuilt = sw.ElapsedMilliseconds;
+        if (Environment.GetEnvironmentVariable("P3D_PROBESCENEB") == "1")
+        {
+            var swS = System.Diagnostics.Stopwatch.StartNew();
+            var scn = Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions());
+            long t1 = swS.ElapsedMilliseconds; swS.Restart();
+            Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions());
+            Console.WriteLine($"  scene build {t1} ms, again {swS.ElapsedMilliseconds} ms");
+        }
         var f = (Feature?)w.CurrentOperation?.EditedFeature;
         w.CommitOperation(); s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
         long tDone = sw.ElapsedMilliseconds;
@@ -2822,6 +2835,54 @@ Check("UI-ROUND-RIM-BALL", () =>
     Parametric3D.Kernel.Ops.FilletOp.RebuildRoundOff = true;
     try { RimBall(cutter: true); }
     finally { Parametric3D.Kernel.Ops.FilletOp.RebuildRoundOff = Environment.GetEnvironmentVariable("P3D_REBUILDROUND") == "0"; }
+});
+
+Check("UI-ROUND-CAP-SPHERE", () =>
+{
+    // 22.10 (снимок 17:40, «займись вогнутым ребром»): цилиндр ∪ шар, скругление R5 вогнутого ребра «нижний торец цилиндра —
+    // шар». Прежде: точный расчёт — отказ (у шара скругления точка касания с торцом вне лунки торца), резец — 40–70 граней-щепок,
+    // 8–11 с. Теперь заполнитель угла — тело вращения вокруг оси шара (торец — тор катящегося шара — шар), обрезанное
+    // продолжением цилиндра, и объединение с телом общим точным путём. Мутации P3D_CAPSPHEREROUND=0, P3D_FSDUPPIECE=0,
+    // P3D_REVOLVEHINT=0; предпросмотр — обе булевы по сеткам (P3D_CAPSPHEREPREVIEW=0).
+    var s = FreeFormCommands.NewFreeForm(); var w = Open(s); var part = s.Part!;
+    var node = part.Features.OfType<FreeFormFeature>().Single();
+    void Add(Feature f) { f.FreeForm = node.Key; f.Frozen = true; part.AddFeature(f); s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs(); }
+    Add(new FFPrimitiveFeature { Shape = FFPrimitive.Cylinder, A = new ValueRef(15), B = new ValueRef(40) });
+    Add(new FFPrimitiveFeature { Shape = FFPrimitive.Sphere, A = new ValueRef(20) });
+    Add(new FFTransformFeature { Mode = FFXform.Move, BodyNames = { "Тело 1" }, Dx = new ValueRef(8), Dz = new ValueRef(5) });
+    Add(new FFBooleanFeature { Op = FFBool.Union, Target = "Тело 1", Tools = { "Тело 2" } });
+    double v0 = part.Volume;
+    string Kind(Parametric3D.Kernel.Topology.TEdge e) => string.Join("/", e.CoEdges.Select(c => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(c.Loop.Face)?.GetType().Name).OrderBy(x => x));
+    var e = part.Bodies[0].Edges.First(x => Kind(x) == "PlaneSurface/RevolvedSurface");
+    w.ViewPort.Selection.Clear(); w.ViewPort.Selection.Select(new PickRef(e.Id, PickKind.Edge, part, null), additive: false);
+    long n0 = Parametric3D.Kernel.Ops.FilletOp.CapSphereRounds, p0 = Parametric3D.Kernel.Ops.FilletOp.CapSpherePreviews;
+    CommandRegistry.Instance["ff.fillet"].Execute();
+    s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+    var op = w.CurrentOperation!; var f = (Feature)op.EditedFeature!;
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    op.DragValue!(5); op.FieldChanged(); s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+    long tPreview = sw.ElapsedMilliseconds;
+    Require(f.Error == null && part.Bodies.Count == 1, "preview R5 failed: " + f.Error);
+    double vPreview = part.Volume;
+    Require(Parametric3D.Kernel.Ops.FilletOp.CapSpherePreviews > p0, "the preview was not made on meshes by the filler");
+    sw.Restart();
+    w.CommitOperation(); s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+    long tExact = sw.ElapsedMilliseconds;
+    Require(f.Error == null && part.Bodies.Count == 1 && !part.Bodies[0].IsPreview, "exact R5 failed: " + f.Error);
+    Require(Parametric3D.Kernel.Ops.FilletOp.CapSphereRounds > n0, "the concave edge was not rounded by the filler of revolution");
+    Require(part.Bodies[0].Guarantee == Parametric3D.Kernel.GuaranteeLevel.ExactAnalytic, $"guarantee {part.Bodies[0].Guarantee}");
+    double added = part.Volume - v0;
+    // Монте-Карло по формулам (4·10⁶ точек): 152.9 мм³; точный объём заполнителя 152.75
+    Require(Math.Abs(added - 152.8) < 1.5, $"added volume {added:0.###} (expected 152.8 ± 1.5)");
+    int nf = part.Bodies[0].Faces.Count();
+    Require(nf <= 6, $"{nf} faces (expected: top, wall, sphere, blend — no slivers)");
+    Require(Math.Abs(vPreview - part.Volume) < 0.01 * part.Volume, $"preview volume {vPreview:0.#} vs exact {part.Volume:0.#}");
+    var tris = Parametric3D.Kernel.Voxels.Occupancy.Triangles(Parametric3D.Kernel.Tess.Tessellator.Tessellate(part.Bodies[0], facets: true));
+    // материал заполнителя под торцом вне шара; свободно — внутри шара скругления
+    Require(Parametric3D.Kernel.Voxels.PointInSolid.Test(tris, new OpenTK.Mathematics.Vector3d(21, 0, 4.5)), "no filler under the cap");
+    Require(!Parametric3D.Kernel.Voxels.PointInSolid.Test(tris, new OpenTK.Mathematics.Vector3d(22.5, 0, 1)), "material inside the rolling ball");
+    Console.WriteLine($"  preview {tPreview} ms (volume {vPreview:0.#}), exact after commit {tExact} ms (added {added:0.###}), faces {nf}");
+    w.Close();
 });
 
 Check("UI-POLY-FAST", () =>
