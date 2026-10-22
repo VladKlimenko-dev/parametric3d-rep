@@ -93,9 +93,113 @@ public static class FilletOp
     {
         // KRN-06: прямой построитель (плоскость/плоскость) — без резцов и булевых; не поддержано — прежний путь
         if (DirectRound.TryRound(bodies, edges, radius, warnings)) return;
+        if (!RebuildRoundOff && RoundByRebuild(bodies, edges, radius, warnings)) return;
         var corners = BallCorners(bodies, edges, radius);
         Apply(bodies, edges, warnings, "Round", radius, radius, true);
         if (corners.Count > 0) BlendCorners(bodies, corners, radius, warnings);
+    }
+
+    // 21.10–22.10 (снимок 17:40, скорость точного расчёта): КРОМКА ЦИЛИНДРА, ОБА КОНЦА КОТОРОЙ НА ШАРЕ, У ТЕЛА «ЦИЛИНДР ∪ ШАР».
+    // Тело восстанавливается из своих граней как C ∪ S (C — цилиндр между торцом кромки и противоположным торцом, S — шар
+    // концов); совпадение проверяется объёмом C ∪ S. Тогда скругление = (C со скруглённой целиком кромкой торца — прямой
+    // построитель, тор по формуле) ∪ S: точная форма вместо многогранной, без вычитания с касаниями (резец минус шар, тело
+    // минус резец — 3.8 с). Мутация P3D_REBUILDROUND=0 — резцы.
+    /// <summary>P3D_REBUILDROUND=0 — резцы; проверка UI-ROUND-RIM-BALL проходит оба пути.</summary>
+    public static bool RebuildRoundOff = Environment.GetEnvironmentVariable("P3D_REBUILDROUND") == "0";
+    public static long RebuildRounds;
+    [ThreadStatic] public static Action<string>? RebuildDebug;
+
+    private static bool RoundByRebuild(List<TSolid> bodies, IReadOnlyList<EdgeRef> edges, double r, List<string> warnings)
+    {
+        if (bodies.Count != 1 || edges.Count != 1 || !(r > 0)) return false;
+        var B = bodies[0];
+        var e = Resolve(bodies, edges[0]);
+        if (e == null || e.Curve is not ArcCurve3 || ReferenceEquals(e.V0, e.V1) || e.FaceA == null || e.FaceB == null) return false;
+        TFace flat = e.FaceA.Surface.IsPlanar ? e.FaceA : e.FaceB, wallF = ReferenceEquals(flat, e.FaceA) ? e.FaceB : e.FaceA;
+        if (!flat.Surface.IsPlanar || GeometryAudit.AuthoritativeSurface(wallF) is not ExtrudedSurface wall || wall.Base is not ArcCurve3 wb) return false;
+        if (Geometry.ExactEdges.ShapeOf(wall) is not Geometry.Ssi.Cylinder cyl) return false;
+        var ax = cyl.Axis.Normalized();
+        if (Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(flat)) is not Geometry.Ssi.Plane capP || Math.Abs(Math.Abs(Vector3d.Dot(capP.N.Normalized(), ax)) - 1) > 1e-9) return false;
+        var ball = EndBall(bodies, e, flat, wallF);
+        if (ball == null) { RebuildDebug?.Invoke("ends are not on one sphere"); return false; }
+        // противоположный торец: плоская грань ⟂ оси, соседняя со стенкой (по ребру), не торец кромки
+        double hCap = Vector3d.Dot(capP.P - cyl.P, ax);
+        double? hTop = null;
+        foreach (var f in B.Faces)
+        {
+            if (ReferenceEquals(f, flat) || !f.Surface.IsPlanar) continue;
+            if (Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) is not Geometry.Ssi.Plane pl || Math.Abs(Math.Abs(Vector3d.Dot(pl.N.Normalized(), ax)) - 1) > 1e-9) continue;
+            if (!f.Edges.Any(x => x.FaceA is { } fa && x.FaceB is { } fb && (GeometryAudit.AuthoritativeSurface(fa) is ExtrudedSurface es1 && Geometry.ExactEdges.ShapeOf(es1) is Geometry.Ssi.Cylinder c1 && SameCyl(c1, cyl) || GeometryAudit.AuthoritativeSurface(fb) is ExtrudedSurface es2 && Geometry.ExactEdges.ShapeOf(es2) is Geometry.Ssi.Cylinder c2 && SameCyl(c2, cyl)))) continue;
+            double h = Vector3d.Dot(pl.P - cyl.P, ax);
+            if (Math.Abs(h - hCap) < 1e-6) continue;
+            hTop = h; break;
+        }
+        if (hTop == null) { RebuildDebug?.Invoke("no opposite cap"); return false; }
+        static bool SameCyl(Geometry.Ssi.Cylinder a, Geometry.Ssi.Cylinder b)
+        {
+            var aa = a.Axis.Normalized(); var bb = b.Axis.Normalized();
+            if (Math.Abs(Math.Abs(Vector3d.Dot(aa, bb)) - 1) > 1e-9 || Math.Abs(a.R - b.R) > 1e-9 * Math.Max(1, a.R)) return false;
+            var d = b.P - a.P; d -= aa * Vector3d.Dot(d, aa);
+            return d.Length < 1e-7 * Math.Max(1, a.R);
+        }
+        // C — той же окружностью, что стенка (рамка дуги основания, сдвинутая к торцу кромки), вдоль оси к противоположному торцу
+        var wf = wb.Frame; var wAx = wf.W.Normalized();
+        double hBase = Vector3d.Dot(wf.Origin - cyl.P, ax);
+        var origin = wf.Origin + ax * (hCap - hBase);
+        var frame = new Frame3(origin, wf.U, wf.V);
+        var circle = new ArcCurve3(frame, cyl.R, wb.A0, wb.A0 + 2 * Math.PI);
+        TSolid C;
+        try { C = ExtrudeOp.Build(ProfileBuilder.Build(frame, new List<ICurve3> { circle }), ax * (hTop.Value - hCap)); }
+        catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { RebuildDebug?.Invoke("cylinder: " + ex.Message); return false; }
+        var S = PrimitiveOp.Sphere(ball.Value.C, ball.Value.R);
+        // проверка разложения: объём C ∪ S = объём тела
+        var w0 = new List<string>();
+        var U = new List<TSolid> { TopologyClone.Deep(C) };
+        try { BooleanOp.Unite(U, TopologyClone.Deep(S), w0); } catch (RebuildException ex) { RebuildDebug?.Invoke("C ∪ S: " + ex.Message); return false; }
+        double? vB = AnalyticVolume.Of(B), vU = U.Count == 1 ? AnalyticVolume.Of(U[0]) : null;
+        if (vB == null || vU == null || Math.Abs(vB.Value - vU.Value) > 1e-7 * Math.Abs(vB.Value)) { RebuildDebug?.Invoke($"decomposition volume {vU} vs body {vB}"); return false; }
+        // скругление кромки торца C целиком
+        var rim = C.Edges.FirstOrDefault(x => ReferenceEquals(x.V0, x.V1) && x.Curve is ArcCurve3 && Math.Abs(Vector3d.Dot(x.Curve.PointAt(0.5) - origin, ax)) < 1e-6);
+        if (rim == null) { RebuildDebug?.Invoke("no rim on C"); return false; }
+        var cr = new List<TSolid> { C };
+        var w1 = new List<string>();
+        if (!DirectRound.TryRound(cr, new List<EdgeRef> { EdgeRef.Of(rim) }, r, w1) || cr.Count != 1) { RebuildDebug?.Invoke("direct round of C declined"); return false; }
+        var res = new List<TSolid> { cr[0] };
+        var w2 = new List<string>();
+        var ev = BooleanOp.Evaluate(res, S, BooleanOp.BooleanKind.Unite, OperationPolicyScope.Current, w2);
+        if (ev.Outcome != OperationOutcome.Success || ev.Bodies.Count != 1 || ev.Guarantee is not (GuaranteeLevel.ExactAnalytic or GuaranteeLevel.ExactQuadric))
+        { RebuildDebug?.Invoke($"C_r ∪ S: {ev.Outcome} {ev.Guarantee} {ev.FailureCode} {ev.FailedStage}"); return false; }
+        var result = ev.Bodies[0];
+        // подписи граней — от граней тела с той же поверхностью (ссылки дальнейших операций)
+        foreach (var f in result.Faces)
+        {
+            var sf = Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f));
+            var same = B.Faces.FirstOrDefault(g => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(g)) is { } sg && sf != null && SameShape(sf, sg));
+            if (same != null) f.Tag = same.Tag;
+        }
+        bodies[0] = result;
+        warnings.Add("Round: direct blend (1 edge(s), exact blend surfaces): the edge ends on a sphere — rounded on the rebuilt cylinder and united with the sphere.");
+        Interlocked.Increment(ref RebuildRounds);
+        return true;
+    }
+
+    private static bool SameShape(Geometry.Ssi.Shape a, Geometry.Ssi.Shape b)
+    {
+        const double t = 1e-7;
+        switch (a, b)
+        {
+            case (Geometry.Ssi.Plane pa, Geometry.Ssi.Plane pb):
+                var na = pa.N.Normalized(); var nb = pb.N.Normalized();
+                return Math.Abs(Math.Abs(Vector3d.Dot(na, nb)) - 1) < 1e-9 && Math.Abs(Vector3d.Dot(pb.P - pa.P, na)) < t;
+            case (Geometry.Ssi.Sphere sa, Geometry.Ssi.Sphere sb):
+                return (sa.C - sb.C).Length < t && Math.Abs(sa.R - sb.R) < t;
+            case (Geometry.Ssi.Cylinder ca, Geometry.Ssi.Cylinder cb):
+                var aa = ca.Axis.Normalized(); var bb = cb.Axis.Normalized();
+                if (Math.Abs(Math.Abs(Vector3d.Dot(aa, bb)) - 1) > 1e-9 || Math.Abs(ca.R - cb.R) > t) return false;
+                var d = cb.P - ca.P; d -= aa * Vector3d.Dot(d, aa);
+                return d.Length < t;
+            default: return false;
+        }
     }
 
     /// <summary>
