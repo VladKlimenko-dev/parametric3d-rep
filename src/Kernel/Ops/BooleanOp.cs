@@ -1576,7 +1576,11 @@ public static class BooleanOp
     static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, object> _previewMeshBodies = new();
     /// <summary>Тело предпросмотра по сеткам: куски без согласования вершин — не делится на компоненты и не проверяется.</summary>
     internal static void MarkPreviewMesh(TSolid b) => _previewMeshBodies.AddOrUpdate(b, true);
-    internal static bool IsPreviewMesh(TSolid b) => _previewMeshBodies.TryGetValue(b, out _);
+    public static bool IsPreviewMesh(TSolid b) => _previewMeshBodies.TryGetValue(b, out _);
+
+    /// <summary>k94: [ThreadStatic] — вызывающий принимает только точный аналитический результат; многогранный путь пропускается.</summary>
+    [ThreadStatic] public static bool AnalyticOnly;
+    public static long AnalyticOnlySkips;
 
     private static bool TryExact(List<TSolid> bodies, TSolid other, List<string> warnings, bool subtract, bool intersect = false)
     {
@@ -1587,6 +1591,9 @@ public static class BooleanOp
                 quick = MeshCut.Solid(bodies[0], other, intersect ? MeshCut.Op.Intersect : subtract ? MeshCut.Op.Subtract : MeshCut.Op.Union);
             if (quick != null) { bodies[0] = quick; Interlocked.Increment(ref PreviewMeshBooleans); return true; }
         }
+        // k94: только аналитические маршруты (построитель, проверяющий точность результата сам): многогранный путь не
+        // запускается — на отказах общего маршрута он шёл 10–24 с ради тела, которое всё равно отвергается.
+        if (AnalyticOnly) { OperationTrace.Report(OperationCodes.ExactDeclined, "analytic routes only (the caller refuses a polyhedral result)"); Interlocked.Increment(ref AnalyticOnlySkips); return false; }
         try
         {
             OperationTrace.Enter("boolean.exact");

@@ -76,6 +76,9 @@ public static partial class FaceSplit
     internal static readonly bool MergeGuardOff = Environment.GetEnvironmentVariable("P3D_MERGEGUARD") == "0";
     static double TolV => TolOverride ?? Region2Ops.Eps;
     [ThreadStatic] public static Action<string>? Debug;
+    /// <summary>k94: кусок пересечения, совпавший с ребром границы грани, отбрасывается. P3D_FSDUPPIECE=0 — прежнее.</summary>
+    public static readonly bool DupPieceOff = Environment.GetEnvironmentVariable("P3D_FSDUPPIECE") == "0";
+    public static long DupPiecesDropped;
     static readonly bool ConeCapHoleOff = Environment.GetEnvironmentVariable("P3D_CONECAPHOLE") == "0";
 
     public static List<Region>? Split(AnalyticFace f, IReadOnlyList<FaceIntersect.Piece> pieces, out string why) =>
@@ -192,8 +195,38 @@ public static partial class FaceSplit
             _ = closedEdge;
         }
         // куски — в обе стороны
+        int nBoundary = darts.Count;
         foreach (var p in pieces)
         {
+            // k94: КУСОК ПО РЕБРУ ГРАНИЦЫ ИЛИ ПОВТОР КУСКА — совпадающая поверхность другого тела (шар на шаре) режет грань ровно по её же
+            // ребру. Дубль границы ломал обход («a face cycle runs into a used piece»); граница уже делит грань там же.
+            if (!DupPieceOff && !p.Closed)
+            {
+                var pd = new Dart { Curve = p.Curve, T0 = p.T0, T1 = p.T1 };   // концы — как у дартов куска (с переходом через шов)
+                int a0 = Node(pd.At(0)), a1 = Node(pd.At(1));
+                bool dup = false;
+                for (int k = 0; k < darts.Count && !dup; k++)
+                {
+                    var bd = darts[k];
+                    if (k >= nBoundary && ((k - nBoundary) & 1) == 1) continue;   // у куска — одна проверка из пары
+                    if (!((bd.From == a0 && bd.To == a1) || (bd.From == a1 && bd.To == a0))) continue;
+                    // расстояние до дуги дарта (по его доле s ∈ [0, 1]: параметры кривых границы и куска разные)
+                    double DistTo(Vector3d x)
+                    {
+                        int m = 32; double bs = 0, bdist = double.MaxValue;
+                        for (int k2 = 0; k2 <= m; k2++) { double dd = (bd.At((double)k2 / m) - x).Length; if (dd < bdist) { bdist = dd; bs = (double)k2 / m; } }
+                        double lo = Math.Max(0, bs - 1.0 / m), hi = Math.Min(1, bs + 1.0 / m);
+                        for (int it = 0; it < 60; it++)
+                        {
+                            double m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
+                            if ((bd.At(m1) - x).Length < (bd.At(m2) - x).Length) hi = m2; else lo = m1;
+                        }
+                        return Math.Min(bdist, (bd.At(0.5 * (lo + hi)) - x).Length);
+                    }
+                    dup = DistTo(pd.At(0.5)) < TolV && DistTo(pd.At(0.25)) < TolV && DistTo(pd.At(0.75)) < TolV;
+                }
+                if (dup) { Interlocked.Increment(ref DupPiecesDropped); Debug?.Invoke($"duplicate piece dropped {p.P0:0.###} → {p.P1:0.###}"); continue; }
+            }
             var d1 = new Dart { Curve = p.Curve, T0 = p.T0, T1 = p.T1, IsPiece = true };
             var d2 = new Dart { Curve = p.Curve, T0 = p.T1, T1 = p.T0, IsPiece = true };
             d1.From = Node(d1.At(0)); d1.To = Node(d1.At(1)); d2.From = d1.To; d2.To = d1.From;

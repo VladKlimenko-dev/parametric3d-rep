@@ -100,6 +100,24 @@ public static class MeshCut
         return solid;
     }
 
+    /// <summary>
+    /// k94: ТЕЛО ПРЕДПРОСМОТРА ИЗ ДВУХ ПЕРЕКРЫВАЮЩИХСЯ ОБОЛОЧЕК без булевой — для добавки, чьё перекрытие с телом лежит внутри
+    /// материала обоих (видимая поверхность — поверхность объединения; объём — с перекрытием).
+    /// </summary>
+    public static Topology.TSolid? Concat(Topology.TSolid a, Topology.TSolid b)
+    {
+        var sources = new Dictionary<uint, Surfaces.ISurface3?>();
+        var r = MeshPolys(a, 0, sources); r.AddRange(MeshPolys(b, 1u << 30, sources));
+        if (r.Count == 0) return null;
+        Topology.TSolid solid;
+        BooleanOp.PreviewMeshBuild = true;
+        try { solid = BooleanOp.SolidFromPolygons(r, sources); }
+        finally { BooleanOp.PreviewMeshBuild = false; }
+        solid.TopologyConvention = Topology.TopologyConventions.Version;
+        BooleanOp.MarkPreviewMesh(solid);
+        return solid;
+    }
+
     static double Probe(CsgPolygon f)
     {
         double s = 0; for (int i = 0; i < f.V.Count; i++) s = Math.Max(s, (f.V[i] - f.V[(i + 1) % f.V.Count]).Length);

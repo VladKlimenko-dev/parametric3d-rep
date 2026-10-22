@@ -94,6 +94,7 @@ public static class FilletOp
         // KRN-06: прямой построитель (плоскость/плоскость) — без резцов и булевых; не поддержано — прежний путь
         if (DirectRound.TryRound(bodies, edges, radius, warnings)) return;
         if (!RebuildRoundOff && RoundByRebuild(bodies, edges, radius, warnings)) return;
+        if (!CapSphereRoundOff && RoundCapSphere(bodies, edges, radius, warnings)) return;
         var corners = BallCorners(bodies, edges, radius);
         Apply(bodies, edges, warnings, "Round", radius, radius, true);
         if (corners.Count > 0) BlendCorners(bodies, corners, radius, warnings);
@@ -180,6 +181,197 @@ public static class FilletOp
         bodies[0] = result;
         warnings.Add("Round: direct blend (1 edge(s), exact blend surfaces): the edge ends on a sphere — rounded on the rebuilt cylinder and united with the sphere.");
         Interlocked.Increment(ref RebuildRounds);
+        return true;
+    }
+
+    // 22.10 (снимок 17:40): ВОГНУТОЕ РЕБРО «ТОРЕЦ ЦИЛИНДРА — ШАР» у тела C ∪ S. Скругление — заполнитель угла под торцом снаружи
+    // шара: тело вращения F (вокруг оси через центр шара по нормали торца) сечения «торец — дуга катящегося шара (тор) — дуга
+    // шара», обрезанное продолжением цилиндра за торец: G = F ∩ C⁺. Результат B ∪ G — общий точный путь (совпадающие с телом
+    // грани шара и стенки, касание тора с шаром). Шар скругления может выходить за торец (лунка уже его) — тогда торец исчезает,
+    // стенка продолжается до тора. Проверки: разложение B = C ∪ S объёмом и объём результата = B + G.
+    // Мутация P3D_CAPSPHEREROUND=0 — прежние пути (отказ точного; резцы).
+    /// <summary>P3D_CAPSPHEREROUND=0 — без заполнителя вогнутого ребра «торец — шар».</summary>
+    public static bool CapSphereRoundOff = Environment.GetEnvironmentVariable("P3D_CAPSPHEREROUND") == "0";
+    public static long CapSphereRounds, CapSpherePreviews, CapSphereParallel;
+    /// <summary>Проверка разложения параллельно заполнителю — по выбору (P3D_CAPSPHEREPAR=1): на 2 ядрах выигрыша нет (общий путь уже параллелен).</summary>
+    public static readonly bool ParallelOff = Environment.GetEnvironmentVariable("P3D_CAPSPHEREPAR") != "1";
+    /// <summary>P3D_CAPSPHEREPREVIEW=0 — предпросмотр точными булевыми (как расчёт), P3D_CAPSPHEREPREVIEW=full — и с проверкой разложения.</summary>
+    public static readonly bool PreviewMeshOff = Environment.GetEnvironmentVariable("P3D_CAPSPHEREPREVIEW") == "0";
+    public static readonly bool PreviewFullCheck = Environment.GetEnvironmentVariable("P3D_CAPSPHEREPREVIEW") is "0" or "full";
+    /// <summary>P3D_CAPSPHEREANALYTIC=0 — булевы заполнителя пробуют и многогранный путь (прежде — 10–24 с на отказах).</summary>
+    public static readonly bool AnalyticOnlyOff = Environment.GetEnvironmentVariable("P3D_CAPSPHEREANALYTIC") == "0";
+
+    private static bool SameCylinder(Geometry.Ssi.Cylinder a, Geometry.Ssi.Cylinder b)
+    {
+        var aa = a.Axis.Normalized(); var bb = b.Axis.Normalized();
+        if (Math.Abs(Math.Abs(Vector3d.Dot(aa, bb)) - 1) > 1e-9 || Math.Abs(a.R - b.R) > 1e-9 * Math.Max(1, a.R)) return false;
+        var d = b.P - a.P; d -= aa * Vector3d.Dot(d, aa);
+        return d.Length < 1e-7 * Math.Max(1, a.R);
+    }
+
+    private static bool RoundCapSphere(List<TSolid> bodies, IReadOnlyList<EdgeRef> edges, double r, List<string> warnings)
+    {
+        if (bodies.Count != 1 || edges.Count != 1 || !(r > 0)) return false;
+        var B = bodies[0];
+        var e = Resolve(bodies, edges[0]);
+        if (e == null || e.FaceA == null || e.FaceB == null) return false;
+        TFace flat = e.FaceA.Surface.IsPlanar ? e.FaceA : e.FaceB, sphF = ReferenceEquals(flat, e.FaceA) ? e.FaceB : e.FaceA;
+        if (!flat.Surface.IsPlanar || Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(flat)) is not Geometry.Ssi.Plane capP) return false;
+        if (Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(sphF)) is not Geometry.Ssi.Sphere sp) return false;
+        if (Vector3d.Dot(sphF.NormalAt(e.Curve.PointAt(0.5 * (e.Curve.T0 + e.Curve.T1))), e.Curve.PointAt(0.5 * (e.Curve.T0 + e.Curve.T1)) - sp.C) <= 0) { RebuildDebug?.Invoke("cap/sphere: concave sphere face"); return false; }
+        var n = capP.N.Normalized();
+        // стенка: соседняя с торцом грань — круговой цилиндр с осью по нормали торца
+        Geometry.Ssi.Cylinder? cyl = null; ArcCurve3? wb = null;
+        foreach (var ce in flat.Edges)
+        {
+            if (ReferenceEquals(ce, e)) continue;
+            var other = ReferenceEquals(ce.FaceA, flat) ? ce.FaceB : ce.FaceA;
+            if (other == null || GeometryAudit.AuthoritativeSurface(other) is not ExtrudedSurface ws || ws.Base is not ArcCurve3 b0) continue;
+            if (Geometry.ExactEdges.ShapeOf(ws) is not Geometry.Ssi.Cylinder c0 || Math.Abs(Math.Abs(Vector3d.Dot(c0.Axis.Normalized(), n)) - 1) > 1e-9) continue;
+            cyl = c0; wb = b0; break;
+        }
+        if (cyl == null || wb == null) { RebuildDebug?.Invoke("cap/sphere: no cylinder wall at the cap"); return false; }
+        var ax = cyl.Axis.Normalized();
+        double hCap = Vector3d.Dot(capP.P - cyl.P, ax);
+        double? hTop = null;
+        foreach (var f in B.Faces)
+        {
+            if (ReferenceEquals(f, flat) || !f.Surface.IsPlanar) continue;
+            if (Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) is not Geometry.Ssi.Plane pl || Math.Abs(Math.Abs(Vector3d.Dot(pl.N.Normalized(), ax)) - 1) > 1e-9) continue;
+            if (!f.Edges.Any(x => x.FaceA is { } fa && x.FaceB is { } fb && (GeometryAudit.AuthoritativeSurface(fa) is ExtrudedSurface es1 && Geometry.ExactEdges.ShapeOf(es1) is Geometry.Ssi.Cylinder c1 && SameCylinder(c1, cyl) || GeometryAudit.AuthoritativeSurface(fb) is ExtrudedSurface es2 && Geometry.ExactEdges.ShapeOf(es2) is Geometry.Ssi.Cylinder c2 && SameCylinder(c2, cyl)))) continue;
+            double h = Vector3d.Dot(pl.P - cyl.P, ax);
+            if (Math.Abs(h - hCap) < 1e-6) continue;
+            hTop = h; break;
+        }
+        if (hTop == null) { RebuildDebug?.Invoke("cap/sphere: no opposite cap"); return false; }
+        var w = ax * Math.Sign(hTop.Value - hCap);                  // от торца в материал цилиндра
+        double z0 = Vector3d.Dot(capP.P - sp.C, w), rs = sp.R;    // высота торца над центром шара
+        if (!(Math.Abs(z0) < rs - 1e-6)) { RebuildDebug?.Invoke("cap/sphere: the cap does not cut the sphere"); return false; }
+        // C и проверка разложения B = C ∪ S
+        var wf = wb.Frame;
+        double hBase = Vector3d.Dot(wf.Origin - cyl.P, ax);
+        Frame3 CircleFrame(double h) => new Frame3(wf.Origin + ax * (h - hBase), wf.U, wf.V);
+        TSolid Cyl(double h0, double h1)
+        {
+            var fr = CircleFrame(h0);
+            return ExtrudeOp.Build(ProfileBuilder.Build(fr, new List<ICurve3> { new ArcCurve3(fr, cyl.R, wb.A0, wb.A0 + 2 * Math.PI) }), ax * (h1 - h0));
+        }
+        bool preview = KernelSettings.Capture().LivePreview;
+        // предпросмотр: разложение не проверяется объёмом (точная булева ~0.5 с) — его проверит расчёт по «ОК»
+        // проверка разложения (P3D_CAPSPHEREPAR=1 — параллельно построению заполнителя)
+        double? vB0 = AnalyticVolume.Of(B);   // тело читается только здесь, не из задачи (ленивые кэши граней)
+        string? Decomp()
+        {
+            bool ao = BooleanOp.AnalyticOnly; BooleanOp.AnalyticOnly = !AnalyticOnlyOff;
+            try
+            {
+                var U = new List<TSolid> { Cyl(hCap, hTop.Value) };
+                BooleanOp.Unite(U, PrimitiveOp.Sphere(sp.C, rs), new List<string>());
+                double? vB = vB0, vU = U.Count == 1 ? AnalyticVolume.Of(U[0]) : null;
+                if (vB == null || vU == null || Math.Abs(vB.Value - vU.Value) > 1e-7 * Math.Abs(vB.Value)) return $"cap/sphere: decomposition volume {vU} vs body {vB}";
+                return null;
+            }
+            catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { return "cap/sphere: C ∪ S: " + ex.Message; }
+            finally { BooleanOp.AnalyticOnly = ao; }
+        }
+        System.Threading.Tasks.Task<string?>? decomp = null;
+        if (!preview || PreviewFullCheck)
+        {
+            if (ParallelOff) { var de = Decomp(); if (de != null) { RebuildDebug?.Invoke(de); return false; } }
+            else { decomp = System.Threading.Tasks.Task.Run(Decomp); Interlocked.Increment(ref CapSphereParallel); }
+        }
+        bool DecompFailed()
+        {
+            if (decomp == null) return false;
+            var de = decomp.GetAwaiter().GetResult();
+            if (de != null) RebuildDebug?.Invoke(de);
+            return de != null;
+        }
+        // сечение (ρ, z) в плоскости через ось шара (O, w)
+        var u = Vector3d.Cross(w, Math.Abs(w.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY).Normalized();
+        var O = sp.C;
+        Vector3d P2(double rho, double z) => O + u * rho + w * z;
+        double rhoE = Math.Sqrt(rs * rs - z0 * z0), qz = z0 - r, rhoC = Math.Sqrt((rs + r) * (rs + r) - qz * qz);
+        double tsr = rhoC * rs / (rs + r), tsz = qz * rs / (rs + r);           // точка касания с шаром
+        var pf = new Frame3(O, u, w);
+        // дуга шара скругления — короткая, от точки касания торца (угол π/2) к точке касания шара (в сторону центра шара,
+        // угол в (π/2, 3π/2)); atan2 даёт его в (−π, π] — при R < z0 он отрицателен, и дуга шла длинным путём (тело ×7)
+        double aTs = Math.Atan2(tsz - qz, tsr - rhoC);
+        if (aTs < Math.PI / 2) aTs += 2 * Math.PI;
+        var torusArc = new ArcCurve3(new Frame3(P2(rhoC, qz), u, w), r, Math.PI / 2, aTs);
+        var sphArc = new ArcCurve3(pf, rs, Math.Atan2(tsz, tsr), Math.Atan2(z0, rhoE));
+        TSolid G;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        bool wasAo = BooleanOp.AnalyticOnly;
+        BooleanOp.AnalyticOnly = !preview && !AnalyticOnlyOff;
+        try
+        {
+            var prof = ProfileBuilder.Build(pf, new List<ICurve3> { new LineCurve3(P2(rhoE, z0), P2(rhoC, z0)), torusArc, sphArc });
+            if (prof.IsEmpty) { BooleanOp.AnalyticOnly = wasAo; RebuildDebug?.Invoke("cap/sphere: empty filler section"); return false; }
+            var F = RevolveOp.Build(prof, new Frame3(O, u, Vector3d.Cross(w, u)), 0, 2 * Math.PI);
+            foreach (var f in F.Faces) if (Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) is Geometry.Ssi.Torus) f.Tag = "round:blend";
+            double below = z0 - Math.Min(tsz, qz) + r + 1, above = Math.Min(r, 0.5 * Math.Abs(hTop.Value - hCap));
+            double hc = hCap, sgn = Math.Sign(hTop.Value - hCap);
+            var Cext = sgn > 0 ? Cyl(hc - below, hc + above) : Cyl(hc - above, hc + below);
+            if (preview && !PreviewMeshOff)
+            {
+                // предпросмотр — обе булевы по сеткам (точный общий путь шёл и в предпросмотре: 1.8 с)
+                BooleanOp.AnalyticOnly = wasAo;
+                // Заполнитель с запасом в материал тела: снизу — хорда внутри шара вместо дуги шара, сверху — на δ выше торца
+                // (там цилиндр). Совпадающих поверхностей нет, объединение — просто две оболочки (перекрытие внутри материала):
+                // сеточная булева с совпадающими шаром и торцом теряла заполнитель (объём −116 мм³, 992 дефекта).
+                TSolid? pg, pr = null;
+                using (Diagnostics.Prof.Time("скругление: заполнитель по сеткам"))
+                {
+                    double dl = Math.Max(0.02, 0.05 * r);
+                    double rhoA = Math.Min(rhoE, Math.Sqrt(Math.Max(0, rs * rs - (z0 + dl) * (z0 + dl)))) - dl;
+                    double k = 1 - dl / rs;
+                    var pprof = ProfileBuilder.Build(pf, new List<ICurve3> {
+                        new LineCurve3(P2(rhoA, z0 + dl), P2(rhoC, z0 + dl)), new LineCurve3(P2(rhoC, z0 + dl), P2(rhoC, z0)), torusArc,
+                        new LineCurve3(P2(tsr, tsz), P2(tsr * k, tsz * k)), new LineCurve3(P2(tsr * k, tsz * k), P2(rhoA, z0 + dl)) });
+                    var Fp = RevolveOp.Build(pprof, new Frame3(O, u, Vector3d.Cross(w, u)), 0, 2 * Math.PI);
+                    double hc2 = hCap, sg2 = Math.Sign(hTop.Value - hCap), below2 = z0 - Math.Min(tsz, qz) + r + 1, above2 = 2 * dl;
+                    var Cp = sg2 > 0 ? Cyl(hc2 - below2, hc2 + above2) : Cyl(hc2 - above2, hc2 + below2);
+                    pg = MeshCut.Solid(Fp, Cp, MeshCut.Op.Intersect);
+                    if (pg != null) pr = MeshCut.Concat(B, pg);
+                }
+                if (pr == null) { RebuildDebug?.Invoke("cap/sphere: preview mesh cut failed"); return false; }
+                if (DecompFailed()) return false;
+                RebuildDebug?.Invoke($"cap/sphere: preview {sw.ElapsedMilliseconds} ms");
+                bodies[0] = pr;
+                warnings.Add("Round: the concave edge between the cylinder end and the sphere — preview on meshes.");
+                Interlocked.Increment(ref CapSpherePreviews);
+                return true;
+            }
+            var gi = BooleanOp.Evaluate(new List<TSolid> { F }, Cext, BooleanOp.BooleanKind.Intersect, OperationPolicy.Strict, new List<string>());
+            if (gi.Outcome != OperationOutcome.Success || gi.Bodies.Count != 1) { BooleanOp.AnalyticOnly = wasAo; RebuildDebug?.Invoke($"cap/sphere: F ∩ C⁺: {gi.Outcome} {gi.Guarantee} {gi.FailureCode}"); return false; }
+            G = gi.Bodies[0];
+        }
+        catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { BooleanOp.AnalyticOnly = wasAo; RebuildDebug?.Invoke("cap/sphere: filler: " + ex.Message); return false; }
+        RebuildDebug?.Invoke($"cap/sphere: filler {sw.ElapsedMilliseconds} ms");
+        OperationResult ev;
+        try { ev = BooleanOp.Evaluate(new List<TSolid> { TopologyClone.Deep(B) }, G, BooleanOp.BooleanKind.Unite, OperationPolicy.Strict, new List<string>()); }
+        finally { BooleanOp.AnalyticOnly = wasAo; }
+        RebuildDebug?.Invoke($"cap/sphere: B ∪ G {ev.Outcome} {ev.Guarantee} {sw.ElapsedMilliseconds} ms");
+        if (ev.Outcome != OperationOutcome.Success || ev.Bodies.Count != 1) return false;
+        if (!preview)
+        {
+            if (ev.Guarantee is not (GuaranteeLevel.ExactAnalytic or GuaranteeLevel.ExactQuadric)) { RebuildDebug?.Invoke("cap/sphere: not exact"); return false; }
+            double? vB = AnalyticVolume.Of(B), vG = AnalyticVolume.Of(G), vR = AnalyticVolume.Of(ev.Bodies[0]);
+            if (vB == null || vG == null || vR == null || Math.Abs(vR.Value - vB.Value - vG.Value) > 1e-6 * Math.Max(1, vB.Value) || vG.Value <= 0)
+            { RebuildDebug?.Invoke($"cap/sphere: volume {vR} ≠ {vB} + {vG}"); return false; }
+        }
+        if (DecompFailed()) return false;
+        var result = ev.Bodies[0];
+        foreach (var f in result.Faces)
+        {
+            var sf = Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f));
+            var same = B.Faces.FirstOrDefault(g => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(g)) is { } sg && sf != null && SameShape(sf, sg));
+            if (same != null) f.Tag = same.Tag;
+        }
+        bodies[0] = result;
+        warnings.Add("Round: direct blend (1 edge(s), exact blend surfaces): the concave edge between the cylinder end and the sphere — a filler of revolution about the sphere axis, trimmed by the cylinder.");
+        Interlocked.Increment(ref CapSphereRounds);
         return true;
     }
 
