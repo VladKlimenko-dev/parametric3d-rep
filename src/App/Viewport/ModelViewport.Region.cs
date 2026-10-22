@@ -120,6 +120,8 @@ public sealed partial class ModelViewport
     }
 
     /// <summary>Что попадает в область: целиком (окно) или хоть одной точкой (секущая рамка). Учитывает фильтр выбора.</summary>
+    static readonly bool RegionAllPointsOff = Environment.GetEnvironmentVariable("P3D_REGIONALLPOINTS") == "0";
+
     public List<PickRef> ItemsInRegion(IReadOnlyList<Point> poly, bool crossing)
     {
         var res = new List<PickRef>();
@@ -162,7 +164,9 @@ public sealed partial class ModelViewport
                 var seen = new HashSet<SkPoint>(ReferenceEqualityComparer.Instance);
                 foreach (var e in sk.Entities)
                 {
-                    if (e is SkPoint || chosen.Contains(e) || e.Role == SkRole.Reference) continue;
+                    // k98 (замечание 10): и у выбранных рамкой фигур — их точки тоже (прежде — только у невыбранных: рамка вокруг
+                    // ломаной давала отрезки и одну точку). P3D_REGIONALLPOINTS=0 — прежнее.
+                    if (e is SkPoint || (chosen.Contains(e) && RegionAllPointsOff) || e.Role == SkRole.Reference) continue;
                     foreach (var h in e.Handles)
                         if (seen.Add(h) && !res.Any(r => ReferenceEquals(r.Target, h)) && Hit(new[] { W(h.P) })) res.Add(new PickRef(h.Id, PickKind.SketchPoint, sk, h));
                 }

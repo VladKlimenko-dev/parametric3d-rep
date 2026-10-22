@@ -26,6 +26,9 @@ public partial class MainWindow
     private Border ShapeBar = null!, SketchBar = null!, ViewBar = null!;
     private WrapPanel ShapeStack = null!;
     private Border DimBar = null!;
+    private Border SketchSetBar = null!;
+    private WrapPanel ToolTray = null!;
+    private WrapPanel SketchSetStack = null!;
     private WrapPanel DimStack = null!;
     private Border TreeDropLine = null!;
     private TextBlock ShapeHeader = null!;
@@ -84,6 +87,9 @@ public partial class MainWindow
         SketchBar = this.FindControl<Border>("SketchBar")!;
         ShapeStack = this.FindControl<WrapPanel>("ShapeStack")!;
         DimBar = this.FindControl<Border>("DimBar")!;
+        SketchSetBar = this.FindControl<Border>("SketchSetBar")!;
+        ToolTray = this.FindControl<WrapPanel>("ToolTray")!;
+        SketchSetStack = this.FindControl<WrapPanel>("SketchSetStack")!;
         DimStack = this.FindControl<WrapPanel>("DimStack")!;
         TreeDropLine = this.FindControl<Border>("TreeDropLine")!;
         ShapeHeader = this.FindControl<TextBlock>("ShapeHeader")!;

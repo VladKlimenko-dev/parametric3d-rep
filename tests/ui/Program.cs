@@ -103,6 +103,17 @@ if (only == "probe-selftest")
     return 0;
 }
 
+if (only == "probe-icons")
+{
+    // разбор: рамка рисунка каждой иконки (доля листа)
+    foreach (var f in Directory.GetFiles(Path.Combine(AppContext.BaseDirectory), "*.svg", SearchOption.AllDirectories).Select(Path.GetFileName).Concat(File.ReadAllLines(Path.Combine(AppContext.BaseDirectory, "icons.tsv")).Where(l => !l.StartsWith("#") && l.Length > 0).Select(l => l.Split('\t')[0])).Distinct())
+    {
+        IconProvider.Get(f);
+        Console.WriteLine($"ICON {f}: {(IconProvider.ContentBox(f!) is { } b ? $"{b.W:0.#}x{b.H:0.#} at {b.X:0.#},{b.Y:0.#}" : "full")}");
+    }
+    return 0;
+}
+
 if (only == "probe-load")
 {
     // разбор: скругления на реальной детали, перезагрузка из снимка (как «отменить»/«вернуть») — время операции до и после
@@ -766,6 +777,8 @@ Check("UI-ICONS-USER-SET", () =>
         var m = System.Text.RegularExpressions.Regex.Match(text, "viewBox=\"[-\\d.]+ [-\\d.]+ ([\\d.]+) ([\\d.]+)\"");
         if (!m.Success || !text.Contains("preserveAspectRatio=\"xMidYMid meet\"")) { bad.Add(f + ": no viewBox/preserveAspectRatio"); continue; }
         double vw = double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture), vh = double.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
+        // k98: иконка с полями вписана по рисунку — пропорции рамки рисунка (с полем 4 %)
+        if (IconProvider.ContentBox(f) is { } cb) { vw = cb.W; vh = cb.H; }
         if (Math.Abs(img.Size.Width / img.Size.Height - vw / vh) > 1e-6) bad.Add($"{f}: drawing {img.Size} vs file {vw}x{vh}");
         var r = IconProvider.Fit(img.Size, new Rect(0, 0, 24, 24));
         if (Math.Abs(r.Width / r.Height - vw / vh) > 1e-6 || r.Width > 24.0001 || r.Height > 24.0001 || Math.Abs(r.Center.X - 12) > 1e-9 || Math.Abs(r.Center.Y - 12) > 1e-9) bad.Add($"{f}: fit {r}");
@@ -1074,8 +1087,11 @@ Check("UI-TOOLBAR-TRAY", () =>
     var area = w.FindControl<Grid>("ViewArea")!;
     void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
     Run();
-    string[] names = { "CommandBar", "ViewBar", "ShapeBar", "SketchBar" };
+    string[] names = { "CommandBar", "ShapeBar", "SketchBar", "DimBar", "SketchSetBar" };
     foreach (var n in names) Require(w.FindControl<Border>(n)!.Parent == tray, n + " is not in the toolbar tray");
+    // k98 (замечание 1): вид и стиль — в окне вида сверху посередине
+    var vbar = w.FindControl<Border>("ViewBar")!;
+    Require(vbar.Parent == area && vbar.HorizontalAlignment == Avalonia.Layout.HorizontalAlignment.Center && vbar.VerticalAlignment == Avalonia.Layout.VerticalAlignment.Top, "view bar is not at the top centre of the view");
     // (13:09): панель предложенных операций — внизу вида, поверх него (не в полосе)
     var ctxBar = w.FindControl<Border>("ContextBar")!;
     Require(ctxBar.Parent == area && ctxBar.VerticalAlignment == Avalonia.Layout.VerticalAlignment.Bottom && !ctxBar.GetVisualAncestors().Contains(trayBorder), "context bar is not at the bottom of the view");
@@ -2769,6 +2785,93 @@ Check("UI-OP-RELEASE", () =>
     Require(alive <= 1, $"replaced parts still alive: {alive} of {weak.Count}");
 });
 
+Check("UI-SKETCH-K98", () =>
+{
+    // k98 (отзыв 08:25): очерк цилиндра в эскизе виден всегда (2); подпись радиуса горизонтальна, продолжение дуги до луча
+    // размера (3, 4); значок касания — у своего конца дуги (5); фаска — два размера катетов (6); подпись без контура (7);
+    // «Вертикально» у почти вертикального отрезка (8); угловой размер снаружи — подпись вне угла (9); рамка — все точки
+    // (10); без «Вырез выдавливанием» (11); иконки — по рисунку (13); порядок панелей эскиза (14)
+    var s = DocumentSession.NewPart();
+    var part = s.Part!;
+    var s1 = part.AddSketch("S1", Parametric3D.Kernel.Frame3.XY, part.PlaneXY.Id);
+    s1.AddEntity(new SkCircle(new SkPoint(0, 0), 10));
+    part.AddFeature(new ExtrudeFeature { SketchId = s1.Id });
+    s.Document.RebuildDirty();
+    var w = Open(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    // (11)
+    var cmdIds = w.FindControl<WrapPanel>("CommandStack")!.Children.OfType<Avalonia.Controls.Primitives.TemplatedControl>().Select(b => (b.Tag as AppCommand)?.Id).ToHashSet();
+    Require(!cmdIds.Contains("op.cut") && cmdIds.Contains("op.extrude"), "extruded cut button is still on the bar");
+    w.SelectItem(part.PlaneXZ);
+    w.StartOperation(new SketchOp());
+    var vp = w.ViewPort; var sk = vp.ActiveSketch!;
+    vp.EnterSketch(sk, animate: false); Run();
+    // (14) порядок панелей
+    var tray = w.FindControl<WrapPanel>("ToolTray")!;
+    var visible = tray.Children.OfType<Border>().Where(b => b.IsVisible).Select(b => b.Name).ToList();
+    Require(visible.SequenceEqual(new[] { "SketchSetBar", "ShapeBar", "CommandBar", "DimBar", "SketchBar" }), "sketch panels order: " + string.Join(", ", visible));
+    // (8) вид эскиза: ось U — вправо, V — вверх
+    var camUp = vp.Camera.Up; var vAx = sk.Plane.V;
+    Require(Vector3.Dot(camUp, new Vector3((float)vAx.X, (float)vAx.Y, (float)vAx.Z)) > 0.99f, $"sketch view up {camUp} is not the sketch V axis");
+    var lv = sk.AddEntity(new SkLine(new SkPoint(30, 0), new SkPoint(31, 20)));
+    vp.Selection.Clear(); vp.Selection.Select(new PickRef(lv.Id, PickKind.SketchCurve, sk, lv), additive: false);
+    Require(SketchCommands.Constrain(w, ConstraintType.Vertical), "vertical refused");
+    Require(Math.Abs(lv.A.X - lv.B.X) < 1e-7 && Math.Abs(lv.A.Y - lv.B.Y) > 10, $"near-vertical line after «Vertical»: {lv.A.P} {lv.B.P}");
+    // (2) очерк цилиндра
+    vp.BuildOverlayForTest();
+    Require(vp.SilhouetteDrawn >= 2, $"cylinder silhouettes drawn: {vp.SilhouetteDrawn}");
+    // (5, 6) скругление и фаска ломаной
+    var p0 = new SkPoint(60, 0); var p1 = new SkPoint(100, 0); var p2 = new SkPoint(100, 40);
+    var a1 = sk.AddEntity(new SkLine(p0, p1)); var a2 = sk.AddEntity(new SkLine(p1, p2));
+    sk.AddConstraint(ConstraintType.Horizontal, a1); sk.AddConstraint(ConstraintType.Vertical, a2);
+    int nd = sk.Dimensions.Count;
+    Require(CornerTool.Apply(sk, new Vector2d(100, 0), true, 5), "chamfer refused");
+    var cd = sk.Dimensions.Skip(nd).ToList();
+    Require(cd.Count == 2 && cd.All(d => d.Type == DimensionType.DistancePointLine && d.IsDriving && Math.Abs(d.Value - 5) < 1e-6), $"chamfer dimensions: {string.Join(", ", cd.Select(d => $"{d.Type} {d.Value:0.##}"))}");
+    Require(sk.Solve(s.Document.Solver) is SolveStatus.Ok or SolveStatus.Underconstrained, "sketch after chamfer does not solve");
+    var q0 = new SkPoint(60, 60); var q1 = new SkPoint(100, 60); var q2 = new SkPoint(100, 100);
+    var b1 = sk.AddEntity(new SkLine(q0, q1)); var b2 = sk.AddEntity(new SkLine(q1, q2));
+    Require(CornerTool.Apply(sk, new Vector2d(100, 60), false, 8), "fillet refused");
+    var fa = sk.Entities.OfType<SkArc>().Last();
+    var tans = sk.Constraints.Where(c => c.Type == ConstraintType.Tangent && c.Items.Contains(fa)).ToList();
+    var tps = tans.Select(c => Parametric3D.Render.ConstraintLayout.TangentPoint(c)).ToList();
+    Require(tps.Count == 2 && tps.All(t => t != null) && tps.Any(t => (t!.Value - fa.Start.P).Length < 1e-6) && tps.Any(t => (t!.Value - fa.End.P).Length < 1e-6), "tangent glyph points are not at the arc ends");
+    Parametric3D.Render.ConstraintLayout.Build(sk, vp.PixelSize);
+    foreach (var c in tans)
+        Require(c.GlyphPositions.Count == 1 && ((c.GlyphPositions[0] - fa.Start.P).Length < 40 * vp.PixelSize || (c.GlyphPositions[0] - fa.End.P).Length < 40 * vp.PixelSize), "tangent glyph is not near its arc end");
+    // (3, 4) радиус скругления: луч мимо дуги — продолжение дуги; подпись горизонтальна на экране
+    var rd = sk.AddDimension(DimensionType.Radius, 8, fa); rd.Locked = true;
+    rd.TextOffset = new Vector2d(-1, -1) * 3;   // луч внутрь угла, мимо дуги
+    SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+    Require(Math.Abs(SketchDimensions.LastArcExtension) > 1e-3, "no arc extension for a radius pointing past the arc");
+    rd.TextOffset = (fa.Start.P + fa.End.P) * 0.5 - fa.Center.P;   // луч на середину дуги
+    SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+    Require(Math.Abs(SketchDimensions.LastArcExtension) < 1e-12, "arc extension drawn for a ray on the arc");
+    var tdir = SketchDimensions.LastTextDir; var sr = SketchDimensions.ScreenRight.Normalized();
+    Require(Math.Abs(tdir.X * sr.Y - tdir.Y * sr.X) < 1e-9, $"radius text direction {tdir} is not horizontal on the screen ({sr})");
+    // (9) угловой размер снаружи — подпись вне угла
+    var l1 = sk.AddEntity(new SkLine(new SkPoint(150, 0), new SkPoint(200, 0))); var l2 = sk.AddEntity(new SkLine(new SkPoint(150, 0), new SkPoint(190, 20)));
+    var ad = sk.AddDimension(DimensionType.AngleLineLine, 26.57, l1, l2);
+    ad.Arrows = ArrowPlacement.Inside; SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+    double inAt = SketchDimensions.LastAngleTextAt;
+    ad.Arrows = ArrowPlacement.Outside; SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+    double outAt = SketchDimensions.LastAngleTextAt, sweepA = Math.Atan2(20, 40);
+    Require(inAt < sweepA && outAt > sweepA + 1e-3, $"angle text at {inAt:0.###} (inside) / {outAt:0.###} (outside), angle {sweepA:0.###}");
+    // (7) подпись — заливка без контура
+    var fill = new List<List<Vector2d>>();
+    StrokeFont.LayoutFill(SketchDimensions.Label(ad), Vector2d.Zero, Vector2d.UnitX, Vector2d.UnitY, 1, 0.7 / SketchDimensions.TextHeightPx, 0, fill);
+    Require(!StrokeFont.UseGost || SketchDimensions.LastTextSegments == fill.Count, $"text segments {SketchDimensions.LastTextSegments}, fill rows {fill.Count} (outline drawn over the fill)");
+    // (10) рамка вокруг ломаной — и отрезки, и все их точки
+    var r0 = vp.Project(sk.Plane.ToWorld(new Vector2d(55, -5)))!.Value; var r1 = vp.Project(sk.Plane.ToWorld(new Vector2d(105, 45)))!.Value;
+    var inBox = vp.ItemsInRegion(new List<Avalonia.Point> { r0, new(r1.X, r0.Y), r1, new(r0.X, r1.Y) }, crossing: false);
+    int pts = inBox.Count(r => r.Kind == PickKind.SketchPoint), crv = inBox.Count(r => r.Kind == PickKind.SketchCurve);
+    Require(crv >= 3 && pts >= 4, $"box selection: {crv} curves, {pts} points");
+    // (13) иконка с полями вписывается по рисунку
+    var anyFit = new[] { "dim_linear_but.svg", "f_revolve_but.svg", "dim_angle_but.svg", "dim_radius_but.svg" }.Select(f => { IconProvider.Get(f); return IconProvider.ContentBox(f); }).ToList();
+    Require(anyFit.Any(b => b != null), "no icon was fitted to its drawing");
+    w.FinishSketch();
+});
+
 Check("UI-SKETCH-K97", () =>
 {
     // k97 (отзыв 21:14): панель размеров (10); скругление угла ломаной (12); оси эскиза — после его элементов (13); значок
@@ -2886,6 +2989,7 @@ Check("UI-SKETCH-K96", () =>
     var ids = stack.Children.OfType<Avalonia.Controls.Primitives.TemplatedControl>().Select(b => (b.Tag as AppCommand)?.Id).Where(x => x != null).ToHashSet();
     // k97 (замечание 10): размеры — своей панелью (DimBar) в полосе
     ids.UnionWith(w.FindControl<WrapPanel>("DimStack")!.Children.OfType<Avalonia.Controls.Primitives.TemplatedControl>().Select(b => (b.Tag as AppCommand)?.Id).Where(x => x != null)!);
+    ids.UnionWith(w.FindControl<WrapPanel>("SketchSetStack")!.Children.OfType<Avalonia.Controls.Primitives.TemplatedControl>().Select(b => (b.Tag as AppCommand)?.Id).Where(x => x != null)!);
     foreach (var id in new[] { "dim.smart", "dim.linear", "dim.radius", "dim.diameter", "dim.angle", "dim.arc_length", "con.coincident", "con.point_on", "con.midpoint", "con.horizontal",
                                "con.vertical", "con.parallel", "con.perpendicular", "con.collinear", "con.tangent", "con.equal", "con.concentric", "con.symmetric", "con.fix",
                                "sk.construction", "sk.grid", "sk.snap_items", "sk.show_open_ends", "sk.show_filled", "sk.references", "sk.setup", "sk.resolve" })

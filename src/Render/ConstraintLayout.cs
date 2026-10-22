@@ -82,6 +82,15 @@ public static class ConstraintLayout
             if (!c.Enabled) continue;
             if (IconMode ? IconOf(c.Type).Length == 0 : ConstraintGlyphs.Get(c.Type).Length == 0) continue;
 
+            // k98 (замечание 5): касание — ОДИН значок у точки касания (у скругления угла — у своего конца дуги), а не по
+            // значку у середины отрезка и центра дуги (два значка скругления сходились у центра)
+            if (c.Type == ConstraintType.Tangent && !TangentAtPointOff && TangentPoint(c) is { } tp)
+            {
+                var prow = rows.FirstOrDefault(r => !r.AlongLine && (r.Position - tp).Length <= merge);
+                if (prow == null) { prow = new Row { Position = tp, Direction = new Vector2d(1, 0) }; rows.Add(prow); }
+                prow.Items.Add(c);
+                continue;
+            }
             var seen = new HashSet<Row>();
             foreach (var item in c.Items)
             {
@@ -158,6 +167,41 @@ public static class ConstraintLayout
             }
         }
         return result;
+    }
+
+    /// <summary>Мутация P3D_TANGENTGLYPH=0: значки касания — у участников (прежде).</summary>
+    public static readonly bool TangentAtPointOff = Environment.GetEnvironmentVariable("P3D_TANGENTGLYPH") == "0";
+
+    /// <summary>Точка касания: конец дуги на прямой (ближний к ней), иначе основание перпендикуляра из центра; у дуг и
+    /// окружностей — на линии центров.</summary>
+    public static Vector2d? TangentPoint(SkConstraint c)
+    {
+        if (c.Items.Count < 2) return null;
+        var line = c.Items.OfType<SkLine>().FirstOrDefault();
+        var rounds = c.Items.Where(x => x is SkArc or SkCircle).ToList();
+        static (Vector2d C, double R) CR(SkEntity e) => e is SkArc a ? (a.Center.P, a.Radius) : (((SkCircle)e).Center.P, ((SkCircle)e).Radius);
+        if (line != null && rounds.Count == 1)
+        {
+            var d = line.B.P - line.A.P; double l2 = d.LengthSquared; if (l2 < 1e-18) return null;
+            if (rounds[0] is SkArc a)
+            {
+                double Dist(Vector2d p) { double t = Vector2d.Dot(p - line.A.P, d) / l2; return (line.A.P + d * t - p).Length; }
+                var e = Dist(a.Start.P) <= Dist(a.End.P) ? a.Start.P : a.End.P;
+                if (Dist(e) <= 1e-6 * Math.Max(1, a.Radius)) return e;
+            }
+            var (cc, _) = CR(rounds[0]);
+            double tt = Vector2d.Dot(cc - line.A.P, d) / l2;
+            return line.A.P + d * tt;
+        }
+        if (rounds.Count == 2)
+        {
+            var (c0, r0) = CR(rounds[0]); var (c1, r1) = CR(rounds[1]);
+            var v = c1 - c0; double L = v.Length; if (L < 1e-12) return null;
+            v /= L;
+            // внешнее касание — на расстоянии r0 от первого центра к второму; внутреннее — со стороны большего радиуса
+            return Math.Abs(L - (r0 + r1)) <= Math.Abs(L - Math.Abs(r0 - r1)) ? c0 + v * r0 : (r0 >= r1 ? c0 + v * r0 : c0 - v * r0);
+        }
+        return null;
     }
 
     /// <summary>Точка и направление строки значков для участника ограничения.</summary>

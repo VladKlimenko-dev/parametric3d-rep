@@ -1,4 +1,4 @@
-<Styles xmlns="https://github.com/avaloniaui"
+﻿<Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <!-- Кнопки панелей: плоские, подсветка при наведении, без рамки. -->
   <Style Selector="Button.tool">
@@ -43,6 +43,17 @@
   <Style Selector="ToggleButton.tool:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource P3.AccentSoft}" />
     <Setter Property="Foreground" Value="{DynamicResource P3.Text}" />
+  </Style>
+  <!-- k98 (замечание 12): всплывающие подсказки обрезались на последней букве («Revolv») — округление ширины текста при
+       дробном масштабе экрана; запас справа и перенос длинных строк -->
+  <Style Selector="ToolTip">
+    <Setter Property="Padding" Value="8,5,12,6" />
+    <Setter Property="MaxWidth" Value="420" />
+  </Style>
+  <Style Selector="ToolTip TextBlock">
+    <Setter Property="Padding" Value="0,0,4,0" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="TextTrimming" Value="None" />
   </Style>
   <Style Selector="TextBlock.dim">
     <Setter Property="Foreground" Value="{DynamicResource P3.TextDim}" />

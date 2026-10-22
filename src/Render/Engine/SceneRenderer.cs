@@ -343,7 +343,7 @@ public sealed class SceneRenderer : IDisposable
             GL.DepthFunc(DepthFunction.Lequal);
         }
         // без граней рёбра — светлые на тёмном фоне (тёмные на светлом), с гранями — тёмные
-        if (edges) DrawLines(_bodyEdges, f, 2e-5f, colorOverride: faces || Style == DisplayStyle.Transparent ? default : Theme.EdgeWire);
+        if (edges) DrawEdges(_bodyEdges, f, colorOverride: faces || Style == DisplayStyle.Transparent ? default : Theme.EdgeWire);
         if (Style == DisplayStyle.Transparent)
         {
             GL.DepthMask(false);
@@ -653,8 +653,25 @@ public sealed class SceneRenderer : IDisposable
         _line!.Use();
         _line.Set("uPickMode", 0);
         GL.DepthMask(false);
-        DrawLinesRaw(g, f, 2e-5f, 0, new Vector4(0, 0, 0, 0.0001f), 0);
+        _biasPx = EdgeBiasPxOff ? 0 : EdgeBiasPx;
+        try { DrawLinesRaw(g, f, 2e-5f, 0, new Vector4(0, 0, 0, 0.0001f), 0); } finally { _biasPx = 0; }
         GL.DepthMask(true);
+    }
+
+    /// <summary>
+    /// k98 (замечание 15): РЁБРА ТЕЛА — СДВИГ К ГЛАЗУ В ПИКСЕЛЯХ. Постоянный сдвиг глубины 2e-5 (в нормированных координатах)
+    /// в мире растёт с удалением (у перспективы — как квадрат расстояния): при уменьшении масштаба он доходил до миллиметров,
+    /// и ребро внутреннего выреза проступало сквозь стенку трубы. Теперь — доля пикселя на глубине точки (не зависит от
+    /// масштаба). P3D_EDGEBIASPX=0 — прежний сдвиг.
+    /// </summary>
+    public static readonly bool EdgeBiasPxOff = Environment.GetEnvironmentVariable("P3D_EDGEBIASPX") == "0";
+    public const float EdgeBiasPx = 0.8f;
+    private float _biasPx;
+
+    private void DrawEdges(InstGpu g, FrameParams f, Vector4 colorOverride = default, float dashOverride = 0)
+    {
+        _biasPx = EdgeBiasPxOff ? 0 : EdgeBiasPx;
+        try { DrawLines(g, f, 2e-5f, colorOverride, dashOverride); } finally { _biasPx = 0; }
     }
 
     private void DrawLinesRaw(InstGpu g, FrameParams f, float bias, float widthOverride, Vector4 colorOverride, float dashOverride)
@@ -664,6 +681,7 @@ public sealed class SceneRenderer : IDisposable
         _line!.Set("uScale", f.Scale);
         _line.Set("uNear", f.Near);
         _line.Set("uDepthBias", bias);
+        _line.Set("uBiasPx", _biasPx);
         _line.Set("uBonus", Theme.HighlightBonus);
         _line.Set("uWidthOverride", widthOverride);
         _line.Set("uColorOverride", colorOverride);
