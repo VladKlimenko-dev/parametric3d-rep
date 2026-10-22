@@ -201,6 +201,28 @@ public static class SsiEvents
     /// пополам по параметру кривой) и ни одного без неё; иначе звено делится пополам (точка кривой обязана лежать в шаре).
     /// Касание (не отделить до 1e-9 мм) и шар без доказательства — null: события не доказаны.
     /// </summary>
+    public static readonly bool OneSidedOff = Environment.GetEnvironmentVariable("P3D_TRACEDONESIDED") == "0";
+    static bool OneSidedOf(Ssi.Shape a, Ssi.Plane pl)
+    {
+        var n = pl.N.Normalized(); const double t = 1e-9;
+        switch (a)
+        {
+            case Ssi.Torus to:
+            {
+                var ax = to.Axis.Normalized();
+                if (Math.Abs(Math.Abs(Vector3d.Dot(ax, n)) - 1) > 1e-12) return false;
+                return Math.Abs(Math.Abs(Vector3d.Dot(to.C - pl.P, n)) - to.r) < t * Math.Max(1, to.R);
+            }
+            case Ssi.Sphere sp: return Math.Abs(Math.Abs(Vector3d.Dot(sp.C - pl.P, n)) - sp.R) < t * Math.Max(1, sp.R);
+            case Ssi.Cylinder cy:
+            {
+                if (Math.Abs(Vector3d.Dot(cy.Axis.Normalized(), n)) > 1e-12) return false;
+                return Math.Abs(Math.Abs(Vector3d.Dot(cy.P - pl.P, n)) - cy.R) < t * Math.Max(1, cy.R);
+            }
+            default: return false;
+        }
+    }
+
     static List<double>? TracedEvents(IntersectionCurve3 ic, Ssi.Shape s)
     {
         if (ExactEdges.ShapeOf(ic.A) is not { } sa || ExactEdges.ShapeOf(ic.B) is not { } sb) { TracedWhy = "shapes/ends"; return null; }
@@ -216,11 +238,16 @@ public static class SsiEvents
         // ОКРЕСТНОСТЬ КОНЦА: шов двух лент, касающихся общей грани, кончается в точке касания лент (A и B касаются — шара
         // единственности нет) и касается там плоскости грани. Неотделимое звено (≤ tiny) у конца кривой: событие в нём — в
         // пределах 1e-8·размер от вершины ребра, т. е. сама вершина (|F_s| в конце ≤ 1e-9 — событие в конце; иначе событий нет)
+        // k94: ПОВЕРХНОСТЬ ПО ОДНУ СТОРОНУ ПЛОСКОСТИ s (тор и плоскость, касающаяся его вершинной окружности; шар и касательная
+        // плоскость; цилиндр и касательная плоскость вдоль образующей): F_s на кривой знака не меняет, события — только касания.
+        // У почти двойного касания (окружность касания тора почти касается стенки — скругление «торец — шар», R3) кривая
+        // прилегает к плоскости дальше 1e-8·размер от вершины (|F_s| < 1e-15 на 1.4e-7 мм) — окрестность конца шире, 1e-5.
+        bool oneSided = !OneSidedOff && s is Ssi.Plane spl && (OneSidedOf(sa, spl) || OneSidedOf(sb, spl));
         bool EndExempt(double t0, double t1, Vector3d p0, Vector3d p1)
         {
             if (TracedEndOff) return false;
             if (TracedEndDbg) Console.Error.WriteLine($"TEND t {t0:R}..{t1:R} curve {T[0]:R}..{T[^1]:R} n {T.Length} A {sa.GetType().Name} B {sb.GetType().Name} s {s.GetType().Name} p0 {P[0]} p1 {P[^1]} ic {ic.T0:R}..{ic.T1:R}");
-            double near = 1e-8 * Math.Max(1, ext);
+            double near = (oneSided ? 1e-5 : 1e-8) * Math.Max(1, ext);
             bool atStart = Math.Max((p0 - P[0]).Length, (p1 - P[0]).Length) <= near, atEnd = Math.Max((p0 - P[^1]).Length, (p1 - P[^1]).Length) <= near;
             if (!atStart && !atEnd) return false;
             Interlocked.Increment(ref TracedEndExempt);
@@ -268,7 +295,7 @@ public static class SsiEvents
                 }
             }
             if ((2 * r < tiny || depth > 60) && EndExempt(t0, t1, p0, p1)) return;
-            if (2 * r < tiny || depth > 60) { ok = false; TracedWhy = $"tangency at {m:0.###}"; return; }                  // касание: не отделить
+            if (2 * r < tiny || depth > 60) { if (TracedEndDbg) Console.Error.WriteLine($"TTAN depth {depth} r {r:G3} tiny {tiny:G3} d0 {(m - P[0]).Length:G3} dN {(m - P[^1]).Length:G3} t {t0:R}..{t1:R} T {T[0]:R}..{T[^1]:R} fm {fm:G3} f0 {Fs(P[0]):G3} fN {Fs(P[^1]):G3}"); ok = false; TracedWhy = $"tangency at {m:0.###}"; return; }                  // касание: не отделить
             double tm = (t0 + t1) / 2; var q = ic.PointAt(tm);
             if ((q - m).Length > r) { ok = false; TracedWhy = "point outside ball"; return; }                         // точка кривой вне шара звена
             Seg(t0, tm, p0, q, depth + 1); Seg(tm, t1, q, p1, depth + 1);

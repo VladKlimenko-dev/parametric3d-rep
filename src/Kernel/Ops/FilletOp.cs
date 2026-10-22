@@ -293,6 +293,17 @@ public static class FilletOp
         Vector3d P2(double rho, double z) => O + u * rho + w * z;
         double rhoE = Math.Sqrt(rs * rs - z0 * z0), qz = z0 - r, rhoC = Math.Sqrt((rs + r) * (rs + r) - qz * qz);
         double tsr = rhoC * rs / (rs + r), tsz = qz * rs / (rs + r);           // точка касания с шаром
+        // КРИТИЧЕСКИЙ РАДИУС: окружность касания шара скругления с плоскостью торца проходит через дальнюю от оси шара точку
+        // края торца (ρ_max) — тор касается стенки в точке, грань тора у стенки вырождается в остриё. Около него точный путь
+        // отказывает (R5-сцена: R* = 3.08, отказ при 3.08…3.11) — отказ называет этот радиус.
+        var dAx = cyl.P - O; dAx -= w * Vector3d.Dot(dAx, w);
+        double rhoMax = dAx.Length + cyl.R;
+        double rCrit = (rhoMax * rhoMax - rs * rs + z0 * z0) / (2 * (rs + z0));
+        void NearCritical()
+        {
+            if (rCrit > 0 && Math.Abs(r - rCrit) < 0.05 * rCrit)
+                warnings.Add($"Round: the radius {r:0.###} is close to the critical value {rCrit:0.###} (the rolling ball touches the cap exactly at its edge next to the cylinder wall); the exact blend is not built there — try a radius farther from it (for example {rCrit * 0.97:0.##} or {rCrit * 1.03:0.##}).");
+        }
         var pf = new Frame3(O, u, w);
         // дуга шара скругления — короткая, от точки касания торца (угол π/2) к точке касания шара (в сторону центра шара,
         // угол в (π/2, 3π/2)); atan2 даёт его в (−π, π] — при R < z0 он отрицателен, и дуга шла длинным путём (тело ×7)
@@ -344,7 +355,7 @@ public static class FilletOp
                 return true;
             }
             var gi = BooleanOp.Evaluate(new List<TSolid> { F }, Cext, BooleanOp.BooleanKind.Intersect, OperationPolicy.Strict, new List<string>());
-            if (gi.Outcome != OperationOutcome.Success || gi.Bodies.Count != 1) { BooleanOp.AnalyticOnly = wasAo; RebuildDebug?.Invoke($"cap/sphere: F ∩ C⁺: {gi.Outcome} {gi.Guarantee} {gi.FailureCode}"); return false; }
+            if (gi.Outcome != OperationOutcome.Success || gi.Bodies.Count != 1) { BooleanOp.AnalyticOnly = wasAo; RebuildDebug?.Invoke($"cap/sphere: F ∩ C⁺: {gi.Outcome} {gi.Guarantee} {gi.FailureCode}"); NearCritical(); return false; }
             G = gi.Bodies[0];
         }
         catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { BooleanOp.AnalyticOnly = wasAo; RebuildDebug?.Invoke("cap/sphere: filler: " + ex.Message); return false; }
@@ -353,10 +364,10 @@ public static class FilletOp
         try { ev = BooleanOp.Evaluate(new List<TSolid> { TopologyClone.Deep(B) }, G, BooleanOp.BooleanKind.Unite, OperationPolicy.Strict, new List<string>()); }
         finally { BooleanOp.AnalyticOnly = wasAo; }
         RebuildDebug?.Invoke($"cap/sphere: B ∪ G {ev.Outcome} {ev.Guarantee} {sw.ElapsedMilliseconds} ms");
-        if (ev.Outcome != OperationOutcome.Success || ev.Bodies.Count != 1) return false;
+        if (ev.Outcome != OperationOutcome.Success || ev.Bodies.Count != 1) { NearCritical(); return false; }
         if (!preview)
         {
-            if (ev.Guarantee is not (GuaranteeLevel.ExactAnalytic or GuaranteeLevel.ExactQuadric)) { RebuildDebug?.Invoke("cap/sphere: not exact"); return false; }
+            if (ev.Guarantee is not (GuaranteeLevel.ExactAnalytic or GuaranteeLevel.ExactQuadric)) { RebuildDebug?.Invoke("cap/sphere: not exact"); NearCritical(); return false; }
             double? vB = AnalyticVolume.Of(B), vG = AnalyticVolume.Of(G), vR = AnalyticVolume.Of(ev.Bodies[0]);
             if (vB == null || vG == null || vR == null || Math.Abs(vR.Value - vB.Value - vG.Value) > 1e-6 * Math.Max(1, vB.Value) || vG.Value <= 0)
             { RebuildDebug?.Invoke($"cap/sphere: volume {vR} ≠ {vB} + {vG}"); return false; }
