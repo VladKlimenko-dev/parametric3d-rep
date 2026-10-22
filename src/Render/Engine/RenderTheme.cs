@@ -47,7 +47,7 @@ public sealed class RenderTheme
     {
         Dark = false,
         BackgroundTop = C(236, 239, 243), BackgroundBottom = C(206, 212, 221),
-        Body = C(196, 202, 212), Edge = C(28, 30, 34), EdgeWire = C(36, 40, 48), SketchRefEdge = C(90, 98, 112, 0.75f), DimDefault = C(110, 116, 128), DimLocked = C(0, 110, 200), DimUserLocked = C(215, 105, 0), DimReference = C(130, 70, 200), Handle = C(220, 120, 0), HandleAlt = C(0, 110, 200), HandleBad = C(220, 30, 30), EdgeHidden = C(120, 126, 138, 0.7f), Silhouette = C(28, 30, 34), Vertex = C(28, 30, 34),
+        Body = C(196, 202, 212), Edge = C(28, 30, 34), EdgeWire = C(36, 40, 48), SketchRefEdge = C(90, 98, 112, 0.75f), DimDefault = C(64, 70, 82), DimLocked = C(0, 110, 200), DimUserLocked = C(215, 105, 0), DimReference = C(130, 70, 200), Handle = C(220, 120, 0), HandleAlt = C(0, 110, 200), HandleBad = C(220, 30, 30), EdgeHidden = C(120, 126, 138, 0.7f), Silhouette = C(28, 30, 34), Vertex = C(28, 30, 34),
         Hover = C(230, 145, 0), Select = C(23, 106, 230), Error = C(209, 36, 47),
         DatumPlane = C(37, 86, 214, 0.08f), DatumBorder = C(37, 86, 214, 0.85f), DatumAxis = C(37, 86, 214, 0.85f),
         Origin = C(214, 146, 0), DatumPoint = C(37, 86, 214),

@@ -389,6 +389,7 @@ public sealed class NumericSketchSolver : ISketchSolver
             if (e is SkArc arc)
                 fns.Add(dst => dst.Add((arc.Start.P - arc.Center.P).Length - (arc.End.P - arc.Center.P).Length));
 
+        _building = sk;
         foreach (var c in sk.Constraints)
         {
             // Конфликтующие исключены: их нельзя удовлетворить вместе
@@ -402,7 +403,34 @@ public sealed class NumericSketchSolver : ISketchSolver
             if (fns.Count == fnsBefore && c.Type != ConstraintType.Fix && _unsupported!.All(u => !u.StartsWith(c.Type + " ")))
                 _unsupported!.Add($"{c.Type} {string.Join("+", it.Select(x => x.GetType().Name))}");
         }
+        _building = null;
         return FinishResiduals(sk, fns);
+    }
+
+    [ThreadStatic] static Sketch? _building;
+    /// <summary>Мутация P3D_SKTANGENTEND=0: касание дуги и отрезка у общего конца — расстоянием до прямой (прежнее).</summary>
+    static readonly bool TangentEndOff = Environment.GetEnvironmentVariable("P3D_SKTANGENTEND") == "0";
+
+    /// <summary>
+    /// k97: конец дуги, лежащий на отрезке по связи (совпадение с концом отрезка, общая точка, «точка на кривой»). Касание
+    /// у такого конца выражается перпендикулярностью радиуса прямой: «расстояние от центра до прямой = радиус» при точке
+    /// на прямой — минимум функции, производная вдоль прямой нулевая, и решатель видел избыточность (скругление угла
+    /// давало «эскиз переопределён»).
+    /// </summary>
+    static SkPoint? ArcEndOnLine(SkLine l, SkArc a)
+    {
+        if (TangentEndOff || _building is not { } sk) return null;
+        foreach (var e in new[] { a.Start, a.End })
+        {
+            if (ReferenceEquals(e, l.A) || ReferenceEquals(e, l.B)) return e;
+            foreach (var c in sk.Constraints)
+            {
+                if (!c.Enabled || c.Conflict || !c.Items.Contains(e)) continue;
+                if (c.Type == ConstraintType.Coincident && c.Items.Any(x => ReferenceEquals(x, l.A) || ReferenceEquals(x, l.B))) return e;
+                if (c.Type == ConstraintType.PointOnEntity && c.Items.Contains(l)) return e;
+            }
+        }
+        return null;
     }
 
     private static void AddConstraintResiduals(SkConstraint c, IReadOnlyList<SkEntity> it, List<ResidualFn> fns)
@@ -491,10 +519,15 @@ public sealed class NumericSketchSolver : ISketchSolver
                             fns.Add(dst => dst.Add(Math.Abs(DistPointLine(tc.Center.P, tl)) - tc.Radius));
                         else if (it[0] is SkCircle tc2 && it[1] is SkLine tl2)
                             fns.Add(dst => dst.Add(Math.Abs(DistPointLine(tc2.Center.P, tl2)) - tc2.Radius));
-                        else if (it[0] is SkLine tl3 && it[1] is SkArc ta)
-                            fns.Add(dst => dst.Add(Math.Abs(DistPointLine(ta.Center.P, tl3)) - ta.Radius));
-                        else if (it[0] is SkArc ta2 && it[1] is SkLine tl4)
-                            fns.Add(dst => dst.Add(Math.Abs(DistPointLine(ta2.Center.P, tl4)) - ta2.Radius));
+                        else if ((it[0] is SkLine && it[1] is SkArc) || (it[0] is SkArc && it[1] is SkLine))
+                        {
+                            var tl3 = it[0] as SkLine ?? (SkLine)it[1];
+                            var ta = it[0] as SkArc ?? (SkArc)it[1];
+                            if (ArcEndOnLine(tl3, ta) is { } te)
+                                fns.Add(dst => dst.Add(Vector2d.Dot(te.P - ta.Center.P, Dir(tl3))));
+                            else
+                                fns.Add(dst => dst.Add(Math.Abs(DistPointLine(ta.Center.P, tl3)) - ta.Radius));
+                        }
                         // u13: касание дуг (и дуги с окружностью) — как у окружностей: внешнее или внутреннее, ближнее
                         else if ((it[0] is SkArc || it[1] is SkArc) && (it[0] is SkArc or SkCircle) && (it[1] is SkArc or SkCircle))
                         {

@@ -51,6 +51,54 @@ public sealed partial class ModelViewport
         try { var pr = SketchReferences.FaceProjection(sk, f); return pr.Count > 0 ? pr : null; } catch { return null; }
     }
 
+    // k97 (замечание 5): в эскизе проход выбора видеокарты не рисует граней (рёбра ловятся сквозь тело), и очерк цилиндра
+    // под курсором не находился. Очерки граней активной детали — на процессоре, по расстоянию до линии на экране.
+    private (object? Mesh, Sketch? Sk, List<(PickRef R, List<(Vector2d A, Vector2d B, double R, bool Circle)> L)> Items)? _faceRefCache;
+    /// <summary>Мутация P3D_SKFACEPICK=0: очерк грани ловится только попаданием в саму грань (в эскизе — никогда).</summary>
+    static readonly bool FacePickOff = Environment.GetEnvironmentVariable("P3D_SKFACEPICK") == "0";
+
+    /// <summary>Мутация P3D_CONHOVER=0: значок связи под курсором не подсвечивает её элементы.</summary>
+    static readonly bool ConstraintHoverOff = Environment.GetEnvironmentVariable("P3D_CONHOVER") == "0";
+    /// <summary>Разбор: сколько элементов подсвечено значком связи под курсором при последней сборке слоя.</summary>
+    public int ConstraintHoverShown { get; private set; }
+
+    /// <summary>Грань детали, очерк которой (ссылочная линия эскиза) проходит под курсором; пусто — нет.</summary>
+    public PickRef FaceReferenceAt(Point p)
+    {
+        if (FacePickOff || FaceRefsOff || ActiveSketch is not { } sk || _doc == null || ScreenToSketch(p) is not { } q) return PickRef.Empty;
+        if (!Selection.Accepts(PickKind.Face)) return PickRef.Empty;
+        var part = ActivePart ?? _doc.AllParts().FirstOrDefault();
+        if (part?.Mesh is not { } mesh) return PickRef.Empty;
+        if (_faceRefCache is not { } c || !ReferenceEquals(c.Mesh, mesh) || !ReferenceEquals(c.Sk, sk))
+        {
+            var items = new List<(PickRef, List<(Vector2d, Vector2d, double, bool)>)>();
+            foreach (var b in part.Bodies)
+                foreach (var f in b.Faces)
+                {
+                    if (f.Surface is Parametric3D.Kernel.Surfaces.PlaneSurface) continue;
+                    List<(Vector2d, Vector2d, double, bool)> pr;
+                    try { pr = SketchReferences.FaceProjection(sk, f); } catch { continue; }
+                    if (pr.Count > 0) items.Add((new PickRef(f.Id, PickKind.Face, part, null), pr));
+                }
+            _faceRefCache = c = (mesh, sk, items);
+        }
+        double tol = Core.Settings.Current.PickTolerancePx * PixelSize, best = tol;
+        var hit = PickRef.Empty;
+        foreach (var (r, list) in c.Items)
+            foreach (var (a, b, rad, circle) in list)
+            {
+                double d = circle ? Math.Abs((q - a).Length - rad) : SegDist(q, a, b);
+                if (d < best) { best = d; hit = r; }
+            }
+        return hit;
+        static double SegDist(Vector2d x, Vector2d a, Vector2d b)
+        {
+            var ab = b - a; double l2 = ab.LengthSquared;
+            double t = l2 < 1e-24 ? 0 : Math.Clamp(Vector2d.Dot(x - a, ab) / l2, 0, 1);
+            return (x - (a + ab * t)).Length;
+        }
+    }
+
     /// <summary>Щелчок по ребру или вершине тела в режиме эскиза — добавить в ссылки эскиза.</summary>
     public event Action<PickRef>? ReferencePicked;
     /// <summary>Двойной щелчок по размеру эскиза — правка значения.</summary>
@@ -316,6 +364,9 @@ public sealed partial class ModelViewport
     private double GridKeyNow() => Math.Round(Camera.WorldToPx, 4) + Camera.State.Target.X * 1e-3 + Camera.State.Target.Y * 1e-5 + Camera.State.Target.Z * 1e-7
         + Camera.State.Rotation.X * 7 + Camera.State.Rotation.Y * 11 + Camera.State.Rotation.Z * 13 + Camera.State.Rotation.W * 17;
 
+    /// <summary>Разбор (проверки без OpenGL): собрать слой поверх вида — число линий сетки, линий и точек.</summary>
+    public (int Grid, int Lines, int Points) BuildOverlayForTest() { var (g, l, p) = BuildOverlay(); return (g.Count, l.Count, p.Count); }
+
     private (List<LineInst> Grid, List<LineInst> Lines, List<PointInst> Points) BuildOverlay()
     {
         var grid = new List<LineInst>();
@@ -338,8 +389,9 @@ public sealed partial class ModelViewport
         double half = Math.Max(Bounds.Width, Bounds.Height) * PixelSize * 0.75;
         int n = (int)Math.Min(200, Math.Ceiling(half / step));
         double x0 = Math.Round(c.X / step) * step, y0 = Math.Round(c.Y / step) * step;
-        var minor = th.Dark ? new Vector4(1, 1, 1, 0.06f) : new Vector4(0, 0, 0, 0.07f);
-        var major = th.Dark ? new Vector4(1, 1, 1, 0.13f) : new Vector4(0, 0, 0, 0.14f);
+        // k97: на светлом фоне сетка темнее (прежние 0.07/0.14 не различались)
+        var minor = th.Dark ? new Vector4(1, 1, 1, 0.06f) : new Vector4(0.10f, 0.13f, 0.20f, 0.17f);
+        var major = th.Dark ? new Vector4(1, 1, 1, 0.13f) : new Vector4(0.10f, 0.13f, 0.20f, 0.32f);
         for (int i = -n; i <= n; i++)
         {
             double x = x0 + i * step, y = y0 + i * step;
@@ -402,6 +454,23 @@ public sealed partial class ModelViewport
                 foreach (var (a, b) in Hatch(skd)) lines.Add(Inst(W(a), W(b), hc, 1f, 0));
             }
         }
+
+        // k97 (замечание 8): под курсором значок связи — подсветить то, к чему она приложена
+        if (ActiveSketch is { } skc && !ConstraintHoverOff && Selection.Hover.Kind == PickKind.SketchConstraint && Selection.Hover.Target is SkConstraint hc0)
+        {
+            var hcol = th.Hover; hcol.W = 1;
+            var items = new HashSet<object>(hc0.Items.Cast<object>(), ReferenceEqualityComparer.Instance);
+            foreach (var (e, pts0, closed) in skc.Polylines().Concat(new[] { skc.AxisH, skc.AxisV }.Select(a => ((SkEntity)a, new List<Vector2d> { a.A.P, a.B.P }, false))))
+            {
+                if (!items.Contains(e)) continue;
+                int segs = closed ? pts0.Count : pts0.Count - 1;
+                for (int i = 0; i < segs; i++) lines.Add(Inst(W(pts0[i]), W(pts0[(i + 1) % pts0.Count]), hcol, th.SketchWidth + 1.8f, 0));
+            }
+            foreach (var it in hc0.Items)
+                if (it is SkPoint hp) pts.Add(new PointInst { P = W(hp.P), Color = SceneData.Pack(th.Hover), Px = 9, Shape = 0 });
+            ConstraintHoverShown = hc0.Items.Count;
+        }
+        else ConstraintHoverShown = 0;
 
         // k96 (п. 14): под курсором грань, дающая ссылочные линии (очерк цилиндра) — показать их цветом наведения
         if (ActiveSketch is { } skh && FaceReference(Selection.Hover) is { } fr)

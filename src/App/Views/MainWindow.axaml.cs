@@ -522,8 +522,8 @@ public partial class MainWindow : Window
         _viewMode = PanelMode.StripH;
         _sketchMode = PanelMode.StripH;
         _ctxMode = PanelMode.Float;   // выбор и предлагаемые операции — внизу вида (13:09), не в полосе
-        foreach (var b in new Control[] { CommandBar, ShapeBar, SketchBar, ViewBar })
-            ToolTip.SetTip(b, b == CommandBar ? L("Операции") : b == ShapeBar ? L("Фигуры") : b == SketchBar ? L("Эскиз") : L("Вид"));
+        foreach (var b in new Control[] { CommandBar, ShapeBar, SketchBar, ViewBar, DimBar })
+            ToolTip.SetTip(b, b == CommandBar ? L("Операции") : b == ShapeBar ? L("Фигуры") : b == SketchBar ? L("Эскиз") : b == DimBar ? L("Размеры") : L("Вид"));
         if (SelChip.Parent is StackPanel inner) DockablePanel.Reorient(inner, true);
         DockablePanel.Reorient(ContextOps, true);
     }
@@ -583,7 +583,7 @@ public partial class MainWindow : Window
                 // фигуры — своя панель (п. 7); размеры и правка фигур — в полосе предложений снизу (пп. 9–10);
                 // «Готово / Отмена» — вверху у куба (п. 11)
                 // k96 (пп. 4, 6, 19): размеры, все связи и все настройки — кнопками, без «Ещё…»
-                (new[] { "dim.smart", "dim.linear", "dim.radius", "dim.diameter", "dim.angle", "dim.arc_length" }, Array.Empty<string>()),
+                // k97 (замечание 10): размеры — своей панелью в полосе (DimBar)
                 (new[] { "con.coincident", "con.point_on", "con.midpoint", "con.horizontal", "con.vertical", "con.parallel", "con.perpendicular", "con.collinear", "con.tangent", "con.equal", "con.concentric", "con.symmetric", "con.fix" }, Array.Empty<string>()),
                 (new[] { "sk.construction", "sk.grid", "sk.snap_items", "sk.show_open_ends", "sk.show_filled", "sk.references", "sk.setup", "sk.resolve" }, Array.Empty<string>()),
             }
@@ -680,11 +680,19 @@ public partial class MainWindow : Window
         "sk.slot", "sk.polygon", "sk.point", "sk.text", "sk.csys",
     };
 
+    /// <summary>k97: панель размеров эскиза.</summary>
+    public static readonly string[] DimTools =
+    {
+        "dim.smart", "dim.linear", "dim.radius", "dim.diameter", "dim.angle", "dim.arc_length",
+        "dim.reference", "dim.lock", "dim.make_weak", "dim.arrows_outside", "dim.link_param", "dim.area",
+    };
+
     private void BuildSketchBars()
     {
         ShapeStack.Children.Clear();
         SketchBarStack.Children.Clear();
-        ShapeBar.IsVisible = SketchBar.IsVisible = InSketch;
+        DimStack.Children.Clear();
+        ShapeBar.IsVisible = SketchBar.IsVisible = DimBar.IsVisible = InSketch;
         if (!InSketch) return;
         ShapeHeader.Text = L("ФИГУРЫ");
         // фигуры: по умолчанию — сетка в три столбца; у стороны — полоса иконок; в углу — ряд с названиями
@@ -702,6 +710,9 @@ public partial class MainWindow : Window
                 if (_shapeMode == PanelMode.Float) { b.Width = 38; b.Height = 36; }
                 ShapeStack.Children.Add(b);
             }
+        // k97 (замечание 10): панель размеров — в полосе над видом
+        foreach (var id in DimTools)
+            if (_reg.Find(id) is { } dc) DimStack.Children.Add(StripButton(dc));
         bool skStrip = _sketchMode is PanelMode.StripV or PanelMode.StripH;
         foreach (var id in new[] { "sk.finish", "sk.cancel" })
             if (_reg.Find(id) is { } c) SketchBarStack.Children.Add(skStrip ? StripButton(c) : CmdButton(c, 18, text: true));
@@ -821,7 +832,7 @@ public partial class MainWindow : Window
         View.HoverChanged += h => UpdateStatus(h);
         View.Selection.Changed += OnSelectionChanged;
         View.ContextRequested += p => { if (InSketch && View.DimensionAt(p) is { } dm) OpenDimensionMenu(dm); else OpenViewContextMenu(); };
-        View.SceneRebuilt += () => { CurrentOperation?.RefreshStatus(); UpdateStatus(); if (_propsOn && CurrentOperation == null) ShowProperties(); };
+        View.SceneRebuilt += () => { CurrentOperation?.RefreshStatus(); UpdateStatus(); if (_propsOn && CurrentOperation == null) ShowProperties(); CheckCommittedFeature(); };
         View.ToolChanged += () => { ShowHint(View.Tool != null ? L(View.Tool.Hint) : null); RefreshToolStates(); };
         View.RegionChanged += ShowRegion;
         // значки ограничений эскиза — поверх вида, под панелями
@@ -1671,7 +1682,24 @@ public partial class MainWindow : Window
         try { done = op.Commit(); }
         catch (Exception ex) { AppLog.Write("operation commit", ex); ShowToast(L(op.Title) + ": " + ex.Message); return; }
         if (!done) return;
+        // k96 (самотест 17:56): предпросмотр (по сеткам) прошёл, а точный расчёт после «ОК» может отказать — сообщить
+        _committedWatch = op.EditedFeature is Feature cf ? (new WeakReference<Feature>(cf), L(op.Title)) : null;
         if (ReferenceEquals(CurrentOperation, op)) EndOperation();
+    }
+
+    // слабая ссылка: отмена заменяет деталь, и прежняя (с сохранёнными состояниями) не должна жить из-за ожидания (самотест k97: +250 МБ)
+    private (WeakReference<Feature> Feature, string Title)? _committedWatch;
+
+    /// <summary>После перестроения: операция, только что принятая «ОК», отказала в точном расчёте — сообщение.</summary>
+    private void CheckCommittedFeature()
+    {
+        if (_committedWatch is not { } w || !w.Feature.TryGetTarget(out var f)) { _committedWatch = null; return; }
+        var doc = Session.Document;
+        if (f.Parent is not { } fp || !doc.AllParts().Contains(fp)) { _committedWatch = null; return; }   // деталь заменена (отмена)
+        if (doc.IsBuilding || doc.AllParts().Any(p => p.IsDirty)) return;   // ещё считается
+        _committedWatch = null;
+        if (f.Error is { } err)
+            ShowToast(L("{0}: точный расчёт после «ОК» не удался — {1}. Операция отмечена в дереве; «Отменить» вернёт деталь.", w.Title, err.Split('\n')[0]));
     }
 
     public void CancelOperation()
@@ -1698,9 +1726,13 @@ public partial class MainWindow : Window
         RefreshAfterOp();
     }
 
+    /// <summary>Мутация P3D_OPRELEASE=0: панель и предпросмотр завершённой операции держат её (и деталь до отмены).</summary>
+    public static readonly bool OpReleaseOff = Environment.GetEnvironmentVariable("P3D_OPRELEASE") == "0";
+
     private void HideOpPanel()
     {
         PropsButtons.Children.Clear();
+        if (!OpReleaseOff) PropsBody.Children.Clear();   // k97: поля завершённой операции держали её и прежнюю деталь (самотест: +240 МБ)
         PropsPanel.IsVisible = _propsOn;
         if (_propsOn) ShowProperties();
     }
@@ -1763,8 +1795,40 @@ public partial class MainWindow : Window
         Session.BeginEdit(L("Изменить эскиз «{0}»", sk.Name));
         _sketchIsNew = false;
         _afterSketch = null;
+        SketchRollback(sk);
         EnterSketchUi(sk);
     }
+
+    // k97 (замечание 4): правка эскиза — временный откат к состоянию ДО операции, которая его использует: ссылки (очерки,
+    // рёбра) и изображение детали — без будущих операций. По выходу полоска отката возвращается.
+    private (Part Part, int Stage)? _sketchStage;
+    static readonly bool SketchRollbackOff = Environment.GetEnvironmentVariable("P3D_SKROLLBACK") == "0";
+
+    private void SketchRollback(Sketch sk)
+    {
+        _sketchStage = null;
+        var part = sk.Parent as Part ?? Session.Part;
+        if (SketchRollbackOff || part == null) return;
+        int k = part.Features.FindIndex(f => f.ConsumedSketchIds().Contains(sk.Id));
+        if (k < 0) return;
+        int stage = part.ClampStage(k);
+        if (part.StageIndex >= 0 && part.StageIndex <= stage) return;   // и так откачено не ниже
+        _sketchStage = (part, part.StageIndex);
+        part.StageIndex = stage; part.Invalidate();
+        View.MarkDirty();
+    }
+
+    /// <summary>Вернуть полоску отката после правки эскиза.</summary>
+    private void SketchRollbackEnd()
+    {
+        if (_sketchStage is not { } st) return;
+        _sketchStage = null;
+        st.Part.StageIndex = st.Stage; st.Part.Invalidate();
+        View.MarkDirty();
+    }
+
+    /// <summary>Разбор: эскиз правится с временным откатом.</summary>
+    public bool SketchRolledBack => _sketchStage != null;
 
     private void EnterSketchUi(Sketch sk)
     {
@@ -1802,6 +1866,7 @@ public partial class MainWindow : Window
         View.ExitSketch();
         _refsPanel = false; _resolvePanel = false; _pendingEdit = null;
         bool empty = sk.Entities.All(e => e.Role == SkRole.Reference);
+        SketchRollbackEnd();
         if (empty && _sketchIsNew && sk.Parent is Part owner) { owner.Remove(sk); Session.DiscardEdit(); }
         else
         {
@@ -1827,6 +1892,7 @@ public partial class MainWindow : Window
         var sk = View.ActiveSketch!;
         _refsPanel = false; _resolvePanel = false; _pendingEdit = null;
         View.ExitSketch();
+        SketchRollbackEnd();
         // новый эскиз — просто убрать (деталь не заменяется); правка — снимок до неё (вид держит прежнюю деталь)
         if (_sketchIsNew && sk.Parent is Part owner) { owner.Remove(sk); Session.DiscardEdit(); }
         else Session.CancelEdit();
@@ -1909,6 +1975,36 @@ public partial class MainWindow : Window
                 MoveRollbackBar(bn, target, lower);
             }
         }, RoutingStrategies.Tunnel);
+        // k97 (замечание 3): операция перетаскивается мышью по дереву; полоса показывает ближайшее к курсору ДОПУСТИМОЕ
+        // место (не выше родителей, не ниже потомков)
+        Tree.AddHandler(PointerPressedEvent, (_, e) =>
+        {
+            _featDrag = null; _featDragOn = false;
+            if (!e.GetCurrentPoint(Tree).Properties.IsLeftButtonPressed || FeatureDragOff) return;
+            if ((e.Source as StyledElement)?.DataContext is TreeNode { IsBar: false } n && DragFeatureOf(n.Item) is { } f)
+                _featDrag = (f, e.GetPosition(Tree));
+        }, RoutingStrategies.Tunnel);
+        Tree.AddHandler(PointerMovedEvent, (_, e) =>
+        {
+            if (_featDrag is not { } fd) return;
+            var p = e.GetPosition(Tree);
+            if (!_featDragOn)
+            {
+                if ((p - fd.Start).X * (p - fd.Start).X + (p - fd.Start).Y * (p - fd.Start).Y < 36) return;
+                _featDragOn = true; e.Pointer.Capture(Tree);
+            }
+            ShowFeatureDrop(fd.F, p);
+            e.Handled = true;
+        }, RoutingStrategies.Tunnel);
+        Tree.AddHandler(PointerReleasedEvent, (_, e) =>
+        {
+            if (_featDrag is not { } fd) return;
+            bool on = _featDragOn; _featDrag = null; _featDragOn = false;
+            TreeDropLine.IsVisible = false;
+            if (!on) return;
+            e.Pointer.Capture(null); e.Handled = true;
+            if (FeatureDropIndex(fd.F, e.GetPosition(Tree)) is int to) Commands.TreeCommands.MoveTo(this, fd.F, to);
+        }, RoutingStrategies.Tunnel);
         Tree.DoubleTapped += (_, e) =>
         {
             if ((e.Source as StyledElement)?.DataContext is not TreeNode n) return;
@@ -1932,6 +2028,73 @@ public partial class MainWindow : Window
             e.Handled = true;
         };
     }
+
+    private (Feature F, Point Start)? _featDrag;
+    private bool _featDragOn;
+    static readonly bool FeatureDragOff = Environment.GetEnvironmentVariable("P3D_TREEDRAG") == "0";
+
+    /// <summary>Операция детали, которую тянут: сама операция или её эскиз (тянется вместе с операцией).</summary>
+    private Feature? DragFeatureOf(ModelItem item)
+    {
+        if (Session.Part is not { } part) return null;
+        if (item is Feature f && part.Features.Contains(f)) return f;
+        if (item is Sketch sk) return part.Features.FirstOrDefault(x => x.ConsumedSketchIds().Contains(sk.Id));
+        return null;
+    }
+
+    /// <summary>Строка дерева (заголовок узла) для элемента: прямоугольник в координатах дерева.</summary>
+    private Rect? TreeRowRect(ModelItem item)
+    {
+        foreach (var tvi in Tree.GetVisualDescendants().OfType<TreeViewItem>())
+        {
+            if (tvi.DataContext is not TreeNode n || !ReferenceEquals(n.Item, item) || !tvi.IsEffectivelyVisible) continue;
+            var head = tvi.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == "PART_HeaderPresenter") ?? (Control)tvi;
+            if (head.TranslatePoint(new Point(0, 0), Tree) is not { } at) continue;
+            return new Rect(at, head.Bounds.Size);
+        }
+        return null;
+    }
+
+    /// <summary>Итоговый номер операции при отпускании в точке p (ближайшее допустимое место); null — некуда.</summary>
+    public int? FeatureDropIndex(Feature f, Point p)
+    {
+        if (FeatureDragOff || Session.Part is not { } part) return null;
+        int me = part.Features.IndexOf(f);
+        if (me < 0) return null;
+        // ближайшая к курсору строка операции (эскиз в дереве — внутри своей операции)
+        int bestK = -1; double bestD = double.MaxValue; bool below = false;
+        for (int k = 0; k < part.Features.Count; k++)
+        {
+            if (TreeRowRect(part.Features[k]) is not { } r) continue;
+            double d = p.Y < r.Top ? r.Top - p.Y : p.Y > r.Bottom ? p.Y - r.Bottom : 0;
+            if (d < bestD) { bestD = d; bestK = k; below = p.Y > r.Center.Y; }
+        }
+        if (bestK < 0) return null;
+        int to = below ? (bestK < me ? bestK + 1 : bestK) : (bestK <= me ? bestK : bestK - 1);
+        var (lo, hi) = Commands.TreeCommands.MoveRange(part, f);
+        if (lo > hi) return null;
+        return Math.Clamp(to, lo, hi);
+    }
+
+    private void ShowFeatureDrop(Feature f, Point p)
+    {
+        TreeDropLine.IsVisible = false;
+        if (Session.Part is not { } part || FeatureDropIndex(f, p) is not int to) return;
+        int me = part.Features.IndexOf(f);
+        // полоса: выше операции, на место которой встанет (вверх), или ниже неё (вниз); на своём месте — у самой операции
+        var anchor = part.Features[to];
+        if (TreeRowRect(anchor) is not { } r) return;
+        double y = to < me ? r.Top - 1.5 : to > me ? r.Bottom - 1.5 : r.Center.Y - 1.5;
+        Canvas.SetLeft(TreeDropLine, r.Left);
+        Canvas.SetTop(TreeDropLine, y);
+        TreeDropLine.Width = Math.Max(60, Tree.Bounds.Width - r.Left - 8);
+        TreeDropLine.Opacity = to == me ? 0.35 : 1;
+        TreeDropLine.IsVisible = true;
+        TreeDropTarget = to;
+    }
+
+    /// <summary>Разбор: номер, куда встанет перетаскиваемая операция (последний показ полосы).</summary>
+    public int TreeDropTarget { get; private set; } = -1;
 
     private void ScheduleTree()
     {

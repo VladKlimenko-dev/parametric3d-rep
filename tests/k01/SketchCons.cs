@@ -33,6 +33,7 @@ static partial class Program
         Console.WriteLine($"solve {sk.LastSolve} dof {sk.DegreesOfFreedom}");
         DefaultDimensions.Refresh(sk, solver);
         foreach (var d in sk.Dimensions) Console.WriteLine($"  dim {d.Type} {d.Value:0.##} default {d.IsDefault} locked {d.Locked}");
+        Console.WriteLine($"after defaults: solve {sk.Solve(solver)} dof {sk.DegreesOfFreedom}");
         var top = L[2];
         var dTop = sk.Dimensions.FirstOrDefault(d => d.Type == DimensionType.DistancePointPoint && d.Items.Contains(top.A) && d.Items.Contains(top.B))
                    ?? sk.AddDimension(DimensionType.DistancePointPoint, 47.14, top.A, top.B);
@@ -51,6 +52,39 @@ static partial class Program
     static void SketchConstraintChecks()
     {
         var solver = new NumericSketchSolver();
+        Check("KRN-REV-MIRROR", () =>
+        {
+            // k97 (замечание 2): зеркало операции «Вращение» — кольцо у x = 50 отражается к x = −50 (прежде отказ
+            // «this operation cannot be repeated by a mirror or pattern»). Мутация P3D_REVMIRROR=0.
+            var p = new Parametric3D.Model.Part("revmirror");
+            var XZ = new Frame3(Vector3d.Zero, Vector3d.UnitX, Vector3d.UnitZ);
+            var s = PolySketch(p, XZ, (55, 0), (65, 0), (65, 10), (55, 10));
+            var ax = new SkLine(new SkPoint(50, 0), new SkPoint(50, 10)) { Role = SkRole.Centerline }; s.AddEntity(ax);
+            var rv = new Parametric3D.Model.Features.RevolveFeature { SketchId = s.Id, AxisEntityId = ax.Id };
+            p.AddFeature(rv);
+            var m = new Parametric3D.Model.Features.MirrorFeature { At = Vector3d.Zero, Normal = Vector3d.UnitX }; m.Sources.Add(rv.Key);
+            p.AddFeature(m);
+            p.Rebuild(null);
+            double ring = Math.PI * (15 * 15 - 5 * 5) * 10;
+            Require(p.Features.All(f => f.Error == null), "error: " + string.Join("; ", p.Features.Where(f => f.Error != null).Select(f => f.Error)));
+            Require(Math.Abs(p.Volume - 2 * ring) < 1e-6 * ring, $"volume {p.Volume:0.###} vs {2 * ring:0.###}");
+            var xs = p.Bodies.SelectMany(b => b.Vertices).Select(v => v.P.X).ToList();
+            Require(xs.Min() < -60 && xs.Max() > 60, $"mirrored ring is not at x = −50: x {xs.Min():0.#}..{xs.Max():0.#}");
+        });
+        Check("KRN-SK-WEAK-DOF", () =>
+        {
+            // k97 (замечание 7): эскиз, образмеренный слабыми размерами, — без «свободных» степеней (значок дерева);
+            // DegreesOfFreedom по-прежнему без них. Мутация P3D_SKWEAKDOF=0.
+            var (sk, _) = SkPoly(StepPoly);
+            sk.Solve(solver);
+            int dof = sk.DegreesOfFreedom;
+            Require(dof > 0 && sk.FreeDegrees == dof, $"dof {dof} free {sk.FreeDegrees} before weak dims");
+            DefaultDimensions.Refresh(sk, solver);
+            sk.Solve(solver);
+            int weak = sk.Dimensions.Count(d => d.IsDefault);
+            Require(weak > 0 && sk.DegreesOfFreedom == dof, $"weak {weak} dof {sk.DegreesOfFreedom}");
+            Require(sk.FreeDegrees == Math.Max(0, dof - weak), $"free {sk.FreeDegrees}, dof {dof}, weak {weak}");
+        });
         Check("KRN-SK-NO-TRIVIAL", () =>
         {
             // ломаная (общие точки соседних отрезков): автопривязка не ставит «конец на своём отрезке», эскиз не переопределён

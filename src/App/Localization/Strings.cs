@@ -1022,6 +1022,8 @@ public static class Strings
         ["РАЗРЕШИТЬ ЭСКИЗ"] = "RESOLVE SKETCH",
         ["Эскиз определён полностью"] = "The sketch is fully defined",
         ["Эскиз недоопределён: степеней свободы {0}"] = "The sketch is underdefined: {0} degrees of freedom",
+        ["Эскиз определён: слабых размеров {0} (их можно сделать сильными или заменить своими)"] = "The sketch is defined: {0} weak dimensions (make them strong or replace them with your own)",
+        ["Эскиз не полностью определён: степеней свободы {0}"] = "Sketch under-defined: {0} degrees of freedom",
         ["Эскиз избыточен: есть лишние (согласные) связи"] = "The sketch is overdefined: there are redundant (consistent) constraints",
         ["Эскиз противоречив: связи и размеры несовместимы"] = "The sketch is inconsistent: constraints and dimensions are incompatible",
         ["Эскиз вырожден: элементы нулевого размера"] = "The sketch is singular: elements of zero size",
@@ -1053,5 +1055,6 @@ public static class Strings
         ["Горизонтальная ось эскиза"] = "Sketch horizontal axis",
         ["Вертикальная ось эскиза"] = "Sketch vertical axis",
         ["Грань не даёт ссылки в плоскости эскиза"] = "The face gives no reference in the sketch plane",
+        ["{0}: точный расчёт после «ОК» не удался — {1}. Операция отмечена в дереве; «Отменить» вернёт деталь."] = "{0}: the exact computation after «OK» failed — {1}. The operation is marked in the tree; «Undo» restores the part.",
     };
 }

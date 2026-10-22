@@ -52,6 +52,57 @@ MainWindow Open(DocumentSession s)
     return w;
 }
 
+if (only == "probe-selftest")
+{
+    // разбор: самотест приложения в окне без экрана (P3D_SELFTEST_ONLY=load|cancel|handles — раздел)
+    var w = Open(DocumentSession.NewPart());
+    // без экрана кадров нет — фоновый расчёт, который запускает кадр вида, запускается таймером
+    var pump = new DispatcherTimer(TimeSpan.FromMilliseconds(20), DispatcherPriority.Background, async (_, _) =>
+    {
+        var doc = w.Session.Document;
+        if (!doc.IsBuilding && doc.AllParts().Any(p => p.IsDirty)) { try { await doc.RebuildDirtyAsync(); } catch { } }
+    });
+    pump.Start();
+    var task = Parametric3D.App.Diagnostics.SelfTest.RunAsync(w, m => Console.WriteLine("ST " + m), CancellationToken.None);
+    var cts = new CancellationTokenSource();
+    _ = task.ContinueWith(_ => Dispatcher.UIThread.Post(() => cts.Cancel()));
+    Dispatcher.UIThread.MainLoop(cts.Token);
+    Console.WriteLine("REPORT " + task.Result);
+    Console.WriteLine(File.ReadAllText(task.Result));
+    for (int k = 0; k < 3; k++) { GC.Collect(); GC.WaitForPendingFinalizers(); }
+    var dp = Parametric3D.App.Diagnostics.SelfTest.DebugParts;
+    Console.WriteLine($"PROBE load parts alive {dp.Count(x => x.IsAlive)} of {dp.Count}");
+    var db = Parametric3D.App.Diagnostics.SelfTest.DebugBodies;
+    Console.WriteLine($"PROBE load bodies alive {db.Count(x => x.IsAlive)} of {db.Count}: [{string.Join(",", db.Select((x, k) => x.IsAlive ? k : -1).Where(k => k >= 0))}]");
+    var curB = w.Session.Part?.Bodies.FirstOrDefault();
+    foreach (var wr in db.Where(x => x.IsAlive && !ReferenceEquals(x.Target, curB)).Skip(3).Take(1)) PathTo(wr.Target!, new (object, string)[] { (w, "window"), (w.Session, "session") });
+    {
+        long Mem() { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); return GC.GetTotalMemory(true); }
+        Console.WriteLine($"PROBE memory now: {Mem() / 1048576.0:0.0} MB");
+        w.Session.Part?.ForgetCheckpoints();
+        Console.WriteLine($"PROBE memory w/o checkpoints: {Mem() / 1048576.0:0.0} MB");
+        for (int rep = 0; rep < 4; rep++) System.Threading.Tasks.Parallel.For(0, 256, new ParallelOptions { MaxDegreeOfParallelism = 64 }, _ => { Parametric3D.Kernel.Diagnostics.ThreadState.Release(); Thread.Sleep(2); });
+        Console.WriteLine($"PROBE memory after thread release: {Mem() / 1048576.0:0.0} MB");
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies().Where(a => a.GetName().Name!.StartsWith("Parametric3D")))
+            foreach (var t in asm.GetTypes())
+                foreach (var fi in t.GetFields(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+                {
+                    if (fi.FieldType.IsGenericTypeDefinition || t.IsGenericTypeDefinition || fi.IsLiteral) continue;
+                    object? v; try { v = fi.GetValue(null); } catch { continue; }
+                    if (v == null) continue;
+                    var clear = v.GetType().GetMethod("Clear", Type.EmptyTypes);
+                    if (clear == null) continue;
+                    long m0 = Mem();
+                    try { clear.Invoke(v, null); } catch { continue; }
+                    long m1 = Mem();
+                    if (m0 - m1 > 1 << 20) Console.WriteLine($"PROBE cleared {t.FullName}.{fi.Name}: −{(m0 - m1) / 1048576.0:0.0} MB");
+                }
+        Console.WriteLine($"PROBE memory after clearing statics: {Mem() / 1048576.0:0.0} MB");
+    }
+    foreach (var wr in dp.Take(dp.Count - 2).Where(x => x.IsAlive && !ReferenceEquals(x.Target, w.Session.Part)).Take(1)) PathTo(wr.Target!, new (object, string)[] { (w, "window"), (w.Session, "session") });
+    return 0;
+}
+
 if (only == "probe-load")
 {
     // разбор: скругления на реальной детали, перезагрузка из снимка (как «отменить»/«вернуть») — время операции до и после
@@ -61,6 +112,7 @@ if (only == "probe-load")
     Console.WriteLine($"PROBE memory start: {Mem() / 1048576.0:0.0} MB");
     var rnd = new Random(11);
     int nEdits = int.TryParse(Environment.GetEnvironmentVariable("P3D_PROBEN"), out var pn) ? pn : 24;
+    var bodyRefs = new List<WeakReference>();
     for (int i = 0; i < nEdits; i++)
     {
         if ((i == 8 || i == 16) && nEdits == 24)
@@ -81,6 +133,7 @@ if (only == "probe-load")
         var sw = System.Diagnostics.Stopwatch.StartNew();
         part.Rebuild(null);
         if (prof) { Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(25))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
+        if (part.Bodies.Count > 0) bodyRefs.Add(new WeakReference(part.Bodies[0]));
         Console.WriteLine($"PROBE edit {i}: {sw.ElapsedMilliseconds} ms, feature {(part.LastFeatureMs.TryGetValue(f, out var ms) ? ms : -1):0} ms, err {f.Error?.Split('\n')[0]}");
         if (f.Error != null && Environment.GetEnvironmentVariable("P3D_PROBESAVE") is { Length: > 0 } dir) File.WriteAllText(Path.Combine(dir, $"probe_fail_{i}.p3d"), DocumentFile.Save(part, null));
     }
@@ -91,6 +144,54 @@ if (only == "probe-load")
         var errs2 = part.Features.Select(x => x.Error != null).ToList();
         GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
         Console.WriteLine($"PROBE memory: {GC.GetTotalMemory(true) / 1048576.0:0.0} MB, features {part.Features.Count}, faces {part.Bodies.Sum(b => b.Faces.Count())}");
+        Console.WriteLine($"PROBE intermediate bodies alive: {bodyRefs.Count(r => r.IsAlive)} of {bodyRefs.Count}");
+        // оценка памяти по полям детали (обход графа отражением; общее — в первом поле, где встретилось)
+        {
+            var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
+            long Walk(object root, int budget)
+            {
+                long bytes = 0; var st = new Stack<object>(); st.Push(root);
+                while (st.Count > 0 && budget-- > 0)
+                {
+                    var o = st.Pop();
+                    if (!seen.Add(o)) continue;
+                    var t = o.GetType();
+                    if (t == typeof(string)) { bytes += 20 + 2L * ((string)o).Length; continue; }
+                    if (t.IsArray)
+                    {
+                        var a = (Array)o; var et = t.GetElementType()!;
+                        if (et.IsPrimitive || et.IsValueType && !et.IsGenericType && et.GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic).All(f => f.FieldType.IsValueType))
+                        { bytes += 24 + (long)a.Length * (et.IsPrimitive ? System.Runtime.InteropServices.Marshal.SizeOf(et) : Math.Max(8, System.Runtime.CompilerServices.Unsafe.SizeOf<long>() * et.GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic).Length)); continue; }
+                        bytes += 24 + 8L * a.Length;
+                        foreach (var x in a) if (x != null) { if (x.GetType().IsValueType) { foreach (var f in x.GetType().GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)) if (!f.FieldType.IsValueType && f.GetValue(x) is { } fv) st.Push(fv); } else st.Push(x); }
+                        continue;
+                    }
+                    if (t.IsPrimitive || t.IsEnum || t.IsPointer) continue;
+                    if (typeof(Delegate).IsAssignableFrom(t) || typeof(System.Reflection.MemberInfo).IsAssignableFrom(t) || t.Namespace?.StartsWith("Avalonia") == true) continue;
+                    var fields = new List<System.Reflection.FieldInfo>();
+                    for (var tt = t; tt != null && tt != typeof(object); tt = tt.BaseType) fields.AddRange(tt.GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly));
+                    bytes += 16 + 8L * fields.Count;
+                    foreach (var f in fields)
+                    {
+                        if (f.FieldType.IsPrimitive || f.FieldType.IsEnum || f.FieldType.IsPointer) continue;
+                        object? v; try { v = f.GetValue(o); } catch { continue; }
+                        if (v == null) continue;
+                        if (v.GetType().IsValueType) { foreach (var g in v.GetType().GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)) if (!g.FieldType.IsValueType && !g.FieldType.IsPointer) { try { if (g.GetValue(v) is { } gv) st.Push(gv); } catch { } } }
+                        else st.Push(v);
+                    }
+                }
+                return bytes;
+            }
+            seen.Add(part);
+            var pf = new List<System.Reflection.FieldInfo>();
+            for (var tt = part.GetType(); tt != null && tt != typeof(object); tt = tt.BaseType) pf.AddRange(tt.GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly));
+            foreach (var f in pf)
+            {
+                if (f.GetValue(part) is not { } v || v.GetType().IsPrimitive) continue;
+                long b = Walk(v, 20_000_000);
+                if (b > 1 << 20) Console.WriteLine($"PROBE part field {f.Name}: ~{b / 1048576.0:0.0} MB");
+            }
+        }
         foreach (var asm in new[] { typeof(Part).Assembly, typeof(Parametric3D.Kernel.Topology.TSolid).Assembly, typeof(MainWindow).Assembly }.Distinct())
             foreach (var t in asm.GetTypes())
                 foreach (var fi in t.GetFields(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
@@ -105,8 +206,29 @@ if (only == "probe-load")
         Console.WriteLine($"PROBE memory after scratch: {Mem() / 1048576.0:0.0} MB");
         part.ForgetCheckpoints();
         Console.WriteLine($"PROBE memory without checkpoints: {Mem() / 1048576.0:0.0} MB");
+        var wrPart = new WeakReference(part); var wrBody = new WeakReference(part.Bodies[0]);
         part = null!;
-        Console.WriteLine($"PROBE memory without the part: {Mem() / 1048576.0:0.0} MB");
+        Console.WriteLine($"PROBE memory without the part: {Mem() / 1048576.0:0.0} MB; part alive {wrPart.IsAlive}, body alive {wrBody.IsAlive}");
+        if (wrPart.Target is { } target) PathTo(target, Array.Empty<(object, string)>());
+        // поточные ссылки рабочих потоков: отпустить на всех потоках пула
+        for (int rep = 0; rep < 4; rep++) System.Threading.Tasks.Parallel.For(0, 256, new ParallelOptions { MaxDegreeOfParallelism = 64 }, _ => { Parametric3D.Kernel.Diagnostics.ThreadState.Release(); Thread.Sleep(2); });
+        Console.WriteLine($"PROBE memory after releasing worker thread state: {Mem() / 1048576.0:0.0} MB");
+        // какие статические поля держат память: очищаются по одному, замер после каждого
+        foreach (var asm in new[] { typeof(Part).Assembly, typeof(Parametric3D.Kernel.Topology.TSolid).Assembly }.Distinct())
+            foreach (var t in asm.GetTypes())
+                foreach (var fi in t.GetFields(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+                {
+                    if (fi.FieldType.IsGenericTypeDefinition || t.IsGenericTypeDefinition || fi.IsLiteral) continue;
+                    object? v; try { v = fi.GetValue(null); } catch { continue; }
+                    if (v == null) continue;
+                    var clear = v.GetType().GetMethod("Clear", Type.EmptyTypes);
+                    if (clear == null) continue;
+                    long m0 = Mem();
+                    try { clear.Invoke(v, null); } catch { continue; }
+                    long m1 = Mem();
+                    if (m0 - m1 > 1 << 20) Console.WriteLine($"PROBE cleared {t.FullName}.{fi.Name}: −{(m0 - m1) / 1048576.0:0.0} MB");
+                }
+        Console.WriteLine($"PROBE memory after clearing statics: {Mem() / 1048576.0:0.0} MB");
     }
     return 0;
 }
@@ -368,8 +490,68 @@ if (only == "probe-leak")
     w0.ViewPort.Selection.Clear(); Dispatcher.UIThread.RunJobs();
     for (int k = 0; k < 3; k++) { GC.Collect(); GC.WaitForPendingFinalizers(); }
     Console.WriteLine($"LEAK parts alive {weak.Count(x => x.IsAlive)} of {weak.Count}; memory {GC.GetTotalMemory(true) / 1048576.0:0.0} MB");
+    foreach (var wr in weak.Where(x => x.IsAlive && !ReferenceEquals(x.Target, s0.Part)).Take(1)) PathTo(wr.Target!, new (object, string)[] { (w0, "window"), (s0, "session") });
     return 0;
 }
+
+static void PathTo(object target, (object, string)[] extra)
+{
+            // путь от статических полей к детали (обход в ширину отражением)
+            const System.Reflection.BindingFlags BF = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+            var parent = new Dictionary<object, (object? from, string via)>(ReferenceEqualityComparer.Instance);
+            var q = new Queue<object>();
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic))
+            {
+                Type[] ts; try { ts = asm.GetTypes(); } catch { continue; }
+                foreach (var t in ts)
+                {
+                    if (t.IsGenericTypeDefinition || t.ContainsGenericParameters) continue;
+                    foreach (var fi in t.GetFields(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+                    {
+                        if (fi.IsLiteral || fi.FieldType.IsPrimitive) continue;
+                        object? v; try { v = fi.GetValue(null); } catch { continue; }
+                        if (v == null || v.GetType().IsValueType && !v.GetType().IsGenericType) { if (v == null) continue; }
+                        if (parent.TryAdd(v, (null, $"{t.FullName}.{fi.Name}"))) q.Enqueue(v);
+                    }
+                }
+            }
+            foreach (var (eo, en) in extra) if (parent.TryAdd(eo, (null, en))) q.Enqueue(eo);
+            bool found = false; int visited = 0;
+            void Push(object from, object? v, string via)
+            {
+                if (v == null) return; var vt = v.GetType();
+                if (vt.IsPrimitive || vt.IsEnum || vt == typeof(string) || vt.IsPointer) return;
+                if (vt.IsValueType)
+                {
+                    foreach (var g in vt.GetFields(BF)) { if (g.FieldType.IsPrimitive || g.FieldType.IsPointer) continue; object? gv; try { gv = g.GetValue(v); } catch { continue; } Push(from, gv, via + "." + g.Name); }
+                    return;
+                }
+                if (parent.TryAdd(v, (from, via))) q.Enqueue(v);
+            }
+            while (q.Count > 0 && !found && visited++ < 30_000_000)
+            {
+                var o = q.Dequeue();
+                if (ReferenceEquals(o, target)) { found = true; break; }
+                var t = o.GetType();
+                if (typeof(System.Reflection.MemberInfo).IsAssignableFrom(t) || typeof(System.Reflection.Assembly).IsAssignableFrom(t) || typeof(System.Reflection.Module).IsAssignableFrom(t)) continue;
+                if (t.IsArray) { int k = 0; if (t.GetElementType()!.IsPrimitive) continue; foreach (var x in (Array)o) Push(o, x, $"[{k++}]"); continue; }
+                if (o is System.Runtime.CompilerServices.ConditionalWeakTable<object, object>) continue;
+                for (var tt = t; tt != null && tt != typeof(object); tt = tt.BaseType)
+                    foreach (var f in tt.GetFields(BF | System.Reflection.BindingFlags.DeclaredOnly))
+                    {
+                        if (f.FieldType.IsPrimitive || f.FieldType.IsPointer) continue;
+                        object? v; try { v = f.GetValue(o); } catch { continue; }
+                        Push(o, v, f.Name);
+                    }
+            }
+            if (!found) Console.WriteLine($"PROBE path to part: not found from statics (visited {visited})");
+            else
+            {
+                var path = new List<string>(); object? cur = target;
+                while (cur != null && parent.TryGetValue(cur, out var pr)) { path.Add($"{pr.via} -> {cur.GetType().Name}"); cur = pr.from; }
+                path.Reverse(); Console.WriteLine("PROBE path to part:\n  " + string.Join("\n  ", path));
+            }
+        }
 
 string IconsTsv = Path.Combine(AppContext.BaseDirectory, "icons.tsv");
 
@@ -1428,7 +1610,7 @@ Check("UI-U13B-SKETCH", () =>
     Require(ar is { } aa && Math.Abs(aa.Area - (100 - Math.PI * 4)) < 1e-6 && aa.Regions == 1, "area");
     w.FinishSketch();
     var st = sk.Solve(solver);
-    Console.WriteLine($"  solve: {st}, entities {sk.Entities.Count}, constraints {sk.Constraints.Count}");
+    Console.WriteLine($"  solve: {st}, entities {sk.Entities.Count}, constraints {sk.Constraints.Count}: {string.Join(", ", sk.Constraints.GroupBy(c => c.Type).Select(g => g.Key + " " + g.Count()))}; conflicts: {string.Join(", ", sk.Constraints.Where(c => c.Conflict).Select(c => c.Type + "[" + string.Join("/", c.Items.Select(i => i.GetType().Name + (i is SkPoint pp ? $"({pp.X:0.#},{pp.Y:0.#})" : ""))) + "]"))}");
     Require(st is not (SolveStatus.Overconstrained or SolveStatus.Inconsistent), $"sketch solves: {st}");
     w.Close();
 });
@@ -2556,6 +2738,132 @@ Check("UI-TANGENT-CHAIN-CHAMFER", () =>
     Require(p.Bodies.All(b => Parametric3D.Kernel.Topology.SolidValidator.Validate(b).IsValid), "chamfered body is not valid");
 });
 
+Check("UI-OP-RELEASE", () =>
+{
+    // k97 (самотест 17:56, раздел 10: +249 МБ): после «ОК» и «Отменить» прежняя деталь не держится окном — ни полями
+    // панели операции, ни проверкой контура ручки, ни ожиданием точного расчёта. Мутация P3D_OPRELEASE=0.
+    var s0 = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 6), "rel");
+    var w0 = Open(s0);
+    s0.Document.RebuildDirty();
+    var weak = new List<WeakReference>();
+    // правка — в отдельном методе: локальные переменные кадра не держат деталь (без инлайнинга)
+    for (int i = 0; i < 3; i++) EditOnce(i);
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    void EditOnce(int i)
+    {
+        var p = s0.Part!;
+        var e = p.Bodies.SelectMany(b => b.Edges).Where(x => x.Curve is Parametric3D.Kernel.Curves.LineCurve3 && (x.V0.P - x.V1.P).Length > 6 && Topo.EdgeHandle(p, x.Id) != null).ElementAt(i);
+        w0.ViewPort.Selection.Select(new PickRef(e.Id, PickKind.Edge, p, null), additive: false);
+        w0.StartOperation(new RoundOp()); Dispatcher.UIThread.RunJobs(); s0.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+        w0.CommitOperation(); s0.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+        weak.Add(new WeakReference(s0.Part));
+        s0.Undo(); s0.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
+    }
+    w0.ViewPort.Selection.Clear(); Dispatcher.UIThread.RunJobs();
+    // поточные ссылки потоков пула (последняя операция потока) — ограничены числом потоков, не утечка; отпускаются
+    for (int rep = 0; rep < 3; rep++) System.Threading.Tasks.Parallel.For(0, 128, new ParallelOptions { MaxDegreeOfParallelism = 32 }, _ => { Parametric3D.Kernel.Diagnostics.ThreadState.Release(); Thread.Sleep(2); });
+    for (int k = 0; k < 3; k++) { GC.Collect(); GC.WaitForPendingFinalizers(); }
+    int alive = weak.Count(x => x.IsAlive && !ReferenceEquals(x.Target, s0.Part));
+    if (alive > 0 && Environment.GetEnvironmentVariable("P3D_RELDBG") == "1") PathTo(weak.First(x => x.IsAlive && !ReferenceEquals(x.Target, s0.Part)).Target!, new (object, string)[] { (w0, "window"), (s0, "session") });
+    // последняя заменённая может держаться временно (показ до перестроения новой), прежние — нет
+    Require(alive <= 1, $"replaced parts still alive: {alive} of {weak.Count}");
+});
+
+Check("UI-SKETCH-K97", () =>
+{
+    // k97 (отзыв 21:14): панель размеров (10); скругление угла ломаной (12); оси эскиза — после его элементов (13); значок
+    // связи подсвечивает её элементы (8); стрелки углового размера снаружи (11); знаки ГОСТ залиты (9, 14); правка эскиза —
+    // временный откат (4); очерк цилиндра под курсором (5); перестановка операции мышью — не выше родителей (3)
+    var s = DocumentSession.NewPart();
+    var part = s.Part!;
+    var s1 = part.AddSketch("S1", Parametric3D.Kernel.Frame3.XY, part.PlaneXY.Id);
+    s1.AddEntity(new SkCircle(new SkPoint(0, 0), 10));
+    var ex = new ExtrudeFeature { SketchId = s1.Id }; part.AddFeature(ex);
+    var s2 = part.AddSketch("S2", Parametric3D.Kernel.Frame3.XZ, part.PlaneXZ.Id);
+    foreach (var (a, b) in new[] { ((40.0, 5.0), (60.0, 5.0)), ((60.0, 5.0), (60.0, 15.0)), ((60.0, 15.0), (40.0, 15.0)), ((40.0, 15.0), (40.0, 5.0)) })
+        s2.AddEntity(new SkLine(new SkPoint(a.Item1, a.Item2), new SkPoint(b.Item1, b.Item2)));
+    var ex2 = new ExtrudeFeature { SketchId = s2.Id, Symmetric = true }; part.AddFeature(ex2);
+    s.Document.RebuildDirty();
+    Require(part.Features.All(f => f.Error == null), "setup: " + string.Join("; ", part.Features.Select(f => f.Error)));
+    var topEdge = part.Bodies.SelectMany(b => b.Edges).First(e => e.V0.P.Z > 19.9 && e.V1.P.Z > 19.9 && Math.Sqrt(e.V0.P.X * e.V0.P.X + e.V0.P.Y * e.V0.P.Y) < 10.01);
+    var rf = new RoundFeature { Radius = new ValueRef(1) }; rf.Edges.Add(Parametric3D.Kernel.Topology.EdgeRef.Of(topEdge)); part.AddFeature(rf);
+    s.Document.RebuildDirty();
+    var w = Open(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    // (3) перестановка: скругление — не выше выдавливания, на ребре которого оно стоит; вырез — куда угодно
+    var (lo, hi) = TreeCommands.MoveRange(part, rf);
+    Require(lo == 1 && hi == 2, $"round move range {lo}..{hi} (expected 1..2)");
+    var (lo2, hi2) = TreeCommands.MoveRange(part, ex2);
+    Require(lo2 == 0 && hi2 == 2, $"second extrude move range {lo2}..{hi2}");
+    Run();
+    Require(w.FeatureDropIndex(rf, new Avalonia.Point(10, -500)) == 1, $"drop above everything: {w.FeatureDropIndex(rf, new Avalonia.Point(10, -500))} (expected clamp to 1)");
+    Require(TreeCommands.MoveTo(w, ex2, 0) && s.Part!.Features[0].Key == ex2.Key && s.Part.Features.All(f => f.Error == null), "moving the second extrude to the top failed");
+    s.Undo(); s.Document.RebuildDirty(); Run();
+    part = s.Part!; var s2l = part.Sketches.First(k => k.Name == "S2");
+    // (4) правка эскиза S2 — откат до его операции
+    w.EditSketch(s2l);
+    int exIdx = part.Features.FindIndex(f => f.ConsumedSketchIds().Contains(s2l.Id));
+    Require(w.SketchRolledBack && part.StageIndex == exIdx, $"sketch edit is not rolled back: stage {part.StageIndex}, owner {exIdx}, parent {s2l.Parent?.GetType().Name}, same part {ReferenceEquals(part, w.Session.Part)}, in sketch {w.InSketch}");
+    s.Document.RebuildDirty();
+    var vp = w.ViewPort; var sk = vp.ActiveSketch!;
+    vp.EnterSketch(sk, animate: false); Run();
+    // (5) очерк цилиндра (x = ±10) под курсором
+    var at = vp.Project(new Vector3d(10, 0, 10))!.Value;
+    var fr = vp.FaceReferenceAt(at);
+    Require(!fr.IsEmpty && fr.Kind == PickKind.Face, "cylinder silhouette is not found under the cursor");
+    // (13) отрезок на оси эскиза выбирается раньше оси
+    var onAxis = sk.AddEntity(new SkLine(new SkPoint(-60, 0), new SkPoint(-30, 0)));
+    var q = vp.Project(sk.Plane.ToWorld(new Vector2d(-45, 0)))!.Value;
+    var hits = new ScenePicker().PickAll(s.Document, vp.Camera, new Vector2i((int)q.X, (int)q.Y), false, sk);
+    var first = hits.FirstOrDefault(h => h.Ref.Kind is PickKind.SketchCurve or PickKind.SketchPoint);
+    Require(ReferenceEquals(first.Ref.Target, onAxis), $"under the cursor first: {first.Ref.Target?.GetType().Name} {(ReferenceEquals(first.Ref.Target, sk.AxisH) ? "(axis)" : "")}");
+    // проход выбора видеокарты: побеждает нарисованное позже — оси эскиза в сцене раньше его кривых
+    var sd = Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions(), part, sk);
+    int LineOf(object t) => sd.Lines.FindIndex(li => li.Pick > 0 && ReferenceEquals(sd.PickTable[(int)li.Pick].Ref.Target, t));
+    Require(LineOf(sk.AxisH) >= 0 && LineOf(sk.AxisH) < LineOf(onAxis), $"scene order: axis line {LineOf(sk.AxisH)}, sketch line {LineOf(onAxis)}");
+    // (8) значок связи под курсором — её элементы подсвечены
+    var hc = sk.AddConstraint(ConstraintType.Horizontal, onAxis);
+    vp.Selection.SetHover(new PickRef(hc.Id, PickKind.SketchConstraint, sk, hc));
+    vp.BuildOverlayForTest();
+    Require(vp.ConstraintHoverShown == 1, $"constraint hover highlighted {vp.ConstraintHoverShown}");
+    vp.Selection.SetHover(PickRef.Empty);
+    // (12) скругление угла ломаной (общая точка)
+    var shared = new SkPoint(-20, 40);
+    var la = sk.AddEntity(new SkLine(new SkPoint(-60, 40), shared)); var lb = sk.AddEntity(new SkLine(shared, new SkPoint(-20, 80)));
+    Require(CornerTool.Apply(sk, new Vector2d(-20, 40), false, 5), "fillet refused");
+    sk.Solve(s.Document.Solver);
+    var arc = sk.Entities.OfType<SkArc>().Last();
+    Require((arc.Start.P - arc.End.P).Length > 5 && Math.Abs(arc.Radius - 5) < 1e-6, $"fillet arc start {arc.Start.P} end {arc.End.P} r {arc.Radius}");
+    Require(!ReferenceEquals(la.B, lb.A) && (la.B.P - arc.Start.P).Length < 1e-6 && (lb.A.P - arc.End.P).Length < 1e-6, "lines are not trimmed to the fillet");
+    {
+        // скругление угла прямоугольника — эскиз решается (не переопределён)
+        var sk3 = new Sketch("r", Parametric3D.Kernel.Frame3.XY);
+        var rt = new RectangleTool(); rt.Click(new SketchInput(sk3, new Vector2d(0, 0), null)); rt.Click(new SketchInput(sk3, new Vector2d(20, 10), null));
+        // касание дуги скругления у общего конца — перпендикулярностью радиуса (P3D_SKTANGENTEND=0 — «переопределён»)
+        var st0 = sk3.Solve(s.Document.Solver);
+        Require(CornerTool.Apply(sk3, new Vector2d(20, 10), false, 3), "rectangle fillet refused");
+        var st3 = sk3.Solve(s.Document.Solver);
+        Require(st3 is SolveStatus.Ok or SolveStatus.Underconstrained, $"rectangle after fillet: {st3} (before {st0}); shared corners {sk3.Entities.OfType<SkLine>().Count(l1 => sk3.Entities.OfType<SkLine>().Any(l2 => l2 != l1 && (l2.A == l1.B || l2.B == l1.B || l2.A == l1.A)))}; {string.Join(", ", sk3.Constraints.Select(c => c.Type))}");
+    }
+    // (11) угловой размер: стрелки снаружи
+    var l1 = sk.AddEntity(new SkLine(new SkPoint(100, 0), new SkPoint(140, 0))); var l2 = sk.AddEntity(new SkLine(new SkPoint(100, 0), new SkPoint(130, 25)));
+    var ad = sk.AddDimension(DimensionType.AngleLineLine, 40, l1, l2);
+    ad.Arrows = ArrowPlacement.Outside; SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+    bool outA = ad.LastArrowsOutside;
+    ad.Arrows = ArrowPlacement.Inside; SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+    Require(outA && !ad.LastArrowsOutside, "angle dimension ignores the arrows inside/outside switch");
+    // (9, 14) знаки ГОСТ залиты строками
+    var fill = new List<List<Vector2d>>();
+    StrokeFont.LayoutFill("28.14", Vector2d.Zero, Vector2d.UnitX, Vector2d.UnitY, 12, 0.7 / 12, 0.1, fill);
+    Require(!StrokeFont.UseGost || fill.Count > 40, $"glyph fill rows: {fill.Count}");
+    // (10) панель размеров
+    var dimIds = w.FindControl<WrapPanel>("DimStack")!.Children.OfType<Avalonia.Controls.Primitives.TemplatedControl>().Select(b => (b.Tag as AppCommand)?.Id).ToHashSet();
+    Require(w.FindControl<Border>("DimBar")!.IsVisible && dimIds.Contains("dim.smart") && dimIds.Contains("dim.angle") && dimIds.Contains("dim.make_weak"), "dimension bar is missing in the sketch");
+    w.FinishSketch();
+    Require(!w.SketchRolledBack && s.Part!.StageIndex == -1, $"rollback is not restored after the sketch: stage {s.Part!.StageIndex}");
+    Require(!w.FindControl<Border>("DimBar")!.IsVisible, "dimension bar stays outside the sketch");
+});
+
 Check("UI-SKETCH-K96", () =>
 {
     // k96 (отзыв 17:55): эскиз открывается без инструмента «Отрезок», заливка и открытые концы включены; полоса эскиза —
@@ -2576,6 +2884,8 @@ Check("UI-SKETCH-K96", () =>
     Require(vp.ShowFilled && vp.ShowOpenEnds, "fill and open ends are not on by default (п. 7)");
     var stack = w.FindControl<WrapPanel>("CommandStack")!;
     var ids = stack.Children.OfType<Avalonia.Controls.Primitives.TemplatedControl>().Select(b => (b.Tag as AppCommand)?.Id).Where(x => x != null).ToHashSet();
+    // k97 (замечание 10): размеры — своей панелью (DimBar) в полосе
+    ids.UnionWith(w.FindControl<WrapPanel>("DimStack")!.Children.OfType<Avalonia.Controls.Primitives.TemplatedControl>().Select(b => (b.Tag as AppCommand)?.Id).Where(x => x != null)!);
     foreach (var id in new[] { "dim.smart", "dim.linear", "dim.radius", "dim.diameter", "dim.angle", "dim.arc_length", "con.coincident", "con.point_on", "con.midpoint", "con.horizontal",
                                "con.vertical", "con.parallel", "con.perpendicular", "con.collinear", "con.tangent", "con.equal", "con.concentric", "con.symmetric", "con.fix",
                                "sk.construction", "sk.grid", "sk.snap_items", "sk.show_open_ends", "sk.show_filled", "sk.references", "sk.setup", "sk.resolve" })

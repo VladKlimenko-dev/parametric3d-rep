@@ -195,6 +195,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
             GL.Load(gl.GetProcAddress, es);
             var old = _r;
             _r = new SceneRenderer { Theme = old.Theme, Style = old.Style, ShowAllVertices = old.ShowAllVertices };
+            _r.MeshLinesReady = () => Avalonia.Threading.Dispatcher.UIThread.Post(Redraw);
             _scene = null;
             _overlayDirty = true;
             GlInfo = $"{GL.GetString(StringName.Vendor)} | {GL.GetString(StringName.Renderer)} | {(es ? "OpenGL ES" : "OpenGL")} {GL.GetString(StringName.Version)}";
@@ -633,6 +634,8 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         PicksServed++;
         // значки ограничений рисуются поверх вида (не в кадре GL) — ловятся здесь и важнее того, что под ними
         if (ConstraintGlyphAt(req.P) is { IsEmpty: false } glyph && Selection.Accepts(glyph.Kind)) r = glyph;
+        // k97: в эскизе — очерк грани детали (цилиндра) под курсором, если под ним нет ничего из эскиза
+        if (ActiveSketch != null && (r.IsEmpty || r.Kind == PickKind.Face) && FaceReferenceAt(req.P) is { IsEmpty: false } fref) r = fref;
         if (Selection.SetHover(r))
         {
             _flagsDirty = true;

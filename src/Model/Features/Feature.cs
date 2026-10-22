@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Topology;
@@ -204,7 +204,7 @@ public abstract class Feature : ModelItem
     /// </summary>
     public virtual void ExecuteTransformed(BuildContext ctx, Kernel.Ops.TransformOp.Xform x) =>
         throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported,
-            $"{Name}: this operation cannot be repeated by a mirror or a pattern (supported: extrude, cut, hole, round, chamfer).");
+            $"{Name}: this operation cannot be repeated by a mirror or a pattern (supported: extrude, revolve, cut, hole, round, chamfer).");
 
     /// <summary>
     /// K05. ПОСТОЯННЫЙ КЛЮЧ ОПЕРАЦИИ — основа устойчивых имён её граней. Номер Id выдаётся заново

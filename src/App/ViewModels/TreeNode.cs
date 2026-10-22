@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Parametric3D.App.Icons;
@@ -89,7 +89,7 @@ public sealed partial class TreeNode : ObservableObject
         if (item is Sketch sk)
         {
             if (sk.LastSolve is SolveStatus.Overconstrained or SolveStatus.Inconsistent) return ("state_overdefined_ico.svg", "+", Loc.L("Эскиз переопределён"));
-            if (sk.Entities.Count > 0 && sk.DegreesOfFreedom > 0) return ("state_underdefined_ico.svg", "−", Loc.L("Эскиз не полностью определён"));
+            if (sk.Entities.Count > 0 && sk.FreeDegrees > 0) return ("state_underdefined_ico.svg", "−", Loc.L("Эскиз не полностью определён: степеней свободы {0}", sk.FreeDegrees));
         }
         if (item is Feature fw && part != null && part.Downgrades.TryGetValue(fw, out var dg)) return ("state_warning_ico.svg", "⚠", Loc.L("Приближение: гранёных граней {0}, рёбер {1}", dg.Faces, dg.Edges));
         // u13h: шаг FreeForm — зафиксирован (замок) или ещё правится; компонент сборки — закреплён

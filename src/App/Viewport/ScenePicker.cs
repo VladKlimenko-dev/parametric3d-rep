@@ -244,9 +244,13 @@ public sealed class ScenePicker
         // Точки эскиза ловятся только в активном эскизе — там же, где они рисуются.
         if (!active) return;
         // k96 (п. 1): нуль и оси эскиза — к ним привязываются связи и размеры
+        // k97 (замечание 13): оси и нуль — после элементов эскиза (штраф к расстоянию больше допуска)
+        int b0 = _hits.Count;
         foreach (var ax in new[] { sk.AxisH, sk.AxisV })
             AddSegment3(plane.ToWorld(ax.A.P), plane.ToWorld(ax.B.P), xf, new PickRef(ax.Id, PickKind.SketchCurve, sk, ax));
         AddPoint(plane.ToWorld(sk.OriginPoint.P), xf, new PickRef(sk.OriginPoint.Id, PickKind.SketchPoint, sk, sk.OriginPoint));
+        if (!Render.Engine.SceneBuilder.AxesLastForTest)
+            for (int i = b0; i < _hits.Count; i++) { var h = _hits[i]; _hits[i] = new Hit(h.Ref, h.Priority, h.Score + TolerancePx + 1, h.Depth); }
         foreach (var p in sk.AllPoints())
             AddPoint(plane.ToWorld(p.P), xf, new PickRef(p.Id, PickKind.SketchPoint, sk, p));
 

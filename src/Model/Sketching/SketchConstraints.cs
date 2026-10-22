@@ -188,6 +188,8 @@ public sealed class SkDimension
     /// в какую сторону от угла утащена подпись.
     /// </summary>
     public bool Reflex;
+    /// <summary>Разбор (k97): стрелки размера при последнем рисовании — снаружи.</summary>
+    public bool LastArrowsOutside;
     public string? Error;
 
     public SkDimension(DimensionType t, double value, params SkEntity[] items)

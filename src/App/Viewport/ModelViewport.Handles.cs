@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using OpenTK.Mathematics;
 using Parametric3D.Render.Engine;
 
@@ -42,7 +42,7 @@ public sealed partial class ModelViewport
         set
         {
             _handle = value;
-            if (value == null) { _hValue = 0; _ghost = null; _ghostLines = null; }
+            if (value == null) { _hValue = 0; _ghost = null; _ghostLines = null; if (!Parametric3D.App.Views.MainWindow.OpReleaseOff) _ghostValid = null; }   // k97: проверка держала прежнюю деталь (+250 МБ)
             _overlayDirty = true; Redraw();
         }
     }

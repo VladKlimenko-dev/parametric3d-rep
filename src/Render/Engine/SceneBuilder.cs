@@ -218,9 +218,30 @@ public static class SceneBuilder
 
     // ------------------------------------------------------------------ эскизы
 
+    /// <summary>Мутация P3D_SKAXESLAST=1: оси и нуль эскиза — после кривых (прежде; ось перекрывала отрезок на ней).</summary>
+    public static readonly bool AxesLastForTest = Environment.GetEnvironmentVariable("P3D_SKAXESLAST") == "1";
+
     private static void AddSketch(Sketch sk, Matrix4 xf, SceneData s, RenderTheme th, ShowOptions show, uint partId)
     {
         var plane = sk.Plane;
+        bool active = ReferenceEquals(sk, _activeSketch);
+        // k96 (п. 1): оси эскиза и нуль — выбираемые ссылки (оси видны сеткой, здесь — почти прозрачная линия для выбора
+        // и подсветки под курсором), нуль — точкой.
+        // k97 (замечание 13): они — ПЕРВЫМИ: в проходе выбора эскиза побеждает нарисованное позже, и отрезок, лежащий на
+        // оси, прежде не выбирался (ось перекрывала его)
+        void Builtins()
+        {
+            foreach (var ax in new[] { sk.AxisH, sk.AxisV })
+            {
+                uint apick = s.AddPick(new PickRef(ax.Id, PickKind.SketchCurve, sk, ax), 2, partId, sk.Id);
+                var ac = th.SketchReference; ac.W = 0.12f;
+                s.Lines.Add(Line(Tr(plane.ToWorld(ax.A.P), xf), Tr(plane.ToWorld(ax.B.P), xf), ac, 1.2f, 0f, apick));
+            }
+            var o = sk.OriginPoint;
+            uint opick = s.AddPick(new PickRef(o.Id, PickKind.SketchPoint, sk, o), 3, partId, sk.Id);
+            s.Points.Add(new PointInst { P = Tr(plane.ToWorld(o.P), xf), Color = SceneData.Pack(th.SketchReference), Px = 7f, Shape = 1, Pick = opick });
+        }
+        if (active && !AxesLastForTest) Builtins();
         foreach (var (e, pts, closed) in sk.Polylines())
         {
             if (e.Role == SkRole.Centerline && !show.Centerlines) continue;
@@ -237,22 +258,8 @@ public static class SceneBuilder
             for (int i = 0; i < segs; i++)
                 s.Lines.Add(Line(Tr(plane.ToWorld(pts[i]), xf), Tr(plane.ToWorld(pts[(i + 1) % pts.Count]), xf), col, w, dash, pick));
         }
+        if (active && AxesLastForTest) Builtins();
         // точки: отдельные — всегда; концы и центры — у эскиза в правке
-        bool active = ReferenceEquals(sk, _activeSketch);
-        if (active)
-        {
-            // k96 (п. 1): оси эскиза и нуль — выбираемые ссылки (оси видны сеткой, здесь — почти прозрачная линия для выбора
-            // и подсветки под курсором), нуль — точкой
-            foreach (var ax in new[] { sk.AxisH, sk.AxisV })
-            {
-                uint apick = s.AddPick(new PickRef(ax.Id, PickKind.SketchCurve, sk, ax), 2, partId, sk.Id);
-                var ac = th.SketchReference; ac.W = 0.12f;
-                s.Lines.Add(Line(Tr(plane.ToWorld(ax.A.P), xf), Tr(plane.ToWorld(ax.B.P), xf), ac, 1.2f, 0f, apick));
-            }
-            var o = sk.OriginPoint;
-            uint opick = s.AddPick(new PickRef(o.Id, PickKind.SketchPoint, sk, o), 3, partId, sk.Id);
-            s.Points.Add(new PointInst { P = Tr(plane.ToWorld(o.P), xf), Color = SceneData.Pack(th.SketchReference), Px = 7f, Shape = 1, Pick = opick });
-        }
         foreach (var e in sk.Entities)
             foreach (var q in e.Handles)
             {

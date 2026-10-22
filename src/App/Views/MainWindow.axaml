@@ -1,4 +1,4 @@
-<Window xmlns="https://github.com/avaloniaui"
+﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vp="using:Parametric3D.App.Viewport"
         xmlns:vm="using:Parametric3D.App.ViewModels"
@@ -49,6 +49,9 @@
               <WrapPanel x:Name="ShapeStack" Orientation="Horizontal" Width="120" />
             </StackPanel>
           </Border>
+          <Border x:Name="DimBar" Classes="toolbar" Margin="2" Padding="3" IsVisible="False">
+            <WrapPanel x:Name="DimStack" Orientation="Horizontal" />
+          </Border>
           <Border x:Name="SketchBar" Classes="toolbar" Margin="2" Padding="4,2" IsVisible="False">
             <StackPanel x:Name="SketchBarStack" Orientation="Horizontal" Spacing="2" />
           </Border>
@@ -69,7 +72,8 @@
             <TextBlock x:Name="TreeHeader" Classes="header" VerticalAlignment="Center" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" x:Name="TreeTools" />
           </Grid>
-          <TreeView Grid.Row="1" x:Name="Tree" Background="Transparent" Margin="2,0,2,4">
+          <Panel Grid.Row="1">
+          <TreeView x:Name="Tree" Background="Transparent" Margin="2,0,2,4">
             <TreeView.Styles>
               <Style Selector="TreeViewItem" x:DataType="vm:TreeNode">
                 <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
@@ -138,6 +142,11 @@
               </TreeDataTemplate>
             </TreeView.ItemTemplate>
           </TreeView>
+          <!-- k97: место, куда встанет перетаскиваемая операция -->
+          <Canvas x:Name="TreeDropCanvas" IsHitTestVisible="False">
+            <Border x:Name="TreeDropLine" Height="3" CornerRadius="1.5" Background="{DynamicResource P3.Accent}" IsVisible="False" />
+          </Canvas>
+          </Panel>
         </Grid>
       </Border>
 

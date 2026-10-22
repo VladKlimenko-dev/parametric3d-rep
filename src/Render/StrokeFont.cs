@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 
 namespace Parametric3D.Render;
 
@@ -88,6 +88,48 @@ public static class StrokeFont
                 }
             }
             pen += c is '.' or ',' ? NarrowAdvance : Advance;
+        }
+    }
+
+    /// <summary>Мутация P3D_TEXTFILL=0: знаки ГОСТ — только контуры (прежде: полые, «жирные» буквы с обводкой).</summary>
+    public static readonly bool FillOff = Environment.GetEnvironmentVariable("P3D_TEXTFILL") == "0";
+
+    /// <summary>
+    /// k97: ЗАЛИВКА ЗНАКОВ ГОСТ. Контур глифа, нарисованный линией, давал полую букву с обводкой — на светлом фоне «обрис»,
+    /// на тёмном — жирно. Внутренность знака заполняется строками развёртки (по правилу чёт-нечет) с шагом rowStep (в
+    /// единицах высоты знака, ~1 пиксель); строка укорочена на trim с каждого конца, чтобы скругление торца не выходило за
+    /// контур. Возвращает отрезки в dst (по два узла).
+    /// </summary>
+    public static void LayoutFill(string text, Vector2d origin, Vector2d dirX, Vector2d dirY, double size, double rowStep, double trim, List<List<Vector2d>> dst)
+    {
+        if (!UseGost || FillOff || rowStep <= 0) return;
+        double pen = 0, wide = S.DimensionTextWidthScale;
+        var xs = new List<double>();
+        foreach (char c in text)
+        {
+            if (GostFont.Glyph(c) is not { } gg) { pen += Advance; continue; }
+            double ylo = double.MaxValue, yhi = double.MinValue;
+            foreach (var ct in gg.Contours) foreach (var q in ct) { ylo = Math.Min(ylo, q.Y); yhi = Math.Max(yhi, q.Y); }
+            if (ylo < yhi)
+                for (double y = ylo + rowStep * 0.5; y < yhi; y += rowStep)
+                {
+                    xs.Clear();
+                    foreach (var ct in gg.Contours)
+                        for (int i = 0; i < ct.Length; i++)
+                        {
+                            var a = ct[i]; var b = ct[(i + 1) % ct.Length];
+                            if ((a.Y > y) == (b.Y > y)) continue;
+                            xs.Add(a.X + (y - a.Y) / (b.Y - a.Y) * (b.X - a.X));
+                        }
+                    xs.Sort();
+                    for (int k = 0; k + 1 < xs.Count; k += 2)
+                    {
+                        double x0 = (pen + xs[k] * wide) * size + trim, x1 = (pen + xs[k + 1] * wide) * size - trim;
+                        if (x1 <= x0) { double m = (x0 + x1) * 0.5; x0 = m; x1 = m + 1e-9 * size; }
+                        dst.Add(new List<Vector2d> { origin + dirX * x0 + dirY * (y * size), origin + dirX * x1 + dirY * (y * size) });
+                    }
+                }
+            pen += gg.Advance * S.DimensionTextWidthScale * S.DimensionTextSpacing;
         }
     }
 

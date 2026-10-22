@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Threading;
@@ -169,7 +169,8 @@ public partial class MainWindow
         string state = sk.LastSolve switch
         {
             SolveStatus.Ok => L("Эскиз определён полностью"),
-            SolveStatus.Underconstrained => L("Эскиз недоопределён: степеней свободы {0}", sk.DegreesOfFreedom),
+            SolveStatus.Underconstrained when sk.FreeDegrees == 0 => L("Эскиз определён: слабых размеров {0} (их можно сделать сильными или заменить своими)", sk.DegreesOfFreedom),
+            SolveStatus.Underconstrained => L("Эскиз недоопределён: степеней свободы {0}", sk.FreeDegrees),
             SolveStatus.Overconstrained => L("Эскиз избыточен: есть лишние (согласные) связи"),
             SolveStatus.Inconsistent => L("Эскиз противоречив: связи и размеры несовместимы"),
             SolveStatus.Singular => L("Эскиз вырожден: элементы нулевого размера"),
