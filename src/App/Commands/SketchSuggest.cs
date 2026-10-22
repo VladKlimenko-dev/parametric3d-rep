@@ -1,4 +1,4 @@
-using Avalonia.Input;
+﻿using Avalonia.Input;
 using OpenTK.Mathematics;
 using Parametric3D.App.Sketching;
 using Parametric3D.App.Views;
@@ -30,20 +30,36 @@ public static class SketchSuggest
     private static bool Radial(SkDimension d) => d.Type is DimensionType.Radius or DimensionType.Diameter;
 
     /// <summary>Правка выбранных размеров с откатом, если эскиз перестал решаться.</summary>
-    public static void EditDims(MainWindow w, Action<SkDimension> act)
+    public static void EditDims(MainWindow w, Action<SkDimension> act, bool geometry = true)
     {
         var sk = w.ViewPort.ActiveSketch; var ds = Dims(w);
         if (sk == null || ds.Count == 0) { w.ShowToast(L("Выберите размер (подпись) в эскизе"), error: false); return; }
-        var before = SketchState.Capture(sk);
-        foreach (var d in ds) act(d);
-        var st = sk.Solve(w.Session.Document.Solver);
-        if (st is SolveStatus.Overconstrained or SolveStatus.Inconsistent)
+        var solver = w.Session.Document.Solver;
+        if (!geometry)
         {
-            before.RestoreInto(sk); sk.Solve(w.Session.Document.Solver);
-            w.ShowToast(L("Размер противоречит другим связям эскиза"));
+            // вид размера (стрелки, одна стрелка, как размер) — без решения и отката (k96, п. 8)
+            foreach (var d in ds) act(d);
+            sk.NotifyChanged(sk); w.ViewPort.MarkDirty(); w.RefreshToolStates(); w.RefreshContext();
+            return;
         }
-        sk.BumpStructure(); w.ViewPort.RefreshDefaultDimensions(); sk.NotifyChanged(sk); w.ViewPort.MarkDirty();
-        w.RefreshToolStates(); w.RefreshContext();
+        // k96: откат — только при настоящем противоречии (избыточность согласных условий — не причина), с геометрией
+        var geo = SketchEditing.Geometry.Take(sk);
+        var st0 = sk.Solve(solver); geo.Restore();
+        var before = ds.Select(d => (d, d.Value, d.Formula, d.Locked, d.IsDefault, d.Reference, d.UserLocked, d.Type)).ToList();
+        foreach (var d in ds) act(d);
+        var st = sk.Solve(solver);
+        var fail = SketchEditing.FailureOf(st0, st, false);
+        if (fail != SketchEditFailure.None)
+        {
+            var res = new SketchEditResult { Failure = fail, Status = st };
+            geo.Restore();
+            SketchEditing.Diagnose(sk, solver, geo, st0, false, ds.Cast<object>().ToArray(), res);
+            foreach (var (d, v, f, lk, df, rf, ul, t) in before) { d.Value = v; d.Formula = f; d.Locked = lk; d.IsDefault = df; d.Reference = rf; d.UserLocked = ul; d.Type = t; }
+            geo.Restore(); sk.Solve(solver); geo.Restore();
+            w.ReportSketchConflict(sk, res, L("Правка размера"), null);
+        }
+        w.AfterSketchEdit(sk);
+        w.RefreshContext();
     }
 
     public static void Register(CommandRegistry r, MainWindow w)
@@ -61,7 +77,7 @@ public static class SketchSuggest
         r.Add(new AppCommand { Id = "dim.single_arrow", Label = "Одна стрелка", Group = S, Synonyms = "single arrow одна стрелка",
             IconOf = () => Dims(w).FirstOrDefault()?.Type == DimensionType.Diameter ? "dim_diameter_arrow_ico.svg" : "dim_radius_arrow_ico.svg",
             CanRun = () => In() && OneTypeDims(w, Radial), IsChecked = () => Dims(w) is { Count: > 0 } ds && ds.All(d => d.SingleArrow),
-            Run = () => { bool to = !Dims(w).All(d => d.SingleArrow); EditDims(w, d => d.SingleArrow = to); } });
+            Run = () => { bool to = !Dims(w).All(d => d.SingleArrow); EditDims(w, d => d.SingleArrow = to, geometry: false); } });
         r.Add(new AppCommand { Id = "dim.outside", Label = "Стрелки снаружи", Group = S, Synonyms = "arrows outside стрелки снаружи наружный",
             IconOf = () => Dims(w).FirstOrDefault()?.Type switch
             {
@@ -69,13 +85,20 @@ public static class SketchSuggest
                 DimensionType.AngleLineLine => "dim_angle_outside_ico.svg", _ => "dim_arrows_outside_but.svg",
             },
             CanRun = () => In() && Dims(w).Count > 0, IsChecked = () => Dims(w) is { Count: > 0 } ds && ds.All(d => d.Arrows == ArrowPlacement.Outside),
-            Run = () => { bool to = !Dims(w).All(d => d.Arrows == ArrowPlacement.Outside); EditDims(w, d => d.Arrows = to ? ArrowPlacement.Outside : ArrowPlacement.Auto); } });
+            Run = () => { bool to = !Dims(w).All(d => d.Arrows == ArrowPlacement.Outside); EditDims(w, d => d.Arrows = to ? ArrowPlacement.Outside : ArrowPlacement.Auto, geometry: false); } });
         r.Add(new AppCommand { Id = "dim.as_linear", Label = "Диаметр как размер", Group = S, Icon = "dim_diameter_size_ico.svg", Synonyms = "diameter linear диаметр как размер",
             CanRun = () => In() && OneTypeDims(w, d => d.Type == DimensionType.Diameter), IsChecked = () => Dims(w) is { Count: > 0 } ds && ds.All(d => d.DiameterAsLinear),
-            Run = () => { bool to = !Dims(w).All(d => d.DiameterAsLinear); EditDims(w, d => d.DiameterAsLinear = to); } });
+            Run = () => { bool to = !Dims(w).All(d => d.DiameterAsLinear); EditDims(w, d => d.DiameterAsLinear = to, geometry: false); } });
         r.Add(new AppCommand { Id = "dim.make_strong", Label = "Сделать сильным", Short = "Сильный", Group = S, Icon = "dim_smart_but.svg", Synonyms = "strong driving сильный",
             CanRun = () => In() && Dims(w).Any(d => d.IsDefault || !d.Locked && !d.Reference),
             Run = () => EditDims(w, d => { d.IsDefault = false; d.Locked = true; d.Reference = false; }) });
+        // k96 (пп. 2, 17): слабым — противоположность «Сделать сильным»; удалить размер (нужный эскизу — становится слабым)
+        r.Add(new AppCommand { Id = "dim.make_weak", Label = "Сделать слабым", Short = "Слабый", Group = S, Icon = "dim_weak_but.svg", Synonyms = "weak слабый ослабить",
+            CanRun = () => In() && Dims(w).Any(d => d.Locked && !d.IsDefault && !d.UserLocked && !d.Reference),
+            Run = () => { var sk = w.ViewPort.ActiveSketch!; SketchEditing.MakeWeak(sk, Dims(w), w.Session.Document.Solver); w.AfterSketchEdit(sk); w.RefreshContext(); } });
+        r.Add(new AppCommand { Id = "dim.delete", Label = "Удалить размер", Short = "Удалить", Group = S, Icon = "delete_but.svg", Synonyms = "delete dimension удалить размер",
+            CanRun = () => In() && Dims(w).Any(d => !d.UserLocked),
+            Run = () => DeleteDims(w, Dims(w)) });
         r.Add(new AppCommand { Id = "dim.lock_toggle", Label = "Замок размера", Short = "Замок", Group = S, Synonyms = "lock unlock замок заблокировать разблокировать",
             IconOf = () => Dims(w).Any(d => d.UserLocked) ? "dim_lock_ico.svg" : "dim_unlock_ico.svg",
             CanRun = () => In() && Dims(w).Any(d => !d.Reference), IsChecked = () => Dims(w) is { Count: > 0 } ds && ds.All(d => d.UserLocked),
@@ -98,6 +121,17 @@ public static class SketchSuggest
         r.Add(new AppCommand { Id = "sk.delete", Label = "Удалить из эскиза", Short = "Удалить", Group = S, Icon = "delete_but.svg", Gesture = new KeyGesture(Key.Delete), Synonyms = "delete удалить",
             CanRun = () => In() && w.ViewPort.Selection.Items.Any(x => ReferenceEquals(x.Owner, w.ViewPort.ActiveSketch) && x.Target is SkEntity or SkConstraint or SkDimension),
             Run = () => Delete(w) });
+    }
+
+    /// <summary>Удалить размеры: нужные эскизу (сильные) становятся слабыми — об этом сообщение.</summary>
+    public static void DeleteDims(MainWindow w, List<SkDimension> ds)
+    {
+        var sk = w.ViewPort.ActiveSketch; if (sk == null || ds.Count == 0) return;
+        var (removed, weakened) = SketchEditing.DeleteDimensions(sk, ds.Where(d => !d.UserLocked), w.Session.Document.Solver);
+        w.ViewPort.Selection.Clear();
+        w.AfterSketchEdit(sk);
+        if (weakened > 0) w.ShowToast(L("Удалено размеров: {0}; нужных эскизу (стали слабыми): {1}", removed, weakened), error: false);
+        w.RefreshContext();
     }
 
     /// <summary>Точка связана с другой (совпадение) или общая у нескольких элементов.</summary>
@@ -125,7 +159,8 @@ public static class SketchSuggest
         var sk = w.ViewPort.ActiveSketch; if (sk == null) return;
         var sel = w.ViewPort.Selection.Items.Where(x => ReferenceEquals(x.Owner, sk)).Select(x => x.Target).ToList();
         foreach (var c in sel.OfType<SkConstraint>()) sk.Constraints.Remove(c);
-        foreach (var d in sel.OfType<SkDimension>()) sk.Dimensions.Remove(d);
+        var dims = sel.OfType<SkDimension>().ToList();
+        if (dims.Count > 0) { DeleteDims(w, dims); if (sel.All(x => x is SkDimension)) return; }
         foreach (var e in sel.OfType<SkEntity>())
         {
             if (e is SkPoint { Owner: not null } owned) { if (sk.Entities.Contains(owned.Owner!)) continue; }
@@ -149,7 +184,7 @@ public static class SketchSuggest
 
         if (dims.Count > 0)
         {
-            res.AddRange(new[] { "dim.to_radius", "dim.to_diameter", "dim.single_arrow", "dim.outside", "dim.as_linear", "dim.make_strong", "dim.lock_toggle", "dim.ref_toggle", "dim.link_param", "dim.edit_value" });
+            res.AddRange(new[] { "dim.to_radius", "dim.to_diameter", "dim.single_arrow", "dim.outside", "dim.as_linear", "dim.make_strong", "dim.make_weak", "dim.lock_toggle", "dim.ref_toggle", "dim.link_param", "dim.edit_value", "dim.delete" });
         }
         if (sel.Count == 0 && dims.Count == 0)
         {

@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Ops;
@@ -166,6 +166,7 @@ public static class ConstraintLayout
         pos = Vector2d.Zero;
         dir = new Vector2d(1, 0);
         alongLine = false;
+        if (item.Builtin) return false;   // k96: нуль и оси эскиза — значок у другого участника
         switch (item)
         {
             case SkLine l:

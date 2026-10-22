@@ -636,6 +636,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         if (Selection.SetHover(r))
         {
             _flagsDirty = true;
+            if (ActiveSketch != null) _overlayDirty = true;   // k96: очерк грани под курсором — в слое поверх
             HoverChanged?.Invoke(r.IsEmpty ? "" : Selection.DescribeHover());
             Redraw();
         }

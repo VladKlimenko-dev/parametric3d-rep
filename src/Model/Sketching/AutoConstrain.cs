@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 
 namespace Parametric3D.Model.Sketching;
@@ -74,6 +74,27 @@ public static class AutoConstrain
         if (d.Length < tol) return;
         d = d.Normalized();
 
+        // k96: оба конца уже на одной прямой (ось эскиза, другой отрезок) — направление задано, горизонтальность или
+        // параллельность была бы избыточной (эскиз «переопределён»).
+        HashSet<SkEntity> OnLines(SkPoint p)
+        {
+            // группа совпадающих точек (по связям «Совпадение», транзитивно)
+            var grp = new HashSet<SkPoint>(ReferenceEqualityComparer.Instance) { p };
+            for (bool grew = true; grew;)
+            {
+                grew = false;
+                foreach (var c in sk.Constraints)
+                    if (c.Enabled && c.Type == ConstraintType.Coincident && c.Items.OfType<SkPoint>().Any(grp.Contains))
+                        foreach (var q in c.Items.OfType<SkPoint>()) grew |= grp.Add(q);
+            }
+            var r = new HashSet<SkEntity>(ReferenceEqualityComparer.Instance);
+            if (grp.Contains(sk.OriginPoint)) { r.Add(sk.AxisH); r.Add(sk.AxisV); }
+            foreach (var c in sk.Constraints)
+                if (c.Enabled && c.Type == ConstraintType.PointOnEntity && c.Items.Count >= 2 && c.Items[0] is SkPoint q && grp.Contains(q) && c.Items[1] is SkLine) r.Add(c.Items[1]);
+            return r;
+        }
+        if (OnLines(line.A).Overlaps(OnLines(line.B))) return;
+
         // Горизонталь и вертикаль важнее прочего: они читаются с первого
         // взгляда и почти всегда именно то, чего хотел пользователь.
         double angle = Math.Atan2(d.Y, d.X);
@@ -117,8 +138,8 @@ public static class AutoConstrain
 
     private static void ApplyToPoint(Sketch sk, SkPoint p, SkEntity owner, double tol)
     {
-        // Совпадение с уже существующей точкой.
-        foreach (var q in sk.AllPoints())
+        // Совпадение с уже существующей точкой (k96: и с нулём эскиза).
+        foreach (var q in sk.AllPoints().Append(sk.OriginPoint))
         {
             if (ReferenceEquals(q, p)) continue;
             if (ReferenceEquals(q.Owner, owner)) continue;      // свои же концы не связываем
@@ -128,11 +149,13 @@ public static class AutoConstrain
             return;
         }
 
-        // Точка на кривой.
-        foreach (var e in sk.Entities)
+        // Точка на кривой. k96: не на кривой, концом которой она и так является (общая точка соседних отрезков ломаной
+        // «лежала на» предыдущем — пустая связь, эскиз выходил переопределённым); на оси эскиза — можно.
+        foreach (var e in sk.Entities.Append(sk.AxisH).Append(sk.AxisV))
         {
             if (ReferenceEquals(e, owner) || e is SkPoint) continue;
-            if (e.Role == SkRole.Reference) continue;
+            if (e.Role == SkRole.Reference && !e.Builtin) continue;
+            if (!TrivialPointOnOld && e.Handles.Contains(p)) continue;
             if (e.DistanceTo(p.P) > tol) continue;
 
             TryAdd(sk, ConstraintType.PointOnEntity, p, e);
@@ -154,6 +177,8 @@ public static class AutoConstrain
         if (ConstraintConflicts.Find(sk, type, items).Count > 0) return;
         sk.AddConstraint(type, items);
     }
+
+    static readonly bool TrivialPointOnOld = Environment.GetEnvironmentVariable("P3D_SKTRIVIAL") == "0";
 
     private static bool Near(double a, double b, double tol) => Math.Abs(a - b) < tol;
 

@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Curves;
@@ -77,6 +77,7 @@ public static class EdgeProjection
     }
 
     static readonly bool FitOff = Environment.GetEnvironmentVariable("P3D_PROJFIT") == "0";
+    static readonly bool PerpLineOff = Environment.GetEnvironmentVariable("P3D_PROJPERP") == "0";
     /// <summary>Разбор: сколько кривых общего вида узнано дугой или отрезком.</summary>
     public static int Recognized;
 
@@ -90,8 +91,30 @@ public static class EdgeProjection
         var n = sk.Plane.W.Normalized(); var o = sk.Plane.Origin;
         var p3 = new Vector3d[N + 1];
         for (int i = 0; i <= N; i++) p3[i] = c.PointAt(c.T0 + (c.T1 - c.T0) * i / N);
-        if (p3.Any(q => Math.Abs(Vector3d.Dot(q - o, n)) > tol)) return null;
         var p = p3.Select(q => On(sk, q)).ToArray();
+        // k96 (п. 13): ПРОЕКЦИЯ — ПРЯМАЯ, хотя кривая и не в плоскости эскиза (ребро на грани, перпендикулярной эскизу:
+        // окружность торца цилиндра, кромка плоскости). Прежде такая кривая шла ломаной — с точкой на каждом шаге
+        // разбиения («зёрна» вдоль линии). Теперь — отрезок между КРАЙНИМИ точками проекции (у окружности — не концы).
+        if (!PerpLineOff)
+        {
+            int far = 0; for (int i = 1; i <= N; i++) if ((p[i] - p[0]).Length > (p[far] - p[0]).Length) far = i;
+            var d0 = p[far] - p[0]; double L0 = d0.Length;
+            if (L0 > 1e-6)
+            {
+                var u = d0 / L0;
+                if (p.All(q => Math.Abs((q.X - p[0].X) * u.Y - (q.Y - p[0].Y) * u.X) < tol))
+                {
+                    double tmin = 0, tmax = 0;
+                    for (int i = 0; i <= N; i++) { double t = Vector2d.Dot(p[i] - p[0], u); tmin = Math.Min(tmin, t); tmax = Math.Max(tmax, t); }
+                    Recognized++;
+                    return (p[0] + u * tmin, p[0] + u * tmax, null, 0, true, false);
+                }
+            }
+        }
+        // остальное (дуга, окружность) — кривая в плоскости эскиза или в параллельной ей
+        double h0 = Vector3d.Dot(p3[0] - o, n);
+        if (p3.Any(q => Math.Abs(Vector3d.Dot(q - o, n) - h0) > tol)) return null;
+        if (Math.Abs(h0) > tol && FitOff) return null;
         bool closed = (p[0] - p[N]).Length < tol;
         double span = 0; for (int i = 1; i <= N; i++) span += (p[i] - p[i - 1]).Length;
         if (span < 1e-6) return null;
@@ -140,6 +163,86 @@ public static class SketchReferences
             foreach (var e in EdgeProjection.Project(sk, c, pool, SkRole.Reference, src)) sk.AddEntity(e);
         else return Loc.L("Ссылка не найдена");
         if (!sk.ReferenceIds.Contains(r.Id)) sk.ReferenceIds.Add(r.Id);
+        sk.BumpStructure();
+        return null;
+    }
+
+    /// <summary>
+    /// k96 (п. 14): ПРОЕКЦИЯ ГРАНИ — ссылочные линии: цилиндр с осью вдоль плоскости эскиза — две образующие-очерка (в такой
+    /// проекции цилиндр — прямоугольник), с осью поперёк — окружность; плоская грань поперёк эскиза — отрезок. Прочее — пусто.
+    /// Отрезки — (A, B, null); окружность — (центр, радиус в A.X, признак).
+    /// </summary>
+    public static List<(Vector2d A, Vector2d B, double R, bool Circle)> FaceProjection(Sketch sk, TFace f)
+    {
+        var res = new List<(Vector2d, Vector2d, double, bool)>();
+        var n = sk.Plane.W.Normalized();
+        var shape = Parametric3D.Kernel.Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f));
+        var bnd = new List<Vector3d>();
+        foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) { try { ce.Tessellate(bnd, true); } catch { } }
+        if (bnd.Count == 0) return res;
+        switch (shape)
+        {
+            case Parametric3D.Kernel.Geometry.Ssi.Cylinder cy:
+            {
+                var ax = cy.Axis.Normalized();
+                double along = Math.Abs(Vector3d.Dot(ax, n));
+                if (along > 1 - 1e-9)
+                {
+                    res.Add((EdgeProjection.On(sk, cy.P), Vector2d.Zero, cy.R, true));
+                    return res;
+                }
+                if (along > 1e-9) return res;
+                // образующие очерка: ось ± R поперёк оси в плоскости эскиза; длина — по размаху грани вдоль оси
+                var a2 = EdgeProjection.On(sk, cy.P + ax) - EdgeProjection.On(sk, cy.P);
+                if (a2.Length < 1e-12) return res;
+                a2 = a2.Normalized();
+                var side = new Vector2d(-a2.Y, a2.X);
+                var c0 = EdgeProjection.On(sk, cy.P);
+                double tmin = double.MaxValue, tmax = double.MinValue, smin = double.MaxValue, smax = double.MinValue;
+                foreach (var q in bnd)
+                {
+                    var q2 = EdgeProjection.On(sk, q) - c0;
+                    double t = Vector2d.Dot(q2, a2), sd = Vector2d.Dot(q2, side);
+                    tmin = Math.Min(tmin, t); tmax = Math.Max(tmax, t); smin = Math.Min(smin, sd); smax = Math.Max(smax, sd);
+                }
+                if (tmax - tmin < 1e-9) return res;
+                // только очерки, лежащие на грани (часть цилиндра может не доходить до очерка)
+                foreach (double s in new[] { -cy.R, cy.R })
+                    if (s >= smin - 1e-6 * Math.Max(1, cy.R) && s <= smax + 1e-6 * Math.Max(1, cy.R))
+                        res.Add((c0 + a2 * tmin + side * s, c0 + a2 * tmax + side * s, 0, false));
+                return res;
+            }
+            case Parametric3D.Kernel.Geometry.Ssi.Plane pl when Math.Abs(Vector3d.Dot(pl.N.Normalized(), n)) < 1e-9:
+            {
+                var p2 = bnd.Select(q => EdgeProjection.On(sk, q)).ToList();
+                int far = 0; for (int i = 1; i < p2.Count; i++) if ((p2[i] - p2[0]).Length > (p2[far] - p2[0]).Length) far = i;
+                var d = p2[far] - p2[0]; if (d.Length < 1e-9) return res;
+                var u = d.Normalized();
+                double tmin = p2.Min(q => Vector2d.Dot(q - p2[0], u)), tmax = p2.Max(q => Vector2d.Dot(q - p2[0], u));
+                res.Add((p2[0] + u * tmin, p2[0] + u * tmax, 0, false));
+                return res;
+            }
+        }
+        return res;
+    }
+
+    public static string FaceSource(uint id) => $"Грань #{id}";
+
+    /// <summary>Добавить проекцию грани ссылкой; null — добавлена, иначе — почему нет.</summary>
+    public static string? AddFace(Sketch sk, Part part, uint faceId)
+    {
+        string src = FaceSource(faceId);
+        if (sk.Entities.Any(e => e.Role == SkRole.Reference && e.ReferenceSource == src)) return Loc.L("Уже в ссылках");
+        if (part.FindFace(faceId) is not { } f) return Loc.L("Ссылка не найдена");
+        var pr = FaceProjection(sk, f);
+        if (pr.Count == 0) return Loc.L("Грань не даёт ссылки в плоскости эскиза");
+        var pool = new EdgeProjection.PointPool(SkRole.Reference, src);
+        foreach (var (a, b, r, circle) in pr)
+        {
+            if (circle) sk.AddEntity(new SkCircle(pool.Get(a), r) { Role = SkRole.Reference, ReferenceSource = src });
+            else sk.AddEntity(new SkLine(pool.Get(a), pool.Get(b)) { Role = SkRole.Reference, ReferenceSource = src });
+        }
+        if (!sk.ReferenceIds.Contains(faceId)) sk.ReferenceIds.Add(faceId);
         sk.BumpStructure();
         return null;
     }

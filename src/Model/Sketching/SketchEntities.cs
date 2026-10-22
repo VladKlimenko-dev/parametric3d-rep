@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Curves;
@@ -32,6 +32,12 @@ public abstract class SkEntity
     public SkRole Role = SkRole.Object;
     /// <summary>Элемент зафиксирован решателем/пользователем.</summary>
     public bool Fixed;
+
+    /// <summary>
+    /// k96: ВСТРОЕННАЯ ССЫЛКА ЭСКИЗА — нулевая точка или ось (горизонтальная, вертикальная). Не входит в Entities: не
+    /// рисуется как геометрия эскиза, не сохраняется элементом, не удаляется; к ней привязываются связи и размеры.
+    /// </summary>
+    public bool Builtin;
 
     /// <summary>
     /// Элемент пересекает сам себя. Признак только отображения:

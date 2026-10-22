@@ -239,6 +239,20 @@ public static class SceneBuilder
         }
         // точки: отдельные — всегда; концы и центры — у эскиза в правке
         bool active = ReferenceEquals(sk, _activeSketch);
+        if (active)
+        {
+            // k96 (п. 1): оси эскиза и нуль — выбираемые ссылки (оси видны сеткой, здесь — почти прозрачная линия для выбора
+            // и подсветки под курсором), нуль — точкой
+            foreach (var ax in new[] { sk.AxisH, sk.AxisV })
+            {
+                uint apick = s.AddPick(new PickRef(ax.Id, PickKind.SketchCurve, sk, ax), 2, partId, sk.Id);
+                var ac = th.SketchReference; ac.W = 0.12f;
+                s.Lines.Add(Line(Tr(plane.ToWorld(ax.A.P), xf), Tr(plane.ToWorld(ax.B.P), xf), ac, 1.2f, 0f, apick));
+            }
+            var o = sk.OriginPoint;
+            uint opick = s.AddPick(new PickRef(o.Id, PickKind.SketchPoint, sk, o), 3, partId, sk.Id);
+            s.Points.Add(new PointInst { P = Tr(plane.ToWorld(o.P), xf), Color = SceneData.Pack(th.SketchReference), Px = 7f, Shape = 1, Pick = opick });
+        }
         foreach (var e in sk.Entities)
             foreach (var q in e.Handles)
             {

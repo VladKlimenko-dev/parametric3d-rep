@@ -546,6 +546,8 @@ public partial class MainWindow : Window
     /// <summary>Список команд всплывающего меню: все пункты видны — не помещаются по высоте окна, следующий столбец (без прокрутки).</summary>
     private WrapPanel ListColumns() => new() { Orientation = Orientation.Vertical, MaxHeight = Math.Max(200, Bounds.Height - 120) };
 
+    static readonly bool AllButtonsOff = Environment.GetEnvironmentVariable("P3D_ALLBUTTONS") == "0";
+
     private void BuildCommandBar()
     {
         FitCommandBar();
@@ -580,10 +582,10 @@ public partial class MainWindow : Window
             {
                 // фигуры — своя панель (п. 7); размеры и правка фигур — в полосе предложений снизу (пп. 9–10);
                 // «Готово / Отмена» — вверху у куба (п. 11)
-                (new[] { "dim.smart", "con.coincident", "con.horizontal", "con.vertical", "con.tangent" },
-                 new[] { "con.point_on", "con.midpoint", "con.parallel", "con.perpendicular", "con.collinear", "con.equal", "con.concentric", "con.symmetric", "con.fix" }),
-                (new[] { "sk.construction", "sk.grid", "sk.references" },
-                 new[] { "sk.snap_items", "sk.show_open_ends", "sk.show_filled", "sk.show_conflicts", "sk.setup" }),
+                // k96 (пп. 4, 6, 19): размеры, все связи и все настройки — кнопками, без «Ещё…»
+                (new[] { "dim.smart", "dim.linear", "dim.radius", "dim.diameter", "dim.angle", "dim.arc_length" }, Array.Empty<string>()),
+                (new[] { "con.coincident", "con.point_on", "con.midpoint", "con.horizontal", "con.vertical", "con.parallel", "con.perpendicular", "con.collinear", "con.tangent", "con.equal", "con.concentric", "con.symmetric", "con.fix" }, Array.Empty<string>()),
+                (new[] { "sk.construction", "sk.grid", "sk.snap_items", "sk.show_open_ends", "sk.show_filled", "sk.references", "sk.setup", "sk.resolve" }, Array.Empty<string>()),
             }
             : new[]
             {
@@ -597,6 +599,12 @@ public partial class MainWindow : Window
                 (new[] { "op.mirror", "op.pattern_linear", "op.pattern_circular" }, new[] { "op.pattern_points", "op.pattern_curve", "op.pattern_fill", "op.move_copy" }),
                 (Array.Empty<string>(), new[] { "tree.rebuild", "tree.needs_attention", "tree.resume", "tree.insert_here", "tree.reorder_up", "tree.reorder_down", "tree.edit_dims", "tree.group", "tree.parents_children", "tree.replace_refs" }),
             };
+        // k96 (п. 9): панель операций детали — все кнопки групп, без «Ещё…» (повтор команды в другой группе — один раз)
+        if (!ffMode && !asmMode && !InSketch && !AllButtonsOff)
+        {
+            var seenIds = new HashSet<string>();
+            groups = groups.Select(g => (g.Main.Concat(g.More).Where(seenIds.Add).ToArray(), Array.Empty<string>())).Where(g => g.Item1.Length > 0).ToArray();
+        }
         bool strip = _cmdMode is PanelMode.StripV or PanelMode.StripH;
         bool horiz = _cmdMode is PanelMode.StripH or PanelMode.Row;
         CommandStack.Orientation = horiz ? Orientation.Horizontal : Orientation.Vertical;
@@ -1207,14 +1215,18 @@ public partial class MainWindow : Window
         if (View.ActiveSketch is not { } sk || r.Owner is not Part part) return;
         // u13: режим «использовать / сместить / утолщить ребро» — ребро становится основной геометрией эскиза
         if (Commands.SketchEditCommands.OnModelEdge(this, sk, part, r)) { ScheduleTree(); return; }
-        var err = SketchReferences.Add(sk, part, r);
+        var err = r.Kind == PickKind.Face ? SketchReferences.AddFace(sk, part, r.Id) : SketchReferences.Add(sk, part, r);
         if (err != null) { ShowToast(err, error: false); return; }
         try { sk.Solve(Session.Document.Solver); } catch (Exception ex) { AppLog.Write("sketch solve", ex); }
         View.RefreshDefaultDimensions();
         View.MarkDirty();
         ScheduleTree();
         if (_refsPanel) ShowReferencesPanel();
-        else ShowToast(L("Ссылка добавлена: {0}", L(SketchReferences.SourceOf(r).Split(' ')[0]) + " " + SketchReferences.SourceOf(r).Split(' ')[1]), error: false);
+        else
+        {
+            var srcName = r.Kind == PickKind.Face ? SketchReferences.FaceSource(r.Id) : SketchReferences.SourceOf(r);
+            ShowToast(L("Ссылка добавлена: {0}", L(srcName.Split(' ')[0]) + " " + srcName.Split(' ')[1]), error: false);
+        }
     }
 
     public void ToggleReferencesPanel()
@@ -1287,21 +1299,17 @@ public partial class MainWindow : Window
                 if (!table.TryEvaluate(t, out v, out _)) { ShowToast(L("Не число и не формула: {0}", t)); return; }
                 formula = t;
             }
-            if (v <= 0 && !angle) { ShowToast(L("Размер должен быть больше нуля")); return; }
-            double old = d.Value; bool oldLocked = d.Locked, oldDefault = d.IsDefault; string? oldFormula = d.Formula;
-            if (signedCoord && old < 0) v = -v;                                      // сторона от нуля — прежняя
-            d.Value = v; d.Formula = formula; d.Locked = true; d.IsDefault = false; d.Reference = false;
-            var st = sk.Solve(Session.Document.Solver);
-            if (st is SolveStatus.Overconstrained or SolveStatus.Inconsistent)
-            {
-                d.Value = old; d.Formula = oldFormula; d.Locked = oldLocked; d.IsDefault = oldDefault;
-                sk.Solve(Session.Document.Solver);
-                ShowToast(L("Размер противоречит другим связям эскиза"));
-            }
-            sk.BumpStructure();
-            View.RefreshDefaultDimensions();
-            sk.NotifyChanged(sk);
-            View.MarkDirty();
+            // k96 (п. 3): размер 0 допустим у расстояний (точка на прямой, совпадение точек); радиус, диаметр, длина дуги — > 0
+            bool positiveOnly = d.Type is DimensionType.Radius or DimensionType.Diameter or DimensionType.ArcLength or DimensionType.EllipseRadiusU or DimensionType.EllipseRadiusV;
+            if (!angle && (v < 0 || v == 0 && positiveOnly)) { ShowToast(L(positiveOnly ? "Размер должен быть больше нуля" : "Размер не может быть отрицательным")); return; }
+            if (signedCoord && d.Value < 0) v = -v;                                  // сторона от нуля — прежняя
+            string what = L("Размер {0} → {1}", d.DisplayText(), t);
+            double vv = v; string? ff = formula;
+            Func<SketchEditResult> run = () => SketchEditing.SetDimensionValue(sk, d, vv, ff, Session.Document.Solver);
+            ClearConflictFlags(sk);
+            var res = run();
+            AfterSketchEdit(sk);
+            if (!res.Ok) ReportSketchConflict(sk, res, what, run);
             fl.Hide();
         }
         ok.Click += (_, _) => Apply();
@@ -1325,40 +1333,58 @@ public partial class MainWindow : Window
     private void OpenDimensionMenu(SkDimension d)
     {
         if (View.ActiveSketch is not { } sk) return;
+        var solver = Session.Document.Solver;
         var items = new List<object>();
-        void Add(string label, bool enabled, Action act, string? icon = null, bool? check = null)
+        // k96: пункты вида (стрелки, одна стрелка, как размер) решения не требуют — прежде каждый пункт решал эскиз и при
+        // статусе «переопределён» откатывал эскиз снимком (копии размеров): «одна стрелка» уходила другому размеру (п. 8).
+        void Add(string label, bool enabled, Action act, string? icon = null, bool? check = null, bool geometry = false)
         {
             var mi = new MenuItem { Header = (check == true ? "✓ " : "") + L(label), IsEnabled = enabled };
             if (icon != null && IconProvider.Get(icon) is { } img) mi.Icon = new Image { Source = img, Width = 16, Height = 16 };
             mi.Click += (_, _) =>
             {
-                var before = Model.Sketching.SketchState.Capture(sk);
+                if (!geometry) { act(); sk.NotifyChanged(sk); View.MarkDirty(); return; }
+                var geo = SketchEditing.Geometry.Take(sk);
+                var st0 = sk.Solve(solver); geo.Restore();
+                var saved = (d.Value, d.Formula, d.Locked, d.IsDefault, d.Reference, d.UserLocked, d.Type);
                 act();
-                var st = sk.Solve(Session.Document.Solver);
-                if (st is SolveStatus.Overconstrained or SolveStatus.Inconsistent)
+                var st = sk.Solve(solver);
+                var fail = SketchEditing.FailureOf(st0, st, false);
+                if (fail != SketchEditFailure.None)
                 {
-                    before.RestoreInto(sk); sk.Solve(Session.Document.Solver);
-                    ShowToast(L("Размер противоречит другим связям эскиза"));
+                    var res = new SketchEditResult { Failure = fail, Status = st };
+                    geo.Restore();
+                    SketchEditing.Diagnose(sk, solver, geo, st0, false, new object[] { d }, res);
+                    (d.Value, d.Formula, d.Locked, d.IsDefault, d.Reference, d.UserLocked, d.Type) = saved;
+                    geo.Restore(); sk.Solve(solver); geo.Restore();
+                    ReportSketchConflict(sk, res, L(label) + " — " + DimensionName(d), null);
                 }
-                sk.BumpStructure();
-                View.RefreshDefaultDimensions();
-                sk.NotifyChanged(sk);
-                View.MarkDirty();
+                AfterSketchEdit(sk);
             };
             items.Add(mi);
         }
         bool radial = d.Type is DimensionType.Radius or DimensionType.Diameter;
-        Add("Сделать сильным", d.IsDefault || !d.Locked, () => { d.IsDefault = false; d.Locked = true; d.Reference = false; });
+        bool weak = d.IsDefault || !d.Locked && !d.Reference;
+        if (weak || d.Reference)
+            Add("Сделать сильным", true, () =>
+            {
+                double m = DimensionMeasure.Value(d);
+                var r = SketchEditing.SetDimensionValue(sk, d, double.IsNaN(m) ? d.Value : m, d.Formula, solver);
+                AfterSketchEdit(sk);
+                if (!r.Ok) ReportSketchConflict(sk, r, L("Сделать сильным") + " — " + DimensionName(d), null);
+            });
+        else
+            Add("Сделать слабым", !d.UserLocked, () => { SketchEditing.MakeWeak(sk, new[] { d }, solver); AfterSketchEdit(sk); });
         Add(d.UserLocked ? "Разблокировать" : "Заблокировать", !d.Reference, () =>
         {
             d.UserLocked = !d.UserLocked;
             if (d.UserLocked) { d.IsDefault = false; d.Locked = true; }
-        }, d.UserLocked ? "dim_lock_ico.svg" : "dim_unlock_ico.svg");
+        }, d.UserLocked ? "dim_lock_ico.svg" : "dim_unlock_ico.svg", geometry: true);
         Add(d.Reference ? "Сделать управляющим" : "Сделать справочным", !d.UserLocked, () =>
         {
             d.Reference = !d.Reference;
-            if (d.Reference) { d.Locked = false; d.IsDefault = false; } else { d.Locked = true; }
-        }, "dim_reference_but.svg");
+            if (d.Reference) { d.Locked = false; d.IsDefault = false; } else { d.Locked = true; d.Value = DimensionMeasure.Value(d) is var mv && !double.IsNaN(mv) ? mv : d.Value; }
+        }, "dim_reference_but.svg", geometry: true);
         items.Add(new Separator());
         Add("Стрелки снаружи (наружный размер)", true, () => d.Arrows = ArrowPlacement.Outside, d.Type == DimensionType.Diameter ? "dim_diameter_outside_ico.svg" : d.Type == DimensionType.Radius ? "dim_radius_outside_ico.svg" : d.Type == DimensionType.AngleLineLine ? "dim_angle_outside_ico.svg" : "dim_arrows_outside_but.svg", check: d.Arrows == ArrowPlacement.Outside);
         Add("Стрелки внутри (внутренний размер)", true, () => d.Arrows = ArrowPlacement.Inside, check: d.Arrows == ArrowPlacement.Inside);
@@ -1368,15 +1394,22 @@ public partial class MainWindow : Window
             items.Add(new Separator());
             Add("Одна стрелка", true, () => d.SingleArrow = !d.SingleArrow, d.Type == DimensionType.Diameter ? "dim_diameter_arrow_ico.svg" : "dim_radius_arrow_ico.svg", check: d.SingleArrow);
             if (d.Type == DimensionType.Radius)
-                Add("Сделать диаметром", !d.UserLocked, () => { d.Type = DimensionType.Diameter; d.Value *= 2; d.Formula = d.Formula == null ? null : $"({d.Formula})*2"; });
+                Add("Сделать диаметром", !d.UserLocked, () => { d.Type = DimensionType.Diameter; d.Value *= 2; d.Formula = d.Formula == null ? null : $"({d.Formula})*2"; }, geometry: true);
             else
             {
-                Add("Сделать радиусом", !d.UserLocked, () => { d.Type = DimensionType.Radius; d.Value /= 2; d.Formula = d.Formula == null ? null : $"({d.Formula})/2"; d.DiameterAsLinear = false; });
+                Add("Сделать радиусом", !d.UserLocked, () => { d.Type = DimensionType.Radius; d.Value /= 2; d.Formula = d.Formula == null ? null : $"({d.Formula})/2"; d.DiameterAsLinear = false; }, geometry: true);
                 Add("Показать как размер", true, () => d.DiameterAsLinear = !d.DiameterAsLinear, "dim_diameter_size_ico.svg", check: d.DiameterAsLinear);
             }
         }
         items.Add(new Separator());
         Add("Изменить значение…", !d.UserLocked, () => Dispatcher.UIThread.Post(() => EditDimension(d, default)));
+        // k96 (п. 17): удалить; нужный эскизу сильный размер становится слабым
+        Add("Удалить размер", !d.UserLocked, () =>
+        {
+            var (removed, weakened) = SketchEditing.DeleteDimensions(sk, new[] { d }, solver);
+            AfterSketchEdit(sk);
+            if (weakened > 0) ShowToast(L("Размер нужен, чтобы эскиз был определён, — он стал слабым"), error: false);
+        }, "delete_but.svg");
         new ContextMenu { ItemsSource = items }.Open(View);
     }
 
@@ -1737,10 +1770,13 @@ public partial class MainWindow : Window
     {
         ConstructionMode = false;
         View.EnterSketch(sk);
-        View.Tool = new LineTool();
+        // k96 (п. 10): инструмент «Отрезок» не включается сам — эскиз открывается в режиме выбора
+        View.Tool = DefaultLineToolOff ? new LineTool() : null;
         RebuildUi();
         ScheduleTree();
     }
+
+    static readonly bool DefaultLineToolOff = Environment.GetEnvironmentVariable("P3D_SKNOLINETOOL") == "0";
 
     public void SetTool(ISketchTool t)
     {
@@ -1764,7 +1800,7 @@ public partial class MainWindow : Window
         if (View.ActiveSketch is not { } sk) return;
         View.ToolFinish();
         View.ExitSketch();
-        _refsPanel = false;
+        _refsPanel = false; _resolvePanel = false; _pendingEdit = null;
         bool empty = sk.Entities.All(e => e.Role == SkRole.Reference);
         if (empty && _sketchIsNew && sk.Parent is Part owner) { owner.Remove(sk); Session.DiscardEdit(); }
         else
@@ -1789,7 +1825,7 @@ public partial class MainWindow : Window
     {
         if (!InSketch) return;
         var sk = View.ActiveSketch!;
-        _refsPanel = false;
+        _refsPanel = false; _resolvePanel = false; _pendingEdit = null;
         View.ExitSketch();
         // новый эскиз — просто убрать (деталь не заменяется); правка — снимок до неё (вид держит прежнюю деталь)
         if (_sketchIsNew && sk.Parent is Part owner) { owner.Remove(sk); Session.DiscardEdit(); }
@@ -1994,6 +2030,7 @@ public partial class MainWindow : Window
 
     public void ShowProperties()
     {
+        if (_resolvePanel || _refsPanel) return;   // k96: панель эскиза («Ссылки», «Разрешить эскиз») не перекрывается свойствами
         using var _ui = Diagnostics.UiTimes.Measure("окно: свойства");
         PropsBody.Children.Clear();
         PropsButtons.Children.Clear();

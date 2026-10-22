@@ -903,7 +903,9 @@ Check("UI-TOOLBAR-TRAY", () =>
     var stack = w.FindControl<WrapPanel>("CommandStack")!;
     var cmdBtns = stack.Children.OfType<Avalonia.Controls.Primitives.TemplatedControl>().Where(b => b.Tag is AppCommand).ToList();
     Require(cmdBtns.Count >= 10 && cmdBtns.All(b => Math.Abs(b.Bounds.Height - UiLook.StripButtonPx) < 0.5), $"command icons: {cmdBtns.Count}, heights {string.Join(",", cmdBtns.Select(b => b.Bounds.Height).Distinct())}");
-    Require(stack.Children.OfType<Button>().Any(b => b.Tag is not AppCommand), "no drop-down for the remaining commands");
+    // k96 (п. 9): панель операций детали — все кнопки, без выпадающих «Ещё…»
+    Require(!stack.Children.OfType<Button>().Any(b => b.Tag is not AppCommand), "a drop-down is left on the part operations bar (all buttons must be shown)");
+    Require(cmdBtns.Count >= 60, $"part operations bar shows {cmdBtns.Count} buttons (expected all)");
     Require(!stack.Children.OfType<TextBlock>().Any(), "the tray has a text header");
     // окно уже: полоса переносится, панели не перекрываются
     w.Width = 1000; Run();
@@ -2552,6 +2554,123 @@ Check("UI-TANGENT-CHAIN-CHAMFER", () =>
     p.AddFeature(cf); p.Rebuild(null);
     Require(cf.Error == null, "chamfer of the chain: " + cf.Error);
     Require(p.Bodies.All(b => Parametric3D.Kernel.Topology.SolidValidator.Validate(b).IsValid), "chamfered body is not valid");
+});
+
+Check("UI-SKETCH-K96", () =>
+{
+    // k96 (отзыв 17:55): эскиз открывается без инструмента «Отрезок», заливка и открытые концы включены; полоса эскиза —
+    // размеры, все связи и настройки кнопками (без «Ещё…»), «Разрешить эскиз»; связи к нулю и осям; рамка выбирает центры
+    // окружностей; строка состояния называет вид связи; правка размера, противоречие — участники красным, панель
+    // «Разрешить эскиз»; «Сделать слабым» и удаление размера; грань поперёк эскиза и окружность в перпендикулярной
+    // плоскости — ссылочные отрезки (без точек разбиения)
+    var s = DocumentSession.NewPart();
+    var w = Open(s);
+    var part = s.Part!;
+    s.Document.RebuildDirty();
+    w.SelectItem(part.PlaneXY);
+    w.StartOperation(new SketchOp());
+    Require(w.InSketch, "sketch mode did not start");
+    var vp = w.ViewPort; var sk = vp.ActiveSketch!;
+    Dispatcher.UIThread.RunJobs();
+    Require(vp.Tool == null, "a drawing tool is active right after entering the sketch (п. 10)");
+    Require(vp.ShowFilled && vp.ShowOpenEnds, "fill and open ends are not on by default (п. 7)");
+    var stack = w.FindControl<WrapPanel>("CommandStack")!;
+    var ids = stack.Children.OfType<Avalonia.Controls.Primitives.TemplatedControl>().Select(b => (b.Tag as AppCommand)?.Id).Where(x => x != null).ToHashSet();
+    foreach (var id in new[] { "dim.smart", "dim.linear", "dim.radius", "dim.diameter", "dim.angle", "dim.arc_length", "con.coincident", "con.point_on", "con.midpoint", "con.horizontal",
+                               "con.vertical", "con.parallel", "con.perpendicular", "con.collinear", "con.tangent", "con.equal", "con.concentric", "con.symmetric", "con.fix",
+                               "sk.construction", "sk.grid", "sk.snap_items", "sk.show_open_ends", "sk.show_filled", "sk.references", "sk.setup", "sk.resolve" })
+        Require(ids.Contains(id), "sketch bar has no button " + id);
+    Require(!stack.Children.OfType<Button>().Any(b => b.Tag is not AppCommand), "a drop-down is left on the sketch bar");
+    // п. 1: связи к нулю и осям эскиза
+    var l = sk.AddEntity(new SkLine(new SkPoint(5, 6), new SkPoint(30, 12)));
+    vp.Selection.Clear();
+    vp.Selection.Select(new PickRef(l.A.Id, PickKind.SketchPoint, sk, l.A), additive: false);
+    vp.Selection.Select(new PickRef(sk.OriginPoint.Id, PickKind.SketchPoint, sk, sk.OriginPoint), additive: true);
+    Require(SketchCommands.Constrain(w, ConstraintType.Coincident), "coincident with the sketch origin refused");
+    vp.Selection.Clear();
+    vp.Selection.Select(new PickRef(l.B.Id, PickKind.SketchPoint, sk, l.B), additive: false);
+    vp.Selection.Select(new PickRef(sk.AxisH.Id, PickKind.SketchCurve, sk, sk.AxisH), additive: true);
+    Require(SketchCommands.Constrain(w, ConstraintType.PointOnEntity), "point on the sketch axis refused");
+    Require(l.A.P.Length < 1e-7 && Math.Abs(l.B.Y) < 1e-7, $"line {l.A.P} {l.B.P} is not on the origin and the axis");
+    Require(Selection.Label(new PickRef(sk.AxisH.Id, PickKind.SketchCurve, sk, sk.AxisH)) == Loc.L("Горизонтальная ось эскиза"), "axis label");
+    // п. 11: вид связи в строке состояния
+    var con = sk.Constraints.First(c => c.Type == ConstraintType.PointOnEntity);
+    Require(Selection.Label(new PickRef(con.Id, PickKind.SketchConstraint, sk, con)).Contains(MainWindow.ConstraintName(ConstraintType.PointOnEntity)), "constraint label has no type");
+    // п. 12: значки связей перекрашиваются под тему вида
+    Require(IconProvider.Get("con_horizontal_but.svg", Avalonia.Media.Color.FromRgb(232, 232, 232)) != null, "glyph icon for the view theme");
+    // п. 5: рамка вокруг двух центров окружностей — выбраны центры
+    var c1 = sk.AddEntity(new SkCircle(new SkPoint(60, 40), 15)); var c2 = sk.AddEntity(new SkCircle(new SkPoint(75, 40), 15));
+    vp.EnterSketch(sk, animate: false);   // вид — нормально к плоскости (без кадров GL анимация не идёт)
+    Dispatcher.UIThread.RunJobs();
+    var pa = vp.Project(sk.Plane.ToWorld(new Vector2d(55, 35)))!.Value; var pb = vp.Project(sk.Plane.ToWorld(new Vector2d(80, 45)))!.Value;
+    var box = new List<Avalonia.Point> { pa, new(pb.X, pa.Y), pb, new(pa.X, pb.Y) };
+    var inBox = vp.ItemsInRegion(box, crossing: false);
+    Require(inBox.Any(r => ReferenceEquals(r.Target, c1.Center)) && inBox.Any(r => ReferenceEquals(r.Target, c2.Center)), $"box selection: {inBox.Count} items, centers not selected");
+    // п. 18, 15, 16: правка размера, противоречие — участники красным, панель «Разрешить эскиз»
+    var rect = new RectangleTool();
+    rect.Click(new SketchInput(sk, new Vector2d(-60, -40), null));
+    rect.Click(new SketchInput(sk, new Vector2d(-20, -10), null));
+    sk.Solve(s.Document.Solver); vp.RefreshDefaultDimensions();
+    var sides = sk.Entities.OfType<SkLine>().Where(x => x.A.X < -19 && x.B.X < -19).ToList();
+    var wdim = sk.Dimensions.First(d => d.Type == DimensionType.DistancePointPoint && sides.Any(x => d.Items.Contains(x.A) && d.Items.Contains(x.B)) && Math.Abs(d.Value - 40) < 1e-6);
+    var r1 = SketchEditing.SetDimensionValue(sk, wdim, 50, null, s.Document.Solver);
+    Require(r1.Ok && !wdim.IsDefault && wdim.Locked, "dimension edit failed");
+    w.AfterSketchEdit(sk);
+    var diag = sk.Dimensions.FirstOrDefault(d => d.IsDefault && d.Type == DimensionType.DistancePointPoint && Math.Abs(d.Value - 30) < 1e-6);
+    Require(diag != null, "no weak height dimension");
+    var r2 = SketchEditing.SetDimensionValue(sk, diag!, 30, null, s.Document.Solver);
+    Require(r2.Ok, "height did not become strong");
+    // ширина 50, высота 30: ещё один сильный размер — диагональ 10 невозможна
+    var corner = sides.SelectMany(x => new[] { x.A, x.B }).Distinct().ToList();
+    var pA = corner.OrderBy(p => p.X + p.Y).First(); var pB = corner.OrderBy(p => p.X + p.Y).Last();
+    var dd = sk.AddDimension(DimensionType.DistancePointPoint, (pA.P - pB.P).Length, pA, pB); dd.Reference = true;
+    var r3 = SketchEditing.SetDimensionValue(sk, dd, 10, null, s.Document.Solver);
+    Require(!r3.Ok && r3.Constraints.Count + r3.Dimensions.Count > 0, $"conflict participants: ok {r3.Ok}, {r3.Constraints.Count}+{r3.Dimensions.Count}");
+    Require(Math.Abs(dd.Value - Math.Sqrt(50 * 50 + 30 * 30)) < 1e-6 && dd.Reference, $"rejected value kept: {dd.Value}");
+    w.ReportSketchConflict(sk, r3, "test", () => SketchEditing.SetDimensionValue(sk, dd, 10, null, s.Document.Solver));
+    Require(r3.Constraints.All(c => c.Flagged) && r3.Dimensions.All(d => d.Flagged), "conflicting items are not shown red");
+    w.ToggleResolvePanel();
+    Require(w.ResolvePanelOpen && w.FindControl<TextBlock>("PropsTitle")!.Text == Loc.L("РАЗРЕШИТЬ ЭСКИЗ"), "resolve panel did not open");
+    w.ToggleResolvePanel();
+    Require(!w.ResolvePanelOpen && !sk.Constraints.Any(c => c.Flagged) && !sk.Dimensions.Any(d => d.Flagged), "resolve panel did not close / flags stay");
+    // п. 2, 17: «Сделать слабым», удалить размер
+    vp.Selection.Clear();
+    vp.Selection.Select(new PickRef(wdim.Id, PickKind.SketchDimension, sk, wdim), additive: false);
+    CommandRegistry.Instance["dim.make_weak"].Execute();
+    Require(sk.Dimensions.Contains(wdim) && wdim.IsDefault && !wdim.Locked, "make weak: the needed width did not stay weak");
+    vp.Selection.Clear();
+    vp.Selection.Select(new PickRef(dd.Id, PickKind.SketchDimension, sk, dd), additive: false);
+    CommandRegistry.Instance["dim.delete"].Execute();
+    Require(!sk.Dimensions.Contains(dd), "the reference dimension was not deleted");
+    // п. 13: окружность в плоскости, перпендикулярной эскизу, — отрезок между крайними точками
+    var circ = new Parametric3D.Kernel.Curves.ArcCurve3(new Parametric3D.Kernel.Frame3(new Vector3d(0, 70, 0), Vector3d.UnitX, Vector3d.UnitZ), 12, 0, 2 * Math.PI);
+    var proj = EdgeProjection.Project(sk, circ, new EdgeProjection.PointPool(SkRole.Reference, "t"), SkRole.Reference, "t");
+    Require(proj.Count == 1 && proj[0] is SkLine pl && Math.Abs(pl.Length - 24) < 1e-6, $"perpendicular circle projected as {proj.Count} element(s)");
+    w.CancelSketch();
+    w.Close();
+    // п. 14: боковая грань бруска (поперёк эскиза на верхней грани) — ссылочный отрезок; верхняя (параллельна) — нет
+    var bp = Parametric3D.App.Diagnostics.TestParts.Block("k96");
+    var bs = DocumentSession.FromPart(bp, "k96");
+    var bw = Open(bs);
+    bs.Document.RebuildDirty();
+    var topF = bp.Bodies[0].Faces.First(f => Refs.FacePlane(bp, f.Id) is { } fp && fp.N.Z > 0.99);
+    var sideF = bp.Bodies[0].Faces.First(f => Refs.FacePlane(bp, f.Id) is { } fp && Math.Abs(fp.N.X) > 0.99);
+    bw.ViewPort.Selection.Select(new PickRef(topF.Id, PickKind.Face, bp, null), additive: false);
+    bw.StartOperation(new SketchOp());
+    var bsk = bw.ViewPort.ActiveSketch!;
+    Require(SketchReferences.FaceProjection(bsk, sideF).Count == 1 && SketchReferences.FaceProjection(bsk, topF).Count == 0, "face projection");
+    Require(bw.ViewPort.FaceReference(new PickRef(sideF.Id, PickKind.Face, bp, null)) != null, "side face is not a reference candidate under the cursor");
+    Require(SketchReferences.AddFace(bsk, bp, sideF.Id) == null && bsk.Entities.Any(e => e is SkLine { Role: SkRole.Reference }), "face reference not added");
+    bw.CancelSketch();
+    bw.Close();
+    // цилиндр (ось Z): эскиз на XZ — две образующие очерка x = ±10 высотой 40; эскиз на XY — окружность R10
+    var cylB = Parametric3D.Kernel.Ops.PrimitiveOp.Cylinder(Vector3d.Zero, 10, 40);
+    var wall = cylB.Faces.First(f => Parametric3D.Kernel.Geometry.ExactEdges.ShapeOf(Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)) is Parametric3D.Kernel.Geometry.Ssi.Cylinder);
+    var skXZ = new Sketch("xz", new Parametric3D.Kernel.Frame3(Vector3d.Zero, Vector3d.UnitX, Vector3d.UnitZ));
+    var sil = SketchReferences.FaceProjection(skXZ, wall);
+    Require(sil.Count == 2 && sil.All(x => !x.Circle && Math.Abs(Math.Abs(x.A.X) - 10) < 1e-6 && Math.Abs((x.B - x.A).Length - 40) < 1e-6), $"cylinder silhouettes: {sil.Count}");
+    var cir = SketchReferences.FaceProjection(new Sketch("xy", Parametric3D.Kernel.Frame3.XY), wall);
+    Require(cir.Count == 1 && cir[0].Circle && Math.Abs(cir[0].R - 10) < 1e-9, "cylinder along the sketch normal is not a circle");
 });
 
 Check("UI-SKETCH-REFERENCES-DIMS", () =>

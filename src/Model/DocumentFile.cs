@@ -179,11 +179,27 @@ public static class DocumentFile
                     break;
             }
 
+        // k96: РОЛЬ ЭЛЕМЕНТА (вспомогательная, осевая, ссылка), закрепление и источник ссылки — в файл. Прежде не
+        // записывались: после сохранения вспомогательные и осевые линии и проекции рёбер становились основной геометрией
+        // (входили в контур тела). Мутация P3D_SKROLESAVE=0.
+        if (!RoleSaveOff)
+        {
+            var byId = new Dictionary<uint, SkEntity>();
+            foreach (var e in s.Entities) { byId[e.Id] = e; foreach (var h in e.Handles) byId.TryAdd(h.Id, h); }
+            foreach (var ed in dto.Entities)
+                if (byId.TryGetValue(ed.Id, out var e))
+                {
+                    if (e.Role != SkRole.Object) ed.Role = (int)e.Role;
+                    if (e.Fixed) ed.Fixed = true;
+                    if (e.ReferenceSource.Length > 0) ed.Src = e.ReferenceSource;
+                }
+        }
+
         foreach (var c in s.Constraints)
             dto.Constraints.Add(new ConstraintDto
             {
                 Type = c.Type.ToString(),
-                Items = c.Items.Select(i => i.Id).ToList(),
+                Items = c.Items.Select(s.SaveIdOf).ToList(),
                 Enabled = c.Enabled
             });
 
@@ -191,7 +207,7 @@ public static class DocumentFile
             dto.Dimensions.Add(new DimensionDto
             {
                 Type = d.Type.ToString(),
-                Items = d.Items.Select(i => i.Id).ToList(),
+                Items = d.Items.Select(s.SaveIdOf).ToList(),
                 Value = d.Value,
                 Locked = d.Locked,
                 Reference = d.Reference,
@@ -756,6 +772,16 @@ public static class DocumentFile
                 if (made != null) byOld[ed.Id] = made;
                 else lost.Add($"sketch '{sd.Name}': entity {ed.Id} ({ed.Kind}) not restored");
             }
+
+            foreach (var ed in sd.Entities)
+                if (byOld.TryGetValue(ed.Id, out var le))
+                {
+                    if (ed.Role is int rl && Enum.IsDefined(typeof(SkRole), rl)) le.Role = (SkRole)rl;
+                    if (ed.Fixed == true) le.Fixed = true;
+                    if (ed.Src != null) le.ReferenceSource = ed.Src;
+                }
+            // k96: встроенные ссылки (нуль, оси) — по особым номерам
+            foreach (var bid in new[] { Sketch.OriginSaveId, Sketch.AxisHSaveId, Sketch.AxisVSaveId }) byOld[bid] = s.BuiltinBySaveId(bid)!;
 
             foreach (var cd in sd.Constraints)
             {
@@ -1428,8 +1454,13 @@ public static class DocumentFile
 
     static readonly bool SplineSaveOff = Environment.GetEnvironmentVariable("P3D_SKSPLINESAVE") == "0";
 
+    static readonly bool RoleSaveOff = Environment.GetEnvironmentVariable("P3D_SKROLESAVE") == "0";
+
     private sealed class EntityDto
     {
+        public int? Role { get; set; }
+        public bool? Fixed { get; set; }
+        public string? Src { get; set; }
         public uint Id { get; set; }
         public string Kind { get; set; } = "point";
         public double X { get; set; }

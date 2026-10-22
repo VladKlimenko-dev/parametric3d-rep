@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.App.Sketching;
 using Parametric3D.App.Views;
 using Parametric3D.Model.Sketching;
@@ -222,27 +222,9 @@ public static class SketchEditCommands
     /// <summary>Показать связи, мешающие решению: каждая проверяется снятием — без неё эскиз решается.</summary>
     public static void ShowConflicts(MainWindow w)
     {
-        var sk = Sk(w); if (sk == null) return;
-        var st = sk.Solve(w.Session.Document.Solver);
-        foreach (var c in sk.Constraints) c.Conflict = false;
-        foreach (var d in sk.Dimensions) d.Conflict = false;
-        if (st is not (SolveStatus.Overconstrained or SolveStatus.Inconsistent)) { w.ShowToast(L("Конфликтующих связей нет"), error: false); w.ViewPort.MarkDirty(); return; }
-        var bad = new List<string>();
-        foreach (var c in sk.Constraints.ToList())
-        {
-            int i = sk.Constraints.IndexOf(c); sk.Constraints.RemoveAt(i);
-            var s2 = sk.Solve(w.Session.Document.Solver);
-            sk.Constraints.Insert(i, c);
-            if (s2 is not (SolveStatus.Overconstrained or SolveStatus.Inconsistent)) { c.Conflict = true; bad.Add(L(c.Type.ToString())); }
-        }
-        foreach (var d in sk.Dimensions.Where(x => x.IsDriving).ToList())
-        {
-            d.Locked = false; var s2 = sk.Solve(w.Session.Document.Solver); d.Locked = true;
-            if (s2 is not (SolveStatus.Overconstrained or SolveStatus.Inconsistent)) { d.Conflict = true; bad.Add(L("размер {0}", d.Value.ToString("0.##"))); }
-        }
-        sk.Solve(w.Session.Document.Solver);
-        w.ShowToast(bad.Count == 0 ? L("Противоречие не сводится к одной связи") : L("Конфликтуют: {0}", string.Join(", ", bad.Distinct())));
-        w.ViewPort.MarkDirty();
+        // k96: панель «Разрешить эскиз» — участники противоречия с действиями
+        if (Sk(w) == null) return;
+        if (!w.ResolvePanelOpen) w.ToggleResolvePanel();
     }
 
     // -------------------------------------------------------------- параметры инструментов

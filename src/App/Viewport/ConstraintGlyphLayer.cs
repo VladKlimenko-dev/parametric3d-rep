@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Parametric3D.App.Icons;
@@ -64,13 +64,13 @@ public sealed class ConstraintGlyphLayer : Control
             var cell = new Rect(q.X - s / 2 - 2, q.Y - s / 2 - 2, s + 4, s + 4);
             if (!cell.Intersects(Bounds.WithX(0).WithY(0))) continue;
 
-            Pen pen = c.Conflict ? conflict
+            Pen pen = c.Conflict || c.Flagged ? conflict
                 : hov.Id == c.Id ? hover
                 : _view.Selection.Contains(c.Id) ? select
                 : normal;
             ctx.DrawRectangle(bg, pen, cell, 3, 3);
 
-            var img = IconProvider.Get(ConstraintLayout.IconOf(c.Type));
+            var img = IconProvider.Get(ConstraintLayout.IconOf(c.Type), th.Dark ? Color.FromRgb(232, 232, 232) : Color.FromRgb(30, 30, 30));
             if (img != null)
             {
                 var dst = IconProvider.Fit(img.Size, new Rect(q.X - s / 2, q.Y - s / 2, s, s));

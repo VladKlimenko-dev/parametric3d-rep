@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 
 namespace Parametric3D.Model.Sketching;
@@ -154,6 +154,7 @@ public sealed class SketchState
                                   Dictionary<SkPoint, SkPoint> points,
                                   Dictionary<SkEntity, SkEntity> entities)
     {
+        if (item.Builtin) return item;                       // k96: нуль и оси эскиза — общие, не копируются
         if (item is SkPoint p) return Get(points, p);
         return entities.TryGetValue(item, out var e) ? e : item;
     }
