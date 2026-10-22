@@ -381,6 +381,12 @@ public static class SketchDimensions
             return;
         }
 
+        // k98 (замечание 4): луч размера мимо дуги — тонкое продолжение дуги от её конца (5 px от него) до луча (+10 px)
+        if (d.Items[0] is SkArc ea && !ArcExtOff) ArcExtension(batch, plane, style, ea, dir, px);
+        // k98 (замечание 3): подпись радиуса и диаметра — горизонтально на ЭКРАНЕ (прежде — вдоль луча или по оси U эскиза,
+        // которая на экране могла быть вертикальной)
+        var (hR, hU) = ScreenAxes();
+
         if (!outside)
         {
             Vector2d from = diameter ? center - dir * radius : center;
@@ -389,7 +395,8 @@ public static class SketchDimensions
             if (diameter && !d.SingleArrow) Arrow(batch, plane, style, from, dir, px);
 
             Vector2d at = diameter ? center : center + dir * (radius * 0.5);
-            Text(batch, plane, style, d, at, dir, nrm, px);
+            if (HorizontalOff) Text(batch, plane, style, d, at, dir, nrm, px);
+            else Text(batch, plane, style, d, at + hU * (TextHeightPx * px * 0.15), hR, hU, px);
             return;
         }
 
@@ -404,7 +411,8 @@ public static class SketchDimensions
             Arrow(batch, plane, style, onCurve, -dir, px);
             if (!d.SingleArrow) Arrow(batch, plane, style, center - dir * radius, dir, px);
             Line(batch, plane, style, onCurve, textAt + dir * textHalf);
-            Text(batch, plane, style, d, textAt, dir, nrm, px);
+            if (HorizontalOff) Text(batch, plane, style, d, textAt, dir, nrm, px);
+            else Text(batch, plane, style, d, textAt + dir * textHalf + hR * (Vector2d.Dot(dir, hR) >= 0 ? textHalf + 2 * px : -textHalf - 2 * px), hR, hU, px);
             return;
         }
 
@@ -423,8 +431,8 @@ public static class SketchDimensions
 
         // Полка — горизонтальная, длиной с подпись, что бы ни делал луч:
         // текст читается по горизонтали, полка идёт под ним.
-        Vector2d shelfDir = new(1, 0);
-        if (dir.X < 0) shelfDir = new Vector2d(-1, 0);
+        Vector2d shelfDir = HorizontalOff ? new(1, 0) : hR;
+        if (Vector2d.Dot(dir, shelfDir) < 0) shelfDir = -shelfDir;
         Vector2d shelfStart = textAt - dir * textHalf;
         Line(batch, plane, style, shelfStart, shelfStart + shelfDir * (textHalf * 2));
 
@@ -432,10 +440,53 @@ public static class SketchDimensions
              shelfStart + shelfDir * textHalf, shelfDir, new Vector2d(-shelfDir.Y, shelfDir.X), px);
     }
 
+    /// <summary>Мутации k98: P3D_RADTEXTH=0 — подпись радиуса вдоль луча/оси U; P3D_ARCEXT=0 — без продолжения дуги.</summary>
+    static readonly bool HorizontalOff = Environment.GetEnvironmentVariable("P3D_RADTEXTH") == "0";
+    static readonly bool ArcExtOff = Environment.GetEnvironmentVariable("P3D_ARCEXT") == "0";
+    /// <summary>Разбор: угол продолжения дуги у последнего радиального размера (0 — не рисовалось).</summary>
+    public static double LastArcExtension;
+
+    /// <summary>Направления «вправо» и «вверх» экрана в координатах эскиза (единичные; «вверх» — по правой руке).</summary>
+    static (Vector2d R, Vector2d U) ScreenAxes()
+    {
+        var r = ScreenRight.LengthSquared > 1e-12 ? ScreenRight.Normalized() : new Vector2d(1, 0);
+        var u = new Vector2d(-r.Y, r.X);
+        if (Vector2d.Dot(u, ScreenUp) < 0) u = -u;
+        return (r, u);
+    }
+
+    /// <summary>Продолжение дуги до луча размера: от ближнего конца дуги (с зазором 5 px) до луча и на 10 px дальше.</summary>
+    static void ArcExtension(DimBatch batch, Frame3 plane, LineStyle style, SkArc a, Vector2d dir, double px)
+    {
+        LastArcExtension = 0;
+        double r = a.Radius; if (r < 1e-9) return;
+        double a0 = a.A0, sw = a.Sweep;
+        double lo = Math.Min(a0, a0 + sw), hi = Math.Max(a0, a0 + sw);
+        double t = Math.Atan2(dir.Y, dir.X);
+        // угол луча относительно начала охвата дуги
+        double rel = GeomUtil.Norm2Pi(t - lo);
+        if (rel <= hi - lo + 1e-9) return;                       // луч попадает на дугу
+        double after = rel - (hi - lo), before = 2 * Math.PI - rel;   // за концом hi и перед началом lo
+        double gap = 5 * px / r, over = 10 * px / r;
+        double from, to;
+        if (after <= before) { from = hi + gap; to = hi + after + over; }
+        else { from = lo - gap; to = lo - before - over; }
+        if (Math.Abs(to - from) < 1e-9) return;
+        var pts = new List<Vector2d>();
+        int n = Math.Max(8, (int)(Math.Abs(to - from) * 60 / Math.PI));
+        for (int i = 0; i <= n; i++) { double u = from + (to - from) * i / n; pts.Add(a.Center.P + new Vector2d(Math.Cos(u), Math.Sin(u)) * r); }
+        Polyline(batch, plane, style, pts);
+        LastArcExtension = to - from;
+    }
+
     // ---------------------------------------------------------- угловые
 
     /// <summary>Мутация P3D_ANGLEARROWS=0: стрелки углового размера всегда внутри (переключатель не действует).</summary>
     static readonly bool AngleArrowsOff = Environment.GetEnvironmentVariable("P3D_ANGLEARROWS") == "0";
+    /// <summary>Мутация P3D_ANGLEOUTARC=1: при стрелках снаружи дуга между лучами и подпись внутри угла остаются (k97).</summary>
+    static readonly bool AngleOutsideArcKeep = Environment.GetEnvironmentVariable("P3D_ANGLEOUTARC") == "1";
+    /// <summary>Разбор: угол (от первого луча, со знаком обхода) подписи последнего углового размера.</summary>
+    public static double LastAngleTextAt;
 
     private static void BuildAngle(SkDimension d, Frame3 plane, DimBatch batch,
                                    double px, LineStyle style)
@@ -485,7 +536,14 @@ public static class SketchDimensions
         var arc = new List<Vector2d>();
         int n = Math.Max(40, (int)(Math.Abs(sweep) * 120 / Math.PI));
         for (int i = 0; i <= n; i++) arc.Add(c + Dir(a0 + sweep * i / n) * r);
-        Polyline(batch, plane, style, arc);
+        // k98 (замечание 9): при стрелках снаружи дуги между лучами нет (только хвосты за ними), подпись — вне угла
+        bool outsideEarly = !AngleArrowsOff && d.Arrows switch
+        {
+            ArrowPlacement.Inside => false,
+            ArrowPlacement.Outside => true,
+            _ => Math.Abs(sweep) * r < ArrowLengthPx * px * 2.2,
+        };
+        if (!outsideEarly || AngleOutsideArcKeep) Polyline(batch, plane, style, arc);
 
         // Выносные линии до дуги.
         Line(batch, plane, style, c + d1 * (r * 0.15), c + d1 * (r + OverrunPx * px));
@@ -521,10 +579,18 @@ public static class SketchDimensions
 
         Vector2d radial = Dir(a0 + sweep * 0.5);
         Vector2d mid = c + radial * r;
+        if (outside && !AngleOutsideArcKeep)
+        {
+            // за концом хвоста у второго луча: хвост (2.5 стрелки) + половина подписи + зазор
+            double textHalfA = StrokeFont.Width(Label(d)) * TextHeightPx * px * 0.5;
+            double at = aEnd + s * (arrowLen * 2.5 + textHalfA + 4 * px) / r;
+            radial = Dir(at); mid = c + radial * r;
+        }
 
         // Пара направлений должна быть ПРАВОЙ, иначе строка выходит
         // зеркальной: касательная берётся поворотом радиуса на -90 градусов.
         Text(batch, plane, style, d, mid, new Vector2d(radial.Y, -radial.X), radial, px);
+        LastAngleTextAt = GeomUtil.Norm2Pi((Math.Atan2(radial.Y, radial.X) - a0) * s);
     }
 
     private static Vector2d Dir(double angle) => new(Math.Cos(angle), Math.Sin(angle));
@@ -550,6 +616,12 @@ public static class SketchDimensions
     /// Подпись всегда над размерной линией — как требует чертёжная норма.
     /// Если письмо оказалось «вверх ногами», строка разворачивается на 180°.
     /// </summary>
+    static readonly bool OutlineWithFill = Environment.GetEnvironmentVariable("P3D_TEXTOUTLINE") == "1";
+    /// <summary>Разбор: число отрезков последней подписи.</summary>
+    public static int LastTextSegments;
+    /// <summary>Разбор: направление письма последней подписи (координаты эскиза).</summary>
+    public static Vector2d LastTextDir;
+
     private static void Text(DimBatch batch, Frame3 plane, LineStyle style, SkDimension d,
                              Vector2d anchor, Vector2d dir, Vector2d up, double px)
     {
@@ -582,10 +654,13 @@ public static class SketchDimensions
         };
 
         var strokes = new List<List<Vector2d>>();
-        StrokeFont.Layout(text, origin, dir, up, h, strokes);
-        // k97: знак залит строками развёртки (~1 пиксель), контур — тонкой линией по краю
-        StrokeFont.LayoutFill(text, origin, dir, up, h, 0.7 / TextHeightPx, px * 0.35, strokes);
+        // k97: знак залит строками развёртки (~0.7 пикселя). k98 (замечание 7): контур поверх заливки утолщал знак на
+        // пиксель — буквы оставались жирными; при заливке контур не рисуется (P3D_TEXTOUTLINE=1 — с контуром)
+        StrokeFont.LayoutFill(text, origin, dir, up, h, 0.7 / TextHeightPx, px * 0.4, strokes);
+        if (strokes.Count == 0 || OutlineWithFill) StrokeFont.Layout(text, origin, dir, up, h, strokes);
         foreach (var poly in strokes) Polyline(batch, plane, textStyle, poly);
+        LastTextSegments = strokes.Count;
+        LastTextDir = dir;
     }
 
     /// <summary>

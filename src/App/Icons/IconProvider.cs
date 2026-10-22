@@ -59,13 +59,91 @@ public static class IconProvider
             {
                 using var s = AssetLoader.Open(uri);
                 using var r = new StreamReader(s);
-                string text = Recolor(r.ReadToEnd(), fg);
+                string raw = r.ReadToEnd();
+                string text = Recolor(FitToContent(file, raw), fg);
                 img = new SvgImage { Source = SvgSource.LoadFromSvg(text) };
             }
         }
         catch (Exception ex) { Core.AppLog.Write("icon " + file, ex); img = null; }
         _cache[key] = img;
         return img;
+    }
+
+    /// <summary>
+    /// k98 (замечание 13): ИКОНКА ВПИСЫВАЕТСЯ ПО РИСУНКУ, а не по полю листа. У части иконок рисунок занимал малую долю
+    /// листа (поля вокруг), и на кнопке они были заметно мельче соседних. Рисунок растрируется один раз (256 px), по
+    /// непрозрачным пикселям находится его рамка, лист обрезается до неё с полем 4 % (viewBox). P3D_ICONFIT=0 — по листу.
+    /// </summary>
+    public static readonly bool FitOff = Environment.GetEnvironmentVariable("P3D_ICONFIT") == "0";
+    private static readonly Dictionary<string, (double X, double Y, double W, double H)?> _boxes = new();
+    /// <summary>Разбор: итоговый лист иконки (рамка рисунка с полем) в единицах её файла; null — лист не менялся.</summary>
+    public static (double X, double Y, double W, double H)? ContentBox(string file) => _boxes.TryGetValue(file, out var b) ? b : null;
+
+    public static string FitToContent(string file, string svg)
+    {
+        if (FitOff) return svg;
+        var root = RootTag.Match(svg);
+        if (!root.Success) return svg;
+        string tag = root.Value;
+        static double? Attr(string t, string n) { var m = Regex.Match(t, n + @"\s*=\s*""\s*([-\d.eE]+)"); return m.Success && double.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : null; }
+        double vx = 0, vy = 0, vw, vh;
+        var vb = Regex.Match(tag, @"viewBox\s*=\s*""([^""]+)""");
+        if (vb.Success)
+        {
+            var n = vb.Groups[1].Value.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries).Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            if (n.Length != 4) return svg;
+            (vx, vy, vw, vh) = (n[0], n[1], n[2], n[3]);
+        }
+        else { vw = Attr(tag, "width") ?? 0; vh = Attr(tag, "height") ?? 0; }
+        if (vw <= 0 || vh <= 0) return svg;
+        (double X, double Y, double W, double H)? box;
+        lock (_boxes)
+            if (!_boxes.TryGetValue(file, out box)) { box = Measure(svg, vx, vy, vw, vh); _boxes[file] = box; }
+        if (box is not { } b) return svg;
+        string inv(double v) => v.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
+        string nt = Regex.Replace(tag, @"\s(width|height|viewBox|preserveAspectRatio)\s*=\s*""[^""]*""", "");
+        // b — итоговый лист (рамка с полем; целые ширина и высота в пикселях листа 1000 — пропорции рисунка = пропорциям файла)
+        int iw = (int)Math.Round(b.W * 1000 / Math.Max(b.W, b.H)), ih = (int)Math.Round(b.H * 1000 / Math.Max(b.W, b.H));
+        nt = nt.Insert(4, $" width=\"{iw}\" height=\"{ih}\" viewBox=\"{inv(b.X)} {inv(b.Y)} {inv(b.W)} {inv(b.H)}\" preserveAspectRatio=\"xMidYMid meet\"");
+        return svg[..root.Index] + nt + svg[(root.Index + root.Length)..];
+    }
+
+    private static (double, double, double, double)? Measure(string svg, double vx, double vy, double vw, double vh)
+    {
+        try
+        {
+            // лист — без полей и с теми же единицами: растр 256 по большей стороне
+            var root = RootTag.Match(svg);
+            string tag = Regex.Replace(root.Value, @"\s(width|height|viewBox|preserveAspectRatio)\s*=\s*""[^""]*""", "");
+            string inv(double v) => v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+            double k = 256.0 / Math.Max(vw, vh);
+            int W = Math.Max(1, (int)Math.Ceiling(vw * k)), H = Math.Max(1, (int)Math.Ceiling(vh * k));
+            tag = tag.Insert(4, $" width=\"{W}\" height=\"{H}\" viewBox=\"{inv(vx)} {inv(vy)} {inv(vw)} {inv(vh)}\" preserveAspectRatio=\"none\"");
+            string norm = svg[..root.Index] + tag + svg[(root.Index + root.Length)..];
+            using var sk = new Svg.Skia.SKSvg();
+            var pic = sk.FromSvg(norm);
+            if (pic == null) return null;
+            using var bmp = new SkiaSharp.SKBitmap(W, H, SkiaSharp.SKColorType.Rgba8888, SkiaSharp.SKAlphaType.Premul);
+            using (var cv = new SkiaSharp.SKCanvas(bmp)) { cv.Clear(SkiaSharp.SKColors.Transparent); cv.DrawPicture(pic); }
+            int x0 = W, y0 = H, x1 = -1, y1 = -1;
+            var px = bmp.Pixels;
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++)
+                    if (px[y * W + x].Alpha > 10) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+            if (x1 < x0 || y1 < y0) return null;
+            double bx = vx + x0 / k, by = vy + y0 / k, bw = (x1 + 1 - x0) / k, bh = (y1 + 1 - y0) / k;
+            // рисунок и так во весь лист — без изменений
+            if (bw >= vw * 0.97 && bh >= vh * 0.97) return null;
+            // поле — 4 % большей стороны; лист — целые 1000 × n (пропорции рисунка совпадают с шириной и высотой файла)
+            double pad = Math.Max(bw, bh) * 0.04;
+            bx -= pad; by -= pad; bw += 2 * pad; bh += 2 * pad;
+            double m = Math.Max(bw, bh);
+            double iw = Math.Round(bw * 1000 / m), ih = Math.Round(bh * 1000 / m);
+            double nw = iw * m / 1000, nh = ih * m / 1000;
+            bx -= (nw - bw) / 2; by -= (nh - bh) / 2;
+            return (bx, by, nw, nh);
+        }
+        catch { return null; }
     }
 
     /// <summary>Прямоугольник внутри dst с пропорциями исходного рисунка, по центру (сохранение пропорций при рисовании).</summary>

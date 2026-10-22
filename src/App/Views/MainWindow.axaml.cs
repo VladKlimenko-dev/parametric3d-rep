@@ -522,8 +522,8 @@ public partial class MainWindow : Window
         _viewMode = PanelMode.StripH;
         _sketchMode = PanelMode.StripH;
         _ctxMode = PanelMode.Float;   // выбор и предлагаемые операции — внизу вида (13:09), не в полосе
-        foreach (var b in new Control[] { CommandBar, ShapeBar, SketchBar, ViewBar, DimBar })
-            ToolTip.SetTip(b, b == CommandBar ? L("Операции") : b == ShapeBar ? L("Фигуры") : b == SketchBar ? L("Эскиз") : b == DimBar ? L("Размеры") : L("Вид"));
+        foreach (var b in new Control[] { CommandBar, ShapeBar, SketchBar, ViewBar, DimBar, SketchSetBar })
+            ToolTip.SetTip(b, b == CommandBar ? L("Операции") : b == ShapeBar ? L("Фигуры") : b == SketchBar ? L("Эскиз") : b == DimBar ? L("Размеры") : b == SketchSetBar ? L("Настройка эскиза") : L("Вид"));
         if (SelChip.Parent is StackPanel inner) DockablePanel.Reorient(inner, true);
         DockablePanel.Reorient(ContextOps, true);
     }
@@ -585,12 +585,12 @@ public partial class MainWindow : Window
                 // k96 (пп. 4, 6, 19): размеры, все связи и все настройки — кнопками, без «Ещё…»
                 // k97 (замечание 10): размеры — своей панелью в полосе (DimBar)
                 (new[] { "con.coincident", "con.point_on", "con.midpoint", "con.horizontal", "con.vertical", "con.parallel", "con.perpendicular", "con.collinear", "con.tangent", "con.equal", "con.concentric", "con.symmetric", "con.fix" }, Array.Empty<string>()),
-                (new[] { "sk.construction", "sk.grid", "sk.snap_items", "sk.show_open_ends", "sk.show_filled", "sk.references", "sk.setup", "sk.resolve" }, Array.Empty<string>()),
+                // k98 (замечание 14): настройки эскиза — своей панелью слева (SketchSetBar)
             }
             : new[]
             {
                 (new[] { "op.sketch" }, Array.Empty<string>()),
-                (new[] { "op.extrude", "op.cut", "op.revolve" }, new[] { "op.extrude_thin", "op.sweep", "op.helical_sweep", "op.loft", "op.boundary_blend", "op.swept_blend", "op.rotational_blend", "op.rib", "op.insert_body" }),
+                (new[] { "op.extrude", "op.revolve" }, new[] { "op.extrude_thin", "op.sweep", "op.helical_sweep", "op.loft", "op.boundary_blend", "op.swept_blend", "op.rotational_blend", "op.rib", "op.insert_body" }),
                 (Array.Empty<string>(), new[] { "op.surface_extrude", "op.surface_revolve", "op.fill", "op.surf_copy", "op.surf_offset", "op.surf_merge", "op.surf_trim", "op.surf_extend", "op.thicken", "op.surf_solidify", "op.replace_face" }),
                 (new[] { "op.hole", "op.round", "op.chamfer", "op.shell" }, new[] { "op.round_variable", "op.full_round", "op.vertex_round", "op.vertex_chamfer", "op.draft", "op.hole_coaxial", "op.hole_radial", "op.thread" }),
                 (Array.Empty<string>(), new[] { "op.face_offset", "op.face_move", "op.face_radius", "op.face_delete", "op.move_copy" }),
@@ -680,6 +680,9 @@ public partial class MainWindow : Window
         "sk.slot", "sk.polygon", "sk.point", "sk.text", "sk.csys",
     };
 
+    /// <summary>k98: панель настройки эскиза (первая слева в эскизе).</summary>
+    public static readonly string[] SketchSetTools = { "sk.setup", "sk.references", "sk.construction", "sk.grid", "sk.snap_items", "sk.show_open_ends", "sk.show_filled", "sk.resolve" };
+
     /// <summary>k97: панель размеров эскиза.</summary>
     public static readonly string[] DimTools =
     {
@@ -692,7 +695,15 @@ public partial class MainWindow : Window
         ShapeStack.Children.Clear();
         SketchBarStack.Children.Clear();
         DimStack.Children.Clear();
-        ShapeBar.IsVisible = SketchBar.IsVisible = DimBar.IsVisible = InSketch;
+        SketchSetStack.Children.Clear();
+        ShapeBar.IsVisible = SketchBar.IsVisible = DimBar.IsVisible = SketchSetBar.IsVisible = InSketch;
+        // k98 (замечание 14): порядок в эскизе — настройка эскиза, фигуры, связи, размеры, «Готово/Отмена»
+        var order = InSketch ? new Control[] { SketchSetBar, ShapeBar, CommandBar, DimBar, SketchBar } : new Control[] { CommandBar, SketchSetBar, ShapeBar, DimBar, SketchBar };
+        for (int i = 0; i < order.Length; i++)
+        {
+            int at = ToolTray.Children.IndexOf(order[i]);
+            if (at >= 0 && at != i) { ToolTray.Children.RemoveAt(at); ToolTray.Children.Insert(i, order[i]); }
+        }
         if (!InSketch) return;
         ShapeHeader.Text = L("ФИГУРЫ");
         // фигуры: по умолчанию — сетка в три столбца; у стороны — полоса иконок; в углу — ряд с названиями
@@ -710,6 +721,8 @@ public partial class MainWindow : Window
                 if (_shapeMode == PanelMode.Float) { b.Width = 38; b.Height = 36; }
                 ShapeStack.Children.Add(b);
             }
+        foreach (var id in SketchSetTools)
+            if (_reg.Find(id) is { } sc) SketchSetStack.Children.Add(StripButton(sc));
         // k97 (замечание 10): панель размеров — в полосе над видом
         foreach (var id in DimTools)
             if (_reg.Find(id) is { } dc) DimStack.Children.Add(StripButton(dc));
@@ -1473,7 +1486,7 @@ public partial class MainWindow : Window
         bool curved = sel.Any(r => r.Kind == PickKind.Face && !Refs.IsPlanar(r));
         int planes = sel.Count(Refs.IsPlanar), sketches = sel.Where(Refs.IsSketch).Select(r => Refs.SketchOf(r)!.Id).Distinct().Count();
         bool arc = sel.Any(r => r.Kind == PickKind.Edge && Session.Part?.FindEdge(r.Id)?.Curve is Kernel.Curves.ArcCurve3);
-        if (sketch) res.AddRange(new[] { "op.extrude", "op.cut", "op.revolve", "edit.feature" });
+        if (sketch) res.AddRange(new[] { "op.extrude", "op.revolve", "edit.feature" });
         // u13: эскизы — протяжка и переход (два и больше), ребро жёсткости
         if (sketches >= 2) res.AddRange(new[] { "op.loft", "op.sweep" });
         if (sketch) res.Add("op.rib");

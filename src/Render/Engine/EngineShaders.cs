@@ -1,4 +1,4 @@
-namespace Parametric3D.Render.Engine;
+﻿namespace Parametric3D.Render.Engine;
 
 /// <summary>
 /// ШЕЙДЕРЫ ДВИЖКА. Общее подмножество OpenGL 3.3 и OpenGL ES 3.0 (заголовок меняется под контекст — ShaderProgram).
@@ -161,6 +161,7 @@ uniform vec2 uViewport;
 uniform float uScale;
 uniform float uNear;        // > 0 — перспектива: отрезок обрезается ближней плоскостью
 uniform float uDepthBias;
+uniform float uBiasPx;      // k98: > 0 — сдвиг к глазу на столько пикселей (в мировых единицах на глубине точки) вместо uDepthBias
 uniform float uBonus;
 uniform float uWidthOverride;
 uniform vec4 uHover;
@@ -212,6 +213,14 @@ void main()
     vec2 s = (atB ? sb : sa) + nrm * side * ext + dir * (atB ? 1.0 : -1.0) * 0.5;
     vec4 c = atB ? cb : ca;
     float z = c.z / c.w - uDepthBias;
+    if (uBiasPx > 0.0)
+    {
+        vec4 vv = atB ? vb : va;
+        float pxW = (uNear > 0.0 ? -vv.z : 1.0) * 2.0 / (uProj[1][1] * uViewport.y);
+        vv.z += uBiasPx * pxW;
+        vec4 cz = uProj * vv;
+        z = cz.z / cz.w;
+    }
     gl_Position = vec4(s / uViewport * 2.0 - 1.0, z, 1.0);
 
     vW = atB ? aB : aA;

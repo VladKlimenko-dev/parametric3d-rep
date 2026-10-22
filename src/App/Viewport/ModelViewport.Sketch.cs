@@ -62,26 +62,38 @@ public sealed partial class ModelViewport
     /// <summary>Разбор: сколько элементов подсвечено значком связи под курсором при последней сборке слоя.</summary>
     public int ConstraintHoverShown { get; private set; }
 
+    /// <summary>Очерки кривых граней активной детали в плоскости эскиза (память — по сетке детали и эскизу).</summary>
+    public List<(PickRef R, List<(Vector2d A, Vector2d B, double R, bool Circle)> L)>? FaceRefItems()
+    {
+        if (FaceRefsOff || ActiveSketch is not { } sk || _doc == null) return null;
+        var part = ActivePart ?? _doc.AllParts().FirstOrDefault();
+        if (part?.Mesh is not { } mesh) return null;
+        if (_faceRefCache is { } c && ReferenceEquals(c.Mesh, mesh) && ReferenceEquals(c.Sk, sk)) return c.Items;
+        var items = new List<(PickRef, List<(Vector2d, Vector2d, double, bool)>)>();
+        foreach (var b in part.Bodies)
+            foreach (var f in b.Faces)
+            {
+                if (f.Surface is Parametric3D.Kernel.Surfaces.PlaneSurface) continue;
+                List<(Vector2d, Vector2d, double, bool)> pr;
+                try { pr = SketchReferences.FaceProjection(sk, f); } catch { continue; }
+                if (pr.Count > 0) items.Add((new PickRef(f.Id, PickKind.Face, part, null), pr));
+            }
+        _faceRefCache = (mesh, sk, items);
+        return items;
+    }
+
+    /// <summary>Мутация P3D_SKSILHOUETTE=0: очерки кривых граней в эскизе — только под курсором (прежде).</summary>
+    static readonly bool SilhouetteOff = Environment.GetEnvironmentVariable("P3D_SKSILHOUETTE") == "0";
+    /// <summary>Разбор: сколько отрезков очерка нарисовано в последнем слое.</summary>
+    public int SilhouetteDrawn { get; private set; }
+
     /// <summary>Грань детали, очерк которой (ссылочная линия эскиза) проходит под курсором; пусто — нет.</summary>
     public PickRef FaceReferenceAt(Point p)
     {
         if (FacePickOff || FaceRefsOff || ActiveSketch is not { } sk || _doc == null || ScreenToSketch(p) is not { } q) return PickRef.Empty;
         if (!Selection.Accepts(PickKind.Face)) return PickRef.Empty;
-        var part = ActivePart ?? _doc.AllParts().FirstOrDefault();
-        if (part?.Mesh is not { } mesh) return PickRef.Empty;
-        if (_faceRefCache is not { } c || !ReferenceEquals(c.Mesh, mesh) || !ReferenceEquals(c.Sk, sk))
-        {
-            var items = new List<(PickRef, List<(Vector2d, Vector2d, double, bool)>)>();
-            foreach (var b in part.Bodies)
-                foreach (var f in b.Faces)
-                {
-                    if (f.Surface is Parametric3D.Kernel.Surfaces.PlaneSurface) continue;
-                    List<(Vector2d, Vector2d, double, bool)> pr;
-                    try { pr = SketchReferences.FaceProjection(sk, f); } catch { continue; }
-                    if (pr.Count > 0) items.Add((new PickRef(f.Id, PickKind.Face, part, null), pr));
-                }
-            _faceRefCache = c = (mesh, sk, items);
-        }
+        if (FaceRefItems() is not { } items0) return PickRef.Empty;
+        var c = (Items: items0, 0);
         double tol = Core.Settings.Current.PickTolerancePx * PixelSize, best = tol;
         var hit = PickRef.Empty;
         foreach (var (r, list) in c.Items)
@@ -214,6 +226,8 @@ public sealed partial class ModelViewport
         }
     }
 
+    static readonly bool UpKeep = Environment.GetEnvironmentVariable("P3D_SKUPKEEP") == "1";
+
     public void EnterSketch(Sketch sk, bool animate = true)
     {
         if (ActiveSketch == null) _beforeSketch = Camera.State;
@@ -224,7 +238,10 @@ public sealed partial class ModelViewport
         var pl = sk.Plane;
         // «верх» вида — ось плоскости, ближайшая к нынешнему верху (вид не переворачивается)
         var camUp = Camera.Up;
-        var up = new[] { V3(pl.V), -V3(pl.V), V3(pl.U), -V3(pl.U) }.OrderByDescending(a => Vector3.Dot(a, camUp)).First();
+        // k98 (замечание 8): «верх» вида — ось V эскиза (U — вправо), как в Creo: «Горизонтально/Вертикально» — по осям
+        // эскиза, и при «верхе» по оси U почти вертикальный отрезок от «Вертикально» ложился горизонтально.
+        // P3D_SKUPKEEP=1 — прежний выбор оси, ближайшей к нынешнему верху.
+        var up = UpKeep ? new[] { V3(pl.V), -V3(pl.V), V3(pl.U), -V3(pl.U) }.OrderByDescending(a => Vector3.Dot(a, camUp)).First() : V3(pl.V);
         to.Rotation = ViewMath.FromForwardUp(-V3(pl.W), up);
         to.Target = V3(pl.Origin);
         to.Mode = ProjectionMode.Orthographic;
@@ -471,6 +488,28 @@ public sealed partial class ModelViewport
             ConstraintHoverShown = hc0.Items.Count;
         }
         else ConstraintHoverShown = 0;
+
+        // k98 (замечание 2): очерки кривых граней детали (образующие цилиндра в плоскости эскиза) — всегда, тонкой линией
+        // цвета ссылок: рёбер у них нет, и в эскизе была видна только кромка торца
+        SilhouetteDrawn = 0;
+        if (ActiveSketch != null && !SilhouetteOff && FaceRefItems() is { } sil)
+        {
+            var sc = th.SketchRefEdge;
+            foreach (var (_, list) in sil)
+                foreach (var (a, b, r, circle) in list)
+                {
+                    if (circle)
+                    {
+                        for (int i = 0; i < 96; i++)
+                        {
+                            double t0 = 2 * Math.PI * i / 96, t1 = 2 * Math.PI * (i + 1) / 96;
+                            lines.Add(Inst(W(a + new Vector2d(Math.Cos(t0), Math.Sin(t0)) * r), W(a + new Vector2d(Math.Cos(t1), Math.Sin(t1)) * r), sc, 1.2f, 0));
+                        }
+                    }
+                    else lines.Add(Inst(W(a), W(b), sc, 1.2f, 0));
+                    SilhouetteDrawn++;
+                }
+        }
 
         // k96 (п. 14): под курсором грань, дающая ссылочные линии (очерк цилиндра) — показать их цветом наведения
         if (ActiveSketch is { } skh && FaceReference(Selection.Hover) is { } fr)

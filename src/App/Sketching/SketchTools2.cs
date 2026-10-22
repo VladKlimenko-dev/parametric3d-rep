@@ -694,6 +694,7 @@ public sealed class CornerTool : SketchToolBase
     public override bool Click(SketchInput i) => Apply(i.Sketch, i.P, _chamfer, _chamfer ? Distance : Radius);
 
     /// <summary>Угол — общий конец двух отрезков у точки щелчка: отрезки укорачиваются, между ними дуга (касательная) или фаска.</summary>
+    public static readonly bool ChamferDimsOff = Environment.GetEnvironmentVariable("P3D_SKCHAMFERDIMS") == "0";
     public static readonly bool CornerSplitOff = Environment.GetEnvironmentVariable("P3D_SKCORNERSPLIT") == "0";
 
     public static bool Apply(Sketch sk, Vector2d at, bool chamfer, double size)
@@ -743,6 +744,15 @@ public sealed class CornerTool : SketchToolBase
         {
             var ch = sk.AddEntity(new SkLine(new SkPoint(qa), new SkPoint(qb)) { Role = la.Role });
             sk.AddConstraint(ConstraintType.Coincident, ch.A, pa); sk.AddConstraint(ConstraintType.Coincident, ch.B, pb);
+            // k98 (замечание 6): как в Creo — два размера катетов фаски (у прямого угла — горизонтальный и вертикальный):
+            // расстояние от конца фаски на одном отрезке до прямой другого. P3D_SKCHAMFERDIMS=0 — без них.
+            if (!ChamferDimsOff)
+            {
+                static double DistToLine(Vector2d p, SkLine l) { var d = l.B.P - l.A.P; double n = d.Length; return n < 1e-12 ? (p - l.A.P).Length : Math.Abs(d.X * (p.Y - l.A.P.Y) - d.Y * (p.X - l.A.P.X)) / n; }
+                var d1 = sk.AddDimension(DimensionType.DistancePointLine, DistToLine(qb, la), pb, la);
+                var d2 = sk.AddDimension(DimensionType.DistancePointLine, DistToLine(qa, lb), pa, lb);
+                foreach (var dd in new[] { d1, d2 }) { dd.Locked = true; dd.IsDefault = false; }
+            }
         }
         else
         {

@@ -39,6 +39,10 @@
     <Border Grid.Row="1" x:Name="ToolTrayBorder" Classes="panel" BorderThickness="0,0,0,1" Padding="4,2">
       <Grid>
         <WrapPanel x:Name="ToolTray" Orientation="Horizontal" VerticalAlignment="Center">
+          <!-- k98 (замечание 14): в эскизе первая — панель настройки эскиза -->
+          <Border x:Name="SketchSetBar" Classes="toolbar" Margin="2" Padding="3" IsVisible="False">
+            <WrapPanel x:Name="SketchSetStack" Orientation="Horizontal" />
+          </Border>
           <Border x:Name="CommandBar" Classes="toolbar" Margin="2" Padding="3">
             <!-- все пункты всегда видны: не помещаются по высоте вида — следующий столбец, без прокрутки -->
             <WrapPanel x:Name="CommandStack" Orientation="Vertical" />
@@ -54,9 +58,6 @@
           </Border>
           <Border x:Name="SketchBar" Classes="toolbar" Margin="2" Padding="4,2" IsVisible="False">
             <StackPanel x:Name="SketchBarStack" Orientation="Horizontal" Spacing="2" />
-          </Border>
-          <Border x:Name="ViewBar" Classes="toolbar" Margin="2" Padding="4,2">
-            <StackPanel Orientation="Horizontal" Spacing="1" x:Name="ViewTools" />
           </Border>
         </WrapPanel>
 
@@ -156,6 +157,10 @@
       <Grid Grid.Column="2" x:Name="ViewArea">
         <vp:ModelViewport x:Name="View" />
         <Canvas x:Name="RegionCanvas" IsHitTestVisible="False" />
+        <!-- k98 (замечание 1): вид и стиль — в окне вида, сверху посередине -->
+        <Border x:Name="ViewBar" Classes="toolbar" Margin="0,6,0,0" Padding="4,2" HorizontalAlignment="Center" VerticalAlignment="Top">
+          <StackPanel Orientation="Horizontal" Spacing="1" x:Name="ViewTools" />
+        </Border>
 
         
 
