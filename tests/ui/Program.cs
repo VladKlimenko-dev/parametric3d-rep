@@ -121,6 +121,7 @@ if (only == "probe-ffround")
         Console.WriteLine($"PROBE warm-up: {swW.ElapsedMilliseconds} ms, feature 0 ms");
     }
     if (Environment.GetEnvironmentVariable("P3D_PROBEDRDBG") == "1") Parametric3D.Kernel.Ops.DirectRound.Debug = m => Console.WriteLine("  DR: " + m);
+    if (Environment.GetEnvironmentVariable("P3D_PROBEREBDBG") == "1") Parametric3D.Kernel.Ops.FilletOp.RebuildDebug = m => Console.WriteLine("  REBUILD: " + m);
     if (Environment.GetEnvironmentVariable("P3D_PROBEARDBG") == "1") Parametric3D.Kernel.Ops.BooleanOp.AnalyticRouteDebug = m => Console.WriteLine("  AR: " + m);
     int repsAll = int.TryParse(Environment.GetEnvironmentVariable("P3D_PROBEREPS"), out var rpa) ? rpa : 1;
     for (int repAll = 0; repAll < repsAll; repAll++)
@@ -2746,12 +2747,14 @@ Check("UI-OP-PREVIEW-FAST", () =>
     }
 });
 
-Check("UI-ROUND-RIM-BALL", () =>
+void RimBall(bool cutter)
 {
     // 21.10 (снимок пользователя 17:40): цилиндр ∪ шар, скругление R5 нижней кромки цилиндра (дуга торца, концы на шаре).
     // Прежде: резец по дуге с продлением за концы врезался в шар (выемка; точный расчёт — отказ, в предпросмотре без проверки —
     // испорченное тело), предпросмотр шёл 4–6 с. Теперь резец продлевается, пока сечение не уйдёт в шар, и из него вычитается
     // шар; предпросмотр — рез по сеткам. Мутации P3D_ARCBALLTRIM=0, P3D_PREVIEWCSG=0.
+    // 22.10: по умолчанию — восстановление тела как цилиндр ∪ шар, скругление всей кромки цилиндра прямым построителем и
+    // объединение с шаром (точная форма, P3D_REBUILDROUND=0 — резцы); проверяются оба пути.
     var s = FreeFormCommands.NewFreeForm(); var w = Open(s); var part = s.Part!;
     var node = part.Features.OfType<FreeFormFeature>().Single();
     void Add(Feature f) { f.FreeForm = node.Key; f.Frozen = true; part.AddFeature(f); s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs(); }
@@ -2764,7 +2767,7 @@ Check("UI-ROUND-RIM-BALL", () =>
     var e = part.Bodies[0].Edges.First(x => Kind(x) == "ExtrudedSurface/PlaneSurface" && !ReferenceEquals(x.V0, x.V1));
     w.ViewPort.Selection.Clear(); w.ViewPort.Selection.Select(new PickRef(e.Id, PickKind.Edge, part, null), additive: false);
     long trims0 = Parametric3D.Kernel.Ops.FilletOp.ArcBallTrims, csg0 = Parametric3D.Kernel.Ops.FilletOp.PreviewCsgCuts;
-    long abort0 = Parametric3D.Kernel.Ops.BooleanOp.MeshEarlyAborts;
+    long abort0 = Parametric3D.Kernel.Ops.BooleanOp.MeshEarlyAborts, reb0 = Parametric3D.Kernel.Ops.FilletOp.RebuildRounds;
     CommandRegistry.Instance["ff.fillet"].Execute();
     s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
     var op = w.CurrentOperation!; var f = (Feature)op.EditedFeature!;
@@ -2773,15 +2776,25 @@ Check("UI-ROUND-RIM-BALL", () =>
     long tPreview = sw.ElapsedMilliseconds;
     Require(f.Error == null && part.Bodies.Count == 1, "preview R5 failed: " + f.Error);
     double vPreview = part.Volume;
-    Require(Parametric3D.Kernel.Ops.FilletOp.PreviewCsgCuts > csg0, "the preview cut was not made on the meshes");
+    if (cutter) Require(Parametric3D.Kernel.Ops.FilletOp.PreviewCsgCuts > csg0, "the preview cut was not made on the meshes");
     sw.Restart();
     w.CommitOperation(); s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs();
     long tExact = sw.ElapsedMilliseconds;
     Require(f.Error == null && part.Bodies.Count == 1 && !part.Bodies[0].IsPreview, "exact R5 failed: " + f.Error);
-    Require(Parametric3D.Kernel.Ops.FilletOp.ArcBallTrims > trims0, "the cutter was not trimmed by the sphere");
     double removed = v0 - part.Volume;
-    // ожидаемо (Монте-Карло по формулам): 158 мм³ + недобор гранения ~120 мм³; выемка в шаре снимала бы больше
-    Require(removed > 100 && removed < 330, $"removed volume {removed:0.#} (expected ≈ 160–280)");
+    if (cutter)
+    {
+        Require(Parametric3D.Kernel.Ops.FilletOp.ArcBallTrims > trims0, "the cutter was not trimmed by the sphere");
+        // ожидаемо (Монте-Карло по формулам): 158 мм³ + недобор гранения ~120 мм³; выемка в шаре снимала бы больше
+        Require(removed > 100 && removed < 330, $"removed volume {removed:0.#} (expected ≈ 160–280)");
+    }
+    else
+    {
+        Require(Parametric3D.Kernel.Ops.FilletOp.RebuildRounds > reb0, "the round was not made on the rebuilt cylinder");
+        Require(part.Bodies[0].Guarantee == Parametric3D.Kernel.GuaranteeLevel.ExactAnalytic, $"guarantee {part.Bodies[0].Guarantee}");
+        // Монте-Карло по формулам (4·10⁶ точек): 157.97 мм³
+        Require(Math.Abs(removed - 158.0) < 2.0, $"removed volume {removed:0.###} (expected 158 ± 2)");
+    }
     Require(Math.Abs(vPreview - part.Volume) < 0.01 * part.Volume, $"preview volume {vPreview:0.#} vs exact {part.Volume:0.#}");
     // шар не тронут: точка шара у продолжения кромки внутри шара (под торцом цилиндра, вне цилиндра) — материал
     var tris = Parametric3D.Kernel.Voxels.Occupancy.Triangles(Parametric3D.Kernel.Tess.Tessellator.Tessellate(part.Bodies[0], facets: true));
@@ -2795,10 +2808,20 @@ Check("UI-ROUND-RIM-BALL", () =>
     // видимая сетка граней многогранного тела (деталь её не строит; показ — многоугольниками формы): одна грань не строится —
     // остальные не считаются (P3D_MESHEARLYABORT=0 — прежнее)
     var swM = System.Diagnostics.Stopwatch.StartNew();
-    Parametric3D.Kernel.Ops.BooleanOp.MeshExactlySolid(part.Bodies[0]);
-    Require(Parametric3D.Kernel.Ops.BooleanOp.MeshEarlyAborts > abort0, "the face meshing went on after a face failed");
-    Console.WriteLine($"  preview {tPreview} ms (volume {vPreview:0.#}), exact after commit {tExact} ms (volume {part.Volume:0.#}, removed {removed:0.#}), face meshing {swM.ElapsedMilliseconds} ms");
+    if (cutter)
+    {
+        Parametric3D.Kernel.Ops.BooleanOp.MeshExactlySolid(part.Bodies[0]);
+        Require(Parametric3D.Kernel.Ops.BooleanOp.MeshEarlyAborts > abort0, "the face meshing went on after a face failed");
+    }
+    Console.WriteLine($"  {(cutter ? "cutter" : "rebuild")}: preview {tPreview} ms (volume {vPreview:0.#}), exact after commit {tExact} ms (volume {part.Volume:0.#}, removed {removed:0.#}), face meshing {swM.ElapsedMilliseconds} ms");
     w.Close();
+}
+Check("UI-ROUND-RIM-BALL", () =>
+{
+    RimBall(cutter: false);
+    Parametric3D.Kernel.Ops.FilletOp.RebuildRoundOff = true;
+    try { RimBall(cutter: true); }
+    finally { Parametric3D.Kernel.Ops.FilletOp.RebuildRoundOff = Environment.GetEnvironmentVariable("P3D_REBUILDROUND") == "0"; }
 });
 
 Check("UI-POLY-FAST", () =>
