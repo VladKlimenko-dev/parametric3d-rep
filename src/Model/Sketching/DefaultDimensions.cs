@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 
 namespace Parametric3D.Model.Sketching;
 
@@ -34,12 +34,17 @@ public static class DefaultDimensions
     /// Пересобирает размеры по умолчанию. Уже существующие удаляются:
     /// пользователь мог добавить свой размер, и прежний набор устарел.
     /// </summary>
-    public static void Refresh(Sketch sk, ISketchSolver solver)
+    public static void Refresh(Sketch sk, ISketchSolver solver, IReadOnlyCollection<SkDimension>? demote = null)
     {
         if (!Core.Settings.Current.ShowDefaultDimensions) return;
 
         // Пересобираем только НЕзаблокированные: заблокированный размер
         // пользователь оставил намеренно, и трогать его нельзя.
+        // k96: прежние слабые размеры — ПЕРВЫЕ кандидаты (тот же объект: место подписи, стрелки, «одна стрелка»
+        // сохраняются, набор не перескакивает от правки к правке). Прежде набор собирался заново: настройки вида слабого
+        // размера терялись (п. 8: «одна стрелка» у одной из концентрических окружностей переключала другую).
+        // demote — эти пробуются последними (удалённые пользователем слабые размеры заменяются другими, если можно).
+        var previous = KeepOff ? new List<SkDimension>() : sk.Dimensions.Where(d => d.IsDefault && !d.Locked).ToList();
         sk.Dimensions.RemoveAll(d => d.IsDefault && !d.Locked);
 
         // Подбор — это ИЗМЕРЕНИЕ, а не построение: он не имеет права
@@ -57,25 +62,54 @@ public static class DefaultDimensions
 
         int trials = 0;
         var chosen = new List<SkDimension>();
+        var entities = new HashSet<SkEntity>(sk.Entities.SelectMany(e => e.Handles.Cast<SkEntity>().Append(e)).Concat(sk.Builtins), ReferenceEqualityComparer.Instance);
+
+        bool Try(SkDimension d)
+        {
+            sk.Dimensions.Add(d);
+            d.Locked = true;
+            solver.Solve(sk, null, out int after);
+            if (after >= dof) { sk.Dimensions.Remove(d); d.Locked = false; return false; }
+            chosen.Add(d);
+            dof = after;
+            return true;
+        }
+        bool Same(SkDimension a, DimensionType t, IReadOnlyList<SkEntity> items) =>
+            a.Type == t && a.Items.Count == items.Count && a.Items.All(items.Contains);
+
+        var first = previous.Where(d => demote == null || !demote.Contains(d)).ToList();
+        var last = demote == null ? new List<SkDimension>() : previous.Where(demote.Contains).ToList();
+        foreach (var d in first)
+        {
+            if (dof <= 0) break;
+            if (!d.Items.All(entities.Contains)) continue;
+            double v = DimensionMeasure.Value(d);
+            if (double.IsNaN(v)) continue;
+            d.Value = v; d.Conflict = false;
+            Try(d);
+        }
 
         foreach (var candidate in Candidates(sk))
         {
             if (dof <= 0 || ++trials > MaxTrials) break;
+            if (chosen.Any(c => Same(c, candidate.Type, candidate.Items))) continue;
+            if (last.Any(c => Same(c, candidate.Type, candidate.Items))) continue;
 
             // На время примерки кандидат делается УПРАВЛЯЮЩИМ: только так
             // решатель его учтёт и покажет, убирает ли он степень свободы.
             // Управление снимается в конце — иначе решатель пропускал бы
             // кандидатов и подбор ничего бы не измерил.
-            var d = sk.AddDimension(candidate.Type, candidate.Value, candidate.Items);
-            d.Locked = true;
-
-            solver.Solve(sk, null, out int after);
-
-            // Кандидат ничего не убрал — он повторяет то, что уже задано.
-            if (after >= dof) { sk.Dimensions.Remove(d); continue; }
-
-            chosen.Add(d);
-            dof = after;
+            var d = new SkDimension(candidate.Type, candidate.Value, candidate.Items);
+            Try(d);
+        }
+        foreach (var d in last)
+        {
+            if (dof <= 0) break;
+            if (!d.Items.All(entities.Contains)) continue;
+            double v = DimensionMeasure.Value(d);
+            if (double.IsNaN(v)) continue;
+            d.Value = v; d.Conflict = false;
+            Try(d);
         }
 
         // Теперь они становятся показывающими: серыми и не управляющими.
@@ -88,8 +122,13 @@ public static class DefaultDimensions
             d.Locked = false;
         }
 
+        sk.BumpStructure();
         Restore(snapshot);
     }
+
+    static readonly bool BuiltinRefsOff = Environment.GetEnvironmentVariable("P3D_SKBUILTINREFS") == "0";
+    /// <summary>P3D_SKKEEPWEAK=0 — слабые размеры собираются заново (прежнее).</summary>
+    public static readonly bool KeepOff = Environment.GetEnvironmentVariable("P3D_SKKEEPWEAK") == "0";
 
     /// <summary>Положение всех свободных величин эскиза.</summary>
     private readonly struct State
@@ -204,6 +243,7 @@ public static class DefaultDimensions
 
         // 3б. UI (2026-10-16): привязка к ССЫЛКАМ эскиза (рёбра и вершины тела, спроецированные в эскиз) — до нуля эскиза:
         //     деталь размеряется от своей геометрии, как в Creo. Сначала до ближайшей точки ссылки, затем до прямой ссылки.
+        // k96: и встроенные ссылки — нуль и оси эскиза (как в Creo: слабые размеры — от осей)
         var refEntities = sk.Entities.Where(e => e.Role == SkRole.Reference).ToList();
         // точки ссылок — вершины (отдельные точки) и центры дуг и окружностей; от рёбер — перпендикуляр до прямой
         var refPoints = refEntities.OfType<SkPoint>()
@@ -228,6 +268,12 @@ public static class DefaultDimensions
                 if (dist < nb && dist > 1e-12) { nb = dist; nr = q; }
             }
             if (nr != null) yield return new Candidate(DimensionType.DistancePointPoint, (p.P - nr.P).Length, p, nr);
+            // k96: от осей эскиза (встроенные ссылки) — расстояния до вертикальной и горизонтальной оси
+            if (!BuiltinRefsOff)
+            {
+                if (Math.Abs(p.X) > 1e-9) yield return new Candidate(DimensionType.DistancePointLine, Math.Abs(p.X), p, sk.AxisV);
+                if (Math.Abs(p.Y) > 1e-9) yield return new Candidate(DimensionType.DistancePointLine, Math.Abs(p.Y), p, sk.AxisH);
+            }
         }
 
         // 4. Привязка к нулю эскиза — в последнюю очередь и только для

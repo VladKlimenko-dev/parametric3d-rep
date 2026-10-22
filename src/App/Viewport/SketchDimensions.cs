@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Tess;
@@ -53,7 +53,7 @@ public static class SketchDimensions
             //   фиолетовый — справочный,
             //   голубой   — заблокирован, то есть управляет эскизом,
             //   серый     — измеряет геометрию, но не задаёт её.
-            LineStyle style = d.Conflict ? LineStyle.DimensionConflict
+            LineStyle style = d.Conflict || d.Flagged ? LineStyle.DimensionConflict
                             : d.Reference ? LineStyle.DimensionReference
                             : d.Locked ? LineStyle.DimensionLocked
                             : LineStyle.DimensionDefault;

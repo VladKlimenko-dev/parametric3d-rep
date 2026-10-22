@@ -1,4 +1,4 @@
-using Avalonia.Input;
+﻿using Avalonia.Input;
 using Parametric3D.App.Operations;
 using Parametric3D.App.Services;
 using Parametric3D.App.Sketching;
@@ -280,6 +280,9 @@ public static class StandardCommands
         r.Add(new AppCommand { Id = "sk.setup", Label = "Настройка эскиза", Group = S, Icon = "sk_setup_but.svg", Synonyms = "sketch setup настройка плоскость",
             CanRun = () => w.InSketch || w.SelectedItems().OfType<Parametric3D.Model.Sketching.Sketch>().Any(), Run = () => SketchEditCommands.Setup(w) });
         SkCmd("sk.show_conflicts", "Показать конфликтующие связи", "sk_show_conflicts_but.svg", () => SketchEditCommands.ShowConflicts(w), "conflicts конфликты связи");
+        // k96 (п. 16): «Разрешить эскиз» (как Resolve Sketch в Creo) — панель с участниками противоречия и действиями
+        r.Add(new AppCommand { Id = "sk.resolve", Label = "Разрешить эскиз", Short = "Разрешить", Group = S, Icon = "sk_resolve_but.svg", Synonyms = "resolve sketch conflicts разрешить эскиз конфликты противоречия",
+            CanRun = () => w.InSketch, IsChecked = () => w.ResolvePanelOpen, Run = () => w.ToggleResolvePanel() });
         r.Add(new AppCommand { Id = "sk.snap_items", Label = "Привязка к элементам", Group = S, Icon = "sk_snap_items_but.svg", Synonyms = "snap items привязка элементы", CanRun = () => w.InSketch, IsChecked = () => vp.SnapItems, Run = () => { vp.SnapItems = !vp.SnapItems; w.RefreshToolStates(); } });
         r.Add(new AppCommand { Id = "sk.show_open_ends", Label = "Показ открытых концов", Group = S, Icon = "sk_show_open_ends_but.svg", Synonyms = "open ends открытые концы", CanRun = () => w.InSketch, IsChecked = () => vp.ShowOpenEnds, Run = () => { vp.ShowOpenEnds = !vp.ShowOpenEnds; vp.MarkDirty(); w.RefreshToolStates(); } });
         r.Add(new AppCommand { Id = "sk.show_filled", Label = "Заливка замкнутых областей", Group = S, Icon = "sk_show_filled_shapes_but.svg", Synonyms = "fill shapes заливка области", CanRun = () => w.InSketch, IsChecked = () => vp.ShowFilled, Run = () => { vp.ShowFilled = !vp.ShowFilled; vp.MarkDirty(); w.RefreshToolStates(); } });

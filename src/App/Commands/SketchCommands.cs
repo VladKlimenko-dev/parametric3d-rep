@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.App.Viewport;
 using Parametric3D.App.Views;
 using Parametric3D.Model.Sketching;
@@ -105,25 +105,17 @@ public static class SketchCommands
         var sk = w.ViewPort.ActiveSketch; if (sk == null) return false;
         var plan = Plan(t, Picked(w), collinear);
         if (plan == null || plan.Count == 0) { w.ShowToast(L(collinear ? "Выберите два отрезка" : Hints[t]), error: false); return false; }
-        var added = new List<SkConstraint>();
-        var st0 = sk.Solve(w.Session.Document.Solver);
-        var before = sk.AllPoints().Select(p => (p, p.P)).ToList();
-        int conflicts0 = sk.Constraints.Count(c => c.Conflict) + sk.Dimensions.Count(d => d.Conflict);
-        foreach (var (ct, items) in plan)
+        // k96: противоречие, вырождение или избыточность — отказ с участниками (красным) и повтором для «Разрешить эскиз»
+        var solver = w.Session.Document.Solver;
+        w.ClearConflictFlags(sk);
+        Func<SketchEditResult> run = () => SketchEditing.AddConstraints(sk, plan, solver);
+        var res = run();
+        w.AfterSketchEdit(sk);
+        if (!res.Ok)
         {
-            if (sk.Constraints.Any(c => c.Type == ct && c.SameItems(items))) continue;
-            added.Add(sk.AddConstraint(ct, items));
-        }
-        var st = sk.Solve(w.Session.Document.Solver);
-        if ((Bad(st) && !Bad(st0)) || sk.Constraints.Count(c => c.Conflict) + sk.Dimensions.Count(d => d.Conflict) > conflicts0)
-        {
-            foreach (var c in added) sk.Constraints.Remove(c);
-            foreach (var (p, q) in before) p.P = q;
-            sk.BumpStructure(); sk.Solve(w.Session.Document.Solver); sk.NotifyChanged(sk);
-            w.ShowToast(L("Связь противоречит другим связям эскиза"));
+            w.ReportSketchConflict(sk, res, L("Связь «{0}»", Parametric3D.App.Views.MainWindow.ConstraintName(t)), res.Failure == SketchEditFailure.Redundant ? null : run);
             return false;
         }
-        sk.NotifyChanged(sk); w.ViewPort.RefreshDefaultDimensions(); w.ViewPort.MarkDirty();
         return true;
     }
 
@@ -233,15 +225,9 @@ public static class SketchCommands
         string? text = await Dialogs.Prompt(w, L("Связать с параметром"), L("Параметр или формула (например, W/2):") + (names.Count > 0 ? "\n" + L("Параметры: {0}", string.Join(", ", names)) : ""), d.Formula ?? names.FirstOrDefault() ?? "");
         if (string.IsNullOrWhiteSpace(text)) return;
         if (!table.TryEvaluate(text.Trim(), out double v, out var err)) { w.ShowToast(L("Не формула: {0}", err ?? text)); return; }
-        double old = d.Value; string? of = d.Formula; bool ol = d.Locked, od = d.IsDefault, oref = d.Reference;
-        d.Formula = text.Trim(); d.Value = v; d.Locked = true; d.IsDefault = false; d.Reference = false;
-        var st = sk.Solve(w.Session.Document.Solver);
-        if (st is SolveStatus.Overconstrained or SolveStatus.Inconsistent)
-        {
-            d.Formula = of; d.Value = old; d.Locked = ol; d.IsDefault = od; d.Reference = oref; sk.Solve(w.Session.Document.Solver);
-            w.ShowToast(L("Размер противоречит другим связям эскиза")); return;
-        }
-        sk.BumpStructure(); sk.NotifyChanged(sk); w.ViewPort.RefreshDefaultDimensions(); w.ViewPort.MarkDirty();
+        var res = SketchEditing.SetDimensionValue(sk, d, v, text.Trim(), w.Session.Document.Solver);
+        w.AfterSketchEdit(sk);
+        if (!res.Ok) w.ReportSketchConflict(sk, res, L("Размер = {0}", text.Trim()), () => SketchEditing.SetDimensionValue(sk, d, v, text.Trim(), w.Session.Document.Solver));
     }
 
     /// <summary>Площадь замкнутых областей эскиза (внешние контуры минус отверстия), мм²; null — замкнутых нет.</summary>

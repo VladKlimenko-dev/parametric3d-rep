@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using OpenTK.Mathematics;
 using Parametric3D.App.Sketching;
 using Parametric3D.Core;
@@ -34,14 +34,22 @@ public sealed partial class ModelViewport
     /// <summary>u13: привязка к элементам эскиза (точкам и кривым); выключена — только сетка.</summary>
     public bool SnapItems { get; set; } = true;
     /// <summary>u13: показ открытых концов контура (точки, к которым не примыкает другой конец).</summary>
-    public bool ShowOpenEnds { get; set; }
+    public bool ShowOpenEnds { get; set; } = true;   // k96 (п. 7): по умолчанию включено
     /// <summary>u13: заливка (штриховка) замкнутых областей эскиза.</summary>
-    public bool ShowFilled { get; set; }
+    public bool ShowFilled { get; set; } = true;     // k96 (п. 7): по умолчанию включено
 
     /// <summary>Что выбирается в режиме эскиза: эскиз, а также рёбра и вершины тела — кандидаты в ссылки (п. 2.3).</summary>
     private PickFilter SketchFilter => ActiveSketch == null ? PickFilter.All
         : _tool != null ? PickFilter.SketchPoints | PickFilter.Edges | PickFilter.Vertices
-        : PickFilter.Sketch | PickFilter.Edges | PickFilter.Vertices;
+        : PickFilter.Sketch | PickFilter.Edges | PickFilter.Vertices | (FaceRefsOff ? PickFilter.None : PickFilter.Faces);
+    static readonly bool FaceRefsOff = Environment.GetEnvironmentVariable("P3D_SKFACEREFS") == "0";
+
+    /// <summary>k96 (п. 14): грань детали, проекция которой — ссылочные линии эскиза (очерк цилиндра, плоскость поперёк).</summary>
+    public List<(Vector2d A, Vector2d B, double R, bool Circle)>? FaceReference(PickRef r)
+    {
+        if (FaceRefsOff || ActiveSketch is not { } sk || r.Kind != PickKind.Face || r.Owner is not Part part || part.FindFace(r.Id) is not { } f) return null;
+        try { var pr = SketchReferences.FaceProjection(sk, f); return pr.Count > 0 ? pr : null; } catch { return null; }
+    }
 
     /// <summary>Щелчок по ребру или вершине тела в режиме эскиза — добавить в ссылки эскиза.</summary>
     public event Action<PickRef>? ReferencePicked;
@@ -50,7 +58,9 @@ public sealed partial class ModelViewport
 
     internal bool TryReference(PickRef r)
     {
-        if (ActiveSketch == null || r.Owner is not Part || r.Kind is not (PickKind.Edge or PickKind.Vertex)) return false;
+        if (ActiveSketch == null || r.Owner is not Part) return false;
+        if (r.Kind == PickKind.Face) { if (FaceReference(r) == null) return false; }
+        else if (r.Kind is not (PickKind.Edge or PickKind.Vertex)) return false;
         ReferencePicked?.Invoke(r);
         return true;
     }
@@ -216,7 +226,7 @@ public sealed partial class ModelViewport
         double tol = PixelSize * Settings.Current.SnapTolerancePx;
         SkPoint? best = null; double bd = tol;
         if (SnapItems)
-            foreach (var pt in sk.AllPoints())
+            foreach (var pt in sk.AllPoints().Append(sk.OriginPoint))
             {
                 double d = (pt.P - q).Length;
                 if (d < bd) { bd = d; best = pt; }
@@ -226,7 +236,7 @@ public sealed partial class ModelViewport
         if (SnapItems)
         {
             SkEntity? ce = null; double cd = tol * 0.6;
-            foreach (var e in sk.Entities) { if (e is SkPoint) continue; double d = e.DistanceTo(q); if (d < cd) { cd = d; ce = e; } }
+            foreach (var e in sk.Entities.Append(sk.AxisH).Append(sk.AxisV)) { if (e is SkPoint) continue; double d = e.DistanceTo(q); if (d < cd) { cd = d; ce = e; } }
             if (ce is SkLine sl) { var ab = sl.B.P - sl.A.P; double t = Math.Clamp(Vector2d.Dot(q - sl.A.P, ab) / Math.Max(ab.LengthSquared, 1e-30), 0, 1); return new SketchInput(sk, sl.A.P + ab * t, null); }
             if (ce is SkCircle or SkArc && Parametric3D.App.Sketching.SkGeom.CircleOf(ce) is { } cc && (q - cc.C).Length > 1e-12) return new SketchInput(sk, cc.C + (q - cc.C).Normalized() * cc.R, null);
         }
@@ -366,7 +376,7 @@ public sealed partial class ModelViewport
                 bool hov = false;
                 if (byId.TryGetValue(dimId, out var dm))
                 {
-                    if (dm.UserLocked && !dm.Conflict && !dm.Reference) dc = th.DimUserLocked;
+                    if (dm.UserLocked && !dm.Conflict && !dm.Flagged && !dm.Reference) dc = th.DimUserLocked;
                     hov = ReferenceEquals(dm, HoverDimension) || ReferenceEquals(dm, DraggedDimension);
                 }
                 // текст — контуры глифов ГОСТ: тонкой линией (толстая сливала цифры)
@@ -390,6 +400,22 @@ public sealed partial class ModelViewport
             {
                 var hc = th.SketchCurve; hc.W = 0.35f;
                 foreach (var (a, b) in Hatch(skd)) lines.Add(Inst(W(a), W(b), hc, 1f, 0));
+            }
+        }
+
+        // k96 (п. 14): под курсором грань, дающая ссылочные линии (очерк цилиндра) — показать их цветом наведения
+        if (ActiveSketch is { } skh && FaceReference(Selection.Hover) is { } fr)
+        {
+            var hc2 = th.Hover; hc2.W = 1;
+            foreach (var (a, b, r, circle) in fr)
+            {
+                if (!circle) { lines.Add(Inst(W(a), W(b), hc2, 2.2f, 0)); continue; }
+                int nseg = 96;
+                for (int i = 0; i < nseg; i++)
+                {
+                    double t0 = 2 * Math.PI * i / nseg, t1 = 2 * Math.PI * (i + 1) / nseg;
+                    lines.Add(Inst(W(a + new Vector2d(Math.Cos(t0), Math.Sin(t0)) * r), W(a + new Vector2d(Math.Cos(t1), Math.Sin(t1)) * r), hc2, 2.2f, 0));
+                }
             }
         }
 

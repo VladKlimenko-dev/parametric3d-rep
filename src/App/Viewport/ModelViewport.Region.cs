@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Input;
 using OpenTK.Mathematics;
 using Parametric3D.Core;
@@ -15,6 +15,7 @@ namespace Parametric3D.App.Viewport;
 public sealed partial class ModelViewport
 {
     public enum RegionKind { Box, Lasso }
+    static readonly bool RegionPointsOff = Environment.GetEnvironmentVariable("P3D_REGIONPOINTS") == "0";
     /// <summary>u13: сборка — протяжка левой кнопкой двигает выбранный компонент (в плоскости вида).</summary>
     public bool DragComponents;
     /// <summary>Компонент перетаскивается: начало и конец (окно решает ограничения и записывает шаг отмены).</summary>
@@ -152,6 +153,19 @@ public sealed partial class ModelViewport
                 List<Vector3d> pts;
                 try { var l = new List<Vector3d>(); e.ToCurve3(pl).Tessellate(l, true); pts = l; } catch { continue; }
                 if (Hit(pts)) res.Add(new PickRef(e.Id, PickKind.SketchCurve, sk, e));
+            }
+            // k96 (п. 5): точки фигур — центры окружностей и дуг, концы отрезков — в рамке выбираются, если сама фигура не
+            // выбрана (рамка вокруг двух центров выбирает центры)
+            if (Selection.Accepts(PickKind.SketchPoint) && !RegionPointsOff)
+            {
+                var chosen = new HashSet<SkEntity>(res.Select(r => (SkEntity)r.Target!), ReferenceEqualityComparer.Instance);
+                var seen = new HashSet<SkPoint>(ReferenceEqualityComparer.Instance);
+                foreach (var e in sk.Entities)
+                {
+                    if (e is SkPoint || chosen.Contains(e) || e.Role == SkRole.Reference) continue;
+                    foreach (var h in e.Handles)
+                        if (seen.Add(h) && !res.Any(r => ReferenceEquals(r.Target, h)) && Hit(new[] { W(h.P) })) res.Add(new PickRef(h.Id, PickKind.SketchPoint, sk, h));
+                }
             }
             return res;
         }

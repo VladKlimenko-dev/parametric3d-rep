@@ -591,15 +591,28 @@ public sealed class NumericSketchSolver : ISketchSolver
             {
                 case DimensionType.DistancePointPoint:
                     if (it.Count >= 2 && it[0] is SkPoint da && it[1] is SkPoint db)
-                        fns.Add(dst => dst.Add((da.P - db.P).Length - d.Value));
+                    {
+                        // k96: НУЛЕВОЙ РАЗМЕР — совпадение (две невязки по осям): у |a − b| в нуле нет производной, и решатель
+                        // не сходился к нулю (размер 0 отвергался вовсе). Мутация P3D_SKZERODIM=0.
+                        if (d.Value == 0 && !ZeroDimOff) fns.Add(dst => { dst.Add(da.X - db.X); dst.Add(da.Y - db.Y); });
+                        else fns.Add(dst => dst.Add((da.P - db.P).Length - d.Value));
+                    }
                     break;
                 case DimensionType.DistancePointLine:
                     if (it.Count >= 2 && it[0] is SkPoint dp && it[1] is SkLine dl)
-                        fns.Add(dst => dst.Add(DistPointLine(dp.P, dl) - d.Value));
+                    {
+                        // k96: СТОРОНА — та, где точка сейчас. Размер хранит расстояние без знака, а уравнение было знаковым:
+                        // точка по другую сторону прямой перескакивала через неё на +значение. Мутация P3D_SKSIDE=0.
+                        double side = SideOff ? 1 : SideOf(DistPointLine(dp.P, dl));
+                        fns.Add(dst => dst.Add(side * DistPointLine(dp.P, dl) - d.Value));
+                    }
                     break;
                 case DimensionType.DistanceLineLine:
                     if (it.Count >= 2 && it[0] is SkLine la && it[1] is SkLine lb)
-                        fns.Add(dst => dst.Add(DistPointLine(lb.A.P, la) - d.Value));
+                    {
+                        double side = SideOff ? 1 : SideOf(DistPointLine(lb.A.P, la));
+                        fns.Add(dst => dst.Add(side * DistPointLine(lb.A.P, la) - d.Value));
+                    }
                     break;
                 case DimensionType.AngleLineLine:
                     if (it.Count >= 2 && it[0] is SkLine aa && it[1] is SkLine ab)
@@ -637,6 +650,10 @@ public sealed class NumericSketchSolver : ISketchSolver
 
         return fns;
     }
+
+    static readonly bool ZeroDimOff = Environment.GetEnvironmentVariable("P3D_SKZERODIM") == "0";
+    static readonly bool SideOff = Environment.GetEnvironmentVariable("P3D_SKSIDE") == "0";
+    static double SideOf(double signed) => signed < 0 ? -1 : 1;
 
     /// <summary>Точки элемента: у отрезка — концы, у окружности — центр, у точки — она сама.</summary>
     private static IEnumerable<SkPoint> PointsOf(SkEntity? e)

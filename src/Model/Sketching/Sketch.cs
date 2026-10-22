@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Ops;
@@ -199,6 +199,35 @@ public sealed class Sketch : ModelItem
     public readonly List<uint> ReferenceIds = new();
 
     public readonly List<SkEntity> Entities = new();
+
+    // ------------------------------------------------------------ k96: встроенные ссылки — нуль и оси эскиза
+
+    /// <summary>Полудлина отрезков осей (для выбора мышью и привязки; в уравнениях ось — бесконечная прямая).</summary>
+    public const double AxisHalfLength = 1e5;
+    /// <summary>Номера встроенных ссылок в файле (элементов с такими номерами в файле нет).</summary>
+    public const uint OriginSaveId = 0xFFFF_FF01, AxisHSaveId = 0xFFFF_FF02, AxisVSaveId = 0xFFFF_FF03;
+    private SkPoint? _origin; private SkLine? _axisH, _axisV;
+
+    static SkPoint BuiltinPoint(double x, double y, string name) => new(x, y) { Role = SkRole.Reference, Fixed = true, Builtin = true, Name = name, ReferenceSource = name };
+    static SkLine BuiltinAxis(bool horizontal, string name)
+    {
+        double L = AxisHalfLength;
+        var l = horizontal ? new SkLine(BuiltinPoint(-L, 0, name), BuiltinPoint(L, 0, name)) : new SkLine(BuiltinPoint(0, -L, name), BuiltinPoint(0, L, name));
+        l.Role = SkRole.Reference; l.Fixed = true; l.Builtin = true; l.Name = name; l.ReferenceSource = name;
+        return l;
+    }
+
+    /// <summary>Нулевая точка эскиза (0, 0) — встроенная ссылка.</summary>
+    public SkPoint OriginPoint => _origin ??= BuiltinPoint(0, 0, "Начало координат эскиза");
+    /// <summary>Горизонтальная ось эскиза (y = 0) — встроенная ссылка.</summary>
+    public SkLine AxisH => _axisH ??= BuiltinAxis(true, "Горизонтальная ось эскиза");
+    /// <summary>Вертикальная ось эскиза (x = 0) — встроенная ссылка.</summary>
+    public SkLine AxisV => _axisV ??= BuiltinAxis(false, "Вертикальная ось эскиза");
+    /// <summary>Нуль и обе оси.</summary>
+    public IEnumerable<SkEntity> Builtins { get { yield return OriginPoint; yield return AxisH; yield return AxisV; } }
+
+    public SkEntity? BuiltinBySaveId(uint id) => id switch { OriginSaveId => OriginPoint, AxisHSaveId => AxisH, AxisVSaveId => AxisV, _ => null };
+    public uint SaveIdOf(SkEntity e) => ReferenceEquals(e, _origin) ? OriginSaveId : ReferenceEquals(e, _axisH) ? AxisHSaveId : ReferenceEquals(e, _axisV) ? AxisVSaveId : e.Id;
     public readonly List<SkConstraint> Constraints = new();
     public readonly List<SkDimension> Dimensions = new();
 
@@ -349,8 +378,43 @@ public sealed class Sketch : ModelItem
         }
     }
 
+    /// <summary>
+    /// k96: ПУСТЫЕ СВЯЗИ — выполненные тождественно: конец отрезка (дуги) «на» своём же отрезке (дуге), совпадение точки с
+    /// собой. Их ставила автопривязка у каждого узла ломаной (общая точка соседних отрезков «лежала на» предыдущем): решатель
+    /// видел избыточные уравнения — эскиз «переопределён», и любая правка размера отвергалась («противоречит другим связям»),
+    /// а геометрия после отказа оставалась сдвинутой. Убираются перед каждым решением. Мутация P3D_SKTRIVIAL=0.
+    /// </summary>
+    public int RemoveTrivialConstraints()
+    {
+        if (TrivialOff) return 0;
+        int n = Constraints.RemoveAll(IsTrivial);
+        if (n > 0) BumpStructure();
+        return n;
+    }
+    public static readonly bool TrivialOff = Environment.GetEnvironmentVariable("P3D_SKTRIVIAL") == "0";
+
+    public static bool IsTrivial(SkConstraint c)
+    {
+        var it = c.Items;
+        switch (c.Type)
+        {
+            case ConstraintType.Coincident:
+                return it.Count >= 2 && ReferenceEquals(it[0], it[1]);
+            case ConstraintType.PointOnEntity:
+                if (it.Count < 2 || it[0] is not SkPoint p) return false;
+                return it[1] switch
+                {
+                    SkLine l => ReferenceEquals(l.A, p) || ReferenceEquals(l.B, p),
+                    SkArc a => ReferenceEquals(a.Start, p) || ReferenceEquals(a.End, p),
+                    _ => false
+                };
+            default: return false;
+        }
+    }
+
     public SolveStatus Solve(ISketchSolver solver, SkPoint? dragged = null)
     {
+        RemoveTrivialConstraints();
         // Признаки конфликта пересчитываются перед КАЖДЫМ решением.
         // Так они всегда отражают текущий состав ограничений: удалили
         // одного спорщика — второй сам перестаёт быть конфликтующим.

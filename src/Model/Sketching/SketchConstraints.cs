@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 
 namespace Parametric3D.Model.Sketching;
 
@@ -63,6 +63,9 @@ public sealed class SkConstraint
     /// </summary>
     public bool Conflict;
 
+    /// <summary>k96: показан красным как участник противоречия последней правки (пока открыто объяснение).</summary>
+    public bool Flagged;
+
     /// <summary>Позиция значка на эскизе (задаётся пользователем при перетаскивании).</summary>
     public Vector2d IconPos;
 
@@ -112,6 +115,9 @@ public sealed class SkDimension
     /// Рисуется красным.
     /// </summary>
     public bool Conflict;
+
+    /// <summary>k96: показан красным как участник противоречия последней правки (пока открыто объяснение).</summary>
+    public bool Flagged;
 
     /// <summary>
     /// Где стрелки: внутри замера или снаружи. В режиме Auto они выносятся

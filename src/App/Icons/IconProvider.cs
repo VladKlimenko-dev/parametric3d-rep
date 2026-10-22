@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -38,10 +38,17 @@ public static class IconProvider
     }
 
     /// <summary>Иконка по имени файла (например, «save_but.svg»), null — файла нет или он не читается.</summary>
-    public static IImage? Get(string? file)
+    public static IImage? Get(string? file) => Get(file, Foreground);
+
+    /// <summary>
+    /// k96 (п. 12): иконка, перекрашенная под заданный цвет текста (подложка значков связей в виде — своей темы, не темы окна:
+    /// при светлом окне и тёмном виде чёрная основная черта значка «Горизонтально» пропадала на тёмной подложке, видна
+    /// оставалась серая вспомогательная — вертикальная, значок читался повёрнутым на 90°).
+    /// </summary>
+    public static IImage? Get(string? file, Color foreground)
     {
         if (string.IsNullOrEmpty(file)) return null;
-        string fg = $"#{Foreground.R:X2}{Foreground.G:X2}{Foreground.B:X2}";
+        string fg = $"#{foreground.R:X2}{foreground.G:X2}{foreground.B:X2}";
         var key = (file, fg);
         if (_cache.TryGetValue(key, out var img)) return img;
         img = null;
