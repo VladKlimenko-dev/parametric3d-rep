@@ -707,32 +707,70 @@ public sealed class SceneRenderer : IDisposable
         if (_meshCpu.Count > 0) diag = (hi - lo).Length;
         float h = Math.Max(1e-6f, diag * (FeaElementFraction > 0 ? FeaElementFraction : 1f / 15));
         var key = (Style, Style == DisplayStyle.FeaMesh ? h : 0f, _sceneVersion);
+        // k96 (самотест 17:56: окно стояло 648 мс на первом кадре стиля «Сетка FEA»): сетка FEA строится в фоне — кадр
+        // рисуется сразу (пока без сетки), готовые линии загружаются следующим кадром. P3D_FEAASYNC=0 — в кадре, как прежде.
+        if (_meshLinesTask is { IsCompleted: true } done && _meshLinesTaskKey == key)
+        {
+            _meshLinesTask = null;
+            if (done.Status == TaskStatus.RanToCompletion)
+            {
+                Del(ref _meshLines.Vbo);
+                if (_meshLines.Vao >= 0) { GL.DeleteVertexArray(_meshLines.Vao); _meshLines.Vao = -1; }
+                UploadLines(_meshLines, done.Result);
+                _meshLinesKey = key;
+            }
+            return;
+        }
         if (key == _meshLinesKey && _meshLines.Vao >= 0) return;
+        if (_meshLinesTask != null && _meshLinesTaskKey == key) return;   // уже считается
+        var style = Style;
+        var items = _meshCpu.Select(m => (m.Pos, m.Idx, m.Pick, m.Model)).ToList();
+        List<LineInst> Build()
+        {
+            var lines = new List<LineInst>();
+            uint col = SceneData.Pack(new Vector4(0, 0, 0, 1));
+            void Add(Vector3 a, Vector3 b) { if (lines.Count < 2_000_000) lines.Add(new LineInst { A = a, B = b, Color = col, Width = 1f }); }
+            foreach (var (pos, idx, pick, model) in items)
+            {
+                Vector3 P(int i) => Vector3.TransformPosition(pos[i], model);
+                if (style == DisplayStyle.ViewMesh)
+                {
+                    var seen = new HashSet<(int, int)>();
+                    for (int t = 0; t + 2 < idx.Length; t += 3)
+                        for (int k = 0; k < 3; k++)
+                        {
+                            int a = idx[t + k], b = idx[t + (k + 1) % 3];
+                            if (seen.Add(a < b ? (a, b) : (b, a))) Add(P(a), P(b));
+                        }
+                    continue;
+                }
+                var wp = pos.Select(q => Vector3.TransformPosition(q, model)).ToArray();
+                foreach (var (a, b2) in FeaRemesh.Lines(wp, idx, pick, h)) Add(a, b2);
+            }
+            return lines;
+        }
+        if (style == DisplayStyle.FeaMesh && !FeaAsyncOff)
+        {
+            _meshLinesTaskKey = key;
+            var cb = MeshLinesReady;
+            _meshLinesTask = Task.Run(() => { var r = Build(); cb?.Invoke(); return r; });
+            // прежние линии (другой стиль или шаг) не показываются
+            Del(ref _meshLines.Vbo);
+            if (_meshLines.Vao >= 0) { GL.DeleteVertexArray(_meshLines.Vao); _meshLines.Vao = -1; }
+            _meshLines.Count = 0;
+            return;
+        }
         _meshLinesKey = key;
         Del(ref _meshLines.Vbo);
         if (_meshLines.Vao >= 0) { GL.DeleteVertexArray(_meshLines.Vao); _meshLines.Vao = -1; }
-        var lines = new List<LineInst>();
-        uint col = SceneData.Pack(new Vector4(0, 0, 0, 1));
-        void Add(Vector3 a, Vector3 b) { if (lines.Count < 2_000_000) lines.Add(new LineInst { A = a, B = b, Color = col, Width = 1f }); }
-        foreach (var m in _meshCpu)
-        {
-            Vector3 P(int i) => Vector3.TransformPosition(m.Pos[i], m.Model);
-            if (Style == DisplayStyle.ViewMesh)
-            {
-                var seen = new HashSet<(int, int)>();
-                for (int t = 0; t + 2 < m.Idx.Length; t += 3)
-                    for (int k = 0; k < 3; k++)
-                    {
-                        int a = m.Idx[t + k], b = m.Idx[t + (k + 1) % 3];
-                        if (seen.Add(a < b ? (a, b) : (b, a))) Add(P(a), P(b));
-                    }
-                continue;
-            }
-            var wp = m.Pos.Select(q => Vector3.TransformPosition(q, m.Model)).ToArray();
-            foreach (var (a, b2) in FeaRemesh.Lines(wp, m.Idx, m.Pick, h)) Add(a, b2);
-        }
-        UploadLines(_meshLines, lines);
+        UploadLines(_meshLines, Build());
     }
+
+    private Task<List<LineInst>>? _meshLinesTask;
+    private (DisplayStyle Style, float H, int Version) _meshLinesTaskKey;
+    static readonly bool FeaAsyncOff = Environment.GetEnvironmentVariable("P3D_FEAASYNC") == "0";
+    /// <summary>Сетка FEA построена в фоне — нужен кадр (вызывается из фонового потока).</summary>
+    public Action? MeshLinesReady;
 
     private void ReleaseScene()
     {

@@ -1,4 +1,4 @@
-using Parametric3D.Core;
+﻿using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Ops;
 
@@ -57,10 +57,23 @@ public sealed class RevolveFeature : Feature
         double a1 = EndAngle.Resolve(ctx.Parameters) * Math.PI / 180.0;
 
         var solid = RevolveOp.Build(profile, axis.Value, a0, a1);
+        // k97 (замечание 2): зеркало и массивы операции — тело вращения под преобразованием
+        if (_x is { } xf)
+            solid = Kernel.Topology.TopologyTransform.Apply(solid, xf) ?? Kernel.Ops.TransformOp.Copy(solid, xf);
 
         if (Cut) BooleanOp.Subtract(ctx.Bodies, solid, ctx.Warnings);
         else BooleanOp.Unite(ctx.Bodies, solid, ctx.Warnings);
     }
+    private Kernel.Ops.TransformOp.Xform? _x;
+    /// <summary>Мутация P3D_REVMIRROR=0: вращение не повторяется зеркалом/массивом (прежний отказ).</summary>
+    static readonly bool MirrorOff = Environment.GetEnvironmentVariable("P3D_REVMIRROR") == "0";
+    public override void ExecuteTransformed(BuildContext ctx, Kernel.Ops.TransformOp.Xform x)
+    {
+        if (MirrorOff) { base.ExecuteTransformed(ctx, x); return; }
+        _x = x;
+        try { Execute(ctx); } finally { _x = null; }
+    }
+
     public override IEnumerable<uint> ConsumedSketchIds()
     {
         if (SketchId != 0) yield return SketchId;

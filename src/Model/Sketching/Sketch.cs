@@ -237,6 +237,14 @@ public sealed class Sketch : ModelItem
     /// <summary>Состояние последнего решения системы ограничений.</summary>
     public SolveStatus LastSolve = SolveStatus.Ok;
     public int DegreesOfFreedom;
+    /// <summary>
+    /// k97 (замечание 7): степени свободы, НЕ закрытые и слабыми размерами. Слабые (приложением поставленные) размеры в
+    /// решение не входят, и DegreesOfFreedom их не учитывает: эскиз, полностью образмеренный слабыми размерами, в дереве
+    /// значился «не полностью определённым» (значок с крестиком), а «Разрешение эскиза» — «конфликтов нет». Каждый слабый
+    /// размер подбирается независимым (снимает ровно одну степень). Мутация P3D_SKWEAKDOF=0 — прежний счёт.
+    /// </summary>
+    public int FreeDegrees => WeakDofOff ? DegreesOfFreedom : Math.Max(0, DegreesOfFreedom - Dimensions.Count(d => d.Enabled && d.IsDefault && !d.Reference));
+    public static readonly bool WeakDofOff = Environment.GetEnvironmentVariable("P3D_SKWEAKDOF") == "0";
 
     public Sketch(string name, Frame3 plane)
     {

@@ -434,6 +434,9 @@ public static class SketchDimensions
 
     // ---------------------------------------------------------- угловые
 
+    /// <summary>Мутация P3D_ANGLEARROWS=0: стрелки углового размера всегда внутри (переключатель не действует).</summary>
+    static readonly bool AngleArrowsOff = Environment.GetEnvironmentVariable("P3D_ANGLEARROWS") == "0";
+
     private static void BuildAngle(SkDimension d, Frame3 plane, DimBatch batch,
                                    double px, LineStyle style)
     {
@@ -489,9 +492,32 @@ public static class SketchDimensions
         Line(batch, plane, style, c + d2 * (r * 0.15), c + d2 * (r + OverrunPx * px));
 
         // Стрелки по касательной к дуге, остриями наружу.
+        // k97 (замечание 11): «стрелки снаружи» у углового размера — стрелки за концами дуги остриями к ней, с хвостами
+        // продолжения дуги (прежде переключатель на угловой размер не влиял). Auto — снаружи, если дуга короче двух стрелок.
         double s = Math.Sign(sweep);
-        Arrow(batch, plane, style, arc[0], new Vector2d(-Math.Sin(a0), Math.Cos(a0)) * s, px);
-        Arrow(batch, plane, style, arc[^1], new Vector2d(Math.Sin(a1), -Math.Cos(a1)) * s, px);
+        double arrowLen = ArrowLengthPx * px;
+        bool outside = !AngleArrowsOff && d.Arrows switch
+        {
+            ArrowPlacement.Inside => false,
+            ArrowPlacement.Outside => true,
+            _ => Math.Abs(sweep) * r < arrowLen * 2.2,
+        };
+        double aEnd = a0 + sweep;   // конец дуги (a1 по модулю 2π)
+        if (!outside)
+        {
+            Arrow(batch, plane, style, arc[0], new Vector2d(-Math.Sin(a0), Math.Cos(a0)) * s, px);
+            Arrow(batch, plane, style, arc[^1], new Vector2d(Math.Sin(aEnd), -Math.Cos(aEnd)) * s, px);
+        }
+        else
+        {
+            double ext = (arrowLen * 2.5) / r;   // хвост за стрелкой, по дуге
+            var t0 = new List<Vector2d>(); var t1 = new List<Vector2d>();
+            for (int i = 0; i <= 12; i++) { t0.Add(c + Dir(a0 - s * ext * i / 12) * r); t1.Add(c + Dir(aEnd + s * ext * i / 12) * r); }
+            Polyline(batch, plane, style, t0); Polyline(batch, plane, style, t1);
+            Arrow(batch, plane, style, arc[0], new Vector2d(Math.Sin(a0), -Math.Cos(a0)) * s, px);
+            Arrow(batch, plane, style, arc[^1], new Vector2d(-Math.Sin(aEnd), Math.Cos(aEnd)) * s, px);
+        }
+        d.LastArrowsOutside = outside;
 
         Vector2d radial = Dir(a0 + sweep * 0.5);
         Vector2d mid = c + radial * r;
@@ -557,6 +583,8 @@ public static class SketchDimensions
 
         var strokes = new List<List<Vector2d>>();
         StrokeFont.Layout(text, origin, dir, up, h, strokes);
+        // k97: знак залит строками развёртки (~1 пиксель), контур — тонкой линией по краю
+        StrokeFont.LayoutFill(text, origin, dir, up, h, 0.7 / TextHeightPx, px * 0.35, strokes);
         foreach (var poly in strokes) Polyline(batch, plane, textStyle, poly);
     }
 

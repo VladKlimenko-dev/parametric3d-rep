@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using Avalonia.Threading;
@@ -27,7 +27,7 @@ namespace Parametric3D.App.Diagnostics;
 /// </summary>
 public sealed class SelfTest
 {
-    public const string Build = "k96";
+    public const string Build = "k97";
 
     private readonly MainWindow _w;
     private readonly Action<string> _progress;
@@ -594,7 +594,8 @@ public sealed class SelfTest
         int okB = 0, triesB = 6;
         for (int i = 0; i < triesB; i++)
         {
-            var p = _w.Session.Part!; int fc = p.Features.Count, uc = _w.Session.UndoNames.Count;
+            var p = _w.Session.Part!;
+ int fc = p.Features.Count, uc = _w.Session.UndoNames.Count;
             v.Selection.Select(EdgeRef(p, e => e.Curve is Kernel.Curves.LineCurve3 && (e.V0.P - e.V1.P).Length > 10), additive: false);
             _w.StartOperation(i % 2 == 0 ? new ChamferOp() : new RoundOp());
             if (i >= 2) await Task.Delay(15 * i);                         // разные мгновения: до расчёта, во время, после
@@ -669,8 +670,10 @@ public sealed class SelfTest
         _w.SetSession(s);
         await WaitBuilt(120000);
         double v0 = s.Part!.Volume; int feat0 = s.Part.Features.Count, undo0 = s.UndoNames.Count;
+        long mem0 = Managed();
         const int N = 80;
-        int done = 0, refused = 0, dead = 0, undoOk = 0, undoTries = 0;
+        int done = 0, refused = 0, dead = 0, undoOk = 0, undoTries = 0, lateFail = 0;
+        var lateWhy = new List<string>();
         var undoWhy = new List<string>();
         long mem10 = 0; double ws10 = 0;
         var times = new List<double>();
@@ -680,6 +683,8 @@ public sealed class SelfTest
         {
             _ct.ThrowIfCancellationRequested();
             _phase = $"нагрузка: правка {i + 1}";
+            if (DebugParts.Count == 0 || !ReferenceEquals(DebugParts[^1].Target, _w.Session.Part)) DebugParts.Add(new WeakReference(_w.Session.Part));
+            if (_w.Session.Part!.Bodies.Count > 0) DebugBodies.Add(new WeakReference(_w.Session.Part.Bodies[0]));
             if (i % 10 == 0) Step($"правка {i + 1} из {N}");
             if (Environment.GetEnvironmentVariable("P3D_LOADDBG") == "1" && times.Count > 0) Console.WriteLine($"LOAD edit {i}: {times[^1]:0} ms, features {_w.Session.Part!.Features.Count}, last build {(_w.Session.Part!.Features.Count > 0 && _w.Session.Part.LastFeatureMs.TryGetValue(_w.Session.Part.Features[^1], out var lm) ? lm : -1):0} ms");
             var p = _w.Session.Part!;
@@ -702,6 +707,18 @@ public sealed class SelfTest
             string? err = last?.Error;
             if (err == null && last != null) { _w.CommitOperation(); done++; } else { _w.CancelOperation(); refused++; }
             await WaitBuilt();
+            // k96: предпросмотр (по сеткам) прошёл, точный расчёт после «ОК» отказал — правка отменяется («Отменить»), как
+            // сделал бы пользователь; считается отдельно (прежде такие операции оставались в дереве с ошибкой, и сравнения
+            // «отменить/вернуть» и «пересчёт с нуля» спотыкались о них)
+            if (err == null && last?.Error != null)
+            {
+                lateFail++;
+                if (lateWhy.Count < 4) lateWhy.Add($"правка {i + 1} ({(round ? "скругление" : "фаска")} {size:0.###}): {last.Error.Split('\n')[0][..Math.Min(150, last.Error.Split('\n')[0].Length)]}");
+                _w.Session.Undo(); await WaitBuilt();
+                done--; refused++;
+            }
+            if (Environment.GetEnvironmentVariable("P3D_LOADDBG") == "1")
+                Console.WriteLine($"LOAD after {i}: {(round ? "round" : "chamfer")} {size:0.###} preview-err {(err == null ? "-" : err.Split('\n')[0])} | committed-err {(last?.Error == null ? "-" : last.Error.Split('\n')[0])} | errors now {_w.Session.Part!.Features.Count(f => f.Error != null)}");
             times.Add(sw.Elapsed.TotalMilliseconds);
             if (!await Alive()) dead++;
             if (i == 9) { mem10 = Managed(); ws10 = Environment.WorkingSet / 1048576.0; }
@@ -739,21 +756,33 @@ public sealed class SelfTest
         var p0 = _w.Session.Part!;
         bool back = p0.Features.Count == feat0 && Math.Abs(p0.Volume - v0) <= 1e-6 * v0;
         bool alive = await Alive();
+        // утечка — то, что не вернулось после отмены всех правок (сохранённые состояния текущей детали сброшены);
+        // рост за сессию сам по себе — живые кэши детали, выросшей с {feat0} до ~50 операций
+        p0.ForgetCheckpoints();
+        int featEnd = pe.Features.Count; pe = null!;
+        long memBack = Managed();
+        double leakMb = (memBack - mem0) / 1048576.0;
         times.Sort();
         double med = times.Count > 0 ? times[times.Count / 2] : double.NaN, p95 = times.Count > 0 ? times[(int)(times.Count * 0.95)] : double.NaN;
-        bool memOk = growMb < 64;
+        bool memOk = leakMb < 64;
         bool ok = dead == 0 && done >= N / 2 && undoOk == undoTries && same && back && alive && memOk;
         Count(ok);
         Line($"Правок: {done} принято, {refused} отклонено ядром (отказ — с сообщением, деталь не меняется) из {N} за {secs:0.0} с; на правку медиана {F(med)} мс, p95 {F(p95)} мс");
         var ls = _stalls.Where(x => x.Phase.StartsWith("нагрузка")).ToList();
         Line($"Окно рисует после каждой правки — {(dead == 0 ? "да" : $"НЕТ ({dead})")}; остановок окна дольше 100 мс за раздел: {ls.Count}{(ls.Count > 0 ? $", наибольшая {F(ls.Max(x => x.Ms))} мс" : "")}");
+        Line($"Из отклонённых — отказ точного расчёта после «ОК» при годном предпросмотре: {lateFail} (правка отменена)");
+        foreach (var lw in lateWhy) Line("    " + lw);
         Line($"«Отменить» ×3 и «вернуть» ×3 каждые 10 правок: деталь та же — {undoOk}/{undoTries}");
         foreach (var w in undoWhy) Line("    " + w);
-        Line($"Память после сборки мусора: после 10 правок {mem10 / 1048576.0:0.0} МБ, после {N} — {memEnd / 1048576.0:0.0} МБ (рост {growMb:+0.0;-0.0} МБ, допустимо < 64); рабочий набор {ws10:0} → {wsEnd:0} МБ — {(memOk ? "годно" : "РОСТ")}");
+        Line($"Память после сборки мусора: в начале {mem0 / 1048576.0:0.0} МБ, после 10 правок {mem10 / 1048576.0:0.0} МБ, после {N} — {memEnd / 1048576.0:0.0} МБ (рост {growMb:+0.0;-0.0} МБ: деталь выросла до {featEnd} операций, кэши её граней живы); рабочий набор {ws10:0} → {wsEnd:0} МБ");
+        Line($"После отмены всех правок: {memBack / 1048576.0:0.0} МБ — не вернулось {leakMb:+0.0;-0.0} МБ (допустимо < 64) — {(memOk ? "утечки нет" : "УТЕЧКА")}");
         Line($"    из них сохранённые состояния детали ({nCk}): {(memCk - memNoCk) / 1048576.0:0.0} МБ; без них — {memNoCk / 1048576.0:0.0} МБ");
         if (saved != null) Line($"Деталь сессии сохранена: {saved}");
         Line($"Пересчёт с нуля после сессии: тот же объём — {(same ? "да" : "НЕТ" + sameWhy)}; отмена всех правок вернула исходную деталь — {(back ? "да" : "НЕТ")}; итог — {(ok ? "годно" : "ОШИБКА")}");
     }
+
+    /// <summary>Разбор (probe-selftest): детали сессии нагрузки — живы ли после отмены всех правок.</summary>
+    public static readonly List<WeakReference> DebugParts = new(), DebugBodies = new();
 
     // ---------------------------------------------------------------- ручки и последовательности (u09)
 

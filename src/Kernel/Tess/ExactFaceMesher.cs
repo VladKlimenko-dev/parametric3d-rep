@@ -831,6 +831,9 @@ public static partial class ExactFaceMesher
     private sealed class FaceMemo { public ulong Key; public bool Reversed; public string Tol = ""; public string? Why; public List<Vector3d>? N; public (List<Vector3d> P, List<int> T)? M; }
     // по составу грани (копия тела — те же поверхности и кривые, другие объекты граней): ограниченная память, сброс при переполнении
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<ulong, FaceMemo> _faceMemo = new();
+    private static long _memoWeight;
+    public static long FaceMemoResets;
+    static readonly long MemoBudget = long.TryParse(Environment.GetEnvironmentVariable("P3D_FACEMEMOBUDGET"), out var mb) ? mb : 3_000_000;
 
     private static string? KeyOf(TFace f)
     {
@@ -953,7 +956,14 @@ public static partial class ExactFaceMesher
         // смениться сеткой по ним (иначе копия получала бы чужой отказ)
         if (!memoHit && made != null && !FaceMemoOff && Snap == null && MemoKey(f) == fk)
         {
-            if (_faceMemo.Count > 4096) _faceMemo.Clear();
+            // k96 (самотест 17:56: +155 МБ за 80 правок, после удаления детали память не возвращалась): память сеток
+            // ограничена по ОБЪЁМУ (точки сеток и нормалей), а не только по числу граней — у мелкой разметки крупных граней
+            // 835 записей держали ~240 МБ. P3D_FACEMEMOBUDGET — предел точек (0 — по числу, как прежде).
+            long add = (made?.P.Count ?? 0) * 2L + (made?.T.Count ?? 0) / 2 + (normals?.Count ?? 0) * 2L;
+            if (_faceMemo.Count > 4096 || MemoBudget > 0 && Interlocked.Add(ref _memoWeight, add) > MemoBudget)
+            {
+                _faceMemo.Clear(); Interlocked.Exchange(ref _memoWeight, add); Interlocked.Increment(ref FaceMemoResets);
+            }
             _faceMemo[fk] = new FaceMemo { Key = fk, Tol = tolKey, Why = why, Reversed = f.Reversed, N = normals == null ? null : new List<Vector3d>(normals),
                 M = made is { } mm0 ? (new List<Vector3d>(mm0.P), new List<int>(mm0.T)) : null };
         }

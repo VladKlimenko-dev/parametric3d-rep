@@ -37,7 +37,24 @@ public static class Ssi
     /// </summary>
     public sealed record ParamSurf(Surfaces.ISurface3 S) : Shape;
 
+    // k97: подсказки основания — слабые по поверхности (прежде словарь потока рос без предела и держал поверхности,
+    // а через них — тела всех прежних деталей: +250 МБ за 80 правок нагрузки самопроверки). P3D_FOOTWEAK=0 — прежний словарь.
+    [ThreadStatic] static System.Runtime.CompilerServices.ConditionalWeakTable<Surfaces.ISurface3, System.Runtime.CompilerServices.StrongBox<Vector2d>>? _footHintsWeak;
     [ThreadStatic] static Dictionary<Surfaces.ISurface3, Vector2d>? _footHints;
+    static readonly bool FootWeak = Environment.GetEnvironmentVariable("P3D_FOOTWEAK") != "0";
+    static bool FootHint(Surfaces.ISurface3 s, out Vector2d uv)
+    {
+        if (FootWeak) { uv = default; if (_footHintsWeak != null && _footHintsWeak.TryGetValue(s, out var b)) { uv = b.Value; return true; } return false; }
+        _footHints ??= new Dictionary<Surfaces.ISurface3, Vector2d>(ReferenceEqualityComparer.Instance);
+        return _footHints.TryGetValue(s, out uv);
+    }
+    static void SetFootHint(Surfaces.ISurface3 s, Vector2d uv)
+    {
+        if (FootWeak) { _footHintsWeak ??= new(); _footHintsWeak.AddOrUpdate(s, new System.Runtime.CompilerServices.StrongBox<Vector2d>(uv)); return; }
+        _footHints![s] = uv;
+    }
+    /// <summary>Замер (k97): поверхностей с подсказкой основания в этом потоке (прежний словарь).</summary>
+    public static int FootHintCount => FootWeak ? _footHintsWeak?.Count() ?? 0 : _footHints?.Count ?? 0;
     [ThreadStatic] public static Action<string>? FootDebug;
     /// <summary>Разбор: вызовы основания на поверхности общего вида и из них — с общей проекцией (без годной подсказки).</summary>
     public static long ParamFootCalls, ParamFootGlobal;
@@ -76,13 +93,12 @@ public static class Ssi
     /// <summary>Основание перпендикуляра и единичная нормаль поверхности общего вида (нормаль — в знаке s.NormalAt).</summary>
     public static (Vector3d P, Vector3d N) ParamFoot(Surfaces.ISurface3 s, Vector3d x)
     {
-        _footHints ??= new Dictionary<Surfaces.ISurface3, Vector2d>(ReferenceEqualityComparer.Instance);
         Interlocked.Increment(ref ParamFootCalls);
         // подсказка — только рядом: из далёкой (прежний вызов в другом месте) Ньютон сходится и к дальней стационарной точке
         // (у продолжения рационального куска — противоположная сторона окружности), где условие ортогональности тоже верно
         Vector2d uv = default;
         bool ok = false;
-        if (_footHints.TryGetValue(s, out var hint))
+        if (FootHint(s, out var hint))
         {
             // ЗАЩИТА ОТ ДАЛЬНЕЙ СТАЦИОНАРНОЙ ТОЧКИ: найденное основание не дальше от x, чем точка подсказки (дальняя стационарная
             // точка — максимум расстояния — всегда дальше), и сдвиг по параметрам умеренный
@@ -105,7 +121,7 @@ public static class Ssi
             }
             return (new Vector3d(double.NaN), new Vector3d(double.NaN));
         }
-        _footHints[s] = uv;
+        SetFootHint(s, uv);
         ParamDerivs(s, uv, out var P, out var Su, out var Sv);
         var n = Vector3d.Cross(Su, Sv);
         if (n.LengthSquared < 1e-30) return (P, new Vector3d(double.NaN));

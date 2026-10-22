@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
 namespace Parametric3D.App.Views;
@@ -25,6 +25,9 @@ public partial class MainWindow
     private Canvas RegionCanvas = null!;
     private Border ShapeBar = null!, SketchBar = null!, ViewBar = null!;
     private WrapPanel ShapeStack = null!;
+    private Border DimBar = null!;
+    private WrapPanel DimStack = null!;
+    private Border TreeDropLine = null!;
     private TextBlock ShapeHeader = null!;
     private StackPanel SketchBarStack = null!;
     private Border CommandBar = null!;
@@ -80,6 +83,9 @@ public partial class MainWindow
         ViewBar = this.FindControl<Border>("ViewBar")!;
         SketchBar = this.FindControl<Border>("SketchBar")!;
         ShapeStack = this.FindControl<WrapPanel>("ShapeStack")!;
+        DimBar = this.FindControl<Border>("DimBar")!;
+        DimStack = this.FindControl<WrapPanel>("DimStack")!;
+        TreeDropLine = this.FindControl<Border>("TreeDropLine")!;
         ShapeHeader = this.FindControl<TextBlock>("ShapeHeader")!;
         SketchBarStack = this.FindControl<StackPanel>("SketchBarStack")!;
         CommandBar = this.FindControl<Border>("CommandBar")!;

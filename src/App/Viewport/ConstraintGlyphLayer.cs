@@ -1,4 +1,6 @@
 ﻿using Avalonia;
+using OpenTK.Mathematics;
+using Parametric3D.Model.Sketching;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Parametric3D.App.Icons;
@@ -20,6 +22,11 @@ namespace Parametric3D.App.Viewport;
 /// </summary>
 public sealed class ConstraintGlyphLayer : Control
 {
+    /// <summary>Мутация P3D_GLYPHHV=0: значок H/V — по осям эскиза, без учёта поворота вида.</summary>
+    internal static readonly bool SwapHvOff = Environment.GetEnvironmentVariable("P3D_GLYPHHV") == "0";
+    /// <summary>Разбор: значки H/V рисуются переставленными (ось U эскиза на экране вертикальна).</summary>
+    public bool LastSwapHv { get; private set; }
+
     private readonly ModelViewport _view;
 
     /// <summary>Сколько значков нарисовано в последний раз (для проверок).</summary>
@@ -56,6 +63,18 @@ public sealed class ConstraintGlyphLayer : Control
         var select = new Pen(new SolidColorBrush(C(th.Select, 1)), 2);
         var hov = _view.Selection.Hover;
 
+        // k97: «горизонтально/вертикально» — вдоль осей ЭСКИЗА; вид при входе в эскиз сохраняет «верх», и ось U эскиза может
+        // идти по экрану вертикально — значок показывает направление на экране (иначе он выглядит повёрнутым на 90°).
+        bool swapHv = false;
+        if (_view.Project(sk.Plane.ToWorld(new Vector2d(0, 0))) is { } o0 && _view.Project(sk.Plane.ToWorld(new Vector2d(1, 0))) is { } o1)
+            swapHv = Math.Abs(o1.Y - o0.Y) > Math.Abs(o1.X - o0.X) && !SwapHvOff;
+        ConstraintType ScreenType(ConstraintType t) => !swapHv ? t : t switch
+        {
+            ConstraintType.Horizontal => ConstraintType.Vertical,
+            ConstraintType.Vertical => ConstraintType.Horizontal,
+            _ => t,
+        };
+        LastSwapHv = swapHv;
         foreach (var p in list)
         {
             if (_view.Project(sk.Plane.ToWorld(p.Center)) is not { } q) continue;
@@ -70,7 +89,7 @@ public sealed class ConstraintGlyphLayer : Control
                 : normal;
             ctx.DrawRectangle(bg, pen, cell, 3, 3);
 
-            var img = IconProvider.Get(ConstraintLayout.IconOf(c.Type), th.Dark ? Color.FromRgb(232, 232, 232) : Color.FromRgb(30, 30, 30));
+            var img = IconProvider.Get(ConstraintLayout.IconOf(ScreenType(c.Type)), th.Dark ? Color.FromRgb(232, 232, 232) : Color.FromRgb(30, 30, 30));
             if (img != null)
             {
                 var dst = IconProvider.Fit(img.Size, new Rect(q.X - s / 2, q.Y - s / 2, s, s));

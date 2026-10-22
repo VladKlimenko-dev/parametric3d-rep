@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Model.Sketching;
 using Parametric3D.Kernel;
@@ -694,6 +694,8 @@ public sealed class CornerTool : SketchToolBase
     public override bool Click(SketchInput i) => Apply(i.Sketch, i.P, _chamfer, _chamfer ? Distance : Radius);
 
     /// <summary>Угол — общий конец двух отрезков у точки щелчка: отрезки укорачиваются, между ними дуга (касательная) или фаска.</summary>
+    public static readonly bool CornerSplitOff = Environment.GetEnvironmentVariable("P3D_SKCORNERSPLIT") == "0";
+
     public static bool Apply(Sketch sk, Vector2d at, bool chamfer, double size)
     {
         var lines = sk.Entities.OfType<SkLine>().ToList();
@@ -718,6 +720,22 @@ public sealed class CornerTool : SketchToolBase
         double dist = chamfer ? size : size / Math.Tan(phi / 2);
         if (dist >= (oa.P - v).Length - 1e-9 || dist >= (ob.P - v).Length - 1e-9) return false;
         var qa = v + ua * dist; var qb = v + ub * dist;
+        // k97 (замечание 12): у ломаной соседние отрезки делят ОДНУ точку угла — прежде обе точки касания писались в неё
+        // же (сначала qa, затем qb), дуга выходила из точки в ту же точку: «скругление нулевого радиуса». Точка угла
+        // разделяется: второй отрезок получает свой конец. P3D_SKCORNERSPLIT=0 — прежнее поведение.
+        if (ReferenceEquals(pa, pb) && !CornerSplitOff)
+        {
+            var np = new SkPoint(pb.P) { Owner = lb };
+            if (ReferenceEquals(lb.A, pb)) lb.A = np; else lb.B = np;
+            pa.Owner = la; pb = np;
+            sk.BumpStructure();
+        }
+        // угла больше нет: связи и размеры, приложенные к точке угла, снимаются (иначе они тянут точку касания обратно в угол)
+        if (!CornerSplitOff)
+        {
+            sk.Constraints.RemoveAll(c => c.Items.Any(x => ReferenceEquals(x, pa) || ReferenceEquals(x, pb)));
+            sk.Dimensions.RemoveAll(d => d.Items.Any(x => ReferenceEquals(x, pa) || ReferenceEquals(x, pb)));
+        }
         // концы отрезков у угла переезжают в точки касания; совпадение угла снимается
         sk.Constraints.RemoveAll(c => c.Type == ConstraintType.Coincident && c.Items.Contains(pa) && c.Items.Contains(pb));
         pa.P = qa; pb.P = qb;

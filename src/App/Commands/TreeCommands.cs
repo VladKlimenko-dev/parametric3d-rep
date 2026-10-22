@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
@@ -216,6 +216,77 @@ public static class TreeCommands
             return false;
         }
         return Walk(f, 0);
+    }
+
+    /// <summary>
+    /// k97 (замечание 3): куда можно переставить операцию, не испортив деталь — диапазон итоговых номеров [Lo, Hi]: не выше
+    /// последнего родителя (операции, на грани/рёбра которой она или её эскиз опираются) и не ниже первого потомка.
+    /// </summary>
+    public static (int Lo, int Hi) MoveRange(Part part, Feature f)
+    {
+        int me = part.Features.IndexOf(f);
+        if (me < 0) return (0, -1);
+        int lo = 0, hi = part.Features.Count - 1;
+        var sk = Parametric3D.Model.Dependencies.SketchesOf(f);
+        var sketches = part.Sketches.Where(s => sk.Contains(s.Id)).ToList();
+        for (int k = 0; k < me; k++)
+        {
+            var g = part.Features[k];
+            if (Parents(part, f).Contains(g) || sketches.Any(s => RefersToObj(s, g.Key))) lo = Math.Max(lo, k + 1);
+        }
+        for (int k = part.Features.Count - 1; k > me; k--)
+        {
+            var g = part.Features[k];
+            var gsk = Parametric3D.Model.Dependencies.SketchesOf(g);
+            if (Parents(part, g).Contains(f) || part.Sketches.Any(s => gsk.Contains(s.Id) && RefersToObj(s, f.Key))) hi = Math.Min(hi, k - 1);
+        }
+        return (lo, hi);
+    }
+
+    /// <summary>Переставить операцию на номер to (в пределах MoveRange); перестройка, при поломке — откат с сообщением.</summary>
+    public static bool MoveTo(MainWindow w, Feature f, int to)
+    {
+        var part = w.Session.Part; if (part == null) return false;
+        int i = part.Features.IndexOf(f);
+        var (lo, hi) = MoveRange(part, f);
+        to = Math.Clamp(to, lo, hi);
+        if (i < 0 || to == i) return false;
+        var before = part.Features.Where(x => x.Error == null && !x.Suppressed).ToHashSet();
+        w.Session.Edit(L("Переупорядочить"), () => { part.MoveFeature(f, to); });
+        w.Session.Document.RebuildDirty();
+        var broken = w.Session.Part!.Features.Where(x => before.Any(b => b.Key == x.Key) && x.Error != null).ToList();
+        if (broken.Count > 0)
+        {
+            w.Session.Undo();
+            w.Session.Document.RebuildDirty();
+            w.ShowToast(L("Нельзя переставить: «{0}» опирается на соседнюю операцию", broken[0].Name));
+            w.ViewPort.MarkDirty(); w.RebuildTree();
+            return false;
+        }
+        w.ViewPort.MarkDirty(); w.RebuildTree();
+        return true;
+    }
+
+    static bool RefersToObj(object o, string key)
+    {
+        string tag = "#" + key + "/";
+        var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        bool Walk(object? x, int depth)
+        {
+            if (x == null || depth > 5) return false;
+            if (x is string str) return str.Contains(tag, StringComparison.Ordinal);
+            if (x.GetType().IsPrimitive || x is OpenTK.Mathematics.Vector3d or OpenTK.Mathematics.Vector2d) return false;
+            if (!x.GetType().IsValueType && !seen.Add(x)) return false;
+            if (x is System.Collections.IEnumerable en) { foreach (var y in en) if (Walk(y, depth + 1)) return true; return false; }
+            if (x.GetType().Namespace?.StartsWith("Parametric3D") != true && !x.GetType().IsGenericType) return false;
+            foreach (var fi in x.GetType().GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+            {
+                if (fi.Name is "Parent" or "Children" or "Name" || fi.FieldType.IsPrimitive) continue;
+                if (Walk(fi.GetValue(x), depth + 1)) return true;
+            }
+            return false;
+        }
+        return Walk(o, 0);
     }
 
     /// <summary>Родители операции: её эскизы, опорные элементы и операции, на грани и рёбра которых она опирается.</summary>
