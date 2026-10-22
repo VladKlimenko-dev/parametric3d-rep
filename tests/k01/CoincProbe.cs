@@ -56,4 +56,43 @@ static partial class Program
         }
         BooleanOp.AnalyticRouteDebug = null;
     }
+
+    /// <summary>
+    /// k95: вогнутое ребро «торец цилиндра — шар» по радиусам (цилиндр r15 h40 сдвинут на (8, 0, 5), шар r20): точная форма
+    /// и объём добавки против Монте-Карло (4·10⁶ точек по формулам). R3 — почти двойное касание (окружность касания шара
+    /// скругления с торцом почти касается стенки): события кривой «тор ∩ стенка» с касательной плоскостью тора доказываются
+    /// по односторонности (P3D_TRACEDONESIDED=0 — отказ). R 3.09 — у критического радиуса 3.08: отказ называет его.
+    /// </summary>
+    static void CapSphereChecks()
+    {
+        TSolid MakeB() { var l = new List<TSolid> { PrimitiveOp.Cylinder(new Vector3d(8, 0, 5), 15, 40) }; BooleanOp.Unite(l, PrimitiveOp.Sphere(Vector3d.Zero, 20), new List<string>()); return l[0]; }
+        (TSolid? Body, string Err, double Added) Round(double r)
+        {
+            var b = MakeB(); double v0 = AnalyticVolume.Of(b) ?? double.NaN;
+            var e = b.Edges.First(x => x.FaceA != null && x.FaceB != null && x.FaceA.Surface.IsPlanar != x.FaceB.Surface.IsPlanar
+                && new[] { x.FaceA, x.FaceB }.Any(f => Parametric3D.Kernel.Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) is Parametric3D.Kernel.Geometry.Ssi.Sphere)
+                && new[] { x.FaceA, x.FaceB }.Any(f => f.Surface.IsPlanar));
+            var bodies = new List<TSolid> { b }; var w = new List<string>();
+            try { FilletOp.RoundEdges(bodies, new List<EdgeRef> { EdgeRef.Of(e) }, r, w); }
+            catch (Exception ex) { return (null, ex.Message + " | " + string.Join(" | ", w), double.NaN); }
+            return (bodies[0], "", (AnalyticVolume.Of(bodies[0]) ?? double.NaN) - v0);
+        }
+        Check("KRN-ROUND-CAP-SPHERE-RADII", () =>
+        {
+            long n0 = FilletOp.CapSphereRounds;
+            foreach (var (r, mc, tol) in new[] { (2.0, 36.78, 0.6), (3.0, 72.45, 0.8), (8.0, 260.75, 2.0) })
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var (body, err, added) = Round(r);
+                Require(body != null, $"R{r}: refused: {err}");
+                Require(body!.Guarantee is GuaranteeLevel.ExactAnalytic or GuaranteeLevel.ExactQuadric, $"R{r}: guarantee {body.Guarantee}");
+                Require(Math.Abs(added - mc) < tol, $"R{r}: added {added:0.###} (Monte Carlo {mc} ± {tol})");
+                Require(body.Faces.Count() <= 6, $"R{r}: {body.Faces.Count()} faces");
+                Console.WriteLine($"  R{r}: added {added:0.###} (MC {mc}), faces {body.Faces.Count()}, {sw.ElapsedMilliseconds} ms");
+            }
+            Require(FilletOp.CapSphereRounds >= n0 + 3, "not rounded by the filler of revolution");
+            var (b2, err2, _) = Round(3.09);
+            Require(b2 == null && err2.Contains("critical value 3.08"), "R3.09: expected a refusal naming the critical radius 3.08: " + (b2 == null ? err2 : "built"));
+        });
+    }
 }
