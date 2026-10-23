@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using OpenTK.Mathematics;
 using Parametric3D.App.Viewport;
 using Parametric3D.Core;
@@ -55,11 +55,18 @@ public sealed class SketchSetupOp : Operation
             Label = "Плоскость-основа", Filter = PickFilter.Faces | PickFilter.Datums, Accept = Refs.IsPlanar, Single = true, Optional = true,
             Describe = r => Refs.PlaneOf(r)?.Name ?? "?",
         });
+        // k99 (замечание 1): поля показывают то, что уже задано (основа — и выбором в виде), а не «не задано»
+        if (!KeptOff)
+        {
+            _plane.KeptText = L(_sk.PlaneDescription);
+            if (BaseRef() is { } br) { _plane.Items.Add(br); _plane.Touched = false; }
+        }
         p.Note(L("Сейчас: {0}. Щелчок по другой плоской грани или плоскости — новая основа.", L(_sk.PlaneDescription)));
         _origin = p.Ref(new RefField
         {
             Label = "Основа нулевой точки (Origin)", Filter = PickFilter.Vertices | PickFilter.Datums | PickFilter.SketchPoints, Accept = r => Refs.PointOf(r) != null, Single = true, Optional = true,
         });
+        if (!KeptOff) _origin.KeptText = L(_sk.OriginDescription);
         p.Note(L("Сейчас: {0}.", L(_sk.OriginDescription)));
         p.Number("Смещение нуля по X эскиза", () => new ValueRef(_dx), v => { _dx = v.Value; _sk.SetOriginOffset(new Vector2d(_dx, _dy)); ShowArrows(); });
         p.Number("Смещение нуля по Y эскиза", () => new ValueRef(_dy), v => { _dy = v.Value; _sk.SetOriginOffset(new Vector2d(_dx, _dy)); ShowArrows(); });
@@ -67,10 +74,37 @@ public sealed class SketchSetupOp : Operation
         {
             Label = "Верх эскиза", Filter = PickFilter.Edges | PickFilter.Faces | PickFilter.Datums | PickFilter.Vertices,
             Accept = r => Refs.LineOf(r) != null || Refs.IsPlanar(r) || Refs.PointOf(r) != null, Single = true, Optional = true,
+            // k99 (замечание 2): под курсором — только то, что задаёт «верх»: ребро не поперёк эскиза, грань или плоскость,
+            // перпендикулярная ему (прежде ловились любые плоскости — большие опорные перекрывали грань основы)
+            Prefer = PreferOff ? null : UpCandidate,
         });
+        if (!KeptOff) _up.KeptText = _sk.UpDescription.Length > 0 ? _sk.UpDescription : L("ось плоскости");
         p.Note(L("Ребро — вдоль него; грань или плоскость, перпендикулярная эскизу, — по её нормали; точка — от нуля к ней. Сейчас: {0}.",
             _sk.UpDescription.Length > 0 ? _sk.UpDescription : L("ось плоскости")));
         p.Check("Взгляд с обратной стороны (или щелчок по стрелке нормали)", () => _sk.PlaneDescription.EndsWith(" (flipped)"), _ => { _sk.Flip(); ShowArrows(); });
+    }
+
+    static readonly bool KeptOff = Environment.GetEnvironmentVariable("P3D_SKSETUPKEPT") == "0";
+    static readonly bool PreferOff = Environment.GetEnvironmentVariable("P3D_SKSETUPUP") == "0";
+
+    /// <summary>Основа эскиза ссылкой вида: опорная плоскость по номеру или грань по имени (номеру).</summary>
+    public PickRef? BaseRef()
+    {
+        if (_sk.BasePlaneId != 0 && Part.FindById<DatumPlane>(_sk.BasePlaneId) is { } dp) return new PickRef(dp.Id, PickKind.DatumPlane, Part, dp);
+        var faces = Part.Bodies.SelectMany(b => b.Faces);
+        var f = (!string.IsNullOrEmpty(_sk.BaseFaceTag) ? faces.FirstOrDefault(x => x.Tag == _sk.BaseFaceTag) : null)
+                ?? (_sk.BasePlaneId != 0 ? faces.FirstOrDefault(x => x.Id == _sk.BasePlaneId) : null);
+        return f != null ? new PickRef(f.Id, PickKind.Face, Part, null) : null;
+    }
+
+    /// <summary>Годится ли под курсором для «верха»: ребро не поперёк эскиза, плоскость/грань — поперёк, точка.</summary>
+    public bool UpCandidate(PickRef r)
+    {
+        var n = _sk.Plane.W.Normalized();
+        if (Refs.LineOf(r) is { } ln) return Math.Abs(Vector3d.Dot(ln.Dir.Normalized(), n)) < 1 - 1e-6;
+        if (Refs.PlaneOf(r) is { } pl) return Math.Abs(Vector3d.Dot(pl.Frame.W.Normalized(), n)) < 1e-6;
+        if (r.Kind == PickKind.Face) return false;   // кривая грань — «верха» не задаёт
+        return Refs.PointOf(r) != null;
     }
 
     protected override void Apply()

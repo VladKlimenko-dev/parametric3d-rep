@@ -157,6 +157,10 @@
       <Grid Grid.Column="2" x:Name="ViewArea">
         <vp:ModelViewport x:Name="View" />
         <Canvas x:Name="RegionCanvas" IsHitTestVisible="False" />
+        <!-- k99: значок «Сечение» в углу плоскости сечения (щелчок — её настройки) -->
+        <Canvas x:Name="BadgeCanvas">
+          <Button x:Name="SectionBadge" Classes="tool" IsVisible="False" Width="28" Height="28" MinWidth="0" MinHeight="0" Padding="3" />
+        </Canvas>
         <!-- k98 (замечание 1): вид и стиль — в окне вида, сверху посередине -->
         <Border x:Name="ViewBar" Classes="toolbar" Margin="0,6,0,0" Padding="4,2" HorizontalAlignment="Center" VerticalAlignment="Top">
           <StackPanel Orientation="Horizontal" Spacing="1" x:Name="ViewTools" />

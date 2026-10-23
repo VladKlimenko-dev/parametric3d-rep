@@ -32,7 +32,7 @@ public sealed class SceneRenderer : IDisposable
     private ShaderProgram? _mesh, _line, _point, _fill, _bg;
     private int _emptyVao = -1;
 
-    private sealed class MeshGpu { public int Vao = -1, Pos = -1, Nrm = -1, Pick = -1, Ibo = -1, Count; public Matrix4 Model; public Vector4 Color, MatColor; public float MatSpec, MatShine, MatMetal; public int Preview; }
+    private sealed class MeshGpu { public int Vao = -1, Pos = -1, Nrm = -1, Pick = -1, Ibo = -1, Count; public Matrix4 Model; public Vector4 Color, MatColor; public float MatSpec, MatShine, MatMetal; public int Preview; public uint PartId; }
     private readonly List<MeshGpu> _meshes = new();
     private sealed class InstGpu { public int Vao = -1, Vbo = -1, Count; }
     private readonly InstGpu _bodyEdges = new(), _lines = new(), _points = new(), _bodyVerts = new();
@@ -72,6 +72,7 @@ public sealed class SceneRenderer : IDisposable
         _point = new ShaderProgram("point", EngineShaders.PointVert, EngineShaders.PointFrag);
         _fill = new ShaderProgram("fill", EngineShaders.FillVert, EngineShaders.FillFrag);
         _bg = new ShaderProgram("background", EngineShaders.BackgroundVert, EngineShaders.BackgroundFrag);
+        _cap = new ShaderProgram("cap", EngineShaders.CapVert, EngineShaders.CapFrag);
         _emptyVao = GL.GenVertexArray();
     }
 
@@ -82,7 +83,7 @@ public sealed class SceneRenderer : IDisposable
         _meshCpu.Clear(); _meshCpu.AddRange(s.Meshes.Where(m => m.Preview == 0)); _sceneVersion++;
         foreach (var m in s.Meshes)
         {
-            var g = new MeshGpu { Model = m.Model, Color = m.Color, MatColor = m.MatColor, MatSpec = m.MatSpec, MatShine = m.MatShine, MatMetal = m.MatMetal, Count = m.Idx.Length, Preview = m.Preview };
+            var g = new MeshGpu { Model = m.Model, Color = m.Color, MatColor = m.MatColor, MatSpec = m.MatSpec, MatShine = m.MatShine, MatMetal = m.MatMetal, Count = m.Idx.Length, Preview = m.Preview, PartId = m.PartId };
             g.Vao = GL.GenVertexArray();
             GL.BindVertexArray(g.Vao);
             g.Pos = Buffer(m.Pos, 12); GL.EnableVertexAttribArray(0); GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 12, 0);
@@ -326,6 +327,7 @@ public sealed class SceneRenderer : IDisposable
         // тела: тонированные — освещённые грани и контур; иначе — только глубина (для заслонения рёбер)
         if (faces) DrawMeshes(f, lit: true, opacity: 1f);
         else DrawMeshDepthOnly(f);
+        if (faces) DrawCaps(f);
         if (faces) DrawOutline(f);
         if (meshStyle)
         {
@@ -596,6 +598,84 @@ public sealed class SceneRenderer : IDisposable
     }
 
     /// <summary>Контур силуэта: задние грани, раздвинутые по нормали на постоянную ширину в пикселях.</summary>
+    /// <summary>
+    /// k99 (замечание 5): КРЫШКИ СЕЧЕНИЯ. Плоскость сечения задана (ClipPlane), CapFrame — её рамка (центр, оси, полуразмер).
+    /// Для каждой детали: её оставшиеся за плоскостью грани (обе стороны, без глубины) переворачивают бит трафарета — где
+    /// счёт нечётный, точка плоскости внутри тела; там рисуется четырёхугольник плоскости цветом материала со штриховкой
+    /// (металл — одна штриховка, неметалл — сетка; соседние детали — другой шаг и направление). P3D_SECTIONCAPS=0 — без них.
+    /// </summary>
+    public (Vector3 O, Vector3 U, Vector3 V, float Half)? CapFrame;
+    /// <summary>Шаг штриховки крышек (мир) у первой детали.</summary>
+    public float HatchStep = 2.5f;
+    public static readonly bool CapsOff = Environment.GetEnvironmentVariable("P3D_SECTIONCAPS") == "0";
+    /// <summary>Разбор: сколько крышек нарисовано в последнем кадре.</summary>
+    public int CapsDrawn { get; private set; }
+    private ShaderProgram? _cap;
+
+    /// <summary>Штриховка детали по её порядку: (шаг, угол, крест).</summary>
+    public static (float Step, float Angle, bool Cross) HatchOf(int partIndex, bool metal, float baseStep)
+    {
+        float[] k = { 1f, 1.45f, 0.75f, 1.9f };
+        float step = baseStep * k[partIndex % k.Length];
+        float ang = (partIndex % 2 == 0 ? 45f : 135f) * MathF.PI / 180f;
+        return (step, ang, !metal);
+    }
+
+    private void DrawCaps(FrameParams f)
+    {
+        CapsDrawn = 0;
+        if (CapsOff || ClipPlane == Vector4.Zero || CapFrame is not { } cf || _meshes.Count == 0 || _cap == null) return;
+        var parts = _meshes.Where(m => m.Preview == 0).Select(m => m.PartId).Distinct().ToList();
+        GL.Enable(EnableCap.StencilTest);
+        GL.Disable(EnableCap.CullFace);
+        for (int pi = 0; pi < parts.Count; pi++)
+        {
+            var ms = _meshes.Where(m => m.Preview == 0 && m.PartId == parts[pi]).ToList();
+            // 1) чётность пересечений — в трафарет
+            GL.ColorMask(false, false, false, false);
+            GL.DepthMask(false);
+            GL.Disable(EnableCap.DepthTest);
+            GL.StencilMask(0xFF);
+            GL.StencilFunc(StencilFunction.Always, 0, 0xFF);
+            GL.StencilOp(StencilOp.Keep, StencilOp.Keep, StencilOp.Invert);
+            _mesh!.Use();
+            SetCamera(_mesh, f);
+            _mesh.Set("uMode", 2);
+            _mesh.Set("uOutlinePx", 0f);
+            foreach (var m in ms)
+            {
+                _mesh.Set("uModel", m.Model);
+                GL.BindVertexArray(m.Vao);
+                GL.DrawElements(PrimitiveType.Triangles, m.Count, DrawElementsType.UnsignedInt, 0);
+            }
+            // 2) крышка там, где счёт нечётный; трафарет обнуляется
+            GL.ColorMask(true, true, true, true);
+            GL.DepthMask(true);
+            GL.Enable(EnableCap.DepthTest);
+            GL.DepthFunc(DepthFunction.Lequal);
+            GL.StencilFunc(StencilFunction.Notequal, 0, 0xFF);
+            GL.StencilOp(StencilOp.Zero, StencilOp.Zero, StencilOp.Zero);
+            var m0 = ms[0];
+            var fill = m0.MatColor.W > 0 ? m0.MatColor : m0.Color;
+            var fillC = new Vector4(fill.X * 0.82f, fill.Y * 0.82f, fill.Z * 0.82f, 1);
+            var hatchC = new Vector4(fill.X * 0.28f, fill.Y * 0.28f, fill.Z * 0.30f, 1);
+            var (step, ang, cross) = HatchOf(pi, m0.MatMetal > 0.5f || m0.MatColor.W <= 0, HatchStep);
+            _cap.Use();
+            _cap.Set("uView", f.View);
+            _cap.Set("uProj", f.Proj);
+            _cap.Set("uO", cf.O); _cap.Set("uU", cf.U); _cap.Set("uV", cf.V); _cap.Set("uHalf", cf.Half);
+            _cap.Set("uFill", fillC); _cap.Set("uHatch", hatchC);
+            _cap.Set("uStep", step); _cap.Set("uAngle", ang); _cap.Set("uCross", cross ? 1 : 0);
+            GL.BindVertexArray(_emptyVao);
+            GL.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+            CapsDrawn++;
+        }
+        GL.StencilFunc(StencilFunction.Always, 0, 0xFF);
+        GL.StencilOp(StencilOp.Keep, StencilOp.Keep, StencilOp.Keep);
+        GL.Disable(EnableCap.StencilTest);
+        GL.BindVertexArray(0);
+    }
+
     private void DrawOutline(FrameParams f)
     {
         if (_meshes.Count == 0) return;

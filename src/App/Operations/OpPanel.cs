@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -30,15 +30,22 @@ public sealed class RefField
     public readonly List<PickRef> Items = new();
     /// <summary>Правка готовой операции: сколько ссылок уже записано в ней (пока поле не трогали).</summary>
     public int Kept;
+    /// <summary>k98+: правка — что уже задано (текстом), пока поле не трогали (настройка эскиза: основа, нуль, верх).</summary>
+    public string? KeptText;
+    /// <summary>k99: что из видимого под курсором годится полю (иное под курсором не подсвечивается и не берётся).</summary>
+    public Func<PickRef, bool>? Prefer { get; init; }
+    /// <summary>k99: поле доступно только при условии (иначе — серое, щелчок не делает его активным).</summary>
+    public Func<bool>? Enabled { get; init; }
     public bool Touched;
 
     internal Border? Box;
     internal TextBlock? Text;
 
-    public bool IsSet => Items.Count > 0 || (!Touched && Kept > 0);
+    public bool IsSet => Items.Count > 0 || (!Touched && (Kept > 0 || KeptText != null));
 
     public string Summary =>
         Items.Count > 0 ? (Single ? (Describe ?? Viewport.Selection.Label)(Items[0]) : L("выбрано: {0}", Items.Count))
+        : !Touched && KeptText != null ? KeptText
         : !Touched && Kept > 0 ? L("как было ({0})", Kept)
         : Optional ? L("не задано") : L("выберите в виде");
 
@@ -106,13 +113,14 @@ public sealed class OpPanel
             Cursor = new Cursor(StandardCursorType.Hand), Background = Brushes.Transparent,
         };
         f.Box = box; f.Text = text;
-        box.PointerPressed += (_, e) => { _op.Activate(f); e.Handled = true; };
+        box.PointerPressed += (_, e) => { if (f.Enabled?.Invoke() == false) return; _op.Activate(f); e.Handled = true; };
+        if (f.Enabled != null) _enabled.Add((box, f.Enabled));
         clear.Click += (_, _) => { f.Items.Clear(); f.Touched = true; _op.Activate(f); _op.RefChanged(f); };
         Row(f.Label, box);
         return f;
     }
 
-    public void Number(string label, Func<ValueRef> get, Action<ValueRef> set, string unit = "мм", Func<bool>? visible = null)
+    public void Number(string label, Func<ValueRef> get, Action<ValueRef> set, string unit = "мм", Func<bool>? visible = null, Action? focused = null)
     {
         // u13: длины — в единицах детали (мм или дюймы); формулы — как записаны
         bool inch = unit == "мм" && Commands.DisplayUnits.Inch;
@@ -143,6 +151,7 @@ public sealed class OpPanel
             }
         };
         tb.LostFocus += (_, _) => Commit();
+        if (focused != null) tb.GotFocus += (_, _) => focused();
         ToolTip.SetTip(tb, L("Число или формула с параметрами; ↑↓ — шаг 1, Shift — 10, Ctrl — 0.1; Enter — применить"));
         When(Row(label, dock), visible);
         _numbers.Add((tb, get));
@@ -158,9 +167,10 @@ public sealed class OpPanel
         When(Row(label, tb), visible);
     }
 
-    public void Check(string label, Func<bool> get, Action<bool> set, Func<bool>? visible = null)
+    public void Check(string label, Func<bool> get, Action<bool> set, Func<bool>? visible = null, Func<bool>? enabled = null)
     {
         var cb = new CheckBox { IsChecked = get(), Content = L(label) };
+        if (enabled != null) _enabled.Add((cb, enabled));
         bool sync = false;
         cb.IsCheckedChanged += (_, _) => { if (sync) return; set(cb.IsChecked == true); _op.FieldChanged(); };
         _syncers.Add(() => { sync = true; cb.IsChecked = get(); sync = false; });
@@ -197,6 +207,7 @@ public sealed class OpPanel
     // ------------------------------------------------------------------ зависимые поля
 
     private readonly List<(Control C, Func<bool> Visible)> _conditional = new();
+    private readonly List<(Control C, Func<bool> Enabled)> _enabled = new();
     private readonly List<(TextBox Box, Func<ValueRef> Get)> _numbers = new();
     private readonly List<Action> _syncers = new();
 
@@ -212,6 +223,7 @@ public sealed class OpPanel
     public void Refresh()
     {
         foreach (var (c, v) in _conditional) c.IsVisible = v();
+        foreach (var (c, en) in _enabled) { bool e = en(); c.IsEnabled = e; c.Opacity = e ? 1 : 0.45; }
         foreach (var (tb, get) in _numbers)
             if (!tb.IsFocused) tb.Text = Show(get());
         foreach (var a in _syncers) a();

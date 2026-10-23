@@ -841,7 +841,11 @@ public partial class MainWindow : Window
     private void WireView()
     {
         Cube.Viewport = View;
-        View.CameraChanged += () => { Cube.Sync(); UpdateProjectionButton(View.IsPerspective); };
+        View.CameraChanged += () => { Cube.Sync(); UpdateProjectionButton(View.IsPerspective); PlaceSectionBadge(); };
+        View.SectionChanged += PlaceSectionBadge;
+        SectionBadge.Content = IconProvider.Content("section_view_but.svg", L("Сечение"), 20);
+        ToolTip.SetTip(SectionBadge, L("Сечение — настройки плоскости"));
+        SectionBadge.Click += (_, _) => { if (CurrentOperation is SectionOp) return; if (CurrentOperation != null) CancelOperation(); if (!InSketch && Session.Part != null) StartOperation(new SectionOp()); };
         View.HoverChanged += h => UpdateStatus(h);
         View.Selection.Changed += OnSelectionChanged;
         View.ContextRequested += p => { if (InSketch && View.DimensionAt(p) is { } dm) OpenDimensionMenu(dm); else OpenViewContextMenu(); };
@@ -882,6 +886,10 @@ public partial class MainWindow : Window
             UpdateContextBar();
         };
         View.SceneRebuilt += HideGhostWhenBuilt;
+        // k99: щелчок по контуру плоскости сечения — её настройки
+        View.SectionClicked += () => { if (CurrentOperation == null && !InSketch && Session.Part != null) StartOperation(new SectionOp()); };
+        // k99: при перестроении (детали изменились) — рамка и плоскость сечения по новым границам
+        View.SceneRebuilt += () => { if (View.Section is { } ss) View.ApplySection(ss); };
         View.GlReady += info => Dispatcher.UIThread.Post(() =>
         {
             StatusGl.Text = ShortGl(info);
@@ -1727,6 +1735,7 @@ public partial class MainWindow : Window
     private void EndOperation()
     {
         CurrentOperation = null;
+        View.Selection.Predicate = null;
         _handleOp = null; _handleOpFixed = false;
         _opQuiet = false;
         DragValueBox.IsVisible = false;
@@ -2040,6 +2049,19 @@ public partial class MainWindow : Window
             new ContextMenu { ItemsSource = items }.Open((Control)e.Source!);
             e.Handled = true;
         };
+    }
+
+    /// <summary>k99: значок «Сечение» — у угла рамки плоскости сечения, ближайшего к правому верхнему углу экрана.</summary>
+    public void PlaceSectionBadge()
+    {
+        if (View.SectionCorners() is not { } cs || InSketch) { SectionBadge.IsVisible = false; return; }
+        Point? best = null;
+        foreach (var c in cs)
+            if (View.Project(c) is { } q && (best == null || q.X - q.Y > best.Value.X - best.Value.Y)) best = q;
+        if (best is not { } b) { SectionBadge.IsVisible = false; return; }
+        double x = Math.Clamp(b.X + 4, 0, Math.Max(0, View.Bounds.Width - 30)), y = Math.Clamp(b.Y - 32, 0, Math.Max(0, View.Bounds.Height - 30));
+        Canvas.SetLeft(SectionBadge, x); Canvas.SetTop(SectionBadge, y);
+        SectionBadge.IsVisible = true;
     }
 
     private (Feature F, Point Start)? _featDrag;

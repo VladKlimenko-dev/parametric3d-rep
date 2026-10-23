@@ -25,8 +25,11 @@ public enum GetProgramParameterName : uint { LinkStatus = 0x8B82, InfoLogLength 
 public enum EnableCap : uint
 {
     CullFace = 0x0B44, DepthTest = 0x0B71, Blend = 0x0BE2, ScissorTest = 0x0C11,
-    PolygonOffsetFill = 0x8037, Multisample = 0x809D,
+    PolygonOffsetFill = 0x8037, Multisample = 0x809D, StencilTest = 0x0B90,
 }
+/// <summary>k99: трафарет (крышки сечения).</summary>
+public enum StencilFunction : uint { Never = 0x0200, Less = 0x0201, Equal = 0x0202, Lequal = 0x0203, Greater = 0x0204, Notequal = 0x0205, Gequal = 0x0206, Always = 0x0207 }
+public enum StencilOp : uint { Zero = 0, Keep = 0x1E00, Replace = 0x1E01, Incr = 0x1E02, Decr = 0x1E03, Invert = 0x150A }
 public enum BlendingFactor : uint { Zero = 0, One = 1, SrcAlpha = 0x0302, OneMinusSrcAlpha = 0x0303 }
 public enum DepthFunction : uint { Never = 0x0200, Less = 0x0201, Equal = 0x0202, Lequal = 0x0203, Greater = 0x0204, Always = 0x0207 }
 public enum FramebufferTarget : uint { Framebuffer = 0x8D40, ReadFramebuffer = 0x8CA8, DrawFramebuffer = 0x8CA9 }
@@ -84,6 +87,10 @@ public static unsafe class GL
     private static delegate* unmanaged<uint, int, int, void> _drawArrays;
     private static delegate* unmanaged<uint, int, uint, IntPtr, void> _drawElements;
     private static delegate* unmanaged<byte, byte, byte, byte, void> _colorMask;
+    private static delegate* unmanaged<uint, int, uint, void> _stencilFunc;
+    private static delegate* unmanaged<uint, uint, uint, void> _stencilOp;
+    private static delegate* unmanaged<uint, void> _stencilMask;
+    private static delegate* unmanaged<int, void> _clearStencil;
     private static delegate* unmanaged<float, float, float, float, void> _clearColor;
     private static delegate* unmanaged<double, void> _clearDepth;
     private static delegate* unmanaged<float, void> _clearDepthf;
@@ -188,6 +195,10 @@ public static unsafe class GL
         _drawArrays = (delegate* unmanaged<uint, int, int, void>)P("glDrawArrays");
         _drawElements = (delegate* unmanaged<uint, int, uint, IntPtr, void>)P("glDrawElements");
         _colorMask = (delegate* unmanaged<byte, byte, byte, byte, void>)P("glColorMask");
+        _stencilFunc = (delegate* unmanaged<uint, int, uint, void>)P("glStencilFunc");
+        _stencilOp = (delegate* unmanaged<uint, uint, uint, void>)P("glStencilOp");
+        _stencilMask = (delegate* unmanaged<uint, void>)P("glStencilMask");
+        _clearStencil = (delegate* unmanaged<int, void>)P("glClearStencil");
         _clearColor = (delegate* unmanaged<float, float, float, float, void>)P("glClearColor");
         _clearDepth = (delegate* unmanaged<double, void>)Opt("glClearDepth");
         _clearDepthf = (delegate* unmanaged<float, void>)Opt("glClearDepthf");
@@ -279,6 +290,10 @@ public static unsafe class GL
     public static void DepthMask(bool f) => _depthMask((byte)(f ? 1 : 0));
     public static void DepthFunc(DepthFunction f) => _depthFunc((uint)f);
     public static void BlendFunc(BlendingFactor s, BlendingFactor d) => _blendFunc((uint)s, (uint)d);
+    public static void StencilFunc(StencilFunction f, int @ref, uint mask) => _stencilFunc((uint)f, @ref, mask);
+    public static void StencilOp(StencilOp fail, StencilOp zfail, StencilOp zpass) => _stencilOp((uint)fail, (uint)zfail, (uint)zpass);
+    public static void StencilMask(uint mask) => _stencilMask(mask);
+    public static void ClearStencil(int s) => _clearStencil(s);
     public static void ColorMask(bool r, bool g, bool b, bool a) => _colorMask((byte)(r ? 1 : 0), (byte)(g ? 1 : 0), (byte)(b ? 1 : 0), (byte)(a ? 1 : 0));
     public static void CullFace(CullFaceMode m) => _cullFace((uint)m);
     public static void CullFace(TriangleFace m) => _cullFace((uint)m);

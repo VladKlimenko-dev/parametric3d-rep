@@ -65,11 +65,70 @@ public sealed partial class ModelViewport
     public (Vector3d At, Vector3d N)? SectionPlane { get; private set; }
     public void SetSection((Vector3d At, Vector3d N)? plane)
     {
+        if (plane == null) { Section = null; _r.CapFrame = null; SectionFrame = null; }
         SectionPlane = plane;
         if (plane is { } pl) { var n = pl.N.Normalized(); _r.ClipPlane = new Vector4((float)n.X, (float)n.Y, (float)n.Z, (float)-Vector3d.Dot(n, pl.At)); }
         else _r.ClipPlane = Vector4.Zero;
         MarkDirty();
+        SectionChanged?.Invoke();
     }
+    /// <summary>k99: настройки сечения (null — сечение задано плоскостью напрямую или выключено).</summary>
+    public SectionState? Section { get; private set; }
+    /// <summary>k99: рамка сечения на виде — центр, оси, полуразмер (контур и крышки).</summary>
+    public (Vector3d O, Vector3d U, Vector3d V, double Half)? SectionFrame { get; private set; }
+    /// <summary>Щелчок по контуру или значку плоскости сечения (вне операции) — открыть её настройки.</summary>
+    public event Action? SectionClicked;
+    /// <summary>Плоскость сечения задана, изменена или снята.</summary>
+    public event Action? SectionChanged;
+
+    /// <summary>Применить настройки сечения: плоскость отсечения, рамка контура, крышки (центр рамки — проекция центра модели).</summary>
+    public void ApplySection(SectionState? s)
+    {
+        if (s == null || _doc == null) { SetSection(null); return; }
+        var b = _doc.Bounds;
+        var (at, n, u, v) = s.Compute(b);
+        Section = s;
+        double diag = b.IsEmpty ? 100 : (b.Max - b.Min).Length;
+        var mid = b.IsEmpty ? at : (b.Min + b.Max) / 2;
+        var o = mid - n * Vector3d.Dot(mid - at, n);
+        double half = Math.Max(10, diag * 0.6);
+        SectionFrame = (o, u, v, half);
+        SectionPlane = (at, n);
+        _r.ClipPlane = new Vector4((float)n.X, (float)n.Y, (float)n.Z, (float)-Vector3d.Dot(n, at));
+        _r.CapFrame = (V3(o), V3(u), V3(v), (float)half);
+        _r.HatchStep = (float)Math.Max(0.2, diag / 55);
+        _overlayDirty = true;
+        MarkDirty();
+        SectionChanged?.Invoke();
+    }
+
+    /// <summary>Углы рамки сечения (мир).</summary>
+    public Vector3d[]? SectionCorners() => SectionFrame is { } f
+        ? new[] { f.O - f.U * f.Half - f.V * f.Half, f.O + f.U * f.Half - f.V * f.Half, f.O + f.U * f.Half + f.V * f.Half, f.O - f.U * f.Half + f.V * f.Half }
+        : null;
+
+    /// <summary>Контур сечения подсвечен (под курсором или настройки открыты).</summary>
+    public bool SectionHot { get => _sectionHot; set { if (_sectionHot == value) return; _sectionHot = value; _overlayDirty = true; Redraw(); } }
+    private bool _sectionHot;
+
+    /// <summary>Курсор у контура рамки сечения (6 px).</summary>
+    public bool SectionOutlineHit(Point p)
+    {
+        if (SectionCorners() is not { } c) return false;
+        for (int i = 0; i < 4; i++)
+            if (Project(c[i]) is { } a && Project(c[(i + 1) % 4]) is { } b)
+            {
+                double dx = b.X - a.X, dy = b.Y - a.Y, l2 = dx * dx + dy * dy;
+                double t = l2 < 1e-9 ? 0 : Math.Clamp(((p.X - a.X) * dx + (p.Y - a.Y) * dy) / l2, 0, 1);
+                double ex = a.X + dx * t - p.X, ey = a.Y + dy * t - p.Y;
+                if (ex * ex + ey * ey <= 36) return true;
+            }
+        return false;
+    }
+
+    /// <summary>Разбор: показать щелчок по контуру сечения.</summary>
+    public void RaiseSectionClicked() => SectionClicked?.Invoke();
+
     /// <summary>u13: полосы-отражения («зебра») на гранях.</summary>
     public bool Zebra { get => _r.Zebra; set { _r.Zebra = value; Redraw(); } }
 
@@ -205,6 +264,12 @@ public sealed partial class ModelViewport
     {
         static Vector3 F(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
         foreach (var (a, b, c) in Annotations) lines.Add(Inst(F(a), F(b), c, 1.2f, 0));
+        // k99: контур плоскости сечения (без заливки)
+        if (SectionCorners() is { } sc && ActiveSketch == null)
+        {
+            var col = SectionHot ? new Vector4(1f, 0.75f, 0.2f, 1f) : new Vector4(0.35f, 0.62f, 1f, 0.95f);
+            for (int i = 0; i < 4; i++) lines.Add(Inst(F(sc[i]), F(sc[(i + 1) % 4]), col, SectionHot ? 2.2f : 1.5f, 0));
+        }
         if (Annotations.Count == 0)
             foreach (var (a, b, cr) in CageLines) lines.Add(Inst(F(a), F(b), cr ? new Vector4(1f, 0.4f, 0.3f, 0.9f) : new Vector4(0.35f, 0.75f, 1f, 0.55f), 1f, 0));
         if (!_modelGrid || ActiveSketch != null) return;
