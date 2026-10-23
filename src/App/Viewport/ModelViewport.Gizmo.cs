@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Input;
 using OpenTK.Mathematics;
 using Parametric3D.Render.Engine;
@@ -11,7 +11,12 @@ public enum GizmoMode { Move, Rotate, Scale }
 public enum GizmoPart { None = -1, AxisX = 0, AxisY = 1, AxisZ = 2, PlaneYZ = 3, PlaneXZ = 4, PlaneXY = 5, Uniform = 6 }
 
 /// <summary>Гизмо: вид, начало, оси рамки (единичные, взаимно перпендикулярные).</summary>
-public sealed record GizmoSpec(GizmoMode Mode, Vector3d Origin, Vector3d X, Vector3d Y, Vector3d Z);
+public sealed record GizmoSpec(GizmoMode Mode, Vector3d Origin, Vector3d X, Vector3d Y, Vector3d Z)
+{
+    /// <summary>k99: какие части видны и берутся (биты 1 &lt;&lt; GizmoPart); 0 — все.</summary>
+    public int Mask { get; init; }
+    public bool Has(GizmoPart p) => Mask == 0 || p != GizmoPart.None && (Mask & (1 << (int)p)) != 0;
+}
 
 /// <summary>
 /// Перетаскивание гизмо — накопленное от нажатия: Delta — сдвиг в осях рамки (ось — одна составляющая, плоскость — две,
@@ -98,7 +103,9 @@ public sealed partial class ModelViewport
     }
 
     /// <summary>Часть гизмо под курсором.</summary>
-    public GizmoPart GizmoHit(Point p)
+    public GizmoPart GizmoHit(Point p) => _gizmo is { } gm && GizmoHitAll(p) is var h && gm.Has(h) ? h : GizmoPart.None;
+
+    private GizmoPart GizmoHitAll(Point p)
     {
         if (_gizmo is not { } g || ActiveSketch != null || Tool != null) return GizmoPart.None;
         double L = GizmoLen;
@@ -109,6 +116,7 @@ public sealed partial class ModelViewport
             GizmoPart best = GizmoPart.None; double bd = 7;
             for (int k = 0; k < 3; k++)
             {
+                if (!g.Has((GizmoPart)k)) continue;
                 var ring = GzRing(g, k);
                 Point? prev = null;
                 foreach (var w in ring)
@@ -267,6 +275,7 @@ public sealed partial class ModelViewport
         {
             for (int k = 0; k < 3; k++)
             {
+                if (!g.Has((GizmoPart)k)) continue;
                 var ring = GzRing(g, k);
                 var c = C((GizmoPart)k, cols[k]);
                 for (int i = 0; i + 1 < ring.Count; i++) lines.Add(Inst(F(ring[i]), F(ring[i + 1]), c, on == (GizmoPart)k ? 3f : 2f, 0));
@@ -276,6 +285,7 @@ public sealed partial class ModelViewport
         }
         for (int i = 0; i < 3; i++)
         {
+            if (!g.Has((GizmoPart)i)) continue;
             var ax = F(GzAxis(g, i));
             var c = C((GizmoPart)i, cols[i]);
             var tip = o + ax * L;
@@ -295,6 +305,7 @@ public sealed partial class ModelViewport
         }
         for (int k = 0; k < 3; k++)
         {
+            if (!g.Has((GizmoPart)(3 + k))) continue;
             var q = GzPlaneQuad(g, k);
             var c = C((GizmoPart)(3 + k), cols[k]);
             for (int i = 0; i < 4; i++) lines.Add(Inst(F(q[i]), F(q[(i + 1) % 4]), c, on == (GizmoPart)(3 + k) ? 2.6f : 1.6f, 0));
@@ -309,6 +320,6 @@ public sealed partial class ModelViewport
             pts.Add(new PointInst { P = corner, Color = SceneData.Pack(C(GizmoPart.Uniform, white)), Px = 13, Shape = 1 });
             pts.Add(new PointInst { P = o, Color = SceneData.Pack(white), Px = 5, Shape = 0 });
         }
-        else pts.Add(new PointInst { P = o, Color = SceneData.Pack(C(GizmoPart.Uniform, white)), Px = 11, Shape = 0 });
+        else if (g.Has(GizmoPart.Uniform)) pts.Add(new PointInst { P = o, Color = SceneData.Pack(C(GizmoPart.Uniform, white)), Px = 11, Shape = 0 });
     }
 }

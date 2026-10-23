@@ -583,6 +583,8 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         else if (was == Drag.Select && ComponentDragEnd()) { }
         else if (was == Drag.Select && RegionEnd(p, e.KeyModifiers)) { }
         else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4 && ClickInterceptor?.Invoke(p) == true) { }
+        // k99: щелчок по контуру плоскости сечения (вне операции и эскиза) — её настройки
+        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4 && ClickInterceptor == null && ActiveSketch == null && Tool == null && SectionOutlineHit(p)) SectionClicked?.Invoke();
         else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4) RequestPick(p, click: true, e.KeyModifiers);
     }
 
@@ -620,12 +622,14 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         Redraw();
     }
 
+    static bool SafePred(Func<PickRef, bool> f, PickRef r) { try { return f(r); } catch { return false; } }
+
     private PickRef CpuPick(Point p)
     {
         if (_doc == null) return PickRef.Empty;
         _cpuPicker.ActiveOwner = ActivePart ?? (ModelItem)_doc.Root;
         foreach (var h in _cpuPicker.PickAll(_doc, Camera, Px(p), Show.Planes, null))
-            if (Selection.Accepts(h.Ref.Kind)) return h.Ref;
+            if (Selection.Accepts(h.Ref.Kind) && (Selection.Predicate is not { } pp || SafePred(pp, h.Ref))) return h.Ref;
         return PickRef.Empty;
     }
 
@@ -634,6 +638,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         PicksServed++;
         // значки ограничений рисуются поверх вида (не в кадре GL) — ловятся здесь и важнее того, что под ними
         if (ConstraintGlyphAt(req.P) is { IsEmpty: false } glyph && Selection.Accepts(glyph.Kind)) r = glyph;
+        if (!r.IsEmpty && Selection.Predicate is { } pred && !SafePred(pred, r)) r = PickRef.Empty;
         // k97: в эскизе — очерк грани детали (цилиндра) под курсором, если под ним нет ничего из эскиза
         if (ActiveSketch != null && (r.IsEmpty || r.Kind == PickKind.Face) && FaceReferenceAt(req.P) is { IsEmpty: false } fref) r = fref;
         if (Selection.SetHover(r))

@@ -88,6 +88,9 @@ public sealed class Selection
             if (i.Kind == kind) yield return i.Id;
     }
 
+    /// <summary>k99: дополнительное условие выбора под курсором (активное поле операции); null — нет.</summary>
+    public Func<PickRef, bool>? Predicate { get; set; }
+
     public bool Accepts(PickKind k) => k switch
     {
         PickKind.Face => Filter.HasFlag(PickFilter.Faces),

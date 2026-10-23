@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Input;
 using OpenTK.Mathematics;
 using Parametric3D.App.Operations;
@@ -175,13 +175,18 @@ public static class ViewSelectCommands
     public static void ToggleSection(MainWindow w)
     {
         var vp = w.ViewPort;
+        if (w.CurrentOperation is Parametric3D.App.Operations.SectionOp) { w.CancelOperation(); vp.SetSection(null); return; }
         if (vp.SectionPlane != null) { vp.SetSection(null); return; }
+        // k99 (замечание 3): сечение — настраиваемая плоскость: по умолчанию основа — выбранная плоскость или XZ детали,
+        // начало — центр основы; сразу открываются её настройки (дальше — щелчок по контуру плоскости)
+        if (w.Session.Part != null && !w.InSketch && !SectionOldOff) { w.StartOperation(new Parametric3D.App.Operations.SectionOp()); return; }
         if (PlaneOfSelection(w) is { } p) { vp.SetSection(p); return; }
         var b = w.Session.Document.Bounds;
         var c = b.IsEmpty ? Vector3d.Zero : (b.Min + b.Max) / 2;
         var f = vp.Camera.Forward;
         vp.SetSection((c, -new Vector3d(f.X, f.Y, f.Z)));
     }
+    static readonly bool SectionOldOff = Environment.GetEnvironmentVariable("P3D_SECTIONOP") == "0";
 
     // ---------------------------------------------------------------- выбор
 

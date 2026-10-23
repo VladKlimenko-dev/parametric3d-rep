@@ -87,6 +87,7 @@ public abstract class Operation
         var flt = f?.Filter ?? PickFilter.All;
         if (f != null && Panel != null) foreach (var r in Panel.Refs) if (!ReferenceEquals(r, f) && !r.IsSet) flt |= r.Filter;
         sel.Filter = flt;
+        sel.Predicate = f?.Prefer;
         Syncing = true;
         try
         {

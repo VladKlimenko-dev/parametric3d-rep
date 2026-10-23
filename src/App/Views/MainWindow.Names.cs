@@ -28,6 +28,7 @@ public partial class MainWindow
     private Border DimBar = null!;
     private Border SketchSetBar = null!;
     private WrapPanel ToolTray = null!;
+    private Button SectionBadge = null!;
     private WrapPanel SketchSetStack = null!;
     private WrapPanel DimStack = null!;
     private Border TreeDropLine = null!;
@@ -89,6 +90,7 @@ public partial class MainWindow
         DimBar = this.FindControl<Border>("DimBar")!;
         SketchSetBar = this.FindControl<Border>("SketchSetBar")!;
         ToolTray = this.FindControl<WrapPanel>("ToolTray")!;
+        SectionBadge = this.FindControl<Button>("SectionBadge")!;
         SketchSetStack = this.FindControl<WrapPanel>("SketchSetStack")!;
         DimStack = this.FindControl<WrapPanel>("DimStack")!;
         TreeDropLine = this.FindControl<Border>("TreeDropLine")!;

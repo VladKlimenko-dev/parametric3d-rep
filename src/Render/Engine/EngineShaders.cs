@@ -371,6 +371,50 @@ void main()
     oColor = c;
 }";
 
+    // ------------------------------------------------------------------ k99: крышка сечения
+
+    /// <summary>Четырёхугольник на плоскости сечения (по номеру вершины): центр uO, оси uU, uV, полуразмер uHalf.</summary>
+    public const string CapVert = @"#version 330 core
+uniform mat4 uView;
+uniform mat4 uProj;
+uniform vec3 uO;
+uniform vec3 uU;
+uniform vec3 uV;
+uniform float uHalf;
+out vec2 vUV;
+void main()
+{
+    vec2 c = vec2((gl_VertexID & 1) == 0 ? -1.0 : 1.0, gl_VertexID >= 2 ? 1.0 : -1.0) * uHalf;
+    vUV = c;
+    vec3 w = uO + uU * c.x + uV * c.y;
+    gl_Position = uProj * (uView * vec4(w, 1.0));
+}";
+
+    /// <summary>Заливка цветом материала и штриховка: шаг uStep (мир), угол uAngle, крест — uCross; линия ~1.1 px.</summary>
+    public const string CapFrag = @"#version 330 core
+in vec2 vUV;
+uniform vec4 uFill;
+uniform vec4 uHatch;
+uniform float uStep;
+uniform float uAngle;
+uniform int uCross;
+out vec4 oColor;
+float lineAt(float s)
+{
+    float t = s / uStep;
+    float d = abs(fract(t) - 0.5);           // 0.5 — на линии, 0 — посередине между линиями
+    float px = (0.5 - d) * uStep / max(fwidth(s), 1e-6);
+    return clamp(1.1 - px, 0.0, 1.0);
+}
+void main()
+{
+    float ca = cos(uAngle), sa = sin(uAngle);
+    float s1 = vUV.x * ca + vUV.y * sa;
+    float a = lineAt(s1);
+    if (uCross == 1) a = max(a, lineAt(-vUV.x * sa + vUV.y * ca));
+    oColor = vec4(mix(uFill.rgb, uHatch.rgb, a), 1.0);
+}";
+
     // ------------------------------------------------------------------ фон
 
     public const string BackgroundVert = @"#version 330 core

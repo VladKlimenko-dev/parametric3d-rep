@@ -2785,6 +2785,66 @@ Check("UI-OP-RELEASE", () =>
     Require(alive <= 1, $"replaced parts still alive: {alive} of {weak.Count}");
 });
 
+Check("UI-SECTION-K99", () =>
+{
+    // k99 (отзыв 11:03): настройка эскиза показывает заданное (1), «верх» — только подходящее (2); сечение — настраиваемая
+    // плоскость с контуром и значком (3), ручки по полю (4), штриховка деталей разная (5)
+    var s = DocumentSession.NewPart();
+    var part = s.Part!;
+    var s1 = part.AddSketch("S1", Parametric3D.Kernel.Frame3.XY, part.PlaneXY.Id);
+    s1.AddEntity(new SkCircle(new SkPoint(0, 0), 10));
+    part.AddFeature(new ExtrudeFeature { SketchId = s1.Id });
+    s.Document.RebuildDirty();
+    var w = Open(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    // (1, 2) настройка эскиза
+    var setup = new SketchSetupOp(s1, false);
+    w.StartOperation(setup); Run();
+    var refs = setup.Panel!.Refs;
+    Require(refs.Count == 3 && refs.All(r => r.Summary != Loc.L("не задано")), "sketch setup fields are empty: " + string.Join(" | ", refs.Select(r => r.Summary)));
+    Require(refs[0].Items.Count == 1 && ReferenceEquals(refs[0].Items[0].Target, part.PlaneXY), "base plane is not the sketch's plane");
+    var upPref = refs[2].Prefer;
+    Require(upPref != null && !upPref(new PickRef(part.PlaneXY.Id, PickKind.DatumPlane, part, part.PlaneXY)) && upPref(new PickRef(part.PlaneXZ.Id, PickKind.DatumPlane, part, part.PlaneXZ)),
+        "«up» accepts a plane parallel to the sketch or rejects a perpendicular one");
+    w.CancelOperation(); Run();
+    // (3) сечение
+    var vp = w.ViewPort;
+    CommandRegistry.Instance["view.section"].Execute(); Run();
+    Require(w.CurrentOperation is SectionOp, "section command did not open the section settings");
+    var op = (SectionOp)w.CurrentOperation!;
+    Require(vp.SectionPlane is { } sp0 && Math.Abs(Math.Abs(sp0.N.Y) - 1) < 1e-9, "default section is not on XZ");
+    var at0 = vp.SectionPlane!.Value.At;
+    op.State.Offset = 5; op.FieldChanged();
+    Require((vp.SectionPlane!.Value.At - at0 - vp.SectionPlane.Value.N * 5).Length < 1e-9 || (vp.SectionPlane!.Value.At - at0 + vp.SectionPlane.Value.N * 5).Length < 1e-9, "offset does not move the plane along the base normal");
+    // (4) ручки по полю
+    Require(vp.Gizmo is { Mode: GizmoMode.Move } g0 && g0.Has(GizmoPart.AxisZ) && !g0.Has(GizmoPart.AxisX), "offset handle");
+    op.SetGizmoField(1);
+    Require(vp.Gizmo is { Mode: GizmoMode.Rotate } g1 && g1.Has(GizmoPart.AxisX) && !g1.Has(GizmoPart.AxisY), "angle A handle");
+    vp.SimulateGizmoDrag(new GizmoDrag(GizmoPart.AxisX, Vector3d.Zero, 30, Avalonia.Input.KeyModifiers.None));
+    Require(Math.Abs(op.State.AngleA - 30) < 1e-9 && Math.Abs(Math.Abs(vp.SectionPlane!.Value.N.Y) - Math.Cos(Math.PI / 6)) < 1e-9, $"angle A by the handle: {op.State.AngleA}, n {vp.SectionPlane!.Value.N}");
+    // начало: по умолчанию — центр основы; «начало основы» выключает «центр» и «точку»
+    Require(op.State.Origin == SectionState.OriginKind.MidPlane && op.Panel!.Refs[1].Enabled!() == false, "origin point field must be disabled with mid-plane origin");
+    op.State.Origin = SectionState.OriginKind.BasePlane; op.FieldChanged();
+    w.CommitOperation(); Run();
+    Require(vp.SectionPlane != null && vp.SectionCorners() != null, "section is gone after OK");
+    var badge = w.FindControl<Button>("SectionBadge")!;
+    Require(badge.IsVisible, "section view badge is not shown");
+    // щелчок по контуру — настройки
+    var c = vp.SectionCorners()!; var pa = vp.Project(c[0])!.Value; var pb = vp.Project(c[1])!.Value;
+    Require(vp.SectionOutlineHit(new Avalonia.Point((pa.X + pb.X) / 2, (pa.Y + pb.Y) / 2)), "outline is not hit");
+    vp.RaiseSectionClicked(); Run();
+    Require(w.CurrentOperation is SectionOp so2 && Math.Abs(so2.State.AngleA - 30) < 1e-9, "settings reopened without the current values");
+    ((SectionOp)w.CurrentOperation!).State.Offset = 50; w.CurrentOperation!.FieldChanged();
+    w.CancelOperation(); Run();
+    Require(vp.Section is { } back && Math.Abs(back.Offset - 5) < 1e-9, "cancel did not restore the section");
+    // (5) штриховка соседних деталей различается
+    var h0 = Parametric3D.Render.Engine.SceneRenderer.HatchOf(0, true, 2);
+    var h1 = Parametric3D.Render.Engine.SceneRenderer.HatchOf(1, true, 2);
+    Require(h0.Step != h1.Step && h0.Angle != h1.Angle && Parametric3D.Render.Engine.SceneRenderer.HatchOf(0, false, 2).Cross, "hatch of adjacent parts / non-metal");
+    CommandRegistry.Instance["view.section"].Execute(); Run();
+    Require(vp.SectionPlane == null && !badge.IsVisible, "section did not switch off");
+});
+
 Check("UI-SKETCH-K98", () =>
 {
     // k98 (отзыв 08:25): очерк цилиндра в эскизе виден всегда (2); подпись радиуса горизонтальна, продолжение дуги до луча
