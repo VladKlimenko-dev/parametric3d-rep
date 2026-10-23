@@ -380,9 +380,60 @@ public sealed class Sketch : ModelItem
         return c;
     }
 
+    /// <summary>k102: следующий номер размера (номера не переиспользуются после удаления).</summary>
+    public int NextDimIndex;
+
+    /// <summary>Размерам без номера — номера по порядку (поставленные приложением добавляются в список напрямую).</summary>
+    public void EnsureDimIds()
+    {
+        foreach (var d in Dimensions)
+        {
+            if (d.Index >= NextDimIndex) NextDimIndex = d.Index + 1;
+        }
+        foreach (var d in Dimensions) if (d.Index < 0) d.Index = NextDimIndex++;
+    }
+
+    /// <summary>Размер по идентификатору «dN»; null — нет.</summary>
+    public SkDimension? DimensionByName(string name) => Params.ModelRefs.DimIndex(name) is var i && i >= 0 ? Dimensions.FirstOrDefault(d => d.Index == i) : null;
+
+    /// <summary>
+    /// k102: ФОРМУЛА В ЭСКИЗЕ — свои размеры по идентификатору (d0, d1…), затем параметры (и пути к размерам других эскизов,
+    /// операций и деталей — через таблицу). Размер с формулой берёт значение своей формулы (цепочки — до 8 шагов).
+    /// </summary>
+    public bool TryEvaluate(string formula, ParameterTable? table, out double value, out string? error)
+    {
+        EnsureDimIds();
+        var scope = new SketchScope(this, table);
+        return ParameterTable.TryEvaluateWith(formula, scope, table?.Geometry, out value, out error);
+    }
+
+    sealed class SketchScope : IValueResolver
+    {
+        readonly Sketch _sk; readonly ParameterTable? _t; int _depth;
+        public SketchScope(Sketch sk, ParameterTable? t) { _sk = sk; _t = t; }
+        public bool TryValue(string name, out double value)
+        {
+            if (_sk.DimensionByName(name) is { } d)
+            {
+                value = d.Value;
+                if (!string.IsNullOrWhiteSpace(d.Formula) && _depth < 8)
+                {
+                    _depth++;
+                    try { if (ParameterTable.TryEvaluateWith(d.Formula!, this, _t?.Geometry, out double v, out _)) value = v; else return false; }
+                    finally { _depth--; }
+                }
+                return true;
+            }
+            if (_t != null) return _t.TryValue(name, out value);
+            value = 0; return false;
+        }
+    }
+
     public SkDimension AddDimension(DimensionType t, double value, params SkEntity[] items)
     {
         var d = new SkDimension(t, value, items);
+        EnsureDimIds();
+        d.Index = NextDimIndex++;
         Dimensions.Add(d);
         BumpStructure();
         NotifyChanged(this);
@@ -422,7 +473,7 @@ public sealed class Sketch : ModelItem
         foreach (var d in Dimensions)
         {
             if (string.IsNullOrWhiteSpace(d.Formula)) { d.Error = null; continue; }
-            if (table.TryEvaluate(d.Formula!, out double v, out string? err))
+            if (TryEvaluate(d.Formula!, table, out double v, out string? err))
             {
                 // координатный размер: формула задаёт расстояние, знак (сторона от нуля) — прежний
                 d.Value = d.Type is DimensionType.CoordX or DimensionType.CoordY && d.Value < 0 && v > 0 ? -v : v;
@@ -510,6 +561,7 @@ public sealed class Sketch : ModelItem
     public SolveStatus Solve(ISketchSolver solver, SkPoint? dragged = null)
     {
         RemoveTrivialConstraints();
+        EnsureDimIds();
         // Признаки конфликта пересчитываются перед КАЖДЫМ решением.
         // Так они всегда отражают текущий состав ограничений: удалили
         // одного спорщика — второй сам перестаёт быть конфликтующим.

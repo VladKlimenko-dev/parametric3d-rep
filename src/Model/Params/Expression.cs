@@ -1,4 +1,4 @@
-using Parametric3D.Core;
+﻿using Parametric3D.Core;
 
 namespace Parametric3D.Model.Params;
 
@@ -88,6 +88,15 @@ public sealed class BinExpr : Expr
                 return a / b;
             case "^": return Math.Pow(a, b);
             case "%": return a / 100.0 * b;   // «a% of b»
+            // k102: сравнения и логика (истина — 1, ложь — 0; равенство — с допуском 1e-9)
+            case "<": return a < b ? 1 : 0;
+            case ">": return a > b ? 1 : 0;
+            case "<=": return a <= b + 1e-9 ? 1 : 0;
+            case ">=": return a >= b - 1e-9 ? 1 : 0;
+            case "==": return Math.Abs(a - b) <= 1e-9 * Math.Max(1, Math.Max(Math.Abs(a), Math.Abs(b))) ? 1 : 0;
+            case "!=": return Math.Abs(a - b) <= 1e-9 * Math.Max(1, Math.Max(Math.Abs(a), Math.Abs(b))) ? 0 : 1;
+            case "&&": return a != 0 && b != 0 ? 1 : 0;
+            case "||": return a != 0 || b != 0 ? 1 : 0;
             default: throw new P3DException($"Unknown operator '{Op}'.");
         }
     }
@@ -126,10 +135,31 @@ public sealed class CallExpr : Expr
             }
         }
 
+        // k102: условие — ветви вычисляются лениво (ошибка в невыбранной ветви не мешает)
+        if (n == "if")
+        {
+            if (Args.Count != 3) throw new P3DException("if(condition, then, else): expected 3 arguments.");
+            return Args[0].Eval(v, g) != 0 ? Args[1].Eval(v, g) : Args[2].Eval(v, g);
+        }
+
         double[] a = Args.Select(x => x.Eval(v, g)).ToArray();
 
         switch (n)
         {
+            // k102: гиперболические, логарифмы, степень, знак, остаток, ограничение
+            case "sinh": Need(a, 1); return Math.Sinh(a[0]);
+            case "cosh": Need(a, 1); return Math.Cosh(a[0]);
+            case "tanh": Need(a, 1); return Math.Tanh(a[0]);
+            case "log": Need(a, 1); if (a[0] <= 0) throw new P3DException("log: argument must be positive."); return Math.Log10(a[0]);
+            case "ln": Need(a, 1); if (a[0] <= 0) throw new P3DException("ln: argument must be positive."); return Math.Log(a[0]);
+            case "exp": Need(a, 1); return Math.Exp(a[0]);
+            case "pow": Need(a, 2); return Math.Pow(a[0], a[1]);
+            case "sign": Need(a, 1); return Math.Sign(a[0]);
+            case "mod": Need(a, 2); if (a[1] == 0) throw new P3DException("mod: division by zero."); return a[0] - a[1] * Math.Floor(a[0] / a[1]);
+            case "trunc": Need(a, 1); return Math.Truncate(a[0]);
+            case "bound": Need(a, 3); return Math.Clamp(a[0], Math.Min(a[1], a[2]), Math.Max(a[1], a[2]));
+            case "not": Need(a, 1); return a[0] == 0 ? 1 : 0;
+            case "e": return Math.E;
             case "sin": Need(a, 1); return Math.Sin(Deg2Rad(a[0]));
             case "cos": Need(a, 1); return Math.Cos(Deg2Rad(a[0]));
             case "tg":
@@ -144,8 +174,8 @@ public sealed class CallExpr : Expr
             case "floor": Need(a, 1); return Math.Floor(a[0]);
             case "ceil": Need(a, 1); return Math.Ceiling(a[0]);
             case "round": return a.Length == 2 ? Math.Round(a[0], (int)a[1]) : Math.Round(a[0]);
-            case "min": Need(a, 2); return Math.Min(a[0], a[1]);
-            case "max": Need(a, 2); return Math.Max(a[0], a[1]);
+            case "min": if (a.Length < 1) throw new P3DException("min: expected arguments."); return a.Min();
+            case "max": if (a.Length < 1) throw new P3DException("max: expected arguments."); return a.Max();
             case "pi": return Math.PI;
             case "length":
                 if (a.Length == 2) return Math.Sqrt(a[0] * a[0] + a[1] * a[1]);
@@ -190,7 +220,7 @@ public static class ExprParser
     public static Expr Parse(string src)
     {
         var p = new Parser(src);
-        Expr e = p.ParseExpr();
+        Expr e = p.ParseOr();
         p.ExpectEnd();
         return e;
     }
@@ -232,6 +262,35 @@ public static class ExprParser
         public void ExpectEnd()
         {
             if (!Eof) throw new P3DException($"Unexpected trailing text at position {_i}: '{_s[_i..]}'.");
+        }
+
+        // k102: логика и сравнения — ниже сложения: or := and ('||' and)*; and := cmp ('&&' cmp)*;
+        // cmp := sum (('<' | '>' | '<=' | '>=' | '==' | '!=') sum)?
+        public Expr ParseOr()
+        {
+            Expr a = ParseAnd();
+            while (TakeOp("||")) a = new BinExpr("||", a, ParseAnd());
+            return a;
+        }
+        private Expr ParseAnd()
+        {
+            Expr a = ParseCmp();
+            while (TakeOp("&&")) a = new BinExpr("&&", a, ParseCmp());
+            return a;
+        }
+        private Expr ParseCmp()
+        {
+            Expr a = ParseExpr();
+            foreach (var op in new[] { "<=", ">=", "==", "!=", "<", ">" })
+                if (TakeOp(op)) return new BinExpr(op, a, ParseExpr());
+            return a;
+        }
+        private bool TakeOp(string op)
+        {
+            Skip();
+            if (_i + op.Length > _s.Length || string.CompareOrdinal(_s, _i, op, 0, op.Length) != 0) return false;
+            _i += op.Length;
+            return true;
         }
 
         public Expr ParseExpr()
@@ -282,7 +341,7 @@ public static class ExprParser
 
             if (Take('('))
             {
-                Expr e = ParseExpr();
+                Expr e = ParseOr();
                 if (!Take(')')) throw new P3DException("Unbalanced parenthesis.");
                 return e;
             }
@@ -352,6 +411,22 @@ public static class ExprParser
         {
             Skip();
             int start = _i;
+            // k102: путь к размеру или параметру — a"Сборка".p"Деталь".s"Эскиз".d0, f"Операция".d1 (имена — в кавычках)
+            if (_i + 1 < _s.Length && _s[_i] is 'a' or 'p' or 's' or 'f' && _s[_i + 1] == '"')
+            {
+                while (_i + 1 < _s.Length && _s[_i] is 'a' or 'p' or 's' or 'f' && _s[_i + 1] == '"')
+                {
+                    int close = _s.IndexOf('"', _i + 2);
+                    if (close < 0) throw new P3DException("Unclosed quote in a reference.");
+                    _i = close + 1;
+                    if (_i >= _s.Length || _s[_i] != '.') throw new P3DException($"Expected '.' after {_s[start.._i]}.");
+                    _i++;
+                }
+                int ns = _i;
+                while (_i < _s.Length && (char.IsLetterOrDigit(_s[_i]) || _s[_i] == '_')) _i++;
+                if (_i == ns) throw new P3DException($"Expected a name after {_s[start..ns]}.");
+                return new RefExpr(_s[start.._i]);
+            }
             while (_i < _s.Length && (char.IsLetterOrDigit(_s[_i]) || _s[_i] == '_' || _s[_i] == ':' || _s[_i] == '.')) _i++;
             string name = _s[start.._i];
 
@@ -360,7 +435,7 @@ public static class ExprParser
                 var args = new List<Expr>();
                 if (!Take(')'))
                 {
-                    do { args.Add(ParseExpr()); } while (Take(','));
+                    do { args.Add(ParseOr()); } while (Take(','));
                     if (!Take(')')) throw new P3DException($"Unbalanced parenthesis in call to '{name}'.");
                 }
                 return new CallExpr(name, args);

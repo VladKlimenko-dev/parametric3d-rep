@@ -367,6 +367,9 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
             _overlayDirty = true;   // u10: стрелки начала координат — из сцены
             _r.ShowAllVertices = Show.Vertices;
             _r.Upload(_scene);
+            // k102: сдвиг рёбер к глазу — не больше 5·10⁻⁴ габарита модели (порядок прогиба хорд разбиения; стенки тоньше
+            // него встречаются редко), см. SceneRenderer.EdgeBiasWorld
+            UpdateEdgeBias();
             LastSceneMs = System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
             _sceneDirty = false;
             _flagsDirty = true;
@@ -378,6 +381,14 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     }
 
     private DateTime _holdUntil = DateTime.MinValue;
+
+    /// <summary>k102: предел сдвига рёбер к глазу — 5·10⁻⁴ габарита модели (не меньше 0.03 мм).</summary>
+    private void UpdateEdgeBias()
+    {
+        if (_doc == null) return;
+        var bb = _doc.Bounds;
+        _r.EdgeBiasWorld = bb.IsEmpty ? 0f : (float)Math.Max(0.03, (bb.Max - bb.Min).Length * 5e-4);
+    }
 
     /// <summary>Не перестраивать сцену, пока детали не посчитаны (не дольше 10 с): деталь не «пропадает» на время расчёта.</summary>
     public void HoldSceneUntilBuilt() { _holdUntil = DateTime.Now.AddSeconds(10); }
@@ -581,7 +592,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         e.Pointer.Capture(null);
         if (was == Drag.Handle) { EndHandleDrag(); return; }
         if (was == Drag.Gizmo) { EndGizmoDrag(); return; }
-        if (was == Drag.Dim) { if (!EndDimensionDrag()) RequestPick(p, click: true, e.KeyModifiers); return; }
+        if (was == Drag.Dim) { if (!EndDimensionDrag()) { if (ClickInterceptor?.Invoke(p) == true) return; RequestPick(p, click: true, e.KeyModifiers); } return; }
         if (was == Drag.SketchGeom) { if (!EndSketchDrag()) RequestPick(p, click: true, e.KeyModifiers); return; }
         if (was == Drag.RightPending && Tool != null) ToolFinish();
         else if (was == Drag.RightPending) ContextRequested?.Invoke(p);
@@ -651,7 +662,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         {
             _flagsDirty = true;
             if (ActiveSketch != null) _overlayDirty = true;   // k96: очерк грани под курсором — в слое поверх
-            HoverChanged?.Invoke(r.IsEmpty ? "" : Selection.DescribeHover());
+            HoverChanged?.Invoke(HoverDimension is { } hd && ActiveSketch != null ? DimHoverText(hd) : r.IsEmpty ? "" : Selection.DescribeHover());
             Redraw();
         }
         if (!req.Click) return;

@@ -137,6 +137,18 @@ public partial class MainWindow
     /// <summary>После правки эскиза: слабые размеры, перерисовка, дерево.</summary>
     public void AfterSketchEdit(Sketch sk)
     {
+        // k102: размеры с формулами (d1 = d0 + 5) — пересчитать по новым значениям других размеров и решить снова
+        if (sk.Dimensions.Any(x => !string.IsNullOrWhiteSpace(x.Formula)))
+        {
+            var table = Session.Part != null ? Session.Document.ScopeFor(Session.Part) : Session.Document.Parameters;
+            var keep = sk.Dimensions.Select(x => (x, x.Value)).ToList();
+            sk.UpdateDimensionsFromParameters(table);
+            if (keep.Any(k => Math.Abs(k.x.Value - k.Value) > 1e-12))
+            {
+                var st = sk.Solve(Session.Document.Solver);
+                if (st is SolveStatus.Inconsistent or SolveStatus.DidNotConverge) ShowToast(L("Размер по формуле не выполняется: эскиз противоречив — «Разрешить эскиз»"));
+            }
+        }
         sk.BumpStructure();
         View.RefreshDefaultDimensions();
         sk.NotifyChanged(sk);

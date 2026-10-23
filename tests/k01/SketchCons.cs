@@ -52,6 +52,44 @@ static partial class Program
     static void SketchConstraintChecks()
     {
         var solver = new NumericSketchSolver();
+        Check("KRN-PARAM-K102", () =>
+        {
+            // k102: функции, условия, сравнения; идентификаторы размеров эскиза (d0…), пути s"…".dN, f"…".dN, p"…".x
+            var t = new Parametric3D.Model.Params.ParameterTable();
+            void Eq(string f, double want)
+            {
+                Require(t.TryEvaluate(f, out double v, out var err), $"{f}: {err}");
+                Require(Math.Abs(v - want) < 1e-9, $"{f} = {v}, want {want}");
+            }
+            Eq("if(2 > 1, 10, 1/0)", 10); Eq("if(1 >= 2, 1, 7)", 7); Eq("3 == 3 && 2 != 3", 1); Eq("0 || 0", 0);
+            Eq("sinh(0) + cosh(0)", 1); Eq("log(1000)", 3); Eq("ln(exp(2))", 2); Eq("pow(2, 10)", 1024); Eq("sign(-3)", -1);
+            Eq("mod(7, 3)", 1); Eq("bound(15, 0, 10)", 10); Eq("max(1, 5, 3)", 5); Eq("trunc(-2.7)", -2);
+            var doc = new Parametric3D.Model.Document();
+            var part = new Parametric3D.Model.Part("Деталь1"); doc.Root.Add(part);
+            var sk = part.AddSketch("Эскиз1", Frame3.XY, part.PlaneXY.Id);
+            var l = new SkLine(new SkPoint(0, 0), new SkPoint(30, 0)); sk.AddEntity(l);
+            var d0 = sk.AddDimension(DimensionType.DistancePointPoint, 30, l.A, l.B); d0.Locked = true;
+            var d1 = sk.AddDimension(DimensionType.DistancePointPoint, 0, l.A, l.B); d1.Reference = true;
+            Require(d0.Index == 0 && d1.Index == 1 && d0.Name == "d0", $"dimension ids {d0.Name} {d1.Name}");
+            Require(sk.TryEvaluate("d0 * 2 + 1", null, out double sv, out var se) && Math.Abs(sv - 61) < 1e-9, $"sketch scope: {sv} {se}");
+            var ex = new Parametric3D.Model.Features.ExtrudeFeature { SketchId = sk.Id }; ex.Side1.Distance = new Parametric3D.Model.Features.ValueRef(12); part.AddFeature(ex);
+            part.LocalParameters.Add("w", 5);
+            var scope = doc.ScopeFor(part);
+            Require(scope.TryEvaluate("s\"Эскиз1\".d0 + f\"" + ex.Name + "\".d0", out double pv, out var pe) && Math.Abs(pv - 42) < 1e-9, $"part paths: {pv} {pe}");
+            Require(doc.Parameters.TryEvaluate("p\"Деталь1\".s\"Эскиз1\".d0 + p\"Деталь1\".w", out double dv, out var de) && Math.Abs(dv - 35) < 1e-9, $"document paths: {dv} {de}");
+            Require(doc.Parameters.TryEvaluate("a\"" + doc.Root.Name + "\".p\"Деталь1\".s\"Эскиз1\".d0", out double av, out var ae) && Math.Abs(av - 30) < 1e-9, $"assembly path: {av} {ae}");
+            Require(!scope.TryEvaluate("s\"Нет\".d0", out _, out _), "unknown path evaluated");
+            // параметр-формула со ссылкой на размер
+            var pf = part.LocalParameters.AddFormula("twice", "s\"Эскиз1\".d0 * 2");
+            Require(pf.Error == null && Math.Abs(pf.Value - 60) < 1e-9, $"parameter from a dimension: {pf.Value} {pf.Error}");
+            // идентификаторы сохраняются в файле; удалённый размер не сдвигает номера
+            sk.Dimensions.Remove(d0);
+            var d2 = sk.AddDimension(DimensionType.DistancePointPoint, 30, l.A, l.B);
+            Require(d2.Index == 2, $"new dimension after delete: {d2.Name}");
+            var (p2, _) = Parametric3D.Model.DocumentFile.Load(Parametric3D.Model.DocumentFile.Save(part, null));
+            var ids = p2.Sketches.First().Dimensions.Select(x => x.Index).OrderBy(x => x).ToList();
+            Require(ids.SequenceEqual(new[] { 1, 2 }), "ids after reload: " + string.Join(",", ids));
+        });
         Check("KRN-REV-MIRROR", () =>
         {
             // k97 (замечание 2): зеркало операции «Вращение» — кольцо у x = 50 отражается к x = −50 (прежде отказ

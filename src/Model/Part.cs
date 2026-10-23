@@ -256,6 +256,7 @@ public sealed class Part : ModelItem
 
     public Part(string name)
     {
+        LocalParameters.External = n => Params.ModelRefs.Resolve(this, n);   // k102: пути к размерам
         Name = name;
 
         Origin = new DatumPoint("Origin", Vector3d.Zero);

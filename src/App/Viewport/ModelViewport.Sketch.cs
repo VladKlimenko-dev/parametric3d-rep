@@ -149,12 +149,22 @@ public sealed partial class ModelViewport
     private bool _dimMoved;
 
     /// <summary>Наведение в эскизе: размер под курсором подсвечивается.</summary>
+    /// <summary>«d3 = 25.00 (формула)» — для строки состояния.</summary>
+    public static string DimHoverText(SkDimension d)
+    {
+        bool ids = SketchDimensions.ShowIds; SketchDimensions.ShowIds = false;
+        try { return d.Name + " = " + SketchDimensions.Label(d) + (string.IsNullOrWhiteSpace(d.Formula) ? "" : "  (" + d.Formula + ")"); }
+        finally { SketchDimensions.ShowIds = ids; }
+    }
+
     internal void UpdateDimensionHover(Point p)
     {
         if (ActiveSketch == null) { if (HoverDimension != null) { HoverDimension = null; _overlayDirty = true; Redraw(); } return; }
         var d = DimensionAt(p);
         if (ReferenceEquals(d, HoverDimension)) return;
         HoverDimension = d; _overlayDirty = true; Redraw();
+        // k102 (замечание 5): идентификатор размера под курсором — в строке состояния
+        HoverChanged?.Invoke(d != null ? DimHoverText(d) : Selection.DescribeHover());
     }
 
     /// <summary>Нажали на подпись размера — её можно тащить мышью (место подписи; значение не меняется).</summary>
@@ -231,8 +241,12 @@ public sealed partial class ModelViewport
 
     static readonly bool UpKeep = Environment.GetEnvironmentVariable("P3D_SKUPKEEP") == "1";
 
+    /// <summary>Слой поверх вида — пересобрать при следующем кадре.</summary>
+    public void InvalidateOverlay() { _overlayDirty = true; Redraw(); }
+
     public void EnterSketch(Sketch sk, bool animate = true)
     {
+        SketchDimensions.ShowIds = false;   // k102: при каждом входе в эскиз — значения размеров
         if (ActiveSketch == null) _beforeSketch = Camera.State;
         ActiveSketch = sk;
         Selection.Clear();
@@ -380,7 +394,7 @@ public sealed partial class ModelViewport
         return 10 * e;
     }
 
-    private bool GridStale() => (ActiveSketch != null || _modelGrid || _handle != null || _gizmo != null || _ghostLines != null || (_scene?.Origins.Count ?? 0) > 0) && Math.Abs(GridKeyNow() - _gridKey) > 1e-9;
+    private bool GridStale() => (ActiveSketch != null || _modelGrid || _handle != null || _gizmo != null || _ghostLines != null || OpDims.Count > 0 || (_scene?.Origins.Count ?? 0) > 0) && Math.Abs(GridKeyNow() - _gridKey) > 1e-9;
     private double GridKeyNow() => Math.Round(Camera.WorldToPx, 4) + Camera.State.Target.X * 1e-3 + Camera.State.Target.Y * 1e-5 + Camera.State.Target.Z * 1e-7
         + Camera.State.Rotation.X * 7 + Camera.State.Rotation.Y * 11 + Camera.State.Rotation.Z * 13 + Camera.State.Rotation.W * 17;
 

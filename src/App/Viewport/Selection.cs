@@ -186,7 +186,7 @@ public sealed class Selection
         if (r.Target is Feature f) return $"{kind} «{f.Summary}»";
         // k96 (п. 11): связь — с видом («Связь: Горизонтально #12»), размер — со значением и ролью, нуль и оси — по имени
         if (r.Target is SkConstraint sc) return $"{kind}: {Views.MainWindow.ConstraintName(sc.Type)} #{r.Id}";
-        if (r.Target is SkDimension sd) return $"{kind}: {Views.MainWindow.DimensionName(sd)} #{r.Id}";
+        if (r.Target is SkDimension sd) return $"{kind} {sd.Name}: {Views.MainWindow.DimensionName(sd)}";
         if (r.Target is SkEntity { Builtin: true } be) return Loc.L(be.Name);
         if (r.Target is ModelItem m && !string.IsNullOrEmpty(m.Name))
             return $"{kind} «{m.Name}»";

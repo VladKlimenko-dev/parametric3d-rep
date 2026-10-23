@@ -1,6 +1,7 @@
 ﻿using Avalonia;
 using Avalonia.Input;
 using OpenTK.Mathematics;
+using Parametric3D.Render;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Model;
@@ -72,6 +73,61 @@ public sealed partial class ModelViewport
         MarkDirty();
         SectionChanged?.Invoke();
     }
+    /// <summary>
+    /// k102 (замечание 7): РАЗМЕРЫ ОПЕРАЦИИ НА ВИДЕ — при правке операции (глубина выдавливания и т. п.): размерная линия со
+    /// стрелками, выносные линии и подпись (значение или идентификатор — TAB), подпись — в плоскости экрана.
+    /// </summary>
+    public readonly List<ViewDim> OpDims = new();
+    public void SetOpDims(IEnumerable<ViewDim>? dims) { OpDims.Clear(); if (dims != null) OpDims.AddRange(dims); _overlayDirty = true; Redraw(); }
+
+    private void AddOpDims(List<Render.Engine.LineInst> lines)
+    {
+        if (OpDims.Count == 0 || ActiveSketch != null) return;
+        static Vector3 F(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
+        var th = _r.Theme;
+        var col = th.DimLocked; col.W = 1;
+        double px = PixelSize;
+        var camR = Camera.Right; var camU = Camera.Up;
+        var R = new Vector3d(camR.X, camR.Y, camR.Z).Normalized(); var U = new Vector3d(camU.X, camU.Y, camU.Z).Normalized();
+        foreach (var vd in OpDims)
+        {
+            var side = vd.Side.LengthSquared > 1e-18 ? vd.Side.Normalized() : R;
+            double off = 26 * px;
+            var a1 = vd.A + side * off; var b1 = vd.B + side * off;
+            lines.Add(Inst(F(vd.A + side * (4 * px)), F(a1 + side * (6 * px)), col, 1.1f, 0));
+            lines.Add(Inst(F(vd.B + side * (4 * px)), F(b1 + side * (6 * px)), col, 1.1f, 0));
+            lines.Add(Inst(F(a1), F(b1), col, 1.1f, 0));
+            var ab = b1 - a1; double len = ab.Length;
+            if (len > 1e-12)
+            {
+                var t = ab / len;
+                double ah = Math.Min(10 * px, len * 0.3), aw = ah * 0.35;
+                foreach (var (tip, dir) in new[] { (a1, t), (b1, -t) })
+                {
+                    var n = Vector3d.Cross(t, Vector3d.Cross(R, U)); if (n.LengthSquared < 1e-18) n = side; n = n.Normalized();
+                    lines.Add(Inst(F(tip), F(tip + dir * ah + n * aw), col, 1.3f, 0));
+                    lines.Add(Inst(F(tip), F(tip + dir * ah - n * aw), col, 1.3f, 0));
+                }
+            }
+            // подпись — посередине, в плоскости экрана
+            string text = SketchDimensions.ShowIds ? vd.Id : vd.Value;
+            double h = SketchDimensions.TextHeightPx * px;
+            var mid = (a1 + b1) / 2 + side * (6 * px);
+            var strokes = new List<List<Vector2d>>();
+            double w = StrokeFont.Width(text) * h;
+            StrokeFont.LayoutFill(text, new Vector2d(-w / 2, 2 * px), Vector2d.UnitX, Vector2d.UnitY, h, 0.7 / SketchDimensions.TextHeightPx, px * 0.4, strokes);
+            if (strokes.Count == 0) StrokeFont.Layout(text, new Vector2d(-w / 2, 2 * px), Vector2d.UnitX, Vector2d.UnitY, h, strokes);
+            foreach (var pl in strokes)
+                for (int i = 1; i < pl.Count; i++)
+                    lines.Add(Inst(F(mid + R * pl[i - 1].X + U * pl[i - 1].Y), F(mid + R * pl[i].X + U * pl[i].Y), col, Core.Settings.Current.DimensionTextOutlineWidth, 0));
+            OpDimsDrawn++;
+        }
+    }
+    /// <summary>Разбор (k102): сдвиг рёбер к глазу (мир) при нынешнем масштабе вида.</summary>
+    public double EdgeBiasNow { get { UpdateEdgeBias(); return _r.EdgeBiasAt((float)PixelSize); } }
+    /// <summary>Разбор: сколько размеров операции нарисовано (накопительно).</summary>
+    public int OpDimsDrawn { get; private set; }
+
     /// <summary>k99: настройки сечения (null — сечение задано плоскостью напрямую или выключено).</summary>
     public SectionState? Section { get; private set; }
     /// <summary>k99: рамка сечения на виде — центр, оси, полуразмер (контур и крышки).</summary>
@@ -264,6 +320,7 @@ public sealed partial class ModelViewport
     {
         static Vector3 F(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
         foreach (var (a, b, c) in Annotations) lines.Add(Inst(F(a), F(b), c, 1.2f, 0));
+        AddOpDims(lines);
         // k99: контур плоскости сечения (без заливки)
         if (SectionCorners() is { } sc && ActiveSketch == null)
         {
@@ -302,3 +359,6 @@ public sealed partial class ModelViewport
         foreach (var c in it.Children) foreach (var q in Parts(c)) yield return q;
     }
 }
+
+/// <summary>k102: размер операции на виде: от A до B, выносится в сторону Side; подпись — значение или идентификатор.</summary>
+public sealed record ViewDim(Vector3d A, Vector3d B, Vector3d Side, string Value, string Id);

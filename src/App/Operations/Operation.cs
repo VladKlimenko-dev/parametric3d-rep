@@ -210,9 +210,13 @@ public abstract class Operation
         else FieldChanged();
     }
 
+    /// <summary>k102 (замечание 7): размеры операции на виде (глубина выдавливания и т. п.); пусто — нет.</summary>
+    public virtual IEnumerable<ViewDim> ViewDims() => Array.Empty<ViewDim>();
+
     /// <summary>Строка состояния панели: чего не хватает или ошибка перестроения.</summary>
     public virtual void RefreshStatus()
     {
+        try { W.ViewPort.SetOpDims(ViewDims()); } catch (Exception ex) { AppLog.Write("operation dims " + Title, ex); }
         if (Panel == null) return;
         string? missing = Panel.Refs.FirstOrDefault(r => !r.IsSet && !r.Optional) is { } m ? L("Выберите: {0}", L(m.Label).ToLowerInvariant()) : null;
         string? err = BuildError;

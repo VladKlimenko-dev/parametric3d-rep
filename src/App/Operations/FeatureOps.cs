@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.App.Viewport;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
@@ -139,6 +139,35 @@ public sealed class ExtrudeOp : FeatureOp<ExtrudeFeature>
     }
     /// <summary>u13: кнопка «тонкое выдавливание» — сразу со стенкой.</summary>
     public bool StartThin;
+
+    /// <summary>
+    /// k102 (замечание 7): глубина на виде — от плоскости эскиза вдоль нормали, у края контура (в сторону оси U эскиза);
+    /// симметрично — общий размер; вторая сторона — свой размер с другой стороны контура.
+    /// </summary>
+    public override IEnumerable<ViewDim> ViewDims()
+    {
+        if (F == null || F.SketchId == 0 || Part.Sketches.FirstOrDefault(s => s.Id == F.SketchId) is not { } sk) yield break;
+        var pts = sk.AllPoints().Where(p => p.Owner?.Role != SkRole.Reference && p.Owner?.Role != SkRole.Construction).Select(p => p.P).ToList();
+        if (pts.Count == 0) yield break;
+        double xmax = pts.Max(p => p.X), xmin = pts.Min(p => p.X), ymid = (pts.Min(p => p.Y) + pts.Max(p => p.Y)) / 2;
+        var n = sk.Plane.W.Normalized(); var u = sk.Plane.U.Normalized();
+        var right = sk.Plane.ToWorld(new Vector2d(xmax, ymid)); var left = sk.Plane.ToWorld(new Vector2d(xmin, ymid));
+        string Id(ExtrudeSide side) => Parametric3D.Model.Params.ModelRefs.PathOf(F, Parametric3D.Model.Params.FeatureDims.IndexOf(F, side, "Distance"));
+        static string V(double v) => Core.Settings.Current.FormatLength(Math.Abs(v), false);
+        if (F.Side1.End != EndType.Distance) yield break;
+        double d1 = Math.Abs(F.Side1.Distance.Value) * (F.Side1.Flip ? -1 : 1);
+        if (F.Symmetric)
+        {
+            yield return new ViewDim(right - n * (d1 / 2), right + n * (d1 / 2), u, V(d1), Id(F.Side1));
+            yield break;
+        }
+        yield return new ViewDim(right, right + n * d1, u, V(d1), Id(F.Side1));
+        if (F.TwoSided && F.Side2.End == EndType.Distance)
+        {
+            double d2 = Math.Abs(F.Side2.Distance.Value) * (F.Side2.Flip ? -1 : 1);
+            yield return new ViewDim(left, left - n * d2, -u, V(d2), Id(F.Side2));
+        }
+    }
 
     private static int EndIndex(EndType e) => e switch { EndType.ThroughAll => 1, EndType.ToNext => 2, _ => 0 };
     private static EndType EndOf(int i) => i switch { 1 => EndType.ThroughAll, 2 => EndType.ToNext, _ => EndType.Distance };

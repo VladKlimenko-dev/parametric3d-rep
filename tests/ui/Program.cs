@@ -2852,6 +2852,78 @@ Check("UI-OP-RELEASE", () =>
     Require(alive <= 1, $"replaced parts still alive: {alive} of {weak.Count}");
 });
 
+Check("UI-PARAMS-K102", () =>
+{
+    // k102 (отзыв 15:15): идентификаторы размеров (TAB, строка состояния, вставка щелчком в правку), формулы размеров,
+    // размеры операции на виде, размеры в «Параметрах» (формулы, значок ошибки), сдвиг рёбер не больше стенки
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var s1 = part.AddSketch("S1", Parametric3D.Kernel.Frame3.XY, part.PlaneXY.Id);
+    { var rt = new RectangleTool(); rt.Click(new SketchInput(s1, new Vector2d(0, 0), null)); rt.Click(new SketchInput(s1, new Vector2d(40, 20), null)); }
+    var ex = new ExtrudeFeature { SketchId = s1.Id }; ex.Side1.Distance = new ValueRef(15); part.AddFeature(ex);
+    s.Document.RebuildDirty();
+    var w = Open(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    var vp = w.ViewPort;
+    // (1) сдвиг рёбер: на мелком масштабе — не больше 5·10⁻⁴ габарита (стенка 1 мм — больше)
+    vp.ZoomToFit(); for (int i = 0; i < 40; i++) vp.Camera.Zoom(-1, 10, 10); Run();
+    Require(vp.EdgeBiasNow <= 0.05, $"edge bias at a small scale: {vp.EdgeBiasNow:0.###} mm");
+    // (7) размеры операции на виде
+    w.SelectItem(ex); w.StartOperation(new ExtrudeOp(ex)); Run();
+    Require(w.CurrentOperation is ExtrudeOp eo && eo.ViewDims().Count() == 1 && vp.OpDims.Count == 1, "extrude depth is not shown in the view");
+    var vd = vp.OpDims[0];
+    Require(Math.Abs((vd.B - vd.A).Length - 15) < 1e-9 && vd.Id == "f\"" + ex.Name + "\".d0", $"extrude dim {vd.A}-{vd.B} {vd.Id}");
+    w.CancelOperation(); Run();
+    Require(vp.OpDims.Count == 0, "operation dims stay after the operation");
+    // «Отмена» правки операции — деталь из снимка (новые объекты)
+    part = s.Part!; s1 = part.Sketches.First(); ex = (ExtrudeFeature)part.Features[0];
+    // эскиз: размеры, TAB, строка состояния, правка с формулой и вставкой щелчком
+    w.EditSketch(s1); s.Document.RebuildDirty(); Run();
+    var sk = vp.ActiveSketch!;
+    var top = sk.Entities.OfType<SkLine>().First(l => Math.Abs(l.A.Y - 20) < 1e-9 && Math.Abs(l.B.Y - 20) < 1e-9);
+    var side = sk.Entities.OfType<SkLine>().First(l => Math.Abs(l.A.X - 40) < 1e-9 && Math.Abs(l.B.X - 40) < 1e-9);
+    // нижний левый угол — к нулю (рост ширины — вправо)
+    var corner = sk.AllPoints().First(p => p.P.Length < 1e-9); sk.AddConstraint(ConstraintType.Coincident, corner, sk.OriginPoint);
+    var dw = sk.AddDimension(DimensionType.DistancePointPoint, 40, top.A, top.B); dw.Locked = true;
+    var dh = sk.AddDimension(DimensionType.DistancePointPoint, 20, side.A, side.B); dh.Locked = true;
+    sk.Solve(s.Document.Solver); vp.RefreshDefaultDimensions();
+    Require(!SketchDimensions.ShowIds, "ids shown on entering the sketch");
+    w.ToggleDimensionIds();
+    Require(SketchDimensions.ShowIds && SketchDimensions.Label(dw) == dw.Name, "TAB did not switch to ids");
+    w.ToggleDimensionIds();
+    Require(ModelViewport.DimHoverText(dw).StartsWith(dw.Name + " = "), "hover text: " + ModelViewport.DimHoverText(dw));
+    w.EditDimensionValue(dh); Run();
+    Require(w.DimEditBox != null, "dimension edit did not open");
+    w.DimEditBox!.Text = ""; w.InsertDimensionName(dw.Name); w.DimEditBox.Text += " / 2";
+    Require(w.DimEditBox.Text == dw.Name + " / 2", "inserted: " + w.DimEditBox.Text);
+    w.DimEditBox.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
+    Run();
+    Require(w.DimEditBox == null && dh.Formula == dw.Name + " / 2" && dh.Locked && !dh.IsDefault && Math.Abs(dh.Value - 20) < 1e-9, $"formula dim: {dh.Formula} {dh.Value} locked {dh.Locked}");
+    // d0 → 60: высота по формуле — 30
+    var r = SketchEditing.SetDimensionValue(sk, dw, 60, null, s.Document.Solver); w.AfterSketchEdit(sk);
+    Require(r.Ok && Math.Abs(dh.Value - 30) < 1e-9 && Math.Abs(side.B.Y - side.A.Y) is var hh && Math.Abs(hh - 30) < 1e-6, $"formula follows: {dh.Value}, side {Math.Abs(side.B.Y - side.A.Y)}");
+    w.FinishSketch(); s.Document.RebuildDirty(); Run();
+    // (8, 9) «Параметры»: уровень размеров детали; формула операции из размера эскиза; значок ошибки; ОК с ошибкой
+    var dlg = new ParametersDialog(s, part);
+    int lv = Enumerable.Range(0, dlg.LevelCount).First(i => dlg.LevelTitle(i) == Loc.L("Размеры детали «{0}»", part.Name));
+    dlg.SelectLevel(lv); dlg.Show(); Run();
+    int row = Enumerable.Range(0, dlg.RowCount).First(i => dlg.RowName(i) == "f\"" + ex.Name + "\".d0");
+    var box = dlg.ValueBox(row)!;
+    box.Focus(); box.Text = ""; Run();
+    dlg.InsertFormula("s\"|S1\".d" + dw.Index);
+    Require(box.Text == "s\"S1\".d" + dw.Index, "formula button insert: " + box.Text);
+    dlg.SetRowValue(row, "s\"S1\".d" + dw.Index + " / 4"); Run();
+    Require(dlg.RowError(row) == "" && dlg.RowResult(row).StartsWith("15"), $"result {dlg.RowResult(row)} {dlg.RowError(row)}");
+    int bad = Enumerable.Range(0, dlg.RowCount).First(i => dlg.RowName(i) == "s\"S1\"." + dh.Name);
+    dlg.SetRowValue(bad, "nothing + 1"); Run();
+    Require(dlg.RowError(bad) != "" && dlg.ErrorShown(bad), "error icon is not shown");
+    dlg.SetRowValue(bad, dw.Name + " / 2");
+    Require(dlg.Apply(), "parameters with dims were not applied");
+    dlg.Close();
+    s.Document.RebuildDirty(); Run();
+    Require(ex.Side1.Distance.Formula == "s\"S1\".d" + dw.Index + " / 4" && ex.Error == null && Math.Abs(ex.Side1.Distance.Value - 15) < 1e-9, $"extrude by a sketch dimension: {ex.Side1.Distance} err {ex.Error}");
+    Require(Math.Abs(part.Volume - 60 * 30 * 15) < 1e-6 * part.Volume, $"volume {part.Volume}");
+});
+
 Check("UI-SKETCH-K101", () =>
 {
     // k101 (отзыв 13:41): очерки трубы в эскизе (6), в т. ч. по сетке; совпадение через нуль — без лишней связи (3);

@@ -61,6 +61,7 @@ public sealed class Document
         Materials.Add(Material.Brass());
 
         Parameters.Geometry = new DocumentGeometryResolver(this);
+        Parameters.External = n => Params.ModelRefs.Resolve(Root, n);   // k102: пути к размерам (a"…".p"…".s"…".dN)
         // K06: правка параметра не сбрасывает сохранённые состояния деталей — каждая деталь сама
         // сравнит значения и пересчитает только операции, которые от изменённых параметров зависят.
         Parameters.Changed += () => { Modified = true; ParametersChanged(); };
@@ -89,10 +90,13 @@ public sealed class Document
     /// <summary>UI (кнопка «Тест»): сколько длилось последнее применение результатов расчёта (в потоке окна), мс.</summary>
     public double LastApplyMs { get; private set; }
 
+    static readonly bool ScopeAlwaysOff = Environment.GetEnvironmentVariable("P3D_PARTSCOPE") == "0";
+
     public ParameterTable ScopeFor(Part part)
     {
         var chain = new List<ParameterTable>();
-        if (part.LocalParameters.Count > 0) chain.Add(part.LocalParameters);
+        // k102: таблица детали — всегда (через неё — пути к размерам от этой детали: s"Эскиз".d0, f"Операция".d1)
+        if (part.LocalParameters.Count > 0 || !ScopeAlwaysOff) chain.Add(part.LocalParameters);
         for (var a = part.Parent; a != null && !ReferenceEquals(a, Root); a = a.Parent)
             if (a is Assembly asm && asm.LocalParameters.Count > 0) chain.Add(asm.LocalParameters);
         if (chain.Count == 0) return Parameters;

@@ -76,6 +76,15 @@ public partial class MainWindow : Window
         _reg.Failed += (c, ex) => ShowToast($"{c.Text}: {ex.Message}");
         _reg.Executed += c => { if (c.Id != "palette") UserPrefs.Current.AddRecentCommand(c.Id); RefreshToolStates(); };
         KeyDown += OnWindowKeyDown;
+        // k102 (замечание 4): TAB в эскизе — значения размеров ↔ их идентификаторы (до обхода фокуса — туннелем)
+        AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key != Key.Tab || e.KeyModifiers != KeyModifiers.None || PaletteShade.IsVisible) return;
+            if (FocusManager?.GetFocusedElement() is TextBox) return;
+            if (!InSketch && CurrentOperation == null) return;
+            ToggleDimensionIds();
+            e.Handled = true;
+        }, RoutingStrategies.Tunnel);
         Dispatcher.UIThread.UnhandledException += (_, e) =>
         {
             AppLog.Write("unhandled", e.Exception);
@@ -1309,18 +1318,51 @@ public partial class MainWindow : Window
     public bool ReferencesPanelOpen => _refsPanel;
 
     /// <summary>Двойной щелчок по размеру: новое значение (число или формула) — размер становится управляющим.</summary>
+    /// <summary>k102: окно правки размера открыто (поле ввода — для вставки идентификаторов щелчком по размерам).</summary>
+    public TextBox? DimEditBox { get; private set; }
+    private Popup? _dimPopup;
+    private Func<Point, bool>? _clickBeforeDimEdit;
+
+    /// <summary>
+    /// ПРАВКА РАЗМЕРА ЭСКИЗА: число или формула (k102: с идентификаторами d0, d1… этого эскиза, путями s"Эскиз".dN к другим
+    /// и функциями). Щелчок по другому размеру эскиза, пока окно открыто, вставляет его идентификатор в место курсора.
+    /// Enter/«ОК» — размер становится сильным, формула хранится в размере (видна в «Параметрах» детали); Esc — закрыть.
+    /// </summary>
     private void EditDimension(SkDimension d, Point at)
     {
         if (View.ActiveSketch is not { } sk) return;
         if (d.UserLocked) { ShowToast(L("Размер заблокирован — снимите замок (правая кнопка → «Разблокировать»)"), error: false); return; }
+        CloseDimensionEdit();
+        sk.EnsureDimIds();
         bool angle = d.Type == DimensionType.AngleLineLine;
         // координатный размер хранит знак (сторона от нуля, нужна решателю); показывается и вводится расстояние — без знака
         bool signedCoord = d.Type is DimensionType.CoordX or DimensionType.CoordY;
-        var tb = new TextBox { Text = d.Formula ?? (signedCoord ? Math.Abs(d.Value) : d.Value).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), MinWidth = 110 };
+        var tb = new TextBox { Text = d.Formula ?? (signedCoord ? Math.Abs(d.Value) : d.Value).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), MinWidth = 160 };
         var ok = new Button { Content = L("ОК"), Classes = { "accent" } };
-        var panel = new StackPanel { Spacing = 6, Margin = new Thickness(4),
-            Children = { new TextBlock { Text = angle ? L("Угол, °") : L("Размер, мм"), Classes = { "dim" }, FontSize = 12 }, tb, ok } };
-        var fl = new Flyout { Content = panel, Placement = PlacementMode.Pointer };
+        var close = new Button { Content = "×", Classes = { "tool" }, Padding = new Thickness(6, 0) };
+        var err = new TextBlock { Classes = { "err" }, FontSize = 11, TextWrapping = TextWrapping.Wrap, MaxWidth = 260, IsVisible = false };
+        var panel = new StackPanel { Spacing = 6, Margin = new Thickness(8),
+            Children =
+            {
+                new DockPanel { Children = { close, new TextBlock { Text = (angle ? L("Угол, °") : L("Размер, мм")) + "  " + d.Name, Classes = { "dim" }, FontSize = 12, VerticalAlignment = VerticalAlignment.Center } } },
+                tb,
+                new TextBlock { Text = L("Щёлкните другой размер — его имя встанет в формулу"), Classes = { "dim" }, FontSize = 11, TextWrapping = TextWrapping.Wrap, MaxWidth = 260 },
+                err, ok,
+            } };
+        DockPanel.SetDock(close, Dock.Right);
+        var border = new Border { Child = panel, CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1) };
+        border.Bind(Border.BackgroundProperty, this.GetResourceObservable("P3.PanelBg"));
+        border.Bind(Border.BorderBrushProperty, this.GetResourceObservable("P3.Border"));
+        var pop = new Popup { Child = border, PlacementTarget = View, Placement = PlacementMode.Pointer, IsLightDismissEnabled = false };
+        ViewArea.Children.Add(pop);
+        _dimPopup = pop; DimEditBox = tb;
+        // щелчок по другому размеру — его идентификатор в место курсора
+        _clickBeforeDimEdit = View.ClickInterceptor;
+        View.ClickInterceptor = p =>
+        {
+            if (View.DimensionAt(p) is { } other && !ReferenceEquals(other, d)) { InsertDimensionName(other.Name); return true; }
+            return _clickBeforeDimEdit?.Invoke(p) == true;
+        };
         void Apply()
         {
             string t = (tb.Text ?? "").Trim();
@@ -1328,12 +1370,14 @@ public partial class MainWindow : Window
             if (!double.TryParse(t.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v))
             {
                 var table = Session.Part != null ? Session.Document.ScopeFor(Session.Part) : Session.Document.Parameters;
-                if (!table.TryEvaluate(t, out v, out _)) { ShowToast(L("Не число и не формула: {0}", t)); return; }
+                if (!sk.TryEvaluate(t, table, out v, out var why)) { err.Text = L("Не число и не формула: {0}", t) + (why != null ? " — " + why : ""); err.IsVisible = true; return; }
+                // ссылка на себя (прямо или через другие размеры)
+                if (System.Text.RegularExpressions.Regex.IsMatch(t, $@"(?<![\w""])d{d.Index}(?!\w)")) { err.Text = L("Формула ссылается на сам размер"); err.IsVisible = true; return; }
                 formula = t;
             }
             // k96 (п. 3): размер 0 допустим у расстояний (точка на прямой, совпадение точек); радиус, диаметр, длина дуги — > 0
             bool positiveOnly = d.Type is DimensionType.Radius or DimensionType.Diameter or DimensionType.ArcLength or DimensionType.EllipseRadiusU or DimensionType.EllipseRadiusV;
-            if (!angle && (v < 0 || v == 0 && positiveOnly)) { ShowToast(L(positiveOnly ? "Размер должен быть больше нуля" : "Размер не может быть отрицательным")); return; }
+            if (!angle && (v < 0 || v == 0 && positiveOnly)) { err.Text = L(positiveOnly ? "Размер должен быть больше нуля" : "Размер не может быть отрицательным"); err.IsVisible = true; return; }
             if (signedCoord && d.Value < 0) v = -v;                                  // сторона от нуля — прежняя
             string what = L("Размер {0} → {1}", d.DisplayText(), t);
             double vv = v; string? ff = formula;
@@ -1342,12 +1386,33 @@ public partial class MainWindow : Window
             var res = run();
             AfterSketchEdit(sk);
             if (!res.Ok) ReportSketchConflict(sk, res, what, run);
-            fl.Hide();
+            CloseDimensionEdit();
         }
         ok.Click += (_, _) => Apply();
-        tb.KeyDown += (_, e) => { if (e.Key == Key.Enter) { Apply(); e.Handled = true; } else if (e.Key == Key.Escape) { fl.Hide(); e.Handled = true; } };
-        fl.ShowAt(View, showAtPointer: true);
+        close.Click += (_, _) => CloseDimensionEdit();
+        tb.KeyDown += (_, e) => { if (e.Key == Key.Enter) { Apply(); e.Handled = true; } else if (e.Key == Key.Escape) { CloseDimensionEdit(); e.Handled = true; } };
+        pop.IsOpen = true;
         Dispatcher.UIThread.Post(() => { tb.Focus(); tb.SelectAll(); }, DispatcherPriority.Input);
+    }
+
+    /// <summary>Вставить имя (идентификатор размера) в поле правки размера — в место курсора.</summary>
+    public void InsertDimensionName(string name)
+    {
+        if (DimEditBox is not { } tb) return;
+        string text = tb.Text ?? "";
+        int at = Math.Clamp(tb.SelectionStart == tb.SelectionEnd ? tb.CaretIndex : Math.Min(tb.SelectionStart, tb.SelectionEnd), 0, text.Length);
+        int end = tb.SelectionStart == tb.SelectionEnd ? at : Math.Max(tb.SelectionStart, tb.SelectionEnd);
+        // всё выделено (значение при открытии) — имя заменяет его
+        tb.Text = text[..at] + name + text[Math.Min(end, text.Length)..];
+        tb.SelectionStart = tb.SelectionEnd = tb.CaretIndex = at + name.Length;
+        tb.Focus();
+    }
+
+    public void CloseDimensionEdit()
+    {
+        if (_dimPopup is { } pop) { pop.IsOpen = false; ViewArea.Children.Remove(pop); }
+        if (DimEditBox != null) View.ClickInterceptor = _clickBeforeDimEdit;
+        _dimPopup = null; DimEditBox = null; _clickBeforeDimEdit = null;
     }
 
     private static string ShortGl(string info)
@@ -1736,6 +1801,7 @@ public partial class MainWindow : Window
     {
         CurrentOperation = null;
         View.Selection.Predicate = null;
+        View.SetOpDims(null);
         _handleOp = null; _handleOpFixed = false;
         _opQuiet = false;
         DragValueBox.IsVisible = false;
@@ -2415,6 +2481,17 @@ public partial class MainWindow : Window
     }
 
     // ================================================================ клавиатура
+
+    /// <summary>k102: показ идентификаторов размеров вместо значений (эскиз и размеры операции на виде).</summary>
+    /// <summary>Мутация k102 P3D_DIMIDS=0: TAB не переключает значения/идентификаторы размеров.</summary>
+    static readonly bool DimIdsOff = Environment.GetEnvironmentVariable("P3D_DIMIDS") == "0";
+    public void ToggleDimensionIds()
+    {
+        if (DimIdsOff) return;
+        SketchDimensions.ShowIds = !SketchDimensions.ShowIds;
+        View.MarkDirty(); View.InvalidateOverlay();
+        ShowHint(SketchDimensions.ShowIds ? L("Размеры: идентификаторы (TAB — значения)") : null);
+    }
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {

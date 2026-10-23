@@ -1,4 +1,4 @@
-using Parametric3D.Core;
+﻿using Parametric3D.Core;
 
 namespace Parametric3D.Model.Params;
 
@@ -40,6 +40,13 @@ public static class ExprUnits
                         if (c.Value == 0) throw new P3DException("Division by zero.");
                         return new Quantity(a.Value / c.Value, a.Dim / c.Dim, a.Bare && c.Bare);
                     case "%": return new Quantity(a.Value / 100 * c.Value, a.Dim * c.Dim, a.Bare && c.Bare);
+                    case "<": case ">": case "<=": case ">=": case "==": case "!=":
+                    {
+                        (a, c) = Align(a, c, doc);
+                        if (a.Dim != c.Dim) throw new P3DException($"Cannot compare {a.Dim} and {c.Dim}.");
+                        return Quantity.Number(new BinExpr(b.Op, new NumExpr(a.Value), new NumExpr(c.Value)).Eval(NoValues.Instance, geom));
+                    }
+                    case "&&": case "||": return Quantity.Number(new BinExpr(b.Op, new NumExpr(a.Value), new NumExpr(c.Value)).Eval(NoValues.Instance, geom));
                     case "^":
                     {
                         if (!c.Dim.IsNone) throw new P3DException($"An exponent must be a number, not {c.Dim}.");
@@ -54,6 +61,11 @@ public static class ExprUnits
             case CallExpr call:
             {
                 string n = call.Name.ToLowerInvariant();
+                if (n == "if")
+                {
+                    if (call.Args.Count != 3) throw new P3DException("if(condition, then, else): expected 3 arguments.");
+                    return Evaluate(call.Args[0], refs, doc, geom).Value != 0 ? Evaluate(call.Args[1], refs, doc, geom) : Evaluate(call.Args[2], refs, doc, geom);
+                }
                 if (call.GeomRef != null && geom != null)
                     switch (n)
                     {
@@ -81,12 +93,12 @@ public static class ExprUnits
                         return new Quantity(val, d, a[0].Bare);
                     }
                     case "abs": case "floor": case "ceil": case "round": return a[0] with { Value = val };
-                    case "min": case "max":
+                    case "min": case "max": case "bound":
                     {
-                        (a[0], a[1]) = Align(a[0], a[1], doc);
-                        if (a[0].Dim != a[1].Dim) throw new P3DException($"{call.Name} of {a[0].Dim} and {a[1].Dim}.");
-                        return new Quantity(n == "min" ? Math.Min(a[0].Value, a[1].Value) : Math.Max(a[0].Value, a[1].Value), a[0].Dim, a[0].Bare && a[1].Bare);
+                        for (int i = 1; i < a.Length; i++) { (a[0], a[i]) = Align(a[0], a[i], doc); if (a[0].Dim != a[i].Dim) throw new P3DException($"{call.Name} of {a[0].Dim} and {a[i].Dim}."); }
+                        return new Quantity(val, a[0].Dim, a.All(x => x.Bare));
                     }
+                    case "sign": case "trunc": case "mod": return n == "sign" ? Quantity.Number(val) : a[0] with { Value = val };
                     case "length":
                     {
                         for (int i = 1; i < a.Length; i++) { (a[0], a[i]) = Align(a[0], a[i], doc); if (a[0].Dim != a[i].Dim) throw new P3DException("Length of mixed kinds."); }

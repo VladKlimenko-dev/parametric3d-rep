@@ -100,6 +100,10 @@ public sealed class SkConstraint
 public sealed class SkDimension
 {
     public readonly uint Id = Core.Ids.New();
+    /// <summary>k102: номер размера в эскизе (идентификатор dN; нумерация каждого эскиза — с нуля); -1 — ещё не задан.</summary>
+    public int Index = -1;
+    /// <summary>Идентификатор размера в эскизе: «d0», «d1»…</summary>
+    public string Name => Index >= 0 ? $"d{Index}" : "d?";
     public DimensionType Type;
     public readonly List<SkEntity> Items = new();
 

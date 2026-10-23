@@ -57,14 +57,31 @@ public sealed class ParameterTable : IValueResolver
     /// </summary>
     public ParameterTable? Parent;
 
+    /// <summary>
+    /// k102: значения по путям к размерам (s"Эскиз".d0, f"Операция".d1, p"Деталь".…, a"Сборка".…) — от элемента, которому
+    /// принадлежит таблица (ModelRefs.Resolve). null — путь не найден.
+    /// </summary>
+    public Func<string, double?>? External;
+
     /// <summary>Есть ли имя в этой таблице или выше.</summary>
-    public bool HasScoped(string name) => _map.ContainsKey(name) || (Parent?.HasScoped(name) ?? false);
+    public bool HasScoped(string name) => _map.ContainsKey(name) || (ModelRefs.IsPath(name) && External?.Invoke(name) != null) || (Parent?.HasScoped(name) ?? false);
+
+    /// <summary>k102: выражение с заданным источником значений (свои размеры эскиза и т. п.).</summary>
+    public static bool TryEvaluateWith(string formula, IValueResolver vals, IGeometryResolver? geom, out double value, out string? error)
+    {
+        value = 0; error = null;
+        if (!ExprParser.TryParse(formula, out Expr? e, out error) || e == null) return false;
+        try { value = e.Eval(vals, geom); if (double.IsNaN(value) || double.IsInfinity(value)) { error = "The result is not a number."; return false; } return true; }
+        catch (Exception ex) { error = ex.Message; return false; }
+    }
 
     /// <summary>Параметр по имени — свой или уровня выше.</summary>
     public Parameter? FindScoped(string name) => Find(name) ?? Parent?.FindScoped(name);
 
     private Quantity? QuantityOf(string n) =>
-        _map.TryGetValue(n, out var p) ? (p.Error == null ? p.Quantity : null) : Parent?.QuantityOf(n);
+        _map.TryGetValue(n, out var p) ? (p.Error == null ? p.Quantity : null)
+        : ModelRefs.IsPath(n) && External?.Invoke(n) is { } ev ? Quantity.Number(ev)
+        : Parent?.QuantityOf(n);
     /// <summary>m.x4: система единиц документа — число без единицы в формуле с величинами берёт её единицу.</summary>
     public UnitSystem Units = UnitSystem.Metric;
     static readonly bool UnitCheckOff = Environment.GetEnvironmentVariable("P3D_PARAMUNITS") == "0";
@@ -129,6 +146,7 @@ public sealed class ParameterTable : IValueResolver
     public bool TryValue(string name, out double value)
     {
         if (_map.TryGetValue(name, out var p)) { value = p.Value; return p.Error == null; }
+        if (ModelRefs.IsPath(name) && External?.Invoke(name) is { } ext) { value = ext; return true; }
         if (Parent != null) return Parent.TryValue(name, out value);
         value = 0;
         return false;
@@ -192,7 +210,7 @@ public sealed class ParameterTable : IValueResolver
                         if (!ReferenceEquals(dep, p)) list.Add(dep);
                         else p.Error = "Formula refers to itself.";
                     }
-                    else if (!(Parent?.HasScoped(r) ?? false))
+                    else if (!(ModelRefs.IsPath(r) && External?.Invoke(r) != null) && !(Parent?.HasScoped(r) ?? false))
                         p.Error = $"Unknown parameter '{r}'.";
             }
             deps[p] = list;
