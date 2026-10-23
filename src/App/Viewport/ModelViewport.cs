@@ -175,6 +175,8 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
 
     /// <summary>Щелчок по виду (без протяжки) — сначала сюда: true — щелчок обработан (стрелка настройки эскиза), выбора нет.</summary>
     public Func<Point, bool>? ClickInterceptor;
+    /// <summary>k101: движение курсора без нажатия (подсветка своих элементов операции, например стрелок настройки эскиза).</summary>
+    public Action<Point>? HoverInterceptor;
 
     /// <summary>Цвета вида (для надстроек поверх него — значков ограничений и т. п.).</summary>
     public RenderTheme Theme => _r.Theme;
@@ -368,6 +370,9 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
             LastSceneMs = System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
             _sceneDirty = false;
             _flagsDirty = true;
+            // k101 (замечание 6): слой поверх вида — по новой детали (очерки граней в эскизе строятся по её сетке: при входе
+            // в эскиз деталь ещё перестраивалась после отката, сетки не было, и слой без очерков оставался до другой правки)
+            _overlayDirty = true;
             Avalonia.Threading.Dispatcher.UIThread.Post(() => SceneRebuilt?.Invoke());
         }
     }
@@ -559,6 +564,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
                 return;
         }
         if (ComponentDragMove(p)) return;
+        if (_drag == Drag.None) HoverInterceptor?.Invoke(p);
         if (RegionMove(p)) return;
         if (_drag == Drag.None && UpdateGizmoHover(p)) return;
         if (Tool != null) ToolMove(p);

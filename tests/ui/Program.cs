@@ -103,6 +103,73 @@ if (only == "probe-selftest")
     return 0;
 }
 
+if (only == "probe-silhouette")
+{
+    // разбор: очерки цилиндра (трубы) в эскизе на плоскости через ось — разные плоскости и оси выдавливания
+    foreach (var (sketchPlane, baseName) in new[] { (Parametric3D.Kernel.Frame3.YZ, "YZ"), (Parametric3D.Kernel.Frame3.XY, "XY"), (Parametric3D.Kernel.Frame3.XZ, "XZ") })
+        foreach (bool tube in new[] { false, true })
+        {
+            var s = DocumentSession.NewPart(); var part = s.Part!;
+            var bp = baseName == "YZ" ? part.PlaneYZ : baseName == "XY" ? part.PlaneXY : part.PlaneXZ;
+            var s1 = part.AddSketch("S1", sketchPlane, bp.Id);
+            s1.AddEntity(new SkCircle(new SkPoint(0, 0), 10));
+            if (tube) s1.AddEntity(new SkCircle(new SkPoint(0, 0), 6));
+            part.AddFeature(new ExtrudeFeature { SketchId = s1.Id, Side1 = { Distance = new ValueRef(200) } });
+            s.Document.RebuildDirty();
+            foreach (var other in new[] { part.PlaneXY, part.PlaneXZ, part.PlaneYZ }.Where(x => x != bp))
+            {
+                var sk = new Sketch("S2", other.Frame);
+                Console.WriteLine($"SIL base {baseName} tube {tube} sketch on {other.Name}: faces {part.Bodies.Sum(b => b.Faces.Count())}; " + string.Join("; ", part.Bodies.SelectMany(b => b.Faces).Select(f =>
+                {
+                    string shape = Parametric3D.Kernel.Geometry.ExactEdges.ShapeOf(Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f))?.GetType().Name ?? "null";
+                    int n; try { n = SketchReferences.FaceProjection(sk, f).Count; } catch (Exception ex) { n = -1; shape += " " + ex.Message; }
+                    return $"{f.Surface?.GetType().Name}/{shape}:{n}";
+                })));
+            }
+        }
+    return 0;
+}
+
+if (only == "probe-tube")
+{
+    // разбор: труба вдоль X (эскиз на YZ), эскиз на XY — очерки цилиндров
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var s1 = part.AddSketch("S1", part.PlaneYZ.Frame, part.PlaneYZ.Id);
+    s1.AddEntity(new SkCircle(new SkPoint(0, 0), 10)); s1.AddEntity(new SkCircle(new SkPoint(0, 0), 5));
+    part.AddFeature(new ExtrudeFeature { SketchId = s1.Id });
+    s.Document.RebuildDirty();
+    Console.WriteLine($"TUBE faces: {string.Join("; ", part.Bodies.SelectMany(b => b.Faces).Select(f => $"#{f.Id} {f.Surface?.GetType().Name} auth {Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name} shape {Parametric3D.Kernel.Geometry.ExactEdges.ShapeOf(Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f))?.GetType().Name}"))}");
+    var w = Open(s);
+    w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp());
+    var vp = w.ViewPort; var sk = vp.ActiveSketch!;
+    Console.WriteLine($"TUBE sketch plane {sk.Plane.Origin} U {sk.Plane.U} V {sk.Plane.V}");
+    foreach (var f in part.Bodies.SelectMany(b => b.Faces))
+    {
+        try { var pr = SketchReferences.FaceProjection(sk, f); Console.WriteLine($"TUBE face #{f.Id}: {string.Join(", ", pr.Select(x => $"{x.A}-{x.B} r{x.R} c{x.Circle}"))}"); }
+        catch (Exception ex) { Console.WriteLine($"TUBE face #{f.Id}: {ex.Message}"); }
+    }
+    vp.BuildOverlayForTest();
+    Console.WriteLine($"TUBE silhouettes {vp.SilhouetteDrawn}, items {vp.FaceRefItems()?.Count}");
+    // вырез вращением (канавка) и правка его эскиза (откат)
+    foreach (var (a, b) in new[] { ((40.0, 8.0), (50.0, 8.0)), ((50.0, 8.0), (50.0, 12.0)), ((50.0, 12.0), (40.0, 12.0)), ((40.0, 12.0), (40.0, 8.0)) })
+        sk.AddEntity(new SkLine(new SkPoint(a.Item1, a.Item2), new SkPoint(b.Item1, b.Item2)));
+    var axl = sk.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(100, 0)) { Role = SkRole.Centerline });
+    w.FinishSketch();
+    part.AddFeature(new RevolveFeature { SketchId = sk.Id, AxisEntityId = axl.Id, Cut = true });
+    s.Document.RebuildDirty();
+    Console.WriteLine($"TUBE after revolve: errors {string.Join(";", part.Features.Select(f => f.Error))}; faces: {string.Join("; ", part.Bodies.SelectMany(b => b.Faces).Select(f => $"#{f.Id} {Parametric3D.Kernel.Geometry.ExactEdges.ShapeOf(Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f))?.GetType().Name ?? f.Surface?.GetType().Name}"))}");
+    // новый эскиз на XY после выреза
+    w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp());
+    var sk3 = vp.ActiveSketch!;
+    s.Document.RebuildDirty(); vp.BuildOverlayForTest();
+    Console.WriteLine($"TUBE new sketch after revolve: silhouettes {vp.SilhouetteDrawn}: {string.Join(" | ", vp.FaceRefItems()!.Select(x => x.R.Id + ":" + string.Join(",", x.L.Select(l => $"{l.A}-{l.B}"))))}");
+    w.CancelSketch();
+    w.EditSketch(part.Sketches.First(k => k.Id == sk.Id));
+    s.Document.RebuildDirty(); vp.BuildOverlayForTest();
+    Console.WriteLine($"TUBE edit revolve sketch (rolled back {w.SketchRolledBack}): silhouettes {vp.SilhouetteDrawn}");
+    return 0;
+}
+
 if (only == "probe-icons")
 {
     // разбор: рамка рисунка каждой иконки (доля листа)
@@ -2785,6 +2852,65 @@ Check("UI-OP-RELEASE", () =>
     Require(alive <= 1, $"replaced parts still alive: {alive} of {weak.Count}");
 });
 
+Check("UI-SKETCH-K101", () =>
+{
+    // k101 (отзыв 13:41): очерки трубы в эскизе (6), в т. ч. по сетке; совпадение через нуль — без лишней связи (3);
+    // «взгляд с обратной стороны» — геометрия на месте (2); «верх» — сторона рамки или ребро основы, подсветка стрелок (1, 5),
+    // сохраняется (4)
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var s1 = part.AddSketch("S1", part.PlaneYZ.Frame, part.PlaneYZ.Id);
+    s1.AddEntity(new SkCircle(new SkPoint(0, 0), 10)); s1.AddEntity(new SkCircle(new SkPoint(0, 0), 5));
+    part.AddFeature(new ExtrudeFeature { SketchId = s1.Id });
+    s.Document.RebuildDirty();
+    var w = Open(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp());
+    var vp = w.ViewPort; var sk = vp.ActiveSketch!;
+    vp.EnterSketch(sk, animate: false); Run();
+    vp.BuildOverlayForTest();
+    Require(vp.SilhouetteDrawn >= 4, $"tube silhouettes: {vp.SilhouetteDrawn}");
+    // очерк по сетке (для граней без аналитического очерка) — у цилиндра R10 вдоль X: линии y = ±10
+    var cyl = part.Bodies.SelectMany(b => b.Faces).First(f => f.Surface is not Parametric3D.Kernel.Surfaces.PlaneSurface && Parametric3D.App.Operations.Refs.FaceCentre(part, f.Id) is { } fc && Math.Abs(Math.Sqrt(fc.Y * fc.Y + fc.Z * fc.Z)) > 7);
+    var ms = SketchReferences.MeshSilhouette(sk, part.Mesh!, cyl.Id);
+    Require(ms.Count >= 2 && ms.All(m => Math.Abs(Math.Abs(m.A.Y) - 10) < 0.2 && Math.Abs(Math.Abs(m.B.Y) - 10) < 0.2), "mesh silhouette: " + string.Join(", ", ms.Select(m => $"{m.A}-{m.B}")));
+    // (3) совпадение через нуль
+    var la = sk.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(0, -30)) { Role = SkRole.Centerline });
+    var lb = sk.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(30, 0)));
+    sk.AddConstraint(ConstraintType.Coincident, la.A, sk.OriginPoint);
+    sk.AddConstraint(ConstraintType.Coincident, lb.A, sk.OriginPoint);
+    int nc = sk.Constraints.Count;
+    var again = sk.AddConstraint(ConstraintType.Coincident, la.A, lb.A);
+    Require(sk.Constraints.Count == nc && again.Type == ConstraintType.Coincident, "a coincident closing a cycle was added");
+    sk.Constraints.Add(new SkConstraint(ConstraintType.Coincident, la.A, lb.A));   // старый файл
+    Require(sk.Solve(s.Document.Solver) != SolveStatus.Overconstrained && sk.Constraints.Count == nc, $"cycle coincident not removed: {sk.Constraints.Count} vs {nc}");
+    // (2) взгляд с обратной стороны — точки на месте в мире, «горизонтально» становится «вертикально»
+    var hc = sk.AddConstraint(ConstraintType.Horizontal, lb);
+    var wb = sk.Plane.ToWorld(lb.B.P);
+    sk.Flip();
+    Require((sk.Plane.ToWorld(lb.B.P) - wb).Length < 1e-9 && hc.Type == ConstraintType.Vertical, $"flip moved the geometry: {sk.Plane.ToWorld(lb.B.P)} vs {wb}, {hc.Type}");
+    sk.Flip();
+    Require((sk.Plane.ToWorld(lb.B.P) - wb).Length < 1e-9 && hc.Type == ConstraintType.Horizontal, "flip twice is not identity");
+    w.FinishSketch(); Run();
+    // (1, 4, 5) настройка эскиза
+    var sk2 = part.Sketches.Last();
+    var setup = new SketchSetupOp(sk2, false);
+    w.StartOperation(setup); Run();
+    vp.ZoomToFit(); Run();
+    var side = setup.FrameSides()[1];
+    var m = vp.Project((side.A + side.B) / 2)!.Value;
+    vp.HoverInterceptor!(m);
+    Require(setup.Hot == 11, $"frame side under the cursor is not highlighted: {setup.Hot}");
+    Require(vp.ClickInterceptor!(m), "frame side click refused");
+    Require(sk2.UpDescription == "правая сторона рамки", "up: " + sk2.UpDescription);
+    w.CommitOperation(); Run();
+    var setup2 = new SketchSetupOp(part.Sketches.Last(), false);
+    w.StartOperation(setup2); Run();
+    Require(setup2.Panel!.Refs[2].Summary == Loc.L("правая сторона рамки"), "up after reopening: " + setup2.Panel!.Refs[2].Summary);
+    // ребро грани-основы годится, опорная плоскость — нет
+    Require(!setup2.UpCandidate(new PickRef(part.PlaneXZ.Id, PickKind.DatumPlane, part, part.PlaneXZ)), "a datum plane is accepted as «up»");
+    w.CancelOperation();
+});
+
 Check("UI-SECTION-K99", () =>
 {
     // k99 (отзыв 11:03): настройка эскиза показывает заданное (1), «верх» — только подходящее (2); сечение — настраиваемая
@@ -2804,7 +2930,8 @@ Check("UI-SECTION-K99", () =>
     Require(refs.Count == 3 && refs.All(r => r.Summary != Loc.L("не задано")), "sketch setup fields are empty: " + string.Join(" | ", refs.Select(r => r.Summary)));
     Require(refs[0].Items.Count == 1 && ReferenceEquals(refs[0].Items[0].Target, part.PlaneXY), "base plane is not the sketch's plane");
     var upPref = refs[2].Prefer;
-    Require(upPref != null && !upPref(new PickRef(part.PlaneXY.Id, PickKind.DatumPlane, part, part.PlaneXY)) && upPref(new PickRef(part.PlaneXZ.Id, PickKind.DatumPlane, part, part.PlaneXZ)),
+    // k101: «верх» — только рёбра основы; плоскости не берутся
+    Require(upPref != null && !upPref(new PickRef(part.PlaneXY.Id, PickKind.DatumPlane, part, part.PlaneXY)) && !upPref(new PickRef(part.PlaneXZ.Id, PickKind.DatumPlane, part, part.PlaneXZ)),
         "«up» accepts a plane parallel to the sketch or rejects a perpendicular one");
     w.CancelOperation(); Run();
     // (3) сечение

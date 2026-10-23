@@ -186,12 +186,13 @@ public static class SketchReferences
             {
                 var ax = cy.Axis.Normalized();
                 double along = Math.Abs(Vector3d.Dot(ax, n));
-                if (along > 1 - 1e-9)
+                // k101: допуск — угловой 1e-6 (плоскость эскиза и ось, заданные построением, параллельны не до бита)
+                if (along > 1 - 1e-9 * 1000)
                 {
                     res.Add((EdgeProjection.On(sk, cy.P), Vector2d.Zero, cy.R, true));
                     return res;
                 }
-                if (along > 1e-9) return res;
+                if (along > 1e-6) return res;
                 // образующие очерка: ось ± R поперёк оси в плоскости эскиза; длина — по размаху грани вдоль оси
                 var a2 = EdgeProjection.On(sk, cy.P + ax) - EdgeProjection.On(sk, cy.P);
                 if (a2.Length < 1e-12) return res;
@@ -212,7 +213,11 @@ public static class SketchReferences
                         res.Add((c0 + a2 * tmin + side * s, c0 + a2 * tmax + side * s, 0, false));
                 return res;
             }
-            case Parametric3D.Kernel.Geometry.Ssi.Plane pl when Math.Abs(Vector3d.Dot(pl.N.Normalized(), n)) < 1e-9:
+            case Parametric3D.Kernel.Geometry.Ssi.Sphere sp:
+                // k101: шар — окружность очерка
+                res.Add((EdgeProjection.On(sk, sp.C), Vector2d.Zero, sp.R, true));
+                return res;
+            case Parametric3D.Kernel.Geometry.Ssi.Plane pl when Math.Abs(Vector3d.Dot(pl.N.Normalized(), n)) < 1e-6:
             {
                 var p2 = bnd.Select(q => EdgeProjection.On(sk, q)).ToList();
                 int far = 0; for (int i = 1; i < p2.Count; i++) if ((p2[i] - p2[0]).Length > (p2[far] - p2[0]).Length) far = i;
@@ -226,6 +231,82 @@ public static class SketchReferences
         return res;
     }
 
+    /// <summary>
+    /// k101 (замечание 6): ОЧЕРК ГРАНИ ПО СЕТКЕ — для кривых граней, у которых нет аналитического очерка (вырез вращением,
+    /// грань общего вида): линия, где нормаль сетки становится перпендикулярной плоскости эскиза (знак n·W меняется внутри
+    /// треугольника), в проекции на эскиз; отрезки сливаются в ломаные и упрощаются. P3D_SKMESHSIL=0 — без него.
+    /// </summary>
+    public static readonly bool MeshSilhouetteOff = Environment.GetEnvironmentVariable("P3D_SKMESHSIL") == "0";
+
+    public static List<(Vector2d A, Vector2d B, double R, bool Circle)> MeshSilhouette(Sketch sk, Parametric3D.Kernel.Tess.MeshData md, uint faceId)
+    {
+        var res = new List<(Vector2d, Vector2d, double, bool)>();
+        if (MeshSilhouetteOff) return res;
+        var W = sk.Plane.W.Normalized();
+        var segs = new List<(Vector2d A, Vector2d B)>();
+        var v = md.Vertices; var ix = md.Indices;
+        double size = 0;
+        for (int i = 0; i + 2 < ix.Length; i += 3)
+        {
+            var a = v[ix[i]]; if (a.FaceId != faceId) continue;
+            var b = v[ix[i + 1]]; var c = v[ix[i + 2]];
+            var P = new[] { a, b, c };
+            var sv = P.Select(x => Vector3d.Dot(new Vector3d(x.N.X, x.N.Y, x.N.Z), W)).ToArray();
+            var cross = new List<Vector2d>();
+            for (int k = 0; k < 3; k++)
+            {
+                int m = (k + 1) % 3;
+                if (sv[k] > 0 == sv[m] > 0) continue;
+                double t = sv[k] / (sv[k] - sv[m]);
+                var pk = new Vector3d(P[k].P.X, P[k].P.Y, P[k].P.Z); var pm = new Vector3d(P[m].P.X, P[m].P.Y, P[m].P.Z);
+                cross.Add(EdgeProjection.On(sk, pk + (pm - pk) * t));
+            }
+            if (cross.Count == 2 && (cross[1] - cross[0]).Length > 1e-9) { segs.Add((cross[0], cross[1])); size = Math.Max(size, (cross[1] - cross[0]).Length); }
+        }
+        if (segs.Count == 0) return res;
+        // слить в ломаные по общим концам
+        double tol = Math.Max(1e-6, size * 1e-4);
+        var used = new bool[segs.Count];
+        for (int i = 0; i < segs.Count; i++)
+        {
+            if (used[i]) continue;
+            used[i] = true;
+            var chain = new LinkedList<Vector2d>(new[] { segs[i].A, segs[i].B });
+            bool grew = true;
+            while (grew)
+            {
+                grew = false;
+                for (int j = 0; j < segs.Count; j++)
+                {
+                    if (used[j]) continue;
+                    var (A, B) = segs[j];
+                    if ((A - chain.Last!.Value).Length < tol) { chain.AddLast(B); used[j] = grew = true; }
+                    else if ((B - chain.Last!.Value).Length < tol) { chain.AddLast(A); used[j] = grew = true; }
+                    else if ((B - chain.First!.Value).Length < tol) { chain.AddFirst(A); used[j] = grew = true; }
+                    else if ((A - chain.First!.Value).Length < tol) { chain.AddFirst(B); used[j] = grew = true; }
+                }
+            }
+            var pts = Simplify(chain.ToList(), Math.Max(1e-4, size * 0.02));
+            for (int k = 1; k < pts.Count; k++) res.Add((pts[k - 1], pts[k], 0, false));
+        }
+        return res;
+    }
+
+    static List<Vector2d> Simplify(List<Vector2d> p, double eps)
+    {
+        if (p.Count < 3) return p;
+        int idx = -1; double dm = 0; var a = p[0]; var b = p[^1]; var d = b - a; double l = d.Length;
+        for (int i = 1; i < p.Count - 1; i++)
+        {
+            double di = l < 1e-12 ? (p[i] - a).Length : Math.Abs(d.X * (p[i].Y - a.Y) - d.Y * (p[i].X - a.X)) / l;
+            if (di > dm) { dm = di; idx = i; }
+        }
+        if (dm <= eps) return new List<Vector2d> { a, b };
+        var left = Simplify(p.GetRange(0, idx + 1), eps); var right = Simplify(p.GetRange(idx, p.Count - idx), eps);
+        left.RemoveAt(left.Count - 1); left.AddRange(right);
+        return left;
+    }
+
     public static string FaceSource(uint id) => $"Грань #{id}";
 
     /// <summary>Добавить проекцию грани ссылкой; null — добавлена, иначе — почему нет.</summary>
@@ -235,6 +316,7 @@ public static class SketchReferences
         if (sk.Entities.Any(e => e.Role == SkRole.Reference && e.ReferenceSource == src)) return Loc.L("Уже в ссылках");
         if (part.FindFace(faceId) is not { } f) return Loc.L("Ссылка не найдена");
         var pr = FaceProjection(sk, f);
+        if (pr.Count == 0 && f.Surface is not Parametric3D.Kernel.Surfaces.PlaneSurface && part.Mesh is { } md) pr = MeshSilhouette(sk, md, faceId);
         if (pr.Count == 0) return Loc.L("Грань не даёт ссылки в плоскости эскиза");
         var pool = new EdgeProjection.PointPool(SkRole.Reference, src);
         foreach (var (a, b, r, circle) in pr)

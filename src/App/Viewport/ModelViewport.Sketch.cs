@@ -48,6 +48,8 @@ public sealed partial class ModelViewport
     public List<(Vector2d A, Vector2d B, double R, bool Circle)>? FaceReference(PickRef r)
     {
         if (FaceRefsOff || ActiveSketch is not { } sk || r.Kind != PickKind.Face || r.Owner is not Part part || part.FindFace(r.Id) is not { } f) return null;
+        // k101: из памяти очерков (в т. ч. по сетке), иначе — заново
+        if (FaceRefItems() is { } items && items.FirstOrDefault(x => x.R.Id == r.Id).L is { Count: > 0 } got) return got;
         try { var pr = SketchReferences.FaceProjection(sk, f); return pr.Count > 0 ? pr : null; } catch { return null; }
     }
 
@@ -76,6 +78,7 @@ public sealed partial class ModelViewport
                 if (f.Surface is Parametric3D.Kernel.Surfaces.PlaneSurface) continue;
                 List<(Vector2d, Vector2d, double, bool)> pr;
                 try { pr = SketchReferences.FaceProjection(sk, f); } catch { continue; }
+                if (pr.Count == 0) { try { pr = SketchReferences.MeshSilhouette(sk, mesh, f.Id); } catch { } }
                 if (pr.Count > 0) items.Add((new PickRef(f.Id, PickKind.Face, part, null), pr));
             }
         _faceRefCache = (mesh, sk, items);
