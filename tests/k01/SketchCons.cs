@@ -90,6 +90,26 @@ static partial class Program
             var ids = p2.Sketches.First().Dimensions.Select(x => x.Index).OrderBy(x => x).ToList();
             Require(ids.SequenceEqual(new[] { 1, 2 }), "ids after reload: " + string.Join(",", ids));
         });
+        Check("KRN-SK-FORMULA-LIVE", () =>
+        {
+            // k103 (замечание 2): размер d1 = d0 + 5 следует за слабым размером d0 при перетаскивании точки (решатель держит
+            // формулу по текущей геометрии). Мутация P3D_SKFORMULALIVE=0.
+            var part = new Parametric3D.Model.Part("live");
+            var sk = part.AddSketch("S", Frame3.XY, part.PlaneXY.Id);
+            var a = new SkLine(new SkPoint(0, 0), new SkPoint(30, 0)); sk.AddEntity(a);
+            var b = new SkLine(new SkPoint(0, 10), new SkPoint(20, 10)); sk.AddEntity(b);
+            a.A.Fixed = true; b.A.Fixed = true;
+            sk.AddConstraint(ConstraintType.Horizontal, a); sk.AddConstraint(ConstraintType.Horizontal, b);
+            var d0 = sk.AddDimension(DimensionType.DistancePointPoint, 30, a.A, a.B); d0.IsDefault = true; d0.Locked = false;
+            var d1 = sk.AddDimension(DimensionType.DistancePointPoint, 35, b.A, b.B); d1.Locked = true; d1.Formula = "d0 + 5";
+            var solver = new NumericSketchSolver();
+            sk.Solve(solver);
+            Require(Math.Abs(b.Length - 35) < 1e-6, $"formula dimension: {b.Length}");
+            a.B.P = new Vector2d(50, 0);
+            sk.Solve(solver, a.B);
+            Require(Math.Abs(a.Length - 50) < 0.5, $"dragged line: {a.Length}");
+            Require(Math.Abs(b.Length - a.Length - 5) < 1e-6 && Math.Abs(d1.Value - b.Length) < 1e-6, $"d1 did not follow d0 while dragging: {b.Length}, d1 {d1.Value}");
+        });
         Check("KRN-REV-MIRROR", () =>
         {
             // k97 (замечание 2): зеркало операции «Вращение» — кольцо у x = 50 отражается к x = −50 (прежде отказ

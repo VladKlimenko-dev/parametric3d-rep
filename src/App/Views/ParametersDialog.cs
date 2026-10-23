@@ -200,7 +200,10 @@ public sealed class ParametersDialog : Window
     }
 
     /// <summary>Разбор (проверки): поле значения строки i текущего уровня — поставить в него курсор.</summary>
-    public TextBox? ValueBox(int row) => _grid.Children.OfType<DockPanel>().Where(d => d.Tag is int r && r == row).SelectMany(d => d.Children.OfType<TextBox>()).FirstOrDefault();
+    public TextBox? ValueBox(int row) => _assists.TryGetValue(row, out var a) ? a.Box : null;
+    /// <summary>Разбор (k103): подсказки поля значения строки i.</summary>
+    public FormulaAssist? Assist(int row) => _assists.TryGetValue(row, out var a) ? a : null;
+    private readonly Dictionary<int, FormulaAssist> _assists = new();
     /// <summary>Разбор: значок ошибки строки i виден.</summary>
     public bool ErrorShown(int row) => _grid.Children.OfType<DockPanel>().Where(d => d.Tag is int r && r == row).SelectMany(d => d.Children.OfType<Control>()).Any(c => c.Name == "err" && c.IsVisible);
     public void SelectLevel(int i) => _lookIn.SelectedIndex = i;
@@ -260,7 +263,10 @@ public sealed class ParametersDialog : Window
     private void Show(Level l)
     {
         _cur = l;
-        l.Rows ??= l.Dims && l.Owner is Part dp ? LoadDims(dp) : Load(l.Table);
+        // k103 (замечание 1): у детали в своих параметрах — и размеры с формулами (эскизов и операций)
+        l.Rows ??= l.Dims && l.Owner is Part dp ? LoadDims(dp)
+            : l.Owner is Part fp && !FormulaRowsOff ? Load(l.Table).Concat(LoadDims(fp).Where(r => !TryNum(r.Value, out _))).ToList()
+            : Load(l.Table);
         _selRow = -1;
         _scopeNote.Text = l.Dims ? L("Размеры эскизов и операций детали. Значение — число или формула: d0 — размер того же эскиза, s\"Эскиз\".d0, f\"Операция\".d1, p\"Деталь\".s\"Эскиз\".d0, a\"Сборка\".p\"Деталь\"… — другие. Формула делает размер сильным.")
             : l.Owner switch
@@ -273,10 +279,13 @@ public sealed class ParametersDialog : Window
         Fill();
     }
 
+    static readonly bool FormulaRowsOff = Environment.GetEnvironmentVariable("P3D_PARAMDIMROWS") == "0";
+
     private void Fill()
     {
         _grid.Children.Clear();
         _grid.RowDefinitions.Clear();
+        _assists.Clear();
         string[] heads = { "Имя", "Тип", "Значение или формула", "Единица", "Результат", "Описание" };
         _grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         for (int c = 0; c < heads.Length; c++)
@@ -327,7 +336,10 @@ public sealed class ParametersDialog : Window
                 var icon = ErrorIcon();
                 var dock = new DockPanel { Tag = ri };
                 DockPanel.SetDock(icon, Dock.Right);
-                dock.Children.Add(icon); dock.Children.Add(tb);
+                // k103: подсказка после точки, имена в кавычках — синим (есть) / красным (нет)
+                var assist = new FormulaAssist(tb, () => _cur.Owner ?? _s.Document.Root, () => r.Sketch);
+                _assists[ri] = assist;
+                dock.Children.Add(icon); dock.Children.Add(assist.View);
                 Grid.SetRow(dock, gr); Grid.SetColumn(dock, 2);
                 _grid.Children.Add(dock);
             }
@@ -377,7 +389,8 @@ public sealed class ParametersDialog : Window
         var rows = _cur.Rows!;
         string n = "d";
         for (int i = rows.Count + 1; ; i++) if (rows.All(r => !string.Equals(r.Name, "d" + i, StringComparison.OrdinalIgnoreCase))) { n = "d" + i; break; }
-        rows.Add(new Row { Name = n, Value = "0", Unit = "mm" });
+        int at = rows.FindIndex(r => r.IsDim);
+        rows.Insert(at < 0 ? rows.Count : at, new Row { Name = n, Value = "0", Unit = "mm" });
         Recalc();
         Fill();
     }
@@ -386,8 +399,8 @@ public sealed class ParametersDialog : Window
     {
         if (_cur.Dims) return;
         var rows = _cur.Rows!;
-        int i = _selRow >= 0 && _selRow < rows.Count ? _selRow : rows.Count - 1;
-        if (i < 0) return;
+        int i = _selRow >= 0 && _selRow < rows.Count ? _selRow : rows.FindLastIndex(r => !r.IsDim);
+        if (i < 0 || rows[i].IsDim) return;
         rows.RemoveAt(i);
         _selRow = -1;
         Recalc();
@@ -403,6 +416,7 @@ public sealed class ParametersDialog : Window
         foreach (var p in t.All.ToList()) t.Remove(p.Name);
         foreach (var r in rows)
         {
+            if (r.IsDim) continue;
             if (string.IsNullOrWhiteSpace(r.Name)) { problems.Add(L("Пустое имя параметра")); continue; }
             if (t.Find(r.Name) != null) { problems.Add(L("Имя «{0}» повторяется", r.Name)); continue; }
             Parameter p;
@@ -437,10 +451,10 @@ public sealed class ParametersDialog : Window
     /// <summary>Пересчитать результат текущего уровня на копии (с уровнями выше — уже исправленными).</summary>
     private void Recalc()
     {
-        if (_cur.Dims && _cur.Owner is Part dpart)
+        if (_cur.Owner is Part dpart && _cur.Rows!.Any(r => r.IsDim))
         {
             var scope = _s.Document.ScopeFor(dpart);
-            foreach (var r in _cur.Rows!)
+            foreach (var r in _cur.Rows!.Where(r => r.IsDim))
             {
                 r.Error = ""; r.Result = "";
                 string v = r.Value.Trim();
@@ -451,7 +465,7 @@ public sealed class ParametersDialog : Window
                 if (ok) r.Result = x.ToString("0.######", CultureInfo.InvariantCulture) + (string.IsNullOrEmpty(r.Unit) ? "" : " " + r.Unit);
                 else r.Error = why ?? L("Не число и не формула");
             }
-            return;
+            if (_cur.Dims) return;
         }
         var scratch = new Dictionary<Level, ParameterTable>();
         ParameterTable Scratch(Level l)
@@ -464,7 +478,7 @@ public sealed class ParametersDialog : Window
             return t;
         }
         var cur = Scratch(_cur);
-        foreach (var r in _cur.Rows!)
+        foreach (var r in _cur.Rows!.Where(r => !r.IsDim))
         {
             var p = cur.Find(r.Name);
             r.Error = p?.Error ?? (p == null && !string.IsNullOrWhiteSpace(r.Name) ? L("имя повторяется") : "");
@@ -512,7 +526,7 @@ public sealed class ParametersDialog : Window
             }
             // k102: размеры — значение или формула (формула и новое значение делают размер эскиза сильным); с ошибкой — тоже
             // записывается: деталь перестраивается до операции, которая её использует, та — с ошибкой
-            foreach (var l in _levels.Where(l => l.Rows != null && l.Dims && l.Owner is Part))
+            foreach (var l in _levels.Where(l => l.Rows != null && l.Owner is Part && l.Rows.Any(r => r.IsDim)))
             {
                 var part = (Part)l.Owner!;
                 foreach (var r in l.Rows!.Where(r => r.Value.Trim() != r.Original))

@@ -551,6 +551,9 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         // п. 6: свободные вершины и фигуры эскиза тащатся мышью (без инструмента)
         else if (props.IsLeftButtonPressed && e.ClickCount < 2 && _drag == Drag.Select && ActiveSketch != null && BeginSketchDrag(pt.Position, e.KeyModifiers)) _drag = Drag.SketchGeom;
         if (props.IsLeftButtonPressed && e.ClickCount >= 2 && ActiveSketch != null && TryEditDimension(pt.Position)) { _drag = Drag.None; e.Handled = true; return; }
+        // k103: двойной щелчок по контуру сечения — его настройки
+        if (props.IsLeftButtonPressed && e.ClickCount >= 2 && _drag == Drag.Select && ActiveSketch == null && Tool == null && ClickInterceptor == null && !SectionSelectOff && SectionOutlineHit(pt.Position))
+        { _drag = Drag.None; SectionDoubleClicked?.Invoke(); e.Handled = true; return; }
         if (_drag == Drag.Tool && e.ClickCount >= 2) { ToolFinish(); _drag = Drag.None; e.Handled = true; return; }
         if (_drag != Drag.None) { Transition.Cancel(); e.Pointer.Capture(this); }
         e.Handled = true;
@@ -578,6 +581,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         if (_drag == Drag.None) HoverInterceptor?.Invoke(p);
         if (RegionMove(p)) return;
         if (_drag == Drag.None && UpdateGizmoHover(p)) return;
+        if (_drag == Drag.None && UpdateSectionHover(p)) return;
         if (Tool != null) ToolMove(p);
         if (ActiveSketch != null) UpdateDimensionHover(p);
         RequestPick(p, click: false, KeyModifiers.None);
@@ -601,8 +605,10 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         else if (was == Drag.Select && RegionEnd(p, e.KeyModifiers)) { }
         else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4 && ClickInterceptor?.Invoke(p) == true) { }
         // k99: щелчок по контуру плоскости сечения (вне операции и эскиза) — её настройки
-        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4 && ClickInterceptor == null && ActiveSketch == null && Tool == null && SectionOutlineHit(p)) SectionClicked?.Invoke();
-        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4) RequestPick(p, click: true, e.KeyModifiers);
+        // k103: щелчок — выбор плоскости (ручки), двойной — настройки
+        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4 && ClickInterceptor == null && ActiveSketch == null && Tool == null && SectionOutlineHit(p))
+        { SectionSelected = true; SectionClicked?.Invoke(); }
+        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4) { SectionSelected = false; RequestPick(p, click: true, e.KeyModifiers); }
     }
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)

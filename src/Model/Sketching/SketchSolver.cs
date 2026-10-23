@@ -620,6 +620,10 @@ public sealed class NumericSketchSolver : ISketchSolver
             // нарисованную фигуру нельзя было бы ни потянуть, ни поправить.
             if (!d.IsDriving) continue;
             var it = d.Items;
+            // k103 (замечание 2): размер с формулой от размеров своего эскиза — значение формулы по ТЕКУЩЕЙ геометрии
+            // (тянут точку слабого размера d1 — размер d2 = d1 + 5 следует сразу); иначе — своё значение
+            var dd = d;
+            Func<double> V = sk.LiveFormula(d) ?? (() => dd.Value);
             switch (d.Type)
             {
                 case DimensionType.DistancePointPoint:
@@ -628,7 +632,7 @@ public sealed class NumericSketchSolver : ISketchSolver
                         // k96: НУЛЕВОЙ РАЗМЕР — совпадение (две невязки по осям): у |a − b| в нуле нет производной, и решатель
                         // не сходился к нулю (размер 0 отвергался вовсе). Мутация P3D_SKZERODIM=0.
                         if (d.Value == 0 && !ZeroDimOff) fns.Add(dst => { dst.Add(da.X - db.X); dst.Add(da.Y - db.Y); });
-                        else fns.Add(dst => dst.Add((da.P - db.P).Length - d.Value));
+                        else fns.Add(dst => dst.Add((da.P - db.P).Length - V()));
                     }
                     break;
                 case DimensionType.DistancePointLine:
@@ -637,46 +641,46 @@ public sealed class NumericSketchSolver : ISketchSolver
                         // k96: СТОРОНА — та, где точка сейчас. Размер хранит расстояние без знака, а уравнение было знаковым:
                         // точка по другую сторону прямой перескакивала через неё на +значение. Мутация P3D_SKSIDE=0.
                         double side = SideOff ? 1 : SideOf(DistPointLine(dp.P, dl));
-                        fns.Add(dst => dst.Add(side * DistPointLine(dp.P, dl) - d.Value));
+                        fns.Add(dst => dst.Add(side * DistPointLine(dp.P, dl) - V()));
                     }
                     break;
                 case DimensionType.DistanceLineLine:
                     if (it.Count >= 2 && it[0] is SkLine la && it[1] is SkLine lb)
                     {
                         double side = SideOff ? 1 : SideOf(DistPointLine(lb.A.P, la));
-                        fns.Add(dst => dst.Add(side * DistPointLine(lb.A.P, la) - d.Value));
+                        fns.Add(dst => dst.Add(side * DistPointLine(lb.A.P, la) - V()));
                     }
                     break;
                 case DimensionType.AngleLineLine:
                     if (it.Count >= 2 && it[0] is SkLine aa && it[1] is SkLine ab)
                         // Та же формула, что и у измерения: иначе размер
                         // начнёт требовать угол, которого никто не задавал.
-                        fns.Add(dst => dst.Add(DimensionMeasure.LineAngleDegrees(aa, ab) - d.Value));
+                        fns.Add(dst => dst.Add(DimensionMeasure.LineAngleDegrees(aa, ab) - V()));
                     break;
                 case DimensionType.Radius:
-                    if (it.Count >= 1 && it[0] is SkCircle rc) fns.Add(dst => dst.Add(rc.Radius - d.Value));
-                    else if (it.Count >= 1 && it[0] is SkArc ra) fns.Add(dst => dst.Add(ra.Radius - d.Value));
+                    if (it.Count >= 1 && it[0] is SkCircle rc) fns.Add(dst => dst.Add(rc.Radius - V()));
+                    else if (it.Count >= 1 && it[0] is SkArc ra) fns.Add(dst => dst.Add(ra.Radius - V()));
                     break;
                 case DimensionType.Diameter:
-                    if (it.Count >= 1 && it[0] is SkCircle dc) fns.Add(dst => dst.Add(dc.Radius * 2 - d.Value));
-                    else if (it.Count >= 1 && it[0] is SkArc darc) fns.Add(dst => dst.Add(darc.Radius * 2 - d.Value));
+                    if (it.Count >= 1 && it[0] is SkCircle dc) fns.Add(dst => dst.Add(dc.Radius * 2 - V()));
+                    else if (it.Count >= 1 && it[0] is SkArc darc) fns.Add(dst => dst.Add(darc.Radius * 2 - V()));
                     break;
 
                 case DimensionType.EllipseRadiusU:
-                    if (it.Count >= 1 && it[0] is SkEllipse eu) fns.Add(dst => dst.Add(eu.RU - d.Value));
+                    if (it.Count >= 1 && it[0] is SkEllipse eu) fns.Add(dst => dst.Add(eu.RU - V()));
                     break;
                 case DimensionType.ArcLength:
-                    if (it.Count >= 1 && it[0] is SkArc alc) fns.Add(dst => dst.Add(alc.Radius * Math.Abs(alc.Sweep) - d.Value));
+                    if (it.Count >= 1 && it[0] is SkArc alc) fns.Add(dst => dst.Add(alc.Radius * Math.Abs(alc.Sweep) - V()));
                     break;
 
                 case DimensionType.EllipseRadiusV:
-                    if (it.Count >= 1 && it[0] is SkEllipse ev) fns.Add(dst => dst.Add(ev.RV - d.Value));
+                    if (it.Count >= 1 && it[0] is SkEllipse ev) fns.Add(dst => dst.Add(ev.RV - V()));
                     break;
                 case DimensionType.CoordX:
-                    if (it.Count >= 1 && it[0] is SkPoint cx) fns.Add(dst => dst.Add(cx.X - d.Value));
+                    if (it.Count >= 1 && it[0] is SkPoint cx) fns.Add(dst => dst.Add(cx.X - V()));
                     break;
                 case DimensionType.CoordY:
-                    if (it.Count >= 1 && it[0] is SkPoint cy) fns.Add(dst => dst.Add(cy.Y - d.Value));
+                    if (it.Count >= 1 && it[0] is SkPoint cy) fns.Add(dst => dst.Add(cy.Y - V()));
                     break;
             }
         }

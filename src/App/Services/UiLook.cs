@@ -1,4 +1,4 @@
-using Avalonia.Media;
+﻿using Avalonia.Media;
 
 namespace Parametric3D.App.Services;
 
@@ -33,6 +33,11 @@ public sealed class LookPrefs
     /// <summary>Фон вида сверху и снизу (светлая тема); пусто — по теме.</summary>
     public string BackgroundTopLight { get; set; } = "";
     public string BackgroundBottomLight { get; set; } = "";
+    /// <summary>k103: штриховать сечение деталей и сборок плоскостью сечения.</summary>
+    public bool SectionHatch { get; set; } = true;
+    /// <summary>k103: цвет штриховки и заливки сечения; пусто — по материалу детали.</summary>
+    public string SectionHatchColor { get; set; } = "";
+    public string SectionFillColor { get; set; } = "";
 
     public LookPrefs Clone() => (LookPrefs)MemberwiseClone();
 }
@@ -64,5 +69,8 @@ public static class UiLook
         if (ParseColor(th.Dark ? L.SketchColorDark : L.SketchColorLight) is { } sc) { th.SketchCurve = V(sc); th.SketchPoint = V(sc); }
         if (ParseColor(th.Dark ? L.BackgroundTopDark : L.BackgroundTopLight) is { } bt) th.BackgroundTop = V(bt);
         if (ParseColor(th.Dark ? L.BackgroundBottomDark : L.BackgroundBottomLight) is { } bb) th.BackgroundBottom = V(bb);
+        th.SectionHatch = L.SectionHatch;
+        th.SectionHatchColor = ParseColor(L.SectionHatchColor) is { } hc ? V(hc) : default;
+        th.SectionFillColor = ParseColor(L.SectionFillColor) is { } fc ? V(fc) : default;
     }
 }

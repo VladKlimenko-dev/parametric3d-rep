@@ -91,6 +91,8 @@ public sealed class SectionOp : Operation
         if (v.SectionPlane is not { } sp) { v.Gizmo = null; return; }
         var f = _s.BaseFrame();
         Vector3d u = f.U.Normalized(), vv = f.V.Normalized(), w = f.W.Normalized();
+        // k103 (замечание 6): ручки сразу все — стрелка смещения и кольца углов A и B
+        if (!ModelViewport.SectionSelectOff) { v.Gizmo = new GizmoSpec(GizmoMode.MoveRotate, sp.At, u, vv, w); return; }
         v.Gizmo = GizmoField switch
         {
             1 => new GizmoSpec(GizmoMode.Rotate, sp.At, u, vv, w) { Mask = 1 << (int)GizmoPart.AxisX },
@@ -99,7 +101,11 @@ public sealed class SectionOp : Operation
         };
     }
 
-    public override void GizmoStart(GizmoPart part) => _g0 = GizmoField switch { 1 => _s.AngleA, 2 => _s.AngleB, _ => _s.Offset };
+    public override void GizmoStart(GizmoPart part)
+    {
+        if (!ModelViewport.SectionSelectOff) GizmoField = part == GizmoPart.AxisX ? 1 : part == GizmoPart.AxisY ? 2 : 0;
+        _g0 = GizmoField switch { 1 => _s.AngleA, 2 => _s.AngleB, _ => _s.Offset };
+    }
 
     public override void GizmoMove(GizmoDrag d)
     {

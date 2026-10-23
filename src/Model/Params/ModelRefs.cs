@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text.RegularExpressions;
 using Parametric3D.Model.Features;
 using Parametric3D.Model.Sketching;
@@ -24,25 +24,7 @@ public static class ModelRefs
     /// <summary>Значение по пути относительно элемента (детали или сборки); null — не найдено.</summary>
     public static double? Resolve(ModelItem context, string path)
     {
-        object cur = context;
-        int at = 0;
-        Match m;
-        while ((m = Seg.Match(path, at)).Success && m.Index == at)
-        {
-            string kind = m.Groups[1].Value, name = m.Groups[2].Value;
-            at = m.Index + m.Length;
-            var root = RootOf(context);
-            object? next = kind switch
-            {
-                "a" => All(root).OfType<Assembly>().FirstOrDefault(x => x.Name == name),
-                "p" => All(cur as ModelItem is Assembly ca ? ca : root).OfType<Part>().FirstOrDefault(x => x.Name == name),
-                "s" => (cur as Part ?? context as Part)?.Sketches.FirstOrDefault(x => x.Name == name),
-                "f" => (cur as Part ?? context as Part)?.Features.FirstOrDefault(x => x.Name == name),
-                _ => null,
-            };
-            if (next == null) return null;
-            cur = next;
-        }
+        if (Walk(context, path, out int at) is not { } cur) return null;
         string last = path[at..];
         switch (cur)
         {
@@ -59,6 +41,117 @@ public static class ModelRefs
                 return a.LocalParameters.Find(last) is { Error: null } ap ? ap.Value : null;
         }
         return null;
+    }
+
+    /// <summary>Шаг пути: элемент по виду (a, p, s, f) и имени от текущего; null — нет такого.</summary>
+    static object? Step(ModelItem context, object cur, string kind, string name)
+    {
+        var root = RootOf(context);
+        return kind switch
+        {
+            "a" => All(root).OfType<Assembly>().FirstOrDefault(x => x.Name == name),
+            "p" => All(cur as ModelItem is Assembly ca ? ca : root).OfType<Part>().FirstOrDefault(x => x.Name == name),
+            "s" => (cur as Part ?? context as Part)?.Sketches.FirstOrDefault(x => x.Name == name),
+            "f" => (cur as Part ?? context as Part)?.Features.FirstOrDefault(x => x.Name == name),
+            _ => null,
+        };
+    }
+
+    /// <summary>Пройти сегменты пути (a"…". p"…". s"…". f"…".); at — где кончились сегменты; null — сегмент не найден.</summary>
+    static object? Walk(ModelItem context, string path, out int at)
+    {
+        object cur = context;
+        at = 0;
+        Match m;
+        while ((m = Seg.Match(path, at)).Success && m.Index == at)
+        {
+            at = m.Index + m.Length;
+            if (Step(context, cur, m.Groups[1].Value, m.Groups[2].Value) is not { } next) return null;
+            cur = next;
+        }
+        return cur;
+    }
+
+    static readonly Regex Quoted = new("([apsf])\"([^\"]*)\"", RegexOptions.Compiled);
+
+    /// <summary>
+    /// k103 (замечание 4): ИМЕНА В КАВЫЧКАХ в тексте формулы — для подсветки: начало и длина (с буквой вида и кавычками),
+    /// найдено ли (по цепочке a"…".p"…".s"…" от элемента context). Незакрытая кавычка не в счёт.
+    /// </summary>
+    public static List<(int Start, int Length, bool Ok)> QuotedNames(ModelItem context, string text)
+    {
+        var res = new List<(int, int, bool)>();
+        object? cur = context; int chainEnd = -1;
+        foreach (Match m in Quoted.Matches(text))
+        {
+            // буква вида не продолжение имени (x_s"…" — не путь)
+            if (m.Index > 0 && (char.IsLetterOrDigit(text[m.Index - 1]) || text[m.Index - 1] == '_')) continue;
+            bool chained = m.Index == chainEnd + 1 && chainEnd >= 0 && text[chainEnd] == '.';
+            if (!chained) cur = context;
+            object? next = cur == null ? null : Step(context, cur, m.Groups[1].Value, m.Groups[2].Value);
+            res.Add((m.Index, m.Length, next != null));
+            cur = next;
+            chainEnd = m.Index + m.Length;
+            if (chainEnd >= text.Length || text[chainEnd] != '.') chainEnd = -1;
+        }
+        return res;
+    }
+
+    static readonly Regex DimRef = new("(?<![\\w\"])((?:[apsf]\"[^\"]*\"\\.)*)(d\\d+)(?![\\w\"])", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// k103 (18:52): ИДЕНТИФИКАТОРЫ РАЗМЕРОВ в тексте формулы (d0 своего эскиза, s"Эскиз".d1, f"Операция".d0…) — для
+    /// подсветки: начало и длина «dN», найден ли размер. Без пути — в эскизе local (нет эскиза — не найден).
+    /// </summary>
+    public static List<(int Start, int Length, bool Ok)> DimNames(ModelItem context, Sketch? local, string text)
+    {
+        var res = new List<(int, int, bool)>();
+        foreach (Match m in DimRef.Matches(text))
+        {
+            var g = m.Groups[2];
+            bool ok = m.Groups[1].Length == 0 ? local?.DimensionByName(g.Value) != null : Resolve(context, m.Value) != null;
+            res.Add((g.Index, g.Length, ok));
+        }
+        return res;
+    }
+
+    /// <summary>
+    /// k103 (замечание 3): ПОДСКАЗКА ПОСЛЕ ТОЧКИ. prefix — текст пути до точки (s"Эскиз1", p"Деталь1", a"Сборка".p"Деталь1"; пусто —
+    /// начало имени); local — эскиз, в формуле размера которого пишут (его d0… первыми). Вставка и подпись «d1 = 51.3».
+    /// </summary>
+    public static List<(string Insert, string Label)> Suggest(ModelItem context, Sketch? local, string prefix)
+    {
+        var res = new List<(string, string)>();
+        static string N(double v) => v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        void Dims(Sketch sk) { sk.EnsureDimIds(); foreach (var d in sk.Dimensions.OrderBy(x => x.Index)) res.Add((d.Name, $"{d.Name} = {N(d.Value)}")); }
+        void FDims(Feature f) { var sl = FeatureDims.Of(f); for (int i = 0; i < sl.Count; i++) if (sl[i].Get() is { } v) res.Add(($"d{i}", $"d{i} = {N(v.Value)} ({sl[i].Name})")); }
+        void Items(Part p)
+        {
+            foreach (var sk in p.Sketches) res.Add(($"s\"{sk.Name}\"", $"s\"{sk.Name}\""));
+            foreach (var f in p.Features) res.Add(($"f\"{f.Name}\"", $"f\"{f.Name}\""));
+            foreach (var pp in p.LocalParameters.All) res.Add((pp.Name, $"{pp.Name} = {N(pp.Value)}"));
+        }
+        if (string.IsNullOrEmpty(prefix))
+        {
+            if (local != null) Dims(local);
+            if (context is Part cp) Items(cp);
+            else if (context is Assembly ca) { foreach (var pp in ca.LocalParameters.All) res.Add((pp.Name, $"{pp.Name} = {N(pp.Value)}")); }
+            var root = RootOf(context);
+            foreach (var a in All(root).OfType<Assembly>().Where(x => !ReferenceEquals(x, context))) res.Add(($"a\"{a.Name}\"", $"a\"{a.Name}\""));
+            foreach (var p in All(root).OfType<Part>().Where(x => !ReferenceEquals(x, context))) res.Add(($"p\"{p.Name}\"", $"p\"{p.Name}\""));
+            return res;
+        }
+        switch (Walk(context, prefix + ".", out int at))
+        {
+            case Sketch sk when at == prefix.Length + 1: Dims(sk); break;
+            case Feature f when at == prefix.Length + 1: FDims(f); break;
+            case Part p when at == prefix.Length + 1: Items(p); break;
+            case Assembly a when at == prefix.Length + 1:
+                foreach (var p in All(a).OfType<Part>()) res.Add(($"p\"{p.Name}\"", $"p\"{p.Name}\""));
+                foreach (var pp in a.LocalParameters.All) res.Add((pp.Name, $"{pp.Name} = {N(pp.Value)}"));
+                break;
+        }
+        return res;
     }
 
     static ModelItem RootOf(ModelItem x) { while (x.Parent != null) x = x.Parent; return x; }

@@ -877,6 +877,7 @@ public partial class MainWindow : Window
         ModelViewport.GraphicsFallback += msg => Dispatcher.UIThread.Post(() => ShowToast(msg));
         View.GizmoDragStarted += part =>
         {
+            if (CurrentOperation == null && View.SectionSelected) { View.SectionGizmoStart(part); return; }
             if (CurrentOperation is not { } op) return;
             op.LivePreview = true;
             op.BeginDrag();
@@ -884,19 +885,23 @@ public partial class MainWindow : Window
         };
         View.GizmoDragged += d =>
         {
+            if (CurrentOperation == null && View.SectionSelected) { View.SectionGizmoMove(d); View.Redraw(); return; }
             if (CurrentOperation is not { } op) return;
             try { op.GizmoMove(d); } catch (Exception ex) { AppLog.Write("gizmo drag", ex); }
             View.Redraw();
         };
         View.GizmoDragEnded += () =>
         {
+            if (CurrentOperation == null && View.SectionSelected) { View.SectionGizmoEnd(); return; }
             if (CurrentOperation is not { } op) return;
             try { op.GizmoEnd(); op.EndDrag(); } catch (Exception ex) { AppLog.Write("gizmo end", ex); }
             UpdateContextBar();
         };
         View.SceneRebuilt += HideGhostWhenBuilt;
         // k99: щелчок по контуру плоскости сечения — её настройки
-        View.SectionClicked += () => { if (CurrentOperation == null && !InSketch && Session.Part != null) StartOperation(new SectionOp()); };
+        // k103: щелчок — выбор (ручки), двойной щелчок — настройки
+        View.SectionDoubleClicked += () => { if (CurrentOperation is SectionOp) return; if (CurrentOperation != null) CancelOperation(); if (!InSketch && Session.Part != null) StartOperation(new SectionOp()); };
+        View.SectionSelectionChanged += () => { UpdateStatus(); };
         // k99: при перестроении (детали изменились) — рамка и плоскость сечения по новым границам
         View.SceneRebuilt += () => { if (View.Section is { } ss) View.ApplySection(ss); };
         View.GlReady += info => Dispatcher.UIThread.Post(() =>
@@ -1320,6 +1325,8 @@ public partial class MainWindow : Window
     /// <summary>Двойной щелчок по размеру: новое значение (число или формула) — размер становится управляющим.</summary>
     /// <summary>k102: окно правки размера открыто (поле ввода — для вставки идентификаторов щелчком по размерам).</summary>
     public TextBox? DimEditBox { get; private set; }
+    /// <summary>k103: подсказки поля правки размера.</summary>
+    public FormulaAssist? DimEditAssist { get; private set; }
     private Popup? _dimPopup;
     private Func<Point, bool>? _clickBeforeDimEdit;
 
@@ -1338,6 +1345,9 @@ public partial class MainWindow : Window
         // координатный размер хранит знак (сторона от нуля, нужна решателю); показывается и вводится расстояние — без знака
         bool signedCoord = d.Type is DimensionType.CoordX or DimensionType.CoordY;
         var tb = new TextBox { Text = d.Formula ?? (signedCoord ? Math.Abs(d.Value) : d.Value).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), MinWidth = 160 };
+        // k103: подсказка после точки и подсветка имён в кавычках
+        var assist = new FormulaAssist(tb, () => (ModelItem?)Session.Part ?? Session.Document.Root, () => sk);
+        DimEditAssist = assist;
         var ok = new Button { Content = L("ОК"), Classes = { "accent" } };
         var close = new Button { Content = "×", Classes = { "tool" }, Padding = new Thickness(6, 0) };
         var err = new TextBlock { Classes = { "err" }, FontSize = 11, TextWrapping = TextWrapping.Wrap, MaxWidth = 260, IsVisible = false };
@@ -1345,7 +1355,7 @@ public partial class MainWindow : Window
             Children =
             {
                 new DockPanel { Children = { close, new TextBlock { Text = (angle ? L("Угол, °") : L("Размер, мм")) + "  " + d.Name, Classes = { "dim" }, FontSize = 12, VerticalAlignment = VerticalAlignment.Center } } },
-                tb,
+                assist.View,
                 new TextBlock { Text = L("Щёлкните другой размер — его имя встанет в формулу"), Classes = { "dim" }, FontSize = 11, TextWrapping = TextWrapping.Wrap, MaxWidth = 260 },
                 err, ok,
             } };
@@ -1412,7 +1422,8 @@ public partial class MainWindow : Window
     {
         if (_dimPopup is { } pop) { pop.IsOpen = false; ViewArea.Children.Remove(pop); }
         if (DimEditBox != null) View.ClickInterceptor = _clickBeforeDimEdit;
-        _dimPopup = null; DimEditBox = null; _clickBeforeDimEdit = null;
+        DimEditAssist?.Close();
+        _dimPopup = null; DimEditBox = null; DimEditAssist = null; _clickBeforeDimEdit = null;
     }
 
     private static string ShortGl(string info)
@@ -1720,6 +1731,7 @@ public partial class MainWindow : Window
     public void StartOperation(Operation op, bool showPanel)
     {
         if (CurrentOperation != null) CancelOperation();
+        View.SectionSelected = false;                   // k103: ручки сечения — у операции
         var part = Session.Part;
         if (part == null) { ShowToast(L("Нет детали")); return; }
         bool panel;

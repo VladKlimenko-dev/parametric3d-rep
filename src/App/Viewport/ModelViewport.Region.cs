@@ -66,7 +66,7 @@ public sealed partial class ModelViewport
     public (Vector3d At, Vector3d N)? SectionPlane { get; private set; }
     public void SetSection((Vector3d At, Vector3d N)? plane)
     {
-        if (plane == null) { Section = null; _r.CapFrame = null; SectionFrame = null; }
+        if (plane == null) { Section = null; _r.CapFrame = null; SectionFrame = null; SectionSelected = false; SectionHover = false; }
         SectionPlane = plane;
         if (plane is { } pl) { var n = pl.N.Normalized(); _r.ClipPlane = new Vector4((float)n.X, (float)n.Y, (float)n.Z, (float)-Vector3d.Dot(n, pl.At)); }
         else _r.ClipPlane = Vector4.Zero;
@@ -183,7 +183,91 @@ public sealed partial class ModelViewport
     }
 
     /// <summary>Разбор: показать щелчок по контуру сечения.</summary>
-    public void RaiseSectionClicked() => SectionClicked?.Invoke();
+    public void RaiseSectionClicked() { SectionSelected = true; SectionClicked?.Invoke(); }
+    /// <summary>Разбор: двойной щелчок по контуру сечения.</summary>
+    public void RaiseSectionDoubleClicked() => SectionDoubleClicked?.Invoke();
+    /// <summary>k103: двойной щелчок по контуру сечения — его настройки.</summary>
+    public event Action? SectionDoubleClicked;
+
+    // ------------------------------------------------------------------ k103 (замечания 6, 7): выбор и ручки плоскости сечения
+
+    public static readonly bool SectionSelectOff = Environment.GetEnvironmentVariable("P3D_SECTIONSELECT") == "0";
+
+    /// <summary>Курсор у контура сечения (подсветка, «Под курсором: Плоскость сечения»).</summary>
+    public bool SectionHover { get => _sectionHover; private set { if (_sectionHover == value) return; _sectionHover = value; _overlayDirty = true; Redraw(); } }
+    private bool _sectionHover;
+
+    /// <summary>
+    /// Плоскость сечения выбрана (щелчок по контуру): контур — цветом выбора, ручки — стрелка вдоль нормали основы
+    /// (смещение) и кольца вокруг осей основы (углы A и B); тянут — сечение меняется сразу. Щелчок мимо снимает выбор.
+    /// </summary>
+    public bool SectionSelected
+    {
+        get => _sectionSelected;
+        set
+        {
+            value = value && SectionFrame != null && !SectionSelectOff;
+            if (_sectionSelected == value) return;
+            _sectionSelected = value;
+            if (value) { Selection.Clear(); Gizmo = SectionGizmoSpec(); _sectionGizmo = true; }
+            else if (_sectionGizmo) { _sectionGizmo = false; Gizmo = null; }
+            _overlayDirty = true; Redraw();
+            SectionSelectionChanged?.Invoke();
+        }
+    }
+    private bool _sectionSelected, _sectionGizmo;
+    public event Action? SectionSelectionChanged;
+
+    /// <summary>Ручки сечения: начало — точка плоскости, оси — основы (поворот A — вокруг первой, B — вокруг второй).</summary>
+    public GizmoSpec? SectionGizmoSpec()
+    {
+        if (Section is not { } s || SectionPlane is not { } sp) return null;
+        var f = s.BaseFrame();
+        return new GizmoSpec(GizmoMode.MoveRotate, sp.At, f.U.Normalized(), f.V.Normalized(), f.W.Normalized());
+    }
+
+    private double _sg0;
+    private GizmoPart _sgPart = GizmoPart.None;
+    /// <summary>Перетаскивание ручки выбранного сечения (вне настройки).</summary>
+    public void SectionGizmoStart(GizmoPart part)
+    {
+        if (Section is not { } s) return;
+        _sgPart = part;
+        _sg0 = part == GizmoPart.AxisX ? s.AngleA : part == GizmoPart.AxisY ? s.AngleB : s.Offset;
+    }
+    public void SectionGizmoMove(GizmoDrag d)
+    {
+        if (Section is not { } s) return;
+        switch (_sgPart)
+        {
+            case GizmoPart.AxisX: s.AngleA = Math.Round(_sg0 + d.AngleDeg, 2); break;
+            case GizmoPart.AxisY: s.AngleB = Math.Round(_sg0 + d.AngleDeg, 2); break;
+            case GizmoPart.AxisZ: s.Offset = Math.Round(_sg0 + d.Delta.Z, 3); break;
+            default: return;
+        }
+        ApplySection(s);
+    }
+    public void SectionGizmoEnd()
+    {
+        _sgPart = GizmoPart.None;
+        if (_sectionSelected) Gizmo = SectionGizmoSpec();
+    }
+
+    /// <summary>Разбор: наведение курсора в точку p (подсветка контура сечения).</summary>
+    public bool SectionHoverAt(Point p) => UpdateSectionHover(p);
+
+    /// <summary>Наведение на контур сечения (вне эскиза и инструмента): подсветка; true — курсор на контуре.</summary>
+    private bool UpdateSectionHover(Point p)
+    {
+        bool hit = SectionFrame != null && ActiveSketch == null && Tool == null && !SectionSelectOff && SectionOutlineHit(p);
+        if (hit != SectionHover)
+        {
+            SectionHover = hit;
+            if (hit && Selection.SetHover(PickRef.Empty)) _flagsDirty = true;
+            HoverChanged?.Invoke(hit ? Loc.L("Плоскость сечения") : "");
+        }
+        return hit;
+    }
 
     /// <summary>u13: полосы-отражения («зебра») на гранях.</summary>
     public bool Zebra { get => _r.Zebra; set { _r.Zebra = value; Redraw(); } }
@@ -324,8 +408,11 @@ public sealed partial class ModelViewport
         // k99: контур плоскости сечения (без заливки)
         if (SectionCorners() is { } sc && ActiveSketch == null)
         {
-            var col = SectionHot ? new Vector4(1f, 0.75f, 0.2f, 1f) : new Vector4(0.35f, 0.62f, 1f, 0.95f);
-            for (int i = 0; i < 4; i++) lines.Add(Inst(F(sc[i]), F(sc[(i + 1) % 4]), col, SectionHot ? 2.2f : 1.5f, 0));
+            // k103: под курсором — цвет наведения, выбрана — цвет выбора
+            bool hot = SectionHot || SectionHover;
+            var col = hot ? new Vector4(1f, 0.75f, 0.2f, 1f) : SectionSelected ? _r.Theme.Select : new Vector4(0.35f, 0.62f, 1f, 0.95f);
+            if (SectionSelected && !hot) col.W = 1;
+            for (int i = 0; i < 4; i++) lines.Add(Inst(F(sc[i]), F(sc[(i + 1) % 4]), col, hot || SectionSelected ? 2.4f : 1.5f, 0));
         }
         if (Annotations.Count == 0)
             foreach (var (a, b, cr) in CageLines) lines.Add(Inst(F(a), F(b), cr ? new Vector4(1f, 0.4f, 0.3f, 0.9f) : new Vector4(0.35f, 0.75f, 1f, 0.55f), 1f, 0));

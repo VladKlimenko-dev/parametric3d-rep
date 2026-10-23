@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Platform.Storage;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -196,12 +196,18 @@ public static class DocCommands
         Control ColorBox(string value, out TextBox tb)
         {
             var t = new TextBox { Text = value, Watermark = L("по теме (#RRGGBB)"), MinWidth = 160 };
-            var sw = new Border { Width = 24, Height = 24, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1), BorderBrush = Avalonia.Media.Brushes.Gray, Margin = new Thickness(6, 0, 0, 0) };
+            var sw = new Border { Width = 24, Height = 24, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1), BorderBrush = Avalonia.Media.Brushes.Gray };
             void Upd() => sw.Background = UiLook.ParseColor(t.Text) is { } c ? new Avalonia.Media.SolidColorBrush(c) : Avalonia.Media.Brushes.Transparent;
             t.TextChanged += (_, _) => Upd(); Upd();
             tb = t;
-            return new StackPanel { Orientation = Orientation.Horizontal, Children = { t, sw } };
+            // k103: образец — кнопка выбора цвета (палитра; «по теме» — очистить)
+            var pick = new Button { Content = sw, Padding = new Thickness(2), Margin = new Thickness(6, 0, 0, 0), Classes = { "tool" } };
+            ToolTip.SetTip(pick, L("Выбрать цвет"));
+            pick.Flyout = ColorPalette(c => t.Text = c);
+            return new StackPanel { Orientation = Orientation.Horizontal, Children = { t, pick } };
         }
+        var cHatchC = ColorBox(look.SectionHatchColor, out var tHatchC); var cFillC = ColorBox(look.SectionFillColor, out var tFillC);
+        var chHatch = new CheckBox { IsChecked = look.SectionHatch, Content = L("Штриховать сечение деталей и сборок") };
         var cSkD = ColorBox(look.SketchColorDark, out var tSkD); var cSkL = ColorBox(look.SketchColorLight, out var tSkL);
         var cBgTD = ColorBox(look.BackgroundTopDark, out var tBgTD); var cBgBD = ColorBox(look.BackgroundBottomDark, out var tBgBD);
         var cBgTL = ColorBox(look.BackgroundTopLight, out var tBgTL); var cBgBL = ColorBox(look.BackgroundBottomLight, out var tBgBL);
@@ -211,7 +217,8 @@ public static class DocCommands
             var d = new LookPrefs();
             fUi.Value = (decimal)d.UiFontSize; fStrip.Value = (decimal)d.StripButtonPx; fStripIcon.Value = (decimal)d.StripIconPx; fPanelIcon.Value = (decimal)d.PanelIconPx;
             fDim.Value = (decimal)d.DimensionTextPx; fDimLine.Value = (decimal)d.DimensionTextLine; fCon.Value = (decimal)d.ConstraintIconPx;
-            foreach (var t in new[] { tSkD, tSkL, tBgTD, tBgBD, tBgTL, tBgBL }) t.Text = "";
+            foreach (var t in new[] { tSkD, tSkL, tBgTD, tBgBD, tBgTL, tBgBL, tHatchC, tFillC }) t.Text = "";
+            chHatch.IsChecked = d.SectionHatch;
         };
         var ok = new Button { Content = L("ОК"), Classes = { "accent" }, MinWidth = 96, HorizontalAlignment = HorizontalAlignment.Right };
         ok.Click += (_, _) =>
@@ -222,6 +229,7 @@ public static class DocCommands
             look.SketchColorDark = tSkD.Text?.Trim() ?? ""; look.SketchColorLight = tSkL.Text?.Trim() ?? "";
             look.BackgroundTopDark = tBgTD.Text?.Trim() ?? ""; look.BackgroundBottomDark = tBgBD.Text?.Trim() ?? "";
             look.BackgroundTopLight = tBgTL.Text?.Trim() ?? ""; look.BackgroundBottomLight = tBgBL.Text?.Trim() ?? "";
+            look.SectionHatch = chHatch.IsChecked == true; look.SectionHatchColor = tHatchC.Text?.Trim() ?? ""; look.SectionFillColor = tFillC.Text?.Trim() ?? "";
             prefs.Look = look;
             if ((theme.SelectedIndex == 0) != w.IsDark) w.ApplyTheme(theme.SelectedIndex == 0);
             if ((lang.SelectedIndex == 1) != (prefs.Language == "en")) w.ToggleLanguage();
@@ -246,6 +254,7 @@ public static class DocCommands
                 Row("Иконка на кнопках панелей, пикс.", fPanelIcon), Row("Высота цифр размеров, пикс.", fDim), Row("Толщина линии цифр размеров", fDimLine),
                 Row("Значки связей эскиза, пикс.", fCon), Row("Линии эскиза (тёмная тема)", cSkD), Row("Линии эскиза (светлая тема)", cSkL),
                 Row("Фон вида сверху (тёмная)", cBgTD), Row("Фон вида снизу (тёмная)", cBgBD), Row("Фон вида сверху (светлая)", cBgTL), Row("Фон вида снизу (светлая)", cBgBL),
+                Row("Сечение", chHatch), Row("Цвет штриховки сечения", cHatchC), Row("Цвет заливки сечения", cFillC),
                 resetLook,
             },
         };
@@ -259,6 +268,30 @@ public static class DocCommands
         };
         win.Content = new StackPanel { Margin = new Thickness(18), Spacing = 10, Children = { tabs, ok } };
         await win.ShowDialog(w);
+    }
+
+    /// <summary>k103: палитра цветов (5 оттенков 10 тонов, серые) и «по теме / по материалу» — пустое значение.</summary>
+    public static Flyout ColorPalette(Action<string> set)
+    {
+        var fl = new Flyout();
+        var wrap = new WrapPanel { Orientation = Orientation.Horizontal, Width = 10 * 24 };
+        var hues = new[] { 0, 30, 50, 90, 140, 175, 200, 225, 265, 310 };
+        var levels = new[] { (0.35, 0.95), (0.55, 0.90), (0.75, 0.80), (0.90, 0.60), (0.95, 0.40) };   // (насыщенность, яркость)
+        string Hex(Avalonia.Media.Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+        void Add(Avalonia.Media.Color c)
+        {
+            var b = new Button { Width = 22, Height = 22, Margin = new Thickness(1), Padding = new Thickness(0), Background = new Avalonia.Media.SolidColorBrush(c), BorderThickness = new Thickness(1), BorderBrush = Avalonia.Media.Brushes.Gray };
+            ToolTip.SetTip(b, Hex(c));
+            b.Click += (_, _) => { set(Hex(c)); fl.Hide(); };
+            wrap.Children.Add(b);
+        }
+        foreach (var (sat, val) in levels)
+            foreach (var h in hues) Add(Avalonia.Media.HsvColor.ToRgb(h, sat, val));
+        for (int i = 0; i < 10; i++) { byte g = (byte)(i * 255 / 9); Add(Avalonia.Media.Color.FromRgb(g, g, g)); }
+        var reset = new Button { Content = L("По умолчанию"), HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(1, 6, 1, 0) };
+        reset.Click += (_, _) => { set(""); fl.Hide(); };
+        fl.Content = new StackPanel { Children = { wrap, reset } };
+        return fl;
     }
 
     public static string HelpText() => string.Join("\n", new[]

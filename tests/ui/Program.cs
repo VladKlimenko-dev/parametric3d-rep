@@ -170,6 +170,23 @@ if (only == "probe-tube")
     return 0;
 }
 
+if (only == "probe-formula")
+{
+    // разбор (k103): поле формулы с цветными именами — снимок (надпись поверх текста поля должна совпадать с ним)
+    var ps = DocumentSession.NewPart(); var pp = ps.Part!;
+    pp.AddSketch("S1", Parametric3D.Kernel.Frame3.XY, pp.PlaneXY.Id);
+    var sk0 = pp.Sketches.First(); var l0 = sk0.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(10, 0))); sk0.AddDimension(DimensionType.DistancePointPoint, 10, l0.A, l0.B);
+    var tbx = new TextBox { Text = "s\"S1\".d0 + s\"Nope\".d1 * 2 + d0 - d7", MinWidth = 300 };
+    var fa = new FormulaAssist(tbx, () => pp, () => sk0);
+    var pw = new Window { Width = 420, Height = 90, Content = new StackPanel { Margin = new Thickness(20), Children = { fa.View } } };
+    pw.Show(); Dispatcher.UIThread.RunJobs(); pw.UpdateLayout(); Dispatcher.UIThread.RunJobs();
+    tbx.Focus(); tbx.CaretIndex = tbx.Text!.Length - 1; Dispatcher.UIThread.RunJobs();
+    var frame = pw.CaptureRenderedFrame();
+    frame?.Save(args.Length > 1 ? args[1] : "/tmp/formula.png");
+    Console.WriteLine("spans " + string.Join(",", fa.Spans));
+    return 0;
+}
+
 if (only == "probe-icons")
 {
     // разбор: рамка рисунка каждой иконки (доля листа)
@@ -2852,6 +2869,98 @@ Check("UI-OP-RELEASE", () =>
     Require(alive <= 1, $"replaced parts still alive: {alive} of {weak.Count}");
 });
 
+Check("UI-K103", () =>
+{
+    // k103 (отзыв 18:21): формулы размеров — в параметрах детали (1); подсказка после точки (3); имена в кавычках — синим /
+    // красным (4); цвета и штриховка сечения из настроек (5); ручки сечения (6); подсветка, выбор и двойной щелчок (7)
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var s1 = part.AddSketch("S1", Parametric3D.Kernel.Frame3.XY, part.PlaneXY.Id);
+    { var rt = new RectangleTool(); rt.Click(new SketchInput(s1, new Vector2d(0, 0), null)); rt.Click(new SketchInput(s1, new Vector2d(40, 20), null)); }
+    var ex = new ExtrudeFeature { SketchId = s1.Id }; ex.Side1.Distance = new ValueRef(15); part.AddFeature(ex);
+    s.Document.RebuildDirty();
+    var w = Open(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    var vp = w.ViewPort;
+    // (5) цвета крышек
+    var saved = UserPrefs.Current.Look.Clone();
+    try
+    {
+        var look = UserPrefs.Current.Look;
+        look.SectionHatch = false; look.SectionFillColor = "#FF0000"; UiLook.ApplyToRender(vp.Theme);
+        var (fc, hc) = Parametric3D.Render.Engine.SceneRenderer.CapColors(vp.Theme, new Vector4(0.5f, 0.5f, 0.5f, 1));
+        Require(fc.X > 0.99f && fc.Y < 0.01f && hc == fc, $"section fill / hatch off: {fc} {hc}");
+        look.SectionHatch = true; look.SectionHatchColor = "#00FF00"; UiLook.ApplyToRender(vp.Theme);
+        (fc, hc) = Parametric3D.Render.Engine.SceneRenderer.CapColors(vp.Theme, new Vector4(0.5f, 0.5f, 0.5f, 1));
+        Require(hc.Y > 0.99f && hc.X < 0.01f && fc.X > 0.99f, $"section hatch color: {hc}");
+    }
+    finally { UserPrefs.Current.Look = saved; UiLook.ApplyToRender(vp.Theme); }
+    // (6, 7) сечение: ручки, подсветка, выбор, двойной щелчок
+    vp.ZoomToFit(animate: false);
+    CommandRegistry.Instance["view.section"].Execute(); Run();
+    Require(w.CurrentOperation is SectionOp && vp.Gizmo is { Mode: GizmoMode.MoveRotate }, "section settings handles");
+    w.CommitOperation(); Run();
+    Require(vp.Gizmo == null && !vp.SectionSelected, "handles stay after OK");
+    var c = vp.SectionCorners()!; var pa = vp.Project(c[0])!.Value; var pb = vp.Project(c[1])!.Value;
+    var mid = new Avalonia.Point((pa.X + pb.X) / 2, (pa.Y + pb.Y) / 2);
+    Require(vp.SectionHoverAt(mid) && vp.SectionHover, "section outline is not highlighted under the cursor");
+    Require(!vp.SectionHoverAt(new Avalonia.Point(-500, -500)) && !vp.SectionHover, "hover stays");
+    vp.RaiseSectionClicked(); Run();
+    Require(vp.SectionSelected && vp.Gizmo is { Mode: GizmoMode.MoveRotate } && w.CurrentOperation == null, "click did not select the section");
+    double off0 = vp.Section!.Offset;
+    vp.SimulateGizmoDrag(new GizmoDrag(GizmoPart.AxisZ, new Vector3d(0, 0, 7), 0, KeyModifiers.None));
+    Require(Math.Abs(vp.Section!.Offset - off0 - 7) < 1e-9, $"offset by the handle: {vp.Section.Offset}");
+    vp.SimulateGizmoDrag(new GizmoDrag(GizmoPart.AxisY, Vector3d.Zero, 20, KeyModifiers.None));
+    Require(Math.Abs(vp.Section!.AngleB - 20) < 1e-9 && vp.SectionSelected, $"angle B by the handle: {vp.Section.AngleB}");
+    vp.RaiseSectionDoubleClicked(); Run();
+    Require(w.CurrentOperation is SectionOp so && Math.Abs(so.State.AngleB - 20) < 1e-9 && !vp.SectionSelected && vp.Gizmo is { Mode: GizmoMode.MoveRotate }, "double click did not open the settings");
+    w.CancelOperation(); Run();
+    CommandRegistry.Instance["view.section"].Execute(); Run();
+    Require(vp.SectionPlane == null, "section did not switch off");
+    // (3, 4) поле формулы размера
+    w.EditSketch(s1); s.Document.RebuildDirty(); Run();
+    part = s.Part!;
+    var sk = vp.ActiveSketch!;
+    var top = sk.Entities.OfType<SkLine>().First(l => Math.Abs(l.A.Y - 20) < 1e-9 && Math.Abs(l.B.Y - 20) < 1e-9);
+    var side = sk.Entities.OfType<SkLine>().First(l => Math.Abs(l.A.X - 40) < 1e-9 && Math.Abs(l.B.X - 40) < 1e-9);
+    var dw = sk.AddDimension(DimensionType.DistancePointPoint, 40, top.A, top.B); dw.Locked = true;
+    var dh = sk.AddDimension(DimensionType.DistancePointPoint, 20, side.A, side.B); dh.Locked = true;
+    sk.Solve(s.Document.Solver); vp.RefreshDefaultDimensions();
+    w.EditDimensionValue(dh); Run();
+    var a = w.DimEditAssist!; var tb = w.DimEditBox!;
+    void Type(string t) { tb.CaretIndex = (tb.Text ?? "").Length; tb.RaiseEvent(new TextInputEventArgs { RoutedEvent = InputElement.TextInputEvent, Text = t }); Run(); }
+    tb.Text = "s\"S1\""; Type(".");
+    Require(tb.Text == "s\"S1\"." && a.ListOpen && a.Items.Any(i => i.Label == dw.Name + " = 40"), $"list after the dot: {tb.Text} open {a.ListOpen}: " + string.Join(" | ", a.Items.Select(i => i.Label)));
+    a.Choose(a.Items.FindIndex(i => i.Insert == dw.Name));
+    Require(tb.Text == "s\"S1\"." + dw.Name && !a.ListOpen, "chosen: " + tb.Text);
+    tb.Text = dw.Name + " + "; Type(".");
+    Require(a.ListOpen && a.Items[0].Insert.StartsWith("d"), "top-level list: " + string.Join(" | ", a.Items.Select(i => i.Label)));
+    a.Choose(a.Items.FindIndex(i => i.Insert == dw.Name));
+    Require(tb.Text == dw.Name + " + " + dw.Name, "top-level insert: " + tb.Text);
+    tb.Text = "2"; Type(".");
+    Require(!a.ListOpen, "list on a decimal point");
+    tb.Text = "s\"S1\".d0 + s\"Nope\".d1"; Run();
+    Require(a.Spans.Count == 2 && a.Spans[0].Ok && !a.Spans[1].Ok && a.Spans[1].Start == tb.Text.IndexOf("s\"Nope\""), "quoted names: " + string.Join(",", a.Spans));
+    // 18:52: размеры — зелёным (есть), красным (нет)
+    tb.Text = dw.Name + " + d99 + s\"S1\"." + dh.Name; Run();
+    Require(a.DimSpans.Count == 3 && a.DimSpans[0].Ok && !a.DimSpans[1].Ok && a.DimSpans[2].Ok && a.DimSpans[2].Start == tb.Text.Length - dh.Name.Length, "dimension names: " + string.Join(",", a.DimSpans));
+    tb.Text = dw.Name + " / 2";
+    tb.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter }); Run();
+    Require(dh.Formula == dw.Name + " / 2", "formula: " + dh.Formula);
+    w.FinishSketch(); s.Document.RebuildDirty(); Run();
+    // (1) формула размера — в параметрах детали
+    var dlg = new ParametersDialog(s, part);
+    int lv = Enumerable.Range(0, dlg.LevelCount).First(i => dlg.LevelTitle(i) == Loc.L("Деталь «{0}»", part.Name));
+    dlg.SelectLevel(lv); dlg.Show(); Run();
+    string path = "s\"S1\"." + dh.Name;
+    int row = Enumerable.Range(0, dlg.RowCount).FirstOrDefault(i => dlg.RowName(i) == path, -1);
+    Require(row >= 0 && dlg.RowResult(row).StartsWith("20"), "formula dimension is not in the part parameters: " + string.Join(" | ", Enumerable.Range(0, dlg.RowCount).Select(dlg.RowName)));
+    dlg.SetRowValue(row, dw.Name + " / 4");
+    Require(dlg.Apply(), "apply"); dlg.Close();
+    s.Document.RebuildDirty(); Run();
+    var dh2 = s.Part!.Sketches.First().Dimensions.First(d => d.Index == dh.Index);
+    Require(dh2.Formula == dw.Name + " / 4" && Math.Abs(dh2.Value - 10) < 1e-9, $"edited in the part parameters: {dh2.Formula} = {dh2.Value}");
+});
+
 Check("UI-PARAMS-K102", () =>
 {
     // k102 (отзыв 15:15): идентификаторы размеров (TAB, строка состояния, вставка щелчком в правку), формулы размеров,
@@ -3016,9 +3125,9 @@ Check("UI-SECTION-K99", () =>
     op.State.Offset = 5; op.FieldChanged();
     Require((vp.SectionPlane!.Value.At - at0 - vp.SectionPlane.Value.N * 5).Length < 1e-9 || (vp.SectionPlane!.Value.At - at0 + vp.SectionPlane.Value.N * 5).Length < 1e-9, "offset does not move the plane along the base normal");
     // (4) ручки по полю
-    Require(vp.Gizmo is { Mode: GizmoMode.Move } g0 && g0.Has(GizmoPart.AxisZ) && !g0.Has(GizmoPart.AxisX), "offset handle");
+    // k103: ручки сразу все — стрелка смещения и кольца углов
+    Require(vp.Gizmo is { Mode: GizmoMode.MoveRotate } g0 && g0.Has(GizmoPart.AxisZ) && g0.Has(GizmoPart.AxisX) && g0.Has(GizmoPart.AxisY), "section handles");
     op.SetGizmoField(1);
-    Require(vp.Gizmo is { Mode: GizmoMode.Rotate } g1 && g1.Has(GizmoPart.AxisX) && !g1.Has(GizmoPart.AxisY), "angle A handle");
     vp.SimulateGizmoDrag(new GizmoDrag(GizmoPart.AxisX, Vector3d.Zero, 30, Avalonia.Input.KeyModifiers.None));
     Require(Math.Abs(op.State.AngleA - 30) < 1e-9 && Math.Abs(Math.Abs(vp.SectionPlane!.Value.N.Y) - Math.Cos(Math.PI / 6)) < 1e-9, $"angle A by the handle: {op.State.AngleA}, n {vp.SectionPlane!.Value.N}");
     // начало: по умолчанию — центр основы; «начало основы» выключает «центр» и «точку»
@@ -3036,7 +3145,7 @@ Check("UI-SECTION-K99", () =>
     // щелчок по контуру — настройки
     var c = vp.SectionCorners()!; var pa = vp.Project(c[0])!.Value; var pb = vp.Project(c[1])!.Value;
     Require(vp.SectionOutlineHit(new Avalonia.Point((pa.X + pb.X) / 2, (pa.Y + pb.Y) / 2)), "outline is not hit");
-    vp.RaiseSectionClicked(); Run();
+    vp.RaiseSectionDoubleClicked(); Run();
     Require(w.CurrentOperation is SectionOp so2 && Math.Abs(so2.State.AngleA - 30) < 1e-9, "settings reopened without the current values");
     ((SectionOp)w.CurrentOperation!).State.Offset = 50; w.CurrentOperation!.FieldChanged();
     w.CancelOperation(); Run();

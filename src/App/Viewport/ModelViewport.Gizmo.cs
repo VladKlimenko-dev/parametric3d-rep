@@ -5,7 +5,8 @@ using Parametric3D.Render.Engine;
 
 namespace Parametric3D.App.Viewport;
 
-public enum GizmoMode { Move, Rotate, Scale }
+/// <summary>MoveRotate (k103, ручки сечения): стрелка вдоль Z — перенос, кольца вокруг X и Y — поворот.</summary>
+public enum GizmoMode { Move, Rotate, Scale, MoveRotate }
 
 /// <summary>Часть гизмо: ось (0–2), плоскость поперёк оси (3–5: YZ, XZ, XY), угол / центр (6 — пропорционально, свободно).</summary>
 public enum GizmoPart { None = -1, AxisX = 0, AxisY = 1, AxisZ = 2, PlaneYZ = 3, PlaneXZ = 4, PlaneXY = 5, Uniform = 6 }
@@ -58,6 +59,10 @@ public sealed partial class ModelViewport
 
     private static Vector3 F(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
     private Vector3d GzAxis(GizmoSpec g, int i) => i == 0 ? g.X : i == 1 ? g.Y : g.Z;
+    /// <summary>Часть — кольцо поворота (у Rotate — все оси, у MoveRotate — X и Y).</summary>
+    private static bool GzRot(GizmoSpec g, GizmoPart part) => g.Mode == GizmoMode.Rotate || g.Mode == GizmoMode.MoveRotate && part is GizmoPart.AxisX or GizmoPart.AxisY;
+    /// <summary>Часть есть у гизмо (MoveRotate: кольца X, Y и стрелка Z).</summary>
+    private static bool GzHas(GizmoSpec g, GizmoPart part) => g.Has(part) && (g.Mode != GizmoMode.MoveRotate || part is GizmoPart.AxisX or GizmoPart.AxisY or GizmoPart.AxisZ);
 
     /// <summary>Квадрат плоскости поперёк оси k: углы в мире.</summary>
     private Vector3d[] GzPlaneQuad(GizmoSpec g, int k)
@@ -111,12 +116,15 @@ public sealed partial class ModelViewport
         double L = GizmoLen;
         if (ToScreen(F(g.Origin)) is not { } o) return GizmoPart.None;
         double Dist(Point a) => Math.Sqrt((a.X - p.X) * (a.X - p.X) + (a.Y - p.Y) * (a.Y - p.Y));
-        if (g.Mode == GizmoMode.Rotate)
+        if (g.Mode is GizmoMode.Rotate or GizmoMode.MoveRotate)
         {
             GizmoPart best = GizmoPart.None; double bd = 7;
+            // MoveRotate: наконечник и стержень стрелки Z — перенос
+            if (g.Mode == GizmoMode.MoveRotate && GzHas(g, GizmoPart.AxisZ) && ToScreen(F(g.Origin)) is { } zo && ToScreen(F(g.Origin + g.Z * L)) is { } zt)
+                if (Dist(zt) < 10 || SegDist(p, zo, zt) < 6) return GizmoPart.AxisZ;
             for (int k = 0; k < 3; k++)
             {
-                if (!g.Has((GizmoPart)k)) continue;
+                if (!g.Has((GizmoPart)k) || !GzRot(g, (GizmoPart)k)) continue;
                 var ring = GzRing(g, k);
                 Point? prev = null;
                 foreach (var w in ring)
@@ -183,7 +191,7 @@ public sealed partial class ModelViewport
         double L = GizmoLen;
         Vector3d? dir = part switch
         {
-            GizmoPart.AxisX or GizmoPart.AxisY or GizmoPart.AxisZ when g.Mode != GizmoMode.Rotate => GzAxis(g, (int)part),
+            GizmoPart.AxisX or GizmoPart.AxisY or GizmoPart.AxisZ when !GzRot(g, part) => GzAxis(g, (int)part),
             GizmoPart.Uniform when g.Mode == GizmoMode.Scale => (g.X + g.Y + g.Z).Normalized(),
             _ => null,
         };
@@ -192,7 +200,7 @@ public sealed partial class ModelViewport
             var ax = new Vector2((float)(b.X - a.X), (float)(b.Y - a.Y));
             if (ax.Length > 1e-3f) { _gzWorldPerPx = L / ax.Length; _gzAxis = ax / ax.Length; }
         }
-        if (g.Mode != GizmoMode.Rotate && (part >= GizmoPart.PlaneYZ && part <= GizmoPart.PlaneXY || part == GizmoPart.Uniform && g.Mode == GizmoMode.Move))
+        if (!GzRot(g, part) && (part >= GizmoPart.PlaneYZ && part <= GizmoPart.PlaneXY || part == GizmoPart.Uniform && g.Mode == GizmoMode.Move))
             RayPlane(p, g.Origin, GzPlaneNormal(g, part), out _gzPlaneStart);
         _overlayDirty = true; Redraw();
     }
@@ -202,7 +210,7 @@ public sealed partial class ModelViewport
     {
         if (_gzStartSpec is not { } g || _gzActive == GizmoPart.None) return null;
         var part = _gzActive;
-        if (g.Mode == GizmoMode.Rotate)
+        if (GzRot(g, part))
         {
             if (ToScreen(F(g.Origin)) is not { } o) return null;
             double a0 = Math.Atan2(-(_gzDown.Y - o.Y), _gzDown.X - o.X), a1 = Math.Atan2(-(p.Y - o.Y), p.X - o.X);
@@ -271,14 +279,29 @@ public sealed partial class ModelViewport
         float L = (float)GizmoLen;
         var o = F(g.Origin);
         var view = Camera.Forward;
-        if (g.Mode == GizmoMode.Rotate)
+        if (g.Mode is GizmoMode.Rotate or GizmoMode.MoveRotate)
         {
             for (int k = 0; k < 3; k++)
             {
-                if (!g.Has((GizmoPart)k)) continue;
+                if (!g.Has((GizmoPart)k) || !GzRot(g, (GizmoPart)k)) continue;
                 var ring = GzRing(g, k);
                 var c = C((GizmoPart)k, cols[k]);
                 for (int i = 0; i + 1 < ring.Count; i++) lines.Add(Inst(F(ring[i]), F(ring[i + 1]), c, on == (GizmoPart)k ? 3f : 2f, 0));
+            }
+            if (g.Mode == GizmoMode.MoveRotate && GzHas(g, GizmoPart.AxisZ))
+            {
+                var ax = F(g.Z);
+                var c = C(GizmoPart.AxisZ, cols[2]);
+                var tip = o + ax * L;
+                lines.Add(Inst(o + ax * (0.15f * L), tip, c, on == GizmoPart.AxisZ ? 3.2f : 2.4f, 0));
+                var side = Vector3.Cross(ax, view);
+                if (side.LengthSquared < 1e-8f) side = Vector3.Cross(ax, Vector3.UnitY);
+                if (side.LengthSquared < 1e-8f) side = Vector3.Cross(ax, Vector3.UnitX);
+                side = side.Normalized();
+                float h = L * 0.2f;
+                lines.Add(Inst(tip, tip - ax * h + side * (h * 0.45f), c, 2.4f, 0));
+                lines.Add(Inst(tip, tip - ax * h - side * (h * 0.45f), c, 2.4f, 0));
+                pts.Add(new PointInst { P = tip, Color = SceneData.Pack(c), Px = 7, Shape = 0 });
             }
             pts.Add(new PointInst { P = o, Color = SceneData.Pack(new Vector4(0.92f, 0.93f, 0.95f, 1)), Px = 6, Shape = 0 });
             return;
