@@ -27,6 +27,9 @@ public sealed class RenderTheme
     public float EdgeWidth = 1.5f, SilhouetteWidth = 1.5f, SketchWidth = 1.8f, DatumWidth = 1.2f, HighlightBonus = 1.4f;
     public float VertexSize = 6f, VertexHighlightSize = 9f, OriginSize = 9f;
     public bool Dark;
+    /// <summary>k103 (замечание 5): штриховка крышек сечения; цвета штриховки и заливки (W = 0 — по материалу детали).</summary>
+    public bool SectionHatch = true;
+    public Vector4 SectionHatchColor, SectionFillColor;
 
     private static Vector4 C(int r, int g, int b, float a = 1f) => new(r / 255f, g / 255f, b / 255f, a);
 

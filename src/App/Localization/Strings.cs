@@ -43,6 +43,13 @@ public static class Strings
         ["Начало координат эскиза"] = "Sketch origin", ["Убрать ссылку"] = "Remove the reference", ["Ссылка добавлена: {0}"] = "Reference added: {0}",
         ["Уже в ссылках"] = "Already a reference", ["Ссылка не найдена"] = "Reference not found", ["Ребро"] = "Edge", ["Вершина"] = "Vertex",
         ["Угол, °"] = "Angle, °", ["Размер, мм"] = "Dimension, mm", ["Не число и не формула: {0}"] = "Not a number or a formula: {0}",
+        // k103: сечение, цвета
+        ["Плоскость сечения"] = "Section plane",
+        ["Штриховать сечение деталей и сборок"] = "Hatch the section of parts and assemblies",
+        ["Цвет штриховки сечения"] = "Section hatch color",
+        ["Цвет заливки сечения"] = "Section fill color",
+        ["Выбрать цвет"] = "Pick a color",
+        ["По умолчанию"] = "Default",
         // k102: формулы размеров, окно параметров
         ["Не число и не формула"] = "Not a number or a formula",
         ["Размер по формуле не выполняется: эскиз противоречив — «Разрешить эскиз»"] = "The formula dimension cannot be satisfied: the sketch is inconsistent — use “Resolve sketch”",

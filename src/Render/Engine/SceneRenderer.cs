@@ -621,6 +621,23 @@ public sealed class SceneRenderer : IDisposable
         return (step, ang, !metal);
     }
 
+    public static readonly bool CapColorsOff = Environment.GetEnvironmentVariable("P3D_CAPCOLORS") == "0";
+
+    /// <summary>
+    /// k103 (замечание 5): ЦВЕТА КРЫШКИ СЕЧЕНИЯ по настройкам: заливка — своя или по материалу (темнее), штриховка — своя,
+    /// по материалу или выключена (цвет заливки — линий не видно). Мутация P3D_CAPCOLORS=0 — настройки не действуют.
+    /// </summary>
+    public static (Vector4 Fill, Vector4 Hatch) CapColors(RenderTheme th, Vector4 material)
+    {
+        var fill = new Vector4(material.X * 0.82f, material.Y * 0.82f, material.Z * 0.82f, 1);
+        var hatch = new Vector4(material.X * 0.28f, material.Y * 0.28f, material.Z * 0.30f, 1);
+        if (CapColorsOff) return (fill, hatch);
+        if (th.SectionFillColor.W > 0) fill = new Vector4(th.SectionFillColor.Xyz, 1);
+        if (!th.SectionHatch) hatch = fill;
+        else if (th.SectionHatchColor.W > 0) hatch = new Vector4(th.SectionHatchColor.Xyz, 1);
+        return (fill, hatch);
+    }
+
     private void DrawCaps(FrameParams f)
     {
         CapsDrawn = 0;
@@ -656,9 +673,7 @@ public sealed class SceneRenderer : IDisposable
             GL.StencilFunc(StencilFunction.Notequal, 0, 0xFF);
             GL.StencilOp(StencilOp.Zero, StencilOp.Zero, StencilOp.Zero);
             var m0 = ms[0];
-            var fill = m0.MatColor.W > 0 ? m0.MatColor : m0.Color;
-            var fillC = new Vector4(fill.X * 0.82f, fill.Y * 0.82f, fill.Z * 0.82f, 1);
-            var hatchC = new Vector4(fill.X * 0.28f, fill.Y * 0.28f, fill.Z * 0.30f, 1);
+            var (fillC, hatchC) = CapColors(Theme, m0.MatColor.W > 0 ? m0.MatColor : m0.Color);
             var (step, ang, cross) = HatchOf(pi, m0.MatMetal > 0.5f || m0.MatColor.W <= 0, HatchStep);
             _cap.Use();
             _cap.Set("uView", f.View);

@@ -429,6 +429,79 @@ public sealed class Sketch : ModelItem
         }
     }
 
+    /// <summary>k103: таблица, по которой последний раз вычислялись формулы размеров (имена вне эскиза — по ней).</summary>
+    public ParameterTable? FormulaScope;
+    /// <summary>Решение при перетаскивании: слабые размеры в формулах — по текущей геометрии.</summary>
+    private bool _liveMeasure;
+    public static readonly bool FormulaLiveOff = Environment.GetEnvironmentVariable("P3D_SKFORMULALIVE") == "0";
+
+    /// <summary>
+    /// k103 (замечание 2): ФОРМУЛА РАЗМЕРА В РЕШАТЕЛЕ. Формула ссылается на размеры этого же эскиза — значение размера
+    /// вычисляется по текущей геометрии: слабый (измеряющий) размер — измерением, управляющий — своим значением, размер
+    /// с формулой — его формулой. Решатель держит размер равным формуле, поэтому при перетаскивании точки отрезка со
+    /// слабым размером d1 отрезок с размером d2 = d1 + 5 меняется вместе с ним. null — формулы нет или в ней нет своих
+    /// размеров (её значение уже подставлено в размер). Мутация P3D_SKFORMULALIVE=0.
+    /// </summary>
+    public Func<double>? LiveFormula(SkDimension d)
+    {
+        if (FormulaLiveOff || string.IsNullOrWhiteSpace(d.Formula)) return null;
+        if (!ExprParser.TryParse(d.Formula!, out Expr? e, out _) || e == null) return null;
+        var refs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        e.CollectRefs(refs);
+        if (!refs.Any(r => DimensionByName(r) is { } x && !ReferenceEquals(x, d))) return null;
+        var scope = new LiveScope(this, FormulaScope, d);
+        var geom = FormulaScope?.Geometry;
+        return () =>
+        {
+            try
+            {
+                double v = e.Eval(scope, geom);
+                if (double.IsNaN(v) || double.IsInfinity(v)) return d.Value;
+                return d.Type is DimensionType.CoordX or DimensionType.CoordY && d.Value < 0 && v > 0 ? -v : v;
+            }
+            catch { return d.Value; }
+        };
+    }
+
+    sealed class LiveScope : IValueResolver
+    {
+        readonly Sketch _sk; readonly ParameterTable? _t; readonly SkDimension _self; int _depth;
+        readonly Dictionary<SkDimension, Expr?> _parsed = new();
+        public LiveScope(Sketch sk, ParameterTable? t, SkDimension self) { _sk = sk; _t = t; _self = self; }
+        public bool TryValue(string name, out double value)
+        {
+            if (_sk.DimensionByName(name) is { } d)
+            {
+                if (ReferenceEquals(d, _self)) { value = d.Value; return true; }
+                if (!string.IsNullOrWhiteSpace(d.Formula) && _depth < 8)
+                {
+                    if (!_parsed.TryGetValue(d, out var pe)) { ExprParser.TryParse(d.Formula!, out pe, out _); _parsed[d] = pe; }
+                    if (pe != null)
+                    {
+                        _depth++;
+                        try { value = pe.Eval(this, _t?.Geometry); if (!double.IsNaN(value)) return true; }
+                        catch { }
+                        finally { _depth--; }
+                    }
+                }
+                // без перетаскивания исходный слабый размер стоит на месте (меняется зависимый); при перетаскивании — измерение
+                if (d.IsDriving || !_sk._liveMeasure) { value = d.Value; return true; }
+                double m = DimensionMeasure.Value(d);
+                value = double.IsNaN(m) ? d.Value : m;
+                return true;
+            }
+            if (_t != null) return _t.TryValue(name, out value);
+            value = 0; return false;
+        }
+    }
+
+    /// <summary>k103: значения размеров с формулами от своих размеров — по геометрии после решения.</summary>
+    public void RefreshLiveFormulas()
+    {
+        foreach (var d in Dimensions)
+            if (d.Enabled && LiveFormula(d) is { } f) { double v = f(); if (!double.IsNaN(v)) d.Value = v; }
+    }
+
     public SkDimension AddDimension(DimensionType t, double value, params SkEntity[] items)
     {
         var d = new SkDimension(t, value, items);
@@ -470,6 +543,7 @@ public sealed class Sketch : ModelItem
     /// <summary>Подставляет значения формул размеров из таблицы параметров.</summary>
     public void UpdateDimensionsFromParameters(ParameterTable table)
     {
+        FormulaScope = table;
         foreach (var d in Dimensions)
         {
             if (string.IsNullOrWhiteSpace(d.Formula)) { d.Error = null; continue; }
@@ -567,7 +641,10 @@ public sealed class Sketch : ModelItem
         // одного спорщика — второй сам перестаёт быть конфликтующим.
         ConstraintConflicts.Refresh(this);
 
-        LastSolve = solver.Solve(this, dragged, out int dof);
+        _liveMeasure = dragged != null;
+        try { LastSolve = solver.Solve(this, dragged, out int dof0); DegreesOfFreedom = dof0; }
+        finally { _liveMeasure = false; }
+        int dof = DegreesOfFreedom;
         DegreesOfFreedom = dof;
         // KRN-08 (08.9): условия выполнены выродившейся геометрией (отрезок нулевой длины, окружность нулевого радиуса) —
         // особое состояние. По рангу якобиана его не отличить: решатель останавливается в 1e-9 от вырождения, где ранг
@@ -580,6 +657,7 @@ public sealed class Sketch : ModelItem
         }
 
         RefreshMeasuredDimensions();
+        RefreshLiveFormulas();
         return LastSolve;
     }
 
