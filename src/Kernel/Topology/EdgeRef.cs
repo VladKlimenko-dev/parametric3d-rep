@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 
 namespace Parametric3D.Kernel.Topology;
 
@@ -118,6 +118,33 @@ public readonly struct EdgeRef
 
     private bool Legacy => FaceA != null && FaceA[0] != '#';
 
+    /// <summary>Мутация P3D_TAGROLES=0: подписи граней сравниваются как есть (без ролей путей построения).</summary>
+    static readonly bool RolesOff = Environment.GetEnvironmentVariable("P3D_TAGROLES") == "0";
+    /// <summary>
+    /// k104: РОЛЬ ГРАНИ НЕ ЗАВИСИТ ОТ ПУТИ ПОСТРОЕНИЯ. Выдавливание по окружности строится точным путём (стенка «quadric:hole» /
+    /// «quadric:boss», дно «quadric:hole-bottom», торец «quadric:boss-top») или общим (стенка «extrude[0]:side[0.0]», торец
+    /// «extrude[0]:top») — смотря по тому, что было в теле до неё. После перестановки операций в дереве путь менялся, и
+    /// скругление или фаска на кромке бобышки/отверстия теряли ребро («the edge … no longer exists»). Подписи одной операции
+    /// (одинаковый префикс «#ключ/») сравниваются по роли: стенка и торец. У одной операции из одной окружности не бывает
+    /// и стенки «quadric», и боковой «extrude[0]:side[0.0]» сразу, поэтому смешения нет.
+    /// </summary>
+    public static string Role(string? tag)
+    {
+        if (string.IsNullOrEmpty(tag)) return tag ?? "";
+        if (RolesOff) return tag;
+        string c = Canon(tag);
+        string bare = Bare(c);
+        string prefix = c.Length > bare.Length ? c[..(c.Length - bare.Length)] : "";
+        string? role = bare switch
+        {
+            "hole:wall" or "quadric:hole" or "quadric:boss" or "extrude[0]:side[0.0]" => "@wall",
+            "hole:bottom" or "quadric:hole-bottom" or "quadric:boss-top" or "extrude[0]:top" => "@cap",
+            _ => null,
+        };
+        return role == null ? c : prefix + role;
+    }
+    static string RoleKey(string key) => string.Join(";", new SortedSet<string>(key.Split(';', StringSplitOptions.RemoveEmptyEntries).Select(Role), StringComparer.Ordinal));
+
     /// <summary>Только грани ребра (без концов).</summary>
     public bool FacesMatch(TEdge e)
     {
@@ -125,7 +152,15 @@ public readonly struct EdgeRef
         string? a = e.FaceA?.Tag, b = e.FaceB?.Tag;
         if (Legacy) { a = a == null ? null : Bare(a); b = b == null ? null : Bare(b); }
         if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
-        return (FaceA == a && FaceB == b) || (FaceA == b && FaceB == a);
+        return Same(a, b);
+    }
+
+    /// <summary>Грани ребра a, b — те же, что у ссылки (по ролям, в любом порядке).</summary>
+    private bool Same(string a, string b)
+    {
+        if ((FaceA == a && FaceB == b) || (FaceA == b && FaceB == a)) return true;
+        string ra = Role(FaceA), rb = Role(FaceB), ea = Role(a), eb = Role(b);
+        return (ra == ea && rb == eb) || (ra == eb && rb == ea);
     }
 
     public bool NamesMatch(TEdge e)
@@ -134,7 +169,7 @@ public readonly struct EdgeRef
         string? a = e.FaceA?.Tag, b = e.FaceB?.Tag;
         if (Legacy) { a = a == null ? null : Bare(a); b = b == null ? null : Bare(b); }
         if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
-        if (!((FaceA == a && FaceB == b) || (FaceA == b && FaceB == a))) return false;
+        if (!Same(a, b)) return false;
         // НОМЕР КУСКА ЗДЕСЬ НЕ ПРОВЕРЯЕТСЯ. Он сдвигается, если новая операция разрежет ребро
         // ещё раз: измерено, что ссылка на кусок при x=80 после второго реза уверенно находила
         // кусок при x=30. Номер используется как ПРЕДПОЧТЕНИЕ при выборе (см. FilletOp.Resolve),
@@ -148,7 +183,10 @@ public readonly struct EdgeRef
         // KRN08-LONG-HISTORY-EDITS). Мутация P3D_ENDKEYUNKNOWN=0.
         if (!EndKeyUnknownOff && (e0.Length == 0 || e1.Length == 0)) return true;
         if (Legacy) { e0 = BareKey(e0); e1 = BareKey(e1); }
-        return (End0 == e0 && End1 == e1) || (End0 == e1 && End1 == e0);
+        if ((End0 == e0 && End1 == e1) || (End0 == e1 && End1 == e0)) return true;
+        if (RolesOff) return false;
+        string r0 = RoleKey(End0), r1 = RoleKey(End1), k0 = RoleKey(e0), k1 = RoleKey(e1);
+        return (r0 == k0 && r1 == k1) || (r0 == k1 && r1 == k0);
     }
 
     /// <summary>Те же концы, в любом порядке: направление ребра не хранится.</summary>

@@ -1,4 +1,4 @@
-using System.Windows.Input;
+﻿using System.Windows.Input;
 using Avalonia.Input;
 
 namespace Parametric3D.App.Commands;
@@ -29,6 +29,16 @@ public sealed class AppCommand : ICommand
     public Func<bool>? IsChecked { get; init; }
 
     public bool Enabled => CanRun?.Invoke() ?? true;
+    /// <summary>k104: почему команда сейчас недоступна (подсказка кнопки и пункта меню); null — без объяснения.</summary>
+    public Func<string?>? WhyDisabled { get; init; }
+
+    /// <summary>Подсказка сейчас: имя, клавиша, описание и — у недоступной — причина.</summary>
+    public string TooltipNow()
+    {
+        string t = Tooltip + (Description != null ? "\n" + Loc.L(Description) : "");
+        if (!Enabled && WhyDisabled?.Invoke() is { Length: > 0 } why) t += "\n" + Loc.L("Недоступно: ") + why;
+        return t;
+    }
 
     /// <summary>Имя на текущем языке.</summary>
     public string Text => Loc.L(Label);

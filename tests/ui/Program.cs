@@ -170,6 +170,55 @@ if (only == "probe-tube")
     return 0;
 }
 
+if (only == "probe-edges")
+{
+    // разбор: рёбра детали после построения (теги граней, концы)
+    var (dd, pp) = args[1] == "plate" ? ReorderModels.Plate(1) : ReorderModels.BoxHoleBoss(1);
+    if (args.Length > 3) { pp.MoveFeature(pp.Features[int.Parse(args[2])], int.Parse(args[3])); dd.RebuildDirty(); }
+    foreach (var f in pp.Features.OfType<RoundFeature>()) foreach (var r in f.Edges) Console.WriteLine($"R {f.Name} {r.Start} {r.End} A {r.FaceA} B {r.FaceB} e0 {r.End0} e1 {r.End1}");
+    foreach (var f in pp.Features) Console.WriteLine($"F {f.Name} {f.Key} err {f.Error} area {ReorderModels.AreaOf(pp, f):0.###}");
+    foreach (var fc in pp.Bodies.SelectMany(b => b.Faces).Where(x => x.Tag != null && x.Tag.Contains("round")))
+        Console.WriteLine($"FACE {fc.Id} {fc.Surface.GetType().Name} {fc.Tag} loops {fc.Loops.Count} edges {fc.Loops.Sum(l => l.CoEdges.Count)}");
+    Console.WriteLine("V " + pp.Volume + " warnings " + string.Join(" | ", pp.Warnings));
+    foreach (var e in pp.Bodies.SelectMany(b => b.Edges).Where(e => e.Curve is not Parametric3D.Kernel.Curves.LineCurve3))
+        Console.WriteLine($"E {e.Id} {e.Curve.GetType().Name} {e.V0.P} {e.V1.P} mid {e.Curve.PointAt(0.5)} A {e.FaceA?.Tag} B {e.FaceB?.Tag} tag {e.Tag}");
+    return 0;
+}
+
+if (only == "probe-delrev")
+{
+    var ds = DocumentSession.NewPart(); var dp = ds.Part!;
+    var sk = dp.AddSketch("S1", Parametric3D.Kernel.Frame3.XZ, dp.PlaneXZ.Id);
+    foreach (var (a, b) in new[] { ((10.0, 0.0), (20.0, 0.0)), ((20.0, 0.0), (20.0, 10.0)), ((20.0, 10.0), (10.0, 10.0)), ((10.0, 10.0), (10.0, 0.0)) })
+        sk.AddEntity(new SkLine(new SkPoint(a.Item1, a.Item2), new SkPoint(b.Item1, b.Item2)));
+    var ax = new SkLine(new SkPoint(0, 0), new SkPoint(0, 10)) { Role = SkRole.Centerline }; sk.AddEntity(ax);
+    var rv = new RevolveFeature { SketchId = sk.Id, AxisEntityId = ax.Id }; dp.AddFeature(rv);
+    ds.Document.RebuildDirty();
+    var w = Open(ds);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    Run();
+    Console.WriteLine($"err {rv.Error} sketches {dp.Sketches.Count()}");
+    w.SelectItem(rv); Run();
+    Console.WriteLine("sel " + string.Join(",", w.SelectedItems().Select(i => i.GetType().Name + ":" + i.Name)));
+    CommandRegistry.Instance["edit.delete"].Execute(); Run();
+    var p2 = ds.Part!;
+    Console.WriteLine($"after: features {p2.Features.Count} sketches {string.Join(",", p2.Sketches.Select(k => k.Name + " parent " + k.Parent?.GetType().Name))}");
+    foreach (var k in p2.Sketches.ToList())
+    {
+        w.SelectItem(k); Run();
+        Console.WriteLine("sel2 " + string.Join(",", w.SelectedItems().Select(i => i.GetType().Name + ":" + i.Name)) + " enabled " + CommandRegistry.Instance["edit.delete"].Enabled);
+    }
+    return 0;
+}
+
+if (only == "probe-reorder")
+{
+    var bad = ReorderModels.CheckAll((p, f) => TreeCommands.MoveRange(p, f), verbose: true);
+    Console.WriteLine("BAD " + bad.Count);
+    foreach (var b in bad) Console.WriteLine("BAD " + b);
+    return 0;
+}
+
 if (only == "probe-formula")
 {
     // разбор (k103): поле формулы с цветными именами — снимок (надпись поверх текста поля должна совпадать с ним)
@@ -2867,6 +2916,49 @@ Check("UI-OP-RELEASE", () =>
     if (alive > 0 && Environment.GetEnvironmentVariable("P3D_RELDBG") == "1") PathTo(weak.First(x => x.IsAlive && !ReferenceEquals(x.Target, s0.Part)).Target!, new (object, string)[] { (w0, "window"), (s0, "session") });
     // последняя заменённая может держаться временно (показ до перестроения новой), прежние — нет
     Require(alive <= 1, $"replaced parts still alive: {alive} of {weak.Count}");
+});
+
+Check("UI-REORDER-K104", () =>
+{
+    // k104 (отзыв 19:43): перестановка операций в дереве — на разных деталях и размерах (брусок с отверстием и бобышкой,
+    // уголок с пазом, пластина с отверстиями; ×0.2, ×1, ×7): каждая допустимая перестановка строится без ошибок, по
+    // отметке — как с нуля, скругления и фаски — на всех своих рёбрах; перетаскивание мышью по дереву
+    var bad = ReorderModels.CheckAll((p, f) => TreeCommands.MoveRange(p, f));
+    Require(bad.Count == 0, $"{bad.Count} bad reorders: " + string.Join(" | ", bad.Take(6)));
+    // вырез не встаёт выше первого тела
+    var (_, bp) = ReorderModels.BoxHoleBoss(1);
+    var cut = bp.Features[1];
+    Require(TreeCommands.MoveRange(bp, cut).Lo >= 1 && TreeCommands.MoveRange(bp, bp.Features[0]).Hi == 0, $"cut above the first body: {TreeCommands.MoveRange(bp, cut)} / base {TreeCommands.MoveRange(bp, bp.Features[0])}");
+    // мышью: фаска (3) — под бобышку (4)
+    var (pl, _) = Parametric3D.Model.DocumentFile.Load(Parametric3D.Model.DocumentFile.Save(bp));
+    var s = DocumentSession.FromPart(pl, "box");
+    s.Document.RebuildDirty();
+    var w = Open(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    Run();
+    var part = s.Part!;
+    var ch = part.Features[3]; var boss = part.Features[4];
+    var r0 = w.TreeRowInWindow(ch); var r1 = w.TreeRowInWindow(boss);
+    Require(r0 != null && r1 != null, "tree rows not found");
+    var a = r0!.Value.Center; var b = new Avalonia.Point(r1!.Value.Center.X, r1.Value.Bottom - 2);
+    w.MouseDown(a, MouseButton.Left); Run();
+    for (int i = 1; i <= 8; i++) { w.MouseMove(new Avalonia.Point(a.X + (b.X - a.X) * i / 8, a.Y + (b.Y - a.Y) * i / 8), RawInputModifiers.LeftMouseButton); Run(); }
+    w.MouseUp(b, MouseButton.Left); Run();
+    s.Document.RebuildDirty(); Run();
+    part = s.Part!;
+    Require(part.Features[4].Key == ch.Key && part.Features[3].Key == boss.Key, "mouse drag did not move the chamfer: " + string.Join(", ", part.Features.Select(f => f.Name)) + " toast " + w.ToastShown);
+    Require(part.Features.All(f => f.Error == null), "errors after the drag: " + string.Join("; ", part.Features.Where(f => f.Error != null).Select(f => f.Error)));
+    // (22:51) почему не удаляется: основная плоскость — причина в подсказке
+    w.SelectItem(part.PlaneXY); Run();
+    var del = CommandRegistry.Instance["edit.delete"];
+    Require(!del.Enabled && del.TooltipNow().Contains(Loc.L("основные плоскости и начало координат детали не удаляются")), "delete reason: " + del.TooltipNow());
+    // эскиз, которым пользуется другая операция, остаётся — с сообщением
+    var s2 = part.Sketches.First(k => k.Name == "S2");
+    var ex2 = new ExtrudeFeature { SketchId = s2.Id, Cut = true }; ex2.Side1.Distance = new ValueRef(5); part.AddFeature(ex2);
+    s.Document.RebuildDirty(); Run();
+    w.SelectItem(part.Features[1]); Run();
+    del.Execute(); Run();
+    Require(s.Part!.Sketches.Any(k => k.Name == "S2") && w.ToastShown.Contains("S2"), "shared sketch: " + w.ToastShown);
 });
 
 Check("UI-K103", () =>

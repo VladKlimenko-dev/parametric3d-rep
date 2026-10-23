@@ -240,8 +240,30 @@ public static class TreeCommands
             var gsk = Parametric3D.Model.Dependencies.SketchesOf(g);
             if (Parents(part, g).Contains(f) || part.Sketches.Any(s => gsk.Contains(s.Id) && RefersToObj(s, f.Key))) hi = Math.Min(hi, k - 1);
         }
+        // k104: операция, которой нужно тело (вырез, скругление, фаска…), не встаёт выше первого тела — вырез первым ничего
+        // не вырезал молча (объём детали менялся без ошибки); и первое тело не уходит ниже такой операции
+        if (!BodyOrderOff)
+        {
+            bool Ok(int to)
+            {
+                var order = part.Features.Where(x => !ReferenceEquals(x, f)).ToList();
+                order.Insert(Math.Clamp(to, 0, order.Count), f);
+                int firstBody = order.FindIndex(x => !x.Suppressed && CreatesBody(x));
+                int firstNeed = order.FindIndex(x => !x.Suppressed && !CreatesBody(x) && NeedsBody(x));
+                return firstNeed < 0 || firstBody >= 0 && firstBody < firstNeed;
+            }
+            while (lo <= hi && !Ok(lo)) lo++;
+            while (hi >= lo && !Ok(hi)) hi--;
+            if (lo > hi) return (me, me);
+        }
         return (lo, hi);
     }
+
+    static readonly bool BodyOrderOff = Environment.GetEnvironmentVariable("P3D_MOVEBODYORDER") == "0";
+    /// <summary>Операция создаёт тело: добавляющая по эскизу (выдавливание, вращение, протяжка, по сечениям…).</summary>
+    public static bool CreatesBody(Feature f) => !f.Cut && f is not (RoundFeature or ChamferFeature or HoleFeature) && Parametric3D.Model.Dependencies.SketchesOf(f).Count > 0;
+    /// <summary>Операции нужно тело: вырез, скругление, фаска.</summary>
+    public static bool NeedsBody(Feature f) => f.Cut || f is RoundFeature or ChamferFeature or HoleFeature;
 
     /// <summary>Переставить операцию на номер to (в пределах MoveRange); перестройка, при поломке — откат с сообщением.</summary>
     public static bool MoveTo(MainWindow w, Feature f, int to)
