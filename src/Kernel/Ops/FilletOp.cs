@@ -1439,6 +1439,44 @@ public static class FilletOp
         return ResolveNear(bodies, wanted);
     }
 
+    /// <summary>Мутация P3D_REFLOOP=0: ссылка на кромку-окружность и её куски не переводятся друг в друга.</summary>
+    static readonly bool RefLoopOff = Environment.GetEnvironmentVariable("P3D_REFLOOP") == "0";
+    /// <summary>
+    /// k104: КРОМКА ЦЕЛИКОМ ИЛИ КУСКАМИ. Кромка отверстия или бобышки после точного пути — четыре дуги, после общего —
+    /// одна окружность; какой путь выбран, зависит от того, что в теле до операции (перестановка операций в дереве его
+    /// меняет). Ссылка на замкнутую кромку (начало = конец), а на теле между теми же гранями — несколько кусков: берутся все
+    /// куски (прежде — один, по точке: фаска ложилась на четверть окружности). Ссылки на куски, а на теле одна замкнутая
+    /// кромка: берётся она, один раз.
+    /// </summary>
+    public static List<EdgeRef> NormalizeLoopRefs(List<TSolid> bodies, IReadOnlyList<EdgeRef> refs)
+    {
+        if (RefLoopOff) return refs.ToList();
+        double tol = Tol.Weld * 100;
+        var res = new List<EdgeRef>();
+        var taken = new HashSet<TEdge>();
+        var all = bodies.SelectMany(b => b.Edges).ToList();
+        foreach (var r in refs)
+        {
+            if (r.FaceA != null && r.FaceB != null)
+            {
+                var named = all.Where(e => r.FacesMatch(e)).ToList();
+                bool refClosed = (r.Start - r.End).Length < tol;
+                if (refClosed && named.Count > 1 && named.All(e => (e.V0.P - e.V1.P).Length > tol))
+                {
+                    foreach (var e in named) if (taken.Add(e)) res.Add(EdgeRef.Of(e));
+                    continue;
+                }
+                if (!refClosed && named.Count == 1 && (named[0].V0.P - named[0].V1.P).Length < tol)
+                {
+                    if (taken.Add(named[0])) res.Add(EdgeRef.Of(named[0]));
+                    continue;
+                }
+            }
+            res.Add(r);
+        }
+        return res;
+    }
+
     /// <summary>Мутация P3D_REFWHOLE=0: выбранное целиком ребро из нескольких кусков, сдвинутое правкой, — неоднозначность (прежде).</summary>
     static readonly bool RefWholeOff = Environment.GetEnvironmentVariable("P3D_REFWHOLE") == "0";
     /// <summary>

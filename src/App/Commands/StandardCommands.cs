@@ -55,7 +55,7 @@ public static class StandardCommands
         r.Add(new AppCommand { Short = "▾", Id = "edit.history", Label = "Журнал отмены", Group = E, Icon = "undo_history_but.svg", Synonyms = "history undo журнал история",
             Run = () => w.OpenHistory() });
         r.Add(new AppCommand { Short = "Удалить", Id = "edit.delete", Label = "Удалить", Group = E, Icon = "delete_but.svg", Gesture = K(Key.Delete), Synonyms = "delete remove",
-            CanRun = () => Modeling() && Deletable(w).Count > 0, Run = () => Delete(w) });
+            CanRun = () => Modeling() && Deletable(w).Count > 0, Run = () => Delete(w), WhyDisabled = () => WhyNotDeletable(w) });
         r.Add(new AppCommand { Short = "Изменить", Id = "edit.feature", Label = "Изменить операцию", Group = E, Icon = "tree_edit_def_but.svg", Synonyms = "edit definition редактировать",
             CanRun = () => Modeling() && w.SelectedItems().Any(i => i is Feature or Sketch), Run = () => w.EditSelected() });
         r.Add(new AppCommand { Short = "Подавить", Id = "edit.suppress", Label = "Подавить / вернуть", Group = E, Icon = "tree_suppress_but.svg", Synonyms = "suppress resume",
@@ -414,11 +414,38 @@ public static class StandardCommands
         return w.SelectedItems().Where(i => i.Parent == part && !basic.Contains(i)).Distinct().ToList();
     }
 
+    /// <summary>
+    /// k104: ПОЧЕМУ ВЫБРАННОЕ НЕ УДАЛЯЕТСЯ: правка эскиза, нет детали, ничего не выбрано, основные плоскости, элемент другой
+    /// детали (правится одна — активная) или вложенный в другой элемент.
+    /// </summary>
+    public static string? WhyNotDeletable(MainWindow w)
+    {
+        if (w.InSketch) return Loc.L("идёт правка эскиза — сначала закончите его");
+        var part = w.Session?.Part;
+        if (part == null) return Loc.L("нет активной детали");
+        var sel = w.SelectedItems().ToList();
+        if (sel.Count == 0) return Loc.L("ничего не выбрано");
+        var basic = new HashSet<ModelItem> { part.Origin, part.PlaneXY, part.PlaneXZ, part.PlaneYZ };
+        foreach (var it in sel)
+        {
+            if (basic.Contains(it)) return Loc.L("основные плоскости и начало координат детали не удаляются");
+            if (it.Parent == part) continue;
+            var owner = it.Parent;
+            while (owner != null && owner is not Part) owner = owner.Parent;
+            if (owner is Part op && !ReferenceEquals(op, part)) return Loc.L("«{0}» — в детали «{1}», а правится «{2}»: сделайте её активной", it.Name, op.Name, part.Name);
+            if (it.Parent is { } par && par != part) return Loc.L("«{0}» — часть «{1}»: удаляется вместе с ней", it.Name, par.Name);
+            if (it is Part or Assembly) return Loc.L("деталь или сборка удаляется в сборке, а не в дереве детали");
+            return Loc.L("«{0}» не удаляется", it.Name);
+        }
+        return null;
+    }
+
     private static void Delete(MainWindow w)
     {
         var items = Deletable(w);
         var part = w.Session.Part!;
         string name = items.Count == 1 ? Loc.L("Удалить «{0}»", items[0].Name) : Loc.L("Удалить ({0})", items.Count);
+        var kept = new List<string>();
         w.Session.Edit(name, () =>
         {
             foreach (var it in items)
@@ -429,7 +456,12 @@ public static class StandardCommands
                     var own = f.ConsumedSketchIds().ToHashSet();
                     part.RemoveFeature(f);
                     foreach (var sk in part.Sketches.Where(k => own.Contains(k.Id)).ToList())
-                        if (!part.Features.Any(o => o.ConsumedSketchIds().Contains(sk.Id))) part.Remove(sk);
+                    {
+                        // k104: эскиз, которым пользуется другая операция, остаётся — с объяснением
+                        var user = part.Features.FirstOrDefault(o => o.ConsumedSketchIds().Contains(sk.Id));
+                        if (user == null && !items.Contains(sk)) part.Remove(sk);
+                        else if (user != null) kept.Add(Loc.L("Эскиз «{0}» оставлен: им пользуется «{1}»", sk.Name, user.Name));
+                    }
                 }
                 else part.Remove(it);
             }
@@ -437,6 +469,7 @@ public static class StandardCommands
         });
         w.ViewPort.Selection.Clear();
         w.ViewPort.MarkDirty();
+        if (kept.Count > 0) w.ShowToast(string.Join("\n", kept.Distinct()), error: false);
     }
 
     private static void Suppress(MainWindow w)

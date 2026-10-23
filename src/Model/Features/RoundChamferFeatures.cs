@@ -49,6 +49,7 @@ public sealed class RoundFeature : Feature
             edges.AddRange(found.Select(EdgeRef.Of));
         }
         if (edges.Count == 0) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Round: no edges selected.");
+        edges = FilletOp.NormalizeLoopRefs(ctx.Bodies, edges);
 
         double r = Radius.Resolve(ctx.Parameters);
         if (r <= Tol.Weld) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Round: radius must be greater than zero.");
@@ -142,6 +143,7 @@ public sealed class ChamferFeature : Feature
             edges.AddRange(found.Select(EdgeRef.Of));
         }
         if (edges.Count == 0) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Chamfer: no edges selected.");
+        edges = FilletOp.NormalizeLoopRefs(ctx.Bodies, edges);
 
         double d1 = D1.Resolve(ctx.Parameters);
         double d2 = Mode == ChamferKind.TwoDistances

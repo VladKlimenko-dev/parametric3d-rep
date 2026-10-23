@@ -110,6 +110,30 @@ static partial class Program
             Require(Math.Abs(a.Length - 50) < 0.5, $"dragged line: {a.Length}");
             Require(Math.Abs(b.Length - a.Length - 5) < 1e-6 && Math.Abs(d1.Value - b.Length) < 1e-6, $"d1 did not follow d0 while dragging: {b.Length}, d1 {d1.Value}");
         });
+        Check("KRN-REF-ROLES", () =>
+        {
+            // k104: фаска на кромке отверстия, вырезанного точным путём (подпись стенки «quadric:hole», ссылка — «hole:wall»);
+            // скругление кромки бобышки после перестановки (точный путь ↔ общий). Мутации P3D_TAGROLES=0, P3D_REFLOOP=0.
+            var p = new Parametric3D.Model.Part("roles");
+            var doc = new Parametric3D.Model.Document(); doc.Root.Add(p);
+            var s1 = PolySketch(p, Frame3.XY, (0, 0), (80, 0), (80, 50), (0, 50));
+            var ex = new Parametric3D.Model.Features.ExtrudeFeature { SketchId = s1.Id }; ex.Side1.Distance = new Parametric3D.Model.Features.ValueRef(6); p.AddFeature(ex);
+            var s2 = p.AddSketch("H", Frame3.XY, p.PlaneXY.Id); s2.AddEntity(new SkCircle(new SkPoint(20, 25), 5));
+            var cut = new Parametric3D.Model.Features.ExtrudeFeature { SketchId = s2.Id, Cut = true }; cut.Side1.Distance = new Parametric3D.Model.Features.ValueRef(10); p.AddFeature(cut);
+            doc.RebuildDirty();
+            var hole = p.Bodies.SelectMany(b => b.Edges).Where(e => e.Curve is not Parametric3D.Kernel.Curves.LineCurve3 && e.V0.P.Z > 5.9).ToList();
+            Require(hole.Count > 0, "hole edges");
+            // ссылка на окружность целиком, на теле — четыре дуги: берутся все
+            var whole = new Parametric3D.Kernel.Topology.EdgeRef(new Vector3d(25, 25, 6), new Vector3d(25, 25, 6), new Vector3d(15, 25, 6), hole[0].FaceA!.Tag, hole[0].FaceB!.Tag);
+            var norm = Parametric3D.Kernel.Ops.FilletOp.NormalizeLoopRefs(p.Bodies.ToList(), new[] { whole });
+            Require(norm.Count == hole.Count || hole.Count == 1, $"whole-loop reference: {norm.Count} of {hole.Count}");
+            var ch = new Parametric3D.Model.Features.ChamferFeature { D1 = new Parametric3D.Model.Features.ValueRef(1), D2 = new Parametric3D.Model.Features.ValueRef(1) };
+            ch.Edges.AddRange(hole.Select(Parametric3D.Kernel.Topology.EdgeRef.Of)); p.AddFeature(ch);
+            doc.RebuildDirty();
+            Require(ch.Error == null, "chamfer of an exact hole: " + ch.Error);
+            Require(Parametric3D.Kernel.Topology.EdgeRef.Role("#k/quadric:boss-top") == Parametric3D.Kernel.Topology.EdgeRef.Role("#k/extrude[0]:top")
+                    && Parametric3D.Kernel.Topology.EdgeRef.Role("#k/quadric:hole") != Parametric3D.Kernel.Topology.EdgeRef.Role("#j/extrude[0]:side[0.0]"), "face roles");
+        });
         Check("KRN-REV-MIRROR", () =>
         {
             // k97 (замечание 2): зеркало операции «Вращение» — кольцо у x = 50 отражается к x = −50 (прежде отказ

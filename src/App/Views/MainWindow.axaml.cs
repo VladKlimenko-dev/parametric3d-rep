@@ -288,6 +288,7 @@ public partial class MainWindow : Window
         else b = new Button { Classes = { "tool" }, Command = c, Content = content, MinWidth = minWidth };
         if (b is ContentControl cc) cc.HorizontalContentAlignment = text ? HorizontalAlignment.Left : HorizontalAlignment.Center;
         ToolTip.SetTip(b, c.Tooltip + (c.Description != null ? "\n" + L(c.Description) : ""));
+        ExplainDisabled(b, c);
         b.Tag = c;
         return b;
     }
@@ -751,13 +752,29 @@ public partial class MainWindow : Window
         UpdateStyleButton();
     }
 
-    private MenuItem Item(AppCommand c) => new()
+    private MenuItem Item(AppCommand c)
     {
-        Header = c.Text,
-        Command = c,
-        InputGesture = c.Gesture,
-        Icon = IconProvider.Get(c.Icon) is { } img ? new Image { Source = img, Width = 16, Height = 16 } : null,
-    };
+        var mi = new MenuItem
+        {
+            Header = c.Text,
+            Command = c,
+            InputGesture = c.Gesture,
+            Icon = IconProvider.Get(c.Icon) is { } img ? new Image { Source = img, Width = 16, Height = 16 } : null,
+        };
+        if (c.WhyDisabled != null) { ToolTip.SetTip(mi, c.TooltipNow()); ExplainDisabled(mi, c); }
+        return mi;
+    }
+
+    /// <summary>
+    /// k104: ПОЧЕМУ НЕДОСТУПНО. Подсказка кнопки и пункта меню видна и у недоступной команды и при открытии берёт причину
+    /// (AppCommand.WhyDisabled): «Удалить» — что именно мешает удалить выбранное.
+    /// </summary>
+    private static void ExplainDisabled(Control b, AppCommand c)
+    {
+        if (c.WhyDisabled == null) return;
+        ToolTip.SetShowOnDisabled(b, true);
+        ToolTip.AddToolTipOpeningHandler(b, (_, _) => ToolTip.SetTip(b, c.TooltipNow()));
+    }
 
     private void OpenFileMenu(Control anchor)
     {
@@ -2154,6 +2171,11 @@ public partial class MainWindow : Window
         if (item is Sketch sk) return part.Features.FirstOrDefault(x => x.ConsumedSketchIds().Contains(sk.Id));
         return null;
     }
+
+    /// <summary>Разбор (k104): строка дерева элемента в координатах окна.</summary>
+    public Rect? TreeRowInWindow(ModelItem item) => TreeRowRect(item) is { } r && Tree.TranslatePoint(r.Position, this) is { } at ? new Rect(at, r.Size) : null;
+    /// <summary>Разбор: текст всплывающего сообщения.</summary>
+    public string ToastShown => Toast.IsVisible ? ToastText.Text ?? "" : "";
 
     /// <summary>Строка дерева (заголовок узла) для элемента: прямоугольник в координатах дерева.</summary>
     private Rect? TreeRowRect(ModelItem item)

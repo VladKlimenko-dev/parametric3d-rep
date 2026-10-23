@@ -43,6 +43,17 @@ public static class Strings
         ["Начало координат эскиза"] = "Sketch origin", ["Убрать ссылку"] = "Remove the reference", ["Ссылка добавлена: {0}"] = "Reference added: {0}",
         ["Уже в ссылках"] = "Already a reference", ["Ссылка не найдена"] = "Reference not found", ["Ребро"] = "Edge", ["Вершина"] = "Vertex",
         ["Угол, °"] = "Angle, °", ["Размер, мм"] = "Dimension, mm", ["Не число и не формула: {0}"] = "Not a number or a formula: {0}",
+        // k104: почему не удаляется
+        ["Недоступно: "] = "Unavailable: ",
+        ["идёт правка эскиза — сначала закончите его"] = "a sketch is being edited — finish it first",
+        ["нет активной детали"] = "no active part",
+        ["ничего не выбрано"] = "nothing is selected",
+        ["основные плоскости и начало координат детали не удаляются"] = "the base planes and the origin of a part cannot be deleted",
+        ["«{0}» — в детали «{1}», а правится «{2}»: сделайте её активной"] = "“{0}” is in part “{1}”, but “{2}” is being edited: make it active",
+        ["«{0}» — часть «{1}»: удаляется вместе с ней"] = "“{0}” is part of “{1}”: it is deleted together with it",
+        ["деталь или сборка удаляется в сборке, а не в дереве детали"] = "a part or an assembly is deleted in the assembly, not in the part tree",
+        ["«{0}» не удаляется"] = "“{0}” cannot be deleted",
+        ["Эскиз «{0}» оставлен: им пользуется «{1}»"] = "Sketch “{0}” is kept: “{1}” uses it",
         // k103: сечение, цвета
         ["Плоскость сечения"] = "Section plane",
         ["Штриховать сечение деталей и сборок"] = "Hatch the section of parts and assemblies",
