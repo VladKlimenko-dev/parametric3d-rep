@@ -162,6 +162,7 @@ uniform float uScale;
 uniform float uNear;        // > 0 — перспектива: отрезок обрезается ближней плоскостью
 uniform float uDepthBias;
 uniform float uBiasPx;      // k98: > 0 — сдвиг к глазу на столько пикселей (в мировых единицах на глубине точки) вместо uDepthBias
+uniform float uBiasWorld;   // k102: > 0 — сдвиг к глазу на столько мировых единиц (не больше uBiasPx пикселей)
 uniform float uBonus;
 uniform float uWidthOverride;
 uniform vec4 uHover;
@@ -217,7 +218,7 @@ void main()
     {
         vec4 vv = atB ? vb : va;
         float pxW = (uNear > 0.0 ? -vv.z : 1.0) * 2.0 / (uProj[1][1] * uViewport.y);
-        vv.z += uBiasPx * pxW;
+        vv.z += uBiasWorld > 0.0 ? min(uBiasWorld, uBiasPx * pxW) : uBiasPx * pxW;
         vec4 cz = uProj * vv;
         z = cz.z / cz.w;
     }

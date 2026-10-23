@@ -747,6 +747,17 @@ public sealed class SceneRenderer : IDisposable
     public static readonly bool EdgeBiasPxOff = Environment.GetEnvironmentVariable("P3D_EDGEBIASPX") == "0";
     public const float EdgeBiasPx = 0.8f;
     private float _biasPx;
+    /// <summary>
+    /// k102 (замечание 1): СДВИГ РЁБЕР — НЕ БОЛЬШЕ ДОПУСКА РАЗБИЕНИЯ В МИРЕ. Толщина линии на глубину не влияет (полоса
+    /// строится на экране, глубина — у самого ребра); ребро выреза проступало сквозь стенку, потому что сдвиг к глазу в
+    /// 0.8 пикселя на мелком масштабе превышал толщину стенки. Ребру нужен сдвиг лишь на прогиб хорды разбиения (рёбра на
+    /// точной поверхности, грани — хордами); грани и так отодвинуты (смещение полигонов). Сдвиг — минимум из 0.8 пикселя и
+    /// EdgeBiasWorld (задаёт вид: ~5·10⁻⁴ габарита модели). P3D_EDGEBIASWORLD=0 — только пиксели (k98).
+    /// </summary>
+    public float EdgeBiasWorld;
+    /// <summary>Сдвиг рёбер к глазу (мир) на глубине при данном размере пикселя: минимум из пикселей и мирового предела.</summary>
+    public float EdgeBiasAt(float pixelWorld) => EdgeBiasPxOff ? 0 : EdgeBiasWorld > 0 && !EdgeBiasWorldOff ? MathF.Min(EdgeBiasWorld, EdgeBiasPx * pixelWorld) : EdgeBiasPx * pixelWorld;
+    public static readonly bool EdgeBiasWorldOff = Environment.GetEnvironmentVariable("P3D_EDGEBIASWORLD") == "0";
 
     private void DrawEdges(InstGpu g, FrameParams f, Vector4 colorOverride = default, float dashOverride = 0)
     {
@@ -762,6 +773,7 @@ public sealed class SceneRenderer : IDisposable
         _line.Set("uNear", f.Near);
         _line.Set("uDepthBias", bias);
         _line.Set("uBiasPx", _biasPx);
+        _line.Set("uBiasWorld", _biasPx > 0 && !EdgeBiasWorldOff ? EdgeBiasWorld : 0f);
         _line.Set("uBonus", Theme.HighlightBonus);
         _line.Set("uWidthOverride", widthOverride);
         _line.Set("uColorOverride", colorOverride);

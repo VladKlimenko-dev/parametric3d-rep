@@ -40,6 +40,7 @@ public static class SketchDimensions
 
     public static void Build(Sketch sk, DimBatch batch, double pixelSize)
     {
+        sk.EnsureDimIds();
         if (pixelSize <= 0) return;
         Frame3 plane = sk.Plane;
         _loops = ClosedLoops(sk);
@@ -599,8 +600,12 @@ public static class SketchDimensions
     // ------------------------------------------------------------ примитивы
 
     /// <summary>Подпись размера так, как она выводится на экран.</summary>
+    /// <summary>k102 (замечание 4): подписи — идентификаторы размеров (d0, d1…) вместо значений (TAB в эскизе).</summary>
+    public static bool ShowIds;
+
     public static string Label(SkDimension d)
     {
+        if (ShowIds) return d.Reference ? "(" + d.Name + ")" : d.Name;
         // Координатные размеры хранят знак: он говорит, по какую сторону
         // от нуля лежит точка, и нужен решателю. Но на чертеже величина
         // без знака — расстояние отрицательным не бывает.

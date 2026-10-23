@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Model.Mates;
 
@@ -39,6 +39,7 @@ public sealed class Assembly : ModelItem
 
     public Assembly(string name)
     {
+        LocalParameters.External = n => Params.ModelRefs.Resolve(this, n);   // k102: пути к размерам
         Name = name;
         Origin = new DatumPoint("Origin", Vector3d.Zero);
         PlaneXY = new DatumPlane("XY", Frame3.XY);

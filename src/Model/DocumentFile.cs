@@ -212,7 +212,7 @@ public static class DocumentFile
                 Locked = d.Locked,
                 Reference = d.Reference,
                 // u12: вид размера сохраняется (место подписи, слабый/сильный/замок, стрелки, формула)
-                Formula = d.Formula, IsDefault = d.IsDefault ? true : null, UserPlaced = d.UserPlaced ? true : null,
+                Formula = d.Formula, IsDefault = d.IsDefault ? true : null, UserPlaced = d.UserPlaced ? true : null, Ix = d.Index >= 0 ? d.Index : null,
                 Offset = d.UserPlaced ? new[] { d.TextOffset.X, d.TextOffset.Y } : null,
                 Arrows = d.Arrows == ArrowPlacement.Auto ? null : d.Arrows.ToString(),
                 UserLocked = d.UserLocked ? true : null, SingleArrow = d.SingleArrow ? true : null, AsLinear = d.DiameterAsLinear ? true : null
@@ -801,6 +801,7 @@ public static class DocumentFile
                 dim.Reference = dd.Reference;
                 dim.Formula = dd.Formula;
                 dim.IsDefault = dd.IsDefault == true; dim.UserPlaced = dd.UserPlaced == true;
+                if (dd.Ix is int ix && ix >= 0) dim.Index = ix;   // k102: идентификатор размера dN
                 if (dd.Offset is { Length: 2 } off) dim.TextOffset = new OpenTK.Mathematics.Vector2d(off[0], off[1]);
                 if (dd.Arrows != null && Enum.TryParse<ArrowPlacement>(dd.Arrows, out var ap)) dim.Arrows = ap;
                 dim.UserLocked = dd.UserLocked == true; dim.SingleArrow = dd.SingleArrow == true; dim.DiameterAsLinear = dd.AsLinear == true;
@@ -1487,6 +1488,7 @@ public static class DocumentFile
     private sealed class DimensionDto
     {
         public string Type { get; set; } = "";
+        public int? Ix { get; set; }
         public List<uint> Items { get; set; } = new();
         public double Value { get; set; }
         public bool Locked { get; set; }
