@@ -1024,7 +1024,7 @@ public static class Strings
         ["Эскиз недоопределён: степеней свободы {0}"] = "The sketch is underdefined: {0} degrees of freedom",
         ["Основа (Base plane)"] = "Base plane", ["Начало — начало основы (Origin – base plane)"] = "Origin – base plane",
         ["Начало — центр основы (Origin – mid-plane)"] = "Origin – mid-plane", ["Точка начала (Origin point)"] = "Origin point",
-        ["Смещение (Offset)"] = "Offset", ["Угол A"] = "Angle A", ["Угол B"] = "Angle B", ["°"] = "°",
+        ["Обратная нормаль (Swap normal)"] = "Swap normal", ["Смещение (Offset)"] = "Offset", ["Угол A"] = "Angle A", ["Угол B"] = "Angle B", ["°"] = "°",
         ["Угол A — поворот вокруг первой оси основы, угол B — вокруг второй. Ручка в виде — у поля, в котором курсор."] = "Angle A rotates about the first axis of the base, angle B about the second. The handle in the view follows the focused field.",
         ["Сечение — настройки плоскости"] = "Section view — plane settings",
         ["Эскиз определён: слабых размеров {0} (их можно сделать сильными или заменить своими)"] = "The sketch is defined: {0} weak dimensions (make them strong or replace them with your own)",

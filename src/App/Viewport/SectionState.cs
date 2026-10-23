@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.App.Operations;
 using Parametric3D.Kernel;
@@ -21,6 +21,8 @@ public sealed class SectionState
     public OriginKind Origin = OriginKind.MidPlane;
     public Vector3d? OriginPoint;
     public double Offset, AngleA, AngleB;
+    /// <summary>k100: «Swap normal» — нормаль сечения в обратную сторону (отсекается другой объём).</summary>
+    public bool Swap;
 
     public SectionState Clone() => (SectionState)MemberwiseClone();
 
@@ -62,6 +64,8 @@ public sealed class SectionState
         }
         // поворот A — вокруг U основы, затем B — вокруг V основы (оси основы неподвижны)
         Vector3d nu = Rot(Rot(u, u, AngleA), v, AngleB), nv = Rot(Rot(v, u, AngleA), v, AngleB), nw = Rot(Rot(w, u, AngleA), v, AngleB);
+        // обратная нормаль: и одна из осей в плоскости — рамка остаётся правой
+        if (Swap) return (o, -nw, nv, nu);
         return (o, nw, nu, nv);
     }
 }

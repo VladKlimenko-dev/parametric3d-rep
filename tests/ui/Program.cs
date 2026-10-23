@@ -2824,6 +2824,11 @@ Check("UI-SECTION-K99", () =>
     Require(Math.Abs(op.State.AngleA - 30) < 1e-9 && Math.Abs(Math.Abs(vp.SectionPlane!.Value.N.Y) - Math.Cos(Math.PI / 6)) < 1e-9, $"angle A by the handle: {op.State.AngleA}, n {vp.SectionPlane!.Value.N}");
     // начало: по умолчанию — центр основы; «начало основы» выключает «центр» и «точку»
     Require(op.State.Origin == SectionState.OriginKind.MidPlane && op.Panel!.Refs[1].Enabled!() == false, "origin point field must be disabled with mid-plane origin");
+    // k100: «Swap normal» — нормаль в обратную сторону, плоскость на месте
+    var nBefore = vp.SectionPlane!.Value.N; var atBefore = vp.SectionPlane.Value.At;
+    op.State.Swap = true; op.FieldChanged();
+    Require((vp.SectionPlane!.Value.N + nBefore).Length < 1e-9 && (vp.SectionPlane.Value.At - atBefore).Length < 1e-9, "swap normal did not reverse the section normal");
+    op.State.Swap = false; op.FieldChanged();
     op.State.Origin = SectionState.OriginKind.BasePlane; op.FieldChanged();
     w.CommitOperation(); Run();
     Require(vp.SectionPlane != null && vp.SectionCorners() != null, "section is gone after OK");

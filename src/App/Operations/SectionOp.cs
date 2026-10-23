@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Model.Features;
 using Parametric3D.App.Viewport;
@@ -68,6 +68,7 @@ public sealed class SectionOp : Operation
         p.Number("Смещение (Offset)", () => new ValueRef(_s.Offset), v => _s.Offset = v.Value, focused: () => SetGizmoField(0));
         p.Number("Угол A", () => new ValueRef(_s.AngleA), v => _s.AngleA = v.Value, unit: "°", focused: () => SetGizmoField(1));
         p.Number("Угол B", () => new ValueRef(_s.AngleB), v => _s.AngleB = v.Value, unit: "°", focused: () => SetGizmoField(2));
+        p.Check("Обратная нормаль (Swap normal)", () => _s.Swap, on => _s.Swap = on);
         p.Note(L("Угол A — поворот вокруг первой оси основы, угол B — вокруг второй. Ручка в виде — у поля, в котором курсор."));
     }
 
