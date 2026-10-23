@@ -43,6 +43,7 @@ public sealed class SketchSetupOp : Operation
         v.AnimateTo(Parametric3D.Render.ViewOrientation.Isometric);
         Avalonia.Threading.Dispatcher.UIThread.Post(() => v.ZoomToFit(), Avalonia.Threading.DispatcherPriority.Background);
         v.ClickInterceptor = ArrowClick;
+        v.HoverInterceptor = Hover;
         ShowArrows();
         return true;
     }
@@ -70,17 +71,16 @@ public sealed class SketchSetupOp : Operation
         p.Note(L("Сейчас: {0}.", L(_sk.OriginDescription)));
         p.Number("Смещение нуля по X эскиза", () => new ValueRef(_dx), v => { _dx = v.Value; _sk.SetOriginOffset(new Vector2d(_dx, _dy)); ShowArrows(); });
         p.Number("Смещение нуля по Y эскиза", () => new ValueRef(_dy), v => { _dy = v.Value; _sk.SetOriginOffset(new Vector2d(_dx, _dy)); ShowArrows(); });
+        // k101 (замечание 5): «верх» — ОДНО ИЗ РЁБЕР ОСНОВЫ: сторона рамки основы в виде или прямое ребро грани-основы;
+        // эскиз поворачивается так, что выбранное ребро — сверху (как ориентация «Top» в Creo)
         _up = p.Ref(new RefField
         {
-            Label = "Верх эскиза", Filter = PickFilter.Edges | PickFilter.Faces | PickFilter.Datums | PickFilter.Vertices,
-            Accept = r => Refs.LineOf(r) != null || Refs.IsPlanar(r) || Refs.PointOf(r) != null, Single = true, Optional = true,
-            // k99 (замечание 2): под курсором — только то, что задаёт «верх»: ребро не поперёк эскиза, грань или плоскость,
-            // перпендикулярная ему (прежде ловились любые плоскости — большие опорные перекрывали грань основы)
+            Label = "Верх эскиза", Filter = PickFilter.Edges, Accept = UpCandidate, Single = true, Optional = true,
             Prefer = PreferOff ? null : UpCandidate,
         });
-        if (!KeptOff) _up.KeptText = _sk.UpDescription.Length > 0 ? _sk.UpDescription : L("ось плоскости");
-        p.Note(L("Ребро — вдоль него; грань или плоскость, перпендикулярная эскизу, — по её нормали; точка — от нуля к ней. Сейчас: {0}.",
-            _sk.UpDescription.Length > 0 ? _sk.UpDescription : L("ось плоскости")));
+        if (!KeptOff) _up.KeptText = _sk.UpDescription.Length > 0 ? L(_sk.UpDescription) : L("ось плоскости");
+        p.Note(L("Щёлкните сторону рамки основы или прямое ребро грани-основы — оно станет верхом эскиза. Сейчас: {0}.",
+            _sk.UpDescription.Length > 0 ? L(_sk.UpDescription) : L("ось плоскости")));
         p.Check("Взгляд с обратной стороны (или щелчок по стрелке нормали)", () => _sk.PlaneDescription.EndsWith(" (flipped)"), _ => { _sk.Flip(); ShowArrows(); });
     }
 
@@ -97,14 +97,67 @@ public sealed class SketchSetupOp : Operation
         return f != null ? new PickRef(f.Id, PickKind.Face, Part, null) : null;
     }
 
-    /// <summary>Годится ли под курсором для «верха»: ребро не поперёк эскиза, плоскость/грань — поперёк, точка.</summary>
+    /// <summary>Годится ли под курсором для «верха»: прямое ребро, лежащее в плоскости основы (ребро грани-основы).</summary>
     public bool UpCandidate(PickRef r)
     {
-        var n = _sk.Plane.W.Normalized();
-        if (Refs.LineOf(r) is { } ln) return Math.Abs(Vector3d.Dot(ln.Dir.Normalized(), n)) < 1 - 1e-6;
-        if (Refs.PlaneOf(r) is { } pl) return Math.Abs(Vector3d.Dot(pl.Frame.W.Normalized(), n)) < 1e-6;
-        if (r.Kind == PickKind.Face) return false;   // кривая грань — «верха» не задаёт
-        return Refs.PointOf(r) != null;
+        if (r.Kind != PickKind.Edge || Refs.LineOf(r) is not { } ln) return false;
+        var n = _sk.Plane.W.Normalized(); var o = _sk.Plane.Origin;
+        double tol = Math.Max(1e-6, Len() * 1e-6);
+        return Math.Abs(Vector3d.Dot(ln.Dir.Normalized(), n)) < 1e-6 && Math.Abs(Vector3d.Dot(ln.At - o, n)) <= tol;
+    }
+
+    /// <summary>«Верх» — к прямой (ребру) в плоскости эскиза: перпендикуляр от центра эскиза к ней.</summary>
+    public bool SetUpTowardLine(Vector3d at, Vector3d dir, string description)
+    {
+        var c = Center(); var n = _sk.Plane.W.Normalized();
+        var d = dir - n * Vector3d.Dot(dir, n);
+        if (d.Length < 1e-12) return false;
+        d = d.Normalized();
+        var foot = at + d * Vector3d.Dot(c - at, d);
+        var up = foot - c; up -= n * Vector3d.Dot(up, n);
+        if (up.Length < 1e-9 * Math.Max(1, Len())) up = d;   // ребро через центр — вдоль него
+        return _sk.SetUpDirection(up, description);
+    }
+
+    /// <summary>Стороны рамки основы (мир): начало, конец; 0 — нижняя, 1 — правая, 2 — верхняя, 3 — левая.</summary>
+    public (Vector3d A, Vector3d B)[] FrameSides()
+    {
+        var pl = _sk.Plane; var c = Center(); double h = Len() * 0.8;
+        var q = new[] { c - pl.U * h - pl.V * h, c + pl.U * h - pl.V * h, c + pl.U * h + pl.V * h, c - pl.U * h + pl.V * h };
+        return Enumerable.Range(0, 4).Select(i => (q[i], q[(i + 1) % 4])).ToArray();
+    }
+
+    static readonly string[] SideNames = { "нижняя сторона рамки", "правая сторона рамки", "верхняя сторона рамки", "левая сторона рамки" };
+
+    /// <summary>Подсвечено под курсором: 0 — ничего, 1 — стрелка нормали, 2 — стрелка «верха», 10 + i — сторона рамки i.</summary>
+    public int Hot { get; private set; }
+
+    private int HitAt(Point p)
+    {
+        var v = W.ViewPort;
+        double Seg(Vector3d a, Vector3d b)
+        {
+            if (v.Project(a) is not { } pa || v.Project(b) is not { } pb) return double.MaxValue;
+            double dx = pb.X - pa.X, dy = pb.Y - pa.Y, l2 = dx * dx + dy * dy;
+            double t = l2 < 1e-9 ? 0 : Math.Clamp(((p.X - pa.X) * dx + (p.Y - pa.Y) * dy) / l2, 0, 1);
+            double ex = pa.X + dx * t - p.X, ey = pa.Y + dy * t - p.Y;
+            return Math.Sqrt(ex * ex + ey * ey);
+        }
+        var c = Center(); double L = Len(); var pl = _sk.Plane;
+        if (Seg(c + pl.W.Normalized() * L * 0.3, c + pl.W.Normalized() * L) <= 8) return 1;
+        if (Seg(c + pl.V.Normalized() * L * 0.2, c + pl.V.Normalized() * L * 0.7) <= 8) return 2;
+        var sides = FrameSides();
+        int best = 0; double bd = 8;
+        for (int i = 0; i < 4; i++) { double d = Seg(sides[i].A, sides[i].B); if (d < bd) { bd = d; best = 10 + i; } }
+        return best;
+    }
+
+    private void Hover(Point p)
+    {
+        int h = HitAt(p);
+        if (h == Hot) return;
+        Hot = h;
+        ShowArrows();
     }
 
     protected override void Apply()
@@ -128,11 +181,9 @@ public sealed class SketchSetupOp : Operation
         if (_up.Items.Count > 0 && _up.Touched)
         {
             var r = _up.Items[0];
-            Vector3d? dir = Refs.LineOf(r) is { } ln ? ln.Dir
-                : Refs.PlaneOf(r) is { } upl ? upl.Frame.W
-                : Refs.PointOf(r) is { } pt ? pt - _sk.Plane.Origin : null;
-            if (dir is { } d && !_sk.SetUpDirection(d, Describe(r))) W.ShowToast(L("Это направление перпендикулярно плоскости эскиза — «верх» им не задать"));
+            if (Refs.LineOf(r) is { } ln && !SetUpTowardLine(ln.At, ln.Dir, Describe(r))) W.ShowToast(L("Это направление перпендикулярно плоскости эскиза — «верх» им не задать"));
             _up.Touched = false;
+            if (_up.Text != null) _up.Text.Text = L(_sk.UpDescription);
         }
 
         W.ViewPort.MarkDirty();
@@ -174,11 +225,16 @@ public sealed class SketchSetupOp : Operation
             foreach (var s in new[] { side, -side, side2, -side2 }) lines.Add((tip, tip - dir * len * 0.15 + s * len * 0.07, col));
         }
         var orange = new Vector4(1f, 0.55f, 0.1f, 1f); var green = new Vector4(0.3f, 0.85f, 0.4f, 1f); var blue = new Vector4(0.35f, 0.6f, 1f, 0.9f);
-        Arrow(c, pl.W.Normalized(), L, orange);
-        Arrow(c, pl.V.Normalized(), L * 0.7, green);
-        double h = L * 0.8;
-        var q = new[] { c - pl.U * h - pl.V * h, c + pl.U * h - pl.V * h, c + pl.U * h + pl.V * h, c - pl.U * h + pl.V * h };
-        for (int i = 0; i < 4; i++) lines.Add((q[i], q[(i + 1) % 4], blue));
+        var hot = new Vector4(1f, 0.92f, 0.3f, 1f);
+        // k101 (замечание 1): стрелка или сторона рамки под курсором — подсвечена (сторона рамки — щелчком «верх»)
+        Arrow(c, pl.W.Normalized(), L, Hot == 1 ? hot : orange);
+        Arrow(c, pl.V.Normalized(), L * 0.7, Hot == 2 ? hot : green);
+        var sides = FrameSides();
+        for (int i = 0; i < 4; i++)
+        {
+            lines.Add((sides[i].A, sides[i].B, Hot == 10 + i ? hot : blue));
+            if (Hot == 10 + i) { var off = (sides[i].A + sides[i].B) / 2 - c; lines.Add((sides[i].A + off * 0.005, sides[i].B + off * 0.005, hot)); }
+        }
         // нулевая точка эскиза — крестик
         double k = L * 0.08;
         lines.Add((pl.Origin - pl.U * k, pl.Origin + pl.U * k, green)); lines.Add((pl.Origin - pl.V * k, pl.Origin + pl.V * k, green));
@@ -188,6 +244,16 @@ public sealed class SketchSetupOp : Operation
     /// <summary>Щелчок рядом со стрелкой нормали — перевернуть взгляд.</summary>
     private bool ArrowClick(Point p)
     {
+        // k101: щелчок по стороне рамки основы — она становится верхом эскиза
+        int h = HitAt(p);
+        if (h >= 10)
+        {
+            var (sa, sb) = FrameSides()[h - 10];
+            if (SetUpTowardLine(sa, sb - sa, SideNames[h - 10])) { _up.Items.Clear(); _up.Touched = false; if (_up.Text != null) _up.Text.Text = L(_sk.UpDescription); }
+            Hot = 0;
+            W.ViewPort.MarkDirty(); ShowArrows(); Panel?.Refresh();
+            return true;
+        }
         var v = W.ViewPort;
         var c = Center(); var tip = c + _sk.Plane.W.Normalized() * Len();
         if (v.Project(c) is not { } a || v.Project(tip) is not { } b) return false;
@@ -211,6 +277,7 @@ public sealed class SketchSetupOp : Operation
     private void Leave()
     {
         W.ViewPort.ClickInterceptor = null;
+        W.ViewPort.HoverInterceptor = null;
         W.ViewPort.SetAnnotations(Array.Empty<(Vector3d, Vector3d, Vector4)>());
     }
 

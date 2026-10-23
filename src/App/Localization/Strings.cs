@@ -1022,6 +1022,8 @@ public static class Strings
         ["РАЗРЕШИТЬ ЭСКИЗ"] = "RESOLVE SKETCH",
         ["Эскиз определён полностью"] = "The sketch is fully defined",
         ["Эскиз недоопределён: степеней свободы {0}"] = "The sketch is underdefined: {0} degrees of freedom",
+        ["Щёлкните сторону рамки основы или прямое ребро грани-основы — оно станет верхом эскиза. Сейчас: {0}."] = "Click a side of the base frame or a straight edge of the base face — it becomes the top of the sketch. Now: {0}.",
+        ["нижняя сторона рамки"] = "bottom side of the frame", ["правая сторона рамки"] = "right side of the frame", ["верхняя сторона рамки"] = "top side of the frame", ["левая сторона рамки"] = "left side of the frame",
         ["Основа (Base plane)"] = "Base plane", ["Начало — начало основы (Origin – base plane)"] = "Origin – base plane",
         ["Начало — центр основы (Origin – mid-plane)"] = "Origin – mid-plane", ["Точка начала (Origin point)"] = "Origin point",
         ["Обратная нормаль (Swap normal)"] = "Swap normal", ["Смещение (Offset)"] = "Offset", ["Угол A"] = "Angle A", ["Угол B"] = "Angle B", ["°"] = "°",

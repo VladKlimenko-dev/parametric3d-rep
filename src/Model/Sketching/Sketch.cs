@@ -81,11 +81,54 @@ public sealed class Sketch : ModelItem
     public void Flip()
     {
         Plane = new Frame3(Plane.Origin, Plane.V, Plane.U);
+        // k101 (замечание 2): ГЕОМЕТРИЯ ОСТАЁТСЯ НА МЕСТЕ В МИРЕ. Оси эскиза меняются местами — прежде плоские координаты
+        // оставались прежними, и эскиз (с рамкой настройки) зеркально «улетал» в сторону; основа не переворачивалась, и
+        // следующий «верх» возвращал прежнюю сторону. Теперь координаты меняются местами (x ↔ y), основа — тоже.
+        if (!FlipKeepOff)
+        {
+            BaseFrame = new Frame3(BaseFrame.Origin, BaseFrame.V, BaseFrame.U);
+            UpVector = new Vector2d(UpVector.Y, UpVector.X);
+            OriginOffset = new Vector2d(OriginOffset.Y, OriginOffset.X);
+            SwapAxes();
+        }
         PlaneDescription = PlaneDescription.EndsWith(" (flipped)")
             ? PlaneDescription[..^10]
             : PlaneDescription + " (flipped)";
         BumpStructure();
         NotifyChanged(this);
+    }
+
+    public static readonly bool FlipKeepOff = Environment.GetEnvironmentVariable("P3D_SKFLIPKEEP") == "0";
+
+    /// <summary>Плоские координаты x ↔ y (зеркало по диагонали): точки, обход дуг, эллипсы, «горизонтально/вертикально»,
+    /// координатные размеры, ссылки на оси эскиза.</summary>
+    private void SwapAxes()
+    {
+        var builtin = new HashSet<SkEntity>(Builtins, ReferenceEqualityComparer.Instance);
+        var done = new HashSet<SkPoint>(ReferenceEqualityComparer.Instance);
+        foreach (var p in AllPoints())
+        {
+            if (builtin.Contains(p) || p.Owner is { } o && builtin.Contains(o) || !done.Add(p)) continue;
+            (p.X, p.Y) = (p.Y, p.X);
+        }
+        foreach (var e in Entities)
+        {
+            if (e is SkArc a) a.CCW = !a.CCW;
+            if (e is SkEllipse el) { el.Rotation = Math.PI / 2 - el.Rotation; (el.A0, el.A1) = (-el.A1, -el.A0); }
+        }
+        SkEntity Map(SkEntity x) => ReferenceEquals(x, AxisH) ? AxisV : ReferenceEquals(x, AxisV) ? AxisH : x;
+        foreach (var c in Constraints)
+        {
+            c.Type = c.Type switch { ConstraintType.Horizontal => ConstraintType.Vertical, ConstraintType.Vertical => ConstraintType.Horizontal, var t => t };
+            for (int i = 0; i < c.Items.Count; i++) c.Items[i] = Map(c.Items[i]);
+        }
+        foreach (var d in Dimensions)
+        {
+            d.Type = d.Type switch { DimensionType.CoordX => DimensionType.CoordY, DimensionType.CoordY => DimensionType.CoordX, var t => t };
+            for (int i = 0; i < d.Items.Count; i++) d.Items[i] = Map(d.Items[i]);
+            d.TextOffset = new Vector2d(d.TextOffset.Y, d.TextOffset.X);
+            d.TextCenter = new Vector2d(d.TextCenter.Y, d.TextCenter.X);
+        }
     }
 
     /// <summary>
@@ -327,6 +370,9 @@ public sealed class Sketch : ModelItem
 
     public SkConstraint AddConstraint(ConstraintType t, params SkEntity[] items)
     {
+        // k101 (замечание 3): совпадение точек, уже совпадающих через другие связи (цепочка через нуль эскиза), — лишнее
+        // уравнение: решатель помечал его красным. Не добавляется — возвращается связь, которая их уже соединяет.
+        if (t == ConstraintType.Coincident && items.Length == 2 && !DupCoincidentOff && CoincidentPath(items[0], items[1]) is { } have) return have;
         var c = new SkConstraint(t, items);
         Constraints.Add(c);
         BumpStructure();
@@ -392,10 +438,51 @@ public sealed class Sketch : ModelItem
     /// видел избыточные уравнения — эскиз «переопределён», и любая правка размера отвергалась («противоречит другим связям»),
     /// а геометрия после отказа оставалась сдвинутой. Убираются перед каждым решением. Мутация P3D_SKTRIVIAL=0.
     /// </summary>
+    public static readonly bool DupCoincidentOff = Environment.GetEnvironmentVariable("P3D_SKDUPCOINC") == "0";
+
+    /// <summary>Связь совпадения на пути между точками a и b (через другие совпадения); null — не совпадают.</summary>
+    public SkConstraint? CoincidentPath(SkEntity a, SkEntity b)
+    {
+        if (ReferenceEquals(a, b)) return Constraints.FirstOrDefault(c => c.Type == ConstraintType.Coincident && c.Items.Contains(a));
+        var seen = new HashSet<SkEntity>(ReferenceEqualityComparer.Instance) { a };
+        var q = new Queue<SkEntity>(); q.Enqueue(a);
+        SkConstraint? first = null;
+        while (q.Count > 0)
+        {
+            var x = q.Dequeue();
+            foreach (var c in Constraints)
+            {
+                if (!c.Enabled || c.Type != ConstraintType.Coincident || c.Items.Count != 2) continue;
+                int k = ReferenceEquals(c.Items[0], x) ? 1 : ReferenceEquals(c.Items[1], x) ? 0 : -1;
+                if (k < 0) continue;
+                var y = c.Items[k];
+                if (!seen.Add(y)) continue;
+                first ??= c;
+                if (ReferenceEquals(y, b)) return c;
+                q.Enqueue(y);
+            }
+        }
+        return null;
+    }
+
     public int RemoveTrivialConstraints()
     {
         if (TrivialOff) return 0;
         int n = Constraints.RemoveAll(IsTrivial);
+        // k101: совпадения, замыкающие цикл (точки уже совпадают через другие), — лишние
+        if (!DupCoincidentOff)
+        {
+            var parent = new Dictionary<SkEntity, SkEntity>(ReferenceEqualityComparer.Instance);
+            SkEntity Find(SkEntity e) { while (parent.TryGetValue(e, out var p) && !ReferenceEquals(p, e)) e = p; return e; }
+            var extra = new List<SkConstraint>();
+            foreach (var c in Constraints)
+            {
+                if (!c.Enabled || c.Type != ConstraintType.Coincident || c.Items.Count != 2) continue;
+                var ra = Find(c.Items[0]); var rb = Find(c.Items[1]);
+                if (ReferenceEquals(ra, rb)) extra.Add(c); else parent[ra] = rb;
+            }
+            foreach (var c in extra) { Constraints.Remove(c); n++; }
+        }
         if (n > 0) BumpStructure();
         return n;
     }
