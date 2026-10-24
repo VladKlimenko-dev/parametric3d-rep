@@ -2918,6 +2918,31 @@ Check("UI-OP-RELEASE", () =>
     Require(alive <= 1, $"replaced parts still alive: {alive} of {weak.Count}");
 });
 
+Check("UI-SKETCH-K106", () =>
+{
+    // k106 (снимок 13:13): вершина открытого конца — поверх красного квадрата (2); совпадение концов дуг, уже касающихся,
+    // принимается командой «Совпадение» (1)
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var w = Open(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp()); Run();
+    var vp = w.ViewPort; var sk = vp.ActiveSketch!;
+    vp.EnterSketch(sk, animate: false); Run();
+    var a = sk.AddEntity(new SkArc(new SkPoint(0, 0), new SkPoint(0, 10), new SkPoint(10, 0), false));
+    var b = sk.AddEntity(new SkArc(new SkPoint(25, 0), new SkPoint(10, 0), new SkPoint(25, 15), false));
+    sk.AddConstraint(ConstraintType.Tangent, a, b);
+    sk.Solve(s.Document.Solver); w.AfterSketchEdit(sk); Run();
+    int before = vp.OpenEndVertices;
+    vp.InvalidateOverlay(); vp.BuildOverlayForTest();
+    Require(vp.OpenEndVertices - before >= 2, $"open-end vertices on top: {vp.OpenEndVertices - before}");
+    vp.Selection.Clear();
+    vp.Selection.Select(new PickRef(a.End.Id, PickKind.SketchPoint, sk, a.End), false);
+    vp.Selection.Select(new PickRef(b.Start.Id, PickKind.SketchPoint, sk, b.Start), true);
+    Require(Parametric3D.App.Commands.SketchCommands.Constrain(w, ConstraintType.Coincident), "coincident of tangent arcs' ends was refused: " + w.ToastShown);
+    Require(sk.Constraints.Any(c => c.Type == ConstraintType.Coincident), "no coincident");
+    w.FinishSketch(); Run();
+});
+
 Check("UI-SKETCH-K105", () =>
 {
     // k105 (отзыв 10:18): обрезка щелчком — кусок между пересечениями и точками на кривой (1), протяжкой — все пересечённые

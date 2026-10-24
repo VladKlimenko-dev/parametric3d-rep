@@ -220,11 +220,41 @@ public static class SketchEditing
             if (sk.Constraints.Any(c => c.Type == t && c.SameItems(items))) continue;
             var c = new SkConstraint(t, items);
             if (Sketch.IsTrivial(c)) continue;
-            sk.Constraints.Add(c); made.Add(c);
+            made.Add(c);
         }
+        // k106: выполнена ли новая связь уже сейчас (при решении без неё)
+        var geoOld = Geometry.Take(sk);
+        double scale = Scale(sk);
+        double r0 = NumericSketchSolver.ResidualOf(sk, made);
+        foreach (var c in made) sk.Constraints.Add(c);
         sk.BumpStructure();
         var st = sk.Solve(solver);
         var fail = FailureOf(st0, st, redundant: true);
+        bool oldGood = st0 is SolveStatus.Ok or SolveStatus.Underconstrained or SolveStatus.Overconstrained;
+        // k106 (снимок 13:13): «избыточна» — по рангу якобиана; у касания по расстоянию вместе с общей точкой (и других
+        // вырожденных записей) ранг теряется, хотя связь ничего не повторяет. Связь избыточна, только если она СЛЕДУЕТ из
+        // прочих: выполнена при любом их решении. Не выполнена при нынешнем решении без неё — не следует (принять);
+        // выполнена — проверка возмущением: прочие решаются от сдвинутой геометрии, и если связь где-то нарушена — не
+        // следует. Мутация P3D_SKREDUNDANTCHECK=0 — по рангу (прежде).
+        if (fail == SketchEditFailure.Redundant && oldGood && !RedundantCheckOff)
+        {
+            if (r0 > 1e-6 * scale || !Implied(sk, solver, made, scale)) fail = SketchEditFailure.None;
+        }
+        // k106: противоречие или нет схождения — повтор от слегка сдвинутой геометрии (вырожденный старт: точки ровно на
+        // особой линии); прежде одна неудачная попытка отвергала выполнимую связь. Мутация P3D_SKRETRY=0.
+        if (fail is SketchEditFailure.Inconsistent or SketchEditFailure.DidNotConverge && oldGood && !RetryOff)
+        {
+            for (int trial = 1; trial <= 3 && fail != SketchEditFailure.None; trial++)
+            {
+                geoOld.Restore();
+                Perturb(sk, 1e-3 * scale * trial, trial);
+                var st2 = sk.Solve(solver);
+                var f2 = FailureOf(st0, st2, redundant: true);
+                if (f2 == SketchEditFailure.Redundant && !RedundantCheckOff && (r0 > 1e-6 * scale || !Implied(sk, solver, made, scale))) f2 = SketchEditFailure.None;
+                if (f2 == SketchEditFailure.None) { fail = f2; st = st2; }
+            }
+            if (fail != SketchEditFailure.None) { geoOld.Restore(); sk.Solve(solver); }
+        }
         if (fail == SketchEditFailure.None && sk.Constraints.Count(c => c.Conflict) + sk.Dimensions.Count(x => x.Conflict) > conflicts0)
         {
             fail = SketchEditFailure.Inconsistent;
@@ -256,6 +286,63 @@ public static class SketchEditing
         geo.Restore();
         Interlocked.Increment(ref RejectedEdits);
         return res;
+    }
+
+    public static readonly bool RedundantCheckOff = Environment.GetEnvironmentVariable("P3D_SKREDUNDANTCHECK") == "0";
+    public static readonly bool RetryOff = Environment.GetEnvironmentVariable("P3D_SKRETRY") == "0";
+
+    /// <summary>Размер эскиза (наибольшая координата или размер) — масштаб допусков.</summary>
+    static double Scale(Sketch sk)
+    {
+        double L = 1;
+        foreach (var p in sk.AllPoints()) L = Math.Max(L, Math.Max(Math.Abs(p.X), Math.Abs(p.Y)));
+        foreach (var e in sk.Entities) if (e is SkCircle c) L = Math.Max(L, c.Radius);
+        return L;
+    }
+
+    /// <summary>Сдвинуть свободные точки (и радиусы окружностей) на величину порядка amount — детерминированно.</summary>
+    static void Perturb(Sketch sk, double amount, int seed)
+    {
+        var rnd = new Random(7919 * seed);
+        var seen = new HashSet<SkPoint>(ReferenceEqualityComparer.Instance);
+        foreach (var e in sk.Entities)
+        {
+            if (e.Fixed || e.Role == SkRole.Reference) continue;
+            foreach (var h in e.Handles)
+                if (!h.Fixed && !h.Builtin && seen.Add(h)) { h.X += (rnd.NextDouble() * 2 - 1) * amount; h.Y += (rnd.NextDouble() * 2 - 1) * amount; }
+            if (e is SkCircle c) c.Radius = Math.Max(1e-6, c.Radius + (rnd.NextDouble() * 2 - 1) * amount * 0.5);
+        }
+    }
+
+    /// <summary>
+    /// Следуют ли связи cs из прочих: прочие решаются от нескольких сдвинутых положений; cs нарушены хоть раз — не следуют.
+    /// Эскиз и геометрия после проверки — как до неё.
+    /// </summary>
+    public static bool Implied(Sketch sk, ISketchSolver solver, IReadOnlyList<SkConstraint> cs, double scale)
+    {
+        var geo = Geometry.Take(sk);
+        var on = cs.Select(c => c.Enabled).ToList();
+        foreach (var c in cs) c.Enabled = false;
+        bool implied = true;
+        try
+        {
+            for (int trial = 1; trial <= 3 && implied; trial++)
+            {
+                geo.Restore();
+                Perturb(sk, 0.02 * scale, trial);
+                var st = sk.Solve(solver);
+                if (st is SolveStatus.Inconsistent or SolveStatus.DidNotConverge) continue;
+                if (NumericSketchSolver.ResidualOf(sk, cs) > 1e-5 * scale) implied = false;
+            }
+        }
+        finally
+        {
+            for (int i = 0; i < cs.Count; i++) cs[i].Enabled = on[i];
+            geo.Restore();
+            sk.Solve(solver);
+            geo.Restore();
+        }
+        return implied;
     }
 
     // ------------------------------------------------------------------ участники противоречия
@@ -324,6 +411,14 @@ public static class SketchEditing
             geo.Restore();
             res.Status = sk.Solve(solver);
             if (res.Status is SolveStatus.Ok or SolveStatus.Underconstrained or SolveStatus.Overconstrained) { } else geo.Restore();
+            // k106: «избыточные» по рангу — только те, что следуют из прочих (вырожденная запись касания и т. п. — нет)
+            if (res.Failure == SketchEditFailure.Redundant && !RedundantCheckOff)
+            {
+                double scale = Scale(sk);
+                res.Constraints.RemoveAll(c => !c.Conflict && !Implied(sk, solver, new[] { c }, scale));
+                if (res.Constraints.Count == 0 && res.Dimensions.Count == 0) res.Failure = SketchEditFailure.None;
+                geo.Restore();
+            }
         }
         res.Ok = res.Failure == SketchEditFailure.None;
         return res;

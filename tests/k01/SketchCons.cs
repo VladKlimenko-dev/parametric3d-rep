@@ -90,6 +90,159 @@ static partial class Program
             var ids = p2.Sketches.First().Dimensions.Select(x => x.Index).OrderBy(x => x).ToList();
             Require(ids.SequenceEqual(new[] { 1, 2 }), "ids after reload: " + string.Join(",", ids));
         });
+        Check("KRN-SK-CONFLICTS-K106", () =>
+        {
+            // k106 (снимок 13:13): совпадение концов кривых, уже касающихся друг друга (и прочие обычные сочетания), — не
+            // «избыточно» и не «противоречиво»: касание по расстоянию (|d − r| = 0) вместе с общей точкой давало вырожденный
+            // якобиан, решатель называл эскиз переопределённым, и связь отвергалась
+            var solver = new NumericSketchSolver();
+            var bad = new List<string>();
+            void Case(string name, Func<Sketch, (ConstraintType, SkEntity[])> build)
+            {
+                var part = new Parametric3D.Model.Part("c");
+                var sk = part.AddSketch("S", Frame3.XY, part.PlaneXY.Id);
+                var (t, items) = build(sk);
+                sk.Solve(solver);
+                var r = SketchEditing.AddConstraints(sk, new[] { (t, items) }, solver);
+                if (!r.Ok) bad.Add($"{name}: {r.Failure} [{string.Join(", ", r.Constraints.Select(c => c.Type))}]");
+            }
+            SkArc Arc(Sketch sk, double cx, double cy, double r, double a0, double a1)
+                => sk.AddEntity(new SkArc(new SkPoint(cx, cy), new SkPoint(cx + r * Math.Cos(a0), cy + r * Math.Sin(a0)), new SkPoint(cx + r * Math.Cos(a1), cy + r * Math.Sin(a1)), true));
+            // отрезок касается дуги, концы рядом — совпадение
+            Case("line–arc", sk =>
+            {
+                var l = sk.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(0, -30)));
+                var a = Arc(sk, 20, -35, 20, Math.PI * 0.95, Math.PI * 1.5);
+                sk.AddConstraint(ConstraintType.Tangent, l, a);
+                return (ConstraintType.Coincident, new SkEntity[] { l.B, a.Start });
+            });
+            // дуга касается дуги, концы рядом — совпадение
+            Case("arc–arc", sk =>
+            {
+                var a = Arc(sk, 0, 0, 10, Math.PI * 0.5, Math.PI * 0.02);
+                a.CCW = false;
+                var b = Arc(sk, 25, 0, 15, Math.PI * 0.95, Math.PI * 0.5);
+                b.CCW = false;
+                sk.AddConstraint(ConstraintType.Tangent, a, b);
+                return (ConstraintType.Coincident, new SkEntity[] { a.End, b.Start });
+            });
+            // касание после совпадения (обратный порядок)
+            Case("arc–arc tangent after coincident", sk =>
+            {
+                var a = Arc(sk, 0, 0, 10, Math.PI * 0.5, 0); a.CCW = false;
+                var b = Arc(sk, 25.3, 0.4, 15.2, Math.PI, Math.PI * 0.5); b.CCW = false;
+                sk.AddConstraint(ConstraintType.Coincident, a.End, b.Start);
+                return (ConstraintType.Tangent, new SkEntity[] { a, b });
+            });
+            // конец отрезка на окружности, затем касание
+            Case("point-on + tangent", sk =>
+            {
+                var c = sk.AddEntity(new SkCircle(new SkPoint(0, 0), 10));
+                var l = sk.AddEntity(new SkLine(new SkPoint(10, 0), new SkPoint(10.5, 20)));
+                sk.AddConstraint(ConstraintType.PointOnEntity, l.A, c);
+                return (ConstraintType.Tangent, new SkEntity[] { l, c });
+            });
+            // совпадение через третью точку
+            Case("coincident chain", sk =>
+            {
+                var l = sk.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(0, -30)));
+                var a = Arc(sk, 20, -35, 20, Math.PI * 0.95, Math.PI * 1.5);
+                var m = sk.AddEntity(new SkLine(new SkPoint(0.2, -31), new SkPoint(-10, -40)));
+                sk.AddConstraint(ConstraintType.Tangent, l, a);
+                sk.AddConstraint(ConstraintType.Coincident, m.A, a.Start);
+                return (ConstraintType.Coincident, new SkEntity[] { l.B, m.A });
+            });
+            // контур: два отрезка касаются двух дуг, замыкание последнего угла
+            Case("closed slot", sk =>
+            {
+                var top = Arc(sk, 0, 20, 10, 0, Math.PI);
+                var bot = Arc(sk, 0, -20, 10, Math.PI, 2 * Math.PI);
+                var l1 = sk.AddEntity(new SkLine(new SkPoint(-10, 20), new SkPoint(-10, -20)));
+                var l2 = sk.AddEntity(new SkLine(new SkPoint(10.3, -19.6), new SkPoint(10, 20)));
+                sk.AddConstraint(ConstraintType.Coincident, top.End, l1.A); sk.AddConstraint(ConstraintType.Coincident, l1.B, bot.Start);
+                sk.AddConstraint(ConstraintType.Coincident, l2.B, top.Start);
+                sk.AddConstraint(ConstraintType.Tangent, top, l1); sk.AddConstraint(ConstraintType.Tangent, l1, bot);
+                sk.AddConstraint(ConstraintType.Tangent, bot, l2); sk.AddConstraint(ConstraintType.Tangent, l2, top);
+                return (ConstraintType.Coincident, new SkEntity[] { bot.End, l2.A });
+            });
+            // касание отрезка и окружности, затем конец отрезка на окружности
+            Case("tangent + point-on", sk =>
+            {
+                var c = sk.AddEntity(new SkCircle(new SkPoint(0, 0), 10));
+                var l = sk.AddEntity(new SkLine(new SkPoint(10, 1), new SkPoint(10, 20)));
+                sk.AddConstraint(ConstraintType.Tangent, l, c);
+                return (ConstraintType.PointOnEntity, new SkEntity[] { l.A, c });
+            });
+            // эллипс: конец отрезка на эллипсе, затем касание
+            Case("ellipse point-on + tangent", sk =>
+            {
+                var el = sk.AddEntity(new SkEllipse(new SkPoint(0, 0), 20, 10));
+                var l = sk.AddEntity(new SkLine(new SkPoint(20, 0), new SkPoint(21, 15)));
+                sk.AddConstraint(ConstraintType.PointOnEntity, l.A, el);
+                return (ConstraintType.Tangent, new SkEntity[] { l, el });
+            });
+            // две окружности касаются, точка касания связана с обеими
+            Case("circles tangent + common point", sk =>
+            {
+                var c1 = sk.AddEntity(new SkCircle(new SkPoint(0, 0), 10));
+                var c2 = sk.AddEntity(new SkCircle(new SkPoint(25, 0), 15));
+                var pt = sk.AddEntity(new SkPoint(10, 0.5));
+                sk.AddConstraint(ConstraintType.Tangent, c1, c2);
+                sk.AddConstraint(ConstraintType.PointOnEntity, pt, c1);
+                return (ConstraintType.PointOnEntity, new SkEntity[] { pt, c2 });
+            });
+            // защита правки сама по себе (касание записано расстоянием — вырождено при общей точке): повтор и проверка
+            // «следует ли из прочих»
+            NumericSketchSolver.ForceDistanceTangent = true;
+            try
+            {
+                Case("distance tangent + point-on (guard)", sk =>
+                {
+                    var c = sk.AddEntity(new SkCircle(new SkPoint(0, 0), 10));
+                    var l = sk.AddEntity(new SkLine(new SkPoint(10, 1), new SkPoint(10, 20)));
+                    sk.AddConstraint(ConstraintType.Tangent, l, c);
+                    return (ConstraintType.PointOnEntity, new SkEntity[] { l.A, c });
+                });
+                Case("distance tangent arcs + coincident (guard)", sk =>
+                {
+                    var a = Arc(sk, 0, 0, 10, Math.PI * 0.5, Math.PI * 0.02); a.CCW = false;
+                    var b = Arc(sk, 25, 0, 15, Math.PI * 0.95, Math.PI * 0.5); b.CCW = false;
+                    sk.AddConstraint(ConstraintType.Tangent, a, b);
+                    return (ConstraintType.Coincident, new SkEntity[] { a.End, b.Start });
+                });
+                // точки уже на месте: по рангу «избыточно», но совпадение не следует из касания (проверка возмущением)
+                Case("distance tangent arcs + coincident in place (guard)", sk =>
+                {
+                    var a = Arc(sk, 0, 0, 10, Math.PI * 0.5, 0); a.CCW = false;
+                    var b = Arc(sk, 25, 0, 15, Math.PI, Math.PI * 0.5); b.CCW = false;
+                    sk.AddConstraint(ConstraintType.Tangent, a, b);
+                    return (ConstraintType.Coincident, new SkEntity[] { a.End, b.Start });
+                });
+            }
+            finally { NumericSketchSolver.ForceDistanceTangent = false; }
+            // точка касания по связям: эскиз с касанием и общей точкой — не «переопределён»
+            {
+                var part = new Parametric3D.Model.Part("k"); var sk = part.AddSketch("S", Frame3.XY, part.PlaneXY.Id);
+                var a = Arc(sk, 0, 0, 10, Math.PI * 0.5, 0); a.CCW = false;
+                var b = Arc(sk, 25, 0, 15, Math.PI, Math.PI * 0.5); b.CCW = false;
+                sk.AddConstraint(ConstraintType.Coincident, a.End, b.Start); sk.AddConstraint(ConstraintType.Tangent, a, b);
+                var st = sk.Solve(solver);
+                if (st == SolveStatus.Overconstrained) bad.Add("arc–arc tangent at a common point: overconstrained");
+            }
+            // настоящая избыточность и противоречие по-прежнему отвергаются
+            {
+                var part = new Parametric3D.Model.Part("r"); var sk = part.AddSketch("S", Frame3.XY, part.PlaneXY.Id);
+                var l = sk.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(10, 0)));
+                sk.AddConstraint(ConstraintType.Horizontal, l); sk.Solve(solver);
+                var r = SketchEditing.AddConstraints(sk, new[] { (ConstraintType.Vertical, new SkEntity[] { l }) }, solver);
+                if (r.Ok) bad.Add("horizontal + vertical accepted");
+                var l2 = sk.AddEntity(new SkLine(new SkPoint(0, 5), new SkPoint(10, 5)));
+                sk.AddConstraint(ConstraintType.Horizontal, l2); sk.Solve(solver);
+                var r2 = SketchEditing.AddConstraints(sk, new[] { (ConstraintType.Parallel, new SkEntity[] { l, l2 }) }, solver);
+                if (r2.Ok) bad.Add("parallel of two horizontals accepted (redundant)");
+            }
+            Require(bad.Count == 0, string.Join(" | ", bad));
+        });
         Check("KRN-SK-FORMULA-LIVE", () =>
         {
             // k103 (замечание 2): размер d1 = d0 + 5 следует за слабым размером d0 при перетаскивании точки (решатель держит

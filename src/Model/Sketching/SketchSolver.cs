@@ -408,6 +408,19 @@ public sealed class NumericSketchSolver : ISketchSolver
     }
 
     [ThreadStatic] static Sketch? _building;
+
+    /// <summary>k106: невязка связей cs при нынешней геометрии (корень суммы квадратов уравнений).</summary>
+    public static double ResidualOf(Sketch sk, IEnumerable<SkConstraint> cs)
+    {
+        var fns = new List<ResidualFn>();
+        var prev = _building;
+        _building = sk;
+        try { foreach (var c in cs) AddConstraintResiduals(c, c.Items, fns); }
+        finally { _building = prev; }
+        var buf = new List<double>(); double sum = 0;
+        foreach (var f in fns) { buf.Clear(); f(buf); foreach (var v in buf) sum += v * v; }
+        return Math.Sqrt(sum);
+    }
     /// <summary>Мутация P3D_SKTANGENTEND=0: касание дуги и отрезка у общего конца — расстоянием до прямой (прежнее).</summary>
     static readonly bool TangentEndOff = Environment.GetEnvironmentVariable("P3D_SKTANGENTEND") == "0";
 
@@ -417,9 +430,48 @@ public sealed class NumericSketchSolver : ISketchSolver
     /// на прямой — минимум функции, производная вдоль прямой нулевая, и решатель видел избыточность (скругление угла
     /// давало «эскиз переопределён»).
     /// </summary>
+    /// <summary>
+    /// k106: ТОЧКА КАСАНИЯ ПО СВЯЗЯМ — конец одной кривой, который по связям лежит на другой: тот же узел или совпадение
+    /// (в т. ч. цепочкой через третьи точки) с концом другой, «точка на кривой». Касание с такой точкой записывается
+    /// направлением (касательная прямой ⟂ радиусу в точке; центры дуг и точка на одной прямой) — запись расстоянием вместе
+    /// с общей точкой вырождена (ранг якобиана теряется, эскиз называли переопределённым). Мутация P3D_SKCONTACT=0.
+    /// </summary>
+    static SkPoint? ContactPoint(SkEntity a, SkEntity b)
+    {
+        if (ContactOff || ForceDistanceTangent || _building is not { } sk) return null;
+        static IEnumerable<SkPoint> Ends(SkEntity e) => e switch
+        {
+            SkLine l => new[] { l.A, l.B },
+            SkArc ar => new[] { ar.Start, ar.End },
+            _ => Array.Empty<SkPoint>(),
+        };
+        // группы совпадения
+        var parent = new Dictionary<SkPoint, SkPoint>(ReferenceEqualityComparer.Instance);
+        SkPoint Find(SkPoint x) { while (parent.TryGetValue(x, out var y) && !ReferenceEquals(y, x)) x = y; return x; }
+        foreach (var c in sk.Constraints)
+            if (c.Enabled && !c.Conflict && c.Type == ConstraintType.Coincident && c.Items.Count >= 2 && c.Items[0] is SkPoint p0 && c.Items[1] is SkPoint p1)
+            { var r0 = Find(p0); var r1 = Find(p1); if (!ReferenceEquals(r0, r1)) parent[r0] = r1; }
+        bool OnOther(SkPoint p, SkEntity other)
+        {
+            foreach (var q in Ends(other)) if (ReferenceEquals(p, q) || ReferenceEquals(Find(p), Find(q))) return true;
+            foreach (var c in sk.Constraints)
+                if (c.Enabled && !c.Conflict && c.Type == ConstraintType.PointOnEntity && c.Items.Count >= 2 && c.Items[1] == other && c.Items[0] is SkPoint pp && (ReferenceEquals(pp, p) || ReferenceEquals(Find(pp), Find(p)))) return true;
+            return false;
+        }
+        // предпочтение — конец дуги (он на окружности сам по себе)
+        foreach (var p in Ends(b)) if (b is not SkLine && OnOther(p, a)) return p;
+        foreach (var p in Ends(a)) if (a is not SkLine && OnOther(p, b)) return p;
+        foreach (var p in Ends(a)) if (OnOther(p, b)) return p;
+        foreach (var p in Ends(b)) if (OnOther(p, a)) return p;
+        return null;
+    }
+    static readonly bool ContactOff = Environment.GetEnvironmentVariable("P3D_SKCONTACT") == "0";
+    /// <summary>Проверки (k106): касание — только расстоянием (как до точки касания по связям), чтобы испытать защиту правки.</summary>
+    [ThreadStatic] public static bool ForceDistanceTangent;
+
     static SkPoint? ArcEndOnLine(SkLine l, SkArc a)
     {
-        if (TangentEndOff || _building is not { } sk) return null;
+        if (TangentEndOff || ForceDistanceTangent || _building is not { } sk) return null;
         foreach (var e in new[] { a.Start, a.End })
         {
             if (ReferenceEquals(e, l.A) || ReferenceEquals(e, l.B)) return e;
@@ -515,15 +567,20 @@ public sealed class NumericSketchSolver : ISketchSolver
                                 dst.Add(off - Math.Sqrt(tel.RU * tel.RU * nrm.X * nrm.X + tel.RV * tel.RV * nrm.Y * nrm.Y));
                             });
                         }
-                        else if (it[0] is SkLine tl && it[1] is SkCircle tc)
-                            fns.Add(dst => dst.Add(Math.Abs(DistPointLine(tc.Center.P, tl)) - tc.Radius));
-                        else if (it[0] is SkCircle tc2 && it[1] is SkLine tl2)
-                            fns.Add(dst => dst.Add(Math.Abs(DistPointLine(tc2.Center.P, tl2)) - tc2.Radius));
+                        else if ((it[0] is SkLine && it[1] is SkCircle) || (it[0] is SkCircle && it[1] is SkLine))
+                        {
+                            var tl = it[0] as SkLine ?? (SkLine)it[1];
+                            var tc = it[0] as SkCircle ?? (SkCircle)it[1];
+                            if (ContactPoint(tl, tc) is { } cp)
+                                fns.Add(dst => dst.Add(Vector2d.Dot(cp.P - tc.Center.P, Dir(tl))));
+                            else
+                                fns.Add(dst => dst.Add(Math.Abs(DistPointLine(tc.Center.P, tl)) - tc.Radius));
+                        }
                         else if ((it[0] is SkLine && it[1] is SkArc) || (it[0] is SkArc && it[1] is SkLine))
                         {
                             var tl3 = it[0] as SkLine ?? (SkLine)it[1];
                             var ta = it[0] as SkArc ?? (SkArc)it[1];
-                            if (ArcEndOnLine(tl3, ta) is { } te)
+                            if ((ContactOff ? ArcEndOnLine(tl3, ta) : ContactPoint(tl3, ta)) is { } te)
                                 fns.Add(dst => dst.Add(Vector2d.Dot(te.P - ta.Center.P, Dir(tl3))));
                             else
                                 fns.Add(dst => dst.Add(Math.Abs(DistPointLine(ta.Center.P, tl3)) - ta.Radius));
@@ -534,6 +591,10 @@ public sealed class NumericSketchSolver : ISketchSolver
                             SkPoint C0 = it[0] is SkArc a0 ? a0.Center : ((SkCircle)it[0]).Center, C1 = it[1] is SkArc a1 ? a1.Center : ((SkCircle)it[1]).Center;
                             var e0 = it[0]; var e1 = it[1];
                             double R(SkEntity e) => e is SkArc aa ? aa.Radius : ((SkCircle)e).Radius;
+                            // k106: общая точка — центры и точка на одной прямой
+                            if (ContactPoint(e0, e1) is { } kp)
+                                fns.Add(dst => { var u = C1.P - kp.P; double ul = u.Length; dst.Add(ul < 1e-12 ? 0 : Cross(C0.P - kp.P, u / ul)); });
+                            else
                             fns.Add(dst =>
                             {
                                 double d = (C0.P - C1.P).Length, r0 = R(e0), r1 = R(e1);
