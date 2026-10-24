@@ -35,6 +35,9 @@ public sealed partial class ModelViewport
     public bool SnapItems { get; set; } = true;
     /// <summary>u13: показ открытых концов контура (точки, к которым не примыкает другой конец).</summary>
     public bool ShowOpenEnds { get; set; } = true;   // k96 (п. 7): по умолчанию включено
+    static readonly bool OpenEndOnTopOff = Environment.GetEnvironmentVariable("P3D_OPENENDTOP") == "0";
+    /// <summary>Разбор (k106): сколько вершин нарисовано поверх значков открытых концов (накопительно).</summary>
+    public int OpenEndVertices { get; private set; }
     /// <summary>u13: заливка (штриховка) замкнутых областей эскиза.</summary>
     public bool ShowFilled { get; set; } = true;     // k96 (п. 7): по умолчанию включено
 
@@ -484,7 +487,15 @@ public sealed partial class ModelViewport
             {
                 try { SketchDiagnostics.Update(skd); } catch { }
                 foreach (var p in skd.AllPoints().Where(p => p.Dangling && p.Owner != null && p.Role != SkRole.Construction))
+                {
                     pts.Add(new PointInst { P = W(p.P), Color = SceneData.Pack(th.Error), Px = 10, Shape = 1 });
+                    // k106 (замечание 2): сама вершина — ПОВЕРХ красного квадрата, с подсветкой под курсором и выбора
+                    if (OpenEndOnTopOff) continue;
+                    bool sel = Selection.Items.Any(i => ReferenceEquals(i.Target, p)), hov = ReferenceEquals(Selection.Hover.Target, p);
+                    var vc = sel ? th.Select : hov ? th.Hover : th.SketchPoint; vc.W = 1;
+                    pts.Add(new PointInst { P = W(p.P), Color = SceneData.Pack(vc), Px = sel || hov ? 8 : 5, Shape = 0 });
+                    OpenEndVertices++;
+                }
             }
             if (ShowFilled)
             {
