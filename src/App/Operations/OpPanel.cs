@@ -36,6 +36,9 @@ public sealed class RefField
     public Func<PickRef, bool>? Prefer { get; init; }
     /// <summary>k99: поле доступно только при условии (иначе — серое, щелчок не делает его активным).</summary>
     public Func<bool>? Enabled { get; init; }
+    /// <summary>k107: поле видно (и берёт выбор) только при условии.</summary>
+    public Func<bool>? Visible { get; set; }
+    public bool Live => (Enabled?.Invoke() ?? true) && (Visible?.Invoke() ?? true);
     public bool Touched;
 
     internal Border? Box;
@@ -97,7 +100,10 @@ public sealed class OpPanel
         _host.Children.Add(new TextBlock { Text = L(text), Classes = { "dim" }, FontSize = 12, TextWrapping = TextWrapping.Wrap });
 
     /// <summary>Поле ссылок: щелчок — сделать активным (выбор вида идёт в него), «×» — очистить.</summary>
-    public RefField Ref(RefField f)
+    public RefField Ref(RefField f) => Ref(f, null);
+
+    /// <summary>k107: поле ссылок, видное только при условии (выбор по кнопке: точка начала, плоскость нового эскиза).</summary>
+    public RefField Ref(RefField f, Func<bool>? visible)
     {
         Refs.Add(f);
         var text = new TextBlock { Text = f.Summary, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
@@ -116,9 +122,24 @@ public sealed class OpPanel
         box.PointerPressed += (_, e) => { if (f.Enabled?.Invoke() == false) return; _op.Activate(f); e.Handled = true; };
         if (f.Enabled != null) _enabled.Add((box, f.Enabled));
         clear.Click += (_, _) => { f.Items.Clear(); f.Touched = true; _op.Activate(f); _op.RefChanged(f); };
-        Row(f.Label, box);
+        When(Row(f.Label, box), visible);
+        if (visible != null) f.Visible = visible;
         return f;
     }
+
+    /// <summary>k107: кнопка действия в панели (под полем): «Создать эскиз сечения» и т. п.</summary>
+    public Button Button(string label, Action click, Func<bool>? enabled = null, string? tip = null)
+    {
+        var b = new Button { Content = L(label), HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center, Margin = new Thickness(108, 1, 0, 3) };
+        if (tip != null) ToolTip.SetTip(b, L(tip));
+        b.Click += (_, _) => click();
+        if (enabled != null) _enabled.Add((b, enabled));
+        _host.Children.Add(b);
+        Buttons[label] = b;
+        return b;
+    }
+    /// <summary>Кнопки панели по подписи (проверки).</summary>
+    public readonly Dictionary<string, Button> Buttons = new();
 
     public void Number(string label, Func<ValueRef> get, Action<ValueRef> set, string unit = "мм", Func<bool>? visible = null, Action? focused = null)
     {

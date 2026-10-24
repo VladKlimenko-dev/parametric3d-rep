@@ -341,6 +341,7 @@ public static class DocumentFile
             Twist = Math.Abs(w.Twist.Value) > 0 || w.Twist.Formula != null ? w.Twist.Value : null,
             TwistFormula = w.Twist.Formula,
             KeepOrientation = w.KeepOrientation ? true : null,
+            Flags = w.Reverse ? new List<string> { "reverse" } : null,   // k107: направление протяжки
             Cut = w.Cut
         },
 
@@ -858,6 +859,7 @@ public static class DocumentFile
                     w.LengthFraction = new ValueRef(fd.Distance) { Formula = fd.Formula };
                     if (fd.Twist is double tw) w.Twist = new ValueRef(tw) { Formula = fd.TwistFormula };
                     w.KeepOrientation = fd.KeepOrientation == true;
+                    w.Reverse = fd.Flags?.Contains("reverse") == true;
                     part.AddFeature(w);
                     break;
                 }

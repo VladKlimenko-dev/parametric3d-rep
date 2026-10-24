@@ -85,7 +85,7 @@ public abstract class Operation
         var sel = W.ViewPort.Selection;
         // u12: фильтр — активного поля и незаполненных прочих (выбранное, подходящее другому полю, уходит туда)
         var flt = f?.Filter ?? PickFilter.All;
-        if (f != null && Panel != null) foreach (var r in Panel.Refs) if (!ReferenceEquals(r, f) && !r.IsSet) flt |= r.Filter;
+        if (f != null && Panel != null) foreach (var r in Panel.Refs) if (!ReferenceEquals(r, f) && !r.IsSet && r.Live) flt |= r.Filter;
         sel.Filter = flt;
         sel.Predicate = f?.Prefer;
         Syncing = true;
@@ -103,7 +103,7 @@ public abstract class Operation
         if (Syncing || ActiveRef is not { } f) return;
         // u12: выбранное не подходит активному полю, но подходит другому — идёт туда (плоская грань при поле «Эскиз» —
         // в поле «Плоскость»; вершина при поле «Грань входа» — в «Точки»)
-        if (items.Count > 0 && !items.Any(f.Accept) && Panel?.Refs.FirstOrDefault(r => !ReferenceEquals(r, f) && items.Any(r.Accept)) is { } other)
+        if (items.Count > 0 && !items.Any(f.Accept) && Panel?.Refs.FirstOrDefault(r => !ReferenceEquals(r, f) && r.Live && items.Any(r.Accept)) is { } other)
         {
             if (other.Take(items)) RefChanged(other);
             return;
@@ -111,7 +111,7 @@ public abstract class Operation
         if (!f.Take(items)) return;
         RefChanged(f);
         // одиночное поле заполнено — дальше следующее пустое
-        if (f.Single && f.Items.Count == 1 && Panel?.Refs.FirstOrDefault(r => !r.IsSet && !r.Optional) is { } next) Activate(next);
+        if (f.Single && f.Items.Count == 1 && Panel?.Refs.FirstOrDefault(r => !r.IsSet && !r.Optional && r.Live) is { } next) Activate(next);
     }
 
     public void RefChanged(RefField f)
@@ -212,11 +212,15 @@ public abstract class Operation
 
     /// <summary>k102 (замечание 7): размеры операции на виде (глубина выдавливания и т. п.); пусто — нет.</summary>
     public virtual IEnumerable<ViewDim> ViewDims() => Array.Empty<ViewDim>();
+    /// <summary>k107: стрелки направления в виде (протяжка: по траектории); щелчок — ArrowClicked.</summary>
+    public virtual IEnumerable<(OpenTK.Mathematics.Vector3d At, OpenTK.Mathematics.Vector3d Dir)> ViewArrows() => Array.Empty<(OpenTK.Mathematics.Vector3d, OpenTK.Mathematics.Vector3d)>();
+    public virtual void ArrowClicked(int index) { }
 
     /// <summary>Строка состояния панели: чего не хватает или ошибка перестроения.</summary>
     public virtual void RefreshStatus()
     {
         try { W.ViewPort.SetOpDims(ViewDims()); } catch (Exception ex) { AppLog.Write("operation dims " + Title, ex); }
+        try { W.ViewPort.SetOpArrows(ViewArrows()); } catch (Exception ex) { AppLog.Write("operation arrows " + Title, ex); }
         if (Panel == null) return;
         string? missing = Panel.Refs.FirstOrDefault(r => !r.IsSet && !r.Optional) is { } m ? L("Выберите: {0}", L(m.Label).ToLowerInvariant()) : null;
         string? err = BuildError;

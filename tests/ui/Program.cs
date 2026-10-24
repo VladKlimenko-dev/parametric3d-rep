@@ -2918,6 +2918,92 @@ Check("UI-OP-RELEASE", () =>
     Require(alive <= 1, $"replaced parts still alive: {alive} of {weak.Count}");
 });
 
+Check("UI-SWEEP-K107", () =>
+{
+    // k107 (отзыв 18:05): протяжка как в Creo — эскизов нет: «Создать эскиз траектории» (плоскость → эскиз → назад в
+    // протяжку), «Создать эскиз сечения» (точка на траектории → плоскость поперёк траектории → эскиз → назад); стрелка
+    // направления — щелчок разворачивает; отмена эскиза — назад в протяжку; есть только сечение — создать траекторию
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var w = Open(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    void Click(Button b) { b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Run(); }
+    var vp = w.ViewPort;
+    w.StartOperation(new SweepOp()); Run();
+    var op = (SweepOp)w.CurrentOperation!;
+    Require(!op.Panel!.Buttons["Создать эскиз сечения"].IsEnabled, "section sketch button is enabled without a path");
+    // (1) эскиз траектории: плоскость XY
+    Click(op.Panel.Buttons["Создать эскиз траектории"]);
+    Require(op.PickingPathPlane, "path plane pick is not active");
+    op.SelectionChanged(new[] { new PickRef(part.PlaneXY.Id, PickKind.DatumPlane, part, part.PlaneXY) }); Run();
+    Require(w.InSketch, "path sketch did not start");
+    var psk = vp.ActiveSketch!;
+    Require(Math.Abs(Math.Abs(psk.Plane.W.Z) - 1) < 1e-9, "path sketch is not on XY");
+    var l1 = psk.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(40, 0)));
+    var l2 = psk.AddEntity(new SkLine(l1.B, new SkPoint(40, 30)));
+    w.FinishSketch(); Run();
+    Require(w.CurrentOperation is SweepOp, "did not return to the sweep after the path sketch");
+    op = (SweepOp)w.CurrentOperation!;
+    Require(op.Panel!.Buttons["Создать эскиз сечения"].IsEnabled, "section sketch button is disabled with a path");
+    // стрелка направления — у начала траектории
+    Require(vp.OpArrows.Count == 1, $"direction arrows: {vp.OpArrows.Count}");
+    var (at0, dir0) = vp.OpArrows[0];
+    bool startA = at0.Length < 1e-6;
+    // отмена эскиза сечения — назад в протяжку
+    Click(op.Panel.Buttons["Создать эскиз сечения"]);
+    Require(op.PickingSectionPoint, "section point pick is not active");
+    var endPt = startA ? l2.B : l1.A;    // щёлкнуть дальний конец — он станет началом
+    var near = startA ? l1.A : l2.B;
+    op.SelectionChanged(new[] { new PickRef(near.Id, PickKind.SketchPoint, psk, near) }); Run();
+    Require(w.InSketch, "section sketch did not start");
+    w.CancelSketch(); Run();
+    Require(w.CurrentOperation is SweepOp, "cancel of the section sketch did not return to the sweep");
+    op = (SweepOp)w.CurrentOperation!;
+    // (2) эскиз сечения у начала (0,0): плоскость поперёк траектории
+    Click(op.Panel!.Buttons["Создать эскиз сечения"]);
+    op.SelectionChanged(new[] { new PickRef(l1.A.Id, PickKind.SketchPoint, psk, l1.A) }); Run();
+    Require(w.InSketch, "section sketch did not start (2)");
+    var ssk = vp.ActiveSketch!;
+    Require(ssk.Plane.Origin.Length < 1e-6 && Math.Abs(Math.Abs(ssk.Plane.W.X) - 1) < 1e-9, $"section plane: origin {ssk.Plane.Origin}, normal {ssk.Plane.W}");
+    ssk.AddEntity(new SkCircle(new SkPoint(0, 0), 3));
+    w.FinishSketch(); Run();
+    Require(w.CurrentOperation is SweepOp, "did not return to the sweep after the section sketch");
+    op = (SweepOp)w.CurrentOperation!;
+    Require(vp.OpArrows.Count == 1 && vp.OpArrows[0].At.Length < 1e-6 && vp.OpArrows[0].Dir.X > 0.99, $"arrow after choosing the start: {(vp.OpArrows.Count > 0 ? vp.OpArrows[0].ToString() : "none")}");
+    // стрелка: щелчок — разворот (начало — другой конец)
+    vp.RaiseOpArrowClicked(0); Run();
+    Require(vp.OpArrows.Count == 1 && (vp.OpArrows[0].At - new Vector3d(40, 30, 0)).Length < 1e-6, "arrow click did not reverse the sweep: " + vp.OpArrows[0]);
+    vp.RaiseOpArrowClicked(0); Run();
+    w.CommitOperation(); Run();
+    Require(w.CurrentOperation == null, "sweep commit failed");
+    s.Document.RebuildDirty(); Run();
+    part = s.Part!;
+    var sw = part.Features.OfType<SweepFeature>().Single();
+    Require(sw.Error == null && part.Volume > Math.PI * 9 * 60, $"sweep: error {sw.Error}, volume {part.Volume:0.#}");
+    // (3) есть только сечение — создать траекторию из протяжки
+    var s3 = DocumentSession.NewPart(); var p3 = s3.Part!;
+    var sec = p3.AddSketch("Sec", p3.PlaneYZ.Frame, p3.PlaneYZ.Id); sec.AddEntity(new SkCircle(new SkPoint(0, 0), 2));
+    s3.Document.RebuildDirty();
+    var w3 = Open(s3);
+    void Run3() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w3.UpdateLayout(); } }
+    w3.ViewPort.Selection.Select(new PickRef(sec.Id, PickKind.SketchCurve, p3, sec), false);
+    w3.StartOperation(new SweepOp()); Run3();
+    var op3 = (SweepOp)w3.CurrentOperation!;
+    op3.Panel!.Buttons["Создать эскиз траектории"].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Run3();
+    op3.SelectionChanged(new[] { new PickRef(p3.PlaneXY.Id, PickKind.DatumPlane, p3, p3.PlaneXY) }); Run3();
+    Require(w3.InSketch, "path sketch did not start (section only)");
+    var pk = w3.ViewPort.ActiveSketch!; pk.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(50, 0)));
+    w3.FinishSketch(); Run3();
+    Require(w3.CurrentOperation is SweepOp, "sweep with a new path");
+    w3.CommitOperation(); Run3();
+    s3.Document.RebuildDirty();
+    var sw3 = s3.Part!.Features.OfType<SweepFeature>().Single();
+    Require(sw3.Error == null && Math.Abs(s3.Part.Volume - Math.PI * 4 * 50) < 0.02 * Math.PI * 4 * 50, $"section-only sweep: {sw3.Error} volume {s3.Part.Volume:0.##}");
+    // направление сохраняется в файле
+    sw3.Reverse = true;
+    var (lp, _) = Parametric3D.Model.DocumentFile.Load(Parametric3D.Model.DocumentFile.Save(s3.Part));
+    Require(lp.Features.OfType<SweepFeature>().Single().Reverse, "reverse is not saved");
+});
+
 Check("UI-SKETCH-K106", () =>
 {
     // k106 (снимок 13:13): вершина открытого конца — поверх красного квадрата (2); совпадение концов дуг, уже касающихся,

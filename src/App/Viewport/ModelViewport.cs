@@ -608,6 +608,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         if (_drag == Drag.None) HoverInterceptor?.Invoke(p);
         if (RegionMove(p)) return;
         if (_drag == Drag.None && UpdateGizmoHover(p)) return;
+        if (_drag == Drag.None && UpdateArrowHover(p)) return;
         if (_drag == Drag.None && UpdateSectionHover(p)) return;
         if (Tool != null) ToolMove(p);
         if (ActiveSketch != null) UpdateDimensionHover(p);
@@ -631,6 +632,8 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         else if (was == Drag.Tool && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 6) ToolClick(p);
         else if (was == Drag.Select && ComponentDragEnd()) { }
         else if (was == Drag.Select && RegionEnd(p, e.KeyModifiers)) { }
+        // k107: стрелка направления операции (протяжка) — развернуть
+        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4 && ActiveSketch == null && TryArrowClick(p)) { }
         else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4 && ClickInterceptor?.Invoke(p) == true) { }
         // k99: щелчок по контуру плоскости сечения (вне операции и эскиза) — её настройки
         // k103: щелчок — выбор плоскости (ручки), двойной — настройки

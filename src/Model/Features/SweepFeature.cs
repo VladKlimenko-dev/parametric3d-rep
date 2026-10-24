@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
@@ -22,6 +22,11 @@ public sealed class SweepFeature : Feature
     public ValueRef Twist = new(0.0);
     /// <summary>KRN-07 (07.3): закон ориентации — сечение не поворачивается (параллельные копии); иначе — рамка без вращения.</summary>
     public bool KeepOrientation;
+    /// <summary>
+    /// k107: НАПРАВЛЕНИЕ ПРОТЯЖКИ (стрелка на траектории, как в Creo): true — траектория проходится от другого конца; сечение
+    /// встаёт в её начало.
+    /// </summary>
+    public bool Reverse;
 
     public SweepFeature(string name = "Sweep") { Name = name; }
 
@@ -43,11 +48,13 @@ public sealed class SweepFeature : Feature
         ICurve3? path = ResolvePath(ctx);
         if (path == null)
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Sweep: no path.");
+        if (Reverse) path = path.Reversed();
 
         Kernel.Topology.TSolid? solid = null;
         double frac = LengthFraction.Resolve(ctx.Parameters);
         double twist = Twist.Resolve(ctx.Parameters);
-        if (Math.Abs(frac - 1) < 1e-12 && Math.Abs(twist) < 1e-12 && !KeepOrientation && ResolveChain(ctx) is { Count: > 1 } chain)
+        if (Math.Abs(frac - 1) < 1e-12 && Math.Abs(twist) < 1e-12 && !KeepOrientation && ResolveChain(ctx) is { Count: > 1 } chain0
+            && (Reverse ? Enumerable.Reverse(chain0).Select(c => c.Reversed()).ToList() : chain0) is var chain)
             solid = SweepOp.BuildChain(profile, chain, ctx.Warnings);
         solid ??= SweepOp.Build(profile, path, frac, twist, KeepOrientation);
 
@@ -55,18 +62,38 @@ public sealed class SweepFeature : Feature
         else BooleanOp.Unite(ctx.Bodies, solid, ctx.Warnings);
     }
 
-    private ICurve3? ResolvePath(BuildContext ctx)
+    private ICurve3? ResolvePath(BuildContext ctx) => PathOf(ctx.Part, ctx.FindSketch);
+
+    /// <summary>
+    /// k107: начало протяжки — точка, касательная (по ходу, с учётом Reverse) и нормаль плоскости траектории (для «верха»
+    /// эскиза сечения); null — траектории нет.
+    /// </summary>
+    public (Vector3d P, Vector3d T, Vector3d N, Vector3d End)? StartFrame(Part part)
+    {
+        Sketching.Sketch? Find(uint id) => part.Sketches.FirstOrDefault(k => k.Id == id);
+        var path = PathOf(part, Find);
+        if (path == null) return null;
+        var chain = PathSketchId != 0 && Find(PathSketchId) is { } ps ? ChainOf(ps) : null;
+        ICurve3 first = chain is { Count: > 1 } ? chain[0] : path, last = chain is { Count: > 1 } ? chain[^1] : path;
+        Vector3d a = first.PointAt(first.T0), b = last.PointAt(last.T1);
+        Vector3d ta = first.TangentAt(first.T0), tb = -last.TangentAt(last.T1);
+        if (ta.LengthSquared < 1e-24 || tb.LengthSquared < 1e-24) return null;
+        Vector3d n = PathSketchId != 0 && Find(PathSketchId) is { } pk ? pk.Plane.W : Vector3d.UnitZ;
+        return Reverse ? (b, tb.Normalized(), n, a) : (a, ta.Normalized(), n, b);
+    }
+
+    private ICurve3? PathOf(Part part, Func<uint, Sketching.Sketch?> find)
     {
         if (PathLineId != 0)
         {
-            var l = ctx.Part.FindById<Line3DItem>(PathLineId);
+            var l = part.FindById<Line3DItem>(PathLineId);
             if (l != null) return new LineCurve3(l.A, l.B);
             // u13: опорная кривая (через точки, по уравнению, проекция)
-            if (ctx.Part.FindById<DatumCurve>(PathLineId) is { Points.Count: >= 2 } dc) return new PolylineCurve3(dc.Points);
+            if (part.FindById<DatumCurve>(PathLineId) is { Points.Count: >= 2 } dc) return new PolylineCurve3(dc.Points);
         }
         if (PathSketchId != 0)
         {
-            var ps = ctx.FindSketch(PathSketchId);
+            var ps = find(PathSketchId);
             if (ps != null)
             {
                 var curves = ps.Entities
@@ -93,7 +120,11 @@ public sealed class SweepFeature : Feature
     {
         if (PathSketchId == 0) return null;
         var ps = ctx.FindSketch(PathSketchId);
-        if (ps == null) return null;
+        return ps == null ? null : ChainOf(ps);
+    }
+
+    private static List<ICurve3>? ChainOf(Sketching.Sketch ps)
+    {
         var left = ps.Entities.Where(e => e.Role == Sketching.SkRole.Object && e is not Sketching.SkPoint)
                               .Select(e => e.ToCurve3(ps.Plane)).ToList();
         if (left.Count < 2) return null;
