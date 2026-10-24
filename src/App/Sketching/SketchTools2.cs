@@ -539,12 +539,12 @@ public sealed class SketchCsysTool : SketchToolBase
 
 // ------------------------------------------------------------ обрезка и разделение
 
-public sealed class TrimTool : SketchToolBase
+public sealed class TrimTool : SketchToolBase, IStrokeTool
 {
     private readonly bool _split;
     public TrimTool(bool split = false) { _split = split; }
     public override string Title => _split ? "Разделить" : "Обрезка";
-    public override string Hint => _split ? "Щёлкните точку на кривой, где разделить" : "Щёлкните кусок кривой, который убрать (до пересечений)";
+    public override string Hint => _split ? "Щёлкните точку на кривой, где разделить" : "Щёлкните кусок кривой, который убрать (до пересечений и точек на ней), или проведите мышью по кривым";
     public override ISketchTool Restart() => Restarted(new TrimTool(_split));
 
     public override bool Click(SketchInput i)
@@ -557,7 +557,11 @@ public sealed class TrimTool : SketchToolBase
 
     static double Extent(Sketch sk) { var pts = sk.AllPoints().Select(p => p.P).ToList(); if (pts.Count == 0) return 100; return Math.Max(pts.Max(p => p.X) - pts.Min(p => p.X), pts.Max(p => p.Y) - pts.Min(p => p.Y)); }
 
-    /// <summary>Параметры пересечений кривой e с прочими (по порядку), без концов.</summary>
+    /// <summary>
+    /// Параметры точек, делящих кривую e (по порядку): пересечения с прочими кривыми и (k105, как в Creo) точки эскиза,
+    /// лежащие на ней — концы других кривых, отдельные точки (свои концы e не в счёт). Мутация P3D_TRIMPOINTS=0 — только
+    /// пересечения.
+    /// </summary>
     static List<double> Cuts(Sketch sk, SkEntity e)
     {
         var ts = new List<double>();
@@ -566,8 +570,68 @@ public sealed class TrimTool : SketchToolBase
             if (ReferenceEquals(o, e) || o is SkPoint || o.Role == SkRole.Construction && e.Role != SkRole.Construction) continue;
             foreach (var p in SkGeom.Intersect(e, o)) ts.Add(SkGeom.Param(e, p));
         }
+        if (!TrimPointsOff)
+        {
+            double tol = Math.Max(1e-7, 1e-7 * Extent(sk));
+            var own = e.Handles.ToHashSet();
+            foreach (var pt in sk.AllPoints())
+            {
+                if (own.Contains(pt) || pt.Role == SkRole.Construction && e.Role != SkRole.Construction) continue;
+                if (e is SkCircle or SkArc && SkGeom.CircleOf(e) is { } cc && (pt.P - cc.C).Length < tol) continue;   // центр
+                if (e.DistanceTo(pt.P) <= tol) ts.Add(SkGeom.Param(e, pt.P));
+            }
+        }
         ts.Sort();
         return ts;
+    }
+    static readonly bool TrimPointsOff = Environment.GetEnvironmentVariable("P3D_TRIMPOINTS") == "0";
+    static readonly bool TrimStrokeOff = Environment.GetEnvironmentVariable("P3D_TRIMSTROKE") == "0";
+    static readonly bool CircleDimKeepOff = Environment.GetEnvironmentVariable("P3D_TRIMCIRCLEDIM") == "0";
+
+    // ---------------------------------------------------------- k105 (замечание 1): обрезка протяжкой
+
+    private readonly List<Vector2d> _stroke = new();
+    public bool StrokeEnabled => !_split && !TrimStrokeOff;
+    public void StrokeMove(Vector2d p) { if (_stroke.Count == 0 || (_stroke[^1] - p).LengthSquared > 1e-18) _stroke.Add(p); }
+    public void StrokeCancel() => _stroke.Clear();
+
+    /// <summary>Протяжка кончилась: убрать куски кривых, которые пересекла линия протяжки (каждый — до пересечений и точек).</summary>
+    public bool StrokeEnd(Sketch sk)
+    {
+        var path = _stroke.ToList(); _stroke.Clear();
+        return StrokeEnabled && TrimAlong(sk, path);
+    }
+
+    /// <summary>Куски кривых, которые пересекает ломаная path, — убрать (по порядку пересечений вдоль ломаной).</summary>
+    public static bool TrimAlong(Sketch sk, IReadOnlyList<Vector2d> path)
+    {
+        if (path.Count < 2) return false;
+        var hits = new List<(double S, Vector2d P)>();
+        double run = 0;
+        for (int i = 0; i + 1 < path.Count; i++)
+        {
+            var seg = new SkLine(new SkPoint(path[i]), new SkPoint(path[i + 1]));
+            double len = (path[i + 1] - path[i]).Length;
+            foreach (var e in sk.Entities.Where(x => x is SkLine or SkArc or SkCircle && x.Role != SkRole.Reference))
+                foreach (var p in SkGeom.Intersect(seg, e)) hits.Add((run + (p - path[i]).Length, p));
+            run += len;
+        }
+        double tol = Math.Max(sk.AutoTolerance, 1e-6 * Extent(sk));
+        bool changed = false;
+        foreach (var (_, p) in hits.OrderBy(h => h.S))
+        {
+            // после прежних обрезок кривые другие: кусок, на котором лежит точка пересечения (если он ещё есть)
+            var e = sk.Entities.Where(x => x is SkLine or SkArc or SkCircle && x.Role != SkRole.Reference).OrderBy(x => x.DistanceTo(p)).FirstOrDefault();
+            if (e == null || e.DistanceTo(p) > tol) continue;
+            changed |= Trim(sk, e, p);
+        }
+        return changed;
+    }
+
+    public override void Preview(List<Vector2d[]> lines, List<Vector2d> points)
+    {
+        base.Preview(lines, points);
+        for (int i = 0; i + 1 < _stroke.Count; i++) lines.Add(new[] { _stroke[i], _stroke[i + 1] });
     }
 
     /// <summary>Точка выпала из эскиза (конец убранного куска) — связи и размеры с ней снимаются.</summary>
@@ -629,8 +693,18 @@ public sealed class TrimTool : SketchToolBase
                 // убрать дугу между соседними пересечениями вокруг t; остаётся дуга от hi до lo (против часовой)
                 double lo = ang.Where(x => x <= t).DefaultIfEmpty(ang[^1] - 2 * Math.PI).Max(), hi = ang.Where(x => x > t).DefaultIfEmpty(ang[0] + 2 * Math.PI).Min();
                 var cc = c.Center.P; double r = c.Radius;
+                if (CircleDimKeepOff)
+                {
+                    sk.RemoveEntity(e);
+                    sk.AddEntity(new SkArc(new SkPoint(cc), new SkPoint(cc + new Vector2d(Math.Cos(hi), Math.Sin(hi)) * r), new SkPoint(cc + new Vector2d(Math.Cos(lo), Math.Sin(lo)) * r), ccw: true) { Role = c.Role });
+                    return true;
+                }
+                // k105 (замечание 3): дуга — на том же центре (его связи остаются), размеры и связи окружности (радиус,
+                // диаметр — тот же размер, тот же идентификатор dN и формула) переходят на дугу
+                var arc = sk.AddEntity(new SkArc(c.Center, new SkPoint(cc + new Vector2d(Math.Cos(hi), Math.Sin(hi)) * r), new SkPoint(cc + new Vector2d(Math.Cos(lo), Math.Sin(lo)) * r), ccw: true) { Role = c.Role });
+                foreach (var dm in sk.Dimensions) for (int k = 0; k < dm.Items.Count; k++) if (ReferenceEquals(dm.Items[k], c)) dm.Items[k] = arc;
+                foreach (var cn in sk.Constraints) for (int k = 0; k < cn.Items.Count; k++) if (ReferenceEquals(cn.Items[k], c)) cn.Items[k] = arc;
                 sk.RemoveEntity(e);
-                sk.AddEntity(new SkArc(new SkPoint(cc), new SkPoint(cc + new Vector2d(Math.Cos(hi), Math.Sin(hi)) * r), new SkPoint(cc + new Vector2d(Math.Cos(lo), Math.Sin(lo)) * r), ccw: true) { Role = c.Role });
                 return true;
             }
         }

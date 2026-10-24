@@ -2918,6 +2918,82 @@ Check("UI-OP-RELEASE", () =>
     Require(alive <= 1, $"replaced parts still alive: {alive} of {weak.Count}");
 });
 
+Check("UI-SKETCH-K105", () =>
+{
+    // k105 (отзыв 10:18): обрезка щелчком — кусок между пересечениями и точками на кривой (1), протяжкой — все пересечённые
+    // куски (1); отмена и возврат в эскизе (2); размер окружности после обрезки остаётся тем же размером (3); подпись
+    // внутреннего диаметра — вдоль линии (4), наружного — горизонтально на полке (5)
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var w = Open(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp()); Run();
+    var vp = w.ViewPort; var sk = vp.ActiveSketch!;
+    vp.EnterSketch(sk, animate: false); Run();
+    // (4, 5) подпись диаметра
+    var circ = sk.AddEntity(new SkCircle(new SkPoint(60, 0), 10));
+    var dd = sk.AddDimension(DimensionType.Diameter, 20, circ); dd.Locked = true; dd.Formula = "20";
+    dd.TextOffset = new Vector2d(4, 3);   // внутри: 5 мм по лучу (0.8, 0.6)
+    // крупно: окружность на весь вид (подпись помещается между центром и стрелкой)
+    for (int i = 0; i < 40 && vp.PixelSize > 0.03; i++) { var cp = vp.Project(sk.Plane.ToWorld(new Vector2d(60, 0)))!.Value; vp.Camera.Zoom(1, (int)(cp.X * vp.Scaling), (int)(cp.Y * vp.Scaling)); }
+    Run();
+    vp.InvalidateOverlay(); vp.BuildOverlayForTest();
+    Require(SketchDimensions.LastDiameterText == "along", "inside diameter text: " + SketchDimensions.LastDiameterText);
+    var rel = dd.TextCenter - new Vector2d(60, 0);
+    Require(Math.Abs(Vector2d.Dot(rel, new Vector2d(0.8, 0.6)) - 5) < 2.5 && Math.Abs(rel.X * 0.6 - rel.Y * 0.8) < 3, $"inside text is not along the dimension line: {rel}");
+    dd.TextOffset = new Vector2d(16, 12);  // снаружи
+    vp.InvalidateOverlay(); vp.BuildOverlayForTest();
+    Require(SketchDimensions.LastDiameterText == "shelf", "outside diameter text: " + SketchDimensions.LastDiameterText);
+    // (2) отмена и возврат
+    w.AfterSketchEdit(sk); Run();
+    int undo0 = w.SketchUndoDepth;
+    var l1 = sk.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(40, 0)));
+    w.AfterSketchEdit(sk); Run();
+    var undo = CommandRegistry.Instance["edit.undo"]; var redo = CommandRegistry.Instance["edit.redo"];
+    Require(undo.Enabled && w.SketchUndoDepth == undo0 + 1, $"undo is not available in the sketch: depth {w.SketchUndoDepth}");
+    uint id1 = l1.Id;
+    w.KeyPress(Key.Z, RawInputModifiers.Control, PhysicalKey.Z, "z"); Run();
+    Require(!sk.Entities.OfType<SkLine>().Any(l => l.Id == id1), "Ctrl+Z did not undo the line");
+    Require(redo.Enabled, "redo is not available");
+    redo.Execute(); Run();
+    Require(sk.Entities.OfType<SkLine>().Any(l => l.Id == id1), "redo did not return the line (same id)");
+    l1 = sk.Entities.OfType<SkLine>().First(l => l.Id == id1);
+    // (1) обрезка щелчком: пересечения
+    var v1 = sk.AddEntity(new SkLine(new SkPoint(10, -10), new SkPoint(10, 10)));
+    var v2 = sk.AddEntity(new SkLine(new SkPoint(30, -10), new SkPoint(30, 10)));
+    Require(TrimTool.Trim(sk, l1, new Vector2d(20, 0)), "trim click");
+    var hs = sk.Entities.OfType<SkLine>().Where(l => Math.Abs(l.A.Y) < 1e-9 && Math.Abs(l.B.Y) < 1e-9).Select(l => (Math.Min(l.A.X, l.B.X), Math.Max(l.A.X, l.B.X))).OrderBy(x => x).ToList();
+    Require(hs.Count == 2 && Math.Abs(hs[0].Item2 - 10) < 1e-6 && Math.Abs(hs[1].Item1 - 30) < 1e-6, "trim between intersections: " + string.Join(" ", hs));
+    // точки на кривой ограничивают кусок (как в Creo)
+    var l2 = sk.AddEntity(new SkLine(new SkPoint(0, 20), new SkPoint(40, 20)));
+    sk.AddEntity(new SkPoint(15, 20));
+    var t2 = sk.AddEntity(new SkLine(new SkPoint(25, 20), new SkPoint(25, 30)));
+    Require(TrimTool.Trim(sk, l2, new Vector2d(20, 20)), "trim between points");
+    var hs2 = sk.Entities.OfType<SkLine>().Where(l => Math.Abs(l.A.Y - 20) < 1e-9 && Math.Abs(l.B.Y - 20) < 1e-9).Select(l => (Math.Min(l.A.X, l.B.X), Math.Max(l.A.X, l.B.X))).OrderBy(x => x).ToList();
+    Require(hs2.Count == 2 && Math.Abs(hs2[0].Item2 - 15) < 1e-6 && Math.Abs(hs2[1].Item1 - 25) < 1e-6, "trim bounded by points on the line: " + string.Join(" ", hs2));
+    // протяжка мышью: линия y = −5 пересекает нижние части v1 и v2
+    w.AfterSketchEdit(sk); Run();
+    int before = w.SketchUndoDepth;
+    vp.Tool = new TrimTool(); Run();
+    var plane = sk.Plane;
+    (double, double) F(double x, double y) { var q = vp.Project(plane.ToWorld(new Vector2d(x, y)))!.Value; return (q.X / vp.Bounds.Width, q.Y / vp.Bounds.Height); }
+    vp.SimulateToolStroke(F(5, -5), F(20, -5), F(35, -5)); Run();
+    var verts = sk.Entities.OfType<SkLine>().Where(l => Math.Abs(l.A.X - l.B.X) < 1e-9 && (Math.Abs(l.A.X - 10) < 1e-9 || Math.Abs(l.A.X - 30) < 1e-9)).ToList();
+    Require(verts.Count == 2 && verts.All(l => Math.Min(l.A.Y, l.B.Y) > -1e-6), "stroke trim: " + string.Join(" ", verts.Select(l => $"{l.A.P}-{l.B.P}")));
+    Require(w.SketchUndoDepth == before + 1, $"stroke is not one undo step: {w.SketchUndoDepth} vs {before + 1}");
+    undo.Execute(); Run();
+    Require(sk.Entities.OfType<SkLine>().Count(l => Math.Abs(l.A.X - l.B.X) < 1e-9 && Math.Min(l.A.Y, l.B.Y) < -9) == 2, "undo of the stroke trim");
+    vp.Tool = null;
+    // (3) обрезка окружности — размер тот же (dN, формула)
+    circ = sk.Entities.OfType<SkCircle>().First();
+    dd = sk.Dimensions.First(x => x.Type == DimensionType.Diameter);
+    int ix = dd.Index;
+    sk.AddEntity(new SkLine(new SkPoint(40, 0), new SkPoint(80, 0)));
+    Require(TrimTool.Trim(sk, circ, new Vector2d(60, 10)), "circle trim");
+    Require(sk.Dimensions.Contains(dd) && dd.Items[0] is SkArc arc && dd.Index == ix && dd.Formula == "20" && Math.Abs(arc.Radius - 10) < 1e-9 && ReferenceEquals(arc.Center, dd.Items[0] is SkArc a2 ? a2.Center : null),
+        $"circle dimension after trim: present {sk.Dimensions.Contains(dd)}, on {dd.Items[0].GetType().Name}, {dd.Name} formula {dd.Formula}");
+    w.FinishSketch(); Run();
+});
+
 Check("UI-REORDER-K104", () =>
 {
     // k104 (отзыв 19:43): перестановка операций в дереве — на разных деталях и размерах (брусок с отверстием и бобышкой,

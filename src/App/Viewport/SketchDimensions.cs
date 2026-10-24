@@ -396,6 +396,15 @@ public static class SketchDimensions
             if (diameter && !d.SingleArrow) Arrow(batch, plane, style, from, dir, px);
 
             Vector2d at = diameter ? center : center + dir * (radius * 0.5);
+            // k105 (замечание 4): внутренний диаметр — подпись ВДОЛЬ размерной линии, там, куда её утащили (между центром и
+            // стрелкой); мутация P3D_DIAINTEXT=0 — горизонтально в центре (прежде)
+            if (diameter && !DiaInsideOff)
+            {
+                double room = Math.Max(0, radius - textHalf - ArrowLengthPx * px);
+                Text(batch, plane, style, d, center + dir * Math.Clamp(reach, 0, room), dir, nrm, px);
+                LastDiameterText = "along";
+                return;
+            }
             if (HorizontalOff) Text(batch, plane, style, d, at, dir, nrm, px);
             else Text(batch, plane, style, d, at + hU * (TextHeightPx * px * 0.15), hR, hU, px);
             return;
@@ -411,6 +420,17 @@ public static class SketchDimensions
             Line(batch, plane, style, d.SingleArrow ? center : center - dir * radius, onCurve);
             Arrow(batch, plane, style, onCurve, -dir, px);
             if (!d.SingleArrow) Arrow(batch, plane, style, center - dir * radius, dir, px);
+            // k105 (замечание 5): наружный диаметр — выноска до подписи и горизонтальная полка под ней (как у радиуса);
+            // мутация P3D_DIAOUTSHELF=0 — без полки (прежде)
+            if (!DiaShelfOff && !HorizontalOff)
+            {
+                Line(batch, plane, style, onCurve, textAt);
+                Vector2d sd = hR; if (Vector2d.Dot(dir, sd) < 0) sd = -sd;
+                Line(batch, plane, style, textAt, textAt + sd * (textHalf * 2 + 4 * px));
+                Text(batch, plane, style, d, textAt + sd * (textHalf + 2 * px), sd, new Vector2d(-sd.Y, sd.X), px);
+                LastDiameterText = "shelf";
+                return;
+            }
             Line(batch, plane, style, onCurve, textAt + dir * textHalf);
             if (HorizontalOff) Text(batch, plane, style, d, textAt, dir, nrm, px);
             else Text(batch, plane, style, d, textAt + dir * textHalf + hR * (Vector2d.Dot(dir, hR) >= 0 ? textHalf + 2 * px : -textHalf - 2 * px), hR, hU, px);
@@ -444,6 +464,10 @@ public static class SketchDimensions
     /// <summary>Мутации k98: P3D_RADTEXTH=0 — подпись радиуса вдоль луча/оси U; P3D_ARCEXT=0 — без продолжения дуги.</summary>
     static readonly bool HorizontalOff = Environment.GetEnvironmentVariable("P3D_RADTEXTH") == "0";
     static readonly bool ArcExtOff = Environment.GetEnvironmentVariable("P3D_ARCEXT") == "0";
+    static readonly bool DiaInsideOff = Environment.GetEnvironmentVariable("P3D_DIAINTEXT") == "0";
+    static readonly bool DiaShelfOff = Environment.GetEnvironmentVariable("P3D_DIAOUTSHELF") == "0";
+    /// <summary>Разбор (k105): как нарисована подпись последнего диаметра — «along» (вдоль линии), «shelf» (на полке).</summary>
+    public static string LastDiameterText = "";
     /// <summary>Разбор: угол продолжения дуги у последнего радиального размера (0 — не рисовалось).</summary>
     public static double LastArcExtension;
 

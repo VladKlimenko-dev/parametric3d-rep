@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Model.Sketching;
 
@@ -30,6 +30,15 @@ public interface ISketchTool
     /// <summary>После готового примитива инструмент остаётся (следующий начинается сразу).</summary>
     bool Continuous { get; }
     ISketchTool Restart();
+}
+
+/// <summary>k105: инструмент с протяжкой мышью (обрезка): точки протяжки в координатах эскиза, конец — правка.</summary>
+public interface IStrokeTool
+{
+    bool StrokeEnabled { get; }
+    void StrokeMove(Vector2d p);
+    bool StrokeEnd(Sketch sk);
+    void StrokeCancel();
 }
 
 public abstract class SketchToolBase : ISketchTool

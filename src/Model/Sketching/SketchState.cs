@@ -25,6 +25,7 @@ public sealed class SketchState
     internal bool SnapToGrid;
     internal double GridStep;
 
+    internal int NextDimIndex;
     internal readonly List<SkEntity> Entities = new();
     internal readonly List<SkConstraint> Constraints = new();
     internal readonly List<SkDimension> Dimensions = new();
@@ -41,7 +42,8 @@ public sealed class SketchState
             OriginDescription = sk.OriginDescription,
             Name = sk.Name,
             SnapToGrid = sk.SnapToGrid,
-            GridStep = sk.GridStep
+            GridStep = sk.GridStep,
+            NextDimIndex = sk.NextDimIndex,
         };
 
         // Точки копируются ПЕРВЫМИ и запоминаются в карте: у соседних
@@ -68,7 +70,8 @@ public sealed class SketchState
             var copy = new SkConstraint(c.Type)
             {
                 Enabled = c.Enabled,
-                IconPos = c.IconPos
+                IconPos = c.IconPos,
+                Id = c.Id,                  // k105: номера те же — на них ссылаются (отмена в эскизе)
             };
             foreach (var it in c.Items) copy.Items.Add(Remap(it, map, entityMap));
             s.Constraints.Add(copy);
@@ -86,7 +89,8 @@ public sealed class SketchState
                 UserLocked = d.UserLocked, SingleArrow = d.SingleArrow, DiameterAsLinear = d.DiameterAsLinear,
                 Arrows = d.Arrows,
                 TextOffset = d.TextOffset,
-                Formula = d.Formula
+                Formula = d.Formula,
+                Index = d.Index, Reflex = d.Reflex, Id = d.Id,
             };
             foreach (var it in d.Items) copy.Items.Add(Remap(it, map, entityMap));
             s.Dimensions.Add(copy);
@@ -113,6 +117,7 @@ public sealed class SketchState
         sk.Constraints.AddRange(Constraints);
         sk.Dimensions.Clear();
         sk.Dimensions.AddRange(Dimensions);
+        sk.NextDimIndex = Math.Max(sk.NextDimIndex, NextDimIndex);
 
         sk.BumpStructure();
     }
@@ -121,6 +126,7 @@ public sealed class SketchState
 
     private static SkPoint ClonePoint(SkPoint p) => new(p.X, p.Y)
     {
+        Id = p.Id,
         Role = p.Role,
         Fixed = p.Fixed,
         Name = p.Name,
@@ -143,6 +149,8 @@ public sealed class SketchState
             _ => throw new NotSupportedException($"Unknown sketch entity: {e.Kind}")
         };
 
+        if (e is SkEllipse se && copy is SkEllipse ce) { ce.A0 = se.A0; ce.A1 = se.A1; }
+        if (e is not SkPoint) copy.Id = e.Id;
         copy.Role = e.Role;
         copy.Fixed = e.Fixed;
         copy.Name = e.Name;

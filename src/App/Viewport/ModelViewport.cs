@@ -525,6 +525,26 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
 
     // ================================================================ мышь
 
+    private bool _stroking;
+
+    /// <summary>k105: конец протяжки инструмента (обрезка по линии).</summary>
+    private void StrokeFinish(Point p)
+    {
+        if (Tool is not Parametric3D.App.Sketching.IStrokeTool st || ActiveSketch is not { } sk) return;
+        if (ScreenToSketch(p) is { } q) st.StrokeMove(q);
+        bool changed = st.StrokeEnd(sk);
+        AfterTool(changed);
+    }
+
+    /// <summary>Протяжка инструмента по точкам вида (доли размера) — для проверок.</summary>
+    public void SimulateToolStroke(params (double X, double Y)[] pts)
+    {
+        if (Tool is not Parametric3D.App.Sketching.IStrokeTool st || ActiveSketch == null) return;
+        st.StrokeCancel();
+        foreach (var (x, y) in pts) if (ScreenToSketch(new Point(Bounds.Width * x, Bounds.Height * y)) is { } q) st.StrokeMove(q);
+        StrokeFinish(new Point(Bounds.Width * pts[^1].X, Bounds.Height * pts[^1].Y));
+    }
+
     private enum Drag { None, Orbit, Pan, RightPending, Select, Tool, Handle, Dim, SketchGeom, Gizmo }
     private Drag _drag;
     private Point _last, _down;
@@ -573,6 +593,13 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
             case Drag.Gizmo: GizmoDragMove(p, e.KeyModifiers); return;
             case Drag.Dim: DimensionDragMove(p); return;
             case Drag.SketchGeom: SketchDragMove(p); return;
+            // k105: обрезка протяжкой — линия протяжки за курсором
+            case Drag.Tool when Tool is Parametric3D.App.Sketching.IStrokeTool { StrokeEnabled: true } st && ActiveSketch != null
+                                && (_stroking || Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > 6):
+                if (!_stroking) { _stroking = true; st.StrokeCancel(); if (ScreenToSketch(_down) is { } q0) st.StrokeMove(q0); }
+                if (ScreenToSketch(p) is { } q) st.StrokeMove(q);
+                _overlayDirty = true; Redraw();
+                return;
             case Drag.RightPending:
                 if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > 4) { _drag = Drag.Pan; Camera.Pan(dx, dy); _last = p; Redraw(); }
                 return;
@@ -600,6 +627,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         if (was == Drag.SketchGeom) { if (!EndSketchDrag()) RequestPick(p, click: true, e.KeyModifiers); return; }
         if (was == Drag.RightPending && Tool != null) ToolFinish();
         else if (was == Drag.RightPending) ContextRequested?.Invoke(p);
+        else if (was == Drag.Tool && _stroking) { _stroking = false; StrokeFinish(p); }
         else if (was == Drag.Tool && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 6) ToolClick(p);
         else if (was == Drag.Select && ComponentDragEnd()) { }
         else if (was == Drag.Select && RegionEnd(p, e.KeyModifiers)) { }

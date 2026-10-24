@@ -49,9 +49,9 @@ public static class StandardCommands
         // ------------------------------------------------------------ правка
         const string E = "Правка";
         r.Add(new AppCommand { Short = "↶", Id = "edit.undo", Label = "Отменить", Group = E, Icon = "undo_but.svg", Gesture = K(Key.Z, KeyModifiers.Control), Synonyms = "undo",
-            CanRun = () => w.Session?.CanUndo == true && w.CurrentOperation == null && !w.InSketch, Run = () => w.Session.Undo() });
+            CanRun = () => w.InSketch ? w.CanSketchUndo : w.Session?.CanUndo == true && w.CurrentOperation == null, Run = () => { if (w.InSketch) w.SketchUndo(); else w.Session.Undo(); } });
         r.Add(new AppCommand { Short = "↷", Id = "edit.redo", Label = "Вернуть", Group = E, Icon = "redo_but.svg", Gesture = K(Key.Y, KeyModifiers.Control), Synonyms = "redo повторить",
-            CanRun = () => w.Session?.CanRedo == true && w.CurrentOperation == null && !w.InSketch, Run = () => w.Session.Redo() });
+            CanRun = () => w.InSketch ? w.CanSketchRedo : w.Session?.CanRedo == true && w.CurrentOperation == null, Run = () => { if (w.InSketch) w.SketchRedo(); else w.Session.Redo(); } });
         r.Add(new AppCommand { Short = "▾", Id = "edit.history", Label = "Журнал отмены", Group = E, Icon = "undo_history_but.svg", Synonyms = "history undo журнал история",
             Run = () => w.OpenHistory() });
         r.Add(new AppCommand { Short = "Удалить", Id = "edit.delete", Label = "Удалить", Group = E, Icon = "delete_but.svg", Gesture = K(Key.Delete), Synonyms = "delete remove",
