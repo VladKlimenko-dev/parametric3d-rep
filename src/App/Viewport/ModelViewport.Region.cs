@@ -123,6 +123,67 @@ public sealed partial class ModelViewport
             OpDimsDrawn++;
         }
     }
+    // ------------------------------------------------------------------ k107: стрелки направления операции
+
+    /// <summary>Стрелки операции (начало, направление) — постоянной длины на экране; щелчок — OpArrowClicked.</summary>
+    public readonly List<(Vector3d At, Vector3d Dir)> OpArrows = new();
+    public event Action<int>? OpArrowClicked;
+    private int _arrowHover = -1;
+    public void SetOpArrows(IEnumerable<(Vector3d At, Vector3d Dir)>? arrows)
+    {
+        OpArrows.Clear(); if (arrows != null) OpArrows.AddRange(arrows);
+        if (_arrowHover >= OpArrows.Count) _arrowHover = -1;
+        _overlayDirty = true; Redraw();
+    }
+    double ArrowLen => 70 * PixelSize;
+
+    /// <summary>Стрелка под курсором (−1 — нет): у стержня 7 px.</summary>
+    public int OpArrowAt(Point p)
+    {
+        for (int i = 0; i < OpArrows.Count; i++)
+        {
+            var (at, dir) = OpArrows[i];
+            if (dir.LengthSquared < 1e-24 || Project(at) is not { } a || Project(at + dir.Normalized() * ArrowLen) is not { } b) continue;
+            double dx = b.X - a.X, dy = b.Y - a.Y, l2 = dx * dx + dy * dy;
+            double t = l2 < 1e-9 ? 0 : Math.Clamp(((p.X - a.X) * dx + (p.Y - a.Y) * dy) / l2, 0, 1);
+            double ex = a.X + dx * t - p.X, ey = a.Y + dy * t - p.Y;
+            if (ex * ex + ey * ey <= 49) return i;
+        }
+        return -1;
+    }
+    private bool UpdateArrowHover(Point p)
+    {
+        int h = OpArrows.Count == 0 ? -1 : OpArrowAt(p);
+        if (h != _arrowHover) { _arrowHover = h; _overlayDirty = true; Redraw(); }
+        return h >= 0;
+    }
+    /// <summary>Разбор: щелчок по стрелке i.</summary>
+    public void RaiseOpArrowClicked(int i) => OpArrowClicked?.Invoke(i);
+    private bool TryArrowClick(Point p) { int i = OpArrows.Count == 0 ? -1 : OpArrowAt(p); if (i < 0) return false; OpArrowClicked?.Invoke(i); return true; }
+
+    private void AddOpArrows(List<Render.Engine.LineInst> lines)
+    {
+        if (OpArrows.Count == 0 || ActiveSketch != null) return;
+        static Vector3 F(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
+        var camF = Camera.Forward; var view = new Vector3d(camF.X, camF.Y, camF.Z);
+        for (int i = 0; i < OpArrows.Count; i++)
+        {
+            var (at, dir0) = OpArrows[i];
+            if (dir0.LengthSquared < 1e-24) continue;
+            var dir = dir0.Normalized();
+            var col = i == _arrowHover ? new Vector4(1f, 0.85f, 0.2f, 1) : new Vector4(1f, 0.55f, 0.1f, 1);
+            double L = ArrowLen, h = 16 * PixelSize, w = 7 * PixelSize;
+            var tip = at + dir * L;
+            var side = Vector3d.Cross(dir, view); if (side.LengthSquared < 1e-12) side = Vector3d.Cross(dir, Vector3d.UnitZ); if (side.LengthSquared < 1e-12) side = Vector3d.Cross(dir, Vector3d.UnitX);
+            side = side.Normalized();
+            float wd = i == _arrowHover ? 3.4f : 2.6f;
+            lines.Add(Inst(F(at), F(tip), col, wd, 0));
+            lines.Add(Inst(F(tip), F(tip - dir * h + side * w), col, wd, 0));
+            lines.Add(Inst(F(tip), F(tip - dir * h - side * w), col, wd, 0));
+            lines.Add(Inst(F(tip - dir * h + side * w), F(tip - dir * h - side * w), col, wd, 0));
+        }
+    }
+
     /// <summary>Разбор (k102): сдвиг рёбер к глазу (мир) при нынешнем масштабе вида.</summary>
     public double EdgeBiasNow { get { UpdateEdgeBias(); return _r.EdgeBiasAt((float)PixelSize); } }
     /// <summary>Разбор: сколько размеров операции нарисовано (накопительно).</summary>
@@ -405,6 +466,7 @@ public sealed partial class ModelViewport
         static Vector3 F(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
         foreach (var (a, b, c) in Annotations) lines.Add(Inst(F(a), F(b), c, 1.2f, 0));
         AddOpDims(lines);
+        AddOpArrows(lines);
         // k99: контур плоскости сечения (без заливки)
         if (SectionCorners() is { } sc && ActiveSketch == null)
         {

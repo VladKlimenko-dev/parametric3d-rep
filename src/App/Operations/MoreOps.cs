@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.App.Viewport;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
@@ -48,40 +48,190 @@ internal static class MoreFields
 
 public sealed class SweepOp : FeatureOp<SweepFeature>
 {
-    private RefField _sec = null!, _path = null!;
+    /// <summary>
+    /// k107: состояние протяжки между её эскизами (как в Creo: из панели протяжки начать эскиз траектории или сечения и
+    /// вернуться в неё с тем же выбором и значениями).
+    /// </summary>
+    public sealed class State
+    {
+        public uint Section, Path, PathLine;
+        public bool Cut, Keep, Reverse;
+        public ValueRef Twist = new(0), Fraction = new(1);
+    }
+    public State? Seed;
+
+    private RefField _sec = null!, _path = null!, _secPoint = null!, _pathPlane = null!;
+    private bool _pickSecPoint, _pickPathPlane, _leaving;
     public SweepOp(SweepFeature? existing = null) : base(existing) { }
     public override string Title => "Протяжка";
     public override string Icon => "f_sweep_but.svg";
-    protected override SweepFeature Create() => new();
+    protected override SweepFeature Create()
+    {
+        var f = new SweepFeature();
+        if (Seed is { } s) { f.Cut = s.Cut; f.KeepOrientation = s.Keep; f.Reverse = s.Reverse; f.Twist = s.Twist; f.LengthFraction = s.Fraction; }
+        return f;
+    }
+
+    /// <summary>Разбор: идёт выбор точки начала сечения / плоскости траектории.</summary>
+    public bool PickingSectionPoint => _pickSecPoint;
+    public bool PickingPathPlane => _pickPathPlane;
+    public RefField SectionPointField => _secPoint;
+    public RefField PathPlaneField => _pathPlane;
 
     public override void Build(OpPanel p)
     {
         _sec = p.Ref(new RefField { Label = "Сечение", Filter = PickFilter.SketchCurves, Accept = Refs.IsSketch, Single = true, Describe = r => L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?") });
+        // k107: эскиз сечения — в начале траектории, в плоскости, перпендикулярной ей (точка — у начала или конца пути)
+        p.Button("Создать эскиз сечения", StartSectionPick, () => HasPath && !Editing,
+            "Щёлкните конец траектории: там создаётся плоскость, перпендикулярная траектории, и начинается эскиз сечения");
+        _secPoint = p.Ref(new RefField
+        {
+            Label = "Точка на траектории", Filter = PickFilter.SketchPoints | PickFilter.Vertices | PickFilter.Datums, Accept = r => Refs.PointOf(r) != null,
+            Single = true, Optional = true,
+        }, () => _pickSecPoint);
         _path = p.Ref(new RefField { Label = "Траектория", Filter = PickFilter.SketchCurves | PickFilter.Datums, Accept = r => Refs.IsSketch(r) || r.Target is DatumCurve or Line3DItem, Single = true,
             Describe = r => r.Target is DatumCurve or Line3DItem ? L("Кривая «{0}»", ((ModelItem)r.Target!).Name) : L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?") });
+        // k107: эскиз траектории — на выбранной плоскости
+        p.Button("Создать эскиз траектории", StartPathPick, () => !Editing,
+            "Выберите плоскость или плоскую грань — на ней начнётся эскиз траектории");
+        _pathPlane = p.Ref(new RefField
+        {
+            Label = "Плоскость траектории", Filter = PickFilter.Faces | PickFilter.Datums, Accept = Refs.IsPlanar, Single = true, Optional = true,
+        }, () => _pickPathPlane);
         if (Editing) { _sec.Kept = F.SectionSketchId != 0 ? 1 : 0; _path.Kept = F.PathSketchId != 0 || F.PathLineId != 0 ? 1 : 0; }
         p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
+        p.Check("Обратное направление", () => F.Reverse, v => F.Reverse = v);
         p.Number("Закрутка", () => F.Twist, v => F.Twist = v, "°");
         p.Number("Доля траектории", () => F.LengthFraction, v => F.LengthFraction = v, "");
         p.Check("Сечение без поворота", () => F.KeepOrientation, v => F.KeepOrientation = v);
-        p.Note("Сечение — замкнутый эскиз; траектория — эскиз с незамкнутой цепочкой.");
+        p.Note("Сечение — замкнутый эскиз в начале траектории; траектория — эскиз с незамкнутой цепочкой. Стрелка на траектории — направление протяжки (щелчок — развернуть).");
+    }
+
+    /// <summary>Доступность кнопок зависит от выбора — обновить вместе с состоянием.</summary>
+    public override void RefreshStatus() { base.RefreshStatus(); Panel?.Refresh(); }
+
+    bool HasPath => _path != null && (_path.Items.Count > 0 || F.PathSketchId != 0 || F.PathLineId != 0);
+
+    void StartSectionPick()
+    {
+        if (!HasPath) { W.ShowToast(L("Сначала выберите траекторию"), error: false); return; }
+        _pickSecPoint = true; _pickPathPlane = false;
+        Panel?.Refresh();
+        Activate(_secPoint);
+        W.ShowHint(L("Щёлкните конец траектории — там начнётся эскиз сечения"));
+    }
+
+    void StartPathPick()
+    {
+        _pickPathPlane = true; _pickSecPoint = false;
+        Panel?.Refresh();
+        Activate(_pathPlane);
+        W.ShowHint(L("Выберите плоскость эскиза траектории"));
     }
 
     protected override void SeedRefs()
     {
+        if (Seed is { } st)
+        {
+            if (Part.Sketches.FirstOrDefault(k => k.Id == st.Section) is { } ss) _sec.Take(new[] { Fields.SketchRef(ss) });
+            if (Part.Sketches.FirstOrDefault(k => k.Id == st.Path) is { } ps) _path.Take(new[] { Fields.SketchRef(ps) });
+            else if (st.PathLine != 0 && Part.Children.FirstOrDefault(c => c.Id == st.PathLine && c is DatumCurve or Line3DItem) is { } pl)
+                _path.Take(new[] { new PickRef(pl.Id, PickKind.DatumAxis, Part, pl) });
+            return;
+        }
         // выбранные эскизы: первый — сечение, второй — траектория
         var sk = W.ViewPort.Selection.Items.Where(Refs.IsSketch).GroupBy(r => Refs.SketchOf(r)!.Id).Select(g => g.First()).ToList();
         if (sk.Count > 0) _sec.Take(new[] { sk[0] });
         if (sk.Count > 1) _path.Take(new[] { sk[1] });
         else if (W.ViewPort.Selection.Items.FirstOrDefault(r => r.Target is DatumCurve or Line3DItem) is { IsEmpty: false } dc) _path.Take(new[] { dc });
+        // k107: один эскиз — незамкнутый (траектория) или замкнутый (сечение)
+        if (sk.Count == 1 && Refs.SketchOf(sk[0]) is { } one && !IsClosed(one))
+        { _sec.Items.Clear(); _path.Take(new[] { sk[0] }); }
     }
+
+    static bool IsClosed(Sketch sk)
+    {
+        try { return !sk.ToProfile().IsEmpty; } catch { return false; }
+    }
+
+    State Snapshot() => new()
+    {
+        Section = F.SectionSketchId, Path = F.PathSketchId, PathLine = F.PathLineId,
+        Cut = F.Cut, Keep = F.KeepOrientation, Reverse = F.Reverse, Twist = F.Twist, Fraction = F.LengthFraction,
+    };
 
     protected override void Push()
     {
         if (_sec.Items.Count > 0 && Refs.SketchOf(_sec.Items[0]) is { } s) F.SectionSketchId = s.Id;
+        else if (_sec.Touched) F.SectionSketchId = 0;
         if (_path.Items.Count > 0 && _path.Items[0].Target is DatumCurve or Line3DItem) { F.PathLineId = ((ModelItem)_path.Items[0].Target!).Id; F.PathSketchId = 0; }
         else if (_path.Items.Count > 0 && Refs.SketchOf(_path.Items[0]) is { } t) { F.PathSketchId = t.Id; F.PathLineId = 0; }
+        if (_leaving) return;
+        if (_pickPathPlane && _pathPlane.Items.Count > 0 && Refs.PlaneOf(_pathPlane.Items[0]) is { } pl) BeginPathSketch(_pathPlane.Items[0], pl);
+        else if (_pickSecPoint && _secPoint.Items.Count > 0 && Refs.PointOf(_secPoint.Items[0]) is { } q) BeginSectionSketch(q);
     }
+
+    /// <summary>Эскиз траектории на плоскости; «Готово» — назад в протяжку с ним, «Отмена» — назад без него.</summary>
+    void BeginPathSketch(PickRef at, (Parametric3D.Kernel.Frame3 Frame, uint SourceId, string Name) pl)
+    {
+        _leaving = true;
+        var st = Snapshot(); var w = W; var part = Part;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (!ReferenceEquals(w.CurrentOperation, this)) return;
+            w.CancelOperation();
+            w.BeginNewSketch(part, SketchOp.SketchFrame(at, pl.Frame), pl.SourceId, pl.Name, sk => { st.Path = sk.Id; st.PathLine = 0; return new SweepOp { Seed = st }; });
+            w.AfterSketchCancel = () => new SweepOp { Seed = st };
+        });
+    }
+
+    /// <summary>
+    /// Эскиз сечения в начале траектории: точка у конца траектории — тот конец становится началом (направление протяжки
+    /// разворачивается); плоскость — перпендикулярно траектории, ось V — по нормали плоскости траектории.
+    /// </summary>
+    void BeginSectionSketch(Vector3d q)
+    {
+        if (F.StartFrame(Part) is not { } sf) { W.ShowToast(L("Траектория не найдена")); return; }
+        if ((q - sf.End).Length < (q - sf.P).Length) { F.Reverse = !F.Reverse; sf = F.StartFrame(Part)!.Value; }
+        var frame = SectionFrame(sf.P, sf.T, sf.N);
+        _leaving = true;
+        var st = Snapshot(); var w = W; var part = Part;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (!ReferenceEquals(w.CurrentOperation, this)) return;
+            w.CancelOperation();
+            w.BeginNewSketch(part, frame, 0, L("Нормаль к траектории"), sk => { st.Section = sk.Id; return new SweepOp { Seed = st }; });
+            w.AfterSketchCancel = () => new SweepOp { Seed = st };
+        });
+    }
+
+    /// <summary>Плоскость сечения: начало — точка траектории, нормаль — касательная, V — нормаль плоскости траектории.</summary>
+    public static Parametric3D.Kernel.Frame3 SectionFrame(Vector3d p, Vector3d t, Vector3d n)
+    {
+        t = t.Normalized();
+        var v = n - t * Vector3d.Dot(n, t);
+        if (v.LengthSquared < 1e-12) v = Math.Abs(t.Z) < 0.9 ? Vector3d.UnitZ - t * t.Z : Vector3d.UnitX - t * t.X;
+        v = v.Normalized();
+        var u = Vector3d.Cross(v, t).Normalized();
+        return new Parametric3D.Kernel.Frame3(p, u, v);
+    }
+
+    /// <summary>k107: стрелка направления — у начала траектории, по ходу протяжки.</summary>
+    public override IEnumerable<(Vector3d At, Vector3d Dir)> ViewArrows()
+    {
+        if (ArrowsOff || Part == null) yield break;
+        (Vector3d P, Vector3d T, Vector3d N, Vector3d End)? sf = null;
+        try { sf = F.StartFrame(Part); } catch { }
+        if (sf is { } s) yield return (s.P, s.T);
+    }
+
+    public override void ArrowClicked(int index)
+    {
+        F.Reverse = !F.Reverse;
+        FieldChanged();
+    }
+
+    static readonly bool ArrowsOff = Environment.GetEnvironmentVariable("P3D_SWEEPARROW") == "0";
 }
 
 // ====================================================================== переход по сечениям

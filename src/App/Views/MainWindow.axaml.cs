@@ -887,6 +887,7 @@ public partial class MainWindow : Window
         View.ComponentDragEnded += _ => { Session.CommitEdit(); Commands.AssemblyCommands.Solve(this); };
         View.SketchEdited += () => { SketchCheckpoint(); ScheduleTree(); UpdateStatus(); UpdateContextBar(); };
         View.SketchEntered += sk => { if (!SketchUndoOff) ResetSketchUndo(sk); };
+        View.OpArrowClicked += i => { try { CurrentOperation?.ArrowClicked(i); } catch (Exception ex) { AppLog.Write("operation arrow", ex); } };
         View.ExpandEdge = r => r.Owner is Part p ? Topo.ChainRefs(p, r) : new List<PickRef> { r };
         View.ReferencePicked += AddSketchReference;
         View.DimensionEditRequested += EditDimension;
@@ -1832,7 +1833,7 @@ public partial class MainWindow : Window
     {
         CurrentOperation = null;
         View.Selection.Predicate = null;
-        View.SetOpDims(null);
+        View.SetOpDims(null); View.SetOpArrows(null);
         _handleOp = null; _handleOpFixed = false;
         _opQuiet = false;
         DragValueBox.IsVisible = false;
@@ -1914,6 +1915,7 @@ public partial class MainWindow : Window
         Session.BeginEdit(L("Изменить эскиз «{0}»", sk.Name));
         _sketchIsNew = false;
         _afterSketch = null;
+        AfterSketchCancel = null;
         SketchRollback(sk);
         EnterSketchUi(sk);
     }
@@ -1997,6 +1999,8 @@ public partial class MainWindow : Window
         ScheduleTree();
         var then = _afterSketch;
         _afterSketch = null;
+        var back = AfterSketchCancel; AfterSketchCancel = null;
+        if (empty && back != null) { View.Selection.Clear(); StartOperation(back()); return; }
         if (!empty && then != null)
         {
             // эскиз из снимка после отмены — тот же объект в детали (правка не отменялась)
@@ -2019,7 +2023,13 @@ public partial class MainWindow : Window
         ShowHint(null);
         RebuildUi();
         ScheduleTree();
+        // k107: эскиз, начатый из операции (протяжка: «Создать эскиз сечения»), отменили — назад в операцию
+        var back = AfterSketchCancel; AfterSketchCancel = null;
+        if (back != null) { View.Selection.Clear(); StartOperation(back()); }
     }
+
+    /// <summary>k107: операция, в которую вернуться при отмене эскиза, начатого из неё.</summary>
+    public Func<Operation>? AfterSketchCancel;
 
     // ================================================================ дерево
 
