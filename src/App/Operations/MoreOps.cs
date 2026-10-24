@@ -86,7 +86,9 @@ public sealed class SweepOp : FeatureOp<SweepFeature>
             "Щёлкните конец траектории: там создаётся плоскость, перпендикулярная траектории, и начинается эскиз сечения");
         _secPoint = p.Ref(new RefField
         {
-            Label = "Точка на траектории", Filter = PickFilter.SketchPoints | PickFilter.Vertices | PickFilter.Datums, Accept = r => Refs.PointOf(r) != null,
+            Label = "Точка на траектории", Filter = PickFilter.SketchPoints | PickFilter.Vertices, Accept = r => Refs.PointOf(r) != null,
+            // k108: точки траектории важнее начала координат детали, лежащего под ними
+            Prefer = r => r.Kind is PickKind.SketchPoint or PickKind.Vertex,
             Single = true, Optional = true,
         }, () => _pickSecPoint);
         _path = p.Ref(new RefField { Label = "Траектория", Filter = PickFilter.SketchCurves | PickFilter.Datums, Accept = r => Refs.IsSketch(r) || r.Target is DatumCurve or Line3DItem, Single = true,
@@ -116,6 +118,8 @@ public sealed class SweepOp : FeatureOp<SweepFeature>
     {
         if (!HasPath) { W.ShowToast(L("Сначала выберите траекторию"), error: false); return; }
         _pickSecPoint = true; _pickPathPlane = false;
+        // k108: концы и узлы траектории — видны и выбираются (вне правки эскиза точки эскиза не ловились)
+        if (F.PathSketchId != 0) W.ViewPort.SetPointSketches(new[] { F.PathSketchId });
         Panel?.Refresh();
         Activate(_secPoint);
         W.ShowHint(L("Щёлкните конец траектории — там начнётся эскиз сечения"));
@@ -192,6 +196,7 @@ public sealed class SweepOp : FeatureOp<SweepFeature>
     void BeginSectionSketch(Vector3d q)
     {
         if (F.StartFrame(Part) is not { } sf) { W.ShowToast(L("Траектория не найдена")); return; }
+        W.ViewPort.SetPointSketches(null);
         if ((q - sf.End).Length < (q - sf.P).Length) { F.Reverse = !F.Reverse; sf = F.StartFrame(Part)!.Value; }
         var frame = SectionFrame(sf.P, sf.T, sf.N);
         _leaving = true;
@@ -219,7 +224,7 @@ public sealed class SweepOp : FeatureOp<SweepFeature>
     /// <summary>k107: стрелка направления — у начала траектории, по ходу протяжки.</summary>
     public override IEnumerable<(Vector3d At, Vector3d Dir)> ViewArrows()
     {
-        if (ArrowsOff || Part == null) yield break;
+        if (ArrowsOff || Part == null || _pickSecPoint) yield break;   // k108: при выборе точки начала стрелка не мешает
         (Vector3d P, Vector3d T, Vector3d N, Vector3d End)? sf = null;
         try { sf = F.StartFrame(Part); } catch { }
         if (sf is { } s) yield return (s.P, s.T);

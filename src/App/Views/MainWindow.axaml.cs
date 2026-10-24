@@ -1833,7 +1833,7 @@ public partial class MainWindow : Window
     {
         CurrentOperation = null;
         View.Selection.Predicate = null;
-        View.SetOpDims(null); View.SetOpArrows(null);
+        View.SetOpDims(null); View.SetOpArrows(null); View.SetPointSketches(null);
         _handleOp = null; _handleOpFixed = false;
         _opQuiet = false;
         DragValueBox.IsVisible = false;

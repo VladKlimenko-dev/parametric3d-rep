@@ -2958,9 +2958,14 @@ Check("UI-SWEEP-K107", () =>
     w.CancelSketch(); Run();
     Require(w.CurrentOperation is SweepOp, "cancel of the section sketch did not return to the sweep");
     op = (SweepOp)w.CurrentOperation!;
-    // (2) эскиз сечения у начала (0,0): плоскость поперёк траектории
+    // (2) эскиз сечения у начала (0,0): плоскость поперёк траектории; k108 — точка траектории выбирается щелчком в виде
     Click(op.Panel!.Buttons["Создать эскиз сечения"]);
-    op.SelectionChanged(new[] { new PickRef(l1.A.Id, PickKind.SketchPoint, psk, l1.A) }); Run();
+    vp.ZoomToFit(animate: false); Run();
+    var sp0 = vp.Project(psk.Plane.ToWorld(l1.A.P))!.Value;
+    var under = vp.PickForTest(sp0);
+    Require(under.Kind == PickKind.SketchPoint && ReferenceEquals(under.Target, l1.A), $"path start point is not pickable: {under.Kind} {under.Target?.GetType().Name}");
+    var wp = vp.TranslatePoint(sp0, w)!.Value;
+    w.MouseMove(wp); Run(); w.MouseDown(wp, MouseButton.Left); w.MouseUp(wp, MouseButton.Left); Run();
     Require(w.InSketch, "section sketch did not start (2)");
     var ssk = vp.ActiveSketch!;
     Require(ssk.Plane.Origin.Length < 1e-6 && Math.Abs(Math.Abs(ssk.Plane.W.X) - 1) < 1e-9, $"section plane: origin {ssk.Plane.Origin}, normal {ssk.Plane.W}");

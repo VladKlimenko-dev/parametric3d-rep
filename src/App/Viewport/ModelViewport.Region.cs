@@ -145,7 +145,10 @@ public sealed partial class ModelViewport
             var (at, dir) = OpArrows[i];
             if (dir.LengthSquared < 1e-24 || Project(at) is not { } a || Project(at + dir.Normalized() * ArrowLen) is not { } b) continue;
             double dx = b.X - a.X, dy = b.Y - a.Y, l2 = dx * dx + dy * dy;
-            double t = l2 < 1e-9 ? 0 : Math.Clamp(((p.X - a.X) * dx + (p.Y - a.Y) * dy) / l2, 0, 1);
+            // k108: у самого начала стрелки — точка траектории (её выбирают), стрелка ловится дальше от неё
+            double t = l2 < 1e-9 ? 0 : ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / l2;
+            if (t < 0.2 || t > 1.05) continue;
+            t = Math.Min(t, 1);
             double ex = a.X + dx * t - p.X, ey = a.Y + dy * t - p.Y;
             if (ex * ex + ey * ey <= 49) return i;
         }
