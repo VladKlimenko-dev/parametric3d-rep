@@ -747,6 +747,7 @@ public partial class MainWindow : Window
 
     public void RefreshToolStates()
     {
+        SketchCheckpoint();       // k105: правка эскиза любым путём — отметка для отмены
         foreach (var (b, c) in _toggles) if (b is ToggleButton t) t.IsChecked = c.IsChecked?.Invoke();
         if (_datumsButton != null) _datumsButton.IsChecked = _reg["view.datums"].IsChecked!();
         UpdateStyleButton();
@@ -884,7 +885,8 @@ public partial class MainWindow : Window
         SetupDocks();
         View.ComponentDragStarted += _ => Session.BeginEdit(L("Перетащить компонент"));
         View.ComponentDragEnded += _ => { Session.CommitEdit(); Commands.AssemblyCommands.Solve(this); };
-        View.SketchEdited += () => { ScheduleTree(); UpdateStatus(); UpdateContextBar(); };
+        View.SketchEdited += () => { SketchCheckpoint(); ScheduleTree(); UpdateStatus(); UpdateContextBar(); };
+        View.SketchEntered += sk => { if (!SketchUndoOff) ResetSketchUndo(sk); };
         View.ExpandEdge = r => r.Owner is Part p ? Topo.ChainRefs(p, r) : new List<PickRef> { r };
         View.ReferencePicked += AddSketchReference;
         View.DimensionEditRequested += EditDimension;

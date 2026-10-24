@@ -48,7 +48,7 @@ public enum ArrowPlacement
 
 public sealed class SkConstraint
 {
-    public readonly uint Id = Core.Ids.New();
+    public uint Id { get; internal set; } = Core.Ids.New();
     public ConstraintType Type;
     /// <summary>Участники: точки и/или кривые, в зависимости от типа.</summary>
     public readonly List<SkEntity> Items = new();
@@ -99,7 +99,7 @@ public sealed class SkConstraint
 /// </summary>
 public sealed class SkDimension
 {
-    public readonly uint Id = Core.Ids.New();
+    public uint Id { get; internal set; } = Core.Ids.New();
     /// <summary>k102: номер размера в эскизе (идентификатор dN; нумерация каждого эскиза — с нуля); -1 — ещё не задан.</summary>
     public int Index = -1;
     /// <summary>Идентификатор размера в эскизе: «d0», «d1»…</summary>

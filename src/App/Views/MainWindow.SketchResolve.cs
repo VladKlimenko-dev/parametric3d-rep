@@ -153,6 +153,7 @@ public partial class MainWindow
         View.RefreshDefaultDimensions();
         sk.NotifyChanged(sk);
         View.MarkDirty();
+        SketchCheckpoint();
         RefreshToolStates();
     }
 

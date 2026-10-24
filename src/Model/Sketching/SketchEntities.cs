@@ -27,7 +27,7 @@ public enum SkRole
 /// </summary>
 public abstract class SkEntity
 {
-    public readonly uint Id = Ids.New();
+    public uint Id { get; internal set; } = Ids.New();
     public abstract SkKind Kind { get; }
     public SkRole Role = SkRole.Object;
     /// <summary>Элемент зафиксирован решателем/пользователем.</summary>

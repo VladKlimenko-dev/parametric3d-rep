@@ -244,9 +244,13 @@ public sealed partial class ModelViewport
     /// <summary>Слой поверх вида — пересобрать при следующем кадре.</summary>
     public void InvalidateOverlay() { _overlayDirty = true; Redraw(); }
 
+    /// <summary>k105: вход в эскиз (окно начинает отмену правок эскиза заново).</summary>
+    public event Action<Sketch>? SketchEntered;
+
     public void EnterSketch(Sketch sk, bool animate = true)
     {
         SketchDimensions.ShowIds = false;   // k102: при каждом входе в эскиз — значения размеров
+        SketchEntered?.Invoke(sk);
         if (ActiveSketch == null) _beforeSketch = Camera.State;
         ActiveSketch = sk;
         Selection.Clear();
