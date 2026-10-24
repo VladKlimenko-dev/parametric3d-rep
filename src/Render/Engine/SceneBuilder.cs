@@ -13,18 +13,22 @@ namespace Parametric3D.Render.Engine;
 /// </summary>
 public static class SceneBuilder
 {
-    public static SceneData Build(Document doc, RenderTheme th, ShowOptions show, ModelItem? activeOwner = null, Sketch? activeSketch = null)
+    public static SceneData Build(Document doc, RenderTheme th, ShowOptions show, ModelItem? activeOwner = null, Sketch? activeSketch = null,
+                                  IReadOnlyCollection<uint>? pointSketches = null)
     {
         var s = new SceneData();
         _activeSketch = activeSketch;
+        _pointSketches = pointSketches;
         _hiddenRoot = doc.RootIsHidden ? doc.Root : null;
         try { Walk(doc.Root, Matrix4.Identity, s, th, show, activeOwner, doc.Root.Visible); }
-        finally { _activeSketch = null; _hiddenRoot = null; }
+        finally { _activeSketch = null; _hiddenRoot = null; _pointSketches = null; }
         return s;
     }
 
     /// <summary>Эскиз в правке: виден всегда (и при скрытых эскизах), его точки выбираются (привязка, размеры).</summary>
     [ThreadStatic] private static Sketch? _activeSketch;
+    /// <summary>k108: эскизы, у которых концы и центры видны и выбираются и вне правки (точка на траектории протяжки).</summary>
+    [ThreadStatic] private static IReadOnlyCollection<uint>? _pointSketches;
     /// <summary>Служебный корень документа детали: его опорные элементы не рисуются.</summary>
     [ThreadStatic] private static Assembly? _hiddenRoot;
 
@@ -260,10 +264,11 @@ public static class SceneBuilder
         }
         if (active && AxesLastForTest) Builtins();
         // точки: отдельные — всегда; концы и центры — у эскиза в правке
+        bool ends = active || _pointSketches?.Contains(sk.Id) == true;
         foreach (var e in sk.Entities)
             foreach (var q in e.Handles)
             {
-                if (q.Owner != null && !active) continue;
+                if (q.Owner != null && !ends) continue;
                 uint pick = s.AddPick(new PickRef(q.Id, PickKind.SketchPoint, sk, q), 3, partId, sk.Id);
                 s.Points.Add(new PointInst { P = Tr(plane.ToWorld(q.P), xf), Color = SceneData.Pack(th.SketchPoint), Px = q.Owner == null ? 6f : 5f, Shape = 0, Pick = pick });
             }

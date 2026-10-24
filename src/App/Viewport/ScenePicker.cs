@@ -146,7 +146,7 @@ public sealed class ScenePicker
                 case DatumCurve dc:
                     for (int k = 1; k < dc.Points.Count; k++) AddSegment3(dc.Points[k - 1], dc.Points[k], xf, new PickRef(dc.Id, PickKind.DatumAxis, item, dc));
                     break;
-                case Sketch sk: AddSketch(sk, xf, sk == activeSketch); break;
+                case Sketch sk: AddSketch(sk, xf, sk == activeSketch, PointSketches?.Contains(sk.Id) == true); break;
             }
 
             // Базовые элементы чужого владельца — после своих.
@@ -225,7 +225,10 @@ public sealed class ScenePicker
                     new PickRef(ax.Id, PickKind.DatumAxis, ax.Parent, ax));
     }
 
-    private void AddSketch(Sketch sk, Matrix4 xf, bool active)
+    /// <summary>k108: эскизы, точки которых ловятся и вне правки.</summary>
+    public IReadOnlyCollection<uint>? PointSketches;
+
+    private void AddSketch(Sketch sk, Matrix4 xf, bool active, bool points = false)
     {
         Frame3 plane = sk.Plane;
 
@@ -241,7 +244,13 @@ public sealed class ScenePicker
             }
         }
 
-        // Точки эскиза ловятся только в активном эскизе — там же, где они рисуются.
+        // Точки эскиза ловятся только в активном эскизе — там же, где они рисуются (k108: и у эскизов PointSketches).
+        if (!active && points)
+        {
+            foreach (var p in sk.AllPoints())
+                AddPoint(plane.ToWorld(p.P), xf, new PickRef(p.Id, PickKind.SketchPoint, sk, p));
+            return;
+        }
         if (!active) return;
         // k96 (п. 1): нуль и оси эскиза — к ним привязываются связи и размеры
         // k97 (замечание 13): оси и нуль — после элементов эскиза (штраф к расстоянию больше допуска)

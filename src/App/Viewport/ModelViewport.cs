@@ -37,6 +37,19 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     // их там нельзя — это были бы чужие объекты)
     private SceneRenderer _r = new();
     private readonly ScenePicker _cpuPicker = new();
+    /// <summary>
+    /// k108: эскизы, у которых концы и центры кривых видны и выбираются и вне правки эскиза (протяжка: точка на траектории
+    /// для эскиза сечения).
+    /// </summary>
+    public readonly HashSet<uint> PointSketchIds = new();
+    public void SetPointSketches(IEnumerable<uint>? ids)
+    {
+        PointSketchIds.Clear();
+        if (ids != null && !PointSketchesOff) foreach (var i in ids) PointSketchIds.Add(i);
+        _cpuPicker.PointSketches = PointSketchIds.Count > 0 ? PointSketchIds : null;
+        MarkDirty();
+    }
+    static readonly bool PointSketchesOff = Environment.GetEnvironmentVariable("P3D_PATHPOINTS") == "0";
     private SceneData? _scene;
     private Document? _doc;
     private bool _glReady, _sceneDirty = true, _flagsDirty = true, _rebuilding;
@@ -363,7 +376,8 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         {
             _holdUntil = DateTime.MinValue;
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-            _scene = SceneBuilder.Build(_doc, _r.Theme, Show, ActivePart, ActiveSketch);
+            _scene = SceneBuilder.Build(_doc, _r.Theme, Show, ActivePart, ActiveSketch, PointSketchIds.Count > 0 ? PointSketchIds : null);
+            _cpuPicker.PointSketches = PointSketchIds.Count > 0 ? PointSketchIds : null;
             _overlayDirty = true;   // u10: стрелки начала координат — из сцены
             _r.ShowAllVertices = Show.Vertices;
             _r.Upload(_scene);
@@ -677,6 +691,9 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     }
 
     static bool SafePred(Func<PickRef, bool> f, PickRef r) { try { return f(r); } catch { return false; } }
+
+    /// <summary>Разбор (k108): что под курсором (выбор на процессоре, с нынешним фильтром).</summary>
+    public PickRef PickForTest(Point p) => CpuPick(p);
 
     private PickRef CpuPick(Point p)
     {
