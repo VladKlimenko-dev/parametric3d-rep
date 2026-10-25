@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using OpenTK.Mathematics;
 using Parametric3D.Kernel;
@@ -446,7 +446,11 @@ public static class DocumentFile
             Dir = new[] { df.NeutralNormal.X, df.NeutralNormal.Y, df.NeutralNormal.Z },
             OpenFaces = df.OnFaces.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList(),
             FaceNames = df.OnFaceNames.Count > 0 ? df.OnFaceNames.ToList() : null,
-            FaceSelectors = FaceSel(df.OnSelectors)
+            FaceSelectors = FaceSel(df.OnSelectors),
+            // k112: шарнир, смещаемое ребро, итоговый угол, сторона, опорная плоскость
+            Edges = df.Hinge is { } dh ? new[] { dh }.Concat(df.Moving is { } dm ? new[] { dm } : Array.Empty<EdgeRef>()).Select(SaveEdge).ToList() : new(),
+            Flags = DraftFlags(df),
+            Num = df.RefNormal is { } drn ? new Dictionary<string, double> { ["refNx"] = drn.X, ["refNy"] = drn.Y, ["refNz"] = drn.Z } : null
         },
 
         RibFeature rb => new FeatureDto
@@ -624,6 +628,14 @@ public static class DocumentFile
 
     private static Vector3d Vec(double[]? a) =>
         a is { Length: >= 3 } ? new Vector3d(a[0], a[1], a[2]) : Vector3d.Zero;
+
+    private static List<string>? DraftFlags(DraftFeature df)
+    {
+        var l = new List<string>();
+        if (df.Total) l.Add("total");
+        if (df.Reverse) l.Add("reverse");
+        return l.Count > 0 ? l : null;
+    }
 
     private static EdgeDto SaveEdge(EdgeRef e) => new()
     {
@@ -923,6 +935,11 @@ public static class DocumentFile
                         df.OnFaces.Add(new Vector3d(fd.OpenFaces[i], fd.OpenFaces[i + 1], fd.OpenFaces[i + 2]));
                     if (fd.FaceNames != null) df.OnFaceNames.AddRange(fd.FaceNames);
                     df.OnSelectors.AddRange(FaceSel(fd.FaceSelectors));
+                    if (fd.Edges.Count > 0) df.Hinge = LoadEdge(fd.Edges[0]);
+                    if (fd.Edges.Count > 1) df.Moving = LoadEdge(fd.Edges[1]);
+                    df.Total = fd.Flags?.Contains("total") == true;
+                    df.Reverse = fd.Flags?.Contains("reverse") == true;
+                    if (fd.Num != null && fd.Num.TryGetValue("refNx", out var rnx)) df.RefNormal = new Vector3d(rnx, fd.Num.GetValueOrDefault("refNy"), fd.Num.GetValueOrDefault("refNz"));
                     part.AddFeature(df);
                     break;
                 }

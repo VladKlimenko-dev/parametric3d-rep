@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -95,6 +95,18 @@ public sealed class OpPanel
 
     public void Header(string text) =>
         _host.Children.Add(new TextBlock { Text = L(text), FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 8, 0, 2) });
+
+    /// <summary>k112: строка-справка, обновляемая при каждом Refresh (уклон: угол между гранями было → станет).</summary>
+    public TextBlock Info(Func<string> get, Func<bool>? visible = null)
+    {
+        var tb = new TextBlock { Text = get(), Classes = { "dim" }, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) };
+        _syncers.Add(() => tb.Text = get());
+        _host.Children.Add(tb);
+        When(tb, visible);
+        Infos.Add(tb);
+        return tb;
+    }
+    public readonly List<TextBlock> Infos = new();
 
     public void Note(string text) =>
         _host.Children.Add(new TextBlock { Text = L(text), Classes = { "dim" }, FontSize = 12, TextWrapping = TextWrapping.Wrap });

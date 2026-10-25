@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using OpenTK.Mathematics;
@@ -111,8 +111,11 @@ public abstract class Operation
         if (!f.Take(items)) return;
         RefChanged(f);
         // одиночное поле заполнено — дальше следующее пустое
-        if (f.Single && f.Items.Count == 1 && Panel?.Refs.FirstOrDefault(r => !r.IsSet && !r.Optional && r.Live) is { } next) Activate(next);
+        if (f.Single && f.Items.Count == 1 && (NextAfter(f) ?? Panel?.Refs.FirstOrDefault(r => !r.IsSet && !r.Optional && r.Live)) is { } next) Activate(next);
     }
+
+    /// <summary>k112: какое поле сделать активным после заполнения одиночного поля f (null — следующее обязательное пустое).</summary>
+    protected virtual RefField? NextAfter(RefField f) => null;
 
     public void RefChanged(RefField f)
     {
@@ -142,6 +145,11 @@ public abstract class Operation
     public virtual double? DragCurrent => null;
     /// <summary>Короткое имя главного значения у курсора («R», «D», «T»…).</summary>
     public virtual string DragLabel => "";
+    /// <summary>k112: единица величины ручки у курсора («мм», «°»).</summary>
+    public virtual string DragUnit => "мм";
+    /// <summary>k112: сдвиг ручки (мм вдоль её оси) → величина операции (уклон: угол по плечу); и обратно.</summary>
+    public virtual double HandleToValue(double d) => d;
+    public virtual double ValueToHandle(double v) => v;
 
     /// <summary>
     /// Идёт перетаскивание ручки: значение пишется в операцию и в поля панели, но деталь не перестраивается — в виде
@@ -246,6 +254,13 @@ public abstract class Operation
         int i = ActiveRef == null ? -1 : Panel.Refs.IndexOf(ActiveRef);
         Activate(Panel.Refs[(i + 1) % Panel.Refs.Count]);
     }
+}
+
+/// <summary>k112: операция со своей ручкой в виде (плоскость со смещением, уклон по ребру): место, направление, контур.</summary>
+public interface IHandleOp
+{
+    (Vector3d At, Vector3d Out)? HandleAt();
+    Func<double, List<(Vector3d A, Vector3d B)>>? HandleGhost() => null;
 }
 
 /// <summary>Операция дерева построения: Feature добавляется в деталь сразу и правится полями (живой предпросмотр).</summary>

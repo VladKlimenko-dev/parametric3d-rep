@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.App.Viewport;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
@@ -590,7 +590,7 @@ public sealed class CircularPatternOp : FeatureOp<CircularPatternFeature>
 
 // ====================================================================== опорная плоскость (элемент, не операция)
 
-public sealed class PlaneOp : Operation
+public sealed class PlaneOp : Operation, IHandleOp
 {
     // u12 (замечание 14): СПОСОБ ПОСТРОЕНИЯ ПЛОСКОСТИ — выбор в панели (прежде только смещение от плоскости); у способов со
     // смещением и углом — ручка (тянут — смещение), у построенных по точкам — без ручки.

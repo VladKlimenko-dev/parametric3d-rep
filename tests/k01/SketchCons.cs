@@ -1,5 +1,7 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.Kernel;
+using Parametric3D.Kernel.Curves;
+using Parametric3D.Kernel.Topology;
 using Parametric3D.Model.Sketching;
 
 static partial class Program
@@ -242,6 +244,84 @@ static partial class Program
                 if (r2.Ok) bad.Add("parallel of two horizontals accepted (redundant)");
             }
             Require(bad.Count == 0, string.Join(" | ", bad));
+        });
+        Check("KRN-DRAFT-HINGE-K112", () =>
+        {
+            // k112 (замечание 20:21): уклон по РЕБРУ — неподвижное ребро грани (шарнир) и смещаемое ребро; угол — приращение
+            // от текущего или итоговый между гранью и соседней (опорной плоскостью); у цилиндра — конус по окружностям.
+            // Мутации P3D_DRAFTHINGE=0 (шарнир не учитывается), P3D_DRAFTTOTAL=0 (итоговый угол — как приращение).
+            static (Parametric3D.Model.Part P, Parametric3D.Model.Document D) Box()
+            {
+                var part = new Parametric3D.Model.Part("dr");
+                var doc = new Parametric3D.Model.Document(); doc.Root.Add(part);
+                var sk = part.AddSketch("Box", Frame3.XY, part.PlaneXY.Id);
+                var q = new[] { (-20.0, -15.0), (20.0, -15.0), (20.0, 15.0), (-20.0, 15.0) }.Select(t => new SkPoint(t.Item1, t.Item2)).ToList();
+                for (int i = 0; i < 4; i++) sk.AddEntity(new SkLine(q[i], q[(i + 1) % 4]));
+                var ex = new Parametric3D.Model.Features.ExtrudeFeature { SketchId = sk.Id }; ex.Side1.Distance = new Parametric3D.Model.Features.ValueRef(20); part.AddFeature(ex);
+                doc.RebuildDirty();
+                return (part, doc);
+            }
+            static EdgeRef XEdge(Parametric3D.Model.Part p, double z) =>
+                EdgeRef.Of(p.Bodies[0].Edges.First(e => Math.Abs(e.V0.P.X - 20) < 1e-9 && Math.Abs(e.V1.P.X - 20) < 1e-9 && Math.Abs(e.V0.P.Z - z) < 1e-9 && Math.Abs(e.V1.P.Z - z) < 1e-9));
+            static double XAt(Parametric3D.Model.Part p, double z) =>
+                p.Bodies[0].Vertices.Where(v => Math.Abs(v.P.Z - z) < 1e-9).Max(v => v.P.X);
+            double V0 = 40 * 30 * 20, prism = 200 * Math.Tan(5 * Math.PI / 180) * 30;
+
+            // 1) шарнир — нижнее ребро, смещаемое — верхнее: 5° внутрь
+            var (p1, d1) = Box();
+            var df = new Parametric3D.Model.Features.DraftFeature { Hinge = XEdge(p1, 0), Moving = XEdge(p1, 20), Angle = new Parametric3D.Model.Features.ValueRef(5) };
+            df.OnFaces.Add(new Vector3d(20, 0, 10));
+            p1.AddFeature(df); d1.RebuildDirty();
+            Console.WriteLine($"  hinge bottom: error {df.Error}, volume {p1.Volume:0.###} (want {V0 - prism:0.###}), angle {df.LastBefore:0.###} -> {df.LastAfter:0.###}");
+            Require(df.Error == null && Math.Abs(p1.Volume - (V0 - prism)) < 1e-6 * V0, $"bottom hinge volume {p1.Volume} err {df.Error}");
+            Require(Math.Abs(XAt(p1, 0) - 20) < 1e-9 && Math.Abs(XAt(p1, 20) - (20 - 20 * Math.Tan(5 * Math.PI / 180))) < 1e-9, "fixed bottom, moved top");
+            Require(Math.Abs(df.LastBefore!.Value - 90) < 1e-9 && Math.Abs(df.LastAfter!.Value - 85) < 1e-9, "angle to the neighbour 90 -> 85");
+            Require(df.LastHinge!.MoveDir.X < -0.99 && Math.Abs(df.LastHinge.MoveAt.Z - 20) < 1e-9, "handle at the moving edge, pointing inward");
+            // наружу
+            df.Reverse = true; p1.MarkDirtyFrom(df); p1.Rebuild(null);
+            Require(df.Error == null && Math.Abs(p1.Volume - (V0 + prism)) < 1e-6 * V0 && Math.Abs(df.LastAfter!.Value - 95) < 1e-9, $"outward volume {p1.Volume} err {df.Error}");
+            // итоговый угол 80° к соседней (нижней) грани — поворот 10° внутрь (от текущего 90°)
+            df.Reverse = false; df.Total = true; df.Angle = new Parametric3D.Model.Features.ValueRef(80); p1.MarkDirtyFrom(df); p1.Rebuild(null);
+            double prism10 = 200 * Math.Tan(10 * Math.PI / 180) * 30;
+            Console.WriteLine($"  total 80: applied {df.LastApplied:0.######}, volume {p1.Volume:0.###} (want {V0 - prism10:0.###})");
+            Require(df.Error == null && Math.Abs(df.LastApplied!.Value - 10) < 1e-6 && Math.Abs(p1.Volume - (V0 - prism10)) < 1e-5 * V0, $"total angle: applied {df.LastApplied}, {df.Error}");
+            // опорная плоскость — та же XY (угол 80°), и файл
+            df.RefNormal = Vector3d.UnitZ; p1.MarkDirtyFrom(df); p1.Rebuild(null);
+            Require(df.Error == null && Math.Abs(df.LastApplied!.Value - 10) < 1e-6, "reference plane");
+            var (pl, _) = Parametric3D.Model.DocumentFile.Load(Parametric3D.Model.DocumentFile.Save(p1));
+            var ld = pl.Features.OfType<Parametric3D.Model.Features.DraftFeature>().Single();
+            Require(ld.Hinge != null && ld.Moving != null && ld.Total && ld.RefNormal != null, "draft hinge not saved");
+            var dl = new Parametric3D.Model.Document(); dl.Root.Add(pl); pl.Rebuild(null);
+            Require(Math.Abs(pl.Volume - p1.Volume) < 1e-6 * V0, $"reloaded volume {pl.Volume} vs {p1.Volume}");
+
+            // 2) шарнир — верхнее ребро: двигается низ
+            var (p2, d2) = Box();
+            var dt = new Parametric3D.Model.Features.DraftFeature { Hinge = XEdge(p2, 20), Angle = new Parametric3D.Model.Features.ValueRef(5) };
+            dt.OnFaces.Add(new Vector3d(20, 0, 10));
+            p2.AddFeature(dt); d2.RebuildDirty();
+            Console.WriteLine($"  hinge top: error {dt.Error}, x at z=0 {XAt(p2, 0):0.######}, z=20 {XAt(p2, 20):0.######}");
+            Require(dt.Error == null && Math.Abs(XAt(p2, 20) - 20) < 1e-9 && Math.Abs(XAt(p2, 0) - (20 - 20 * Math.Tan(5 * Math.PI / 180))) < 1e-9, "top hinge: the bottom must move " + dt.Error);
+            // ребро не этой грани — понятный отказ
+            var (p3, d3) = Box();
+            var foreign = EdgeRef.Of(p3.Bodies[0].Edges.First(e => Math.Abs(e.V0.P.X + 20) < 1e-9 && Math.Abs(e.V1.P.X + 20) < 1e-9));
+            var dbad = new Parametric3D.Model.Features.DraftFeature { Hinge = foreign, Angle = new Parametric3D.Model.Features.ValueRef(5) };
+            dbad.OnFaces.Add(new Vector3d(20, 0, 10)); p3.AddFeature(dbad); d3.RebuildDirty();
+            Require(dbad.Error != null && dbad.Error.Contains("does not belong"), "foreign edge: " + dbad.Error);
+
+            // 3) цилиндр: шарнир — нижняя окружность, верх сужается (конус)
+            var c = new Parametric3D.Model.Part("cyl"); var dc = new Parametric3D.Model.Document(); dc.Root.Add(c);
+            var cs = c.AddSketch("C", Frame3.XY, c.PlaneXY.Id); cs.AddEntity(new SkCircle(new SkPoint(0, 0), 10));
+            var ce = new Parametric3D.Model.Features.ExtrudeFeature { SketchId = cs.Id }; ce.Side1.Distance = new Parametric3D.Model.Features.ValueRef(20); c.AddFeature(ce);
+            dc.RebuildDirty();
+            var circ = c.Bodies[0].Edges.Where(e => e.Curve is ArcCurve3).OrderBy(e => e.V0.P.Z).ToList();
+            var dcy = new Parametric3D.Model.Features.DraftFeature { Hinge = EdgeRef.Of(circ[0]), Moving = EdgeRef.Of(circ[^1]), Angle = new Parametric3D.Model.Features.ValueRef(5) };
+            dcy.OnFaces.Add(new Vector3d(10, 0, 10)); c.AddFeature(dcy); dc.RebuildDirty();
+            double r1 = 10 - 20 * Math.Tan(5 * Math.PI / 180), vc = Math.PI * 20 / 3 * (100 + 10 * r1 + r1 * r1);
+            Console.WriteLine($"  cylinder: error {dcy.Error}, volume {c.Volume:0.###} (cone {vc:0.###}), angle {dcy.LastBefore:0.###} -> {dcy.LastAfter:0.###}");
+            Require(dcy.Error == null && Math.Abs(c.Volume - vc) < 1e-4 * vc, $"cone volume {c.Volume} want {vc} err {dcy.Error}");
+            Require(Math.Abs(dcy.LastBefore!.Value - 90) < 1e-6 && Math.Abs(dcy.LastAfter!.Value - 85) < 1e-6, "cone angle to the base 90 -> 85");
+            Require(Math.Abs(dcy.LastHinge!.MoveAt.Z - 20) < 1e-9 && Math.Abs(dcy.LastHinge.MoveDir.Z) < 1e-9 && Vector3d.Dot(dcy.LastHinge.MoveDir, dcy.LastHinge.MoveAt - new Vector3d(0, 0, 20)) < 0,
+                "cone: the direction at the moving circle's midpoint points to the axis");
         });
         Check("KRN-SWEEP-CLOSED-K111", () =>
         {
