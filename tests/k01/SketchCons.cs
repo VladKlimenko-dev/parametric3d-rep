@@ -243,6 +243,32 @@ static partial class Program
             }
             Require(bad.Count == 0, string.Join(" | ", bad));
         });
+        Check("KRN-SK-LINKS-K110", () =>
+        {
+            // k110: ссылка на эскиз параллельной плоскости следует за источником — эскиз выдавливания (окружность, равная
+            // ссылочной) и объём меняются вместе с исходным эскизом; после чтения файла — тоже. Мутация P3D_SKLINKS=0.
+            var part = new Parametric3D.Model.Part("links");
+            var doc = new Parametric3D.Model.Document(); doc.Root.Add(part);
+            var src = part.AddSketch("Src", new Frame3(new Vector3d(0, 0, -10), Vector3d.UnitX, Vector3d.UnitY));
+            var sc = src.AddEntity(new SkCircle(new SkPoint(0, 0), 10));
+            var t = part.AddSketch("T", Frame3.XY, part.PlaneXY.Id);
+            var rc = (SkCircle)SketchLinks.Make(t, src, sc)!; t.AddEntity(rc);
+            var own = t.AddEntity(new SkCircle(new SkPoint(1, 1), 8));
+            t.AddConstraint(ConstraintType.Concentric, own, rc); t.AddConstraint(ConstraintType.Equal, own, rc);
+            t.Solve(new NumericSketchSolver());
+            var ex = new Parametric3D.Model.Features.ExtrudeFeature { SketchId = t.Id }; ex.Side1.Distance = new Parametric3D.Model.Features.ValueRef(5); part.AddFeature(ex);
+            doc.RebuildDirty();
+            Require(Math.Abs(part.Volume - Math.PI * 100 * 5) < 0.01 * part.Volume, $"initial volume {part.Volume}");
+            sc.Radius = 15; src.NotifyChanged(src);
+            doc.RebuildDirty();
+            Require(Math.Abs(rc.Radius - 15) < 1e-9 && Math.Abs(own.Radius - 15) < 1e-6, $"reference {rc.Radius}, own {own.Radius}");
+            Require(Math.Abs(part.Volume - Math.PI * 225 * 5) < 0.01 * part.Volume, $"volume did not follow: {part.Volume}");
+            var (p2, _) = Parametric3D.Model.DocumentFile.Load(Parametric3D.Model.DocumentFile.Save(part));
+            var d2 = new Parametric3D.Model.Document(); d2.Root.Add(p2); d2.RebuildDirty();
+            var s2 = p2.Sketches.First(k => k.Name == "Src"); s2.Entities.OfType<SkCircle>().First().Radius = 12; s2.NotifyChanged(s2);
+            d2.RebuildDirty();
+            Require(Math.Abs(p2.Volume - Math.PI * 144 * 5) < 0.01 * p2.Volume, $"after reload: volume {p2.Volume}");
+        });
         Check("KRN-SK-FORMULA-LIVE", () =>
         {
             // k103 (замечание 2): размер d1 = d0 + 5 следует за слабым размером d0 при перетаскивании точки (решатель держит

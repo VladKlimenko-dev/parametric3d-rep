@@ -158,11 +158,11 @@ public static class SketchReferences
     public static string? AddFromSketch(Sketch sk, Sketch other, PickRef r)
     {
         if (r.Target is not SkEntity e) return Loc.L("Ссылка не найдена");
-        string src = $"Эскиз #{e.Id}";
+        // k110: ссылка ассоциативна — следует за источником (SketchLinks)
+        string src = SketchLinks.SourceOf(other, e);
         if (sk.Entities.Any(x => x.Role == SkRole.Reference && x.ReferenceSource == src)) return Loc.L("Уже в ссылках");
-        var pool = new EdgeProjection.PointPool(SkRole.Reference, src);
-        if (e is SkPoint p) sk.AddEntity(pool.Get(EdgeProjection.On(sk, other.Plane.ToWorld(p.P))));
-        else foreach (var x in EdgeProjection.Project(sk, e.ToCurve3(other.Plane), pool, SkRole.Reference, src)) sk.AddEntity(x);
+        if (SketchLinks.Make(sk, other, e) is not { } made) return Loc.L("Ссылка не найдена");
+        sk.AddEntity(made);
         sk.BumpStructure();
         return null;
     }

@@ -28,6 +28,8 @@ public enum SkRole
 public abstract class SkEntity
 {
     public uint Id { get; internal set; } = Ids.New();
+    /// <summary>k110: номер элемента для ссылок других эскизов (= Id; при чтении файла ссылки переводятся на новые номера).</summary>
+    public uint StableId => Id;
     public abstract SkKind Kind { get; }
     public SkRole Role = SkRole.Object;
     /// <summary>Элемент зафиксирован решателем/пользователем.</summary>

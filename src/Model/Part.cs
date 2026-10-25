@@ -322,7 +322,14 @@ public sealed class Part : ModelItem
         int at = Features.FindIndex(f => Dependencies.SketchesOf(f).Contains(sk.Id));
         if (at >= 0) DirtyFromIndex(at);
         SetDirty();
+        // k110: ссылки других эскизов на этот — за ним
+        if (_propagating == 0)
+        {
+            _propagating++;
+            try { Sketching.SketchLinks.Propagate(this, sk); } finally { _propagating--; }
+        }
     }
+    private int _propagating;
 
     /// <summary>
     /// Добавляет операцию В ПОЛОЖЕНИЕ ПОЛОСКИ расчёта, а не в конец списка.

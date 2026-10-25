@@ -2937,11 +2937,28 @@ Check("UI-SKETCH-K109B", () =>
     Require(under.Kind == PickKind.SketchCurve && ReferenceEquals(under.Owner, low), $"hidden parallel sketch curve is not pickable: {under.Kind} {(under.Owner as ModelItem)?.Name}");
     var wp = vp.TranslatePoint(pt, w)!.Value;
     w.MouseMove(wp); Run(); w.MouseDown(wp, MouseButton.Left); w.MouseUp(wp, MouseButton.Left); Run();
-    var refs = sk.Entities.Where(e => e.Role == SkRole.Reference && e.ReferenceSource == $"Эскиз #{gl.Id}").ToList();
+    var refs = sk.Entities.Where(e => e.Role == SkRole.Reference && e.ReferenceSource == SketchLinks.SourceOf(low, gl)).ToList();
     Require(refs.OfType<SkLine>().Count() == 1 && refs.OfType<SkLine>().First() is { } rl && Math.Abs(rl.Length - 20) < 1e-9, "reference from the parallel sketch: " + string.Join(",", refs.Select(r => r.GetType().Name)));
     // перпендикулярный эскиз — не ссылка
     Require(!side.IsParallelTo(sk) && low.IsParallelTo(sk), "parallel test");
+    // k110: ссылка следует за источником — точка эскиза, привязанная к концу ссылки, тоже
+    var rline = refs.OfType<SkLine>().First();
+    var own = sk.AddEntity(new SkLine(new SkPoint(50, 0), new SkPoint(60, 10)));
+    sk.AddConstraint(ConstraintType.Coincident, own.A, rline.B);
+    sk.Solve(s.Document.Solver);
     w.FinishSketch(); Run();
+    part = s.Part!; low = part.Sketches.First(k => k.Name == "Low"); sk = part.Sketches.First(k => k.Entities.Any(e => e.Role == SkRole.Reference && e.ReferenceSource.StartsWith(SketchLinks.Prefix)));
+    gl = low.Entities.OfType<SkLine>().First();
+    gl.B.P = new Vector2d(70, 5); low.NotifyChanged(low);
+    rline = sk.Entities.OfType<SkLine>().First(e => e.Role == SkRole.Reference);
+    own = sk.Entities.OfType<SkLine>().First(e => e.Role == SkRole.Object);
+    Require((rline.B.P - new Vector2d(70, 5)).Length < 1e-9, $"reference did not follow the source: {rline.B.P}");
+    Require((own.A.P - new Vector2d(70, 5)).Length < 1e-6, $"geometry bound to the reference did not follow: {own.A.P}");
+    // и после сохранения и чтения файла
+    var (lp, _) = Parametric3D.Model.DocumentFile.Load(Parametric3D.Model.DocumentFile.Save(part));
+    var llow = lp.Sketches.First(k => k.Name == "Low"); var lsk = lp.Sketches.First(k => k.Name == sk.Name);
+    llow.Entities.OfType<SkLine>().First().A.P = new Vector2d(35, -5); llow.NotifyChanged(llow);
+    Require((lsk.Entities.OfType<SkLine>().First(e => e.Role == SkRole.Reference).A.P - new Vector2d(35, -5)).Length < 1e-9, "reference does not follow after reload");
 });
 
 Check("UI-SKETCH-K109", () =>
