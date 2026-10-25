@@ -732,6 +732,7 @@ public static class DocumentFile
         if (doc.ConstructionPlane is { Length: 9 } cpl)
             try { part.ConstructionPlane = new Frame3(new Vector3d(cpl[0], cpl[1], cpl[2]), new Vector3d(cpl[3], cpl[4], cpl[5]), new Vector3d(cpl[6], cpl[7], cpl[8])); } catch { }
         var sketchById = new Dictionary<uint, Sketch>();
+        var byOldOf = new Dictionary<uint, Dictionary<uint, SkEntity>>();   // k110: номера элементов эскизов из файла → новые
 
         foreach (var sd in doc.Sketches)
         {
@@ -808,7 +809,9 @@ public static class DocumentFile
                 dim.UserLocked = dd.UserLocked == true; dim.SingleArrow = dd.SingleArrow == true; dim.DiameterAsLinear = dd.AsLinear == true;
             }
 
+            byOldOf[sd.Id] = byOld;
             part.Children.Add(s);
+            s.Parent = part;          // k110: правка прочитанного эскиза извещает деталь (ссылки, пересчёт операций)
             sketchById[sd.Id] = s;
         }
 
@@ -1254,6 +1257,12 @@ public static class DocumentFile
         }
 
         if (doc.Stage is int stg && stg >= 0 && stg < part.Features.Count) part.StageIndex = part.ClampStage(stg);
+        // k110: ссылки на другие эскизы — на новые номера эскизов
+        foreach (var sk in part.Sketches)
+            foreach (var e in sk.Entities.SelectMany(x => x.Handles.Prepend(x)).Distinct())
+                if (SketchLinks.TryParse(e.ReferenceSource, out var oldS, out var ent) && sketchById.TryGetValue(oldS, out var ns)
+                    && byOldOf.TryGetValue(oldS, out var bo) && bo.TryGetValue(ent, out var ne))
+                    e.ReferenceSource = $"{SketchLinks.Prefix}{ns.Id}:{ne.Id}";
         // k109: эскизы — на своих местах в дереве (прежде все эскизы вставали перед операциями: эскиз, созданный после
         // выдавливания, после отмены/открытия оказывался выше него). Файл до k109 — эскиз не в операции, стоящий на гранях
         // операции, — сразу после неё.
