@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -3037,6 +3037,62 @@ Check("UI-TREE-K109", () =>
     var ex2 = new ExtrudeFeature { SketchId = s5.Id }; part.AddFeature(ex2);
     part.MoveFeature(ex2, 0);
     Require(part.Children.IndexOf(ex2) < part.Children.IndexOf(part.Features[1]), "MoveFeature did not reorder the tree");
+});
+
+Check("UI-DRAFT-K112", () =>
+{
+    // k112 (замечание 20:21): уклон по ребру — грань, неподвижное ребро (шарнир), смещаемое ребро; угол от текущего или
+    // итоговый между гранями; ручка у смещаемого ребра (тянут — угол), стрелка хода (щелчок — внутрь/наружу), «было → станет».
+    var s = DocumentSession.Sample(); var w = Open(s); var part = s.Part!; part.Rebuild(null);
+    // деталь посчитана — как после перестроения сцены (SceneRebuilt): стрелка, ручка, «было → станет»
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } s.Document.RebuildDirty(); Dispatcher.UIThread.RunJobs(); w.CurrentOperation?.RefreshStatus(); }
+    var vp = w.ViewPort;
+    var fx = part.Bodies[0].Faces.First(f => Refs.FacePlane(part, f.Id) is { } pl && pl.N.X > 0.99);
+    var bottom = part.Bodies[0].Faces.First(f => Refs.FacePlane(part, f.Id) is { } pl && pl.N.Z < -0.99);
+    var hinge = fx.Edges.First(e => e.FaceA == bottom || e.FaceB == bottom);
+    double zTop = fx.Edges.SelectMany(e => new[] { e.V0.P.Z, e.V1.P.Z }).Max();
+    var top = fx.Edges.First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0.P.Z - zTop) < 1e-9 && Math.Abs(e.V1.P.Z - zTop) < 1e-9);
+    double v0 = part.Volume;
+    vp.Selection.Clear(); Select(w, new PickRef(fx.Id, PickKind.Face, part, null));
+    var op = new DraftOp(); w.StartOperation(op); Run();
+    Select(w, new PickRef(hinge.Id, PickKind.Edge, part, null)); Run();
+    Require(op.ByEdge, "the edge did not go to the fixed (hinge) field");
+    Require(ReferenceEquals(op.ActiveRef, op.Panel!.Refs[2]), "the moving-edge field is not active after the hinge");
+    // смещаемое — верхнее ребро той же грани, в нынешнем (предпросмотр) теле: номера рёбер после перестроения другие
+    double xTop = part.Bodies[0].Vertices.Where(v => Math.Abs(v.P.Z - zTop) < 1e-9).Max(v => v.P.X);
+    var topNow = part.Bodies[0].Edges.First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && new[] { e.V0.P, e.V1.P }.All(q => Math.Abs(q.Z - zTop) < 1e-9 && Math.Abs(q.X - xTop) < 1e-9));
+    Select(w, new PickRef(topNow.Id, PickKind.Edge, part, null)); Run();
+    var df = part.Features.OfType<DraftFeature>().Single();
+    Console.WriteLine($"  draft: error {df.Error}, hinge {df.Hinge != null}, moving {df.Moving != null}, {df.LastBefore:0.###} -> {df.LastAfter:0.###}; info «{op.AngleInfo()}»");
+    Require(df.Error == null && df.Hinge != null && df.Moving != null && Math.Abs(part.Volume - v0) > 1, $"draft by edge: {df.Error}");
+    Require(Math.Abs(df.LastBefore!.Value - 90) < 1e-6 && Math.Abs(df.LastAfter!.Value - 87) < 1e-6 && op.AngleInfo().Contains("90") && op.AngleInfo().Contains("87"), "angle before/after: " + op.AngleInfo());
+    var h = df.LastHinge!;
+    // стрелка и ручка — у середины смещаемого ребра, внутрь
+    Require(vp.OpArrows.Count == 1 && (vp.OpArrows[0].At - h.MoveAt).Length < 1e-9 && vp.OpArrows[0].Dir.X < -0.99, "arrow at the moving edge: " + (vp.OpArrows.Count > 0 ? vp.OpArrows[0].ToString() : "none"));
+    Require(Math.Abs(h.MoveAt.Z - zTop) < 1e-9, "moving point is not on the top edge");
+    Require(vp.Handle != null && (new Vector3d(vp.Handle.At.X, vp.Handle.At.Y, vp.Handle.At.Z) - h.MoveAt).Length < 1e-3, "no handle at the moving edge");
+    // ручка: сдвиг на плечо·tg 6° — угол 6°
+    vp.SimulateHandleDrag(h.Lever * Math.Tan(6 * Math.PI / 180), end: false);
+    Require(vp.GhostShown || w.FullPreview, "no outline while dragging");
+    vp.SimulateHandleDrag(h.Lever * Math.Tan(6 * Math.PI / 180), end: true); Run();
+    Console.WriteLine($"  after handle: angle {df.Angle.Value}, applied {df.LastApplied}, error {df.Error}");
+    Require(Math.Abs(df.Angle.Value - 6) < 0.02 && !df.Reverse && Math.Abs(df.LastAfter!.Value - df.LastBefore!.Value + df.Angle.Value) < 1e-6, $"handle angle {df.Angle.Value}");
+    // стрелка: щелчок — наружу
+    double vIn = part.Volume;
+    vp.RaiseOpArrowClicked(0); Run();
+    Require(df.Reverse && df.Error == null && part.Volume > v0 && vp.OpArrows.Count == 1 && vp.OpArrows[0].Dir.X > 0.99, $"arrow click: reverse {df.Reverse}, volume {part.Volume:0.##} vs {v0:0.##}");
+    // итоговый угол: геометрия та же (96°), затем 80° — поворот 10° внутрь
+    double vOut = part.Volume;
+    op.SetTotalMode(true); Run();
+    Require(df.Total && Math.Abs(df.Angle.Value - df.LastAfter!.Value) < 1e-3 && Math.Abs(part.Volume - vOut) < 1e-3, $"total mode keeps the geometry: angle {df.Angle.Value}, volume {part.Volume} vs {vOut}");
+    df.Angle = new ValueRef(80); op.FieldChanged(); Run();
+    Require(df.Error == null && Math.Abs(df.LastApplied!.Value - 10) < 1e-3 && part.Volume < vIn, $"total 80: applied {df.LastApplied}, {df.Error}");
+    w.CommitOperation(); Run();
+    Require(w.CurrentOperation == null && df.Error == null, "commit");
+    // правка: снова по ребру, поля как было
+    var ed = new DraftOp(df); w.StartOperation(ed); Run();
+    Require(ed.ByEdge && ed.Panel!.Refs[1].IsSet && ed.Panel.Refs[2].IsSet, "edit does not restore the hinge mode");
+    w.CancelOperation(); w.Close();
 });
 
 Check("UI-SWEEP-K107", () =>

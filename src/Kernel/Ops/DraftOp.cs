@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -126,6 +126,222 @@ public static class DraftOp
         return true;
     }
 
+    // ============================================================ k112: уклон по ребру-шарниру
+
+    /// <summary>Мутация P3D_DRAFTHINGE=0: шарнир-ребро не учитывается (уклон — только от нейтральной плоскости, прежде).</summary>
+    public static readonly bool HingeOff = Environment.GetEnvironmentVariable("P3D_DRAFTHINGE") == "0";
+
+    /// <summary>
+    /// k112: ШАРНИР УКЛОНА. Плоская грань поворачивается вокруг своего прямого ребра (оно неподвижно), цилиндрическая
+    /// становится конусом, у которого неподвижна окружность-шарнир. M — направление в грани от шарнира к смещаемому ребру
+    /// (у цилиндра — вдоль оси), NOut — наружная нормаль грани у шарнира. Положительный угол — смещаемое ребро уходит
+    /// внутрь материала (MoveDir в его середине), отрицательный — наружу. Угол к соседней грани (через шарнир) или к
+    /// опорной плоскости — между направлением M (повёрнутым) и направлением от шарнира в соседней грани (RefIn).
+    /// </summary>
+    public sealed class HingeInfo
+    {
+        public bool Cone;
+        public int FaceIndex;
+        public Vector3d HingeP, HingeDir, M, NOut, MoveAt, MoveDir;
+        /// <summary>Концы шарнира (у окружности — точка в середине).</summary>
+        public Vector3d HingeA, HingeB;
+        public double Lever;
+        public Vector3d? RefIn;
+        public Vector3d ConeCentre;
+
+        /// <summary>Направление в грани от шарнира после поворота на deg.</summary>
+        public Vector3d MAt(double deg) { double a = deg * Math.PI / 180; return (M * Math.Cos(a) - NOut * Math.Sin(a)).Normalized(); }
+        public Vector3d NAt(double deg) { double a = deg * Math.PI / 180; return (NOut * Math.Cos(a) + M * Math.Sin(a)).Normalized(); }
+
+        /// <summary>Направление от шарнира в опорной плоскости (refN) или в соседней грани (null — RefIn).</summary>
+        public Vector3d? RefDir(Vector3d? refN)
+        {
+            if (refN is not { } w || w.LengthSquared < 1e-18) return RefIn;
+            var r = Vector3d.Cross(w.Normalized(), HingeDir);
+            if (r.LengthSquared < 1e-12) return null;      // шарнир поперёк опорной плоскости — угол не определён
+            r = r.Normalized();
+            var toward = RefIn ?? -M;
+            return Vector3d.Dot(r, toward) >= 0 ? r : -r;
+        }
+
+        /// <summary>Угол (°) между гранью, повёрнутой на deg, и соседней гранью / опорной плоскостью; null — не определён.</summary>
+        public double? AngleTo(double deg, Vector3d? refN = null)
+        {
+            if (RefDir(refN) is not { } r) return null;
+            return Math.Acos(Math.Clamp(Vector3d.Dot(MAt(deg), r), -1, 1)) * 180 / Math.PI;
+        }
+
+        /// <summary>Поворот (°), при котором угол к соседней грани / опорной плоскости станет target; ближайший к нулю.</summary>
+        public double? Solve(double target, Vector3d? refN = null)
+        {
+            if (AngleTo(0, refN) is not { } a0) return null;
+            if (Math.Abs(a0 - target) < 1e-12) return 0;
+            double F(double d) => AngleTo(d, refN)!.Value - target;
+            double? best = null;
+            const double lim = 89.5, step = 0.25;
+            for (double lo = -lim; lo < lim - 1e-12; lo += step)
+            {
+                double hi = Math.Min(lim, lo + step), flo = F(lo), fhi = F(hi);
+                if (flo == 0) { if (best == null || Math.Abs(lo) < Math.Abs(best.Value)) best = lo; continue; }
+                if (flo * fhi > 0) continue;
+                double x0 = lo, x1 = hi, f0 = flo;
+                for (int it = 0; it < 80; it++)
+                {
+                    double xm = (x0 + x1) / 2, fm = F(xm);
+                    if (f0 * fm <= 0) x1 = xm; else { x0 = xm; f0 = fm; }
+                }
+                double root = (x0 + x1) / 2;
+                if (best == null || Math.Abs(root) < Math.Abs(best.Value)) best = root;
+            }
+            return best;
+        }
+    }
+
+    static Vector3d OutAt(TFace f, Vector3d p)
+    {
+        if (f.Surface is FacetedSurface fs && fs.Facets.Count > 0)
+        {
+            var best = fs.Facets.ReadView.OrderBy(t => (ClosestOnTriangle(p, t.A, t.B, t.C) - p).LengthSquared).First();
+            return (Vector3d.Cross(best.B - best.A, best.C - best.A) * (f.Reversed ? -1 : 1)).Normalized();
+        }
+        var src = GeometryAudit.AuthoritativeSurface(f) ?? f.Surface;
+        return (src.NormalAt(src.ProjectToUV(p)) * (f.Reversed ? -1 : 1)).Normalized();
+    }
+
+    /// <summary>Грань под точкой: плоская или цилиндрическая; -1 — нет.</summary>
+    static int FaceAt(List<TFace> faces, Vector3d probe)
+    {
+        for (int i = 0; i < faces.Count; i++)
+        {
+            var sh = Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(faces[i]));
+            if (sh is Geometry.Ssi.Plane pl)
+            {
+                if (Math.Abs(Vector3d.Dot(probe - pl.P, pl.N.Normalized())) > 1e-6 || MeshDistance(faces[i], probe) > 1e-4) continue;
+                return i;
+            }
+            if (sh is Geometry.Ssi.Cylinder cy && Math.Abs(DistToCylinder(cy, probe)) <= 1e-6 && MeshDistance(faces[i], probe) <= Math.Max(1e-2, 0.03 * cy.R)) return i;
+        }
+        return -1;
+    }
+
+    /// <summary>Направление от точки шарнира в соседней грани (поперёк шарнира, в касательной плоскости соседней грани).</summary>
+    static Vector3d? InFace(TFace? adj, Vector3d at, Vector3d hingeDir, double scale)
+    {
+        if (adj == null) return null;
+        var n = adj.Surface is FacetedSurface || GeometryAudit.AuthoritativeSurface(adj) is { IsPlanar: true } ? (PlanarTweak.OutwardNormal(adj) ?? OutAt(adj, at)) : OutAt(adj, at);
+        var r = Vector3d.Cross(n, hingeDir);
+        if (r.LengthSquared < 1e-12) return null;
+        r = r.Normalized();
+        double eps = Math.Max(1e-4, 0.02 * scale);
+        return MeshDistance(adj, at + r * eps) <= MeshDistance(adj, at - r * eps) ? r : -r;
+    }
+
+    static TEdge? Edge(List<TSolid> bodies, EdgeRef r) => FilletOp.Resolve(bodies, r, out _);
+
+    /// <summary>k112: шарнир уклона грани под probe; null — why.</summary>
+    public static HingeInfo? Hinge(List<TSolid> bodies, Vector3d probe, EdgeRef hinge, EdgeRef? moving, out string? why)
+    {
+        why = null;
+        if (bodies.Count == 0) { why = "no body"; return null; }
+        var body = bodies[0];
+        var faces = body.Faces.ToList();
+        int fi = FaceAt(faces, probe);
+        if (fi < 0) { why = "the drafted face must be planar or cylindrical"; return null; }
+        var face = faces[fi];
+        if (Edge(bodies, hinge) is not { } he) { why = "the fixed edge is not found"; return null; }
+        if (!ReferenceEquals(he.FaceA, face) && !ReferenceEquals(he.FaceB, face)) { why = "the fixed edge does not belong to the drafted face"; return null; }
+        TEdge? me = null;
+        if (moving is { } mr)
+        {
+            me = Edge(bodies, mr);
+            if (me == null) { why = "the moving edge is not found"; return null; }
+            if (ReferenceEquals(me, he)) { why = "the moving edge is the fixed edge"; return null; }
+            if (!ReferenceEquals(me.FaceA, face) && !ReferenceEquals(me.FaceB, face)) { why = "the moving edge does not belong to the drafted face"; return null; }
+        }
+        var adj = ReferenceEquals(he.FaceA, face) ? he.FaceB : he.FaceA;
+        var info = new HingeInfo { FaceIndex = fi };
+        var sh = Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(face));
+        if (sh is Geometry.Ssi.Plane)
+        {
+            Vector3d a = he.V0.P, b = he.V1.P, mid = he.Curve.PointAt(0.5 * (he.Curve.T0 + he.Curve.T1));
+            double len = (b - a).Length;
+            var d = len > 1e-12 ? (b - a) / len : Vector3d.Zero;
+            var off = mid - a - d * Vector3d.Dot(mid - a, d);
+            if (len < 1e-9 || off.Length > 1e-7 * Math.Max(1, len)) { why = "the fixed edge of a planar face must be straight"; return null; }
+            if (PlanarTweak.OutwardNormal(face) is not { } nOut) { why = "no outward normal"; return null; }
+            info.HingeDir = d; info.HingeP = (a + b) / 2; info.NOut = nOut; info.HingeA = a; info.HingeB = b;
+            var m = Vector3d.Cross(nOut, d).Normalized();
+            Vector3d target;
+            if (me != null) target = me.Curve.PointAt(0.5 * (me.Curve.T0 + me.Curve.T1));
+            else
+            {
+                // смещаемое не задано — самая далёкая от шарнира вершина грани
+                target = face.Edges.SelectMany(e => new[] { e.V0.P, e.V1.P, e.Curve.PointAt(0.5 * (e.Curve.T0 + e.Curve.T1)) })
+                    .OrderByDescending(p => Math.Abs(Vector3d.Dot(p - info.HingeP, m))).First();
+            }
+            if (Vector3d.Dot(target - info.HingeP, m) < 0) m = -m;
+            info.M = m; info.Lever = Vector3d.Dot(target - info.HingeP, m);
+            if (info.Lever < 1e-6) { why = "the moving edge lies on the fixed edge line"; return null; }
+            info.MoveAt = target; info.MoveDir = -nOut;
+            info.RefIn = InFace(adj, info.HingeP, d, info.Lever);
+            return info;
+        }
+        if (sh is Geometry.Ssi.Cylinder cy)
+        {
+            var w = cy.Axis.Normalized();
+            var arcs = face.Edges.Where(e => e.Curve is ArcCurve3 ac && ReferenceEquals(e.V0, e.V1) && Math.Abs(Math.Abs(Vector3d.Dot(ac.Frame.W.Normalized(), w)) - 1) < 1e-9).ToList();
+            if (he.Curve is not ArcCurve3 ha || !arcs.Contains(he)) { why = "the fixed edge of a cylindrical face must be one of its end circles"; return null; }
+            var other = arcs.Where(e => !ReferenceEquals(e, he)).ToList();
+            if (other.Count != 1) { why = "the cylindrical face must be bounded by two full circles"; return null; }
+            if (me != null && !ReferenceEquals(me, other[0])) { why = "the moving edge of a cylindrical face must be its other end circle"; return null; }
+            var oa = (ArcCurve3)other[0].Curve;
+            var c0 = ha.Frame.Origin; var c1 = oa.Frame.Origin;
+            var m = Vector3d.Dot(c1 - c0, w) >= 0 ? w : -w;
+            info.Cone = true; info.ConeCentre = c0; info.M = m; info.Lever = Math.Abs(Vector3d.Dot(c1 - c0, w));
+            if (info.Lever < 1e-6) { why = "the end circles coincide"; return null; }
+            // направления — в середине рёбер (k112: у кривой грани направление зависит от места)
+            info.HingeP = ha.PointAt(0.5); info.HingeDir = ha.TangentAt(0.5).Normalized(); info.HingeA = info.HingeB = info.HingeP;
+            info.NOut = OutAt(face, info.HingeP);
+            info.NOut = (info.NOut - m * Vector3d.Dot(info.NOut, m)).Normalized();
+            info.MoveAt = oa.PointAt(0.5);
+            var no = OutAt(face, info.MoveAt); no = (no - m * Vector3d.Dot(no, m)).Normalized();
+            info.MoveDir = -no;
+            info.RefIn = InFace(adj, info.HingeP, info.HingeDir, cy.R);
+            return info;
+        }
+        why = "the drafted face must be planar or cylindrical";
+        return null;
+    }
+
+    /// <summary>k112: уклон по шарниру на degrees (&gt; 0 — смещаемое ребро внутрь материала, &lt; 0 — наружу).</summary>
+    public static bool ApplyHinged(List<TSolid> bodies, HingeInfo h, double degrees, List<string> warnings)
+    {
+        if (Math.Abs(degrees) < 1e-9) { warnings.Add("Draft: the angle must not be zero."); return false; }
+        if (Math.Abs(degrees) >= 89.9) { warnings.Add("Draft: the angle must be less than 90°."); return false; }
+        string? why = null;
+        if (h.Cone)
+        {
+            var r = DraftCylinders(bodies[0], new List<int> { h.FaceIndex }, h.ConeCentre, h.M, degrees * Math.PI / 180, ref why);
+            if (r == null) { warnings.Add("Draft: the cone could not be built: " + why + "."); return false; }
+            bodies[0] = r;
+            warnings.Add($"Draft: {degrees:0.###}° about the fixed circle (exact cone).");
+            return true;
+        }
+        var nNew = h.NAt(degrees);
+        var t = PlanarTweak.Apply(bodies[0], (i, f) => i == h.FaceIndex ? (h.HingeP, nNew) : null, ref why);
+        if (t != null)
+        {
+            bodies[0] = t;
+            warnings.Add($"Draft: {degrees:0.###}° about the fixed edge (exact plane replacement).");
+            return true;
+        }
+        if (degrees < 0) { warnings.Add($"Draft: an outward draft about an edge is built only by plane replacement, which declined: {why}."); return false; }
+        BooleanOp.Subtract(bodies, HalfSpace(h.HingeP, nNew, Extent(bodies[0]) * 4), warnings);
+        if (bodies.Count == 0) { warnings.Add("Draft: the angle removes the whole body."); return false; }
+        warnings.Add($"Draft: {degrees:0.###}° about the fixed edge (half-space cut: {why}).");
+        return true;
+    }
+
     /// <summary>Грани под точками (плоские и цилиндрические, точка на поверхности и на сетке грани); null — не все найдены.</summary>
     static HashSet<TFace>? TangentFaces(TSolid body, IReadOnlyList<Vector3d> probes)
     {
@@ -208,6 +424,8 @@ public static class DraftOp
 
     /// <summary>Мутация P3D_DRAFTCYL=0: цилиндрические грани уклону не поддаются (прежде).</summary>
     static readonly bool CylDraftOff = Environment.GetEnvironmentVariable("P3D_DRAFTCYL") == "0";
+    /// <summary>Мутация P3D_DRAFTSEAM=0: цилиндр со швом уклону не поддаётся (k111 и прежде).</summary>
+    static readonly bool SeamOff = Environment.GetEnvironmentVariable("P3D_DRAFTSEAM") == "0";
 
     static double DistToCylinder(Geometry.Ssi.Cylinder c, Vector3d p)
     {
@@ -233,7 +451,11 @@ public static class DraftOp
             var w = cy.Axis.Normalized();
             if (Math.Abs(Math.Abs(Vector3d.Dot(w, m)) - 1) > 1e-9) { why = "the cylinder axis is not along the pull direction"; return null; }
             var f = cf[i];
-            var arcs = f.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct().ToList();
+            var allE = f.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct().ToList();
+            // k112: шов цилиндра (отрезок вдоль оси между окружностями) — допускается, становится образующей конуса
+            var seams = SeamOff ? new List<TEdge>() : allE.Where(e => e.Curve is LineCurve3 && !ReferenceEquals(e.V0, e.V1)
+                && Math.Abs(Math.Abs(Vector3d.Dot((e.V1.P - e.V0.P).Normalized(), w)) - 1) < 1e-9).ToList();
+            var arcs = allE.Except(seams).ToList();
             if (arcs.Count != 2 || arcs.Any(e => e.Curve is not ArcCurve3 ac || !ReferenceEquals(e.V0, e.V1) || Math.Abs(Math.Abs(Vector3d.Dot(ac.Frame.W.Normalized(), w)) - 1) > 1e-9
                                               || Math.Abs(ac.Radius - cy.R) > 1e-9 * Math.Max(1, cy.R)))
             { why = "the cylindrical face is not bounded by two full circles across its axis"; return null; }
@@ -261,9 +483,11 @@ public static class DraftOp
                 var na = new ArcCurve3(ac.Frame, r, ac.A0, ac.A0 + ac.Sweep);
                 e.Curve = na; e.PolylineCache = null; e.V0.P = na.PointAt(na.T0);
             }
-            // конус: отрезок образующей в полуплоскости угла 0 и ось
+            foreach (var e in seams) { e.Curve = new LineCurve3(e.V0.P, e.V1.P); e.PolylineCache = null; }
+            // конус: отрезок образующей в полуплоскости угла 0 и ось (есть шов — угол 0 на шве)
             double t0 = Vector3d.Dot(c0 - cy.P, w), t1 = Vector3d.Dot(c1 - cy.P, w);
             var u = Vector3d.Cross(w, Math.Abs(w.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY).Normalized();
+            if (seams.Count > 0) { var sr = seams[0].V0.P - cy.P; sr -= w * Vector3d.Dot(sr, w); if (sr.LengthSquared > 1e-18) u = sr.Normalized(); }
             var axisO = cy.P;
             var gen = new LineCurve3(axisO + w * Math.Min(t0, t1) + u * R(axisO + w * Math.Min(t0, t1)), axisO + w * Math.Max(t0, t1) + u * R(axisO + w * Math.Max(t0, t1)));
             var cone = new RevolvedSurface(gen, new Frame3(axisO, u, Vector3d.Cross(w, u)), 0, 2 * Math.PI);

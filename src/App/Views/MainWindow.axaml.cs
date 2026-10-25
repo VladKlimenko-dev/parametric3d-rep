@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -1138,7 +1138,7 @@ public partial class MainWindow : Window
         if (_handleOpFixed && CurrentOperation is { } fop0 && ReferenceEquals(fop0, _handleOp))
         {
             // операция, начатая командой: сторона ручки не выбирает операцию; со знаком — наружу плюс (плоскость)
-            double val = fop0.SignedDrag ? (sign > 0 ? v : -v) : Math.Abs(v);
+            double val = fop0.HandleToValue(fop0.SignedDrag ? (sign > 0 ? v : -v) : Math.Abs(v));
             fop0.SetDragValue(val);
             View.Redraw();
             ShowDragLabel(fop0, val);
@@ -1167,7 +1167,7 @@ public partial class MainWindow : Window
 
     private void ShowDragLabel(Operation op, double v)
     {
-        string label = $"{(op.DragLabel.Length > 0 ? op.DragLabel + " " : "")}{Math.Sign(v) * Math.Round(Math.Max(0.01, Math.Abs(v)), 2):0.##} {L("мм")}";
+        string label = $"{(op.DragLabel.Length > 0 ? op.DragLabel + " " : "")}{Math.Sign(v) * Math.Round(Math.Max(0.01, Math.Abs(v)), 2):0.##}{(op.DragUnit == "°" ? "°" : " " + L(op.DragUnit))}";
         SelChipText.Text = L(op.Title) + " · " + label;
         bool bad = View.GhostBad || op.HasBuildError;
         DragValueText.Foreground = bad ? Res("P3.Error") : Res("P3.Text");
@@ -1190,7 +1190,7 @@ public partial class MainWindow : Window
     {
         if (InSketch) return;
         if (CurrentOperation is RoundOp or ChamferOp) { AttachEdgeOpHandle(); return; }
-        if (CurrentOperation is PlaneOp) { RefreshPlaneHandle(); return; }
+        if (CurrentOperation is IHandleOp) { RefreshPlaneHandle(); return; }
         if (CurrentOperation is not ShellOp sh) return;
         var r = sh.FaceRefs.FirstOrDefault();
         if (r.Owner is not Part part || Topo.FaceHandle(part, r.Id) is not { } h) return;
@@ -1214,16 +1214,17 @@ public partial class MainWindow : Window
     /// <summary>u12 (замечание 14): ручка плоскости — у способов со смещением и углом (по точкам — без ручки).</summary>
     public void RefreshPlaneHandle()
     {
-        if (CurrentOperation is not PlaneOp op || View.HandleDragging) return;
+        if (CurrentOperation is not IHandleOp ho || CurrentOperation is not { } op || View.HandleDragging) return;
         View.Handle = null; _handleOp = null; _handleOpFixed = false;
-        if (op.HandleAt() is { } h)
+        if (ho.HandleAt() is { } h)
         {
             static Vector3 F(OpenTK.Mathematics.Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
             View.Handle = new OpHandle(F(h.At), F(h.Out), true, true);
             _ghostOut = _ghostIn = null; _validOut = _validIn = null;
-            _handleKind = "plane"; _handleOp = op; _handleOpFixed = true;
-            View.SetHandleValue(op.DragCurrent ?? 0);
-            View.SetHandleGhost(null, null);
+            _handleKind = op is PlaneOp ? "plane" : "op"; _handleOp = op; _handleOpFixed = true;
+            View.SetHandleValue(op.ValueToHandle(op.DragCurrent ?? 0));
+            // k112: контур ручки операции (уклон — шарнир и смещённое ребро)
+            View.SetHandleGhost(FullPreview ? null : ho.HandleGhost(), null);
         }
         View.MarkDirty();
     }

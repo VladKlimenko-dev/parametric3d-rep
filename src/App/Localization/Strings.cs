@@ -1,4 +1,4 @@
-﻿namespace Parametric3D.App;
+namespace Parametric3D.App;
 
 /// <summary>
 /// ПЕРЕВОД ИНТЕРФЕЙСА: русская строка из кода → английская. Ключ — ровно та строка, что передаётся в L() (с {0} для
@@ -780,6 +780,18 @@ public static class Strings
         ["Начать эскиз"] = "Start sketch", ["Эскиз «{0}»"] = "Sketch “{0}”", ["Эскиз{0}"] = "Sketch{0}", ["Плоскость{0}"] = "Plane{0}",
         ["Деталь «{0}»"] = "Part “{0}”", ["Сборка «{0}»"] = "Assembly “{0}”", ["Документ «{0}»"] = "Document “{0}”",
         ["Тело"] = "Body", ["Добавить"] = "Add", ["Вырезать"] = "Cut", ["Глубина до"] = "Depth to", ["На расстояние"] = "Blind", ["Насквозь"] = "Through all",
+        ["Неподвижное: ребро или плоскость"] = "Fixed: edge or plane",
+        ["Ребро (шарнир)"] = "Edge (hinge)",
+        ["Смещаемое ребро"] = "Moving edge",
+        ["Угол к плоскости"] = "Angle to plane",
+        ["Угол задан"] = "Angle is",
+        ["От текущего (приращение)"] = "From current (increment)",
+        ["Итоговый между гранями"] = "Final between faces",
+        ["Угол между гранями не определён — выберите плоскость угла"] = "The angle between faces is undefined — choose an angle plane",
+        ["к плоскости"] = "to the plane",
+        ["к соседней грани"] = "to the neighbouring face",
+        ["Угол {0}: {1}° → {2}°"] = "Angle {0}: {1}° → {2}°",
+        ["Угол {0}: {1}°"] = "Angle {0}: {1}°",
         ["Глубина"] = "Depth", ["Обратное направление"] = "Flip direction", ["Симметрично"] = "Symmetric", ["Угол"] = "Angle",
         ["Ось"] = "Axis", ["Без оси — осевая линия эскиза."] = "No axis — the sketch centerline is used.",
         ["Рёбра"] = "Edges", ["Радиус"] = "Radius", ["Размер"] = "Size", ["Вершина"] = "Vertex",

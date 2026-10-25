@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.App.Viewport;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
@@ -280,30 +280,138 @@ public sealed class LoftOp : FeatureOp<LoftFeature>
 
 // ====================================================================== уклон
 
-public sealed class DraftOp : FeatureOp<DraftFeature>
+public sealed class DraftOp : FeatureOp<DraftFeature>, IHandleOp
 {
-    private RefField _faces = null!, _neutral = null!;
+    private RefField _faces = null!, _neutral = null!, _moving = null!, _refPlane = null!;
     private readonly RefCache<Vector3d> _cache = new();
+    private readonly RefCache<EdgeRef> _hingeCache = new(), _moveCache = new();
     private bool _flip;
     public DraftOp(DraftFeature? existing = null) : base(existing) { }
     public override string Title => "Уклон";
     public override string Icon => "f_draft_but.svg";
     protected override DraftFeature Create() => new();
 
+    /// <summary>Мутация P3D_DRAFTHANDLE=0: у уклона по ребру нет ручки и стрелки.</summary>
+    static readonly bool HandleOff = Environment.GetEnvironmentVariable("P3D_DRAFTHANDLE") == "0";
+
+    /// <summary>k112: шарнир — ребро (а не нейтральная плоскость).</summary>
+    public bool ByEdge => _neutral != null && (_neutral.Items.Count > 0 ? _neutral.Items[0].Kind == PickKind.Edge : !_neutral.Touched && F?.Hinge != null);
+
     public override void Build(OpPanel p)
     {
         _faces = p.Ref(MoreFields.Faces("Грани"));
-        _neutral = p.Ref(Fields.Plane("Нейтральная плоскость"));
-        if (Editing) { _faces.Kept = F.OnFaces.Count; _neutral.Kept = 1; }
+        // k112: неподвижное — ребро выбранной грани (шарнир) или нейтральная плоскость
+        _neutral = p.Ref(new RefField
+        {
+            Label = "Неподвижное: ребро или плоскость", Filter = PickFilter.Edges | PickFilter.Faces | PickFilter.Datums, Single = true,
+            Accept = r => r.Kind == PickKind.Edge ? !Topo.IsSeam(r) : Refs.IsPlanar(r),
+            Describe = r => r.Kind == PickKind.Edge ? L("Ребро (шарнир)") : Viewport.Selection.Label(r),
+        });
+        _moving = p.Ref(new RefField
+        {
+            Label = "Смещаемое ребро", Filter = PickFilter.Edges, Single = true, Optional = true,
+            Accept = r => r.Kind == PickKind.Edge && !Topo.IsSeam(r) && !_neutral.Items.Any(x => x.Kind == PickKind.Edge && x.Id == r.Id),
+        }, () => ByEdge);
+        _refPlane = p.Ref(new RefField
+        {
+            Label = "Угол к плоскости", Filter = PickFilter.Faces | PickFilter.Datums, Single = true, Optional = true,
+            Accept = r => r.Kind != PickKind.Edge && Refs.IsPlanar(r),
+        }, () => ByEdge);
+        if (Editing)
+        {
+            _faces.Kept = F.OnFaces.Count; _neutral.Kept = 1;
+            if (F.Moving != null) _moving.Kept = 1;
+            if (F.RefNormal != null) _refPlane.Kept = 1;
+        }
+        p.Choice("Угол задан", new[] { "От текущего (приращение)", "Итоговый между гранями" }, () => F.Total ? 1 : 0, SetTotal, visible: () => ByEdge);
         p.Number("Угол", () => F.Angle, v => F.Angle = v, "°");
-        p.Check("Обратное направление", () => _flip, v => _flip = v);
+        p.Check("Обратное направление", () => ByEdge ? F.Reverse : _flip, v => { if (ByEdge) F.Reverse = v; else _flip = v; }, visible: () => !(ByEdge && F.Total));
+        p.Info(() => AngleInfo(), () => ByEdge);
     }
 
-    public override Action<double>? DragValue => v => F.Angle = new ValueRef(v);
-    public override double? DragCurrent => F.Angle.Value;
+    /// <summary>k112: «к соседней грани: было → станет» (по последнему расчёту).</summary>
+    public string AngleInfo()
+    {
+        if (F.LastBefore is not { } b) return F.LastHinge != null ? L("Угол между гранями не определён — выберите плоскость угла") : "";
+        string to = F.RefNormal != null ? L("к плоскости") : L("к соседней грани");
+        return F.LastAfter is { } a ? L("Угол {0}: {1}° → {2}°", to, Fmt(b), Fmt(a)) : L("Угол {0}: {1}°", to, Fmt(b));
+    }
+    static string Fmt(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>k112: шарнир-ребро выбран — дальше смещаемое ребро (если не задано).</summary>
+    protected override RefField? NextAfter(RefField f) =>
+        ReferenceEquals(f, _neutral) && ByEdge && !_moving.IsSet && _faces.IsSet ? _moving : null;
+
+    public void SetTotalMode(bool total) { SetTotal(total ? 1 : 0); FieldChanged(); }
+
+    /// <summary>Смена способа задания угла — геометрия та же: итоговый = нынешний результат, приращение = применённый поворот.</summary>
+    void SetTotal(int v)
+    {
+        bool total = v == 1;
+        if (total == F.Total) return;
+        if (total && F.LastAfter is { } a) F.Angle = new ValueRef(Math.Round(a, 3));
+        else if (!total && F.LastApplied is { } d && Math.Abs(d) > 1e-9) { F.Angle = new ValueRef(Math.Round(Math.Abs(d), 3)); F.Reverse = d < 0; }
+        F.Total = total;
+    }
+
+    // ---------------------------------------------------------------- k112: ручка и стрелка у смещаемого ребра
+
+    public override bool SignedDrag => ByEdge;
+    public override string DragUnit => "°";
+    public override Action<double>? DragValue => v =>
+    {
+        if (!ByEdge) { F.Angle = new ValueRef(v); return; }
+        if (F.Total && F.LastHinge?.AngleTo(v, F.RefNormal) is { } t) { F.Angle = new ValueRef(Math.Round(t, 2)); return; }
+        F.Angle = new ValueRef(Math.Abs(v)); F.Reverse = v < 0;
+    };
+    public override double? DragCurrent => ByEdge ? F.LastApplied ?? F.Angle.Value * (F.Reverse ? -1 : 1) : F.Angle.Value;
     public override string DragLabel => "∠";
 
-    protected override void SeedRefs() => Seed(_faces, _neutral);
+    /// <summary>Ручка — у середины смещаемого ребра, вдоль его хода (положительный угол — внутрь); величина ручки — плечо·tg угла.</summary>
+    public (Vector3d At, Vector3d Out)? HandleAt() => !HandleOff && ByEdge && F.LastHinge is { } h ? (h.MoveAt, h.MoveDir) : null;
+    public override double HandleToValue(double d) => ByEdge && F.LastHinge is { Lever: > 0 } h ? Math.Atan(d / h.Lever) * 180 / Math.PI : d;
+    public override double ValueToHandle(double v) => ByEdge && F.LastHinge is { Lever: > 0 } h ? h.Lever * Math.Tan(Math.Clamp(v, -89, 89) * Math.PI / 180) : v;
+
+    /// <summary>Контур при перетаскивании: шарнир и смещённое ребро (у плоской грани — четырёхугольник).</summary>
+    public Func<double, List<(Vector3d A, Vector3d B)>>? HandleGhost()
+    {
+        if (F.LastHinge is not { } h) return null;
+        return d =>
+        {
+            double deg = HandleToValue(d);
+            var m = h.MAt(deg); double len = h.Lever / Math.Max(1e-6, Math.Cos(deg * Math.PI / 180));
+            if (h.Cone) return new() { (h.HingeP, h.HingeP + m * len) };
+            var a = h.HingeA; var b = h.HingeB;
+            return new() { (a, b), (b, b + m * len), (b + m * len, a + m * len), (a + m * len, a) };
+        };
+    }
+
+    public override IEnumerable<(Vector3d At, Vector3d Dir)> ViewArrows()
+    {
+        if (HandleOff || !ByEdge || F.LastHinge is not { } h) yield break;
+        double sgn = F.Total ? Math.Sign(F.LastApplied ?? 1) : F.Reverse ? -1 : 1;
+        if (sgn == 0) sgn = 1;
+        yield return (h.MoveAt, h.MoveDir * sgn);
+    }
+
+    public override void ArrowClicked(int index)
+    {
+        if (F.Total) return;
+        F.Reverse = !F.Reverse;
+        FieldChanged();
+    }
+
+    public override void RefreshStatus()
+    {
+        base.RefreshStatus();
+        Panel?.Refresh();
+        W.RefreshPlaneHandle();
+    }
+
+    protected override void SeedRefs()
+    {
+        Seed(_faces, _neutral);
+    }
 
     protected override void Push()
     {
@@ -312,11 +420,22 @@ public sealed class DraftOp : FeatureOp<DraftFeature>
             F.OnFaces.Clear(); F.OnFaceNames.Clear();
             F.OnFaces.AddRange(_cache.Resolve(_faces, Refs.PointOf));
         }
-        if (_neutral.Items.Count > 0 && Refs.PlaneOf(_neutral.Items[0]) is { } pl)
+        if (_neutral.Items.Count > 0 && _neutral.Items[0].Kind == PickKind.Edge)
         {
+            var he = _hingeCache.Resolve(_neutral, r => Part.FindEdge(r.Id) is { } e ? EdgeRef.Of(e) : (EdgeRef?)null).Select(x => (EdgeRef?)x).FirstOrDefault();
+            if (he != null) F.Hinge = he;
+        }
+        else if (_neutral.Items.Count > 0 && Refs.PlaneOf(_neutral.Items[0]) is { } pl)
+        {
+            F.Hinge = null;
             F.NeutralPoint = pl.Frame.Origin;
             F.NeutralNormal = pl.Frame.W.Normalized() * (_flip ? -1 : 1);
         }
+        else if (_neutral.Touched) F.Hinge = null;
+        if (_moving.Touched)
+            F.Moving = _moving.Items.Count > 0 ? _moveCache.Resolve(_moving, r => Part.FindEdge(r.Id) is { } e ? EdgeRef.Of(e) : (EdgeRef?)null).Select(x => (EdgeRef?)x).FirstOrDefault() : null;
+        if (_refPlane.Touched)
+            F.RefNormal = _refPlane.Items.Count > 0 && Refs.PlaneOf(_refPlane.Items[0]) is { } rp ? rp.Frame.W.Normalized() : null;
     }
 }
 
