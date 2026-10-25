@@ -208,13 +208,51 @@ public static class SweepOp
         if (ClearOff || pieces.Count == 0) return;
         double rho = Extent(section);
         if (rho <= 0) return;
-        void Refuse(string why) => throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"Sweep: the swept body would cross itself — {why} (section extent {rho:0.###}).");
+        // k111 (снимок 19:13): ПЛОСКАЯ ТРАЕКТОРИЯ — зазор ПО СТОРОНАМ. Сечение «треугольник 60 наружу» вдоль контура с
+        // радиусами 51…60 отвергалось: бралось наибольшее расстояние сечения от траектории в любую сторону (75.6), хотя к
+        // центрам кривизны (внутрь контура) сечение не заходит. У плоской траектории рамка поворачивается вокруг нормали
+        // плоскости, и смещение точки сечения поперёк траектории в плоскости (a — к «левой» стороне n = N × t) постоянно:
+        // кривизна мешает, только если её центр — на стороне, куда сечение заходит дальше радиуса; сближение двух мест —
+        // если сечения тянутся навстречу друг другу на расстояние больше их разноса. Мутация P3D_SWEEPSIDES=0.
+        double rhoL = rho, rhoR = rho;
+        Vector3d? planeN = SidesOff ? null : PlaneNormal(pieces);
+        if (planeN is { } N0)
+        {
+            var p0 = pieces[0].PointAt(pieces[0].T0); var t0 = pieces[0].TangentAt(pieces[0].T0).Normalized();
+            var f = AlignNormal(section.Plane, p0, t0);
+            var n0 = Vector3d.Cross(N0, t0).Normalized();
+            rhoL = 0; rhoR = 0;
+            foreach (var l in section.Loops) foreach (var c in l.Curves)
+            {
+                var t = new List<Vector3d>(); c.Tessellate(t, true);
+                foreach (var q in t)
+                {
+                    var d = q - section.Plane.Origin;
+                    var w = f.U * Vector3d.Dot(d, section.Plane.U) + f.V * Vector3d.Dot(d, section.Plane.V);
+                    double a = Vector3d.Dot(w, n0);
+                    rhoL = Math.Max(rhoL, a); rhoR = Math.Max(rhoR, -a);
+                }
+            }
+        }
+        double Reach(Vector3d? toCenter, Vector3d tangent)
+        {
+            if (planeN is not { } N || toCenter is not { } tc) return rho;
+            var n = Vector3d.Cross(N, tangent.Normalized());
+            return Vector3d.Dot(tc, n) >= 0 ? rhoL : rhoR;
+        }
+        void Refuse(string why, double ext) => throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"Sweep: the swept body would cross itself — {why} (section extent {ext:0.###}).");
         // (1) кривизна
         for (int k = 0; k < pieces.Count; k++)
         {
             var c = pieces[k];
             if (c is LineCurve3) continue;
-            if (c is ArcCurve3 a) { if (a.Radius <= rho) Refuse($"the path arc radius {a.Radius:0.###} is not larger than the section"); continue; }
+            if (c is ArcCurve3 a)
+            {
+                var pm = a.PointAt((a.T0 + a.T1) / 2);
+                double ra = Reach(a.Frame.Origin - pm, a.TangentAt((a.T0 + a.T1) / 2));
+                if (a.Radius <= ra) Refuse($"the path arc radius {a.Radius:0.###} is not larger than the section", ra);
+                continue;
+            }
             var t = new List<Vector3d>(); c.Tessellate(t, true);
             for (int i = 1; i + 1 < t.Count; i++)
             {
@@ -225,37 +263,39 @@ public static class SweepOp
                 double cross = Vector3d.Cross(u, v).Length;
                 if (cross < 1e-15) continue;
                 double R = u.Length * v.Length * (t[i + 1] - t[i - 1]).Length / (2 * cross);
-                if (R <= rho) Refuse($"the path curvature radius {R:0.###} near ({t[i].X:0.##}, {t[i].Y:0.##}, {t[i].Z:0.##}) is not larger than the section");
+                double rr = Reach(v.Normalized() - u.Normalized(), u + v);   // центр кривизны — куда поворачивает траектория
+                if (R <= rr) Refuse($"the path curvature radius {R:0.###} near ({t[i].X:0.##}, {t[i].Y:0.##}, {t[i].Z:0.##}) is not larger than the section", rr);
             }
         }
-        // (3) стыки «на ус»
+        // (3) стыки «на ус»: срез — со стороны поворота
         for (int k = 0; k + 1 < pieces.Count; k++)
         {
             var t1 = pieces[k].TangentAt(pieces[k].T1).Normalized(); var t2 = pieces[k + 1].TangentAt(pieces[k + 1].T0).Normalized();
             double phi = Math.Acos(Math.Clamp(Vector3d.Dot(t1, t2), -1, 1));
             if (phi < 1e-9) continue;
-            double zone = phi >= Math.PI - 1e-9 ? double.PositiveInfinity : rho * Math.Tan(phi / 2);
+            double rk = Reach(t2 - t1, t1 + t2);
+            double zone = phi >= Math.PI - 1e-9 ? double.PositiveInfinity : rk * Math.Tan(phi / 2);
             double l1 = Len(pieces[k]), l2 = Len(pieces[k + 1]);
-            if (zone >= Math.Min(l1, l2)) Refuse($"the corner {k + 1} turns by {phi * 180 / Math.PI:0.#}° and its mitre ({zone:0.###}) runs past the adjacent segment");
+            if (zone >= Math.Min(l1, l2)) Refuse($"the corner {k + 1} turns by {phi * 180 / Math.PI:0.#}° and its mitre ({zone:0.###}) runs past the adjacent segment", rk);
         }
         // (2) сближение
-        var pts = new List<(Vector3d P, int Piece, double S)>();
+        var pts = new List<(Vector3d P, Vector3d T, int Piece, double S)>();
         double s0 = 0;
         for (int k = 0; k < pieces.Count; k++)
         {
             var t = new List<Vector3d>(); pieces[k].Tessellate(t, true);
-            var dense = new List<Vector3d> { t[0] };
+            var dense = new List<(Vector3d P, Vector3d T)> { (t[0], t.Count > 1 ? t[1] - t[0] : Vector3d.UnitX) };
             for (int i = 1; i < t.Count; i++)
             {
                 int m = Math.Max(1, (int)Math.Ceiling((t[i] - t[i - 1]).Length / (rho / 4)));
                 m = Math.Min(m, 400);
-                for (int j = 1; j <= m; j++) dense.Add(t[i - 1] + (t[i] - t[i - 1]) * (j / (double)m));
+                for (int j = 1; j <= m; j++) dense.Add((t[i - 1] + (t[i] - t[i - 1]) * (j / (double)m), t[i] - t[i - 1]));
             }
             for (int i = 0; i < dense.Count; i++)
             {
-                if (i > 0) s0 += (dense[i] - dense[i - 1]).Length;
+                if (i > 0) s0 += (dense[i].P - dense[i - 1].P).Length;
                 if (k > 0 && i == 0) continue;
-                pts.Add((dense[i], k, s0));
+                pts.Add((dense[i].P, dense[i].T, k, s0));
             }
         }
         if (pts.Count > 6000) { var step = (int)Math.Ceiling(pts.Count / 6000.0); pts = pts.Where((x, i) => i % step == 0).ToList(); }
@@ -268,9 +308,36 @@ public static class SweepOp
                 if (closed) sep = Math.Min(sep, total - sep);
                 if (sep <= Math.PI * rho) continue;
                 double d = (pts[i].P - pts[j].P).Length;
-                if (d < 2 * rho * (1 - 1e-9))
-                    Refuse($"the path comes back within {d:0.###} of itself (points {pts[i].S:0.##} and {pts[j].S:0.##} along it)");
+                double reach = 2 * rho;
+                if (planeN is { } N && d > 1e-12 && pts[i].T.LengthSquared > 1e-24 && pts[j].T.LengthSquared > 1e-24)
+                {
+                    // навстречу: сечение в i — к j, в j — к i (по поперечной стороне в плоскости)
+                    var e = (pts[j].P - pts[i].P) / d;
+                    double Side(Vector3d tang, Vector3d dir) { var n = Vector3d.Cross(N, tang.Normalized()); double c = Vector3d.Dot(dir, n); return c >= 0 ? rhoL * c : rhoR * -c; }
+                    reach = Side(pts[i].T, e) + Side(pts[j].T, -e);
+                    // по нормали плоскости сечения не сближаются — оценка не меньше отступа поперёк траектории
+                }
+                if (d < reach * (1 - 1e-9))
+                    Refuse($"the path comes back within {d:0.###} of itself (points {pts[i].S:0.##} and {pts[j].S:0.##} along it)", reach / 2);
             }
+    }
+
+    static readonly bool SidesOff = Environment.GetEnvironmentVariable("P3D_SWEEPSIDES") == "0";
+
+    /// <summary>Нормаль плоскости траектории; null — траектория не плоская (или прямая).</summary>
+    static Vector3d? PlaneNormal(IReadOnlyList<ICurve3> pieces)
+    {
+        var pts = new List<Vector3d>();
+        foreach (var c in pieces) c.Tessellate(pts, true);
+        if (pts.Count < 3) return null;
+        var p0 = pts[0];
+        Vector3d n = Vector3d.Zero;
+        for (int i = 1; i + 1 < pts.Count; i++) { var c = Vector3d.Cross(pts[i] - p0, pts[i + 1] - p0); if (c.LengthSquared > n.LengthSquared) n = c; }
+        if (n.LengthSquared < 1e-18) return null;
+        n = n.Normalized();
+        double span = pts.Max(p => (p - p0).Length);
+        if (pts.Any(p => Math.Abs(Vector3d.Dot(p - p0, n)) > 1e-6 * Math.Max(1, span))) return null;
+        return n;
     }
 
     private static double Len(ICurve3 c) { var t = new List<Vector3d>(); c.Tessellate(t, true); double l = 0; for (int i = 1; i < t.Count; i++) l += (t[i] - t[i - 1]).Length; return l; }
