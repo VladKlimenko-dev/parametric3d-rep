@@ -117,10 +117,35 @@ public static class SketchSuggest
             CanRun = () => In() && SketchCommands.Picked(w) is [SkPoint pt] && w.ViewPort.ActiveSketch is { } sk && Joined(sk, pt),
             Run = () => SplitPoint(w) });
 
+        // ---- k109 (11:07): выбранные кривые — вспомогательные ↔ основные (пункт меню «Make construction» / «Make sketch»)
+        r.Add(new AppCommand { Id = "sk.toggle_construction", Label = "Вспомогательная ↔ основная", Short = "Вспом.", Group = S, Icon = "sk_construction_but.svg",
+            Synonyms = "make construction make sketch вспомогательная основная",
+            CanRun = () => In() && ConstructionTargets(w).Count > 0, Run = () => ToggleConstructionSel(w) });
+
         // ---- удаление в эскизе (Delete)
         r.Add(new AppCommand { Id = "sk.delete", Label = "Удалить из эскиза", Short = "Удалить", Group = S, Icon = "delete_but.svg", Gesture = new KeyGesture(Key.Delete), Synonyms = "delete удалить",
             CanRun = () => In() && w.ViewPort.Selection.Items.Any(x => ReferenceEquals(x.Owner, w.ViewPort.ActiveSketch) && x.Target is SkEntity or SkConstraint or SkDimension),
             Run = () => Delete(w) });
+    }
+
+    /// <summary>k109: выбранные элементы эскиза, у которых меняется роль (кривые и точки; ссылки — нет).</summary>
+    public static List<SkEntity> ConstructionTargets(MainWindow w) =>
+        SketchCommands.Picked(w).Where(e => e is SkLine or SkArc or SkCircle or SkEllipse or SkSpline || e is SkPoint { Owner: null }).Where(e => e.Role != SkRole.Reference && !e.Builtin).ToList();
+
+    /// <summary>Все выбранные — вспомогательные (пункт меню — «Make sketch»), иначе — «Make construction».</summary>
+    public static bool AllConstruction(MainWindow w) => ConstructionTargets(w) is { Count: > 0 } t && t.All(e => e.Role == SkRole.Construction);
+
+    /// <summary>k109: выбранные кривые — вспомогательные; если все уже вспомогательные — основные. Один шаг отмены эскиза.</summary>
+    public static void ToggleConstructionSel(MainWindow w)
+    {
+        if (w.ViewPort.ActiveSketch is not { } sk) return;
+        var t = ConstructionTargets(w);
+        if (t.Count == 0) return;
+        var to = t.All(e => e.Role == SkRole.Construction) ? SkRole.Object : SkRole.Construction;
+        foreach (var e in t) e.Role = to;
+        sk.BumpStructure();
+        w.AfterSketchEdit(sk);
+        w.ViewPort.MarkDirty();
     }
 
     /// <summary>Удалить размеры: нужные эскизу (сильные) становятся слабыми — об этом сообщение.</summary>
@@ -223,7 +248,7 @@ public static class SketchSuggest
             {
                 res.Add("sk.offset");
                 if (sel.Any(e => e is SkLine { Role: SkRole.Centerline }) && sel.Count >= 2) res.Add("sk.mirror");
-                res.AddRange(new[] { "sk.transform", "sk.construction", "sk.trim" });
+                res.AddRange(new[] { "sk.transform", "sk.toggle_construction", "sk.trim" });
             }
             res.Add("con.fix");
         }

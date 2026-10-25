@@ -315,6 +315,10 @@ public sealed class Sketch : ModelItem
 
     public void BumpStructure() => StructureVersion++;
 
+    /// <summary>k109 (11:11): плоскость эскиза параллельна плоскости other (такой эскиз виден и служит ссылкой при правке).</summary>
+    public bool IsParallelTo(Sketch other) => !ReferenceEquals(this, other) && Math.Abs(OpenTK.Mathematics.Vector3d.Dot(Plane.W.Normalized(), other.Plane.W.Normalized())) > 1 - 1e-6;
+    public static readonly bool ParallelGhostOff = Environment.GetEnvironmentVariable("P3D_SKGHOST") == "0";
+
     /// <summary>
     /// Пересчитывает значения размеров, которые эскизом не управляют:
     /// справочных и поставленных по умолчанию. Они показывают геометрию,

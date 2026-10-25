@@ -2918,6 +2918,110 @@ Check("UI-OP-RELEASE", () =>
     Require(alive <= 1, $"replaced parts still alive: {alive} of {weak.Count}");
 });
 
+Check("UI-SKETCH-K109B", () =>
+{
+    // k109 (11:11): в правке эскиза видны эскизы параллельных плоскостей (и скрытые); их кривые и точки — ссылки
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var low = part.AddSketch("Low", new Parametric3D.Kernel.Frame3(new Vector3d(0, 0, -30), Vector3d.UnitX, Vector3d.UnitY));
+    var gl = low.AddEntity(new SkLine(new SkPoint(30, 0), new SkPoint(50, 0)));
+    low.Visible = false; low.VisibleUserSet = true;
+    var side = part.AddSketch("Side", part.PlaneYZ.Frame, part.PlaneYZ.Id); side.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(10, 10)));
+    s.Document.RebuildDirty();
+    var w = Open(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp()); Run();
+    var vp = w.ViewPort; var sk = vp.ActiveSketch!;
+    vp.EnterSketch(sk, animate: false); vp.ZoomToFit(animate: false); Run();
+    var pt = vp.Project(low.Plane.ToWorld(new Vector2d(40, 0)))!.Value;
+    var under = vp.PickForTest(pt);
+    Require(under.Kind == PickKind.SketchCurve && ReferenceEquals(under.Owner, low), $"hidden parallel sketch curve is not pickable: {under.Kind} {(under.Owner as ModelItem)?.Name}");
+    var wp = vp.TranslatePoint(pt, w)!.Value;
+    w.MouseMove(wp); Run(); w.MouseDown(wp, MouseButton.Left); w.MouseUp(wp, MouseButton.Left); Run();
+    var refs = sk.Entities.Where(e => e.Role == SkRole.Reference && e.ReferenceSource == $"Эскиз #{gl.Id}").ToList();
+    Require(refs.OfType<SkLine>().Count() == 1 && refs.OfType<SkLine>().First() is { } rl && Math.Abs(rl.Length - 20) < 1e-9, "reference from the parallel sketch: " + string.Join(",", refs.Select(r => r.GetType().Name)));
+    // перпендикулярный эскиз — не ссылка
+    Require(!side.IsParallelTo(sk) && low.IsParallelTo(sk), "parallel test");
+    w.FinishSketch(); Run();
+});
+
+Check("UI-SKETCH-K109", () =>
+{
+    // k109 (11:07): контекстное меню выбранного в эскизе — «Make construction» / «Make sketch»
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var w = Open(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp()); Run();
+    var vp = w.ViewPort; var sk = vp.ActiveSketch!;
+    var l = sk.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(20, 0)));
+    var c = sk.AddEntity(new SkCircle(new SkPoint(40, 0), 5));
+    w.AfterSketchEdit(sk); Run();
+    vp.Selection.Select(new PickRef(l.Id, PickKind.SketchCurve, sk, l), false);
+    vp.Selection.Select(new PickRef(c.Id, PickKind.SketchCurve, sk, c), true);
+    MenuItem Toggle() { w.OpenViewContextMenuForTest(); Run(); return w.LastContextMenu!.OfType<MenuItem>().First(m => m.Name == "makeConstruction"); }
+    var mi = Toggle();
+    Require((string)mi.Header! == Loc.L("Сделать вспомогательной (Make construction)"), "menu: " + mi.Header);
+    mi.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent)); Run();
+    Require(l.Role == SkRole.Construction && c.Role == SkRole.Construction, "not construction");
+    mi = Toggle();
+    Require((string)mi.Header! == Loc.L("Сделать основной (Make sketch)"), "menu after: " + mi.Header);
+    mi.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent)); Run();
+    Require(l.Role == SkRole.Object && c.Role == SkRole.Object, "not back to sketch geometry");
+    CommandRegistry.Instance["edit.undo"].Execute(); Run();
+    Require(sk.Entities.OfType<SkLine>().First().Role == SkRole.Construction, "undo of make sketch");
+    w.FinishSketch(); Run();
+});
+
+Check("UI-TREE-K109", () =>
+{
+    // k109 (снимок 11:04): эскиз, созданный после выдавливания, в дереве — после него (и после отмены/открытия файла);
+    // эскиз не в операции тянется мышью между операциями (не выше операции, на гранях которой стоит); перестановка
+    // операции меняет и порядок в дереве
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var s1 = part.AddSketch("S1", Parametric3D.Kernel.Frame3.XY, part.PlaneXY.Id);
+    s1.AddEntity(new SkCircle(new SkPoint(0, 0), 10));
+    var ex = new ExtrudeFeature { SketchId = s1.Id }; part.AddFeature(ex);
+    s.Document.RebuildDirty();
+    var s2 = part.AddSketch("S2", part.PlaneYZ.Frame, part.PlaneYZ.Id);
+    s2.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(5, 5)));
+    Require(part.SketchSlot(s2) == 1, $"new sketch slot {part.SketchSlot(s2)}");
+    var (lp, _) = Parametric3D.Model.DocumentFile.Load(Parametric3D.Model.DocumentFile.Save(part));
+    var ls2 = lp.Sketches.First(k => k.Name == "S2");
+    Require(lp.SketchSlot(ls2) == 1 && lp.Children.IndexOf(ls2) > lp.Children.IndexOf(lp.Features[0]), $"after reload S2 is above the extrude: slot {lp.SketchSlot(ls2)}");
+    // файл до k109 (без места): эскиз на грани выдавливания — после него
+    var s3 = part.AddSketch("S3", Parametric3D.Kernel.Frame3.XY); s3.BaseFaceTag = "#" + ex.Key + "/extrude[0]:top";
+    var json = System.Text.RegularExpressions.Regex.Replace(Parametric3D.Model.DocumentFile.Save(part), ",\\s*\"Slot\":\\s*\\d+", "");
+    var (op, _) = Parametric3D.Model.DocumentFile.Load(json);
+    Require(op.SketchSlot(op.Sketches.First(k => k.Name == "S3")) == 1, "legacy sketch on the extrude face is not after it");
+    part.Remove(s3);
+    var w = Open(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    Run();
+    // отмена правки не поднимает эскиз выше выдавливания
+    s.Edit("rename", () => s.Part!.Name = "P"); s.Undo(); s.Document.RebuildDirty(); Run();
+    part = s.Part!; s2 = part.Sketches.First(k => k.Name == "S2");
+    Require(part.SketchSlot(s2) == 1, $"after undo S2 slot {part.SketchSlot(s2)}");
+    // перетащить выше и мышью — обратно ниже
+    Require(w.MoveSketchTo(s2, 0), "move sketch above"); Run();
+    part = s.Part!; s2 = part.Sketches.First(k => k.Name == "S2"); ex = (ExtrudeFeature)part.Features[0];
+    Require(part.SketchSlot(s2) == 0, "sketch is not above the extrude");
+    var rs = w.TreeRowInWindow(s2); var re = w.TreeRowInWindow(ex);
+    Require(rs != null && re != null, "tree rows");
+    var a = rs!.Value.Center; var b = new Avalonia.Point(re!.Value.Center.X, re.Value.Bottom - 2);
+    w.MouseDown(a, MouseButton.Left); Run();
+    for (int i = 1; i <= 8; i++) { w.MouseMove(new Avalonia.Point(a.X + (b.X - a.X) * i / 8, a.Y + (b.Y - a.Y) * i / 8), RawInputModifiers.LeftMouseButton); Run(); }
+    w.MouseUp(b, MouseButton.Left); Run();
+    part = s.Part!; s2 = part.Sketches.First(k => k.Name == "S2");
+    Require(part.SketchSlot(s2) == 1, $"mouse drag did not move the sketch below the extrude: slot {part.SketchSlot(s2)}");
+    // эскиз на грани выдавливания — не выше него
+    var s4 = part.AddSketch("S4", Parametric3D.Kernel.Frame3.XY); s4.BaseFaceTag = "#" + part.Features[0].Key + "/extrude[0]:top";
+    Require(part.SketchSlotRange(s4).Lo == 1 && !w.MoveSketchTo(s4, 0), "sketch on the extrude face moved above it");
+    // перестановка операций — порядок и в дереве
+    var s5 = part.AddSketch("S5", Parametric3D.Kernel.Frame3.XY, part.PlaneXY.Id); s5.AddEntity(new SkCircle(new SkPoint(30, 0), 5));
+    var ex2 = new ExtrudeFeature { SketchId = s5.Id }; part.AddFeature(ex2);
+    part.MoveFeature(ex2, 0);
+    Require(part.Children.IndexOf(ex2) < part.Children.IndexOf(part.Features[1]), "MoveFeature did not reorder the tree");
+});
+
 Check("UI-SWEEP-K107", () =>
 {
     // k107 (отзыв 18:05): протяжка как в Creo — эскизов нет: «Создать эскиз траектории» (плоскость → эскиз → назад в

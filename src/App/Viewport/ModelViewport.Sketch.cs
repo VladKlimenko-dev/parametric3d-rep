@@ -124,6 +124,9 @@ public sealed partial class ModelViewport
 
     internal bool TryReference(PickRef r)
     {
+        // k109 (11:11): кривая или точка эскиза параллельной плоскости — в ссылки
+        if (ActiveSketch is { } act && r.Owner is Sketch other && !ReferenceEquals(other, act) && r.Kind is PickKind.SketchCurve or PickKind.SketchPoint && !Sketch.ParallelGhostOff)
+        { ReferencePicked?.Invoke(r); return true; }
         if (ActiveSketch == null || r.Owner is not Part) return false;
         if (r.Kind == PickKind.Face) { if (FaceReference(r) == null) return false; }
         else if (r.Kind is not (PickKind.Edge or PickKind.Vertex)) return false;

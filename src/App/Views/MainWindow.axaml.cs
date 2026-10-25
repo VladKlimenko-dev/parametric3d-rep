@@ -1278,6 +1278,16 @@ public partial class MainWindow : Window
 
     private void AddSketchReference(PickRef r)
     {
+        if (View.ActiveSketch is { } ask && r.Owner is Sketch other)
+        {
+            var e2 = SketchReferences.AddFromSketch(ask, other, r);
+            if (e2 != null) { ShowToast(e2, error: false); return; }
+            try { ask.Solve(Session.Document.Solver); } catch (Exception ex) { AppLog.Write("sketch solve", ex); }
+            View.RefreshDefaultDimensions(); View.MarkDirty(); ScheduleTree();
+            if (_refsPanel) ShowReferencesPanel(); else ShowToast(L("Ссылка добавлена: {0}", L("Эскиз") + " «" + other.Name + "»"), error: false);
+            AfterSketchEdit(ask);
+            return;
+        }
         if (View.ActiveSketch is not { } sk || r.Owner is not Part part) return;
         // u13: режим «использовать / сместить / утолщить ребро» — ребро становится основной геометрией эскиза
         if (Commands.SketchEditCommands.OnModelEdge(this, sk, part, r)) { ScheduleTree(); return; }
@@ -1541,13 +1551,35 @@ public partial class MainWindow : Window
         new ContextMenu { ItemsSource = items }.Open(View);
     }
 
+    /// <summary>Разбор: пункты последнего контекстного меню вида.</summary>
+    public List<object>? LastContextMenu { get; private set; }
+    public void OpenViewContextMenuForTest() => OpenViewContextMenu();
+
     private void OpenViewContextMenu()
     {
         var items = new List<object>();
+        // k109 (11:07): в эскизе — команды выбранного и «Make construction» / «Make sketch»
+        if (InSketch && !View.Selection.IsEmpty)
+        {
+            if (Commands.SketchSuggest.ConstructionTargets(this).Count > 0)
+            {
+                bool all = Commands.SketchSuggest.AllConstruction(this);
+                var mi = new MenuItem { Header = L(all ? "Сделать основной (Make sketch)" : "Сделать вспомогательной (Make construction)"), Name = "makeConstruction" };
+                if (IconProvider.Get("sk_construction_but.svg") is { } ci) mi.Icon = new Image { Source = ci, Width = 16, Height = 16 };
+                mi.Click += (_, _) => Commands.SketchSuggest.ToggleConstructionSel(this);
+                items.Add(mi);
+                items.Add(new Separator());
+            }
+            foreach (var id in Commands.SketchSuggest.For(this).Where(i => i != "sk.construction" && _reg.Find(i) != null)) items.Add(Item(_reg[id]));
+            LastContextMenu = items;
+            new ContextMenu { ItemsSource = items }.Open(View);
+            return;
+        }
         var ids = View.Selection.IsEmpty
             ? new[] { "view.fit", "view.home", "view.show_all", "op.sketch", "app.parameters" }
             : SuggestedOps().Concat(new[] { "view.hide", "view.isolate", "edit.delete", "app.properties" }).Distinct().ToArray();
         foreach (var id in ids) items.Add(Item(_reg[id]));
+        LastContextMenu = items;
         new ContextMenu { ItemsSource = items }.Open(View);
     }
 
@@ -2108,13 +2140,29 @@ public partial class MainWindow : Window
         // место (не выше родителей, не ниже потомков)
         Tree.AddHandler(PointerPressedEvent, (_, e) =>
         {
-            _featDrag = null; _featDragOn = false;
+            _featDrag = null; _featDragOn = false; _sketchDrag = null;
             if (!e.GetCurrentPoint(Tree).Properties.IsLeftButtonPressed || FeatureDragOff) return;
             if ((e.Source as StyledElement)?.DataContext is TreeNode { IsBar: false } n && DragFeatureOf(n.Item) is { } f)
                 _featDrag = (f, e.GetPosition(Tree));
+            // k109: эскиз, не ушедший в операцию, — тоже тянется (его место среди операций)
+            else if ((e.Source as StyledElement)?.DataContext is TreeNode { IsBar: false, Item: Sketch ls } && !SketchDragOff && Session.Part is { } lp
+                     && lp.Sketches.Contains(ls) && !lp.Features.Any(x => x.ConsumedSketchIds().Contains(ls.Id)))
+                _sketchDrag = (ls, e.GetPosition(Tree));
         }, RoutingStrategies.Tunnel);
         Tree.AddHandler(PointerMovedEvent, (_, e) =>
         {
+            if (_sketchDrag is { } sd0)
+            {
+                var sp = e.GetPosition(Tree);
+                if (!_featDragOn)
+                {
+                    if ((sp - sd0.Start).X * (sp - sd0.Start).X + (sp - sd0.Start).Y * (sp - sd0.Start).Y < 36) return;
+                    _featDragOn = true; e.Pointer.Capture(Tree);
+                }
+                ShowSketchDrop(sd0.S, sp);
+                e.Handled = true;
+                return;
+            }
             if (_featDrag is not { } fd) return;
             var p = e.GetPosition(Tree);
             if (!_featDragOn)
@@ -2127,6 +2175,15 @@ public partial class MainWindow : Window
         }, RoutingStrategies.Tunnel);
         Tree.AddHandler(PointerReleasedEvent, (_, e) =>
         {
+            if (_sketchDrag is { } sd1)
+            {
+                bool son = _featDragOn; _sketchDrag = null; _featDragOn = false;
+                TreeDropLine.IsVisible = false;
+                if (!son) return;
+                e.Pointer.Capture(null); e.Handled = true;
+                if (SketchDropSlot(sd1.S, e.GetPosition(Tree)) is int slot) MoveSketchTo(sd1.S, slot);
+                return;
+            }
             if (_featDrag is not { } fd) return;
             bool on = _featDragOn; _featDrag = null; _featDragOn = false;
             TreeDropLine.IsVisible = false;
@@ -2172,6 +2229,55 @@ public partial class MainWindow : Window
     }
 
     private (Feature F, Point Start)? _featDrag;
+    private (Sketch S, Point Start)? _sketchDrag;
+    static readonly bool SketchDragOff = Environment.GetEnvironmentVariable("P3D_SKETCHDRAG") == "0";
+
+    /// <summary>
+    /// k109: место эскиза при отпускании в точке p — после скольких операций (ближайшая строка операции: ниже середины —
+    /// после неё); в пределах Part.SketchSlotRange; null — некуда.
+    /// </summary>
+    public int? SketchDropSlot(Sketch sk, Point p)
+    {
+        if (Session.Part is not { } part || part.Features.Count == 0) return null;
+        int bestK = -1; double bestD = double.MaxValue; bool below = false;
+        for (int k = 0; k < part.Features.Count; k++)
+        {
+            if (TreeRowRect(part.Features[k]) is not { } r) continue;
+            double d = p.Y < r.Top ? r.Top - p.Y : p.Y > r.Bottom ? p.Y - r.Bottom : 0;
+            if (d < bestD) { bestD = d; bestK = k; below = p.Y > r.Center.Y; }
+        }
+        if (bestK < 0) return null;
+        int slot = below ? bestK + 1 : bestK;
+        var (lo, hi) = part.SketchSlotRange(sk);
+        return Math.Clamp(slot, lo, hi);
+    }
+
+    private void ShowSketchDrop(Sketch sk, Point p)
+    {
+        TreeDropLine.IsVisible = false;
+        if (Session.Part is not { } part || SketchDropSlot(sk, p) is not int slot) return;
+        var anchor = slot == 0 ? part.Features[0] : part.Features[slot - 1];
+        if (TreeRowRect(anchor) is not { } r) return;
+        double y = slot == 0 ? r.Top - 1.5 : r.Bottom - 1.5;
+        Canvas.SetLeft(TreeDropLine, r.Left); Canvas.SetTop(TreeDropLine, y);
+        TreeDropLine.Width = Math.Max(60, Tree.Bounds.Width - r.Left - 8);
+        TreeDropLine.Opacity = slot == part.SketchSlot(sk) ? 0.35 : 1;
+        TreeDropLine.IsVisible = true;
+        TreeDropTarget = slot;
+    }
+
+    /// <summary>k109: переставить эскиз в дереве (после slot операций) — шаг отмены; расчёт не меняется.</summary>
+    public bool MoveSketchTo(Sketch sk, int slot)
+    {
+        if (Session.Part is not { } part) return false;
+        var (lo, hi) = part.SketchSlotRange(sk);
+        slot = Math.Clamp(slot, lo, hi);
+        if (slot == part.SketchSlot(sk)) return false;
+        uint id = sk.Id;
+        Session.Edit(L("Переставить эскиз"), () => { if (Session.Part!.Sketches.FirstOrDefault(k => k.Id == id) is { } s2) Session.Part.PlaceSketch(s2, slot); });
+        RebuildTree();
+        return true;
+    }
     private bool _featDragOn;
     static readonly bool FeatureDragOff = Environment.GetEnvironmentVariable("P3D_TREEDRAG") == "0";
 

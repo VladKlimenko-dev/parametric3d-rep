@@ -151,6 +151,22 @@ public static class SketchReferences
 {
     public static string SourceOf(PickRef r) => r.Kind == PickKind.Vertex ? $"Вершина #{r.Id}" : $"Ребро #{r.Id}";
 
+    /// <summary>
+    /// k109 (11:11): ССЫЛКА ИЗ ДРУГОГО ЭСКИЗА — кривая (или точка) эскиза на параллельной плоскости проецируется в правимый
+    /// эскиз ссылочной геометрией (к ней привязываются точки и размеры). Источник — «Эскиз #номер элемента».
+    /// </summary>
+    public static string? AddFromSketch(Sketch sk, Sketch other, PickRef r)
+    {
+        if (r.Target is not SkEntity e) return Loc.L("Ссылка не найдена");
+        string src = $"Эскиз #{e.Id}";
+        if (sk.Entities.Any(x => x.Role == SkRole.Reference && x.ReferenceSource == src)) return Loc.L("Уже в ссылках");
+        var pool = new EdgeProjection.PointPool(SkRole.Reference, src);
+        if (e is SkPoint p) sk.AddEntity(pool.Get(EdgeProjection.On(sk, other.Plane.ToWorld(p.P))));
+        else foreach (var x in EdgeProjection.Project(sk, e.ToCurve3(other.Plane), pool, SkRole.Reference, src)) sk.AddEntity(x);
+        sk.BumpStructure();
+        return null;
+    }
+
     /// <summary>Добавить ссылку; null — добавлена, иначе — почему нет.</summary>
     public static string? Add(Sketch sk, Part part, PickRef r)
     {
