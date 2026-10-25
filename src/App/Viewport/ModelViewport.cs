@@ -699,7 +699,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     {
         if (_doc == null) return PickRef.Empty;
         _cpuPicker.ActiveOwner = ActivePart ?? (ModelItem)_doc.Root;
-        foreach (var h in _cpuPicker.PickAll(_doc, Camera, Px(p), Show.Planes, null))
+        foreach (var h in _cpuPicker.PickAll(_doc, Camera, Px(p), Show.Planes, Sketch.ParallelGhostOff ? null : ActiveSketch))
             if (Selection.Accepts(h.Ref.Kind) && (Selection.Predicate is not { } pp || SafePred(pp, h.Ref))) return h.Ref;
         return PickRef.Empty;
     }

@@ -104,7 +104,7 @@ public static class DocumentFile
                 Note = part.Info.Note
             },
 
-            Sketches = part.Sketches.Select(SaveSketch).ToList(),
+            Sketches = part.Sketches.Select(s => { var d = SaveSketch(s); d.Slot = part.SketchSlot(s); return d; }).ToList(),
             // K10: операция, которую нельзя записать, — ошибка записи, а не молча выпавшая операция.
             Features = part.Features.Select(f =>
             {
@@ -1254,6 +1254,16 @@ public static class DocumentFile
         }
 
         if (doc.Stage is int stg && stg >= 0 && stg < part.Features.Count) part.StageIndex = part.ClampStage(stg);
+        // k109: эскизы — на своих местах в дереве (прежде все эскизы вставали перед операциями: эскиз, созданный после
+        // выдавливания, после отмены/открытия оказывался выше него). Файл до k109 — эскиз не в операции, стоящий на гранях
+        // операции, — сразу после неё.
+        if (!SketchSlotOff)
+            foreach (var sd in doc.Sketches)
+            {
+                if (!sketchById.TryGetValue(sd.Id, out var sk)) continue;
+                int slot = sd.Slot ?? (part.Features.Any(f => f.ConsumedSketchIds().Contains(sk.Id)) ? 0 : part.SketchSlotRange(sk).Lo);
+                if (slot > 0) part.PlaceSketch(sk, slot);
+            }
         return (part, table);
     }
 
@@ -1434,6 +1444,8 @@ public static class DocumentFile
         public string? Comment { get; set; }
     }
 
+    static readonly bool SketchSlotOff = Environment.GetEnvironmentVariable("P3D_SKETCHSLOT") == "0";
+
     private sealed class SketchDto
     {
         public uint Id { get; set; }
@@ -1453,6 +1465,8 @@ public static class DocumentFile
         public List<EntityDto> Entities { get; set; } = new();
         public List<ConstraintDto> Constraints { get; set; } = new();
         public List<DimensionDto> Dimensions { get; set; } = new();
+        /// <summary>k109: место в дереве — сколько операций перед эскизом (null — файл до k109).</summary>
+        public int? Slot { get; set; }
     }
 
     static readonly bool SplineSaveOff = Environment.GetEnvironmentVariable("P3D_SKSPLINESAVE") == "0";

@@ -352,6 +352,52 @@ public sealed class Part : ModelItem
         return f;
     }
 
+    static readonly bool ChildOrderOff = Environment.GetEnvironmentVariable("P3D_TREEORDER") == "0";
+
+    /// <summary>
+    /// k109: МЕСТО ЭСКИЗА В ДЕРЕВЕ — сколько операций стоит перед ним (эскиз, не ушедший в операцию, — отдельная строка
+    /// дерева между операциями; расчёт от него не зависит).
+    /// </summary>
+    public int SketchSlot(Sketch sk)
+    {
+        int at = Children.IndexOf(sk);
+        if (at < 0) return Features.Count;
+        int n = 0;
+        for (int i = 0; i < at; i++) if (Children[i] is Feature) n++;
+        return n;
+    }
+
+    /// <summary>Поставить эскиз в дереве после slot операций (0 — перед первой).</summary>
+    public void PlaceSketch(Sketch sk, int slot)
+    {
+        if (!Children.Remove(sk)) return;
+        slot = Math.Clamp(slot, 0, Features.Count);
+        int target;
+        if (slot == 0) target = Features.Count > 0 && Children.IndexOf(Features[0]) is var f0 && f0 >= 0 ? f0 : Children.Count;
+        else target = Children.IndexOf(Features[slot - 1]) is var pv && pv >= 0 ? pv + 1 : Children.Count;
+        sk.Parent = this;
+        Children.Insert(target, sk);
+        NotifyChanged(sk);
+    }
+
+    /// <summary>
+    /// Куда можно поставить эскиз: не выше операции, на грани или рёбра которой он опирается (основа, ссылки); ниже — куда
+    /// угодно.
+    /// </summary>
+    public (int Lo, int Hi) SketchSlotRange(Sketch sk)
+    {
+        int lo = 0;
+        var tags = new List<string>();
+        if (sk.BaseFaceTag is { Length: > 0 } bt) tags.Add(bt);
+        foreach (var e in sk.Entities) if (e.ReferenceSource is { Length: > 0 } rs) tags.Add(rs);
+        for (int i = 0; i < Features.Count; i++)
+        {
+            string key = "#" + Features[i].Key + "/";
+            if (tags.Any(t => t.Contains(key, StringComparison.Ordinal))) lo = Math.Max(lo, i + 1);
+        }
+        return (lo, Features.Count);
+    }
+
     /// <summary>
     /// Вставляет операцию в список детей так, чтобы порядок в дереве
     /// совпадал с порядком расчёта.
@@ -402,6 +448,16 @@ public sealed class Part : ModelItem
 
         Features.RemoveAt(old);
         Features.Insert(Math.Clamp(newIndex, 0, Features.Count), f);
+        // k109: и в дереве (Children) — на новом месте (прежде дерево показывало старый порядок до перезагрузки)
+        if (!ChildOrderOff && Children.Remove(f))
+        {
+            int ni = Features.IndexOf(f);
+            int target = Children.Count;
+            if (ni + 1 < Features.Count && Children.IndexOf(Features[ni + 1]) is var nx && nx >= 0) target = nx;
+            else if (ni > 0 && Children.IndexOf(Features[ni - 1]) is var pv && pv >= 0) target = pv + 1;
+            Children.Insert(target, f);
+            NotifyChanged(f);
+        }
 
         // Перестановка меняет всё начиная с меньшего из двух мест: там порядок уже другой.
         DirtyFromIndex(Math.Min(old, to));

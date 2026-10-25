@@ -127,7 +127,8 @@ public sealed class ScenePicker
 
         foreach (var c in item.Children)
         {
-            if (!c.Visible && c != activeSketch) { continue; }
+            bool ghost = c is Sketch gsk && activeSketch != null && c != activeSketch && !Sketch.ParallelGhostOff && gsk.IsParallelTo(activeSketch);
+            if (!c.Visible && c != activeSketch && !ghost) { continue; }
             // служебный корень документа детали: его опорных элементов нет
             if (ReferenceEquals(item, _hiddenRoot) && c is not (Part or Assembly)) continue;
             if (c is Part cpart && item is Assembly stageAsm && stageAsm.IsBeyondStage(cpart)) continue;
@@ -146,7 +147,7 @@ public sealed class ScenePicker
                 case DatumCurve dc:
                     for (int k = 1; k < dc.Points.Count; k++) AddSegment3(dc.Points[k - 1], dc.Points[k], xf, new PickRef(dc.Id, PickKind.DatumAxis, item, dc));
                     break;
-                case Sketch sk: AddSketch(sk, xf, sk == activeSketch, PointSketches?.Contains(sk.Id) == true); break;
+                case Sketch sk: AddSketch(sk, xf, sk == activeSketch, ghost || PointSketches?.Contains(sk.Id) == true); break;
             }
 
             // Базовые элементы чужого владельца — после своих.

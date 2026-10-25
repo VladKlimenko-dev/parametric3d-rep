@@ -54,7 +54,9 @@ public static class SceneBuilder
             if (c is Part or Assembly) { Walk(c, xf, s, th, show, active, c.Visible); continue; }
             if (ReferenceEquals(item, _hiddenRoot)) continue;
             // эскиз в правке рисуется всегда — даже если в дереве он скрыт (иначе правят невидимое: видны только размеры)
-            if (!c.Visible && !ReferenceEquals(c, _activeSketch)) continue;
+            // k109 (11:11): в правке эскиза видны и эскизы на параллельных плоскостях (скрытые тоже) — их кривые берутся в ссылки
+            bool ghost = c is Sketch gsk && _activeSketch != null && !ReferenceEquals(c, _activeSketch) && !Sketch.ParallelGhostOff && gsk.IsParallelTo(_activeSketch);
+            if (!c.Visible && !ReferenceEquals(c, _activeSketch) && !ghost) continue;
             if (component && item is Part cpp && (ReferenceEquals(c, cpp.PlaneXY) || ReferenceEquals(c, cpp.PlaneXZ) || ReferenceEquals(c, cpp.PlaneYZ) || ReferenceEquals(c, cpp.Origin))) continue;
             switch (c)
             {
@@ -109,7 +111,7 @@ public static class SceneBuilder
                     }
                     break;
                 case Sketch sk when show.Sketches || ReferenceEquals(sk, _activeSketch):
-                    AddSketch(sk, xf, s, th, show, OwnerPartId(owner));
+                    AddSketch(sk, xf, s, th, show, OwnerPartId(owner), ghost);
                     break;
             }
         }
@@ -225,7 +227,7 @@ public static class SceneBuilder
     /// <summary>Мутация P3D_SKAXESLAST=1: оси и нуль эскиза — после кривых (прежде; ось перекрывала отрезок на ней).</summary>
     public static readonly bool AxesLastForTest = Environment.GetEnvironmentVariable("P3D_SKAXESLAST") == "1";
 
-    private static void AddSketch(Sketch sk, Matrix4 xf, SceneData s, RenderTheme th, ShowOptions show, uint partId)
+    private static void AddSketch(Sketch sk, Matrix4 xf, SceneData s, RenderTheme th, ShowOptions show, uint partId, bool ghost = false)
     {
         var plane = sk.Plane;
         bool active = ReferenceEquals(sk, _activeSketch);
@@ -256,6 +258,8 @@ public static class SceneBuilder
                 SkRole.Reference => (th.SketchReference, 1.2f, 9f),
                 _ => (th.SketchCurve, th.SketchWidth, 0f),
             };
+            // k109: эскиз параллельной плоскости при правке другого — бледно, тонко (ссылка)
+            if (ghost) { col = th.SketchReference; col.W = 0.55f; w = 1.2f; dash = 5f; }
             uint pick = s.AddPick(new PickRef(e.Id, PickKind.SketchCurve, sk, e), 2, partId, sk.Id);
             // весь эскиз выбирается и как целое (из дерева): номер записи эскиза — у его кривых через SketchId
             int segs = closed ? pts.Count : pts.Count - 1;
@@ -264,7 +268,7 @@ public static class SceneBuilder
         }
         if (active && AxesLastForTest) Builtins();
         // точки: отдельные — всегда; концы и центры — у эскиза в правке
-        bool ends = active || _pointSketches?.Contains(sk.Id) == true;
+        bool ends = active || ghost || _pointSketches?.Contains(sk.Id) == true;
         foreach (var e in sk.Entities)
             foreach (var q in e.Handles)
             {

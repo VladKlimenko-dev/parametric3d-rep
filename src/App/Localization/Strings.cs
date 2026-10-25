@@ -43,6 +43,11 @@ public static class Strings
         ["Начало координат эскиза"] = "Sketch origin", ["Убрать ссылку"] = "Remove the reference", ["Ссылка добавлена: {0}"] = "Reference added: {0}",
         ["Уже в ссылках"] = "Already a reference", ["Ссылка не найдена"] = "Reference not found", ["Ребро"] = "Edge", ["Вершина"] = "Vertex",
         ["Угол, °"] = "Angle, °", ["Размер, мм"] = "Dimension, mm", ["Не число и не формула: {0}"] = "Not a number or a formula: {0}",
+        // k109
+        ["Сделать основной (Make sketch)"] = "Make sketch",
+        ["Сделать вспомогательной (Make construction)"] = "Make construction",
+        ["Вспомогательная ↔ основная"] = "Construction ↔ sketch",
+        ["Переставить эскиз"] = "Move sketch",
         // k107: протяжка
         ["Создать эскиз сечения"] = "Create section sketch",
         ["Создать эскиз траектории"] = "Create path sketch",
