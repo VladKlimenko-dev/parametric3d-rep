@@ -45,16 +45,17 @@ public sealed class SweepFeature : Feature
         if (profile.IsEmpty)
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Sweep: the section is not closed.");
 
-        ICurve3? path = ResolvePath(ctx);
+        // k111: цепочка траектории по связности (и замкнутая), с началом у сечения и направлением (Reverse)
+        var chain = OrderedChain(ctx.FindSketch, section);
+        ICurve3? path = chain is { Count: > 1 } ? Polyline(chain) : chain is { Count: 1 } ? chain[0] : ResolvePath(ctx);
         if (path == null)
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Sweep: no path.");
-        if (Reverse) path = path.Reversed();
+        if (Reverse && chain == null) path = path.Reversed();
 
         Kernel.Topology.TSolid? solid = null;
         double frac = LengthFraction.Resolve(ctx.Parameters);
         double twist = Twist.Resolve(ctx.Parameters);
-        if (Math.Abs(frac - 1) < 1e-12 && Math.Abs(twist) < 1e-12 && !KeepOrientation && ResolveChain(ctx) is { Count: > 1 } chain0
-            && (Reverse ? Enumerable.Reverse(chain0).Select(c => c.Reversed()).ToList() : chain0) is var chain)
+        if (Math.Abs(frac - 1) < 1e-12 && Math.Abs(twist) < 1e-12 && !KeepOrientation && chain is { Count: > 1 })
             solid = SweepOp.BuildChain(profile, chain, ctx.Warnings);
         solid ??= SweepOp.Build(profile, path, frac, twist, KeepOrientation);
 
@@ -63,6 +64,39 @@ public sealed class SweepFeature : Feature
     }
 
     private ICurve3? ResolvePath(BuildContext ctx) => PathOf(ctx.Part, ctx.FindSketch);
+
+    static ICurve3 Polyline(List<ICurve3> chain)
+    {
+        var pts = new List<Vector3d>();
+        for (int i = 0; i < chain.Count; i++) chain[i].Tessellate(pts, i == 0);
+        return new PolylineCurve3(pts);
+    }
+
+    static readonly bool ClosedChainOff = Environment.GetEnvironmentVariable("P3D_SWEEPCLOSED") == "0";
+
+    /// <summary>
+    /// k111 (снимок 19:13): ЦЕПОЧКА ТРАЕКТОРИИ ЭСКИЗА — по связности концов, в том числе ЗАМКНУТАЯ (контур вокруг детали:
+    /// прежде замкнутая цепь не складывалась, и кривые сшивались ломаной по порядку элементов эскиза — с перескоками). У
+    /// замкнутой начало — узел, ближайший к началу эскиза сечения, обход — по нормали сечения (как сечение нарисовано); Reverse
+    /// разворачивает. null — траектория не из эскиза (или не цепь).
+    /// </summary>
+    List<ICurve3>? OrderedChain(Func<uint, Sketching.Sketch?> find, Sketching.Sketch? section)
+    {
+        if (PathSketchId == 0 || find(PathSketchId) is not { } ps) return null;
+        var chain = ChainOf(ps, out bool closed);
+        if (chain == null) return null;
+        if (closed && section != null)
+        {
+            var o = section.Plane.Origin;
+            int best = 0; double bd = double.MaxValue;
+            for (int i = 0; i < chain.Count; i++) { double d = (chain[i].PointAt(chain[i].T0) - o).Length; if (d < bd) { bd = d; best = i; } }
+            chain = chain.Skip(best).Concat(chain.Take(best)).ToList();
+            if (Vector3d.Dot(chain[0].TangentAt(chain[0].T0), section.Plane.W) < 0) chain = Rev(chain);
+        }
+        if (Reverse) chain = Rev(chain);
+        return chain;
+    }
+    static List<ICurve3> Rev(List<ICurve3> c) => Enumerable.Reverse(c).Select(x => x.Reversed()).ToList();
 
     /// <summary>
     /// k107: начало протяжки — точка, касательная (по ходу, с учётом Reverse) и нормаль плоскости траектории (для «верха»
@@ -73,12 +107,20 @@ public sealed class SweepFeature : Feature
         Sketching.Sketch? Find(uint id) => part.Sketches.FirstOrDefault(k => k.Id == id);
         var path = PathOf(part, Find);
         if (path == null) return null;
-        var chain = PathSketchId != 0 && Find(PathSketchId) is { } ps ? ChainOf(ps) : null;
-        ICurve3 first = chain is { Count: > 1 } ? chain[0] : path, last = chain is { Count: > 1 } ? chain[^1] : path;
+        var chain = OrderedChain(Find, SectionSketchId != 0 ? Find(SectionSketchId) : null);
+        Vector3d n = PathSketchId != 0 && Find(PathSketchId) is { } pk ? pk.Plane.W : Vector3d.UnitZ;
+        if (chain is { Count: > 0 })
+        {
+            // уже по ходу протяжки (Reverse учтён)
+            var c0 = chain[0]; var c1 = chain[^1];
+            var t0 = c0.TangentAt(c0.T0);
+            if (t0.LengthSquared < 1e-24) return null;
+            return (c0.PointAt(c0.T0), t0.Normalized(), n, c1.PointAt(c1.T1));
+        }
+        ICurve3 first = path, last = path;
         Vector3d a = first.PointAt(first.T0), b = last.PointAt(last.T1);
         Vector3d ta = first.TangentAt(first.T0), tb = -last.TangentAt(last.T1);
         if (ta.LengthSquared < 1e-24 || tb.LengthSquared < 1e-24) return null;
-        Vector3d n = PathSketchId != 0 && Find(PathSketchId) is { } pk ? pk.Plane.W : Vector3d.UnitZ;
         return Reverse ? (b, tb.Normalized(), n, a) : (a, ta.Normalized(), n, b);
     }
 
@@ -116,17 +158,12 @@ public sealed class SweepFeature : Feature
     /// K09. Цепочка кривых траектории по СВЯЗНОСТИ концов (а не по порядку элементов эскиза),
     /// каждая — в направлении обхода. null, если кривые не складываются в одну незамкнутую цепь.
     /// </summary>
-    private List<ICurve3>? ResolveChain(BuildContext ctx)
+    private static List<ICurve3>? ChainOf(Sketching.Sketch ps, out bool closed)
     {
-        if (PathSketchId == 0) return null;
-        var ps = ctx.FindSketch(PathSketchId);
-        return ps == null ? null : ChainOf(ps);
-    }
-
-    private static List<ICurve3>? ChainOf(Sketching.Sketch ps)
-    {
+        closed = false;
         var left = ps.Entities.Where(e => e.Role == Sketching.SkRole.Object && e is not Sketching.SkPoint)
                               .Select(e => e.ToCurve3(ps.Plane)).ToList();
+        if (left.Count == 1) { closed = left[0].IsClosed; return left; }
         if (left.Count < 2) return null;
         double tol = Tol.Weld * 10;
         bool Touch(OpenTK.Mathematics.Vector3d a, OpenTK.Mathematics.Vector3d b) => (a - b).Length < tol;
@@ -138,7 +175,12 @@ public sealed class SweepFeature : Feature
             if (!left.Any(o => o != c && (Touch(o.PointAt(o.T0), s0) || Touch(o.PointAt(o.T1), s0)))) { first = c; break; }
             if (!left.Any(o => o != c && (Touch(o.PointAt(o.T0), s1) || Touch(o.PointAt(o.T1), s1)))) { first = c.Reversed(); left.Remove(c); left.Insert(0, first); break; }
         }
-        if (first == null) return null;
+        // k111: свободного конца нет — замкнутая цепь: начало — первая кривая
+        if (first == null)
+        {
+            if (ClosedChainOff) return null;
+            first = left[0]; closed = true;
+        }
         var chain = new List<ICurve3> { first };
         left.Remove(first); left.RemoveAll(c => ReferenceEquals(c, first));
         while (left.Count > 0)
@@ -149,6 +191,7 @@ public sealed class SweepFeature : Feature
             left.Remove(next);
             chain.Add(Touch(next.PointAt(next.T0), end) ? next : next.Reversed());
         }
+        if (closed && !Touch(chain[^1].PointAt(chain[^1].T1), chain[0].PointAt(chain[0].T0))) return null;
         return chain;
     }
 

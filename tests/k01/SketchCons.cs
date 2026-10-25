@@ -243,6 +243,46 @@ static partial class Program
             }
             Require(bad.Count == 0, string.Join(" | ", bad));
         });
+        Check("KRN-SWEEP-CLOSED-K111", () =>
+        {
+            // k111 (снимок 19:13): протяжка-вырез треугольника (60 наружу, 46 вниз) по ЗАМКНУТОМУ контуру-стадиону (R50 и
+            // отрезки) — прежде «would cross itself» (размах сечения 75.6 > R50 во все стороны) и замкнутая цепь не
+            // складывалась. Объём выреза — по Паппу: площадь × путь центра тяжести. Мутации P3D_SWEEPSIDES=0, P3D_SWEEPCLOSED=0.
+            var part = new Parametric3D.Model.Part("sw");
+            var doc = new Parametric3D.Model.Document(); doc.Root.Add(part);
+            var box = part.AddSketch("Box", new Frame3(new Vector3d(0, 0, -60), Vector3d.UnitX, Vector3d.UnitY));
+            var bp = new[] { (-200.0, -150.0), (200.0, -150.0), (200.0, 150.0), (-200.0, 150.0) }.Select(q => new SkPoint(q.Item1, q.Item2)).ToList();
+            for (int i = 0; i < 4; i++) box.AddEntity(new SkLine(bp[i], bp[(i + 1) % 4]));
+            var ex = new Parametric3D.Model.Features.ExtrudeFeature { SketchId = box.Id }; ex.Side1.Distance = new Parametric3D.Model.Features.ValueRef(60); part.AddFeature(ex);
+            var path = part.AddSketch("Path", Frame3.XY, part.PlaneXY.Id);
+            SkPoint P(double x, double y) => new(x, y);
+            var a = P(-50, -50); var m = P(0, -50); var b = P(50, -50); var c = P(50, 50); var d = P(-50, 50);
+            path.AddEntity(new SkLine(a, m)); path.AddEntity(new SkLine(m, b));
+            path.AddEntity(new SkArc(P(50, 0), b, c, true));
+            path.AddEntity(new SkLine(c, d));
+            path.AddEntity(new SkArc(P(-50, 0), d, a, true));
+            // сечение у (0,−50), плоскость поперёк (+X), V — по Z, U = V × T = +Y (внутрь): треугольник в −U (наружу) и −V (вниз)
+            var sf = new Frame3(new Vector3d(0, -50, 0), Vector3d.UnitY, Vector3d.UnitZ);
+            var sec = part.AddSketch("Sec", sf);
+            var t0 = P(0, 0); var t1 = P(-60, 0); var t2 = P(-60, -46);
+            sec.AddEntity(new SkLine(t0, t1)); sec.AddEntity(new SkLine(t1, t2)); sec.AddEntity(new SkLine(t2, t0));
+            var sw = new Parametric3D.Model.Features.SweepFeature { SectionSketchId = sec.Id, PathSketchId = path.Id, Cut = true };
+            part.AddFeature(sw);
+            doc.RebuildDirty();
+            Require(sw.Error == null, "sweep: " + sw.Error);
+            double area = 60 * 46 / 2.0, cx = 40;                     // центр тяжести — 40 наружу
+            double removed = area * (200 + 2 * Math.PI * (50 + cx));
+            double want = 400 * 300 * 60 - removed;
+            Require(Math.Abs(part.Volume - want) < 0.01 * removed, $"volume {part.Volume:0.#} want {want:0.#} (removed {removed:0.#})");
+            // внутрь (60 > R50) — по-прежнему отказ
+            var sec2 = part.AddSketch("Sec2", sf);
+            var u0 = P(0, 0); var u1 = P(60, 0); var u2 = P(60, -46);
+            sec2.AddEntity(new SkLine(u0, u1)); sec2.AddEntity(new SkLine(u1, u2)); sec2.AddEntity(new SkLine(u2, u0));
+            var sw2 = new Parametric3D.Model.Features.SweepFeature { SectionSketchId = sec2.Id, PathSketchId = path.Id, Cut = true };
+            part.AddFeature(sw2);
+            doc.RebuildDirty();
+            Require(sw2.Error != null && sw2.Error.Contains("cross itself"), "inward section is not refused: " + sw2.Error);
+        });
         Check("KRN-SK-LINKS-K110", () =>
         {
             // k110: ссылка на эскиз параллельной плоскости следует за источником — эскиз выдавливания (окружность, равная
