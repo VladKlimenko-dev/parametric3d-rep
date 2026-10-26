@@ -33,9 +33,12 @@ public sealed class CsgPolygon
         V = v; Tag = tag; N = n; W = w;
     }
 
-    public CsgPolygon Clone() => new(new List<Vector3d>(V), Tag, N, W);
+    /// <summary>k113: исходный многоугольник, от которого отрезан этот кусок (null — сам исходный): нормали сетки показа.</summary>
+    public CsgPolygon? Origin;
 
-    public CsgPolygon Split(List<Vector3d> v) => new(v, Tag, N, W);
+    public CsgPolygon Clone() => new(new List<Vector3d>(V), Tag, N, W) { Origin = Origin ?? this };
+
+    public CsgPolygon Split(List<Vector3d> v) => new(v, Tag, N, W) { Origin = Origin ?? this };
 
     public void Flip()
     {

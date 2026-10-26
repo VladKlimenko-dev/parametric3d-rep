@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Topology;
@@ -196,6 +196,18 @@ public abstract class Feature : ModelItem
 
     /// <summary>Выполняет построение. Ошибки бросаются как RebuildException.</summary>
     public abstract void Execute(BuildContext ctx);
+
+    /// <summary>
+    /// k113: операция, чей итог — булева над телом на входе (выдавливание, вращение, отверстие, протяжка, переход, уклон,
+    /// скругление, фаска): последней в дереве в предпросмотре её можно показать мгновенно по сеткам (InstantPreview).
+    /// </summary>
+    public virtual bool InstantPreviewSafe => false;
+
+    /// <summary>
+    /// k113: повторяется в массиве и зеркале по сеткам: резец строится из своих данных (эскиз, точки), а не из рёбер и граней
+    /// текущего тела (выдавливание, вращение, отверстие, протяжка, переход).
+    /// </summary>
+    public virtual bool InstantReplaySafe => false;
 
     /// <summary>
     /// u12: ПОВТОР ОПЕРАЦИИ ПОД ПРЕОБРАЗОВАНИЕМ — зеркало и массивы операций (не тела): скругление на зеркальном ребре,

@@ -25,7 +25,7 @@ using Parametric3D.Render;
 // ПРОВЕРКИ ПРИЛОЖЕНИЯ (этапы U0–U1) без экрана: Avalonia.Headless, вид — без OpenGL (выбор под курсором считается на
 // процессоре, см. ScenePicker). Каждая проверка — строка JSON {"test", "ok", "error"}; итог — {"passed", "failed"}.
 
-AppBuilder.Configure<App>().UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+AppBuilder.Configure<App>().UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = Environment.GetEnvironmentVariable("P3D_UIDRAW") == "none" }).SetupWithoutStarting();   // k113: P3D_UIDRAW=none — замер без программной отрисовки окна
 
 string? only = args.FirstOrDefault();
 int passed = 0, failed = 0;
@@ -3037,6 +3037,97 @@ Check("UI-TREE-K109", () =>
     var ex2 = new ExtrudeFeature { SketchId = s5.Id }; part.AddFeature(ex2);
     part.MoveFeature(ex2, 0);
     Require(part.Children.IndexOf(ex2) < part.Children.IndexOf(part.Features[1]), "MoveFeature did not reorder the tree");
+});
+
+Check("UI-PREVIEW-K113", () =>
+{
+    // k113 (цель 21:47 — предпросмотр ≤ 20 мс): последняя операция в предпросмотре — мгновенно по сеткам (тела для выбора —
+    // тело до операции), через паузу — уточнение обычным расчётом (ошибки операции), правка прерывает уточнение; «ОК» — точно.
+    // Время: расчёт в фоне и применение, сборка сцены. Мутации P3D_INSTANTPREVIEW=0, P3D_PREVIEWREFINE=0.
+    UserPrefs.Current.PreviewMode = "full";
+    var s = DocumentSession.Sample(); var w = Open(s); var vp = w.ViewPort; var part = s.Part!;
+    BuildNow(s);
+    s.Document.RefineDelayMs = 100000;     // уточнение — по команде проверки
+    double v0 = part.Volume;
+    // карман на верхней грани куба: эскиз-прямоугольник, выдавливание-вырез, глубина — ручкой
+    double zTop = part.Bodies[0].Vertices.Max(v => v.P.Z), xMin = part.Bodies[0].Vertices.Min(v => v.P.X), yMin = part.Bodies[0].Vertices.Min(v => v.P.Y);
+    var sk = part.AddSketch("Pocket", new Parametric3D.Kernel.Frame3(new Vector3d(0, 0, zTop), Vector3d.UnitX, Vector3d.UnitY));
+    var q = new[] { (xMin + 20, yMin + 20), (xMin + 50, yMin + 20), (xMin + 50, yMin + 45), (xMin + 20, yMin + 45) }.Select(t => new SkPoint(t.Item1, t.Item2)).ToList();
+    for (int i = 0; i < 4; i++) sk.AddEntity(new SkLine(q[i], q[(i + 1) % 4]));
+    BuildNow(s);
+    var op = new ExtrudeOp { SeedSketch = sk, StartCut = true }; w.StartOperation(op);
+    BuildNow(s);
+    var rf = part.Features.OfType<ExtrudeFeature>().Last();
+    Require(rf.Cut, "not a cut");
+    rf.Side1.Flip = true; op.FieldChanged(); BuildNow(s);      // в тело (вниз)
+    long hits0 = Parametric3D.Kernel.Ops.InstantPreview.Hits;
+    var comp = new List<double>(); var scene = new List<double>();
+    for (int i = 0; i < 9; i++)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        op.SetDragValue(10 + 1.5 * i);
+        double tSet = sw.Elapsed.TotalMilliseconds;
+        double tJobs = 0, tWait = 0; int rounds = 0;
+        for (int k = 0; k < 20; k++)
+        {
+            rounds++;
+            var tk = s.Document.RebuildDirtyAsync();
+            while (!tk.IsCompleted) { var j0 = sw.Elapsed.TotalMilliseconds; Dispatcher.UIThread.RunJobs(); tJobs += sw.Elapsed.TotalMilliseconds - j0; var w0 = sw.Elapsed.TotalMilliseconds; Thread.Sleep(0); tWait += sw.Elapsed.TotalMilliseconds - w0; }
+            if (!s.Document.AllParts().Any(p => p.IsDirty)) break;
+        }
+        { var j0 = sw.Elapsed.TotalMilliseconds; Dispatcher.UIThread.RunJobs(); tJobs += sw.Elapsed.TotalMilliseconds - j0; }
+        double c = sw.Elapsed.TotalMilliseconds;
+        if (Environment.GetEnvironmentVariable("P3D_PERFDBG") == "1") Console.WriteLine($"    rounds {rounds}, jobs {tJobs:0.0} ms, wait {tWait:0.0} ms");
+        if (Environment.GetEnvironmentVariable("P3D_PERFDBG") == "1")
+            foreach (var (_, nm, ms) in Parametric3D.App.Diagnostics.UiTimes.Since(DateTime.Now.AddMilliseconds(-c - 5))) Console.WriteLine($"      ui {nm}: {ms:0.0} ms");
+        if (Environment.GetEnvironmentVariable("P3D_PERFDBG") == "1")
+            Console.WriteLine($"    step {i}: set {tSet:0.0} ms, total {c:0.0} ms, feature {part.LastFeatureMs.GetValueOrDefault(rf):0.0} ms, compute {s.Document.LastComputeMs:0.0} ms, apply {s.Document.LastApplyMs:0.0} ms, instant {part.ShowsInstant}, preview part {ReferenceEquals(s.Document.PreviewPart, part)}");
+        double sc = vp.BuildSceneForTest();
+        if (i > 0) { comp.Add(s.Document.LastPartComputeMs); scene.Add(sc); }
+    }
+    comp.Sort(); scene.Sort();
+    Console.WriteLine($"  pocket preview: part compute median {comp[comp.Count / 2]:0.0} ms (max {comp[^1]:0.0}), scene median {scene[scene.Count / 2]:0.0} ms; instant {Parametric3D.Kernel.Ops.InstantPreview.Hits - hits0}, volume {part.Volume:0.##} (before {v0:0.##})");
+    Require(part.ShowsInstant && Parametric3D.Kernel.Ops.InstantPreview.Hits - hits0 >= 9, "the preview is not instant");
+    Require(Math.Abs(part.Volume - (v0 - 30 * 25 * rf.Side1.Distance.Value)) < 1e-3 * v0 && rf.Error == null, $"instant pocket volume {part.Volume} vs {v0 - 30 * 25 * rf.Side1.Distance.Value}, error {rf.Error}");
+    // дерево: при открытом предпросмотре — не чаще раза в 0.5 с; то же дерево — вид не пересобирается
+    Require(MainWindow.TreeThrottled > 0, "the tree is not throttled during the preview");
+    w.RebuildTree(); long sk0 = MainWindow.TreeRebuildsSkipped; w.RebuildTree();
+    Require(MainWindow.TreeRebuildsSkipped > sk0, "an unchanged tree was rebuilt");
+    // уточнение по паузе после правки (само, без команды)
+    s.Document.RefineDelayMs = 30;
+    long rs0 = Parametric3D.Model.Document.RefinesStarted;
+    op.SetDragValue(18); BuildNow(s);
+    var waitRefine = System.Diagnostics.Stopwatch.StartNew();
+    while (waitRefine.ElapsedMilliseconds < 3000 && (part.ShowsInstant || part.IsDirty || s.Document.IsBuilding)) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); if (part.IsDirty && !s.Document.IsBuilding) BuildNow(s); }
+    Console.WriteLine($"  scheduled refine: started {Parametric3D.Model.Document.RefinesStarted - rs0}, instant {part.ShowsInstant}");
+    Require(Parametric3D.Model.Document.RefinesStarted > rs0 && !part.ShowsInstant, "the preview was not refined after a pause");
+    s.Document.RefineDelayMs = 100000;
+    op.SetDragValue(10 + 1.5 * 8); BuildNow(s);
+    Require(part.ShowsInstant, "not instant after the refine");
+    // выбор в предпросмотре: грань сетки — грань тела детали
+    var anyFace = part.Mesh!.Vertices.First(v => v.FaceId != 0).FaceId;
+    Require(part.FindFace(anyFace) != null, "a face of the instant mesh is not found in the part");
+    // уточнение: обычный предпросмотр, тот же объём
+    double vInstant = part.Volume;
+    Require(s.Document.RefineNowForTest(), "refine was not scheduled");
+    BuildNow(s);
+    Console.WriteLine($"  refined: instant {part.ShowsInstant}, volume {part.Volume:0.##} (instant {vInstant:0.##}), error {rf.Error}");
+    Require(!part.ShowsInstant && rf.Error == null && Math.Abs(part.Volume - vInstant) < 5e-3 * Math.Abs(v0), "refine");
+    // правка во время уточнения прерывает его, следующий расчёт — снова мгновенный
+    op.SetDragValue(20); BuildNow(s);
+    Require(part.ShowsInstant, "not instant after a change");
+    long c0 = Parametric3D.Model.Document.RefinesCancelled;
+    s.Document.RefineNowForTest();
+    var t = s.Document.RebuildDirtyAsync();
+    op.SetDragValue(21);
+    while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+    BuildNow(s);
+    Console.WriteLine($"  cancel: cancelled {Parametric3D.Model.Document.RefinesCancelled - c0}, instant {part.ShowsInstant}, depth {rf.Side1.Distance.Value}");
+    Require(Parametric3D.Model.Document.RefinesCancelled > c0 && part.ShowsInstant && Math.Abs(rf.Side1.Distance.Value - 21) < 1e-9, "a change did not cancel the refine");
+    w.CommitOperation(); BuildNow(s);
+    Require(!part.ShowsInstant && rf.Error == null && part.Bodies.Count == 1 && !part.Bodies[0].IsPreview, "exact build after commit: " + rf.Error);
+    Require(Math.Abs(part.Volume - (v0 - 30 * 25 * 21)) < 1e-6 * v0, $"commit volume {part.Volume}");
+    w.Close();
 });
 
 Check("UI-DRAFT-K112", () =>

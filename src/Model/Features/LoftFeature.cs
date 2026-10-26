@@ -1,4 +1,4 @@
-﻿using Parametric3D.Core;
+using Parametric3D.Core;
 using Parametric3D.Kernel.Ops;
 
 namespace Parametric3D.Model.Features;
@@ -10,6 +10,8 @@ namespace Parametric3D.Model.Features;
 /// </summary>
 public sealed class LoftFeature : Feature
 {
+    public override bool InstantPreviewSafe => true;
+    public override bool InstantReplaySafe => true;
     /// <summary>Эскизы сечений, по порядку от первого к последнему.</summary>
     public readonly List<uint> SectionSketchIds = new();
 

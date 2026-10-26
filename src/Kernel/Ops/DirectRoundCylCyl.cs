@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Topology;
@@ -412,12 +412,21 @@ public static partial class DirectRound
     /// <summary>Треугольники тела (сетки граней) — для пробы точки.</summary>
     static List<(Vector3d A, Vector3d B, Vector3d C)> SolidTriangles(TSolid body)
     {
+        // k113: треугольники опубликованного тела — одни на его ревизию и допуски (прямой построитель спрашивал их заново на
+        // каждой попытке: скругление кромки пластины в предпросмотре — 5 разметок тела по 7 мс на 3 шага). P3D_SOLIDTRISMEMO=0.
+        var key = (body.Revision, Core.Tol.Chord, Core.Tol.ChordAngle);
+        if (!SolidTrisMemoOff && body.IsPublished && _solidTris.TryGetValue(body, out var memo) && memo.Key.Equals(key)) { Interlocked.Increment(ref SolidTrisMemoHits); return memo.Tris; }
         var md = Tess.Tessellator.Tessellate(body, facets: true);
         var l = new List<(Vector3d, Vector3d, Vector3d)>(md.Indices.Length / 3);
         Vector3d V(int i) { var p = md.Vertices[md.Indices[i]].P; return new Vector3d(p.X, p.Y, p.Z); }
         for (int t = 0; t + 2 < md.Indices.Length; t += 3) l.Add((V(t), V(t + 1), V(t + 2)));
+        if (!SolidTrisMemoOff && body.IsPublished) _solidTris.AddOrUpdate(body, new SolidTrisMemo { Key = key, Tris = l });
         return l;
     }
+    static readonly bool SolidTrisMemoOff = Environment.GetEnvironmentVariable("P3D_SOLIDTRISMEMO") == "0";
+    public static long SolidTrisMemoHits;
+    sealed class SolidTrisMemo { public (long, double, double) Key; public List<(Vector3d A, Vector3d B, Vector3d C)> Tris = null!; }
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, SolidTrisMemo> _solidTris = new();
 
     /// <summary>Точка внутри сетки: чётность пересечений лучей трёх направлений (касания лучом — направление не в счёт).</summary>
     static bool? InsideMesh(List<(Vector3d A, Vector3d B, Vector3d C)> tris, Vector3d p)

@@ -26,6 +26,8 @@ public enum HoleKind
 /// </summary>
 public sealed class HoleFeature : Feature
 {
+    public override bool InstantPreviewSafe => true;
+    public override bool InstantReplaySafe => true;
     /// <summary>Эскиз, точки которого задают положения отверстий.</summary>
     public uint SketchId;
 
@@ -47,7 +49,7 @@ public sealed class HoleFeature : Feature
         var res = new List<Vector3d>(Points);
         if (HoleFaceOff) return res;
         while (PointFaces.Count < Points.Count) PointFaces.Add(null);
-        var faces = ctx.Bodies.SelectMany(b => b.Faces).ToList();
+        var faces = ctx.Bodies.Select(Kernel.Ops.InstantPreview.Query).SelectMany(b => b.Faces).ToList();   // k113: у носителя — тело до операции
         for (int i = 0; i < Points.Count; i++)
         {
             var p = Points[i];
@@ -161,7 +163,7 @@ public sealed class HoleFeature : Feature
         if (_x is { } xp) at = at.Select(xp.Point).ToList();
 
         Vector3d dir = DirW;
-        double depth = ThroughAll ? Extent(ctx.Bodies) * 3 : Depth.Resolve(ctx.Parameters);
+        double depth = ThroughAll ? Extent(ctx.Bodies.Select(Kernel.Ops.InstantPreview.Query).ToList()) * 3 : Depth.Resolve(ctx.Parameters);
         if (depth <= Tol.Weld) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: the depth must be greater than zero.");
 
         // KRN-11 (11.2): ОТВЕРСТИЕ МИМО ТЕЛА. Точка вне тела прежде давала «успешную» операцию без снятого материала
@@ -169,7 +171,7 @@ public sealed class HoleFeature : Feature
         // 10 % — такая точка пропускается с предупреждением; все точки мимо — отказ InvalidInput. Мутация P3D_HOLEMISS=0.
         if (!HoleMissOff)
         {
-            var bb = ctx.Bodies[0].Bounds; bb = bb.Expanded(0.1 * bb.Diagonal + Tol.Weld);
+            var bb = Kernel.Ops.InstantPreview.Query(ctx.Bodies[0]).Bounds; bb = bb.Expanded(0.1 * bb.Diagonal + Tol.Weld);
             double rr = Math.Max(d, Kind == HoleKind.Simple ? 0 : HeadDiameter.Resolve(ctx.Parameters)) / 2;
             var dn = DirW;
             bool Misses(Vector3d q)
@@ -206,7 +208,7 @@ public sealed class HoleFeature : Feature
             routes.Add(trace);
             TSolid? exact = null;
             var body = ctx.Bodies[0];
-            string? off = !ExactHoles ? "exact holes switched off (HoleFeature.ExactHoles)" : ctx.Bodies.Count != 1 ? "the part has more than one body" : null;
+            string? off = Kernel.Ops.InstantPreview.Active ? "instant preview (mesh)" : !ExactHoles ? "exact holes switched off (HoleFeature.ExactHoles)" : ctx.Bodies.Count != 1 ? "the part has more than one body" : null;
             bool lastInvalid = false;
             bool Route(string name, string? notApplicable, Func<TSolid?> attempt, bool fullValidation, string? invalidWarning)
             {

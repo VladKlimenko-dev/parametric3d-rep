@@ -24,6 +24,8 @@ public sealed class ExtrudeSide
 /// <summary>Выдавливание эскиза.</summary>
 public sealed class ExtrudeFeature : Feature
 {
+    public override bool InstantPreviewSafe => true;
+    public override bool InstantReplaySafe => true;
     public uint SketchId;
     /// <summary>Две стороны от плоскости эскиза.</summary>
     public bool TwoSided;
@@ -225,7 +227,7 @@ public sealed class ExtrudeFeature : Feature
             // обязан граниться. Именно знание замысла и позволяет резать точно: во всяком
             // вычитании цилиндра, случившемся внутри другой операции, такого знания нет
             // (проверено на оболочке: там внутренняя труба уходила в точный путь и ошибалась).
-            if (ExactCircularCuts && ctx.Bodies.Count == 1 && circ is { } circle)
+            if (ExactCircularCuts && !Kernel.Ops.InstantPreview.Active && ctx.Bodies.Count == 1 && circ is { } circle)
             {
                 var (centre, radius) = circle;
                 Vector3d axis = dir.LengthSquared < 1e-18 ? Vector3d.UnitZ : dir.Normalized();
@@ -250,7 +252,7 @@ public sealed class ExtrudeFeature : Feature
             // БОБЫШКА ПО ОКРУЖНОСТИ — ТОЧНЫМ ПУТЁМ. Замысел тот же, что у выреза, только материал
             // добавляется: эскиз из одной окружности, выдавленный от грани, — цилиндрический
             // прилив, и резец не обязан граниться.
-            if (ExactCircularCuts && ctx.Bodies.Count == 1 && circ is { } boss)
+            if (ExactCircularCuts && !Kernel.Ops.InstantPreview.Active && ctx.Bodies.Count == 1 && circ is { } boss)
             {
                 var (centre, radius) = boss;
                 Vector3d axis = dir.LengthSquared < 1e-18 ? Vector3d.UnitZ : dir.Normalized();

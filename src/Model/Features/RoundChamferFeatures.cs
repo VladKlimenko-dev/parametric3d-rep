@@ -1,4 +1,4 @@
-﻿using Parametric3D.Core;
+using Parametric3D.Core;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
 
@@ -13,6 +13,7 @@ namespace Parametric3D.Model.Features;
 /// </summary>
 public sealed class RoundFeature : Feature
 {
+    public override bool InstantPreviewSafe => true;
     public readonly List<EdgeRef> Edges = new();
     /// <summary>KRN-08 (08.3): рёбра по роли (кромки операции и т. п.), разрешаются при каждой перестройке.</summary>
     public readonly List<EdgeSelector> Selectors = new();
@@ -108,6 +109,7 @@ public enum ChamferKind
 /// <summary>Фаска рёбер.</summary>
 public sealed class ChamferFeature : Feature
 {
+    public override bool InstantPreviewSafe => true;
     public readonly List<EdgeRef> Edges = new();
     public ChamferKind Mode = ChamferKind.TwoDistances;
     public ValueRef D1 = new(1);

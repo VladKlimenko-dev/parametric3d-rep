@@ -313,12 +313,46 @@ public static class DraftOp
         return null;
     }
 
+    /// <summary>k113: клин уклона — между гранью и её новым положением до уровня смещаемого ребра.</summary>
+    static TSolid? Wedge(HingeInfo h, double degrees)
+    {
+        double t = Math.Tan(degrees * Math.PI / 180) * h.Lever;
+        if (h.Cone)
+        {
+            var w = h.M.Normalized();
+            var radial = h.HingeP - h.ConeCentre; radial -= w * Vector3d.Dot(radial, w);
+            if (radial.LengthSquared < 1e-18) return null;
+            var p0 = h.HingeP; var p1 = h.MoveAt; var p2 = h.MoveAt + h.MoveDir * t;
+            var u = radial.Normalized();
+            var plane = new Frame3(h.ConeCentre, u, w);
+            var prof = ProfileBuilder.Build(plane, new List<ICurve3> { new LineCurve3(p0, p1), new LineCurve3(p1, p2), new LineCurve3(p2, p0) });
+            if (prof.IsEmpty) return null;
+            var axis = new Frame3(h.ConeCentre, u, Vector3d.Cross(w, u));
+            return RevolveOp.Build(prof, axis, 0, 2 * Math.PI);
+        }
+        double len = (h.HingeB - h.HingeA).Length, margin = Math.Max(len * 0.05, h.Lever * 0.05);
+        var d = h.HingeDir.Normalized();
+        var o = h.HingeA - d * margin;
+        var q0 = o; var q1 = o + h.M * h.Lever; var q2 = q1 + h.MoveDir * t;
+        var fr = new Frame3(o, h.M.Normalized(), Vector3d.Cross(d, h.M.Normalized()));
+        var pr = ProfileBuilder.Build(fr, new List<ICurve3> { new LineCurve3(q0, q1), new LineCurve3(q1, q2), new LineCurve3(q2, q0) });
+        if (pr.IsEmpty) return null;
+        return ExtrudeOp.Build(pr, d * (len + 2 * margin));
+    }
+
     /// <summary>k112: уклон по шарниру на degrees (&gt; 0 — смещаемое ребро внутрь материала, &lt; 0 — наружу).</summary>
     public static bool ApplyHinged(List<TSolid> bodies, HingeInfo h, double degrees, List<string> warnings)
     {
         if (Math.Abs(degrees) < 1e-9) { warnings.Add("Draft: the angle must not be zero."); return false; }
         if (Math.Abs(degrees) >= 89.9) { warnings.Add("Draft: the angle must be less than 90°."); return false; }
         string? why = null;
+        // k113: мгновенный предпросмотр — клин между прежним и новым положением грани (у цилиндра — кольцо-клин вращения),
+        // вычитается (внутрь) или прибавляется (наружу) по сеткам; точный уклон — при подтверждении
+        if (InstantPreview.Applies(bodies) && Wedge(h, degrees) is { } wedge)
+        {
+            if (degrees > 0) BooleanOp.Subtract(bodies, wedge, warnings); else BooleanOp.Unite(bodies, wedge, warnings);
+            if (InstantPreview.IsCarrier(bodies[0])) return true;
+        }
         if (h.Cone)
         {
             var r = DraftCylinders(bodies[0], new List<int> { h.FaceIndex }, h.ConeCentre, h.M, degrees * Math.PI / 180, ref why);

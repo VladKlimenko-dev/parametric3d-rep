@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Tess;
@@ -585,6 +585,8 @@ public sealed class Part : ModelItem
         public readonly Dictionary<Feature, List<uint>> Created = new();
         /// <summary>UI: время выполнения каждой операции в этом расчёте (мс); операции до точки возобновления — не считались.</summary>
         public readonly Dictionary<Feature, double> FeatureMs = new();
+        /// <summary>k113: операция, показанная мгновенно (по сеткам); −1 — нет.</summary>
+        public int InstantAt = -1;
         /// <summary>KRN-08 (08.2): ПРОИСХОЖДЕНИЕ НА УРОВНЕ ДЕРЕВА — у каждой выполненной операции тела после неё: то же тело, что
         /// до (Unchanged), или новое с картой происхождения граней своего построителя (Map); построитель карты не пишет — карта
         /// выведена по несущим поверхностям (Inferred). Мутация P3D_TREEPROV=0.</summary>
@@ -832,6 +834,30 @@ public sealed class Part : ModelItem
     }
 
     /// <summary>Пометить, что операция изменилась: пересчёт пойдёт с неё.</summary>
+    /// <summary>k113: на экране — мгновенный предпросмотр по сеткам (последняя операция ещё не посчитана точно).</summary>
+    public bool ShowsInstant { get; private set; }
+    /// <summary>k113: номер операции, показанной мгновенно (с неё уточняется).</summary>
+    public int InstantFeatureIndex { get; private set; } = -1;
+    static readonly bool InstantRollbackOff = Environment.GetEnvironmentVariable("P3D_INSTANTROLLBACK") == "0";
+    public static long InstantRollbacks;
+    /// <summary>k113: следующий расчёт — уточнение мгновенного предпросмотра (без сеток, с проверками операции).</summary>
+    public bool RefinePending { get; private set; }
+    internal bool SuppressInstant;
+
+    /// <summary>k113: уточнить мгновенный предпросмотр — последняя операция считается обычным предпросмотром.</summary>
+    public bool RequestRefine()
+    {
+        if (!ShowsInstant) return false;
+        int k = InstantFeatureIndex >= 0 && InstantFeatureIndex < Features.Count ? InstantFeatureIndex : Features.Count - 1;
+        while (k >= 0 && Features[k].Suppressed) k--;
+        if (k < 0) return false;
+        RefinePending = true;
+        DirtyFromIndex(k);
+        SetDirty();
+        return true;
+    }
+    internal void TakeRefine() => RefinePending = false;
+
     public void MarkDirtyFrom(Feature f)
     {
         int at = Features.IndexOf(f);
@@ -1034,6 +1060,7 @@ public sealed class Part : ModelItem
                                          Mesh = last.Mesh, Volume = last.Volume, VolumeError = last.VolumeError, Bounds = last.Bounds,
                                          Approximate = last.Approximate, IntegrityError = last.IntegrityError, MassFromMesh = last.MassFromMesh };
             same.ShareAreaFrom(last);
+            same.InstantAt = last.InstantAt;
             same.Bodies.AddRange(last.Bodies); same.Warnings.AddRange(last.Warnings);
             foreach (var kv in last.Errors) same.Errors[kv.Key] = kv.Value;
             foreach (var kv in last.Outcomes) same.Outcomes[kv.Key] = kv.Value;
@@ -1168,6 +1195,14 @@ public sealed class Part : ModelItem
         _dirtyFrom = int.MaxValue;
 
         bool poisoned = false;
+        int lastActive = -1;
+        for (int k = Math.Min(stage, Features.Count) - 1; k >= 0; k--) if (!Features[k].Suppressed) { lastActive = k; break; }
+        // k113: ПРАВКА ОПЕРАЦИИ В СЕРЕДИНЕ ДЕРЕВА — предпросмотр «на её месте» (как «правка определения» в Creo): деталь до неё и
+        // она сама по сеткам, операции после — до уточнения (пауза после правки) не пересчитываются. P3D_INSTANTROLLBACK=0.
+        int instantAt = lastActive;
+        if (settingsNow.LivePreview && !SuppressInstant && !InstantRollbackOff && dirtyNote >= from && dirtyNote < lastActive && dirtyNote < Features.Count
+            && !Features[dirtyNote].Suppressed && Features[dirtyNote].InstantPreviewSafe && Features[dirtyNote].FreeForm == null)
+            instantAt = dirtyNote;
         try
         {
         for (int fi = 0; fi < Features.Count; fi++)
@@ -1225,7 +1260,11 @@ public sealed class Part : ModelItem
                     try
                     {
                         // u13h: шаг FreeForm — на своём теле; конец узла FreeForm в параметрической детали — пересекающиеся тела объединяются
-                        if (f.FreeForm != null) FreeFormExec.Run(f, ctx); else f.Execute(ctx);
+                        // k113: последняя операция дерева в предпросмотре — мгновенно по сеткам (её тело дальше не идёт)
+                        Kernel.Ops.InstantPreview.Allowed = settingsNow.LivePreview && !SuppressInstant && f.FreeForm == null && fi == instantAt && f.InstantPreviewSafe;
+                        Kernel.Ops.InstantPreview.Target = ctx.Bodies.Count == 1 ? ctx.Bodies[0] : null;
+                        try { if (f.FreeForm != null) FreeFormExec.Run(f, ctx); else f.Execute(ctx); }
+                        finally { Kernel.Ops.InstantPreview.Allowed = false; Kernel.Ops.InstantPreview.Target = null; }
                         if (f.FreeForm != null && (!FreeFormDoc || MergeFreeForm) && EditingFreeForm != f.FreeForm
                             && (fi + 1 >= Math.Min(stage, Features.Count) || Features[fi + 1].FreeForm != f.FreeForm))
                             FreeFormExec.AutoUnion(ctx);
@@ -1380,7 +1419,7 @@ public sealed class Part : ModelItem
                 result.Outcomes[f] = ctx.Bodies.Count == 0 && saved.Bodies.Count > 0 ? Kernel.OperationOutcome.Empty : Kernel.OperationOutcome.Success;
             _pAud.Dispose();
             using (Kernel.Diagnostics.Prof.Time("дерево: история"))
-            if (result.Errors[f] == null) result.History[f] = FeatureHistory.Between(saved.Bodies, ctx.Bodies);
+            if (result.Errors[f] == null && !ctx.Bodies.Any(Kernel.Ops.InstantPreview.IsCarrier)) result.History[f] = FeatureHistory.Between(saved.Bodies, ctx.Bodies);
 
             foreach (uint id in FaceIds(ctx.Bodies))
                 if (!before.Contains(id)) result.Created[f].Add(id);
@@ -1388,10 +1427,28 @@ public sealed class Part : ModelItem
             result.Executed++;
 
             _records[f] = FeatureRecord.Of(f, result);
-            // Состояние после операции запоминается: следующая правка начнёт отсюда.
-            if (UseCheckpoints)
+            // Состояние после операции запоминается: следующая правка начнёт отсюда. k113: состояние мгновенного предпросмотра
+            // (носитель сетки) — нет: с него нельзя продолжать.
+            bool instantHere = ctx.Bodies.Any(Kernel.Ops.InstantPreview.IsCarrier);
+            if (UseCheckpoints && !instantHere)
                 using (Kernel.Diagnostics.Prof.Time("дерево: снимок после операции"))
                 _checkpoints.Add(new Checkpoint { After = fi, State = ctx.Remember() });
+            if (instantHere)
+            {
+                result.InstantAt = fi;
+                if (fi < lastActive)
+                {
+                    // операции после — как в прежнем расчёте (ошибки, созданные грани), сами не выполняются
+                    for (int r = fi + 1; r < Features.Count; r++)
+                    {
+                        var g = Features[r];
+                        result.Errors[g] = null; result.Created[g] = new List<uint>();
+                        if (_records.TryGetValue(g, out var grec)) grec.CopyTo(g, result);
+                    }
+                    Interlocked.Increment(ref InstantRollbacks);
+                    break;
+                }
+            }
         }
         }
         finally { options.Dispose(); }
@@ -1450,7 +1507,7 @@ public sealed class Part : ModelItem
                 {
                     result.Volume += MassProps.Volume(md); result.AddArea(MassProps.Area(md)); result.MassFromMesh = true;
                     result.Bounds.Add(md.Bounds);
-                    if (ValidateResults) result.DeferredValidation.Add((b, md));
+                    if (ValidateResults && !Kernel.Ops.InstantPreview.IsCarrier(b)) result.DeferredValidation.Add((b, md));
                     Interlocked.Increment(ref FastPreviewBodies);
                     continue;
                 }
@@ -1657,7 +1714,11 @@ public sealed class Part : ModelItem
         }
 
         Bodies.Clear();
-        Bodies.AddRange(r.Bodies);
+        // k113: мгновенный предпросмотр — на экране сетка носителя, а тела (выбор, ссылки, ручки) — тело до операции: номера
+        // граней, рёбер и вершин в сетке — его
+        ShowsInstant = r.Bodies.Any(Kernel.Ops.InstantPreview.IsCarrier);
+        InstantFeatureIndex = ShowsInstant ? r.InstantAt : -1;
+        Bodies.AddRange(r.Bodies.Select(b => Kernel.Ops.InstantPreview.SourceBody(b) ?? b));
         BodyNameList.Clear();
         BodyNameList.AddRange(r.BodyNames);
         CagesByBody.Clear();

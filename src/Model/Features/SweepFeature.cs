@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
@@ -9,6 +9,8 @@ namespace Parametric3D.Model.Features;
 /// <summary>Протягивание сечения по траектории.</summary>
 public sealed class SweepFeature : Feature
 {
+    public override bool InstantPreviewSafe => true;
+    public override bool InstantReplaySafe => true;
     /// <summary>Эскиз сечения.</summary>
     public uint SectionSketchId;
     /// <summary>Эскиз траектории (берётся его первая незамкнутая цепочка).</summary>

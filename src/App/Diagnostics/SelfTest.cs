@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using Avalonia.Threading;
@@ -13,6 +13,7 @@ using Parametric3D.Kernel.Export;
 using Parametric3D.Kernel.Topology;
 using Parametric3D.Model;
 using Parametric3D.Model.Features;
+using Parametric3D.Model.Sketching;
 using Parametric3D.Render.Engine;
 
 namespace Parametric3D.App.Diagnostics;
@@ -27,7 +28,7 @@ namespace Parametric3D.App.Diagnostics;
 /// </summary>
 public sealed class SelfTest
 {
-    public const string Build = "k112";
+    public const string Build = "k113";
 
     private readonly MainWindow _w;
     private readonly Action<string> _progress;
@@ -123,6 +124,7 @@ public sealed class SelfTest
             if (Environment.GetEnvironmentVariable("P3D_SELFTEST_ONLY") == "handles") { await Handles(); await UserEdges(); return; }
             if (Environment.GetEnvironmentVariable("P3D_SELFTEST_ONLY") == "cancel") { await CancelAndFailure(); return; }
             if (Environment.GetEnvironmentVariable("P3D_SELFTEST_ONLY") == "load") { await Load(); return; }
+            if (Environment.GetEnvironmentVariable("P3D_SELFTEST_ONLY") == "preview") { await PreviewLatency(); return; }
             await Operations();
             await RealisticParts();
             await Holes();
@@ -131,6 +133,7 @@ public sealed class SelfTest
             await View();
             await Ui();
             await Handles();
+            await PreviewLatency();
             await UserEdges();
             await CancelAndFailure();
             await Load();
@@ -897,6 +900,91 @@ public sealed class SelfTest
     }
 
     private readonly List<(string Name, double BuildMs, double PerSec)> _handleRows = new();
+
+    /// <summary>
+    /// k113 (цель 21:47 — предпросмотр любой операции ≤ 20 мс): ОТ ПРАВКИ ДО КАРТИНКИ. Пластина K08 (20 операций), последняя
+    /// операция — в панели; величина меняется 12 раз (как ввод в поле или шаг ручки), каждый раз — время от правки до готовой
+    /// сцены (расчёт в фоне, применение, сборка и загрузка сцены, ожидание кадра), отдельно — расчёт и сцена.
+    /// </summary>
+    private async Task PreviewLatency()
+    {
+        Head("8в. Предпросмотр операций: от правки до картинки (пластина, 20 операций)");
+        Line("правка → картинка — от изменения величины до новой сцены на экране (с ожиданием кадра); расчёт — фоновый расчёт детали;");
+        Line("сцена — сборка и загрузка сцены; мгновенно — сколько шагов показано по сеткам (точный расчёт — по «ОК», уточнение — после паузы).");
+        var keepMode = UserPrefs.Current.PreviewMode;
+        UserPrefs.Current.PreviewMode = "full";
+        try
+        {
+            async Task Case(string name, Func<Part, Operation?> start, Func<int, double> value)
+            {
+                _ct.ThrowIfCancellationRequested();
+                Step("предпросмотр: " + name);
+                _phase = "предпросмотр: " + name;
+                var part = await Task.Run(() => TestParts.Realistic(3, 20));
+                var s = DocumentSession.FromPart(part, "Предпросмотр");
+                _w.SetSession(s);
+                await WaitBuilt();
+                var v = _w.ViewPort;
+                var op = start(part);
+                if (op == null) { Line($"{name,-34} не начата"); Count(false); return; }
+                _w.StartOperation(op);
+                await WaitBuilt();
+                var doc = s.Document;
+                var caseStart = DateTime.Now;
+                int scenes = 0; void OnScene() => scenes++;
+                v.SceneRebuilt += OnScene;
+                var lat = new List<double>(); var comp = new List<double>(); var scn = new List<double>(); var pcomp = new List<double>(); var resume = new List<double>(); int instant = 0, rounds = 0;
+                try
+                {
+                    for (int i = 0; i < 13; i++)
+                    {
+                        await Task.Delay(40);
+                        int s0 = scenes;
+                        var t = Stopwatch.StartNew();
+                        op.SetDragValue(value(i));
+                        bool frames = v.FramesRendered > 0;     // без экрана (проверки) кадров нет — сцену не ждать
+                        await Until(() => (scenes > s0 || !frames) && !doc.IsBuilding && !part.IsDirty, 10000, fine: true);
+                        if (i == 0) continue;                  // первый шаг — подготовка сетки тела до операции
+                        lat.Add(t.Elapsed.TotalMilliseconds); comp.Add(doc.LastComputeMs); scn.Add(v.LastSceneMs); pcomp.Add(doc.LastPartComputeMs); resume.Add(doc.LastResumeMs); rounds = Math.Max(rounds, doc.LastRounds);
+                        if (part.ShowsInstant) instant++;
+                    }
+                }
+                finally { v.SceneRebuilt -= OnScene; }
+                // долгие участки потока окна за время замера (по именам)
+                var slow = UiTimes.Since(caseStart).GroupBy(x => x.Name).Select(g => (g.Key, Sum: g.Sum(x => x.Ms), N: g.Count())).OrderByDescending(x => x.Sum).Take(4).ToList();
+                if (slow.Count > 0) Line($"      поток окна: {string.Join("; ", slow.Select(x => $"{x.Key} {F(x.Sum)} мс ×{x.N}"))}");
+                var f = part.Features.LastOrDefault();
+                string? err = f?.Error;
+                _w.CommitOperation();
+                await WaitBuilt();
+                bool ok = err == null && f?.Error == null;
+                Count(ok);
+                Line($"{name,-34} правка → картинка медиана {F(Median(lat)),6} мс, p95 {F(P95(lat)),6} | расчёт {F(Median(comp)),6} (деталь {F(Median(pcomp)),6}, ожидание потока окна {F(Median(resume)),5}, кругов до {rounds}) | сцена {F(Median(scn)),5} | мгновенно {instant}/{lat.Count} | {(ok ? "годно" : "ОШИБКА: " + (err ?? f?.Error))}");
+                Target($"Предпросмотр «{name}»: расчёт детали, медиана", "≤ 20 мс", Median(pcomp), 20);
+            }
+            Operation? Pocket(Part p)
+            {
+                // эскиз на верхней плоскости нормалью вниз — вырез в тело
+                var sk = new Sketch($"S{p.Sketches.Count() + 1}", new Frame3(new Vector3d(0, 0, TopZ(p)), Vector3d.UnitX, -Vector3d.UnitY)); p.Add(sk);
+                var q = new[] { (-60.0, 28.0), (-40.0, 28.0), (-40.0, 40.0), (-60.0, 40.0) }.Select(t => new SkPoint(t.Item1, t.Item2)).ToList();
+                for (int k = 0; k < 4; k++) sk.AddEntity(new SkLine(q[k], q[(k + 1) % 4]));
+                return new ExtrudeOp { SeedSketch = sk, StartCut = true };
+            }
+            Operation? Boss(Part p) => new ExtrudeOp { SeedSketch = TestParts.CircleSketch(p, TopZ(p), 30, 20, 6) };
+            Operation? EdgeOp(Part p, bool round)
+            {
+                var r = EdgeRef(p, e => e.Curve is Kernel.Curves.LineCurve3 && Math.Abs(Math.Abs(e.V0.P.X) - 80) < 1e-6 && Math.Abs(e.V0.P.X - e.V1.P.X) < 1e-6 && Math.Abs(e.V0.P.Z - e.V1.P.Z) < 1e-6 && e.V0.P.Z > 0);
+                if (r.Owner == null) return null;
+                _w.ViewPort.Selection.Clear(); _w.ViewPort.Selection.Select(r, additive: false);
+                return round ? new RoundOp() : new ChamferOp();
+            }
+            await Case("карман (вырез выдавливанием)", Pocket, i => 4 + 0.3 * i);
+            await Case("бобышка (выдавливание)", Boss, i => 8 + 0.4 * i);
+            await Case("скругление кромки", p => EdgeOp(p, true), i => 3 + 0.2 * i);
+            await Case("фаска кромки", p => EdgeOp(p, false), i => 2 + 0.1 * i);
+        }
+        finally { UserPrefs.Current.PreviewMode = keepMode; }
+    }
 
     private async Task Handles()
     {
