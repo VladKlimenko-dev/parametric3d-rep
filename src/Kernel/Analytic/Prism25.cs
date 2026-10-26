@@ -359,6 +359,12 @@ public sealed class Prism25
                 foreach (var q in CarrierIntersections(x, y))
                     if (best == null || (q - v).Length < (best.Value - v).Length) best = q;
                 var hv = best ?? v;
+                // k116 (снимок 21:45, двойная стенка): СТЫК КАСАНИЯ — сама вершина. Отрезок, касательный к дуге (стенка кармана):
+                // пересечение несущих — двойной корень, его положение вдоль касательной определено с точностью √ε (здесь
+                // 6.7·10⁻⁷ мм); «лечение» уводило вершину тела от вершины эскиза, и совпадающая стенка второго кармана
+                // (вершины — из эскиза) уже не сходилась с первой. Вершина на обеих несущих в пределах касания — она и есть
+                // стык. Мутация P3D_TANJOINT=0.
+                if (!TanJointOff && TangentJoint(x, y, v)) hv = v;
                 if ((hv - v).Length > HealTol) { why = $"a vertex is {(hv - v).Length:G3} mm off its carrier curves"; return null; }
                 HealShift = Math.Max(HealShift, (hv - v).Length);
                 joint[i] = hv;
@@ -430,4 +436,24 @@ public sealed class Prism25
     }
 
     static double Norm(double a) { a %= 2 * Math.PI; if (a < 0) a += 2 * Math.PI; return a; }
+
+    static readonly bool TanJointOff = Environment.GetEnvironmentVariable("P3D_TANJOINT") == "0";
+    /// <summary>Стык отрезка и дуги (или двух дуг), касающихся друг друга у вершины v: v на обеих несущих до допуска.</summary>
+    static bool TangentJoint((bool Arc, Vector2d P, Vector2d Dir, Vector2d C, double R, bool Ccw, Vector2d Start, Vector2d End) x,
+                             (bool Arc, Vector2d P, Vector2d Dir, Vector2d C, double R, bool Ccw, Vector2d Start, Vector2d End) y, Vector2d v)
+    {
+        if (!x.Arc && !y.Arc) return false;
+        double eps = Region2Ops.Eps;
+        double OnCarrier((bool Arc, Vector2d P, Vector2d Dir, Vector2d C, double R, bool Ccw, Vector2d Start, Vector2d End) k)
+        {
+            if (k.Arc) return Math.Abs((v - k.C).Length - k.R);
+            var d = v - k.P; return Math.Abs(d.X * k.Dir.Y - d.Y * k.Dir.X);
+        }
+        if (OnCarrier(x) > eps || OnCarrier(y) > eps) return false;
+        // касательные направления в вершине параллельны
+        Vector2d T((bool Arc, Vector2d P, Vector2d Dir, Vector2d C, double R, bool Ccw, Vector2d Start, Vector2d End) k)
+        { if (!k.Arc) return k.Dir; var r = (v - k.C).Normalized(); return new Vector2d(-r.Y, r.X); }
+        var tx = T(x); var ty = T(y);
+        return Math.Abs(tx.X * ty.Y - tx.Y * ty.X) < 1e-6;
+    }
 }

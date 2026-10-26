@@ -264,7 +264,8 @@ public static class DocumentFile
             DatumDto? d = c switch
             {
                 DatumPlane dp when !ReferenceEquals(dp, part.PlaneXY) && !ReferenceEquals(dp, part.PlaneXZ) && !ReferenceEquals(dp, part.PlaneYZ)
-                    => new DatumDto { Kind = "plane", P = V(dp.Frame.Origin, dp.Frame.U, dp.Frame.V), Mode = dp.Mode.ToString(), Offset = dp.Offset },
+                    => new DatumDto { Kind = "plane", P = V(dp.Frame.Origin, dp.Frame.U, dp.Frame.V), Mode = dp.Mode.ToString(), Offset = dp.Offset,
+                                      Angle = dp.Angle != 0 ? dp.Angle : null, Flip = dp.Flip ? true : null, Method = dp.Method >= 0 ? dp.Method : null, Base = dp.BaseName },
                 DatumAxis ax => new DatumDto { Kind = "axis", P = V(ax.Origin, ax.Direction) },
                 DatumPoint pt when !ReferenceEquals(pt, part.Origin) => new DatumDto { Kind = "point", P = V(pt.P) },
                 Line3DItem ln => new DatumDto { Kind = "line", P = V(ln.A, ln.B) },
@@ -288,7 +289,8 @@ public static class DocumentFile
             ModelItem? it = d.Kind switch
             {
                 "plane" when d.P.Count >= 9 => new DatumPlane(d.Name, new Frame3(At(d.P, 0), At(d.P, 1), At(d.P, 2)))
-                    { Mode = Enum.TryParse<DatumPlaneMode>(d.Mode, out var m) ? m : DatumPlaneMode.Standard, Offset = d.Offset },
+                    { Mode = Enum.TryParse<DatumPlaneMode>(d.Mode, out var m) ? m : DatumPlaneMode.Standard, Offset = d.Offset,
+                      Angle = d.Angle ?? 0, Flip = d.Flip ?? false, Method = d.Method ?? -1, BaseName = d.Base },
                 "axis" when d.P.Count >= 6 => new DatumAxis(d.Name, At(d.P, 0), At(d.P, 1)),
                 "point" when d.P.Count >= 3 => new DatumPoint(d.Name, At(d.P, 0)),
                 "line" when d.P.Count >= 6 => new Line3DItem(d.Name, At(d.P, 0), At(d.P, 1)),
@@ -1387,6 +1389,11 @@ public static class DocumentFile
         public string? Source { get; set; }
         public string? Mode { get; set; }
         public double Offset { get; set; }
+        /// <summary>k116: угол, обратное направление, способ и базовая плоскость (правка плоскости).</summary>
+        public double? Angle { get; set; }
+        public bool? Flip { get; set; }
+        public int? Method { get; set; }
+        public string? Base { get; set; }
         /// <summary>u13i: NURBS опорной кривой.</summary>
         public List<double>? Cv { get; set; }
         public List<double>? Wt { get; set; }

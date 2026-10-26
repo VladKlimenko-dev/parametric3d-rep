@@ -120,6 +120,159 @@ static partial class Program
             Console.WriteLine($"resave: cached {q.ShowsCached} rejected {DocumentFile.DisplayRejected - r0} dirty {p.IsDirty} mesh {p.Mesh?.Vertices.Length}");
             return;
         }
+        if (variant.StartsWith("faces"))
+        {
+            int n = int.Parse(variant.Substring(5));
+            for (int i = n; i < p.Features.Count; i++) p.Features[i].Suppressed = true;
+            p.Rebuild(prm);
+            foreach (var f in p.Bodies.SelectMany(b => b.Faces))
+            {
+                var src = (f.Surface as Parametric3D.Kernel.Surfaces.FacetedSurface)?.Source ?? f.Surface;
+                var sh = Parametric3D.Kernel.Geometry.ExactEdges.ShapeOf(src);
+                string d = sh switch
+                {
+                    Parametric3D.Kernel.Geometry.Ssi.Cylinder cy => $"cyl P {cy.P:0.###} axis {cy.Axis:0.###} R {cy.R:0.#####}",
+                    Parametric3D.Kernel.Geometry.Ssi.Plane pl => $"plane P {pl.P:0.###} N {pl.N:0.###}",
+                    Parametric3D.Kernel.Geometry.Ssi.Cone k => $"cone apex {k.Apex:0.###}",
+                    _ => sh?.GetType().Name ?? "?"
+                };
+                var vs = f.Edges.SelectMany(e => new[] { e.V0.P, e.V1.P }).ToList();
+                Console.WriteLine($"face {f.Id} {f.Tag}: {d}; z {vs.Min(v => v.Z):0.###}..{vs.Max(v => v.Z):0.###}, edges {f.Edges.Count()}");
+                if (Environment.GetEnvironmentVariable("P3D_FACELOOPS") is { } fl && f.Tag.Contains(fl))
+                    foreach (var l in f.Loops) { Console.WriteLine("   loop:"); foreach (var ce in l.CoEdges) Console.WriteLine($"     {ce.Edge.Curve.GetType().Name} {ce.Start.P:0.####} -> {ce.End.P:0.####}"); }
+            }
+            return;
+        }
+        if (variant.StartsWith("vtx"))
+        {
+            // vtxN:x,y,z — вершины тела после N операций у точки (разбор точности вершин)
+            var parts = variant.Substring(3).Split(':'); int n = int.Parse(parts[0]);
+            var q = parts[1].Split(',').Select(v => double.Parse(v, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            var at = new Vector3d(q[0], q[1], q[2]);
+            for (int i = n; i < p.Features.Count; i++) p.Features[i].Suppressed = true;
+            p.Rebuild(prm);
+            foreach (var v in p.Bodies.SelectMany(b => b.Faces).SelectMany(f => f.Edges).SelectMany(e => new[] { e.V0, e.V1 }).Distinct())
+                if ((v.P - at).Length < 1e-3) Console.WriteLine($"vertex after {n}: {v.P.X:R} {v.P.Y:R} {v.P.Z:R} (off {(v.P - at).Length:G3})");
+            return;
+        }
+        if (variant.StartsWith("ids"))
+        {
+            // ids[:twice] — треугольники сетки показа лежат ли на поверхности грани своего номера
+            p.Rebuild(prm);
+            void Report(string when)
+            {
+                var md = p.Mesh!;
+                var bodyFaces = p.Bodies.SelectMany(b => b.Faces).ToDictionary(f => f.Id);
+                var per = new Dictionary<uint, (int N, int Off, double Worst)>();
+                for (int t = 0; t + 2 < md.Indices.Length; t += 3)
+                {
+                    var a = md.Vertices[md.Indices[t]]; var b = md.Vertices[md.Indices[t + 1]]; var c = md.Vertices[md.Indices[t + 2]];
+                    var cur = per.GetValueOrDefault(a.FaceId);
+                    double d = -1;
+                    if (bodyFaces.TryGetValue(a.FaceId, out var bf) && cur.N % 7 == 0)
+                    {
+                        var src = (bf.Surface as Parametric3D.Kernel.Surfaces.FacetedSurface)?.Source ?? bf.Surface;
+                        var cen = new Vector3d((a.P.X + b.P.X + c.P.X) / 3, (a.P.Y + b.P.Y + c.P.Y) / 3, (a.P.Z + b.P.Z + c.P.Z) / 3);
+                        d = (src.PointAt(src.ProjectToUV(cen)) - cen).Length;
+                    }
+                    per[a.FaceId] = (cur.N + 1, cur.Off + (d > 0.5 ? 1 : 0), Math.Max(cur.Worst, d));
+                }
+                Console.WriteLine($"{when}: mesh faces {per.Count}, body faces {bodyFaces.Count}, missing in body {per.Keys.Count(k => !bodyFaces.ContainsKey(k))}");
+                foreach (var bf in bodyFaces.Values) if (!per.ContainsKey(bf.Id)) Console.WriteLine($"   body face without mesh {bf.Id} {bf.Tag} {(bf.Surface as Parametric3D.Kernel.Surfaces.FacetedSurface)?.Source?.GetType().Name} facets {(bf.Surface as Parametric3D.Kernel.Surfaces.FacetedSurface)?.Facets.Count}");
+                foreach (var (fid, v) in per.OrderBy(k => k.Key)) Console.WriteLine($"   mesh face {fid} {bodyFaces.GetValueOrDefault(fid)?.Tag} tris {v.N}");
+                foreach (var (fid, v) in per.OrderBy(k => k.Key)) if (v.Off > 0 || !bodyFaces.ContainsKey(fid)) Console.WriteLine($"   face {fid} {bodyFaces.GetValueOrDefault(fid)?.Tag}: tris {v.N}, off-surface samples {v.Off}, worst {v.Worst:0.###}");
+            }
+            Report("first");
+            if (variant == "ids:twice")
+            {
+                var last = p.Features[^1]; last.Suppressed = true; p.NotifyChanged(last); p.Rebuild(prm); Report("suppressed last");
+                last.Suppressed = false; p.NotifyChanged(last); p.Rebuild(prm); Report("restored last");
+            }
+            return;
+        }
+        if (variant.StartsWith("fold"))
+        {
+            // foldN: после N операций — у каждой грани: площадь сетки, треугольники против нормали поверхности, площадь по формулам
+            int n = int.Parse(variant.Substring(4));
+            for (int i = n; i < p.Features.Count; i++) p.Features[i].Suppressed = true;
+            p.Rebuild(prm);
+            var md = p.Mesh!;
+            var bodyFaces = p.Bodies.SelectMany(b => b.Faces).ToDictionary(f => f.Id);
+            var per = new Dictionary<uint, (int Tris, int Against, double Area, double AgainstArea)>();
+            var badN = new Dictionary<uint, int>();
+            for (int t = 0; t + 2 < md.Indices.Length; t += 3)
+            {
+                var a = md.Vertices[md.Indices[t]]; var b = md.Vertices[md.Indices[t + 1]]; var c = md.Vertices[md.Indices[t + 2]];
+                var g = Vector3.Cross(b.P - a.P, c.P - a.P); double ar = g.Length / 2;
+                bool against = false;
+                if (bodyFaces.TryGetValue(a.FaceId, out var bf))
+                {
+                    var src = (bf.Surface as Parametric3D.Kernel.Surfaces.FacetedSurface)?.Source ?? bf.Surface;
+                    var cen = new Vector3d((a.P.X + b.P.X + c.P.X) / 3, (a.P.Y + b.P.Y + c.P.Y) / 3, (a.P.Z + b.P.Z + c.P.Z) / 3);
+                    var sn = src.NormalAt(src.ProjectToUV(cen)); if (bf.Reversed) sn = -sn;
+                    against = Vector3d.Dot(sn, new Vector3d(g.X, g.Y, g.Z)) < 0;
+                }
+                var cur = per.GetValueOrDefault(a.FaceId);
+                if (bodyFaces.TryGetValue(a.FaceId, out var bf2))
+                {
+                    var src2 = (bf2.Surface as Parametric3D.Kernel.Surfaces.FacetedSurface)?.Source ?? bf2.Surface;
+                    foreach (var q in new[] { a, b, c })
+                    {
+                        var sn = src2.NormalAt(src2.ProjectToUV(new Vector3d(q.P.X, q.P.Y, q.P.Z)));
+                        double cosv = Math.Abs(Vector3d.Dot(sn.Normalized(), new Vector3d(q.N.X, q.N.Y, q.N.Z).Normalized()));
+                        if (cosv < 0.9) badN[a.FaceId] = badN.GetValueOrDefault(a.FaceId) + 1;
+                    }
+                }
+                per[a.FaceId] = (cur.Tris + 1, cur.Against + (against ? 1 : 0), cur.Area + ar, cur.AgainstArea + (against ? ar : 0));
+            }
+            foreach (var (fid, v) in per.OrderBy(k => k.Key))
+            {
+                var bf = bodyFaces.GetValueOrDefault(fid);
+                double? exactA = null; try { exactA = bf == null ? null : Parametric3D.Kernel.Topology.AnalyticVolume.FaceArea(bf); } catch { }
+                Console.WriteLine($"face {fid} {bf?.Tag}: tris {v.Tris}, normals off >25deg {badN.GetValueOrDefault(fid)}, against {v.Against} (area {v.AgainstArea:0.###}), mesh area {v.Area:0.###}, exact {exactA:0.###}");
+            }
+            return;
+        }
+        if (variant.StartsWith("overlap"))
+        {
+            // overlapN: после N операций — грани, чьи треугольники лежат на треугольниках другой грани (двойная поверхность)
+            int n = int.Parse(variant.Substring(7));
+            for (int i = n; i < p.Features.Count; i++) p.Features[i].Suppressed = true;
+            p.Rebuild(prm);
+            var md = p.Mesh!;
+            var tris = new List<(Vector3 A, Vector3 B, Vector3 C, uint F)>();
+            for (int t = 0; t + 2 < md.Indices.Length; t += 3) tris.Add((md.Vertices[md.Indices[t]].P, md.Vertices[md.Indices[t + 1]].P, md.Vertices[md.Indices[t + 2]].P, md.Vertices[md.Indices[t]].FaceId));
+            static float DistPT(Vector3 p0, Vector3 a, Vector3 b, Vector3 c)
+            {
+                var n0 = Vector3.Cross(b - a, c - a); if (n0.LengthSquared < 1e-20f) return 1e9f; n0 = n0.Normalized();
+                float d = Vector3.Dot(p0 - a, n0); var q = p0 - n0 * d;
+                bool In(Vector3 x, Vector3 y) => Vector3.Dot(Vector3.Cross(y - x, q - x), n0) >= -1e-4f;
+                return In(a, b) && In(b, c) && In(c, a) ? Math.Abs(d) : 1e9f;
+            }
+            var faces = tris.Select(t => t.F).Distinct().ToList();
+            var bodyFaces = p.Bodies.SelectMany(b => b.Faces).ToDictionary(f => f.Id);
+            foreach (var fa in faces)
+            {
+                var mine = tris.Where(t => t.F == fa).ToList();
+                var hits = new Dictionary<uint, int>(); int samples = 0;
+                var big = mine.Where(t => Vector3.Cross(t.B - t.A, t.C - t.A).Length > 0.2f).ToList();
+                foreach (var t in big.Where((_, i) => i % Math.Max(1, big.Count / 300) == 0))
+                {
+                    samples++;
+                    var c = (t.A + t.B + t.C) / 3; var na = Vector3.Cross(t.B - t.A, t.C - t.A).Normalized();
+                    foreach (var u in tris)
+                    {
+                        if (u.F == fa) continue;
+                        var nb = Vector3.Cross(u.B - u.A, u.C - u.A); if (nb.LengthSquared < 1e-12f) continue;
+                        if (Math.Abs(Vector3.Dot(na, nb.Normalized())) < 0.95f) continue;
+                        if (DistPT(c, u.A, u.B, u.C) < (Environment.GetEnvironmentVariable("P3D_OVTOL") is { } ot ? float.Parse(ot) : 0.02f)) { hits[u.F] = hits.GetValueOrDefault(u.F) + 1; break; }
+                    }
+                }
+                var tag = bodyFaces.TryGetValue(fa, out var bf) ? bf.Tag + " " + ((bf.Surface as Parametric3D.Kernel.Surfaces.FacetedSurface)?.Source?.GetType().Name ?? bf.Surface.GetType().Name) : "?";
+                Console.WriteLine($"face {fa} {tag}: tris {mine.Count}, samples {samples}, on other faces: {string.Join(", ", hits.Select(kv => kv.Key + "x" + kv.Value))}");
+            }
+            return;
+        }
         if (variant == "none") return;
         var m = new MirrorFeature("M");
         if (variant == "sweep") { m.Sources.Add("51e5e5fd56"); m.At = new Vector3d(0, 0, -279.7175); m.Normal = Vector3d.UnitZ; }

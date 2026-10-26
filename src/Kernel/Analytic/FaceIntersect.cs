@@ -454,7 +454,7 @@ public static class FaceIntersect
                 return;
             }
             inside[i] = g2 > 0;
-            if (ClipDbg) Console.WriteLine($"CLIP {a.Face.Tag}×{b.Face.Tag} {c.GetType().Name} iv [{s:G9},{e:G9}] len {(c.PointAt(Wrap(s)) - c.PointAt(Wrap(e))).Length:G3} g {g1:G3} {g2:G3} {g3:G3}");
+            if (ClipDbg) { var mx = c.PointAt(Wrap(s + (e - s) * 0.5)); Console.WriteLine($"CLIP {a.Face.Tag}×{b.Face.Tag} {c.GetType().Name} iv [{s:G9},{e:G9}] len {(c.PointAt(Wrap(s)) - c.PointAt(Wrap(e))).Length:G3} g {g1:G3} {g2:G3} {g3:G3} mid {mx:0.###} gA {a.SignedBoundaryDistance(mx):G3} gB {b.SignedBoundaryDistance(mx):G3}"); }
             // 04.4/04.6: часть кривой внутри обеих граней, но ближе допуска слияния к их границам (узкий угол, срезанный на
             // доли допуска): знаковое расстояние там — ноль, и кусок молча терялся (у бруска угол, срезанный плоскостью в
             // 2e-6 мм, оставался целым — вершина вне точного тела на 1.2e-6 мм при точности модели 1e-7). Внутри обеих граней

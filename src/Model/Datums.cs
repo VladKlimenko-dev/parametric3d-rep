@@ -27,6 +27,10 @@ public sealed class DatumPlane : ModelItem
     public double Offset;
     public double Angle;
     public bool Flip;
+    /// <summary>k116: способ построения (номер способа панели «Плоскость»); −1 — не записан (по Mode).</summary>
+    public int Method = -1;
+    /// <summary>k116: базовая плоскость способа — имя опорной плоскости или метка грани (правка плоскости после открытия файла).</summary>
+    public string? BaseName;
 
     /// <summary>
     /// Полуразмер квадрата, которым плоскость показывается в виде (мм).

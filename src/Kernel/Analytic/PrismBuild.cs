@@ -108,6 +108,13 @@ public static class PrismBuild
             double z = (lv[k] + lv[k + 1]) / 2;
             secs.Add(Region2Ops.Boolean(pa.SectionAt(z), pb.SectionAt(z), op));
         }
+        if (Environment.GetEnvironmentVariable("P3D_PRISMDBG") is { } pdbg)
+        {
+            var q = pdbg.Split(',').Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            var t2 = pa.To2(new Vector3d(q[0], q[1], q[2]));
+            void Dump(string nm, Region2 r) { foreach (var l in r.Loops) foreach (var sg in l) foreach (var e in new[] { sg.A, sg.B }) if ((e - t2).Length < 1e-3) Console.Error.WriteLine($"PRISM {nm}: {(sg.IsArc ? "arc" : "line")} end off {(e - t2).Length:G3}"); }
+            for (int k = 0; k + 1 < lv.Count; k++) { double z = (lv[k] + lv[k + 1]) / 2; Dump($"A[{k}]", pa.SectionAt(z)); Dump($"B[{k}]", pb.SectionAt(z)); Dump($"R[{k}]", secs[k]); }
+        }
         LastVolume = 0; for (int k = 0; k < secs.Count; k++) LastVolume += secs[k].Area * (lv[k + 1] - lv[k]);
         LastVolumeA = pa.Volume; LastVolumeB = pb.Volume;
         string? Namer(FaceInfo fi)

@@ -1692,6 +1692,7 @@ public partial class MainWindow : Window
         if (linear && !sketch) res.Add("op.pattern_linear");
         if (axis || linear && !sketch) res.Add("op.pattern_circular");
         if (feature) res.AddRange(new[] { "edit.feature", "edit.suppress", "edit.delete" });
+        if (sel.Any(r => EditablePlane(r.Target as ModelItem))) res.Insert(0, "edit.feature");
         // эскиз (в том числе оставшийся без операции) — удаляется отсюда же
         if (sketch && sel.Any(r => r.Target is Sketch)) res.AddRange(new[] { "sk.setup", "edit.delete" });
         // u13h: операция с отказом — предложенное исправление; узел FreeForm — правка и обновление ссылок
@@ -1955,9 +1956,13 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Изменить выбранное: операцию — в панели, эскиз — в режиме эскиза.</summary>
+    /// <summary>k116: опорная плоскость, которую можно править (не стандартные XY/XZ/YZ).</summary>
+    public static bool EditablePlane(ModelItem? i) => !PlaneOp.EditOff && i is DatumPlane dp && dp.Parent is Part pp
+        && !ReferenceEquals(dp, pp.PlaneXY) && !ReferenceEquals(dp, pp.PlaneXZ) && !ReferenceEquals(dp, pp.PlaneYZ);
+
     public void EditSelected()
     {
-        var item = SelectedItems().FirstOrDefault(i => i is Feature or Sketch);
+        var item = SelectedItems().FirstOrDefault(i => i is Feature or Sketch || EditablePlane(i));
         if (item == null)
         {
             var sk = View.Selection.Items.Select(Refs.SketchOf).FirstOrDefault(s => s != null);
@@ -1971,6 +1976,10 @@ public partial class MainWindow : Window
         switch (item)
         {
             case Sketch sk: EditSketch(sk); break;
+            case DatumPlane dpe when EditablePlane(dpe):
+                if (CurrentOperation != null) CancelOperation();
+                StartOperation(new PlaneOp { EditTarget = dpe });
+                break;
             case FreeFormFeature ffn when Session.Part is { } ffp: Commands.FreeFormCommands.Enter(this, ffp, ffn); break;
             case Feature { Frozen: true }:
                 ShowToast(L("Шаг FreeForm зафиксирован: параметры вернуть — «Отменить до этого шага»"), error: false);
@@ -2310,7 +2319,7 @@ public partial class MainWindow : Window
         Tree.DoubleTapped += (_, e) =>
         {
             if ((e.Source as StyledElement)?.DataContext is not TreeNode n) return;
-            if (n.Item is Feature or Sketch) EditItem(n.Item);
+            if (n.Item is Feature or Sketch || EditablePlane(n.Item)) EditItem(n.Item);
             else if (n.Item is Part) View.ZoomToFit();
             else if (n.Item is InfoItem ii) OpenInfo(ii);
         };
@@ -2319,7 +2328,7 @@ public partial class MainWindow : Window
             if ((e.Source as StyledElement)?.DataContext is not TreeNode n) return;
             SelectItem(n.Item);
             var ids = new List<string>();
-            if (n.Item is Feature or Sketch) ids.Add("edit.feature");
+            if (n.Item is Feature or Sketch || EditablePlane(n.Item)) ids.Add("edit.feature");
             if (n.Item is Feature) ids.AddRange(new[] { "edit.suppress", "tree.resume", "tree.edit_dims", "tree.insert_here", "tree.reorder_up", "tree.reorder_down", "tree.group", "tree.parents_children", "tree.replace_refs" });
             if (n.Item is Sketch) ids.AddRange(new[] { "sk.setup", "tree.replace_refs" });
             // k115 (п. 7): группа — разгруппировать, отразить, массив, копировать, удалить, подавить
