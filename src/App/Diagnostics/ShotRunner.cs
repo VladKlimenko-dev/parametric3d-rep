@@ -62,6 +62,41 @@ public static class ShotRunner
             w.ViewPort.AnimateTo(OpenTK.Mathematics.Quaternion.FromAxisAngle(OpenTK.Mathematics.Vector3.UnitX, a[0]) * OpenTK.Mathematics.Quaternion.FromAxisAngle(OpenTK.Mathematics.Vector3.UnitY, a[1]));
             Console.WriteLine("rot " + id); return;
         }
+        if (id.StartsWith("cam:"))
+        {
+            // cam:tx,ty,tz,расстояние,наклон,разворот — точка взгляда, расстояние и поворот (градусы)
+            var a = id[4..].Split(',').Select(v => float.Parse(v, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            var st = w.ViewPort.Camera.State;
+            st.Target = new OpenTK.Mathematics.Vector3(a[0], a[1], a[2]); st.Distance = a[3];
+            st.Rotation = OpenTK.Mathematics.Quaternion.FromAxisAngle(OpenTK.Mathematics.Vector3.UnitX, a[4] * MathF.PI / 180) * OpenTK.Mathematics.Quaternion.FromAxisAngle(OpenTK.Mathematics.Vector3.UnitY, a[5] * MathF.PI / 180);
+            w.ViewPort.Camera.State = st; w.ViewPort.Redraw();
+            Console.WriteLine("cam " + id); return;
+        }
+        if (id.StartsWith("ray:") && w.Session.Part?.Mesh is { } rmd)
+        {
+            // ray:px,py — все пересечения луча через пиксель снимка с сеткой детали (разбор артефактов показа)
+            var a = id[4..].Split(',').Select(int.Parse).ToArray();
+            w.ViewPort.Camera.ScreenRay(a[0], a[1], out var ro, out var rd);
+            var hits = new List<(float T, uint Face, float Dot, int Tri)>();
+            for (int t = 0; t + 2 < rmd.Indices.Length; t += 3)
+            {
+                var p0 = rmd.Vertices[rmd.Indices[t]].P; var p1 = rmd.Vertices[rmd.Indices[t + 1]].P; var p2 = rmd.Vertices[rmd.Indices[t + 2]].P;
+                var e1 = p1 - p0; var e2 = p2 - p0; var h = OpenTK.Mathematics.Vector3.Cross(rd, e2); float det = OpenTK.Mathematics.Vector3.Dot(e1, h);
+                if (MathF.Abs(det) < 1e-12f) continue;
+                float inv = 1 / det; var sv = ro - p0; float u = inv * OpenTK.Mathematics.Vector3.Dot(sv, h); if (u < 0 || u > 1) continue;
+                var q = OpenTK.Mathematics.Vector3.Cross(sv, e1); float v = inv * OpenTK.Mathematics.Vector3.Dot(rd, q); if (v < 0 || u + v > 1) continue;
+                float tt = inv * OpenTK.Mathematics.Vector3.Dot(e2, q); if (tt <= 0) continue;
+                var gn = OpenTK.Mathematics.Vector3.Cross(e1, e2).Normalized();
+                hits.Add((tt, rmd.Vertices[rmd.Indices[t]].FaceId, OpenTK.Mathematics.Vector3.Dot(gn, rd), t / 3));
+            }
+            foreach (var hh in hits.OrderBy(x => x.T).Take(8))
+            {
+                var vv = Enumerable.Range(0, 3).Select(k => rmd.Vertices[rmd.Indices[hh.Tri * 3 + k]]).ToArray();
+                var gn = OpenTK.Mathematics.Vector3.Cross(vv[1].P - vv[0].P, vv[2].P - vv[0].P).Normalized();
+                Console.WriteLine($"ray {id}: t {hh.T:0.####} face {hh.Face} dot {hh.Dot:0.###} tri {hh.Tri} P {vv[0].P} {vv[1].P} {vv[2].P} N·g {OpenTK.Mathematics.Vector3.Dot(vv[0].N, gn):0.###} {OpenTK.Mathematics.Vector3.Dot(vv[1].N, gn):0.###} {OpenTK.Mathematics.Vector3.Dot(vv[2].N, gn):0.###}");
+            }
+            return;
+        }
         if (id.StartsWith("mat:") && w.Session.Part is { } mp && Model.Material.FromLibrary(id[4..]) is { } mm)
         {
             mp.Material = mm; w.ViewPort.MarkDirty(); Console.WriteLine("material " + mm.Name); return;

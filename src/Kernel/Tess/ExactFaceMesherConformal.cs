@@ -28,6 +28,11 @@ public static partial class ExactFaceMesher
     public static Action<string>? ConformalDebug;
     public static Action<string>? TorusDebug;
 
+    static readonly bool ConfTrace = Environment.GetEnvironmentVariable("P3D_CONFTRACE") == "1";
+    static readonly bool CylAnisoOff = Environment.GetEnvironmentVariable("P3D_CYLANISO") == "0";
+    /// <summary>k116: граней цилиндра, размеченных развёрткой, сжатой вдоль оси (счётчик разбора).</summary>
+    public static long AnisoCylFaces;
+
     /// <summary>Отображение поверхности на плоскость (прямое и обратное) и проверка, применимо ли оно к точке.</summary>
     sealed class ConformalMap
     {
@@ -36,6 +41,8 @@ public static partial class ExactFaceMesher
         public required string Kind;
         /// <summary>Нормаль поверхности (знак — любой, но один на всей поверхности); null — по грани.</summary>
         public Func<Vector3d, Vector3d>? Normal;
+        /// <summary>k116: расстояние точки до поверхности (отход треугольника); null — по обратному отображению.</summary>
+        public Func<Vector3d, double>? Dist;
     }
 
     static (Vector3d U, Vector3d V) Perp(Vector3d w)
@@ -83,14 +90,36 @@ public static partial class ExactFaceMesher
             };
         }
 
+        void AddCylinder(Vector3d o, Vector3d w, double R)
+        {
+            // k116 (замечание 16:00, п. 1): ДЛИННЫЙ ЦИЛИНДР — СЖАТИЕ ВДОЛЬ ОСИ. Конформная развёртка даёт треугольники, равные во
+            // все стороны, а прогиб у цилиндра — только поперёк оси: на трубе 559 мм R92 точек требовалось больше предела
+            // (40000), грань оставалась нерасчерченной, булева уходила на многогранный путь (40 с, огранённый вид с полосами).
+            // Первым — развёртка, сжатая вдоль оси в s раз (треугольники длинные вдоль образующей); отход меряется расстоянием
+            // до цилиндра (у неконформной развёртки точка плоскости уходит вдоль оси — отход по ней завышен). P3D_CYLANISO=0.
+            if (!CylAnisoOff)
+            {
+                double hLo = double.MaxValue, hHi = double.MinValue;
+                foreach (var p in all) { double h = Vector3d.Dot(p - o, w); hLo = Math.Min(hLo, h); hHi = Math.Max(hHi, h); }
+                double tolC = 2 * Math.Max(Tol.Chord, 1e-4), circ = 2 * Math.Sqrt(2 * tolC * R);
+                double s = Math.Clamp((hHi - hLo) / (4 * Math.Max(circ, 1e-6)), 1, 8);   // вытянутость треугольника — не больше 8
+                if (s > 1.5 && Axial(o, w, (h, r) => h / (R * s), l => double.IsNegativeInfinity(l) ? null : (l * R * s, R), "cylinder*") is { } ma)
+                {
+                    ma.Dist = p => { var d = p - o; return Math.Abs((d - w * Vector3d.Dot(d, w)).Length - R); };
+                    maps.Add(ma);
+                }
+            }
+            var m = Axial(o, w, (h, r) => h / R, l => double.IsNegativeInfinity(l) ? null : (l * R, R), "cylinder");
+            if (m != null) maps.Add(m);
+        }
+
         switch (src)
         {
             case ExtrudedSurface { Base: ArcCurve3 arc } ex:
             {
                 var w = ex.Dir.Normalized(); double R = arc.Radius;
                 if (Math.Abs(Vector3d.Dot(arc.Frame.W.Normalized(), w)) < 1 - 1e-9) break;   // косой срез — не круговой цилиндр
-                var m = Axial(arc.Frame.Origin, w, (h, r) => h / R, l => double.IsNegativeInfinity(l) ? null : (l * R, R), "cylinder");
-                if (m != null) maps.Add(m);
+                AddCylinder(arc.Frame.Origin, w, R);
                 break;
             }
             case RevolvedSurface { Base: LineCurve3 ln } rv:
@@ -103,8 +132,7 @@ public static partial class ExactFaceMesher
                 if (Math.Abs(rB - rA) < 1e-9 * len)
                 {
                     double R = (rA + rB) / 2; if (R < 1e-9) break;
-                    var m = Axial(o, w, (h, r) => h / R, l => double.IsNegativeInfinity(l) ? null : (l * R, R), "cylinder");
-                    if (m != null) maps.Add(m);
+                    AddCylinder(o, w, R);
                 }
                 else if (Math.Abs(hB - hA) < 1e-9 * len)
                 {
@@ -424,18 +452,27 @@ public static partial class ExactFaceMesher
                     Vector2d a = pts[T[i]], b = pts[T[i + 1]], c = pts[T[i + 2]];
                     Vector3d A = P3(a), B = P3(b), Cc = P3(c);
                     var g = (a + b + c) / 3;
-                    double dev = (map.Inv(g) - (A + B + Cc) / 3).Length;
+                    double dev = map.Dist is { } dist ? dist((A + B + Cc) / 3) : (map.Inv(g) - (A + B + Cc) / 3).Length;
                     // и середины сторон (длинная сторона у кромки — тот же прогиб)
                     // (сторона между двумя точками контура — хорда ребра, её прогиб задан гранением ребра: не мерится)
                     double Mid(Vector2d x, Vector2d y, Vector3d X, Vector3d Y) =>
-                        lookup.ContainsKey((x.X, x.Y)) && lookup.ContainsKey((y.X, y.Y)) ? 0 : (map.Inv((x + y) / 2) - (X + Y) / 2).Length;
+                        lookup.ContainsKey((x.X, x.Y)) && lookup.ContainsKey((y.X, y.Y)) ? 0 : map.Dist is { } dd ? dd((X + Y) / 2) : (map.Inv((x + y) / 2) - (X + Y) / 2).Length;
                     dev = Math.Max(dev, Math.Max(Mid(a, b, A, B), Math.Max(Mid(b, c, B, Cc), Mid(c, a, Cc, A))));
                     // мельче 0.01 мм не дробится: прогиб такого треугольника уже не от размера (угол у кромки)
                     double lmax = Math.Max((B - A).Length, Math.Max((Cc - B).Length, (A - Cc).Length));
-                    if (dev > tol && lmax > 0.01) bad.Add(g);
+                    // k116: центр уже вставлен, а треугольник остался (вытянутый у кромки) — середина его длинной стороны
+                    if (dev > tol && lmax > 0.01 && map.Dist != null && tried.Contains((g.X, g.Y)))
+                    {
+                        var (p0, p1, op) = (B - A).Length >= Math.Max((Cc - B).Length, (A - Cc).Length) ? (a, b, c) : (Cc - B).Length >= (A - Cc).Length ? (b, c, a) : (c, a, b);
+                        // длинная сторона — кромка (обе точки контура): точку на неё не поставить — у неё, внутри треугольника
+                        var mid = (p0 + p1) / 2;
+                        g = lookup.ContainsKey((p0.X, p0.Y)) && lookup.ContainsKey((p1.X, p1.Y)) ? mid + (op - mid) * 0.2 : mid;
+                    }
+                    if (dev > tol && lmax > 0.01) { bad.Add(g); if (ConfTrace && pass >= 9 && bad.Count <= 4) Console.Error.WriteLine($"CONFBAD {map.Kind} dev {dev:0.###} A {A} B {B} C {Cc} onB {lookup.ContainsKey((a.X, a.Y))}{lookup.ContainsKey((b.X, b.Y))}{lookup.ContainsKey((c.X, c.Y))}"); }
                 }
                 // центр, уже вставленный (или вне области), второй раз не берётся: такие треугольники — на суд самопроверки
                 bad.RemoveAll(q => tried.Contains((q.X, q.Y)));
+                if (ConfTrace) Console.Error.WriteLine($"CONF face {f.Id} {map.Kind} pass {pass}: boundary {nB}, inner {inner.Count}, tris {T.Count / 3}, bad {bad.Count}");
                 if (bad.Count == 0) break;
                 if (inner.Count + bad.Count > 40000) { T = null; lastWhy = $"conformal ({map.Kind}): too many points"; break; }
                 foreach (var q in bad) tried.Add((q.X, q.Y));
@@ -508,6 +545,7 @@ public static partial class ExactFaceMesher
                 double area = 0; for (int i = 0; i + 2 < T.Count; i += 3) area += Vector3d.Cross(P[T[i + 1]] - P[T[i]], P[T[i + 2]] - P[T[i]]).Length / 2;
                 ConformalDebug($"face {f.Id}: conformal {map.Kind}: {T.Count / 3} triangles, {inner.Count} inner points, normals agree {agree}, area {area:0.###}, rev {f.Reversed}");
             }
+            if (map.Kind == "cylinder*") Interlocked.Increment(ref AnisoCylFaces);
             return (P, T);
 
             Vector3d P3(Vector2d q) => lookup.TryGetValue((q.X, q.Y), out var p3) ? p3 : map.Inv(q);

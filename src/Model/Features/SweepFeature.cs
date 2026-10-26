@@ -60,9 +60,22 @@ public sealed class SweepFeature : Feature
         if (Math.Abs(frac - 1) < 1e-12 && Math.Abs(twist) < 1e-12 && !KeepOrientation && chain is { Count: > 1 })
             solid = SweepOp.BuildChain(profile, chain, ctx.Warnings);
         solid ??= SweepOp.Build(profile, path, frac, twist, KeepOrientation);
+        // k116 (замечание 16:00, п. 3): зеркало и массивы протяжки — тело протяжки под преобразованием
+        if (_x is { } xf)
+            solid = Kernel.Topology.TopologyTransform.Apply(solid, xf) ?? Kernel.Ops.TransformOp.Copy(solid, xf);
 
         if (Cut) BooleanOp.Subtract(ctx.Bodies, solid, ctx.Warnings);
         else BooleanOp.Unite(ctx.Bodies, solid, ctx.Warnings);
+    }
+
+    private Kernel.Ops.TransformOp.Xform? _x;
+    /// <summary>k116: мутация P3D_SWEEPMIRROR=0 — протяжка не повторяется зеркалом/массивом (прежний отказ).</summary>
+    static readonly bool MirrorOff = Environment.GetEnvironmentVariable("P3D_SWEEPMIRROR") == "0";
+    public override void ExecuteTransformed(BuildContext ctx, Kernel.Ops.TransformOp.Xform x)
+    {
+        if (MirrorOff) { base.ExecuteTransformed(ctx, x); return; }
+        _x = x;
+        try { Execute(ctx); } finally { _x = null; }
     }
 
     private ICurve3? ResolvePath(BuildContext ctx) => PathOf(ctx.Part, ctx.FindSketch);

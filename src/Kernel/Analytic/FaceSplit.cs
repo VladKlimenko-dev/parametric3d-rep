@@ -75,7 +75,10 @@ public static partial class FaceSplit
     internal static double MergeExact => ToleranceContext.Current.ModelAccuracy;
     internal static readonly bool MergeGuardOff = Environment.GetEnvironmentVariable("P3D_MERGEGUARD") == "0";
     static double TolV => TolOverride ?? Region2Ops.Eps;
-    [ThreadStatic] public static Action<string>? Debug;
+    [ThreadStatic] static Action<string>? _debug;
+    public static Action<string>? Debug { get => _debug ?? EnvDebug; set => _debug = value; }
+    /// <summary>k116: P3D_SPLITDBG=1 — разбор разбиения граней в stderr (из любого потока).</summary>
+    static readonly Action<string>? EnvDebug = Environment.GetEnvironmentVariable("P3D_SPLITDBG") == "1" ? m => Console.Error.WriteLine("SPLIT " + m) : null;
     /// <summary>k94: кусок пересечения, совпавший с ребром границы грани, отбрасывается. P3D_FSDUPPIECE=0 — прежнее.</summary>
     public static readonly bool DupPieceOff = Environment.GetEnvironmentVariable("P3D_FSDUPPIECE") == "0";
     public static long DupPiecesDropped;
