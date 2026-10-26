@@ -25,7 +25,10 @@ public static class AssemblyFile
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
-    public static string Save(Assembly asm, ParameterTable? parameters = null)
+    public static string Save(Assembly asm, ParameterTable? parameters = null) => Save(asm, parameters, withDisplay: false);
+
+    /// <summary>k114: withDisplay — детали сборки с поверхностями (файл на диске; снимки отмены — без них).</summary>
+    public static string Save(Assembly asm, ParameterTable? parameters, bool withDisplay)
     {
         var parts = asm.Parts.ToList();
 
@@ -48,7 +51,7 @@ public static class AssemblyFile
 
             Parts = parts.Select(p => new AsmPartDto
             {
-                Document = DocumentFile.Save(p, parameters),
+                Document = DocumentFile.Save(p, parameters, withDisplay),
                 Translation = new[] { (double)p.Translation.X, p.Translation.Y, p.Translation.Z },
                 Rotation = new[] { (double)p.Rotation.X, p.Rotation.Y, p.Rotation.Z, p.Rotation.W },
                 Fixed = p.Fixed, Skeleton = p.Skeleton, SourcePath = p.SourcePath, Hidden = !p.Visible, SubAssembly = p.SubAssembly,

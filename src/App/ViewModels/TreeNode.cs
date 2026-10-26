@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Parametric3D.App.Icons;
@@ -25,7 +25,17 @@ public sealed partial class TreeNode : ObservableObject
     public string? Error { get; private set; }
     public bool HasError => Error != null;
     public bool IsDim { get; internal set; }
-    public bool HasEye { get; }
+    public bool HasEye { get; private set; }
+    /// <summary>k115 (п. 3): строка-ссылка — операция, которую повторяет родитель (зеркало, массив); не тянется и без глаза.</summary>
+    public bool IsReference { get; private set; }
+
+    /// <summary>k115: строка-ссылка на операцию-источник под зеркалом или массивом.</summary>
+    public static TreeNode Reference(Feature src, Part? owner)
+    {
+        var n = new TreeNode(src, owner) { IsReference = true, HasEye = false, IsDim = true };
+        n.Name = "↳ " + src.Name;
+        return n;
+    }
 
     /// <summary>Строка отката (детали, сборки или подсборки): рисуется цветной полосой, тянется мышью.</summary>
     public bool IsBar => Item is InfoItem { Role: "rollback" or "asm_rollback" or "sub_rollback" };
@@ -351,6 +361,13 @@ public sealed partial class TreeNode : ObservableObject
                 }
                 target = gn;
             }
+            // k115 (п. 3): зеркало и массивы операций — что именно они повторяют (строки-ссылки на операции-источники)
+            if (c is Feature rf && item is Part rp && !ReplayChildrenOff && SourcesOf(rf) is { Count: > 0 } keys)
+            {
+                foreach (var k in keys)
+                    if (rp.Features.FirstOrDefault(x => x.Key == k) is { } srcF) child.Children.Add(Reference(srcF, owner));
+                child.RestoreExpanded(true);
+            }
             if (c is Feature f)
                 foreach (var id in f.ConsumedSketchIds())
                     if (item.Children.FirstOrDefault(x => x.Id == id) is Sketch s)
@@ -363,6 +380,12 @@ public sealed partial class TreeNode : ObservableObject
         if (!barDone && item is Part bpe) node.Children.Add(Bar(bpe));
         return node;
     }
+
+    static readonly bool ReplayChildrenOff = Environment.GetEnvironmentVariable("P3D_TREEREPLAY") == "0";
+    static IReadOnlyList<string>? SourcesOf(Feature f) => f switch
+    {
+        MirrorFeature m => m.Sources, LinearPatternFeature l => l.Sources, CircularPatternFeature c => c.Sources, _ => null,
+    };
 
     public IEnumerable<TreeNode> SelfAndDescendants()
     {

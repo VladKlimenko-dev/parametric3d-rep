@@ -141,7 +141,7 @@ public sealed class DocumentSession
 
     public void SaveAs(string path)
     {
-        if (IsAssembly) DocumentStorage.WriteAtomic(path, AssemblyFile.Save(Document.Root, Document.Parameters));
+        if (IsAssembly) DocumentStorage.WriteAtomic(path, AssemblyFile.Save(Document.Root, Document.Parameters, withDisplay: true));
         else
         {
             var part = Part ?? throw new InvalidOperationException("the document has no part");

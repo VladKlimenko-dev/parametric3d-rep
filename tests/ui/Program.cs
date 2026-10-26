@@ -3039,6 +3039,116 @@ Check("UI-TREE-K109", () =>
     Require(part.Children.IndexOf(ex2) < part.Children.IndexOf(part.Features[1]), "MoveFeature did not reorder the tree");
 });
 
+Check("UI-TREE-GROUP-K115", () =>
+{
+    // k115 (замечание 12:39, пп. 3–7): несколько строк дерева, кнопка «Группа», выбор группы — её операции; группу —
+    // копировать/вставить (новая группа), отразить (зеркало показывает в дереве, что отражено), удалить; всё — с отменой;
+    // наведение на операцию — что добавлено (зелёным) и убрано (красным); скрытый элемент по щелчку — очертание до щелчка мимо.
+    var s = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 20), "k115");
+    var w = Open(s); var vp = w.ViewPort; var part = s.Part!;
+    BuildNow(s); w.RebuildTree(); Dispatcher.UIThread.RunJobs();
+    var reg = CommandRegistry.Instance;
+    var holes = part.Features.OfType<HoleFeature>().Take(2).ToList();
+    Require(holes.Count == 2, "two holes");
+    // (6) несколько строк дерева — обе операции в выделении; кнопка «Группа» доступна
+    var tree = w.TreeControl;
+    var hn = holes.Select(h => w.AllNodes.First(n => ReferenceEquals(n.Item, h))).ToList();
+    tree.SelectedItems.Clear(); tree.SelectedItems.Add(hn[0]); tree.SelectedItems.Add(hn[1]); Dispatcher.UIThread.RunJobs();
+    Require(vp.Selection.Items.Count(r => r.Target is HoleFeature) == 2, $"multi-select in the tree: {vp.Selection.Count}");
+    Require(reg["tree.group"].Enabled, "the Group button is disabled");
+    Parametric3D.App.Commands.TreeCommands.SetGroup(w, holes, "G1"); BuildNow(s);
+    Require(holes.All(h => h.Group == "G1") && w.AllNodes.Count(n => n.Item is InfoItem { Role: "group" }) == 1, "group not created");
+    s.Undo(); part = s.Part!; BuildNow(s); w.RebuildTree();
+    Require(part.Features.All(f => string.IsNullOrEmpty(f.Group)), "undo of the grouping");
+    s.Redo(); part = s.Part!; BuildNow(s); w.RebuildTree();
+    var gHoles = part.Features.Where(f => f.Group == "G1").ToList();
+    Require(gHoles.Count == 2, "redo of the grouping");
+    // выбор строки группы — её операции
+    var gnode = w.AllNodes.First(n => n.Item is InfoItem { Role: "group" });
+    w.SelectItem(gnode.Item);
+    Require(vp.Selection.Items.Count(r => r.Target is Feature f && f.Group == "G1") == 2, "selecting the group did not select its operations");
+    // копировать — вставить: новая группа
+    int n0 = part.Features.Count;
+    Parametric3D.App.Commands.DocCommands.Copy(w); Parametric3D.App.Commands.DocCommands.Paste(w); BuildNow(s); w.RebuildTree();
+    part = s.Part!;
+    Console.WriteLine($"  paste: features {n0} -> {part.Features.Count}, groups {string.Join(", ", part.Features.Select(f => f.Group).Where(g => g != null).Distinct())}");
+    Require(part.Features.Count == n0 + 2 && part.Features.Count(f => f.Group == "G1") == 2 && part.Features.Count(f => f.Group == "G1 (2)") == 2, "pasted group");
+    s.Undo(); part = s.Part!; BuildNow(s);
+    Require(part.Features.Count == n0, "undo of the paste");
+    // зеркало группы: источники — операции группы; в дереве — строки-ссылки
+    w.RebuildTree(); gnode = w.AllNodes.First(n => n.Item is InfoItem { Role: "group" }); w.SelectItem(gnode.Item);
+    var mop = new MirrorOp(); w.StartOperation(mop);
+    mop.SelectionChanged(new[] { new PickRef(part.PlaneYZ.Id, PickKind.DatumPlane, part, part.PlaneYZ) });
+    w.CommitOperation(); BuildNow(s); w.RebuildTree();
+    part = s.Part!;
+    var mf = part.Features.OfType<MirrorFeature>().LastOrDefault();
+    var mnode = mf == null ? null : w.AllNodes.First(n => ReferenceEquals(n.Item, mf));
+    Console.WriteLine($"  mirror: sources {mf?.Sources.Count}, error {mf?.Error}, tree children {mnode?.Children.Count(c => c.IsReference)}");
+    Require(mf != null && mf.Sources.Count == 2 && mf.Error == null && mnode!.Children.Count(c => c.IsReference) == 2, "mirror of the group");
+    s.Undo(); part = s.Part!; BuildNow(s);
+    Require(!part.Features.OfType<MirrorFeature>().Any(), "undo of the mirror");
+    // удалить группу
+    w.RebuildTree(); gnode = w.AllNodes.First(n => n.Item is InfoItem { Role: "group" }); w.SelectItem(gnode.Item);
+    reg["edit.delete"].Execute(); BuildNow(s); part = s.Part!;
+    Require(part.Features.Count == n0 - 2 && !part.Features.Any(f => f.Group == "G1"), "delete of the group");
+    s.Undo(); part = s.Part!; BuildNow(s); w.RebuildTree();
+    Require(part.Features.Count == n0 && part.Features.Count(f => f.Group == "G1") == 2, "undo of the delete");
+    // (4) наведение: отверстие — убрано (красным), бобышка — добавлено (зелёным)
+    var hole = part.Features.OfType<HoleFeature>().First();
+    var boss = part.Features.OfType<ExtrudeFeature>().First(f => !f.Cut && part.Features.IndexOf(f) > 0);
+    w.ShowHoverContour(hole);
+    int segH = vp.ContourSegments("hover"); var colH = vp.ContourColor("hover");
+    w.ShowHoverContour(boss);
+    int segB = vp.ContourSegments("hover"); var colB = vp.ContourColor("hover");
+    w.ShowHoverContour(null);
+    Console.WriteLine($"  hover: hole {segH} segments {colH}, boss {segB} segments {colB}, after leaving {vp.ContourSegments("hover")}");
+    Require(segH > 0 && colH == TreeContours.Removed && segB > 0 && colB == TreeContours.Added && vp.ContourSegments("hover") == 0, "material contours on hover");
+    // (5) скрытая плоскость: щелчок в дереве — очертание; щелчок мимо — нет
+    var pl = part.PlaneXY; pl.Visible = false; w.RebuildTree();
+    var pnode = w.AllNodes.First(n => ReferenceEquals(n.Item, pl));
+    tree.SelectedItems.Clear(); tree.SelectedItem = pnode; Dispatcher.UIThread.RunJobs();
+    int segP = vp.ContourSegments("pinned");
+    vp.Selection.Clear(); Dispatcher.UIThread.RunJobs();
+    Console.WriteLine($"  hidden plane: outline {segP} segments, after a click elsewhere {vp.ContourSegments("pinned")}");
+    Require(segP == 4 && vp.ContourSegments("pinned") == 0, "outline of a hidden item");
+    w.Close();
+});
+
+Check("UI-FILE-DISPLAY-K114", () =>
+{
+    // k114 (замечание 12:12): открытый файл сразу показывает деталь (поверхности из файла), выбор — после перестроения,
+    // перестроение — в фоне. Мутация P3D_FILEDISPLAY=0.
+    string path = Path.Combine(Path.GetTempPath(), $"p3d_ui_k114_{Guid.NewGuid():N}.p3d");
+    try
+    {
+        var src = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 20), "k114");
+        src.Part!.Rebuild(null);
+        double v0 = src.Part.Volume; int tri0 = src.Part.Mesh!.Indices.Length;
+        src.SaveAs(path);
+        var s = DocumentSession.Open(path);
+        var part = s.Part!;
+        var w = new MainWindow(s) { Width = 1400, Height = 860 };
+        w.Show();
+        Dispatcher.UIThread.RunJobs();
+        var vp = w.ViewPort;
+        vp.BuildSceneForTest();
+        var sc = vp.Scene!;
+        int meshVerts = sc.Meshes.Sum(m => m.Pos.Length);
+        bool facePicks = sc.PickTable.Any(e => e.Ref.Kind == PickKind.Face && ReferenceEquals(e.Ref.Owner, part));
+        Console.WriteLine($"  opened: cached {part.ShowsCached}, dirty {part.IsDirty}, bodies {part.Bodies.Count}, scene vertices {meshVerts}, face picks {facePicks}, bounds {s.Document.Bounds.Diagonal:0.#}");
+        Require(part.ShowsCached && part.IsDirty && part.Bodies.Count == 0 && part.Mesh!.Indices.Length == tri0, "the opened file does not show the stored surfaces");
+        Require(meshVerts == part.Mesh.Vertices.Length && !facePicks && !s.Document.Bounds.IsEmpty && Math.Abs(part.Volume - v0) < 1e-9, "the scene does not show the stored surfaces");
+        Require(!s.Modified, "opening marked the document modified");
+        BuildNow(s);
+        vp.BuildSceneForTest();
+        Console.WriteLine($"  built: cached {part.ShowsCached}, bodies {part.Bodies.Count}, volume {part.Volume:0.###} vs {v0:0.###}");
+        Require(!part.ShowsCached && part.Bodies.Count > 0 && Math.Abs(part.Volume - v0) < 1e-6 * v0 && part.Features.All(f => f.Error == null), "background rebuild");
+        Require(vp.Scene!.PickTable.Any(e => e.Ref.Kind == PickKind.Face && ReferenceEquals(e.Ref.Owner, part)), "faces are not pickable after the rebuild");
+        w.Close();
+    }
+    finally { try { File.Delete(path); } catch { } }
+});
+
 Check("UI-PREVIEW-K113", () =>
 {
     // k113 (цель 21:47 — предпросмотр ≤ 20 мс): последняя операция в предпросмотре — мгновенно по сеткам (тела для выбора —

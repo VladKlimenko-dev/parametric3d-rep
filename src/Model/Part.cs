@@ -802,6 +802,50 @@ public sealed class Part : ModelItem
     private readonly Dictionary<Feature, FeatureRecord> _records = new(ReferenceEqualityComparer.Instance);
     internal static readonly bool KeepRecordsOff = Environment.GetEnvironmentVariable("P3D_KEEPRECORDS") == "0";
 
+    /// <summary>
+    /// k115 (замечание 12:39, п. 4): ЧТО ОПЕРАЦИЯ ДОБАВИЛА И УБРАЛА — контуры для вида при наведении на неё в дереве. Тела до и
+    /// после операции — из сохранённых состояний расчёта; рёбра, которых не было до (новые), и рёбра, которых не стало после
+    /// (снятые), — ломаными; знак — по объёму (больше — добавлено, меньше — убрано). null — состояний нет (деталь не посчитана,
+    /// операция подавлена, ошибка). Мутация P3D_TREEDIFF=0.
+    /// </summary>
+    public (List<(Vector3d A, Vector3d B)> Lines, bool Adds)? MaterialDiff(Feature f)
+    {
+        if (TreeDiffOff || IsDirty || f.Suppressed || f.Error != null) return null;
+        int at = Features.IndexOf(f);
+        if (at < 0) return null;
+        var after = _checkpoints.FirstOrDefault(c => c.After == at);
+        if (after == null) return null;
+        var before = _checkpoints.Where(c => c.After < at).OrderBy(c => c.After).LastOrDefault();
+        var b0 = before?.State.Bodies ?? (at == 0 ? new List<Kernel.Topology.TSolid>() : null);
+        if (b0 == null) return null;
+        var b1 = after.State.Bodies;
+        if (b0.Count == b1.Count && b0.Zip(b1).All(p => ReferenceEquals(p.First, p.Second))) return (new(), true);
+        static string Key(Kernel.Topology.TEdge e)
+        {
+            var m = e.Curve.PointAt(0.5 * (e.Curve.T0 + e.Curve.T1));
+            static string R(Vector3d v) => $"{Math.Round(v.X, 4)},{Math.Round(v.Y, 4)},{Math.Round(v.Z, 4)}";
+            var a = R(e.V0.P); var b = R(e.V1.P);
+            return string.CompareOrdinal(a, b) < 0 ? a + "|" + b + "|" + R(m) : b + "|" + a + "|" + R(m);
+        }
+        var k0 = new HashSet<string>(b0.SelectMany(b => b.Edges).Where(e => !e.Hidden).Select(Key));
+        var k1 = new HashSet<string>(b1.SelectMany(b => b.Edges).Where(e => !e.Hidden).Select(Key));
+        var lines = new List<(Vector3d A, Vector3d B)>();
+        void Add(Kernel.Topology.TEdge e)
+        {
+            var c = e.Curve;
+            int n = c is Kernel.Curves.LineCurve3 ? 1 : 32;
+            var prev = c.PointAt(c.T0);
+            for (int i = 1; i <= n; i++) { var q = c.PointAt(c.T0 + (c.T1 - c.T0) * i / n); lines.Add((prev, q)); prev = q; }
+        }
+        foreach (var e in b1.SelectMany(b => b.Edges)) if (!e.Hidden && !k0.Contains(Key(e))) Add(e);   // новые рёбра
+        foreach (var e in b0.SelectMany(b => b.Edges)) if (!e.Hidden && !k1.Contains(Key(e))) Add(e);   // снятые рёбра
+        double V(List<Kernel.Topology.TSolid> bs) => bs.Sum(b => Kernel.Topology.AnalyticVolume.Of(b) ?? MassProps.Volume(Tessellator.Tessellate(b)));
+        bool adds;
+        try { adds = V(b1) >= V(b0); } catch { adds = true; }
+        return (lines, adds);
+    }
+    static readonly bool TreeDiffOff = Environment.GetEnvironmentVariable("P3D_TREEDIFF") == "0";
+
     private sealed class Checkpoint
     {
         public int After;                       // номер операции, после которой снято
@@ -836,6 +880,14 @@ public sealed class Part : ModelItem
     /// <summary>Пометить, что операция изменилась: пересчёт пойдёт с неё.</summary>
     /// <summary>k113: на экране — мгновенный предпросмотр по сеткам (последняя операция ещё не посчитана точно).</summary>
     public bool ShowsInstant { get; private set; }
+    /// <summary>k114: на экране — сетка из файла (деталь ещё не перестроена: тел нет, выбора нет).</summary>
+    public bool ShowsCached { get; private set; }
+
+    /// <summary>k114: показать сетку, записанную в файле, до перестроения (деталь остаётся грязной — перестроение в фоне).</summary>
+    public void SetCachedDisplay(MeshData md, double volume)
+    {
+        Mesh = md; Volume = volume; Bounds = md.Bounds; ShowsCached = true;
+    }
     /// <summary>k113: номер операции, показанной мгновенно (с неё уточняется).</summary>
     public int InstantFeatureIndex { get; private set; } = -1;
     static readonly bool InstantRollbackOff = Environment.GetEnvironmentVariable("P3D_INSTANTROLLBACK") == "0";
@@ -1739,6 +1791,7 @@ public sealed class Part : ModelItem
         HideConsumedSketches();
 
         Mesh = r.Mesh;
+        ShowsCached = false;
         Quilts.Clear(); Quilts.AddRange(r.Quilts);
         Volume = r.Volume;
         _areaFrom = r;

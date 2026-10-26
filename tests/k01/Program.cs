@@ -445,6 +445,8 @@ static partial class Program
         if (mode is "capsph" or "allB") CapSphereChecks();
         if (mode is "skcons" or "allB") SketchConstraintChecks();
         if (mode is "instant" or "allB") InstantPreviewChecks();
+        if (mode is "filedisplay" or "allB") FileDisplayChecks();
+        if (mode is "k115" or "allB") Krn115Checks();
         if (mode is "krn06guard" or "allB") Krn06FallbackGuardChecks();
         if (mode is "krn06cc" or "allB") Krn06CylCylChecks();
         if (mode is "krn06q" or "allB") Krn06QuadricChecks();
