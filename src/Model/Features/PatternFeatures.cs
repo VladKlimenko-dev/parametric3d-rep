@@ -12,6 +12,8 @@ namespace Parametric3D.Model.Features;
 /// </summary>
 public sealed class MirrorFeature : Feature
 {
+    /// <summary>k113: массив операций-резцов — по сеткам (FeatureReplay решает, годятся ли операции).</summary>
+    public override bool InstantPreviewSafe => Sources.Count > 0;
     public Vector3d At;
     public Vector3d Normal = Vector3d.UnitX;
     /// <summary>u12: ключи операций для повтора (зеркало операций); пусто — зеркало тела.</summary>
@@ -48,6 +50,8 @@ public sealed class MirrorFeature : Feature
 /// </summary>
 public sealed class LinearPatternFeature : Feature
 {
+    /// <summary>k113: массив операций-резцов — по сеткам (FeatureReplay решает, годятся ли операции).</summary>
+    public override bool InstantPreviewSafe => Sources.Count > 0;
     /// <summary>KRN-09 (09.6): наибольшее число копий массива.</summary>
     public const int MaxCopies = 10000;
     internal static readonly bool CopyLimitOff = Environment.GetEnvironmentVariable("P3D_COPYLIMIT") == "0";
@@ -83,6 +87,8 @@ public sealed class LinearPatternFeature : Feature
 /// <summary>КРУГОВОЙ МАССИВ: ось задаётся точкой и направлением.</summary>
 public sealed class CircularPatternFeature : Feature
 {
+    /// <summary>k113: массив операций-резцов — по сеткам (FeatureReplay решает, годятся ли операции).</summary>
+    public override bool InstantPreviewSafe => Sources.Count > 0;
     const int MaxCopies = LinearPatternFeature.MaxCopies;
     static bool CopyLimitOff => LinearPatternFeature.CopyLimitOff;
     public Vector3d At;
@@ -123,6 +129,19 @@ public sealed class CircularPatternFeature : Feature
 internal static class FeatureReplay
 {
     public static void Run(BuildContext ctx, Feature owner, IReadOnlyList<string> keys, IReadOnlyList<TransformOp.Xform> xs, string what)
+    {
+        // k113: повтор по сеткам — только операций-резцов (резец из своих данных); скругление и фаска ищут рёбра текущего
+        // тела — носителю сетки они не годятся
+        bool instant = Parametric3D.Kernel.Ops.InstantPreview.Allowed;
+        var srcAll = ctx.Part.Features.Where(f => keys.Contains(f.Key)).ToList();
+        if (ReplayOff || srcAll.Any(f => !f.InstantReplaySafe)) Parametric3D.Kernel.Ops.InstantPreview.Allowed = false;
+        try { RunCore(ctx, owner, keys, xs, what); }
+        finally { Parametric3D.Kernel.Ops.InstantPreview.Allowed = instant; }
+    }
+
+    static readonly bool ReplayOff = Environment.GetEnvironmentVariable("P3D_INSTANTREPLAY") == "0";
+
+    static void RunCore(BuildContext ctx, Feature owner, IReadOnlyList<string> keys, IReadOnlyList<TransformOp.Xform> xs, string what)
     {
         if (ctx.Bodies.Count == 0) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"{what}: no body.");
         var all = ctx.Part.Features.ToList();

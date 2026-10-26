@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Model.Params;
@@ -157,8 +157,53 @@ public sealed class Document
 
     /// <summary>u09: деталь, чья операция сейчас в живом предпросмотре (ручку тянут): она считается грубо и без проверок.</summary>
     public Part? PreviewPart { get; set; }
+    /// <summary>k113: время последнего фонового расчёта (от запуска задачи до её конца, с ожиданием потока), мс.</summary>
+    public double LastComputeMs { get; private set; }
+    /// <summary>k113: из него — сам расчёт детали предпросмотра (Part.Compute), мс.</summary>
+    public double LastPartComputeMs { get; private set; }
+    /// <summary>k113: кругов расчёта в последней фоновой пересборке (больше одного — деталь менялась во время расчёта).</summary>
+    public int LastRounds { get; private set; }
+    /// <summary>k113: от конца расчёта в фоне до продолжения в потоке окна, мс (занятость потока окна).</summary>
+    public double LastResumeMs { get; private set; }
     /// <summary>Во сколько раз грубее сетка живого предпросмотра.</summary>
     public double PreviewCoarseness { get; set; } = 4;
+
+    // ================================================================ k113: уточнение мгновенного предпросмотра
+    /// <summary>Мутация P3D_PREVIEWREFINE=0: мгновенный предпросмотр не уточняется (ошибки операции — только по «ОК»).</summary>
+    public static readonly bool RefineOff = Environment.GetEnvironmentVariable("P3D_PREVIEWREFINE") == "0";
+    /// <summary>Пауза после последней правки до уточнения (пока тянут ручку — не уточняется).</summary>
+    public int RefineDelayMs { get; set; } = 250;
+    private CancellationTokenSource? _refineCts;
+    private long _computeEnd;
+    private int _refineGen;
+    /// <summary>Уточнение назначено (деталь помечена) — виду пора перестроиться.</summary>
+    public event Action? RefineRequested;
+    public static long RefinesStarted, RefinesCancelled, RefinesApplied;
+
+    /// <summary>Правка во время уточнения: оно прерывается (следующий расчёт — снова мгновенный).</summary>
+    public void CancelRefine()
+    {
+        _refineGen++;
+        if (_refineCts is { IsCancellationRequested: false } c) { c.Cancel(); Interlocked.Increment(ref RefinesCancelled); }
+    }
+
+    /// <summary>Назначить уточнение через паузу (в потоке окна); правка за это время его отменяет.</summary>
+    private void ScheduleRefine()
+    {
+        if (RefineOff || PreviewPart is not { } pp || !pp.ShowsInstant) return;
+        var ctx = SynchronizationContext.Current;
+        int gen = ++_refineGen; int ver = pp.Version;
+        void Fire()
+        {
+            if (gen != _refineGen || !ReferenceEquals(PreviewPart, pp) || pp.Version != ver || pp.IsDirty || IsBuilding || !pp.ShowsInstant) return;
+            if (pp.RequestRefine()) RefineRequested?.Invoke();
+        }
+        if (RefineDelayMs <= 0 || ctx == null) { ctx?.Post(_ => Fire(), null); if (ctx == null) Fire(); return; }
+        _ = Task.Delay(RefineDelayMs).ContinueWith(_ => ctx.Post(_ => Fire(), null), TaskScheduler.Default);
+    }
+
+    /// <summary>Проверкам: уточнить сразу (без паузы).</summary>
+    public bool RefineNowForTest() => PreviewPart is { } pp && pp.RequestRefine();
 
     private async Task<bool> RunBuild()
     {
@@ -167,14 +212,26 @@ public sealed class Document
         bool any = false;
         try
         {
+            LastRounds = 0;
             for (int round = 0; round < 3; round++)
             {
                 var dirty = AllParts().Where(p => p.IsDirty).ToList();
                 if (dirty.Count == 0) break;
+                LastRounds++;
 
                 var solver = Solver;
                 var preview = PreviewPart;
                 var scopes = dirty.ToDictionary(p => p, ScopeFor);
+                // k113: уточнение мгновенного предпросмотра — с отменой (правка во время него прерывает его)
+                CancellationToken refineToken = CancellationToken.None;
+                Part? refining = preview != null && dirty.Contains(preview) && preview.RefinePending ? preview : null;
+                if (refining != null)
+                {
+                    refining.TakeRefine(); refining.SuppressInstant = true;
+                    _refineCts = new CancellationTokenSource(); refineToken = _refineCts.Token;
+                    Interlocked.Increment(ref RefinesStarted);
+                }
+                long computeStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 var results = await Task.Run(() => dirty.Select(p =>
                 {
                     try
@@ -184,18 +241,30 @@ public sealed class Document
                         {
                             var ks = Kernel.KernelSettings.Capture();
                             ks = ks with { Preview = true, LivePreview = true, Chord = ks.Chord * PreviewCoarseness };   // угловой шаг не трогается: от него зависит восстановление дуг
+                            long pc0 = System.Diagnostics.Stopwatch.GetTimestamp();
                             using (new Kernel.KernelContext(ks).Enter())
-                                return (Part: p, Result: p.Compute(scopes[p], solver), Failed: (Exception?)null);
+                            {
+                                var rr = p.Compute(scopes[p], solver, ReferenceEquals(p, refining) ? refineToken : CancellationToken.None);
+                                LastPartComputeMs = System.Diagnostics.Stopwatch.GetElapsedTime(pc0).TotalMilliseconds;
+                                _computeEnd = System.Diagnostics.Stopwatch.GetTimestamp();
+                                return (Part: p, Result: rr, Failed: (Exception?)null);
+                            }
                         }
                         return (Part: p, Result: p.Compute(scopes[p], solver), Failed: (Exception?)null);
                     }
                     catch (Exception ex) { return (Part: p, Result: (Part.BuildResult?)null, Failed: ex); }
                 }).ToList());
+                LastComputeMs = System.Diagnostics.Stopwatch.GetElapsedTime(computeStart).TotalMilliseconds;
+                LastResumeMs = _computeEnd != 0 ? System.Diagnostics.Stopwatch.GetElapsedTime(_computeEnd).TotalMilliseconds : double.NaN;
+                if (refining != null) { refining.SuppressInstant = false; _refineCts?.Dispose(); _refineCts = null; }
 
                 bool again = false;
                 long applyStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 foreach (var (part, result, failed) in results)
                 {
+                    // k113: уточнение прервано правкой — не сбой: деталь осталась грязной, следующий круг посчитает её снова
+                    if (failed != null && Kernel.KernelContext.IsCancellation(failed)) { again = true; continue; }
+                    if (failed == null && ReferenceEquals(part, refining) && result != null && part.Apply(result)) { any = true; Interlocked.Increment(ref RefinesApplied); continue; }
                     if (failed != null)
                     {
                         // РАСЧЁТ УПАЛ ЦЕЛИКОМ — ПОВТОРЯТЬ ЕГО НЕЛЬЗЯ. Прежде он пересобирался в
@@ -225,6 +294,7 @@ public sealed class Document
             _building = null;
             BuildFinished?.Invoke();
         }
+        ScheduleRefine();
         return any;
     }
 

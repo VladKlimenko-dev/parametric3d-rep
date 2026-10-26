@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Model;
@@ -153,15 +153,16 @@ public static class SceneBuilder
             var v = md.Vertices[i];
             item.Pos[i] = v.P;
             item.Nrm[i] = v.N;
+            // k113: грань 0 — кусок резца в мгновенном предпросмотре: у неё нет грани тела, выбирать нечего
             if (!facePick.TryGetValue(v.FaceId, out uint fp))
-                facePick[v.FaceId] = fp = s.AddPick(new PickRef(v.FaceId, PickKind.Face, part, null), 1, part.Id);
+                facePick[v.FaceId] = fp = v.FaceId == 0 ? 0u : s.AddPick(new PickRef(v.FaceId, PickKind.Face, part, null), 1, part.Id);
             item.Pick[i] = fp;
         }
         s.Meshes.Add(item);
 
         foreach (var (edgeId, pts) in md.EdgePolylines)
         {
-            uint pick = s.AddPick(new PickRef(edgeId, PickKind.Edge, part, null), 2, part.Id);
+            uint pick = edgeId == 0 ? 0u : s.AddPick(new PickRef(edgeId, PickKind.Edge, part, null), 2, part.Id);
             for (int i = 1; i < pts.Length; i++)
                 s.BodyEdges.Add(Line(Vector3.TransformPosition(pts[i - 1], xf), Vector3.TransformPosition(pts[i], xf), th.Edge, th.EdgeWidth, 0, pick));
         }

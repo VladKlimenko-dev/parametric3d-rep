@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Input;
 using Avalonia.OpenGL;
 using Avalonia.OpenGL.Controls;
@@ -153,9 +153,9 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         set
         {
             if (ReferenceEquals(_doc, value)) return;
-            if (_doc != null) _doc.Invalidated -= OnDocInvalidated;
+            if (_doc != null) { _doc.Invalidated -= OnDocInvalidated; _doc.RefineRequested -= OnRefine; }
             _doc = value;
-            if (_doc != null) _doc.Invalidated += OnDocInvalidated;
+            if (_doc != null) { _doc.Invalidated += OnDocInvalidated; _doc.RefineRequested += OnRefine; }
             Selection.Clear();
             Selection.SetHover(PickRef.Empty);
             MarkDirty();
@@ -163,6 +163,8 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     }
 
     private void OnDocInvalidated() => MarkDirty();
+    /// <summary>k113: назначено уточнение мгновенного предпросмотра — кадр запустит расчёт.</summary>
+    private void OnRefine() => Redraw();
 
     public Part? ActivePart { get; set; }
 
@@ -272,6 +274,15 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     public double LastFrameMs { get; private set; }
     /// <summary>Последняя сборка сцены и загрузка в видеокарту, мс.</summary>
     public double LastSceneMs { get; private set; }
+
+    /// <summary>k113: сборка сцены (на процессоре, без видеокарты) — время, мс (проверки скорости предпросмотра).</summary>
+    public double BuildSceneForTest()
+    {
+        if (_doc == null) return 0;
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        _scene = SceneBuilder.Build(_doc, _r.Theme, Show, ActivePart, ActiveSketch, PointSketchIds.Count > 0 ? PointSketchIds : null);
+        return System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
+    }
     /// <summary>Ошибки OpenGL и исключения кадра с запуска.</summary>
     public int FrameErrors => _frameErrors;
     /// <summary>Сглаживание (выборок на пиксель).</summary>

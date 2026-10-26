@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.Kernel.Topology;
 
 namespace Parametric3D.Kernel.Tess;
@@ -126,6 +126,8 @@ public static class Tessellator
     static readonly bool PolyFromExactOff = Environment.GetEnvironmentVariable("P3D_POLYFROMEXACT") == "0";
     public static MeshData Tessellate(TSolid solid, bool facets)
     {
+        // k113: носитель мгновенного предпросмотра — его сетка
+        if (Ops.InstantPreview.MeshOf(solid) is { } instant) return instant;
         bool poly = !facets && !PolyDisplayOff && PolyFacetsOnly && solid.Exact != null && solid.ExactAuthoritative;
         if (!poly) return TessellateCore(solid, facets, 0);
         // 21.10 (скорость): сетка показа многогранного тела — одна на тело, его ревизию, точную форму и допуски (её строили

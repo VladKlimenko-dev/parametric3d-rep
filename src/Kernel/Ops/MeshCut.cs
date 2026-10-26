@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 
 namespace Parametric3D.Kernel.Ops;
 
@@ -27,39 +27,77 @@ public static class MeshCut
     /// <summary>A − T (subtract) или A ∪ T; null — вход пустой.</summary>
     public static List<CsgPolygon>? Run(List<CsgPolygon> a, List<CsgPolygon> t, bool subtract) => Run(a, t, subtract ? Op.Subtract : Op.Union);
 
-    public static List<CsgPolygon>? Run(List<CsgPolygon> a, List<CsgPolygon> t, Op op)
+    public static List<CsgPolygon>? Run(List<CsgPolygon> a, List<CsgPolygon> t, Op op) => a.Count == 0 ? null : Run(new Prepared(a), t, op);
+
+    /// <summary>
+    /// k113: ПОДГОТОВЛЕННОЕ ТЕЛО A — многоугольники, рамка, сетка лучей и клетки по рамкам строятся один раз: у мгновенного
+    /// предпросмотра A — тело до операции, одно на все шаги ручки (строить их заново — половина времени реза).
+    /// </summary>
+    public sealed class Prepared
     {
+        public readonly List<CsgPolygon> Polys;
+        internal readonly (Vector3d Min, Vector3d Max) Bounds;
+        internal readonly RayGrid Grid;
+        internal readonly BoxHash Hash;
+        public Prepared(List<CsgPolygon> polys) { Polys = polys; Bounds = Box(polys); Grid = new RayGrid(polys); Hash = new BoxHash(polys); }
+        /// <summary>Точка внутри тела (луч, большинство из трёх).</summary>
+        public bool Inside(Vector3d p) => Grid.Inside(p);
+        /// <summary>k113: точка ближе eps к поверхности тела.</summary>
+        public bool OnSurface(Vector3d p, double eps) => MeshCut.OnSurface(Hash, p, eps);
+    }
+
+    internal static bool OnSurface(BoxHash h, Vector3d p, double eps)
+    {
+        var d = new Vector3d(eps);
+        foreach (var q in h.InBox(p - d, p + d))
+        {
+            double off = Vector3d.Dot(q.N, p) - q.W;
+            if (Math.Abs(off) > eps) continue;
+            var x = p - q.N * off;                         // проекция на плоскость многоугольника — внутри него (с запасом eps)?
+            bool inside = true;
+            for (int i = 0, k = q.V.Count; i < k && inside; i++)
+            {
+                var a = q.V[i]; var b = q.V[(i + 1) % k];
+                var en = Vector3d.Cross(b - a, q.N); double len = en.Length;
+                if (len < 1e-300) continue;
+                if (Vector3d.Dot(x - a, en / len) > eps) inside = false;
+            }
+            if (inside) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Клетки по рамкам многоугольников — для поиска «точка на поверхности».</summary>
+    public static Func<Vector3d, double, bool> OnSurfaceTest(List<CsgPolygon> ps) { var h = new BoxHash(ps); return (p, e) => OnSurface(h, p, e); }
+
+    /// <summary>Сетка лучей многоугольников (точка внутри) — для классификации рёбер мгновенного предпросмотра.</summary>
+    public static Func<Vector3d, bool> InsideTest(List<CsgPolygon> ps) { var g = new RayGrid(ps); return g.Inside; }
+
+    public static List<CsgPolygon>? Run(Prepared pa, List<CsgPolygon> t, Op op)
+    {
+        var a = pa.Polys;
         if (a.Count == 0 || t.Count == 0) return null;
-        var boxA = Box(a); var boxT = Box(t);
+        var boxA = pa.Bounds; var boxT = Box(t);
         double pad = 1e-6 * Math.Max(1, (boxA.Max - boxA.Min).Length);
         var aNear = new List<CsgPolygon>(); var res = new List<CsgPolygon>();
         foreach (var p in a) if (Overlaps(p, boxT, pad)) aNear.Add(p); else if (op != Op.Intersect) res.Add(p);   // вдали от T — снаружи T
         var tNear = t.Where(p => Overlaps(p, boxA, pad)).ToList();                             // вдали от A — снаружи A
-        var gridA = new RayGrid(a); var gridT = new RayGrid(t);
+        var gridA = pa.Grid; var gridT = new RayGrid(t);
 
         // куски A: вычитание и объединение — остаются, если сторона материала A у куска снаружи T; пересечение — если внутри.
         // Делят кусок только соседние (по рамке) многоугольники другого тела: дерево на каждый многоугольник из десятков.
-        var hashT = new BoxHash(tNear); var hashA = new BoxHash(aNear);
-        foreach (var p in aNear)
-            foreach (var f in Split(Build(hashT.Near(p)), p))
-            {
-                var c = Centroid(f); double h = Probe(f);
-                bool inT = gridT.Inside(c - f.N * h);
-                if (op == Op.Intersect ? inT : !inT) res.Add(f);
-            }
-        // куски T: вычитание — остаются (вывернутыми), если снаружи T у куска материал A; объединение — если снаружи A;
-        // пересечение — если внутри A
-        foreach (var p in tNear)
-            foreach (var f in Split(Build(hashA.Near(p)), p))
-            {
-                var c = Centroid(f); double h = Probe(f);
-                if (op == Op.Subtract) { if (gridA.Inside(c + f.N * h)) { f.Flip(); res.Add(f); } }
-                else
-                {
-                    bool inA = gridA.Inside(c - f.N * h);
-                    if (op == Op.Intersect ? inA : !inA) res.Add(f);
-                }
-            }
+        var hashT = new BoxHash(tNear); var hashA = pa.Hash;
+        Diagnostics.Prof.Count("meshcut: A near", aNear.Count); Diagnostics.Prof.Count("meshcut: T near", tNear.Count);
+        // k113: КЛАССИФИКАЦИЯ ПО ОБЛАСТЯМ. Нетронутые разбиением многоугольники (ни одна соседняя плоскость другого тела их не
+        // делит), смежные по вершинам, лежат по одну сторону поверхности другого тела: проба лучом — одна на область, а не на
+        // каждый многоугольник (бобышка: 174 пробы → 3). Куски, которые разбиение делило, пробуются каждый. P3D_MESHCUTREGIONS=0.
+        using (Diagnostics.Prof.Time("meshcut: куски A"))
+            Classify(aNear, hashT, gridT, f => op == Op.Intersect, keepWhenInside: op == Op.Intersect, flip: false, probeOut: false, res);
+        using (Diagnostics.Prof.Time("meshcut: куски T"))
+        {
+            if (op == Op.Subtract) Classify(tNear, hashA, gridA, null, keepWhenInside: true, flip: true, probeOut: true, res, bothSides: !BothSidesOff);
+            else Classify(tNear, hashA, gridA, null, keepWhenInside: op == Op.Intersect, flip: false, probeOut: false, res);
+        }
         if (op == Op.Union) foreach (var p in t) if (!Overlaps(p, boxA, pad)) res.Add(p);
         return res;
     }
@@ -118,6 +156,74 @@ public static class MeshCut
         return solid;
     }
 
+    static readonly bool RegionsOff = Environment.GetEnvironmentVariable("P3D_MESHCUTREGIONS") == "0";
+    static readonly bool BspMemoOff = Environment.GetEnvironmentVariable("P3D_MESHCUTBSPMEMO") == "0";
+    static readonly bool BothSidesOff = Environment.GetEnvironmentVariable("P3D_MESHCUTBOTHSIDES") == "0";
+    public static long RegionProbes, PieceProbes, BspMemoHits;
+    /// <summary>Касание поверхностью: дальше 1e-5 мм — уже не касание (координаты сетки показа — float, у 100 мм шаг ~1e-5).</summary>
+    const double ContactEps = 2e-5;
+
+    /// <summary>
+    /// Куски многоугольников ps, разбитых соседями другого тела, — в результат по стороне: проба точки у куска (снаружи от
+    /// куска по нормали — probeOut, иначе внутрь) против сетки другого тела; keepWhenInside — оставить, если точка внутри.
+    /// </summary>
+    static void Classify(List<CsgPolygon> ps, BoxHash other, RayGrid grid, Func<CsgPolygon, bool>? _, bool keepWhenInside, bool flip, bool probeOut, List<CsgPolygon> res, bool bothSides = false)
+    {
+        bool Keep(CsgPolygon f)
+        {
+            var c = Centroid(f); double h = Probe(f);
+            bool k = grid.Inside(probeOut ? c + f.N * h : c - f.N * h) == keepWhenInside;
+            // k113: кусок резца при вычитании, лежащий НА поверхности тела (резец касается грани снаружи или заподлицо), не
+            // становится стенкой (прежде вырез вверх от верхней грани добавлял её дно). Проба с другой стороны куска для этого не
+            // годится: у касательной стенки резца скругления тело по ту сторону тоньше пробы — куски выпадали.
+            if (k && bothSides && OnSurface(other, c, ContactEps)) k = false;
+            return k;
+        }
+        var whole = new List<CsgPolygon>();
+        // k113: дерево разбиения — одно на одинаковый набор соседей (у малого резца у всех ближних треугольников тела соседи —
+        // весь резец: прежде дерево из ~100 многоугольников строилось заново для каждого, O(n²) на каждый). P3D_MESHCUTBSPMEMO=0.
+        var trees = new Dictionary<(int, long), List<(int[] Ids, Node? Tree)>>();
+        Node? TreeOf(int[] ids)
+        {
+            if (BspMemoOff) return Build(ids.Select(i => other.At(i)).ToList());
+            long h = 17; foreach (int i in ids) h = h * 1000003 + i;
+            var key = (ids.Length, h);
+            if (trees.TryGetValue(key, out var l)) foreach (var (k, t) in l) if (k.AsSpan().SequenceEqual(ids)) { Interlocked.Increment(ref BspMemoHits); return t; }
+            var tree = Build(ids.Select(i => other.At(i)).ToList());
+            (l ??= trees[key] = new()).Add((ids, tree));
+            return tree;
+        }
+        foreach (var p in ps)
+        {
+            var nearIds = other.NearIds(p);
+            if (nearIds.Length == 0 && !RegionsOff) { whole.Add(p); continue; }
+            var tree0 = TreeOf(nearIds);
+            bool split = false; var pieces = new List<CsgPolygon>();
+            SplitInto(tree0, p, pieces, ref split);
+            foreach (var f in pieces) if (!ReferenceEquals(f, p)) split = true;
+            if (!split && !RegionsOff) { whole.Add(p); continue; }
+            foreach (var f in pieces) { Interlocked.Increment(ref PieceProbes); if (Keep(f)) { if (flip) f.Flip(); res.Add(f); } }
+        }
+        if (whole.Count == 0) return;
+        // области нетронутых: смежность по общим вершинам
+        var parent = new int[whole.Count]; for (int i = 0; i < parent.Length; i++) parent[i] = i;
+        int Find(int x) { while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+        var byVertex = new Dictionary<Vector3d, int>();
+        for (int i = 0; i < whole.Count; i++)
+            foreach (var v in whole[i].V)
+            {
+                if (byVertex.TryGetValue(v, out int j)) { int a = Find(i), b = Find(j); if (a != b) parent[a] = b; }
+                else byVertex[v] = i;
+            }
+        var verdict = new Dictionary<int, bool>();
+        for (int i = 0; i < whole.Count; i++)
+        {
+            int r = Find(i);
+            if (!verdict.TryGetValue(r, out bool keep)) { Interlocked.Increment(ref RegionProbes); verdict[r] = keep = Keep(whole[i]); }
+            if (keep) { var f = whole[i]; if (flip) f.Flip(); res.Add(f); }
+        }
+    }
+
     static double Probe(CsgPolygon f)
     {
         double s = 0; for (int i = 0; i < f.V.Count; i++) s = Math.Max(s, (f.V[i] - f.V[(i + 1) % f.V.Count]).Length);
@@ -162,6 +268,23 @@ public static class MeshCut
         return n;
     }
 
+    /// <summary>Как Split, в список; touched — кусок лёг в плоскость узла (касание поверхностью: область по соседям не годится).</summary>
+    static void SplitInto(Node? node, CsgPolygon p, List<CsgPolygon> res, ref bool touched)
+    {
+        if (node == null) { res.Add(p); return; }
+        SplitBy(p, node.N, node.W, out var f, out var b, out bool cop);
+        if (cop)
+        {
+            touched = true;
+            var tmp = new List<CsgPolygon>();
+            SplitInto(node.Front, p, tmp, ref touched);
+            foreach (var x in tmp) SplitInto(node.Back, x, res, ref touched);
+            return;
+        }
+        if (f != null) SplitInto(node.Front, f, res, ref touched);
+        if (b != null) SplitInto(node.Back, b, res, ref touched);
+    }
+
     static IEnumerable<CsgPolygon> Split(Node? node, CsgPolygon p)
     {
         if (node == null) { yield return p; yield break; }
@@ -200,7 +323,7 @@ public static class MeshCut
     }
 
     /// <summary>Многоугольники по клеткам объёмной сетки (по рамке); соседи — пересекающие рамку запроса.</summary>
-    sealed class BoxHash
+    internal sealed class BoxHash
     {
         readonly List<CsgPolygon> _p; readonly Dictionary<long, List<int>> _cells = new();
         readonly Vector3d _o; readonly double _h; readonly (Vector3d Lo, Vector3d Hi)[] _b;
@@ -227,6 +350,42 @@ public static class MeshCut
             for (int x = x0; x <= x1; x++) for (int y = y0; y <= y1; y++) for (int z = z0; z <= z1; z++)
                 yield return ((long)(x & 0x1FFFFF) << 42) | ((long)(y & 0x1FFFFF) << 21) | (long)(z & 0x1FFFFF);
         }
+        public CsgPolygon At(int i) => _p[i];
+
+        /// <summary>Многоугольники, чья рамка задевает рамку (lo, hi).</summary>
+        public IEnumerable<CsgPolygon> InBox(Vector3d a, Vector3d b)
+        {
+            var seen = new HashSet<int>();
+            foreach (long k in Keys(a, b))
+                if (_cells.TryGetValue(k, out var l))
+                    foreach (int i in l)
+                    {
+                        var (lo, hi) = _b[i];
+                        if (lo.X > b.X || hi.X < a.X || lo.Y > b.Y || hi.Y < a.Y || lo.Z > b.Z || hi.Z < a.Z) continue;
+                        if (seen.Add(i)) yield return _p[i];
+                    }
+        }
+
+        /// <summary>Номера соседей по рамке, по возрастанию.</summary>
+        public int[] NearIds(CsgPolygon q)
+        {
+            var a = q.V[0]; var b = a;
+            foreach (var v in q.V) { a = Vector3d.ComponentMin(a, v); b = Vector3d.ComponentMax(b, v); }
+            double pad = 1e-6 * _h; a -= new Vector3d(pad); b += new Vector3d(pad);
+            var res = new List<int>();
+            foreach (long k in Keys(a, b))
+                if (_cells.TryGetValue(k, out var l))
+                    foreach (int i in l)
+                    {
+                        var (lo, hi) = _b[i];
+                        if (lo.X > b.X || hi.X < a.X || lo.Y > b.Y || hi.Y < a.Y || lo.Z > b.Z || hi.Z < a.Z) continue;
+                        res.Add(i);
+                    }
+            res.Sort();
+            int w = 0; for (int r = 0; r < res.Count; r++) if (r == 0 || res[r] != res[r - 1]) res[w++] = res[r];
+            return res.GetRange(0, w).ToArray();
+        }
+
         public List<CsgPolygon> Near(CsgPolygon q)
         {
             var a = q.V[0]; var b = a;
@@ -246,7 +405,7 @@ public static class MeshCut
     }
 
     /// <summary>Луч вдоль +Z от точки; треугольники разложены по клеткам проекции на XY.</summary>
-    sealed class RayGrid
+    internal sealed class RayGrid
     {
         readonly List<(Vector3d A, Vector3d B, Vector3d C)> _t = new();
         readonly List<int>[] _cells; readonly int _nx, _ny; readonly double _x0, _y0, _cx, _cy;

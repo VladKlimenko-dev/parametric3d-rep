@@ -1,4 +1,4 @@
-﻿using Parametric3D.Core;
+using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Ops;
 
@@ -7,6 +7,8 @@ namespace Parametric3D.Model.Features;
 /// <summary>Вращение эскиза вокруг осевой линии эскиза или базовой оси.</summary>
 public sealed class RevolveFeature : Feature
 {
+    public override bool InstantPreviewSafe => true;
+    public override bool InstantReplaySafe => true;
     public uint SketchId;
     /// <summary>Явно заданная ось (DatumAxis). 0 — берётся осевая линия эскиза.</summary>
     public uint AxisId;

@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -902,7 +902,7 @@ public static class FilletOp
                 // Та же double-геометрия, что у Damage, не float-буфер для экрана.
                 // На ступеньке 60000×40000×20 float давал вес 31426 вместо ~34701
                 // и откатывал правильную прибавку даже после исправления вогнутости.
-                toolWeight = Math.Abs(TotalVolume(new List<TSolid> { tool }));
+                toolWeight = InstantPreview.Applies(bodies) ? 0 : Math.Abs(TotalVolume(new List<TSolid> { tool }));   // k113: вес — для проверок точного расчёта
             jobs.Add((wanted, tool, kind, toolWeight, addsHere, 1));
         }
 
@@ -911,8 +911,9 @@ public static class FilletOp
 
         double? knownVolume = null;
         // KRN-06 (06.16): независимая оценка объёма полос обходного пути (см. EstimateBlendVolume) — до первого реза
-        double estimate = EstimateOff ? double.NaN : EstimateBlendVolume(found.Select(f => f.Edge).ToList(), size1, size2, round);
-        double startVolume = TotalVolume(bodies);
+        bool instant = InstantPreview.Applies(bodies);   // k113: по сеткам — без сверки объёма (её сделает точный расчёт)
+        double estimate = EstimateOff || instant ? double.NaN : EstimateBlendVolume(found.Select(f => f.Edge).ToList(), size1, size2, round);
+        double startVolume = instant ? 0 : TotalVolume(bodies);
         var original = new List<TSolid>(bodies);
 
         foreach (var (wanted, tool, kind, weight, adds, edgeCount) in jobs)
@@ -922,6 +923,12 @@ public static class FilletOp
             // BooleanOp кладёт в список НОВОЕ тело, а прежнее не трогает,
             // поэтому копии самого списка достаточно, чтобы вернуться.
             var before = new List<TSolid>(bodies);
+            // k113: мгновенный предпросмотр — рез по сеткам прямо в сетку показа, без проверок объёма (их сделает точный расчёт)
+            if (!adds && !PreClipped.TryGetValue(tool, out _) && !PreviewPolys.TryGetValue(tool, out _) && InstantPreview.TryBoolean(bodies, tool, BooleanOp.BooleanKind.Subtract))
+            {
+                done += edgeCount; kinds.Add(kind);
+                continue;
+            }
             // Объём «до» — это объём «после» предыдущего среза; считается один раз.
             double volumeBefore;
             using (Diagnostics.Prof.Time("скругление: объём до"))
@@ -1754,7 +1761,9 @@ public static class FilletOp
         // отказ возникает, когда проба diagonal*1e-3 перескакивает тонкий участок либо
         // размер пробы раздувает удалённое второе тело. Для двух плоскостей материал
         // определяется по локальным треугольникам у ребра, без пространственной пробы.
-        if (!Convex(bodies, mid, n1, n2, edge))
+        bool convexHere;
+        using (Diagnostics.Prof.Time("  резец: выпуклость")) convexHere = Convex(bodies, mid, n1, n2, edge);
+        if (!convexHere)
         {
             adds = true;
             n1 = -n1;
@@ -1812,11 +1821,13 @@ public static class FilletOp
             if (claimA == 0) claimA = 1;
             if (claimB == 0) claimB = 1;
         }
+        var _pr = Diagnostics.Prof.Time("  резец: продление концов");
         double reachA = claimA == 0 ? EndReach(bodies, fa, fb, edge.V0.P, -t, n1, n2, f1, f2, need1, need2)
                       : claimA == 2 ? overlap : 0;
         double reachB = claimB == 0 ? EndReach(bodies, fa, fb, edge.V1.P, t, n1, n2, f1, f2, need1, need2)
                       : claimB == 2 ? overlap : 0;
 
+        _pr.Dispose();
         double extA = Math.Max(over, reachA);
         double extB = Math.Max(over, reachB);
 
@@ -1836,8 +1847,9 @@ public static class FilletOp
         //
         // И главное: для ступеньки этот путь НЕ ВЫЗЫВАЕТСЯ ВОВСЕ — отказ приходит из другой
         // ветви построения резца. Искать надо там, а здесь всё в порядке.
-        string? tooBig = Fits(fa, corner, f1, need1, "first")
-                      ?? Fits(fb, corner, f2, need2, "second");
+        string? tooBig;
+        using (Diagnostics.Prof.Time("  резец: помещается ли"))
+            tooBig = Fits(fa, corner, f1, need1, "first") ?? Fits(fb, corner, f2, need2, "second");
 
         if (tooBig != null) return tooBig;
 
@@ -1851,7 +1863,7 @@ public static class FilletOp
 
         if (profile.IsEmpty) return "the cross-section did not close into a contour";
 
-        tool = ExtrudeOp.Build(profile, t * (length + extA + extB));
+        using (Diagnostics.Prof.Time("  резец: выдавливание")) tool = ExtrudeOp.Build(profile, t * (length + extA + extB));
 
         // ПОДПИСИ ГРАНЕЙ РЕЗЦА. Резец построен выдавливанием, и его грани унаследовали бы имена
         // выдавливания («extrude[0]:side[...]»), попав в тело: тогда кромка скругления
@@ -1906,6 +1918,12 @@ public static class FilletOp
     ///
     /// Потолок — три размера сечения.
     /// </summary>
+    static readonly bool ReachTrisOff = Environment.GetEnvironmentVariable("P3D_REACHTRIS") == "0";
+    static readonly bool ReachCullOff = Environment.GetEnvironmentVariable("P3D_REACHCULL") == "0";
+    public static long ReachTrisHits, ReachCulls;
+    sealed class ReachMemo { public (long, double, double) Key; public List<(Vector3d A, Vector3d B, Vector3d C)> Tris = null!; public List<TFace> Faces = null!; }
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, ReachMemo> _reachTris = new();
+
     private static double EndReach(List<TSolid> bodies,
                                    TFace fa, TFace fb, Vector3d end, Vector3d outward,
                                    Vector3d n1, Vector3d n2, Vector3d f1, Vector3d f2,
@@ -1956,20 +1974,64 @@ public static class FilletOp
         var tris = new List<(Vector3d A, Vector3d B, Vector3d C)>();
         var triFace = new List<TFace>();
         foreach (TSolid body in bodies)
+        {
+            // k113: треугольники граней тела — одни на тело, его ревизию и допуски (прежде — заново на каждый конец каждого
+            // резца: фаска одной кромки пластины K08 — 165 мс из 190). Тот же ответ — та же разметка. P3D_REACHTRIS=0.
+            var key = (body.Revision, Tol.Chord, Tol.ChordAngle);
+            if (!ReachTrisOff && _reachTris.TryGetValue(body, out var memo) && memo.Key.Equals(key))
+            { tris.AddRange(memo.Tris); triFace.AddRange(memo.Faces); Interlocked.Increment(ref ReachTrisHits); continue; }
+            var bt = new List<(Vector3d A, Vector3d B, Vector3d C)>(); var bf = new List<TFace>();
             foreach (TFace face in body.Faces)
                 if (face.Surface is FacetedSurface fsr)
-                    foreach (var t in fsr.Facets) { tris.Add(t); triFace.Add(face); }
+                    foreach (var t in fsr.Facets) { bt.Add(t); bf.Add(face); }
                 else
                 {
                     var mb0 = new MeshBuilder(); face.Surface.TessellateFace(face, mb0);
                     var md0 = new MeshData(); mb0.FillInto(md0);
                     for (int i = 0; i + 2 < md0.Indices.Length; i += 3)
-                    { tris.Add((mb0.PositionsD[md0.Indices[i]], mb0.PositionsD[md0.Indices[i + 1]], mb0.PositionsD[md0.Indices[i + 2]])); triFace.Add(face); }
+                    { bt.Add((mb0.PositionsD[md0.Indices[i]], mb0.PositionsD[md0.Indices[i + 1]], mb0.PositionsD[md0.Indices[i + 2]])); bf.Add(face); }
                 }
+            if (!ReachTrisOff && body.IsPublished) _reachTris.AddOrUpdate(body, new ReachMemo { Key = key, Tris = bt, Faces = bf });
+            tris.AddRange(bt); triFace.AddRange(bf);
+        }
 
         double reach = 0;
-        const int N = 24;
+        // k113: мгновенный предпросмотр — сетка лучей реже и уточнение грубее (длина резца — для вида; точный расчёт — при «ОК»)
+        bool quick = InstantPreview.Active;
+        int N = quick ? 16 : 24;
         var best = new List<(double Exit, double U, double V)>();
+
+        // k113: ЛУЧИ ИДУТ ВДОЛЬ outward ИЗ СЕЧЕНИЯ — треугольники вне его проекции (и целиком позади) им не попадаются: отбор
+        // по рамке проекции на плоскость поперёк лучей (ответ тот же; прежде ~1000 лучей × все треугольники тела). P3D_REACHCULL=0.
+        if (!ReachCullOff && tris.Count > 64 && outward.LengthSquared > 1e-24)
+        {
+            var o = outward.Normalized();
+            var e1 = Vector3d.Cross(o, Math.Abs(o.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY).Normalized();
+            var e2 = Vector3d.Cross(o, e1);
+            var inw = -(n1 + n2) * Math.Max(1e-5, size * 1e-5);
+            var corners = new[] { end + inw, end + f1 * need1 + inw, end + f2 * need2 + inw };
+            double lo1 = double.MaxValue, hi1 = double.MinValue, lo2 = double.MaxValue, hi2 = double.MinValue, back = double.MaxValue;
+            foreach (var c in corners)
+            {
+                double a = Vector3d.Dot(c, e1), b = Vector3d.Dot(c, e2);
+                lo1 = Math.Min(lo1, a); hi1 = Math.Max(hi1, a); lo2 = Math.Min(lo2, b); hi2 = Math.Max(hi2, b); back = Math.Min(back, Vector3d.Dot(c, o));
+            }
+            double pad = Math.Max(1e-6, 1e-3 * size);
+            lo1 -= pad; hi1 += pad; lo2 -= pad; hi2 += pad; back -= pad;
+            var ct = new List<(Vector3d A, Vector3d B, Vector3d C)>(); var cf = new List<TFace>();
+            for (int i = 0; i < tris.Count; i++)
+            {
+                var (ta, tb, tc) = tris[i];
+                double a0 = Vector3d.Dot(ta, e1), a1 = Vector3d.Dot(tb, e1), a2 = Vector3d.Dot(tc, e1);
+                if (Math.Max(a0, Math.Max(a1, a2)) < lo1 || Math.Min(a0, Math.Min(a1, a2)) > hi1) continue;
+                double b0 = Vector3d.Dot(ta, e2), b1 = Vector3d.Dot(tb, e2), b2 = Vector3d.Dot(tc, e2);
+                if (Math.Max(b0, Math.Max(b1, b2)) < lo2 || Math.Min(b0, Math.Min(b1, b2)) > hi2) continue;
+                if (Math.Max(Vector3d.Dot(ta, o), Math.Max(Vector3d.Dot(tb, o), Vector3d.Dot(tc, o))) < back) continue;
+                ct.Add(tris[i]); cf.Add(triFace[i]);
+            }
+            tris = ct; triFace = cf;
+            Interlocked.Increment(ref ReachCulls);
+        }
 
         // Точки сечения сдвигаются внутрь ТЕЛА — поперёк граней ребра — на
         // несколько микрометров. Тогда можно брать всё сечение, с вершинами
@@ -2009,12 +2071,12 @@ public static class FilletOp
             return FirstExitExact(tris, triFace, At(u, v), outward, size);
         }
 
-        foreach (var (e0, u0, v0) in best.Where(b => b.Exit > 0).OrderByDescending(b => b.Exit).Take(6).ToList())
+        foreach (var (e0, u0, v0) in best.Where(b => b.Exit > 0).OrderByDescending(b => b.Exit).Take(quick ? 3 : 6).ToList())
         {
             double bu = u0, bv = v0, be = e0;
             double step = 1.0 / N;
 
-            while (step > 1e-4)
+            while (step > (quick ? 1e-3 : 1e-4))
             {
                 bool moved = false;
                 foreach (var (du, dv) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1), (1, 1), (-1, -1) })

@@ -349,6 +349,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
     }
     private void EndOpPreview(bool recompute)
     {
+        W.Session.Document.CancelRefine();
         if (!_opPreview) return;
         _opPreview = false;
         if (ReferenceEquals(W.Session.Document.PreviewPart, Part)) W.Session.Document.PreviewPart = null;
@@ -360,6 +361,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
 
     protected override void RequestLive()
     {
+        W.Session.Document.CancelRefine();
         Push();
         PushFreeForm();
         W.Session.Document.PreviewPart = Part;
@@ -371,6 +373,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
 
     public override void FlushLive()
     {
+        if (_liveDirty && Dragging) W.Session.Document.CancelRefine();   // k113: уточнение не держит ручку
         if (!_liveDirty || !Dragging || W.Session.Document.IsBuilding || Part.IsDirty) return;
         _liveDirty = false;
         Part.NotifyChanged(F);
@@ -392,6 +395,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
 
     protected override void Apply()
     {
+        W.Session.Document.CancelRefine();
         Push();
         PushFreeForm();
         if (Dragging) return;

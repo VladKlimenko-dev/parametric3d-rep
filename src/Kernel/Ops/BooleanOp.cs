@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Tess;
@@ -224,14 +224,24 @@ public static class BooleanOp
     // по политике становится исключением OperationFailedException (дерево построения ловит его
     // и откатывает операцию), а список тел вызывающего меняется только при успехе.
 
-    public static void Unite(List<TSolid> bodies, TSolid addition, List<string> warnings) =>
+    // k113: последняя операция в предпросмотре — мгновенно по сеткам (InstantPreview)
+    public static void Unite(List<TSolid> bodies, TSolid addition, List<string> warnings)
+    {
+        if (InstantPreview.TryBoolean(bodies, addition, BooleanKind.Unite)) return;
         Commit(Evaluate(bodies, addition, BooleanKind.Unite, OperationPolicyScope.Current, warnings), bodies);
+    }
 
-    public static void Subtract(List<TSolid> bodies, TSolid tool, List<string> warnings) =>
+    public static void Subtract(List<TSolid> bodies, TSolid tool, List<string> warnings)
+    {
+        if (InstantPreview.TryBoolean(bodies, tool, BooleanKind.Subtract)) return;
         Commit(Evaluate(bodies, tool, BooleanKind.Subtract, OperationPolicyScope.Current, warnings), bodies);
+    }
 
-    public static void Intersect(List<TSolid> bodies, TSolid other, List<string> warnings) =>
+    public static void Intersect(List<TSolid> bodies, TSolid other, List<string> warnings)
+    {
+        if (InstantPreview.TryBoolean(bodies, other, BooleanKind.Intersect)) return;
         Commit(Evaluate(bodies, other, BooleanKind.Intersect, OperationPolicyScope.Current, warnings), bodies);
+    }
 
     private static void Commit(OperationResult r, List<TSolid> bodies)
     {

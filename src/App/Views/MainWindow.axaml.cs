@@ -148,7 +148,29 @@ public partial class MainWindow : Window
     /// <summary>u13h: ключ открытого узла FreeForm (переживает замену детали при отмене).</summary>
     public string? FreeFormKey;
 
-    private void OnBuild() => Dispatcher.UIThread.Post(() => { UpdateStatus(); ScheduleTree(); UpdateCages(); View.MarkDirty(); });
+    private void OnBuild() => Dispatcher.UIThread.Post(() =>
+    {
+        using (Diagnostics.UiTimes.Measure("окно: строка состояния")) UpdateStatus();
+        // k113: пока открыт предпросмотр операции, дерево обновляется не чаще раза в 0.5 с (каждый шаг ручки пересобирал его
+        // дважды — в начале и в конце расчёта: 25 мс в потоке окна на пластине из 20 операций); по окончании расчёта — сразу.
+        // P3D_TREETHROTTLE=0 — прежнее.
+        using (Diagnostics.UiTimes.Measure("окно: дерево (назначить)"))
+        {
+            if (!TreeThrottleOff && Session.Document.PreviewPart != null) ScheduleTreeThrottled();
+            else if (!Session.Document.IsBuilding || TreeThrottleOff) ScheduleTree();
+        }
+        UpdateCages(); View.MarkDirty();
+    });
+
+    static readonly bool TreeThrottleOff = Environment.GetEnvironmentVariable("P3D_TREETHROTTLE") == "0";
+    private DispatcherTimer? _treeTimer;
+    public static long TreeThrottled;
+    private void ScheduleTreeThrottled()
+    {
+        if (_treeTimer is { IsEnabled: true }) { Interlocked.Increment(ref TreeThrottled); return; }
+        _treeTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) => { _treeTimer!.Stop(); ScheduleTree(); });
+        _treeTimer.Start();
+    }
 
     /// <summary>u13k: клетки SubD тел детали — в окружении FreeForm поверх модели.</summary>
     public void UpdateCages()
@@ -876,7 +898,13 @@ public partial class MainWindow : Window
         View.HoverChanged += h => UpdateStatus(h);
         View.Selection.Changed += OnSelectionChanged;
         View.ContextRequested += p => { if (InSketch && View.DimensionAt(p) is { } dm) OpenDimensionMenu(dm); else OpenViewContextMenu(); };
-        View.SceneRebuilt += () => { CurrentOperation?.RefreshStatus(); UpdateStatus(); if (_propsOn && CurrentOperation == null) ShowProperties(); CheckCommittedFeature(); };
+        View.SceneRebuilt += () =>
+        {
+            using (Diagnostics.UiTimes.Measure("окно: состояние операции")) CurrentOperation?.RefreshStatus();
+            using (Diagnostics.UiTimes.Measure("окно: строка состояния")) UpdateStatus();
+            if (_propsOn && CurrentOperation == null) ShowProperties();
+            using (Diagnostics.UiTimes.Measure("окно: проверка операции")) CheckCommittedFeature();
+        };
         View.ToolChanged += () => { ShowHint(View.Tool != null ? L(View.Tool.Hint) : null); RefreshToolStates(); };
         View.RegionChanged += ShowRegion;
         // значки ограничений эскиза — поверх вида, под панелями
@@ -2362,7 +2390,21 @@ public partial class MainWindow : Window
         using var _ui = Diagnostics.UiTimes.Measure("окно: дерево");
         // состояние «развёрнут» живёт между перестройками (п. 13): глаз эскиза не сворачивает ветку
         foreach (var n in AllNodes) _expand[n.Item.Id] = n.IsExpanded;
-        _roots = TreeNode.Build(Session.Document, Session.IsAssembly);
+        List<TreeNode> roots;
+        using (Diagnostics.UiTimes.Measure("окно: дерево — узлы")) roots = TreeNode.Build(Session.Document, Session.IsAssembly);
+        // k113: ДЕРЕВО ТО ЖЕ — НЕ ПЕРЕСТРАИВАТЬ ВИД. Каждый шаг предпросмотра (начало и конец расчёта) пересобирал дерево целиком
+        // (новый источник — заново все строки: 7–20 мс в потоке окна на каждый шаг ручки), хотя строки не менялись. Подпись —
+        // всё, что строка показывает (имя, значки, ошибка, подсказка, глаз, вложенность). P3D_TREESIG=0 — всегда заново.
+        string sig = TreeSignature(roots);
+        if (!TreeSigOff && sig == _treeSig && Tree.ItemsSource != null) { Interlocked.Increment(ref TreeRebuildsSkipped); SyncTreeFromSelection(); return; }
+        if (Environment.GetEnvironmentVariable("P3D_TREESIGDBG") == "1" && _treeSig != null)
+        {
+            var a = _treeSig.Split('\n'); var b = sig.Split('\n');
+            for (int i = 0; i < Math.Max(a.Length, b.Length); i++)
+                if (i >= a.Length || i >= b.Length || a[i] != b[i]) { Console.WriteLine($"TREESIG {i}: «{(i < a.Length ? a[i] : "")}» → «{(i < b.Length ? b[i] : "")}»"); break; }
+        }
+        _treeSig = sig;
+        _roots = roots;
         foreach (var n in _roots.SelectMany(r => r.SelfAndDescendants()))
             if (_expand.TryGetValue(n.Item.Id, out bool ex)) n.RestoreExpanded(ex);
         _syncingTree = true;
@@ -2372,6 +2414,27 @@ public partial class MainWindow : Window
     }
 
     public IEnumerable<TreeNode> AllNodes => _roots.SelectMany(r => r.SelfAndDescendants());
+
+    static readonly bool TreeSigOff = Environment.GetEnvironmentVariable("P3D_TREESIG") == "0";
+    public static long TreeRebuildsSkipped;
+    private string? _treeSig;
+    /// <summary>Сбросить подпись дерева (принудительная перестройка вида дерева).</summary>
+    public void ForgetTreeSignature() => _treeSig = null;
+    static string TreeSignature(IEnumerable<TreeNode> roots)
+    {
+        var sb = new System.Text.StringBuilder();
+        void N(TreeNode n, int depth)
+        {
+            // строки-сведения (параметры, полоса отката) создаются заново при каждой сборке — у них свой номер каждый раз
+            sb.Append(depth).Append('|').Append(n.Item is InfoItem ii ? "info:" + ii.Role : n.Item.Id.ToString()).Append('|').Append(n.Item.GetType().Name).Append('|').Append(n.Name).Append('|')
+              .Append(n.IsVisible).Append('|').Append(n.Error).Append('|').Append(n.IsDim).Append('|').Append(n.IconFile).Append('|')
+              .Append(n.StateFile).Append('|').Append(n.StateGlyph).Append('|').Append(n.StateTip).Append('|').Append(n.Tooltip).Append('|')
+              .Append(n.Glyph).Append('|').Append(n.HasEye).Append('\n');
+            foreach (var c in n.Children) N(c, depth + 1);
+        }
+        foreach (var r in roots) N(r, 0);
+        return sb.ToString();
+    }
 
     /// <summary>Свернуть или развернуть всё, включая деталь (п. 5).</summary>
     public void SetTreeExpanded(bool expanded)

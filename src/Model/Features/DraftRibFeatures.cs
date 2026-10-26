@@ -13,6 +13,7 @@ namespace Parametric3D.Model.Features;
 /// </summary>
 public sealed class DraftFeature : Feature
 {
+    public override bool InstantPreviewSafe => true;
     /// <summary>Точки на гранях, которые наклоняются.</summary>
     public readonly List<Vector3d> OnFaces = new();
 
