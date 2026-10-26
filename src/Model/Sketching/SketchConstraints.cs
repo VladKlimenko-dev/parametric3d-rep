@@ -111,6 +111,8 @@ public sealed class SkDimension
     public double Value;
     /// <summary>Если задана — Value пересчитывается из формулы при каждом обновлении.</summary>
     public string? Formula;
+    /// <summary>k118: описание размера (окно «Параметры», колонка «Описание»); сохраняется в файле.</summary>
+    public string? Note;
     /// <summary>Размер справочный: не управляет геометрией, только показывает её.</summary>
     public bool Reference;
 

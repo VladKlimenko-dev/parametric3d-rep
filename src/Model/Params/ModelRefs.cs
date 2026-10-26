@@ -43,6 +43,52 @@ public static class ModelRefs
         return null;
     }
 
+    static readonly Regex Chain = new("(?:[ap]\"[^\"]*\"\\.?)+", RegexOptions.Compiled);
+    static readonly Regex Ident = new(@"(?<![\w""\.])([A-Za-z_\p{L}][\w]*)(?![\w""(])", RegexOptions.Compiled);
+    public static readonly bool DepsOff = Environment.GetEnvironmentVariable("P3D_PARTDEPS") == "0";
+
+    /// <summary>
+    /// k118 (замечание 08:54, п.11): ОТ ЧЕГО ЗАВИСИТ ДЕТАЛЬ — другие детали и сборки, на размеры и параметры которых
+    /// ссылаются её формулы (параметры детали, размеры эскизов, поля операций): пути a"…".p"…"… и имена параметров
+    /// сборок над деталью, которых нет в самой детали. Элемент — и где ссылка (первая).
+    /// </summary>
+    public static List<(ModelItem Item, string Where)> DependenciesOf(Part part)
+    {
+        var res = new List<(ModelItem, string)>();
+        if (DepsOff) return res;
+        var formulas = new List<(string Where, string Text)>();
+        foreach (var p in part.LocalParameters.All) if (!string.IsNullOrEmpty(p.Formula)) formulas.Add((p.Name, p.Formula));
+        foreach (var sk in part.Sketches) foreach (var d in sk.Dimensions) if (!string.IsNullOrEmpty(d.Formula)) formulas.Add((PathOf(sk, d), d.Formula!));
+        foreach (var f in part.Features)
+        {
+            var slots = FeatureDims.Of(f);
+            for (int i = 0; i < slots.Count; i++) if (slots[i].Get() is { Formula: { Length: > 0 } fx }) formulas.Add((PathOf(f, i), fx));
+        }
+        void AddDep(ModelItem it, string where) { if (!ReferenceEquals(it, part) && !res.Any(r => ReferenceEquals(r.Item1, it))) res.Add((it, where)); }
+        foreach (var (where, text) in formulas)
+        {
+            foreach (Match m in Chain.Matches(text))
+            {
+                object cur = part;
+                foreach (Match sg in Quoted.Matches(m.Value))
+                {
+                    if (Step(part, cur, sg.Groups[1].Value, sg.Groups[2].Value) is not ModelItem nx) break;
+                    cur = nx;
+                }
+                if (cur is Part or Assembly) AddDep((ModelItem)cur, where);
+            }
+            // имена параметров сборок над деталью (своих в детали нет)
+            foreach (Match m in Ident.Matches(text))
+            {
+                string n = m.Groups[1].Value;
+                if (part.LocalParameters.Find(n) != null) continue;
+                for (var a = part.Parent; a != null; a = a.Parent)
+                    if (a is Assembly asm && asm.LocalParameters.Find(n) != null) { AddDep(asm, where); break; }
+            }
+        }
+        return res;
+    }
+
     /// <summary>Шаг пути: элемент по виду (a, p, s, f) и имени от текущего; null — нет такого.</summary>
     static object? Step(ModelItem context, object cur, string kind, string name)
     {

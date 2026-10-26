@@ -146,6 +146,12 @@ public static class ShotRunner
             case "cancel": w.CancelOperation(); Console.WriteLine("cancel"); return;
             case "wait": return;
             case "notool": w.ViewPort.Tool = null; return;
+            case "counters":
+                {
+                    var rc = w.ViewPort.RenderCounters;
+                    Console.WriteLine($"COUNTERS wireOutlines {rc.WireOutlines} dimmedCandidates {rc.DimmedCandidates} frames {w.ViewPort.FramesRendered}");
+                    return;
+                }
             case "dbg":
                 {
                     var part = w.Session.Part!;

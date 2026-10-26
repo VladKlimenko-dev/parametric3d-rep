@@ -130,7 +130,10 @@ public static class DocumentFile
                 Created = part.Info.Created,
                 Modified = DateTime.UtcNow,
                 Revision = part.Info.Revision,
-                Note = part.Info.Note
+                Note = part.Info.Note,
+                Uom = part.Info.Uom == "шт" ? null : part.Info.Uom,
+                Units = part.Info.LengthUnits == "мм" ? null : part.Info.LengthUnits,
+                Tolerances = part.Info.Tolerances == "ISO 2768-mK" ? null : part.Info.Tolerances
             },
 
             Sketches = part.Sketches.Select(s => { var d = SaveSketch(s); d.Slot = part.SketchSlot(s); return d; }).ToList(),
@@ -245,6 +248,7 @@ public static class DocumentFile
                 Reference = d.Reference,
                 // u12: вид размера сохраняется (место подписи, слабый/сильный/замок, стрелки, формула)
                 Formula = d.Formula, IsDefault = d.IsDefault ? true : null, UserPlaced = d.UserPlaced ? true : null, Ix = d.Index >= 0 ? d.Index : null,
+                Note = string.IsNullOrEmpty(d.Note) ? null : d.Note,
                 Offset = d.UserPlaced ? new[] { d.TextOffset.X, d.TextOffset.Y } : null,
                 Arrows = d.Arrows == ArrowPlacement.Auto ? null : d.Arrows.ToString(),
                 UserLocked = d.UserLocked ? true : null, SingleArrow = d.SingleArrow ? true : null, AsLinear = d.DiameterAsLinear ? true : null
@@ -276,13 +280,23 @@ public static class DocumentFile
             };
             if (d == null) continue;
             d.Name = c.Name; d.Hidden = !c.Visible;
+            if (!DatumSlotOff) d.Slot = part.ItemSlot(c);
             res.Add(d);
         }
         return res.Count > 0 ? res : null;
     }
 
+    /// <summary>
+    /// k118 (замечание 08:54, п. 6): ОПОРНЫЕ ЭЛЕМЕНТЫ НА СВОИХ МЕСТАХ В ДЕРЕВЕ. Плоскости, оси, точки писались отдельным списком и
+    /// после открытия вставали над всеми операциями, хотя создавались между ними. Место — число операций перед элементом;
+    /// мутация P3D_DATUMSLOT=0.
+    /// </summary>
+    static readonly bool DatumSlotOff = Environment.GetEnvironmentVariable("P3D_DATUMSLOT") == "0";
+    [ThreadStatic] static List<(ModelItem Item, int Slot)>? _datumSlots;
+
     private static void LoadDatums(Part part, List<DatumDto>? list)
     {
+        _datumSlots = new();
         if (list == null) return;
         foreach (var d in list)
         {
@@ -306,6 +320,7 @@ public static class DocumentFile
             }
             it.Visible = !d.Hidden;
             part.Add(it);
+            if (d.Slot is int sl && sl > 0) _datumSlots!.Add((it, sl));
         }
     }
 
@@ -792,7 +807,8 @@ public static class DocumentFile
                 Code = id.Code ?? "", Title = id.Title ?? "", Author = id.Author ?? "",
                 Checker = id.Checker ?? "", Company = id.Company ?? "",
                 Created = id.Created, Modified = id.Modified,
-                Revision = id.Revision ?? "", Note = id.Note ?? ""
+                Revision = id.Revision ?? "", Note = id.Note ?? "",
+                Uom = id.Uom ?? "шт", LengthUnits = id.Units ?? "мм", Tolerances = id.Tolerances ?? "ISO 2768-mK"
             };
 
         foreach (var cd in doc.Configurations)
@@ -879,6 +895,7 @@ public static class DocumentFile
                 dim.Locked = dd.Locked;
                 dim.Reference = dd.Reference;
                 dim.Formula = dd.Formula;
+                dim.Note = dd.Note;
                 dim.IsDefault = dd.IsDefault == true; dim.UserPlaced = dd.UserPlaced == true;
                 if (dd.Ix is int ix && ix >= 0) dim.Index = ix;   // k102: идентификатор размера dN
                 if (dd.Offset is { Length: 2 } off) dim.TextOffset = new OpenTK.Mathematics.Vector2d(off[0], off[1]);
@@ -1365,6 +1382,11 @@ public static class DocumentFile
                 int slot = sd.Slot ?? (part.Features.Any(f => f.ConsumedSketchIds().Contains(sk.Id)) ? 0 : part.SketchSlotRange(sk).Lo);
                 if (slot > 0) part.PlaceSketch(sk, slot);
             }
+        if (!DatumSlotOff && _datumSlots != null)
+        {
+            for (int di = _datumSlots.Count - 1; di >= 0; di--) part.PlaceItem(_datumSlots[di].Item, _datumSlots[di].Slot);   // с конца: одинаковые места — в прежнем порядке
+            _datumSlots = null;
+        }
         if (displayOk && display!.Data is { } data)
         {
             try { if (DisplayCache.Unpack(Convert.FromBase64String(data)) is { } cached) part.SetCachedDisplay(cached, display.Volume); }
@@ -1394,6 +1416,8 @@ public static class DocumentFile
         public bool? Flip { get; set; }
         public int? Method { get; set; }
         public string? Base { get; set; }
+        /// <summary>k118: место в дереве — сколько операций перед элементом.</summary>
+        public int? Slot { get; set; }
         /// <summary>u13i: NURBS опорной кривой.</summary>
         public List<double>? Cv { get; set; }
         public List<double>? Wt { get; set; }
@@ -1551,6 +1575,9 @@ public static class DocumentFile
         public DateTime Modified { get; set; }
         public string? Revision { get; set; }
         public string? Note { get; set; }
+        public string? Uom { get; set; }
+        public string? Units { get; set; }
+        public string? Tolerances { get; set; }
     }
 
     private sealed class ConfigDto
@@ -1640,6 +1667,7 @@ public static class DocumentFile
         public bool Locked { get; set; }
         public bool Reference { get; set; }
         public string? Formula { get; set; }
+        public string? Note { get; set; }
         public bool? IsDefault { get; set; }
         public bool? UserPlaced { get; set; }
         public double[]? Offset { get; set; }

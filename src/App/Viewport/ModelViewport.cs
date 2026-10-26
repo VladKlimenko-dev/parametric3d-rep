@@ -444,6 +444,25 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         Redraw();
     }
 
+    private uint[]? _refHover;
+    /// <summary>k118 (п.1): подсветка элементов эскиза (ссылки под курсором в списке ссылок); null — снять.</summary>
+    public void HighlightSketchEntities(IEnumerable<uint>? ids)
+    {
+        var a = ids?.ToArray();
+        if (a is { Length: 0 }) a = null;
+        if (a == null && _refHover == null) return;
+        _refHover = a;
+        _flagsDirty = true;
+        Redraw();
+    }
+    public IReadOnlyList<uint> RefHoverIds => _refHover ?? Array.Empty<uint>();
+
+    /// <summary>Разбор (k118): счётчики кадра — очертания тел в стилях без тонирования, приглушённые опорные точки.</summary>
+    public (int WireOutlines, int DimmedCandidates) RenderCounters => (_r.WireOutlines, _r.DimmedCandidateDraws);
+
+    /// <summary>Разбор (k118): применить признаки подсветки без кадра (сцена — собрать, если нет).</summary>
+    public void ApplyFlagsForTest() { if (_scene == null) BuildSceneForTest(); ApplyFlags(); }
+
     private void ApplyFlags()
     {
         _r.ClearFlags();
@@ -458,8 +477,24 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
                 foreach (var q in p.Quilts) foreach (var sq in Simple(q)) foreach (var f in sq.Faces) Set(f.Id, 16);
         foreach (var r in Selection.Items) SetRef(r, 2);
         if (!Selection.Hover.IsEmpty && !Selection.Contains(Selection.Hover.Id)) SetRef(Selection.Hover, 1);
+        // k118 (замечание 08:54, п. 7): центр окружности, дуги, эллипса под курсором — подсвечена и сама кривая
+        if (!CenterHoverOff && Selection.Hover is { Kind: PickKind.SketchPoint, Target: SkPoint hq } && CenterOwner(hq) is { } ow && !Selection.Contains(ow.Id))
+        { Set(ow.Id, 1); CenterOwnerHovers++; }
         if (_treeHover != null) SetItem(_treeHover, 1);
+        if (_refHover != null) foreach (var id in _refHover) if (!Selection.Contains(id)) Set(id, 1);
     }
+
+    public static readonly bool CenterHoverOff = Environment.GetEnvironmentVariable("P3D_CENTERHOVER") == "0";
+    /// <summary>Разбор: сколько раз центр под курсором подсветил свою кривую.</summary>
+    public int CenterOwnerHovers { get; private set; }
+    /// <summary>Кривая, центром которой служит точка (окружность, дуга, эллипс); иначе null.</summary>
+    public static SkEntity? CenterOwner(SkPoint q) => q.Owner switch
+    {
+        SkCircle c when ReferenceEquals(c.Center, q) => c,
+        SkArc a when ReferenceEquals(a.Center, q) => a,
+        SkEllipse e when ReferenceEquals(e.Center, q) => e,
+        _ => null,
+    };
 
     private static IEnumerable<Quilt> Simple(Quilt q) => q.Parts.Count > 0 ? q.Parts.SelectMany(Simple) : new[] { q };
 

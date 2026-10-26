@@ -375,7 +375,10 @@ public sealed class Part : ModelItem
     /// k109: МЕСТО ЭСКИЗА В ДЕРЕВЕ — сколько операций стоит перед ним (эскиз, не ушедший в операцию, — отдельная строка
     /// дерева между операциями; расчёт от него не зависит).
     /// </summary>
-    public int SketchSlot(Sketch sk)
+    public int SketchSlot(Sketch sk) => ItemSlot(sk);
+
+    /// <summary>k118: место элемента (эскиз, опорная плоскость, ось…) в дереве — сколько операций перед ним.</summary>
+    public int ItemSlot(ModelItem sk)
     {
         int at = Children.IndexOf(sk);
         if (at < 0) return Features.Count;
@@ -385,7 +388,10 @@ public sealed class Part : ModelItem
     }
 
     /// <summary>Поставить эскиз в дереве после slot операций (0 — перед первой).</summary>
-    public void PlaceSketch(Sketch sk, int slot)
+    public void PlaceSketch(Sketch sk, int slot) => PlaceItem(sk, slot);
+
+    /// <summary>k118: поставить элемент в дереве после slot операций (0 — перед первой).</summary>
+    public void PlaceItem(ModelItem sk, int slot)
     {
         if (!Children.Remove(sk)) return;
         slot = Math.Clamp(slot, 0, Features.Count);

@@ -30,7 +30,7 @@ public sealed class SectionOp : Operation
     {
         var v = W.ViewPort;
         _before = v.Section?.Clone();
-        _s = v.Section?.Clone() ?? Default();
+        _s = v.Section?.Clone() ?? (v.LastSection is { } last && (last.Base is not { } lb || ReferenceEquals(lb.Owner, Part)) ? last.Clone() : Default());
         v.ApplySection(_s);
         v.SectionHot = true;
         ShowGizmo();
@@ -128,6 +128,7 @@ public sealed class SectionOp : Operation
     public override void Cancel()
     {
         Leave();
-        if (_before != null) W.ViewPort.ApplySection(_before); else W.ViewPort.SetSection(null);
+        if (_before != null) W.ViewPort.ApplySection(_before);
+        else { var keep = W.ViewPort.LastSection; W.ViewPort.SetSection(null); W.ViewPort.LastSection = keep; }   // k118: отменённое не запоминается
     }
 }

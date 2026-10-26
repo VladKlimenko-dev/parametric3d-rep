@@ -277,6 +277,7 @@ uniform float uDepthBias;
 uniform float uSizeOverride;
 uniform float uBonus;
 uniform int uOnlyFlagged;
+uniform float uDim;
 uniform vec4 uHover;
 uniform vec4 uSelect;
 out vec2 vLocal;
@@ -293,6 +294,7 @@ void main()
     if (c.w <= 1e-6) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
     float size = aSize * uScale;
     vec4 col = aColor;
+    if (uDim > 0.0 && (f & 3u) == 0u) { size *= uDim; col.a *= uDim * 0.75; }
     if ((f & 2u) != 0u) { col = vec4(uSelect.rgb, 1.0); size += uBonus * uScale; }
     else if ((f & 1u) != 0u) { col = vec4(uHover.rgb, 1.0); size += uBonus * uScale; }
     if (uSizeOverride > 0.0) size = uSizeOverride * uScale;
