@@ -95,7 +95,26 @@ public partial class MainWindow : Window
         SearchButton.Click += (_, _) => OpenPalette();
         EnvPill.PointerPressed += (_, _) => Commands.ContextCommands.EnvMenu(this, EnvPill);
         TreeNode.VisibilityToggled += _ => { View.MarkDirty(); Session.MarkModified(); };
-        TreeNode.ExpandedChanged += n => _expand[n.Item.Id] = n.IsExpanded;
+        TreeNode.ExpandedChanged += n => RememberExpanded(n);
+        Tree.LayoutUpdated += (_, _) => FitTreeToScrollBar();
+    }
+
+    // k116 (замечание 16:00, п. 5): ПОЛОСА ПРОКРУТКИ ДЕРЕВА НЕ ЗАКРЫВАЕТ ГЛАЗА. Полоса прокрутки темы ложится поверх
+    // содержимого, и столбец значков видимости у правого края уходил под неё. Когда полоса есть, содержимое дерева
+    // сужается на её ширину. Мутация P3D_TREESCROLLGAP=0.
+    static readonly bool TreeScrollGapOff = Environment.GetEnvironmentVariable("P3D_TREESCROLLGAP") == "0";
+    public const double TreeScrollGap = 14;
+    private ScrollViewer? _treeScroll;
+    /// <summary>Отступ содержимого дерева справа под полосу прокрутки (проверка).</summary>
+    public double TreeContentRightGap => (_treeScroll?.Content as Control)?.Margin.Right ?? 0;
+    public bool TreeScrollBarShown => _treeScroll is { } sv && sv.Extent.Height > sv.Viewport.Height + 0.5;
+    private void FitTreeToScrollBar()
+    {
+        if (TreeScrollGapOff) return;
+        _treeScroll ??= Tree.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+        if (_treeScroll?.Content is not Control content) return;
+        double want = TreeScrollBarShown ? TreeScrollGap : 0;
+        if (Math.Abs(content.Margin.Right - want) > 0.1) content.Margin = new Thickness(content.Margin.Left, content.Margin.Top, want, content.Margin.Bottom);
     }
 
     // ================================================================ документ
@@ -115,7 +134,7 @@ public partial class MainWindow : Window
         s.Document.BuildStarted += OnBuild;
         s.Document.BuildFinished += OnBuild;
         s.Document.Root.Changed += _ => ScheduleTree();
-        _expand.Clear();
+        _expand.Clear(); _nodeKeys.Clear();
         View.Document = s.Document;
         View.ActivePart = s.Part;
         View.DarkTheme = _dark;
@@ -160,6 +179,10 @@ public partial class MainWindow : Window
             else if (!Session.Document.IsBuilding || TreeThrottleOff) ScheduleTree();
         }
         UpdateCages(); View.MarkDirty();
+        // k116 (п. 2): расчёт предпросмотра идёт дольше порога — вид перерисовывается (прежняя деталь — без рёбер и выбора)
+        if (Session.Document.IsBuilding && Session.Document.PreviewPart is { } pp)
+            DispatcherTimer.RunOnce(() => { if (Session.Document.IsBuilding && ReferenceEquals(Session.Document.PreviewPart, pp) && pp.IsDirty) View.MarkDirty(); },
+                TimeSpan.FromMilliseconds(Parametric3D.Render.Engine.SceneBuilder.StaleAfterMs + 30));
     });
 
     static readonly bool TreeThrottleOff = Environment.GetEnvironmentVariable("P3D_TREETHROTTLE") == "0";
@@ -1981,6 +2004,10 @@ public partial class MainWindow : Window
         _sketchIsNew = false;
         _afterSketch = null;
         AfterSketchCancel = null;
+        // k116 (п. 9): снимок эскиза и расчёта детали — правка вступает в силу только по «ОК»
+        _skEdit = null;
+        if (!SketchStashOff && (sk.Parent as Part ?? Session.Part) is { } ep && ep.StashBuild() is { } stash)
+            _skEdit = (ep, sk, SketchState.Capture(sk), SketchSigRounded(sk), stash);
         SketchRollback(sk);
         EnterSketchUi(sk);
     }
@@ -2000,8 +2027,37 @@ public partial class MainWindow : Window
         int stage = part.ClampStage(k);
         if (part.StageIndex >= 0 && part.StageIndex <= stage) return;   // и так откачено не ниже
         _sketchStage = (part, part.StageIndex);
-        part.StageIndex = stage; part.Invalidate();
+        // k116: без сброса сохранённых состояний — полоска сдвигается, состояния до неё остаются (выход не пересчитывает всё)
+        part.StageIndex = stage; if (SketchStashOff) part.Invalidate(); else part.MarkStageMoved();
         View.MarkDirty();
+    }
+
+    /// <summary>k116: правка эскиза — деталь, эскиз, его снимок и подпись, снимок расчёта детали.</summary>
+    private (Part Part, Sketch Sketch, SketchState Orig, string Sig, Part.BuildStash Stash)? _skEdit;
+    static readonly bool SketchStashOff = Environment.GetEnvironmentVariable("P3D_SKSTASH") == "0";
+    /// <summary>Разбор: сколько раз выход из эскиза вернул деталь из снимка расчёта (без пересчёта).</summary>
+    public static long SketchStashRestores;
+
+    /// <summary>Вернуть эскиз (если отмена) и расчёт детали из снимка; false — снимка нет или он не подошёл.</summary>
+    private bool RestoreSketchEdit(bool revertSketch)
+    {
+        if (_skEdit is not { } e) return false;
+        _skEdit = null;
+        if (revertSketch) { e.Orig.RestoreInto(e.Sketch); e.Sketch.NotifyChanged(e.Sketch); }
+        else if (SketchSigRounded(e.Sketch) is var sigNow && sigNow != e.Sig)
+        {
+            if (Environment.GetEnvironmentVariable("P3D_SKSTASHDBG") == "1")
+            {
+                int k = 0; while (k < Math.Min(sigNow.Length, e.Sig.Length) && sigNow[k] == e.Sig[k]) k++;
+                Console.WriteLine($"SKSTASH sig differs at {k}: «{e.Sig.Substring(Math.Max(0, k - 60), Math.Min(140, e.Sig.Length - Math.Max(0, k - 60)))}» vs «{sigNow.Substring(Math.Max(0, k - 60), Math.Min(140, sigNow.Length - Math.Max(0, k - 60)))}»");
+            }
+            return false;
+        }
+        _sketchStage = null;
+        if (!e.Part.RestoreBuild(e.Stash)) { e.Part.StageIndex = e.Stash.Stage; e.Part.MarkStageMoved(); View.MarkDirty(); return revertSketch; }
+        Interlocked.Increment(ref SketchStashRestores);
+        View.MarkDirty();
+        return true;
     }
 
     /// <summary>Вернуть полоску отката после правки эскиза.</summary>
@@ -2009,7 +2065,7 @@ public partial class MainWindow : Window
     {
         if (_sketchStage is not { } st) return;
         _sketchStage = null;
-        st.Part.StageIndex = st.Stage; st.Part.Invalidate();
+        st.Part.StageIndex = st.Stage; if (SketchStashOff) st.Part.Invalidate(); else st.Part.MarkStageMoved();
         View.MarkDirty();
     }
 
@@ -2052,12 +2108,18 @@ public partial class MainWindow : Window
         View.ExitSketch();
         _refsPanel = false; _resolvePanel = false; _pendingEdit = null;
         bool empty = sk.Entities.All(e => e.Role == SkRole.Reference);
+        // k116: эскиз не изменился — деталь из снимка расчёта, шаг отмены не нужен
+        if (!_sketchIsNew && RestoreSketchEdit(revertSketch: false)) Session.DiscardEdit();
+        else
+        {
+        _skEdit = null;
         SketchRollbackEnd();
         if (empty && _sketchIsNew && sk.Parent is Part owner) { owner.Remove(sk); Session.DiscardEdit(); }
         else
         {
             sk.NotifyChanged(sk);
             Session.CommitEdit();
+        }
         }
         ShowHint(null);
         RebuildUi();
@@ -2080,10 +2142,16 @@ public partial class MainWindow : Window
         var sk = View.ActiveSketch!;
         _refsPanel = false; _resolvePanel = false; _pendingEdit = null;
         View.ExitSketch();
+        // k116 (п. 9): отмена правки — эскиз из снимка, деталь — из снимка расчёта (без перестроения)
+        if (!_sketchIsNew && RestoreSketchEdit(revertSketch: true)) Session.DiscardEdit();
+        else
+        {
+        _skEdit = null;
         SketchRollbackEnd();
         // новый эскиз — просто убрать (деталь не заменяется); правка — снимок до неё (вид держит прежнюю деталь)
         if (_sketchIsNew && sk.Parent is Part owner) { owner.Remove(sk); Session.DiscardEdit(); }
         else Session.CancelEdit();
+        }
         _afterSketch = null;
         ShowHint(null);
         RebuildUi();
@@ -2410,7 +2478,7 @@ public partial class MainWindow : Window
     {
         using var _ui = Diagnostics.UiTimes.Measure("окно: дерево");
         // состояние «развёрнут» живёт между перестройками (п. 13): глаз эскиза не сворачивает ветку
-        foreach (var n in AllNodes) _expand[n.Item.Id] = n.IsExpanded;
+        foreach (var n in AllNodes) RememberExpanded(n);
         List<TreeNode> roots;
         using (Diagnostics.UiTimes.Measure("окно: дерево — узлы")) roots = TreeNode.Build(Session.Document, Session.IsAssembly);
         // k113: ДЕРЕВО ТО ЖЕ — НЕ ПЕРЕСТРАИВАТЬ ВИД. Каждый шаг предпросмотра (начало и конец расчёта) пересобирал дерево целиком
@@ -2426,8 +2494,9 @@ public partial class MainWindow : Window
         }
         _treeSig = sig;
         _roots = roots;
+        KeyNodes(_roots);
         foreach (var n in _roots.SelectMany(r => r.SelfAndDescendants()))
-            if (_expand.TryGetValue(n.Item.Id, out bool ex)) n.RestoreExpanded(ex);
+            if (ExpandedOf(n) is { } ex) n.RestoreExpanded(ex);
         _syncingTree = true;
         Tree.ItemsSource = _roots;
         _syncingTree = false;
@@ -2463,7 +2532,56 @@ public partial class MainWindow : Window
     public void SetTreeExpanded(bool expanded)
     {
         foreach (var n in AllNodes.ToList())
-            if (n.Children.Count > 0) { n.IsExpanded = expanded; _expand[n.Item.Id] = expanded; }
+            if (n.Children.Count > 0) { n.IsExpanded = expanded; RememberExpanded(n); }
+    }
+
+    // ---------------------------------------------------------------- k116: развёрнутые ветки — по постоянным ключам, в файле
+
+    /// <summary>
+    /// k116 (замечание 16:00, п. 7): СОСТОЯНИЕ «РАЗВЁРНУТ/СВЁРНУТ» — по постоянному пути узла внутри детали (ключ операции,
+    /// имя эскиза, имя группы, роль строки), в Part.TreeState — пишется в файл. Прежде — по номеру элемента в памяти окна:
+    /// у папок групп номер новый при каждой сборке дерева (папка разворачивалась сама), после открытия файла всё — заново.
+    /// Узлы вне деталей (сборка) — в памяти окна. P3D_TREESTATE=0 — прежнее.
+    /// </summary>
+    private readonly Dictionary<TreeNode, (Part? Part, string Key)> _nodeKeys = new();
+    private readonly Dictionary<string, bool> _expandAsm = new();
+    static readonly bool TreeStateOff = Environment.GetEnvironmentVariable("P3D_TREESTATE") == "0";
+
+    static string LocalKey(TreeNode n) => n.IsReference && n.Item is Feature rf ? "r:" + rf.Key : n.Item switch
+    {
+        Feature f => "f:" + f.Key,
+        Part => "p",
+        InfoItem ii => "i:" + ii.Role + ":" + ii.Name,
+        _ => n.Item.Kind + ":" + n.Item.Name,
+    };
+
+    private void KeyNodes(IEnumerable<TreeNode> roots)
+    {
+        _nodeKeys.Clear();
+        void Walk(TreeNode n, Part? part, string path)
+        {
+            var key = (path.Length > 0 ? path + "/" : "") + LocalKey(n);
+            Part? own = part;
+            if (n.Item is Part p && !n.IsReference) { own = p; key = "p"; }
+            _nodeKeys[n] = (own, key);
+            foreach (var c in n.Children) Walk(c, own, key);
+        }
+        foreach (var r in roots) Walk(r, null, "");
+    }
+
+    private bool? ExpandedOf(TreeNode n)
+    {
+        if (TreeStateOff) return _expand.TryGetValue(n.Item.Id, out bool e0) ? e0 : null;
+        if (!_nodeKeys.TryGetValue(n, out var k)) return null;
+        var d = k.Part?.TreeState ?? _expandAsm;
+        return d.TryGetValue(k.Key, out bool e) ? e : null;
+    }
+
+    private void RememberExpanded(TreeNode n)
+    {
+        if (TreeStateOff) { _expand[n.Item.Id] = n.IsExpanded; return; }
+        if (!_nodeKeys.TryGetValue(n, out var k)) return;
+        (k.Part?.TreeState ?? _expandAsm)[k.Key] = n.IsExpanded;
     }
 
     // ---------------------------------------------------------------- k115: контуры элементов дерева, несколько строк

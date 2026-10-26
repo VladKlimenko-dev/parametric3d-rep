@@ -23,6 +23,15 @@ public sealed class MirrorFeature : Feature
 
     public MirrorFeature(string name = "Mirror") { Name = name; }
 
+    /// <summary>k116 (замечание 16:00, п. 4): преобразование, под которым повторяется сама эта операция (зеркало зеркала).</summary>
+    private TransformOp.Xform? _outer;
+    public override void ExecuteTransformed(BuildContext ctx, TransformOp.Xform x)
+    {
+        if (Sources.Count == 0 || FeatureReplay.NestOff) { base.ExecuteTransformed(ctx, x); return; }
+        _outer = x;
+        try { Execute(ctx); } finally { _outer = null; }
+    }
+
     public override string Summary => $"Mirror about ({Normal.X:0.##}, {Normal.Y:0.##}, {Normal.Z:0.##})";
 
     public override void Execute(BuildContext ctx)
@@ -30,7 +39,7 @@ public sealed class MirrorFeature : Feature
         if (ctx.Bodies.Count == 0) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Mirror: no body.");
         if (Normal.LengthSquared < 1e-18) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Mirror: the plane normal is not set.");
 
-        if (Sources.Count > 0) { FeatureReplay.Run(ctx, this, Sources, new[] { TransformOp.Mirror(At, Normal.Normalized()) }, "Mirror"); return; }
+        if (Sources.Count > 0) { FeatureReplay.Run(ctx, this, Sources, new[] { FeatureReplay.Outer(_outer, TransformOp.Mirror(At, Normal.Normalized())) }, "Mirror"); return; }
         if (ReplaceBody)
         {
             var x = TransformOp.Mirror(At, Normal.Normalized());
@@ -62,6 +71,15 @@ public sealed class LinearPatternFeature : Feature
 
     public LinearPatternFeature(string name = "Linear pattern") { Name = name; }
 
+    /// <summary>k116 (замечание 16:00, п. 4): преобразование, под которым повторяется сама эта операция (зеркало зеркала).</summary>
+    private TransformOp.Xform? _outer;
+    public override void ExecuteTransformed(BuildContext ctx, TransformOp.Xform x)
+    {
+        if (Sources.Count == 0 || FeatureReplay.NestOff) { base.ExecuteTransformed(ctx, x); return; }
+        _outer = x;
+        try { Execute(ctx); } finally { _outer = null; }
+    }
+
     public override string Summary => $"Linear pattern ×{Count}";
 
     public override void Execute(BuildContext ctx)
@@ -76,7 +94,7 @@ public sealed class LinearPatternFeature : Feature
         if (Step.LengthSquared <= Tol.Weld * Tol.Weld)
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Linear pattern: the step must be greater than zero.");
 
-        if (Sources.Count > 0) { FeatureReplay.Run(ctx, this, Sources, Enumerable.Range(1, n - 1).Select(i => TransformOp.Move(Step * i)).ToList(), "Linear pattern"); return; }
+        if (Sources.Count > 0) { FeatureReplay.Run(ctx, this, Sources, Enumerable.Range(1, n - 1).Select(i => FeatureReplay.Outer(_outer, TransformOp.Move(Step * i))).ToList(), "Linear pattern"); return; }
         bool patterned = false;
         Kernel.OperationContract.Apply("LinearPattern", ctx.Bodies, b => patterned = TransformOp.LinearPattern(b, Step, n, ctx.Warnings, Key));
         if (!patterned)
@@ -99,6 +117,15 @@ public sealed class CircularPatternFeature : Feature
 
     public CircularPatternFeature(string name = "Circular pattern") { Name = name; }
 
+    /// <summary>k116 (замечание 16:00, п. 4): преобразование, под которым повторяется сама эта операция (зеркало зеркала).</summary>
+    private TransformOp.Xform? _outer;
+    public override void ExecuteTransformed(BuildContext ctx, TransformOp.Xform x)
+    {
+        if (Sources.Count == 0 || FeatureReplay.NestOff) { base.ExecuteTransformed(ctx, x); return; }
+        _outer = x;
+        try { Execute(ctx); } finally { _outer = null; }
+    }
+
     public override string Summary => $"Circular pattern ×{Count}";
 
     public override void Execute(BuildContext ctx)
@@ -112,7 +139,7 @@ public sealed class CircularPatternFeature : Feature
         if (!CopyLimitOff && n > MaxCopies) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"Circular pattern: the count {n} exceeds the limit of {MaxCopies} copies.");
         if (Axis.LengthSquared < 1e-18) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Circular pattern: the axis is not set.");
 
-        if (Sources.Count > 0) { FeatureReplay.Run(ctx, this, Sources, Enumerable.Range(1, n - 1).Select(i => TransformOp.Rotate(At, Axis.Normalized(), 360.0 * i / n)).ToList(), "Circular pattern"); return; }
+        if (Sources.Count > 0) { FeatureReplay.Run(ctx, this, Sources, Enumerable.Range(1, n - 1).Select(i => FeatureReplay.Outer(_outer, TransformOp.Rotate(At, Axis.Normalized(), 360.0 * i / n))).ToList(), "Circular pattern"); return; }
         bool rotated = false;
         Kernel.OperationContract.Apply("CircularPattern", ctx.Bodies, b => rotated = TransformOp.CircularPattern(b, At, Axis.Normalized(), n, ctx.Warnings, Key));
         if (!rotated)
@@ -140,6 +167,11 @@ internal static class FeatureReplay
     }
 
     static readonly bool ReplayOff = Environment.GetEnvironmentVariable("P3D_INSTANTREPLAY") == "0";
+    /// <summary>k116: мутация P3D_REPLAYNEST=0 — зеркало/массив не повторяется другим зеркалом или массивом (прежний отказ).</summary>
+    internal static readonly bool NestOff = Environment.GetEnvironmentVariable("P3D_REPLAYNEST") == "0";
+    /// <summary>Преобразование копии внутри повторяемой операции: сперва своё, затем внешнее (outer ∘ x).</summary>
+    internal static TransformOp.Xform Outer(TransformOp.Xform? outer, TransformOp.Xform x) => outer is not { } o ? x
+        : new TransformOp.Xform(p => o.Point(x.Point(p)), d => o.Direction(x.Direction(d)), o.Flips ^ x.Flips);
 
     static void RunCore(BuildContext ctx, Feature owner, IReadOnlyList<string> keys, IReadOnlyList<TransformOp.Xform> xs, string what)
     {

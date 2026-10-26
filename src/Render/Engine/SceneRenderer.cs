@@ -691,9 +691,19 @@ public sealed class SceneRenderer : IDisposable
         GL.BindVertexArray(0);
     }
 
+    /// <summary>
+    /// k116 (замечание 16:00, п. 1): КОНТУР — ЗА ГРАНЯМИ. Грани рисуются со сдвигом глубины назад (PolygonOffset 1.5/6, чтобы
+    /// рёбра были поверх), а проход контура (обратные стороны, раздутые по нормали на N пикселей) — без сдвига. Тонкий
+    /// треугольник-щепка (вдоль длинной трубы в огранённом теле — тысячи) при раздутии выворачивается, перестаёт
+    /// отсекаться как лицевой и на той же глубине оказывался ВПЕРЕДИ своей грани: тёмные точки и штрихи по поверхности
+    /// («вершины и пунктир»). Контур теперь сдвинут дальше граней. Мутация P3D_OUTLINEOFFSET=0.
+    /// </summary>
+    static readonly bool OutlineOffsetOff = Environment.GetEnvironmentVariable("P3D_OUTLINEOFFSET") == "0";
+    public const float OutlineOffsetFactor = 6f, OutlineOffsetUnits = 40f;
     private void DrawOutline(FrameParams f)
     {
         if (_meshes.Count == 0) return;
+        if (!OutlineOffsetOff) { GL.Enable(EnableCap.PolygonOffsetFill); GL.PolygonOffset(OutlineOffsetFactor, OutlineOffsetUnits); }
         _mesh!.Use();
         _mesh.Set("uMode", 1);
         _mesh.Set("uFlat", Theme.Silhouette);
@@ -709,6 +719,7 @@ public sealed class SceneRenderer : IDisposable
         }
         GL.CullFace(TriangleFace.Back);
         GL.Disable(EnableCap.CullFace);
+        if (!OutlineOffsetOff) GL.Disable(EnableCap.PolygonOffsetFill);
         _mesh.Set("uOutlinePx", 0f);
         _mesh.Set("uMode", 0);
     }

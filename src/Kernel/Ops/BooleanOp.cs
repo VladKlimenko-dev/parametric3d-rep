@@ -481,16 +481,16 @@ public static class BooleanOp
         // рёбра подогнаны к фасетам: маршрут строил результат по источникам и объявлял его ExactAnalytic, хотя операнд —
         // многогранник (объединение цилиндра с шаром многогранно, затем − брусок: 3301.6 вместо 3354.7 мм³, тождество с
         // многогранным пересечением нарушено на 41 мм³; серия 8 разностного сравнения). Мутация P3D_POLYOPERAND=0.
-        if (!PolyOperandOld && (IsPolyhedral(body) || IsPolyhedral(other))) { AnalyticRouteDebug?.Invoke("general declined: polyhedral operand"); return null; }
+        if (!PolyOperandOld && (IsPolyhedral(body) || IsPolyhedral(other))) { RouteDbg("general declined: polyhedral operand"); return null; }
         // 06.12/g.08: грани по формуле (ленты, протяжки, угловые лоскуты) — представлением NURBS в пределах точности модели
         NurbsProxy.Begin();
-        if (NurbsProxy.Of(body, out var pw1) is { } pb) body = pb; else if (pw1 != null) AnalyticRouteDebug?.Invoke("proxy: " + pw1);
-        if (NurbsProxy.Of(other, out var pw2) is { } po) other = po; else if (pw2 != null) AnalyticRouteDebug?.Invoke("proxy: " + pw2);
+        if (NurbsProxy.Of(body, out var pw1) is { } pb) body = pb; else if (pw1 != null) RouteDbg("proxy: " + pw1);
+        if (NurbsProxy.Of(other, out var pw2) is { } po) other = po; else if (pw2 != null) RouteDbg("proxy: " + pw2);
         var op = kind == BooleanKind.Unite ? Analytic.Bool2.Union : kind == BooleanKind.Subtract ? Analytic.Bool2.Subtract : Analytic.Bool2.Intersect;
         // Сферы (этап 2б) в маршруте — за флагом: на корпусе скругление вершины куба R6 давало итоговую сетку с замечаниями
         // (K09-VERTEX-CHAMFER-AND-ROUND) — дефект дальше в цепочке, разобрать.
         if (!AnalyticSpheres && body.Faces.Concat(other.Faces).Any(fc => Geometry.ExactEdges.ShapeOf(Topology.GeometryAudit.AuthoritativeSurface(fc)) is Geometry.Ssi.Sphere))
-        { AnalyticRouteDebug?.Invoke("general declined: sphere faces (P3D_ANALYTICSPHERES=1 to enable)"); return null; }
+        { RouteDbg("general declined: sphere faces (P3D_ANALYTICSPHERES=1 to enable)"); return null; }
         TSolid? r;
         var proxySwaps = new List<(int Face, ISurface3 Proxy, bool Rev)>();
         try
@@ -499,16 +499,16 @@ public static class BooleanOp
             string why;
             using (Diagnostics.Prof.Time("аналитика (общая): сборка")) r = Analytic.GeneralBoolean.Run(body, other, op, out why);
             if (r != null) proxySwaps = NurbsProxy.Restore(r);
-            if (r == null && Analytic.GeneralBoolean.LastProvedEmpty) { AnalyticRouteDebug?.Invoke("general: empty result proved"); return ProvedEmpty; }
+            if (r == null && Analytic.GeneralBoolean.LastProvedEmpty) { RouteDbg("general: empty result proved"); return ProvedEmpty; }
             if (r == null)
             {
-                AnalyticRouteDebug?.Invoke("general declined: " + why); GeneralDeclineProbe?.Invoke(body, other, kind, why);
+                RouteDbg("general declined: " + why); GeneralDeclineProbe?.Invoke(body, other, kind, why);
                 // KRN-05 (05.5): нарушенное разбиение грани — дефект ядра, а не неподдержанный случай: причина — в предупреждениях
                 if (why.Contains("partition check")) warn.Add("Boolean: general analytic path refused — " + why);
                 return null;
             }
         }
-        catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { AnalyticRouteDebug?.Invoke("general exception: " + ex.Message); return null; }
+        catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { RouteDbg("general exception: " + ex.Message); return null; }
         Func<TFace, FacetedSurface?>? donor = null;
         if (ReuseFaceMeshes)
         {
@@ -519,9 +519,18 @@ public static class BooleanOp
         }
         int unmeshed;
         var rawForLazy = LazyFine ? TopologyClone.Deep(r) : null;      // эксперимент r48: копия до завершения
-        var meshWhy = AnalyticRouteDebug != null ? new List<string>() : null;
+        var meshWhy = AnalyticRouteDebug != null || RouteTrace ? new List<string>() : null;
         using (Diagnostics.Prof.Time("аналитика (общая): завершение")) unmeshed = Analytic.PrismBuild.Finish(r, meshWhy, donor);
-        if (unmeshed > 0) { AnalyticRouteDebug?.Invoke($"general invalid: {unmeshed} face(s) not meshed from their loops: {string.Join(" | ", meshWhy ?? new())}"); return null; }
+        if (unmeshed > 0)
+        {
+            RouteDbg($"general invalid: {unmeshed} face(s) not meshed from their loops: {string.Join(" | ", meshWhy ?? new())}");
+            if (RouteTrace)
+                foreach (var tf in r.Faces)
+                    if (Tess.ExactFaceMesher.Cycles(tf) == null)
+                        foreach (var l in tf.Loops) foreach (var ce in l.CoEdges)
+                            Console.Error.WriteLine($"ROUTE   face {tf.Id} {tf.Tag} ce {ce.Edge.Id} {ce.Edge.Curve.GetType().Name} {ce.Start.Id}:{ce.Start.P:0.#########} -> {ce.End.Id}:{ce.End.P:0.#########}");
+            return null;
+        }
         // Сферические грани размечаются иначе (кольцами к полюсу) — швы не согласованы по построению: полная проверка
         // (на корпусе — сетка с замечаниями у скругления вершин); прочие — B-rep (швы плоскостей и цилиндров — по рёбрам).
         // KRN-10 (g.13): ПРОВЕРКИ РЕЗУЛЬТАТА МАРШРУТА — одна функция. Обычный режим — сразу (отказ — многогранный путь);
@@ -556,10 +565,10 @@ public static class BooleanOp
                 if (!RoutePCurveOff && v.IsValid && !(curved || coneLike)) v.Merge(Topology.SolidValidator.ValidatePCurves(r));
             }
             r.Guarantee = g0;
-            if (!v.IsValid) { GeneralInvalidProbe?.Invoke(r!); AnalyticRouteDebug?.Invoke("general invalid: " + v.Summary() + " :: " + string.Join(" / ", v.Issues.Where(i => i.Severity == Topology.ValidationSeverity.Error).Take(3))); GeneralDeclineProbe?.Invoke(body, other, kind, "invalid: " + v.Summary()); return "general route check failed"; }
+            if (!v.IsValid) { GeneralInvalidProbe?.Invoke(r!); RouteDbg("general invalid: " + v.Summary() + " :: " + string.Join(" / ", v.Issues.Where(i => i.Severity == Topology.ValidationSeverity.Error).Take(3))); GeneralDeclineProbe?.Invoke(body, other, kind, "invalid: " + v.Summary()); return "general route check failed"; }
             bool noVol;
             using (Diagnostics.Prof.Time("аналитика (общая): объём по формулам")) noVol = Topology.AnalyticVolume.Of(r) == null;
-            if (noVol) { AnalyticRouteDebug?.Invoke("general: no analytic volume"); GeneralDeclineProbe?.Invoke(body, other, kind, "no analytic volume"); return "general route check failed"; }
+            if (noVol) { RouteDbg("general: no analytic volume"); GeneralDeclineProbe?.Invoke(body, other, kind, "no analytic volume"); return "general route check failed"; }
             // g.05: ОБЪЁМ ПО ФОРМУЛАМ ГРАНЕЙ СОГЛАСУЕТСЯ С ОБЪЁМОМ ЕГО ЖЕ ФАСЕТ в пределах прогиба гранения. Точки CSG проверяют
             // геометрию тела, но не интеграл: брусок минус тор (серия 8, случай 79) принимался с объёмом 46 190 при фасетах
             // 42 871 и верном 39 560 (OpenCascade). Мутация P3D_VOLFACETS=0.
@@ -567,7 +576,7 @@ public static class BooleanOp
             using (Diagnostics.Prof.Time("аналитика (общая): объём и фасеты")) { if (!VolFacetsOff) vfr = VolumeVsFacets(r); }
             if (!VolFacetsOff && vfr is { } vf && !vf.Agree)
             {
-                AnalyticRouteDebug?.Invoke($"general: volume {vf.Va:G8} disagrees with its facets {vf.Vf:G8} (bound {vf.Bound:G3})");
+                RouteDbg($"general: volume {vf.Va:G8} disagrees with its facets {vf.Vf:G8} (bound {vf.Bound:G3})");
                 GeneralDeclineProbe?.Invoke(body, other, kind, "volume vs facets"); return "general route check failed";
             }
             // согласие с CSG по точкам
@@ -579,7 +588,7 @@ public static class BooleanOp
                     ? new Analytic.Classifier(s.Faces.Select(f => forms[f]).ToList()) : new Analytic.Classifier(s);
                 var cr = new Analytic.Classifier(r); var ca = Cls(body); var cb = Cls(other);
                 if (cr.Unsupported != null && NurbsProxy.ProxyView(r, proxySwaps) is { } rView) cr = new Analytic.Classifier(rView);
-                if (cr.Unsupported != null || ca.Unsupported != null || cb.Unsupported != null) { AnalyticRouteDebug?.Invoke("general: classifier unsupported"); return "general route check failed"; }
+                if (cr.Unsupported != null || ca.Unsupported != null || cb.Unsupported != null) { RouteDbg("general: classifier unsupported"); return "general route check failed"; }
                 // Точки — в основном в ПЕРЕСЕЧЕНИИ габаритов операндов (там результат меняется: снятые 268 мм³ в теле в десятки
                 // мм проскакивали мимо 128 точек по общему габариту), четверть — по общему.
                 var (lo, hi) = BoxOf(body); var (lo2, hi2) = BoxOf(other);
@@ -614,7 +623,7 @@ public static class BooleanOp
                     bool expect = op switch { Analytic.Bool2.Union => a == 1 || b == 1, Analytic.Bool2.Intersect => a == 1 && b == 1, _ => a == 1 && b != 1 };
                     decided++; if ((c == 1) != expect) { disagree++; if (disagree <= 4) CsgDisagreeProbe?.Invoke(p, a.Value, b.Value, c.Value, r); }
                 }
-                if (decided < 64 || disagree > 0) { AnalyticRouteDebug?.Invoke($"general: CSG agreement {decided - disagree}/{decided}"); return "general route check failed"; }
+                if (decided < 64 || disagree > 0) { RouteDbg($"general: CSG agreement {decided - disagree}/{decided}"); return "general route check failed"; }
             }
             return null;
         }
@@ -633,7 +642,7 @@ public static class BooleanOp
             }, LazyThreadSafetyMode.ExecutionAndPublication);
         r.LazyDerivedExact = (derived, r.Revision);
         if (Analytic.GeneralBoolean.LastProvenance is { } pv) r.SetProvenance(FinalizeProvenance(r, pv, body, other));
-        AnalyticRouteDebug?.Invoke("general accepted");
+        RouteDbg("general accepted");
         GeneralAcceptProbe?.Invoke(body, other, kind, r);
         warn.Add($"Boolean: general analytic path ({r.Faces.Count()} faces, exact surfaces).");
         return r;
@@ -660,6 +669,9 @@ public static class BooleanOp
 
     /// <summary>Разбор: решение аналитического маршрута по каждой булевой («accepted» или причина отказа). null — выключено.</summary>
     [ThreadStatic] public static Action<string>? AnalyticRouteDebug;
+    /// <summary>k116: P3D_ROUTETRACE=1 — причины отказа точных маршрутов булевой в stderr (разбор файлов пользователя).</summary>
+    static readonly bool RouteTrace = Environment.GetEnvironmentVariable("P3D_ROUTETRACE") == "1";
+    static void RouteDbg(string m) { AnalyticRouteDebug?.Invoke(m); if (RouteTrace) Console.Error.WriteLine("ROUTE " + m); }
 
     /// <summary>Габарит тела по точкам рёбер (с ломаными кривых), расширенный на 1e-6 мм.</summary>
     private static (Vector3d Lo, Vector3d Hi) BoxOf(TSolid s)
@@ -703,7 +715,7 @@ public static class BooleanOp
 
     private static TSolid? TryAnalyticPrismCore(TSolid body, TSolid other, BooleanKind kind, List<string> warn)
     {
-        if (!PolyOperandOld && (IsPolyhedral(body) || IsPolyhedral(other))) { AnalyticRouteDebug?.Invoke("declined: polyhedral operand"); return null; }
+        if (!PolyOperandOld && (IsPolyhedral(body) || IsPolyhedral(other))) { RouteDbg("declined: polyhedral operand"); return null; }
         var op = kind == BooleanKind.Unite ? Analytic.Bool2.Union : kind == BooleanKind.Subtract ? Analytic.Bool2.Subtract : Analytic.Bool2.Intersect;
         TSolid? r;
         // Свой этап: отмена пробрасывается (KernelContext.Checkpoint), внутренний сбой маршрута — в том числе
@@ -712,10 +724,10 @@ public static class BooleanOp
         if (Environment.GetEnvironmentVariable("P3D_R2DBGAT") is string r2at && r2at.Split(',') is [var r2x, var r2y])
             Analytic.Region2Ops.DbgAt = new OpenTK.Mathematics.Vector2d(double.Parse(r2x, System.Globalization.CultureInfo.InvariantCulture), double.Parse(r2y, System.Globalization.CultureInfo.InvariantCulture));
         try { OperationTrace.Enter("boolean.analytic"); string why; using (Diagnostics.Prof.Time("аналитика: распознавание и сборка")) r = Analytic.PrismBuild.Boolean(body, other, op, out why);
-            if (r == null && why == "the result is empty" && Analytic.GeneralBoolean.ConfirmEmpty(body, other, op)) { AnalyticRouteDebug?.Invoke("prism: empty result proved"); return ProvedEmpty; }
-            if (r == null) { AnalyticRouteDebug?.Invoke("declined: " + why); return null; }
+            if (r == null && why == "the result is empty" && Analytic.GeneralBoolean.ConfirmEmpty(body, other, op)) { RouteDbg("prism: empty result proved"); return ProvedEmpty; }
+            if (r == null) { RouteDbg("declined: " + why); return null; }
             prismProv = Analytic.PrismBuild.LastProvenance; }
-        catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { AnalyticRouteDebug?.Invoke("exception: " + ex.Message); return null; }
+        catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { RouteDbg("exception: " + ex.Message); return null; }
         // НЕЗАВИСИМАЯ СВЕРКА РАСПОЗНАВАНИЯ: объём каждого операнда по слоям — против аналитического объёма его
         // нормализованной копии. Самопроверка «объём результата = объём по слоям» неверное распознавание не ловит (обе
         // величины ошибаются одинаково: составной резец цекования был принят с ошибкой 804 мм³). Не подтверждено — отказ.
@@ -728,8 +740,8 @@ public static class BooleanOp
             foreach (var (operand, pv0, name) in new[] { (body, pvA, "first"), (other, pvB, "second") })
             {
                 double? ov; using (Diagnostics.Overhead.Scope()) using (Diagnostics.Prof.Time("аналитика: сверка операнда")) ov = OperandVolume(operand);
-                if (ov == null) { AnalyticRouteDebug?.Invoke($"recognition unconfirmed: {name} operand has no analytic volume"); return "recognition unconfirmed"; }
-                if (Math.Abs(ov.Value - pv0) > 1e-6 * Math.Max(1, Math.Abs(ov.Value))) { AnalyticRouteDebug?.Invoke($"recognition check: {name} operand layers {pv0} vs analytic {ov}"); return "recognition check failed"; }
+                if (ov == null) { RouteDbg($"recognition unconfirmed: {name} operand has no analytic volume"); return "recognition unconfirmed"; }
+                if (Math.Abs(ov.Value - pv0) > 1e-6 * Math.Max(1, Math.Abs(ov.Value))) { RouteDbg($"recognition check: {name} operand layers {pv0} vs analytic {ov}"); return "recognition check failed"; }
             }
             return null;
         }
@@ -796,7 +808,7 @@ public static class BooleanOp
         // если все грани построены, швы согласованы по построению, и проверка всей сетки (88 мс из 123 на реалистичной
         // детали) повторяет известное — проверяется B-rep. Не построенная грань — отказ маршрута (многогранный путь):
         // строже прежнего (результат проходил, если общая сетка всё же оказывалась замкнутой), зато без случайностей.
-        if (unmeshed > 0) { AnalyticRouteDebug?.Invoke($"invalid: {unmeshed} face(s) not meshed from their loops"); return null; }
+        if (unmeshed > 0) { RouteDbg($"invalid: {unmeshed} face(s) not meshed from their loops"); return null; }
         var gAtBuild = r.Guarantee;
         string? ResultChecks()
         {
@@ -805,9 +817,9 @@ public static class BooleanOp
             {
                 Topology.ValidationReport v;
                 using (Diagnostics.Overhead.Scope()) using (Diagnostics.Prof.Time("аналитика: проверка B-rep")) v = Topology.SolidValidator.ValidateBRep(r);
-                if (!v.IsValid) { AnalyticRouteDebug?.Invoke("invalid: " + v.Summary()); return "prism route: invalid B-rep"; }
+                if (!v.IsValid) { RouteDbg("invalid: " + v.Summary()); return "prism route: invalid B-rep"; }
                 double? av; using (Diagnostics.Overhead.Scope()) using (Diagnostics.Prof.Time("аналитика: аналитический объём")) av = Topology.AnalyticVolume.Of(r);
-                if (av == null || Math.Abs(av.Value - pvR) > 1e-9 * Math.Max(1, Math.Abs(pvR))) { AnalyticRouteDebug?.Invoke($"volume check: analytic {av} vs layers {pvR}"); return "prism route: volume check failed"; }
+                if (av == null || Math.Abs(av.Value - pvR) > 1e-9 * Math.Max(1, Math.Abs(pvR))) { RouteDbg($"volume check: analytic {av} vs layers {pvR}"); return "prism route: volume check failed"; }
                 return null;
             }
             finally { r.Guarantee = gSaved; }
@@ -821,7 +833,7 @@ public static class BooleanOp
         // Производная многогранная форма — лениво: следующие многогранные операции берут её через ExactAdapter.ToExact.
         r.LazyDerivedExact = (derived, r.Revision);
         if (prismProv != null) r.SetProvenance(FinalizeProvenance(r, prismProv, body, other));
-        AnalyticRouteDebug?.Invoke("accepted");
+        RouteDbg("accepted");
         warn.Add($"Boolean: analytic 2.5D path ({r.Faces.Count()} faces, exact surfaces).");
         return r;
     }

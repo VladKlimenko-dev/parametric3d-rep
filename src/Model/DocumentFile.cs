@@ -71,7 +71,16 @@ public static class DocumentFile
     }
 
     public static readonly bool DisplayOff = Environment.GetEnvironmentVariable("P3D_FILEDISPLAY") == "0";
-    static string Signature(string def) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(def)));
+    static string Signature(string def) => SignatureRaw(NewlineSigOff ? def : def.Replace("\r\n", "\n"));
+    static string SignatureRaw(string def) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(def)));
+    /// <summary>Проверка k116: подпись текста как есть (так её считала k114/k115 — с переводами строк системы).</summary>
+    public static string SignatureRawForTest(string s) => SignatureRaw(s);
+    /// <summary>k116: мутация P3D_SKETCHVIS=0 — видимость эскизов в файл не пишется (после открытия скрытые показаны).</summary>
+    static readonly bool SketchVisOff = Environment.GetEnvironmentVariable("P3D_SKETCHVIS") == "0";
+    /// <summary>k116: мутация P3D_TREESTATE=0 — развёрнутые ветки дерева в файл не пишутся.</summary>
+    static readonly bool TreeStateOff = Environment.GetEnvironmentVariable("P3D_TREESTATE") == "0";
+    /// <summary>k116: мутация P3D_FILENEWLINE=0 — подпись по тексту как есть (переводы строк Windows/Linux различают её).</summary>
+    static readonly bool NewlineSigOff = Environment.GetEnvironmentVariable("P3D_FILENEWLINE") == "0";
 
     private static DocDto BuildDto(Part part, ParameterTable? parameters)
     {
@@ -137,6 +146,7 @@ public static class DocumentFile
                 return d;
             }).ToList()
         };
+        if (!TreeStateOff && part.TreeState.Count > 0) doc.Tree = new Dictionary<string, bool>(part.TreeState);   // k116: ветки дерева
         return doc;
     }
 
@@ -153,6 +163,8 @@ public static class DocumentFile
             Up = new[] { s.UpVector.X, s.UpVector.Y }, UpRef = s.UpDescription.Length > 0 ? s.UpDescription : null,
             OriginRef = s.OriginDescription, OriginBase = s.OriginBase is { } ob ? new[] { ob.X, ob.Y, ob.Z } : null,
             OriginOffset = s.OriginOffset == Vector2d.Zero ? null : new[] { s.OriginOffset.X, s.OriginOffset.Y } };
+        // k116 (замечание 16:00, п. 8): видимость эскиза, заданная пользователем, — в файле
+        if (!SketchVisOff && s.VisibleUserSet) dto.Shown = s.Visible;
 
         // ТОЧКИ, НА КОТОРЫЕ ССЫЛАЮТСЯ ЛИНИИ И ДУГИ, ЗАПИСЫВАЮТСЯ ВСЕГДА. Эскиз, собранный кодом
         // (TestGeometry, мастера), хранит концы отрезков только в самих отрезках; прежде такие
@@ -739,7 +751,13 @@ public static class DocumentFile
             throw new InvalidDataException($"файл записан более новой сборкой (вид {doc.Version})");
         // k114: сетка показа из файла — если описание модели то же, что при записи
         var display = doc.Display; doc.Display = null;
-        bool displayOk = display != null && !DisplayOff && display.Signature == Signature(JsonSerializer.Serialize(doc, Opts));
+        bool displayOk = false;
+        if (display != null && !DisplayOff)
+        {
+            // k116: подпись — без учёта переводов строк (файл с Windows \r\n открывался на Linux без сетки, и обратно)
+            var re = JsonSerializer.Serialize(doc, Opts);
+            displayOk = display.Signature == Signature(re) || (!NewlineSigOff && display.Signature == SignatureRaw(re.Replace("\r\n", "\n").Replace("\n", "\r\n")));
+        }
 
         var units = Core.UnitSystem.FromDictionary(doc.Units);                  // m.x4: система единиц документа
         var table = new ParameterTable { Units = units };
@@ -747,6 +765,7 @@ public static class DocumentFile
         table.Recalculate();
 
         var part = new Part(doc.Name) { ActiveConfiguration = doc.ActiveConfiguration ?? "", Units = units };
+        if (!TreeStateOff && doc.Tree != null) foreach (var kv in doc.Tree) part.TreeState[kv.Key] = kv.Value;
         if (doc.PartParameters is { Count: > 0 } pp)
         {
             part.LocalParameters.Units = units;
@@ -804,6 +823,7 @@ public static class DocumentFile
             if (sd.OriginRef != null) s.OriginDescription = sd.OriginRef;
             if (sd.OriginBase is { Length: 3 } obs) s.OriginBase = new Vector3d(obs[0], obs[1], obs[2]);
             if (sd.OriginOffset is { Length: 2 } oo) s.OriginOffset = new Vector2d(oo[0], oo[1]);
+            if (!SketchVisOff && sd.Shown is { } shown) { s.Visible = shown; s.VisibleUserSet = true; }
 
             var byOld = new Dictionary<uint, SkEntity>();
             foreach (var ed in sd.Entities.Where(x => x.Kind == "point"))
@@ -1399,6 +1419,8 @@ public static class DocumentFile
         public int? Stage { get; set; }
         /// <summary>k114: посчитанная сетка показа (поверхности) — открыть без ожидания перестроения.</summary>
         public DisplayDto? Display { get; set; }
+        /// <summary>k116: развёрнутые ветки дерева (путь узла → развёрнут).</summary>
+        public Dictionary<string, bool>? Tree { get; set; }
     }
 
     private sealed class DisplayDto
@@ -1566,6 +1588,8 @@ public static class DocumentFile
         public List<DimensionDto> Dimensions { get; set; } = new();
         /// <summary>k109: место в дереве — сколько операций перед эскизом (null — файл до k109).</summary>
         public int? Slot { get; set; }
+        /// <summary>k116: видимость, заданная пользователем (глаз в дереве); null — по умолчанию программы.</summary>
+        public bool? Shown { get; set; }
     }
 
     static readonly bool SplineSaveOff = Environment.GetEnvironmentVariable("P3D_SKSPLINESAVE") == "0";

@@ -29,23 +29,32 @@ public partial class MainWindow
     }
 
     /// <summary>Подпись содержимого эскиза: изменился ли он с последней отметки.</summary>
-    private static string SketchSig(Sketch sk)
+    private static string SketchSig(Sketch sk) => SketchSig(sk, "R");
+
+    /// <summary>
+    /// k116: подпись с координатами до 10⁻⁹ — «эскиз не менялся» при выходе из правки: решатель на пересчёте детали
+    /// сдвигает точки на 10⁻¹⁵, и точная подпись видела в этом правку (деталь пересчитывалась).
+    /// </summary>
+    private static string SketchSigRounded(Sketch sk) => SketchSig(sk, "0.#########");
+
+    private static string SketchSig(Sketch sk, string fmt)
     {
         var b = new StringBuilder();
         var ci = CultureInfo.InvariantCulture;
         foreach (var e in sk.Entities)
         {
             b.Append(e.Kind).Append(e.Id).Append((int)e.Role).Append(e.Fixed ? 'f' : '-');
-            foreach (var h in e.Handles) b.Append(h.Id).Append(':').Append(h.X.ToString("R", ci)).Append(',').Append(h.Y.ToString("R", ci)).Append(';');
-            if (e is SkCircle c) b.Append('r').Append(c.Radius.ToString("R", ci));
+            foreach (var h in e.Handles) b.Append(h.Id).Append(':').Append(h.X.ToString(fmt, ci)).Append(',').Append(h.Y.ToString(fmt, ci)).Append(';');
+            if (e is SkCircle c) b.Append('r').Append(c.Radius.ToString(fmt, ci));
             if (e is SkArc a) b.Append(a.CCW ? '+' : '-');
-            if (e is SkEllipse el) b.Append(el.RU.ToString("R", ci)).Append(el.RV.ToString("R", ci)).Append(el.Rotation.ToString("R", ci));
+            if (e is SkEllipse el) b.Append(el.RU.ToString(fmt, ci)).Append(el.RV.ToString(fmt, ci)).Append(el.Rotation.ToString(fmt, ci));
             b.Append('|');
         }
         foreach (var c in sk.Constraints) { b.Append(c.Type).Append(c.Enabled ? 1 : 0); foreach (var i in c.Items) b.Append(',').Append(i.Id); b.Append('|'); }
         foreach (var d in sk.Dimensions)
         {
-            b.Append(d.Type).Append(d.Value.ToString("R", ci)).Append(d.Locked ? 'L' : '-').Append(d.Reference ? 'R' : '-').Append(d.IsDefault ? 'D' : '-')
+            if (fmt != "R" && d.IsDefault) continue;   // k116: размеры по умолчанию (ставит сам редактор) — не правка
+            b.Append(d.Type).Append(d.Value.ToString(fmt, ci)).Append(d.Locked ? 'L' : '-').Append(d.Reference ? 'R' : '-').Append(d.IsDefault ? 'D' : '-')
              .Append(d.Formula).Append(d.TextOffset.X.ToString("0.###", ci)).Append(d.TextOffset.Y.ToString("0.###", ci)).Append(d.Arrows);
             foreach (var i in d.Items) b.Append(',').Append(i.Id);
             b.Append('|');

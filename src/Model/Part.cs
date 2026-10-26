@@ -26,6 +26,8 @@ public sealed class Part : ModelItem
 
     /// <summary>Упорядоченное дерево построения.</summary>
     public readonly List<Feature> Features = new();
+    /// <summary>k116: развёрнутые ветки дерева (постоянный путь узла → развёрнут); пишется в файл.</summary>
+    public readonly Dictionary<string, bool> TreeState = new();
 
     /// <summary>UI: параметры уровня детали (ищутся первыми; чего нет — выше: сборка, документ). Пишутся в файл детали.</summary>
     public readonly ParameterTable LocalParameters = new();
@@ -247,9 +249,15 @@ public sealed class Part : ModelItem
 
     private void SetDirty()
     {
+        if (!_dirty) DirtySince = System.Diagnostics.Stopwatch.GetTimestamp();
         _dirty = true;
         Version++;
     }
+
+    /// <summary>k116: с какого момента деталь ждёт расчёта (Stopwatch); показ предпросмотра по нему решает, устарел ли вид.</summary>
+    public long DirtySince { get; private set; } = System.Diagnostics.Stopwatch.GetTimestamp();
+    /// <summary>k116: деталь ждёт расчёта дольше ms миллисекунд.</summary>
+    public bool DirtyLongerThan(double ms) => _dirty && System.Diagnostics.Stopwatch.GetElapsedTime(DirtySince).TotalMilliseconds > ms;
 
     public Matrix4 LocalTransform =>
         Matrix4.CreateFromQuaternion(Rotation) * Matrix4.CreateTranslation(Translation);
@@ -290,6 +298,8 @@ public sealed class Part : ModelItem
     public string? LastFailure;
 
     public void Invalidate() { ForgetCheckpoints(); SetDirty(); }
+    /// <summary>k116: полоска сдвинута — пересчёт по сдвигу (ApplyOutsideChanges), сохранённые состояния до неё остаются.</summary>
+    public void MarkStageMoved() => SetDirty();
 
     /// <summary>
     /// K06. Параметры документа изменились. Сохранённые состояния не сбрасываются: при расчёте
@@ -779,7 +789,7 @@ public sealed class Part : ModelItem
     internal static readonly bool AdoptOff = Environment.GetEnvironmentVariable("P3D_ADOPT") == "0";
 
     /// <summary>Итог выполнения операции (для операций до начала пересчёта).</summary>
-    private sealed class FeatureRecord
+    internal sealed class FeatureRecord
     {
         public string? Error; public Kernel.OperationOutcome? Outcome; public List<uint> Created = new();
         public IReadOnlyList<string>? Entities; public AmbiguousReferenceException? Ambiguity; public (int, int)? Downgrade;
@@ -837,16 +847,70 @@ public sealed class Part : ModelItem
             var prev = c.PointAt(c.T0);
             for (int i = 1; i <= n; i++) { var q = c.PointAt(c.T0 + (c.T1 - c.T0) * i / n); lines.Add((prev, q)); prev = q; }
         }
-        foreach (var e in b1.SelectMany(b => b.Edges)) if (!e.Hidden && !k0.Contains(Key(e))) Add(e);   // новые рёбра
-        foreach (var e in b0.SelectMany(b => b.Edges)) if (!e.Hidden && !k1.Contains(Key(e))) Add(e);   // снятые рёбра
+        // k116 (замечание 16:00, п. 6): КОНТУР ДОБАВЛЕННОГО/СНЯТОГО — рёбра граней, порождённых операцией (метка «#ключ/»):
+        // стенки и дно выреза, стенки и крышка бобышки. Разность рёбер «до/после» давала и рёбра чужих граней, которые
+        // булева лишь переразбила (кромки, порезанные на куски). Нет таких граней (зеркало, массив) — прежняя разность.
+        var own = TreeOwnOff ? new List<Kernel.Topology.TFace>() : b1.SelectMany(b => b.Faces).Where(fc => fc.Tag.StartsWith("#" + f.Key + "/", StringComparison.Ordinal)).ToList();
+        if (own.Count > 0)
+        {
+            var seen = new HashSet<Kernel.Topology.TEdge>();
+            foreach (var fc in own) foreach (var e in fc.Edges) if (!e.Hidden && seen.Add(e)) Add(e);
+        }
+        else
+        {
+            foreach (var e in b1.SelectMany(b => b.Edges)) if (!e.Hidden && !k0.Contains(Key(e))) Add(e);   // новые рёбра
+            foreach (var e in b0.SelectMany(b => b.Edges)) if (!e.Hidden && !k1.Contains(Key(e))) Add(e);   // снятые рёбра
+        }
         double V(List<Kernel.Topology.TSolid> bs) => bs.Sum(b => Kernel.Topology.AnalyticVolume.Of(b) ?? MassProps.Volume(Tessellator.Tessellate(b)));
         bool adds;
         try { adds = V(b1) >= V(b0); } catch { adds = true; }
         return (lines, adds);
     }
     static readonly bool TreeDiffOff = Environment.GetEnvironmentVariable("P3D_TREEDIFF") == "0";
+    /// <summary>
+    /// k116 (замечание 16:00, п. 9): СНИМОК РАСЧЁТА ДЕТАЛИ — на время правки эскиза. Отмена правки (или «ОК» без изменений)
+    /// возвращает деталь к расчёту до правки без единой операции: сохранённые состояния, итог, записи операций. Прежде
+    /// отмена заменяла деталь снимком файла — деталь перестраивалась целиком (на детали пользователя — минуты).
+    /// </summary>
+    public sealed class BuildStash
+    {
+        internal List<Checkpoint> Checkpoints = null!;
+        internal BuildResult? Last;
+        internal (Kernel.KernelSettings Settings, Kernel.OperationPolicy Policy, Kernel.KernelLimits Limits, int Stage)? Inputs;
+        internal Dictionary<string, double>? Params;
+        internal Dictionary<Feature, FeatureRecord> Records = null!;
+        internal int Stage;
+        internal int FeatureCount;
+    }
 
-    private sealed class Checkpoint
+    public BuildStash? StashBuild()
+    {
+        if (IsDirty || _lastResult == null) return null;
+        return new BuildStash
+        {
+            Checkpoints = _checkpoints.ToList(), Last = _lastResult, Inputs = _lastInputs, Params = _lastParams,
+            Records = new Dictionary<Feature, FeatureRecord>(_records, ReferenceEqualityComparer.Instance), Stage = StageIndex, FeatureCount = Features.Count,
+        };
+    }
+
+    /// <summary>Вернуть расчёт из снимка (дерево операций то же); false — снимок не годится, нужен обычный пересчёт.</summary>
+    public bool RestoreBuild(BuildStash st)
+    {
+        if (st.Last == null || st.FeatureCount != Features.Count || _computing > 0) return false;
+        StageIndex = st.Stage;
+        _checkpoints.Clear(); _checkpoints.AddRange(st.Checkpoints);
+        _records.Clear(); foreach (var kv in st.Records) _records[kv.Key] = kv.Value;
+        _lastInputs = st.Inputs; _lastParams = st.Params; _lastResult = st.Last;
+        _dirtyFrom = int.MaxValue;
+        st.Last.Version = Version;
+        st.Last.Inputs = (EffectiveStage, Policy, Limits);
+        st.Last.ParamSnapshot = null;
+        return Apply(st.Last);
+    }
+
+    static readonly bool TreeOwnOff = Environment.GetEnvironmentVariable("P3D_TREEOWN") == "0";
+
+    internal sealed class Checkpoint
     {
         public int After;                       // номер операции, после которой снято
         public Features.BuildContext.Snapshot State = null!;

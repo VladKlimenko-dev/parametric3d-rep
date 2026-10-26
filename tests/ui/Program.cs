@@ -3114,6 +3114,83 @@ Check("UI-TREE-GROUP-K115", () =>
     w.Close();
 });
 
+Check("UI-K116", () =>
+{
+    // k116 (замечание 16:00): (2) расчёт предпросмотра идёт — прежняя деталь без рёбер, вершин и выбора; (5) полоса прокрутки
+    // дерева не закрывает глаза; (7) развёрнутые ветки дерева — в файле; (9) правка эскиза — со снимком: отмена (и «ОК» без
+    // изменений) возвращает эскиз и расчёт детали без перестроения и без шага отмены.
+    // Мутации P3D_PREVIEWSTALE=0, P3D_TREESCROLLGAP=0, P3D_TREESTATE=0, P3D_SKSTASH=0.
+    var s = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 20), "k116");
+    var w = Open(s); var vp = w.ViewPort; var part = s.Part!;
+    BuildNow(s); w.RebuildTree(); Dispatcher.UIThread.RunJobs();
+    // (2)
+    double staleMs = Parametric3D.Render.Engine.SceneBuilder.StaleAfterMs;
+    try
+    {
+        Parametric3D.Render.Engine.SceneBuilder.StaleAfterMs = 0;
+        s.Document.PreviewPart = part; part.Invalidate(); Thread.Sleep(2);
+        vp.BuildSceneForTest(); var sc = vp.Scene!;
+        int edgesStale = sc.BodyEdges.Count, vertsStale = sc.BodyVertices.Count;
+        bool picksStale = sc.PickTable.Skip(1).Any(e => ReferenceEquals(e.Ref.Owner, part) && e.Ref.Kind is PickKind.Face or PickKind.Edge or PickKind.Vertex);
+        s.Document.PreviewPart = null; vp.BuildSceneForTest(); sc = vp.Scene!;
+        int edgesNormal = sc.BodyEdges.Count;
+        bool picksNormal = sc.PickTable.Skip(1).Any(e => ReferenceEquals(e.Ref.Owner, part) && e.Ref.Kind == PickKind.Face);
+        Console.WriteLine($"  (2) preview pending: edges {edgesStale}, vertices {vertsStale}, picks {picksStale}, meshes {sc.Meshes.Count}; not in preview: edges {edgesNormal}, picks {picksNormal}");
+        Require(edgesStale == 0 && vertsStale == 0 && !picksStale && edgesNormal > 0 && picksNormal && sc.Meshes.Count > 0, "a pending preview shows the old edges or lets them be picked");
+    }
+    finally { Parametric3D.Render.Engine.SceneBuilder.StaleAfterMs = staleMs; s.Document.PreviewPart = null; }
+    BuildNow(s);
+    // (5) низкое окно — у дерева полоса прокрутки, содержимое сужено под неё
+    w.Height = 480; for (int i = 0; i < 5; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); }
+    Console.WriteLine($"  (5) tree scroll bar {w.TreeScrollBarShown}, content right gap {w.TreeContentRightGap}");
+    Require(w.TreeScrollBarShown && Math.Abs(w.TreeContentRightGap - MainWindow.TreeScrollGap) < 0.01, "the tree scroll bar covers the visibility column");
+    w.Height = 860; for (int i = 0; i < 5; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); }
+    Require(w.TreeScrollBarShown || w.TreeContentRightGap == 0, "the gap stays without a scroll bar");
+    // (7) развернуть ветку операции — в файле, после открытия развёрнута
+    var ex = part.Features.OfType<ExtrudeFeature>().First(f => f.ConsumedSketchIds().Any());
+    var node = w.AllNodes.First(n => ReferenceEquals(n.Item, ex) && !n.IsReference);
+    bool before = node.IsExpanded;
+    node.IsExpanded = !before; Dispatcher.UIThread.RunJobs();
+    string path = Path.Combine(Path.GetTempPath(), $"p3d_ui_k116_{Guid.NewGuid():N}.p3d");
+    try
+    {
+        s.SaveAs(path);
+        var s2 = DocumentSession.Open(path); var w2 = Open(s2); BuildNow(s2); w2.RebuildTree(); Dispatcher.UIThread.RunJobs();
+        var n2 = w2.AllNodes.First(n => n.Item is Feature f2 && f2.Key == ex.Key && !n.IsReference);
+        Console.WriteLine($"  (7) branch expanded {before} -> {!before}, after reopening {n2.IsExpanded}");
+        Require(n2.IsExpanded == !before, "the expanded state was not restored from the file");
+        w2.Close();
+    }
+    finally { try { File.Delete(path); } catch { } }
+    // (9) правка эскиза: изменить и отменить — эскиз и деталь прежние, деталь не пересчитывается, шага отмены нет
+    var used = part.Features.Last(f => f.ConsumedSketchIds().Any() && f.Error == null);
+    var sk = part.Sketches.First(k => used.ConsumedSketchIds().Contains(k.Id));
+    double v0 = part.Volume;
+    string Coords(Sketch k) => string.Join(";", k.AllPoints().Select(q => $"{q.X:R},{q.Y:R}"));
+    string c0 = Coords(sk);
+    long r0 = MainWindow.SketchStashRestores;
+    bool canUndo0 = s.CanUndo;
+    w.EditSketch(sk); BuildNow(s);
+    var pt = sk.AllPoints().First(q => q.Role != SkRole.Reference && !q.Fixed);
+    pt.X += 1; sk.NotifyChanged(sk); BuildNow(s);
+    w.CancelSketch(); Dispatcher.UIThread.RunJobs();
+    var pAfter = s.Part!;
+    var skAfter = pAfter.Sketches.First(k => k.Id == sk.Id);
+    Console.WriteLine($"  (9) cancel: same part {ReferenceEquals(pAfter, part)}, dirty {pAfter.IsDirty}, restores {MainWindow.SketchStashRestores - r0}, sketch restored {Coords(skAfter) == c0}, volume {pAfter.Volume:0.###} vs {v0:0.###}, can undo {s.CanUndo} (was {canUndo0})");
+    Require(ReferenceEquals(pAfter, part) && !pAfter.IsDirty && MainWindow.SketchStashRestores == r0 + 1 && Coords(skAfter) == c0 && Math.Abs(pAfter.Volume - v0) < 1e-9 * Math.Max(1, v0) && s.CanUndo == canUndo0,
+        "cancelling a sketch edit rebuilt the part or did not restore the sketch");
+    // «ОК» без изменений — так же
+    w.EditSketch(sk); BuildNow(s); w.FinishSketch(); Dispatcher.UIThread.RunJobs();
+    Console.WriteLine($"  (9) OK without changes: same part {ReferenceEquals(s.Part, part)}, dirty {part.IsDirty}, restores {MainWindow.SketchStashRestores - r0}, can undo {s.CanUndo}");
+    Require(ReferenceEquals(s.Part, part) && !part.IsDirty && MainWindow.SketchStashRestores == r0 + 2 && s.CanUndo == canUndo0, "OK without changes rebuilt the part");
+    // «ОК» с изменением — обычная правка (деталь пересчитана, шаг отмены есть)
+    w.EditSketch(sk); BuildNow(s);
+    pt = sk.AllPoints().First(q => q.Role != SkRole.Reference && !q.Fixed); pt.X += 0.5; sk.NotifyChanged(sk);
+    w.FinishSketch(); BuildNow(s);
+    Require(s.CanUndo && Coords(s.Part!.Sketches.First(k => k.Id == sk.Id)) != c0, "OK with a change was not applied");
+    w.Close();
+});
+
 Check("UI-FILE-DISPLAY-K114", () =>
 {
     // k114 (замечание 12:12): открытый файл сразу показывает деталь (поверхности из файла), выбор — после перестроения,

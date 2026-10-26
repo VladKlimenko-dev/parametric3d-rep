@@ -20,10 +20,24 @@ public static class SceneBuilder
         _activeSketch = activeSketch;
         _pointSketches = pointSketches;
         _hiddenRoot = doc.RootIsHidden ? doc.Root : null;
+        _previewPart = doc.PreviewPart;
         try { Walk(doc.Root, Matrix4.Identity, s, th, show, activeOwner, doc.Root.Visible); }
-        finally { _activeSketch = null; _hiddenRoot = null; _pointSketches = null; }
+        finally { _activeSketch = null; _hiddenRoot = null; _pointSketches = null; _previewPart = null; }
         return s;
     }
+
+    /// <summary>
+    /// k116 (замечание 16:00, п. 2): ПРЕДПРОСМОТР СЧИТАЕТСЯ — ПРЕЖНЯЯ ДЕТАЛЬ БЕЗ РЁБЕР И БЕЗ ВЫБОРА. Пока расчёт предпросмотра
+    /// операции идёт (на тяжёлой детали — секунды), на экране оставалась деталь до операции со всеми рёбрами и вершинами, и её
+    /// элементы подсвечивались и выбирались — как будто это уже результат. Теперь через StaleAfterMs после начала ожидания
+    /// прежняя деталь показывается только гранями: без рёбер, вершин и выбора (быстрый предпросмотр — меньше этого — не мигает).
+    /// Мутация P3D_PREVIEWSTALE=0.
+    /// </summary>
+    public static readonly bool StalePreviewOff = Environment.GetEnvironmentVariable("P3D_PREVIEWSTALE") == "0";
+    public static double StaleAfterMs = 300;
+    [ThreadStatic] private static Part? _previewPart;
+    public static bool IsStalePreview(Part part, Part? previewPart) =>
+        !StalePreviewOff && ReferenceEquals(part, previewPart) && part.DirtyLongerThan(StaleAfterMs);
 
     /// <summary>Эскиз в правке: виден всегда (и при скрытых эскизах), его точки выбираются (привязка, размеры).</summary>
     [ThreadStatic] private static Sketch? _activeSketch;
@@ -130,6 +144,7 @@ public static class SceneBuilder
     {
         var md = part.Mesh;
         if (md == null || md.Vertices.Length == 0) return;
+        bool stale = IsStalePreview(part, _previewPart);
 
         var color = th.Body;
         if (part.Material is { } mat && mat.Name != Material.Steel().Name)
@@ -155,17 +170,19 @@ public static class SceneBuilder
             item.Nrm[i] = v.N;
             // k113: грань 0 — кусок резца в мгновенном предпросмотре: у неё нет грани тела, выбирать нечего
             if (!facePick.TryGetValue(v.FaceId, out uint fp))
-                facePick[v.FaceId] = fp = v.FaceId == 0 || part.ShowsCached ? 0u : s.AddPick(new PickRef(v.FaceId, PickKind.Face, part, null), 1, part.Id);   // k114: сетка из файла — тел ещё нет
+                facePick[v.FaceId] = fp = v.FaceId == 0 || part.ShowsCached || stale ? 0u : s.AddPick(new PickRef(v.FaceId, PickKind.Face, part, null), 1, part.Id);   // k114: сетка из файла — тел ещё нет
             item.Pick[i] = fp;
         }
         s.Meshes.Add(item);
 
+        if (!stale)
         foreach (var (edgeId, pts) in md.EdgePolylines)
         {
             uint pick = edgeId == 0 || part.ShowsCached ? 0u : s.AddPick(new PickRef(edgeId, PickKind.Edge, part, null), 2, part.Id);
             for (int i = 1; i < pts.Length; i++)
                 s.BodyEdges.Add(Line(Vector3.TransformPosition(pts[i - 1], xf), Vector3.TransformPosition(pts[i], xf), th.Edge, th.EdgeWidth, 0, pick));
         }
+        if (!stale)
         foreach (var (vid, p) in md.Points)
         {
             uint pick = part.ShowsCached ? 0u : s.AddPick(new PickRef(vid, PickKind.Vertex, part, null), 3, part.Id);
