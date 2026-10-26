@@ -72,6 +72,36 @@ public static class ShotRunner
             w.ViewPort.Camera.State = st; w.ViewPort.Redraw();
             Console.WriteLine("cam " + id); return;
         }
+        if (id.StartsWith("facetag:") && w.Session.Part is { } tp)
+        {
+            // facetag:начало метки[,номер] — выбрать грань тела по метке (разбор: подсветка грани)
+            var a = id[8..].Split(',');
+            var fs = tp.Bodies.SelectMany(b => b.Faces).Where(f => f.Tag.StartsWith(a[0], StringComparison.Ordinal)).ToList();
+            int k = a.Length > 1 ? int.Parse(a[1]) : 0;
+            if (k < fs.Count) w.ViewPort.Selection.Select(new Parametric3D.Core.PickRef(fs[k].Id, Parametric3D.Core.PickKind.Face, tp, null), additive: false);
+            Console.WriteLine($"facetag {id}: {fs.Count} faces, selected {(k < fs.Count ? fs[k].Id : 0)}");
+            return;
+        }
+        if (id == "meshfaces" && w.Session.Part is { } mfp && mfp.Mesh is { } mmd)
+        {
+            // разбор: треугольники сетки показа — на поверхности грани своего номера?
+            var bf = mfp.Bodies.SelectMany(b => b.Faces).ToDictionary(f => f.Id);
+            var per = new Dictionary<uint, (int N, int Off, double Area)>();
+            for (int t = 0; t + 2 < mmd.Indices.Length; t += 3)
+            {
+                var ta = mmd.Vertices[mmd.Indices[t]]; var tb = mmd.Vertices[mmd.Indices[t + 1]]; var tc = mmd.Vertices[mmd.Indices[t + 2]];
+                var cur = per.GetValueOrDefault(ta.FaceId); int off = 0;
+                if (bf.TryGetValue(ta.FaceId, out var mf) && cur.N % 5 == 0)
+                {
+                    var src = (mf.Surface as Kernel.Surfaces.FacetedSurface)?.Source ?? mf.Surface;
+                    var cen = new OpenTK.Mathematics.Vector3d((ta.P.X + tb.P.X + tc.P.X) / 3, (ta.P.Y + tb.P.Y + tc.P.Y) / 3, (ta.P.Z + tb.P.Z + tc.P.Z) / 3);
+                    if ((src.PointAt(src.ProjectToUV(cen)) - cen).Length > 0.5) off = 1;
+                }
+                per[ta.FaceId] = (cur.N + 1, cur.Off + off, cur.Area + OpenTK.Mathematics.Vector3.Cross(tb.P - ta.P, tc.P - ta.P).Length / 2);
+            }
+            foreach (var (fid, v) in per.OrderBy(k => k.Key)) Console.WriteLine($"meshface {fid} {bf.GetValueOrDefault(fid)?.Tag}: tris {v.N}, area {v.Area:0.#}, off-surface samples {v.Off}");
+            return;
+        }
         if (id.StartsWith("ray:") && w.Session.Part?.Mesh is { } rmd)
         {
             // ray:px,py — все пересечения луча через пиксель снимка с сеткой детали (разбор артефактов показа)

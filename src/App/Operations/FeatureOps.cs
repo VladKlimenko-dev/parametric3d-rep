@@ -609,11 +609,59 @@ public sealed class PlaneOp : Operation, IHandleOp
     public int InitialMethod = -1;
     private RefField _base2 = null!, _face = null!;
 
+    /// <summary>
+    /// k116 (задача 22:05): ПРАВКА ГОТОВОЙ ПЛОСКОСТИ — как любой операции (двойной щелчок в дереве, «Изменить операцию»):
+    /// панель с её способом, базовой плоскостью, смещением, углом и направлением; эскизы на ней переносятся вместе с ней;
+    /// «Отмена» — плоскость и эскизы прежние. Мутация P3D_PLANEEDIT=0 — правка плоскости недоступна (прежнее).
+    /// </summary>
+    public DatumPlane? EditTarget;
+    public static readonly bool EditOff = Environment.GetEnvironmentVariable("P3D_PLANEEDIT") == "0";
+    public bool Editing => EditTarget != null;
+    private (Frame3 F, DatumPlaneMode M, double Off, double Ang, bool Flip, int Method, string? Base, List<uint> Refs, List<(Sketch S, Frame3 P, Frame3 B)> Sk)? _orig;
+
+    /// <summary>Способ панели по виду плоскости (у плоскостей, записанных до k116).</summary>
+    static int MethodOf(DatumPlane dp) => dp.Method >= 0 ? dp.Method : dp.Mode switch
+    {
+        DatumPlaneMode.ThreePoints => 1, DatumPlaneMode.LineAndPoint => 2, DatumPlaneMode.ParallelThroughPoint => 3,
+        DatumPlaneMode.AngleToFace => 4, DatumPlaneMode.NormalToLine => 5, _ => 0,
+    };
+
+    /// <summary>Эскизы на плоскости (по номеру основы или по имени плоскости — после открытия файла).</summary>
+    List<Sketch> SketchesOn(DatumPlane dp) => Part.Sketches.Where(k => k.BasePlaneId == dp.Id || k.PlaneDescription == dp.Name).ToList();
+
     protected override bool Start()
     {
+        if (EditTarget is { } dp)
+        {
+            W.Session.BeginEdit(L("Изменить «{0}»", dp.Name));
+            _dp = dp;
+            _by = MethodOf(dp);
+            _flip = dp.Flip || (_by == 0 && dp.Offset < 0);
+            _offset = new ValueRef(_by == 0 ? Math.Abs(dp.Offset) : 20);
+            _angle = new ValueRef(dp.Angle != 0 ? Math.Abs(dp.Angle) : 30);
+            _orig = (dp.Frame, dp.Mode, dp.Offset, dp.Angle, dp.Flip, dp.Method, dp.BaseName, dp.References.ToList(),
+                     SketchesOn(dp).Select(k => (k, k.Plane, k.BaseFrame)).ToList());
+            return true;
+        }
         W.Session.BeginEdit(L(Title));
         if (InitialMethod >= 0) _by = InitialMethod;
         return true;
+    }
+
+    /// <summary>Базовая плоскость правки — по номеру ссылки или по имени (опорная плоскость или грань с этой меткой).</summary>
+    PickRef? BaseRefOf(DatumPlane dp)
+    {
+        foreach (var id in dp.References)
+        {
+            if (Part.Planes.FirstOrDefault(x => x.Id == id) is { } bp && !ReferenceEquals(bp, dp)) return new PickRef(bp.Id, PickKind.DatumPlane, Part, bp);
+            if (Part.FindFace(id) != null) return new PickRef(id, PickKind.Face, Part, null);
+        }
+        if (dp.BaseName is { Length: > 0 } bn)
+        {
+            if (Part.Planes.FirstOrDefault(x => x.Name == bn && !ReferenceEquals(x, dp)) is { } bp) return new PickRef(bp.Id, PickKind.DatumPlane, Part, bp);
+            if (Part.Bodies.SelectMany(b => b.Faces).FirstOrDefault(f => f.Tag == bn) is { } bf) return new PickRef(bf.Id, PickKind.Face, Part, null);
+        }
+        return null;
     }
 
     public override void Build(OpPanel p)
@@ -632,6 +680,15 @@ public sealed class PlaneOp : Operation, IHandleOp
 
     public override void Prime()
     {
+        if (EditTarget is { } edp)
+        {
+            // правка: ссылки — из самой плоскости (выбрана в дереве она сама); точки и прямые способов по точкам — выбрать заново
+            if (BaseRefOf(edp) is { } br && _by is 0 or 3 or 4 or 6) _base.Take(new[] { br });
+            foreach (var f in new[] { _base, _base2, _line, _pts, _face }) if (f.Text != null) f.Text.Text = f.Summary;
+            Panel?.Refresh();
+            RefreshStatus();
+            return;
+        }
         // вторая плоскость — второй выбранной плоской ссылкой (выбор снят раскладкой по полям — взять до неё)
         var planes = W.ViewPort.Selection.Items.Where(Refs.IsPlanar).ToList();
         Seed(_base, _line, _pts, _face);
@@ -709,14 +766,34 @@ public sealed class PlaneOp : Operation, IHandleOp
         }
         else
         {
+            var old = _dp.Frame;
             _dp.Frame = c.F; _dp.Mode = c.M;
             _dp.Offset = _by == 0 ? _offset.Value * (_flip ? -1 : 1) : 0;
             _dp.References.Clear();
             if (c.Src != 0) _dp.References.Add(c.Src);
+            // правка: эскизы на плоскости — вместе с ней (их координаты в плоскости те же)
+            if (EditTarget != null) foreach (var sk in SketchesOn(_dp)) MoveSketch(sk, old, c.F);
             _dp.NotifyChanged(_dp);
         }
+        _dp.Angle = _by == 4 ? _angle.Value : 0; _dp.Flip = _flip; _dp.Method = _by;
+        _dp.BaseName = _base.Items.Count > 0 ? NameOfRef(_base.Items[0]) : null;
         W.ViewPort.MarkDirty();
         W.RefreshPlaneHandle();
+    }
+
+    string? NameOfRef(PickRef r) => r.Target is DatumPlane bp ? bp.Name : r.Kind == PickKind.Face && Part.FindFace(r.Id) is { } f ? f.Tag : null;
+
+    /// <summary>Перенести эскиз с плоскости from на плоскость to (координаты эскиза в плоскости — те же).</summary>
+    static void MoveSketch(Sketch sk, Frame3 from, Frame3 to)
+    {
+        Frame3 Map(Frame3 f)
+        {
+            Vector3d P(Vector3d x) { var d = x - from.Origin; return to.Origin + to.U * Vector3d.Dot(d, from.U) + to.V * Vector3d.Dot(d, from.V) + to.W * Vector3d.Dot(d, from.W); }
+            Vector3d D(Vector3d x) => to.U * Vector3d.Dot(x, from.U) + to.V * Vector3d.Dot(x, from.V) + to.W * Vector3d.Dot(x, from.W);
+            return new Frame3(P(f.Origin), D(f.U), D(f.V));
+        }
+        sk.Plane = Map(sk.Plane); sk.BaseFrame = Map(sk.BaseFrame);
+        sk.NotifyChanged(sk);
     }
 
     /// <summary>Ручка: начало и нормаль базовой плоскости (смещение) — тянут вдоль нормали.</summary>
@@ -736,6 +813,17 @@ public sealed class PlaneOp : Operation, IHandleOp
 
     public override void Cancel()
     {
+        if (EditTarget is { } dp && _orig is { } o)
+        {
+            // правка: плоскость и эскизы на ней — прежние (без замены детали снимком)
+            dp.Frame = o.F; dp.Mode = o.M; dp.Offset = o.Off; dp.Angle = o.Ang; dp.Flip = o.Flip; dp.Method = o.Method; dp.BaseName = o.Base;
+            dp.References.Clear(); dp.References.AddRange(o.Refs);
+            foreach (var (sk, pl, bf) in o.Sk) if (!sk.Plane.Equals(pl) || !sk.BaseFrame.Equals(bf)) { sk.Plane = pl; sk.BaseFrame = bf; sk.NotifyChanged(sk); }
+            dp.NotifyChanged(dp);
+            W.ViewPort.MarkDirty();
+            W.Session.DiscardEdit();
+            return;
+        }
         // новая плоскость — убрать её; деталь не заменяется и не перестраивается целиком
         if (_dp != null) Part.Remove(_dp);
         W.Session.DiscardEdit();

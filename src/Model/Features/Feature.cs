@@ -182,6 +182,7 @@ public sealed class BuildContext
         var sk = Part.FindById<Sketch>(id);
         // KRN-08: эскиз на грани переносится на текущую грань с его именем.
         if (sk != null) SketchFaceRef.Follow(sk, this);
+        if (sk != null) SketchEdgeRefs.Follow(sk, this);
         return sk;
     }
     public DatumPlane? FindPlane(uint id) => Part.FindById<DatumPlane>(id);

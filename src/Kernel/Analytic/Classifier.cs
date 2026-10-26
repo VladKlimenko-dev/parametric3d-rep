@@ -754,8 +754,29 @@ public sealed partial class AnalyticFace
     {
         double d = BoundaryDistance(q);
         if (d < Tol) return 0;
-        return Contains(q) == true ? d : -d;
+        var c = Contains(q);
+        // k116 (снимок 21:45, двойная стенка): ЛУЧ ВДОЛЬ РЕБРА. У цилиндра и конуса луч идёт вдоль образующей; точка под
+        // вертикальным ребром границы (θ — ровно θ ребра, вдали от него) давала «не решено» — и считалась СНАРУЖИ грани:
+        // кусок пересечения в этом месте терялся, стенка второго кармана не делилась, точный маршрут отказывал. Точка дальше
+        // допуска от границы: то же решение у точки, сдвинутой по θ на долю её расстояния до границы (в той же области).
+        // Мутация P3D_RAYSHIFT=0.
+        if (c == null && !RayShiftOff && (Cyl || Cone) && !Tor && !Band && !Param && !FullSurface)
+        {
+            double h = H(q), th = Theta(q), r = RadiusAt(h);
+            if (r > 0)
+                foreach (double k in new[] { 0.25, -0.25, 0.1, -0.1 })
+                {
+                    double t2 = th + k * d / r;
+                    var axisPt = O + W * h / Math.Max(1e-300, W.LengthSquared);
+                    var q2 = axisPt + (U * Math.Cos(t2) + V * Math.Sin(t2)) * ((q - axisPt).Length);
+                    if (Math.Abs(H(q2) - h) > 1e-9 * Math.Max(1, Math.Abs(h))) break;     // базис не ортонормален — без сдвига
+                    var c2 = Contains(q2);
+                    if (c2 != null) { c = c2; break; }
+                }
+        }
+        return c == true ? d : -d;
     }
+    static readonly bool RayShiftOff = Environment.GetEnvironmentVariable("P3D_RAYSHIFT") == "0";
 
     /// <summary>Беззнаковое расстояние (мм) от точки на поверхности до границы грани в параметрах (без допуска).</summary>
     public double BoundaryDistance(Vector3d q)

@@ -3191,6 +3191,57 @@ Check("UI-K116", () =>
     w.Close();
 });
 
+Check("UI-PLANE-EDIT-K116", () =>
+{
+    // k116 (задача 22:05): готовую плоскость правят как операцию — «Изменить операцию» (двойной щелчок в дереве): панель
+    // со способом, базой и смещением; эскиз на плоскости переносится с ней; «Отмена» — всё прежнее; «ОК» — новое, с отменой;
+    // после записи в файл и открытия правка находит базовую плоскость по имени. Мутация P3D_PLANEEDIT=0.
+    var s = DocumentSession.Sample(); var w = Open(s); var part = s.Part!; var reg = CommandRegistry.Instance;
+    BuildNow(s);
+    w.SelectItem(part.PlaneXY);
+    var pop = new PlaneOp(); w.StartOperation(pop); pop.DragValue!(20); pop.FieldChanged(); w.CommitOperation(); BuildNow(s);
+    var dp = part.Planes.Last();
+    var n = part.PlaneXY.Frame.W.Normalized();
+    double Off(DatumPlane x) => Vector3d.Dot(x.Frame.Origin - part.PlaneXY.Frame.Origin, n);
+    Require(!ReferenceEquals(dp, part.PlaneXY) && Math.Abs(Math.Abs(Off(dp)) - 20) < 1e-9, $"plane offset {Off(dp)}");
+    double sign = Math.Sign(Off(dp));
+    var sk = new Sketch("OnPlane", dp.Frame); sk.SetBasePlane(dp.Frame, dp.Id, dp.Name); sk.AddEntity(new SkCircle(new SkPoint(3, 4), 5)); part.Add(sk);
+    double SkOff() => Vector3d.Dot(sk.Plane.Origin - part.PlaneXY.Frame.Origin, n);
+    // правка: «Изменить операцию» доступна, панель — правка плоскости
+    w.SelectItem(dp); Dispatcher.UIThread.RunJobs();
+    Require(reg["edit.feature"].Enabled, "Edit feature is disabled for a datum plane");
+    reg["edit.feature"].Execute(); Dispatcher.UIThread.RunJobs();
+    var eop = w.CurrentOperation as PlaneOp;
+    Require(eop is { Editing: true } && ReferenceEquals(eop.EditTarget, dp), "the plane did not open for editing");
+    eop!.DragValue!(35 * sign); eop.FieldChanged(); Dispatcher.UIThread.RunJobs();
+    Console.WriteLine($"  editing: plane {Off(dp):0.###}, sketch {SkOff():0.###}");
+    Require(Math.Abs(Off(dp) - 35 * sign) < 1e-9 && Math.Abs(SkOff() - 35 * sign) < 1e-9, "the plane (or its sketch) did not move");
+    w.CancelOperation(); Dispatcher.UIThread.RunJobs();
+    Console.WriteLine($"  cancelled: plane {Off(dp):0.###}, sketch {SkOff():0.###}");
+    Require(Math.Abs(Off(dp) - 20 * sign) < 1e-9 && Math.Abs(SkOff() - 20 * sign) < 1e-9, "cancel did not restore the plane and its sketch");
+    // «ОК»
+    w.SelectItem(dp); reg["edit.feature"].Execute(); eop = (PlaneOp)w.CurrentOperation!;
+    eop.DragValue!(35 * sign); eop.FieldChanged(); w.CommitOperation(); BuildNow(s);
+    Require(Math.Abs(Off(dp) - 35 * sign) < 1e-9 && Math.Abs(SkOff() - 35 * sign) < 1e-9 && s.CanUndo, "OK did not keep the new plane");
+    // файл: правка после открытия — база по имени
+    string path = Path.Combine(Path.GetTempPath(), $"p3d_ui_k116p_{Guid.NewGuid():N}.p3d");
+    try
+    {
+        s.SaveAs(path);
+        var s2 = DocumentSession.Open(path); var w2 = Open(s2); BuildNow(s2); var p2 = s2.Part!;
+        var dp2 = p2.Planes.First(x => x.Name == dp.Name);
+        var sk2 = p2.Sketches.First(x => x.Name == "OnPlane");
+        w2.SelectItem(dp2); reg["edit.feature"].Execute(); var op2 = (PlaneOp)w2.CurrentOperation!;
+        op2.DragValue!(50 * sign); op2.FieldChanged(); w2.CommitOperation(); BuildNow(s2);
+        double o2 = Vector3d.Dot(dp2.Frame.Origin - p2.PlaneXY.Frame.Origin, n), so2 = Vector3d.Dot(sk2.Plane.Origin - p2.PlaneXY.Frame.Origin, n);
+        Console.WriteLine($"  after reopening: method {dp2.Method}, base {dp2.BaseName}, plane {o2:0.###}, sketch {so2:0.###}");
+        Require(Math.Abs(o2 - 50 * sign) < 1e-9 && Math.Abs(so2 - 50 * sign) < 1e-9, "editing after reopening the file");
+        w2.Close();
+    }
+    finally { try { File.Delete(path); } catch { } }
+    w.Close();
+});
+
 Check("UI-FILE-DISPLAY-K114", () =>
 {
     // k114 (замечание 12:12): открытый файл сразу показывает деталь (поверхности из файла), выбор — после перестроения,

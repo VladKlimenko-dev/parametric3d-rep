@@ -405,7 +405,11 @@ public static class DraftOp
         double len = (h.HingeB - h.HingeA).Length, margin = Math.Max(len * 0.05, h.Lever * 0.05);
         var d = h.HingeDir.Normalized();
         var o = h.HingeA - d * margin;
-        var q0 = o; var q1 = o + h.M * h.Lever; var q2 = q1 + h.MoveDir * t;
+        // k116: клин чуть дальше смещаемого ребра (2 %): торец клина на уровне ребра касался кривой соседней грани (дно
+        // кармана, ограниченное дугой отверстия: плоскость торца — касательная к цилиндру у вершины дуги) — точная булева
+        // отказывала («tangent contact»). За ребром — снаружи тела (выпуклое ребро), лишнего не снимается. P3D_WEDGEMARGIN=0.
+        double lev = WedgeMarginOff ? h.Lever : h.Lever * 1.02;
+        var q0 = o; var q1 = o + h.M * lev; var q2 = q1 + h.MoveDir * (t * lev / h.Lever);
         var fr = new Frame3(o, h.M.Normalized(), Vector3d.Cross(d, h.M.Normalized()));
         var pr = ProfileBuilder.Build(fr, new List<ICurve3> { new LineCurve3(q0, q1), new LineCurve3(q1, q2), new LineCurve3(q2, q0) });
         if (pr.IsEmpty) return null;
@@ -548,6 +552,7 @@ public static class DraftOp
     static readonly bool CylDraftOff = Environment.GetEnvironmentVariable("P3D_DRAFTCYL") == "0";
     static readonly bool ConeOff = Environment.GetEnvironmentVariable("P3D_DRAFTCONE") == "0";
     static readonly bool WedgeBoolOff = Environment.GetEnvironmentVariable("P3D_DRAFTWEDGE") == "0";
+    static readonly bool WedgeMarginOff = Environment.GetEnvironmentVariable("P3D_WEDGEMARGIN") == "0";
 
     /// <summary>
     /// k115: УКЛОН ГРАНИ ТЕЛА ВРАЩЕНИЯ ПО ОКРУЖНОСТИ-ШАРНИРУ — цилиндр или конус. Образующая поворачивается вокруг точки шарнира
