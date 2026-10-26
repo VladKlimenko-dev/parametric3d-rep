@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using OpenTK.Mathematics;
 using Parametric3D.Render.Engine;
 
@@ -196,9 +196,30 @@ public sealed partial class ModelViewport
         }
     }
 
+    /// <summary>k115: контуры поверх вида — набор отрезков, цвет, пунктир (0 — сплошной).</summary>
+    public sealed record Contour(List<(Vector3d A, Vector3d B)> Lines, Vector4 Color, float Dash = 0);
+    private readonly Dictionary<string, List<Contour>> _contours = new();
+
+    /// <summary>
+    /// k115 (замечание 12:39, пп. 4–5): контуры канала (hover — что операция добавила/убрала при наведении в дереве; pinned —
+    /// скрытый элемент, выбранный в дереве). null — убрать.
+    /// </summary>
+    public void SetContours(string channel, IEnumerable<Contour>? cs)
+    {
+        if (cs == null) { if (!_contours.Remove(channel)) return; }
+        else _contours[channel] = cs.ToList();
+        _overlayDirty = true; Redraw();
+    }
+    public int ContourSegments(string channel) => _contours.TryGetValue(channel, out var l) ? l.Sum(c => c.Lines.Count) : 0;
+    public Vector4? ContourColor(string channel) => _contours.TryGetValue(channel, out var l) && l.Count > 0 ? l[0].Color : null;
+
     private void AddHandleOverlay(List<LineInst> lines, List<PointInst> pts)
     {
         var th = _r.Theme;
+        foreach (var set in _contours.Values)
+            foreach (var c in set)
+                foreach (var (a, b) in c.Lines)
+                    lines.Add(Inst(new Vector3((float)a.X, (float)a.Y, (float)a.Z), new Vector3((float)b.X, (float)b.Y, (float)b.Z), c.Color, 2.2f, c.Dash));
         if (_ghostLines != null && ActiveSketch == null)
         {
             var gc = !_ghostOk ? th.HandleBad : _ghostSign < 0 ? th.HandleAlt : th.Handle;

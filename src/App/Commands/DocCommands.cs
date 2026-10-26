@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Platform.Storage;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -101,11 +101,24 @@ public static class DocCommands
                     if (tmp.Children.OfType<Sketch>().FirstOrDefault(s => s.Id == id) is { } s) TakeSketch(s);
                 made.Add(f);
             }
+            // k115 (п. 7): вставленная группа — новая группа (прежде копия вливалась в исходную с тем же именем)
+            var groupNames = part.Features.Select(x => x.Group).Where(g => !string.IsNullOrEmpty(g)).ToHashSet()!;
+            var renamed = new Dictionary<string, string>();
             foreach (var f in made)
             {
                 tmp.RemoveFeature(f);
                 f.Key = Feature.NewKey();
                 f.Name = UniqueName(part, f.Name);
+                if (!string.IsNullOrEmpty(f.Group) && !PasteGroupOff)
+                {
+                    if (!renamed.TryGetValue(f.Group, out var ng))
+                    {
+                        ng = f.Group;
+                        for (int i = 2; groupNames.Contains(ng); i++) ng = $"{f.Group} ({i})";
+                        groupNames.Add(ng); renamed[f.Group] = ng;
+                    }
+                    f.Group = ng;
+                }
                 part.AddFeature(f);
             }
         });
@@ -114,6 +127,8 @@ public static class DocCommands
         w.ShowToast(L("Вставлено операций: {0}", made.Count), error: false);
         return made;
     }
+
+    static readonly bool PasteGroupOff = Environment.GetEnvironmentVariable("P3D_PASTEGROUP") == "0";
 
     static string UniqueName(Part part, string name)
     {

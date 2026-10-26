@@ -331,6 +331,8 @@ public partial class MainWindow : Window
         TreeTools.Children.Clear();
         TreeTools.Children.Add(CmdButton(_reg["tree.collapse"], 16));
         TreeTools.Children.Add(CmdButton(_reg["tree.expand"], 16));
+        // k115 (п. 6): группа выбранных операций (все уже в одной группе — разгруппировать)
+        TreeTools.Children.Add(CmdButton(_reg["tree.group"], 16));
         TreeHeader.Text = L("ДЕРЕВО МОДЕЛИ");
         SearchText.Text = L("Найти команду…");
         PaletteHelp.Text = L("↑↓ — выбор, Enter — выполнить, Esc — закрыть. Поиск по-русски и по-английски.");
@@ -969,6 +971,8 @@ public partial class MainWindow : Window
         // u12: наведение тоже извещает об изменении выбора — операции передаётся только изменившийся выбор
         var ids = View.Selection.Items.Select(r => (r.Id, r.Kind)).ToList();
         bool selChanged = !ids.SequenceEqual(_lastSelIds);
+        // k115 (п. 5): очертание скрытого элемента — пока он выбран
+        if (_pinnedContour is { } pc && !View.Selection.Items.Any(r => ReferenceEquals(r.Target, pc) || r.Id == pc.Id)) ShowPinnedContour(null);
         _lastSelIds = ids;
         if (selChanged) CurrentOperation?.SelectionChanged(View.Selection.Items);
         if (CurrentOperation is ShellOp && !View.HandleDragging) AttachOpHandle();
@@ -2136,15 +2140,30 @@ public partial class MainWindow : Window
         Tree.SelectionChanged += (_, _) =>
         {
             if (_syncingTree) return;
-            if (Tree.SelectedItem is TreeNode n) SelectItem(n.Item);
+            // k115 (п. 6): несколько строк (Ctrl, Shift) — все их элементы в выделение вида
+            var nodes = TreeMultiOff ? new List<TreeNode>() : Tree.SelectedItems.OfType<TreeNode>().ToList();
+            if (nodes.Count > 1)
+            {
+                View.Selection.Clear();
+                foreach (var nn in nodes) foreach (var r in RefsOf(nn.Item)) View.Selection.Select(r, additive: true);
+                ShowPinnedContour(null);
+                return;
+            }
+            if (Tree.SelectedItem is TreeNode n)
+            {
+                SelectItem(n.Item);
+                // k115 (п. 5): скрытый элемент — очертанием на виде, пока выбран
+                ShowPinnedContour(n.Item.Visible || n.Item is InfoItem ? null : n.Item);
+            }
         };
         Tree.AddHandler(PointerMovedEvent, (_, e) =>
         {
             var src = e.Source as Visual;
             var node = (src as StyledElement)?.DataContext as TreeNode;
             View.HighlightFromTree(node?.Item);
+            ShowHoverContour(node?.Item);
         }, RoutingStrategies.Tunnel);
-        Tree.PointerExited += (_, _) => View.HighlightFromTree(null);
+        Tree.PointerExited += (_, _) => { View.HighlightFromTree(null); ShowHoverContour(null); };
         // (23:43) п. 16: строка отката тянется мышью между элементами дерева
         Tree.AddHandler(PointerPressedEvent, (_, e) =>
         {
@@ -2171,7 +2190,7 @@ public partial class MainWindow : Window
         {
             _featDrag = null; _featDragOn = false; _sketchDrag = null;
             if (!e.GetCurrentPoint(Tree).Properties.IsLeftButtonPressed || FeatureDragOff) return;
-            if ((e.Source as StyledElement)?.DataContext is TreeNode { IsBar: false } n && DragFeatureOf(n.Item) is { } f)
+            if ((e.Source as StyledElement)?.DataContext is TreeNode { IsBar: false, IsReference: false } n && DragFeatureOf(n.Item) is { } f)
                 _featDrag = (f, e.GetPosition(Tree));
             // k109: эскиз, не ушедший в операцию, — тоже тянется (его место среди операций)
             else if ((e.Source as StyledElement)?.DataContext is TreeNode { IsBar: false, Item: Sketch ls } && !SketchDragOff && Session.Part is { } lp
@@ -2235,6 +2254,8 @@ public partial class MainWindow : Window
             if (n.Item is Feature or Sketch) ids.Add("edit.feature");
             if (n.Item is Feature) ids.AddRange(new[] { "edit.suppress", "tree.resume", "tree.edit_dims", "tree.insert_here", "tree.reorder_up", "tree.reorder_down", "tree.group", "tree.parents_children", "tree.replace_refs" });
             if (n.Item is Sketch) ids.AddRange(new[] { "sk.setup", "tree.replace_refs" });
+            // k115 (п. 7): группа — разгруппировать, отразить, массив, копировать, удалить, подавить
+            if (n.Item is InfoItem { Role: "group" }) ids.AddRange(new[] { "tree.group", "op.mirror", "op.pattern_linear", "op.pattern_circular", "edit.suppress" });
             ids.AddRange(SuggestedOps().Where(i => i != "edit.feature" && i != "edit.suppress"));
             ids.AddRange(new[] { "edit.rename", "edit.copy", "edit.paste", "view.hide", "view.isolate", "edit.delete" });
             if (n.Item is Part) ids.AddRange(new[] { "part.material", "part.units", "part.configurations", "an.mass", "an.check_body" });
@@ -2414,6 +2435,8 @@ public partial class MainWindow : Window
     }
 
     public IEnumerable<TreeNode> AllNodes => _roots.SelectMany(r => r.SelfAndDescendants());
+    /// <summary>k115: дерево — для проверок (несколько строк).</summary>
+    public TreeView TreeControl => Tree;
 
     static readonly bool TreeSigOff = Environment.GetEnvironmentVariable("P3D_TREESIG") == "0";
     public static long TreeRebuildsSkipped;
@@ -2443,9 +2466,64 @@ public partial class MainWindow : Window
             if (n.Children.Count > 0) { n.IsExpanded = expanded; _expand[n.Item.Id] = expanded; }
     }
 
+    // ---------------------------------------------------------------- k115: контуры элементов дерева, несколько строк
+
+    static readonly bool TreeMultiOff = Environment.GetEnvironmentVariable("P3D_TREEMULTI") == "0";
+    static readonly bool TreeContoursOff = Environment.GetEnvironmentVariable("P3D_TREECONTOURS") == "0";
+    private ModelItem? _hoverContour, _pinnedContour;
+
+    /// <summary>Наведение на операцию в дереве: что она добавила (зелёным) и убрала (красным).</summary>
+    public void ShowHoverContour(ModelItem? it)
+    {
+        if (TreeContoursOff || ReferenceEquals(it, _hoverContour)) return;
+        _hoverContour = it;
+        ModelViewport.Contour? c = null;
+        try { c = TreeContours.MaterialOf(it); } catch (Exception ex) { AppLog.Write("tree contour", ex); }
+        View.SetContours("hover", c == null ? null : new[] { c });
+    }
+
+    /// <summary>Скрытый элемент, выбранный в дереве: очертание пунктиром до щелчка в другом месте.</summary>
+    public void ShowPinnedContour(ModelItem? it)
+    {
+        if (TreeContoursOff) return;
+        _pinnedContour = it;
+        ModelViewport.Contour? c = null;
+        if (it != null) try { c = TreeContours.OutlineOf(it); } catch (Exception ex) { AppLog.Write("tree outline", ex); }
+        View.SetContours("pinned", c == null ? null : new[] { c });
+    }
+
+    /// <summary>Выбор вида для элемента дерева: группа — её операции.</summary>
+    public List<PickRef> RefsOf(ModelItem item)
+    {
+        if (item is InfoItem { Role: "group" } g)
+            return g.Owner.Features.Where(x => x.Group == g.Name).Select(f => new PickRef(f.Id, PickKind.Feature, f.Parent, f)).ToList();
+        var r = RefOf(item);
+        return r.IsEmpty ? new() : new() { r };
+    }
+
+    private static PickRef RefOf(ModelItem item) => item switch
+    {
+        Assembly a => new PickRef(a.Id, PickKind.Assembly, a.Parent, a),
+        Part p => new PickRef(p.Id, PickKind.Body, p.Parent, p),
+        Sketch sk => new PickRef(sk.Id, PickKind.SketchCurve, sk.Parent, sk),
+        Feature f => new PickRef(f.Id, PickKind.Feature, f.Parent, f),
+        DatumPlane dp => new PickRef(dp.Id, PickKind.DatumPlane, dp.Parent, dp),
+        DatumAxis ax => new PickRef(ax.Id, PickKind.DatumAxis, ax.Parent, ax),
+        DatumPoint pt => new PickRef(pt.Id, PickKind.DatumPoint, pt.Parent, pt),
+        Line3DItem ln => new PickRef(ln.Id, PickKind.DatumAxis, ln.Parent, ln),
+        _ => PickRef.Empty
+    };
+
     /// <summary>Выбор элемента модели (из дерева): в выделение вида.</summary>
     public void SelectItem(ModelItem item)
     {
+        // k115 (п. 6): группа — все её операции
+        if (item is InfoItem { Role: "group" } && CurrentOperation == null)
+        {
+            View.Selection.Clear();
+            foreach (var gr in RefsOf(item)) View.Selection.Select(gr, additive: true);
+            return;
+        }
         PickRef r = item switch
         {
             Assembly a => new PickRef(a.Id, PickKind.Assembly, a.Parent, a),
@@ -2466,6 +2544,19 @@ public partial class MainWindow : Window
 
     private void SyncTreeFromSelection()
     {
+        // k115: несколько элементов — несколько строк (операции группы, Ctrl в виде)
+        if (!TreeMultiOff && View.Selection.Items.Count > 1)
+        {
+            var want = new HashSet<uint>(View.Selection.Items.Where(r => r.Target is ModelItem).Select(r => r.Id));
+            var ns = AllNodes.Where(n => n.Item is not InfoItem && want.Contains(n.Item.Id) && !n.IsReference).GroupBy(n => n.Item.Id).Select(g => g.First()).ToList();
+            if (ns.Count > 1)
+            {
+                _syncingTree = true;
+                try { Tree.SelectedItems.Clear(); foreach (var n in ns) Tree.SelectedItems.Add(n); }
+                finally { _syncingTree = false; }
+                return;
+            }
+        }
         var prim = View.Selection.Primary;
         TreeNode? node = prim.IsEmpty ? null : AllNodes.FirstOrDefault(n => n.Item.Id == prim.Id || ReferenceEquals(n.Item, prim.Target));
         _syncingTree = true;

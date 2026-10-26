@@ -15,8 +15,9 @@ public static class DocumentStorage
     /// <summary>Предел размера документа, байт.</summary>
     public static long MaxBytes = 256L * 1024 * 1024;
 
+    /// <summary>k114: файл — с поверхностями (сетка показа): открывается сразу, перестроение — в фоне.</summary>
     public static void Save(string path, Part part, Params.ParameterTable? parameters = null) =>
-        WriteAtomic(path, DocumentFile.Save(part, parameters));
+        WriteAtomic(path, DocumentFile.Save(part, parameters, withDisplay: true));
 
     public static (Part Part, Params.ParameterTable Parameters) Load(string path)
     {

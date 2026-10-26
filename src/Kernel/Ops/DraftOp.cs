@@ -148,6 +148,13 @@ public static class DraftOp
         public double Lever;
         public Vector3d? RefIn;
         public Vector3d ConeCentre;
+        /// <summary>k115: ось тела вращения (к смещаемой окружности); у плоской грани — не задана.</summary>
+        public Vector3d Axis;
+        /// <summary>k115: высота смещаемой окружности над шарнирной вдоль оси; номера рёбер шарнира и смещаемого.</summary>
+        public double Height;
+        public TEdge? HingeEdge, MovingEdge;
+        /// <summary>k115: плоскость грани найдена по её треугольникам (поверхность грани — не «плоскость» по виду).</summary>
+        public bool FittedPlane;
 
         /// <summary>Направление в грани от шарнира после поворота на deg.</summary>
         public Vector3d MAt(double deg) { double a = deg * Math.PI / 180; return (M * Math.Cos(a) - NOut * Math.Sin(a)).Normalized(); }
@@ -209,19 +216,74 @@ public static class DraftOp
     }
 
     /// <summary>Грань под точкой: плоская или цилиндрическая; -1 — нет.</summary>
+    /// <summary>
+    /// k115 (замечание 12:39): ГРАНЬ ПОД ТОЧКОЙ — ЛЮБАЯ, ближайшая по её сетке. Прежде брались только грани, чья поверхность
+    /// по виду «плоскость» или «цилиндр» (с допуском 1e-6 мм от точки), — плоская грань выреза на конусе (многогранный итог
+    /// булевой, поверхность — фасеты) не находилась: «the drafted face must be planar or cylindrical». Вид грани решается
+    /// после (FacePlane, конус и цилиндр). Мутация P3D_DRAFTANYFACE=0.
+    /// </summary>
     static int FaceAt(List<TFace> faces, Vector3d probe)
     {
+        if (AnyFaceOff)
+        {
+            for (int i = 0; i < faces.Count; i++)
+            {
+                var sh = Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(faces[i]));
+                if (sh is Geometry.Ssi.Plane pl)
+                {
+                    if (Math.Abs(Vector3d.Dot(probe - pl.P, pl.N.Normalized())) > 1e-6 || MeshDistance(faces[i], probe) > 1e-4) continue;
+                    return i;
+                }
+                if (sh is Geometry.Ssi.Cylinder cy && Math.Abs(DistToCylinder(cy, probe)) <= 1e-6 && MeshDistance(faces[i], probe) <= Math.Max(1e-2, 0.03 * cy.R)) return i;
+            }
+            return -1;
+        }
+        int best = -1; double bd = double.MaxValue;
         for (int i = 0; i < faces.Count; i++)
         {
-            var sh = Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(faces[i]));
-            if (sh is Geometry.Ssi.Plane pl)
-            {
-                if (Math.Abs(Vector3d.Dot(probe - pl.P, pl.N.Normalized())) > 1e-6 || MeshDistance(faces[i], probe) > 1e-4) continue;
-                return i;
-            }
-            if (sh is Geometry.Ssi.Cylinder cy && Math.Abs(DistToCylinder(cy, probe)) <= 1e-6 && MeshDistance(faces[i], probe) <= Math.Max(1e-2, 0.03 * cy.R)) return i;
+            double d = MeshDistance(faces[i], probe);
+            if (d < bd) { bd = d; best = i; }
         }
-        return -1;
+        double size = 0;
+        foreach (var f in faces) foreach (var e in f.Edges) { size = Math.Max(size, (e.V0.P - e.V1.P).Length); }
+        return bd <= Math.Max(1e-3, 1e-3 * size) ? best : -1;
+    }
+    static readonly bool AnyFaceOff = Environment.GetEnvironmentVariable("P3D_DRAFTANYFACE") == "0";
+
+    /// <summary>k115: плоскость грани — по виду поверхности или по её треугольникам (все в одной плоскости); наружу.</summary>
+    static (Vector3d P, Vector3d N, bool Fitted)? FacePlane(TFace f)
+    {
+        if (Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) is Geometry.Ssi.Plane && PlanarTweak.OutwardNormal(f) is { } n0)
+            return (f.Edges.First().V0.P, n0, false);
+        if (AnyFaceOff) return null;
+        var mb = new Tess.MeshBuilder(); f.Surface.TessellateFace(f, mb); var md = new Tess.MeshData(); mb.FillInto(md);
+        var pts = mb.PositionsD.ToList();
+        foreach (var e in f.Edges) { pts.Add(e.V0.P); pts.Add(e.V1.P); }
+        if (pts.Count < 3) return null;
+        var c = Vector3d.Zero; foreach (var p in pts) c += p; c /= pts.Count;
+        // нормаль Ньюэлла по треугольникам, сторона — по самим треугольникам грани (наружу)
+        var n = Vector3d.Zero;
+        for (int i = 0; i + 2 < md.Indices.Length; i += 3)
+            n += Vector3d.Cross(mb.PositionsD[md.Indices[i + 1]] - mb.PositionsD[md.Indices[i]], mb.PositionsD[md.Indices[i + 2]] - mb.PositionsD[md.Indices[i]]);
+        if (n.LengthSquared < 1e-24) return null;
+        n.Normalize();
+        if (f.Reversed && f.Surface is not FacetedSurface) { }    // треугольники сетки грани уже обращены наружу
+        double size = 0, dev = 0;
+        foreach (var p in pts) { size = Math.Max(size, (p - c).Length); dev = Math.Max(dev, Math.Abs(Vector3d.Dot(p - c, n))); }
+        if (dev > Math.Max(1e-6, 1e-7 * size)) return null;
+        var o = OutAt(f, c);
+        if (Vector3d.Dot(o, n) < 0) n = -n;
+        return (c, n, true);
+    }
+
+    static string KindOf(TFace f)
+    {
+        var s = GeometryAudit.AuthoritativeSurface(f) ?? f.Surface;
+        return Geometry.ExactEdges.ShapeOf(s) switch
+        {
+            Geometry.Ssi.Sphere => "spherical", Geometry.Ssi.Torus => "toroidal", null => s.GetType().Name.Replace("Surface", "").ToLowerInvariant(),
+            var k => k.GetType().Name.ToLowerInvariant(),
+        };
     }
 
     /// <summary>Направление от точки шарнира в соседней грани (поперёк шарнира, в касательной плоскости соседней грани).</summary>
@@ -246,7 +308,7 @@ public static class DraftOp
         var body = bodies[0];
         var faces = body.Faces.ToList();
         int fi = FaceAt(faces, probe);
-        if (fi < 0) { why = "the drafted face must be planar or cylindrical"; return null; }
+        if (fi < 0) { why = "no face of the body at the selected point"; return null; }
         var face = faces[fi];
         if (Edge(bodies, hinge) is not { } he) { why = "the fixed edge is not found"; return null; }
         if (!ReferenceEquals(he.FaceA, face) && !ReferenceEquals(he.FaceB, face)) { why = "the fixed edge does not belong to the drafted face"; return null; }
@@ -261,14 +323,15 @@ public static class DraftOp
         var adj = ReferenceEquals(he.FaceA, face) ? he.FaceB : he.FaceA;
         var info = new HingeInfo { FaceIndex = fi };
         var sh = Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(face));
-        if (sh is Geometry.Ssi.Plane)
+        info.HingeEdge = he; info.MovingEdge = me;
+        if (FacePlane(face) is { } fp)
         {
             Vector3d a = he.V0.P, b = he.V1.P, mid = he.Curve.PointAt(0.5 * (he.Curve.T0 + he.Curve.T1));
             double len = (b - a).Length;
             var d = len > 1e-12 ? (b - a) / len : Vector3d.Zero;
             var off = mid - a - d * Vector3d.Dot(mid - a, d);
-            if (len < 1e-9 || off.Length > 1e-7 * Math.Max(1, len)) { why = "the fixed edge of a planar face must be straight"; return null; }
-            if (PlanarTweak.OutwardNormal(face) is not { } nOut) { why = "no outward normal"; return null; }
+            if (len < 1e-9 || off.Length > 1e-6 * Math.Max(1, len)) { why = "the fixed edge of a planar face must be straight"; return null; }
+            var nOut = fp.N; info.FittedPlane = fp.Fitted;
             info.HingeDir = d; info.HingeP = (a + b) / 2; info.NOut = nOut; info.HingeA = a; info.HingeB = b;
             var m = Vector3d.Cross(nOut, d).Normalized();
             Vector3d target;
@@ -286,30 +349,39 @@ public static class DraftOp
             info.RefIn = InFace(adj, info.HingeP, d, info.Lever);
             return info;
         }
-        if (sh is Geometry.Ssi.Cylinder cy)
+        // k115: цилиндр и конус (боковая грань тела вращения между двумя окружностями)
+        Vector3d? axisDir = sh switch { Geometry.Ssi.Cylinder c => c.Axis, Geometry.Ssi.Cone k when !ConeOff => k.Axis, _ => null };
+        if (axisDir is { } ax0)
         {
-            var w = cy.Axis.Normalized();
+            var w = ax0.Normalized();
             var arcs = face.Edges.Where(e => e.Curve is ArcCurve3 ac && ReferenceEquals(e.V0, e.V1) && Math.Abs(Math.Abs(Vector3d.Dot(ac.Frame.W.Normalized(), w)) - 1) < 1e-9).ToList();
-            if (he.Curve is not ArcCurve3 ha || !arcs.Contains(he)) { why = "the fixed edge of a cylindrical face must be one of its end circles"; return null; }
+            string kind = sh is Geometry.Ssi.Cone ? "conical" : "cylindrical";
+            if (he.Curve is not ArcCurve3 ha || !arcs.Contains(he)) { why = $"the fixed edge of a {kind} face must be one of its end circles"; return null; }
             var other = arcs.Where(e => !ReferenceEquals(e, he)).ToList();
-            if (other.Count != 1) { why = "the cylindrical face must be bounded by two full circles"; return null; }
-            if (me != null && !ReferenceEquals(me, other[0])) { why = "the moving edge of a cylindrical face must be its other end circle"; return null; }
+            if (other.Count != 1) { why = $"the {kind} face must be bounded by two full circles"; return null; }
+            if (me != null && !ReferenceEquals(me, other[0])) { why = $"the moving edge of a {kind} face must be its other end circle"; return null; }
+            info.MovingEdge = other[0];
             var oa = (ArcCurve3)other[0].Curve;
             var c0 = ha.Frame.Origin; var c1 = oa.Frame.Origin;
-            var m = Vector3d.Dot(c1 - c0, w) >= 0 ? w : -w;
-            info.Cone = true; info.ConeCentre = c0; info.M = m; info.Lever = Math.Abs(Vector3d.Dot(c1 - c0, w));
-            if (info.Lever < 1e-6) { why = "the end circles coincide"; return null; }
-            // направления — в середине рёбер (k112: у кривой грани направление зависит от места)
+            var ax = Vector3d.Dot(c1 - c0, w) >= 0 ? w : -w;
+            info.Cone = true; info.ConeCentre = c0; info.Axis = ax; info.Height = Math.Abs(Vector3d.Dot(c1 - c0, w));
+            if (info.Height < 1e-6) { why = "the end circles coincide"; return null; }
+            // направления — в середине шарнира; смещаемая точка — на той же образующей (тот же угол вокруг оси)
             info.HingeP = ha.PointAt(0.5); info.HingeDir = ha.TangentAt(0.5).Normalized(); info.HingeA = info.HingeB = info.HingeP;
-            info.NOut = OutAt(face, info.HingeP);
-            info.NOut = (info.NOut - m * Vector3d.Dot(info.NOut, m)).Normalized();
-            info.MoveAt = oa.PointAt(0.5);
-            var no = OutAt(face, info.MoveAt); no = (no - m * Vector3d.Dot(no, m)).Normalized();
-            info.MoveDir = -no;
-            info.RefIn = InFace(adj, info.HingeP, info.HingeDir, cy.R);
+            var radial = info.HingeP - c0; radial -= ax * Vector3d.Dot(radial, ax); radial.Normalize();
+            info.MoveAt = c1 + radial * oa.Radius;
+            var g = info.MoveAt - info.HingeP; info.Lever = g.Length; info.M = g / info.Lever;
+            var n0 = OutAt(face, info.HingeP); n0 -= info.M * Vector3d.Dot(n0, info.M);
+            // нормаль — в плоскости меридиана, поперёк образующей
+            var meridian = Vector3d.Cross(ax, radial);
+            n0 -= meridian * Vector3d.Dot(n0, meridian);
+            info.NOut = n0.Normalized();
+            var no = OutAt(face, info.MoveAt); no -= info.M * Vector3d.Dot(no, info.M); no -= meridian * Vector3d.Dot(no, meridian);
+            info.MoveDir = -no.Normalized();
+            info.RefIn = InFace(adj, info.HingeP, info.HingeDir, ha.Radius);
             return info;
         }
-        why = "the drafted face must be planar or cylindrical";
+        why = $"the drafted face is {KindOf(face)}: a draft about an edge is built for planar faces and for cylinders and cones between two circles";
         return null;
     }
 
@@ -319,7 +391,7 @@ public static class DraftOp
         double t = Math.Tan(degrees * Math.PI / 180) * h.Lever;
         if (h.Cone)
         {
-            var w = h.M.Normalized();
+            var w = h.Axis.Normalized();
             var radial = h.HingeP - h.ConeCentre; radial -= w * Vector3d.Dot(radial, w);
             if (radial.LengthSquared < 1e-18) return null;
             var p0 = h.HingeP; var p1 = h.MoveAt; var p2 = h.MoveAt + h.MoveDir * t;
@@ -355,7 +427,7 @@ public static class DraftOp
         }
         if (h.Cone)
         {
-            var r = DraftCylinders(bodies[0], new List<int> { h.FaceIndex }, h.ConeCentre, h.M, degrees * Math.PI / 180, ref why);
+            var r = DraftRevolvedHinged(bodies[0], h, degrees, ref why);
             if (r == null) { warnings.Add("Draft: the cone could not be built: " + why + "."); return false; }
             bodies[0] = r;
             warnings.Add($"Draft: {degrees:0.###}° about the fixed circle (exact cone).");
@@ -368,6 +440,22 @@ public static class DraftOp
             bodies[0] = t;
             warnings.Add($"Draft: {degrees:0.###}° about the fixed edge (exact plane replacement).");
             return true;
+        }
+        // k115: плоскость не заменилась (грань — фасеты, соседи кривые) — клин точной булевой: внутрь — вычесть, наружу — прибавить
+        if (!WedgeBoolOff && Wedge(h, degrees) is { } wedgeX)
+        {
+            var copy = new List<TSolid>(bodies); var wl = new List<string>();
+            try
+            {
+                if (degrees > 0) BooleanOp.Subtract(copy, wedgeX, wl); else BooleanOp.Unite(copy, wedgeX, wl);
+                if (copy.Count == 1)
+                {
+                    bodies.Clear(); bodies.AddRange(copy);
+                    warnings.Add($"Draft: {degrees:0.###}° about the fixed edge (wedge {(degrees > 0 ? "cut" : "added")}: plane replacement declined — {why}).");
+                    return true;
+                }
+            }
+            catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { why += " | wedge: " + ex.Message; }
         }
         if (degrees < 0) { warnings.Add($"Draft: an outward draft about an edge is built only by plane replacement, which declined: {why}."); return false; }
         BooleanOp.Subtract(bodies, HalfSpace(h.HingeP, nNew, Extent(bodies[0]) * 4), warnings);
@@ -431,7 +519,7 @@ public static class DraftOp
             {
                 if (PlaneOf(faces[i]) is not { } pl) continue;
                 var n = pl.N.Normalized();
-                if (Math.Abs(Vector3d.Dot(probe - pl.P, n)) > 1e-6) continue;
+                if (Math.Abs(Vector3d.Dot(probe - pl.P, n)) > (AnyFaceOff ? 1e-6 : 1e-4)) continue;   // k115: точка с сетки показа (float)
                 if (MeshDistance(faces[i], probe) > 1e-4) continue;
                 if (hit >= 0) { why = "the point lies on several faces"; return null; }
                 hit = i;
@@ -458,6 +546,80 @@ public static class DraftOp
 
     /// <summary>Мутация P3D_DRAFTCYL=0: цилиндрические грани уклону не поддаются (прежде).</summary>
     static readonly bool CylDraftOff = Environment.GetEnvironmentVariable("P3D_DRAFTCYL") == "0";
+    static readonly bool ConeOff = Environment.GetEnvironmentVariable("P3D_DRAFTCONE") == "0";
+    static readonly bool WedgeBoolOff = Environment.GetEnvironmentVariable("P3D_DRAFTWEDGE") == "0";
+
+    /// <summary>
+    /// k115: УКЛОН ГРАНИ ТЕЛА ВРАЩЕНИЯ ПО ОКРУЖНОСТИ-ШАРНИРУ — цилиндр или конус. Образующая поворачивается вокруг точки шарнира
+    /// в плоскости меридиана на угол (внутрь материала при &gt; 0); смещаемая окружность остаётся в своей плоскости с новым
+    /// радиусом; поверхность — конус по новой образующей. Соседние грани — плоскости поперёк оси (как DraftCylinders).
+    /// </summary>
+    static TSolid? DraftRevolvedHinged(TSolid body, HingeInfo h, double degrees, ref string? why)
+    {
+        if (h.HingeEdge == null || h.MovingEdge == null) { why = "the end circles are not known"; return null; }
+        var faces = body.Faces.ToList();
+        var src = faces[h.FaceIndex];
+        var clone = TopologyClone.Deep(body);
+        var f = clone.Faces.ToList()[h.FaceIndex];
+        var srcEdges = src.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct().ToList();
+        var allE = f.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct().ToList();
+        if (srcEdges.Count != allE.Count) { why = "the face copy differs"; return null; }
+        var w = h.Axis.Normalized();
+        TEdge hinge = allE[srcEdges.IndexOf(h.HingeEdge)], mov = allE[srcEdges.IndexOf(h.MovingEdge)];
+        var seams = allE.Where(e => e.Curve is LineCurve3 && !ReferenceEquals(e.V0, e.V1)).ToList();
+        if (allE.Count != 2 + seams.Count) { why = "the face is not bounded by two full circles"; return null; }
+        var ha = (ArcCurve3)hinge.Curve; var ma = (ArcCurve3)mov.Curve;
+        var g = h.MAt(degrees);
+        double along = Vector3d.Dot(g, w);
+        if (along < 1e-6) { why = "the generatrix would turn past the circle plane"; return null; }
+        var np = h.HingeP + g * (h.Height / along);
+        var rr = np - ma.Frame.Origin; rr -= w * Vector3d.Dot(rr, w);
+        double rNew = rr.Length;
+        if (!(rNew > 1e-6)) { why = "the cone would close before the moving circle"; return null; }
+        var na = new ArcCurve3(ma.Frame, rNew, ma.A0, ma.A0 + ma.Sweep);
+        mov.Curve = na; mov.PolylineCache = null; mov.V0.P = na.PointAt(na.T0);
+        foreach (var e in seams) { e.Curve = new LineCurve3(e.V0.P, e.V1.P); e.PolylineCache = null; }
+        var c0 = ha.Frame.Origin; var c1 = ma.Frame.Origin;
+        var u = Vector3d.Cross(w, Math.Abs(w.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY).Normalized();
+        if (seams.Count > 0) { var sr = seams[0].V0.P - c0; sr -= w * Vector3d.Dot(sr, w); if (sr.LengthSquared > 1e-18) u = sr.Normalized(); }
+        var gen = new LineCurve3(c0 + u * ha.Radius, c1 + u * rNew);
+        var cone = new RevolvedSurface(gen, new Frame3(c0, u, Vector3d.Cross(w, u)), 0, 2 * Math.PI);
+        f.Surface = cone;
+        var qp = gen.PointAt(0.5);
+        var want = OutAt(src, c0 + (c1 - c0) * 0.5 + u * (0.5 * (ha.Radius + ((ArcCurve3)h.MovingEdge.Curve).Radius)));
+        f.Reversed = Vector3d.Dot(cone.NormalAt(cone.ProjectToUV(qp)), want) < 0;
+        var touched = new HashSet<TFace>(ReferenceEqualityComparer.Instance) { f };
+        foreach (var e in new[] { hinge, mov }) foreach (var ce in e.CoEdges) if (ce.Loop?.Face is { } nb) touched.Add(nb);
+        foreach (var t in touched)
+        {
+            if (t.Surface is FacetedSurface fs2)
+            {
+                if (fs2.Source is not PlaneSurface || PlanarTweak.OutwardNormal(t) is not { } no || Geometry.ExactEdges.ShapeOf(fs2.Source) is not Geometry.Ssi.Plane pl)
+                { why = "a face next to the drafted face is not planar"; return null; }
+                t.Surface = new PlaneSurface(Frame3.FromNormal(pl.P, no)); t.Reversed = false;
+            }
+            else if (t.Surface is not (PlaneSurface or RevolvedSurface)) { why = "a face next to the drafted face is not planar"; return null; }
+            t.InteriorHint = null;
+            foreach (var ce in t.Loops.SelectMany(l => l.CoEdges)) { ce.PCurve = null; ce.PCurveDeviation = 0; }
+        }
+        clone.Exact = null; clone.QExact = null; clone.DisplayMeshKey = null;
+        var wl = new List<string>();
+        if (Analytic.PrismBuild.Finish(clone, wl) > 0) { why = "faces not meshed: " + string.Join(" / ", wl.Take(2)); return null; }
+        clone.Guarantee = GuaranteeLevel.ExactAnalytic;
+        var vr = SolidValidator.Validate(clone);
+        if (!vr.IsValid) { why = "result invalid: " + vr.Summary(); return null; }
+        if (AnalyticVolume.Of(clone) is not { } vol || vol <= 0) { why = "no analytic volume"; return null; }
+        if (BooleanOp.VolumeVsFacets(clone) is { } vf && !vf.Agree) { why = $"volume {vf.Va:G8} vs facets {vf.Vf:G8}"; return null; }
+        if (!PlanarTweak.ProvOff)
+        {
+            var pv = new Provenance { Operation = "Draft" };
+            var srcFaces = body.Faces.ToList(); var resFaces = clone.Faces.ToList();
+            for (int k = 0; k < resFaces.Count; k++) pv.Faces.Add(new FaceProvenance(resFaces[k], srcFaces[k], touched.Contains(resFaces[k]) ? FaceOrigin.Modified : FaceOrigin.Kept));
+            clone.SetProvenance(pv);
+        }
+        return clone;
+    }
+
     /// <summary>Мутация P3D_DRAFTSEAM=0: цилиндр со швом уклону не поддаётся (k111 и прежде).</summary>
     static readonly bool SeamOff = Environment.GetEnvironmentVariable("P3D_DRAFTSEAM") == "0";
 

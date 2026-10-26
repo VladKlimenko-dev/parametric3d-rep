@@ -53,7 +53,27 @@ public static class DocumentFile
         }
     }
 
-    public static string Save(Part part, ParameterTable? parameters = null)
+    public static string Save(Part part, ParameterTable? parameters = null) => Save(part, parameters, withDisplay: false);
+
+    /// <summary>
+    /// k114 (замечание 12:12): ЗАПИСЬ С ПОВЕРХНОСТЯМИ. withDisplay — в файл идёт и посчитанная сетка показа детали (вершины,
+    /// нормали, грани, рёбра, вершины тела, объём, габарит) с подписью описания модели: открытый файл сразу показывает
+    /// деталь, перестроение идёт в фоне и заменяет её. Подпись не сошлась (файл правили вне программы) — сетка не берётся.
+    /// Снимки отмены и копии деталей пишутся без неё. Мутация P3D_FILEDISPLAY=0.
+    /// </summary>
+    public static string Save(Part part, ParameterTable? parameters, bool withDisplay)
+    {
+        var doc = BuildDto(part, parameters);
+        string def = JsonSerializer.Serialize(doc, Opts);
+        if (!withDisplay || DisplayOff || part.IsDirty || part.ShowsInstant || part.ShowsCached || part.Mesh is not { } md || md.Vertices.Length == 0) return def;
+        doc.Display = new DisplayDto { Signature = Signature(def), Volume = part.Volume, Data = Convert.ToBase64String(DisplayCache.Pack(md)) };
+        return JsonSerializer.Serialize(doc, Opts);
+    }
+
+    public static readonly bool DisplayOff = Environment.GetEnvironmentVariable("P3D_FILEDISPLAY") == "0";
+    static string Signature(string def) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(def)));
+
+    private static DocDto BuildDto(Part part, ParameterTable? parameters)
     {
         var doc = new DocDto
         {
@@ -117,7 +137,7 @@ public static class DocumentFile
                 return d;
             }).ToList()
         };
-        return JsonSerializer.Serialize(doc, Opts);
+        return doc;
     }
 
     private static SketchDto SaveSketch(Sketch s)
@@ -310,8 +330,10 @@ public static class DocumentFile
             Symmetric = e.Symmetric,
             Cut = e.Cut,
             Num = e.Thin is { } th ? new() { ["thin"] = th.Value } : null,
-            Str = e.Thin is { Formula: { } tf } ? new() { ["thin"] = tf } : null,
-            Flags = e.ThinOutside ? new() { "thinOutside" } : null,
+            Str = ExtrudeStr(e),
+            Flags = ExtrudeFlags(e),
+            // k115 (замечание 12:39): вторая сторона и «глубина до» — прежде не записывались (открытый файл — «на расстояние»)
+            Distance2 = e.Side2.Distance.Value, Formula2 = e.Side2.Distance.Formula,
         },
         RevolveFeature r => new FeatureDto
         {
@@ -629,6 +651,24 @@ public static class DocumentFile
     private static Vector3d Vec(double[]? a) =>
         a is { Length: >= 3 } ? new Vector3d(a[0], a[1], a[2]) : Vector3d.Zero;
 
+    private static Dictionary<string, string?>? ExtrudeStr(ExtrudeFeature e)
+    {
+        var d = new Dictionary<string, string?>();
+        if (e.Thin is { Formula: { } tf }) d["thin"] = tf;
+        if (e.Side1.End != EndType.Distance) d["end1"] = e.Side1.End.ToString();
+        if (e.Side2.End != EndType.Distance) d["end2"] = e.Side2.End.ToString();
+        if (e.Side1.TargetId != 0) d["target1"] = e.Side1.TargetId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (e.Side2.TargetId != 0) d["target2"] = e.Side2.TargetId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return d.Count > 0 ? d : null;
+    }
+    private static List<string>? ExtrudeFlags(ExtrudeFeature e)
+    {
+        var l = new List<string>();
+        if (e.ThinOutside) l.Add("thinOutside");
+        if (e.Side2.Flip) l.Add("flip2");
+        return l.Count > 0 ? l : null;
+    }
+
     private static List<string>? DraftFlags(DraftFeature df)
     {
         var l = new List<string>();
@@ -697,6 +737,9 @@ public static class DocumentFile
         if (doc == null) throw new InvalidDataException("файл не разобран");
         if (doc.Version > CurrentVersion)
             throw new InvalidDataException($"файл записан более новой сборкой (вид {doc.Version})");
+        // k114: сетка показа из файла — если описание модели то же, что при записи
+        var display = doc.Display; doc.Display = null;
+        bool displayOk = display != null && !DisplayOff && display.Signature == Signature(JsonSerializer.Serialize(doc, Opts));
 
         var units = Core.UnitSystem.FromDictionary(doc.Units);                  // m.x4: система единиц документа
         var table = new ParameterTable { Units = units };
@@ -849,6 +892,16 @@ public static class DocumentFile
                     e.Cut = fd.Cut;
                     if (fd.Num != null && fd.Num.TryGetValue("thin", out var thin)) e.Thin = new ValueRef(thin) { Formula = fd.Str != null && fd.Str.TryGetValue("thin", out var tf) ? tf : null };
                     e.ThinOutside = fd.Flags?.Contains("thinOutside") == true;
+                    // k115: «глубина до», вторая сторона
+                    if (!ExtrudeEndOff)
+                    {
+                        if (GetS(fd, "end1") is { } e1 && Enum.TryParse<EndType>(e1, out var t1)) e.Side1.End = t1;
+                        if (GetS(fd, "end2") is { } e2 && Enum.TryParse<EndType>(e2, out var t2)) e.Side2.End = t2;
+                        if (GetS(fd, "target1") is { } g1 && uint.TryParse(g1, out var u1)) e.Side1.TargetId = u1;
+                        if (GetS(fd, "target2") is { } g2 && uint.TryParse(g2, out var u2)) e.Side2.TargetId = u2;
+                        if (fd.Distance2 > 0) e.Side2.Distance = new ValueRef(fd.Distance2) { Formula = fd.Formula2 };
+                        e.Side2.Flip = fd.Flags?.Contains("flip2") == true;
+                    }
                     part.AddFeature(e);
                     break;
                 }
@@ -1290,8 +1343,17 @@ public static class DocumentFile
                 int slot = sd.Slot ?? (part.Features.Any(f => f.ConsumedSketchIds().Contains(sk.Id)) ? 0 : part.SketchSlotRange(sk).Lo);
                 if (slot > 0) part.PlaceSketch(sk, slot);
             }
+        if (displayOk && display!.Data is { } data)
+        {
+            try { if (DisplayCache.Unpack(Convert.FromBase64String(data)) is { } cached) part.SetCachedDisplay(cached, display.Volume); }
+            catch (Exception ex) when (ex is FormatException or InvalidDataException or EndOfStreamException or IOException) { }   // испорченная сетка — просто без неё
+        }
+        else if (display != null) Interlocked.Increment(ref DisplayRejected);
         return (part, table);
     }
+    public static long DisplayRejected;
+    /// <summary>Мутация P3D_EXTRUDEEND=0: «глубина до» и вторая сторона выдавливания не читаются (прежде).</summary>
+    static readonly bool ExtrudeEndOff = Environment.GetEnvironmentVariable("P3D_EXTRUDEEND") == "0";
 
     // ------------------------------------------------------------------ записи файла
 
@@ -1335,6 +1397,17 @@ public static class DocumentFile
         public double[]? ConstructionPlane { get; set; }
         /// <summary>Строка отката (режим вставки): сколько операций в расчёте; нет — в конце.</summary>
         public int? Stage { get; set; }
+        /// <summary>k114: посчитанная сетка показа (поверхности) — открыть без ожидания перестроения.</summary>
+        public DisplayDto? Display { get; set; }
+    }
+
+    private sealed class DisplayDto
+    {
+        /// <summary>Подпись описания модели (SHA-256 записи без этой сетки).</summary>
+        public string Signature { get; set; } = "";
+        public double Volume { get; set; }
+        /// <summary>Сетка (DisplayCache.Pack): сжато, base64.</summary>
+        public string? Data { get; set; }
     }
 
     private sealed class FaceSetDto
