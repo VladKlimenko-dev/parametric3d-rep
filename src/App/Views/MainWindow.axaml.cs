@@ -889,7 +889,9 @@ public partial class MainWindow : Window
     {
         _dark = dark;
         if (Application.Current is { } app) app.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
-        IconProvider.SetForeground(Color.Parse(dark ? "#E6E8EC" : "#1C1E22"));
+        IconProvider.SetForeground(dark ? IconProvider.DarkFg : IconProvider.LightFg);
+        // k118 (п.10): гамма другой темы — заранее, в фоне (переключение темы без разбора SVG)
+        _ = IconProvider.Preload(dark ? IconProvider.LightFg : IconProvider.DarkFg, delayMs: 2500);
         View.DarkTheme = dark;
         UiLook.ApplyToRender(View.Theme);
         UserPrefs.Current.Theme = dark ? "Dark" : "Light";
@@ -996,6 +998,14 @@ public partial class MainWindow : Window
         bool selChanged = !ids.SequenceEqual(_lastSelIds);
         // k115 (п. 5): очертание скрытого элемента — пока он выбран
         if (_pinnedContour is { } pc && !View.Selection.Items.Any(r => ReferenceEquals(r.Target, pc) || r.Id == pc.Id)) ShowPinnedContour(null);
+        // k118: отметка строки ссылки снимается, когда на виде выбрано другое
+        if (selChanged && _refRowSelected is { } rs && View.ActiveSketch is { } rsk
+            && !ids.Select(i => i.Id).ToHashSet().SetEquals(rsk.Entities.Where(e => e.Role == SkRole.Reference && e.ReferenceSource == rs).Select(e => e.Id))
+            && ids.Count > 0 && !_refSelecting)
+        {
+            _refRowSelected = null;
+            foreach (var rb in RefRows.Values) rb.Background = rb.IsPointerOver ? new SolidColorBrush(Color.FromArgb(0x26, 0x80, 0x80, 0x80)) : Brushes.Transparent;
+        }
         _lastSelIds = ids;
         if (selChanged) CurrentOperation?.SelectionChanged(View.Selection.Items);
         if (CurrentOperation is ShellOp && !View.HandleDragging) AttachOpHandle();
@@ -1378,6 +1388,8 @@ public partial class MainWindow : Window
         PropsButtons.Children.Clear();
         PropsBody.Children.Add(new TextBlock { Text = L("Щёлкайте рёбра и вершины детали (подсвечиваются под курсором): они станут ссылками — к ним привязываются точки и размеры эскиза. Начало координат эскиза — ссылка всегда."), TextWrapping = TextWrapping.Wrap, Classes = { "dim" }, FontSize = 12 });
         var list = SketchReferences.Sources(sk).ToList();
+        RefRows.Clear();
+        if (_refRowSelected != null && !list.Contains(_refRowSelected)) _refRowSelected = null;
         PropsBody.Children.Add(new TextBlock { Text = L("Начало координат эскиза"), Margin = new Thickness(0, 8, 0, 0) });
         foreach (var src in list)
         {
@@ -1398,7 +1410,7 @@ public partial class MainWindow : Window
             row.Children.Add(del);
             var parts = src.Split(' ');
             row.Children.Add(new TextBlock { Text = parts.Length == 2 ? L(parts[0]) + " " + parts[1] : src, VerticalAlignment = VerticalAlignment.Center });
-            PropsBody.Children.Add(row);
+            PropsBody.Children.Add(RefRow(sk, src, row));
         }
         var close = new Button { Content = L("Готово"), Classes = { "accent" }, MinWidth = 90 };
         close.Click += (_, _) => ToggleReferencesPanel();
@@ -1407,6 +1419,60 @@ public partial class MainWindow : Window
     }
 
     public bool ReferencesPanelOpen => _refsPanel;
+
+    public static readonly bool RefRowsOff = Environment.GetEnvironmentVariable("P3D_REFROWS") == "0";
+    /// <summary>k118: строки списка ссылок (для проверок): источник → рамка строки.</summary>
+    public Dictionary<string, Border> RefRows { get; } = new();
+    private string? _refRowSelected;
+    public string? RefRowSelected => _refRowSelected;
+    private bool _refSelecting;
+
+    /// <summary>
+    /// k118 (замечание 08:54, п.1): строка списка ссылок интерактивна — под курсором фон строки чуть светлее и элементы
+    /// ссылки подсвечены на эскизе; щелчок выбирает их на виде (строка остаётся отмеченной, пока выбор тот же).
+    /// P3D_REFROWS=0 — строки без отклика, как прежде.
+    /// </summary>
+    private Control RefRow(Sketch sk, string src, DockPanel row)
+    {
+        if (RefRowsOff) return row;
+        var b = new Border { Child = row, CornerRadius = new CornerRadius(3), Padding = new Thickness(4, 0), Background = Brushes.Transparent, Cursor = new Cursor(StandardCursorType.Hand) };
+        RefRows[src] = b;
+        uint[] Ids() => sk.Entities.Where(e => e.Role == SkRole.Reference && e.ReferenceSource == src).Select(e => e.Id).ToArray();
+        void Paint()
+        {
+            bool sel = _refRowSelected == src;
+            bool hov = b.IsPointerOver;
+            b.Background = sel ? (IBrush)new SolidColorBrush(Color.FromArgb(0x55, 0x3d, 0x8b, 0xd9))
+                : hov ? new SolidColorBrush(Color.FromArgb(0x26, 0x80, 0x80, 0x80)) : Brushes.Transparent;
+        }
+        b.PointerEntered += (_, _) => { Paint(); View.HighlightSketchEntities(Ids()); };
+        b.PointerExited += (_, _) => { Paint(); View.HighlightSketchEntities(null); };
+        b.PointerPressed += (_, e) =>
+        {
+            if (e.Source is Visual v && v.FindAncestorOfType<Button>(true) != null) return;
+            SelectRefRow(sk, src);
+            e.Handled = true;
+        };
+        if (_refRowSelected == src) Paint();
+        return b;
+    }
+
+    /// <summary>k118: выбрать на виде элементы ссылки и отметить её строку.</summary>
+    public void SelectRefRow(Sketch sk, string src)
+    {
+        _refRowSelected = src;
+        _refSelecting = true;
+        try
+        {
+            View.Selection.Clear();
+            foreach (var e in sk.Entities.Where(e => e.Role == SkRole.Reference && e.ReferenceSource == src))
+                View.Selection.Select(new PickRef(e.Id, e is SkPoint ? PickKind.SketchPoint : PickKind.SketchCurve, sk, e), additive: true);
+        }
+        finally { _refSelecting = false; }
+        foreach (var (k, rb) in RefRows)
+            rb.Background = k == src ? new SolidColorBrush(Color.FromArgb(0x55, 0x3d, 0x8b, 0xd9)) : rb.IsPointerOver ? new SolidColorBrush(Color.FromArgb(0x26, 0x80, 0x80, 0x80)) : Brushes.Transparent;
+        View.MarkDirty();
+    }
 
     /// <summary>Двойной щелчок по размеру: новое значение (число или формула) — размер становится управляющим.</summary>
     /// <summary>k102: окно правки размера открыто (поле ввода — для вставки идентификаторов щелчком по размерам).</summary>
@@ -2221,8 +2287,15 @@ public partial class MainWindow : Window
             var nodes = TreeMultiOff ? new List<TreeNode>() : Tree.SelectedItems.OfType<TreeNode>().ToList();
             if (nodes.Count > 1)
             {
-                View.Selection.Clear();
-                foreach (var nn in nodes) foreach (var r in RefsOf(nn.Item)) View.Selection.Select(r, additive: true);
+                // k118 (п. 5): выделение вида — из дерева; обратная синхронизация дерева в это время не трогает его строки
+                // (прежде она перезаписывала выделение дерева посреди щелчка с Ctrl/Shift — оставалась одна строка)
+                _treeDriving = !TreeDriveOff;
+                try
+                {
+                    View.Selection.Clear();
+                    foreach (var nn in nodes) foreach (var r in RefsOf(nn.Item)) View.Selection.Select(r, additive: true);
+                }
+                finally { _treeDriving = false; }
                 ShowPinnedContour(null);
                 return;
             }
@@ -2669,8 +2742,11 @@ public partial class MainWindow : Window
         else View.Selection.Select(r, additive: false);
     }
 
+    private bool _treeDriving;
+    static readonly bool TreeDriveOff = Environment.GetEnvironmentVariable("P3D_TREEDRIVE") == "0";
     private void SyncTreeFromSelection()
     {
+        if (_treeDriving) return;
         // k115: несколько элементов — несколько строк (операции группы, Ctrl в виде)
         if (!TreeMultiOff && View.Selection.Items.Count > 1)
         {
@@ -2738,6 +2814,13 @@ public partial class MainWindow : Window
         {
             PropsTitle.Text = L("ДЕТАЛЬ");
             Row("Имя", part.Name);
+            // k118 (замечание 08:54, п.11): обозначение, наименование, изменение — правятся здесь (основная надпись, перечень)
+            if (!PartPropsOff)
+            {
+                EditRow("Обозначение", part.Info.Code, v => part.Info.Code = v);
+                EditRow("Наименование", part.Info.Title, v => part.Info.Title = v);
+                EditRow("Изменение", part.Info.Revision, v => part.Info.Revision = v);
+            }
             MaterialRow(part);
             Row("Тел", part.Bodies.Count.ToString());
             if (part.Bodies.Count > 0)
@@ -2752,9 +2835,34 @@ public partial class MainWindow : Window
                 }
                 else Row("Площадь", $"{part.Area / 100.0:0.###} " + L("см²"));
                 Row("Масса", $"{part.Mass:0.####} " + L("кг"));
+                if (!PartPropsOff && !part.Bounds.IsEmpty)
+                {
+                    var sz = part.Bounds.Size;
+                    Row("Габариты", $"{sz.X:0.##} × {sz.Y:0.##} × {sz.Z:0.##} " + L("мм") + "  (" + L("Ш × В × Г") + ")");
+                }
             }
             Row("Операций", part.Children.OfType<Feature>().Count().ToString());
             Row("Параметров", $"{Session.Document.Parameters.Count} + {part.LocalParameters.Count}");
+            if (!PartPropsOff)
+            {
+                ChoiceRow("Ед. учёта", DocumentInfo.UomChoices, part.Info.Uom, v => part.Info.Uom = v);
+                ChoiceRow("Ед. длины", DocumentInfo.LengthChoices, part.Info.LengthUnits, v => part.Info.LengthUnits = v);
+                ChoiceRow("Допуски", DocumentInfo.ToleranceChoices, part.Info.Tolerances, v => part.Info.Tolerances = v);
+                Row("Сборка", part.Parent is Assembly pa ? pa.Name : "—");
+                var deps = Parametric3D.Model.Params.ModelRefs.DependenciesOf(part);
+                PropsBody.Children.Add(new TextBlock { Text = L("Зависит от") + (deps.Count == 0 ? ": —" : ":"), Classes = { "dim" }, Margin = new Thickness(0, 6, 0, 2) });
+                foreach (var (item, where) in deps)
+                {
+                    var link = new TextBlock { Text = (item is Assembly ? L("Сборка") : L("Деталь")) + " «" + item.Name + "»", Margin = new Thickness(12, 1, 0, 1), TextDecorations = TextDecorations.Underline, Cursor = new Cursor(StandardCursorType.Hand) };
+                    link.Bind(TextBlock.ForegroundProperty, this.GetResourceObservable("P3.Accent"));
+                    ToolTip.SetTip(link, L("Ссылка в") + " " + where);
+                    var it = item;
+                    link.PointerEntered += (_, _) => View.HighlightFromTree(it);
+                    link.PointerExited += (_, _) => View.HighlightFromTree(null);
+                    PropsBody.Children.Add(link);
+                }
+                PartDepsShown = deps.Count;
+            }
             return;
         }
         PropsTitle.Text = L("ВЫБРАНО");
@@ -2812,6 +2920,37 @@ public partial class MainWindow : Window
         }
     }
 
+    public static readonly bool PartPropsOff = Environment.GetEnvironmentVariable("P3D_PARTPROPS") == "0";
+    /// <summary>Разбор (k118): ссылок «Зависит от» в последней панели детали.</summary>
+    public int PartDepsShown { get; private set; }
+
+    /// <summary>k118: строка свойства с полем ввода (правка — по Enter или уходу из поля; документ помечается изменённым).</summary>
+    private void EditRow(string k, string v, Action<string> set)
+    {
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("110,*"), Margin = new Thickness(0, 1) };
+        g.Children.Add(new TextBlock { Text = L(k), Classes = { "dim" }, VerticalAlignment = VerticalAlignment.Center });
+        var tb = new TextBox { Text = v, MinHeight = 24, Padding = new Thickness(4, 2), Name = "prop_" + k };
+        void Commit() { string nv = (tb.Text ?? "").Trim(); if (nv == v) return; set(nv); v = nv; Session.MarkModified(); }
+        tb.LostFocus += (_, _) => Commit();
+        tb.KeyDown += (_, e) => { if (e.Key == Key.Enter) { Commit(); e.Handled = true; } };
+        Grid.SetColumn(tb, 1);
+        g.Children.Add(tb);
+        PropsBody.Children.Add(g);
+    }
+
+    private void ChoiceRow(string k, string[] choices, string cur, Action<string> set)
+    {
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("110,*"), Margin = new Thickness(0, 1) };
+        g.Children.Add(new TextBlock { Text = L(k), Classes = { "dim" }, VerticalAlignment = VerticalAlignment.Center });
+        var list = choices.ToList();
+        if (!list.Contains(cur)) list.Add(cur);
+        var cb = new ComboBox { ItemsSource = list.Select(c => L(c)).ToList(), SelectedIndex = list.IndexOf(cur), HorizontalAlignment = HorizontalAlignment.Stretch, Name = "prop_" + k };
+        cb.SelectionChanged += (_, _) => { if (cb.SelectedIndex >= 0 && list[cb.SelectedIndex] != cur) { cur = list[cb.SelectedIndex]; set(cur); Session.MarkModified(); } };
+        Grid.SetColumn(cb, 1);
+        g.Children.Add(cb);
+        PropsBody.Children.Add(g);
+    }
+
     private void Row(string k, string v)
     {
         var g = new Grid { ColumnDefinitions = new ColumnDefinitions("110,*") };
@@ -2828,7 +2967,9 @@ public partial class MainWindow : Window
     {
         ModelItem? start = SelectedItems().FirstOrDefault(i => i is Part or Assembly) ?? (ModelItem?)Session.Part;
         var dlg = new ParametersDialog(Session, start);
+        dlg.PeekRow = (sk, d, f) => View.ShowPeek(sk, d, f);
         await dlg.ShowDialog(this);
+        View.ShowPeek(null, null, null);
         if (dlg.Applied) { View.MarkDirty(); UpdateStatus(); }
     }
 

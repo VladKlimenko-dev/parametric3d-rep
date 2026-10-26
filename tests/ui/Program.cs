@@ -3191,6 +3191,247 @@ Check("UI-K116", () =>
     w.Close();
 });
 
+Check("UI-TREE-MULTI-K118", () =>
+{
+    // k118 (замечание 08:54, п.5): выбор нескольких операций в дереве Ctrl и Shift — дерево не сбрасывается выбором вида.
+    // Мутация P3D_TREEDRIVE=0.
+    var s = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 20), "tm");
+    var w = Open(s); BuildNow(s); w.RebuildTree(); for (int i = 0; i < 5; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); }
+    var tree = w.TreeControl;
+    var items = tree.GetVisualDescendants().OfType<TreeViewItem>().Where(t => t.DataContext is TreeNode { Item: Feature } tn && !tn.IsReference).ToList();
+    Require(items.Count >= 6, $"feature rows {items.Count}");
+    Point C(TreeViewItem t) => t.TranslatePoint(new Point(60, 10), w) ?? default;
+    var a = C(items[1]); var b = C(items[3]); var c = C(items[5]);
+    w.MouseMove(a); w.MouseDown(a, MouseButton.Left); w.MouseUp(a, MouseButton.Left); Dispatcher.UIThread.RunJobs();
+    w.MouseMove(b); w.MouseDown(b, MouseButton.Left, RawInputModifiers.Control); w.MouseUp(b, MouseButton.Left, RawInputModifiers.Control); Dispatcher.UIThread.RunJobs();
+    Console.WriteLine($"  ctrl: tree {tree.SelectedItems.Count}, view {w.ViewPort.Selection.Count}");
+    Require(tree.SelectedItems.Count == 2 && w.ViewPort.Selection.Count == 2, $"Ctrl-click: tree {tree.SelectedItems.Count}, view {w.ViewPort.Selection.Count}");
+    w.MouseMove(c); w.MouseDown(c, MouseButton.Left, RawInputModifiers.Shift); w.MouseUp(c, MouseButton.Left, RawInputModifiers.Shift); Dispatcher.UIThread.RunJobs();
+    Console.WriteLine($"  shift: tree {tree.SelectedItems.Count}, view {w.ViewPort.Selection.Count}");
+    Require(tree.SelectedItems.Count == 5 && w.ViewPort.Selection.Count == 5, $"Shift-click: tree {tree.SelectedItems.Count}, view {w.ViewPort.Selection.Count}");
+    w.Close();
+});
+
+Check("UI-DATUM-ORDER-K118", () =>
+{
+    // k118 (п.6): плоскость, созданная после операций, после записи и открытия — на своём месте в дереве, а не вверху.
+    // Мутация P3D_DATUMSLOT=0.
+    var s = DocumentSession.Sample(); var w = Open(s); var part = s.Part!;
+    BuildNow(s);
+    w.SelectItem(part.PlaneXY);
+    var pop = new PlaneOp(); w.StartOperation(pop); pop.DragValue!(20); pop.FieldChanged(); w.CommitOperation(); BuildNow(s);
+    var dp = part.Planes.Last();
+    int Before(Part p, ModelItem it) => p.Children.TakeWhile(x => !ReferenceEquals(x, it)).Count(x => x is Feature);
+    int fb = Before(part, dp);
+    Require(fb > 0, "the new plane is not after the features");
+    string path = Path.Combine(Path.GetTempPath(), $"p3d_ui_k118d_{Guid.NewGuid():N}.p3d");
+    try
+    {
+        s.SaveAs(path);
+        var s2 = DocumentSession.Open(path); var p2 = s2.Part!;
+        var dp2 = p2.Planes.First(x => x.Name == dp.Name);
+        int fb2 = Before(p2, dp2);
+        Console.WriteLine($"  features before the plane: {fb} → after reopening {fb2}");
+        Require(fb2 == fb, $"plane moved in the tree after reopening: {fb} → {fb2}");
+    }
+    finally { try { File.Delete(path); } catch { } }
+    w.Close();
+});
+
+Check("UI-SECTION-MEMORY-K118", () =>
+{
+    // k118 (п.4): сечение помнит настройки: выключили и снова включили — прежние смещение и углы; отменённое — не запоминается.
+    // Мутация P3D_SECTIONMEMORY=0.
+    var s = DocumentSession.Sample(); var w = Open(s); BuildNow(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    var vp = w.ViewPort; var cmd = CommandRegistry.Instance["view.section"];
+    cmd.Execute(); Run();
+    var op = (SectionOp)w.CurrentOperation!;
+    op.State.Offset = 7; op.State.AngleA = 15; op.FieldChanged(); w.CommitOperation(); Run();
+    cmd.Execute(); Run();
+    Require(vp.SectionPlane == null, "section did not turn off");
+    cmd.Execute(); Run();
+    var op2 = w.CurrentOperation as SectionOp;
+    Console.WriteLine($"  reopened: offset {op2?.State.Offset}, angle A {op2?.State.AngleA}");
+    Require(op2 != null && Math.Abs(op2.State.Offset - 7) < 1e-9 && Math.Abs(op2.State.AngleA - 15) < 1e-9, "section settings are not remembered");
+    op2!.State.Offset = 99; op2.FieldChanged(); w.CancelOperation(); Run();
+    cmd.Execute(); Run();
+    var op3 = (SectionOp)w.CurrentOperation!;
+    Require(Math.Abs(op3.State.Offset - 7) < 1e-9, $"cancelled settings were remembered: {op3.State.Offset}");
+    w.CancelOperation();
+    w.Close();
+});
+
+Check("UI-SKETCH-REFS-K118", () =>
+{
+    // k118 (п.1, 7, 8): строки списка ссылок эскиза — под курсором подсвечены строка и элементы ссылки на эскизе, щелчок
+    // выбирает их на виде (P3D_REFROWS=0); центр окружности под курсором подсвечивает окружность (P3D_CENTERHOVER=0);
+    // значки связей без подложки и рамки (P3D_GLYPHPLAIN=0).
+    var part = Parametric3D.App.Diagnostics.TestParts.Block("refs");
+    var s = DocumentSession.FromPart(part, "refs");
+    var w = Open(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    s.Document.RebuildDirty();
+    var face = part.Bodies[0].Faces.First(f => Refs.FacePlane(part, f.Id) is { } pl && pl.N.Z > 0.99);
+    w.ViewPort.Selection.Select(new PickRef(face.Id, PickKind.Face, part, null), additive: false);
+    w.StartOperation(new SketchOp());
+    var vp = w.ViewPort; var sk = vp.ActiveSketch!;
+    var edge = part.Bodies[0].Edges.First(e => e.Curve is Parametric3D.Kernel.Curves.LineCurve3 && Math.Abs(e.V0.P.Z - 20) < 1e-6 && Math.Abs(e.V1.P.Z - 20) < 1e-6);
+    Require(SketchReferences.Add(sk, part, new PickRef(edge.Id, PickKind.Edge, part, null)) == null, "reference not added");
+    var rect = new RectangleTool();
+    rect.Click(new SketchInput(sk, new Vector2d(-10, -5), null));
+    rect.Click(new SketchInput(sk, new Vector2d(10, 5), null));
+    var circ = new SkCircle(new SkPoint(30, 0), 4); sk.AddEntity(circ);
+    sk.Solve(s.Document.Solver); vp.RefreshDefaultDimensions(); Run();
+    w.ToggleReferencesPanel(); Run();
+    Require(w.RefRows.Count == 1, $"reference rows {w.RefRows.Count}");
+    var (src, row) = w.RefRows.First();
+    var refIds = sk.Entities.Where(e => e.Role == SkRole.Reference && e.ReferenceSource == src).Select(e => e.Id).OrderBy(x => x).ToList();
+    var pt = row.TranslatePoint(new Point(8, row.Bounds.Height / 2), w)!.Value;
+    w.MouseMove(new Point(pt.X, pt.Y - 200)); Run();
+    w.MouseMove(pt); Run();
+    Console.WriteLine($"  hover: highlighted {vp.RefHoverIds.Count} of {refIds.Count}, row background {(row.Background as Avalonia.Media.ISolidColorBrush)?.Color}");
+    Require(vp.RefHoverIds.OrderBy(x => x).SequenceEqual(refIds), "hovering the row does not highlight the reference on the sketch");
+    Require(row.Background is Avalonia.Media.ISolidColorBrush { Color.A: > 0 }, "row background does not change under the cursor");
+    w.MouseDown(pt, MouseButton.Left); w.MouseUp(pt, MouseButton.Left); Run();
+    Require(w.RefRowSelected == src && vp.Selection.Items.Select(r => r.Id).OrderBy(x => x).SequenceEqual(refIds), "click did not select the reference in the view");
+    w.MouseMove(new Point(pt.X, pt.Y - 300)); Run();
+    Require(vp.RefHoverIds.Count == 0 && w.RefRowSelected == src, "selection is not kept after the cursor left");
+    // центр окружности под курсором — окружность подсвечена
+    int ch = vp.CenterOwnerHovers;
+    vp.Selection.SetHover(new PickRef(circ.Center.Id, PickKind.SketchPoint, sk, circ.Center));
+    vp.ApplyFlagsForTest();
+    Require(vp.CenterOwnerHovers > ch, "hovering the centre does not highlight the circle");
+    vp.Selection.SetHover(PickRef.Empty);
+    // значки связей: без подложки
+    var rtb = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize(Math.Max(64, (int)w.GlyphLayer.Bounds.Width), Math.Max(64, (int)w.GlyphLayer.Bounds.Height)));
+    using (var ctx = rtb.CreateDrawingContext()) w.GlyphLayer.Render(ctx);
+    Console.WriteLine($"  glyphs drawn {w.GlyphLayer.LastDrawn}, with background {w.GlyphLayer.LastBackgrounds}");
+    Require(w.GlyphLayer.LastDrawn > 0 && w.GlyphLayer.LastBackgrounds == 0, "constraint glyphs are drawn on a background");
+    w.ToggleReferencesPanel();
+    w.CancelSketch();
+    w.Close();
+});
+
+Check("UI-PARAMS-K118", () =>
+{
+    // k118 (п.9): окно «Параметры» — колонки меняют ширину (разделители; P3D_PARAMCOLS=0), фильтр по имени, описание у
+    // размеров (сохраняется в файле), подсветка строки, «Удалить» только при выбранной строке (P3D_PARAMROWS=0),
+    // «Математика» первой; строка размера под курсором — размер показан на виде (P3D_PARAMPEEK=0).
+    var s = DocumentSession.Sample(); var part = s.Part!;
+    var sk = part.AddSketch("PK", part.PlaneXY.Frame, part.PlaneXY.Id);
+    var cc = new SkCircle(new SkPoint(0, 0), 6); sk.AddEntity(cc); sk.AddDimension(DimensionType.Diameter, 12, cc).Locked = true;
+    var w = Open(s); BuildNow(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    var vp = w.ViewPort;
+    var dlg = new ParametersDialog(s, part);
+    dlg.PeekRow = (a, d, f) => vp.ShowPeek(a, d, f);
+    int lv = Enumerable.Range(0, dlg.LevelCount).First(i => dlg.LevelTitle(i) == Loc.L("Размеры детали «{0}»", part.Name));
+    dlg.SelectLevel(lv); dlg.Show(); Run();
+    Require(ParametersDialog.FormulaCategories[0].Category == "Математика" && dlg.CurrentCategory == 0, "Math is not the first formula category");
+    Require(dlg.SplitterCount == 5, $"column splitters {dlg.SplitterCount}");
+    Require(!dlg.DeleteEnabled, "Delete is enabled with no row selected");
+    int all = dlg.VisibleRows.Count;
+    string pref = "s\"" + sk.Name + "\"";
+    dlg.FilterText = pref; Run();
+    Console.WriteLine($"  filter «{pref}»: {dlg.VisibleRows.Count} of {all}");
+    Require(dlg.VisibleRows.Count > 0 && dlg.VisibleRows.All(i => dlg.RowName(i).Contains(pref)) && (dlg.VisibleRows.Count < all || part.Features.Count == 0), "name filter");
+    dlg.FilterText = ""; Run();
+    int row = Enumerable.Range(0, dlg.RowCount).First(i => dlg.RowName(i).StartsWith(pref));
+    Require(dlg.HasNoteBox(row), "no description field for a dimension row");
+    // наведение: размер на виде
+    dlg.SetHoverRow(row); vp.BuildOverlayForTest();
+    Console.WriteLine($"  hover row {dlg.RowName(row)}: peek {vp.PeekDimension?.D.Name}, segments {vp.PeekSegments}");
+    Require(vp.PeekDimension is { } pk && ReferenceEquals(pk.Sk, sk) && vp.PeekSegments > 0, "hovering a dimension row does not show it in the view");
+    dlg.SetHoverRow(-1);
+    Require(vp.PeekDimension == null, "peek is not cleared");
+    // параметр: выбор строки — «Удалить» доступна
+    dlg.SelectLevel(Enumerable.Range(0, dlg.LevelCount).First(i => dlg.LevelTitle(i) == Loc.L("Деталь «{0}»", part.Name))); Run();
+    Require(!dlg.DeleteEnabled, "Delete is enabled after switching level");
+    dlg.SelectLevel(lv); Run();
+    dlg.SelectRow(row);
+    dlg.SetRowNote(row, "ширина паза");
+    var dim = sk.Dimensions.First(d => ModelRefs.PathOf(sk, d) == dlg.RowName(row));
+    Require(dlg.Apply(), "apply");
+    dlg.Close();
+    Require(dim.Note == "ширина паза", $"dimension description: {dim.Note}");
+    string path = Path.Combine(Path.GetTempPath(), $"p3d_ui_k118p_{Guid.NewGuid():N}.p3d");
+    try
+    {
+        s.SaveAs(path);
+        var s2 = DocumentSession.Open(path);
+        var d2 = s2.Part!.Sketches.First(x => x.Name == sk.Name).Dimensions.First(d => d.Index == dim.Index);
+        Require(d2.Note == "ширина паза", "dimension description is not saved");
+    }
+    finally { try { File.Delete(path); } catch { } }
+    // параметры детали: удалить — только выбранную
+    var d3 = new ParametersDialog(s, part);
+    d3.SelectLevel(Enumerable.Range(0, d3.LevelCount).First(i => d3.LevelTitle(i) == Loc.L("Документ «{0}»", s.Title))); d3.Show(); Run();
+    if (d3.RowCount > 0) { d3.SelectRow(0); Require(d3.DeleteEnabled, "Delete is disabled with a parameter row selected"); }
+    d3.Close();
+    w.Close();
+});
+
+Check("UI-PART-PROPS-K118", () =>
+{
+    // k118 (п.11): свойства детали — обозначение, наименование, изменение (правятся), габариты, единица учёта, единицы длины,
+    // допуски, сборка над деталью, «Зависит от» (P3D_PARTPROPS=0, P3D_PARTDEPS=0); сохраняются в файле.
+    var part = Parametric3D.App.Diagnostics.TestParts.Block("pp");
+    var s = DocumentSession.FromPart(part, "pp"); var w = Open(s); BuildNow(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    if (!w.PropertiesVisible) w.ToggleProperties();
+    w.ViewPort.Selection.Clear(); w.ShowProperties(); Run();
+    var props = w.GetVisualDescendants().OfType<Control>().Where(c => c.Name?.StartsWith("prop_") == true).Select(c => c.Name!).ToList();
+    Console.WriteLine($"  property fields: {string.Join(", ", props)}");
+    Require(props.Contains("prop_Обозначение") && props.Contains("prop_Наименование") && props.Contains("prop_Изменение") && props.Contains("prop_Допуски") && props.Contains("prop_Ед. учёта"), "part property fields");
+    var code = w.GetVisualDescendants().OfType<TextBox>().First(t => t.Name == "prop_Обозначение");
+    code.Text = "АБВГ.123456.001"; code.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
+    Require(part.Info.Code == "АБВГ.123456.001" && s.Modified, "part number is not edited");
+    var texts = w.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").ToList();
+    Require(texts.Any(t => t.Contains("×") && t.Contains(Loc.L("мм"))), "no overall size");
+    part.Info.Uom = "кг"; part.Info.Tolerances = "ISO 2768-fH";
+    string path = Path.Combine(Path.GetTempPath(), $"p3d_ui_k118i_{Guid.NewGuid():N}.p3d");
+    try
+    {
+        s.SaveAs(path);
+        var i2 = DocumentSession.Open(path).Part!.Info;
+        Require(i2.Code == "АБВГ.123456.001" && i2.Uom == "кг" && i2.Tolerances == "ISO 2768-fH" && i2.LengthUnits == "мм", "part properties are not saved");
+    }
+    finally { try { File.Delete(path); } catch { } }
+    // зависимости: путь p"…" к другой детали и параметр сборки над деталью
+    var doc = new Document("deps");
+    var asm = new Assembly("Узел"); doc.Root.Add(asm);
+    var pa = asm.AddPart("PA"); var pb = asm.AddPart("PB");
+    pb.LocalParameters.Add("x", 5, ParamKind.Real, "mm");
+    asm.LocalParameters.Add("k", 3, ParamKind.Real, "");
+    pa.LocalParameters.AddFormula("y", "p\"PB\".x * 2", "mm");
+    pa.LocalParameters.AddFormula("z", "k + 1", "");
+    var deps = ModelRefs.DependenciesOf(pa);
+    Console.WriteLine($"  PA depends on: {string.Join(", ", deps.Select(d => d.Item.Name + " (" + d.Where + ")"))}");
+    Require(deps.Any(d => ReferenceEquals(d.Item, pb)) && deps.Any(d => ReferenceEquals(d.Item, asm)) && ModelRefs.DependenciesOf(pb).Count == 0, "part dependencies");
+    w.Close();
+});
+
+Check("UI-ICON-THEME-K118", () =>
+{
+    // k118 (п.10): иконки другой темы готовятся заранее (P3D_ICONPRELOAD=0), живые картинки иконок меняются сразу при
+    // смене темы (P3D_ICONLIVE=0).
+    var fg0 = IconProvider.Foreground;
+    var other = fg0 == IconProvider.DarkFg ? IconProvider.LightFg : IconProvider.DarkFg;
+    IconProvider.Preload(other).Wait();
+    Console.WriteLine($"  preloaded {IconProvider.PreloadedCount} of {IconProvider.AllFiles().Count}");
+    Require(IconProvider.AllFiles().Count > 100 && IconProvider.PreloadedCount > 100, "icons of the other theme are not prepared");
+    var img = (Image)IconProvider.Content("save_but.svg", "save");
+    var src0 = img.Source;
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    IconProvider.SetForeground(other);
+    double ms = sw.Elapsed.TotalMilliseconds;
+    Console.WriteLine($"  switch: live swaps {IconProvider.LastLiveSwaps}, {ms:0.#} ms");
+    Require(!ReferenceEquals(img.Source, src0) && ReferenceEquals(img.Source, IconProvider.Get("save_but.svg")), "an existing icon did not switch with the theme");
+    IconProvider.SetForeground(fg0);
+    Require(ReferenceEquals(img.Source, src0), "icon did not switch back");
+});
+
 Check("UI-PLANE-EDIT-K116", () =>
 {
     // k116 (задача 22:05): готовую плоскость правят как операцию — «Изменить операцию» (двойной щелчок в дереве): панель

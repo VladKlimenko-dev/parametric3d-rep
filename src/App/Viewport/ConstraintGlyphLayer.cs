@@ -22,6 +22,10 @@ namespace Parametric3D.App.Viewport;
 /// </summary>
 public sealed class ConstraintGlyphLayer : Control
 {
+    public static readonly bool GlyphPlainOff = Environment.GetEnvironmentVariable("P3D_GLYPHPLAIN") == "0";
+    /// <summary>Разбор: значков с подложкой в последнем кадре.</summary>
+    public int LastBackgrounds { get; private set; }
+
     /// <summary>Мутация P3D_GLYPHHV=0: значок H/V — по осям эскиза, без учёта поворота вида.</summary>
     internal static readonly bool SwapHvOff = Environment.GetEnvironmentVariable("P3D_GLYPHHV") == "0";
     /// <summary>Разбор: значки H/V рисуются переставленными (ось U эскиза на экране вертикальна).</summary>
@@ -54,6 +58,7 @@ public sealed class ConstraintGlyphLayer : Control
         try { list = ConstraintLayout.Build(sk, _view.PixelSize); }
         catch (Exception ex) { AppLog.Write("constraint glyphs", ex); return; }
         if (list.Count == 0) return;
+        LastBackgrounds = 0;
 
         var th = _view.Theme;
         var bg = new SolidColorBrush(th.Dark ? Color.FromArgb(215, 30, 34, 41) : Color.FromArgb(225, 250, 251, 253));
@@ -87,7 +92,10 @@ public sealed class ConstraintGlyphLayer : Control
                 : hov.Id == c.Id ? hover
                 : _view.Selection.Contains(c.Id) ? select
                 : normal;
-            ctx.DrawRectangle(bg, pen, cell, 3, 3);
+            // k118 (замечание 08:54, п. 8): значок без подложки и обода — не закрывает геометрию эскиза; рамка — только у
+            // наведённого, выбранного и конфликтного. Мутация P3D_GLYPHPLAIN=0 — прежняя плашка.
+            if (GlyphPlainOff) { ctx.DrawRectangle(bg, pen, cell, 3, 3); LastBackgrounds++; }
+            else if (!ReferenceEquals(pen, normal)) ctx.DrawRectangle(null, pen, cell, 3, 3);
 
             var img = IconProvider.Get(ConstraintLayout.IconOf(ScreenType(c.Type)), th.Dark ? Color.FromRgb(232, 232, 232) : Color.FromRgb(30, 30, 30));
             if (img != null)

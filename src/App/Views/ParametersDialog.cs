@@ -31,6 +31,8 @@ public sealed class ParametersDialog : Window
         public SkDimension? Dim; public Sketch? Sketch;
         public Feature? Feature; public FeatureDims.Slot? Slot;
         public string Original = "";
+        /// <summary>k118 (п.9.3): описание строки размера эскиза (у параметров — Comment).</summary>
+        public string Note = "", NoteOriginal = "";
         public bool IsDim => Dim != null || Slot != null;
     }
 
@@ -51,7 +53,17 @@ public sealed class ParametersDialog : Window
     private readonly List<Level> _levels = new();
     private Level _cur = null!;
     private readonly ComboBox _lookIn = new() { MinWidth = 320 };
-    private readonly Grid _grid = new() { ColumnDefinitions = new ColumnDefinitions("150,150,190,70,120,*") };
+    // k118 (п.9.1): между колонками — разделители (нечётные колонки), ширина колонок меняется перетаскиванием
+    private readonly Grid _grid = new() { ColumnDefinitions = new ColumnDefinitions(ColumnsOff ? "150,0,150,0,190,0,70,0,120,0,*" : "150,5,150,5,190,5,70,5,120,5,*") };
+    private static int C(int c) => c * 2;
+    public static readonly bool ColumnsOff = Environment.GetEnvironmentVariable("P3D_PARAMCOLS") == "0";
+    public static readonly bool RowUiOff = Environment.GetEnvironmentVariable("P3D_PARAMROWS") == "0";
+    private readonly TextBox _filter = new() { MinWidth = 220 };
+    private readonly Button _del = new();
+    private readonly List<(Border Bg, int Row)> _rowBg = new();
+    private int _hoverRow = -1;
+    /// <summary>k118 (п.9.6): строка под курсором — показать её размер на виде (эскиз и размер, операция; null — снять).</summary>
+    public Action<Sketch?, SkDimension?, Feature?>? PeekRow;
     private readonly TextBlock _scopeNote = new() { Classes = { "dim" }, FontSize = 12, TextWrapping = TextWrapping.Wrap };
     private int _selRow = -1;
     public bool Applied { get; private set; }
@@ -85,14 +97,25 @@ public sealed class ParametersDialog : Window
         _lookIn.SelectionChanged += (_, _) => { if (_lookIn.SelectedIndex >= 0) Show(_levels[_lookIn.SelectedIndex]); };
 
         var add = new Button { Content = "+ " + L("Добавить") };
-        var del = new Button { Content = "− " + L("Удалить") };
+        var del = _del;
+        del.Content = "− " + L("Удалить");
         add.Click += (_, _) => AddRow();
         del.Click += (_, _) => DeleteRow();
+        // k118 (п.9.2): фильтр строк по имени
+        _filter.Watermark = L("Фильтр по имени");
+        _filter.TextChanged += (_, _) => { if (_cur != null) Fill(); };
 
         var top0 = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { new TextBlock { Text = L("Искать в:"), VerticalAlignment = VerticalAlignment.Center }, _lookIn, add, del } };
+        var filterRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0), Children = { new TextBlock { Text = L("Имя:"), VerticalAlignment = VerticalAlignment.Center }, _filter } };
         // k102 (замечание 9): формулы — категории и кнопки функций; кнопка вставляет текст в место курсора поля значения
         BuildFormulaBars();
         var top = new StackPanel { Spacing = 4, Children = { top0, _catBar, _funcBar } };
+        if (!RowUiOff) top.Children.Add(filterRow);
+        // k118 (п.9.5): строка под курсором подсвечена, щелчок выбирает строку (кнопка «Удалить» — только при выборе)
+        _grid.PointerMoved += (_, e) => { if (!RowUiOff) SetHoverRow(RowAt(e.GetPosition(_grid))); };
+        _grid.PointerExited += (_, _) => SetHoverRow(-1);
+        _grid.AddHandler(PointerPressedEvent, (_, e) => { if (!RowUiOff && RowAt(e.GetPosition(_grid)) is int r and >= 0) SelectRow(r); }, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
+        Closed += (_, _) => PeekRow?.Invoke(null, null, null);
 
         var ok = new Button { Content = L("ОК"), MinWidth = 96, Classes = { "accent" } };
         var cancel = new Button { Content = L("Отмена"), MinWidth = 96 };
@@ -125,8 +148,17 @@ public sealed class ParametersDialog : Window
     // ------------------------------------------------------------------ формулы (k102)
 
     /// <summary>Категории формул: название и кнопки (подпись, вставляемый текст; «|» — место курсора после вставки).</summary>
+    /// <summary>k118 (п.9.4): «Математика» — первой и открыта по умолчанию.</summary>
     public static readonly (string Category, (string Label, string Insert, string Tip)[] Items)[] FormulaCategories =
     {
+        ("Математика", new[]
+        {
+            ("+", " + ", "Сложение"), ("−", " - ", "Вычитание"), ("×", " * ", "Умножение"), ("÷", " / ", "Деление"), ("^", "^", "Степень"),
+            ("( )", "(|)", "Скобки"), ("sqrt", "sqrt(|)", "Квадратный корень"), ("pow", "pow(|, )", "Степень pow(a, b)"), ("abs", "abs(|)", "Модуль"),
+            ("log", "log(|)", "Десятичный логарифм"), ("ln", "ln(|)", "Натуральный логарифм"), ("exp", "exp(|)", "Экспонента"),
+            ("ceil", "ceil(|)", "Вверх до целого"), ("floor", "floor(|)", "Вниз до целого"), ("round", "round(|)", "Округлить"), ("trunc", "trunc(|)", "Отбросить дробную часть"),
+            ("pi", "pi", "Число π"), ("e", "e()", "Число e"),
+        }),
         ("Тригонометрия", new[]
         {
             ("sin", "sin(|)", "Синус угла в градусах"), ("cos", "cos(|)", "Косинус угла в градусах"), ("tan", "tan(|)", "Тангенс угла в градусах"),
@@ -140,14 +172,6 @@ public sealed class ParametersDialog : Window
             (">=", " >= ", "Не меньше"), ("==", " == ", "Равно"), ("!=", " != ", "Не равно"), ("&&", " && ", "И"), ("||", " || ", "Или"),
             ("not", "not(|)", "Не"), ("sign", "sign(|)", "Знак: −1, 0, 1"), ("mod", "mod(|, )", "Остаток от деления"),
             ("min", "min(|, )", "Наименьшее"), ("max", "max(|, )", "Наибольшее"), ("bound", "bound(|, , )", "Ограничить: bound(x, от, до)"),
-        }),
-        ("Математика", new[]
-        {
-            ("+", " + ", "Сложение"), ("−", " - ", "Вычитание"), ("×", " * ", "Умножение"), ("÷", " / ", "Деление"), ("^", "^", "Степень"),
-            ("( )", "(|)", "Скобки"), ("sqrt", "sqrt(|)", "Квадратный корень"), ("pow", "pow(|, )", "Степень pow(a, b)"), ("abs", "abs(|)", "Модуль"),
-            ("log", "log(|)", "Десятичный логарифм"), ("ln", "ln(|)", "Натуральный логарифм"), ("exp", "exp(|)", "Экспонента"),
-            ("ceil", "ceil(|)", "Вверх до целого"), ("floor", "floor(|)", "Вниз до целого"), ("round", "round(|)", "Округлить"), ("trunc", "trunc(|)", "Отбросить дробную часть"),
-            ("pi", "pi", "Число π"), ("e", "e()", "Число e"),
         }),
         ("Размеры и ссылки", new[]
         {
@@ -207,6 +231,18 @@ public sealed class ParametersDialog : Window
     /// <summary>Разбор: значок ошибки строки i виден.</summary>
     public bool ErrorShown(int row) => _grid.Children.OfType<DockPanel>().Where(d => d.Tag is int r && r == row).SelectMany(d => d.Children.OfType<Control>()).Any(c => c.Name == "err" && c.IsVisible);
     public void SelectLevel(int i) => _lookIn.SelectedIndex = i;
+    public int CurrentCategory => _cat;
+    public string FilterText { get => _filter.Text ?? ""; set => _filter.Text = value; }
+    /// <summary>Видимые (после фильтра) строки: индексы строк уровня.</summary>
+    public IReadOnlyList<int> VisibleRows => _rowBg.Select(x => x.Row).ToList();
+    public bool DeleteEnabled => _del.IsEnabled;
+    public int SelectedRow => _selRow;
+    public int HoverRow => _hoverRow;
+    public int SplitterCount => _grid.Children.OfType<GridSplitter>().Count();
+    public double ColumnWidth(int c) => _grid.ColumnDefinitions[C(c)].Width.Value;
+    public void SetColumnWidth(int c, double w) => _grid.ColumnDefinitions[C(c)].Width = new GridLength(w);
+    public void SetRowNote(int i, string v) => _cur.Rows![i].Note = v;
+    public bool HasNoteBox(int i) => _grid.Children.OfType<TextBox>().Any(t => t.Tag is string tg && tg == "note" + i);
     public int LevelCount => _levels.Count;
     public string LevelTitle(int i) => _levels[i].Title;
     public int RowCount => _cur.Rows?.Count ?? 0;
@@ -243,7 +279,7 @@ public sealed class ParametersDialog : Window
             foreach (var d in sk.Dimensions.OrderBy(x => x.Index))
             {
                 string val = d.Formula ?? Num(d.Value);
-                rows.Add(new Row { Name = ModelRefs.PathOf(sk, d), Value = val, Original = val, Unit = d.IsAngular ? "°" : "mm", Dim = d, Sketch = sk,
+                rows.Add(new Row { Name = ModelRefs.PathOf(sk, d), Value = val, Original = val, Unit = d.IsAngular ? "°" : "mm", Dim = d, Sketch = sk, Note = d.Note ?? "", NoteOriginal = d.Note ?? "",
                     Comment = MainWindow.DimensionName(d) + (d.IsDefault ? " · " + L("слабый") : "") });
             }
         }
@@ -267,7 +303,7 @@ public sealed class ParametersDialog : Window
         l.Rows ??= l.Dims && l.Owner is Part dp ? LoadDims(dp)
             : l.Owner is Part fp && !FormulaRowsOff ? Load(l.Table).Concat(LoadDims(fp).Where(r => !TryNum(r.Value, out _))).ToList()
             : Load(l.Table);
-        _selRow = -1;
+        _selRow = -1; _hoverRow = -1;
         _scopeNote.Text = l.Dims ? L("Размеры эскизов и операций детали. Значение — число или формула: d0 — размер того же эскиза, s\"Эскиз\".d0, f\"Операция\".d1, p\"Деталь\".s\"Эскиз\".d0, a\"Сборка\".p\"Деталь\"… — другие. Формула делает размер сильным.")
             : l.Owner switch
         {
@@ -286,28 +322,36 @@ public sealed class ParametersDialog : Window
         _grid.Children.Clear();
         _grid.RowDefinitions.Clear();
         _assists.Clear();
+        _rowBg.Clear();
         string[] heads = { "Имя", "Тип", "Значение или формула", "Единица", "Результат", "Описание" };
         _grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         for (int c = 0; c < heads.Length; c++)
         {
-            var h = new TextBlock { Text = L(heads[c]), Classes = { "header" }, Margin = new Thickness(4, 2, 4, 6) };
-            Grid.SetColumn(h, c);
+            var h = new TextBlock { Text = L(heads[c]), Classes = { "header" }, Margin = new Thickness(4, 2, 4, 6), TextTrimming = TextTrimming.CharacterEllipsis };
+            Grid.SetColumn(h, C(c));
             _grid.Children.Add(h);
         }
         var rows = _cur.Rows!;
+        string flt = RowUiOff ? "" : (_filter.Text ?? "").Trim();
+        int gr = 0;
         for (int i = 0; i < rows.Count; i++)
         {
             int ri = i;
             var r = rows[i];
+            if (flt.Length > 0 && !r.Name.Contains(flt, StringComparison.OrdinalIgnoreCase)) continue;
             _grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-            int gr = i + 1;
+            gr++;
+            var bg = new Border { Background = Brushes.Transparent, CornerRadius = new CornerRadius(3) };
+            Grid.SetRow(bg, gr); Grid.SetColumnSpan(bg, 11);
+            _grid.Children.Add(bg);
+            _rowBg.Add((bg, ri));
             TextBox Box(string text, int col, Action<string> set)
             {
                 var tb = new TextBox { Text = text, Margin = new Thickness(2), MinHeight = 26 };
-                tb.GotFocus += (_, _) => _selRow = ri;
+                tb.GotFocus += (_, _) => SelectRow(ri);
                 tb.LostFocus += (_, _) => { set(tb.Text ?? ""); Recalc(); UpdateResults(); };
                 tb.KeyDown += (_, e) => { if (e.Key == Key.Enter) { set(tb.Text ?? ""); Recalc(); UpdateResults(); e.Handled = true; } };
-                Grid.SetRow(tb, gr); Grid.SetColumn(tb, col);
+                Grid.SetRow(tb, gr); Grid.SetColumn(tb, C(col));
                 _grid.Children.Add(tb);
                 return tb;
             }
@@ -315,22 +359,22 @@ public sealed class ParametersDialog : Window
             {
                 // k102: имя размера — путь (не правится), тип — что за размер
                 var nm = new TextBlock { Text = r.Name, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0), FontFamily = new FontFamily("Consolas, Menlo, monospace") };
-                Grid.SetRow(nm, gr); Grid.SetColumn(nm, 0); _grid.Children.Add(nm);
+                Grid.SetRow(nm, gr); Grid.SetColumn(nm, C(0)); _grid.Children.Add(nm);
                 var ty = new TextBlock { Text = r.Comment, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0), Classes = { "dim" }, TextTrimming = TextTrimming.CharacterEllipsis };
-                Grid.SetRow(ty, gr); Grid.SetColumn(ty, 1); _grid.Children.Add(ty);
+                Grid.SetRow(ty, gr); Grid.SetColumn(ty, C(1)); _grid.Children.Add(ty);
             }
             else
             {
                 Box(r.Name, 0, v => r.Name = v.Trim());
                 var type = new ComboBox { ItemsSource = Types.Select(t => L(t)).ToList(), SelectedIndex = r.Type, Margin = new Thickness(2), HorizontalAlignment = HorizontalAlignment.Stretch };
-                type.SelectionChanged += (_, _) => { _selRow = ri; r.Type = Math.Max(0, type.SelectedIndex); Recalc(); UpdateResults(); };
-                Grid.SetRow(type, gr); Grid.SetColumn(type, 1);
+                type.SelectionChanged += (_, _) => { SelectRow(ri); r.Type = Math.Max(0, type.SelectedIndex); Recalc(); UpdateResults(); };
+                Grid.SetRow(type, gr); Grid.SetColumn(type, C(1));
                 _grid.Children.Add(type);
             }
             // значение или формула — с красным значком ошибки справа (k102, замечание 9)
             {
                 var tb = new TextBox { Text = r.Value, Margin = new Thickness(2), MinHeight = 26 };
-                tb.GotFocus += (_, _) => { _selRow = ri; _lastValueBox = tb; };
+                tb.GotFocus += (_, _) => { SelectRow(ri); _lastValueBox = tb; };
                 tb.LostFocus += (_, _) => { r.Value = (tb.Text ?? "").Trim(); Recalc(); UpdateResults(); };
                 tb.KeyDown += (_, e) => { if (e.Key == Key.Enter) { r.Value = (tb.Text ?? "").Trim(); Recalc(); UpdateResults(); e.Handled = true; } };
                 var icon = ErrorIcon();
@@ -340,21 +384,65 @@ public sealed class ParametersDialog : Window
                 var assist = new FormulaAssist(tb, () => _cur.Owner ?? _s.Document.Root, () => r.Sketch);
                 _assists[ri] = assist;
                 dock.Children.Add(icon); dock.Children.Add(assist.View);
-                Grid.SetRow(dock, gr); Grid.SetColumn(dock, 2);
+                Grid.SetRow(dock, gr); Grid.SetColumn(dock, C(2));
                 _grid.Children.Add(dock);
             }
             if (r.IsDim)
             {
                 var un = new TextBlock { Text = r.Unit, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0), Classes = { "dim" } };
-                Grid.SetRow(un, gr); Grid.SetColumn(un, 3); _grid.Children.Add(un);
+                Grid.SetRow(un, gr); Grid.SetColumn(un, C(3)); _grid.Children.Add(un);
             }
             else Box(r.Unit, 3, v => r.Unit = v.Trim());
             var res = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0), Tag = ri, TextTrimming = TextTrimming.CharacterEllipsis };
-            Grid.SetRow(res, gr); Grid.SetColumn(res, 4);
+            Grid.SetRow(res, gr); Grid.SetColumn(res, C(4));
             _grid.Children.Add(res);
-            if (!r.IsDim) Box(r.Comment, 5, v => r.Comment = v);
+            if (!r.IsDim) Box(r.Comment, 5, v => r.Comment = v).Tag = "note" + ri;
+            // k118 (п.9.3): описание и у размера эскиза (хранится в размере, в файле)
+            else if (r.Dim != null && !RowUiOff) Box(r.Note, 5, v => r.Note = v).Tag = "note" + ri;
         }
+        if (!ColumnsOff)
+            for (int c = 1; c < 11; c += 2)
+            {
+                var sp = new GridSplitter { ResizeDirection = GridResizeDirection.Columns, Background = new SolidColorBrush(Color.FromArgb(0x30, 0x80, 0x80, 0x80)), MinWidth = 1 };
+                Grid.SetColumn(sp, c); Grid.SetRowSpan(sp, Math.Max(1, _grid.RowDefinitions.Count));
+                _grid.Children.Add(sp);
+            }
         UpdateResults();
+        PaintRows();
+    }
+
+    private int RowAt(Point p)
+    {
+        foreach (var (bg, row) in _rowBg)
+            if (bg.Bounds.Height > 0 && p.Y >= bg.Bounds.Top && p.Y < bg.Bounds.Bottom) return row;
+        return -1;
+    }
+
+    /// <summary>Строка под курсором (k118): подсветка и показ её размера на виде.</summary>
+    public void SetHoverRow(int r)
+    {
+        if (r == _hoverRow) return;
+        _hoverRow = r;
+        PaintRows();
+        var row = r >= 0 && r < (_cur.Rows?.Count ?? 0) ? _cur.Rows![r] : null;
+        PeekRow?.Invoke(row?.Sketch, row?.Dim, row?.Feature);
+    }
+
+    public void SelectRow(int r)
+    {
+        _selRow = r;
+        PaintRows();
+    }
+
+    private void PaintRows()
+    {
+        foreach (var (bg, row) in _rowBg)
+            bg.Background = RowUiOff ? Brushes.Transparent
+                : row == _selRow ? new SolidColorBrush(Color.FromArgb(0x50, 0x3d, 0x8b, 0xd9))
+                : row == _hoverRow ? new SolidColorBrush(Color.FromArgb(0x24, 0x80, 0x80, 0x80))
+                : Brushes.Transparent;
+        var rows = _cur?.Rows;
+        _del.IsEnabled = RowUiOff || (_cur is { Dims: false } && rows != null && _selRow >= 0 && _selRow < rows.Count && !rows[_selRow].IsDim);
     }
 
     /// <summary>Красный треугольник с «!» — формула не вычисляется (подсказка — причина).</summary>
@@ -399,7 +487,7 @@ public sealed class ParametersDialog : Window
     {
         if (_cur.Dims) return;
         var rows = _cur.Rows!;
-        int i = _selRow >= 0 && _selRow < rows.Count ? _selRow : rows.FindLastIndex(r => !r.IsDim);
+        int i = _selRow >= 0 && _selRow < rows.Count ? _selRow : RowUiOff ? rows.FindLastIndex(r => !r.IsDim) : -1;
         if (i < 0 || rows[i].IsDim) return;
         rows.RemoveAt(i);
         _selRow = -1;
@@ -529,6 +617,8 @@ public sealed class ParametersDialog : Window
             foreach (var l in _levels.Where(l => l.Rows != null && l.Owner is Part && l.Rows.Any(r => r.IsDim)))
             {
                 var part = (Part)l.Owner!;
+                foreach (var r in l.Rows!.Where(r => r.Dim != null && r.Note.Trim() != r.NoteOriginal))
+                    r.Dim!.Note = r.Note.Trim().Length == 0 ? null : r.Note.Trim();
                 foreach (var r in l.Rows!.Where(r => r.Value.Trim() != r.Original))
                 {
                     string v = r.Value.Trim();

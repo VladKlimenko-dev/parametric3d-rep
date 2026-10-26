@@ -263,10 +263,21 @@ public sealed class DocumentInfo
     public string Revision = "";
     public string Note = "";
 
+    /// <summary>k118 (п.11): единица учёта в перечне (шт, кг, м, м², м³, л) и единицы длины показа (мм, см, м, дюйм).</summary>
+    public string Uom = "шт";
+    public string LengthUnits = "мм";
+    /// <summary>k118 (п.11): общие допуски (ISO 2768-1 класс f/m/c/v + ISO 2768-2 H/K/L), по умолчанию «ISO 2768-mK».</summary>
+    public string Tolerances = "ISO 2768-mK";
+
+    public static readonly string[] UomChoices = { "шт", "кг", "м", "м²", "м³", "л", "компл." };
+    public static readonly string[] LengthChoices = { "мм", "см", "м", "дюйм" };
+    public static readonly string[] ToleranceChoices = { "ISO 2768-fH", "ISO 2768-mK", "ISO 2768-cL", "ISO 2768-vL", "ГОСТ 30893.1-m", "ГОСТ 30893.1-c", "—" };
+
     public DocumentInfo Copy() => new()
     {
         Code = Code, Title = Title, Author = Author, Checker = Checker, Company = Company,
-        Created = Created, Modified = Modified, Revision = Revision, Note = Note
+        Created = Created, Modified = Modified, Revision = Revision, Note = Note,
+        Uom = Uom, LengthUnits = LengthUnits, Tolerances = Tolerances
     };
 
     public override string ToString() =>

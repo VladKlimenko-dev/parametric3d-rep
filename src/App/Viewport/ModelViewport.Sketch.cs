@@ -394,6 +394,46 @@ public sealed partial class ModelViewport
         ToolClick(p);
     }
 
+    /// <summary>k118 (п.9.6): размер, показанный по наведению на строку окна «Параметры» (эскиз может быть не открыт).</summary>
+    public (Sketch Sk, SkDimension D)? PeekDimension { get; private set; }
+    /// <summary>Разбор: отрезков показанного размера в последнем слое.</summary>
+    public int PeekSegments { get; private set; }
+    public static readonly bool PeekOff = Environment.GetEnvironmentVariable("P3D_PARAMPEEK") == "0";
+
+    /// <summary>Показать размер (sk, d) поверх вида и подсветить элемент (эскиз или операцию); всё null — снять.</summary>
+    public void ShowPeek(Sketch? sk, SkDimension? d, Model.ModelItem? item)
+    {
+        if (PeekOff) return;
+        PeekDimension = sk != null && d != null ? (sk, d) : null;
+        HighlightFromTree(item ?? sk);
+        _overlayDirty = true;
+        Redraw();
+    }
+
+    private void AddPeekOverlay(List<LineInst> lines)
+    {
+        PeekSegments = 0;
+        if (PeekDimension is not { } pk || ReferenceEquals(pk.Sk, ActiveSketch)) return;
+        var pl = pk.Sk.Plane;
+        var batch = new DimBatch { PixelSize = PixelSize, Normal = V3(pl.W) };
+        var camR = Vector3.Transform(Vector3.UnitX, Quaternion.Invert(Camera.State.Rotation));
+        var camU = Camera.Up;
+        var (sr, su) = (SketchDimensions.ScreenRight, SketchDimensions.ScreenUp);
+        SketchDimensions.ScreenRight = new Vector2d(Vector3d.Dot(new Vector3d(camR.X, camR.Y, camR.Z), pl.U), Vector3d.Dot(new Vector3d(camR.X, camR.Y, camR.Z), pl.V));
+        SketchDimensions.ScreenUp = new Vector2d(Vector3d.Dot(new Vector3d(camU.X, camU.Y, camU.Z), pl.U), Vector3d.Dot(new Vector3d(camU.X, camU.Y, camU.Z), pl.V));
+        try { SketchDimensions.Build(pk.Sk, batch, PixelSize); }
+        catch (Exception ex) { AppLog.Write("dimensions", ex); }
+        finally { (SketchDimensions.ScreenRight, SketchDimensions.ScreenUp) = (sr, su); }
+        var c = _r.Theme.Hover; c.W = 1;
+        foreach (var (a, b, st, dimId) in batch.Segments)
+        {
+            if (dimId != pk.D.Id) continue;
+            bool txt = st >= LineStyle.DimensionText;
+            lines.Add(Inst(a, b, c, txt ? Settings.Current.DimensionTextOutlineWidth * 1.3f : 1.8f, 0));
+            PeekSegments++;
+        }
+    }
+
     /// <summary>Шаг сетки: «круглое» число, чтобы клетка была 25–60 пикселей.</summary>
     public double GridStep()
     {
@@ -404,7 +444,7 @@ public sealed partial class ModelViewport
         return 10 * e;
     }
 
-    private bool GridStale() => (ActiveSketch != null || _modelGrid || _handle != null || _gizmo != null || _ghostLines != null || OpDims.Count > 0 || (_scene?.Origins.Count ?? 0) > 0) && Math.Abs(GridKeyNow() - _gridKey) > 1e-9;
+    private bool GridStale() => (ActiveSketch != null || PeekDimension != null || _modelGrid || _handle != null || _gizmo != null || _ghostLines != null || OpDims.Count > 0 || (_scene?.Origins.Count ?? 0) > 0) && Math.Abs(GridKeyNow() - _gridKey) > 1e-9;
     private double GridKeyNow() => Math.Round(Camera.WorldToPx, 4) + Camera.State.Target.X * 1e-3 + Camera.State.Target.Y * 1e-5 + Camera.State.Target.Z * 1e-7
         + Camera.State.Rotation.X * 7 + Camera.State.Rotation.Y * 11 + Camera.State.Rotation.Z * 13 + Camera.State.Rotation.W * 17;
 
@@ -420,6 +460,7 @@ public sealed partial class ModelViewport
         AddGizmoOverlay(lines, pts);
         AddOriginOverlay(lines, pts);
         AddExtraOverlay(grid, lines);
+        AddPeekOverlay(lines);
         if (ActiveSketch is not { } sk) { _gridKey = GridKeyNow(); return (grid, lines, pts); }
         _gridKey = GridKeyNow();
         var th = _r.Theme;

@@ -319,7 +319,12 @@ public sealed class SceneRenderer : IDisposable
         {
             GL.Disable(EnableCap.DepthTest);
             DrawLines(_bodyEdges, f, 0f, colorOverride: Theme.SketchRefEdge);
+            // k118 (п.2): потенциальные опорные точки тела — мельче и бледнее выбранных опорных точек эскиза
+            // (масштаб 0,65 к размеру и прозрачности; подсвеченная/выбранная — в полном размере). P3D_CANDDIM=0 — как прежде.
+            _pointDim = CandDimOff ? 0f : 0.65f;
+            if (_pointDim > 0) DimmedCandidateDraws++;
             DrawPoints(_bodyVerts, f, 0f, onlyFlagged: false);
+            _pointDim = 0f;
             GL.Enable(EnableCap.DepthTest);
             goto afterBodies;
         }
@@ -329,6 +334,11 @@ public sealed class SceneRenderer : IDisposable
         else DrawMeshDepthOnly(f);
         if (faces) DrawCaps(f);
         if (faces) DrawOutline(f);
+        // k118 (замечание 08:54, п. 3): КОНТУР ТЕЛА И В СТИЛЯХ БЕЗ ГРАНЕЙ. Очерк кривых поверхностей (цилиндр сбоку) — не ребро:
+        // в «скрытых линиях» и каркасе тело без него теряло форму. Тот же проход контура — цветом рёбер, шириной ребра.
+        // Мутация P3D_WIREOUTLINE=0.
+        else if (!meshStyle && !WireOutlineOff && Style is DisplayStyle.HiddenLines or DisplayStyle.Wireframe or DisplayStyle.Transparent)
+            DrawOutline(f, Style == DisplayStyle.Transparent ? Theme.Edge : Theme.EdgeWire, Theme.EdgeWidth * 0.6f);
         if (meshStyle)
         {
             EnsureMeshLines();
@@ -700,14 +710,18 @@ public sealed class SceneRenderer : IDisposable
     /// </summary>
     static readonly bool OutlineOffsetOff = Environment.GetEnvironmentVariable("P3D_OUTLINEOFFSET") == "0";
     public const float OutlineOffsetFactor = 6f, OutlineOffsetUnits = 40f;
-    private void DrawOutline(FrameParams f)
+    public static readonly bool WireOutlineOff = Environment.GetEnvironmentVariable("P3D_WIREOUTLINE") == "0";
+    /// <summary>Разбор: проходов контура в стилях без граней (накопительно).</summary>
+    public int WireOutlines { get; private set; }
+    private void DrawOutline(FrameParams f, Vector4? color = null, float? width = null)
     {
         if (_meshes.Count == 0) return;
+        if (color != null) WireOutlines++;
         if (!OutlineOffsetOff) { GL.Enable(EnableCap.PolygonOffsetFill); GL.PolygonOffset(OutlineOffsetFactor, OutlineOffsetUnits); }
         _mesh!.Use();
         _mesh.Set("uMode", 1);
-        _mesh.Set("uFlat", Theme.Silhouette);
-        _mesh.Set("uOutlinePx", Theme.SilhouetteWidth * f.Scale);
+        _mesh.Set("uFlat", color ?? Theme.Silhouette);
+        _mesh.Set("uOutlinePx", (width ?? Theme.SilhouetteWidth) * f.Scale);
         GL.Enable(EnableCap.CullFace);
         GL.CullFace(TriangleFace.Front);
         foreach (var m in _meshes)
@@ -808,6 +822,11 @@ public sealed class SceneRenderer : IDisposable
         GL.DrawArraysInstanced(PrimitiveType.TriangleStrip, 0, 4, g.Count);
     }
 
+    private float _pointDim;
+    public static readonly bool CandDimOff = Environment.GetEnvironmentVariable("P3D_CANDDIM") == "0";
+    /// <summary>k118: сколько раз потенциальные опорные точки рисовались приглушёнными (для проверки).</summary>
+    public int DimmedCandidateDraws { get; private set; }
+
     private void DrawPoints(InstGpu g, FrameParams f, float bias, bool onlyFlagged)
     {
         if (g.Count == 0) return;
@@ -825,6 +844,7 @@ public sealed class SceneRenderer : IDisposable
         _point.Set("uBonus", Theme.VertexHighlightSize - Theme.VertexSize);
         _point.Set("uSizeOverride", sizeOverride);
         _point.Set("uOnlyFlagged", onlyFlagged ? 1 : 0);
+        _point.Set("uDim", _pointDim);
         GL.BindVertexArray(g.Vao);
         GL.DrawArraysInstanced(PrimitiveType.TriangleStrip, 0, 4, g.Count);
     }

@@ -66,6 +66,7 @@ public sealed partial class ModelViewport
     public (Vector3d At, Vector3d N)? SectionPlane { get; private set; }
     public void SetSection((Vector3d At, Vector3d N)? plane)
     {
+        if (plane == null && Section != null && !SectionMemoryOff) LastSection = Section.Clone();   // k118 (п. 4)
         if (plane == null) { Section = null; _r.CapFrame = null; SectionFrame = null; SectionSelected = false; SectionHover = false; }
         SectionPlane = plane;
         if (plane is { } pl) { var n = pl.N.Normalized(); _r.ClipPlane = new Vector4((float)n.X, (float)n.Y, (float)n.Z, (float)-Vector3d.Dot(n, pl.At)); }
@@ -191,6 +192,13 @@ public sealed partial class ModelViewport
     public double EdgeBiasNow { get { UpdateEdgeBias(); return _r.EdgeBiasAt((float)PixelSize); } }
     /// <summary>Разбор: сколько размеров операции нарисовано (накопительно).</summary>
     public int OpDimsDrawn { get; private set; }
+
+    /// <summary>
+    /// k118 (замечание 08:54, п. 4): ПОСЛЕДНЕЕ СЕЧЕНИЕ. Выключенное сечение помнит свои настройки (основа, начало, смещение,
+    /// углы, сторона): включённое снова — там же. Мутация P3D_SECTIONMEMORY=0 — каждый раз по умолчанию.
+    /// </summary>
+    public SectionState? LastSection { get; set; }
+    public static readonly bool SectionMemoryOff = Environment.GetEnvironmentVariable("P3D_SECTIONMEMORY") == "0";
 
     /// <summary>k99: настройки сечения (null — сечение задано плоскостью напрямую или выключено).</summary>
     public SectionState? Section { get; private set; }

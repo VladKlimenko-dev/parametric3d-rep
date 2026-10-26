@@ -24,7 +24,85 @@ public static class IconProvider
     {
         if (c == Foreground) return;
         Foreground = c;
+        SwapLive();
         ThemeChanged?.Invoke();
+    }
+
+    /// <summary>Цвета текста тем (тёмная, светлая).</summary>
+    public static readonly Color DarkFg = Color.Parse("#E6E8EC"), LightFg = Color.Parse("#1C1E22");
+
+    // ---------------------------------------------------------------- k118 (замечание 08:54, п.10)
+    // Иконки при смене темы появлялись не сразу: каждая перекрашенная иконка разбиралась из SVG заново при перестройке
+    // окна (≈335 файлов), а иконки, созданные один раз (значок сечения и т. п.), оставались прежнего цвета до следующей
+    // перестройки. Теперь: (1) обе гаммы готовятся заранее в фоне (разбор SVG — вне потока окна); (2) живые картинки
+    // иконок помнят свой файл и меняют источник сразу при смене темы. P3D_ICONPRELOAD=0 / P3D_ICONLIVE=0 — как прежде.
+    public static readonly bool PreloadOff = Environment.GetEnvironmentVariable("P3D_ICONPRELOAD") == "0";
+    public static readonly bool LiveOff = Environment.GetEnvironmentVariable("P3D_ICONLIVE") == "0";
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string, string), SvgSource?> _pre = new();
+    private static readonly List<(WeakReference<Image> Img, string File)> _live = new();
+    /// <summary>Разбор: сколько иконок подготовлено заранее; сколько живых картинок сменили источник при последней смене темы.</summary>
+    public static int PreloadedCount => _pre.Count;
+    public static int LastLiveSwaps { get; private set; }
+    public static int LiveCount { get { lock (_live) return _live.Count; } }
+
+    /// <summary>Все файлы иконок сборки.</summary>
+    public static IReadOnlyList<string> AllFiles()
+    {
+        try
+        {
+            return AssetLoader.GetAssets(new Uri("avares://Parametric3D/App/Assets/Icons/"), null)
+                .Select(u => Uri.UnescapeDataString(u.AbsolutePath)).Select(Path.GetFileName).Where(f => f != null && f.EndsWith(".svg", StringComparison.OrdinalIgnoreCase)).Select(f => f!).ToList();
+        }
+        catch { return Array.Empty<string>(); }
+    }
+
+    /// <summary>Подготовить иконки под цвет текста fg (в фоне; разбор SVG — вне потока окна).</summary>
+    public static Task Preload(Color fg, int delayMs = 0)
+    {
+        if (PreloadOff) return Task.CompletedTask;
+        string hex = Hex(fg);
+        var files = AllFiles();
+        return Task.Run(async () =>
+        {
+            if (delayMs > 0) await Task.Delay(delayMs);
+            foreach (var f in files)
+            {
+                if (_pre.ContainsKey((f, hex))) continue;
+                lock (_cache) if (_cache.ContainsKey((f, hex))) continue;
+                try
+                {
+                    using var st = AssetLoader.Open(UriOf(f));
+                    using var r = new StreamReader(st);
+                    _pre[(f, hex)] = SvgSource.LoadFromSvg(Recolor(FitToContent(f, r.ReadToEnd()), hex));
+                }
+                catch { _pre[(f, hex)] = null; }
+            }
+        });
+    }
+
+    private static string Hex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+
+    /// <summary>Запомнить картинку иконки: при смене темы ей сразу назначается иконка новой гаммы.</summary>
+    public static Image Track(Image img, string file)
+    {
+        if (LiveOff) return img;
+        lock (_live)
+        {
+            if (_live.Count > 4000) _live.RemoveAll(x => !x.Img.TryGetTarget(out _));
+            _live.Add((new WeakReference<Image>(img), file));
+        }
+        return img;
+    }
+
+    private static void SwapLive()
+    {
+        if (LiveOff) { LastLiveSwaps = 0; return; }
+        int n = 0;
+        List<(WeakReference<Image> Img, string File)> live;
+        lock (_live) { _live.RemoveAll(x => !x.Img.TryGetTarget(out _)); live = _live.ToList(); }
+        foreach (var (w, f) in live)
+            if (w.TryGetTarget(out var im) && Get(f) is { } src) { im.Source = src; n++; }
+        LastLiveSwaps = n;
     }
 
     public static event Action? ThemeChanged;
@@ -48,10 +126,16 @@ public static class IconProvider
     public static IImage? Get(string? file, Color foreground)
     {
         if (string.IsNullOrEmpty(file)) return null;
-        string fg = $"#{foreground.R:X2}{foreground.G:X2}{foreground.B:X2}";
+        string fg = Hex(foreground);
         var key = (file, fg);
-        if (_cache.TryGetValue(key, out var img)) return img;
-        img = null;
+        lock (_cache) if (_cache.TryGetValue(key, out var hit)) return hit;
+        IImage? img = null;
+        if (_pre.TryRemove(key, out var ready))
+        {
+            img = ready == null ? null : new SvgImage { Source = ready };
+            lock (_cache) _cache[key] = img;
+            return img;
+        }
         try
         {
             var uri = UriOf(file);
@@ -65,7 +149,7 @@ public static class IconProvider
             }
         }
         catch (Exception ex) { Core.AppLog.Write("icon " + file, ex); img = null; }
-        _cache[key] = img;
+        lock (_cache) _cache[key] = img;
         return img;
     }
 
@@ -217,7 +301,7 @@ public static class IconProvider
     {
         var img = Get(file);
         Control icon = img != null
-            ? new Image { Source = img, Width = size, Height = size, Stretch = Stretch.Uniform }
+            ? Track(new Image { Source = img, Width = size, Height = size, Stretch = Stretch.Uniform }, file!)
             : new TextBlock { Text = Abbrev(label), FontSize = 11, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
         if (!withLabel) return icon;
         var sp = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
