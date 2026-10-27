@@ -398,8 +398,9 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
         switch (extra)
         {
             case Extra.Home: Viewport.GoHome(); return;
-            case Extra.RotCcw: Viewport.AnimateTo(Quaternion.FromAxisAngle(Vector3.UnitZ, MathHelper.PiOver2) * q); return;
-            case Extra.RotCw: Viewport.AnimateTo(Quaternion.FromAxisAngle(Vector3.UnitZ, -MathHelper.PiOver2) * q); return;
+            // k123: в эскизе поворот вида на 90° поворачивает и оси эскиза («горизонтально/вертикально» — по экрану)
+            case Extra.RotCcw: if (Viewport.RollSketch(ccw: true)) return; Viewport.AnimateTo(Quaternion.FromAxisAngle(Vector3.UnitZ, MathHelper.PiOver2) * q); return;
+            case Extra.RotCw: if (Viewport.RollSketch(ccw: false)) return; Viewport.AnimateTo(Quaternion.FromAxisAngle(Vector3.UnitZ, -MathHelper.PiOver2) * q); return;
             case Extra.Up: Viewport.AnimateTo(Quaternion.FromAxisAngle(Vector3.UnitX, MathHelper.PiOver2) * q); return;
             case Extra.Down: Viewport.AnimateTo(Quaternion.FromAxisAngle(Vector3.UnitX, -MathHelper.PiOver2) * q); return;
             case Extra.Left: Viewport.AnimateTo(Quaternion.FromAxisAngle(Vector3.UnitY, MathHelper.PiOver2) * q); return;

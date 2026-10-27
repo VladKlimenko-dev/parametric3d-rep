@@ -49,7 +49,13 @@ public sealed class Settings
     public int LengthDecimals = 2;
     public int AngleDecimals = 2;
 
-    public double UnitFactor => Units switch
+    /// <summary>
+    /// k123 (замечание 27.10, 21:55, п. 3): единица длины показа — по системе единиц детали (мм в единице показа: дюйм —
+    /// 25.4). 0 — по Units. Ставит приложение при смене детали или её единиц.
+    /// </summary>
+    public static double DisplayUnitMm;
+    public static string DisplayUnitSuffix = "";
+    public double UnitFactor => DisplayUnitMm > 0 ? 1.0 / DisplayUnitMm : Units switch
     {
         UnitOfMeasure.Centimeter => 0.1,
         UnitOfMeasure.Meter => 0.001,
@@ -57,7 +63,7 @@ public sealed class Settings
         _ => 1.0
     };
 
-    public string UnitSuffix => Units switch
+    public string UnitSuffix => DisplayUnitMm > 0 && DisplayUnitSuffix.Length > 0 ? DisplayUnitSuffix : Units switch
     {
         UnitOfMeasure.Centimeter => "cm",
         UnitOfMeasure.Meter => "m",

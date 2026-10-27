@@ -17,6 +17,7 @@ namespace Parametric3D.Model.Sketching;
 public sealed class SketchState
 {
     internal Frame3 Plane;
+    internal OpenTK.Mathematics.Vector2d UpVector, OriginOffset;
     internal uint BasePlaneId;
     internal string? BaseFaceTag;
     internal string PlaneDescription = "";
@@ -35,7 +36,7 @@ public sealed class SketchState
     {
         var s = new SketchState
         {
-            Plane = sk.Plane,
+            Plane = sk.Plane, UpVector = sk.UpVector, OriginOffset = sk.OriginOffset,
             BasePlaneId = sk.BasePlaneId,
             BaseFaceTag = sk.BaseFaceTag,
             PlaneDescription = sk.PlaneDescription,
@@ -90,7 +91,7 @@ public sealed class SketchState
                 Arrows = d.Arrows,
                 TextOffset = d.TextOffset,
                 Formula = d.Formula,
-                Index = d.Index, Reflex = d.Reflex, Id = d.Id,
+                Index = d.Index, Reflex = d.Reflex, Supplement = d.Supplement, Id = d.Id,
             };
             foreach (var it in d.Items) copy.Items.Add(Remap(it, map, entityMap));
             s.Dimensions.Add(copy);
@@ -102,7 +103,7 @@ public sealed class SketchState
     /// <summary>Возвращает эскиз к снятому состоянию.</summary>
     public void RestoreInto(Sketch sk)
     {
-        sk.Plane = Plane;
+        sk.Plane = Plane; sk.UpVector = UpVector; sk.OriginOffset = OriginOffset;
         sk.BasePlaneId = BasePlaneId;
         sk.BaseFaceTag = BaseFaceTag;
         sk.PlaneDescription = PlaneDescription;

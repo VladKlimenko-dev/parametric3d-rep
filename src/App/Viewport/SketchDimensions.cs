@@ -525,7 +525,41 @@ public static class SketchDimensions
         double r = d.TextOffset.Length;
         if (r < px * 10) r = px * 40;
 
-        double a0 = Math.Atan2(d1.Y, d1.X);
+        double a0, sweep;
+        Vector2d e1 = d1, e2 = d2;     // лучи сектора (выносные линии — по ним)
+        d.Supplement = false; d.Reflex = false;
+        LastAngleExtensions.Clear();
+        if (!AngleSectorOff)
+        {
+            // k123 (замечание 27.10, 21:55, п. 4): ЧЕТЫРЕ СЕКТОРА — угол между лучами прямых и их продолжениями. Сектор —
+            // тот, где пользователь поставил подпись (прежде — короткая дуга или дополняющая до 360: от отрезка к оси
+            // выходили 210° вместо 30°); у размера, поставленного приложением, — меньший угол, если одна из прямых — ось.
+            var rays = new[] { (d1, d2, false), (d2, -d1, true), (-d1, -d2, false), (-d2, d1, true) };
+            int pick = 0;
+            bool axis = l1.Builtin || l2.Builtin || l1.Role == SkRole.Reference && l1.Fixed || l2.Role == SkRole.Reference && l2.Fixed;
+            if (d.UserPlaced && d.TextOffset.LengthSquared > 1e-12)
+            {
+                var want = d.TextOffset.Normalized(); double best = double.MinValue;
+                for (int k = 0; k < 4; k++)
+                {
+                    var (ra, rb, _) = rays[k];
+                    var bis = ra + rb; bis = bis.LengthSquared > 1e-18 ? bis.Normalized() : new Vector2d(-ra.Y, ra.X);
+                    double dot = Vector2d.Dot(want, bis);
+                    if (dot > best) { best = dot; pick = k; }
+                }
+            }
+            else if (axis && d.Value > 90) pick = 1;
+            var (pa, pb, supp) = rays[pick];
+            // обход — от первого луча ко второму, короткий (сектор меньше 180°)
+            a0 = Math.Atan2(pa.Y, pa.X);
+            double sw = GeomUtil.Norm2Pi(Math.Atan2(pb.Y, pb.X) - a0);
+            if (sw > Math.PI) sw -= Math.PI * 2;
+            sweep = sw; e1 = pa; e2 = pb;
+            d.Supplement = supp;
+        }
+        else
+        {
+        a0 = Math.Atan2(d1.Y, d1.X);
         double a1 = Math.Atan2(d2.Y, d2.X);
 
         // Короткая дуга между направлениями: значение в (-pi, pi].
@@ -536,25 +570,18 @@ public static class SketchDimensions
         double sign = shortSweep >= 0 ? 1 : -1;
         double longSweep = shortSweep - Math.PI * 2 * sign;
 
-        // Что показывать, решает СТОРОНА, куда пользователь утащил подпись:
-        // сравниваем направление смещения с серединами обеих дуг. Раньше
-        // всегда бралась короткая, и подпись можно было двигать лишь
-        // в одну сторону от угла.
-        // Дополняющую дугу показываем ТОЛЬКО если подпись двигал сам
-        // пользователь. У размера, поставленного приложением, смещение
-        // подписи ещё случайное, и по нему нельзя решать, какой из двух
-        // углов имелся в виду: так на ровном месте получались 353°.
         Vector2d want = d.UserPlaced && d.TextOffset.LengthSquared > 1e-12
             ? d.TextOffset.Normalized()
             : Dir(a0 + shortSweep * 0.5);
 
-        double sweep = Vector2d.Dot(want, Dir(a0 + longSweep * 0.5))
+        sweep = Vector2d.Dot(want, Dir(a0 + longSweep * 0.5))
                      > Vector2d.Dot(want, Dir(a0 + shortSweep * 0.5))
             ? longSweep
             : shortSweep;
 
         // Признак нужен подписи: у дополняющей дуги показывается 360 - угол.
         d.Reflex = sweep != shortSweep;
+        }
 
         // Дуга размера. Сегментов вдвадцатеро больше, чем градусов в дуге,
         // иначе на крупном радиусе видны изломы.
@@ -570,9 +597,26 @@ public static class SketchDimensions
         };
         if (!outsideEarly || AngleOutsideArcKeep) Polyline(batch, plane, style, arc);
 
-        // Выносные линии до дуги.
-        Line(batch, plane, style, c + d1 * (r * 0.15), c + d1 * (r + OverrunPx * px));
-        Line(batch, plane, style, c + d2 * (r * 0.15), c + d2 * (r + OverrunPx * px));
+        // Выносные линии до дуги. k123 (п. 1): от КОНЦОВ отрезка (ближайшего к дуге), а не от точки пересечения прямых;
+        // дуга на самом отрезке — выносной нет; ось — бесконечна (выносной нет). P3D_ANGLEEXT=0 — прежние, от пересечения.
+        if (AngleExtOff)
+        {
+            Line(batch, plane, style, c + e1 * (r * 0.15), c + e1 * (r + OverrunPx * px));
+            Line(batch, plane, style, c + e2 * (r * 0.15), c + e2 * (r + OverrunPx * px));
+        }
+        else
+        {
+            var segs = new[] { (e1, LineFor(e1, l1, l2, d1)), (e2, LineFor(e2, l1, l2, d1)) };
+            LastAngleExtensions.Clear();
+            foreach (var (dir, ln) in segs)
+            {
+                if (ln.Builtin) continue;
+                double ta = Vector2d.Dot(ln.A.P - c, dir), tb = Vector2d.Dot(ln.B.P - c, dir);
+                double tmin = Math.Min(ta, tb), tmax = Math.Max(ta, tb), over = OverrunPx * px;
+                if (r > tmax) { Line(batch, plane, style, c + dir * tmax, c + dir * (r + over)); LastAngleExtensions.Add((c + dir * tmax, c + dir * (r + over))); }
+                else if (r < tmin) { Line(batch, plane, style, c + dir * tmin, c + dir * Math.Max(0, r - over)); LastAngleExtensions.Add((c + dir * tmin, c + dir * Math.Max(0, r - over))); }
+            }
+        }
 
         // Стрелки по касательной к дуге, остриями наружу.
         // k97 (замечание 11): «стрелки снаружи» у углового размера — стрелки за концами дуги остриями к ней, с хвостами
@@ -620,6 +664,14 @@ public static class SketchDimensions
 
     private static Vector2d Dir(double angle) => new(Math.Cos(angle), Math.Sin(angle));
 
+    /// <summary>Какой прямой принадлежит луч сектора (±d1 — первой, иначе второй).</summary>
+    private static SkLine LineFor(Vector2d ray, SkLine l1, SkLine l2, Vector2d d1) => Math.Abs(Vector2d.Dot(ray, d1)) > 1 - 1e-9 ? l1 : l2;
+    /// <summary>Мутации k123: P3D_ANGLESECTOR=0 — короткая или дополняющая до 360 дуга; P3D_ANGLEEXT=0 — выносные от пересечения.</summary>
+    static readonly bool AngleSectorOff = Environment.GetEnvironmentVariable("P3D_ANGLESECTOR") == "0";
+    static readonly bool AngleExtOff = Environment.GetEnvironmentVariable("P3D_ANGLEEXT") == "0";
+    /// <summary>Разбор и проверки: выносные линии последнего углового размера (координаты эскиза).</summary>
+    public static readonly List<(Vector2d A, Vector2d B)> LastAngleExtensions = new();
+
 
     // ------------------------------------------------------------ примитивы
 
@@ -634,7 +686,7 @@ public static class SketchDimensions
         // от нуля лежит точка, и нужен решателю. Но на чертеже величина
         // без знака — расстояние отрицательным не бывает.
         string v = d.IsAngular
-            ? S.FormatAngle(d.Reflex ? 360 - d.Value : d.Value)
+            ? S.FormatAngle(d.ShownAngle)
             : S.FormatLength(Math.Abs(d.Value), S.DimensionShowUnits);
         return d.Reference ? "(" + v + ")" : v;
     }

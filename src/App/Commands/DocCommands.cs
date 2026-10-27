@@ -16,10 +16,21 @@ namespace Parametric3D.App.Commands;
 public static class DisplayUnits
 {
     /// <summary>k120: единица длины показа — из системы единиц детали (мм, см, м, дюйм, фут…).</summary>
-    public static string Length = "mm";
+    public static string Length
+    {
+        get => _length;
+        set
+        {
+            _length = value;
+            // k123: подписи размеров эскиза — в той же единице (Settings.FormatLength)
+            if (!SketchUnitsOff) { Core.Settings.DisplayUnitMm = Factor; Core.Settings.DisplayUnitSuffix = value; }
+        }
+    }
+    static string _length = "mm";
+    public static readonly bool SketchUnitsOff = Environment.GetEnvironmentVariable("P3D_SKUNITS") == "0";
     public static bool Inch { get => Length == "in"; set => Length = value ? "in" : "mm"; }
     public const double InchMm = 25.4;
-    static double Factor => Core.Units.TryParse(Length, out var u, out _) && u!.Dim == Core.Dimension.Length ? u.Factor : 1;
+    public static double Factor => Core.Units.TryParse(Length, out var u, out _) && u!.Dim == Core.Dimension.Length ? u.Factor : 1;
     public static string LengthUnit => Symbol(Length);
     public static double ToShow(double mm) => mm / Factor;
     public static double FromShow(double v) => v * Factor;
@@ -448,12 +459,14 @@ public static class DocCommands
     public static void ToggleUnits(MainWindow w)
     {
         var part = w.Session.Part; if (part == null) return;
-        DisplayUnits.Inch = !DisplayUnits.Inch;
-        part.Units = DisplayUnits.Inch ? Core.UnitSystem.Imperial : Core.UnitSystem.Metric;
-        part.LocalParameters.Units = part.Units;
-        w.Session.MarkModified();
-        w.ShowToast(L("Единицы длины: {0}", L(DisplayUnits.LengthUnit)), error: false);
-        if (w.CurrentOperation != null) w.ShowProperties();
+        // k123: через смену системы единиц детали (с вопросом о преобразовании размеров)
+        var to = part.Units.Length == "in" ? Core.UnitSystem.Metric : Core.UnitSystem.Imperial;
+        _ = Run();
+        async Task Run()
+        {
+            await w.SetPartUnitsAsync(part, to);
+            w.ShowToast(L("Единицы длины: {0}", L(DisplayUnits.LengthUnit)), error: false);
+        }
     }
 
     public static async Task ConfigurationsDialog(MainWindow w)

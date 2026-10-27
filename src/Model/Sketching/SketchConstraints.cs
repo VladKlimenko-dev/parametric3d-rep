@@ -65,6 +65,8 @@ public sealed class SkConstraint
 
     /// <summary>k96: показан красным как участник противоречия последней правки (пока открыто объяснение).</summary>
     public bool Flagged;
+    /// <summary>k123: подсвечен наведением на строку таблицы «Разрешить эскиз».</summary>
+    public bool Highlight;
 
     /// <summary>Позиция значка на эскизе (задаётся пользователем при перетаскивании).</summary>
     public Vector2d IconPos;
@@ -194,6 +196,15 @@ public sealed class SkDimension
     /// в какую сторону от угла утащена подпись.
     /// </summary>
     public bool Reflex;
+    /// <summary>k123: подсвечен наведением на строку таблицы «Разрешить эскиз».</summary>
+    public bool Highlight;
+    /// <summary>
+    /// k123: угловой размер показан в смежном секторе (между лучом одной прямой и продолжением другой): в подписи 180
+    /// минус угол. Только отображение и ввод — решателем управляет Value (угол между прямыми).
+    /// </summary>
+    public bool Supplement;
+    /// <summary>Подпись углового размера: что видит пользователь (смежный сектор — 180 − угол, дополняющая дуга — 360 − угол).</summary>
+    public double ShownAngle => Supplement ? 180 - Value : Reflex ? 360 - Value : Value;
     /// <summary>Разбор (k97): стрелки размера при последнем рисовании — снаружи.</summary>
     public bool LastArrowsOutside;
     public string? Error;

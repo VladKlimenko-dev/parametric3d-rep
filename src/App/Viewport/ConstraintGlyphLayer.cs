@@ -88,7 +88,8 @@ public sealed class ConstraintGlyphLayer : Control
             var cell = new Rect(q.X - s / 2 - 2, q.Y - s / 2 - 2, s + 4, s + 4);
             if (!cell.Intersects(Bounds.WithX(0).WithY(0))) continue;
 
-            Pen pen = c.Conflict || c.Flagged ? conflict
+            Pen pen = c.Highlight ? hover
+                : c.Conflict || c.Flagged ? conflict
                 : hov.Id == c.Id ? hover
                 : _view.Selection.Contains(c.Id) ? select
                 : normal;

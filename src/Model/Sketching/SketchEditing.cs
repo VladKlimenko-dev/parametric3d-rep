@@ -29,6 +29,8 @@ public sealed class SketchEditResult
     public readonly List<SkEntity> Degenerate = new();
     /// <summary>Правка прошла, удерживая слабые размеры (как в Creo: меняется только заданное).</summary>
     public bool HeldWeak;
+    /// <summary>k123: участники не найдены точно — перечислены связи и размеры, касающиеся элементов правки.</summary>
+    public bool Related;
 }
 
 /// <summary>
@@ -155,6 +157,7 @@ public static class SketchEditing
         d.Value = value;
         geo.Restore();
         Diagnose(sk, solver, geo, st0, redundant: false, new object[] { d }, res);
+        if (res.Constraints.Count + res.Dimensions.Count == 0) AddRelated(sk, d.Items, new object[] { d }, res);
         if (RestoreOff) { d.Value = value; sk.Solve(solver); }   // мутация: геометрия остаётся там, куда её увёл неудачный расчёт
         (d.Value, d.Formula, d.Locked, d.IsDefault, d.Reference, d.Conflict) = saved;
         if (!RestoreOff) geo.Restore();
@@ -278,6 +281,7 @@ public static class SketchEditing
         {
             geo.Restore();
             Diagnose(sk, solver, geo, st0, redundant: fail == SketchEditFailure.Redundant, made.Cast<object>().ToArray(), res);
+            if (res.Constraints.Count + res.Dimensions.Count == 0) AddRelated(sk, made.SelectMany(c => c.Items), made.Cast<object>().ToArray(), res);
         }
         foreach (var c in made) sk.Constraints.Remove(c);
         sk.BumpStructure();
@@ -351,6 +355,32 @@ public static class SketchEditing
     /// Участники противоречия: связи и сильные размеры (кроме правимых <paramref name="focus"/>), без любого из которых эскиз
     /// решается. Каждая проба — от одной и той же геометрии.
     /// </summary>
+    /// <summary>
+    /// k123 (замечание 27.10, 21:55, п. 5): снятие по одному не нашло участника (спор нескольких сразу) — в таблицу идут
+    /// связи и сильные размеры, касающиеся элементов правки (сами элементы, их концы, элементы с общими концами): пустой
+    /// список при «удалите участника (красные)» путал. Признак Related — список приблизительный. P3D_SKRELATED=0 — нет.
+    /// </summary>
+    public static void AddRelated(Sketch sk, IEnumerable<SkEntity> items, IReadOnlyCollection<object> focus, SketchEditResult res)
+    {
+        if (RelatedOff) return;
+        var near = new HashSet<SkEntity>(ReferenceEqualityComparer.Instance);
+        foreach (var e in items)
+        {
+            near.Add(e);
+            foreach (var h in e.Handles) near.Add(h);
+        }
+        // соседи через общие концы
+        foreach (var e in sk.Entities)
+            if (e.Handles.Any(h => near.Contains(h))) near.Add(e);
+        bool Touches(IEnumerable<SkEntity> xs) => xs.Any(x => near.Contains(x) || x.Handles.Any(h => near.Contains(h)));
+        foreach (var c in sk.Constraints)
+            if (c.Enabled && !focus.Contains(c) && Touches(c.Items) && !res.Constraints.Contains(c)) res.Constraints.Add(c);
+        foreach (var x in sk.Dimensions)
+            if (x.IsDriving && !focus.Contains(x) && Touches(x.Items) && !res.Dimensions.Contains(x)) res.Dimensions.Add(x);
+        res.Related = res.Constraints.Count + res.Dimensions.Count > 0;
+    }
+    public static readonly bool RelatedOff = Environment.GetEnvironmentVariable("P3D_SKRELATED") == "0";
+
     public static void Diagnose(Sketch sk, ISketchSolver solver, Geometry geo, SolveStatus st0, bool redundant, IReadOnlyCollection<object> focus, SketchEditResult res)
     {
         Interlocked.Increment(ref Diagnosed);

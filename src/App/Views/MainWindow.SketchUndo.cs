@@ -105,7 +105,9 @@ public partial class MainWindow
         {
             CloseDimensionEdit();
             View.Selection.Clear();
+            var u0 = sk.Plane.U;
             st.RestoreInto(sk);
+            if ((sk.Plane.U - u0).Length > 1e-9) View.AlignToActiveSketch();   // k123: отменён поворот эскиза — и вид
             _skLast = SketchState.Capture(sk);      // снимок из стека теперь «живой» — у отметки своя копия
             _skLastSig = SketchSig(sk);
             if (View.Tool is { } t) View.Tool = t.Restart();

@@ -253,6 +253,35 @@ public sealed partial class ModelViewport
     /// <summary>k105: вход в эскиз (окно начинает отмену правок эскиза заново).</summary>
     public event Action<Sketch>? SketchEntered;
 
+    /// <summary>k123: эскиз повёрнут на четверть оборота вместе с видом (обработчик — правка эскиза с отметкой отмены).</summary>
+    public event Action<Sketch, bool>? SketchRolled;
+
+    /// <summary>
+    /// k123 (замечание 27.10, 21:55, п. 2): поворот вида на 90° в эскизе — оси эскиза поворачиваются вместе с видом
+    /// (Sketch.RotateQuarter), вид — по новым осям. false — не эскиз (поворачивается только вид).
+    /// </summary>
+    public bool RollSketch(bool ccw)
+    {
+        if (ActiveSketch is not { } sk || Sketch.RollOff) return false;
+        sk.RotateQuarter(ccw);
+        AlignToActiveSketch();
+        RefreshDefaultDimensions();
+        _overlayDirty = true;
+        MarkDirty();
+        SketchRolled?.Invoke(sk, ccw);
+        return true;
+    }
+
+    /// <summary>k123: вид — по осям эскиза (U вправо, V вверх), без смены масштаба и цели.</summary>
+    public void AlignToActiveSketch()
+    {
+        if (ActiveSketch is not { } sk) return;
+        var to = Camera.State;
+        var pl = sk.Plane;
+        to.Rotation = ViewMath.FromForwardUp(-V3(pl.W), V3(pl.V));
+        AnimateTo(to);
+    }
+
     public void EnterSketch(Sketch sk, bool animate = true)
     {
         SketchDimensions.ShowIds = false;   // k102: при каждом входе в эскиз — значения размеров
