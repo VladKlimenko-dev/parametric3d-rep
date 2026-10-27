@@ -65,12 +65,18 @@ public static class DocumentFile
     {
         var doc = BuildDto(part, parameters);
         string def = JsonSerializer.Serialize(doc, Opts);
-        if (!withDisplay || DisplayOff || part.IsDirty || part.ShowsInstant || part.ShowsCached || part.Mesh is not { } md || md.Vertices.Length == 0) return def;
-        doc.Display = new DisplayDto { Signature = Signature(def), Volume = part.Volume, Data = Convert.ToBase64String(DisplayCache.Pack(md)) };
+        if (!withDisplay || DisplayOff) return def;
+        Parametric3D.Kernel.Tess.MeshData md; double vol;
+        if (!part.IsDirty && !part.ShowsInstant && !part.ShowsCached && part.Mesh is { } cur && cur.Vertices.Length > 0) { md = cur; vol = part.Volume; }
+        else if (!DisplayAnyOff && part.LastGoodDisplay is { } lg) { md = lg.Mesh; vol = lg.Volume; }   // k125: идёт расчёт — последняя показанная
+        else return def;
+        doc.Display = new DisplayDto { Signature = Signature(def), Volume = vol, Data = Convert.ToBase64String(DisplayCache.Pack(md)) };
         return JsonSerializer.Serialize(doc, Opts);
     }
 
     public static readonly bool DisplayOff = Environment.GetEnvironmentVariable("P3D_FILEDISPLAY") == "0";
+    /// <summary>k125: мутация P3D_FILEDISPLAYANY=0 — сетка в файл только у посчитанной детали (прежде).</summary>
+    public static readonly bool DisplayAnyOff = Environment.GetEnvironmentVariable("P3D_FILEDISPLAYANY") == "0";
     static string Signature(string def) => SignatureRaw(NewlineSigOff ? def : def.Replace("\r\n", "\n"));
     static string SignatureRaw(string def) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(def)));
     /// <summary>Проверка k116: подпись текста как есть (так её считала k114/k115 — с переводами строк системы).</summary>
@@ -1424,6 +1430,7 @@ public static class DocumentFile
             for (int di = _datumSlots.Count - 1; di >= 0; di--) part.PlaceItem(_datumSlots[di].Item, _datumSlots[di].Slot);   // с конца: одинаковые места — в прежнем порядке
             _datumSlots = null;
         }
+        part.HideConsumedSketchesOnLoad();
         if (displayOk && display!.Data is { } data)
         {
             try { if (DisplayCache.Unpack(Convert.FromBase64String(data)) is { } cached) part.SetCachedDisplay(cached, display.Volume); }

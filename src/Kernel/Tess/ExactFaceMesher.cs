@@ -1097,6 +1097,8 @@ public static partial class ExactFaceMesher
     static readonly bool PoleCapFirstOff = Environment.GetEnvironmentVariable("P3D_POLECAPFIRST") == "0";
     static readonly bool FoldCheckOff = Environment.GetEnvironmentVariable("P3D_FOLDCHECK") == "0";
     public static long FoldRejected;
+    /// <summary>k125: разметок по uv, не удавшихся (грань ушла на запасной путь — дорого). Проверки.</summary>
+    public static long UvFailures;
     /// <summary>Есть ли в сетке треугольник, повёрнутый против нормали поверхности (угол > 120°) при общей стороне сетки.</summary>
     internal static bool Folded(ISurface3 src, List<Vector3d> P, List<int> T)
     {
@@ -1190,8 +1192,9 @@ public static partial class ExactFaceMesher
         if (UseUvMesher && Snap == null && !Lenient)
         {
             if (MeshTrace) Console.Error.WriteLine($"MESHTRACE {DateTime.Now:HH:mm:ss.fff}   uv start");
-            var uvm = UvMesher.Mesh(f, Tol.Chord, out _);
-            if (MeshTrace) Console.Error.WriteLine($"MESHTRACE {DateTime.Now:HH:mm:ss.fff}   uv done {(uvm == null ? "null" : "ok")}");
+            var uvm = UvMesher.Mesh(f, Tol.Chord, out var uvWhy);
+            if (MeshTrace) Console.Error.WriteLine($"MESHTRACE {DateTime.Now:HH:mm:ss.fff}   uv done {(uvm == null ? "null: " + uvWhy : "ok")}");
+            if (uvm == null) Interlocked.Increment(ref UvFailures);
             // g.05: СКЛАДКА — треугольники против нормали поверхности при большинстве по ней (конусная грань у края: полоса
             // перевёрнутых треугольников, сетка «обходится в одну сторону» с соседом — 9 отказов маршрута на серии 8). Такая
             // разметка не берётся, грань размечается следующим способом. Мутация P3D_FOLDCHECK=0.

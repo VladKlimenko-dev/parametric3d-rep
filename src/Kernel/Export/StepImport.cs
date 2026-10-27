@@ -505,6 +505,8 @@ public static class StepImport
         return false;
     }
     static readonly bool LoopMeshParallel = Environment.GetEnvironmentVariable("P3D_LOOPMESHPAR") != "0";
+    static readonly bool SlowFaceDbg = Environment.GetEnvironmentVariable("P3D_SLOWFACE") == "1";
+    public static Func<TFace, string?>? DonorKeyProbe;
     /// <summary>Сколько раз грани тела размечались по контурам параллельно.</summary>
     public static long LoopMeshParallelRuns;
     internal static int MeshFacesFromLoops(TSolid solid, List<string>? warnings, string format,
@@ -539,8 +541,14 @@ public static class StepImport
                     var fi = faceList[i];
                     using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("разметка грани: " + (Topology.GeometryAudit.AuthoritativeSurface(fi)?.GetType().Name ?? "?") + (Topology.GeometryAudit.AuthoritativeSurface(fi) is Surfaces.RevolvedSurface rvp ? "/" + Geometry.ExactEdges.ShapeOf(rvp)?.GetType().Name : "")) : null)
                     {
+                        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
                         try { var m = Tess.ExactFaceMesher.Mesh(fi, out var w, out _); pre[i] = (m, w); }
                         catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { pre[i] = null; }
+                        if (SlowFaceDbg && System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds > 300)
+                        {
+                            var src0 = Topology.GeometryAudit.AuthoritativeSurface(fi);
+                            Console.Error.WriteLine($"SLOWFACE {System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds:0} ms {fi.Tag} {src0?.GetType().Name} base {(src0 as Surfaces.ExtrudedSurface)?.Base.GetType().Name} loops {fi.Loops.Count} coedges {fi.Loops.Sum(l => l.CoEdges.Count)} curves {string.Join(",", fi.Loops.SelectMany(l => l.CoEdges).Select(c => c.Edge.Curve.GetType().Name).Distinct())} donorKey {(DonorKeyProbe?.Invoke(fi) != null)}");
+                        }
                     }
                 });
                 Interlocked.Increment(ref LoopMeshParallelRuns);

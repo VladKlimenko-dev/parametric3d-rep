@@ -1057,7 +1057,83 @@ public static class UvMesher
     }
     static readonly bool TorusBandMeshOff = Environment.GetEnvironmentVariable("P3D_TORUSBANDMESH") == "0";
     static readonly bool BandParityOff = Environment.GetEnvironmentVariable("P3D_BANDPARITY") == "0";
+    /// <summary>
+    /// k125: ШОВ ПОЛОСЫ — НЕ ЧЕРЕЗ КРАЙ. Шов идёт от начала края A к ближайшей по периоду точке края B; если начало A — на
+    /// уступе края (край A делает «ступеньку» поперёк пояса: вырез под протяжку на стенке трубы детали пользователя), шов
+    /// пересекал соседний участок края, многоугольник полосы выходил самопересекающимся, один треугольник выворачивался —
+    /// и вся разметка грани отвергалась (запасной путь — 1.4 с в каждой булевой). Теперь при самопересечении начало A
+    /// переносится в другие точки края (по кругу периода), пока многоугольник не станет простым. Мутация P3D_STRIPSEAM=0.
+    /// </summary>
     private static List<(List<(Vector2d Uv, Vector3d X)>, List<List<(Vector2d Uv, Vector3d X)>>)>? Strips(
+        ISurface3 s, List<(Vector2d Uv, Vector3d X)> a, List<(Vector2d Uv, Vector3d X)> b, List<List<(Vector2d Uv, Vector3d X)>> holes,
+        bool alongU, double tol, out List<(Vector2d Uv, Vector3d X)> rimA, out List<(Vector2d Uv, Vector3d X)> rimB,
+        out List<List<(Vector2d Uv, Vector3d X)>> shiftedHoles)
+    {
+        var res = StripsCore(s, a, b, holes, alongU, tol, out rimA, out rimB, out shiftedHoles);
+        if (StripSeamOff || StripSeamOffForTest || res == null || res.All(r => !SelfCrossing(r.Item1)) || a.Count < 8) return res;
+        var period = a[^1].Uv - a[0].Uv;
+        int n = a.Count;
+        for (int k = 1; k < 24; k++)
+        {
+            int r = (int)Math.Round((double)k * (n - 1) / 24);
+            if (r <= 0 || r >= n - 1) continue;
+            var rot = new List<(Vector2d Uv, Vector3d X)>(n);
+            for (int i = r; i < n; i++) rot.Add(a[i]);
+            for (int i = 1; i <= r; i++) rot.Add((a[i].Uv + period, a[i].X));
+            var r2 = StripsCore(s, rot, b, holes, alongU, tol, out var ra2, out var rb2, out var sh2);
+            if (r2 != null && r2.All(x => !SelfCrossing(x.Item1)))
+            {
+                rimA = ra2; rimB = rb2; shiftedHoles = sh2;
+                System.Threading.Interlocked.Increment(ref StripSeamMoves);
+                return r2;
+            }
+        }
+        return res;
+    }
+    static readonly bool StripSeamOff = Environment.GetEnvironmentVariable("P3D_STRIPSEAM") == "0";
+    /// <summary>Проверкам: прежний шов (запасной путь разметки остаётся проверяемым).</summary>
+    public static bool StripSeamOffForTest;
+    /// <summary>k125: швы полос, перенесённые с уступа края (разбор).</summary>
+    public static long StripSeamMoves;
+
+    /// <summary>Самопересечение многоугольника (собственное пересечение несмежных сторон).</summary>
+    static bool SelfCrossing(List<(Vector2d Uv, Vector3d X)> po)
+    {
+        static double Cr(Vector2d a, Vector2d b, Vector2d c) => (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
+        int n = po.Count;
+        // шип: сторона возвращается по предыдущей (шов, идущий из нижней точки уступа вверх, накрывает уступ)
+        for (int i = 0; i < n; i++)
+        {
+            var p0 = po[(i + n - 1) % n].Uv; var p1 = po[i].Uv; var p2 = po[(i + 1) % n].Uv;
+            var d1 = p1 - p0; var d2 = p2 - p1;
+            double l2 = Math.Max(d1.LengthSquared, d2.LengthSquared);
+            if (l2 > 0 && Math.Abs(d1.X * d2.Y - d1.Y * d2.X) <= 1e-12 * l2 && Vector2d.Dot(d1, d2) < 0) return true;
+        }
+        // сетка по габариту: стороны по ячейкам — проверка только соседей по ячейке
+        double minX = po.Min(x => x.Uv.X), maxX = po.Max(x => x.Uv.X), minY = po.Min(x => x.Uv.Y), maxY = po.Max(x => x.Uv.Y);
+        int G = Math.Clamp((int)Math.Sqrt(n), 4, 64);
+        double cw = Math.Max(maxX - minX, 1e-12) / G, ch = Math.Max(maxY - minY, 1e-12) / G;
+        var cells = new Dictionary<(int, int), List<int>>();
+        for (int i = 0; i < n; i++)
+        {
+            var p = po[i].Uv; var q = po[(i + 1) % n].Uv;
+            int x0 = (int)((Math.Min(p.X, q.X) - minX) / cw), x1 = (int)((Math.Max(p.X, q.X) - minX) / cw);
+            int y0 = (int)((Math.Min(p.Y, q.Y) - minY) / ch), y1 = (int)((Math.Max(p.Y, q.Y) - minY) / ch);
+            for (int gx = x0; gx <= x1; gx++) for (int gy = y0; gy <= y1; gy++)
+            { if (!cells.TryGetValue((gx, gy), out var l)) cells[(gx, gy)] = l = new List<int>(); l.Add(i); }
+        }
+        foreach (var l in cells.Values)
+            for (int u = 0; u < l.Count; u++) for (int v = u + 1; v < l.Count; v++)
+            {
+                int i = l[u], j = l[v];
+                if (Math.Abs(i - j) <= 1 || Math.Abs(i - j) == n - 1) continue;
+                var a = po[i].Uv; var b = po[(i + 1) % n].Uv; var c = po[j].Uv; var d = po[(j + 1) % n].Uv;
+                if (Cr(a, b, c) * Cr(a, b, d) < 0 && Cr(c, d, a) * Cr(c, d, b) < 0) return true;
+            }
+        return false;
+    }
+
+    private static List<(List<(Vector2d Uv, Vector3d X)>, List<List<(Vector2d Uv, Vector3d X)>>)>? StripsCore(
         ISurface3 s, List<(Vector2d Uv, Vector3d X)> a, List<(Vector2d Uv, Vector3d X)> b, List<List<(Vector2d Uv, Vector3d X)>> holes,
         bool alongU, double tol, out List<(Vector2d Uv, Vector3d X)> rimA, out List<(Vector2d Uv, Vector3d X)> rimB,
         out List<List<(Vector2d Uv, Vector3d X)>> shiftedHoles)

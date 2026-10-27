@@ -192,6 +192,60 @@ if (only == "probe-sk")
     return 0;
 }
 
+if (only == "probe-open")
+{
+    // разбор (k125): открытие файла — взята ли сетка из файла, сколько ждать детали
+    long rej0 = Parametric3D.Model.DocumentFile.DisplayRejected;
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    var s = DocumentSession.Open(args[1]);
+    var part = s.Part!;
+    Console.WriteLine($"open {sw.ElapsedMilliseconds} ms: cached display {part.ShowsCached}, mesh {(part.Mesh?.Vertices.Length ?? 0)} verts, rejected {Parametric3D.Model.DocumentFile.DisplayRejected - rej0}, features {part.Features.Count}, dirty {part.IsDirty}");
+    var w = Open(s);
+    sw.Restart(); BuildNow(s);
+    Console.WriteLine($"build {sw.ElapsedMilliseconds} ms; " + string.Join(", ", part.Features.Select(f => $"{f.Name} {(part.LastFeatureMs.TryGetValue(f, out var m) ? m : 0):0}")));
+    return 0;
+}
+
+if (only == "probe-openwin")
+{
+    // разбор (k125): окно с файлом — что на виде сразу и после пауз
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    var s = DocumentSession.Open(args[1]); var part = s.Part!;
+    var w = new MainWindow(s) { Width = 1400, Height = 860 }; w.Show();
+    for (int k = 0; k < 12; k++)
+    {
+        Dispatcher.UIThread.RunJobs();
+        w.ViewPort.BuildSceneForTest();
+        var sc = w.ViewPort.Scene!;
+        Console.WriteLine($"{sw.ElapsedMilliseconds,6} ms: cached {part.ShowsCached}, instant {part.ShowsInstant}, dirty {part.IsDirty}, building {s.Document.IsBuilding}, scene verts {sc.Meshes.Sum(m => m.Pos.Length)}, sketches shown {part.Sketches.Count(x => x.Visible)}");
+        var t0 = DateTime.Now; while ((DateTime.Now - t0).TotalMilliseconds < 2500) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); }
+    }
+    return 0;
+}
+
+if (only == "probe-prof")
+{
+    // разбор (k125): где время расчёта детали файла
+    Parametric3D.Kernel.Export.StepImport.DonorKeyProbe = Parametric3D.Kernel.Ops.BooleanOp.MeshDonorKeyForTests;
+    var s = DocumentSession.Open(args[1]); var part = s.Part!;
+    Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.ResetAll();
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    if (args.Length > 3 && args[3] == "warm") { BuildNow(s); Parametric3D.Kernel.Diagnostics.Prof.ResetAll(); sw.Restart(); part.Invalidate(); }
+    if (args.Length > 3 && args[3].StartsWith("from"))
+    {
+        BuildNow(s); int fi = int.Parse(args[3][4..]);
+        Parametric3D.Kernel.Diagnostics.Prof.ResetAll(); sw.Restart();
+        part.MarkDirtyFrom(part.Features[fi]); BuildNow(s);
+        Console.WriteLine($"from #{fi}: applied [{part.LastStartedAt}+{part.LastExecuted}]");
+    }
+    else if (args.Length > 3 && args[3] == "doc") BuildNow(s);
+    else if (args.Length > 3 && args[3] == "win") { var w0 = Open(s); BuildNow(s); }
+    else part.Rebuild(null, s.Document.Solver);
+    Console.WriteLine($"full rebuild {sw.ElapsedMilliseconds} ms; " + string.Join(", ", part.Features.Select(f => $"{f.Name} {(part.LastFeatureMs.TryGetValue(f, out var m) ? m : 0):0}")));
+    Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(int.Parse(args.Length > 2 ? args[2] : "60"))));
+    return 0;
+}
+
 if (only == "probe-measure")
 {
     // разбор (k120): замер двух антипараллельных граней в файле args[1]; ключи, найдены ли после перестроения
@@ -3363,6 +3417,60 @@ Check("UI-K116", () =>
     w.FinishSketch(); BuildNow(s);
     Require(s.CanUndo && Coords(s.Part!.Sketches.First(k => k.Id == sk.Id)) != c0, "OK with a change was not applied");
     w.Close();
+});
+
+Check("UI-SPEED-K125", () =>
+{
+    // k125 (замечание 28.10, 08:10): файл пользователя (12 операций: выдавливания, протяжки, зеркала, уклон).
+    // (A) открытие: деталь из снимка сразу, израсходованные эскизы скрыты до перестроения (P3D_HIDEONLOAD=0);
+    // (B) перестроение: главная грань трубы размечается по uv в каждой булевой — шов полосы переносится с выступа
+    //     контура (P3D_STRIPSEAM=0: 9 отказов uv и ~1.4 с запасного пути на каждый); грани берутся у доноров
+    //     правка с зеркала №10 — пересчёт трёх операций, неизменные грани берутся у доноров прежнего расчёта;
+    //     зазор точки внутри области при разбиении грани — без мусора (P3D_CLEARFAST=0);
+    // (C) сохранение с несобранной деталью (правка, перестроение ещё не прошло) — снимок всё равно пишется: последняя
+    //     собранная сетка; открытый файл показывает её сразу (P3D_FILEDISPLAYANY=0).
+    string src = Path.Combine(AppContext.BaseDirectory, "data", "user_k125_tube.p3d");
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    var s = DocumentSession.Open(src);
+    var part = s.Part!;
+    long openMs = sw.ElapsedMilliseconds;
+    var consumed = part.Features.SelectMany(f => f.ConsumedSketchIds()).ToHashSet();
+    int shown = part.Sketches.Count(k => consumed.Contains(k.Id) && k.Visible);
+    Console.WriteLine($"  (A) open {openMs} ms: cached {part.ShowsCached}, mesh {part.Mesh?.Vertices.Length ?? 0} verts, consumed sketches {consumed.Count}, shown {shown}");
+    Require(part.ShowsCached && (part.Mesh?.Vertices.Length ?? 0) > 0, "the opened file does not show the part snapshot");
+    Require(consumed.Count > 0 && shown == 0, "consumed sketches are shown before the rebuild");
+    // точный расчёт (без окна: окно делает деталь «живой» — сначала мгновенный предпросмотр, точный — уточнением)
+    long uv0 = Parametric3D.Kernel.Tess.ExactFaceMesher.UvFailures, mv0 = Parametric3D.Kernel.Tess.UvMesher.StripSeamMoves, dh0 = Parametric3D.Kernel.Ops.BooleanOp.DonorHits;
+    long gc0 = GC.GetTotalAllocatedBytes(true);
+    sw.Restart(); BuildNow(s);
+    double allocGb = (GC.GetTotalAllocatedBytes(true) - gc0) / 1e9;
+    long uvF = Parametric3D.Kernel.Tess.ExactFaceMesher.UvFailures - uv0, mv = Parametric3D.Kernel.Tess.UvMesher.StripSeamMoves - mv0, dh = Parametric3D.Kernel.Ops.BooleanOp.DonorHits - dh0;
+    Console.WriteLine($"  (B) build {sw.ElapsedMilliseconds} ms, allocated {allocGb:0.00} GB: uv failures {uvF}, seam moves {mv}, volume {part.Volume:0.###}, errors {part.Features.Count(f => f.Error != null)}");
+    Require(!part.ShowsCached && part.Bodies.Count > 0 && part.Features.All(f => f.Error == null), "the part did not rebuild");
+    Require(uvF == 0 && mv > 0, $"the tube face fell back from uv meshing ({uvF} failures)");
+    // зазор точки внутри области — без массива на каждый отрезок (P3D_CLEARFAST=0: 8.7 ГБ выделений вместо 4.3)
+    Require(allocGb < 6.5, $"the rebuild allocated {allocGb:0.00} GB");
+    // (B2) правка с зеркала №10: пересчёт с него (три операции), грани без изменений — у доноров прежнего расчёта
+    dh0 = Parametric3D.Kernel.Ops.BooleanOp.DonorHits;
+    sw.Restart(); part.MarkDirtyFrom(part.Features[9]); BuildNow(s);
+    dh = Parametric3D.Kernel.Ops.BooleanOp.DonorHits - dh0;
+    Console.WriteLine($"  (B2) rebuild from #10: {sw.ElapsedMilliseconds} ms, applied [{part.LastStartedAt}+{part.LastExecuted}], donor faces {dh}");
+    Require(part.LastStartedAt == 9 && part.LastExecuted == 3 && part.Features.All(f => f.Error == null), "the rebuild did not start at the edited feature");
+    Require(dh > 0, "no faces were taken from donors");
+    // (C) правка без перестроения и сохранение
+    int verts = part.Mesh!.Vertices.Length; double vol = part.Volume;
+    part.MarkDirtyFrom(part.Features[^1]);
+    Require(part.IsDirty, "the part did not become dirty");
+    string path = Path.Combine(Path.GetTempPath(), $"p3d_ui_k125_{Guid.NewGuid():N}.p3d");
+    try
+    {
+        s.SaveAs(path);
+        var s2 = DocumentSession.Open(path);
+        var p2 = s2.Part!;
+        Console.WriteLine($"  (C) saved dirty, reopened: cached {p2.ShowsCached}, verts {p2.Mesh?.Vertices.Length ?? 0} vs {verts}, volume {p2.Volume:0.###} vs {vol:0.###}");
+        Require(p2.ShowsCached && p2.Mesh!.Vertices.Length == verts && Math.Abs(p2.Volume - vol) < 1e-6 * Math.Max(1, vol), "a file saved before the rebuild finished has no part snapshot");
+    }
+    finally { try { File.Delete(path); } catch { } }
 });
 
 Check("UI-SKETCH-DIMS-K124", () =>

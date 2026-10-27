@@ -203,13 +203,27 @@ static partial class Program
             var (p, prm) = DocumentFile.Load(File.ReadAllText(path));
             var doc = new Document(); doc.Root.Add(p);
             for (int i = 4; i < p.Features.Count; i++) p.Features[i].Suppressed = true;
-            long a0 = Parametric3D.Kernel.Tess.ExactFaceMesher.AnisoCylFaces;
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            p.Rebuild(prm);
-            var faceted = p.Warnings.Where(w0 => w0.Contains("Geometry downgrade")).ToList();
-            Console.WriteLine($"  user part, 4 operations: {sw.ElapsedMilliseconds} ms, anisotropic cylinder faces {Parametric3D.Kernel.Tess.ExactFaceMesher.AnisoCylFaces - a0}, downgrades {faceted.Count}");
-            Require(p.Features.Take(4).All(f => f.Error == null), "errors: " + string.Join("; ", p.Features.Select(f => f.Error)));
-            Require(faceted.Count == 0 && Parametric3D.Kernel.Tess.ExactFaceMesher.AnisoCylFaces > a0, "the long cylinder went to the polyhedral path: " + string.Join("; ", faceted));
+            // k125: шов полосы перенесён с уступа края — грань трубы размечается по uv (быстрее, анизотропная развёртка не
+            // нужна). Запасной путь проверяется с прежним швом (StripSeamOffForTest): анизотропная развёртка, без огранки.
+            foreach (bool oldSeam in new[] { true, false })
+            {
+                Parametric3D.Kernel.Tess.UvMesher.StripSeamOffForTest = oldSeam;
+                try
+                {
+                    p.Invalidate();
+                    long a0 = Parametric3D.Kernel.Tess.ExactFaceMesher.AnisoCylFaces, u0 = Parametric3D.Kernel.Tess.UvMesher.StripSeamMoves;
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    p.Rebuild(prm);
+                    var faceted = p.Warnings.Where(w0 => w0.Contains("Geometry downgrade")).ToList();
+                    long aniso = Parametric3D.Kernel.Tess.ExactFaceMesher.AnisoCylFaces - a0, moves = Parametric3D.Kernel.Tess.UvMesher.StripSeamMoves - u0;
+                    Console.WriteLine($"  user part, 4 operations, {(oldSeam ? "old seam" : "k125 seam")}: {sw.ElapsedMilliseconds} ms, anisotropic cylinder faces {aniso}, seam moves {moves}, downgrades {faceted.Count}");
+                    Require(p.Features.Take(4).All(f => f.Error == null), "errors: " + string.Join("; ", p.Features.Select(f => f.Error)));
+                    Require(faceted.Count == 0, "the long cylinder went to the polyhedral path: " + string.Join("; ", faceted));
+                    if (oldSeam) Require(aniso > 0, "the fallback did not use the anisotropic development");
+                    else Require(moves > 0 && aniso == 0, "the strip seam was not moved off the rim step");
+                }
+                finally { Parametric3D.Kernel.Tess.UvMesher.StripSeamOffForTest = false; }
+            }
         });
     }
 
