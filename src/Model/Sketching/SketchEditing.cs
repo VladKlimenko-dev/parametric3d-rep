@@ -114,6 +114,10 @@ public static class SketchEditing
         var geo = Geometry.Take(sk);
         var st0 = sk.Solve(solver);
         geo.Restore();
+        var sizes0 = Sizes(sk); double scale0 = Scale(sk);
+        // свои элементы размера (длина отрезка, радиус) стягиваются, только если размер к этому и ведёт (значение около 0)
+        var own = new HashSet<SkEntity>(ReferenceEqualityComparer.Instance);
+        if (Math.Abs(value) < 1e-3 * scale0) foreach (var it in d.Items) { own.Add(it); foreach (var e in sk.Entities) if (e.Handles.Any(h => ReferenceEquals(h, it))) own.Add(e); }
         var saved = (d.Value, d.Formula, d.Locked, d.IsDefault, d.Reference, d.Conflict);
         double from = DimensionMeasure.Value(d);
         if (double.IsNaN(from)) from = d.Value;
@@ -143,6 +147,17 @@ public static class SketchEditing
             ok = Reach(sk, d, from, value, solver, st0, out st);
             if (ok) Interlocked.Increment(ref FreeEdits);
         }
+        if (ok && Shrunk(sk, sizes0, scale0, own) is { Count: > 0 } shrunk)
+        {
+            // k124: размер достигнут ценой стянутого элемента — снова, удерживая его длину; иначе — отказ «вырождение»
+            geo.Restore();
+            var tmp = Hold(sk, shrunk, sizes0);
+            bool okHeld;
+            try { okHeld = Reach(sk, d, from, value, solver, st0, out st) && Shrunk(sk, sizes0, scale0, own).Count == 0; }
+            finally { foreach (var t in tmp) sk.Dimensions.Remove(t); sk.BumpStructure(); }
+            if (okHeld) Interlocked.Increment(ref CollapseHeld);
+            else { Interlocked.Increment(ref CollapseRejected); ok = false; st = SolveStatus.Singular; res.Degenerate.AddRange(shrunk); }
+        }
         if (ok)
         {
             d.Value = value;
@@ -153,7 +168,7 @@ public static class SketchEditing
         // отказ: участники — при новом значении, затем всё назад
         res.Failure = FailureOf(st0, st, false);
         if (res.Failure == SketchEditFailure.None) res.Failure = SketchEditFailure.Inconsistent;
-        if (res.Failure == SketchEditFailure.Singular) res.Degenerate.AddRange(sk.DegenerateEntities);
+        if (res.Failure == SketchEditFailure.Singular && res.Degenerate.Count == 0) res.Degenerate.AddRange(sk.DegenerateEntities);
         d.Value = value;
         geo.Restore();
         Diagnose(sk, solver, geo, st0, redundant: false, new object[] { d }, res);
@@ -228,6 +243,7 @@ public static class SketchEditing
         // k106: выполнена ли новая связь уже сейчас (при решении без неё)
         var geoOld = Geometry.Take(sk);
         double scale = Scale(sk);
+        var sizes0 = Sizes(sk);
         double r0 = NumericSketchSolver.ResidualOf(sk, made);
         foreach (var c in made) sk.Constraints.Add(c);
         sk.BumpStructure();
@@ -271,12 +287,34 @@ public static class SketchEditing
         }
         if (fail == SketchEditFailure.None)
         {
+            var shrunk = Shrunk(sk, sizes0, scale);
+            if (shrunk.Count > 0)
+            {
+                // стянуло элемент — снова от прежней геометрии, удерживая его длину
+                geoOld.Restore();
+                var tmp = Hold(sk, shrunk, sizes0);
+                var st3 = sk.Solve(solver);
+                bool okHeld = FailureOf(st0, st3, redundant: false) == SketchEditFailure.None && Shrunk(sk, sizes0, scale).Count == 0;
+                foreach (var t in tmp) sk.Dimensions.Remove(t);
+                sk.BumpStructure();
+                if (okHeld) { Interlocked.Increment(ref CollapseHeld); st = sk.Solve(solver); }
+                else
+                {
+                    Interlocked.Increment(ref CollapseRejected);
+                    fail = SketchEditFailure.Singular;
+                    res.Degenerate.AddRange(shrunk);
+                    geoOld.Restore();
+                }
+            }
+        }
+        if (fail == SketchEditFailure.None)
+        {
             res.Ok = true; res.Status = st;
             added?.AddRange(made);
             return res;
         }
         res.Failure = fail;
-        if (fail == SketchEditFailure.Singular) res.Degenerate.AddRange(sk.DegenerateEntities);
+        if (fail == SketchEditFailure.Singular && res.Degenerate.Count == 0) res.Degenerate.AddRange(sk.DegenerateEntities);
         if (res.Constraints.Count == 0 && res.Dimensions.Count == 0)
         {
             geo.Restore();
@@ -293,6 +331,56 @@ public static class SketchEditing
     }
 
     public static readonly bool RedundantCheckOff = Environment.GetEnvironmentVariable("P3D_SKREDUNDANTCHECK") == "0";
+
+    /// <summary>
+    /// k124 (замечание 27.10, 23:41: «длина отрезка становится 0»): РЕШЕНИЕ СТЯНУЛО ЭЛЕМЕНТ. Связь или размер выполнены, но
+    /// ценой отрезка (окружности), стянутого почти в точку: решатель ищет ближайшее решение, и иногда ближайшее — схлопнуть
+    /// соседний отрезок. Такое решение не принимается: сперва — снова, удерживая длины стянутых (как слабые размеры), не
+    /// выйдет — отказ «вырождение» с этими элементами. Мутация P3D_SKCOLLAPSE=0 — принимается.
+    /// </summary>
+    public static readonly bool CollapseOff = Environment.GetEnvironmentVariable("P3D_SKCOLLAPSE") == "0";
+    static Dictionary<SkEntity, double> Sizes(Sketch sk)
+    {
+        var d = new Dictionary<SkEntity, double>(ReferenceEqualityComparer.Instance);
+        foreach (var e in sk.Entities)
+        {
+            if (e.Role == SkRole.Reference || e.Builtin) continue;
+            if (e is SkLine l) d[e] = (l.B.P - l.A.P).Length;
+            else if (e is SkCircle c) d[e] = c.Radius;
+            else if (e is SkArc a) d[e] = a.Radius;
+        }
+        return d;
+    }
+    /// <summary>Элементы, стянутые правкой: были заметной величины, стали в сотни раз меньше и почти нулевыми.</summary>
+    static List<SkEntity> Shrunk(Sketch sk, Dictionary<SkEntity, double> before, double scale, ICollection<SkEntity>? allowed = null)
+    {
+        var res = new List<SkEntity>();
+        if (CollapseOff) return res;
+        foreach (var (e, now) in Sizes(sk))
+            if (before.TryGetValue(e, out var was) && was > 1e-3 * scale && now < 1e-3 * scale && now < was * 0.01 && (allowed == null || !allowed.Contains(e)))
+                res.Add(e);
+        return res;
+    }
+    /// <summary>Удерживать длины (радиусы) элементов временными сильными размерами; возвращает их (снять после).</summary>
+    static List<SkDimension> Hold(Sketch sk, IEnumerable<SkEntity> es, Dictionary<SkEntity, double> before)
+    {
+        var tmp = new List<SkDimension>();
+        foreach (var e in es)
+        {
+            SkDimension? d = e switch
+            {
+                SkLine l => new SkDimension(DimensionType.DistancePointPoint, before[e], l.A, l.B),
+                SkCircle c => new SkDimension(DimensionType.Radius, before[e], c),
+                SkArc a => new SkDimension(DimensionType.Radius, before[e], a),
+                _ => null,
+            };
+            if (d == null) continue;
+            d.Locked = true; d.IsDefault = false; sk.Dimensions.Add(d); tmp.Add(d);
+        }
+        sk.BumpStructure();
+        return tmp;
+    }
+    public static long CollapseHeld, CollapseRejected;
     public static readonly bool RetryOff = Environment.GetEnvironmentVariable("P3D_SKRETRY") == "0";
 
     /// <summary>Размер эскиза (наибольшая координата или размер) — масштаб допусков.</summary>

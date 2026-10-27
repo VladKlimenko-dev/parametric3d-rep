@@ -257,7 +257,11 @@ public static class DimensionMeasure
 
             case DimensionType.DistanceLineLine:
                 if (it.Count >= 2 && it[0] is SkLine l1 && it[1] is SkLine l2)
-                    return Math.Abs(PointToLine(l2.A.P, l1));
+                {
+                    if (LineLineOff) return Math.Abs(PointToLine(l2.A.P, l1));
+                    var (pt, rf) = LineLinePair(l1, l2);
+                    return Math.Abs(PointToLine(pt, rf));
+                }
                 break;
 
             case DimensionType.AngleLineLine:
@@ -299,6 +303,22 @@ public static class DimensionMeasure
         return double.NaN;
     }
 
+    /// <summary>
+    /// k124 (замечание 27.10, 23:41): РАССТОЯНИЕ МЕЖДУ ПРЯМЫМИ — от СЕРЕДИНЫ отрезка до другой прямой (ось эскиза или более
+    /// длинный отрезок). Прежде мерилось от начала второго элемента до первого: у размера «отрезок — ось» это конец оси за
+    /// 100 м, и наклон короткого отрезка на 10⁻⁵ давал десятки миллиметров — сильный размер не держал отрезок (эскиз
+    /// пользователя: 131.68 при настоящих 84.40), решение не сходилось, отрезок стягивался в точку, угол к оси
+    /// «конфликтовал». Одна формула для измерения, решателя и рисования. P3D_SKLINELINE=0 — прежняя.
+    /// </summary>
+    public static (Vector2d Point, SkLine Reference) LineLinePair(SkLine a, SkLine b)
+    {
+        double la = a.Builtin ? double.MaxValue : (a.B.P - a.A.P).Length;
+        double lb = b.Builtin ? double.MaxValue : (b.B.P - b.A.P).Length;
+        var (from, rf) = la <= lb ? (a, b) : (b, a);
+        return ((from.A.P + from.B.P) * 0.5, rf);
+    }
+    public static readonly bool LineLineOff = Environment.GetEnvironmentVariable("P3D_SKLINELINE") == "0";
+
     private static double PointToLine(Vector2d p, SkLine l)
     {
         Vector2d d = l.B.P - l.A.P;
@@ -334,9 +354,49 @@ public static class DimensionMeasure
         double t = (r.X * db.Y - r.Y * db.X) / den;
         corner = a.A.P + da * t;
 
-        rayA = Farthest(corner, a);
-        rayB = Farthest(corner, b);
+        rayA = AxisRay(a) ?? Farthest(corner, a);
+        rayB = AxisRay(b) ?? Farthest(corner, b);
         return true;
+    }
+
+    /// <summary>
+    /// k124: у ОСИ ЭСКИЗА луч — её собственное направление (+X, +Y), а не к дальнему концу. Концы оси — за 100 м по обе
+    /// стороны нуля, и «дальний» менялся, когда точка пересечения переходила через ноль: угол к оси скачком становился
+    /// 180 − угол, решение такого размера не сходилось («угол к оси конфликтует»). P3D_SKAXISRAY=0 — прежнее. Старые
+    /// размеры при чтении файла переводятся (MigrateAxisAngles) — геометрия та же.
+    /// </summary>
+    static Vector2d? AxisRay(SkLine l) => AxisRayOff || !l.Builtin ? null : (l.B.P - l.A.P).Normalized();
+    public static readonly bool AxisRayOff = Environment.GetEnvironmentVariable("P3D_SKAXISRAY") == "0";
+
+    /// <summary>Угол прямых по прежнему правилу (лучи к дальним концам, у оси тоже) — для перевода старых размеров.</summary>
+    public static double LegacyLineAngleDegrees(SkLine a, SkLine b)
+    {
+        Vector2d da = a.B.P - a.A.P, db = b.B.P - b.A.P;
+        double den = da.X * db.Y - da.Y * db.X;
+        if (da.Length < 1e-12 || db.Length < 1e-12 || Math.Abs(den) < 1e-12) return LineAngleDegrees(a, b);
+        double t = ((b.A.P - a.A.P).X * db.Y - (b.A.P - a.A.P).Y * db.X) / den;
+        var c = a.A.P + da * t;
+        var ra = Farthest(c, a); var rb = Farthest(c, b);
+        return Math.Abs(Math.Atan2(ra.X * rb.Y - ra.Y * rb.X, Vector2d.Dot(ra, rb)) * 180.0 / Math.PI);
+    }
+
+    /// <summary>
+    /// Угловые размеры к осям эскиза из файла прежнего правила: значение по прежнему правилу — переводится в новое (180 −
+    /// угол, где «дальний» конец оси был отрицательным), чтобы решатель не перевернул отрезок. Возвращает число переводов.
+    /// </summary>
+    public static int MigrateAxisAngles(Sketch sk)
+    {
+        if (AxisRayOff) return 0;
+        int n = 0;
+        foreach (var d in sk.Dimensions)
+        {
+            if (d.Type != DimensionType.AngleLineLine || d.Items.Count < 2 || d.Items[0] is not SkLine a || d.Items[1] is not SkLine b || !(a.Builtin || b.Builtin)) continue;
+            double now = LineAngleDegrees(a, b), old = LegacyLineAngleDegrees(a, b);
+            if (Math.Abs(now - old) < 1e-9) continue;
+            // значение — по прежнему правилу: в новом то же положение — дополнение до 180
+            if (Math.Abs(d.Value - old) < Math.Abs(d.Value - now) + 1e-9) { d.Value = 180 - d.Value; if (d.Formula is { } f && !string.IsNullOrWhiteSpace(f)) d.Formula = "180 - (" + f + ")"; d.Supplement = !d.Supplement; n++; }
+        }
+        return n;
     }
 
     private static Vector2d Farthest(Vector2d c, SkLine l)

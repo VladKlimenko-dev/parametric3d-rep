@@ -155,7 +155,7 @@ public static class DocumentFile
 
     private static SketchDto SaveSketch(Sketch s)
     {
-        var dto = new SketchDto { Id = s.Id, Name = s.Name, Plane = new[]
+        var dto = new SketchDto { Id = s.Id, Name = s.Name, AxisRays = DimensionMeasure.AxisRayOff ? null : true, Plane = new[]
         {
             s.Plane.Origin.X, s.Plane.Origin.Y, s.Plane.Origin.Z,
             s.Plane.U.X, s.Plane.U.Y, s.Plane.U.Z,
@@ -916,6 +916,8 @@ public static class DocumentFile
                 dim.UserLocked = dd.UserLocked == true; dim.SingleArrow = dd.SingleArrow == true; dim.DiameterAsLinear = dd.AsLinear == true;
             }
 
+            // k124: угловые размеры к осям из файла до k124 — в новое правило (геометрия та же)
+            if (sd.AxisRays != true) DimensionMeasure.MigrateAxisAngles(s);
             byOldOf[sd.Id] = byOld;
             part.Children.Add(s);
             s.Parent = part;          // k110: правка прочитанного эскиза извещает деталь (ссылки, пересчёт операций)
@@ -1659,6 +1661,8 @@ public static class DocumentFile
         public int? Slot { get; set; }
         /// <summary>k116: видимость, заданная пользователем (глаз в дереве); null — по умолчанию программы.</summary>
         public bool? Shown { get; set; }
+        /// <summary>k124: углы к осям эскиза — по направлению оси (+X, +Y); null — файл до k124 (луч к дальнему концу оси).</summary>
+        public bool? AxisRays { get; set; }
     }
 
     static readonly bool SplineSaveOff = Environment.GetEnvironmentVariable("P3D_SKSPLINESAVE") == "0";

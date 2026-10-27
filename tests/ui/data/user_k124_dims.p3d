@@ -1,0 +1,299 @@
+{
+  "Version": 2,
+  "Name": "TH X-218795-05",
+  "Units": {
+    "length": "in",
+    "mass": "kg",
+    "time": "s",
+    "angle": "deg",
+    "temperature": "K",
+    "name": "in/kg/s"
+  },
+  "Parameters": [],
+  "Sketches": [
+    {
+      "Id": 3406,
+      "Name": "Sketch1",
+      "Plane": [
+        0,
+        0,
+        0,
+        -0,
+        -0,
+        -1,
+        0,
+        1,
+        0
+      ],
+      "PlaneRef": "YZ",
+      "BasePlaneId": 966,
+      "BaseFrame": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "Up": [
+        1,
+        0
+      ],
+      "OriginRef": "Geometric center",
+      "Entities": [
+        {
+          "Id": 3416,
+          "Kind": "point",
+          "X": -1.8068906830828735E-17,
+          "Y": 29.48179626466299,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 3417,
+          "Kind": "point",
+          "X": -1.8068906830828735E-17,
+          "Y": 48.47034454345703,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 3427,
+          "Kind": "point",
+          "X": 63.214571944260896,
+          "Y": 84.41756102430656,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 3437,
+          "Kind": "point",
+          "X": 130.52938193344903,
+          "Y": 84.38576321782186,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 3418,
+          "Kind": "line",
+          "X": 0,
+          "Y": 0,
+          "R": 0,
+          "A": 3416,
+          "B": 3417,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 3428,
+          "Kind": "line",
+          "X": 0,
+          "Y": 0,
+          "R": 0,
+          "A": 3417,
+          "B": 3427,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 3438,
+          "Kind": "line",
+          "X": 0,
+          "Y": 0,
+          "R": 0,
+          "A": 3427,
+          "B": 3437,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        }
+      ],
+      "Constraints": [
+        {
+          "Type": "PointOnEntity",
+          "Items": [
+            3416,
+            4294967043
+          ],
+          "Enabled": true
+        },
+        {
+          "Type": "PointOnEntity",
+          "Items": [
+            3417,
+            4294967043
+          ],
+          "Enabled": true
+        },
+        {
+          "Type": "Horizontal",
+          "Items": [
+            3438
+          ],
+          "Enabled": true
+        }
+      ],
+      "Dimensions": [
+        {
+          "Type": "DistanceLineLine",
+          "Ix": 5,
+          "Items": [
+            3438,
+            4294967042
+          ],
+          "Value": 131.68486785885767,
+          "Locked": true,
+          "Reference": false,
+          "UserPlaced": true,
+          "Offset": [
+            0,
+            12
+          ]
+        },
+        {
+          "Type": "DistancePointPoint",
+          "Ix": 0,
+          "Items": [
+            3416,
+            3417
+          ],
+          "Value": 18.988548278794042,
+          "Locked": false,
+          "Reference": false,
+          "IsDefault": true
+        },
+        {
+          "Type": "DistancePointPoint",
+          "Ix": 1,
+          "Items": [
+            3417,
+            3427
+          ],
+          "Value": 103.26856229845117,
+          "Locked": false,
+          "Reference": false,
+          "IsDefault": true
+        },
+        {
+          "Type": "DistancePointPoint",
+          "Ix": 2,
+          "Items": [
+            3427,
+            3437
+          ],
+          "Value": 0.11176579269282752,
+          "Locked": false,
+          "Reference": false,
+          "IsDefault": true
+        },
+        {
+          "Type": "AngleLineLine",
+          "Ix": 3,
+          "Items": [
+            3418,
+            3428
+          ],
+          "Value": 110.36142292269847,
+          "Locked": false,
+          "Reference": false,
+          "IsDefault": true
+        }
+      ],
+      "Slot": 0
+    }
+  ],
+  "Features": [],
+  "Configurations": [],
+  "ActiveConfiguration": "",
+  "Material": {
+    "Name": "Сталь",
+    "Density": 7850,
+    "Designation": "Ст3",
+    "Colour": [
+      0.62,
+      0.64,
+      0.67
+    ],
+    "YoungModulus": 200000000000,
+    "PoissonRatio": 0.3,
+    "ShearModulus": 0,
+    "YieldStrength": 235000000,
+    "UltimateStrength": 370000000,
+    "TangentModulus": 1200000000,
+    "ThermalExpansion": 1.2E-05,
+    "ThermalConductivity": 52,
+    "SpecificHeat": 470,
+    "Specular": 0.6000000238418579,
+    "Shininess": 64,
+    "Opacity": 1,
+    "Metallic": true,
+    "Group": "Сталь",
+    "StressStrain": [],
+    "FatigueCurve": []
+  },
+  "Info": {
+    "Code": "X-218795-05",
+    "Title": "",
+    "Author": "",
+    "Checker": "",
+    "Company": "",
+    "Created": "2026-10-27T09:39:42.1957369Z",
+    "Modified": "2026-10-27T12:35:00.0891273Z",
+    "Revision": "",
+    "Note": ""
+  },
+  "FaceSets": [],
+  "FreeForm": false,
+  "MergeFreeForm": false,
+  "Tree": {
+    "p": true,
+    "p/DatumPoint:Origin": true,
+    "p/DatumPlane:XY": true,
+    "p/DatumPlane:XZ": true,
+    "p/DatumPlane:YZ": true,
+    "p/i:rollback:— rollback bar —": true,
+    "p/Sketch:Sketch1": true
+  }
+}

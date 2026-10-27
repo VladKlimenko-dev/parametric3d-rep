@@ -257,7 +257,13 @@ public static class SketchDimensions
 
             case DimensionType.DistanceLineLine:
                 if (it.Count >= 2 && it[0] is SkLine l1 && it[1] is SkLine l2)
-                { a = l1.A.P; b = Project(l1.A.P, l2); return true; }
+                {
+                    if (DimensionMeasure.LineLineOff) { a = l1.A.P; b = Project(l1.A.P, l2); return true; }
+                    var (pm, rf) = DimensionMeasure.LineLinePair(l1, l2);   // k124: от середины отрезка до оси
+                    if (ReferenceEquals(rf, l2)) { a = pm; b = Project(pm, rf); }   // a — на первом элементе, b — на втором
+                    else { b = pm; a = Project(pm, rf); }
+                    return true;
+                }
                 return false;
 
             case DimensionType.CoordX:

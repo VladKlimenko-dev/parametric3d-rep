@@ -157,6 +157,41 @@ if (only == "probe-hv")
     return 0;
 }
 
+if (only == "probe-sk")
+{
+    // разбор (k124): состояние эскиза файла — связи, размеры, невязки, статус
+    var s = DocumentSession.Open(args[1]); var w = Open(s); BuildNow(s);
+    var sk = s.Part!.Sketches.First();
+    w.EditSketch(sk); BuildNow(s);
+    var solver = s.Document.Solver;
+    void Dump(string what)
+    {
+        Console.WriteLine($"== {what}: status {sk.LastSolve}, dof {sk.DegreesOfFreedom}, free {sk.FreeDegrees}");
+        foreach (var e in sk.Entities) if (e is SkLine l) Console.WriteLine($"   line {l.Id}: ({l.A.X:0.###},{l.A.Y:0.###}) - ({l.B.X:0.###},{l.B.Y:0.###}) len {(l.B.P - l.A.P).Length:0.###}");
+        foreach (var c in sk.Constraints) Console.WriteLine($"   C {c.Type} [{string.Join(",", c.Items.Select(i => i.Builtin ? i.Name : i.Id.ToString()))}] en {c.Enabled} conflict {c.Conflict} res {NumericSketchSolver.ResidualOf(sk, new[] { c }):E1}");
+        foreach (var d in sk.Dimensions) Console.WriteLine($"   D {d.Name} {d.Type} [{string.Join(",", d.Items.Select(i => i.Builtin ? i.Name : i.Id.ToString()))}] value {d.Value:0.###} measured {DimensionMeasure.Value(d):0.###} locked {d.Locked} default {d.IsDefault} driving {d.IsDriving} conflict {d.Conflict} en {d.Enabled}");
+    }
+    sk.Solve(solver);
+    Dump("loaded");
+    var lines = sk.Entities.OfType<SkLine>().ToList();
+    var hz = lines[2]; var sl = lines[1]; var vt = lines[0];
+    // тянем горизонтальный отрезок вверх: сильный размер до оси держит
+    var g0 = hz.A.Y; hz.A.Y += 10; hz.B.Y += 10; sk.Solve(solver, hz.A); Dump($"drag horizontal (y {g0:0.###} +10)");
+    // угол наклонного к оси
+    var ra = SketchEditing.SetDimensionValue(sk, sk.AddDimension(DimensionType.AngleLineLine, DimensionMeasure.LineAngleDegrees(sl, sk.AxisH), sl, sk.AxisH), 150, null, solver);
+    Dump($"angle 150 to the axis: ok {ra.Ok} {ra.Failure} participants {ra.Constraints.Count}+{ra.Dimensions.Count}");
+    var len = sk.Dimensions.First(x => x.Type == DimensionType.DistancePointPoint && x.Items.Contains(hz.A) && x.Items.Contains(hz.B));
+    var rl = SketchEditing.SetDimensionValue(sk, len, 2.12 * 25.4, null, solver);
+    Dump($"horizontal length 2.12in: ok {rl.Ok} {rl.Failure}");
+    var lv = sk.Dimensions.First(x => x.Type == DimensionType.DistancePointPoint && x.Items.Contains(vt.A) && x.Items.Contains(vt.B));
+    var rv = SketchEditing.SetDimensionValue(sk, lv, 0.75 * 25.4, null, solver);
+    Dump($"vertical length 0.75in: ok {rv.Ok} {rv.Failure}");
+    var ls = sk.Dimensions.First(x => x.Type == DimensionType.DistancePointPoint && x.Items.Contains(sl.A) && x.Items.Contains(sl.B));
+    var rs = SketchEditing.SetDimensionValue(sk, ls, 2.71 * 25.4, null, solver);
+    Dump($"slanted length 2.71in: ok {rs.Ok} {rs.Failure} participants {string.Join(",", rs.Dimensions.Select(x => x.Name))}");
+    return 0;
+}
+
 if (only == "probe-measure")
 {
     // разбор (k120): замер двух антипараллельных граней в файле args[1]; ключи, найдены ли после перестроения
@@ -3328,6 +3363,131 @@ Check("UI-K116", () =>
     w.FinishSketch(); BuildNow(s);
     Require(s.CanUndo && Coords(s.Part!.Sketches.First(k => k.Id == sk.Id)) != c0, "OK with a change was not applied");
     w.Close();
+});
+
+Check("UI-SKETCH-DIMS-K124", () =>
+{
+    // k124 (замечание 27.10, 23:41): система размеров и связей с нуля.
+    // (A) файл пользователя (in/kg/s): сильный размер «отрезок — горизонтальная ось» держит отрезок (прежде мерился от конца
+    //     оси за 100 м: 131.68 при настоящих 84.40, решение не сходилось, отрезок стягивался в 0.11 мм; P3D_SKLINELINE=0);
+    // (B) та же геометрия с нуля в дюймах — размеры по одному: расстояние до оси, длины, угол к оси, длина наклонного;
+    //     после каждого — правка принята, сильные размеры выполнены, ни один отрезок не стянулся; «Вертикально» к
+    //     горизонтальному — отказ с участником «Горизонтально», геометрия прежняя; тянут отрезок — расстояние держится;
+    // (C) угол к оси — по направлению оси: сдвиг отрезка через ноль не переворачивает его (P3D_SKAXISRAY=0), старые
+    //     размеры из файла переводятся без смены геометрии;
+    // (D) 40 случайных эскизов: принятая правка — все сильные размеры и связи выполнены, отрезки не стянулись;
+    //     отвергнутая — геометрия точно прежняя.
+    var solver = new NumericSketchSolver();
+    double Res(Sketch sk) => sk.Constraints.Where(c => c.Enabled && !c.Conflict).Select(c => Math.Abs(NumericSketchSolver.ResidualOf(sk, new[] { c }))).DefaultIfEmpty(0).Max();
+    double DimErr(Sketch sk) => sk.Dimensions.Where(d => d.IsDriving).Select(d => Math.Abs(DimensionMeasure.Value(d) - d.Value) / (d.IsAngular ? 1 : Math.Max(1, Math.Abs(d.Value)))).DefaultIfEmpty(0).Max();
+    double MinLen(Sketch sk) => sk.Entities.OfType<SkLine>().Where(l => !l.Builtin).Select(l => (l.B.P - l.A.P).Length).DefaultIfEmpty(1).Min();
+    // (A)
+    var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "user_k124_dims.p3d")); var w = Open(s); BuildNow(s);
+    var sk = s.Part!.Sketches.First();
+    var st = sk.Solve(solver);
+    var lines = sk.Entities.OfType<SkLine>().ToList(); var hz = lines[2];
+    var d5 = sk.Dimensions.First(d => d.Type == DimensionType.DistanceLineLine);
+    Console.WriteLine($"  (A) loaded: {st}, horizontal at y {hz.A.Y:0.###} (strong {d5.Value:0.###}), length {(hz.B.P - hz.A.P).Length:0.###}");
+    Require(st is not (SolveStatus.DidNotConverge or SolveStatus.Inconsistent) && Math.Abs(hz.A.Y - d5.Value) < 1e-6 && Math.Abs(hz.B.Y - d5.Value) < 1e-6, "the strong distance to the axis is not held");
+    hz.A.Y += 10; hz.B.Y += 10; sk.Solve(solver, hz.A);
+    Require(Math.Abs(hz.A.Y - d5.Value) < 1e-6, "dragging moved the line off its strong distance");
+    w.Close();
+    // (B) с нуля в дюймах
+    double IN = 25.4;
+    var sk2 = new Sketch("B", Parametric3D.Kernel.Frame3.XY);
+    var p0 = new SkPoint(0, 20); var p1 = new SkPoint(0, 40); var p2 = new SkPoint(60, 80); var p3 = new SkPoint(120, 80);
+    var vt = sk2.AddEntity(new SkLine(p0, p1)); var sl = sk2.AddEntity(new SkLine(p1, p2)); var hz2 = sk2.AddEntity(new SkLine(p2, p3));
+    sk2.AddConstraint(ConstraintType.PointOnEntity, p0, sk2.AxisV); sk2.AddConstraint(ConstraintType.PointOnEntity, p1, sk2.AxisV);
+    sk2.AddConstraint(ConstraintType.Horizontal, hz2);
+    sk2.Solve(solver);
+    void Step(string what, SkDimension d, double value)
+    {
+        var r = SketchEditing.SetDimensionValue(sk2, d, value, null, solver);
+        Console.WriteLine($"  (B) {what}: ok {r.Ok} {r.Failure}; residual {Res(sk2):E1}, dim error {DimErr(sk2):E1}, shortest {MinLen(sk2):0.###}");
+        Require(r.Ok && Res(sk2) < 1e-6 && DimErr(sk2) < 1e-6 && MinLen(sk2) > 1, what + " failed or collapsed a segment");
+    }
+    Step("distance to the axis 5.18 in", sk2.AddDimension(DimensionType.DistanceLineLine, 80, hz2, sk2.AxisH), 5.18 * IN);
+    Step("horizontal length 2.12 in", sk2.AddDimension(DimensionType.DistancePointPoint, 60, p2, p3), 2.12 * IN);
+    Step("vertical length 0.75 in", sk2.AddDimension(DimensionType.DistancePointPoint, 20, p0, p1), 0.75 * IN);
+    var ang = sk2.AddDimension(DimensionType.AngleLineLine, 0, sl, sk2.AxisH); ang.Value = DimensionMeasure.Value(ang);
+    Step("angle to the axis 30°", ang, 30);
+    var sdir = (p2.P - p1.P).Normalized();
+    Require(Math.Abs(Math.Atan2(sdir.Y, sdir.X) * 180 / Math.PI - 30) < 1e-6, "the slanted line is not at 30° to the axis");
+    Step("slanted length 2.71 in", sk2.AddDimension(DimensionType.DistancePointPoint, 60, p1, p2), 2.71 * IN);
+    Require(Math.Abs(p2.Y - 5.18 * IN) < 1e-6 && Math.Abs((p3.P - p2.P).Length - 2.12 * IN) < 1e-6, "final geometry");
+    var geo = SketchEditing.Geometry.Take(sk2);
+    var rvh = SketchEditing.AddConstraints(sk2, new[] { (ConstraintType.Vertical, new SkEntity[] { hz2 }) }, solver);
+    Console.WriteLine($"  (B) vertical to the horizontal line: ok {rvh.Ok}, participants {string.Join(", ", rvh.Constraints.Select(c => c.Type.ToString()))}, moved {geo.MaxShift():E1}");
+    Require(!rvh.Ok && rvh.Constraints.Any(c => c.Type == ConstraintType.Horizontal) && geo.MaxShift() < 1e-12, "a contradiction was accepted, unexplained, or moved the geometry");
+    p3.Y += 15; sk2.Solve(solver, p3);
+    Require(Math.Abs(p2.Y - 5.18 * IN) < 1e-6 && Math.Abs(p3.Y - 5.18 * IN) < 1e-6, "dragging the end broke the strong distance");
+    // (C) угол к оси при переходе точки пересечения через ноль
+    var sk3 = new Sketch("C", Parametric3D.Kernel.Frame3.XY);
+    var la = sk3.AddEntity(new SkLine(new SkPoint(-10, 5), new SkPoint(30, 25)));   // пересечение с осью при x = −20
+    var a3 = sk3.AddDimension(DimensionType.AngleLineLine, 0, la, sk3.AxisH); a3.Value = DimensionMeasure.Value(a3); a3.Locked = true;
+    var dir0 = (la.B.P - la.A.P).Normalized();
+    la.A.X += 40; la.B.X += 40; sk3.Solve(solver, la.A);                            // пересечение — при x = +20
+    var dir1 = (la.B.P - la.A.P).Normalized();
+    Console.WriteLine($"  (C) angle {a3.Value:0.##}, direction {dir0} -> {dir1}");
+    Require((dir1 - dir0).Length < 1e-6, "moving the line across the origin flipped it (angle to the axis)");
+    // старый файл: углы к осям переведены, геометрия та же
+    var sOld = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "user_k123_x218795.p3d"));
+    var skOld = sOld.Part!.Sketches.First();
+    var before = skOld.AllPoints().Where(q => !q.Builtin).Select(q => q.P).ToList();
+    var stOld = skOld.Solve(solver);
+    double movedOld = skOld.AllPoints().Where(q => !q.Builtin).Select(q => q.P).Zip(before).Max(z => (z.First - z.Second).Length);
+    var aOld = skOld.Dimensions.First(d => d.Type == DimensionType.AngleLineLine && d.Locked && !d.IsDefault);
+    Console.WriteLine($"  (C) old file: {stOld}, axis angle {aOld.Value:0.##} (shown {aOld.ShownAngle:0.##}), geometry moved {movedOld:E1}");
+    Require(movedOld < 1e-6 && Math.Abs(aOld.Value - DimensionMeasure.Value(aOld)) < 1e-9, "an old file changed its geometry on load");
+    // (D) случайные эскизы: два прохода (40 × 8 правок пяти видов — на нём было стягивание; 100 × 10 правок семи видов)
+    int accepted = 0, rejected = 0, bad = 0; string? why = null;
+    int unexplained = 0;
+    foreach (var (seed, nsk, ned, nkinds) in new[] { (124, 40, 8, 5), (124, 100, 10, 7) })
+    {
+    var rnd = new Random(seed);
+    for (int t = 0; t < nsk; t++)
+    {
+        var sk4 = new Sketch("D" + t, Parametric3D.Kernel.Frame3.XY);
+        int n = 4 + rnd.Next(3);
+        var pts = Enumerable.Range(0, n).Select(i => new SkPoint(i * 30 + rnd.NextDouble() * 10, (i % 2) * 25 + rnd.NextDouble() * 10 + 10)).ToList();
+        var segs = Enumerable.Range(0, n - 1).Select(i => sk4.AddEntity(new SkLine(pts[i], pts[i + 1]))).ToList();
+        sk4.Solve(solver);
+        for (int e = 0; e < ned; e++)
+        {
+            var g = SketchEditing.Geometry.Take(sk4);
+            var seg = segs[rnd.Next(segs.Count)];
+            SketchEditResult r;
+            int kind = rnd.Next(nkinds);
+            if (kind == 0) r = SketchEditing.AddConstraints(sk4, new[] { (rnd.Next(2) == 0 ? ConstraintType.Horizontal : ConstraintType.Vertical, new SkEntity[] { seg }) }, solver);
+            else if (kind == 1) { var d = sk4.AddDimension(DimensionType.DistancePointPoint, 0, seg.A, seg.B); d.Value = DimensionMeasure.Value(d); r = SketchEditing.SetDimensionValue(sk4, d, d.Value * (0.7 + rnd.NextDouble() * 0.6), null, solver); if (!r.Ok) sk4.Dimensions.Remove(d); }
+            else if (kind == 2) { var d = sk4.AddDimension(DimensionType.AngleLineLine, 0, seg, sk4.AxisH); d.Value = DimensionMeasure.Value(d); r = SketchEditing.SetDimensionValue(sk4, d, Math.Clamp(d.Value + rnd.Next(-20, 21), 5, 175), null, solver); if (!r.Ok) sk4.Dimensions.Remove(d); }
+            else if (kind == 3) { var d = sk4.AddDimension(DimensionType.DistancePointLine, 0, seg.A, sk4.AxisH); d.Value = DimensionMeasure.Value(d); r = SketchEditing.SetDimensionValue(sk4, d, Math.Max(1, d.Value + rnd.Next(-5, 6)), null, solver); if (!r.Ok) sk4.Dimensions.Remove(d); }
+            else if (kind == 4) { var other = segs[rnd.Next(segs.Count)]; if (ReferenceEquals(other, seg)) continue; r = SketchEditing.AddConstraints(sk4, new[] { (rnd.Next(2) == 0 ? ConstraintType.Parallel : ConstraintType.Perpendicular, new SkEntity[] { seg, other }) }, solver); }
+            else if (kind == 5) { var d = sk4.AddDimension(DimensionType.DistanceLineLine, 0, seg, sk4.AxisH); d.Value = DimensionMeasure.Value(d); r = SketchEditing.SetDimensionValue(sk4, d, Math.Max(1, d.Value + rnd.Next(-8, 9)), null, solver); if (!r.Ok) sk4.Dimensions.Remove(d); }
+            else { var other = segs[rnd.Next(segs.Count)]; if (ReferenceEquals(other, seg)) continue; var d = sk4.AddDimension(DimensionType.AngleLineLine, 0, seg, other); d.Value = DimensionMeasure.Value(d); r = SketchEditing.SetDimensionValue(sk4, d, Math.Clamp(d.Value + rnd.Next(-25, 26), 5, 175), null, solver); if (!r.Ok) sk4.Dimensions.Remove(d); }
+            if (r.Ok)
+            {
+                accepted++;
+                if (Res(sk4) > 1e-6 || DimErr(sk4) > 1e-6 || MinLen(sk4) < 1e-6)
+                {
+                    bad++; why ??= $"sketch {t} edit {e} kind {kind}: residual {Res(sk4):E1}, dim error {DimErr(sk4):E1}, shortest {MinLen(sk4):E1}";
+                    foreach (var dd in sk4.Dimensions.Where(x => x.IsDriving && Math.Abs(DimensionMeasure.Value(x) - x.Value) > 1e-6)) Console.WriteLine($"    unmet: sketch {t} edit {e} kind {kind}: {dd.Type} value {dd.Value:0.####} measured {DimensionMeasure.Value(dd):0.####}");
+                }
+            }
+            else
+            {
+                rejected++;
+                if (r.Constraints.Count + r.Dimensions.Count + r.Degenerate.Count == 0 && r.Failure != SketchEditFailure.Redundant) unexplained++;
+                sk4.BumpStructure(); sk4.Solve(solver);
+                if (g.MaxShift() > 1e-6) { bad++; why ??= $"sketch {t} edit {e} kind {kind}: rejected but moved {g.MaxShift():E1}"; }
+                g.Restore();
+            }
+        }
+    }
+    }
+    Console.WriteLine($"  (D) random sketches: accepted {accepted}, rejected {rejected} (without participants {unexplained}), bad {bad}{(why != null ? " — " + why : "")}; collapse held {SketchEditing.CollapseHeld}, rejected {SketchEditing.CollapseRejected}");
+    Require(bad == 0, "random sketch edits: " + why);
+    Require(unexplained == 0, $"rejections without participants: {unexplained}");
 });
 
 Check("UI-SKETCH-K123", () =>
