@@ -138,6 +138,13 @@ public sealed class Sketch : ModelItem
         foreach (var d in Dimensions)
         {
             // ccw: x' = −y, y' = x; cw: x' = y, y' = −x
+            // k124: угол к оси — по её направлению; ось, у которой направление в мире развернулось (ccw: V → H', cw: H → V'),
+            // — угол дополняется до 180 (положение отрезка то же)
+            if (d.Type == DimensionType.AngleLineLine && !DimensionMeasure.AxisRayOff && d.Items.Any(i => ReferenceEquals(i, ccw ? AxisV : AxisH)))
+            {
+                d.Value = 180 - d.Value;
+                if (!string.IsNullOrWhiteSpace(d.Formula)) d.Formula = "180 - (" + d.Formula + ")";
+            }
             if (d.Type == DimensionType.CoordX) { d.Type = DimensionType.CoordY; if (!ccw) d.Value = -d.Value; }
             else if (d.Type == DimensionType.CoordY) { d.Type = DimensionType.CoordX; if (ccw) d.Value = -d.Value; }
             for (int i = 0; i < d.Items.Count; i++) d.Items[i] = Map(d.Items[i]);

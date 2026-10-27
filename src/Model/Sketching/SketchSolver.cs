@@ -708,8 +708,19 @@ public sealed class NumericSketchSolver : ISketchSolver
                 case DimensionType.DistanceLineLine:
                     if (it.Count >= 2 && it[0] is SkLine la && it[1] is SkLine lb)
                     {
-                        double side = SideOff ? 1 : SideOf(DistPointLine(lb.A.P, la));
-                        fns.Add(dst => dst.Add(side * DistPointLine(lb.A.P, la) - V()));
+                        if (DimensionMeasure.LineLineOff)
+                        {
+                            double side0 = SideOff ? 1 : SideOf(DistPointLine(lb.A.P, la));
+                            fns.Add(dst => dst.Add(side0 * DistPointLine(lb.A.P, la) - V()));
+                        }
+                        else
+                        {
+                            // k124: середина короткого отрезка — до прямой длинного (оси)
+                            var (pt0, rf0) = DimensionMeasure.LineLinePair(la, lb);
+                            var from = ReferenceEquals(rf0, la) ? lb : la;
+                            double side = SideOff ? 1 : SideOf(DistPointLine(pt0, rf0));
+                            fns.Add(dst => dst.Add(side * DistPointLine((from.A.P + from.B.P) * 0.5, rf0) - V()));
+                        }
                     }
                     break;
                 case DimensionType.AngleLineLine:
