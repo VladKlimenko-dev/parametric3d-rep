@@ -23,7 +23,8 @@ public sealed class UndoHistory
 
     void Keep(string json, Part part)
     {
-        if (part.StashBuild() is not { } st) return;
+        if (part.StashBuild() is not { } st0) return;
+        var st = st0.Detached();
         _stash[json] = st; _stashOrder.Add(json);
         while (_stashOrder.Count > StashLimit) { _stash.Remove(_stashOrder[0]); _stashOrder.RemoveAt(0); }
     }
