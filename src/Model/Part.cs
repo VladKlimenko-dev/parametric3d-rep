@@ -890,6 +890,17 @@ public sealed class Part : ModelItem
         /// <summary>k122: операции детали в момент снимка (итоги операций — по порядку) и тела (доноры сетки).</summary>
         internal List<Feature> FeatureList = new();
         internal List<Kernel.Topology.TSolid> Bodies = new();
+        /// <summary>k122: отвязанный снимок (журнал отмены): без ссылок на операции и деталь — ключи, виды и итоги по порядку.</summary>
+        internal List<string>? Keys; internal List<Type>? Types; internal List<FeatureRecord?>? RecordList;
+
+        /// <summary>Снимок без ссылок на операции и деталь (журнал отмены не держит заменённые детали в памяти).</summary>
+        public BuildStash Detached() => new()
+        {
+            Checkpoints = Checkpoints.ToList(), Last = null, Inputs = Inputs, Params = Params, Records = new(ReferenceEqualityComparer.Instance),
+            Stage = Stage, FeatureCount = FeatureCount, FeatureList = new(), Bodies = Bodies.ToList(),
+            Keys = FeatureList.Select(f => f.Key).ToList(), Types = FeatureList.Select(f => f.GetType()).ToList(),
+            RecordList = FeatureList.Select(f => Records.TryGetValue(f, out var r) ? r : null).ToList(),
+        };
         /// <summary>Сколько сохранённых состояний (разбор).</summary>
         public int CheckpointCount => Checkpoints.Count;
     }
@@ -901,11 +912,14 @@ public sealed class Part : ModelItem
     /// </summary>
     public int AdoptStash(BuildStash st)
     {
-        if (AdoptOff || UndoStashOff || !UseCheckpoints || st.Inputs == null || st.FeatureList.Count != Features.Count || st.Stage != StageIndex) return -1;
-        for (int i = 0; i < Features.Count; i++) if (st.FeatureList[i].GetType() != Features[i].GetType() || st.FeatureList[i].Key != Features[i].Key) return -1;
+        var keys = st.Keys ?? st.FeatureList.Select(f => f.Key).ToList();
+        var types = st.Types ?? st.FeatureList.Select(f => f.GetType()).ToList();
+        var recs = st.RecordList ?? st.FeatureList.Select(f => st.Records.TryGetValue(f, out var r) ? r : null).ToList();
+        if (AdoptOff || UndoStashOff || !UseCheckpoints || st.Inputs == null || keys.Count != Features.Count || st.Stage != StageIndex) return -1;
+        for (int i = 0; i < Features.Count; i++) if (types[i] != Features[i].GetType() || keys[i] != Features[i].Key) return -1;
         _checkpoints.Clear(); _checkpoints.AddRange(st.Checkpoints.OrderBy(c => c.After));
         _records.Clear();
-        for (int i = 0; i < Features.Count; i++) if (st.Records.TryGetValue(st.FeatureList[i], out var rec)) _records[Features[i]] = rec;
+        for (int i = 0; i < Features.Count; i++) if (recs[i] is { } rec) _records[Features[i]] = rec;
         _lastInputs = st.Inputs; _lastParams = st.Params;
         _lastResult = null;
         _dirtyFrom = _checkpoints.Count > 0 ? _checkpoints[^1].After + 1 : 0;
