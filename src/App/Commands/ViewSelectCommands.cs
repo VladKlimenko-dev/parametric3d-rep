@@ -66,7 +66,7 @@ public static class ViewSelectCommands
             CanRun = HasPart, Run = () => FaceLoop(w) });
         // анализ
         r.Add(new AppCommand { Id = "an.measure", Label = "Измерить", Group = An, Icon = "an_measure_but.svg", Synonyms = "measure distance angle radius измерить расстояние угол радиус", Gesture = K(Key.M),
-            CanRun = HasPart, Run = async () => await Dialogs.Info(w, L("Измерение"), string.Join("\n", Measure(w))) });
+            CanRun = HasPart, Run = async () => { if (!MeasureOff && CreateMeasure(w) != null) return; await Dialogs.Info(w, L("Измерение"), string.Join("\n", Measure(w))); } });
         r.Add(new AppCommand { Id = "an.area", Label = "Площадь", Group = An, Icon = "an_area_but.svg", Synonyms = "area площадь",
             CanRun = HasPart, Run = () => w.ShowToast(L("Площадь выбранных граней: {0} мм²", F(SelectedArea(w))), error: false) });
         r.Add(new AppCommand { Id = "an.perimeter", Label = "Периметр / длина", Group = An, Icon = "an_perimeter_but.svg", Synonyms = "perimeter length периметр длина",
@@ -280,6 +280,60 @@ public static class ViewSelectCommands
     }
 
     /// <summary>Измерение выбранного: координаты, длины, радиусы, площади; для пары — расстояние и угол.</summary>
+    public static readonly bool MeasureOff = Environment.GetEnvironmentVariable("P3D_MEASUREFEATURE") == "0";
+
+    /// <summary>Ссылка замера из выбранного: вершина, точка, прямое ребро, плоская грань, опорная плоскость; null — не годится.</summary>
+    public static MeasureRef? MeasureRefOf(PickRef r)
+    {
+        if (r.Owner is Part p)
+        {
+            if (r.Kind == PickKind.Vertex && p.FindVertex(r.Id) is { } v) return new MeasureRef { Type = 0, P = v.P, Key = EdgeRef.EndKey(v) };
+            if (r.Kind == PickKind.Edge && p.FindEdge(r.Id) is { Curve: LineCurve3 } e)
+                return new MeasureRef { Type = 1, P = e.Curve.PointAt((e.Curve.T0 + e.Curve.T1) / 2), D = (e.V1.P - e.V0.P).Normalized(), Key = MeasureFeature.EdgeKey(e) };
+            if (r.Kind == PickKind.Face && p.FindFace(r.Id) is { } f && GeometryAudit.AuthoritativeSurface(f) is Kernel.Surfaces.PlaneSurface ps)
+            {
+                var pts = f.Loops.SelectMany(l => l.CoEdges).Select(c => c.Edge.V0.P).ToList();
+                var c0 = pts.Count > 0 ? pts.Aggregate(Vector3d.Zero, (a, b) => a + b) / pts.Count : ps.F.Origin;
+                var n = ps.F.W.Normalized();
+                return new MeasureRef { Type = 2, P = c0 - n * Vector3d.Dot(c0 - ps.F.Origin, n), D = n, Key = f.Tag ?? "" };
+            }
+        }
+        if (PointOnly(r) is { } q) return new MeasureRef { Type = 0, P = q };
+        if (r.Kind is PickKind.DatumPlane && Refs.PlaneOf(r) is { } pl) return new MeasureRef { Type = 2, P = pl.Frame.Origin, D = pl.Frame.W.Normalized() };
+        if (r.Kind is PickKind.DatumAxis && Refs.LineOf(r) is { } ln) return new MeasureRef { Type = 1, P = ln.At, D = ln.Dir.Normalized() };
+        return null;
+    }
+
+    /// <summary>
+    /// k120 (замечание 15:06, п. 17): «Измерить» по двум выбранным — точкам, параллельным прямым, параллельным плоскостям
+    /// (и от точки до прямой или плоскости) — ЗАМЕР-ОПЕРАЦИЯ в дереве с размером на виде (подпись тянется мышью); иначе —
+    /// прежнее окно со сведениями. P3D_MEASUREFEATURE=0 — только окно.
+    /// </summary>
+    public static MeasureFeature? CreateMeasure(MainWindow w)
+    {
+        var part = w.Session.Part;
+        var sel = w.ViewPort.Selection.Items;
+        if (part == null || sel.Count != 2) return null;
+        if (MeasureRefOf(sel[0]) is not { } ra || MeasureRefOf(sel[1]) is not { } rb) return null;
+        if (MeasureFeature.Solve(ra, rb) is not { } ab || (ab.B - ab.A).Length < 1e-9) return null;
+        var ms = new MeasureFeature(UniqueName(part, L("Замер"))) { RefA = ra, RefB = rb, A = ab.A, B = ab.B, Value = (ab.B - ab.A).Length };
+        var d = (ab.B - ab.A).Normalized();
+        var f = w.ViewPort.Camera.Forward; var side = Vector3d.Cross(d, new Vector3d(f.X, f.Y, f.Z));
+        if (side.LengthSquared < 1e-12) side = Vector3d.Cross(d, Math.Abs(d.Z) < 0.9 ? Vector3d.UnitZ : Vector3d.UnitX);
+        ms.Side = side.Normalized();
+        ms.Offset = Math.Max(ms.Value * 0.25, 30 * w.ViewPort.PixelSize);
+        w.Session.Edit(L("Замер"), () => part.AddFeature(ms));
+        w.Session.Document.RebuildDirty();
+        w.ViewPort.MarkDirty(); w.RebuildTree();
+        w.ShowToast(L("Замер: {0}", DisplayUnits.ToShow(ms.Value).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) + " " + L(DisplayUnits.LengthUnit)), error: false);
+        return ms;
+    }
+
+    static string UniqueName(Part part, string baseName)
+    {
+        for (int i = 1; ; i++) { string n = $"{baseName} {i}"; if (!part.Features.Any(x => x.Name == n)) return n; }
+    }
+
     public static List<string> Measure(MainWindow w)
     {
         var res = new List<string>();

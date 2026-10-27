@@ -27,6 +27,8 @@ public sealed class UserPrefs
     public Dictionary<string, string> PanelPlaces { get; set; } = new();
     /// <summary>Визуальные настройки (вкладка «Вид»): размеры текста и кнопок, цвета.</summary>
     public LookPrefs Look { get; set; } = new();
+    /// <summary>k120: свои системы единиц пользователя (имя и единицы длины, массы, времени, угла).</summary>
+    public List<Dictionary<string, string>> UnitSystems { get; set; } = new();
 
     public static string Dir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Parametric3D");
     public static string FilePath => Path.Combine(Dir, "ui.json");

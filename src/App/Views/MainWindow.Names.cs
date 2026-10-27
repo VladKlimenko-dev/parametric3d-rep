@@ -18,6 +18,7 @@ public partial class MainWindow
     private Border TreePanel = null!;
     private TextBlock TreeHeader = null!;
     private StackPanel TreeTools = null!;
+    private WrapPanel TreeBar = null!;
     private TreeView Tree = null!;
     private GridSplitter TreeSplitter = null!;
     private Grid ViewArea = null!;
@@ -78,6 +79,7 @@ public partial class MainWindow
         TreePanel = this.FindControl<Border>("TreePanel")!;
         TreeHeader = this.FindControl<TextBlock>("TreeHeader")!;
         TreeTools = this.FindControl<StackPanel>("TreeTools")!;
+        TreeBar = this.FindControl<WrapPanel>("TreeBar")!;
         Tree = this.FindControl<TreeView>("Tree")!;
         TreeSplitter = this.FindControl<GridSplitter>("TreeSplitter")!;
         ViewArea = this.FindControl<Grid>("ViewArea")!;

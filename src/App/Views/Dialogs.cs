@@ -48,6 +48,39 @@ public static class Dialogs
 
     public static Task Info(Window owner, string title, string text) => Ask(owner, title, text, "OK");
 
+    /// <summary>
+    /// k120 (замечание 15:06, п. 5): НОВАЯ СИСТЕМА ЕДИНИЦ — имя и единицы длины, массы, времени и угла (например, in/kg/s).
+    /// Null — отмена.
+    /// </summary>
+    public static async Task<Core.UnitSystem?> NewUnitSystem(Window owner)
+    {
+        Core.UnitSystem? result = null;
+        var w = new Window { Title = Loc.L("Новая система единиц"), SizeToContent = SizeToContent.WidthAndHeight, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner, ShowInTaskbar = false, MinWidth = 360 };
+        w.Bind(Window.BackgroundProperty, w.GetResourceObservable("P3.PanelBg"));
+        var name = new TextBox { Text = "", Watermark = "in/kg/s", MinWidth = 180, Name = "us_name" };
+        ComboBox Pick(string nm, string[] opts, string cur) => new() { Name = nm, ItemsSource = opts.Select(Commands.DisplayUnits.Symbol).ToList(), SelectedIndex = Math.Max(0, Array.IndexOf(opts, cur)), MinWidth = 120 };
+        var lenOpts = new[] { "mm", "cm", "m", "in", "ft" }; var massOpts = new[] { "g", "kg", "t", "lb" }; var timeOpts = new[] { "s", "min", "h" }; var angOpts = new[] { "deg", "rad" };
+        var len = Pick("us_length", lenOpts, "mm"); var mass = Pick("us_mass", massOpts, "kg"); var time = Pick("us_time", timeOpts, "s"); var ang = Pick("us_angle", angOpts, "deg");
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto") };
+        int row = 0;
+        void Add(string label, Control c) { var t = new TextBlock { Text = Loc.L(label), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 3, 12, 3) }; Grid.SetRow(t, row); Grid.SetRow(c, row); Grid.SetColumn(c, 1); c.Margin = new Thickness(0, 3); grid.Children.Add(t); grid.Children.Add(c); row++; }
+        Add("Имя", name); Add("Длина", len); Add("Масса", mass); Add("Время", time); Add("Угол", ang);
+        var ok = new Button { Content = Loc.L("Создать"), MinWidth = 96, HorizontalContentAlignment = HorizontalAlignment.Center, Name = "us_ok" }; ok.Classes.Add("accent");
+        var cancel = new Button { Content = Loc.L("Отмена"), MinWidth = 96, HorizontalContentAlignment = HorizontalAlignment.Center };
+        ok.Click += (_, _) =>
+        {
+            var u = new Core.UnitSystem { Length = lenOpts[len.SelectedIndex], Mass = massOpts[mass.SelectedIndex], Time = timeOpts[time.SelectedIndex], Angle = angOpts[ang.SelectedIndex] };
+            u.Name = string.IsNullOrWhiteSpace(name.Text) ? $"{u.Length}/{u.Mass}/{u.Time}" : name.Text.Trim();
+            result = u; w.Close();
+        };
+        cancel.Click += (_, _) => w.Close();
+        w.Content = new StackPanel { Margin = new Thickness(20), Spacing = 12, Children = { grid, new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Children = { ok, cancel } } } };
+        LastUnitWindow = w;
+        await w.ShowDialog(owner);
+        return result;
+    }
+    public static Window? LastUnitWindow;
+
     /// <summary>k119: настройки импорта STL; null — отмена.</summary>
     public sealed record StlOptions(bool Exact, bool Snap, double TolScale, double Scale);
     public static readonly (string Name, double Scale)[] StlUnits = { ("мм", 1), ("см", 10), ("м", 1000), ("дюйм", 25.4) };

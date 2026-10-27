@@ -128,7 +128,7 @@ public partial class MainWindow : Window
         Session = s;
         UiLook.ApplyToRender(View.Theme);                // настройки отрисовки — у документа свои; визуальные — пользователя
         View.ActivePart = s.ActivePart;
-        Commands.DisplayUnits.Inch = s.Part?.Units.Length == "in";
+        Commands.DisplayUnits.From(s.Part?.Units);
         s.Replaced += OnReplaced;
         s.StateChanged += OnStateChanged;
         s.Document.BuildStarted += OnBuild;
@@ -387,10 +387,21 @@ public partial class MainWindow : Window
         FitViewTools();
         BuildCommandBar();
         TreeTools.Children.Clear();
-        TreeTools.Children.Add(CmdButton(_reg["tree.collapse"], 16));
-        TreeTools.Children.Add(CmdButton(_reg["tree.expand"], 16));
-        // k115 (п. 6): группа выбранных операций (все уже в одной группе — разгруппировать)
-        TreeTools.Children.Add(CmdButton(_reg["tree.group"], 16));
+        // k120 (замечание 15:06, п. 16): свернуть и развернуть — шевронами; «Группа» — на панели дерева ниже (п. 13)
+        TreeTools.Children.Add(ChevronButton(_reg["tree.collapse"], up: true));
+        TreeTools.Children.Add(ChevronButton(_reg["tree.expand"], up: false));
+        // k120 (п. 13): команды дерева — на панели дерева модели (иконками, имя — подсказкой); в полосе операций их больше нет
+        TreeBar.Children.Clear();
+        foreach (var id in TreeBarOff ? Array.Empty<string>() : TreeBarCommands)
+            if (_reg.Find(id) is { } tc)
+            {
+                // без иконки — подписью целиком (п. 13: «Требуют…» обрезалось)
+                bool text = !IconProvider.Exists(tc.Icon) && !StripTextOff;
+                var b = CmdButton(tc, 16);
+                if (b is Layoutable l) { l.Width = text ? double.NaN : 26; l.Height = 26; l.MinWidth = text ? 26 : 0; }
+                if (b is TemplatedControl t) t.Padding = text ? new Thickness(6, 0) : new Thickness(0);
+                TreeBar.Children.Add(b);
+            }
         TreeHeader.Text = L("ДЕРЕВО МОДЕЛИ");
         SearchText.Text = L("Найти команду…");
         PaletteHelp.Text = L("↑↓ — выбор, Enter — выполнить, Esc — закрыть. Поиск по-русски и по-английски.");
@@ -596,8 +607,11 @@ public partial class MainWindow : Window
     private Control StripButton(AppCommand c)
     {
         var b = CmdButton(c, UiLook.StripIconPx);
-        if (b is Layoutable l) { l.Width = UiLook.StripButtonPx; l.Height = UiLook.StripButtonPx; l.MinWidth = 0; }
-        if (b is TemplatedControl tc) tc.Padding = new Thickness(0);
+        // k120 (замечание 15:06, п. 14): кнопка без иконки — подписью ЦЕЛИКОМ (ширина по тексту), прежде квадрат обрезал
+        // подпись: «Измер», «Площ», «Пов. е»
+        bool text = !IconProvider.Exists(c.Icon) && !StripTextOff;
+        if (b is Layoutable l) { l.Width = text ? double.NaN : UiLook.StripButtonPx; l.Height = UiLook.StripButtonPx; l.MinWidth = text ? UiLook.StripButtonPx : 0; }
+        if (b is TemplatedControl tc) tc.Padding = text ? new Thickness(6, 0) : new Thickness(0);
         return b;
     }
 
@@ -618,6 +632,47 @@ public partial class MainWindow : Window
             ToolTip.SetTip(b, b == CommandBar ? L("Операции") : b == ShapeBar ? L("Фигуры") : b == SketchBar ? L("Эскиз") : b == DimBar ? L("Размеры") : b == SketchSetBar ? L("Настройка эскиза") : L("Вид"));
         if (SelChip.Parent is StackPanel inner) DockablePanel.Reorient(inner, true);
         DockablePanel.Reorient(ContextOps, true);
+    }
+
+    /// <summary>Панель кнопок дерева и заголовок дерева (проверки).</summary>
+    public Panel TreeBarPanel => TreeBar;
+    public Panel PropsBodyPanel => PropsBody;
+    /// <summary>Все тексты панели свойств: подписи, поля, выбранные пункты списков (проверки).</summary>
+    public List<string> PropsPanelTexts()
+    {
+        var res = new List<string> { PropsTitle.Text ?? "" };
+        foreach (var c in PropsBody.GetVisualDescendants())
+            switch (c)
+            {
+                case TextBox tb: res.Add(tb.Text ?? ""); break;
+                case TextBlock t when t.FindAncestorOfType<TextBox>() == null: res.Add(t.Text ?? ""); break;
+                case ComboBox cb when cb.SelectedItem is string str: res.Add(str); break;
+                case ComboBox cb when cb.SelectedItem is ComboBoxItem { Content: string cs }: res.Add(cs); break;
+            }
+        foreach (var c in PropsBody.GetVisualDescendants().OfType<Control>()) if (ToolTip.GetTip(c) is string tip) res.Add(tip);
+        return res.Where(x => x.Length > 0).ToList();
+    }
+    public static readonly bool TreeBarOff = Environment.GetEnvironmentVariable("P3D_TREEBAR") == "0";
+    public Panel TreeTitleTools => TreeTools;
+
+    public static readonly bool StripTextOff = Environment.GetEnvironmentVariable("P3D_STRIPTEXT") == "0";
+
+    /// <summary>k120: команды панели дерева модели.</summary>
+    public static readonly string[] TreeBarCommands = { "tree.rebuild", "tree.needs_attention", "tree.resume", "tree.insert_here", "tree.reorder_up", "tree.reorder_down", "tree.edit_dims", "tree.group", "tree.parents_children", "tree.replace_refs" };
+
+    /// <summary>k120 (п. 16): кнопка-шеврон (свернуть — вверх, развернуть — вниз), двойной шеврон рисунком.</summary>
+    private Button ChevronButton(AppCommand c, bool up)
+    {
+        var path = new Avalonia.Controls.Shapes.Path
+        {
+            Data = Geometry.Parse(up ? "M0,6 L5,1 L10,6 M0,11 L5,6 L10,11" : "M0,1 L5,6 L10,1 M0,6 L5,11 L10,6"),
+            StrokeThickness = 1.6, Width = 10, Height = 11, Stretch = Stretch.Uniform, StrokeLineCap = PenLineCap.Round, StrokeJoin = PenLineJoin.Round,
+        };
+        path.Bind(Avalonia.Controls.Shapes.Shape.StrokeProperty, this.GetResourceObservable("P3.Text"));
+        var b = new Button { Content = path, Classes = { "tool" }, Command = c, Width = 24, Height = 24, Padding = new Thickness(0), Name = up ? "tree_collapse" : "tree_expand" };
+        ToolTip.SetTip(b, c.Tooltip);
+        b.Tag = c;
+        return b;
     }
 
     /// <summary>Маленькая стрелка «список» (рисунок, не текст).</summary>
@@ -689,7 +744,6 @@ public partial class MainWindow : Window
                 (Array.Empty<string>(), new[] { "an.measure", "an.area", "an.perimeter", "an.mass", "an.zebra", "an.curvature", "an.check_body", "an.heal" }),
                 (new[] { "op.plane" }, new[] { "op.plane_offset", "op.plane_mid", "op.plane_3pt", "op.plane_axis", "op.plane_normal_curve", "op.plane_tangent", "op.axis", "op.axis_face", "op.axis_intersect", "op.point", "op.point_center", "op.point_intersect", "op.csys", "op.curve_points", "op.curve_equation", "op.curve_project" }),
                 (new[] { "op.mirror", "op.pattern_linear", "op.pattern_circular" }, new[] { "op.pattern_points", "op.pattern_curve", "op.pattern_fill", "op.move_copy" }),
-                (Array.Empty<string>(), new[] { "tree.rebuild", "tree.needs_attention", "tree.resume", "tree.insert_here", "tree.reorder_up", "tree.reorder_down", "tree.edit_dims", "tree.group", "tree.parents_children", "tree.replace_refs" }),
             };
         // k96 (п. 9): панель операций детали — все кнопки групп, без «Ещё…» (повтор команды в другой группе — один раз)
         if (!ffMode && !asmMode && !InSketch && !AllButtonsOff)
@@ -954,6 +1008,7 @@ public partial class MainWindow : Window
         Cube.Viewport = View;
         View.CameraChanged += () => { Cube.Sync(); UpdateProjectionButton(View.IsPerspective); PlaceSectionBadge(); };
         View.SectionChanged += PlaceSectionBadge;
+        View.MeasureMoved += (part, m) => Session.MarkModified();
         SectionBadge.Content = IconProvider.Content("section_view_but.svg", L("Сечение"), 20);
         ToolTip.SetTip(SectionBadge, L("Сечение — настройки плоскости"));
         SectionBadge.Click += (_, _) => { if (CurrentOperation is SectionOp) return; if (CurrentOperation != null) CancelOperation(); if (!InSketch && Session.Part != null) StartOperation(new SectionOp()); };
@@ -1043,6 +1098,9 @@ public partial class MainWindow : Window
         }
         _lastSelIds = ids;
         if (selChanged) CurrentOperation?.SelectionChanged(View.Selection.Items);
+        // k120 (пп. 12, 15): доступность кнопок — по выбранному (прежде пересчитывалась только при смене документа и после
+        // операции: «Группа» при выборе нескольких операций оставалась недоступной). P3D_CMDREFRESH=0 — как прежде.
+        if (selChanged && !CmdRefreshOff) _reg.RefreshAll();
         if (CurrentOperation is ShellOp && !View.HandleDragging) AttachOpHandle();
         else if (CurrentOperation is RoundOp or ChamferOp && !View.HandleDragging && !_startingHandleOp && (_handleOpFixed || !ReferenceEquals(CurrentOperation, _handleOp))) AttachOpHandle();
         var prim = View.Selection.Primary;
@@ -2844,74 +2902,193 @@ public partial class MainWindow : Window
         PropsBody.Children.Clear();
         PropsButtons.Children.Clear();
         var sel = View.Selection;
-        var part = Session.Part;
-        if (sel.IsEmpty && part != null)
+        // k120 (замечание 15:06, п. 1): свойства детали — и когда ничего не выбрано, и по щелчку на детали в дереве (на виде)
+        var part = sel.IsEmpty ? Session.Part
+            : !PartPanelOff && sel.Count == 1 && sel.Items[0] is { Kind: PickKind.Body, Target: Part sp } ? sp : null;
+        if (part != null)
         {
-            PropsTitle.Text = L("ДЕТАЛЬ");
-            Row("Имя", part.Name);
-            // k118 (замечание 08:54, п.11): обозначение, наименование, изменение — правятся здесь (основная надпись, перечень)
-            if (!PartPropsOff)
-            {
-                EditRow("Обозначение", part.Info.Code, v => part.Info.Code = v);
-                EditRow("Наименование", part.Info.Title, v => part.Info.Title = v);
-                EditRow("Изменение", part.Info.Revision, v => part.Info.Revision = v);
-            }
-            MaterialRow(part);
-            Row("Тел", part.Bodies.Count.ToString());
-            if (part.Bodies.Count > 0)
-            {
-                Row("Объём", $"{part.Volume / 1000.0:0.###} " + L("см³"));
-                // 21.10: площадь — по запросу; не посчитана — считается в фоне, панель обновляется (поток окна не ждёт квадратуру)
-                if (part.AreaPending)
-                {
-                    Row("Площадь", "…");
-                    var pp = part;
-                    _ = Task.Run(() => { _ = pp.Area; }).ContinueWith(_ => Dispatcher.UIThread.Post(() => { if (ReferenceEquals(Session.Part, pp) && _propsOn && CurrentOperation == null && View.Selection.IsEmpty) ShowProperties(); }));
-                }
-                else Row("Площадь", $"{part.Area / 100.0:0.###} " + L("см²"));
-                Row("Масса", $"{part.Mass:0.####} " + L("кг"));
-                if (!PartPropsOff && !part.Bounds.IsEmpty)
-                {
-                    var sz = part.Bounds.Size;
-                    Row("Габариты", $"{sz.X:0.##} × {sz.Y:0.##} × {sz.Z:0.##} " + L("мм") + "  (" + L("Ш × В × Г") + ")");
-                }
-            }
-            Row("Операций", part.Children.OfType<Feature>().Count().ToString());
-            Row("Параметров", $"{Session.Document.Parameters.Count} + {part.LocalParameters.Count}");
-            if (!PartPropsOff)
-            {
-                ChoiceRow("Ед. учёта", DocumentInfo.UomChoices, part.Info.Uom, v => part.Info.Uom = v);
-                ChoiceRow("Ед. длины", DocumentInfo.LengthChoices, part.Info.LengthUnits, v => part.Info.LengthUnits = v);
-                ChoiceRow("Допуски", DocumentInfo.ToleranceChoices, part.Info.Tolerances, v => part.Info.Tolerances = v);
-                Row("Сборка", part.Parent is Assembly pa ? pa.Name : "—");
-                var deps = Parametric3D.Model.Params.ModelRefs.DependenciesOf(part);
-                PropsBody.Children.Add(new TextBlock { Text = L("Зависит от") + (deps.Count == 0 ? ": —" : ":"), Classes = { "dim" }, Margin = new Thickness(0, 6, 0, 2) });
-                foreach (var (item, where) in deps)
-                {
-                    var link = new TextBlock { Text = (item is Assembly ? L("Сборка") : L("Деталь")) + " «" + item.Name + "»", Margin = new Thickness(12, 1, 0, 1), TextDecorations = TextDecorations.Underline, Cursor = new Cursor(StandardCursorType.Hand) };
-                    link.Bind(TextBlock.ForegroundProperty, this.GetResourceObservable("P3.Accent"));
-                    ToolTip.SetTip(link, L("Ссылка в") + " " + where);
-                    var it = item;
-                    link.PointerEntered += (_, _) => View.HighlightFromTree(it);
-                    link.PointerExited += (_, _) => View.HighlightFromTree(null);
-                    PropsBody.Children.Add(link);
-                }
-                PartDepsShown = deps.Count;
-            }
+            ShowPartProperties(part);
             return;
         }
         PropsTitle.Text = L("ВЫБРАНО");
+        ShowSelectionList();
+    }
+
+    /// <summary>k120: виды выбранного, скрытые в списке (пользователь снял флажок); не задано — по фильтру выбора вида.</summary>
+    private readonly Dictionary<PickKind, bool> _listKinds = new();
+    /// <summary>Разбор: строки списка выбранного (номер элемента → строка).</summary>
+    public Dictionary<uint, Border> SelectionRows { get; } = new();
+    public const int SelectionListMax = 200;
+    public static readonly bool SelListOff = Environment.GetEnvironmentVariable("P3D_SELLIST") == "0";
+
+    /// <summary>
+    /// k120 (замечание 15:06, пп. 8.1, 8.2): СПИСОК ВЫБРАННОГО — сверху флажки видов (по умолчанию — как фильтр выбора вида),
+    /// строки с крестиком «снять выбор»; строка под курсором подсвечивает свой элемент на виде. Строк — не больше 200
+    /// (рамка на тысячи элементов не строит тысячи строк).
+    /// </summary>
+    private void ShowSelectionList()
+    {
+        var sel = View.Selection;
+        SelectionRows.Clear();
         Row("Выбрано", sel.Count.ToString());
-        foreach (var r in sel.Items.Take(12))
+        if (SelListOff)
         {
-            Row(Selection.KindName(r), Selection.Label(r));
-            if (r.Target is Feature f)
+            foreach (var r in sel.Items.Take(12)) Row(Selection.KindName(r), Selection.Label(r));
+            return;
+        }
+        var kinds = sel.Items.GroupBy(r => r.Kind).Select(g => (g.Key, g.Count())).ToList();
+        bool Shown(PickKind k) => _listKinds.TryGetValue(k, out var on) ? on : sel.Accepts(k) || k is PickKind.Body or PickKind.Feature or PickKind.Assembly;
+        if (kinds.Count > 1 || kinds.Any(k => !Shown(k.Key)))
+        {
+            var wrap = new WrapPanel { Margin = new Thickness(0, 4, 0, 4) };
+            foreach (var (k, n) in kinds)
+            {
+                var kk = k;
+                var cb = new CheckBox { Content = $"{Selection.KindName(new PickRef(1, k, null, null))} ({n})", IsChecked = Shown(k), Margin = new Thickness(0, 0, 10, 0), Name = "selkind_" + k };
+                cb.IsCheckedChanged += (_, _) => { _listKinds[kk] = cb.IsChecked == true; Dispatcher.UIThread.Post(ShowProperties); };
+                wrap.Children.Add(cb);
+            }
+            PropsBody.Children.Add(wrap);
+        }
+        var visible = sel.Items.Where(r => Shown(r.Kind)).ToList();
+        foreach (var r in visible.Take(SelectionListMax))
+        {
+            var rr = r;
+            var x = new Button { Content = "×", Classes = { "tool" }, Padding = new Thickness(6, 0), MinHeight = 20, VerticalAlignment = VerticalAlignment.Center };
+            ToolTip.SetTip(x, L("Снять выбор"));
+            x.Click += (_, _) => { View.HighlightSelected(0); View.Selection.Deselect(rr.Id); };
+            var text = new TextBlock { Text = Selection.KindName(r) + ": " + Selection.Label(r), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+            ToolTip.SetTip(text, text.Text);
+            var dp = new DockPanel();
+            DockPanel.SetDock(x, Dock.Right);
+            dp.Children.Add(x); dp.Children.Add(text);
+            var b = new Border { Child = dp, CornerRadius = new CornerRadius(3), Padding = new Thickness(4, 1), Background = Brushes.Transparent };
+            b.PointerEntered += (_, _) => { b.Background = new SolidColorBrush(Color.FromArgb(0x26, 0x80, 0x80, 0x80)); View.HighlightSelected(rr.Id); };
+            b.PointerExited += (_, _) => { b.Background = Brushes.Transparent; View.HighlightSelected(0); };
+            SelectionRows[r.Id] = b;
+            PropsBody.Children.Add(b);
+            if (r.Target is Feature f && sel.Count == 1)
             {
                 Row("Описание", f.Summary);
                 if (f.Error != null) Row("Ошибка", f.Error);
             }
         }
+        if (visible.Count > SelectionListMax) PropsBody.Children.Add(new TextBlock { Text = L("… и ещё {0}", visible.Count - SelectionListMax), Classes = { "dim" } });
     }
+
+    public static readonly bool CmdRefreshOff = Environment.GetEnvironmentVariable("P3D_CMDREFRESH") == "0";
+    public static readonly bool PartPanelOff = Environment.GetEnvironmentVariable("P3D_PARTPANEL") == "0";
+
+    /// <summary>
+    /// k120 (замечание 15:06, пп. 1–5): ПАНЕЛЬ СВОЙСТВ ДЕТАЛИ — всё, что прежде было узлами дерева («Параметры», «Материал»,
+    /// «Тело») и строками на двух языках: правятся имя, номер детали, материал, система единиц (готовые и свои), допуски;
+    /// показываются масса, объём, площадь, габариты — в единицах системы детали. Всё пишется в документ.
+    /// </summary>
+    private void ShowPartProperties(Part part)
+    {
+        PropsTitle.Text = L("ДЕТАЛЬ");
+        var sys = part.Units;
+        EditRow("Имя", part.Name, v =>
+        {
+            if (v.Length == 0) return;
+            part.Name = v; part.NotifyChanged(part);
+            RebuildTree(); OnStateChanged();
+        });
+        EditRow("Номер детали", part.Info.Code, v => part.Info.Code = v);
+        MaterialRow(part);
+        UnitSystemRow(part);
+        Row("Тел", part.Bodies.Count.ToString());
+        if (part.Bodies.Count > 0)
+        {
+            Row("Объём", DisplayUnits.Format(part.Volume, Core.Dimension.Volume, sys, "0.###"));
+            // 21.10: площадь — по запросу; не посчитана — считается в фоне, панель обновляется (поток окна не ждёт квадратуру)
+            if (part.AreaPending)
+            {
+                Row("Площадь", "…");
+                var pp = part;
+                _ = Task.Run(() => { _ = pp.Area; }).ContinueWith(_ => Dispatcher.UIThread.Post(() => { if (_propsOn && CurrentOperation == null) ShowProperties(); }));
+            }
+            else Row("Площадь", DisplayUnits.Format(part.Area, Core.Dimension.Area, sys, "0.###"));
+            Row("Масса", DisplayUnits.Format(part.Mass, Core.Dimension.Mass, sys, "0.####"));
+            if (!part.Bounds.IsEmpty)
+            {
+                var sz = part.Bounds.Size; var lu = sys.UnitFor(Core.Dimension.Length);
+                string N(double v) => (v / lu.Factor).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                Row("Габариты", $"{N(sz.X)} × {N(sz.Y)} × {N(sz.Z)} " + DisplayUnits.Symbol(lu.Symbol));
+            }
+        }
+        Row("Операций", part.Children.OfType<Feature>().Count().ToString());
+        if (!PartPropsOff)
+        {
+            ChoiceRow("Допуски", DocumentInfo.ToleranceChoices, part.Info.Tolerances, v => part.Info.Tolerances = v);
+            Row("Сборка", part.Parent is Assembly pa ? pa.Name : "—");
+            var deps = Parametric3D.Model.Params.ModelRefs.DependenciesOf(part);
+            PropsBody.Children.Add(new TextBlock { Text = L("Зависит от") + (deps.Count == 0 ? ": —" : ":"), Classes = { "dim" }, Margin = new Thickness(0, 6, 0, 2) });
+            foreach (var (item, where) in deps)
+            {
+                var link = new TextBlock { Text = (item is Assembly ? L("Сборка") : L("Деталь")) + " «" + item.Name + "»", Margin = new Thickness(12, 1, 0, 1), TextDecorations = TextDecorations.Underline, Cursor = new Cursor(StandardCursorType.Hand) };
+                link.Bind(TextBlock.ForegroundProperty, this.GetResourceObservable("P3.Accent"));
+                ToolTip.SetTip(link, L("Ссылка в") + " " + where);
+                var it = item;
+                link.PointerEntered += (_, _) => View.HighlightFromTree(it);
+                link.PointerExited += (_, _) => View.HighlightFromTree(null);
+                PropsBody.Children.Add(link);
+            }
+            PartDepsShown = deps.Count;
+        }
+    }
+
+    /// <summary>Готовые системы единиц и свои системы пользователя (настройки приложения).</summary>
+    public static List<Core.UnitSystem> UnitSystemLibrary()
+    {
+        var list = Core.UnitSystem.Standard.ToList();
+        foreach (var d in UserPrefs.Current.UnitSystems)
+            try { var u = Core.UnitSystem.FromDictionary(d); if (!list.Any(x => x.Name == u.Name && x.SameUnits(u))) list.Add(u); } catch { }
+        return list;
+    }
+
+    public static string UnitSystemText(Core.UnitSystem u) => (u.Name.Length > 0 ? L(u.Name) + " (" : "(") + string.Join(", ", new[] { u.Length, u.Mass, u.Time }.Select(DisplayUnits.Symbol)) + ")";
+
+    /// <summary>k120 (п. 5): «Система единиц» — список систем и «Создать систему…» (свои единицы длины, массы, времени, угла).</summary>
+    private void UnitSystemRow(Part part)
+    {
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("110,*,Auto"), Margin = new Thickness(0, 1) };
+        g.Children.Add(new TextBlock { Text = L("Система единиц"), Classes = { "dim" }, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap });
+        var lib = UnitSystemLibrary();
+        int at = lib.FindIndex(x => x.SameUnits(part.Units) && (part.Units.Name.Length == 0 || x.Name == part.Units.Name));
+        if (at < 0) { lib.Add(part.Units.Clone()); at = lib.Count - 1; }
+        var cb = new ComboBox { ItemsSource = lib.Select(UnitSystemText).ToList(), SelectedIndex = at, HorizontalAlignment = HorizontalAlignment.Stretch, Name = "prop_units" };
+        cb.SelectionChanged += (_, _) => { if (cb.SelectedIndex >= 0 && cb.SelectedIndex != at) SetPartUnits(part, lib[cb.SelectedIndex]); };
+        var add = new Button { Content = "+", Classes = { "tool" }, Padding = new Thickness(6, 0), Margin = new Thickness(4, 0, 0, 0), Name = "prop_units_new" };
+        ToolTip.SetTip(add, L("Создать систему единиц…"));
+        add.Click += async (_, _) => { if (await Dialogs.NewUnitSystem(this) is { } u) { AddUnitSystem(u); SetPartUnits(part, u); } };
+        Grid.SetColumn(cb, 1); Grid.SetColumn(add, 2);
+        g.Children.Add(cb); g.Children.Add(add);
+        PropsBody.Children.Add(g);
+    }
+
+    /// <summary>Своя система — в настройки приложения (список систем); имя уже есть — заменяется.</summary>
+    public static void AddUnitSystem(Core.UnitSystem u)
+    {
+        var p = UserPrefs.Current;
+        p.UnitSystems.RemoveAll(d => d.TryGetValue("name", out var n) && n == u.Name);
+        p.UnitSystems.Add(u.ToDictionary());
+        p.Save();
+    }
+
+    public void SetPartUnits(Part part, Core.UnitSystem u)
+    {
+        part.Units = u.Clone();
+        part.LocalParameters.Units = part.Units;
+        if (ReferenceEquals(part, Session.Part)) DisplayUnits.From(part.Units);
+        Session.MarkModified();
+        View.MarkDirty();
+        Dispatcher.UIThread.Post(ShowProperties);
+    }
+
+    /// <summary>Предел текучести и прочности: σт, σв по-русски; σy, σu по-английски.</summary>
+    static string SigY => Loc.En ? "σy" : "σт";
+    static string SigU => Loc.En ? "σu" : "σв";
 
     /// <summary>u10: материал детали — выбор из библиотеки (группы), свойства для массы и расчёта — подсказкой.</summary>
     private void MaterialRow(Part part)
@@ -2919,7 +3096,7 @@ public partial class MainWindow : Window
         var lib = Material.Library();
         var g = new Grid { ColumnDefinitions = new ColumnDefinitions("110,*") };
         g.Children.Add(new TextBlock { Text = L("Материал"), Classes = { "dim" }, VerticalAlignment = VerticalAlignment.Center });
-        var cb = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, MaxDropDownHeight = 420 };
+        var cb = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, MaxDropDownHeight = 420, Name = "prop_material" };
         var items = new List<object>();
         string? grp = null;
         int sel = -1;
@@ -2943,7 +3120,7 @@ public partial class MainWindow : Window
         if (part.Material is { } pm)
             ToolTip.SetTip(cb, $"{pm.Designation}\n" + L("Плотность") + $" {pm.DensityGPerCm3:0.###} " + L("г/см³") +
                                $"\nE {pm.YoungModulus / 1e9:0.#} GPa, ν {pm.PoissonRatio:0.##}" +
-                               (pm.YieldStrength > 0 ? $"\nσт {pm.YieldStrength / 1e6:0} MPa" : "") + (pm.UltimateStrength > 0 ? $", σв {pm.UltimateStrength / 1e6:0} MPa" : ""));
+                               (pm.YieldStrength > 0 ? $"\n{SigY} {pm.YieldStrength / 1e6:0} MPa" : "") + (pm.UltimateStrength > 0 ? $", {SigU} {pm.UltimateStrength / 1e6:0} MPa" : ""));
         Grid.SetColumn(cb, 1);
         g.Children.Add(cb);
         PropsBody.Children.Add(g);
@@ -2951,7 +3128,7 @@ public partial class MainWindow : Window
         {
             Row("Плотность", $"{mm.DensityGPerCm3:0.###} " + L("г/см³"));
             if (mm.YoungModulus > 0) Row("Модуль Юнга", $"{mm.YoungModulus / 1e9:0.#} " + L("ГПа") + $", ν {mm.PoissonRatio:0.##}");
-            if (mm.YieldStrength > 0 || mm.UltimateStrength > 0) Row("Прочность", (mm.YieldStrength > 0 ? $"σт {mm.YieldStrength / 1e6:0} " : "") + (mm.UltimateStrength > 0 ? $"σв {mm.UltimateStrength / 1e6:0} " : "") + L("МПа"));
+            if (mm.YieldStrength > 0 || mm.UltimateStrength > 0) Row("Прочность", (mm.YieldStrength > 0 ? $"{SigY} {mm.YieldStrength / 1e6:0} " : "") + (mm.UltimateStrength > 0 ? $"{SigU} {mm.UltimateStrength / 1e6:0} " : "") + L("МПа"));
         }
     }
 

@@ -46,6 +46,21 @@ public readonly record struct Quantity(double Value, Dimension Dim, bool Bare = 
 public sealed class UnitSystem
 {
     public string Length = "mm", Mass = "kg", Time = "s", Angle = "deg", Temperature = "K";
+    /// <summary>k120: имя системы (своя система пользователя: «in/kg/s» и т. п.); пусто — по единицам.</summary>
+    public string Name = "";
+    /// <summary>Краткое обозначение: «mm, kg, s».</summary>
+    public string Signature => $"{Length}, {Mass}, {Time}";
+    public bool SameUnits(UnitSystem o) => Length == o.Length && Mass == o.Mass && Time == o.Time && Angle == o.Angle;
+
+    /// <summary>k120: готовые системы (имя, единицы).</summary>
+    public static IReadOnlyList<UnitSystem> Standard => new[]
+    {
+        new UnitSystem { Name = "MMKS" },
+        new UnitSystem { Name = "SI", Length = "m" },
+        new UnitSystem { Name = "CGS", Length = "cm", Mass = "g" },
+        new UnitSystem { Name = "IPS", Length = "in", Mass = "lb" },
+        new UnitSystem { Name = "FPS", Length = "ft", Mass = "lb" },
+    };
     /// <summary>Единицы производных размерностей (площадь, объём, плотность, сила, давление…); нет — из базовых.</summary>
     public readonly Dictionary<Dimension, string> Derived = new();
 
@@ -61,7 +76,7 @@ public sealed class UnitSystem
         }
     }
 
-    public UnitSystem Clone() { var c = new UnitSystem { Length = Length, Mass = Mass, Time = Time, Angle = Angle, Temperature = Temperature }; foreach (var kv in Derived) c.Derived[kv.Key] = kv.Value; return c; }
+    public UnitSystem Clone() { var c = new UnitSystem { Name = Name, Length = Length, Mass = Mass, Time = Time, Angle = Angle, Temperature = Temperature }; foreach (var kv in Derived) c.Derived[kv.Key] = kv.Value; return c; }
 
     /// <summary>Единица показа размерности: явная — из Derived или базовых, иначе составная из базовых (мм², кг/мм³…).</summary>
     public Unit UnitFor(Dimension d)
@@ -84,6 +99,7 @@ public sealed class UnitSystem
     public Dictionary<string, string> ToDictionary()
     {
         var r = new Dictionary<string, string> { ["length"] = Length, ["mass"] = Mass, ["time"] = Time, ["angle"] = Angle, ["temperature"] = Temperature };
+        if (Name.Length > 0) r["name"] = Name;
         foreach (var kv in Derived) r[Units.DimensionKey(kv.Key)] = kv.Value;
         return r;
     }
@@ -93,6 +109,7 @@ public sealed class UnitSystem
         var s = new UnitSystem(); if (d == null) return s;
         foreach (var (k, v) in d)
         {
+            if (k == "name") { s.Name = v; continue; }
             var u = Units.Parse(v);                                         // неизвестная единица — исключение с причиной
             switch (k)
             {

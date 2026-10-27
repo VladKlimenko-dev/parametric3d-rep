@@ -197,6 +197,12 @@ public static class Strings
         ["Плоскости"] = "Planes", ["Оси"] = "Axes", ["Начало координат"] = "Origin", ["Точки"] = "Points", ["Линии"] = "Lines",
         ["Вершины"] = "Vertices", ["Осевые линии"] = "Centerlines", ["Эскизы"] = "Sketches", ["Размеры"] = "Dimensions",
         ["Обозначения"] = "Annotations", ["Измерения"] = "Measurements",
+        // k120: панель детали, системы единиц, список выбора, замеры
+        ["Время"] = "Time", ["Номер детали"] = "Part number", ["Система единиц"] = "Unit system",
+        ["Новая система единиц"] = "New unit system", ["Создать"] = "Create", ["Создать систему единиц…"] = "Create new system…",
+        ["Замер"] = "Measurement", ["Замер: {0}"] = "Measurement: {0}", ["… и ещё {0}"] = "… and {0} more",
+        ["Фигуры"] = "Shapes", ["Дерево"] = "Tree", ["Прямая правка"] = "Direct edit",
+        ["сейчас ортогональ"] = "currently orthographic", ["сейчас перспектива"] = "currently perspective",
         ["Показывать: Плоскости"] = "Show: Planes", ["Показывать: Оси"] = "Show: Axes", ["Показывать: Начало координат"] = "Show: Origin",
         ["Показывать: Точки"] = "Show: Points", ["Показывать: Линии"] = "Show: Lines", ["Показывать: Вершины"] = "Show: Vertices",
         ["Показывать: Осевые линии"] = "Show: Centerlines", ["Показывать: Эскизы"] = "Show: Sketches", ["Показывать: Размеры"] = "Show: Dimensions",

@@ -206,6 +206,7 @@ public sealed partial class TreeNode : ObservableObject
         DatumPlaneFeature => "dat_plane_but.svg",
         DatumAxisFeature => "dat_axis_but.svg",
         DatumPointFeature => "dat_point_but.svg",
+        MeasureFeature => "dim_linear_but.svg",
         _ => "",
     };
 
@@ -225,6 +226,7 @@ public sealed partial class TreeNode : ObservableObject
         DatumCsys => "Система координат",
         DatumCurve => "Кривая",
         HelicalSweepFeature => "Винтовая протяжка",
+        MeasureFeature => "Замер",
         MoveCopyFeature => "Перенос и поворот",
         FaceEditFeature => "Правка граней",
         PointsPatternFeature => "Массив",
@@ -317,6 +319,8 @@ public sealed partial class TreeNode : ObservableObject
     private string? ComponentIcon;
     private (string File, string Glyph, string Tip)? StateFileOverride;
 
+    public static readonly bool TreeInfoOff = Environment.GetEnvironmentVariable("P3D_TREEINFO") == "0";
+
     private static TreeNode BuildItem(ModelItem item, Part? part)
     {
         var node = new TreeNode(item, part);
@@ -324,10 +328,15 @@ public sealed partial class TreeNode : ObservableObject
         // u13: у детали — узлы параметров, материала, исполнений и тел (двойной щелчок — правка)
         if (item is Part pp)
         {
-            node.Children.Add(new TreeNode(new InfoItem("params", Loc.L("Параметры"), pp), pp));
-            node.Children.Add(new TreeNode(new InfoItem("material", Loc.L("Материал: {0}", pp.Material?.Name ?? "—"), pp), pp));
+            // k120 (замечание 15:06, пп. 1, 6, 7): узлов «Параметры», «Материал» и «Тело N» в дереве больше нет — всё это
+            // свойства детали: щелчок по детали показывает их в панели свойств (там же и правка). P3D_TREEINFO=0 — прежние узлы.
+            if (TreeInfoOff)
+            {
+                node.Children.Add(new TreeNode(new InfoItem("params", Loc.L("Параметры"), pp), pp));
+                node.Children.Add(new TreeNode(new InfoItem("material", Loc.L("Материал: {0}", pp.Material?.Name ?? "—"), pp), pp));
+            }
             if (pp.Configurations.Count > 0) node.Children.Add(new TreeNode(new InfoItem("configs", Loc.L("Исполнения ({0}){1}", pp.Configurations.Count, pp.ActiveConfiguration.Length > 0 ? ": " + pp.ActiveConfiguration : ""), pp), pp));
-            for (int bi = 0; bi < pp.Bodies.Count; bi++) node.Children.Add(new TreeNode(new InfoItem("body", bi < pp.BodyNameList.Count ? Loc.L(pp.BodyNameList[bi]) : Loc.L("Тело {0}", bi + 1), pp) { Index = bi }, pp));
+            if (TreeInfoOff) for (int bi = 0; bi < pp.Bodies.Count; bi++) node.Children.Add(new TreeNode(new InfoItem("body", bi < pp.BodyNameList.Count ? Loc.L(pp.BodyNameList[bi]) : Loc.L("Тело {0}", bi + 1), pp) { Index = bi }, pp));
             // u13h: квилты (поверхности без объёма)
             for (int qi = 0; qi < pp.Quilts.Count; qi++) node.Children.Add(new TreeNode(new InfoItem("quilt", Loc.L("Квилт «{0}»", pp.Quilts[qi].Name), pp) { Index = qi }, pp));
         }

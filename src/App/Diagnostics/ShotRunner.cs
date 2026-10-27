@@ -131,6 +131,15 @@ public static class ShotRunner
         {
             mp.Material = mm; w.ViewPort.MarkDirty(); Console.WriteLine("material " + mm.Name); return;
         }
+        if (id == "zfaces" && w.Session.Part is { } zp)
+        {
+            // разбор (k120): выбрать первые две плоские грани с нормалью ±Z (замер)
+            var pl = zp.Bodies.SelectMany(b => b.Faces).Select(f => (F: f, S: Kernel.Topology.GeometryAudit.AuthoritativeSurface(f) as Kernel.Surfaces.PlaneSurface)).Where(x => x.S != null).ToList();
+            var zf = new List<Kernel.Topology.TFace>();
+            foreach (var a in pl) { var b = pl.FirstOrDefault(x => OpenTK.Mathematics.Vector3d.Dot(x.S!.F.W, a.S!.F.W) < -0.999); if (b.F != null) { zf.Add(a.F); zf.Add(b.F); break; } }
+            w.ViewPort.Selection.SelectMany(zf.Select(f => new Parametric3D.Core.PickRef(f.Id, Parametric3D.Core.PickKind.Face, zp, null)), additive: false);
+            Console.WriteLine($"zfaces {zf.Count}"); return;
+        }
         if (id.StartsWith("select:"))
         {
             // выбрать элемент модели по имени (как щелчок в дереве)
