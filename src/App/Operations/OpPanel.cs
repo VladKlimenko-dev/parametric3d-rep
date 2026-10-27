@@ -156,8 +156,10 @@ public sealed class OpPanel
     public void Number(string label, Func<ValueRef> get, Action<ValueRef> set, string unit = "мм", Func<bool>? visible = null, Action? focused = null)
     {
         // u13: длины — в единицах детали (мм или дюймы); формулы — как записаны
-        bool inch = unit == "мм" && Commands.DisplayUnits.Inch;
-        if (inch) { var g0 = get; var s0 = set; get = () => { var v = g0(); return v.Formula != null ? v : new ValueRef(v.Value / Commands.DisplayUnits.InchMm); }; set = v => s0(v.Formula != null ? v : new ValueRef(v.Value * Commands.DisplayUnits.InchMm)); unit = "дюйм"; }
+        // k123: поле длины — в единице системы детали (см, м, дюйм, фут…), не только в дюймах
+        double uf = Commands.DisplayUnits.SketchUnitsOff ? (Commands.DisplayUnits.Inch ? Commands.DisplayUnits.InchMm : 1) : Commands.DisplayUnits.Factor;
+        bool scaled = unit == "мм" && Math.Abs(uf - 1) > 1e-12;
+        if (scaled) { var g0 = get; var s0 = set; get = () => { var v = g0(); return v.Formula != null ? v : new ValueRef(v.Value / uf); }; set = v => s0(v.Formula != null ? v : new ValueRef(v.Value * uf)); unit = Commands.DisplayUnits.LengthUnit; }
         var tb = new TextBox { Text = Show(get()), MinWidth = 60 };
         var unitText = new TextBlock { Text = L(unit), Classes = { "dim" }, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) };
         var dock = new DockPanel();

@@ -23,6 +23,8 @@ static partial class Program
         ["Kernel.Ops.FilletOp.RebuildRoundOff"] = "22.10: переключатель разбора (P3D_REBUILDROUND), проверка UI-ROUND-RIM-BALL проходит оба пути",
         ["Kernel.Exact.ExactBsp.LazyCapsOff"] = "21.10: переключатель разбора (P3D_LAZYCAPS), проверка UI-POLY-FAST сравнивает оба пути",
         ["Core.Settings.Current"] = "настройки интерфейса (цвета, шрифты), не геометрия",
+        ["Core.Settings.DisplayUnitMm"] = "k123: единица длины показа (подписи размеров эскиза) — интерфейс, не геометрия",
+        ["Core.Settings.DisplayUnitSuffix"] = "k123: обозначение единицы длины показа — интерфейс, не геометрия",
         ["Kernel.Topology.AnalyticVolume.OriginShift"] = "KRN-02: переключатель разбора (P3D_VOLORIGIN), только для замеров",
         ["Core.AppLog.Path"] = "журнал приложения", ["Core.AppLog.MaxBytes"] = "журнал приложения",
         ["Model.DocumentStorage.MaxBytes"] = "предел размера файла документа при загрузке",

@@ -100,6 +100,55 @@ public sealed class Sketch : ModelItem
 
     public static readonly bool FlipKeepOff = Environment.GetEnvironmentVariable("P3D_SKFLIPKEEP") == "0";
 
+    /// <summary>
+    /// k123 (замечание 27.10, 21:55, пп. 2, 5): ПОВОРОТ ВИДА ЭСКИЗА НА 90° (стрелки у куба вида). «Горизонтально» и
+    /// «вертикально» — по осям эскиза, а вид эскиза смотрит вдоль них; после поворота вида на четверть оборота
+    /// горизонтальные на экране отрезки значились «вертикальными», и «Вертикально» к отрезку, вертикальному на экране,
+    /// давало противоречие. Теперь вместе с видом поворачиваются оси эскиза: геометрия в мире на месте (плоские
+    /// координаты — на обратный угол), «горизонтально» ↔ «вертикально», оси эскиза в ссылках ↔, координатные размеры
+    /// X ↔ Y (со знаком), подписи и значки — за осями. ccw — изображение против часовой (верх вида — прежняя ось U).
+    /// Мутация P3D_SKROLL=0 — поворачивается только вид.
+    /// </summary>
+    public void RotateQuarter(bool ccw)
+    {
+        // новые оси в прежних: ccw — U' = −V, V' = U; cw — U' = V, V' = −U; координаты — поворот на β = ±90°
+        var u = Plane.U; var v = Plane.V;
+        var nu = ccw ? -v : v; var nv = ccw ? u : -u;
+        Vector2d R(Vector2d q) => ccw ? new Vector2d(-q.Y, q.X) : new Vector2d(q.Y, -q.X);
+        double beta = ccw ? Math.PI / 2 : -Math.PI / 2;
+        Plane = new Frame3(Plane.Origin, nu, nv);
+        var bu = BaseFrame.U; var bv = BaseFrame.V;
+        UpVector = new Vector2d(Vector3d.Dot(nv, bu), Vector3d.Dot(nv, bv));
+        OriginOffset = R(OriginOffset);
+        var builtin = new HashSet<SkEntity>(Builtins, ReferenceEqualityComparer.Instance);
+        var done = new HashSet<SkPoint>(ReferenceEqualityComparer.Instance);
+        foreach (var p in AllPoints())
+        {
+            if (builtin.Contains(p) || p.Owner is { } o && builtin.Contains(o) || !done.Add(p)) continue;
+            var q = R(new Vector2d(p.X, p.Y)); p.X = q.X; p.Y = q.Y;
+        }
+        foreach (var e in Entities) if (e is SkEllipse el) el.Rotation += beta;
+        SkEntity Map(SkEntity x) => ReferenceEquals(x, AxisH) ? AxisV : ReferenceEquals(x, AxisV) ? AxisH : x;
+        foreach (var c in Constraints)
+        {
+            c.Type = c.Type switch { ConstraintType.Horizontal => ConstraintType.Vertical, ConstraintType.Vertical => ConstraintType.Horizontal, var t => t };
+            for (int i = 0; i < c.Items.Count; i++) c.Items[i] = Map(c.Items[i]);
+            c.IconPos = R(c.IconPos);
+        }
+        foreach (var d in Dimensions)
+        {
+            // ccw: x' = −y, y' = x; cw: x' = y, y' = −x
+            if (d.Type == DimensionType.CoordX) { d.Type = DimensionType.CoordY; if (!ccw) d.Value = -d.Value; }
+            else if (d.Type == DimensionType.CoordY) { d.Type = DimensionType.CoordX; if (ccw) d.Value = -d.Value; }
+            for (int i = 0; i < d.Items.Count; i++) d.Items[i] = Map(d.Items[i]);
+            d.TextOffset = R(d.TextOffset);
+            d.TextCenter = R(d.TextCenter);
+        }
+        BumpStructure();
+        NotifyChanged(this);
+    }
+    public static readonly bool RollOff = Environment.GetEnvironmentVariable("P3D_SKROLL") == "0";
+
     /// <summary>Плоские координаты x ↔ y (зеркало по диагонали): точки, обход дуг, эллипсы, «горизонтально/вертикально»,
     /// координатные размеры, ссылки на оси эскиза.</summary>
     private void SwapAxes()

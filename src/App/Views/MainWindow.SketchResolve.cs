@@ -62,8 +62,9 @@ public partial class MainWindow
     {
         sk ??= View.ActiveSketch;
         if (sk == null) return;
-        foreach (var c in sk.Constraints) c.Flagged = false;
-        foreach (var d in sk.Dimensions) d.Flagged = false;
+        foreach (var c in sk.Constraints) { c.Flagged = false; c.Highlight = false; }
+        foreach (var d in sk.Dimensions) { d.Flagged = false; d.Highlight = false; }
+        ResolveHovered = null;
         View.MarkDirty();
     }
 
@@ -193,7 +194,7 @@ public partial class MainWindow
         if (_pendingEdit is { } pe)
             PropsBody.Children.Add(new TextBlock
             {
-                Text = L("Отвергнутая правка: {0}. Удалите или ослабьте одного из участников (красные) — правка будет применена.", pe.What),
+                Text = L("Отвергнутая правка: {0}. Удалите или ослабьте одного из участников в таблице ниже (на эскизе — красным; наведите на строку — подсветится) — правка будет применена.", pe.What),
                 TextWrapping = Avalonia.Media.TextWrapping.Wrap, Classes = { "dim" }, FontSize = 12,
             });
 
@@ -223,20 +224,78 @@ public partial class MainWindow
 
         if (info.Constraints.Count + info.Dimensions.Count > 0)
         {
-            Header(info.Failure == SketchEditFailure.Redundant && _pendingEdit == null ? L("Избыточные (любая из них лишняя):") : L("Участники противоречия:"));
-            foreach (var c in info.Constraints.ToList())
+            Header(info.Failure == SketchEditFailure.Redundant && _pendingEdit == null ? L("Избыточные (любая из них лишняя):")
+                   : info.Related ? L("Связи и размеры у элементов правки (точный участник не выделяется — удалите или ослабьте один):")
+                   : L("Участники противоречия:"));
+            if (ResolveTableOff)
             {
-                var cc = c;
-                Row($"{ConstraintName(c.Type)} #{c.Id}", c,
-                    Small("Удалить", "Удалить связь", () => { sk.Constraints.Remove(cc); AfterResolveAction(sk); }));
+                foreach (var c in info.Constraints.ToList())
+                {
+                    var cc = c;
+                    Row($"{ConstraintName(c.Type)} #{c.Id}", c,
+                        Small("Удалить", "Удалить связь", () => { sk.Constraints.Remove(cc); AfterResolveAction(sk); }));
+                }
+                foreach (var d in info.Dimensions.ToList())
+                {
+                    var dd = d;
+                    Row(DimensionName(d), d,
+                        Small("Справ.", "Сделать справочным (размер измеряет, а не задаёт)", () => { dd.Reference = true; dd.Locked = false; dd.IsDefault = false; dd.UserLocked = false; AfterResolveAction(sk); }),
+                        Small("Слабый", "Сделать слабым", () => { SketchEditing.MakeWeak(sk, new[] { dd }, solver); AfterResolveAction(sk); }),
+                        Small("×", "Удалить размер", () => { SketchEditing.DeleteDimensions(sk, new[] { dd }, solver); AfterResolveAction(sk); }));
+                }
             }
-            foreach (var d in info.Dimensions.ToList())
+            else
             {
-                var dd = d;
-                Row(DimensionName(d), d,
-                    Small("Справ.", "Сделать справочным (размер измеряет, а не задаёт)", () => { dd.Reference = true; dd.Locked = false; dd.IsDefault = false; dd.UserLocked = false; AfterResolveAction(sk); }),
-                    Small("Слабый", "Сделать слабым", () => { SketchEditing.MakeWeak(sk, new[] { dd }, solver); AfterResolveAction(sk); }),
-                    Small("×", "Удалить размер", () => { SketchEditing.DeleteDimensions(sk, new[] { dd }, solver); AfterResolveAction(sk); }));
+                // k123 (замечание 27.10, 21:55, п. 5): ТАБЛИЦА КАК В CREO — вид, элементы, значение, действия; наведение на
+                // строку подсвечивает связь или размер и их элементы на эскизе, «Удалить» — в каждой строке
+                var table = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), Margin = new Thickness(0, 4, 0, 0) };
+                void Cell(Control c, int row, int col) { Grid.SetRow(c, row); Grid.SetColumn(c, col); table.Children.Add(c); }
+                table.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+                foreach (var (h, i) in new[] { (L("Вид"), 0), (L("Элементы"), 1), (L("Значение"), 2) })
+                    Cell(new TextBlock { Text = h, Classes = { "dim" }, FontSize = 11, Margin = new Thickness(4, 0, 8, 2) }, 0, i);
+                var all = info.Constraints.Cast<object>().Concat(info.Dimensions).ToList();
+                ResolveRows.Clear();
+                for (int i = 0; i < all.Count; i++)
+                {
+                    int r = i + 1;
+                    table.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+                    var item = all[i];
+                    string kind = item is SkConstraint c0 ? ConstraintName(c0.Type) : DimensionName((SkDimension)item).Split(' ')[0];
+                    string ents = string.Join(", ", (item is SkConstraint c1 ? c1.Items : ((SkDimension)item).Items).Select(e => L(Parametric3D.App.Viewport.Selection.KindNameRu(new PickRef(e.Id, e is SkPoint ? PickKind.SketchPoint : PickKind.SketchCurve, sk, e))) + (e.Builtin ? "" : " #" + e.Id)));
+                    string val = item is SkDimension d1 ? d1.DisplayText() + " (" + L(d1.Reference ? "справочный" : d1.UserLocked ? "с замком" : d1.IsDefault || !d1.Locked ? "слабый" : "сильный") + ")" : "";
+                    var bg = new Border { Background = Avalonia.Media.Brushes.Transparent, CornerRadius = new CornerRadius(3), Name = "resolve_row_" + i };
+                    Grid.SetRow(bg, r); Grid.SetColumnSpan(bg, 4); table.Children.Add(bg);
+                    var t1 = new TextBlock { Text = kind, Margin = new Thickness(4, 2, 8, 2), VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
+                    var t2 = new TextBlock { Text = ents, Margin = new Thickness(0, 2, 8, 2), TextWrapping = Avalonia.Media.TextWrapping.Wrap, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
+                    var t3 = new TextBlock { Text = val, Margin = new Thickness(0, 2, 8, 2), FontSize = 12, VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
+                    Cell(t1, r, 0); Cell(t2, r, 1); Cell(t3, r, 2);
+                    var acts = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+                    var obj = item;
+                    if (item is SkConstraint cc)
+                    {
+                        var del = Small("Удалить", "Удалить связь", () => { HoverResolveItem(sk, null); sk.Constraints.Remove(cc); AfterResolveAction(sk); });
+                        del.Name = "resolve_del_" + i; acts.Children.Add(del);
+                    }
+                    else if (item is SkDimension dd)
+                    {
+                        acts.Children.Add(Small("Справ.", "Сделать справочным (размер измеряет, а не задаёт)", () => { HoverResolveItem(sk, null); dd.Reference = true; dd.Locked = false; dd.IsDefault = false; dd.UserLocked = false; AfterResolveAction(sk); }));
+                        acts.Children.Add(Small("Слабый", "Сделать слабым", () => { HoverResolveItem(sk, null); SketchEditing.MakeWeak(sk, new[] { dd }, solver); AfterResolveAction(sk); }));
+                        var del = Small("Удалить", "Удалить размер", () => { HoverResolveItem(sk, null); SketchEditing.DeleteDimensions(sk, new[] { dd }, solver); AfterResolveAction(sk); });
+                        del.Name = "resolve_del_" + i; acts.Children.Add(del);
+                    }
+                    Cell(acts, r, 3);
+                    void Enter() { bg.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromArgb(0x30, 0xE0, 0x50, 0x40)); HoverResolveItem(sk, obj); }
+                    void Leave() { bg.Background = Avalonia.Media.Brushes.Transparent; HoverResolveItem(sk, null); }
+                    foreach (var ctl in new Control[] { bg, acts })
+                    {
+                        ctl.PointerEntered += (_, _) => Enter();
+                        ctl.PointerExited += (_, _) => Leave();
+                    }
+                    bg.PointerPressed += (_, _) => SelectSketchItem(sk, obj);
+                    ResolveRows.Add((bg, obj, Enter));
+                    rows++;
+                }
+                PropsBody.Children.Add(table);
             }
         }
         if (info.Degenerate.Count > 0 || sk.DegenerateEntities.Count > 0)
@@ -274,6 +333,30 @@ public partial class MainWindow
         PropsButtons.Children.Add(close);
         RefreshToolStates();
         View.MarkDirty();
+    }
+
+    public static readonly bool ResolveTableOff = Environment.GetEnvironmentVariable("P3D_RESOLVETABLE") == "0";
+    /// <summary>Строки таблицы «Разрешить эскиз»: строка, связь или размер, наведение (проверки).</summary>
+    public List<(Border Row, object Item, Action Hover)> ResolveRows { get; } = new();
+    /// <summary>Что подсвечено наведением на строку таблицы (проверки).</summary>
+    public object? ResolveHovered { get; private set; }
+
+    /// <summary>Подсветить связь или размер и их элементы на эскизе (наведение на строку таблицы); null — снять.</summary>
+    private void HoverResolveItem(Sketch sk, object? item)
+    {
+        ResolveHovered = item;
+        var sel = View.Selection;
+        PickRef r = item switch
+        {
+            SkConstraint c => c.Items.FirstOrDefault() is { } e0 ? new PickRef(e0.Id, e0 is SkPoint ? PickKind.SketchPoint : PickKind.SketchCurve, sk, e0) : new PickRef(c.Id, PickKind.SketchConstraint, sk, c),
+            SkDimension d => new PickRef(d.Id, PickKind.SketchDimension, sk, d),
+            _ => PickRef.Empty,
+        };
+        // связь и размер — подсвечены как участники (заметнее красного), элементы — наведением
+        foreach (var c in sk.Constraints) c.Highlight = ReferenceEquals(c, item);
+        foreach (var d in sk.Dimensions) d.Highlight = ReferenceEquals(d, item);
+        sel.SetHover(r);
+        View.MarkDirty(); View.InvalidateOverlay();
     }
 
     private void AfterResolveAction(Sketch sk)

@@ -198,6 +198,14 @@ public static class Strings
         ["Вершины"] = "Vertices", ["Осевые линии"] = "Centerlines", ["Эскизы"] = "Sketches", ["Размеры"] = "Dimensions",
         ["Обозначения"] = "Annotations", ["Измерения"] = "Measurements",
         ["Пересчёт с «{0}»: {1} из {2}"] = "Recomputing from “{0}”: {1} of {2}",
+        // k123: единицы детали, таблица «Разрешить эскиз»
+        ["«Не преобразовывать» — числа размеров остаются прежними в новых единицах: деталь меняет размер."] = "“Do not convert” — dimension numbers stay the same in the new units: the part changes size.",
+        ["«Преобразовать» — деталь остаётся прежней, размеры эскизов, операций и параметры показываются в новых единицах (формулы, которые только переводили единицы, снимаются)."] = "“Convert” — the part stays the same; sketch dimensions, feature values and parameters are shown in the new units (formulas that only converted units are removed).",
+        ["Единица длины детали: {0} → {1}."] = "Part length unit: {0} → {1}.", ["Единицы детали"] = "Part units",
+        ["Значение"] = "Value", ["Элементы"] = "Entities", ["Не преобразовывать"] = "Do not convert", ["Преобразовать"] = "Convert",
+        ["Отвергнутая правка: {0}. Удалите или ослабьте одного из участников в таблице ниже (на эскизе — красным; наведите на строку — подсветится) — правка будет применена."] = "Rejected change: {0}. Delete or weaken one of the participants in the table below (red in the sketch; hover a row to highlight it) — the change will then be applied.",
+        ["Размер, {0}"] = "Dimension, {0}",
+        ["Связи и размеры у элементов правки (точный участник не выделяется — удалите или ослабьте один):"] = "Constraints and dimensions at the edited entities (no single participant found — delete or weaken one):",
         // k121: ход загрузки и перестроения, настоящая группа
         ["Загрузка «{0}»…"] = "Loading “{0}”…", ["Обработка: {0} из {1}"] = "Processing: {0} of {1}", ["Обработка…"] = "Processing…",
         ["Отображение…"] = "Displaying…", ["Нельзя собрать группу: "] = "Cannot make the group: ",

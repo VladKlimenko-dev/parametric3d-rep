@@ -1074,6 +1074,7 @@ public partial class MainWindow : Window
             UpdateContextBar();
         };
         View.SceneRebuilt += HideGhostWhenBuilt;
+        View.SketchRolled += (sk, _) => { try { sk.Solve(Session.Document.Solver); } catch (Exception ex) { AppLog.Write("sketch roll solve", ex); } SketchCheckpoint(); Session.MarkModified(); ScheduleTree(); UpdateContextBar(); };
         View.SceneRebuilt += OnSceneShown;
         // k99: щелчок по контуру плоскости сечения — её настройки
         // k103: щелчок — выбор (ручки), двойной щелчок — настройки
@@ -1601,7 +1602,11 @@ public partial class MainWindow : Window
         bool angle = d.Type == DimensionType.AngleLineLine;
         // координатный размер хранит знак (сторона от нуля, нужна решателю); показывается и вводится расстояние — без знака
         bool signedCoord = d.Type is DimensionType.CoordX or DimensionType.CoordY;
-        var tb = new TextBox { Text = d.Formula ?? (signedCoord ? Math.Abs(d.Value) : d.Value).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), MinWidth = 160 };
+        // k123: угол в смежном секторе — вводится то, что видно (180 − угол); длины — в единицах детали
+        bool supp = angle && d.Supplement;
+        double lf = angle ? 1 : DisplayUnits.Factor;
+        string shownFormula = d.Formula is { } f0 && supp && f0.StartsWith("180 - (") && f0.EndsWith(")") ? f0[7..^1] : d.Formula ?? "";
+        var tb = new TextBox { Text = d.Formula != null ? shownFormula : ((signedCoord ? Math.Abs(d.Value) : supp ? 180 - d.Value : d.Value) / lf).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture), MinWidth = 160 };
         // k103: подсказка после точки и подсветка имён в кавычках
         var assist = new FormulaAssist(tb, () => (ModelItem?)Session.Part ?? Session.Document.Root, () => sk);
         DimEditAssist = assist;
@@ -1611,7 +1616,7 @@ public partial class MainWindow : Window
         var panel = new StackPanel { Spacing = 6, Margin = new Thickness(8),
             Children =
             {
-                new DockPanel { Children = { close, new TextBlock { Text = (angle ? L("Угол, °") : L("Размер, мм")) + "  " + d.Name, Classes = { "dim" }, FontSize = 12, VerticalAlignment = VerticalAlignment.Center } } },
+                new DockPanel { Children = { close, new TextBlock { Text = (angle ? L("Угол, °") : L("Размер, {0}", L(DisplayUnits.LengthUnit))) + "  " + d.Name, Classes = { "dim" }, FontSize = 12, VerticalAlignment = VerticalAlignment.Center } } },
                 assist.View,
                 new TextBlock { Text = L("Щёлкните другой размер — его имя встанет в формулу"), Classes = { "dim" }, FontSize = 11, TextWrapping = TextWrapping.Wrap, MaxWidth = 260 },
                 err, ok,
@@ -1634,7 +1639,9 @@ public partial class MainWindow : Window
         {
             string t = (tb.Text ?? "").Trim();
             double v; string? formula = null;
-            if (!double.TryParse(t.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v))
+            if (double.TryParse(t.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v))
+                v *= lf;                                                             // k123: число — в единицах детали
+            else
             {
                 var table = Session.Part != null ? Session.Document.ScopeFor(Session.Part) : Session.Document.Parameters;
                 if (!sk.TryEvaluate(t, table, out v, out var why)) { err.Text = L("Не число и не формула: {0}", t) + (why != null ? " — " + why : ""); err.IsVisible = true; return; }
@@ -1646,6 +1653,7 @@ public partial class MainWindow : Window
             bool positiveOnly = d.Type is DimensionType.Radius or DimensionType.Diameter or DimensionType.ArcLength or DimensionType.EllipseRadiusU or DimensionType.EllipseRadiusV;
             if (!angle && (v < 0 || v == 0 && positiveOnly)) { err.Text = L(positiveOnly ? "Размер должен быть больше нуля" : "Размер не может быть отрицательным"); err.IsVisible = true; return; }
             if (signedCoord && d.Value < 0) v = -v;                                  // сторона от нуля — прежняя
+            if (supp) { v = 180 - v; if (formula != null) formula = "180 - (" + formula + ")"; }
             string what = L("Размер {0} → {1}", d.DisplayText(), t);
             double vv = v; string? ff = formula;
             Func<SketchEditResult> run = () => SketchEditing.SetDimensionValue(sk, d, vv, ff, Session.Document.Solver);
@@ -3088,13 +3096,49 @@ public partial class MainWindow : Window
         p.Save();
     }
 
-    public void SetPartUnits(Part part, Core.UnitSystem u)
+    public void SetPartUnits(Part part, Core.UnitSystem u, bool? convert = null) => _ = SetPartUnitsAsync(part, u, convert);
+
+    /// <summary>Проверки: ответ на вопрос «преобразовать размеры?» без окна (true — да, false — нет, null — отмена).</summary>
+    public static Func<string, Task<bool?>>? UnitQuestion;
+    public static readonly bool UnitAskOff = Environment.GetEnvironmentVariable("P3D_UNITASK") == "0";
+    /// <summary>Разбор: итог последней смены единиц.</summary>
+    public Model.UnitConversion.Report? LastUnitReport { get; private set; }
+
+    /// <summary>
+    /// k123 (замечание 27.10, 21:55, п. 3): СМЕНА СИСТЕМЫ ЕДИНИЦ ДЕТАЛИ. Единица длины меняется — вопрос: преобразовать
+    /// размеры (деталь прежняя, числа — в новых единицах, формулы-переводы снимаются) или нет (числа прежние, деталь
+    /// меняет размер); «Отмена» — ничего. Один шаг отмены. P3D_UNITASK=0 — без вопроса и без преобразования (прежнее).
+    /// </summary>
+    public async Task SetPartUnitsAsync(Part part, Core.UnitSystem u, bool? convert = null)
     {
-        part.Units = u.Clone();
-        part.LocalParameters.Units = part.Units;
+        var old = part.Units.Clone();
+        bool lengthChanged = !UnitAskOff && old.Length != u.Length;
+        bool hasModel = part.Sketches.Any() || part.Features.Count > 0 || part.LocalParameters.Count > 0;
+        if (lengthChanged && hasModel && convert == null)
+        {
+            string q = L("Единица длины детали: {0} → {1}.", DisplayUnits.Symbol(old.Length), DisplayUnits.Symbol(u.Length)) + "\n\n" +
+                       L("«Преобразовать» — деталь остаётся прежней, размеры эскизов, операций и параметры показываются в новых единицах (формулы, которые только переводили единицы, снимаются).") + "\n" +
+                       L("«Не преобразовывать» — числа размеров остаются прежними в новых единицах: деталь меняет размер.");
+            bool? ans;
+            if (UnitQuestion != null) ans = await UnitQuestion(q);
+            else
+            {
+                string yes = L("Преобразовать"), no = L("Не преобразовывать"), cancel = L("Отмена");
+                var a = await Dialogs.Ask(this, L("Единицы детали"), q, yes, no, cancel);
+                ans = a == yes ? true : a == no ? false : null;
+            }
+            if (ans == null) { ShowProperties(); return; }
+            convert = ans;
+        }
+        Session.Edit(L("Единицы детали"), () =>
+        {
+            if (lengthChanged && hasModel) LastUnitReport = Model.UnitConversion.Apply(part, Session.Document.Parameters, old, u, convert ?? true);
+            part.Units = u.Clone();
+            part.LocalParameters.Units = part.Units;
+        });
         if (ReferenceEquals(part, Session.Part)) DisplayUnits.From(part.Units);
-        Session.MarkModified();
-        View.MarkDirty();
+        View.MarkDirty(); View.InvalidateOverlay();
+        RebuildTree();
         Dispatcher.UIThread.Post(ShowProperties);
     }
 

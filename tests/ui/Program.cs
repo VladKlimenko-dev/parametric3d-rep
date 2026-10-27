@@ -124,6 +124,39 @@ if (only == "probe-incr")
     return 0;
 }
 
+if (only == "probe-hv")
+{
+    // разбор (k123): «Вертикально/Горизонтально» к каждому отрезку эскиза файла — итог и участники противоречия
+    var s = DocumentSession.Open(args[1]); var w = Open(s); BuildNow(s);
+    var sk = s.Part!.Sketches.First();
+    w.EditSketch(sk); BuildNow(s);
+    var solver = s.Document.Solver;
+    Console.WriteLine($"sketch: status {sk.Solve(solver)}, dof {sk.DegreesOfFreedom}, free {sk.FreeDegrees}, conflicts c{sk.Constraints.Count(c => c.Conflict)} d{sk.Dimensions.Count(x => x.Conflict)}, driving dims {sk.Dimensions.Count(x => x.IsDriving)}");
+    foreach (var x in sk.Dimensions.Where(x => x.IsDriving)) Console.WriteLine($"  driving {x.Type} {x.Value:0.###} items {string.Join(",", x.Items.Select(i => i.Id))}");
+    if (args.Length > 3)
+    {
+        var l9 = sk.Entities.OfType<SkLine>().First(x => x.Id == uint.Parse(args[3]));
+        var c9 = new SkConstraint(Parametric3D.Model.Sketching.ConstraintType.Vertical, new SkEntity[] { l9 });
+        sk.Constraints.Add(c9); sk.BumpStructure();
+        var st9 = sk.Solve(solver);
+        Console.WriteLine($"direct: {st9}, conflicts c{sk.Constraints.Count(c => c.Conflict)} d{sk.Dimensions.Count(x => x.Conflict)}; flagged {string.Join(",", sk.Constraints.Where(c => c.Conflict).Select(c => c.Type + ":" + string.Join("/", c.Items.Select(i => i.Id))))}; line now ({(l9.B.P - l9.A.P).X:0.###},{(l9.B.P - l9.A.P).Y:0.###})");
+        return 0;
+    }
+    foreach (var l in sk.Entities.OfType<SkLine>().Take(int.Parse(args.Length > 2 ? args[2] : "99")).ToList())
+        foreach (var t in new[] { Parametric3D.Model.Sketching.ConstraintType.Vertical, Parametric3D.Model.Sketching.ConstraintType.Horizontal })
+        {
+            if (sk.Constraints.Any(c => c.Type == t && c.Items.Contains(l))) continue;
+            var geo = Parametric3D.Model.Sketching.SketchEditing.Geometry.Take(sk);
+            var d = l.B.P - l.A.P;
+            var added = new List<SkConstraint>();
+            var r = Parametric3D.Model.Sketching.SketchEditing.AddConstraints(sk, new[] { (t, new SkEntity[] { l }) }, solver, added);
+            Console.WriteLine($"line {l.Id} dir ({d.X:0.#},{d.Y:0.#}) {t}: ok {r.Ok} {r.Failure}, participants {string.Join(", ", r.Constraints.Select(c => c.Type.ToString()).Concat(r.Dimensions.Select(x => x.Type + " " + x.Value.ToString("0.##"))))}");
+            foreach (var c in added) sk.Constraints.Remove(c);
+            geo.Restore(); sk.BumpStructure(); sk.Solve(solver); geo.Restore();
+        }
+    return 0;
+}
+
 if (only == "probe-measure")
 {
     // разбор (k120): замер двух антипараллельных граней в файле args[1]; ключи, найдены ли после перестроения
@@ -2056,10 +2089,17 @@ Check("UI-U13D-DOC", () =>
     Console.WriteLine($"  configurations: high {vHigh:F3}, no hole {vNo:F3}, base {vBase:F3}");
     Require(Math.Abs(vHigh - (16000 - Math.PI * 80)) < 1e-6 && Math.Abs(vNo - 8000) < 1e-6 && Math.Abs(vBase - v1) < 1e-6 && !cut.Suppressed && part.ActiveConfiguration == "", "configurations");
     // единицы: дюймы в поле операции
-    DocCommands.ToggleUnits(w);
-    Require(DisplayUnits.Inch && part.Units.Length == "in", "inch on");
-    DocCommands.ToggleUnits(w);
-    Require(!DisplayUnits.Inch, "inch off");
+    // k123: переключатель — через смену системы единиц детали (вопрос «преобразовать?» — да)
+    MainWindow.UnitQuestion = _ => Task.FromResult<bool?>(true);
+    try
+    {
+        DocCommands.ToggleUnits(w); for (int i = 0; i < 5; i++) Dispatcher.UIThread.RunJobs();
+        part = s.Part!;
+        Require(DisplayUnits.Inch && part.Units.Length == "in", "inch on");
+        DocCommands.ToggleUnits(w); for (int i = 0; i < 5; i++) Dispatcher.UIThread.RunJobs();
+        Require(!DisplayUnits.Inch, "inch off");
+    }
+    finally { MainWindow.UnitQuestion = null; }
     var json = Parametric3D.Model.DocumentFile.Save(part, table);
     Require(json.Contains("Высокая"), "configurations saved");
     w.Close();
@@ -3290,6 +3330,146 @@ Check("UI-K116", () =>
     w.Close();
 });
 
+Check("UI-SKETCH-K123", () =>
+{
+    // k123 (замечание 27.10, 21:55): (1) выносные линии углового размера — от концов отрезка, не от пересечения прямых
+    // (P3D_ANGLEEXT=0); (4) сектор — где поставлена подпись, меньший угол (26.57°, а не 153.43° или 206.57°;
+    // P3D_ANGLESECTOR=0), ввод — видимого значения; (2) поворот вида на 90° в эскизе — оси эскиза за видом:
+    // «вертикально» ↔ «горизонтально», геометрия в мире на месте, отмена (P3D_SKROLL=0); (5) «Разрешить эскиз» —
+    // таблица участников, наведение подсвечивает, «Удалить» в строке — правка применяется (P3D_RESOLVETABLE=0).
+    var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "user_k123_x218795.p3d")); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    var vp = w.ViewPort; var solver = s.Document.Solver;
+    var sk = s.Part!.Sketches.First();
+    w.EditSketch(sk); BuildNow(s); Run();
+    // (1), (4): отрезок и горизонтальная ось эскиза, далеко от пересечения
+    var la = sk.AddEntity(new SkLine(new SkPoint(150, 20), new SkPoint(200, 45)));
+    var ad = sk.AddDimension(DimensionType.AngleLineLine, 0, la, sk.AxisH);
+    ad.Value = DimensionMeasure.Value(ad);                  // угол между прямыми (лучи к дальним концам) — 153.43°
+    ad.UserPlaced = true;
+    var cpt = new Vector2d(110, 0);
+    ad.TextOffset = new Vector2d(20, 4);                  // между отрезком и осью справа: острый угол, дуга ближе начала отрезка
+    SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+    string label = SketchDimensions.Label(ad);
+    var ext = SketchDimensions.LastAngleExtensions.ToList();
+    Console.WriteLine($"  angle to the axis: value {ad.Value:0.##}, label {label}, supplement {ad.Supplement}; extensions {string.Join("; ", ext.Select(e => $"({e.A.X:0.#},{e.A.Y:0.#})-({e.B.X:0.#},{e.B.Y:0.#})"))}");
+    Require(label.StartsWith("26.5") && !label.StartsWith("153") && !label.StartsWith("206"), "the angle to the axis is not the smaller one: " + label);
+    Require(ext.Count == 1 && (ext[0].A - la.A.P).Length < 1e-6, "the extension line does not start at the segment end");
+    // ввод видимого значения: 30° → угол между прямыми 150° (показано 30°)
+    w.EditDimensionValue(ad); Run();
+    Require(w.DimEditBox != null && w.DimEditBox.Text!.StartsWith("26.5"), "the angle editor shows " + w.DimEditBox?.Text);
+    w.DimEditBox!.Text = "30"; w.DimEditBox.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter }); Run();
+    SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+    var dirA = (la.B.P - la.A.P).Normalized();
+    Console.WriteLine($"  after 30°: value {ad.Value:0.##}, label {SketchDimensions.Label(ad)}, line angle {Math.Atan2(Math.Abs(dirA.Y), Math.Abs(dirA.X)) * 180 / Math.PI:0.##}°");
+    Require(SketchDimensions.Label(ad).StartsWith("30") && Math.Abs(Math.Atan2(Math.Abs(dirA.Y), Math.Abs(dirA.X)) * 180 / Math.PI - 30) < 1e-6, "the entered angle is not the shown one");
+    SketchEditing.DeleteDimensions(sk, new[] { ad }, solver); sk.Entities.Remove(la); w.AfterSketchEdit(sk);
+    // (2) поворот вида на 90°
+    // (номера элементов при чтении файла назначаются заново — элементы по связям)
+    var vline = (SkLine)sk.Constraints.First(c => c.Type == ConstraintType.Vertical).Items[0];
+    var hcons = sk.Constraints.Where(c => c.Type == ConstraintType.Horizontal && c.Items[0] is SkLine).ToList();
+    var hline = (SkLine)hcons[0].Items[0];
+    uint vId = vline.Id;
+    Require(sk.Constraints.Any(c => c.Type == ConstraintType.Vertical && c.Items.Contains(vline)), "fixture: vertical line");
+    var world0 = sk.AllPoints().Where(p => !p.Builtin).Select(p => sk.Plane.ToWorld(p.P)).ToList();
+    var plane0 = sk.Plane;
+    int depth0 = w.SketchUndoDepth;
+    Require(vp.RollSketch(ccw: true), "the view roll did not rotate the sketch");
+    Console.WriteLine($"  undo depth {depth0} -> {w.SketchUndoDepth}");
+    Run(); sk.Solve(solver);
+    var world1 = sk.AllPoints().Where(p => !p.Builtin).Select(p => sk.Plane.ToWorld(p.P)).ToList();
+    double moved = world0.Zip(world1).Max(z => (z.First - z.Second).Length);
+    bool vNowH = sk.Constraints.Any(c => c.Type == ConstraintType.Horizontal && c.Items.Contains(vline));
+    bool hNowV = sk.Constraints.Any(c => c.Type == ConstraintType.Vertical && c.Items.Contains(hline));
+    var camUp = vp.Camera.Up; var pv = sk.Plane.V;
+    Console.WriteLine($"  roll: vertical→horizontal {vNowH}, horizontal→vertical {hNowV}, world moved {moved:E1}, status {sk.LastSolve}, view up · V {Vector3d.Dot(new Vector3d(camUp.X, camUp.Y, camUp.Z), pv):0.###}");
+    Require(vNowH && hNowV && moved < 1e-9 && sk.LastSolve is not (SolveStatus.Inconsistent or SolveStatus.DidNotConverge), "the sketch axes did not follow the view roll");
+    // «Вертикально» к отрезку, вертикальному на экране после поворота, — без противоречия
+    var screenV = (SkLine)hcons[1].Items[0];   // был горизонтальным
+    var r0 = SketchEditing.AddConstraints(sk, new[] { (ConstraintType.Horizontal, new SkEntity[] { screenV }) }, solver);
+    Require(!r0.Ok, "fixture: the former horizontal line accepted horizontal after the roll");
+    // отмена поворота эскиза
+    int depth = w.SketchUndoDepth;
+    w.SketchUndo(); Run();
+    Console.WriteLine($"  undo: depth {depth}, plane U {sk.Plane.U} (was {plane0.U}), vertical on line {sk.Constraints.Any(c => c.Type == ConstraintType.Vertical && c.Items.Any(i => i.Id == vId))}");
+    Require((sk.Plane.U - plane0.U).Length < 1e-12 && sk.Constraints.Any(c => c.Type == ConstraintType.Vertical && c.Items.Any(i => i.Id == vId)), "sketch undo did not restore the axes");
+    // (5) «Вертикально» к отрезку с угловым размером 24.06° к оси — противоречие; таблица, наведение, «Удалить»
+    var aline = (SkLine)sk.Dimensions.First(x => x.Type == DimensionType.AngleLineLine && x.Locked && !x.IsDefault).Items[0];
+    Func<SketchEditResult> retry = () => SketchEditing.AddConstraints(sk, new[] { (ConstraintType.Vertical, new SkEntity[] { aline }) }, solver);
+    var rv = retry();
+    Require(!rv.Ok, "fixture: vertical to the 24° line was accepted");
+    w.ReportSketchConflict(sk, rv, "Вертикально", retry);
+    w.ToggleResolvePanel(); Run();
+    var rowsInfo = w.ResolveRows.Select(r => r.Item is SkDimension dd ? dd.Type + " " + dd.Value.ToString("0.##") : ((SkConstraint)r.Item).Type.ToString()).ToList();
+    Console.WriteLine($"  resolve table: {string.Join(" | ", rowsInfo)}");
+    int ai = w.ResolveRows.FindIndex(r => r.Item is SkDimension { Type: DimensionType.AngleLineLine });
+    Require(ai >= 0, "the angle dimension is not in the resolve table");
+    w.ResolveRows[ai].Hover(); Run();
+    Require(ReferenceEquals(w.ResolveHovered, w.ResolveRows[ai].Item) && ((SkDimension)w.ResolveRows[ai].Item).Highlight, "hovering a row does not highlight the item");
+    var del = w.PropsBodyPanel.GetVisualDescendants().OfType<Button>().First(b => b.Name == "resolve_del_" + ai);
+    del.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Run();
+    var dirL = aline.B.P - aline.A.P;
+    Console.WriteLine($"  after delete: vertical {sk.Constraints.Any(c => c.Type == ConstraintType.Vertical && c.Items.Contains(aline))}, line dir ({dirL.X:0.###},{dirL.Y:0.###})");
+    Require(sk.Constraints.Any(c => c.Type == ConstraintType.Vertical && c.Items.Contains(aline)) && Math.Abs(dirL.X) < 1e-6, "deleting the participant did not apply the change");
+    w.Close();
+});
+
+Check("UI-UNITS-K123", () =>
+{
+    // k123 (п. 3): размеры эскиза — в единицах детали (подпись, правка; P3D_SKUNITS=0); смена единицы длины — вопрос
+    // (P3D_UNITASK=0 — без вопроса): «преобразовать» — деталь прежняя, формулы-переводы снимаются, параметры — в новой
+    // единице; «не преобразовывать» — числа прежние, деталь больше в 25.4 раза; «Отмена» — ничего; отмена правки.
+    var asked = 0; bool? answer = true;
+    MainWindow.UnitQuestion = _ => { asked++; return Task.FromResult(answer); };
+    try
+    {
+        var part = Parametric3D.App.Diagnostics.TestParts.Block("u");
+        part.LocalParameters.Add("w", 25.4, ParamKind.Real, "mm");
+        var pf = part.LocalParameters.Add("h", 0, ParamKind.Formula, "mm"); pf.Formula = "2 * 25.4"; part.LocalParameters.Recalculate();
+        var s = DocumentSession.FromPart(part, "u"); var w = Open(s); BuildNow(s);
+        void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+        var sk = part.Sketches.First();
+        var top = sk.Entities.OfType<SkLine>().First(l => Math.Abs(l.A.Y - l.B.Y) < 1e-9);
+        var dw = sk.AddDimension(DimensionType.DistancePointPoint, 100, top.A, top.B); dw.Locked = true; dw.Formula = "100mm";
+        part.Invalidate(); BuildNow(s);
+        double v0 = part.Volume;
+        // «Отмена»
+        answer = null;
+        WaitTask(w.SetPartUnitsAsync(part, Parametric3D.Core.UnitSystem.Standard.First(u => u.Length == "in")));
+        Require(asked == 1 && part.Units.Length == "mm", "the unit change was not asked or Cancel changed the units");
+        // «Преобразовать»
+        answer = true;
+        WaitTask(w.SetPartUnitsAsync(part, Parametric3D.Core.UnitSystem.Standard.First(u => u.Length == "in"))); BuildNow(s);
+        part = s.Part!; sk = part.Sketches.First(); dw = sk.Dimensions.First(x => x.Locked && x.Type == DimensionType.DistancePointPoint && !x.IsDefault);
+        var pw = part.LocalParameters.Find("w")!; var ph = part.LocalParameters.Find("h")!;
+        string lab = SketchDimensions.Label(dw);
+        Console.WriteLine($"  convert: asked {asked}, units {part.Units.Length}, volume {v0:0.###} -> {part.Volume:0.###}, dim {dw.Value:0.###} mm formula '{dw.Formula}', label {lab}, params w {pw.Number:0.###} {pw.Unit}, h {ph.Kind} {ph.Number:0.###} {ph.Unit}; {w.LastUnitReport}");
+        Require(asked == 2 && part.Units.Length == "in" && Math.Abs(part.Volume - v0) < 1e-6 * v0, "convert changed the part");
+        Require(dw.Formula == null && Math.Abs(dw.Value - 100) < 1e-9 && lab == "3.94", "the sketch dimension is not shown in inches or the conversion formula stayed");
+        Require(pw.Unit == "in" && Math.Abs(pw.Number - 25.4) < 1e-9 && ph.Kind == ParamKind.Real && Math.Abs(ph.Number - 50.8) < 1e-9, "parameters are not converted");
+        // ввод в дюймах
+        w.EditSketch(sk); BuildNow(s); Run();
+        w.EditDimensionValue(dw); Run();
+        Require(w.DimEditBox != null && w.DimEditBox.Text == "3.937", "the editor does not show inches: " + w.DimEditBox?.Text);
+        w.DimEditBox!.Text = "5"; w.DimEditBox.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter }); Run();
+        Require(Math.Abs(dw.Value - 127) < 1e-9, $"5 in entered as {dw.Value} mm");
+        w.CancelSketch(); BuildNow(s); Run();
+        // отмена смены единиц — одним шагом
+        s.Undo(); BuildNow(s); part = s.Part!;
+        Require(part.Units.Length == "mm", "undo did not restore the units");
+        // «Не преобразовывать» — числа прежние: деталь в 25.4 раза больше
+        answer = false;
+        double vmm = part.Volume;
+        WaitTask(w.SetPartUnitsAsync(part, Parametric3D.Core.UnitSystem.Standard.First(u => u.Length == "in"))); BuildNow(s);
+        part = s.Part!;
+        var ex = part.Features.OfType<ExtrudeFeature>().First();
+        Console.WriteLine($"  keep numbers: volume {vmm:0.###} -> {part.Volume:0.###} (×{part.Volume / vmm:0.#}), depth {ex.Side1.Distance.Value:0.###} mm; {w.LastUnitReport}");
+        Require(Math.Abs(part.Volume / vmm - Math.Pow(25.4, 3)) < 1e-6 * Math.Pow(25.4, 3) && Math.Abs(ex.Side1.Distance.Value - 20 * 25.4) < 1e-9, "keep-numbers did not scale the part");
+        w.Close();
+    }
+    finally { MainWindow.UnitQuestion = null; }
+});
+
 Check("UI-INCR-K122", () =>
 {
     // k122 (замечание 27.10, 19:44): деталь держит состояние тела после каждой операции (строятся при открытии, в файл не
@@ -3477,6 +3657,8 @@ Check("UI-PART-PANEL-K120", () =>
     var part = Parametric3D.App.Diagnostics.TestParts.Block("pp");
     var s = DocumentSession.FromPart(part, "pp"); var w = Open(s); BuildNow(s);
     void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    MainWindow.UnitQuestion = _ => Task.FromResult<bool?>(true);   // k123: смена единиц — «преобразовать»
+    try {
     w.RebuildTree(); Run();
     var info = w.AllNodes.Where(n => n.Item is InfoItem { Role: "params" or "material" or "body" }).Select(n => ((InfoItem)n.Item).Role).ToList();
     Console.WriteLine($"  tree info nodes: {(info.Count == 0 ? "none" : string.Join(", ", info))}");
@@ -3533,6 +3715,7 @@ Check("UI-PART-PANEL-K120", () =>
     }
     finally { try { File.Delete(path); } catch { } }
     w.Close();
+    } finally { MainWindow.UnitQuestion = null; }
 });
 
 Check("UI-SELECTION-K120", () =>
