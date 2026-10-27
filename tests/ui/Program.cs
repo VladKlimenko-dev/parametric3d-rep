@@ -3191,6 +3191,56 @@ Check("UI-K116", () =>
     w.Close();
 });
 
+Check("UI-STL-IMPORT-K119", () =>
+{
+    // k119: импорт STL с галочкой «Преобразовать в точную геометрию»: окно настроек; новая деталь с операцией «Импорт STL»;
+    // тело — точное (грани как у исходной детали, объём — до 10⁻⁵); итог перевода пишется в файл и при открытии не
+    // считается заново; правка операции — без галочки — тело из плоских граней.
+    var src = Parametric3D.App.Diagnostics.TestParts.Holes100(); src.Rebuild(null);
+    int srcFaces = src.Bodies.Sum(b => b.Faces.Count()); double v0 = src.Volume;
+    var tris = Parametric3D.Kernel.Export.MeshExport.Triangles(src.Bodies).Select(t => (t.A, t.B, t.C)).ToList();
+    string path = Path.Combine(Path.GetTempPath(), $"p3d_k119_{Guid.NewGuid():N}.stl");
+    string saved = Path.ChangeExtension(path, ".p3d");
+    File.WriteAllBytes(path, Parametric3D.Kernel.MeshFit.StlFile.WriteBinary(tris));
+    try
+    {
+        var w = Open(DocumentSession.NewPart());
+        void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+        // окно настроек: галочка снимается, «Импортировать» — настройки без точной геометрии
+        var task = Dialogs.StlImport(w, Path.GetFileName(path)); Run();
+        var dw = Dialogs.LastStlWindow!;
+        var cb = dw.GetVisualDescendants().OfType<CheckBox>().First(c => c.Name == "stl_exact");
+        Require(cb.IsChecked == true, "exact conversion is not on by default");
+        cb.IsChecked = false; Run();
+        var okBtn = dw.GetVisualDescendants().OfType<Button>().First(b => (b.Content as string) == Loc.L("Импортировать"));
+        okBtn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Run();
+        Require(task.IsCompleted && task.Result is { Exact: false }, "the dialog did not return the options");
+        // импорт с точной геометрией
+        _ = w.ImportStlAsync(path, new Dialogs.StlOptions(true, true, 1, 1)); Run();
+        var s = w.Session; BuildNow(s); Run();
+        var part = s.Part!; var fi = part.Features.OfType<MeshImportFeature>().Single();
+        int faces = part.Bodies.Sum(b => b.Faces.Count());
+        Console.WriteLine($"  exact: {fi.Report}; faces {faces} (source {srcFaces}), volume {part.Volume:0.###} vs {v0:0.###}, error {fi.Error}");
+        Require(fi.Error == null && fi.LastResult is { Exact: true } && faces == srcFaces && Math.Abs(part.Volume - v0) <= 1e-5 * v0, "exact STL import");
+        // файл: итог перевода сохранён, при открытии не переводится заново
+        s.SaveAs(saved);
+        var s2 = DocumentSession.Open(saved); BuildNow(s2);
+        var fi2 = s2.Part!.Features.OfType<MeshImportFeature>().Single();
+        Require(fi2.LastResult == null && fi2.Error == null && s2.Part.Bodies.Sum(b => b.Faces.Count()) == srcFaces, "the stored conversion was not reused");
+        // правка: без точной геометрии — плоские грани
+        w.SelectItem(fi); CommandRegistry.Instance["edit.feature"].Execute(); Run();
+        Require(w.CurrentOperation is MeshImportOp, "edit feature did not open the STL import panel");
+        var exactBox = w.GetVisualDescendants().OfType<CheckBox>().First(c => (c.Content as string) == Loc.L("Преобразовать в точную геометрию"));
+        exactBox.IsChecked = false; Run();
+        w.CommitOperation(); BuildNow(s); Run();
+        int flat = part.Bodies.Sum(b => b.Faces.Count());
+        Console.WriteLine($"  flat: {fi.Report}; faces {flat}");
+        Require(!fi.Exact && fi.LastResult is { Exact: false } && flat > srcFaces * 5 && part.Bodies[0].Faces.All(f => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.PlaneSurface), "flat STL import: " + string.Join(",", part.Bodies[0].Faces.GroupBy(f => f.Surface.GetType().Name).Select(g => g.Key + " " + g.Count())));
+        w.Close();
+    }
+    finally { try { File.Delete(path); File.Delete(saved); } catch { } }
+});
+
 Check("UI-TREE-MULTI-K118", () =>
 {
     // k118 (замечание 08:54, п.5): выбор нескольких операций в дереве Ctrl и Shift — дерево не сбрасывается выбором вида.

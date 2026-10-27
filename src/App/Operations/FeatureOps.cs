@@ -937,6 +937,7 @@ public static class OperationFactory
         QuiltSolidFeature x => new QuiltSolidOp(x),
         BlendFeature x => new BlendOp(x),
         InsertBodyFeature x => new InsertBodyOp(x),
+        MeshImportFeature x => new MeshImportOp(x),
         FFPrimitiveFeature x => new FFPrimitiveOp(x),
         FFBooleanFeature x => new FFBooleanOp(x),
         FFSplitFeature x => new FFSplitOp(x),

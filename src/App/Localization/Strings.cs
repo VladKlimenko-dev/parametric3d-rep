@@ -206,6 +206,18 @@ public static class Strings
         // ---------------------------------------------------------------- приложение
         ["Тема: тёмная / светлая"] = "Theme: dark / light", ["Язык: русский / английский"] = "Language: Russian / English",
         ["Свойства"] = "Properties", ["Параметры"] = "Parameters", ["Палитра команд"] = "Command palette",
+        // k118–k119
+        ["Фильтр по имени"] = "Filter by name", ["Имя:"] = "Name:", ["Обозначение"] = "Part number", ["Наименование"] = "Title",
+        ["Изменение"] = "Revision", ["Габариты"] = "Overall size", ["Ш × В × Г"] = "W × H × D", ["Ед. учёта"] = "UoM",
+        ["Ед. длины"] = "Length units", ["Допуски"] = "Tolerances", ["Сборка"] = "Assembly", ["Зависит от"] = "Depends on",
+        ["Ссылка в"] = "Referenced in", ["Импорт STL"] = "STL import", ["Импорт STL «{0}»"] = "STL import «{0}»",
+        ["Преобразовать в точную геометрию"] = "Convert to exact geometry", ["Выравнивать по замыслу"] = "Align to design intent",
+        ["Выравнивать по замыслу (оси, соосность, круглые размеры, касания)"] = "Align to design intent (axes, coaxiality, round values, tangency)",
+        ["Единицы файла"] = "File units", ["Импортировать"] = "Import", ["Допуск, × (1 — сетка из САПР; скан — 10…100)"] = "Tolerance, × (1 — CAD mesh; scan — 10…100)",
+        ["Плоскости, цилиндры, конусы, сферы и торы находятся на сетке; тело — точное (резать, сверлить, ставить эскиз на грань). Без галочки — тело из плоских граней сетки."] = "Planes, cylinders, cones, spheres and tori are recognised on the mesh; the body is exact (cut, drill, sketch on a face). Unchecked — a body of the mesh's flat faces.",
+        ["Импорт STL: "] = "STL import: ", ["Импорт STL: перевод сетки в тело…"] = "STL import: converting the mesh to a body…",
+        ["Сетка из «{0}» (треугольники хранятся в документе)."] = "Mesh from «{0}» (triangles are stored in the document).",
+        ["В файле нет треугольников."] = "The file has no triangles.", ["Допуск ×"] = "Tolerance ×", ["дюйм"] = "inch", ["шт"] = "pcs",
         ["Свернуть дерево"] = "Collapse tree", ["Развернуть дерево"] = "Expand tree",
         ["ДЕРЕВО МОДЕЛИ"] = "MODEL TREE", ["Найти команду…"] = "Find a command…",
         ["↑↓ — выбор, Enter — выполнить, Esc — закрыть. Поиск по-русски и по-английски."] = "↑↓ — select, Enter — run, Esc — close. Search in English or Russian.",

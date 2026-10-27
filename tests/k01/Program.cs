@@ -383,6 +383,7 @@ static partial class Program
         if (mode is "perftargets") { PerfTargets(args[1]); return; }
         if (mode is "meshpreviewbench") { MeshPreviewBench(); return; }
         if (mode is "probe116") { Probe116(args[1], args[2]); return; }
+        if (mode is "meshfit") { MeshFitProbe(args[1], args.Length > 2 ? args[2] : ""); return; }
         if (mode is "k116probe") { Krn116Probe(); return; }
         if (mode is "previewbench") { PreviewBench(args.Length > 1 ? args[1] : null); return; }
         if (mode is "perfprof") { PerfProfile(); return; }
@@ -450,6 +451,7 @@ static partial class Program
         if (mode is "filedisplay" or "allB") FileDisplayChecks();
         if (mode is "k115" or "allB") Krn115Checks();
         if (mode is "k116" or "allB") Krn116Checks();
+        if (mode is "k119" or "allB") Krn119Checks();
         if (mode is "krn06guard" or "allB") Krn06FallbackGuardChecks();
         if (mode is "krn06cc" or "allB") Krn06CylCylChecks();
         if (mode is "krn06q" or "allB") Krn06QuadricChecks();

@@ -220,3 +220,33 @@ public sealed class InsertBodyOp : FeatureOp<InsertBodyFeature>
     protected override void SeedRefs() { }
     protected override void Push() { F.Offset = new Vector3d(_x.Value, _y.Value, _z.Value); }
 }
+
+/// <summary>
+/// k119: ПРАВКА ИМПОРТА STL — те же треугольники, другие настройки: точная геометрия или плоские грани, выравнивание по
+/// замыслу, допуск, единицы файла. Перевод — перестроением детали.
+/// </summary>
+public sealed class MeshImportOp : FeatureOp<MeshImportFeature>
+{
+    public MeshImportOp(MeshImportFeature? existing = null) : base(existing) { }
+    public override string Title => "Импорт STL";
+    public override string Icon => "f_insert_freeform_but.svg";
+    protected override MeshImportFeature Create() => new(L("Импорт STL"));
+    private ValueRef _tol = new(1);
+
+    public override void Build(OpPanel p)
+    {
+        if (Editing) _tol = new ValueRef(F.TolScale);
+        p.Note(L("Сетка из «{0}» (треугольники хранятся в документе).", F.SourceName));
+        if (F.Report.Length > 0) p.Info(() => F.Report);
+        p.Check(L("Преобразовать в точную геометрию"), () => F.Exact, v => F.Exact = v);
+        p.Check(L("Выравнивать по замыслу"), () => F.Snap, v => F.Snap = v, enabled: () => F.Exact);
+        p.Number("Допуск ×", () => _tol, v => _tol = v, unit: "");
+        var units = Views.Dialogs.StlUnits;
+        p.Choice("Единицы файла", units.Select(u => L(u.Name)).ToArray(), () => Math.Max(0, Array.FindIndex(units, u => Math.Abs(u.Scale - F.Scale) < 1e-12)), i => F.Scale = units[i].Scale);
+        p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
+    }
+
+    protected override void SeedRefs() { }
+    protected override void Push() { F.TolScale = Math.Max(1e-3, _tol.Value); }
+}
+

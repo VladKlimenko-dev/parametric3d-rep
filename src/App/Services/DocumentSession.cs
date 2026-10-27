@@ -127,6 +127,26 @@ public sealed class DocumentSession
     }
 
     /// <summary>Импорт STEP/IGES: тела без истории — новая деталь (позже — FreeForm-тело, раздел 24).</summary>
+    /// <summary>
+    /// k119: ИМПОРТ STL — новая деталь с операцией «Импорт STL» (треугольники файла и настройки перевода хранятся в ней;
+    /// тело — точная геометрия или плоские грани — строится перестроением).
+    /// </summary>
+    public static DocumentSession ImportMesh(string path, bool exact, bool snap, double tolScale, double scale)
+    {
+        var tris = Parametric3D.Kernel.MeshFit.StlFile.ReadFile(path);
+        if (tris.Count == 0) throw new InvalidDataException(Loc.L("В файле нет треугольников."));
+        string name = Path.GetFileNameWithoutExtension(path);
+        var part = new Part(name);
+        part.AddFeature(new Parametric3D.Model.Features.MeshImportFeature(Loc.L("Импорт STL «{0}»", name))
+        {
+            SourceName = Path.GetFileName(path), MeshData = Parametric3D.Model.Features.MeshImportFeature.Pack(tris),
+            Exact = exact, Snap = snap, TolScale = tolScale, Scale = scale,
+        });
+        var doc = new Document(name);
+        doc.Root.Add(part);
+        return new DocumentSession(doc, null) { Modified = true };
+    }
+
     public static DocumentSession Import(string path, List<string> warnings)
     {
         string text = File.ReadAllText(path);
