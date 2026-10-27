@@ -1046,6 +1046,19 @@ public sealed class Part : ModelItem
     /// оставляет следов: поля детали не меняются, сохранённые состояния остаются годными, а
     /// отметка пересчёта возвращается — следующий расчёт начнёт с того же места.
     /// </summary>
+    /// <summary>
+    /// k121: ХОД РАСЧЁТА для строки состояния: сделано шагов из ProgressTotal (шаг — выполненная операция; последний — сетки
+    /// и проверка тел). Пишется фоновым расчётом, читается потоком окна. Мутация P3D_BUILDPROGRESS=0 — хода нет.
+    /// </summary>
+    public int ProgressDone { get => _progDone; private set { if (!ProgressOff) _progDone = value; } }
+    public int ProgressTotal { get => _progTotal; private set { if (!ProgressOff) _progTotal = value; } }
+    private volatile int _progDone, _progTotal;
+    public static readonly bool ProgressOff = Environment.GetEnvironmentVariable("P3D_BUILDPROGRESS") == "0";
+    /// <summary>Отметить деталь как ждущую расчёта (ход с нуля).</summary>
+    public void ResetProgress() { ProgressDone = 0; ProgressTotal = Math.Max(1, Features.Count(f => !f.Suppressed) + 1); }
+    /// <summary>Расчёт закончен (ход — весь).</summary>
+    public void CompleteProgress() { ProgressDone = ProgressTotal; }
+
     public BuildResult Compute(ParameterTable? parameters, ISketchSolver? solver, CancellationToken cancellation)
     {
         if (RebuildLog) Console.WriteLine($"REBUILD {Name} features {Features.Count} dirty {IsDirty} {string.Join(" < ", Environment.StackTrace.Split('\n').Skip(2).Take(7).Select(l => l.Trim()))}");
@@ -1073,7 +1086,7 @@ public sealed class Part : ModelItem
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(inner).Throw();
             throw;
         }
-        finally { Interlocked.Decrement(ref _computing); Kernel.Diagnostics.ThreadState.Release(); }
+        finally { CompleteProgress(); Interlocked.Decrement(ref _computing); Kernel.Diagnostics.ThreadState.Release(); }
     }
 
     // K06: то, от чего зависел последний расчёт, кроме самих операций.
@@ -1325,11 +1338,16 @@ public sealed class Part : ModelItem
         if (settingsNow.LivePreview && !SuppressInstant && !InstantRollbackOff && dirtyNote >= from && dirtyNote < lastActive && dirtyNote < Features.Count
             && !Features[dirtyNote].Suppressed && Features[dirtyNote].InstantPreviewSafe && Features[dirtyNote].FreeForm == null)
             instantAt = dirtyNote;
+        // k121: ход расчёта — для строки состояния (операций сделано / всего; последний шаг — сетки и проверка тел)
+        int progTotal = 1;
+        for (int k = from; k < Math.Min(stage, Features.Count); k++) if (!Features[k].Suppressed) progTotal++;
+        ProgressDone = 0; ProgressTotal = progTotal;
         try
         {
         for (int fi = 0; fi < Features.Count; fi++)
         {
             var f = Features[fi];
+            if (fi >= from && fi < stage && fi > 0 && !Features[fi - 1].Suppressed && fi - 1 >= from) ProgressDone = Math.Min(ProgressDone + 1, progTotal - 1);
             result.Errors[f] = null;
             result.Created[f] = new List<uint>();
 
@@ -1614,6 +1632,7 @@ public sealed class Part : ModelItem
         // достроить и у опубликованного тела, форму — нельзя).
         foreach (var b in result.Bodies) b.Publish();
 
+        ProgressDone = Math.Max(ProgressDone, progTotal - 1);
         if (result.Bodies.Count > 0)
         {
             var all = new List<MeshData>();

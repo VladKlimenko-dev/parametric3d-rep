@@ -185,14 +185,110 @@ public static class TreeCommands
         }
         var name = await Dialogs.Prompt(w, L("Группа"), L("Имя группы:"), L("Группа {0}", part.Features.Select(f => f.Group).Where(g => g != null).Distinct().Count() + 1));
         if (string.IsNullOrWhiteSpace(name)) return;
-        SetGroup(w, fs, name.Trim());
+        await SetGroupAsync(w, fs, name.Trim());
     }
 
-    public static void SetGroup(MainWindow w, IEnumerable<Feature> fs, string? name)
+    /// <summary>Досчитать все детали документа (фоновый расчёт, если он идёт, — дождаться и досчитать за ним).</summary>
+    static async Task BuildAll(Document doc)
+    {
+        for (int i = 0; i < 20 && (doc.IsBuilding || doc.AllParts().Any(p => p.IsDirty)); i++) await doc.RebuildDirtyAsync();
+    }
+
+    public static async Task SetGroupAsync(MainWindow w, IEnumerable<Feature> fs, string? name)
     {
         var list = fs.ToList();
+        var part = w.Session.Part;
+        // k121 (замечание 27.10, 17:27, п. 3): группа — НАСТОЯЩАЯ: её операции становятся подряд в истории построения
+        // (а не только показываются вместе в дереве), если перестановка допустима; иначе группа не создаётся
+        if (name != null && part != null && !GroupReorderOff && list.Count > 1)
+        {
+            var order = GatherOrder(part, list, out var why);
+            if (order == null) { w.ShowToast(L("Нельзя собрать группу: ") + why); return; }
+            bool moves = !order.SequenceEqual(part.Features);
+            if (moves)
+            {
+                await BuildAll(w.Session.Document);
+                var shape0 = Shape(part);
+                var good = part.Features.Where(x => x.Error == null && !x.Suppressed).ToHashSet();
+                w.Session.Edit(L("Группа"), () =>
+                {
+                    for (int i = 0; i < order.Count; i++) if (!ReferenceEquals(part.Features[i], order[i])) part.MoveFeature(order[i], i);
+                    foreach (var f in list) f.Group = name;
+                });
+                await BuildAll(w.Session.Document);
+                var broken = part.Features.FirstOrDefault(x => good.Contains(x) && x.Error != null);
+                string? fail = broken != null ? L("«{0}» перестаёт строиться", broken.Name)
+                             : !SameShape(shape0, Shape(part)) ? L("перестановка операций меняет форму детали") : null;
+                if (fail != null)
+                {
+                    w.Session.Undo();
+                    await BuildAll(w.Session.Document);
+                    w.ShowToast(L("Нельзя собрать группу: ") + fail);
+                    w.ViewPort.MarkDirty(); w.RebuildTree();
+                    return;
+                }
+                LastGroupMoved = true;
+                w.ViewPort.MarkDirty(); w.RebuildTree();
+                return;
+            }
+        }
+        LastGroupMoved = false;
         w.Session.Edit(L("Группа"), () => { foreach (var f in list) f.Group = name; });
         w.RebuildTree();
+    }
+
+    public static readonly bool GroupReorderOff = Environment.GetEnvironmentVariable("P3D_GROUPREORDER") == "0";
+    /// <summary>Разбор: последняя группа переставляла операции.</summary>
+    [ThreadStatic] public static bool LastGroupMoved;
+
+    /// <summary>
+    /// k121: ПОРЯДОК, В КОТОРОМ ОПЕРАЦИИ ГРУППЫ ИДУТ ПОДРЯД. Между первой и последней операцией группы прочие операции
+    /// расходятся: те, что опираются (прямо или через другие такие же) на операции группы, — после группы, остальные — перед
+    /// ней; порядок внутри группы и внутри «до» и «после» прежний. Нельзя, если операция группы опирается на операцию,
+    /// которой приходится уйти после группы (null и причина).
+    /// </summary>
+    public static List<Feature>? GatherOrder(Part part, IReadOnlyCollection<Feature> members, out string? why)
+    {
+        why = null;
+        var set = members.ToHashSet();
+        var feats = part.Features.ToList();
+        var idx = members.Select(f => feats.IndexOf(f)).Where(i => i >= 0).OrderBy(i => i).ToList();
+        if (idx.Count < 2) return feats;
+        int first = idx[0], last = idx[^1];
+        var parents = new Dictionary<Feature, HashSet<ModelItem>>();
+        HashSet<ModelItem> Par(Feature f) => parents.TryGetValue(f, out var p) ? p : parents[f] = Parents(part, f).ToHashSet();
+        var after = new HashSet<Feature>();
+        for (int k = first + 1; k < last; k++)
+        {
+            var n = feats[k];
+            if (set.Contains(n)) continue;
+            var pn = Par(n);
+            if (pn.Any(x => x is Feature pf && (set.Contains(pf) || after.Contains(pf)))) after.Add(n);
+        }
+        for (int k = first; k <= last; k++)
+        {
+            var m = feats[k];
+            if (!set.Contains(m)) continue;
+            if (Par(m).OfType<Feature>().FirstOrDefault(after.Contains) is { } bad)
+            {
+                why = L("«{0}» опирается на «{1}», а та — на операции группы", m.Name, bad.Name);
+                return null;
+            }
+        }
+        var res = feats.Take(first).ToList();
+        res.AddRange(feats.Skip(first).Take(last - first + 1).Where(f => !set.Contains(f) && !after.Contains(f)));
+        res.AddRange(feats.Skip(first).Take(last - first + 1).Where(set.Contains));
+        res.AddRange(feats.Skip(first).Take(last - first + 1).Where(after.Contains));
+        res.AddRange(feats.Skip(last + 1));
+        return res;
+    }
+
+    static (double Vol, int Faces, Parametric3D.Kernel.Bounds3 B) Shape(Part p) => (p.Volume, p.Bodies.Sum(b => b.Faces.Count()), p.Bounds);
+    static bool SameShape((double Vol, int Faces, Parametric3D.Kernel.Bounds3 B) a, (double Vol, int Faces, Parametric3D.Kernel.Bounds3 B) b)
+    {
+        double size = a.B.IsEmpty ? 1 : Math.Max(1, (a.B.Max - a.B.Min).Length);
+        return a.Faces == b.Faces && Math.Abs(a.Vol - b.Vol) <= 1e-6 * Math.Max(1, Math.Abs(a.Vol))
+               && a.B.IsEmpty == b.B.IsEmpty && (a.B.IsEmpty || ((a.B.Min - b.B.Min).Length <= 1e-6 * size && (a.B.Max - b.B.Max).Length <= 1e-6 * size));
     }
 
     /// <summary>Ссылается ли операция на операцию с ключом key (грани и рёбра «#ключ/…», повтор операций, селекторы).</summary>

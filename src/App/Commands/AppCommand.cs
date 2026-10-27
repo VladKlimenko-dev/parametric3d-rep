@@ -35,8 +35,8 @@ public sealed class AppCommand : ICommand
     /// <summary>Подсказка сейчас: имя, клавиша, описание и — у недоступной — причина.</summary>
     public string TooltipNow()
     {
-        string t = Tooltip + (Description != null ? "\n" + Loc.L(Description) : "");
-        if (!Enabled && WhyDisabled?.Invoke() is { Length: > 0 } why) t += "\n" + Loc.L("Недоступно: ") + why;
+        string t = Tooltip + (Description != null ? " — " + Loc.L(Description) : "");
+        if (!Enabled && WhyDisabled?.Invoke() is { Length: > 0 } why) t += "  ·  " + Loc.L("Недоступно: ") + why;
         return t;
     }
 

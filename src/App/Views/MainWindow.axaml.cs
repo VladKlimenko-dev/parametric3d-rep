@@ -144,6 +144,8 @@ public partial class MainWindow : Window
         RebuildUi();
         OnStateChanged();
         Dispatcher.UIThread.Post(() => View.ZoomToFit(false), DispatcherPriority.Background);
+        // k121: новый документ ждёт расчёта — полоса хода (обработка, затем отображение)
+        if (s.Document.AllParts().Any(p => p.IsDirty)) StartProgress();
     }
 
     private void OnReplaced()
@@ -169,6 +171,7 @@ public partial class MainWindow : Window
 
     private void OnBuild() => Dispatcher.UIThread.Post(() =>
     {
+        if (Session.Document.IsBuilding) StartProgress(); else UpdateProgress();
         using (Diagnostics.UiTimes.Measure("окно: строка состояния")) UpdateStatus();
         // k113: пока открыт предпросмотр операции, дерево обновляется не чаще раза в 0.5 с (каждый шаг ручки пересобирал его
         // дважды — в начале и в конце расчёта: 25 мс в потоке окна на пластине из 20 операций); по окончании расчёта — сразу.
@@ -267,8 +270,16 @@ public partial class MainWindow : Window
             path = files.FirstOrDefault()?.TryGetLocalPath();
             if (path == null) return;
         }
-        SetSession(DocumentSession.Open(path));
+        // k121: чтение и разбор файла — в фоне; в строке состояния — «Загрузка», затем ход обработки
+        _loadingFile = Path.GetFileName(path);
+        StartProgress();
+        DocumentSession opened;
+        try { opened = StatusProgressOff ? DocumentSession.Open(path) : await Task.Run(() => DocumentSession.Open(path)); }
+        catch (Exception ex) { _loadingFile = null; UpdateProgress(); ShowToast(L("Открыть: ") + ex.Message); return; }
+        finally { _loadingFile = null; }
+        SetSession(opened);
         UserPrefs.Current.AddRecentFile(path);
+        StartProgress();
     }
 
     public async Task ImportAsync()
@@ -367,7 +378,7 @@ public partial class MainWindow : Window
         }
         else b = new Button { Classes = { "tool" }, Command = c, Content = content, MinWidth = minWidth };
         if (b is ContentControl cc) cc.HorizontalContentAlignment = text ? HorizontalAlignment.Left : HorizontalAlignment.Center;
-        ToolTip.SetTip(b, c.Tooltip + (c.Description != null ? "\n" + L(c.Description) : ""));
+        ToolTip.SetTip(b, c.TooltipNow());
         ExplainDisabled(b, c);
         b.Tag = c;
         return b;
@@ -1063,6 +1074,7 @@ public partial class MainWindow : Window
             UpdateContextBar();
         };
         View.SceneRebuilt += HideGhostWhenBuilt;
+        View.SceneRebuilt += OnSceneShown;
         // k99: щелчок по контуру плоскости сечения — её настройки
         // k103: щелчок — выбор (ручки), двойной щелчок — настройки
         View.SectionDoubleClicked += () => { if (CurrentOperation is SectionOp) return; if (CurrentOperation != null) CancelOperation(); if (!InSketch && Session.Part != null) StartOperation(new SectionOp()); };
@@ -3118,9 +3130,9 @@ public partial class MainWindow : Window
             Dispatcher.UIThread.Post(ShowProperties);
         };
         if (part.Material is { } pm)
-            ToolTip.SetTip(cb, $"{pm.Designation}\n" + L("Плотность") + $" {pm.DensityGPerCm3:0.###} " + L("г/см³") +
-                               $"\nE {pm.YoungModulus / 1e9:0.#} GPa, ν {pm.PoissonRatio:0.##}" +
-                               (pm.YieldStrength > 0 ? $"\n{SigY} {pm.YieldStrength / 1e6:0} MPa" : "") + (pm.UltimateStrength > 0 ? $", {SigU} {pm.UltimateStrength / 1e6:0} MPa" : ""));
+            ToolTip.SetTip(cb, $"{pm.Designation}  ·  " + L("Плотность") + $" {pm.DensityGPerCm3:0.###} " + L("г/см³") +
+                               $"  ·  E {pm.YoungModulus / 1e9:0.#} GPa, ν {pm.PoissonRatio:0.##}" +
+                               (pm.YieldStrength > 0 ? $"  ·  {SigY} {pm.YieldStrength / 1e6:0} MPa" : "") + (pm.UltimateStrength > 0 ? $", {SigU} {pm.UltimateStrength / 1e6:0} MPa" : ""));
         Grid.SetColumn(cb, 1);
         g.Children.Add(cb);
         PropsBody.Children.Add(g);
@@ -3198,6 +3210,74 @@ public partial class MainWindow : Window
 
     private string _hoverText = "";
 
+    // ================================================================ k121: ход загрузки и перестроения
+
+    /// <summary>
+    /// k121 (замечание 27.10, 17:27, п. 2): ПОЛОСА ХОДА В СТРОКЕ СОСТОЯНИЯ. Загрузка файла (чтение и разбор — в фоне, окно не
+    /// замирает) → обработка (фоновое перестроение: операций сделано из всех, по всем деталям сборки) → отображение (сцена
+    /// вида по новым телам). Перестроение короче 0.3 с (шаг ручки в предпросмотре) полосу не показывает. Мутация
+    /// P3D_STATUSPROGRESS=0 — полосы нет.
+    /// </summary>
+    public static readonly bool StatusProgressOff = Environment.GetEnvironmentVariable("P3D_STATUSPROGRESS") == "0";
+    private DispatcherTimer? _progressTimer;
+    private string? _loadingFile;
+    private DateTime _busySince = DateTime.MaxValue, _sceneWaitUntil = DateTime.MinValue;
+    /// <summary>Разбор и проверки: что показано (этап, процент); null — полоса скрыта.</summary>
+    public (string Stage, double Percent, bool Indeterminate)? ProgressShown { get; private set; }
+    /// <summary>Проверки: все показанные этапы за время жизни окна.</summary>
+    public List<string> ProgressStages { get; } = new();
+    /// <summary>Проверки: показывать полосу сразу (без паузы 0.3 с).</summary>
+    public static double ProgressDelayMs = 300;
+
+    private void StartProgress()
+    {
+        if (StatusProgressOff) return;
+        if (_busySince == DateTime.MaxValue) _busySince = DateTime.Now;
+        if (_progressTimer == null)
+        {
+            _progressTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(100), DispatcherPriority.Background, (_, _) => UpdateProgress());
+        }
+        if (!_progressTimer.IsEnabled) _progressTimer.Start();
+        UpdateProgress();
+    }
+
+    /// <summary>Один шаг полосы хода (таймер окна, 10 раз в секунду).</summary>
+    public void UpdateProgress()
+    {
+        if (StatusProgressOff) return;
+        string? stage = null; double pct = 0; bool ind = false;
+        var doc = Session?.Document;
+        if (_loadingFile != null) { stage = L("Загрузка «{0}»…", _loadingFile); ind = true; }
+        else if (doc != null && doc.IsBuilding)
+        {
+            var (d, t) = doc.BuildProgress;
+            if (t > 0) { pct = 100.0 * d / t; stage = L("Обработка: {0} из {1}", d, t); }
+            else { stage = L("Обработка…"); ind = true; }
+            _sceneWaitUntil = DateTime.Now.AddSeconds(5);
+        }
+        else if (doc != null && doc.AllParts().Any(p => p.IsDirty)) { stage = L("Обработка…"); ind = true; _sceneWaitUntil = DateTime.Now.AddSeconds(5); }
+        else if (DateTime.Now < _sceneWaitUntil) { stage = L("Отображение…"); pct = 100; }
+        if (stage == null)
+        {
+            _busySince = DateTime.MaxValue; _sceneWaitUntil = DateTime.MinValue;
+            _progressTimer?.Stop();
+            if (ProgressShown != null) { ProgressShown = null; StatusProgress.IsVisible = false; UpdateStatus(); }
+            return;
+        }
+        if (_busySince == DateTime.MaxValue) _busySince = DateTime.Now;
+        if (_loadingFile == null && (DateTime.Now - _busySince).TotalMilliseconds < ProgressDelayMs) return;
+        ProgressShown = (stage, pct, ind);
+        if (ProgressStages.Count == 0 || ProgressStages[^1] != stage) ProgressStages.Add(stage);
+        StatusProgress.IsVisible = true;
+        StatusProgress.IsIndeterminate = ind;
+        if (!ind) StatusProgress.Value = pct;
+        StatusBuild.Text = ind || pct >= 100 ? stage : stage + $"  ({pct:0}%)";
+        StatusBuild.Foreground = Res("P3.Warning");
+    }
+
+    /// <summary>Сцена вида построена по новым телам — этап «Отображение» окончен.</summary>
+    private void OnSceneShown() { if (_sceneWaitUntil > DateTime.MinValue && Session?.Document is { IsBuilding: false } d && !d.AllParts().Any(p => p.IsDirty)) { _sceneWaitUntil = DateTime.MinValue; UpdateProgress(); } }
+
     public void UpdateStatus(string? hover = null)
     {
         if (hover != null) _hoverText = hover;
@@ -3211,8 +3291,9 @@ public partial class MainWindow : Window
         EnvText.Text = InSketch ? L("Эскиз") : CurrentOperation != null ? L("Операция") : InFreeForm ? L("FreeForm") : Session?.IsAssembly == true ? (Session.ActivePart != null ? L("Компонент «{0}»", Session.ActivePart.Name) : L("Сборка")) : L("Деталь");
         if (Session == null) return;
         int errors = Session.Document.Root.Descendants().Count(i => i.Error != null);
-        // u13: значки состояния — идёт перестроение, требуют внимания, годно
-        if (Session.Document.IsBuilding) { StatusBuild.Text = "⟳ " + L("Перестроение…"); StatusBuild.Foreground = Res("P3.Warning"); }
+        // u13: значки состояния — идёт перестроение, требуют внимания, годно (k121: пока идёт полоса хода — её подпись)
+        if (ProgressShown != null) { }
+        else if (Session.Document.IsBuilding) { StatusBuild.Text = "⟳ " + L("Перестроение…"); StatusBuild.Foreground = Res("P3.Warning"); }
         else if (errors > 0) { StatusBuild.Text = "! " + L("Требуют внимания: {0}", errors); StatusBuild.Foreground = Res("P3.Error"); }
         else if (part != null && part.Bodies.Count > 0) { StatusBuild.Text = "✓ " + L("Построено"); StatusBuild.Foreground = Res("P3.TextDim"); }
         else StatusBuild.Text = "";

@@ -2076,7 +2076,7 @@ Check("UI-U13E-DATUMS-HOLES", () =>
     Console.WriteLine($"  coaxial: error {hf.Error}, at {hf.Points.FirstOrDefault()}, dir {hf.Direction}, volume {part.Volume:F4}");
     Require(hf.Error == null && Math.Abs(part.Volume - (8000 - Math.PI * 9 * 10)) < 1e-4, "coaxial hole");
     // группа, родители и потомки
-    TreeCommands.SetGroup(w, new Feature[] { cut, hf }, "Отверстия");
+    WaitTask(TreeCommands.SetGroupAsync(w, new Feature[] { cut, hf }, "Отверстия"));
     var roots = TreeNode.Build(s.Document);
     var grp = roots[0].Children.FirstOrDefault(n => n.Item is InfoItem { Role: "group" });
     Require(grp != null && grp.Children.Count == 2, "group node");
@@ -3083,7 +3083,7 @@ Check("UI-TREE-GROUP-K115", () =>
     tree.SelectedItems.Clear(); tree.SelectedItems.Add(hn[0]); tree.SelectedItems.Add(hn[1]); Dispatcher.UIThread.RunJobs();
     Require(vp.Selection.Items.Count(r => r.Target is HoleFeature) == 2, $"multi-select in the tree: {vp.Selection.Count}");
     Require(reg["tree.group"].Enabled, "the Group button is disabled");
-    Parametric3D.App.Commands.TreeCommands.SetGroup(w, holes, "G1"); BuildNow(s);
+    WaitTask(Parametric3D.App.Commands.TreeCommands.SetGroupAsync(w, holes, "G1")); BuildNow(s);
     Require(holes.All(h => h.Group == "G1") && w.AllNodes.Count(n => n.Item is InfoItem { Role: "group" }) == 1, "group not created");
     s.Undo(); part = s.Part!; BuildNow(s); w.RebuildTree();
     Require(part.Features.All(f => string.IsNullOrEmpty(f.Group)), "undo of the grouping");
@@ -3216,6 +3216,120 @@ Check("UI-K116", () =>
     w.FinishSketch(); BuildNow(s);
     Require(s.CanUndo && Coords(s.Part!.Sketches.First(k => k.Id == sk.Id)) != c0, "OK with a change was not applied");
     w.Close();
+});
+
+Check("UI-TOOLTIP-K121", () =>
+{
+    // k121 (замечание 27.10, 17:27, п. 1): подсказки — в одну строку и целиком: у подсказки команды нет переносов; окно
+    // подсказки, получившее ширину на долю пикселя меньше измеренной (дробный масштаб экрана), не переносит текст и не
+    // обрезает его (P3D_TIPONELINE=0 — прежний перенос с шириной до 420).
+    var s = DocumentSession.Sample(); var w = Open(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    var multi = CommandRegistry.Instance.All.Select(c => c.TooltipNow()).Where(t => t.Contains('\n')).ToList();
+    Require(multi.Count == 0, "command tooltips with line breaks: " + string.Join(" | ", multi.Take(3)));
+    var host = new Window { Width = 1600, Height = 300 };
+    var canvas = new Canvas(); host.Content = canvas; host.Show();
+    var texts = CommandRegistry.Instance.All.Select(c => c.TooltipNow()).OrderByDescending(t => t.Length).Take(20).ToList();
+    texts.Add(TreeNode.Build(s.Document)[0].Children.Select(n => n.Tooltip).OrderByDescending(t => t.Length).First());
+    texts.Add(Loc.L("Выберите грань, ребро, вершину, плоскость или эскиз — здесь появятся подходящие операции") + " — " + Loc.L("Недоступно: ") + Loc.L("Выберите операции в дереве"));
+    int bad = 0; string? example = null;
+    foreach (var text in texts)
+    {
+        foreach (double cut in new[] { 0.0, 0.4, 0.9 })
+        {
+            var tt = new ToolTip { Content = text };
+            canvas.Children.Clear(); canvas.Children.Add(tt); Run();
+            tt.Measure(Size.Infinity); var ds = tt.DesiredSize;
+            tt.Arrange(new Rect(0, 0, Math.Max(1, ds.Width - cut), ds.Height));
+            var tb = tt.GetVisualDescendants().OfType<TextBlock>().First();
+            int lines = tb.TextLayout.TextLines.Count;
+            double textW = tb.TextLayout.WidthIncludingTrailingWhitespace, room = tb.Bounds.Width - tb.Padding.Left;
+            bool fits = lines == 1 && textW <= room + 0.01 && tb.TextLayout.Height <= tb.Bounds.Height - tb.Padding.Top + 0.01;
+            if (!fits) { bad++; example ??= $"«{text}» cut {cut}: lines {lines}, text {textW:0.##} in {room:0.##}"; }
+        }
+    }
+    Console.WriteLine($"  tooltips checked {texts.Count} × 3 widths, cut or wrapped: {bad}{(example != null ? " — " + example : "")}");
+    Require(bad == 0, "tooltips are wrapped or cut: " + example);
+    host.Close(); w.Close();
+});
+
+Check("UI-PROGRESS-K121", () =>
+{
+    // k121 (п. 2): полоса хода в строке состояния — загрузка файла, затем обработка (операций сделано из всех, процент
+    // растёт), затем отображение; потом полоса скрыта (P3D_STATUSPROGRESS=0, P3D_BUILDPROGRESS=0).
+    double delay0 = MainWindow.ProgressDelayMs; MainWindow.ProgressDelayMs = 0;
+    string path = Path.Combine(Path.GetTempPath(), $"p3d_k121p_{Guid.NewGuid():N}.p3d");
+    try
+    {
+        var src = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(5, 24), "progress");
+        src.SaveAs(path);
+        var w = Open(DocumentSession.NewPart());
+        var open = w.OpenAsync(path);
+        var t0 = DateTime.Now;
+        while (!open.IsCompleted && (DateTime.Now - t0).TotalSeconds < 30) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(2); }
+        Console.WriteLine($"  open: {open.Status} {open.Exception?.InnerException?.Message}, part {w.Session.Part?.Name} features {w.Session.Part?.Features.Count}");
+        Require(open.IsCompleted && w.Session.Part!.Features.Count > 10, "the file did not open");
+        var s = w.Session; var doc = s.Document;
+        var seen = new List<double>();
+        var build = doc.RebuildDirtyAsync();
+        while (!build.IsCompleted && (DateTime.Now - t0).TotalSeconds < 120)
+        {
+            Dispatcher.UIThread.RunJobs(); w.UpdateProgress();
+            if (w.ProgressShown is { Indeterminate: false } ps && ps.Stage.StartsWith(Loc.L("Обработка: {0} из {1}", 0, 0)[..5])) seen.Add(ps.Percent);
+            Thread.Sleep(3);
+        }
+        Dispatcher.UIThread.RunJobs(); w.UpdateProgress();
+        var stages = w.ProgressStages;
+        Console.WriteLine($"  stages: {string.Join(" → ", stages.Select(x => x.Length > 30 ? x[..30] : x).Distinct().Take(8))}; processing samples {seen.Count}, percent {(seen.Count > 0 ? $"{seen.Min():0}…{seen.Max():0}" : "—")}");
+        Require(stages.Any(x => x.StartsWith(Loc.L("Загрузка «{0}»…", "")[..5])), "no loading stage");
+        Require(seen.Any(p => p > 0 && p < 100) && seen.Count > 1, "no processing progress");
+        Require(w.ProgressShown?.Stage == Loc.L("Отображение…"), "no display stage after the build");
+        Require(stages.IndexOf(stages.First(x => x.StartsWith(Loc.L("Загрузка «{0}»…", "")[..5]))) < stages.FindLastIndex(x => x == Loc.L("Отображение…")), "stage order");
+        w.Close();
+    }
+    finally { MainWindow.ProgressDelayMs = delay0; try { File.Delete(path); } catch { } }
+});
+
+Check("UI-GROUP-REAL-K121", () =>
+{
+    // k121 (п. 3): группа — настоящая: операции 1, 5, 6 становятся подряд в истории (прочие между ними — перед группой
+    // или после, по зависимостям), форма детали прежняя, в дереве группа на месте операций. Перестановка, меняющая форму, —
+    // отказ без изменений (P3D_GROUPREORDER=0 — прежняя группа «в дереве»).
+    var s = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 12), "grp"); var w = Open(s); BuildNow(s);
+    var part = s.Part!;
+    var f = part.Features;
+    var members = new List<Feature> { f[1], f[5], f[6] };
+    string before = string.Join(",", f.Select(x => x.Name));
+    double v0 = part.Volume; int faces0 = part.Bodies.Sum(b => b.Faces.Count());
+    WaitTask(TreeCommands.SetGroupAsync(w, members, "G")); BuildNow(s); w.RebuildTree();
+    var idx = members.Select(m => part.Features.IndexOf(m)).ToList();
+    Console.WriteLine($"  before: {before}");
+    Console.WriteLine($"  after:  {string.Join(",", part.Features.Select(x => x.Name))}; members at {string.Join(",", idx)}; volume {v0:0.###} -> {part.Volume:0.###}");
+    Require(idx[1] == idx[0] + 1 && idx[2] == idx[1] + 1, "group features are not consecutive in the history");
+    Require(Math.Abs(part.Volume - v0) < 1e-6 * v0 && part.Bodies.Sum(b => b.Faces.Count()) == faces0 && part.Features.All(x => x.Error == null), "regrouping changed the part");
+    var gnode = w.AllNodes.First(n => n.Item is InfoItem { Role: "group" });
+    var inGroup = gnode.Children.Select(n => n.Item).OfType<Feature>().ToList();
+    Require(inGroup.SequenceEqual(members), "the tree group does not hold the features in order");
+    // откат одним шагом
+    s.Undo(); BuildNow(s);
+    var pu = s.Part!;
+    Console.WriteLine($"  undo: {string.Join(",", pu.Features.Select(x => x.Name))}");
+    Require(string.Join(",", pu.Features.Select(x => x.Name)) == before && pu.Features.All(x => x.Group == null), "undo does not restore the order");
+    // отказ: перестановка меняет форму (карман, затем бобышка на его месте, затем отверстие; группа «карман + отверстие»
+    // вынесла бы бобышку перед карманом — карман прорезал бы её)
+    var p2 = Parametric3D.App.Diagnostics.TestParts.Block("rf");
+    var pk = new ExtrudeFeature("Pocket") { SketchId = Parametric3D.App.Diagnostics.TestParts.RectSketch(p2, 20, -15, -10, 30, 20).Id, Cut = true };
+    pk.Side1.Distance = new ValueRef(6); pk.Side1.Flip = true; p2.AddFeature(pk);
+    var bs = new ExtrudeFeature("Boss") { SketchId = Parametric3D.App.Diagnostics.TestParts.CircleSketch(p2, 14, 0, 0, 5).Id };
+    bs.Side1.Distance = new ValueRef(10); p2.AddFeature(bs);
+    var ho = new HoleFeature("Hole") { Direction = -Vector3d.UnitZ, ThroughAll = true }; ho.Points.Add(new Vector3d(35, 20, 20)); ho.Diameter = new ValueRef(4); p2.AddFeature(ho);
+    var s2 = DocumentSession.FromPart(p2, "rf"); var w2 = Open(s2); BuildNow(s2);
+    string order2 = string.Join(",", p2.Features.Select(x => x.Name)); double v2 = p2.Volume;
+    WaitTask(TreeCommands.SetGroupAsync(w2, new Feature[] { pk, ho }, "G2")); BuildNow(s2);
+    p2 = s2.Part!;   // отказ — откат правки (деталь — снимок до неё)
+    Console.WriteLine($"  shape-changing group: order {string.Join(",", p2.Features.Select(x => x.Name))}, groups {string.Join(",", p2.Features.Select(x => x.Group ?? "-"))}, volume {v2:0.###} -> {p2.Volume:0.###}");
+    Require(string.Join(",", p2.Features.Select(x => x.Name)) == order2 && p2.Features.All(x => x.Group == null) && Math.Abs(p2.Volume - v2) < 1e-6 * v2, "a shape-changing regroup was applied");
+    w2.Close(); w.Close();
 });
 
 Check("UI-PART-PANEL-K120", () =>
@@ -4840,6 +4954,14 @@ Check("UI-CTRL-TOGGLE", () =>
     Require(n1 >= 1 && n2 > n1 && n3 == n1, $"ctrl toggle: {n1} → {n2} → {n3}");
     w.Close();
 });
+
+void WaitTask(Task t)
+{
+    var t0 = DateTime.Now;
+    while (!t.IsCompleted && (DateTime.Now - t0).TotalSeconds < 300) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+    if (t.Exception != null) throw t.Exception.InnerException ?? t.Exception;
+    Dispatcher.UIThread.RunJobs();
+}
 
 void BuildNow(DocumentSession ses)
 {
