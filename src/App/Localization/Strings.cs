@@ -197,6 +197,7 @@ public static class Strings
         ["Плоскости"] = "Planes", ["Оси"] = "Axes", ["Начало координат"] = "Origin", ["Точки"] = "Points", ["Линии"] = "Lines",
         ["Вершины"] = "Vertices", ["Осевые линии"] = "Centerlines", ["Эскизы"] = "Sketches", ["Размеры"] = "Dimensions",
         ["Обозначения"] = "Annotations", ["Измерения"] = "Measurements",
+        ["Пересчёт с «{0}»: {1} из {2}"] = "Recomputing from “{0}”: {1} of {2}",
         // k121: ход загрузки и перестроения, настоящая группа
         ["Загрузка «{0}»…"] = "Loading “{0}”…", ["Обработка: {0} из {1}"] = "Processing: {0} of {1}", ["Обработка…"] = "Processing…",
         ["Отображение…"] = "Displaying…", ["Нельзя собрать группу: "] = "Cannot make the group: ",

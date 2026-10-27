@@ -119,7 +119,9 @@ static partial class Program
             var rd = h.Redo(u.Part, pars, rebuild: false)!.Value;
             var r2 = rd.Part.Compute(null); rd.Part.Apply(r2);
             Log(new { test = "KRN08-UNDO-ADOPTS-CHECKPOINTS", undoStartedAt = r1.StartedAt, redoStartedAt = r2.StartedAt, adopted = h.LastAdopted, vUndo = u.Part.Volume, vRef = refU.Volume, vRedo = rd.Part.Volume, v12 });
-            Require(r1.StartedAt == 7 && r2.StartedAt == 7, $"undo/redo rebuilt from operation {r1.StartedAt}/{r2.StartedAt} (7 expected)");
+            // k122: журнал держит расчёт вместе со снимком — отмена и повтор не выполняют ни одной операции (P3D_UNDOSTASH=0 — с №7)
+            int want = Environment.GetEnvironmentVariable("P3D_UNDOSTASH") == "0" ? 7 : part.Features.Count;
+            Require(r1.StartedAt == want && r2.StartedAt == want && r1.Executed == 0 == (want == part.Features.Count), $"undo/redo rebuilt from operation {r1.StartedAt}/{r2.StartedAt} ({want} expected)");
             Require(Math.Abs(u.Part.Volume - refU.Volume) <= 1e-9 * refU.Volume, $"undo volume {u.Part.Volume:R} vs from scratch {refU.Volume:R}");
             Require(Math.Abs(rd.Part.Volume - v12) <= 1e-9 * v12, $"redo volume {rd.Part.Volume:R} vs {v12:R}");
             Require(u.Part.Features.All(f => f.Error == null) && rd.Part.Features.All(f => f.Error == null), "errors after undo/redo");

@@ -339,6 +339,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
     // перетаскивания ручки); «ОК» — результат предпросмотра забывается, операция считается обычным точным расчётом.
     // Выключение — P3D_OPPREVIEW=0 (как прежде: каждый шаг — точный).
     public static bool OpPreviewOn = Environment.GetEnvironmentVariable("P3D_OPPREVIEW") != "0";
+    public static readonly bool EditRecomputeOff = Environment.GetEnvironmentVariable("P3D_EDITRECOMPUTE") == "0";
     private bool _opPreview;
     private void BeginOpPreview()
     {
@@ -353,7 +354,9 @@ public abstract class FeatureOp<T> : Operation where T : Feature
         if (!_opPreview) return;
         _opPreview = false;
         if (ReferenceEquals(W.Session.Document.PreviewPart, Part)) W.Session.Document.PreviewPart = null;
-        if (recompute && _added) Part.EndPreviewSession(F);
+        // k122: и у ПРАВКИ готовой операции (прежде только у новой — после «ОК» на детали оставался приближённый результат
+        // предпросмотра: операция по сеткам, операции после неё не пересчитаны). P3D_EDITRECOMPUTE=0 — прежнее.
+        if (recompute && (_added || Editing && !EditRecomputeOff && Part.Features.Contains(F))) Part.EndPreviewSession(F);
     }
 
     private bool _added;
@@ -388,7 +391,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
         else if (ReferenceEquals(W.Session.Document.PreviewPart, Part))
         {
             W.Session.Document.PreviewPart = null;
-            if (_added) Part.EndPreviewSession(F);
+            if (_added || Editing && !EditRecomputeOff && Part.Features.Contains(F)) Part.EndPreviewSession(F);
         }
         base.EndDrag();
     }

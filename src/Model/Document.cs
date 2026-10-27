@@ -144,6 +144,17 @@ public sealed class Document
         }
     }
 
+    /// <summary>k122: расчёт одной детали идёт не с начала — с этой операции (иначе null).</summary>
+    public Features.Feature? BuildFromFeature
+    {
+        get
+        {
+            if (!_isBuilding || _progressParts.Count != 1) return null;
+            var p = _progressParts[0]; int i = p.ProgressFrom;
+            return i > 0 && i < p.Features.Count && p.ProgressTotal > 0 ? p.Features[i] : null;
+        }
+    }
+
     /// <summary>Фоновая пересборка началась / закончилась (события — в главном потоке).</summary>
     public event Action? BuildStarted, BuildFinished;
 

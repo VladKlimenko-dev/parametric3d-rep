@@ -52,6 +52,78 @@ MainWindow Open(DocumentSession s)
     return w;
 }
 
+if (only == "probe-incr")
+{
+    // разбор (k122): с какой операции пересчитывается деталь при правке операции, эскиза, отмене (как у пользователя: из файла)
+    string path = args.Length > 1 ? args[1] : Path.Combine(Path.GetTempPath(), $"p3d_incr_{Guid.NewGuid():N}.p3d");
+    if (args.Length < 2) DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(7, 40), "incr").SaveAs(path);
+    var w = Open(DocumentSession.NewPart());
+    var t = w.OpenAsync(path); while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+    var s = w.Session; BuildNow(s);
+    void Log(string what) { var p = s.Part!; Console.WriteLine($"{what}: features {p.Features.Count}, applied {string.Join(" ", p.AppliedLog.Select(a => $"[{a.StartedAt}+{a.Executed}]"))}, checkpoints {p.CheckpointCount}"); p.AppliedLog.Clear(); }
+    Console.WriteLine("open feature ms: " + string.Join(", ", s.Part!.Features.Select((f, i) => $"#{i} {f.Name} {(s.Part.LastFeatureMs.TryGetValue(f, out var m) ? m : 0):0}")));
+    Log("open");
+    var part = s.Part!;
+    void Settle() { for (int i = 0; i < 4; i++) { BuildNow(s); var t1 = DateTime.Now; while ((DateTime.Now - t1).TotalMilliseconds < 400) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); } } BuildNow(s); }
+    if (args.Length > 2 && args[2] == "misc")
+    {
+        var pm = s.Part!;
+        void Do(string what, Action a) { var sw = System.Diagnostics.Stopwatch.StartNew(); a(); Settle(); Log($"{what} ({sw.ElapsedMilliseconds} ms incl. 2 s waits)"); }
+        Do("rename #2", () => s.Edit("r", () => s.Part!.Features[2].Name = "Renamed"));
+        Do("group #9,#10", () => WaitTask(TreeCommands.SetGroupAsync(w, new[] { s.Part!.Features[9], s.Part.Features[10] }, "G")));
+        Do("hide part", () => { s.Part!.Visible = false; });
+        Do("show part", () => { s.Part!.Visible = true; });
+        Do("save", () => s.SaveAs(Path.Combine(Path.GetTempPath(), "incr_saved.p3d")));
+        Do("suppress #11", () => s.Edit("s", () => { s.Part!.Features[11].Suppressed = true; }));
+        Do("unsuppress #11", () => s.Edit("s", () => { s.Part!.Features[11].Suppressed = false; }));
+        Do("undo", () => s.Undo());
+        Do("material", () => { s.Part!.Material = Parametric3D.Model.Material.Library().Skip(3).First(); s.MarkModified(); w.ViewPort.MarkDirty(); });
+        Do("units", () => w.SetPartUnits(s.Part!, Parametric3D.Core.UnitSystem.Standard[3]));
+        Do("rollback to #6", () => s.Edit("rb", () => { s.Part!.StageIndex = 6; s.Part.MarkStageMoved(); }));
+        Do("rollback to end", () => s.Edit("rb", () => s.Part!.EndInsertMode(resume: true)));
+        return 0;
+    }
+    if (args.Length > 2 && args[2] == "sketches")
+    {
+        for (int i = 0; i < s.Part!.Features.Count; i++)
+        {
+            var pf = s.Part!.Features[i];
+            var ids = pf.ConsumedSketchIds().ToList();
+            var k = s.Part.Sketches.FirstOrDefault(x => ids.Contains(x.Id));
+            if (k == null || pf.Suppressed) continue;
+            if (args.Length > 3 && !args[3].Split(',').Contains(i.ToString())) continue;
+            var sw0 = System.Diagnostics.Stopwatch.StartNew();
+            Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.ResetAll();
+            w.EditSketch(k); Settle(); long tEnter = sw0.ElapsedMilliseconds;
+            Console.WriteLine("PROF enter:\n" + string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(25)));
+            Parametric3D.Kernel.Diagnostics.Prof.Enabled = false;
+            var q = k.AllPoints().FirstOrDefault(z => z.Role != Parametric3D.Model.Sketching.SkRole.Reference && !z.Fixed);
+            if (q == null) { w.CancelSketch(); Settle(); continue; }
+            q.X += 0.01; k.NotifyChanged(k); Settle(); long tChange = sw0.ElapsedMilliseconds;
+            w.FinishSketch(); Settle(); long tFinish = sw0.ElapsedMilliseconds;
+            Log($"sketch of #{i} {pf.Name} (enter {tEnter} ms, change {tChange - tEnter} ms, finish {tFinish - tChange} ms)");
+            var sw1 = System.Diagnostics.Stopwatch.StartNew();
+            s.Undo(); Settle(); Log($"  undo ({sw1.ElapsedMilliseconds} ms)");
+        }
+        return 0;
+    }
+    var ex = part.Features.Where(f => f is ExtrudeFeature).Skip(2).First(); int at = part.Features.IndexOf(ex);
+    Console.WriteLine($"edit feature #{at} {ex.Name}");
+    w.SelectItem(ex); CommandRegistry.Instance["edit.feature"].Execute(); Dispatcher.UIThread.RunJobs();
+    var op = w.CurrentOperation!; op.DragValue!(((ExtrudeFeature)ex).Side1.Distance.Value + 0.5); op.FieldChanged(); BuildNow(s); Log("  preview");
+    w.CommitOperation(); Settle(); Log("  commit");
+    part = s.Part!; ex = part.Features[at];
+    var sk = part.Sketches.First(k => ex.ConsumedSketchIds().Contains(k.Id));
+    w.EditSketch(sk); BuildNow(s); Log("  enter sketch");
+    var pt = sk.AllPoints().First(q => q.Role != Parametric3D.Model.Sketching.SkRole.Reference && !q.Fixed); pt.X += 0.3; sk.NotifyChanged(sk); BuildNow(s); Log("  sketch change");
+    w.FinishSketch(); BuildNow(s); Log("  finish sketch");
+    s.Undo(); BuildNow(s); Log("  undo");
+    s.Redo(); BuildNow(s); Log("  redo");
+    w.SelectItem(s.Part!.Features[at]); CommandRegistry.Instance["edit.feature"].Execute(); Dispatcher.UIThread.RunJobs();
+    w.CancelOperation(); BuildNow(s); Log("  cancel op");
+    return 0;
+}
+
 if (only == "probe-measure")
 {
     // разбор (k120): замер двух антипараллельных граней в файле args[1]; ключи, найдены ли после перестроения
@@ -3216,6 +3288,70 @@ Check("UI-K116", () =>
     w.FinishSketch(); BuildNow(s);
     Require(s.CanUndo && Coords(s.Part!.Sketches.First(k => k.Id == sk.Id)) != c0, "OK with a change was not applied");
     w.Close();
+});
+
+Check("UI-INCR-K122", () =>
+{
+    // k122 (замечание 27.10, 19:44): деталь держит состояние тела после каждой операции (строятся при открытии, в файл не
+    // пишутся). Правка эскиза или операции N — пересчёт с N, предыдущие не трогаются; строка отката туда и обратно — без
+    // пересчёта операций (P3D_STAGEKEEP=0); отмена и повтор — без пересчёта операций (P3D_UNDOSTASH=0); итог — как у
+    // полного пересчёта.
+    string path = Path.Combine(Path.GetTempPath(), $"p3d_k122_{Guid.NewGuid():N}.p3d");
+    try
+    {
+        DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(7, 40), "incr").SaveAs(path);
+        var w = Open(DocumentSession.NewPart());
+        WaitTask(w.OpenAsync(path));
+        var s = w.Session; BuildNow(s);
+        var part = s.Part!; int n = part.Features.Count;
+        Console.WriteLine($"  opened: {n} features, states {part.CheckpointCount}, first build [{part.LastStartedAt}+{part.LastExecuted}]");
+        Require(part.CheckpointCount == n && part.LastStartedAt == 0 && part.LastExecuted == n, "states after opening");
+        double v0 = part.Volume;
+        // строка отката — на середину и обратно
+        int mid = n / 2;
+        w.SelectItem(part.Features[mid - 1]); TreeCommands.InsertHere(w); BuildNow(s);
+        var back = (part.LastStartedAt, part.LastExecuted);
+        w.ViewPort.Selection.Clear(); TreeCommands.InsertHere(w); BuildNow(s);
+        var fwd = (part.LastStartedAt, part.LastExecuted);
+        Console.WriteLine($"  rollback to {mid}: [{back.Item1}+{back.Item2}], back to the end: [{fwd.Item1}+{fwd.Item2}], volume {part.Volume:0.###}");
+        Require(back.Item2 == 0 && fwd.Item2 == 0 && part.EffectiveStage == n && Math.Abs(part.Volume - v0) < 1e-9 * v0, "moving the rollback bar recomputed features");
+        // правка эскиза операции k — пересчёт с k
+        int k = Enumerable.Range(mid, n - mid).First(i => part.Features[i] is ExtrudeFeature && part.Features[i].ConsumedSketchIds().Any());
+        var sk = part.Sketches.First(x => part.Features[k].ConsumedSketchIds().Contains(x.Id));
+        w.EditSketch(sk); BuildNow(s);
+        var pt = sk.AllPoints().First(q => q.Role != Parametric3D.Model.Sketching.SkRole.Reference && !q.Fixed); pt.X += 0.25; sk.NotifyChanged(sk);
+        w.FinishSketch(); BuildNow(s);
+        part = s.Part!;
+        var edit = (part.LastStartedAt, part.LastExecuted); double v1 = part.Volume;
+        Console.WriteLine($"  sketch of #{k}: [{edit.Item1}+{edit.Item2}], volume {v0:0.###} -> {v1:0.###}");
+        Require(edit.Item1 == k && edit.Item2 == n - k, "a sketch edit did not start from its feature");
+        // правка самой операции k (глубина) — пересчёт с k
+        w.SelectItem(part.Features[k]); CommandRegistry.Instance["edit.feature"].Execute(); Dispatcher.UIThread.RunJobs();
+        part.AppliedLog.Clear();
+        var op = w.CurrentOperation!; op.DragValue!(((ExtrudeFeature)part.Features[k]).Side1.Distance.Value + 1.5); op.FieldChanged(); BuildNow(s);
+        w.CommitOperation(); BuildNow(s);
+        for (int i = 0; i < 10 && s.Part!.AppliedLog.All(a => a.StartedAt + a.Executed < n); i++) { Thread.Sleep(100); Dispatcher.UIThread.RunJobs(); BuildNow(s); }
+        part = s.Part!;
+        var opEdit = part.AppliedLog.ToList(); v1 = part.Volume;
+        Console.WriteLine($"  feature #{k} depth: applied {string.Join(" ", opEdit.Select(a => $"[{a.StartedAt}+{a.Executed}]"))}, volume {v0:0.###} -> {v1:0.###}");
+        Require(opEdit.Count > 0 && opEdit.All(a => a.StartedAt >= k) && Math.Abs(v1 - v0) > 1e-6 * v0, "a feature edit did not start from the feature");
+        Require(opEdit.Any(a => a.StartedAt == k && a.Executed == n - k) && !part.ShowsInstant, "after OK the part keeps the approximate preview (later features not recomputed)");
+        // отмена и повтор
+        s.Undo(); BuildNow(s); part = s.Part!;
+        var und = (part.LastStartedAt, part.LastExecuted); double vu = part.Volume;
+        s.Redo(); BuildNow(s); part = s.Part!;
+        var red = (part.LastStartedAt, part.LastExecuted); double vr = part.Volume;
+        Console.WriteLine($"  undo [{und.Item1}+{und.Item2}] volume {vu:0.###}; redo [{red.Item1}+{red.Item2}] volume {vr:0.###}");
+        Require(und.Item2 == 0 && red.Item2 == 0, "undo or redo recomputed features");
+        Require(Math.Abs(vu - v0) < 1e-9 * v0 && Math.Abs(vr - v1) < 1e-9 * v0, "undo or redo restored a different body");
+        // итог — как у полного пересчёта
+        int faces = part.Bodies.Sum(b => b.Faces.Count());
+        part.Invalidate(); BuildNow(s);
+        Console.WriteLine($"  full rebuild: [{part.LastStartedAt}+{part.LastExecuted}], volume {part.Volume:0.###}, faces {part.Bodies.Sum(b => b.Faces.Count())} vs {faces}");
+        Require(Math.Abs(part.Volume - vr) < 1e-9 * v0 && part.Bodies.Sum(b => b.Faces.Count()) == faces, "the incremental result differs from a full rebuild");
+        w.Close();
+    }
+    finally { try { File.Delete(path); } catch { } }
 });
 
 Check("UI-TOOLTIP-K121", () =>

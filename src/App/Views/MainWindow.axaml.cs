@@ -2365,7 +2365,7 @@ public partial class MainWindow : Window
             else return false;
             int stage = at >= part.Features.Count ? -1 : part.ClampStage(at);
             if (stage == part.StageIndex || (stage < 0 && !part.InInsertMode)) return false;
-            Session.Edit(L("Строка отката"), () => { if (stage < 0) part.EndInsertMode(resume: true); else { part.StageIndex = stage; part.Invalidate(); } });
+            Session.Edit(L("Строка отката"), () => { if (stage < 0) part.EndInsertMode(resume: true); else { part.StageIndex = stage; if (Part.StageKeepOffPublic) part.Invalidate(); else part.MarkStageMoved(); } });
         }
         else if (bar.Item is InfoItem { Role: "asm_rollback", Asm: { } asm })
         {
@@ -3251,7 +3251,12 @@ public partial class MainWindow : Window
         else if (doc != null && doc.IsBuilding)
         {
             var (d, t) = doc.BuildProgress;
-            if (t > 0) { pct = 100.0 * d / t; stage = L("Обработка: {0} из {1}", d, t); }
+            if (t > 0)
+            {
+                pct = 100.0 * d / t;
+                // k122: пересчёт не с начала — с какой операции (предыдущие не пересчитываются)
+                stage = doc.BuildFromFeature is { } ff ? L("Пересчёт с «{0}»: {1} из {2}", ff.Name, d, t) : L("Обработка: {0} из {1}", d, t);
+            }
             else { stage = L("Обработка…"); ind = true; }
             _sceneWaitUntil = DateTime.Now.AddSeconds(5);
         }

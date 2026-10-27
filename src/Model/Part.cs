@@ -887,7 +887,32 @@ public sealed class Part : ModelItem
         internal Dictionary<Feature, FeatureRecord> Records = null!;
         internal int Stage;
         internal int FeatureCount;
+        /// <summary>k122: операции детали в момент снимка (итоги операций — по порядку) и тела (доноры сетки).</summary>
+        internal List<Feature> FeatureList = new();
+        internal List<Kernel.Topology.TSolid> Bodies = new();
+        /// <summary>Сколько сохранённых состояний (разбор).</summary>
+        public int CheckpointCount => Checkpoints.Count;
     }
+
+    /// <summary>
+    /// k122: ОТМЕНА И ПОВТОР БЕЗ ПЕРЕСЧЁТА. Деталь из снимка журнала перенимает сохранённые состояния, снятые с детали в тот
+    /// момент, когда этот снимок записывался (то же дерево операций): пересчёт — ни одной операции, только сетка показа.
+    /// Итоги операций переносятся по порядку. Возвращает, с какой операции пойдёт расчёт (−1 — не перенято). P3D_UNDOSTASH=0.
+    /// </summary>
+    public int AdoptStash(BuildStash st)
+    {
+        if (AdoptOff || UndoStashOff || !UseCheckpoints || st.Inputs == null || st.FeatureList.Count != Features.Count || st.Stage != StageIndex) return -1;
+        for (int i = 0; i < Features.Count; i++) if (st.FeatureList[i].GetType() != Features[i].GetType() || st.FeatureList[i].Key != Features[i].Key) return -1;
+        _checkpoints.Clear(); _checkpoints.AddRange(st.Checkpoints.OrderBy(c => c.After));
+        _records.Clear();
+        for (int i = 0; i < Features.Count; i++) if (st.Records.TryGetValue(st.FeatureList[i], out var rec)) _records[Features[i]] = rec;
+        _lastInputs = st.Inputs; _lastParams = st.Params;
+        _lastResult = null;
+        _dirtyFrom = _checkpoints.Count > 0 ? _checkpoints[^1].After + 1 : 0;
+        _donorKeep = st.Bodies.ToList();
+        return _dirtyFrom;
+    }
+    internal static readonly bool UndoStashOff = Environment.GetEnvironmentVariable("P3D_UNDOSTASH") == "0";
 
     public BuildStash? StashBuild()
     {
@@ -896,6 +921,7 @@ public sealed class Part : ModelItem
         {
             Checkpoints = _checkpoints.ToList(), Last = _lastResult, Inputs = _lastInputs, Params = _lastParams,
             Records = new Dictionary<Feature, FeatureRecord>(_records, ReferenceEqualityComparer.Instance), Stage = StageIndex, FeatureCount = Features.Count,
+            FeatureList = Features.ToList(), Bodies = Bodies.ToList(),
         };
     }
 
@@ -1053,9 +1079,12 @@ public sealed class Part : ModelItem
     public int ProgressDone { get => _progDone; private set { if (!ProgressOff) _progDone = value; } }
     public int ProgressTotal { get => _progTotal; private set { if (!ProgressOff) _progTotal = value; } }
     private volatile int _progDone, _progTotal;
+    /// <summary>k122: с какой операции идёт текущий расчёт (предыдущие — из сохранённых состояний).</summary>
+    public int ProgressFrom { get => _progFrom; private set => _progFrom = value; }
+    private volatile int _progFrom;
     public static readonly bool ProgressOff = Environment.GetEnvironmentVariable("P3D_BUILDPROGRESS") == "0";
     /// <summary>Отметить деталь как ждущую расчёта (ход с нуля).</summary>
-    public void ResetProgress() { ProgressDone = 0; ProgressTotal = Math.Max(1, Features.Count(f => !f.Suppressed) + 1); }
+    public void ResetProgress() { ProgressDone = 0; ProgressTotal = Math.Max(1, Features.Count(f => !f.Suppressed) + 1); ProgressFrom = 0; }
     /// <summary>Расчёт закончен (ход — весь).</summary>
     public void CompleteProgress() { ProgressDone = ProgressTotal; }
 
@@ -1113,7 +1142,13 @@ public sealed class Part : ModelItem
                 _dirtyFrom = 0;                               // настройки ядра или политика изменились
             }
             else if (last.Stage != EffectiveStage)
-                DirtyFromIndex(Math.Min(last.Stage, EffectiveStage));   // полоска сдвинулась
+            {
+                // k122: полоска сдвинулась — операции не менялись: сохранённые состояния и после полоски остаются годными
+                // (откат на строку — состояние после операции перед ней; возврат полоски — состояние после последней из
+                // сохранённых), прежде все состояния за полоской сбрасывались, и возврат пересчитывал их. P3D_STAGEKEEP=0.
+                if (StageKeepOff) DirtyFromIndex(Math.Min(last.Stage, EffectiveStage));
+                else _stageMoved = true;
+            }
         }
         else { if (BuildDbg) Console.WriteLine($"BUILD {Name}: no previous inputs"); _dirtyFrom = 0; }
 
@@ -1129,8 +1164,11 @@ public sealed class Part : ModelItem
             }
         }
 
-        return _lastResult != null && _dirtyFrom == int.MaxValue && UseCheckpoints;
+        return _lastResult != null && _dirtyFrom == int.MaxValue && !_stageMoved && UseCheckpoints;
     }
+    private bool _stageMoved;
+    internal static readonly bool StageKeepOff = Environment.GetEnvironmentVariable("P3D_STAGEKEEP") == "0";
+    public static bool StageKeepOffPublic => StageKeepOff;
 
     static readonly bool PreviewPartOff = Environment.GetEnvironmentVariable("P3D_PREVIEWPART") == "0";
     internal static readonly bool PreviewValidateOff = Environment.GetEnvironmentVariable("P3D_PREVIEWVALIDATE") == "0";
@@ -1308,9 +1346,9 @@ public sealed class Part : ModelItem
         int from = 0;
         int dirtyNote = _dirtyFrom;
 
-        if (UseCheckpoints && _dirtyFrom < int.MaxValue)
+        if (UseCheckpoints && (_dirtyFrom < int.MaxValue || _stageMoved))
         {
-            var take = _checkpoints.LastOrDefault(c => c.After < _dirtyFrom);
+            var take = _checkpoints.Where(c => c.After < Math.Min(_dirtyFrom, stage)).MaxBy(c => c.After);
             if (take != null)
             {
                 ctx.RollBack(take.State);
@@ -1321,13 +1359,16 @@ public sealed class Part : ModelItem
 
         result.StartedAt = from;
         if (BuildDbg) Console.WriteLine($"BUILD {Name}: from {from} of {Features.Count} (dirty {dirtyNote}), preview {previewNow}, checkpoints {_checkpoints.Count}");
-        _checkpoints.RemoveAll(c => c.After >= from);
+        // k122: состояния за полоской (операции там не выполняются) остаются — они годны, пока операции до них не менялись
+        // (а состояние после операции, перед которой что-то изменилось, — нет: dirtyNote — первое изменённое место)
+        _checkpoints.RemoveAll(c => c.After >= from && (StageKeepOff || c.After < stage || c.After >= dirtyNote));
 
         // ОТМЕТКА СБРАСЫВАЕТСЯ СРАЗУ. Иначе она остаётся опущенной навсегда: первая же правка
         // ставит её в ноль, и следующая правка берёт наименьшее из нуля и своего номера — то
         // есть снова ноль. Приращение в таком виде не работает вовсе, что и показала проверка:
         // при изменении последней операции выполнялись все четыре.
         _dirtyFrom = int.MaxValue;
+        _stageMoved = false;
 
         bool poisoned = false;
         int lastActive = -1;
@@ -1341,7 +1382,7 @@ public sealed class Part : ModelItem
         // k121: ход расчёта — для строки состояния (операций сделано / всего; последний шаг — сетки и проверка тел)
         int progTotal = 1;
         for (int k = from; k < Math.Min(stage, Features.Count); k++) if (!Features[k].Suppressed) progTotal++;
-        ProgressDone = 0; ProgressTotal = progTotal;
+        ProgressDone = 0; ProgressTotal = progTotal; ProgressFrom = from;
         try
         {
         for (int fi = 0; fi < Features.Count; fi++)
@@ -1572,7 +1613,12 @@ public sealed class Part : ModelItem
             bool instantHere = ctx.Bodies.Any(Kernel.Ops.InstantPreview.IsCarrier);
             if (UseCheckpoints && !instantHere)
                 using (Kernel.Diagnostics.Prof.Time("дерево: снимок после операции"))
-                _checkpoints.Add(new Checkpoint { After = fi, State = ctx.Remember() });
+                {
+                    // k122: по порядку операций (за полоской могут оставаться прежние состояния)
+                    int at = _checkpoints.FindIndex(c => c.After > fi);
+                    var cp = new Checkpoint { After = fi, State = ctx.Remember() };
+                    if (at < 0) _checkpoints.Add(cp); else _checkpoints.Insert(at, cp);
+                }
             if (instantHere)
             {
                 result.InstantAt = fi;
@@ -1839,6 +1885,12 @@ public sealed class Part : ModelItem
     /// <summary>UI (кнопка «Тест»): время операций последнего применённого расчёта, мс (только выполненные заново).</summary>
     public IReadOnlyDictionary<Feature, double> LastFeatureMs { get; private set; } = new Dictionary<Feature, double>();
 
+    /// <summary>k122 (разбор и проверки): с какой операции начат последний применённый расчёт и сколько операций выполнено.</summary>
+    public int LastStartedAt { get; private set; } = -1;
+    public int LastExecuted { get; private set; }
+    /// <summary>k122: последние применённые расчёты (начало, выполнено).</summary>
+    public readonly List<(int StartedAt, int Executed)> AppliedLog = new();
+
     public bool Apply(BuildResult r)
     {
         LastMeshFacesReused = r.MeshFacesReused;
@@ -1854,6 +1906,9 @@ public sealed class Part : ModelItem
                 && Dependencies.Changed(r.ParamSnapshot, Dependencies.Snapshot(r.ParamTable)).Count > 0) return false;
         }
 
+        LastStartedAt = r.StartedAt; LastExecuted = r.Executed;
+        AppliedLog.Add((r.StartedAt, r.Executed));
+        if (AppliedLog.Count > 64) AppliedLog.RemoveAt(0);
         Bodies.Clear();
         // k113: мгновенный предпросмотр — на экране сетка носителя, а тела (выбор, ссылки, ручки) — тело до операции: номера
         // граней, рёбер и вершин в сетке — его
