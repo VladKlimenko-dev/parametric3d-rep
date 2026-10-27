@@ -43,7 +43,7 @@ public static class TreeCommands
             if (!part.InInsertMode) { w.ShowToast(L("Выберите операцию, после которой вставлять"), error: false); return; }
             w.Session.Edit(L("Строка отката — в конец"), () => part.EndInsertMode(resume: true));
         }
-        else w.Session.Edit(L("Вставить здесь"), () => { part.StageIndex = part.ClampStage(at); part.Invalidate(); });
+        else w.Session.Edit(L("Вставить здесь"), () => { part.StageIndex = part.ClampStage(at); if (Part.StageKeepOffPublic) part.Invalidate(); else part.MarkStageMoved(); });
         w.ViewPort.MarkDirty(); w.RebuildTree();
     }
 
