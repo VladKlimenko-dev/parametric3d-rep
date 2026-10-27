@@ -613,6 +613,12 @@ public static class DocumentFile
             d.OpenFaces = fl.OnFaces.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList();
             d.FaceNames = fl.OnFaceNames.Count > 0 ? fl.OnFaceNames.ToList() : null;
         }),
+        MeasureFeature ms => Dto("measure", ms, d =>
+        {
+            PutS(d, "a", ms.RefA.Pack()); PutS(d, "b", ms.RefB.Pack());
+            (d.Num ??= new())["offset"] = ms.Offset; d.Num["value"] = ms.Value;
+            d.Dir = V3(ms.Side); d.Point = V3(ms.A); PutS(d, "end", string.Join(",", new[] { ms.B.X, ms.B.Y, ms.B.Z }.Select(x => x.ToString("R", System.Globalization.CultureInfo.InvariantCulture))));
+        }),
         MeshImportFeature mi => Dto("mesh_import", mi, d =>
         {
             PutS(d, "mesh", mi.MeshData); PutS(d, "source", mi.SourceName);
@@ -1229,6 +1235,17 @@ public static class DocumentFile
                     for (int i = 0; i + 2 < fd.OpenFaces.Count; i += 3) fl.OnFaces.Add(new Vector3d(fd.OpenFaces[i], fd.OpenFaces[i + 1], fd.OpenFaces[i + 2]));
                     if (fd.FaceNames != null) fl.OnFaceNames.AddRange(fd.FaceNames);
                     part.AddFeature(fl);
+                    break;
+                }
+                case "measure":
+                {
+                    var ms = new MeasureFeature(fd.Name) { Suppressed = fd.Suppressed, Offset = GetD(fd, "offset", 10), Value = GetD(fd, "value", 0) };
+                    if (MeasureRef.Unpack(GetS(fd, "a")) is { } ra) ms.RefA = ra;
+                    if (MeasureRef.Unpack(GetS(fd, "b")) is { } rb) ms.RefB = rb;
+                    if (fd.Dir is { Length: 3 } sd) ms.Side = new Vector3d(sd[0], sd[1], sd[2]);
+                    if (fd.Point is { Length: 3 } pa) ms.A = new Vector3d(pa[0], pa[1], pa[2]);
+                    if (GetS(fd, "end") is { } eb) { var e = eb.Split(',').Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray(); ms.B = new Vector3d(e[0], e[1], e[2]); }
+                    part.AddFeature(ms);
                     break;
                 }
                 case "mesh_import":

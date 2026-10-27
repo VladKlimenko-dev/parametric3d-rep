@@ -52,6 +52,32 @@ MainWindow Open(DocumentSession s)
     return w;
 }
 
+if (only == "probe-measure")
+{
+    // разбор (k120): замер двух антипараллельных граней в файле args[1]; ключи, найдены ли после перестроения
+    var s = DocumentSession.Open(args[1]); var w = Open(s); BuildNow(s);
+    var part = s.Part!;
+    var pl = part.Bodies.SelectMany(b => b.Faces).Select(f => (F: f, S: Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f) as Parametric3D.Kernel.Surfaces.PlaneSurface)).Where(x => x.S != null).ToList();
+    foreach (var a in pl) { var b = pl.FirstOrDefault(x => Vector3d.Dot(x.S!.F.W, a.S!.F.W) < -0.999); if (b.F != null) { w.ViewPort.Selection.SelectMany(new[] { a.F, b.F }.Select(f => new PickRef(f.Id, PickKind.Face, part, null)), false); break; } }
+    var ms = ViewSelectCommands.CreateMeasure(w)!; BuildNow(s);
+    Console.WriteLine($"A key '{ms.RefA.Key}', B key '{ms.RefB.Key}', value {ms.Value}, stale {ms.Stale}, error {ms.Error}");
+    foreach (var f in part.Bodies.SelectMany(b => b.Faces)) Console.WriteLine($"  face {f.Id} tag '{f.Tag}' {Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name}");
+    return 0;
+}
+
+if (only == "probe-labels")
+{
+    var w = Open(DocumentSession.NewPart());
+    foreach (var c in CommandRegistry.Instance.All.OrderBy(c => c.Id))
+    {
+        string lab = c.Label, sh = c.Short ?? "";
+        bool miss = Loc.EnOf(lab) == "" || (sh.Length > 0 && Loc.EnOf(sh) == "" && sh.Any(ch => ch >= 'А' && ch <= 'я'));
+        bool icon = IconProvider.Exists(c.Icon);
+        if (miss || !icon) Console.WriteLine($"{c.Id}\t{(icon ? "" : "NOICON")}\t{(miss ? "NOEN" : "")}\t{lab}\t{sh}");
+    }
+    return 0;
+}
+
 if (only == "probe-selftest")
 {
     // разбор: самотест приложения в окне без экрана (P3D_SELFTEST_ONLY=load|cancel|handles — раздел)
@@ -2008,7 +2034,8 @@ Check("UI-U13D-CONTEXT", () =>
     var roots = TreeNode.Build(s.Document);
     var infos = roots[0].Children.Where(n => n.Item is InfoItem).Select(n => ((InfoItem)n.Item).Role).ToList();
     Console.WriteLine($"  tree info nodes: {string.Join(",", infos)}");
-    Require(infos.Contains("params") && infos.Contains("material") && infos.Contains("body"), "info nodes");
+    // k120: «Параметры», «Материал», «Тело» — не узлы дерева, а свойства детали (замечание 15:06, пп. 1, 6, 7)
+    Require(!infos.Contains("params") && !infos.Contains("material") && !infos.Contains("body"), "info nodes");
     w.Close();
 });
 
@@ -3191,6 +3218,209 @@ Check("UI-K116", () =>
     w.Close();
 });
 
+Check("UI-PART-PANEL-K120", () =>
+{
+    // k120 (замечание 15:06, пп. 1–7): в дереве нет узлов «Параметры», «Материал», «Тело» (P3D_TREEINFO=0); щелчок по детали —
+    // панель свойств детали (P3D_PARTPANEL=0): имя и номер детали правятся, материал, система единиц (готовые и своя —
+    // окно «Новая система единиц»); «Изменение», «Обозначение», «Ед. учёта» убраны; на английском — без русских слов;
+    // всё пишется в документ.
+    var part = Parametric3D.App.Diagnostics.TestParts.Block("pp");
+    var s = DocumentSession.FromPart(part, "pp"); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    w.RebuildTree(); Run();
+    var info = w.AllNodes.Where(n => n.Item is InfoItem { Role: "params" or "material" or "body" }).Select(n => ((InfoItem)n.Item).Role).ToList();
+    Console.WriteLine($"  tree info nodes: {(info.Count == 0 ? "none" : string.Join(", ", info))}");
+    Require(info.Count == 0, "the tree still has Parameters / Material / Body nodes");
+    if (!w.PropertiesVisible) w.ToggleProperties();
+    w.SelectItem(part); w.ShowProperties(); Run();
+    TextBox Box(string n) => w.PropsBodyPanel.GetVisualDescendants().OfType<TextBox>().FirstOrDefault(t => t.Name == n) ?? throw new Exception("no field " + n);
+    var names = w.PropsBodyPanel.GetVisualDescendants().OfType<Control>().Where(c => c.Name?.StartsWith("prop_") == true).Select(c => c.Name!).ToList();
+    Console.WriteLine($"  part panel on tree click: {string.Join(", ", names)}");
+    Require(names.Contains("prop_Имя") && names.Contains("prop_Номер детали") && names.Contains("prop_material") && names.Contains("prop_units") && names.Contains("prop_units_new"), "the part panel is not shown for the selected part");
+    Require(!names.Any(n => n is "prop_Изменение" or "prop_Обозначение" or "prop_Ед. учёта" or "prop_Наименование"), "removed fields are still shown");
+    void Enter(TextBox t, string v) { t.Text = v; t.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter }); Run(); }
+    Enter(Box("prop_Имя"), "Корпус");
+    Enter(Box("prop_Номер детали"), "PN-120");
+    Require(part.Name == "Корпус" && part.Info.Code == "PN-120" && s.Modified, "name or part number is not edited");
+    // готовая система: дюймы
+    w.ShowProperties(); Run();
+    var units = w.PropsBodyPanel.GetVisualDescendants().OfType<ComboBox>().First(c => c.Name == "prop_units");
+    int ips = MainWindow.UnitSystemLibrary().FindIndex(u => u.Length == "in");
+    units.SelectedIndex = ips; Run();
+    Require(part.Units.Length == "in" && part.Units.Mass == "lb", "standard unit system is not set");
+    // своя система: окно «Новая система единиц» (см, кг, с)
+    var task = Dialogs.NewUnitSystem(w); Run();
+    var dw = Dialogs.LastUnitWindow!;
+    ComboBox C(string n) => dw.GetVisualDescendants().OfType<ComboBox>().First(c => c.Name == n);
+    C("us_length").SelectedIndex = 1; C("us_mass").SelectedIndex = 1;
+    dw.GetVisualDescendants().OfType<TextBox>().First(t => t.Name == "us_name").Text = "Лаборатория";
+    dw.GetVisualDescendants().OfType<Button>().First(b => b.Name == "us_ok").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Run();
+    Require(task.IsCompleted && task.Result is { Length: "cm", Mass: "kg", Name: "Лаборатория" }, "the new unit system dialog");
+    w.SetPartUnits(part, task.Result!); Run();
+    var texts = w.PropsBodyPanel.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").ToList();
+    Console.WriteLine($"  custom system: {part.Units.Name} ({part.Units.Length}, {part.Units.Mass}); size row: {texts.FirstOrDefault(t => t.Contains('×'))}");
+    Require(texts.Any(t => t.Contains('×') && t.Contains(Loc.L("см"))), "sizes are not shown in the part unit system");
+    part.Material = Parametric3D.Model.Material.Library().Skip(2).First();
+    part.Info.Tolerances = "ISO 2768-mK";
+    // английский: ни одной русской подписи (кроме имени детали, которое ввёл пользователь)
+    Loc.Set(true);
+    try
+    {
+        w.ShowProperties(); Run();
+        var ru = w.PropsPanelTexts().Where(t => t != part.Name && !t.StartsWith(part.Units.Name) && System.Text.RegularExpressions.Regex.IsMatch(t, "[А-Яа-яЁё]")).Distinct().ToList();
+        Console.WriteLine($"  English panel, Russian texts: {(ru.Count == 0 ? "none" : string.Join(" | ", ru))}");
+        Require(ru.Count == 0, "the English part panel has Russian text: " + string.Join(" | ", ru));
+    }
+    finally { Loc.Set(false); }
+    string path = Path.Combine(Path.GetTempPath(), $"p3d_ui_k120p_{Guid.NewGuid():N}.p3d");
+    try
+    {
+        s.SaveAs(path);
+        var p2 = DocumentSession.Open(path).Part!;
+        Console.WriteLine($"  reopened: {p2.Name}, {p2.Info.Code}, {p2.Material?.Name}, {p2.Units.Name} {p2.Units.Length}/{p2.Units.Mass}, {p2.Info.Tolerances}");
+        Require(p2.Name == "Корпус" && p2.Info.Code == "PN-120" && p2.Material?.Name == part.Material.Name && p2.Units.Name == "Лаборатория" && p2.Units.Length == "cm" && p2.Units.Mass == "kg" && p2.Info.Tolerances == "ISO 2768-mK",
+            "part properties are not saved with the document");
+    }
+    finally { try { File.Delete(path); } catch { } }
+    w.Close();
+});
+
+Check("UI-SELECTION-K120", () =>
+{
+    // k120 (пп. 8, 12, 15): выбор рамкой — один «выбор изменился» на всю рамку (P3D_SELMANY=0); список выбранного в панели:
+    // × снимает выбор, наведение подсвечивает элемент на виде, фильтр по видам (P3D_SELLIST=0); кнопки обновляются по
+    // выбору — «Группа» доступна при двух операциях и более (P3D_CMDREFRESH=0).
+    var s = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Holes100(), "sel"); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    if (!w.PropertiesVisible) w.ToggleProperties();
+    var part = s.Part!; var vp = w.ViewPort;
+    var faces = part.Bodies.SelectMany(b => b.Faces).Select(f => new PickRef(f.Id, PickKind.Face, part, null)).ToList();
+    var edges = part.Bodies.SelectMany(b => b.Edges).Take(30).Select(e => new PickRef(e.Id, PickKind.Edge, part, null)).ToList();
+    vp.Selection.Clear();
+    int c0 = vp.Selection.ChangedCount;
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    vp.Selection.SelectMany(faces.Concat(edges), additive: false); Run();
+    sw.Stop();
+    Console.WriteLine($"  region of {faces.Count + edges.Count} items: changed {vp.Selection.ChangedCount - c0} time(s), {sw.ElapsedMilliseconds} ms, rows {w.SelectionRows.Count}");
+    Require(vp.Selection.Count == faces.Count + edges.Count && vp.Selection.ChangedCount - c0 == 1, "region select reports every item");
+    Require(w.SelectionRows.Count > 0 && w.SelectionRows.Count <= MainWindow.SelectionListMax, "selection list rows");
+    // фильтр по видам: снять «Рёбра»
+    var kEdge = w.PropsBodyPanel.GetVisualDescendants().OfType<CheckBox>().First(c => c.Name == "selkind_" + PickKind.Edge);
+    kEdge.IsChecked = false; Run();
+    Require(w.SelectionRows.Keys.All(id => faces.Any(f => f.Id == id)), "the kind filter does not hide edges");
+    kEdge.IsChecked = true; Run();
+    // × у строки
+    var first = w.SelectionRows.First();
+    var x = first.Value.GetVisualDescendants().OfType<Button>().First();
+    int n0 = vp.Selection.Count;
+    x.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Run();
+    Require(vp.Selection.Count == n0 - 1 && !vp.Selection.Contains(first.Key), "× does not deselect");
+    // наведение на строку — подсветка на виде
+    var row = w.SelectionRows.First();
+    var at = row.Value.TranslatePoint(new Point(20, 8), w) ?? default;
+    w.MouseMove(at); Run();
+    Console.WriteLine($"  hover row {row.Key}: view highlight {vp.ListHoverId}");
+    Require(vp.ListHoverId == row.Key, "hovering a list row does not highlight it in the view");
+    // «Группа»: одна операция — нет, две — да (кнопка на панели дерева)
+    var feats = part.Features.Take(2).ToList();
+    Button GroupBtn() => w.TreeBarPanel.Children.OfType<Button>().First(b => b.Tag is AppCommand { Id: "tree.group" });
+    vp.Selection.Clear(); Run();
+    w.SelectItem(feats[0]); Run();
+    vp.Selection.Select(new PickRef(feats[1].Id, PickKind.Feature, part, feats[1]), additive: true); Run();
+    bool two = GroupBtn().IsEffectivelyEnabled;
+    vp.Selection.Clear(); w.SelectItem(feats[0]); Run();
+    bool one = GroupBtn().IsEffectivelyEnabled;
+    Console.WriteLine($"  Group button: two features {two}, one feature {one}");
+    Require(two && !one, "the Group button does not follow the selection");
+    w.Close();
+});
+
+Check("UI-PANELS-K120", () =>
+{
+    // k120 (пп. 9–11, 13, 14, 16): язык из настроек сохраняется (P3D_LANGFIX=0); в настройках приложения нет единиц длины,
+    // размеры вида — ползунками со значением слева; команды дерева — на панели дерева (P3D_TREEBAR=0), в заголовке —
+    // шевроны и без «Группы»; кнопки без иконок — подписью целиком (P3D_STRIPTEXT=0).
+    var s = DocumentSession.Sample(); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    var prefs = UserPrefs.Current; string lang0 = prefs.Language ?? "ru";
+    try
+    {
+        if (!Loc.En) w.ToggleLanguage();
+        Run();
+        _ = DocCommands.Settings(w); Run();
+        var sw = DocCommands.LastSettingsWindow!;
+        var langBox = sw.GetVisualDescendants().OfType<ComboBox>().First(c => c.Name == "set_lang");
+        var labels = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(sw).OfType<TextBlock>().Select(t => t.Text ?? "").ToList();
+        int sliders = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(sw).OfType<ValueSlider>().Count();
+        int nuds = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(sw).OfType<NumericUpDown>().Count();
+        Console.WriteLine($"  settings: language index {langBox.SelectedIndex}, sliders {sliders}, numeric boxes {nuds}, units row {labels.Contains(Loc.L("Единицы длины"))}");
+        Require(langBox.SelectedIndex == 1, "the language list does not show English");
+        Require(!labels.Contains(Loc.L("Единицы длины")) && sliders >= 7 && nuds == 0, "settings: units row or numeric boxes");
+        var vs = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(sw).OfType<ValueSlider>().First();
+        vs.Value = 15; Run();
+        Require(vs.ShownText == "15", "the slider value is not shown");
+        sw.GetVisualDescendants().OfType<Button>().First(b => b.Name == "set_ok").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Run();
+        Console.WriteLine($"  after OK: language {prefs.Language}, English {Loc.En}");
+        Require(Loc.En && prefs.Language == "en", "the language is not kept after closing the settings");
+    }
+    finally { if ((prefs.Language == "en") != (lang0 == "en")) w.ToggleLanguage(); Run(); }
+    // панель дерева
+    var bar = w.TreeBarPanel.Children.OfType<Control>().Select(b => (b.Tag as AppCommand)?.Id).ToList();
+    var title = w.TreeTitleTools.Children.OfType<Control>().ToList();
+    Console.WriteLine($"  tree bar: {string.Join(", ", bar)}; title: {string.Join(", ", title.Select(c => c.Name ?? (c.Tag as AppCommand)?.Id))}");
+    Require(MainWindow.TreeBarCommands.All(id => bar.Contains(id)), "tree commands are not on the tree bar");
+    Require(title.Count == 2 && title.Any(c => c.Name == "tree_collapse") && title.Any(c => c.Name == "tree_expand") && !title.Any(c => c.Tag is AppCommand { Id: "tree.group" }), "tree title: chevrons only");
+    // подписи кнопок без иконок — целиком
+    var textButtons = w.GetVisualDescendants().OfType<Button>().Where(b => b.Tag is AppCommand && b.Content is TextBlock && b.IsEffectivelyVisible && b.Bounds.Width > 0).ToList();
+    var cut = textButtons.Where(b => { var t = (TextBlock)b.Content!; t.Measure(Size.Infinity); return t.DesiredSize.Width > b.Bounds.Width - b.Padding.Left - b.Padding.Right + 0.5; })
+                         .Select(b => ((TextBlock)b.Content!).Text).ToList();
+    Console.WriteLine($"  text buttons {textButtons.Count}, cut: {(cut.Count == 0 ? "none" : string.Join(" | ", cut))}");
+    Require(textButtons.Count > 0 && cut.Count == 0, "button text is cut: " + string.Join(" | ", cut));
+    w.Close();
+});
+
+Check("UI-MEASURE-K120", () =>
+{
+    // k120 (п. 17): «Измерить» двух параллельных граней — операция «Замер» в дереве (P3D_MEASUREFEATURE=0), размер на виде
+    // (P3D_MEASUREVIEW=0), подпись тянется мышью — вынос меняется, документ изменён (P3D_MEASUREDRAG=0); замер пишется в
+    // файл и после открытия находит свои грани.
+    var part = Parametric3D.App.Diagnostics.TestParts.Block("mb");
+    var s = DocumentSession.FromPart(part, "mb"); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    var vp = w.ViewPort;
+    var zf = part.Bodies[0].Faces.Where(f => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.PlaneSurface ps && Math.Abs(ps.F.W.Z) > 0.99).ToList();
+    Require(zf.Count == 2, "block faces");
+    vp.Selection.SelectMany(zf.Select(f => new PickRef(f.Id, PickKind.Face, part, null)), additive: false); Run();
+    CommandRegistry.Instance["an.measure"].Execute(); BuildNow(s); w.RebuildTree(); Run();
+    var ms = part.Features.OfType<MeasureFeature>().SingleOrDefault();
+    Console.WriteLine($"  measure: {ms?.Name} = {ms?.Value:0.###}, in tree {w.AllNodes.Any(n => ReferenceEquals(n.Item, ms))}");
+    Require(ms != null && Math.Abs(ms.Value - 20) < 1e-9 && w.AllNodes.Any(n => ReferenceEquals(n.Item, ms)), "Measure did not create a tree feature");
+    vp.ZoomToFit(animate: false); Run();
+    vp.BuildOverlayForTest();
+    var lp = vp.MeasureLabelPoint(ms!);
+    Console.WriteLine($"  drawn {vp.MeasuresDrawn}, label at {lp}");
+    Require(vp.MeasuresDrawn == 1 && lp != null, "the measure is not drawn in the view");
+    double off0 = ms!.Offset;
+    string path = Path.Combine(Path.GetTempPath(), $"p3d_ui_k120m_{Guid.NewGuid():N}.p3d");
+    s.SaveAs(path);
+    var p0 = vp.TranslatePoint(lp!.Value, w)!.Value;
+    w.MouseMove(p0); w.MouseDown(p0, MouseButton.Left);
+    for (int i = 1; i <= 5; i++) w.MouseMove(p0 + new Point(i * 8, -i * 8));
+    w.MouseUp(p0 + new Point(40, -40), MouseButton.Left); Run();
+    Console.WriteLine($"  drag: offset {off0:0.###} -> {ms.Offset:0.###}, modified {s.Modified}, selection {vp.Selection.Count}");
+    Require(Math.Abs(ms.Offset - off0) > 1e-3 && s.Modified, "the measure label is not dragged");
+    try
+    {
+        s.SaveAs(path);
+        var s2 = DocumentSession.Open(path); BuildNow(s2);
+        var m2 = s2.Part!.Features.OfType<MeasureFeature>().Single();
+        Console.WriteLine($"  reopened: {m2.Value:0.###}, offset {m2.Offset:0.###}, stale {m2.Stale}");
+        Require(Math.Abs(m2.Value - 20) < 1e-9 && Math.Abs(m2.Offset - ms.Offset) < 1e-9 && !m2.Stale, "the measure is not saved or not resolved");
+    }
+    finally { try { File.Delete(path); } catch { } }
+    w.Close();
+});
+
 Check("UI-STL-IMPORT-K119", () =>
 {
     // k119: импорт STL с галочкой «Преобразовать в точную геометрию»: окно настроек; новая деталь с операцией «Импорт STL»;
@@ -3433,8 +3663,9 @@ Check("UI-PART-PROPS-K118", () =>
     w.ViewPort.Selection.Clear(); w.ShowProperties(); Run();
     var props = w.GetVisualDescendants().OfType<Control>().Where(c => c.Name?.StartsWith("prop_") == true).Select(c => c.Name!).ToList();
     Console.WriteLine($"  property fields: {string.Join(", ", props)}");
-    Require(props.Contains("prop_Обозначение") && props.Contains("prop_Наименование") && props.Contains("prop_Изменение") && props.Contains("prop_Допуски") && props.Contains("prop_Ед. учёта"), "part property fields");
-    var code = w.GetVisualDescendants().OfType<TextBox>().First(t => t.Name == "prop_Обозначение");
+    // k120: имя и номер детали — поля; «Изменение», «Обозначение», «Ед. учёта» убраны (замечание 15:06, п. 3)
+    Require(props.Contains("prop_Имя") && props.Contains("prop_Номер детали") && props.Contains("prop_Допуски"), "part property fields");
+    var code = w.GetVisualDescendants().OfType<TextBox>().First(t => t.Name == "prop_Номер детали");
     code.Text = "АБВГ.123456.001"; code.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
     Require(part.Info.Code == "АБВГ.123456.001" && s.Modified, "part number is not edited");
     var texts = w.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").ToList();
@@ -3445,7 +3676,7 @@ Check("UI-PART-PROPS-K118", () =>
     {
         s.SaveAs(path);
         var i2 = DocumentSession.Open(path).Part!.Info;
-        Require(i2.Code == "АБВГ.123456.001" && i2.Uom == "кг" && i2.Tolerances == "ISO 2768-fH" && i2.LengthUnits == "мм", "part properties are not saved");
+        Require(i2.Code == "АБВГ.123456.001" && i2.Uom == "кг" && i2.Tolerances == "ISO 2768-fH", "part properties are not saved");
     }
     finally { try { File.Delete(path); } catch { } }
     // зависимости: путь p"…" к другой детали и параметр сборки над деталью

@@ -376,8 +376,7 @@ public sealed partial class ModelViewport
         RegionChanged?.Invoke(null);
         bool crossing = RegionMode == RegionKind.Box && p.X < _down.X;
         var items = ItemsInRegion(poly, crossing);
-        if (!mods.HasFlag(KeyModifiers.Control) && !mods.HasFlag(KeyModifiers.Shift)) Selection.Clear();
-        foreach (var r in items) if (!Selection.Contains(r.Id)) Selection.Select(r, additive: true);
+        Selection.SelectMany(items, additive: mods.HasFlag(KeyModifiers.Control) || mods.HasFlag(KeyModifiers.Shift));
         _flagsDirty = true; Redraw();
         return true;
     }
@@ -477,6 +476,7 @@ public sealed partial class ModelViewport
         static Vector3 F(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
         foreach (var (a, b, c) in Annotations) lines.Add(Inst(F(a), F(b), c, 1.2f, 0));
         AddOpDims(lines);
+        AddMeasureDims(lines);
         AddOpArrows(lines);
         // k99: контур плоскости сечения (без заливки)
         if (SectionCorners() is { } sc && ActiveSketch == null)

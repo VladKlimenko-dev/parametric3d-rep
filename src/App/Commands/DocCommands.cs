@@ -15,11 +15,41 @@ namespace Parametric3D.App.Commands;
 /// <summary>Единицы показа длины в полях операций и измерениях: мм или дюймы (по единицам детали).</summary>
 public static class DisplayUnits
 {
-    public static bool Inch;
+    /// <summary>k120: единица длины показа — из системы единиц детали (мм, см, м, дюйм, фут…).</summary>
+    public static string Length = "mm";
+    public static bool Inch { get => Length == "in"; set => Length = value ? "in" : "mm"; }
     public const double InchMm = 25.4;
-    public static string LengthUnit => Inch ? "дюйм" : "мм";
-    public static double ToShow(double mm) => Inch ? mm / InchMm : mm;
-    public static double FromShow(double v) => Inch ? v * InchMm : v;
+    static double Factor => Core.Units.TryParse(Length, out var u, out _) && u!.Dim == Core.Dimension.Length ? u.Factor : 1;
+    public static string LengthUnit => Symbol(Length);
+    public static double ToShow(double mm) => mm / Factor;
+    public static double FromShow(double v) => v * Factor;
+
+    /// <summary>Обозначение единицы на языке интерфейса: мм, см, м, дюйм, фут, кг, г, т, фунт, с, мин, ч; степени — ², ³.</summary>
+    public static string Symbol(string sym)
+    {
+        string Tok(string t) => t switch
+        {
+            "mm" => "мм", "cm" => "см", "m" => "м", "km" => "км", "in" => "дюйм", "ft" => "фут", "yd" => "ярд",
+            "kg" => "кг", "g" => "г", "t" => "т", "lb" => "фунт", "s" => "с", "min" => "мин", "h" => "ч", "deg" => "°", "rad" => "рад",
+            _ => t,
+        };
+        var parts = sym.Split('·').Select(p =>
+        {
+            var b = p.Split('^');
+            string u = Loc.En ? b[0] : Tok(b[0]);
+            return b.Length == 2 ? u + (b[1] == "2" ? "²" : b[1] == "3" ? "³" : b[1] == "-1" ? "⁻¹" : b[1] == "-3" ? "⁻³" : "^" + b[1]) : u;
+        });
+        return string.Join("·", parts);
+    }
+
+    /// <summary>Величина (во внутренних единицах) в системе sys: число и обозначение.</summary>
+    public static string Format(double internalValue, Core.Dimension dim, Core.UnitSystem sys, string fmt = "0.####")
+    {
+        var u = sys.UnitFor(dim);
+        return (internalValue / u.Factor).ToString(fmt, System.Globalization.CultureInfo.InvariantCulture) + " " + Symbol(u.Symbol);
+    }
+
+    public static void From(Core.UnitSystem? sys) => Length = sys?.Length ?? "mm";
 }
 
 /// <summary>
@@ -182,16 +212,19 @@ public static class DocCommands
 
     // ---------------------------------------------------------------- настройки, справка, все команды
 
+    public static readonly bool LangFixOff = Environment.GetEnvironmentVariable("P3D_LANGFIX") == "0";
+    /// <summary>Разбор (проверки): последнее окно настроек.</summary>
+    public static Window? LastSettingsWindow;
+
     public static async Task Settings(MainWindow w)
     {
         var prefs = UserPrefs.Current;
         var win = new Window { Title = L("Настройки"), SizeToContent = SizeToContent.WidthAndHeight, WindowStartupLocation = WindowStartupLocation.CenterOwner, ShowInTaskbar = false, CanResize = false };
         win.Bind(Window.BackgroundProperty, win.GetResourceObservable("P3.PanelBg"));
         var theme = new ComboBox { ItemsSource = new[] { L("Тёмная"), L("Светлая") }, SelectedIndex = w.IsDark ? 0 : 1, MinWidth = 200 };
-        var lang = new ComboBox { ItemsSource = new[] { "Русский", "English" }, SelectedIndex = prefs.Language == "en" ? 1 : 0, MinWidth = 200 };
+        var lang = new ComboBox { ItemsSource = new[] { "Русский", "English" }, SelectedIndex = prefs.Language == "en" ? 1 : 0, MinWidth = 200, Name = "set_lang" };
         var prev = new ComboBox { ItemsSource = new[] { L("Полный (деталь считается)"), L("Контур") }, SelectedIndex = (prefs.PreviewMode ?? "full") == "contour" ? 1 : 0, MinWidth = 200 };
         var gl = new ComboBox { ItemsSource = new[] { "auto", "angle", "wgl", "software" }, SelectedItem = prefs.GlMode ?? "auto", MinWidth = 200 };
-        var units = new ComboBox { ItemsSource = new[] { L("Миллиметры"), L("Дюймы") }, SelectedIndex = DisplayUnits.Inch ? 1 : 0, MinWidth = 200 };
         Control Row(string label, Control c) => new DockPanel { Children = { new TextBlock { Text = L(label), Width = 200, VerticalAlignment = VerticalAlignment.Center }, c } };
         // заголовок «Общие» и языки — иконками пользователя (нет файла — только текст)
         static Control WithIcon(string? icon, string text, double size = 16)
@@ -201,10 +234,14 @@ public static class DocCommands
             sp.Children.Add(new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center });
             return sp;
         }
+        // k120 (п. 9): список языков — иконками; выбор ставится ПОСЛЕ замены списка (прежде замена сбрасывала выбор в −1, и «ОК»
+        // возвращало язык обратно — английский «не сохранялся»)
         lang.ItemsSource = new[] { WithIcon("language_ru_but.svg", "Русский"), WithIcon("language_en_but.svg", "English") };
+        if (!LangFixOff) lang.SelectedIndex = prefs.Language == "en" ? 1 : 0;
         // вкладка «Вид»: размеры текста и кнопок, цвета (UserPrefs.Look)
         var look = prefs.Look.Clone();
-        NumericUpDown Num(double v, double min, double max, double step) => new NumericUpDown { Value = (decimal)v, Minimum = (decimal)min, Maximum = (decimal)max, Increment = (decimal)step, MinWidth = 200, FormatString = step < 1 ? "0.##" : "0" };
+        // k120 (п. 11): ползунок со значением слева (вместо поля с кнопками)
+        ValueSlider Num(double v, double min, double max, double step) => new ValueSlider(v, min, max, step);
         var fUi = Num(look.UiFontSize, 9, 22, 1); var fStrip = Num(look.StripButtonPx, 22, 64, 1); var fStripIcon = Num(look.StripIconPx, 12, 48, 1);
         var fPanelIcon = Num(look.PanelIconPx, 12, 40, 1); var fDim = Num(look.DimensionTextPx, 6, 40, 1); var fDimLine = Num(look.DimensionTextLine, 0.3, 3, 0.05);
         var fCon = Num(look.ConstraintIconPx, 8, 48, 1);
@@ -230,15 +267,15 @@ public static class DocCommands
         resetLook.Click += (_, _) =>
         {
             var d = new LookPrefs();
-            fUi.Value = (decimal)d.UiFontSize; fStrip.Value = (decimal)d.StripButtonPx; fStripIcon.Value = (decimal)d.StripIconPx; fPanelIcon.Value = (decimal)d.PanelIconPx;
-            fDim.Value = (decimal)d.DimensionTextPx; fDimLine.Value = (decimal)d.DimensionTextLine; fCon.Value = (decimal)d.ConstraintIconPx;
+            fUi.Value = d.UiFontSize; fStrip.Value = d.StripButtonPx; fStripIcon.Value = d.StripIconPx; fPanelIcon.Value = d.PanelIconPx;
+            fDim.Value = d.DimensionTextPx; fDimLine.Value = d.DimensionTextLine; fCon.Value = d.ConstraintIconPx;
             foreach (var t in new[] { tSkD, tSkL, tBgTD, tBgBD, tBgTL, tBgBL, tHatchC, tFillC }) t.Text = "";
             chHatch.IsChecked = d.SectionHatch;
         };
-        var ok = new Button { Content = L("ОК"), Classes = { "accent" }, MinWidth = 96, HorizontalAlignment = HorizontalAlignment.Right };
+        var ok = new Button { Content = L("ОК"), Classes = { "accent" }, MinWidth = 96, HorizontalAlignment = HorizontalAlignment.Right, Name = "set_ok" };
         ok.Click += (_, _) =>
         {
-            double D(NumericUpDown n, double dflt) => n.Value is { } v ? (double)v : dflt;
+            double D(ValueSlider n, double dflt) => double.IsFinite(n.Value) ? n.Value : dflt;
             look.UiFontSize = D(fUi, 13); look.StripButtonPx = D(fStrip, 34); look.StripIconPx = D(fStripIcon, 20); look.PanelIconPx = D(fPanelIcon, 20);
             look.DimensionTextPx = D(fDim, 12); look.DimensionTextLine = D(fDimLine, 0.75); look.ConstraintIconPx = D(fCon, 16);
             look.SketchColorDark = tSkD.Text?.Trim() ?? ""; look.SketchColorLight = tSkL.Text?.Trim() ?? "";
@@ -250,7 +287,6 @@ public static class DocCommands
             if ((lang.SelectedIndex == 1) != (prefs.Language == "en")) w.ToggleLanguage();
             prefs.PreviewMode = prev.SelectedIndex == 1 ? "contour" : "full";
             prefs.GlMode = gl.SelectedItem as string ?? "auto";
-            if ((units.SelectedIndex == 1) != DisplayUnits.Inch) ToggleUnits(w);
             prefs.Save();
             w.ApplyLook();
             win.Close();
@@ -258,7 +294,7 @@ public static class DocCommands
         var general = new StackPanel
         {
             Margin = new Thickness(6, 12, 6, 6), Spacing = 10,
-            Children = { Row("Тема", theme), Row("Язык", lang), Row("Предпросмотр операций", prev), Row("Графика (со следующего запуска)", gl), Row("Единицы длины", units) },
+            Children = { Row("Тема", theme), Row("Язык", lang), Row("Предпросмотр операций", prev), Row("Графика (со следующего запуска)", gl) },
         };
         var visual = new StackPanel
         {
@@ -282,6 +318,7 @@ public static class DocCommands
             },
         };
         win.Content = new StackPanel { Margin = new Thickness(18), Spacing = 10, Children = { tabs, ok } };
+        LastSettingsWindow = win;
         await win.ShowDialog(w);
     }
 
@@ -413,6 +450,7 @@ public static class DocCommands
         var part = w.Session.Part; if (part == null) return;
         DisplayUnits.Inch = !DisplayUnits.Inch;
         part.Units = DisplayUnits.Inch ? Core.UnitSystem.Imperial : Core.UnitSystem.Metric;
+        part.LocalParameters.Units = part.Units;
         w.Session.MarkModified();
         w.ShowToast(L("Единицы длины: {0}", L(DisplayUnits.LengthUnit)), error: false);
         if (w.CurrentOperation != null) w.ShowProperties();
@@ -467,3 +505,25 @@ public static class DocCommands
         await win.ShowDialog(w);
     }
 }
+
+/// <summary>k120 (замечание 15:06, п. 11): ползунок настройки со значением слева.</summary>
+public sealed class ValueSlider : DockPanel
+{
+    public readonly Slider Slider;
+    readonly TextBlock _text;
+    readonly double _step;
+    public ValueSlider(double v, double min, double max, double step)
+    {
+        _step = step;
+        _text = new TextBlock { Width = 48, VerticalAlignment = VerticalAlignment.Center, TextAlignment = Avalonia.Media.TextAlignment.Right, Margin = new Thickness(0, 0, 10, 0) };
+        Slider = new Slider { Minimum = min, Maximum = max, SmallChange = step, LargeChange = step * 5, TickFrequency = step, IsSnapToTickEnabled = true, Value = v, MinWidth = 200 };
+        Slider.PropertyChanged += (_, e) => { if (e.Property == Avalonia.Controls.Primitives.RangeBase.ValueProperty) Show(); };
+        DockPanel.SetDock(_text, Dock.Left);
+        Children.Add(_text); Children.Add(Slider);
+        Show();
+    }
+    void Show() => _text.Text = Slider.Value.ToString(_step < 1 ? "0.##" : "0", System.Globalization.CultureInfo.InvariantCulture);
+    public double Value { get => Slider.Value; set => Slider.Value = value; }
+    public string ShownText => _text.Text ?? "";
+}
+

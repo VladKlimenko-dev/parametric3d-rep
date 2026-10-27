@@ -444,6 +444,15 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         Redraw();
     }
 
+    private uint _listHover;
+    /// <summary>k120: подсветить выбранный элемент (строка списка выбранного под курсором); 0 — снять.</summary>
+    public void HighlightSelected(uint id)
+    {
+        if (id == _listHover) return;
+        _listHover = id; _flagsDirty = true; Redraw();
+    }
+    public uint ListHoverId => _listHover;
+
     private uint[]? _refHover;
     /// <summary>k118 (п.1): подсветка элементов эскиза (ссылки под курсором в списке ссылок); null — снять.</summary>
     public void HighlightSketchEntities(IEnumerable<uint>? ids)
@@ -475,7 +484,9 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         if (_doc != null)
             foreach (var p in _doc.AllParts())
                 foreach (var q in p.Quilts) foreach (var sq in Simple(q)) foreach (var f in sq.Faces) Set(f.Id, 16);
-        foreach (var r in Selection.Items) SetRef(r, 2);
+        foreach (var r in Selection.Items) if (r.Id != _listHover) SetRef(r, 2);
+        // k120 (п. 8.1): строка списка выбранного под курсором — её элемент подсвечен цветом наведения
+        if (_listHover != 0 && Selection.Items.FirstOrDefault(r => r.Id == _listHover) is { IsEmpty: false } lh) SetRef(lh, 1);
         if (!Selection.Hover.IsEmpty && !Selection.Contains(Selection.Hover.Id)) SetRef(Selection.Hover, 1);
         // k118 (замечание 08:54, п. 7): центр окружности, дуги, эллипса под курсором — подсвечена и сама кривая
         if (!CenterHoverOff && Selection.Hover is { Kind: PickKind.SketchPoint, Target: SkPoint hq } && CenterOwner(hq) is { } ow && !Selection.Contains(ow.Id))
@@ -605,7 +616,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         StrokeFinish(new Point(Bounds.Width * pts[^1].X, Bounds.Height * pts[^1].Y));
     }
 
-    private enum Drag { None, Orbit, Pan, RightPending, Select, Tool, Handle, Dim, SketchGeom, Gizmo }
+    private enum Drag { None, Orbit, Pan, RightPending, Select, Tool, Handle, Dim, SketchGeom, Gizmo, Measure }
     private Drag _drag;
     private Point _last, _down;
 
@@ -628,6 +639,8 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         else if (_drag == Drag.Gizmo) BeginGizmoDrag(pt.Position, GizmoHit(pt.Position));
         // u12 (замечание 17): подпись размера эскиза тащится мышью (двойной щелчок — правка значения, ниже)
         else if (props.IsLeftButtonPressed && e.ClickCount < 2 && ActiveSketch != null && BeginDimensionDrag(pt.Position)) _drag = Drag.Dim;
+        // k120: подпись замера тащится мышью
+        else if (props.IsLeftButtonPressed && e.ClickCount < 2 && _drag == Drag.Select && BeginMeasureDrag(pt.Position)) _drag = Drag.Measure;
         // п. 6: свободные вершины и фигуры эскиза тащатся мышью (без инструмента)
         else if (props.IsLeftButtonPressed && e.ClickCount < 2 && _drag == Drag.Select && ActiveSketch != null && BeginSketchDrag(pt.Position, e.KeyModifiers)) _drag = Drag.SketchGeom;
         if (props.IsLeftButtonPressed && e.ClickCount >= 2 && ActiveSketch != null && TryEditDimension(pt.Position)) { _drag = Drag.None; e.Handled = true; return; }
@@ -652,6 +665,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
             case Drag.Handle: HandleDragMove(p); return;
             case Drag.Gizmo: GizmoDragMove(p, e.KeyModifiers); return;
             case Drag.Dim: DimensionDragMove(p); return;
+            case Drag.Measure: _last = p; MeasureDragMove(p); return;
             case Drag.SketchGeom: SketchDragMove(p); return;
             // k105: обрезка протяжкой — линия протяжки за курсором
             case Drag.Tool when Tool is Parametric3D.App.Sketching.IStrokeTool { StrokeEnabled: true } st && ActiveSketch != null
@@ -684,6 +698,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         e.Pointer.Capture(null);
         if (was == Drag.Handle) { EndHandleDrag(); return; }
         if (was == Drag.Gizmo) { EndGizmoDrag(); return; }
+        if (was == Drag.Measure) { if (!EndMeasureDrag()) RequestPick(p, click: true, e.KeyModifiers); return; }
         if (was == Drag.Dim) { if (!EndDimensionDrag()) { if (ClickInterceptor?.Invoke(p) == true) return; RequestPick(p, click: true, e.KeyModifiers); } return; }
         if (was == Drag.SketchGeom) { if (!EndSketchDrag()) RequestPick(p, click: true, e.KeyModifiers); return; }
         if (was == Drag.RightPending && Tool != null) ToolFinish();

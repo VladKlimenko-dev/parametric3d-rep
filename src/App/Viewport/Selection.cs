@@ -22,6 +22,8 @@ public sealed class Selection
     public const uint FlagSelected = 2u;
 
     private readonly List<PickRef> _items = new();
+    /// <summary>k120: номера выбранного — для проверки «выбран ли» за O(1) (рамка на тысячи граней проверяла списком).</summary>
+    private readonly HashSet<uint> _ids = new();
     private PickRef _hover = PickRef.Empty;
 
     /// <summary>Какие типы элементов сейчас можно выбирать.</summary>
@@ -44,7 +46,39 @@ public sealed class Selection
         return true;
     }
 
-    public bool Contains(uint id) => _items.Any(i => i.Id == id);
+    public bool Contains(uint id) => _ids.Contains(id);
+
+    /// <summary>
+    /// k120 (замечание 15:06, п. 8): ВЫБОР МНОГИХ ОДНИМ ШАГОМ (рамка, аркан). Прежде каждый элемент рамки добавлялся
+    /// отдельно: поиск по списку и событие «выбор изменился» на каждый — панель свойств, дерево и подсветка пересобирались
+    /// тысячи раз, окно «подвисало». Теперь — один проход и одно событие. P3D_SELMANY=0 — по одному, как прежде.
+    /// </summary>
+    public void SelectMany(IEnumerable<PickRef> refs, bool additive)
+    {
+        if (SelectManyOff)
+        {
+            if (!additive) Clear();
+            foreach (var r in refs) if (!Contains(r.Id)) Select(r, additive: true);
+            return;
+        }
+        if (!additive) { _items.Clear(); _ids.Clear(); }
+        foreach (var r in refs) if (!r.IsEmpty && _ids.Add(r.Id)) _items.Add(r);
+        ChangedCount++;
+        Changed?.Invoke();
+    }
+    public static readonly bool SelectManyOff = Environment.GetEnvironmentVariable("P3D_SELMANY") == "0";
+    /// <summary>Разбор: сколько раз сообщено «выбор изменился» (выбор, снятие, наведение).</summary>
+    public int ChangedCount { get; private set; }
+
+    /// <summary>k120 (п. 8.1): снять выбор одного элемента.</summary>
+    public void Deselect(uint id)
+    {
+        int i = _items.FindIndex(x => x.Id == id);
+        if (i < 0) return;
+        _items.RemoveAt(i); _ids.Remove(id);
+        ChangedCount++;
+        Changed?.Invoke();
+    }
 
     /// <param name="additive">Зажат CTRL — последовательный выбор.</param>
     public void Select(PickRef r, bool additive)
@@ -57,22 +91,24 @@ public sealed class Selection
 
         if (!additive)
         {
-            _items.Clear();
-            _items.Add(r);
+            _items.Clear(); _ids.Clear();
+            _items.Add(r); _ids.Add(r.Id);
         }
         else
         {
-            int i = _items.FindIndex(x => x.Id == r.Id);
-            if (i >= 0) _items.RemoveAt(i);   // повторный клик снимает выделение
-            else _items.Add(r);
+            int i = _ids.Contains(r.Id) ? _items.FindIndex(x => x.Id == r.Id) : -1;
+            if (i >= 0) { _items.RemoveAt(i); _ids.Remove(r.Id); }   // повторный клик снимает выделение
+            else { _items.Add(r); _ids.Add(r.Id); }
         }
+        ChangedCount++;
         Changed?.Invoke();
     }
 
     public void Clear()
     {
         if (_items.Count == 0 && _hover.IsEmpty) return;
-        _items.Clear();
+        _items.Clear(); _ids.Clear();
+        ChangedCount++;
         Changed?.Invoke();
     }
 
