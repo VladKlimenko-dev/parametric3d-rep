@@ -522,6 +522,10 @@ public sealed class Part : ModelItem
         return set;
     }
 
+    /// <summary>k125: эскизы, ушедшие в операции, скрыть сразу при открытии (прежде — только после перестроения: до конца
+    /// расчёта на экране были одни эскизы). Видимость, заданная пользователем, не трогается. P3D_HIDEONLOAD=0 — прежнее.</summary>
+    public void HideConsumedSketchesOnLoad() { if (Environment.GetEnvironmentVariable("P3D_HIDEONLOAD") != "0") HideConsumedSketches(); }
+
     private void HideConsumedSketches()
     {
         foreach (var f in Features)
@@ -997,7 +1001,14 @@ public sealed class Part : ModelItem
     public void SetCachedDisplay(MeshData md, double volume)
     {
         Mesh = md; Volume = volume; Bounds = md.Bounds; ShowsCached = true;
+        LastGoodDisplay = (md, volume);
     }
+    /// <summary>
+    /// k125: последняя показанная сетка детали (не мгновенный предпросмотр) — пишется в файл, даже если запись пришлась на
+    /// перестроение или деталь ещё показывает сетку из файла: прежде такая запись выходила без сетки, и следующее открытие
+    /// показывало одни эскизы до конца расчёта (30 с). Перестроение после открытия её заменяет.
+    /// </summary>
+    public (MeshData Mesh, double Volume)? LastGoodDisplay { get; private set; }
     /// <summary>k113: номер операции, показанной мгновенно (с неё уточняется).</summary>
     public int InstantFeatureIndex { get; private set; } = -1;
     static readonly bool InstantRollbackOff = Environment.GetEnvironmentVariable("P3D_INSTANTROLLBACK") == "0";
@@ -1950,6 +1961,7 @@ public sealed class Part : ModelItem
 
         Mesh = r.Mesh;
         ShowsCached = false;
+        if (!ShowsInstant && r.Mesh is { } gm && gm.Vertices.Length > 0) LastGoodDisplay = (gm, r.Volume);
         Quilts.Clear(); Quilts.AddRange(r.Quilts);
         Volume = r.Volume;
         _areaFrom = r;

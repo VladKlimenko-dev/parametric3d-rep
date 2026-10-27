@@ -42,9 +42,17 @@ static partial class Program
                 string edited = text[..(at + 12)] + "7.25" + text[end..];
                 var (e, _) = DocumentFile.Load(edited);
                 Require(!e.ShowsCached && e.Mesh == null && DocumentFile.DisplayRejected > rej0, "the stored surfaces were used for an edited file");
-                // деталь не посчитана (грязная) — сетка не пишется
+                // деталь не посчитана (грязная): k125 — пишется последняя собранная сетка (при открытии деталь видна сразу,
+                // точный расчёт — в фоне); P3D_FILEDISPLAYANY=0 — прежнее: сетка не пишется
                 p.MarkDirtyFrom(p.Features[^1]);
-                Require(!DocumentFile.Save(p, null, withDisplay: true).Contains("\"Display\""), "a stale display mesh was written");
+                string dirtyText = DocumentFile.Save(p, null, withDisplay: true);
+                if (Environment.GetEnvironmentVariable("P3D_FILEDISPLAYANY") == "0")
+                    Require(!dirtyText.Contains("\"Display\""), "a stale display mesh was written");
+                else
+                {
+                    var (d, _) = DocumentFile.Load(dirtyText);
+                    Require(d.ShowsCached && p.LastGoodDisplay is { } lg && d.Mesh!.Indices.Length == lg.Mesh.Indices.Length && Math.Abs(d.Volume - p.Volume) < 1e-6 * p.Volume, "a part saved before its rebuild has no last built display mesh");
+                }
             }
             finally { try { File.Delete(path); } catch { } }
         });

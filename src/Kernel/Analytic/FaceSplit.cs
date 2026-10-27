@@ -519,6 +519,29 @@ public static partial class FaceSplit
     /// <summary>KRN-02: расстояние от точки развёртки до ближайшего контура области (у цилиндра — с учётом периода).</summary>
     static double Clearance(List<List<Vector2d>> polys, Vector2d q, double per)
     {
+        if (ClearFastOff) return ClearanceOld(polys, q, per);
+        // k125: без выделения массива сдвигов на каждый отрезок (4 ГБ мусора на детали пользователя) и с отсевом отрезка,
+        // чей габарит дальше уже найденного зазора — минимум тот же побитово. Мутация P3D_CLEARFAST=0.
+        double best = double.MaxValue;
+        var shs = per > 0 ? new[] { -per, 0, per } : ZeroShift;
+        foreach (var poly in polys)
+            for (int i = 0; i + 1 < poly.Count; i++)
+                foreach (double sh in shs)
+                {
+                    var a = poly[i]; var b = poly[i + 1]; var p = q + new Vector2d(sh, 0);
+                    if (per > 0) { double mid = (a.X + b.X) / 2; p = new Vector2d(q.X + per * Math.Round((mid - q.X) / per) + sh, q.Y); }
+                    double dx = Math.Max(0, Math.Max(Math.Min(a.X, b.X) - p.X, p.X - Math.Max(a.X, b.X)));
+                    double dy = Math.Max(0, Math.Max(Math.Min(a.Y, b.Y) - p.Y, p.Y - Math.Max(a.Y, b.Y)));
+                    if (dx * dx + dy * dy > best * best * (1 + 1e-9)) continue;
+                    var ab = b - a; double t = ab.LengthSquared > 0 ? Math.Clamp(Vector2d.Dot(p - a, ab) / ab.LengthSquared, 0, 1) : 0;
+                    best = Math.Min(best, (a + ab * t - p).Length);
+                }
+        return best;
+    }
+    static readonly double[] ZeroShift = { 0.0 };
+    static readonly bool ClearFastOff = Environment.GetEnvironmentVariable("P3D_CLEARFAST") == "0";
+    static double ClearanceOld(List<List<Vector2d>> polys, Vector2d q, double per)
+    {
         double best = double.MaxValue;
         foreach (var poly in polys)
             for (int i = 0; i + 1 < poly.Count; i++)

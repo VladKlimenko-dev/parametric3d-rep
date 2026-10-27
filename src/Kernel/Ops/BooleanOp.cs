@@ -846,6 +846,7 @@ public static class BooleanOp
     static readonly bool DonorLoopsOff = Environment.GetEnvironmentVariable("P3D_DONORLOOPS") == "0";
     static readonly bool DonorDbg = Environment.GetEnvironmentVariable("P3D_DONORDBG") == "1";
     static readonly bool DonorKeyDbg = Environment.GetEnvironmentVariable("P3D_DONORKEYDBG") == "1";
+    public static string? MeshDonorKeyForTests(TFace f) => MeshDonorKey(f);
     internal static string? MeshDonorKey(TFace f)
     {
         var src = Topology.GeometryAudit.AuthoritativeSurface(f);
@@ -909,6 +910,8 @@ public static class BooleanOp
         return b.ToString();
     }
     static readonly bool DonorCanonEnvOff = Environment.GetEnvironmentVariable("P3D_DONORCANON") == "0";
+    /// <summary>k125: граней, взятых у донора (всего; проверки).</summary>
+    public static long DonorHits;
     [ThreadStatic] static bool _donorCanonOffForTests;
     static bool DonorCanonOff => DonorCanonEnvOff || _donorCanonOffForTests;
     /// <summary>Сравнение (KRN10-MESH-DONOR-FROM-LOOPS): прежний ключ донора в этом потоке.</summary>
@@ -2842,6 +2845,7 @@ public static class BooleanOp
                             ((FacetedSurface)f.Surface).RawMesh = (key, copy.M, copy.Why, copy.N);
                             prepared[f] = CopyRaw(copy);
                             Interlocked.Increment(ref donors.Reused);
+                            Interlocked.Increment(ref DonorHits);
                             return;
                         }
                         var mm = ExactFaceMesher.Mesh(f, out string? w2, out var n2);
