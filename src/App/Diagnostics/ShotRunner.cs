@@ -131,6 +131,14 @@ public static class ShotRunner
         {
             mp.Material = mm; w.ViewPort.MarkDirty(); Console.WriteLine("material " + mm.Name); return;
         }
+        if (id.StartsWith("tip:"))
+        {
+            // разбор (k121): открыть подсказку кнопки команды (снимок — обрезана ли)
+            var cid = id[4..];
+            var b = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(w).OfType<Avalonia.Controls.Control>().FirstOrDefault(c => c.Tag is Commands.AppCommand ac && ac.Id == cid && c.IsEffectivelyVisible);
+            if (b != null) Avalonia.Controls.ToolTip.SetIsOpen(b, true);
+            Console.WriteLine($"tip {cid}: {(b != null ? "open" : "not found")}"); return;
+        }
         if (id == "zfaces" && w.Session.Part is { } zp)
         {
             // разбор (k120): выбрать первые две плоские грани с нормалью ±Z (замер)

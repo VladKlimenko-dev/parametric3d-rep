@@ -226,7 +226,10 @@
       <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
         <TextBlock Grid.Column="0" x:Name="StatusMode" FontSize="12" FontWeight="SemiBold" Margin="0,0,16,0" />
         <TextBlock Grid.Column="1" x:Name="StatusSel" FontSize="12" Classes="dim" TextTrimming="CharacterEllipsis" />
-        <TextBlock Grid.Column="2" x:Name="StatusBuild" FontSize="12" Margin="16,0" />
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="16,0" Spacing="8">
+          <ProgressBar x:Name="StatusProgress" Width="180" Height="8" MinHeight="8" Minimum="0" Maximum="100" VerticalAlignment="Center" IsVisible="False" />
+          <TextBlock x:Name="StatusBuild" FontSize="12" VerticalAlignment="Center" />
+        </StackPanel>
         <TextBlock Grid.Column="3" x:Name="StatusUnits" FontSize="12" Classes="dim" Margin="0,0,16,0" />
         <TextBlock Grid.Column="4" x:Name="StatusGl" FontSize="12" Classes="dim" />
       </Grid>

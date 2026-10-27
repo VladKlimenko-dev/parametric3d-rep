@@ -197,6 +197,11 @@ public static class Strings
         ["Плоскости"] = "Planes", ["Оси"] = "Axes", ["Начало координат"] = "Origin", ["Точки"] = "Points", ["Линии"] = "Lines",
         ["Вершины"] = "Vertices", ["Осевые линии"] = "Centerlines", ["Эскизы"] = "Sketches", ["Размеры"] = "Dimensions",
         ["Обозначения"] = "Annotations", ["Измерения"] = "Measurements",
+        // k121: ход загрузки и перестроения, настоящая группа
+        ["Загрузка «{0}»…"] = "Loading “{0}”…", ["Обработка: {0} из {1}"] = "Processing: {0} of {1}", ["Обработка…"] = "Processing…",
+        ["Отображение…"] = "Displaying…", ["Нельзя собрать группу: "] = "Cannot make the group: ",
+        ["«{0}» перестаёт строиться"] = "“{0}” would fail to build", ["перестановка операций меняет форму детали"] = "reordering the features changes the part shape",
+        ["«{0}» опирается на «{1}», а та — на операции группы"] = "“{0}” depends on “{1}”, which depends on the group features",
         // k120: панель детали, системы единиц, список выбора, замеры
         ["Время"] = "Time", ["Номер детали"] = "Part number", ["Система единиц"] = "Unit system",
         ["Новая система единиц"] = "New unit system", ["Создать"] = "Create", ["Создать систему единиц…"] = "Create new system…",

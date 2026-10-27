@@ -8,7 +8,20 @@ namespace Parametric3D.App;
 
 public partial class App : Application
 {
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+        // k121: мутация P3D_TIPONELINE=0 — прежние подсказки (перенос, ширина до 420)
+        if (TipOneLineOff)
+        {
+            var tip = new Avalonia.Styling.Style(x => Avalonia.Styling.Selectors.OfType<Avalonia.Controls.ToolTip>(x));
+            tip.Setters.Add(new Avalonia.Styling.Setter(Avalonia.Layout.Layoutable.MaxWidthProperty, 420.0));
+            var tb = new Avalonia.Styling.Style(x => Avalonia.Styling.Selectors.OfType<Avalonia.Controls.TextBlock>(Avalonia.Styling.Selectors.Descendant(Avalonia.Styling.Selectors.OfType<Avalonia.Controls.ToolTip>(x))));
+            tb.Setters.Add(new Avalonia.Styling.Setter(Avalonia.Controls.TextBlock.TextWrappingProperty, Avalonia.Media.TextWrapping.Wrap));
+            Styles.Add(tip); Styles.Add(tb);
+        }
+    }
+    public static readonly bool TipOneLineOff = Environment.GetEnvironmentVariable("P3D_TIPONELINE") == "0";
 
     /// <summary>Прошлый запуск не дошёл до выхода (аварийное завершение).</summary>
     public static bool PreviousRunCrashed { get; private set; }

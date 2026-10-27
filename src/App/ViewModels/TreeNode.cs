@@ -54,7 +54,7 @@ public sealed partial class TreeNode : ObservableObject
     public bool HasIcon => Icon != null;
     public string Glyph { get; }
     private readonly string? _summary;
-    public string Tooltip => Error != null ? $"{Name}\n{Error}" : $"{KindLabel(Item)}: {Name}" + (_summary != null ? $"\n{_summary}" : "");
+    public string Tooltip => Error != null ? $"{Name} — {Error}" : $"{KindLabel(Item)}: {Name}" + (_summary != null ? $" — {_summary}" : "");
 
     /// <summary>u13: значок состояния поверх значка узла (ошибка, предупреждение, подавлена, ниже строки отката, потеряна
     /// ссылка, эскиз не определён или переопределён); без файла значка — знак.</summary>

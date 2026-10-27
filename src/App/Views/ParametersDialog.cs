@@ -202,7 +202,7 @@ public sealed class ParametersDialog : Window
         foreach (var (label, insert, tip) in FormulaCategories[_cat].Items)
         {
             var b = new Button { Content = label, Padding = new Thickness(8, 2), Margin = new Thickness(0, 0, 4, 4), MinWidth = 34, Focusable = false };
-            ToolTip.SetTip(b, L(tip) + "\n" + insert.Replace("|", ""));
+            ToolTip.SetTip(b, L(tip) + " — " + insert.Replace("|", ""));
             string ins = insert;
             b.Click += (_, _) => InsertFormula(ins);
             _funcBar.Children.Add(b);

@@ -46,13 +46,18 @@
   </Style>
   <!-- k98 (замечание 12): всплывающие подсказки обрезались на последней букве («Revolv») — округление ширины текста при
        дробном масштабе экрана; запас справа и перенос длинных строк -->
+  <!-- k121 (замечание 27.10, 17:27, п. 1): подсказки — В ОДНУ СТРОКУ, без переноса и без предела ширины. С переносом окно
+       подсказки (отдельное окно ОС) при дробном масштабе экрана получало ширину на долю пикселя меньше измеренной: текст
+       переносился ещё раз, а высота оставалась прежней — последняя строка обрезалась. Без переноса этого не бывает; запас
+       справа и снизу покрывает округление. -->
   <Style Selector="ToolTip">
-    <Setter Property="Padding" Value="8,5,12,6" />
-    <Setter Property="MaxWidth" Value="420" />
+    <Setter Property="Padding" Value="8,5,8,5" />
+    <Setter Property="MaxWidth" Value="100000" />
+    <Setter Property="MaxHeight" Value="100000" />
   </Style>
   <Style Selector="ToolTip TextBlock">
-    <Setter Property="Padding" Value="0,0,4,0" />
-    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="Padding" Value="0,0,8,2" />
+    <Setter Property="TextWrapping" Value="NoWrap" />
     <Setter Property="TextTrimming" Value="None" />
   </Style>
   <Style Selector="TextBlock.dim">

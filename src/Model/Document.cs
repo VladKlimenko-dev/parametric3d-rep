@@ -128,6 +128,22 @@ public sealed class Document
     public bool IsBuilding => _isBuilding;
     private bool _isBuilding;
 
+    private List<Part> _progressParts = new();
+    /// <summary>
+    /// k121: ХОД ФОНОВОЙ ПЕРЕСБОРКИ (строка состояния): шагов сделано / всего по деталям текущего круга (шаг — операция;
+    /// у детали ещё шаг сеток и проверки). Нет расчёта — (0, 0).
+    /// </summary>
+    public (int Done, int Total) BuildProgress
+    {
+        get
+        {
+            if (!_isBuilding) return (0, 0);
+            int d = 0, t = 0;
+            foreach (var p in _progressParts) { int pt = p.ProgressTotal; t += pt; d += Math.Min(p.ProgressDone, pt); }
+            return (d, t);
+        }
+    }
+
     /// <summary>Фоновая пересборка началась / закончилась (события — в главном потоке).</summary>
     public event Action? BuildStarted, BuildFinished;
 
@@ -218,6 +234,8 @@ public sealed class Document
                 var dirty = AllParts().Where(p => p.IsDirty).ToList();
                 if (dirty.Count == 0) break;
                 LastRounds++;
+                foreach (var p in dirty) p.ResetProgress();
+                _progressParts = dirty;
 
                 var solver = Solver;
                 var preview = PreviewPart;

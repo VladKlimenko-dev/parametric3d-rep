@@ -56,6 +56,7 @@ public partial class MainWindow
     private TextBlock StatusMode = null!;
     private TextBlock StatusSel = null!;
     private TextBlock StatusBuild = null!;
+    private ProgressBar StatusProgress = null!;
     private TextBlock StatusUnits = null!;
     private TextBlock StatusGl = null!;
     private Border PaletteShade = null!;
@@ -119,6 +120,7 @@ public partial class MainWindow
         StatusMode = this.FindControl<TextBlock>("StatusMode")!;
         StatusSel = this.FindControl<TextBlock>("StatusSel")!;
         StatusBuild = this.FindControl<TextBlock>("StatusBuild")!;
+        StatusProgress = this.FindControl<ProgressBar>("StatusProgress")!;
         StatusUnits = this.FindControl<TextBlock>("StatusUnits")!;
         StatusGl = this.FindControl<TextBlock>("StatusGl")!;
         PaletteShade = this.FindControl<Border>("PaletteShade")!;
