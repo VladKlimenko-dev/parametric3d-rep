@@ -277,14 +277,49 @@ public partial class MainWindow : Window
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = L("Импорт"),
-            FileTypeFilter = new[] { new FilePickerFileType("STEP, IGES") { Patterns = new[] { "*.step", "*.stp", "*.iges", "*.igs" } } },
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("STEP, IGES, STL") { Patterns = new[] { "*.step", "*.stp", "*.iges", "*.igs", "*.stl" } },
+                new FilePickerFileType("STL") { Patterns = new[] { "*.stl" } },
+            },
         });
         var path = files.FirstOrDefault()?.TryGetLocalPath();
         if (path == null) return;
+        if (Path.GetExtension(path).Equals(".stl", StringComparison.OrdinalIgnoreCase)) { await ImportStlAsync(path); return; }
         var warnings = new List<string>();
         SetSession(DocumentSession.Import(path, warnings));
         if (warnings.Count > 0) ShowToast(string.Join("\n", warnings.Take(6)), error: false);
     }
+
+    /// <summary>
+    /// k119: ИМПОРТ STL с галочкой «Преобразовать в точную геометрию»: окно настроек, новая деталь с операцией «Импорт STL»,
+    /// перевод — перестроением (в фоне), итог — в строке сообщения.
+    /// </summary>
+    public async Task ImportStlAsync(string path, Dialogs.StlOptions? preset = null)
+    {
+        var o = preset ?? await Dialogs.StlImport(this, Path.GetFileName(path));
+        if (o == null) return;
+        DocumentSession s;
+        try { s = DocumentSession.ImportMesh(path, o.Exact, o.Snap, o.TolScale, o.Scale); }
+        catch (Exception ex) { ShowToast(L("Импорт STL: ") + ex.Message); return; }
+        SetSession(s);
+        ShowToast(L("Импорт STL: перевод сетки в тело…"), error: false);
+        var fi = LastStlImport = s.Part!.Features.OfType<MeshImportFeature>().FirstOrDefault();
+        void Done()
+        {
+            s.Document.BuildFinished -= Done;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (fi == null || !ReferenceEquals(Session, s)) return;
+                if (fi.Error != null) ShowToast(L("Импорт STL: ") + fi.Error);
+                else if (fi.Report.Length > 0) ShowToast(L("Импорт STL: ") + fi.Report, error: false);
+                View.ZoomToFit(animate: false);
+            });
+        }
+        s.Document.BuildFinished += Done;
+    }
+    /// <summary>Разбор: операция последнего импорта STL.</summary>
+    public MeshImportFeature? LastStlImport { get; private set; }
 
     public async Task ExportAsync()
     {

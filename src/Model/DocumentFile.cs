@@ -613,6 +613,13 @@ public static class DocumentFile
             d.OpenFaces = fl.OnFaces.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList();
             d.FaceNames = fl.OnFaceNames.Count > 0 ? fl.OnFaceNames.ToList() : null;
         }),
+        MeshImportFeature mi => Dto("mesh_import", mi, d =>
+        {
+            PutS(d, "mesh", mi.MeshData); PutS(d, "source", mi.SourceName);
+            if (mi.Step.Length > 0 && mi.StepKey == mi.Key) { PutS(d, "step", mi.Step); PutS(d, "report", mi.Report); }
+            if (mi.Exact) Flag(d, "exact"); if (mi.Snap) Flag(d, "snap");
+            (d.Num ??= new())["tol"] = mi.TolScale; d.Num["scale"] = mi.Scale;
+        }),
         InsertBodyFeature ib => Dto("insert_body", ib, d =>
         {
             PutS(d, "step", ib.Step); PutS(d, "source", ib.SourceName); d.Point = new[] { ib.Offset.X, ib.Offset.Y, ib.Offset.Z };
@@ -1222,6 +1229,17 @@ public static class DocumentFile
                     for (int i = 0; i + 2 < fd.OpenFaces.Count; i += 3) fl.OnFaces.Add(new Vector3d(fd.OpenFaces[i], fd.OpenFaces[i + 1], fd.OpenFaces[i + 2]));
                     if (fd.FaceNames != null) fl.OnFaceNames.AddRange(fd.FaceNames);
                     part.AddFeature(fl);
+                    break;
+                }
+                case "mesh_import":
+                {
+                    var mi = new MeshImportFeature(fd.Name)
+                    {
+                        Suppressed = fd.Suppressed, Cut = fd.Cut, MeshData = GetS(fd, "mesh") ?? "", SourceName = GetS(fd, "source") ?? "",
+                        Exact = HasFlag(fd, "exact"), Snap = HasFlag(fd, "snap"), TolScale = GetD(fd, "tol", 1), Scale = GetD(fd, "scale", 1),
+                    };
+                    if (GetS(fd, "step") is { Length: > 0 } st) { mi.Step = st; mi.StepKey = mi.Key; mi.Report = GetS(fd, "report") ?? ""; }
+                    part.AddFeature(mi);
                     break;
                 }
                 case "insert_body":
