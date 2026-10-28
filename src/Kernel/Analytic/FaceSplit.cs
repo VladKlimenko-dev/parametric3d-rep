@@ -166,8 +166,32 @@ public static partial class FaceSplit
             var c = ce.Edge.Curve;
             double a0 = ce.Reversed ? c.T1 : c.T0, a1 = ce.Reversed ? c.T0 : c.T1;
             var ts = new List<double> { a0 };
+            // k126: кривая пересечения — точки разреза дальше её уточнённой ломаной (габарит + наибольшее звено + допуск) её не
+            // режут: поиск ближайшего параметра (уточнения на обе поверхности) не нужен. Мутация P3D_CUTBOX=0.
+            (Vector3d Lo, Vector3d Hi)? near = null;
+            if (!CutBoxOff && cuts.Count > 2 && c is LineCurve3 lnb)
+            {
+                var mg = new Vector3d(2 * TolV + 1e-9);
+                near = (Vector3d.ComponentMin(lnb.A, lnb.B) - mg, Vector3d.ComponentMax(lnb.A, lnb.B) + mg);
+            }
+            else if (!CutBoxOff && cuts.Count > 2 && c is ArcCurve3 acb)
+            {
+                // габарит всей окружности (диск поперёк оси)
+                var w = acb.Frame.W.Normalized(); double r = acb.Radius;
+                var ext = new Vector3d(r * Math.Sqrt(Math.Max(0, 1 - w.X * w.X)), r * Math.Sqrt(Math.Max(0, 1 - w.Y * w.Y)), r * Math.Sqrt(Math.Max(0, 1 - w.Z * w.Z))) + new Vector3d(2 * TolV + 1e-9 + 1e-9 * r);
+                near = (acb.Frame.Origin - ext, acb.Frame.Origin + ext);
+            }
+            else if (!CutBoxOff && c is IntersectionCurve3 icb && cuts.Count > 2)
+            {
+                var (rp, _) = icb.RefinedWithParams();
+                var lo = new Vector3d(double.MaxValue); var hi = new Vector3d(double.MinValue); double seg = 0;
+                for (int i = 0; i < rp.Length; i++) { lo = Vector3d.ComponentMin(lo, rp[i]); hi = Vector3d.ComponentMax(hi, rp[i]); if (i > 0) seg = Math.Max(seg, (rp[i] - rp[i - 1]).Length); }
+                var mg = new Vector3d(seg + 2 * TolV + 1e-9);
+                near = (lo - mg, hi + mg);
+            }
             foreach (var x in cuts)
             {
+                if (near is { } nb && (x.X < nb.Lo.X || x.Y < nb.Lo.Y || x.Z < nb.Lo.Z || x.X > nb.Hi.X || x.Y > nb.Hi.Y || x.Z > nb.Hi.Z)) { Interlocked.Increment(ref CutsSkippedByBox); continue; }
                 double t = ClosestParam(c, x);
                 double dc = (c.PointAt(t) - x).Length;
                 if (dc < TolV && Math.Min(Math.Abs(t - c.T0), Math.Abs(t - c.T1)) > 1e-12 * Math.Max(1, c.T1 - c.T0))
@@ -336,7 +360,8 @@ public static partial class FaceSplit
             double uRef = 0; bool first = true;
             foreach (var d in cy.Darts)
             {
-                int m = Math.Max(16, (int)Math.Ceiling(Length(d) * 4));
+                int? ms = StraightSteps(f, d); if (ms != null) Interlocked.Increment(ref StraightDarts);
+                int m = ms ?? Math.Max(16, (int)Math.Ceiling(Length(d) * 4));
                 for (int i = first ? 0 : 1; i <= m; i++)
                 {
                     var q = P(d.At((double)i / m), uRef); uRef = q.X; cy.Poly.Add(q);
@@ -459,10 +484,15 @@ public static partial class FaceSplit
         foreach (var r in regions)
         {
             var polys = r.Loops.Select(l => cycles.First(c => c.Darts == l).Poly).ToList();
+            double perR = f.Cyl ? 2 * Math.PI * f.R : 0;
+            // k126: сетка ячеек по отрезкам контуров области — чётность и зазор кандидатов без обхода всех точек контура
+            // (у грани трубы — 4 650 точек на кандидат, 30 000 кандидатов за расчёт). Ответы те же побитово. P3D_SPLITGRID=0.
+            var grid = PolyGrid.For(polys, perR);
             bool InRegion(Vector2d q)
             {
                 int cr = 0;
-                foreach (var poly in polys) cr += Crossings(poly, q, f.Cyl ? 2 * Math.PI * f.R : 0);
+                if (grid != null) cr = grid.Crossings(q);
+                else foreach (var poly in polys) cr += Crossings(poly, q, perR);
                 return ((cr & 1) == 1) ^ r.Unbounded ^ r.ApexAbove;   // неограниченная (и шапка с вершиной сверху) — снаружи своих контуров
             }
             // Точка внутри — КАК МОЖНО ГЛУБЖЕ (сначала большие сдвиги): у линии касания цилиндра с плоскостью плоскость
@@ -489,7 +519,7 @@ public static partial class FaceSplit
                     // зазор — и до вершины (H = 0)
                     if (f.Cone && ConeHalf && sign * q.Y <= 0) continue;
                     if (!InRegion(q)) continue;
-                    double cl = Clearance(polys, q, per);
+                    double cl = grid != null ? grid.Clearance(q) : Clearance(polys, q, per);
                     if (f.Cone && ConeHalf) cl = Math.Min(cl, Math.Abs(q.Y));
                     cands.Add((cl, FromParam(f, q, sign)));
                 }
@@ -568,25 +598,234 @@ public static partial class FaceSplit
     static int Crossings(List<Vector2d> poly, Vector2d q, double per)
     {
         int n = 0;
-        for (int i = 0; i + 1 < poly.Count; i++)
-        {
-            double ua = poly[i].X, ub = poly[i + 1].X; double lo = Math.Min(ua, ub), hi = Math.Max(ua, ub);
-            if (hi - lo < 1e-15) continue;
-            double uu = q.X;
-            // q в своём периоде — без сдвига: q + per − per ≠ q в плавающей точке, и куски по обе стороны вершины с u = q
-            // считались оба (тройник равных труб: вершина в верхней точке линзы — дырка не вычиталась). Мутация P3D_CROSSWRAP=0.
-            if (per > 0 && CrossWrapOld) { while (uu < lo) uu += per; while (uu - per >= lo) uu -= per; }
-            else if (per > 0 && !(uu >= lo && uu < hi))
-            {
-                double j0 = Math.Floor((lo - q.X) / per); bool found = false;
-                for (double j = j0 - 1; j <= j0 + 2 && !found; j++) { if (j == 0) continue; double x = q.X + j * per; if (x >= lo && x < hi) { uu = x; found = true; } }
-                if (!found) continue;
-            }
-            if (uu < lo || uu >= hi) continue;
-            double t = (uu - ua) / (ub - ua); double v = poly[i].Y + (poly[i + 1].Y - poly[i].Y) * t;
-            if (v > q.Y) n++;
-        }
+        for (int i = 0; i + 1 < poly.Count; i++) n += CrossOne(poly[i], poly[i + 1], q, per);
         return n;
+    }
+
+    /// <summary>Пересекает ли луч +v из q отрезок a–b (у цилиндра u — по модулю периода per): 1 или 0.</summary>
+    static int CrossOne(Vector2d pa, Vector2d pb, Vector2d q, double per)
+    {
+        double ua = pa.X, ub = pb.X; double lo = Math.Min(ua, ub), hi = Math.Max(ua, ub);
+        if (hi - lo < 1e-15) return 0;
+        double uu = q.X;
+        // q в своём периоде — без сдвига: q + per − per ≠ q в плавающей точке, и куски по обе стороны вершины с u = q
+        // считались оба (тройник равных труб: вершина в верхней точке линзы — дырка не вычиталась). Мутация P3D_CROSSWRAP=0.
+        if (per > 0 && CrossWrapOld) { while (uu < lo) uu += per; while (uu - per >= lo) uu -= per; }
+        else if (per > 0 && !(uu >= lo && uu < hi))
+        {
+            double j0 = Math.Floor((lo - q.X) / per); bool found = false;
+            for (double j = j0 - 1; j <= j0 + 2 && !found; j++) { if (j == 0) continue; double x = q.X + j * per; if (x >= lo && x < hi) { uu = x; found = true; } }
+            if (!found) return 0;
+        }
+        if (uu < lo || uu >= hi) return 0;
+        double t = (uu - ua) / (ub - ua); double v = pa.Y + (pb.Y - pa.Y) * t;
+        return v > q.Y ? 1 : 0;
+    }
+
+    /// <summary>Зазор от q до отрезка a–b (у цилиндра — до ближайших периодов, как в Clearance); best — текущий минимум.</summary>
+    static double ClearOne(Vector2d a, Vector2d b, Vector2d q, double per, double best)
+    {
+        if (per > 0)
+        {
+            double mid = (a.X + b.X) / 2; double baseX = q.X + per * Math.Round((mid - q.X) / per);
+            best = ClearAt(a, b, new Vector2d(baseX - per, q.Y), best);
+            best = ClearAt(a, b, new Vector2d(baseX, q.Y), best);
+            return ClearAt(a, b, new Vector2d(baseX + per, q.Y), best);
+        }
+        return ClearAt(a, b, q, best);
+    }
+    static double ClearAt(Vector2d a, Vector2d b, Vector2d p, double best)
+    {
+        double dx = Math.Max(0, Math.Max(Math.Min(a.X, b.X) - p.X, p.X - Math.Max(a.X, b.X)));
+        double dy = Math.Max(0, Math.Max(Math.Min(a.Y, b.Y) - p.Y, p.Y - Math.Max(a.Y, b.Y)));
+        if (dx * dx + dy * dy > best * best * (1 + 1e-9)) return best;
+        var ab = b - a; double t = ab.LengthSquared > 0 ? Math.Clamp(Vector2d.Dot(p - a, ab) / ab.LengthSquared, 0, 1) : 0;
+        return Math.Min(best, (a + ab * t - p).Length);
+    }
+
+    /// <summary>
+    /// k126 (проверки): сетка ячеек против полного обхода — случайные ломаные (плоские и развёртки цилиндра с периодом) и
+    /// случайные точки: чётность и зазор должны совпасть побитово. Возвращает (сравнений, расхождений).
+    /// </summary>
+    public static (int Compared, int Mismatches) GridSelfCheck(int seed, int polys, int queries)
+    {
+        var rnd = new Random(seed); int cmp = 0, bad = 0;
+        for (int pi = 0; pi < polys; pi++)
+        {
+            double per = rnd.Next(2) == 0 ? 0 : 2 * Math.PI * (5 + 50 * rnd.NextDouble());
+            int n = 300 + rnd.Next(1500);
+            var poly = new List<Vector2d>();
+            double cx = rnd.NextDouble() * 10, cy = rnd.NextDouble() * 10, r0 = 5 + 20 * rnd.NextDouble();
+            for (int i = 0; i < n; i++)
+            {
+                double t = 2 * Math.PI * i / n, r = r0 * (1 + 0.3 * Math.Sin(7 * t + pi));
+                poly.Add(new Vector2d(cx + r * Math.Cos(t) * (per > 0 ? per / (2 * Math.PI) / r0 : 1), cy + r * Math.Sin(t)));
+            }
+            poly.Add(poly[0]);
+            var polysL = new List<List<Vector2d>> { poly };
+            var g = PolyGrid.For(polysL, per);
+            if (g == null) continue;
+            for (int k = 0; k < queries; k++)
+            {
+                var q = new Vector2d(cx + (rnd.NextDouble() - 0.5) * 4 * r0 * (per > 0 ? per / (2 * Math.PI) / r0 : 1), cy + (rnd.NextDouble() - 0.5) * 4 * r0);
+                int c1 = g.Crossings(q), c2 = Crossings(poly, q, per);
+                double d1 = g.Clearance(q), d2 = Clearance(polysL, q, per);
+                cmp++; if (c1 != c2 || d1 != d2) bad++;
+            }
+        }
+        return (cmp, bad);
+    }
+
+    static readonly bool SplitGridOff = Environment.GetEnvironmentVariable("P3D_SPLITGRID") == "0";
+    static readonly bool SplitGridCheck = Environment.GetEnvironmentVariable("P3D_SPLITGRIDCHECK") == "1";
+    /// <summary>k126: разбор — расхождений сетки ячеек с полным обходом (P3D_SPLITGRIDCHECK=1).</summary>
+    public static long SplitGridMismatches;
+    /// <summary>k126: областей с сеткой ячеек / прямых кусков ломаной из концов / точек разреза, отсеянных габаритом (проверки).</summary>
+    public static long GridRegions, StraightDarts, CutsSkippedByBox;
+
+    /// <summary>
+    /// k126: СЕТКА ЯЧЕЕК ОТРЕЗКОВ КОНТУРОВ ОБЛАСТИ. Чётность луча — только отрезки столбцов, где лежат периодические образы
+    /// q (прочие отрезки луч не пересекают); зазор — обход ячеек кольцами от образов q, пока кольцо не дальше найденного.
+    /// Для каждого найденного отрезка — та же формула, что в полном обходе (CrossOne, ClearOne), поэтому ответы те же.
+    /// </summary>
+    sealed class PolyGrid
+    {
+        readonly Vector2d[] _a, _b; readonly double _per;
+        readonly double _x0, _y0, _cw, _ch, _x1, _y1; readonly int _nx, _ny;
+        readonly int[] _start = null!, _items = null!; readonly int[] _stamp; int _gen;
+        readonly List<List<Vector2d>> _polys;
+
+        PolyGrid(List<List<Vector2d>> polys, double per, int n)
+        {
+            _polys = polys; _per = per;
+            _a = new Vector2d[n]; _b = new Vector2d[n]; _stamp = new int[n];
+            int k = 0; double x0 = double.MaxValue, y0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue;
+            foreach (var po in polys)
+                for (int i = 0; i + 1 < po.Count; i++)
+                {
+                    _a[k] = po[i]; _b[k] = po[i + 1]; k++;
+                    x0 = Math.Min(x0, Math.Min(po[i].X, po[i + 1].X)); x1 = Math.Max(x1, Math.Max(po[i].X, po[i + 1].X));
+                    y0 = Math.Min(y0, Math.Min(po[i].Y, po[i + 1].Y)); y1 = Math.Max(y1, Math.Max(po[i].Y, po[i + 1].Y));
+                }
+            double w = Math.Max(x1 - x0, 1e-12), h = Math.Max(y1 - y0, 1e-12);
+            int cells = Math.Clamp(n / 8, 16, 1 << 16);
+            _nx = Math.Clamp((int)Math.Round(Math.Sqrt(cells * w / h)), 1, 1024); _ny = Math.Clamp(cells / _nx, 1, 1024);
+            _x0 = x0; _y0 = y0; _x1 = x1; _y1 = y1; _cw = w / _nx; _ch = h / _ny;
+            // ячейки — сжатыми строками (счёт, затем заполнение): без списка на ячейку
+            _start = new int[_nx * _ny + 1];
+            for (int i = 0; i < n; i++)
+            {
+                int cx0 = Col(Math.Min(_a[i].X, _b[i].X)), cx1 = Col(Math.Max(_a[i].X, _b[i].X));
+                int cy0 = Row(Math.Min(_a[i].Y, _b[i].Y)), cy1 = Row(Math.Max(_a[i].Y, _b[i].Y));
+                for (int cx = cx0; cx <= cx1; cx++) for (int cy = cy0; cy <= cy1; cy++) _start[cx * _ny + cy + 1]++;
+            }
+            for (int k2 = 0; k2 < _nx * _ny; k2++) _start[k2 + 1] += _start[k2];
+            _items = new int[_start[^1]];
+            var fill = new int[_nx * _ny];
+            for (int i = 0; i < n; i++)
+            {
+                int cx0 = Col(Math.Min(_a[i].X, _b[i].X)), cx1 = Col(Math.Max(_a[i].X, _b[i].X));
+                int cy0 = Row(Math.Min(_a[i].Y, _b[i].Y)), cy1 = Row(Math.Max(_a[i].Y, _b[i].Y));
+                for (int cx = cx0; cx <= cx1; cx++) for (int cy = cy0; cy <= cy1; cy++) { int ci = cx * _ny + cy; _items[_start[ci] + fill[ci]++] = i; }
+            }
+        }
+        int Col(double x) => Math.Clamp((int)Math.Floor((x - _x0) / _cw), 0, _nx - 1);
+        int Row(double y) => Math.Clamp((int)Math.Floor((y - _y0) / _ch), 0, _ny - 1);
+        double X1 => _x1;
+        double Y1 => _y1;
+
+        public static PolyGrid? For(List<List<Vector2d>> polys, double per)
+        {
+            if (SplitGridOff || CrossWrapOld) return null;
+            int n = 0; foreach (var po in polys) n += Math.Max(0, po.Count - 1);
+            if (n < 256) return null;
+            foreach (var po in polys) foreach (var v in po) if (!double.IsFinite(v.X) || !double.IsFinite(v.Y)) return null;
+            Interlocked.Increment(ref GridRegions);
+            return new PolyGrid(polys, per, n);
+        }
+
+        /// <summary>Образы q.X по периоду в пределах [lo, hi] (сам q.X — всегда первым).</summary>
+        IEnumerable<double> Images(double x, double lo, double hi)
+        {
+            yield return x;
+            if (_per <= 0) yield break;
+            for (double j = Math.Floor((lo - x) / _per); x + j * _per <= hi; j++) if (j != 0 && x + j * _per >= lo) yield return x + j * _per;
+        }
+
+        public int Crossings(Vector2d q)
+        {
+            int n = 0; int gen = ++_gen;
+            foreach (double xi in Images(q.X, _x0, X1))
+            {
+                if (xi < _x0 || xi > X1) continue;
+                int c = Col(xi);
+                // соседний столбец — граница ячейки (xi ровно на ней)
+                // пересечение выше q — у отрезка, чей верх выше q: он записан и в строках не ниже строки q
+                int ry = Row(q.Y);
+                for (int cx = Math.Max(0, c - 1); cx <= Math.Min(_nx - 1, c + 1); cx++)
+                    for (int cy = ry; cy < _ny; cy++)
+                    {
+                        int ci = cx * _ny + cy;
+                        for (int k = _start[ci]; k < _start[ci + 1]; k++)
+                        {
+                            int i = _items[k];
+                            if (_stamp[i] == gen) continue;
+                            _stamp[i] = gen;
+                            n += CrossOne(_a[i], _b[i], q, _per);
+                        }
+                    }
+            }
+            if (SplitGridCheck)
+            {
+                int full = 0; foreach (var po in _polys) full += FaceSplit.Crossings(po, q, _per);
+                if (full != n) { Interlocked.Increment(ref SplitGridMismatches); return full; }
+            }
+            return n;
+        }
+
+        public double Clearance(Vector2d q)
+        {
+            double best = double.MaxValue; int gen = ++_gen;
+            double lim = Math.Min(_cw, _ch);
+            foreach (double xi in Images(q.X, _x0 - 2 * _per, X1 + 2 * _per))
+            {
+                var c = new Vector2d(xi, q.Y);
+                // расстояние от образа до габарита сетки (образ снаружи — кольца считаются от ближайшей ячейки)
+                double ox = Math.Max(0, Math.Max(_x0 - c.X, c.X - X1)), oy = Math.Max(0, Math.Max(_y0 - c.Y, c.Y - Y1));
+                double outside = Math.Sqrt(ox * ox + oy * oy);
+                if (outside * outside > best * best * (1 + 1e-9)) continue;
+                int cx = Col(c.X), cy = Row(c.Y);
+                int rmax = Math.Max(_nx, _ny);
+                for (int r = 0; r <= rmax; r++)
+                {
+                    if (r >= 2 && Math.Max(outside, (r - 1) * lim) > best * (1 + 1e-9)) break;
+                    for (int ix = cx - r; ix <= cx + r; ix++)
+                    {
+                        if (ix < 0 || ix >= _nx) continue;
+                        bool edgeCol = ix == cx - r || ix == cx + r;
+                        for (int iy = cy - r; iy <= cy + r; iy += edgeCol ? 1 : 2 * r)
+                        {
+                            if (iy < 0 || iy >= _ny) { if (r == 0) break; continue; }
+                            int ci = ix * _ny + iy;
+                            for (int k = _start[ci]; k < _start[ci + 1]; k++)
+                            {
+                                int i = _items[k];
+                                if (_stamp[i] == gen) continue;
+                                _stamp[i] = gen;
+                                best = ClearOne(_a[i], _b[i], q, _per, best);
+                            }
+                            if (r == 0) break;
+                        }
+                    }
+                }
+            }
+            if (SplitGridCheck)
+            {
+                double full = FaceSplit.Clearance(_polys, q, _per);
+                if (full != best) { Interlocked.Increment(ref SplitGridMismatches); return full; }
+            }
+            return best;
+        }
     }
 
     static bool Inside(List<Vector2d> poly, Vector2d q) => (Crossings(poly, q, 0) & 1) == 1;
@@ -605,6 +844,42 @@ public static partial class FaceSplit
         return a;
     }
 
+    static readonly bool CutBoxOff = Environment.GetEnvironmentVariable("P3D_CUTBOX") == "0";
+    static readonly bool PolyStraightOff = Environment.GetEnvironmentVariable("P3D_POLYSTRAIGHT") == "0";
+    /// <summary>
+    /// k126: КУСОК, ПРЯМОЙ В ПАРАМЕТРАХ ГРАНИ — ломаная из его концов (у дуги — через каждые 45°, чтобы развёртка угла не
+    /// теряла оборот): отрезок плоской грани; образующая и окружность поперёк оси у цилиндра и конуса. Прежде — 4 точки на мм
+    /// (у окружности трубы R 92 — 2 300 точек, и каждая — в чётности и зазорах кандидатов точки внутри). Ломаная та же
+    /// прямая. null — кривая не такая (прежняя густота). Мутация P3D_POLYSTRAIGHT=0.
+    /// </summary>
+    static int? StraightSteps(AnalyticFace f, Dart d)
+    {
+        if (PolyStraightOff || f.Sph || f.Tor || f.Band || f.Param) return null;
+        if (d.Curve is LineCurve3 ln)
+        {
+            if (!f.Cyl) return 1;
+            var dir = ln.B - ln.A; double L = dir.Length; if (L <= 0) return null;
+            dir /= L;
+            if (f.Cone)
+            {
+                var ra = ln.A - f.O; var rb = ln.B - f.O;
+                double sc = Math.Max(ra.Length, rb.Length);
+                return Vector3d.Cross(dir, (ra.Length >= rb.Length ? ra : rb)).Length <= 1e-12 * Math.Max(1, sc) ? 1 : null;
+            }
+            return Vector3d.Cross(dir, f.W.Normalized()).Length <= 1e-12 ? 1 : null;
+        }
+        if (d.Curve is ArcCurve3 arc && f.Cyl)
+        {
+            var w = f.W.Normalized();
+            if (Vector3d.Cross(arc.Frame.W.Normalized(), w).Length > 1e-12) return null;
+            var oc = arc.Frame.Origin - f.O;
+            if ((oc - w * Vector3d.Dot(oc, w)).Length > 1e-9 * Math.Max(1, arc.Radius)) return null;
+            double span = Math.Abs(d.T1 - d.T0) * Math.Abs(arc.Sweep);
+            return Math.Max(1, (int)Math.Ceiling(span / (Math.PI / 4)));
+        }
+        return null;
+    }
+
     static double Length(Dart d)
     {
         double l = 0; var p = d.At(0);
@@ -619,7 +894,108 @@ public static partial class FaceSplit
     /// кривой ближайшая точка у шва бывает по другую сторону параметра, а лучший отсчёт — на краю (g.05, брусок минус тор:
     /// событие ребра в 0.007 мм от начала кривой терялось, вершок овала у угла не вырезался). Мутация P3D_CLOSESTMINIMA=0.
     /// </summary>
+    /// <summary>
+    /// k126: БЛИЖАЙШИЙ ПАРАМЕТР — у отрезка и дуги по формуле (проекция; у дуги — угол проекции в пределах дуги, иначе
+    /// ближний конец), у прочих кривых — память по (кривая, точка): функция чистая, а точки разреза и концы кусков
+    /// спрашиваются по нескольку раз (у каждой из двух граней ребра, при обрезке и при сборке). Прежде — 257 отсчётов и
+    /// тернарный поиск каждый раз (1.8 с на детали пользователя). Мутация P3D_CLOSESTFAST=0.
+    /// </summary>
     public static double ClosestParam(ICurve3 c, Vector3d x)
+    {
+        if (ClosestFastOff) return ClosestParamCore(c, x);
+        if (ClosestCheck && c is IntersectionCurve3)
+        {
+            ClosestFastOffForCheck = true; double tc = ClosestParamCore(c, x); ClosestFastOffForCheck = false;
+            double tf = ClosestFast(c, x);
+            if ((c.PointAt(tc) - x).Length < 1 && ((c.PointAt(tf) - x).Length > (c.PointAt(tc) - x).Length + 1e-9 || Math.Abs(tf - tc) > 1e-6))
+            {
+                if (Interlocked.Increment(ref ClosestMismatches) < 12)
+                    Console.Error.WriteLine($"CLOSEST {c.GetType().Name} {(c is ArcCurve3 ac0 ? $"sweep {ac0.Sweep:R} r {ac0.Radius}" : "")} tf {tf:R} tc {tc:R} df {(c.PointAt(tf) - x).Length:G4} dc {(c.PointAt(tc) - x).Length:G4}");
+            }
+            return tf;
+        }
+        return ClosestFast(c, x);
+    }
+    // отрезок и дуга — прежним поиском (с памятью): его конечная разрешающая способность сводит почти совпадающие точки
+    // к одному параметру, и ключи рёбер у соседних граней совпадают побитово (формула давала разные — KRN04-COMMON-VERTICES)
+    [ThreadStatic] static bool ClosestFastOffForCheck;
+    static readonly bool ClosestCheck = Environment.GetEnvironmentVariable("P3D_CLOSESTCHECK") == "1";
+    public static long ClosestMismatches;
+    static double ClosestFast(ICurve3 c, Vector3d x)
+    {
+        switch (ClosestAnalyticOn ? c : null)
+        {
+            case LineCurve3 ln:
+            {
+                var d = ln.B - ln.A; double l2 = d.LengthSquared;
+                if (l2 <= 0) return 0;
+                return Math.Clamp(Vector3d.Dot(x - ln.A, d) / l2, 0, 1);
+            }
+            case ArcCurve3 arc when arc.Radius > 0 && Math.Abs(arc.Sweep) > 1e-12:
+            {
+                var q = x - arc.Frame.Origin;
+                double u = Vector3d.Dot(q, arc.Frame.U), v = Vector3d.Dot(q, arc.Frame.V);
+                if (u * u + v * v < 1e-24) break;                               // центр — любая точка: прежний поиск
+                double phi = Math.Atan2(v, u), sw = arc.Sweep, sg = Math.Sign(sw);
+                double dlt = (phi - arc.A0) * sg; dlt -= 2 * Math.PI * Math.Floor(dlt / (2 * Math.PI));
+                if (dlt <= Math.Abs(sw)) return dlt / Math.Abs(sw);
+                // вне дуги — ближний конец (у замкнутой не бывает)
+                return (arc.PointAt(0) - x).LengthSquared <= (arc.PointAt(1) - x).LengthSquared ? 0 : 1;
+            }
+        }
+        if (c is IntersectionCurve3 ic && ClosestOnTrace(ic, x) is double ti) return ti;
+        var box = _closestMemo.GetValue(c, _ => new System.Collections.Concurrent.ConcurrentDictionary<(long, long, long), double>());
+        var key = (BitConverter.DoubleToInt64Bits(x.X), BitConverter.DoubleToInt64Bits(x.Y), BitConverter.DoubleToInt64Bits(x.Z));
+        if (box.TryGetValue(key, out double t0)) { Interlocked.Increment(ref ClosestMemoHits); return t0; }
+        double t = ClosestParamCore(c, x);
+        if (box.Count < 4096) box[key] = t;
+        return t;
+    }
+    static readonly bool ClosestFastOff = Environment.GetEnvironmentVariable("P3D_CLOSESTFAST") == "0";
+    static readonly bool ClosestAnalyticOn = Environment.GetEnvironmentVariable("P3D_CLOSESTANALYTIC") == "1";
+
+    /// <summary>
+    /// k126: КРИВАЯ ПЕРЕСЕЧЕНИЯ — по её уточнённой ломаной: местные минимумы расстояния до звеньев (как у отсчётов прежнего
+    /// поиска) и золотое сечение по параметру кривой в окне соседних звеньев каждого; ответ — наименьшее расстояние.
+    /// Прежде — 257 точек кривой (каждая — уточнение на обе поверхности) и тернарный поиск у каждого минимума.
+    /// </summary>
+    static double? ClosestOnTrace(IntersectionCurve3 c, Vector3d x)
+    {
+        var (P, T) = c.RefinedWithParams();
+        int n = P.Length; if (n < 2) return null;
+        var d = new double[n - 1];
+        for (int i = 0; i + 1 < n; i++)
+        {
+            var a = P[i]; var ab = P[i + 1] - a; double l2 = ab.LengthSquared;
+            double t = l2 > 0 ? Math.Clamp(Vector3d.Dot(x - a, ab) / l2, 0, 1) : 0;
+            d[i] = (a + ab * t - x).LengthSquared;
+        }
+        double bestT = 0, bestD = double.MaxValue;
+        const double g = 0.6180339887498949;
+        for (int i = 0; i < d.Length; i++)
+        {
+            bool min = (i == 0 || d[i] <= d[i - 1]) && (i == d.Length - 1 || d[i] <= d[i + 1]);
+            if (!min) continue;
+            double lo = T[Math.Max(0, i - 1)], hi = T[Math.Min(n - 1, i + 2)];
+            double x1 = hi - g * (hi - lo), x2 = lo + g * (hi - lo);
+            double f1 = (c.PointAt(x1) - x).LengthSquared, f2 = (c.PointAt(x2) - x).LengthSquared;
+            for (int it = 0; it < 200 && hi - lo > 1e-15; it++)
+            {
+                if (f1 < f2) { hi = x2; x2 = x1; f2 = f1; x1 = hi - g * (hi - lo); f1 = (c.PointAt(x1) - x).LengthSquared; }
+                else { lo = x1; x1 = x2; f1 = f2; x2 = lo + g * (hi - lo); f2 = (c.PointAt(x2) - x).LengthSquared; }
+            }
+            double tm = (lo + hi) / 2, dm = (c.PointAt(tm) - x).LengthSquared;
+            // концы окна (ближайшая точка у конца кривой)
+            if (dm < bestD) { bestD = dm; bestT = tm; }
+        }
+        foreach (double te in new[] { 0.0, 1.0 }) { double de = (c.PointAt(te) - x).LengthSquared; if (de < bestD) { bestD = de; bestT = te; } }
+        return bestT;
+    }
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ICurve3, System.Collections.Concurrent.ConcurrentDictionary<(long, long, long), double>> _closestMemo = new();
+    /// <summary>k126: ответов ближайшего параметра из памяти (разбор).</summary>
+    public static long ClosestMemoHits;
+
+    static double ClosestParamCore(ICurve3 c, Vector3d x)
     {
         int n = 256; double T0 = c.T0, T1 = c.T1, step = (T1 - T0) / n;
         var d = new double[n + 1];

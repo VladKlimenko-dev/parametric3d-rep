@@ -9,6 +9,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>Parametric3D.UiChecks</AssemblyName>
+    <!-- k126: без профилирования по ходу работы (TieredPGO): первый расчёт детали — на 20 % быстрее (код ядра реже уходит
+         в медленный уровень с замерами), установившийся — не медленнее, запуск окна — тот же (замер на детали пользователя). -->
+    <TieredPGO>false</TieredPGO>
     <NoWarn>$(NoWarn);CS9057</NoWarn>
     <AvaloniaNameGeneratorIsEnabled>false</AvaloniaNameGeneratorIsEnabled>
   </PropertyGroup>

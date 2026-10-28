@@ -27,7 +27,9 @@ public static class TopoFingerprint
             foreach (var f in sh.Faces)
             {
                 R(f); R(f.Surface); M(f.Reversed ? 3UL : 4UL);
-                if (f.Surface is FacetedSurface fs) { M((ulong)fs.Facets.Count); if (display) R(fs.Display); }
+                // k126: поверхность с отложенной сеткой — её треугольники заданы ею самой (строятся по требованию): в отпечатке —
+                // признак отложенной разметки, а не число треугольников (до и после построения отпечаток тот же)
+                if (f.Surface is FacetedSurface fs) { M(fs.LazySense != 0 ? 0xA5A5UL + (ulong)(fs.LazySense + 2) : (ulong)fs.Facets.Count); if (display) R(fs.Display); }
                 M((ulong)f.Loops.Count);
                 foreach (var l in f.Loops)
                 {

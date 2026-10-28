@@ -647,6 +647,101 @@ public static class StepImport
         return failed;
     }
 
+    /// <summary>
+    /// k126: ОТЛОЖЕННАЯ РАЗМЕТКА ГРАНЕЙ ПРОМЕЖУТОЧНОГО ТЕЛА (как у OCCT: сетка — только когда она нужна). Грань сразу
+    /// получает гранёную поверхность с той же Source и стороной (LazySense), а треугольники строятся при первом обращении
+    /// к ним — по копии тела в состоянии до разметки (та же поверхность, та же сторона, те же рёбра и соседи), то есть
+    /// ровно то, что построила бы немедленная разметка. Грани-исключения (без контуров, замкнутые, шов) и грани от донора —
+    /// сразу, как прежде. Не удалась — LazyFailure (принятие тела отказывает). Возвращает false, если отложить нельзя
+    /// (тогда вызывающий размечает сразу).
+    /// </summary>
+    internal static bool MeshFacesFromLoopsLazy(TSolid solid, Func<TFace, Surfaces.FacetedSurface?>? donor)
+    {
+        var faceList = solid.Faces.ToList();
+        foreach (var f in faceList)
+        {
+            if (f.Loops.All(l => l.CoEdges.Count == 0)) return false;
+            if (f.Loops.All(l => l.CoEdges.Count >= 2 && l.CoEdges.Select(c => c.Edge).Distinct().Count() <= 1)) return false;
+            if (f.Surface is Surfaces.FacetedSurface) return false;
+        }
+        var clone = TopologyClone.Deep(solid);
+        var cfaces = clone.Faces.ToList();
+        if (cfaces.Count != faceList.Count) return false;
+        for (int i = 0; i < faceList.Count; i++)
+        {
+            var f2 = faceList[i]; var cf = cfaces[i];
+            if (donor?.Invoke(f2) is { } dn && DonorFitsEdges(f2, dn))
+            {
+                var copy = new Surfaces.FacetedSurface(dn.Source, dn.FallbackNormal);
+                foreach (var t in dn.Facets.ReadView) copy.Facets.Add(t);
+                copy.SetDisplay(dn.Display, dn.DisplayNormals);
+                copy.FromLoops = true;
+                f2.Surface = copy; f2.Reversed = false; DonorReused++;
+                continue;
+            }
+            var src = f2.Surface;
+            int want = f2.Reversed ? -1 : 1;
+            Vector3d nApprox = Vector3d.UnitZ;
+            try
+            {
+                var probe = f2.InteriorHint ?? f2.Loops[0].CoEdges[0].Start.P;
+                var nn = src.NormalAt(src.ProjectToUV(probe));
+                if (nn.LengthSquared > 1e-18) nApprox = nn.Normalized() * want;
+            }
+            catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { }
+            var fs = new Surfaces.FacetedSurface(src, nApprox) { FromLoops = true, LazySense = want };
+            fs.Facets.SetPending(() => LazyFill(cf, src, want, fs));
+            f2.Surface = fs;
+            f2.Reversed = false;
+            Interlocked.Increment(ref LazyFaces);
+        }
+        return true;
+    }
+    /// <summary>k126: граней с отложенной разметкой / разметок, выполненных по требованию (разбор, проверки).</summary>
+    public static long LazyFaces, LazyFills;
+    /// <summary>Разбор: кто первым потребовал отложенную сетку (P3D_LAZYWHO=1 — печать стека).</summary>
+    static readonly bool LazyWho = Environment.GetEnvironmentVariable("P3D_LAZYWHO") == "1";
+
+    static List<(Vector3d A, Vector3d B, Vector3d C)> LazyFill(TFace cf, Surfaces.ISurface3 src, int want, Surfaces.FacetedSurface fs)
+    {
+        Interlocked.Increment(ref LazyFills);
+        if (LazyWho) Console.Error.WriteLine("LAZYFILL " + cf.Tag + "\n" + string.Join("\n", Environment.StackTrace.Split('\n').Skip(3).Take(14)));
+        (List<Vector3d> P, List<int> T)? got; string? why;
+        using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("разметка грани (отложенная): " + src.GetType().Name) : null)
+        {
+            long tsf = System.Diagnostics.Stopwatch.GetTimestamp();
+            try { got = Tess.ExactFaceMesher.Mesh(cf, out why, out _); }
+            catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { got = null; why = "exception: " + ex.Message; }
+            if (SlowFaceDbg && System.Diagnostics.Stopwatch.GetElapsedTime(tsf).TotalMilliseconds > 30)
+                Console.Error.WriteLine($"SLOWFACE lazy {System.Diagnostics.Stopwatch.GetElapsedTime(tsf).TotalMilliseconds:0} ms {cf.Tag} {src.GetType().Name} tris {(got?.T.Count ?? 0) / 3}");
+        }
+        var res = new List<(Vector3d A, Vector3d B, Vector3d C)>();
+        if (got == null) { fs.LazyFailure = why ?? "not meshed"; return res; }
+        var (pts, tri) = got.Value;
+        for (int i = 0; i + 2 < tri.Count; i += 3) res.Add((pts[tri[i]], pts[tri[i + 1]], pts[tri[i + 2]]));
+        if (res.Count == 0) { fs.LazyFailure = "no triangles"; return res; }
+        // сторона — как у немедленной разметки: по первому треугольнику и нормали поверхности
+        var (ta, tb, tc) = res[0];
+        var nt = Vector3d.Cross(tb - ta, tc - ta); var g = (ta + tb + tc) / 3;
+        var ns = src.NormalAt(src.ProjectToUV(g));
+        if (ns.LengthSquared > 1e-18 && nt.LengthSquared > 1e-18 && Vector3d.Dot(nt.Normalized(), ns.Normalized()) * want < 0)
+            for (int i = 0; i < res.Count; i++) res[i] = (res[i].A, res[i].C, res[i].B);
+        return res;
+    }
+
+    /// <summary>k126: построить все отложенные сетки граней тела (параллельно). Возвращает причину первой неудачи или null.</summary>
+    public static string? EnsureMeshed(TSolid solid)
+    {
+        var pending = solid.Faces.Where(f => f.Surface is Surfaces.FacetedSurface fs && fs.Facets.IsPending).ToList();
+        if (pending.Count > 1 && Tess.Tessellator.Threads > 1)
+            System.Threading.Tasks.Parallel.ForEach(pending, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = Tess.Tessellator.Threads },
+                f => ((Surfaces.FacetedSurface)f.Surface).Facets.EnsureFilled());
+        else foreach (var f in pending) ((Surfaces.FacetedSurface)f.Surface).Facets.EnsureFilled();
+        foreach (var f in solid.Faces)
+            if (f.Surface is Surfaces.FacetedSurface fs && fs.LazyFailure is { } w) return $"face {f.Tag} not meshed from its loops: {w}";
+        return null;
+    }
+
     static readonly bool ClosedMeshOff = Environment.GetEnvironmentVariable("P3D_CLOSEDMESH") == "0";
 
     /// <summary>
@@ -703,6 +798,13 @@ public static class StepImport
     }
 
     internal static void OrientShellPublic(TSolid solid) => OrientShell(solid);
+    [ThreadStatic] static int _orientFlips;
+    /// <summary>k126: сколько граней развернула бы ориентация оболочки (на копии; тело не меняется).</summary>
+    internal static int OrientFlipsOn(TSolid solid)
+    {
+        var c = TopologyClone.Deep(solid);
+        _orientFlips = 0; OrientShell(c); return _orientFlips;
+    }
     static readonly bool OrientLocalOff = Environment.GetEnvironmentVariable("P3D_ORIENTLOCAL") == "0";
 
     /// <summary>Развернуть грань целиком: сторона, обход контуров, фасеты (область та же).</summary>
@@ -739,6 +841,7 @@ public static class StepImport
             // задаёт сторону грани (NormalAt). Прежде нормаль оставалась прежней, и у
             // развёрнутых граней сторона смотрела внутрь — соглашение K05 по телу из IGES не
             // сходилось («ни одно кольцо не ограничивает область» у 5 граней каждой детали).
+            _orientFlips++;
             var fs = (Surfaces.FacetedSurface)f.Surface;
             var list = fs.Facets.ToList();
             var n = Vector3d.Zero;

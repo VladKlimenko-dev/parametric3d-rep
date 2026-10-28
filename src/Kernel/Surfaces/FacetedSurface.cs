@@ -143,10 +143,18 @@ public sealed class FacetedSurface : ISurface3, Topology.IFreezable
     /// нет Source или нет годных треугольников). Считается по треугольникам (до 256 равномерно)
     /// и пересчитывается, если число треугольников изменилось.
     /// </summary>
-    public int Sense { get { if (_senseKey != Facets.Count) ComputeSense(); return _sense; } }
+    public int Sense { get { if (Facets.IsPending && LazySense != 0) return LazySense; if (_senseKey != Facets.Count) ComputeSense(); return _sense; } }
+
+    /// <summary>
+    /// k126: ОТЛОЖЕННАЯ РАЗМЕТКА. Знак нормали Source, который дадут треугольники, когда их построят (разметчик
+    /// разворачивает их по стороне грани): пока треугольников нет, сторона известна без них. 0 — не отложено.
+    /// </summary>
+    public int LazySense { get; internal set; }
+    /// <summary>k126: отложенная разметка не удалась (грань без треугольников; принятие тела отказывает).</summary>
+    public string? LazyFailure { get; internal set; }
 
     /// <summary>Знаки треугольников согласны между собой (иначе грань несогласованна — диагностика).</summary>
-    public bool SenseConsistent { get { if (_senseKey != Facets.Count) ComputeSense(); return _senseConsistent; } }
+    public bool SenseConsistent { get { if (Facets.IsPending && LazySense != 0) return true; if (_senseKey != Facets.Count) ComputeSense(); return _senseConsistent; } }
 
     private void ComputeSense()
     {

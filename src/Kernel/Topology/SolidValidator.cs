@@ -739,7 +739,8 @@ public static class SolidValidator
         int bad = 0;
         foreach (var f in faces)
         {
-            if (f.Surface is not Surfaces.FacetedSurface fs || fs.Facets.Count == 0 || f.Surface.IsPlanar) continue;
+            // k126: отложенная сетка — по фасетам не сверяется (сверка по точной поверхности ниже; фасеты — при принятии)
+            if (f.Surface is not Surfaces.FacetedSurface fs || fs.Facets.IsPending || fs.Facets.Count == 0 || f.Surface.IsPlanar) continue;
             if (f.Loops.Count == 0 || f.Loops.All(l => l.CoEdges.Count == 0)) continue;
             var nf = Vector3d.Zero; double area = 0;
             foreach (var (a, b, c) in fs.Facets) { var x = Vector3d.Cross(b - a, c - a) / 2; nf += x; area += x.Length; }
@@ -810,7 +811,8 @@ public static class SolidValidator
                     // сторона: у точной грани — флаг Reversed; у грани с фасетами — согласие фасет с источником (по всей грани,
                     // а не по одной опорной нормали: у широкой кривой грани одна нормаль сторону не задаёт)
                     // (флаг Reversed грани поверх стороны поверхности — у обеих, как в TFace.NormalAt)
-                    if (f.Surface is Surfaces.FacetedSurface ffs) { facetSign ??= FacetSign(ffs); if (facetSign == 0) return null; n *= facetSign.Value; }
+                    // k126: отложенная сетка — её сторона известна без треугольников (LazySense)
+                    if (f.Surface is Surfaces.FacetedSurface ffs) { facetSign ??= ffs.Facets.IsPending && ffs.LazySense != 0 ? ffs.LazySense : FacetSign(ffs); if (facetSign == 0) return null; n *= facetSign.Value; }
                     if (f.Reversed) n = -n;
                 }
                 catch { continue; }

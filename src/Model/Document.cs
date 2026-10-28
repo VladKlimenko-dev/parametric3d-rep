@@ -279,6 +279,15 @@ public sealed class Document
                                 return (Part: p, Result: rr, Failed: (Exception?)null);
                             }
                         }
+                        // k126: ПРОВЕРКИ — ПОСЛЕ ПОКАЗА. Обычный расчёт идёт с отложенными проверками (как предпросмотр, но с полной
+                        // точностью сетки): маршрут операции не ждёт разметки промежуточных тел и их проверки; деталь показывается,
+                        // а проверки выполняет следующий шаг (VerifyPhase) — те же проверки на тех же телах; не принятое
+                        // пересчитывается с этой операции без отложенных проверок. Мутация P3D_DEFERCHECKS=0 — прежнее.
+                        if (!DeferChecksOff)
+                        {
+                            var ksd = Kernel.KernelSettings.Capture() with { Preview = true, LivePreview = false };
+                            using (new Kernel.KernelContext(ksd).Enter()) return (Part: p, Result: p.Compute(scopes[p], solver), Failed: (Exception?)null);
+                        }
                         return (Part: p, Result: p.Compute(scopes[p], solver), Failed: (Exception?)null);
                     }
                     catch (Exception ex) { return (Part: p, Result: (Part.BuildResult?)null, Failed: ex); }
@@ -314,7 +323,10 @@ public sealed class Document
                 }
 
                 LastApplyMs = System.Diagnostics.Stopwatch.GetElapsedTime(applyStart).TotalMilliseconds;
-                if (!again) break;
+                if (again) continue;
+                // k126: деталь показана — проверки отложенных тел (правка во время них их прерывает, и расчёт идёт дальше)
+                if (await VerifyPhase()) { any = true; continue; }
+                break;
             }
         }
         finally
@@ -326,6 +338,69 @@ public sealed class Document
         ScheduleRefine();
         return any;
     }
+
+    /// <summary>k126: мутация P3D_DEFERCHECKS=0 — расчёт с проверками сразу (прежнее).</summary>
+    public static readonly bool DeferChecksOff = Environment.GetEnvironmentVariable("P3D_DEFERCHECKS") == "0";
+    /// <summary>k126: идёт проверка показанных деталей (строка состояния).</summary>
+    public bool IsVerifying { get; private set; }
+    /// <summary>k126: проверок начато / прервано правкой / закончено пересчётом (не принято) — разбор, проверки.</summary>
+    public static long VerifiesStarted, VerifiesCancelled, VerifiesRejected;
+    /// <summary>k126: время последней проверки (мс).</summary>
+    public double LastVerifyMs { get; private set; }
+    private CancellationTokenSource? _verifyCts;
+
+    /// <summary>
+    /// k126: ПРОВЕРКА ПОКАЗАННЫХ ДЕТАЛЕЙ. Обычный расчёт (без отложенных проверок) детали, тела которой ждут принятия: он
+    /// сначала принимает их (те же проверки маршрута на тех же телах — Part.AcceptPreviewBodies) и, если всё принято,
+    /// ничего не пересчитывает; не принятое — пересчёт с этой операции. Правка модели во время проверки её прерывает (отмена
+    /// расчёта): деталь снова считается с отложенными проверками. Возвращает true, если что-то применено или деталь снова
+    /// требует расчёта.
+    /// </summary>
+    private async Task<bool> VerifyPhase()
+    {
+        if (DeferChecksOff) return false;
+        var parts = AllParts().Where(p => !p.IsDirty && p.NeedsAcceptance && !ReferenceEquals(p, PreviewPart)).ToList();
+        if (parts.Count == 0) return false;
+        var versions = parts.ToDictionary(p => p, p => p.Version);
+        var scopes = parts.ToDictionary(p => p, ScopeFor);
+        var solver = Solver;
+        _verifyCts = new CancellationTokenSource(); var token = _verifyCts.Token;
+        void OnChanged(ModelItem _) { if (parts.Any(p => p.Version != versions[p])) { try { _verifyCts?.Cancel(); } catch (ObjectDisposedException) { } } }
+        Root.Changed += OnChanged;
+        IsVerifying = true; Interlocked.Increment(ref VerifiesStarted);
+        VerifyStarted?.Invoke();
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        bool any = false;
+        try
+        {
+            var results = await Task.Run(() => parts.Select(p =>
+            {
+                if (token.IsCancellationRequested) return (Part: p, Result: (Part.BuildResult?)null);
+                try { return (Part: p, Result: (Part.BuildResult?)p.Compute(scopes[p], solver, token)); }
+                catch (Exception ex) when (Kernel.KernelContext.IsCancellation(ex)) { return (Part: p, Result: (Part.BuildResult?)null); }
+                catch (Exception) { return (Part: p, Result: (Part.BuildResult?)null); }
+            }).ToList());
+            foreach (var (p, r) in results)
+            {
+                if (r == null) { Interlocked.Increment(ref VerifiesCancelled); continue; }
+                if (r.Executed > 0) Interlocked.Increment(ref VerifiesRejected);
+                // всё принято и тела те же — применять нечего (вид не перестраивается); иначе — как обычный результат
+                if (r.Executed == 0 && r.IntegrityError == null) continue;
+                if (p.Apply(r)) any = true;
+            }
+        }
+        finally
+        {
+            Root.Changed -= OnChanged;
+            IsVerifying = false;
+            _verifyCts.Dispose(); _verifyCts = null;
+            LastVerifyMs = System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
+            VerifyFinished?.Invoke();
+        }
+        return any || AllParts().Any(p => p.IsDirty);
+    }
+    /// <summary>k126: проверка показанных деталей началась / закончилась (события — в главном потоке).</summary>
+    public event Action? VerifyStarted, VerifyFinished;
 
     /// <summary>
     /// Пересчитывает все «грязные» детали сразу, в текущем потоке. Во время фоновой

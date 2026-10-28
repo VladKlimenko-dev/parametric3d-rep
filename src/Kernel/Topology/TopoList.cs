@@ -28,32 +28,52 @@ public sealed class TopoList<T> : IList<T>, IReadOnlyList<T>
         if (_owner.IsFrozen) throw new PublishedBodyMutationException(_owner.FreezeName, _name);
     }
 
-    public int Count => _items.Count;
+    // k126: ОТЛОЖЕННОЕ НАПОЛНЕНИЕ (сетка грани промежуточного тела — по требованию). Первое обращение к списку вызывает
+    // заполнитель один раз (под замком), дальше — обычный список. Заполнитель не трогает этот же список.
+    private volatile Func<List<T>>? _pending;
+    internal void SetPending(Func<List<T>> fill) { Check(); _pending = fill; }
+    /// <summary>Список ждёт отложенного наполнения (обращение к нему его выполнит).</summary>
+    public bool IsPending => _pending != null;
+    /// <summary>Выполнить отложенное наполнение (если есть).</summary>
+    public void EnsureFilled() { if (_pending != null) Fill(); }
+    private void Fill()
+    {
+        lock (_items)
+        {
+            var p = _pending; if (p == null) return;
+            var items = p();
+            _items.AddRange(items);
+            _pending = null;
+        }
+    }
+    private List<T> L { get { if (_pending != null) Fill(); return _items; } }
+
+    public int Count => L.Count;
     public bool IsReadOnly => _owner.IsFrozen;
-    public T this[int index] { get => _items[index]; set { Check(); _items[index] = value; } }
+    public T this[int index] { get => L[index]; set { Check(); L[index] = value; } }
 
-    public List<T>.Enumerator GetEnumerator() => _items.GetEnumerator();
-    IEnumerator<T> IEnumerable<T>.GetEnumerator() => _items.GetEnumerator();
-    IEnumerator IEnumerable.GetEnumerator() => _items.GetEnumerator();
+    public List<T>.Enumerator GetEnumerator() => L.GetEnumerator();
+    IEnumerator<T> IEnumerable<T>.GetEnumerator() => L.GetEnumerator();
+    IEnumerator IEnumerable.GetEnumerator() => L.GetEnumerator();
 
-    public void Add(T item) { Check(); _items.Add(item); }
-    public void AddRange(IEnumerable<T> items) { Check(); _items.AddRange(items); }
-    public void Insert(int index, T item) { Check(); _items.Insert(index, item); }
-    public bool Remove(T item) { Check(); return _items.Remove(item); }
-    public void RemoveAt(int index) { Check(); _items.RemoveAt(index); }
-    public int RemoveAll(Predicate<T> match) { Check(); return _items.RemoveAll(match); }
-    public void Clear() { Check(); _items.Clear(); }
-    public void Reverse() { Check(); _items.Reverse(); }
+    public void Add(T item) { Check(); L.Add(item); }
+    public void AddRange(IEnumerable<T> items) { Check(); L.AddRange(items); }
+    public void Insert(int index, T item) { Check(); L.Insert(index, item); }
+    public bool Remove(T item) { Check(); return L.Remove(item); }
+    public void RemoveAt(int index) { Check(); L.RemoveAt(index); }
+    public int RemoveAll(Predicate<T> match) { Check(); return L.RemoveAll(match); }
+    public void Clear() { Check(); _pending = null; _items.Clear(); }
+    public void Reverse() { Check(); L.Reverse(); }
 
-    public bool Contains(T item) => _items.Contains(item);
-    public int IndexOf(T item) => _items.IndexOf(item);
-    public int FindIndex(Predicate<T> match) => _items.FindIndex(match);
-    public T[] ToArray() => _items.ToArray();
+    public bool Contains(T item) => L.Contains(item);
+    public int IndexOf(T item) => L.IndexOf(item);
+    public int FindIndex(Predicate<T> match) => L.FindIndex(match);
+    public T[] ToArray() => L.ToArray();
 
     /// <summary>
     /// Тот же список для ЧТЕНИЯ в горячих путях ядра, ожидающих List&lt;T&gt; (без копии и без интерфейсного
     /// индексатора). Писать через него нельзя — это обход заморозки; только внутри ядра и только чтение.
     /// </summary>
-    internal List<T> ReadView => _items;
-    public void CopyTo(T[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+    internal List<T> ReadView => L;
+    public void CopyTo(T[] array, int arrayIndex) => L.CopyTo(array, arrayIndex);
 }

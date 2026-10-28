@@ -42,7 +42,7 @@ public sealed class GeometryAudit
     public int AnalyticFaces => Faces.Count(f => f.Level == GeometryLevel.Analytic);
     public int AnalyticEdges => Edges.Count(e => e.Level == GeometryLevel.Analytic);
     public int InconsistentEdges => Edges.Count(e => e.Level == GeometryLevel.Inconsistent);
-    public double MaxChordError => Faces.Count == 0 ? 0 : Faces.Max(f => f.ChordError);
+    public double MaxChordError => Faces.Count == 0 ? 0 : Faces.Max(f => double.IsNaN(f.ChordError) ? 0 : f.ChordError);
     public bool FullyAnalytic => Faces.All(f => f.Level == GeometryLevel.Analytic) && Edges.All(e => e.Level == GeometryLevel.Analytic);
 
     /// <summary>Допуск согласования кривой с поверхностью: шаг точной сетки с запасом и допуск ребра.</summary>
@@ -90,7 +90,9 @@ public sealed class GeometryAudit
                 continue;
             }
             double chord = 0;
-            if (f.Surface is FacetedSurface fsc && CachedChord(fsc, s) is double cc) chord = cc;
+            // k126: отложенная сетка — ошибка гранения ещё не измерима (сетки нет); уровень — по поверхности
+            if (f.Surface is FacetedSurface fsp && fsp.Facets.IsPending) chord = double.NaN;
+            else if (f.Surface is FacetedSurface fsc && CachedChord(fsc, s) is double cc) chord = cc;
             else if (f.Surface is FacetedSurface fsh && ChordByContent(fsh, s) is double ch2) chord = ch2;
             else if (f.Surface is FacetedSurface fs)
             {
