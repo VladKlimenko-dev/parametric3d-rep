@@ -124,7 +124,7 @@ public partial class MainWindow : Window
         using var _ui = Diagnostics.UiTimes.Measure("окно: открыть документ");
         if (CurrentOperation != null) { CurrentOperation = null; HideOpPanel(); }
         if (InSketch) View.ExitSketch(false);
-        if (Session != null) { Session.Replaced -= OnReplaced; Session.StateChanged -= OnStateChanged; Session.Document.BuildStarted -= OnBuild; Session.Document.BuildFinished -= OnBuild; }
+        if (Session != null) { Session.Replaced -= OnReplaced; Session.StateChanged -= OnStateChanged; Session.Document.BuildStarted -= OnBuild; Session.Document.BuildFinished -= OnBuild; Session.Document.VerifyStarted -= OnBuild; Session.Document.VerifyFinished -= OnBuild; }
         Session = s;
         UiLook.ApplyToRender(View.Theme);                // настройки отрисовки — у документа свои; визуальные — пользователя
         View.ActivePart = s.ActivePart;
@@ -133,6 +133,7 @@ public partial class MainWindow : Window
         s.StateChanged += OnStateChanged;
         s.Document.BuildStarted += OnBuild;
         s.Document.BuildFinished += OnBuild;
+        s.Document.VerifyStarted += OnBuild; s.Document.VerifyFinished += OnBuild;
         s.Document.Root.Changed += _ => ScheduleTree();
         _expand.Clear(); _nodeKeys.Clear();
         View.Document = s.Document;
@@ -179,7 +180,7 @@ public partial class MainWindow : Window
         using (Diagnostics.UiTimes.Measure("окно: дерево (назначить)"))
         {
             if (!TreeThrottleOff && Session.Document.PreviewPart != null) ScheduleTreeThrottled();
-            else if (!Session.Document.IsBuilding || TreeThrottleOff) ScheduleTree();
+            else if (!Session.Document.IsBuilding || Session.Document.IsVerifying || TreeThrottleOff) ScheduleTree();
         }
         UpdateCages(); View.MarkDirty();
         // k116 (п. 2): расчёт предпросмотра идёт дольше порога — вид перерисовывается (прежняя деталь — без рёбер и выбора)
@@ -3292,6 +3293,8 @@ public partial class MainWindow : Window
         string? stage = null; double pct = 0; bool ind = false;
         var doc = Session?.Document;
         if (_loadingFile != null) { stage = L("Загрузка «{0}»…", _loadingFile); ind = true; }
+        // k126: деталь показана, идут отложенные проверки (правка их прерывает)
+        else if (doc != null && doc.IsVerifying) { stage = L("Проверка детали…"); ind = true; }
         else if (doc != null && doc.IsBuilding)
         {
             var (d, t) = doc.BuildProgress;
@@ -3342,6 +3345,7 @@ public partial class MainWindow : Window
         int errors = Session.Document.Root.Descendants().Count(i => i.Error != null);
         // u13: значки состояния — идёт перестроение, требуют внимания, годно (k121: пока идёт полоса хода — её подпись)
         if (ProgressShown != null) { }
+        else if (Session.Document.IsVerifying) { StatusBuild.Text = "⟳ " + L("Проверка…"); StatusBuild.Foreground = Res("P3.Warning"); }
         else if (Session.Document.IsBuilding) { StatusBuild.Text = "⟳ " + L("Перестроение…"); StatusBuild.Foreground = Res("P3.Warning"); }
         else if (errors > 0) { StatusBuild.Text = "! " + L("Требуют внимания: {0}", errors); StatusBuild.Foreground = Res("P3.Error"); }
         else if (part != null && part.Bodies.Count > 0) { StatusBuild.Text = "✓ " + L("Построено"); StatusBuild.Foreground = Res("P3.TextDim"); }

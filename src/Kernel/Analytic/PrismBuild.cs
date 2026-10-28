@@ -395,8 +395,12 @@ public static class PrismBuild
     /// <summary>Возвращает число граней, не построенных по контурам (у результата маршрута — повод отказать).</summary>
     public static int Finish(TSolid solid, List<string>? warnings) => Finish(solid, warnings, null);
 
-    public static int Finish(TSolid solid, List<string>? warnings, Func<TFace, FacetedSurface?>? donor)
+    public static int Finish(TSolid solid, List<string>? warnings, Func<TFace, FacetedSurface?>? donor) => Finish(solid, warnings, donor, false, out _);
+
+    /// <summary>k126: lazy — разметка граней отложена (StepImport.MeshFacesFromLoopsLazy); deferred — так и вышло.</summary>
+    public static int Finish(TSolid solid, List<string>? warnings, Func<TFace, FacetedSurface?>? donor, bool lazy, out bool deferred)
     {
+        deferred = false;
         TopologyConventions.Report norm;
         using (Diagnostics.Prof.Time("аналитика: завершение — соглашение")) norm = TopologyConventions.Normalize(solid);
         if (solid.TopologyConvention == 0 && norm.Consistent && norm.Problems.Count == 0 && norm.Unanchored > 0)
@@ -404,6 +408,7 @@ public static class PrismBuild
             TopologyConventions.SplitRegions(solid);
             solid.TopologyConvention = TopologyConventions.Version;
         }
+        if (lazy && Export.StepImport.MeshFacesFromLoopsLazy(solid, donor)) { deferred = true; return 0; }   // сторона оболочки — при принятии
         int failed;
         using (Diagnostics.Prof.Time("аналитика: завершение — разметка граней")) failed = Export.StepImport.MeshFacesFromLoops(solid, warnings, "AnalyticPrism", donor);
         Export.StepImport.OrientShellPublic(solid);

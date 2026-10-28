@@ -239,14 +239,31 @@ public static class DraftOp
             return -1;
         }
         int best = -1; double bd = double.MaxValue;
+        double size = 0;
+        foreach (var f in faces) foreach (var e in f.Edges) { size = Math.Max(size, (e.V0.P - e.V1.P).Length); }
+        double limit = Math.Max(1e-3, 1e-3 * size);
+        // k126: ГРАНЬ ДАЛЬШЕ ПОРОГА ПО СВОЕЙ ПОВЕРХНОСТИ — НЕ КАНДИДАТ (сетку не строить). Сетка грани лежит у её поверхности
+        // (отход не больше хорды разметки), поэтому расстояние до поверхности минус запас — нижняя граница расстояния до
+        // сетки; грань, у которой она больше порога, выбрана быть не может (порог решает и без неё). Только плоскость,
+        // цилиндр и шар — у них расстояние точное. Прежде строилась сетка каждой грани тела. Мутация P3D_DRAFTPICKFAST=0.
+        double margin = 4 * Math.Max(Core.Tol.Chord, 1e-6) + 1e-6;
         for (int i = 0; i < faces.Count; i++)
         {
+            if (!DraftPickFastOff)
+            {
+                double ds = Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(faces[i])) switch
+                {
+                    Geometry.Ssi.Plane pl => Math.Abs(Vector3d.Dot(probe - pl.P, pl.N.Normalized())),
+                    Geometry.Ssi.Cylinder cy => Math.Abs(DistToCylinder(cy, probe)),
+                    Geometry.Ssi.Sphere sp => Math.Abs((probe - sp.C).Length - sp.R),
+                    _ => 0
+                };
+                if (ds > limit + margin) { Interlocked.Increment(ref PickFacesSkipped); continue; }
+            }
             double d = MeshDistance(faces[i], probe);
             if (d < bd) { bd = d; best = i; }
         }
-        double size = 0;
-        foreach (var f in faces) foreach (var e in f.Edges) { size = Math.Max(size, (e.V0.P - e.V1.P).Length); }
-        return bd <= Math.Max(1e-3, 1e-3 * size) ? best : -1;
+        return bd <= limit ? best : -1;
     }
     static readonly bool AnyFaceOff = Environment.GetEnvironmentVariable("P3D_DRAFTANYFACE") == "0";
 
@@ -731,6 +748,9 @@ public static class DraftOp
         return clone;
     }
 
+    static readonly bool DraftPickFastOff = Environment.GetEnvironmentVariable("P3D_DRAFTPICKFAST") == "0";
+    /// <summary>k126: граней, не размеченных при выборе грани уклона (проверки).</summary>
+    public static long PickFacesSkipped;
     static double MeshDistance(TFace f, Vector3d p)
     {
         var mb = new Tess.MeshBuilder(); f.Surface.TessellateFace(f, mb); var md = new Tess.MeshData(); mb.FillInto(md);

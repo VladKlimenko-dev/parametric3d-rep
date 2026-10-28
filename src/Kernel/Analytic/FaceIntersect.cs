@@ -34,6 +34,73 @@ public static class FaceIntersect
         public override string ToString() => $"{Kind}: {Pieces.Count} piece(s)";
     }
 
+    static readonly bool TraceBallOff = Environment.GetEnvironmentVariable("P3D_TRACEBALL") == "0";
+    static readonly bool EvMemoOff = Environment.GetEnvironmentVariable("P3D_EVMEMO") == "0";
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<AnalyticFace, System.Collections.Concurrent.ConcurrentDictionary<ICurve3, (double[] T, string? Unres)>> _evMemo = new();
+    /// <summary>k126: событий (ребро, грань) из памяти (проверки).</summary>
+    public static long EventMemoHits;
+    /// <summary>k126: пар со строгим шаром прослеживания (проверки).</summary>
+    public static long TraceBallsTight;
+
+    /// <summary>
+    /// k126: СТРОГИЙ ГАБАРИТ ГРАНИ (вся грань внутри). Плоскость — точки рёбер (с запасом на прогиб хорды); шар и тор — целое
+    /// тело; цилиндр и конус — пояс поверхности между крайними по оси точками контуров (у конуса — до вершины, если контуры
+    /// обходят ось в сумме не ноль раз: грань-шапка), то есть габарит двух кругов поперёк оси, — пересечённый с габаритом
+    /// рёбер с запасом на прогиб. null — грань не из этих видов.
+    /// </summary>
+    internal static (Vector3d Lo, Vector3d Hi)? TightBox(AnalyticFace a)
+    {
+        if (a.Band || a.Param) return null;
+        double eps = 4 * Math.Max(Core.Tol.Chord, 1e-6) + 1e-6;
+        if (a.Sph) return (a.O - new Vector3d(a.R + eps), a.O + new Vector3d(a.R + eps));
+        if (a.Tor) return (a.O - new Vector3d(a.R + a.Rm + eps), a.O + new Vector3d(a.R + a.Rm + eps));
+        var pts = new List<Vector3d>();
+        foreach (var ce in a.Face.Loops.SelectMany(l => l.CoEdges)) ce.Tessellate(pts, true);
+        if (pts.Count == 0) return null;
+        var lo = new Vector3d(double.MaxValue); var hi = new Vector3d(double.MinValue);
+        foreach (var p in pts) { lo = Vector3d.ComponentMin(lo, p); hi = Vector3d.ComponentMax(hi, p); }
+        if (!a.Cyl) return (lo - new Vector3d(eps), hi + new Vector3d(eps));
+        var w = a.W.Normalized();
+        double hmin = double.MaxValue, hmax = double.MinValue;
+        foreach (var p in pts) { double h = Vector3d.Dot(p - a.O, w); hmin = Math.Min(hmin, h); hmax = Math.Max(hmax, h); }
+        bool apexIn = false;
+        if (a.Cone)
+        {
+            // сумма оборотов контуров вокруг оси: не ноль — грань-шапка с вершиной внутри
+            double turns = 0;
+            foreach (var l in a.Face.Loops)
+            {
+                var lp = new List<Vector3d>(); foreach (var ce in l.CoEdges) ce.Tessellate(lp, lp.Count == 0);
+                double ang = 0;
+                for (int i = 0; i + 1 < lp.Count; i++)
+                {
+                    var d0 = lp[i] - a.O; d0 -= w * Vector3d.Dot(d0, w); var d1 = lp[i + 1] - a.O; d1 -= w * Vector3d.Dot(d1, w);
+                    if (d0.LengthSquared < 1e-24 || d1.LengthSquared < 1e-24) return null;     // контур через ось — без строгого пояса
+                    ang += Math.Atan2(Vector3d.Dot(Vector3d.Cross(d0, d1), w), Vector3d.Dot(d0, d1));
+                }
+                turns += ang / (2 * Math.PI);
+            }
+            if (Math.Abs(turns) > 0.5) { hmin = Math.Min(hmin, 0); apexIn = true; }
+            if (hmin < -1e-9) return null;                                   // другая пола конуса — не ждём
+            hmin = Math.Max(0, hmin);
+        }
+        double r0 = a.RadiusAt(hmin), r1 = a.RadiusAt(hmax);
+        var slo = new Vector3d(double.MaxValue); var shi = new Vector3d(double.MinValue);
+        foreach (var (h, r) in new[] { (hmin, r0), (hmax, r1) })
+        {
+            var c = a.O + w * h;
+            var ext = new Vector3d(r * Math.Sqrt(Math.Max(0, 1 - w.X * w.X)), r * Math.Sqrt(Math.Max(0, 1 - w.Y * w.Y)), r * Math.Sqrt(Math.Max(0, 1 - w.Z * w.Z)));
+            slo = Vector3d.ComponentMin(slo, c - ext); shi = Vector3d.ComponentMax(shi, c + ext);
+        }
+        // шапка с вершиной внутри выходит за рёбра до вершины — только пояс (габарит рёбер её не ограничивает)
+        if (apexIn) return (slo - new Vector3d(eps), shi + new Vector3d(eps));
+        // прогиб за рёбрами не больше поперечника пояса
+        double bulge = 2 * Math.Max(r0, r1);
+        var elo = lo - new Vector3d(bulge); var ehi = hi + new Vector3d(bulge);
+        var rlo = Vector3d.ComponentMax(slo, elo) - new Vector3d(eps); var rhi = Vector3d.ComponentMin(shi, ehi) + new Vector3d(eps);
+        return (rlo, rhi);
+    }
+
     static (Vector3d Lo, Vector3d Hi) BoxOf(TFace f)
     {
         var lo = new Vector3d(double.MaxValue); var hi = new Vector3d(double.MinValue); var pts = new List<Vector3d>();
@@ -140,12 +207,26 @@ public static class FaceIntersect
         var centre = (lo + hi) / 2; double radius = (hi - lo).Length / 2 * 1.01;
 
         Ssi.Result ssi;
-        using (Diagnostics.Prof.Time("пары: SSI")) ssi = Ssi.Intersect(a.Shape, b.Shape, centre, radius);
+        // k126: шар прослеживания (общий случай SSI) — по ОБЩЕЙ части строгих габаритов двух граней (кривая пересечения граней
+        // лежит на обеих), а не по общему габариту пары с запасом на прогиб: у двух конусов уклона шар был 830 мм при
+        // гранях в 200 мм, а удостоверение прослеживания — по всей площади конуса в шаре. P3D_TRACEBALL=0 — прежний шар.
+        (Vector3d C, double R)? traceBall = null;
+        if (!TraceBallOff && TightBox(a) is { } ta && TightBox(b) is { } tb)
+        {
+            var tlo = Vector3d.ComponentMax(ta.Lo, tb.Lo); var thi = Vector3d.ComponentMin(ta.Hi, tb.Hi);
+            if (tlo.X > thi.X || tlo.Y > thi.Y || tlo.Z > thi.Z) return res;          // строгие габариты не встречаются
+            // запас: концы прослеженной кривой — заметно вне обеих граней (события на рёбрах ложатся внутрь кривой)
+            double tr = (thi - tlo).Length / 2 * 1.5 + 1;
+            if (tr < radius) { traceBall = ((tlo + thi) / 2, tr); Interlocked.Increment(ref TraceBallsTight); }
+        }
+        using (Diagnostics.Prof.Time("пары: SSI"))
+            ssi = Ssi.Intersect(a.Shape, b.Shape, centre, radius, traceBall);
         if (ssi.Uncertified != null) { res.Kind = Kind.Unresolved; res.Unresolved = ssi.Uncertified; return res; }
         if (ssi.Kind == Ssi.Kind.Coincident) { res.Kind = Kind.Coincident; return res; }
         if (ssi.Kind == Ssi.Kind.Tangent) { res.Kind = Kind.Tangent; res.TangentPoints.AddRange(ssi.Points); return res; }
         if (ssi.AllTangent) res.TangentCurves.AddRange(ssi.Curves);
-        using (Diagnostics.Prof.Time("пары: события и обрезка")) foreach (var c in ssi.Curves) Clip(c, a, b, res);
+        using (Diagnostics.Prof.Time("пары: события и обрезка"))
+            foreach (var c in ssi.Curves) Clip(c, a, b, res);
         using (Diagnostics.Prof.Time("пары: удостоверение событий")) if (!EventCertOff && !EventsOff && res.Unresolved == null) CertifyEvents(a, b, ssi, res);
         if (Debug != null && (a.Tor || b.Tor))
         {
@@ -170,6 +251,24 @@ public static class FaceIntersect
     /// <summary>То же, с отказом: события на кривой пересечения не доказаны (выборка) — Unresolved.</summary>
     static List<double> EventsOn(ICurve3 c, AnalyticFace other, Result res)
     {
+        // k126: ПАМЯТЬ СОБЫТИЙ (ребро, грань): события ребра на поверхности другой грани — функция только их двоих, а ребро
+        // делят две грани, и пары каждой с той же другой гранью считали их заново (у детали пользователя — 65 % повторов).
+        // Признак «не доказано» хранится вместе с ответом. Мутация P3D_EVMEMO=0.
+        if (!EvMemoOff)
+        {
+            var box = _evMemo.GetValue(other, _ => new System.Collections.Concurrent.ConcurrentDictionary<ICurve3, (double[] T, string? Unres)>(ReferenceEqualityComparer.Instance));
+            if (box.TryGetValue(c, out var hit))
+            {
+                Interlocked.Increment(ref EventMemoHits);
+                if (hit.Unres != null && res.Unresolved == null) res.Unresolved = hit.Unres;
+                return new List<double>(hit.T);
+            }
+            var tmp = new Result();
+            var got = EventsOn0(c, other, tmp);
+            box.TryAdd(c, (got.ToArray(), tmp.Unresolved));
+            if (tmp.Unresolved != null && res.Unresolved == null) res.Unresolved = tmp.Unresolved;
+            return got;
+        }
         var lst = EventsOn0(c, other, res);
         if (Environment.GetEnvironmentVariable("P3D_EVDUMP") == "1") Console.Error.WriteLine($"EVDUMP {c.GetType().Name} {c.PointAt(c.T0):0.######}->{c.PointAt(c.T1):0.######} on {(other.Param ? "NURBS" : other.Shape?.GetType().Name)}: [{string.Join(", ", lst.Select(t => t.ToString("R")))}] unres {res.Unresolved != null}");
         return lst;

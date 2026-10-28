@@ -60,14 +60,34 @@ public sealed class Classifier
     public int? Classify(Vector3d p)
     {
         if (Unsupported != null) return null;
+        // k126: строгий габарит грани (FaceIntersect.TightBox) — точка дальше допуска от него на грани не лежит, луч мимо него
+        // грань не пересекает (её точки на поверхности вне грани не считаются и прежде). Мутация P3D_CLSBOX=0.
+        bool box = !ClsBoxOff;
         // на границе?
         foreach (var f in _faces)
+        {
+            if (box && f.Box is { } fb && Outside(fb, p, Tol))
+            {
+                Interlocked.Increment(ref ClsBoxSkips);
+                if (ClsBoxCheck && f.SurfaceDistance(p) < Tol && f.Contains(f.ProjectTo(p)) != false)
+                    Console.Error.WriteLine($"CLSBOX on-miss face {f.Face.Tag} cyl {f.Cyl} cone {f.Cone} p {p} box {fb.Lo} {fb.Hi} contains {f.Contains(f.ProjectTo(p))}");
+                continue;
+            }
             if (f.SurfaceDistance(p) < Tol && f.Contains(f.ProjectTo(p)) != false) return 0;
+        }
         foreach (var dir in Dirs)
         {
             int hits = 0; bool doubtful = false;
             foreach (var f in _faces)
             {
+                if (box && f.Box is { } fb2 && !RayMeets(fb2, p, dir))
+                {
+                    if (ClsBoxCheck)
+                        foreach (var (t9, q9, g9) in RayHits(f, p, dir))
+                            if (t9 > Tol && !g9 && f.Contains(q9) != false)
+                                Console.Error.WriteLine($"CLSBOX miss face {f.Face.Tag} cyl {f.Cyl} cone {f.Cone} sph {f.Sph} q {q9} h(q) {f.H(q9):G6} O {f.O} W {f.W} tan {f.TanA:G6} box {fb2.Lo} {fb2.Hi} loops {f.Face.Loops.Count} hs [{string.Join(",", f.Face.Loops.SelectMany(l => l.CoEdges).Select(ce => $"{f.H(ce.Start.P):G4}"))}] curves {string.Join(",", f.Face.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge.Curve.GetType().Name[0]))}");
+                    continue;
+                }
                 foreach (var (t, q, grazing) in RayHits(f, p, dir))
                 {
                     Debug?.Invoke($"dir {dir} face {(f.Cone ? "cone" : f.Sph ? "sphere" : f.Cyl ? "cyl" : "plane")} {f.Face.Tag} t {t:G6} grazing {grazing} contains {(t > Tol && !grazing ? f.Contains(q) : null)}");
@@ -82,6 +102,28 @@ public sealed class Classifier
             if (!doubtful) return (hits & 1) == 1 ? 1 : -1;
         }
         return null;
+    }
+
+    static readonly bool ClsBoxOff = Environment.GetEnvironmentVariable("P3D_CLSBOX") == "0";
+    static readonly bool ClsBoxCheck = Environment.GetEnvironmentVariable("P3D_CLSBOXCHECK") == "1";
+    /// <summary>k126: граней, отсеянных габаритом в классификации точки (проверки).</summary>
+    public static long ClsBoxSkips;
+    static bool Outside((Vector3d Lo, Vector3d Hi) b, Vector3d p, double tol) =>
+        p.X < b.Lo.X - tol || p.Y < b.Lo.Y - tol || p.Z < b.Lo.Z - tol || p.X > b.Hi.X + tol || p.Y > b.Hi.Y + tol || p.Z > b.Hi.Z + tol;
+    /// <summary>Луч p + t·dir (t ≥ 0) задевает габарит (с запасом допуска).</summary>
+    static bool RayMeets((Vector3d Lo, Vector3d Hi) b, Vector3d p, Vector3d dir)
+    {
+        double t0 = 0, t1 = double.MaxValue; double m = 2 * Tol + 1e-9;
+        for (int k = 0; k < 3; k++)
+        {
+            double o = k == 0 ? p.X : k == 1 ? p.Y : p.Z, d = k == 0 ? dir.X : k == 1 ? dir.Y : dir.Z;
+            double lo = (k == 0 ? b.Lo.X : k == 1 ? b.Lo.Y : b.Lo.Z) - m, hi = (k == 0 ? b.Hi.X : k == 1 ? b.Hi.Y : b.Hi.Z) + m;
+            if (Math.Abs(d) < 1e-300) { if (o < lo || o > hi) return false; continue; }
+            double ta = (lo - o) / d, tb = (hi - o) / d; if (ta > tb) (ta, tb) = (tb, ta);
+            t0 = Math.Max(t0, ta); t1 = Math.Min(t1, tb);
+            if (t0 > t1) return false;
+        }
+        return true;
     }
 
     static IEnumerable<(double T, Vector3d Q, bool Grazing)> RayHits(AnalyticFace f, Vector3d p, Vector3d dir)
@@ -179,6 +221,9 @@ public sealed partial class AnalyticFace
     /// </summary>
     public bool Cone; public double TanA;
     public double RadiusAt(double h) => Cone ? Math.Max(1e-12, h * TanA) : R;
+    /// <summary>k126: строгий габарит грани (вся грань внутри) — один раз на форму; null — нет (лента, NURBS, особый конус).</summary>
+    internal (Vector3d Lo, Vector3d Hi)? Box { get { if (!_boxSet) { _box = FaceIntersect.TightBox(this); _boxSet = true; } return _box; } }
+    (Vector3d Lo, Vector3d Hi)? _box; volatile bool _boxSet;
     public Vector3d O, U, V, W;          // плоскость: начало, оси, нормаль; цилиндр: точка оси, базис ⟂ оси, ось
     /// <summary>
     /// g.05: ТОР — центр O, ось W, базис U, V; большой радиус R, малый Rm. Параметры: θ — вокруг оси, φ — вокруг трубки
@@ -594,6 +639,48 @@ public sealed partial class AnalyticFace
     /// <summary>То же с заданным допуском у границы (0 — без допуска: точная чётность пересечений).</summary>
     public bool? Contains(Vector3d q, double tol)
     {
+        if (BoundsCheck && !_inCheck && BoundsIndex != null)
+        {
+            var r1 = ContainsImpl(q, tol); _inCheck = true; var old = _bix; _bix = null;
+            try { var r2 = ContainsImpl(q, tol); if (r1 != r2) { Interlocked.Increment(ref BoundsMismatches); Console.Error.WriteLine($"BOUNDSCHECK contains {Face.Tag} cyl {Cyl} {r1} vs {r2}"); } }
+            finally { _bix = old; _inCheck = false; }
+            var d1 = BoundaryDistance(q); _inCheck = true; _bix = null;
+            try { var d2 = BoundaryDistance(q); if (d1 != d2) { Interlocked.Increment(ref BoundsMismatches); Console.Error.WriteLine($"BOUNDSCHECK dist {Face.Tag} cyl {Cyl} {d1:R} vs {d2:R}"); } }
+            finally { _bix = old; _inCheck = false; }
+            return r1;
+        }
+        return ContainsImpl(q, tol);
+    }
+    /// <summary>
+    /// k126 (проверки): указатель отрезков границы против полного обхода — на гранях тела в случайных точках у поверхности
+    /// (принадлежность и расстояние до границы должны совпасть побитово). Возвращает (сравнений, расхождений, граней с указателем).
+    /// </summary>
+    public static (int Compared, int Mismatches, int Indexed) BoundsIndexSelfCheck(Topology.TSolid s, int perFace, int seed)
+    {
+        var rnd = new Random(seed); int cmp = 0, bad = 0, idx = 0;
+        foreach (var tf in s.Faces)
+        {
+            var f = Of(tf, out _); if (f == null || f.BoundsIndex == null) continue;
+            idx++;
+            var pts = new List<Vector3d>(); foreach (var ce in tf.Loops.SelectMany(l => l.CoEdges)) ce.Tessellate(pts, true);
+            if (pts.Count == 0) continue;
+            for (int k = 0; k < perFace; k++)
+            {
+                var a = pts[rnd.Next(pts.Count)]; var b = pts[rnd.Next(pts.Count)];
+                var q = f.ProjectTo(a + (b - a) * rnd.NextDouble() + new Vector3d(rnd.NextDouble() - 0.5, rnd.NextDouble() - 0.5, rnd.NextDouble() - 0.5) * 1e-3);
+                var c1 = f.ContainsImpl(q, Tol); double d1 = f.BoundaryDistance(q);
+                var keep = f._bix; f._bix = null;
+                try { var c2 = f.ContainsImpl(q, Tol); double d2 = f.BoundaryDistance(q); cmp++; if (c1 != c2 || d1 != d2) bad++; }
+                finally { f._bix = keep; }
+            }
+        }
+        return (cmp, bad, idx);
+    }
+    static readonly bool BoundsCheck = Environment.GetEnvironmentVariable("P3D_BOUNDSCHECK") == "1";
+    [ThreadStatic] static bool _inCheck;
+    public static long BoundsMismatches;
+    bool? ContainsImpl(Vector3d q, double tol)
+    {
         var f = this;
         if (Band) { double sd = BandSignedBoundary(q); return Math.Abs(sd) < tol ? null : sd > 0; }
         if (Param) { double sd = ParamSignedBoundary(q); return Math.Abs(sd) < tol ? null : sd > 0; }
@@ -605,8 +692,11 @@ public sealed partial class AnalyticFace
             var p = PlaneUV(q);
             // луч в 2D под общим углом
             var dir = new Vector2d(Math.Cos(0.613), Math.Sin(0.613));
-            foreach (var s in f.Bounds)
+            var visit = BoundsIndex is { } bxp ? bxp.PlaneRay(p, dir, tol / Math.Max(Scale(p), 1e-300) + 1e-9) : null;
+            int nv = visit?.Count ?? f.Bounds.Count;
+            for (int vi = 0; vi < nv; vi++)
             {
+                var s = f.Bounds[visit != null ? visit[vi] : vi];
                 if (DistToSeg(s, p) * Scale(p) < tol) return null;
                 if (s.Kind == Seg.Line)
                 {
@@ -633,8 +723,11 @@ public sealed partial class AnalyticFace
         // цилиндр: луч вдоль образующей (+h) в развёртке
         double th = Theta(q), h = H(q); double Rq = f.RadiusAt(h);
         double tolH = Cone && !ConeMetricOff ? tol / Math.Sqrt(1 + TanA * TanA) : tol;   // допуск по h: мм вдоль образующей → h
-        foreach (var s in f.Bounds)
+        var visitC = BoundsIndex is { } bxc ? bxc.CylColumn(th) : null;
+        int ncv = visitC?.Count ?? f.Bounds.Count;
+        for (int vi = 0; vi < ncv; vi++)
         {
+            var s = f.Bounds[visitC != null ? visitC[vi] : vi];
             switch (s.Kind)
             {
                 case Seg.Vertical:
@@ -796,7 +889,22 @@ public sealed partial class AnalyticFace
                 }
             return d;
         }
-        if (!Cyl) { var p = PlaneUV(q); foreach (var s in Bounds) d = Math.Min(d, DistToSeg(s, p)); if (Sph) d *= Scale(p); }
+        if (!Cyl)
+        {
+            var p = PlaneUV(q);
+            if (BoundsIndex is { } bxd)
+            {
+                foreach (int i in bxd.Always) d = Math.Min(d, DistToSeg(Bounds[i], p));
+                foreach (var ch in bxd.Chunks)
+                {
+                    double dx = Math.Max(0, Math.Max(ch.X0 - p.X, p.X - ch.X1)), dy = Math.Max(0, Math.Max(ch.Y0 - p.Y, p.Y - ch.Y1));
+                    if (dx * dx + dy * dy > d * d * (1 + 1e-9)) continue;
+                    for (int i = ch.S; i < ch.E; i++) d = Math.Min(d, DistToSeg(Bounds[i], p));
+                }
+            }
+            else foreach (var s in Bounds) d = Math.Min(d, DistToSeg(s, p));
+            if (Sph) d *= Scale(p);
+        }
         else
         {
             double th = Theta(q), h = H(q); double Rh = RadiusAt(h);
@@ -804,7 +912,27 @@ public sealed partial class AnalyticFace
             // окружности-края грани на конусе с полууглом 60° выходило вдвое меньше настоящего, и точка в 1.5 допуска от края
             // считалась «на границе». У цилиндра множитель 1. Мутация P3D_CONEMETRIC=0.
             double ks = Cone && !ConeMetricOff ? Math.Sqrt(1 + TanA * TanA) : 1;
-            foreach (var s in Bounds)
+            var bxy = BoundsIndex;
+            List<int>? order = null;
+            if (bxy != null)
+            {
+                // сначала всегда проверяемые, затем куски ломаных, чей габарит (с ближайшим оборотом) не дальше найденного
+                foreach (int i in bxy.Always) d = Math.Min(d, CylSegDist(Bounds[i], th, h, Rh, ks));
+                foreach (var ch in bxy.Chunks)
+                {
+                    double cm = (ch.X0 + ch.X1) / 2; double kc = Math.Round((cm - th) / (2 * Math.PI)); double lb = double.MaxValue;
+                    for (int k = -1; k <= 1; k++)
+                    {
+                        double tt = th + 2 * Math.PI * (kc + k);
+                        double dx = Math.Max(0, Math.Max(ch.X0 - tt, tt - ch.X1)) * Rh, dy = Math.Max(0, Math.Max(ch.Y0 - h, h - ch.Y1)) * ks;
+                        lb = Math.Min(lb, Math.Sqrt(dx * dx + dy * dy));
+                    }
+                    if (lb > d * (1 + 1e-9)) continue;
+                    for (int i = ch.S; i < ch.E; i++) d = Math.Min(d, CylSegDist(Bounds[i], th, h, Rh, ks));
+                }
+                order = new List<int>();
+            }
+            foreach (var s in order != null ? Enumerable.Empty<Seg>() : Bounds)
             {
                 switch (s.Kind)
                 {
@@ -835,6 +963,112 @@ public sealed partial class AnalyticFace
         }
         return d;
     }
+
+    /// <summary>Расстояние (мм) от точки (θ, h) цилиндра/конуса до отрезка границы — та же формула, что в BoundaryDistance.</summary>
+    static double CylSegDist(Seg s, double th, double h, double Rh, double ks)
+    {
+        switch (s.Kind)
+        {
+            case Seg.Vertical:
+                {
+                    double dth = Math.Abs(Wrap(th - s.A.X + Math.PI) - Math.PI) * Rh;
+                    double lo = Math.Min(s.A.Y, s.B.Y), hi = Math.Max(s.A.Y, s.B.Y);
+                    double dh = (h < lo ? lo - h : h > hi ? h - hi : 0) * ks;
+                    return Math.Sqrt(dth * dth + dh * dh);
+                }
+            case Seg.Horizontal:
+                {
+                    double dd = Wrap((th - s.T0) * Math.Sign(s.Sweep)), len = Math.Abs(s.Sweep);
+                    double dth = (Math.Abs(len - 2 * Math.PI) < 1e-12 || dd <= len) ? 0 : Math.Min(dd - len, 2 * Math.PI - dd) * Rh;
+                    double dh = (h - s.A.Y) * ks;
+                    return Math.Sqrt(dth * dth + dh * dh);
+                }
+            default:
+                {
+                    double mid = (s.A.X + s.B.X) / 2, tt = th + 2 * Math.PI * Math.Round((mid - th) / (2 * Math.PI));
+                    var a = new Vector2d(s.A.X * Rh, s.A.Y * ks); var b = new Vector2d(s.B.X * Rh, s.B.Y * ks); var p = new Vector2d(tt * Rh, h * ks);
+                    var e = b - a; double l2 = e.LengthSquared; double t = l2 > 0 ? Math.Clamp(Vector2d.Dot(p - a, e) / l2, 0, 1) : 0;
+                    return (a + e * t - p).Length;
+                }
+        }
+    }
+
+    /// <summary>
+    /// k126: УКАЗАТЕЛЬ ОТРЕЗКОВ ГРАНИЦЫ. Ломаные кривых рёбер (512 отрезков на ребро) — кусками по 32 подряд с габаритом в
+    /// параметрах грани; прочие отрезки (дуги плоскости, горизонтали и вертикали цилиндра) — всегда. Принадлежность и
+    /// расстояние до границы обходят только куски, которых касается луч точки (у цилиндра — столбец её угла с оборотами) или
+    /// чей габарит не дальше найденного расстояния; формулы для отрезков — прежние, ответы — те же. null — отрезков мало или
+    /// грань не плоскость/цилиндр/конус. Мутация P3D_BOUNDSINDEX=0.
+    /// </summary>
+    internal sealed class BoundsIdx
+    {
+        public readonly List<int> Always = new();
+        public readonly List<(int S, int E, double X0, double X1, double Y0, double Y1)> Chunks = new();
+        bool _cyl;
+        [ThreadStatic] static List<int>? _buf;
+        public static BoundsIdx? Build(AnalyticFace f)
+        {
+            if (BoundsIndexOff || f.Band || f.Param || f.Tor || f.FullSurface || f.Bounds.Count < 96) return null;
+            var ix = new BoundsIdx { _cyl = f.Cyl };
+            int i = 0, n = f.Bounds.Count;
+            while (i < n)
+            {
+                if (f.Bounds[i].Kind != Seg.Line) { ix.Always.Add(i); i++; continue; }
+                int st = i; double x0 = double.MaxValue, x1 = double.MinValue, y0 = double.MaxValue, y1 = double.MinValue;
+                while (i < n && f.Bounds[i].Kind == Seg.Line && i - st < 32)
+                {
+                    var sg = f.Bounds[i];
+                    double nx0 = Math.Min(x0, Math.Min(sg.A.X, sg.B.X)), nx1 = Math.Max(x1, Math.Max(sg.A.X, sg.B.X));
+                    if (f.Cyl && i > st && nx1 - nx0 > Math.PI / 2) break;                   // кусок цилиндра — не шире четверти оборота
+                    x0 = nx0; x1 = nx1; y0 = Math.Min(y0, Math.Min(sg.A.Y, sg.B.Y)); y1 = Math.Max(y1, Math.Max(sg.A.Y, sg.B.Y));
+                    i++;
+                }
+                if (f.Cyl && x1 - x0 > Math.PI / 2) { for (int k = st; k < i; k++) ix.Always.Add(k); continue; }   // один длинный отрезок
+                ix.Chunks.Add((st, i, x0, x1, y0, y1));
+            }
+            if (ix.Chunks.Count == 0) return null;
+            Interlocked.Increment(ref BoundsIndexes);
+            return ix;
+        }
+        /// <summary>Отрезки для луча плоской грани из p в направлении dir (габарит куска с запасом m).</summary>
+        public List<int> PlaneRay(Vector2d p, Vector2d dir, double m)
+        {
+            var l = _buf ??= new List<int>(); l.Clear();
+            l.AddRange(Always);
+            foreach (var ch in Chunks)
+            {
+                double lx = ch.X0 - m, hx = ch.X1 + m, ly = ch.Y0 - m, hy = ch.Y1 + m;
+                double t0 = 0, t1 = double.MaxValue; bool hit = true;
+                for (int k = 0; k < 2 && hit; k++)
+                {
+                    double o = k == 0 ? p.X : p.Y, d = k == 0 ? dir.X : dir.Y, lo = k == 0 ? lx : ly, hi = k == 0 ? hx : hy;
+                    if (Math.Abs(d) < 1e-300) { if (o < lo || o > hi) hit = false; continue; }
+                    double ta = (lo - o) / d, tb = (hi - o) / d; if (ta > tb) (ta, tb) = (tb, ta);
+                    t0 = Math.Max(t0, ta); t1 = Math.Min(t1, tb); if (t0 > t1) hit = false;
+                }
+                if (hit) for (int i = ch.S; i < ch.E; i++) l.Add(i);
+            }
+            return l;
+        }
+        /// <summary>Отрезки цилиндра, чей угловой охват может содержать θ (с оборотами).</summary>
+        public List<int> CylColumn(double th)
+        {
+            var l = _buf ??= new List<int>(); l.Clear();
+            l.AddRange(Always);
+            foreach (var ch in Chunks)
+            {
+                double cm = (ch.X0 + ch.X1) / 2; double kc = Math.Round((cm - th) / (2 * Math.PI)); bool any = false;
+                for (int k = -1; k <= 1 && !any; k++) { double tt = th + 2 * Math.PI * (kc + k); if (tt >= ch.X0 - 1e-9 && tt <= ch.X1 + 1e-9) any = true; }
+                if (any) for (int i = ch.S; i < ch.E; i++) l.Add(i);
+            }
+            return l;
+        }
+    }
+    static readonly bool BoundsIndexOff = Environment.GetEnvironmentVariable("P3D_BOUNDSINDEX") == "0";
+    /// <summary>k126: граней с указателем отрезков границы (проверки).</summary>
+    public static long BoundsIndexes;
+    BoundsIdx? _bix; volatile bool _bixSet;
+    internal BoundsIdx? BoundsIndex { get { if (!_bixSet) { _bix = BoundsIdx.Build(this); _bixSet = true; } return _bix; } }
 
     public double SurfaceDistance(Vector3d p)
     {

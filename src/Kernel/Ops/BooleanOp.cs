@@ -450,6 +450,12 @@ public static class BooleanOp
 
     /// <summary>KRN-10 (g.13): режим предпросмотра текущего вычисления — проверки результата откладываются до принятия.</summary>
     internal static bool PreviewMode => !PreviewOff && KernelContext.Current?.Settings.Preview == true;
+    /// <summary>
+    /// k126: РАЗМЕТКА ГРАНЕЙ РЕЗУЛЬТАТА ОТЛОЖЕНА, пока отложены проверки (расчёт с проверками в фоне, не живой предпросмотр):
+    /// сетка строится по требованию — для показа итогового тела и при принятии. Мутация P3D_LAZYMESH=0.
+    /// </summary>
+    internal static bool LazyMeshNow => !LazyMeshOff && PreviewMode && KernelContext.Current?.Settings.LivePreview != true;
+    static readonly bool LazyMeshOff = Environment.GetEnvironmentVariable("P3D_LAZYMESH") == "0";
     static readonly bool PreviewOff = Environment.GetEnvironmentVariable("P3D_PREVIEW") == "0";
     static readonly bool CsgParOff = Environment.GetEnvironmentVariable("P3D_CSGPAR") == "0";
     /// <summary>Пачек точек согласия с CSG, классифицированных в несколько потоков.</summary>
@@ -509,18 +515,20 @@ public static class BooleanOp
             }
         }
         catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { RouteDbg("general exception: " + ex.Message); return null; }
+        var partChecks = Analytic.GeneralBoolean.LastDeferredChecks; Analytic.GeneralBoolean.LastDeferredChecks = null;
         Func<TFace, FacetedSurface?>? donor = null;
         if (ReuseFaceMeshes)
         {
             var donors = new Dictionary<string, FacetedSurface>();
             foreach (var f in DonorLoopsOff ? body.Faces : body.Faces.Concat(other.Faces))
-                if (f.Surface is FacetedSurface dfs && dfs.Facets.Count > 0 && (dfs.Display != null || (dfs.FromLoops && !DonorLoopsOff)) && MeshDonorKey(f) is { } k) donors.TryAdd(k, dfs);
+                if (f.Surface is FacetedSurface dfs && !dfs.Facets.IsPending && dfs.Facets.Count > 0 && (dfs.Display != null || (dfs.FromLoops && !DonorLoopsOff)) && MeshDonorKey(f) is { } k) donors.TryAdd(k, dfs);
             if (donors.Count > 0) donor = f => MeshDonorKey(f) is { } k && donors.TryGetValue(k, out var d) ? d : null;
         }
         int unmeshed;
         var rawForLazy = LazyFine ? TopologyClone.Deep(r) : null;      // эксперимент r48: копия до завершения
         var meshWhy = AnalyticRouteDebug != null || RouteTrace ? new List<string>() : null;
-        using (Diagnostics.Prof.Time("аналитика (общая): завершение")) unmeshed = Analytic.PrismBuild.Finish(r, meshWhy, donor);
+        bool lazyMesh;
+        using (Diagnostics.Prof.Time("аналитика (общая): завершение")) unmeshed = Analytic.PrismBuild.Finish(r, meshWhy, donor, LazyMeshNow, out lazyMesh);
         if (unmeshed > 0)
         {
             RouteDbg($"general invalid: {unmeshed} face(s) not meshed from their loops: {string.Join(" | ", meshWhy ?? new())}");
@@ -545,6 +553,18 @@ public static class BooleanOp
         }
         string? ChecksCore()
         {
+            // k126: отложенные проверки разбиения граней
+            if (partChecks != null)
+                foreach (var pc in partChecks)
+                    if (pc() is { } pw) { RouteDbg("general invalid (deferred partition check): " + pw); return "general route check failed"; }
+            // k126: отложенная разметка — сетки граней сейчас (параллельно); не построенная грань и грань, которую развернула
+            // бы ориентация оболочки, — отказ маршрута (как при немедленной разметке)
+            if (lazyMesh)
+            {
+                string? lw; using (Diagnostics.Prof.Time("аналитика (общая): отложенная разметка")) lw = Export.StepImport.EnsureMeshed(r);
+                if (lw != null) { RouteDbg("general invalid (deferred meshing): " + lw); return "general route check failed"; }
+                if (Export.StepImport.OrientFlipsOn(r) is int fl && fl > 0) { RouteDbg($"general invalid (deferred meshing): shell orientation would flip {fl} face(s)"); return "general route check failed"; }
+            }
             bool curved = r.Faces.Any(fc => Geometry.ExactEdges.ShapeOf(Topology.GeometryAudit.AuthoritativeSurface(fc)) is Geometry.Ssi.Sphere);
             // g.02: ПОЛНАЯ ПРОВЕРКА И У НЕСФЕРИЧЕСКИХ РЕЗУЛЬТАТОВ, если есть грани не плоскость/цилиндр (конус): объединение бруска
             // с повёрнутым конусом принималось с 46 сторонами сетки «в одну сторону» и объёмом на 351 мм³ меньше (разностное
@@ -1067,9 +1087,12 @@ public static class BooleanOp
     /// пересечение: если оно доказано пусто точным маршрутом — результат — исходные тела, точные, с пометкой о касании.
     /// Мутация P3D_TOUCHPOLICY=0.
     /// </summary>
+    /// <summary>Разбор (сравнение с OCCT): операнды каждой булевой.</summary>
+    public static Action<IReadOnlyList<TSolid>, TSolid, BooleanKind>? OperandProbe;
     public static OperationResult Evaluate(IReadOnlyList<TSolid> bodies, TSolid other, BooleanKind kind,
                                            OperationPolicy policy, List<string>? warnings = null)
     {
+        OperandProbe?.Invoke(bodies, other, kind);
         OperationResult r; using (Diagnostics.Prof.Time("булева: операция целиком")) r = EvaluateCore(bodies, other, kind, policy, warnings);
         if (TouchOff || kind != BooleanKind.Unite || bodies.Count != 1) return r;
         if (r.Accepted && r.Bodies.Count == 1) return r;
@@ -2507,6 +2530,8 @@ public static class BooleanOp
         // Поставка 2: сетка — производное данной РЕВИЗИИ B-rep; правка формы после разметки делает её устаревшей.
         if (solid.DisplayMeshKey == key && solid.MeshRevision == solid.Revision) return;
         if (MeshAgainDbg) Console.Error.WriteLine($"MESHAGAIN key {solid.DisplayMeshKey?.ToString() ?? "null"} vs {key} rev {solid.MeshRevision} vs {solid.Revision}");
+        // k126: отложенные сетки граней — сейчас и параллельно (иначе — по одной, по мере обращения)
+        Export.StepImport.EnsureMeshed(solid);
 
         bool prev = PerFaceAdoption;
         PerFaceAdoption = perFace;

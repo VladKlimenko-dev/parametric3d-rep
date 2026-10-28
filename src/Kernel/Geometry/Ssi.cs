@@ -148,7 +148,10 @@ public static class Ssi
     const double Eps = 1e-12;
 
     /// <summary>Пересечение; box — центр и радиус области, по которой обрезаются прямые.</summary>
-    public static Result Intersect(Shape a, Shape b, Vector3d boxCentre, double boxRadius)
+    public static Result Intersect(Shape a, Shape b, Vector3d boxCentre, double boxRadius) => Intersect(a, b, boxCentre, boxRadius, null);
+
+    /// <summary>traceBall — шар для общего прослеживания (k126: строже шара пары); аналитические случаи — по box.</summary>
+    public static Result Intersect(Shape a, Shape b, Vector3d boxCentre, double boxRadius, (Vector3d C, double R)? traceBall)
     {
         // Соосные тела вращения (плоскость поперёк оси, цилиндр, шар с центром на оси, конус, тор):
         // пересечение — окружности по точкам пересечения их профилей в полуплоскости (ρ, z).
@@ -174,7 +177,8 @@ public static class Ssi
             case (Sphere sp, Cone k) when !ConeGenOff && ConeGeneratorsAgainst(k, sp) is { } g4: return g4;
             case (Cone k, Cone k2) when !ConeGenOff && ConeGeneratorsAgainst(k, k2) is { } g5: return g5;
         }
-        return Trace(a, b, boxCentre, boxRadius);
+        var (tc, tr) = traceBall ?? (boxCentre, boxRadius);
+        return Trace(a, b, tc, tr);
     }
 
     static Result PlanePlane(Plane p, Plane q, Vector3d bc, double br)
@@ -1047,6 +1051,9 @@ public static class Ssi
     }
 
     static readonly bool TraceCertOff = Environment.GetEnvironmentVariable("P3D_TRACECERT") == "0";
+    static readonly bool CertConeOff = Environment.GetEnvironmentVariable("P3D_CERTCONE") == "0";
+    /// <summary>k126: удостоверений прослеживания на конусе по поясу шара (проверки).</summary>
+    public static long ConeCertsTight;
     static readonly bool UniqOff = Environment.GetEnvironmentVariable("P3D_TRACEUNIQ") == "0";
     /// <summary>Мутация: P3D_TRACESTEPCERT=0 — без проверки звеньев ломаной и полноты прохода дуги в шаре ячейки.</summary>
     static readonly bool StepCertOff = Environment.GetEnvironmentVariable("P3D_TRACESTEPCERT") == "0";
@@ -1156,7 +1163,18 @@ public static class Ssi
         (double Lu, double Lv)? Lip = ParamLipschitz(a, bcC, br);
         var stack = new Stack<(double U0, double V0, double U1, double V1)>();
         int G = 32;
-        for (int i = 0; i < G; i++) for (int j = 0; j < G; j++) stack.Push(((double)i / G, (double)j / G, (double)(i + 1) / G, (double)(j + 1) / G));
+        // k126: КОНУС — ячейки только по поясу шара области вдоль образующей (v от (d − br)/far до 1; ближе к вершине точки
+        // карты вне шара) и оценка по u в ячейке — по её дальнему краю (|∂P/∂u| = 2π·s·sin α растёт от вершины), а не по
+        // краю всей карты. Обе оценки строгие. У конуса уклона вершина за метры от детали: карта — до вершины, оценка — по
+        // краю, и удостоверение делило полмиллиона ячеек. Мутация P3D_CERTCONE=0.
+        double vlo = 0, coneFar = 0, coneSin = 0; bool coneTight = false;
+        if (!CertConeOff && a is Cone ka)
+        {
+            double d = (bcC - ka.Apex).Length; coneFar = d + br; coneSin = Math.Sin(ka.HalfAngle);
+            vlo = Math.Max(0, (d - br) / coneFar); coneTight = true; Interlocked.Increment(ref ConeCertsTight);
+        }
+        for (int i = 0; i < G; i++) for (int j = 0; j < G; j++)
+            stack.Push(((double)i / G, vlo + (1 - vlo) * j / G, (double)(i + 1) / G, vlo + (1 - vlo) * (j + 1) / G));
         int visited = 0; string? fail = null;
         while (stack.Count > 0)
         {
@@ -1164,12 +1182,19 @@ public static class Ssi
             var (u0, v0, u1, v1) = stack.Pop();
             double um = (u0 + u1) / 2, vm = (v0 + v1) / 2;
             var c = P(um, vm);
-            double rho = 0;
-            foreach (var (uu, vv) in new[] { (u0, v0), (u1, v0), (u0, v1), (u1, v1), (um, v0), (um, v1), (u0, vm), (u1, vm) })
-                rho = Math.Max(rho, (P(uu, vv) - c).Length);
+            double rho;
             // строгая оценка: |P(u,v) − P(c)| ≤ L_u·Δu/2 + L_v·Δv/2 (L — наибольшие |∂P/∂u|, |∂P/∂v| карты); без известной
-            // карты — по отсчётам с запасом 1.25
-            rho = Lip is { } lp ? lp.Lu * (u1 - u0) / 2 + lp.Lv * (v1 - v0) / 2 : rho * 1.25;
+            // карты — по отсчётам с запасом 1.25. k126: отсчёты — только без оценки карты (прежде считались всегда, 8 точек
+            // карты и массив на ячейку — и выбрасывались)
+            if (coneTight) rho = 2 * Math.PI * coneFar * v1 * coneSin * (u1 - u0) / 2 + coneFar * (v1 - v0) / 2;
+            else if (Lip is { } lp) rho = lp.Lu * (u1 - u0) / 2 + lp.Lv * (v1 - v0) / 2;
+            else
+            {
+                rho = 0;
+                foreach (var (uu, vv) in new[] { (u0, v0), (u1, v0), (u0, v1), (u1, v1), (um, v0), (um, v1), (u0, vm), (u1, vm) })
+                    rho = Math.Max(rho, (P(uu, vv) - c).Length);
+                rho *= 1.25;
+            }
             if ((c - bcC).Length > br + rho) continue;              // вне шара области — кривые там не нужны
             double f = Math.Abs(Implicit(b, c).F);
             if (f > rho) continue;                                  // исключена

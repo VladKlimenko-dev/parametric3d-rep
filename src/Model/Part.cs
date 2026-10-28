@@ -1216,6 +1216,10 @@ public sealed class Part : ModelItem
         ValidationIntegrity(r);
     }
 
+    /// <summary>k126: есть тела, ждущие принятия (проверки отложены), или отложенная проверка тел результата.</summary>
+    public bool NeedsAcceptance =>
+        _checkpoints.Any(c => c.State.Bodies.Any(b => b.IsPreview)) || (_lastResult is { } lr && (lr.ValidationPending || lr.Bodies.Any(b => b.IsPreview)));
+
     /// <summary>Принять тела предпросмотра в сохранённых состояниях и прежнем результате; не принятое — пересчёт с его места.</summary>
     private void AcceptPreviewBodies()
     {

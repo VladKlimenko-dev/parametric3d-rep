@@ -40,7 +40,15 @@ public static class GeneralBoolean
     static readonly bool VMergeDbg = Environment.GetEnvironmentVariable("P3D_VMERGEDBG") == "1";
     [ThreadStatic] public static Action<Vector3d, Vector3d>? MergeDebug;
     static readonly bool BndRigorOff = Environment.GetEnvironmentVariable("P3D_BNDRIGOR") == "0";
-    sealed class FaceOut { public string? Fail; public bool Cut; public TFace? Boundary; public readonly List<FaceSplit.Region> Kept = new(); public Exception? Error; }
+    sealed class FaceOut { public string? Fail; public bool Cut; public TFace? Boundary; public readonly List<FaceSplit.Region> Kept = new(); public Exception? Error; public Func<string?>? Deferred; }
+    static readonly bool BndLazyOff = Environment.GetEnvironmentVariable("P3D_BNDLAZY") == "0";
+    /// <summary>k126: рёбер без выборки (события есть) / проверок разбиения, выполненных при принятии (проверки).</summary>
+    public static long BndSamplesSkipped, PartChecksDeferred;
+    static readonly bool PartDeferOff = Environment.GetEnvironmentVariable("P3D_PARTDEFER") == "0";
+    /// <summary>k126: проверки разбиения отложены до принятия (расчёт с проверками в фоне, не живой предпросмотр).</summary>
+    static bool DeferChecksNow => !PartDeferOff && Ops.BooleanOp.PreviewMode && KernelContext.Current?.Settings.LivePreview != true;
+    /// <summary>k126: отложенные проверки разбиения последней общей булевой в этом потоке (принятие тела их выполняет).</summary>
+    [ThreadStatic] internal static List<Func<string?>>? LastDeferredChecks;
     static readonly bool FastPvEnv = Environment.GetEnvironmentVariable("P3D_FASTPREVIEW") != "0";
     static readonly bool PrepParOff = Environment.GetEnvironmentVariable("P3D_PREPPAR") == "0";
     /// <summary>Сколько раз формы граней операндов строились в несколько потоков.</summary>
@@ -244,7 +252,7 @@ public static class GeneralBoolean
     [ThreadStatic] static List<(TFace Source, TFace Into)>? _merged;
     [ThreadStatic] static HashSet<TFace>? _aFaces;
     /// <summary>Отпустить поточные ссылки на тела последней операции (см. Diagnostics.ThreadState).</summary>
-    internal static void ReleaseThreadState() { _src = null; _merged = null; _aFaces = null; LastProvenance = null; LastOperandForms = null; }                     // грани первого операнда (имя слитой грани — от них)
+    internal static void ReleaseThreadState() { _src = null; _merged = null; _aFaces = null; LastProvenance = null; LastOperandForms = null; LastDeferredChecks = null; }                     // грани первого операнда (имя слитой грани — от них)
     /// <summary>
     /// ИМЯ СЛИТОЙ ГРАНИ — ОТ ПЕРВОГО ОПЕРАНДА. Совпадающие грани двух операндов (стенка бруска и стенка добавленного выдавливания
     /// в одной плоскости) сливаются в одну; прежде она брала имя той из двух, что раньше шла в списке граней оболочки, — часто
@@ -258,7 +266,7 @@ public static class GeneralBoolean
 
     public static TSolid? Run(TSolid a, TSolid b, Bool2 op, out string why)
     {
-        LastProvedEmpty = false; LastProvenance = null;
+        LastProvedEmpty = false; LastProvenance = null; LastDeferredChecks = null;
         _src = ProvOff ? null : new Dictionary<TFace, TFace>(ReferenceEqualityComparer.Instance); _merged = new(); _aFaces = null;
         var keptCount = new Dictionary<TFace, int>(ReferenceEqualityComparer.Instance);
         var cutFace = new HashSet<TFace>(ReferenceEqualityComparer.Instance);
@@ -509,6 +517,7 @@ public static class GeneralBoolean
                 var f = faces[i];
                 var o = outs[i] ?? Work(f);
                 if (o.Error != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(o.Error).Throw();
+                if (o.Deferred != null) (LastDeferredChecks ??= new()).Add(o.Deferred);
                 if (o.Fail != null) { w = o.Fail; return false; }
                 if (o.Cut) cutFace.Add(f.Face);
                 if (o.Boundary != null) boundaryOf[f.Face] = o.Boundary;
@@ -572,6 +581,10 @@ public static class GeneralBoolean
                 // 21.10: быстрый предпросмотр операции — проверка разбиения при подтверждении (точный расчёт)
                 if (!PartitionOff && on[f].Count > 0 && regs.Count > 0 && measurable && !(FastPvEnv && KernelContext.Current?.Settings.LivePreview == true))
                 {
+                    // k126: проверка разбиения — проверка, а не построение: при отложенных проверках (расчёт с проверками в фоне)
+                    // — при принятии тела (те же области, та же мера). Мутация P3D_PARTDEFER=0 — сразу.
+                    string? PartCheck()
+                {
                     // плоская грань: площади точно (квадратура Гаусса по кривым областей); по ломаным разметка областей и
                     // целой грани разная — расхождение до 2.6e-4 при верном разбиении (измерено на krn05)
                     var whole = FaceSplit.Split(f, Array.Empty<FaceIntersect.Piece>(), new List<Vector3d>(), out _);
@@ -588,7 +601,7 @@ public static class GeneralBoolean
                         double sum2 = 0;
                         if (f.Tor) { sum2 = Math.Abs(regs.Sum(r => MeasureTor2(f, r, org0))); bad |= sum2 > 1e-7 * Math.PI * (f.R + f.Rm) * (f.R + f.Rm) + 2 * TolV * (f.R + f.Rm) * lsum + 1e-12; }
                         if (PartStat) Console.Error.WriteLine($"PARTSTAT full {(f.Sph ? "sph" : "tor")} regs {regs.Count} sum {sum:G6} a0 {a0:G6} sum2 {sum2:G6}");
-                        if (bad) { o.Fail = $"face split: the regions of the closed face {f.Face.Tag} cover {sum:G10} (second measure {sum2:G6}) of {a0:G10} (partition check)"; return o; }
+                        if (bad) return $"face split: the regions of the closed face {f.Face.Tag} cover {sum:G10} (second measure {sum2:G6}) of {a0:G10} (partition check)";
                     }
                     else if (whole is { Count: 1 })
                     {
@@ -599,14 +612,18 @@ public static class GeneralBoolean
                         double tolAbs = 2 * TolV * (lw + mm1.Sum(x => x.L));
                         if (PartStat) Console.Error.WriteLine($"PARTSTAT {(f.Cyl ? "cyl" : f.Cone ? "cone" : f.Tor ? "tor" : f.Sph ? "sph" : "plane")} regs {regs.Count} rel {(sum - a0) / a0:E2} a0 {a0:G6}");
                         if (Math.Abs(sum - a0) > 1e-7 * Math.Abs(a0) + tolAbs + 1e-12)
-                        { o.Fail = $"face split: the regions of face {f.Face.Tag} cover {sum:G10} of {a0:G10} (partition check)"; return o; }
+                        return $"face split: the regions of face {f.Face.Tag} cover {sum:G10} of {a0:G10} (partition check)";
                         if (f.Tor && poleOk)
                         {
                             double s2 = Math.Abs(regs.Sum(r => MeasureTor2(f, r, org))), w2 = Math.Abs(MeasureTor2(f, whole[0], org));
                             if (Math.Abs(s2 - w2) > 1e-7 * Math.Max(w2, Math.PI * (f.R + f.Rm) * (f.R + f.Rm)) + 2 * TolV * (f.R + f.Rm) * (lw + mm1.Sum(x => x.L)) + 1e-12)
-                            { o.Fail = $"face split: the regions of face {f.Face.Tag} cover {s2:G10} of {w2:G10} (second measure, partition check)"; return o; }
+                            return $"face split: the regions of face {f.Face.Tag} cover {s2:G10} of {w2:G10} (second measure, partition check)";
                         }
                     }
+                    return null;
+                }
+                    if (DeferChecksNow) o.Deferred = () => { Interlocked.Increment(ref PartChecksDeferred); using (Diagnostics.Prof.Time("общая: проверка разбиения (отложенная)")) return PartCheck(); };
+                    else { var pw = PartCheck(); if (pw != null) { o.Fail = pw; return o; } }
                 }
                 if (on[f].Count > 0 || regs.Count > 1) o.Cut = true;
                 foreach (var r in regs)
@@ -1586,7 +1603,10 @@ public static class GeneralBoolean
         {
             var c = e.Curve; int n = 512;
             var ts = new double[n + 1]; var gs = new double[n + 1];
-            for (int i = 0; i <= n; i++) { ts[i] = c.T0 + (c.T1 - c.T0) * i / n; gs[i] = dst.SignedBoundaryDistance(c.PointAt(ts[i])); }
+            // k126: выборка (513 точек ребра, у каждой — расстояние до границы приёмника) нужна только без событий; прежде
+            // считалась всегда и выбрасывалась (94 000 проверок принадлежности на детали пользователя). P3D_BNDLAZY=0 — всегда.
+            void Sample() { for (int i = 0; i <= n; i++) { ts[i] = c.T0 + (c.T1 - c.T0) * i / n; gs[i] = dst.SignedBoundaryDistance(c.PointAt(ts[i])); } }
+            if (BndLazyOff) Sample(); else Interlocked.Increment(ref BndSamplesSkipped);
             bool closed = (c.PointAt(c.T0) - c.PointAt(c.T1)).Length < TolV;
             // события (KRN-04); null — выборка ниже
             string? unres = null;
@@ -1601,6 +1621,7 @@ public static class GeneralBoolean
                     found.Add((s0, e0));
             else
             {
+            if (!BndLazyOff) Sample();
             int iStart = -1;
             for (int i = 0; i <= n; i++)
             {

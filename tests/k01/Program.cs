@@ -451,6 +451,7 @@ static partial class Program
         if (mode is "filedisplay" or "allB") FileDisplayChecks();
         if (mode is "k115" or "allB") Krn115Checks();
         if (mode is "k116" or "allB") Krn116Checks();
+        if (mode is "k126" or "allB") Krn126Checks();
         if (mode is "k119" or "allB") Krn119Checks();
         if (mode is "krn06guard" or "allB") Krn06FallbackGuardChecks();
         if (mode is "krn06cc" or "allB") Krn06CylCylChecks();

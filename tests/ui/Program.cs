@@ -223,6 +223,73 @@ if (only == "probe-openwin")
     return 0;
 }
 
+if (only == "probe-bool")
+{
+    // разбор (k126): каждая булева детали отдельно — операнды (копии) снимаются при расчёте, затем операция повторяется
+    // reps раз; время — наименьшее; для номера sel — разбивка по стадиям. probe-bool <файл> <reps> [sel] [lines]
+    var caps = new List<(List<Parametric3D.Kernel.Topology.TSolid> A, Parametric3D.Kernel.Topology.TSolid B, Parametric3D.Kernel.Ops.BooleanOp.BooleanKind K, Parametric3D.Kernel.KernelSettings S, Parametric3D.Kernel.OperationPolicy P)>();
+    Parametric3D.Kernel.Ops.BooleanOp.OperandProbe = (bodies, other, kind) =>
+    {
+        lock (caps) caps.Add((bodies.Select(Parametric3D.Kernel.Topology.TopologyClone.Deep).ToList(), Parametric3D.Kernel.Topology.TopologyClone.Deep(other), kind,
+                              Parametric3D.Kernel.KernelSettings.Capture(), Parametric3D.Kernel.OperationPolicyScope.Current));
+    };
+    var s = DocumentSession.Open(args[1]); BuildNow(s);
+    Parametric3D.Kernel.Ops.BooleanOp.OperandProbe = null;
+    int reps = int.Parse(args[2]); int sel = args.Length > 3 ? int.Parse(args[3]) : -1; int lines = args.Length > 4 ? int.Parse(args[4]) : 40;
+    double total = 0;
+    for (int k = 0; k < caps.Count; k++)
+    {
+        var c = caps[k]; double best = double.MaxValue; string acc = "";
+        for (int r = 0; r < reps; r++)
+        {
+            var A = c.A.Select(Parametric3D.Kernel.Topology.TopologyClone.Deep).ToList(); var B = Parametric3D.Kernel.Topology.TopologyClone.Deep(c.B);
+            if (k + 1 == sel && r == reps - 1) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.ResetAll(); }
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Parametric3D.Kernel.OperationResult res;
+            using (new Parametric3D.Kernel.KernelContext(c.S, c.P).Enter()) res = Parametric3D.Kernel.Ops.BooleanOp.Evaluate(A, B, c.K, c.P, new List<string>());
+            best = Math.Min(best, sw.Elapsed.TotalMilliseconds);
+            acc = $"{(res.Accepted ? "ok" : "FAIL")} faces {A.Sum(x => x.Faces.Count())}+{B.Faces.Count()} -> {res.Bodies.Sum(x => x.Faces.Count())} {res.Bodies.FirstOrDefault()?.Guarantee}";
+        }
+        total += best;
+        Console.WriteLine($"{k + 1:00} {c.K,-9} {best,8:0.0} ms  {acc}");
+        if (k + 1 == sel) { Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(lines))); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
+    }
+    Console.WriteLine($"total {total:0} ms over {caps.Count} booleans");
+    return 0;
+}
+
+if (only == "probe-dumpbool")
+{
+    // разбор (k126): операнды каждой булевой детали — в STEP (сравнение с OCCT на тех же операциях)
+    string dir = args[2]; Directory.CreateDirectory(dir); int n = 0;
+    Parametric3D.Kernel.Ops.BooleanOp.OperandProbe = (bodies, other, kind) =>
+    {
+        int k = Interlocked.Increment(ref n);
+        foreach (var (b, nm) in bodies.Select((b, i) => (b, $"a{i}")).Append((other, "b")))
+            using (var w = new StreamWriter(Path.Combine(dir, $"{k:00}_{kind}_{nm}.step"))) Parametric3D.Kernel.Export.StepExact.Write(w, new[] { b }, nm);
+    };
+    var s = DocumentSession.Open(args[1]); var sw = System.Diagnostics.Stopwatch.StartNew(); BuildNow(s);
+    Console.WriteLine($"booleans {n}, build {sw.ElapsedMilliseconds} ms (with dumps)");
+    return 0;
+}
+
+if (only == "probe-edit")
+{
+    // разбор (k126): правка операции k после полного расчёта — когда деталь показана и когда проверена (BuildNow)
+    var s = DocumentSession.Open(args[1]); var part = s.Part!; var doc = s.Document;
+    long shown = -1; var sw = System.Diagnostics.Stopwatch.StartNew();
+    doc.VerifyStarted += () => { if (shown < 0) shown = sw.ElapsedMilliseconds; };
+    BuildNow(s);
+    Console.WriteLine($"full: shown {shown} ms, checked {sw.ElapsedMilliseconds} ms");
+    for (int rep = 0; rep < 2; rep++)
+        foreach (var k in args.Skip(2).Select(int.Parse))
+        {
+            shown = -1; sw.Restart(); part.MarkDirtyFrom(part.Features[k]); BuildNow(s);
+            Console.WriteLine($"edit #{k + 1} ({part.Features[k].Name}): shown {shown} ms, checked {sw.ElapsedMilliseconds} ms, applied [{part.LastStartedAt}+{part.LastExecuted}]");
+        }
+    return 0;
+}
+
 if (only == "probe-prof")
 {
     // разбор (k125): где время расчёта детали файла
@@ -237,6 +304,30 @@ if (only == "probe-prof")
         Parametric3D.Kernel.Diagnostics.Prof.ResetAll(); sw.Restart();
         part.MarkDirtyFrom(part.Features[fi]); BuildNow(s);
         Console.WriteLine($"from #{fi}: applied [{part.LastStartedAt}+{part.LastExecuted}]");
+    }
+    else if (args.Length > 3 && (args[3] == "deferwarm" || args[3] == "eagerwarm"))
+    {
+        // k126: тот же расчёт второй раз в том же процессе (код ядра уже скомпилирован) — установившаяся скорость
+        var ks = Parametric3D.Kernel.KernelSettings.Capture() with { Preview = args[3] == "deferwarm" };
+        for (int rep = 0; rep < 3; rep++)
+        {
+            part.Invalidate(); Parametric3D.Kernel.Diagnostics.Prof.ResetAll(); sw.Restart();
+            using (new Parametric3D.Kernel.KernelContext(ks).Enter()) { var rr = part.Compute(s.Document.ScopeFor(part), s.Document.Solver, CancellationToken.None); part.Apply(rr); }
+            Console.WriteLine($"run {rep + 1}: phase 1 {sw.ElapsedMilliseconds} ms, volume {part.Volume:0.###}");
+        }
+        Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(int.Parse(args.Length > 2 ? args[2] : "60"))));
+        return 0;
+    }
+    else if (args.Length > 3 && args[3] == "defer")
+    {
+        // k126: расчёт с отложенными проверками (Preview без LivePreview), затем принятие (обычный расчёт)
+        var ks = Parametric3D.Kernel.KernelSettings.Capture() with { Preview = true };
+        using (new Parametric3D.Kernel.KernelContext(ks).Enter()) { var rr = part.Compute(s.Document.ScopeFor(part), s.Document.Solver, CancellationToken.None); part.Apply(rr); }
+        Console.WriteLine($"phase 1 (deferred checks) {sw.ElapsedMilliseconds} ms, volume {part.Volume:0.###}, preview bodies {part.Bodies.Count(b => b.IsPreview)}, lazy faces {Parametric3D.Kernel.Export.StepImport.LazyFaces}, filled {Parametric3D.Kernel.Export.StepImport.LazyFills}, grid mismatches {Parametric3D.Kernel.Analytic.FaceSplit.SplitGridMismatches}, closest mismatches {Parametric3D.Kernel.Analytic.FaceSplit.ClosestMismatches}, memo hits {Parametric3D.Kernel.Analytic.FaceSplit.ClosestMemoHits}");
+        Console.WriteLine(string.Join("\n", Parametric3D.Kernel.Diagnostics.Prof.Report().Split('\n').Take(int.Parse(args.Length > 2 ? args[2] : "60"))));
+        Parametric3D.Kernel.Diagnostics.Prof.ResetAll(); sw.Restart();
+        var r2 = part.Compute(s.Document.ScopeFor(part), s.Document.Solver, CancellationToken.None); part.Apply(r2);
+        Console.WriteLine($"phase 2 (acceptance) {sw.ElapsedMilliseconds} ms, lazy filled {Parametric3D.Kernel.Export.StepImport.LazyFills}, started at {part.LastStartedAt}, executed {part.LastExecuted}, volume {part.Volume:0.###}, dirty {part.IsDirty}");
     }
     else if (args.Length > 3 && args[3] == "doc") BuildNow(s);
     else if (args.Length > 3 && args[3] == "win") { var w0 = Open(s); BuildNow(s); }
@@ -3471,6 +3562,71 @@ Check("UI-SPEED-K125", () =>
         Require(p2.ShowsCached && p2.Mesh!.Vertices.Length == verts && Math.Abs(p2.Volume - vol) < 1e-6 * Math.Max(1, vol), "a file saved before the rebuild finished has no part snapshot");
     }
     finally { try { File.Delete(path); } catch { } }
+});
+
+Check("UI-SPEED-K126", () =>
+{
+    // k126 (замечание 28.10, 10:09 — «скорость хотя бы как у OCCT»): файл пользователя (12 операций).
+    // (A) расчёт с отложенными проверками: деталь показана до проверок (P3D_DEFERCHECKS=0 — проверки до показа), сетки
+    //     граней промежуточных тел — по требованию (P3D_LAZYMESH=0), проверки разбиения — при принятии (P3D_PARTDEFER=0);
+    //     после проверки всё принято, тело то же, что у расчёта с проверками сразу (Part.Rebuild);
+    // (B) ускорения ядра — каждое срабатывает на этой детали: сетка ячеек точки внутри области (P3D_SPLITGRID=0), прямые
+    //     куски ломаной из концов (P3D_POLYSTRAIGHT=0), отсев точек разреза габаритом (P3D_CUTBOX=0), строгий шар
+    //     прослеживания (P3D_TRACEBALL=0), пояс конуса в удостоверении (P3D_CERTCONE=0), габарит грани в классификации
+    //     (P3D_CLSBOX=0), выборка ребра только без событий (P3D_BNDLAZY=0), ближайший параметр кривой пересечения по её
+    //     ломаной (P3D_CLOSESTFAST=0), выбор грани уклона без разметки всех граней (P3D_DRAFTPICKFAST=0), память событий
+    //     ребра на грани (P3D_EVMEMO=0), указатель отрезков границы грани (P3D_BOUNDSINDEX=0);
+    // (C) правка во время проверки её прерывает, деталь пересчитывается и проверяется заново.
+    string src = Path.Combine(AppContext.BaseDirectory, "data", "user_k125_tube.p3d");
+    var s = DocumentSession.Open(src);
+    var part = s.Part!; var doc = s.Document;
+    long vs0 = Parametric3D.Model.Document.VerifiesStarted, lf0 = Parametric3D.Kernel.Export.StepImport.LazyFaces, ll0 = Parametric3D.Kernel.Export.StepImport.LazyFills;
+    long pd0 = Parametric3D.Kernel.Analytic.GeneralBoolean.PartChecksDeferred;
+    long g0 = Parametric3D.Kernel.Analytic.FaceSplit.GridRegions, st0 = Parametric3D.Kernel.Analytic.FaceSplit.StraightDarts, cb0 = Parametric3D.Kernel.Analytic.FaceSplit.CutsSkippedByBox;
+    long tb0 = Parametric3D.Kernel.Analytic.FaceIntersect.TraceBallsTight, cc0 = Parametric3D.Kernel.Geometry.Ssi.ConeCertsTight, cl0 = Parametric3D.Kernel.Analytic.Classifier.ClsBoxSkips;
+    long bs0 = Parametric3D.Kernel.Analytic.GeneralBoolean.BndSamplesSkipped, cm0 = Parametric3D.Kernel.Analytic.FaceSplit.ClosestMemoHits, dp0 = Parametric3D.Kernel.Ops.DraftOp.PickFacesSkipped;
+    long em0 = Parametric3D.Kernel.Analytic.FaceIntersect.EventMemoHits, bi0 = Parametric3D.Kernel.Analytic.AnalyticFace.BoundsIndexes;
+    long shownMs = -1, fillsAtShow = -1; var sw = System.Diagnostics.Stopwatch.StartNew();
+    void OnVerify() { if (shownMs < 0) { shownMs = sw.ElapsedMilliseconds; fillsAtShow = Parametric3D.Kernel.Export.StepImport.LazyFills - ll0; } }
+    doc.VerifyStarted += OnVerify;
+    BuildNow(s);
+    doc.VerifyStarted -= OnVerify;
+    long totalMs = sw.ElapsedMilliseconds;
+    long lazyFaces = Parametric3D.Kernel.Export.StepImport.LazyFaces - lf0;
+    Console.WriteLine($"  (A) shown {shownMs} ms, checked {totalMs} ms (verify {doc.LastVerifyMs:0} ms): verifies {Parametric3D.Model.Document.VerifiesStarted - vs0}, lazy faces {lazyFaces}, filled before show {fillsAtShow}, deferred partition checks {Parametric3D.Kernel.Analytic.GeneralBoolean.PartChecksDeferred - pd0}, pending {part.NeedsAcceptance}, volume {part.Volume:0.###}");
+    Require(Parametric3D.Model.Document.VerifiesStarted > vs0 && shownMs >= 0 && shownMs < totalMs, "the part was not shown before its checks");
+    Require(lazyFaces > 0 && fillsAtShow < lazyFaces, "intermediate faces were meshed before the part was shown");
+    Require(Parametric3D.Kernel.Analytic.GeneralBoolean.PartChecksDeferred > pd0, "partition checks were not deferred to acceptance");
+    Require(!part.IsDirty && !part.NeedsAcceptance && part.Features.All(f => f.Error == null), "the checks did not accept the part");
+    // то же тело, что у расчёта с проверками сразу
+    var (p2, prm2) = Parametric3D.Model.DocumentFile.Load(File.ReadAllText(src));
+    var d2 = new Parametric3D.Model.Document(); d2.Root.Add(p2); p2.Rebuild(d2.ScopeFor(p2));
+    Console.WriteLine($"      eager rebuild: volume {p2.Volume:0.###}, faces {p2.Bodies.Sum(b => b.Faces.Count())} vs {part.Bodies.Sum(b => b.Faces.Count())}");
+    Require(Math.Abs(p2.Volume - part.Volume) <= 1e-9 * p2.Volume && p2.Bodies.Sum(b => b.Faces.Count()) == part.Bodies.Sum(b => b.Faces.Count()), "the deferred-check build differs from the eager build");
+    // (B) ускорения ядра
+    var ctr = new (string Name, long D)[]
+    {
+        ("grid regions", Parametric3D.Kernel.Analytic.FaceSplit.GridRegions - g0), ("straight darts", Parametric3D.Kernel.Analytic.FaceSplit.StraightDarts - st0),
+        ("cuts skipped by box", Parametric3D.Kernel.Analytic.FaceSplit.CutsSkippedByBox - cb0), ("tight trace balls", Parametric3D.Kernel.Analytic.FaceIntersect.TraceBallsTight - tb0),
+        ("cone certificates", Parametric3D.Kernel.Geometry.Ssi.ConeCertsTight - cc0), ("classifier box skips", Parametric3D.Kernel.Analytic.Classifier.ClsBoxSkips - cl0),
+        ("boundary samples skipped", Parametric3D.Kernel.Analytic.GeneralBoolean.BndSamplesSkipped - bs0), ("closest-param memo hits", Parametric3D.Kernel.Analytic.FaceSplit.ClosestMemoHits - cm0),
+        ("draft pick skips", Parametric3D.Kernel.Ops.DraftOp.PickFacesSkipped - dp0),
+        ("edge-event memo hits", Parametric3D.Kernel.Analytic.FaceIntersect.EventMemoHits - em0), ("face boundary indexes", Parametric3D.Kernel.Analytic.AnalyticFace.BoundsIndexes - bi0),
+    };
+    Console.WriteLine("  (B) " + string.Join(", ", ctr.Select(c => $"{c.Name} {c.D}")));
+    foreach (var c in ctr) Require(c.D > 0, $"kernel speed-up not used: {c.Name}");
+    // (C) правка во время проверки
+    long vc0 = Parametric3D.Model.Document.VerifiesCancelled;
+    part.MarkDirtyFrom(part.Features[9]);
+    var t = doc.RebuildDirtyAsync();
+    var t0 = DateTime.Now;
+    while (!doc.IsVerifying && !t.IsCompleted && (DateTime.Now - t0).TotalSeconds < 120) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(2); }
+    bool sawVerify = doc.IsVerifying;
+    if (sawVerify) part.NotifyChanged(part.Features[10]);
+    WaitTask(t); BuildNow(s);
+    Console.WriteLine($"  (C) verification seen {sawVerify}, cancelled {Parametric3D.Model.Document.VerifiesCancelled - vc0}, dirty {part.IsDirty}, pending {part.NeedsAcceptance}, volume {part.Volume:0.###}");
+    Require(sawVerify && Parametric3D.Model.Document.VerifiesCancelled > vc0, "an edit did not interrupt the checks");
+    Require(!part.IsDirty && !part.NeedsAcceptance && Math.Abs(part.Volume - p2.Volume) <= 1e-9 * p2.Volume, "the part was not rebuilt and checked after the interrupted checks");
 });
 
 Check("UI-SKETCH-DIMS-K124", () =>
