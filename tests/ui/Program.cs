@@ -3564,6 +3564,77 @@ Check("UI-SPEED-K125", () =>
     finally { try { File.Delete(path); } catch { } }
 });
 
+Check("UI-GHOSTRING-K127", () =>
+{
+    // k127 (замечание 28.10, 14:36, п. 2): точки эскиза-соседа (параллельный эскиз, показанный при правке другого, —
+    // возможные опорные) рисуются кольцом без заливки (вид 4; шейдер рисует кольцо, а под курсором и выбранные — залитым
+    // кругом, как прежде) того же размера, что точки правимого эскиза, и выбираются наведением. P3D_GHOSTRING=0 — залитые.
+    var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "user_k125_tube.p3d"));
+    BuildNow(s);
+    var part = s.Part!; var sk = part.Sketches.First(k => k.Name == "Sketch4");
+    var sc = Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions(), part, sk);
+    var pts = sc.Points.Where(q => q.Pick != 0 && sc.PickTable[(int)q.Pick].Ref.Kind == PickKind.SketchPoint).ToList();
+    var own = pts.Where(q => sc.PickTable[(int)q.Pick].SketchId == sk.Id).ToList();
+    var ghost = pts.Where(q => sc.PickTable[(int)q.Pick].SketchId != sk.Id).ToList();
+    Console.WriteLine($"  sketch points: own {own.Count} (shapes {string.Join(",", own.Select(q => q.Shape).Distinct())}, px {string.Join(",", own.Select(q => q.Px).Distinct())}), neighbour {ghost.Count} (shapes {string.Join(",", ghost.Select(q => q.Shape).Distinct())}, px {string.Join(",", ghost.Select(q => q.Px).Distinct())})");
+    Require(own.Count > 0 && ghost.Count > 0, "no neighbour sketch points drawn while editing Sketch4");
+    Require(ghost.All(q => q.Shape == 4), "neighbour sketch points are not drawn as unfilled rings");
+    Require(own.All(q => q.Shape != 4), "points of the edited sketch are drawn as rings");
+    Require(ghost.All(q => own.Any(o => o.Shape == 0 && o.Px == q.Px)), "ring size differs from a normal point");
+});
+
+Check("UI-TOUCHPAN-K127", () =>
+{
+    // k127 (замечание 28.10, 14:36, п. 1): сдвиг вида без мыши. Отчёты панели — как у Windows Precision Touchpad.
+    // (A) три пальца: кадр приходит двумя отчётами (число касаний — в первом), лишний слот отчёта — устаревшие данные;
+    //     сдвиг центра пальцев на 12 мм вправо и 6 мм вниз сдвигает вид на 12/60 и 6/60 его ширины — как перетаскивание
+    //     (P3D_TOUCHPAN=0 — вид стоит);
+    // (B) два и четыре пальца, смена пальца (другой номер касания) — не сдвигают и не дают скачка;
+    // (C) Shift + прокрутка (двумя пальцами или колесом) — сдвиг без масштаба, без Shift — масштаб (P3D_SHIFTWHEELPAN=0).
+    var s = DocumentSession.Sample();
+    var w = new MainWindow(s) { Width = 1400, Height = 860 }; w.Show();
+    Dispatcher.UIThread.RunJobs();
+    var vp = w.ViewPort; var cam = vp.Camera;
+    double W = vp.Bounds.Width * vp.Scaling;
+    var c0 = cam.State;
+    var tp = vp.Touchpad; tp.Reset();
+    TouchContact C(int id, double x, double y, bool tip = true) => new(id, x, y, tip);
+    void Frame3(double ox, double oy)
+    {
+        // смешанный режим: по два слота в отчёте; второй слот последнего отчёта — устаревшие данные
+        tp.AddReport(3, new[] { C(5, 30 + ox, 20 + oy), C(6, 40 + ox, 22 + oy) });
+        tp.AddReport(0, new[] { C(7, 50 + ox, 18 + oy), C(400, 999, -999) });
+    }
+    long ps0 = TouchpadPan.PanSteps;
+    Frame3(0, 0); Frame3(4, 2); Frame3(12, 6);
+    var t1 = cam.State.Target;
+    var exp = new Parametric3D.Render.Camera { State = c0 };
+    exp.ViewportWidth = cam.ViewportWidth; exp.ViewportHeight = cam.ViewportHeight;
+    exp.Pan((float)(12 * W / ModelViewport.TouchpadMmPerView), (float)(6 * W / ModelViewport.TouchpadMmPerView));
+    double err = (t1 - exp.State.Target).Length, moved = (t1 - c0.Target).Length;
+    Console.WriteLine($"  (A) view width {W:0} px, pan steps {TouchpadPan.PanSteps - ps0}, moved {moved:0.###}, error {err:0.######}");
+    Require(TouchpadPan.PanSteps - ps0 == 2 && moved > 1e-3 && err < 1e-3 * Math.Max(1, moved), "three fingers did not pan the view by the finger travel");
+    // (B)
+    var t2 = cam.State.Target; long ps1 = TouchpadPan.PanSteps;
+    tp.OnFrame(new[] { C(5, 0, 0), C(6, 10, 0) }); tp.OnFrame(new[] { C(5, 30, 30), C(6, 40, 30) });             // два пальца
+    tp.OnFrame(new[] { C(1, 0, 0), C(2, 1, 0), C(3, 2, 0), C(4, 3, 0) }); tp.OnFrame(new[] { C(1, 20, 0), C(2, 21, 0), C(3, 22, 0), C(4, 23, 0) }); // четыре
+    tp.OnFrame(new[] { C(1, 0, 0), C(2, 10, 0), C(3, 20, 0) }); tp.OnFrame(new[] { C(1, 0, 0), C(2, 10, 0), C(9, 80, 40) });   // смена пальца
+    tp.OnFrame(new[] { C(1, 0, 0), C(2, 10, 0), C(3, 20, 0, tip: false) }); tp.OnFrame(new[] { C(1, 50, 0), C(2, 60, 0), C(3, 70, 0, tip: false) }); // третий оторван
+    Console.WriteLine($"  (B) pan steps {TouchpadPan.PanSteps - ps1}, moved {(cam.State.Target - t2).Length:0.######}");
+    Require(TouchpadPan.PanSteps == ps1 && (cam.State.Target - t2).Length < 1e-6, "two/four fingers or a finger change panned the view");
+    // (C)
+    var st = cam.State; long wp0 = ModelViewport.WheelPans;
+    vp.WheelAt(new Avalonia.Point(300, 300), new Avalonia.Vector(0.5, -1.25), Avalonia.Input.KeyModifiers.Shift);
+    var a = cam.State;
+    Console.WriteLine($"  (C) shift+scroll: target moved {(a.Target - st.Target).Length:0.###}, distance {st.Distance:0.###} -> {a.Distance:0.###}, ortho {st.OrthoHeight:0.###} -> {a.OrthoHeight:0.###}");
+    Require(ModelViewport.WheelPans > wp0 && (a.Target - st.Target).Length > 1e-3 && a.Distance == st.Distance && a.OrthoHeight == st.OrthoHeight, "shift + scroll did not pan");
+    vp.WheelAt(new Avalonia.Point(300, 300), new Avalonia.Vector(0, 1), Avalonia.Input.KeyModifiers.None);
+    var b = cam.State;
+    Console.WriteLine($"      scroll: distance {a.Distance:0.###} -> {b.Distance:0.###}, ortho {a.OrthoHeight:0.###} -> {b.OrthoHeight:0.###}");
+    Require(b.Distance != a.Distance || b.OrthoHeight != a.OrthoHeight, "scroll without shift does not zoom");
+    w.Close();
+});
+
 Check("UI-SPEED-K126", () =>
 {
     // k126 (замечание 28.10, 10:09 — «скорость хотя бы как у OCCT»): файл пользователя (12 операций).

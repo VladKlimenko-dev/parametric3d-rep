@@ -13,6 +13,7 @@ namespace Parametric3D.Render.Engine;
 /// </summary>
 public static class SceneBuilder
 {
+    static readonly bool GhostRingOff = Environment.GetEnvironmentVariable("P3D_GHOSTRING") == "0";
     public static SceneData Build(Document doc, RenderTheme th, ShowOptions show, ModelItem? activeOwner = null, Sketch? activeSketch = null,
                                   IReadOnlyCollection<uint>? pointSketches = null)
     {
@@ -292,7 +293,10 @@ public static class SceneBuilder
             {
                 if (q.Owner != null && !ends) continue;
                 uint pick = s.AddPick(new PickRef(q.Id, PickKind.SketchPoint, sk, q), 3, partId, sk.Id);
-                s.Points.Add(new PointInst { P = Tr(plane.ToWorld(q.P), xf), Color = SceneData.Pack(th.SketchPoint), Px = q.Owner == null ? 6f : 5f, Shape = 0, Pick = pick });
+                // k127 (замечание 28.10, 14:36, п. 2): точки эскиза-соседа (возможные опорные) — кольцом без заливки того же
+                // размера; под курсором и выбранные — как прежде (шейдер рисует их залитыми). P3D_GHOSTRING=0 — залитые.
+                uint shp = ghost && !GhostRingOff ? 4u : 0u;
+                s.Points.Add(new PointInst { P = Tr(plane.ToWorld(q.P), xf), Color = SceneData.Pack(th.SketchPoint), Px = q.Owner == null ? 6f : 5f, Shape = shp, Pick = pick });
             }
     }
 }

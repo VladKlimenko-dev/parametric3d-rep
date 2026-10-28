@@ -19,6 +19,7 @@ namespace Parametric3D.App.Viewport;
 ///
 /// Мышь (ТЗ_UI, 0.6): средняя — вращать, Shift+средняя или правая с перетаскиванием — сдвиг, колесо — масштаб к курсору;
 /// левая — выбрать, Shift — добавить, Ctrl — исключить. Короткий правый щелчок — общие команды (ContextRequested).
+/// Без мыши (k127): три пальца на сенсорной панели — сдвиг (TouchpadPan), Shift + прокрутка — сдвиг.
 ///
 /// Выбор под курсором — проходом выбора видеокарты (один пиксель, заслонение учтено, во всех стилях, вершины и рёбра
 /// тела ловятся с допуском). Без OpenGL (проверки без экрана) — расчётом на процессоре (ScenePicker).
@@ -74,6 +75,50 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         Selection.Changed += () => { _flagsDirty = true; Redraw(); };
         Transition.Completed += (_, _) => CameraChanged?.Invoke();
         InstallUpdateGuard();
+        Touchpad.Pan += OnTouchpadPan;
+    }
+
+    // ---------------------------------------------------------------- k127: сдвиг без мыши (ноутбук)
+
+    /// <summary>k127 (замечание 28.10, 14:36, п. 1): три пальца на сенсорной панели — сдвиг вида (TouchpadPan; отчёты панели
+    /// в Windows — WinTouchpad). Проход пальцами по TouchpadMmPerView мм сдвигает вид на его ширину.</summary>
+    public readonly TouchpadPan Touchpad = new();
+    public static double TouchpadMmPerView = 60;
+    public event Action? TouchpadPanned;
+    static readonly bool ShiftWheelPanOff = Environment.GetEnvironmentVariable("P3D_SHIFTWHEELPAN") == "0";
+    public static long WheelPans;
+
+    private void OnTouchpadPan(double dxMm, double dyMm)
+    {
+        double w = Bounds.Width * Scaling; if (!(w > 1)) w = 1000;
+        float k = (float)(w / TouchpadMmPerView);
+        Transition.Cancel();
+        Camera.Pan((float)dxMm * k, (float)dyMm * k);
+        CameraChanged?.Invoke();
+        if (ActiveSketch != null) _overlayDirty = true;
+        Redraw();
+        TouchpadPanned?.Invoke();
+    }
+
+    /// <summary>Колесо / прокрутка двумя пальцами: масштаб к курсору; с Shift — сдвиг вида (k127; P3D_SHIFTWHEELPAN=0 —
+    /// всегда масштаб). Сдвиг — как прокрутка страницы: прокрутка вверх опускает модель, влево — сдвигает вправо.</summary>
+    public void WheelAt(Point pos, Vector delta, KeyModifiers mods)
+    {
+        Transition.Cancel();
+        if (mods.HasFlag(KeyModifiers.Shift) && !ShiftWheelPanOff)
+        {
+            const float k = 60f;
+            Camera.Pan((float)delta.X * k, (float)delta.Y * k);
+            Interlocked.Increment(ref WheelPans);
+        }
+        else
+        {
+            var px = Px(pos);
+            Camera.Zoom((float)delta.Y, px.X, px.Y);
+        }
+        CameraChanged?.Invoke();
+        if (ActiveSketch != null) _overlayDirty = true;
+        Redraw();
     }
 
     // ---------------------------------------------------------------- 14:51: защита кадра от отказа FBO Avalonia
@@ -720,12 +765,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
         base.OnPointerWheelChanged(e);
-        Transition.Cancel();
-        var px = Px(e.GetPosition(this));
-        Camera.Zoom((float)e.Delta.Y, px.X, px.Y);
-        CameraChanged?.Invoke();
-        if (ActiveSketch != null) _overlayDirty = true;
-        Redraw();
+        WheelAt(e.GetPosition(this), e.Delta, e.KeyModifiers);
         e.Handled = true;
     }
 

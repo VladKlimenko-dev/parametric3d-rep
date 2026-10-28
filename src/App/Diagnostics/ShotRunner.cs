@@ -148,6 +148,11 @@ public static class ShotRunner
             w.ViewPort.Selection.SelectMany(zf.Select(f => new Parametric3D.Core.PickRef(f.Id, Parametric3D.Core.PickKind.Face, zp, null)), additive: false);
             Console.WriteLine($"zfaces {zf.Count}"); return;
         }
+        if (id.StartsWith("editsketch:") && w.Session.Part is { } esp && esp.Sketches.FirstOrDefault(k => k.Name == id[11..]) is { } esk)
+        {
+            // k127: открыть эскиз на правку (снимок эскиза поверх детали)
+            w.EditSketch(esk); Console.WriteLine($"edit sketch {esk.Name}"); return;
+        }
         if (id.StartsWith("select:"))
         {
             // выбрать элемент модели по имени (как щелчок в дереве)
