@@ -224,7 +224,7 @@ public static class SketchCommands
         var names = new List<string>(); for (var tt = table; tt != null; tt = tt.Parent) names.AddRange(tt.All.Select(x => x.Name));
         string? text = await Dialogs.Prompt(w, L("Связать с параметром"), L("Параметр или формула (например, W/2):") + (names.Count > 0 ? "\n" + L("Параметры: {0}", string.Join(", ", names)) : ""), d.Formula ?? names.FirstOrDefault() ?? "");
         if (string.IsNullOrWhiteSpace(text)) return;
-        if (!table.TryEvaluate(text.Trim(), out double v, out var err)) { w.ShowToast(L("Не формула: {0}", err ?? text)); return; }
+        if (!sk.TryEvaluate(text.Trim(), table, d, out double v, out var err)) { w.ShowToast(L("Не формула: {0}", err ?? text)); return; }
         var res = SketchEditing.SetDimensionValue(sk, d, v, text.Trim(), w.Session.Document.Solver);
         w.AfterSketchEdit(sk);
         if (!res.Ok) w.ReportSketchConflict(sk, res, L("Размер = {0}", text.Trim()), () => SketchEditing.SetDimensionValue(sk, d, v, text.Trim(), w.Session.Document.Solver));

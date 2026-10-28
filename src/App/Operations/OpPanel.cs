@@ -158,6 +158,8 @@ public sealed class OpPanel
         // u13: длины — в единицах детали (мм или дюймы); формулы — как записаны
         // k123: поле длины — в единице системы детали (см, м, дюйм, фут…), не только в дюймах
         double uf = Commands.DisplayUnits.SketchUnitsOff ? (Commands.DisplayUnits.Inch ? Commands.DisplayUnits.InchMm : 1) : Commands.DisplayUnits.Factor;
+        // k128: вид величины поля — для формулы без единицы (длина — в единице детали, угол — в градусах)
+        sbyte kind = unit == "мм" ? ValueRef.KindLength : unit == "°" ? ValueRef.KindAngle : ValueRef.KindNumber;
         bool scaled = unit == "мм" && Math.Abs(uf - 1) > 1e-12;
         if (scaled) { var g0 = get; var s0 = set; get = () => { var v = g0(); return v.Formula != null ? v : new ValueRef(v.Value / uf); }; set = v => s0(v.Formula != null ? v : new ValueRef(v.Value * uf)); unit = Commands.DisplayUnits.LengthUnit; }
         var tb = new TextBox { Text = Show(get()), MinWidth = 60 };
@@ -168,7 +170,7 @@ public sealed class OpPanel
         dock.Children.Add(tb);
         void Commit()
         {
-            var v = Parse(tb.Text ?? "", get());
+            var v = Parse(tb.Text ?? "", get(), kind);
             if (v == null) { tb.Classes.Add("err"); return; }
             tb.Classes.Remove("err");
             set(v.Value);
@@ -269,13 +271,15 @@ public sealed class OpPanel
     public static string Show(ValueRef v) => v.Formula ?? v.Value.ToString("0.###", CultureInfo.InvariantCulture);
 
     /// <summary>Число («12,5» и «12.5») или формула; формула проверяется по параметрам детали и документа.</summary>
-    public ValueRef? Parse(string text, ValueRef old)
+    public ValueRef? Parse(string text, ValueRef old, sbyte kind = 0)
     {
         text = text.Trim();
         if (text.Length == 0) return null;
-        if (double.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double v)) return new ValueRef(v);
+        if (double.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double v)) return new ValueRef(v) { Kind = kind };
         var table = _op.Parameters;
-        if (table != null && table.TryEvaluate(text, out double r, out _)) return new ValueRef(r) { Formula = text };
+        // k128: число без единицы в формуле — в единице детали (поле длины), с единицей — в указанной
+        if (table != null && (kind != 0 ? table.TryEvaluateAs(text, ValueRef.DimOf(kind), out double r, out _) : table.TryEvaluate(text, out r, out _)))
+            return new ValueRef(r) { Formula = text, Kind = kind };
         return null;
     }
 }

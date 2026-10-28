@@ -69,12 +69,14 @@ public static class SketchEditCommands
         var sk = Sk(w); if (sk == null) return;
         var sel = SketchCommands.Picked(w);
         if (sel.Count == 0) { w.ShowToast(L("Выберите элементы эскиза"), error: false); return; }
-        var text = await Dialogs.Prompt(w, L("Перенести, повернуть, масштаб"), L("Сдвиг X, сдвиг Y (мм), угол (°), масштаб — через пробел; копия — добавьте «копия»:"), "10 0 0 1");
+        // k128: сдвиги — в единице детали (число без единицы), «4.5in» — в указанной
+        var text = await Dialogs.Prompt(w, L("Перенести, повернуть, масштаб"), L("Сдвиг X, сдвиг Y ({0}), угол (°), масштаб — через пробел; копия — добавьте «копия»:", DisplayUnits.LengthUnit), "10 0 0 1");
         if (string.IsNullOrWhiteSpace(text)) return;
         var parts = text.Split(new[] { ' ', ';' }, StringSplitOptions.RemoveEmptyEntries);
         bool copy = parts.Any(x => x.StartsWith("коп", StringComparison.OrdinalIgnoreCase) || x.StartsWith("copy", StringComparison.OrdinalIgnoreCase));
-        var nums = parts.Where(x => double.TryParse(x.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _)).Select(Num).ToList();
-        double dx = nums.ElementAtOrDefault(0), dy = nums.ElementAtOrDefault(1), ang = nums.ElementAtOrDefault(2) * Math.PI / 180, sc = nums.Count > 3 ? nums[3] : 1;
+        var vals = parts.Where(x => !x.StartsWith("коп", StringComparison.OrdinalIgnoreCase) && !x.StartsWith("copy", StringComparison.OrdinalIgnoreCase)).ToList();
+        double V(int i, Parametric3D.Core.Dimension dim, double dflt) => i < vals.Count && DisplayUnits.TryValue(vals[i], dim, out var v) ? v : dflt;
+        double dx = V(0, Parametric3D.Core.Dimension.Length, 0), dy = V(1, Parametric3D.Core.Dimension.Length, 0), ang = V(2, Parametric3D.Core.Dimension.Angle, 0) * Math.PI / 180, sc = V(3, Parametric3D.Core.Dimension.None, 1);
         if (!(sc > 0)) { w.ShowToast(L("Масштаб должен быть больше нуля")); return; }
         var pts = sel.SelectMany(e => e.Handles).Distinct().ToList();
         var ctr = pts.Aggregate(Vector2d.Zero, (s, p) => s + p.P) / Math.Max(1, pts.Count);
@@ -122,9 +124,9 @@ public static class SketchEditCommands
         var sk = Sk(w); if (sk == null) return;
         var sel = SketchCommands.Picked(w).Where(e => e is SkLine or SkArc or SkCircle).ToList();
         if (sel.Count == 0) { w.ShowToast(L("Выберите отрезки, дуги или окружности"), error: false); return; }
-        var text = await Dialogs.Prompt(w, L("Смещение цепочки"), L("Расстояние, мм (знак — сторона):"), "5");
+        var text = await Dialogs.Prompt(w, L("Смещение цепочки"), L("Расстояние, {0} (знак — сторона):", DisplayUnits.LengthUnit), DisplayUnits.ShowText(5));
         if (string.IsNullOrWhiteSpace(text)) return;
-        double d; try { d = Num(text.Trim()); } catch { w.ShowToast(L("Не число: {0}", text)); return; }
+        if (!DisplayUnits.TryLength(text, out double d)) { w.ShowToast(L("Не число: {0}", text)); return; }
         OffsetChain(sk, sel, d);
         Done(w, sk);
     }
@@ -168,9 +170,10 @@ public static class SketchEditCommands
         if (Sk(w) == null) return;
         if (m != EdgeMode.Use)
         {
-            var text = await Dialogs.Prompt(w, L(m == EdgeMode.Offset ? "Смещение ребра" : "Утолщение ребра"), L(m == EdgeMode.Offset ? "Смещение, мм (знак — сторона):" : "Толщина, мм:"), ModeDistance.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            var text = await Dialogs.Prompt(w, L(m == EdgeMode.Offset ? "Смещение ребра" : "Утолщение ребра"), L(m == EdgeMode.Offset ? "Смещение, {0} (знак — сторона):" : "Толщина, {0}:", DisplayUnits.LengthUnit), DisplayUnits.ShowText(ModeDistance));
             if (string.IsNullOrWhiteSpace(text)) return;
-            try { ModeDistance = Num(text.Trim()); } catch { w.ShowToast(L("Не число: {0}", text)); return; }
+            if (!DisplayUnits.TryLength(text, out double md)) { w.ShowToast(L("Не число: {0}", text)); return; }
+            ModeDistance = md;
         }
         Mode = m;
         w.ViewPort.Tool = null;
@@ -238,19 +241,19 @@ public static class SketchEditCommands
 
     public static async void Text(MainWindow w)
     {
-        var text = await Dialogs.Prompt(w, L("Текст"), L("Текст и высота, мм (через «;», например: ABC;10):"), $"{TextTool.Text};{TextTool.Height.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+        var text = await Dialogs.Prompt(w, L("Текст"), L("Текст и высота, {0} (через «;», например: ABC;10):", DisplayUnits.LengthUnit), $"{TextTool.Text};{DisplayUnits.ShowText(TextTool.Height)}");
         if (string.IsNullOrWhiteSpace(text)) return;
         var p = text.Split(';');
         TextTool.Text = p[0];
-        if (p.Length > 1) try { TextTool.Height = Math.Max(0.1, Num(p[1].Trim())); } catch { }
+        if (p.Length > 1 && DisplayUnits.TryLength(p[1], out double th)) TextTool.Height = Math.Max(0.1, th);
         w.SetTool(new TextTool());
     }
 
     public static async void Corner(MainWindow w, bool chamfer)
     {
-        var text = await Dialogs.Prompt(w, L(chamfer ? "Фаска угла" : "Скругление угла"), L(chamfer ? "Фаска, мм:" : "Радиус, мм:"), (chamfer ? CornerTool.Distance : CornerTool.Radius).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        var text = await Dialogs.Prompt(w, L(chamfer ? "Фаска угла" : "Скругление угла"), L(chamfer ? "Фаска, {0}:" : "Радиус, {0}:", DisplayUnits.LengthUnit), DisplayUnits.ShowText(chamfer ? CornerTool.Distance : CornerTool.Radius));
         if (string.IsNullOrWhiteSpace(text)) return;
-        double v; try { v = Num(text.Trim()); } catch { return; }
+        if (!DisplayUnits.TryLength(text, out double v)) return;
         if (!(v > 0)) return;
         if (chamfer) CornerTool.Distance = v; else CornerTool.Radius = v;
         // выбраны два отрезка с общим концом — угол обрабатывается сразу (без щелчка по углу)

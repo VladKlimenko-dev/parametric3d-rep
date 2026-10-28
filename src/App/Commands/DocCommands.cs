@@ -61,6 +61,36 @@ public static class DisplayUnits
     }
 
     public static void From(Core.UnitSystem? sys) => Length = sys?.Length ?? "mm";
+
+    /// <summary>
+    /// k128 (замечание 28.10, 18:18): ВВОД ДЛИНЫ ИЛИ УГЛА В ОКНАХ — число без единицы — в единице детали, с единицей — в
+    /// указанной («4.5in», «10 mm», «1.5*25.4mm»); выражения из чисел и единиц. Значение — во внутренних единицах (мм, °).
+    /// </summary>
+    /// <summary>P3D_INPUTUNITS=0 — число в окне ввода длины — в мм (прежде).</summary>
+    public static readonly bool InputUnitsOff = Environment.GetEnvironmentVariable("P3D_INPUTUNITS") == "0";
+    public static bool TryLength(string? text, out double mm) => TryValue(text, Core.Dimension.Length, out mm);
+    public static bool TryAngle(string? text, out double deg) => TryValue(text, Core.Dimension.Angle, out deg);
+    public static bool TryValue(string? text, Core.Dimension want, out double value)
+    {
+        value = 0;
+        string t = (text ?? "").Trim();
+        if (t.Length == 0) return false;
+        if (double.TryParse(t.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double x))
+        { value = want == Core.Dimension.Length && !InputUnitsOff ? FromShow(x) : x; return true; }
+        if (!Model.Params.ExprParser.TryParse(t.Replace(',', '.'), out var e, out _) || e == null) return false;
+        try
+        {
+            var sys = new Core.UnitSystem { Length = Length };
+            var q = Model.Params.ExprUnits.Evaluate(e, _ => null, sys);
+            if (q.Bare && q.Dim.IsNone) value = want.IsNone ? q.Value : sys.UnitFor(want).ToInternal(q.Value);
+            else if (q.Dim == want) value = q.Value;
+            else return false;
+            return !double.IsNaN(value) && !double.IsInfinity(value);
+        }
+        catch { return false; }
+    }
+    /// <summary>Длина (мм) числом в единице детали — для поля ввода.</summary>
+    public static string ShowText(double mm) => ToShow(mm).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
 }
 
 /// <summary>

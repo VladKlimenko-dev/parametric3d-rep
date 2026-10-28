@@ -161,6 +161,39 @@ public sealed class ParameterTable : IValueResolver
         catch (Exception ex) { error = ex.Message; return false; }
     }
 
+    /// <summary>P3D_VALUEUNITS=0 — число без единицы в формуле операции — внутренние единицы (мм), как прежде.</summary>
+    public static readonly bool ValueUnitsOff = Environment.GetEnvironmentVariable("P3D_VALUEUNITS") == "0";
+
+    /// <summary>Путь к размеру (s"Эскиз".d0…) — у этой таблицы или выше.</summary>
+    double? ExternalScoped(string n) => External?.Invoke(n) ?? Parent?.ExternalScoped(n);
+
+    /// <summary>
+    /// k128 (замечание 28.10, 18:18): ЗНАЧЕНИЕ С ОЖИДАЕМОЙ РАЗМЕРНОСТЬЮ — правило ввода: число без единицы — в единице детали
+    /// (Units: таблица детали считает в единицах детали), с единицей — в указанной («4.5in», «10 mm», «30deg»). Формула:
+    /// размерность по ExprUnits — параметры со своей единицей, пути к размерам (s"Эскиз".d0) — величины той же размерности,
+    /// результат без единицы — в единице детали. Формула другой размерности (отношение и т. п.) — как прежде, без перевода.
+    /// want = None — число как есть. Значение — во внутренних единицах (мм, градусы).
+    /// </summary>
+    public bool TryEvaluateAs(string formula, Dimension want, out double value, out string? error)
+    {
+        value = 0; error = null;
+        if (!ExprParser.TryParse(formula, out Expr? e, out error) || e == null) return false;
+        double plain;
+        try { plain = e.Eval(this, Geometry); }
+        catch (Exception ex) { error = ex.Message; return false; }
+        if (double.IsNaN(plain) || double.IsInfinity(plain)) { error = "The result is not a number."; return false; }
+        value = plain;
+        if (ValueUnitsOff) return true;
+        try
+        {
+            var q = ExprUnits.Evaluate(e, n => ModelRefs.IsPath(n) && ExternalScoped(n) is { } ev ? new Quantity(ev, want) : QuantityOf(n), Units, Geometry);
+            if (q.Bare && q.Dim.IsNone) value = want.IsNone ? q.Value : Units.UnitFor(want).ToInternal(q.Value);
+            else if (q.Dim == want) value = q.Value;
+        }
+        catch { }
+        return true;
+    }
+
     /// <summary>m.x4: вычисление выражения с единицами — значение во внутренних единицах и размерность.</summary>
     public bool TryEvaluateQuantity(string formula, out Quantity value, out string? error)
     {

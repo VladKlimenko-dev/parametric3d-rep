@@ -3712,6 +3712,65 @@ Check("UI-SPEED-K126", () =>
     Require(!part.IsDirty && !part.NeedsAcceptance && Math.Abs(part.Volume - p2.Volume) <= 1e-9 * p2.Volume, "the part was not rebuilt and checked after the interrupted checks");
 });
 
+Check("UI-UNITS-INPUT-K128", () =>
+{
+    // k128 (замечание 28.10, 18:18): единица размера или операции, если не указана, — единица детали; указанная — как
+    // указана. Деталь in/kg/s: (A) поле операции — число «2» — 2 in, формула «2/2» — 1 in, «10mm» — 10 мм, «1in+5mm»
+    // — 30.4 мм (и при пересчёте детали — то же); угол «45/2» — 22.5°, число «3» в поле количества — 3;
+    // (B) окна ввода длины: «2» — 2 in, «10 mm» — 10 мм, «1.5*2» — 3 in; (C) таблица параметров детали — в единицах
+    // детали: параметр без единицы в длине — дюймы. P3D_VALUEUNITS=0, P3D_PARTSCOPEUNITS=0.
+    MainWindow.UnitQuestion = _ => Task.FromResult<bool?>(true);
+    try
+    {
+        var part = Parametric3D.App.Diagnostics.TestParts.Block("u");
+        var s = DocumentSession.FromPart(part, "u"); var w = Open(s); BuildNow(s);
+        void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+        WaitTask(w.SetPartUnitsAsync(part, Parametric3D.Core.UnitSystem.Standard.First(u => u.Length == "in"))); BuildNow(s); Run();
+        part = s.Part!;
+        var ex = (ExtrudeFeature)part.Features[0];
+        double area = part.Volume / ex.Side1.Distance.Value;
+        Require(part.Units.Length == "in" && DisplayUnits.Length == "in", "the part is not in inches");
+        // (A) панель операции
+        w.SelectItem(ex); w.StartOperation(new ExtrudeOp(ex)); Run();
+        var panel = w.CurrentOperation!.Panel!;
+        var cases = new (string Text, sbyte Kind, double Want)[]
+        {
+            ("2/2", ValueRef.KindLength, 25.4), ("10mm", ValueRef.KindLength, 10), ("1in+5mm", ValueRef.KindLength, 30.4),
+            ("45/2", ValueRef.KindAngle, 22.5), ("90deg/3", ValueRef.KindAngle, 30), ("6/2", ValueRef.KindNumber, 3),
+        };
+        foreach (var (text, kind, want) in cases)
+        {
+            var v = panel.Parse(text, default, kind);
+            Console.WriteLine($"  (A) panel «{text}» kind {kind}: {v?.Value:0.####} (want {want})");
+            Require(v is { } vv && Math.Abs(vv.Value - want) < 1e-9, $"the operation field took «{text}» as {v?.Value}");
+        }
+        w.CancelOperation(); Run();
+        part = s.Part!; ex = (ExtrudeFeature)part.Features[0];
+        // при пересчёте детали: формула без единицы в поле глубины (вид величины — по имени поля)
+        ex.Side1.Distance = new ValueRef(0) { Formula = "2/2" };
+        part.NotifyChanged(ex); BuildNow(s);
+        Console.WriteLine($"  (A) rebuild «2/2»: depth {ex.Side1.Distance.Value:0.####} mm, volume/area {part.Volume / area:0.####}");
+        Require(Math.Abs(ex.Side1.Distance.Value - 25.4) < 1e-9 && Math.Abs(part.Volume / area - 25.4) < 1e-6, "the operation formula without a unit was not in the part's units on rebuild");
+        ex.Side1.Distance = new ValueRef(0) { Formula = "10mm" }; part.NotifyChanged(ex); BuildNow(s);
+        Require(Math.Abs(ex.Side1.Distance.Value - 10) < 1e-9, "an explicit unit was not kept on rebuild");
+        Require(FeatureDims.KindOf("Angle") == ValueRef.KindAngle && FeatureDims.KindOf("Side1.Distance") == ValueRef.KindLength && FeatureDims.KindOf("Count") == ValueRef.KindNumber && FeatureDims.KindOf("Sx") == ValueRef.KindNumber, "field kinds");
+        // (B) окна ввода
+        var inputs = new (string Text, double Want)[] { ("2", 50.8), ("10 mm", 10), ("1.5*2", 76.2), ("4.5in", 114.3) };
+        foreach (var (text, want) in inputs)
+        {
+            bool ok = DisplayUnits.TryLength(text, out double mm);
+            Console.WriteLine($"  (B) «{text}»: {mm:0.####} mm");
+            Require(ok && Math.Abs(mm - want) < 1e-9, $"the length input «{text}» was taken as {mm} mm");
+        }
+        Require(DisplayUnits.TryAngle("30", out double deg) && Math.Abs(deg - 30) < 1e-12, "angle input");
+        // (C) таблица параметров детали
+        var table = s.Document.ScopeFor(part);
+        Require(table.TryEvaluateAs("3", Parametric3D.Core.Dimension.Length, out double t3, out _) && Math.Abs(t3 - 76.2) < 1e-9, $"the part table took a bare length in {table.Units.Length}: {t3}");
+        w.Close();
+    }
+    finally { MainWindow.UnitQuestion = null; DisplayUnits.Length = "mm"; }
+});
+
 Check("UI-SKETCH-GCS-K128", () =>
 {
     // k128 (замечание 28.10, 17:00): эскиз пользователя X-218795-05 (in/kg/s).
