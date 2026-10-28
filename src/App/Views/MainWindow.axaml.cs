@@ -2329,6 +2329,29 @@ public partial class MainWindow : Window
         RefreshToolStates();
     }
 
+    /// <summary>
+    /// k131 (замечание 28.10, 21:31, п. 2): выход из эскиза на время «Настройки эскиза» — новый пустой эскиз не удаляется
+    /// (прежде «Настройка» закрывала его как пустой); после настройки эскиз снова новый (пустым — удалится при «Готово»).
+    /// P3D_SKSETUPKEEP=0 — прежнее.
+    /// </summary>
+    public (bool WasNew, Func<Sketch, Operation>? Then) FinishSketchForSetup()
+    {
+        bool wasNew = _sketchIsNew && !SetupKeepOff;
+        var then = _afterSketch;
+        _keepEmptySketch = wasNew;
+        try { FinishSketch(); } finally { _keepEmptySketch = false; }
+        return (wasNew, then);
+    }
+    /// <summary>Снова в эскиз после настройки: новый — остаётся новым (и с операцией «после эскиза»).</summary>
+    public void ResumeSketchAfterSetup(Sketch sk, bool wasNew, Func<Sketch, Operation>? then)
+    {
+        EditSketch(sk);
+        if (!wasNew) return;
+        _sketchIsNew = true; _skEdit = null; _afterSketch = then;
+    }
+    private bool _keepEmptySketch;
+    static readonly bool SetupKeepOff = Environment.GetEnvironmentVariable("P3D_SKSETUPKEEP") == "0";
+
     public void FinishSketch()
     {
         Commands.SketchEditCommands.Mode = Commands.SketchEditCommands.EdgeMode.None;
@@ -2343,7 +2366,7 @@ public partial class MainWindow : Window
         {
         _skEdit = null;
         SketchRollbackEnd();
-        if (empty && _sketchIsNew && sk.Parent is Part owner) { owner.Remove(sk); Session.DiscardEdit(); }
+        if (empty && _sketchIsNew && !_keepEmptySketch && sk.Parent is Part owner) { owner.Remove(sk); Session.DiscardEdit(); }
         else
         {
             sk.NotifyChanged(sk);
@@ -2353,8 +2376,9 @@ public partial class MainWindow : Window
         ShowHint(null);
         RebuildUi();
         ScheduleTree();
-        var then = _afterSketch;
+        var then = _keepEmptySketch ? null : _afterSketch;
         _afterSketch = null;
+        if (_keepEmptySketch) return;
         var back = AfterSketchCancel; AfterSketchCancel = null;
         if (empty && back != null) { View.Selection.Clear(); StartOperation(back()); return; }
         if (!empty && then != null)

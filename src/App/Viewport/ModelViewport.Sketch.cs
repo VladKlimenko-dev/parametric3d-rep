@@ -58,7 +58,13 @@ public sealed partial class ModelViewport
 
     // k97 (замечание 5): в эскизе проход выбора видеокарты не рисует граней (рёбра ловятся сквозь тело), и очерк цилиндра
     // под курсором не находился. Очерки граней активной детали — на процессоре, по расстоянию до линии на экране.
-    private (object? Mesh, Sketch? Sk, List<(PickRef R, List<(Vector2d A, Vector2d B, double R, bool Circle)> L)> Items)? _faceRefCache;
+    private (object? Mesh, Sketch? Sk, Parametric3D.Kernel.Frame3 Plane, List<(PickRef R, List<(Vector2d A, Vector2d B, double R, bool Circle)> L)> Items)? _faceRefCache;
+    /// <summary>
+    /// k131 (замечание 28.10, 21:31, п. 1): память очерков — и по ПЛОСКОСТИ эскиза: очерки хранятся в координатах эскиза, и
+    /// после поворота эскиза стрелками куба (оси U, V — другие) прежние очерки рисовались в новых осях — повёрнутыми
+    /// относительно тела (рёбра детали поворачивались, очерки цилиндров — нет). P3D_SKSILPLANE=0 — по сетке и эскизу.
+    /// </summary>
+    static readonly bool SilPlaneOff = Environment.GetEnvironmentVariable("P3D_SKSILPLANE") == "0";
     /// <summary>Мутация P3D_SKFACEPICK=0: очерк грани ловится только попаданием в саму грань (в эскизе — никогда).</summary>
     static readonly bool FacePickOff = Environment.GetEnvironmentVariable("P3D_SKFACEPICK") == "0";
 
@@ -73,7 +79,7 @@ public sealed partial class ModelViewport
         if (FaceRefsOff || ActiveSketch is not { } sk || _doc == null) return null;
         var part = ActivePart ?? _doc.AllParts().FirstOrDefault();
         if (part?.Mesh is not { } mesh) return null;
-        if (_faceRefCache is { } c && ReferenceEquals(c.Mesh, mesh) && ReferenceEquals(c.Sk, sk)) return c.Items;
+        if (_faceRefCache is { } c && ReferenceEquals(c.Mesh, mesh) && ReferenceEquals(c.Sk, sk) && (SilPlaneOff || c.Plane.Equals(sk.Plane))) return c.Items;
         var items = new List<(PickRef, List<(Vector2d, Vector2d, double, bool)>)>();
         foreach (var b in part.Bodies)
             foreach (var f in b.Faces)
@@ -84,7 +90,7 @@ public sealed partial class ModelViewport
                 if (pr.Count == 0) { try { pr = SketchReferences.MeshSilhouette(sk, mesh, f.Id); } catch { } }
                 if (pr.Count > 0) items.Add((new PickRef(f.Id, PickKind.Face, part, null), pr));
             }
-        _faceRefCache = (mesh, sk, items);
+        _faceRefCache = (mesh, sk, sk.Plane, items);
         return items;
     }
 

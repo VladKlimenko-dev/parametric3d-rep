@@ -281,8 +281,10 @@ public static class SketchEditCommands
         var sk = Sk(w) ?? w.SelectedItems().OfType<Sketch>().FirstOrDefault();
         if (sk == null) { w.ShowToast(L("Выберите эскиз"), error: false); return; }
         bool back = w.InSketch;
-        if (back) w.FinishSketch();
+        // k131: новый пустой эскиз на время настройки не удаляется и после неё остаётся новым
+        (bool WasNew, Func<Sketch, Parametric3D.App.Operations.Operation>? Then) st = (false, null);
+        if (back) st = w.FinishSketchForSetup();
         if (w.Session.Part?.Sketches.FirstOrDefault(s => s.Id == sk.Id) is not { } live) return;
-        w.StartOperation(new Parametric3D.App.Operations.SketchSetupOp(live, back));
+        w.StartOperation(new Parametric3D.App.Operations.SketchSetupOp(live, back) { WasNew = st.WasNew, Then = st.Then });
     }
 }

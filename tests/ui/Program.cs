@@ -3712,6 +3712,52 @@ Check("UI-SPEED-K126", () =>
     Require(!part.IsDirty && !part.NeedsAcceptance && Math.Abs(part.Volume - p2.Volume) <= 1e-9 * p2.Volume, "the part was not rebuilt and checked after the interrupted checks");
 });
 
+Check("UI-SKETCH-ROLL-SETUP-K131", () =>
+{
+    // k131 (замечание 28.10, 21:31): (A) новый эскиз на XY у трубы вдоль X — поворот эскиза стрелкой куба: очерки
+    // цилиндров (ссылочные линии) остаются там же в пространстве, что и тело (прежде память очерков в координатах
+    // эскиза рисовалась в новых осях — повёрнутой; P3D_SKSILPLANE=0); (B) «Настройка эскиза» в новом пустом эскизе —
+    // эскиз не закрывается и не удаляется: настройка, затем снова эскиз; пустой по «Готово» — удаляется (P3D_SKSETUPKEEP=0).
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var s1 = part.AddSketch("S1", part.PlaneYZ.Frame, part.PlaneYZ.Id);
+    s1.AddEntity(new SkCircle(new SkPoint(0, 0), 10)); s1.AddEntity(new SkCircle(new SkPoint(0, 0), 5));
+    part.AddFeature(new ExtrudeFeature { SketchId = s1.Id });
+    s.Document.RebuildDirty();
+    var w = Open(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    var vp = w.ViewPort;
+    w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp()); Run();
+    var sk = vp.ActiveSketch!;
+    List<(Vector3d A, Vector3d B)> Sil()
+    {
+        vp.BuildOverlayForTest();
+        return vp.FaceRefItems()!.SelectMany(x => x.L).Where(l => !l.Circle).Select(l => (sk.Plane.ToWorld(l.A), sk.Plane.ToWorld(l.B))).ToList();
+    }
+    var w0 = Sil();
+    Require(w0.Count >= 2, "fixture: no cylinder silhouettes in the new sketch");
+    Require(vp.RollSketch(ccw: true), "the roll did not rotate the sketch"); Run();
+    var w1 = Sil();
+    double worst = w0.Max(a => w1.Min(b => Math.Min((a.A - b.A).Length + (a.B - b.B).Length, (a.A - b.B).Length + (a.B - b.A).Length)));
+    Console.WriteLine($"  (A) silhouettes {w0.Count} → {w1.Count}, worst world shift {worst:0.######}; plane V {sk.Plane.V}");
+    Require(w1.Count == w0.Count && worst < 1e-6, "the silhouettes did not stay with the body after the sketch roll");
+    w.CancelSketch(); Run();
+    // (B)
+    int n0 = part.Sketches.Count();
+    w.SelectItem(part.PlaneXZ); w.StartOperation(new SketchOp()); Run();
+    var nk = vp.ActiveSketch!; uint nid = nk.Id;
+    Require(nk.Entities.All(e => e.Builtin || e.Role == SkRole.Reference), "fixture: the new sketch is not empty");
+    SketchEditCommands.Setup(w); Run();
+    bool kept = part.Sketches.Any(k => k.Id == nid);
+    Console.WriteLine($"  (B) setup on an empty new sketch: operation {w.CurrentOperation?.GetType().Name ?? "none"}, sketch kept {kept}");
+    Require(w.CurrentOperation is Parametric3D.App.Operations.SketchSetupOp && kept, "Sketch setup closed the empty new sketch");
+    w.CommitOperation(); Run(); Run();
+    Console.WriteLine($"  (B) after setup: in sketch {w.InSketch}, same {vp.ActiveSketch?.Id == nid}");
+    Require(w.InSketch && vp.ActiveSketch?.Id == nid, "the sketch did not resume after the setup");
+    w.FinishSketch(); Run();
+    Require(part.Sketches.Count() == n0 && !part.Sketches.Any(k => k.Id == nid), "the empty new sketch stayed after Finish");
+    w.Close();
+});
+
 Check("UI-SKETCH-AXISDIM-K130", () =>
 {
     // k130 (замечание 28.10, 19:39, пп. 3–5): размеры по горизонтали и по вертикали — кнопки с иконками пользователя
