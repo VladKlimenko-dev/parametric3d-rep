@@ -90,6 +90,8 @@ public sealed class Document
     /// <summary>UI (кнопка «Тест»): сколько длилось последнее применение результатов расчёта (в потоке окна), мс.</summary>
     public double LastApplyMs { get; private set; }
 
+    /// <summary>k128: таблица детали считает в единицах детали (in/kg/s и т. п.), а не документа. P3D_PARTSCOPEUNITS=0 — документа.</summary>
+    static readonly bool PartUnitsOff = Environment.GetEnvironmentVariable("P3D_PARTSCOPEUNITS") == "0";
     static readonly bool ScopeAlwaysOff = Environment.GetEnvironmentVariable("P3D_PARTSCOPE") == "0";
 
     public ParameterTable ScopeFor(Part part)
@@ -101,7 +103,7 @@ public sealed class Document
             if (a is Assembly asm && asm.LocalParameters.Count > 0) chain.Add(asm.LocalParameters);
         if (chain.Count == 0) return Parameters;
         for (int i = 0; i < chain.Count; i++) chain[i].Parent = i + 1 < chain.Count ? chain[i + 1] : Parameters;
-        for (int i = chain.Count - 1; i >= 0; i--) { chain[i].Geometry = Parameters.Geometry; chain[i].Units = Parameters.Units; chain[i].Recalculate(); }
+        for (int i = chain.Count - 1; i >= 0; i--) { chain[i].Geometry = Parameters.Geometry; chain[i].Units = ReferenceEquals(chain[i], part.LocalParameters) && !PartUnitsOff ? part.Units : Parameters.Units; chain[i].Recalculate(); }
         return chain[0];
     }
 

@@ -91,7 +91,7 @@ public sealed class SketchState
                 Arrows = d.Arrows,
                 TextOffset = d.TextOffset,
                 Formula = d.Formula,
-                Index = d.Index, Reflex = d.Reflex, Supplement = d.Supplement, Id = d.Id,
+                Index = d.Index, Reflex = d.Reflex, Supplement = d.Supplement, Id = d.Id, RayA = d.RayA, RayB = d.RayB, Side = d.Side, LineFrom = d.LineFrom,
             };
             foreach (var it in d.Items) copy.Items.Add(Remap(it, map, entityMap));
             s.Dimensions.Add(copy);

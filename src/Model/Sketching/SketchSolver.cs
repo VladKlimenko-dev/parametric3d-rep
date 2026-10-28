@@ -72,6 +72,21 @@ public sealed class NumericSketchSolver : ISketchSolver
     /// </summary>
     public HashSet<SkPoint>? DraggedPoints;
 
+    /// <summary>
+    /// k128 (замечание 28.10, 17:00, п. 2): ПЕРЕТАСКИВАНИЕ — ЦЕЛЬ, А НЕ СДВИГ. Точки, которые тянут, и куда (курсор). Прежде
+    /// точку ставили под курсор ДО решения, и решатель восстанавливал связи от этого (недопустимого) положения: курсор,
+    /// уведённый на десятки миллиметров от того, что разрешают связи, давал решателю далёкий старт — он находил другую
+    /// ветвь решения (эскиз «перескакивал») или не сходился. Теперь (как перетаскивание во FreeCAD — цель как мягкое
+    /// условие при жёстких связях) решение идёт от прежнего допустимого положения: шаг Гаусса — Ньютона с наименьшей
+    /// взвешенной нормой — связи выполняются, точка идёт к курсору, прочие сдвигаются как можно меньше. Null — обычное
+    /// решение. P3D_SKDRAGTARGET=0 — прежнее.
+    /// </summary>
+    public Dictionary<SkPoint, Vector2d>? DragTargets;
+    public static readonly bool DragTargetOff = Environment.GetEnvironmentVariable("P3D_SKDRAGTARGET") == "0";
+    /// <summary>Проверки: перетаскивание прежним способом (чтобы испытать отмену сломавшего эскиз шага).</summary>
+    [ThreadStatic] public static bool DragTargetOffForTests;
+    public static long DragSolves, DragSteps, DragHalvings;
+
     private bool IsDragged(SkPoint? p, SkPoint? dragged) =>
         p != null && (p == dragged || (DraggedPoints != null && DraggedPoints.Contains(p)));
 
@@ -131,7 +146,7 @@ public sealed class NumericSketchSolver : ISketchSolver
 
         var residuals = BuildResiduals(sk);
         int m = residuals.Count;
-        if (m == 0) { dof = vars.Count; return SolveStatus.Underconstrained; }
+        if (m == 0) { ApplyFreeTargets(vars); dof = vars.Count; return SolveStatus.Underconstrained; }
 
         // K09. РАЗБИЕНИЕ НА НЕЗАВИСИМЫЕ ЧАСТИ. Метод Левенберга — Марквардта с плотной матрицей
         // стоит O(n³) на шаг: эскиз из 50 несвязанных прямоугольников (400 переменных) решался
@@ -144,7 +159,7 @@ public sealed class NumericSketchSolver : ISketchSolver
             bool inconsistent = false, didNotConverge = false, over = false;
             foreach (var (cv, cf) in comps)
             {
-                if (cf.Count == 0) { dof += cv.Count; continue; }
+                if (cf.Count == 0) { ApplyFreeTargets(cv); dof += cv.Count; continue; }
                 var st = SolveCore(sk, cv, cf, dragged, out int d);
                 dof += d;
                 inconsistent |= st == SolveStatus.Inconsistent;
@@ -168,6 +183,13 @@ public sealed class NumericSketchSolver : ISketchSolver
             return dof > 0 ? SolveStatus.Underconstrained : SolveStatus.Ok;
         }
         return SolveCore(sk, vars, residuals, dragged, out dof);
+    }
+
+    /// <summary>k128: свободные переменные (ни в одной невязке) тянущихся точек — прямо к цели.</summary>
+    private void ApplyFreeTargets(List<Var> vars)
+    {
+        if (DragTargets == null) return;
+        foreach (var v in vars) if (v.Point != null && DragTargets.TryGetValue(v.Point, out var t)) v.Set(v.IsY ? t.Y : t.X);
     }
 
     /// <summary>Связные части: переменные и невязки, связанные через общие переменные.</summary>
@@ -229,7 +251,12 @@ public sealed class NumericSketchSolver : ISketchSolver
         double tolConverged = Math.Pow(1e-12 * L, 2), tolFailed = Math.Pow(1e-7 * L, 2);
 
         Sparse? sparse = null;
-        for (int iter = 0; iter < MaxIterations; iter++)
+        bool dragMode = DragTargets != null && vars.Any(v => v.Point != null && DragTargets.ContainsKey(v.Point));
+        if (dragMode)
+        {
+            using (Parametric3D.Kernel.Diagnostics.Prof.Time("эскиз: перетаскивание")) DragIterate(vars, x, residuals, ref sparse, L, tolConverged);
+        }
+        for (int iter = 0; iter < MaxIterations && !dragMode; iter++)
         {
             if (ConstraintResidual(vars, x, residuals) < tolConverged) break;
 
@@ -701,7 +728,8 @@ public sealed class NumericSketchSolver : ISketchSolver
                     {
                         // k96: СТОРОНА — та, где точка сейчас. Размер хранит расстояние без знака, а уравнение было знаковым:
                         // точка по другую сторону прямой перескакивала через неё на +значение. Мутация P3D_SKSIDE=0.
-                        double side = SideOff ? 1 : SideOf(DistPointLine(dp.P, dl));
+                        // k128: сторона — закреплённая (d.Side), а не по геометрии на начало решения
+                        double side = SideOff ? 1 : d.Side != 0 && !DimensionMeasure.FixedSideOff ? d.Side : SideOf(DistPointLine(dp.P, dl));
                         fns.Add(dst => dst.Add(side * DistPointLine(dp.P, dl) - V()));
                     }
                     break;
@@ -716,9 +744,9 @@ public sealed class NumericSketchSolver : ISketchSolver
                         else
                         {
                             // k124: середина короткого отрезка — до прямой длинного (оси)
-                            var (pt0, rf0) = DimensionMeasure.LineLinePair(la, lb);
+                            var (pt0, rf0) = DimensionMeasure.LineLinePair(d, la, lb);
                             var from = ReferenceEquals(rf0, la) ? lb : la;
-                            double side = SideOff ? 1 : SideOf(DistPointLine(pt0, rf0));
+                            double side = SideOff ? 1 : d.Side != 0 && !DimensionMeasure.FixedSideOff ? d.Side : SideOf(DistPointLine(pt0, rf0));
                             fns.Add(dst => dst.Add(side * DistPointLine((from.A.P + from.B.P) * 0.5, rf0) - V()));
                         }
                     }
@@ -727,7 +755,7 @@ public sealed class NumericSketchSolver : ISketchSolver
                     if (it.Count >= 2 && it[0] is SkLine aa && it[1] is SkLine ab)
                         // Та же формула, что и у измерения: иначе размер
                         // начнёт требовать угол, которого никто не задавал.
-                        fns.Add(dst => dst.Add(DimensionMeasure.LineAngleDegrees(aa, ab) - V()));
+                        fns.Add(dst => dst.Add(DimensionMeasure.AngleDegrees(dd) - V()));
                     break;
                 case DimensionType.Radius:
                     if (it.Count >= 1 && it[0] is SkCircle rc) fns.Add(dst => dst.Add(rc.Radius - V()));
@@ -995,6 +1023,95 @@ public sealed class NumericSketchSolver : ISketchSolver
 
         for (int i = 0; i < n; i++) vars[i].Set(x[i]);
         return J;
+    }
+
+    /// <summary>
+    /// k128: шаги к цели перетаскивания при жёстких связях. Задача на шаге: min ½Σ_цель (x + dx − t)² + ½ε Σ_прочие (x + dx − x₀)²
+    /// при J dx = −r — решение (J H⁻¹ Jᵀ + δI) λ = J H⁻¹ g − r, dx = H⁻¹(Jᵀλ − g). Шаг, увеличивший невязку связей, делится
+    /// пополам; шаг ограничен десятой долей размера эскиза — решение идёт непрерывно по множеству решений связей.
+    /// </summary>
+    private void DragIterate(List<Var> vars, double[] x, List<ResidualFn> fns, ref Sparse? sp, double L, double tolConverged)
+    {
+        Interlocked.Increment(ref DragSolves);
+        int n = vars.Count;
+        sp ??= SparseStructure(vars, x, fns);
+        const double eps = 1e-4;
+        var hinv = new double[n]; var target = new double[n]; var start = (double[])x.Clone();
+        for (int i = 0; i < n; i++)
+        {
+            var v = vars[i];
+            if (v.Point != null && DragTargets!.TryGetValue(v.Point, out var t)) { hinv[i] = 1; target[i] = v.IsY ? t.Y : t.X; }
+            else { hinv[i] = 1 / eps; target[i] = double.NaN; }
+        }
+        double maxStep = 0.1 * L;
+        for (int it = 0; it < 80; it++)
+        {
+            for (int i = 0; i < n; i++) vars[i].Set(x[i]);
+            var r = new List<double>(); foreach (var f in fns) f(r);
+            int m = sp.ConstraintRows;
+            if (r.Count != m) return;
+            double before = r.Sum(v => v * v);
+            // g = ∇ цели: у тянущихся — к курсору, у прочих — к положению на начало (вес ε)
+            var g = new double[n];
+            for (int i = 0; i < n; i++) g[i] = double.IsNaN(target[i]) ? eps * (x[i] - start[i]) : x[i] - target[i];
+            double[] dx;
+            if (m == 0) dx = g.Select((gi, i) => -hinv[i] * gi).ToArray();
+            else
+            {
+                var (rowCols, rowVals) = SparseJacobian(vars, x, fns, null, sp, r.Concat(new double[n]).ToArray());
+                // правая часть: J H⁻¹ g − r
+                var rhs = new double[m];
+                for (int a = 0; a < m; a++) { double sum = 0; var ca = rowCols[a]; var va = rowVals[a]; for (int p = 0; p < ca.Count; p++) sum += va[p] * hinv[ca[p]] * g[ca[p]]; rhs[a] = sum - r[a]; }
+                double[] lam;
+                if (UseSparse(n))
+                {
+                    var colRows = new Dictionary<int, List<(int Row, double V)>>();
+                    for (int a = 0; a < m; a++) for (int p = 0; p < rowCols[a].Count; p++) { int c = rowCols[a][p]; if (!colRows.TryGetValue(c, out var lst)) colRows[c] = lst = new(); lst.Add((a, rowVals[a][p])); }
+                    var As = new Dictionary<int, double>[m]; for (int a = 0; a < m; a++) As[a] = new Dictionary<int, double>();
+                    foreach (var (c, lst) in colRows) foreach (var (ra, va) in lst) foreach (var (rb, vb) in lst) As[ra][rb] = (As[ra].TryGetValue(rb, out var o) ? o : 0) + va * hinv[c] * vb;
+                    double dmax = 0; for (int a = 0; a < m; a++) dmax = Math.Max(dmax, As[a].TryGetValue(a, out var o) ? o : 0);
+                    for (int a = 0; a < m; a++) As[a][a] = (As[a].TryGetValue(a, out var o) ? o : 0) + 1e-10 * Math.Max(dmax, 1e-30);
+                    if (!SparseLinear.SolveSpd(As, rhs, out lam)) return;
+                }
+                else
+                {
+                    var A = new double[m, m];
+                    for (int a = 0; a < m; a++)
+                        for (int b = a; b < m; b++)
+                        {
+                            double sum = 0; var ca = rowCols[a]; var va = rowVals[a]; var cb = rowCols[b]; var vb = rowVals[b];
+                            for (int p = 0; p < ca.Count; p++) { int idx = cb.IndexOf(ca[p]); if (idx >= 0) sum += va[p] * hinv[ca[p]] * vb[idx]; }
+                            A[a, b] = A[b, a] = sum;
+                        }
+                    double dmax = 0; for (int a = 0; a < m; a++) dmax = Math.Max(dmax, A[a, a]);
+                    for (int a = 0; a < m; a++) A[a, a] += 1e-10 * Math.Max(dmax, 1e-30);
+                    if (!SolveLinear(A, rhs, out lam)) return;
+                }
+                dx = new double[n];
+                for (int i = 0; i < n; i++) dx[i] = -hinv[i] * g[i];
+                for (int a = 0; a < m; a++) { var ca = rowCols[a]; var va = rowVals[a]; for (int p = 0; p < ca.Count; p++) dx[ca[p]] += hinv[ca[p]] * va[p] * lam[a]; }
+            }
+            double big = dx.Max(Math.Abs);
+            if (big < 1e-12 * Math.Max(1, L) && before < tolConverged) return;
+            if (big > maxStep) { double k = maxStep / big; for (int i = 0; i < n; i++) dx[i] *= k; }
+            Interlocked.Increment(ref DragSteps);
+            // шаг: невязка связей не должна заметно вырасти (линеаризация на длинном шаге неточна — половиним)
+            var trial = new double[n];
+            bool taken = false;
+            for (int h = 0; h < 12; h++)
+            {
+                for (int i = 0; i < n; i++) { trial[i] = x[i] + dx[i]; vars[i].Set(trial[i]); }
+                var r2 = new List<double>(); foreach (var f in fns) f(r2);
+                double after = r2.Sum(v => v * v);
+                if (after <= Math.Max(before, tolConverged * 1e4) * 1.0001 + 1e-30 || after < Math.Pow(1e-9 * L, 2)) { taken = true; break; }
+                for (int i = 0; i < n; i++) dx[i] *= 0.5;
+                Interlocked.Increment(ref DragHalvings);
+            }
+            if (!taken) { for (int i = 0; i < n; i++) vars[i].Set(x[i]); return; }
+            Array.Copy(trial, x, n);
+            if (big < 1e-10 * Math.Max(1, L)) return;
+        }
+        for (int i = 0; i < n; i++) vars[i].Set(x[i]);
     }
 
     private void Polish(List<Var> vars, double[] x, List<ResidualFn> fns, Sparse? sp)

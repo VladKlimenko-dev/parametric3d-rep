@@ -460,11 +460,53 @@ public sealed class Sketch : ModelItem
     /// k102: ФОРМУЛА В ЭСКИЗЕ — свои размеры по идентификатору (d0, d1…), затем параметры (и пути к размерам других эскизов,
     /// операций и деталей — через таблицу). Размер с формулой берёт значение своей формулы (цепочки — до 8 шагов).
     /// </summary>
-    public bool TryEvaluate(string formula, ParameterTable? table, out double value, out string? error)
+    public bool TryEvaluate(string formula, ParameterTable? table, out double value, out string? error) => TryEvaluate(formula, table, null, out value, out error);
+
+    /// <summary>Формула размера <paramref name="target"/> (длина или угол — по размеру; null — длина).</summary>
+    public bool TryEvaluate(string formula, ParameterTable? table, SkDimension? target, out double value, out string? error)
     {
         EnsureDimIds();
-        var scope = new SketchScope(this, table);
-        return ParameterTable.TryEvaluateWith(formula, scope, table?.Geometry, out value, out error);
+        value = 0;
+        if (!ExprParser.TryParse(formula, out Expr? e, out error) || e == null) return false;
+        return TryDimFormula(e, target, new SketchScope(this, table), table, out value, out error);
+    }
+
+    /// <summary>P3D_SKFORMULAUNITS=0 — число без единицы в формуле размера — в мм (прежде).</summary>
+    public static readonly bool FormulaUnitsOff = Environment.GetEnvironmentVariable("P3D_SKFORMULAUNITS") == "0";
+    public static long FormulaBareInDocUnits;
+
+    /// <summary>
+    /// k128 (замечание 28.10, 17:00, п. 3): ФОРМУЛА РАЗМЕРА — В ЕДИНИЦАХ ДЕТАЛИ. Число без единицы («12.625/2») в детали
+    /// in/kg/s — дюймы, как и простое число в поле размера; прежде формула считалась во внутренних единицах (мм), и
+    /// приходилось писать «12.625in/2». Размерность — по ExprUnits: размеры эскиза — длины (углы), параметры — со своей
+    /// единицей, число без единицы — единица детали той размерности, которую задаёт размер. Формула другой размерности
+    /// (отношение размеров и т. п.) — как прежде, без перевода.
+    /// </summary>
+    internal bool TryDimFormula(Expr e, SkDimension? target, IValueResolver scope, ParameterTable? t, out double value, out string? error)
+    {
+        value = 0; error = null;
+        double plain;
+        try { plain = e.Eval(scope, t?.Geometry); }
+        catch (Exception ex) { error = ex.Message; return false; }
+        if (double.IsNaN(plain) || double.IsInfinity(plain)) { error = "The result is not a number."; return false; }
+        value = plain;
+        if (FormulaUnitsOff || t == null) return true;
+        var want = target?.IsAngular == true ? Core.Dimension.Angle : Core.Dimension.Length;
+        Core.Quantity? Ref(string name)
+        {
+            if (DimensionByName(name) is { } d)
+                return scope.TryValue(name, out double v) ? new Core.Quantity(v, d.IsAngular ? Core.Dimension.Angle : Core.Dimension.Length) : null;
+            if (t.FindScoped(name) is { } p && p.Error == null && p.Kind != ParamKind.String) return p.Quantity;
+            return scope.TryValue(name, out double x) ? new Core.Quantity(x, want) : null;
+        }
+        try
+        {
+            var q = ExprUnits.Evaluate(e, Ref, t.Units, t.Geometry);
+            if (q.Bare && q.Dim.IsNone) { value = t.Units.UnitFor(want).ToInternal(q.Value); if (value != plain) Interlocked.Increment(ref FormulaBareInDocUnits); }
+            else if (q.Dim == want) value = q.Value;
+        }
+        catch { }
+        return true;
     }
 
     sealed class SketchScope : IValueResolver
@@ -479,7 +521,11 @@ public sealed class Sketch : ModelItem
                 if (!string.IsNullOrWhiteSpace(d.Formula) && _depth < 8)
                 {
                     _depth++;
-                    try { if (ParameterTable.TryEvaluateWith(d.Formula!, this, _t?.Geometry, out double v, out _)) value = v; else return false; }
+                    try
+                    {
+                        if (ExprParser.TryParse(d.Formula!, out Expr? de, out _) && de != null && _sk.TryDimFormula(de, d, this, _t, out double v, out _)) value = v;
+                        else return false;
+                    }
                     finally { _depth--; }
                 }
                 return true;
@@ -515,8 +561,7 @@ public sealed class Sketch : ModelItem
         {
             try
             {
-                double v = e.Eval(scope, geom);
-                if (double.IsNaN(v) || double.IsInfinity(v)) return d.Value;
+                if (!TryDimFormula(e, d, scope, FormulaScope, out double v, out _)) return d.Value;
                 return d.Type is DimensionType.CoordX or DimensionType.CoordY && d.Value < 0 && v > 0 ? -v : v;
             }
             catch { return d.Value; }
@@ -539,7 +584,7 @@ public sealed class Sketch : ModelItem
                     if (pe != null)
                     {
                         _depth++;
-                        try { value = pe.Eval(this, _t?.Geometry); if (!double.IsNaN(value)) return true; }
+                        try { if (_sk.TryDimFormula(pe, d, this, _t, out value, out _)) return true; }
                         catch { }
                         finally { _depth--; }
                     }
@@ -607,7 +652,7 @@ public sealed class Sketch : ModelItem
         foreach (var d in Dimensions)
         {
             if (string.IsNullOrWhiteSpace(d.Formula)) { d.Error = null; continue; }
-            if (TryEvaluate(d.Formula!, table, out double v, out string? err))
+            if (TryEvaluate(d.Formula!, table, d, out double v, out string? err))
             {
                 // координатный размер: формула задаёт расстояние, знак (сторона от нуля) — прежний
                 d.Value = d.Type is DimensionType.CoordX or DimensionType.CoordY && d.Value < 0 && v > 0 ? -v : v;
@@ -700,6 +745,8 @@ public sealed class Sketch : ModelItem
         // Так они всегда отражают текущий состав ограничений: удалили
         // одного спорщика — второй сам перестаёт быть конфликтующим.
         ConstraintConflicts.Refresh(this);
+        // k128: лучи угловых размеров — закреплены по геометрии до решения
+        foreach (var d in Dimensions) { if (d.Type == DimensionType.AngleLineLine) DimensionMeasure.FixAngleRays(d); else DimensionMeasure.FixDistanceFrame(d); }
 
         _liveMeasure = dragged != null;
         try { LastSolve = solver.Solve(this, dragged, out int dof0); DegreesOfFreedom = dof0; }

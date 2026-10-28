@@ -1654,7 +1654,7 @@ public partial class MainWindow : Window
             else
             {
                 var table = Session.Part != null ? Session.Document.ScopeFor(Session.Part) : Session.Document.Parameters;
-                if (!sk.TryEvaluate(t, table, out v, out var why)) { err.Text = L("Не число и не формула: {0}", t) + (why != null ? " — " + why : ""); err.IsVisible = true; return; }
+                if (!sk.TryEvaluate(t, table, d, out v, out var why)) { err.Text = L("Не число и не формула: {0}", t) + (why != null ? " — " + why : ""); err.IsVisible = true; return; }
                 // ссылка на себя (прямо или через другие размеры)
                 if (System.Text.RegularExpressions.Regex.IsMatch(t, $@"(?<![\w""])d{d.Index}(?!\w)")) { err.Text = L("Формула ссылается на сам размер"); err.IsVisible = true; return; }
                 formula = t;
