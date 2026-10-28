@@ -3712,6 +3712,158 @@ Check("UI-SPEED-K126", () =>
     Require(!part.IsDirty && !part.NeedsAcceptance && Math.Abs(part.Volume - p2.Volume) <= 1e-9 * p2.Volume, "the part was not rebuilt and checked after the interrupted checks");
 });
 
+Check("UI-MODELVIEW-K132", () =>
+{
+    // k132 (замечание 28.10, 23:42, пп. 7–12): настройки — разделы как в QymCAD (P3D_SETTINGSSECTIONS=0), поиск, цвета для
+    // выбранной темы одним набором строк (P3D_EDITTHEME=0), «Вид модели»: пол, зазор (NumericUpDown), свет, плоскости
+    // (P3D_LIGHTPREFS=0, P3D_PLANEOUTLINE=0), куб вида (P3D_CUBESIZE=0); пол под деталью (P3D_FLOOR=0); дерево и панель
+    // свойств (P3D_PANELLOOK=0).
+    var prefs = UserPrefs.Current; var saved = prefs.Look.Clone();
+    var s = DocumentSession.Sample(); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    try
+    {
+        prefs.Look = new LookPrefs(); w.ApplyLook(); Run();
+        _ = DocCommands.Settings(w); Run();
+        var pr = SettingsDialog.Last!; var sw = DocCommands.LastSettingsWindow!;
+        sw.UpdateLayout(); Run();
+        // (A) разделы: виден только выбранный
+        int nSec = pr.Sections.ItemCount;
+        pr.Sections.SelectedIndex = 7; Run();   // «Вид модели»
+        if (Environment.GetEnvironmentVariable("UI_SETSHOT") is { Length: > 0 } setshot)
+            foreach (var (si, nm) in new[] { (7, "model"), (1, "appearance"), (5, "ops") })
+            {
+                pr.Sections.SelectedIndex = si; Run();
+                var rb = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize((int)sw.Bounds.Width, (int)sw.Bounds.Height));
+                rb.Render(sw); rb.Save(setshot.Replace(".png", "_" + nm + ".png"));
+            }
+        pr.Sections.SelectedIndex = 7; Run();
+        var modelRows = pr.Rows.Where(r => r.Section == "model").ToList();
+        int visModel = modelRows.Count(r => r.Row.IsEffectivelyVisible), visOther = pr.Rows.Where(r => r.Section != "model").Count(r => r.Row.IsEffectivelyVisible);
+        Console.WriteLine($"  sections {nSec}; model rows visible {visModel}/{modelRows.Count}, other visible {visOther}");
+        Require(nSec == 8 && visModel == modelRows.Count && visOther == 0, "settings sections: only the chosen section must be shown");
+        // поиск
+        var q = modelRows.First(r => r.Label.Length > 6 && r.Label.Contains(' ')).Label;
+        pr.Search.Text = q; Run();
+        var found = pr.Rows.Where(r => r.Row.IsEffectivelyVisible).ToList();
+        Console.WriteLine($"  search '{q}': {found.Count} rows");
+        Require(found.Count >= 1 && found.All(r => r.Label.Contains(q, StringComparison.OrdinalIgnoreCase)), "settings search");
+        pr.Search.Text = ""; pr.Sections.SelectedIndex = 6; Run();   // «Эскиз»
+        // (B) цвета по теме: одна строка, правится тема из списка
+        var skRow = pr.Rows.First(r => r.Section == "sketch" && r.Label == Loc.L("Линии эскиза")).Row;
+        var skBox = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(skRow).OfType<TextBox>().First();
+        var etc = pr.EditTheme[2];   // список темы раздела «Эскиз»
+        etc.SelectedIndex = 0; Run();
+        skBox.Text = "#AA0000"; Run();
+        etc.SelectedIndex = 1; Run();
+        string lightShown = skBox.Text ?? "";
+        skBox.Text = "#00AA00"; Run();
+        etc.SelectedIndex = 0; Run();
+        string darkShown = skBox.Text ?? "";
+        Console.WriteLine($"  sketch color: light shown '{lightShown}', dark shown back '{darkShown}', synced combos {pr.EditTheme.Count(c => c.SelectedIndex == 0)}/{pr.EditTheme.Count}");
+        Require(lightShown == "" && darkShown == "#AA0000" && pr.EditTheme.All(c => c.SelectedIndex == 0), "the theme list does not switch the edited colors");
+        // (C) вид модели: зазор пола, свет, плоскости, куб
+        var gap = (NumericUpDown)pr.Find("set_mv_gap")!; gap.Value = 5;
+        ((NumericUpDown)pr.Find("set_mv_l1py")!).Value = 0.9m;
+        var outlineRow = pr.Rows.First(r => r.Section == "model" && r.Label == Loc.L("Контур плоскостей")).Row;
+        Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(outlineRow).OfType<CheckBox>().First().IsChecked = false;
+        var cubeRow = pr.Rows.First(r => r.Section == "model" && r.Label == Loc.L("Размер куба вида, пикс.")).Row;
+        Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(cubeRow).OfType<ValueSlider>().First().Value = 220;
+        var treeRow = pr.Rows.First(r => r.Section == "tree" && r.Label == Loc.L("Значки дерева, пикс.")).Row;
+        Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(treeRow).OfType<ValueSlider>().First().Value = 22;
+        var propsRow = pr.Rows.First(r => r.Section == "props" && r.Label == Loc.L("Ширина панели свойств, пикс.")).Row;
+        Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(propsRow).OfType<ValueSlider>().First().Value = 360;
+        int nuds = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(sw).OfType<NumericUpDown>().Count();
+        Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(sw).OfType<Button>().First(b => b.Name == "set_ok").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Run();
+        var th = w.ViewPort.Theme;
+        Console.WriteLine($"  after OK: look gap {prefs.Look.FloorGapMm}, sketch dark {prefs.Look.SketchColorDark} light {prefs.Look.SketchColorLight}; theme gap {th.FloorGap}, light1 {th.Light1Pos}, outline {th.DatumOutline}, numeric boxes {nuds}");
+        Require(prefs.Look.FloorGapMm == 5 && prefs.Look.SketchColorDark == "#AA0000" && prefs.Look.SketchColorLight == "#00AA00", "settings are not saved");
+        Require(th.FloorGap == 5 && Math.Abs(th.Light1Pos.Y - 0.9f) < 1e-4 && !th.DatumOutline, "model view settings do not reach the renderer");
+        Require(nuds >= 7, "numeric boxes of the model view");
+        // контур плоскостей
+        var scn = Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, th, new Parametric3D.Render.Engine.ShowOptions());
+        var planePicks = scn.Planes.Select(p => p.Pick).ToHashSet();
+        int borders = scn.Lines.Count(l => planePicks.Contains(l.Pick));
+        Console.WriteLine($"  planes {scn.Planes.Count}, outline lines {borders}");
+        Require(scn.Planes.Count > 0 && borders == 0, "plane outlines are drawn with the outline off");
+        // куб вида и кнопка «Домой»
+        var cube = w.CubeControl; Run();
+        var home = cube.HomeRectNow;
+        Console.WriteLine($"  cube {cube.Width}, home {home}");
+        Require(cube.Width == 220 && Math.Abs(home.Width - 24 * 220 / 150.0) < 0.5, "the view cube or its Home button is not resized");
+        // дерево и панель свойств
+        Console.WriteLine($"  tree icon {w.Resources["P3.TreeIconPx"]}, props width {w.PropsPanelWidth}");
+        Require(Equals(w.Resources["P3.TreeIconPx"], 22.0) && w.PropsPanelWidth == 360, "tree or properties panel settings are not applied");
+        // (D) пол: на зазоре под нижней точкой, чуть больше детали
+        var fg = Parametric3D.Render.Engine.SceneRenderer.FloorGeometry(new OpenTK.Mathematics.Vector3(-10, 2, -5), new OpenTK.Mathematics.Vector3(30, 12, 15), 5);
+        Console.WriteLine($"  floor: {fg}");
+        Require(fg is { } f && Math.Abs(f.Y - (-3)) < 1e-4 && f.H.X > 20 && f.H.X < 30 && f.H.Y > 10 && f.H.Y < 20 && Math.Abs(f.C.X - 10) < 1e-4, "floor geometry");
+    }
+    finally { prefs.Look = saved; prefs.Save(); w.ApplyLook(); }
+    w.Close();
+});
+
+Check("UI-DATUM-TREE-K132", () =>
+{
+    // k132 (замечание 28.10, 23:42, пп. 1–6), файл пользователя (строка расчёта после Extrude, ось Axis1 в конце дерева):
+    // (A) выбраны XY и XZ — «Опорная ось»: способ «пересечение плоскостей», ось по X (P3D_SEEDSINGLE=0, P3D_DATUMSEED=0);
+    // (B) новая ось — в месте строки расчёта (P3D_DATUMATSTAGE=0); (C) строку отката к оси в конце дерева — в конец, а не
+    // наверх (P3D_BARDATUM=0); (D) строку тянут мышью — линия места видна, отпустили ниже последней операции — в конце
+    // (P3D_BARDROP=0); (E) двойной щелчок по оси — правка оси: способ и ссылки — из неё (P3D_DATUMEDIT=0); (F) смена
+    // темы — иконки строк дерева новой темы (P3D_TREEICONTHEME=0).
+    var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "user_k132_x05.p3d")); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 4; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    var vp = w.ViewPort; var part = s.Part!;
+    Console.WriteLine($"  features {part.Features.Count}, stage {part.StageIndex}, children: {string.Join(", ", part.Children.Select(c => c.Name))}");
+    // (A), (B)
+    vp.Selection.Clear();
+    vp.Selection.Select(new PickRef(part.PlaneXY.Id, PickKind.DatumPlane, part, part.PlaneXY), additive: true);
+    vp.Selection.Select(new PickRef(part.PlaneXZ.Id, PickKind.DatumPlane, part, part.PlaneXZ), additive: true);
+    var axes0 = part.Children.OfType<DatumAxis>().ToList();
+    var aop = new AxisOp(); w.StartOperation(aop); Run();
+    var ax = part.Children.OfType<DatumAxis>().FirstOrDefault(a => !axes0.Contains(a));
+    Console.WriteLine($"  (A) method {aop.Method} ({AxisOp.Methods[aop.Method]}), refs {aop.RefCount}, axis {(ax == null ? "none" : $"{ax.Direction}")}");
+    Require(aop.Method == 2 && ax != null && Math.Abs(Math.Abs(ax.Direction.X) - 1) < 1e-9, "two selected planes did not make an intersection axis");
+    w.CommitOperation(); Run();
+    int slot = part.ItemSlot(ax!);
+    Console.WriteLine($"  (B) new axis slot {slot} (stage {part.EffectiveStage}); children: {string.Join(", ", part.Children.Select(c => c.Name))}");
+    Require(slot == part.EffectiveStage && part.StageIndex >= 0, "the new axis is not at the rollback bar");
+    // (E) правка оси
+    w.SelectItem(ax!); w.EditSelected(); Run();
+    var eop = w.CurrentOperation as AxisOp;
+    Console.WriteLine($"  (E) edit: {eop?.GetType().Name ?? "none"}, method {eop?.Method}, refs {eop?.RefCount}");
+    Require(eop != null && eop.EditTarget == ax && eop.Method == 2 && eop.RefCount == 2, "the axis is not editable with its method and references");
+    w.CancelOperation(); Run();
+    Require(Math.Abs(Math.Abs(ax!.Direction.X) - 1) < 1e-9 && part.Children.Contains(ax), "cancelling the edit changed the axis");
+    // (C) строку отката — к Axis1 в конце дерева (ниже)
+    var bar = w.TreeRoots.SelectMany(n => n.Children).First(n => n.IsBar);
+    var axis1 = part.Children.OfType<DatumAxis>().First(a => a.Name == "Axis1");
+    var axis1Node = w.TreeRoots.SelectMany(n => n.Children).First(n => ReferenceEquals(n.Item, axis1));
+    w.MoveRollbackBar(bar, axis1Node, lower: true); Run();
+    Console.WriteLine($"  (C) bar to Axis1: stage {part.StageIndex}, effective {part.EffectiveStage} of {part.Features.Count}");
+    Require(part.EffectiveStage == part.Features.Count, "the bar moved to Axis1 at the end did not go to the end");
+    // (D) мышью: строку — к первой операции, затем вниз под последнюю
+    s.Edit("stage", () => { part.StageIndex = 1; part.MarkStageMoved(); }); w.RebuildTree(); Run();
+    var barItem = w.TreeRoots.SelectMany(n => n.Children).First(n => n.IsBar).Item;
+    var br = w.TreeRowInWindow(barItem)!.Value; var last = w.TreeRowInWindow(part.Features[^1])!.Value;
+    var from = br.Center; var to = new Point(last.Center.X, last.Bottom + 6);
+    w.MouseMove(from); w.MouseDown(from, MouseButton.Left); Run();
+    w.MouseMove(new Point(from.X, (from.Y + to.Y) / 2), RawInputModifiers.LeftMouseButton); Run();
+    w.MouseMove(to, RawInputModifiers.LeftMouseButton); Run();
+    bool shown = w.TreeDropVisible; int target = w.TreeDropTarget;
+    w.MouseUp(to, MouseButton.Left); Run();
+    Console.WriteLine($"  (D) drag: drop line shown {shown}, target {target}, after release stage {part.StageIndex} (effective {part.EffectiveStage})");
+    Require(shown && target == part.Features.Count && part.EffectiveStage == part.Features.Count, "dragging the bar below the last operation did not show the place or did not move it to the end");
+    // (F) тема
+    w.ApplyTheme(false); Run();
+    var imgs = w.TreeControl.GetVisualDescendants().OfType<Image>().Where(im => im.DataContext is TreeNode tn && tn.HasIcon && im.Width == 16).ToList();
+    int stale = imgs.Count(im => !ReferenceEquals(im.Source, ((TreeNode)im.DataContext!).Icon));
+    Console.WriteLine($"  (F) light theme: tree icons {imgs.Count}, stale {stale}; widths {string.Join(",", w.TreeControl.GetVisualDescendants().OfType<Image>().Where(im => im.DataContext is TreeNode).Select(im => im.Width).Distinct())}");
+    w.ApplyTheme(true); Run();
+    Require(imgs.Count > 3 && stale == 0, "tree icons kept the old theme");
+    w.Close();
+});
+
 Check("UI-SKETCH-ROLL-SETUP-K131", () =>
 {
     // k131 (замечание 28.10, 21:31): (A) новый эскиз на XY у трубы вдоль X — поворот эскиза стрелкой куба: очерки
@@ -4707,7 +4859,8 @@ Check("UI-PANELS-K120", () =>
         int nuds = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(sw).OfType<NumericUpDown>().Count();
         Console.WriteLine($"  settings: language index {langBox.SelectedIndex}, sliders {sliders}, numeric boxes {nuds}, units row {labels.Contains(Loc.L("Единицы длины"))}");
         Require(langBox.SelectedIndex == 1, "the language list does not show English");
-        Require(!labels.Contains(Loc.L("Единицы длины")) && sliders >= 7 && nuds == 0, "settings: units row or numeric boxes");
+        int nudsOut = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(sw).OfType<NumericUpDown>().Count(n => !(n.Name ?? "").StartsWith("set_mv_"));
+        Require(!labels.Contains(Loc.L("Единицы длины")) && sliders >= 7 && nudsOut == 0, "settings: units row or numeric boxes");
         var vs = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(sw).OfType<ValueSlider>().First();
         vs.Value = 15; Run();
         Require(vs.ShownText == "15", "the slider value is not shown");

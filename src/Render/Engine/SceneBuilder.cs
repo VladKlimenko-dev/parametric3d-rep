@@ -202,6 +202,7 @@ public static class SceneBuilder
 
     // ------------------------------------------------------------------ опорные плоскости
 
+    public static readonly bool PlaneOutlineFlagOff = Environment.GetEnvironmentVariable("P3D_PLANEOUTLINE") == "0";
     private static void AddPlane(DatumPlane dp, Matrix4 xf, SceneData s, RenderTheme th, uint partId)
     {
         var c = dp.DisplayCorners();
@@ -209,7 +210,8 @@ public static class SceneBuilder
         uint pick = s.AddPick(new PickRef(dp.Id, PickKind.DatumPlane, dp.Parent, dp), 1, partId);
         s.Planes.Add(new PlaneItem { C0 = c[0], C1 = c[1], C2 = c[2], C3 = c[3], Pick = pick, Fill = th.DatumPlane });
         // рамка ловится как линия: по ней плоскость выбрать проще всего
-        for (int i = 0; i < 4; i++) s.Lines.Add(Line(c[i], c[(i + 1) % 4], th.DatumBorder, th.DatumWidth, 0, pick));
+        // k132 (п. 9): контур плоскости — по настройке вида модели
+        if (th.DatumOutline || PlaneOutlineFlagOff) for (int i = 0; i < 4; i++) s.Lines.Add(Line(c[i], c[(i + 1) % 4], th.DatumBorder, th.DatumWidth, 0, pick));
     }
 
     private static Bounds3 OwnerBounds(ModelItem owner)
@@ -296,7 +298,7 @@ public static class SceneBuilder
                 // k127 (замечание 28.10, 14:36, п. 2): точки эскиза-соседа (возможные опорные) — кольцом без заливки того же
                 // размера; под курсором и выбранные — как прежде (шейдер рисует их залитыми). P3D_GHOSTRING=0 — залитые.
                 uint shp = ghost && !GhostRingOff ? 4u : 0u;
-                s.Points.Add(new PointInst { P = Tr(plane.ToWorld(q.P), xf), Color = SceneData.Pack(th.SketchPoint), Px = q.Owner == null ? 6f : 5f, Shape = shp, Pick = pick });
+                s.Points.Add(new PointInst { P = Tr(plane.ToWorld(q.P), xf), Color = SceneData.Pack(th.SketchPoint), Px = q.Owner == null ? th.SketchPointPx : th.SketchPointPx - 1f, Shape = shp, Pick = pick });
             }
     }
 }

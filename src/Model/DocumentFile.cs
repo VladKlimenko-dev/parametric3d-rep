@@ -276,8 +276,8 @@ public static class DocumentFile
                 DatumPlane dp when !ReferenceEquals(dp, part.PlaneXY) && !ReferenceEquals(dp, part.PlaneXZ) && !ReferenceEquals(dp, part.PlaneYZ)
                     => new DatumDto { Kind = "plane", P = V(dp.Frame.Origin, dp.Frame.U, dp.Frame.V), Mode = dp.Mode.ToString(), Offset = dp.Offset,
                                       Angle = dp.Angle != 0 ? dp.Angle : null, Flip = dp.Flip ? true : null, Method = dp.Method >= 0 ? dp.Method : null, Base = dp.BaseName },
-                DatumAxis ax => new DatumDto { Kind = "axis", P = V(ax.Origin, ax.Direction) },
-                DatumPoint pt when !ReferenceEquals(pt, part.Origin) => new DatumDto { Kind = "point", P = V(pt.P) },
+                DatumAxis ax => new DatumDto { Kind = "axis", P = V(ax.Origin, ax.Direction), Method = ax.Method >= 0 ? ax.Method : null },
+                DatumPoint pt when !ReferenceEquals(pt, part.Origin) => new DatumDto { Kind = "point", P = V(pt.P), Method = pt.Method >= 0 ? pt.Method : null },
                 Line3DItem ln => new DatumDto { Kind = "line", P = V(ln.A, ln.B) },
                 DatumCsys cs => new DatumDto { Kind = "csys", P = V(cs.Frame.Origin, cs.Frame.U, cs.Frame.V) },
                 DatumCurve dc => new DatumDto { Kind = "curve", P = V(dc.Points.ToArray()), Source = dc.Source,
@@ -311,8 +311,8 @@ public static class DocumentFile
                 "plane" when d.P.Count >= 9 => new DatumPlane(d.Name, new Frame3(At(d.P, 0), At(d.P, 1), At(d.P, 2)))
                     { Mode = Enum.TryParse<DatumPlaneMode>(d.Mode, out var m) ? m : DatumPlaneMode.Standard, Offset = d.Offset,
                       Angle = d.Angle ?? 0, Flip = d.Flip ?? false, Method = d.Method ?? -1, BaseName = d.Base },
-                "axis" when d.P.Count >= 6 => new DatumAxis(d.Name, At(d.P, 0), At(d.P, 1)),
-                "point" when d.P.Count >= 3 => new DatumPoint(d.Name, At(d.P, 0)),
+                "axis" when d.P.Count >= 6 => new DatumAxis(d.Name, At(d.P, 0), At(d.P, 1)) { Method = d.Method ?? -1 },
+                "point" when d.P.Count >= 3 => new DatumPoint(d.Name, At(d.P, 0)) { Method = d.Method ?? -1 },
                 "line" when d.P.Count >= 6 => new Line3DItem(d.Name, At(d.P, 0), At(d.P, 1)),
                 "csys" when d.P.Count >= 9 => new DatumCsys(d.Name, new Frame3(At(d.P, 0), At(d.P, 1), At(d.P, 2))),
                 "curve" when d.P.Count >= 6 => new DatumCurve(d.Name, Enumerable.Range(0, d.P.Count / 3).Select(i => At(d.P, i)), d.Source ?? ""),

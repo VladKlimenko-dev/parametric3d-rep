@@ -28,7 +28,9 @@ internal static class MoreFields
     };
     public static RefField AnyEdge(string label, bool optional = true) => new()
     {
-        Label = label, Filter = PickFilter.Edges | PickFilter.SketchCurves, Accept = r => r.Kind is PickKind.Edge or PickKind.SketchCurve, Single = true, Optional = optional,
+        Label = label, Filter = PickFilter.Edges | PickFilter.SketchCurves | PickFilter.Datums,
+        // k132: и опорная ось (ось по оси, касательная к ней)
+        Accept = r => r.Kind is PickKind.Edge or PickKind.SketchCurve || r.Kind == PickKind.DatumAxis && r.Target is DatumAxis, Single = true, Optional = optional,
     };
 
     /// <summary>Кривая ссылки: ребро тела или кривая эскиза (в мировых координатах).</summary>
@@ -479,6 +481,7 @@ public sealed class RibOp : FeatureOp<RibFeature>
 
 public sealed class AxisOp : Operation
 {
+    public static readonly bool DatumSeedOff = Environment.GetEnvironmentVariable("P3D_DATUMSEED") == "0";
     private RefField _pts = null!, _pl = null!, _pl2 = null!, _face = null!, _edge = null!;
     private int _by;
     private DatumAxis? _ax;
@@ -487,7 +490,28 @@ public sealed class AxisOp : Operation
     public override string Icon => "dat_axis_but.svg";
     public static readonly string[] Methods = { "Через две точки", "Нормально к плоскости через точку", "Пересечение двух плоскостей", "Ось грани вращения", "По прямому ребру", "Касательно к кривой в точке" };
 
-    protected override bool Start() { W.Session.BeginEdit(L(Title)); if (InitialMethod >= 0) _by = InitialMethod; return true; }
+    /// <summary>
+    /// k132 (замечание 28.10, 23:42, п. 2): ПРАВКА ГОТОВОЙ ОСИ (двойной щелчок, «Изменить»): способ и ссылки — из оси; «Отмена»
+    /// — ось прежняя. P3D_DATUMEDIT=0 — правки нет.
+    /// </summary>
+    public DatumAxis? EditTarget;
+    /// <summary>Разбор (k132): способ и число ссылок в полях.</summary>
+    public int Method => _by;
+    public int RefCount => new[] { _pts, _pl, _pl2, _face, _edge }.Sum(f => f?.Items.Count ?? 0);
+    public static readonly bool EditOff = Environment.GetEnvironmentVariable("P3D_DATUMEDIT") == "0";
+    private (Vector3d O, Vector3d D, int M, List<uint> R)? _orig;
+
+    protected override bool Start()
+    {
+        if (EditTarget is { } ax)
+        {
+            W.Session.BeginEdit(L("Изменить «{0}»", ax.Name));
+            _ax = ax; _by = ax.Method >= 0 ? ax.Method : 0;
+            _orig = (ax.Origin, ax.Direction, ax.Method, ax.References.ToList());
+            return true;
+        }
+        W.Session.BeginEdit(L(Title)); if (InitialMethod >= 0) _by = InitialMethod; return true;
+    }
 
     public override void Build(OpPanel p)
     {
@@ -501,13 +525,24 @@ public sealed class AxisOp : Operation
 
     public override void Prime()
     {
-        Seed(_pts, _pl, _face, _edge);
+        if (EditTarget is { } eax)
+        {
+            SeedFrom(RefsOfIds(eax.References), _pts, _pl, _pl2, _face, _edge);
+            foreach (var f in new[] { _pts, _pl, _pl2, _face, _edge }) if (f.Text != null) f.Text.Text = f.Summary;
+            Panel?.Refresh(); RefreshStatus();
+            return;
+        }
+        // k132 (замечание 28.10, 23:42, п. 1): способ — по выбранному до команды: две плоскости — пересечение, грань вращения —
+        // её ось, прямое ребро или опорная ось — по ней, кривая и точка — касательная, две точки — через них, плоскость
+        // (и точка) — нормально к плоскости. P3D_DATUMSEED=0 — без второй плоскости и без плоскости без точки.
+        if (DatumSeedOff) Seed(_pts, _pl, _face, _edge); else Seed(_pts, _pl, _pl2, _face, _edge);
         if (InitialMethod < 0)
         {
-            if (_face.Items.Count > 0) _by = 3;
-            else if (_edge.Items.Count > 0) _by = _pts.Items.Count > 0 ? 5 : 4;
+            if (!DatumSeedOff && _pl.Items.Count > 0 && _pl2.Items.Count > 0) _by = 2;
+            else if (_face.Items.Count > 0) _by = 3;
+            else if (_edge.Items.Count > 0) _by = _pts.Items.Count > 0 && _edge.Items[0].Kind != PickKind.DatumAxis ? 5 : 4;
             else if (_pts.Items.Count >= 2) _by = 0;
-            else if (_pl.Items.Count > 0 && _pts.Items.Count > 0) _by = 1;
+            else if (_pl.Items.Count > 0 && (_pts.Items.Count > 0 || !DatumSeedOff)) _by = 1;
         }
         foreach (var f in new[] { _pts, _pl, _pl2, _face, _edge }) if (f.Text != null) f.Text.Text = f.Summary;
         Panel?.Refresh(); Apply(); RefreshStatus();
@@ -550,8 +585,12 @@ public sealed class AxisOp : Operation
     protected override void Apply()
     {
         if (Compute() is not { } a) return;
-        if (_ax == null) { _ax = new DatumAxis(L("Ось{0}", Part.Children.OfType<DatumAxis>().Count() + 1), a.At, a.Dir.Normalized()); Part.Add(_ax); }
+        if (_ax == null) { _ax = new DatumAxis(L("Ось{0}", Part.Children.OfType<DatumAxis>().Count() + 1), a.At, a.Dir.Normalized()); Part.AddAtStage(_ax); }
         else { _ax.Origin = a.At; _ax.Direction = a.Dir.Normalized(); _ax.NotifyChanged(_ax); }
+        // k132: способ и ссылки — для правки
+        _ax.Method = _by;
+        _ax.References.Clear();
+        foreach (var f in new[] { _pts, _pl, _pl2, _face, _edge }) foreach (var r in f.Items) _ax.References.Add(r.Id);
         W.ViewPort.MarkDirty();
     }
 
@@ -561,7 +600,15 @@ public sealed class AxisOp : Operation
         W.Session.CommitEdit(); return true;
     }
 
-    public override void Cancel() { if (_ax != null) Part.Remove(_ax); W.Session.DiscardEdit(); }
+    public override void Cancel()
+    {
+        if (EditTarget is { } ax && _orig is { } o)
+        {
+            ax.Origin = o.O; ax.Direction = o.D; ax.Method = o.M; ax.References.Clear(); ax.References.AddRange(o.R); ax.NotifyChanged(ax);
+            W.Session.DiscardEdit(); W.ViewPort.MarkDirty(); return;
+        }
+        if (_ax != null) Part.Remove(_ax); W.Session.DiscardEdit();
+    }
 }
 
 // ====================================================================== опорная точка
@@ -577,7 +624,22 @@ public sealed class PointOp : Operation
     public override string Icon => "dat_point_but.svg";
     public static readonly string[] Methods = { "В вершине (середина точек)", "В центре дуги", "На кривой (доля длины)", "Пересечение прямой и плоскости", "Пересечение трёх плоскостей" };
 
-    protected override bool Start() { W.Session.BeginEdit(L(Title)); if (InitialMethod >= 0) _by = InitialMethod; return true; }
+    /// <summary>k132: правка готовой точки (как оси).</summary>
+    public DatumPoint? EditTarget;
+    private (Vector3d P, int M, List<uint> R)? _orig;
+    public int Method => _by;
+
+    protected override bool Start()
+    {
+        if (EditTarget is { } pt)
+        {
+            W.Session.BeginEdit(L("Изменить «{0}»", pt.Name));
+            _pt = pt; _by = pt.Method >= 0 ? pt.Method : 0;
+            _orig = (pt.P, pt.Method, pt.References.ToList());
+            return true;
+        }
+        W.Session.BeginEdit(L(Title)); if (InitialMethod >= 0) _by = InitialMethod; return true;
+    }
 
     public override void Build(OpPanel p)
     {
@@ -591,11 +653,21 @@ public sealed class PointOp : Operation
 
     public override void Prime()
     {
-        Seed(_pts, _edge, _line, _pl);
+        if (EditTarget is { } ept)
+        {
+            SeedFrom(RefsOfIds(ept.References), _pts, _line, _edge, _pl);
+            foreach (var f in new[] { _pts, _edge, _line, _pl }) if (f.Text != null) f.Text.Text = f.Summary;
+            Panel?.Refresh(); RefreshStatus();
+            return;
+        }
+        // k132: прямая (ребро, опорная ось) — сначала в поле прямой, а не кривой: ось и плоскость — точка пересечения
+        if (AxisOp.DatumSeedOff) Seed(_pts, _edge, _line, _pl); else Seed(_pts, _line, _edge, _pl);
         if (InitialMethod < 0)
         {
             if (_pl.Items.Count >= 3) _by = 4;
             else if (_line.Items.Count > 0 && _pl.Items.Count > 0) _by = 3;
+            else if (!AxisOp.DatumSeedOff && _pts.Items.Count > 0 && _edge.Items.Count == 0) _by = 0;
+            else if (!AxisOp.DatumSeedOff && _edge.Items.Count == 0 && _line.Items.Count > 0 && _line.Items[0].Kind == PickKind.Edge) { _edge.Take(_line.Items); _line.Items.Clear(); _by = MoreFields.CurveOf(_edge.Items[0]) is ArcCurve3 ? 1 : 2; }
             else if (_edge.Items.Count > 0 && MoreFields.CurveOf(_edge.Items[0]) is ArcCurve3) _by = 1;
             else if (_edge.Items.Count > 0) _by = 2;
         }
@@ -629,8 +701,11 @@ public sealed class PointOp : Operation
     protected override void Apply()
     {
         if (Compute() is not { } q) return;
-        if (_pt == null) { _pt = new DatumPoint(L("Точка{0}", Part.Children.OfType<DatumPoint>().Count() + 1), q); Part.Add(_pt); }
+        if (_pt == null) { _pt = new DatumPoint(L("Точка{0}", Part.Children.OfType<DatumPoint>().Count() + 1), q); Part.AddAtStage(_pt); }
         else { _pt.P = q; _pt.NotifyChanged(_pt); }
+        _pt.Method = _by;
+        _pt.References.Clear();
+        foreach (var f in new[] { _pts, _edge, _line, _pl }) foreach (var r in f.Items) _pt.References.Add(r.Id);
         W.ViewPort.MarkDirty();
     }
 
@@ -640,5 +715,13 @@ public sealed class PointOp : Operation
         W.Session.CommitEdit(); return true;
     }
 
-    public override void Cancel() { if (_pt != null) Part.Remove(_pt); W.Session.DiscardEdit(); }
+    public override void Cancel()
+    {
+        if (EditTarget is { } pt && _orig is { } o)
+        {
+            pt.P = o.P; pt.Method = o.M; pt.References.Clear(); pt.References.AddRange(o.R); pt.NotifyChanged(pt);
+            W.Session.DiscardEdit(); W.ViewPort.MarkDirty(); return;
+        }
+        if (_pt != null) Part.Remove(_pt); W.Session.DiscardEdit();
+    }
 }

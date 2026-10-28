@@ -69,7 +69,21 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
 
     private Quaternion Rot => Viewport?.Camera.State.Rotation ?? Quaternion.Identity;
     private double Scale => Math.Min(Bounds.Width, Bounds.Height) / 2 / (RingR + RingW + 0.15);
-    private APoint Center => new(Bounds.Width / 2, Bounds.Height / 2 + 6);
+    private APoint Center => new(Bounds.Width / 2, Bounds.Height / 2 + 6 * K);
+    /// <summary>k132 (замечание 28.10, 23:42, п. 10): масштаб куба и его кнопок («Домой», повороты, стрелки) от размера 150.</summary>
+    private double K => Math.Max(0.3, (Bounds.Width > 0 ? Bounds.Width : Width) / 150);
+    public const double DefaultPx = 150, MinPx = 90, MaxPx = 300;
+    public static readonly bool SizeOff = Environment.GetEnvironmentVariable("P3D_CUBESIZE") == "0";
+    /// <summary>Размер куба вместе с кнопками, пикселей.</summary>
+    public void SetSize(double px)
+    {
+        if (SizeOff) return;
+        px = Math.Clamp(px, MinPx, MaxPx);
+        Width = px; Height = px; InvalidateVisual();
+    }
+    /// <summary>Разбор: прямоугольник кнопки «Домой» при размере куба px.</summary>
+    public Rect HomeRectFor(double px) { double k = px / 150; return new(4 * k, 4 * k, 24 * k, 24 * k); }
+    public Rect HomeRectNow => HomeRect;
 
     private Vector3 ToCam(Vector3 p) => Vector3.Transform(p, Rot);
     private APoint Proj(Vector3 p)
@@ -192,15 +206,15 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
         }
     }
 
-    private Rect HomeRect => new(4, 4, 24, 24);
-    private Rect CcwRect => new(Bounds.Width - 50, 2, 22, 22);
-    private Rect CwRect => new(Bounds.Width - 26, 2, 22, 22);
+    private Rect HomeRect => SizeOff ? new(4, 4, 24, 24) : HomeRectFor(K * 150);
+    private Rect CcwRect => new(Bounds.Width - 50 * K, 2 * K, 22 * K, 22 * K);
+    private Rect CwRect => new(Bounds.Width - 26 * K, 2 * K, 22 * K, 22 * K);
 
     private (Extra E, APoint P)[] Triangles()
     {
         if (AlignedFace() is not { } f) return Array.Empty<(Extra, APoint)>();
         // треугольники у середин сторон грани (за её пределами)
-        var c = Center; double r = 1.0 * Scale + 14;
+        var c = Center; double r = 1.0 * Scale + 14 * K;
         return new[] { (Extra.Up, new APoint(c.X, c.Y - r)), (Extra.Down, new APoint(c.X, c.Y + r)),
                        (Extra.Left, new APoint(c.X - r, c.Y)), (Extra.Right, new APoint(c.X + r, c.Y)) };
     }
@@ -218,7 +232,7 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
             if (IconProvider.Get("viewcube_arrow_ico.svg") is { } arrow)
             {
                 double deg = e switch { Extra.Up => 0, Extra.Right => 90, Extra.Down => 180, _ => 270 };
-                var rr = new Rect(p.X - 8, p.Y - 8, 16, 16);
+                var rr = new Rect(p.X - 8 * K, p.Y - 8 * K, 16 * K, 16 * K);
                 using (dc.PushTransform(Matrix.CreateTranslation(-p.X, -p.Y) * Matrix.CreateRotation(deg * Math.PI / 180) * Matrix.CreateTranslation(p.X, p.Y)))
                 using (dc.PushOpacity(_hoverExtra == e ? 1.0 : 0.7))
                     arrow.Draw(dc, new Rect(arrow.Size), IconProvider.Fit(arrow.Size, rr));
@@ -227,7 +241,7 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
             var g = new StreamGeometry();
             using (var ctx = g.Open())
             {
-                double s = 6;
+                double s = 6 * K;
                 var (a, b, cc) = e switch
                 {
                     Extra.Up => (new APoint(p.X, p.Y - s), new APoint(p.X - s, p.Y + s * 0.6), new APoint(p.X + s, p.Y + s * 0.6)),

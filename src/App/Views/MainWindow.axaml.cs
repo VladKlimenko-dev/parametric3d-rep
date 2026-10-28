@@ -62,6 +62,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         FontSize = UiLook.UiFontSize;
+        ApplyPanelLook();
         // шрифт ГОСТ тип А — только у объектов вида (размеры эскиза, подписи куба вида); меню и панели — шрифтом интерфейса
         Loc.Set(UserPrefs.Current.Language == "en");
         StandardCommands.Register(this);
@@ -982,8 +983,29 @@ public partial class MainWindow : Window
     {
         FontSize = UiLook.UiFontSize;
         UiLook.ApplyToRender(View.Theme);
+        ApplyPanelLook();
         View.MarkDirty();
         RebuildUi();
+    }
+
+    public Parametric3D.App.Viewport.ViewCube CubeControl => Cube;
+    public double TreeColumnWidth => WorkArea.ColumnDefinitions[0].Width.Value;
+    public double PropsPanelWidth => PropsPanel.Width;
+    public static readonly bool PanelLookOff = Environment.GetEnvironmentVariable("P3D_PANELLOOK") == "0";
+    /// <summary>
+    /// k132 (замечание 28.10, 23:42, пп. 10, 12): куб вида (с кнопкой «Домой»), дерево модели (текст, значки, высота строки,
+    /// ширина панели), панель свойств (ширина, текст) — из настроек.
+    /// </summary>
+    public void ApplyPanelLook()
+    {
+        Cube.SetSize(UiLook.ViewCubePx);
+        if (PanelLookOff) { Resources["P3.TreeIconPx"] = 16.0; Resources["P3.TreeRowPx"] = 24.0; return; }
+        Resources["P3.TreeIconPx"] = UiLook.TreeIconPx;
+        Resources["P3.TreeRowPx"] = UiLook.TreeRowPx;
+        Tree.FontSize = UiLook.TreeFontSize;
+        if (WorkArea.ColumnDefinitions.Count > 0) WorkArea.ColumnDefinitions[0].Width = new GridLength(UiLook.TreePanelPx);
+        PropsPanel.Width = UiLook.PropsPanelPx;
+        PropsPanel.SetValue(Avalonia.Controls.Documents.TextElement.FontSizeProperty, UiLook.PropsFontSize);
     }
 
     public void ApplyTheme(bool dark)
@@ -998,8 +1020,14 @@ public partial class MainWindow : Window
         UserPrefs.Current.Theme = dark ? "Dark" : "Light";
         UserPrefs.Current.Save();
         if (Session != null) { RebuildUi(); RebuildTree(); }
+        if (!TreeIconThemeOff) foreach (var n in _roots) n.RefreshIcons();
         Cube.InvalidateVisual();
     }
+    static readonly bool TreeIconThemeOff = Environment.GetEnvironmentVariable("P3D_TREEICONTHEME") == "0";
+    /// <summary>Разбор (k132): узлы дерева верхнего уровня.</summary>
+    public IReadOnlyList<TreeNode> TreeRoots => _roots;
+    /// <summary>Разбор (k132): линия места в дереве видна.</summary>
+    public bool TreeDropVisible => TreeDropLine.IsVisible;
 
     public void ToggleLanguage()
     {
@@ -2178,7 +2206,9 @@ public partial class MainWindow : Window
     /// <summary>Изменить выбранное: операцию — в панели, эскиз — в режиме эскиза.</summary>
     /// <summary>k116: опорная плоскость, которую можно править (не стандартные XY/XZ/YZ).</summary>
     public static bool EditablePlane(ModelItem? i) => !PlaneOp.EditOff && i is DatumPlane dp && dp.Parent is Part pp
-        && !ReferenceEquals(dp, pp.PlaneXY) && !ReferenceEquals(dp, pp.PlaneXZ) && !ReferenceEquals(dp, pp.PlaneYZ);
+        && !ReferenceEquals(dp, pp.PlaneXY) && !ReferenceEquals(dp, pp.PlaneXZ) && !ReferenceEquals(dp, pp.PlaneYZ)
+        // k132 (п. 2): и опорная ось, точка (кроме начала координат)
+        || !AxisOp.EditOff && (i is DatumAxis { Parent: Part } || i is DatumPoint { Parent: Part dpp } dpt && !ReferenceEquals(dpt, dpp.Origin));
 
     public void EditSelected()
     {
@@ -2200,6 +2230,14 @@ public partial class MainWindow : Window
                 if (CurrentOperation != null) CancelOperation();
                 StartOperation(new PlaneOp { EditTarget = dpe });
                 break;
+            case DatumAxis dax when EditablePlane(dax):
+                if (CurrentOperation != null) CancelOperation();
+                StartOperation(new AxisOp { EditTarget = dax });
+                break;
+            case DatumPoint dpo when EditablePlane(dpo):
+                if (CurrentOperation != null) CancelOperation();
+                StartOperation(new PointOp { EditTarget = dpo });
+                break;
             case FreeFormFeature ffn when Session.Part is { } ffp: Commands.FreeFormCommands.Enter(this, ffp, ffn); break;
             case Feature { Frozen: true }:
                 ShowToast(L("Шаг FreeForm зафиксирован: параметры вернуть — «Отменить до этого шага»"), error: false);
@@ -2219,7 +2257,7 @@ public partial class MainWindow : Window
         var sk = new Sketch(L("Эскиз{0}", part.Sketches.Count() + 1), frame);
         sk.SetBasePlane(frame, sourceId, planeName);
         SketchFaceRef.AttachById(sk, part.Bodies, sourceId);
-        part.Add(sk);
+        part.AddAtStage(sk);   // k132: в место полоски расчёта
         _sketchIsNew = true;
         _afterSketch = then;
         EnterSketchUi(sk);
@@ -2420,6 +2458,55 @@ public partial class MainWindow : Window
     // ================================================================ дерево
 
     private TreeNode? _barDrag;
+    static readonly bool BarDatumOff = Environment.GetEnvironmentVariable("P3D_BARDATUM") == "0";
+    /// <summary>P3D_BARDROP=0 — строка отката при перетаскивании без показа места, отпускание — по строке под курсором (прежде).</summary>
+    static readonly bool BarDropOff = Environment.GetEnvironmentVariable("P3D_BARDROP") == "0";
+
+    /// <summary>
+    /// k132 (замечание 28.10, 23:42, пп. 3, 5): МЕСТО СТРОКИ ОТКАТА при отпускании в точке p — сколько операций выше неё:
+    /// ближайшая строка операции (ниже середины — после неё); ниже последней операции (и в пустом месте под деревом) — в
+    /// конец. null — некуда (нет операций).
+    /// </summary>
+    public int? RollbackDropStage(Point p)
+    {
+        if (Session.Part is not { } part || part.Features.Count == 0) return null;
+        int bestK = -1; double bestD = double.MaxValue; bool below = false; double lastBottom = double.MinValue;
+        for (int k = 0; k < part.Features.Count; k++)
+        {
+            if (TreeRowRect(part.Features[k]) is not { } r) continue;
+            lastBottom = Math.Max(lastBottom, r.Bottom);
+            double d = p.Y < r.Top ? r.Top - p.Y : p.Y > r.Bottom ? p.Y - r.Bottom : 0;
+            if (d < bestD) { bestD = d; bestK = k; below = p.Y > r.Center.Y; }
+        }
+        if (bestK < 0) return null;
+        if (p.Y > lastBottom) return part.Features.Count;
+        return below ? bestK + 1 : bestK;
+    }
+
+    /// <summary>Показать, куда встанет строка отката (линия на месте вставки).</summary>
+    private void ShowRollbackDrop(Point p)
+    {
+        TreeDropLine.IsVisible = false;
+        if (Session.Part is not { } part || RollbackDropStage(p) is not int slot) return;
+        var anchor = slot == 0 ? part.Features[0] : part.Features[slot - 1];
+        if (TreeRowRect(anchor) is not { } r) return;
+        double y = slot == 0 ? r.Top - 1.5 : r.Bottom - 1.5;
+        Canvas.SetLeft(TreeDropLine, r.Left); Canvas.SetTop(TreeDropLine, y);
+        TreeDropLine.Width = Math.Max(60, Tree.Bounds.Width - r.Left - 8);
+        TreeDropLine.Opacity = slot == part.EffectiveStage ? 0.35 : 1;
+        TreeDropLine.IsVisible = true;
+        TreeDropTarget = slot;
+    }
+
+    /// <summary>Строку отката — после stage операций (stage = число операций — в конец). Один шаг отмены.</summary>
+    public bool MoveRollbackTo(Part part, int stage)
+    {
+        int st = stage >= part.Features.Count ? -1 : part.ClampStage(stage);
+        if (st == part.StageIndex || (st < 0 && !part.InInsertMode)) return false;
+        Session.Edit(L("Строка отката"), () => { if (st < 0) part.EndInsertMode(resume: true); else { part.StageIndex = st; if (Part.StageKeepOffPublic) part.Invalidate(); else part.MarkStageMoved(); } });
+        View.MarkDirty(); RebuildTree();
+        return true;
+    }
 
     /// <summary>
     /// Строка отката — к узлу дерева: ниже узла (lower) или выше. Деталь: после операции (её эскиз — вместе с ней), выше
@@ -2434,7 +2521,9 @@ public partial class MainWindow : Window
             int at;
             if (item is Feature f && part.Features.Contains(f)) at = part.Features.IndexOf(f) + (lower ? 1 : 0);
             else if (ReferenceEquals(item, part) || item is InfoItem { Role: "params" or "material" or "configs" or "body" or "quilt" } ii && ii.Owner == part) at = 0;
-            else if (item is DatumPlane or DatumPoint or DatumAxis or Sketch && item.Parent == part) at = 0;
+            // k132 (замечание 28.10, 23:42, п. 4): опорный элемент или эскиз — на его месте в дереве (прежде — всегда в начало:
+            // ось в конце дерева отправляла строку наверх)
+            else if (item is DatumPlane or DatumPoint or DatumAxis or Sketch && item.Parent == part) at = BarDatumOff ? 0 : part.ItemSlot(item);
             else return false;
             int stage = at >= part.Features.Count ? -1 : part.ClampStage(at);
             if (stage == part.StageIndex || (stage < 0 && !part.InInsertMode)) return false;
@@ -2500,10 +2589,18 @@ public partial class MainWindow : Window
                 _barDrag = bn; e.Pointer.Capture(Tree); e.Handled = true;
             }
         }, RoutingStrategies.Tunnel);
+        // k132: пока строку тянут — линия на месте, куда она встанет
+        Tree.AddHandler(PointerMovedEvent, (_, e) =>
+        {
+            if (_barDrag is not { Item: InfoItem { Role: "rollback" } } || BarDropOff) return;
+            ShowRollbackDrop(e.GetPosition(Tree)); e.Handled = true;
+        }, RoutingStrategies.Tunnel);
         Tree.AddHandler(PointerReleasedEvent, (_, e) =>
         {
             if (_barDrag is not { } bn) return;
             _barDrag = null; e.Pointer.Capture(null); e.Handled = true;
+            TreeDropLine.IsVisible = false;
+            if (!BarDropOff && bn.Item is InfoItem { Role: "rollback", Owner: var bpart } && RollbackDropStage(e.GetPosition(Tree)) is int bst) { MoveRollbackTo(bpart, bst); return; }
             var hit = Tree.InputHitTest(e.GetPosition(Tree)) as Visual;
             var tvi = hit?.FindAncestorOfType<TreeViewItem>(includeSelf: true);
             if (tvi?.DataContext is TreeNode target)
