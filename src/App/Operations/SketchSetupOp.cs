@@ -27,6 +27,9 @@ public sealed class SketchSetupOp : Operation
     private double _dx, _dy;
 
     public SketchSetupOp(Sketch sk, bool backToSketch) { _sketchId = sk.Id; _backToSketch = backToSketch; }
+    /// <summary>k131: эскиз был новым (пустой — удалится при «Готово»), и что начать после него.</summary>
+    public bool WasNew;
+    public Func<Sketch, Operation>? Then;
 
     public override string Title => "Настройка эскиза";
     public override string Icon => "sk_setup_but.svg";
@@ -285,7 +288,7 @@ public sealed class SketchSetupOp : Operation
     {
         Leave();
         W.Session.CommitEdit();
-        if (_backToSketch) Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (W.Session.Part?.Sketches.FirstOrDefault(s => s.Id == _sketchId) is { } sk) W.EditSketch(sk); });
+        if (_backToSketch) Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (W.Session.Part?.Sketches.FirstOrDefault(s => s.Id == _sketchId) is { } sk) W.ResumeSketchAfterSetup(sk, WasNew, Then); });
         return true;
     }
 
@@ -293,6 +296,6 @@ public sealed class SketchSetupOp : Operation
     {
         Leave();
         W.Session.CancelEdit();
-        if (_backToSketch) Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (W.Session.Part?.Sketches.FirstOrDefault(s => s.Id == _sketchId) is { } sk) W.EditSketch(sk); });
+        if (_backToSketch) Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (W.Session.Part?.Sketches.FirstOrDefault(s => s.Id == _sketchId) is { } sk) W.ResumeSketchAfterSetup(sk, WasNew, Then); });
     }
 }
