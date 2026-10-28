@@ -3712,6 +3712,161 @@ Check("UI-SPEED-K126", () =>
     Require(!part.IsDirty && !part.NeedsAcceptance && Math.Abs(part.Volume - p2.Volume) <= 1e-9 * p2.Volume, "the part was not rebuilt and checked after the interrupted checks");
 });
 
+Check("UI-SKETCH-AXISDIM-K130", () =>
+{
+    // k130 (замечание 28.10, 19:39, пп. 3–5): размеры по горизонтали и по вертикали — кнопки с иконками пользователя
+    // (P3D_AXISDIMS=0 — нет); размер держит разность координат (правка значения сдвигает только по своей оси); рисуется
+    // размерной линией по оси эскиза; пишется в файл. Меню косого размера «точка — точка» — «Сделать горизонтальным /
+    // вертикальным» (P3D_AXISDIMMENU=0 — нет), у горизонтального — этих пунктов нет. Иконки панели измерений.
+    var part = Parametric3D.App.Diagnostics.TestParts.Block("ax");
+    var s = DocumentSession.FromPart(part, "ax"); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    var sk = part.Sketches.First(); var solver = s.Document.Solver;
+    w.EditSketch(sk); BuildNow(s); Run();
+    var vp = w.ViewPort;
+    void Pick(params SkEntity[] es) { vp.Selection.Clear(); foreach (var e in es) vp.Selection.Select(new PickRef(e.Id, e is SkPoint ? PickKind.SketchPoint : PickKind.SketchCurve, sk, e), additive: true); }
+    var reg = CommandRegistry.Instance;
+    foreach (var id in new[] { "dim.horizontal", "dim.vertical" })
+        Require(reg.Find(id) is { } c && IconProvider.Exists(c.Icon) && MainWindow.DimTools.Contains(id), "no button " + id);
+    foreach (var (id, icon) in new[] { ("an.area", "dim_area_but.svg"), ("an.perimeter", "dim_perimeter_but.svg"), ("an.mass", "mass_but.svg"), ("an.zebra", "zebra.svg") })
+        Require(reg[id].Icon == icon && IconProvider.Exists(icon), $"measure panel icon {id}: {reg[id].Icon}");
+    Require(IconProvider.Exists(reg["an.measure"].Icon), "measure icon " + reg["an.measure"].Icon);
+    foreach (var f in new[] { "dim_size_horizontal.svg", "dim_size_vertical.svg", "dim_perimeter_but.svg", "mass_but.svg", "zebra.svg" })
+        Require(IconProvider.Get(f) != null, "the icon does not load: " + f);
+    var l = sk.AddEntity(new SkLine(new SkPoint(140, 10), new SkPoint(170, 30))) as SkLine ?? throw new Exception("line");
+    sk.Solve(solver);
+    Pick(l); var dh = SketchCommands.Dimension(w, SketchCommands.DimKind.Horizontal);
+    Pick(l); var dv = SketchCommands.Dimension(w, SketchCommands.DimKind.Vertical);
+    Require(dh != null && dv != null && dh.Type == DimensionType.DistanceHorizontal && dv.Type == DimensionType.DistanceVertical, "the axis dimensions were not made");
+    Console.WriteLine($"  horizontal {dh!.Value:0.###}, vertical {dv!.Value:0.###}");
+    Require(Math.Abs(dh.Value - 30) < 1e-9 && Math.Abs(dv.Value - 20) < 1e-9, "axis dimension values");
+    var r = SketchEditing.SetDimensionValue(sk, dh, 45, null, solver);
+    Console.WriteLine($"  horizontal → 45: ok {r.Ok}, dx {l.B.X - l.A.X:0.######}, dy {l.B.Y - l.A.Y:0.######}");
+    Require(r.Ok && Math.Abs(l.B.X - l.A.X - 45) < 1e-6 && Math.Abs(l.B.Y - l.A.Y - 20) < 1e-6, "the horizontal dimension does not drive only x");
+    SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+    var (da, db) = SketchDimensions.LastAxisDim;
+    Console.WriteLine($"  vertical dimension line ({da.X:0.##},{da.Y:0.##})-({db.X:0.##},{db.Y:0.##})");
+    Require(Math.Abs(da.X - db.X) < 1e-9 && Math.Abs(Math.Abs(da.Y - db.Y) - 20) < 1e-6, "the vertical dimension line is not vertical");
+    // файл
+    var (p2, _) = DocumentFile.Load(DocumentFile.Save(part));
+    Require(p2.Sketches.First().Dimensions.Count(x => x.Type is DimensionType.DistanceHorizontal or DimensionType.DistanceVertical) == 2, "axis dimensions are not saved");
+    // меню косого размера
+    var l2 = sk.AddEntity(new SkLine(new SkPoint(140, 60), new SkPoint(160, 75))) as SkLine ?? throw new Exception("line2");
+    sk.Solve(solver);
+    Pick(l2); var dl = SketchCommands.Dimension(w, SketchCommands.DimKind.Linear)!;
+    w.OpenDimensionMenuForTest(dl);
+    var menu = w.LastDimensionMenu!;
+    Console.WriteLine($"  diagonal dimension menu: {string.Join(" | ", menu)}");
+    Require(menu.Contains(Parametric3D.App.Loc.L("Сделать горизонтальным")) && menu.Contains(Parametric3D.App.Loc.L("Сделать вертикальным")), "no Make horizontal / vertical for a diagonal dimension");
+    w.OpenDimensionMenuForTest(dh);
+    Require(!w.LastDimensionMenu!.Contains(Parametric3D.App.Loc.L("Сделать горизонтальным")) && !w.LastDimensionMenu!.Contains(Parametric3D.App.Loc.L("Сделать вертикальным")), "Make horizontal / vertical on a horizontal dimension");
+    var g0 = (l2.A.P, l2.B.P);
+    w.OpenDimensionMenuForTest(dl, "Сделать вертикальным"); Run();
+    Console.WriteLine($"  made vertical: type {dl.Type}, value {dl.Value:0.###}, geometry moved {Math.Max((l2.A.P - g0.Item1).Length, (l2.B.P - g0.Item2).Length):0.######}");
+    Require(dl.Type == DimensionType.DistanceVertical && Math.Abs(dl.Value - 15) < 1e-9 && (l2.A.P - g0.Item1).Length < 1e-9 && (l2.B.P - g0.Item2).Length < 1e-9, "Make vertical");
+    w.CancelSketch(); w.Close();
+});
+
+Check("UI-SKETCH-FIT-K130", () =>
+{
+    // k130 (замечание 28.10, 19:39, п. 2): в эскизе «Вписать всё» и вход в эскиз — по элементам эскиза: все видны и
+    // занимают вид (не меньше 45 % ширины или высоты); деталь (блок 100×60×20) — не в счёт: маленький эскиз (10 мм)
+    // вписывается крупно. P3D_SKFIT=0 — по детали.
+    var part = Parametric3D.App.Diagnostics.TestParts.Block("fit");
+    var s = DocumentSession.FromPart(part, "fit"); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    var vp = w.ViewPort;
+    var sk = part.Sketches.First();
+    var small = new SkLine(new SkPoint(200, 150), new SkPoint(210, 156));
+    double Fill(string what)
+    {
+        Run();
+        var pts = sk.Entities.Where(e => !e.Builtin).SelectMany(e => e.Handles.Select(h => h.P).Append(e is SkPoint p ? p.P : e.Handles.First().P)).ToList();
+        var scr = pts.Select(q => vp.Project(sk.Plane.ToWorld(q))!.Value).ToList();
+        double x0 = scr.Min(p => p.X), x1 = scr.Max(p => p.X), y0 = scr.Min(p => p.Y), y1 = scr.Max(p => p.Y);
+        bool inside = x0 >= 0 && y0 >= 0 && x1 <= vp.Bounds.Width && y1 <= vp.Bounds.Height;
+        double fill = Math.Max((x1 - x0) / vp.Bounds.Width, (y1 - y0) / vp.Bounds.Height);
+        Console.WriteLine($"  {what}: sketch on screen x {x0:0}..{x1:0}, y {y0:0}..{y1:0} of {vp.Bounds.Width:0}x{vp.Bounds.Height:0}, inside {inside}, fill {fill:P0}");
+        Require(inside && fill > 0.45, $"{what}: the sketch is not fitted in the view");
+        return fill;
+    }
+    // эскиз только из маленького отрезка далеко от детали
+    foreach (var e in sk.Entities.Where(e => !e.Builtin).ToList()) sk.Entities.Remove(e);
+    sk.Constraints.Clear(); sk.Dimensions.Clear(); sk.AddEntity(small); sk.BumpStructure();
+    w.EditSketch(sk); BuildNow(s);
+    for (int i = 0; i < 40 && vp.Transition.IsRunning; i++) vp.Transition.Tick(ref vp.Camera.State);
+    Fill("entering the sketch");
+    for (int i = 0; i < 12; i++) vp.Camera.Zoom(-1, 10, 10);
+    vp.Camera.Pan(400, -300);
+    vp.ZoomToFit(animate: false); Fill("fit all in the sketch");
+    w.CancelSketch(); w.Close();
+});
+
+Check("UI-SKETCH-PICK-K130", () =>
+{
+    // k130 (замечание 28.10, 19:39, п. 1): выбор в эскизе мышью (тачпад ноутбука): щелчок по точке, Ctrl+щелчок по второй
+    // точке и по отрезку — все три выбраны; при щелчке курсор сдвигается на 5–6 пикселей (дрожь тачпада) — это щелчок,
+    // а не протяжка (прежде — рамка выбора с пустым итогом или перетаскивание точки). P3D_CLICKSLOP=0 — прежний допуск 4 px.
+    var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "user_k128_x05.p3d")); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    var vp = w.ViewPort; var sk = s.Part!.Sketches.First();
+    w.EditSketch(sk); BuildNow(s); Run();
+    vp.ZoomToFit(animate: false); Run();
+    Point Scr(Vector2d q) => vp.TranslatePoint(vp.Project(sk.Plane.ToWorld(q))!.Value, w)!.Value;
+    var pA = sk.AllPoints().Distinct().Single(p => (p.P - new Vector2d(209.55, 137.795)).Length < 0.01 && p.Owner != null && sk.Entities.OfType<SkLine>().Any(l => ReferenceEquals(l.B, p) && Math.Abs(l.A.Y - 137.795) < 0.01));
+    var pB = sk.AllPoints().Distinct().Single(p => (p.P - new Vector2d(419.1, 160.3375)).Length < 0.01);
+    var line = sk.Entities.OfType<SkLine>().Single(l => !l.Builtin && Math.Abs(l.A.Y - 122.174) < 0.01 && Math.Abs(l.B.Y - 122.174) < 0.01);
+    var before = sk.AllPoints().Distinct().ToDictionary(p => p, p => p.P);
+    void Click(Point at, RawInputModifiers mods, Vector jitter)
+    {
+        w.MouseMove(at); Run();
+        w.MouseDown(at, MouseButton.Left, mods); Run();
+        var up = at + jitter;
+        w.MouseMove(up, mods); Run();
+        w.MouseUp(up, MouseButton.Left, mods); Run();
+    }
+    var jit = new Vector(5, 3);
+    // без дрожи — исходное поведение (разбор)
+    w.MouseMove(Scr(pA.P)); Run();
+    Console.WriteLine($"  hover at point A: {vp.Selection.Hover.Kind} {(vp.Selection.Hover.Id == pA.Id ? "(A)" : "")}; screen {Scr(pA.P)}");
+    Click(Scr(pA.P), RawInputModifiers.None, jit);
+    Click(Scr(pB.P), RawInputModifiers.Control, new Vector(-4, 4));
+    var mid = line.A.P + (line.B.P - line.A.P) * 0.3;
+    Click(Scr(mid), RawInputModifiers.Control, jit);
+    var ids = vp.Selection.Items.Select(r => r.Id).ToHashSet();
+    // в точке A — две совпадающие точки (концы соседних отрезков): годится любая
+    if (vp.Selection.Items.FirstOrDefault(r => r.Target is SkPoint sp && (sp.P - pA.P).Length < 1e-6) is { IsEmpty: false } ra) pA = (SkPoint)ra.Target!;
+    double moved = before.Max(kv => (kv.Key.P - kv.Value).Length);
+    Console.WriteLine($"  selected {vp.Selection.Count}: {string.Join(", ", vp.Selection.Items.Select(r => r.Kind))}; point A {ids.Contains(pA.Id)}, point B {ids.Contains(pB.Id)}, line {ids.Contains(line.Id)}; geometry moved {moved:0.######}");
+    Require(ids.Contains(pA.Id) && ids.Contains(pB.Id) && ids.Contains(line.Id) && vp.Selection.Count == 3, "Ctrl+click did not select two points and a line");
+    Require(moved < 1e-9, "a click moved the sketch geometry");
+    // Ctrl+щелчок по выбранному — снимает его
+    Click(Scr(pB.P), RawInputModifiers.Control, jit);
+    Require(!vp.Selection.Items.Any(r => r.Id == pB.Id) && vp.Selection.Count == 2, "Ctrl+click on a selected point did not deselect it");
+    // значок связи, не лежащий на геометрии, по-прежнему выбирается щелчком; значок у точки — щелчок по точке выбирает точку
+    double px = vp.PixelSize;
+    var free = sk.Constraints.Where(c => c.Enabled).SelectMany(c => c.GlyphPositions.Select(g => (C: c, G: g)))
+        .FirstOrDefault(t => sk.AllPoints().All(p => (p.P - t.G).Length > 10 * px) && sk.Entities.Where(e => e is not SkPoint).All(e => e.DistanceTo(t.G) > 6 * px)
+                             && vp.Project(sk.Plane.ToWorld(t.G)) is { } lp && lp.X > 0.2 * vp.Bounds.Width && lp.Y > 0.2 * vp.Bounds.Height && lp.X < 0.8 * vp.Bounds.Width && lp.Y < 0.8 * vp.Bounds.Height
+                             && vp.DimensionAt(lp) == null);
+    Require(free.C != null, "no free constraint glyph to click");
+    vp.Selection.Clear(); Run();
+    w.MouseMove(Scr(free.G)); Run();
+    var gp = vp.TranslatePoint(new Point(0, 0), w)!.Value; var sg = Scr(free.G);
+    Console.WriteLine($"  glyph {free.C.Type} at screen {sg}, glyph hit {vp.ConstraintGlyphAt(new Point(sg.X - gp.X, sg.Y - gp.Y)).Kind}, hover {vp.Selection.Hover.Kind}, view {vp.Bounds.Width:0}x{vp.Bounds.Height:0}");
+    Click(Scr(free.G), RawInputModifiers.None, default);
+    Console.WriteLine($"  click on a {free.C.Type} glyph: selected {string.Join(",", vp.Selection.Items.Select(r => r.Kind))}");
+    Require(vp.Selection.Count == 1 && vp.Selection.Primary.Kind == PickKind.SketchConstraint, "a constraint glyph is not selectable");
+    var near = sk.Constraints.Where(c => c.Enabled && c.Type == ConstraintType.Coincident).SelectMany(c => c.GlyphPositions).Select(g => (G: g, P: sk.AllPoints().OrderBy(p => (p.P - g).Length).First()))
+        .Where(t => vp.Project(sk.Plane.ToWorld(t.P.P)) is { } lp && lp.X > 0.1 * vp.Bounds.Width && lp.Y > 0.1 * vp.Bounds.Height && lp.X < 0.9 * vp.Bounds.Width && lp.Y < 0.85 * vp.Bounds.Height)
+        .OrderBy(t => (t.P.P - t.G).Length).First();
+    Console.WriteLine($"  coincident glyph {(near.P.P - near.G).Length / px:0.#} px from its point");
+    vp.Selection.Clear(); Run();
+    Click(Scr(near.P.P), RawInputModifiers.None, default);
+    Require(vp.Selection.Count == 1 && vp.Selection.Primary.Kind == PickKind.SketchPoint, "a click on a point under a constraint glyph selected " + vp.Selection.Primary.Kind);
+    w.Close();
+});
+
 Check("UI-UNITS-INPUT-K128", () =>
 {
     // k128 (замечание 28.10, 18:18): единица размера или операции, если не указана, — единица детали; указанная — как

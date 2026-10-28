@@ -34,7 +34,11 @@ public enum DimensionType
     /// <summary>u13: длина дуги (R·|угол|).</summary>
     ArcLength = 100,
     /// <summary>Малая полуось эллипса.</summary>
-    EllipseRadiusV
+    EllipseRadiusV,
+    /// <summary>k130: расстояние между двумя точками по горизонтали (по оси U эскиза).</summary>
+    DistanceHorizontal = 110,
+    /// <summary>k130: расстояние между двумя точками по вертикали (по оси V эскиза).</summary>
+    DistanceVertical = 111,
 }
 
 /// <summary>Где ставить стрелки размера.</summary>
@@ -276,6 +280,14 @@ public static class DimensionMeasure
                     return Math.Abs(PointToLine(p.P, l));
                 break;
 
+            case DimensionType.DistanceHorizontal:
+                if (it.Count >= 2 && it[0] is SkPoint ha && it[1] is SkPoint hb) return Math.Abs(hb.X - ha.X);
+                break;
+
+            case DimensionType.DistanceVertical:
+                if (it.Count >= 2 && it[0] is SkPoint va && it[1] is SkPoint vb) return Math.Abs(vb.Y - va.Y);
+                break;
+
             case DimensionType.DistanceLineLine:
                 if (it.Count >= 2 && it[0] is SkLine l1 && it[1] is SkLine l2)
                 {
@@ -338,6 +350,14 @@ public static class DimensionMeasure
         var (from, rf) = d.LineFrom == 1 ? (a, b) : (b, a);
         return ((from.A.P + from.B.P) * 0.5, rf);
     }
+    /// <summary>k130: размер «точка — точка» косой (точки не на одной горизонтали и не на одной вертикали эскиза).</summary>
+    public static bool IsDiagonal(SkDimension d)
+    {
+        if (d.Type != DimensionType.DistancePointPoint || d.Items.Count < 2 || d.Items[0] is not SkPoint a || d.Items[1] is not SkPoint b) return false;
+        double len = (b.P - a.P).Length, tol = 1e-6 * Math.Max(1, len);
+        return Math.Abs(b.X - a.X) > tol && Math.Abs(b.Y - a.Y) > tol;
+    }
+
     /// <summary>P3D_SKFIXSIDE=0 — сторона расстояния и выбор отрезка «прямая — прямая» — заново при каждом решении (прежде).</summary>
     public static readonly bool FixedSideOff = Environment.GetEnvironmentVariable("P3D_SKFIXSIDE") == "0";
 
@@ -351,6 +371,12 @@ public static class DimensionMeasure
             if (d.Side != 0) return;
             double v = PointToLine(p.P, l), len = (l.B.P - l.A.P).Length;
             if (len > 1e-12 && Math.Abs(v) > 1e-9 * Math.Max(1, len)) d.Side = (sbyte)(v < 0 ? 1 : -1);   // знак решателя (DistPointLine) — обратный PointToLine
+        }
+        else if (d.Type is DimensionType.DistanceHorizontal or DimensionType.DistanceVertical && it.Count >= 2 && it[0] is SkPoint ha && it[1] is SkPoint hb)
+        {
+            if (d.Side != 0) return;
+            double v = d.Type == DimensionType.DistanceHorizontal ? hb.X - ha.X : hb.Y - ha.Y;
+            if (Math.Abs(v) > 1e-9 * Math.Max(1, Math.Max(ha.P.Length, hb.P.Length))) d.Side = (sbyte)(v < 0 ? -1 : 1);
         }
         else if (d.Type == DimensionType.DistanceLineLine && it.Count >= 2 && it[0] is SkLine a && it[1] is SkLine b && !LineLineOff)
         {

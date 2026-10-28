@@ -147,6 +147,9 @@ public sealed class Sketch : ModelItem
             }
             if (d.Type == DimensionType.CoordX) { d.Type = DimensionType.CoordY; if (!ccw) d.Value = -d.Value; }
             else if (d.Type == DimensionType.CoordY) { d.Type = DimensionType.CoordX; if (ccw) d.Value = -d.Value; }
+            // k130: по горизонтали ↔ по вертикали; сторона — заново по геометрии
+            else if (d.Type == DimensionType.DistanceHorizontal) { d.Type = DimensionType.DistanceVertical; d.Side = 0; }
+            else if (d.Type == DimensionType.DistanceVertical) { d.Type = DimensionType.DistanceHorizontal; d.Side = 0; }
             for (int i = 0; i < d.Items.Count; i++) d.Items[i] = Map(d.Items[i]);
             d.TextOffset = R(d.TextOffset);
             d.TextCenter = R(d.TextCenter);
@@ -180,7 +183,9 @@ public sealed class Sketch : ModelItem
         }
         foreach (var d in Dimensions)
         {
-            d.Type = d.Type switch { DimensionType.CoordX => DimensionType.CoordY, DimensionType.CoordY => DimensionType.CoordX, var t => t };
+            d.Type = d.Type switch { DimensionType.CoordX => DimensionType.CoordY, DimensionType.CoordY => DimensionType.CoordX,
+                DimensionType.DistanceHorizontal => DimensionType.DistanceVertical, DimensionType.DistanceVertical => DimensionType.DistanceHorizontal, var t => t };
+            d.Side = 0;   // k130: зеркало меняет сторону — заново по геометрии (k128 закрепляет её при решении)
             for (int i = 0; i < d.Items.Count; i++) d.Items[i] = Map(d.Items[i]);
             d.TextOffset = new Vector2d(d.TextOffset.Y, d.TextOffset.X);
             d.TextCenter = new Vector2d(d.TextCenter.Y, d.TextCenter.X);

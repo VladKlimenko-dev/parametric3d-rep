@@ -121,7 +121,9 @@ public static class SketchCommands
 
     static bool Bad(SolveStatus st) => st is SolveStatus.Overconstrained or SolveStatus.Inconsistent or SolveStatus.DidNotConverge or SolveStatus.Singular;
 
-    public enum DimKind { Smart, Linear, Radius, Diameter, Angle, ArcLength }
+    /// <summary>P3D_AXISDIMS=0 — без размеров по горизонтали и вертикали (k130).</summary>
+    public static readonly bool AxisDimsOff = Environment.GetEnvironmentVariable("P3D_AXISDIMS") == "0";
+    public enum DimKind { Smart, Linear, Radius, Diameter, Angle, ArcLength, Horizontal, Vertical }
 
     /// <summary>Размер по выбранному: тип по виду (умный) или заданный.</summary>
     public static (DimensionType T, SkEntity[] Items)? PlanDimension(DimKind k, List<SkEntity> sel)
@@ -134,6 +136,15 @@ public static class SketchCommands
             case DimKind.Diameter: return round.Count == 1 ? (DimensionType.Diameter, new[] { round[0] }) : null;
             case DimKind.ArcLength: return sel.Count == 1 && sel[0] is SkArc ar ? (DimensionType.ArcLength, new SkEntity[] { ar }) : null;
             case DimKind.Angle: return lines.Count == 2 ? (DimensionType.AngleLineLine, new SkEntity[] { lines[0], lines[1] }) : null;
+            // k130: по горизонтали / по вертикали — две точки или концы отрезка
+            case DimKind.Horizontal or DimKind.Vertical:
+            {
+                if (AxisDimsOff) return null;
+                var t = k == DimKind.Horizontal ? DimensionType.DistanceHorizontal : DimensionType.DistanceVertical;
+                if (pts.Count == 2 && sel.Count == 2) return (t, new SkEntity[] { pts[0], pts[1] });
+                if (lines.Count == 1 && sel.Count == 1) return (t, new SkEntity[] { lines[0].A, lines[0].B });
+                return null;
+            }
         }
         // линейный и умный
         if (pts.Count == 2 && sel.Count == 2) return (DimensionType.DistancePointPoint, new SkEntity[] { pts[0], pts[1] });
@@ -160,6 +171,7 @@ public static class SketchCommands
             {
                 DimKind.Radius or DimKind.Diameter => "Выберите дугу или окружность",
                 DimKind.ArcLength => "Выберите дугу",
+                DimKind.Horizontal or DimKind.Vertical => "Выберите две точки или отрезок",
                 DimKind.Angle => "Выберите два отрезка",
                 _ => "Выберите отрезок, две точки, точку и отрезок, два отрезка или дугу",
             }), error: false);

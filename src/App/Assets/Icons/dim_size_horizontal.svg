@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="136" height="124" viewBox="0 0 136 124" preserveAspectRatio="xMidYMid meet">
+	<path fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(-860.49 -4461.42)" d="M883.77313 4562.2803L883.383 4509.9653" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(-860.49 -4461.42)" d="M972.72113 4562.2803L972.33099 4509.9653" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="3.999999" stroke-linecap="round" stroke-linejoin="round" transform="translate(-860.49 -4461.42)" d="M959.40771 4521.2915L896.28333 4521.4775" fill-rule="evenodd"/>
+	<path transform="matrix(0.999996 -0.00295467 0.00295467 0.999996 108.918 59.8423)" d="M0 0L-19.999996 7.9999986L-19.999996 -7.9999986L0 0Z"/>
+	<path transform="matrix(-0.999996 0.00295487 -0.00295487 -0.999996 25.7938 60.0879)" d="M0 0L-19.999996 7.9999986L-19.999996 -7.9999986L0 0Z"/>
+	<path transform="translate(-860.49 -4461.42)" d="M916.11444 4514L916.11444 4484.313L922.10858 4484.313L922.10858 4495.9976L933.85376 4495.9976L933.85376 4484.313L939.8479 4484.313L939.8479 4514L933.85376 4514L933.85376 4501.0195L922.10858 4501.0195L922.10858 4514L916.11444 4514Z"/>
+</svg>

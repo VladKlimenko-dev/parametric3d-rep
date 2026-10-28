@@ -243,6 +243,12 @@ public static class SketchSuggest
             foreach (var (id, k) in new[] { ("dim.linear", SketchCommands.DimKind.Linear), ("dim.radius", SketchCommands.DimKind.Radius), ("dim.diameter", SketchCommands.DimKind.Diameter), ("dim.angle", SketchCommands.DimKind.Angle), ("dim.arc_length", SketchCommands.DimKind.ArcLength) })
                 if (SketchCommands.PlanDimension(k, sel) != null) res.Add(id);
             if (round.Count == 0 && SketchCommands.PlanDimension(SketchCommands.DimKind.Smart, sel) is { } sm && !res.Contains("dim.linear") && !res.Contains("dim.angle")) res.Add("dim.smart");
+            // k130: две точки (отрезок) не на одной горизонтали / вертикали — размеры по осям
+            if (SketchCommands.PlanDimension(SketchCommands.DimKind.Horizontal, sel) is { } hp && hp.Items[0] is SkPoint h0 && hp.Items[1] is SkPoint h1)
+            {
+                if (Math.Abs(h1.X - h0.X) > 1e-9) res.Add("dim.horizontal");
+                if (Math.Abs(h1.Y - h0.Y) > 1e-9) res.Add("dim.vertical");
+            }
             // кривые
             if (curves)
             {

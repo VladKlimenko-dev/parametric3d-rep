@@ -28,7 +28,7 @@ public sealed partial class ModelViewport
         if (!DragComponents || _drag != Drag.Select) return false;
         if (_dragPart == null)
         {
-            if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4) return false;
+            if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= ClickSlop) return false;
             _dragPart = Selection.Items.Select(r => r.Target as Part ?? r.Owner as Part).OfType<Part>().FirstOrDefault(x => !x.Fixed);
             if (_dragPart == null) return false;
             ComponentDragStarted?.Invoke(_dragPart);
@@ -360,7 +360,7 @@ public sealed partial class ModelViewport
         if (_drag != Drag.Select || !RegionSelect) return false;
         if (_region == null)
         {
-            if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4) return false;
+            if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= ClickSlop) return false;
             _region = new List<Point> { _down };
         }
         if (RegionMode == RegionKind.Lasso) { if ((p - _region[^1]).X * (p - _region[^1]).X + (p - _region[^1]).Y * (p - _region[^1]).Y > 9) _region.Add(p); }
