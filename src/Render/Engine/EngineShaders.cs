@@ -306,6 +306,8 @@ void main()
     vLocal = corner * (half_ + 1.0);
     vHalf = half_;
     vShape = aShape;
+    // k127: кольцо (возможная опорная точка) под курсором или выбранное — залитый круг, как прежде
+    if (aShape == 4u && (f & 3u) != 0u) vShape = 0u;
     vColor = col;
     vPick = aPick;
 }";
@@ -329,6 +331,7 @@ void main()
         float ax = abs(vLocal.x), ay = abs(vLocal.y);
         d = max(ax, ay) > vHalf ? 1e3 : min(ax, ay) + vHalf - 1.0;
     }
+    else if (vShape == 4u) d = abs(length(vLocal) - (vHalf - 0.6)) + vHalf - 0.6;   // кольцо: тонкий обрис без заливки
     else d = length(vLocal);                                                  // круг
     if (uPickMode == 1)
     {

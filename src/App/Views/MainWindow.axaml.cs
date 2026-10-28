@@ -1025,6 +1025,15 @@ public partial class MainWindow : Window
         ToolTip.SetTip(SectionBadge, L("Сечение — настройки плоскости"));
         SectionBadge.Click += (_, _) => { if (CurrentOperation is SectionOp) return; if (CurrentOperation != null) CancelOperation(); if (!InSketch && Session.Part != null) StartOperation(new SectionOp()); };
         View.HoverChanged += h => UpdateStatus(h);
+        // k127: три пальца на сенсорной панели — сдвиг вида (Windows Precision Touchpad); жест Windows с тремя пальцами
+        // (переключение окон) приложение отменить не может — при первом сдвиге подсказка, как его выключить
+        Opened += (_, _) => { if (OperatingSystem.IsWindows()) WinTouchpad.Attach(this, View.Touchpad); };
+        View.TouchpadPanned += () =>
+        {
+            if (UserPrefs.Current.TouchpadHintShown) return;
+            UserPrefs.Current.TouchpadHintShown = true; UserPrefs.Current.Save();
+            ShowToast(L("Сдвиг вида тремя пальцами. Чтобы Windows не переключала при этом окна: Параметры → Bluetooth и устройства → Сенсорная панель → Жесты тремя пальцами → Прокрутки: «Ничего». Без этого — Shift + прокрутка двумя пальцами."), error: false);
+        };
         View.Selection.Changed += OnSelectionChanged;
         View.ContextRequested += p => { if (InSketch && View.DimensionAt(p) is { } dm) OpenDimensionMenu(dm); else OpenViewContextMenu(); };
         View.SceneRebuilt += () =>

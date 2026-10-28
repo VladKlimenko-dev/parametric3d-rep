@@ -325,6 +325,7 @@ public static class Strings
         ["Резьба — обозначение: тело не меняется; диаметр и вид берутся с грани."] = "The thread is a notation: the body does not change; the diameter and type come from the face.",
         ["Резьба"] = "Thread",
         ["Сдвиг X"] = "Shift X",
+        ["Сдвиг вида тремя пальцами. Чтобы Windows не переключала при этом окна: Параметры → Bluetooth и устройства → Сенсорная панель → Жесты тремя пальцами → Прокрутки: «Ничего». Без этого — Shift + прокрутка двумя пальцами."] = "Three-finger view pan. To stop Windows from switching apps at the same time: Settings → Bluetooth & devices → Touchpad → Three-finger gestures → Swipes: “Nothing”. Otherwise use Shift + two-finger scroll.",
         ["Сдвиг Y"] = "Shift Y",
         ["Сдвиг Z"] = "Shift Z",
         ["Сетка внутри замкнутой области от первой точки эскиза (или центра области)."] = "A grid inside the closed region from the first sketch point (or the region centre).",

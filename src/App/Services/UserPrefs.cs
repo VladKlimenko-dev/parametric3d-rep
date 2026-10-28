@@ -22,6 +22,8 @@ public sealed class UserPrefs
     /// <summary>u13: закреплённые команды контекстной панели.</summary>
     public List<string> PinnedCommands { get; set; } = new();
     public bool TreeVisible { get; set; } = true;
+    /// <summary>k127: подсказка о жесте трёх пальцев Windows показана.</summary>
+    public bool TouchpadHintShown { get; set; }
     public double TreeWidth { get; set; } = 260;
     /// <summary>Места панелей поверх вида: «Сторона|доля» (прилипла) или «Free|x|y».</summary>
     public Dictionary<string, string> PanelPlaces { get; set; } = new();
