@@ -190,14 +190,16 @@ public sealed class CurveOp : Operation
     public static List<Vector3d>? Equation(ParameterTable? scope, string fx, string fy, string fz, double t0, double t1, int n, out string? why)
     {
         why = null;
-        var tt = new ParameterTable { Parent = scope };
+        var tt = new ParameterTable { Parent = scope, Units = scope?.Units ?? Parametric3D.Core.UnitSystem.Metric };
         var tp = tt.Add("t", t0);
         var res = new List<Vector3d>();
         n = Math.Clamp(n, 2, 20000);
         for (int i = 0; i <= n; i++)
         {
             tp.Number = t0 + (t1 - t0) * i / n;
-            if (!tt.TryEvaluate(fx, out var x, out why) || !tt.TryEvaluate(fy, out var y, out why) || !tt.TryEvaluate(fz, out var z, out why)) return null;
+            // k128: координаты — длины: число без единицы — в единице детали
+            var L = Parametric3D.Core.Dimension.Length;
+            if (!tt.TryEvaluateAs(fx, L, out var x, out why) || !tt.TryEvaluateAs(fy, L, out var y, out why) || !tt.TryEvaluateAs(fz, L, out var z, out why)) return null;
             res.Add(new Vector3d(x, y, z));
         }
         return res;

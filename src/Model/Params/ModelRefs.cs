@@ -239,6 +239,25 @@ public static class FeatureDims
         return res;
     }
 
+    /// <summary>
+    /// k128: вид величины поля операции по имени (как UnitConversion.IsLengthField): углы (Angle, Twist, Draft…), числа
+    /// (Count, Factor, Fraction, Turns, масштабы Sx/Sy/Sz…) и длины — все прочие.
+    /// </summary>
+    public static sbyte KindOf(string fieldName)
+    {
+        string n = fieldName.Contains('.') ? fieldName[(fieldName.LastIndexOf('.') + 1)..] : fieldName;
+        if (n.Contains("Angle") || n.Contains("Twist") || n.Contains("Draft") || n.Contains("Degree")) return ValueRef.KindAngle;
+        if (n is "Sx" or "Sy" or "Sz" || !UnitConversion.IsLengthField(n)) return ValueRef.KindNumber;
+        return ValueRef.KindLength;
+    }
+
+    /// <summary>k128: проставить вид величины всем полям операции (перед расчётом, после чтения файла).</summary>
+    public static void StampKinds(Feature f)
+    {
+        foreach (var sl in Of(f))
+            if (sl.Get() is { } v) { var k = KindOf(sl.Field.Name); if (v.Kind != k) { v.Kind = k; sl.Set(v); } }
+    }
+
     /// <summary>Номер поля в размерах операции (по владельцу и имени поля); -1 — нет.</summary>
     public static int IndexOf(Feature f, object owner, string field) => Of(f).FindIndex(s => ReferenceEquals(s.Owner, owner) && s.Field.Name == field);
 }

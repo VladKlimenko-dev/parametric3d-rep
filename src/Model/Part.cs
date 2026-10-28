@@ -1473,6 +1473,7 @@ public sealed class Part : ModelItem
                         // k113: последняя операция дерева в предпросмотре — мгновенно по сеткам (её тело дальше не идёт)
                         Kernel.Ops.InstantPreview.Allowed = settingsNow.LivePreview && !SuppressInstant && f.FreeForm == null && fi == instantAt && f.InstantPreviewSafe;
                         Kernel.Ops.InstantPreview.Target = ctx.Bodies.Count == 1 ? ctx.Bodies[0] : null;
+                        if (!ParameterTable.ValueUnitsOff) Params.FeatureDims.StampKinds(f);   // k128: вид величин полей — для формул без единиц
                         try { if (f.FreeForm != null) FreeFormExec.Run(f, ctx); else f.Execute(ctx); }
                         finally { Kernel.Ops.InstantPreview.Allowed = false; Kernel.Ops.InstantPreview.Target = null; }
                         if (f.FreeForm != null && (!FreeFormDoc || MergeFreeForm) && EditingFreeForm != f.FreeForm

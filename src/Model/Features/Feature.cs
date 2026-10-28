@@ -16,8 +16,15 @@ public struct ValueRef
 {
     public double Value;
     public string? Formula;
+    /// <summary>
+    /// k128: что это за величина — для числа без единицы в формуле: 0 — не известно (как прежде, мм), 1 — длина (единица
+    /// детали), 2 — угол (градусы), 3 — число. Ставит панель операции по полю и FeatureDims.StampKinds по имени поля.
+    /// </summary>
+    public sbyte Kind;
+    public const sbyte KindLength = 1, KindAngle = 2, KindNumber = 3;
+    public static Core.Dimension DimOf(sbyte kind) => kind switch { KindLength => Core.Dimension.Length, KindAngle => Core.Dimension.Angle, _ => Core.Dimension.None };
 
-    public ValueRef(double v) { Value = v; Formula = null; }
+    public ValueRef(double v) { Value = v; Formula = null; Kind = 0; }
     public static implicit operator ValueRef(double v) => new ValueRef(v);
 
     /// <summary>
@@ -39,7 +46,9 @@ public struct ValueRef
         if (t == null)
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"формула «{Formula}» задана, но таблицы переменных нет");
 
-        if (t.TryEvaluate(Formula!, out double v, out string? why))
+        double v; string? why;
+        bool ok = Kind != 0 ? t.TryEvaluateAs(Formula!, DimOf(Kind), out v, out why) : t.TryEvaluate(Formula!, out v, out why);
+        if (ok)
         {
             if (double.IsNaN(v) || double.IsInfinity(v))
                 throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"формула «{Formula}» дала недопустимое значение");

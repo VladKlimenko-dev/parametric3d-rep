@@ -112,14 +112,18 @@ public static class TreeCommands
         if (vals.Count == 0) { w.ShowToast(L("У операции «{0}» нет размеров", f.Name), error: false); return; }
         var panel = new StackPanel { Spacing = 6, Margin = new Thickness(6) };
         panel.Children.Add(new TextBlock { Text = f.Name, FontWeight = Avalonia.Media.FontWeight.SemiBold });
-        var boxes = new List<(TextBox Box, Action<ValueRef> Set)>();
+        var boxes = new List<(TextBox Box, Action<ValueRef> Set, sbyte Kind)>();
         foreach (var (name, get, set) in vals)
         {
             var cur = get()!.Value;
-            var tb = new TextBox { Text = cur.Formula ?? cur.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), MinWidth = 120 };
-            panel.Children.Add(new TextBlock { Text = L(Names.TryGetValue(name, out var ru) ? ru : name), Classes = { "dim" }, FontSize = 12 });
+            // k128: длины — в единице детали (число без единицы — в ней же, с единицей — в указанной)
+            sbyte kind = Parametric3D.Model.Params.FeatureDims.KindOf(name);
+            double shown = kind == ValueRef.KindLength ? DisplayUnits.ToShow(cur.Value) : cur.Value;
+            var tb = new TextBox { Text = cur.Formula ?? shown.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), MinWidth = 120 };
+            string unit = kind == ValueRef.KindLength ? ", " + DisplayUnits.LengthUnit : kind == ValueRef.KindAngle ? ", °" : "";
+            panel.Children.Add(new TextBlock { Text = L(Names.TryGetValue(name, out var ru) ? ru : name) + unit, Classes = { "dim" }, FontSize = 12 });
             panel.Children.Add(tb);
-            boxes.Add((tb, set));
+            boxes.Add((tb, set, kind));
         }
         var ok = new Button { Content = L("ОК"), Classes = { "accent" } };
         panel.Children.Add(ok);
@@ -128,11 +132,11 @@ public static class TreeCommands
         {
             var table = w.Session.Document.ScopeFor(part);
             var parsed = new List<(Action<ValueRef>, ValueRef)>();
-            foreach (var (tb, set) in boxes)
+            foreach (var (tb, set, kind) in boxes)
             {
                 string t = (tb.Text ?? "").Trim();
-                if (double.TryParse(t.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v)) parsed.Add((set, new ValueRef(v)));
-                else if (table.TryEvaluate(t, out v, out _)) parsed.Add((set, new ValueRef(v) { Formula = t }));
+                if (double.TryParse(t.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v)) parsed.Add((set, new ValueRef(kind == ValueRef.KindLength ? DisplayUnits.FromShow(v) : v) { Kind = kind }));
+                else if (table.TryEvaluateAs(t, ValueRef.DimOf(kind), out v, out _)) parsed.Add((set, new ValueRef(v) { Formula = t, Kind = kind }));
                 else { w.ShowToast(L("Не число и не формула: {0}", t)); return; }
             }
             w.Session.Edit(L("Править размеры «{0}»", f.Name), () => { foreach (var (set, v) in parsed) set(v); part.NotifyChanged(f); });
@@ -140,7 +144,7 @@ public static class TreeCommands
             fl.Hide();
         }
         ok.Click += (_, _) => Apply();
-        foreach (var (tb, _) in boxes) tb.KeyDown += (_, e) => { if (e.Key == Key.Enter) { Apply(); e.Handled = true; } else if (e.Key == Key.Escape) { fl.Hide(); e.Handled = true; } };
+        foreach (var (tb, _, _) in boxes) tb.KeyDown += (_, e) => { if (e.Key == Key.Enter) { Apply(); e.Handled = true; } else if (e.Key == Key.Escape) { fl.Hide(); e.Handled = true; } };
         fl.ShowAt(w.ViewPort, showAtPointer: true);
         Dispatcher.UIThread.Post(() => { boxes[0].Box.Focus(); boxes[0].Box.SelectAll(); }, DispatcherPriority.Input);
     }

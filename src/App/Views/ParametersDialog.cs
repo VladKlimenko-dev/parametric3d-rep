@@ -34,6 +34,10 @@ public sealed class ParametersDialog : Window
         /// <summary>k118 (п.9.3): описание строки размера эскиза (у параметров — Comment).</summary>
         public string Note = "", NoteOriginal = "";
         public bool IsDim => Dim != null || Slot != null;
+        /// <summary>k128: вид величины строки размера (длина — в единице детали, угол, число) и множитель единицы длины (мм).</summary>
+        public sbyte Kind; public double LenMm = 1;
+        public double ToShow(double v) => Kind == ValueRef.KindLength ? v / LenMm : v;
+        public double FromShow(double v) => Kind == ValueRef.KindLength ? v * LenMm : v;
     }
 
     private sealed class Level
@@ -273,14 +277,19 @@ public sealed class ParametersDialog : Window
     {
         var rows = new List<Row>();
         static string Num(double v) => v.ToString("0.######", CultureInfo.InvariantCulture);
+        // k128 (замечание 28.10, 18:18): длины — в единице детали (показ и ввод числа; формула без единицы — в ней же)
+        double lenMm = Parametric3D.Core.Units.TryParse(part.Units.Length, out var lu, out _) && lu!.Dim == Parametric3D.Core.Dimension.Length ? lu.Factor : 1;
+        string lenUnit = part.Units.Length;
         foreach (var sk in part.Sketches)
         {
             sk.EnsureDimIds();
             foreach (var d in sk.Dimensions.OrderBy(x => x.Index))
             {
-                string val = d.Formula ?? Num(d.Value);
-                rows.Add(new Row { Name = ModelRefs.PathOf(sk, d), Value = val, Original = val, Unit = d.IsAngular ? "°" : "mm", Dim = d, Sketch = sk, Note = d.Note ?? "", NoteOriginal = d.Note ?? "",
-                    Comment = MainWindow.DimensionName(d) + (d.IsDefault ? " · " + L("слабый") : "") });
+                sbyte kind = d.IsAngular ? ValueRef.KindAngle : ValueRef.KindLength;
+                var row = new Row { Name = ModelRefs.PathOf(sk, d), Unit = d.IsAngular ? "°" : lenUnit, Dim = d, Sketch = sk, Note = d.Note ?? "", NoteOriginal = d.Note ?? "",
+                    Comment = MainWindow.DimensionName(d) + (d.IsDefault ? " · " + L("слабый") : ""), Kind = kind, LenMm = lenMm };
+                row.Value = row.Original = d.Formula ?? Num(row.ToShow(d.Value));
+                rows.Add(row);
             }
         }
         foreach (var f in part.Features)
@@ -289,8 +298,11 @@ public sealed class ParametersDialog : Window
             for (int i = 0; i < slots.Count; i++)
             {
                 if (slots[i].Get() is not { } v) continue;
-                string val = v.Formula ?? Num(v.Value);
-                rows.Add(new Row { Name = ModelRefs.PathOf(f, i), Value = val, Original = val, Feature = f, Slot = slots[i], Comment = slots[i].Name });
+                sbyte kind = FeatureDims.KindOf(slots[i].Field.Name);
+                var row = new Row { Name = ModelRefs.PathOf(f, i), Feature = f, Slot = slots[i], Comment = slots[i].Name, Kind = kind, LenMm = lenMm,
+                    Unit = kind == ValueRef.KindLength ? lenUnit : kind == ValueRef.KindAngle ? "°" : "" };
+                row.Value = row.Original = v.Formula ?? Num(row.ToShow(v.Value));
+                rows.Add(row);
             }
         }
         return rows;
@@ -478,7 +490,7 @@ public sealed class ParametersDialog : Window
         string n = "d";
         for (int i = rows.Count + 1; ; i++) if (rows.All(r => !string.Equals(r.Name, "d" + i, StringComparison.OrdinalIgnoreCase))) { n = "d" + i; break; }
         int at = rows.FindIndex(r => r.IsDim);
-        rows.Insert(at < 0 ? rows.Count : at, new Row { Name = n, Value = "0", Unit = "mm" });
+        rows.Insert(at < 0 ? rows.Count : at, new Row { Name = n, Value = "0", Unit = Commands.DisplayUnits.Length });
         Recalc();
         Fill();
     }
@@ -547,10 +559,11 @@ public sealed class ParametersDialog : Window
                 r.Error = ""; r.Result = "";
                 string v = r.Value.Trim();
                 double x; string? why = null;
-                bool ok = TryNum(v, out x)
-                    || (r.Sketch != null ? r.Sketch.TryEvaluate(v, scope, r.Dim, out x, out why) : ParameterTable.TryEvaluateWith(v, scope, scope.Geometry, out x, out why));
+                bool ok;
+                if (TryNum(v, out x)) { x = r.FromShow(x); ok = true; }   // k128: число — в единице детали
+                else ok = r.Sketch != null ? r.Sketch.TryEvaluate(v, scope, r.Dim, out x, out why) : scope.TryEvaluateAs(v, ValueRef.DimOf(r.Kind), out x, out why);
                 if (ok && r.Dim != null && System.Text.RegularExpressions.Regex.IsMatch(v, $@"(?<![\w""])d{r.Dim.Index}(?!\w)") && !TryNum(v, out _)) { ok = false; why = L("Формула ссылается на сам размер"); }
-                if (ok) r.Result = x.ToString("0.######", CultureInfo.InvariantCulture) + (string.IsNullOrEmpty(r.Unit) ? "" : " " + r.Unit);
+                if (ok) r.Result = r.ToShow(x).ToString("0.######", CultureInfo.InvariantCulture) + (string.IsNullOrEmpty(r.Unit) ? "" : " " + r.Unit);
                 else r.Error = why ?? L("Не число и не формула");
             }
             if (_cur.Dims) return;
@@ -623,6 +636,7 @@ public sealed class ParametersDialog : Window
                 {
                     string v = r.Value.Trim();
                     bool num = TryNum(v, out double x);
+                    if (num) x = r.FromShow(x);   // k128: число — в единице детали
                     if (r.Dim != null)
                     {
                         if (num) { r.Dim.Value = r.Dim.Type is DimensionType.CoordX or DimensionType.CoordY && r.Dim.Value < 0 ? -Math.Abs(x) : x; r.Dim.Formula = null; }
@@ -633,7 +647,7 @@ public sealed class ParametersDialog : Window
                     else if (r.Slot != null)
                     {
                         var cur = r.Slot.Get() ?? new ValueRef(0);
-                        r.Slot.Set(num ? new ValueRef(x) : new ValueRef(cur.Value) { Formula = v });
+                        r.Slot.Set(num ? new ValueRef(x) { Kind = r.Kind } : new ValueRef(cur.Value) { Formula = v, Kind = r.Kind });
                         r.Feature!.NotifyChanged(r.Feature);
                     }
                 }

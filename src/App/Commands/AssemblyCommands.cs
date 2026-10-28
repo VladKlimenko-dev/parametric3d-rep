@@ -184,8 +184,9 @@ public static class AssemblyCommands
         double value = 0;
         if (cmd is MateCmd.Distance or MateCmd.Angle)
         {
-            var t = await Dialogs.Prompt(w, L(cmd == MateCmd.Distance ? "Расстояние" : "Угол"), L(cmd == MateCmd.Distance ? "Расстояние, мм:" : "Угол, °:"), cmd == MateCmd.Distance ? "10" : "45");
-            if (t == null || !double.TryParse(t.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value)) return;
+            // k128: расстояние — в единице детали (число без единицы), с единицей — в указанной
+            var t = await Dialogs.Prompt(w, L(cmd == MateCmd.Distance ? "Расстояние" : "Угол"), cmd == MateCmd.Distance ? L("Расстояние, {0}:", DisplayUnits.LengthUnit) : L("Угол, °:"), cmd == MateCmd.Distance ? DisplayUnits.ShowText(10) : "45");
+            if (t == null || !(cmd == MateCmd.Distance ? DisplayUnits.TryLength(t, out value) : DisplayUnits.TryAngle(t, out value))) return;
         }
         var plan = Plan(cmd, gs[0], gs[1], value, out var why);
         // вставка: две оси и две плоскости — соосность и прижатие
@@ -414,9 +415,10 @@ public static class AssemblyCommands
     public static async void PatternDialog(MainWindow w)
     {
         var src = SelectedComponents(w).FirstOrDefault(); if (src == null) { w.ShowToast(L("Выберите компонент"), error: false); return; }
-        var t = await Dialogs.Prompt(w, L("Массив компонентов"), L("Число и шаг: n dx dy dz (через пробел):"), "3 50 0 0");
+        var t = await Dialogs.Prompt(w, L("Массив компонентов"), L("Число и шаг: n dx dy dz (через пробел), {0}:", DisplayUnits.LengthUnit), "3 " + DisplayUnits.ShowText(50) + " 0 0");
         if (t == null) return;
-        var a = t.Replace(',', '.').Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(x => double.TryParse(x, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : double.NaN).ToArray();
+        // k128: шаг — в единице детали (число без единицы), с единицей — в указанной
+        var a = t.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select((x, i) => DisplayUnits.TryValue(x, i == 0 ? Parametric3D.Core.Dimension.None : Parametric3D.Core.Dimension.Length, out var v) ? v : double.NaN).ToArray();
         if (a.Length < 4 || a.Any(double.IsNaN) || a[0] < 2) { w.ShowToast(L("Не число: {0}", t)); return; }
         Pattern(w, src, (int)a[0], new Vector3d(a[1], a[2], a[3]));
     }
