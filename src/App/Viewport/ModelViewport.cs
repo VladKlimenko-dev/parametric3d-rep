@@ -619,8 +619,10 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     {
         if (_doc == null) return;
         var cam = new Camera { State = Camera.State, ViewportWidth = Camera.ViewportWidth, ViewportHeight = Camera.ViewportHeight };
-        FitInto(cam);
-        if (animate) AnimateTo(cam.State); else { Camera.State = cam.State; CameraChanged?.Invoke(); Redraw(); }
+        // k130: в эскизе — по его элементам
+        if (ActiveSketch is { } sk && !SketchFitOff && FitSketch(cam.State, sk) is { } fit) cam.State = fit;
+        else FitInto(cam);
+        if (animate) AnimateTo(cam.State); else { Transition.Cancel(); Camera.State = cam.State; CameraChanged?.Invoke(); Redraw(); }
     }
 
     private void FitInto(Camera cam)
@@ -720,7 +722,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
                 _overlayDirty = true; Redraw();
                 return;
             case Drag.RightPending:
-                if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > 4) { _drag = Drag.Pan; Camera.Pan(dx, dy); _last = p; Redraw(); }
+                if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > ClickSlop) { _drag = Drag.Pan; Camera.Pan(dx, dy); _last = p; Redraw(); }
                 return;
         }
         if (ComponentDragMove(p)) return;
@@ -740,12 +742,14 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         var p = e.GetPosition(this);
         var was = _drag;
         _drag = Drag.None;
+        // k130: щелчок — там, где нажали (курсор тачпада при отпускании съезжает на несколько пикселей)
+        var at = ClickSlopOff ? p : _down;
         e.Pointer.Capture(null);
         if (was == Drag.Handle) { EndHandleDrag(); return; }
         if (was == Drag.Gizmo) { EndGizmoDrag(); return; }
-        if (was == Drag.Measure) { if (!EndMeasureDrag()) RequestPick(p, click: true, e.KeyModifiers); return; }
-        if (was == Drag.Dim) { if (!EndDimensionDrag()) { if (ClickInterceptor?.Invoke(p) == true) return; RequestPick(p, click: true, e.KeyModifiers); } return; }
-        if (was == Drag.SketchGeom) { if (!EndSketchDrag()) RequestPick(p, click: true, e.KeyModifiers); return; }
+        if (was == Drag.Measure) { if (!EndMeasureDrag()) RequestPick(at, click: true, e.KeyModifiers); return; }
+        if (was == Drag.Dim) { if (!EndDimensionDrag()) { if (ClickInterceptor?.Invoke(at) == true) return; RequestPick(at, click: true, e.KeyModifiers); } return; }
+        if (was == Drag.SketchGeom) { if (!EndSketchDrag()) RequestPick(at, click: true, e.KeyModifiers); return; }
         if (was == Drag.RightPending && Tool != null) ToolFinish();
         else if (was == Drag.RightPending) ContextRequested?.Invoke(p);
         else if (was == Drag.Tool && _stroking) { _stroking = false; StrokeFinish(p); }
@@ -753,14 +757,22 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         else if (was == Drag.Select && ComponentDragEnd()) { }
         else if (was == Drag.Select && RegionEnd(p, e.KeyModifiers)) { }
         // k107: стрелка направления операции (протяжка) — развернуть
-        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4 && ActiveSketch == null && TryArrowClick(p)) { }
-        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4 && ClickInterceptor?.Invoke(p) == true) { }
+        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= ClickSlop && ActiveSketch == null && TryArrowClick(p)) { }
+        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= ClickSlop && ClickInterceptor?.Invoke(at) == true) { }
         // k99: щелчок по контуру плоскости сечения (вне операции и эскиза) — её настройки
         // k103: щелчок — выбор плоскости (ручки), двойной — настройки
-        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4 && ClickInterceptor == null && ActiveSketch == null && Tool == null && SectionOutlineHit(p))
+        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= ClickSlop && ClickInterceptor == null && ActiveSketch == null && Tool == null && SectionOutlineHit(p))
         { SectionSelected = true; SectionClicked?.Invoke(); }
-        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= 4) { SectionSelected = false; RequestPick(p, click: true, e.KeyModifiers); }
+        else if (was == Drag.Select && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= ClickSlop) { SectionSelected = false; RequestPick(at, click: true, e.KeyModifiers); }
     }
+
+    /// <summary>
+    /// k130 (замечание 28.10, 19:39, п. 1): ДОПУСК ЩЕЛЧКА — 8 пикселей (по сумме сдвигов): на тачпаде нажатие сдвигает
+    /// курсор на 4–6 пикселей, и щелчок с допуском 4 становился рамкой выбора (пустой — выбор снимался) или
+    /// перетаскиванием точки эскиза. P3D_CLICKSLOP=0 — прежние 4.
+    /// </summary>
+    public static double ClickSlop => ClickSlopOff ? 4 : 8;
+    public static readonly bool ClickSlopOff = Environment.GetEnvironmentVariable("P3D_CLICKSLOP") == "0";
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
@@ -809,7 +821,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     {
         PicksServed++;
         // значки ограничений рисуются поверх вида (не в кадре GL) — ловятся здесь и важнее того, что под ними
-        if (ConstraintGlyphAt(req.P) is { IsEmpty: false } glyph && Selection.Accepts(glyph.Kind)) r = glyph;
+        if (ConstraintGlyphAt(req.P) is { IsEmpty: false } glyph && Selection.Accepts(glyph.Kind) && !GeometryBeatsGlyph(r, req.P)) r = glyph;
         if (!r.IsEmpty && Selection.Predicate is { } pred && !SafePred(pred, r)) r = PickRef.Empty;
         // k97: в эскизе — очерк грани детали (цилиндра) под курсором, если под ним нет ничего из эскиза
         if (ActiveSketch != null && (r.IsEmpty || r.Kind == PickKind.Face) && FaceReferenceAt(req.P) is { IsEmpty: false } fref) r = fref;

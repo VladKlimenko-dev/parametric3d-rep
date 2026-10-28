@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="128" height="96" viewBox="0 0 128 96" preserveAspectRatio="xMidYMid meet">
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-479.817 -4472.61)" d="M483.52197 4560.8555L566.96826 4564.356L555.21771 4497.0615L507.20157 4496.688L483.52197 4560.8555Z"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-479.817 -4472.61)" d="M555.21765 4496.8823L566.96832 4564.1772L604.02234 4550.0273L569.94177 4492.7104L555.21765 4496.8823Z"/>
+	<path fill="#87CEEB" transform="translate(-479.817 -4472.61)" d="M507.20145 4496.687L555.21765 4497.0605L569.94183 4492.7104L532.21844 4492.6523L507.20145 4496.687Z"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-479.817 -4472.61)" d="M507.20145 4496.687L555.21765 4497.0605L569.94183 4492.7104L532.21844 4492.6523L507.20145 4496.687Z"/>
+	<path fill="none" stroke="black" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" transform="translate(-479.817 -4472.61)" d="M530.2876 4492.9932L529.91315 4476.5039L552.77325 4476.3164L553.14813 4493.3682" fill-rule="evenodd"/>
+</svg>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="124" height="134" viewBox="0 0 124 134" preserveAspectRatio="xMidYMid meet">
+	<path fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(-750.302 -4453.58)" d="M773.1781 4476.8389L825.49335 4476.4565" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(-750.302 -4453.58)" d="M773.1781 4564.0376L825.49335 4563.6553" fill-rule="evenodd"/>
+	<path fill="none" stroke="black" stroke-width="3.999999" stroke-linecap="round" stroke-linejoin="round" transform="translate(-750.302 -4453.58)" d="M814.16626 4550.7896L813.98102 4489.3003" fill-rule="evenodd"/>
+	<path transform="matrix(0.00301321 0.999995 -0.999995 0.00301321 63.8941 107.209)" d="M0 0L-19.999996 7.9999986L-19.999996 -7.9999986L0 0Z"/>
+	<path transform="matrix(-0.00301305 -0.999995 0.999995 -0.00301305 63.6486 25.7197)" d="M0 0L-19.999996 7.9999986L-19.999996 -7.9999986L0 0Z"/>
+	<path transform="translate(-750.302 -4453.58)" d="M821.4585 4515.9492L851.14557 4505.5464L851.14557 4511.9189L829.17389 4519.2842L851.14557 4526.4111L851.14551 4532.6445L821.4585 4522.2222L821.4585 4515.9492Z"/>
+</svg>

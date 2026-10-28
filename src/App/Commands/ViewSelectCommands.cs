@@ -65,15 +65,15 @@ public static class ViewSelectCommands
         r.Add(new AppCommand { Id = "sel.face_loop", Label = "Контур грани", Group = S, Icon = "sel_face_loop_but.svg", Synonyms = "face loop edges контур грани рёбра",
             CanRun = HasPart, Run = () => FaceLoop(w) });
         // анализ
-        r.Add(new AppCommand { Id = "an.measure", Label = "Измерить", Group = An, Icon = "an_measure_but.svg", Synonyms = "measure distance angle radius измерить расстояние угол радиус", Gesture = K(Key.M),
+        r.Add(new AppCommand { Id = "an.measure", Label = "Измерить", Group = An, Icon = Parametric3D.App.Icons.IconProvider.Exists("dim_size_but.svg") ? "dim_size_but.svg" : "dim_linear_but.svg", Synonyms = "measure distance angle radius измерить расстояние угол радиус", Gesture = K(Key.M),
             CanRun = HasPart, Run = async () => { if (!MeasureOff && CreateMeasure(w) != null) return; await Dialogs.Info(w, L("Измерение"), string.Join("\n", Measure(w))); } });
-        r.Add(new AppCommand { Id = "an.area", Label = "Площадь", Group = An, Icon = "an_area_but.svg", Synonyms = "area площадь",
+        r.Add(new AppCommand { Id = "an.area", Label = "Площадь", Group = An, Icon = "dim_area_but.svg", Synonyms = "area площадь",
             CanRun = HasPart, Run = () => w.ShowToast(L("Площадь выбранных граней: {0} мм²", F(SelectedArea(w))), error: false) });
-        r.Add(new AppCommand { Id = "an.perimeter", Label = "Периметр / длина", Group = An, Icon = "an_perimeter_but.svg", Synonyms = "perimeter length периметр длина",
+        r.Add(new AppCommand { Id = "an.perimeter", Label = "Периметр / длина", Group = An, Icon = "dim_perimeter_but.svg", Synonyms = "perimeter length периметр длина",
             CanRun = HasPart, Run = () => w.ShowToast(L("Длина: {0} мм", F(SelectedLength(w))), error: false) });
-        r.Add(new AppCommand { Id = "an.mass", Label = "Массовые свойства", Group = An, Icon = "an_mass_but.svg", Synonyms = "mass properties inertia масса центр инерция",
+        r.Add(new AppCommand { Id = "an.mass", Label = "Массовые свойства", Group = An, Icon = "mass_but.svg", Synonyms = "mass properties inertia масса центр инерция",
             CanRun = HasPart, Run = async () => await Dialogs.Info(w, L("Массовые свойства"), MassText(w.Session.Part!)) });
-        r.Add(new AppCommand { Id = "an.zebra", Label = "Зебра", Group = An, Icon = "an_zebra_but.svg", Synonyms = "zebra stripes reflection зебра",
+        r.Add(new AppCommand { Id = "an.zebra", Label = "Зебра", Group = An, Icon = "zebra.svg", Synonyms = "zebra stripes reflection зебра",
             IsChecked = () => vp.Zebra, Run = () => vp.Zebra = !vp.Zebra });
         r.Add(new AppCommand { Id = "an.curvature", Label = "Кривизна (гребёнка)", Group = An, Icon = "an_curvature_but.svg", Synonyms = "curvature comb кривизна гребёнка",
             IsChecked = () => vp.Annotations.Count > 0,

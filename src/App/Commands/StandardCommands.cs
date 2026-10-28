@@ -307,6 +307,8 @@ public static class StandardCommands
             r.Add(new AppCommand { Id = id, Label = label, Group = S, Icon = icon, Synonyms = "dimension размер " + syn, Gesture = g, CanRun = () => w.InSketch, Run = () => SketchCommands.Dimension(w, k) });
         Dim("dim.smart", "Размер", "dim_smart_but.svg", SketchCommands.DimKind.Smart, "smart dimension размер", K(Key.D));
         Dim("dim.linear", "Линейный размер", "dim_linear_but.svg", SketchCommands.DimKind.Linear, "linear distance length линейный расстояние длина");
+        Dim("dim.horizontal", "Размер по горизонтали", "dim_size_horizontal.svg", SketchCommands.DimKind.Horizontal, "horizontal distance размер по горизонтали горизонтальный");
+        Dim("dim.vertical", "Размер по вертикали", "dim_size_vertical.svg", SketchCommands.DimKind.Vertical, "vertical distance размер по вертикали вертикальный");
         Dim("dim.radius", "Радиус", "dim_radius_but.svg", SketchCommands.DimKind.Radius, "radius радиус");
         Dim("dim.diameter", "Диаметр", "dim_diameter_but.svg", SketchCommands.DimKind.Diameter, "diameter диаметр");
         Dim("dim.angle", "Угловой размер", "dim_angle_but.svg", SketchCommands.DimKind.Angle, "angle угол угловой");

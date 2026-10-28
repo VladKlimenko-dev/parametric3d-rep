@@ -723,6 +723,17 @@ public sealed class NumericSketchSolver : ISketchSolver
                         else fns.Add(dst => dst.Add((da.P - db.P).Length - V()));
                     }
                     break;
+                // k130: по горизонтали / по вертикали — разность координат со стороной (знаком), закреплённой при первом решении
+                case DimensionType.DistanceHorizontal:
+                case DimensionType.DistanceVertical:
+                    if (it.Count >= 2 && it[0] is SkPoint ha && it[1] is SkPoint hb)
+                    {
+                        bool hz = d.Type == DimensionType.DistanceHorizontal;
+                        double sd = d.Side != 0 ? d.Side : SideOf(hz ? hb.X - ha.X : hb.Y - ha.Y);
+                        if (d.Value == 0 && !ZeroDimOff) fns.Add(hz ? dst => dst.Add(hb.X - ha.X) : dst => dst.Add(hb.Y - ha.Y));
+                        else fns.Add(hz ? dst => dst.Add(sd * (hb.X - ha.X) - V()) : dst => dst.Add(sd * (hb.Y - ha.Y) - V()));
+                    }
+                    break;
                 case DimensionType.DistancePointLine:
                     if (it.Count >= 2 && it[0] is SkPoint dp && it[1] is SkLine dl)
                     {

@@ -51,6 +51,8 @@ public partial class MainWindow
             DimensionType.AngleLineLine => "угол",
             DimensionType.ArcLength => "длина дуги",
             DimensionType.CoordX or DimensionType.CoordY => "координата",
+            DimensionType.DistanceHorizontal => "размер по горизонтали",
+            DimensionType.DistanceVertical => "размер по вертикали",
             _ => "размер",
         });
         string role = L(d.Reference ? "справочный" : d.UserLocked ? "с замком" : d.IsDefault || !d.Locked ? "слабый" : "сильный");

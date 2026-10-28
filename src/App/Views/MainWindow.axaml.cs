@@ -844,7 +844,7 @@ public partial class MainWindow : Window
     /// <summary>k97: панель размеров эскиза.</summary>
     public static readonly string[] DimTools =
     {
-        "dim.smart", "dim.linear", "dim.radius", "dim.diameter", "dim.angle", "dim.arc_length",
+        "dim.smart", "dim.linear", "dim.horizontal", "dim.vertical", "dim.radius", "dim.diameter", "dim.angle", "dim.arc_length",
         "dim.reference", "dim.lock", "dim.make_weak", "dim.arrows_outside", "dim.link_param", "dim.area",
     };
 
@@ -1713,6 +1713,17 @@ public partial class MainWindow : Window
     /// u12 (замечание 17): меню размера эскиза (правая кнопка): сделать сильным, замок, справочный, стрелки внутри/снаружи;
     /// у радиуса и диаметра — одна стрелка, радиус ↔ диаметр, диаметр как обычный размер.
     /// </summary>
+    /// <summary>P3D_AXISDIMMENU=0 — без пунктов «Сделать горизонтальным / вертикальным».</summary>
+    static readonly bool AxisDimMenuOff = Environment.GetEnvironmentVariable("P3D_AXISDIMMENU") == "0";
+    /// <summary>Разбор (k130): пункты последнего меню размера.</summary>
+    public List<string>? LastDimensionMenu { get; private set; }
+    /// <summary>Проверки: меню размера (как правой кнопкой) — пункты в LastDimensionMenu; pick — выполнить пункт с такой подписью.</summary>
+    public void OpenDimensionMenuForTest(SkDimension d, string? pick = null)
+    {
+        _dimMenuPick = pick; try { OpenDimensionMenu(d); } finally { _dimMenuPick = null; }
+    }
+    private string? _dimMenuPick;
+
     private void OpenDimensionMenu(SkDimension d)
     {
         if (View.ActiveSketch is not { } sk) return;
@@ -1768,6 +1779,20 @@ public partial class MainWindow : Window
             d.Reference = !d.Reference;
             if (d.Reference) { d.Locked = false; d.IsDefault = false; } else { d.Locked = true; d.Value = DimensionMeasure.Value(d) is var mv && !double.IsNaN(mv) ? mv : d.Value; }
         }, "dim_reference_but.svg", geometry: true);
+        // k130 (замечание 28.10, 19:39, п. 4): косой размер «точка — точка» — сделать по горизонтали или по вертикали;
+        // у размера, уже горизонтального или вертикального, пунктов нет. Значение — нынешнее расстояние по оси (геометрия на месте).
+        if (DimensionMeasure.IsDiagonal(d) && !AxisDimMenuOff)
+        {
+            items.Add(new Separator());
+            foreach (var (label, t, icon) in new[] { ("Сделать горизонтальным", DimensionType.DistanceHorizontal, "dim_size_horizontal.svg"), ("Сделать вертикальным", DimensionType.DistanceVertical, "dim_size_vertical.svg") })
+                Add(label, !d.UserLocked, () =>
+                {
+                    d.Type = t; d.Side = 0; d.Formula = null;
+                    double m = DimensionMeasure.Value(d); if (!double.IsNaN(m)) d.Value = m;
+                    sk.BumpStructure();
+                }, icon, geometry: true);
+        }
+        LastDimensionMenu = items.OfType<MenuItem>().Select(m => m.Header?.ToString() ?? "").ToList();
         items.Add(new Separator());
         Add("Стрелки снаружи (наружный размер)", true, () => d.Arrows = ArrowPlacement.Outside, d.Type == DimensionType.Diameter ? "dim_diameter_outside_ico.svg" : d.Type == DimensionType.Radius ? "dim_radius_outside_ico.svg" : d.Type == DimensionType.AngleLineLine ? "dim_angle_outside_ico.svg" : "dim_arrows_outside_but.svg", check: d.Arrows == ArrowPlacement.Outside);
         Add("Стрелки внутри (внутренний размер)", true, () => d.Arrows = ArrowPlacement.Inside, check: d.Arrows == ArrowPlacement.Inside);
@@ -1793,6 +1818,12 @@ public partial class MainWindow : Window
             AfterSketchEdit(sk);
             if (weakened > 0) ShowToast(L("Размер нужен, чтобы эскиз был определён, — он стал слабым"), error: false);
         }, "delete_but.svg");
+        if (_dimMenuPick != null)
+        {
+            LastDimensionMenu = items.OfType<MenuItem>().Select(m => m.Header?.ToString() ?? "").ToList();
+            if (items.OfType<MenuItem>().FirstOrDefault(m => m.Header?.ToString() == L(_dimMenuPick)) is { } mi) mi.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+            return;
+        }
         new ContextMenu { ItemsSource = items }.Open(View);
     }
 

@@ -183,6 +183,8 @@ public sealed partial class ModelViewport
 
     internal void DimensionDragMove(Point p)
     {
+        // k130: пока курсор в пределах допуска щелчка (по экрану, без привязки), это щелчок, а не протяжка
+        if (!_dimMoved && !ClickSlopOff && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= ClickSlop) return;
         if (DraggedDimension is not { } d || ScreenToSketch(p) is not { } q) return;
         var delta = q - _dimDragStart;
         if (!_dimMoved && delta.Length < 3 * PixelSize) return;
@@ -301,6 +303,8 @@ public sealed partial class ModelViewport
         to.Rotation = ViewMath.FromForwardUp(-V3(pl.W), up);
         to.Target = V3(pl.Origin);
         to.Mode = ProjectionMode.Orthographic;
+        // k130 (замечание 28.10, 19:39, п. 2): вид вписан по элементам эскиза (не по детали); пустой эскиз — как прежде
+        if (!SketchFitOff && FitSketch(to, sk) is { } fit) to = fit;
         if (animate) AnimateTo(to); else { Camera.State = to; CameraChanged?.Invoke(); }
         RefreshDefaultDimensions();
         _overlayDirty = true;
@@ -321,6 +325,47 @@ public sealed partial class ModelViewport
     }
 
     private static Vector3 V3(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
+
+    /// <summary>P3D_SKFIT=0 — «Вписать» и вход в эскиз — по детали (прежде).</summary>
+    public static readonly bool SketchFitOff = Environment.GetEnvironmentVariable("P3D_SKFIT") == "0";
+    public static long SketchFits;
+
+    /// <summary>
+    /// k130 (замечание 28.10, 19:39, п. 2): ВИД ПО ЭСКИЗУ. В эскизе объекты — его элементы (своя и ссылочная геометрия;
+    /// оси и начало эскиза не в счёт): цель — середина их охвата в осях вида, масштаб — чтобы охват поместился по ширине
+    /// и высоте вида с полями (подписи размеров — у края). Null — в эскизе нет элементов.
+    /// </summary>
+    public CameraState? FitSketch(CameraState st, Sketch sk)
+    {
+        var pts = new List<Vector2d>();
+        foreach (var e in sk.Entities)
+        {
+            if (e.Builtin) continue;
+            if (e is SkPoint p) { pts.Add(p.P); continue; }
+            try { e.Tessellate(pts, true); } catch { }
+            foreach (var hp in e.Handles) pts.Add(hp.P);
+        }
+        if (pts.Count == 0) return null;
+        var cam = new Camera { State = st, ViewportWidth = Camera.ViewportWidth, ViewportHeight = Camera.ViewportHeight };
+        Vector3 R = cam.Right, U = cam.Up;
+        var o = V3(sk.Plane.Origin);
+        float r0 = float.MaxValue, r1 = float.MinValue, u0 = float.MaxValue, u1 = float.MinValue;
+        foreach (var q in pts)
+        {
+            var w = V3(sk.Plane.ToWorld(q)) - o;
+            float r = Vector3.Dot(w, R), u = Vector3.Dot(w, U);
+            r0 = Math.Min(r0, r); r1 = Math.Max(r1, r); u0 = Math.Min(u0, u); u1 = Math.Max(u1, u);
+        }
+        float wid = r1 - r0, hei = u1 - u0;
+        float aspect = cam.Aspect;
+        float h = Math.Max(hei, wid / Math.Max(1e-3f, aspect)) * 1.3f;
+        if (h < 1e-3f) h = 50f;
+        st.Target = o + R * ((r0 + r1) * 0.5f) + U * ((u0 + u1) * 0.5f);
+        st.OrthoHeight = h;
+        st.Distance = h / MathF.Max(1e-3f, MathF.Tan(st.Fovy * 0.5f)) * 0.5f;
+        Interlocked.Increment(ref SketchFits);
+        return st;
+    }
 
     /// <summary>Размер логического пикселя на плоскости (мм).</summary>
     public double PixelSize => 1.0 / Math.Max(1e-6, Camera.WorldToPx) * Scaling;
@@ -683,6 +728,20 @@ public sealed partial class ModelViewport
         new() { A = a, B = b, Color = SceneData.Pack(c), Width = w, Dash = dash, Pick = 0 };
 
     /// <summary>Значок ограничения под точкой экрана (DIP) в активном эскизе; Empty — нет.</summary>
+    /// <summary>
+    /// k130 (замечание 28.10, 19:39, п. 1): ТОЧКА И ЛИНИЯ ЭСКИЗА — ВАЖНЕЕ ЗНАЧКА СВЯЗИ, когда курсор прямо на них (точка — до
+    /// 5 пикселей, линия — до 3). Значок совпадения стоит в нескольких пикселях от своей точки, и прежде щелчок по точке
+    /// выбирал связь (значок перекрывал точку), Ctrl+щелчок «не добавлял» точку. P3D_GLYPHPRIO=0 — значок всегда важнее.
+    /// </summary>
+    public bool GeometryBeatsGlyph(PickRef r, Point p)
+    {
+        if (GlyphPrioOff || ActiveSketch == null || r.IsEmpty || ScreenToSketch(p) is not { } q) return false;
+        if (r.Kind == PickKind.SketchPoint && r.Target is SkPoint pt) return (pt.P - q).Length <= 5 * PixelSize;
+        if (r.Kind == PickKind.SketchCurve && r.Target is SkEntity e) return e.DistanceTo(q) <= 3 * PixelSize;
+        return false;
+    }
+    public static readonly bool GlyphPrioOff = Environment.GetEnvironmentVariable("P3D_GLYPHPRIO") == "0";
+
     public PickRef ConstraintGlyphAt(Point p)
     {
         if (ActiveSketch is not { } sk || !Settings.Current.ShowConstraintGlyphs) return PickRef.Empty;
@@ -770,7 +829,6 @@ public sealed partial class ModelViewport
         _dragPoint = null; _dragShape = null; _geomMoved = false;
         if (ActiveSketch is not { } sk || _tool != null || ScreenToSketch(p) is not { } q) return false;
         if (mods.HasFlag(Avalonia.Input.KeyModifiers.Control) || mods.HasFlag(Avalonia.Input.KeyModifiers.Shift)) return false;
-        if (ConstraintGlyphAt(p) is { IsEmpty: false }) return false;
         double tol = PixelSize * Settings.Current.SnapTolerancePx;
         SkPoint? best = null; double bd = tol;
         foreach (var pt in sk.AllPoints())
@@ -778,6 +836,8 @@ public sealed partial class ModelViewport
             double d = (pt.P - q).Length;
             if (d < bd) { bd = d; best = pt; }
         }
+        // значок связи под курсором — не тянуть (k130: кроме точки прямо под курсором)
+        if (ConstraintGlyphAt(p) is { IsEmpty: false } && (GlyphPrioOff || best == null || bd > 5 * PixelSize)) return false;
         if (best != null)
         {
             if (!IsMovable(sk, best)) return false;
@@ -841,6 +901,9 @@ public sealed partial class ModelViewport
 
     internal void SketchDragMove(Point p)
     {
+        // k130: точка под курсором привязывается (к сетке, к точкам) — дрожь тачпада в 5 пикселей давала скачок привязки на
+        // 10 и больше: щелчок становился перетаскиванием. Пока курсор в пределах допуска щелчка (по экрану) — не тянуть.
+        if (!_geomMoved && !ClickSlopOff && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) <= ClickSlop) return;
         if (ScreenToSketch(p) is { } q) SketchDragTo(q);
     }
 

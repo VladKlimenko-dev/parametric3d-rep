@@ -127,9 +127,66 @@ public static class SketchDimensions
 
     // ------------------------------------------------------------ линейные
 
+    /// <summary>
+    /// k130 (замечание 28.10, 19:39, п. 3): РАЗМЕР ПО ГОРИЗОНТАЛИ / ПО ВЕРТИКАЛИ. Размерная линия — по оси эскиза (U или V),
+    /// выносные — от каждой точки поперёк до размерной линии; подпись — как у линейного.
+    /// </summary>
+    private static void BuildAxisLinear(SkDimension d, Frame3 plane, DimBatch batch, double px, LineStyle style)
+    {
+        if (d.Items.Count < 2 || d.Items[0] is not SkPoint pa || d.Items[1] is not SkPoint pb) return;
+        Vector2d a = pa.P, b = pb.P;
+        bool hz = d.Type == DimensionType.DistanceHorizontal;
+        Vector2d dir = hz ? new Vector2d(1, 0) : new Vector2d(0, 1);
+        if (Vector2d.Dot(b - a, dir) < 0) dir = -dir;
+        Vector2d nrm = new(-dir.Y, dir.X);
+        double span = Vector2d.Dot(b - a, dir);
+        if (span < 1e-9) return;
+        double ta = Vector2d.Dot(a, nrm), tb = Vector2d.Dot(b, nrm);
+        double off = Vector2d.Dot(d.TextOffset, nrm), along = Vector2d.Dot(d.TextOffset, dir);
+        if (Math.Abs(off) < px) off = px * 20;
+        // линия размера: у поставленного мышью — на смещении от первой точки; иначе — за дальней точкой на 20 px
+        double tl = d.UserPlaced ? ta + off : off >= 0 ? Math.Max(ta, tb) + px * 20 : Math.Min(ta, tb) - px * 20;
+        Vector2d a2 = a + nrm * (tl - ta), b2 = b + nrm * (tl - tb);
+        foreach (var (p, t) in new[] { (a, ta), (b, tb) })
+        {
+            double o = tl - t;
+            if (Math.Abs(o) < GapPx * px) continue;
+            double sg = Math.Sign(o);
+            Line(batch, plane, style, p + nrm * (GapPx * px * sg), p + nrm * (o + OverrunPx * px * sg));
+        }
+        double arrowLen = ArrowLengthPx * px;
+        double textWidth = StrokeFont.Width(Label(d)) * TextHeightPx * px;
+        bool outside = d.Arrows switch { ArrowPlacement.Inside => false, ArrowPlacement.Outside => true, _ => span < arrowLen * 2 + textWidth };
+        if (outside)
+        {
+            Line(batch, plane, style, a2 - dir * arrowLen, a2);
+            Line(batch, plane, style, b2, b2 + dir * arrowLen);
+            Arrow(batch, plane, style, a2, -dir, px);
+            Arrow(batch, plane, style, b2, dir, px);
+        }
+        else
+        {
+            Line(batch, plane, style, a2, b2);
+            Arrow(batch, plane, style, a2, dir, px);
+            Arrow(batch, plane, style, b2, -dir, px);
+        }
+        double half = span * 0.5;
+        Vector2d mid = (a2 + b2) * 0.5;
+        double textHalf = textWidth * 0.5 + px * 2;
+        if (outside && Math.Abs(along) < half + arrowLen + textHalf) along = half + arrowLen + textHalf;
+        double right = along + textHalf, left = along - textHalf;
+        if (right > half) Line(batch, plane, style, b2, mid + dir * right);
+        if (left < -half) Line(batch, plane, style, a2, mid + dir * left);
+        Text(batch, plane, style, d, mid + dir * along, dir, nrm, px);
+        LastAxisDim = (a2, b2);
+    }
+    /// <summary>Разбор и проверки (k130): размерная линия последнего размера по горизонтали / вертикали.</summary>
+    public static (Vector2d A, Vector2d B) LastAxisDim;
+
     private static void BuildLinear(SkDimension d, Frame3 plane, DimBatch batch,
                                     double px, LineStyle style)
     {
+        if (d.Type is DimensionType.DistanceHorizontal or DimensionType.DistanceVertical) { BuildAxisLinear(d, plane, batch, px, style); return; }
         if (!LinearEnds(d, out Vector2d a, out Vector2d b)) return;
 
         // Если замер идёт до ПРЯМОЙ, проекция может лечь за пределы самого
@@ -264,6 +321,12 @@ public static class SketchDimensions
                     else { b = pm; a = Project(pm, rf); }
                     return true;
                 }
+                return false;
+
+            case DimensionType.DistanceHorizontal:
+            case DimensionType.DistanceVertical:
+                if (it.Count >= 2 && it[0] is SkPoint ha && it[1] is SkPoint hb)
+                { a = ha.P; b = d.Type == DimensionType.DistanceHorizontal ? new Vector2d(hb.X, ha.Y) : new Vector2d(ha.X, hb.Y); return true; }
                 return false;
 
             case DimensionType.CoordX:

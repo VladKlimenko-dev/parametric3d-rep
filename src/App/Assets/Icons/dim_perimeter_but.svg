@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="132" height="132" viewBox="0 0 132 132" preserveAspectRatio="xMidYMid meet">
+	<path fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(-620.838 -4453.6)" d="M657.6142 4490.1553L715.60034 4490.1553L715.60034 4548.1416L657.6142 4548.1416L657.6142 4490.1553Z"/>
+	<path fill="none" stroke="black" stroke-width="3.999999" stroke-linecap="round" stroke-linejoin="round" transform="translate(-620.838 -4453.6)" d="M705.60028 4476.4565L667.6142 4476.457" fill-rule="evenodd"/>
+	<path transform="translate(94.7622 22.8584)" d="M0 0L-19.999996 7.9999986L-19.999996 -7.9999986L0 0Z"/>
+	<path transform="matrix(-1 0 0 -1 36.7761 22.8589)" d="M0 0L-19.999996 7.9999986L-19.999996 -7.9999986L0 0Z"/>
+	<path fill="none" stroke="black" stroke-width="3.999999" stroke-linecap="round" stroke-linejoin="round" transform="translate(-620.838 -4453.6)" d="M705.60034 4562.2788L667.61426 4562.2793" fill-rule="evenodd"/>
+	<path transform="translate(94.7623 108.681)" d="M0 0L-19.999996 7.9999986L-19.999996 -7.9999986L0 0Z"/>
+	<path transform="matrix(-1 0 0 -1 36.7762 108.681)" d="M0 0L-19.999996 7.9999986L-19.999996 -7.9999986L0 0Z"/>
+	<path fill="none" stroke="black" stroke-width="3.999999" stroke-linecap="round" stroke-linejoin="round" transform="translate(-620.838 -4453.6)" d="M643.69672 4538.3608L643.69635 4500.3745" fill-rule="evenodd"/>
+	<path transform="matrix(0 1 -1 0 22.8587 94.7627)" d="M0 0L-19.999996 7.9999986L-19.999996 -7.9999986L0 0Z"/>
+	<path transform="matrix(0 -1 1 0 22.8582 36.7764)" d="M0 0L-19.999996 7.9999986L-19.999996 -7.9999986L0 0Z"/>
+	<path fill="none" stroke="black" stroke-width="3.999999" stroke-linecap="round" stroke-linejoin="round" transform="translate(-620.838 -4453.6)" d="M729.51898 4538.3608L729.51862 4500.3745" fill-rule="evenodd"/>
+	<path transform="matrix(0 1 -1 0 108.681 94.7627)" d="M0 0L-19.999996 7.9999986L-19.999996 -7.9999986L0 0Z"/>
+	<path transform="matrix(0 -1 1 0 108.68 36.7764)" d="M0 0L-19.999996 7.9999986L-19.999996 -7.9999986L0 0Z"/>
+</svg>
