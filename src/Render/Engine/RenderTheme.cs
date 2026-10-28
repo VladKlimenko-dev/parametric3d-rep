@@ -31,6 +31,24 @@ public sealed class RenderTheme
     public bool SectionHatch = true;
     public Vector4 SectionHatchColor, SectionFillColor;
 
+    // ---------------------------------------------------------------- k132 (замечание 28.10, 23:42, пп. 8–9): вид модели
+    /// <summary>Пол под деталью (параллельно XZ): включён, тень, отражение, зазор до нижней точки (мм), цвет, доля отражения.</summary>
+    public bool FloorOn = true, FloorShadow = true, FloorReflection = true;
+    public float FloorGap;
+    public Vector4 FloorColor;
+    public float FloorReflect = 0.25f;
+    /// <summary>Свет в осях камеры: положение и точка, куда он светит (направление — от точки к положению), цвет, сила.</summary>
+    public Vector3 Light1Pos = new(-0.45f, 0.65f, 0.62f), Light1Target, Light1Color = new(1f, 0.98f, 0.95f);
+    public float Light1Power = 0.80f;
+    public Vector3 Light2Pos = new(0.75f, 0.10f, 0.45f), Light2Target, Light2Color = new(0.85f, 0.90f, 1f);
+    public float Light2Power = 0.28f;
+    public Vector3 AmbientColor = new(0.40f / 0.46f, 0.42f / 0.46f, 1f);
+    public float AmbientPower = 0.46f;
+    /// <summary>Контур опорных плоскостей.</summary>
+    public bool DatumOutline = true;
+    /// <summary>Размер точки эскиза, пикселей (точка на кривой — на 1 меньше).</summary>
+    public float SketchPointPx = 6f;
+
     private static Vector4 C(int r, int g, int b, float a = 1f) => new(r / 255f, g / 255f, b / 255f, a);
 
     public static RenderTheme DarkTheme() => new()
@@ -44,6 +62,7 @@ public sealed class RenderTheme
         SketchCurve = C(255, 214, 74), SketchConstruction = C(140, 170, 220, 0.9f), SketchCenterline = C(255, 255, 255, 0.95f),
         SketchReference = C(96, 205, 255, 0.9f), SketchPoint = C(255, 214, 74),
         PreviewAdd = C(255, 122, 26, 0.4f), PreviewAddEdge = C(255, 122, 26, 0.95f), PreviewCut = C(239, 68, 68, 0.35f), PreviewCutEdge = C(239, 68, 68, 0.95f),
+        FloorColor = C(58, 63, 72, 0.82f),
     };
 
     public static RenderTheme LightTheme() => new()
@@ -57,5 +76,6 @@ public sealed class RenderTheme
         SketchCurve = C(31, 95, 214), SketchConstruction = C(90, 115, 160, 0.9f), SketchCenterline = C(60, 64, 72, 0.95f),
         SketchReference = C(0, 140, 200, 0.9f), SketchPoint = C(31, 95, 214),
         PreviewAdd = C(234, 88, 12, 0.35f), PreviewAddEdge = C(234, 88, 12, 0.95f), PreviewCut = C(209, 36, 47, 0.3f), PreviewCutEdge = C(209, 36, 47, 0.95f),
+        FloorColor = C(246, 247, 249, 0.80f),
     };
 }

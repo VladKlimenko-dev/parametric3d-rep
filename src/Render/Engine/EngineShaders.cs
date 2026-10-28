@@ -80,6 +80,12 @@ uniform float uOpacity;
 uniform int uMode;          // 0 lit, 1 flat colour, 2 pick
 uniform vec4 uFlat;
 uniform vec4 uMat;          // u10: стиль «Материал» — x сила блика, y резкость, z металл, w включён
+// k132: свет из настроек вида модели (в осях камеры): ключевой и заполняющий — направление и цвет×сила; окружающий
+uniform vec3 uL1;
+uniform vec3 uL1C;
+uniform vec3 uL2;
+uniform vec3 uL2C;
+uniform vec3 uAmb;
 out vec4 oColor;
 " + PickOut + @"
 vec3 toLin(vec3 c) { return pow(c, vec3(2.2)); }
@@ -102,9 +108,11 @@ void main()
     vec3 V = normalize(-vV);
 
     // студийный свет, привязанный к камере: верхний ключевой, боковой заполняющий, полусфера неба и пола
-    vec3 L1 = normalize(vec3(-0.45, 0.65, 0.62));
-    vec3 L2 = normalize(vec3(0.75, 0.10, 0.45));
-    vec3 hemi = mix(vec3(0.16, 0.165, 0.18), vec3(0.40, 0.42, 0.46), N.y * 0.5 + 0.5);
+    vec3 L1 = normalize(uL1);
+    vec3 L2 = normalize(uL2);
+    vec3 hemi = mix(uAmb * 0.4, uAmb, N.y * 0.5 + 0.5);
+    // сила блика — от силы света (по умолчанию 0.80 и 0.28 — прежние)
+    float k1 = max(max(uL1C.r, uL1C.g), uL1C.b) / 0.80, k2 = max(max(uL2C.r, uL2C.g), uL2C.b) / 0.28;
     float d1 = max(dot(N, L1), 0.0);
     float d2 = max(dot(N, L2), 0.0);
     if (uMat.w > 0.5)
@@ -116,10 +124,10 @@ void main()
         vec3 env = mix(vec3(0.05, 0.05, 0.06), vec3(0.62, 0.66, 0.72), smoothstep(-0.35, 0.55, Rv.y))
                  + vec3(0.55) * exp(-pow((Rv.y - 0.08) * 7.0, 2.0));
         vec3 kd = b * (1.0 - 0.75 * metal);
-        vec3 diffM = kd * (hemi + d1 * 0.80 * vec3(1.0, 0.98, 0.95) + d2 * 0.28 * vec3(0.85, 0.90, 1.0));
+        vec3 diffM = kd * (hemi + d1 * uL1C + d2 * uL2C);
         vec3 ks = mix(vec3(1.0), b, metal) * uMat.x;
-        float sp1 = pow(max(dot(N, normalize(L1 + V)), 0.0), max(uMat.y, 2.0));
-        float sp2 = pow(max(dot(N, normalize(L2 + V)), 0.0), max(uMat.y * 0.4, 2.0)) * 0.25;
+        float sp1 = pow(max(dot(N, normalize(L1 + V)), 0.0), max(uMat.y, 2.0)) * k1;
+        float sp2 = pow(max(dot(N, normalize(L2 + V)), 0.0), max(uMat.y * 0.4, 2.0)) * 0.25 * k2;
         float F = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
         vec3 refl = env * mix(vec3(F) * uMat.x * 0.6, b * (0.55 + 0.45 * F), metal);
         vec3 cm = diffM + ks * (sp1 + sp2) * 1.4 + refl;
@@ -137,9 +145,9 @@ void main()
         return;
     }
     if (!gl_FrontFacing && dot(uClip.xyz, uClip.xyz) > 0.0) b *= 0.45;   // u13: внутренность в сечении темнее
-    vec3 diff = b * (hemi + d1 * 0.80 * vec3(1.0, 0.98, 0.95) + d2 * 0.28 * vec3(0.85, 0.90, 1.0));
-    float s1 = pow(max(dot(N, normalize(L1 + V)), 0.0), 64.0) * 0.30;
-    float s2 = pow(max(dot(N, normalize(L2 + V)), 0.0), 24.0) * 0.06;
+    vec3 diff = b * (hemi + d1 * uL1C + d2 * uL2C);
+    float s1 = pow(max(dot(N, normalize(L1 + V)), 0.0), 64.0) * 0.30 * k1;
+    float s2 = pow(max(dot(N, normalize(L2 + V)), 0.0), 24.0) * 0.06 * k2;
     float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0) * 0.16;
     vec3 c = diff + vec3(s1 + s2) + fres * vec3(0.80, 0.85, 0.95);
     c = c / (1.0 + c * 0.12);
@@ -419,6 +427,47 @@ void main()
     float a = lineAt(s1);
     if (uCross == 1) a = max(a, lineAt(-vUV.x * sa + vUV.y * ca));
     oColor = vec4(mix(uFill.rgb, uHatch.rgb, a), 1.0);
+}";
+
+    // ------------------------------------------------------------------ k132: пол
+
+    /// <summary>Пол — прямоугольник в плоскости y = uY (мир), центр uC, полуразмеры uH; края мягко исчезают.</summary>
+    public const string FloorVert = @"#version 330 core
+uniform mat4 uView;
+uniform mat4 uProj;
+uniform vec3 uC;
+uniform vec2 uH;
+out vec2 vUV;
+void main()
+{
+    vec2 c = vec2((gl_VertexID & 1) == 0 ? -1.0 : 1.0, gl_VertexID >= 2 ? 1.0 : -1.0);
+    vUV = c;
+    vec3 w = uC + vec3(c.x * uH.x, 0.0, c.y * uH.y);
+    gl_Position = uProj * (uView * vec4(w, 1.0));
+}";
+
+    public const string FloorFrag = @"#version 330 core
+in vec2 vUV;
+uniform vec4 uColor;
+uniform float uEdge;   // доля края, на которой пол исчезает
+uniform int uOverRefl; // пол поверх отражения: к краю уходит в фон (и отражение тоже)
+uniform vec4 uTop;
+uniform vec4 uBottom;
+uniform float uVpH;
+out vec4 oColor;
+void main()
+{
+    vec2 a = abs(vUV);
+    float e = max(uEdge, 1e-3);
+    float k = (1.0 - smoothstep(1.0 - e, 1.0, a.x)) * (1.0 - smoothstep(1.0 - e, 1.0, a.y));
+    if (uOverRefl == 0) { oColor = vec4(uColor.rgb, uColor.a * k); return; }
+    float t = clamp(gl_FragCoord.y / max(uVpH, 1.0), 0.0, 1.0);
+    t = t * t * (3.0 - 2.0 * t);
+    vec3 bg = mix(uBottom.rgb, uTop.rgb, t);
+    // итог = k·(fa·пол + (1−fa)·отражение) + (1−k)·фон
+    float fa = uColor.a;
+    float al = 1.0 - k * (1.0 - fa);
+    oColor = vec4((k * fa * uColor.rgb + (1.0 - k) * bg) / max(al, 1e-4), al);
 }";
 
     // ------------------------------------------------------------------ фон

@@ -112,6 +112,8 @@ public sealed class DatumAxis : ModelItem
     public Vector3d Direction = Vector3d.UnitZ;
     public double DisplayLength = 80;
     public readonly List<uint> References = new();
+    /// <summary>k132: способ построения (номер в панели «Опорная ось»; −1 — не задан) — для правки.</summary>
+    public int Method = -1;
 
     public DatumAxis(string name, Vector3d origin, Vector3d dir)
     {
@@ -124,6 +126,8 @@ public sealed class DatumPoint : ModelItem
     public override ItemKind Kind => ItemKind.DatumPoint;
     public Vector3d P;
     public readonly List<uint> References = new();
+    /// <summary>k132: способ построения (номер в панели «Опорная точка»; −1 — не задан) — для правки.</summary>
+    public int Method = -1;
     public DatumPoint(string name, Vector3d p) { Name = name; P = p; }
 }
 

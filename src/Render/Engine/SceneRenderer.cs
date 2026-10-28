@@ -29,7 +29,29 @@ public sealed class SceneRenderer : IDisposable
     /// </summary>
     public bool SketchMode;
 
-    private ShaderProgram? _mesh, _line, _point, _fill, _bg;
+    private ShaderProgram? _mesh, _line, _point, _fill, _bg, _floor;
+    /// <summary>k132: габарит тел сцены (мир), без предпросмотра; пусто — нет тел.</summary>
+    private Vector3 _bMin, _bMax; private bool _hasBounds;
+    /// <summary>Разбор (k132): пол последнего кадра — нарисован, его высота, центр и полуразмеры; проходы отражения и тени.</summary>
+    public (bool Drawn, float Y, Vector3 C, Vector2 H, bool Reflection, bool Shadow) LastFloor;
+    public static readonly bool FloorOff = Environment.GetEnvironmentVariable("P3D_FLOOR") == "0";
+
+    /// <summary>
+    /// k132 (замечание 28.10, 23:42, п. 8): ПОЛ ПОД ДЕТАЛЬЮ (как в SolidWorks): плоскость, параллельная XZ, на зазоре от нижней
+    /// точки тел, чуть больше их габарита (поля — 15 % габарита и не меньше 10 % наибольшего размера), края мягко
+    /// исчезают. Null — тел нет.
+    /// </summary>
+    public static (float Y, Vector3 C, Vector2 H)? FloorGeometry(Vector3 min, Vector3 max, float gap)
+    {
+        if (FloorOff) return null;
+        var d = max - min;
+        float big = Math.Max(d.X, Math.Max(d.Y, d.Z));
+        if (!(big > 0) || float.IsNaN(big)) return null;
+        float y = min.Y - Math.Max(0, gap);
+        float mx = Math.Max(d.X * 0.15f, big * 0.10f), mz = Math.Max(d.Z * 0.15f, big * 0.10f);
+        var c = new Vector3((min.X + max.X) * 0.5f, y, (min.Z + max.Z) * 0.5f);
+        return (y, c, new Vector2(d.X * 0.5f + mx, d.Z * 0.5f + mz));
+    }
     private int _emptyVao = -1;
 
     private sealed class MeshGpu { public int Vao = -1, Pos = -1, Nrm = -1, Pick = -1, Ibo = -1, Count; public Matrix4 Model; public Vector4 Color, MatColor; public float MatSpec, MatShine, MatMetal; public int Preview; public uint PartId; }
@@ -73,6 +95,7 @@ public sealed class SceneRenderer : IDisposable
         _fill = new ShaderProgram("fill", EngineShaders.FillVert, EngineShaders.FillFrag);
         _bg = new ShaderProgram("background", EngineShaders.BackgroundVert, EngineShaders.BackgroundFrag);
         _cap = new ShaderProgram("cap", EngineShaders.CapVert, EngineShaders.CapFrag);
+        _floor = new ShaderProgram("floor", EngineShaders.FloorVert, EngineShaders.FloorFrag);
         _emptyVao = GL.GenVertexArray();
     }
 
@@ -81,6 +104,17 @@ public sealed class SceneRenderer : IDisposable
         EnsureShaders();
         ReleaseScene();
         _meshCpu.Clear(); _meshCpu.AddRange(s.Meshes.Where(m => m.Preview == 0)); _sceneVersion++;
+        // k132: габарит тел — для пола
+        _hasBounds = false; _bMin = new Vector3(float.MaxValue); _bMax = new Vector3(float.MinValue);
+        foreach (var m in s.Meshes)
+        {
+            if (m.Preview != 0) continue;
+            foreach (var pp in m.Pos)
+            {
+                var w = Vector3.TransformPosition(pp, m.Model);
+                _bMin = Vector3.ComponentMin(_bMin, w); _bMax = Vector3.ComponentMax(_bMax, w); _hasBounds = true;
+            }
+        }
         foreach (var m in s.Meshes)
         {
             var g = new MeshGpu { Model = m.Model, Color = m.Color, MatColor = m.MatColor, MatSpec = m.MatSpec, MatShine = m.MatShine, MatMetal = m.MatMetal, Count = m.Idx.Length, Preview = m.Preview, PartId = m.PartId };
@@ -329,6 +363,10 @@ public sealed class SceneRenderer : IDisposable
             goto afterBodies;
         }
 
+        // k132: пол (отражение, сам пол, тень) — под телами
+        LastFloor = default;
+        if (faces && !FloorOff) DrawFloor(f);
+
         // тела: тонированные — освещённые грани и контур; иначе — только глубина (для заслонения рёбер)
         if (faces) DrawMeshes(f, lit: true, opacity: 1f);
         else DrawMeshDepthOnly(f);
@@ -532,7 +570,106 @@ public sealed class SceneRenderer : IDisposable
         p.Set("uProj", f.Proj);
         p.Set("uViewport", new Vector2(_w, _h));
         SetCommon(p, f);
+        // k132: свет из настроек вида модели
+        var th = Theme;
+        Vector3 Dir(Vector3 pos, Vector3 to) { var d = pos - to; return d.LengthSquared > 1e-12f ? d.Normalized() : new Vector3(0, 0, 1); }
+        p.Set("uL1", Dir(th.Light1Pos, th.Light1Target)); p.Set("uL1C", th.Light1Color * th.Light1Power);
+        p.Set("uL2", Dir(th.Light2Pos, th.Light2Target)); p.Set("uL2C", th.Light2Color * th.Light2Power);
+        p.Set("uAmb", th.AmbientColor * th.AmbientPower);
     }
+
+    /// <summary>
+    /// k132: пол — трафарет пола, отражение тел (зеркально относительно пола, только на полу), пол поверх отражения
+    /// (частично прозрачный — отражение видно слабо), тень — тела, сплющенные на пол (по одному разу на пиксель).
+    /// Снизу пол не виден.
+    /// </summary>
+    private void DrawFloor(FrameParams f)
+    {
+        var th = Theme;
+        if (!th.FloorOn || SketchMode || !_hasBounds || _floor == null || _meshes.All(m => m.Preview != 0)) return;
+        if (FloorGeometry(_bMin, _bMax, th.FloorGap) is not { } fg) return;
+        var inv = f.View.Inverted();
+        var eye = inv.Row3.Xyz; var fwd = -inv.Row2.Xyz;
+        bool above = f.Near > 0 ? eye.Y > fg.Y : fwd.Y < -0.02f;
+        if (!above) return;
+        float big = Math.Max(_bMax.X - _bMin.X, Math.Max(_bMax.Y - _bMin.Y, _bMax.Z - _bMin.Z));
+        void Quad(Vector4 color, bool overRefl = false)
+        {
+            _floor!.Use();
+            _floor.Set("uOverRefl", overRefl ? 1 : 0); _floor.Set("uTop", th.BackgroundTop); _floor.Set("uBottom", th.BackgroundBottom);
+            _floor.Set("uVpH", (float)_h);
+            _floor.Set("uView", f.View); _floor.Set("uProj", f.Proj);
+            _floor.Set("uC", fg.C); _floor.Set("uH", fg.H); _floor.Set("uColor", color); _floor.Set("uEdge", 0.18f);
+            GL.BindVertexArray(_emptyVao);
+            GL.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+        }
+        GL.Enable(EnableCap.StencilTest);
+        GL.StencilMask(0xFF);
+        // 1) трафарет пола
+        GL.ColorMask(false, false, false, false); GL.DepthMask(false);
+        GL.StencilFunc(StencilFunction.Always, 1, 0xFF);
+        GL.StencilOp(StencilOp.Keep, StencilOp.Keep, StencilOp.Replace);
+        Quad(new Vector4(1, 1, 1, 1));
+        GL.ColorMask(true, true, true, true); GL.DepthMask(true);
+        GL.StencilOp(StencilOp.Keep, StencilOp.Keep, StencilOp.Keep);
+        GL.StencilFunc(StencilFunction.Equal, 1, 0xFF);
+        int dbg = int.TryParse(Environment.GetEnvironmentVariable("P3D_FLOORDBG"), out var dd) ? dd : 0;
+        bool refl = th.FloorReflection && ClipPlane == Vector4.Zero && (dbg & 1) == 0;
+        // 2) отражение
+        if (refl)
+        {
+            var R = Matrix4.CreateScale(1, -1, 1) * Matrix4.CreateTranslation(0, 2 * fg.Y, 0);
+            _mesh!.Use();
+            SetCamera(_mesh, f);
+            _mesh.Set("uClip", new Vector4(0, 1, 0, -fg.Y - 1e-4f * big));
+            _mesh.Set("uMode", 0); _mesh.Set("uOutlinePx", 0f); _mesh.Set("uOpacity", 1f); _mesh.Set("uError", Theme.Error);
+            _mesh.Set("uZebra", 0);
+            GL.Disable(EnableCap.CullFace);
+            foreach (var m in _meshes)
+            {
+                if (m.Preview != 0) continue;
+                _mesh.Set("uModel", m.Model * R);
+                bool mat = Style == DisplayStyle.Material;
+                _mesh.Set("uBase", mat ? m.MatColor : m.Color);
+                _mesh.Set("uMat", mat ? new Vector4(m.MatSpec, m.MatShine, m.MatMetal, 1) : Vector4.Zero);
+                GL.BindVertexArray(m.Vao);
+                GL.DrawElements(PrimitiveType.Triangles, m.Count, DrawElementsType.UnsignedInt, 0);
+            }
+            _mesh.Set("uMat", Vector4.Zero);
+            _mesh.Set("uClip", ClipPlane);
+        }
+        // 3) пол поверх отражения (без отражения — плотнее)
+        var fc = th.FloorColor;
+        if ((dbg & 2) == 0) Quad(new Vector4(fc.X, fc.Y, fc.Z, refl ? Math.Clamp(1 - th.FloorReflect, 0.3f, 0.97f) : fc.W), refl);
+        // 4) тень: тела, сплющенные на пол; каждый пиксель — один раз
+        if (th.FloorShadow && (dbg & 4) == 0)
+        {
+            var S = Matrix4.CreateScale(1, 0, 1) * Matrix4.CreateTranslation(0, fg.Y + 1e-4f * big, 0);
+            GL.StencilOp(StencilOp.Keep, StencilOp.Keep, StencilOp.Incr);
+            GL.DepthMask(false);
+            _mesh!.Use();
+            SetCamera(_mesh, f);
+            _mesh.Set("uMode", 1); _mesh.Set("uOutlinePx", 0f);
+            _mesh.Set("uFlat", new Vector4(0, 0, 0, th.Dark ? 0.45f : 0.22f));
+            GL.Disable(EnableCap.CullFace);
+            foreach (var m in _meshes)
+            {
+                if (m.Preview != 0) continue;
+                _mesh.Set("uModel", m.Model * S);
+                GL.BindVertexArray(m.Vao);
+                GL.DrawElements(PrimitiveType.Triangles, m.Count, DrawElementsType.UnsignedInt, 0);
+            }
+            _mesh.Set("uMode", 0);
+            GL.DepthMask(true);
+        }
+        GL.StencilFunc(StencilFunction.Always, 0, 0xFF);
+        GL.StencilOp(StencilOp.Keep, StencilOp.Keep, StencilOp.Keep);
+        GL.Clear(ClearBufferMask.StencilBufferBit);
+        GL.Disable(EnableCap.StencilTest);
+        LastFloor = (true, fg.Y, fg.C, fg.H, refl, th.FloorShadow);
+        FloorFrames++;
+    }
+    public static long FloorFrames;
 
     private void DrawMeshes(FrameParams f, bool lit, float opacity)
     {

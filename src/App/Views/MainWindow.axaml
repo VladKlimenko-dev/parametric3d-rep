@@ -79,13 +79,14 @@
             <TreeView.Styles>
               <Style Selector="TreeViewItem" x:DataType="vm:TreeNode">
                 <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                <Setter Property="MinHeight" Value="{DynamicResource P3.TreeRowPx}" />
               </Style>
             </TreeView.Styles>
             <TreeView.ItemTemplate>
               <TreeDataTemplate DataType="vm:TreeNode" ItemsSource="{Binding Children}">
                 <Grid ColumnDefinitions="Auto,*,Auto" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
-                  <Panel Grid.Column="0" Width="18" Height="18" Margin="0,0,6,0" IsVisible="{Binding IsNotBar}">
-                    <Image Source="{Binding Icon}" IsVisible="{Binding HasIcon}" Width="16" Height="16" />
+                  <Panel Grid.Column="0" MinWidth="18" MinHeight="18" Margin="0,0,6,0" IsVisible="{Binding IsNotBar}">
+                    <Image Source="{Binding Icon}" IsVisible="{Binding HasIcon}" Width="{DynamicResource P3.TreeIconPx}" Height="{DynamicResource P3.TreeIconPx}" />
                     <Border IsVisible="{Binding !HasIcon}" CornerRadius="3" Background="{DynamicResource P3.PanelBg2}"
                             BorderBrush="{DynamicResource P3.Border}" BorderThickness="1">
                       <TextBlock Text="{Binding Glyph}" FontSize="8" FontWeight="Bold" HorizontalAlignment="Center"

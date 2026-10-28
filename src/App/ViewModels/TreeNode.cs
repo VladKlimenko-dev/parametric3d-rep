@@ -51,6 +51,15 @@ public sealed partial class TreeNode : ObservableObject
     private readonly string _iconFile;
     public string IconFile => ComponentIcon ?? _iconFile;
     public IImage? Icon => IconProvider.Get(IconFile);
+    /// <summary>
+    /// k132 (замечание 28.10, 23:42, п. 6): иконки строки — под нынешнюю тему (прежде привязка читала их один раз, и после
+    /// смены темы строки, которые дерево не пересоздавало, оставались с иконками прежней темы).
+    /// </summary>
+    public void RefreshIcons()
+    {
+        OnPropertyChanged(nameof(Icon)); OnPropertyChanged(nameof(StateIcon)); OnPropertyChanged(nameof(EyeOn)); OnPropertyChanged(nameof(EyeOff));
+        foreach (var c in Children) c.RefreshIcons();
+    }
     public bool HasIcon => Icon != null;
     public string Glyph { get; }
     private readonly string? _summary;

@@ -762,7 +762,7 @@ public sealed class PlaneOp : Operation, IHandleOp
         {
             _dp = new DatumPlane(L("Плоскость{0}", Part.Planes.Count() + 1), c.F) { Mode = c.M, Offset = _by == 0 ? _offset.Value * (_flip ? -1 : 1) : 0 };
             if (c.Src != 0) _dp.References.Add(c.Src);
-            Part.Add(_dp);
+            Part.AddAtStage(_dp);
         }
         else
         {

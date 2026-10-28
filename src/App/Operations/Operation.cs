@@ -64,6 +64,45 @@ public abstract class Operation
     }
 
     /// <summary>Разложить выбор до команды по полям: каждое поле берёт то, что ему подходит.</summary>
+    /// <summary>k132: ссылки опорного элемента (номера) — как выбор: опорные плоскости, оси, точки, грани, рёбра, вершины.</summary>
+    protected List<PickRef> RefsOfIds(IEnumerable<uint> ids)
+    {
+        var res = new List<PickRef>();
+        foreach (var id in ids)
+        {
+            if (Part.Children.FirstOrDefault(c => c.Id == id) is { } c)
+            {
+                res.Add(c switch
+                {
+                    DatumPlane dp => new PickRef(dp.Id, PickKind.DatumPlane, Part, dp),
+                    DatumAxis ax => new PickRef(ax.Id, PickKind.DatumAxis, Part, ax),
+                    DatumPoint pt => new PickRef(pt.Id, PickKind.DatumPoint, Part, pt),
+                    _ => PickRef.Empty,
+                });
+            }
+            else if (Part.FindFace(id) != null) res.Add(new PickRef(id, PickKind.Face, Part, null));
+            else if (Part.FindEdge(id) != null) res.Add(new PickRef(id, PickKind.Edge, Part, null));
+            else if (Part.FindVertex(id) != null) res.Add(new PickRef(id, PickKind.Vertex, Part, null));
+        }
+        res.RemoveAll(r => r.IsEmpty);
+        return res;
+    }
+
+    /// <summary>Разложить ссылки по полям (как Seed, но из списка).</summary>
+    protected static void SeedFrom(List<PickRef> list, params RefField[] fields)
+    {
+        var sel = list.ToList();
+        foreach (var f in fields)
+        {
+            var take = sel.Where(f.Accept).ToList();
+            if (take.Count == 0) continue;
+            if (f.Single) take = take.Take(1).ToList();
+            f.Take(take);
+            sel.RemoveAll(r => take.Any(t => t.Id == r.Id && t.Kind == r.Kind));
+        }
+    }
+
+    public static readonly bool SeedSingleOff = Environment.GetEnvironmentVariable("P3D_SEEDSINGLE") == "0";
     protected void Seed(params RefField[] fields)
     {
         var sel = W.ViewPort.Selection.Items.ToList();
@@ -71,8 +110,12 @@ public abstract class Operation
         {
             var take = sel.Where(f.Accept).ToList();
             if (take.Count == 0) continue;
+            // k132 (замечание 28.10, 23:42, п. 1): поле на одну ссылку берёт ПЕРВУЮ подходящую, остальные остаются следующим
+            // полям (две выбранные плоскости — «плоскость» и «вторая плоскость»); прежде поле забирало все (оставляя себе
+            // последнюю), и вторая плоскость пропадала. P3D_SEEDSINGLE=0 — прежнее.
+            if (f.Single && !SeedSingleOff) take = take.Take(1).ToList();
             f.Take(take);
-            sel.RemoveAll(r => take.Any(t => t.Id == r.Id));
+            sel.RemoveAll(r => take.Any(t => t.Id == r.Id && t.Kind == r.Kind));
         }
     }
 

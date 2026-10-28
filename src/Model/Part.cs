@@ -372,6 +372,17 @@ public sealed class Part : ModelItem
     static readonly bool ChildOrderOff = Environment.GetEnvironmentVariable("P3D_TREEORDER") == "0";
 
     /// <summary>
+    /// k132 (замечание 28.10, 23:42, п. 4): опорный элемент (плоскость, ось, точка) или эскиз — В МЕСТО ПОЛОСКИ расчёта,
+    /// как операция (прежде — в конец дерева, ниже полоски). P3D_DATUMATSTAGE=0 — в конец.
+    /// </summary>
+    public void AddAtStage(ModelItem item)
+    {
+        Add(item);
+        if (!DatumAtStageOff && StageIndex >= 0) PlaceItem(item, EffectiveStage);
+    }
+    public static readonly bool DatumAtStageOff = Environment.GetEnvironmentVariable("P3D_DATUMATSTAGE") == "0";
+
+    /// <summary>
     /// k109: МЕСТО ЭСКИЗА В ДЕРЕВЕ — сколько операций стоит перед ним (эскиз, не ушедший в операцию, — отдельная строка
     /// дерева между операциями; расчёт от него не зависит).
     /// </summary>

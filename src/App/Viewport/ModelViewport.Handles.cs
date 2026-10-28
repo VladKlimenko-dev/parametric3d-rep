@@ -93,7 +93,7 @@ public sealed partial class ModelViewport
 
     // ---------------------------------------------------------------- геометрия ручки
 
-    private double HandleLen => 70 * PixelSize;
+    private double HandleLen => Services.UiLook.HandleLengthPx * PixelSize;
 
     /// <summary>Начальное место шарика — на оси наружу от элемента.</summary>
     private Vector3 Rest(OpHandle h) => h.At + h.Out * (float)HandleLen;
@@ -111,7 +111,7 @@ public sealed partial class ModelViewport
     private int HandleHit(Point p)
     {
         if (_handle is not { } h || ActiveSketch != null || ToScreen(Knob(h)) is not { } q) return 0;
-        return Math.Sqrt((q.X - p.X) * (q.X - p.X) + (q.Y - p.Y) * (q.Y - p.Y)) < 14 ? 1 : 0;
+        return Math.Sqrt((q.X - p.X) * (q.X - p.X) + (q.Y - p.Y) * (q.Y - p.Y)) < Math.Max(14, Services.UiLook.HandleKnobPx) ? 1 : 0;
     }
 
     private void BeginHandleDrag(Point p)
@@ -231,13 +231,14 @@ public sealed partial class ModelViewport
         var rest = Rest(h);
         var knob = Knob(h);
         float L = (float)HandleLen;
-        lines.Add(Inst(h.At, rest, th.Handle, 1.6f, 0));
-        if (h.Outward) lines.Add(Inst(rest, rest + h.Out * (L * 0.5f), th.Handle, 1.2f, 5));
-        if (h.Inward) lines.Add(Inst(rest, rest - h.Out * (L * 0.5f), th.HandleAlt, 1.2f, 5));
-        if (Math.Abs(_hValue) > 1e-9) lines.Add(Inst(rest, knob, _hValue < 0 ? th.HandleAlt : th.Handle, 2.4f, 0));
+        float hw = (float)Services.UiLook.HandleLineWidth;
+        lines.Add(Inst(h.At, rest, th.Handle, hw, 0));
+        if (h.Outward) lines.Add(Inst(rest, rest + h.Out * (L * 0.5f), th.Handle, hw * 0.75f, 5));
+        if (h.Inward) lines.Add(Inst(rest, rest - h.Out * (L * 0.5f), th.HandleAlt, hw * 0.75f, 5));
+        if (Math.Abs(_hValue) > 1e-9) lines.Add(Inst(rest, knob, _hValue < 0 ? th.HandleAlt : th.Handle, hw * 1.5f, 0));
         var kc = _hValue < 0 ? th.HandleAlt : th.Handle;
         pts.Add(new PointInst { P = rest, Color = SceneData.Pack(th.Handle), Px = 5, Shape = 2 });
-        pts.Add(new PointInst { P = knob, Color = SceneData.Pack(kc), Px = 13, Shape = 0 });
+        pts.Add(new PointInst { P = knob, Color = SceneData.Pack(kc), Px = (float)Services.UiLook.HandleKnobPx, Shape = 0 });
         pts.Add(new PointInst { P = h.At, Color = SceneData.Pack(th.Handle), Px = 6, Shape = 2 });
     }
 }
