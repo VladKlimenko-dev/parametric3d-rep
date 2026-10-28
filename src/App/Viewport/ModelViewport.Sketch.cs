@@ -807,22 +807,37 @@ public sealed partial class ModelViewport
         var delta = q - _geomFrom;
         if (!_geomMoved && delta.Length < 3 * PixelSize) return;
         _geomMoved = true;
-        foreach (var (pt, start) in _dragShape) pt.P = start + delta;
         var solver = _doc?.Solver ?? new NumericSketchSolver();
         var num = solver as NumericSketchSolver;
+        bool targets = num != null && !NumericSketchSolver.DragTargetOff && !NumericSketchSolver.DragTargetOffForTests;
+        // k128: положение до шага — если шаг сломал эскиз (не сошлось, противоречие), он отменяется: точка стоит, где
+        // её держат связи, а не там, куда её увёл неудачный расчёт. P3D_SKDRAGUNDO=0 — остаётся как есть.
+        var before = DragUndoOff ? null : SketchEditing.Geometry.Take(sk);
+        var st0 = sk.LastSolve;
+        if (!targets) foreach (var (pt, start) in _dragShape) pt.P = start + delta;
         double w0 = num?.DragWeight ?? 0;
         try
         {
             // перетаскивание: курсор держит точку в 100 раз крепче, чем остальные держатся на месте
             // (вес всё равно много меньше веса связей — связи не нарушаются)
             if (num != null) { num.DragWeight = Math.Max(w0, num.Regularization * 100); if (_dragPoint == null) num.DraggedPoints = _dragShape.Keys.ToHashSet(); }
-            sk.Solve(solver, _dragPoint ?? _dragShape.Keys.First());
+            if (targets) num!.DragTargets = _dragShape.ToDictionary(kv => kv.Key, kv => kv.Value + delta);
+            var st = sk.Solve(solver, _dragPoint ?? _dragShape.Keys.First());
+            if (before != null && st is SolveStatus.Inconsistent or SolveStatus.DidNotConverge && st0 is not (SolveStatus.Inconsistent or SolveStatus.DidNotConverge))
+            {
+                if (num != null) num.DragTargets = null;
+                before.Restore(); sk.Solve(solver); before.Restore();
+                Interlocked.Increment(ref DragStepsUndone);
+            }
         }
         catch (Exception ex) { AppLog.Write("sketch drag", ex); }
-        finally { if (num != null) { num.DraggedPoints = null; num.DragWeight = w0; } }
+        finally { if (num != null) { num.DraggedPoints = null; num.DragWeight = w0; num.DragTargets = null; } }
         _overlayDirty = true;
         MarkDirty();
     }
+
+    static readonly bool DragUndoOff = Environment.GetEnvironmentVariable("P3D_SKDRAGUNDO") == "0";
+    public static long DragStepsUndone;
 
     internal void SketchDragMove(Point p)
     {

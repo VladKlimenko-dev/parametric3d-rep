@@ -206,6 +206,18 @@ if (only == "probe-open")
     return 0;
 }
 
+if (only == "probe-k128")
+{
+    var s = DocumentSession.Open(args[1]); BuildNow(s);
+    var sk = s.Part!.Sketches.First(); var solver = s.Document.Solver;
+    Console.WriteLine($"solve0 {sk.Solve(solver)} dof {sk.DegreesOfFreedom}");
+    foreach (var d in sk.Dimensions) Console.WriteLine($"  {d.Name} {d.Type} v {d.Value:0.####} meas {DimensionMeasure.Value(d):0.####} driving {d.IsDriving} side {d.Side} from {d.LineFrom} rays {d.RayA},{d.RayB}");
+    var target = sk.Dimensions.First(d => d.Name == args[2]);
+    var res = SketchEditing.SetDimensionValue(sk, target, double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture), null, solver);
+    Console.WriteLine($"edit ok {res.Ok} status {res.Status} failure {res.Failure} held {res.HeldWeak}; constraints {string.Join(",", res.Constraints.Select(c => c.Type))}; dims {string.Join(",", res.Dimensions.Select(x => x.Name))}; degenerate {res.Degenerate.Count}");
+    return 0;
+}
+
 if (only == "probe-openwin")
 {
     // разбор (k125): окно с файлом — что на виде сразу и после пауз
@@ -3698,6 +3710,158 @@ Check("UI-SPEED-K126", () =>
     Console.WriteLine($"  (C) verification seen {sawVerify}, cancelled {Parametric3D.Model.Document.VerifiesCancelled - vc0}, dirty {part.IsDirty}, pending {part.NeedsAcceptance}, volume {part.Volume:0.###}");
     Require(sawVerify && Parametric3D.Model.Document.VerifiesCancelled > vc0, "an edit did not interrupt the checks");
     Require(!part.IsDirty && !part.NeedsAcceptance && Math.Abs(part.Volume - p2.Volume) <= 1e-9 * p2.Volume, "the part was not rebuilt and checked after the interrupted checks");
+});
+
+Check("UI-SKETCH-GCS-K128", () =>
+{
+    // k128 (замечание 28.10, 17:00): эскиз пользователя X-218795-05 (in/kg/s).
+    // (A) угол «отрезок — ось» 30° → 20°: дуга размера пересекает отрезок там же, где прежде (центр дуги — пересечение
+    //     прямых — уезжает на 140 мм; прежде радиус дуги был постоянным, и размер «убегал» влево);
+    // (B) свободный конец нижнего отрезка тянут вправо до +300 мм: на каждом шаге все связи и сильные размеры выполнены,
+    //     остальные точки на месте (прежде у угла 150° к этому отрезку «дальний» конец менялся, когда отрезок становился
+    //     длиннее, — угол скачком становился 30°, и решатель «плясал»);
+    // (C) ввод размера без единицы «12.625/2» — в единицах детали (дюймах): 160.3375 мм, и так же после пересчёта формул.
+    string file = Path.Combine(AppContext.BaseDirectory, "data", "user_k128_x05.p3d");
+    var s = DocumentSession.Open(file); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    var vp = w.ViewPort;
+    var sk = s.Part!.Sketches.First();
+    w.EditSketch(sk); BuildNow(s); Run();
+    SkLine L(Vector2d a, Vector2d b) => sk.Entities.OfType<SkLine>().Single(l => !l.Builtin && ((l.A.P - a).Length < 0.01 && (l.B.P - b).Length < 0.01 || (l.A.P - b).Length < 0.01 && (l.B.P - a).Length < 0.01));
+    var l973 = L(new(0, 135.4837890124096), new(6.35, 137.795));
+    var l1053 = L(new(6.35, 122.174), new(345.0177229370573, 122.174));
+    var ang = sk.Dimensions.Single(d => d.Type == DimensionType.AngleLineLine && d.Items.Contains(l973) && d.Items.Any(i => i.Builtin));
+    void Enter(SkDimension d, string text)
+    {
+        w.EditDimensionValue(d); Run();
+        Require(w.DimEditBox != null, "the dimension editor did not open");
+        w.DimEditBox!.Text = text; w.DimEditBox.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter }); Run();
+    }
+    (Vector2d Cross, Vector2d C, double R) ArcOn(SkDimension d, SkLine l)
+    {
+        SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+        var (c, r, e1, e2) = SketchDimensions.AngleArcs.TryGetValue(d, out var o) ? ((Vector2d, double, Vector2d, Vector2d))o : default;
+        var line = l.B.P - l.A.P; var e = Math.Abs(Vector2d.Dot(e1.Normalized(), line.Normalized())) > Math.Abs(Vector2d.Dot(e2.Normalized(), line.Normalized())) ? e1 : e2;
+        return (c + e * r, c, r);
+    }
+    // (A)
+    SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+    Enter(ang, "30");
+    var a30 = ArcOn(ang, l973);
+    var mid30 = (l973.A.P + l973.B.P) / 2;
+    Enter(ang, "20");
+    var a20 = ArcOn(ang, l973);
+    var mid20 = (l973.A.P + l973.B.P) / 2;
+    double seg = (l973.B.P - l973.A.P).Length;
+    Console.WriteLine($"  (A) 30°: corner ({a30.C.X:0.#},{a30.C.Y:0.#}) r {a30.R:0.#}, arc meets the segment line at ({a30.Cross.X:0.##},{a30.Cross.Y:0.##}), segment mid ({mid30.X:0.##},{mid30.Y:0.##})");
+    Console.WriteLine($"      20°: corner ({a20.C.X:0.#},{a20.C.Y:0.#}) r {a20.R:0.#}, arc meets the segment line at ({a20.Cross.X:0.##},{a20.Cross.Y:0.##}), segment mid ({mid20.X:0.##},{mid20.Y:0.##}); value {ang.Value:0.##}");
+    Require(Math.Abs(ang.Value - 20) < 1e-9, "the angle was not set to 20°");
+    Require(((a20.Cross - mid20) - (a30.Cross - mid30)).Length < 0.25 * seg + 1e-6, "the angle dimension ran away from its segment");
+    // (C) единицы: формула без единицы — в дюймах
+    var l2119 = sk.Entities.OfType<SkLine>().Single(l => !l.Builtin && Math.Abs(l.A.Y - 160.3375) < 0.01 && Math.Abs(l.B.Y - 160.3375) < 0.01);
+    var d2119 = sk.Dimensions.Single(d => d.Type == DimensionType.DistanceLineLine && d.Items.Contains(l2119));
+    Enter(d2119, "12.625/2");
+    double vC = d2119.Value;
+    sk.UpdateDimensionsFromParameters(s.Document.ScopeFor(s.Part!));
+    Console.WriteLine($"  (C) «12.625/2»: value {vC:0.####} mm, formula {d2119.Formula}, after recalculation {d2119.Value:0.####} mm, line at y {l2119.A.Y:0.####}");
+    Require(d2119.Formula == "12.625/2" && Math.Abs(vC - 160.3375) < 1e-9 && Math.Abs(d2119.Value - 160.3375) < 1e-9 && Math.Abs(l2119.A.Y - 160.3375) < 1e-6, "a formula without a unit was not taken in the part's units (in)");
+    Enter(d2119, "12.625in/2");
+    Require(Math.Abs(d2119.Value - 160.3375) < 1e-9, "a formula with a unit changed");
+    // (B) тянуть свободный конец нижнего отрезка вправо
+    var s2 = DocumentSession.Open(file); var w2 = Open(s2); BuildNow(s2);
+    var vp2 = w2.ViewPort; var sk2 = s2.Part!.Sketches.First();
+    w2.EditSketch(sk2); BuildNow(s2); for (int i = 0; i < 3; i++) Dispatcher.UIThread.RunJobs();
+    var end = sk2.AllPoints().Distinct().Single(p => (p.P - new Vector2d(345.0177229370573, 122.174)).Length < 0.01);
+    var pts0 = sk2.AllPoints().Distinct().Where(p => !p.Builtin).ToDictionary(p => p, p => p.P);
+    var drv = sk2.Dimensions.Where(d => d.IsDriving).ToList();
+    var p0 = end.P; int bad = 0; double worstDim = 0, worstMove = 0;
+    Require(vp2.BeginSketchDragAt(p0), "the free end cannot be dragged");
+    for (int k = 1; k <= 30; k++)
+    {
+        var to = p0 + new Vector2d(10 * k, 0);
+        vp2.SketchDragTo(to);
+        double dimErr = 0; foreach (var d in drv) { double m = DimensionMeasure.Value(d); dimErr = Math.Max(dimErr, Math.Abs(m - d.Value)); }
+        double conErr = NumericSketchSolver.ResidualOf(sk2, sk2.Constraints.Where(c => c.Enabled));
+        double moved = pts0.Where(kv => !ReferenceEquals(kv.Key, end)).Max(kv => (kv.Key.P - kv.Value).Length);
+        worstDim = Math.Max(worstDim, dimErr); worstMove = Math.Max(worstMove, moved);
+        bool okStep = sk2.LastSolve is SolveStatus.Ok or SolveStatus.Underconstrained or SolveStatus.Overconstrained && dimErr < 1e-6 && conErr < 1e-6 && moved < 1e-6 && Math.Abs(end.P.X - to.X) < 1e-3;
+        if (!okStep) { bad++; if (bad <= 4) Console.WriteLine($"      step {k}: x {end.P.X:0.###} (want {to.X:0.###}), status {sk2.LastSolve}, dimension error {dimErr:0.######}, constraint error {conErr:0.######}, other points moved {moved:0.######}"); }
+    }
+    vp2.EndSketchDrag();
+    Console.WriteLine($"  (B) 30 drag steps: bad {bad}, worst dimension error {worstDim:0.######}, worst move of other points {worstMove:0.######}, end x {end.P.X:0.###}");
+    Require(bad == 0, "dragging the free end broke the sketch");
+    // (D) каждую подвижную точку эскиза — в 8 сторон на 40 мм шагами по 4 мм: связи и сильные размеры выполнены на каждом
+    //     шаге, прочие точки не прыгают (за шаг — не больше 10 шагов курсора)
+    int dragged = 0, broken = 0, jumps = 0; long undone0 = ModelViewport.DragStepsUndone;
+    var all0 = sk2.AllPoints().Distinct().Where(p => !p.Builtin).ToList();
+    foreach (var pt in all0)
+    {
+        for (int dir = 0; dir < 8; dir++)
+        {
+            var geo = SketchEditing.Geometry.Take(sk2);
+            var start = pt.P;
+            if (!vp2.BeginSketchDragAt(start)) { geo.Restore(); break; }
+            dragged++;
+            var u = new Vector2d(Math.Cos(dir * Math.PI / 4), Math.Sin(dir * Math.PI / 4));
+            var prev = all0.ToDictionary(p => p, p => p.P);
+            for (int k = 1; k <= 10; k++)
+            {
+                vp2.SketchDragTo(start + u * (4 * k));
+                double dimErr = 0; foreach (var d in sk2.Dimensions.Where(d => d.IsDriving)) { double m = DimensionMeasure.Value(d); dimErr = Math.Max(dimErr, Math.Abs(m - d.Value)); }
+                double conErr = NumericSketchSolver.ResidualOf(sk2, sk2.Constraints.Where(c => c.Enabled));
+                double jump = all0.Where(p => !ReferenceEquals(p, pt)).Max(p => (p.P - prev[p]).Length);
+                bool fail = sk2.LastSolve is SolveStatus.Inconsistent or SolveStatus.DidNotConverge || dimErr > 1e-6 || conErr > 1e-6;
+                if (fail) { broken++; if (broken <= 5) Console.WriteLine($"      point ({start.X:0.##},{start.Y:0.##}) dir {dir * 45}° step {k}: status {sk2.LastSolve}, dimension error {dimErr:0.######}, constraint error {conErr:0.######}"); }
+                if (jump > 40) { jumps++; if (jumps <= 5) Console.WriteLine($"      point ({start.X:0.##},{start.Y:0.##}) dir {dir * 45}° step {k}: another point jumped {jump:0.###}"); }
+                prev = all0.ToDictionary(p => p, p => p.P);
+            }
+            vp2.EndSketchDrag();
+            geo.Restore(); sk2.Solve(s2.Document.Solver);
+        }
+    }
+    long undone = ModelViewport.DragStepsUndone - undone0;
+    Console.WriteLine($"  (D) drags {dragged} (×10 steps): broken steps {broken}, jumps {jumps}, steps undone {undone}");
+    Require(dragged > 0 && broken == 0 && jumps == 0 && undone == 0, "dragging points of the sketch broke it or made it jump");
+    // (E) сторона расстояния закреплена: точку поставили за прямую (0.25 in от вертикального отрезка) — решение
+    //     возвращает её на её сторону, а не зеркально (P3D_SKFIXSIDE=0)
+    {
+        var geo = SketchEditing.Geometry.Take(sk2);
+        var p970 = sk2.AllPoints().Distinct().Single(p => (p.P - new Vector2d(6.35, 137.795)).Length < 0.01);
+        p970.P = new Vector2d(-3, p970.Y);
+        sk2.Solve(s2.Document.Solver);
+        Console.WriteLine($"  (E) point put across the line: solved to x {p970.X:0.###}, status {sk2.LastSolve}");
+        Require(Math.Abs(p970.X - 6.35) < 1e-6, "the point was mirrored across the dimensioned line");
+        geo.Restore(); sk2.Solve(s2.Document.Solver);
+    }
+    // (F) шаг прежнего способа (точку — под курсор до решения), сломавший эскиз, отменяется (P3D_SKDRAGUNDO=0)
+    {
+        NumericSketchSolver.DragTargetOffForTests = true;
+        long u0 = ModelViewport.DragStepsUndone; int brokenF = 0;
+        try
+        {
+            foreach (var pt in all0)
+                for (int dir = 0; dir < 8; dir++)
+                {
+                    var geo = SketchEditing.Geometry.Take(sk2);
+                    var st = pt.P;
+                    if (!vp2.BeginSketchDragAt(st)) { geo.Restore(); break; }
+                    var u = new Vector2d(Math.Cos(dir * Math.PI / 4), Math.Sin(dir * Math.PI / 4));
+                    for (int k = 1; k <= 10; k++)
+                    {
+                        vp2.SketchDragTo(st + u * (4 * k));
+                        double conErr = NumericSketchSolver.ResidualOf(sk2, sk2.Constraints.Where(c => c.Enabled));
+                        double dimErr = sk2.Dimensions.Where(d => d.IsDriving).Max(d => Math.Abs(DimensionMeasure.Value(d) - d.Value));
+                        if (sk2.LastSolve is SolveStatus.Inconsistent or SolveStatus.DidNotConverge || conErr > 1e-6 || dimErr > 1e-6) brokenF++;
+                    }
+                    vp2.EndSketchDrag();
+                    geo.Restore(); sk2.Solve(s2.Document.Solver);
+                }
+        }
+        finally { NumericSketchSolver.DragTargetOffForTests = false; }
+        Console.WriteLine($"  (F) old-style drags: broken steps {brokenF}, undone {ModelViewport.DragStepsUndone - u0}");
+        Require(brokenF == 0 && ModelViewport.DragStepsUndone > u0, "a drag step that broke the sketch was kept");
+    }
+    w2.Close(); w.Close();
 });
 
 Check("UI-SKETCH-DIMS-K124", () =>

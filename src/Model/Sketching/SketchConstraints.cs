@@ -203,6 +203,26 @@ public sealed class SkDimension
     /// минус угол. Только отображение и ввод — решателем управляет Value (угол между прямыми).
     /// </summary>
     public bool Supplement;
+    /// <summary>
+    /// k128 (замечание 28.10, 17:00, п. 2): ЛУЧИ УГЛОВОГО РАЗМЕРА ЗАКРЕПЛЕНЫ — направление каждой прямой (+1 — от A к B, −1 —
+    /// от B к A), по которому меряется угол; 0 — ещё не выбрано (выбирается по геометрии перед решением: луч к дальнему
+    /// концу). Прежде луч выбирался заново при каждом вычислении, и когда другой конец отрезка становился дальним от
+    /// пересечения прямых (отрезок удлиняли), угол скачком менялся на 180 − угол — решатель «плясал».
+    /// </summary>
+    public sbyte RayA, RayB;
+    /// <summary>
+    /// k128: СТОРОНА РАССТОЯНИЯ ЗАКРЕПЛЕНА (точка — прямая, прямая — прямая): +1/−1 — по какую сторону прямой точка (середина
+    /// отрезка); 0 — ещё не выбрана. Прежде сторона бралась из геометрии в начале КАЖДОГО решения — при перетаскивании
+    /// точку ставят под курсор до решения, и если курсор уводил её за прямую, решатель зеркально перебрасывал её (и с ней
+    /// эскиз) на другую сторону. LineFrom — какой из отрезков меряется от середины (1 — первый, 2 — второй; k124 выбирал
+    /// короче — выбор менялся, когда длины сравнивались).
+    /// </summary>
+    public sbyte Side, LineFrom;
+    /// <summary>k128: где дуга углового размера пересекает отрезок (отрисовка; не сохраняется): отрезок, расстояние вдоль
+    /// его луча от середины, смещение подписи, при котором это запомнено.</summary>
+    public SkLine? ArcAnchorLine;
+    public double ArcAnchorAlong;
+    public Vector2d ArcAnchorOffset;
     /// <summary>Подпись углового размера: что видит пользователь (смежный сектор — 180 − угол, дополняющая дуга — 360 − угол).</summary>
     public double ShownAngle => Supplement ? 180 - Value : Reflex ? 360 - Value : Value;
     /// <summary>Разбор (k97): стрелки размера при последнем рисовании — снаружи.</summary>
@@ -241,6 +261,7 @@ public static class DimensionMeasure
     /// <summary>Текущее значение размера. NaN — измерить нечем.</summary>
     public static double Value(SkDimension d)
     {
+        if (d.Type == DimensionType.AngleLineLine) return AngleDegrees(d);
         var it = d.Items;
 
         switch (d.Type)
@@ -259,7 +280,7 @@ public static class DimensionMeasure
                 if (it.Count >= 2 && it[0] is SkLine l1 && it[1] is SkLine l2)
                 {
                     if (LineLineOff) return Math.Abs(PointToLine(l2.A.P, l1));
-                    var (pt, rf) = LineLinePair(l1, l2);
+                    var (pt, rf) = LineLinePair(d, l1, l2);
                     return Math.Abs(PointToLine(pt, rf));
                 }
                 break;
@@ -310,6 +331,37 @@ public static class DimensionMeasure
     /// пользователя: 131.68 при настоящих 84.40), решение не сходилось, отрезок стягивался в точку, угол к оси
     /// «конфликтовал». Одна формула для измерения, решателя и рисования. P3D_SKLINELINE=0 — прежняя.
     /// </summary>
+    /// <summary>k128: пара размера «прямая — прямая» с закреплённым выбором (LineFrom), пока не закреплён — по длинам.</summary>
+    public static (Vector2d Point, SkLine Reference) LineLinePair(SkDimension d, SkLine a, SkLine b)
+    {
+        if (FixedSideOff || d.LineFrom == 0 || a.Builtin || b.Builtin) return LineLinePair(a, b);
+        var (from, rf) = d.LineFrom == 1 ? (a, b) : (b, a);
+        return ((from.A.P + from.B.P) * 0.5, rf);
+    }
+    /// <summary>P3D_SKFIXSIDE=0 — сторона расстояния и выбор отрезка «прямая — прямая» — заново при каждом решении (прежде).</summary>
+    public static readonly bool FixedSideOff = Environment.GetEnvironmentVariable("P3D_SKFIXSIDE") == "0";
+
+    /// <summary>k128: закрепить сторону расстояния и выбор отрезка по нынешней геометрии (если ещё не закреплены).</summary>
+    public static void FixDistanceFrame(SkDimension d)
+    {
+        if (FixedSideOff) return;
+        var it = d.Items;
+        if (d.Type == DimensionType.DistancePointLine && it.Count >= 2 && it[0] is SkPoint p && it[1] is SkLine l)
+        {
+            if (d.Side != 0) return;
+            double v = PointToLine(p.P, l), len = (l.B.P - l.A.P).Length;
+            if (len > 1e-12 && Math.Abs(v) > 1e-9 * Math.Max(1, len)) d.Side = (sbyte)(v < 0 ? 1 : -1);   // знак решателя (DistPointLine) — обратный PointToLine
+        }
+        else if (d.Type == DimensionType.DistanceLineLine && it.Count >= 2 && it[0] is SkLine a && it[1] is SkLine b && !LineLineOff)
+        {
+            if (d.LineFrom == 0 && !a.Builtin && !b.Builtin) { var (_, rf0) = LineLinePair(a, b); d.LineFrom = (sbyte)(ReferenceEquals(rf0, b) ? 1 : 2); }
+            if (d.Side != 0) return;
+            var (pt, rf) = LineLinePair(d, a, b);
+            double v = PointToLine(pt, rf), len = (rf.B.P - rf.A.P).Length;
+            if (len > 1e-12 && Math.Abs(v) > 1e-9 * Math.Max(1, (pt - rf.A.P).Length)) d.Side = (sbyte)(v < 0 ? 1 : -1);
+        }
+    }
+
     public static (Vector2d Point, SkLine Reference) LineLinePair(SkLine a, SkLine b)
     {
         double la = a.Builtin ? double.MaxValue : (a.B.P - a.A.P).Length;
@@ -404,6 +456,47 @@ public static class DimensionMeasure
         Vector2d p = l.A.P - c, q = l.B.P - c;
         Vector2d far = p.LengthSquared >= q.LengthSquared ? p : q;
         return far.Length < 1e-12 ? new Vector2d(1, 0) : far.Normalized();
+    }
+
+    /// <summary>P3D_SKANGLERAYS=0 — лучи углового размера выбираются заново при каждом вычислении (прежде).</summary>
+    public static readonly bool FixedRaysOff = Environment.GetEnvironmentVariable("P3D_SKANGLERAYS") == "0";
+
+    /// <summary>k128: закрепить лучи углового размера по нынешней геометрии (если ещё не закреплены).</summary>
+    public static void FixAngleRays(SkDimension d)
+    {
+        if (FixedRaysOff || d.Type != DimensionType.AngleLineLine || d.RayA != 0 && d.RayB != 0) return;
+        if (d.Items.Count < 2 || d.Items[0] is not SkLine a || d.Items[1] is not SkLine b) return;
+        Vector2d da = a.B.P - a.A.P, db = b.B.P - b.A.P;
+        if (da.Length < 1e-12 || db.Length < 1e-12) return;
+        if (AngleRays(a, b, out _, out var ra, out var rb))
+        {
+            d.RayA = (sbyte)(Vector2d.Dot(ra, da) >= 0 ? 1 : -1);
+            d.RayB = (sbyte)(Vector2d.Dot(rb, db) >= 0 ? 1 : -1);
+        }
+        else { d.RayA = 1; d.RayB = 1; }   // параллельные: 0° или 180° — по направлениям отрезков, как прежде
+    }
+
+    static Vector2d RayOf(SkLine l, int sign) => AxisRay(l) ?? (l.B.P - l.A.P).Normalized() * sign;
+
+    /// <summary>Лучи размера: закреплённые (k128) или, пока не закреплены, к дальним концам.</summary>
+    public static bool AngleRays(SkDimension d, out Vector2d corner, out Vector2d rayA, out Vector2d rayB)
+    {
+        corner = Vector2d.Zero; rayA = new Vector2d(1, 0); rayB = new Vector2d(1, 0);
+        if (d.Items.Count < 2 || d.Items[0] is not SkLine a || d.Items[1] is not SkLine b) return false;
+        if (!AngleRays(a, b, out corner, out rayA, out rayB)) return false;
+        if (!FixedRaysOff && d.RayA != 0 && d.RayB != 0) { rayA = RayOf(a, d.RayA); rayB = RayOf(b, d.RayB); }
+        return true;
+    }
+
+    /// <summary>Угол размера в градусах (0..180) — по закреплённым лучам (k128); одна формула для решателя, измерения и рисования.</summary>
+    public static double AngleDegrees(SkDimension d)
+    {
+        if (d.Items.Count < 2 || d.Items[0] is not SkLine a || d.Items[1] is not SkLine b) return double.NaN;
+        if (FixedRaysOff || d.RayA == 0 || d.RayB == 0) return LineAngleDegrees(a, b);
+        Vector2d da = a.B.P - a.A.P, db = b.B.P - b.A.P;
+        if (da.Length < 1e-12 || db.Length < 1e-12) return 0;
+        var ra = RayOf(a, d.RayA); var rb = RayOf(b, d.RayB);
+        return Math.Abs(Math.Atan2(ra.X * rb.Y - ra.Y * rb.X, Vector2d.Dot(ra, rb)) * 180.0 / Math.PI);
     }
 
     /// <summary>

@@ -548,7 +548,7 @@ public sealed class ParametersDialog : Window
                 string v = r.Value.Trim();
                 double x; string? why = null;
                 bool ok = TryNum(v, out x)
-                    || (r.Sketch != null ? r.Sketch.TryEvaluate(v, scope, out x, out why) : ParameterTable.TryEvaluateWith(v, scope, scope.Geometry, out x, out why));
+                    || (r.Sketch != null ? r.Sketch.TryEvaluate(v, scope, r.Dim, out x, out why) : ParameterTable.TryEvaluateWith(v, scope, scope.Geometry, out x, out why));
                 if (ok && r.Dim != null && System.Text.RegularExpressions.Regex.IsMatch(v, $@"(?<![\w""])d{r.Dim.Index}(?!\w)") && !TryNum(v, out _)) { ok = false; why = L("Формула ссылается на сам размер"); }
                 if (ok) r.Result = x.ToString("0.######", CultureInfo.InvariantCulture) + (string.IsNullOrEmpty(r.Unit) ? "" : " " + r.Unit);
                 else r.Error = why ?? L("Не число и не формула");
@@ -626,7 +626,7 @@ public sealed class ParametersDialog : Window
                     if (r.Dim != null)
                     {
                         if (num) { r.Dim.Value = r.Dim.Type is DimensionType.CoordX or DimensionType.CoordY && r.Dim.Value < 0 ? -Math.Abs(x) : x; r.Dim.Formula = null; }
-                        else { r.Dim.Formula = v; if (r.Sketch!.TryEvaluate(v, _s.Document.ScopeFor(part), out double fx, out _)) r.Dim.Value = fx; }
+                        else { r.Dim.Formula = v; if (r.Sketch!.TryEvaluate(v, _s.Document.ScopeFor(part), r.Dim, out double fx, out _)) r.Dim.Value = fx; }
                         r.Dim.Locked = true; r.Dim.IsDefault = false; r.Dim.Reference = false;
                         r.Sketch!.BumpStructure(); r.Sketch.NotifyChanged(r.Sketch);
                     }

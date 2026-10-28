@@ -1,0 +1,805 @@
+{
+  "Version": 2,
+  "Name": "TH X-218795-05",
+  "Units": {
+    "length": "in",
+    "mass": "kg",
+    "time": "s",
+    "angle": "deg",
+    "temperature": "K",
+    "name": "in/kg/s"
+  },
+  "Parameters": [],
+  "Sketches": [
+    {
+      "Id": 967,
+      "Name": "Sketch1",
+      "Plane": [
+        0,
+        0,
+        0,
+        -0,
+        -0,
+        -1,
+        0,
+        1,
+        0
+      ],
+      "PlaneRef": "YZ",
+      "BasePlaneId": 966,
+      "BaseFrame": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "Up": [
+        1,
+        0
+      ],
+      "OriginRef": "Geometric center",
+      "Entities": [
+        {
+          "Id": 1028,
+          "Kind": "point",
+          "X": 1.684830741543034E-20,
+          "Y": 124.48521098759036,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 1029,
+          "Kind": "point",
+          "X": 6.35,
+          "Y": 122.17399999999998,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 1052,
+          "Kind": "point",
+          "X": 345.0177229370573,
+          "Y": 122.17399999999998,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 2084,
+          "Kind": "point",
+          "X": 209.54999999999995,
+          "Y": 137.795,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 2085,
+          "Kind": "point",
+          "X": 248.5947553296214,
+          "Y": 160.33749999999995,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 2118,
+          "Kind": "point",
+          "X": 419.0999999999999,
+          "Y": 160.33749999999998,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 2154,
+          "Kind": "point",
+          "X": 419.09999999999997,
+          "Y": 197.001,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 3266,
+          "Kind": "point",
+          "X": 420.6,
+          "Y": 198.501,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 2193,
+          "Kind": "point",
+          "X": 530.6314,
+          "Y": 198.501,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 3267,
+          "Kind": "point",
+          "X": 419.09999999999997,
+          "Y": 197.001,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 3268,
+          "Kind": "point",
+          "X": 420.59999999999997,
+          "Y": 198.501,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 968,
+          "Kind": "point",
+          "X": 1.6794196277875836E-20,
+          "Y": 124.48521098759036,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 969,
+          "Kind": "point",
+          "X": 1.8819703104076778E-20,
+          "Y": 135.4837890124096,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 970,
+          "Kind": "point",
+          "X": 6.35,
+          "Y": 137.79499999999996,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 971,
+          "Kind": "point",
+          "X": 209.54999999999998,
+          "Y": 137.795,
+          "R": 0,
+          "A": 0,
+          "B": 0,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 972,
+          "Kind": "line",
+          "X": 0,
+          "Y": 0,
+          "R": 0,
+          "A": 968,
+          "B": 969,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 973,
+          "Kind": "line",
+          "X": 0,
+          "Y": 0,
+          "R": 0,
+          "A": 969,
+          "B": 970,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 974,
+          "Kind": "line",
+          "X": 0,
+          "Y": 0,
+          "R": 0,
+          "A": 970,
+          "B": 971,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 1030,
+          "Kind": "line",
+          "X": 0,
+          "Y": 0,
+          "R": 0,
+          "A": 1028,
+          "B": 1029,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 1053,
+          "Kind": "line",
+          "X": 0,
+          "Y": 0,
+          "R": 0,
+          "A": 1029,
+          "B": 1052,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 2086,
+          "Kind": "line",
+          "X": 0,
+          "Y": 0,
+          "R": 0,
+          "A": 2084,
+          "B": 2085,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 2119,
+          "Kind": "line",
+          "X": 0,
+          "Y": 0,
+          "R": 0,
+          "A": 2085,
+          "B": 2118,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 2155,
+          "Kind": "line",
+          "X": 0,
+          "Y": 0,
+          "R": 0,
+          "A": 2118,
+          "B": 2154,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 2194,
+          "Kind": "line",
+          "X": 0,
+          "Y": 0,
+          "R": 0,
+          "A": 3266,
+          "B": 2193,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        },
+        {
+          "Id": 3269,
+          "Kind": "line",
+          "X": 0,
+          "Y": 0,
+          "R": 0,
+          "A": 3267,
+          "B": 3268,
+          "C": 0,
+          "CCW": true,
+          "R2": 0,
+          "Rot": 0,
+          "A0": 0,
+          "A1": 0
+        }
+      ],
+      "Constraints": [
+        {
+          "Type": "PointOnEntity",
+          "Items": [
+            968,
+            4294967043
+          ],
+          "Enabled": true
+        },
+        {
+          "Type": "PointOnEntity",
+          "Items": [
+            969,
+            4294967043
+          ],
+          "Enabled": true
+        },
+        {
+          "Type": "Horizontal",
+          "Items": [
+            974
+          ],
+          "Enabled": true
+        },
+        {
+          "Type": "Coincident",
+          "Items": [
+            1028,
+            968
+          ],
+          "Enabled": true
+        },
+        {
+          "Type": "Horizontal",
+          "Items": [
+            1053
+          ],
+          "Enabled": true
+        },
+        {
+          "Type": "Coincident",
+          "Items": [
+            2084,
+            971
+          ],
+          "Enabled": true
+        },
+        {
+          "Type": "Horizontal",
+          "Items": [
+            2119
+          ],
+          "Enabled": true
+        },
+        {
+          "Type": "Vertical",
+          "Items": [
+            2155
+          ],
+          "Enabled": true
+        },
+        {
+          "Type": "Horizontal",
+          "Items": [
+            2194
+          ],
+          "Enabled": true
+        },
+        {
+          "Type": "Coincident",
+          "Items": [
+            3267,
+            2154
+          ],
+          "Enabled": true
+        },
+        {
+          "Type": "Coincident",
+          "Items": [
+            3268,
+            3266
+          ],
+          "Enabled": true
+        }
+      ],
+      "Dimensions": [
+        {
+          "Type": "DistanceLineLine",
+          "Ix": 5,
+          "Items": [
+            974,
+            4294967042
+          ],
+          "Value": 137.795,
+          "Locked": true,
+          "Reference": false,
+          "Formula": "10.85in/2",
+          "UserPlaced": true,
+          "Offset": [
+            -2.2892532348632812,
+            -21.423091888427734
+          ]
+        },
+        {
+          "Type": "AngleLineLine",
+          "Ix": 10,
+          "Items": [
+            973,
+            4294967042
+          ],
+          "Value": 20,
+          "Locked": true,
+          "Reference": false,
+          "UserPlaced": true,
+          "Offset": [
+            380.9537048721486,
+            120.48930740356445
+          ]
+        },
+        {
+          "Type": "DistancePointPoint",
+          "Ix": 2,
+          "Items": [
+            970,
+            971
+          ],
+          "Value": 203.2,
+          "Locked": true,
+          "Reference": false,
+          "Formula": "8in",
+          "UserPlaced": true,
+          "Offset": [
+            0,
+            12
+          ]
+        },
+        {
+          "Type": "DistanceLineLine",
+          "Ix": 18,
+          "Items": [
+            1053,
+            4294967042
+          ],
+          "Value": 122.17399999999998,
+          "Locked": true,
+          "Reference": false,
+          "Formula": "9.62in/2",
+          "UserPlaced": true,
+          "Offset": [
+            0,
+            12
+          ]
+        },
+        {
+          "Type": "AngleLineLine",
+          "Ix": 19,
+          "Items": [
+            1030,
+            973
+          ],
+          "Value": 40,
+          "Locked": true,
+          "Reference": false,
+          "UserPlaced": true,
+          "Offset": [
+            87.12413787841797,
+            -13.580856323242188
+          ]
+        },
+        {
+          "Type": "DistancePointLine",
+          "Ix": 20,
+          "Items": [
+            970,
+            972
+          ],
+          "Value": 6.35,
+          "Locked": true,
+          "Reference": false,
+          "Formula": "0.25in",
+          "UserPlaced": true,
+          "Offset": [
+            0,
+            12
+          ]
+        },
+        {
+          "Type": "DistancePointLine",
+          "Ix": 21,
+          "Items": [
+            1029,
+            972
+          ],
+          "Value": 6.35,
+          "Locked": true,
+          "Reference": false,
+          "Formula": "0.25in",
+          "UserPlaced": true,
+          "Offset": [
+            -11.773784637451172,
+            -5.660682678222656
+          ]
+        },
+        {
+          "Type": "DistanceLineLine",
+          "Ix": 22,
+          "Items": [
+            2119,
+            4294967042
+          ],
+          "Value": 160.33749999999998,
+          "Locked": true,
+          "Reference": false,
+          "Formula": "12.625in/2",
+          "UserPlaced": true,
+          "Offset": [
+            0,
+            12
+          ]
+        },
+        {
+          "Type": "AngleLineLine",
+          "Ix": 27,
+          "Items": [
+            2086,
+            1053
+          ],
+          "Value": 150,
+          "Locked": true,
+          "Reference": false,
+          "UserPlaced": true,
+          "Offset": [
+            57.129486083984375,
+            14.50201416015625
+          ]
+        },
+        {
+          "Type": "DistanceLineLine",
+          "Ix": 28,
+          "Items": [
+            2155,
+            972
+          ],
+          "Value": 419.09999999999997,
+          "Locked": true,
+          "Reference": false,
+          "Formula": "16.5in",
+          "UserPlaced": true,
+          "Offset": [
+            -7.4203643798828125,
+            56.81904602050781
+          ]
+        },
+        {
+          "Type": "DistanceLineLine",
+          "Ix": 29,
+          "Items": [
+            2194,
+            4294967042
+          ],
+          "Value": 198.501,
+          "Locked": true,
+          "Reference": false,
+          "Formula": "15.63in/2",
+          "UserPlaced": true,
+          "Offset": [
+            0,
+            12
+          ]
+        },
+        {
+          "Type": "DistancePointLine",
+          "Ix": 30,
+          "Items": [
+            3266,
+            2155
+          ],
+          "Value": 1.5,
+          "Locked": true,
+          "Reference": false,
+          "UserPlaced": true,
+          "Offset": [
+            -8.0450439453125,
+            -9.16058349609375
+          ]
+        },
+        {
+          "Type": "DistancePointLine",
+          "Ix": 31,
+          "Items": [
+            2154,
+            2194
+          ],
+          "Value": 1.5,
+          "Locked": true,
+          "Reference": false
+        },
+        {
+          "Type": "DistancePointLine",
+          "Ix": 33,
+          "Items": [
+            2193,
+            2155
+          ],
+          "Value": 111.53140000000002,
+          "Locked": true,
+          "Reference": false,
+          "UserPlaced": true,
+          "Offset": [
+            0,
+            12
+          ]
+        },
+        {
+          "Type": "DistancePointPoint",
+          "Ix": 15,
+          "Items": [
+            1029,
+            1052
+          ],
+          "Value": 338.66772293705725,
+          "Locked": false,
+          "Reference": false,
+          "IsDefault": true
+        }
+      ],
+      "Slot": 0,
+      "AxisRays": true
+    }
+  ],
+  "Features": [],
+  "Configurations": [],
+  "ActiveConfiguration": "",
+  "Material": {
+    "Name": "Сталь",
+    "Density": 7850,
+    "Designation": "Ст3",
+    "Colour": [
+      0.62,
+      0.64,
+      0.67
+    ],
+    "YoungModulus": 200000000000,
+    "PoissonRatio": 0.3,
+    "ShearModulus": 0,
+    "YieldStrength": 235000000,
+    "UltimateStrength": 370000000,
+    "TangentModulus": 1200000000,
+    "ThermalExpansion": 1.2E-05,
+    "ThermalConductivity": 52,
+    "SpecificHeat": 470,
+    "Specular": 0.6000000238418579,
+    "Shininess": 64,
+    "Opacity": 1,
+    "Metallic": true,
+    "Group": "Сталь",
+    "StressStrain": [],
+    "FatigueCurve": []
+  },
+  "Info": {
+    "Code": "X-218795-05",
+    "Title": "",
+    "Author": "",
+    "Checker": "",
+    "Company": "",
+    "Created": "2026-10-27T09:39:42.1957369Z",
+    "Modified": "2026-10-28T05:46:05.2995411Z",
+    "Revision": "",
+    "Note": ""
+  },
+  "FaceSets": [],
+  "FreeForm": false,
+  "MergeFreeForm": false,
+  "Tree": {
+    "p": true,
+    "p/DatumPoint:Origin": true,
+    "p/DatumPlane:XY": true,
+    "p/DatumPlane:XZ": true,
+    "p/DatumPlane:YZ": true,
+    "p/i:rollback:— rollback bar —": true,
+    "p/Sketch:Sketch1": true
+  }
+}

@@ -259,7 +259,7 @@ public static class SketchDimensions
                 if (it.Count >= 2 && it[0] is SkLine l1 && it[1] is SkLine l2)
                 {
                     if (DimensionMeasure.LineLineOff) { a = l1.A.P; b = Project(l1.A.P, l2); return true; }
-                    var (pm, rf) = DimensionMeasure.LineLinePair(l1, l2);   // k124: от середины отрезка до оси
+                    var (pm, rf) = DimensionMeasure.LineLinePair(d, l1, l2);   // k124: от середины отрезка до оси
                     if (ReferenceEquals(rf, l2)) { a = pm; b = Project(pm, rf); }   // a — на первом элементе, b — на втором
                     else { b = pm; a = Project(pm, rf); }
                     return true;
@@ -526,7 +526,7 @@ public static class SketchDimensions
 
         // Лучи берутся ровно те же, по которым считается величина размера.
         // Иначе дуга и число расходятся, и это уже случалось.
-        if (!DimensionMeasure.AngleRays(l1, l2, out Vector2d c, out Vector2d d1, out Vector2d d2)) return;
+        if (!DimensionMeasure.AngleRays(d, out Vector2d c, out Vector2d d1, out Vector2d d2)) return;
 
         double r = d.TextOffset.Length;
         if (r < px * 10) r = px * 40;
@@ -587,6 +587,26 @@ public static class SketchDimensions
 
         // Признак нужен подписи: у дополняющей дуги показывается 360 - угол.
         d.Reflex = sweep != shortSweep;
+        }
+
+        // k128 (замечание 28.10, 17:00, п. 1): ДУГА ДЕРЖИТСЯ ЗА ОТРЕЗОК. Радиус дуги — расстояние подписи от пересечения прямых;
+        // у отрезка, почти параллельного оси, пересечение далеко и при правке угла уезжает (30° → 20°: на 140 мм), и дуга
+        // с прежним радиусом уходила от отрезка. Теперь запоминается, где дуга пересекает отрезок (вдоль его луча от
+        // середины), и пока подпись не двигали, радиус берётся так, чтобы дуга пересекала отрезок там же. P3D_ANGLEANCHOR=0.
+        if (!AngleAnchorOff && d.UserPlaced)
+        {
+            var anchor = l1.Builtin || l1.Role == SkRole.Reference && l1.Fixed ? l2 : l1;
+            if (!anchor.Builtin)
+            {
+                var ea = ReferenceEquals(LineFor(e1, l1, l2, d1), anchor) ? e1 : e2;
+                double proj = Vector2d.Dot((anchor.A.P + anchor.B.P) * 0.5 - c, ea);
+                if (ReferenceEquals(d.ArcAnchorLine, anchor) && d.TextOffset == d.ArcAnchorOffset && d.TextOffset.LengthSquared > 1e-18)
+                {
+                    double rn = Math.Max(proj + d.ArcAnchorAlong, px * 10);
+                    if (Math.Abs(rn - r) > 1e-12) { r = rn; d.TextOffset = d.TextOffset.Normalized() * r; Interlocked.Increment(ref AngleAnchored); }
+                }
+                d.ArcAnchorLine = anchor; d.ArcAnchorAlong = r - proj; d.ArcAnchorOffset = d.TextOffset;
+            }
         }
 
         // Дуга размера. Сегментов вдвадцатеро больше, чем градусов в дуге,
@@ -666,7 +686,14 @@ public static class SketchDimensions
         // зеркальной: касательная берётся поворотом радиуса на -90 градусов.
         Text(batch, plane, style, d, mid, new Vector2d(radial.Y, -radial.X), radial, px);
         LastAngleTextAt = GeomUtil.Norm2Pi((Math.Atan2(radial.Y, radial.X) - a0) * s);
+        LastAngleArc = (c, r, e1, e2);
+        AngleArcs.AddOrUpdate(d, LastAngleArc);
     }
+    /// <summary>Разбор и проверки (k128): дуга последнего углового размера — центр, радиус, лучи сектора; по размерам.</summary>
+    public static (Vector2d C, double R, Vector2d E1, Vector2d E2) LastAngleArc;
+    public static readonly System.Runtime.CompilerServices.ConditionalWeakTable<SkDimension, object> AngleArcs = new();
+    static readonly bool AngleAnchorOff = Environment.GetEnvironmentVariable("P3D_ANGLEANCHOR") == "0";
+    public static long AngleAnchored;
 
     private static Vector2d Dir(double angle) => new(Math.Cos(angle), Math.Sin(angle));
 
