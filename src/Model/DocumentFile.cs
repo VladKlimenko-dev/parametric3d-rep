@@ -75,6 +75,51 @@ public static class DocumentFile
     }
 
     public static readonly bool DisplayOff = Environment.GetEnvironmentVariable("P3D_FILEDISPLAY") == "0";
+    static readonly bool RawSigOff = Environment.GetEnvironmentVariable("P3D_DISPLAYRAWSIG") == "0";
+
+    /// <summary>
+    /// k133: текст файла без свойства верхнего уровня «Display» (с запятой перед ним) — ровно то, что было подписано при
+    /// записи (описание модели записывается тем же сериализатором, сетка — последним изменением). Null — свойства нет.
+    /// </summary>
+    /// <summary>Проверки: заменить подпись сетки в тексте файла на подпись данного описания.</summary>
+    public static string ResignForTest(string json, string def)
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        string old = node["Display"]!["Signature"]!.GetValue<string>();
+        return json.Replace(old, Signature(def));
+    }
+
+    public static string? StripDisplay(string json)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(json);
+        int pre = 0; if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) pre = 3;
+        var span = new ReadOnlySpan<byte>(bytes, pre, bytes.Length - pre);
+        var rd = new Utf8JsonReader(span, new JsonReaderOptions { CommentHandling = JsonCommentHandling.Skip });
+        while (rd.Read())
+        {
+            if (rd.TokenType == JsonTokenType.PropertyName && rd.CurrentDepth == 1 && rd.ValueTextEquals("Display"))
+            {
+                long start = rd.TokenStartIndex;
+                rd.Read(); rd.Skip();
+                long end = rd.BytesConsumed;
+                // запятая перед свойством (и пробелы между ней и именем)
+                long cut = start; long k = start - 1;
+                while (k >= 0 && (span[(int)k] == ' ' || span[(int)k] == '\n' || span[(int)k] == '\r' || span[(int)k] == '\t')) k--;
+                if (k >= 0 && span[(int)k] == ',') cut = k;
+                else
+                {
+                    // первое свойство: убрать запятую после значения
+                    long j = end; while (j < span.Length && (span[(int)j] == ' ' || span[(int)j] == '\n' || span[(int)j] == '\r' || span[(int)j] == '\t')) j++;
+                    if (j < span.Length && span[(int)j] == ',') end = j + 1;
+                }
+                var outB = new byte[span.Length - (end - cut)];
+                span.Slice(0, (int)cut).CopyTo(outB);
+                span.Slice((int)end).CopyTo(outB.AsSpan((int)cut));
+                return System.Text.Encoding.UTF8.GetString(outB);
+            }
+        }
+        return null;
+    }
     /// <summary>k125: мутация P3D_FILEDISPLAYANY=0 — сетка в файл только у посчитанной детали (прежде).</summary>
     public static readonly bool DisplayAnyOff = Environment.GetEnvironmentVariable("P3D_FILEDISPLAYANY") == "0";
     static string Signature(string def) => SignatureRaw(NewlineSigOff ? def : def.Replace("\r\n", "\n"));
@@ -793,6 +838,11 @@ public static class DocumentFile
             // k116: подпись — без учёта переводов строк (файл с Windows \r\n открывался на Linux без сетки, и обратно)
             var re = JsonSerializer.Serialize(doc, Opts);
             displayOk = display.Signature == Signature(re) || (!NewlineSigOff && display.Signature == SignatureRaw(re.Replace("\r\n", "\n").Replace("\n", "\r\n")));
+            // k133 (замечание 29.10, 08:55, п. 5): ПОДПИСЬ — ПО ТЕКСТУ ФАЙЛА без сетки, а не по повторной записи разобранного
+            // описания. Новое поле описания (способ построения оси и точки, k132) меняло повторную запись, подпись не сходилась,
+            // и сетка файла отбрасывалась: деталь появлялась только после полного перестроения. Мутация P3D_DISPLAYRAWSIG=0.
+            if (!displayOk && !RawSigOff && StripDisplay(json) is { } raw)
+                displayOk = display.Signature == Signature(raw) || display.Signature == SignatureRaw(raw.Replace("\r\n", "\n").Replace("\n", "\r\n"));
         }
 
         var units = Core.UnitSystem.FromDictionary(doc.Units);                  // m.x4: система единиц документа

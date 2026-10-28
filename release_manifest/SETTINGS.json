@@ -29,6 +29,7 @@
     "HealAfterBoolean": "False",
     "HealTinyEdges": "False",
     "HealTolerance": "0.001",
+    "LivePreview": "False",
     "LocalizeBooleans": "True",
     "MeshThreads": "1",
     "OpTag": null,

@@ -454,20 +454,59 @@ uniform int uOverRefl; // пол поверх отражения: к краю у
 uniform vec4 uTop;
 uniform vec4 uBottom;
 uniform float uVpH;
+uniform int uShape;    // k133: 0 прямоугольник/квадрат, 1 эллипс/круг
+uniform int uStencil;  // проход трафарета: вне формы — не писать
+uniform vec3 uC;
+uniform vec2 uH;
+uniform int uGridOn;   // k133: сетка пола
+uniform float uGridStep;   // шаг промежуточных линий, мм
+uniform float uGridMajor;  // промежуточных на основную
+uniform vec2 uGridO;       // начало сетки (проекция начала документа), xz
+uniform vec4 uGridColor;
+uniform float uGridPx;     // толщина промежуточных линий, пикс.; основные ×2, нулевые ×4 от основных
 out vec4 oColor;
+float lineCov(float u, float wpx)
+{
+    // u — координата в шагах сетки; расстояние до ближайшей линии в пикселях
+    float fw = max(fwidth(u), 1e-6);
+    float d = abs(fract(u + 0.5) - 0.5) / fw;
+    float w = max(wpx, 1.0);
+    float c = 1.0 - smoothstep(w * 0.5 - 0.5, w * 0.5 + 0.5, d);
+    return c * min(wpx, 1.0) * clamp(1.0 / (fw * 6.0), 0.0, 1.0);   // слишком частые линии гаснут
+}
+float zeroCov(float x, float wpx)
+{
+    float fw = max(fwidth(x), 1e-9);
+    float d = abs(x) / fw; float w = max(wpx, 1.0);
+    return (1.0 - smoothstep(w * 0.5 - 0.5, w * 0.5 + 0.5, d)) * min(wpx, 1.0);
+}
 void main()
 {
     vec2 a = abs(vUV);
     float e = max(uEdge, 1e-3);
-    float k = (1.0 - smoothstep(1.0 - e, 1.0, a.x)) * (1.0 - smoothstep(1.0 - e, 1.0, a.y));
-    if (uOverRefl == 0) { oColor = vec4(uColor.rgb, uColor.a * k); return; }
+    float k = uShape == 1 ? 1.0 - smoothstep(1.0 - e, 1.0, length(vUV))
+                          : (1.0 - smoothstep(1.0 - e, 1.0, a.x)) * (1.0 - smoothstep(1.0 - e, 1.0, a.y));
+    if (uStencil == 1) { if (uShape == 1 && length(vUV) > 1.0) discard; oColor = vec4(1.0); return; }
+    vec3 col = uColor.rgb; float fa = uColor.a;
+    if (uGridOn == 1 && uGridStep > 0.0)
+    {
+        vec2 w = uC.xz + vUV * uH - uGridO;
+        vec2 u = w / uGridStep;
+        float cm = max(lineCov(u.x, uGridPx), lineCov(u.y, uGridPx)) * 0.55;
+        vec2 um = u / max(uGridMajor, 1.0);
+        float cM = max(lineCov(um.x, 2.0 * uGridPx), lineCov(um.y, 2.0 * uGridPx));
+        float c0 = max(zeroCov(w.x, 8.0 * uGridPx), zeroCov(w.y, 8.0 * uGridPx));
+        float c = clamp(max(cm, max(cM, c0)), 0.0, 1.0) * uGridColor.a;
+        col = mix(col, uGridColor.rgb, c);
+        fa = max(fa, c);
+    }
+    if (uOverRefl == 0) { oColor = vec4(col, fa * k); return; }
     float t = clamp(gl_FragCoord.y / max(uVpH, 1.0), 0.0, 1.0);
     t = t * t * (3.0 - 2.0 * t);
     vec3 bg = mix(uBottom.rgb, uTop.rgb, t);
     // итог = k·(fa·пол + (1−fa)·отражение) + (1−k)·фон
-    float fa = uColor.a;
     float al = 1.0 - k * (1.0 - fa);
-    oColor = vec4((k * fa * uColor.rgb + (1.0 - k) * bg) / max(al, 1e-4), al);
+    oColor = vec4((k * fa * col + (1.0 - k) * bg) / max(al, 1e-4), al);
 }";
 
     // ------------------------------------------------------------------ фон

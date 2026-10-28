@@ -155,9 +155,22 @@ public static class PCurves
         if (Enumerable.Range(0, n + 1).All(i => (line.PointAt((double)i / n) - uv[i]).Length < 1e-9 * scale)) cand = line;
         else if (s.IsPlanar && ConicOnPlane(ce, s, uv, scale) is { } cn) cand = cn;
         else if (s.IsPlanar && ArcThrough(uv) is { } arc) cand = arc;
-        else if (projected || ce.Edge.Curve is IntersectionCurve3 or Geometry.NurbsImplicitCurve3 or Geometry.NurbsNurbsCurve3)
-            cand = new ProjectedCurve2(t => PoleSafeUV(s, poles, ce, t), uv, perU, perV);
-        else cand = HermiteThrough(ce, s, uv, perU, perV) ?? (ICurve2)new Polyline2(uv);
+        else cand = Fallback();
+        ICurve2 Fallback() => projected || ce.Edge.Curve is IntersectionCurve3 or Geometry.NurbsImplicitCurve3 or Geometry.NurbsNurbsCurve3
+            ? new ProjectedCurve2(t => PoleSafeUV(s, poles, ce, t), uv, perU, perV)
+            : HermiteThrough(ce, s, uv, perU, perV) ?? (ICurve2)new Polyline2(uv);
+        dev = Deviation(cand);
+        // k133 (11.3, модель пользователя X-218795-05): ДУГА «ЧЕРЕЗ ТРИ ТОЧКИ» — ТОЛЬКО ЕСЛИ ОНА ЛЕЖИТ НА РЕБРЕ В ПРЕДЕЛАХ ТОЧНОСТИ
+        // МОДЕЛИ. Допуск выбора дуги — 1e-9·радиус: у почти прямой кривой пересечения (гипербола «плоскость торца ∩ пологий
+        // конус», 5 мм) радиус дуги ~10⁴ мм, и дуга с отходом 1.3e-7 мм принималась; как точная, она не уплотнялась, и тело
+        // не проходило проверку p-кривых (общая булева отказывала, деталь уходила в многогранную). Теперь дуга, отходящая
+        // больше половины точности модели, заменяется общей p-кривой (проекция или Эрмита). Мутация P3D_PCARCDEV=0.
+        if (cand is Arc2 && !ArcDevOff && dev > 0.5 * ToleranceContext.Current.ModelAccuracy) { cand = Fallback(); dev = Deviation(cand); }
+        return cand;
+
+        double Deviation(ICurve2 cand)
+        {
+        double dev = 0;
         // Отклонение: середины шагов и сами точки выборки.
         if (cand is Hermite2 hc)
         {
@@ -174,8 +187,10 @@ public static class PCurves
                 double t = (i + 0.5) / (2 * n);
                 dev = Math.Max(dev, (s.PointAt(cand.PointAt(t)) - At(ce, t)).Length);
             }
-        return cand;
+        return dev;
+        }
     }
+    static readonly bool ArcDevOff = Environment.GetEnvironmentVariable("P3D_PCARCDEV") == "0";
 
     /// <summary>
     /// KRN-03 (03.11): КОНЕЦ ПОЛУРЕБРА НА ВЫРОЖДЕНИИ ИЛИ НА ШВЕ КАРТЫ. (1) Конец на оси неполного тела вращения (полюс, которого

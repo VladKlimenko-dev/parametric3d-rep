@@ -508,6 +508,14 @@ static partial class Program
         if (mode is "krn10pairs" or "allA") Krn10PairChecks();
         if (mode is "krn10prepared" or "allA") Krn10PreparedChecks();
         if (mode is "krn11big" or "allB") Krn11BigModelChecks();
+        if (mode is "usermodels" or "allB") Krn00UserModelChecks();
+        if (mode is "rawsig" or "allA") Krn09DisplayRawSigChecks();
+        if (mode is "meshsag" or "allA") Krn02MeshSagChecks();
+        if (mode is "embtool" or "allA") Krn05EmbeddedToolChecks();
+        if (mode is "junction" or "allA") Krn05JunctionChecks();
+        if (mode is "usermodels-ref") { UserModelsRef(); return; }
+        if (mode is "userprobe") { UserProbe(args[1]); return; }
+        if (mode is "dispsig") { foreach (var f in args.Skip(1)) DisplaySigProbe(f); return; }
         if (mode is "krn10toolreuse" or "allA") Krn10ToolReuseChecks();
         if (mode is "krn08provtree" or "allA") Krn08ProvTreeChecks();
         if (mode is "krn03igespc" or "allA") Krn03IgesPCurveChecks();

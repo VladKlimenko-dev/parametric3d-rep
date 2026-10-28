@@ -3712,6 +3712,74 @@ Check("UI-SPEED-K126", () =>
     Require(!part.IsDirty && !part.NeedsAcceptance && Math.Abs(part.Volume - p2.Volume) <= 1e-9 * p2.Volume, "the part was not rebuilt and checked after the interrupted checks");
 });
 
+Check("UI-FLOOR-SETTINGS-K133", () =>
+{
+    // k133 (замечание 29.10, 08:55, пп. 2–4): пол вдвое больше по умолчанию, размер 0…100 (P3D_FLOORSIZE=0), форма; сетка пола в
+    // единицах документа (P3D_FLOORGRID=0), толщина 0…100; настройки применяются к новой теме отрисовки при открытии документа
+    // (P3D_THEMELOOK=0); окно настроек переведено (P3D_SETTINGSLOC=0).
+    var R = typeof(Parametric3D.Render.Engine.SceneRenderer);
+    var lo = new OpenTK.Mathematics.Vector3(-10, 2, -5); var hi = new OpenTK.Mathematics.Vector3(30, 12, 15);
+    var fDef = Parametric3D.Render.Engine.SceneRenderer.FloorGeometry(lo, hi, 0, UiLook.FloorSizeOf(new LookPrefs().FloorSizePct))!.Value;
+    var f0 = Parametric3D.Render.Engine.SceneRenderer.FloorGeometry(lo, hi, 0, UiLook.FloorSizeOf(0))!.Value;
+    var f100 = Parametric3D.Render.Engine.SceneRenderer.FloorGeometry(lo, hi, 0, UiLook.FloorSizeOf(100))!.Value;
+    var fc = Parametric3D.Render.Engine.SceneRenderer.FloorGeometry(lo, hi, 0, 1f, Parametric3D.Render.Engine.FloorShapeKind.Circle)!.Value;
+    var fs = Parametric3D.Render.Engine.SceneRenderer.FloorGeometry(lo, hi, 0, 1f, Parametric3D.Render.Engine.FloorShapeKind.Square)!.Value;
+    Console.WriteLine($"  floor H: default {fDef.H}, size 0 {f0.H}, size 100 {f100.H}, circle {fc.H}, square {fs.H}");
+    Require(fDef.H.X > 50 && fDef.H.X < 55 && Math.Abs(f0.H.X - 20) < 1e-3 && Math.Abs(f100.H.X - 200) < 1e-2, "floor size");
+    Require(Math.Abs(fc.H.X - fc.H.Y) < 1e-4 && Math.Abs(fc.H.X - MathF.Sqrt(500)) < 1e-3 && Math.Abs(fs.H.X - 20) < 1e-4 && Math.Abs(fs.H.Y - 20) < 1e-4, "floor shape");
+    var g1 = Parametric3D.Render.Engine.SceneRenderer.GridSteps(1000, 1); var g2 = Parametric3D.Render.Engine.SceneRenderer.GridSteps(1000, 25.4);
+    var th = Parametric3D.Render.Engine.RenderTheme.DarkTheme();
+    var gOn = Parametric3D.Render.Engine.SceneRenderer.GridFor(th, new OpenTK.Mathematics.Vector2(500, 300));
+    Console.WriteLine($"  grid: mm {g1}, inch {g2}, theme {gOn}; px 0 {UiLook.GridPxOf(0)} 100 {UiLook.GridPxOf(100)}");
+    Require(Math.Abs(g1.MinorMm - 10) < 1e-9 && g1.PerMajor == 10 && Math.Abs(g2.MinorMm - 25.4) < 1e-9 && g2.PerMajor == 5 && gOn.MinorMm > 0, "floor grid steps");
+    Require(Math.Abs(UiLook.GridPxOf(0) - 0.1) < 1e-6 && Math.Abs(UiLook.GridPxOf(100) - 2) < 1e-6, "grid width");
+    var prefs = UserPrefs.Current; var saved = prefs.Look.Clone();
+    var s = DocumentSession.Sample(); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    bool en0 = Loc.En;
+    try
+    {
+        // настройки — к новой теме отрисовки при открытии документа
+        prefs.Look = new LookPrefs { FloorGapMm = 7, FloorShape = "Ellipse", FloorGrid = false };
+        var s2 = DocumentSession.Sample(); w.SetSession(s2); Run();
+        var t2 = w.ViewPort.Theme;
+        Console.WriteLine($"  after opening a document: gap {t2.FloorGap}, shape {t2.FloorShape}, grid {t2.FloorGrid}");
+        Require(t2.FloorGap == 7 && t2.FloorShape == Parametric3D.Render.Engine.FloorShapeKind.Ellipse && !t2.FloorGrid, "settings are not applied on opening a document");
+        // окно настроек: форма пола
+        _ = DocCommands.Settings(w); Run();
+        var pr = SettingsDialog.Last!; var sw = DocCommands.LastSettingsWindow!;
+        var shape = (ComboBox)pr.Find("set_mv_shape")!; shape.SelectedIndex = 2;
+        Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(sw).OfType<Button>().First(b => b.Name == "set_ok").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Run();
+        Require(prefs.Look.FloorShape == "Circle" && w.ViewPort.Theme.FloorShape == Parametric3D.Render.Engine.FloorShapeKind.Circle, "floor shape from the settings");
+        // перевод: английский — без кириллицы (кроме названия языка «Русский»); русский — без английских слов (кроме имён и знаков)
+        foreach (bool en in new[] { true, false })
+        {
+            if (Loc.En != en) w.ToggleLanguage();
+            Run();
+            _ = DocCommands.Settings(w); Run();
+            var win = DocCommands.LastSettingsWindow!;
+            var texts = new List<string>();
+            foreach (var c in Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(win))
+            {
+                if (c is TextBlock tb && tb.Text is { Length: > 0 } t) texts.Add(t);
+                if (c is TextBox tx && tx.Watermark is string wm && wm.Length > 0) texts.Add(wm);
+                if (c is ComboBox cb && cb.ItemsSource is System.Collections.IEnumerable items) foreach (var it in items) if (it is string si) texts.Add(si);
+                if (c is CheckBox ch && ch.Content is string cs) texts.Add(cs);
+                if (c is Button bt && bt.Content is string bs) texts.Add(bs);
+            }
+            var allowLatin = new HashSet<string> { "X", "Y", "Z", "RRGGBB", "English", "ANGLE", "Direct3D", "Direct", "WGL", "OpenGL", "Ambient" };
+            var bad = en
+                ? texts.Where(t => t != "Русский" && System.Text.RegularExpressions.Regex.IsMatch(t, "[А-Яа-яЁё]")).Distinct().ToList()
+                : texts.Where(t => System.Text.RegularExpressions.Regex.Matches(t, "[A-Za-z]{2,}").Any(m => !allowLatin.Contains(m.Value))).Distinct().ToList();
+            Console.WriteLine($"  settings in {(en ? "EN" : "RU")}: {texts.Count} texts, untranslated {bad.Count}: {string.Join(" | ", bad.Take(8))}");
+            win.Close(); Run();
+            Require(texts.Count > 50 && bad.Count == 0, $"settings window is not translated ({(en ? "EN" : "RU")}): {string.Join(" | ", bad.Take(5))}");
+        }
+    }
+    finally { if (Loc.En != en0) w.ToggleLanguage(); prefs.Look = saved; prefs.Save(); w.ApplyLook(); }
+    w.Close();
+});
+
 Check("UI-MODELVIEW-K132", () =>
 {
     // k132 (замечание 28.10, 23:42, пп. 7–12): настройки — разделы как в QymCAD (P3D_SETTINGSSECTIONS=0), поиск, цвета для
@@ -3795,7 +3863,7 @@ Check("UI-MODELVIEW-K132", () =>
         Console.WriteLine($"  tree icon {w.Resources["P3.TreeIconPx"]}, props width {w.PropsPanelWidth}");
         Require(Equals(w.Resources["P3.TreeIconPx"], 22.0) && w.PropsPanelWidth == 360, "tree or properties panel settings are not applied");
         // (D) пол: на зазоре под нижней точкой, чуть больше детали
-        var fg = Parametric3D.Render.Engine.SceneRenderer.FloorGeometry(new OpenTK.Mathematics.Vector3(-10, 2, -5), new OpenTK.Mathematics.Vector3(30, 12, 15), 5);
+        var fg = Parametric3D.Render.Engine.SceneRenderer.FloorGeometry(new OpenTK.Mathematics.Vector3(-10, 2, -5), new OpenTK.Mathematics.Vector3(30, 12, 15), 5, 1.3f);
         Console.WriteLine($"  floor: {fg}");
         Require(fg is { } f && Math.Abs(f.Y - (-3)) < 1e-4 && f.H.X > 20 && f.H.X < 30 && f.H.Y > 10 && f.H.Y < 20 && Math.Abs(f.C.X - 10) < 1e-4, "floor geometry");
     }

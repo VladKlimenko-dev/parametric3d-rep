@@ -228,8 +228,19 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     public bool DarkTheme
     {
         get => _r.Theme.Dark;
-        set { _r.Theme = value ? RenderTheme.DarkTheme() : RenderTheme.LightTheme(); MarkDirty(); }
+        set
+        {
+            _r.Theme = value ? RenderTheme.DarkTheme() : RenderTheme.LightTheme();
+            // k133 (замечание 29.10, 08:55, п. 4): новая тема отрисовки сразу получает настройки пользователя (пол, свет,
+            // плоскости…). Прежде при открытии документа тема создавалась заново ПОСЛЕ применения настроек — зазор пола и
+            // прочее терялись до «ОК» в настройках. Мутация P3D_THEMELOOK=0.
+            if (!ThemeLookOff) ThemeCreated?.Invoke(_r.Theme);
+            MarkDirty();
+        }
     }
+    /// <summary>k133: вызывается с каждой новой темой отрисовки (настройки пользователя — UiLook.ApplyToRender).</summary>
+    public static Action<RenderTheme>? ThemeCreated;
+    public static readonly bool ThemeLookOff = Environment.GetEnvironmentVariable("P3D_THEMELOOK") == "0";
 
     public void Redraw() => RequestNextFrameRendering();
 

@@ -37,6 +37,14 @@ public sealed class RenderTheme
     public float FloorGap;
     public Vector4 FloorColor;
     public float FloorReflect = 0.25f;
+    /// <summary>k133 (замечание 29.10, 08:55, п. 3): размер пола — множитель габарита тел (1 — по габариту, 10 — в 10 раз
+    /// больше); форма; сетка пола: показ, цвет, толщина промежуточных линий (пикс.), мм на единицу документа.</summary>
+    public float FloorSize = 2.62f;
+    public FloorShapeKind FloorShape = FloorShapeKind.Rectangle;
+    public bool FloorGrid = true;
+    public Vector4 FloorGridColor;
+    public float FloorGridPx = 1f;
+    public double GridUnitMm = 1;
     /// <summary>Свет в осях камеры: положение и точка, куда он светит (направление — от точки к положению), цвет, сила.</summary>
     public Vector3 Light1Pos = new(-0.45f, 0.65f, 0.62f), Light1Target, Light1Color = new(1f, 0.98f, 0.95f);
     public float Light1Power = 0.80f;
@@ -62,7 +70,7 @@ public sealed class RenderTheme
         SketchCurve = C(255, 214, 74), SketchConstruction = C(140, 170, 220, 0.9f), SketchCenterline = C(255, 255, 255, 0.95f),
         SketchReference = C(96, 205, 255, 0.9f), SketchPoint = C(255, 214, 74),
         PreviewAdd = C(255, 122, 26, 0.4f), PreviewAddEdge = C(255, 122, 26, 0.95f), PreviewCut = C(239, 68, 68, 0.35f), PreviewCutEdge = C(239, 68, 68, 0.95f),
-        FloorColor = C(58, 63, 72, 0.82f),
+        FloorColor = C(58, 63, 72, 0.82f), FloorGridColor = C(150, 160, 178, 0.55f),
     };
 
     public static RenderTheme LightTheme() => new()
@@ -76,6 +84,9 @@ public sealed class RenderTheme
         SketchCurve = C(31, 95, 214), SketchConstruction = C(90, 115, 160, 0.9f), SketchCenterline = C(60, 64, 72, 0.95f),
         SketchReference = C(0, 140, 200, 0.9f), SketchPoint = C(31, 95, 214),
         PreviewAdd = C(234, 88, 12, 0.35f), PreviewAddEdge = C(234, 88, 12, 0.95f), PreviewCut = C(209, 36, 47, 0.3f), PreviewCutEdge = C(209, 36, 47, 0.95f),
-        FloorColor = C(246, 247, 249, 0.80f),
+        FloorColor = C(246, 247, 249, 0.80f), FloorGridColor = C(120, 128, 142, 0.55f),
     };
 }
+
+/// <summary>k133: форма пола.</summary>
+public enum FloorShapeKind { Rectangle, Ellipse, Circle, Square }

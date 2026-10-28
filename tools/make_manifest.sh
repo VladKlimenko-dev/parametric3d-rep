@@ -7,7 +7,8 @@ root=$(pwd); out=release_manifest; k01=${1:-}
 mkdir -p "$out"
 # Учитываемые файлы: исходники, проекты, ресурсы, документы, проверки, скрипты; без результатов сборки.
 find src tests tools -type f \( -name '*.cs' -o -name '*.csproj' -o -name '*.slnx' -o -name '*.resx' -o -name '*.md' \
-     -o -name '*.sh' -o -name '*.py' -o -name '*.json' -o -name '*.txt' -o -name '*.glsl' -o -name '*.ico' -o -name '*.png' \) \
+     -o -name '*.sh' -o -name '*.py' -o -name '*.json' -o -name '*.txt' -o -name '*.glsl' -o -name '*.ico' -o -name '*.png' \
+     -o -name '*.axaml' -o -name '*.svg' -o -name '*.p3d' -o -name '*.tsv' -o -name '*.ttf' -o -name '*.props' -o -name '*.config' \) \
      -not -path '*/bin/*' -not -path '*/obj/*' -not -path '*/TestResults/*' | LC_ALL=C sort > "$out/FILES.txt"
 xargs -d '\n' sha256sum < "$out/FILES.txt" > "$out/SHA256SUMS.txt"
 sha256sum "$out/SHA256SUMS.txt" | cut -c1-64 > "$out/RELEASE_ID.txt"
@@ -19,6 +20,9 @@ sha256sum "$out/SHA256SUMS.txt" | cut -c1-64 > "$out/RELEASE_ID.txt"
   echo; echo "# Инструменты"
   echo "dotnet SDK $(dotnet --version 2>/dev/null || echo 'не найден')"
   echo "ОС сборки стенда: $(uname -srm)"
+  echo; echo "# Платформы выпуска (k133, 11.6)"
+  echo "linux-x64: самодостаточная поставка (tools/make_package.sh <вывод>) — среда .NET внутри; проверка из архива без .NET: запуск, кадр, «Тест» (раздел «Отмена и отказ»)"
+  echo "portable (win-x64 и linux-x64, нужен .NET 8): tools/make_package.sh <вывод> portable — Parametric3D.cmd / Parametric3D.sh; повторная сборка даёт те же файлы приложения до бита (Parametric3D-portable.app.sha256); на Windows — кнопка «Тест» (разделы «Холодный и тёплый прогон», «Модели пользователя»)"
 } > "$out/DEPENDENCIES.txt"
 if [ -n "$k01" ] && [ -x "$k01" ]; then DOTNET_TieredCompilation=0 "$k01" settings | sed -n '/^{$/,$p' > "$out/SETTINGS.json"; fi
 echo "RELEASE_ID $(cat $out/RELEASE_ID.txt); файлов $(wc -l < $out/FILES.txt)"

@@ -228,7 +228,7 @@ public static class FaceIntersect
         using (Diagnostics.Prof.Time("пары: события и обрезка"))
             foreach (var c in ssi.Curves) Clip(c, a, b, res);
         using (Diagnostics.Prof.Time("пары: удостоверение событий")) if (!EventCertOff && !EventsOff && res.Unresolved == null) CertifyEvents(a, b, ssi, res);
-        if (Debug != null && (a.Tor || b.Tor))
+        if (Debug != null)
         {
             Debug($"pair {a.Face.Id}/{b.Face.Id} ssi {ssi.Kind} curves {ssi.Curves.Count} → pieces {res.Pieces.Count} unresolved {res.Unresolved}");
             foreach (var c in ssi.Curves) { var q0 = c.PointAt(c.T0); var q1 = c.PointAt(c.T1); var bl = q0; var bh = q0; for (int i = 0; i <= 200; i++) { var q = c.PointAt(c.T0 + (c.T1 - c.T0) * i / 200); bl = Vector3d.ComponentMin(bl, q); bh = Vector3d.ComponentMax(bh, q); } Debug($"   curve {c.GetType().Name} {q0:0.###}→{q1:0.###} box {bl:0.##}..{bh:0.##}"); }
@@ -301,6 +301,12 @@ public static class FaceIntersect
             return ParamEvents(c, other);
         }
         var l = EventsOn(c, other);
+        // k133 (модель пользователя X-218795-05, круговой массив выреза): НЕОТДЕЛИМОЕ КАСАНИЕ ДАЛЕКО ВНЕ ГРАНИ. Ребро тела касается
+        // ПОВЕРХНОСТИ другой грани (плоскость торца копии инструмента, повёрнутой на 60°, проходит через вершину гиперболы
+        // первого выреза), но точка касания — далеко вне самой грани: корни возле неё (в шаре звена, доли микрона) грани не
+        // касаются, события на грани от этого не теряются. Прежде — отказ маршрута, массив выреза не строился. Мутация P3D_TANGENTFAR=0.
+        if (!other.Param && SsiEvents.LastUncertain && !TangentFarOff && SsiEvents.TracedAt is { } tp && other.Contains(tp) == false && other.BoundaryDistance(tp) > 1e-3)
+        { Interlocked.Increment(ref TangentFar); return l; }
         if (!other.Param && SsiEvents.LastUncertain && res.Unresolved == null) { res.Unresolved = $"events of a {c.GetType().Name} edge are not proven (sampled; {SsiEvents.TracedWhy})"; if (RigorDbg) Console.Error.WriteLine("RIGOR unresolved: " + res.Unresolved); }
         return l;
     }
@@ -553,6 +559,29 @@ public static class FaceIntersect
                 return;
             }
             inside[i] = g2 > 0;
+            // k133 (11.3, модель пользователя X-218795-05): КУСОК НА ГРАНИЦЕ ОДНОЙ ГРАНИ И ВНУТРИ ДРУГОЙ. Плоскость торца инструмента
+            // через окружность стыка конуса и цилиндра тела: окружность — граница грани тела (знаковое расстояние 0) и внутри
+            // грани инструмента; min(…) = 0, и кусок терялся — грань инструмента не делилась, тело выходило с открытыми рёбрами
+            // (общая булева отказывала, деталь — многогранная). Теперь кусок отдаётся: для грани, на границе которой он лежит,
+            // его отбрасывает общая булева (OnBoundary), для другой — это разрез. Мутация P3D_CLIPONEDGE=0.
+            if (!inside[i] && !ClipOnEdgeOff)
+            {
+                double acc = FaceSplit.MergeExact;
+                var q1 = c.PointAt(Wrap(s + (e - s) * 0.25)); var q2 = c.PointAt(Wrap(s + (e - s) * 0.5)); var q3 = c.PointAt(Wrap(s + (e - s) * 0.75));
+                double a1 = a.SignedBoundaryDistance(q1), a2 = a.SignedBoundaryDistance(q2), a3 = a.SignedBoundaryDistance(q3);
+                double b1 = b.SignedBoundaryDistance(q1), b2 = b.SignedBoundaryDistance(q2), b3 = b.SignedBoundaryDistance(q3);
+                bool aOn = Math.Max(Math.Abs(a1), Math.Max(Math.Abs(a2), Math.Abs(a3))) <= acc, bOn = Math.Max(Math.Abs(b1), Math.Max(Math.Abs(b2), Math.Abs(b3))) <= acc;
+                bool aIn = Math.Min(a1, Math.Min(a2, a3)) > acc, bIn = Math.Min(b1, Math.Min(b2, b3)) > acc;
+                // только заметный кусок (длиннее 1000 точностей модели): узкие части уже допуска слияния — отказ (ниже), не разрез
+                if ((c.PointAt(Wrap(s)) - c.PointAt(Wrap(e))).Length <= 1000 * acc) aOn = bOn = false;
+                // кроме случая, когда за этим краем грани — грань, совпадающая с другой (зеркало, касание гранями): разрез
+                // там даёт разбор совпадающих поверхностей, и второй, свой, кусок давал щель-область
+                if (((aOn && bIn) || (bOn && aIn)) && (NeighbourOff || !NeighbourCoincides(aOn ? a : b, aOn ? b : a, q2)))
+                {
+                    inside[i] = true; Interlocked.Increment(ref OnEdgePieces);
+                    if (PinchDbg) Console.Error.WriteLine($"ONEDGE {a.Face.Tag} × {b.Face.Tag} on {(aOn ? "A" : "B")} {c.GetType().Name} {q1:0.######} {q3:0.######} aIn {Math.Min(a1, Math.Min(a2, a3)):G3} bIn {Math.Min(b1, Math.Min(b2, b3)):G3}");
+                }
+            }
             if (ClipDbg) { var mx = c.PointAt(Wrap(s + (e - s) * 0.5)); Console.WriteLine($"CLIP {a.Face.Tag}×{b.Face.Tag} {c.GetType().Name} iv [{s:G9},{e:G9}] len {(c.PointAt(Wrap(s)) - c.PointAt(Wrap(e))).Length:G3} g {g1:G3} {g2:G3} {g3:G3} mid {mx:0.###} gA {a.SignedBoundaryDistance(mx):G3} gB {b.SignedBoundaryDistance(mx):G3}"); }
             // 04.4/04.6: часть кривой внутри обеих граней, но ближе допуска слияния к их границам (узкий угол, срезанный на
             // доли допуска): знаковое расстояние там — ноль, и кусок молча терялся (у бруска угол, срезанный плоскостью в
@@ -577,6 +606,38 @@ public static class FaceIntersect
                 }
             }
         }
+        // k133 (11.3, модель пользователя X-218795-05): ПЕРЕМЫЧКА В ТОЧКЕ КАСАНИЯ. Кривая пересечения касается границы в точке
+        // (вершина гиперболы «плоскость низа инструмента ∩ конус» — ровно в углу инструмента на окружности стыка конуса и
+        // цилиндра): там два события — от ребра одной грани и от ребра другой, — и у двойного корня они расходятся на 6e-6 мм.
+        // Интервал между ними — на границе обеих граней, не «внутри», и кусок делился на два с щелью 6e-6 мм; грань
+        // скругления инструмента выходила с перевёрнутым контуром, общая булева отказывала. Интервал короче 100 точностей
+        // модели между двумя внутренними, середина которого — на границе обеих граней, — стык (если щель больше 10 точностей —
+        // меньшую сшивает слияние вершин): оба куска кончаются в ОДНОЙ точке — середине интервала. (Склеить их в один кусок нельзя: кусок, касающийся границы грани
+        // внутри себя, ломает разбиение грани.) Мутация P3D_CLIPBRIDGE=0.
+        var pinched = new HashSet<double>();
+        if (!ClipBridgeOff)
+            for (int i = 0; i < iv.Count; i++)
+            {
+                if (inside[i]) continue;
+                int ip = i - 1, inx = i + 1;
+                if (ip < 0 || inx >= iv.Count || ip == i || inx == i || !inside[ip] || !inside[inx]) continue;
+                var (s, e) = iv[i];
+                double tol = 100 * FaceSplit.MergeExact;
+                double gap = (c.PointAt(Wrap(s)) - c.PointAt(Wrap(e))).Length;
+                // щель меньше 10 точностей модели сшивается слиянием вершин (и стык в вершине на шве грани вращения ломал бы
+                // её разбиение) — не трогаем
+                if (gap > tol || gap <= 10 * FaceSplit.MergeExact) continue;
+                var m = c.PointAt(Wrap(s + (e - s) * 0.5));
+                if (Math.Abs(a.SignedBoundaryDistance(m)) <= tol && Math.Abs(b.SignedBoundaryDistance(m)) <= tol)
+                {
+                    // два куска сходятся в ОДНОЙ точке (середина короткого интервала), без уточнения концов
+                    // точка стыка — середина интервала (у двойного корня события — по разные стороны от касания)
+                    double mid = s + (e - s) * 0.5;
+                    iv[ip] = (iv[ip].S, mid); iv[inx] = (mid, iv[inx].E); iv[i] = (mid, mid);
+                    pinched.Add(mid); Interlocked.Increment(ref TouchBridges);
+                    if (PinchDbg) Console.Error.WriteLine($"PINCH {a.Face.Tag} ({(a.Cone ? "cone" : a.Cyl ? "cyl" : "plane?")}) × {b.Face.Tag} ({(b.Cone ? "cone" : b.Cyl ? "cyl" : "plane?")}) iv {i}/{iv.Count} {c.GetType().Name} s {c.PointAt(Wrap(s)):0.#########} e {c.PointAt(Wrap(e)):0.#########} mid {c.PointAt(Wrap(mid)):0.#########} len {(c.PointAt(Wrap(s)) - c.PointAt(Wrap(e))).Length:G3}");
+                }
+            }
         // соседние внутренние интервалы — один кусок (событие без смены стороны: шов, касание ребра изнутри)
         var runs = new List<(double S, double E)>();
         for (int i = 0; i < iv.Count; i++)
@@ -598,8 +659,8 @@ public static class FaceIntersect
         foreach (var (s0, e0) in runs)
         {
             double s = s0, e = e0;
-            if (!(!closed && s == T0)) s = RefineOnEdge(c, Wrap(s), a, b) is { } rs ? rs + (s >= T1 ? P : 0) : s;
-            if (!(!closed && e == T1)) { double ew = Wrap(e); e = RefineOnEdge(c, ew, a, b) is { } re ? re + (e - ew) : e; }
+            if (!(!closed && s == T0) && !pinched.Contains(s0)) s = RefineOnEdge(c, Wrap(s), a, b) is { } rs ? rs + (s >= T1 ? P : 0) : s;
+            if (!(!closed && e == T1) && !pinched.Contains(e0)) { double ew = Wrap(e); e = RefineOnEdge(c, ew, a, b) is { } re ? re + (e - ew) : e; }
             // кусок через конец параметра: начало — в [T0, T1), конец — за T1
             if (closed && s >= T1) { s -= P; e -= P; }
             if (!closed && !PieceWrapOld) { s = Math.Clamp(s, T0, T1); e = Math.Clamp(e, T0, T1); }
@@ -607,6 +668,49 @@ public static class FaceIntersect
             res.Pieces.Add(new Piece(c, s, e, c.PointAt(s), c.PointAt(e > T1 ? e - P : e), false));
         }
     }
+
+    static readonly bool ClipOnEdgeOff = Environment.GetEnvironmentVariable("P3D_CLIPONEDGE") == "0";
+    /// <summary>Грань по ту сторону края <paramref name="on"/> у точки q лежит на поверхности грани <paramref name="other"/> (около q).</summary>
+    static bool NeighbourCoincides(AnalyticFace on, AnalyticFace other, Vector3d q)
+    {
+        var so = GeometryAudit.AuthoritativeSurface(other.Face); if (so == null) return false;
+        TEdge? best = null; double bd = double.MaxValue;
+        foreach (var ed in on.Face.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct())
+        {
+            if (ed.Curve == null) continue;
+            double d = (ed.Curve.PointAt(FaceSplit.ClosestParam(ed.Curve, q)) - q).Length;
+            if (d < bd) { bd = d; best = ed; }
+        }
+        if (best == null) return false;
+        double acc = 10 * FaceSplit.MergeExact;
+        foreach (var ce in best.CoEdges)
+        {
+            var nf = ce.Loop?.Face; if (nf == null || ReferenceEquals(nf, on.Face)) continue;
+            var sn = GeometryAudit.AuthoritativeSurface(nf); if (sn == null) continue;
+            // точки соседней грани около q: проекция q и шаги по параметрам; все — на поверхности другой грани
+            var uv = sn.ProjectToUV(q); var p0 = sn.PointAt(uv);
+            var du = sn.PointAt(uv + new Vector2d(1e-3, 0)) - p0; var dv = sn.PointAt(uv + new Vector2d(0, 1e-3)) - p0;
+            double hu = du.Length > 1e-15 ? 0.5 / du.Length * 1e-3 : 0, hv = dv.Length > 1e-15 ? 0.5 / dv.Length * 1e-3 : 0;   // ≈ 0.5 мм
+            bool all = true;
+            foreach (var d in new[] { new Vector2d(hu, 0), new Vector2d(-hu, 0), new Vector2d(0, hv), new Vector2d(0, -hv) })
+            {
+                var x = sn.PointAt(uv + d);
+                if ((so.PointAt(so.ProjectToUV(x)) - x).Length > acc) { all = false; break; }
+            }
+            if (all) return true;
+        }
+        return false;
+    }
+    static readonly bool NeighbourOff = Environment.GetEnvironmentVariable("P3D_ONEDGENEIGH") == "0";
+    static readonly bool TangentFarOff = Environment.GetEnvironmentVariable("P3D_TANGENTFAR") == "0";
+    /// <summary>Статистика: неотделимые касания ребра с поверхностью далеко вне грани.</summary>
+    public static long TangentFar;
+    static readonly bool PinchDbg = Environment.GetEnvironmentVariable("P3D_PINCHDBG") == "1";
+    static readonly bool ClipBridgeOff = Environment.GetEnvironmentVariable("P3D_CLIPBRIDGE") == "0";
+    /// <summary>Статистика: перемычки в точках касания границы.</summary>
+    public static long TouchBridges;
+    /// <summary>Статистика: куски на границе одной грани и внутри другой.</summary>
+    public static long OnEdgePieces;
 
     [ThreadStatic] static int _denseN;
 

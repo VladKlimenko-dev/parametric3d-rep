@@ -1,0 +1,6 @@
+# KRN-00 (00.3): эталон моделей пользователя — файл, операций, ошибок, тел, граней, объём мм³, площадь мм², тела годны, эскизы (элементы/размеры/решение/свободные степени), сумма |x|+|y| точек эскизов, уровень гарантии тел
+user_k123_x218795.p3d	0	0	0	0	0	0	1	75/58/Underconstrained/0	55975.94439479204	
+user_k124_dims.p3d	0	0	0	0	0	0	1	7/5/Underconstrained/0	1848.5672755572116	
+user_k125_tube.p3d	12	0	1	35	8421325.774718478	568897.0263925757	1	16/5/Ok/0;14/4/Ok/0;29/4/Overconstrained/0;7/2/Ok/0;20/10/Underconstrained/0;10/2/Underconstrained/0;19/0/Overconstrained/0;7/2/Underconstrained/0;29/4/Overconstrained/0	24251.102024214306	ExactAnalytic
+user_k128_x05.p3d	0	0	0	0	0	0	1	25/15/Underconstrained/0	19417.255812104828	
+user_k132_x05.p3d	3	0	1	37	43026382.96667511	2256101.5181794628	1	75/47/Underconstrained/0;26/3/Underconstrained/0	161183.29900195522	ExactAnalytic

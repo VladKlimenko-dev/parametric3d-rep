@@ -1,9 +1,16 @@
 # Пакеты (из .csproj)
-OpenTK 4.9.4
-OpenTK.GLControl 4.0.2
+Avalonia 12.1.4
+Avalonia.Desktop 12.1.4
+Avalonia.Fonts.Inter 12.1.4
+Avalonia.Headless 12.1.4
+Avalonia.Themes.Fluent 12.1.4
+CommunityToolkit.Mvvm 8.4.2
+OpenTK.Mathematics 4.9.4
+Svg.Controls.Skia.Avalonia 12.0.0.17
+System.Drawing.Common 8.0.0
 
 # Целевые платформы (из .csproj)
-src/Parametric3D.csproj: net8.0-windows
+src/Parametric3D.csproj: net8.0
 tests/a01/FixChecks.csproj: net8.0
 tests/a03/ExactChecks.csproj: net8.0
 tests/a04/CylinderChecks.csproj: net8.0
@@ -15,9 +22,14 @@ tests/k01/K01Checks.csproj: net8.0
 tests/k03bench/K03Bench.csproj: net8.0
 tests/speed/Speed.csproj: net8.0
 tests/stepprobe/StepProbe.csproj: net8.0
+tests/ui/UiChecks.csproj: net8.0
 tools/deps/OTKMath/OpenTK.Mathematics.csproj: net8.0
 tools/deps/SDCStub/System.Drawing.Common.csproj: net8.0
 
 # Инструменты
 dotnet SDK 8.0.131
-ОС сборки стенда: Linux 6.18.44-fc-v114 x86_64
+ОС сборки стенда: Linux 6.18.44-fc-v185 x86_64
+
+# Платформы выпуска (k133, 11.6)
+linux-x64: самодостаточная поставка (tools/make_package.sh <вывод>) — среда .NET внутри; проверка из архива без .NET: запуск, кадр, «Тест» (раздел «Отмена и отказ»)
+portable (win-x64 и linux-x64, нужен .NET 8): tools/make_package.sh <вывод> portable — Parametric3D.cmd / Parametric3D.sh; повторная сборка даёт те же файлы приложения до бита (Parametric3D-portable.app.sha256); на Windows — кнопка «Тест» (разделы «Холодный и тёплый прогон», «Модели пользователя»)
