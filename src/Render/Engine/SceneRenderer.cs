@@ -34,24 +34,65 @@ public sealed class SceneRenderer : IDisposable
     private Vector3 _bMin, _bMax; private bool _hasBounds;
     /// <summary>Разбор (k132): пол последнего кадра — нарисован, его высота, центр и полуразмеры; проходы отражения и тени.</summary>
     public (bool Drawn, float Y, Vector3 C, Vector2 H, bool Reflection, bool Shadow) LastFloor;
+    /// <summary>Разбор (k133): шаг сетки пола последнего кадра (мм) и число промежуточных на основную; 0 — сетки нет.</summary>
+    public (double MinorMm, int PerMajor) LastGrid;
     public static readonly bool FloorOff = Environment.GetEnvironmentVariable("P3D_FLOOR") == "0";
 
     /// <summary>
     /// k132 (замечание 28.10, 23:42, п. 8): ПОЛ ПОД ДЕТАЛЬЮ (как в SolidWorks): плоскость, параллельная XZ, на зазоре от нижней
-    /// точки тел, чуть больше их габарита (поля — 15 % габарита и не меньше 10 % наибольшего размера), края мягко
-    /// исчезают. Null — тел нет.
+    /// точки тел; края мягко исчезают. k133 (замечание 29.10, 08:55, п. 3): РАЗМЕР — множитель габарита тел size (1 — по
+    /// габариту, 10 — в 10 раз больше; по умолчанию 2.62 — вдвое больше прежнего пола); ФОРМА: прямоугольник, эллипс
+    /// (описан около прямоугольника — √2), круг (радиус — полудиагональ), квадрат (сторона — большая сторона). Плоская по
+    /// стороне деталь — не меньше 10 % наибольшего размера. Null — тел нет.
     /// </summary>
-    public static (float Y, Vector3 C, Vector2 H)? FloorGeometry(Vector3 min, Vector3 max, float gap)
+    public static (float Y, Vector3 C, Vector2 H)? FloorGeometry(Vector3 min, Vector3 max, float gap, float size = 2.62f, FloorShapeKind shape = FloorShapeKind.Rectangle)
     {
         if (FloorOff) return null;
         var d = max - min;
         float big = Math.Max(d.X, Math.Max(d.Y, d.Z));
         if (!(big > 0) || float.IsNaN(big)) return null;
         float y = min.Y - Math.Max(0, gap);
-        float mx = Math.Max(d.X * 0.15f, big * 0.10f), mz = Math.Max(d.Z * 0.15f, big * 0.10f);
+        float k = FloorSizeOff ? 1.3f : Math.Clamp(size, 1f, 10f);
+        var h = new Vector2(Math.Max(d.X, 0.1f * big) * 0.5f * k, Math.Max(d.Z, 0.1f * big) * 0.5f * k);
+        if (!FloorSizeOff)
+            switch (shape)
+            {
+                case FloorShapeKind.Ellipse: h *= MathF.Sqrt(2); break;
+                case FloorShapeKind.Circle: { float r = h.Length; h = new Vector2(r, r); break; }
+                case FloorShapeKind.Square: { float m = Math.Max(h.X, h.Y); h = new Vector2(m, m); break; }
+            }
         var c = new Vector3((min.X + max.X) * 0.5f, y, (min.Z + max.Z) * 0.5f);
-        return (y, c, new Vector2(d.X * 0.5f + mx, d.Z * 0.5f + mz));
+        return (y, c, h);
     }
+    public static readonly bool FloorSizeOff = Environment.GetEnvironmentVariable("P3D_FLOORSIZE") == "0";
+    public static readonly bool FloorGridOff = Environment.GetEnvironmentVariable("P3D_FLOORGRID") == "0";
+
+    /// <summary>
+    /// k133: ШАГ СЕТКИ ПОЛА в единицах документа: основной шаг — «круглое» число 1, 2, 5 × 10ⁿ единиц, при котором на большую
+    /// сторону пола приходится около 10 основных клеток; промежуточных на основную — 10 (у 1), 4 (у 2), 5 (у 5). Возврат —
+    /// шаг промежуточных линий в мм и их число на основную.
+    /// </summary>
+    /// <summary>k133: сетка пола темы для пола с полуразмерами h (единица — документа); (0, 0) — сетки нет.</summary>
+    public static (double MinorMm, int PerMajor) GridFor(RenderTheme th, Vector2 h)
+    {
+        if (!th.FloorGrid || FloorGridOff) return (0, 0);
+        double unit = Parametric3D.Core.Settings.DisplayUnitMm > 0 ? Parametric3D.Core.Settings.DisplayUnitMm : th.GridUnitMm;
+        return GridSteps(2 * Math.Max(h.X, h.Y), unit);
+    }
+
+    public static (double MinorMm, int PerMajor) GridSteps(double floorSideMm, double unitMm)
+    {
+        if (!(unitMm > 0)) unitMm = 1;
+        double raw = Math.Max(floorSideMm, 1e-6) / unitMm / 10;
+        double p = Math.Pow(10, Math.Floor(Math.Log10(raw)));
+        double m = raw / p;
+        int digit = m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10;
+        if (digit == 10) { digit = 1; p *= 10; }
+        int per = digit == 1 ? 10 : digit == 2 ? 4 : 5;
+        double majorMm = digit * p * unitMm;
+        return (majorMm / per, per);
+    }
+
     private int _emptyVao = -1;
 
     private sealed class MeshGpu { public int Vao = -1, Pos = -1, Nrm = -1, Pick = -1, Ibo = -1, Count; public Matrix4 Model; public Vector4 Color, MatColor; public float MatSpec, MatShine, MatMetal; public int Preview; public uint PartId; }
@@ -587,15 +628,20 @@ public sealed class SceneRenderer : IDisposable
     {
         var th = Theme;
         if (!th.FloorOn || SketchMode || !_hasBounds || _floor == null || _meshes.All(m => m.Preview != 0)) return;
-        if (FloorGeometry(_bMin, _bMax, th.FloorGap) is not { } fg) return;
+        if (FloorGeometry(_bMin, _bMax, th.FloorGap, th.FloorSize, th.FloorShape) is not { } fg) return;
         var inv = f.View.Inverted();
         var eye = inv.Row3.Xyz; var fwd = -inv.Row2.Xyz;
         bool above = f.Near > 0 ? eye.Y > fg.Y : fwd.Y < -0.02f;
         if (!above) return;
         float big = Math.Max(_bMax.X - _bMin.X, Math.Max(_bMax.Y - _bMin.Y, _bMax.Z - _bMin.Z));
-        void Quad(Vector4 color, bool overRefl = false)
+        var (gStep, gPer) = GridFor(th, fg.H);
+        bool round = th.FloorShape is FloorShapeKind.Ellipse or FloorShapeKind.Circle;
+        void Quad(Vector4 color, bool overRefl = false, bool stencil = false)
         {
             _floor!.Use();
+            _floor.Set("uShape", round && !FloorSizeOff ? 1 : 0); _floor.Set("uStencil", stencil ? 1 : 0);
+            _floor.Set("uGridOn", gStep > 0 ? 1 : 0); _floor.Set("uGridStep", (float)gStep); _floor.Set("uGridMajor", (float)gPer);
+            _floor.Set("uGridO", Vector2.Zero); _floor.Set("uGridColor", th.FloorGridColor); _floor.Set("uGridPx", th.FloorGridPx);
             _floor.Set("uOverRefl", overRefl ? 1 : 0); _floor.Set("uTop", th.BackgroundTop); _floor.Set("uBottom", th.BackgroundBottom);
             _floor.Set("uVpH", (float)_h);
             _floor.Set("uView", f.View); _floor.Set("uProj", f.Proj);
@@ -609,7 +655,7 @@ public sealed class SceneRenderer : IDisposable
         GL.ColorMask(false, false, false, false); GL.DepthMask(false);
         GL.StencilFunc(StencilFunction.Always, 1, 0xFF);
         GL.StencilOp(StencilOp.Keep, StencilOp.Keep, StencilOp.Replace);
-        Quad(new Vector4(1, 1, 1, 1));
+        Quad(new Vector4(1, 1, 1, 1), stencil: true);
         GL.ColorMask(true, true, true, true); GL.DepthMask(true);
         GL.StencilOp(StencilOp.Keep, StencilOp.Keep, StencilOp.Keep);
         GL.StencilFunc(StencilFunction.Equal, 1, 0xFF);
@@ -667,6 +713,7 @@ public sealed class SceneRenderer : IDisposable
         GL.Clear(ClearBufferMask.StencilBufferBit);
         GL.Disable(EnableCap.StencilTest);
         LastFloor = (true, fg.Y, fg.C, fg.H, refl, th.FloorShadow);
+        LastGrid = (gStep, gPer);
         FloorFrames++;
     }
     public static long FloorFrames;

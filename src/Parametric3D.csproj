@@ -71,4 +71,9 @@
     <InternalsVisibleTo Include="Parametric3D.UiChecks" />
   </ItemGroup>
 
+  <!-- KRN-00 (00.3, 00.5): модели пользователя с эталоном — для раздела «Модели пользователя» кнопки «Тест» -->
+  <ItemGroup>
+    <Content Include="../tests/ui/data/user_*.p3d;../tests/ui/data/user_models.tsv" Link="UserModels/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

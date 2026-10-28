@@ -75,6 +75,14 @@ public sealed class LookPrefs
     /// <summary>Размер куба вида вместе с кнопкой «Домой», пикселей.</summary>
     public double ViewCubePx { get; set; } = 150;
     /// <summary>Цвет пола (по теме; пусто — по умолчанию); толщина рёбер модели.</summary>
+    /// <summary>k133 (замечание 29.10, 08:55, п. 3): размер пола 0…100 (0 — по габариту модели, 100 — в 10 раз больше);
+    /// форма (Rectangle, Ellipse, Circle, Square); сетка пола: показ, толщина 0…100 (промежуточные 0.1…2 пикс.), цвет по теме.</summary>
+    public double FloorSizePct { get; set; } = 18;
+    public string FloorShape { get; set; } = "Rectangle";
+    public bool FloorGrid { get; set; } = true;
+    public double FloorGridWidthPct { get; set; } = 47;
+    public string FloorGridColorDark { get; set; } = "";
+    public string FloorGridColorLight { get; set; } = "";
     public string FloorColorDark { get; set; } = "";
     public string FloorColorLight { get; set; } = "";
     public double ModelEdgeWidth { get; set; } = 1.5;
@@ -118,6 +126,7 @@ public sealed class LookPrefs
         nameof(Light2X), nameof(Light2Y), nameof(Light2Z), nameof(Light2DX), nameof(Light2DY), nameof(Light2DZ), nameof(Light2Color), nameof(Light2Power),
         nameof(AmbientColor), nameof(AmbientPower), nameof(DatumPlaneColorDark), nameof(DatumPlaneColorLight), nameof(DatumPlaneOpacityPct),
         nameof(DatumPlaneOutline), nameof(ViewCubePx), nameof(FloorColorDark), nameof(FloorColorLight), nameof(ModelEdgeWidth),
+        nameof(FloorSizePct), nameof(FloorShape), nameof(FloorGrid), nameof(FloorGridWidthPct), nameof(FloorGridColorDark), nameof(FloorGridColorLight),
     };
 }
 
@@ -164,6 +173,12 @@ public static class UiLook
         var fl = C3(th.Dark ? l.FloorColorDark : l.FloorColorLight, d.FloorColor.Xyz);
         th.FloorColor = new(fl, d.FloorColor.W);
         th.EdgeWidth = (float)Math.Clamp(l.ModelEdgeWidth, 0.5, 5);
+        th.FloorSize = FloorSizeOf(l.FloorSizePct);
+        th.FloorShape = Enum.TryParse<Parametric3D.Render.Engine.FloorShapeKind>(l.FloorShape, out var fs) ? fs : Parametric3D.Render.Engine.FloorShapeKind.Rectangle;
+        th.FloorGrid = l.FloorGrid;
+        th.FloorGridPx = GridPxOf(l.FloorGridWidthPct);
+        th.FloorGridColor = new(C3(th.Dark ? l.FloorGridColorDark : l.FloorGridColorLight, d.FloorGridColor.Xyz), d.FloorGridColor.W);
+        th.GridUnitMm = Core.Settings.DisplayUnitMm > 0 ? Core.Settings.DisplayUnitMm : 1;
         th.Handle = new(C3(th.Dark ? l.HandleColorDark : l.HandleColorLight, d.Handle.Xyz), d.Handle.W);
         th.HandleAlt = new(C3(th.Dark ? l.HandleAltColorDark : l.HandleAltColorLight, d.HandleAlt.Xyz), d.HandleAlt.W);
         th.SketchWidth = (float)Math.Clamp(l.SketchLineWidth, 0.5, 6);
@@ -171,6 +186,10 @@ public static class UiLook
         var cs = Core.Settings.Current;
         cs.AutoConstrainEnabled = l.SketchAutoConstrain; cs.SketchToolRepeat = l.SketchToolRepeat;
     }
+    /// <summary>k133: размер пола 0…100 → множитель габарита 1…10.</summary>
+    public static float FloorSizeOf(double pct) => (float)(1 + 9 * Math.Clamp(pct, 0, 100) / 100);
+    /// <summary>k133: толщина сетки 0…100 → промежуточные линии 0.1…2 пикс.</summary>
+    public static float GridPxOf(double pct) => (float)(0.1 + 1.9 * Math.Clamp(pct, 0, 100) / 100);
     public static double TreeFontSize => L.TreeFontSize > 0 ? Math.Clamp(L.TreeFontSize, 9, 22) : UiFontSize;
     public static double TreeIconPx => Math.Clamp(L.TreeIconPx, 10, 32);
     public static double TreeRowPx => Math.Clamp(L.TreeRowPx, 16, 48);

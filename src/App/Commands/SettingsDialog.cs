@@ -16,6 +16,9 @@ namespace Parametric3D.App.Commands;
 /// </summary>
 public static class SettingsDialog
 {
+    /// <summary>k133 (замечание 29.10, 08:55, п. 2): все подписи окна — через перевод (P3D_SETTINGSLOC=0 — без перевода).</summary>
+    public static readonly bool LocOff = Environment.GetEnvironmentVariable("P3D_SETTINGSLOC") == "0";
+    static string L(string ru) => LocOff ? ru : Parametric3D.App.Loc.L(ru);
     public static readonly bool EditThemeOff = Environment.GetEnvironmentVariable("P3D_EDITTHEME") == "0";
     public static readonly bool SectionsOff = Environment.GetEnvironmentVariable("P3D_SETTINGSSECTIONS") == "0";
 
@@ -147,7 +150,8 @@ public static class SettingsDialog
         var lang = new ComboBox { MinWidth = 200, Name = "set_lang" };
         lang.ItemsSource = new[] { WithIcon("language_ru_but.svg", "Русский"), WithIcon("language_en_but.svg", "English") };
         if (!DocCommands.LangFixOff) lang.SelectedIndex = prefs.Language == "en" ? 1 : 0;
-        var gl = new ComboBox { ItemsSource = new[] { "auto", "angle", "wgl", "software" }, SelectedItem = prefs.GlMode ?? "auto", MinWidth = 200 };
+        string[] glModes = { "auto", "angle", "wgl", "software" };
+        var gl = new ComboBox { ItemsSource = new[] { L("Автоматически"), L("ANGLE (Direct3D 11)"), L("WGL (настольный OpenGL)"), L("Программная отрисовка") }, SelectedIndex = Math.Max(0, Array.IndexOf(glModes, prefs.GlMode ?? "auto")), MinWidth = 200, Name = "set_gl" };
         Add("Тема интерфейса", theme);
         Add("Язык", lang);
         Add("Графика (со следующего запуска)", gl);
@@ -215,6 +219,18 @@ public static class SettingsDialog
         Nud("set_mv_gap", "Зазор от нижней точки модели до пола, мм", l => l.FloorGapMm, (l, v) => l.FloorGapMm = v, 0, 100000, 1);
         Slider("Доля отражения, %", l => l.FloorReflectPct, (l, v) => l.FloorReflectPct = v, 0, 70, 1);
         ThemedColor("Цвет пола", l => l.FloorColorDark, (l, v) => l.FloorColorDark = v, l => l.FloorColorLight, (l, v) => l.FloorColorLight = v);
+        // k133 (замечание 29.10, 08:55, п. 3): размер и форма пола, сетка пола
+        Slider("Размер пола (0 — по модели, 100 — в 10 раз больше)", l => l.FloorSizePct, (l, v) => l.FloorSizePct = v, 0, 100, 1);
+        {
+            string[] shapes = { "Rectangle", "Ellipse", "Circle", "Square" };
+            var cb = new ComboBox { ItemsSource = new[] { L("Прямоугольник"), L("Эллипс"), L("Круг"), L("Квадрат") }, MinWidth = 200, Name = "set_mv_shape" };
+            int Idx(LookPrefs l) => Math.Max(0, Array.IndexOf(shapes, l.FloorShape));
+            cb.SelectedIndex = Idx(look);
+            Add("Форма пола", cb, (l, _) => cb.SelectedIndex = Idx(l), (l, _) => l.FloorShape = shapes[Math.Max(0, cb.SelectedIndex)]);
+        }
+        Check("Сетка пола", "Показывать сетку пола (в единицах документа)", l => l.FloorGrid, (l, v) => l.FloorGrid = v);
+        Slider("Толщина линий сетки (0 — 0.1 пикс., 100 — 2 пикс.)", l => l.FloorGridWidthPct, (l, v) => l.FloorGridWidthPct = v, 0, 100, 1);
+        ThemedColor("Цвет линий сетки", l => l.FloorGridColorDark, (l, v) => l.FloorGridColorDark = v, l => l.FloorGridColorLight, (l, v) => l.FloorGridColorLight = v);
         void LightRows(string n, string title,
             Func<LookPrefs, double> x, Action<LookPrefs, double> sx, Func<LookPrefs, double> y, Action<LookPrefs, double> sy, Func<LookPrefs, double> z, Action<LookPrefs, double> sz,
             Func<LookPrefs, double> dx, Action<LookPrefs, double> sdx, Func<LookPrefs, double> dy, Action<LookPrefs, double> sdy, Func<LookPrefs, double> dz, Action<LookPrefs, double> sdz,
@@ -342,7 +358,7 @@ public static class SettingsDialog
             if ((theme.SelectedIndex == 0) != w.IsDark) w.ApplyTheme(theme.SelectedIndex == 0);
             if ((lang.SelectedIndex == 1) != (prefs.Language == "en")) w.ToggleLanguage();
             prefs.PreviewMode = prev.SelectedIndex == 1 ? "contour" : "full";
-            prefs.GlMode = gl.SelectedItem as string ?? "auto";
+            prefs.GlMode = glModes[Math.Max(0, gl.SelectedIndex)];
             prefs.Save();
             w.ApplyLook();
             win.Close();

@@ -62,6 +62,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         FontSize = UiLook.UiFontSize;
+        Parametric3D.App.Viewport.ModelViewport.ThemeCreated = UiLook.ApplyToRender;
         ApplyPanelLook();
         // шрифт ГОСТ тип А — только у объектов вида (размеры эскиза, подписи куба вида); меню и панели — шрифтом интерфейса
         Loc.Set(UserPrefs.Current.Language == "en");

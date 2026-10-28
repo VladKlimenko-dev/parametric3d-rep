@@ -28,7 +28,7 @@ namespace Parametric3D.App.Diagnostics;
 /// </summary>
 public sealed class SelfTest
 {
-    public const string Build = "k132";
+    public const string Build = "k133";
 
     private readonly MainWindow _w;
     private readonly Action<string> _progress;
@@ -120,6 +120,8 @@ public sealed class SelfTest
         try
         {
             SystemInfo();
+            if (Environment.GetEnvironmentVariable("P3D_SELFTEST_ONLY") == "coldwarm") { await ColdWarm(); await UserModels(); Summary(); return; }
+            await ColdWarm();
             // отладка: только раздел ручек (P3D_SELFTEST_ONLY=handles)
             if (Environment.GetEnvironmentVariable("P3D_SELFTEST_ONLY") == "handles") { await Handles(); await UserEdges(); return; }
             if (Environment.GetEnvironmentVariable("P3D_SELFTEST_ONLY") == "cancel") { await CancelAndFailure(); return; }
@@ -137,6 +139,7 @@ public sealed class SelfTest
             await UserEdges();
             await CancelAndFailure();
             await Load();
+            await UserModels();
         }
         finally
         {
@@ -181,6 +184,92 @@ public sealed class SelfTest
         }
         catch { }
         return "?";
+    }
+
+    // ---------------------------------------------------------------- KRN-00 (00.4): холодный и тёплый прогон
+
+    /// <summary>
+    /// k133: база скорости на этой машине — по сценарию первый прогон в процессе (холодный: загрузка и компиляция кода),
+    /// затем 9 тёплых: медиана, p95, выделения памяти на прогон. Раздел идёт первым — до прогрева остальных.
+    /// </summary>
+    private async Task ColdWarm()
+    {
+        Head("1а. Холодный и тёплый прогон (база скорости)");
+        Line($"{"сценарий",-40} {"холодный",9} {"тёпл. мед.",10} {"тёпл. p95",10} {"выдел. хол., МБ",15} {"выдел. тёпл., МБ",16}");
+        var cases = TestParts.OperationCases().Where(c => c.Name.StartsWith("Скругление 4") || c.Name.StartsWith("Оболочка") || c.Name.StartsWith("Вращение") || c.Name.StartsWith("Отверстие сквозное с зенковкой"))
+            .Select(c => (c.Name, c.Make)).ToList();
+        cases.Insert(0, ("Реалистичная деталь, 24 операции", () => TestParts.Realistic(7, 24)));
+        foreach (var (name, make) in cases)
+        {
+            _ct.ThrowIfCancellationRequested();
+            Step(name); _phase = "холодный/тёплый: " + name;
+            var r = await Task.Run(() =>
+            {
+                var t = new List<double>(); var al = new List<double>();
+                for (int i = 0; i < 10; i++)
+                {
+                    var p = make(); p.Invalidate();
+                    long a0 = GC.GetTotalAllocatedBytes(true);
+                    var sw = Stopwatch.StartNew(); p.Rebuild(null); t.Add(sw.Elapsed.TotalMilliseconds);
+                    al.Add((GC.GetTotalAllocatedBytes(true) - a0) / 1048576.0);
+                }
+                return (t, al);
+            });
+            var warm = r.t.Skip(1).ToList();
+            Line($"{name,-40} {F(r.t[0]),9} {F(Median(warm)),10} {F(P95(warm)),10} {F(r.al[0]),15} {F(Median(r.al.Skip(1).ToList())),16}");
+            ColdWarmRows.Add((name, r.t[0], Median(warm), P95(warm)));
+        }
+    }
+    /// <summary>Разбор (проверки): строки раздела «Холодный и тёплый прогон».</summary>
+    public static readonly List<(string Name, double Cold, double WarmMedian, double WarmP95)> ColdWarmRows = new();
+
+    // ---------------------------------------------------------------- KRN-00 (00.3, 00.5): модели пользователя
+
+    /// <summary>
+    /// k133: детали пользователя (UserModels/user_*.p3d рядом с приложением) перестраиваются с нуля и сверяются с эталоном
+    /// (UserModels/user_models.tsv, тот же, что у проверки ядра KRN00-USER-MODELS): ошибки, тела, грани, объём и площадь
+    /// (1e-9), годность, эскизы. Совпадение на другой машине и ОС — воспроизведение результатов.
+    /// </summary>
+    private async Task UserModels()
+    {
+        Head("11. Модели пользователя: сверка с эталоном");
+        var dir = Path.Combine(AppContext.BaseDirectory, "UserModels");
+        var tsv = Path.Combine(dir, "user_models.tsv");
+        if (!File.Exists(tsv)) { Line("нет UserModels/user_models.tsv рядом с приложением"); Count(false); return; }
+        Line($"{"модель",-26} {"опер.",5} {"граней",6} {"объём, мм³",20} {"расчёт, мс",10}  итог");
+        foreach (var r in File.ReadAllLines(tsv).Where(l => !l.StartsWith('#') && l.Length > 0).Select(l => l.Split('\t')))
+        {
+            _ct.ThrowIfCancellationRequested();
+            Step(r[0]); _phase = "модель пользователя: " + r[0];
+            var a = await Task.Run(() =>
+            {
+                var (part, pars) = DocumentFile.Load(File.ReadAllText(Path.Combine(dir, r[0])));
+                var sw = Stopwatch.StartNew(); part.Rebuild(pars); double ms = sw.Elapsed.TotalMilliseconds;
+                bool valid = part.Bodies.All(b => SolidValidator.Validate(b).IsValid);
+                var sks = new List<string>(); double psum = 0;
+                foreach (var sk in part.Sketches)
+                {
+                    var st = sk.Solve(new NumericSketchSolver());
+                    sks.Add($"{sk.Entities.Count}/{sk.Dimensions.Count}/{st}/{sk.FreeDegrees}");
+                    foreach (var q in sk.AllPoints()) psum += Math.Abs(q.X) + Math.Abs(q.Y);
+                }
+                return (features: part.Features.Count, errors: part.Features.Count(f => f.Error != null), bodies: part.Bodies.Count,
+                        faces: part.Bodies.Sum(b => b.Faces.Count()), vol: part.Volume, area: part.Area, valid, ms, sk: string.Join(";", sks), psum,
+                        guar: string.Join(",", part.Bodies.Select(b => b.Guarantee.ToString())));
+            });
+            static double D(string s) => double.Parse(s, CultureInfo.InvariantCulture);
+            static bool Rel(double x, double y) => Math.Abs(x - y) <= 1e-9 * Math.Max(1, Math.Abs(y));
+            var diff = new List<string>();
+            if (a.features != int.Parse(r[1])) diff.Add("операций"); if (a.errors != int.Parse(r[2])) diff.Add("ошибок");
+            if (a.bodies != int.Parse(r[3])) diff.Add("тел"); if (a.faces != int.Parse(r[4])) diff.Add("граней");
+            if (!Rel(a.vol, D(r[5]))) diff.Add($"объём (эталон {r[5]})"); if (!Rel(a.area, D(r[6]))) diff.Add("площадь");
+            if ((a.valid ? "1" : "0") != r[7]) diff.Add("годность");
+            if (r.Length > 8 && a.sk != r[8]) diff.Add($"эскизы ({a.sk} ≠ {r[8]})");
+            if (r.Length > 9 && Math.Abs(a.psum - D(r[9])) > 1e-6 * Math.Max(1, D(r[9]))) diff.Add("точки эскизов");
+            if (r.Length > 10 && a.guar != r[10]) diff.Add($"гарантия ({a.guar} ≠ {r[10]})");
+            Count(diff.Count == 0);
+            Line($"{r[0],-26} {a.features,5} {a.faces,6} {a.vol.ToString("0.######", Inv),20} {F(a.ms),10}  {(diff.Count == 0 ? "да, совпало" : "НЕТ: " + string.Join(", ", diff))}");
+        }
     }
 
     // ---------------------------------------------------------------- операции по одной

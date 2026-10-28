@@ -77,7 +77,7 @@ public static class SsiEvents
     /// </summary>
     public static List<double> CurveSurface(ICurve3 e, Ssi.Shape s, out bool coincident)
     {
-        coincident = false; LastUncertain = false;
+        coincident = false; LastUncertain = false; TracedAt = null;
         // ребро на поверхности целиком: расстояние ~0 по всей длине
         bool allOn = true;
         for (int i = 0; i <= 16 && allOn; i++) if (Math.Abs(Ssi.Implicit(s, e.PointAt(e.T0 + (e.T1 - e.T0) * (i + 0.37 * (i < 16 ? 1 : 0)) / 16)).F) > 1e-9) allOn = false;
@@ -187,6 +187,8 @@ public static class SsiEvents
     /// <summary>Последний вызов CurveSurface (в этом потоке) дал события выборкой по кривой пересечения — не доказано.</summary>
     [ThreadStatic] public static bool LastUncertain;
     [ThreadStatic] public static string? TracedWhy;
+    /// <summary>k133: точка неотделимого касания (последняя причина «tangency at»), иначе null.</summary>
+    [ThreadStatic] public static Vector3d? TracedAt;
     /// <summary>Мутация P3D_TRACEDEVENTS=0: события на кривых пересечения — выборкой (прежнее), без отказа.</summary>
     internal static readonly bool TracedOff = Environment.GetEnvironmentVariable("P3D_TRACEDEVENTS") == "0";
     /// <summary>Мутация P3D_TRACEDSPLIT=0: звено без шара единственности — отказ сразу (прежнее), без деления.</summary>
@@ -295,7 +297,7 @@ public static class SsiEvents
                 }
             }
             if ((2 * r < tiny || depth > 60) && EndExempt(t0, t1, p0, p1)) return;
-            if (2 * r < tiny || depth > 60) { if (TracedEndDbg) Console.Error.WriteLine($"TTAN depth {depth} r {r:G3} tiny {tiny:G3} d0 {(m - P[0]).Length:G3} dN {(m - P[^1]).Length:G3} t {t0:R}..{t1:R} T {T[0]:R}..{T[^1]:R} fm {fm:G3} f0 {Fs(P[0]):G3} fN {Fs(P[^1]):G3}"); ok = false; TracedWhy = $"tangency at {m:0.###}"; return; }                  // касание: не отделить
+            if (2 * r < tiny || depth > 60) { if (TracedEndDbg) Console.Error.WriteLine($"TTAN depth {depth} r {r:G3} tiny {tiny:G3} d0 {(m - P[0]).Length:G3} dN {(m - P[^1]).Length:G3} t {t0:R}..{t1:R} T {T[0]:R}..{T[^1]:R} fm {fm:G3} f0 {Fs(P[0]):G3} fN {Fs(P[^1]):G3}"); ok = false; TracedWhy = $"tangency at {m:0.###}"; TracedAt = m; return; }                  // касание: не отделить
             double tm = (t0 + t1) / 2; var q = ic.PointAt(tm);
             if ((q - m).Length > r) { ok = false; TracedWhy = "point outside ball"; return; }                         // точка кривой вне шара звена
             Seg(t0, tm, p0, q, depth + 1); Seg(tm, t1, q, p1, depth + 1);

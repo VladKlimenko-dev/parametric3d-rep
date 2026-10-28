@@ -131,6 +131,24 @@ static partial class Program
             }
             catch (Exception ex) { man.Add($"{id}\t{name}\texception: {ex.Message.Replace('\t', ' ')}\t\t\t\t\t\t\t"); }
         }
+        // KRN-11 (11.3): МОДЕЛИ ПОЛЬЗОВАТЕЛЯ (корпус KRN00-USER-MODELS) — независимый потребитель OpenCascade читает их точный
+        // STEP и сверяет объём, площадь, годность
+        if (UserModelsDir() is { } umd)
+            foreach (var f in Directory.GetFiles(umd, "user_*.p3d").OrderBy(x => x, StringComparer.Ordinal))
+            {
+                string id = $"c{i++:D2}"; string name = "user: " + Path.GetFileName(f);
+                try
+                {
+                    var (p, pars) = Parametric3D.Model.DocumentFile.Load(File.ReadAllText(f)); p.Rebuild(pars);
+                    if (p.Bodies.Count == 0) { i--; continue; }   // только эскизы — тел для сверки нет
+                    var w = new List<string>(); var sw = new StringWriter();
+                    if (!Parametric3D.Kernel.Export.StepExact.Write(sw, p.Bodies, id, w)) { man.Add($"{id}\t{name}\tno exact step: {string.Join("; ", w).Replace('\t', ' ')}\t\t\t\t\t\t\t"); continue; }
+                    File.WriteAllText(Path.Combine(dir, id + ".step"), sw.ToString());
+                    string g = string.Join(",", p.Bodies.Select(b => b.Guarantee.ToString()));
+                    man.Add($"{id}\t{name}\tok\t{p.Bodies.Count}\t{p.Bodies.Sum(b => b.Faces.Count())}\t{p.Volume:R}\t{p.Area:R}\tNaN\t{g}\tFalse\t{p.VolumeError:R}");
+                }
+                catch (Exception ex) { man.Add($"{id}\t{name}\texception: {ex.Message.Replace('\t', ' ')}\t\t\t\t\t\t\t"); }
+            }
         // g.11: СБОРКИ — точный STEP интерфейса (Exchange.WriteStep): экземпляры со сдвигом, поворотом, зеркалом; все тела.
         foreach (var (name, build) in G11Assemblies())
         {

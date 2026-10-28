@@ -439,8 +439,8 @@ public static class GeneralBoolean
                 // эллипсом-границей), её не делит — для неё отбрасывается (для другой грани может быть настоящим разрезом).
                 foreach (var p in r.Pieces)
                 {
-                    if (!OnBoundary(p, x)) onA[x].Add(p);
-                    if (!OnBoundary(p, y)) onB[y].Add(p);
+                    if (!OnBoundary(p, x)) AddPiece(onA[x], p);
+                    if (!OnBoundary(p, y)) AddPiece(onB[y], p);
                 }
             }
         var extraCuts = new List<Vector3d>();
@@ -450,8 +450,8 @@ public static class GeneralBoolean
         foreach (var (x, y) in coincident)
         {
             var probs = new List<string>();
-            foreach (var p in BoundaryInside(y, x, extraCuts, probs)) onA[x].Add(p);
-            foreach (var p in BoundaryInside(x, y, extraCuts, probs)) onB[y].Add(p);
+            foreach (var p in BoundaryInside(y, x, extraCuts, probs)) AddPiece(onA[x], p);
+            foreach (var p in BoundaryInside(x, y, extraCuts, probs)) AddPiece(onB[y], p);
             if (probs.Count > 0) { why = "coincident faces: " + probs[0]; return null; }
         }
         // KRN-05/g.14: БЕЗ ПЕРЕСЕЧЕНИЯ (вложенные или раздельные тела) — тот же отбор целых граней по классификаторам: грани,
@@ -1808,6 +1808,51 @@ public static class GeneralBoolean
     }
 
     /// <summary>Лежит ли кусок на границе грани (точки на 1/4, 1/2, 3/4 — ближе допуска совпадения точек).</summary>
+    /// <summary>
+    /// k133: КУСОК РАЗРЕЗА — ОДИН РАЗ НА ГРАНЬ. Кусок на границе одной грани и внутри другой (FaceIntersect, P3D_CLIPONEDGE)
+    /// приходит к грани и от пары с совпадающей гранью (её граница внутри — тот же разрез): два одинаковых разреза давали
+    /// щель-область 3e-5 мм² («нет внутренней точки области» — зеркало трубы пользователя k125). Совпадающий кусок (концы и
+    /// точки на ¼, ½, ¾ — в допуске) не добавляется. Мутация P3D_PIECEDEDUP=0.
+    /// </summary>
+    static void AddPiece(List<FaceIntersect.Piece> list, FaceIntersect.Piece p)
+    {
+        if (!PieceDedupOff)
+            foreach (var q in list)
+                if (SamePiece(p, q)) { Interlocked.Increment(ref DuplicatePieces); return; }
+        list.Add(p);
+    }
+    static readonly bool PieceDedupOff = Environment.GetEnvironmentVariable("P3D_PIECEDEDUP") == "0";
+    /// <summary>Статистика: отброшенные повторы кусков разреза на грани.</summary>
+    public static long DuplicatePieces;
+    static Vector3d PieceAt(FaceIntersect.Piece p, double s)
+    {
+        double t = p.T0 + (p.T1 - p.T0) * s, span = p.Curve.T1 - p.Curve.T0;
+        if (t > p.Curve.T1) t -= span;
+        return p.Curve.PointAt(t);
+    }
+    static bool SamePiece(FaceIntersect.Piece a, FaceIntersect.Piece b)
+    {
+        if (a.Closed != b.Closed) return false;
+        double tol = 10 * TolV;
+        bool fwd = (a.P0 - b.P0).Length <= tol && (a.P1 - b.P1).Length <= tol;
+        bool back = (a.P0 - b.P1).Length <= tol && (a.P1 - b.P0).Length <= tol;
+        if (!fwd && !back) return false;
+        foreach (double s in new[] { 0.25, 0.5, 0.75 })
+        {
+            var pa = PieceAt(a, s);
+            double bs = 0, bd = double.MaxValue;
+            for (int k = 0; k <= 64; k++) { double d = (PieceAt(b, k / 64.0) - pa).Length; if (d < bd) { bd = d; bs = k / 64.0; } }
+            double lo = Math.Max(0, bs - 1 / 64.0), hi = Math.Min(1, bs + 1 / 64.0);
+            for (int it = 0; it < 60; it++)
+            {
+                double m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
+                if ((PieceAt(b, m1) - pa).Length < (PieceAt(b, m2) - pa).Length) hi = m2; else lo = m1;
+            }
+            if (Math.Min(bd, (PieceAt(b, (lo + hi) / 2) - pa).Length) > tol) return false;
+        }
+        return true;
+    }
+
     static bool OnBoundary(FaceIntersect.Piece p, AnalyticFace f)
     {
         foreach (double s in new[] { 0.25, 0.5, 0.75 })
