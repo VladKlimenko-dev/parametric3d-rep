@@ -158,7 +158,7 @@ public sealed class OpPanel
     /// <summary>Кнопки панели по подписи (проверки).</summary>
     public readonly Dictionary<string, Button> Buttons = new();
 
-    public void Number(string label, Func<ValueRef> get, Action<ValueRef> set, string unit = "мм", Func<bool>? visible = null, Action? focused = null)
+    public void Number(string label, Func<ValueRef> get, Action<ValueRef> set, string unit = "мм", Func<bool>? visible = null, Action? focused = null, double scrub = 0)
     {
         // u13: длины — в единицах детали (мм или дюймы); формулы — как записаны
         // k123: поле длины — в единице системы детали (см, м, дюйм, фут…), не только в дюймах
@@ -172,6 +172,27 @@ public sealed class OpPanel
         var dock = new DockPanel();
         DockPanel.SetDock(unitText, Dock.Right);
         dock.Children.Add(unitText);
+        // k139 (замечание 30.10, 00:56, п. 1): стрелки поля с протяжкой — тянуть вверх с нажатой левой кнопкой — значение
+        // растёт, вниз — убывает (шаг scrub на 4 пикселя; Shift ×10, Ctrl ×0.1); щелчок по стрелке — один шаг. Вид меняется
+        // при протяжке (FieldChanged на каждом шаге).
+        if (scrub > 0 && !Commands.Scrub.Off)
+        {
+            var arrows = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
+            foreach (bool up in new[] { true, false })
+                arrows.Children.Add(new Avalonia.Controls.Shapes.Path
+                {
+                    Data = Avalonia.Media.Geometry.Parse(up ? "M0,5 L4,0 L8,5 Z" : "M0,0 L4,5 L8,0 Z"),
+                    Width = 8, Height = 5, Stretch = Avalonia.Media.Stretch.Fill, HorizontalAlignment = HorizontalAlignment.Center,
+                });
+            foreach (var pa in arrows.Children.OfType<Avalonia.Controls.Shapes.Path>()) pa.Bind(Avalonia.Controls.Shapes.Shape.FillProperty, pa.GetResourceObservable("P3.Text"));
+            var handle = new Border { Child = arrows, Width = 16, Background = Avalonia.Media.Brushes.Transparent, Margin = new Thickness(2, 0, 0, 0), Name = "scrub_" + label };
+            ToolTip.SetTip(handle, L("Тянуть вверх или вниз с нажатой левой кнопкой — изменить значение; щелчок — шаг"));
+            void Put(double v) { var r = new ValueRef(Math.Round(v, 6)); tb.Text = Show(r); tb.Classes.Remove("err"); set(r); _op.FieldChanged(); }
+            Commands.Scrub.Attach(handle, () => get().Value, Put, () => scrub, dir => Put(get().Value + dir * scrub));
+            DockPanel.SetDock(handle, Dock.Right);
+            dock.Children.Add(handle);
+            Scrubs[label] = handle;
+        }
         dock.Children.Add(tb);
         void Commit()
         {
@@ -212,6 +233,8 @@ public sealed class OpPanel
     /// <summary>k137: мутация P3D_OPTIPS=0 — поля и флажки панели без подсказок.</summary>
     public static readonly bool TipsOff = Environment.GetEnvironmentVariable("P3D_OPTIPS") == "0";
     public readonly Dictionary<string, Control> Checks = new();
+    /// <summary>k139: стрелки с протяжкой у числовых полей (по подписи поля).</summary>
+    public readonly Dictionary<string, Control> Scrubs = new();
     public void Check(string label, Func<bool> get, Action<bool> set, Func<bool>? visible = null, Func<bool>? enabled = null, string? tip = null)
     {
         var cb = new CheckBox { IsChecked = get(), Content = L(label) };

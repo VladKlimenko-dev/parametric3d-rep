@@ -3740,6 +3740,86 @@ Check("UI-SPEED-K126", () =>
     Require(!part.IsDirty && !part.NeedsAcceptance && Math.Abs(part.Volume - p2.Volume) <= 1e-9 * p2.Volume, "the part was not rebuilt and checked after the interrupted checks");
 });
 
+Check("UI-SCRUB-LIVE-K139", () =>
+{
+    // k139 (замечание 30.10, 00:56, пп. 1–3): (A) настройки «Вида модели» — карточки групп с жирным заголовком
+    // (P3D_SETTINGSGROUPS=0); (B) любая правка видна сразу, «Отмена» возвращает прежнее (P3D_SETTINGSLIVE=0); (C) число
+    // настройки тянется по стрелкам вверх-вниз с нажатой левой кнопкой (P3D_SCRUB=0); (D) смещение и углы сечения — тоже,
+    // и плоскость сечения следует при протяжке.
+    var prefs = UserPrefs.Current; var saved = prefs.Look.Clone();
+    var s = DocumentSession.Sample(); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    var fails = new List<string>();
+    try
+    {
+        prefs.Look = new LookPrefs(); w.ApplyLook(); Run();
+        _ = DocCommands.Settings(w); Run();
+        var pr = SettingsDialog.Last!; var sw = DocCommands.LastSettingsWindow!;
+        pr.Sections.SelectedIndex = 7; sw.UpdateLayout(); Run();
+        // (A)
+        var groups = pr.Groups.Where(g => g.Section == "model").ToList();
+        Console.WriteLine($"  model view groups: {string.Join(" | ", groups.Select(g => g.Title.Text))}");
+        if (groups.Count < 7 || groups.Any(g => g.Title.FontWeight != Avalonia.Media.FontWeight.Bold)) fails.Add($"model view groups: {groups.Count}");
+        // (B) размер куба: протяжка на 40 пикс. вверх = 10 шагов по 5 — куб меняется до «ОК»
+        double cube0 = UiLook.ViewCubePx, gap0 = w.ViewPort.Theme.FloorGap;
+        var cubeRow = pr.Rows.First(r => r.Section == "model" && r.Label == Loc.L("Размер куба вида, пикс.")).Row;
+        var cubeBox = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(cubeRow).OfType<DragNumber>().First();
+        cubeBox.ScrubBy(40); Run();
+        ((NumericUpDown)pr.Find("set_mv_gap")!).Value = 7; Run();
+        Console.WriteLine($"  live: cube {cube0} → {UiLook.ViewCubePx}, floor gap {gap0} → {w.ViewPort.Theme.FloorGap}, applied {pr.LiveApplied}");
+        if (Math.Abs(UiLook.ViewCubePx - (cube0 + 50)) > 1e-9 || Math.Abs(w.ViewPort.Theme.FloorGap - 7) > 1e-6) fails.Add("settings are not applied at once");
+        // (C) протяжка мышью по стрелкам поля зазора: нажать на верхней стрелке, тянуть вверх на 40 пикс.
+        var gapBox = (DragNumber)pr.Find("set_mv_gap")!;
+        gapBox.BringIntoView(); sw.UpdateLayout(); Run();
+        var arrow = gapBox.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.IsEffectivelyVisible && b.Bounds.Height > 0);
+        if (arrow == null) fails.Add("no arrows on the numeric box");
+        else
+        {
+            var at = arrow.TranslatePoint(new Point(arrow.Bounds.Width / 2, arrow.Bounds.Height / 2), sw)!.Value;
+            double g0 = (double)(gapBox.Value ?? 0);
+            sw.MouseMove(at); sw.MouseDown(at, MouseButton.Left); Run();
+            for (int k = 1; k <= 4; k++) { sw.MouseMove(at - new Point(0, 10 * k), RawInputModifiers.LeftMouseButton); Run(); }
+            double mid = (double)(gapBox.Value ?? 0);
+            sw.MouseUp(at - new Point(0, 40), MouseButton.Left); Run();
+            Console.WriteLine($"  drag on the arrows: gap {g0} → {mid} while dragging, renderer {w.ViewPort.Theme.FloorGap}");
+            if (Math.Abs(mid - (g0 + 10)) > 1e-9 || Math.Abs(w.ViewPort.Theme.FloorGap - mid) > 1e-6) fails.Add($"drag on the arrows: {g0} → {mid}");
+        }
+        // «Отмена» — прежние настройки
+        sw.GetVisualDescendants().OfType<Button>().First(b => b.Name == "set_cancel").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Run();
+        Console.WriteLine($"  after cancel: cube {UiLook.ViewCubePx}, floor gap {w.ViewPort.Theme.FloorGap}");
+        if (Math.Abs(UiLook.ViewCubePx - cube0) > 1e-9 || Math.Abs(w.ViewPort.Theme.FloorGap - gap0) > 1e-6) fails.Add("cancel did not restore the settings");
+    }
+    finally { prefs.Look = saved; w.ApplyLook(); Run(); }
+    // (D) сечение: стрелки смещения тянутся, плоскость следует
+    CommandRegistry.Instance["view.section"].Execute(); Run();
+    var op = w.CurrentOperation as SectionOp;
+    if (op?.Panel?.Scrubs.GetValueOrDefault("Смещение (Offset)") is not { } h || !op.Panel.Scrubs.ContainsKey("Угол A") || !op.Panel.Scrubs.ContainsKey("Угол B"))
+        fails.Add("section: no drag arrows on offset and angles");
+    else
+    {
+        h.BringIntoView(); Run();
+        var at = h.TranslatePoint(new Point(h.Bounds.Width / 2, h.Bounds.Height / 2), w)!.Value;
+        double o0 = op.State.Offset; var pl0 = w.ViewPort.SectionPlane;
+        w.MouseMove(at); w.MouseDown(at, MouseButton.Left); Run();
+        for (int k = 1; k <= 4; k++) { w.MouseMove(at - new Point(0, 5 * k), RawInputModifiers.LeftMouseButton); Run(); }
+        double o1 = op.State.Offset; var pl1 = w.ViewPort.SectionPlane;
+        w.MouseUp(at - new Point(0, 20), MouseButton.Left); Run();
+        var ha = op.Panel.Scrubs["Угол A"]; ha.BringIntoView(); Run();
+        var atA = ha.TranslatePoint(new Point(ha.Bounds.Width / 2, ha.Bounds.Height / 2), w)!.Value;
+        double a0 = op.State.AngleA;
+        w.MouseMove(atA); w.MouseDown(atA, MouseButton.Left); Run();
+        for (int k = 1; k <= 4; k++) { w.MouseMove(atA + new Point(0, 4 * k), RawInputModifiers.LeftMouseButton); Run(); }
+        w.MouseUp(atA + new Point(0, 16), MouseButton.Left); Run();
+        Console.WriteLine($"  section drag: offset {o0} → {o1}, plane moved {pl0 != null && pl1 != null && (pl0.Value.At - pl1.Value.At).Length > 1e-9}; angle A {a0} → {op.State.AngleA}");
+        if (Math.Abs(o1 - (o0 + 5)) > 1e-9) fails.Add($"section offset drag: {o0} → {o1}");
+        if (pl0 == null || pl1 == null || (pl0.Value.At - pl1.Value.At).Length < 1e-9) fails.Add("the section plane does not follow the drag");
+        if (Math.Abs(op.State.AngleA - (a0 - 4)) > 1e-9) fails.Add($"section angle drag: {a0} → {op.State.AngleA}");
+    }
+    w.CancelOperation(); Run();
+    w.Close();
+    Require(fails.Count == 0, string.Join("; ", fails));
+});
+
 Check("UI-BLEND-CURVE-TREE-K137", () =>
 {
     // k137 (замечание 29.10, 18:13, файл пользователя Sweep_Blend): пп. 3–8.
@@ -5039,7 +5119,8 @@ Check("UI-PANELS-K120", () =>
         Console.WriteLine($"  settings: language index {langBox.SelectedIndex}, sliders {sliders}, numeric boxes {nuds}, units row {labels.Contains(Loc.L("Единицы длины"))}");
         Require(langBox.SelectedIndex == 1, "the language list does not show English");
         int nudsOut = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(sw).OfType<NumericUpDown>().Count(n => !(n.Name ?? "").StartsWith("set_mv_"));
-        Require(!labels.Contains(Loc.L("Единицы длины")) && sliders >= 7 && nudsOut == 0, "settings: units row or numeric boxes");
+        // k139 (замечание 30.10, 00:56, п. 3): размеры — полями числа с протяжкой (DragNumber внутри ValueSlider), не ползунками
+        Require(!labels.Contains(Loc.L("Единицы длины")) && sliders >= 7 && nudsOut >= 7, "settings: units row or numeric boxes");
         var vs = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(sw).OfType<ValueSlider>().First();
         vs.Value = 15; Run();
         Require(vs.ShownText == "15", "the slider value is not shown");

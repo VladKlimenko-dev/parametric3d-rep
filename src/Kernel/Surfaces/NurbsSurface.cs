@@ -304,7 +304,20 @@ public sealed class NurbsSurface : ISurface3
 
             double nu = Math.Clamp(bestU + du2, 0, 1), nv2 = Math.Clamp(bestV + dv2, 0, 1);
             double nd = (PointAt(new Vector2d(nu, nv2)) - p).LengthSquared;
-            if (nd >= best) break;
+            // k139: шаг Гаусса — Ньютона, не уменьшивший расстояния, — делится пополам (прежде — конец уточнения: проекция
+            // оставалась на точности спуска по сетке, у изогнутой стенки лофта точка касания шара уходила на 0.7 мм)
+            if (nd >= best && !ProjHalvingOff)
+            {
+                double fr = 0.5; bool ok = false;
+                for (int h2 = 0; h2 < 12 && !ok; h2++, fr *= 0.5)
+                {
+                    nu = Math.Clamp(bestU + du2 * fr, 0, 1); nv2 = Math.Clamp(bestV + dv2 * fr, 0, 1);
+                    nd = (PointAt(new Vector2d(nu, nv2)) - p).LengthSquared;
+                    ok = nd < best;
+                }
+                if (!ok) break;
+            }
+            else if (nd >= best) break;
             bestU = nu; bestV = nv2; best = nd;
         }
 
@@ -323,6 +336,7 @@ public sealed class NurbsSurface : ISurface3
         return lo;
     }
 
+    static readonly bool ProjHalvingOff = Environment.GetEnvironmentVariable("P3D_NURBSPROJHALF") == "0";
     /// <summary>Мутация P3D_NURBSFAST=0: точка — прежним путём (де Бур с выделениями памяти).</summary>
     public static readonly bool FastEvalOff = Environment.GetEnvironmentVariable("P3D_NURBSFAST") == "0";
 
@@ -345,29 +359,32 @@ public sealed class NurbsSurface : ISurface3
     }
 
     /// <summary>Базисные функции и их первые производные на промежутке (Пигль — Тиллер, A2.3, n = 1).</summary>
-    private static void BasisDers(double[] U, int i, double u, int p, double[] N, double[] dN)
+    private static void BasisDers(double[] U, int i, double u, int p, Span<double> N, Span<double> dN)
     {
-        var ndu = new double[p + 1, p + 1]; var left = new double[p + 1]; var right = new double[p + 1];
-        ndu[0, 0] = 1;
+        // k139: без выделений памяти (stackalloc): производные звались миллионы раз (объём и проекции граней NURBS) —
+        // 25 ГБ выделений на одно скругление по лофту
+        int P1 = p + 1;
+        Span<double> ndu = stackalloc double[P1 * P1]; Span<double> left = stackalloc double[P1]; Span<double> right = stackalloc double[P1];
+        ndu[0] = 1;
         for (int j = 1; j <= p; j++)
         {
             left[j] = u - U[i + 1 - j]; right[j] = U[i + j] - u; double saved = 0;
             for (int r = 0; r < j; r++)
             {
-                ndu[j, r] = right[r + 1] + left[j - r];
-                double temp = ndu[j, r] == 0 ? 0 : ndu[r, j - 1] / ndu[j, r];
-                ndu[r, j] = saved + right[r + 1] * temp; saved = left[j - r] * temp;
+                ndu[j * P1 + r] = right[r + 1] + left[j - r];
+                double temp = ndu[j * P1 + r] == 0 ? 0 : ndu[r * P1 + j - 1] / ndu[j * P1 + r];
+                ndu[r * P1 + j] = saved + right[r + 1] * temp; saved = left[j - r] * temp;
             }
-            ndu[j, j] = saved;
+            ndu[j * P1 + j] = saved;
         }
-        for (int j = 0; j <= p; j++) N[j] = ndu[j, p];
+        for (int j = 0; j <= p; j++) N[j] = ndu[j * P1 + p];
         if (p == 0) { dN[0] = 0; return; }
         for (int r = 0; r <= p; r++)
         {
             // первая производная: p·(N_{r,p−1}/(U_{i+r}−U_{i+r−p}) − N_{r+1,p−1}/(U_{i+r+1}−U_{i+r+1−p}))
             double d = 0;
-            if (r >= 1) { double den = ndu[p, r - 1]; if (den != 0) d += ndu[r - 1, p - 1] / den; }
-            if (r <= p - 1) { double den = ndu[p, r]; if (den != 0) d -= ndu[r, p - 1] / den; }
+            if (r >= 1) { double den = ndu[p * P1 + r - 1]; if (den != 0) d += ndu[(r - 1) * P1 + p - 1] / den; }
+            if (r <= p - 1) { double den = ndu[p * P1 + r]; if (den != 0) d -= ndu[r * P1 + p - 1] / den; }
             dN[r] = d * p;
         }
     }
@@ -388,7 +405,7 @@ public sealed class NurbsSurface : ISurface3
         double u = extend ? uv.X : uc, v = extend ? uv.Y : vc;
         int nu = CountU, nv = CountV;
         int su = Span(_ku, nu, _du, uc), sv = Span(_kv, nv, _dv, vc);
-        var Nu = new double[_du + 1]; var dNu = new double[_du + 1]; var Nv = new double[_dv + 1]; var dNv = new double[_dv + 1];
+        Span<double> Nu = stackalloc double[_du + 1]; Span<double> dNu = stackalloc double[_du + 1]; Span<double> Nv = stackalloc double[_dv + 1]; Span<double> dNv = stackalloc double[_dv + 1];
         BasisDers(_ku, su, u, _du, Nu, dNu); BasisDers(_kv, sv, v, _dv, Nv, dNv);
         Vector3d A = Vector3d.Zero, Au = Vector3d.Zero, Av = Vector3d.Zero; double w = 0, wu = 0, wv = 0;
         for (int a = 0; a <= _du; a++)
@@ -403,6 +420,43 @@ public sealed class NurbsSurface : ISurface3
 
     /// <summary>Образ при аффинном отображении точек (перенос, поворот, зеркало): опорные точки отображаются, веса и узлы те же —
     /// рациональная поверхность переходит в рациональную точно.</summary>
+    /// <summary>
+    /// k139: ближайшая точка ПРОДОЛЖЕНИЯ поверхности за край области (DerivsExtended): Гаусс — Ньютон от обычной проекции.
+    /// null — не сошлось или ушло дальше maxOut по параметру за край.
+    /// </summary>
+    public (Vector2d Uv, Vector3d P, Vector3d N)? ProjectExtended(Vector3d p, double maxOut = 0.5)
+    {
+        var uv = ProjectToUV(p);
+        for (int it = 0; it < 40; it++)
+        {
+            DerivsExtended(uv, out var S, out var Su, out var Sv);
+            var r = S - p;
+            double f1 = Vector3d.Dot(r, Su), f2 = Vector3d.Dot(r, Sv);
+            double a11 = Vector3d.Dot(Su, Su), a12 = Vector3d.Dot(Su, Sv), a22 = Vector3d.Dot(Sv, Sv), det = a11 * a22 - a12 * a12;
+            if (Math.Abs(det) < 1e-24) return null;
+            double du = -(f1 * a22 - f2 * a12) / det, dv = -(f2 * a11 - f1 * a12) / det;
+            uv += new Vector2d(du, dv);
+            if (uv.X < -maxOut || uv.X > 1 + maxOut || uv.Y < -maxOut || uv.Y > 1 + maxOut) return null;
+            if (Math.Abs(du) + Math.Abs(dv) < 1e-13)
+            {
+                DerivsExtended(uv, out var S2, out var Su2, out var Sv2);
+                var n = Vector3d.Cross(Su2, Sv2); if (n.LengthSquared < 1e-30) return null;
+                return (uv, S2, n.Normalized());
+            }
+        }
+        return null;
+    }
+
+    /// <summary>k139: та же поверхность с обратным направлением u (нормаль — в другую сторону): опорные точки и веса в обратном
+    /// порядке по u, узлы u → 1 − u.</summary>
+    public NurbsSurface ReversedU()
+    {
+        int nu = CountU, nv = CountV; var cp = new Vector3d[nu, nv]; var w = new double[nu, nv];
+        for (int i = 0; i < nu; i++) for (int j = 0; j < nv; j++) { cp[i, j] = _cp[nu - 1 - i, j]; w[i, j] = _w[nu - 1 - i, j]; }
+        var ku = _ku.Select(k => 1 - k).Reverse().ToArray();
+        return new NurbsSurface(cp, _du, _dv, w, ku, (double[])_kv.Clone());
+    }
+
     public NurbsSurface Mapped(Func<Vector3d, Vector3d> map)
     {
         int nu = CountU, nv = CountV; var cp = new Vector3d[nu, nv]; var w = new double[nu, nv];

@@ -21,6 +21,10 @@ public static class SettingsDialog
     static string L(string ru) => LocOff ? ru : Parametric3D.App.Loc.L(ru);
     public static readonly bool EditThemeOff = Environment.GetEnvironmentVariable("P3D_EDITTHEME") == "0";
     public static readonly bool SectionsOff = Environment.GetEnvironmentVariable("P3D_SETTINGSSECTIONS") == "0";
+    /// <summary>k139 (замечание 30.10, 00:56, п. 2): любая правка видна сразу; «Отмена» возвращает прежнее. Мутация P3D_SETTINGSLIVE=0.</summary>
+    public static readonly bool LiveOff = Environment.GetEnvironmentVariable("P3D_SETTINGSLIVE") == "0";
+    /// <summary>k139 (п. 3): группы строк раздела — карточки с жирным заголовком. Мутация P3D_SETTINGSGROUPS=0.</summary>
+    public static readonly bool GroupsOff = Environment.GetEnvironmentVariable("P3D_SETTINGSGROUPS") == "0";
 
     /// <summary>Строка раздела: подпись, элемент, загрузка из настроек и запись в них (тема — у цветов по теме).</summary>
     sealed class Bind
@@ -29,6 +33,10 @@ public static class SettingsDialog
         public Control Row = null!;
         public bool Themed;
         public Action<LookPrefs, bool>? Load, Save;
+        /// <summary>Карточка группы, в которой строка (null — строка прямо в разделе).</summary>
+        public StackPanel? Card;
+        /// <summary>Заголовок группы: сама карточка и её строки.</summary>
+        public StackPanel? OwnCard;
     }
 
     /// <summary>Разбор (проверки): разделы и строки последнего окна, выбор раздела, поиск, тема правки цветов.</summary>
@@ -41,6 +49,10 @@ public static class SettingsDialog
         public Func<string, Control?> Find = _ => null;
         public Action<string> Reset = _ => { };
         public LookPrefs Look = null!;
+        /// <summary>Заголовки групп раздела (жирные), по разделам.</summary>
+        public readonly List<(string Section, TextBlock Title)> Groups = new();
+        /// <summary>Сколько раз правка применилась к виду сразу (до «ОК»).</summary>
+        public int LiveApplied;
     }
     public static Probe? Last;
 
@@ -59,6 +71,8 @@ public static class SettingsDialog
         bool editDark = w.IsDark;
         var editCombos = new List<ComboBox>();
         string section = "";
+        StackPanel? card = null; string cardSection = "";
+        bool committed = false, suppress = true;   // k139: правка видна сразу (Live ниже); до конца сборки окна — без применения
 
         static Control WithIcon(string? icon, string text, double size = 16)
         {
@@ -76,14 +90,26 @@ public static class SettingsDialog
         Bind Add(string label, Control c, Action<LookPrefs, bool>? load = null, Action<LookPrefs, bool>? save = null, bool themed = false)
         {
             var b = new Bind { Section = section, Label = L(label), Row = MakeRow(label, c), Load = load, Save = save, Themed = themed };
+            if (card != null && cardSection == section) { b.Card = card; card.Children.Add(b.Row); }
             binds.Add(b); probe.Rows.Add((section, b.Label, b.Row));
             return b;
         }
         void Header(string text)
         {
-            var h = new TextBlock { Text = L(text), FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 10, 0, 2), Opacity = 0.85 };
-            var b = new Bind { Section = section, Label = "", Row = h };
-            binds.Add(b);
+            if (GroupsOff)
+            {
+                var h0 = new TextBlock { Text = L(text), FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 10, 0, 2), Opacity = 0.85 };
+                binds.Add(new Bind { Section = section, Label = "", Row = h0 });
+                return;
+            }
+            // карточка группы: жирный заголовок и строки группы в рамке
+            var h = new TextBlock { Text = L(text), FontWeight = FontWeight.Bold, FontSize = 15, Margin = new Thickness(0, 0, 0, 6) };
+            var st = new StackPanel { Spacing = 2, Children = { h } };
+            var border = new Border { Child = st, Padding = new Thickness(12, 8, 12, 10), Margin = new Thickness(0, 8, 0, 4), CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1) };
+            border.Bind(Border.BorderBrushProperty, border.GetResourceObservable("P3.Border"));
+            card = st; cardSection = section;
+            binds.Add(new Bind { Section = section, Label = "", Row = border, OwnCard = st });
+            probe.Groups.Add((section, h));
         }
         ValueSlider Slider(string label, Func<LookPrefs, double> get, Action<LookPrefs, double> set, double min, double max, double step)
         {
@@ -93,7 +119,7 @@ public static class SettingsDialog
         }
         NumericUpDown Nud(string name, string label, Func<LookPrefs, double> get, Action<LookPrefs, double> set, double min, double max, double inc, string fmt = "0.###")
         {
-            var n = new NumericUpDown { Name = name, Minimum = (decimal)min, Maximum = (decimal)max, Increment = (decimal)inc, FormatString = fmt, Value = (decimal)get(look), MinWidth = 160, HorizontalAlignment = HorizontalAlignment.Left };
+            var n = new DragNumber { Name = name, Minimum = (decimal)min, Maximum = (decimal)max, Increment = (decimal)inc, FormatString = fmt, Value = (decimal)get(look), MinWidth = 160, HorizontalAlignment = HorizontalAlignment.Left };
             if (label != "") Add(label, n, (l, _) => n.Value = (decimal)get(l), (l, _) => set(l, (double)(n.Value ?? 0)));
             return n;
         }
@@ -138,6 +164,11 @@ public static class SettingsDialog
         void SwitchTheme(bool dark)
         {
             if (EditThemeOff) { editDark = dark; return; }
+            bool sup0 = suppress; suppress = true;
+            try { SwitchThemeCore(dark); } finally { suppress = sup0; }
+        }
+        void SwitchThemeCore(bool dark)
+        {
             foreach (var b in binds) if (b.Themed) b.Save?.Invoke(look, editDark);
             editDark = dark;
             foreach (var b in binds) if (b.Themed) b.Load?.Invoke(look, editDark);
@@ -211,6 +242,7 @@ public static class SettingsDialog
 
         // ================================================================ Вид модели
         section = "model";
+        Header("Тема цветов");
         EditThemeCombo();
         Header("Пол");
         Check("Пол", "Показывать пол под моделью", l => l.FloorOn, (l, v) => l.FloorOn = v);
@@ -228,6 +260,7 @@ public static class SettingsDialog
             cb.SelectedIndex = Idx(look);
             Add("Форма пола", cb, (l, _) => cb.SelectedIndex = Idx(l), (l, _) => l.FloorShape = shapes[Math.Max(0, cb.SelectedIndex)]);
         }
+        Header("Сетка пола");
         Check("Сетка пола", "Показывать сетку пола (в единицах документа)", l => l.FloorGrid, (l, v) => l.FloorGrid = v);
         Slider("Толщина линий сетки (0 — 0.1 пикс., 100 — 2 пикс.)", l => l.FloorGridWidthPct, (l, v) => l.FloorGridWidthPct = v, 0, 100, 1);
         ThemedColor("Цвет линий сетки", l => l.FloorGridColorDark, (l, v) => l.FloorGridColorDark = v, l => l.FloorGridColorLight, (l, v) => l.FloorGridColorLight = v);
@@ -274,8 +307,9 @@ public static class SettingsDialog
         ThemedColor("Цвет плоскостей", l => l.DatumPlaneColorDark, (l, v) => l.DatumPlaneColorDark = v, l => l.DatumPlaneColorLight, (l, v) => l.DatumPlaneColorLight = v);
         Slider("Непрозрачность плоскостей, %", l => l.DatumPlaneOpacityPct, (l, v) => l.DatumPlaneOpacityPct = v, 0, 100, 1);
         Check("Контур плоскостей", "Показывать контур плоскостей", l => l.DatumPlaneOutline, (l, v) => l.DatumPlaneOutline = v);
-        Header("Модель и куб вида");
+        Header("Модель");
         Slider("Толщина рёбер модели", l => l.ModelEdgeWidth, (l, v) => l.ModelEdgeWidth = v, 0.5, 5, 0.1);
+        Header("Куб вида");
         Slider("Размер куба вида, пикс.", l => l.ViewCubePx, (l, v) => l.ViewCubePx = v, 90, 300, 5);
 
         // ================================================================ разметка: поиск, список разделов, строки
@@ -295,7 +329,7 @@ public static class SettingsDialog
             var head = new TextBlock { Text = L(title), FontSize = 17, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 6, 0, 6) };
             titles[key] = head;
             sp.Children.Add(head);
-            foreach (var b in binds.Where(b => b.Section == key)) sp.Children.Add(b.Row);
+            foreach (var b in binds.Where(b => b.Section == key && b.Card == null)) sp.Children.Add(b.Row);
             panels[key] = sp; body.Children.Add(sp);
         }
         var list = new ListBox { Name = "set_sections", MinWidth = 210 };
@@ -311,6 +345,7 @@ public static class SettingsDialog
                 var cur = Current();
                 foreach (var (k, p) in panels) p.IsVisible = SectionsOff || k == cur;
                 foreach (var b in binds) b.Row.IsVisible = true;
+                foreach (var b in binds) if (b.OwnCard != null) b.Row.IsVisible = true;
                 foreach (var t in titles.Values) t.IsVisible = SectionsOff;
                 resetBtn.IsVisible = cur != "general";
                 return;
@@ -321,9 +356,13 @@ public static class SettingsDialog
                 bool any = false;
                 foreach (var b in binds.Where(b => b.Section == k))
                 {
+                    if (b.OwnCard != null) continue;
                     bool m = b.Label.Length > 0 && b.Label.Contains(q, StringComparison.OrdinalIgnoreCase);
                     b.Row.IsVisible = m; any |= m;
                 }
+                // карточка группы видна, если видна хоть одна её строка
+                foreach (var b in binds.Where(b => b.Section == k && b.OwnCard != null))
+                    b.Row.IsVisible = binds.Any(x => x.Card == b.OwnCard && x.Row.IsVisible);
                 p.IsVisible = any; titles[k].IsVisible = true;
             }
             resetBtn.IsVisible = false;
@@ -343,16 +382,54 @@ public static class SettingsDialog
             }
             if (key == "ops") prev.SelectedIndex = 0;
         }
-        resetBtn.Click += (_, _) => ResetSection(Current());
+        resetBtn.Click += (_, _) => { suppress = true; try { ResetSection(Current()); } finally { suppress = false; } Live(); };
         list.SelectedIndex = 0;
         probe.Sections = list; probe.Search = search; probe.Reset = ResetSection;
         probe.Find = name => Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(body).OfType<Control>().FirstOrDefault(c => c.Name == name);
 
         var ok = new Button { Content = L("ОК"), Classes = { "accent" }, MinWidth = 96, Name = "set_ok" };
         var cancel = new Button { Content = L("Отмена"), MinWidth = 96, Name = "set_cancel" };
+        // k139 (п. 2): ПРАВКА ВИДНА СРАЗУ. Любое изменение строки пишется в настройки и применяется к окну и виду; «Отмена»
+        // (и закрытие окна без «ОК») возвращает настройки, тему и язык, бывшие до открытия.
+        var origLook = prefs.Look; bool origDark = w.IsDark; bool origEn = prefs.Language == "en"; string? origPrev = prefs.PreviewMode;
+        void Live()
+        {
+            if (LiveOff || suppress) return;
+            suppress = true;
+            try
+            {
+                foreach (var b in binds) b.Save?.Invoke(look, editDark);
+                prefs.Look = look;
+                if ((theme.SelectedIndex == 0) != w.IsDark) w.ApplyTheme(theme.SelectedIndex == 0);
+                if ((lang.SelectedIndex == 1) != Loc.En) w.ToggleLanguage();
+                prefs.PreviewMode = prev.SelectedIndex == 1 ? "contour" : "full";
+                w.ApplyLookLive();
+                probe.LiveApplied++;
+            }
+            finally { suppress = false; }
+        }
+        foreach (var c in Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(body).OfType<Control>())
+            switch (c)
+            {
+                case NumericUpDown n: n.ValueChanged += (_, _) => Live(); break;
+                case CheckBox cb: cb.IsCheckedChanged += (_, _) => Live(); break;
+                case ComboBox co when co.Name != "set_edit_theme": co.SelectionChanged += (_, _) => Live(); break;
+                case TextBox t when t.Parent is not NumericUpDown && t != search: t.TextChanged += (_, _) => Live(); break;
+            }
+        void Restore()
+        {
+            if (committed || LiveOff) return;
+            committed = true;
+            prefs.Look = origLook; prefs.PreviewMode = origPrev;
+            if (w.IsDark != origDark) w.ApplyTheme(origDark);
+            if (Loc.En != origEn) w.ToggleLanguage();
+            w.ApplyLook();
+        }
+        win.Closed += (_, _) => Restore();
         cancel.Click += (_, _) => win.Close();
         ok.Click += (_, _) =>
         {
+            committed = true;
             foreach (var b in binds) b.Save?.Invoke(look, editDark);
             prefs.Look = look;
             if ((theme.SelectedIndex == 0) != w.IsDark) w.ApplyTheme(theme.SelectedIndex == 0);
@@ -382,6 +459,7 @@ public static class SettingsDialog
         root.Children.Add(left); root.Children.Add(sep); root.Children.Add(right);
         win.Content = root;
         Show();
+        suppress = false;
         Last = probe;
         DocCommands.LastSettingsWindow = win;
         await win.ShowDialog(w);

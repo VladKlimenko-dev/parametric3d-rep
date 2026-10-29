@@ -149,11 +149,16 @@ static partial class Program
     static void BlendEdgeProbe(string file, double[] a, bool round, double size)
     {
         var (p, pars) = Parametric3D.Model.DocumentFile.Load(File.ReadAllText(file));
+        bool profBase = Environment.GetEnvironmentVariable("BLENDPROF") == "base", profOp = Environment.GetEnvironmentVariable("BLENDPROF") == "op";
+        if (profBase) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
+        var swBase = System.Diagnostics.Stopwatch.StartNew();
         if (Environment.GetEnvironmentVariable("BLENDDEFER") == "1")
         {
             using (new Parametric3D.Kernel.KernelContext(Parametric3D.Kernel.KernelSettings.Capture() with { Preview = true, LivePreview = false }).Enter()) p.Rebuild(pars);
         }
         else p.Rebuild(pars);
+        Console.WriteLine($"BASE {swBase.ElapsedMilliseconds} ms");
+        if (profBase) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; Console.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report()); }
         var A = new OpenTK.Mathematics.Vector3d(a[0], a[1], a[2]); var B = new OpenTK.Mathematics.Vector3d(a[3], a[4], a[5]);
         var e = p.Bodies.SelectMany(b => b.Edges).OrderBy(q => Math.Min((q.V0.P - A).Length + (q.V1.P - B).Length, (q.V0.P - B).Length + (q.V1.P - A).Length)).First();
         if (Environment.GetEnvironmentVariable("BLENDAT") is { Length: > 0 } bat)
@@ -162,6 +167,13 @@ static partial class Program
             e = p.Bodies.SelectMany(b => b.Edges).Where(q => q.Curve != null).OrderBy(q => Enumerable.Range(0, 33).Min(i => (q.Curve!.PointAt(q.Curve.T0 + (q.Curve.T1 - q.Curve.T0) * i / 32.0) - at).Length)).First();
         }
         Console.WriteLine($"edge {e.V0.P} → {e.V1.P}; faces {string.Join(" | ", e.CoEdges.Select(c => c.Loop?.Face?.Tag + " " + GeometryAudit.AuthoritativeSurface(c.Loop!.Face!)?.GetType().Name))}");
+        if (Environment.GetEnvironmentVariable("BLENDNEAR") is { Length: > 0 } bnear)
+        {   // разбор: грани и рёбра тела у точки (x,y,z,r)
+            var c4 = bnear.Split(',').Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            var at = new OpenTK.Mathematics.Vector3d(c4[0], c4[1], c4[2]);
+            foreach (var ed in p.Bodies.SelectMany(b => b.Edges).Where(q => q.Curve != null && Enumerable.Range(0, 17).Min(i => (q.Curve!.PointAt(q.Curve.T0 + (q.Curve.T1 - q.Curve.T0) * i / 16.0) - at).Length) < c4[3]))
+                Console.WriteLine($"NEAR edge {ed.Id} {ed.V0.P:0.####} → {ed.V1.P:0.####} {ed.Curve!.GetType().Name}; faces: {string.Join(" | ", ed.CoEdges.Select(c => c.Loop?.Face?.Id + ":" + c.Loop?.Face?.Tag + " " + GeometryAudit.AuthoritativeSurface(c.Loop!.Face!)?.GetType().Name))}");
+        }
         Parametric3D.Kernel.Ops.BooleanOp.GeneralInvalidProbe = r =>
         {
             var v = SolidValidator.Validate(r);
@@ -185,6 +197,17 @@ static partial class Program
             };
         if (Environment.GetEnvironmentVariable("DRDBG") == "1") Parametric3D.Kernel.Ops.DirectRound.Debug = m => Console.WriteLine("DR " + m);
         if (Environment.GetEnvironmentVariable("SURFDBG") == "1") Parametric3D.Kernel.Ops.FilletOp.SurfaceDebug = m => Console.WriteLine("SURF " + m);
+        if (Environment.GetEnvironmentVariable("SWEEPDBG") == "1") Parametric3D.Kernel.Ops.FilletOp.SweepDebug = m => Console.WriteLine("SWEEP " + m);
+        if (Environment.GetEnvironmentVariable("BALLDBG") == "1") Parametric3D.Kernel.Ops.FilletOp.BallDebug = m => Console.WriteLine("BALL " + m);
+        if (Environment.GetEnvironmentVariable("REACHDBG") == "1") Parametric3D.Kernel.Ops.FilletOp.ReachDebug = m => Console.WriteLine("REACH " + m);
+        if (Environment.GetEnvironmentVariable("GENDBG") == "1")
+        {
+            Parametric3D.Kernel.Analytic.FaceIntersect.Debug = m => Console.WriteLine("FI " + m);
+            Parametric3D.Kernel.Analytic.GeneralBoolean.TangentDebug = m => Console.WriteLine("TAN " + m);
+            Parametric3D.Kernel.Analytic.GeneralBoolean.EmptyDebug = m => Console.WriteLine("EMPTY " + m);
+            Parametric3D.Kernel.Ops.BooleanOp.PathDebug = m => Console.WriteLine("PATH " + m);
+            Parametric3D.Kernel.Ops.BooleanOp.AnalyticRouteDebug = m => Console.WriteLine("ROUTE " + m);
+        }
         var bodyBefore = TopologyClone.Deep(p.Bodies[0]);
         TSolid? builtTool = null;
         Parametric3D.Kernel.Ops.FilletOp.BuiltTool = t => builtTool ??= TopologyClone.Deep(t);
@@ -212,6 +235,8 @@ static partial class Program
             Console.WriteLine($"chain: {chain.Count} edge(s)");
         }
         p.AddFeature(f);
+        if (profOp) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
+        var swOp = System.Diagnostics.Stopwatch.StartNew();
         if (Environment.GetEnvironmentVariable("BLENDDEFER") == "1")
         {   // как приложение: обычный расчёт с отложенными проверками (Document, k126)
             using (new Parametric3D.Kernel.KernelContext(Parametric3D.Kernel.KernelSettings.Capture() with { Preview = true, LivePreview = false }).Enter()) p.Rebuild(pars);
@@ -222,6 +247,8 @@ static partial class Program
             using (new Parametric3D.Kernel.KernelContext(k0 with { Preview = true, LivePreview = true, Chord = k0.Chord * 4 }).Enter()) p.Rebuild(pars);
         }
         else p.Rebuild(pars);
+        Console.WriteLine($"OP {swOp.ElapsedMilliseconds} ms (with the rebuild of earlier operations)");
+        if (profOp) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; Console.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report()); }
         Parametric3D.Kernel.Ops.BooleanOp.GeneralInvalidProbe = null; Parametric3D.Kernel.Ops.FilletOp.BuiltTool = null;
         if (Environment.GetEnvironmentVariable("BLENDDUMP") is { Length: > 0 } dump && builtTool != null)
         {
@@ -237,6 +264,8 @@ static partial class Program
         if (Environment.GetEnvironmentVariable("TOOLFACES") == "1" && builtTool != null)
             foreach (var tf in builtTool.Faces) Console.WriteLine($"TOOL face {tf.Id} {tf.Tag} {tf.Surface.GetType().Name} auth {GeometryAudit.AuthoritativeSurface(tf)?.GetType().Name} proc {(GeometryAudit.AuthoritativeSurface(tf) as Parametric3D.Kernel.Surfaces.SectionSurface)?.IsProcedural}");
         Console.WriteLine("ERROR: " + (f.Error?.Replace('\n', '#') ?? "none"));
+        if (Environment.GetEnvironmentVariable("BLENDOBJ") is { Length: > 0 } bobj) WriteObj(bobj, p.Bodies);
+        if (Environment.GetEnvironmentVariable("BLENDTOOLOBJ") is { Length: > 0 } tobj && builtTool != null) WriteObj(tobj, new[] { builtTool });
         if (Environment.GetEnvironmentVariable("BLENDSAVE") is { Length: > 0 } bsave) File.WriteAllText(bsave, Parametric3D.Model.DocumentFile.Save(p, pars));
         if (Environment.GetEnvironmentVariable("BLENDFACES") == "1")
             foreach (var fz in p.Bodies.SelectMany(b => b.Faces))
@@ -323,5 +352,83 @@ static partial class Program
             }
             Require(fails.Count == 0, string.Join("; ", fails));
         });
+    }
+}
+
+static partial class Program
+{
+    /// <summary>
+    /// k139 (11.5): УГОЛ ИЗ ТРЁХ СКРУГЛЕНИЙ. Ребро дна кармана вдоль стенки упирается в скругление дна у соседней стенки и в
+    /// вертикальное скругление угла кармана. Новое скругление и вертикальное касаются одной стенки, их линии касания
+    /// пересекаются: цилиндры касаются изнутри в точке. Пересечение цилиндров с параметром по меньшему (Disc ≥ 0 на всей
+    /// окружности, ноль лишь в точке касания) выходило одной петлёй-восьмёркой — разметка граней не находила на ней кусков,
+    /// общая булева давала тело с открытыми рёбрами, и правка шла многогранным путём (память и отказы раздела «Нагрузка»).
+    /// Норма: при любом порядке операндов — две замкнутые кривые через точку касания; угол — точное аналитическое тело.
+    /// Мутация P3D_CYLTOUCH=0.
+    /// </summary>
+    static void Krn11ThreeBlendCornerChecks()
+    {
+        Check("KRN11-THREE-BLEND-CORNER", () =>
+        {
+            var fails = new List<string>();
+            var a = new Parametric3D.Kernel.Geometry.Ssi.Cylinder(new OpenTK.Mathematics.Vector3d(0.6, 0, 0.6), OpenTK.Mathematics.Vector3d.UnitY, 0.6);
+            var b = new Parametric3D.Kernel.Geometry.Ssi.Cylinder(new OpenTK.Mathematics.Vector3d(0.672, 0, 0), OpenTK.Mathematics.Vector3d.UnitZ, 0.672);
+            var touch = new OpenTK.Mathematics.Vector3d(0, 0, 0.6);
+            foreach (var (x, y, name) in new[] { (a, b, "small×big"), (b, a, "big×small") })
+            {
+                var r = Parametric3D.Kernel.Geometry.Ssi.Intersect(x, y, OpenTK.Mathematics.Vector3d.Zero, 10);
+                int through = r.Curves.Count(c => Enumerable.Range(0, 257).Any(i => (c.PointAt(c.T0 + (c.T1 - c.T0) * i / 256.0) - touch).Length < 1e-6));
+                Log(new { name, curves = r.Curves.Count, through });
+                if (r.Curves.Count != 2 || through != 2) fails.Add($"{name}: {r.Curves.Count} curve(s), {through} through the touching point");
+            }
+            var dir = UserModelsDir() ?? throw new Exception("tests/ui/data not found");
+            foreach (bool round in new[] { true, false })
+            {
+                var (p, pars) = Parametric3D.Model.DocumentFile.Load(File.ReadAllText(Path.Combine(dir, "blend_session6.p3d"))); p.Rebuild(pars);
+                double v0 = p.Volume;
+                var A = new OpenTK.Mathematics.Vector3d(34.31, 4.41, 1.99); var B = new OpenTK.Mathematics.Vector3d(34.31, 17.56, 1.99);
+                var e = p.Bodies.SelectMany(q => q.Edges).OrderBy(q => Math.Min((q.V0.P - A).Length + (q.V1.P - B).Length, (q.V0.P - B).Length + (q.V1.P - A).Length)).First();
+                Feature f = round ? new RoundFeature("R") { Radius = new ValueRef(0.6) } : new ChamferFeature("C") { D1 = new ValueRef(0.6), D2 = new ValueRef(0.6) };
+                if (f is RoundFeature rf) rf.Edges.Add(EdgeRef.Of(e)); else ((ChamferFeature)f).Edges.Add(EdgeRef.Of(e));
+                p.AddFeature(f); p.Rebuild(pars);
+                string tag = round ? "round 0.6" : "chamfer 0.6";
+                if (f.Error != null) { fails.Add($"{tag}: {f.Error.Split('\n').Last()}"); continue; }
+                var body = p.Bodies.Single();
+                bool valid = SolidValidator.Validate(body).IsValid;
+                double dv = p.Volume - v0;
+                Log(new { tag, guarantee = body.Guarantee.ToString(), valid, dv = Math.Round(dv, 4) });
+                if (!valid) fails.Add(tag + ": invalid body");
+                if (body.Guarantee.ToString() != "ExactAnalytic") fails.Add(tag + ": guarantee " + body.Guarantee);
+                if (dv <= 0 || dv > 0.36 * 13.2) fails.Add($"{tag}: volume change {dv:G4}");
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
+}
+
+static partial class Program
+{
+    /// <summary>Разбор: сетка тел в OBJ (v/f) и рёбра B-rep ломаными (строки «l x y z x y z …») — для картинки вне приложения.</summary>
+    static void WriteObj(string path, IEnumerable<TSolid> bodies)
+    {
+        var sb = new System.Text.StringBuilder(); var ci = System.Globalization.CultureInfo.InvariantCulture;
+        int baseIdx = 1;
+        var el = new System.Text.StringBuilder();
+        foreach (var b in bodies)
+        {
+            var md = Parametric3D.Kernel.Tess.Tessellator.Tessellate(b);
+            foreach (var v in md.Vertices) sb.Append(ci, $"v {v.P.X} {v.P.Y} {v.P.Z}\n");
+            for (int i = 0; i + 2 < md.Indices.Length; i += 3) sb.Append(ci, $"f {md.Indices[i] + baseIdx} {md.Indices[i + 1] + baseIdx} {md.Indices[i + 2] + baseIdx}\n");
+            baseIdx += md.Vertices.Length;
+            foreach (var e in b.Edges)
+            {
+                if (e.Curve == null) continue;
+                var pts = new List<OpenTK.Mathematics.Vector3d>();
+                for (int i = 0; i <= 24; i++) pts.Add(e.Curve.PointAt(e.Curve.T0 + (e.Curve.T1 - e.Curve.T0) * i / 24.0));
+                el.Append("l"); foreach (var q in pts) el.Append(ci, $" {q.X} {q.Y} {q.Z}"); el.Append('\n');
+            }
+        }
+        File.WriteAllText(path, sb.ToString());
+        File.WriteAllText(Path.ChangeExtension(path, ".edges"), el.ToString());
     }
 }
