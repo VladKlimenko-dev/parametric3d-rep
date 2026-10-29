@@ -91,6 +91,8 @@ public static class Tessellator
         return true;
     }
 
+    static readonly bool SliverDbg = Environment.GetEnvironmentVariable("P3D_SLIVERDBG") == "1";
+    static readonly bool SliverWindOff = Environment.GetEnvironmentVariable("P3D_SLIVERWIND") == "0";
     public static MeshData Tessellate(TSolid solid) => Tessellate(solid, facets: false);
     static readonly bool PolyDisplayOff = Environment.GetEnvironmentVariable("P3D_POLYDISPLAY") == "0";
     // g.11: тело с авторитетной многогранной формой показывается САМИМИ фасетами формы, без видимой сетки граней
@@ -344,7 +346,9 @@ public static class Tessellator
         // g.11: у тела с авторитетной многогранной формой обход задан самой формой (многоугольники точного ядра ориентированы);
         // «исправление по нормалям» переворачивало участки граней с несогласованной гладкой нормалью (серия 9, случай 65:
         // 141 сторона с одинаковым обходом). Мутация P3D_POLYWINDING=0.
-        if (!(polyAuth && PolyFacetsOnly && PolyFine && !PolyWindingOld)) FixWindingByNormals(md);
+        if (!(polyAuth && PolyFacetsOnly && PolyFine && !PolyWindingOld))
+            FixWindingByNormals(md, faces.Where(q => q.Surface is Surfaces.FacetedSurface fq && fq.Source != null
+                && Geometry.ExactEdges.ShapeOf(fq.Source) is { } shq && shq is not Geometry.Ssi.ParamSurf).Select(q => q.Id).ToHashSet());
 
         double vol = MassProps.SignedVolume(md);
         if (vol < 0) FlipAll(md);
@@ -398,7 +402,7 @@ public static class Tessellator
     /// их нормали. Нормаль здесь — источник истины: её задаёт поверхность,
     /// зная, где у грани наружная сторона.
     /// </summary>
-    private static void FixWindingByNormals(MeshData md)
+    private static void FixWindingByNormals(MeshData md, HashSet<uint>? facetFaces = null)
     {
         var idx = md.Indices;
         var vt = md.Vertices;
@@ -426,6 +430,16 @@ public static class Tessellator
             float scale = MathF.Max(MathF.Max(MaxAbs(vt[i0].P), MaxAbs(vt[i1].P)), MaxAbs(vt[i2].P));
             float edge = MathF.Max(MathF.Max(e1.Length, e2.Length), (vt[i2].P - vt[i1].P).Length);
             if (geom.Length <= 16 * 1.2e-7f * scale * edge) { unreliable.Add(i); continue; }
+
+            // k134 (11.5): ТРЕУГОЛЬНИК ПОПЕРЁК НОРМАЛИ — ТОЖЕ ПО СОСЕДЯМ. У узкого вогнутого скругления (R0.545) после булевой
+            // фасеты у торца — щепки (высота 0.04 длины), наклонённые к поверхности на 60–90°: знак их нормали к нормали поверхности задаёт
+            // форма щепки, а не сторона грани, и один из них переворачивался против согласованных соседей (три стороны «в одну
+            // сторону», верное скругление угла кармана откатывалось). Мутация P3D_SLIVERWIND=0.
+            // Только ЩЕПКА (высота меньше 1/10 длиннейшей стороны) и только у гранёной грани на КВАДРИКЕ (цилиндр, конус,
+            // сфера, тор): нормаль квадрики гладкая и точная, щепка поперёк неё — след разметки, а не излом. У гранёной грани
+            // лофта такая щепка — настоящий излом: тело 5 → 4 вершины должно остаться негодным (KRN07-LOFT-ACCEPTANCE).
+            float cosGs = Vector3.Dot(geom, shading) / (geom.Length * shading.Length);
+            if (!SliverWindOff && facetFaces != null && facetFaces.Contains(vt[i0].FaceId) && MathF.Abs(cosGs) < 0.5f && geom.Length < 0.1f * edge * edge) { if (SliverDbg) Console.Error.WriteLine($"SLIVER face {vt[i0].FaceId} cos {cosGs:0.###} h/L {geom.Length / (edge * edge):0.####} at {vt[i0].P}"); unreliable.Add(i); continue; }
 
             if (Vector3.Dot(geom, shading) < 0)
                 (idx[i + 1], idx[i + 2]) = (idx[i + 2], idx[i + 1]);

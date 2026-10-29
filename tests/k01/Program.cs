@@ -513,8 +513,14 @@ static partial class Program
         if (mode is "meshsag" or "allA") Krn02MeshSagChecks();
         if (mode is "embtool" or "allA") Krn05EmbeddedToolChecks();
         if (mode is "junction" or "allA") Krn05JunctionChecks();
+        if (mode is "blendat" or "allA") Krn11BlendAtBlendsChecks();
         if (mode is "usermodels-ref") { UserModelsRef(); return; }
         if (mode is "userprobe") { UserProbe(args[1]); return; }
+        if (mode is "blendeach") { BlendEachEdgeProbe(int.Parse(args[1]), int.Parse(args[2]), double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture)); return; }
+        if (mode is "blendfile") { BlendEachFileProbe(args[1]); return; }
+        if (mode is "blendstep") { BlendStepProbe(int.Parse(args[1])); return; }
+        if (mode is "blendedge") { BlendEdgeProbe(args[1], args[2].Split(',').Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray(), args[3] == "round", double.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture)); return; }
+        if (mode is "blendprobe") { BlendSessionProbe(args.Length > 1 ? int.Parse(args[1]) : 80); return; }
         if (mode is "dispsig") { foreach (var f in args.Skip(1)) DisplaySigProbe(f); return; }
         if (mode is "krn10toolreuse" or "allA") Krn10ToolReuseChecks();
         if (mode is "krn08provtree" or "allA") Krn08ProvTreeChecks();

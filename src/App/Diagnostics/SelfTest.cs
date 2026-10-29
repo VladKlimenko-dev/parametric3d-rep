@@ -28,7 +28,7 @@ namespace Parametric3D.App.Diagnostics;
 /// </summary>
 public sealed class SelfTest
 {
-    public const string Build = "k134";
+    public const string Build = "k135";
 
     private readonly MainWindow _w;
     private readonly Action<string> _progress;
@@ -764,7 +764,7 @@ public sealed class SelfTest
         double v0 = s.Part!.Volume; int feat0 = s.Part.Features.Count, undo0 = s.UndoNames.Count;
         long mem0 = Managed();
         const int N = 80;
-        int done = 0, refused = 0, dead = 0, undoOk = 0, undoTries = 0, lateFail = 0;
+        int done = 0, refused = 0, dead = 0, undoOk = 0, undoTries = 0, lateFail = 0, bySize = 0, byTangent = 0;
         var lateWhy = new List<string>();
         var undoWhy = new List<string>();
         long mem10 = 0; double ws10 = 0;
@@ -797,7 +797,14 @@ public sealed class SelfTest
             v.MarkDirty();
             await WaitBuilt();
             string? err = last?.Error;
-            if (err == null && last != null) { _w.CommitOperation(); done++; } else { _w.CancelOperation(); refused++; }
+            if (err == null && last != null) { _w.CommitOperation(); done++; }
+            else
+            {
+                _w.CancelOperation(); refused++;
+                // k135: законные отказы — размер больше грани и касательный стык (не ребро) — считаются отдельно от отказов ядра
+                if (err != null && err.Contains(": the cut reaches")) bySize++;
+                else if (err != null && err.Contains("meet tangentially")) byTangent++;
+            }
             await WaitBuilt();
             // k96: предпросмотр (по сеткам) прошёл, точный расчёт после «ОК» отказал — правка отменяется («Отменить»), как
             // сделал бы пользователь; считается отдельно (прежде такие операции оставались в дереве с ошибкой, и сравнения
@@ -862,6 +869,7 @@ public sealed class SelfTest
         Line($"Правок: {done} принято, {refused} отклонено ядром (отказ — с сообщением, деталь не меняется) из {N} за {secs:0.0} с; на правку медиана {F(med)} мс, p95 {F(p95)} мс");
         var ls = _stalls.Where(x => x.Phase.StartsWith("нагрузка")).ToList();
         Line($"Окно рисует после каждой правки — {(dead == 0 ? "да" : $"НЕТ ({dead})")}; остановок окна дольше 100 мс за раздел: {ls.Count}{(ls.Count > 0 ? $", наибольшая {F(ls.Max(x => x.Ms))} мс" : "")}");
+        Line($"Из отклонённых — законный отказ: размер больше грани {bySize}, касательный стык (не ребро) {byTangent}; отказ ядра {refused - bySize - byTangent}");
         Line($"Из отклонённых — отказ точного расчёта после «ОК» при годном предпросмотре: {lateFail} (правка отменена)");
         foreach (var lw in lateWhy) Line("    " + lw);
         Line($"«Отменить» ×3 и «вернуть» ×3 каждые 10 правок: деталь та же — {undoOk}/{undoTries}");
