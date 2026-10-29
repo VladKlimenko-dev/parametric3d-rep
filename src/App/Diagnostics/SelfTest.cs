@@ -28,7 +28,7 @@ namespace Parametric3D.App.Diagnostics;
 /// </summary>
 public sealed class SelfTest
 {
-    public const string Build = "k133";
+    public const string Build = "k134";
 
     private readonly MainWindow _w;
     private readonly Action<string> _progress;
@@ -810,7 +810,7 @@ public sealed class SelfTest
                 done--; refused++;
             }
             if (Environment.GetEnvironmentVariable("P3D_LOADDBG") == "1")
-                Console.WriteLine($"LOAD after {i}: {(round ? "round" : "chamfer")} {size:0.###} preview-err {(err == null ? "-" : err.Split('\n')[0])} | committed-err {(last?.Error == null ? "-" : last.Error.Split('\n')[0])} | errors now {_w.Session.Part!.Features.Count(f => f.Error != null)}");
+                Console.WriteLine($"LOAD after {i}: {(round ? "round" : "chamfer")} {size:0.###} edge {e.Id} len {(e.V0.P - e.V1.P).Length:0.##} preview-err {(err == null ? "-" : err.Replace('\n', '#'))} | committed-err {(last?.Error == null ? "-" : last.Error.Split('\n')[0])} | errors now {_w.Session.Part!.Features.Count(f => f.Error != null)}");
             times.Add(sw.Elapsed.TotalMilliseconds);
             if (!await Alive()) dead++;
             if (i == 9) { mem10 = Managed(); ws10 = Environment.WorkingSet / 1048576.0; }
