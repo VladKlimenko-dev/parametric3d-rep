@@ -12,6 +12,23 @@ public static partial class DirectRound
     static readonly bool LoftHalvesOff = Environment.GetEnvironmentVariable("P3D_LOFTHALVES") == "0";
     static readonly bool LoftTangentOff = Environment.GetEnvironmentVariable("P3D_LOFTTANGENT") == "0";
     static readonly bool LoftSplineOff = Environment.GetEnvironmentVariable("P3D_LOFTSPLINE") == "0";
+    static readonly bool LoftPlanarOff = Environment.GetEnvironmentVariable("P3D_LOFTPLANAR") == "0";
+    public static long LoftPlanarSides;
+    /// <summary>k138: плоскость всех опорных точек сетки (отход ≤ 1e-9 размера); null — не плоская.</summary>
+    static (Vector3d P, Vector3d N)? PlaneOfControlPoints(Vector3d[,] cp)
+    {
+        var pts = new List<Vector3d>(); foreach (var q in cp) pts.Add(q);
+        if (pts.Count < 3) return null;
+        var c = pts.Aggregate(Vector3d.Zero, (a, b) => a + b) / pts.Count;
+        double size = pts.Max(q => (q - c).Length); if (!(size > 0)) return null;
+        // нормаль — наибольшее векторное произведение пар от центра
+        Vector3d n = Vector3d.Zero;
+        for (int i = 0; i < pts.Count; i++) for (int k = i + 1; k < pts.Count; k++) { var x = Vector3d.Cross(pts[i] - c, pts[k] - c); if (x.LengthSquared > n.LengthSquared) n = x; }
+        if (n.LengthSquared < 1e-20 * size * size * size * size) return null;
+        n = n.Normalized();
+        foreach (var q in pts) if (Math.Abs(Vector3d.Dot(q - c, n)) > 1e-9 * Math.Max(1, size)) return null;
+        return (c, n);
+    }
     static readonly bool LoftEqualizeOff = Environment.GetEnvironmentVariable("P3D_LOFTEQUALIZE") == "0";
     public static long NurbsLofts;
 
@@ -386,6 +403,18 @@ public static partial class DirectRound
                     new() { Curve = Side(j, span), A = A1, B = A0 },
                 };
                 var fd = new FDesc { Surf = ns, Rev = false, Tag = $"loft:side[{j}]" + (spans > 1 ? $".{span}" : ""), Touched = true, Hint = ns.PointAt(new Vector2d(0.5, 0.5)) };
+                // k138 (замечание 29.10, 18:35, п. 12): ПЛОСКАЯ БОКОВАЯ ГРАНЬ ЛОФТА — ПЛОСКОСТЬ. Стенка отверстия между параллельными
+                // сторонами квадрата и прямоугольника лежит в плоскости, но была NURBS: скругление и фаска ребра на её стыке с
+                // торцом шли общим построителем по параметрической поверхности, концы ленты на соседних таких стенках выходили
+                // на ширину ленты мимо (ребро в 0.7–0.9 мм от поверхностей — отказ). Все опорные точки в одной плоскости —
+                // грань получает плоскость (нормаль — как у NURBS). Мутация P3D_LOFTPLANAR=0.
+                if (!LoftPlanarOff && PlaneOfControlPoints(cp) is { } pl)
+                {
+                    var nn = ns.NormalAt(new Vector2d(0.5, 0.5));
+                    var n0 = Vector3d.Dot(nn, pl.N) < 0 ? -pl.N : pl.N;
+                    fd.Surf = new PlaneSurface(Frame3.FromNormal(pl.P, n0)); fd.N = n0;
+                    Interlocked.Increment(ref LoftPlanarSides);
+                }
                 fd.Loops.Add(loop);
                 faces.Add(fd);
             }

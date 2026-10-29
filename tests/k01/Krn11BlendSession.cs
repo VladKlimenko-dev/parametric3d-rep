@@ -156,6 +156,11 @@ static partial class Program
         else p.Rebuild(pars);
         var A = new OpenTK.Mathematics.Vector3d(a[0], a[1], a[2]); var B = new OpenTK.Mathematics.Vector3d(a[3], a[4], a[5]);
         var e = p.Bodies.SelectMany(b => b.Edges).OrderBy(q => Math.Min((q.V0.P - A).Length + (q.V1.P - B).Length, (q.V0.P - B).Length + (q.V1.P - A).Length)).First();
+        if (Environment.GetEnvironmentVariable("BLENDAT") is { Length: > 0 } bat)
+        {   // ребро, проходящее ближе всего к точке (как щелчок в приложении)
+            var c3 = bat.Split(',').Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray(); var at = new OpenTK.Mathematics.Vector3d(c3[0], c3[1], c3[2]);
+            e = p.Bodies.SelectMany(b => b.Edges).Where(q => q.Curve != null).OrderBy(q => Enumerable.Range(0, 33).Min(i => (q.Curve!.PointAt(q.Curve.T0 + (q.Curve.T1 - q.Curve.T0) * i / 32.0) - at).Length)).First();
+        }
         Console.WriteLine($"edge {e.V0.P} → {e.V1.P}; faces {string.Join(" | ", e.CoEdges.Select(c => c.Loop?.Face?.Tag + " " + GeometryAudit.AuthoritativeSurface(c.Loop!.Face!)?.GetType().Name))}");
         Parametric3D.Kernel.Ops.BooleanOp.GeneralInvalidProbe = r =>
         {
@@ -167,6 +172,19 @@ static partial class Program
                     Console.WriteLine($"   edge {ed.V0.P:0.####} → {ed.V1.P:0.####} {ed.Curve?.GetType().Name}; faces: {string.Join(" | ", ed.CoEdges.Select(c => c.Loop?.Face?.Tag + " " + GeometryAudit.AuthoritativeSurface(c.Loop!.Face!)?.GetType().Name + (c.Reversed ? " rev" : "")))}");
             }
         };
+        if (Environment.GetEnvironmentVariable("AUDITDBG") == "1")
+            GeometryAudit.OnInconsistent = (sol, ed, fs) =>
+            {
+                var mid = ed.Curve.PointAt(0.5 * (ed.Curve.T0 + ed.Curve.T1));
+                foreach (var fz in fs)
+                {
+                    var su = GeometryAudit.AuthoritativeSurface(fz); if (su == null) continue;
+                    var uv = su.ProjectToUV(mid); var on = su.PointAt(uv);
+                    Console.WriteLine($"AUDIT edge {ed.V0.P:0.###}->{ed.V1.P:0.###} face {fz.Tag} {su.GetType().Name} uv {uv:0.####} dist {(on - mid).Length:G4}" + (su is Parametric3D.Kernel.Surfaces.SectionSurface ss ? $" umin {ss.UMin:0.###} umax {ss.UMax:0.###}" : ""));
+                }
+            };
+        if (Environment.GetEnvironmentVariable("DRDBG") == "1") Parametric3D.Kernel.Ops.DirectRound.Debug = m => Console.WriteLine("DR " + m);
+        if (Environment.GetEnvironmentVariable("SURFDBG") == "1") Parametric3D.Kernel.Ops.FilletOp.SurfaceDebug = m => Console.WriteLine("SURF " + m);
         var bodyBefore = TopologyClone.Deep(p.Bodies[0]);
         TSolid? builtTool = null;
         Parametric3D.Kernel.Ops.FilletOp.BuiltTool = t => builtTool ??= TopologyClone.Deep(t);
@@ -216,6 +234,8 @@ static partial class Program
             if (u.Count == 1) { Step("U", u[0]); var vu = SolidValidator.Validate(u[0]); Console.WriteLine("DUMP U valid " + vu.IsValid + " " + string.Join(" / ", vu.Issues.Where(i => i.Severity == ValidationSeverity.Error).Take(3))); }
             Console.WriteLine($"DUMP vA {AnalyticVolume.Of(bodyBefore)} vB {AnalyticVolume.Of(builtTool)} vBmesh {Parametric3D.Kernel.Tess.MassProps.Volume(Parametric3D.Kernel.Tess.Tessellator.Tessellate(builtTool))} Bbox {builtTool.Bounds.Min} {builtTool.Bounds.Max} vU {(u.Count == 1 ? AnalyticVolume.Of(u[0]) : null)} {string.Join(" / ", wu.TakeLast(2))}");
         }
+        if (Environment.GetEnvironmentVariable("TOOLFACES") == "1" && builtTool != null)
+            foreach (var tf in builtTool.Faces) Console.WriteLine($"TOOL face {tf.Id} {tf.Tag} {tf.Surface.GetType().Name} auth {GeometryAudit.AuthoritativeSurface(tf)?.GetType().Name} proc {(GeometryAudit.AuthoritativeSurface(tf) as Parametric3D.Kernel.Surfaces.SectionSurface)?.IsProcedural}");
         Console.WriteLine("ERROR: " + (f.Error?.Replace('\n', '#') ?? "none"));
         if (Environment.GetEnvironmentVariable("BLENDSAVE") is { Length: > 0 } bsave) File.WriteAllText(bsave, Parametric3D.Model.DocumentFile.Save(p, pars));
         if (Environment.GetEnvironmentVariable("BLENDFACES") == "1")
