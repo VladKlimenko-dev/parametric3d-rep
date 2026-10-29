@@ -366,6 +366,8 @@ public static class Ssi
     }
 
     static readonly bool CylIntervalsOff = Environment.GetEnvironmentVariable("P3D_CYLINTERVALS") == "0";
+    static readonly bool CylTouchOff = Environment.GetEnvironmentVariable("P3D_CYLTOUCH") == "0";
+    public static long CylTouchSplits;
     static readonly bool EqualCylOn = Environment.GetEnvironmentVariable("P3D_EQUALCYLSSI") != "0";
     public static long EqualCylSplits;
     /// <summary>Проверка отождествления кусков при сборке (KRN05-SHARED-BY-CONSTRUCTION): стык «на ус» — общим способом.</summary>
@@ -462,6 +464,24 @@ public static class Ssi
                 for (int i = 0; i <= n; i++) pts.Add(Pt(2 * Math.PI * i / n, sgn));
                 r.Curves.Add(new IntersectionCurve3(sc, sd, pts));
             }
+            r.Kind = Kind.Curves; return r;
+        }
+        // k139 (11.5): ТОЛЬКО КАСАНИЯ ВНУТРИ ДОПУСТИМЫХ УГЛОВ. Цилиндры касаются изнутри (вертикальное скругление угла кармана и
+        // новое скругление дна — оба касаются одной стенки, их линии касания пересекаются): Disc ≥ 0 на всей окружности и
+        // обращается в 0 лишь в точке касания. Прежде интервал «от корня до того же корня + 2π» давал одну петлю-восьмёрку
+        // (ветвь «−» вокруг и «+» обратно) с точкой касания посередине — разметка граней не находила на ней кусков, и общая
+        // булева давала тело с открытыми рёбрами; при другом порядке операндов (параметр — по большому цилиндру) те же ветви
+        // выходили двумя петлями. Здесь — две замкнутые кривые (вход и выход), каждая начинается в точке касания.
+        // Мутация P3D_CYLTOUCH=0.
+        if (!CylTouchOff && rs.All(x => Disc(x - 1e-4) > 0 && Disc(x + 1e-4) > 0))
+        {
+            foreach (int sgn in new[] { -1, 1 })
+            {
+                var pts = new List<Vector3d>();
+                for (int i = 0; i <= n; i++) pts.Add(Pt(rs[0] + 2 * Math.PI * i / n, i == 0 || i == n ? 0 : sgn));
+                r.Curves.Add(new IntersectionCurve3(sc, sd, pts));
+            }
+            Interlocked.Increment(ref CylTouchSplits);
             r.Kind = Kind.Curves; return r;
         }
         // интервалы между соседними корнями, где Disc > 0

@@ -446,24 +446,27 @@ public static class DocCommands
     }
 }
 
-/// <summary>k120 (замечание 15:06, п. 11): ползунок настройки со значением слева.</summary>
+/// <summary>
+/// k120 (замечание 15:06, п. 11): число настройки. k139 (замечание 30.10, 00:56, п. 3): вместо ползунка — поле числа со
+/// стрелками и протяжкой по ним (<see cref="DragNumber"/>); ValueChanged — при каждом изменении (вид меняется сразу).
+/// </summary>
 public sealed class ValueSlider : DockPanel
 {
-    public readonly Slider Slider;
-    readonly TextBlock _text;
+    public readonly DragNumber Box;
     readonly double _step;
+    public event Action? ValueChanged;
     public ValueSlider(double v, double min, double max, double step)
     {
         _step = step;
-        _text = new TextBlock { Width = 48, VerticalAlignment = VerticalAlignment.Center, TextAlignment = Avalonia.Media.TextAlignment.Right, Margin = new Thickness(0, 0, 10, 0) };
-        Slider = new Slider { Minimum = min, Maximum = max, SmallChange = step, LargeChange = step * 5, TickFrequency = step, IsSnapToTickEnabled = true, Value = v, MinWidth = 200 };
-        Slider.PropertyChanged += (_, e) => { if (e.Property == Avalonia.Controls.Primitives.RangeBase.ValueProperty) Show(); };
-        DockPanel.SetDock(_text, Dock.Left);
-        Children.Add(_text); Children.Add(Slider);
-        Show();
+        Box = new DragNumber
+        {
+            Minimum = (decimal)min, Maximum = (decimal)max, Increment = (decimal)step, Value = (decimal)Math.Clamp(v, min, max),
+            FormatString = step < 1 ? "0.##" : "0", MinWidth = 140, HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        Box.ValueChanged += (_, _) => ValueChanged?.Invoke();
+        Children.Add(Box);
     }
-    void Show() => _text.Text = Slider.Value.ToString(_step < 1 ? "0.##" : "0", System.Globalization.CultureInfo.InvariantCulture);
-    public double Value { get => Slider.Value; set => Slider.Value = value; }
-    public string ShownText => _text.Text ?? "";
+    public double Value { get => (double)(Box.Value ?? 0); set => Box.Value = (decimal)value; }
+    public string ShownText => Value.ToString(_step < 1 ? "0.##" : "0", System.Globalization.CultureInfo.InvariantCulture);
 }
 

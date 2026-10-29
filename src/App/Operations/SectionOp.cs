@@ -65,9 +65,9 @@ public sealed class SectionOp : Operation
             Label = "Точка начала (Origin point)", Filter = PickFilter.Vertices | PickFilter.Datums | PickFilter.SketchPoints, Accept = r => Refs.PointOf(r) != null,
             Single = true, Optional = true, Enabled = () => _s.Origin == SectionState.OriginKind.Point,
         });
-        p.Number("Смещение (Offset)", () => new ValueRef(_s.Offset), v => _s.Offset = v.Value, focused: () => SetGizmoField(0));
-        p.Number("Угол A", () => new ValueRef(_s.AngleA), v => _s.AngleA = v.Value, unit: "°", focused: () => SetGizmoField(1));
-        p.Number("Угол B", () => new ValueRef(_s.AngleB), v => _s.AngleB = v.Value, unit: "°", focused: () => SetGizmoField(2));
+        p.Number("Смещение (Offset)", () => new ValueRef(_s.Offset), v => _s.Offset = v.Value, focused: () => SetGizmoField(0), scrub: 1);
+        p.Number("Угол A", () => new ValueRef(_s.AngleA), v => _s.AngleA = v.Value, unit: "°", focused: () => SetGizmoField(1), scrub: 1);
+        p.Number("Угол B", () => new ValueRef(_s.AngleB), v => _s.AngleB = v.Value, unit: "°", focused: () => SetGizmoField(2), scrub: 1);
         p.Check("Обратная нормаль (Swap normal)", () => _s.Swap, on => _s.Swap = on);
         p.Note(L("Угол A — поворот вокруг первой оси основы, угол B — вокруг второй. Ручка в виде — у поля, в котором курсор."));
     }

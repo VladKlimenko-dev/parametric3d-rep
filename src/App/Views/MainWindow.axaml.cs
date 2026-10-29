@@ -990,6 +990,28 @@ public partial class MainWindow : Window
         RebuildUi();
     }
 
+    /// <summary>
+    /// k139 (замечание 30.10, 00:56, п. 2): правка настроек — сразу на виде и панелях; пересборка полос инструментов (размер
+    /// иконок) — через 250 мс после последней правки, чтобы протяжка числа не пересобирала панели на каждом шаге.
+    /// </summary>
+    public void ApplyLookLive()
+    {
+        FontSize = UiLook.UiFontSize;
+        UiLook.ApplyToRender(View.Theme);
+        ApplyPanelLook();
+        View.MarkDirty();
+        Cube.InvalidateVisual();
+        _liveUi ??= new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _liveUi.Stop();
+        _liveUi.Tick -= LiveUiTick; _liveUi.Tick += LiveUiTick;
+        _liveUi.Start();
+        LiveLookApplied++;
+    }
+    Avalonia.Threading.DispatcherTimer? _liveUi;
+    void LiveUiTick(object? s, EventArgs e) { _liveUi?.Stop(); RebuildUi(); }
+    /// <summary>Разбор: сколько раз настройки применены сразу.</summary>
+    public int LiveLookApplied;
+
     public Parametric3D.App.Viewport.ViewCube CubeControl => Cube;
     public double TreeColumnWidth => WorkArea.ColumnDefinitions[0].Width.Value;
     public double PropsPanelWidth => PropsPanel.Width;

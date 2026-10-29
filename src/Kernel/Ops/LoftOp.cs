@@ -141,6 +141,19 @@ public static class LoftOp
                 ch.Add(ranked[0].H); free.Remove(ranked[0].H);
             }
         }
+        // k139: точный лофт с отверстиями — одним телом, без булевой (DirectRound.NurbsLoftHollow)
+        if (!DirectRound.LoftNurbsOff)
+        {
+            var outerSecs = ExactSections(sections.Select(x => OneLoop(x, x.Outers.First())).ToList());
+            var holeSecs = chains.Select(ch => ExactSections(ch.Select((h, k) => OneLoop(sections[k], h)).ToList())).ToList();
+            bool arcs = outerSecs != null && (outerSecs.Any(x => x.Loop.Any(c => c is ArcCurve3 or BezierCurve3)) || holeSecs.Any(hs => hs != null && hs.Any(x => x.Loop.Any(c => c is ArcCurve3 or BezierCurve3))));
+            if (outerSecs != null && holeSecs.All(h => h != null) && (_smooth || arcs) && !(sections.Count == 2 && _tan0 == 0 && _tan1 == 0 && CoaxialCircles(OneLoop(sections[0], sections[0].Outers.First()), OneLoop(sections[1], sections[1].Outers.First())) != null))
+            {
+                string? whyH = null;
+                var hollow = DirectRound.NurbsLoftHollow(outerSecs, holeSecs.Select(h => (IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)>)h!).ToList(), _smooth, ref whyH, _tan0, _tan1);
+                if (hollow != null) return hollow;
+            }
+        }
         var outer = BuildSingle(sections.Select(x => OneLoop(x, x.Outers.First())).ToList(), samples);
         var bodies = new List<TSolid> { outer };
         var warnings = new List<string>();

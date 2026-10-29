@@ -78,6 +78,80 @@ public static partial class DirectRound
     /// проверяется (годность, аналитический объём, объём по фасетам). null — отказ (причина в why).
     /// </summary>
     internal static TSolid? NurbsLoft(IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)> sections, bool smooth, ref string? why, IReadOnlyList<ICurve3>? guides = null, double tanStart = 0, double tanEnd = 0)
+        => NurbsLoftCore(sections, smooth, ref why, guides, tanStart, tanEnd, null);
+
+    static readonly bool LoftHollowOff = Environment.GetEnvironmentVariable("P3D_LOFTHOLLOW") == "0";
+    public static long HollowLofts;
+
+    /// <summary>
+    /// k139 (замечание 30.10, 00:56, п. 4: скорость): ЛОФТ С ОТВЕРСТИЯМИ — ОДНИМ ТЕЛОМ. Прежде внешний лофт и лофт каждого
+    /// отверстия строились отдельно, и отверстие вычиталось общей булевой (лофт трёх сечений «окружность с квадратом» — 20 с,
+    /// из них 11 с — булева и 9 ГБ выделений). Грани внешнего лофта и лофтов отверстий (вывернутые) собираются в одно тело,
+    /// торцы — с контурами отверстий. Отверстие должно лежать внутри: точки его граней — по ту сторону ближайшей грани
+    /// внешнего лофта; иначе null (прежний путь). Мутация P3D_LOFTHOLLOW=0.
+    /// </summary>
+    internal static TSolid? NurbsLoftHollow(IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)> outer,
+        IReadOnlyList<IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)>> holes, bool smooth, ref string? why, double tanStart = 0, double tanEnd = 0)
+    {
+        if (LoftHollowOff) { why = "hollow loft is off"; return null; }
+        var of = new List<FDesc>();
+        NurbsLoftCore(outer, smooth, ref why, null, tanStart, tanEnd, of);
+        if (of.Count == 0) return null;
+        var outerSides = of.Where(f => f.Tag.StartsWith("loft:side")).ToList();
+        var start = of.FirstOrDefault(f => f.Tag == "loft:start"); var end = of.FirstOrDefault(f => f.Tag == "loft:end");
+        if (start == null || end == null || start.Loops.Count != 1 || end.Loops.Count != 1) { why = "hollow loft: caps not found"; return null; }
+        var all = new List<FDesc>(of);
+        int hi = 0;
+        foreach (var h in holes)
+        {
+            var hf = new List<FDesc>();
+            NurbsLoftCore(h, smooth, ref why, null, tanStart, tanEnd, hf);
+            if (hf.Count == 0) return null;
+            var hs = hf.FirstOrDefault(f => f.Tag == "loft:start"); var he = hf.FirstOrDefault(f => f.Tag == "loft:end");
+            if (hs == null || he == null) { why = "hollow loft: hole caps not found"; return null; }
+            static List<Seg> RevLoop(List<Seg> l) { var r = l.Select(sg => { var c = sg.Clone(); (c.A, c.B) = (sg.B, sg.A); return c; }).ToList(); r.Reverse(); return r; }
+            // отверстие внутри внешнего лофта: точки его боковых граней — по ту сторону ближайшей боковой грани
+            foreach (var fd in hf.Where(f => f.Tag.StartsWith("loft:side")))
+                for (int i = 1; i < 8; i++)
+                    for (int j = 1; j < 8; j++)
+                    {
+                        var q = fd.Surf is NurbsSurface ns0 ? ns0.PointAt(new Vector2d(i / 8.0, j / 8.0)) : (Vector3d?)null;
+                        if (q == null) continue;
+                        double best = double.MaxValue, sgn = 0;
+                        foreach (var od in outerSides)
+                        {
+                            var uv = od.Surf.ProjectToUV(q.Value); var sp = od.Surf.PointAt(uv); double d = (sp - q.Value).Length;
+                            if (d >= best) continue;
+                            var n = od.Surf.NormalAt(uv); if (od.Rev) n = -n;
+                            // наружу внешнего лофта: по центру масс сечений не судим — нормаль грани наружная по построению
+                            best = d; sgn = Vector3d.Dot(q.Value - sp, n);
+                        }
+                        if (!(sgn < -1e-6)) { why = "hollow loft: a hole reaches the outer surface"; Interlocked.Increment(ref HollowRejected); return null; }
+                    }
+            foreach (var fd in hf.Where(f => f.Tag.StartsWith("loft:side")))
+            {
+                // поверхность — с обратной нормалью (наружу — в отверстие), а не грань «наизнанку»: построители скруглений
+                // берут нормаль поверхности
+                if (fd.Surf is NurbsSurface nsr) fd.Surf = nsr.ReversedU();
+                else if (fd.Surf is PlaneSurface ps) fd.Surf = new PlaneSurface(Frame3.FromNormal(ps.F.Origin, -ps.F.W));
+                else fd.Rev = !fd.Rev;
+                fd.N = -fd.N;
+                if (fd.Hint is { } hh) fd.Hint = hh;
+                for (int k = 0; k < fd.Loops.Count; k++) fd.Loops[k] = RevLoop(fd.Loops[k]);
+                // имена граней — как у прежнего пути (лофт отверстия, вычтенный булевой): ссылки рёбер в документах — по ним
+                all.Add(fd);
+            }
+            start.Loops.Add(RevLoop(hs.Loops[0])); end.Loops.Add(RevLoop(he.Loops[0]));
+            hi++;
+        }
+        var solid = FinishFaces(all, "loft", ref why);
+        if (solid == null) return null;
+        Interlocked.Increment(ref HollowLofts);
+        return solid;
+    }
+    public static long HollowRejected;
+
+    static TSolid? NurbsLoftCore(IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)> sections, bool smooth, ref string? why, IReadOnlyList<ICurve3>? guides, double tanStart, double tanEnd, List<FDesc>? collect)
     {
         if (LoftNurbsOff) { why = "NURBS loft is off"; return null; }
         // KRN-07 (07.4): НАПРАВЛЯЮЩИЕ (DirectRoundLoftGuides.cs). Сечение-окружность делится на дуги в точках направляющих.
@@ -428,6 +502,7 @@ public static partial class DirectRound
             fd.Loops.Add(loop);
             faces.Add(fd);
         }
+        if (collect != null) { collect.AddRange(faces); return null; }
         var solid = FinishFaces(faces, "loft", ref why);
         if (solid == null) return null;
         if (Prov)
