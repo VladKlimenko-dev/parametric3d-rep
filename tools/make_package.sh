@@ -21,7 +21,7 @@ if [ "$RID" = "portable" ]; then
   dotnet publish src/Parametric3D.csproj -c Release --self-contained false -p:UseAppHost=false -o "$STAGE/app" \
     -p:LocalDeps="$ROOT/tools/deps" -p:UiPackages="$UIPKG" > "$OUT/publish.log" 2>&1 || { echo "PACKAGE: publish failed (см. $OUT/publish.log)"; exit 1; }
   printf '@echo off\r\nrem Parametric3D: переносная поставка (нужен .NET 8 Desktop Runtime x64)\r\ndotnet "%%~dp0app\\Parametric3D.dll" %%*\r\n' > "$STAGE/Parametric3D.cmd"
-  printf '@echo off\r\nrem Кнопка «Тест» без окна: отчёт в Документы\\Parametric3D\\Tests\r\ndotnet "%%~dp0app\\Parametric3D.dll" --selftest %%*\r\npause\r\n' > "$STAGE/Parametric3D_Test.cmd"
+  printf '@echo off\r\nchcp 65001 >nul\r\nrem Кнопка «Тест» без окна: отчёт в Документы\\Parametric3D\\Tests\r\ndotnet "%%~dp0app\\Parametric3D.dll" --selftest %%*\r\npause\r\n' > "$STAGE/Parametric3D_Test.cmd"
   printf '#!/bin/sh\nexec dotnet "$(dirname "$0")/app/Parametric3D.dll" "$@"\n' > "$STAGE/Parametric3D.sh"; chmod +x "$STAGE/Parametric3D.sh"
   # только две платформы поставки; отладочные символы машинных библиотек не нужны
   find "$STAGE/app/runtimes" -mindepth 1 -maxdepth 1 -type d ! -name win-x64 ! -name linux-x64 -exec rm -rf {} +
