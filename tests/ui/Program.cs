@@ -32,7 +32,7 @@ int passed = 0, failed = 0;
 
 void Check(string name, Action body)
 {
-    if (only != null && !name.Contains(only, StringComparison.OrdinalIgnoreCase)) return;
+    if (only != null && !only.Split('|').Any(o => name.Contains(o, StringComparison.OrdinalIgnoreCase))) return;
     string? err = null;
     try { body(); } catch (Exception ex) { err = ex is CheckFailed ? ex.Message : ex.ToString(); }
     if (err == null) passed++; else failed++;
@@ -189,6 +189,34 @@ if (only == "probe-sk")
     var ls = sk.Dimensions.First(x => x.Type == DimensionType.DistancePointPoint && x.Items.Contains(sl.A) && x.Items.Contains(sl.B));
     var rs = SketchEditing.SetDimensionValue(sk, ls, 2.71 * 25.4, null, solver);
     Dump($"slanted length 2.71in: ok {rs.Ok} {rs.Failure} participants {string.Join(",", rs.Dimensions.Select(x => x.Name))}");
+    return 0;
+}
+
+if (only == "probe-blendui")
+{
+    // разбор (k137): скругление/фаска ребра у точки как в приложении — выбор (с касательной цепочкой), команда, предпросмотр, «ОК»
+    // probe-blendui <файл> x y z round|chamfer [размер]
+    var s = DocumentSession.Open(args[1]); var w = Open(s); BuildNow(s);
+    var at = new Vector3d(double.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture), double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture), double.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture));
+    var part = s.Part!;
+    var e = part.Bodies.SelectMany(b => b.Edges).Where(q => q.Curve != null).OrderBy(q => Enumerable.Range(0, 33).Min(i => (q.Curve!.PointAt(q.Curve.T0 + (q.Curve.T1 - q.Curve.T0) * i / 32.0) - at).Length)).First();
+    var r0 = new PickRef(e.Id, PickKind.Edge, part, null);
+    var grp = w.ViewPort.ExpandEdge?.Invoke(r0) ?? new List<PickRef> { r0 };
+    w.ViewPort.Selection.Select(grp[0], additive: false); foreach (var g in grp.Skip(1)) w.ViewPort.Selection.Select(g, additive: true);
+    Console.WriteLine($"edge {e.V0.P} → {e.V1.P} {e.Curve!.GetType().Name}; chain {grp.Count}");
+    bool round = args[5] == "round";
+    w.StartOperation(round ? new RoundOp() : new ChamferOp()); BuildNow(s);
+    var f = part.Features[^1];
+    Console.WriteLine($"default size: {(f is RoundFeature rf0 ? rf0.Radius.Value : ((ChamferFeature)f).D1.Value)}; preview error: {f.Error?.Replace('\n', '#') ?? "-"}");
+    if (args.Length > 6)
+    {
+        double sz = double.Parse(args[6], System.Globalization.CultureInfo.InvariantCulture);
+        if (f is RoundFeature rf) rf.Radius = new ValueRef(sz); else if (f is ChamferFeature cf) { cf.D1 = new ValueRef(sz); cf.D2 = new ValueRef(sz); }
+        part.MarkDirtyFrom(f); w.ViewPort.MarkDirty(); BuildNow(s);
+        Console.WriteLine($"size {sz}: preview error: {f.Error?.Replace('\n', '#') ?? "-"}");
+    }
+    w.CommitOperation(); BuildNow(s);
+    Console.WriteLine($"after OK: error {f.Error?.Replace('\n', '#') ?? "-"}; volume {part.Volume}; guarantee {string.Join(",", part.Bodies.Select(b => b.Guarantee))}");
     return 0;
 }
 
@@ -3710,6 +3738,89 @@ Check("UI-SPEED-K126", () =>
     Console.WriteLine($"  (C) verification seen {sawVerify}, cancelled {Parametric3D.Model.Document.VerifiesCancelled - vc0}, dirty {part.IsDirty}, pending {part.NeedsAcceptance}, volume {part.Volume:0.###}");
     Require(sawVerify && Parametric3D.Model.Document.VerifiesCancelled > vc0, "an edit did not interrupt the checks");
     Require(!part.IsDirty && !part.NeedsAcceptance && Math.Abs(part.Volume - p2.Volume) <= 1e-9 * p2.Volume, "the part was not rebuilt and checked after the interrupted checks");
+});
+
+Check("UI-BLEND-CURVE-TREE-K137", () =>
+{
+    // k137 (замечание 29.10, 18:13, файл пользователя Sweep_Blend): пп. 3–8.
+    var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "sweep_blend_k137.p3d"));
+    var w = Open(s); BuildNow(s); var part = s.Part!;
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    var fails = new List<string>();
+    // п. 8: двойной щелчок по операции с вложенными эскизами (строка сама сворачивалась и съедала щелчок) — правка (P3D_TREEDOUBLE)
+    var tb = w.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault(t => t.Text == "Blend" && t.FindAncestorOfType<TreeViewItem>() != null);
+    if (tb == null) fails.Add("no tree row «Blend»");
+    else
+    {
+        tb.BringIntoView(); Run();
+        var c = tb.TranslatePoint(new Point(tb.Bounds.Width / 2, tb.Bounds.Height / 2), w)!.Value;
+        // строка выбирается заранее: выбор операции в полном прогоне долог (панель, ручки), и второе нажатие двойного
+        // щелчка в окне без экрана приходило позже порога двойного щелчка (время — момент вызова, не событие ОС)
+        w.MouseMove(c); w.MouseDown(c, MouseButton.Left); w.MouseUp(c, MouseButton.Left); Run();
+        Thread.Sleep(700); Run();
+        var hitEl = w.InputHitTest(c) as StyledElement;
+        Console.WriteLine($"  row at {c}, hit {hitEl?.GetType().Name} ctx {(hitEl?.DataContext as TreeNode)?.Item?.Name}, window {w.Bounds.Size}");
+        // второе нажатие — событием с ClickCount = 2: в окне без экрана время нажатия — момент вызова, и в полном прогоне
+        // (сотня окон проверок) обработка первого нажатия переходила порог двойного щелчка (в приложении время — от ОС)
+        var ptr = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, true);
+        var props = new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed);
+        tb.RaiseEvent(new PointerPressedEventArgs(tb, ptr, w, c, (ulong)Environment.TickCount64, props, KeyModifiers.None, 2));
+        tb.RaiseEvent(new PointerReleasedEventArgs(tb, ptr, w, c, (ulong)Environment.TickCount64, new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased), KeyModifiers.None, MouseButton.Left));
+        Run();
+        Console.WriteLine($"  double click «Blend»: operation {w.CurrentOperation?.GetType().Name}; last press: {MainWindow.TreePressDiag}");
+        if (w.CurrentOperation is not Parametric3D.App.Operations.LoftOp) fails.Add("double click on «Blend» did not open its edit");
+    }
+    // пп. 3–4: подсказки полей и флажков, флажок «по нормалям крайних сечений» (P3D_OPTIPS)
+    if (w.CurrentOperation is not Parametric3D.App.Operations.LoftOp) { w.SelectItem(part.Features[0]); CommandRegistry.Instance["edit.feature"].Execute(); Run(); }
+    if (w.CurrentOperation is Parametric3D.App.Operations.LoftOp lop && lop.Panel is { } pn)
+    {
+        var guides = pn.Refs.FirstOrDefault(r => r.Label == "Направляющие");
+        bool tipG = guides?.Box != null && ToolTip.GetTip(guides.Box) is string gt && gt.Length > 40;
+        bool tipS = pn.Checks.TryGetValue("Гладкий переход", out var cs) && ToolTip.GetTip(cs) is string st && st.Length > 40;
+        bool hasNormal = pn.Checks.TryGetValue("По нормалям крайних сечений", out var cn);
+        Console.WriteLine($"  loft tips: guides {tipG}, smooth {tipS}, normal toggle {hasNormal}");
+        if (!tipG || !tipS || !hasNormal) fails.Add("loft panel: no hints or no «normal to end sections» toggle");
+        if (cn is CheckBox cbn) { cbn.IsChecked = true; Run(); var lf = (LoftFeature)s.Part!.Features[0]; if (!(lf.StartTangent > 0 && lf.EndTangent > 0 && lf.Smooth)) fails.Add("the normal toggle does not set end tangency"); cbn.IsChecked = false; Run(); }
+        w.CancelOperation(); Run();
+    }
+    else fails.Add("the loft edit did not open");
+    // п. 6: опорная кривая выбирается из дерева — переименовать и удалить доступны (P3D_CURVESELECT)
+    var curve = s.Part!.Children.OfType<DatumCurve>().First();
+    w.SelectItem(curve); Run();
+    bool canRename = CommandRegistry.Instance["edit.rename"].Enabled, canDelete = CommandRegistry.Instance["edit.delete"].Enabled;
+    Console.WriteLine($"  curve: rename {canRename}, delete {canDelete} ({Parametric3D.App.Commands.StandardCommands.WhyNotDeletable(w)})");
+    if (!canRename || !canDelete) fails.Add("curve: rename/delete disabled");
+    // п. 7: правка кривой — «Изменить» и двойной щелчок (P3D_CURVEEDIT)
+    w.EditSelected(); Run();
+    Console.WriteLine($"  curve edit: {w.CurrentOperation?.GetType().Name} target {(w.CurrentOperation as CurveOp)?.EditTarget?.Name}");
+    if (w.CurrentOperation is not CurveOp { EditTarget: not null }) fails.Add("curve edit did not open");
+    if (w.CurrentOperation != null) { w.CancelOperation(); Run(); }
+    // п. 5: точки видимых эскизов — видны и выбираются при поле «точки» (P3D_OPSKETCHPOINTS); щелчки — по порядку (P3D_PICKORDER)
+    w.StartOperation(new CurveOp { Mode = 0 }); Run();
+    var sk3 = s.Part!.Sketches.First(k => k.Name == "Sketch3");
+    bool pts = w.ViewPort.PointSketchIds.Contains(sk3.Id);
+    bool acc = w.ViewPort.AccumulatePicks?.Invoke() == true;
+    Console.WriteLine($"  curve through points: sketch points shown {pts} (ids {string.Join(",", w.ViewPort.PointSketchIds)}; visible {string.Join(",", s.Part!.Sketches.Select(k => k.Name + ":" + k.Visible + ":" + k.Id))}; active {w.CurrentOperation?.ActiveRef?.Label} filter {w.ViewPort.Selection.Filter}), picks accumulate {acc}");
+    if (!pts) fails.Add("points of a visible sketch are not pickable in «curve through points»");
+    if (!acc) fails.Add("«points in order» does not add on click");
+    w.CancelOperation(); Run();
+    Require(fails.Count == 0, string.Join("; ", fails));
+    w.Close();
+});
+
+Check("UI-OPEN-WARMUP-YIELDS-K136", () =>
+{
+    // k136 (замечание 29.10, 16:08, п. 1): открытие документа с операциями — сетка из файла сразу, перестроение в фоне; прогрев
+    // ядра ему уступает (не стартует и останавливается), иначе делит с ним процессор (P3D_WARMUPYIELD=0).
+    string file = Path.Combine(AppContext.BaseDirectory, "data", "user_k125_tube.p3d");
+    var s = DocumentSession.Open(file);
+    Require(s.Part!.ShowsCached, "the opened file does not show its saved mesh");
+    var w = Open(s);
+    Console.WriteLine($"  features {s.Part.Features.Count}, skip warm-up {Parametric3D.App.Diagnostics.KernelWarmup.ShouldSkipFor(s)}, stopped {Parametric3D.App.Diagnostics.KernelWarmup.Stopped}");
+    Require(Parametric3D.App.Diagnostics.KernelWarmup.ShouldSkipFor(s) && Parametric3D.App.Diagnostics.KernelWarmup.Stopped, "the kernel warm-up does not yield to the opened document");
+    var empty = DocumentSession.NewPart();
+    Require(!Parametric3D.App.Diagnostics.KernelWarmup.ShouldSkipFor(empty), "the warm-up would be skipped for an empty part");
+    w.Close();
 });
 
 Check("UI-FLOOR-SETTINGS-K133", () =>

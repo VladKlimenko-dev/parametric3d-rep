@@ -221,7 +221,7 @@ public static class FaceIntersect
         }
         using (Diagnostics.Prof.Time("пары: SSI"))
             ssi = Ssi.Intersect(a.Shape, b.Shape, centre, radius, traceBall);
-        if (ssi.Uncertified != null) { res.Kind = Kind.Unresolved; res.Unresolved = ssi.Uncertified; return res; }
+        if (ssi.Uncertified != null) { if (UncertDbg) Console.Error.WriteLine($"UNCERT {a.Shape} | {b.Shape} | ball {centre:R} {radius:R} trace {traceBall} | {ssi.Uncertified}"); res.Kind = Kind.Unresolved; res.Unresolved = ssi.Uncertified; return res; }
         if (ssi.Kind == Ssi.Kind.Coincident) { res.Kind = Kind.Coincident; return res; }
         if (ssi.Kind == Ssi.Kind.Tangent) { res.Kind = Kind.Tangent; res.TangentPoints.AddRange(ssi.Points); return res; }
         if (ssi.AllTangent) res.TangentCurves.AddRange(ssi.Curves);
@@ -230,7 +230,7 @@ public static class FaceIntersect
         using (Diagnostics.Prof.Time("пары: удостоверение событий")) if (!EventCertOff && !EventsOff && res.Unresolved == null) CertifyEvents(a, b, ssi, res);
         if (Debug != null)
         {
-            Debug($"pair {a.Face.Id}/{b.Face.Id} ssi {ssi.Kind} curves {ssi.Curves.Count} → pieces {res.Pieces.Count} unresolved {res.Unresolved}");
+            Debug($"pair {a.Face.Id}/{b.Face.Id} ssi {ssi.Kind} curves {ssi.Curves.Count} → pieces {res.Pieces.Count} unresolved {res.Unresolved} ball {centre:0.##} r {radius:0.##} trace {traceBall}");
             foreach (var c in ssi.Curves) { var q0 = c.PointAt(c.T0); var q1 = c.PointAt(c.T1); var bl = q0; var bh = q0; for (int i = 0; i <= 200; i++) { var q = c.PointAt(c.T0 + (c.T1 - c.T0) * i / 200); bl = Vector3d.ComponentMin(bl, q); bh = Vector3d.ComponentMax(bh, q); } Debug($"   curve {c.GetType().Name} {q0:0.###}→{q1:0.###} box {bl:0.##}..{bh:0.##}"); }
             foreach (var pc in res.Pieces) Debug($"   piece {pc.P0:0.###}→{pc.P1:0.###} closed {pc.Closed}");
         }
@@ -370,15 +370,35 @@ public static class FaceIntersect
         var r = new Result(); CertifyEvents(a, b, ssi, r); return r.Unresolved;
     }
 
+    static string ShapeName(AnalyticFace f) => f.Shape switch
+    {
+        Ssi.Plane pl => $"plane n {pl.N:0.###}",
+        Ssi.Cylinder cy => $"cylinder R {cy.R:0.###}",
+        Ssi.Cone co => $"cone half {co.HalfAngle * 180 / Math.PI:0.###}° apex {co.Apex:0.###}",
+        Ssi.Sphere sp => $"sphere R {sp.R:0.###}",
+        Ssi.Torus to => $"torus R {to.R:0.###} r {to.r:0.###}",
+        null => "?",
+        var x => x.GetType().Name,
+    };
+
     static void CertifyEvents(AnalyticFace a, AnalyticFace b, Ssi.Result ssi, Result res)
     {
         foreach (var (f, otherF) in new[] { (a, b), (b, a) })
+        {
+            // k136 (X-218795-05 пользователя): ТОЧКА ВНЕ ГАБАРИТА ДРУГОЙ ГРАНИ — НЕ ЕЁ ТОЧКА. Ребро тонкого тора (кольцо R 187)
+            // пересекает бесконечный цилиндр выреза (R 50) и там, где самой грани цилиндра нет (y = 110 при грани |y| ≤ 25.4).
+            // Прослеживание идёт в шаре общей части габаритов граней и такую ветвь законно не ищет, а удостоверение событий
+            // требовало кривую через каждую точку ребра на ПОВЕРХНОСТИ — отказ общего пути, вырез уходил в многогранный, и
+            // копия 5 кругового массива падала на ребре 5e-8 мм. Мутация P3D_CERTOUTBOX=0.
+            var obox = CertOutBoxOff ? null : TightBox(otherF);
             foreach (var e in f.Face.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct())
             {
                 if (e.Curve == null) continue;
                 foreach (var te in EventsOn(e.Curve, otherF, res))
                 {
                     var q = e.Curve.PointAt(te);
+                    if (obox is { } ob && (q.X < ob.Lo.X || q.Y < ob.Lo.Y || q.Z < ob.Lo.Z || q.X > ob.Hi.X || q.Y > ob.Hi.Y || q.Z > ob.Hi.Z))
+                    { Interlocked.Increment(ref CertOutsideBox); continue; }
                     // касание ребра поверхностью (кратный корень) кривой пересечения может и не дать — только поперечные
                     var gO = SurfaceGradient(otherF, q); var tng = e.Curve.TangentAt(te);
                     if (tng.LengthSquared < 1e-24 || Math.Abs(Vector3d.Dot(gO, tng.Normalized())) < 1e-6) continue;
@@ -387,12 +407,16 @@ public static class FaceIntersect
                     if (!on)
                     {
                         Interlocked.Increment(ref EventCertFailures);
-                        res.Unresolved = $"edge point {q:0.######} lies on both surfaces but on no traced intersection curve";
+                        res.Unresolved = $"edge point {q:0.######} lies on both surfaces but on no traced intersection curve ({ShapeName(f)} × {ShapeName(otherF)}, {ssi.Curves.Count} curve(s))";
                         return;
                     }
                 }
             }
+        }
     }
+    static readonly bool UncertDbg = Environment.GetEnvironmentVariable("P3D_UNCERTDBG") == "1";
+    static readonly bool CertOutBoxOff = Environment.GetEnvironmentVariable("P3D_CERTOUTBOX") == "0";
+    public static long CertOutsideBox;
 
     /// <summary>Знак «внутри обеих граней»: минимум знаковых расстояний до их границ (плюс — внутри обеих).</summary>
     static double G(ICurve3 c, double t, AnalyticFace a, AnalyticFace b)

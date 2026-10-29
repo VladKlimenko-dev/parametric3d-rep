@@ -156,6 +156,11 @@ public sealed class DatumCurve : ModelItem
     /// <summary>Как построена (для показа): «через точки», «x(t)=…», «проекция».</summary>
     public string Source = "";
     public DatumCurve(string name, IEnumerable<Vector3d> pts, string source = "") { Name = name; Points.AddRange(pts); Source = source; }
+    /// <summary>k137 (замечание 29.10, 18:13, п. 7): способ (0 через точки, 1 уравнение, 2 проекция; −1 — файл до k137), точки
+    /// построения «через точки», замкнутая, гладкая — для правки кривой.</summary>
+    public int Mode = -1;
+    public readonly List<Vector3d> Inputs = new();
+    public bool Closed, Smooth = true;
     public double Length { get { double l = 0; for (int i = 1; i < Points.Count; i++) l += (Points[i] - Points[i - 1]).Length; return l; } }
 
     /// <summary>u13i: NURBS-определение (FreeForm): опорные точки, веса, узлы, степень; есть — точки кривой считаются по нему.</summary>

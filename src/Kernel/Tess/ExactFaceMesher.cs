@@ -1440,6 +1440,8 @@ public static partial class ExactFaceMesher
     /// расходится с треугольниками разбиения больше чем на 1% + периметр × допуск, или центр
     /// какого-либо треугольника отходит от точной поверхности больше трёх допусков гранения.
     /// </summary>
+    static readonly bool PinchTriOff = Environment.GetEnvironmentVariable("P3D_PINCHTRI") == "0";
+    public static long PinchFoldsDropped;
     private static (List<Vector3d> P, List<int> T)? Validate(TFace f, ISurface3 src, List<Vector3d> P, List<int> T, out string? why, bool checkArea = true, double boundaryDev = 0)
     {
         using var _pv = Diagnostics.Prof.Time("сетка: самопроверка");
@@ -1449,6 +1451,27 @@ public static partial class ExactFaceMesher
         // поверхности соседней грани эта кривая лежит с тем же отходом. Порог — по отходу
         // собственной границы грани, но не строже трёх допусков гранения.
         double limit = Math.Max(3 * Math.Max(Tol.Chord, 0.05), 1.2 * boundaryDev);
+        // k136 (X-218795-05, копия 4 кругового массива): КЛИН У ПОЧТИ ЗАЩЕМЛЁННОГО КОНТУРА. Контур грани вращения подходит
+        // сам к себе на 1.3e-6 мм (кривая выреза почти касается окружности стыка у шва): две несоседние точки контура
+        // ближе шага сетки точных вершин (1e-5), и любой способ триангуляции ставит между ними клин — короткая сторона
+        // 1.3e-6, две другие по 0.4 мм. Это не хорда через промежуточную точку (ради которой проверка): обе длинные
+        // стороны идут по своим рёбрам, у клина сторона с соседом на каждой из них. Прежде такой клин отвергал разметку
+        // грани, общий путь отказывал, многогранный давал открытый результат. Мутация P3D_PINCHTRI=0.
+        bool PinchWedge(int at)
+        {
+            if (PinchTriOff) return false;
+            int[] ix = { T[at], T[at + 1], T[at + 2] };
+            for (int k = 0; k < 3; k++)
+            {
+                int i0 = ix[k], i1 = ix[(k + 1) % 3];
+                double sh = (P[i0] - P[i1]).Length;
+                if (sh >= 1e-5 || i0 >= BoundaryCount || i1 >= BoundaryCount) continue;
+                int gap = Math.Abs(i0 - i1); if (gap == 1 || gap == BoundaryCount - 1) continue;   // соседние точки контура
+                var o = P[ix[(k + 2) % 3]];
+                if ((o - P[i0]).Length > 100 * sh && (o - P[i1]).Length > 100 * sh) return true;
+            }
+            return false;
+        }
         double aNew = 0, dev = 0, minArea = double.MaxValue;
         int minAt = 0, devAt = 0;
         int facingPos = 0, facingNeg = 0, negAt = -1;
@@ -1462,7 +1485,7 @@ public static partial class ExactFaceMesher
             var guv = src.ProjectToUV(g);
             double dv = (src.PointAt(guv) - g).Length;
             if (dv > dev) { dev = dv; devAt = i; }
-            if (!FlipCheckOff && ar > 1e-12)
+            if (!FlipCheckOff && ar > 1e-12 && !PinchWedge(i))
             {
                 double sd = Vector3d.Dot(Vector3d.Cross(b - a, c - a), src.NormalAt(guv));
                 if (sd > 0) facingPos++; else if (sd < 0) { facingNeg++; negAt = i; }
@@ -1484,6 +1507,18 @@ public static partial class ExactFaceMesher
         // 4e-6 при сторонах 12 и 92 мм) нельзя. Охват поднимался с 89 до 91 тела, но два теста
         // ловили открытые стороны в экспорте: высота такого треугольника около 1e-7 мм, то есть
         // ниже разрешения STL с одинарной точностью, и он там схлопывается.
+        if (aNew > 0 && minArea < 1e-9 * aNew && PinchWedge(minAt))
+        {
+            // клин законен; худший из остальных треугольников — по общей норме
+            Interlocked.Increment(ref PinchFoldsDropped);
+            minArea = double.MaxValue;
+            for (int i = 0; i + 2 < T.Count; i += 3)
+            {
+                if (PinchWedge(i)) continue;
+                double ar = Vector3d.Cross(P[T[i + 1]] - P[T[i]], P[T[i + 2]] - P[T[i]]).Length / 2;
+                if (ar < minArea) { minArea = ar; minAt = i; }
+            }
+        }
         if (aNew > 0 && minArea < 1e-9 * aNew)
         {
             Vector3d a0 = P[T[minAt]], b0 = P[T[minAt + 1]], c0 = P[T[minAt + 2]];
@@ -1504,7 +1539,7 @@ public static partial class ExactFaceMesher
                     if (have.Contains((T[minAt + (k + 1) % 3], T[minAt + k]))) withNeighbour++;
                 origin += $"; сторон с соседом {withNeighbour} из 3";
             }
-            why = $"вырожденный треугольник [{origin}] (площадь {minArea:E1}) стороны {(b0 - a0).Length:0.####}/{(c0 - b0).Length:0.####}/{(a0 - c0).Length:0.####} " +
+            why = $"вырожденный треугольник [{origin}] (площадь {minArea:E1}) стороны {(b0 - a0).Length:G4}/{(c0 - b0).Length:G4}/{(a0 - c0).Length:G4} " +
                   $"у ({a0.X:0.###},{a0.Y:0.###},{a0.Z:0.###})";
             return null;
         }

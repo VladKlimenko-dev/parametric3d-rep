@@ -27,6 +27,10 @@ public sealed class RefField
     public Func<PickRef, string>? Describe { get; init; }
     /// <summary>Поле можно оставить пустым (необязательная ссылка).</summary>
     public bool Optional { get; init; }
+    /// <summary>k137: щелчок по виду добавляет к полю (по порядку), а не заменяет.</summary>
+    public bool Accumulate { get; init; }
+    /// <summary>k137: подсказка поля (что выбирать и зачем).</summary>
+    public string? Tip { get; init; }
     public readonly List<PickRef> Items = new();
     /// <summary>Правка готовой операции: сколько ссылок уже записано в ней (пока поле не трогали).</summary>
     public int Kept;
@@ -131,6 +135,7 @@ public sealed class OpPanel
             Cursor = new Cursor(StandardCursorType.Hand), Background = Brushes.Transparent,
         };
         f.Box = box; f.Text = text;
+        if (f.Tip != null && !TipsOff) ToolTip.SetTip(box, L(f.Tip));
         box.PointerPressed += (_, e) => { if (f.Enabled?.Invoke() == false) return; _op.Activate(f); e.Handled = true; };
         if (f.Enabled != null) _enabled.Add((box, f.Enabled));
         clear.Click += (_, _) => { f.Items.Clear(); f.Touched = true; _op.Activate(f); _op.RefChanged(f); };
@@ -204,9 +209,14 @@ public sealed class OpPanel
         When(Row(label, tb), visible);
     }
 
-    public void Check(string label, Func<bool> get, Action<bool> set, Func<bool>? visible = null, Func<bool>? enabled = null)
+    /// <summary>k137: мутация P3D_OPTIPS=0 — поля и флажки панели без подсказок.</summary>
+    public static readonly bool TipsOff = Environment.GetEnvironmentVariable("P3D_OPTIPS") == "0";
+    public readonly Dictionary<string, Control> Checks = new();
+    public void Check(string label, Func<bool> get, Action<bool> set, Func<bool>? visible = null, Func<bool>? enabled = null, string? tip = null)
     {
         var cb = new CheckBox { IsChecked = get(), Content = L(label) };
+        if (tip != null && !TipsOff) ToolTip.SetTip(cb, L(tip));
+        Checks[label] = cb;
         if (enabled != null) _enabled.Add((cb, enabled));
         bool sync = false;
         cb.IsCheckedChanged += (_, _) => { if (sync) return; set(cb.IsChecked == true); _op.FieldChanged(); };

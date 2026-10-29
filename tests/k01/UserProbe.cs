@@ -9,7 +9,14 @@ static partial class Program
             if (k > p.Features.Count) break;
             p.StageIndex = k; p.MarkStageMoved();
             if (Environment.GetEnvironmentVariable("UPDBG") == k.ToString()) { Parametric3D.Kernel.Analytic.GeneralBoolean.PointDebug = (m, q) => Console.Error.WriteLine($"PD {m} {q}"); Parametric3D.Kernel.Analytic.FaceIntersect.Debug = m => Console.Error.WriteLine("FI " + m); }
-            p.Rebuild(pars);
+            bool prof = Environment.GetEnvironmentVariable("UPPROF") == k.ToString();
+            if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
+            if (Environment.GetEnvironmentVariable("UPDEFER") == "1")
+            {   // как приложение: обычный расчёт с отложенными проверками
+                using (new Parametric3D.Kernel.KernelContext(Parametric3D.Kernel.KernelSettings.Capture() with { Preview = true, LivePreview = false }).Enter()) p.Rebuild(pars);
+            }
+            else p.Rebuild(pars);
+            if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; Console.Error.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report()); }
             Parametric3D.Kernel.Analytic.GeneralBoolean.PointDebug = null; Parametric3D.Kernel.Analytic.FaceIntersect.Debug = null;
             var f = p.Features[k - 1];
             Log(new { step = k, feature = f.Name, kind = f.GetType().Name, error = f.Error, bodies = p.Bodies.Count, guarantee = string.Join(",", p.Bodies.Select(b => b.Guarantee)),

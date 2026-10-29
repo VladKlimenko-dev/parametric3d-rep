@@ -1002,6 +1002,12 @@ public static class Ssi
                     t = t.Normalized() * dir;
                     if (hsStart < 0) hsStart = hs;
                     var y = OntoBoth(a, b, x + t * hs);
+                    // k136 (X-218795-05, копия кругового массива): ЗВЕНО НЕ ДЛИННЕЕ ЗАДАННОГО ШАГА. На тонкой трубке тора (r 1.5)
+                    // проекция точки x + t·hs на обе поверхности уходила вдоль кривой на 0.6 мм при шаге 0.37 — звено выходило из
+                    // шара, где ветвь одна, удостоверение отказывало («not proven single-branch»), и вырез шёл многогранным путём.
+                    // Длинное звено — шаг пополам (до 6 раз). Мутация P3D_TRACECHORD=0.
+                    for (int k = 0; !TraceChordOff && y != null && (y.Value - x).Length > 1.25 * hs && k < 6; k++)
+                    { hs /= 2; y = OntoBoth(a, b, x + t * hs); Interlocked.Increment(ref TraceChordHalvings); }
                     if (y == null) break;
                     travelled += (y.Value - x).Length;
                     x = y.Value;
@@ -1009,7 +1015,21 @@ public static class Ssi
                     // замыкание: обойдено больше трёх шагов у начала и вернулись ближе 0.8 шага (шаг у начала и текущий —
                     // при переменном шаге прежнее «ближе 0.8 h» срабатывало на первых мелких шагах)
                     double hc = UniqOff ? h : Math.Max(hs, hsStart);
-                    if (step > 4 && travelled > 3 * hc && (x - start).Length < 0.8 * hc) { closed = true; break; }
+                    if (step > 4 && travelled > 3 * hc && (x - start).Length < 0.8 * hc)
+                    {
+                        // k136: ЗАМЫКАЮЩЕЕ ЗВЕНО НЕ ДЛИННЕЕ ШАГА. Замыкающее звено идёт от последней точки ломаной к началу — до шага
+                        // плюс 0.8 шага (0.6 мм на трубке тора r 1.5), и удостоверение единственности ветви на нём отказывало.
+                        // Длинное — делится точками кривой (середина звена на обеих поверхностях). Точка замыкания в ломаную не
+                        // идёт: она в доле шага от начала, и такое короткое звено ломало разбиение граней (серия 8, случай 199).
+                        // Мутация P3D_TRACECHORD=0.
+                        closed = true;
+                        for (int k = 0; !TraceChordOff && k < 4 && (pts[^1] - start).Length > 1.25 * hc; k++)
+                        {
+                            if (OntoBoth(a, b, (pts[^1] + start) / 2) is not { } mid || (mid - pts[^1]).Length < 0.25 * hc) break;
+                            pts.Add(mid); Interlocked.Increment(ref TraceChordHalvings);
+                        }
+                        break;
+                    }
                     pts.Add(x);
                 }
                 return pts;
@@ -1084,6 +1104,9 @@ public static class Ssi
     }
 
     /// <summary>Поверхности трансверсальны во всём шаре и шар мал против их кривизны (ветвь в шаре — одна дуга).</summary>
+    [ThreadStatic] public static Action<Vector3d, double, double, double, double>? TransversalDbg;
+    static readonly bool TraceChordOff = Environment.GetEnvironmentVariable("P3D_TRACECHORD") == "0";
+    public static long TraceChordHalvings;
     internal static bool Transversal(Shape a, Shape b, Vector3d c, double rb)
     {
         if (NormalLip(a, c, rb) is not double la || NormalLip(b, c, rb) is not double lb) return false;
@@ -1148,7 +1171,11 @@ public static class Ssi
                 for (int i = 1; i < cv.Count; i++)
                 {
                     var mid = (cv[i] + cv[i - 1]) / 2; double half = (cv[i] - cv[i - 1]).Length / 2;
-                    if (!Transversal(a, b, mid, half * 1.01 + 1e-12)) return $"trace certificate: trace step at {mid:0.######} not proven single-branch";
+                    if (!Transversal(a, b, mid, half * 1.01 + 1e-12))
+                    {
+                        if (TransversalDbg != null) { double rb = half * 1.01 + 1e-12; TransversalDbg(mid, rb, NormalLip(a, mid, rb) ?? -1, NormalLip(b, mid, rb) ?? -1, Vector3d.Cross(Implicit(a, mid).G.Normalized(), Implicit(b, mid).G.Normalized()).Length); }
+                        return $"trace certificate: trace step at {mid:0.######} not proven single-branch";
+                    }
                 }
         // ветвь в шаре ячейки пройдена ломаной целиком, если концы незамкнутой ломаной этой ветви — вне шара (или вне области)
         bool Covered(Vector3d c, double rb)

@@ -128,6 +128,7 @@ public partial class MainWindow : Window
         if (InSketch) View.ExitSketch(false);
         if (Session != null) { Session.Replaced -= OnReplaced; Session.StateChanged -= OnStateChanged; Session.Document.BuildStarted -= OnBuild; Session.Document.BuildFinished -= OnBuild; Session.Document.VerifyStarted -= OnBuild; Session.Document.VerifyFinished -= OnBuild; }
         Session = s;
+        if (Diagnostics.KernelWarmup.ShouldSkipFor(s)) Diagnostics.KernelWarmup.Yield();   // k136: прогрев уступает перестроению
         UiLook.ApplyToRender(View.Theme);                // настройки отрисовки — у документа свои; визуальные — пользователя
         View.ActivePart = s.ActivePart;
         Commands.DisplayUnits.From(s.Part?.Units);
@@ -1064,6 +1065,7 @@ public partial class MainWindow : Window
             ShowToast(L("Сдвиг вида тремя пальцами. Чтобы Windows не переключала при этом окна: Параметры → Bluetooth и устройства → Сенсорная панель → Жесты тремя пальцами → Прокрутки: «Ничего». Без этого — Shift + прокрутка двумя пальцами."), error: false);
         };
         View.Selection.Changed += OnSelectionChanged;
+        View.AccumulatePicks = () => CurrentOperation?.ActiveRef is { Accumulate: true };   // k137: «точки по порядку» — щелчками
         View.ContextRequested += p => { if (InSketch && View.DimensionAt(p) is { } dm) OpenDimensionMenu(dm); else OpenViewContextMenu(); };
         View.SceneRebuilt += () =>
         {
@@ -2209,7 +2211,9 @@ public partial class MainWindow : Window
     public static bool EditablePlane(ModelItem? i) => !PlaneOp.EditOff && i is DatumPlane dp && dp.Parent is Part pp
         && !ReferenceEquals(dp, pp.PlaneXY) && !ReferenceEquals(dp, pp.PlaneXZ) && !ReferenceEquals(dp, pp.PlaneYZ)
         // k132 (п. 2): и опорная ось, точка (кроме начала координат)
-        || !AxisOp.EditOff && (i is DatumAxis { Parent: Part } || i is DatumPoint { Parent: Part dpp } dpt && !ReferenceEquals(dpt, dpp.Origin));
+        || !AxisOp.EditOff && (i is DatumAxis { Parent: Part } || i is DatumPoint { Parent: Part dpp } dpt && !ReferenceEquals(dpt, dpp.Origin))
+        // k137 (п. 7): и опорная кривая (через точки, по уравнению, проекция; кривая FreeForm — своей правкой)
+        || !CurveOp.EditOff && i is DatumCurve { Parent: Part, IsNurbs: false };
 
     public void EditSelected()
     {
@@ -2234,6 +2238,10 @@ public partial class MainWindow : Window
             case DatumAxis dax when EditablePlane(dax):
                 if (CurrentOperation != null) CancelOperation();
                 StartOperation(new AxisOp { EditTarget = dax });
+                break;
+            case DatumCurve dcu when EditablePlane(dcu):
+                if (CurrentOperation != null) CancelOperation();
+                StartOperation(new CurveOp { EditTarget = dcu, Mode = CurveOp.ModeOf(dcu) });
                 break;
             case DatumPoint dpo when EditablePlane(dpo):
                 if (CurrentOperation != null) CancelOperation();
@@ -2665,13 +2673,29 @@ public partial class MainWindow : Window
             e.Pointer.Capture(null); e.Handled = true;
             if (FeatureDropIndex(fd.F, e.GetPosition(Tree)) is int to) Commands.TreeCommands.MoveTo(this, fd.F, to);
         }, RoutingStrategies.Tunnel);
+        // k137 (замечание 29.10, 18:13, п. 8): ДВОЙНОЙ ЩЕЛЧОК ПО ОПЕРАЦИИ — ПРАВКА. Строка дерева с вложенными строками (у операции
+        // — её эскизы) сама обрабатывала двойной щелчок (свернуть/развернуть) и помечала его обработанным: обработчик дерева не
+        // вызывался, и правка открывалась только у эскиза и плоскости. Теперь двойной щелчок перехватывается до строки
+        // (туннелем). Мутация P3D_TREEDOUBLE=0 — прежнее.
+        long lastTreeEdit = 0;
         Tree.DoubleTapped += (_, e) =>
         {
             if ((e.Source as StyledElement)?.DataContext is not TreeNode n) return;
+            if (Environment.TickCount64 - lastTreeEdit < 800) return;   // уже открыто по второму нажатию
             if (n.Item is Feature or Sketch || EditablePlane(n.Item)) EditItem(n.Item);
             else if (n.Item is Part) View.ZoomToFit();
             else if (n.Item is InfoItem ii) OpenInfo(ii);
         };
+        if (!TreeDoubleOff)
+            Tree.AddHandler(PointerPressedEvent, (_, e) =>
+            {
+                if (e.GetCurrentPoint(Tree).Properties.IsLeftButtonPressed) TreePressDiag = $"clicks {e.ClickCount} at {e.GetPosition(Tree)} ctx {((e.Source as StyledElement)?.DataContext as TreeNode)?.Item?.Name}";
+                if (e.ClickCount != 2 || !e.GetCurrentPoint(Tree).Properties.IsLeftButtonPressed) return;
+                if ((e.Source as StyledElement)?.DataContext is not TreeNode { IsBar: false } n || !(n.Item is Feature or Sketch || EditablePlane(n.Item))) return;
+                lastTreeEdit = Environment.TickCount64;
+                e.Handled = true;
+                Dispatcher.UIThread.Post(() => EditItem(n.Item));
+            }, RoutingStrategies.Tunnel);
         Tree.ContextRequested += (_, e) =>
         {
             if ((e.Source as StyledElement)?.DataContext is not TreeNode n) return;
@@ -3010,6 +3034,9 @@ public partial class MainWindow : Window
             DatumAxis ax => new PickRef(ax.Id, PickKind.DatumAxis, ax.Parent, ax),
             DatumPoint pt => new PickRef(pt.Id, PickKind.DatumPoint, pt.Parent, pt),
             Line3DItem ln => new PickRef(ln.Id, PickKind.DatumAxis, ln.Parent, ln),
+            // k137 (замечание 29.10, 18:13, п. 6): опорная кривая не выбиралась из дерева — выбор очищался, и все пункты меню
+            // (удалить, переименовать, копировать) были недоступны. P3D_CURVESELECT=0 — прежнее.
+            DatumCurve dcv when !CurveSelectOff => new PickRef(dcv.Id, PickKind.DatumAxis, dcv.Parent, dcv),
             _ => PickRef.Empty
         };
         if (r.IsEmpty) { View.Selection.Clear(); return; }
@@ -3018,6 +3045,10 @@ public partial class MainWindow : Window
         else View.Selection.Select(r, additive: false);
     }
 
+    /// <summary>Разбор (проверки): последнее нажатие в дереве — число щелчков и строка.</summary>
+    public static string TreePressDiag = "";
+    static readonly bool TreeDoubleOff = Environment.GetEnvironmentVariable("P3D_TREEDOUBLE") == "0";
+    static readonly bool CurveSelectOff = Environment.GetEnvironmentVariable("P3D_CURVESELECT") == "0";
     private bool _treeDriving;
     static readonly bool TreeDriveOff = Environment.GetEnvironmentVariable("P3D_TREEDRIVE") == "0";
     private void SyncTreeFromSelection()

@@ -12,7 +12,42 @@ public static partial class DirectRound
     static readonly bool LoftHalvesOff = Environment.GetEnvironmentVariable("P3D_LOFTHALVES") == "0";
     static readonly bool LoftTangentOff = Environment.GetEnvironmentVariable("P3D_LOFTTANGENT") == "0";
     static readonly bool LoftSplineOff = Environment.GetEnvironmentVariable("P3D_LOFTSPLINE") == "0";
+    static readonly bool LoftEqualizeOff = Environment.GetEnvironmentVariable("P3D_LOFTEQUALIZE") == "0";
     public static long NurbsLofts;
+
+    /// <summary>k137: контур — в n звеньев делением самого длинного звена пополам (отрезок, дуга, кривая Безье — де Кастельжо).</summary>
+    static List<ICurve3> EqualizeLoop(List<ICurve3> loop, int n)
+    {
+        var l = loop.ToList();
+        static double Len(ICurve3 c) { double s = 0; var p = c.PointAt(c.T0); for (int i = 1; i <= 16; i++) { var q = c.PointAt(c.T0 + (c.T1 - c.T0) * i / 16.0); s += (q - p).Length; p = q; } return s; }
+        while (l.Count < n)
+        {
+            int at = 0; double best = -1;
+            for (int i = 0; i < l.Count; i++) { double len = Len(l[i]); if (len > best + 1e-12) { best = len; at = i; } }
+            var c = l[at];
+            (ICurve3 A, ICurve3 B)? parts = c switch
+            {
+                LineCurve3 ln => (new LineCurve3(ln.A, (ln.A + ln.B) / 2), new LineCurve3((ln.A + ln.B) / 2, ln.B)),
+                ArcCurve3 ar => (new ArcCurve3(ar.Frame, ar.Radius, ar.A0, (ar.A0 + ar.A1) / 2), new ArcCurve3(ar.Frame, ar.Radius, (ar.A0 + ar.A1) / 2, ar.A1)),
+                BezierCurve3 bz => SplitBezier(bz),
+                _ => null,
+            };
+            if (parts is not { } pr) break;
+            l[at] = pr.A; l.Insert(at + 1, pr.B);
+        }
+        return l;
+        static (ICurve3, ICurve3) SplitBezier(BezierCurve3 bz)
+        {
+            var pts = bz.P.ToList(); var left = new List<Vector3d> { pts[0] }; var right = new List<Vector3d> { pts[^1] };
+            while (pts.Count > 1)
+            {
+                var nx = new List<Vector3d>(); for (int i = 0; i + 1 < pts.Count; i++) nx.Add((pts[i] + pts[i + 1]) / 2);
+                left.Add(nx[0]); right.Add(nx[^1]); pts = nx;
+            }
+            right.Reverse();
+            return (new BezierCurve3(left), new BezierCurve3(right));
+        }
+    }
     public static long GuidedLofts;
 
     /// <summary>
@@ -55,6 +90,18 @@ public static partial class DirectRound
         if (!LoftHalvesOff && sections.All(sec => sec.Loop.Count == 1 && sec.Loop[0] is ArcCurve3 { IsClosed: true }))
             sections = sections.Select(sec => { var ca = (ArcCurve3)sec.Loop[0]; double hm = (ca.A0 + ca.A1) / 2;
                 return (new List<ICurve3> { new ArcCurve3(ca.Frame, ca.Radius, ca.A0, hm), new ArcCurve3(ca.Frame, ca.Radius, hm, ca.A1) }, sec.Normal); }).ToList();
+        // k137 (замечание 29.10, 18:13, пп. 1–2): СЕЧЕНИЯ С РАЗНЫМ ЧИСЛОМ ЗВЕНЬЕВ. Окружность уже делилась на столько дуг,
+        // сколько звеньев у соседа, но многоугольники с разным числом сторон (отверстие-прямоугольник → отверстие-треугольник)
+        // давали отказ «sections differ in the number of curves» — гладкий лофт по трём эскизам пользователя не строился.
+        // Сечение с меньшим числом звеньев делится: самое длинное звено пополам, пока число не сравняется (вершины
+        // сопоставляются по порядку обхода, начало — как прежде). Мутация P3D_LOFTEQUALIZE=0.
+        if (!LoftEqualizeOff && guides is not { Count: > 0 } && sections.Count >= 2)
+        {
+            int nMax = sections.Max(sec => sec.Loop.Count);
+            if (sections.Any(sec => sec.Loop.Count != nMax))
+                sections = sections.Select(sec => sec.Loop.Count >= nMax || (sec.Loop.Count == 1 && sec.Loop[0] is ArcCurve3 { IsClosed: true })
+                    ? sec : (EqualizeLoop(sec.Loop, nMax), sec.Normal)).ToList();
+        }
         int S = sections.Count;
         if (S < 2) { why = "loft: fewer than two sections"; return null; }
         int N = sections[0].Loop.Count;
