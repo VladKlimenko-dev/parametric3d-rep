@@ -517,6 +517,7 @@ static partial class Program
         if (mode is "x05pattern" or "allA") Krn05X05PatternChecks();
         if (mode is "loftunequal" or "allA") Krn07LoftUnequalChecks();
         if (mode is "sweptconvex" or "allA") Krn06SweptConvexMidChecks();
+        if (mode is "loftcaps" or "allA") Krn06LoftCapBlendChecks();
         if (mode is "usermodels-ref") { UserModelsRef(); return; }
         if (mode is "userprobe") { UserProbe(args[1]); return; }
         if (mode is "blendeach") { BlendEachEdgeProbe(int.Parse(args[1]), int.Parse(args[2]), double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture)); return; }

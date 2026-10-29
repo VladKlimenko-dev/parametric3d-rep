@@ -66,10 +66,13 @@ public static class BandNurbs
                     dev = Math.Max(dev, OffSection(nurbs.PointAt(new Vector2d(tm, v)), ex));
                 }
             }
+            if (FitDbg) Console.WriteLine($"BANDFIT n {n} dev {dev:E2} budget {budget:E1}");
+            if (FitDbg) Console.WriteLine($"BANDFIT broken {brk.Count} n {n} dev {dev:E2} budget {budget:E1}");
             if (dev <= budget) return (nurbs, dev);
         }
         return null;
     }
+    static readonly bool FitDbg = Environment.GetEnvironmentVariable("P3D_BANDFITDBG") == "1";
 
     /// <summary>Расстояние точки до сечения: до дуги (её плоскость и окружность) или до прямой отрезка.</summary>
     static double OffSection(Vector3d q, SweepSection ex)

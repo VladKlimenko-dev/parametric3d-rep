@@ -4375,6 +4375,11 @@ public static class FilletOp
         // Допускается до 5% сечений за допуском и ни одного больше чем вдесятеро.
         if (worst > 10 * limit || outliers > Math.Max(1, checkedCount / 20)) return null;
 
+        if (closed && SurfaceDebug != null)
+        {
+            var g0 = Gen(0); var gL = Gen(L); var gL2 = Gen(L * (1 - 1e-6));
+            SurfaceDebug($"замыкание: A {(g0.Point(0) - gL.Point(0)).Length:E2}, B {(g0.Point(1) - gL.Point(1)).Length:E2}, у L−: B {(g0.Point(1) - gL2.Point(1)).Length:E2}; Gen(0) {g0.Point(0):0.####}→{g0.Point(1):0.####}, Gen(L) {gL.Point(0):0.####}→{gL.Point(1):0.####}; S {string.Join(",", S.Select(x => x.ToString("0.###")))}, forward {string.Join(",", forward)}");
+        }
         // Стыки рёбер и продлений — узлы таблицы формулы (там кривизна скачет).
         var breaks = new List<double>(S);
         return new SectionSurface(Gen, stationU, work, closed, closed ? 0 : -ext0, closed ? L : L + extL, breaks);
@@ -4769,7 +4774,19 @@ public static class FilletOp
             if (InArcRange(s, x)) return ExactSurfaces.ProjectUnsigned(s, x);
             foreach (var n in near)
                 if (!ReferenceEquals(n, s) && InArcRange(n, x)) return ExactSurfaces.ProjectUnsigned(n, x);
-            return ExactSurfaces.ProjectUnsigned(s, x);
+            var best = ExactSurfaces.ProjectUnsigned(s, x);
+            // k138: у NURBS — ближайшая проекция среди своей и соседних поверхностей (см. OntoSurfaceNear)
+            if (!OntoNearestOff && s is NurbsSurface or FacetedSurface { Source: NurbsSurface })
+            {
+                double bd = (best.P - x).LengthSquared;
+                foreach (var n in near)
+                {
+                    if (ReferenceEquals(n, s)) continue;
+                    var q = ExactSurfaces.ProjectUnsigned(n, x); double d = (q.P - x).LengthSquared;
+                    if (d < bd - 1e-18) { bd = d; best = q; }
+                }
+            }
+            return best;
         }
 
         var c = c0;
@@ -4823,7 +4840,19 @@ public static class FilletOp
             var src = n.Surface is FacetedSurface fs ? fs.Source : n.Surface;
             if (InArcRange(src, p)) return OntoFace(n, p);
         }
-        return OntoFace(f, p);
+        var best = OntoFace(f, p);
+        // k138: грань на NURBS — ближайшая проекция среди своей и соседних граней (как в формуле, OntoSurfaceNear)
+        if (!OntoNearestOff && own is NurbsSurface)
+        {
+            double bd = (best - p).LengthSquared;
+            foreach (var n in neighbours)
+            {
+                if (ReferenceEquals(n, f)) continue;
+                var q = OntoFace(n, p); double d = (q - p).LengthSquared;
+                if (d < bd - 1e-18) { bd = d; best = q; }
+            }
+        }
+        return best;
     }
 
     /// <summary>То же для точных поверхностей (формула рабочей поверхности).</summary>
@@ -4832,8 +4861,24 @@ public static class FilletOp
         if (InArcRange(own, p)) return ExactSurfaces.ProjectUnsigned(own, p).P;
         foreach (var n in neighbours)
             if (!ReferenceEquals(n, own) && InArcRange(n, p)) return ExactSurfaces.ProjectUnsigned(n, p).P;
-        return ExactSurfaces.ProjectUnsigned(own, p).P;
+        var best = ExactSurfaces.ProjectUnsigned(own, p).P;
+        // k138 (замечание 29.10, 18:35, пп. 9–11): ПОВЕРХНОСТЬ С ГРАНИЦЕЙ ПАРАМЕТРОВ (NURBS) — ближайшая из своей и соседних.
+        // Проекция на NURBS прижимается к краю её области: точка фаски у шва половин грани перехода, чуть за швом, вставала
+        // на 0.33 мм в сторону, и сечение у замыкания кольца расходилось с начальным — кромка фаски уходила от поверхностей,
+        // отказ проверки. Ближайшая проекция берётся среди своей поверхности и соседних по цепочке. Мутация P3D_ONTONEAREST=0.
+        if (!OntoNearestOff && own is NurbsSurface or FacetedSurface { Source: NurbsSurface })
+        {
+            double bd = (best - p).LengthSquared;
+            foreach (var n in neighbours)
+            {
+                if (ReferenceEquals(n, own)) continue;
+                var q = ExactSurfaces.ProjectUnsigned(n, p).P; double d = (q - p).LengthSquared;
+                if (d < bd - 1e-18) { bd = d; best = q; }
+            }
+        }
+        return best;
     }
+    static readonly bool OntoNearestOff = Environment.GetEnvironmentVariable("P3D_ONTONEAREST") == "0";
 
     /// <summary>Поверхность — дуга, выдавленная поперёк своей плоскости, и точка в угле дуги.</summary>
     private static bool InArcRange(ISurface3? s, Vector3d p)

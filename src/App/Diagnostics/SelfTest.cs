@@ -28,7 +28,7 @@ namespace Parametric3D.App.Diagnostics;
 /// </summary>
 public sealed class SelfTest
 {
-    public const string Build = "k137";
+    public const string Build = "k138";
 
     private readonly MainWindow _w;
     private readonly Action<string> _progress;

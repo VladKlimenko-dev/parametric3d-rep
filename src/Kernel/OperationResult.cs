@@ -412,7 +412,7 @@ public static class OperationContract
                 result.FailureCode = OperationCodes.InvalidResult;
                 result.Outcome = OperationOutcome.InternalFailure;
                 var ents = DiagEntitiesOff ? null : Topology.EntityNames.Of(new[] { b }, v.Issues.Where(i => i.Severity == Topology.ValidationSeverity.Error && i.Element != null).Select(i => i.Element!.Value));
-                result.Diagnostics.Add(new OperationDiagnostic(result.FailedStage, OperationCodes.InvalidResult, v.Summary(), null, ents));
+                result.Diagnostics.Add(new OperationDiagnostic(result.FailedStage, OperationCodes.InvalidResult, v.Summary() + ": " + string.Join(" / ", v.Issues.Where(i => i.Severity == Topology.ValidationSeverity.Error).Take(2).Select(i => i.Message)), null, ents));
                 return result;
             }
         }

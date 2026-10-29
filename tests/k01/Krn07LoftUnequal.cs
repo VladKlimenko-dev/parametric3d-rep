@@ -66,6 +66,57 @@ static partial class Program
         });
     }
 
+    /// <summary>
+    /// k138 (замечание 29.10, 18:35, пп. 9–12; файл пользователя Sweep_Blend): ФАСКИ И СКРУГЛЕНИЯ РЁБЕР ТОРЦОВ ПЕРЕХОДА.
+    /// — окружность торца (плоскость × NURBS перехода, цепочка из двух половин, щелчок по любой): точка фаски у шва половин
+    ///   проецировалась на NURBS с прижатием к краю области, сечение у замыкания кольца расходилось с начальным на 0.33 мм —
+    ///   отказ «curve-off-surface» или излом на шве (P3D_ONTONEAREST=0);
+    /// — рёбра квадратного и прямоугольного отверстий: плоская стенка отверстия была NURBS, концы ленты на соседних стенках
+    ///   уходили на ширину ленты — отказ (P3D_LOFTPLANAR=0); теперь — точно (ExactAnalytic).
+    /// Норма: все правки приняты, тело годное, объём уменьшился; рёбра отверстий — точный результат.
+    /// </summary>
+    static void Krn06LoftCapBlendChecks()
+    {
+        Check("KRN06-LOFT-CAP-BLENDS", () =>
+        {
+            var dir = UserModelsDir() ?? throw new Exception("tests/ui/data not found");
+            var text = File.ReadAllText(Path.Combine(dir, "sweep_blend_k137.p3d"));
+            var fails = new List<string>(); int ok = 0;
+            var ks = Parametric3D.Kernel.KernelSettings.Capture() with { Preview = true, LivePreview = false };   // как приложение
+            void Case(string name, OpenTK.Mathematics.Vector3d at, bool round, double size, bool chain, bool exact)
+            {
+                var (p, pars) = DocumentFile.Load(text);
+                using (new Parametric3D.Kernel.KernelContext(ks).Enter()) p.Rebuild(pars);
+                double v0 = p.Volume;
+                var e = p.Bodies.SelectMany(b => b.Edges).Where(q => q.Curve != null).OrderBy(q => Enumerable.Range(0, 33).Min(i => (q.Curve!.PointAt(q.Curve.T0 + (q.Curve.T1 - q.Curve.T0) * i / 32.0) - at).Length)).First();
+                var edges = new List<TEdge> { e };
+                if (chain)
+                    foreach (var q in p.Bodies.SelectMany(b => b.Edges))
+                        if (!ReferenceEquals(q, e) && q.Curve is Parametric3D.Kernel.Curves.ArcCurve3 && (ReferenceEquals(q.V0, e.V0) || ReferenceEquals(q.V0, e.V1)) && (ReferenceEquals(q.V1, e.V0) || ReferenceEquals(q.V1, e.V1))) edges.Add(q);
+                Feature f = round ? new RoundFeature("R") { Radius = new ValueRef(size) } : new ChamferFeature("C") { D1 = new ValueRef(size), D2 = new ValueRef(size) };
+                foreach (var q in edges) { if (f is RoundFeature rf) rf.Edges.Add(EdgeRef.Of(q)); else ((ChamferFeature)f).Edges.Add(EdgeRef.Of(q)); }
+                p.AddFeature(f);
+                using (new Parametric3D.Kernel.KernelContext(ks).Enter()) p.Rebuild(pars);
+                p.Rebuild(pars);   // проверки отложенного расчёта
+                string tag = $"{name} {(round ? "R" : "C")}{size}";
+                if (f.Error != null) { fails.Add($"{tag}: {f.Error.Split('\n').Last()}"); return; }
+                var b0 = p.Bodies.Single();
+                if (!SolidValidator.Validate(b0).IsValid) { fails.Add(tag + ": invalid"); return; }
+                if (!(p.Volume < v0)) { fails.Add($"{tag}: volume {p.Volume} ≥ {v0}"); return; }
+                if (exact && b0.Guarantee != Parametric3D.Kernel.GuaranteeLevel.ExactAnalytic) { fails.Add($"{tag}: {b0.Guarantee}"); return; }
+                ok++;
+            }
+            var V = (double x, double y, double z) => new OpenTK.Mathematics.Vector3d(x, y, z);
+            foreach (var (nm, at) in new[] { ("front+y", V(0, 30, 0)), ("front-y", V(0, -30, 0)) })
+                foreach (var (rd, sz) in new[] { (false, 1.0), (false, 2.0), (true, 3.0) }) Case(nm, at, rd, sz, true, false);
+            foreach (var (nm, at) in new[] { ("hole x+10", V(10, 0, 0)), ("hole x-10", V(-10, 0, 0)), ("hole y+10", V(0, 10, 0)), ("hole y-10", V(0, -10, 0)) })
+                foreach (bool rd in new[] { true, false }) Case(nm, at, rd, 1, false, true);
+            Case("back hole x40", V(40, 40, -100), true, 2, false, true);
+            Log(new { ok, fails = fails.Count, first = fails.Take(4) });
+            Require(fails.Count == 0, string.Join("; ", fails.Take(6)));
+        });
+    }
+
     /// <summary>Площадь области эскиза (внешний контур минус отверстия) по сетке плоской грани профиля.</summary>
     static double AreaOfSketch(Part p, string name)
     {
