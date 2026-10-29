@@ -12,5 +12,6 @@
     <Compile Include="$(SourceRoot)/Core/*.cs" />
     <Compile Include="$(SourceRoot)/Model/**/*.cs" />
     <Compile Include="*.cs" />
+    <Compile Include="$(SourceRoot)/App/Diagnostics/TestParts.cs" />
   </ItemGroup>
 </Project>

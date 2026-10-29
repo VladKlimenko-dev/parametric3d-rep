@@ -916,6 +916,7 @@ public static class FilletOp
         double startVolume = instant ? 0 : TotalVolume(bodies);
         var original = new List<TSolid>(bodies);
 
+        bool carrierResult = false;
         foreach (var (wanted, tool, kind, weight, adds, edgeCount) in jobs)
         {
             // СОСТОЯНИЕ ДО РЕЗА СОХРАНЯЕТСЯ ЦЕЛИКОМ.
@@ -973,7 +974,18 @@ public static class FilletOp
 
             string? broke;
             double volumeAfter;
-            if (quickCut)
+            // k135 (11.5, раздел «Нагрузка»): НОСИТЕЛЬ МГНОВЕННОГО ПРЕДПРОСМОТРА — НЕ ТЕЛО. Последняя операция в предпросмотре
+            // режется по сеткам (InstantPreview): в дереве — пустой носитель сетки показа, без граней. Защитная проверка
+            // разбивала его грани и сообщала «the result has no surface left»: каждое скругление и фаска вогнутого ребра
+            // (прибавка идёт через булеву, не через сеточный рез) в предпросмотре выходили с ошибкой, и правку отменяли —
+            // в разделе «Нагрузка» так отклонялись 43 правки из 44. Носитель не проверяется: точный расчёт по «ОК» проверяет
+            // всё. Мутация P3D_CARRIERCHECK=0.
+            if (!CarrierSkipOff && bodies.Count == 1 && InstantPreview.IsCarrier(bodies[0]))
+            {
+                carrierResult = true; Interlocked.Increment(ref CarrierChecksSkipped);
+                broke = null; volumeAfter = volumeBefore;
+            }
+            else if (quickCut)
             {
                 // предпросмотр по сеткам: стыки кусков не согласованы (открытые рёбра законны), проверяется только объём
                 volumeAfter = TotalVolume(bodies);
@@ -981,7 +993,7 @@ public static class FilletOp
             }
             else
             using (Diagnostics.Prof.Time("скругление: защитная проверка"))
-                broke = Damage(bodies, volumeBefore, weight, adds, out volumeAfter);
+                broke = Damage(bodies, volumeBefore, weight, adds, out volumeAfter, DamageExactOff ? null : ExactVolume(before));
             if (broke == null) knownVolume = volumeAfter;
 
             if (broke != null)
@@ -1023,7 +1035,7 @@ public static class FilletOp
         // принимался (проверка «не больше веса резца» не ловит неверный резец). Изменение объёма сверяется с оценкой
         // ∫ A(θ) ds по двугранному углу вдоль рёбер; расхождение больше чем втрое — откат и отказ (результату нельзя верить).
         // Мутация P3D_BLENDESTIMATE=0.
-        if (!EstimateOff && done > 0 && double.IsFinite(estimate) && estimate > 0)
+        if (!EstimateOff && done > 0 && !carrierResult && double.IsFinite(estimate) && estimate > 0)
         {
             double changed = Math.Abs(TotalVolume(bodies) - startVolume);
             LastEstimate = (changed, estimate);
@@ -1132,7 +1144,29 @@ public static class FilletOp
         return solid;
     }
 
-    private static string? Damage(List<TSolid> bodies, double volumeBefore, double toolWeight, bool adds, out double after)
+    static readonly bool CarrierSkipOff = Environment.GetEnvironmentVariable("P3D_CARRIERCHECK") == "0";
+    public static long CarrierChecksSkipped;
+    static readonly bool DamageExactOff = Environment.GetEnvironmentVariable("P3D_DAMAGEEXACTVOL") == "0";
+    /// <summary>k134: точный объём тел (все — точные, у каждого есть аналитический объём), иначе null.</summary>
+    private static double? ExactVolume(List<TSolid> bodies)
+    {
+        double sum = 0;
+        foreach (var b in bodies)
+        {
+            if (b.Guarantee is not (GuaranteeLevel.ExactAnalytic or GuaranteeLevel.ExactQuadric)) return null;
+            if (AnalyticVolume.Of(b) is not double v) return null;
+            sum += v;
+        }
+        return bodies.Count > 0 ? sum : null;
+    }
+
+    /// <summary>
+    /// k134 (11.5, раздел «Нагрузка»): ОБЪЁМ ДО И ПОСЛЕ — ТОЧНЫЙ, если тела точные. Сравнение «прибавка не тяжелее заполнителя»
+    /// шло по объёмам сеток: у маленького заполнителя (0.59 мм³ у кармана после скругления дна) разница сеток соседних граней,
+    /// перестроенных булевой, — 0.1 мм³, и верная прибавка откатывалась («прибавка 0.693 при весе 0.594»; точная — 0.587).
+    /// Мутация P3D_DAMAGEEXACTVOL=0.
+    /// </summary>
+    private static string? Damage(List<TSolid> bodies, double volumeBefore, double toolWeight, bool adds, out double after, double? exactBefore = null)
     {
         after = volumeBefore;
         if (bodies.Count == 0) return null;   // «съело всё» разбирается отдельно
@@ -1148,6 +1182,9 @@ public static class FilletOp
             after += scan.BodyVolume[bi];
         }
 
+        double meshAfter = after;
+        if (exactBefore is double eb && ExactVolume(bodies) is double ea) { volumeBefore = eb; after = ea; }
+        try {
         if (adds)
         {
             // Прибавка: объём растёт, но не больше, чем весит сама прибавка.
@@ -1163,6 +1200,7 @@ public static class FilletOp
         double removed = volumeBefore - after;
         if (!adds && removed > toolWeight * 1.05 + 1e-6)
             return $"the cut removed {removed:0.###} while the tool itself weighs only {toolWeight:0.###}; {scan.OpenEdgesText()}";
+        } finally { after = meshAfter; }
 
         // Поверхность обязана остаться чистой: касание в точке, по линии, дыры.
         string? pinch = scan.PinchPoint();

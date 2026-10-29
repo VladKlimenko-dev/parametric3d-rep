@@ -722,6 +722,12 @@ public static class ShellOp
         {
             if (CylOfFace(f) is not { } cy || PlanarTweak.CylConvex(f) is not bool convex) continue;
             var ax = cy.Axis.Normalized();
+            // k134 (11.5): цилиндр торца КАСАЕТСЯ грани самого ребра (скругление дна кармана — его стенки): прибавка кончается ровно
+            // на прямой касания и через цилиндр не проходит; обрезка трубой давала касание «плоскость × цилиндр» внутри граней —
+            // отказ общей булевой и многогранный путь (ребро с четырьмя гранями). Такой торец не обрезается. Мутация P3D_FILLERTANGENTEND=0.
+            if (!TangentEndOff && adj.Any(af => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(af)) is Geometry.Ssi.Plane pl
+                    && Math.Abs(Vector3d.Dot(pl.N.Normalized(), ax)) < 1e-9 && Math.Abs(Math.Abs(Vector3d.Dot(cy.P - pl.P, pl.N.Normalized())) - cy.R) < 1e-7 * Math.Max(1, cy.R)))
+            { Interlocked.Increment(ref TangentEndsKept); continue; }
             var tube = Cylinder(cy.P - ax * len, ax * (2 * len), cy.R);
             if (convex) BooleanOp.Subtract(cur, tube, warnings);
             else
@@ -737,6 +743,8 @@ public static class ShellOp
     }
     static readonly bool ClipDbg = Environment.GetEnvironmentVariable("P3D_CLIPDBG") == "1";
     static readonly bool FillerClipOff = Environment.GetEnvironmentVariable("P3D_FILLERCLIP") == "0";
+    static readonly bool TangentEndOff = Environment.GetEnvironmentVariable("P3D_FILLERTANGENTEND") == "0";
+    public static long TangentEndsKept;
     public static long FillerClips;
 
     internal static TSolid CylinderSolid(Vector3d at, Vector3d dir, double r) => Cylinder(at, dir, r);
