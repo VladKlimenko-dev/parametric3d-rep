@@ -514,9 +514,14 @@ static partial class Program
         if (mode is "embtool" or "allA") Krn05EmbeddedToolChecks();
         if (mode is "junction" or "allA") Krn05JunctionChecks();
         if (mode is "blendat" or "allA") Krn11BlendAtBlendsChecks();
+        if (mode is "x05pattern" or "allA") Krn05X05PatternChecks();
+        if (mode is "loftunequal" or "allA") Krn07LoftUnequalChecks();
+        if (mode is "sweptconvex" or "allA") Krn06SweptConvexMidChecks();
         if (mode is "usermodels-ref") { UserModelsRef(); return; }
         if (mode is "userprobe") { UserProbe(args[1]); return; }
         if (mode is "blendeach") { BlendEachEdgeProbe(int.Parse(args[1]), int.Parse(args[2]), double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture)); return; }
+        if (mode is "torcase") { var row = ReplayDiffCase(8, int.Parse(args[1]), TorOps8Long); Console.WriteLine(string.Join(" | ", row)); return; }
+        if (mode is "ssitorcyl") { SsiTorusCylProbe(); return; }
         if (mode is "blendfile") { BlendEachFileProbe(args[1]); return; }
         if (mode is "blendstep") { BlendStepProbe(int.Parse(args[1])); return; }
         if (mode is "blendedge") { BlendEdgeProbe(args[1], args[2].Split(',').Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray(), args[3] == "round", double.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture)); return; }

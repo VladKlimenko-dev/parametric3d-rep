@@ -113,10 +113,39 @@ public sealed class CurveOp : Operation
     private ValueRef _t0 = new(0), _t1 = new(720), _n = new(200);
     private bool _closed, _smooth = true;
     private DatumCurve? _dc;
+    /// <summary>k137 (замечание 29.10, 18:13, п. 7): правка существующей кривой (двойной щелчок в дереве, «Изменить»).</summary>
+    public DatumCurve? EditTarget;
+    public static readonly bool EditOff = Environment.GetEnvironmentVariable("P3D_CURVEEDIT") == "0";
+    static readonly bool AccumulateOff = Environment.GetEnvironmentVariable("P3D_PICKORDER") == "0";
+    private (List<Vector3d> Pts, string Src, int Mode, List<Vector3d> In, bool Closed, bool Smooth)? _orig;
+    /// <summary>Способ по кривой файла до k137 (без записанного способа): по описанию построения.</summary>
+    public static int ModeOf(DatumCurve dc) => dc.Mode >= 0 ? dc.Mode : dc.Source.StartsWith("x=") ? 1 : dc.Source == "projection" ? 2 : 0;
     public override string Title => Mode switch { 1 => "Кривая по уравнению", 2 => "Проекция кривой на грань", _ => "Кривая через точки" };
     public override string Icon => Mode switch { 1 => "dat_curve_equation_but.svg", 2 => "dat_curve_project_but.svg", _ => "dat_curve_points_but.svg" };
 
-    protected override bool Start() { W.Session.BeginEdit(L(Title)); return true; }
+    protected override bool Start()
+    {
+        if (EditTarget is { } dc)
+        {
+            W.Session.BeginEdit(L("Изменить «{0}»", dc.Name));
+            _dc = dc; Mode = ModeOf(dc); _closed = dc.Closed; _smooth = dc.Smooth;
+            _orig = (dc.Points.ToList(), dc.Source, dc.Mode, dc.Inputs.ToList(), dc.Closed, dc.Smooth);
+            // уравнение — из описания построения «x=…; y=…; z=…; t=a..b»
+            if (Mode == 1)
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(dc.Source, @"^x=(.*); y=(.*); z=(.*); t=([-0-9.eE+]+)\.\.([-0-9.eE+]+)$");
+                if (m.Success)
+                {
+                    _fx = m.Groups[1].Value; _fy = m.Groups[2].Value; _fz = m.Groups[3].Value;
+                    _t0 = new ValueRef(double.Parse(m.Groups[4].Value, System.Globalization.CultureInfo.InvariantCulture));
+                    _t1 = new ValueRef(double.Parse(m.Groups[5].Value, System.Globalization.CultureInfo.InvariantCulture));
+                    _n = new ValueRef(Math.Max(2, dc.Points.Count - 1));
+                }
+            }
+            return true;
+        }
+        W.Session.BeginEdit(L(Title)); return true;
+    }
 
     public override void Build(OpPanel p)
     {
@@ -140,7 +169,13 @@ public sealed class CurveOp : Operation
                 _pts = new RefField { Label = "", Optional = true };
                 break;
             default:
-                _pts = p.Ref(MoreFields.Points("Точки по порядку", optional: false));
+                _pts = p.Ref(new RefField
+                {
+                    Label = "Точки по порядку", Filter = PickFilter.Vertices | PickFilter.SketchPoints | PickFilter.Datums,
+                    Accept = r => r.Kind is PickKind.Vertex or PickKind.SketchPoint or PickKind.DatumPoint, Accumulate = !AccumulateOff,
+                    Tip = "Щелчками по порядку: вершины тела, точки эскизов (концы и центры кривых видимых эскизов), опорные точки. Ctrl — убрать точку.",
+                });
+                if (EditTarget is { } edc && edc.Inputs.Count >= 2) _pts.Kept = edc.Inputs.Count;   // k137: без нового выбора — прежние точки
                 p.Check("Гладкая", () => _smooth, v => _smooth = v);
                 p.Check("Замкнутая", () => _closed, v => _closed = v);
                 _src = _faces = _dir = new RefField { Label = "", Optional = true };
@@ -152,7 +187,8 @@ public sealed class CurveOp : Operation
 
     public override void Prime()
     {
-        if (Mode == 0) Seed(_pts); else if (Mode == 2) Seed(_src, _faces, _dir);
+        if (EditTarget != null) { }   // правка: выбор до команды — не ссылки кривой
+        else if (Mode == 0) Seed(_pts); else if (Mode == 2) Seed(_src, _faces, _dir);
         foreach (var f in new[] { _pts, _src, _faces, _dir }) if (f.Text != null) f.Text.Text = f.Summary;
         Panel?.Refresh(); Apply(); RefreshStatus();
     }
@@ -269,6 +305,8 @@ public sealed class CurveOp : Operation
             default:
             {
                 var q = _pts.Items.Select(Refs.PointOf).OfType<Vector3d>().ToList();
+                if (q.Count == 0 && !_pts.Touched && EditTarget is { } edc && edc.Inputs.Count >= 2) q = edc.Inputs.ToList();
+                _lastInputs = q;
                 return q.Count >= 2 ? ThroughPoints(q, _closed, _smooth) : null;
             }
         }
@@ -280,8 +318,12 @@ public sealed class CurveOp : Operation
         string src = Mode switch { 1 => $"x={_fx}; y={_fy}; z={_fz}; t={_t0.Value}..{_t1.Value}", 2 => "projection", _ => "through points" };
         if (_dc == null) { _dc = new DatumCurve(L("Кривая{0}", Part.Children.OfType<DatumCurve>().Count() + 1), pts, src); Part.Add(_dc); }
         else { _dc.Points.Clear(); _dc.Points.AddRange(pts); _dc.Source = src; _dc.NotifyChanged(_dc); }
+        // k137: построение — для правки
+        _dc.Mode = Mode; _dc.Closed = _closed; _dc.Smooth = _smooth;
+        _dc.Inputs.Clear(); if (Mode == 0) _dc.Inputs.AddRange(_lastInputs);
         W.ViewPort.MarkDirty();
     }
+    private List<Vector3d> _lastInputs = new();
 
     public override bool Commit()
     {
@@ -289,7 +331,16 @@ public sealed class CurveOp : Operation
         W.Session.CommitEdit(); return true;
     }
 
-    public override void Cancel() { if (_dc != null) Part.Remove(_dc); W.Session.DiscardEdit(); }
+    public override void Cancel()
+    {
+        if (EditTarget is { } dc && _orig is { } o)
+        {
+            dc.Points.Clear(); dc.Points.AddRange(o.Pts); dc.Source = o.Src; dc.Mode = o.Mode; dc.Inputs.Clear(); dc.Inputs.AddRange(o.In);
+            dc.Closed = o.Closed; dc.Smooth = o.Smooth; dc.NotifyChanged(dc);
+            W.Session.DiscardEdit(); W.ViewPort.MarkDirty(); return;
+        }
+        if (_dc != null) Part.Remove(_dc); W.Session.DiscardEdit();
+    }
 }
 
 /// <summary>Соосное отверстие (на оси цилиндрической грани, ребра-окружности или опорной оси) и радиальное (в стенке цилиндра к оси).</summary>

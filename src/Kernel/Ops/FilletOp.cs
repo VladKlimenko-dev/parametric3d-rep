@@ -3881,7 +3881,19 @@ public static class FilletOp
 
         // Только выпуклые углы: у вогнутых фаска прибавляет материал — это отдельный путь.
         int mid = n / 2;
-        if (!Convex(bodies, samples[mid].P, N1[mid], N2[mid]))
+        // k137 (замечание 29.10, 18:35, п. 12): ВЫПУКЛОСТЬ — В СЕРЕДИНЕ РЕБРА, А НЕ В ВЕРШИНЕ. У прямого ребра сечений два — его
+        // концы, и «средняя» точка цепочки была вершиной: проба выпуклости рядом с вершиной задевала соседние грани (ребро
+        // квадратного отверстия на торце перехода — выпуклое, но «вогнутая цепочка», отказ). Проба — в середине кривой
+        // ребра, к которому относится сечение, с нормалями граней там же. Мутация P3D_SWEEPCONVEXMID=0.
+        Vector3d cp = samples[mid].P, cn1 = N1[mid], cn2 = N2[mid];
+        if (!SweepConvexMidOff && sampleK[mid] < order.Count && order[sampleK[mid]].Edge.Curve is { } mc)
+        {
+            var (fe1, fe2) = edgeFaces[sampleK[mid]];
+            var q = mc.PointAt(0.5 * (mc.T0 + mc.T1));
+            Vector3d qn1 = SmoothNormal(fe1, q, tol), qn2 = SmoothNormal(fe2, q, tol);
+            if (qn1.LengthSquared > 1e-18 && qn2.LengthSquared > 1e-18) { cp = q; cn1 = qn1.Normalized(); cn2 = qn2.Normalized(); }
+        }
+        if (!Convex(bodies, cp, cn1, cn2))
         { refusal = round ? "the swept round on a concave chain is not implemented yet"
                           : "the swept chamfer on a concave chain is not implemented yet"; return null; }
 
@@ -4529,6 +4541,7 @@ public static class FilletOp
     /// Нормали треугольников гранёной грани скачут между полосами (у скругления на 7°),
     /// и сечения протянутого резца, поставленные часто, перехлёстывались.
     /// </summary>
+    static readonly bool SweepConvexMidOff = Environment.GetEnvironmentVariable("P3D_SWEEPCONVEXMID") == "0";
     private static Vector3d SmoothNormal(TFace face, Vector3d p, double tol)
     {
         // ЗНАК — ОТ БЛИЖАЙШЕГО ТРЕУГОЛЬНИКА ГРАНИ. Сама нормаль ниже берётся из точной

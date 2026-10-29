@@ -32,19 +32,34 @@ public static class KernelWarmup
     /// <summary>Прогрев закончен (время, мс); null — не закончен или не шёл.</summary>
     public static double? DoneMs { get; private set; }
 
+    /// <summary>
+    /// k136 (замечание 29.10, п. 1: «загрузка документа по-прежнему длительная»): ПРОГРЕВ НЕ МЕШАЕТ ПЕРЕСТРОЕНИЮ ОТКРЫТОГО
+    /// ДОКУМЕНТА. Открытие файла с операциями сразу показывает сетку из файла и перестраивает деталь в фоне — это перестроение
+    /// само прогревает ядро. Прогрев шёл параллельно и отнимал процессор (на 2 ядрах — 8–13 с), и деталь становилась
+    /// доступной для правки позже. Теперь прогрев не запускается при открытии документа с операциями и останавливается,
+    /// если такой документ открыт во время прогрева. Мутация P3D_WARMUPYIELD=0.
+    /// </summary>
+    public static readonly bool YieldOff = Environment.GetEnvironmentVariable("P3D_WARMUPYIELD") == "0";
+    static volatile bool _stop;
+    public static bool Stopped => _stop;
+    /// <summary>Открыт документ с операциями: прогрев не нужен (его заменит перестроение документа).</summary>
+    public static void Yield() { if (!YieldOff) _stop = true; }
+    public static bool ShouldSkipFor(Parametric3D.App.Services.DocumentSession s) => !YieldOff && (s.Part?.Features.Count ?? 0) > 0;
+
     public static void Start(int delayMs = 1500)
     {
-        if (!Enabled) return;
+        if (!Enabled || _stop) return;
         var t = new Thread(() =>
         {
             try
             {
                 Thread.Sleep(delayMs);
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                Run();
+                Run(yieldable: true);
                 DoneMs = sw.Elapsed.TotalMilliseconds;
                 Core.AppLog.Write($"kernel warm-up done in {DoneMs:0} ms");
             }
+            catch (OperationCanceledException) { Core.AppLog.Write("kernel warm-up stopped: a document with operations was opened"); }
             catch (Exception ex) { Core.AppLog.Write("kernel warm-up", ex); }
         })
         { IsBackground = true, Priority = ThreadPriority.BelowNormal, Name = "kernel warm-up" };
@@ -52,13 +67,13 @@ public static class KernelWarmup
     }
 
     /// <summary>Сцена прогрева (синхронно; для проверок): число операций с ошибкой (0 — сцена построилась).</summary>
-    public static int Run()
+    public static int Run(bool yieldable = false)
     {
         int errors = 0;
         var part = new Part("warm-up") { FreeFormDoc = true };
         var node = new FreeFormFeature("warm-up");
         part.AddFeature(node);
-        void Add(Feature f) { f.FreeForm = node.Key; f.Frozen = true; part.AddFeature(f); part.Rebuild(null); if (f.Error != null) { errors++; Core.AppLog.Write($"warm-up: {f.Name}: {f.Error.Split('\n')[0]}"); } }
+        void Add(Feature f) { if (yieldable && _stop) throw new OperationCanceledException("kernel warm-up yielded to the opened document"); f.FreeForm = node.Key; f.Frozen = true; part.AddFeature(f); part.Rebuild(null); if (f.Error != null) { errors++; Core.AppLog.Write($"warm-up: {f.Name}: {f.Error.Split('\n')[0]}"); } }
         Add(new FFPrimitiveFeature { Shape = FFPrimitive.Cylinder, A = new ValueRef(6), B = new ValueRef(16) });
         Add(new FFPrimitiveFeature { Shape = FFPrimitive.Sphere, A = new ValueRef(8) });
         Add(new FFTransformFeature { Mode = FFXform.Move, BodyNames = { "Тело 1" }, Dx = new ValueRef(3), Dz = new ValueRef(2) });

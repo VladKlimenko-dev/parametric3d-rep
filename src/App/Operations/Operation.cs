@@ -119,6 +119,10 @@ public abstract class Operation
         }
     }
 
+    /// <summary>k137: поле с точками эскиза включает точки видимых эскизов (своя логика — у протяжки).</summary>
+    protected virtual bool AutoPointSketches => true;
+    static readonly bool OpSketchPointsOff = Environment.GetEnvironmentVariable("P3D_OPSKETCHPOINTS") == "0";
+    private bool _autoPoints;
     public void Activate(RefField? f)
     {
         ActiveRef = f;
@@ -131,6 +135,16 @@ public abstract class Operation
         if (f != null && Panel != null) foreach (var r in Panel.Refs) if (!ReferenceEquals(r, f) && !r.IsSet && r.Live) flt |= r.Filter;
         sel.Filter = flt;
         sel.Predicate = f?.Prefer;
+        // k137 (замечание 29.10, 18:13, п. 5): ТОЧКИ ВИДИМЫХ ЭСКИЗОВ — ПРИ ПОЛЕ, ПРИНИМАЮЩЕМ ТОЧКИ ЭСКИЗА. Вне правки эскиза его
+        // точки не рисовались и не ловились: «кривая через точки» (и опорные точка, ось, плоскость по точкам) брали точки
+        // только тела. Теперь концы и центры кривых видимых эскизов детали видны и выбираются, пока активно такое поле.
+        // Мутация P3D_OPSKETCHPOINTS=0.
+        if (AutoPointSketches && !OpSketchPointsOff)
+        {
+            if (flt.HasFlag(PickFilter.SketchPoints) && Part is { } part)
+            { W.ViewPort.SetPointSketches(part.Sketches.Where(s => s.Visible).Select(s => s.Id).ToList()); _autoPoints = true; }
+            else if (_autoPoints) { W.ViewPort.SetPointSketches(null); _autoPoints = false; }
+        }
         Syncing = true;
         try
         {

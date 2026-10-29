@@ -326,7 +326,8 @@ public static class DocumentFile
                 Line3DItem ln => new DatumDto { Kind = "line", P = V(ln.A, ln.B) },
                 DatumCsys cs => new DatumDto { Kind = "csys", P = V(cs.Frame.Origin, cs.Frame.U, cs.Frame.V) },
                 DatumCurve dc => new DatumDto { Kind = "curve", P = V(dc.Points.ToArray()), Source = dc.Source,
-                    Cv = dc.IsNurbs ? V(dc.Control!.ToArray()) : null, Wt = dc.IsNurbs ? dc.Weights : null, Kn = dc.IsNurbs ? dc.Knots : null, Deg = dc.IsNurbs ? dc.Degree : null },
+                    Cv = dc.IsNurbs ? V(dc.Control!.ToArray()) : null, Wt = dc.IsNurbs ? dc.Weights : null, Kn = dc.IsNurbs ? dc.Knots : null, Deg = dc.IsNurbs ? dc.Degree : null,
+                    Method = dc.Mode >= 0 ? dc.Mode : null, In = dc.Inputs.Count > 0 ? V(dc.Inputs.ToArray()) : null, Flip = dc.Closed ? true : null, Sm = dc.Smooth ? null : false },
                 _ => null,
             };
             if (d == null) continue;
@@ -368,6 +369,11 @@ public static class DocumentFile
             {
                 ndc.Control = Enumerable.Range(0, cv.Count / 3).Select(i => At(cv, i)).ToList();
                 ndc.Weights = d.Wt; ndc.Knots = d.Kn; ndc.Degree = d.Deg ?? 3;
+            }
+            if (it is DatumCurve kdc)
+            {   // k137: построение — для правки
+                kdc.Mode = d.Method ?? -1; kdc.Closed = d.Flip ?? false; kdc.Smooth = d.Sm ?? true;
+                if (d.In is { Count: >= 3 } inp) kdc.Inputs.AddRange(Enumerable.Range(0, inp.Count / 3).Select(i => At(inp, i)));
             }
             it.Visible = !d.Hidden;
             part.Add(it);
@@ -1517,6 +1523,9 @@ public static class DocumentFile
         public List<double>? Wt { get; set; }
         public List<double>? Kn { get; set; }
         public int? Deg { get; set; }
+        /// <summary>k137: точки построения опорной кривой «через точки»; гладкая (false — нет).</summary>
+        public List<double>? In { get; set; }
+        public bool? Sm { get; set; }
     }
 
     private sealed class DocDto

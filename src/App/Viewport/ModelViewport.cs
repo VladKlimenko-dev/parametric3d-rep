@@ -350,6 +350,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     /// <summary>Кадр рисуется в потоке окна (null — кадров ещё не было).</summary>
     public bool? RenderOnUiThread { get; private set; }
 
+    static readonly bool StartDbg = Environment.GetEnvironmentVariable("P3D_STARTDBG") == "1";
     protected override void OnOpenGlRender(GlInterface gl, int fb)
     {
         if (!_glReady) return;
@@ -377,7 +378,9 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
                 if (Transition.IsRunning) RequestNextFrameRendering();
             }
 
+            long tPrep = System.Diagnostics.Stopwatch.GetTimestamp();
             using (Diagnostics.UiTimes.Measure("вид: подготовка сцены")) PrepareScene();
+            if (StartDbg && FramesRendered < 4) Console.WriteLine($"START frame {FramesRendered} at {(DateTime.Now - System.Diagnostics.Process.GetCurrentProcess().StartTime).TotalMilliseconds:0} ms since process start, prepare {System.Diagnostics.Stopwatch.GetElapsedTime(tPrep).TotalMilliseconds:0} ms");
             var f = Frame(s);
 
             // запросы выбора (мышь) — номер под курсором читается до кадра
@@ -845,7 +848,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         }
         if (!req.Click) return;
         // п. 7: Ctrl — добавить или (повторный щелчок) убрать; Shift — добавить
-        bool toggle = req.Mods.HasFlag(KeyModifiers.Control), add = req.Mods.HasFlag(KeyModifiers.Shift);
+        bool toggle = req.Mods.HasFlag(KeyModifiers.Control), add = req.Mods.HasFlag(KeyModifiers.Shift) || AccumulatePicks?.Invoke() == true;
         if (r.IsEmpty) { if (!add && !toggle) Selection.Clear(); return; }
         if (TryReference(r)) return;
         // u13: режим выбора «операция» и др. — щелчок по грани заменяется (операция, создавшая грань)
@@ -866,6 +869,8 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         foreach (var g in group.Skip(1)) Selection.Select(g, additive: true);
     }
 
+    /// <summary>k137: щелчок добавляет к выбору без Shift (поле «точки по порядку»).</summary>
+    public Func<bool>? AccumulatePicks;
     /// <summary>Ребро → касательная цепочка рёбер (задаёт окно; null — только само ребро).</summary>
     public Func<PickRef, List<PickRef>>? ExpandEdge;
 

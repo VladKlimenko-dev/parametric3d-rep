@@ -172,6 +172,27 @@ static partial class Program
         Parametric3D.Kernel.Ops.FilletOp.BuiltTool = t => builtTool ??= TopologyClone.Deep(t);
         Feature f = round ? new RoundFeature("R") { Radius = new ValueRef(size) } : new ChamferFeature("C") { D1 = new ValueRef(size), D2 = new ValueRef(size) };
         if (f is RoundFeature rf) rf.Edges.Add(EdgeRef.Of(e)); else ((ChamferFeature)f).Edges.Add(EdgeRef.Of(e));
+        if (Environment.GetEnvironmentVariable("BLENDCHAIN") == "1")
+        {   // разбор: и все рёбра, касательно продолжающие выбранное (как цепочка в приложении)
+            var all = p.Bodies.SelectMany(b => b.Edges).ToList(); var chain = new List<TEdge> { e };
+            for (bool grew = true; grew;)
+            {
+                grew = false;
+                foreach (var q in all)
+                {
+                    if (chain.Contains(q) || q.Curve == null) continue;
+                    foreach (var c in chain.ToList())
+                        foreach (var (v, tq, tc) in new[] { (q.V0, q.Curve.TangentAt(q.Curve.T0), 0), (q.V1, q.Curve.TangentAt(q.Curve.T1), 1) })
+                            if ((ReferenceEquals(v, c.V0) || ReferenceEquals(v, c.V1)) && c.Curve != null)
+                            {
+                                var tcv = ReferenceEquals(v, c.V0) ? c.Curve.TangentAt(c.Curve.T0) : c.Curve.TangentAt(c.Curve.T1);
+                                if (Math.Abs(OpenTK.Mathematics.Vector3d.Dot(tq.Normalized(), tcv.Normalized())) > 0.9995 && !chain.Contains(q)) { chain.Add(q); grew = true; }
+                            }
+                }
+            }
+            foreach (var q in chain.Skip(1)) { if (f is RoundFeature rf2) rf2.Edges.Add(EdgeRef.Of(q)); else ((ChamferFeature)f).Edges.Add(EdgeRef.Of(q)); }
+            Console.WriteLine($"chain: {chain.Count} edge(s)");
+        }
         p.AddFeature(f);
         if (Environment.GetEnvironmentVariable("BLENDDEFER") == "1")
         {   // как приложение: обычный расчёт с отложенными проверками (Document, k126)
@@ -193,9 +214,19 @@ static partial class Program
             var u = new List<TSolid> { TopologyClone.Deep(bodyBefore) }; var wu = new List<string>();
             try { Parametric3D.Kernel.Ops.BooleanOp.Unite(u, TopologyClone.Deep(builtTool), wu); } catch (Exception ex) { Console.WriteLine("unite: " + ex.Message); }
             if (u.Count == 1) { Step("U", u[0]); var vu = SolidValidator.Validate(u[0]); Console.WriteLine("DUMP U valid " + vu.IsValid + " " + string.Join(" / ", vu.Issues.Where(i => i.Severity == ValidationSeverity.Error).Take(3))); }
-            Console.WriteLine($"DUMP vA {AnalyticVolume.Of(bodyBefore)} vB {AnalyticVolume.Of(builtTool)} vU {(u.Count == 1 ? AnalyticVolume.Of(u[0]) : null)} {string.Join(" / ", wu.TakeLast(2))}");
+            Console.WriteLine($"DUMP vA {AnalyticVolume.Of(bodyBefore)} vB {AnalyticVolume.Of(builtTool)} vBmesh {Parametric3D.Kernel.Tess.MassProps.Volume(Parametric3D.Kernel.Tess.Tessellator.Tessellate(builtTool))} Bbox {builtTool.Bounds.Min} {builtTool.Bounds.Max} vU {(u.Count == 1 ? AnalyticVolume.Of(u[0]) : null)} {string.Join(" / ", wu.TakeLast(2))}");
         }
         Console.WriteLine("ERROR: " + (f.Error?.Replace('\n', '#') ?? "none"));
+        if (Environment.GetEnvironmentVariable("BLENDSAVE") is { Length: > 0 } bsave) File.WriteAllText(bsave, Parametric3D.Model.DocumentFile.Save(p, pars));
+        if (Environment.GetEnvironmentVariable("BLENDFACES") == "1")
+            foreach (var fz in p.Bodies.SelectMany(b => b.Faces))
+            {
+                var pts = new List<OpenTK.Mathematics.Vector3d>(); foreach (var ce in fz.Loops.SelectMany(l => l.CoEdges)) ce.Tessellate(pts, true);
+                if (pts.Count == 0) continue;
+                double rmin = pts.Min(q => Math.Sqrt(q.X * q.X + q.Y * q.Y)), rmax = pts.Max(q => Math.Sqrt(q.X * q.X + q.Y * q.Y)), zmin = pts.Min(q => q.Z), zmax = pts.Max(q => q.Z);
+                if (zmax > -5) Console.WriteLine($"FACE {fz.Tag} {GeometryAudit.AuthoritativeSurface(fz)?.GetType().Name} r {rmin:0.###}..{rmax:0.###} z {zmin:0.###}..{zmax:0.###}");
+            }
+        foreach (var wm in p.Warnings.Where(x => x.Contains("Round") || x.Contains("Chamfer") || x.Contains("Boolean"))) Console.WriteLine("WARN " + wm);
         if (Parametric3D.Kernel.Ops.BooleanOp.LastInvalidResult is { } bad)
         {
             var v = SolidValidator.ValidateBRep(bad);

@@ -50,6 +50,7 @@ internal static class MoreFields
 
 public sealed class SweepOp : FeatureOp<SweepFeature>
 {
+    protected override bool AutoPointSketches => false;   // k137: точки — только траектории (StartSectionPick)
     /// <summary>
     /// k107: состояние протяжки между её эскизами (как в Creo: из панели протяжки начать эскиз траектории или сечения и
     /// вернуться в неё с тем же выбором и значениями).
@@ -253,13 +254,32 @@ public sealed class LoftOp : FeatureOp<LoftFeature>
 
     public override void Build(OpPanel p)
     {
-        _secs = p.Ref(MoreFields.Sketches("Сечения"));
-        _guides = p.Ref(MoreFields.Sketches("Направляющие", optional: true));
+        // k137 (замечание 29.10, 18:13, пп. 3–4): у полей и флажков — подсказки, что выбирать и что они делают; флажок
+        // «по нормалям крайних сечений» (касательная к нормали первого и последнего эскиза — было в ядре, не было в панели)
+        _secs = p.Ref(new RefField
+        {
+            Label = "Сечения", Filter = PickFilter.SketchCurves, Accept = Refs.IsSketch,
+            Describe = r => L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?"),
+            Tip = "Замкнутые эскизы — сечения перехода, по порядку выбора (не меньше двух). Число сторон может различаться: у сечения с меньшим числом сторон самая длинная сторона делится. Контуры-отверстия сопоставляются по положению.",
+        });
+        _guides = p.Ref(new RefField
+        {
+            Label = "Направляющие", Filter = PickFilter.SketchCurves, Accept = Refs.IsSketch, Optional = true,
+            Describe = r => L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?"),
+            Tip = "Не обязательно. Эскизы с кривыми (отрезок, дуга меньше 180°, сплайн), каждая из которых проходит через соответственные вершины всех сечений: кривая задаёт, по какому пути вершина переходит от сечения к сечению. Без направляющих путь вершин — прямая или плавная кривая.",
+        });
         if (Editing) { _secs.Kept = F.SectionSketchIds.Count; _guides.Kept = F.GuideSketchIds.Count; }
         p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
-        p.Check("Гладкий переход", () => F.Smooth, v => F.Smooth = v);
-        p.Note("Сечения — по порядку выбора (не меньше двух).");
+        p.Check("Гладкий переход", () => F.Smooth, v => F.Smooth = v,
+                tip: "Включено — одна плавная поверхность через все сечения, без изломов на средних сечениях. Выключено — прямые между соседними сечениями (излом на каждом среднем сечении).");
+        p.Check("По нормалям крайних сечений", () => Math.Abs(F.StartTangent) > 1e-12 || Math.Abs(F.EndTangent) > 1e-12,
+                v => { F.StartTangent = F.EndTangent = v ? NormalTangent : 0; if (v) F.Smooth = true; },
+                tip: "Переход выходит из первого сечения и входит в последнее перпендикулярно плоскостям их эскизов, а между ними плавно поворачивается от одного к другому. Включает гладкий переход. С направляющими не сочетается.");
+        p.Note("Сечения — по порядку выбора (не меньше двух). Наведите на поле или флажок — подсказка.");
     }
+
+    /// <summary>k137: длина касательной к нормали крайнего сечения — доля расстояния между центрами крайних сечений.</summary>
+    public const double NormalTangent = 0.5;
 
     protected override void SeedRefs() => Seed(_secs);
 
