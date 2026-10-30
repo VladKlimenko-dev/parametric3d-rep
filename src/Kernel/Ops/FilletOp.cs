@@ -3881,6 +3881,8 @@ public static class FilletOp
 
     /// <summary>ДИАГНОСТИКА: сечения протянутого резца (точка ребра, A, B, O).</summary>
     public static Action<Vector3d, Vector3d, Vector3d, Vector3d>? SweepSections;
+    /// <summary>ДИАГНОСТИКА (k142): все сечения одной попытки протянутого резца разом — точка ребра и точки A, B.</summary>
+    public static Action<IReadOnlyList<(Vector3d P, Vector3d A, Vector3d B, Vector3d N1, Vector3d N2)>>? SweepSectionSet;
 
     private static TSolid? BuildSweptChamfer(List<TSolid> bodies, List<(TEdge Edge, bool Swap)> chain,
                                              double d1, double d2, out string? refusal, bool round = false,
@@ -3901,6 +3903,9 @@ public static class FilletOp
     public static long SmoothSkipped;
     static readonly bool SweepConcaveOff = Environment.GetEnvironmentVariable("P3D_SWEEPCONCAVE") == "0";
     static readonly bool FaceSideOff = Environment.GetEnvironmentVariable("P3D_FACESIDE") == "0";
+    static readonly bool NormalContinuityOff = Environment.GetEnvironmentVariable("P3D_NORMALCONTINUITY") == "0";
+    static readonly bool SideMajorityOff = Environment.GetEnvironmentVariable("P3D_SIDEMAJORITY") == "0";
+    static readonly bool EndNormalInsetOff = Environment.GetEnvironmentVariable("P3D_ENDNORMALINSET") == "0";
     public static long SweptFills;
 
     private static TSolid? BuildSweptChamfer(List<TSolid> bodies, List<(TEdge Edge, bool Swap)> chain,
@@ -4041,6 +4046,7 @@ public static class FilletOp
         var A = new Vector3d[n]; var B = new Vector3d[n]; var O = new Vector3d[n]; var T = new Vector3d[n];
         var N1 = new Vector3d[n]; var N2 = new Vector3d[n]; var F1v = new Vector3d[n]; var F2v = new Vector3d[n];
         var A0 = new Vector3d[n]; var B0 = new Vector3d[n];      // точки фаски до продления наружу
+        var sideVote = new int[n];                               // k142: +1 — треугольники за разворот, −1 — против
 
         // k141 (seq_s108_2): СТОРОНА ГРАНИ — ПО ЕЁ ТРЕУГОЛЬНИКАМ. Направление вдоль грани от ребра выбиралось правилом
         // «против нормали другой грани» — верным только у выпуклого ребра. У вогнутого ребра лофта (перехват сечения, излом
@@ -4101,6 +4107,34 @@ public static class FilletOp
             chainDir = chainDir.Normalized();
 
             Vector3d n1 = SmoothNormal(f1, p, tol), n2 = SmoothNormal(f2, p, tol);
+            // k142: НОРМАЛИ НА КОНЦЕ ОТКРЫТОЙ ЦЕПОЧКИ — ЧУТЬ ВНУТРИ РЕБРА. В конечной вершине (ребро упирается в соседнюю грань)
+            // проекция на точную поверхность грани — на её краю, и нормаль там скачет: у края прежнего скругления
+            // (SectionSurface) — на 6° и больше. Последнее сечение разворачивалось, отрезок к нему выходил с обратным знаком
+            // объёма, и протянутый резец отказывал «складкой» / «самопересечением» (корпус: s101 R0.51, s102 R3.57 и фаска 6).
+            // Если нормаль в вершине расходится с нормалью в 5% пути к соседнему сечению больше чем на 2°, берётся
+            // внутренняя. Мутация P3D_ENDNORMALINSET=0.
+            if (!EndNormalInsetOff && !closed && n > 1 && (i == 0 || i == n - 1))
+            {
+                var q = p + (samples[i == 0 ? 1 : n - 2].P - p) * 0.05;
+                Vector3d m1 = SmoothNormal(f1, q, tol), m2 = SmoothNormal(f2, q, tol);
+                const double cos2 = 0.99939;
+                if (m1.LengthSquared > 1e-18 && m2.LengthSquared > 1e-18 &&
+                    (Vector3d.Dot(m1.Normalized(), n1.Normalized()) < cos2 || Vector3d.Dot(m2.Normalized(), n2.Normalized()) < cos2))
+                {
+                    SweepDebug?.Invoke($"конец {i}: нормали в вершине {n1:0.###} {n2:0.###} → внутри {m1:0.###} {m2:0.###}");
+                    n1 = m1; n2 = m2;
+                }
+            }
+
+            // k142: ЗНАК НОРМАЛИ — НЕПРЕРЫВНО ВДОЛЬ ЦЕПОЧКИ. Знак нормали даёт ближайший треугольник грани; у конечной вершины
+            // ближайшим бывает треугольник другой стороны (s102 R3.57: у предпоследнего сечения n1 развёрнута, скалярное
+            // произведение с соседней −1) — сечение выворачивалось, резец «складывался». Нормаль, развёрнутая против
+            // предыдущего сечения (cos < −0.5), разворачивается обратно. Мутация P3D_NORMALCONTINUITY=0.
+            if (!NormalContinuityOff && i > 0 && N1[i - 1].LengthSquared > 0.5)
+            {
+                if (Vector3d.Dot(n1, N1[i - 1]) < -0.5) { SweepDebug?.Invoke($"сечение {i}: нормаль 1 развёрнута — обратно"); n1 = -n1; }
+                if (Vector3d.Dot(n2, N2[i - 1]) < -0.5) { SweepDebug?.Invoke($"сечение {i}: нормаль 2 развёрнута — обратно"); n2 = -n2; }
+            }
 
             // КАСАТЕЛЬНАЯ — ПО ГЛАДКИМ НОРМАЛЯМ: ребро — пересечение двух поверхностей,
             // и его направление — n1 × n2. По соседним точкам ломаной оно скачет:
@@ -4124,8 +4158,29 @@ public static class FilletOp
             {
                 // обе грани согласны: сторона по треугольникам (у выпуклого ребра совпадает с прежним правилом)
                 bool flip1 = Vector3d.Dot(g1, w1) < 0, flip2 = Vector3d.Dot(g2, w2) < 0;
-                if (flip1 && flip2) { g1 = -g1; g2 = -g2; }
+                if (flip1 && flip2) sideVote[i] = 1; else if (!flip1 && !flip2) sideVote[i] = -1;
             }
+            T[i] = t; N1[i] = n1; N2[i] = n2; F1v[i] = g1; F2v[i] = g2;
+        }
+
+        // k142: СТОРОНА ГРАНЕЙ — ОДНА НА ВСЮ ЦЕПОЧКУ, ПО БОЛЬШИНСТВУ СЕЧЕНИЙ. Поштучно (k141) одиночное сечение, у которого
+        // ближайший треугольник оказался не тем (s102 фаска 6: сечение 77 из 167), разворачивалось целиком — точки фаски
+        // уходили на другую сторону ребра, и резец «пересекал сам себя». Мутация P3D_SIDEMAJORITY=0 (поштучно, как в k141).
+        {
+            int votes = sideVote.Sum();
+            for (int i = 0; i < n; i++)
+            {
+                bool flip = SideMajorityOff ? sideVote[i] > 0 : votes > 0;
+                if (flip) { F1v[i] = -F1v[i]; F2v[i] = -F2v[i]; }
+            }
+            if (!SideMajorityOff && sideVote.Any(v => v != 0 && (v > 0) != (votes > 0)))
+                SweepDebug?.Invoke($"сторона граней: по большинству ({votes}), несогласных сечений {sideVote.Count(v => v != 0 && (v > 0) != (votes > 0))}");
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            var (p, f1, f2) = samples[i];
+            Vector3d n1 = N1[i], n2 = N2[i], g1 = F1v[i], g2 = F2v[i];
             A[i] = OntoFaceNear(f1, NeighbourFaces(i, first: true), p + g1 * d1);
             B[i] = OntoFaceNear(f2, NeighbourFaces(i, first: false), p + g2 * d2);
 
@@ -4155,7 +4210,6 @@ public static class FilletOp
                 B[i] -= hyp * past;
             }
             O[i] = p + (n1 + n2).Normalized() * (reach + Math.Max(0.1, 0.1 * Math.Max(d1, d2)));
-            T[i] = t; N1[i] = n1; N2[i] = n2; F1v[i] = g1; F2v[i] = g2;
         }
 
         // ФАСКА КРУПНЕЕ СКРУГЛЕНИЯ — прежнее объяснение, как у резца по дуге: точка фаски
@@ -4216,6 +4270,7 @@ public static class FilletOp
         bool fillLocal = fill;
 
         if (SweepSections != null) for (int i = 0; i < n; i++) SweepSections(samples[i].P, A[i], B[i], O[i]);
+        SweepSectionSet?.Invoke(Enumerable.Range(0, n).Select(i => (samples[i].P, A[i], B[i], N1[i], N2[i])).ToList());
 
         // ---- сечения как многоугольники
         //

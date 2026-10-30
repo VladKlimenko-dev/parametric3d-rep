@@ -594,7 +594,7 @@ static partial class Program
                 var mid = e.Curve!.PointAt(0.5 * (e.Curve.T0 + e.Curve.T1));
                 string tag = $"s{sd} step {st} {(round ? "R" : "C")}{size} edge ({mid.X:0.##},{mid.Y:0.##},{mid.Z:0.##}){(chain.Count > 1 ? $" chain {chain.Count}" : "")}";
                 var problems = new List<string>();
-                if (f.Error != null && LegitRefusal(f.Error)) { legit++; Log(new { tag, ms, legit = f.Error.Split('\n').Last(), full = f.Error }); p.RemoveFeature(f); p.Rebuild(null); continue; }
+                if (f.Error != null && LegitRefusal(f.Error)) { legit++; Log(new { tag, ms, legit = f.Error.Split('\n').Last(), full = f.Error }); try { File.WriteAllText(Path.Combine(outDir, $"legit_s{sd}_{st}.p3d"), DocumentFile.Save(p)); } catch { } p.RemoveFeature(f); p.Rebuild(null); continue; }
                 if (f.Error != null) { refused++; problems.Add("refused: " + f.Error.Split('\n').Last()); }
                 else if (p.Bodies.Count != 1) problems.Add($"the body split into {p.Bodies.Count} bodies");
                 else

@@ -15,7 +15,8 @@ static partial class Program
     /// Мутации (каждая роняет хотя бы один случай): P3D_SLITLOOPS, P3D_MICROLOOP4, P3D_ISLANDS, P3D_TRACEEXACT,
     /// P3D_TANGENTINSET, P3D_ZEROAFTERHEAL, P3D_LINEFACET, P3D_SLIVERPIECES, P3D_SLIVERSTRIPS, P3D_ARCONSURF, P3D_BLENDCRUMBS,
     /// P3D_DROPTINYCAVITY (см. KRN06-LOFT-CORPUS-K140-MUT в отчёте k140); k140 — P3D_REGIONNEAREST (seq_s105_4), P3D_PATCHFOLD
-    /// (seq_s106_2); k141 — P3D_FACESIDE (seq_s108_2), P3D_REACHFACERAYS (fail_s71), P3D_WALLCAPMIN (fail_s58).
+    /// (seq_s106_2); k141 — P3D_FACESIDE (seq_s108_2), P3D_REACHFACERAYS (fail_s71), P3D_WALLCAPMIN (fail_s58);
+    /// k142 — P3D_NORMALCONTINUITY (seq_s106_4: фаска 0.3 цепочки из 4, прежде «both faces must be planar»).
     /// </summary>
     static void Krn06LoftCorpusK140Checks()
     {
