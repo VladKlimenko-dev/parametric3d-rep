@@ -19,6 +19,7 @@ namespace Parametric3D.Kernel.Ops;
 public static class LoftOp
 {
     static readonly bool HolesOff = Environment.GetEnvironmentVariable("P3D_LOFTHOLES") == "0";
+    static readonly bool UnequalRuledOff = Environment.GetEnvironmentVariable("P3D_LOFTUNEQUALRULED") == "0";
     static readonly bool OrderOff = Environment.GetEnvironmentVariable("P3D_LOFTORDER") == "0";
     static readonly bool AmbigOff = Environment.GetEnvironmentVariable("P3D_LOFTAMBIG") == "0";
 
@@ -147,7 +148,8 @@ public static class LoftOp
             var outerSecs = ExactSections(sections.Select(x => OneLoop(x, x.Outers.First())).ToList());
             var holeSecs = chains.Select(ch => ExactSections(ch.Select((h, k) => OneLoop(sections[k], h)).ToList())).ToList();
             bool arcs = outerSecs != null && (outerSecs.Any(x => x.Loop.Any(c => c is ArcCurve3 or BezierCurve3)) || holeSecs.Any(hs => hs != null && hs.Any(x => x.Loop.Any(c => c is ArcCurve3 or BezierCurve3))));
-            if (outerSecs != null && holeSecs.All(h => h != null) && (_smooth || arcs) && !(sections.Count == 2 && _tan0 == 0 && _tan1 == 0 && CoaxialCircles(OneLoop(sections[0], sections[0].Outers.First()), OneLoop(sections[1], sections[1].Outers.First())) != null))
+            bool unequal = !UnequalRuledOff && outerSecs != null && (outerSecs.Select(x => x.Loop.Count).Distinct().Count() > 1 || holeSecs.Any(hs => hs != null && hs.Select(x => x.Loop.Count).Distinct().Count() > 1));
+            if (outerSecs != null && holeSecs.All(h => h != null) && (_smooth || arcs || unequal) && !(sections.Count == 2 && _tan0 == 0 && _tan1 == 0 && CoaxialCircles(OneLoop(sections[0], sections[0].Outers.First()), OneLoop(sections[1], sections[1].Outers.First())) != null))
             {
                 string? whyH = null;
                 var hollow = DirectRound.NurbsLoftHollow(outerSecs, holeSecs.Select(h => (IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)>)h!).ToList(), _smooth, ref whyH, _tan0, _tan1);
@@ -180,7 +182,10 @@ public static class LoftOp
         // столько дуг, сколько звеньев у соседа) — NURBS-грани по звеньям, линейчатый или гладкий (DirectRound.NurbsLoft).
         // Гладкий без этого пути не строится (отказ), линейчатый — прежним путём по ломаным. Мутация P3D_LOFTNURBS=0.
         // многоугольники (без дуг) у линейчатого лофта — прежним точным путём по вершинам (призматоид, P3D_LOFTCORNERS)
-        if (!DirectRound.LoftNurbsOff && ExactSections(sections) is { } secs && (_smooth || secs.Any(x => x.Loop.Any(c => c is ArcCurve3 or BezierCurve3))))
+        // k140 (корпус лофтов): многоугольники с разным числом сторон у линейчатого лофта — тоже точным путём (сторона
+        // делится, EqualizeLoop): прежний путь по ломаным давал многогранное тело из 4 граней. Мутация P3D_LOFTUNEQUALRULED=0.
+        if (!DirectRound.LoftNurbsOff && ExactSections(sections) is { } secs && (_smooth || secs.Any(x => x.Loop.Any(c => c is ArcCurve3 or BezierCurve3))
+            || (!UnequalRuledOff && secs.Select(x => x.Loop.Count).Distinct().Count() > 1)))
         {
             string? why = null;
             var exact = DirectRound.NurbsLoft(secs, _smooth, ref why, null, _tan0, _tan1);

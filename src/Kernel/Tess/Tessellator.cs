@@ -119,6 +119,8 @@ public static class Tessellator
     // (серия 9, случай 50: фасеты плоской грани x = 6.43 после второй булевой не согласованы с соседями — 45 сторон без
     // пары, видимая сетка годна). Мутация P3D_POLYCHOICE=0.
     static readonly bool PolyNormalFastOff = Environment.GetEnvironmentVariable("P3D_POLYNORMALFAST") == "0";
+    static readonly bool PolyOrphanOff = Environment.GetEnvironmentVariable("P3D_POLYORPHANTAG") == "0";
+    public static long PolyOrphanTags;
     static readonly bool PolySrcDbg = Environment.GetEnvironmentVariable("P3D_POLYSRCDBG") == "1";
     static readonly bool PolyChoiceOff = Environment.GetEnvironmentVariable("P3D_POLYCHOICE") == "0";
     // g.11: ТРЕТИЙ ИСТОЧНИК — САМИ ТОЧНЫЕ МНОГОУГОЛЬНИКИ ТЕЛА (ExactAdapter.ToCsg: кольца без T-стыков, вершины реестра
@@ -157,8 +159,8 @@ public static class Tessellator
             MeshData md;
             var swSrc = System.Diagnostics.Stopwatch.StartNew();
             try { using (Diagnostics.Prof.Time("показ многогранного: источник " + src)) md = TessellateCore(solid, facets, src); }
-            catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { continue; }
-            if (md.Indices.Length == 0) continue;
+            catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { if (PolySrcDbg) Console.Error.WriteLine($"POLYSRC {src}: failed {ex.Message}"); continue; }
+            if (md.Indices.Length == 0) { if (PolySrcDbg) Console.Error.WriteLine($"POLYSRC {src}: empty"); continue; }
             int d = md.BrokenFaces.Count > 0 ? int.MaxValue - 1 : MeshData.FloatDefects(md);   // повреждённая грань хуже любых дефектов
             if (PolySrcDbg) Console.Error.WriteLine($"POLYSRC {src}: {swSrc.ElapsedMilliseconds} ms, tris {md.Indices.Length / 3}, defects {d}");
             if (d < bestD) { best = md; bestD = d; }
@@ -265,7 +267,16 @@ public static class Tessellator
             List<Vector3d> CentsOf(int i) { if (!cents.TryGetValue(i, out var l)) { l = new(); if (faces[i].Surface is Surfaces.FacetedSurface fz) foreach (var (a, b, c) in fz.Facets.ReadView) l.Add((a + b + c) / 3); cents[i] = l; } return l; }
             foreach (var cp in csg)
             {
-                if (!byTag.TryGetValue(cp.Tag, out var cand)) return new MeshData();      // метка без грани — источник непригоден
+                // k140: МЕТКА БЕЗ ГРАНИ — щепка грани, слитая сборкой граней с соседней (MergeSliverPieces): её многоугольник
+                // идёт к грани с ближайшим треугольником разбиения. Прежде источник отвергался целиком, и показ брал фасеты
+                // с дефектами (сторона кратности 3 у хорды скругления R0.3 вдоль стенки лофта). Мутация P3D_POLYORPHANTAG=0.
+                if (!byTag.TryGetValue(cp.Tag, out var cand))
+                {
+                    if (PolyOrphanOff) { if (PolySrcDbg) Console.Error.WriteLine($"POLYSRC tag {cp.Tag} has no face"); return new MeshData(); }
+                    byTag[cp.Tag] = cand = Enumerable.Range(0, faces.Count).Where(i => faces[i].Surface is Surfaces.FacetedSurface).ToList();
+                    if (cand.Count == 0) return new MeshData();
+                    Interlocked.Increment(ref PolyOrphanTags);
+                }
                 int fi = cand[0];
                 if (cand.Count > 1)
                 {
@@ -273,6 +284,7 @@ public static class Tessellator
                     foreach (int ci in cand) foreach (var q in CentsOf(ci)) { double d = (q - pc).LengthSquared; if (d < bd) { bd = d; fi = ci; } }
                 }
                 var face = faces[fi]; var mbF = parts[fi];
+                if (PolySrcDbg && cand.Count > 3) { var pc0 = cp.V.Aggregate(Vector3d.Zero, (a, b) => a + b) / cp.V.Count; Console.Error.WriteLine($"POLYSRC orphan tag {cp.Tag} at {pc0:0.####} → face {face.Id} {face.Tag} dist {Math.Sqrt(CentsOf(fi).Min(q => (q - pc0).LengthSquared)):E2}"); }
                 var srcS = face.Surface is Surfaces.FacetedSurface fsx ? fsx.Source : face.Surface;
                 // 21.10 (скорость): нормаль квадрики — градиентом её уравнения (без проекции на поверхность Ньютоном), и одна на
                 // точку грани (точка входит в несколько многоугольников): показ многогранного тела тор ∪ брусок 585 мс → ~100 мс.
@@ -295,6 +307,18 @@ public static class Tessellator
                     if (srcS == null || srcS.IsPlanar) return cp.N;
                     try { var n = Raw(p); if (n.LengthSquared < 1e-24) return cp.N; n = n.Normalized(); return Vector3d.Dot(n, cp.N) >= 0.866 ? n : Vector3d.Dot(-n, cp.N) >= 0.866 ? -n : cp.N; } catch { return cp.N; }
                 }
+                if (Ops.BooleanOp.PolyFan(cp.V, out var fanC) is { } fan)
+                {
+                    // k140: без игл (см. BooleanOp.PolyFan)
+                    Vector3d At(int i) => i < cp.V.Count ? cp.V[i] : fanC!.Value;
+                    foreach (var (fa, fb, fc) in fan)
+                    {
+                        var va = At(fa); var vb = At(fb); var vc = At(fc);
+                        if (va == vb || vb == vc || vc == va) continue;
+                        mbF.AddTriangle(mbF.AddVertex(va, Nrm(va)), mbF.AddVertex(vb, Nrm(vb)), mbF.AddVertex(vc, Nrm(vc)));
+                    }
+                }
+                else
                 for (int k = 1; k + 1 < cp.V.Count; k++)
                 {
                     var va = cp.V[0]; var vb = cp.V[k]; var vc = cp.V[k + 1];

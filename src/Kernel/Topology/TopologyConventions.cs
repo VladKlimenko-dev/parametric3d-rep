@@ -322,15 +322,21 @@ public static class TopologyConventions
                 int pick = -1, pickDir = 0;
                 // Сперва — полуребро, чьё прежнее направление продолжает обход, затем любое
                 // инцидентное (с разворотом).
-                for (int pass = 0; pass < 2 && pick < 0; pass++)
+                // k140: сперва — та же вершина (объект), и лишь потом — вершина в пределах допуска. У вершины с допуском
+                // в 5 мкм (ребро-ломаная у торца скругления) соседняя вершина в 4.6 мкм «совпадала», обход перескакивал на
+                // её ребро, и петля из четырёх рёбер выпадала в отдельное незамкнутое «кольцо» (s27 R3.76). Мутация
+                // P3D_TRACEEXACT=0.
+                for (int pass = TraceExactOff ? 2 : 0; pass < 4 && pick < 0; pass++)
                     for (int i = 0; i < left.Count; i++)
                     {
                         var c = left[i];
                         int d = c.Reversed ? -1 : 1;
                         var s = d > 0 ? c.Edge.V0 : c.Edge.V1;
                         var e = d > 0 ? c.Edge.V1 : c.Edge.V0;
-                        if (pass == 0 && Same(s, at)) { pick = i; pickDir = d; break; }
-                        if (pass == 1 && Same(e, at)) { pick = i; pickDir = -d; break; }
+                        if (pass == 0 && ReferenceEquals(s, at)) { pick = i; pickDir = d; break; }
+                        if (pass == 1 && ReferenceEquals(e, at)) { pick = i; pickDir = -d; break; }
+                        if (pass == 2 && Same(s, at)) { pick = i; pickDir = d; break; }
+                        if (pass == 3 && Same(e, at)) { pick = i; pickDir = -d; break; }
                     }
                 // Замыкание по допуску — только когда продолжать некуда: иначе микроребро (концы
                 // ближе допуска вершины) замыкало бы «кольцо» из одного полуребра.
@@ -351,6 +357,7 @@ public static class TopologyConventions
     // повторной разметкой всех колец грани: у пластины с 96 отверстиями — 97×97 разметок колец на операцию, 2.2 с из 4.6 с
     // перестроения детали и 3.2 ГБ выделений; рост сверхквадратичный. Точки кольца, роль, габарит — один раз за проход.
     // Мутация P3D_CONVCACHE=0.
+    static readonly bool TraceExactOff = Environment.GetEnvironmentVariable("P3D_TRACEEXACT") == "0";
     static readonly bool CacheOff = Environment.GetEnvironmentVariable("P3D_CONVCACHE") == "0";
     [ThreadStatic] private static Dictionary<Ring, List<Vector3d>>? _ptsCache;
     [ThreadStatic] private static Dictionary<Ring, int>? _roleCache;
@@ -404,6 +411,24 @@ public static class TopologyConventions
                         if (!Inside(polys[o], c, n)) continue;
                         if (!RegionFacetsOld && holePolys[o].Any(h => Inside(h, c, n))) continue;
                         double a = Area(polys[o]); if (a < bestA) { bestA = a; best = o; }
+                    }
+                    // k140 (корпус лофтов): треугольник-щепка (ширина 10⁻⁵ мм у острого угла) центром вне всех контуров —
+                    // прежде оставался первой области (в другом теле после разделения: три стороны без пары, отказ фаски).
+                    // Такой треугольник — области с ближайшим контуром. Мутация P3D_REGIONNEAREST=0.
+                    if (best == null && !RegionNearestOff)
+                    {
+                        double bd = double.MaxValue;
+                        foreach (var o in outers)
+                        {
+                            var pl = polys[o];
+                            for (int i = 0; i < pl.Count; i++)
+                            {
+                                var a = pl[i]; var b = pl[(i + 1) % pl.Count]; var d = b - a; double L2 = d.LengthSquared;
+                                double t = L2 > 0 ? Math.Clamp(Vector3d.Dot(c - a, d) / L2, 0, 1) : 0;
+                                double dist = (a + d * t - c).Length;
+                                if (dist < bd) { bd = dist; best = o; }
+                            }
+                        }
                     }
                     return best;
                 }
@@ -613,6 +638,7 @@ public static class TopologyConventions
     [ThreadStatic] public static Action<string>? AnchorDebug;
     static readonly bool HintOff = Environment.GetEnvironmentVariable("P3D_FACEHINT") == "0";
     static readonly bool RegionFacetsOld = Environment.GetEnvironmentVariable("P3D_REGIONFACETS") == "0";
+    static readonly bool RegionNearestOff = Environment.GetEnvironmentVariable("P3D_REGIONNEAREST") == "0";
     static readonly bool TorusSideOff = Environment.GetEnvironmentVariable("P3D_TORUSSIDE") == "0";
 
     static int? TorusVote(TFace f, Geometry.Ssi.Torus t, List<Vector3d> ring, List<List<Vector3d>> faceRings, Vector3d hint)

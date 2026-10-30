@@ -14,7 +14,9 @@ static partial class Program
     /// — 4.3: скругление R6.27 верхней кромки торца-прямоугольника: сечения и внутри прямого ребра (P3D_SWEEPLINESTATIONS=0 —
     ///   полоска вдоль скругления);
     /// — 4.4: фаска 2.18 кромки, упёртой в скругление, — сбегает в него (P3D_BLENDRUNOUT=0 — ступенька).
-    /// Норма: правка принята, тело годное, объём в пределах 0.5 мм³ от замера k139, счётчики путей сработали.
+    /// Норма: правка принята, тело годное, объём в пределах 0.5 мм³ от замера k140, счётчики путей сработали.
+    /// k140: замер пересмотрен — проекция на NURBS стенки лофта Ньютоном (P3D_NURBSPROJNEWTON) сходится точнее прежней
+    /// (−0.76 мм³ во всех трёх случаях), точки касания внутри материала (P3D_TANGENTINSET) — ещё −0.08 мм³.
     /// </summary>
     static void Krn06LoftBlendsK139Checks()
     {
@@ -52,14 +54,14 @@ static partial class Program
                 if (extra() is { } x) fails.Add(tag + ": " + x);
             }
             long fb0 = Parametric3D.Kernel.Ops.FilletOp.BallFlatFallbacks, wc0 = Parametric3D.Kernel.Ops.FilletOp.WallCaps;
-            Case("4.1 round R10.29", Stage(0), new[] { 10.0, 10, 0, -10, 10, 0 }, true, 10.29, 644281.36,
+            Case("4.1 round R10.29", Stage(0), new[] { 10.0, 10, 0, -10, 10, 0 }, true, 10.29, 644280.526,
                 () => Parametric3D.Kernel.Ops.FilletOp.BallFlatFallbacks != fb0 ? "a section fell back to tangent planes"
                     : Parametric3D.Kernel.Ops.FilletOp.WallCaps == wc0 ? "the tool end was not laid on the wall" : null);
             long ls0 = Parametric3D.Kernel.Ops.FilletOp.LineStations;
-            Case("4.3 round R6.27", Stage(0), new[] { -59.27, 83.41, -200, -7.45, 83.41, -200 }, true, 6.27, 644851.437,
+            Case("4.3 round R6.27", Stage(0), new[] { -59.27, 83.41, -200, -7.45, 83.41, -200 }, true, 6.27, 644850.616,
                 () => Parametric3D.Kernel.Ops.FilletOp.LineStations == ls0 ? "no stations inside the straight edge" : null);
             long ro0 = Parametric3D.Kernel.Ops.FilletOp.BlendRunouts;
-            Case("4.4 chamfer 2.18 at the round", Stage(0, 2), new[] { -59.27, 83.41, -200, -59.27, 53.36, -200 }, false, 2.18, 644788.829,
+            Case("4.4 chamfer 2.18 at the round", Stage(0, 2), new[] { -59.27, 83.41, -200, -59.27, 53.36, -200 }, false, 2.18, 644787.999,
                 () => Parametric3D.Kernel.Ops.FilletOp.BlendRunouts == ro0 ? "the chamfer did not run out into the round" : null);
             Require(fails.Count == 0, string.Join("; ", fails));
         });

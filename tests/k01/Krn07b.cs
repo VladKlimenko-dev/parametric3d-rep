@@ -147,11 +147,14 @@ static partial class Program
                 var (q, f) = Built(p, Lf(a, b, c));
                 Refused("sections out of order", q, f, "out of order");
             }
-            {   // негодное тело по равномерной разметке (разное число вершин) — отказ, а не публикация
+            {   // k140: разное число вершин (5 → 4) — линейчатый лофт через NURBS (P3D_LOFTUNEQUALRULED): годное тело. У сечения
+                // с меньшим числом сторон делится самая длинная (k137): (5,−10)→(5,10) серединой (5,0); вершины — по порядку,
+                // среднее сечение — (−7.5,−7.5) (2.5,−7.5) (7.5,−2.5) (7.5,7.5) (−7.5,7.5), площадь 212.5; объём призматоида
+                // h/6·(A₁ + 4·Aₘ + A₂) = 30/6·(200 + 850 + 200) = 6250. Прежде (равномерная разметка) — негодное тело и отказ.
                 var p = new Part("lsc"); var a = PolySketch(p, XYat(0), (-10, -5), (0, -5), (10, -5), (10, 5), (-10, 5));
                 var b = PolySketch(p, XYat(30), (-5, -10), (5, -10), (5, 10), (-5, 10));
                 var (q, f) = Built(p, Lf(a, b));
-                Refused("5-vertex → 4-vertex section", q, f, "not a valid solid");
+                Ok("5-vertex → 4-vertex section", q, f, 6250, 1e-6);
             }
             Require(fails.Count == 0, string.Join("; ", fails));
         });

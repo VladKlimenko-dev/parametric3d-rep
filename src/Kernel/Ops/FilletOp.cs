@@ -754,6 +754,34 @@ public static class FilletOp
             found.Add((wanted, edge));
         }
 
+        // k140: ГЛАДКИЙ СТЫК В ЦЕПОЧКЕ. Цепочка по касательной (AutoChain) захватывает и рёбра гладкого стыка граней (край
+        // прежнего скругления), у которых нет угла: прежде вся операция отказывала «a smooth join, not an edge». Такие рёбра
+        // пропускаются с предупреждением, если в запросе есть острые. Мутация P3D_SKIPSMOOTH=0.
+        static bool SmoothJoin(TEdge e)
+        {
+            if (e.Hidden) return true;
+            if (e.FaceA == null || e.FaceB == null || e.Curve == null) return false;
+            double tol0 = Tol.Weld * 100;
+            foreach (double u in new[] { 0.25, 0.5, 0.75 })
+            {
+                var q = e.Curve.PointAt(e.Curve.T0 + (e.Curve.T1 - e.Curve.T0) * u);
+                Vector3d na = SmoothNormal(e.FaceA, q, tol0), nb = SmoothNormal(e.FaceB, q, tol0);
+                if (na.LengthSquared < 1e-18 || nb.LengthSquared < 1e-18) return false;
+                if (Vector3d.Dot(na.Normalized(), nb.Normalized()) < 0.9998) return false;      // угол больше ~1.1° — ребро
+            }
+            return true;
+        }
+        if (!SkipSmoothOff && found.Count > 1)
+        {
+            var smooth = found.Where(f => SmoothJoin(f.Edge)).Select(f => f.Edge).ToHashSet();
+            int dropped = smooth.Count > 0 && smooth.Count < found.Count ? found.RemoveAll(f => smooth.Contains(f.Edge)) : 0;
+            if (dropped > 0)
+            {
+            Interlocked.Add(ref SmoothSkipped, dropped);
+            warnings.Add($"{what}: {dropped} edge(s) of the chain are smooth joins (no corner) and were skipped.");
+            }
+        }
+
         // КОНЦЫ, КОТОРЫЕ ДЕЛИТ ДРУГОЕ РЕБРО ТОЙ ЖЕ ОПЕРАЦИИ.
         //
         // Резец продлевается за конец ребра, чтобы пройти угол насквозь, —
@@ -782,7 +810,24 @@ public static class FilletOp
         var swept = new HashSet<int>();
         if (true)   // фаски и скругления: протягивание по цепочкам, которые не берут специальные построители
         {
-            foreach (var comp in SmoothPieces(found.Select(f => f.Edge).ToList()))
+            // k140: цепочка разбивается по выпуклости рёбер: выпуклые куски режутся, вогнутые — заполняются (резец
+            // прибавляется). Прежде смешанная цепочка (кромка прежней фаски: выпуклое и вогнутое подряд) резалась
+            // частично, объём «не сходился с оценкой», и правка отказывала. Мутация P3D_SWEEPCONCAVE=0.
+            var comps0 = SmoothPieces(found.Select(f => f.Edge).ToList());
+            var comps = new List<List<int>>();
+            foreach (var c0 in comps0)
+            {
+                if (SweepConcaveOff || c0.Count < 2) { comps.Add(c0); continue; }
+                var cvx = c0.ToDictionary(k => k, k => EdgeConvex(bodies, found[k].Edge));
+                if (cvx.Values.Distinct().Count() < 2) { comps.Add(c0); continue; }
+                foreach (bool want in new[] { true, false })
+                {
+                    var part = c0.Where(k => cvx[k] == want).ToList();
+                    if (part.Count == 0) continue;
+                    foreach (var sub in SmoothPieces(part.Select(k => found[k].Edge).ToList())) comps.Add(sub.Select(i => part[i]).ToList());
+                }
+            }
+            foreach (var comp in comps)
             {
                 // Протягивание — если в цепочке есть ребро, которое не берёт ни один
                 // специальный построитель, ИЛИ это гладкая цепочка из дуг и прямых.
@@ -804,10 +849,11 @@ public static class FilletOp
 
                 TSolid? sweptTool;
                 string? why;
+                bool sweptFill;
                 PathDebug?.Invoke($"резец: протянутый, звеньев {comp.Count}, закон {(VariableLaw != null ? "есть" : "нет")}");
                 using (Diagnostics.Prof.Time("скругление: протянутый резец"))
                     sweptTool = BuildSweptChamfer(bodies, comp.Select(k => (found[k].Edge, swap[k])).ToList(),
-                                                  size1 * ToolScale, (round ? size1 : size2) * ToolScale, out why, round, VariableLaw);
+                                                  size1 * ToolScale, (round ? size1 : size2) * ToolScale, out why, out sweptFill, round, VariableLaw);
                 if (sweptTool == null)
                 {
                     warnings.Add($"{what}: {why}.");
@@ -815,7 +861,7 @@ public static class FilletOp
                 }
 
                 double w = Math.Abs(TotalVolume(new List<TSolid> { sweptTool }));
-                jobs.Add((found[comp[0]].Ref, sweptTool, (round ? $"swept chain of {comp.Count} edge(s) rounded R{size1:0.###}" : $"swept chain of {comp.Count} edge(s) cut {size1:0.###}x{size2:0.###}"), w, false, comp.Count));
+                jobs.Add((found[comp[0]].Ref, sweptTool, (round ? $"swept chain of {comp.Count} edge(s) rounded R{size1:0.###}" : $"swept chain of {comp.Count} edge(s) cut {size1:0.###}x{size2:0.###}") + (sweptFill ? " (concave, filled)" : ""), w, sweptFill, comp.Count));
                 swept.UnionWith(comp);
             }
             alive.ExceptWith(swept);
@@ -917,6 +963,7 @@ public static class FilletOp
         var original = new List<TSolid>(bodies);
 
         bool carrierResult = false;
+        double absChanged = 0;            // k140: сумма изменений по резцам (у смешанной цепочки рез и прибавка не гасят друг друга)
         foreach (var (wanted, tool, kind, weight, adds, edgeCount) in jobs)
         {
             // СОСТОЯНИЕ ДО РЕЗА СОХРАНЯЕТСЯ ЦЕЛИКОМ.
@@ -971,6 +1018,28 @@ public static class FilletOp
                 bodies[0] = quick; Interlocked.Increment(ref PreviewCsgCuts); quickCut = true;
             }
             else BooleanOp.Subtract(bodies, tool, warnings);
+            // k140 (корпус лофтов): КРОШКИ. Резец у острого угла (клин лофта в доли миллиметра) отрезает кончик клина — от тела
+            // отделялось отдельное тело объёмом 0.004 мм³. Отделившиеся куски внутри габарита резца, легче 2 % веса резца, —
+            // часть снимаемого материала: отбрасываются. Мутация P3D_BLENDCRUMBS=0.
+            if (!CrumbsOff && bodies.Count > before.Count && weight > 0)
+            {
+                var tb = tool.Bounds; var pad = new Vector3d(1e-6 + 1e-3 * (tb.Max - tb.Min).Length);
+                var fresh = bodies.Where(b => !before.Any(o => ReferenceEquals(o, b))).ToList();
+                if (fresh.Count > 1)
+                {
+                    var main = fresh.OrderByDescending(b => Math.Abs(TotalVolume(new List<TSolid> { b }))).First();
+                    foreach (var b in fresh)
+                    {
+                        if (ReferenceEquals(b, main)) continue;
+                        var bb = b.Bounds;
+                        bool inside = bb.Min.X >= tb.Min.X - pad.X && bb.Min.Y >= tb.Min.Y - pad.Y && bb.Min.Z >= tb.Min.Z - pad.Z
+                                   && bb.Max.X <= tb.Max.X + pad.X && bb.Max.Y <= tb.Max.Y + pad.Y && bb.Max.Z <= tb.Max.Z + pad.Z;
+                        // k140: у заполнителя (вогнутая цепочка) отдельный кусок — часть резца, не коснувшаяся тела (весь — из резца)
+                        if (inside && Math.Abs(TotalVolume(new List<TSolid> { b })) < (adds ? 1.01 : 0.25) * weight)
+                        { bodies.Remove(b); Interlocked.Increment(ref CrumbsDropped); warnings.Add($"{what}: a crumb of the body inside the cutter dropped."); }
+                    }
+                }
+            }
 
             string? broke;
             double volumeAfter;
@@ -994,8 +1063,9 @@ public static class FilletOp
             else
             using (Diagnostics.Prof.Time("скругление: защитная проверка"))
                 broke = Damage(bodies, volumeBefore, weight, adds, out volumeAfter, DamageExactOff ? null : ExactVolume(before));
-            if (broke == null) knownVolume = volumeAfter;
+            if (broke == null) { knownVolume = volumeAfter; absChanged += Math.Abs(volumeAfter - volumeBefore); }
 
+            if (broke != null && KeepBroken) { warnings.Add($"{what}: DEBUG kept broken result: {broke}"); broke = null; }
             if (broke != null)
             {
                 // ОТКАТ ВМЕСТО ПОРЧИ.
@@ -1038,6 +1108,7 @@ public static class FilletOp
         if (!EstimateOff && done > 0 && !carrierResult && double.IsFinite(estimate) && estimate > 0)
         {
             double changed = Math.Abs(TotalVolume(bodies) - startVolume);
+            if (!SweepConcaveOff && jobs.Any(j => j.Adds) && jobs.Any(j => !j.Adds)) changed = Math.Max(changed, absChanged);
             LastEstimate = (changed, estimate);
             if (changed > 3 * estimate + 1e-9 || changed < estimate / 3 - 1e-9)
             {
@@ -1059,6 +1130,7 @@ public static class FilletOp
                 using (Diagnostics.Prof.Time("скругление: итоговая проверка")) vr = SolidValidator.Validate(b);
                 if (vr.IsValid) continue;
                 var bad = vr.Issues.First(i => i.Severity == ValidationSeverity.Error);
+                if (KeepBroken) { warnings.Add($"{what}: DEBUG kept invalid result: {bad}"); continue; }
                 bodies.Clear(); bodies.AddRange(original);
                 Interlocked.Increment(ref FinalCheckRefusals);
                 throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported,
@@ -1146,6 +1218,8 @@ public static class FilletOp
 
     static readonly bool CarrierSkipOff = Environment.GetEnvironmentVariable("P3D_CARRIERCHECK") == "0";
     public static long CarrierChecksSkipped;
+    /// <summary>Разбор: P3D_KEEPBROKEN=1 — испорченный итог реза не откатывается (только для воспроизводителя).</summary>
+    static readonly bool KeepBroken = Environment.GetEnvironmentVariable("P3D_KEEPBROKEN") == "1";
     static readonly bool DamageExactOff = Environment.GetEnvironmentVariable("P3D_DAMAGEEXACTVOL") == "0";
     /// <summary>k134: точный объём тел (все — точные, у каждого есть аналитический объём), иначе null.</summary>
     private static double? ExactVolume(List<TSolid> bodies)
@@ -1208,6 +1282,19 @@ public static class FilletOp
             return $"the result touches itself at a point {pinch}";
 
         string edges = scan.OpenEdgesText();
+        if (!edges.StartsWith("0 open edges") && Environment.GetEnvironmentVariable("P3D_DAMAGEDBG") == "1")
+            foreach (var fz in bodies.SelectMany(b => b.Faces).Where(fz => edges.Contains($"[{fz.Id}]") || edges.Contains($",{fz.Id}]") || edges.Contains($"[{fz.Id},")))
+            {
+                Console.WriteLine($"DFACE {fz.Id} {fz.Tag} {fz.Surface?.GetType().Name} facets {(fz.Surface as FacetedSurface)?.Facets.Count}");
+                foreach (var lp in fz.Loops) Console.WriteLine("  LOOP " + string.Join(" ", lp.CoEdges.Select(c => $"e{c.Edge.Id}:{c.Start.P.X:0.#####},{c.Start.P.Y:0.#####},{c.Start.P.Z:0.#####}")));
+                if (fz.Surface is FacetedSurface fs0)
+                    foreach (var ft in fs0.Facets)
+                    {
+                        var vs = new[] { ft.A, ft.B, ft.C };
+                        if (vs.Any(x => Math.Abs(x.X + 40.55) < 0.6 && Math.Abs(x.Z + 118.88) < 0.6))
+                            Console.WriteLine("  FACET " + string.Join(" ", vs.Select(x => $"{x.X:R},{x.Y:R},{x.Z:R}")));
+                    }
+            }
         if (!edges.StartsWith("0 open edges"))
             return scan.TouchesOnly()
                 ? $"the result touches itself along an edge (four faces meet there): {edges}"
@@ -1300,6 +1387,8 @@ public static class FilletOp
             {
                 if (pair.Value.Count == 2) continue;
                 open++;
+                if (Environment.GetEnvironmentVariable("P3D_DAMAGEDBG") == "1")
+                    Console.WriteLine($"OPENSIDE {Points[pair.Key.Item1].X:R},{Points[pair.Key.Item1].Y:R},{Points[pair.Key.Item1].Z:R} -> {Points[pair.Key.Item2].X:R},{Points[pair.Key.Item2].Y:R},{Points[pair.Key.Item2].Z:R} faces [{string.Join(",", pair.Value)}]");
                 if (where.Count >= 3) continue;
                 Vector3d u = Points[pair.Key.Item1], v = Points[pair.Key.Item2];
                 where.Add($"({(u.X + v.X) / 2:0.##}, {(u.Y + v.Y) / 2:0.##}, {(u.Z + v.Z) / 2:0.##})" +
@@ -1956,6 +2045,9 @@ public static class FilletOp
     ///
     /// Потолок — три размера сечения.
     /// </summary>
+    static readonly bool ReachTangentOff = Environment.GetEnvironmentVariable("P3D_REACHTANGENT") == "0";
+    static readonly bool InsetFacetsOff = Environment.GetEnvironmentVariable("P3D_INSETFACETS") == "0";
+    static readonly bool TangentInsetOff = Environment.GetEnvironmentVariable("P3D_TANGENTINSET") == "0";
     static readonly bool ReachTrisOff = Environment.GetEnvironmentVariable("P3D_REACHTRIS") == "0";
     static readonly bool ReachCullOff = Environment.GetEnvironmentVariable("P3D_REACHCULL") == "0";
     public static long ReachTrisHits, ReachCulls;
@@ -2191,6 +2283,8 @@ public static class FilletOp
     /// продолжение соседнего сечения за общий конец расходится с ним лишь по кривизне.
     /// </summary>
     static readonly bool WallCapOff = Environment.GetEnvironmentVariable("P3D_WALLCAP") == "0";
+    static readonly bool CrumbsOff = Environment.GetEnvironmentVariable("P3D_BLENDCRUMBS") == "0";
+    public static long CrumbsDropped;
     static readonly bool BlendRunoutOff = Environment.GetEnvironmentVariable("P3D_BLENDRUNOUT") == "0";
     public static long BlendRunouts;
     static readonly bool LineStationsOff = Environment.GetEnvironmentVariable("P3D_SWEEPLINESTATIONS") == "0";
@@ -3766,7 +3860,28 @@ public static class FilletOp
     private static TSolid? BuildSweptChamfer(List<TSolid> bodies, List<(TEdge Edge, bool Swap)> chain,
                                              double d1, double d2, out string? refusal, bool round = false,
                                              Func<double, double>? radiusAt = null)
+        => BuildSweptChamfer(bodies, chain, d1, d2, out refusal, out _, round, radiusAt);
+
+    /// <summary>Выпуклость ребра — по середине кривой и нормалям граней там же.</summary>
+    private static bool EdgeConvex(List<TSolid> bodies, TEdge e)
     {
+        if (e.FaceA == null || e.FaceB == null || e.Curve == null) return true;
+        var q = e.Curve.PointAt(0.5 * (e.Curve.T0 + e.Curve.T1));
+        double tol = Tol.Weld * 100;
+        Vector3d na = SmoothNormal(e.FaceA, q, tol), nb = SmoothNormal(e.FaceB, q, tol);
+        if (na.LengthSquared < 1e-18 || nb.LengthSquared < 1e-18) return true;
+        return Convex(bodies, q, na.Normalized(), nb.Normalized(), e);
+    }
+    static readonly bool SkipSmoothOff = Environment.GetEnvironmentVariable("P3D_SKIPSMOOTH") == "0";
+    public static long SmoothSkipped;
+    static readonly bool SweepConcaveOff = Environment.GetEnvironmentVariable("P3D_SWEEPCONCAVE") == "0";
+    public static long SweptFills;
+
+    private static TSolid? BuildSweptChamfer(List<TSolid> bodies, List<(TEdge Edge, bool Swap)> chain,
+                                             double d1, double d2, out string? refusal, out bool fill, bool round = false,
+                                             Func<double, double>? radiusAt = null)
+    {
+        fill = false;
         refusal = null;
 
         // ---- порядок цепочки: концы по вершинам, обход от конца (или откуда угодно у кольца)
@@ -4002,8 +4117,15 @@ public static class FilletOp
             if (qn1.LengthSquared > 1e-18 && qn2.LengthSquared > 1e-18) { cp = q; cn1 = qn1.Normalized(); cn2 = qn2.Normalized(); }
         }
         if (!Convex(bodies, cp, cn1, cn2))
-        { refusal = round ? "the swept round on a concave chain is not implemented yet"
-                          : "the swept chamfer on a concave chain is not implemented yet"; return null; }
+        {
+            // k140: вогнутая цепочка — резец-заполнитель (прибавляется к телу): то же сечение (шар в пустоте угла касается
+            // обеих граней), наружные точки — внутрь материала.
+            if (SweepConcaveOff)
+            { refusal = round ? "the swept round on a concave chain is not implemented yet"
+                              : "the swept chamfer on a concave chain is not implemented yet"; return null; }
+            fill = true; Interlocked.Increment(ref SweptFills);
+        }
+        bool fillLocal = fill;
 
         if (SweepSections != null) for (int i = 0; i < n; i++) SweepSections(samples[i].P, A[i], B[i], O[i]);
 
@@ -4058,9 +4180,85 @@ public static class FilletOp
             return ballCache[i] ?? plane;
         }
 
+        // k140: ГЛУБИНА ТОЧЕК КАСАНИЯ ПОД ГРАНЁНОЙ ГРАНЬЮ. Отрезок резца между станциями и гранение грани — хорды одной точной
+        // поверхности, но разные: между станциями отрезок может выйти над гранями на прогиб, и тогда дуга (3.75° к грани)
+        // режет грань вдоль линии касания пилой из игл. Глубина у станции — не меньше наибольшей высоты над гранями отрезков к
+        // соседним станциям (по точкам на четвертях) плюс базовые 10⁻⁴ мм; у точной (не гранёной) грани — базовая.
+        var insetCache = new (double, double)?[n];
+        // треугольники грани такими, какими их увидит булева: фасеты гранёной, разметка точной (TessellateFace — та же
+        // дорога, что вход булевой, ToPolygons)
+        var probeTris = new Dictionary<TFace, List<(Vector3d A, Vector3d B, Vector3d C)>>(ReferenceEqualityComparer.Instance);
+        List<(Vector3d A, Vector3d B, Vector3d C)> TrisOf(TFace f)
+        {
+            if (probeTris.TryGetValue(f, out var got)) return got;
+            var l = new List<(Vector3d, Vector3d, Vector3d)>();
+            if (f.Surface is FacetedSurface fsx) foreach (var t in fsx.Facets) l.Add(t);
+            else if (!f.Surface.IsPlanar)
+            {
+                try
+                {
+                    var mb0 = new MeshBuilder(); f.Surface.TessellateFace(f, mb0);
+                    var md0 = new MeshData(); mb0.FillInto(md0);
+                    for (int k = 0; k + 2 < md0.Indices.Length; k += 3)
+                        l.Add((mb0.PositionsD[md0.Indices[k]], mb0.PositionsD[md0.Indices[k + 1]], mb0.PositionsD[md0.Indices[k + 2]]));
+                }
+                catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { }
+            }
+            probeTris[f] = l; return l;
+        }
+        Vector3d? ClosestOnTris(TFace f, Vector3d q)
+        {
+            var tl = TrisOf(f); if (tl.Count == 0) return null;
+            double best = double.MaxValue; Vector3d bq = q;
+            foreach (var (a, b, c) in tl) { var x = ClosestOnTriangle(q, a, b, c); double d = (x - q).LengthSquared; if (d < best) { best = d; bq = x; } }
+            return bq;
+        }
+        double ProbeAbove(TFace f, Vector3d q, Vector3d nrm)
+        {
+            if (ClosestOnTris(f, q) is not { } w) return 0;
+            return Math.Max(0, Vector3d.Dot(q - w, nrm));
+        }
+        (double, double) Inset(int i)
+        {
+            if (insetCache[i] is { } ci) return ci;
+            var pi = samples[i].P;
+            double baseM = Math.Max(1e-3, 64 * 1.2e-7 * Math.Max(Math.Abs(pi.X), Math.Max(Math.Abs(pi.Y), Math.Abs(pi.Z))));
+            double a1 = 0, a2 = 0;
+            if (!InsetFacetsOff)
+            {
+                var (_, t1i, t2i) = Ball(i);
+                a1 = ProbeAbove(samples[i].F1, t1i, N1[i]); a2 = ProbeAbove(samples[i].F2, t2i, N2[i]);
+                foreach (int j in new[] { i - 1, i + 1 })
+                {
+                    if (j < 0 || j >= n) continue;
+                    var (_, t1j, t2j) = Ball(j);
+                    for (int k = 1; k <= 3; k++)
+                    {
+                        double u = k / 4.0;
+                        a1 = Math.Max(a1, ProbeAbove(samples[i].F1, t1i + (t1j - t1i) * u, (N1[i] + N1[j]).Normalized()));
+                        a2 = Math.Max(a2, ProbeAbove(samples[i].F2, t2i + (t2j - t2i) * u, (N2[i] + N2[j]).Normalized()));
+                    }
+                }
+                // не глубже допуска хорды: дальше — уже не прогиб гранения
+                double cap = 2 * Tol.Chord;
+                a1 = Math.Min(a1, cap); a2 = Math.Min(a2, cap);
+            }
+            var res = (baseM + a1, baseM + a2);
+            insetCache[i] = res;
+            return res;
+        }
         Vector3d[] Section(int i)
         {
-            if (!round) return new[] { A[i], B[i], O[i] };
+            if (!round)
+            {
+                // k140: точки фаски на гранях — чуть внутри материала (как точки касания скругления, см. ниже)
+                var Oi = fillLocal ? 2 * samples[i].P - O[i] : O[i];          // у заполнителя — внутрь материала
+                if (TangentInsetOff) return new[] { A[i], B[i], Oi };
+                var pa = samples[i].P;
+                double mc = Math.Max(1e-4, 8 * 1.2e-7 * Math.Max(Math.Abs(pa.X), Math.Max(Math.Abs(pa.Y), Math.Abs(pa.Z))));
+                double sg = fillLocal ? -1 : 1;                                // у заполнителя — в пустоту
+                return new[] { A[i] - N1[i] * (sg * mc), B[i] - N2[i] * (sg * mc), Oi };
+            }
 
             Vector3d p = samples[i].P;
             double r = radiusAt == null ? d1 : radiusAt(n <= 1 ? 0 : i / (double)(n - 1));
@@ -4078,10 +4276,25 @@ public static class FilletOp
                 double rr = r1 + (r2 - r1) * j / arcSeg;      // концы — ровно в точках касания
                 pts[j] = centre + (e1 * Math.Cos(th) + e2 * Math.Sin(th)) * rr;
             }
+            // k140: ТОЧКИ КАСАНИЯ РЕЗЦА — ЧУТЬ ВНУТРИ МАТЕРИАЛА. Точка касания шара лежит на точной поверхности грани — там же,
+            // где вершины её гранения (хорды точной поверхности). Хорды резца и грани у линии касания почти совпадают: точная
+            // булева даёт вершины в 10⁻⁶ мм друг от друга и иглы нулевой площади вдоль всей линии касания, во float — складки
+            // сетки (сторона кратности 3, итоговая проверка отказывает: R0.3 у шестигранного отверстия лофта). Крайние точки
+            // дуги уходят внутрь материала на m = 10⁻³ мм (не меньше 64 шагов float у этих координат: ступенька заметно шире порога игл сетки показа): стенку режет
+            // перпендикулярная ей сторона резца, а ступенька высотой m — часть грани скругления (та же метка). Рабочая полоса
+            // (точная поверхность скругления) не меняется. Мутация P3D_TANGENTINSET=0.
+            if (!TangentInsetOff)
+            {
+                var (m1, m2) = Inset(i);
+                if (fillLocal) { var (bm, _) = Inset(i); m1 = m2 = Math.Min(bm, Math.Max(1e-3, 64 * 1.2e-7 * Math.Max(Math.Abs(p.X), Math.Max(Math.Abs(p.Y), Math.Abs(p.Z))))); }
+                double sg = fillLocal ? -1 : 1;
+                pts[0] -= N1[i] * (sg * m1); pts[arcSeg] -= N2[i] * (sg * m2);
+            }
             double out_ = Math.Max(0.1, 0.3 * r);
-            pts[arcSeg + 1] = t2 + N2[i] * out_;
-            pts[arcSeg + 2] = p + (N1[i] + N2[i]).Normalized() * out_;
-            pts[arcSeg + 3] = t1 + N1[i] * out_;
+            double so = fillLocal ? -1 : 1;                                   // у заполнителя наружные точки — внутрь материала
+            pts[arcSeg + 1] = t2 + N2[i] * (so * out_);
+            pts[arcSeg + 2] = p + (N1[i] + N2[i]).Normalized() * (so * out_);
+            pts[arcSeg + 3] = t1 + N1[i] * (so * out_);
             return pts;
         }
         // Точная рабочая полоса сечения i (этап 2): дуга скругления или отрезок фаски —
@@ -4178,12 +4391,26 @@ public static class FilletOp
             Interlocked.Increment(ref WallCaps);
             return (res, tmax, tmin, w.Surface is PlaneSurface || w.Surface?.IsPlanar == true ? w.Surface : null);
         }
+        // k140: СЕЧЕНИЕ СКРУГЛЕНИЯ ПО ГРАНИ — ДО ТОЧКИ КАСАНИЯ, r / tg(α/2) от ребра, а не r. Лучи продления брали сечение
+        // шириной r: у острого угла (α < 90°) край сечения у грани в лучи не попадал, торец резца не доходил до выхода из
+        // тела, и от торца оставались треугольники в 0.004 мм² у верхней грани, а снятый объём недобирал 16% (R6 на
+        // лофте). Мутация P3D_REACHTANGENT=0 — прежняя ширина.
+        double ReachNeed(int i, double d, bool first)
+        {
+            if (!round || ReachTangentOff) return d;
+            double r = radiusAt == null ? d1 : radiusAt(n <= 1 ? 0 : i / (double)(n - 1));
+            // точка касания шара по точной поверхности (у изогнутой грани — дальше формулы плоского угла)
+            var (_, bt1, bt2) = Ball(i);
+            double dt = ((first ? bt1 : bt2) - samples[i].P).Length;
+            return Math.Max(d, Math.Max(r / Math.Tan(alpha[i] / 2), dt) * 1.01);
+        }
         ISurface3? wallCap0 = null, wallCapL = null; bool wall0 = false, wallL = false;
         int drop0 = 0, dropL = 0;
         if (!closed)
         {
             double ext = ContinuesSmoothly(samples[0].P, -T[0]) ? 0
-                : Math.Max(EndReach(bodies, samples[0].F1, samples[0].F2, samples[0].P, -T[0], N1[0], N2[0], F1v[0], F2v[0], d1, d2),
+                : fillLocal ? ClaimedOverlap(Math.Max(d1, d2))       // заполнитель за конец не продлевается (прибавил бы шип)
+                : Math.Max(EndReach(bodies, samples[0].F1, samples[0].F2, samples[0].P, -T[0], N1[0], N2[0], F1v[0], F2v[0], ReachNeed(0, d1, true), ReachNeed(0, d2, false)),
                            ClaimedOverlap(Math.Max(d1, d2)));
             if (ext <= ClaimedOverlap(Math.Max(d1, d2)) && WallEnd(0, -T[0]) is { } we)
             {
@@ -4205,7 +4432,8 @@ public static class FilletOp
         {
             int l = n - 1;
             double ext = ContinuesSmoothly(samples[l].P, T[l]) ? 0
-                : Math.Max(EndReach(bodies, samples[l].F1, samples[l].F2, samples[l].P, T[l], N1[l], N2[l], F1v[l], F2v[l], d1, d2),
+                : fillLocal ? ClaimedOverlap(Math.Max(d1, d2))       // заполнитель за конец не продлевается (прибавил бы шип)
+                : Math.Max(EndReach(bodies, samples[l].F1, samples[l].F2, samples[l].P, T[l], N1[l], N2[l], F1v[l], F2v[l], ReachNeed(l, d1, true), ReachNeed(l, d2, false)),
                            ClaimedOverlap(Math.Max(d1, d2)));
             if (ext <= ClaimedOverlap(Math.Max(d1, d2)) && WallEnd(l, T[l]) is { } we)
             {
@@ -4226,7 +4454,8 @@ public static class FilletOp
                 if (cum[n - 1] + t0 + tL < 0.02 * Math.Max(cum[n - 1], 1e-9)) { refusal = $"the {what} does not fit between the end walls"; return null; }
             }
         }
-        for (int i = drop0; i < n - dropL; i++) { secs.Add(Section(i)); work.Add(WorkingBand(i)); }
+        // рабочая полоса — у всех станций (формула поверхности ждёт сечение на каждой), многоугольники — без выпавших
+        for (int i = 0; i < n; i++) { if (i >= drop0 && i < n - dropL) secs.Add(Section(i)); work.Add(WorkingBand(i)); }
         Mark("сечения — станции");
         if (!closed)
         {
