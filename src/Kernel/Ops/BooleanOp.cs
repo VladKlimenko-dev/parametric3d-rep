@@ -210,9 +210,12 @@ public static class BooleanOp
     /// <summary>Слабая ссылка: тело для разбора не держится в памяти потока (u-нагрузка: до 80 МБ на поток).</summary>
     public static TSolid? LastInvalidResult
     {
-        get => _lastInvalid != null && _lastInvalid.TryGetTarget(out var t) ? t : null;
-        set => _lastInvalid = value == null ? null : new WeakReference<TSolid>(value);
+        get => KeepInvalid ? _keptInvalid : _lastInvalid != null && _lastInvalid.TryGetTarget(out var t) ? t : null;
+        set { _lastInvalid = value == null ? null : new WeakReference<TSolid>(value); if (KeepInvalid) _keptInvalid = value; }
     }
+    /// <summary>Разбор: P3D_KEEPINVALID=1 — последнее отвергнутое тело держится сильной ссылкой и видно из любого потока.</summary>
+    static readonly bool KeepInvalid = Environment.GetEnvironmentVariable("P3D_KEEPINVALID") == "1";
+    static TSolid? _keptInvalid;
     [ThreadStatic] static WeakReference<TSolid>? _lastInvalid;
 
     /// <summary>Вид булевой операции для типизированного вызова.</summary>
@@ -1269,6 +1272,8 @@ public static class BooleanOp
                 if (IsPreviewMesh(b)) continue;
                 // K05: опубликованное тело приводится к соглашению о полурёбрах до проверки.
                 if (b.TopologyConvention < Topology.TopologyConventions.Version) using (Diagnostics.Prof.Time("булева: соглашение результата")) Topology.TopologyConventions.Normalize(b);
+                LoopDump("pre-validate-collapse", b);
+                if (b.Faces.Any(x => x.Surface is FacetedSurface) && CollapseMicroLoops(b) > 0) result.Diagnostics.Add(new OperationDiagnostic("micro-loops", "micro-loops", "micro loops of faces collapsed"));
                 // g.13: тело предпросмотра (проверки маршрута отложены) — и эта проверка при принятии (P3D_PREVIEWPRISM=0 — сразу)
                 if (PreviewMode && !PreviewPrismOff && b.PendingAcceptance is { } pending)
                 {
@@ -1276,6 +1281,7 @@ public static class BooleanOp
                     b.PendingAcceptance = () => pending() ?? (Topology.SolidValidator.ValidateBRep(bb) is { IsValid: false } bad ? "result body failed B-rep validation: " + bad.Summary() : null);
                     continue;
                 }
+                LoopDump("validate", b);
                 Topology.ValidationReport v; using (Diagnostics.Prof.Time("булева: проверка результата")) v = Topology.SolidValidator.ValidateBRep(b);
                 if (!v.IsValid)
                 {
@@ -2100,6 +2106,19 @@ public static class BooleanOp
         {
             normals[p.Tag] = p.N;
 
+            if (!FanFixOff && PolyFan(p.V, out var fanCentre) is { } fan)
+            {
+                // k140: многоугольник с точками на сторонах — треугольники без игл (см. PolyFan)
+                var ids = p.V.Select(v => weld.Add(v)).ToList();
+                if (fanCentre is { } fc) ids.Add(weld.Add(fc));
+                foreach (var (a, b, c) in fan)
+                {
+                    int j0 = ids[a], j1 = ids[b], j2 = ids[c];
+                    if (j0 == j1 || j1 == j2 || j0 == j2) continue;
+                    tris.Add(new Tri(j0, j1, j2, p.Tag));
+                }
+                continue;
+            }
             int i0 = weld.Add(p.V[0]);
             for (int i = 1; i + 1 < p.V.Count; i++)
             {
@@ -2211,6 +2230,12 @@ public static class BooleanOp
             }
         }
 
+        // k140 (корпус лофтов): ЩЕПКА-КУСОК ГРАНИ — К СОСЕДНЕЙ. У конца скругления на кривой грани от неё оставались
+        // отдельные куски площадью 10⁻⁴…10⁻³ мм² (хорды резца у линии касания): отдельные грани из четырёх рёбер. Несвязный
+        // кусок метки (не самый большой) площадью меньше 10⁻³ мм² приписывается соседней метке, с которой у него больше
+        // общих сторон. Мутация P3D_SLIVERPIECES=0.
+        if (!SliverPiecesOff) MergeSliverPieces(groups, weld, warnings, sources);
+
         var faces = new Dictionary<uint, TFace>();
 
         foreach (var (tag, list) in groups)
@@ -2289,6 +2314,7 @@ public static class BooleanOp
         // фактически точка, но его вершины разные, и у соседних граней стороны не сходятся.
         // Просто убрать такое ребро мало (охват падал с 89 до 86): нужно СЛИТЬ его вершины и
         // пересобрать контуры затронутых граней, чтобы у всех соседей появилась общая точка.
+        LoopDump("pre-heal", solid);
         if (exactEdges && HealTinyEdges)
         {
             var touched = new HashSet<TFace>();
@@ -2334,6 +2360,36 @@ public static class BooleanOp
             }
         }
 
+        // k140 (корпус лофтов): СЛИЯНИЕ ВЕРШИН РОЖДАЕТ НОВЫЕ ТОЧКИ-РЁБРА. После слияния вершин микро-рёбер у соседнего ребра
+        // обе вершины могут стать одной — ребро-точка, и контур грани из него одного («контур из одного полуребра не
+        // замкнут»): фаска у острого угла лофта отказывала. Такие рёбра убираются и после слияния, пустые контуры — тоже.
+        // Мутация P3D_ZEROAFTERHEAL=0.
+        LoopDump("pre-zero", solid);
+        if (exactEdges && !ZeroAfterHealOff)
+        {
+            int removed2 = 0;
+            foreach (var e13 in solid.Edges.ToList())
+            {
+                if (!ReferenceEquals(e13.V0, e13.V1) && (e13.V1.P - e13.V0.P).Length > 1e-9) continue;
+                if (e13.Curve is ArcCurve3 { IsClosed: true }) continue;
+                if (e13.Curve != null && (e13.Curve.PointAt(0.5 * (e13.Curve.T0 + e13.Curve.T1)) - e13.V0.P).Length > 1e-6) continue;   // замкнутая кривая — не точка
+                if (MicroDbg) Console.WriteLine($"ZEROEDGE e{e13.Id} V{e13.V0.Id}->V{e13.V1.Id} {e13.V0.P:0.####} faces {string.Join(",", e13.CoEdges.Select(o => o.Loop?.Face?.Tag))}");
+                foreach (var sh13 in solid.Shells)
+                    foreach (var f13 in sh13.Faces)
+                        foreach (var l13 in f13.Loops)
+                            l13.CoEdges.RemoveAll(c => ReferenceEquals(c.Edge, e13));
+                e13.CoEdges.Clear();
+                removed2++;
+            }
+            removed2 += CollapseMicroLoops(solid);
+            foreach (var sh13 in solid.Shells)
+                foreach (var f13 in sh13.Faces)
+                    for (int li = f13.Loops.Count - 1; li >= 0; li--)
+                        if (f13.Loops[li].CoEdges.Count == 0 && f13.Loops.Count > 1) f13.Loops.RemoveAt(li);
+            if (removed2 > 0) { Interlocked.Add(ref ZeroAfterHeal, removed2); warnings?.Add($"Boolean: {removed2} point edge(s) removed after merging vertices."); }
+        }
+
+        LoopDump("post-zero", solid);
         if (MeshDebug != null && exactEdges)
         {
             // Отросток: ребро, пройденное контуром дважды (туда и обратно) — след того, что
@@ -4228,8 +4284,17 @@ public static class BooleanOp
         foreach (var (i, set) in atPoint)
             if (set.Count >= 3) corners.Add(i);
 
+        void SegDump(string stage)
+        {
+            if (SegPt is not { } sp) return;
+            foreach (var sg in segments)
+                if ((weld.Points[sg.A] - sp).Length < 0.05 || (weld.Points[sg.B] - sp).Length < 0.05)
+                    Console.WriteLine($"SEG[{stage}] {sg.A}->{sg.B} {weld.Points[sg.A]:0.######}->{weld.Points[sg.B]:0.######} owners {string.Join(",", sg.Owners)} corners {corners.Contains(sg.A)}/{corners.Contains(sg.B)}");
+        }
+        SegDump("raw");
         using (Diagnostics.Prof.Time("рёбра: слияние коллинеарных"))
             MergeCollinear(segments, weld, corners);
+        SegDump("collinear");
 
         // Дуги распознаются ПОСЛЕ прямых: слияние коллинеарных кусков
         // уже убрало лишние точки с прямых участков, и всё, что осталось
@@ -4243,6 +4308,7 @@ public static class BooleanOp
         Dictionary<(int, int), List<(HashSet<uint> Owners, ICurve3 Curve)>> arcs;
         using (Diagnostics.Prof.Time("рёбра: кривые (MergeArcs)"))
             arcs = MergeArcs(segments, weld, corners, warnings, exactEdges ? faces : null);
+        SegDump("arcs");
 
         // СКОЛЬКО ДУГ УЗНАНО. Без этого «дуга осталась ломаной» и «дугу
         // узнать не удалось» выглядят одинаково: точки на экране.
@@ -4272,6 +4338,10 @@ public static class BooleanOp
                 ? candidates.FirstOrDefault(c => c.Owners.SetEquals(tags)).Curve
                 : null;
             ICurve3 curve = arc ?? new LineCurve3(v0.P, v1.P);
+            // k140 (корпус лофтов): отрезок между гранями, у которых есть точная кривая поверхность, отходящий от неё дальше
+            // допуска хорды (резец у острого угла, гранение), — без притязания на точность: ломаная, а не прямая. Прежде
+            // такое ребро «прямая в 0.13 мм от NURBS» роняло проверку тела, и фаска отказывала. Мутация P3D_LINEFACET=0.
+            if (arc == null && !LineFacetOff && Environment.GetEnvironmentVariable("P3D_LINEFACET1") != "0" && exactEdges && LineOffSources(v0.P, v1.P, tags, faces)) { curve = new PolylineCurve3(new[] { v0.P, v1.P }); Interlocked.Increment(ref LinesFaceted); }
 
             var edge = new TEdge { V0 = v0, V1 = v1, Curve = curve };
 
@@ -4368,6 +4438,407 @@ public static class BooleanOp
     /// нет, остаются отрезками.
     /// </summary>
     /// <summary>Исходные поверхности двух граней-владельцев (обе известны и не гранёные), иначе null.</summary>
+    /// <summary>
+    /// k140: микро-контур грани (вся длина меньше 10⁻⁵ мм, до трёх рёбер) — след разбиения у острого угла: контур убирается,
+    /// его рёбра стягиваются в точку и у соседних граней. Возвращает число убранных рёбер.
+    /// </summary>
+    internal static int CollapseMicroLoops(TSolid solid)
+    {
+        if (ZeroAfterHealOff) return 0;
+        if (MicroDbg) Console.WriteLine($"COLLAPSE-ENTER faces {solid.Faces.Count()}");
+        int removed = 0;
+        foreach (var sh in solid.Shells)
+            foreach (var f in sh.Faces)
+                for (int li = f.Loops.Count - 1; li >= 0; li--)
+                {
+                    var l = f.Loops[li];
+                    if (f.Loops.Count < 2 || l.CoEdges.Count == 0 || l.CoEdges.Count > 3) continue;
+                    // длина — по кривым: у замкнутого ребра (окружность отверстия) вершины совпадают, а длина — нет
+                    double len = l.CoEdges.Sum(c => Math.Max((c.Edge.V1.P - c.Edge.V0.P).Length, c.Edge.Curve?.Length ?? 0));
+                    // k140: короткий контур, все рёбра которого принадлежат лишь этой грани (прорезь-шов внутри грани), — тоже точка
+                    bool slit = !SlitLoopsOff && len < 0.01 && l.CoEdges.All(c => !(c.Edge.Curve is ArcCurve3 { IsClosed: true }) && (c.Edge.CoEdges.All(o => ReferenceEquals(o.Loop?.Face, f)) || (l.CoEdges.Count == 1 && !ReferenceEquals(c.Edge.V0, c.Edge.V1)) || Bigon(l)));
+                    // k140: порог — минимальный элемент модели (1e-4 мм): цепочка микрорёбер 2.7e-5 мм у торца резца, выделенная
+                    // сборкой контуров в отдельный «контур», разрывала внешний контур грани (s17 R1.27)
+                    if (len > (MicroLoop4Off ? 1e-5 : 1e-4) && !slit) continue;
+                    if (slit) Interlocked.Increment(ref SlitLoops);
+                    if (MicroDbg) Console.WriteLine($"MICROLOOP face {f.Tag} slit {slit} len {len:E3} edges " + string.Join(" ", l.CoEdges.Select(c => $"e{c.Edge.Id} V{c.Edge.V0.Id}->V{c.Edge.V1.Id} {c.Edge.V0.P:0.####} uses {string.Join(",", c.Edge.CoEdges.Select(o => o.Loop?.Face?.Tag))}")));
+                    foreach (var ce in l.CoEdges.ToList())
+                    {
+                        var e = ce.Edge; TVertex keep = e.V0, drop = e.V1;
+                        foreach (var o in solid.Edges) { if (o.V0 == drop) o.V0 = keep; if (o.V1 == drop) o.V1 = keep; }
+                        foreach (var sh2 in solid.Shells) foreach (var f2 in sh2.Faces) foreach (var l2 in f2.Loops) l2.CoEdges.RemoveAll(c => ReferenceEquals(c.Edge, e));
+                        e.CoEdges.Clear(); removed++;
+                        // слитая вершина сдвинулась на длину прорези — допуск рёбер при ней покрывает сдвиг
+                        if (slit || len > 1e-6) foreach (var o in solid.Edges) if (!ReferenceEquals(o, e) && (o.V0 == keep || o.V1 == keep)) o.MeasureTolerance();
+                    }
+                }
+        // ребро короче модельной точности (не замкнутое) — точка: вершины сливаются, ребро убирается из контуров
+        double acc = ToleranceContext.Current.ModelAccuracy;
+        foreach (var e in solid.Edges.ToList())
+        {
+            if (ReferenceEquals(e.V0, e.V1) || (e.V1.P - e.V0.P).Length >= acc) continue;
+            if (e.Curve is ArcCurve3 { IsClosed: true } || (e.Curve != null && (e.Curve.PointAt(0.5 * (e.Curve.T0 + e.Curve.T1)) - e.V0.P).Length > acc)) continue;
+            TVertex keep = e.V0, drop = e.V1;
+            if (MicroDbg) Console.WriteLine($"MICROEDGE e{e.Id} V{e.V0.Id}->V{e.V1.Id} {e.V0.P:0.####} len {(e.V1.P - e.V0.P).Length:E3}");
+            foreach (var o in solid.Edges) { if (o.V0 == drop) o.V0 = keep; if (o.V1 == drop) o.V1 = keep; }
+            foreach (var sh2 in solid.Shells) foreach (var f2 in sh2.Faces) foreach (var l2 in f2.Loops) l2.CoEdges.RemoveAll(c => ReferenceEquals(c.Edge, e));
+            e.CoEdges.Clear(); removed++;
+        }
+        foreach (var sh in solid.Shells)
+            foreach (var f in sh.Faces)
+                for (int li = f.Loops.Count - 1; li >= 0; li--)
+                    if (f.Loops[li].CoEdges.Count == 0 && f.Loops.Count > 1) f.Loops.RemoveAt(li);
+        // многогранное тело: прямая или дуга между гранями с кривой точной поверхностью, отходящая от неё дальше допуска
+        // хорды, — без притязания на точность (ломаная по её точкам)
+        if (!LineFacetOff)
+        {
+            double tol = Parametric3D.Core.Tol.Chord;
+            foreach (var e in solid.Edges)
+            {
+                if (e.Curve is not (LineCurve3 or ArcCurve3)) continue;
+                if (!e.CoEdges.All(c => c.Loop?.Face?.Surface is FacetedSurface)) continue;
+                bool off = false;
+                foreach (var f in e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct())
+                {
+                    ISurface3? src = GeometryAudit.AuthoritativeSurface(f);
+                    if (src == null || src is FacetedSurface) continue;
+                    for (int i = 1; i < 8 && !off; i++)
+                    {
+                        var q = e.Curve.PointAt(e.Curve.T0 + (e.Curve.T1 - e.Curve.T0) * i / 8.0);
+                        try { off = (Parametric3D.Kernel.Curves.ExactSurfaces.ProjectUnsigned(src, q).P - q).Length > tol; } catch { }
+                    }
+                    if (off) break;
+                }
+                if (!off) continue;
+                var pts = new List<Vector3d>(); for (int i = 0; i <= 16; i++) pts.Add(e.Curve.PointAt(e.Curve.T0 + (e.Curve.T1 - e.Curve.T0) * i / 16.0));
+                if ((pts[0] - e.V0.P).LengthSquared > (pts[0] - e.V1.P).LengthSquared) pts.Reverse();
+                pts[0] = e.V0.P; pts[^1] = e.V1.P;
+                if (MicroDbg) Console.WriteLine($"FACETEDGE e{e.Id} {e.Curve.GetType().Name} V{e.V0.Id}->V{e.V1.Id} {e.V0.P:0.####}->{e.V1.P:0.####} curve {e.Curve.PointAt(e.Curve.T0):0.####}->{e.Curve.PointAt(e.Curve.T1):0.####}");
+                e.Curve = new PolylineCurve3(pts); removed++; Interlocked.Increment(ref LinesFaceted);
+            }
+        }
+        if (!IslandFacesOff) removed += AbsorbIslandFaces(solid);
+        if (removed > 0) Interlocked.Add(ref ZeroAfterHeal, removed);
+        return removed;
+    }
+
+    /// <summary>k140: контур из двух рёбер между одними и теми же двумя вершинами (двуугольник) — щель, а не отверстие.</summary>
+    static bool Bigon(TLoop l)
+    {
+        if (l.CoEdges.Count != 2) return false;
+        TEdge a = l.CoEdges[0].Edge, b = l.CoEdges[1].Edge;
+        if (ReferenceEquals(a, b) || ReferenceEquals(a.V0, a.V1)) return false;
+        return ReferenceEquals(a.V0, b.V0) && ReferenceEquals(a.V1, b.V1) || ReferenceEquals(a.V0, b.V1) && ReferenceEquals(a.V1, b.V0);
+    }
+
+    static readonly Vector3d? SegPt = Environment.GetEnvironmentVariable("P3D_SEGPT") is { } spv ? new Vector3d(double.Parse(spv.Split(',')[0], System.Globalization.CultureInfo.InvariantCulture), double.Parse(spv.Split(',')[1], System.Globalization.CultureInfo.InvariantCulture), double.Parse(spv.Split(',')[2], System.Globalization.CultureInfo.InvariantCulture)) : null;
+    internal static void LoopDump(string stage, TSolid solid)
+    {
+        if (SegPt is not { } sp) return;
+        foreach (var f in solid.Faces)
+        {
+            if (!f.Loops.Any(l => l.CoEdges.Any(c => (c.Start.P - sp).Length < 0.02))) continue;
+            foreach (var l in f.Loops)
+            {
+                var bal = new Dictionary<TVertex, int>();
+                foreach (var ce in l.CoEdges) { bal[ce.Start] = bal.GetValueOrDefault(ce.Start) + 1; bal[ce.End] = bal.GetValueOrDefault(ce.End) - 1; }
+                Console.WriteLine($"LOOPS[{stage}] face {f.Id} {f.Tag} loop n={l.CoEdges.Count} outer {l.IsOuter} unbalanced {bal.Count(kv => kv.Value != 0)}: " + string.Join(" ", l.CoEdges.Where(c => (c.Start.P - sp).Length < 0.3 || (c.End.P - sp).Length < 0.3).Select(c => $"e{c.Edge.Id}:V{c.Start.Id}->V{c.End.Id}")));
+            }
+        }
+    }
+    static readonly bool MicroDbg = Environment.GetEnvironmentVariable("P3D_MICRODBG") == "1";
+    static readonly bool MicroLoop4Off = Environment.GetEnvironmentVariable("P3D_MICROLOOP4") == "0";
+    static readonly bool FanFixOff = Environment.GetEnvironmentVariable("P3D_POLYFAN") == "0";
+    public static long PolyFanFixes;
+    /// <summary>
+    /// k140: ТРЕУГОЛЬНИКИ ВЫПУКЛОГО МНОГОУГОЛЬНИКА БЕЗ ИГЛ. Многоугольник точного результата несёт на сторонах точки
+    /// соседей (Т-стыки). Веер из первой вершины даёт иглы нулевой площади, если она лежит на одной прямой с точками своих
+    /// сторон: у касания скругления со стенкой лофта — сотни игл вдоль линии касания, которые во float сливаются в складки
+    /// (сторона сетки кратности 3–4, итоговая проверка скругления отказывает). Вершина веера выбирается так, чтобы ни один
+    /// треугольник не был иглой; если такой нет — веер из центра (одна новая точка внутри грани). null — прежний веер
+    /// годится (игл нет) или многоугольник не выпуклый. Мутация P3D_POLYFAN=0.
+    /// </summary>
+    internal static List<(int A, int B, int C)>? PolyFan(IReadOnlyList<Vector3d> V, out Vector3d? centre)
+    {
+        centre = null;
+        int n = V.Count;
+        if (n < 4) return null;
+        double maxAbs = 1;
+        foreach (var q in V) maxAbs = Math.Max(maxAbs, Math.Max(Math.Abs(q.X), Math.Max(Math.Abs(q.Y), Math.Abs(q.Z))));
+        double eps = maxAbs * 8 * 1.2e-7;
+        bool Needle(Vector3d a, Vector3d b, Vector3d c)
+        {
+            double L2 = Math.Max((b - a).LengthSquared, Math.Max((c - b).LengthSquared, (a - c).LengthSquared));
+            if (L2 <= 0) return true;
+            return Vector3d.Cross(b - a, c - a).Length / Math.Sqrt(L2) < eps;
+        }
+        bool FanOk(int apex)
+        {
+            for (int k = 1; k + 1 < n; k++) if (Needle(V[apex], V[(apex + k) % n], V[(apex + k + 1) % n])) return false;
+            return true;
+        }
+        if (FanOk(0)) return null;
+        // выпуклость (по нормали Ньюэлла)
+        var nn = Vector3d.Zero;
+        for (int i = 0; i < n; i++) { var a = V[i]; var b = V[(i + 1) % n]; nn += new Vector3d((a.Y - b.Y) * (a.Z + b.Z), (a.Z - b.Z) * (a.X + b.X), (a.X - b.X) * (a.Y + b.Y)); }
+        if (nn.LengthSquared < 1e-30) return null;
+        nn = nn.Normalized();
+        for (int i = 0; i < n; i++)
+        {
+            var a = V[i]; var b = V[(i + 1) % n]; var c = V[(i + 2) % n];
+            double turn = Vector3d.Dot(Vector3d.Cross(b - a, c - b), nn);
+            if (turn < -eps * Math.Sqrt(Math.Max((b - a).LengthSquared, (c - b).LengthSquared))) return null;
+        }
+        Interlocked.Increment(ref PolyFanFixes);
+        var res = new List<(int, int, int)>();
+        for (int apex = 1; apex < n; apex++)
+            if (FanOk(apex))
+            {
+                for (int k = 1; k + 1 < n; k++) res.Add((apex, (apex + k) % n, (apex + k + 1) % n));
+                return res;
+            }
+        // веер из центра: центр — среднее вершин-углов (не на прямой соседей)
+        var cs = Vector3d.Zero; int m = 0;
+        for (int i = 0; i < n; i++) if (!Needle(V[(i + n - 1) % n], V[i], V[(i + 1) % n])) { cs += V[i]; m++; }
+        if (m < 3) return null;
+        centre = cs / m;
+        for (int i = 0; i < n; i++)
+        {
+            if (Needle(centre.Value, V[i], V[(i + 1) % n])) { centre = null; return null; }
+            res.Add((n, i, (i + 1) % n));
+        }
+        return res;
+    }
+
+    static readonly bool IslandFacesOff = Environment.GetEnvironmentVariable("P3D_ISLANDFACES") == "0";
+    public static long IslandFacesAbsorbed;
+    /// <summary>
+    /// k140: ГРАНЬ-ОСТРОВОК. Крошечная гранёная грань (меньше 5·10⁻³ мм² или шириной меньше 10 мкм) из одного контура, все рёбра
+    /// которого — с одной и той же соседней гранёной гранью (кусок стенки лофта, проступивший сквозь скругление на 10⁻⁴ мм²):
+    /// грань уходит, её треугольники — соседу, контур-отверстие соседа — тоже. Мутация P3D_ISLANDFACES=0.
+    /// </summary>
+    static int AbsorbIslandFaces(TSolid solid)
+    {
+        int n = 0;
+        foreach (var sh in solid.Shells)
+            foreach (var f in sh.Faces.ToList())
+            {
+                if (f.Loops.Count != 1 || f.Surface is not FacetedSurface fs) continue;
+                var ces = f.Loops[0].CoEdges;
+                if (ces.Count < 2) continue;
+                TFace? g = null; bool ok = true;
+                foreach (var ce in ces)
+                {
+                    if (ce.Edge.CoEdges.Count != 2) { ok = false; break; }
+                    var other = ce.Edge.CoEdges.First(c => !ReferenceEquals(c, ce)).Loop?.Face;
+                    if (other == null || ReferenceEquals(other, f) || (g != null && !ReferenceEquals(g, other))) { ok = false; break; }
+                    g = other;
+                }
+                if (!ok || g == null || g.Surface is not FacetedSurface gs) continue;
+                double area = 0; foreach (var (a, b, c) in fs.Facets) area += Vector3d.Cross(b - a, c - a).Length / 2;
+                double per = ces.Sum(c => c.Edge.Curve?.Length ?? (c.Edge.V1.P - c.Edge.V0.P).Length);
+                if (!(area < 5e-3 || per > 0 && 2 * area / per < 0.01)) continue;
+                // контур соседа из тех же рёбер
+                var edges = ces.Select(c => c.Edge).ToHashSet();
+                var hole = g.Loops.FirstOrDefault(l => l.CoEdges.Count == edges.Count && l.CoEdges.All(c => edges.Contains(c.Edge)));
+                if (hole == null || g.Loops.Count < 2) continue;
+                foreach (var t in fs.Facets) gs.Facets.Add(t);
+                foreach (var e in edges) e.CoEdges.Clear();
+                hole.CoEdges.Clear(); g.Loops.Remove(hole);
+                ces.Clear(); f.Loops.Clear();
+                sh.Faces.Remove(f);
+                n++; Interlocked.Increment(ref IslandFacesAbsorbed);
+            }
+        return n;
+    }
+
+    static readonly bool SlitLoopsOff = Environment.GetEnvironmentVariable("P3D_SLITLOOPS") == "0";
+    public static long SlitLoops;
+    static readonly bool ZeroAfterHealOff = Environment.GetEnvironmentVariable("P3D_ZEROAFTERHEAL") == "0";
+    public static long ZeroAfterHeal;
+    static readonly bool LineFacetOff = Environment.GetEnvironmentVariable("P3D_LINEFACET") == "0";
+    public static long LinesFaceted;
+    static bool LineOffSources(Vector3d a, Vector3d b, HashSet<uint> tags, Dictionary<uint, TFace> faces)
+    {
+        double tol = Parametric3D.Core.Tol.Chord;
+        foreach (uint tag in tags)
+        {
+            if (!faces.TryGetValue(tag, out var f)) continue;
+            ISurface3? s = f.Surface is FacetedSurface fs ? fs.Source : f.Surface;
+            if (s == null || s is FacetedSurface || s.IsPlanar) continue;
+            foreach (double t in new[] { 0.25, 0.5, 0.75 })
+            {
+                var q = a + (b - a) * t;
+                double d;
+                try { d = (Parametric3D.Kernel.Curves.ExactSurfaces.ProjectUnsigned(s, q).P - q).Length; } catch { continue; }
+                if (d > tol) return true;
+            }
+        }
+        return false;
+    }
+
+    static readonly bool StripSurfOff = Environment.GetEnvironmentVariable("P3D_STRIPSURF") == "0";
+    static readonly bool IslandsOff = Environment.GetEnvironmentVariable("P3D_ISLANDS") == "0";
+    public static long IslandsMerged;
+    static readonly bool SliverStripsOff = Environment.GetEnvironmentVariable("P3D_SLIVERSTRIPS") == "0";
+    static readonly bool SliverPiecesOff = Environment.GetEnvironmentVariable("P3D_SLIVERPIECES") == "0";
+    public static long SliverPiecesMerged;
+    static void MergeSliverPieces(Dictionary<uint, List<Tri>> groups, VertexWeld weld, List<string>? warnings, Dictionary<uint, ISurface3?>? sources = null)
+    {
+        const double MaxArea = 1e-3;
+        var side = new Dictionary<(int, int), List<uint>>();
+        foreach (var (tag, list) in groups)
+            foreach (var t in list)
+                foreach (var (u, v) in new[] { (t.A, t.B), (t.B, t.C), (t.C, t.A) })
+                {
+                    var k = u < v ? (u, v) : (v, u);
+                    if (!side.TryGetValue(k, out var l2)) side[k] = l2 = new List<uint>();
+                    l2.Add(tag);
+                }
+        int merged = 0;
+        foreach (var tag in groups.Keys.ToList())
+        {
+            var list = groups[tag];
+            if (list.Count < 1) continue;
+            // связные куски по общим сторонам
+            var bySide = new Dictionary<(int, int), List<int>>();
+            for (int i = 0; i < list.Count; i++)
+                foreach (var (u, v) in new[] { (list[i].A, list[i].B), (list[i].B, list[i].C), (list[i].C, list[i].A) })
+                {
+                    var k = u < v ? (u, v) : (v, u);
+                    if (!bySide.TryGetValue(k, out var l3)) bySide[k] = l3 = new List<int>();
+                    l3.Add(i);
+                }
+            var comp = Enumerable.Repeat(-1, list.Count).ToArray(); int nc = 0;
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (comp[i] >= 0) continue;
+                var st = new Stack<int>(); st.Push(i); comp[i] = nc;
+                while (st.Count > 0)
+                {
+                    int j = st.Pop(); var t = list[j];
+                    foreach (var (u, v) in new[] { (t.A, t.B), (t.B, t.C), (t.C, t.A) })
+                        foreach (int o in bySide[u < v ? (u, v) : (v, u)]) if (comp[o] < 0) { comp[o] = nc; st.Push(o); }
+                }
+                nc++;
+            }
+            var area = new double[nc]; var perim = new double[nc];
+            for (int i = 0; i < list.Count; i++) { var t = list[i]; area[comp[i]] += Vector3d.Cross(weld.Points[t.B] - weld.Points[t.A], weld.Points[t.C] - weld.Points[t.A]).Length / 2; }
+            // периметр куска — стороны, не общие с другим треугольником того же куска
+            foreach (var (k, ids) in bySide) if (ids.Count == 1) perim[comp[ids[0]]] += (weld.Points[k.Item1] - weld.Points[k.Item2]).Length;
+            int biggest = Array.IndexOf(area, area.Max());
+            var moveTo = new Dictionary<int, uint>();
+            for (int c = 0; c < nc; c++)
+            {
+                // k140: и вся грань-полоска шириной (2·площадь/периметр) меньше 0.005 мм и площадью меньше 0.05 мм² — щепка
+                bool strip = !SliverStripsOff && perim[c] > 0 && 2 * area[c] / perim[c] < 0.01 && area[c] < 0.1;
+                // k140: ОСТРОВОК НА ЧУЖОЙ ПОВЕРХНОСТИ. Торец резца по кривой стенке (точная поверхность, своё гранение) и сама
+                // стенка (гранение тела) расходятся в пределах хорды — от стенки остаются островки площадью 10⁻²–10⁻¹ мм² среди
+                // торца (и наоборот). Несвязный кусок (не самый большой, меньше 0.5 мм² и 5% метки), все точки которого лежат на
+                // точной поверхности соседней метки в пределах полутора допусков хорды, отходит к ней. Мутация P3D_ISLANDS=0.
+                if (!strip && c != biggest && area[c] >= MaxArea && !IslandsOff && sources != null && area[c] < 0.5 && area[c] < 0.05 * area.Sum())
+                {
+                    var cnt2 = new Dictionary<uint, int>();
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        if (comp[i] != c) continue; var t = list[i];
+                        foreach (var (u, v) in new[] { (t.A, t.B), (t.B, t.C), (t.C, t.A) })
+                            foreach (uint other in side[u < v ? (u, v) : (v, u)]) if (other != tag) cnt2[other] = cnt2.GetValueOrDefault(other) + 1;
+                    }
+                    double tolI = 1.5 * Parametric3D.Core.Tol.Chord;
+                    var vs = new HashSet<int>(); for (int i = 0; i < list.Count; i++) if (comp[i] == c) { vs.Add(list[i].A); vs.Add(list[i].B); vs.Add(list[i].C); }
+                    foreach (var cand in cnt2.OrderByDescending(x => x.Value).Select(x => x.Key))
+                    {
+                        if (!sources.TryGetValue(cand, out var hs) || hs == null || hs is FacetedSurface || !groups.ContainsKey(cand)) continue;
+                        bool on = true;
+                        double tolJ = hs.IsPlanar ? 1e-4 : tolI;
+                        foreach (int v in vs)
+                        {
+                            var q = weld.Points[v];
+                            double d; try { d = (Parametric3D.Kernel.Curves.ExactSurfaces.ProjectUnsigned(hs, q).P - q).Length; } catch { on = false; break; }
+                            if (d > tolJ) { on = false; break; }
+                        }
+                        if (on) { moveTo[c] = cand; Interlocked.Increment(ref IslandsMerged); break; }
+                    }
+                    continue;
+                }
+                if (!strip && (c == biggest || area[c] >= MaxArea)) continue;
+                if (strip && c == biggest && nc == 1 && groups.Count < 3) continue;
+                var counts = new Dictionary<uint, int>();
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (comp[i] != c) continue; var t = list[i];
+                    foreach (var (u, v) in new[] { (t.A, t.B), (t.B, t.C), (t.C, t.A) })
+                        foreach (uint other in side[u < v ? (u, v) : (v, u)]) if (other != tag) counts[other] = counts.GetValueOrDefault(other) + 1;
+                }
+                if (counts.Count == 0) continue;
+                if (!strip || StripSurfOff || sources == null) { moveTo[c] = counts.OrderByDescending(x => x.Value).First().Key; continue; }
+                // k140: полоска — только к соседу, на точной поверхности которого она лежит (иначе — своя грань). Узкая
+                // законная грань скругления у угла из четырёх рёбер уходила к соседу, и прямая ребра отходила от его
+                // поверхности (K09-VERTEX-N-EDGES). Мутация P3D_STRIPSURF=0.
+                var vsS = new HashSet<int>(); for (int i = 0; i < list.Count; i++) if (comp[i] == c) { vsS.Add(list[i].A); vsS.Add(list[i].B); vsS.Add(list[i].C); }
+                double tolS = Math.Max(1e-4, 0.5 * Parametric3D.Core.Tol.Chord);
+                foreach (var cand in counts.OrderByDescending(x => x.Value).Select(x => x.Key))
+                {
+                    if (sources.TryGetValue(cand, out var hs) && hs != null && hs is not FacetedSurface)
+                    {
+                        bool on = true;
+                        // у плоского соседа гранения нет — допуск как у точной грани (10⁻⁴), у кривого — полхорды
+                        double tolC = hs.IsPlanar ? 1e-4 : tolS;
+                        foreach (int v in vsS)
+                        {
+                            var q = weld.Points[v];
+                            double d; try { d = (Parametric3D.Kernel.Curves.ExactSurfaces.ProjectUnsigned(hs, q).P - q).Length; } catch { on = false; break; }
+                            if (d > tolC) { on = false; break; }
+                        }
+                        if (!on) continue;
+                    }
+                    moveTo[c] = cand; break;
+                }
+            }
+            if (moveTo.Count == 0) continue;
+            var keep = new List<Tri>();
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (moveTo.TryGetValue(comp[i], out uint host) && groups.ContainsKey(host)) groups[host].Add(new Tri(list[i].A, list[i].B, list[i].C, host));
+                else keep.Add(list[i]);
+            }
+            if (keep.Count == 0) groups.Remove(tag); else groups[tag] = keep;
+            merged += moveTo.Count;
+        }
+        if (merged > 0) { Interlocked.Add(ref SliverPiecesMerged, merged); warnings?.Add($"Boolean: {merged} sliver piece(s) of faces merged into neighbours."); }
+    }
+
+    static readonly bool ChainPolyOff = Environment.GetEnvironmentVariable("P3D_CHAINPOLY") == "0";
+    public static long ChainPolylines;
+    static readonly bool ArcPlaneOff = Environment.GetEnvironmentVariable("P3D_ARCPLANE") == "0";
+    static readonly bool ArcOnSurfOff = Environment.GetEnvironmentVariable("P3D_ARCONSURF") == "0";
+    public static long ArcsOffSurface;
+    /// <summary>k140: дуга лежит на точных поверхностях граней-хозяев (в пределах допуска хорды); грани без точной поверхности
+    /// не проверяются.</summary>
+    static bool ArcOnSources(ICurve3 arc, HashSet<uint> owners, Dictionary<uint, TFace> faces)
+    {
+        double tol = Parametric3D.Core.Tol.Chord;
+        foreach (uint tag in owners)
+        {
+            if (!faces.TryGetValue(tag, out var f)) continue;
+            ISurface3? s = f.Surface is FacetedSurface fs ? fs.Source : f.Surface;
+            if (s == null || s is FacetedSurface) continue;
+            // k140: у плоской грани гранения нет — дуга лежит в её плоскости (как точная грань, 10⁻⁴ мм)
+            // у кривой — 10⁻³ мм: дуга, подогнанная по хордам гранения, расходится с поверхностью на прогиб (0.015 мм), а
+            // проверка тела мерит ребро по измеренной ошибке гранения грани (бывает меньше хорды)
+            double tolS = s.IsPlanar ? (ArcPlaneOff ? double.MaxValue : 1e-4) : (ArcPlaneOff ? tol : 1e-3);
+            for (int i = 1; i < 8; i++)
+            {
+                var q = arc.PointAt(arc.T0 + (arc.T1 - arc.T0) * i / 8.0);
+                double d;
+                try { d = (Parametric3D.Kernel.Curves.ExactSurfaces.ProjectUnsigned(s, q).P - q).Length; } catch { return true; }
+                if (d > tolS) return false;
+            }
+        }
+        return true;
+    }
+
     private static (ISurface3 A, ISurface3 B)? SourcesOf(HashSet<uint> owners, Dictionary<uint, TFace> faces)
     {
         if (owners.Count != 2) return null;
@@ -4394,6 +4865,42 @@ public static class BooleanOp
         return FitArc(pts) ?? c;
     }
 
+    /// <summary>
+    /// k140: УТОЧНЕНИЕ ТОЧЕК ЦЕПОЧКИ НА ПЕРЕСЕЧЕНИЕ — НЕ ДАЛЬШЕ ТРЁХ ДОПУСКОВ ХОРДЫ. Точки цепочки — пересечение гранений, они
+    /// отходят от точной кривой на прогиб. Прежде допускался сдвиг до 0.5 мм: у почти касательного пересечения (конец
+    /// скругления R1.44 на стенке лофта) уточнение уходило вдоль касания, и ребро 0.23 мм получало кривую в 0.78 мм от
+    /// своих граней — булева отвергала тело. Мутация P3D_ICSHIFT=0 — прежние 0.5 мм.
+    /// </summary>
+    static double IcShift() => IcShiftOff ? 0.5 : Math.Max(1e-3, 3 * Parametric3D.Core.Tol.Chord);
+    static readonly bool IcShiftOff = Environment.GetEnvironmentVariable("P3D_ICSHIFT") == "0";
+    /// <summary>k140: и между точками цепочки кривая не уходит от неё дальше того же сдвига (уточнение середины пролёта у
+    /// почти касательного пересечения сходится далеко).</summary>
+    static IntersectionCurve3? IcNear(IntersectionCurve3? c, IReadOnlyList<Vector3d> pts)
+    {
+        if (c == null || IcShiftOff || pts.Count < 2) return c;
+        double lim = IcShift(), onTol = Math.Max(1e-4, 0.1 * Parametric3D.Core.Tol.Chord);
+        for (int i = 0; i <= 4 * pts.Count; i++)
+        {
+            var q = c.PointAt(c.T0 + (c.T1 - c.T0) * i / (4.0 * pts.Count));
+            if (!double.IsFinite(q.X)) return null;
+            // точка кривой — на обеих поверхностях (уточнение сошлось), а не середина пролёта между точками
+            foreach (var srf in new[] { c.A, c.B })
+            {
+                double dd; try { dd = (Parametric3D.Kernel.Curves.ExactSurfaces.ProjectUnsigned(srf, q).P - q).Length; } catch { return null; }
+                if (dd > onTol) return null;
+            }
+            double best = double.MaxValue;
+            for (int k = 0; k + 1 < pts.Count; k++)
+            {
+                var d = pts[k + 1] - pts[k]; double L2 = d.LengthSquared;
+                double t = L2 < 1e-30 ? 0 : Math.Clamp(Vector3d.Dot(q - pts[k], d) / L2, 0, 1);
+                best = Math.Min(best, (pts[k] + d * t - q).Length);
+            }
+            if (best > lim) return null;
+        }
+        return c;
+    }
+
     /// <summary>Кривая пересечения исходных поверхностей двух граней-владельцев цепочки, если она сходится.</summary>
     private static ICurve3? IntersectionOf(HashSet<uint> owners, List<Vector3d> points, Dictionary<uint, TFace> faces)
     {
@@ -4410,7 +4917,7 @@ public static class BooleanOp
         // Край процедурной поверхности (линия касания скругления) — изолиния, а не пересечение:
         // у касающихся поверхностей пересечение не уточняется.
         return ArcIfRound(SectionIsoCurve.TryBuild(src[0], src[1], points))
-               ?? IntersectionCurve3.TryBuild(src[0], src[1], points);
+               ?? IcNear(IntersectionCurve3.TryBuild(src[0], src[1], points, maxShift: IcShift()), points);
     }
 
     private static Dictionary<(int, int), List<(HashSet<uint> Owners, ICurve3 Curve)>> MergeArcs(
@@ -4565,6 +5072,7 @@ public static class BooleanOp
                     {
                         var pp = ChainPoints(segments, part.Links, weld, part.From, part.To);
                         ICurve3? piece = pp == null ? null : FitArc(pp, out _, KnownCircle(segments[chain[0]].Owners, pp[0]));
+                        if (piece != null && !ArcOnSurfOff && faces != null && !ArcOnSources(piece, segments[chain[0]].Owners, faces)) { piece = null; Interlocked.Increment(ref ArcsOffSurface); }
                         if (piece == null) break;
                         fitted.Add(piece);
                     }
@@ -4581,6 +5089,7 @@ public static class BooleanOp
                             var pp = ChainPoints(segments, part.Links, weld, part.From, part.To);
                             ChainDebug?.Invoke($"  кольцо {chain.Count}: пробую часть {fitted.Count}");
                             ICurve3? piece = pp == null ? null : FitArc(pp) ?? IntersectionOf(segments[chain[0]].Owners, pp, faces);
+                            if (piece is ArcCurve3 && !ArcOnSurfOff && !ArcOnSources(piece, segments[chain[0]].Owners, faces)) { Interlocked.Increment(ref ArcsOffSurface); piece = pp == null ? null : IntersectionOf(segments[chain[0]].Owners, pp, faces) ?? new PolylineCurve3(pp); }
                             ChainDebug?.Invoke($"  кольцо {chain.Count}: часть {fitted.Count}, точек {pp?.Count}, кривая {piece?.GetType().Name ?? "нет"}");
                             if (piece == null) break;
                             fitted.Add(piece);
@@ -4619,6 +5128,11 @@ public static class BooleanOp
             }
 
             ICurve3? arc = FitArc(points, out string why, KnownCircle(segments[chain[0]].Owners, points[0]));
+            // k140 (корпус лофтов): дуга по точкам цепочки должна лежать на точных поверхностях граней — точки цепочки лежат на
+            // гранении (резец по хордам), и окружность через них отходила от NURBS-грани на 0.033 мм: тело отвергалось
+            // проверкой «кривая ребра отходит от поверхностей», правка отказывала. Такая цепочка остаётся хордами (или
+            // кривой пересечения). Мутация P3D_ARCONSURF=0.
+            if (arc != null && !ArcOnSurfOff && faces != null && !ArcOnSources(arc, segments[chain[0]].Owners, faces)) { arc = null; Interlocked.Increment(ref ArcsOffSurface); }
 
             // КРИВАЯ ПЕРЕСЕЧЕНИЯ ДВУХ ИСХОДНЫХ ПОВЕРХНОСТЕЙ.
             //
@@ -4657,6 +5171,15 @@ public static class BooleanOp
                     continue;
                 }
                 arc = IntersectionOf(segments[chain[0]].Owners, points, faces);
+            }
+
+            // k140: ЦЕПОЧКА БЕЗ ТОЧНОЙ КРИВОЙ — ОДНО РЕБРО-ЛОМАНАЯ, а не полсотни отрезков. Гладкий шов боковин лофта (касание,
+            // пересечение не уточняется) оставался звеньями: ссылка на ребро после правки находила два куска в одной точке
+            // («ambiguous reference»), а цепочка скругления рвалась на каждом звене. Мутация P3D_CHAINPOLY=0.
+            if (arc == null && !ChainPolyOff && faces != null && chain.Count >= 2)
+            {
+                arc = new PolylineCurve3(points);
+                Interlocked.Increment(ref ChainPolylines);
             }
 
             if (arc == null)
@@ -4811,7 +5334,7 @@ public static class BooleanOp
             // которая уже измерена у допуска.
 
             ICurve3? c = FitArc(run) ?? ArcIfRound(SectionIsoCurve.TryBuild(src[0], src[1], run));
-            if (c == null && IntersectionCurve3.TryBuild(src[0], src[1], run) is { } ic)
+            if (c == null && IcNear(IntersectionCurve3.TryBuild(src[0], src[1], run, maxShift: IcShift()), run) is { } ic)
             {
                 // Уточнённые точки легли на окружность — ребро дуга (край фаски по скруглению
                 // на плоской грани — точная окружность, а не кривая общего вида).
@@ -4819,6 +5342,8 @@ public static class BooleanOp
                 ic.Tessellate(refined, true);
                 c = FitArc(refined) ?? (ICurve3)ic;
             }
+            // k140: дуга — только если лежит на точных поверхностях обеих граней (у плоской — в её плоскости)
+            if (c is ArcCurve3 && !ArcOnSurfOff && !ArcOnSources(c, owners, faces)) { Interlocked.Increment(ref ArcsOffSurface); c = null; }
             if (c == null) return false;
             result.Add((from, end, c));
             anyCurve = true;

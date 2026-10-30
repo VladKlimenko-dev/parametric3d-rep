@@ -362,7 +362,7 @@ static partial class Program
                 n++;
                 double back = double.NaN;
                 try { var b = Parametric3D.Kernel.Export.IgesImport.Read(Parametric3D.Kernel.Export.IgesSolid.Write(p.Bodies, new List<string>()), new List<string>()); if (b != null) back = OpVolume(b); }
-                catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { }
+                catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { if (Environment.GetEnvironmentVariable("IGESDBG") == "1") Console.WriteLine($"IGESEX {name}: {ex}"); }
                 if (!(Math.Abs(back - p.Volume) <= 1e-6 * Math.Max(1, p.Volume))) bad.Add($"{name}: {back:G9} vs {p.Volume:G9}");
             }
             Console.WriteLine($"IGES catalogue back: {n - bad.Count}/{n}");

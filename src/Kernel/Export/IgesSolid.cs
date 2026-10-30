@@ -647,6 +647,7 @@ public static class IgesSolid
     static readonly bool PcGenOff = Environment.GetEnvironmentVariable("P3D_IGESPCGEN") == "0";
     static readonly bool PcKOld = Environment.GetEnvironmentVariable("P3D_IGESPCK") == "24";
     static readonly bool PieceOff = Environment.GetEnvironmentVariable("P3D_IGESPIECE") == "0";
+    static readonly bool PolySegOff = Environment.GetEnvironmentVariable("P3D_IGESPOLYSEG") == "0";
 
     /// <summary>Зарегистрировать деление куска контура в его параметре t (переводится в параметр кривой ребра).</summary>
     static void RegisterSplit(ICurve3 piece, double t)
@@ -681,6 +682,26 @@ public static class IgesSolid
         {
             var c = ce.Edge.Curve;
             var cuts = _splits != null && _splits.TryGetValue(ce.Edge, out var sl) ? sl.Where(x => x > c.T0 + 1e-9 && x < c.T1 - 1e-9).OrderBy(x => x).ToList() : null;
+            // k140: ребро-ломаная (цепочка отрезков без точной кривой, P3D_CHAINPOLY) — отрезками, как до k140: обратный
+            // импорт IGES не собирал грань (объём NaN в K10-IGES-CATALOGUE-BACK). Мутация P3D_IGESPOLYSEG=0.
+            if (!PolySegOff && c is PolylineCurve3 pl && (cuts == null || cuts.Count == 0))
+            {
+                var acc = new double[pl.Pts.Length];
+                for (int i = 1; i < pl.Pts.Length; i++) acc[i] = acc[i - 1] + (pl.Pts[i] - pl.Pts[i - 1]).Length;
+                double tot = acc[^1] > 0 ? acc[^1] : 1;
+                var segs = new List<ICurve3>();
+                for (int i = 1; i < pl.Pts.Length; i++)
+                {
+                    if ((pl.Pts[i] - pl.Pts[i - 1]).LengthSquared == 0) continue;
+                    ICurve3 sg = ce.Reversed ? new LineCurve3(pl.Pts[i], pl.Pts[i - 1]) : new LineCurve3(pl.Pts[i - 1], pl.Pts[i]);
+                    double a0 = c.T0 + (c.T1 - c.T0) * acc[i - 1] / tot, a1 = c.T0 + (c.T1 - c.T0) * acc[i] / tot;
+                    _pieces?.TryAdd(sg, (ce.Edge, ce.Reversed ? a1 : a0, ce.Reversed ? a0 : a1));
+                    segs.Add(sg);
+                }
+                if (ce.Reversed) segs.Reverse();
+                res.AddRange(segs);
+                continue;
+            }
             var ranges = new List<(double A, double B)>();
             if (cuts == null || cuts.Count == 0 || Sub(c, c.T0, c.T1) == null) ranges.Add((c.T0, c.T1));
             else { double prev = c.T0; foreach (var x in cuts) { ranges.Add((prev, x)); prev = x; } ranges.Add((prev, c.T1)); }

@@ -366,6 +366,13 @@ public sealed class MeshBuilder
     static readonly double SnapUlps = double.TryParse(Environment.GetEnvironmentVariable("P3D_SNAPULPS"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var su) ? su : 0;
     static readonly bool LocalSnapOn = Environment.GetEnvironmentVariable("P3D_LOCALSNAP") == "1";
     static readonly bool WedgeOff = Environment.GetEnvironmentVariable("P3D_WEDGE") != "1";
+    static readonly bool NeedleAxisOff = Environment.GetEnvironmentVariable("P3D_NEEDLEAXIS") == "0";
+    public static long NeedleAxisFixes;
+    static readonly bool NeedlePatchOff = Environment.GetEnvironmentVariable("P3D_NEEDLEPATCH") == "0";
+    static readonly bool PatchFoldOff = Environment.GetEnvironmentVariable("P3D_PATCHFOLD") == "0";
+    static readonly bool PatchDbg = Environment.GetEnvironmentVariable("P3D_PATCHDBG") == "1";
+    public static long NeedlePatches;
+    string? _axisWhy, _buildWhy, _patchWhy;
     static readonly bool SecondPassOff = Environment.GetEnvironmentVariable("P3D_SECONDPASS") == "0";
     static readonly double ZipK = double.TryParse(Environment.GetEnvironmentVariable("P3D_ZIPK"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var zk) ? zk : 1;
     private void GlobalSnapClean(bool snapOnly)
@@ -578,7 +585,7 @@ public sealed class MeshBuilder
                     foreach (int m in others) { var (a, b, c, _, _) = tris[m]; Count(a, b); Count(b, c); Count(c, a); }
                     foreach (var tri in add)
                         foreach (var (x, y) in new[] { (tri.A, tri.B), (tri.B, tri.C), (tri.C, tri.A) })
-                            if (cnt.GetValueOrDefault((x, y)) != 1 || cnt.GetValueOrDefault((y, x)) != 1) return null;
+                            if (cnt.GetValueOrDefault((x, y)) != 1 || cnt.GetValueOrDefault((y, x)) != 1) { _buildWhy = $"unpaired {x}->{y} fwd {cnt.GetValueOrDefault((x, y))} back {cnt.GetValueOrDefault((y, x))}"; return null; }
                     return add;
                 }
                 List<int>? Straight(int u, int v)
@@ -605,16 +612,152 @@ public sealed class MeshBuilder
                     if (su > sv) on.Reverse();
                     return on;
                 }
-                var addSel = Build(BySpine) ?? Build(Straight);
+                // k140: (3) по главной оси группы — щепка вдоль прямой линии касания скругления со стенкой лофта (15 мм,
+                // зигзаг из 155 игл): «хребет» ветвится (концов 5), а точки отходят от основания стороны дальше 2T. Годится,
+                // если группа почти прямая (отход точек от оси меньше сотой доли её длины). Мутация P3D_NEEDLEAXIS=0.
+                Dictionary<int, double>? axis = null;
+                if (!NeedleAxisOff && S.Count >= 3)
+                {
+                    var c0 = S.Aggregate(Vector3d.Zero, (acc, w) => acc + Pos(w)) / S.Count;
+                    double xx = 0, xy = 0, xz = 0, yy = 0, yz = 0, zz = 0;
+                    foreach (int w in S) { var d = Pos(w) - c0; xx += d.X * d.X; xy += d.X * d.Y; xz += d.X * d.Z; yy += d.Y * d.Y; yz += d.Y * d.Z; zz += d.Z * d.Z; }
+                    var ax = new Vector3d(1, 0.7, 0.3);
+                    for (int it = 0; it < 60; it++)
+                    {
+                        var nx = new Vector3d(xx * ax.X + xy * ax.Y + xz * ax.Z, xy * ax.X + yy * ax.Y + yz * ax.Z, xz * ax.X + yz * ax.Y + zz * ax.Z);
+                        if (nx.LengthSquared < 1e-30) break; ax = nx.Normalized();
+                    }
+                    double lo = double.MaxValue, hi = double.MinValue, off = 0;
+                    var prm = new Dictionary<int, double>();
+                    foreach (int w in S) { var d = Pos(w) - c0; double t = Vector3d.Dot(d, ax); prm[w] = t; lo = Math.Min(lo, t); hi = Math.Max(hi, t); off = Math.Max(off, (d - ax * t).Length); }
+                    if (hi - lo > 0 && off < 0.01 * (hi - lo)) axis = prm;
+                    _axisWhy = $"axis len {hi - lo:G3} off {off:G3}";
+                }
+                List<int>? ByAxis(int u, int v)
+                {
+                    if (axis == null || !axis.TryGetValue(u, out double au) || !axis.TryGetValue(v, out double av)) return null;
+                    double lo = Math.Min(au, av), hi = Math.Max(au, av);
+                    var on = S.Where(w => w != u && w != v && axis[w] > lo && axis[w] < hi).ToList();
+                    on.Sort((x, y) => axis[x] != axis[y] ? axis[x].CompareTo(axis[y]) : x.CompareTo(y));
+                    if (au > av) on.Reverse();
+                    return on;
+                }
+                List<(int A, int B, int C, uint Face, int Src)>? Patch(List<int> g, List<int> sd)
+                {
+                    if (g.Count == 0) return null;
+                    var gfaces = g.Select(t => tris[t].Face).Distinct().ToHashSet();
+                    if (gfaces.Count > 3) { _patchWhy = "faces " + gfaces.Count; return null; }
+                    var U = g.Concat(sd.Where(t => gfaces.Contains(tris[t].Face))).Distinct().ToList();
+                    var res = new List<(int A, int B, int C, uint Face, int Src)>();
+                    var loops = new List<List<int>>();
+                    foreach (uint gf in gfaces)
+                    {
+                        var P = U.Where(t => tris[t].Face == gf).ToList();
+                        var net = new Dictionary<(int, int), int>();
+                        foreach (int t in P) { var (a, b, c, _, _) = tris[t]; foreach (var (x, y) in new[] { (a, b), (b, c), (c, a) }) net[(x, y)] = net.GetValueOrDefault((x, y)) + 1; }
+                        var bnd = new List<(int, int)>();
+                        foreach (var ((x, y), k) in net) { int r = k - net.GetValueOrDefault((y, x)); for (int q = 0; q < r; q++) bnd.Add((x, y)); }
+                        if (bnd.Count == 0) continue;                       // область грани гасится целиком (складка)
+                        var nextOf = new Dictionary<int, int>();
+                        foreach (var (x, y) in bnd) { if (nextOf.ContainsKey(x)) { _patchWhy = "branch " + bnd.Count; return null; } nextOf[x] = y; }
+                        if (nextOf.Count < 3) { _patchWhy = "short " + nextOf.Count; return null; }
+                        var loop = new List<int> { bnd[0].Item1 };
+                        while (true) { int nx = nextOf[loop[^1]]; if (nx == loop[0]) break; if (loop.Contains(nx) || loop.Count > nextOf.Count) { _patchWhy = "loops"; return null; } loop.Add(nx); }
+                        if (loop.Count != nextOf.Count) { _patchWhy = "several loops"; return null; }
+                        var nrm = Vector3d.Zero;
+                        foreach (int t in P) { var (a, b, c, _, _) = tris[t]; nrm += Vector3d.Cross(Pos(b) - Pos(a), Pos(c) - Pos(a)); }
+                        if (nrm.LengthSquared < 1e-30) { _patchWhy = "flat"; return null; }
+                        nrm = nrm.Normalized();
+                        var u = Vector3d.Cross(nrm, Math.Abs(nrm.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY).Normalized(); var v = Vector3d.Cross(nrm, u);
+                        var o = Pos(loop[0]);
+                        var uv = loop.Select(w => new Vector2d(Vector3d.Dot(Pos(w) - o, u), Vector3d.Dot(Pos(w) - o, v))).ToList();
+                        if (uv.Distinct().Count() != uv.Count) { _patchWhy = "uv dup"; return null; }
+                        var idx = Tess.Triangulator.Triangulate(uv, new List<IReadOnlyList<Vector2d>>(), out var outPts);
+                        var back = new Dictionary<Vector2d, int>(); for (int i = 0; i < uv.Count; i++) back[uv[i]] = loop[i];
+                        var (_, _, _, face0, src0) = tris[P[0]];
+                        int made = 0, pos = 0, neg = 0; int r0 = res.Count;
+                        for (int i = 0; i + 2 < idx.Count; i += 3)
+                        {
+                            if (!back.TryGetValue(outPts[idx[i]], out int a) || !back.TryGetValue(outPts[idx[i + 1]], out int b) || !back.TryGetValue(outPts[idx[i + 2]], out int c)) { _patchWhy = "bridge"; return null; }
+                            if (Vector3d.Dot(Vector3d.Cross(Pos(b) - Pos(a), Pos(c) - Pos(a)), nrm) < 0) { neg++; if (PatchFoldOff) (b, c) = (c, b); } else pos++;
+                            res.Add((a, b, c, face0, src0)); made++;
+                        }
+                        // k140: разбиение кольца — одного обхода. Треугольники разного обхода (кольцо в проекции перекрывает
+                        // себя) прежде переворачивались поодиночке — заплатка сама давала складку (две встречные иглы на
+                        // соседних float-точках, сторона кратности 4: seq_s106_2). Разный обход — заплатки нет; весь
+                        // обратный — переворачивается целиком; внутренние стороны — парны. Мутация P3D_PATCHFOLD=0.
+                        if (!PatchFoldOff)
+                        {
+                            if (pos > 0 && neg > 0) { _patchWhy = $"mixed orientation {pos}/{neg}"; return null; }
+                            if (neg > 0) for (int i = r0; i < res.Count; i++) { var w = res[i]; res[i] = (w.A, w.C, w.B, w.Face, w.Src); }
+                            var inner = new Dictionary<(int, int), int>();
+                            for (int i = r0; i < res.Count; i++) { var w = res[i]; foreach (var (x, y) in new[] { (w.A, w.B), (w.B, w.C), (w.C, w.A) }) inner[(x, y)] = inner.GetValueOrDefault((x, y)) + 1; }
+                            var ring = new HashSet<(int, int)>(); for (int i = 0; i < loop.Count; i++) ring.Add((loop[i], loop[(i + 1) % loop.Count]));
+                            foreach (var ((x, y), k) in inner)
+                                if (k != 1 || (!ring.Contains((x, y)) && !ring.Contains((y, x)) && inner.GetValueOrDefault((y, x)) != 1)) { _patchWhy = "inner sides"; return null; }
+                        }
+                        if (made != loop.Count - 2) { _patchWhy = $"triangulated {made} of {loop.Count - 2}"; return null; }
+                        loops.Add(loop);
+                    }
+                    // k140: заплатка в двух-трёх гранях не должна давать плавник — один и тот же треугольник в двух гранях
+                    // встречными обходами (сторона кратности 4 в сетке, seq_s106_2). Мутация P3D_PATCHFOLD=0.
+                    if (!PatchFoldOff)
+                    {
+                        var und = new Dictionary<(int, int), int>(); var trip = new HashSet<(int, int, int)>();
+                        foreach (var w in res)
+                        {
+                            var arr = new[] { w.A, w.B, w.C }; Array.Sort(arr);
+                            if (!trip.Add((arr[0], arr[1], arr[2]))) { _patchWhy = "fin"; return null; }
+                            foreach (var (x, y) in new[] { (w.A, w.B), (w.B, w.C), (w.C, w.A) }) { var k = x < y ? (x, y) : (y, x); und[k] = und.GetValueOrDefault(k) + 1; }
+                        }
+                        if (und.Values.Any(k => k > 2)) { _patchWhy = "side used more than twice"; return null; }
+                    }
+                    // проверка: стороны колец — парны с соседями вне области и с новыми треугольниками
+                    var uset = new HashSet<int>(U);
+                    var cnt = new Dictionary<(int, int), int>();
+                    void Cn(int a, int b) { cnt[(a, b)] = cnt.GetValueOrDefault((a, b)) + 1; }
+                    foreach (var (a, b, c, _, _) in res) { Cn(a, b); Cn(b, c); Cn(c, a); }
+                    var nb = new HashSet<int>();
+                    foreach (var loop in loops)
+                        for (int i = 0; i < loop.Count; i++)
+                        {
+                            var key = loop[i] < loop[(i + 1) % loop.Count] ? (loop[i], loop[(i + 1) % loop.Count]) : (loop[(i + 1) % loop.Count], loop[i]);
+                            if (byEdge.TryGetValue(key, out var lst)) foreach (int e in lst) if (!dead[e] && !uset.Contains(e)) nb.Add(e);
+                        }
+                    var vset = new HashSet<int>(loops.SelectMany(x => x));
+                    foreach (int e in nb) { var (a, b, c, _, _) = tris[e]; foreach (var (x, y) in new[] { (a, b), (b, c), (c, a) }) if (vset.Contains(x) && vset.Contains(y)) Cn(x, y); }
+                    foreach (var loop in loops)
+                        for (int i = 0; i < loop.Count; i++)
+                        {
+                            int a = loop[i], b = loop[(i + 1) % loop.Count];
+                            if (cnt.GetValueOrDefault((a, b)) != 1 || cnt.GetValueOrDefault((b, a)) != 1) { _patchWhy = $"pair {a}->{b} {cnt.GetValueOrDefault((a, b))}/{cnt.GetValueOrDefault((b, a))}"; return null; }
+                        }
+                    foreach (int t in U) kill.Add(t);
+                    if (PatchDbg)
+                    {
+                        Console.WriteLine($"PATCH faces {gfaces.Count} removed {U.Count} added {res.Count}");
+                        foreach (int t in U) { var w = tris[t]; Console.WriteLine($"  OLD f{w.Face} {Pos(w.A).X:R},{Pos(w.A).Y:R},{Pos(w.A).Z:R} | {Pos(w.B).X:R},{Pos(w.B).Y:R},{Pos(w.B).Z:R} | {Pos(w.C).X:R},{Pos(w.C).Y:R},{Pos(w.C).Z:R}"); }
+                        foreach (var w in res) Console.WriteLine($"  NEW f{w.Face} {Pos(w.A).X:R},{Pos(w.A).Y:R},{Pos(w.A).Z:R} | {Pos(w.B).X:R},{Pos(w.B).Y:R},{Pos(w.B).Z:R} | {Pos(w.C).X:R},{Pos(w.C).Y:R},{Pos(w.C).Z:R}");
+                    }
+                    Interlocked.Increment(ref NeedlePatches);
+                    return res;
+                }
+                var addSel = Build(BySpine) ?? Build(Straight) ?? (axis != null ? Build(ByAxis) : null);
+                if (addSel != null && axis != null && spine == null) Interlocked.Increment(ref NeedleAxisFixes);
+                // k140: (4) ЗАПЛАТКА. Группа и её стороны в одной грани (складка веером нулевой площади у торца скругления):
+                // область заменяется заново разбитым контуром — сеть направленных сторон области (взаимные пары гасятся)
+                // складывается в одно кольцо, оно разбивается в плоскости области отрезанием ушей. Мутация P3D_NEEDLEPATCH=0.
+                bool patched = false;
+                if (addSel == null && !NeedlePatchOff) { addSel = Patch(grp, sides.Select(sd => sd.T).ToList()); patched = addSel != null; }
                 bool bad = addSel == null;
                 var add = addSel ?? new List<(int A, int B, int C, uint Face, int Src)>();
-                foreach (var sd in sides) kill.Add(sd.T);
+                if (!patched) foreach (var sd in sides) kill.Add(sd.T);
                 if (bad)
                 {
                     failedGroups++;
                     if (Environment.GetEnvironmentVariable("P3D_COLLDBG") == "2")
                     {
-                        Console.WriteLine($"failed group: needles {grp.Count} points {S.Count} sides {sides.Count} add {add.Count} spine {(spine == null ? _spineWhy : "ok")}");
+                        Console.WriteLine($"failed group: needles {grp.Count} points {S.Count} sides {sides.Count} add {add.Count} spine {(spine == null ? _spineWhy : "ok")} {_axisWhy} {_buildWhy} patch {_patchWhy}");
                         foreach (int t in grp) Console.WriteLine($"   needle {tris[t].A},{tris[t].B},{tris[t].C} h {Height(t, out _, out _, out _):E2}");
                         foreach (var sd in sides) { var tm = tris[sd.T]; Console.WriteLine($"   side {tm.A},{tm.B},{tm.C} base {sd.A}->{sd.B} h {Height(sd.T, out _, out _, out _):E2}"); }
                         foreach (int w in S) Console.WriteLine($"   pt {w} {Pos(w).X:R} {Pos(w).Y:R} {Pos(w).Z:R}");

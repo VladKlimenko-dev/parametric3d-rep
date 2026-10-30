@@ -993,6 +993,7 @@ public static partial class ExactFaceMesher
             }
         }
 
+        if (made == null) AreaDebug?.Invoke($"{f.Tag} REJECT {why}");
         // В ПАМЯТЬ КЛАДУТСЯ КОПИИ, И ОТДАЮТСЯ ТОЖЕ КОПИИ. Прежде при первом счёте в память шли
         // ТЕ ЖЕ списки, что уходили вызывающему: сдвиг одной точки на 123 мм в полученной сетке
         // обнаруживался потом в памяти, и следующая грань получала испорченное.
@@ -1021,6 +1022,10 @@ public static partial class ExactFaceMesher
     /// <summary>Сколько сеток по контурам отвергнуто самопроверкой площади (диагностика).</summary>
     public static int RejectedByArea;
     public static Action<string>? AreaDebug;
+    static readonly bool SideSplitOff = Environment.GetEnvironmentVariable("P3D_MESHSIDESPLIT") == "0";
+    public static long SideSplits;
+    static readonly bool BoundaryInsOff = Environment.GetEnvironmentVariable("P3D_MESHBOUNDARYINS") == "0";
+    public static long BoundaryInsSkipped;
 
     static readonly bool MeshTrace = Environment.GetEnvironmentVariable("P3D_MESHTRACE") == "1";
     static readonly bool SplitDbg = Environment.GetEnvironmentVariable("P3D_MESHWHY") == "1";
@@ -3228,7 +3233,46 @@ public static partial class ExactFaceMesher
                     Vector2d mSide = (UV[la] + UV[lb]) / 2;
                     Vector3d onSide = src.PointAt(new Vector2d(mSide.X / scale.X, mSide.Y / scale.Y));
                     if ((onSide - P[la]).Length < micro || (onSide - P[lb]).Length < micro) { SkipMicro++; continue; }
+                    // k140: ДЕЛЕНИЕ СТОРОНЫ — ДЕЛЕНИЕ ОБОИХ ЕЁ ТРЕУГОЛЬНИКОВ. Прежде точка середины стороны вставлялась как
+                    // центр треугольника (три новых, один из них — вырожденный по параметрам на самой стороне). У граничной
+                    // стороны точка поверхности выходит за хорду ребра тела: треугольник между хордой и кривой, сторона хорды
+                    // кратности 3 со смежной гранью (скругление R0.3 у шестигранного отверстия лофта). Граничная сторона не
+                    // делится (на ней точки рёбер тела), внутренняя — с обоими треугольниками. Мутация P3D_MESHSIDESPLIT=0.
+                    if (!SideSplitOff)
+                    {
+                        if (!map.TryGetValue((lb, la), out int to) || to == t) { SkipMicro++; continue; }
+                        if (!DupInsOff && P.Any(x => (x - onSide).LengthSquared < micro * micro)) { SkipMicro++; continue; }
+                        int x1 = Third(T, t, la, lb), y1 = Third(T, to, lb, la);
+                        if (x1 < 0 || y1 < 0) { SkipMicro++; continue; }
+                        int vs = P.Count; P.Add(onSide); UV.Add(mSide); added++; RefineAdded = added; Interlocked.Increment(ref SideSplits);
+                        Remove(t); Remove(to);
+                        T[t] = la; T[t + 1] = vs; T[t + 2] = x1; Add(t);
+                        T[to] = lb; T[to + 1] = vs; T[to + 2] = y1; Add(to);
+                        int s1 = T.Count; T.Add(vs); T.Add(lb); T.Add(x1); Add(s1);
+                        int s2 = T.Count; T.Add(vs); T.Add(la); T.Add(y1); Add(s2);
+                        var qs = new Queue<(int, int)>();
+                        qs.Enqueue((la, x1)); qs.Enqueue((x1, lb)); qs.Enqueue((lb, y1)); qs.Enqueue((y1, la));
+                        Legalize(qs);
+                        continue;
+                    }
                     onS = onSide; m = mSide;
+                }
+                // k140: ТОЧКА НЕ ЛОЖИТСЯ НА ГРАНИЧНУЮ СТОРОНУ. Хорда ребра тела в 15 мм вдоль стенки лофта: у узких треугольников
+                // при ней точка поверхности по центру в развёртке встаёт на саму хорду (в микронах), а соседняя грань делает то же
+                // со своей стороны — после склейки точек сетки сторона кратности 3. Вставка, которая ближе к граничной стороне
+                // треугольника, чем десятая доля его высоты над ней, пропускается. Мутация P3D_MESHBOUNDARYINS=0.
+                if (!BoundaryInsOff)
+                {
+                    bool nearRim = false;
+                    foreach (var (u0, w0, o0) in new[] { (a, b, c), (b, c, a), (c, a, b) })
+                    {
+                        if (map.ContainsKey((w0, u0))) continue;          // внутренняя сторона
+                        var d = P[w0] - P[u0]; double L2 = d.LengthSquared; if (L2 < 1e-24) continue;
+                        double Dist(Vector3d x) { double tt = Math.Clamp(Vector3d.Dot(x - P[u0], d) / L2, 0, 1); return (P[u0] + d * tt - x).Length; }
+                        double h = Dist(P[o0]);
+                        if (Dist(onS) < Math.Max(1e-6, 0.1 * h)) { nearRim = true; break; }
+                    }
+                    if (nearRim) { SkipMicro++; Interlocked.Increment(ref BoundaryInsSkipped); continue; }
                 }
                 // KRN-06 (06.12): ТОЧКА УЖЕ ЕСТЬ. Деление по длинной стороне у двух соседних щепок ставило одну и ту же середину
                 // их общей стороны дважды — вырожденный треугольник (сторона 0), грань отвергалась (лента катящегося шара у

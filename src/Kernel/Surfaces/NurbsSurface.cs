@@ -262,6 +262,35 @@ public sealed class NurbsSurface : ISurface3
                 if (d < best) { best = d; bestU = i / (double)grid; bestV = j / (double)grid; }
             }
 
+        // k140 (скорость): СРАЗУ НЬЮТОН. Гаусс — Ньютон с точными производными (Derivs) от лучшей точки сетки, шаг делится
+        // пополам, пока расстояние не уменьшится; сходится за несколько шагов. Прежде — спуск по сетке (до 160 вычислений
+        // точки) и Ньютон по разностям: проекция на NURBS была главной ценой проверок и объёма граней лофта. Не сошёлся —
+        // прежний путь. Мутация P3D_NURBSPROJNEWTON=0.
+        if (!ProjNewtonOff && !DerivsOff)
+        {
+            double u = bestU, v = bestV, bd = best; bool ok = false;
+            for (int it = 0; it < 50; it++)
+            {
+                DerivsCore(new Vector2d(u, v), false, out var S, out var Su, out var Sv);
+                var r = S - p;
+                double f1 = Vector3d.Dot(r, Su), f2 = Vector3d.Dot(r, Sv);
+                double a11 = Vector3d.Dot(Su, Su), a12 = Vector3d.Dot(Su, Sv), a22 = Vector3d.Dot(Sv, Sv), det = a11 * a22 - a12 * a12;
+                if (Math.Abs(det) < 1e-30) break;
+                double du = -(f1 * a22 - f2 * a12) / det, dv = -(f2 * a11 - f1 * a12) / det;
+                double fr = 1; bool moved = false;
+                for (int hh = 0; hh < 30; hh++, fr *= 0.5)
+                {
+                    double nu = Math.Clamp(u + du * fr, 0, 1), nv = Math.Clamp(v + dv * fr, 0, 1);
+                    double nd = (PointAt(new Vector2d(nu, nv)) - p).LengthSquared;
+                    if (nd < bd || (nd <= bd && (Math.Abs(nu - u) + Math.Abs(nv - v)) == 0)) { moved = nd < bd; u = nu; v = nv; bd = Math.Min(nd, bd); break; }
+                }
+                if (!moved) { ok = true; break; }
+                if (Math.Abs(du * fr) + Math.Abs(dv * fr) < 1e-14) { ok = true; break; }
+            }
+            if (ok) { Interlocked.Increment(ref ProjNewtonHits); return new Vector2d(u, v); }
+            bestU = u; bestV = v; best = bd;
+        }
+
         double step = 1.0 / grid;
         for (int pass = 0; pass < 40 && step > 1e-6; pass++)
         {
@@ -336,6 +365,8 @@ public sealed class NurbsSurface : ISurface3
         return lo;
     }
 
+    static readonly bool ProjNewtonOff = Environment.GetEnvironmentVariable("P3D_NURBSPROJNEWTON") == "0";
+    public static long ProjNewtonHits;
     static readonly bool ProjHalvingOff = Environment.GetEnvironmentVariable("P3D_NURBSPROJHALF") == "0";
     /// <summary>Мутация P3D_NURBSFAST=0: точка — прежним путём (де Бур с выделениями памяти).</summary>
     public static readonly bool FastEvalOff = Environment.GetEnvironmentVariable("P3D_NURBSFAST") == "0";

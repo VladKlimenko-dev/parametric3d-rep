@@ -23,9 +23,12 @@ public static class ShellComponents
     public sealed class Outcome
     {
         public readonly List<TSolid> Bodies = new();
-        public int Components, Cavities;
+        public int Components, Cavities, DroppedCrumbs;
         public string? Warning;
     }
+
+    static readonly bool DropTinyCavityOff = Environment.GetEnvironmentVariable("P3D_DROPTINYCAVITY") == "0";
+    public static long TinyCavitiesDropped;
 
     public static Outcome Split(TSolid solid)
     {
@@ -76,6 +79,10 @@ public static class ShellComponents
                 if (vols[i] >= best) continue;
                 if (Contains(bodyOf[i], comps[i], probe)) { owner = i; best = vols[i]; }
             }
+            // k140 (корпус лофтов): вывернутая крошка (объём меньше 10⁻⁵ тела) вне всех оболочек — след разбиения у острого
+            // угла после фаски: отбрасывается (её грани в тело не идут). Мутация P3D_DROPTINYCAVITY=0.
+            if (owner < 0 && !DropTinyCavityOff && Math.Abs(vols[k]) < 1e-5 * outers.Sum(i => vols[i]))
+            { res.DroppedCrumbs++; Interlocked.Increment(ref TinyCavitiesDropped); continue; }
             if (owner < 0) { res.Warning = $"a cavity (volume {vols[k]:G6}) lies in no outer shell"; Restore(solid, comps); res.Bodies.Clear(); res.Bodies.Add(solid); return res; }
             var sh = bodyOf[owner].AddShell();
             foreach (var f in comps[k]) sh.Add(f);
