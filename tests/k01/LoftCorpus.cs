@@ -319,7 +319,7 @@ static partial class Program
                         double ms = sw.ElapsedMilliseconds; totalMs += ms;
                         string tag = $"s{sd} {(round ? "R" : "C")}{size} edge ({mid.X:0.##},{mid.Y:0.##},{mid.Z:0.##}){(chain.Count > 1 ? $" chain {chain.Count}" : "")}";
                         var problems = new List<string>();
-                        if (f.Error != null && LegitRefusal(f.Error)) { nLegit++; Log(new { tag, ms, legit = f.Error.Split('\n').Last() }); continue; }
+                        if (f.Error != null && LegitRefusal(f.Error)) { nLegit++; Log(new { tag, ms, legit = f.Error.Split('\n').Last(), full = f.Error }); continue; }
                         if (f.Error != null)
                         {
                             nRefused++; string key = System.Text.RegularExpressions.Regex.Replace(f.Error.Split('\n').Last(), @"[-0-9]+\.[0-9]+(E[-+0-9]+)?", "#");
@@ -434,7 +434,7 @@ static partial class Program
         }
         var (p, pars) = DocumentFile.Load(text);
         TSolid? tool = null;
-        Parametric3D.Kernel.Ops.FilletOp.BuiltTool = t => tool ??= TopologyClone.Deep(t);
+        Parametric3D.Kernel.Ops.FilletOp.BuiltTool = t => tool = TopologyClone.Deep(t);   // последний резец — операции файла
         if (Environment.GetEnvironmentVariable("SWEEPDBG") == "1") Parametric3D.Kernel.Ops.FilletOp.SweepDebug = m => Console.WriteLine("SWEEP " + m);
         if (Environment.GetEnvironmentVariable("REACHDBG") == "1") Parametric3D.Kernel.Ops.FilletOp.ReachDebug = m => Console.WriteLine("REACH " + m);
         if (Environment.GetEnvironmentVariable("BALLDBG") == "1") Parametric3D.Kernel.Ops.FilletOp.BallDebug = m => Console.WriteLine("BALL " + m);
@@ -594,7 +594,7 @@ static partial class Program
                 var mid = e.Curve!.PointAt(0.5 * (e.Curve.T0 + e.Curve.T1));
                 string tag = $"s{sd} step {st} {(round ? "R" : "C")}{size} edge ({mid.X:0.##},{mid.Y:0.##},{mid.Z:0.##}){(chain.Count > 1 ? $" chain {chain.Count}" : "")}";
                 var problems = new List<string>();
-                if (f.Error != null && LegitRefusal(f.Error)) { legit++; Log(new { tag, ms, legit = f.Error.Split('\n').Last() }); p.RemoveFeature(f); p.Rebuild(null); continue; }
+                if (f.Error != null && LegitRefusal(f.Error)) { legit++; Log(new { tag, ms, legit = f.Error.Split('\n').Last(), full = f.Error }); p.RemoveFeature(f); p.Rebuild(null); continue; }
                 if (f.Error != null) { refused++; problems.Add("refused: " + f.Error.Split('\n').Last()); }
                 else if (p.Bodies.Count != 1) problems.Add($"the body split into {p.Bodies.Count} bodies");
                 else

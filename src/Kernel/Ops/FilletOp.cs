@@ -2050,6 +2050,7 @@ public static class FilletOp
     static readonly bool TangentInsetOff = Environment.GetEnvironmentVariable("P3D_TANGENTINSET") == "0";
     static readonly bool ReachTrisOff = Environment.GetEnvironmentVariable("P3D_REACHTRIS") == "0";
     static readonly bool ReachCullOff = Environment.GetEnvironmentVariable("P3D_REACHCULL") == "0";
+    static readonly bool ReachFaceRaysOff = Environment.GetEnvironmentVariable("P3D_REACHFACERAYS") == "0";
     public static long ReachTrisHits, ReachCulls;
     sealed class ReachMemo { public (long, double, double) Key; public List<(Vector3d A, Vector3d B, Vector3d C)> Tris = null!; public List<TFace> Faces = null!; }
     static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, ReachMemo> _reachTris = new();
@@ -2125,6 +2126,22 @@ public static class FilletOp
             tris.AddRange(bt); triFace.AddRange(bf);
         }
 
+        // k141 (корпус, s71): ЛУЧИ И С САМИХ ГРАНЕЙ. Сетка лучей — плоский треугольник между ребром и прямыми f1, f2; у
+        // наклонённой или изогнутой грани (сторона лофта уходит от прямой f1 на 0.25 мм на глубине 1.5 мм) полоса сечения между
+        // прямой и гранью лучами не проверялась: у угла из трёх граней за концом там оставался материал, продления не было, и
+        // от торца резца оставалась грань-щепка 0.42 × 0.006 мм. Добавлены лучи из точек самих граней ребра (проекции точек
+        // прямых f1, f2 на грани, чуть внутрь тела). Мутация P3D_REACHFACERAYS=0.
+        var faceRays = new List<Vector3d>();
+        if (!ReachFaceRaysOff)
+        {
+            Vector3d inw0 = -(n1 + n2) * Math.Max(1e-5, size * 1e-5);
+            for (int k = 1; k <= 24; k++)
+            {
+                double u = k / 24.0;
+                try { faceRays.Add(OntoFace(fa, end + f1 * (need1 * u)) + inw0); } catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { }
+                try { faceRays.Add(OntoFace(fb, end + f2 * (need2 * u)) + inw0); } catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { }
+            }
+        }
         double reach = 0;
         // k113: мгновенный предпросмотр — сетка лучей реже и уточнение грубее (длина резца — для вида; точный расчёт — при «ОК»)
         bool quick = InstantPreview.Active;
@@ -2139,7 +2156,7 @@ public static class FilletOp
             var e1 = Vector3d.Cross(o, Math.Abs(o.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY).Normalized();
             var e2 = Vector3d.Cross(o, e1);
             var inw = -(n1 + n2) * Math.Max(1e-5, size * 1e-5);
-            var corners = new[] { end + inw, end + f1 * need1 + inw, end + f2 * need2 + inw };
+            var corners = new[] { end + inw, end + f1 * need1 + inw, end + f2 * need2 + inw }.Concat(faceRays).ToArray();
             double lo1 = double.MaxValue, hi1 = double.MinValue, lo2 = double.MaxValue, hi2 = double.MinValue, back = double.MaxValue;
             foreach (var c in corners)
             {
@@ -2190,6 +2207,12 @@ public static class FilletOp
                 if (exit > reach) reach = exit;
             }
 
+        foreach (var q in faceRays)
+        {
+            double exit = FirstExitExact(tris, triFace, q, outward, size);
+            if (exit > reach && exit < limit) reach = exit;
+        }
+        ReachDebug?.Invoke($"лучи у ({end.X:0.###},{end.Y:0.###},{end.Z:0.###}): выходов {best.Count(b => b.Exit > 0)} из {best.Count}, наибольший {reach:G4}; f1 {f1:0.###}×{need1:0.###} f2 {f2:0.###}×{need2:0.###} out {outward:0.###} треугольников {tris.Count}");
         // УТОЧНЕНИЕ МАКСИМУМА. Самая дальняя точка выхода лежит на гребне, где
         // выход через одну грань сравнивается с выходом через другую, и гребень
         // проходит между узлами сетки. Ближайший узел недобирал десятые доли
@@ -2283,6 +2306,7 @@ public static class FilletOp
     /// продолжение соседнего сечения за общий конец расходится с ним лишь по кривизне.
     /// </summary>
     static readonly bool WallCapOff = Environment.GetEnvironmentVariable("P3D_WALLCAP") == "0";
+    static readonly bool WallCapMinOff = Environment.GetEnvironmentVariable("P3D_WALLCAPMIN") == "0";
     static readonly bool CrumbsOff = Environment.GetEnvironmentVariable("P3D_BLENDCRUMBS") == "0";
     public static long CrumbsDropped;
     static readonly bool BlendRunoutOff = Environment.GetEnvironmentVariable("P3D_BLENDRUNOUT") == "0";
@@ -2335,6 +2359,7 @@ public static class FilletOp
                         w = (c + n * Vector3d.Dot(end - c, n), n);
                     }
                 }
+                SweepDebug?.Invoke($"стенка-кандидат {face.Id} {face.Tag} n {w.N:0.####} ne {ne:0.####}");
                 if (found is { } f0 && Vector3d.Dot(f0.N, w.N) < 0.9999) return null;
                 var au = GeometryAudit.AuthoritativeSurface(face);
                 found ??= (w.P, w.N, au is PlaneSurface || au == null ? new PlaneSurface(Frame3.FromNormal(w.P, w.N)) : au);
@@ -3875,6 +3900,7 @@ public static class FilletOp
     static readonly bool SkipSmoothOff = Environment.GetEnvironmentVariable("P3D_SKIPSMOOTH") == "0";
     public static long SmoothSkipped;
     static readonly bool SweepConcaveOff = Environment.GetEnvironmentVariable("P3D_SWEEPCONCAVE") == "0";
+    static readonly bool FaceSideOff = Environment.GetEnvironmentVariable("P3D_FACESIDE") == "0";
     public static long SweptFills;
 
     private static TSolid? BuildSweptChamfer(List<TSolid> bodies, List<(TEdge Edge, bool Swap)> chain,
@@ -4016,6 +4042,50 @@ public static class FilletOp
         var N1 = new Vector3d[n]; var N2 = new Vector3d[n]; var F1v = new Vector3d[n]; var F2v = new Vector3d[n];
         var A0 = new Vector3d[n]; var B0 = new Vector3d[n];      // точки фаски до продления наружу
 
+        // k141 (seq_s108_2): СТОРОНА ГРАНИ — ПО ЕЁ ТРЕУГОЛЬНИКАМ. Направление вдоль грани от ребра выбиралось правилом
+        // «против нормали другой грани» — верным только у выпуклого ребра. У вогнутого ребра лофта (перехват сечения, излом
+        // 17°) точки фаски вставали за ребро, проекция прижимала их к ребру — резец толщиной 0.2 мм ничего не снимал (отказ
+        // недоверия: 10⁻⁴ против 18.8 мм³). Внутрь грани — туда, где её треугольник у точки ребра; и выпуклость ребра — по
+        // тем же треугольникам (внутренность первой грани за плоскостью второй). Мутация P3D_FACESIDE=0.
+        var sideTris = new Dictionary<TFace, List<(Vector3d A, Vector3d B, Vector3d C)>>(ReferenceEqualityComparer.Instance);
+        Vector3d? Inward(TFace f, Vector3d q, Vector3d t)
+        {
+            // только фаска: у скругления точки касания даёт шар (Ball), а смена пути у вогнутой дуги за критическим
+            // радиусом (KRN-ROUND-CAP-SPHERE-RADII, R3.09) строила недопустимое скругление вместо отказа
+            if (FaceSideOff || round) return null;
+            if (!sideTris.TryGetValue(f, out var tl))
+            {
+                tl = new List<(Vector3d, Vector3d, Vector3d)>();
+                try
+                {
+                    if (f.Surface is FacetedSurface fsx) foreach (var tt in fsx.Facets) tl.Add(tt);
+                    else
+                    {
+                        var mb0 = new MeshBuilder(); f.Surface.TessellateFace(f, mb0);
+                        var md0 = new MeshData(); mb0.FillInto(md0);
+                        for (int k = 0; k + 2 < md0.Indices.Length; k += 3)
+                            tl.Add((mb0.PositionsD[md0.Indices[k]], mb0.PositionsD[md0.Indices[k + 1]], mb0.PositionsD[md0.Indices[k + 2]]));
+                    }
+                }
+                catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { }
+                sideTris[f] = tl;
+            }
+            double best = double.MaxValue; (Vector3d A, Vector3d B, Vector3d C) bt = default; bool any = false;
+            foreach (var tr in tl)
+            {
+                var x = ClosestOnTriangle(q, tr.A, tr.B, tr.C); double dd = (x - q).LengthSquared;
+                if (dd < best) { best = dd; bt = tr; any = true; }
+            }
+            if (!any || best > 1e-6) return null;
+            Vector3d w = Vector3d.Zero; double wl = 0;
+            foreach (var v in new[] { bt.A, bt.B, bt.C })
+            {
+                var r = v - q; r -= t * Vector3d.Dot(r, t);
+                if (r.LengthSquared > wl) { wl = r.LengthSquared; w = r; }
+            }
+            return wl > 1e-14 ? w.Normalized() : null;
+        }
+
         for (int i = 0; i < n; i++)
         {
             var (p, f1, f2) = samples[i];
@@ -4050,6 +4120,12 @@ public static class FilletOp
             if (Vector3d.Dot(n1, n2) > 1 - 1e-6) { refusal = "the faces meet tangentially here — a smooth join, not an edge"; return null; }
 
             Vector3d g1 = AlongFace(n1, t, n2), g2 = AlongFace(n2, t, n1);
+            if (Inward(f1, p, t) is { } w1 && Inward(f2, p, t) is { } w2)
+            {
+                // обе грани согласны: сторона по треугольникам (у выпуклого ребра совпадает с прежним правилом)
+                bool flip1 = Vector3d.Dot(g1, w1) < 0, flip2 = Vector3d.Dot(g2, w2) < 0;
+                if (flip1 && flip2) { g1 = -g1; g2 = -g2; }
+            }
             A[i] = OntoFaceNear(f1, NeighbourFaces(i, first: true), p + g1 * d1);
             B[i] = OntoFaceNear(f2, NeighbourFaces(i, first: false), p + g2 * d2);
 
@@ -4069,6 +4145,7 @@ public static class FilletOp
             // стороны, продлённая — с другой), и кромки сливались в петлю с огрызками.
             // Цена — положение кромки на плоской грани с точностью шага сетки (1e-5 мм).
             A0[i] = A[i]; B0[i] = B[i];
+            if (!round && SweepDebug != null) SweepDebug($"фаска {i}: p {p:0.###} n1 {n1:0.###} n2 {n2:0.###} A {A[i]:0.###} B {B[i]:0.###} f1 {f1.Surface?.GetType().Name}/{(f1.Surface as FacetedSurface)?.Source?.GetType().Name} f2 {f2.Surface?.GetType().Name}/{(f2.Surface as FacetedSurface)?.Source?.GetType().Name}");
             Vector3d hyp = A[i] - B[i];
             if (hyp.LengthSquared > 1e-18)
             {
@@ -4116,7 +4193,18 @@ public static class FilletOp
             Vector3d qn1 = SmoothNormal(fe1, q, tol), qn2 = SmoothNormal(fe2, q, tol);
             if (qn1.LengthSquared > 1e-18 && qn2.LengthSquared > 1e-18) { cp = q; cn1 = qn1.Normalized(); cn2 = qn2.Normalized(); }
         }
-        if (!Convex(bodies, cp, cn1, cn2))
+        bool? sideConvex = null;
+        if (!FaceSideOff && sampleK[mid] < edgeFaces.Count)
+        {
+            var (se1, se2) = edgeFaces[sampleK[mid]];
+            var st = Vector3d.Cross(cn1, cn2);
+            if (st.LengthSquared > 1e-12 && Inward(se1, cp, st.Normalized()) is { } sw1 && Inward(se2, cp, st.Normalized()) is { } sw2)
+            {
+                bool c1 = Vector3d.Dot(sw1, cn2) < 0, c2 = Vector3d.Dot(sw2, cn1) < 0;
+                if (c1 == c2) sideConvex = c1;
+            }
+        }
+        if (!(sideConvex ?? Convex(bodies, cp, cn1, cn2)))
         {
             // k140: вогнутая цепочка — резец-заполнитель (прибавляется к телу): то же сечение (шар в пустоте угла касается
             // обеих граней), наружные точки — внутрь материала.
@@ -4376,17 +4464,22 @@ public static class FilletOp
         for (int k = 1; k < n; k++) cum[k] = cum[k - 1] + (samples[k].P - samples[k - 1].P).Length;
         (Vector3d[] Pts, double TMax, double TMin, ISurface3? Cap)? WallEnd(int i, Vector3d outward)
         {
-            if (WallCapOff || EndWall(bodies, samples[i].F1, samples[i].F2, samples[i].P, outward, Math.Max(d1, d2)) is not { } w) return null;
+            if (WallCapOff || EndWall(bodies, samples[i].F1, samples[i].F2, samples[i].P, outward, Math.Max(d1, d2)) is not { } w) { SweepDebug?.Invoke($"стенка у {i}: нет"); return null; }
             double c = Vector3d.Dot(outward, w.N);
-            if (c > -1e-6) return null;
+            if (c > -1e-6) { SweepDebug?.Invoke($"стенка у {i}: не навстречу ({c:G3})"); return null; }
             var sec = Section(i); var res = new Vector3d[sec.Length]; double tmax = 0, tmin = 0;
             for (int j = 0; j < sec.Length; j++)
             {
-                if (RayToSurface(w.Surface, sec[j], outward) is not { } t) return null;
+                if (RayToSurface(w.Surface, sec[j], outward) is not { } t) { SweepDebug?.Invoke($"стенка у {i}: луч {j} мимо"); return null; }
                 res[j] = sec[j] + outward * t; tmax = Math.Max(tmax, t); tmin = Math.Min(tmin, t);
             }
             double lim = 3 * Math.Max(d1, d2);
+            SweepDebug?.Invoke($"стенка у {i}: сдвиги {tmin:G4}…{tmax:G4}, предел {lim:G3}, поверхность {w.Surface?.GetType().Name}");
             if (tmax > lim || -tmin > lim || tmax - tmin < 1e-9 * Math.Max(1, lim)) return null;   // стенка поперёк ребра — прежний торец
+            // k141 (корпус, s58): стенка почти поперёк ребра (сдвиги торца в пределах полухорды — здесь 2 мкм) — прежний плоский
+            // торец: клин между ним и стенкой меньше допуска показа, а торец по точной кривой стенке в микронах от её гранения
+            // давал щепки и складку сетки (сторона кратности 4, отказ скругления R0.63). Мутация P3D_WALLCAPMIN=0.
+            if (!WallCapMinOff && tmax - tmin < 0.5 * Tol.Chord && w.Surface is not PlaneSurface && w.Surface?.IsPlanar != true) { SweepDebug?.Invoke($"стенка у {i}: почти поперёк — прежний торец"); return null; }
             if (-tmin > 0.9 * cum[n - 1]) return null;
             Interlocked.Increment(ref WallCaps);
             return (res, tmax, tmin, w.Surface is PlaneSurface || w.Surface?.IsPlanar == true ? w.Surface : null);
