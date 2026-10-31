@@ -517,6 +517,7 @@ static partial class Program
         if (mode is "threecorner" or "allA") Krn11ThreeBlendCornerChecks();
         if (mode is "loftblends139" or "allB") Krn06LoftBlendsK139Checks();
         if (mode is "tangentchain145" or "allB") Krn06TangentChainK145Checks();
+        if (mode is "chamferchain146" or "allB") Krn06ChamferChainK146Checks();
         if (mode is "loftcorpus140" or "allB") Krn06LoftCorpusK140Checks();
         if (mode is "sweepsec142" or "allB") Krn06SweepSectionsK142Checks();
         if (mode is "x05pattern" or "allA") Krn05X05PatternChecks();

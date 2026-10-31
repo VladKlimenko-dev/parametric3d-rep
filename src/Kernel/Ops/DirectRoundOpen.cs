@@ -84,7 +84,7 @@ public static partial class DirectRound
             foreach (var p in ChainEnds(c))
             {
                 if (!chains.Any(o => o != c && o.Any(x => (x.V0.P - p).Length < 1e-7 || (x.V1.P - p).Length < 1e-7))) continue;
-                string? jw = JointOn && chDist == null && varLaw == null ? TangentJoint(p, c, chains, allE, byFace) : "joints off";
+                string? jw = JointOn && (chDist == null || ChamferJointOn) && varLaw == null ? TangentJoint(p, c, chains, allE, byFace) : "joints off";
                 if (jw != null) { why = "open curved: selected edges share a vertex" + (JointOn ? $" ({jw})" : ""); return null; }
                 if (!jointPts.Any(q => (q - p).Length < 1e-7)) jointPts.Add(p);
             }
@@ -279,7 +279,7 @@ public static partial class DirectRound
         if (fs.Count != 2) { why = "open curved: edge is not between two faces"; return false; }
         var FA = byFace[fs[0]]; var FB = byFace[fs[1]];
         var shA = BlendShapeOf(FA.Surf); var shB = BlendShapeOf(FB.Surf);
-        if (shA == null || shB == null) { why = "open curved: a face is not a plane, cylinder, cone, sphere or torus"; return false; }
+        if (shA == null || shB == null) { why = $"open curved: a face is not a plane, cylinder, cone, sphere or torus ({(shA == null ? SurfName(FA.Surf) : SurfName(FB.Surf))})"; return false; }
         // плоскость/плоскость: обычно — свой построитель (DirectRound.Build); сюда — когда он отказал (кривые торцы, закон
         // радиуса); P3D_DROPENPP=0 — отказ, как прежде
         if (shA is Geometry.Ssi.Plane && shB is Geometry.Ssi.Plane && !OpenPlanePlane) { why = "open curved: plane/plane edge"; return false; }
@@ -496,7 +496,7 @@ public static partial class DirectRound
                 Debug?.Invoke($"open: march extension {ext0.Count}/{ext1.Count} steps of {hM:G3} mm");
             }
             var rcFit = RefCurve.Fit(refSrc, 1e-3 * Math.Clamp(r, 0.1, 1));   // опорная кривая задаёт лишь плоскости сечений: точность — доли радиуса
-            if (rcFit == null) Debug?.Invoke("open: reference curve not fitted");
+            if (rcFit == null) Debug?.Invoke($"open: reference curve not fitted ({E.GetType().Name}, chain {chain.Count}: {string.Join(",", chain.Select(x => x.Curve.GetType().Name))})");
             if (rcFit is { } rc)
             {
                 Vector3d AtCore(double t)
@@ -706,6 +706,25 @@ public static partial class DirectRound
             double speed = (Ed(tEnd - dk * 1e-4 * Delta) - Ed(tEnd)).Length / (1e-4 * Delta);
             if (!(speed > 0)) { why = "open curved: edge parameter degenerate at an end"; return false; }
             double step = Math.Min(2 * r / speed, 0.45 * Delta);
+            if (joint[k] != 0 && ch)
+            {
+                // k146: СТЫК ФАСКИ. Сечение фаски — в плоскости поперёк ребра; у касательной цепочки плоскости двух звеньев в
+                // вершине совпадают (общая касательная), и точка на общей грани A — одна. Точка на боковой стороне — общая, если
+                // она лежит на гладком шве s (на обеих боковых гранях): у выдавливания шов лежит в плоскости сечения, и это так
+                // точно. Иначе (шов наклонён — лофт) следы боковых граней в плоскости сечения расходятся (разная кривизна):
+                // отказ с причиной.
+                bool onA = joint[k] == 1;
+                var qT = onA ? ChA(tEnd) : ChB(tEnd);
+                if (double.IsNaN(qT.X) || ends[k].ShE == null) { why = "open curved: chamfer joint — side point not found"; return false; }
+                double off = Math.Abs(Geometry.Ssi.Implicit(ends[k].ShE, qT).F);
+                if (!(off <= 1e-8 * Math.Max(1, r))) { why = $"open curved: chamfer joint — side points of the two chain edges differ (seam not in the section plane, {off:E1} mm)"; return false; }
+                tJ[k] = tEnd; inT[k] = tEnd; jC[k] = ends[k].V; jShT[k] = ends[k].ShE; jOffT[k] = 0;
+                double ext = step;
+                while (ext > 1e-6 * step && (double.IsNaN(ChA(tEnd + dk * ext).X) || double.IsNaN(ChB(tEnd + dk * ext).X))) ext /= 2;
+                outT[k] = tEnd + dk * ext;
+                Debug?.Invoke($"open: chamfer joint {k} at the vertex, side point {qT:0.####} (off the other side {off:E1})");
+                continue;
+            }
             if (joint[k] != 0)
             {
                 // k145: СЕЧЕНИЕ СТЫКА. На гладком ребре s (сторона T) — точка q, где шар, касающийся T в q (центр q + ∇T·offT),
@@ -1124,7 +1143,7 @@ public static partial class DirectRound
         {
             if (joint[k] == 0) continue;
             var g = Gen(tJ[k]); var qa = k == 0 ? qa0 : qa1; var qb = k == 0 ? qb0 : qb1;
-            ICurve3 arc = new ArcCurve3(new Frame3(g.C, g.E1, g.E2), g.R, 0, g.Phi);
+            ICurve3 arc = ch ? new LineCurve3(g.Point(0), g.Point(1)) : new ArcCurve3(new Frame3(g.C, g.E1, g.E2), g.R, 0, g.Phi);
             if ((arc.PointAt(0) - qa).Length > 1e-8 * Math.Max(1, r) || (arc.PointAt(1) - qb).Length > 1e-8 * Math.Max(1, r)) { why = "open curved: joint arc does not meet the contact lines"; return false; }
             var V = ends[k].V;
             var prevArc = jctx!.Arcs.FirstOrDefault(a => (a.V - V).Length < 1e-7);
@@ -1579,6 +1598,10 @@ public static partial class DirectRound
 public static partial class DirectRound
 {
     static readonly bool CurvedChamfer = Environment.GetEnvironmentVariable("P3D_DRCURVCH") != "0";
+    static string SurfName(ISurface3? s) => s is Surfaces.FacetedSurface fs ? "faceted/" + (fs.Source?.GetType().Name ?? "none") : s?.GetType().Name ?? "null";
+    /// <summary>k146: стыки касательных цепочек фаски (сечение в вершине). P3D_DRCHJOINT=0 — отказ, как прежде.</summary>
+    static readonly bool ChamferJointOn = Environment.GetEnvironmentVariable("P3D_DRCHJOINT") != "0";
+    static readonly bool StraightChamferOn = Environment.GetEnvironmentVariable("P3D_DRSTRAIGHTCH") != "0";
     public static long CurvedChamfers;
 
     /// <summary>06.15: фаска рёбер между кривыми гранями — замкнутых (CylCylBlends) или незамкнутых (OpenBlend); все рёбра одного вида.</summary>
@@ -1593,8 +1616,9 @@ public static partial class DirectRound
             if (!es.Contains(e)) es.Add(e);
         }
         // u12: одно прямое ребро между плоскостями (незамкнутое) — тем же построителем, лента — плоскость (OpenChamferPlane)
-        if (es.Any(e => e.Curve is LineCurve3) && !(OpenCylOn && es.Count == 1)) { why = "straight edges are not in this family"; return null; }
         bool closed = es.All(e => ReferenceEquals(e.V0, e.V1) || (e.V0.P - e.V1.P).Length < 1e-7);
+        // k146: прямые рёбра незамкнутой фаски — тем же открытым построителем, что и у скругления (грани NURBS лофта, цепочки)
+        if (es.Any(e => e.Curve is LineCurve3) && !(OpenCylOn && es.Count == 1) && !(StraightChamferOn && !closed)) { why = "straight edges are not in this family"; return null; }
         if (!closed) return BuildOpen(body, refs, d, ref why, dist);
         if (es.Any(e => !(ReferenceEquals(e.V0, e.V1) || (e.V0.P - e.V1.P).Length < 1e-7))) { why = "closed and open edges in one chamfer"; return null; }
         var faces = Describe(body, out var byFace, ref why);
@@ -1614,7 +1638,10 @@ public static partial class DirectRound
 
     /// <summary>Форма грани для катящегося шара: квадрика — точная неявная; NURBS — по основанию перпендикуляра (Ssi.ParamSurf).</summary>
     static Geometry.Ssi.Shape? BlendShapeOf(ISurface3? s) =>
-        Geometry.ExactEdges.ShapeOf(s) ?? (NurbsBlends && s is NurbsSurface ? new Geometry.Ssi.ParamSurf(s) : null);
+        Geometry.ExactEdges.ShapeOf(s) ?? (NurbsBlends && s is NurbsSurface ? new Geometry.Ssi.ParamSurf(s) : null)
+        ?? (SectionBlends && s is SectionSurface { IsProcedural: true } ? new Geometry.Ssi.ParamSurf(s) : null);
+    /// <summary>k146: ленты прежних скруглений и фасок (процедурная SectionSurface) — гранями новой ленты (каскад). P3D_DRSECTION=0.</summary>
+    static readonly bool SectionBlends = Environment.GetEnvironmentVariable("P3D_DRSECTION") != "0";
 
     /// <summary>
     /// Гладкая опорная кривая ребра для параметра хребта: многочлен Чебышёва по доле длины (интерполяция в узлах Чебышёва;

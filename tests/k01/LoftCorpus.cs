@@ -315,7 +315,7 @@ static partial class Program
                         p.AddFeature(f);
                         var sw = System.Diagnostics.Stopwatch.StartNew();
                         string? drWhy = null; var drPrev = Parametric3D.Kernel.Ops.DirectRound.Debug;
-                        Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (s.StartsWith("declined")) drWhy = s.Length > 200 ? s[..200] : s; };
+                        Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (Environment.GetEnvironmentVariable("LOFT_DRDEBUG") is { } dd && s.Contains(dd)) Console.WriteLine("DBG " + (s.Length > 300 ? s[..300] : s)); if (s.StartsWith("declined")) drWhy = s.Length > 200 ? s[..200] : s; };
                         try { p.Rebuild(pars); }
                         catch (Exception ex) when (ex is not OutOfMemoryException) { f.Error = "exception: " + ex.Message; }
                         finally { Parametric3D.Kernel.Ops.DirectRound.Debug = drPrev; }
@@ -594,7 +594,7 @@ static partial class Program
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 // k143: путь операции — прямой построитель (замена граней, как Parasolid) или резец; причина отказа прямого
                 string? drWhy = null; var drPrev = Parametric3D.Kernel.Ops.DirectRound.Debug;
-                Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (s.StartsWith("declined")) drWhy = s.Length > 200 ? s[..200] : s; };
+                Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (Environment.GetEnvironmentVariable("LOFT_DRDEBUG") is { } dd && s.Contains(dd)) Console.WriteLine("DBG " + (s.Length > 300 ? s[..300] : s)); if (s.StartsWith("declined")) drWhy = s.Length > 200 ? s[..200] : s; };
                 try { p.Rebuild(null); } catch (Exception ex) when (ex is not OutOfMemoryException) { f.Error = "exception: " + ex.Message; }
                 finally { Parametric3D.Kernel.Ops.DirectRound.Debug = drPrev; }
                 double ms = sw.ElapsedMilliseconds; totalMs += ms;
