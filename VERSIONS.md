@@ -5,6 +5,7 @@
 
 | Версия | Дата | Коммит | Архив | Что сделано |
 |---|---|---|---|---|
+| k146 | 2026-10-31 | [`dfdaf48`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/dfdaf48) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/dfdaf48.zip) | фаски «как в Parasolid» — стыки касательных цепочек фасок, прямые рёбра в пути кривых фасок, ленты SectionSurface в каскаде |
 | k145 | 2026-10-31 | [`7152440`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/7152440) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/7152440.zip) | касательные цепочки скруглений прямым построителем — стык лент на гладком шве |
 | k144.1 | 2026-10-31 | [`8782be1`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/8782be1) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/8782be1.zip) | иконки 9 кнопок — анализ (проверка тела, кривизна, залечить, зебра), заливка, поверхность выдавливанием и вращением, копия поверхности, радиальное отверстие |
 | k144 | 2026-10-31 | [`3b04471`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/3b04471) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/3b04471.zip) | скругления «как в Parasolid» — кромки окон лофта прямым построителем (продолжение граней NURBS) |
