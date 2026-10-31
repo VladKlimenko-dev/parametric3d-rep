@@ -258,7 +258,8 @@
 | `f_swept_blend_but.svg` | Протяжка с переходом | Позже, Д-44 | Позже |
 | `f_rotational_blend_but.svg` | Переход вращением | Позже, Д-45 | Позже |
 | `f_fill_but.svg` | Заливка (плоская поверхность) | КП Д-28 | U2 |
-| `f_surface_extrude_but.svg` | Поверхность выдавливанием / вращением | КП Д-29 | U2 |
+| `f_surface_extrude_but.svg` | Поверхность выдавливанием | КП Д-29 | U2 |
+| `surf_revolve_but.svg` | Поверхность вращением | КП Д-29 | k144 |
 
 ## Деталь: конструктивные
 
@@ -692,13 +693,14 @@
 
 ### Иконки, на которые есть ссылки в приложении, но файлов нет
 
-an_area, an_check_body, an_curvature, an_heal, an_mass, an_measure, an_perimeter, an_zebra, f_boundary_blend,
-f_extrude_thin, f_fill, f_hole_radial, f_round_full, f_surface_extrude, ff_cv_edit, ff_cv_weight, ff_insert_knot,
-ff_surf_blend, ff_surf_extend, ff_surf_flip, ff_surf_network, ff_surf_patch, ff_surf_planar, ff_surf_ruled,
-ff_surf_stitch, language, mate_angle, mate_coincident, mate_concentric, mate_distance, mate_insert, mate_parallel,
-mate_perpendicular, mate_point_on, mate_rigid, mate_tangent, sketch, step_undo_to, style_fea_mesh, subd_box,
-subd_crease, subd_edge_loop, subd_extrude, subd_smooth_level, subd_to_nurbs, surf_copy, undo_history,
+an_area, an_mass, an_measure, an_perimeter, f_boundary_blend, f_extrude_thin, f_round_full, ff_cv_edit, ff_cv_weight,
+ff_insert_knot, ff_surf_blend, ff_surf_extend, ff_surf_flip, ff_surf_network, ff_surf_patch, ff_surf_planar,
+ff_surf_ruled, ff_surf_stitch, language, mate_angle, mate_coincident, mate_concentric, mate_distance, mate_insert,
+mate_parallel, mate_perpendicular, mate_point_on, mate_rigid, mate_tangent, sketch, step_undo_to, style_fea_mesh,
+subd_box, subd_crease, subd_edge_loop, subd_extrude, subd_smooth_level, subd_to_nurbs, undo_history,
 viewcube_arrow_ico, viewcube_rot_ccw, viewcube_rot_cw (все `_but.svg`, кроме помеченных `_ico`).
+(31.10, k144: добавлены an_check_body, an_curvature, an_heal, an_zebra — у «Зебры» вместо zebra.svg, f_fill, f_hole_radial,
+f_surface_extrude, surf_copy и новая surf_revolve — «Поверхность вращением» прежде показывала иконку выдавливания.)
 Пока их нет, на кнопках — сокращённая подпись.
 
 ## Исправления и панели (2026-10-19, 21:04)
