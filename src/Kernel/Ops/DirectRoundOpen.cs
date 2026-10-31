@@ -73,18 +73,71 @@ public static partial class DirectRound
                 }
             chains.Add(ch);
         }
-        foreach (var c in chains)
-            foreach (var p in ChainEnds(c))
-                if (chains.Any(o => o != c && o.Any(x => (x.V0.P - p).Length < 1e-7 || (x.V1.P - p).Length < 1e-7))) { why = "open curved: selected edges share a vertex"; return null; }
         var faces = Describe(body, out var byFace, ref why);
         if (faces == null) return null;
-        var blends = new List<FDesc>();
+        // k145: СТЫК КАСАТЕЛЬНОЙ ЦЕПОЧКИ (как Parasolid): два выбранных ребра сходятся в вершине касательно, третье ребро
+        // вершины — гладкое (его грани касаются). Ленты соседних рёбер стыкуются по общему сечению — там, где линия касания
+        // пересекает гладкое ребро (шар касается обеих граней одной точкой с общей нормалью). Мутация P3D_DRJOINT=0 — отказ.
+        var jointPts = new List<Vector3d>();
+        var selSet = chains.SelectMany(x => x).ToHashSet();
         foreach (var c in chains)
-            if (!OpenBlend(body, c, byFace, blends, r, ref why, chDist, varLaw)) return null;
+            foreach (var p in ChainEnds(c))
+            {
+                if (!chains.Any(o => o != c && o.Any(x => (x.V0.P - p).Length < 1e-7 || (x.V1.P - p).Length < 1e-7))) continue;
+                string? jw = JointOn && chDist == null && varLaw == null ? TangentJoint(p, c, chains, allE, byFace) : "joints off";
+                if (jw != null) { why = "open curved: selected edges share a vertex" + (JointOn ? $" ({jw})" : ""); return null; }
+                if (!jointPts.Any(q => (q - p).Length < 1e-7)) jointPts.Add(p);
+            }
+        var blends = new List<FDesc>();
+        var jctx = jointPts.Count > 0 ? new JointCtx { Pts = jointPts, Sel = selSet } : null;
+        foreach (var c in chains)
+            if (!OpenBlend(body, c, byFace, blends, r, ref why, chDist, varLaw, jctx)) return null;
+        if (jctx != null) { Interlocked.Add(ref JointsBuilt, jctx.Arcs.Count); Debug?.Invoke($"open: {jctx.Arcs.Count} tangent joint(s)"); }
         return FinishDirect(faces, blends, chDist != null ? "chamfer.direct" : "round.direct", ref why);
     }
 
     static readonly bool Deg2 = Environment.GetEnvironmentVariable("P3D_DRDEG2") != "0";
+    static readonly bool JointOn = Environment.GetEnvironmentVariable("P3D_DRJOINT") != "0";
+    /// <summary>k145: стыков касательных цепочек построено (разбор).</summary>
+    public static long JointsBuilt;
+    /// <summary>Стыки касательных цепочек одного построения: вершины, выбранные рёбра, общие сечения (дуга и её концы).</summary>
+    sealed class JointCtx
+    {
+        public List<Vector3d> Pts = new(); public HashSet<TEdge> Sel = new();
+        public List<(Vector3d V, ICurve3 Arc, Vector3d P0, Vector3d P1, Vector3d C, Geometry.Ssi.Shape ShT, double OffT)> Arcs = new();
+    }
+    /// <summary>
+    /// Касательный стык в вершине p: ровно три ребра (конец цепочки c, конец другой выбранной цепочки и третье — гладкое),
+    /// выбранные рёбра касательны, у них одна общая грань, третье ребро — между двумя другими гранями, касательными в p.
+    /// null — стык годен, иначе причина.
+    /// </summary>
+    static string? TangentJoint(Vector3d p, List<TEdge> c, List<List<TEdge>> chains, List<TEdge> allE, Dictionary<TFace, FDesc> byFace)
+    {
+        var at = allE.Where(x => (x.V0.P - p).Length < 1e-7 || (x.V1.P - p).Length < 1e-7).ToList();
+        if (at.Count != 3) return $"joint vertex of degree {at.Count}";
+        var mine = at.Where(c.Contains).ToList();
+        var others = at.Where(x => !c.Contains(x) && chains.Any(o => o != c && o.Contains(x))).ToList();
+        var rest = at.Where(x => !c.Contains(x) && !others.Contains(x)).ToList();
+        if (mine.Count != 1 || others.Count != 1 || rest.Count != 1) return "joint: not two chain ends and one more edge";
+        Vector3d Tan(TEdge e) { var cv = e.Curve; bool a0 = (cv.PointAt(cv.T0) - p).Length <= (cv.PointAt(cv.T1) - p).Length; return cv.TangentAt(a0 ? cv.T0 : cv.T1).Normalized(); }
+        if (Math.Abs(Vector3d.Dot(Tan(mine[0]), Tan(others[0]))) < 0.9998) return "joint: chain edges not tangent";
+        HashSet<TFace> F(TEdge x) => x.CoEdges.Select(k => k.Loop?.Face).OfType<TFace>().ToHashSet();
+        var f1 = F(mine[0]); var f2 = F(others[0]); var f3 = F(rest[0]);
+        if (f1.Count != 2 || f2.Count != 2 || f3.Count != 2) return "joint: edge not between two faces";
+        var shared = f1.Intersect(f2).ToList();
+        if (shared.Count != 1) return "joint: chain edges do not share exactly one face";
+        var b = f1.First(x => x != shared[0]); var cc = f2.First(x => x != shared[0]);
+        if (!f3.SetEquals(new[] { b, cc })) return "joint: third edge is not between the side faces";
+        if (!byFace.TryGetValue(b, out var fb) || !byFace.TryGetValue(cc, out var fc)) return "joint: face not described";
+        // гладкость третьего ребра — в вершине и вдоль него
+        var cv3 = rest[0].Curve;
+        for (int i = 0; i <= 8; i++)
+        {
+            var q = cv3.PointAt(cv3.T0 + (cv3.T1 - cv3.T0) * i / 8.0);
+            if (Vector3d.Dot(NormalOf(fb, q), NormalOf(fc, q)) < 0.9998) return "joint: third edge is not smooth";
+        }
+        return null;
+    }
     /// <summary>Параметр вдоль опорной кривой, а не угол вокруг оси (повтор, когда продление по углу не выходит за торец).</summary>
     [ThreadStatic] static bool _forceGeneric;
     static readonly bool ExactTangent = Environment.GetEnvironmentVariable("P3D_DRTANGENT") != "0";
@@ -219,7 +272,7 @@ public static partial class DirectRound
         return new ProcCurve3(F, 0, pieces.Count, false, "edge chain");
     }
 
-    static bool OpenBlend(TSolid body, List<TEdge> chain, Dictionary<TFace, FDesc> byFace, List<FDesc> blends, double r, ref string? why, Func<TEdge, TFace, double>? chDist = null, RadiusLaw? varLaw = null)
+    static bool OpenBlend(TSolid body, List<TEdge> chain, Dictionary<TFace, FDesc> byFace, List<FDesc> blends, double r, ref string? why, Func<TEdge, TFace, double>? chDist = null, RadiusLaw? varLaw = null, JointCtx? jctx = null)
     {
         var e = chain[0];
         var fs = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
@@ -240,6 +293,7 @@ public static partial class DirectRound
         // ОКОНЧАНИЯ: в каждой вершине — ровно три ребра (e, A∩E, B∩E), торец E — квадрика
         var allEdges = body.Edges.ToList();
         var ends = new (FDesc FE, Geometry.Ssi.Shape ShE, TEdge EA, TEdge EB, Vector3d V, double SE)[2];
+        var joint = new int[2];   // k145: 0 — торец; 1/2 — стык касательной цепочки, гладкое ребро на стороне A/B
         for (int k = 0; k < 2; k++)
         {
             var V = k == 0 ? P0 : P1;
@@ -253,6 +307,15 @@ public static partial class DirectRound
             if (Other(eB, fs[1]) != fe) { why = "open curved: the two end edges are on different faces"; return false; }
             if ((eA.V0.P - eA.V1.P).Length < 1e-7 || (eB.V0.P - eB.V1.P).Length < 1e-7) { why = "open curved: closed end edge"; return false; }
             var FE = byFace[fe]; var shE = BlendShapeOf(FE.Surf);
+            // k145: стык касательной цепочки — торец не нужен (лента кончается сечением на гладком ребре)
+            if (jctx != null && jctx.Pts.Any(q => (q - V).Length < 1e-7))
+            {
+                bool sharedA = jctx.Sel.Contains(eA), sharedB = jctx.Sel.Contains(eB);
+                if (sharedA == sharedB) { why = "open curved: joint edges not recognised"; return false; }
+                joint[k] = sharedA ? 2 : 1;     // 1 — гладкое ребро на стороне A, 2 — на стороне B
+                ends[k] = (FE, shE!, eA, eB, V, 1);
+                continue;
+            }
             if (shE == null) { why = "open curved: end face is not a quadric"; return false; }
             double sE = Vector3d.Dot(NormalOf(FE, V), Geometry.Ssi.Implicit(shE, V).G) > 0 ? 1 : -1;
             ends[k] = (FE, shE, eA, eB, V, sE);
@@ -635,13 +698,59 @@ public static partial class DirectRound
         }
         IDisposable? _phase = null; void Phase(string n) { _phase?.Dispose(); _phase = Diagnostics.Prof.Time("open: этап " + n); }
         Phase("торцы");
-        var outT = new double[2]; var inT = new double[2];
+        var outT = new double[2]; var inT = new double[2]; var tJ = new[] { double.NaN, double.NaN };
+        var jC = new Vector3d[2]; var jShT = new Geometry.Ssi.Shape?[2]; var jOffT = new double[2];
         for (int k = 0; k < 2; k++)
         {
             double dk = k == 0 ? -1 : 1, tEnd = k == 0 ? 0 : Delta;
             double speed = (Ed(tEnd - dk * 1e-4 * Delta) - Ed(tEnd)).Length / (1e-4 * Delta);
             if (!(speed > 0)) { why = "open curved: edge parameter degenerate at an end"; return false; }
             double step = Math.Min(2 * r / speed, 0.45 * Delta);
+            if (joint[k] != 0)
+            {
+                // k145: СЕЧЕНИЕ СТЫКА. На гладком ребре s (сторона T) — точка q, где шар, касающийся T в q (центр q + ∇T·offT),
+                // касается и общей грани S (F_S(центр) = offS); сечение ленты стыка — то, чей хребет проходит через этот центр.
+                bool onA = joint[k] == 1;
+                var shT = onA ? shA : shB; var shS = onA ? shB : shA; double offT = onA ? offA : offB, offS = onA ? offB : offA;
+                var sc = (onA ? ends[k].EA : ends[k].EB).Curve;
+                bool v0 = (sc.PointAt(sc.T0) - ends[k].V).Length <= (sc.PointAt(sc.T1) - ends[k].V).Length;
+                Vector3d Centre(double u) { var q = sc.PointAt(u); var g = Geometry.Ssi.Implicit(shT, q).G; return q + g.Normalized() * offT; }
+                double Gs(double u) => Geometry.Ssi.Implicit(shS, Centre(u)).F - offS;
+                double U(double f) => v0 ? sc.T0 + (sc.T1 - sc.T0) * f : sc.T1 - (sc.T1 - sc.T0) * f;
+                double uStar = double.NaN, gPrev = Gs(U(0));
+                for (int i = 1; i <= 128 && double.IsNaN(uStar); i++)
+                {
+                    double g = Gs(U(i / 128.0));
+                    if (double.IsFinite(gPrev + g) && Math.Sign(g) != Math.Sign(gPrev)) uStar = RootIn(Gs, U((i - 1) / 128.0), U(i / 128.0));
+                    gPrev = g;
+                }
+                if (double.IsNaN(uStar)) { why = "open curved: joint — the blend does not cross the smooth edge"; return false; }
+                var cJ = Centre(uStar);
+                double Hs(double t) { var P = Ed(t); return double.IsNaN(P.X) ? double.NaN : Vector3d.Dot(cJ - P, Td(t)); }
+                double tj = double.NaN, best = double.MaxValue;
+                const int nJ = 96;
+                double hPrev = Hs(tEnd - dk * 3 * step);
+                for (int i = 1; i <= nJ; i++)
+                {
+                    double ta = tEnd - dk * 3 * step + dk * 6 * step * (i - 1) / nJ, tb = tEnd - dk * 3 * step + dk * 6 * step * i / nJ;
+                    double hj = Hs(tb);
+                    if (double.IsFinite(hPrev + hj) && Math.Sign(hj) != Math.Sign(hPrev))
+                    {
+                        double rt = RootIn(Hs, ta, tb);
+                        if (double.IsFinite(rt) && Spine(rt) is { } sp && (sp - cJ).Length < best) { best = (sp - cJ).Length; tj = rt; }
+                    }
+                    hPrev = hj;
+                }
+                if (double.IsNaN(tj) || best > 1e-7 * Math.Max(1, r)) { why = $"open curved: joint section not found (centre off the spine {best:E1})"; return false; }
+                var qT = Foot(shT, S(tj));
+                if ((qT - sc.PointAt(uStar)).Length > 1e-7) { why = "open curved: joint contact is off the smooth edge"; return false; }
+                tJ[k] = tj; inT[k] = tj; jC[k] = cJ; jShT[k] = shT; jOffT[k] = offT;
+                double ext = step;
+                while (ext > 1e-6 * step && Spine(tj + dk * ext) == null) ext /= 2;
+                outT[k] = tj + dk * ext;
+                Debug?.Invoke($"open: joint {k} at t {tj:G8} (end {tEnd:G6}), smooth edge on {(onA ? "A" : "B")}, contact {qT:0.####}");
+                continue;
+            }
             double fBeyond = Fend(k, Ed(tEnd + dk * 1e-4 * step)), fBefore = Fend(k, Ed(tEnd - dk * 1e-4 * step));
             if (!(fBeyond * fBefore < 0)) { why = $"open curved: the edge does not cross the end face (end {k} at {ends[k].V}, face {ends[k].FE.Surf.GetType().Name} {ends[k].FE.Tag}, f {fBefore:E2}/{fBeyond:E2})"; return false; }
             if (fBeyond < 0) endSign[k] = -1;
@@ -718,6 +827,7 @@ public static partial class DirectRound
         Vector3d EndPtSolve(int k, double v)
         {
             double t;
+            if (joint[k] != 0) return Gen(tJ[k]).Point(v);
             // концы края — те же корни, что у линий касания (точка в точку)
             if (v <= 0 && !double.IsNaN(tEndA[k])) return QA(tEndA[k]);
             if (v >= 1 && !double.IsNaN(tEndB[k])) return QB(tEndB[k]);
@@ -760,7 +870,7 @@ public static partial class DirectRound
         Phase("знак в скобке");
         // одна смена знака в скобке у каждой пробы v
         for (int k = 0; k < 2; k++)
-            foreach (double v in new[] { 0, 0.2, 0.4, 0.6, 0.8, 1.0 })
+            foreach (double v in joint[k] != 0 ? Array.Empty<double>() : new[] { 0, 0.2, 0.4, 0.6, 0.8, 1.0 })
             {
                 int changes = 0; double prev = Fend(k, Gen(inT[k]).Point(v));
                 // 20:17: сечение в скобке не находится (хребет не сошёлся) — отказ с причиной, а не исключение Math.Sign(NaN);
@@ -774,7 +884,8 @@ public static partial class DirectRound
                 }
                 if (changes != 1) { why = $"open curved: blend section crosses end face {changes} times"; return false; }
             }
-        double tA0 = TStar(0, 0), tB0 = TStar(0, 1), tA1 = TStar(1, 0), tB1 = TStar(1, 1);
+        double TS(int k, double v) => joint[k] != 0 ? tJ[k] : TStar(k, v);
+        double tA0 = TS(0, 0), tB0 = TS(0, 1), tA1 = TS(1, 0), tB1 = TS(1, 1);
         tEndA[0] = tA0; tEndA[1] = tA1; tEndB[0] = tB0; tEndB[1] = tB1;
         endTab = new double[2][];
         // 20:17 (скорость): НЕЗАВИСИМЫЕ ПРОБЫ — В НЕСКОЛЬКО ПОТОКОВ (корни края на торцах, хребет и сечения сверок, сверка таблицы
@@ -796,6 +907,7 @@ public static partial class DirectRound
             endTab[0][0] = tA0; endTab[0][64] = tB0; endTab[1][0] = tA1; endTab[1][64] = tB1;
             For(2, k =>
             {
+                if (joint[k] != 0) { Array.Fill(endTab[k], tJ[k]); return; }
                 double prev = endTab[k][0], prev2 = double.NaN;
                 for (int i = 1; i < 64; i++)
                 {
@@ -817,7 +929,7 @@ public static partial class DirectRound
                 }
             });
         }
-        else For(130, j => { int k = j / 65, i = j % 65; endTab[k][i] = TStar(k, i / 64.0); });
+        else For(130, j => { int k = j / 65, i = j % 65; endTab[k][i] = TS(k, i / 64.0); });
         for (int k = 0; k < 2; k++)
             if (endTab[k].Any(double.IsNaN))
             {
@@ -835,7 +947,7 @@ public static partial class DirectRound
         double tLo = double.MaxValue, tHi = double.MinValue;
         var tsv = new double[34];
         if (StarCont) for (int j = 0; j < 34; j++) tsv[j] = endTab[j / 17][(j % 17) * 4];   // те же v (i/16 = 4i/64) — из таблицы края
-        else For(34, j => tsv[j] = TStar(j / 17, (j % 17) / 16.0));
+        else For(34, j => tsv[j] = TS(j / 17, (j % 17) / 16.0));
         for (int i = 0; i <= 16; i++)
         {
             double t0s = tsv[i], t1s = tsv[17 + i];
@@ -986,7 +1098,8 @@ public static partial class DirectRound
         // формулами (у тела из 40 граней 2 с → доли секунды). Всё сверяется с формулой сечений; иначе — прежний путь.
         // Мутация P3D_OPENCYL=0.
         ISurface3 bSurf = surf; ICurve3 bA = cA, bB = cB, bE0 = end0, bE1 = end1;
-        if (OpenCylOn && !ch && varLaw == null && knotT.Count == 0 && chain.Count == 1 && chain[0].Curve is LineCurve3
+        bool anyJoint = joint[0] != 0 || joint[1] != 0;
+        if (OpenCylOn && !anyJoint && !ch && varLaw == null && knotT.Count == 0 && chain.Count == 1 && chain[0].Curve is LineCurve3
             && shA is Geometry.Ssi.Plane && shB is Geometry.Ssi.Plane && ends[0].ShE is Geometry.Ssi.Plane pe0 && ends[1].ShE is Geometry.Ssi.Plane pe1
             && OpenCylinder(Spine, Gen, QA, QB, EndPt, r, tLo, tHi, tA0, tA1, tB0, tB1, pe0, pe1) is { } oc)
         {
@@ -995,7 +1108,7 @@ public static partial class DirectRound
         }
         // u12: ФАСКА ПРЯМОГО РЕБРА МЕЖДУ ПЛОСКОСТЯМИ, концы на плоских торцах — лента точно плоскость, контакты и края на
         // торцах — отрезки (прежде прямые рёбра в незамкнутую фаску не принимались, и фаска шла резцом). Мутация P3D_OPENCYL=0.
-        else if (OpenCylOn && ch && varLaw == null && chain.Count == 1 && chain[0].Curve is LineCurve3
+        else if (OpenCylOn && !anyJoint && ch && varLaw == null && chain.Count == 1 && chain[0].Curve is LineCurve3
             && shA is Geometry.Ssi.Plane && shB is Geometry.Ssi.Plane && ends[0].ShE is Geometry.Ssi.Plane && ends[1].ShE is Geometry.Ssi.Plane
             && OpenChamferPlane(QA, QB, EndPt, tA0, tA1, tB0, tB1) is { } op)
         {
@@ -1005,9 +1118,32 @@ public static partial class DirectRound
 
         // УКОРОЧЕНИЕ РЁБЕР A∩E и B∩E до точек касания (одна кривая на обе грани ребра). Ребро может укорачиваться с обоих концов
         // (торец — общий у обоих концов, ребро B∩E идёт от одного конца до другого)
-        var cuts = new Dictionary<TEdge, List<(Vector3d Old, Vector3d New)>>();
-        foreach (var (x, oldP, q) in new[] { (ends[0].EA, P0, qa0), (ends[0].EB, P0, qb0), (ends[1].EA, P1, qa1), (ends[1].EB, P1, qb1) })
+        // k145: СТЫК — край ленты есть дуга сечения (точно, окружность), общая с лентой соседнего звена цепочки: первая лента
+        // заводит дугу, вторая берёт ту же (концы сверяются)
+        for (int k = 0; k < 2; k++)
         {
+            if (joint[k] == 0) continue;
+            var g = Gen(tJ[k]); var qa = k == 0 ? qa0 : qa1; var qb = k == 0 ? qb0 : qb1;
+            ICurve3 arc = new ArcCurve3(new Frame3(g.C, g.E1, g.E2), g.R, 0, g.Phi);
+            if ((arc.PointAt(0) - qa).Length > 1e-8 * Math.Max(1, r) || (arc.PointAt(1) - qb).Length > 1e-8 * Math.Max(1, r)) { why = "open curved: joint arc does not meet the contact lines"; return false; }
+            var V = ends[k].V;
+            var prevArc = jctx!.Arcs.FirstOrDefault(a => (a.V - V).Length < 1e-7);
+            if (prevArc.Arc != null)
+            {
+                bool same = (prevArc.P0 - qa).Length < 1e-7 && (prevArc.P1 - qb).Length < 1e-7 || (prevArc.P0 - qb).Length < 1e-7 && (prevArc.P1 - qa).Length < 1e-7;
+                double dm = (prevArc.Arc.PointAt(0.5) - arc.PointAt(0.5)).Length;
+                if (!same || dm > 1e-7) Debug?.Invoke($"open: joint mismatch at {V:0.###}: centres {(prevArc.C - jC[k]).Length:E2}, this centre vs other side {Geometry.Ssi.Implicit(prevArc.ShT, jC[k]).F - prevArc.OffT:E3} (off {prevArc.OffT:G4}), other centre vs this side {Geometry.Ssi.Implicit(jShT[k]!, prevArc.C).F - jOffT[k]:E3} (off {jOffT[k]:G4}); contacts {(prevArc.P1 - qb).Length:E2}/{(prevArc.P0 - qa).Length:E2}");
+                if (!same || dm > 1e-7) { why = $"open curved: joint sections of the two chain edges differ ({Math.Max(dm, Math.Min((prevArc.P0 - qa).Length, (prevArc.P1 - qa).Length)):E1} mm)"; return false; }
+                arc = prevArc.Arc;
+            }
+            else jctx.Arcs.Add((V, arc, qa, qb, jC[k], jShT[k]!, jOffT[k]));
+            if (k == 0) bE0 = arc; else bE1 = arc;
+        }
+        var cuts = new Dictionary<TEdge, List<(Vector3d Old, Vector3d New)>>();
+        foreach (var (x, oldP, q, kk, isA) in new[] { (ends[0].EA, P0, qa0, 0, true), (ends[0].EB, P0, qb0, 0, false), (ends[1].EA, P1, qa1, 1, true), (ends[1].EB, P1, qb1, 1, false) })
+        {
+            // стык: ребро общей стороны — соседнее звено цепочки (его заменит своя лента), укорачивается только гладкое
+            if (joint[kk] != 0 && (joint[kk] == 1) != isA) continue;
             if (!cuts.TryGetValue(x, out var l)) cuts[x] = l = new();
             l.Add((oldP, q));
         }
@@ -1028,6 +1164,7 @@ public static partial class DirectRound
         // вставка края ленты в торец: между звеньями A∩E и B∩E у прежней вершины
         foreach (var (k, endC, qa, qb) in new[] { (0, bE0, qa0, qb0), (1, bE1, qa1, qb1) })
         {
+            if (joint[k] != 0) continue;
             var (FEk, _, eA, eB, V, _) = ends[k];
             bool done = false;
             foreach (var loop in FEk.Loops)
@@ -1094,7 +1231,7 @@ public static partial class DirectRound
             new() { Curve = bE0, A = qb0, B = qa0 },
         });
         blends.Add(bl);
-        Debug?.Invoke($"open: sigma {sigma} shapes {shA.GetType().Name}/{shB.GetType().Name} ends {ends[0].ShE.GetType().Name}/{ends[1].ShE.GetType().Name} t [{tLo:G5}, {tHi:G5}] contacts A [{tA0:G6}, {tA1:G6}] B [{tB0:G6}, {tB1:G6}] Δ {Delta:G6}");
+        Debug?.Invoke($"open: sigma {sigma} shapes {shA.GetType().Name}/{shB.GetType().Name} ends {(joint[0] != 0 ? "joint" : ends[0].ShE.GetType().Name)}/{(joint[1] != 0 ? "joint" : ends[1].ShE.GetType().Name)} t [{tLo:G5}, {tHi:G5}] contacts A [{tA0:G6}, {tA1:G6}] B [{tB0:G6}, {tB1:G6}] Δ {Delta:G6}");
         return true;
     }
 
