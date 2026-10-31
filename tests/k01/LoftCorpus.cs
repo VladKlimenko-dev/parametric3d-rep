@@ -314,8 +314,11 @@ static partial class Program
                         foreach (var ce in chain) { if (f is RoundFeature rf) rf.Edges.Add(EdgeRef.Of(ce)); else ((ChamferFeature)f).Edges.Add(EdgeRef.Of(ce)); }
                         p.AddFeature(f);
                         var sw = System.Diagnostics.Stopwatch.StartNew();
+                        string? drWhy = null; var drPrev = Parametric3D.Kernel.Ops.DirectRound.Debug;
+                        Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (s.StartsWith("declined")) drWhy = s.Length > 200 ? s[..200] : s; };
                         try { p.Rebuild(pars); }
                         catch (Exception ex) when (ex is not OutOfMemoryException) { f.Error = "exception: " + ex.Message; }
+                        finally { Parametric3D.Kernel.Ops.DirectRound.Debug = drPrev; }
                         double ms = sw.ElapsedMilliseconds; totalMs += ms;
                         string tag = $"s{sd} {(round ? "R" : "C")}{size} edge ({mid.X:0.##},{mid.Y:0.##},{mid.Z:0.##}){(chain.Count > 1 ? $" chain {chain.Count}" : "")}";
                         var problems = new List<string>();
@@ -366,7 +369,7 @@ static partial class Program
                                     Console.WriteLine($"   TINY {fz.Tag} {GeometryAudit.AuthoritativeSurface(fz)?.GetType().Name} area {AnalyticVolume.FaceAreaRough(fz):G3} at ({c.X:0.###},{c.Y:0.###},{c.Z:0.###}) edges {fz.Loops.Sum(l => l.CoEdges.Count)}");
                                 }
                             }
-                            Log(new { tag, ms, guarantee = b.Guarantee.ToString(), dv = Math.Round(dv, 4), expect = expect is { } ee ? Math.Round(ee, 4) : (double?)null, faces = $"{f0}->{b.Faces.Count()}", problems });
+                            Log(new { tag, ms, guarantee = b.Guarantee.ToString(), dv = Math.Round(dv, 4), expect = expect is { } ee ? Math.Round(ee, 4) : (double?)null, faces = $"{f0}->{b.Faces.Count()}", problems, dr = drWhy });
                         }
                         if (problems.Count > 0 && f.Error != null) Log(new { tag, ms, problems });
                         if (Environment.GetEnvironmentVariable("CORPUS_SAVEALL") == "1")
@@ -589,7 +592,11 @@ static partial class Program
                 foreach (var ce in chain) { if (f is RoundFeature rf) rf.Edges.Add(EdgeRef.Of(ce)); else ((ChamferFeature)f).Edges.Add(EdgeRef.Of(ce)); }
                 p.AddFeature(f);
                 var sw = System.Diagnostics.Stopwatch.StartNew();
+                // k143: путь операции — прямой построитель (замена граней, как Parasolid) или резец; причина отказа прямого
+                string? drWhy = null; var drPrev = Parametric3D.Kernel.Ops.DirectRound.Debug;
+                Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (s.StartsWith("declined")) drWhy = s.Length > 200 ? s[..200] : s; };
                 try { p.Rebuild(null); } catch (Exception ex) when (ex is not OutOfMemoryException) { f.Error = "exception: " + ex.Message; }
+                finally { Parametric3D.Kernel.Ops.DirectRound.Debug = drPrev; }
                 double ms = sw.ElapsedMilliseconds; totalMs += ms;
                 var mid = e.Curve!.PointAt(0.5 * (e.Curve.T0 + e.Curve.T1));
                 string tag = $"s{sd} step {st} {(round ? "R" : "C")}{size} edge ({mid.X:0.##},{mid.Y:0.##},{mid.Z:0.##}){(chain.Count > 1 ? $" chain {chain.Count}" : "")}";
@@ -614,7 +621,7 @@ static partial class Program
                         if (Math.Abs(dv - ex) > tol) problems.Add($"volume change {dv:0.###} vs formula {ex:0.###}");
                     }
                     if (dv < 1e-6) problems.Add("nothing changed");
-                    Log(new { tag, ms, guarantee = b.Guarantee.ToString(), dv = Math.Round(dv, 4), expect = clean && expect is { } e2 ? Math.Round(e2, 4) : (double?)null, problems });
+                    Log(new { tag, ms, guarantee = b.Guarantee.ToString(), dv = Math.Round(dv, 4), expect = clean && expect is { } e2 ? Math.Round(e2, 4) : (double?)null, problems, dr = drWhy });
                 }
                 if (f.Error != null || p.Bodies.Count != 1) Log(new { tag, ms, problems });
                 if (problems.Count == 0) { ok++; continue; }

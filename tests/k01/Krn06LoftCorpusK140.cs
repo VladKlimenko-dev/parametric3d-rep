@@ -16,7 +16,8 @@ static partial class Program
     /// P3D_TANGENTINSET, P3D_ZEROAFTERHEAL, P3D_LINEFACET, P3D_SLIVERPIECES, P3D_SLIVERSTRIPS, P3D_ARCONSURF, P3D_BLENDCRUMBS,
     /// P3D_DROPTINYCAVITY (см. KRN06-LOFT-CORPUS-K140-MUT в отчёте k140); k140 — P3D_REGIONNEAREST (seq_s105_4), P3D_PATCHFOLD
     /// (seq_s106_2); k141 — P3D_FACESIDE (seq_s108_2), P3D_REACHFACERAYS (fail_s71), P3D_WALLCAPMIN (fail_s58);
-    /// k142 — P3D_NORMALCONTINUITY (seq_s106_4: фаска 0.3 цепочки из 4, прежде «both faces must be planar»).
+    /// k142 — P3D_NORMALCONTINUITY (seq_s106_4: фаска 0.3 цепочки из 4, прежде «both faces must be planar»);
+    /// k143 — P3D_ENDTRIM (seq_s101_4, seq_s102_2, seq_s102_5, seq_s110_5: прежние законные отказы — складка резца у конца).
     /// </summary>
     static void Krn06LoftCorpusK140Checks()
     {
