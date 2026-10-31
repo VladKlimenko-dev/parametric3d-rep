@@ -569,6 +569,8 @@ static partial class Program
         if (mode is "krn05probe") Krn05OverlayProbe();
         if (mode is "loadrebuild") { LoadRebuild(args[1]); return; }
         if (mode is "stageeach") { StageEach(args[1]); return; }
+        if (mode is "edgeop") { EdgeOpProbe(args); return; }
+        if (mode is "jointprobe") { JointProbe(args[1]); return; }
         if (mode is "corpuscase") { CorpusCase(args[1], args.Length > 2 ? args[2] : "/tmp/claude-0/case"); return; }
         if (mode is "loftseq") { LoftCorpusSeq(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), args.Length > 4 ? args[4] : "/tmp/claude-0/corpusseq"); return; }
         if (mode is "loftcorpus") { LoftCorpusRun(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), args.Length > 4 ? args[4] : "/tmp/claude-0/corpus"); return; }

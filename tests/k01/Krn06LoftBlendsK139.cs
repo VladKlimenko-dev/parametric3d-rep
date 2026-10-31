@@ -50,9 +50,14 @@ static partial class Program
                 var body = p.Bodies.Single(); bool valid = SolidValidator.Validate(body).IsValid; double v = p.Volume;
                 Log(new { tag, volume = Math.Round(v, 3), valid, guarantee = body.Guarantee.ToString() });
                 if (!valid) fails.Add(tag + ": invalid body");
-                if (Math.Abs(v - want) > 0.5) fails.Add($"{tag}: volume {v:0.###}, expected {want:0.###}");
+                if (tag.Contains("direct") && body.Guarantee.ToString() != "ExactAnalytic") fails.Add(tag + ": not exact (" + body.Guarantee + ")");
+                if (Math.Abs(v - want) > (tag.Contains("direct") ? 0.01 : 0.5)) fails.Add($"{tag}: volume {v:0.###}, expected {want:0.###}");
                 if (extra() is { } x) fails.Add(tag + ": " + x);
             }
+            // k144: кромку окна теперь строит прямой построитель (лента катящегося шара, замена граней, торец — продолжение
+            // стенки); прежние случаи резца — с выключенным прямым построителем (обходной путь остаётся проверенным)
+            Parametric3D.Kernel.Ops.DirectRound.OffForTest = true;
+            try {
             long fb0 = Parametric3D.Kernel.Ops.FilletOp.BallFlatFallbacks, wc0 = Parametric3D.Kernel.Ops.FilletOp.WallCaps;
             Case("4.1 round R10.29", Stage(0), new[] { 10.0, 10, 0, -10, 10, 0 }, true, 10.29, 644280.526,
                 () => Parametric3D.Kernel.Ops.FilletOp.BallFlatFallbacks != fb0 ? "a section fell back to tangent planes"
@@ -63,6 +68,18 @@ static partial class Program
             long ro0 = Parametric3D.Kernel.Ops.FilletOp.BlendRunouts;
             Case("4.4 chamfer 2.18 at the round", Stage(0, 2), new[] { -59.27, 83.41, -200, -59.27, 53.36, -200 }, false, 2.18, 644787.999,
                 () => Parametric3D.Kernel.Ops.FilletOp.BlendRunouts == ro0 ? "the chamfer did not run out into the round" : null);
+            } finally { Parametric3D.Kernel.Ops.DirectRound.OffForTest = false; }
+            // k144 (замечание 31.10, п. 1–2: фаска и скругление кромки окна — «сдвиг и неправильная форма»): прямой путь,
+            // тело точное; торцы ленты — по продолжению соседних стенок окна (P3D_DREXTENDNURBS, P3D_FOOTFAR, P3D_DRENDFINE,
+            // P3D_DRSTRIPTIGHT; R1 — тонкие треугольники у касательного угла торца, P3D_EARTHIN). Объём — точный (замер k144).
+            foreach (var (tag, round, size, want) in new[] { ("k144 round R10.29 direct", true, 10.29, 644582.926), ("k144 chamfer 3 direct", false, 3.0, 645437.827),
+                                                              ("k144 round R3 direct", true, 3.0, 645477.506), ("k144 chamfer 10.29 direct", false, 10.29, 644433.392),
+                                                              ("k144 round R1 direct", true, 1.0, 645525.192) })
+            {
+                long b0 = Parametric3D.Kernel.Ops.DirectRound.Built;
+                Case(tag, Stage(0), new[] { 10.0, 10, 0, -10, 10, 0 }, round, size, want,
+                    () => Parametric3D.Kernel.Ops.DirectRound.Built == b0 ? "not built by the direct builder" : null);
+            }
             Require(fails.Count == 0, string.Join("; ", fails));
         });
     }

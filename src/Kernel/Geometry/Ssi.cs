@@ -57,7 +57,8 @@ public static class Ssi
     public static int FootHintCount => FootWeak ? _footHintsWeak?.Count() ?? 0 : _footHints?.Count ?? 0;
     [ThreadStatic] public static Action<string>? FootDebug;
     /// <summary>Разбор: вызовы основания на поверхности общего вида и из них — с общей проекцией (без годной подсказки).</summary>
-    public static long ParamFootCalls, ParamFootGlobal;
+    public static long ParamFootCalls, ParamFootGlobal, ParamFootFar;
+    static readonly bool FootFar = Environment.GetEnvironmentVariable("P3D_FOOTFAR") != "0";
 
     static void ParamDerivs(Surfaces.ISurface3 s, Vector2d uv, out Vector3d S, out Vector3d Su, out Vector3d Sv)
     {
@@ -109,7 +110,18 @@ public static class Ssi
         {
             Interlocked.Increment(ref ParamFootGlobal);
             uv = s.ProjectToUV(x); var g0 = uv;
-            ok = FootNewton(s, x, ref uv) && (uv - g0).Length < 0.25;
+            bool conv = FootNewton(s, x, ref uv);
+            ok = conv && (uv - g0).Length < 0.25;
+            // k144: ОСНОВАНИЕ НА ПРОДОЛЖЕНИИ ЗА КРАЕМ ОБЛАСТИ. Общая проекция прижата к области, а основание у точки за краем — на
+            // продолжении, дальше 0.25 по параметру (стенка окна Sweep_Blend шириной 20 мм, продление ленты на 6 мм — 0.3):
+            // прежде отказ (NaN), лента катящегося шара не продлевалась за торец, и скругление шло резцом. Сошедшийся Ньютон
+            // принимается, если основание не дальше от x, чем прижатая точка (дальняя стационарная точка — максимум расстояния —
+            // всегда дальше). Мутация P3D_FOOTFAR=0.
+            if (!ok && conv && FootFar)
+            {
+                ParamDerivs(s, uv, out var Pf, out _, out _); ParamDerivs(s, g0, out var Pg, out _, out _);
+                if ((x - Pf).Length <= (x - Pg).Length * (1 + 1e-12) + 1e-12) { ok = true; Interlocked.Increment(ref ParamFootFar); }
+            }
         }
         if (!ok)
         {

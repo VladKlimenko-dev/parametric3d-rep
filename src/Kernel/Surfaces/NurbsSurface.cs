@@ -478,6 +478,98 @@ public sealed class NurbsSurface : ISurface3
         return null;
     }
 
+    /// <summary>
+    /// k144: ТА ЖЕ ПОВЕРХНОСТЬ НА БОЛЬШЕЙ ОБЛАСТИ — точное продолжение крайних промежутков (те же многочлены, что у
+    /// DerivsExtended): область прежних параметров [u0, u1] × [v0, v1] (u0 ≤ 0, u1 ≥ 1, …) переводится в [0, 1] × [0, 1].
+    /// Крайний промежуток выделяется вставкой узла до кратности степени и продлевается де Кастельжо за 1 (однородные
+    /// координаты — веса тоже). Нужна прямому построителю скруглений: грань-торец NURBS за краем своей области (вогнутый
+    /// конец ленты упирается в продолжение стенки), как продление поверхностей у Parasolid. null — вес продолжения не
+    /// положителен (рациональный кусок не продолжается).
+    /// </summary>
+    public NurbsSurface? Extended(double u0, double u1, double v0, double v1)
+    {
+        int nu = CountU, nv = CountV;
+        var H = new Vector4d[nu, nv];
+        for (int i = 0; i < nu; i++) for (int j = 0; j < nv; j++) H[i, j] = new Vector4d(_cp[i, j] * _w[i, j], _w[i, j]);
+        var ku = (double[])_ku.Clone(); var kv = (double[])_kv.Clone();
+        // по u: строки — кривые по первому индексу
+        H = ExtendDir(H, ref ku, _du, u0, u1, alongFirst: true);
+        H = ExtendDir(H, ref kv, _dv, v0, v1, alongFirst: false);
+        int mu = H.GetLength(0), mv = H.GetLength(1);
+        var cp = new Vector3d[mu, mv]; var w = new double[mu, mv];
+        for (int i = 0; i < mu; i++)
+            for (int j = 0; j < mv; j++)
+            {
+                if (!(H[i, j].W > 1e-12)) return null;
+                w[i, j] = H[i, j].W; cp[i, j] = H[i, j].Xyz / H[i, j].W;
+            }
+        static double[] Rescale(double[] k, double a, double b) => k.Select(x => Math.Clamp((x - a) / (b - a), 0, 1)).ToArray();
+        return new NurbsSurface(cp, _du, _dv, w, Rescale(ku, u0, u1), Rescale(kv, v0, v1));
+    }
+
+    static Vector4d[,] ExtendDir(Vector4d[,] H, ref double[] knots, int p, double lo, double hi, bool alongFirst)
+    {
+        int n = alongFirst ? H.GetLength(0) : H.GetLength(1), other = alongFirst ? H.GetLength(1) : H.GetLength(0);
+        var rows = new List<Vector4d[]>();
+        for (int o = 0; o < other; o++) { var r = new Vector4d[n]; for (int i = 0; i < n; i++) r[i] = alongFirst ? H[i, o] : H[o, i]; rows.Add(r); }
+        var k = knots;
+        if (hi > 1 + 1e-15) ExtendHigh(rows, ref k, p, hi);
+        if (lo < -1e-15)
+        {
+            // низкий конец — отражением: t → −t, порядок точек обратный
+            var kr = k.Select(x => -x).Reverse().ToArray();
+            for (int o = 0; o < rows.Count; o++) Array.Reverse(rows[o]);
+            ExtendHigh(rows, ref kr, p, -lo);
+            k = kr.Select(x => -x).Reverse().ToArray();
+            for (int o = 0; o < rows.Count; o++) Array.Reverse(rows[o]);
+        }
+        knots = k;
+        int m = rows[0].Length;
+        var R = alongFirst ? new Vector4d[m, other] : new Vector4d[other, m];
+        for (int o = 0; o < other; o++) for (int i = 0; i < m; i++) { if (alongFirst) R[i, o] = rows[o][i]; else R[o, i] = rows[o][i]; }
+        return R;
+    }
+
+    /// <summary>Продление по параметру за верхний конец узлов до T: крайний промежуток — кусок Безье, де Кастельжо при s &gt; 1.</summary>
+    static void ExtendHigh(List<Vector4d[]> rows, ref double[] knots, int p, double T)
+    {
+        double end = knots[^1];
+        // начало крайнего промежутка — наибольший узел меньше конца
+        double a = knots.Where(x => x < end - 1e-12).DefaultIfEmpty(double.NaN).Max();
+        if (double.IsNaN(a)) return;
+        // кратность a — до степени (вставка Бёма во все строки)
+        bool interior = knots.Count(x => x < a - 1e-12) > 0;
+        while (interior && knots.Count(x => Math.Abs(x - a) < 1e-12) < p)
+        {
+            int kk = Array.FindLastIndex(knots, x => x <= a + 1e-12);   // промежуток, содержащий a (с правой стороны)
+            for (int o = 0; o < rows.Count; o++)
+            {
+                var P = rows[o]; int n = P.Length; var Q = new Vector4d[n + 1];
+                for (int i = 0; i <= n; i++)
+                {
+                    double al;
+                    if (i <= kk - p) al = 1;
+                    else if (i > kk) al = 0;
+                    else { double den = knots[i + p] - knots[i]; al = den <= 0 ? 0 : (a - knots[i]) / den; }
+                    var prev = i - 1 >= 0 ? P[i - 1] : Vector4d.Zero; var cur = i < n ? P[i] : Vector4d.Zero;
+                    Q[i] = prev * (1 - al) + cur * al;
+                }
+                rows[o] = Q;
+            }
+            var nk = knots.ToList(); nk.Insert(kk + 1, a); knots = nk.ToArray();
+        }
+        double s = (T - a) / (end - a);
+        for (int o = 0; o < rows.Count; o++)
+        {
+            var P = rows[o]; int n = P.Length;
+            var B = new Vector4d[p + 1]; for (int i = 0; i <= p; i++) B[i] = P[n - p - 1 + i];
+            var L = new Vector4d[p + 1]; L[0] = B[0];
+            for (int r = 1; r <= p; r++) { for (int i = 0; i <= p - r; i++) B[i] = B[i] * (1 - s) + B[i + 1] * s; L[r] = B[0]; }
+            for (int i = 0; i <= p; i++) P[n - p - 1 + i] = L[i];
+        }
+        for (int i = knots.Length - p - 1; i < knots.Length; i++) knots[i] = T;
+    }
+
     /// <summary>k139: та же поверхность с обратным направлением u (нормаль — в другую сторону): опорные точки и веса в обратном
     /// порядке по u, узлы u → 1 − u.</summary>
     public NurbsSurface ReversedU()
