@@ -35,7 +35,12 @@ static partial class Program
                 string file = row[0]; double want = double.Parse(row[1], System.Globalization.CultureInfo.InvariantCulture);
                 if (only != null && !file.Contains(only)) continue;
                 n++;
-                var r = CorpusFixture(Path.Combine(cdir, file));
+                // k147: третий столбец «noswitch» — история записана до перехода боковой точки фаски (прежние операции шли
+                // резцом); воспроизводится так же, иначе тело перед последней операцией другое и случай не о том
+                bool noSwitch = row.Length > 2 && row[2].Trim() == "noswitch";
+                Parametric3D.Kernel.Ops.DirectRound.ChamferSwitchOffForTest = noSwitch;
+                (bool Ok, double Dv, long Ms, List<string> Problems) r;
+                try { r = CorpusFixture(Path.Combine(cdir, file)); } finally { Parametric3D.Kernel.Ops.DirectRound.ChamferSwitchOffForTest = false; }
                 Log(new { file, r.Ok, dv = Math.Round(r.Dv, 4), want, r.Ms, r.Problems });
                 foreach (var pr in r.Problems) fails.Add($"{file}: {pr}");
                 if (r.Ok && Math.Abs(r.Dv - want) > 0.01 * Math.Abs(want) + 0.05) fails.Add($"{file}: removed volume {r.Dv:0.####}, expected {want:0.####}");

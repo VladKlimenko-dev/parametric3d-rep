@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
@@ -72,19 +72,40 @@ static partial class Program
                     if (Math.Abs(got - want) > 1e-6 * want) fails.Add($"loft prism: removed {got:G12}, expected {want:G12}");
                 }
             }
-            // лофт подобных контуров: шов наклонён — прямой путь отказывает с причиной (резец строит)
+            // лофт подобных контуров: шов наклонён. k146 — отказ с причиной; k147 — боковая точка звена переходит на соседнюю
+            // грань у шва (P3D_DRCHSWITCH): прямой путь, 8 переходов, точное тело; сетка против сетки — в пределах 1.5 % от
+            // резца (у лофта «точный до, сетка после» резца — не мера: сетка боковых граней грубее точного объёма)
             {
                 var p = new Part("ccl");
                 var s1 = RoundedRectSketch(p, 0, a, b, rc); var s2 = RoundedRectSketch(p, -60, 0.7 * a, 0.7 * b, 0.7 * rc);
                 var lf = new LoftFeature("Loft"); lf.SectionSketchIds.Add(s1.Id); lf.SectionSketchIds.Add(s2.Id); p.AddFeature(lf);
                 p.Rebuild(null);
-                var top = p.Bodies.Single().Edges.Where(e => Math.Abs(e.V0.P.Z) < 1e-6 && Math.Abs(e.V1.P.Z) < 1e-6).ToList();
-                var cf = new ChamferFeature("C") { D1 = new ValueRef(2), D2 = new ValueRef(2) }; foreach (var e in top) cf.Edges.Add(EdgeRef.Of(e));
+                double v0 = p.Volume;
+                double MeshVol(TSolid x) => Parametric3D.Kernel.Tess.MassProps.SignedVolume(Parametric3D.Kernel.Tess.Tessellator.Tessellate(TopologyClone.Deep(x)));
+                double m0 = MeshVol(p.Bodies.Single());
+                List<EdgeRef> Top() => p.Bodies.Single().Edges.Where(e => Math.Abs(e.V0.P.Z) < 1e-6 && Math.Abs(e.V1.P.Z) < 1e-6).Select(EdgeRef.Of).ToList();
+                var cf = new ChamferFeature("C") { D1 = new ValueRef(2), D2 = new ValueRef(2) }; foreach (var e in Top()) cf.Edges.Add(e);
                 string? dr = null; var dbg = DirectRound.Debug; DirectRound.Debug = x => { if (x.StartsWith("declined")) dr = x; };
+                long sw0 = DirectRound.ChamferSwitches;
                 try { p.AddFeature(cf); p.Rebuild(null); } finally { DirectRound.Debug = dbg; }
-                Log(new { test = "KRN06-CHAMFER-CHAIN-K146", model = "loft", error = cf.Error, guarantee = p.Bodies.Single().Guarantee.ToString(), dr });
+                var body = p.Bodies.Single(); bool valid = SolidValidator.Validate(body).IsValid;
+                double got = v0 - p.Volume, gotMesh = m0 - MeshVol(body);
+                Log(new { test = "KRN06-CHAMFER-CHAIN-K146", model = "loft", error = cf.Error, removed = got.ToString("R"), gotMesh, valid, guarantee = body.Guarantee.ToString(), switches = DirectRound.ChamferSwitches - sw0, dr });
                 if (cf.Error != null) fails.Add("loft: " + cf.Error.Split('\n').Last());
-                if (dr == null || !(dr.Contains("chamfer joint") || dr.Contains("not smooth"))) fails.Add("loft: expected a chamfer-joint decline, got " + (dr ?? "direct"));
+                else
+                {
+                    if (dr != null) fails.Add("loft: not built by the direct builder: " + dr);
+                    if (!valid) fails.Add("loft: invalid body");
+                    if (body.Guarantee != GuaranteeLevel.ExactAnalytic) fails.Add("loft: guarantee " + body.Guarantee);
+                    if (DirectRound.ChamferSwitches - sw0 != 8) fails.Add($"loft: {DirectRound.ChamferSwitches - sw0} side-point switches (8 expected)");
+                    p.RemoveFeature(cf); p.Rebuild(null);
+                    var c2 = new ChamferFeature("C2") { D1 = new ValueRef(2), D2 = new ValueRef(2) }; foreach (var e in Top()) c2.Edges.Add(e);
+                    DirectRound.OffForTest = true;
+                    try { p.AddFeature(c2); p.Rebuild(null); } finally { DirectRound.OffForTest = false; }
+                    double cutMesh = m0 - MeshVol(p.Bodies.Single());
+                    Log(new { test = "KRN06-CHAMFER-CHAIN-K146", model = "loft by the cutter", cutMesh, guarantee = p.Bodies.Single().Guarantee.ToString() });
+                    if (c2.Error != null || !(Math.Abs(cutMesh - gotMesh) < 0.015 * gotMesh)) fails.Add($"loft: cutter removed {cutMesh:G6} (mesh) against {gotMesh:G6}");
+                }
             }
             Require(fails.Count == 0, string.Join(" | ", fails));
         });

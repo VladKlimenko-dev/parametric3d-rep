@@ -116,6 +116,7 @@ public static partial class DirectRound
         public TEdge? Id;                                        // исходное ребро звена (сохраняется при укорачивании)
         public ICurve3? TrimOf;                                  // кривая — часть кривой ребра Id (укорочение, не новая)
         public double Tol;                                       // u12b: допуск нового ребра (наследуется от ребра-образца)
+        public bool JointPiece;                                  // k147: кусок линии касания соседнего звена у стыка (переход фаски на эту грань)
         public bool Closed => (A - B).LengthSquared < 1e-24 && Curve is ArcCurve3 { IsClosed: true } or ProcCurve3 { IsClosed: true };
         public Seg Clone() => new() { Curve = Curve, A = A, B = B, Orig = Orig, Id = Id, TrimOf = TrimOf, Tol = Tol };
     }
@@ -1475,7 +1476,7 @@ public static partial class DirectRound
         if (Debug != null) foreach (var f in solid.Faces.Where(x => x.Tag == "round:face")) Debug($"after normalize: loopsVec {AnalyticVolume.NormalIntegral(f):0.###} rev {f.Reversed}");
         var w = new List<string>();
         Stage("mesh");
-        if (Analytic.PrismBuild.Finish(solid, w, BooleanOp.DonorFrom(body)) > 0) { why = "faces not meshed: " + string.Join(" / ", w.Take(3)); return null; }
+        if (Analytic.PrismBuild.Finish(solid, w, KeepDonor(faces, BooleanOp.DonorFrom(body))) > 0) { why = "faces not meshed: " + string.Join(" / ", w.Take(3)); return null; }
         solid.Guarantee = GuaranteeLevel.ExactAnalytic;
         // KRN-10 (g.13): проверки результата — сразу или, в предпросмотре, при принятии (BooleanOp.AcceptPreview)
         string? Checks()
@@ -1918,6 +1919,94 @@ public static partial class DirectRound
 
         return faces;
     }
+
+    /// <summary>
+    /// k147 (как в Parasolid: правка не трогает прочие грани). Грань, которую операция не меняла (Touched = false), — та же
+    /// грань: её прежняя сетка — донор по ссылке на исходную грань, даже без ключа по содержанию (кривые рёбер — не отрезки
+    /// и дуги: ленты прежних скруглений, грани после правки резцом). Прежде такие грани размечались по контурам заново, и
+    /// грань, рождённая многогранным путём (сетка — сама грань), по контуру не размечалась — отказ всей операции. Сетка
+    /// донора сверяется с точками рёбер (StepImport.DonorFitsEdges). Мутация P3D_DRKEEPFACES=0.
+    /// </summary>
+    static Func<TFace, FacetedSurface?>? KeepDonor(IEnumerable<FDesc> faces, Func<TFace, FacetedSurface?>? baseDonor)
+    {
+        if (!KeepFaces) return baseDonor;
+        var kept = new Dictionary<TFace, FacetedSurface>();
+        static IEnumerable<(ICurve3, Vector3d, Vector3d)> Sig(TFace f) => f.Loops.SelectMany(l => l.CoEdges).Select(c => (c.Edge.Curve, c.Edge.V0.P, c.Edge.V1.P));
+        foreach (var fd in faces)
+        {
+            if (fd.Touched || fd.Made == null || fd.Orig?.Surface is not FacetedSurface fs || fs.Facets.Count == 0) continue;
+            // только у неточного тела (после правки резцом): у точного тела у каждой грани сетка — FacetedSurface, и прежняя
+            // сетка с кромкой вместо заново размеченных ломаных меняла прочие операции (регрессия allA k147e)
+            if (fd.Orig.Shell?.Solid is not { } os || os.Guarantee == GuaranteeLevel.ExactAnalytic) continue;
+            if (baseDonor?.Invoke(fd.Made) != null) continue;          // обычный донор по содержанию — как прежде
+            // те же рёбра (та же кривая, те же концы), что у исходной грани
+            var o = Sig(fd.Orig).ToList(); var m = Sig(fd.Made).ToList();
+            if (o.Count != m.Count || !m.All(x => o.Any(y => ReferenceEquals(y.Item1, x.Item1) && (y.Item2 == x.Item2 && y.Item3 == x.Item3 || y.Item2 == x.Item3 && y.Item3 == x.Item2)))) continue;
+            kept[fd.Made] = fs;
+        }
+        if (kept.Count == 0) return baseDonor;
+        // ломаные рёбер — с кромки сетки нетронутой грани: соседние грани, размечаемые заново, берут те же точки (щелей
+        // на шве нет), а сетка донора сходится с точками своих рёбер; кромка не обходится по всем рёбрам — грань не берётся
+        foreach (var (f, dn) in kept.ToList()) if (!SeedRimPolylines(f, dn)) kept.Remove(f);
+        if (kept.Count == 0) return baseDonor;
+        return f => baseDonor?.Invoke(f) ?? (kept.TryGetValue(f, out var d) ? d : null);
+    }
+
+    /// <summary>k147: ломаная каждого ребра грани — путь по кромке её сетки от V0 до V1 (из двух дуг кромки — ближайшая к кривой).</summary>
+    static bool SeedRimPolylines(TFace f, FacetedSurface dn)
+    {
+        static (long, long, long) K(Vector3d p) => ((long)Math.Round(p.X * 1e9), (long)Math.Round(p.Y * 1e9), (long)Math.Round(p.Z * 1e9));
+        var sides = new Dictionary<((long, long, long), (long, long, long)), int>();
+        var at = new Dictionary<(long, long, long), Vector3d>();
+        void Side(Vector3d a, Vector3d b)
+        {
+            var ka = K(a); var kb = K(b); at[ka] = a; at[kb] = b;
+            var k = ka.CompareTo(kb) < 0 ? (ka, kb) : (kb, ka); sides[k] = sides.GetValueOrDefault(k) + 1;
+        }
+        foreach (var (A, B, C) in dn.Facets.ReadView) { Side(A, B); Side(B, C); Side(C, A); }
+        var adj = new Dictionary<(long, long, long), List<(long, long, long)>>();
+        foreach (var (k, n) in sides)
+            if (n == 1)
+            {
+                (adj.TryGetValue(k.Item1, out var l1) ? l1 : adj[k.Item1] = new()).Add(k.Item2);
+                (adj.TryGetValue(k.Item2, out var l2) ? l2 : adj[k.Item2] = new()).Add(k.Item1);
+            }
+        var want = (Core.Tol.Chord, Core.Tol.ChordAngle);
+        var found = new List<(TEdge E, List<Vector3d> P)>();
+        foreach (var e in f.Loops.SelectMany(l => l.CoEdges).Select(c => c.Edge).Distinct())
+        {
+            if (ReferenceEquals(e.V0, e.V1)) return false;
+            var k0 = K(e.V0.P); var k1 = K(e.V1.P);
+            if (!adj.TryGetValue(k0, out var starts) || !adj.ContainsKey(k1)) return false;
+            List<Vector3d>? best = null; double bestOff = double.MaxValue;
+            foreach (var n0 in starts)
+            {
+                var path = new List<(long, long, long)> { k0, n0 }; var prev = k0; var cur = n0;
+                while (cur != k1 && path.Count <= sides.Count)
+                {
+                    var nx = adj[cur]; if (nx.Count != 2) break;
+                    var nxt = nx[0] == prev ? nx[1] : nx[0]; prev = cur; cur = nxt; path.Add(cur);
+                }
+                if (cur != k1) continue;
+                var pts = path.Select(q => at[q]).ToList();
+                var mid = pts[pts.Count / 2];
+                double off = (e.Curve.PointAt(CurveParam.Closest(e.Curve, mid)) - mid).Length;
+                if (off < bestOff) { bestOff = off; best = pts; }
+            }
+            if (best == null || bestOff > 1e-3) return false;
+            best[0] = e.V0.P; best[^1] = e.V1.P;
+            found.Add((e, best));
+        }
+        foreach (var (e, best) in found)
+        {
+            e.PolylineCache = best; e.PolylineQuality = want; e.PolylineSource = (e.Curve, e.V0.P, e.V1.P);
+            RimSeeded++;
+        }
+        return true;
+    }
+    /// <summary>k147: сколько ломаных рёбер взято с кромки сетки нетронутых граней.</summary>
+    public static long RimSeeded;
+    static readonly bool KeepFaces = Environment.GetEnvironmentVariable("P3D_DRKEEPFACES") != "0";
 
     static TSolid? Assemble(List<FDesc> faces, ref string? why)
     {
