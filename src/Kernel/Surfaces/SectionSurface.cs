@@ -445,6 +445,36 @@ public sealed class SectionSurface : ISurface3
         return (sec.Point(v), su, sec.Deriv(v));
     }
 
+    /// <summary>
+    /// k146: ТОЧКА И ПРОИЗВОДНЫЕ С ПРОДОЛЖЕНИЕМ (процедурный режим) — для основания перпендикуляра, когда лента прежнего
+    /// скругления становится гранью новой ленты катящегося шара (каскад). По v — производная самого сечения; по u — центральная
+    /// разность (шаг 1e-4 мм); за концами по u (незамкнутая) — продолжение второго порядка по концу: S(uₑ) + S_u·δ + ½S_uu·δ².
+    /// </summary>
+    public void DerivsExtended(Vector2d uv, out Vector3d S, out Vector3d Su, out Vector3d Sv)
+    {
+        double u = uv.X, v = uv.Y; const double h = 1e-4;
+        if (_gen == null) throw new InvalidOperationException("DerivsExtended: not procedural");
+        if (Closed || (u >= _u0 && u <= _u1))
+        {
+            u = WrapU(u);
+            double a = Closed ? u - h : Math.Max(_u0, u - h), b = Closed ? u + h : Math.Min(_u1, u + h);
+            var sec = SectionAt(u);
+            S = sec.Point(v); Sv = sec.Deriv(v);
+            Su = (SectionAt(b).Point(v) - SectionAt(a).Point(v)) / (b - a);
+            return;
+        }
+        double ue = u < _u0 ? _u0 : _u1, sg = u < _u0 ? 1 : -1, d = u - ue;
+        // узлы внутрь от конца: uₑ, uₑ ± h, uₑ ± 2h
+        var s0 = SectionAt(ue); var s1 = SectionAt(ue + sg * h); var s2 = SectionAt(ue + sg * 2 * h);
+        Vector3d p0 = s0.Point(v), p1 = s1.Point(v), p2 = s2.Point(v);
+        Vector3d d1 = sg * (-3 * p0 + 4 * p1 - p2) / (2 * h), d2 = (p0 - 2 * p1 + p2) / (h * h);
+        S = p0 + d1 * d + d2 * (0.5 * d * d);
+        Su = d1 + d2 * d;
+        Vector3d q0 = s0.Deriv(v), q1 = s1.Deriv(v), q2 = s2.Deriv(v);
+        Vector3d e1 = sg * (-3 * q0 + 4 * q1 - q2) / (2 * h), e2 = (q0 - 2 * q1 + q2) / (h * h);
+        Sv = q0 + e1 * d + e2 * (0.5 * d * d);
+    }
+
     public Vector3d PointAt(Vector2d uv)
     {
         if (_gen != null) return SectionAt(uv.X).Point(uv.Y);

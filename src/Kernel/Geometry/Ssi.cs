@@ -63,6 +63,7 @@ public static class Ssi
     static void ParamDerivs(Surfaces.ISurface3 s, Vector2d uv, out Vector3d S, out Vector3d Su, out Vector3d Sv)
     {
         if (s is Surfaces.NurbsSurface ns) { ns.DerivsExtended(uv, out S, out Su, out Sv); return; }
+        if (s is Surfaces.SectionSurface ss && ss.IsProcedural) { ss.DerivsExtended(uv, out S, out Su, out Sv); return; }
         const double h = 1e-7;
         S = s.PointAt(uv);
         Su = (s.PointAt(new Vector2d(uv.X + h, uv.Y)) - s.PointAt(new Vector2d(uv.X - h, uv.Y))) / (2 * h);
