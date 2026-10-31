@@ -73,7 +73,7 @@ public static class ViewSelectCommands
             CanRun = HasPart, Run = () => w.ShowToast(L("Длина: {0} мм", F(SelectedLength(w))), error: false) });
         r.Add(new AppCommand { Id = "an.mass", Label = "Массовые свойства", Group = An, Icon = "mass_but.svg", Synonyms = "mass properties inertia масса центр инерция",
             CanRun = HasPart, Run = async () => await Dialogs.Info(w, L("Массовые свойства"), MassText(w.Session.Part!)) });
-        r.Add(new AppCommand { Id = "an.zebra", Label = "Зебра", Group = An, Icon = "zebra.svg", Synonyms = "zebra stripes reflection зебра",
+        r.Add(new AppCommand { Id = "an.zebra", Label = "Зебра", Group = An, Icon = "an_zebra_but.svg", Synonyms = "zebra stripes reflection зебра",
             IsChecked = () => vp.Zebra, Run = () => vp.Zebra = !vp.Zebra });
         r.Add(new AppCommand { Id = "an.curvature", Label = "Кривизна (гребёнка)", Group = An, Icon = "an_curvature_but.svg", Synonyms = "curvature comb кривизна гребёнка",
             IsChecked = () => vp.Annotations.Count > 0,

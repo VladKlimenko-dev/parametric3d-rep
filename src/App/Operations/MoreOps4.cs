@@ -34,7 +34,7 @@ public sealed class SurfaceOp : FeatureOp<SurfaceFeature>
     private readonly RefCache<Vector3d> _cache = new();
     public SurfaceOp(SurfaceFeature? existing = null) : base(existing) { if (existing != null) StartMode = existing.Mode; }
     public override string Title => StartMode switch { SurfaceKind.Revolve => "Поверхность вращением", SurfaceKind.Fill => "Заливка (плоская поверхность)", SurfaceKind.Copy => "Копия поверхности", _ => "Поверхность выдавливанием" };
-    public override string Icon => StartMode switch { SurfaceKind.Fill => "f_fill_but.svg", SurfaceKind.Copy => "surf_copy_but.svg", _ => "f_surface_extrude_but.svg" };
+    public override string Icon => StartMode switch { SurfaceKind.Fill => "f_fill_but.svg", SurfaceKind.Copy => "surf_copy_but.svg", SurfaceKind.Revolve => "surf_revolve_but.svg", _ => "f_surface_extrude_but.svg" };
     protected override SurfaceFeature Create() => new(L(Title)) { Mode = StartMode };
 
     public override void Build(OpPanel p)

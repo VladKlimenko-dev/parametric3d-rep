@@ -4185,10 +4185,10 @@ Check("UI-SKETCH-AXISDIM-K130", () =>
     var reg = CommandRegistry.Instance;
     foreach (var id in new[] { "dim.horizontal", "dim.vertical" })
         Require(reg.Find(id) is { } c && IconProvider.Exists(c.Icon) && MainWindow.DimTools.Contains(id), "no button " + id);
-    foreach (var (id, icon) in new[] { ("an.area", "dim_area_but.svg"), ("an.perimeter", "dim_perimeter_but.svg"), ("an.mass", "mass_but.svg"), ("an.zebra", "zebra.svg") })
+    foreach (var (id, icon) in new[] { ("an.area", "dim_area_but.svg"), ("an.perimeter", "dim_perimeter_but.svg"), ("an.mass", "mass_but.svg"), ("an.zebra", "an_zebra_but.svg") })
         Require(reg[id].Icon == icon && IconProvider.Exists(icon), $"measure panel icon {id}: {reg[id].Icon}");
     Require(IconProvider.Exists(reg["an.measure"].Icon), "measure icon " + reg["an.measure"].Icon);
-    foreach (var f in new[] { "dim_size_horizontal.svg", "dim_size_vertical.svg", "dim_perimeter_but.svg", "mass_but.svg", "zebra.svg" })
+    foreach (var f in new[] { "dim_size_horizontal.svg", "dim_size_vertical.svg", "dim_perimeter_but.svg", "mass_but.svg", "an_zebra_but.svg", "zebra.svg" })
         Require(IconProvider.Get(f) != null, "the icon does not load: " + f);
     var l = sk.AddEntity(new SkLine(new SkPoint(140, 10), new SkPoint(170, 30))) as SkLine ?? throw new Exception("line");
     sk.Solve(solver);

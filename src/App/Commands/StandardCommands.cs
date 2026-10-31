@@ -201,7 +201,7 @@ public static class StandardCommands
         Op("op.pattern_fill", "Массив заполнением", "Заполнение", "f_pattern_fill_but.svg", () => new PointsPatternOp { StartMode = PointsPatternMode.Fill }, "pattern fill grid массив заполнение сетка");
         // u13f: поверхности и переходы
         Op("op.surface_extrude", "Поверхность выдавливанием", "Пов. выдавл.", "f_surface_extrude_but.svg", () => new SurfaceOp(), "surface extrude поверхность выдавливание квилт");
-        Op("op.surface_revolve", "Поверхность вращением", "Пов. вращ.", "f_surface_extrude_but.svg", () => new SurfaceOp { StartMode = SurfaceKind.Revolve }, "surface revolve поверхность вращение квилт");
+        Op("op.surface_revolve", "Поверхность вращением", "Пов. вращ.", "surf_revolve_but.svg", () => new SurfaceOp { StartMode = SurfaceKind.Revolve }, "surface revolve поверхность вращение квилт");
         Op("op.fill", "Заливка (плоская поверхность)", "Заливка", "f_fill_but.svg", () => new SurfaceOp { StartMode = SurfaceKind.Fill }, "fill flat surface заливка плоская поверхность");
         Op("op.surf_copy", "Копия поверхности", "Копия пов.", "surf_copy_but.svg", () => new SurfaceOp { StartMode = SurfaceKind.Copy }, "copy surface копия поверхности граней");
         Op("op.surf_offset", "Смещение поверхности", "Смещ. пов.", "surf_offset_but.svg", () => new QuiltEditOp(), "offset surface смещение поверхности");
