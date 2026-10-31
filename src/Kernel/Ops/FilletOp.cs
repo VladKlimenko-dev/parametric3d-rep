@@ -854,6 +854,26 @@ public static class FilletOp
                 using (Diagnostics.Prof.Time("скругление: протянутый резец"))
                     sweptTool = BuildSweptChamfer(bodies, comp.Select(k => (found[k].Edge, swap[k])).ToList(),
                                                   size1 * ToolScale, (round ? size1 : size2) * ToolScale, out why, out sweptFill, round, VariableLaw);
+                // k143: СКЛАДКА У КОНЦА — ПОВТОР С УКОРОЧЕННЫМ КОНЦОМ. Ребро у конца круто поворачивает (уходит в верхнюю грань под
+                // малым углом у края прежней фаски): сечения размером d поворачиваются быстрее, чем идут вперёд, дальняя кромка
+                // резца идёт назад — складка. Станции у конца (½d, затем d) выпадают, резец доходит до выхода из тела продлением
+                // последнего сечения. Прежние успешные резцы не меняются: только повтор после отказа. Мутация P3D_ENDTRIM=0.
+                if (sweptTool == null && !EndTrimOff && why != null && (why.Contains("folds over itself") || why.Contains("would intersect itself")))
+                {
+                    double big = Math.Max(size1, round ? size1 : size2) * ToolScale;
+                    foreach (double sc in new[] { 0.5, 1.0, 2.0 })
+                    {
+                        foreach (var (a0, aL) in new[] { (0.0, 1.0), (1.0, 0.0), (1.0, 1.0) })
+                        {
+                            sweptTool = BuildSweptChamfer(bodies, comp.Select(k => (found[k].Edge, swap[k])).ToList(),
+                                                          size1 * ToolScale, (round ? size1 : size2) * ToolScale, out var why2, out sweptFill, round, VariableLaw,
+                                                          a0 * sc * big, aL * sc * big);
+                            PathDebug?.Invoke($"резец: укороченные концы {a0 * sc * big:0.###}/{aL * sc * big:0.###} — {(sweptTool != null ? "годен" : why2)}");
+                            if (sweptTool != null) { Interlocked.Increment(ref EndTrims); break; }
+                        }
+                        if (sweptTool != null) break;
+                    }
+                }
                 if (sweptTool == null)
                 {
                     warnings.Add($"{what}: {why}.");
@@ -3906,11 +3926,14 @@ public static class FilletOp
     static readonly bool NormalContinuityOff = Environment.GetEnvironmentVariable("P3D_NORMALCONTINUITY") == "0";
     static readonly bool SideMajorityOff = Environment.GetEnvironmentVariable("P3D_SIDEMAJORITY") == "0";
     static readonly bool EndNormalInsetOff = Environment.GetEnvironmentVariable("P3D_ENDNORMALINSET") == "0";
+    static readonly bool EndTrimOff = Environment.GetEnvironmentVariable("P3D_ENDTRIM") == "0";
+    public static long EndTrims;
+
     public static long SweptFills;
 
     private static TSolid? BuildSweptChamfer(List<TSolid> bodies, List<(TEdge Edge, bool Swap)> chain,
                                              double d1, double d2, out string? refusal, out bool fill, bool round = false,
-                                             Func<double, double>? radiusAt = null)
+                                             Func<double, double>? radiusAt = null, double trim0 = 0, double trimL = 0)
     {
         fill = false;
         refusal = null;
@@ -4022,6 +4045,20 @@ public static class FilletOp
             samples = thin; sampleK = thinK;
         }
         if (samples.Count < 2) { refusal = "the chain is too short to sweep along"; return null; }
+        // k143: УКОРОЧЕННЫЙ КОНЕЦ (повтор после складки, см. вызов): станции в пределах trim0/trimL от концов открытой цепочки
+        // выпадают, резец к концу доходит продлением крайнего оставшегося сечения (EndReach / торец по стенке).
+        if (!closed && (trim0 > 0 || trimL > 0))
+        {
+            var cumT = new double[samples.Count];
+            for (int k = 1; k < samples.Count; k++) cumT[k] = cumT[k - 1] + (samples[k].P - samples[k - 1].P).Length;
+            double total = cumT[^1];
+            int lo = 0, hi = samples.Count - 1;
+            while (lo < hi && cumT[lo + 1] <= trim0) lo++;
+            while (hi > lo && total - cumT[hi - 1] <= trimL) hi--;
+            if (hi - lo < 2) { refusal = "the chain is too short to sweep along"; return null; }
+            samples = samples.GetRange(lo, hi - lo + 1); sampleK = sampleK.GetRange(lo, hi - lo + 1);
+            SweepDebug?.Invoke($"укороченные концы: выпало станций {lo} в начале и {cumT.Length - 1 - hi} в конце");
+        }
 
         // ---- сечения
         double tol = Tol.Weld * 100;
