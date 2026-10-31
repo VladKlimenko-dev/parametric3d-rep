@@ -624,6 +624,8 @@ static partial class Program
                     Log(new { tag, ms, guarantee = b.Guarantee.ToString(), dv = Math.Round(dv, 4), expect = clean && expect is { } e2 ? Math.Round(e2, 4) : (double?)null, problems, dr = drWhy });
                 }
                 if (f.Error != null || p.Bodies.Count != 1) Log(new { tag, ms, problems });
+                if (Environment.GetEnvironmentVariable("CORPUS_SAVEALL") == "1")
+                    try { File.WriteAllText(Path.Combine(outDir, $"all_s{sd}_{st}.p3d"), DocumentFile.Save(p)); } catch { }
                 if (problems.Count == 0) { ok++; continue; }
                 if (f.Error == null) bad++;
                 foreach (var pr in problems)

@@ -1446,6 +1446,9 @@ public static partial class ExactFaceMesher
     /// какого-либо треугольника отходит от точной поверхности больше трёх допусков гранения.
     /// </summary>
     static readonly bool PinchTriOff = Environment.GetEnvironmentVariable("P3D_PINCHTRI") == "0";
+    static readonly bool EarThinOff = Environment.GetEnvironmentVariable("P3D_EARTHIN") == "0";
+    /// <summary>k144: тонких ушей из трёх подряд точек контура, принятых разметкой.</summary>
+    public static long ThinEarsKept;
     public static long PinchFoldsDropped;
     private static (List<Vector3d> P, List<int> T)? Validate(TFace f, ISurface3 src, List<Vector3d> P, List<int> T, out string? why, bool checkArea = true, double boundaryDev = 0)
     {
@@ -1466,6 +1469,23 @@ public static partial class ExactFaceMesher
         {
             if (PinchTriOff) return false;
             int[] ix = { T[at], T[at + 1], T[at + 2] };
+            // k144: ТОНКИЙ ТРЕУГОЛЬНИК ИЗ БЛИЗКИХ ТОЧЕК КОНТУРА (в пределах 16 шагов). Край ленты катящегося шара на торце-стенке подходит к плоскости касательно
+            // (вогнутый конец скругления, грань стенки продолжена за край области): точки контура там почти на одной прямой, и
+            // треугольник из близких точек контура тонкий (площадь 1e-7, высота 2e-5–6e-5 мм). Хорда через промежуточную точку
+            // (ради которой проверка) — это высота около нуля; принимается при высоте не меньше 1e-5 мм (разрешение STL). Мутация
+            // P3D_EARTHIN=0.
+            if (!EarThinOff && ix.All(i => i < BoundaryCount))
+            {
+                // близкие по контуру (в пределах 16 шагов): тонкий треугольник у касательного угла контура
+                var s = ix.OrderBy(i => i).ToArray(); int n = BoundaryCount;
+                int span = Math.Min(s[2] - s[0], Math.Min(n - s[2] + s[1], n - s[1] + s[0]));
+                if (span <= 16)
+                {
+                    Vector3d a = P[ix[0]], b = P[ix[1]], c = P[ix[2]];
+                    double ar = Vector3d.Cross(b - a, c - a).Length / 2, lmax = Math.Max((b - a).Length, Math.Max((c - b).Length, (a - c).Length));
+                    if (lmax > 0 && 2 * ar / lmax >= 1e-5) { Interlocked.Increment(ref ThinEarsKept); return true; }
+                }
+            }
             for (int k = 0; k < 3; k++)
             {
                 int i0 = ix[k], i1 = ix[(k + 1) % 3];
