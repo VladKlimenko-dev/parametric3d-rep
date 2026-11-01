@@ -18,7 +18,10 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { Fail 'dotnet не
 $repoUrl = 'https://github.com/VladKlimenko-dev/parametric3d-rep.git'
 function IsClone($dir) { (Test-Path (Join-Path $dir '.git')) -and (Test-Path (Join-Path $dir 'src\Parametric3D.csproj')) }
 if (-not (IsClone $PWD.Path)) {
-    $clone = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'parametric3d-rep'
+    # «Документы» (у OneDrive — перенаправленные) и папка профиля\Documents — где клон делали по инструкции
+    $cands = @((Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'parametric3d-rep'), (Join-Path $HOME 'Documents\parametric3d-rep'))
+    $clone = ($cands | Where-Object { IsClone $_ } | Select-Object -First 1)
+    if (-not $clone) { $clone = $cands[0] }
     if (IsClone $clone) {
         Write-Host "Эта папка — не клон репозитория ($($PWD.Path)). Работаю с клоном: $clone" -ForegroundColor Yellow
         Set-Location -Path $clone
