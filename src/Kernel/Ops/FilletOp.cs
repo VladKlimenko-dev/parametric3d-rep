@@ -1143,8 +1143,10 @@ public static class FilletOp
         // скруглений без общего шара (пирамида с разными уклонами граней) давал микрорёбра 1e-6 мм у основания и сетку с
         // рёбрами кратности 4 — тело принималось (защитная проверка смотрит объём и открытые рёбра своей разметки).
         // Негодный итог — откат и отказ. Мутация P3D_FILLETFINALCHECK=0.
-        if (!FinalCheckOff && done > 0 && !KernelSettings.Capture().LivePreview)
-            foreach (var b in bodies.Where(x => !original.Any(o => ReferenceEquals(o, x))))
+        // k148 (замечание 01.11, 15:02: «не должно быть поломанных тел даже в предпросмотре»): и в предпросмотре — кроме тела по
+        // сеткам показа (его замкнутость проверена при резе). Мутация P3D_PREVIEWCHECK=0 — как прежде (в предпросмотре без проверки).
+        if (!FinalCheckOff && done > 0 && (!KernelSettings.Capture().LivePreview || !PreviewCheckOff))
+            foreach (var b in bodies.Where(x => !original.Any(o => ReferenceEquals(o, x)) && !BooleanOp.IsPreviewMesh(x)))
             {
                 ValidationReport vr;
                 using (Diagnostics.Prof.Time("скругление: итоговая проверка")) vr = SolidValidator.Validate(b);
@@ -1206,6 +1208,7 @@ public static class FilletOp
     static readonly bool PreviewCsgOff = Environment.GetEnvironmentVariable("P3D_PREVIEWCSG") == "0"
                                          || Environment.GetEnvironmentVariable("P3D_FASTPREVIEW") == "0";
     public static long PreviewCsgCuts;
+    static readonly bool PreviewCheckOff = Environment.GetEnvironmentVariable("P3D_PREVIEWCHECK") == "0";
     static bool PreviewCsgNow => !PreviewCsgOff && KernelSettings.Capture().LivePreview;
 
     /// <summary>Резцы предпросмотра, уже разрезанные по сеткам (обрезка шаром): многоугольники вместо тела.</summary>
@@ -1225,6 +1228,8 @@ public static class FilletOp
         List<CsgPolygon>? r;
         using (Diagnostics.Prof.Time("  предпросмотр: рез")) r = MeshCut.Run(pa0, pt0, subtract);
         if (r == null || r.Count == 0) return null;
+        // k148: предпросмотр — только замкнутое тело с возможным объёмом (иначе — обычный рез)
+        if (!MeshCut.PlausibleCut(r, pa0, pt0, subtract)) return null;
         TSolid solid;
         using (Diagnostics.Prof.Time("  предпросмотр: тело"))
         {
@@ -1233,6 +1238,7 @@ public static class FilletOp
             finally { BooleanOp.PreviewMeshBuild = false; }
         }
         solid.TopologyConvention = TopologyConventions.Version;   // куски без согласования вершин: соглашение — не для показа
+        BooleanOp.MarkPreviewMesh(solid);
         return solid;
     }
 

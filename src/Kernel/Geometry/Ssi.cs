@@ -207,9 +207,14 @@ public static class Ssi
         return Line(x0, dir, bc, br);
     }
 
+    static readonly bool LineBallPadOff = Environment.GetEnvironmentVariable("P3D_LINEBALLPAD") == "0";
     static Result Line(Vector3d x0, Vector3d dir, Vector3d bc, double br)
     {
         // Обрезка по шару области: |x0 + t·dir − bc| ≤ br.
+        // k148 (модель пользователя, массив выреза): прямая, касающаяся шара на его границе (угол копии выреза лежит
+        // ровно на цилиндре), от шума последних битов то оставалась, то отбрасывалась — точка ребра «ни на одной кривой
+        // пересечения», вырез копии — отказ. Шару — запас 1e-7 мм. Мутация P3D_LINEBALLPAD=0.
+        if (!LineBallPadOff) br += 1e-7 + 1e-9 * br;
         double tc = Vector3d.Dot(bc - x0, dir);
         double d2 = (x0 + dir * tc - bc).LengthSquared;
         var r = new Result();
@@ -247,23 +252,38 @@ public static class Ssi
     }
 
     static readonly bool PcTangentOff = Environment.GetEnvironmentVariable("P3D_PCTANGENT") == "0";
+    /// <summary>k148: мутация P3D_PCTANACC=0 — касание плоскости и цилиндра по 1e-12, как прежде.</summary>
+    static readonly bool PcTanAccOff = Environment.GetEnvironmentVariable("P3D_PCTANACC") == "0";
+    static readonly bool PcNearParOff = Environment.GetEnvironmentVariable("P3D_PCNEARPAR") == "0";
     static Result PlaneCylinder(Plane p, Cylinder c, Vector3d bc, double br)
     {
         var n = p.N.Normalized(); var w = c.Axis.Normalized();
         double cosT = Vector3d.Dot(n, w);
         var r = new Result();
+        // k148 (модель пользователя, массив выреза): ПОЧТИ ПАРАЛЛЕЛЬНО ОСИ. Стенка копии выреза наклонена к оси
+        // цилиндра на ~1e-12 рад (шум поворота копии): пересечение считалось эллипсом с центром в 1e14 мм, точки рёбер выреза на
+        // цилиндре оказывались «ни на одной кривой пересечения» — отказ копии. Если в шаре интереса плоскость отходит от
+        // параллельной оси меньше чем на 0.1 точности модели — она параллельна оси (нормаль без осевой доли). P3D_PCNEARPAR=0.
+        if (!PcNearParOff && Math.Abs(cosT) >= 1e-12 && Math.Abs(cosT) < 1e-6)
+        {
+            double span = Math.Abs(Vector3d.Dot(bc - p.P, w)) + br + c.R;
+            if (Math.Abs(cosT) * span < 0.1 * ToleranceContext.Current.ModelAccuracy) { n = (n - w * cosT).Normalized(); cosT = 0; }
+        }
         if (Math.Abs(cosT) < 1e-12)
         {
             // Плоскость параллельна оси: расстояние от оси до плоскости.
             double d = Vector3d.Dot(n, c.P - p.P);
-            if (Math.Abs(d) > c.R + 1e-12) { r.Kind = Kind.Empty; return r; }
+            // k148 (PART-01: дно копии выреза касается цилиндра тела вращения, зазор — шум поворота копии): касание — по зазору
+            // до 0.1 точности модели (прежде 1e-12: при |d| > R на 1e-12 — «пусто», точка ребра — «ни на одной кривой»).
+            double tTol = PcTanAccOff ? 1e-12 * Math.Max(1, c.R) : Math.Max(1e-12 * Math.Max(1, c.R), 0.1 * ToleranceContext.Current.ModelAccuracy);
+            if (Math.Abs(d) > c.R + (PcTanAccOff ? 1e-12 : tTol)) { r.Kind = Kind.Empty; return r; }
             var foot = c.P - n * d;
             var side = Vector3d.Cross(w, n).Normalized();
             double h2 = c.R * c.R - d * d;
             // касание: по зазору между осью и плоскостью (R − |d| до 1e-12 отн.), а не по h² — у плоскости и ленты, построенных в
             // разных телах (пересечение тел «одно тело — разные скругления»), зазор 1e-15 давал h ~ 6e-8: две прямые и полосу уже
             // допуска слияния. Мутация P3D_PCTANGENT=0.
-            if (h2 < 1e-18 || (!PcTangentOff && Math.Abs(c.R - Math.Abs(d)) <= 1e-12 * Math.Max(1, c.R))) { var l1 = Line(foot, w, bc, br); l1.Kind = l1.Curves.Count > 0 ? Kind.Tangent : Kind.Empty; return l1; }
+            if (h2 < 1e-18 || (!PcTangentOff && Math.Abs(c.R - Math.Abs(d)) <= tTol)) { var l1 = Line(foot, w, bc, br); l1.Kind = l1.Curves.Count > 0 ? Kind.Tangent : Kind.Empty; return l1; }
             double h = Math.Sqrt(h2);
             foreach (double sgn in new[] { -1.0, 1.0 })
             {

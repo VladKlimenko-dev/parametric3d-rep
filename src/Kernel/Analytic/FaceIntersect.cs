@@ -408,6 +408,8 @@ public static class FaceIntersect
                     {
                         Interlocked.Increment(ref EventCertFailures);
                         res.Unresolved = $"edge point {q:0.######} lies on both surfaces but on no traced intersection curve ({ShapeName(f)} × {ShapeName(otherF)}, {ssi.Curves.Count} curve(s))";
+                        if (Environment.GetEnvironmentVariable("P3D_CERTDBG") == "1")
+                            Console.Error.WriteLine($"CERT q {q:0.#########} box {(obox is { } bb ? $"{bb.Lo:0.#########}..{bb.Hi:0.#########}" : "-")} curves {string.Join(" ; ", ssi.Curves.Select(c => $"{c.GetType().Name} {c.PointAt(c.T0):0.###}->{c.PointAt(c.T1):0.###} d {(c.PointAt(FaceSplit.ClosestParam(c, q)) - q).Length:E2}"))}");
                         return;
                     }
                 }

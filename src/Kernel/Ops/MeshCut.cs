@@ -129,6 +129,11 @@ public static class MeshCut
         var pa = MeshPolys(a, 0, sources); var pb = MeshPolys(b, 1u << 30, sources);
         var r = Run(pa, pb, op);
         if (r == null || r.Count == 0) return null;
+        // k148 (замечание 01.11, 15:02: «полое тело в предпросмотре винтовой протяжки»): ПРЕДПРОСМОТР — ТОЛЬКО ЗАМКНУТОЕ ТЕЛО.
+        // Куски по сеткам не согласованы в вершинах (Т-стыки законны), но у замкнутой поверхности сумма векторов площади — нуль
+        // (при любом разбиении); дыра (пропавшие куски) её нарушает. И объём: у вычитания — не больше тела, у пересечения — не
+        // больше меньшего, у объединения — не меньше большего. Иначе null — считается обычный маршрут. Мутация P3D_MESHCUTCLOSED=0.
+        if (!ClosedOff && !Plausible(r, pa, pb, op)) { Interlocked.Increment(ref OpenRejected); return null; }
         Topology.TSolid solid;
         BooleanOp.PreviewMeshBuild = true;
         try { solid = BooleanOp.SolidFromPolygons(r, sources); }
@@ -156,6 +161,37 @@ public static class MeshCut
         return solid;
     }
 
+    static readonly bool ClosedOff = Environment.GetEnvironmentVariable("P3D_MESHCUTCLOSED") == "0";
+    /// <summary>k148: сколько результатов предпросмотра по сеткам отвергнуто как незамкнутые или с невозможным объёмом.</summary>
+    public static long OpenRejected;
+    static (Vector3d Va, double Area, double Vol) Sums(List<CsgPolygon> ps)
+    {
+        var va = Vector3d.Zero; double ar = 0, vol = 0;
+        foreach (var p in ps)
+        {
+            var v = p.V;
+            for (int i = 1; i + 1 < v.Count; i++)
+            {
+                var c = Vector3d.Cross(v[i] - v[0], v[i + 1] - v[0]) * 0.5;
+                va += c; ar += c.Length; vol += Vector3d.Dot(v[0], Vector3d.Cross(v[i], v[i + 1])) / 6;
+            }
+        }
+        return (va, ar, vol);
+    }
+    internal static bool PlausibleCut(List<CsgPolygon> r, List<CsgPolygon> pa, List<CsgPolygon> pb, bool subtract) => ClosedOff || Plausible(r, pa, pb, subtract ? Op.Subtract : Op.Union) || CountReject();
+    static bool CountReject() { Interlocked.Increment(ref OpenRejected); return false; }
+    static bool Plausible(List<CsgPolygon> r, List<CsgPolygon> pa, List<CsgPolygon> pb, Op op)
+    {
+        var (va, ar, vol) = Sums(r);
+        if (!(ar > 0) || va.Length > 1e-4 * ar) return false;
+        double v1 = Math.Abs(Sums(pa).Vol), v2 = Math.Abs(Sums(pb).Vol), tol = 1e-3 * Math.Max(v1, v2) + 1e-9;
+        return op switch
+        {
+            Op.Subtract => vol > -tol && vol <= v1 + tol,
+            Op.Intersect => vol > -tol && vol <= Math.Min(v1, v2) + tol,
+            _ => vol >= Math.Max(v1, v2) - tol && vol <= v1 + v2 + tol,
+        };
+    }
     static readonly bool RegionsOff = Environment.GetEnvironmentVariable("P3D_MESHCUTREGIONS") == "0";
     static readonly bool BspMemoOff = Environment.GetEnvironmentVariable("P3D_MESHCUTBSPMEMO") == "0";
     static readonly bool BothSidesOff = Environment.GetEnvironmentVariable("P3D_MESHCUTBOTHSIDES") == "0";
