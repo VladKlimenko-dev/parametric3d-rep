@@ -13,6 +13,27 @@ function Fail($msg) { Write-Host $msg -ForegroundColor Red; Read-Host 'Нажм�
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail 'Git не найден. Откройте новое окно PowerShell или переустановите Git (вариант PATH: «Git from the command line…»).' }
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { Fail 'dotnet не найден. Установите .NET 8 SDK: https://dotnet.microsoft.com/download' }
 
+# Скрипт может лежать не в клоне репозитория (скопирован в другую папку, распакован из zip): тогда — клон в
+# «Документы\parametric3d-rep»; нет его — предложить скачать туда.
+$repoUrl = 'https://github.com/VladKlimenko-dev/parametric3d-rep.git'
+function IsClone($dir) { (Test-Path (Join-Path $dir '.git')) -and (Test-Path (Join-Path $dir 'src\Parametric3D.csproj')) }
+if (-not (IsClone $PWD.Path)) {
+    $clone = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'parametric3d-rep'
+    if (IsClone $clone) {
+        Write-Host "Эта папка — не клон репозитория ($($PWD.Path)). Работаю с клоном: $clone" -ForegroundColor Yellow
+        Set-Location -Path $clone
+    } else {
+        Write-Host "Эта папка — не клон репозитория ($($PWD.Path)), и клона нет в $clone." -ForegroundColor Yellow
+        $ans = Read-Host "Скачать репозиторий в $clone? (Y/N)"
+        if ($ans -notmatch '^(y|д)') { Fail 'Без клона обновление невозможно.' }
+        git clone $repoUrl $clone
+        if ($LASTEXITCODE -ne 0) { Fail 'git clone не удался (нет сети?).' }
+        Set-Location -Path $clone
+        $NoPull = $true
+    }
+    Write-Host "Дальше запускайте run.bat из папки $((Get-Location).Path)" -ForegroundColor Yellow
+}
+
 if (-not $NoPull) {
     $changed = git status --porcelain --untracked-files=no
     if ($changed) {
