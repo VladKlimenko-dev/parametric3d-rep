@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -92,6 +92,7 @@ public static class FilletOp
                                   double radius, List<string> warnings)
     {
         // KRN-06: прямой построитель (плоскость/плоскость) — без резцов и булевых; не поддержано — прежний путь
+        DirectRound.LastDeclined = null;
         if (DirectRound.TryRound(bodies, edges, radius, warnings)) return;
         if (!RebuildRoundOff && RoundByRebuild(bodies, edges, radius, warnings)) return;
         if (!CapSphereRoundOff && RoundCapSphere(bodies, edges, radius, warnings)) return;
@@ -637,6 +638,7 @@ public static class FilletOp
     public static void ChamferEdges(List<TSolid> bodies, IReadOnlyList<EdgeRef> edges,
                                     double d1, double d2, List<string> warnings)
     {
+        DirectRound.LastDeclined = null;
         if (DirectRound.TryChamfer(bodies, edges, d1, d2, warnings)) return;
         Apply(bodies, edges, warnings, "Chamfer", d1, d2, false);
     }
@@ -1135,7 +1137,7 @@ public static class FilletOp
                 bodies.Clear(); bodies.AddRange(original);
                 throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported,
                     $"{what}: the result of the cutter route could not be trusted — it changed the volume by {changed:G4} mm³ where the blend " +
-                    $"cross-sections along the edges give about {estimate:G4} mm³") { Entities = EdgeNames(bodies, edges) };
+                    $"cross-sections along the edges give about {estimate:G4} mm³" + ExactWhy()) { Entities = EdgeNames(bodies, edges) };
             }
         }
 
@@ -1156,7 +1158,7 @@ public static class FilletOp
                 bodies.Clear(); bodies.AddRange(original);
                 Interlocked.Increment(ref FinalCheckRefusals);
                 throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported,
-                    $"{what}: the result of the cutter route failed validation ({bad}) — not applied") { Entities = EdgeNames(bodies, edges) };
+                    $"{what}: the result of the cutter route failed validation ({bad}) — not applied" + ExactWhy()) { Entities = EdgeNames(bodies, edges) };
             }
 
         if (done == 0 && edges.Count > 0)
@@ -1195,6 +1197,20 @@ public static class FilletOp
     /// а здесь ловится то, после чего продолжать нельзя.
     /// </summary>
     static readonly bool FinalCheckOff = Environment.GetEnvironmentVariable("P3D_FILLETFINALCHECK") == "0";
+    /// <summary>
+    /// k148d (замечание 01.11, 15:02: фаска после скругления на Sweep_Blend): ПРИЧИНА ОТКАЗА ТОЧНОГО ПУТИ — в тексте ошибки
+    /// обходного. Прежде пользователь видел только «результат резца не прошёл проверку (ребро кратности 3)». Ребро со сменой
+    /// выпуклости вдоль него (из выпуклого в вогнутое) — сопряжение не строится и в Parasolid (mixed convexity) — так и сказано.
+    /// </summary>
+    static string ExactWhy()
+    {
+        var w = DirectRound.LastDeclined;
+        if (string.IsNullOrEmpty(w)) return "";
+        if (w.Contains("convexity changes along the edge"))
+            return ". The edge changes from convex to concave along its length — a blend across a change of convexity is not supported; split the selection at the flat point or blend the convex and concave parts separately";
+        return $". Exact route: {(w.Length > 240 ? w[..240] + "…" : w)}";
+    }
+
     /// <summary>Число отказов итоговой проверки обходного пути (разбор).</summary>
     public static long FinalCheckRefusals;
     // 21.10 (снимок пользователя 17:40): кромка цилиндра, концы которой лежат на шаре того же тела, — резец продлевается

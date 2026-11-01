@@ -254,7 +254,7 @@ public static class FaceIntersect
         // k126: ПАМЯТЬ СОБЫТИЙ (ребро, грань): события ребра на поверхности другой грани — функция только их двоих, а ребро
         // делят две грани, и пары каждой с той же другой гранью считали их заново (у детали пользователя — 65 % повторов).
         // Признак «не доказано» хранится вместе с ответом. Мутация P3D_EVMEMO=0.
-        if (!EvMemoOff)
+        if (!EvMemoOff && !SsiEvents.NearTangentSuppressed)
         {
             var box = _evMemo.GetValue(other, _ => new System.Collections.Concurrent.ConcurrentDictionary<ICurve3, (double[] T, string? Unres)>(ReferenceEqualityComparer.Instance));
             if (box.TryGetValue(c, out var hit))
@@ -531,7 +531,7 @@ public static class FaceIntersect
         double T0 = c.T0, T1 = c.T1, P = T1 - T0;
         var p0 = c.PointAt(T0); var p1 = c.PointAt(T1);
         bool closed = (p0 - p1).Length < 1e-9;
-        var ts = new List<double>();
+        var ts = new List<double>(); var touchTs = new List<double>();
         foreach (var (f, otherF) in new[] { (a, b), (b, a) })
             foreach (var e in f.Face.Loops.SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct())
             {
@@ -540,7 +540,17 @@ public static class FaceIntersect
                 {
                     var q = e.Curve.PointAt(te);
                     double tc = FaceSplit.ClosestParam(c, q);
-                    if ((c.PointAt(tc) - q).Length <= 1e-6) ts.Add(tc);
+                    if ((c.PointAt(tc) - q).Length <= 1e-6)
+                    {
+                        ts.Add(tc);
+                        // k148c: КАСАНИЕ РЕБРА ПОВЕРХНОСТЬЮ (слитая пара корней почти касания, SsiEvents.NearTangentApex) — кривая
+                        // касается края грани в точке: куски по обе стороны — с общей вершиной в ней (как перемычка k133), не один
+                        if (!TouchSplitOff && SsiEvents.NearTangentMergeOn)
+                        {
+                            var gO = SurfaceGradient(otherF, q); var tng = e.Curve.TangentAt(te);
+                            if (tng.LengthSquared > 1e-24 && gO.LengthSquared > 1e-24 && Math.Abs(Vector3d.Dot(gO.Normalized(), tng.Normalized())) < 1e-6) touchTs.Add(tc);
+                        }
+                    }
                     else if (Debug != null && (a.Tor || b.Tor)) Debug($"   event dropped: q {q:0.######} curve dist {(c.PointAt(tc) - q).Length:G3} tc {tc:G6} [{c.T0:G4},{c.T1:G4}]");
                     if (ClipDbg) Console.WriteLine($"  EVT on {e.Curve.GetType().Name} te {te:G9} q {q:0.#########} tc {tc:G9} dist {(c.PointAt(tc) - q).Length:G3}");
                 }
@@ -561,6 +571,30 @@ public static class FaceIntersect
             else for (int i = 0; i < ev.Count; i++) iv.Add((ev[i], i + 1 < ev.Count ? ev[i + 1] : ev[0] + P));
         }
         else for (int i = 0; i + 1 < ev.Count; i++) iv.Add((ev[i], ev[i + 1]));
+        // k148c (массив PART-01, сдвиг оси 4e-11 мм): КАСАНИЕ ГРАНИЦЫ ВНУТРИ ИНТЕРВАЛА БЕЗ СОБЫТИЯ. Гипербола «дно копии
+        // выреза ∩ конус» касается окружности стыка конуса и цилиндра в вершине, но плоскость дна отошла от цилиндра на 1e-14
+        // мм наружу, и у окружности на ней нет корня: интервал от стенки до стенки — внутри обеих граней на ¼ и ¾ и на границе
+        // в середине; он целиком терялся (min > 0 не выполнено), грань конуса не делилась — у тела рёбра на трёх гранях.
+        // Такой интервал — два куска, сходящиеся в точке касания (как перемычка k133). Мутация P3D_TOUCHSPLIT=0.
+        var touchAt = new HashSet<double>();
+        if (!TouchSplitOff && SsiEvents.NearTangentMergeOn)
+            for (int i = 0; i < iv.Count; i++)
+            {
+                var (s0, e0) = iv[i];
+                double tolT = 100 * FaceSplit.MergeExact;
+                double ga = G(c, Wrap(s0 + (e0 - s0) * 0.25), a, b), gm = G(c, Wrap(s0 + (e0 - s0) * 0.5), a, b), gb = G(c, Wrap(s0 + (e0 - s0) * 0.75), a, b);
+                if (!(ga > tolT && gb > tolT && gm <= 0 && gm >= -tolT)) continue;
+                double lo = s0 + (e0 - s0) * 0.25, hi = s0 + (e0 - s0) * 0.75;
+                for (int it = 0; it < 120 && hi - lo > 1e-15 * Math.Max(1, P); it++)
+                {
+                    double m1 = lo + (hi - lo) * 0.381966, m2 = lo + (hi - lo) * 0.618034;
+                    if (G(c, Wrap(m1), a, b) < G(c, Wrap(m2), a, b)) hi = m2; else lo = m1;
+                }
+                double tt = (lo + hi) / 2;
+                if (!(G(c, Wrap(tt), a, b) is var gt && Math.Abs(gt) <= tolT)) continue;
+                iv[i] = (s0, tt); iv.Insert(i + 1, (tt, e0)); touchAt.Add(tt); i++;
+                Interlocked.Increment(ref TouchSplits);
+            }
         var inside = new bool[iv.Count];
         for (int i = 0; i < iv.Count; i++)
         {
@@ -584,7 +618,7 @@ public static class FaceIntersect
                 }
                 return;
             }
-            inside[i] = g2 > 0;
+            inside[i] = g2 > 0 || (touchAt.Count > 0 && (touchAt.Contains(s) || touchAt.Contains(e)) && Math.Max(g1, g3) > 0);
             // k133 (11.3, модель пользователя): КУСОК НА ГРАНИЦЕ ОДНОЙ ГРАНИ И ВНУТРИ ДРУГОЙ. Плоскость торца инструмента
             // через окружность стыка конуса и цилиндра тела: окружность — граница грани тела (знаковое расстояние 0) и внутри
             // грани инструмента; min(…) = 0, и кусок терялся — грань инструмента не делилась, тело выходило с открытыми рёбрами
@@ -669,7 +703,11 @@ public static class FaceIntersect
         for (int i = 0; i < iv.Count; i++)
         {
             if (!inside[i]) continue;
-            if (runs.Count > 0 && runs[^1].E == iv[i].S) runs[^1] = (runs[^1].S, iv[i].E); else runs.Add(iv[i]);
+            bool touch = (touchTs.Count > 0 && touchTs.Any(t => Math.Abs(t - Wrap(iv[i].S)) <= 1e-10 * P)) || touchAt.Contains(iv[i].S);
+            // перемычка k133 рядом (две вершины у касания) — касание уже разобрано ею
+            if (touch && pinched.Count > 0 && pinched.Any(pm => (c.PointAt(Wrap(pm)) - c.PointAt(Wrap(iv[i].S))).Length <= 100 * FaceSplit.MergeExact)) touch = false;
+            if (touch) { pinched.Add(iv[i].S); Interlocked.Increment(ref TouchSplits); if (PinchDbg) Console.Error.WriteLine($"TOUCH {a.Face.Tag} × {b.Face.Tag} {c.GetType().Name} at {c.PointAt(Wrap(iv[i].S)):0.#########} ts {touchTs.Count} mid {touchAt.Count}"); }
+            if (runs.Count > 0 && runs[^1].E == iv[i].S && !touch) runs[^1] = (runs[^1].S, iv[i].E); else runs.Add(iv[i]);
         }
         if (runs.Count == 0) return;
         if (closed)
@@ -735,6 +773,9 @@ public static class FaceIntersect
     static readonly bool ClipBridgeOff = Environment.GetEnvironmentVariable("P3D_CLIPBRIDGE") == "0";
     /// <summary>Статистика: перемычки в точках касания границы.</summary>
     public static long TouchBridges;
+    /// <summary>Замер: кривая пересечения разделена в точке касания ребра (k148c).</summary>
+    public static long TouchSplits;
+    static readonly bool TouchSplitOff = Environment.GetEnvironmentVariable("P3D_TOUCHSPLIT") == "0";
     /// <summary>Статистика: куски на границе одной грани и внутри другой.</summary>
     public static long OnEdgePieces;
 

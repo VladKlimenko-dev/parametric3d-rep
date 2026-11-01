@@ -23,6 +23,8 @@ public static partial class DirectRound
 {
     static readonly bool Off = Environment.GetEnvironmentVariable("P3D_DIRECTROUND") == "0";
     [ThreadStatic] public static Action<string>? Debug;
+    /// <summary>k148d: причина последнего отказа прямого пути (поток вызова) — в текст ошибки обходного пути, если тот не удался.</summary>
+    [ThreadStatic] public static string? LastDeclined;
     [ThreadStatic] public static Action<string>? Prof;
     /// <summary>Мутация P3D_DRSRCSIDE=0: сторона источника — по Reversed фасетной грани.</summary>
     /// <summary>Мутация P3D_DRCHAINS=0: цепочки (общая вершина двух выбранных рёбер) — отказ, прежний построитель.</summary>
@@ -242,7 +244,7 @@ public static partial class DirectRound
                 return true;
             }
         }
-        if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); return false; }
+        if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); LastDeclined = why; return false; }
         bodies[k] = res; Interlocked.Increment(ref Built);
         if (added > 0) warnings.Add($"Round: tangent propagation added {added} edge(s) to the selection.");
         warnings.Add(staged ? $"Round: direct blend ({refs.Count} edge(s), exact blend surfaces; concave edges first at mixed corners)."
@@ -307,7 +309,7 @@ public static partial class DirectRound
                 return true;
             }
         }
-        if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); return false; }
+        if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); LastDeclined = why; return false; }
         bodies[k] = res; Interlocked.Increment(ref Built);
         warnings.Add(unequal ? $"Chamfer: direct cut {d1:0.###}x{d2:0.###} (plane/plane, {refs.Count} edge(s), exact planes)." : $"Chamfer: direct cut (plane/plane, {refs.Count} edge(s), exact planes).");
         return true;
@@ -462,7 +464,7 @@ public static partial class DirectRound
         double rMax = points.Max(x => x.R);
         string? why = null;
         var res = BuildOpen(bodies[k], refs, rMax, ref why, null, law);
-        if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); return false; }
+        if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); LastDeclined = why; return false; }
         bodies[k] = res; Interlocked.Increment(ref Built); Interlocked.Increment(ref OpenBuilt);
         warnings.Add($"Round: direct blend with a radius law ({points.Count} points, rolling ball, exact envelope).");
         return true;
@@ -517,7 +519,7 @@ public static partial class DirectRound
                 _law = law;
                 if (res != null) { curved = true; Interlocked.Increment(ref OpenBuilt); } else why += " | curved variable: " + w2;
             }
-            if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); return false; }
+            if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); LastDeclined = why; return false; }
             bodies[k] = res; Interlocked.Increment(ref Built);
             warnings.Add(curved ? $"Round: direct variable blend R{r0:0.###}→R{r1:0.###} (rolling ball, exact envelope)." : $"Round: direct variable blend R{r0:0.###}→R{r1:0.###} (exact cone).");
             return true;

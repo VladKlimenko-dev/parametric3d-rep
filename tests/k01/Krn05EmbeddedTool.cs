@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Topology;
 using Parametric3D.Model;
@@ -111,8 +111,9 @@ static partial class Program
             })
             {
                 var (p, cut) = JunctionCut(bottom, right, R1, R2, z1, z2, left, top, half);
-                if (Environment.GetEnvironmentVariable("JDBG") == $"{bottom}/{right}") { Parametric3D.Kernel.Analytic.GeneralBoolean.PointDebug = (m, q) => Console.Error.WriteLine($"PD {m} {q}"); Parametric3D.Kernel.Analytic.FaceIntersect.Debug = m => Console.Error.WriteLine("FI " + m); }
+                if (Environment.GetEnvironmentVariable("JDBG") == $"{bottom}/{right}") { Parametric3D.Kernel.Analytic.GeneralBoolean.PointDebug = (m, q) => Console.Error.WriteLine($"PD {m} {q}"); Parametric3D.Kernel.Analytic.FaceIntersect.Debug = m => Console.Error.WriteLine("FI " + m); Parametric3D.Kernel.Ops.BooleanOp.AnalyticRouteDebug = m => Console.Error.WriteLine("   route: " + m); }
                 p.Rebuild(null);
+                Parametric3D.Kernel.Ops.BooleanOp.AnalyticRouteDebug = null;
                 Parametric3D.Kernel.Analytic.GeneralBoolean.PointDebug = null; Parametric3D.Kernel.Analytic.FaceIntersect.Debug = null;
                 string tag = $"bottom {bottom} right {right} left {left}";
                 if (cut.Error != null) { fails.Add($"{tag}: {cut.Error}"); continue; }

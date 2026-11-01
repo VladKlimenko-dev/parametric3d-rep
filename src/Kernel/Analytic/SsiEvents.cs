@@ -144,12 +144,30 @@ public static class SsiEvents
         var merged = new List<double>();
         foreach (var t in outR)
         {
+            // k148c (массив PART-01 со сдвигом оси 1e-13 мм): ПОЧТИ КАСАНИЕ — ДВА КОРНЯ, МЕЖДУ КОТОРЫМИ КРИВАЯ НЕ ОТХОДИТ ОТ
+            // ПОВЕРХНОСТИ ДАЛЬШЕ 0.1 ТОЧНОСТИ МОДЕЛИ. Стенка копии выреза касается цилиндра тела, но шум поворота копии сдвигает её
+            // на 3e-14 мм внутрь: дно-окружность пересекается в двух точках в 6e-6 мм (хорда √(8Rδ)), и грань вращения
+            // «прорезается» щелью шириной 6e-6 и глубиной 3e-14 — её не разметить. Это одно касание: событие — в точке
+            // наибольшего отхода между корнями. Только у рёбер-кривых (прямая, дуга, эллипс): у кривой пересечения граней два
+            // корня у касания дают перемычку (FaceIntersect.Clip, k133) — два куска с общей вершиной в точке касания, и вершина
+            // ребра здесь совпадает с ней. Мутация P3D_NEARTANMERGE=0.
+            if (NearTangentMergeOn && (e is ArcCurve3 or EllipseCurve3 || (e is LineCurve3 && !PairLineOff)) && merged.Count > 0 && NearTangentApex(e, s, merged[^1], t) is { } apex)
+            { merged[^1] = apex; Interlocked.Increment(ref NearTangentMerges); continue; }
             if (merged.Count > 0 && (e.PointAt(t) - e.PointAt(merged[^1])).Length <= 10 * ToleranceContext.Current.ModelAccuracy)
             {
                 if (Math.Abs(Ssi.Implicit(s, e.PointAt(t)).F) < Math.Abs(Ssi.Implicit(s, e.PointAt(merged[^1])).F)) merged[^1] = t;
                 continue;
             }
             merged.Add(t);
+        }
+        // k148c: КРАТНЫЙ КОРЕНЬ РЕБРА-КРИВОЙ — В ВЕРШИНЕ КАСАНИЯ. Корень у касания находится с точностью ~√ε (у дуги R 148 —
+        // 1e-6 мм вдоль дуги): вершина касания в одной копии массива и перемычка кривой пересечения в той же точке расходились
+        // на 9.5e-7 мм — дуга-огрызок между ними, у сетки — щель по линии касания. Корень, где кривая почти касается
+        // поверхности, уточняется до корня производной (∇F·C′ = 0) рядом. Мутация P3D_NEARTANMERGE=0.
+        if (NearTangentMergeOn && !TanPolishOff && e is ArcCurve3 or LineCurve3 or EllipseCurve3)
+        {
+            for (int i = 0; i < merged.Count; i++) if (TangentApexNear(e, s, merged[i]) is { } ap) merged[i] = ap;
+            merged = merged.Distinct().OrderBy(t => t).ToList();
         }
         // 06.1: КАСАНИЕ У КОНЦА РЕБРА. Дуга торца ленты кончается на линии касания, и поверхность другого операнда (плоскость
         // грани, касательная к ленте) касается её именно в конце: кратный корень находится с точностью ~√ε (3e-7 по параметру
@@ -169,6 +187,90 @@ public static class SsiEvents
             merged = merged.Distinct().OrderBy(t => t).ToList();
         }
         return merged;
+    }
+
+    static readonly bool NearTanMergeOff = Environment.GetEnvironmentVariable("P3D_NEARTANMERGE") == "0";
+    internal static bool NearTangentMergeOn => !NearTanMergeOff && !NearTangentSuppressed;
+    /// <summary>k148d: повтор общей булевой без разбора почти касаний (контекст вызова — и в его параллельных задачах;
+    /// события — без памяти).</summary>
+    internal static readonly AsyncLocal<bool> NearTangentSuppress = new();
+    internal static bool NearTangentSuppressed => NearTangentSuppress.Value;
+    static readonly bool PairLineOff = Environment.GetEnvironmentVariable("P3D_TANPAIRLINE") == "0";
+    static readonly bool ApexAtEndOff = Environment.GetEnvironmentVariable("P3D_TANAPEXEND") == "0";
+    static readonly bool TanPolishOff = Environment.GetEnvironmentVariable("P3D_TANPOLISH") == "0";
+    /// <summary>Замер: пары корней почти касания, слитые в одно событие.</summary>
+    public static long NearTangentMerges;
+    /// <summary>
+    /// Два соседних корня t1 &lt; t2 кривой на поверхности — одно касание, если всюду между ними кривая ближе 0.1 точности
+    /// модели к поверхности (|F|/|∇F|) и корни недалеко (хорда не больше 1e-3 размера): параметр наибольшего отхода; иначе null.
+    /// </summary>
+    /// <summary>Корень t почти касания (угол кривой с поверхностью меньше 1e-5): ближайший корень ∇F·C′ в окрестности, если там
+    /// кривая в 0.1 точности модели от поверхности; иначе null.</summary>
+    static double? TangentApexNear(ICurve3 e, Ssi.Shape s, double t)
+    {
+        var im = Ssi.Implicit(s, e.PointAt(t)); var tg = e.TangentAt(t);
+        double gl = im.G.Length, tl = tg.Length;
+        if (gl < 1e-300 || tl < 1e-300 || Math.Abs(Vector3d.Dot(im.G, tg)) > 1e-5 * gl * tl) return null;
+        double H(double u) { var q = Ssi.Implicit(s, e.PointAt(u)); return Vector3d.Dot(q.G, e.TangentAt(u)); }
+        double span = Math.Abs(e.T1 - e.T0), h0 = H(t);
+        if (h0 == 0) return t;
+        for (double h = 1e-12 * span; h <= 1e-4 * span; h *= 4)
+            foreach (var sd in new[] { -1.0, 1.0 })
+            {
+                double u = Math.Clamp(t + sd * h, Math.Min(e.T0, e.T1), Math.Max(e.T0, e.T1)), hu = H(u);
+                if (Math.Sign(hu) == Math.Sign(h0)) continue;
+                double a = Math.Min(t, u), b = Math.Max(t, u), ha = H(a);
+                for (int it = 0; it < 200; it++)
+                {
+                    double mid = (a + b) / 2; if (mid <= a || mid >= b) break;
+                    double hm = H(mid); if (hm == 0) { a = b = mid; break; }
+                    if (Math.Sign(hm) == Math.Sign(ha)) { a = mid; ha = hm; } else b = mid;
+                }
+                double ap = (a + b) / 2; var q = Ssi.Implicit(s, e.PointAt(ap));
+                // вершина касания у вершины ребра (шов замкнутой окружности) — прежний разбор (перемычка k133)
+                var pap = e.PointAt(ap);
+                if (!ApexAtEndOff && Math.Min((pap - e.PointAt(e.T0)).Length, (pap - e.PointAt(e.T1)).Length) <= 100 * ToleranceContext.Current.ModelAccuracy) return null;
+                return Math.Abs(q.F) / Math.Max(1e-300, q.G.Length) <= 0.1 * ToleranceContext.Current.ModelAccuracy ? ap : null;
+            }
+        return null;
+    }
+    static double? NearTangentApex(ICurve3 e, Ssi.Shape s, double t1, double t2)
+    {
+        if (!(t2 > t1)) return null;
+        double tol = 0.1 * ToleranceContext.Current.ModelAccuracy;
+        var p1 = e.PointAt(t1); var p2 = e.PointAt(t2);
+        double chord = (p2 - p1).Length;
+        double size = Math.Max(1, (e.PointAt(e.T1) - e.PointAt(e.T0)).Length + (e.PointAt((e.T0 + e.T1) / 2) - e.PointAt(e.T0)).Length);
+        if (chord > 1e-3 * size) return null;
+        double Dist(double t) { var im = Ssi.Implicit(s, e.PointAt(t)); double g = im.G.Length; return g > 1e-300 ? im.F / g : double.PositiveInfinity; }
+        // знак отхода — по середине; все пробы — того же знака и в допуске
+        double best = (t1 + t2) / 2, bestD = Math.Abs(Dist(best));
+        double sg = Math.Sign(Dist(best));
+        for (int i = 1; i < 16; i++)
+        {
+            double t = t1 + (t2 - t1) * i / 16, dd = Dist(t);
+            if (!(Math.Abs(dd) <= tol) || (sg != 0 && Math.Sign(dd) == -sg && Math.Abs(dd) > 1e-15)) return null;
+            if (Math.Abs(dd) > bestD) { bestD = Math.Abs(dd); best = t; }
+        }
+        // ВЕРШИНА ОТХОДА — корень производной F вдоль кривой (∇F·C′ = 0; по теореме Ролля — между корнями F, смена знака):
+        // поперечный корень, хорошо обусловлен (минимум |F| плоский — его положение по золотому сечению плавало на 1e-6 мм,
+        // и вершины касания соседних копий расходились на 3e-7)
+        double H(double t) { var im = Ssi.Implicit(s, e.PointAt(t)); return Vector3d.Dot(im.G, e.TangentAt(t)); }
+        double a = t1, b = t2, ha = H(a), hb = H(b);
+        if (ha == 0) return a; if (hb == 0) return b;
+        if (Math.Sign(ha) == Math.Sign(hb)) return null;
+        for (int it = 0; it < 200 && b - a > 0; it++)
+        {
+            double mid = (a + b) / 2; if (mid <= a || mid >= b) break;
+            double hm = H(mid); if (hm == 0) { a = b = mid; break; }
+            if (Math.Sign(hm) == Math.Sign(ha)) { a = mid; ha = hm; } else b = mid;
+        }
+        double apex = (a + b) / 2;
+        // касание у вершины ребра (шов замкнутой окружности в точке касания) — прежний разбор (перемычка k133): вершина там
+        // уже есть, и сетки соседних граней сходятся по ней
+        var pa = e.PointAt(apex);
+        if (!ApexAtEndOff && Math.Min((pa - e.PointAt(e.T0)).Length, (pa - e.PointAt(e.T1)).Length) <= Math.Max(chord, 100 * ToleranceContext.Current.ModelAccuracy)) return null;
+        return Math.Abs(Dist(apex)) <= tol ? apex : null;
     }
 
     /// <summary>Замер: рёбра-кривые пересечения со строгими событиями и без них (тогда — выборка и отказ маршрута).</summary>

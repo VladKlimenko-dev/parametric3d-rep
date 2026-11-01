@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Tess;
@@ -447,7 +447,25 @@ public static class BooleanOp
         var prevE = Analytic.Region2Ops.EpsOverride; var prevF = Analytic.FaceSplit.TolOverride;
         double tol; using (Diagnostics.Prof.Time("булева: допуск операции (общая)")) tol = OperationTolerance(body, other); ToleranceDebug?.Invoke("general", tol);
         Analytic.FaceSplit.TolOverride = tol; Analytic.Region2Ops.EpsOverride = tol;
-        try { using (Diagnostics.Prof.Time("булева: общий маршрут целиком")) return TryAnalyticGeneralCore(body, other, kind, warn); }
+        try
+        {
+            long m0 = Interlocked.Read(ref Analytic.SsiEvents.NearTangentMerges) + Interlocked.Read(ref Analytic.FaceIntersect.TouchSplits);
+            TSolid? res;
+            using (Diagnostics.Prof.Time("булева: общий маршрут целиком")) res = TryAnalyticGeneralCore(body, other, kind, warn);
+            // k148d: РАЗБОР ПОЧТИ КАСАНИЙ НЕ УДАЛСЯ — ПОВТОР ПО-ПРЕЖНЕМУ. Касание вырезом окружности стыка в её вершине-шве
+            // (KRN05-TOOL-FACE-ON-JUNCTION-CIRCLE, размеры PART-01): вершина касания совпадает со швом, и разметка грани
+            // конуса у неё не сходится с соседней; прежний разбор (перемычка k133) там верен. Если общий маршрут отказал, а
+            // почти касания разбирались, — ещё раз без них. Мутация P3D_NEARTANRETRY=0.
+            long m1 = Interlocked.Read(ref Analytic.SsiEvents.NearTangentMerges) + Interlocked.Read(ref Analytic.FaceIntersect.TouchSplits);
+            if (res == null && m1 != m0 && !NearTanRetryOff && Analytic.SsiEvents.NearTangentMergeOn)
+            {
+                RouteDbg("general: retry without near-tangent merging");
+                Analytic.SsiEvents.NearTangentSuppress.Value = true;
+                try { using (Diagnostics.Prof.Time("булева: общий маршрут (повтор)")) res = TryAnalyticGeneralCore(body, other, kind, warn); if (res != null) Interlocked.Increment(ref NearTanRetries); }
+                finally { Analytic.SsiEvents.NearTangentSuppress.Value = false; }
+            }
+            return res;
+        }
         finally { Analytic.Region2Ops.EpsOverride = prevE; Analytic.FaceSplit.TolOverride = prevF; }
     }
 
@@ -531,15 +549,25 @@ public static class BooleanOp
         var rawForLazy = LazyFine ? TopologyClone.Deep(r) : null;      // эксперимент r48: копия до завершения
         var meshWhy = AnalyticRouteDebug != null || RouteTrace ? new List<string>() : null;
         bool lazyMesh;
+        if (!LoopSpliceOff && Analytic.SsiEvents.NearTangentMergeOn) SpliceTouchingLoops(r);
         using (Diagnostics.Prof.Time("аналитика (общая): завершение")) unmeshed = Analytic.PrismBuild.Finish(r, meshWhy, donor, LazyMeshNow, out lazyMesh);
+        if (Environment.GetEnvironmentVariable("P3D_ROUTEFACE") is { Length: > 0 } rfTag)
+            foreach (var tf in r.Faces)
+                if (tf.Tag?.ToString()?.Contains(rfTag) == true)
+                    foreach (var l in tf.Loops) foreach (var ce in l.CoEdges)
+                        Console.Error.WriteLine($"RFACE {tf.Id} {tf.Tag} loop {tf.Loops.IndexOf(l)} ce {ce.Edge.Id} {ce.Edge.Curve.GetType().Name} rev {ce.Reversed} {ce.Start.P:0.#########} -> {ce.End.P:0.#########}");
         if (unmeshed > 0)
         {
             RouteDbg($"general invalid: {unmeshed} face(s) not meshed from their loops: {string.Join(" | ", meshWhy ?? new())}");
             if (RouteTrace)
                 foreach (var tf in r.Faces)
-                    if (Tess.ExactFaceMesher.Cycles(tf) == null)
+                    if (Tess.ExactFaceMesher.Cycles(tf) == null || (meshWhy ?? new()).Any(w => w.Contains($"грань {tf.Id} ")))
                         foreach (var l in tf.Loops) foreach (var ce in l.CoEdges)
-                            Console.Error.WriteLine($"ROUTE   face {tf.Id} {tf.Tag} ce {ce.Edge.Id} {ce.Edge.Curve.GetType().Name} {ce.Start.Id}:{ce.Start.P:0.#########} -> {ce.End.Id}:{ce.End.P:0.#########}");
+                        {
+                            var srf = Topology.GeometryAudit.AuthoritativeSurface(tf);
+                            string uvs = srf == null ? "" : $" uv {srf.ProjectToUV(ce.Start.P):0.#########} -> {srf.ProjectToUV(ce.End.P):0.#########}";
+                            Console.Error.WriteLine($"ROUTE   face {tf.Id} {tf.Tag} ce {ce.Edge.Id} {ce.Edge.Curve.GetType().Name} rev {ce.Reversed} {ce.Start.Id}:{ce.Start.P:0.#########} -> {ce.End.Id}:{ce.End.P:0.#########}{uvs}");
+                        }
             return null;
         }
         // Сферические грани размечаются иначе (кольцами к полюсу) — швы не согласованы по построению: полная проверка
@@ -588,6 +616,10 @@ public static class BooleanOp
                 if (!RoutePCurveOff && v.IsValid && !(curved || coneLike)) v.Merge(Topology.SolidValidator.ValidatePCurves(r));
             }
             r.Guarantee = g0;
+            if (!v.IsValid && RouteTrace)
+                foreach (var iss in v.Issues.Where(i => i.Severity == Topology.ValidationSeverity.Error && i.Element != null))
+                    foreach (var ed in r.Faces.SelectMany(fc => fc.Loops).SelectMany(l => l.CoEdges).Select(ce => ce.Edge).Distinct().Where(ed => ed.Id == iss.Element))
+                        Console.Error.WriteLine($"ROUTE   bad edge {ed.Id} {ed.Curve?.GetType().Name} {ed.V0.Id}:{ed.V0.P:0.#########} -> {ed.V1.Id}:{ed.V1.P:0.#########} faces {string.Join(" | ", ed.CoEdges.Select(ce => $"{ce.Loop?.Face?.Id} {ce.Loop?.Face?.Tag}"))}");
             if (!v.IsValid) { GeneralInvalidProbe?.Invoke(r!); RouteDbg("general invalid: " + v.Summary() + " :: " + string.Join(" / ", v.Issues.Where(i => i.Severity == Topology.ValidationSeverity.Error).Take(3))); GeneralDeclineProbe?.Invoke(body, other, kind, "invalid: " + v.Summary()); return "general route check failed"; }
             bool noVol;
             using (Diagnostics.Prof.Time("аналитика (общая): объём по формулам")) noVol = Topology.AnalyticVolume.Of(r) == null;
@@ -694,6 +726,48 @@ public static class BooleanOp
     [ThreadStatic] public static Action<string>? AnalyticRouteDebug;
     /// <summary>k116: P3D_ROUTETRACE=1 — причины отказа точных маршрутов булевой в stderr (разбор файлов пользователя).</summary>
     static readonly bool RouteTrace = Environment.GetEnvironmentVariable("P3D_ROUTETRACE") == "1";
+    static readonly bool NearTanRetryOff = Environment.GetEnvironmentVariable("P3D_NEARTANRETRY") == "0";
+    /// <summary>Замер: общий маршрут удался повтором без разбора почти касаний (k148d).</summary>
+    public static long NearTanRetries;
+    static readonly bool LoopSpliceOff = Environment.GetEnvironmentVariable("P3D_LOOPSPLICE") == "0";
+    /// <summary>Замер: контуры грани, касающиеся друг друга в общей вершине, слиты в один (k148d).</summary>
+    public static long LoopsSpliced;
+    /// <summary>
+    /// k148d: КОНТУРЫ ГРАНИ, КАСАЮЩИЕСЯ В ВЕРШИНЕ, — ОДИН КОНТУР. Вырез касается окружности стыка конуса и цилиндра в точке
+    /// (вершина касания теперь — одна, SsiEvents.NearTangentApex): у грани конуса внешний контур (окружность) и контур выреза
+    /// проходят через одну вершину. Двумя контурами это не отверстие (они не разделены), и разметка грани по ним давала
+    /// сетку с несогласованными сторонами у вершины. Одним контуром, проходящим вершину дважды (как у Parasolid), — верно.
+    /// Мутация P3D_LOOPSPLICE=0.
+    /// </summary>
+    static void SpliceTouchingLoops(TSolid r)
+    {
+        foreach (var f in r.Faces)
+        {
+            bool again = true;
+            while (again && f.Loops.Count > 1)
+            {
+                again = false;
+                var ls = f.Loops.ToList();
+                for (int i = 0; i < ls.Count && !again; i++)
+                    for (int j = i + 1; j < ls.Count && !again; j++)
+                    {
+                        var vi = new HashSet<TVertex>(ls[i].CoEdges.Select(c => c.Start), ReferenceEqualityComparer.Instance);
+                        if (!ls[j].CoEdges.Any(c => vi.Contains(c.Start))) continue;
+                        var target = ls[j].IsOuter && !ls[i].IsOuter ? ls[j] : ls[i];
+                        var other = ReferenceEquals(target, ls[i]) ? ls[j] : ls[i];
+                        var moved = other.CoEdges.ToList();
+                        foreach (var ce in moved) { other.CoEdges.Remove(ce); ce.Loop = target; target.CoEdges.Add(ce); }
+                        if (target.Ordered() == null)
+                        {   // обход не сходится — как было
+                            foreach (var ce in moved) { target.CoEdges.Remove(ce); ce.Loop = other; other.CoEdges.Add(ce); }
+                            continue;
+                        }
+                        f.Loops.Remove(other);
+                        Interlocked.Increment(ref LoopsSpliced); again = true;
+                    }
+            }
+        }
+    }
     static void RouteDbg(string m) { AnalyticRouteDebug?.Invoke(m); if (RouteTrace) Console.Error.WriteLine("ROUTE " + m); }
 
     /// <summary>Габарит тела по точкам рёбер (с ломаными кривых), расширенный на 1e-6 мм.</summary>
@@ -4249,6 +4323,7 @@ public static class BooleanOp
             if (set.Count >= 2) { segments.Add((key.Item1, key.Item2, set)); continue; }
             // Граничная сторона без пары: ребра из неё не выйдет, и грань останется без границы.
             double len = (weld.Points[key.Item1] - weld.Points[key.Item2]).Length;
+            if (RouteTrace) Console.Error.WriteLine($"LONELY tag {string.Join(",", set)} {weld.Points[key.Item1]:0.#########} - {weld.Points[key.Item2]:0.#########} len {len:G4}");
             foreach (uint tg in set)
             {
                 var cur = lonelyByTag.GetValueOrDefault(tg);
