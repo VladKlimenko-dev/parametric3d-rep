@@ -221,6 +221,15 @@ public static partial class DirectRound
                 finally { _forceGeneric = false; }
                 if (r3 == null) w3 += " | generic parameter: " + w5;
             }
+            // k148e: повтор с сечением за торцом долями шага (DirectRoundOpen, P3D_DRENDHOLE)
+            if (r3 == null && w3 != null && w3.Contains("section undefined in the end bracket"))
+            {
+                string? w7 = null;
+                _endHole = true;
+                try { r3 = BuildOpen(bodies[k], refs, r, ref w7); }
+                finally { _endHole = false; }
+                if (r3 == null) w3 += " | end-hole retry: " + w7;
+            }
             if (r3 != null) { res = r3; Interlocked.Increment(ref OpenBuilt); }
             else { why += " | open curved: " + w3; Interlocked.Increment(ref OpenDeclined); }
         }
@@ -293,6 +302,14 @@ public static partial class DirectRound
                     try { res = CurvedChamferBuild(bodies[k], refs, d1, dist, ref w6); }
                     finally { _forceGeneric = false; }
                     if (res == null) w2 += " | generic parameter: " + w6;
+                }
+                if (res == null && w2 != null && w2.Contains("section undefined in the end bracket"))
+                {
+                    string? w8 = null;
+                    _endHole = true;
+                    try { res = CurvedChamferBuild(bodies[k], refs, d1, dist, ref w8); }
+                    finally { _endHole = false; }
+                    if (res == null) w2 += " | end-hole retry: " + w8;
                 }
                 if (res != null) Interlocked.Increment(ref CurvedChamfers); else why += " | curved chamfer: " + w2;
             }

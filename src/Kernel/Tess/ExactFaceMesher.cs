@@ -1803,6 +1803,7 @@ public static partial class ExactFaceMesher
             }
             loops3.Add(p3); loopsUV.Add(uv); winding.Add(wind); loopCycle.Add(ci);
             LoopDebug?.Invoke(f, cyc.Select(x => x.E).ToList(), uv, wind);
+            if (MeshTrace) Console.Error.WriteLine($"MESHTRACE   loop {ci}: points {uv.Count}, per {per:G4}, wind {wind}, u [{uv.Min(q => q.X):G6}, {uv.Max(q => q.X):G6}] v [{uv.Min(q => q.Y):G6}, {uv.Max(q => q.Y):G6}], area {Area(uv):G6}");
         }
 
         // ЗАМКНУТАЯ ГРАНЬ БЕЗ ГРАНИЦЫ — РАЗОБРАНО, НЕ ЛЕЧИТСЯ ЗДЕСЬ. У полного цилиндра или тела

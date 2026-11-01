@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Tess;
@@ -121,6 +121,43 @@ public sealed class ExtrudedSurface : ISurface3
         return new Vector2d(uu, Vector3d.Dot(p - Base.PointAt(uu), Dir) / d2);
     }
 
+    /// <summary>
+    /// k148e: ТОЧКИ ПОЛОСЫ — ПО РЁБРАМ КРАЁВ. Полная полоса замкнутого основания (стенка отверстия) гранилась по своей разметке
+    /// основания, а соседние плоские грани — по точкам своих рёбер; у малых отверстий числа совпадали, у R49 (плита ×7) — 110
+    /// и 112: сетка тела незамкнута (378 сторон без пары), тело «не прошло проверку», а следующее скругление резцом отказывало
+    /// (UI-REORDER-K104). Если оба контура грани — края полосы (v = 0 и v = 1) и точки их рёбер по u совпадают, полоса берёт эти
+    /// u (доли области основания, по возрастанию, с замыканием). Мутация P3D_EXTRUDERIM=0.
+    /// </summary>
+    List<double>? RimParams(TFace face)
+    {
+        if (!Base.IsClosed || face.Loops.Count != 2) return null;
+        var rims = new List<List<double>>();
+        foreach (var loop in face.Loops)
+        {
+            var us = new List<double>(); double? vRim = null;
+            foreach (var ce in loop.CoEdges)
+            {
+                var pts = new List<Vector3d>(); ce.Edge.Curve.Tessellate(pts, true);
+                foreach (var q in pts)
+                {
+                    var uv = ProjectToUV(q);
+                    if (!double.IsFinite(uv.X + uv.Y)) return null;
+                    vRim ??= Math.Round(uv.Y);
+                    if (Math.Abs(uv.Y - vRim.Value) > 1e-9 || (vRim != 0 && vRim != 1)) return null;
+                    us.Add(uv.X - Math.Floor(uv.X));
+                }
+            }
+            us.Sort(); var uq = new List<double>(); foreach (var x in us) if (uq.Count == 0 || x - uq[^1] > 1e-9) uq.Add(x);
+            if (uq.Count > 1 && uq[^1] > 1 - 1e-9) { uq.RemoveAt(uq.Count - 1); if (uq[0] > 1e-9) uq.Insert(0, 0); }
+            rims.Add(uq);
+        }
+        if (rims[0].Count != rims[1].Count || rims[0].Count < 3) return null;
+        for (int i = 0; i < rims[0].Count; i++) if (Math.Abs(rims[0][i] - rims[1][i]) > 1e-9) return null;
+        var r = new List<double>(rims[0]); r.Add(r[0] + 1);
+        return r;
+    }
+    static readonly bool RimFromEdges = Environment.GetEnvironmentVariable("P3D_EXTRUDERIM") != "0";
+
     // KRN-09 (09.1, ворота g.11): СЕТКА ПОКАЗА — ОДНА ПОЛОСА ПО ВЫСОТЕ. Деления по высоте каждая грань выбирала сама (по
     // своему шагу основания), и у соседних граней с общим ребром образующей они не совпадали: сетка простого выдавливания
     // «стадион» (отрезки и дуги) или стенки 100×5 была незамкнутой (16 ошибок, «стороны без пары»). Образующая линейна —
@@ -164,7 +201,9 @@ public sealed class ExtrudedSurface : ISurface3
         //
         // Делений по высоте берётся столько, чтобы шаг по ней был близок к шагу по дуге.
         var basePts = new List<Vector3d>();
-        Base.Tessellate(basePts, true);
+        List<double>? rimU = RimFromEdges ? RimParams(face) : null;
+        if (rimU != null) foreach (double ru in rimU) basePts.Add(Base.PointAt(Base.T0 + (Base.T1 - Base.T0) * ru));
+        else Base.Tessellate(basePts, true);
         int nu = basePts.Count - 1;
         if (nu < 1) return;
 
@@ -179,7 +218,7 @@ public sealed class ExtrudedSurface : ISurface3
         int start = mb.VertexCount;
         for (int i = 0; i <= nu; i++)
         {
-            double u = i / (double)nu;
+            double u = rimU != null ? rimU[i] : i / (double)nu;
             Vector3d n = NormalAt(new Vector2d(u, 0));
             if (face.Reversed) n = -n;
 

@@ -123,6 +123,9 @@ public static class AnalyticVolume
         return Math.Abs(v - vp) <= 1e-2 * Math.Abs(vp) + 1e-9;
     }
 
+    /// <summary>k148f: объём без памяти (сверка: тот же интеграл с другим началом отсчёта).</summary>
+    public static double? OfUncached(TSolid solid) => OfCore(solid);
+
     static double? OfCore(TSolid solid)
     {
         var prev = _origin;
@@ -332,6 +335,8 @@ public static class AnalyticVolume
                 return BandIntegral(f, band, area: true);
             case SectionSurface ob when Prof1("лента: область", () => BandOpenRange(f, ob)) is { } orr:
                 return Prof1("лента: площадь", () => BandOpenIntegral(f, ob, orr, area: true));
+            case SectionSurface sl when !SlabOff && sl.IsProcedural && !sl.Closed:
+                return Prof1("лента: площадь полосами", () => BandSlabIntegral(f, sl, area: true));
             default: return null;
         }
     }
@@ -730,25 +735,88 @@ public static class AnalyticVolume
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TFace, BandRangeEntry> _bandRange = new();
     static T Prof1<T>(string n, Func<T> f) { using (Diagnostics.Prof.Time(n)) return f(); }
     static readonly bool LinearSideOff = Environment.GetEnvironmentVariable("P3D_BANDLINSIDE") == "0";
+    static readonly bool BandChainOff = Environment.GetEnvironmentVariable("P3D_BANDCHAIN") == "0";
+    static readonly bool ChainDbg = Environment.GetEnvironmentVariable("P3D_CHAINDBG") == "1";
+    /// <summary>k148e: граней ленты со стороной из нескольких рёбер.</summary>
+    public static long BandChains;
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TFace, double[]> _bandVBreaks = new();
+    /// <summary>Узлы Гаусса по v на [0, 1] с кусками, разделёнными в изломах области vBreaks (m кусков на весь отрезок).</summary>
+    static (double V, double W)[] VNodes(TFace f, int mv, double[] gx, double[] gw)
+    {
+        var cuts = new List<double> { 0 };
+        if (_bandVBreaks.TryGetValue(f, out var br)) cuts.AddRange(br.Where(b => b > 1e-9 && b < 1 - 1e-9));
+        cuts.Add(1);
+        var res = new List<(double, double)>();
+        for (int p = 0; p + 1 < cuts.Count; p++)
+        {
+            double a = cuts[p], b = cuts[p + 1]; if (b - a < 1e-12) continue;
+            int m = Math.Max(cuts.Count > 2 ? 2 : 1, (int)Math.Ceiling(mv * (b - a)));
+            double w = (b - a) / m;
+            for (int i = 0; i < m; i++) for (int k = 0; k < gx.Length; k++) res.Add((a + w * (i + (gx[k] + 1) / 2), gw[k] / 2 * w));
+        }
+        return res.ToArray();
+    }
     static readonly bool BandRangeCacheOff = Environment.GetEnvironmentVariable("P3D_BANDRANGECACHE") == "0";
 
     static (Func<double, double> L, Func<double, double> R)? BandOpenRangeCore(TFace f, SectionSurface ss)
     {
         bool at0 = false, at1 = false; var sides = new List<(ICurve3 C, double UMid)>();
+        // k148e: БОКОВАЯ СТОРОНА ИЗ НЕСКОЛЬКИХ РЁБЕР (торец новой ленты режет край прежней: сторона — край новой ленты от v = 0
+        // до v* и остаток прежнего края от v* до 1). Рёбра между краями v = 0 и v = 1 по порядку контура — цепочка; v по
+        // цепочке монотонно, стыки — изломы области (узлы квадратуры по v). Мутация P3D_BANDCHAIN=0.
+        var kinds = new List<(ICurve3 C, int Kind, double Va, double Vb, double UMid)>();   // Kind: 0 — край v=0, 1 — край v=1, 2 — сторона
         foreach (var ce in f.Loops[0].CoEdges)
         {
             var c = ce.Edge.Curve;
             var uv = Enumerable.Range(0, 11).Select(k => ss.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * k / 10.0))).ToList();
-            if (uv.All(q => Math.Abs(q.Y) < 1e-6)) { at0 = true; continue; }
-            if (uv.All(q => Math.Abs(q.Y - 1) < 1e-6)) { at1 = true; continue; }
+            if (uv.All(q => Math.Abs(q.Y) < 1e-6)) { at0 = true; kinds.Add((c, 0, 0, 0, 0)); continue; }
+            if (uv.All(q => Math.Abs(q.Y - 1) < 1e-6)) { at1 = true; kinds.Add((c, 1, 1, 1, 0)); continue; }
             double va = uv[0].Y, vb = uv[^1].Y;
-            if (!(Math.Min(Math.Abs(va), Math.Abs(vb)) < 1e-6 && Math.Abs(Math.Max(va, vb) - 1) < 1e-6)) return null;
             int sg = Math.Sign(vb - va);
             for (int k = 1; k < uv.Count; k++) if (Math.Sign(uv[k].Y - uv[k - 1].Y) != sg) return null;
-            sides.Add((c, uv[5].X));
+            kinds.Add((c, 2, Math.Min(va, vb), Math.Max(va, vb), uv[5].X));
         }
-        if (!at0 || !at1 || sides.Count != 2) return null;
-        sides.Sort((a, b) => a.UMid.CompareTo(b.UMid));
+        if (!at0 || !at1) return null;
+        var vBreaks = new List<double>();
+        if (kinds.Count(k => k.Kind == 2) == 2)
+        {
+            foreach (var k in kinds.Where(k => k.Kind == 2))
+            {
+                if (!(k.Va < 1e-6 && Math.Abs(k.Vb - 1) < 1e-6)) return null;
+                sides.Add((k.C, k.UMid));
+            }
+            sides.Sort((a, b) => a.UMid.CompareTo(b.UMid));
+        }
+        else
+        {
+            if (BandChainOff) return null;
+            // цепочки сторон — между краями по кругу контура
+            int n = kinds.Count, start = kinds.FindIndex(k => k.Kind != 2);
+            var chains = new List<List<(ICurve3 C, double Va, double Vb, double UMid)>>(); List<(ICurve3 C, double Va, double Vb, double UMid)>? cur = null;
+            for (int i = 1; i <= n; i++)
+            {
+                var k = kinds[(start + i) % n];
+                if (k.Kind != 2) { if (cur != null) { chains.Add(cur); cur = null; } continue; }
+                (cur ??= new()).Add((k.C, k.Va, k.Vb, k.UMid));
+            }
+            if (cur != null) chains.Add(cur);
+            if (chains.Count != 2) return null;
+            var made = new List<(Func<double, double> F, double UMid)>();
+            foreach (var ch in chains)
+            {
+                var srt = ch.OrderBy(x => x.Va).ToList();
+                if (srt[0].Va > 1e-6 || Math.Abs(srt[^1].Vb - 1) > 1e-6) return null;
+                for (int i = 1; i < srt.Count; i++) { if (Math.Abs(srt[i].Va - srt[i - 1].Vb) > 1e-6) return null; vBreaks.Add(srt[i].Va); }
+                var fs = srt.Select(x => (Make(x.C), x.Va, x.Vb)).ToList();
+                double um = srt.Average(x => x.UMid);
+                made.Add((v => { foreach (var (fn, va, vb) in fs) if (v <= vb) return fn(v); return fs[^1].Item1(v); }, um));
+            }
+            made.Sort((a, b) => a.UMid.CompareTo(b.UMid));
+            Interlocked.Increment(ref BandChains);
+            if (ChainDbg) Console.Error.WriteLine($"BANDCHAIN face {f.Tag}: " + string.Join(" / ", chains.Select(ch => string.Join(", ", ch.OrderBy(x => x.Va).Select(x => $"{(x.C is ProcCurve3 pc ? pc.Kind : x.C.GetType().Name)} v[{x.Va:G4},{x.Vb:G4}] u {x.UMid:G5}")))) + $"; kinds {string.Join(",", kinds.Select(k => k.Kind))}");
+            _bandVBreaks.AddOrUpdate(f, vBreaks.OrderBy(x => x).ToArray());
+            return (made[0].F, made[1].F);
+        }
         Func<double, double> Make(ICurve3 c)
         {
             bool inc = ss.ProjectToUV(c.PointAt(c.T1)).Y > ss.ProjectToUV(c.PointAt(c.T0)).Y;
@@ -829,14 +897,14 @@ public static class AnalyticVolume
         // детерминирован; от прежнего — в последних битах). Мутация P3D_BANDPAR=0.
         var origin = _origin;
         int thrB = Math.Min(Tess.Tessellator.Threads, Environment.ProcessorCount);
-        if (!BandParOff && thrB > 1 && mv * gx.Length >= 8)
+        var vn = VNodes(f, mv, gx, gw);
+        if (!BandParOff && thrB > 1 && vn.Length >= 8)
         {
-            int rows = mv * gx.Length;
+            int rows = vn.Length;
             var pv = new double[rows]; var pa2 = new double[rows]; var pva = new Vector3d[rows]; var bad = new bool[rows];
             System.Threading.Tasks.Parallel.For(0, rows, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = thrB }, rix =>
             {
-                int iv = rix / gx.Length, kv = rix % gx.Length;
-                double v = (iv + (gx[kv] + 1) / 2) / mv, wv = gw[kv] / 2 / mv;
+                double v = vn[rix].V, wv = vn[rix].W;
                 double uL = rg.L(v), uR = rg.R(v); if (!(uR > uL)) { bad[rix] = true; return; }
                 var cutsU = new List<double> { uL };
                 foreach (var bk in ss.Breaks) if (bk > uL + 1e-12 && bk < uR - 1e-12 && !BandBreaksOff) cutsU.Add(bk);
@@ -863,10 +931,8 @@ public static class AnalyticVolume
             for (int rix = 0; rix < rows; rix++) { if (bad[rix]) return null; vol += pv[rix]; ar += pa2[rix]; va += pva[rix]; }
         }
         else
-        for (int iv = 0; iv < mv; iv++)
-            for (int kv = 0; kv < gx.Length; kv++)
+        foreach (var (v, wv) in vn)
             {
-                double v = (iv + (gx[kv] + 1) / 2) / mv, wv = gw[kv] / 2 / mv;
                 double uL = rg.L(v), uR = rg.R(v); if (!(uR > uL)) return null;
                 // куски по стыкам формулы (узлы закона радиуса): через излом квадратура теряет порядок
                 var cutsU = new List<double> { uL };
@@ -897,6 +963,139 @@ public static class AnalyticVolume
         if (Math.Abs(cosv) < 0.999) return area && va.Length < 0.05 * ar && !WoundOff ? ar : null;
         return area ? ar : (cosv > 0 ? vol : -vol);
     }
+    static readonly bool SlabOff = Environment.GetEnvironmentVariable("P3D_BANDSLAB") == "0";
+    /// <summary>k148f: граней ленты, посчитанных полосами по v.</summary>
+    public static long BandSlabs;
+    private sealed class SlabEdge { public ICurve3 C = null!; public double[] S = null!; public Vector2d[] Uv = null!; }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TFace, Tuple<SectionSurface, SlabEdge[], double[]>> _slabCache = new();
+
+    /// <summary>
+    /// k148f: ГРАНЬ ЛЕНТЫ ОБЩЕГО ВИДА — ПОЛОСАМИ ПО v. Контур грани ленты (процедурная SectionSurface) — не обязательно края v = 0,
+    /// v = 1 и две боковые стороны: у грани прежней фаски, по которой прошло новое скругление, нижний край — линия касания шара
+    /// (v меняется вдоль неё; корпус s101 шаг 4). Область в (u, v) режется горизонталями v = const: на каждой — точки пересечения
+    /// со всеми рёбрами контура (корень v(s) = v по параметру ребра, через проекцию на ленту), отрезки по u — между парами
+    /// точек по порядку (чёт-нечет). Узлы Гаусса по v — с изломами в вершинах контура и в экстремумах v по рёбрам; по u — как у
+    /// BandOpenIntegral (стыки формулы). Сторона — по нормали контура, как там. Мутация P3D_BANDSLAB=0.
+    /// </summary>
+    static double? BandSlabIntegral(TFace f, SectionSurface ss, bool area)
+    {
+        if (f.Loops.Count == 0) return null;
+        Tuple<SectionSurface, SlabEdge[], double[]>? cache;
+        if (!_slabCache.TryGetValue(f, out cache) || !ReferenceEquals(cache.Item1, ss))
+        {
+            var edges = new List<SlabEdge>(); var brk = new List<double>();
+            const int K = 96;
+            foreach (var ce in f.Loops.SelectMany(l => l.CoEdges))
+            {
+                var c = ce.Edge.Curve;
+                var sv = new double[K + 1]; var uv = new Vector2d[K + 1];
+                for (int i = 0; i <= K; i++) { sv[i] = c.T0 + (c.T1 - c.T0) * i / K; uv[i] = ss.ProjectToUV(c.PointAt(sv[i])); if (!double.IsFinite(uv[i].X + uv[i].Y)) return null; }
+                for (int i = 1; i <= K; i++) if (Math.Abs(uv[i].X - uv[i - 1].X) > 0.25 * Math.Max(1e-9, ss.UMax - ss.UMin)) { if (ChainDbg) Console.Error.WriteLine($"SLAB {f.Tag}: u jump on {c.GetType().Name} {uv[i - 1]} → {uv[i]} (u {ss.UMin:G5}..{ss.UMax:G5})"); return null; }   // скачок по u — не та лента
+                brk.Add(uv[0].Y); brk.Add(uv[K].Y);
+                for (int i = 1; i < K; i++)
+                    if ((uv[i].Y - uv[i - 1].Y) * (uv[i + 1].Y - uv[i].Y) < 0)
+                    {   // экстремум v по ребру — золотым сечением
+                        double lo = sv[i - 1], hi = sv[i + 1]; bool max = uv[i].Y > uv[i - 1].Y;
+                        double V(double t) { double y = ss.ProjectToUV(c.PointAt(t)).Y; return max ? -y : y; }
+                        for (int it = 0; it < 60 && hi - lo > 1e-13 * Math.Max(1, Math.Abs(c.T1 - c.T0)); it++)
+                        { double m1 = lo + (hi - lo) * 0.381966, m2 = lo + (hi - lo) * 0.618034; if (V(m1) < V(m2)) hi = m2; else lo = m1; }
+                        brk.Add(ss.ProjectToUV(c.PointAt((lo + hi) / 2)).Y);
+                    }
+                // край по v = const (у ленты — v = 0 или 1 с шумом проекции) горизонтали не пересекает
+                if (uv.Max(q => q.Y) - uv.Min(q => q.Y) <= 1e-9) continue;
+                edges.Add(new SlabEdge { C = c, S = sv, Uv = uv });
+            }
+            brk.Sort();
+            // изломы ближе 1e-6 доли — один (концы соседних рёбер в проекции расходятся на 1e-9…1e-7: узлы Гаусса в такой
+            // щели не пересекают ни одно из двух рёбер)
+            double span0 = brk.Count > 0 ? brk[^1] - brk[0] : 0;
+            var ub = new List<double>(); foreach (var b in brk) if (ub.Count == 0 || b - ub[^1] > 1e-6 * Math.Max(1e-9, span0)) ub.Add(b);
+            if (ub.Count > 1 && brk[^1] > ub[^1]) ub[^1] = brk[^1];
+            cache = Tuple.Create(ss, edges.ToArray(), ub.ToArray());
+            _slabCache.AddOrUpdate(f, cache);
+        }
+        var (eds, vb) = (cache.Item2, cache.Item3);
+        if (vb.Length < 2) return null;
+        Interlocked.Increment(ref BandSlabs);
+        // точки пересечения горизонтали v с контуром — u по возрастанию
+        List<double>? Cross(double v)
+        {
+            var us = new List<double>();
+            foreach (var e in eds)
+                for (int i = 1; i < e.S.Length; i++)
+                {
+                    double a = e.Uv[i - 1].Y - v, b = e.Uv[i].Y - v;
+                    if (a == 0 || b == 0 || (a < 0) == (b < 0)) { if (a == 0) us.Add(e.Uv[i - 1].X); continue; }
+                    double lo = e.S[i - 1], hi = e.S[i], flo = a, fhi = b; double md = lo; int side = 0;
+                    for (int it = 0; it < 100; it++)
+                    {
+                        md = (lo * fhi - hi * flo) / (fhi - flo);
+                        double fm = ss.ProjectToUV(e.C.PointAt(md)).Y - v;
+                        if (fm == 0 || Math.Abs(hi - lo) < 1e-14 * Math.Max(1, Math.Abs(e.C.T1 - e.C.T0))) break;
+                        if ((fm < 0) == (flo < 0)) { lo = md; flo = fm; if (side == -1) fhi /= 2; side = -1; }
+                        else { hi = md; fhi = fm; if (side == 1) flo /= 2; side = 1; }
+                        if (Math.Abs(fm) < 1e-15) break;
+                    }
+                    us.Add(ss.ProjectToUV(e.C.PointAt(md)).X);
+                }
+            if (us.Count % 2 != 0) { if (ChainDbg) Console.Error.WriteLine($"SLAB {f.Tag}: odd crossings {us.Count} at v {v:G6}"); return null; }
+            us.Sort();
+            return us;
+        }
+        double? At(int mu, int mv)
+        {
+            Interlocked.Add(ref BandPoints, (long)mu * mv * 144);
+            double per = ss.UMax - ss.UMin, h = 1e-6 * Math.Max(1e-9, per);
+            var (gx, gw) = Gauss12;
+            double vol = 0, ar = 0; var va = Vector3d.Zero; var origin = _origin;
+            double vLen = vb[^1] - vb[0];
+            for (int p = 0; p + 1 < vb.Length; p++)
+            {
+                double a = vb[p], b = vb[p + 1]; if (b - a < 1e-12) continue;
+                int m = Math.Max(1, (int)Math.Ceiling(mv * (b - a) / vLen));
+                double w = (b - a) / m;
+                for (int i = 0; i < m; i++)
+                    for (int kv = 0; kv < gx.Length; kv++)
+                    {
+                        double v = a + w * (i + (gx[kv] + 1) / 2), wv = gw[kv] / 2 * w;
+                        var us = Cross(v); if (us == null) return null;
+                        for (int q = 0; q + 1 < us.Count; q += 2)
+                        {
+                            double uL = us[q], uR = us[q + 1]; if (!(uR > uL)) continue;
+                            var cutsU = new List<double> { uL };
+                            foreach (var bk in ss.Breaks) if (bk > uL + 1e-12 && bk < uR - 1e-12) cutsU.Add(bk);
+                            cutsU.Add(uR);
+                            for (int piece = 0; piece + 1 < cutsU.Count; piece++)
+                            {
+                                double pa = cutsU[piece], pb = cutsU[piece + 1];
+                                int mp = Math.Max(4, (int)Math.Ceiling(mu * (pb - pa) / Math.Max(1e-12, per)));
+                                double pw = (pb - pa) / mp;
+                                for (int ii = 0; ii < mp; ii++)
+                                    for (int j = 0; j < gx.Length; j++)
+                                    {
+                                        double u = pa + pw * (ii + (gx[j] + 1) / 2), ww = gw[j] / 2 * pw * wv;
+                                        var s0 = ss.SectionAt(u);
+                                        var P = s0.Point(v); var su = (ss.SectionAt(u + h).Point(v) - ss.SectionAt(u - h).Point(v)) / (2 * h); var sv = s0.Deriv(v);
+                                        var c = Vector3d.Cross(su, sv);
+                                        vol += Vector3d.Dot(P - origin, c) * ww; ar += c.Length * ww; va += c * ww;
+                                    }
+                            }
+                        }
+                    }
+            }
+            Vector3d loopsVa = NormalIntegral(f);
+            if (loopsVa.Length < 1e-6 * Math.Max(1e-12, ar) || va.Length < 1e-6 * Math.Max(1e-12, ar)) return null;
+            double cosv = Vector3d.Dot(loopsVa, va) / (loopsVa.Length * va.Length);
+            if (Math.Abs(cosv) < 0.999) { if (ChainDbg) Console.Error.WriteLine($"SLAB {f.Tag}: normal mismatch cos {cosv:G6}"); return null; }
+            return area ? ar : (cosv > 0 ? vol : -vol);
+        }
+        if (_rough) return At(8, 3);
+        if (_coarse > 0) return At(12, 4);
+        var fa = At(24, 8); var fb = At(12, 4);
+        if (fa is { } av && fb is { } bv && Math.Abs(av - bv) <= 1e-11 * Math.Max(1e-9, Math.Abs(av))) return av;
+        return At(48, 16);
+    }
+
     /// <summary>k148: сторона намотанной ленты — нормаль поверхности S_u × S_v в середине области против нормали грани (+1 — та же).</summary>
     static int? WoundSign(TFace f, SectionSurface ss, (Func<double, double> L, Func<double, double> R) rg)
     {
@@ -1003,6 +1202,8 @@ public static class AnalyticVolume
                 return BandIntegral(f, band, area: false);
             case SectionSurface ob when BandOpenRange(f, ob) is { } orr:
                 return BandOpenIntegral(f, ob, orr, area: false);
+            case SectionSurface sl when !SlabOff && sl.IsProcedural && !sl.Closed:
+                return BandSlabIntegral(f, sl, area: false);
             case CornerPatchSurface cpv when WholePatch(f, cpv):
             {
                 var oc = _origin;

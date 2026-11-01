@@ -346,6 +346,43 @@ public sealed class SectionSurface : ISurface3
         return new SectionSurface(u => map(g(u)), _stationU, _s.Select(map).ToList(), Closed, _u0, _u1, _breaks, _tableStep) { ParallelTable = ParallelTable };
     }
 
+    /// <summary>
+    /// k148e: ТА ЖЕ ПОВЕРХНОСТЬ НА БОЛЬШЕМ ПРОМЕЖУТКЕ u — продолжение за концами той же формулой, что у DerivsExtended (второй
+    /// порядок по концу, шаг разностей по удалению): лента прежней правки становится торцом новой ленты, и контур её грани
+    /// уходит за конец ленты (Sweep_Blend: скругление R5.55 упирается в прежнюю фаску за её концом). Внутри прежнего
+    /// промежутка — та же формула и те же куски таблицы (стыки — прежние концы). Сечения — отрезки или кривые Безье (их точки
+    /// линейны по опорным, продолжение точное); дуги — null.
+    /// </summary>
+    public SectionSurface? ExtendedRange(double a, double b)
+    {
+        if (_gen == null || _stationU == null || Closed) return null;
+        a = Math.Min(a, _u0); b = Math.Max(b, _u1);
+        if (a >= _u0 && b <= _u1) return this;
+        var g = _gen; double u0 = _u0, u1 = _u1;
+        foreach (var uu in new[] { u0, u1 }) { var sec = SectionAt(uu); if (sec.IsArc) return null; }
+        SweepSection Ext(double u)
+        {
+            if (u >= u0 && u <= u1) return g(u);
+            double ue = u < u0 ? u0 : u1, sg = u < u0 ? 1 : -1, d = u - ue, h = 1e-4;
+            if (ExtStep) h = Math.Clamp(0.1 * Math.Abs(d), h, Math.Max(h, 0.2 * (u1 - u0)));
+            var s0 = SectionAt(ue); var s1 = SectionAt(ue + sg * h); var s2 = SectionAt(ue + sg * 2 * h);
+            Vector3d Mix(Vector3d p0, Vector3d p1, Vector3d p2)
+            {
+                Vector3d d1 = sg * (-3 * p0 + 4 * p1 - p2) / (2 * h), d2 = (p0 - 2 * p1 + p2) / (h * h);
+                return p0 + d1 * d + d2 * (0.5 * d * d);
+            }
+            if (SweepSection.BezierMix(new[] { s0, s1, s2 }, p => Mix(p[0], p[1], p[2])) is { } bz) return bz;
+            if (s0.IsLine && s1.IsLine && s2.IsLine) return SweepSection.Line(Mix(s0.A, s1.A, s2.A), Mix(s0.B, s1.B, s2.B));
+            throw new InvalidOperationException("ExtendedRange: section kind");
+        }
+        var su = new List<double>(); var st = new List<SweepSection>();
+        if (a < u0) { su.Add(a); st.Add(Ext(a)); }
+        su.AddRange(_stationU); st.AddRange(_s);
+        if (b > u1) { su.Add(b); st.Add(Ext(b)); }
+        var br = _breaks.Concat(new[] { u0, u1 }).ToArray();
+        return new SectionSurface(Ext, su, st, false, a, b, br, _tableStep) { ParallelTable = false };
+    }
+
     /// <summary>Сечение по самой формуле (без таблицы) — для проверок.</summary>
     public SweepSection ExactSectionAt(double u) => _gen != null ? _gen(WrapU(u)) : SectionAt(u);
 
@@ -450,9 +487,10 @@ public sealed class SectionSurface : ISurface3
     /// скругления становится гранью новой ленты катящегося шара (каскад). По v — производная самого сечения; по u — центральная
     /// разность (шаг 1e-4 мм); за концами по u (незамкнутая) — продолжение второго порядка по концу: S(uₑ) + S_u·δ + ½S_uu·δ².
     /// </summary>
+    static readonly bool ExtStep = Environment.GetEnvironmentVariable("P3D_EXTSTEP") != "0";
     public void DerivsExtended(Vector2d uv, out Vector3d S, out Vector3d Su, out Vector3d Sv)
     {
-        double u = uv.X, v = uv.Y; const double h = 1e-4;
+        double u = uv.X, v = uv.Y; double h = 1e-4;
         if (_gen == null) throw new InvalidOperationException("DerivsExtended: not procedural");
         if (Closed || (u >= _u0 && u <= _u1))
         {
@@ -464,6 +502,12 @@ public sealed class SectionSurface : ISurface3
             return;
         }
         double ue = u < _u0 ? _u0 : _u1, sg = u < _u0 ? 1 : -1, d = u - ue;
+        // k148e: ШАГ РАЗНОСТЕЙ ПРОДОЛЖЕНИЯ — по удалению от конца. Округление точек сечения (~1e-14 мм) усиливается вторыми
+        // разностями в (d/h)² раз: при h = 1e-4 и d = 3.6 мм — шум 1e-5 мм, основание перпендикуляра «дрожит» (градиент
+        // расстояния прыгает на 1e-5 при сдвиге параметра на 1e-9), Ньютон не сходится, неявная функция грани — NaN (Sweep_Blend:
+        // скругление R5.55 у прежней фаски — лента не выходила за торец, путь — резец). Шаг 0.1·|d| (не меньше 1e-4, не больше
+        // 0.2 промежутка) — шум ~1e-12 мм; у самого конца (|d| ≤ 1e-3) — прежний. Мутация P3D_EXTSTEP=0.
+        if (ExtStep) h = Math.Clamp(0.1 * Math.Abs(d), h, Math.Max(h, 0.2 * (_u1 - _u0)));
         // узлы внутрь от конца: uₑ, uₑ ± h, uₑ ± 2h
         var s0 = SectionAt(ue); var s1 = SectionAt(ue + sg * h); var s2 = SectionAt(ue + sg * 2 * h);
         Vector3d p0 = s0.Point(v), p1 = s1.Point(v), p2 = s2.Point(v);

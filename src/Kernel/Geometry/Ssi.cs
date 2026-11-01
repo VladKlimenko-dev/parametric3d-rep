@@ -84,6 +84,11 @@ public static class Ssi
             if (!double.IsFinite(uv.X + uv.Y)) return false;
             if (Math.Abs(du) + Math.Abs(dv) < 1e-15) break;
         }
+        return FootOrtho(s, x, uv);
+    }
+
+    static bool FootOrtho(Surfaces.ISurface3 s, Vector3d x, Vector2d uv)
+    {
         ParamDerivs(s, uv, out var S1, out var Su1, out var Sv1);
         var w = x - S1; double L = w.Length;
         // ортогональность — относительно max(L, 1e-5 мм): у точки на самой поверхности остаток w — шум округления, и его угол
@@ -92,9 +97,14 @@ public static class Ssi
         return Math.Abs(Vector3d.Dot(w, Su1)) <= 1e-9 * Lr * Su1.Length && Math.Abs(Vector3d.Dot(w, Sv1)) <= 1e-9 * Lr * Sv1.Length;
     }
 
+
     /// <summary>Основание перпендикуляра и единичная нормаль поверхности общего вида (нормаль — в знаке s.NormalAt).</summary>
-    public static (Vector3d P, Vector3d N) ParamFoot(Surfaces.ISurface3 s, Vector3d x)
+    public static (Vector3d P, Vector3d N) ParamFoot(Surfaces.ISurface3 s, Vector3d x) => ParamFoot(s, x, out _);
+
+    /// <summary>То же с параметрами основания (у продолжения — за пределами области).</summary>
+    public static (Vector3d P, Vector3d N) ParamFoot(Surfaces.ISurface3 s, Vector3d x, out Vector2d footUv)
     {
+        footUv = new Vector2d(double.NaN);
         Interlocked.Increment(ref ParamFootCalls);
         // подсказка — только рядом: из далёкой (прежний вызов в другом месте) Ньютон сходится и к дальней стационарной точке
         // (у продолжения рационального куска — противоположная сторона окружности), где условие ортогональности тоже верно
@@ -134,7 +144,7 @@ public static class Ssi
             }
             return (new Vector3d(double.NaN), new Vector3d(double.NaN));
         }
-        SetFootHint(s, uv);
+        SetFootHint(s, uv); footUv = uv;
         ParamDerivs(s, uv, out var P, out var Su, out var Sv);
         var n = Vector3d.Cross(Su, Sv);
         if (n.LengthSquared < 1e-30) return (P, new Vector3d(double.NaN));

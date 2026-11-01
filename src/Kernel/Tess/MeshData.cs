@@ -147,6 +147,7 @@ public sealed class MeshBuilder
     /// <summary>Стороны треугольников — нужны тем, кто строит сетку поверх готовой.</summary>
     public IReadOnlyList<int> IndicesList => _i;
     private readonly Dictionary<uint, FaceRange> _ranges = new();
+    static readonly bool RangesFixOff = Environment.GetEnvironmentVariable("P3D_MESHRANGESFIX") == "0";
 
     private uint _curFace;
     private int _faceV0, _faceI0;
@@ -240,10 +241,40 @@ public sealed class MeshBuilder
         }
         else if (weld) { CanonicalPositions(); WeldWithinFaces(); }
 
+        if (weld && !RangesFixOff) RebuildRanges();
         md.Vertices = _v.ToArray();
         md.Indices = _i.ToArray();
         md.FaceRanges.Clear();
         foreach (var kv in _ranges) md.FaceRanges[kv.Key] = kv.Value;
+    }
+
+    /// <summary>
+    /// k148e: ДИАПАЗОНЫ ГРАНЕЙ ПОСЛЕ ЧИСТКИ. Стягивание коротких рёбер, щепки и сварка выбрасывают треугольники и пересобирают
+    /// номера, а диапазоны граней оставались прежними: у последней грани диапазон выходил за конец номеров (многогранное тело
+    /// после резца: 15753 + 2811 при 18390 номерах — выбор грани под курсором и площадь грани читали за массивом; проверка
+    /// UI-REORDER-K104). Теперь треугольники упорядочиваются по граням (в прежнем порядке граней, устойчиво) и диапазоны
+    /// считаются заново: номера — подряд, вершины — от наименьшей до наибольшей у грани. Мутация P3D_MESHRANGESFIX=0.
+    /// </summary>
+    private void RebuildRanges()
+    {
+        int nT = _i.Count / 3;
+        var order = _ranges.OrderBy(kv => kv.Value.IndexStart).Select(kv => kv.Key).ToList();
+        var rank = new Dictionary<uint, int>(); for (int k = 0; k < order.Count; k++) rank[order[k]] = k;
+        var tris = Enumerable.Range(0, nT).Select(t => (Face: _v[_i[3 * t]].FaceId, T: t))
+                             .OrderBy(x => rank.TryGetValue(x.Face, out var rr) ? rr : int.MaxValue).ThenBy(x => x.T).ToList();
+        var ni = new List<int>(_i.Count);
+        var res = new Dictionary<uint, FaceRange>();
+        int at = 0;
+        while (at < tris.Count)
+        {
+            uint face = tris[at].Face; int i0 = ni.Count, vMin = int.MaxValue, vMax = -1;
+            for (; at < tris.Count && tris[at].Face == face; at++)
+                for (int k = 0; k < 3; k++) { int v = _i[3 * tris[at].T + k]; ni.Add(v); vMin = Math.Min(vMin, v); vMax = Math.Max(vMax, v); }
+            res[face] = new FaceRange { VertexStart = vMin, VertexCount = vMax - vMin + 1, IndexStart = i0, IndexCount = ni.Count - i0 };
+        }
+        foreach (var kv in _ranges) if (!res.ContainsKey(kv.Key)) res[kv.Key] = new FaceRange { VertexStart = Math.Min(kv.Value.VertexStart, _v.Count), VertexCount = 0, IndexStart = ni.Count, IndexCount = 0 };
+        _i.Clear(); _i.AddRange(ni);
+        _ranges.Clear(); foreach (var kv in res) _ranges[kv.Key] = kv.Value;
     }
 
     /// <summary>

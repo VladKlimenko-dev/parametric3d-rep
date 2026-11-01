@@ -6,3 +6,4 @@ user_k128_x05.p3d	0	0	0	0	0	0	1	25/15/Underconstrained/0	19417.255812104828
 user_k132_x05.p3d	3	0	1	37	43026382.96667489	2256101.518179464	1	75/47/Underconstrained/0;26/3/Underconstrained/0	161183.29900195522	ExactAnalytic
 user_k136_x05.p3d	3	0	1	167	41172038.02418906	2318852.8399752667	1	109/54/Overconstrained/0;26/3/Underconstrained/0	223238.98039971563	ExactAnalytic
 user_k148_sweep_blend.p3d	4	1	1	15	642818.1506537752	72344.1559596319	1	15/9/Underconstrained/0;10/4/Ok/0;18/7/Underconstrained/0	5932.302749335393	ExactAnalytic
+user_k148e_sweep_blend_r555.p3d	5	0	1	14	643219.1970931283	72699.96641082573	1	15/9/Underconstrained/0;10/4/Ok/0;18/7/Underconstrained/0	5932.302749335393	ExactPolyhedral

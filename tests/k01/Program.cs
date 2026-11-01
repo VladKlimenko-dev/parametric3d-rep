@@ -523,6 +523,8 @@ static partial class Program
         if (mode is "sweepsec142" or "allB") Krn06SweepSectionsK142Checks();
         if (mode is "x05pattern" or "allA") Krn05X05PatternChecks();
         if (mode is "sweepblend148" or "allA") Krn06SweepBlendK148Checks();
+        if (mode is "sweepblend148e" or "allA") Krn06SweepBlendR555Checks();
+        if (mode is "seqs101" or "allA") Krn06SeqS101Checks();
         if (mode is "loftunequal" or "allA") Krn07LoftUnequalChecks();
         if (mode is "sweptconvex" or "allA") Krn06SweptConvexMidChecks();
         if (mode is "loftcaps" or "allA") Krn06LoftCapBlendChecks();

@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Topology;
 using Parametric3D.Model;
@@ -86,6 +86,7 @@ static class ReorderModels
         foreach (var (id, r) in m.FaceRanges)
         {
             if (!ids.Contains(id)) continue;
+            if (r.IndexStart + r.IndexCount > m.Indices.Length) throw new Exception($"face {id} range {r.IndexStart}+{r.IndexCount} beyond indices {m.Indices.Length}; vertices {m.Vertices.Length}; ranges {m.FaceRanges.Count}; bodies {p.Bodies.Count}; guarantee {string.Join(",", p.Bodies.Select(b => b.Guarantee))}; feature {f.Name}");
             for (int i = r.IndexStart; i + 2 < r.IndexStart + r.IndexCount; i += 3)
             {
                 var v0 = m.Vertices[m.Indices[i]].P; var v1 = m.Vertices[m.Indices[i + 1]].P; var v2 = m.Vertices[m.Indices[i + 2]].P;
@@ -117,7 +118,7 @@ static class ReorderModels
         {
             var (d0, p0) = make();
             var errs0 = p0.Features.Where(f => f.Error != null).Select(f => $"{f.Name}: {f.Error}").ToList();
-            if (errs0.Count > 0) { bad.Add($"{name}: setup errors: {string.Join("; ", errs0)}"); continue; }
+            if (errs0.Count > 0) { try { File.WriteAllText(Path.Combine(Path.GetTempPath(), $"reorder_setup_{name.Replace("×", "x")}.p3d"), Parametric3D.Model.DocumentFile.Save(p0)); } catch { } bad.Add($"{name}: setup errors: {string.Join("; ", errs0)}"); continue; }
             string json = Parametric3D.Model.DocumentFile.Save(p0);
             double v0 = p0.Volume;
             var area0 = p0.Features.Where(x => x is RoundFeature or ChamferFeature).ToDictionary(x => x.Key, x => AreaOf(p0, x));

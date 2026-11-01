@@ -168,6 +168,7 @@ public static partial class DirectRound
     }
     /// <summary>Параметр вдоль опорной кривой, а не угол вокруг оси (повтор, когда продление по углу не выходит за торец).</summary>
     [ThreadStatic] static bool _forceGeneric;
+    [ThreadStatic] internal static bool _endHole;
     static readonly bool ExactTangent = Environment.GetEnvironmentVariable("P3D_DRTANGENT") != "0";
     static readonly bool RootOrder = Environment.GetEnvironmentVariable("P3D_DRROOTORDER") != "0";
     static readonly bool EndSeed = Environment.GetEnvironmentVariable("P3D_DRENDSEED") != "0";
@@ -176,6 +177,8 @@ public static partial class DirectRound
     const int MemoCap = 1 << 18;
 
     static readonly bool ExtendEnds = Environment.GetEnvironmentVariable("P3D_DREXTEND") != "0";
+    static readonly bool StraightExt = Environment.GetEnvironmentVariable("P3D_DRSTRAIGHTEXT") != "0";
+    public static long StraightExtends;
     static readonly bool OpenPlanePlane = Environment.GetEnvironmentVariable("P3D_DROPENPP") != "0";
     static readonly bool LawBreaks = Environment.GetEnvironmentVariable("P3D_DRLAWBREAKS") != "0";
 
@@ -240,6 +243,19 @@ public static partial class DirectRound
             return Analytic.GeneralBoolean.SubCurve(c, lo, hi);
         }
         if (!ExtendEnds) { why = "contact end is not on the end edge"; return null; }
+        // k148e: ПРЯМАЯ КРИВАЯ ОБЩЕГО ВИДА (кромка прежней фаски на плоскости — процедурная кривая ленты, но отрезок): точки
+        // отходят от хорды не дальше 1e-9 длины — продление как у отрезка (Sweep_Blend: скругление R5.55 упирается в прежнюю
+        // фаску за её концом). Мутация P3D_DRSTRAIGHTEXT=0.
+        if (StraightExt && c is not LineCurve3 && c is not ArcCurve3 && c is not EllipseCurve3 && !c.IsClosed)
+        {
+            Vector3d a = c.PointAt(c.T0), b = c.PointAt(c.T1); var ab = b - a; double L = ab.Length;
+            if (L > 1e-9)
+            {
+                var dd = ab / L; double dev = 0;
+                for (int i = 1; i < 32; i++) { var w = c.PointAt(c.T0 + (c.T1 - c.T0) * i / 32.0) - a; dev = Math.Max(dev, (w - dd * Vector3d.Dot(w, dd)).Length); }
+                if (dev <= 1e-9 * Math.Max(1, L)) { Interlocked.Increment(ref StraightExtends); c = new LineCurve3(a, b); }
+            }
+        }
         switch (c)
         {
             case LineCurve3 ln:
@@ -273,7 +289,7 @@ public static partial class DirectRound
                 return ne;
             }
         }
-        why = "contact end is not on the end edge (extension of this curve type not supported)";
+        why = $"contact end is not on the end edge (extension of {c.GetType().Name} not supported; off {(c.PointAt(tq) - q).Length:E1} mm)";
         return null;
     }
 
@@ -1065,7 +1081,29 @@ public static partial class DirectRound
             // но вдвое-втрое большим числом точек и с отказом точности у фаски 5; KRN06-FF-CYL-SPHERE-BLENDS)
             bool fine = EndFine && (FA.Surf is NurbsSurface || FB.Surf is NurbsSurface || ends[k].FE.Surf is NurbsSurface);
             double h = step; bool found = false;
-            for (int it = 0; it < 8 && !found; it++, h *= 2) if (SectionSide(k, tEnd + dk * h, 1)) { outT[k] = tEnd + dk * h; found = true; }
+            bool holeOut = false;
+            for (int it = 0; it < 8 && !found; it++, h *= 2)
+            {
+                if (SectionSide(k, tEnd + dk * h, 1)) { outT[k] = tEnd + dk * h; found = true; }
+                else if (!ch && Spine(tEnd + dk * h) == null) holeOut = true;
+            }
+            // k148f: ХРЕБЕТ НЕ ОПРЕДЕЛЁН НА ПЕРВЫХ ШАГАХ — сечение за торцом ближе. Шаг — два радиуса по ходу ребра; у малого
+            // радиуса на кромке лофта хребет (шар на продолжениях граней) за 1.4 мм от конца уже не находится, а удвоение шага
+            // находит сечение «за торцом» в 46 мм — скобка торца с неопределёнными сечениями, отказ («section undefined in the end
+            // bracket»; корпус s101 шаг 4, R1.43). Тогда — доли первого шага (сечение целиком за торцом уже в 0.36 мм).
+            // Мутация P3D_DRENDHOLE=0.
+            // только повтором после отказа «section undefined in the end bracket» (у прогрева ядра — цилиндр ∪ шар, R1 — ближнее
+            // сечение вело к отказу таблицы ленты, а прежний выбор годен)
+            if (found && holeOut && EndHole && _endHole)
+                for (int j = 1; j < 8; j++)
+                    if (SectionSide(k, tEnd + dk * step * j / 8, 1)) { if (EndScanDbg) Console.Error.WriteLine($"ENDHOLE end {k}: far {outT[k] - tEnd:G4} → {dk * step * j / 8:G4} (step {step:G4}, r {r:G4})"); outT[k] = tEnd + dk * step * j / 8; Interlocked.Increment(ref EndHoleHits); break; }
+            if (Debug != null && EndScanDbg)
+                for (double hh = step / 8; hh <= step * 300; hh *= 2)
+                {
+                    double tt = tEnd + dk * hh; var sp = Spine(tt);
+                    string fsx = sp == null ? "" : string.Join(" ", Enumerable.Range(0, 9).Select(i => Fend(k, Gen(tt).Point(i / 8.0)).ToString("F3")));
+                    Debug($"open end {k} scan: t {tt:F4} (end {tEnd:F4}, step {step:G4}) spine {(sp == null ? "null" : sp.Value.ToString("0.###"))} f [{fsx}]");
+                }
             // k144: ПРОДЛЕНИЕ КОРОЧЕ ПЕРВОГО ШАГА. Шаг — два радиуса по ходу ребра; у грани NURBS, продолженной за край области,
             // точка ленты на таком удалении может не найтись (NaN), хотя сечение выходит за торец раньше (окно Sweep_Blend:
             // стенка лофта, фаска 3 — сечение целиком за торцом уже в 3–4 мм, а на 6 мм проекция на продолжение стенки не сходится).
@@ -1076,7 +1114,7 @@ public static partial class DirectRound
                 {
                     double tt = tEnd + dk * hh; var sp = Spine(tt);
                     string fsx = "";
-                    if (sp != null) { var g = Gen(tt); fsx = string.Join(" ", Enumerable.Range(0, 5).Select(i => Fend(k, g.Point(i / 4.0)).ToString("F2"))); }
+                    if (sp != null) { var g = Gen(tt); fsx = string.Join(" ", Enumerable.Range(0, 17).Select(i => Fend(k, g.Point(i / 16.0)).ToString("F2"))); }
                     Debug($"open end {k}: t {tt:F4} (Δ {Delta:F4}) spine {(sp == null ? "null" : sp.Value.ToString("0.##"))} edge {Ed(tt):0.##} f [{fsx}]");
                 }
             if (!found) { why = "open curved: the blend does not leave the end face (end face too oblique?)"; return false; }
@@ -1089,7 +1127,7 @@ public static partial class DirectRound
                 {
                     double tt = tEnd - dk * hh; var sp = Spine(tt);
                     string fsx = "";
-                    if (sp != null) { var g = Gen(tt); fsx = string.Join(" ", Enumerable.Range(0, 5).Select(i => Fend(k, g.Point(i / 4.0)).ToString("F2"))); }
+                    if (sp != null) { var g = Gen(tt); fsx = string.Join(" ", Enumerable.Range(0, 17).Select(i => Fend(k, g.Point(i / 16.0)).ToString("F2"))); }
                     Debug($"open end {k} inside: t {tt:F4} (Δ {Delta:F4}) spine {(sp == null ? "null" : sp.Value.ToString("0.##"))} edge {Ed(tt):0.##} f [{fsx}]");
                 }
             if (!found) { why = "open curved: no blend section inside the end face"; return false; }
@@ -1181,11 +1219,11 @@ public static partial class DirectRound
                 int changes = 0; double prev = Fend(k, Gen(inT[k]).Point(v));
                 // 20:17: сечение в скобке не находится (хребет не сошёлся) — отказ с причиной, а не исключение Math.Sign(NaN);
                 // причина ведёт к повтору с параметром по опорной кривой
-                if (double.IsNaN(prev)) { why = "open curved: no blend section inside the end face (section undefined in the end bracket)"; return false; }
+                if (double.IsNaN(prev)) { Debug?.Invoke($"open: end {k} bracket: NaN at the inner end t {inT[k]:G6} v {v} (point {Gen(inT[k]).Point(v):0.####}, end face {ends[k].FE.Surf.GetType().Name} {ends[k].FE.Tag})"); why = "open curved: no blend section inside the end face (section undefined in the end bracket)"; return false; }
                 for (int i = 1; i <= 32; i++)
                 {
                     double f = Fend(k, Gen(inT[k] + (outT[k] - inT[k]) * i / 32.0).Point(v));
-                    if (double.IsNaN(f)) { why = "open curved: no blend section inside the end face (section undefined in the end bracket)"; return false; }
+                    if (double.IsNaN(f)) { Debug?.Invoke($"open: end {k} bracket: NaN at t {inT[k] + (outT[k] - inT[k]) * i / 32.0:G6} (in {inT[k]:G6}, out {outT[k]:G6}) v {v} (point {Gen(inT[k] + (outT[k] - inT[k]) * i / 32.0).Point(v):0.####}, end face {ends[k].FE.Surf.GetType().Name} {ends[k].FE.Tag})"); why = "open curved: no blend section inside the end face (section undefined in the end bracket)"; return false; }
                     if (Math.Sign(f) != Math.Sign(prev)) changes++; prev = f;
                 }
                 if (changes != 1) { why = $"open curved: blend section crosses end face {changes} times"; return false; }
@@ -1491,7 +1529,7 @@ public static partial class DirectRound
             foreach (var (oldP, q) in moves)
             {
                 var nc = Reshape(cur, oldP, q, out var rwhy, TolEnds && body.Guarantee != GuaranteeLevel.ExactAnalytic ? 1e-4 : 0);
-                if (nc == null) { why = "open curved: " + rwhy; return false; }
+                if (nc == null) { Debug?.Invoke($"open: reshape failed: edge {cur.GetType().Name} {cur.PointAt(cur.T0):0.###}→{cur.PointAt(cur.T1):0.###}, old end {oldP:0.###}, contact {q:0.###}"); why = "open curved: " + rwhy; return false; }
                 cur = nc;
             }
             foreach (var (oldP, q) in moves)
@@ -1717,6 +1755,7 @@ public static partial class DirectRound
     static TSolid? FinishDirect(List<FDesc> faces, List<FDesc> blends, string op, ref string? why)
     {
         if (ExtendNurbsOn) ExtendNurbsFaces(faces);
+        if (ExtendSectionOn) ExtendSectionFaces(faces);
         foreach (var fd in faces.Where(x => x.Touched)) fd.Hint = InteriorPoint(fd);
         foreach (var fd in blends.Where(x => x.Surf.IsPlanar && Scan)) fd.Hint = ScanlinePoint(fd);
         var all = faces.Concat(blends).ToList();
@@ -1726,6 +1765,10 @@ public static partial class DirectRound
         finally { if (Debug != null && ProfDbg) { Debug(Diagnostics.Prof.Report()); Diagnostics.Prof.Enabled = profWas; } }
     }
     static readonly bool ProfDbg = Environment.GetEnvironmentVariable("P3D_OPENPROF") == "1";
+    static readonly bool EndScanDbg = Environment.GetEnvironmentVariable("P3D_ENDSCAN") == "1";
+    static readonly bool EndHole = Environment.GetEnvironmentVariable("P3D_DRENDHOLE") != "0";
+    /// <summary>k148f: сечение за торцом найдено долями шага, потому что хребет на шаге не определён.</summary>
+    public static long EndHoleHits;
     static readonly bool ExtendNurbsOn = Environment.GetEnvironmentVariable("P3D_DREXTENDNURBS") != "0";
     /// <summary>k144: граней NURBS, продлённых за край области (контур ушёл на продолжение поверхности).</summary>
     public static long NurbsFacesExtended;
@@ -1771,6 +1814,50 @@ public static partial class DirectRound
             Debug?.Invoke($"open: NURBS face {fd.Tag} extended u [{eu0:G4}, {eu1:G4}] v [{ev0:G4}, {ev1:G4}], deviation inside {dev:E1}");
             if (dev > 1e-9) continue;
             fd.Surf = ext; Interlocked.Increment(ref NurbsFacesExtended);
+        }
+    }
+    static readonly bool ExtendSectionOn = Environment.GetEnvironmentVariable("P3D_DREXTENDSECTION") != "0";
+    /// <summary>k148e: граней-лент прежней правки, продлённых за конец по u.</summary>
+    public static long SectionFacesExtended;
+
+    /// <summary>
+    /// k148e: ПРОДЛЕНИЕ ЛЕНТЫ ПРЕЖНЕЙ ПРАВКИ ПОД НОВЫЙ КОНТУР — как у граней NURBS (k144): лента прежней фаски или скругления
+    /// (процедурная SectionSurface) — торец новой ленты, и контур её грани уходит за конец ленты по u (кромка прежней фаски
+    /// продлена до точки касания нового скругления). Поверхность грани заменяется той же лентой на большем промежутке
+    /// (SectionSurface.ExtendedRange) с запасом 5 %; сверка внутри прежнего промежутка — до 1e-8 мм. Мутация P3D_DREXTENDSECTION=0.
+    /// </summary>
+    static void ExtendSectionFaces(List<FDesc> faces)
+    {
+        foreach (var fd in faces)
+        {
+            if (!fd.Touched || fd.Surf is not SectionSurface ss || !ss.IsProcedural || ss.Closed) continue;
+            double u0 = ss.UMin, u1 = ss.UMax, lo = u0, hi = u1; bool bad = false;
+            foreach (var sg in fd.Loops.SelectMany(l => l))
+            {
+                for (int i = 0; i <= 16 && !bad; i++)
+                {
+                    var q = sg.Curve.PointAt(sg.Curve.T0 + (sg.Curve.T1 - sg.Curve.T0) * i / 16.0);
+                    if (!double.IsFinite(q.X + q.Y + q.Z)) { bad = true; break; }
+                    var (P, _) = Geometry.Ssi.ParamFoot(ss, q, out var uv);
+                    if (!double.IsFinite(uv.X) || (P - q).Length > 1e-6) continue;
+                    lo = Math.Min(lo, uv.X); hi = Math.Max(hi, uv.X);
+                }
+                if (bad) break;
+            }
+            double span = u1 - u0;
+            if (bad || (lo > u0 - 1e-9 * span && hi < u1 + 1e-9 * span)) continue;
+            double m = 0.05 * (hi - lo);
+            double a = lo < u0 - 1e-9 * span ? lo - m : u0, b = hi > u1 + 1e-9 * span ? hi + m : u1;
+            if (ss.ExtendedRange(a, b) is not { } ext) { Debug?.Invoke($"open: section face {fd.Tag}: extension not supported (arc sections)"); continue; }
+            double dev = 0;
+            for (int i = 0; i <= 16; i++) for (int j = 0; j <= 4; j++)
+            {
+                var uv = new Vector2d(u0 + span * i / 16.0, j / 4.0);
+                dev = Math.Max(dev, (ext.PointAt(uv) - ss.PointAt(uv)).Length);
+            }
+            Debug?.Invoke($"open: section face {fd.Tag} extended u [{a:G6}, {b:G6}] (was [{u0:G6}, {u1:G6}]), deviation inside {dev:E1}");
+            if (dev > 1e-8) continue;
+            fd.Surf = ext; Interlocked.Increment(ref SectionFacesExtended);
         }
     }
     static readonly bool MarginClamp = Environment.GetEnvironmentVariable("P3D_DRMARGINCLAMP") != "0";

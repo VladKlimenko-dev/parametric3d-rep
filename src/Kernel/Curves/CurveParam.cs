@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 
 namespace Parametric3D.Kernel.Curves;
 
@@ -13,6 +13,7 @@ namespace Parametric3D.Kernel.Curves;
 public static class CurveParam
 {
     static readonly bool MinimaOff = Environment.GetEnvironmentVariable("P3D_CURVEMINIMA") == "0";
+    static readonly bool DomainOff = Environment.GetEnvironmentVariable("P3D_CLOSESTDOMAIN") == "0";
     public static double Closest(ICurve3 c, Vector3d p)
     {
         switch (c)
@@ -39,6 +40,13 @@ public static class CurveParam
             }
         }
 
+        // k148e: ПАРАМЕТР ПО ОБЛАСТИ КРИВОЙ. Перебор и уточнение — по доле s ∈ [0, 1] области [T0, T1]; прежде — по самому
+        // параметру на [0, 1], и у кривой с другой областью (процедурная кривая ленты: параметр — длина дуги, мм) ближайшая
+        // точка искалась не там (s101: кромка прежней фаски, «точка касания в 12 мм от ребра», хотя она на ребре). У кривых с
+        // областью [0, 1] — то же, что прежде. Мутация P3D_CLOSESTDOMAIN=0.
+        double cT0 = DomainOff ? 0 : c.T0, cT1 = DomainOff ? 1 : c.T1;
+        double Map(double s) => cT0 + (cT1 - cT0) * s;
+        Vector3d At(double s) => c.PointAt(Map(s));
         // Прочие кривые: перебор и уточнение Ньютоном по g(t) = (c(t) − p)·c'(t).
         const int N = 64;
         double bt = 0, bd = double.MaxValue;
@@ -46,7 +54,7 @@ public static class CurveParam
         for (int i = 0; i <= N; i++)
         {
             double t = i / (double)N;
-            double d = ds[i] = (c.PointAt(t) - p).LengthSquared;
+            double d = ds[i] = (At(t) - p).LengthSquared;
             if (d < bd) { bd = d; bt = t; }
         }
         // g.04: ВСЕ ЛОКАЛЬНЫЕ МИНИМУМЫ ПЕРЕБОРА уточняются делением золотым сечением в своей скобке, берётся ближайший.
@@ -61,13 +69,13 @@ public static class CurveParam
                 if (!((i == 0 || ds[i] <= ds[i - 1]) && (i == N || ds[i] <= ds[i + 1]))) continue;
                 double lo = Math.Max(0, (i - 1) / (double)N), hi = Math.Min(1, (i + 1) / (double)N);
                 double x1 = hi - gr * (hi - lo), x2 = lo + gr * (hi - lo);
-                double f1 = (c.PointAt(x1) - p).LengthSquared, f2 = (c.PointAt(x2) - p).LengthSquared;
+                double f1 = (At(x1) - p).LengthSquared, f2 = (At(x2) - p).LengthSquared;
                 for (int it = 0; it < 48 && hi - lo > 1e-13; it++)
                 {
-                    if (f1 < f2) { hi = x2; x2 = x1; f2 = f1; x1 = hi - gr * (hi - lo); f1 = (c.PointAt(x1) - p).LengthSquared; }
-                    else { lo = x1; x1 = x2; f1 = f2; x2 = lo + gr * (hi - lo); f2 = (c.PointAt(x2) - p).LengthSquared; }
+                    if (f1 < f2) { hi = x2; x2 = x1; f2 = f1; x1 = hi - gr * (hi - lo); f1 = (At(x1) - p).LengthSquared; }
+                    else { lo = x1; x1 = x2; f1 = f2; x2 = lo + gr * (hi - lo); f2 = (At(x2) - p).LengthSquared; }
                 }
-                double tm = (lo + hi) / 2, dm = (c.PointAt(tm) - p).LengthSquared;
+                double tm = (lo + hi) / 2, dm = (At(tm) - p).LengthSquared;
                 if (dm < bd) { bd = dm; bt = tm; }
             }
         }
@@ -79,8 +87,8 @@ public static class CurveParam
         double t0 = bt;
         for (int it = 0; it < 12; it++)
         {
-            Vector3d at = c.PointAt(t0);
-            Vector3d tan = c.TangentAt(t0);
+            Vector3d at = At(t0);
+            Vector3d tan = c.TangentAt(Map(t0));
             double len = tan.Length;
             if (len < 1e-12) break;
             // Масштаб касательной — в единицах параметра: длина кривой на единицу t.
@@ -90,6 +98,6 @@ public static class CurveParam
             if (Math.Abs(next - t0) < 1e-12) { t0 = next; break; }
             t0 = next;
         }
-        return (c.PointAt(t0) - p).LengthSquared <= bd ? t0 : bt;
+        return Map((At(t0) - p).LengthSquared <= bd ? t0 : bt);
     }
 }
