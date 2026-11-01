@@ -5,6 +5,7 @@
 
 | Версия | Дата | Коммит | Архив | Что сделано |
 |---|---|---|---|---|
+| k148a | 2026-11-01 | [`a9ef0d1`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/a9ef0d1) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/a9ef0d1.zip) | run.ps1 — если папка скрипта не клон репозитория, работать с клоном в «Документыparametric3d-rep» (или скачать его) |
 | k148 | 2026-11-01 | [`f9910ca`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/f9910ca) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/f9910ca.zip) | винтовая протяжка винтовым движением, ручки шага и витков, имена эскизов в полях, подробности ошибок, стык скругления у выпуклого излома шва |
 | k147 | 2026-11-01 | [`cc11d7e`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/cc11d7e) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/cc11d7e.zip) | ядро «как в Parasolid» — допуски на рёбрах, нетронутые грани, стыки фасок у наклонного шва |
 | k146 | 2026-10-31 | [`dfdaf48`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/dfdaf48) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/dfdaf48.zip) | фаски «как в Parasolid» — стыки касательных цепочек фасок, прямые рёбра в пути кривых фасок, ленты SectionSurface в каскаде |
