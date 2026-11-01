@@ -5,6 +5,7 @@
 
 | Версия | Дата | Коммит | Архив | Что сделано |
 |---|---|---|---|---|
+| k148d | 2026-11-02 | [`4f50519`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/4f50519) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/4f50519.zip) | почти касание — одно событие в вершине касания (массив PART-01 при шуме оси: 33 сдвига — отказов 0, точных 27), причина отказа точного пути в ошибке фаски (Sweep_Blend: смена выпуклости) |
 | k148c | 2026-11-01 | [`1129547`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/1129547) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/1129547.zip) | предпросмотр без поломанных тел (MeshCut и резец скругления — только замкнутая сетка), плоскость × цилиндр по допускам точности модели (массив PART-01) |
 | k148b | 2026-11-01 | [`ca24f11`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/ca24f11) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/ca24f11.zip) | run.ps1 — клон ищется и в «Документы» OneDrive, и в папке профиляDocuments |
 | k148a | 2026-11-01 | [`a9ef0d1`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/a9ef0d1) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/a9ef0d1.zip) | run.ps1 — если папка скрипта не клон репозитория, работать с клоном в «Документыparametric3d-rep» (или скачать его) |
