@@ -3,6 +3,7 @@ using Parametric3D.App.Viewport;
 using Parametric3D.Core;
 using Parametric3D.Model;
 using Parametric3D.Model.Features;
+using Parametric3D.Model.Params;
 using Parametric3D.Model.Sketching;
 using static Parametric3D.App.Loc;
 
@@ -11,7 +12,7 @@ namespace Parametric3D.App.Operations;
 // u13c: операции кнопок таблицы иконок — винтовая протяжка, перенос/копия, прямая правка граней, массивы по точкам,
 // по кривой и заполнением, косметическая резьба.
 
-public sealed class HelicalSweepOp : FeatureOp<HelicalSweepFeature>
+public sealed class HelicalSweepOp : FeatureOp<HelicalSweepFeature>, IMultiHandleOp
 {
     private RefField _sk = null!, _axis = null!;
     public HelicalSweepOp(HelicalSweepFeature? existing = null) : base(existing) { }
@@ -22,7 +23,8 @@ public sealed class HelicalSweepOp : FeatureOp<HelicalSweepFeature>
     public override void Build(OpPanel p)
     {
         _sk = p.Ref(new RefField { Label = "Сечение", Filter = PickFilter.SketchCurves, Accept = Refs.IsSketch, Single = true, Describe = r => L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?") });
-        if (Editing && F.SketchId != 0) _sk.Kept = 1;
+        _sk.SketchFits = Refs.ClosedSketch;
+        if (Editing) KeepSketches(_sk, F.SketchId);
         _axis = p.Ref(new RefField
         {
             Label = "Ось", Optional = true, Single = true,
@@ -32,9 +34,39 @@ public sealed class HelicalSweepOp : FeatureOp<HelicalSweepFeature>
         if (Editing && (F.AxisId != 0 || F.AxisEntityId != 0)) _axis.Kept = 1;
         p.Note("Без оси — осевая линия эскиза сечения. Винтовая линия идёт от центра сечения.");
         p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
-        p.Number("Шаг", () => F.Pitch, v => F.Pitch = v);
-        p.Number("Витков", () => F.Turns, v => F.Turns = v, "");
+        // k148 (замечание 01.11, 09:14): шаг и витки — поля со стрелками протяжки (как в настройках); «Обратное направление» —
+        // винт вдоль оси в другую сторону; ручки в виде: шаг — у начала, витки — у конца
+        p.Number("Шаг", () => F.Pitch, v => F.Pitch = v, scrub: 0.5);
+        p.Number("Витков", () => F.Turns, v => F.Turns = v, "", scrub: 0.25);
         p.Check("Левая", () => F.LeftHand, v => F.LeftHand = v);
+        p.Check("Обратное направление", () => F.FlipDirection, v => F.FlipDirection = v);
+    }
+
+    public override void RefreshStatus()
+    {
+        base.RefreshStatus();
+        W.RefreshMultiHandles();
+    }
+
+    private double _turns0;
+    public List<(Vector3d At, Vector3d Out, double Value, string Label)> Handles()
+    {
+        var res = new List<(Vector3d, Vector3d, double, string)>();
+        double pitch = F.Pitch.Value, turns = F.Turns.Value;
+        if (F.CentreAt(pitch, 0) is not { } s0 || F.CentreAt(pitch, turns) is not { } s1 || !(Math.Abs(pitch) > 1e-9)) return res;
+        var a = F.LastAxisDir;
+        _turns0 = turns;
+        res.Add((s0, a, pitch, "Шаг"));          // шарик — на витке выше начала: тянут — шаг
+        res.Add((s1, a, 0, "Витков"));           // у конца: сдвиг вдоль оси на шаг — виток
+        return res;
+    }
+
+    public string HandleMoved(int i, double value, bool final)
+    {
+        if (i == 0) F.Pitch = new ValueRef(Math.Round(Math.Max(0.01, value), 2));
+        else F.Turns = new ValueRef(Math.Round(Math.Max(0.05, _turns0 + value / Math.Max(1e-6, F.Pitch.Value)), 2));
+        if (final) FieldChanged(); else Panel?.Refresh();
+        return i == 0 ? $"{L("Шаг")} {F.Pitch.Value:0.##} {L("мм")}" : $"{L("Витков")} {F.Turns.Value:0.##}";
     }
 
     protected override void SeedRefs() => Seed(_sk, _axis);
@@ -151,7 +183,8 @@ public sealed class PointsPatternOp : FeatureOp<PointsPatternFeature>
             Filter = PickFilter.SketchCurves | PickFilter.SketchPoints, Accept = Refs.IsSketch, Single = true,
             Describe = r => L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?"),
         });
-        if (Editing && F.SketchId != 0) _sk.Kept = 1;
+        _sk.SketchFits = StartMode == PointsPatternMode.Fill ? Refs.ClosedSketch : s => s.Entities.Any(e => e.Role == Parametric3D.Model.Sketching.SkRole.Object);
+        if (Editing) KeepSketches(_sk, F.SketchId);
         if (StartMode == PointsPatternMode.Curve) p.Number("Количество", () => F.Count, v => F.Count = v, "шт");
         if (StartMode == PointsPatternMode.Fill)
         {

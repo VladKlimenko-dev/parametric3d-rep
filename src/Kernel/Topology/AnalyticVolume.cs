@@ -889,11 +889,34 @@ public static class AnalyticVolume
                 }
             }
         Vector3d loopsVa; using (Diagnostics.Prof.Time("лента: нормаль по контуру")) loopsVa = NormalIntegral(f);
-        if (loopsVa.Length < 1e-6 * Math.Max(1e-12, ar) || va.Length < 1e-6 * Math.Max(1e-12, ar)) return null;
+        // k148: «НАМОТАННАЯ» ЛЕНТА (винтовая протяжка в несколько витков): нормали почти гасятся, векторная площадь мала против
+        // площади, и сверка с контуром (ломаные винтовых рельсов) теряет точность — сторона по нормали грани в средней точке
+        if (!WoundOff && area == false && va.Length < 0.05 * ar && WoundSign(f, ss, rg) is int ws) return ws > 0 ? vol : -vol;
+        if (loopsVa.Length < 1e-6 * Math.Max(1e-12, ar) || va.Length < 1e-6 * Math.Max(1e-12, ar)) return area ? (va.Length < 0.05 * ar && !WoundOff ? ar : null) : null;
         double cosv = Vector3d.Dot(loopsVa, va) / (loopsVa.Length * va.Length);
-        if (Math.Abs(cosv) < 0.999) return null;
+        if (Math.Abs(cosv) < 0.999) return area && va.Length < 0.05 * ar && !WoundOff ? ar : null;
         return area ? ar : (cosv > 0 ? vol : -vol);
     }
+    /// <summary>k148: сторона намотанной ленты — нормаль поверхности S_u × S_v в середине области против нормали грани (+1 — та же).</summary>
+    static int? WoundSign(TFace f, SectionSurface ss, (Func<double, double> L, Func<double, double> R) rg)
+    {
+        int? sg = null;
+        foreach (double v in new[] { 0.3, 0.5, 0.7 })
+        {
+            double uL = rg.L(v), uR = rg.R(v); if (!(uR > uL)) return null;
+            double u = (uL + uR) / 2, h = 1e-6 * Math.Max(1e-9, ss.UMax - ss.UMin);
+            var s0 = ss.SectionAt(u); var P = s0.Point(v);
+            var c = Vector3d.Cross((ss.SectionAt(u + h).Point(v) - ss.SectionAt(u - h).Point(v)) / (2 * h), s0.Deriv(v));
+            var nf = f.NormalAt(P);
+            double d = Vector3d.Dot(c.Normalized(), nf.Normalized());
+            if (!(Math.Abs(d) > 0.9)) return null;
+            int si = Math.Sign(d);
+            if (sg != null && sg != si) return null;
+            sg = si;
+        }
+        return sg;
+    }
+    static readonly bool WoundOff = Environment.GetEnvironmentVariable("P3D_VOLWOUND") == "0";
     static readonly bool BandParOff = Environment.GetEnvironmentVariable("P3D_BANDPAR") != "1";   // включение — P3D_BANDPAR=1 (на 2 ядрах выигрыша нет)
     /// <summary>Сколько раз квадратура ленты шла рядами в несколько потоков.</summary>
     public static long BandParallelRuns;

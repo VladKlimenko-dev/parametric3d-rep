@@ -332,6 +332,7 @@ public static class DocumentFile
             };
             if (d == null) continue;
             d.Name = c.Name; d.Hidden = !c.Visible;
+            if (!DatumIdOff) d.Id = c.Id;
             if (!DatumSlotOff) d.Slot = part.ItemSlot(c);
             res.Add(d);
         }
@@ -346,9 +347,27 @@ public static class DocumentFile
     static readonly bool DatumSlotOff = Environment.GetEnvironmentVariable("P3D_DATUMSLOT") == "0";
     [ThreadStatic] static List<(ModelItem Item, int Slot)>? _datumSlots;
 
+    /// <summary>
+    /// k148 (модель пользователя HelSweep, 01.11): НОМЕРА ОПОРНЫХ ЭЛЕМЕНТОВ В ФАЙЛЕ. Ось, плоскость, точка писались без номера, а
+    /// операции (вращение, винтовая протяжка) ссылаются на ось номером: после открытия у оси новый номер, и операция — «no axis».
+    /// Теперь номер пишется, при открытии — сопоставление «прежний → новый»; у старых файлов без номеров — единственная ось
+    /// детали. Мутация P3D_DATUMID=0.
+    /// </summary>
+    static readonly bool DatumIdOff = Environment.GetEnvironmentVariable("P3D_DATUMID") == "0";
+    [ThreadStatic] static Dictionary<uint, uint>? _datumIds;
+    static uint MapAxis(Part part, uint old)
+    {
+        if (old == 0 || DatumIdOff) return old;
+        if (_datumIds != null && _datumIds.TryGetValue(old, out var nw)) return nw;
+        if (part.FindById<DatumAxis>(old) != null) return old;
+        var axes = part.Children.OfType<DatumAxis>().ToList();
+        return axes.Count == 1 && (_datumIds == null || _datumIds.Count == 0) ? axes[0].Id : old;
+    }
+
     private static void LoadDatums(Part part, List<DatumDto>? list)
     {
         _datumSlots = new();
+        _datumIds = new();
         if (list == null) return;
         foreach (var d in list)
         {
@@ -377,6 +396,7 @@ public static class DocumentFile
             }
             it.Visible = !d.Hidden;
             part.Add(it);
+            if (d.Id is uint oid && oid != 0) _datumIds![oid] = it.Id;
             if (d.Slot is int sl && sl > 0) _datumSlots!.Add((it, sl));
         }
     }
@@ -690,7 +710,7 @@ public static class DocumentFile
         HelicalSweepFeature hs => Dto("helical_sweep", hs, d =>
         {
             d.SketchId = hs.SketchId; d.AxisId = hs.AxisId; d.AxisEntityId = hs.AxisEntityId;
-            PutV(d, "pitch", hs.Pitch); PutV(d, "turns", hs.Turns); if (hs.LeftHand) Flag(d, "left");
+            PutV(d, "pitch", hs.Pitch); PutV(d, "turns", hs.Turns); if (hs.LeftHand) Flag(d, "left"); if (hs.FlipDirection) Flag(d, "flip");
         }),
 
         LoftFeature lf => new FeatureDto
@@ -1026,7 +1046,7 @@ public static class DocumentFile
                 {
                     var r = new RevolveFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut };
                     if (sketchById.TryGetValue(fd.SketchId, out var sk)) r.SketchId = sk.Id;
-                    r.AxisId = fd.AxisId;
+                    r.AxisId = MapAxis(part, fd.AxisId);
                     r.AxisEntityId = fd.AxisEntityId;
                     r.StartAngle = new ValueRef(fd.StartAngle) { Formula = fd.StartFormula };
                     r.EndAngle = new ValueRef(fd.EndAngle) { Formula = fd.EndFormula };
@@ -1331,9 +1351,9 @@ public static class DocumentFile
                 }
                 case "helical_sweep":
                 {
-                    var hs = new HelicalSweepFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut, AxisId = fd.AxisId, AxisEntityId = fd.AxisEntityId };
+                    var hs = new HelicalSweepFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut, AxisId = MapAxis(part, fd.AxisId), AxisEntityId = fd.AxisEntityId };
                     if (sketchById.TryGetValue(fd.SketchId, out var hsk)) hs.SketchId = hsk.Id;
-                    hs.Pitch = GetV(fd, "pitch", 5); hs.Turns = GetV(fd, "turns", 3); hs.LeftHand = HasFlag(fd, "left");
+                    hs.Pitch = GetV(fd, "pitch", 5); hs.Turns = GetV(fd, "turns", 3); hs.LeftHand = HasFlag(fd, "left"); hs.FlipDirection = HasFlag(fd, "flip");
                     part.AddFeature(hs);
                     break;
                 }
@@ -1506,6 +1526,8 @@ public static class DocumentFile
     {
         public string Kind { get; set; } = "";
         public string Name { get; set; } = "";
+        /// <summary>k148: номер элемента при записи (ссылки операций на него).</summary>
+        public uint? Id { get; set; }
         public bool Hidden { get; set; }
         public List<double> P { get; set; } = new();
         public string? Source { get; set; }

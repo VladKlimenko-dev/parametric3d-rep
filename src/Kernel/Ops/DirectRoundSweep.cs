@@ -32,8 +32,18 @@ public static partial class DirectRound
     /// keepOrientation — закон ориентации «сечение не поворачивается» (перенос без поворота: сечения — параллельные копии
     /// исходного, плоскость сечения остаётся своей; как «Keep normal constant»). Закрутка тогда не задаётся.
     /// </summary>
-    internal static TSolid? ExactSweep(Profile section, ICurve3 path, double frac, double twistRad, bool keepOrientation, ref string? why)
+    internal static TSolid? ExactSweep(Profile section, ICurve3 path, double frac, double twistRad, bool keepOrientation, ref string? why) =>
+        ExactSweep(section, path, frac, twistRad, keepOrientation, null, ref why);
+
+    /// <summary>
+    /// k148: frameLaw — своя рамка сечения по параметру траектории (начало, U, V в мире): винтовая протяжка — винтовое
+    /// движение самого эскиза (поворот вокруг оси и сдвиг вдоль неё), плоскость сечения не разворачивается поперёк
+    /// касательной и не проворачивается рамкой без вращения. Торцы — в плоскостях сечения.
+    /// </summary>
+    internal static TSolid? ExactSweep(Profile section, ICurve3 path, double frac, double twistRad, bool keepOrientation,
+        Func<double, (Vector3d O, Vector3d U, Vector3d V)>? frameLaw, ref string? why)
     {
+        if (frameLaw != null && (keepOrientation || Math.Abs(twistRad) > 1e-12)) { why = "exact sweep: a frame law with a twist or the kept orientation"; return null; }
         if (keepOrientation && Math.Abs(twistRad) > 1e-12) { why = "exact sweep: a twist with the kept orientation"; return null; }
         if (SweepExactOff) { why = "exact sweep is off"; return null; }
         // ЗАМКНУТАЯ траектория (целиком): торцов нет; рамка без вращения по возвращении повёрнута на δ вокруг касательной —
@@ -84,6 +94,7 @@ public static partial class DirectRound
         // рамка с закруткой: U = r cos φ + (T × r) sin φ, V = T × U
         (Vector3d O, Vector3d U, Vector3d V) Fr(double s)
         {
+            if (frameLaw != null) return frameLaw(s);
             if (keepOrientation) return (path.PointAt(s), section.Plane.U, section.Plane.V);
             var t = Tan(s); var r = RAt(s); double ph = (twistRad + corr) * (s - s0) / (s1 - s0);
             var u = r * Math.Cos(ph) + Vector3d.Cross(t, r) * Math.Sin(ph);
@@ -146,9 +157,12 @@ public static partial class DirectRound
                 for (int sp = 0; sp < spans.Length; sp++)
                 {
                     var (sa, sb) = spans[sp]; double Ua = (sa - s0) * kU, Ub = (sb - s0) * kU;
-                    const int NS = 128;
+                    // k148: сечений таблицы — не меньше 128 и по 64 на радиан поворота касательной (винт в 5 витков: 128 давали
+                    // отход таблицы 2e-8 мм — на границе допуска, точный путь отказывал)
+                    int NS = Math.Max(128, (int)Math.Ceiling(64 * turn * (Ub - Ua) / Math.Max(1e-12, (s1 - s0) * kU)));
                     var us = Enumerable.Range(0, NS + 1).Select(i => Ua + (Ub - Ua) * i / NS).ToList();
-                    var surf = new SectionSurface(gen, us, us.Select(gen).ToList(), false, Ua, Ub, null, Math.Max((Ub - Ua) / 20000, (Ub - Ua) / 4096));
+                    double turnSpan = turn * (Ub - Ua) / Math.Max(1e-12, (s1 - s0) * kU);     // k148: шаг таблицы — и по повороту касательной (винт)
+                    var surf = new SectionSurface(gen, us, us.Select(gen).ToList(), false, Ua, Ub, null, (Ub - Ua) / Math.Clamp(1024 * turnSpan, 4096, 20000));
                     // таблица — представление формулы (как у лент): отход в пятой доле точности модели
                     double worst = 0;
                     for (int i = 0; i < 400; i++) { double U = Ua + (Ub - Ua) * (i + 0.5) / 400; var ta = surf.SectionAt(U); var ex = surf.ExactSectionAt(U); foreach (double v in new[] { 0.0, 0.5, 1.0 }) worst = Math.Max(worst, (ta.Point(v) - ex.Point(v)).Length); }
@@ -183,7 +197,14 @@ public static partial class DirectRound
         {
             // торцы: начало — наружу против касательной, конец — по ней
             var fs0 = Fr(s0); var fs1 = Fr(s1); var t0 = Tan(s0); var t1 = Tan(s1);
-            if (keepOrientation)
+            if (frameLaw != null)
+            {
+                // k148: торцы — в плоскостях сечения у концов; наружу — против хода в начале, по ходу в конце
+                var w0 = Vector3d.Cross(fs0.U, fs0.V).Normalized(); var w1 = Vector3d.Cross(fs1.U, fs1.V).Normalized();
+                if (Math.Abs(Vector3d.Dot(w0, t0)) < 0.05 || Math.Abs(Vector3d.Dot(w1, t1)) < 0.05) { why = "exact sweep: the path runs along the section plane"; return null; }
+                t0 = w0 * Math.Sign(Vector3d.Dot(w0, t0)); t1 = w1 * Math.Sign(Vector3d.Dot(w1, t1));
+            }
+            else if (keepOrientation)
             {
                 // торцы — в плоскости сечения (она не поворачивается); наружу — против хода траектории в начале, по ходу в конце
                 var W = section.Plane.W;

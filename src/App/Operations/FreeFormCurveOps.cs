@@ -210,7 +210,7 @@ public sealed class FFCurveOp : Operation
             if (sel.Count > 1) _b.Take(new[] { sel[1] });
         }
         else Seed(_a, _b);
-        foreach (var f in new[] { _a, _b }) if (f.Text != null) f.Text.Text = f.Summary;
+        foreach (var f in new[] { _a, _b }) f.Refresh();
         Panel?.Refresh(); Apply(); RefreshStatus();
     }
 

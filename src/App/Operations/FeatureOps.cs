@@ -122,7 +122,8 @@ public sealed class ExtrudeOp : FeatureOp<ExtrudeFeature>
     {
         if (!Editing) _plane = p.Ref(Fields.SketchPlane());
         _sk = p.Ref(Fields.Sketch());
-        if (Editing && F.SketchId != 0) _sk.Kept = 1;
+        _sk.SketchFits = Refs.ClosedSketch;
+        if (Editing) KeepSketches(_sk, F.SketchId);
         p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
         p.Choice("Глубина до", new[] { "На расстояние", "Насквозь", "До следующей грани" }, () => EndIndex(F.Side1.End),
             v => F.Side1.End = EndOf(v));
@@ -213,7 +214,8 @@ public sealed class RevolveOp : FeatureOp<RevolveFeature>
     {
         if (!Editing) _plane = p.Ref(Fields.SketchPlane());
         _sk = p.Ref(Fields.Sketch());
-        if (Editing && F.SketchId != 0) _sk.Kept = 1;
+        _sk.SketchFits = Refs.ClosedSketch;
+        if (Editing) KeepSketches(_sk, F.SketchId);
         _axis = p.Ref(new RefField
         {
             Label = "Ось", Optional = true, Single = true,
@@ -684,7 +686,7 @@ public sealed class PlaneOp : Operation, IHandleOp
         {
             // правка: ссылки — из самой плоскости (выбрана в дереве она сама); точки и прямые способов по точкам — выбрать заново
             if (BaseRefOf(edp) is { } br && _by is 0 or 3 or 4 or 6) _base.Take(new[] { br });
-            foreach (var f in new[] { _base, _base2, _line, _pts, _face }) if (f.Text != null) f.Text.Text = f.Summary;
+            foreach (var f in new[] { _base, _base2, _line, _pts, _face }) f.Refresh();
             Panel?.Refresh();
             RefreshStatus();
             return;
@@ -702,7 +704,7 @@ public sealed class PlaneOp : Operation, IHandleOp
         else if (_base.Items.Count > 0 && _pts.Items.Count > 0) _by = 3;
         else if (_base.Items.Count > 0 && _line.Items.Count > 0) _by = 4;
         else if (_line.Items.Count > 0) _by = 5;
-        foreach (var f in new[] { _base, _base2, _line, _pts, _face }) if (f.Text != null) f.Text.Text = f.Summary;
+        foreach (var f in new[] { _base, _base2, _line, _pts, _face }) f.Refresh();
         Panel?.Refresh();
         Apply();
         RefreshStatus();

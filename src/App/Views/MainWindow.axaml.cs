@@ -68,6 +68,7 @@ public partial class MainWindow : Window
         Loc.Set(UserPrefs.Current.Language == "en");
         StandardCommands.Register(this);
         WireView();
+        WireStatusDetails();
         WireTree();
         WirePalette();
         ApplyTheme(UserPrefs.Current.Theme != "Light");
@@ -1113,6 +1114,8 @@ public partial class MainWindow : Window
         View.HandleDragStarted += OnHandleDragStarted;
         View.HandleDragged += OnHandleDragged;
         View.HandleDragEnded += OnHandleDragEnded;
+        View.MultiHandleDragged += (i, v) => OnMultiHandle(i, v, false);
+        View.MultiHandleEnded += i => OnMultiHandle(i, double.NaN, true);
         ModelViewport.GraphicsFallback += msg => Dispatcher.UIThread.Post(() => ShowToast(msg));
         View.GizmoDragStarted += part =>
         {
@@ -1444,6 +1447,34 @@ public partial class MainWindow : Window
     /// сторону — величина этой операции (операция не меняется). Выбрали другие рёбра — ручка переезжает.
     /// </summary>
     private bool _handleOpFixed;
+
+    // k148: ручки операции с несколькими величинами (винтовая протяжка)
+    private double _multiLast;
+    public void RefreshMultiHandles()
+    {
+        if (View.MultiDragging >= 0) return;
+        static OpenTK.Mathematics.Vector3 F(OpenTK.Mathematics.Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
+        View.MultiHandles = CurrentOperation is IMultiHandleOp m && !InSketch
+            ? m.Handles().Select(h => new Parametric3D.App.Viewport.ModelViewport.MultiHandle(F(h.At), F(h.Out), h.Value, h.Label)).ToList()
+            : null;
+    }
+    private void OnMultiHandle(int i, double v, bool final)
+    {
+        if (CurrentOperation is not IMultiHandleOp m) return;
+        if (!double.IsNaN(v)) _multiLast = v;
+        string label;
+        try { label = m.HandleMoved(i, _multiLast, final); }
+        catch (Exception ex) { AppLog.Write("multi handle", ex); return; }
+        if (final) { DragValueBox.IsVisible = false; RefreshMultiHandles(); return; }
+        SelChipText.Text = L(CurrentOperation.Title) + " · " + label;
+        if (!PropsPanel.IsVisible)
+        {
+            var c = View.HandleCursor;
+            DragValueText.Text = L(CurrentOperation.Title) + "  " + label;
+            DragValueBox.Margin = new Thickness(c.X + 18, c.Y + 14, 0, 0);
+            DragValueBox.IsVisible = true;
+        }
+    }
 
     /// <summary>u12 (замечание 14): ручка плоскости — у способов со смещением и углом (по точкам — без ручки).</summary>
     public void RefreshPlaneHandle()
@@ -2151,6 +2182,7 @@ public partial class MainWindow : Window
         View.MarkDirty();
         RefreshAfterOp();
         if (!_startingHandleOp) AttachOpHandle();
+        RefreshMultiHandles();
         try { op.RefreshGizmo(); } catch (Exception ex) { AppLog.Write("gizmo", ex); }
         if (View.Gizmo != null) ShowHint(null);   // подсказка ручки выбора — не к этой операции
     }
@@ -2200,6 +2232,7 @@ public partial class MainWindow : Window
         _opQuiet = false;
         DragValueBox.IsVisible = false;
         View.Handle = null;
+        View.MultiHandles = null;
         View.Gizmo = null;
         View.Selection.Filter = InSketch ? PickFilter.Sketch : PickFilter.All;
         if (!InSketch) View.Selection.Clear();
@@ -3565,6 +3598,55 @@ public partial class MainWindow : Window
         else if (errors > 0) { StatusBuild.Text = "! " + L("Требуют внимания: {0}", errors); StatusBuild.Foreground = Res("P3.Error"); }
         else if (part != null && part.Bodies.Count > 0) { StatusBuild.Text = "✓ " + L("Построено"); StatusBuild.Foreground = Res("P3.TextDim"); }
         else StatusBuild.Text = "";
+    }
+
+    // ===== k148 (замечание 01.11, 08:51): ПОДРОБНОСТИ ОШИБОК У СТРОКИ СОСТОЯНИЯ. Наведение на «Требуют внимания» — панель со
+    // всеми проблемами (операция, где она в дереве, полный текст ошибки; предупреждения и проверка тела детали). Панель
+    // временная: уходит через 1.5 с после ухода курсора с надписи и с самой панели; ✕ — закрыть сразу. Текст выделяется.
+    private DispatcherTimer? _detailsTimer;
+    private void WireStatusDetails()
+    {
+        StatusBuild.PointerEntered += (_, _) => { if (StatusDetailsLines() is { } l && l.Any(x => x.StartsWith("✖"))) ShowStatusDetails(l); };   // только при ошибках (сведения маршрута — не повод)
+        StatusBuild.PointerExited += (_, _) => HideStatusDetailsLater();
+        StatusDetails.PointerEntered += (_, _) => _detailsTimer?.Stop();
+        StatusDetails.PointerExited += (_, _) => HideStatusDetailsLater();
+        StatusDetailsClose.Click += (_, _) => { _detailsTimer?.Stop(); StatusDetails.IsVisible = false; };
+    }
+    private void HideStatusDetailsLater()
+    {
+        if (!StatusDetails.IsVisible) return;
+        _detailsTimer?.Stop();
+        _detailsTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+        _detailsTimer.Tick += (_, _) => { _detailsTimer?.Stop(); if (!StatusDetails.IsPointerOver && !StatusBuild.IsPointerOver) StatusDetails.IsVisible = false; };
+        _detailsTimer.Start();
+    }
+    /// <summary>Строки панели подробностей: элементы дерева с ошибкой (путь, вид, текст), затем предупреждения детали.</summary>
+    internal List<string> StatusDetailsLines()
+    {
+        var lines = new List<string>();
+        if (Session == null) return lines;
+        foreach (var it in Session.Document.Root.Descendants().Where(i => i.Error != null))
+        {
+            var path = new List<string>();
+            for (var p = it.Parent; p != null && p.Parent != null; p = p.Parent) path.Insert(0, p.Name);
+            string where = path.Count > 0 ? string.Join(" ▸ ", path) + " ▸ " : "";
+            lines.Add($"✖ {where}{it.Name}  [{L(it.Kind.ToString())}]\n    {it.Error!.Trim().Replace("\n", "\n    ")}");
+        }
+        if (Session.Part is { } part)
+        {
+            if (part.Integrity is { Length: > 0 } ig) lines.Add("✖ " + L("Проверка тела") + "\n    " + ig.Trim());
+            foreach (var w in part.Warnings.Distinct().Take(30)) lines.Add("⚠ " + w.Trim());
+        }
+        return lines;
+    }
+    private void ShowStatusDetails(List<string> lines)
+    {
+        _detailsTimer?.Stop();
+        int err = lines.Count(l => l.StartsWith("✖"));
+        StatusDetailsTitle.Text = err > 0 ? L("Требуют внимания: {0}", err) : L("Предупреждения");
+        StatusDetails.BorderBrush = Res(err > 0 ? "P3.Error" : "P3.Warning");
+        StatusDetailsText.Text = string.Join("\n\n", lines);
+        StatusDetails.IsVisible = true;
     }
 
     public IBrush Res(string key) =>

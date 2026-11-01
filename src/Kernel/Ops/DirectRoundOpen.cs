@@ -84,7 +84,7 @@ public static partial class DirectRound
             foreach (var p in ChainEnds(c))
             {
                 if (!chains.Any(o => o != c && o.Any(x => (x.V0.P - p).Length < 1e-7 || (x.V1.P - p).Length < 1e-7))) continue;
-                string? jw = JointOn && (chDist == null || ChamferJointOn) && varLaw == null ? TangentJoint(p, c, chains, allE, byFace, chDist != null && ChamferSwitch) : "joints off";
+                string? jw = JointOn && (chDist == null || ChamferJointOn) && varLaw == null ? TangentJoint(p, c, chains, allE, byFace, chDist != null ? ChamferSwitch : RoundSwitch && varLaw == null) : "joints off";
                 if (jw != null) { why = "open curved: selected edges share a vertex" + (JointOn ? $" ({jw})" : ""); return null; }
                 if (!jointPts.Any(q => (q - p).Length < 1e-7)) jointPts.Add(p);
             }
@@ -108,6 +108,9 @@ public static partial class DirectRound
     }
     /// <summary>k147: стыков фасок с переходом боковой точки на соседнюю грань у наклонного шва (разбор).</summary>
     public static long ChamferSwitches;
+    /// <summary>k148: стыков скруглений у шва с изломом (шар перекатывается через шов на соседнюю грань).</summary>
+    public static long RoundSwitches;
+    static readonly bool RoundSwitch = Environment.GetEnvironmentVariable("P3D_DRRDSWITCH") != "0";
     /// <summary>k147: стык фаски у наклонного шва — боковая точка звена переходит на соседнюю боковую грань. P3D_DRCHSWITCH=0 — отказ, как прежде.</summary>
     static readonly bool ChamferSwitchOn = Environment.GetEnvironmentVariable("P3D_DRCHSWITCH") != "0";
     /// <summary>k147: закреплённые истории (фикстуры корпуса k140, записанные до перехода боковой точки) — воспроизведение без
@@ -145,7 +148,21 @@ public static partial class DirectRound
         for (int i = 0; i <= (vertexOnly ? 0 : 8); i++)
         {
             var q = cv3.PointAt(vertexOnly ? (p0 ? cv3.T0 : cv3.T1) : cv3.T0 + (cv3.T1 - cv3.T0) * i / 8.0);
-            if (Vector3d.Dot(NormalOf(fb, q), NormalOf(fc, q)) < 0.9998) return "joint: third edge is not smooth";
+            if (Vector3d.Dot(NormalOf(fb, q), NormalOf(fc, q)) < 0.9998)
+            {
+                if (Debug != null)
+                    for (int j = 0; j <= 8; j++)
+                    {
+                        double uu = cv3.T0 + (cv3.T1 - cv3.T0) * j / 8.0; var qq = cv3.PointAt(uu); var ts = cv3.TangentAt(uu).Normalized();
+                        var nb = NormalOf(fb, qq); var nc = NormalOf(fc, qq); var w = Vector3d.Cross(nb, ts).Normalized();
+                        var mm = mine[0].Curve.PointAt((mine[0].Curve.T0 + mine[0].Curve.T1) / 2);
+                        if (Vector3d.Dot(mm - qq, w) < 0) w = -w;
+                        double h = 0.05 * (cv3.PointAt(cv3.T1) - cv3.PointAt(cv3.T0)).Length;
+                        var x = qq + w * h; var mB = fb.Surf.PointAt(fb.Surf.ProjectToUV(x)); var mC = fc.Surf.PointAt(fc.Surf.ProjectToUV(x));
+                        Debug($"joint seam {j}/8: angle {Math.Acos(Math.Clamp(Vector3d.Dot(nb, nc), -1, 1)):E2} rad, B below C-ext {Vector3d.Dot(mB - mC, nc):E2} (neg = convex), dist p {(qq - p).Length:0.###}");
+                    }
+                return "joint: third edge is not smooth";
+            }
         }
         return null;
     }
@@ -368,7 +385,11 @@ public static partial class DirectRound
         Func<double, double> Rt = _ => r, dRt = _ => 0;
         Func<double, double>? fracOf = null;
         var knotT = new List<double>();                  // параметры хребта узлов закона радиуса
-        var swT = new[] { double.NaN, double.NaN }; var swOnA = new bool[2]; var swSh = new Geometry.Ssi.Shape?[2]; var swQ = new Vector3d[2];
+        var swT = new[] { double.NaN, double.NaN }; var swT2 = new[] { double.NaN, double.NaN }; var swQ2 = new Vector3d[2]; var swOnA = new bool[2]; var swSh = new Geometry.Ssi.Shape?[2]; var swQ = new Vector3d[2];
+        // k148: стык скругления у шва с изломом — режимы хребта у конца k: на T (обычный), на шве (шар касается общей грани и
+        // ребра шва), на E (шар касается общей грани и соседней боковой E). rgT — переход T → шов, rgE — шов → E.
+        var rgT = new[] { double.NaN, double.NaN }; var rgE = new[] { double.NaN, double.NaN }; var rgSeam = new ICurve3?[2];
+        var rgShE = new Geometry.Ssi.Shape?[2]; var rgSE = new double[2]; var rgOnA = new bool[2];
         double OffA(double t) => sigma * sA * Rt(t);
         double OffB(double t) => sigma * sB * Rt(t);
         bool ch = chDist != null; double dA = ch ? chDist!(e, fs[0]) : r, dB = ch ? chDist!(e, fs[1]) : r;
@@ -639,24 +660,76 @@ public static partial class DirectRound
         Vector3d? Spine(double t) => MemoOn && spMemo.Count < MemoCap ? spMemo.GetOrAdd(t, SpineCore) : SpineCore(t);
         Vector3d? SpineCore(double t)
         {
+            for (int k = 0; k < 2; k++)
+            {
+                int rg = Regime(k, t);
+                if (rg == 1) return SeamSpine(k, t);
+                if (rg == 2) return rgOnA[k] ? SpineWith(t, rgShE[k]!, rgSE[k], shB, sB) : SpineWith(t, shA, sA, rgShE[k]!, rgSE[k]);
+            }
+            return SpineWith(t, shA, sA, shB, sB);
+        }
+        Vector3d? SpineWith(double t, Geometry.Ssi.Shape sh1, double s1, Geometry.Ssi.Shape sh2, double s2)
+        {
             using var _ps = Diagnostics.Prof.Time("open: SpineCore");
             var P = Ed(t); if (double.IsNaN(P.X)) return null;
             var tg = Td(t);
-            var nA = Geometry.Ssi.Implicit(shA, P).G * sA; var nB = Geometry.Ssi.Implicit(shB, P).G * sB; double c = Vector3d.Dot(nA, nB);
-            double rr = Rt(t), oA = OffA(t), oB = OffB(t);
+            var nA = Geometry.Ssi.Implicit(sh1, P).G * s1; var nB = Geometry.Ssi.Implicit(sh2, P).G * s2; double c = Vector3d.Dot(nA, nB);
+            double rr = Rt(t), oA = sigma * s1 * rr, oB = sigma * s2 * rr;
             var x = P + (nA + nB) * (sigma * rr / (1 + c));
             for (int it = 0; it < 60; it++)
             {
-                var (f1, gA) = Geometry.Ssi.Implicit(shA, x); var (f2, gB) = Geometry.Ssi.Implicit(shB, x);
+                var (f1, gA) = Geometry.Ssi.Implicit(sh1, x); var (f2, gB) = Geometry.Ssi.Implicit(sh2, x);
                 double f3 = Vector3d.Dot(x - P, tg);
                 var dx = Solve3(new[] { gA, gB, tg }, new[] { oA - f1, oB - f2, -f3 });
                 if (dx == null) return null;
                 x += dx.Value;
                 if (dx.Value.Length < 1e-15 * Math.Max(1, x.Length)) break;
             }
-            double ea = Geometry.Ssi.Implicit(shA, x).F - oA, eb = Geometry.Ssi.Implicit(shB, x).F - oB;
+            double ea = Geometry.Ssi.Implicit(sh1, x).F - oA, eb = Geometry.Ssi.Implicit(sh2, x).F - oB;
             if (Math.Abs(ea) > 1e-9 * Math.Max(1, rr) || Math.Abs(eb) > 1e-9 * Math.Max(1, rr) || Math.Abs(Vector3d.Dot(x - P, tg)) > 1e-9 * Math.Max(1, rr)) return null;
             return x;
+        }
+        // k148: режим хребта у конца k: 0 — обычный, 1 — на шве, 2 — на соседней грани E
+        int Regime(int k, double t)
+        {
+            if (double.IsNaN(rgT[k])) return 0;
+            bool Past(double ts) => k == 0 ? t < ts : t > ts;
+            return !Past(rgT[k]) ? 0 : Past(rgE[k]) ? 2 : 1;
+        }
+        // центр шара на шве: в плоскости сечения, на расстоянии r от общей грани S и от кривой шва (касание ребра)
+        Vector3d? SeamSpine(int k, double t)
+        {
+            var P = Ed(t); if (double.IsNaN(P.X)) return null;
+            var tg = Td(t); var sc = rgSeam[k]!;
+            var shS = rgOnA[k] ? shB : shA; double oS = sigma * (rgOnA[k] ? sB : sA) * r;
+            var x0 = SpineWith(t, shA, sA, shB, sB); if (x0 == null) return null;
+            var x = x0.Value;
+            for (int it = 0; it < 60; it++)
+            {
+                var (f1, g1) = Geometry.Ssi.Implicit(shS, x);
+                var q = sc.PointAt(CurveParam.Closest(sc, x)); var d = x - q; double L = d.Length;
+                if (!(L > 1e-12)) return null;
+                double f3 = Vector3d.Dot(x - P, tg);
+                var dx = Solve3(new[] { g1, d / L, tg }, new[] { oS - f1, r - L, -f3 });
+                if (dx == null) return null;
+                x += dx.Value;
+                if (dx.Value.Length < 1e-15 * Math.Max(1, x.Length)) break;
+            }
+            var qe = sc.PointAt(CurveParam.Closest(sc, x));
+            if (Math.Abs(Geometry.Ssi.Implicit(shS, x).F - oS) > 1e-9 * Math.Max(1, r) || Math.Abs((x - qe).Length - r) > 1e-9 * Math.Max(1, r) || Math.Abs(Vector3d.Dot(x - P, tg)) > 1e-9 * Math.Max(1, r)) return null;
+            return x;
+        }
+        // точка касания на стороне (A или B) у центра x сечения t: у конца с изломом шва — на шве или на E
+        Vector3d SideFoot(bool sideA, double t, Vector3d x)
+        {
+            for (int k = 0; k < 2; k++)
+            {
+                if (double.IsNaN(rgT[k]) || rgOnA[k] != sideA) continue;
+                int rg = Regime(k, t);
+                if (rg == 1) return rgSeam[k]!.PointAt(CurveParam.Closest(rgSeam[k]!, x));
+                if (rg == 2) return Foot(rgShE[k]!, x);
+            }
+            return Foot(sideA ? shA : shB, x);
         }
         Vector3d Foot(Geometry.Ssi.Shape sh, Vector3d x) { var (fv, g) = Geometry.Ssi.Implicit(sh, x); return x - g * fv; }
         Vector3d S(double t) => Spine(t) ?? new Vector3d(double.NaN);
@@ -673,14 +746,14 @@ public static partial class DirectRound
             for (int k = 0; k < 2; k++) if (!swOnA[k] && Beyond(k, t)) return ChamferPoint(swSh[k]!, shA, sB, sA, sigma, Ed(t), Td(t), dB);
             return ChamferPoint(shB, shA, sB, sA, sigma, Ed(t), Td(t), dB);
         }
-        Vector3d QA(double t) => ch ? ChA(t) : Foot(shA, S(t));
-        Vector3d QB(double t) => ch ? ChB(t) : Foot(shB, S(t));
+        Vector3d QA(double t) => ch ? ChA(t) : SideFoot(true, t, S(t));
+        Vector3d QB(double t) => ch ? ChB(t) : SideFoot(false, t, S(t));
         SweepSection Gen(double t)
         {
             using var _pg = Diagnostics.Prof.Time("open: Gen");
             genCount++;
             if (ch) return SweepSection.Line(ChA(t), ChB(t));
-            var x = S(t); var qa = Foot(shA, x); var qb = Foot(shB, x);
+            var x = S(t); var qa = SideFoot(true, t, x); var qb = SideFoot(false, t, x);
             // характеристическая окружность огибающей шаров: в плоскости (y − c)·c' = −r r', центр c − (r r'/|c'|²) c',
             // радиус √(r² − (r r')²/|c'|²); линии касания на ней лежат (d/dt dist(c, A) = r'). Постоянный радиус — большой круг.
             var cc = x; double rad = Rt(t);
@@ -825,6 +898,119 @@ public static partial class DirectRound
                 outT[k] = tEnd + dk * ext;
                 Debug?.Invoke($"open: chamfer joint {k} at the vertex, side point {qT:0.####} (off the other side {off:E1})");
                 continue;
+            }
+            if (joint[k] != 0 && !ch && RoundSwitch && varLaw == null && ends[k].ShE != null)
+            {
+                // k148: СТЫК СКРУГЛЕНИЯ У ШВА С ИЗЛОМОМ (лофт: шов гладок только в вершине). Шар катится по общей грани S и по
+                // стороне T до шва (точка q1), дальше перекатывается через ребро шва (касается S и кривой шва — край ленты
+                // идёт по шву) до q2, где ложится на соседнюю грань E, и до плоскости вершины касается S и E — там он тот же,
+                // что у соседнего звена (плоскость, S, E, r — общие). Звено, у которого линия касания шов не пересекает, его
+                // не режет (это сделает соседнее). Выпуклый излом; иначе — отказ. Мутация P3D_DRRDSWITCH=0.
+                bool onA = joint[k] == 1;
+                var shT = onA ? shA : shB; var shS = onA ? shB : shA; double sT = onA ? sA : sB, sS = onA ? sB : sA;
+                var sc = (onA ? ends[k].EA : ends[k].EB).Curve; var shE = ends[k].ShE!;
+                bool smooth = true;
+                for (int i = 0; i <= 8 && smooth; i++)
+                {
+                    var q = sc.PointAt(sc.T0 + (sc.T1 - sc.T0) * i / 8.0);
+                    if (Math.Abs(Vector3d.Dot(Geometry.Ssi.Implicit(shT, q).G.Normalized(), Geometry.Ssi.Implicit(shE, q).G.Normalized())) < 0.9998) smooth = false;
+                }
+                if (!smooth)
+                {
+                    var V = ends[k].V;
+                    double sEs = Vector3d.Dot(NormalOf(ends[k].FE, V), Geometry.Ssi.Implicit(shE, V).G) > 0 ? 1 : -1;
+                    // сторона точки относительно шва на поверхности sh: > 0 — к ребру цепочки (на T), < 0 — за швом
+                    double Side(Vector3d Q, Geometry.Ssi.Shape sh, double t)
+                    {
+                        double u = CurveParam.Closest(sc, Q); var sg = sc.PointAt(u);
+                        var w = Vector3d.Cross(Geometry.Ssi.Implicit(sh, sg).G, sc.TangentAt(u)).Normalized();
+                        if (Vector3d.Dot(Ed(t) - sg, w) < 0) w = -w;
+                        return Vector3d.Dot(Q - sg, w);
+                    }
+                    double H(double t, Geometry.Ssi.Shape shX, double sX)
+                    {
+                        var x = onA ? SpineWith(t, shX, sX, shB, sB) : SpineWith(t, shA, sA, shX, sX);
+                        return x == null ? double.NaN : Side(Foot(shX, x.Value), shX, t);
+                    }
+                    double HT(double t) => H(t, shT, sT);
+                    double HE(double t) => H(t, shE, sEs);
+                    double win = Math.Min(0.45 * Delta, 6 * r / speed);
+                    const int nSw = 192;
+                    double h0 = HT(tEnd);
+                    if (Debug != null)
+                        for (int i = 0; i <= 12; i++)
+                        {
+                            double tt = tEnd - dk * win * i / 12.0;
+                            var xa = onA ? SpineWith(tt, shT, sT, shB, sB) : SpineWith(tt, shA, sA, shT, sT);
+                            var xb = onA ? SpineWith(tt, shE, sEs, shB, sB) : SpineWith(tt, shA, sA, shE, sEs);
+                            string dd = xa != null && xb != null ? $"{(xa.Value - xb.Value).Length:E2} fE(xT) {sigma * sEs * Geometry.Ssi.Implicit(shE, xa.Value).F / r - 1:E2} fT(xE) {sigma * sT * Geometry.Ssi.Implicit(shT, xb.Value).F / r - 1:E2}" : "-";
+                            Debug($"open: round joint {k} scan t {tt:G6}: HT {HT(tt):E2} HE {HE(tt):E2} centres {dd}");
+                        }
+                    if (!(h0 < 0))
+                    {
+                        if (double.IsNaN(h0)) { why = "open curved: round joint — the ball at the vertex not found"; Debug?.Invoke(why); return false; }
+                        noCut[k] = true;
+                        Debug?.Invoke($"open: round joint {k}: contact inside the side face at the vertex ({h0:E1}), no seam crossing on this link");
+                    }
+                    else
+                    {
+                        double t1 = double.NaN, gPrev = h0;
+                        for (int i = 1; i <= nSw && double.IsNaN(t1); i++)
+                        {
+                            double ta = tEnd - dk * win * (i - 1) / nSw, tb = tEnd - dk * win * i / nSw, gv = HT(tb);
+                            if (double.IsFinite(gPrev + gv) && Math.Sign(gv) != Math.Sign(gPrev)) t1 = RootIn(HT, ta, tb);
+                            gPrev = gv;
+                        }
+                        if (double.IsNaN(t1)) { why = "open curved: round joint — the contact line does not reach the seam"; Debug?.Invoke(why); return false; }
+                        double e1 = HE(t1), eEnd = HE(tEnd);
+                        Debug?.Invoke($"open: round joint {k}: t1 {t1:G8} HE {e1:E2}..{eEnd:E2} h0 {h0:E2} win {win:G4}");
+                        if (!(e1 > 0 && eEnd < 0)) { why = $"open curved: round joint — the ball does not pass onto the next face before the vertex ({e1:E1}/{eEnd:E1}, concave crease?)"; Debug?.Invoke(why); return false; }
+                        double t2 = double.NaN; gPrev = e1;
+                        for (int i = 1; i <= nSw && double.IsNaN(t2); i++)
+                        {
+                            double ta = t1 + (tEnd - t1) * (i - 1) / nSw, tb = t1 + (tEnd - t1) * i / nSw, gv = HE(tb);
+                            if (double.IsFinite(gPrev + gv) && Math.Sign(gv) != Math.Sign(gPrev)) t2 = RootIn(HE, ta, tb);
+                            gPrev = gv;
+                        }
+                        if (double.IsNaN(t2)) { why = "open curved: round joint — the ball does not pass onto the next face"; Debug?.Invoke(why); return false; }
+                        rgSeam[k] = sc; rgShE[k] = shE; rgSE[k] = sEs; rgOnA[k] = onA; rgT[k] = t1; rgE[k] = t2;
+                        spMemo.Clear();
+                        // стыковка режимов: хребет и точка касания непрерывны в t1 и t2
+                        var xT = onA ? SpineWith(t1, shT, sT, shB, sB) : SpineWith(t1, shA, sA, shT, sT);
+                        var xS1 = SeamSpine(k, t1); var xS2 = SeamSpine(k, t2);
+                        var xE = onA ? SpineWith(t2, shE, sEs, shB, sB) : SpineWith(t2, shA, sA, shE, sEs);
+                        if (xT == null || xS1 == null || xS2 == null || xE == null) { rgT[k] = double.NaN; why = "open curved: round joint — the ball on the seam not found"; Debug?.Invoke(why); return false; }
+                        double j1 = (xT.Value - xS1.Value).Length, j2 = (xE.Value - xS2.Value).Length;
+                        var q1 = Foot(shT, xT.Value); var q2 = Foot(shE, xE.Value);
+                        double o1 = (sc.PointAt(CurveParam.Closest(sc, q1)) - q1).Length, o2 = (sc.PointAt(CurveParam.Closest(sc, q2)) - q2).Length;
+                        if (j1 > 1e-7 * Math.Max(1, r) || j2 > 1e-7 * Math.Max(1, r) || o1 > 1e-7 || o2 > 1e-7)
+                        { rgT[k] = double.NaN; why = $"open curved: round joint — regimes do not meet (centres {j1:E1}/{j2:E1}, contacts off the seam {o1:E1}/{o2:E1})"; Debug?.Invoke(why); return false; }
+                        // шар на шве перекатывается через ребро: направление от шва к центру — между нормалями сторон (в сторону
+                        // шара); сравнение с продолжениями граней за швом не годится (у выпуклого излома продолжение одной
+                        // грани лежит над другой)
+                        for (int i = 1; i < 8; i++)
+                        {
+                            double tmS = t1 + (t2 - t1) * i / 8.0; var xm = SeamSpine(k, tmS);
+                            if (xm == null) { rgT[k] = double.NaN; why = "open curved: round joint — the ball on the seam not found"; Debug?.Invoke(why); return false; }
+                            var sg = sc.PointAt(CurveParam.Closest(sc, xm.Value)); var d = (xm.Value - sg).Normalized();
+                            var mT = Geometry.Ssi.Implicit(shT, sg).G.Normalized() * (sigma * sT); var mE = Geometry.Ssi.Implicit(shE, sg).G.Normalized() * (sigma * sEs);
+                            var ax = Vector3d.Cross(mT, mE); double sn = ax.Length;
+                            if (sn < 1e-6) continue;
+                            double c1 = Vector3d.Dot(Vector3d.Cross(mT, d), ax) / sn, c2 = Vector3d.Dot(Vector3d.Cross(d, mE), ax) / sn;
+                            if (c1 < -1e-9 * sn || c2 < -1e-9 * sn) { rgT[k] = double.NaN; why = $"open curved: round joint — the ball on the seam is outside the crease ({c1:E1}/{c2:E1})"; Debug?.Invoke(why); return false; }
+                        }
+                        swT[k] = t1; swOnA[k] = onA; swSh[k] = shE; swQ[k] = q1; swQ2[k] = q2; swT2[k] = t2;
+                        knotT.Add(t1); knotT.Add(t2);
+                        Interlocked.Increment(ref RoundSwitches);
+                        Debug?.Invoke($"open: round joint {k}: onto the seam at t {t1:G8} ({q1:0.####}), onto the next face at t {t2:G8} ({q2:0.####}), end {tEnd:G6}");
+                    }
+                    tJ[k] = tEnd; inT[k] = tEnd; jC[k] = S(tEnd); jShT[k] = shE; jOffT[k] = sigma * sEs * r;
+                    if (double.IsNaN(jC[k].X)) { why = "open curved: round joint — the ball at the vertex not found"; Debug?.Invoke(why); return false; }
+                    double ext = step;
+                    while (ext > 1e-6 * step && Spine(tEnd + dk * ext) == null) ext /= 2;
+                    outT[k] = tEnd + dk * ext;
+                    continue;
+                }
             }
             if (joint[k] != 0)
             {
@@ -1108,7 +1294,7 @@ public static partial class DirectRound
             var x = preX[i];
             if (x == null) { why = "open curved: ball centre not found (radius too large?)"; return false; }
             var P = Ed(t); Ps.Add(P);
-            var qa = ch ? ChA(t) : Foot(shA, x.Value); var qb = ch ? ChB(t) : Foot(shB, x.Value);
+            var qa = ch ? ChA(t) : SideFoot(true, t, x.Value); var qb = ch ? ChB(t) : SideFoot(false, t, x.Value);
             if (ch)
             {
                 if (double.IsNaN(qa.X + qb.X) || Math.Abs((qa - P).Length - dA) > 1e-8 * Math.Max(1, dA) || Math.Abs((qb - P).Length - dB) > 1e-8 * Math.Max(1, dB) || (qa - qb).Length < 1e-6)
@@ -1220,18 +1406,32 @@ public static partial class DirectRound
         ISurface3 bSurf = surf; ICurve3 bA = cA, bB = cB, bE0 = end0, bE1 = end1;
         // k147: переход боковой точки фаски — линия касания стороны T из кусков: средний (на T) и у конца k с переходом —
         // после q (на соседней грани E_k)
-        var swPart = new ICurve3?[2];
+        var swPart = new ICurve3?[2]; var swParts = new List<(ICurve3 C, Vector3d A, Vector3d B)>?[2];
         foreach (bool oA in new[] { true, false })
         {
             bool s0 = !double.IsNaN(swT[0]) && swOnA[0] == oA, s1 = !double.IsNaN(swT[1]) && swOnA[1] == oA;
             if (!s0 && !s1) continue;
             double t0 = oA ? tA0 : tB0, t1 = oA ? tA1 : tB1;
             double lo = s0 ? swT[0] : t0, hi = s1 ? swT[1] : t1;
-            if (!(t0 < t1 && lo >= t0 && hi <= t1 && lo < hi)) { why = "open curved: chamfer joint — seam crossing outside the contact line"; return false; }
+            if (!(t0 < t1 && lo >= t0 && hi <= t1 && lo < hi)) { why = "open curved: joint — seam crossing outside the contact line"; return false; }
             Func<double, Vector3d> fT = oA ? QA : QB;
             var main = new ProcCurve3(fT, lo, hi, false, "chamfer contact");
-            if (s0) swPart[0] = new ProcCurve3(fT, t0, lo, false, "chamfer contact");
-            if (s1) swPart[1] = new ProcCurve3(fT, hi, t1, false, "chamfer contact");
+            string nm = ch ? "chamfer contact" : "round contact";
+            // куски по возрастанию t; у скругления с изломом шва — два: на шве и на E (k148)
+            foreach (var (kk, on) in new[] { (0, s0), (1, s1) })
+            {
+                if (!on) continue;
+                double ta = kk == 0 ? t0 : hi, tb = kk == 0 ? lo : t1, tm2 = swT2[kk];
+                var lst = swParts[kk] = new();
+                if (!double.IsNaN(tm2))
+                {
+                    if (!(tm2 > ta && tm2 < tb)) { why = "open curved: round joint — the seam piece outside the contact line"; return false; }
+                    lst.Add((new ProcCurve3(fT, ta, tm2, false, nm), fT(ta), swQ2[kk]));
+                    lst.Add((new ProcCurve3(fT, tm2, tb, false, nm), swQ2[kk], fT(tb)));
+                }
+                else lst.Add((new ProcCurve3(fT, ta, tb, false, nm), fT(ta), fT(tb)));
+                swPart[kk] = lst[0].C;
+            }
             if (oA) bA = main; else bB = main;
         }
         bool anyJoint = joint[0] != 0 || joint[1] != 0;
@@ -1378,9 +1578,11 @@ public static partial class DirectRound
             var lp = bl.Loops[0]; int iT = oA ? 0 : 2; var mainC = lp[iT].Curve;
             Vector3d e0 = oA ? qa0 : qb0, e1 = oA ? qa1 : qb1, m0 = s0 ? swQ[0] : e0, m1 = s1 ? swQ[1] : e1;
             var pieces = new List<Seg>();
-            if (s0) pieces.Add(new Seg { Curve = swPart[0]!, A = e0, B = m0 });
+            if (s0) foreach (var pc in swParts[0]!) pieces.Add(new Seg { Curve = pc.C, A = pc.A, B = pc.B });
             pieces.Add(new Seg { Curve = mainC, A = m0, B = m1 });
-            if (s1) pieces.Add(new Seg { Curve = swPart[1]!, A = m1, B = e1 });
+            if (s1) foreach (var pc in swParts[1]!) pieces.Add(new Seg { Curve = pc.C, A = pc.A, B = pc.B });
+            if (s0) { pieces[0].A = e0; pieces[swParts[0]!.Count - 1].B = m0; }
+            if (s1) { pieces[^1].B = e1; pieces[^swParts[1]!.Count].A = m1; }
             if (!oA) { pieces.Reverse(); pieces = pieces.Select(x => new Seg { Curve = x.Curve, A = x.B, B = x.A }).ToList(); }
             lp.RemoveAt(iT); lp.InsertRange(iT, pieces);
         }
@@ -1396,8 +1598,11 @@ public static partial class DirectRound
                 for (int i = 0; i < n && !done; i++)
                 {
                     if (loop[i].Id != seamE) continue;
-                    if ((loop[i].B - q).Length < 1e-7) { loop.Insert(i + 1, new Seg { Curve = swPart[k]!, A = q, B = endP, JointPiece = true }); done = true; }
-                    else if ((loop[i].A - q).Length < 1e-7) { loop.Insert(i, new Seg { Curve = swPart[k]!, A = endP, B = q, JointPiece = true }); done = true; }
+                    // куски от q к концу (у конца 0 — по убыванию t)
+                    var fromQ = (k == 0 ? Enumerable.Reverse(swParts[k]!) : swParts[k]!).Select(pc => k == 0 ? (pc.C, A: pc.B, B: pc.A) : (pc.C, pc.A, pc.B)).ToList();
+                    fromQ[0] = (fromQ[0].C, q, fromQ[0].B); fromQ[^1] = (fromQ[^1].C, fromQ[^1].A, endP);
+                    if ((loop[i].B - q).Length < 1e-7) { loop.InsertRange(i + 1, fromQ.Select(pc => new Seg { Curve = pc.C, A = pc.A, B = pc.B, JointPiece = true })); done = true; }
+                    else if ((loop[i].A - q).Length < 1e-7) { loop.InsertRange(i, Enumerable.Reverse(fromQ).Select(pc => new Seg { Curve = pc.C, A = pc.B, B = pc.A, JointPiece = true })); done = true; }
                 }
                 if (done) break;
             }

@@ -107,11 +107,53 @@ public sealed partial class ModelViewport
         return new Point((c.X / c.W * 0.5 + 0.5) * Camera.ViewportWidth / s, (0.5 - c.Y / c.W * 0.5) * Camera.ViewportHeight / s);
     }
 
+    // ---------------------------------------------------------------- k148: несколько ручек операции
+    /// <summary>
+    /// k148 (замечание 01.11, 09:14, п. 3): РУЧКИ ОПЕРАЦИИ С НЕСКОЛЬКИМИ ВЕЛИЧИНАМИ (винтовая протяжка: шаг — у начала, витки —
+    /// у конца). Ручка i — шарик на оси (At, Out) на расстоянии Value от At (мм); тянут вдоль оси — величина ручки меняется.
+    /// </summary>
+    public sealed record MultiHandle(Vector3 At, Vector3 Out, double Value, string Label);
+    private List<MultiHandle>? _multi;
+    private double[] _mValues = Array.Empty<double>();
+    /// <summary>Какая ручка тянется: 0 — основная, i + 1 — ручка i из набора.</summary>
+    private int _hActive;
+    public List<MultiHandle>? MultiHandles
+    {
+        get => _multi;
+        set
+        {
+            if (_hDragging && _hActive > 0) return;     // тянут — набор не меняется под курсором
+            _multi = value; _mValues = value?.Select(m => m.Value).ToArray() ?? Array.Empty<double>();
+            _overlayDirty = true; Redraw();
+        }
+    }
+    /// <summary>Тянут ручку i набора: номер и величина (мм от её начала).</summary>
+    public event Action<int, double>? MultiHandleDragged;
+    public event Action<int>? MultiHandleEnded;
+    /// <summary>Какая ручка набора тянется (−1 — никакая).</summary>
+    public int MultiDragging => _hDragging && _hStarted && _hActive > 0 ? _hActive - 1 : -1;
+    private Vector3 MKnob(int i) => _multi![i].At + _multi[i].Out * (float)_mValues[i];
+    /// <summary>Потянуть ручку i набора (сценарии проверок): величина ручки; end — отпустить.</summary>
+    public void SimulateMultiDrag(int i, double value, bool end = true)
+    {
+        if (_multi == null || i >= _multi.Count) return;
+        _hActive = i + 1; _hDragging = true; _hStarted = true;
+        _mValues[i] = value; MultiHandleDragged?.Invoke(i, value);
+        if (end) EndHandleDrag();
+        _overlayDirty = true; Redraw();
+    }
+
     /// <summary>Под курсором шарик ручки.</summary>
     private int HandleHit(Point p)
     {
-        if (_handle is not { } h || ActiveSketch != null || ToScreen(Knob(h)) is not { } q) return 0;
-        return Math.Sqrt((q.X - p.X) * (q.X - p.X) + (q.Y - p.Y) * (q.Y - p.Y)) < Math.Max(14, Services.UiLook.HandleKnobPx) ? 1 : 0;
+        _hActive = 0;
+        if (ActiveSketch != null) return 0;
+        double rad = Math.Max(14, Services.UiLook.HandleKnobPx);
+        if (_handle is { } h && ToScreen(Knob(h)) is { } q && Math.Sqrt((q.X - p.X) * (q.X - p.X) + (q.Y - p.Y) * (q.Y - p.Y)) < rad) return 1;
+        if (_multi != null)
+            for (int i = 0; i < _multi.Count; i++)
+                if (ToScreen(MKnob(i)) is { } m && Math.Sqrt((m.X - p.X) * (m.X - p.X) + (m.Y - p.Y) * (m.Y - p.Y)) < rad) { _hActive = i + 1; return 1; }
+        return 0;
     }
 
     private void BeginHandleDrag(Point p)
@@ -119,6 +161,15 @@ public sealed partial class ModelViewport
         _hDown = p;
         _hDragging = true; _hStarted = false;
         _hAxis = Vector2.Zero;
+        if (_hActive > 0)
+        {
+            var mh = _multi![_hActive - 1];
+            if (ToScreen(mh.At) is not { } ma || ToScreen(mh.At + mh.Out * (float)HandleLen) is not { } mb) return;
+            var ax2 = new Vector2((float)(mb.X - ma.X), (float)(mb.Y - ma.Y)); float l2 = ax2.Length;
+            if (l2 < 1e-3f) return;
+            _hAxis = ax2 / l2; _hWorldPerPx = HandleLen / l2; _hStartValue = _mValues[_hActive - 1];
+            return;
+        }
         if (_handle is not { } h || ToScreen(h.At) is not { } a || ToScreen(h.At + h.Out * (float)HandleLen) is not { } b) return;
         // ось на экране — «наружу»: движение вдоль неё увеличивает сдвиг со знаком
         var axis = new Vector2((float)(b.X - a.X), (float)(b.Y - a.Y));
@@ -131,6 +182,18 @@ public sealed partial class ModelViewport
 
     private void HandleDragMove(Point p)
     {
+        if (_hActive > 0)
+        {
+            if (_hAxis == Vector2.Zero || _multi == null) return;
+            double mv = (p.X - _hDown.X) * _hAxis.X + (p.Y - _hDown.Y) * _hAxis.Y;
+            HandleCursor = p;
+            if (!_hStarted) { if (Math.Abs(mv) < 4) return; _hStarted = true; }
+            int i = _hActive - 1;
+            _mValues[i] = _hStartValue + mv * _hWorldPerPx;
+            MultiHandleDragged?.Invoke(i, _mValues[i]);
+            _overlayDirty = true; Redraw();
+            return;
+        }
         if (_handle is not { } h || _hAxis == Vector2.Zero) return;
         double moved = (p.X - _hDown.X) * _hAxis.X + (p.Y - _hDown.Y) * _hAxis.Y;
         HandleCursor = p;
@@ -151,8 +214,9 @@ public sealed partial class ModelViewport
 
     private void EndHandleDrag()
     {
-        bool was = _hStarted;
-        _hDragging = false; _hStarted = false;
+        bool was = _hStarted; int act = _hActive;
+        _hDragging = false; _hStarted = false; _hActive = 0;
+        if (act > 0) { if (was) MultiHandleEnded?.Invoke(act - 1); return; }
         if (was) HandleDragEnded?.Invoke();
     }
 
@@ -225,6 +289,18 @@ public sealed partial class ModelViewport
             var gc = !_ghostOk ? th.HandleBad : _ghostSign < 0 ? th.HandleAlt : th.Handle;
             foreach (var (a, b) in _ghostLines)
                 lines.Add(Inst(new Vector3((float)a.X, (float)a.Y, (float)a.Z), new Vector3((float)b.X, (float)b.Y, (float)b.Z), gc, 2f, 0));
+        }
+        if (_multi != null && ActiveSketch == null)
+        {
+            float hwm = (float)Services.UiLook.HandleLineWidth;
+            for (int i = 0; i < _multi.Count; i++)
+            {
+                var mh = _multi[i]; var kn = MKnob(i);
+                lines.Add(Inst(mh.At, kn, th.Handle, hwm, 0));
+                lines.Add(Inst(kn, kn + mh.Out * (float)(HandleLen * 0.5), th.Handle, hwm * 0.75f, 5));
+                pts.Add(new PointInst { P = mh.At, Color = SceneData.Pack(th.Handle), Px = 6, Shape = 2 });
+                pts.Add(new PointInst { P = kn, Color = SceneData.Pack(th.Handle), Px = (float)Services.UiLook.HandleKnobPx, Shape = 0 });
+            }
         }
         if (_handle is not { } h || ActiveSketch != null) return;
         // ось: от элемента к начальному месту и дальше в обе стороны (пунктир), шарик — на текущем сдвиге

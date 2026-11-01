@@ -180,6 +180,51 @@ public static class SweepOp
         return solid;
     }
 
+    /// <summary>
+    /// k148 (замечание 01.11, 09:14): ВИНТОВАЯ ПРОТЯЖКА — винтовое движение сечения: поворот вокруг оси (o, a) на угол 2π·turns·s
+    /// и сдвиг вдоль оси на pitch·turns·s, s ∈ [0, 1]. Плоскость эскиза остаётся своей (у сечения в плоскости оси — всё время
+    /// через ось), не разворачивается поперёк касательной и не проворачивается. Прежде сечение протягивалось по ломаной винтовой
+    /// линии рамкой без вращения — трапеция с самого начала стояла повёрнутой и проворачивалась по ходу. Точно (грани по
+    /// формуле сечения); иначе — многогранно по тем же рамкам. Мутация P3D_HELIXSCREW=0 — прежний путь (протяжка по ломаной).
+    /// </summary>
+    public static TSolid BuildHelical(Profile section, Vector3d o, Vector3d a, double pitch, double turns, bool left, int perTurn, Func<List<Vector3d>, TSolid> legacy)
+    {
+        if (section.IsEmpty) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Helical sweep: the section is empty or not closed.");
+        a = a.Normalized();
+        double sg = left ? -1 : 1;
+        Vector3d Rot(Vector3d d, double th)
+        {
+            double c = Math.Cos(th), sn = Math.Sin(th);
+            return d * c + Vector3d.Cross(a, d) * sn + a * (Vector3d.Dot(a, d) * (1 - c));
+        }
+        var pl = section.Plane;
+        (Vector3d O, Vector3d U, Vector3d V) Law(double s)
+        {
+            double th = sg * 2 * Math.PI * turns * s;
+            return (o + Rot(pl.Origin - o, th) + a * (pitch * turns * s), Rot(pl.U, th), Rot(pl.V, th));
+        }
+        if (HelixScrewOff)
+        {
+            var pts = new List<Vector3d>(); int n0 = Math.Max(8, (int)Math.Ceiling(perTurn * Math.Abs(turns)));
+            for (int k = 0; k <= n0; k++) pts.Add(Law((double)k / n0).O);
+            return legacy(pts);
+        }
+        // траектория — движение центра сечения (начало плоскости эскиза может лежать на оси — там винт вырождается в прямую)
+        var smp = section.Outers.SelectMany(l => { var p3 = new List<Vector3d>(); foreach (var c in l.Curves) c.Tessellate(p3, true); return p3; }).ToList();
+        var cen = smp.Count > 0 ? smp.Aggregate(Vector3d.Zero, (acc, q) => acc + q) / smp.Count : pl.Origin;
+        var cl = pl.ToLocal2(cen);
+        var path = new ProcCurve3(s => { var f = Law(s); return f.O + f.U * cl.X + f.V * cl.Y; }, 0, 1, false, "helix");
+        string? why = null;
+        var ex = DirectRound.ExactSweep(section, path, 1, 0, false, Law, ref why);
+        if (ex != null) return ex;
+        DirectRound.Debug?.Invoke("helical sweep: exact declined: " + why);
+        int n = Math.Max(16, (int)Math.Ceiling(perTurn * Math.Abs(turns)));
+        var frames = new List<Frame3>(n + 1);
+        for (int k = 0; k <= n; k++) { var f = Law((double)k / n); frames.Add(new Frame3(f.O, f.U, f.V)); }
+        return Polyhedral(section, frames, false);
+    }
+    static readonly bool HelixScrewOff = Environment.GetEnvironmentVariable("P3D_HELIXSCREW") == "0";
+
     static readonly bool PolyOff = Environment.GetEnvironmentVariable("P3D_SWEEPPOLY") == "0";
     static readonly bool ClearOff = Environment.GetEnvironmentVariable("P3D_SWEEPCLEAR") == "0";
 

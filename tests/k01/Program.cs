@@ -475,6 +475,7 @@ static partial class Program
         if (mode is "drmultiend" or "allA") Krn06MultiEndChecks();
         if (mode is "sweepexact" or "allA") Krn07ExactSweepChecks();
         if (mode is "sweepexact" or "sweepbez" or "allA") Krn07SweepBezierSectionChecks();
+        if (mode is "helixscrew" or "allA") Krn07HelixScrewChecks();
         if (mode is "loftspline" or "allA") Krn07SplineLoftChecks();
         if (mode is "loftguides" or "allA") Krn07GuideLoftChecks();
         if (mode is "lofttangent" or "allA") Krn07LoftTangencyChecks();

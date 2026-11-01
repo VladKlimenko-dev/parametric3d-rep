@@ -58,7 +58,7 @@ public abstract class Operation
     public void AttachPanel(OpPanel p)
     {
         Panel = p;
-        foreach (var r in p.Refs) if (r.Text != null) r.Text.Text = r.Summary;
+        foreach (var r in p.Refs) r.Refresh();
         Activate(p.Refs.FirstOrDefault(r => !r.IsSet && !r.Optional) ?? p.Refs.FirstOrDefault());
         RefreshStatus();
     }
@@ -176,7 +176,7 @@ public abstract class Operation
 
     public void RefChanged(RefField f)
     {
-        if (f.Text != null) f.Text.Text = f.Summary;
+        f.Refresh();
         FieldChanged();
         RefreshGizmo();
     }
@@ -313,6 +313,15 @@ public abstract class Operation
     }
 }
 
+/// <summary>k148: операция с несколькими ручками в виде (винтовая протяжка: шаг у начала, витки у конца).</summary>
+public interface IMultiHandleOp
+{
+    /// <summary>Ручки: начало оси ручки, направление, величина (мм от начала), подпись.</summary>
+    List<(Vector3d At, Vector3d Out, double Value, string Label)> Handles();
+    /// <summary>Ручку i потянули до величины value (мм); final — отпустили (перестроить). Возвращает подпись величины у курсора.</summary>
+    string HandleMoved(int i, double value, bool final);
+}
+
 /// <summary>k112: операция со своей ручкой в виде (плоскость со смещением, уклон по ребру): место, направление, контур.</summary>
 public interface IHandleOp
 {
@@ -334,6 +343,14 @@ public abstract class FeatureOp<T> : Operation where T : Feature
     protected abstract void SeedRefs();
     /// <summary>Перенести поля в операцию.</summary>
     protected abstract void Push();
+
+    /// <summary>k148 (замечание 01.11, 09:14, п. 4): правка — поле показывает имена записанных эскизов, а не «как было».</summary>
+    protected void KeepSketches(RefField f, params uint[] ids)
+    {
+        var ks = ids.Where(id => id != 0).Select(id => Part.FindById<Sketch>(id)).OfType<Sketch>().ToList();
+        f.Kept = ids.Count(id => id != 0);
+        f.KeptSketches = ks.Count > 0 ? ks : null;
+    }
 
     protected override bool Start()
     {
@@ -377,7 +394,7 @@ public abstract class FeatureOp<T> : Operation where T : Feature
     public override void Prime()
     {
         if (!Editing) SeedRefs();
-        if (Panel != null) foreach (var r in Panel.Refs) if (r.Text != null) r.Text.Text = r.Summary;
+        if (Panel != null) foreach (var r in Panel.Refs) r.Refresh();
         Push();
         PushFreeForm();
         // ручку ещё тянут — операция в деталь попадёт, когда отпустят (EndDrag); u10: не выбрано обязательное (грань
@@ -506,6 +523,11 @@ public static class Refs
     public static Sketch? SketchOf(PickRef r) => r.Target as Sketch ?? r.Owner as Sketch;
 
     public static bool IsSketch(PickRef r) => SketchOf(r) != null;
+
+    /// <summary>k148: эскиз годен телу — есть замкнутый контур без самопересечений.</summary>
+    public static bool ClosedSketch(Sketch s) { var p = s.ToSolidProfile(s.Name); return !p.IsEmpty; }
+    /// <summary>k148: эскиз годен траектории или направляющей — есть кривые (роль «объект»).</summary>
+    public static bool CurvesSketch(Sketch s) => s.Entities.Any(e => e.Role == SkRole.Object && e is not SkPoint);
 
     public static bool IsPlanar(PickRef r)
     {

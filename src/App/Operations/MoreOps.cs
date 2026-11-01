@@ -103,7 +103,8 @@ public sealed class SweepOp : FeatureOp<SweepFeature>
         {
             Label = "Плоскость траектории", Filter = PickFilter.Faces | PickFilter.Datums, Accept = Refs.IsPlanar, Single = true, Optional = true,
         }, () => _pickPathPlane);
-        if (Editing) { _sec.Kept = F.SectionSketchId != 0 ? 1 : 0; _path.Kept = F.PathSketchId != 0 || F.PathLineId != 0 ? 1 : 0; }
+        _sec.SketchFits = Refs.ClosedSketch; _path.SketchFits = Refs.CurvesSketch;
+        if (Editing) { KeepSketches(_sec, F.SectionSketchId); if (F.PathSketchId != 0) KeepSketches(_path, F.PathSketchId); else _path.Kept = F.PathLineId != 0 ? 1 : 0; }
         p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
         p.Check("Обратное направление", () => F.Reverse, v => F.Reverse = v);
         p.Number("Закрутка", () => F.Twist, v => F.Twist = v, "°");
@@ -268,7 +269,8 @@ public sealed class LoftOp : FeatureOp<LoftFeature>
             Describe = r => L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?"),
             Tip = "Не обязательно. Эскизы с кривыми (отрезок, дуга меньше 180°, сплайн), каждая из которых проходит через соответственные вершины всех сечений: кривая задаёт, по какому пути вершина переходит от сечения к сечению. Без направляющих путь вершин — прямая или плавная кривая.",
         });
-        if (Editing) { _secs.Kept = F.SectionSketchIds.Count; _guides.Kept = F.GuideSketchIds.Count; }
+        _secs.SketchFits = Refs.ClosedSketch; _guides.SketchFits = Refs.CurvesSketch;
+        if (Editing) { KeepSketches(_secs, F.SectionSketchIds.ToArray()); KeepSketches(_guides, F.GuideSketchIds.ToArray()); }
         p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
         p.Check("Гладкий переход", () => F.Smooth, v => F.Smooth = v,
                 tip: "Включено — одна плавная поверхность через все сечения, без изломов на средних сечениях. Выключено — прямые между соседними сечениями (излом на каждом среднем сечении).");
@@ -476,7 +478,8 @@ public sealed class RibOp : FeatureOp<RibFeature>
     public override void Build(OpPanel p)
     {
         _sk = p.Ref(Fields.Sketch());
-        if (Editing && F.SketchId != 0) _sk.Kept = 1;
+        _sk.SketchFits = Refs.CurvesSketch;
+        if (Editing) KeepSketches(_sk, F.SketchId);
         p.Number("Толщина", () => F.Thickness, v => F.Thickness = v);
         p.Choice("Рост", Dirs, () => _dir, v => _dir = v);
         p.Note("Контур эскиза наращивается в плоскости эскиза до тела и утолщается на обе стороны.");
@@ -548,7 +551,7 @@ public sealed class AxisOp : Operation
         if (EditTarget is { } eax)
         {
             SeedFrom(RefsOfIds(eax.References), _pts, _pl, _pl2, _face, _edge);
-            foreach (var f in new[] { _pts, _pl, _pl2, _face, _edge }) if (f.Text != null) f.Text.Text = f.Summary;
+            foreach (var f in new[] { _pts, _pl, _pl2, _face, _edge }) f.Refresh();
             Panel?.Refresh(); RefreshStatus();
             return;
         }
@@ -564,7 +567,7 @@ public sealed class AxisOp : Operation
             else if (_pts.Items.Count >= 2) _by = 0;
             else if (_pl.Items.Count > 0 && (_pts.Items.Count > 0 || !DatumSeedOff)) _by = 1;
         }
-        foreach (var f in new[] { _pts, _pl, _pl2, _face, _edge }) if (f.Text != null) f.Text.Text = f.Summary;
+        foreach (var f in new[] { _pts, _pl, _pl2, _face, _edge }) f.Refresh();
         Panel?.Refresh(); Apply(); RefreshStatus();
     }
 
@@ -676,7 +679,7 @@ public sealed class PointOp : Operation
         if (EditTarget is { } ept)
         {
             SeedFrom(RefsOfIds(ept.References), _pts, _line, _edge, _pl);
-            foreach (var f in new[] { _pts, _edge, _line, _pl }) if (f.Text != null) f.Text.Text = f.Summary;
+            foreach (var f in new[] { _pts, _edge, _line, _pl }) f.Refresh();
             Panel?.Refresh(); RefreshStatus();
             return;
         }
@@ -691,7 +694,7 @@ public sealed class PointOp : Operation
             else if (_edge.Items.Count > 0 && MoreFields.CurveOf(_edge.Items[0]) is ArcCurve3) _by = 1;
             else if (_edge.Items.Count > 0) _by = 2;
         }
-        foreach (var f in new[] { _pts, _edge, _line, _pl }) if (f.Text != null) f.Text.Text = f.Summary;
+        foreach (var f in new[] { _pts, _edge, _line, _pl }) f.Refresh();
         Panel?.Refresh(); Apply(); RefreshStatus();
     }
 

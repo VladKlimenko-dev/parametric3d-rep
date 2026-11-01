@@ -47,12 +47,47 @@ public sealed class RefField
 
     internal Border? Box;
     internal TextBlock? Text;
+    /// <summary>k148 (замечание 01.11, 09:14, п. 4): отметка поля эскиза — ✓ эскиз задан и годен операции, ! — не годен.</summary>
+    internal TextBlock? Mark;
+    /// <summary>k148: правка — эскизы, записанные в операции (имена вместо «как было»), пока поле не трогали.</summary>
+    public List<Parametric3D.Model.Sketching.Sketch>? KeptSketches;
+    /// <summary>k148: годен ли эскиз этой операции (замкнутый контур у тела, кривые у траектории); null — отметки нет.</summary>
+    public Func<Parametric3D.Model.Sketching.Sketch, bool>? SketchFits { get; set; }
+    /// <summary>Эскизы поля сейчас: выбранные или записанные в операции.</summary>
+    public List<Parametric3D.Model.Sketching.Sketch> CurrentSketches =>
+        Items.Count > 0 ? Items.Select(Operations.Refs.SketchOf).OfType<Parametric3D.Model.Sketching.Sketch>().Distinct().ToList()
+        : !Touched && KeptSketches != null ? KeptSketches : new();
+    /// <summary>true — все эскизы поля годны; false — какой-то нет; null — эскизов нет (или проверка не задана).</summary>
+    public bool? Fits
+    {
+        get
+        {
+            if (SketchFits == null) return null;
+            var sk = CurrentSketches; if (sk.Count == 0) return null;
+            foreach (var s in sk) { bool ok; try { ok = SketchFits(s); } catch { ok = false; } if (!ok) return false; }
+            return true;
+        }
+    }
+    /// <summary>Обновить подпись и отметку поля.</summary>
+    public void Refresh()
+    {
+        if (Text != null) Text.Text = Summary;
+        if (Mark != null)
+        {
+            var fits = Fits;
+            Mark.IsVisible = fits != null;
+            Mark.Text = fits == true ? "✓" : "!";
+            Mark.Foreground = Box?.TryFindResource(fits == true ? "P3.Success" : "P3.Error", Box.ActualThemeVariant, out var v) == true && v is IBrush b ? b : (fits == true ? Brushes.SeaGreen : Brushes.IndianRed);
+            ToolTip.SetTip(Mark, fits == true ? L("Эскиз задан и подходит операции") : L("Эскиз не подходит операции (нет замкнутого контура или нет кривых)"));
+        }
+    }
 
     public bool IsSet => Items.Count > 0 || (!Touched && (Kept > 0 || KeptText != null));
 
     public string Summary =>
         Items.Count > 0 ? (Single ? (Describe ?? Viewport.Selection.Label)(Items[0]) : L("выбрано: {0}", Items.Count))
         : !Touched && KeptText != null ? KeptText
+        : !Touched && KeptSketches is { Count: > 0 } ks ? string.Join(", ", ks.Select(k => L("Эскиз «{0}»", k.Name)))
         : !Touched && Kept > 0 ? L("как было ({0})", Kept)
         : Optional ? L("не задано") : L("выберите в виде");
 
@@ -128,13 +163,17 @@ public sealed class OpPanel
         var dock = new DockPanel();
         DockPanel.SetDock(clear, Dock.Right);
         dock.Children.Add(clear);
+        // k148: отметка поля эскиза (✓ — задан и годен)
+        var mark = new TextBlock { FontWeight = FontWeight.Bold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 2, 0), IsVisible = false };
+        DockPanel.SetDock(mark, Dock.Right);
+        dock.Children.Add(mark);
         dock.Children.Add(text);
         var box = new Border
         {
             Child = dock, CornerRadius = new CornerRadius(5), Padding = new Thickness(8, 3, 2, 3), BorderThickness = new Thickness(1.5),
             Cursor = new Cursor(StandardCursorType.Hand), Background = Brushes.Transparent,
         };
-        f.Box = box; f.Text = text;
+        f.Box = box; f.Text = text; f.Mark = mark;
         if (f.Tip != null && !TipsOff) ToolTip.SetTip(box, L(f.Tip));
         box.PointerPressed += (_, e) => { if (f.Enabled?.Invoke() == false) return; _op.Activate(f); e.Handled = true; };
         if (f.Enabled != null) _enabled.Add((box, f.Enabled));

@@ -13,7 +13,10 @@ static partial class Program
             if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
             if (Environment.GetEnvironmentVariable("UPDEFER") == "1")
             {   // как приложение: обычный расчёт с отложенными проверками
-                using (new Parametric3D.Kernel.KernelContext(Parametric3D.Kernel.KernelSettings.Capture() with { Preview = true, LivePreview = false }).Enter()) p.Rebuild(pars);
+                int th = int.TryParse(Environment.GetEnvironmentVariable("UPTHREADS"), out var tv) && tv > 0 ? tv : 1;   // потоки, как в приложении
+                var ks = Parametric3D.Kernel.KernelSettings.Capture() with { Preview = true, LivePreview = false };
+                if (th > 1) ks = ks with { BooleanThreads = th, MeshThreads = th };
+                using (new Parametric3D.Kernel.KernelContext(ks).Enter()) p.Rebuild(pars);
             }
             else p.Rebuild(pars);
             if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; Console.Error.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report()); }

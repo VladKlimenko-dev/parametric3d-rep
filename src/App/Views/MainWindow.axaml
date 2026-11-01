@@ -208,6 +208,20 @@
                 Padding="12,8" IsVisible="False" BorderBrush="{DynamicResource P3.Error}">
           <TextBlock x:Name="ToastText" TextWrapping="Wrap" MaxWidth="640" />
         </Border>
+
+        <!-- k148 (замечание 01.11): подробности ошибок — при наведении на «Требуют внимания» в строке состояния -->
+        <Border x:Name="StatusDetails" Classes="overlay" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,12,8"
+                Padding="10,6,6,10" MaxWidth="680" MaxHeight="440" IsVisible="False" BorderBrush="{DynamicResource P3.Error}">
+          <Grid RowDefinitions="Auto,*">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock x:Name="StatusDetailsTitle" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0" />
+              <Button Grid.Column="1" x:Name="StatusDetailsClose" Content="✕" Padding="6,1" Background="Transparent" BorderThickness="0" />
+            </Grid>
+            <ScrollViewer Grid.Row="1" Margin="0,6,4,0">
+              <SelectableTextBlock x:Name="StatusDetailsText" TextWrapping="Wrap" FontSize="12" />
+            </ScrollViewer>
+          </Grid>
+        </Border>
       </Grid>
 
       <!-- правая панель: свойства или параметры операции -->

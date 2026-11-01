@@ -97,7 +97,7 @@ public static class ContextCommands
         switch (w.CurrentOperation?.EditedFeature)
         {
             case ExtrudeFeature e: e.Side1.Flip = !e.Side1.Flip; break;
-            case HelicalSweepFeature h: h.LeftHand = !h.LeftHand; break;
+            case HelicalSweepFeature h: h.FlipDirection = !h.FlipDirection; break;   // k148: «Перевернуть направление» — винт вдоль оси в другую сторону (рука — своим флажком)
             case RevolveFeature rv: rv.EndAngle = new ValueRef(-rv.EndAngle.Value) { Formula = rv.EndAngle.Formula == null ? null : $"-({rv.EndAngle.Formula})" }; break;
         }
         After(w);

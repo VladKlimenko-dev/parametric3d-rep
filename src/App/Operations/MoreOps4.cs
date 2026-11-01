@@ -47,7 +47,8 @@ public sealed class SurfaceOp : FeatureOp<SurfaceFeature>
             return;
         }
         _sk = p.Ref(QuiltFields.Sketch(StartMode == SurfaceKind.Fill ? "Замкнутый эскиз" : "Эскиз (цепочка кривых)"));
-        if (Editing && F.SketchId != 0) _sk.Kept = 1;
+        _sk.SketchFits = StartMode == SurfaceKind.Fill ? Refs.ClosedSketch : Refs.CurvesSketch;
+        if (Editing) KeepSketches(_sk, F.SketchId);
         _faces = new RefField { Label = "", Optional = true };
         if (StartMode == SurfaceKind.Revolve)
         {
@@ -166,9 +167,11 @@ public sealed class BlendOp : FeatureOp<BlendFeature>
     public override void Build(OpPanel p)
     {
         _secs = p.Ref(new RefField { Label = "Сечения по порядку", Filter = PickFilter.SketchCurves, Accept = Refs.IsSketch, Describe = r => L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?") });
-        if (Editing) _secs.Kept = F.SectionSketchIds.Count;
+        _secs.SketchFits = Refs.CurvesSketch;
+        if (Editing) KeepSketches(_secs, F.SectionSketchIds.ToArray());
         _path = StartMode == BlendKind.Swept ? p.Ref(QuiltFields.Sketch("Траектория")) : new RefField { Label = "", Optional = true };
-        if (Editing && F.PathSketchId != 0) _path.Kept = 1;
+        if (StartMode == BlendKind.Swept) _path.SketchFits = Refs.CurvesSketch;
+        if (Editing) KeepSketches(_path, F.PathSketchId);
         _axis = StartMode == BlendKind.Rotational ? p.Ref(new RefField { Label = "Ось (отрезок эскиза)", Filter = PickFilter.SketchCurves, Accept = r => r.Target is SkLine, Single = true, Optional = true }) : new RefField { Label = "", Optional = true };
         p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
         p.Check("Поверхность (без торцов)", () => F.AsSurface, v => F.AsSurface = v);

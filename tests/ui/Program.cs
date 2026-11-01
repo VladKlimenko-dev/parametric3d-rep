@@ -728,6 +728,25 @@ if (only == "probe-load")
     return 0;
 }
 
+if (only == "probe-openfile")
+{
+    // разбор (k148): открыть файл, как приложение (окно, перестроение, отложенная проверка), — все ошибки и строки панели подробностей
+    var ses = DocumentSession.Open(args[1]);
+    var w = Open(ses);
+    var t0 = DateTime.Now;
+    while ((DateTime.Now - t0).TotalSeconds < 600)
+    {
+        BuildNow(ses);
+        for (int i = 0; i < 50; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(20); }
+        if (!ses.Document.IsBuilding && !ses.Document.IsVerifying && !ses.Document.AllParts().Any(p => p.IsDirty)) break;
+    }
+    w.UpdateStatus(); Dispatcher.UIThread.RunJobs();
+    Console.WriteLine($"PROBE status: {w.FindControl<TextBlock>("StatusBuild")!.Text}");
+    foreach (var l in w.StatusDetailsLines()) Console.WriteLine("PROBE " + l);
+    foreach (var p in ses.Document.AllParts()) Console.WriteLine($"PROBE part {p.Name}: bodies {p.Bodies.Count}, guarantee {string.Join(",", p.Bodies.Select(b => b.Guarantee))}, volume {p.Volume:0.###}, integrity {p.Integrity}");
+    return 0;
+}
+
 if (only == "probe-ffround")
 {
     // 17:31: FreeForm цилиндр ∪ шар, скругление / фаска ребра пересечения и верхней кромки — время шагов
@@ -7628,6 +7647,66 @@ Check("BENCH-FUZZ", () =>
     }
     Console.WriteLine($"  trials {trials}: total {sumMs:0} ms, fails {fails}, slow {slowN}, contour mismatches {mism}");
     foreach (var kv in classes.OrderByDescending(x => x.Value.Ms)) Console.WriteLine($"   {kv.Value.N,4} {kv.Value.Ms,8:0} ms fail {kv.Value.Fail,3}  {kv.Key}\n        e.g. {kv.Value.Ex}");
+});
+
+// k148 (замечание 01.11, 08:51): наведение на «Требуют внимания» в строке состояния — панель со всеми проблемами (путь в дереве,
+// полный текст ошибки), ✕ закрывает
+Check("UI-STATUS-DETAILS", () =>
+{
+    var w = Open(DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(7, 40), "status"));
+    var feat = w.ViewPort.Document!.Root.Descendants().OfType<Feature>().Last();
+    feat.Error = "Circular pattern: copy 2 of «Extrude» failed — test detail\nsecond line of the detail";
+    w.UpdateStatus(); Dispatcher.UIThread.RunJobs();
+    var sb = w.FindControl<TextBlock>("StatusBuild")!; var panel = w.FindControl<Border>("StatusDetails")!;
+    Require(sb.Text?.StartsWith("!") == true, $"status text {sb.Text}");
+    Require(!panel.IsVisible, "details shown before hover");
+    w.MouseMove(new Point(2, 2)); Dispatcher.UIThread.RunJobs();
+    var c = sb.TranslatePoint(new Point(sb.Bounds.Width / 2, sb.Bounds.Height / 2), w)!.Value;
+    w.MouseMove(c); Dispatcher.UIThread.RunJobs();
+    Require(panel.IsVisible, "details not shown on hover");
+    var txt = w.FindControl<SelectableTextBlock>("StatusDetailsText")!.Text ?? "";
+    Require(txt.Contains(feat.Name) && txt.Contains("test detail") && txt.Contains("second line"), $"details text: {txt}");
+    var x = w.FindControl<Button>("StatusDetailsClose")!;
+    var cx = x.TranslatePoint(new Point(x.Bounds.Width / 2, x.Bounds.Height / 2), w)!.Value;
+    w.MouseMove(cx); w.MouseDown(cx, MouseButton.Left); w.MouseUp(cx, MouseButton.Left); Dispatcher.UIThread.RunJobs();
+    Require(!panel.IsVisible, "✕ did not close the details");
+    w.Close();
+});
+
+// k148 (замечание 01.11, 09:14): винтовая протяжка — правка готовой операции: поле сечения с именем эскиза (не «как было») и
+// отметкой ✓; «Обратное направление»; две ручки в виде (шаг у начала, витки у конца) — тянут — величины меняются; файл
+// пользователя с осью Axis1 открывается без «no axis» (номер оси в файле)
+Check("UI-HELIX-EDIT", () =>
+{
+    var dir = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "tests", "ui", "data");
+    string path = Environment.GetEnvironmentVariable("P3D_USERMODELS") is { Length: > 0 } um ? Path.Combine(um, "HelSweep.p3d") : Path.Combine(dir, "HelSweep.p3d");
+    Require(File.Exists(path), "HelSweep.p3d not found: " + path);
+    var s = DocumentSession.Open(path);
+    var w = Open(s); BuildNow(s);
+    var part = s.Part!;
+    var hf = part.Features.OfType<HelicalSweepFeature>().Single();
+    Require(hf.Error == null, "helical sweep error after open: " + hf.Error);
+    w.StartOperation(OperationFactory.ForEdit(hf)!); BuildNow(s); Dispatcher.UIThread.RunJobs();
+    var op = w.CurrentOperation!;
+    var sec = op.Panel!.Refs[0];
+    Require(sec.Text?.Text?.Contains("Sketch2") == true, $"section field: «{sec.Text?.Text}» (sketch name expected)");
+    Require(sec.Mark?.IsVisible == true && sec.Mark.Text == "✓", $"section mark: visible {sec.Mark?.IsVisible}, «{sec.Mark?.Text}»");
+    // ручки: две; шаг — тянут на 5 мм дальше — шаг 25; витки — вдоль оси на шаг — виток больше
+    var mh = w.ViewPort.MultiHandles;
+    Require(mh != null && mh.Count == 2, $"helix handles: {mh?.Count}");
+    double p0 = hf.Pitch.Value, t0 = hf.Turns.Value;
+    w.ViewPort.SimulateMultiDrag(0, p0 + 5); BuildNow(s);
+    Require(Math.Abs(hf.Pitch.Value - (p0 + 5)) < 1e-9, $"pitch after the handle: {hf.Pitch.Value}");
+    w.ViewPort.SimulateMultiDrag(1, hf.Pitch.Value); BuildNow(s);
+    Require(Math.Abs(hf.Turns.Value - (t0 + 1)) < 1e-9, $"turns after the handle: {hf.Turns.Value}");
+    Require(hf.Error == null, "helical sweep error after the handles: " + hf.Error);
+    // «Обратное направление» — флажок панели
+    bool f0 = hf.FlipDirection;
+    var flip = op.Panel!.Checks.TryGetValue("Обратное направление", out var cb) ? cb : null;
+    Require(flip != null, "no «Flip direction» check box");
+    ((CheckBox)flip!).IsChecked = !f0; Dispatcher.UIThread.RunJobs(); BuildNow(s);
+    Require(hf.FlipDirection != f0, "flip direction did not change");
+    w.CancelOperation(); w.Close();
 });
 
 if (Environment.GetEnvironmentVariable("P3D_BENCH") == "edge")

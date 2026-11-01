@@ -56,6 +56,10 @@ public partial class MainWindow
     private TextBlock StatusMode = null!;
     private TextBlock StatusSel = null!;
     private TextBlock StatusBuild = null!;
+    private Border StatusDetails = null!;
+    private TextBlock StatusDetailsTitle = null!;
+    private SelectableTextBlock StatusDetailsText = null!;
+    private Button StatusDetailsClose = null!;
     private ProgressBar StatusProgress = null!;
     private TextBlock StatusUnits = null!;
     private TextBlock StatusGl = null!;
@@ -123,6 +127,10 @@ public partial class MainWindow
         StatusProgress = this.FindControl<ProgressBar>("StatusProgress")!;
         StatusUnits = this.FindControl<TextBlock>("StatusUnits")!;
         StatusGl = this.FindControl<TextBlock>("StatusGl")!;
+        StatusDetails = this.FindControl<Border>("StatusDetails")!;
+        StatusDetailsTitle = this.FindControl<TextBlock>("StatusDetailsTitle")!;
+        StatusDetailsText = this.FindControl<SelectableTextBlock>("StatusDetailsText")!;
+        StatusDetailsClose = this.FindControl<Button>("StatusDetailsClose")!;
         PaletteShade = this.FindControl<Border>("PaletteShade")!;
         PaletteBox = this.FindControl<Border>("PaletteBox")!;
         PaletteInput = this.FindControl<TextBox>("PaletteInput")!;

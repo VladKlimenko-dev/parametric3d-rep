@@ -41,7 +41,7 @@ public sealed class CsysOp : Operation
     {
         Seed(_pt, _pl, _x);
         if (_pl.Items.Count >= 3) _by = 2; else if (_pl.Items.Count > 0) _by = 1;
-        foreach (var f in new[] { _pt, _pl, _x }) if (f.Text != null) f.Text.Text = f.Summary;
+        foreach (var f in new[] { _pt, _pl, _x }) f.Refresh();
         Panel?.Refresh(); Apply(); RefreshStatus();
     }
 
@@ -189,7 +189,7 @@ public sealed class CurveOp : Operation
     {
         if (EditTarget != null) { }   // правка: выбор до команды — не ссылки кривой
         else if (Mode == 0) Seed(_pts); else if (Mode == 2) Seed(_src, _faces, _dir);
-        foreach (var f in new[] { _pts, _src, _faces, _dir }) if (f.Text != null) f.Text.Text = f.Summary;
+        foreach (var f in new[] { _pts, _src, _faces, _dir }) f.Refresh();
         Panel?.Refresh(); Apply(); RefreshStatus();
     }
 

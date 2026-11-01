@@ -231,6 +231,19 @@ public sealed class HelicalSweepFeature : Feature
     public ValueRef Pitch = new(5);
     public ValueRef Turns = new(3);
     public bool LeftHand;
+    /// <summary>k148: винт идёт вдоль оси в обратную сторону («Flip Direction»).</summary>
+    public bool FlipDirection;
+    /// <summary>k148: геометрия последнего построения (для ручек вида): центр сечения, ось (точка, направление винта).</summary>
+    public Vector3d? LastCentre; public Vector3d LastAxisOrigin, LastAxisDir;
+    /// <summary>k148: точка винта центра сечения после k витков при шаге pitch (null — операция ещё не строилась).</summary>
+    public Vector3d? CentreAt(double pitch, double k)
+    {
+        if (LastCentre is not { } c) return null;
+        var a = LastAxisDir; double th = (LeftHand ? -1 : 1) * 2 * Math.PI * k;
+        var d = c - LastAxisOrigin; double cs = Math.Cos(th), sn = Math.Sin(th);
+        var r = d * cs + Vector3d.Cross(a, d) * sn + a * (Vector3d.Dot(a, d) * (1 - cs));
+        return LastAxisOrigin + r + a * (pitch * k);
+    }
     /// <summary>Точек ломаной винтовой линии на виток.</summary>
     public int StepsPerTurn = 72;
 
@@ -282,8 +295,13 @@ public sealed class HelicalSweepFeature : Feature
         var shifted = new Profile { Plane = new Frame3(centre, profile.Plane.U, profile.Plane.V) };
         foreach (var l in profile.Loops) shifted.Loops.Add(l);
         var ax = axis.Value;
-        var pts = Helix(centre, ax.Origin, ax.W, pitch, turns, LeftHand, StepsPerTurn);
-        var solid = SweepOp.Build(shifted, new PolylineCurve3(pts));
+        // k148: «Flip Direction» — винт идёт вдоль оси в обратную сторону (рука витка та же)
+        var aw = FlipDirection ? -ax.W : ax.W;
+        var foot = ax.Origin + ax.W * Vector3d.Dot(centre - ax.Origin, ax.W);
+        if ((centre - foot).Length < Tol.Weld) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Helical sweep: the section centre lies on the axis.");
+        LastCentre = centre; LastAxisOrigin = ax.Origin; LastAxisDir = aw.Normalized();
+        var solid = SweepOp.BuildHelical(shifted, ax.Origin, aw, pitch, turns, LeftHand, StepsPerTurn,
+            pts => SweepOp.Build(shifted, new PolylineCurve3(pts)));
         if (Cut) BooleanOp.Subtract(ctx.Bodies, solid, ctx.Warnings);
         else BooleanOp.Unite(ctx.Bodies, solid, ctx.Warnings);
     }
