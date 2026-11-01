@@ -5,6 +5,7 @@
 
 | Версия | Дата | Коммит | Архив | Что сделано |
 |---|---|---|---|---|
+| k148 | 2026-11-01 | [`f9910ca`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/f9910ca) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/f9910ca.zip) | винтовая протяжка винтовым движением, ручки шага и витков, имена эскизов в полях, подробности ошибок, стык скругления у выпуклого излома шва |
 | k147 | 2026-11-01 | [`cc11d7e`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/cc11d7e) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/cc11d7e.zip) | ядро «как в Parasolid» — допуски на рёбрах, нетронутые грани, стыки фасок у наклонного шва |
 | k146 | 2026-10-31 | [`dfdaf48`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/dfdaf48) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/dfdaf48.zip) | фаски «как в Parasolid» — стыки касательных цепочек фасок, прямые рёбра в пути кривых фасок, ленты SectionSurface в каскаде |
 | k145 | 2026-10-31 | [`7152440`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/7152440) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/7152440.zip) | касательные цепочки скруглений прямым построителем — стык лент на гладком шве |
