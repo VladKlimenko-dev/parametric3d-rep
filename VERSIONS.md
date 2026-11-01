@@ -5,6 +5,7 @@
 
 | Версия | Дата | Коммит | Архив | Что сделано |
 |---|---|---|---|---|
+| k148c | 2026-11-01 | [`1129547`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/1129547) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/1129547.zip) | предпросмотр без поломанных тел (MeshCut и резец скругления — только замкнутая сетка), плоскость × цилиндр по допускам точности модели (массив PART-01) |
 | k148b | 2026-11-01 | [`ca24f11`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/ca24f11) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/ca24f11.zip) | run.ps1 — клон ищется и в «Документы» OneDrive, и в папке профиляDocuments |
 | k148a | 2026-11-01 | [`a9ef0d1`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/a9ef0d1) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/a9ef0d1.zip) | run.ps1 — если папка скрипта не клон репозитория, работать с клоном в «Документыparametric3d-rep» (или скачать его) |
 | k148 | 2026-11-01 | [`f9910ca`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/f9910ca) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/f9910ca.zip) | винтовая протяжка винтовым движением, ручки шага и витков, имена эскизов в полях, подробности ошибок, стык скругления у выпуклого излома шва |
