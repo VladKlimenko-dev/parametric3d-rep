@@ -5,6 +5,7 @@
 
 | Версия | Дата | Коммит | Архив | Что сделано |
 |---|---|---|---|---|
+| k149a | 2026-11-03 | [`9b78533`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/9b78533) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/9b78533.zip) | STEP с несколькими деталями — сборка из компонентов 6 DOF; маркер переноса и поворота; все соединения на панели, значки ограничений, доступность по выбору; активный элемент жирным, «Активировать»; подсветка детали сборки |
 | k149 | 2026-11-03 | [`41fe741`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/41fe741) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/41fe741.zip) | импорт STEP-сборки — детали отдельными узлами FreeForm; отчёт в окне с прокруткой; серые значки неактивных кнопок; угол у шва, гладкого только в вершине, — точно (s106, Sweep_Blend R2.07) |
 | k148h | 2026-11-03 | [`754dde2`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/754dde2) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/754dde2.zip) | угол цепочки скруглений у шва с вогнутым изломом — точно, по умолчанию (скос по пересечению лент, как OCCT/SMLib); корпус seq: точных 23 |
 | k148g | 2026-11-03 | [`6e700ab`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/6e700ab) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/6e700ab.zip) | импорт STEP/IGES — операцией «Импорт» в дереве (прежде открывалась пустая деталь); угол цепочки скруглений у шва — скос у обоих концов звена (под флагом) |
