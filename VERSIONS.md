@@ -5,6 +5,7 @@
 
 | Версия | Дата | Коммит | Архив | Что сделано |
 |---|---|---|---|---|
+| k148f | 2026-11-02 | [`952ed0a`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/952ed0a) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/952ed0a.zip) | угол цепочки скруглений у шва с изломом — разбор по OCCT и SMLib, скос по пересечению лент (под флагом); реестр решений других ядер |
 | k148e | 2026-11-02 | [`2ef3322`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/2ef3322) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/2ef3322.zip) | скругления у прежних фасок — точно (Sweep_Blend R5.55; корпус seq: точных 21 из 60, было 14), диапазоны граней сетки после чистки, стенка отверстия по точкам рёбер (UI-REORDER-K104) |
 | k148d | 2026-11-02 | [`4f50519`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/4f50519) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/4f50519.zip) | почти касание — одно событие в вершине касания (массив PART-01 при шуме оси: 33 сдвига — отказов 0, точных 27), причина отказа точного пути в ошибке фаски (Sweep_Blend: смена выпуклости) |
 | k148c | 2026-11-01 | [`1129547`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/1129547) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/1129547.zip) | предпросмотр без поломанных тел (MeshCut и резец скругления — только замкнутая сетка), плоскость × цилиндр по допускам точности модели (массив PART-01) |
