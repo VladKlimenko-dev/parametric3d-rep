@@ -170,8 +170,45 @@ public sealed class DocumentSession
         return part;
     }
 
+    /// <summary>
+    /// k149 (замечания 03.11, 08:17–08:19): ФАЙЛ С НЕСКОЛЬКИМИ ДЕТАЛЯМИ — СБОРКА. Каждая деталь файла (замкнутая оболочка,
+    /// имя — изделие STEP) — компонент сборки: в нём операция «Импорт» с телом только этой детали и узел FreeForm для правки;
+    /// у компонента — связь «шесть степеней свободы» (6 DOF: тип соединения в файле не задан), он не зафиксирован — его можно
+    /// двигать и вращать. Положение — как в файле. Файл с одной деталью — документ детали, как прежде. P3D_IMPORTASM=0 —
+    /// всегда документ детали.
+    /// </summary>
+    public static DocumentSession? ImportAssembly(string path, List<string> warnings)
+    {
+        if (Environment.GetEnvironmentVariable("P3D_IMPORTASM") == "0") return null;
+        string text = File.ReadAllText(path);
+        var read = Exchange.Read(text, out var fmt, warnings) ?? throw new InvalidDataException(string.Join("\n", warnings));
+        var bodies = Parametric3D.Model.Features.InsertBodyFeature.Separated(read.Bodies.ToList(), read.BodyNameList, out var names);
+        if (bodies.Count < 2) return null;
+        string file = Path.GetFileName(path);
+        var doc = new Document(Path.GetFileNameWithoutExtension(path));
+        var s = new DocumentSession(doc, null) { IsAssembly = true, Modified = true };
+        for (int i = 0; i < bodies.Count; i++)
+        {
+            var one = new Part(names[i]); one.Bodies.Add(bodies[i]);
+            string step;
+            try { step = Exchange.Write(one, Exchange.Format.Step, warnings); }
+            catch (Exception ex) { warnings.Add($"{names[i]}: {ex.Message}"); continue; }
+            var comp = new Part(names[i]);
+            var imp = new Parametric3D.Model.Features.InsertBodyFeature(Loc.L("Импорт «{0}»", file)) { Step = step, SourceName = file, Separate = true };
+            imp.Prime(new List<Kernel.Topology.TSolid> { bodies[i] }, new[] { names[i] });
+            comp.AddFeature(imp);
+            foreach (var nm in imp.PartNames(warnings))
+                comp.AddFeature(new Parametric3D.Model.Features.FreeFormFeature(nm) { ImportOf = imp.Key, FFBody = nm });
+            comp.Mates.Add(new Parametric3D.Model.Mates.Mate(Parametric3D.Model.Mates.MateType.Free, Loc.L("Шесть степеней")));
+            doc.Root.Add(comp);
+        }
+        if (doc.Root.Children.OfType<Part>().Count() < 2) return null;
+        return s;
+    }
+
     public static DocumentSession Import(string path, List<string> warnings)
     {
+        if (ImportAssembly(path, warnings) is { } asm) return asm;
         var part = ImportPart(path, warnings);
         var doc = new Document(part.Name);
         doc.Root.Add(part);

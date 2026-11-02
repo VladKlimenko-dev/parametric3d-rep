@@ -154,6 +154,7 @@ public static class DocumentFile
             Stage = part.InInsertMode ? part.StageIndex : null,
             Datums = SaveDatums(part),
             FreeForm = part.FreeFormDoc, MergeFreeForm = part.MergeFreeForm,
+            HiddenBodies = part.HiddenBodies.Count > 0 ? part.HiddenBodies.OrderBy(x => x, StringComparer.Ordinal).ToList() : null,
             ConstructionPlane = part.ConstructionPlane.Origin == Vector3d.Zero && part.ConstructionPlane.W == Vector3d.UnitZ && part.ConstructionPlane.U == Vector3d.UnitX ? null
                 : new[] { part.ConstructionPlane.Origin.X, part.ConstructionPlane.Origin.Y, part.ConstructionPlane.Origin.Z, part.ConstructionPlane.U.X, part.ConstructionPlane.U.Y, part.ConstructionPlane.U.Z, part.ConstructionPlane.V.X, part.ConstructionPlane.V.Y, part.ConstructionPlane.V.Z },
 
@@ -916,6 +917,7 @@ public static class DocumentFile
         }
         LoadDatums(part, doc.Datums);
         part.FreeFormDoc = doc.FreeForm; part.MergeFreeForm = doc.MergeFreeForm;
+        if (doc.HiddenBodies != null) foreach (var hb in doc.HiddenBodies) part.HiddenBodies.Add(hb);
         if (doc.ConstructionPlane is { Length: 9 } cpl)
             try { part.ConstructionPlane = new Frame3(new Vector3d(cpl[0], cpl[1], cpl[2]), new Vector3d(cpl[3], cpl[4], cpl[5]), new Vector3d(cpl[6], cpl[7], cpl[8])); } catch { }
         var sketchById = new Dictionary<uint, Sketch>();
@@ -1570,6 +1572,8 @@ public static class DocumentFile
         /// <summary>u13h: документ — FreeForm-тело; объединять тела при встраивании; плоскость построения (9 чисел).</summary>
         public bool FreeForm { get; set; }
         public bool MergeFreeForm { get; set; }
+        /// <summary>k149: скрытые тела детали (по именам; детали импортированной сборки).</summary>
+        public List<string>? HiddenBodies { get; set; }
         public double[]? ConstructionPlane { get; set; }
         /// <summary>Строка отката (режим вставки): сколько операций в расчёте; нет — в конце.</summary>
         public int? Stage { get; set; }

@@ -6,10 +6,11 @@ using Parametric3D.Render.Engine;
 namespace Parametric3D.App.Viewport;
 
 /// <summary>MoveRotate (k103, ручки сечения): стрелка вдоль Z — перенос, кольца вокруг X и Y — поворот.</summary>
-public enum GizmoMode { Move, Rotate, Scale, MoveRotate }
+/// k149: Full — перенос (стрелки, плоскости, центр) и поворот (кольца RingX/Y/Z) вместе: компонент сборки с 6 DOF.
+public enum GizmoMode { Move, Rotate, Scale, MoveRotate, Full }
 
 /// <summary>Часть гизмо: ось (0–2), плоскость поперёк оси (3–5: YZ, XZ, XY), угол / центр (6 — пропорционально, свободно).</summary>
-public enum GizmoPart { None = -1, AxisX = 0, AxisY = 1, AxisZ = 2, PlaneYZ = 3, PlaneXZ = 4, PlaneXY = 5, Uniform = 6 }
+public enum GizmoPart { None = -1, AxisX = 0, AxisY = 1, AxisZ = 2, PlaneYZ = 3, PlaneXZ = 4, PlaneXY = 5, Uniform = 6, RingX = 7, RingY = 8, RingZ = 9 }
 
 /// <summary>Гизмо: вид, начало, оси рамки (единичные, взаимно перпендикулярные).</summary>
 public sealed record GizmoSpec(GizmoMode Mode, Vector3d Origin, Vector3d X, Vector3d Y, Vector3d Z)
@@ -60,7 +61,9 @@ public sealed partial class ModelViewport
     private static Vector3 F(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
     private Vector3d GzAxis(GizmoSpec g, int i) => i == 0 ? g.X : i == 1 ? g.Y : g.Z;
     /// <summary>Часть — кольцо поворота (у Rotate — все оси, у MoveRotate — X и Y).</summary>
-    private static bool GzRot(GizmoSpec g, GizmoPart part) => g.Mode == GizmoMode.Rotate || g.Mode == GizmoMode.MoveRotate && part is GizmoPart.AxisX or GizmoPart.AxisY;
+    private static bool GzRot(GizmoSpec g, GizmoPart part) => part is GizmoPart.RingX or GizmoPart.RingY or GizmoPart.RingZ || g.Mode == GizmoMode.Rotate || g.Mode == GizmoMode.MoveRotate && part is GizmoPart.AxisX or GizmoPart.AxisY;
+    /// <summary>Ось кольца (у Full — RingX…RingZ, иначе — номер оси).</summary>
+    private static int GzRotAxis(GizmoPart part) => part >= GizmoPart.RingX ? (int)part - 7 : (int)part;
     /// <summary>Часть есть у гизмо (MoveRotate: кольца X, Y и стрелка Z).</summary>
     private static bool GzHas(GizmoSpec g, GizmoPart part) => g.Has(part) && (g.Mode != GizmoMode.MoveRotate || part is GizmoPart.AxisX or GizmoPart.AxisY or GizmoPart.AxisZ);
 
@@ -148,6 +151,23 @@ public sealed partial class ModelViewport
             var q = GzPlaneQuad(g, k).Select(w => ToScreen(F(w))).ToArray();
             if (q.All(x => x != null) && InQuad(p, q.Select(x => x!.Value).ToArray())) return (GizmoPart)(3 + k);
         }
+        // k149: кольца поворота (Full)
+        if (g.Mode == GizmoMode.Full)
+        {
+            GizmoPart bestR = GizmoPart.None; double bdR = 6;
+            for (int k = 0; k < 3; k++)
+            {
+                if (!g.Has((GizmoPart)(7 + k))) continue;
+                Point? prev = null;
+                foreach (var w in GzRing(g, k))
+                {
+                    if (ToScreen(F(w)) is not { } s) { prev = null; continue; }
+                    if (prev is { } pv) { double d = SegDist(p, pv, s); if (d < bdR) { bdR = d; bestR = (GizmoPart)(7 + k); } }
+                    prev = s;
+                }
+            }
+            if (bestR != GizmoPart.None) return bestR;
+        }
         // стержни осей
         GizmoPart ba = GizmoPart.None; double bdist = 6;
         for (int i = 0; i < 3; i++)
@@ -200,7 +220,7 @@ public sealed partial class ModelViewport
             var ax = new Vector2((float)(b.X - a.X), (float)(b.Y - a.Y));
             if (ax.Length > 1e-3f) { _gzWorldPerPx = L / ax.Length; _gzAxis = ax / ax.Length; }
         }
-        if (!GzRot(g, part) && (part >= GizmoPart.PlaneYZ && part <= GizmoPart.PlaneXY || part == GizmoPart.Uniform && g.Mode == GizmoMode.Move))
+        if (!GzRot(g, part) && (part >= GizmoPart.PlaneYZ && part <= GizmoPart.PlaneXY || part == GizmoPart.Uniform && g.Mode is GizmoMode.Move or GizmoMode.Full))
             RayPlane(p, g.Origin, GzPlaneNormal(g, part), out _gzPlaneStart);
         _overlayDirty = true; Redraw();
     }
@@ -218,7 +238,7 @@ public sealed partial class ModelViewport
             while (da > 180) da -= 360;
             while (da < -180) da += 360;
             var f = Camera.Forward;
-            var ax = GzAxis(g, (int)part);
+            var ax = GzAxis(g, GzRotAxis(part));
             // ось смотрит на зрителя — поворот против часовой на экране положительный
             double toward = -Vector3d.Dot(ax, new Vector3d(f.X, f.Y, f.Z));
             if (toward < 0) da = -da;
@@ -313,7 +333,7 @@ public sealed partial class ModelViewport
             var c = C((GizmoPart)i, cols[i]);
             var tip = o + ax * L;
             lines.Add(Inst(o + ax * (0.15f * L), tip, c, on == (GizmoPart)i ? 3.2f : 2.4f, 0));
-            if (g.Mode == GizmoMode.Move)
+            if (g.Mode is GizmoMode.Move or GizmoMode.Full)
             {
                 var side = Vector3.Cross(ax, view);
                 if (side.LengthSquared < 1e-8f) side = Vector3.Cross(ax, Vector3.UnitY);
@@ -335,6 +355,15 @@ public sealed partial class ModelViewport
             // заливка — диагонали (лёгкая штриховка), чтобы квадрат читался как площадка
             lines.Add(Inst(F(q[0]), F(q[2]), c, 1f, 4));
         }
+        if (g.Mode == GizmoMode.Full)
+            for (int k = 0; k < 3; k++)
+            {
+                var rp = (GizmoPart)(7 + k);
+                if (!g.Has(rp)) continue;
+                var ring = GzRing(g, k);
+                var c = C(rp, cols[k]);
+                for (int i = 0; i + 1 < ring.Count; i++) lines.Add(Inst(F(ring[i]), F(ring[i + 1]), c, on == rp ? 3f : 1.8f, 0));
+            }
         var white = new Vector4(0.92f, 0.93f, 0.95f, 1);
         if (g.Mode == GizmoMode.Scale)
         {

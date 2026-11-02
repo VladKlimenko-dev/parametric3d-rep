@@ -1,4 +1,4 @@
-using Parametric3D.App.Operations;
+﻿using Parametric3D.App.Operations;
 using Parametric3D.App.Services;
 using Parametric3D.App.Views;
 using Parametric3D.Kernel;
@@ -187,12 +187,23 @@ public static class FreeFormCommands
         _savedStage = part.StageIndex;
         if (last >= 0 && last < part.Features.Count - 1) part.StageIndex = part.ClampStage(last + 1);
         part.Invalidate();
+        // k149 (замечание 03.11, 08:06, п. 1): сетка плоскости построения больше не включается сама при входе в FreeForm —
+        // только командой «Сетка» (вид); при входе она лишь ставится на плоскость построения. Мутация P3D_FFGRID=1 — прежнее.
         _savedGrid = w.ViewPort.ModelGrid;
         w.ViewPort.GridFrame = part.ConstructionPlane;
-        w.ViewPort.ModelGrid = true;
+        if (Environment.GetEnvironmentVariable("P3D_FFGRID") == "1") w.ViewPort.ModelGrid = true;
+        // k149 (п. 2): деталь импортированной сборки правится ОТДЕЛЬНО — прочие тела детали скрыты, пока узел открыт
+        _savedHidden = null;
+        if (node is { ImportOf: not null, FFBody: { } own })
+        {
+            _savedHidden = part.HiddenBodies.ToList();
+            part.HiddenBodies.Clear();
+            for (int bi = 0; bi < part.Bodies.Count; bi++) if (part.BodyName(bi) != own) part.HiddenBodies.Add(part.BodyName(bi));
+        }
         if (rebuildUi) { w.RebuildUi(); w.RebuildTree(); w.UpdateCages(); w.ViewPort.MarkDirty(); }
     }
     private static int _savedStage = -1;
+    private static List<string>? _savedHidden;
     private static bool _savedGrid;
 
     /// <summary>«Готово»: узел FreeForm закрыт — в параметрической детали его тела объединяются, строка отката — как была.</summary>
@@ -202,6 +213,7 @@ public static class FreeFormCommands
         if (w.CurrentOperation != null) w.CommitOperation();
         part.EditingFreeForm = null;
         w.FreeFormKey = null;
+        if (_savedHidden != null) { part.HiddenBodies.Clear(); foreach (var h in _savedHidden) part.HiddenBodies.Add(h); _savedHidden = null; }
         if (!part.FreeFormDoc) part.StageIndex = _savedStage < 0 ? -1 : part.ClampStage(_savedStage);
         part.Invalidate();
         w.ViewPort.ModelGrid = _savedGrid;

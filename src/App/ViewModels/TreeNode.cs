@@ -21,6 +21,11 @@ public sealed partial class TreeNode : ObservableObject
     [ObservableProperty] private string _name = "";
     [ObservableProperty] private bool _isExpanded = true;
     [ObservableProperty] private bool _isVisible = true;
+    /// <summary>k149 (замечание 03.11, 08:12): активный элемент (сборка, деталь или узел FreeForm, который сейчас правится) —
+    /// имя жирным.</summary>
+    [ObservableProperty] private bool _isActive;
+    /// <summary>k149 (замечание 03.11, 08:09): элемент под курсором на виде — строка подсвечена.</summary>
+    [ObservableProperty] private bool _isHot;
 
     public string? Error { get; private set; }
     public bool HasError => Error != null;
@@ -86,9 +91,12 @@ public sealed partial class TreeNode : ObservableObject
         _name = item.Name;
         _summary = item is Feature f ? f.Summary : null;
         _isVisible = item.Visible;
+        _part = part;
+        // k149: деталь импортированной сборки — глаз скрывает её тело (Part.HiddenBodies)
+        if (item is FreeFormFeature { ImportOf: not null, FFBody: { } hb } && part != null) _isVisible = !part.HiddenBodies.Contains(hb);
         Error = item.Error;
         IsDim = item.Suppressed || (item is Feature fe && part != null && part.IsBeyondStage(fe));
-        HasEye = item is not Feature and not InfoItem;
+        HasEye = item is not Feature and not InfoItem || item is FreeFormFeature { ImportOf: not null };
         _iconFile = IconOf(item);
         Glyph = IconProvider.Abbrev(KindLabel(item));
         (_stateFile, _stateGlyph, _stateTip) = StateOf(item, part);
@@ -125,8 +133,17 @@ public sealed partial class TreeNode : ObservableObject
         return ("", "", "");
     }
 
+    private readonly Part? _part;
+
     partial void OnIsVisibleChanged(bool value)
     {
+        if (Item is FreeFormFeature { ImportOf: not null, FFBody: { } hb } && _part != null)
+        {
+            if (value == !_part.HiddenBodies.Contains(hb)) return;
+            if (value) _part.HiddenBodies.Remove(hb); else _part.HiddenBodies.Add(hb);
+            if (!_cascading) VisibilityToggled?.Invoke(this);
+            return;
+        }
         if (Item.Visible == value) return;
         Item.Visible = value;
         Item.VisibleUserSet = true;

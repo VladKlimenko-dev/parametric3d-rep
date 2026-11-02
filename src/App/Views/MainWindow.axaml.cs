@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -736,8 +736,9 @@ public partial class MainWindow : Window
             {
                 (new[] { "as.insert_component", "as.create_component", "as.edit_in_context" }, new[] { "as.insert_freeform", "as.skeleton", "as.open_component", "as.replace", "file.insert_part" }),
                 (new[] { "mate.coincident", "mate.concentric", "mate.distance" }, new[] { "mate.angle", "mate.parallel", "mate.perpendicular", "mate.tangent", "mate.insert", "mate.point_on", "mate.rigid", "as.flip" }),
-                (new[] { "joint.fixed", "joint.pin", "joint.slider" }, new[] { "joint.cylindrical", "joint.bearing", "joint.planar", "joint.ball", "joint.slot", "joint.weld", "joint.gimbal" }),
-                (new[] { "as.fix", "as.drag" }, new[] { "as.pattern", "as.pattern_ref", "as.mirror", "as.subassembly" }),
+                // k149 (замечание 03.11, 08:16): все виды соединений — кнопками на панели, без раскрывающегося списка
+                (new[] { "joint.fixed", "joint.pin", "joint.slider", "joint.cylindrical", "joint.bearing", "joint.planar", "joint.ball", "joint.slot", "joint.weld", "joint.gimbal" }, Array.Empty<string>()),
+                (new[] { "as.fix", "as.drag", "as.move" }, new[] { "as.pattern", "as.pattern_ref", "as.mirror", "as.subassembly" }),
                 (new[] { "as.explode", "as.bom" }, Array.Empty<string>()),
             }
             : InSketch
@@ -1077,7 +1078,8 @@ public partial class MainWindow : Window
         SectionBadge.Content = IconProvider.Content("section_view_but.svg", L("Сечение"), 20);
         ToolTip.SetTip(SectionBadge, L("Сечение — настройки плоскости"));
         SectionBadge.Click += (_, _) => { if (CurrentOperation is SectionOp) return; if (CurrentOperation != null) CancelOperation(); if (!InSketch && Session.Part != null) StartOperation(new SectionOp()); };
-        View.HoverChanged += h => UpdateStatus(h);
+        View.HoverChanged += h => { UpdateStatus(h); MarkHotInTree(); };
+        View.HoverGroup = HoverGroupOf;
         // k127: три пальца на сенсорной панели — сдвиг вида (Windows Precision Touchpad); жест Windows с тремя пальцами
         // (переключение окон) приложение отменить не может — при первом сдвиге подсказка, как его выключить
         Opened += (_, _) => { if (OperatingSystem.IsWindows()) WinTouchpad.Attach(this, View.Touchpad); };
@@ -1120,6 +1122,7 @@ public partial class MainWindow : Window
         View.GizmoDragStarted += part =>
         {
             if (CurrentOperation == null && View.SectionSelected) { View.SectionGizmoStart(part); return; }
+            if (CurrentOperation == null && Gizmo6Start(part)) return;   // k149: компонент с 6 DOF
             if (CurrentOperation is not { } op) return;
             op.LivePreview = true;
             op.BeginDrag();
@@ -1128,6 +1131,7 @@ public partial class MainWindow : Window
         View.GizmoDragged += d =>
         {
             if (CurrentOperation == null && View.SectionSelected) { View.SectionGizmoMove(d); View.Redraw(); return; }
+            if (CurrentOperation == null && Gizmo6Move(d)) { View.Redraw(); return; }
             if (CurrentOperation is not { } op) return;
             try { op.GizmoMove(d); } catch (Exception ex) { AppLog.Write("gizmo drag", ex); }
             View.Redraw();
@@ -1135,6 +1139,7 @@ public partial class MainWindow : Window
         View.GizmoDragEnded += () =>
         {
             if (CurrentOperation == null && View.SectionSelected) { View.SectionGizmoEnd(); return; }
+            if (CurrentOperation == null && Gizmo6End()) return;
             if (CurrentOperation is not { } op) return;
             try { op.GizmoEnd(); op.EndDrag(); } catch (Exception ex) { AppLog.Write("gizmo end", ex); }
             UpdateContextBar();
@@ -1177,6 +1182,7 @@ public partial class MainWindow : Window
         }
         _lastSelIds = ids;
         if (selChanged) CurrentOperation?.SelectionChanged(View.Selection.Items);
+        if (selChanged && CurrentOperation == null) RefreshGizmo6();   // k149: маркер компонента с 6 DOF
         // k120 (пп. 12, 15): доступность кнопок — по выбранному (прежде пересчитывалась только при смене документа и после
         // операции: «Группа» при выборе нескольких операций оставалась недоступной). P3D_CMDREFRESH=0 — как прежде.
         if (selChanged && !CmdRefreshOff) _reg.RefreshAll();
@@ -1911,6 +1917,8 @@ public partial class MainWindow : Window
         new ContextMenu { ItemsSource = items }.Open(View);
     }
 
+    /// <summary>Разбор: пункты последнего контекстного меню дерева.</summary>
+    public List<object>? LastTreeMenu { get; private set; }
     /// <summary>Разбор: пункты последнего контекстного меню вида.</summary>
     public List<object>? LastContextMenu { get; private set; }
     public void OpenViewContextMenuForTest() => OpenViewContextMenu();
@@ -2765,6 +2773,15 @@ public partial class MainWindow : Window
             ids.AddRange(new[] { "edit.rename", "edit.copy", "edit.paste", "view.hide", "view.isolate", "edit.delete" });
             if (n.Item is Part) ids.AddRange(new[] { "part.material", "part.units", "part.configurations", "an.mass", "an.check_body" });
             var items = ids.Distinct().Where(id => _reg.Find(id) != null).Select(id => (object)Item(_reg[id])).ToList();
+            // k149 (замечание 03.11, 08:12): «Активировать» — сборку, деталь или узел FreeForm
+            if (!n.IsReference && n.Item is Part or Assembly or FreeFormFeature)
+            {
+                var act = new MenuItem { Header = L("Активировать"), Name = "tree_activate", IsEnabled = !ReferenceEquals(ActiveItem(), n.Item) };
+                var item0 = n.Item;
+                act.Click += (_, _) => ActivateItem(item0);
+                items.Insert(0, new Separator()); items.Insert(0, act);
+            }
+            LastTreeMenu = items;
             new ContextMenu { ItemsSource = items }.Open((Control)e.Source!);
             e.Handled = true;
         };
@@ -2911,6 +2928,80 @@ public partial class MainWindow : Window
         Dispatcher.UIThread.Post(() => { _treePending = false; RebuildTree(); }, DispatcherPriority.Background);
     }
 
+    // ================================================================ k149: активный элемент, элемент под курсором
+
+    /// <summary>Активный элемент: открытый узел FreeForm; в сборке — деталь, правимая в контексте, иначе сама сборка;
+    /// в документе детали — деталь.</summary>
+    public ModelItem? ActiveItem()
+    {
+        if (Session.Part is { EditingFreeForm: { } ffk } fp && fp.Features.FirstOrDefault(f => f is FreeFormFeature && f.Key == ffk) is { } ffn) return ffn;
+        if (Session.IsAssembly) return (ModelItem?)Session.ActivePart ?? Session.Document.Root;
+        return Session.Part;
+    }
+
+    /// <summary>Имя активного элемента в дереве — жирным.</summary>
+    public void MarkActiveInTree()
+    {
+        var act = ActiveItem();
+        foreach (var n in _roots.SelectMany(r => r.SelfAndDescendants()))
+        {
+            bool a = act != null && !n.IsReference && ReferenceEquals(n.Item, act);
+            if (n.IsActive != a) n.IsActive = a;
+        }
+    }
+
+    private readonly Dictionary<(uint Part, uint Id), string?> _bodyOfPick = new();
+    /// <summary>Что подсветить целиком по элементу под курсором: в сборке (без правки в контексте) — деталь; у детали с
+    /// деталями импорта — узел той детали (её тело).</summary>
+    public ModelItem? HoverGroupOf(PickRef r)
+    {
+        if (r.IsEmpty || r.Owner is not Part p) return null;
+        if (Session.IsAssembly && Session.ActivePart == null) return p;
+        if (r.Kind is not (PickKind.Face or PickKind.Edge or PickKind.Vertex) || !p.Features.Any(f => f is FreeFormFeature { ImportOf: not null })) return null;
+        if (!_bodyOfPick.TryGetValue((p.Id, r.Id), out var bn))
+        {
+            if (_bodyOfPick.Count > 4096) _bodyOfPick.Clear();
+            _bodyOfPick[(p.Id, r.Id)] = bn = p.BodyNameOf(r.Id);
+        }
+        return bn == null ? null : p.Features.FirstOrDefault(f => f is FreeFormFeature { ImportOf: not null } n && n.FFBody == bn);
+    }
+
+    /// <summary>Строка дерева элемента под курсором на виде — подсвечена.</summary>
+    public void MarkHotInTree()
+    {
+        var g = HoverGroupOf(View.Selection.Hover);
+        foreach (var n in _roots.SelectMany(r => r.SelfAndDescendants()))
+        {
+            bool h = g != null && !n.IsReference && ReferenceEquals(n.Item, g);
+            if (n.IsHot != h) n.IsHot = h;
+        }
+    }
+
+    /// <summary>«Активировать»: сборка — режим сборки; деталь сборки — правка в контексте; узел FreeForm — его правка;
+    /// деталь документа — режим детали (выход из FreeForm).</summary>
+    public void ActivateItem(ModelItem item)
+    {
+        if (InSketch) FinishSketch();
+        if (CurrentOperation != null) CommitOperation();
+        if (item is FreeFormFeature ffn && ffn.Parent is Part fpp)
+        {
+            if (Session.IsAssembly && !ReferenceEquals(Session.ActivePart, fpp)) Commands.AssemblyCommands.EditInContext(this, fpp);
+            if (fpp.EditingFreeForm != null && fpp.EditingFreeForm != ffn.Key) Commands.FreeFormCommands.Exit(this);
+            if (fpp.EditingFreeForm != ffn.Key) Commands.FreeFormCommands.Enter(this, fpp, ffn);
+        }
+        else
+        {
+            if (Session.Part?.EditingFreeForm != null && !(Session.Part.FreeFormDoc)) Commands.FreeFormCommands.Exit(this);
+            if (Session.IsAssembly)
+            {
+                if (item is Part ip && !ReferenceEquals(Session.ActivePart, ip)) Commands.AssemblyCommands.EditInContext(this, ip);
+                else if (item is Assembly && Session.ActivePart != null) Commands.AssemblyCommands.EditInContext(this, null);
+            }
+        }
+        RebuildTree();
+        MarkActiveInTree();
+    }
+
     public void RebuildTree()
     {
         using var _ui = Diagnostics.UiTimes.Measure("окно: дерево");
@@ -2922,7 +3013,7 @@ public partial class MainWindow : Window
         // (новый источник — заново все строки: 7–20 мс в потоке окна на каждый шаг ручки), хотя строки не менялись. Подпись —
         // всё, что строка показывает (имя, значки, ошибка, подсказка, глаз, вложенность). P3D_TREESIG=0 — всегда заново.
         string sig = TreeSignature(roots);
-        if (!TreeSigOff && sig == _treeSig && Tree.ItemsSource != null) { Interlocked.Increment(ref TreeRebuildsSkipped); SyncTreeFromSelection(); return; }
+        if (!TreeSigOff && sig == _treeSig && Tree.ItemsSource != null) { Interlocked.Increment(ref TreeRebuildsSkipped); SyncTreeFromSelection(); MarkActiveInTree(); return; }
         if (Environment.GetEnvironmentVariable("P3D_TREESIGDBG") == "1" && _treeSig != null)
         {
             var a = _treeSig.Split('\n'); var b = sig.Split('\n');
@@ -2931,6 +3022,7 @@ public partial class MainWindow : Window
         }
         _treeSig = sig;
         _roots = roots;
+        MarkActiveInTree();
         KeyNodes(_roots);
         foreach (var n in _roots.SelectMany(r => r.SelfAndDescendants()))
             if (ExpandedOf(n) is { } ex) n.RestoreExpanded(ex);

@@ -1205,53 +1205,215 @@ Check("UI-IMPORT-STEP", () =>
 
 Check("UI-IMPORT-ASSEMBLY", () =>
 {
-    // k149 (замечание 03.11, 06:41, п. 3): STEP-СБОРКА — ДЕТАЛИ ОТДЕЛЬНО. Файл из трёх тел (два касаются друг друга, третье —
-    // отдельно; ещё одно тело из двух несвязных оболочек): после импорта — операция «Импорт» и по узлу FreeForm на каждую
-    // деталь (в дереве — внутри операции импорта), тела не объединяются, у каждого — своё имя; после сохранения и открытия —
-    // то же.
+    // k149 (замечания 03.11, 06:41; 08:17–08:38): STEP с несколькими деталями — СБОРКА: каждая деталь (замкнутая оболочка)
+    // — компонент с операцией «Импорт» (тело только этой детали) и узлом FreeForm; связь «6 DOF», не зафиксирован; положение —
+    // как в файле; сохранение (.p3a) и открытие — то же. Файл с одним телом — документ детали. Тело из двух несвязных
+    // оболочек делится на детали.
     var src = new Part("asm");
     var a = Parametric3D.Kernel.Ops.PrimitiveOp.Cylinder(Vector3d.Zero, 10, 20);
     var b = Parametric3D.Kernel.Ops.PrimitiveOp.Cylinder(new Vector3d(0, 0, 20), 6, 15);       // касается a торцом
     var c = Parametric3D.Kernel.Ops.PrimitiveOp.Sphere(new Vector3d(50, 0, 0), 8);
     src.Bodies.AddRange(new[] { a, b, c });
     double vSum = Math.PI * 100 * 20 + Math.PI * 36 * 15 + 4.0 / 3 * Math.PI * 512;
-    string step = Path.Combine(Path.GetTempPath(), $"uicheck_asm_{Guid.NewGuid():N}.step"), p3d = Path.ChangeExtension(step, ".p3d");
+    string step = Path.Combine(Path.GetTempPath(), $"uicheck_asm_{Guid.NewGuid():N}.step"), p3a = Path.ChangeExtension(step, DocumentSession.AssemblyExtension);
+    string step1 = Path.ChangeExtension(step, ".one.step");
     File.WriteAllText(step, Parametric3D.Model.Exchange.Write(src, Parametric3D.Model.Exchange.Format.Step));
+    var src1 = new Part("one"); src1.Bodies.Add(Parametric3D.Kernel.Ops.PrimitiveOp.Sphere(Vector3d.Zero, 5));
+    File.WriteAllText(step1, Parametric3D.Model.Exchange.Write(src1, Parametric3D.Model.Exchange.Format.Step));
     try
     {
         var imp = DocumentSession.Import(step, new List<string>());
-        var part = imp.Part!;
-        var nodes = part.Features.OfType<Parametric3D.Model.Features.FreeFormFeature>().ToList();
-        Require(part.Features[0] is Parametric3D.Model.Features.InsertBodyFeature, "no import operation");
-        Require(nodes.Count == 3 && nodes.All(n => n.ImportOf == part.Features[0].Key && n.FFBody == n.Name), $"FreeForm part nodes: {nodes.Count} ({string.Join(", ", nodes.Select(n => n.Name))})");
-        Require(nodes.Select(n => n.Name).Distinct().Count() == 3, "part names are not unique: " + string.Join(", ", nodes.Select(n => n.Name)));
-        part.Rebuild(imp.Document.Parameters);
-        Require(part.Bodies.Count == 3, $"{part.Bodies.Count} bodies after rebuild (the touching parts must not be united)");
-        Require(Math.Abs(part.Volume - vSum) <= 1e-3 * vSum, $"volume {part.Volume} vs {vSum}");
-        Require(nodes.All(n => part.BodyNameList.Contains(n.FFBody!)), "body names: " + string.Join(", ", part.BodyNameList));
+        Require(imp.IsAssembly, "a three-part STEP is not imported as an assembly");
+        var comps = imp.Document.Root.Children.OfType<Part>().ToList();
+        Require(comps.Count == 3 && comps.Select(x => x.Name).Distinct().Count() == 3, $"components: {comps.Count} ({string.Join(", ", comps.Select(x => x.Name))})");
+        foreach (var cp in comps)
+        {
+            Require(cp.Features.Count == 2 && cp.Features[0] is InsertBodyFeature && cp.Features[1] is FreeFormFeature { ImportOf: not null }, $"{cp.Name}: features {string.Join(", ", cp.Features.Select(f => f.GetType().Name))}");
+            Require(!cp.Fixed && cp.Mates.Count == 1 && cp.Mates[0].Type == Parametric3D.Model.Mates.MateType.Free, $"{cp.Name}: not a free 6 DOF component");
+            Require(MainWindow.IsFree6(cp), $"{cp.Name}: IsFree6");
+        }
+        imp.Document.RebuildDirty();
+        Require(comps.All(x => x.Bodies.Count == 1), "a component has no body or several");
+        double vol = comps.Sum(x => x.Volume);
+        Require(Math.Abs(vol - vSum) <= 1e-3 * vSum, $"volume {vol} vs {vSum}");
         var w = Open(imp);
-        var impNode = w.TreeRoots.SelectMany(r => r.SelfAndDescendants()).FirstOrDefault(t => t.Item is Parametric3D.Model.Features.InsertBodyFeature);
-        Require(impNode != null, "no import node in the tree");
-        var kids = impNode!.Children.Where(t => t.Item is Parametric3D.Model.Features.FreeFormFeature).ToList();
-        Require(kids.Count == 3, $"the import node has {kids.Count} FreeForm children");
-        Require(!w.TreeRoots.SelectMany(r => r.Children).Any(t => t.Item is Parametric3D.Model.Features.FreeFormFeature), "a part node is outside the import node");
-        imp.SaveAs(p3d);
+        Require(w.TreeRoots.SelectMany(r => r.SelfAndDescendants()).Count(t => t.Item is Part) == 3, "the tree does not show three components");
+        imp.SaveAs(p3a);
         w.Close();
-        var s2 = DocumentSession.Open(p3d);
-        s2.Part!.Rebuild(s2.Document.Parameters);
-        var n2 = s2.Part.Features.OfType<Parametric3D.Model.Features.FreeFormFeature>().ToList();
-        Require(s2.Part.Bodies.Count == 3 && n2.Count == 3 && n2.All(n => n.ImportOf == s2.Part.Features[0].Key), $"after reopen: {s2.Part.Bodies.Count} bodies, {n2.Count} nodes");
+        var s2 = DocumentSession.OpenAssembly(p3a);
+        s2.Document.RebuildDirty();
+        var c2 = s2.Document.Root.Children.OfType<Part>().ToList();
+        Require(c2.Count == 3 && c2.All(x => x.Bodies.Count == 1 && x.Mates.Count == 1 && x.Mates[0].Type == Parametric3D.Model.Mates.MateType.Free && x.Features.OfType<FreeFormFeature>().Count() == 1), "after reopen the components differ");
+        var one = DocumentSession.Import(step1, new List<string>());
+        Require(!one.IsAssembly && one.Part!.Features[0] is InsertBodyFeature, "a one-body STEP is not a part document");
         // тело из двух несвязных оболочек делится на детали
-        var one = Parametric3D.Kernel.Topology.TopologyClone.Deep(a);
+        var two = Parametric3D.Kernel.Topology.TopologyClone.Deep(a);
         var extra = Parametric3D.Kernel.Topology.TopologyClone.Deep(c);
-        foreach (var sh in extra.Shells.ToList()) { var ns = one.AddShell(); foreach (var f in sh.Faces.ToList()) ns.Add(f); }
-        var src2 = new Part("merged"); src2.Bodies.Add(one);
-        var parts = new Parametric3D.Model.Features.InsertBodyFeature("x") { Step = "x", Separate = true };
-        parts.Prime(new List<Parametric3D.Kernel.Topology.TSolid> { one }, new[] { "Корпус" });
+        foreach (var sh in extra.Shells.ToList()) { var ns = two.AddShell(); foreach (var f in sh.Faces.ToList()) ns.Add(f); }
+        var parts = new InsertBodyFeature("x") { Step = "x", Separate = true };
+        parts.Prime(new List<Parametric3D.Kernel.Topology.TSolid> { two }, new[] { "Корпус" });
         var pn = parts.PartNames(new List<string>());
         Require(pn.Count == 2 && pn[0] == "Корпус.1" && pn[1] == "Корпус.2", "split of a two-shell body: " + string.Join(", ", pn));
     }
-    finally { foreach (var f in new[] { step, p3d }) if (File.Exists(f)) File.Delete(f); }
+    finally { foreach (var f in new[] { step, p3a, step1 }) if (File.Exists(f)) File.Delete(f); }
+});
+
+Check("UI-GIZMO-6DOF", () =>
+{
+    // k149 (замечание 03.11, 08:18): компонент с 6 DOF — маркер на виде (стрелки, площадки, кольца); перенос по X, поворот
+    // кольцом Z (90° вокруг центра), одна отмена на перетаскивание; «Переместить / повернуть» полями; у зафиксированного —
+    // маркера нет
+    var src = new Part("asm");
+    src.Bodies.AddRange(new[] { Parametric3D.Kernel.Ops.PrimitiveOp.Cylinder(Vector3d.Zero, 10, 20), Parametric3D.Kernel.Ops.PrimitiveOp.Sphere(new Vector3d(50, 0, 0), 8) });
+    string step = Path.Combine(Path.GetTempPath(), $"uicheck_g6_{Guid.NewGuid():N}.step");
+    File.WriteAllText(step, Parametric3D.Model.Exchange.Write(src, Parametric3D.Model.Exchange.Format.Step));
+    try
+    {
+        var s = DocumentSession.Import(step, new List<string>());
+        var w = Open(s); s.Document.RebuildDirty();
+        var comps = s.Document.Root.Children.OfType<Part>().ToList();
+        var sp = comps.First(x => x.Bounds.Max.X > 30);   // шар
+        w.ViewPort.Selection.Clear(); Select(w, new PickRef(sp.Bodies[0].Faces.First().Id, PickKind.Face, sp, null)); Dispatcher.UIThread.RunJobs();
+        w.RefreshGizmo6();
+        Require(w.ViewPort.Gizmo is { Mode: GizmoMode.Full } g && (g.Origin - new Vector3d(50, 0, 0)).Length < 1e-3, $"no 6 DOF marker at the component centre ({w.ViewPort.Gizmo?.Origin})");
+        var t0 = sp.Translation;
+        w.ViewPort.SimulateGizmoDrag(new GizmoDrag(GizmoPart.AxisX, new Vector3d(10, 0, 0), 0, Avalonia.Input.KeyModifiers.None));
+        Require(Math.Abs(sp.Translation.X - t0.X - 10) < 1e-4, $"move X: {sp.Translation}");
+        Require((w.ViewPort.Gizmo!.Origin - new Vector3d(60, 0, 0)).Length < 1e-3, "the marker did not follow the component");
+        // поворот кольцом Z на 90° вокруг центра (60,0,0): центр на месте, тело повернулось
+        w.ViewPort.SimulateGizmoDrag(new GizmoDrag(GizmoPart.RingZ, Vector3d.Zero, 90, Avalonia.Input.KeyModifiers.None));
+        var cW = Parametric3D.App.Commands.AssemblyCommands.ToWorld(sp, (sp.Bounds.Min + sp.Bounds.Max) / 2);
+        Require((cW - new Vector3d(60, 0, 0)).Length < 1e-3, $"rotation moved the centre: {cW}");
+        var ax = Parametric3D.App.Commands.AssemblyCommands.ToWorld(sp, new Vector3d(51, 0, 0)) - cW;   // локальная X → мировая Y
+        Require((ax - new Vector3d(0, 1, 0)).Length < 1e-3, $"rotation about Z: local X goes to {ax}");
+        s.Undo(); s.Document.RebuildDirty();
+        var spU = s.Document.Root.Children.OfType<Part>().First(x => x.Name == sp.Name);
+        Require(Math.Abs(spU.Translation.X - t0.X - 10) < 1e-4 && (spU.Rotation.Xyz.Length < 1e-6), "undo did not return one drag step");
+        w.ViewPort.Selection.Clear(); Select(w, new PickRef(spU.Bodies[0].Faces.First().Id, PickKind.Face, spU, null));
+        w.MoveComponent(spU, new Vector3d(0, 0, 5), Vector3d.Zero);
+        Require(Math.Abs(spU.Translation.Z - t0.Z - 5) < 1e-4, "move by values");
+        spU.Fixed = true; w.RefreshGizmo6();
+        Require(w.ViewPort.Gizmo == null, "a fixed component has a marker");
+        w.Close();
+    }
+    finally { if (File.Exists(step)) File.Delete(step); }
+});
+
+Check("UI-IMPORT-PART-SHOW", () =>
+{
+    // k149 (замечание 03.11, 08:06): детали импортированной сборки — подсветка при наведении (грани своего тела), глаз в
+    // дереве скрывает тело, правка детали — отдельно (прочие тела скрыты, после «Готово» — как было); сетка плоскости при
+    // входе в FreeForm сама не включается
+    var src = new Part("asm");
+    src.Bodies.AddRange(new[] { Parametric3D.Kernel.Ops.PrimitiveOp.Cylinder(Vector3d.Zero, 10, 20), Parametric3D.Kernel.Ops.PrimitiveOp.Sphere(new Vector3d(50, 0, 0), 8) });
+    string step = Path.Combine(Path.GetTempPath(), $"uicheck_asm2_{Guid.NewGuid():N}.step");
+    File.WriteAllText(step, Parametric3D.Model.Exchange.Write(src, Parametric3D.Model.Exchange.Format.Step));
+    try
+    {
+        var imp = DocumentSession.FromPart(DocumentSession.ImportPart(step, new List<string>()), "imp");
+        var w = Open(imp);
+        imp.Document.RebuildDirty();
+        var part = imp.Part!;
+        var nodes = part.Features.OfType<FreeFormFeature>().ToList();
+        Require(nodes.Count == 2, $"{nodes.Count} part nodes");
+        foreach (var n in nodes)
+        {
+            var want = part.FaceIdsOfBody(n.FFBody!).OrderBy(x => x).ToList();
+            Require(want.Count > 0 && n.CreatedFaceIds.OrderBy(x => x).SequenceEqual(want), $"{n.Name}: hover faces {n.CreatedFaceIds.Count} vs body faces {want.Count}");
+        }
+        w.RebuildTree(); Dispatcher.UIThread.RunJobs();
+        var tn = w.TreeRoots.SelectMany(r => r.SelfAndDescendants()).First(t => ReferenceEquals(t.Item, nodes[1]));
+        Require(tn.HasEye, "no eye on the part node");
+        tn.IsVisible = false;
+        Require(part.HiddenBodies.Contains(nodes[1].FFBody!), "the eye did not hide the body");
+        var hid = part.HiddenIds();
+        Require(hid is { } h && h.Faces.SetEquals(part.FaceIdsOfBody(nodes[1].FFBody!)), "hidden faces are not the body faces");
+        tn.IsVisible = true;
+        Require(part.HiddenBodies.Count == 0, "the eye did not show the body again");
+        bool grid0 = w.ViewPort.ModelGrid;
+        FreeFormCommands.Enter(w, part, nodes[0]);
+        Require(part.HiddenBodies.SetEquals(new[] { nodes[1].FFBody! }), "editing a part does not hide the other parts: " + string.Join(", ", part.HiddenBodies));
+        Require(w.ViewPort.ModelGrid == grid0, "entering FreeForm turned the grid on");
+        FreeFormCommands.Exit(w);
+        Require(part.HiddenBodies.Count == 0, "the other parts are not shown again after Done");
+        w.Close();
+    }
+    finally { if (File.Exists(step)) File.Delete(step); }
+});
+
+Check("UI-TREE-ACTIVE-HOT", () =>
+{
+    // k149 (замечания 03.11, 08:09–08:12): в сборке деталь под курсором на виде подсвечена целиком и её строка в дереве —
+    // тоже; наведение на деталь в дереве подсвечивает её на виде; активный элемент в дереве — жирным; пункт «Активировать»
+    var s = DocumentSession.NewAssembly(); var w = Open(s);
+    var a = AssemblyCommands.AddComponent(w, CubePart("Основание", 40), "add A");
+    var b = AssemblyCommands.AddComponent(w, CubePart("Кубик", 20), "add B");
+    w.RebuildTree(); Dispatcher.UIThread.RunJobs();
+    TreeNode NodeOf(ModelItem it) => w.TreeRoots.SelectMany(r => r.SelfAndDescendants()).First(n => !n.IsReference && ReferenceEquals(n.Item, it));
+    Require(NodeOf(s.Document.Root).IsActive && !NodeOf(a).IsActive, "the assembly is not shown active");
+    var face = new PickRef(b.Bodies[0].Faces.First().Id, PickKind.Face, b, null);
+    Require(ReferenceEquals(w.HoverGroupOf(face), b), "hovering a face in the assembly does not group the whole part");
+    w.ViewPort.Selection.SetHover(face); w.MarkHotInTree();
+    Require(NodeOf(b).IsHot && !NodeOf(a).IsHot, "the hovered part is not hot in the tree");
+    w.ViewPort.Selection.SetHover(PickRef.Empty); w.MarkHotInTree();
+    Require(!NodeOf(b).IsHot, "the tree row stays hot");
+    w.ActivateItem(b);
+    Require(ReferenceEquals(s.ActivePart, b) && NodeOf(b).IsActive && !NodeOf(s.Document.Root).IsActive, "Activate on a part did not make it active");
+    Require(w.HoverGroupOf(face) == null, "in-context editing still groups the part");
+    w.ActivateItem(s.Document.Root);
+    Require(s.ActivePart == null && NodeOf(s.Document.Root).IsActive, "Activate on the assembly did not return to it");
+    w.Close();
+    // документ детали с деталями импорта: наведение на грань — узел детали импорта; «Активировать» узла — правка FreeForm
+    var src = new Part("asm");
+    src.Bodies.AddRange(new[] { Parametric3D.Kernel.Ops.PrimitiveOp.Cylinder(Vector3d.Zero, 10, 20), Parametric3D.Kernel.Ops.PrimitiveOp.Sphere(new Vector3d(50, 0, 0), 8) });
+    string step = Path.Combine(Path.GetTempPath(), $"uicheck_asm3_{Guid.NewGuid():N}.step");
+    File.WriteAllText(step, Parametric3D.Model.Exchange.Write(src, Parametric3D.Model.Exchange.Format.Step));
+    try
+    {
+        var imp = DocumentSession.FromPart(DocumentSession.ImportPart(step, new List<string>()), "imp"); var w2 = Open(imp); imp.Document.RebuildDirty();
+        var part = imp.Part!; var nodes = part.Features.OfType<FreeFormFeature>().ToList();
+        w2.RebuildTree(); Dispatcher.UIThread.RunJobs();
+        TreeNode N2(ModelItem it) => w2.TreeRoots.SelectMany(r => r.SelfAndDescendants()).First(n => !n.IsReference && ReferenceEquals(n.Item, it));
+        Require(N2(part).IsActive, "the part is not shown active");
+        int bi = part.BodyNameList.IndexOf(nodes[1].FFBody!);
+        var f2 = new PickRef(part.Bodies[bi].Faces.First().Id, PickKind.Face, part, null);
+        Require(ReferenceEquals(w2.HoverGroupOf(f2), nodes[1]), "hovering an imported part does not group its node");
+        w2.ViewPort.Selection.SetHover(f2); w2.MarkHotInTree();
+        Require(N2(nodes[1]).IsHot, "the imported part row is not hot");
+        w2.ActivateItem(nodes[0]);
+        Require(part.EditingFreeForm == nodes[0].Key && N2(nodes[0]).IsActive && !N2(part).IsActive, "Activate on an imported part did not open it");
+        w2.ActivateItem(part);
+        Require(part.EditingFreeForm == null && N2(part).IsActive, "Activate on the part did not leave FreeForm");
+        w2.Close();
+    }
+    finally { if (File.Exists(step)) File.Delete(step); }
+});
+
+Check("UI-ASM-BUTTONS", () =>
+{
+    // k149 (замечания 03.11, 08:16; 09:02): в сборке все соединения — кнопками на панели; у ограничений — значки ограничений
+    // эскиза; кнопки ограничений и соединений доступны, только если выбранное подходит
+    var s = DocumentSession.NewAssembly(); var w = Open(s);
+    var a = AssemblyCommands.AddComponent(w, CubePart("Основание", 40), "add A");
+    var b = AssemblyCommands.AddComponent(w, CubePart("Кубик", 20), "add B");
+    var reg = CommandRegistry.Instance;
+    var mates = reg.All.Where(c => c.Id.StartsWith("mate.")).ToList();
+    var joints = reg.All.Where(c => c.Id.StartsWith("joint.")).ToList();
+    Require(mates.Count >= 10 && mates.All(c => IconProvider.Exists(c.Icon)), "mate icons missing: " + string.Join(", ", mates.Where(c => !IconProvider.Exists(c.Icon)).Select(c => c.Id)));
+    w.ViewPort.Selection.Clear(); Dispatcher.UIThread.RunJobs();
+    var on = mates.Concat(joints).Where(c => c.Enabled).Select(c => c.Id).ToList();
+    Require(on.Count == 0, "enabled with nothing selected: " + string.Join(", ", on));
+    Require(!reg["as.edit_in_context"].Enabled && !reg["as.fix"].Enabled && !reg["as.move"].Enabled, "component commands enabled with nothing selected");
+    PickRef Face(Part p, Vector3d n) { var f = p.Bodies[0].Faces.First(x => Refs.FacePlane(p, x.Id) is { } pl && (pl.N - n).Length < 1e-9); return new PickRef(f.Id, PickKind.Face, p, null); }
+    Select(w, Face(b, -Vector3d.UnitZ)); Select(w, Face(a, Vector3d.UnitZ)); Dispatcher.UIThread.RunJobs();
+    Require(reg["mate.coincident"].Enabled && reg["mate.distance"].Enabled && reg["joint.planar"].Enabled && reg["joint.fixed"].Enabled, "two planar faces: plane mates are not available");
+    Require(!reg["mate.concentric"].Enabled && !reg["joint.pin"].Enabled && !reg["joint.slider"].Enabled, "two planar faces: axial mates are available");
+    // панель сборки: все соединения — отдельными кнопками
+    w.RebuildUi(); Dispatcher.UIThread.RunJobs();
+    var tips = w.GetVisualDescendants().OfType<Button>().Select(x => ToolTip.GetTip(x)?.ToString() ?? "").ToList();
+    var missing = joints.Where(c => !tips.Any(t => t.Contains(Loc.L(c.Label)))).Select(c => c.Id).ToList();
+    Require(missing.Count == 0, "joints not on the panel: " + string.Join(", ", missing));
+    w.Close();
 });
 
 Check("UI-DIALOG-SCROLL", () =>

@@ -1,4 +1,4 @@
-namespace Parametric3D.App;
+﻿namespace Parametric3D.App;
 
 /// <summary>
 /// ПЕРЕВОД ИНТЕРФЕЙСА: русская строка из кода → английская. Ключ — ровно та строка, что передаётся в L() (с {0} для
@@ -385,6 +385,11 @@ public static class Strings
         ["Кривизна (гребёнка)"] = "Curvature (comb)",
         ["Выберите рёбра или кривые эскиза"] = "Select edges or sketch curves",
         ["Проверка тела"] = "Check body",
+        ["Активировать"] = "Activate",
+        ["Переместить компонент"] = "Move component", ["Переместить / повернуть компонент"] = "Move / rotate component", ["Переместить / повернуть"] = "Move / rotate",
+        ["Сдвиг X, мм"] = "Shift X, mm", ["Сдвиг Y, мм"] = "Shift Y, mm", ["Сдвиг Z, мм"] = "Shift Z, mm",
+        ["Поворот вокруг X, °"] = "Rotate about X, °", ["Поворот вокруг Y, °"] = "Rotate about Y, °", ["Поворот вокруг Z, °"] = "Rotate about Z, °",
+        ["Компонент зафиксирован или связан ограничениями — его положение задают они"] = "The component is fixed or constrained — its position is set by them",
         ["Залечить"] = "Heal",
         ["Материал: {0} ({1} кг/м³)"] = "Material: {0} ({1} kg/m³)",
         ["Объём: {0} мм³"] = "Volume: {0} mm³",

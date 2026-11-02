@@ -84,7 +84,7 @@ public static class StandardCommands
         Style("style.fea_mesh", "Сетка FEA", "style_fea_mesh_but.svg", DisplayStyle.FeaMesh, "fea mesh расчёт сетка элементы мкэ", K(Key.D8, KeyModifiers.Alt));
         // 13:09: КНОПКА-ПЕРЕКЛЮЧАТЕЛЬ. Выбранное скрыто — повторный щелчок возвращает видимость (выбор остаётся после
         // скрытия, поэтому вторым щелчком скрытое показывается обратно); значок — «скрыть» или «показать»
-        static bool AllHidden(List<ModelItem> s) => s.Count > 0 && s.All(i => !i.Visible);
+        static bool AllHidden(List<ModelItem> s) => s.Count > 0 && s.All(i => !ShownOf(i));
         r.Add(new AppCommand { Short = "Скрыть / показать", Id = "view.hide", Label = "Скрыть / показать выбранное", Group = V, Synonyms = "hide show скрыть показать",
             IconOf = () => AllHidden(w.SelectedItems()) ? "eye_hidden_ico.svg" : "hide_but.svg",
             IsChecked = () => AllHidden(w.SelectedItems()),
@@ -92,7 +92,11 @@ public static class StandardCommands
         r.Add(new AppCommand { Short = "Изолировать", Id = "view.isolate", Label = "Изолировать", Group = V, Icon = "isolate_but.svg", Synonyms = "isolate",
             CanRun = () => w.SelectedItems().Count > 0, Run = () => Isolate(w) });
         r.Add(new AppCommand { Short = "Показать всё", Id = "view.show_all", Label = "Показать всё", Group = V, Icon = "show_all_but.svg", Synonyms = "show all unhide",
-            Run = () => SetVisible(w, w.Session.Document.Root.Descendants().Where(i => i is not Feature).ToList(), true) });
+            Run = () =>
+            {
+                foreach (var pp in w.Session.Document.AllParts()) pp.HiddenBodies.Clear();   // k149: и скрытые тела деталей импорта
+                SetVisible(w, w.Session.Document.Root.Descendants().Where(i => i is not Feature).ToList(), true);
+            } });
         r.Add(new AppCommand { Short = "Опорные", Id = "view.datums", Label = "Опорные элементы: показать / скрыть", Group = V, Icon = "datums_visible_but.svg", Synonyms = "datums planes плоскости",
             IsChecked = () => vp.Show.Planes || vp.Show.Axes || vp.Show.Points, Run = () => w.ToggleDatums() });
         foreach (var (key, label) in ShowItems)
@@ -482,10 +486,16 @@ public static class StandardCommands
         w.ViewPort.MarkDirty();
     }
 
+    /// <summary>k149: узел детали импортированной сборки — её тело (Part.HiddenBodies), не сам элемент.</summary>
+    static (Part P, string Body)? ImportBody(ModelItem i) =>
+        i is FreeFormFeature { ImportOf: not null, FFBody: { } b } f && f.Parent is Part p ? (p, b) : null;
+    static bool ShownOf(ModelItem i) => ImportBody(i) is { } ib ? !ib.P.HiddenBodies.Contains(ib.Body) : i.Visible;
+
     private static void SetVisible(MainWindow w, List<ModelItem> items, bool visible)
     {
         foreach (var i in items)
         {
+            if (ImportBody(i) is { } ib) { if (visible) ib.P.HiddenBodies.Remove(ib.Body); else ib.P.HiddenBodies.Add(ib.Body); w.Session.MarkModified(); continue; }
             i.Visible = visible; i.VisibleUserSet = true;
             if (i is Part or Assembly) foreach (var d in i.Descendants()) { d.Visible = visible; d.VisibleUserSet = true; }
         }
@@ -496,6 +506,14 @@ public static class StandardCommands
     private static void Isolate(MainWindow w)
     {
         var keep = new HashSet<ModelItem>(w.SelectedItems());
+        // k149: выбраны детали импортированной сборки — в их детали видны только их тела
+        foreach (var grp in keep.Select(ImportBody).OfType<(Part P, string Body)>().GroupBy(x => x.P))
+        {
+            var shown = grp.Select(x => x.Body).ToHashSet();
+            grp.Key.HiddenBodies.Clear();
+            for (int bi = 0; bi < grp.Key.Bodies.Count; bi++) if (!shown.Contains(grp.Key.BodyName(bi))) grp.Key.HiddenBodies.Add(grp.Key.BodyName(bi));
+            w.Session.MarkModified();
+        }
         var all = w.Session.Document.Root.Descendants().Where(i => i is not Feature && i is not Assembly).ToList();
         foreach (var i in all)
         {

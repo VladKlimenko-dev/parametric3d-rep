@@ -157,6 +157,34 @@ public sealed class Part : ModelItem
         }
         return null;
     }
+    /// <summary>
+    /// k149 (замечание 03.11, 08:06, п. 2): СКРЫТЫЕ ТЕЛА ДЕТАЛИ — по именам (детали импортированной сборки: скрыть, изолировать,
+    /// править отдельно). Вид не рисует их грани, рёбра и вершины; расчёт и тела не меняются. Сохраняется в документе.
+    /// </summary>
+    public readonly HashSet<string> HiddenBodies = new();
+
+    /// <summary>Номера граней, рёбер и вершин скрытых тел (для вида).</summary>
+    public (HashSet<uint> Faces, HashSet<uint> Edges, HashSet<uint> Vertices)? HiddenIds()
+    {
+        if (HiddenBodies.Count == 0) return null;
+        var f = new HashSet<uint>(); var e = new HashSet<uint>(); var v = new HashSet<uint>();
+        for (int i = 0; i < Bodies.Count; i++)
+        {
+            if (!HiddenBodies.Contains(BodyName(i))) continue;
+            foreach (var x in Bodies[i].Faces) f.Add((uint)x.Id);
+            foreach (var x in Bodies[i].Edges) e.Add((uint)x.Id);
+            foreach (var x in Bodies[i].Vertices) v.Add((uint)x.Id);
+        }
+        return (f, e, v);
+    }
+
+    /// <summary>Номера граней тела по имени (подсветка узла детали в дереве).</summary>
+    public IEnumerable<uint> FaceIdsOfBody(string name)
+    {
+        for (int i = 0; i < Bodies.Count; i++)
+            if (BodyName(i) == name) foreach (var x in Bodies[i].Faces) yield return (uint)x.Id;
+    }
+
     /// <summary>k149: узел FreeForm — деталь импортированной сборки (FreeFormFeature.ImportOf).</summary>
     public bool IsImportNode(string ffKey) => Features.Any(x => x is FreeFormFeature { ImportOf: not null } n && n.Key == ffKey);
 
@@ -1649,6 +1677,9 @@ public sealed class Part : ModelItem
 
             foreach (uint id in FaceIds(ctx.Bodies))
                 if (!before.Contains(id)) result.Created[f].Add(id);
+            // k149: узел детали импорта «создаёт» грани своего тела — подсветка при наведении в дереве, выбор
+            if (f is FreeFormFeature { ImportOf: not null, FFBody: { } ffb } && ctx.BodyByName(ffb) is { } ffBody)
+                foreach (var bf in ffBody.Faces) result.Created[f].Add((uint)bf.Id);
 
             result.Executed++;
 

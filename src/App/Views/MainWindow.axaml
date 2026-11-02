@@ -1,4 +1,4 @@
-<Window xmlns="https://github.com/avaloniaui"
+﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vp="using:Parametric3D.App.Viewport"
         xmlns:vm="using:Parametric3D.App.ViewModels"
@@ -84,7 +84,7 @@
             </TreeView.Styles>
             <TreeView.ItemTemplate>
               <TreeDataTemplate DataType="vm:TreeNode" ItemsSource="{Binding Children}">
-                <Grid ColumnDefinitions="Auto,*,Auto" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
+                <Grid ColumnDefinitions="Auto,*,Auto" Background="Transparent" ToolTip.Tip="{Binding Tooltip}" Classes.treehot="{Binding IsHot}">
                   <Panel Grid.Column="0" MinWidth="18" MinHeight="18" Margin="0,0,6,0" IsVisible="{Binding IsNotBar}">
                     <Image Source="{Binding Icon}" IsVisible="{Binding HasIcon}" Width="{DynamicResource P3.TreeIconPx}" Height="{DynamicResource P3.TreeIconPx}" />
                     <Border IsVisible="{Binding !HasIcon}" CornerRadius="3" Background="{DynamicResource P3.PanelBg2}"
@@ -102,7 +102,7 @@
                     </Border>
                   </Panel>
                   <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                             Classes.err="{Binding HasError}" Classes.dimmed="{Binding IsDim}" IsVisible="{Binding IsNotBar}" />
+                             Classes.err="{Binding HasError}" Classes.dimmed="{Binding IsDim}" Classes.active="{Binding IsActive}" IsVisible="{Binding IsNotBar}" />
                   <!-- строка отката: только цветная полоса во всю ширину (деталь — оранжевая, сборка — синяя, подсборка —
                        фиолетовая), без значка и подписи (13:09); тянется мышью; имя — во всплывающей подсказке -->
                   <Grid Grid.Column="0" Grid.ColumnSpan="3" IsVisible="{Binding IsBar}" Cursor="SizeNorthSouth" Background="Transparent" MinWidth="120" MinHeight="12">

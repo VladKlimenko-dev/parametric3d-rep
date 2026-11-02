@@ -665,7 +665,7 @@ public sealed class InsertBodyFeature : Feature
     /// (полости остаются в своём теле). Имя — имя изделия из файла (STEP), иначе «Деталь N»; части одного тела — «имя.2»…,
     /// повторы имени — «имя (2)». Мутация P3D_IMPORTSPLIT=0 — тела как прочитаны, без деления.
     /// </summary>
-    static List<TSolid> Separated(List<TSolid> read, IReadOnlyList<string>? fileNames, out List<string> names)
+    public static List<TSolid> Separated(List<TSolid> read, IReadOnlyList<string>? fileNames, out List<string> names)
     {
         bool split = Environment.GetEnvironmentVariable("P3D_IMPORTSPLIT") != "0";
         var res = new List<TSolid>(); names = new List<string>();

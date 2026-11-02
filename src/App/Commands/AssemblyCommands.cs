@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Platform.Storage;
@@ -327,7 +327,7 @@ public static class AssemblyCommands
         w.Session.ActivePart = part == null || ReferenceEquals(w.Session.ActivePart, part) ? null : part;
         w.ViewPort.ActivePart = w.Session.ActivePart;
         w.ViewPort.Selection.Clear();
-        w.RebuildUi(); w.ViewPort.MarkDirty();
+        w.RebuildUi(); w.RebuildTree(); w.MarkActiveInTree(); w.ViewPort.MarkDirty();
         w.ShowToast(w.Session.ActivePart != null ? L("Правка в контексте: «{0}» (повторно — назад к сборке)", w.Session.ActivePart.Name) : L("Сборка"), error: false);
     }
 
@@ -619,7 +619,7 @@ public static class AssemblyCommands
         r.Add(new AppCommand { Id = "as.skeleton", Label = "Скелетная модель", Group = A, Icon = "as_skeleton_but.svg", Synonyms = "skeleton скелет", CanRun = AM, Run = () => CreateComponent(w, skeleton: true) });
         r.Add(new AppCommand { Id = "as.open_component", Label = "Открыть компонент", Group = A, Icon = "as_open_component_but.svg", Synonyms = "open component открыть компонент", CanRun = Sel, Run = () => OpenComponent(w) });
         r.Add(new AppCommand { Id = "as.edit_in_context", Label = "Править в контексте", Group = A, Icon = "as_edit_in_context_but.svg", Synonyms = "edit in context править в контексте",
-            IsChecked = () => w.Session?.ActivePart != null && Asm(w), CanRun = () => Asm(w), Run = () => EditInContext(w, w.Session.ActivePart != null ? null : SelectedComponents(w).FirstOrDefault()) });
+            IsChecked = () => w.Session?.ActivePart != null && Asm(w), CanRun = () => Asm(w) && (w.Session.ActivePart != null || SelectedComponents(w).Count == 1), Run = () => EditInContext(w, w.Session.ActivePart != null ? null : SelectedComponents(w).FirstOrDefault()) });
         r.Add(new AppCommand { Id = "as.replace", Label = "Заменить компонент", Group = A, Icon = "as_replace_but.svg", Synonyms = "replace component заменить компонент", CanRun = Sel, Run = () => ReplaceComponent(w) });
         r.Add(new AppCommand { Id = "as.fix", Label = "Зафиксировать компонент", Group = A, Icon = "as_fix_but.svg", Synonyms = "fix ground зафиксировать", CanRun = Sel, Run = () => ToggleFix(w) });
         r.Add(new AppCommand { Id = "as.pattern", Label = "Массив компонентов", Group = A, Icon = "as_pattern_but.svg", Synonyms = "pattern components массив компонентов", CanRun = Sel, Run = () => PatternDialog(w) });
@@ -628,24 +628,42 @@ public static class AssemblyCommands
         r.Add(new AppCommand { Id = "as.subassembly", Label = "Подсборка из выбранных", Group = A, Icon = "as_subassembly_but.svg", Synonyms = "subassembly подсборка", CanRun = Sel, Run = () => SubAssembly(w) });
         r.Add(new AppCommand { Id = "as.explode", Label = "Разнесённый вид", Group = A, Icon = "as_explode_but.svg", Synonyms = "explode разнесённый вид", CanRun = AM, IsChecked = () => Asm(w) && IsExploded(w), Run = () => ToggleExplode(w) });
         r.Add(new AppCommand { Id = "as.bom", Label = "Спецификация", Group = A, Icon = "as_bom_but.svg", Synonyms = "bom bill of materials спецификация", CanRun = () => Asm(w), Run = () => ShowBom(w) });
+        // k149: переместить / повернуть свободный компонент (6 DOF) точными значениями; маркер на виде — при выборе
+        r.Add(new AppCommand { Id = "as.move", Label = "Переместить / повернуть компонент", Group = A, Icon = "ff_move_but.svg", Synonyms = "move rotate component переместить повернуть 6 dof",
+            CanRun = () => AM() && SelectedComponents(w).Count == 1 && Views.MainWindow.IsFree6(SelectedComponents(w)[0]), Run = async () => await w.MoveComponentByValues() });
         r.Add(new AppCommand { Id = "as.drag", Label = "Перетащить компонент (проверка движения)", Group = A, Icon = "as_drag_but.svg", Synonyms = "drag move component перетащить",
             CanRun = AM, IsChecked = () => w.ViewPort.DragComponents, Run = () => { w.ViewPort.DragComponents = !w.ViewPort.DragComponents; w.RefreshToolStates(); w.ShowToast(w.ViewPort.DragComponents ? L("Выберите компонент и тяните левой кнопкой; ограничения возвращают его по свободам") : L("Перетаскивание выключено"), error: false); } });
         r.Add(new AppCommand { Id = "as.flip", Label = "Перевернуть направление ограничения", Group = A, Icon = "as_flip_but.svg", Synonyms = "flip constraint перевернуть ограничение",
             CanRun = () => Asm(w) && w.SelectedTreeConstraint() != null, Run = () => { if (w.SelectedTreeConstraint() is { } t) FlipConstraint(w, t.Part, t.Index); } });
+        // k149 (замечание 03.11, 09:02): кнопка доступна, только если выбранное подходит (две ссылки на разных компонентах,
+        // годные для этого ограничения или соединения); значки ограничений — те же, что у ограничений эскиза
+        bool CanMate(MateCmd cmd)
+        {
+            if (!AM()) return false;
+            var gs = SelectedGeos(w); if (gs.Count < 2) return false;
+            try { return Plan(cmd, gs[0], gs[1], cmd == MateCmd.Distance ? 10 : cmd == MateCmd.Angle ? 45 : 0, out _) != null; } catch { return false; }
+        }
+        bool CanJoint(MateType t)
+        {
+            if (!AM()) return false;
+            if (t == MateType.Free) return SelectedComponents(w).Count > 0;
+            var gs = SelectedGeos(w); if (gs.Count < 2) return false;
+            try { return PlanJoint(t, gs[0], gs[1], out var mv, out _) != null && mv != null; } catch { return false; }
+        }
         void M(string id, string label, string icon, MateCmd cmd, string syn) =>
-            r.Add(new AppCommand { Id = id, Label = label, Group = C, Icon = icon, Synonyms = syn, CanRun = AM, Run = () => Constrain(w, cmd) });
-        M("mate.coincident", "Совпадение", "mate_coincident_but.svg", MateCmd.Coincident, "coincident mate совпадение прижать");
-        M("mate.distance", "Расстояние", "mate_distance_but.svg", MateCmd.Distance, "distance offset расстояние");
-        M("mate.angle", "Угол", "mate_angle_but.svg", MateCmd.Angle, "angle угол");
-        M("mate.parallel", "Параллельно", "mate_parallel_but.svg", MateCmd.Parallel, "parallel параллельно");
-        M("mate.perpendicular", "Перпендикулярно", "mate_perpendicular_but.svg", MateCmd.Perpendicular, "perpendicular перпендикулярно");
-        M("mate.concentric", "Соосность", "mate_concentric_but.svg", MateCmd.Concentric, "concentric coaxial соосность");
-        M("mate.tangent", "Касание", "mate_tangent_but.svg", MateCmd.Tangent, "tangent касание");
-        M("mate.insert", "Вставка (болт в отверстие)", "mate_insert_but.svg", MateCmd.Insert, "insert bolt hole вставка болт");
-        M("mate.point_on", "Точка на поверхности / прямой", "mate_point_on_but.svg", MateCmd.PointOn, "point on surface line точка на");
-        M("mate.rigid", "Жёсткая связь", "mate_rigid_but.svg", MateCmd.Rigid, "rigid жёсткая связь");
+            r.Add(new AppCommand { Id = id, Label = label, Group = C, Icon = icon, Synonyms = syn, CanRun = () => CanMate(cmd), Run = () => Constrain(w, cmd) });
+        M("mate.coincident", "Совпадение", "con_coincident_but.svg", MateCmd.Coincident, "coincident mate совпадение прижать");
+        M("mate.distance", "Расстояние", "dim_linear_but.svg", MateCmd.Distance, "distance offset расстояние");
+        M("mate.angle", "Угол", "dim_angle_but.svg", MateCmd.Angle, "angle угол");
+        M("mate.parallel", "Параллельно", "con_parallel_but.svg", MateCmd.Parallel, "parallel параллельно");
+        M("mate.perpendicular", "Перпендикулярно", "con_perpendicular_but.svg", MateCmd.Perpendicular, "perpendicular перпендикулярно");
+        M("mate.concentric", "Соосность", "con_concentric_but.svg", MateCmd.Concentric, "concentric coaxial соосность");
+        M("mate.tangent", "Касание", "con_tangent_but.svg", MateCmd.Tangent, "tangent касание");
+        M("mate.insert", "Вставка (болт в отверстие)", "f_hole_coaxial_but.svg", MateCmd.Insert, "insert bolt hole вставка болт");
+        M("mate.point_on", "Точка на поверхности / прямой", "con_point_on_but.svg", MateCmd.PointOn, "point on surface line точка на");
+        M("mate.rigid", "Жёсткая связь", "con_fix_but.svg", MateCmd.Rigid, "rigid жёсткая связь");
         void Jn(string id, string label, string icon, MateType t, string syn) =>
-            r.Add(new AppCommand { Id = id, Label = label, Group = J, Icon = icon, Synonyms = syn, CanRun = AM, Run = () => Joint(w, t) });
+            r.Add(new AppCommand { Id = id, Label = label, Group = J, Icon = icon, Synonyms = syn, CanRun = () => CanJoint(t), Run = () => Joint(w, t) });
         Jn("joint.fixed", "Соединение: жёсткое", "joint_fixed_but.svg", MateType.Weld, "fixed joint жёсткое соединение");
         Jn("joint.pin", "Соединение: шарнир", "joint_pin_but.svg", MateType.Pin, "pin revolute шарнир");
         Jn("joint.slider", "Соединение: ползун", "joint_slider_but.svg", MateType.Slider, "slider prismatic ползун");

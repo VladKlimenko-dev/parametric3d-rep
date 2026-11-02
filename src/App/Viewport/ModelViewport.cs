@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Input;
 using Avalonia.OpenGL;
 using Avalonia.OpenGL.Controls;
@@ -495,6 +495,9 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
 
     private ModelItem? _treeHover;
 
+    /// <summary>k149: что подсветить целиком по элементу под курсором (деталь сборки, деталь импорта); null — только его.</summary>
+    public Func<PickRef, ModelItem?>? HoverGroup;
+
     public void HighlightFromTree(ModelItem? item)
     {
         if (ReferenceEquals(_treeHover, item)) return;
@@ -551,6 +554,8 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         if (!CenterHoverOff && Selection.Hover is { Kind: PickKind.SketchPoint, Target: SkPoint hq } && CenterOwner(hq) is { } ow && !Selection.Contains(ow.Id))
         { Set(ow.Id, 1); CenterOwnerHovers++; }
         if (_treeHover != null) SetItem(_treeHover, 1);
+        // k149 (замечание 03.11, 08:09): в сборке под курсором — вся деталь (и деталь импорта — всё её тело)
+        if (!Selection.Hover.IsEmpty && HoverGroup?.Invoke(Selection.Hover) is { } hg) SetItem(hg, 1);
         if (_refHover != null) foreach (var id in _refHover) if (!Selection.Contains(id)) Set(id, 1);
     }
 

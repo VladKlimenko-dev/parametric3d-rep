@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Model;
@@ -154,6 +154,16 @@ public static class SceneBuilder
             color = new Vector4(mc.X, mc.Y, mc.Z, 1f);
         }
 
+        // k149: скрытые тела детали (детали импортированной сборки) — без их треугольников, рёбер и вершин
+        var hid = part.ShowsCached ? null : part.HiddenIds();
+        int[] idx = md.Indices;
+        if (hid is { } hh && hh.Faces.Count > 0)
+        {
+            var keep = new List<int>(idx.Length);
+            for (int t = 0; t + 2 < idx.Length; t += 3)
+                if (!hh.Faces.Contains(md.Vertices[idx[t]].FaceId)) { keep.Add(idx[t]); keep.Add(idx[t + 1]); keep.Add(idx[t + 2]); }
+            idx = keep.ToArray();
+        }
         // номер выбора грани — по id грани
         var facePick = new Dictionary<uint, uint>();
         var item = new MeshItem
@@ -162,7 +172,7 @@ public static class SceneBuilder
             MatColor = part.Material is { } pm ? new Vector4(pm.Color.X, pm.Color.Y, pm.Color.Z, 1f) : th.Body,
             MatSpec = part.Material?.Specular ?? 0.3f, MatShine = part.Material?.Shininess ?? 48, MatMetal = part.Material?.Metallic == true ? 1 : 0,
             Pos = new Vector3[md.Vertices.Length], Nrm = new Vector3[md.Vertices.Length], Pick = new uint[md.Vertices.Length],
-            Idx = md.Indices,
+            Idx = idx,
         };
         for (int i = 0; i < md.Vertices.Length; i++)
         {
@@ -179,6 +189,7 @@ public static class SceneBuilder
         if (!stale)
         foreach (var (edgeId, pts) in md.EdgePolylines)
         {
+            if (hid is { } he && he.Edges.Contains(edgeId)) continue;
             uint pick = edgeId == 0 || part.ShowsCached ? 0u : s.AddPick(new PickRef(edgeId, PickKind.Edge, part, null), 2, part.Id);
             for (int i = 1; i < pts.Length; i++)
                 s.BodyEdges.Add(Line(Vector3.TransformPosition(pts[i - 1], xf), Vector3.TransformPosition(pts[i], xf), th.Edge, th.EdgeWidth, 0, pick));
@@ -186,6 +197,7 @@ public static class SceneBuilder
         if (!stale)
         foreach (var (vid, p) in md.Points)
         {
+            if (hid is { } hv && hv.Vertices.Contains(vid)) continue;
             uint pick = part.ShowsCached ? 0u : s.AddPick(new PickRef(vid, PickKind.Vertex, part, null), 3, part.Id);
             s.BodyVertices.Add(new PointInst { P = Vector3.TransformPosition(p, xf), Color = SceneData.Pack(th.Vertex), Px = th.VertexSize, Shape = 0, Pick = pick });
         }
