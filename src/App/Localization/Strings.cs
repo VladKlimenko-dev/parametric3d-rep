@@ -230,7 +230,7 @@ public static class Strings
         ["Фильтр по имени"] = "Filter by name", ["Имя:"] = "Name:", ["Обозначение"] = "Part number", ["Наименование"] = "Title",
         ["Изменение"] = "Revision", ["Габариты"] = "Overall size", ["Ш × В × Г"] = "W × H × D", ["Ед. учёта"] = "UoM",
         ["Ед. длины"] = "Length units", ["Допуски"] = "Tolerances", ["Сборка"] = "Assembly", ["Зависит от"] = "Depends on",
-        ["Ссылка в"] = "Referenced in", ["Импорт STL"] = "STL import", ["Импорт STL «{0}»"] = "STL import «{0}»",
+        ["Ссылка в"] = "Referenced in", ["Импорт STL"] = "STL import", ["Импорт STL «{0}»"] = "STL import «{0}»", ["Импорт «{0}»"] = "Import «{0}»",
         ["Преобразовать в точную геометрию"] = "Convert to exact geometry", ["Выравнивать по замыслу"] = "Align to design intent",
         ["Выравнивать по замыслу (оси, соосность, круглые размеры, касания)"] = "Align to design intent (axes, coaxiality, round values, tangency)",
         ["Единицы файла"] = "File units", ["Импортировать"] = "Import", ["Допуск, × (1 — сетка из САПР; скан — 10…100)"] = "Tolerance, × (1 — CAD mesh; scan — 10…100)",

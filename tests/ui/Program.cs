@@ -1162,6 +1162,47 @@ Check("UI-FILE-ROUNDTRIP", () =>
     w.Close();
 });
 
+Check("UI-IMPORT-STEP", () =>
+{
+    // k148g (замечание 02.11, 23:10): импорт STEP/IGES открывал пустую деталь — тела клались без операции, и перестроение
+    // истории их стирало. Теперь — операция «Импорт» в дереве: после перестроения, сохранения и открытия тело то же.
+    var s = DocumentSession.Sample();
+    s.Part!.Rebuild(s.Document.Parameters);
+    double v0 = s.Part.Volume;
+    string baseP = Path.Combine(Path.GetTempPath(), $"uicheck_imp_{Guid.NewGuid():N}");
+    string step = baseP + ".step", igs = baseP + ".igs", p3d = baseP + ".p3d";
+    ExportService.Export(s, step); ExportService.Export(s, igs);
+    foreach (var src in new[] { step, igs })
+    {
+        var imp = DocumentSession.Import(src, new List<string>());
+        var w = Open(imp);
+        imp.Document.RebuildDirty();
+        var part = imp.Part!;
+        Require(part.Features.Count == 1 && part.Features[0] is Parametric3D.Model.Features.InsertBodyFeature, $"{Path.GetExtension(src)}: no import operation in the tree");
+        part.Rebuild(imp.Document.Parameters);
+        Require(part.Bodies.Count == 1, $"{Path.GetExtension(src)}: {part.Bodies.Count} bodies after rebuild");
+        Require(Math.Abs(part.Volume - v0) <= 1e-6 * Math.Max(1, v0), $"{Path.GetExtension(src)}: volume {part.Volume} vs {v0}");
+        imp.SaveAs(p3d);
+        var s2 = DocumentSession.Open(p3d);
+        s2.Part!.Rebuild(s2.Document.Parameters);
+        Require(s2.Part.Bodies.Count == 1 && Math.Abs(s2.Part.Volume - v0) <= 1e-6 * Math.Max(1, v0), $"{Path.GetExtension(src)}: after reopen {s2.Part.Bodies.Count} bodies, volume {s2.Part.Volume} vs {v0}");
+        w.Close();
+    }
+    foreach (var f in new[] { step, igs, p3d }) File.Delete(f);
+    // файлы STEP других систем (tests/stepfiles): после перестроения в детали есть тела
+    string? dir = AppContext.BaseDirectory;
+    while (dir != null && !Directory.Exists(Path.Combine(dir, "tests", "stepfiles"))) dir = Path.GetDirectoryName(dir);
+    if (Environment.GetEnvironmentVariable("P3D_USERMODELS") is { } um && dir == null)
+        for (dir = um; dir != null && !Directory.Exists(Path.Combine(dir, "tests", "stepfiles")); dir = Path.GetDirectoryName(dir)) { }
+    Require(dir != null, "tests/stepfiles not found");
+    foreach (var f in Directory.GetFiles(Path.Combine(dir!, "tests", "stepfiles"), "*.step"))
+    {
+        var imp = DocumentSession.Import(f, new List<string>());
+        imp.Part!.Rebuild(imp.Document.Parameters);
+        Require(imp.Part.Bodies.Count > 0 && imp.Part.Volume > 0, $"{Path.GetFileName(f)}: {imp.Part.Bodies.Count} bodies after rebuild ({imp.Part.Features[0].Error})");
+    }
+});
+
 Check("UI-VIEW-PICK", () =>
 {
     // выбор в виде мышью: наведение на середину куба — грань (подсветка), щелчок — выбор, Shift — добавить, щелчок в

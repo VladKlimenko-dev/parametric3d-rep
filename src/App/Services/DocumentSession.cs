@@ -147,11 +147,28 @@ public sealed class DocumentSession
         return new DocumentSession(doc, null) { Modified = true };
     }
 
-    public static DocumentSession Import(string path, List<string> warnings)
+    /// <summary>
+    /// k148g: ДЕТАЛЬ ИЗ ФАЙЛА STEP/IGES — тела файла операцией «Импорт» в дереве (текст файла хранится в ней, тела — отдельные).
+    /// Прежде тела клались в деталь без операции, и первое же перестроение истории их стирало: открывалась пустая деталь
+    /// (замечание 02.11, 23:10); то же — у компонента сборки из STEP.
+    /// </summary>
+    public static Part ImportPart(string path, List<string> warnings)
     {
         string text = File.ReadAllText(path);
-        var part = Exchange.Read(text, out _, warnings) ?? throw new InvalidDataException(string.Join("\n", warnings));
-        part.Name = Path.GetFileNameWithoutExtension(path);
+        var read = Exchange.Read(text, out _, warnings) ?? throw new InvalidDataException(string.Join("\n", warnings));
+        var part = new Part(Path.GetFileNameWithoutExtension(path));
+        var imp = new Parametric3D.Model.Features.InsertBodyFeature(Loc.L("Импорт «{0}»", Path.GetFileName(path)))
+        {
+            Step = text, SourceName = Path.GetFileName(path), Separate = true,
+        };
+        imp.Prime(read.Bodies.ToList());
+        part.AddFeature(imp);
+        return part;
+    }
+
+    public static DocumentSession Import(string path, List<string> warnings)
+    {
+        var part = ImportPart(path, warnings);
         var doc = new Document(part.Name);
         doc.Root.Add(part);
         return new DocumentSession(doc, null) { Modified = true };

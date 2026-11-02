@@ -1794,6 +1794,30 @@ public static partial class DirectRound
         {
             double hh = 1e-6 * Math.Max(Delta, 1e-9), rr = Math.Max(1, r);
             double tMin = tS - 3 * win, tMax = tS + 3 * win;
+            // ТАБЛИЦА ХРЕБТА: точка хребта — Ньютон с проекциями на грани (дорого), а кривые митры и обрыва вычисляются в тысячах
+            // точек (сетка, проверки). Хребет на окне вокруг t* — по таблице: Эрмит с производными четвёртого порядка
+            // (погрешность ~1e-10 мм при шаге ~0.01 мм); вне окна — точно.
+            Func<double, Vector3d?> Tab(Func<double, Vector3d?> sp, double a, double b, int n)
+            {
+                double h = (b - a) / n; var P = new Vector3d[n + 5]; bool ok = true;
+                for (int i = 0; i < n + 5 && ok; i++) { var x = sp(a + (i - 2) * h); if (x == null) ok = false; else P[i] = x.Value; }
+                if (!ok) return sp;
+                var D = new Vector3d[n + 1];
+                for (int i = 0; i <= n; i++) { int j = i + 2; D[i] = (P[j - 2] - P[j - 1] * 8 + P[j + 1] * 8 - P[j + 2]) / (12 * h); }
+                return t =>
+                {
+                    if (!(t >= a && t <= b)) return sp(t);
+                    double x = (t - a) / h; int i = Math.Clamp((int)Math.Floor(x), 0, n - 1); double u = x - i;
+                    double h00 = 2 * u * u * u - 3 * u * u + 1, h10 = u * u * u - 2 * u * u + u, h01 = -2 * u * u * u + 3 * u * u, h11 = u * u * u - u * u;
+                    return P[i + 2] * h00 + D[i] * (h10 * h) + P[i + 3] * h01 + D[i + 1] * (h11 * h);
+                };
+            }
+            {
+                double tEndV0 = dk > 0 ? Delta : 0, span0 = Math.Min(2 * win, 8 * Math.Abs(tEndV0 - tS) + 0.05 * win);
+                double half = 1.5 * span0 + 4 * r / Math.Max(1e-9, ((Ed(tS + hh) - Ed(tS - hh)).Length / (2 * hh)));
+                int n = Math.Clamp((int)Math.Ceiling(2 * half / Math.Max(1e-4, 0.01 * Math.Min(1, r))), 256, 8192);
+                spT = Tab(spT, tS - half, tS + half, n); spE = Tab(spE, tS - half, tS + half, n);
+            }
             Vector3d? D1(Func<double, Vector3d?> sp, double t) { var a = sp(t - hh); var b = sp(t + hh); return a == null || b == null ? null : (b.Value - a.Value) / (2 * hh); }
             (double D, Vector3d G, double T)? Tube(Func<double, Vector3d?> sp, Vector3d y)
             {
@@ -1813,11 +1837,14 @@ public static partial class DirectRound
                 var w = y - cc.Value; double L = w.Length;
                 return L > 0 ? (L, w / L, t) : null;
             }
+            var edS = Ed(tS);
             double SideOn(Vector3d Q, Geometry.Ssi.Shape sh, double t)
             {
                 double u = CurveParam.Closest(sc, Q); var sg = sc.PointAt(u);
                 var w = Vector3d.Cross(Geometry.Ssi.Implicit(sh, sg).G, sc.TangentAt(u)).Normalized();
-                if (Vector3d.Dot(Ed(t) - sg, w) < 0) w = -w;
+                // ориентация — по точке ребра в t* (за вершиной продолжение ребра уходит за шов, и знак по Ed(t) переворачивался:
+                // ложный корень у s110, третий угол)
+                if (Vector3d.Dot(edS - sg, w) < 0) w = -w;
                 return Vector3d.Dot(Q - sg, w);
             }
             Vector3d? Rail(Func<double, Vector3d?> sp, Geometry.Ssi.Shape sh, double t) { var x = sp(t); return x == null ? null : Foot(sh, x.Value); }
@@ -1860,7 +1887,21 @@ public static partial class DirectRound
             }
             var B1 = Rail(spT, shT, tB1)!.Value; var B2 = Rail(spE, shE, tB2)!.Value;
             double o1 = (sc.PointAt(CurveParam.Closest(sc, B1)) - B1).Length, o2 = (sc.PointAt(CurveParam.Closest(sc, B2)) - B2).Length;
-            if (o1 > 1e-7 * rr || o2 > 1e-7 * rr) { Debug?.Invoke($"open: crease bevel — rail ends off the seam ({o1:E1}/{o2:E1})"); return null; }
+            if (o1 > 1e-7 * rr || o2 > 1e-7 * rr)
+            {
+                if (Debug != null)
+                {
+                    var Vv = ends[k].V; var sa = sc.PointAt(sc.T0); var sb = sc.PointAt(sc.T1);
+                    Debug($"open: crease bevel off-seam: V {Vv:0.#####} B1 {B1:0.#####} |B1-V| {(B1 - Vv).Length:E2} |B2-V| {(B2 - Vv).Length:E2}; seam ends {sa:0.####} / {sb:0.####}");
+                    for (int i = 0; i <= 8; i++)
+                    {
+                        double tt = tS + (tB1 - tS) * i / 8.0; var q = Rail(spT, shT, tt); var xs = spT(tt);
+                        if (q == null || xs == null) continue;
+                        Debug($"open: crease bevel off-seam T rail t {tt:G8}: |q-V| {(q.Value - Vv).Length:E3} F_E(q) {Geometry.Ssi.Implicit(shE, q.Value).F:E3} F_E(c) {Geometry.Ssi.Implicit(shE, xs.Value).F:E3} side {SideOn(q.Value, shT, tt):E3}");
+                    }
+                }
+                Debug?.Invoke($"open: crease bevel — rail ends off the seam ({o1:E1}/{o2:E1})"); return null;
+            }
             var V = ends[k].V; bool bigT = (B1 - V).Length > (B2 - V).Length;
             var bv = new CreaseBevel { BigT = bigT, C = c, QS = qS, QT = qT, QE = qE, TS = tS, SpT = spT, SpE = spE, ShT = shT, ShE = shE, ShS = shS };
             bool same = (B1 - B2).Length < 10 * 1e-7 * rr;
@@ -1937,121 +1978,171 @@ public static partial class DirectRound
             // дуга от точки на S до точки на T (часть ленты до t*) и до точки на E (часть после t*); общая дуга — до ближней из
             // двух, остаток (ближняя → дальняя) — край той части, чьё сечение длиннее, и грани-обрыва в плоскости t*. Грань-
             // обрыв ограничена этим остатком и следами T и E в плоскости до точки шва; шов укорочен до неё.
-            if (crOn[0] && crOn[1]) { cwhy = "open curved: concave crease at both ends"; return false; }
-            int k = crOn[0] ? 0 : 1; bool tA = swOnA[k];
-            if (swPart[1 - k] != null) { cwhy = "open curved: concave crease with a seam switch at the other end"; return false; }
-            double ts = crT[k]; var c = crC[k]; var qS = crQS[k]; var qT = crQT[k]; var qE = crQE[k]; var sP = crSeamPt[k];
-            var shTk = crShT[k]!; var shEk = crShE[k]!;
-            if (crBv[k] is { } bvk) return Bevel(bvk);
-            // k148g: СКОС. Части ленты: T — от дальнего конца до TX (за t* у большей T — до шва), E — от TY до вершины. Край у t*
-            // каждой части: от qS митра до PMil, у большей — обрыв до точки шва B, дальше свой край на своей грани до q своей части.
-            bool Bevel(CreaseBevel bv)
+            if ((!crOn[0] || crBv[0] != null) && (!crOn[1] || crBv[1] != null)) return BevelAll();
+            // k148g: СКОС У ОДНОГО ИЛИ ОБОИХ КОНЦОВ. Части ленты по t: E у конца 0 (до TY0), T (от TX0 до TX1), E у конца 1 (от TY1).
+            // Край у излома каждой части: от qS митра до PMil, у большей — обрыв до точки шва B, дальше свой край на своей грани.
+            // Контур части (сторона A — T): сторона a→b, конец b (T→S), S b→a, конец a (S→T); при T на B — обратный обход.
+            bool BevelAll()
             {
-                ICurve3 mT = tA ? bA : bB, pE = swParts[k]![0].C;
-                double s0b = tA ? tB0 : tA0, s1b = tA ? tB1 : tA1;
-                Func<double, Vector3d> fSb = tA ? QB : QA;
-                if (!(ts > s0b && ts < s1b)) { cwhy = "open curved: concave crease outside the contact line"; return false; }
-                if ((fSb(ts) - qS).Length > 1e-7) { cwhy = "open curved: concave crease — the S contact does not pass the three-face ball"; return false; }
-                var Sa = new ProcCurve3(fSb, s0b, ts, false, "rolling-ball contact"); var Sb = new ProcCurve3(fSb, ts, s1b, false, "rolling-ball contact");
-                Vector3d pT0b = tA ? qa0 : qb0, pT1b = tA ? qa1 : qb1, pS0b = tA ? qb0 : qa0, pS1b = tA ? qb1 : qa1;
-                // край у t* от qS до q части (T или E)
-                List<Seg> Up(bool eSide)
+                var bvs = new[] { crOn[0] ? crBv[0] : null, crOn[1] ? crBv[1] : null };
+                int kk0 = bvs[0] != null ? 0 : 1;
+                bool tAb = swOnA[kk0];
+                for (int e = 0; e < 2; e++)
                 {
-                    var l = new List<Seg> { new() { Curve = bv.Mitre, A = qS, B = bv.Pm } };
+                    if (bvs[e] != null && swOnA[e] != tAb) { cwhy = "open curved: concave crease — side faces differ at the two ends"; return false; }
+                    if (bvs[e] == null && swPart[e] != null) { cwhy = "open curved: concave crease with a seam switch at the other end"; return false; }
+                }
+                ICurve3 mT = tAb ? bA : bB;
+                double s0b = tAb ? tB0 : tA0, s1b = tAb ? tB1 : tA1;
+                Func<double, Vector3d> fSb = tAb ? QB : QA;
+                Vector3d pT0b = tAb ? qa0 : qb0, pT1b = tAb ? qa1 : qb1, pS0b = tAb ? qb0 : qa0, pS1b = tAb ? qb1 : qa1;
+                foreach (var bv in bvs)
+                {
+                    if (bv == null) continue;
+                    if (!(bv.TS > s0b && bv.TS < s1b)) { cwhy = "open curved: concave crease outside the contact line"; return false; }
+                    if ((fSb(bv.TS) - bv.QS).Length > 1e-7) { cwhy = "open curved: concave crease — the S contact does not pass the three-face ball"; return false; }
+                }
+                List<Seg> Up(CreaseBevel bv, bool eSide)
+                {
+                    var l = new List<Seg> { new() { Curve = bv.Mitre, A = bv.QS, B = bv.Pm } };
                     bool big = eSide ? !bv.BigT : bv.BigT;
                     if (big && bv.Cliff != null) l.Add(new Seg { Curve = bv.Cliff, A = bv.Pm, B = bv.B });
                     var from = big ? bv.B : bv.Pm;
-                    if (eSide) l.Add(new Seg { Curve = bv.RailE, A = from, B = qE });
-                    else l.Add(new Seg { Curve = bv.RailT, A = from, B = qT });
+                    if (eSide) l.Add(new Seg { Curve = bv.RailE, A = from, B = bv.QE });
+                    else l.Add(new Seg { Curve = bv.RailT, A = from, B = bv.QT });
                     return l;
                 }
-                List<Seg> Down(bool eSide) => Up(eSide).AsEnumerable().Reverse().Select(x => new Seg { Curve = x.Curve, A = x.B, B = x.A }).ToList();
-                // часть 0 (у начала t) — E, если вогнутый излом у начала (k = 0), иначе T
-                bool e0 = k == 0;
-                Vector3d q0 = e0 ? qE : qT, q1 = e0 ? qT : qE;
-                ICurve3 sd0 = e0 ? pE : mT, sd1 = e0 ? mT : pE;
-                List<Seg> L0b, L1b;
-                if (tA)
-                {
-                    L0b = new() { new() { Curve = sd0, A = pT0b, B = q0 } }; L0b.AddRange(Down(e0)); L0b.Add(new Seg { Curve = Sa, A = qS, B = pS0b }); L0b.Add(new Seg { Curve = bE0, A = pS0b, B = pT0b });
-                    L1b = Up(!e0); L1b.Add(new Seg { Curve = sd1, A = q1, B = pT1b }); L1b.Add(new Seg { Curve = bE1, A = pT1b, B = pS1b }); L1b.Add(new Seg { Curve = Sb, A = pS1b, B = qS });
-                }
-                else
-                {
-                    L0b = new() { new() { Curve = Sa, A = pS0b, B = qS } }; L0b.AddRange(Up(e0)); L0b.Add(new Seg { Curve = sd0, A = q0, B = pT0b }); L0b.Add(new Seg { Curve = bE0, A = pT0b, B = pS0b });
-                    L1b = new() { new() { Curve = Sb, A = qS, B = pS1b }, new() { Curve = bE1, A = pS1b, B = pT1b }, new() { Curve = sd1, A = pT1b, B = q1 } }; L1b.AddRange(Down(!e0));
-                }
-                // поверхности частей: свой режим хребта на своём промежутке (T — до TX, E — от TY)
-                SweepSection GenR(double t, bool eReg)
+                List<Seg> Rev(List<Seg> l) => l.AsEnumerable().Reverse().Select(x => new Seg { Curve = x.Curve, A = x.B, B = x.A }).ToList();
+                List<Seg> Down(CreaseBevel bv, bool eSide) => Rev(Up(bv, eSide));
+                ICurve3 SC(double a, double b) => new ProcCurve3(fSb, a, b, false, "rolling-ball contact");
+                SweepSection GenR(double t, bool eReg, CreaseBevel bv)
                 {
                     var x = (eReg ? bv.SpE(t) : bv.SpT(t)) ?? new Vector3d(double.NaN);
                     var qSide = Foot(eReg ? bv.ShE : bv.ShT, x); var qs2 = Foot(bv.ShS, x);
-                    var qa2 = tA ? qSide : qs2; var qb2 = tA ? qs2 : qSide;
+                    var qa2 = tAb ? qSide : qs2; var qb2 = tAb ? qs2 : qSide;
                     var e1b = (qa2 - x).Normalized(); var v2b = (qb2 - x).Normalized();
                     var e2b = v2b - e1b * Vector3d.Dot(e1b, v2b);
                     return SweepSection.Arc(x, e1b, e2b.Normalized(), r, Math.Atan2(e2b.Length, Vector3d.Dot(e1b, v2b)));
                 }
                 double Uof(double t) => (t - tLo) * kU;
-                double uX = Uof(bv.TX), uY = Uof(bv.TY);
-                if (!(uX > 0 && uX < Lp && uY > 0 && uY < Lp)) { cwhy = "open curved: concave crease — bevel beyond the blend range"; return false; }
-                SectionSurface PartR(double ua, double ub, bool eReg)
+                SectionSurface PartR(double ua, double ub, bool eReg, CreaseBevel bv)
                 {
-                    Func<double, SweepSection> g = U => GenR(tLo + U / kU, eReg);
+                    Func<double, SweepSection> g = U => GenR(tLo + U / kU, eReg, bv);
                     var st = new List<double>(); var sc2 = new List<SweepSection>();
                     int nst = 24; for (int i = 0; i <= nst; i++) { double U = ua + (ub - ua) * i / nst; st.Add(U); sc2.Add(g(U)); }
                     var brk = surf.Breaks.Where(b => b > ua + 1e-9 && b < ub - 1e-9).ToList();
                     return new SectionSurface(g, st, sc2, false, ua, ub, brk, tabStep) { ParallelTable = true };
                 }
-                // часть 0 — [0, u_end0], часть 1 — [u_start1, Lp]
-                SectionSurface sf0 = e0 ? PartR(0, uY, true) : PartR(0, uX, false);
-                SectionSurface sf1 = e0 ? PartR(uX, Lp, false) : PartR(uY, Lp, true);
-                FDesc MkB(SectionSurface sf, List<Seg> lp, double tm, bool eReg)
+                void AddPart(SectionSurface sf, bool eReg, CreaseBevel bv, double tm, Seg side, List<Seg> endB, Seg sAB, List<Seg> endA)
                 {
-                    var gm2 = GenR(tm, eReg); var mid2 = gm2.Point(0.5);
+                    List<Seg> lp;
+                    if (tAb) { lp = new() { side }; lp.AddRange(endB); lp.Add(new Seg { Curve = sAB.Curve, A = sAB.B, B = sAB.A }); lp.AddRange(endA); }
+                    else { lp = new() { sAB }; lp.AddRange(Rev(endB)); lp.Add(new Seg { Curve = side.Curve, A = side.B, B = side.A }); lp.AddRange(Rev(endA)); }
+                    var gm2 = GenR(tm, eReg, bv); var mid2 = gm2.Point(0.5);
                     var want2 = (mid2 - gm2.C).Normalized() * (-sigma);
                     var n2 = sf.NormalAt(sf.ProjectToUV(mid2));
                     var fd = new FDesc { Surf = sf, Rev = Vector3d.Dot(n2, want2) < 0, Tag = "round:face", Touched = true, Hint = mid2 };
-                    fd.Loops.Add(lp); return fd;
+                    fd.Loops.Add(lp); blends.Add(fd);
                 }
-                blends.Add(MkB(sf0, L0b, 0.5 * (tLo + ts), e0)); blends.Add(MkB(sf1, L1b, 0.5 * (ts + tHi), !e0));
-                // грань T: от qT — край T до X (шов или PMil), у большей E — обрыв до шва
-                var xT = bv.BigT ? bv.B : bv.Pm;
-                var insT = new List<Seg> { new() { Curve = bv.RailT, A = qT, B = xT } };
-                if (!bv.BigT && bv.Cliff != null) insT.Add(new Seg { Curve = bv.Cliff, A = bv.Pm, B = bv.B });
-                var FTb = tA ? FA : FB; bool dT = false;
-                foreach (var loop in FTb.Loops)
+                var b0 = bvs[0]; var b1 = bvs[1]; var bAny = (b0 ?? b1)!;
+                // линия касания на S делится в изломах; те же куски — и в контуре грани S (сборка сводит рёбра по кривой и концам)
+                var sCuts = new List<(double T, Vector3d P)> { (s0b, pS0b) };
+                if (b0 != null) sCuts.Add((b0.TS, b0.QS));
+                if (b1 != null) sCuts.Add((b1.TS, b1.QS));
+                sCuts.Add((s1b, pS1b));
+                var sPieces = new List<Seg>();
+                for (int i = 0; i + 1 < sCuts.Count; i++) sPieces.Add(new Seg { Curve = SC(sCuts[i].T, sCuts[i + 1].T), A = sCuts[i].P, B = sCuts[i + 1].P });
                 {
-                    for (int i = 0; i < loop.Count && !dT; i++)
+                    var FSb = tAb ? FB : FA; var sMain = tAb ? bB : bA; bool dS = false;
+                    foreach (var loop in FSb.Loops)
                     {
-                        var s1g = loop[i]; var s2g = loop[(i + 1) % loop.Count];
-                        if ((s1g.B - qT).Length < 1e-9 && (s2g.A - bv.B).Length < 1e-9) { loop.InsertRange(i + 1, insT); dT = true; }
-                        else if ((s1g.B - bv.B).Length < 1e-9 && (s2g.A - qT).Length < 1e-9) { loop.InsertRange(i + 1, insT.AsEnumerable().Reverse().Select(x => new Seg { Curve = x.Curve, A = x.B, B = x.A })); dT = true; }
+                        for (int i = 0; i < loop.Count && !dS; i++)
+                        {
+                            if (!ReferenceEquals(loop[i].Curve, sMain)) continue;
+                            bool fwd = (loop[i].A - pS0b).Length < 1e-7 && (loop[i].B - pS1b).Length < 1e-7;
+                            bool bwd = (loop[i].A - pS1b).Length < 1e-7 && (loop[i].B - pS0b).Length < 1e-7;
+                            if (!fwd && !bwd) continue;
+                            loop.RemoveAt(i);
+                            loop.InsertRange(i, (fwd ? sPieces.Select(x => new Seg { Curve = x.Curve, A = x.A, B = x.B }) : Rev(sPieces)).Select(x => { x.JointPiece = true; return x; }));
+                            dS = true;
+                        }
+                        if (dS) break;
                     }
-                    if (dT) break;
+                    if (!dS) { cwhy = "open curved: concave crease — the contact line on S not found in its face"; return false; }
+                    FSb.Touched = true;
                 }
-                if (!dT) { cwhy = "open curved: concave crease — the side face loop does not meet the seam point"; return false; }
-                // грань E: от точки шва B — обрыв (у большей T) до PMil, край E до qE и кусок линии касания до конца звена
-                var FEb = ends[k].FE; var seamEb = tA ? ends[k].EA : ends[k].EB; bool dE = false;
-                var endPb = k == 0 ? pT0b : pT1b;
-                var insE = new List<Seg>();
-                if (bv.BigT && bv.Cliff != null) insE.Add(new Seg { Curve = bv.Cliff, A = bv.B, B = bv.Pm, JointPiece = true });
-                insE.Add(new Seg { Curve = bv.RailE, A = bv.BigT ? bv.Pm : bv.B, B = qE, JointPiece = true });
-                insE.Add(new Seg { Curve = pE, A = qE, B = endPb, JointPiece = true });
-                foreach (var loop in FEb.Loops)
+                double uX0 = b0 != null ? Uof(b0.TX) : 0, uX1 = b1 != null ? Uof(b1.TX) : Lp;
+                double uY0 = b0 != null ? Uof(b0.TY) : 0, uY1 = b1 != null ? Uof(b1.TY) : Lp;
+                if (!(uX0 >= 0 && uX1 <= Lp && uX0 < uX1) || (b0 != null && !(uY0 > 0 && uY0 < Lp)) || (b1 != null && !(uY1 > 0 && uY1 < Lp)))
+                { cwhy = "open curved: concave crease — bevel beyond the blend range"; return false; }
+                // часть T (середина)
                 {
-                    for (int i = 0; i < loop.Count && !dE; i++)
-                    {
-                        if (loop[i].Id != seamEb) continue;
-                        if ((loop[i].B - bv.B).Length < 1e-9) { loop.InsertRange(i + 1, insE); dE = true; }
-                        else if ((loop[i].A - bv.B).Length < 1e-9) { loop.InsertRange(i, insE.AsEnumerable().Reverse().Select(x => new Seg { Curve = x.Curve, A = x.B, B = x.A, JointPiece = true })); dE = true; }
-                    }
-                    if (dE) break;
+                    double ta = b0 != null ? b0.TS : s0b, tb = b1 != null ? b1.TS : s1b;
+                    var side = new Seg { Curve = mT, A = b0 != null ? b0.QT : pT0b, B = b1 != null ? b1.QT : pT1b };
+                    var endB = b1 != null ? Down(b1, false) : new List<Seg> { new() { Curve = bE1, A = pT1b, B = pS1b } };
+                    var sAB = sPieces[b0 != null ? 1 : 0];
+                    var endA = b0 != null ? Up(b0, false) : new List<Seg> { new() { Curve = bE0, A = pS0b, B = pT0b } };
+                    AddPart(PartR(uX0, uX1, false, bAny), false, bAny, 0.5 * (ta + tb), side, endB, sAB, endA);
                 }
-                if (!dE) { cwhy = "open curved: concave crease — the seam end not found in the next face"; return false; }
-                FEb.Touched = true; FTb.Touched = true;
-                Debug?.Invoke($"open: concave crease bevel at t {ts:G8}: big {(bv.BigT ? "T" : "E")}, mitre {(bv.Pm - qS).Length:E2}, cliff {(bv.B - bv.Pm).Length:E2}");
+                if (b0 != null)
+                {
+                    var side = new Seg { Curve = swParts[0]![0].C, A = pT0b, B = b0.QE };
+                    var sAB = sPieces[0];
+                    AddPart(PartR(0, uY0, true, b0), true, b0, 0.5 * (tLo + b0.TS), side, Down(b0, true), sAB, new List<Seg> { new() { Curve = bE0, A = pS0b, B = pT0b } });
+                }
+                if (b1 != null)
+                {
+                    var side = new Seg { Curve = swParts[1]![0].C, A = b1.QE, B = pT1b };
+                    var sAB = sPieces[^1];
+                    AddPart(PartR(uY1, Lp, true, b1), true, b1, 0.5 * (b1.TS + tHi), side, new List<Seg> { new() { Curve = bE1, A = pT1b, B = pS1b } }, sAB, Up(b1, true));
+                }
+                // грани T и E у каждого излома
+                for (int kk = 0; kk < 2; kk++)
+                {
+                    var bv = bvs[kk]; if (bv == null) continue;
+                    var qT = bv.QT; var qE = bv.QE;
+                    var xT = bv.BigT ? bv.B : bv.Pm;
+                    var insT = new List<Seg> { new() { Curve = bv.RailT, A = qT, B = xT, JointPiece = true } };
+                    if (!bv.BigT && bv.Cliff != null) insT.Add(new Seg { Curve = bv.Cliff, A = bv.Pm, B = bv.B, JointPiece = true });
+                    var FTb = tAb ? FA : FB; bool dT = false;
+                    foreach (var loop in FTb.Loops)
+                    {
+                        for (int i = 0; i < loop.Count && !dT; i++)
+                        {
+                            var s1g = loop[i]; var s2g = loop[(i + 1) % loop.Count];
+                            if ((s1g.B - qT).Length < 1e-9 && (s2g.A - bv.B).Length < 1e-9) { loop.InsertRange(i + 1, insT); dT = true; }
+                            else if ((s1g.B - bv.B).Length < 1e-9 && (s2g.A - qT).Length < 1e-9) { loop.InsertRange(i + 1, Rev(insT).Select(x => { x.JointPiece = true; return x; })); dT = true; }
+                        }
+                        if (dT) break;
+                    }
+                    if (!dT) { cwhy = "open curved: concave crease — the side face loop does not meet the seam point"; return false; }
+                    var FEb = ends[kk].FE; var seamEb = tAb ? ends[kk].EA : ends[kk].EB; bool dE = false;
+                    var endPb = kk == 0 ? pT0b : pT1b;
+                    var insE = new List<Seg>();
+                    if (bv.BigT && bv.Cliff != null) insE.Add(new Seg { Curve = bv.Cliff, A = bv.B, B = bv.Pm, JointPiece = true });
+                    insE.Add(new Seg { Curve = bv.RailE, A = bv.BigT ? bv.Pm : bv.B, B = qE, JointPiece = true });
+                    insE.Add(new Seg { Curve = swParts[kk]![0].C, A = qE, B = endPb, JointPiece = true });
+                    foreach (var loop in FEb.Loops)
+                    {
+                        for (int i = 0; i < loop.Count && !dE; i++)
+                        {
+                            if (loop[i].Id != seamEb) continue;
+                            if ((loop[i].B - bv.B).Length < 1e-9) { loop.InsertRange(i + 1, insE); dE = true; }
+                            else if ((loop[i].A - bv.B).Length < 1e-9) { loop.InsertRange(i, Rev(insE).Select(x => { x.JointPiece = true; return x; })); dE = true; }
+                        }
+                        if (dE) break;
+                    }
+                    if (!dE) { cwhy = "open curved: concave crease — the seam end not found in the next face"; return false; }
+                    FEb.Touched = true; FTb.Touched = true;
+                    Debug?.Invoke($"open: concave crease bevel {kk} at t {bv.TS:G8}: big {(bv.BigT ? "T" : "E")}, mitre {(bv.Pm - bv.QS).Length:E2}, cliff {(bv.B - bv.Pm).Length:E2}");
+                }
                 return true;
             }
+            if (crOn[0] && crOn[1]) { cwhy = "open curved: concave crease at both ends"; return false; }
+            int k = crOn[0] ? 0 : 1; bool tA = swOnA[k];
+            if (swPart[1 - k] != null) { cwhy = "open curved: concave crease with a seam switch at the other end"; return false; }
+            double ts = crT[k]; var c = crC[k]; var qS = crQS[k]; var qT = crQT[k]; var qE = crQE[k]; var sP = crSeamPt[k];
+            var shTk = crShT[k]!; var shEk = crShE[k]!;
             var Pp = Ed(ts); var Tp = Td(ts).Normalized();
             // окружность сечения: от qS, в сторону q-точек
             var e1 = (qS - c).Normalized(); var mT = qT - c; var e2 = (mT - e1 * Vector3d.Dot(mT, e1)); e2 -= Tp * Vector3d.Dot(e2, Tp); e2.Normalize();

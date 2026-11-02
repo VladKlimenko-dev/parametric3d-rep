@@ -260,7 +260,7 @@ public static class AssemblyCommands
             // u13h: FreeForm-тело в сборке — пересекающиеся тела объединяются (решение 2026-10-13)
             if (part.FreeFormDoc) { part.MergeFreeForm = true; part.Invalidate(); }
         }
-        else part = Exchange.Read(File.ReadAllText(path), out _, warnings) ?? throw new InvalidDataException(string.Join("; ", warnings));
+        else part = DocumentSession.ImportPart(path, warnings);
         part.SourcePath = path;
         part.Name = Path.GetFileNameWithoutExtension(path);
         return part;

@@ -705,7 +705,7 @@ public static class DocumentFile
         }),
         InsertBodyFeature ib => Dto("insert_body", ib, d =>
         {
-            PutS(d, "step", ib.Step); PutS(d, "source", ib.SourceName); d.Point = new[] { ib.Offset.X, ib.Offset.Y, ib.Offset.Z };
+            PutS(d, "step", ib.Step); PutS(d, "source", ib.SourceName); d.Point = new[] { ib.Offset.X, ib.Offset.Y, ib.Offset.Z }; if (ib.Separate) Flag(d, "separate");
         }),
         HelicalSweepFeature hs => Dto("helical_sweep", hs, d =>
         {
@@ -1345,7 +1345,7 @@ public static class DocumentFile
                 }
                 case "insert_body":
                 {
-                    var ib = new InsertBodyFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut, Step = GetS(fd, "step") ?? "", SourceName = GetS(fd, "source") ?? "", Offset = Vec(fd.Point) };
+                    var ib = new InsertBodyFeature(fd.Name) { Suppressed = fd.Suppressed, Cut = fd.Cut, Step = GetS(fd, "step") ?? "", SourceName = GetS(fd, "source") ?? "", Offset = Vec(fd.Point), Separate = HasFlag(fd, "separate") };
                     part.AddFeature(ib);
                     break;
                 }

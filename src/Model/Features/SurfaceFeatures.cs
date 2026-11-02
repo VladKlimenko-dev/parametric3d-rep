@@ -637,8 +637,14 @@ public sealed class InsertBodyFeature : Feature
     public Vector3d Offset;
     private List<TSolid>? _cache;
     private string? _cacheText;
+    /// <summary>k148g: импорт файла (STEP/IGES) — тела файла остаются отдельными телами детали (не объединяются), каждое —
+    /// копией прочитанного (операции дальше по дереву не трогают кэш).</summary>
+    public bool Separate;
     public InsertBodyFeature(string name = "Insert body") { Name = name; }
-    public override string Summary => $"Inserted body «{SourceName}»";
+    public override string Summary => Separate ? $"Import «{SourceName}»" : $"Inserted body «{SourceName}»";
+
+    /// <summary>Уже прочитанные тела того же текста (импорт: файл разбирается один раз).</summary>
+    public void Prime(List<TSolid> bodies) { _cache = bodies; _cacheText = Step; }
 
     public List<TSolid> Bodies(List<string> warnings)
     {
@@ -651,6 +657,18 @@ public sealed class InsertBodyFeature : Feature
     public override void Execute(BuildContext ctx)
     {
         if (string.IsNullOrEmpty(Step)) throw new RebuildException(OperationOutcome.InvalidInput, "Insert body: no body.");
+        if (Separate)
+        {
+            int n = 0;
+            foreach (var b0 in Bodies(ctx.Warnings))
+            {
+                var b = TopologyClone.Deep(b0);
+                if (Offset.LengthSquared > 0) b = TopologyTransform.Apply(b, TransformOp.Move(Offset)) ?? TransformOp.Copy(b, TransformOp.Move(Offset));
+                ctx.Bodies.Add(b); n++;
+            }
+            if (n == 0) throw new RebuildException(OperationOutcome.InvalidInput, "Import: no bodies were read from the file.");
+            return;
+        }
         foreach (var b0 in Bodies(ctx.Warnings))
         {
             var b = Offset.LengthSquared > 0 ? (TopologyTransform.Apply(b0, TransformOp.Move(Offset)) ?? TransformOp.Copy(b0, TransformOp.Move(Offset))) : b0;
