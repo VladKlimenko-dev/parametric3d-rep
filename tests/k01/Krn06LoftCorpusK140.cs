@@ -39,8 +39,10 @@ static partial class Program
                 // резцом); воспроизводится так же, иначе тело перед последней операцией другое и случай не о том
                 bool noSwitch = row.Length > 2 && row[2].Trim() == "noswitch";
                 Parametric3D.Kernel.Ops.DirectRound.ChamferSwitchOffForTest = noSwitch;
+                // k148h: «nocrease» — история до точного угла у излома шва (прежние операции резцом), воспроизводится так же
+                Parametric3D.Kernel.Ops.DirectRound.CreaseOffForTest = row.Length > 2 && row[2].Trim() == "nocrease";
                 (bool Ok, double Dv, long Ms, List<string> Problems) r;
-                try { r = CorpusFixture(Path.Combine(cdir, file)); } finally { Parametric3D.Kernel.Ops.DirectRound.ChamferSwitchOffForTest = false; }
+                try { r = CorpusFixture(Path.Combine(cdir, file)); } finally { Parametric3D.Kernel.Ops.DirectRound.ChamferSwitchOffForTest = false; Parametric3D.Kernel.Ops.DirectRound.CreaseOffForTest = false; }
                 Log(new { file, r.Ok, dv = Math.Round(r.Dv, 4), want, r.Ms, r.Problems });
                 foreach (var pr in r.Problems) fails.Add($"{file}: {pr}");
                 if (r.Ok && Math.Abs(r.Dv - want) > 0.01 * Math.Abs(want) + 0.05) fails.Add($"{file}: removed volume {r.Dv:0.####}, expected {want:0.####}");

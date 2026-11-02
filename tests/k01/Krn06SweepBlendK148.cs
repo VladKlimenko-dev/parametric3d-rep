@@ -108,4 +108,52 @@ static partial class Program
             Require(fails.Count == 0, string.Join("; ", fails));
         });
     }
+
+    /// <summary>
+    /// k148h: УГОЛ ЦЕПОЧКИ СКРУГЛЕНИЙ У ШВА С ВОГНУТЫМ ИЗЛОМОМ (корпус s110, шаг 0: R5.45 по кромке лофта, 4 звена) — скос по
+    /// пересечению лент (митра + обрыв большей ленты гранью меньшей, как ChFi3d PerformTwoCornerbyInter / SMLib Nx2 bevel).
+    /// Прежде — резец (многогранно). Мутации P3D_DRCREASE3=0, P3D_DRCREASEBEVEL=0 роняют.
+    /// </summary>
+    static void Krn06SeqS110Checks()
+    {
+        Check("KRN06-SEQ-S110-CREASE-BEVEL", () =>
+        {
+            var dir = UserModelsDir() ?? throw new Exception("tests/ui/data not found");
+            string text = File.ReadAllText(Path.Combine(dir, "corpus_k148h_s110_0.p3d"));
+            var (p, pars) = DocumentFile.Load(text);
+            int n = p.Features.Count;
+            // объём — интегралом при началах отсчёта в центре тела и в нуле: стенки лофтов корпуса — FacetedSurface, и у самого
+            // лофта объём от начала зависит на ~7 мм³ из 507 тыс. (квадратура по граням-сеткам); снятый скруглением объём —
+            // разность, она от начала должна почти не зависеть (ошибка области новой грани дала бы единицы мм³ и больше)
+            (double C, double Z) Both(Parametric3D.Kernel.Topology.TSolid t)
+            {
+                bool was = Parametric3D.Kernel.Topology.AnalyticVolume.OriginShift;
+                try
+                {
+                    Parametric3D.Kernel.Topology.AnalyticVolume.OriginShift = true; var c = Parametric3D.Kernel.Topology.AnalyticVolume.OfUncached(t);
+                    Parametric3D.Kernel.Topology.AnalyticVolume.OriginShift = false; var z = Parametric3D.Kernel.Topology.AnalyticVolume.OfUncached(t);
+                    return (c ?? double.NaN, z ?? double.NaN);
+                }
+                finally { Parametric3D.Kernel.Topology.AnalyticVolume.OriginShift = was; }
+            }
+            p.StageIndex = n - 1; p.MarkStageMoved(); p.Rebuild(pars);
+            var before = Both(p.Bodies[0]);
+            p.StageIndex = n; p.MarkStageMoved(); p.Rebuild(pars);
+            var f = p.Features[n - 1];
+            string g = string.Join(",", p.Bodies.Select(b => b.Guarantee));
+            var fails = new List<string>();
+            if (f.Error != null) fails.Add(f.Error);
+            if (g != "ExactAnalytic") fails.Add("guarantee " + g);
+            if (p.Bodies.Count == 1 && fails.Count == 0)
+            {
+                var after = Both(p.Bodies[0]);
+                double rc = before.C - after.C, rz = before.Z - after.Z;
+                Log(new { feature = f.Name, guarantee = g, removedCentre = Math.Round(rc, 6), removedZero = Math.Round(rz, 6) });
+                // замер k148h (начало — центр); формула сечений по рёбрам (без углов, 12 сечений на ребро) — 2563.75 (0.2 %)
+                if (Math.Abs(rc - 2558.8996) > 1e-3) fails.Add($"removed {rc:0.######}, expected 2558.8996");
+                if (!(Math.Abs(rc - rz) < 0.5)) fails.Add($"removed volume depends on the origin: {rc:0.###} / {rz:0.###}");
+            }
+            Require(fails.Count == 0, string.Join("; ", fails));
+        });
+    }
 }

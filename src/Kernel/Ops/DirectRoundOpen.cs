@@ -111,7 +111,10 @@ public static partial class DirectRound
     /// <summary>k148: стыков скруглений у шва с изломом (шар перекатывается через шов на соседнюю грань).</summary>
     public static long RoundSwitches;
     static readonly bool RoundSwitch = Environment.GetEnvironmentVariable("P3D_DRRDSWITCH") != "0";
-    static readonly bool Crease3 = Environment.GetEnvironmentVariable("P3D_DRCREASE3") == "1";   // пока включается вручную: топология перехода — в работе
+    static readonly bool Crease3On = Environment.GetEnvironmentVariable("P3D_DRCREASE3") != "0";   // k148h: по умолчанию (скос у излома шва); 0 — прежний отказ
+    /// <summary>k148h: фикстуры, чья история записана до точного угла у излома шва (прежние операции шли резцом).</summary>
+    [ThreadStatic] public static bool CreaseOffForTest;
+    static bool Crease3 => Crease3On && !CreaseOffForTest;
     /// <summary>k148f: стыков у вогнутого излома шва через шар трёх граней.</summary>
     public static long CreaseSwitches;
     /// <summary>k148g: угол у вогнутого излома — скос по пересечению лент (митра + обрыв большей ленты гранью меньшей, как
@@ -119,10 +122,11 @@ public static partial class DirectRound
     /// <summary>k148g: шар на шве до вершины (обе стороны стыка — до шва); P3D_DRSEAMTOV=0 — отказ, как прежде.</summary>
     static readonly bool SeamToVertex = Environment.GetEnvironmentVariable("P3D_DRSEAMTOV") == "1";   // в работе: у вершины шар касается конца шва (точки), см. BACKLOG
     public static long SeamToVertexHits;
+    static readonly bool SideRef = Environment.GetEnvironmentVariable("P3D_DRSIDEREF") != "0";
     static readonly bool CreaseBevelOn = Environment.GetEnvironmentVariable("P3D_DRCREASEBEVEL") != "0";
     sealed class CreaseBevel
     {
-        public bool BigT; public Vector3d B, Pm, C, QS, QT, QE; public double TS, TB, TPm, TX, TY;
+        public bool BigT; public Vector3d B, Pm, C, QS, QT, QE; public double TS, TB, TPm, TX, TY, TXs, TYs;
         public Func<double, Vector3d?> SpT = null!, SpE = null!; public Geometry.Ssi.Shape ShT = null!, ShE = null!, ShS = null!;
         public ICurve3 Mitre = null!, RailT = null!, RailE = null!; public ICurve3? Cliff;
     }
@@ -955,11 +959,14 @@ public static partial class DirectRound
                     var V = ends[k].V;
                     double sEs = Vector3d.Dot(NormalOf(ends[k].FE, V), Geometry.Ssi.Implicit(shE, V).G) > 0 ? 1 : -1;
                     // сторона точки относительно шва на поверхности sh: > 0 — к ребру цепочки (на T), < 0 — за швом
+                    // k148g: ориентация стороны — по точке ребра вдали от вершины (у вершины точка ребра совпадает с концом шва, и знак
+                    // по Ed(t) — шум: «у самой вершины он неустойчив»; ложные корни HT у s106). Мутация P3D_DRSIDEREF=0.
+                    var edRef = Ed(tEnd - dk * Math.Min(0.5 * Math.Min(0.45 * Delta, 6 * r / speed), 0.25 * Delta));
                     double Side(Vector3d Q, Geometry.Ssi.Shape sh, double t)
                     {
                         double u = CurveParam.Closest(sc, Q); var sg = sc.PointAt(u);
                         var w = Vector3d.Cross(Geometry.Ssi.Implicit(sh, sg).G, sc.TangentAt(u)).Normalized();
-                        if (Vector3d.Dot(Ed(t) - sg, w) < 0) w = -w;
+                        if (Vector3d.Dot((SideRef ? edRef : Ed(t)) - sg, w) < 0) w = -w;
                         return Vector3d.Dot(Q - sg, w);
                     }
                     double H(double t, Geometry.Ssi.Shape shX, double sX)
@@ -1966,6 +1973,23 @@ public static partial class DirectRound
                 if (cl == null) return null;
                 bv.Cliff = cl;
             }
+            // промежутки частей покрывают параметры трубок у кривых угла (ближайшая точка хребта к точкам митры и обрыва может
+            // лежать за TX/TY — грань там продолжалась бы за край своей области)
+            {
+                double txr = bv.TX, tyr = bv.TY;
+                foreach (var cv in new[] { bv.Mitre, bv.Cliff })
+                {
+                    if (cv == null) continue;
+                    for (int i = 0; i <= 32; i++)
+                    {
+                        var x = cv.PointAt(cv.T0 + (cv.T1 - cv.T0) * i / 32.0);
+                        if (Tube(spT, x) is { } a1) txr = dk > 0 ? Math.Max(txr, a1.T) : Math.Min(txr, a1.T);
+                        if (Tube(spE, x) is { } a2) tyr = dk > 0 ? Math.Min(tyr, a2.T) : Math.Max(tyr, a2.T);
+                    }
+                }
+                double mg = 0.02 * Math.Abs(bv.TX - tS) + 1e-6 * Math.Max(1, Delta);
+                bv.TXs = txr + dk * mg; bv.TYs = tyr - dk * mg;
+            }
             double tx = bv.TX, ty = bv.TY;
             bv.RailT = new ProcCurve3(l => Rail(spT, shT, tS + (tx - tS) * l) ?? new Vector3d(double.NaN), 0, 1, false, "rolling-ball contact");
             bv.RailE = new ProcCurve3(l => Rail(spE, shE, ty + (tS - ty) * l) ?? new Vector3d(double.NaN), 0, 1, false, "rolling-ball contact");
@@ -2029,7 +2053,13 @@ public static partial class DirectRound
                 {
                     Func<double, SweepSection> g = U => GenR(tLo + U / kU, eReg, bv);
                     var st = new List<double>(); var sc2 = new List<SweepSection>();
-                    int nst = 24; for (int i = 0; i <= nst; i++) { double U = ua + (ub - ua) * i / nst; st.Add(U); sc2.Add(g(U)); }
+                    // сечения — те же, что у основной ленты (сгущены по кривизне), плюс концы части и 24 равных (у короткой части);
+                    // 24 равных на всю часть давали отход кривых угла от грани 3–6 мкм (s110)
+                    var Us = us.Select(t => (t - tLo) * kU).Where(U => U > ua + 1e-9 && U < ub - 1e-9).ToList();
+                    for (int i = 0; i <= 24; i++) Us.Add(ua + (ub - ua) * i / 24);
+                    Us.Sort(); var Uu = new List<double>(); foreach (var U in Us) if (Uu.Count == 0 || U - Uu[^1] > 1e-9 * Math.Max(1, ub - ua)) Uu.Add(U);
+                    Uu[^1] = ub;
+                    foreach (var U in Uu) { st.Add(U); sc2.Add(g(U)); }
                     var brk = surf.Breaks.Where(b => b > ua + 1e-9 && b < ub - 1e-9).ToList();
                     return new SectionSurface(g, st, sc2, false, ua, ub, brk, tabStep) { ParallelTable = true };
                 }
@@ -2071,8 +2101,8 @@ public static partial class DirectRound
                     if (!dS) { cwhy = "open curved: concave crease — the contact line on S not found in its face"; return false; }
                     FSb.Touched = true;
                 }
-                double uX0 = b0 != null ? Uof(b0.TX) : 0, uX1 = b1 != null ? Uof(b1.TX) : Lp;
-                double uY0 = b0 != null ? Uof(b0.TY) : 0, uY1 = b1 != null ? Uof(b1.TY) : Lp;
+                double uX0 = b0 != null ? Uof(b0.TXs) : 0, uX1 = b1 != null ? Uof(b1.TXs) : Lp;
+                double uY0 = b0 != null ? Uof(b0.TYs) : 0, uY1 = b1 != null ? Uof(b1.TYs) : Lp;
                 if (!(uX0 >= 0 && uX1 <= Lp && uX0 < uX1) || (b0 != null && !(uY0 > 0 && uY0 < Lp)) || (b1 != null && !(uY1 > 0 && uY1 < Lp)))
                 { cwhy = "open curved: concave crease — bevel beyond the blend range"; return false; }
                 // часть T (середина)
@@ -2631,7 +2661,8 @@ public static partial class DirectRound
                     Debug($"  invalid: {iss} | edge tol {ed?.Tolerance:E2} curve {ed?.Curve.GetType().Name} {ed?.V0.P:0.###}->{ed?.V1.P:0.###}");
                 }
             Stage("validated");
-            if (!v.IsValid) return "result invalid: " + v.Summary() + " " + string.Join(" / ", v.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(2));
+            if (!v.IsValid && Debug != null) foreach (var iss in v.Issues.Where(x => x.Severity == ValidationSeverity.Error)) Debug("invalid: " + iss);
+            if (!v.IsValid) return "result invalid: " + v.Summary() + " " + string.Join(" / ", v.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(6));
             if (AnalyticVolume.Of(solid) == null)
             {
                 if (Debug != null)
