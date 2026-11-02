@@ -125,6 +125,109 @@ public static class IconProvider
     /// </summary>
     public static IImage? Get(string? file, Color foreground)
     {
+        var img = GetCore(file, foreground);
+        if (img != null && file != null) lock (_origin) { if (!_origin.TryGetValue(img, out _)) _origin.Add(img, (file, foreground)); }
+        return img;
+    }
+
+    // ---------------------------------------------------------------- k149 (замечание 03.11, 06:41, п. 2)
+    // НЕАКТИВНАЯ КНОПКА — СЕРЫЙ ЗНАЧОК. Значки цветные (оранжевые, синие акценты), и у неактивной кнопки прозрачность 0.4
+    // (только у кнопок панелей) их почти не меняла: неактивная кнопка не отличалась от активной. Теперь у любой картинки
+    // значка, которая стала недоступной (её кнопка, пункт меню или родитель выключены), источник подменяется серым
+    // вариантом того же значка (все цвета — в серый по яркости, контраст понижен), при включении — возвращается. Один
+    // обработчик класса Image на всё приложение. P3D_ICONGRAY=0 — как прежде.
+    public static readonly bool GrayOff = Environment.GetEnvironmentVariable("P3D_ICONGRAY") == "0";
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IImage, Tuple<string, Color>> _originT = new();
+    private static readonly OriginTable _origin = new();
+    private sealed class OriginTable
+    {
+        public bool TryGetValue(IImage k, out (string File, Color Fg) v) { if (_originT.TryGetValue(k, out var t)) { v = (t.Item1, t.Item2); return true; } v = default; return false; }
+        public void Add(IImage k, (string File, Color Fg) v) => _originT.AddOrUpdate(k, Tuple.Create(v.File, v.Fg));
+    }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IImage, IImage> _grayToColor = new();
+    private static readonly Dictionary<(string, string), IImage?> _grayCache = new();
+    /// <summary>Разбор: сколько раз значок подменён серым / возвращён.</summary>
+    public static int GraySwaps, ColorSwaps;
+    private static bool _grayInstalled;
+
+    /// <summary>Серый вариант значка (для недоступной кнопки).</summary>
+    public static IImage? GetGray(string file, Color foreground)
+    {
+        string fg = Hex(foreground);
+        var key = (file, fg);
+        lock (_grayCache) if (_grayCache.TryGetValue(key, out var hit)) return hit;
+        IImage? img = null;
+        try
+        {
+            var uri = UriOf(file);
+            if (AssetLoader.Exists(uri))
+            {
+                using var s = AssetLoader.Open(uri);
+                using var r = new StreamReader(s);
+                img = new SvgImage { Source = SvgSource.LoadFromSvg(Grayed(Recolor(FitToContent(file, r.ReadToEnd()), fg))) };
+            }
+        }
+        catch (Exception ex) { Core.AppLog.Write("icon gray " + file, ex); img = null; }
+        lock (_grayCache) _grayCache[key] = img;
+        return img;
+    }
+
+    /// <summary>Все цвета SVG — в серый по яркости с пониженным контрастом; рисунок — полупрозрачный.</summary>
+    public static string Grayed(string svg)
+    {
+        string r = ColorToken.Replace(svg, m =>
+        {
+            var c = ParseColor(m.Groups[2].Value);
+            if (c == null) return m.Value;
+            var (cr, cg, cb) = c.Value;
+            double l = 0.299 * cr + 0.587 * cg + 0.114 * cb;
+            int g = (int)Math.Round(Math.Clamp(128 + (l - 128) * 0.45, 0, 255));
+            return m.Groups[1].Value + $"#{g:X2}{g:X2}{g:X2}";
+        });
+        int open = r.IndexOf("<svg", StringComparison.OrdinalIgnoreCase);
+        int gt = open < 0 ? -1 : r.IndexOf('>', open);
+        int close = r.LastIndexOf("</svg>", StringComparison.OrdinalIgnoreCase);
+        if (gt > 0 && close > gt && r[gt - 1] != '/') r = r[..(gt + 1)] + "<g opacity=\"0.85\">" + r[(gt + 1)..close] + "</g>" + r[close..];
+        return r;
+    }
+
+    /// <summary>Подключить подмену значков недоступных элементов (один раз при запуске).</summary>
+    public static void InstallDisabledGray()
+    {
+        if (GrayOff || _grayInstalled) return;
+        _grayInstalled = true;
+        Avalonia.Input.InputElement.IsEffectivelyEnabledProperty.Changed.AddClassHandler<Image>((im, _) => UpdateGray(im));
+        Image.SourceProperty.Changed.AddClassHandler<Image>((im, _) => UpdateGray(im));
+    }
+
+    [ThreadStatic] private static bool _inUpdate;
+    /// <summary>Значок картинки — серый, если она недоступна, цветной — если доступна.</summary>
+    public static void UpdateGray(Image im)
+    {
+        if (_inUpdate || im.Source is not { } src) return;
+        _inUpdate = true;
+        try
+        {
+            if (!im.IsEffectivelyEnabled)
+            {
+                if (_origin.TryGetValue(src, out var o) && GetGray(o.File, o.Fg) is { } gray && !ReferenceEquals(gray, src))
+                {
+                    lock (_grayToColor) _grayToColor.AddOrUpdate(gray, src);
+                    im.Source = gray; GraySwaps++;
+                }
+            }
+            else
+            {
+                IImage? col = null;
+                lock (_grayToColor) if (_grayToColor.TryGetValue(src, out var c)) col = c;
+                if (col != null) { im.Source = col; ColorSwaps++; }
+            }
+        }
+        finally { _inUpdate = false; }
+    }
+
+    private static IImage? GetCore(string? file, Color foreground)
+    {
         if (string.IsNullOrEmpty(file)) return null;
         string fg = Hex(foreground);
         var key = (file, fg);

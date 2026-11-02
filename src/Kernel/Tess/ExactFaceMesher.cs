@@ -467,6 +467,8 @@ public static partial class ExactFaceMesher
     }
 
     static readonly bool CuspOff = Environment.GetEnvironmentVariable("P3D_CUSPDENSE") == "0";
+    static readonly bool RefineFlip = Environment.GetEnvironmentVariable("P3D_REFINEFLIP") != "0";
+    static readonly bool MicroEdgeOff = Environment.GetEnvironmentVariable("P3D_MICROEDGE") == "0";
 
     /// <summary>
     /// KRN-06 (06.5): ВЕРШИНА-КЛЮВ — два ребра выходят из вершины в одну сторону, касаясь друг друга (край ленты катящегося
@@ -554,6 +556,17 @@ public static partial class ExactFaceMesher
         // верную сетку). Замкнутое ребро идёт по параметру своей кривой.
         if (!ReferenceEquals(e.V0, e.V1) && (pts[0] - e.V0.P).LengthSquared > (pts[^1] - e.V0.P).LengthSquared) pts.Reverse();
         pts[0] = e.V0.P; pts[^1] = e.V1.P;                    // концы — точно вершины тела
+        // k149: МИКРОРЕБРО — короче 2e-3 мм и прямое в пределах десятой доли допуска гранения (обрыв ленты у излома шва 9e-4 мм,
+        // кусок края ленты на шве 5e-4 мм): одна хорда. Гранение кривой ставило 17 точек через 6e-5 мм; разметка большой грани
+        // в параметрах (лофт ~160 мм: шаг 4e-7 по u) их не различала и соединяла иначе, чем соседняя грань — стороны без пары.
+        // Мутация P3D_MICROEDGE=0.
+        if (!MicroEdgeOff && pts.Count > 2 && !ReferenceEquals(e.V0, e.V1))
+        {
+            double len = 0; for (int i = 1; i < pts.Count; i++) len += (pts[i] - pts[i - 1]).Length;
+            var d = pts[^1] - pts[0]; double l2 = d.LengthSquared;
+            if (len < 2e-3 && l2 > 0 && pts.Skip(1).Take(pts.Count - 2).All(q => (pts[0] + d * (Vector3d.Dot(q - pts[0], d) / l2) - q).Length <= Core.Tol.Chord / 10))
+                pts = new List<Vector3d> { pts[0], pts[^1] };
+        }
         if (!CuspOff && !ReferenceEquals(e.V0, e.V1)) pts = DensifyAtCusps(e, pts);
         e.PolylineCache = pts;
         e.PolylineQuality = want;
@@ -3186,6 +3199,36 @@ public static partial class ExactFaceMesher
         // Мутация P3D_REFINECACHE=0.
         var good = RefineCacheOff ? null : new HashSet<(int, int, int)>();
         static (int, int, int) Key(int a, int b, int c) => a <= b && a <= c ? (a, b, c) : b <= a && b <= c ? (b, c, a) : (c, a, b);
+        // k149: УЗКИЙ ТРЕУГОЛЬНИК ОБРАТНОЙ СТОРОНЫ — тоже негодный: его длинная сторона делится. У ленты, чей край
+        // перекатывается через ребро шва (кусок края 5e-4 мм на шве, дальняя вершина в 0.34 мм), веер к дальней вершине давал
+        // щепку поперёк закрутки поверхности; уточнение такие (площадь меньше доли грани) пропускало, а самопроверка отвергала
+        // грань. Проверяются только узкие (обычные переворачиваются редко, и их ловит самопроверка); сторона — по большинству,
+        // считается при первой узкой. Мутация P3D_REFINEFLIP=0.
+        int Facing(int t)
+        {
+            // как в самопроверке: нормаль в проекции центра треугольника
+            var nn = src.NormalAt(src.ProjectToUV((P[T[t]] + P[T[t + 1]] + P[T[t + 2]]) / 3));
+            double sd = Vector3d.Dot(Vector3d.Cross(P[T[t + 1]] - P[T[t]], P[T[t + 2]] - P[T[t]]), nn);
+            return sd > 0 ? 1 : sd < 0 ? -1 : 0;
+        }
+        int? major = null;
+        bool Flipped(int t)
+        {
+            if (!RefineFlip) return false;
+            if (major == null)
+            {
+                int pos = 0, neg = 0;
+                for (int q = 0; q + 2 < T.Count; q += 3)
+                {
+                    var mq = (UV[T[q]] + UV[T[q + 1]] + UV[T[q + 2]]) / 3;
+                    double sq = Vector3d.Dot(Vector3d.Cross(P[T[q + 1]] - P[T[q]], P[T[q + 2]] - P[T[q]]), src.NormalAt(new Vector2d(mq.X / scale.X, mq.Y / scale.Y)));
+                    if (sq > 0) pos++; else if (sq < 0) neg++;
+                }
+                major = pos > 2 * neg ? 1 : neg > 2 * pos ? -1 : 0;
+            }
+            return major != 0 && Facing(t) == -major;
+        }
+        var flipBad = new HashSet<(int, int, int)>();
         for (int pass = 0; pass < 200 && added < maxPoints; pass++)   // предел 40 достигался: оставалось 6 негодных треугольников
         {
             KernelContext.Checkpoint("mesh.refine.pass");
@@ -3200,7 +3243,12 @@ public static partial class ExactFaceMesher
                 // Площадь — в пространстве и относительно грани: узкие веера в развёртке имеют
                 // ничтожную площадь по параметрам, и уточнение их пропускало целиком.
                 double area = Vector3d.Cross(P[T[t + 1]] - P[T[t]], P[T[t + 2]] - P[T[t]]).Length / 2;
-                if (area < tiny) { SkipTiny++; continue; }
+                if (area < tiny)
+                {
+                    if (area > 1e-12 && Flipped(t)) { var kf = Key(T[t], T[t + 1], T[t + 2]); flipBad.Add(kf); bad.Add((T[t], T[t + 1], T[t + 2])); }
+                    else SkipTiny++;
+                    continue;
+                }
                 // Отход меряется двумя способами: по точке с теми же параметрами и по ближайшей
                 // точке поверхности. Первый не видит треугольник, перекинутый через шов
                 // периодической поверхности (у трубки тора он соединяет края развёртки и в
@@ -3237,12 +3285,15 @@ public static partial class ExactFaceMesher
                 Vector3d onS = src.PointAt(new Vector2d(m.X / scale.X, m.Y / scale.Y));
                 Vector3d c3b = (P[a] + P[b] + P[c]) / 3;
                 if (MeshTrace) Console.Error.WriteLine($"MESHTRACE   insert onS {onS} c3b {c3b}");
-                if ((onS - c3b).Length <= tol && (src.PointAt(src.ProjectToUV(c3b)) - c3b).Length <= tol) { SkipRecheck++; continue; }
+                bool flipT = flipBad.Contains(Key(a, b, c));
+                if (!flipT && (onS - c3b).Length <= tol && (src.PointAt(src.ProjectToUV(c3b)) - c3b).Length <= tol) { SkipRecheck++; continue; }
                 if (MeshTrace) Console.Error.WriteLine($"MESHTRACE   insert recheck done");
                 // Точка в микронах от вершины узкого треугольника даёт сторону, которую
                 // экспорт склеит, — такую вставку пропускаем.
                 const double micro = 2e-4;
-                if ((onS - P[a]).Length < micro || (onS - P[b]).Length < micro || (onS - P[c]).Length < micro)
+                // k149: перевёрнутый треугольник — делением длинной стороны (вставка в центр щепки у перекатного края давала
+                // точки почти на одной прямой — вырожденный треугольник)
+                if (flipT || (onS - P[a]).Length < micro || (onS - P[b]).Length < micro || (onS - P[c]).Length < micro)
                 {
                     // ЦЕНТР ПОПАЛ В ВЕРШИНУ — ДЕЛИМ ПО ДЛИННОЙ СТОРОНЕ. Веер в развёртке — тонкая
                     // щепка: его центр по параметрам совпадает с вершиной, вставка отбрасывалась,

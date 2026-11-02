@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using OpenTK.Mathematics;
 using Parametric3D.Kernel;
@@ -646,7 +646,7 @@ public static class DocumentFile
             if (bf.AsSurface) Flag(d, "surface");
             (d.Num ??= new())["steps"] = bf.Steps; d.Num["points"] = bf.Points;
         }),
-        FreeFormFeature ffn => Dto("freeform", ffn, d => { PutS(d, "input", ffn.InputStep.Length > 0 ? ffn.InputStep : null); PutS(d, "sig", ffn.InputSig.Length > 0 ? ffn.InputSig : null); }),
+        FreeFormFeature ffn => Dto("freeform", ffn, d => { PutS(d, "input", ffn.InputStep.Length > 0 ? ffn.InputStep : null); PutS(d, "sig", ffn.InputSig.Length > 0 ? ffn.InputSig : null); PutS(d, "import_of", ffn.ImportOf); }),
         FFPrimitiveFeature pr => Dto("ff_primitive", pr, d =>
         {
             PutS(d, "shape", pr.Shape.ToString()); PutV(d, "a", pr.A); PutV(d, "b", pr.B); PutV(d, "c", pr.C);
@@ -1224,7 +1224,7 @@ public static class DocumentFile
                     break;
                 }
                 case "freeform":
-                    part.AddFeature(new FreeFormFeature(fd.Name) { Suppressed = fd.Suppressed, InputStep = GetS(fd, "input") ?? "", InputSig = GetS(fd, "sig") ?? "" });
+                    part.AddFeature(new FreeFormFeature(fd.Name) { Suppressed = fd.Suppressed, InputStep = GetS(fd, "input") ?? "", InputSig = GetS(fd, "sig") ?? "", ImportOf = GetS(fd, "import_of") });
                     break;
                 case "ff_primitive":
                 {

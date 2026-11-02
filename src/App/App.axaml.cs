@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Parametric3D.App.Services;
@@ -29,6 +29,7 @@ public partial class App : Application
     public override void OnFrameworkInitializationCompleted()
     {
         if (!Avalonia.Controls.Design.IsDesignMode) Diagnostics.UiWatchdog.Start();
+        Icons.IconProvider.InstallDisabledGray();   // k149: значки недоступных кнопок — серые
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime d)
         {
             // метка «приложение работает»: осталась от прошлого запуска — тот завершился аварийно (не через выход)

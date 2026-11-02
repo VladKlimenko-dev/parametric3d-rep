@@ -39,9 +39,11 @@ static partial class Program
         {
             var dir = UserModelsDir() ?? throw new Exception("tests/ui/data not found");
             string text = File.ReadAllText(Path.Combine(dir, "user_k148e_sweep_blend_r555.p3d"));
-            var want = new[] { 645529.990445, 643912.998858, 643765.861024, 643663.308290 };
+            // k149: и шаг 5 — R2.07 по внешней кромке (цепочка из 4 звеньев у шва лофта, гладкого только в вершинах) — точно;
+            // снимается 167.37 мм³ (резец — 171.9 по сеткам; оценка по сечению на кромке 90° × 188 мм — ~170)
+            var want = new[] { 645529.990445, 643912.998858, 643765.861024, 643663.308290, 643495.942641 };
             var fails = new List<string>();
-            for (int k = 1; k <= 4; k++)
+            for (int k = 1; k <= 5; k++)
             {
                 var (p, pars) = DocumentFile.Load(text);
                 p.StageIndex = k; p.MarkStageMoved(); p.Rebuild(pars);
@@ -114,12 +116,24 @@ static partial class Program
     /// пересечению лент (митра + обрыв большей ленты гранью меньшей, как ChFi3d PerformTwoCornerbyInter / SMLib Nx2 bevel).
     /// Прежде — резец (многогранно). Мутации P3D_DRCREASE3=0, P3D_DRCREASEBEVEL=0 роняют.
     /// </summary>
-    static void Krn06SeqS110Checks()
+    static void Krn06SeqS110Checks() =>
+        SeqCornerCheck("KRN06-SEQ-S110-CREASE-BEVEL", "corpus_k148h_s110_0.p3d", 2558.8996,
+            "замер k148h (начало — центр); формула сечений по рёбрам (без углов, 12 сечений на ребро) — 2563.75 (0.2 %)");
+
+    /// <summary>k149: корпус s106, шаг 0 — R2.71 по кромке лофта, цепочка из 7 звеньев. У одной вершины шов гладок только в ней
+    /// самой и наклонён над стороной T: шар звена касается T за швом и перекатывается через ребро шва на соседнюю грань (кусок
+    /// края на шве 5e-4 мм); у другого конца того же звена — вогнутый излом (скос). Прежде — резцом (многогранно).</summary>
+    static void Krn06SeqS106Checks() =>
+        SeqCornerCheck("KRN06-SEQ-S106-SEAM-ROLL", "corpus_k149_s106_0.p3d", S106Want,
+            "замер k149 (начало — центр); формула сечений — 221.54 (0.4 %), резец снимал 225.57");
+    const double S106Want = 220.6858;
+
+    static void SeqCornerCheck(string id, string file, double want, string note)
     {
-        Check("KRN06-SEQ-S110-CREASE-BEVEL", () =>
+        Check(id, () =>
         {
             var dir = UserModelsDir() ?? throw new Exception("tests/ui/data not found");
-            string text = File.ReadAllText(Path.Combine(dir, "corpus_k148h_s110_0.p3d"));
+            string text = File.ReadAllText(Path.Combine(dir, file));
             var (p, pars) = DocumentFile.Load(text);
             int n = p.Features.Count;
             // объём — интегралом при началах отсчёта в центре тела и в нуле: стенки лофтов корпуса — FacetedSurface, и у самого
@@ -148,9 +162,8 @@ static partial class Program
             {
                 var after = Both(p.Bodies[0]);
                 double rc = before.C - after.C, rz = before.Z - after.Z;
-                Log(new { feature = f.Name, guarantee = g, removedCentre = Math.Round(rc, 6), removedZero = Math.Round(rz, 6) });
-                // замер k148h (начало — центр); формула сечений по рёбрам (без углов, 12 сечений на ребро) — 2563.75 (0.2 %)
-                if (Math.Abs(rc - 2558.8996) > 1e-3) fails.Add($"removed {rc:0.######}, expected 2558.8996");
+                Log(new { feature = f.Name, guarantee = g, removedCentre = Math.Round(rc, 6), removedZero = Math.Round(rz, 6), note });
+                if (!(Math.Abs(rc - want) <= 1e-3)) fails.Add($"removed {rc:0.######}, expected {want:0.####}");
                 if (!(Math.Abs(rc - rz) < 0.5)) fails.Add($"removed volume depends on the origin: {rc:0.###} / {rz:0.###}");
             }
             Require(fails.Count == 0, string.Join("; ", fails));

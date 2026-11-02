@@ -526,6 +526,7 @@ static partial class Program
         if (mode is "sweepblend148e" or "allA") Krn06SweepBlendR555Checks();
         if (mode is "seqs101" or "allA") Krn06SeqS101Checks();
         if (mode is "seqs110" or "allA") Krn06SeqS110Checks();
+        if (mode is "seqs106" or "allA") Krn06SeqS106Checks();
         if (mode is "loftunequal" or "allA") Krn07LoftUnequalChecks();
         if (mode is "sweptconvex" or "allA") Krn06SweptConvexMidChecks();
         if (mode is "loftcaps" or "allA") Krn06LoftCapBlendChecks();
@@ -579,6 +580,7 @@ static partial class Program
         if (mode is "edgeop") { EdgeOpProbe(args); return; }
         if (mode is "jointprobe") { JointProbe(args[1]); return; }
         if (mode is "corpuscase") { CorpusCase(args[1], args.Length > 2 ? args[2] : "/tmp/claude-0/case"); return; }
+        if (mode is "p3dprobe") { P3dProbe(args[1]); return; }
         if (mode is "loftseq") { LoftCorpusSeq(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), args.Length > 4 ? args[4] : "/tmp/claude-0/corpusseq"); return; }
         if (mode is "loftcorpus") { LoftCorpusRun(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), args.Length > 4 ? args[4] : "/tmp/claude-0/corpus"); return; }
         if (mode is "projprobe") { ProjProbe(args[1], args[2].Split(',').Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray(), args[3].Split(',').Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray()); return; }

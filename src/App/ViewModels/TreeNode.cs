@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Parametric3D.App.Icons;
@@ -352,6 +352,7 @@ public sealed partial class TreeNode : ObservableObject
         var consumed = new HashSet<uint>(item.Children.OfType<Feature>().SelectMany(f => f.ConsumedSketchIds()));
         var groups = new Dictionary<string, TreeNode>();
         var ffNodes = new Dictionary<string, TreeNode>();
+        var impNodes = new Dictionary<string, TreeNode>();
         // u13h: ручка строки отката (режим вставки) — узел на её месте; двойной щелчок — строка в конец
         // строка отката детали — всегда (в конце или на месте режима вставки); тянется мышью между операциями
         bool barDone = item is not Part;
@@ -370,6 +371,14 @@ public sealed partial class TreeNode : ObservableObject
                 continue;
             }
             if (c is FreeFormFeature ffm) ffNodes[ffm.Key] = child;
+            // k149: детали импортированного файла — внутри операции импорта
+            if (c is Feature impF && impF is InsertBodyFeature { Separate: true }) impNodes[impF.Key] = child;
+            if (c is FreeFormFeature { ImportOf: { } impKey } && impNodes.TryGetValue(impKey, out var impNode))
+            {
+                impNode.Children.Add(child);
+                impNode.RestoreExpanded(true);
+                continue;
+            }
             if (c is Feature gf && !string.IsNullOrEmpty(gf.Group) && item is Part gp)
             {
                 if (!groups.TryGetValue(gf.Group, out var gn))

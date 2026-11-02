@@ -110,7 +110,103 @@ public static class StepImport
         return Vector3d.Dot(n, canon) >= 0;
     }
 
-    public static List<TSolid> ReadExactSolids(string text, List<string>? warnings = null)
+    public static List<TSolid> ReadExactSolids(string text, List<string>? warnings = null) => ReadExactSolids(text, warnings, null);
+
+    /// <summary>
+    /// k149 (замечание 03.11, 06:41, п. 3): ИМЕНА ДЕТАЛЕЙ СБОРКИ. Оболочка → тело (MANIFOLD_SOLID_BREP, BREP_WITH_VOIDS) →
+    /// представление формы (…SHAPE_REPRESENTATION, в т. ч. через SHAPE_REPRESENTATION_RELATIONSHIP) → SHAPE_DEFINITION_REPRESENTATION →
+    /// PRODUCT_DEFINITION_SHAPE → PRODUCT_DEFINITION → …FORMATION → PRODUCT (имя; пустое — его код). Нет изделия — имя тела.
+    /// </summary>
+    public static Dictionary<int, string> ShellNames(StepParser parser)
+    {
+        var E = parser.Entities;
+        static int R(string a) => int.TryParse(a.Trim().TrimStart('#'), out int id) ? id : -1;
+        IEnumerable<int> Refs(string a) => StepParser.SplitArgs(a.Trim().TrimStart('(').TrimEnd(')')).Select(R).Where(x => x > 0);
+        var brepOfShell = new Dictionary<int, int>();
+        var brepName = new Dictionary<int, string>();
+        foreach (var (id, e) in E)
+        {
+            if (e.Type is "MANIFOLD_SOLID_BREP" or "BREP_WITH_VOIDS" && e.Args.Count >= 2)
+            {
+                int sh = R(e.Args[1]); if (sh > 0) brepOfShell[sh] = id;
+                brepName[id] = Unquote(e.Args[0]);
+            }
+            else if (e.Type is "SHELL_BASED_SURFACE_MODEL" && e.Args.Count >= 2)
+            {
+                foreach (int sh in Refs(e.Args[1])) brepOfShell[sh] = id;
+                brepName[id] = Unquote(e.Args[0]);
+            }
+        }
+        // представление, где тело — элемент
+        var repOfItem = new Dictionary<int, int>();
+        foreach (var (id, e) in E)
+            if (e.Type.EndsWith("SHAPE_REPRESENTATION") && e.Args.Count >= 2)
+                foreach (int it in Refs(e.Args[1])) repOfItem.TryAdd(it, id);
+        // связи представлений (деталь ↔ её тело)
+        var linked = new Dictionary<int, List<int>>();
+        void Link(int a, int b) { if (!linked.TryGetValue(a, out var l)) linked[a] = l = new(); l.Add(b); }
+        foreach (var (_, e) in E)
+            if (e.Type == "SHAPE_REPRESENTATION_RELATIONSHIP" && e.Args.Count >= 4) { int a = R(e.Args[2]), b = R(e.Args[3]); if (a > 0 && b > 0) { Link(a, b); Link(b, a); } }
+        var productOfRep = new Dictionary<int, string>();
+        foreach (var (_, e) in E)
+        {
+            if (e.Type != "SHAPE_DEFINITION_REPRESENTATION" || e.Args.Count < 2) continue;
+            int pds = R(e.Args[0]), rep = R(e.Args[1]);
+            if (!E.TryGetValue(pds, out var pdsE) || pdsE.Type != "PRODUCT_DEFINITION_SHAPE" || pdsE.Args.Count < 3) continue;
+            if (!E.TryGetValue(R(pdsE.Args[2]), out var pd) || !pd.Type.StartsWith("PRODUCT_DEFINITION") || pd.Args.Count < 3) continue;
+            if (!E.TryGetValue(R(pd.Args[2]), out var pdf) || !pdf.Type.StartsWith("PRODUCT_DEFINITION_FORMATION") || pdf.Args.Count < 3) continue;
+            if (!E.TryGetValue(R(pdf.Args[2]), out var pr) || pr.Type != "PRODUCT" || pr.Args.Count < 2) continue;
+            string nm = Unquote(pr.Args[1]); if (nm.Length == 0) nm = Unquote(pr.Args[0]);
+            if (nm.Length > 0) productOfRep[rep] = nm;
+        }
+        string? ProductOf(int rep)
+        {
+            var seen = new HashSet<int>(); var q = new Queue<int>(); q.Enqueue(rep);
+            while (q.Count > 0)
+            {
+                int r = q.Dequeue(); if (!seen.Add(r)) continue;
+                if (productOfRep.TryGetValue(r, out var n)) return n;
+                if (linked.TryGetValue(r, out var l)) foreach (int x in l) q.Enqueue(x);
+            }
+            return null;
+        }
+        var res = new Dictionary<int, string>();
+        foreach (var (sh, brep) in brepOfShell)
+        {
+            string? nm = repOfItem.TryGetValue(brep, out int rep) ? ProductOf(rep) : null;
+            if (string.IsNullOrWhiteSpace(nm) && brepName.TryGetValue(brep, out var bn) && bn.Length > 0) nm = bn;
+            if (!string.IsNullOrWhiteSpace(nm)) res[sh] = nm.Trim();
+        }
+        return res;
+    }
+
+    /// <summary>Строка STEP без кавычек; \X2\…\X0\ (UTF-16) и '' раскрываются.</summary>
+    public static string Unquote(string a)
+    {
+        a = a.Trim();
+        if (a.Length < 2 || a[0] != '\'' || a[^1] != '\'') return "";
+        a = a[1..^1].Replace("''", "'");
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < a.Length; i++)
+        {
+            if (a[i] == '\\' && i + 3 < a.Length && a.Substring(i, 4) == "\\X2\\")
+            {
+                int end = a.IndexOf("\\X0\\", i + 4, StringComparison.Ordinal);
+                if (end > 0)
+                {
+                    string hex = a[(i + 4)..end];
+                    for (int k = 0; k + 4 <= hex.Length; k += 4)
+                        if (int.TryParse(hex.Substring(k, 4), System.Globalization.NumberStyles.HexNumber, null, out int cp)) sb.Append((char)cp);
+                    i = end + 3; continue;
+                }
+            }
+            sb.Append(a[i]);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>Тела STEP; names — имена деталей по порядку тел (null — нет имени).</summary>
+    public static List<TSolid> ReadExactSolids(string text, List<string>? warnings, List<string?>? names)
     {
         var parser = StepParser.Parse(text);
         if (parser.LengthUnitNote != null) warnings?.Add(parser.LengthUnitNote);
@@ -458,6 +554,13 @@ public static class StepImport
         }
 
         if (warnings != null && solids.Count == 0) warnings.Add("STEP: no exact shells found in the file.");
+        if (names != null)
+        {
+            names.Clear();
+            Dictionary<int, string> sn; try { sn = ShellNames(parser); } catch { sn = new(); }
+            var shellOf = solidOfShell.ToDictionary(kv => kv.Value, kv => kv.Key, ReferenceEqualityComparer.Instance);
+            foreach (var so in solids) names.Add(shellOf.TryGetValue(so, out int shId) && sn.TryGetValue(shId, out var nm) ? nm : null);
+        }
         return solids;
     }
 

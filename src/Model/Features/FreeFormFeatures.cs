@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Curves;
@@ -225,8 +225,11 @@ public sealed class FreeFormFeature : Feature, IFreeFormNative
     private List<TSolid>? _cache;
     private string? _cacheText;
 
+    /// <summary>k149: узел — деталь импортированного файла (сборки): ключ операции импорта; тело узла — FFBody (имя тела
+    /// детали). Такой узел ничего не захватывает и не объединяет тела; в дереве — внутри операции импорта.</summary>
+    public string? ImportOf;
     public FreeFormFeature(string name = "FreeForm") { Name = name; FreeForm = Key; }
-    public override string Summary => InputSig.Length == 0 ? "FreeForm body" : RefsChanged ? "FreeForm (references changed)" : "FreeForm (edit of the part body)";
+    public override string Summary => ImportOf != null ? $"Imported part «{FFBody}» (FreeForm)" : InputSig.Length == 0 ? "FreeForm body" : RefsChanged ? "FreeForm (references changed)" : "FreeForm (edit of the part body)";
 
     /// <summary>Запомнить вход: тела детали перед узлом.</summary>
     public void Capture(IReadOnlyList<TSolid> bodies)
@@ -243,6 +246,11 @@ public sealed class FreeFormFeature : Feature, IFreeFormNative
     public override void Execute(BuildContext ctx)
     {
         RefsChanged = false;
+        if (ImportOf != null)
+        {
+            if (FFBody != null && ctx.BodyByName(FFBody) == null) ctx.Warnings.Add($"{Name}: the imported part «{FFBody}» is not found.");
+            return;
+        }
         if (InputSig.Length > 0 && FreeFormExec.Signature(ctx.Bodies) != InputSig)
         {
             RefsChanged = true;

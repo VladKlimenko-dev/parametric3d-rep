@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Curves;
@@ -643,15 +643,43 @@ public sealed class InsertBodyFeature : Feature
     public InsertBodyFeature(string name = "Insert body") { Name = name; }
     public override string Summary => Separate ? $"Import «{SourceName}»" : $"Inserted body «{SourceName}»";
 
+    private List<string>? _names;
+
     /// <summary>Уже прочитанные тела того же текста (импорт: файл разбирается один раз).</summary>
-    public void Prime(List<TSolid> bodies) { _cache = bodies; _cacheText = Step; }
+    public void Prime(List<TSolid> bodies, IReadOnlyList<string>? fileNames = null) { _cache = Separated(bodies, fileNames, out _names); _cacheText = Step; }
 
     public List<TSolid> Bodies(List<string> warnings)
     {
         if (_cache != null && ReferenceEquals(_cacheText, Step)) return _cache;
         var part = Exchange.Read(Step, out _, warnings) ?? throw new RebuildException(OperationOutcome.InvalidInput, "Insert body: the stored body cannot be read.");
-        _cache = part.Bodies.ToList(); _cacheText = Step;
+        _cache = Separate ? Separated(part.Bodies.ToList(), part.BodyNameList, out _names) : part.Bodies.ToList(); _cacheText = Step;
         return _cache;
+    }
+
+    /// <summary>k149: имена деталей импорта по порядку тел (имя изделия STEP, иначе «Деталь N»).</summary>
+    public IReadOnlyList<string> PartNames(List<string> warnings) { Bodies(warnings); return _names ?? new List<string>(); }
+
+    /// <summary>
+    /// k149 (замечание 03.11, 06:41, п. 3): ДЕТАЛИ ФАЙЛА — ОТДЕЛЬНЫМИ ТЕЛАМИ. Сборка в STEP — несколько замкнутых оболочек;
+    /// каждая — своё тело, а тело из нескольких несвязных оболочек (детали, сведённые в одно тело) делится на связные части
+    /// (полости остаются в своём теле). Имя — имя изделия из файла (STEP), иначе «Деталь N»; части одного тела — «имя.2»…,
+    /// повторы имени — «имя (2)». Мутация P3D_IMPORTSPLIT=0 — тела как прочитаны, без деления.
+    /// </summary>
+    static List<TSolid> Separated(List<TSolid> read, IReadOnlyList<string>? fileNames, out List<string> names)
+    {
+        bool split = Environment.GetEnvironmentVariable("P3D_IMPORTSPLIT") != "0";
+        var res = new List<TSolid>(); names = new List<string>();
+        var used = new HashSet<string>();
+        string Unique(string n) { string u = n; for (int k = 2; !used.Add(u); k++) u = $"{n} ({k})"; return u; }
+        for (int i = 0; i < read.Count; i++)
+        {
+            string baseName = fileNames != null && i < fileNames.Count && !string.IsNullOrWhiteSpace(fileNames[i]) ? fileNames[i].Trim() : $"Деталь {i + 1}";
+            List<TSolid> parts;
+            if (split) { try { parts = ShellComponents.Split(read[i]).Bodies; } catch { parts = new List<TSolid> { read[i] }; } }
+            else parts = new List<TSolid> { read[i] };
+            for (int j = 0; j < parts.Count; j++) { res.Add(parts[j]); names.Add(Unique(parts.Count == 1 ? baseName : $"{baseName}.{j + 1}")); }
+        }
+        return res;
     }
 
     public override void Execute(BuildContext ctx)
@@ -660,11 +688,14 @@ public sealed class InsertBodyFeature : Feature
         if (Separate)
         {
             int n = 0;
-            foreach (var b0 in Bodies(ctx.Warnings))
+            var src = Bodies(ctx.Warnings);
+            foreach (var b0 in src)
             {
                 var b = TopologyClone.Deep(b0);
                 if (Offset.LengthSquared > 0) b = TopologyTransform.Apply(b, TransformOp.Move(Offset)) ?? TransformOp.Copy(b, TransformOp.Move(Offset));
-                ctx.Bodies.Add(b); n++;
+                ctx.Bodies.Add(b);
+                if (_names != null && n < _names.Count) ctx.BodyNames[b] = _names[n];
+                n++;
             }
             if (n == 0) throw new RebuildException(OperationOutcome.InvalidInput, "Import: no bodies were read from the file.");
             return;

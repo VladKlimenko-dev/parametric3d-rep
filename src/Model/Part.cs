@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Tess;
@@ -157,6 +157,9 @@ public sealed class Part : ModelItem
         }
         return null;
     }
+    /// <summary>k149: узел FreeForm — деталь импортированной сборки (FreeFormFeature.ImportOf).</summary>
+    public bool IsImportNode(string ffKey) => Features.Any(x => x is FreeFormFeature { ImportOf: not null } n && n.Key == ffKey);
+
     public string BodyName(int index) => index < BodyNameList.Count ? BodyNameList[index] : "Тело " + (index + 1);
     /// <summary>u13: квилты (поверхности) последнего перестроения.</summary>
     public readonly List<Quilt> Quilts = new();
@@ -1487,7 +1490,8 @@ public sealed class Part : ModelItem
                         if (!ParameterTable.ValueUnitsOff) Params.FeatureDims.StampKinds(f);   // k128: вид величин полей — для формул без единиц
                         try { if (f.FreeForm != null) FreeFormExec.Run(f, ctx); else f.Execute(ctx); }
                         finally { Kernel.Ops.InstantPreview.Allowed = false; Kernel.Ops.InstantPreview.Target = null; }
-                        if (f.FreeForm != null && (!FreeFormDoc || MergeFreeForm) && EditingFreeForm != f.FreeForm
+                        // k149: узлы деталей импортированной сборки — тела не объединяются (детали сборки касаются и пересекаются)
+                        if (f.FreeForm != null && (!FreeFormDoc || MergeFreeForm) && EditingFreeForm != f.FreeForm && !IsImportNode(f.FreeForm)
                             && (fi + 1 >= Math.Min(stage, Features.Count) || Features[fi + 1].FreeForm != f.FreeForm))
                             FreeFormExec.AutoUnion(ctx);
                     }

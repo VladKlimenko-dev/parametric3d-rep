@@ -1,4 +1,4 @@
-using Parametric3D.Kernel.Export;
+﻿using Parametric3D.Kernel.Export;
 using Parametric3D.Kernel.Topology;
 
 namespace Parametric3D.Model;
@@ -145,9 +145,10 @@ public static class Exchange
     {
         format = Guess(text);
 
+        var stepNames = new List<string?>();
         List<TSolid>? bodies = format switch
         {
-            Format.Step => StepImport.ReadExactSolids(text, warnings) is { Count: > 0 } exact
+            Format.Step => StepImport.ReadExactSolids(text, warnings, stepNames) is { Count: > 0 } exact
                            ? exact
                            : StepImport.ReadSolids(text, warnings),
             Format.Iges => IgesImport.Read(text, warnings) is { } one ? new List<TSolid> { one } : null,
@@ -165,6 +166,8 @@ public static class Exchange
             for (int i = 0; i < bodies.Count; i++) Kernel.Export.ImportHeal.Heal(bodies[i], warnings, $"body {i + 1}");
         var part = new Part("импорт");
         foreach (var b in bodies) part.Bodies.Add(b);
+        // k149: имена деталей файла (STEP: изделие оболочки), по порядку тел; нет — пусто
+        if (stepNames.Count == bodies.Count) part.BodyNameList.AddRange(stepNames.Select(n => n ?? ""));
         return part;
     }
 

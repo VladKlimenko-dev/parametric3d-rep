@@ -1,4 +1,4 @@
-using Parametric3D.Model;
+﻿using Parametric3D.Model;
 using Parametric3D.Model.Params;
 
 namespace Parametric3D.App.Services;
@@ -161,8 +161,12 @@ public sealed class DocumentSession
         {
             Step = text, SourceName = Path.GetFileName(path), Separate = true,
         };
-        imp.Prime(read.Bodies.ToList());
+        imp.Prime(read.Bodies.ToList(), read.BodyNameList);
         part.AddFeature(imp);
+        // k149 (замечание 03.11, 06:41, п. 3): каждая деталь файла (замкнутая оболочка) — свой узел FreeForm внутри операции
+        // импорта (правка — в окружении FreeForm, тела деталей не объединяются)
+        foreach (var nm in imp.PartNames(warnings))
+            part.AddFeature(new Parametric3D.Model.Features.FreeFormFeature(nm) { ImportOf = imp.Key, FFBody = nm });
         return part;
     }
 

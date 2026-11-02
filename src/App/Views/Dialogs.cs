@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -32,21 +32,36 @@ public static class Dialogs
             btn.Click += (_, _) => { result = b; w.Close(); };
             row.Children.Add(btn);
         }
-        w.Content = new StackPanel
+        // k149 (замечание 03.11, 06:41): ДЛИННЫЙ ТЕКСТ — В ПРОКРУТКЕ. Отчёт «Проверка тела» в сотни строк растягивал окно за
+        // край экрана: ни кнопки, ни крестика не достать. Высота окна — не больше 80 % рабочей области экрана владельца; текст
+        // — в области с полосой прокрутки (выделяется и копируется), кнопки — всегда внизу.
+        double maxH = 600;
+        try
         {
-            Margin = new Thickness(20),
-            Spacing = 18,
-            Children =
-            {
-                new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 580 },
-                row,
-            }
+            var scr = owner.Screens.ScreenFromVisual(owner) ?? owner.Screens.Primary;
+            if (scr != null) maxH = Math.Max(240, 0.8 * scr.WorkingArea.Height / Math.Max(0.1, scr.Scaling));
+        }
+        catch { }
+        w.MaxHeight = maxH;
+        var body = new SelectableTextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 580, Name = "dlg_text" };
+        var scroll = new ScrollViewer
+        {
+            Content = body,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            Name = "dlg_scroll",
         };
+        row.Margin = new Thickness(0, 18, 0, 0);
+        DockPanel.SetDock(row, Dock.Bottom);
+        w.Content = new DockPanel { Margin = new Thickness(20), Children = { row, scroll } };
+        LastAskWindow = w;
         await w.ShowDialog(owner);
         return result;
     }
 
     public static Task Info(Window owner, string title, string text) => Ask(owner, title, text, "OK");
+    /// <summary>Последнее окно вопроса (проверки интерфейса).</summary>
+    public static Window? LastAskWindow;
 
     /// <summary>
     /// k120 (замечание 15:06, п. 5): НОВАЯ СИСТЕМА ЕДИНИЦ — имя и единицы длины, массы, времени и угла (например, in/kg/s).

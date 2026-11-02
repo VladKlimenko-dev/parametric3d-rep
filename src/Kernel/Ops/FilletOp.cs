@@ -1299,6 +1299,7 @@ public static class FilletOp
         }
 
         double meshAfter = after;
+        if (Environment.GetEnvironmentVariable("P3D_DAMAGEDBG") == "1") Console.WriteLine($"DAMAGE before {volumeBefore:G10} exactBefore {exactBefore:G10} meshAfter {after:G10} exactAfter {ExactVolume(bodies):G10} guarantee {string.Join(",", bodies.Select(b => b.Guarantee))} tool {toolWeight:G6}");
         if (exactBefore is double eb && ExactVolume(bodies) is double ea) { volumeBefore = eb; after = ea; }
         try {
         if (adds)

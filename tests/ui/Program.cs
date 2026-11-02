@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -1178,7 +1178,7 @@ Check("UI-IMPORT-STEP", () =>
         var w = Open(imp);
         imp.Document.RebuildDirty();
         var part = imp.Part!;
-        Require(part.Features.Count == 1 && part.Features[0] is Parametric3D.Model.Features.InsertBodyFeature, $"{Path.GetExtension(src)}: no import operation in the tree");
+        Require(part.Features.Count >= 1 && part.Features[0] is Parametric3D.Model.Features.InsertBodyFeature, $"{Path.GetExtension(src)}: no import operation in the tree");
         part.Rebuild(imp.Document.Parameters);
         Require(part.Bodies.Count == 1, $"{Path.GetExtension(src)}: {part.Bodies.Count} bodies after rebuild");
         Require(Math.Abs(part.Volume - v0) <= 1e-6 * Math.Max(1, v0), $"{Path.GetExtension(src)}: volume {part.Volume} vs {v0}");
@@ -1201,6 +1201,107 @@ Check("UI-IMPORT-STEP", () =>
         imp.Part!.Rebuild(imp.Document.Parameters);
         Require(imp.Part.Bodies.Count > 0 && imp.Part.Volume > 0, $"{Path.GetFileName(f)}: {imp.Part.Bodies.Count} bodies after rebuild ({imp.Part.Features[0].Error})");
     }
+});
+
+Check("UI-IMPORT-ASSEMBLY", () =>
+{
+    // k149 (замечание 03.11, 06:41, п. 3): STEP-СБОРКА — ДЕТАЛИ ОТДЕЛЬНО. Файл из трёх тел (два касаются друг друга, третье —
+    // отдельно; ещё одно тело из двух несвязных оболочек): после импорта — операция «Импорт» и по узлу FreeForm на каждую
+    // деталь (в дереве — внутри операции импорта), тела не объединяются, у каждого — своё имя; после сохранения и открытия —
+    // то же.
+    var src = new Part("asm");
+    var a = Parametric3D.Kernel.Ops.PrimitiveOp.Cylinder(Vector3d.Zero, 10, 20);
+    var b = Parametric3D.Kernel.Ops.PrimitiveOp.Cylinder(new Vector3d(0, 0, 20), 6, 15);       // касается a торцом
+    var c = Parametric3D.Kernel.Ops.PrimitiveOp.Sphere(new Vector3d(50, 0, 0), 8);
+    src.Bodies.AddRange(new[] { a, b, c });
+    double vSum = Math.PI * 100 * 20 + Math.PI * 36 * 15 + 4.0 / 3 * Math.PI * 512;
+    string step = Path.Combine(Path.GetTempPath(), $"uicheck_asm_{Guid.NewGuid():N}.step"), p3d = Path.ChangeExtension(step, ".p3d");
+    File.WriteAllText(step, Parametric3D.Model.Exchange.Write(src, Parametric3D.Model.Exchange.Format.Step));
+    try
+    {
+        var imp = DocumentSession.Import(step, new List<string>());
+        var part = imp.Part!;
+        var nodes = part.Features.OfType<Parametric3D.Model.Features.FreeFormFeature>().ToList();
+        Require(part.Features[0] is Parametric3D.Model.Features.InsertBodyFeature, "no import operation");
+        Require(nodes.Count == 3 && nodes.All(n => n.ImportOf == part.Features[0].Key && n.FFBody == n.Name), $"FreeForm part nodes: {nodes.Count} ({string.Join(", ", nodes.Select(n => n.Name))})");
+        Require(nodes.Select(n => n.Name).Distinct().Count() == 3, "part names are not unique: " + string.Join(", ", nodes.Select(n => n.Name)));
+        part.Rebuild(imp.Document.Parameters);
+        Require(part.Bodies.Count == 3, $"{part.Bodies.Count} bodies after rebuild (the touching parts must not be united)");
+        Require(Math.Abs(part.Volume - vSum) <= 1e-3 * vSum, $"volume {part.Volume} vs {vSum}");
+        Require(nodes.All(n => part.BodyNameList.Contains(n.FFBody!)), "body names: " + string.Join(", ", part.BodyNameList));
+        var w = Open(imp);
+        var impNode = w.TreeRoots.SelectMany(r => r.SelfAndDescendants()).FirstOrDefault(t => t.Item is Parametric3D.Model.Features.InsertBodyFeature);
+        Require(impNode != null, "no import node in the tree");
+        var kids = impNode!.Children.Where(t => t.Item is Parametric3D.Model.Features.FreeFormFeature).ToList();
+        Require(kids.Count == 3, $"the import node has {kids.Count} FreeForm children");
+        Require(!w.TreeRoots.SelectMany(r => r.Children).Any(t => t.Item is Parametric3D.Model.Features.FreeFormFeature), "a part node is outside the import node");
+        imp.SaveAs(p3d);
+        w.Close();
+        var s2 = DocumentSession.Open(p3d);
+        s2.Part!.Rebuild(s2.Document.Parameters);
+        var n2 = s2.Part.Features.OfType<Parametric3D.Model.Features.FreeFormFeature>().ToList();
+        Require(s2.Part.Bodies.Count == 3 && n2.Count == 3 && n2.All(n => n.ImportOf == s2.Part.Features[0].Key), $"after reopen: {s2.Part.Bodies.Count} bodies, {n2.Count} nodes");
+        // тело из двух несвязных оболочек делится на детали
+        var one = Parametric3D.Kernel.Topology.TopologyClone.Deep(a);
+        var extra = Parametric3D.Kernel.Topology.TopologyClone.Deep(c);
+        foreach (var sh in extra.Shells.ToList()) { var ns = one.AddShell(); foreach (var f in sh.Faces.ToList()) ns.Add(f); }
+        var src2 = new Part("merged"); src2.Bodies.Add(one);
+        var parts = new Parametric3D.Model.Features.InsertBodyFeature("x") { Step = "x", Separate = true };
+        parts.Prime(new List<Parametric3D.Kernel.Topology.TSolid> { one }, new[] { "Корпус" });
+        var pn = parts.PartNames(new List<string>());
+        Require(pn.Count == 2 && pn[0] == "Корпус.1" && pn[1] == "Корпус.2", "split of a two-shell body: " + string.Join(", ", pn));
+    }
+    finally { foreach (var f in new[] { step, p3d }) if (File.Exists(f)) File.Delete(f); }
+});
+
+Check("UI-DIALOG-SCROLL", () =>
+{
+    // k149 (замечание 03.11, 06:41, п. 1): длинный отчёт («Проверка тела» в сотни строк) — окно не выше экрана, текст в
+    // прокрутке, кнопка «OK» видна
+    var s = DocumentSession.Sample();
+    var w = Open(s);
+    string text = string.Join("\n", Enumerable.Range(1, 600).Select(i => $"✖ issue {i}: open edge at ({i}.0, 0, 0)"));
+    _ = Dialogs.Info(w, "Check body", text);
+    Dispatcher.UIThread.RunJobs();
+    var dw = Dialogs.LastAskWindow;
+    Require(dw != null && dw.IsVisible, "the dialog is not shown");
+    var scroll = dw!.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault(x => x.Name == "dlg_scroll");
+    Require(scroll != null, "no scroll viewer");
+    double maxH = dw.MaxHeight;
+    Require(double.IsFinite(maxH) && dw.Bounds.Height <= maxH + 1, $"dialog height {dw.Bounds.Height} > max {maxH}");
+    Require(scroll!.Extent.Height > scroll.Viewport.Height + 10, $"text is not scrolled (extent {scroll.Extent.Height}, viewport {scroll.Viewport.Height})");
+    var ok = dw.GetVisualDescendants().OfType<Button>().FirstOrDefault(x => x.Content as string == "OK");
+    Require(ok != null && ok.IsVisible && ok.Bounds.Height > 0, "the OK button is not visible");
+    var okPos = ok!.TranslatePoint(new Point(0, ok.Bounds.Height), dw);
+    Require(okPos is { } op && op.Y <= dw.Bounds.Height + 0.5, $"the OK button is below the window ({okPos})");
+    dw.Close(); w.Close();
+});
+
+Check("UI-ICON-GRAY", () =>
+{
+    // k149 (замечание 03.11, 06:41, п. 2): у недоступной кнопки значок — серый (подмена источника картинки), у доступной —
+    // цветной; переключение туда и обратно
+    var s = DocumentSession.Sample();
+    var w = Open(s);
+    var btns = w.GetVisualDescendants().OfType<Button>().Where(b => b.GetVisualDescendants().OfType<Image>().Any()).ToList();
+    var dis = btns.FirstOrDefault(b => !b.IsEffectivelyEnabled);
+    var en = btns.FirstOrDefault(b => b.IsEffectivelyEnabled);
+    Require(en != null, "no enabled icon button");
+    var img = en!.GetVisualDescendants().OfType<Image>().First();
+    var colored = img.Source;
+    en.IsEnabled = false; Dispatcher.UIThread.RunJobs();
+    Require(!ReferenceEquals(img.Source, colored) && img.Source != null, "the icon did not change when the button was disabled");
+    en.IsEnabled = true; Dispatcher.UIThread.RunJobs();
+    Require(ReferenceEquals(img.Source, colored), "the icon did not return when the button was enabled");
+    if (dis != null)
+    {
+        var di = dis.GetVisualDescendants().OfType<Image>().First();
+        Require(Parametric3D.App.Icons.IconProvider.GraySwaps > 0, "no gray swaps happened for disabled buttons");
+    }
+    // серый вариант — без цветных точек
+    string gray = Parametric3D.App.Icons.IconProvider.Grayed("<svg xmlns='http://www.w3.org/2000/svg'><path fill='#FF8000' stroke=\"#0055cc\"/></svg>");
+    Require(!gray.Contains("FF8000", StringComparison.OrdinalIgnoreCase) && !gray.Contains("0055cc", StringComparison.OrdinalIgnoreCase), "colors left in the gray icon: " + gray);
+    w.Close();
 });
 
 Check("UI-VIEW-PICK", () =>
