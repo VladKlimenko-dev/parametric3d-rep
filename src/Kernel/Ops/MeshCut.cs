@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 
 namespace Parametric3D.Kernel.Ops;
 
@@ -162,6 +162,7 @@ public static class MeshCut
     }
 
     static readonly bool ClosedOff = Environment.GetEnvironmentVariable("P3D_MESHCUTCLOSED") == "0";
+    static readonly bool CutDbg = Environment.GetEnvironmentVariable("P3D_MESHCUTDBG") == "1";
     /// <summary>k148: сколько результатов предпросмотра по сеткам отвергнуто как незамкнутые или с невозможным объёмом.</summary>
     public static long OpenRejected;
     static (Vector3d Va, double Area, double Vol) Sums(List<CsgPolygon> ps)
@@ -183,8 +184,18 @@ public static class MeshCut
     static bool Plausible(List<CsgPolygon> r, List<CsgPolygon> pa, List<CsgPolygon> pb, Op op)
     {
         var (va, ar, vol) = Sums(r);
-        if (!(ar > 0) || va.Length > 1e-4 * ar) return false;
         double v1 = Math.Abs(Sums(pa).Vol), v2 = Math.Abs(Sums(pb).Vol), tol = 1e-3 * Math.Max(v1, v2) + 1e-9;
+        if (CutDbg) Console.Error.WriteLine($"MESHCUT {op}: pieces {r.Count}, area {ar:G6}, |vector area| {va.Length:G4} ({va.Length / Math.Max(1e-30, ar):E2}), volume {vol:G8} (a {v1:G8}, b {v2:G8}); |va| inputs {Sums(pa).Va.Length:G4}/{Sums(pa).Area:G6}, {Sums(pb).Va.Length:G4}/{Sums(pb).Area:G6}");
+        if (CutDbg && va.Length > 1e-4 * ar && Environment.GetEnvironmentVariable("P3D_MESHCUTDUMP") is { } dump)
+        {
+            void W(List<CsgPolygon> ps, string f)
+            {
+                using var sw = new System.IO.StreamWriter(f);
+                foreach (var p in ps) sw.WriteLine(string.Join(";", p.V.Select(v => FormattableString.Invariant($"{v.X:R},{v.Y:R},{v.Z:R}"))) + "|" + p.Tag);
+            }
+            W(r, dump + "_r.txt"); W(pa, dump + "_a.txt"); W(pb, dump + "_b.txt");
+        }
+        if (!(ar > 0) || va.Length > 1e-4 * ar) return false;
         return op switch
         {
             Op.Subtract => vol > -tol && vol <= v1 + tol,

@@ -3179,7 +3179,10 @@ public static class FilletOp
                 var parts = new List<TSolid> { made2 };
                 var w2 = new List<string>();
                 var ballSolid = PrimitiveOp.Sphere(ball.C, ball.R);
-                if (PreviewCsgNow && MeshPolys(made2, 1u << 29, null) is { Count: > 0 } wp && MeshCut.Run(wp, MeshPolys(ballSolid, 1u << 28, null), subtract: true) is { Count: > 0 } tp)
+                // k148f: резец минус шар по сеткам — тоже только замкнутым (прежде без проверки: дыра в многоугольниках резца
+                // давала незамкнутый рез тела, и тот законно отвергался — предпросмотр шёл точным путём; UI-ROUND-RIM-BALL)
+                if (PreviewCsgNow && MeshPolys(made2, 1u << 29, null) is { Count: > 0 } wp && MeshPolys(ballSolid, 1u << 28, null) is var bp
+                    && MeshCut.Run(wp, bp, subtract: true) is { Count: > 0 } tp && MeshCut.PlausibleCut(tp, wp, bp, subtract: true))
                 {
                     // предпросмотр: резец остаётся многоугольниками (тело из них не собирается — его режут и так по сеткам)
                     PreviewPolys.AddOrUpdate(made2, tp);
