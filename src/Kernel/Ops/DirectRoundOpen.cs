@@ -134,6 +134,14 @@ public static partial class DirectRound
     }
     /// <summary>k147: стык фаски у наклонного шва — боковая точка звена переходит на соседнюю боковую грань. P3D_DRCHSWITCH=0 — отказ, как прежде.</summary>
     static readonly bool ChamferSwitchOn = Environment.GetEnvironmentVariable("P3D_DRCHSWITCH") != "0";
+    /// <summary>k150: сечение стыка фаски — через вершину (конец кривой ребра в допуске от неё). Мутация P3D_DRJOINTV=0.</summary>
+    static readonly bool CuspEnd = Environment.GetEnvironmentVariable("P3D_DRCUSPEND") != "0";
+    public static long CuspEnds;
+    // k151: проба таблицы ленты, где формула не определена (NaN), — отказ (прежде пропускалась). Мутация P3D_DRTABNAN=0.
+    static readonly bool TabNan = Environment.GetEnvironmentVariable("P3D_DRTABNAN") != "0";
+    static readonly bool ConvEpsOn = Environment.GetEnvironmentVariable("P3D_DRCONVEPS") != "0";
+    static readonly bool JointThroughV = Environment.GetEnvironmentVariable("P3D_DRJOINTV") != "0";
+    public static long JointThroughVHits;
     /// <summary>k147: закреплённые истории (фикстуры корпуса k140, записанные до перехода боковой точки) — воспроизведение без
     /// перехода в этом потоке: прежние операции идут резцом, как при записи, и последняя операция проверяет то, ради чего
     /// фикстура заведена.</summary>
@@ -403,6 +411,7 @@ public static partial class DirectRound
         // выпуклость — пробой точки в теле (как у замкнутых рёбер)
         List<(Vector3d A, Vector3d B, Vector3d C)>? tris = null;
         int? sigmaVote = null;
+        double edgeLen = 0; { var pq = E.PointAt(E.T0); for (int i = 1; i <= 32; i++) { var qq = E.PointAt(E.T0 + (E.T1 - E.T0) * i / 32.0); edgeLen += (qq - pq).Length; pq = qq; } }
         foreach (double f in new[] { 0.25, 0.5, 0.75 })
         {
             var p = E.PointAt(E.T0 + (E.T1 - E.T0) * f);
@@ -410,9 +419,14 @@ public static partial class DirectRound
             tris ??= SolidTriangles(body);
             var d = nB - nA; if (d.Length < 1e-6) { why = "open curved: tangent faces"; return false; }
             double eps = Math.Min(r, 0.05 * Math.Min(sizeMin, 1e3)) / 2;
+            // k150: ПРОБА ВЫПУКЛОСТИ — В ОКРЕСТНОСТИ РЕБРА. Отступ — половина размера ленты; у короткого ребра у острия (ребро
+            // «стенка ∩ скругление», 10 мм, фаска 9.72 у Sweep_Blend) точка пробы уходила за соседнюю грань — «выпуклость
+            // меняется вдоль ребра», хотя угол граней всюду ~90°. Отступ — не больше 1/20 длины ребра. Мутация P3D_DRCONVEPS=0.
+            if (ConvEpsOn) eps = Math.Min(eps, 0.05 * edgeLen);
             bool? ins = InsideMesh(tris, p + d.Normalized() * eps);
             if (ins == null) { why = "open curved: convexity probe undecided"; return false; }
             int sg = ins.Value ? 1 : -1;
+            Debug?.Invoke($"open: convexity probe at {f} p {p:0.###} nA {nA:0.###} nB {nB:0.###} inside {ins} (eps {eps:G3}), faces {FA.Tag}/{FB.Tag}");
             if (sigmaVote != null && sigmaVote != sg) { why = "open curved: convexity changes along the edge"; return false; }
             sigmaVote = sg;
         }
@@ -872,7 +886,40 @@ public static partial class DirectRound
         // знак «за торцом»: обычно снаружи тела (ребро уходит сквозь торец); у упора в стенку (вогнутый конец — материал
         // за торцом) — внутри. Обрезка та же, функция ориентируется так, чтобы за концом было > 0.
         var endSign = new double[] { 1, 1 };
-        double Fend(int k, Vector3d x) => endSign[k] * ends[k].SE * Geometry.Ssi.Implicit(ends[k].ShE, x).F;
+        // k150: КОНЕЦ У ОСТРИЯ — торец касается грани ребра вдоль шва (cusp[k] — направление «за шов» в этой грани). «За
+        // торцом» — сторона материала у E или за продолжением шва: на стороне касания корень — пересечение контакта с
+        // продолжением шва (поперёк), на остальной ленте — с самим торцом
+        var cusp = new Vector3d?[2];
+        double Fend(int k, Vector3d x) => cusp[k] is { } mc
+            ? Math.Max(-ends[k].SE * Geometry.Ssi.Implicit(ends[k].ShE, x).F, Vector3d.Dot(x - ends[k].V, mc))
+            : endSign[k] * ends[k].SE * Geometry.Ssi.Implicit(ends[k].ShE, x).F;
+        // направление «за шов»: торец E касается грани A (или B) в вершине, шов A ∩ E — гладкий; m — в грани касания поперёк
+        // шва, по ходу ребра за конец
+        Vector3d? CuspDir(int k, double tEnd, double dk)
+        {
+            var V = ends[k].V; var nE = NormalOf(ends[k].FE, V);
+            foreach (var (F, seam, other) in new[] { (FA, ends[k].EA, ends[k].EB), (FB, ends[k].EB, ends[k].EA) })
+            {
+                var nF = NormalOf(F, V);
+                if (Math.Abs(Vector3d.Dot(nF, nE)) < 1 - 1e-7) continue;
+                var c = seam.Curve; bool s0 = (c.PointAt(c.T0) - V).Length <= (c.PointAt(c.T1) - V).Length;
+                var sTan = c.TangentAt(s0 ? c.T0 : c.T1); if (!(sTan.LengthSquared > 0)) continue; sTan.Normalize();
+                // шов гладкий: нормали F и E совпадают и в середине шва
+                var mid = c.PointAt((c.T0 + c.T1) / 2);
+                if (Math.Abs(Vector3d.Dot(NormalOf(F, mid), NormalOf(ends[k].FE, mid))) < 1 - 1e-6) continue;
+                var dOut = (Ed(tEnd + dk * 1e-6 * Delta) - Ed(tEnd)); if (!(dOut.LengthSquared > 0)) continue; dOut.Normalize();
+                var m = dOut - Vector3d.Dot(dOut, sTan) * sTan; m -= Vector3d.Dot(m, nF) * nF;
+                if (m.Length < 0.5) continue;      // ребро уходит не поперёк шва
+                // острие, а не гладкое продолжение: второе ребро торца (другая грань ∩ E) уходит из вершины НАЗАД, вдоль самого
+                // ребра. Если оно продолжает ребро за вершину (касательная по ходу) — это гладкий переход в следующее ребро:
+                // выбор дополняется по касательным (k150, P3D_DROPENTANPROP), а не конец у острия
+                var oc = other.Curve; bool o0 = (oc.PointAt(oc.T0) - V).Length <= (oc.PointAt(oc.T1) - V).Length;
+                var oTan = oc.TangentAt(o0 ? oc.T0 : oc.T1); if (!o0) oTan = -oTan;
+                if (!(oTan.LengthSquared > 0) || Vector3d.Dot(oTan.Normalized(), dOut) > 0) continue;
+                return m.Normalized();
+            }
+            return null;
+        }
         bool SectionSide(int k, double t, int want)
         {
             if (!ch && Spine(t) == null) return false;
@@ -954,7 +1001,22 @@ public static partial class DirectRound
                         Debug?.Invoke($"open: chamfer joint {k}: side point passes onto the next face at t {tS:G8} (end {tEnd:G6}), seam point {qx:0.####}");
                     }
                 }
-                tJ[k] = tEnd; inT[k] = tEnd; jC[k] = ends[k].V; jShT[k] = ends[k].ShE; jOffT[k] = 0;
+                // k150: СЕЧЕНИЕ СТЫКА — ЧЕРЕЗ САМУ ВЕРШИНУ. Конец кривой ребра может отстоять от вершины на допуск ребра (кривая
+                // пересечения после прежней правки: 5e-7 мм вдоль хода у s107); сечения двух звеньев в их концах тогда
+                // параллельны, но сдвинуты вдоль хода, и стык не сходится. Параметр стыка — тот, где плоскость сечения проходит
+                // через вершину (у соседнего звена — тоже): сечения совпадают. Мутация P3D_DRJOINTV=0.
+                double tJv = tEnd;
+                if (JointThroughV)
+                    for (int it = 0; it < 6; it++)
+                    {
+                        double dh = 1e-6 * Delta; var D = (Ed(tJv + dh) - Ed(tJv - dh)) / (2 * dh);
+                        var Pj = Ed(tJv); if (double.IsNaN(Pj.X) || double.IsNaN(D.X) || !(D.LengthSquared > 0)) { tJv = tEnd; break; }
+                        double dtj = Vector3d.Dot(ends[k].V - Pj, D) / D.LengthSquared; tJv += dtj;
+                        if (Math.Abs(dtj) < 1e-15 * Math.Max(1, Delta)) break;
+                    }
+                if (!(Math.Abs(tJv - tEnd) <= 1e-5 * Math.Max(1, Delta))) tJv = tEnd;
+                if (tJv != tEnd) Interlocked.Increment(ref JointThroughVHits);
+                tJ[k] = tJv; inT[k] = tJv; jC[k] = ends[k].V; jShT[k] = ends[k].ShE; jOffT[k] = 0;
                 double ext = step;
                 while (ext > 1e-6 * step && (double.IsNaN(ChA(tEnd + dk * ext).X) || double.IsNaN(ChB(tEnd + dk * ext).X))) ext /= 2;
                 outT[k] = tEnd + dk * ext;
@@ -1234,6 +1296,15 @@ public static partial class DirectRound
                 continue;
             }
             double fBeyond = Fend(k, Ed(tEnd + dk * 1e-4 * step)), fBefore = Fend(k, Ed(tEnd - dk * 1e-4 * step));
+            if (!(fBeyond * fBefore < 0) && CuspEnd && CuspDir(k, tEnd, dk) is { } mcu)
+            {
+                // k150: ОСТРИЕ (карман со скруглённой кромкой, Sweep_Blend): ребро торец только касается — торец касается грани
+                // ребра вдоль шва (A ∩ E), а лента торец пересекает целиком. Конец — по «за торцом или за швом». Мутация P3D_DRCUSPEND=0.
+                cusp[k] = mcu;
+                fBeyond = Fend(k, Ed(tEnd + dk * 1e-4 * step)); fBefore = Fend(k, Ed(tEnd - dk * 1e-4 * step));
+                Interlocked.Increment(ref CuspEnds);
+                Debug?.Invoke($"open: end {k} at a cusp: end face tangent to a face of the edge along the seam, beyond the seam {mcu:0.###}, f {fBefore:E2}/{fBeyond:E2}");
+            }
             if (!(fBeyond * fBefore < 0)) { why = $"open curved: the edge does not cross the end face (end {k} at {ends[k].V}, face {ends[k].FE.Surf.GetType().Name} {ends[k].FE.Tag}, f {fBefore:E2}/{fBeyond:E2})"; return false; }
             if (fBeyond < 0) endSign[k] = -1;
             // k144b: доли шага — только при гранях NURBS (стенки лофта и их продолжения): у аналитических граней отказ удвоением
@@ -1561,7 +1632,28 @@ public static partial class DirectRound
                 devs[i] = dm;
             });
             for (int i = 0; i < nChk; i++) if (devs[i] > worstTab) { worstTab = devs[i]; worstU = ((useLo - tLo) + (useHi - useLo) * (i + 0.5) / nChk) * kU; }
+            // k151: ФОРМУЛА НЕ ОПРЕДЕЛЕНА в пробе — отказ. Прежде NaN не попадал в худший отход (сравнение с NaN ложно), и таблица
+            // в окрестности такой пробы шла без проверки (корпус s110 шаг 2: точка фаски не находилась у излома грани прежней
+            // фаски; отказ ловила лишь проверка тела — «кривая отходит от поверхности на 3.6e-3 мм»). Мутация P3D_DRTABNAN=0.
+            int nanChk = devs.Take(nChk).Count(double.IsNaN);
+            if (TabNan && nanChk > 0)
+            {
+                int iNan = Array.FindIndex(devs, double.IsNaN);
+                why = $"open curved: blend formula undefined at {nanChk} of {nChk} probes (first at t {tLo + ((useLo - tLo) + (useHi - useLo) * (iNan + 0.5) / nChk):G6})"; return false;
+            }
             Debug?.Invoke($"open: table vs formula {worstTab:E2} at t {tLo + worstU / kU:G6} (Δ {Delta:G6}) widths {widthA:G4}/{widthB:G4} Lp {Lp:G5}");
+            if (Debug != null && worstTab > 1e-8)
+            {
+                // k151: разбор отхода — точки формулы около худшего места (края, середина) и вторые разности по u
+                double h = tabStep;
+                for (int j = -4; j <= 4; j++)
+                {
+                    double U = worstU + j * h / 2;
+                    var e0 = surf.ExactSectionAt(U - h); var e1 = surf.ExactSectionAt(U); var e2 = surf.ExactSectionAt(U + h); var ta = surf.SectionAt(U);
+                    string s2 = string.Join(" ", new[] { 0.0, 0.5, 1.0 }.Select(v => $"{(e0.Point(v) - 2 * e1.Point(v) + e2.Point(v)).Length:E1}/{(ta.Point(v) - e1.Point(v)).Length:E1}"));
+                    Debug($"open: table probe t {tLo + U / kU:G8} A {e1.Point(0):0.####} B {e1.Point(1):0.####} d2/dev(v=0,.5,1) {s2}; A {FA.Tag} {FA.Surf.GetType().Name} uv {FA.Surf.ProjectToUV(e1.Point(0)):0.#####}, B {FB.Tag} {FB.Surf.GetType().Name} uv {FB.Surf.ProjectToUV(e1.Point(1)):0.#####}");
+                }
+            }
             // таблица — представление формулы: её отход — в пятой доле точности модели (1e-7 → 2e-8 мм)
             if (worstTab > (FastPreviewNow ? 1e-4 : Math.Max(1e-8, 0.2 * ToleranceContext.Current.ModelAccuracy))) { why = $"open curved: blend surface table deviates from the formula ({worstTab:E1} mm)"; return false; }
         }
@@ -1677,6 +1769,7 @@ public static partial class DirectRound
                 bool same = (prevArc.P0 - qa).Length < 1e-7 && (prevArc.P1 - qb).Length < 1e-7 || (prevArc.P0 - qb).Length < 1e-7 && (prevArc.P1 - qa).Length < 1e-7;
                 double dm = (prevArc.Arc.PointAt(0.5) - arc.PointAt(0.5)).Length;
                 if (!same || dm > 1e-7) Debug?.Invoke($"open: joint mismatch at {V:0.###}: centres {(prevArc.C - jC[k]).Length:E2}, this centre vs other side {Geometry.Ssi.Implicit(prevArc.ShT, jC[k]).F - prevArc.OffT:E3} (off {prevArc.OffT:G4}), other centre vs this side {Geometry.Ssi.Implicit(jShT[k]!, prevArc.C).F - jOffT[k]:E3} (off {jOffT[k]:G4}); contacts {(prevArc.P1 - qb).Length:E2}/{(prevArc.P0 - qa).Length:E2}");
+                if ((!same || dm > 1e-7) && Debug != null) { var tdj = Td(tJ[k]).Normalized(); var d0 = prevArc.P0 - qa; var d1 = prevArc.P1 - qb; if ((prevArc.P0 - qb).Length < (prevArc.P0 - qa).Length) { d0 = prevArc.P0 - qb; d1 = prevArc.P1 - qa; } Debug($"open: joint mismatch along the edge {Vector3d.Dot(d0, tdj):E2}/{Vector3d.Dot(d1, tdj):E2}, across {(d0 - Vector3d.Dot(d0, tdj) * tdj).Length:E2}/{(d1 - Vector3d.Dot(d1, tdj) * tdj).Length:E2}, tJ {tJ[k]:G10}"); }
                 if (!same || dm > 1e-7) { why = $"open curved: joint sections of the two chain edges differ ({Math.Max(dm, Math.Min((prevArc.P0 - qa).Length, (prevArc.P1 - qa).Length)):E1} mm)"; return false; }
                 arc = prevArc.Arc;
             }
@@ -2731,6 +2824,10 @@ public static partial class DirectRound
                 foreach (var kv in cnt.Where(kv => kv.Value.Count != 2).Take(40))
                     Debug($"open side {kv.Key.Item1} {kv.Key.Item2} faces {string.Join(",", kv.Value.Select(x => x + ":" + tagOf.GetValueOrDefault(x)))}");
             }
+            if (!v.IsValid && Debug != null)
+                foreach (var e in solid.Edges)
+                    if (v.Issues.Any(x => x.Severity == ValidationSeverity.Error && x.Element == (uint)e.Id))
+                        Debug($"open invalid edge e{e.Id} {e.Curve.GetType().Name}{(e.Curve is ProcCurve3 pk ? ":" + pk.Kind : "")} {e.V0.P:0.####}->{e.V1.P:0.####} faces {string.Join(" / ", e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Select(f => f.Tag + " " + GeometryAudit.AuthoritativeSurface(f)?.GetType().Name))}");
             if (!v.IsValid) return "result invalid: " + v.Summary() + " " + string.Join(" / ", v.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(6));
             if (AnalyticVolume.Of(solid) == null)
             {

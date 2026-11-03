@@ -230,6 +230,17 @@ public static partial class DirectRound
                 finally { _endHole = false; }
                 if (r3 == null) w3 += " | end-hole retry: " + w7;
             }
+            // k150: КОНЕЦ РЕБРА — ГЛАДКИЙ ПЕРЕХОД В СЛЕДУЮЩЕЕ РЕБРО (реестр п. 5, s107/s108): у конца торец касается грани ребра,
+            // ребро продолжается касательно (A ∩ B → A ∩ E), лента торец не пересекает. Как OCCT (BRepFilletAPI_MakeFillet::Add
+            // добавляет к контуру все рёбра, продолжающие его по касательной) и Parasolid (распространение по касательным) —
+            // выбор дополняется звеньями до острых стыков, стык звеньев — сечение на гладком ребре (k145). Мутация P3D_DROPENTANPROP=0.
+            if (r3 == null && OpenTanProp && w3 != null && w3.Contains("does not cross the end face") && TangentClosure(bodies[k], refs) is { } moreO)
+            {
+                string? w9 = null;
+                r3 = BuildOpen(bodies[k], moreO, r, ref w9);
+                if (r3 != null) { added = moreO.Count - refs.Count; Interlocked.Increment(ref OpenTanPropagations); }
+                else w3 += " | with tangent propagation: " + w9;
+            }
             if (r3 != null) { res = r3; Interlocked.Increment(ref OpenBuilt); }
             else { why += " | open curved: " + w3; Interlocked.Increment(ref OpenDeclined); }
         }
@@ -282,7 +293,7 @@ public static partial class DirectRound
             var first = FilletOp.FirstSizeFaces(es!.Distinct().ToList()!);
             _chamfer = (d1, d2, first);
         }
-        TSolid? res;
+        TSolid? res; int addedC = 0;
         try
         {
             res = Build(bodies[k], refs, d1, true, ref why);
@@ -311,6 +322,14 @@ public static partial class DirectRound
                     finally { _endHole = false; }
                     if (res == null) w2 += " | end-hole retry: " + w8;
                 }
+                // k150: гладкий переход в следующее ребро — выбор дополняется по касательным (как у скругления, P3D_DROPENTANPROP)
+                if (res == null && OpenTanProp && !unequal && w2 != null && w2.Contains("does not cross the end face") && TangentClosure(bodies[k], refs) is { } moreC)
+                {
+                    string? w10 = null;
+                    res = CurvedChamferBuild(bodies[k], moreC, d1, dist, ref w10);
+                    if (res != null) { addedC = moreC.Count - refs.Count; Interlocked.Increment(ref OpenTanPropagations); }
+                    else w2 += " | with tangent propagation: " + w10;
+                }
                 if (res != null) Interlocked.Increment(ref CurvedChamfers); else why += " | curved chamfer: " + w2;
             }
         }
@@ -328,6 +347,7 @@ public static partial class DirectRound
         }
         if (res == null) { Interlocked.Increment(ref Declined); Debug?.Invoke("declined: " + why); LastDeclined = why; return false; }
         bodies[k] = res; Interlocked.Increment(ref Built);
+        if (addedC > 0) warnings.Add($"Chamfer: tangent propagation added {addedC} edge(s) to the selection.");
         warnings.Add(unequal ? $"Chamfer: direct cut {d1:0.###}x{d2:0.###} (plane/plane, {refs.Count} edge(s), exact planes)." : $"Chamfer: direct cut (plane/plane, {refs.Count} edge(s), exact planes).");
         return true;
     }
@@ -386,10 +406,13 @@ public static partial class DirectRound
     /// (мутация P3D_DRTANPROP=0 — без распространения, отказ, как прежде).</summary>
     static readonly bool TanProp = Environment.GetEnvironmentVariable("P3D_DRTANPROP") != "0";
     public static long TanPropagations;
+    /// <summary>k150: распространение по касательным у незамкнутых кривых рёбер (скругление и фаска). Мутация P3D_DROPENTANPROP=0.</summary>
+    static readonly bool OpenTanProp = Environment.GetEnvironmentVariable("P3D_DROPENTANPROP") != "0";
+    public static long OpenTanPropagations;
 
     /// <summary>Замыкание выбора по касательным продолжениям: звено e' в конце V выбранного e добавляется, если у них ровно
     /// одна общая грань, касательные в V продолжают друг друга, а вторые грани касаются в V. null — добавлять нечего.</summary>
-    static List<EdgeRef>? TangentClosure(TSolid body, IReadOnlyList<EdgeRef> refs)
+    public static List<EdgeRef>? TangentClosure(TSolid body, IReadOnlyList<EdgeRef> refs)
     {
         var one = new List<TSolid> { body };
         var sel = new List<TEdge>();

@@ -52,6 +52,17 @@ MainWindow Open(DocumentSession s)
     return w;
 }
 
+if (only == "probe-kerneltest")
+{
+    // k150: прогон окна «Тесты ядра» целиком (сборка K01Checks, набор, отчёт) — режим из P3D_KT_MODE
+    var kt = new KernelTestWindow();
+    var mi = typeof(KernelTestWindow).GetMethod("Run", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+    var task = (Task<string?>)mi.Invoke(kt, new object[] { new List<string> { Environment.GetEnvironmentVariable("P3D_KT_MODE") ?? "none" }, (Action<string>)(s => Console.WriteLine("UI| " + s)), CancellationToken.None })!;
+    while (!task.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); }
+    Console.WriteLine("REPORT " + task.Result);
+    return 0;
+}
+
 if (only == "probe-incr")
 {
     // разбор (k122): с какой операции пересчитывается деталь при правке операции, эскиза, отмене (как у пользователя: из файла)
@@ -1618,6 +1629,26 @@ Check("UI-ASM-K149C", () =>
     var back = s2.Document.Root.Children.OfType<Part>().First(p => p.Name == "К1");
     Require((back.Translation - new Vector3(5, 3, 0)).Length < 1e-5, "collapse did not restore the positions");
     w2.Close();
+});
+
+Check("UI-KERNELTEST-K150", () =>
+{
+    // k150 (03.11, 18:33): окно «Тесты ядра» — наборы, корень клона, разбор строк K01Checks, сведения о компьютере
+    var w = Open(DocumentSession.NewPart());
+    Require(CommandRegistry.Instance["app.kerneltest"] is { } c && (c.CanRun?.Invoke() ?? true), "command");
+    var kt = new KernelTestWindow(); kt.Show(); Dispatcher.UIThread.RunJobs();
+    var names = kt.GetVisualDescendants().OfType<Control>().Select(x => x.Name).Where(x => x != null).ToHashSet();
+    Require(KernelTestWindow.Suites.All(su => names.Contains("kt_" + su.Mode)) && names.Contains("kt_start"), "suite boxes / start");
+    var root = KernelTestWindow.RepoRoot(Environment.GetEnvironmentVariable("P3D_USERMODELS") ?? Path.Combine(Environment.CurrentDirectory, "tests", "ui"));
+    Require(root != null && File.Exists(Path.Combine(root, "tests", "k01", "K01Checks.csproj")), "repo root: " + root);
+    Require(KernelTestWindow.ParseResult("{\"test\":\"X-1\",\"ok\":false,\"error\":\"boom\"}") is { Test: "X-1", Ok: false, Error: "boom" }, "parse failed line");
+    Require(KernelTestWindow.ParseResult("{\"test\":\"X-2\",\"ok\":true}") is { Ok: true }, "parse ok line");
+    Require(KernelTestWindow.ParseResult("{\"test\":\"KRN06\",\"name\":\"a\"}") == null && KernelTestWindow.ParseResult("{\"passed\":1}") == null, "non-result lines");
+    var info = KernelTestWindow.MachineInfo().ToList();
+    Console.WriteLine("  " + string.Join(" | ", info));
+    Require(info.Count == 4 && info.All(x => x.Length > 5), "machine info");
+    Require(Directory.Exists(KernelTestWindow.ReportDir()), "report dir");
+    kt.Close(); w.Close();
 });
 
 Check("UI-ASM-K149D", () =>

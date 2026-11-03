@@ -353,6 +353,9 @@ public static class StandardCommands
             CanRun = () => w.Session != null, Run = async () => await w.OpenParameters() });
         r.Add(new AppCommand { Short = "Тест", Id = "app.selftest", Label = "Тест: замер скорости и отчёт", Group = A, Icon = "selftest_but.svg",
             Synonyms = "test self benchmark speed report тест замер скорость отчёт", Run = async () => await w.OpenSelfTest() });
+        // k150: тесты ядра (K01Checks) из исходников клона, отчёт в файл (окно KernelTestWindow)
+        r.Add(new AppCommand { Id = "app.kerneltest", Label = "Тесты ядра: прогон и отчёт", Group = A,
+            Synonyms = "kernel tests allA allB report тесты ядра проверки отчёт", Run = async () => await w.OpenKernelTest() });
         foreach (var (mode, label) in new[] { ("auto", "Графика: автоматически (Windows — ANGLE)"), ("angle", "Графика: ANGLE (Direct3D 11)"), ("wgl", "Графика: OpenGL (WGL)"), ("software", "Графика: программная") })
             r.Add(new AppCommand { Id = "app.gl_" + mode, Label = label, Group = A, Synonyms = "graphics opengl angle wgl direct3d графика",
                 IsChecked = () => (UserPrefs.Current.GlMode ?? "auto") == mode,

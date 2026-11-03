@@ -91,6 +91,7 @@ static partial class Program
                 var body = p.Bodies.Single(); bool valid = SolidValidator.Validate(body).IsValid;
                 double got = v0 - p.Volume, gotMesh = m0 - MeshVol(body);
                 Log(new { test = "KRN06-CHAMFER-CHAIN-K146", model = "loft", error = cf.Error, removed = got.ToString("R"), gotMesh, valid, guarantee = body.Guarantee.ToString(), switches = DirectRound.ChamferSwitches - sw0, dr });
+                if (Environment.GetEnvironmentVariable("PROBE_FACES") == "1") FacesOf(p, "after");   // k151: разбор сетки по граням
                 if (cf.Error != null) fails.Add("loft: " + cf.Error.Split('\n').Last());
                 else
                 {
@@ -104,7 +105,10 @@ static partial class Program
                     try { p.AddFeature(c2); p.Rebuild(null); } finally { DirectRound.OffForTest = false; }
                     double cutMesh = m0 - MeshVol(p.Bodies.Single());
                     Log(new { test = "KRN06-CHAMFER-CHAIN-K146", model = "loft by the cutter", cutMesh, guarantee = p.Bodies.Single().Guarantee.ToString() });
-                    if (c2.Error != null || !(Math.Abs(cutMesh - gotMesh) < 0.015 * gotMesh)) fails.Add($"loft: cutter removed {cutMesh:G6} (mesh) against {gotMesh:G6}");
+                    // k151: сверка — точный снятый объём прямого пути против «сетка до − сетка после» резца, до 1 %. Прежняя мера
+                    // «сетка против сетки» (до 1.5 %) упиралась в шум сетки NURBS-боковин лофта: у прямого тела число треугольников
+                    // боковины скачет (60 или 1644) при сдвиге стыка на 7e-7 мм, недобор сетки — 1.7…2.8 мм³ на боковину
+                    if (c2.Error != null || !(Math.Abs(cutMesh - got) < 0.01 * got)) fails.Add($"loft: cutter removed {cutMesh:G6} (mesh) against {got:G6} (exact)");
                 }
             }
             Require(fails.Count == 0, string.Join(" | ", fails));

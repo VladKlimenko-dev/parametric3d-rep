@@ -18,10 +18,14 @@ static partial class Program
             var fs = p.Features;
             Require(fs.Count >= 4, $"features {fs.Count}");
             for (int i = 0; i < 3; i++) Require(fs[i].Error == null, $"{fs[i].Name}: {fs[i].Error}");
-            var e = fs[3].Error ?? throw new Exception("the mixed-convexity chamfer was applied");
-            Log(new { test = "KRN06-USER-SWEEPBLEND-MIXED-CONVEXITY", error = e.Split('\n')[0] });
-            Require(e.Contains("changes from convex to concave"), "no mixed-convexity reason in: " + e);
-            Require(p.Bodies.Count == 1 && p.Bodies[0].Guarantee == Parametric3D.Kernel.GuaranteeLevel.ExactAnalytic, "body after the refused chamfer is not exact");
+            // k150: с сечением стыка через вершину (P3D_DRJOINTV) резец больше не даёт ребро кратности 3 — фаска строится запасным
+            // путём; норма теперь — фаска применена без ошибки, тело одно и годное (многогранное; точная лента — BACKLOG,
+            // смешанная вершина). Прежняя норма (отказ с причиной) — при P3D_DRJOINTV=0.
+            Require(fs[3].Error == null, $"{fs[3].Name}: {fs[3].Error?.Split('\n')[0]}");
+            Require(p.Bodies.Count == 1, $"bodies {p.Bodies.Count}");
+            var v = Parametric3D.Kernel.Topology.SolidValidator.Validate(p.Bodies[0]);
+            Log(new { test = "KRN06-USER-SWEEPBLEND-MIXED-CONVEXITY", guarantee = p.Bodies[0].Guarantee.ToString(), faces = p.Bodies[0].Faces.Count(), verdict = v.Summary() });
+            Require(v.IsValid, v.Summary() + " | " + string.Join(" | ", v.Issues.Where(i => i.Severity == Parametric3D.Kernel.Topology.ValidationSeverity.Error).Select(i => i.ToString()).Distinct().Take(3)));
         });
     }
 

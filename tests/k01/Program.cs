@@ -581,6 +581,12 @@ static partial class Program
         if (mode is "jointprobe") { JointProbe(args[1]); return; }
         if (mode is "corpuscase") { CorpusCase(args[1], args.Length > 2 ? args[2] : "/tmp/claude-0/case"); return; }
         if (mode is "p3dprobe") { P3dProbe(args[1]); return; }
+        if (mode is "tanprop150") { TanProp150Probe(int.Parse(args[1]), int.Parse(args[2])); return; }
+        if (mode is "mixed150") { Mixed150Probe(args[1]); return; }
+        if (mode is "pocketrim") { PocketRimProbe(); return; }
+        if (mode is "tanprop150chk" or "allB") TanProp150Checks();
+        if (mode is "sbc972" or "allB") SweepBlendC972Checks();
+        if (mode is "cusp151" or "allB") CuspEndChecks();
         if (mode is "loftseq") { LoftCorpusSeq(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), args.Length > 4 ? args[4] : "/tmp/claude-0/corpusseq"); return; }
         if (mode is "loftcorpus") { LoftCorpusRun(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), args.Length > 4 ? args[4] : "/tmp/claude-0/corpus"); return; }
         if (mode is "projprobe") { ProjProbe(args[1], args[2].Split(',').Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray(), args[3].Split(',').Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray()); return; }

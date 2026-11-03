@@ -18,9 +18,12 @@ static partial class Program
         object Desc(Part p) => p.Bodies.Select(b => new { g = b.Guarantee.ToString(), valid = SolidValidator.Validate(b).IsValid, exact = AnalyticVolume.Of(b), mesh = MeshVol(b), faces = b.Faces.Count() }).ToList();
         Log(new { stage = "before", bodies = Desc(p0) });
         var (p, pars) = DocumentFile.Load(text);
+        // k150: отладка прямого построителя на последней операции (PROBE_DR=<подстрока>)
+        if (Environment.GetEnvironmentVariable("PROBE_DR") is { } pdr) Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (s.Contains(pdr)) Console.WriteLine("DBG " + s); };
         p.Rebuild(pars);
+        Parametric3D.Kernel.Ops.DirectRound.Debug = null;
         var f = p.Features[^1];
-        Log(new { stage = "after", feature = f.Name, error = f.Error, warnings = p.Warnings, bodies = Desc(p) });
+        Log(new { stage = "after", feature = f.Name, error = f.Error, errors = string.Join("; ", p.Features.Where(x => x.Error != null).Select(x => x.Name + ": " + x.Error)), warnings = p.Warnings, bodies = Desc(p) });
         if (Environment.GetEnvironmentVariable("PROBE_FACES") == "1") { FacesOf(p0, "before"); FacesOf(p, "after"); }
     }
     static void FacesOf(Part p, string stage)
