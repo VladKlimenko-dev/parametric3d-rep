@@ -511,6 +511,7 @@ public static class StandardCommands
         }
         w.ViewPort.MarkDirty();
         w.RebuildTree();
+        AssemblyCommands.ReExplode(w);   // k149d: разнесённый вид — по видимым компонентам
     }
 
     // ------------------------------------------------------------ k149 (12:31, п. 5): изоляция с выходом
@@ -531,6 +532,7 @@ public static class StandardCommands
         w.Session.MarkModified();
         w.ViewPort.MarkDirty();
         w.RebuildTree(); w.RefreshToolStates();
+        AssemblyCommands.ReExplode(w);
     }
 
     /// <summary>Компоненты сборки среди выбранного (в режиме сборки, не при правке в контексте).</summary>
@@ -559,6 +561,7 @@ public static class StandardCommands
         w.ViewPort.Selection.Clear();
         w.ViewPort.Gizmo = null;
         w.RebuildTree();
+        AssemblyCommands.ReExplode(w);
         w.ViewPort.MarkDirty();
         w.RefreshToolStates();
     }
@@ -589,6 +592,7 @@ public static class StandardCommands
         }
         w.ViewPort.MarkDirty();
         w.RebuildTree();
+        AssemblyCommands.ReExplode(w);   // k149d: разнесённый вид — по видимым компонентам
     }
 
     private static bool IsAncestor(ModelItem a, ModelItem b)

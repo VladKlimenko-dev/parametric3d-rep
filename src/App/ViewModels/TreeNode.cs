@@ -311,6 +311,9 @@ public sealed partial class TreeNode : ObservableObject
             {
                 var pn = BuildItem(p, p);
                 pn.SetComponent(p);
+                // k149d (замечание 03.11, 14:32, п. 4; 14:36): связи — под каждым компонентом: свои ограничения и соединения и
+                // связи других компонентов с ним (← имя); отдельной ветки сопряжений у сборки больше нет
+                if (MatesNode(asm, p) is { } mn) pn.Children.Insert(0, mn);
                 var target = node;
                 if (!string.IsNullOrEmpty(p.SubAssembly))
                 {
@@ -326,15 +329,26 @@ public sealed partial class TreeNode : ObservableObject
         }
         foreach (var sn in subs.Values) sn.Children.Add(new TreeNode(new InfoItem("sub_rollback", Loc.L("— строка отката подсборки —"), ((InfoItem)sn.Item).Owner), null));
         if (!asmBar) node.Children.Add(AsmBar());
-        var mates = new TreeNode(new InfoItem("mates", Loc.L("Ограничения и соединения"), asm.Children.OfType<Part>().FirstOrDefault() ?? new Part("-")), null);
-        foreach (var p in asm.Children.OfType<Part>())
-        {
-            int i = 0;
-            foreach (var c in p.Constraints) mates.Children.Add(new TreeNode(new InfoItem("constraint", $"{c.Name}: {p.Name}{(c.BasePart != null ? " → " + c.BasePart.Name : "")}", p) { Index = i++ }, null));
-            foreach (var m in p.Mates) mates.Children.Add(new TreeNode(new InfoItem("joint", $"{m.Name}: {p.Name}{(m.BasePart != null ? " → " + m.BasePart.Name : "")}", p) { Index = i++ }, null));
-        }
-        if (mates.Children.Count > 0) node.Children.Add(mates);
         return node;
+    }
+
+    /// <summary>
+    /// k149d: «Сопряжения» компонента — его ограничения и соединения (номер: ограничения 0…n−1, соединения n…) и связи других
+    /// компонентов с ним (узел ссылается на компонент-владелец связи: удаление и выбор — те же).
+    /// </summary>
+    private static TreeNode? MatesNode(Assembly asm, Part p)
+    {
+        var mates = new TreeNode(new InfoItem("mates", Loc.L("Сопряжения"), p), p);
+        int i = 0;
+        foreach (var c in p.Constraints) mates.Children.Add(new TreeNode(new InfoItem("constraint", $"{c.Name}{(c.BasePart != null ? " → " + c.BasePart.Name : "")}", p) { Index = i++ }, p));
+        foreach (var m in p.Mates) mates.Children.Add(new TreeNode(new InfoItem("joint", $"{m.Name}{(m.BasePart != null ? " → " + m.BasePart.Name : "")}", p) { Index = i++ }, p));
+        foreach (var o in asm.Children.OfType<Part>().Where(o => !ReferenceEquals(o, p)))
+        {
+            int j = 0;
+            foreach (var c in o.Constraints) { if (ReferenceEquals(c.BasePart, p)) mates.Children.Add(new TreeNode(new InfoItem("constraint", $"{c.Name} ← {o.Name}", o) { Index = j }, p)); j++; }
+            foreach (var m in o.Mates) { if (ReferenceEquals(m.BasePart, p)) mates.Children.Add(new TreeNode(new InfoItem("joint", $"{m.Name} ← {o.Name}", o) { Index = j }, p)); j++; }
+        }
+        return mates.Children.Count > 0 ? mates : null;
     }
 
     /// <summary>Узел детали — компонент сборки: свой значок и состояние «зафиксирован».</summary>

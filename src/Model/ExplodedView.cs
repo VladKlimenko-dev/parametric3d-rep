@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 
 namespace Parametric3D.Model;
 
@@ -33,6 +33,12 @@ public sealed class ExplodedView
     }
 
     public readonly List<Step> Steps = new();
+
+    /// <summary>
+    /// k149d (замечание 03.11, 14:32, п. 2): ПОЛОЖЕНИЯ, ЗАДАННЫЕ ПОЛЬЗОВАТЕЛЕМ В РАЗНЕСЁННОМ ВИДЕ (имя детали → сдвиг и поворот
+    /// относительно её места в сборке: T = T₀ + dT, R = dR·R₀). Приоритетнее автоматического разноса; пишутся в документ.
+    /// </summary>
+    public readonly Dictionary<string, (Vector3d T, Quaterniond R)> UserMoves = new();
 
     public ExplodedView(string name) { Name = name; }
 

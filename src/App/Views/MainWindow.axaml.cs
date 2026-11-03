@@ -97,7 +97,7 @@ public partial class MainWindow : Window
         Closing += OnClosing;
         SearchButton.Click += (_, _) => OpenPalette();
         EnvPill.PointerPressed += (_, _) => Commands.ContextCommands.EnvMenu(this, EnvPill);
-        TreeNode.VisibilityToggled += _ => { View.MarkDirty(); Session.MarkModified(); };
+        TreeNode.VisibilityToggled += _ => { View.MarkDirty(); Session.MarkModified(); Commands.AssemblyCommands.ReExplode(this); };
         TreeNode.ExpandedChanged += n => RememberExpanded(n);
         Tree.LayoutUpdated += (_, _) => FitTreeToScrollBar();
     }
@@ -173,6 +173,7 @@ public partial class MainWindow : Window
         {
             View.Selection.Clear();
             View.Gizmo = null;
+            Commands.AssemblyCommands.ReExplode(this);   // k149d: разнесённый вид — по восстановленным местам и положениям
         }
         RebuildTree();
         MarkActiveInTree();
@@ -416,6 +417,7 @@ public partial class MainWindow : Window
         BuildCommandBar();
         TreeTools.Children.Clear();
         // k120 (замечание 15:06, п. 16): свернуть и развернуть — шевронами; «Группа» — на панели дерева ниже (п. 13)
+        if (!TreeFilterOff) TreeTools.Children.Add(TreeFilterButton());
         TreeTools.Children.Add(ChevronButton(_reg["tree.collapse"], up: true));
         TreeTools.Children.Add(ChevronButton(_reg["tree.expand"], up: false));
         // k120 (п. 13): команды дерева — на панели дерева модели (иконками, имя — подсказкой); в полосе операций их больше нет
@@ -752,7 +754,7 @@ public partial class MainWindow : Window
                 // k149 (замечание 03.11, 08:16): все виды соединений — кнопками на панели, без раскрывающегося списка
                 (new[] { "joint.fixed", "joint.pin", "joint.slider", "joint.cylindrical", "joint.bearing", "joint.planar", "joint.ball", "joint.slot", "joint.weld", "joint.gimbal" }, Array.Empty<string>()),
                 (new[] { "as.fix", "as.drag", "as.move" }, new[] { "as.pattern", "as.pattern_ref", "as.mirror", "as.subassembly" }),
-                (new[] { "as.explode", "as.bom" }, Array.Empty<string>()),
+                (new[] { "as.explode", "as.explode_reset", "as.bom" }, Array.Empty<string>()),
             }
             : InSketch
             ? new[]
@@ -3099,7 +3101,7 @@ public partial class MainWindow : Window
         // состояние «развёрнут» живёт между перестройками (п. 13): глаз эскиза не сворачивает ветку
         foreach (var n in AllNodes) RememberExpanded(n);
         List<TreeNode> roots;
-        using (Diagnostics.UiTimes.Measure("окно: дерево — узлы")) roots = TreeNode.Build(Session.Document, Session.IsAssembly);
+        using (Diagnostics.UiTimes.Measure("окно: дерево — узлы")) roots = FilterTree(TreeNode.Build(Session.Document, Session.IsAssembly));
         // k113: ДЕРЕВО ТО ЖЕ — НЕ ПЕРЕСТРАИВАТЬ ВИД. Каждый шаг предпросмотра (начало и конец расчёта) пересобирал дерево целиком
         // (новый источник — заново все строки: 7–20 мс в потоке окна на каждый шаг ручки), хотя строки не менялись. Подпись —
         // всё, что строка показывает (имя, значки, ошибка, подсказка, глаз, вложенность). P3D_TREESIG=0 — всегда заново.
@@ -3445,12 +3447,16 @@ public partial class MainWindow : Window
     /// </summary>
     private void ShowPartProperties(Part part)
     {
-        PropsTitle.Text = L("ДЕТАЛЬ");
+        bool comp = Session.IsAssembly && part.Parent == Session.Document.Root && Session.ActivePart == null;
+        PropsTitle.Text = comp ? L("КОМПОНЕНТ") : L("ДЕТАЛЬ");
+        if (comp && !AsmPropsOff) ShowComponentLinks(part);
         var sys = part.Units;
         EditRow("Имя", part.Name, v =>
         {
             if (v.Length == 0) return;
+            var oldName = part.Name;
             part.Name = v; part.NotifyChanged(part);
+            Commands.AssemblyCommands.Renamed(this, part, oldName);
             RebuildTree(); OnStateChanged();
         });
         EditRow("Номер детали", part.Info.Code, v => part.Info.Code = v);

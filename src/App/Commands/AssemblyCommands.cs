@@ -78,6 +78,7 @@ public static class AssemblyCommands
     /// <summary>Решить сборку; невыполненное — сообщением.</summary>
     public static List<string> Solve(MainWindow w)
     {
+        if (w.Session.Document.Root.ExplodeHome != null) { w.ViewPort.MarkDirty(); w.RebuildTree(); return new(); }   // k149d: разнесённый вид — связи не решаются
         var stuck = w.Session.Document.Root.SolveMates();
         w.ViewPort.MarkDirty(); w.RebuildTree();
         if (stuck.Count > 0) w.ShowToast(L("Сборка: не выполнено — {0}", string.Join("; ", stuck.Take(3))));
@@ -216,11 +217,7 @@ public static class AssemblyCommands
         if (axial && (m.Kind != GeoKind.Axis || b.Kind != GeoKind.Axis)) { why = L("Выберите две оси (цилиндрические грани, окружности или прямые рёбра)"); return null; }
         if (type == MateType.Planar && (m.Kind != GeoKind.Plane || b.Kind != GeoKind.Plane)) { why = L("Выберите две плоские грани"); return null; }
         if (type == MateType.Ball && (m.Kind == GeoKind.Plane || b.Kind == GeoKind.Plane)) { why = L("Выберите две точки (вершины, центры окружностей)"); return null; }
-        var mate = new Mate(type, L(type switch
-        {
-            MateType.Pin => "Шарнир", MateType.Slider => "Ползун", MateType.Cylinder => "Цилиндрическое", MateType.Planar => "Плоскостное", MateType.Ball => "Шаровое",
-            MateType.BallCylinder => "Шар в цилиндре", MateType.Slot => "Паз", MateType.Free => "Шесть степеней", _ => "Жёсткое",
-        }))
+        var mate = new Mate(type, JointLabel(type))
         {
             BasePart = b.Part, AssemblyOrigin = b.O, AssemblyAxis = b.A, PartOrigin = m.O,
             // плоскости прижимаются друг к другу: нормаль детали — против нормали базы
@@ -229,6 +226,12 @@ public static class AssemblyCommands
         if (type == MateType.Slot) mate.SlotNormal = Kernel.Frame3.FromNormal(Vector3d.Zero, b.A).U;
         return mate;
     }
+
+    public static string JointLabel(MateType type) => L(type switch
+    {
+        MateType.Pin => "Шарнир", MateType.Slider => "Ползун", MateType.Cylinder => "Цилиндрическое", MateType.Planar => "Плоскостное", MateType.Ball => "Шаровое",
+        MateType.BallCylinder => "Шар в цилиндре", MateType.Slot => "Паз", MateType.Free => "Шесть степеней", _ => "Жёсткое",
+    });
 
     public static void Joint(MainWindow w, MateType type)
     {
@@ -541,44 +544,119 @@ public static class AssemblyCommands
 
     // ---------------------------------------------------------------- разнесённый вид
 
-    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, Dictionary<Part, Vector3>> _exploded = new();
-    public static bool IsExploded(MainWindow w) => _exploded.TryGetValue(w.Session.Document.Root, out _);
+    public static bool IsExploded(MainWindow w) => w.Session?.Document.Root.ExplodeHome != null;
 
-    /// <summary>Разнесённый вид: компоненты отходят от центра сборки (шаги вида сохраняются в документе); повторно — собрать.</summary>
+    /// <summary>Автоматический разнесённый вид документа (создаётся при первом включении).</summary>
+    static ExplodedView? AutoView(Assembly root) => root.ExplodedViews.FirstOrDefault();
+
+    /// <summary>
+    /// Разнесённый вид: компоненты отходят от центра сборки; повторно — собрать (места из сборки). k149d (замечание 03.11,
+    /// 14:32): скрытые компоненты не участвуют и не влияют на разнос; положения, заданные пользователем в разнесённом виде,
+    /// хранятся в виде (и в документе) и приоритетнее автоматических.
+    /// </summary>
     public static void ToggleExplode(MainWindow w)
     {
         var root = w.Session.Document.Root;
-        if (_exploded.TryGetValue(root, out var orig))
+        if (root.ExplodeHome != null) { Collapse(w); return; }
+        if (AutoView(root) == null)
         {
-            foreach (var (p, t) in orig) p.Translation = t;
-            _exploded.Remove(root);
-            w.ViewPort.MarkDirty(); return;
+            var nv = new ExplodedView(L("Разнесённый вид"));
+            w.Session.Edit(L("Разнесённый вид"), () => root.ExplodedViews.Add(nv));
         }
-        var view = root.ExplodedViews.FirstOrDefault();
+        root.ExplodeHome = Components(w).GroupBy(p => p.Name).ToDictionary(g => g.Key, g => (g.First().Translation, g.First().Rotation));
+        ApplyExplode(w);
+        w.ViewPort.Gizmo = null; w.RefreshGizmo6(); w.RefreshToolStates();
+    }
+
+    /// <summary>Собрать: компоненты — на свои места в сборке.</summary>
+    public static void Collapse(MainWindow w)
+    {
+        var root = w.Session.Document.Root;
+        if (root.ExplodeHome is not { } home) return;
+        foreach (var p in Components(w)) if (home.TryGetValue(p.Name, out var h)) { p.Translation = h.T; p.Rotation = h.R; }
+        root.ExplodeHome = null;
+        w.ViewPort.Gizmo = null; w.RefreshGizmo6();
+        w.ViewPort.MarkDirty(); w.RefreshToolStates();
+    }
+
+    /// <summary>
+    /// Расставить компоненты разнесённого вида: все — на места, видимые разносятся без пересечений (скрытые остаются на местах
+    /// и не мешают), затем положения, заданные пользователем.
+    /// </summary>
+    public static void ApplyExplode(MainWindow w)
+    {
+        var root = w.Session.Document.Root;
+        if (root.ExplodeHome is not { } home) return;
         var parts = Components(w).ToList();
-        // k149 (12:31, п. 8): автоматический вид — разнос без пересечений (прежний — радиальный на полгабарита — пересчитывается)
-        if (view == null || view.Name == L("Разнесённый вид") || view.Name == "Разнесённый вид")
+        foreach (var p in parts)
         {
-            var steps = ExplodeSteps(parts);
-            if (view == null)
-            {
-                view = new ExplodedView(L("Разнесённый вид"));
-                view.Steps.AddRange(steps);
-                var nv = view;
-                w.Session.Edit(L("Разнесённый вид"), () => root.ExplodedViews.Add(nv));
-            }
-            else { view.Steps.Clear(); view.Steps.AddRange(steps); }
+            if (!home.ContainsKey(p.Name)) home[p.Name] = (p.Translation, p.Rotation);   // добавлен во время показа
+            var h = home[p.Name]; p.Translation = h.T; p.Rotation = h.R;
         }
-        var saved = new Dictionary<Part, Vector3>();
+        var view = AutoView(root);
+        if (view == null) { root.ExplodeHome = null; w.ViewPort.MarkDirty(); return; }   // вид отменён — собрано
+        var shown = parts.Where(p => p.Visible).ToList();
+        view.Steps.Clear(); view.Steps.AddRange(ExplodeSteps(shown));
         foreach (var st in view.Steps)
-            if (parts.FirstOrDefault(p => p.Name == st.PartName) is { } p)
+            if (shown.FirstOrDefault(p => p.Name == st.PartName) is { } p)
             {
-                saved[p] = p.Translation;
-                var s = st.Shift; p.Translation += new Vector3((float)s.X, (float)s.Y, (float)s.Z);
+                var sh = st.Shift; p.Translation += new Vector3((float)sh.X, (float)sh.Y, (float)sh.Z);
             }
-        _exploded.AddOrUpdate(root, saved);
+        foreach (var p in shown)
+            if (view.UserMoves.TryGetValue(p.Name, out var um))
+            {
+                var h = home[p.Name];
+                var dr = new Quaternion((float)um.R.X, (float)um.R.Y, (float)um.R.Z, (float)um.R.W);
+                p.Rotation = Quaternion.Normalize(dr * h.R);
+                p.Translation = h.T + new Vector3((float)um.T.X, (float)um.T.Y, (float)um.T.Z);
+            }
         w.ViewPort.MarkDirty();
     }
+
+    /// <summary>k149d: видимость изменилась или сборка заменена снимком — разнесённый вид перестраивается.</summary>
+    public static void ReExplode(MainWindow w)
+    {
+        var root = w.Session?.Document.Root;
+        if (root?.ExplodeHome == null) return;
+        // компоненты могли смениться (отмена): места — по именам, новые — с их положения в сборке
+        ApplyExplode(w);
+        w.RefreshGizmo6();
+    }
+
+    /// <summary>k149d: компонент передвинут в разнесённом виде — запомнить его положение относительно места в сборке.</summary>
+    public static void RecordExplodeMove(MainWindow w, Part p)
+    {
+        var root = w.Session.Document.Root;
+        if (root.ExplodeHome is not { } home || AutoView(root) is not { } view || !home.TryGetValue(p.Name, out var h)) return;
+        var dT = p.Translation - h.T;
+        var dR = Quaternion.Normalize(p.Rotation * Quaternion.Invert(h.R));
+        view.UserMoves[p.Name] = (new Vector3d(dT.X, dT.Y, dT.Z), new Quaterniond(dR.X, dR.Y, dR.Z, dR.W));
+    }
+
+    /// <summary>k149d (14:32, п. 2): «Сбросить разнесённый вид» — положения, заданные пользователем, забываются.</summary>
+    public static void ResetExplode(MainWindow w)
+    {
+        var root = w.Session.Document.Root;
+        if (AutoView(root) is not { } view || view.UserMoves.Count == 0) return;
+        w.Session.Edit(L("Сбросить разнесённый вид"), () => view.UserMoves.Clear());
+        ReExplode(w);
+        w.RefreshToolStates();
+    }
+
+    /// <summary>k149d: компонент переименован — места и положения разнесённого вида (по именам) переходят к новому имени.</summary>
+    public static void Renamed(MainWindow w, Part p, string oldName)
+    {
+        var root = w.Session.Document.Root;
+        if (p.Parent != root || oldName == p.Name) return;
+        if (root.ExplodeHome is { } home && home.Remove(oldName, out var h)) home[p.Name] = h;
+        foreach (var v in root.ExplodedViews)
+        {
+            if (v.UserMoves.Remove(oldName, out var um)) v.UserMoves[p.Name] = um;
+            foreach (var st in v.Steps) if (st.PartName == oldName) st.PartName = p.Name;
+        }
+    }
+
+    public static bool HasExplodeMoves(MainWindow w) => w.Session?.Document.Root is { } r && AutoView(r) is { UserMoves.Count: > 0 };
 
     /// <summary>Габарит компонента в осях сборки.</summary>
     public static (Vector3d Min, Vector3d Max)? WorldBox(Part p)
@@ -713,10 +791,11 @@ public static class AssemblyCommands
         r.Add(new AppCommand { Id = "as.mirror", Label = "Зеркало компонента", Group = A, Icon = "as_mirror_but.svg", Synonyms = "mirror component зеркало компонента", CanRun = Sel, Run = () => MirrorCommand(w) });
         r.Add(new AppCommand { Id = "as.subassembly", Label = "Подсборка из выбранных", Group = A, Icon = "as_subassembly_but.svg", Synonyms = "subassembly подсборка", CanRun = Sel, Run = () => SubAssembly(w) });
         r.Add(new AppCommand { Id = "as.explode", Label = "Разнесённый вид", Group = A, Icon = "as_explode_but.svg", Synonyms = "explode разнесённый вид", CanRun = AM, IsChecked = () => Asm(w) && IsExploded(w), Run = () => ToggleExplode(w) });
+        r.Add(new AppCommand { Id = "as.explode_reset", Label = "Сбросить разнесённый вид", Group = A, Icon = "as_explode_reset_but.svg", Synonyms = "reset exploded view сбросить разнесённый", CanRun = () => Asm(w) && HasExplodeMoves(w), Run = () => ResetExplode(w) });
         r.Add(new AppCommand { Id = "as.bom", Label = "Спецификация", Group = A, Icon = "as_bom_but.svg", Synonyms = "bom bill of materials спецификация", CanRun = () => Asm(w), Run = () => ShowBom(w) });
         // k149: переместить / повернуть свободный компонент (6 DOF) точными значениями; маркер на виде — при выборе
         r.Add(new AppCommand { Id = "as.move", Label = "Переместить / повернуть компонент", Group = A, Icon = "ff_move_but.svg", Synonyms = "move rotate component переместить повернуть 6 dof",
-            CanRun = () => AM() && SelectedComponents(w).Count == 1 && Views.MainWindow.IsFree6(SelectedComponents(w)[0]), Run = async () => await w.MoveComponentByValues() });
+            CanRun = () => AM() && SelectedComponents(w).Count == 1 && (IsExploded(w) || Views.MainWindow.IsFree6(SelectedComponents(w)[0])), Run = async () => await w.MoveComponentByValues() });
         r.Add(new AppCommand { Id = "as.drag", Label = "Перетащить компонент (проверка движения)", Group = A, Icon = "as_drag_but.svg", Synonyms = "drag move component перетащить",
             CanRun = AM, IsChecked = () => w.ViewPort.DragComponents, Run = () => { w.ViewPort.DragComponents = !w.ViewPort.DragComponents; w.RefreshToolStates(); w.ShowToast(w.ViewPort.DragComponents ? L("Выберите компонент и тяните левой кнопкой; ограничения возвращают его по свободам") : L("Перетаскивание выключено"), error: false); } });
         r.Add(new AppCommand { Id = "as.flip", Label = "Перевернуть направление ограничения", Group = A, Icon = "as_flip_but.svg", Synonyms = "flip constraint перевернуть ограничение",

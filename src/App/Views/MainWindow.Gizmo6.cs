@@ -68,7 +68,9 @@ public partial class MainWindow
     {
         if (Gizmo6Off || !Session.IsAssembly || Session.ActivePart != null || CurrentOperation != null || InSketch) return null;
         var comps = Commands.AssemblyCommands.SelectedComponents(this);
-        return comps.Count == 1 && IsFree6(comps[0]) && InActiveGroup(comps[0]) ? comps[0] : null;
+        // k149d: в разнесённом виде двигается любой компонент (положение запоминается в виде, место в сборке не меняется)
+        bool exploded = Commands.AssemblyCommands.IsExploded(this);
+        return comps.Count == 1 && (exploded || IsFree6(comps[0])) && InActiveGroup(comps[0]) ? comps[0] : null;
     }
 
     private Vector3d CentreOf(Part p)
@@ -110,7 +112,7 @@ public partial class MainWindow
         if (_g6Part is not { } p) return false;
         _g6Part = null;
         if (p.Translation == _g6T0 && p.Rotation == _g6R0) Session.DiscardEdit();
-        else Session.CommitEdit();
+        else { Commands.AssemblyCommands.RecordExplodeMove(this, p); Session.CommitEdit(); }
         View.Gizmo = null; RefreshGizmo6();
         UpdateStatus(); RefreshToolStates();
         return true;
@@ -131,7 +133,7 @@ public partial class MainWindow
         var comps = Commands.AssemblyCommands.SelectedComponents(this);
         if (comps.Count != 1) { ShowToast(L("Выберите компонент"), error: false); return; }
         var p = comps[0];
-        if (!IsFree6(p)) { ShowToast(L("Компонент зафиксирован или связан ограничениями — его положение задают они"), error: false); return; }
+        if (!IsFree6(p) && !Commands.AssemblyCommands.IsExploded(this)) { ShowToast(L("Компонент зафиксирован или связан ограничениями — его положение задают они"), error: false); return; }
         var boxes = new TextBox[6];
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto") };
         string[] labels = { "Сдвиг X, мм", "Сдвиг Y, мм", "Сдвиг Z, мм", "Поворот вокруг X, °", "Поворот вокруг Y, °", "Поворот вокруг Z, °" };
@@ -167,6 +169,7 @@ public partial class MainWindow
             ApplyMove(p, p.Translation, p.Rotation, c, Vector3d.Zero, Vector3d.UnitX, anglesDeg.X);
             ApplyMove(p, p.Translation, p.Rotation, c, Vector3d.Zero, Vector3d.UnitY, anglesDeg.Y);
             ApplyMove(p, p.Translation, p.Rotation, c, shift, Vector3d.UnitZ, anglesDeg.Z);
+            Commands.AssemblyCommands.RecordExplodeMove(this, p);
         });
         Session.CommitEdit();
         View.MarkDirty(); RefreshGizmo6(); UpdateStatus(); RefreshToolStates();

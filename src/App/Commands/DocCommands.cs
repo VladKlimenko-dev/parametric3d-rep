@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Platform.Storage;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -215,7 +215,8 @@ public static class DocCommands
         var it = w.SelectedItems().FirstOrDefault(); if (it == null) return;
         var name = await Dialogs.Prompt(w, L("Переименовать"), L("Новое имя:"), it.Name);
         if (string.IsNullOrWhiteSpace(name) || name == it.Name) return;
-        w.Session.Edit(L("Переименовать"), () => { it.Name = name.Trim(); });
+        var old = it.Name;
+        w.Session.Edit(L("Переименовать"), () => { it.Name = name.Trim(); if (it is Part rp) AssemblyCommands.Renamed(w, rp, old); });
         w.RebuildTree();
     }
 

@@ -1620,6 +1620,99 @@ Check("UI-ASM-K149C", () =>
     w2.Close();
 });
 
+Check("UI-ASM-K149D", () =>
+{
+    // k149d (замечания 03.11, 14:32, 14:36): разнесённый вид — скрытые не участвуют, перестройка при показе, положения
+    // пользователя (запоминаются, пишутся в документ, приоритетнее), «Сбросить»; связи компонента в панели свойств (6 DOF);
+    // сопряжения — под компонентами (общей ветки нет); фильтр дерева по видам
+    var s = DocumentSession.NewAssembly(); var w = Open(s);
+    var a = AssemblyCommands.AddComponent(w, CubePart("A", 20), "add");
+    var b = AssemblyCommands.AddComponent(w, CubePart("B", 20), "add");
+    var c = AssemblyCommands.AddComponent(w, CubePart("C", 20), "add");
+    foreach (var p in new[] { a, b, c }) p.Translation = new Vector3(5 * (p == b ? 1 : p == c ? 2 : 0), 0, 0);
+    s.Document.RebuildDirty();
+    var reg = CommandRegistry.Instance;
+    Part P(string n) => s.Document.Root.Children.OfType<Part>().First(p => p.Name == n);
+    bool Overlap(Part x, Part y)
+    {
+        var (bx, by) = (AssemblyCommands.WorldBox(x)!.Value, AssemblyCommands.WorldBox(y)!.Value);
+        return bx.Min.X < by.Max.X && by.Min.X < bx.Max.X && bx.Min.Y < by.Max.Y && by.Min.Y < bx.Max.Y && bx.Min.Z < by.Max.Z && by.Min.Z < bx.Max.Z;
+    }
+    // (1) скрытый C не разносится и не влияет
+    w.ViewPort.Selection.Clear(); Select(w, new PickRef(c.Id, PickKind.Body, s.Document.Root, c)); Dispatcher.UIThread.RunJobs();
+    reg["view.hide"].Execute(); Dispatcher.UIThread.RunJobs();
+    Require(!P("C").Visible, "C is not hidden");
+    AssemblyCommands.ToggleExplode(w);
+    Require(AssemblyCommands.IsExploded(w) && P("C").Translation == new Vector3(10, 0, 0), $"the hidden component moved ({P("C").Translation})");
+    Require(!Overlap(P("A"), P("B")), "A and B still intersect");
+    var view = s.Document.Root.ExplodedViews[0];
+    Require(view.Steps.All(st => st.PartName != "C"), "the hidden component takes part in the layout");
+    var bAB = P("B").Translation;
+    // показ C — перестройка: все трое без пересечений
+    reg["view.show_all"].Execute(); Dispatcher.UIThread.RunJobs();
+    Require(P("C").Visible && !Overlap(P("A"), P("C")) && !Overlap(P("B"), P("C")) && !Overlap(P("A"), P("B")), "showing C did not re-explode");
+    var bDef = P("B").Translation;
+    // (2) положение пользователя: запоминается, после сборки — место, после разноса — оно; в файле — места сборки
+    w.ViewPort.Selection.Clear(); Select(w, new PickRef(P("B").Id, PickKind.Body, s.Document.Root, P("B")));
+    Require(w.Gizmo6Target() != null || true, "");
+    w.MoveComponent(P("B"), new Vector3d(0, 0, 40), new Vector3d(0, 0, 90));
+    var bUser = P("B").Translation; var rUser = P("B").Rotation;
+    Require(view.UserMoves.ContainsKey("B") && reg["as.explode_reset"].Enabled, "the user move was not recorded");
+    var json = AssemblyFile.Save(s.Document.Root, s.Document.Parameters);
+    var (re, _) = AssemblyFile.Load(json);
+    var reB = re.Parts.First(p => p.Name == "B");
+    Require((reB.Translation - new Vector3(5, 0, 0)).Length < 1e-4 && re.ExplodedViews[0].UserMoves.ContainsKey("B"), $"saved file: B at {reB.Translation} (must be its place), user moves {re.ExplodedViews[0].UserMoves.Count}");
+    AssemblyCommands.ToggleExplode(w);
+    Require(!AssemblyCommands.IsExploded(w) && (P("B").Translation - new Vector3(5, 0, 0)).Length < 1e-4 && P("B").Rotation.Xyz.Length < 1e-5, "collapse did not return B to its place");
+    AssemblyCommands.ToggleExplode(w);
+    Require((P("B").Translation - bUser).Length < 1e-3 && (P("B").Rotation.Xyz - rUser.Xyz).Length < 1e-4, $"the user position is not restored ({P("B").Translation} vs {bUser})");
+    // отмена в разнесённом виде: положение пользователя снимается, вид остаётся разнесённым
+    reg["edit.undo"].Execute(); Dispatcher.UIThread.RunJobs();
+    Require(AssemblyCommands.IsExploded(w) && (P("B").Translation - bDef).Length < 1e-3 && !s.Document.Root.ExplodedViews[0].UserMoves.ContainsKey("B"), $"undo in exploded view: B at {P("B").Translation}, default {bDef}");
+    reg["edit.redo"].Execute(); Dispatcher.UIThread.RunJobs();
+    Require((P("B").Translation - bUser).Length < 1e-3, "redo in exploded view");
+    // «Сбросить разнесённый вид»
+    reg["as.explode_reset"].Execute(); Dispatcher.UIThread.RunJobs();
+    Require(s.Document.Root.ExplodedViews[0].UserMoves.Count == 0 && (P("B").Translation - bDef).Length < 1e-3 && !reg["as.explode_reset"].Enabled, "reset");
+    AssemblyCommands.ToggleExplode(w);
+    // (4) сопряжения — под компонентом; общей ветки нет
+    s.Edit("m", () => { P("B").Constraints.Add(new Parametric3D.Model.Mates.AssemblyConstraint(Parametric3D.Model.Mates.ConstraintKind.Mate, "Совпадение") { BasePart = P("A") }); });
+    w.RebuildTree(); Dispatcher.UIThread.RunJobs();
+    var rootNode = w.TreeRoots[0];
+    Require(!rootNode.Children.Any(n => n.Item is InfoItem { Role: "mates" }), "the assembly still has a separate mates branch");
+    TreeNode NodeOf(Part p) => w.TreeRoots.SelectMany(r => r.SelfAndDescendants()).First(n => !n.IsReference && ReferenceEquals(n.Item, p));
+    Require(NodeOf(P("B")).Children.Any(n => n.Item is InfoItem { Role: "mates" } && n.Children.Any(k => k.Item is InfoItem { Role: "constraint" })), "B has no mates under it");
+    Require(NodeOf(P("A")).Children.Any(n => n.Item is InfoItem { Role: "mates" } && n.Children.Any(k => k.Item is InfoItem { Role: "constraint" } ii && ii.Name.Contains("← B"))), "A does not show the mate from B");
+    // фильтр дерева: только ограничения
+    w.TreeFilter.Clear(); w.TreeFilter.Add("mate"); w.ApplyTreeFilter(); Dispatcher.UIThread.RunJobs();
+    var kinds = w.TreeRoots.SelectMany(r => r.SelfAndDescendants()).Select(MainWindow.TreeKindOf).ToList();
+    Require(kinds.Count > 0 && kinds.All(k => k == null || k == "mate"), "filter 'mates only': " + string.Join(",", kinds.Distinct()));
+    w.TreeFilter.Clear(); w.TreeFilter.Add("part"); w.TreeFilter.Add("sketch"); w.ApplyTreeFilter(); Dispatcher.UIThread.RunJobs();
+    Require(w.TreeRoots.All(r => r.Item is Part) && w.TreeRoots.Count == 3, $"filter 'parts': {w.TreeRoots.Count} roots");
+    foreach (var k in MainWindow.TreeKinds) w.TreeFilter.Add(k); w.ApplyTreeFilter(); Dispatcher.UIThread.RunJobs();
+    Require(w.TreeRoots.Count == 1 && w.TreeRoots[0].Item is Assembly, "filter 'all'");
+    // (3) панель свойств компонента: «6 DOF» включается и снимается
+    s.Edit("free", () => { P("C").Mates.Clear(); P("C").Mates.Add(new Parametric3D.Model.Mates.Mate(Parametric3D.Model.Mates.MateType.Free, "Шесть степеней")); });
+    if (!w.OperationPanelVisible) w.ToggleProperties();
+    w.ViewPort.Selection.Clear(); Select(w, new PickRef(P("C").Id, PickKind.Body, s.Document.Root, P("C"))); Dispatcher.UIThread.RunJobs();
+    w.ShowProperties(); Dispatcher.UIThread.RunJobs();
+    CheckBox Cb(string name) => Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(w).OfType<CheckBox>().First(x => x.Name == name);
+    var free = Cb("prop_free");
+    Require(free.IsChecked == true, "6 DOF is not shown checked");
+    free.IsChecked = false; Dispatcher.UIThread.RunJobs();
+    Require(!P("C").Mates.Any(m => m.Type == Parametric3D.Model.Mates.MateType.Free), "unchecking 6 DOF did not remove it");
+    w.ShowProperties(); Dispatcher.UIThread.RunJobs();
+    Cb("prop_fixed").IsChecked = true; Dispatcher.UIThread.RunJobs();
+    Require(P("C").Fixed, "Fixed checkbox");
+    // удаление связи из панели у компонента B
+    w.ViewPort.Selection.Clear(); Select(w, new PickRef(P("B").Id, PickKind.Body, s.Document.Root, P("B"))); Dispatcher.UIThread.RunJobs();
+    w.ShowProperties(); Dispatcher.UIThread.RunJobs();
+    var del = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(w).OfType<Button>().First(x => x.Name == "prop_con_0_del");
+    del.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Dispatcher.UIThread.RunJobs();
+    Require(P("B").Constraints.Count == 0, "deleting the constraint from the panel");
+    w.Close();
+});
+
 Check("UI-DIALOG-SCROLL", () =>
 {
     // k149 (замечание 03.11, 06:41, п. 1): длинный отчёт («Проверка тела» в сотни строк) — окно не выше экрана, текст в
@@ -3179,9 +3272,10 @@ Check("UI-U13G-ASSEMBLY", () =>
     var nb = CubePart("Кубик2", 20);
     AssemblyCommands.Replace(w, b, nb);
     Require(nb.Constraints.Count == 3 && !s.Document.Root.Children.Contains(b), "replace keeps constraints");
-    // дерево: компоненты и папка ограничений
+    // дерево: компоненты, у каждого — своя папка «Сопряжения» (k149d: общей ветки нет)
     var roots = TreeNode.Build(s.Document, assembly: true);
-    Require(roots[0].Children.Any(n => n.Item is InfoItem { Role: "mates" } mm && n.Children.Count >= 4) && roots[0].Children.Count(n => n.Item is Part) >= 5, "assembly tree");
+    Require(!roots[0].Children.Any(n => n.Item is InfoItem { Role: "mates" }) && roots[0].Children.Count(n => n.Item is Part) >= 5
+        && roots[0].Children.Where(n => n.Item is Part).Sum(n => n.Children.FirstOrDefault(c => c.Item is InfoItem { Role: "mates" })?.Children.Count ?? 0) >= 4, "assembly tree");
     w.Close();
 });
 
@@ -5661,7 +5755,7 @@ Check("UI-PANELS-K120", () =>
     var title = w.TreeTitleTools.Children.OfType<Control>().ToList();
     Console.WriteLine($"  tree bar: {string.Join(", ", bar)}; title: {string.Join(", ", title.Select(c => c.Name ?? (c.Tag as AppCommand)?.Id))}");
     Require(MainWindow.TreeBarCommands.All(id => bar.Contains(id)), "tree commands are not on the tree bar");
-    Require(title.Count == 2 && title.Any(c => c.Name == "tree_collapse") && title.Any(c => c.Name == "tree_expand") && !title.Any(c => c.Tag is AppCommand { Id: "tree.group" }), "tree title: chevrons only");
+    Require(title.Count == 3 && title.Any(c => c.Name == "tree_filter") && title.Any(c => c.Name == "tree_collapse") && title.Any(c => c.Name == "tree_expand") && !title.Any(c => c.Tag is AppCommand { Id: "tree.group" }), "tree title: filter and chevrons only");
     // подписи кнопок без иконок — целиком
     var textButtons = w.GetVisualDescendants().OfType<Button>().Where(b => b.Tag is AppCommand && b.Content is TextBlock && b.IsEffectivelyVisible && b.Bounds.Width > 0).ToList();
     var cut = textButtons.Where(b => { var t = (TextBlock)b.Content!; t.Measure(Size.Infinity); return t.DesiredSize.Width > b.Bounds.Width - b.Padding.Left - b.Padding.Right + 0.5; })

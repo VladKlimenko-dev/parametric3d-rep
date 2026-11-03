@@ -26,6 +26,12 @@ public sealed class Assembly : ModelItem
     /// <summary>Разнесённые виды: показ узла в разобранном состоянии.</summary>
     public readonly List<ExplodedView> ExplodedViews = new();
 
+    /// <summary>
+    /// k149d: идёт показ разнесённого вида — места компонентов в сборке (имя → положение и поворот). Не сохраняется: в файл и в
+    /// снимки отмены пишутся эти места, а не разнесённые положения. null — вид собран.
+    /// </summary>
+    public Dictionary<string, (Vector3 T, Quaternion R)>? ExplodeHome;
+
     public override ItemKind Kind => ItemKind.Assembly;
 
     public readonly DatumPoint Origin;

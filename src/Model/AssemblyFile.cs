@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using OpenTK.Mathematics;
 using Parametric3D.Model.Mates;
@@ -46,14 +46,20 @@ public static class AssemblyFile
                     Direction = new[] { st.Direction.X, st.Direction.Y, st.Direction.Z },
                     Distance = st.Distance,
                     Order = st.Order
+                }).ToList(),
+                UserMoves = v.UserMoves.Count == 0 ? null : v.UserMoves.Select(kv => new ExplodeMoveDto
+                {
+                    PartName = kv.Key,
+                    Shift = new[] { kv.Value.T.X, kv.Value.T.Y, kv.Value.T.Z },
+                    Rotation = new[] { kv.Value.R.X, kv.Value.R.Y, kv.Value.R.Z, kv.Value.R.W }
                 }).ToList()
             }).ToList(),
 
             Parts = parts.Select(p => new AsmPartDto
             {
                 Document = DocumentFile.Save(p, parameters, withDisplay),
-                Translation = new[] { (double)p.Translation.X, p.Translation.Y, p.Translation.Z },
-                Rotation = new[] { (double)p.Rotation.X, p.Rotation.Y, p.Rotation.Z, p.Rotation.W },
+                Translation = new[] { (double)Home(asm, p).T.X, Home(asm, p).T.Y, Home(asm, p).T.Z },
+                Rotation = new[] { (double)Home(asm, p).R.X, Home(asm, p).R.Y, Home(asm, p).R.Z, Home(asm, p).R.W },
                 Fixed = p.Fixed, Skeleton = p.Skeleton, SourcePath = p.SourcePath, Hidden = !p.Visible, SubAssembly = p.SubAssembly,
                 Constraints = p.Constraints.Select(c => new ConstraintDto
                 {
@@ -177,11 +183,18 @@ public static class AssemblyFile
                     Distance = st.Distance,
                     Order = st.Order
                 });
+            if (vd.UserMoves != null)
+                foreach (var um in vd.UserMoves)
+                    v.UserMoves[um.PartName] = (Vec(um.Shift), um.Rotation is { Length: 4 } q ? new Quaterniond(q[0], q[1], q[2], q[3]) : Quaterniond.Identity);
             asm.ExplodedViews.Add(v);
         }
 
         return (asm, table);
     }
+
+    /// <summary>k149d: место компонента в сборке (при показе разнесённого вида — не разнесённое положение).</summary>
+    static (Vector3 T, Quaternion R) Home(Assembly asm, Part p) =>
+        asm.ExplodeHome != null && asm.ExplodeHome.TryGetValue(p.Name, out var h) ? h : (p.Translation, p.Rotation);
 
     private static Vector3d Vec(double[]? a) =>
         a is { Length: >= 3 } ? new Vector3d(a[0], a[1], a[2]) : Vector3d.Zero;
@@ -200,6 +213,14 @@ public static class AssemblyFile
     {
         public string Name { get; set; } = "";
         public List<ExplodeStepDto> Steps { get; set; } = new();
+        public List<ExplodeMoveDto>? UserMoves { get; set; }
+    }
+
+    private sealed class ExplodeMoveDto
+    {
+        public string PartName { get; set; } = "";
+        public double[]? Shift { get; set; }
+        public double[]? Rotation { get; set; }
     }
 
     private sealed class ExplodeStepDto
