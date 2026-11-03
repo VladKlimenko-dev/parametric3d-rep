@@ -177,16 +177,22 @@ public sealed class DocumentSession
     /// двигать и вращать. Положение — как в файле. Файл с одной деталью — документ детали, как прежде. P3D_IMPORTASM=0 —
     /// всегда документ детали.
     /// </summary>
-    public static DocumentSession? ImportAssembly(string path, List<string> warnings)
+    public static List<Part>? ImportComponents(string path, List<string> warnings)
     {
         if (Environment.GetEnvironmentVariable("P3D_IMPORTASM") == "0") return null;
         string text = File.ReadAllText(path);
+        // k149 (замечание 03.11, 10:32): структура изделий STEP — детали на своих местах (размещения сборки)
+        if (Exchange.Guess(text) == Exchange.Format.Step && !(Environment.GetEnvironmentVariable("P3D_STEPPLACE") == "0"))
+        {
+            List<Kernel.Export.StepOccurrence>? occ = null;
+            try { occ = Kernel.Export.StepAssembly.Read(text, warnings); } catch (Exception ex) { warnings.Add("STEP assembly: " + ex.Message); }
+            if (occ is { Count: >= 2 }) return FromOccurrences(path, occ, warnings);
+        }
         var read = Exchange.Read(text, out var fmt, warnings) ?? throw new InvalidDataException(string.Join("\n", warnings));
         var bodies = Parametric3D.Model.Features.InsertBodyFeature.Separated(read.Bodies.ToList(), read.BodyNameList, out var names);
         if (bodies.Count < 2) return null;
         string file = Path.GetFileName(path);
-        var doc = new Document(Path.GetFileNameWithoutExtension(path));
-        var s = new DocumentSession(doc, null) { IsAssembly = true, Modified = true };
+        var list = new List<Part>();
         for (int i = 0; i < bodies.Count; i++)
         {
             var one = new Part(names[i]); one.Bodies.Add(bodies[i]);
@@ -200,10 +206,74 @@ public sealed class DocumentSession
             foreach (var nm in imp.PartNames(warnings))
                 comp.AddFeature(new Parametric3D.Model.Features.FreeFormFeature(nm) { ImportOf = imp.Key, FFBody = nm });
             comp.Mates.Add(new Parametric3D.Model.Mates.Mate(Parametric3D.Model.Mates.MateType.Free, Loc.L("Шесть степеней")));
-            doc.Root.Add(comp);
+            list.Add(comp);
         }
-        if (doc.Root.Children.OfType<Part>().Count() < 2) return null;
+        return list.Count < 2 ? null : list;
+    }
+
+    /// <summary>Файл с несколькими деталями — документ сборки из компонентов (ImportComponents); иначе null.</summary>
+    public static DocumentSession? ImportAssembly(string path, List<string> warnings)
+    {
+        if (ImportComponents(path, warnings) is not { } comps) return null;
+        var doc = new Document(Path.GetFileNameWithoutExtension(path));
+        var s = new DocumentSession(doc, null) { IsAssembly = true, Modified = true };
+        foreach (var c in comps) doc.Root.Add(c);
         return s;
+    }
+
+    /// <summary>
+    /// k149: сборка из вхождений деталей STEP. Компонент — вхождение: тела изделия в его координатах (операция «Импорт» и
+    /// узел FreeForm на тело), размещение — Translation/Rotation компонента, связь — «шесть степеней»; подсборка файла —
+    /// группа компонентов (Part.SubAssembly). Повторные вхождения одного изделия — одинаковое содержимое, свои размещения.
+    /// </summary>
+    static List<Part> FromOccurrences(string path, List<Kernel.Export.StepOccurrence> occ, List<string> warnings)
+    {
+        string file = Path.GetFileName(path);
+        var list = new List<Part>();
+        var stepOf = new Dictionary<int, (string Step, List<Kernel.Topology.TSolid> Bodies, List<string> Names)>();
+        var used = new HashSet<string>();
+        string Unique(string n) { string u = n; for (int k = 2; !used.Add(u); k++) u = $"{n} ({k})"; return u; }
+        int anon = 0;
+        foreach (var o in occ)
+        {
+            int key = o.ProductDef >= 0 ? o.ProductDef : -(++anon);
+            if (!stepOf.TryGetValue(key, out var st))
+            {
+                if (!Kernel.Export.ImportHeal.Off) for (int i = 0; i < o.Bodies.Count; i++) Kernel.Export.ImportHeal.Heal(o.Bodies[i], warnings, $"{o.Product} {i + 1}");
+                var bodies = Parametric3D.Model.Features.InsertBodyFeature.Separated(o.Bodies, o.BodyNames.Select(n => n ?? (o.Bodies.Count == 1 ? o.Product : "")).ToList(), out var names);
+                for (int i = 0; i < names.Count; i++) if (names[i].StartsWith("Деталь ") && o.Bodies.Count > 1) names[i] = $"{o.Product}.{i + 1}";
+                var one = new Part(o.Product); one.Bodies.AddRange(bodies);
+                one.BodyNameList.AddRange(names);
+                string text;
+                try { text = Exchange.Write(one, Exchange.Format.Step, warnings); }
+                catch (Exception ex) { warnings.Add($"{o.Product}: {ex.Message}"); continue; }
+                stepOf[key] = st = (text, bodies, names);
+            }
+            var comp = new Part(Unique(o.Product)) { SubAssembly = o.Parent };
+            var imp = new Parametric3D.Model.Features.InsertBodyFeature(Loc.L("Импорт «{0}»", file)) { Step = st.Step, SourceName = file, Separate = true };
+            imp.Prime(st.Bodies.Select(b => Kernel.Topology.TopologyClone.Deep(b)).ToList(), st.Names);
+            comp.AddFeature(imp);
+            foreach (var nm in imp.PartNames(warnings))
+                comp.AddFeature(new Parametric3D.Model.Features.FreeFormFeature(nm) { ImportOf = imp.Key, FFBody = nm });
+            var pl = o.Placement;
+            comp.Translation = new OpenTK.Mathematics.Vector3((float)pl.O.X, (float)pl.O.Y, (float)pl.O.Z);
+            comp.Rotation = QuatOf(pl.X, pl.Y, pl.Z);
+            comp.Mates.Add(new Parametric3D.Model.Mates.Mate(Parametric3D.Model.Mates.MateType.Free, Loc.L("Шесть степеней")));
+            list.Add(comp);
+        }
+        return list;
+    }
+
+    /// <summary>Кватернион поворота, переводящего оси X, Y, Z в x, y, z (столбцы матрицы поворота).</summary>
+    public static OpenTK.Mathematics.Quaternion QuatOf(OpenTK.Mathematics.Vector3d x, OpenTK.Mathematics.Vector3d y, OpenTK.Mathematics.Vector3d z)
+    {
+        double m00 = x.X, m10 = x.Y, m20 = x.Z, m01 = y.X, m11 = y.Y, m21 = y.Z, m02 = z.X, m12 = z.Y, m22 = z.Z;
+        double tr = m00 + m11 + m22, qw, qx, qy, qz;
+        if (tr > 0) { double S = Math.Sqrt(tr + 1) * 2; qw = 0.25 * S; qx = (m21 - m12) / S; qy = (m02 - m20) / S; qz = (m10 - m01) / S; }
+        else if (m00 > m11 && m00 > m22) { double S = Math.Sqrt(1 + m00 - m11 - m22) * 2; qw = (m21 - m12) / S; qx = 0.25 * S; qy = (m01 + m10) / S; qz = (m02 + m20) / S; }
+        else if (m11 > m22) { double S = Math.Sqrt(1 + m11 - m00 - m22) * 2; qw = (m02 - m20) / S; qx = (m01 + m10) / S; qy = 0.25 * S; qz = (m12 + m21) / S; }
+        else { double S = Math.Sqrt(1 + m22 - m00 - m11) * 2; qw = (m10 - m01) / S; qx = (m02 + m20) / S; qy = (m12 + m21) / S; qz = 0.25 * S; }
+        return OpenTK.Mathematics.Quaternion.Normalize(new OpenTK.Mathematics.Quaternion((float)qx, (float)qy, (float)qz, (float)qw));
     }
 
     public static DocumentSession Import(string path, List<string> warnings)

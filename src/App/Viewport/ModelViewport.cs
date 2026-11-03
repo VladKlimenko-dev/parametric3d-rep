@@ -495,6 +495,9 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
 
     private ModelItem? _treeHover;
 
+    /// <summary>k149: выбор деталей целиком (режим сборки вне команд, которым нужны ссылки на грани и рёбра).</summary>
+    public Func<bool>? WholePartPick;
+
     /// <summary>k149: что подсветить целиком по элементу под курсором (деталь сборки, деталь импорта); null — только его.</summary>
     public Func<PickRef, ModelItem?>? HoverGroup;
 
@@ -844,6 +847,10 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         if (!r.IsEmpty && Selection.Predicate is { } pred && !SafePred(pred, r)) r = PickRef.Empty;
         // k97: в эскизе — очерк грани детали (цилиндра) под курсором, если под ним нет ничего из эскиза
         if (ActiveSketch != null && (r.IsEmpty || r.Kind == PickKind.Face) && FaceReferenceAt(req.P) is { IsEmpty: false } fref) r = fref;
+        // k149 (замечание 03.11, 10:48, п. 5): в сборке выбирается деталь целиком — грань, ребро и вершина только там, где на
+        // них ссылается команда (ограничение, соединение — режим выбора ссылок)
+        if (WholePartPick?.Invoke() == true && r.Owner is Part wp && r.Kind is PickKind.Face or PickKind.Edge or PickKind.Vertex)
+            r = new PickRef(wp.Id, PickKind.Body, wp.Parent, wp);
         if (Selection.SetHover(r))
         {
             _flagsDirty = true;

@@ -761,7 +761,8 @@ public sealed class SceneRenderer : IDisposable
         {
             if (m.Preview == 0) continue;
             _mesh.Set("uModel", m.Model);
-            _mesh.Set("uFlat", m.Preview > 0 ? Theme.PreviewAdd : Theme.PreviewCut);
+            // k149: Preview = 2 — полупрозрачное тело (прочие детали при активной детали): цвет тела, непрозрачность 15 %
+            _mesh.Set("uFlat", m.Preview == 2 ? m.Color : m.Preview > 0 ? Theme.PreviewAdd : Theme.PreviewCut);
             GL.BindVertexArray(m.Vao);
             GL.DrawElements(PrimitiveType.Triangles, m.Count, DrawElementsType.UnsignedInt, 0);
         }

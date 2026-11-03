@@ -26,6 +26,8 @@ public sealed partial class TreeNode : ObservableObject
     [ObservableProperty] private bool _isActive;
     /// <summary>k149 (замечание 03.11, 08:09): элемент под курсором на виде — строка подсвечена.</summary>
     [ObservableProperty] private bool _isHot;
+    /// <summary>k149 (10:48, п. 4): не активен — активна другая деталь (компонент сборки или деталь импорта): имя приглушено.</summary>
+    [ObservableProperty] private bool _isInactive;
 
     public string? Error { get; private set; }
     public bool HasError => Error != null;

@@ -73,7 +73,7 @@ public static class AssemblyCommands
         return null;
     }
 
-    static List<Geo> SelectedGeos(MainWindow w) => w.ViewPort.Selection.Items.Select(GeoOf).OfType<Geo>().ToList();
+    public static List<Geo> SelectedGeos(MainWindow w) => w.ViewPort.Selection.Items.Select(GeoOf).OfType<Geo>().ToList();
 
     /// <summary>Решить сборку; невыполненное — сообщением.</summary>
     public static List<string> Solve(MainWindow w)
@@ -266,6 +266,33 @@ public static class AssemblyCommands
         return part;
     }
 
+    /// <summary>k149: детали файла-сборки — компонентами группы (подсборка): взаимное положение — как в файле; вся группа —
+    /// справа от уже стоящих (габарит + 20); первый вставленный в пустую сборку — на месте. Один шаг отмены.</summary>
+    public static void AddComponents(MainWindow w, List<Part> comps, string group)
+    {
+        var root = w.Session.Document.Root;
+        var names = root.Children.Select(c => c.Name).ToHashSet();
+        bool first = !Components(w).Any();
+        foreach (var p in comps)
+        {
+            string n = p.Name; for (int i = 2; names.Contains(n); i++) n = $"{p.Name} ({i})";
+            p.Name = n; names.Add(n);
+            p.SubAssembly = string.IsNullOrEmpty(p.SubAssembly) ? group : group + " / " + p.SubAssembly;
+            p.Rebuild(w.Session.Document.ScopeFor(p));
+        }
+        float dx = 0;
+        if (!first)
+        {
+            var b = w.Session.Document.Bounds;
+            double minX = double.MaxValue;
+            foreach (var p in comps) if (!p.Bounds.IsEmpty) minX = Math.Min(minX, ToWorld(p, p.Bounds.Min).X);
+            if (!b.IsEmpty && minX < double.MaxValue) dx = (float)(b.Max.X + 20 - minX);
+        }
+        w.Session.Edit(L("Вставить компонент"), () => { foreach (var p in comps) { p.Translation += new Vector3(dx, 0, 0); root.Add(p); } });
+        w.Session.Document.RebuildDirty();
+        w.ViewPort.MarkDirty(); w.RebuildTree(); w.ViewPort.ZoomToFit();
+    }
+
     /// <summary>Компонент в сборку: справа от уже стоящих (габарит + 20), первый — в начале.</summary>
     public static Part AddComponent(MainWindow w, Part part, string undo)
     {
@@ -305,6 +332,14 @@ public static class AssemblyCommands
     {
         var path = await PickFile(w, L(freeform ? "Вставить FreeForm-тело" : "Вставить компонент"), freeform ? new[] { "*.step", "*.stp", "*.iges", "*.igs", "*" + DocumentSession.PartExtension } : new[] { "*" + DocumentSession.PartExtension, "*.step", "*.stp" });
         if (path == null) return;
+        // k149 (замечание 03.11, 10:48, п. 1): STEP-сборка (или файл с несколькими телами) — деталями-компонентами на своих
+        // местах, группой (подсборка с именем файла); каждая — 6 DOF
+        if (!path.EndsWith(DocumentSession.PartExtension, StringComparison.OrdinalIgnoreCase))
+        {
+            List<Part>? comps = null;
+            try { comps = DocumentSession.ImportComponents(path, new List<string>()); } catch (Exception ex) { w.ShowToast(L("Вставить компонент: {0}", ex.Message)); return; }
+            if (comps != null) { AddComponents(w, comps, Path.GetFileNameWithoutExtension(path)); return; }
+        }
         try { AddComponent(w, LoadComponent(path, new List<string>()), L("Вставить компонент")); }
         catch (Exception ex) { w.ShowToast(L("Вставить компонент: {0}", ex.Message)); }
     }
@@ -637,9 +672,12 @@ public static class AssemblyCommands
             CanRun = () => Asm(w) && w.SelectedTreeConstraint() != null, Run = () => { if (w.SelectedTreeConstraint() is { } t) FlipConstraint(w, t.Part, t.Index); } });
         // k149 (замечание 03.11, 09:02): кнопка доступна, только если выбранное подходит (две ссылки на разных компонентах,
         // годные для этого ограничения или соединения); значки ограничений — те же, что у ограничений эскиза
+        // k149 (10:48, п. 5): в сборке детали выбираются целиком; ничего не выбрано — команда доступна и начинает выбор ссылок
+        bool NoSel() => w.ViewPort.Selection.IsEmpty && !w.AsmRefPicking;
         bool CanMate(MateCmd cmd)
         {
             if (!AM()) return false;
+            if (NoSel()) return true;
             var gs = SelectedGeos(w); if (gs.Count < 2) return false;
             try { return Plan(cmd, gs[0], gs[1], cmd == MateCmd.Distance ? 10 : cmd == MateCmd.Angle ? 45 : 0, out _) != null; } catch { return false; }
         }
@@ -647,11 +685,13 @@ public static class AssemblyCommands
         {
             if (!AM()) return false;
             if (t == MateType.Free) return SelectedComponents(w).Count > 0;
+            if (NoSel()) return true;
             var gs = SelectedGeos(w); if (gs.Count < 2) return false;
             try { return PlanJoint(t, gs[0], gs[1], out var mv, out _) != null && mv != null; } catch { return false; }
         }
         void M(string id, string label, string icon, MateCmd cmd, string syn) =>
-            r.Add(new AppCommand { Id = id, Label = label, Group = C, Icon = icon, Synonyms = syn, CanRun = () => CanMate(cmd), Run = () => Constrain(w, cmd) });
+            r.Add(new AppCommand { Id = id, Label = label, Group = C, Icon = icon, Synonyms = syn, CanRun = () => CanMate(cmd),
+                Run = () => { if (SelectedGeos(w).Count >= 2) Constrain(w, cmd); else w.BeginAsmRefPick(label, () => Constrain(w, cmd)); } });
         M("mate.coincident", "Совпадение", "con_coincident_but.svg", MateCmd.Coincident, "coincident mate совпадение прижать");
         M("mate.distance", "Расстояние", "dim_linear_but.svg", MateCmd.Distance, "distance offset расстояние");
         M("mate.angle", "Угол", "dim_angle_but.svg", MateCmd.Angle, "angle угол");
@@ -663,7 +703,8 @@ public static class AssemblyCommands
         M("mate.point_on", "Точка на поверхности / прямой", "con_point_on_but.svg", MateCmd.PointOn, "point on surface line точка на");
         M("mate.rigid", "Жёсткая связь", "con_fix_but.svg", MateCmd.Rigid, "rigid жёсткая связь");
         void Jn(string id, string label, string icon, MateType t, string syn) =>
-            r.Add(new AppCommand { Id = id, Label = label, Group = J, Icon = icon, Synonyms = syn, CanRun = () => CanJoint(t), Run = () => Joint(w, t) });
+            r.Add(new AppCommand { Id = id, Label = label, Group = J, Icon = icon, Synonyms = syn, CanRun = () => CanJoint(t),
+                Run = () => { if (t == MateType.Free || SelectedGeos(w).Count >= 2) Joint(w, t); else w.BeginAsmRefPick(label, () => Joint(w, t)); } });
         Jn("joint.fixed", "Соединение: жёсткое", "joint_fixed_but.svg", MateType.Weld, "fixed joint жёсткое соединение");
         Jn("joint.pin", "Соединение: шарнир", "joint_pin_but.svg", MateType.Pin, "pin revolute шарнир");
         Jn("joint.slider", "Соединение: ползун", "joint_slider_but.svg", MateType.Slider, "slider prismatic ползун");

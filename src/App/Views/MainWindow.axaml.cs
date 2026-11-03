@@ -1080,6 +1080,7 @@ public partial class MainWindow : Window
         SectionBadge.Click += (_, _) => { if (CurrentOperation is SectionOp) return; if (CurrentOperation != null) CancelOperation(); if (!InSketch && Session.Part != null) StartOperation(new SectionOp()); };
         View.HoverChanged += h => { UpdateStatus(h); MarkHotInTree(); };
         View.HoverGroup = HoverGroupOf;
+        View.WholePartPick = WholePartMode;
         // k127: три пальца на сенсорной панели — сдвиг вида (Windows Precision Touchpad); жест Windows с тремя пальцами
         // (переключение окон) приложение отменить не может — при первом сдвиге подсказка, как его выключить
         Opened += (_, _) => { if (OperatingSystem.IsWindows()) WinTouchpad.Attach(this, View.Touchpad); };
@@ -1090,7 +1091,7 @@ public partial class MainWindow : Window
             ShowToast(L("Сдвиг вида тремя пальцами. Чтобы Windows не переключала при этом окна: Параметры → Bluetooth и устройства → Сенсорная панель → Жесты тремя пальцами → Прокрутки: «Ничего». Без этого — Shift + прокрутка двумя пальцами."), error: false);
         };
         View.Selection.Changed += OnSelectionChanged;
-        View.AccumulatePicks = () => CurrentOperation?.ActiveRef is { Accumulate: true };   // k137: «точки по порядку» — щелчками
+        View.AccumulatePicks = () => CurrentOperation?.ActiveRef is { Accumulate: true } || AsmRefPicking;   // k137: «точки по порядку» — щелчками
         View.ContextRequested += p => { if (InSketch && View.DimensionAt(p) is { } dm) OpenDimensionMenu(dm); else OpenViewContextMenu(); };
         View.SceneRebuilt += () =>
         {
@@ -1182,7 +1183,7 @@ public partial class MainWindow : Window
         }
         _lastSelIds = ids;
         if (selChanged) CurrentOperation?.SelectionChanged(View.Selection.Items);
-        if (selChanged && CurrentOperation == null) RefreshGizmo6();   // k149: маркер компонента с 6 DOF
+        if (selChanged && CurrentOperation == null) { AsmRefPickStep(); RefreshGizmo6(); }   // k149: ссылки сборки; маркер компонента с 6 DOF
         // k120 (пп. 12, 15): доступность кнопок — по выбранному (прежде пересчитывалась только при смене документа и после
         // операции: «Группа» при выборе нескольких операций оставалась недоступной). P3D_CMDREFRESH=0 — как прежде.
         if (selChanged && !CmdRefreshOff) _reg.RefreshAll();
@@ -2034,6 +2035,39 @@ public partial class MainWindow : Window
     }
 
     /// <summary>u13: ограничение или соединение, выбранное в дереве сборки.</summary>
+    /// <summary>k149 (замечание 03.11, 10:48, п. 3): выбранные в дереве ограничения и соединения сборки (для удаления).</summary>
+    public List<(Part Part, string Role, int Index)> SelectedTreeMates()
+    {
+        var res = new List<(Part, string, int)>();
+        var nodes = Tree.SelectedItems?.OfType<TreeNode>().ToList() ?? new List<TreeNode>();
+        if (nodes.Count == 0 && Tree.SelectedItem is TreeNode one) nodes.Add(one);
+        foreach (var n in nodes) if (n.Item is InfoItem { Role: "constraint" or "joint" } ii) res.Add((ii.Owner, ii.Role, ii.Index));
+        return res;
+    }
+
+    /// <summary>Выбрать узел дерева (проверки).</summary>
+    public void SelectTreeNodeForTest(TreeNode n) => Tree.SelectedItem = n;
+
+    /// <summary>Удалить выбранные ограничения и соединения сборки (один шаг отмены).</summary>
+    public void DeleteTreeMates()
+    {
+        var sel = SelectedTreeMates(); if (sel.Count == 0 || !Session.IsAssembly) return;
+        Session.Edit(sel.Count == 1 ? L("Удалить ограничение") : L("Удалить ограничения ({0})", sel.Count), () =>
+        {
+            foreach (var g in sel.GroupBy(x => x.Part))
+            {
+                var p = g.Key; int nc = p.Constraints.Count;
+                foreach (var (_, role, idx) in g.OrderByDescending(x => x.Index))
+                {
+                    if (role == "constraint" && idx < p.Constraints.Count) p.Constraints.RemoveAt(idx);
+                    else if (role == "joint" && idx - nc >= 0 && idx - nc < p.Mates.Count) p.Mates.RemoveAt(idx - nc);
+                }
+            }
+        });
+        Commands.AssemblyCommands.Solve(this);
+        View.Selection.Clear(); RebuildTree(); View.MarkDirty();
+    }
+
     public (Part Part, int Index)? SelectedTreeConstraint() =>
         Tree.SelectedItem is TreeNode { Item: InfoItem { Role: "constraint" or "joint" } ii } ? (ii.Owner, ii.Index) : null;
 
@@ -2947,6 +2981,13 @@ public partial class MainWindow : Window
         {
             bool a = act != null && !n.IsReference && ReferenceEquals(n.Item, act);
             if (n.IsActive != a) n.IsActive = a;
+            // прочие детали того же уровня — неактивны: при активной детали импорта — другие детали импорта; при правке
+            // компонента в контексте — другие компоненты
+            bool ina = !a && act != null && !n.IsReference && (
+                act is FreeFormFeature { ImportOf: not null } af && n.Item is FreeFormFeature { ImportOf: not null } nf && ReferenceEquals(af.Parent, nf.Parent)
+                || act is Part ap && Session.IsAssembly && n.Item is Part np && !ReferenceEquals(ap, np)
+                || act is FreeFormFeature af2 && Session.IsAssembly && n.Item is Part np2 && !ReferenceEquals(af2.Parent, np2));
+            if (n.IsInactive != ina) n.IsInactive = ina;
         }
     }
 
@@ -2955,7 +2996,9 @@ public partial class MainWindow : Window
     /// деталями импорта — узел той детали (её тело).</summary>
     public ModelItem? HoverGroupOf(PickRef r)
     {
-        if (r.IsEmpty || r.Owner is not Part p) return null;
+        if (r.IsEmpty) return null;
+        if (r.Kind == PickKind.Body && r.Target is Part tp) return Session.IsAssembly && Session.ActivePart == null ? tp : null;
+        if (r.Owner is not Part p) return null;
         if (Session.IsAssembly && Session.ActivePart == null) return p;
         if (r.Kind is not (PickKind.Face or PickKind.Edge or PickKind.Vertex) || !p.Features.Any(f => f is FreeFormFeature { ImportOf: not null })) return null;
         if (!_bodyOfPick.TryGetValue((p.Id, r.Id), out var bn))
@@ -3815,6 +3858,7 @@ public partial class MainWindow : Window
             if (InSketch && Commands.SketchEditCommands.Mode != Commands.SketchEditCommands.EdgeMode.None) { Commands.SketchEditCommands.Mode = Commands.SketchEditCommands.EdgeMode.None; return; }
             if (InSketch && View.Tool != null) { View.Tool = null; return; }
             if (CurrentOperation != null) { CancelOperation(); return; }
+            if (AsmRefPicking) { CancelAsmRefPick(); return; }
             if (!View.Selection.IsEmpty) { View.Selection.Clear(); return; }
             if (InSketch) return;
             if (_propsOn) { ToggleProperties(); return; }

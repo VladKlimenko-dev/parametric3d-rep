@@ -172,6 +172,15 @@ public sealed class StepParser
                     p.Entities[id] = ("B_SPLINE_SURFACE_WITH_KNOTS", args);
                     continue;
                 }
+                // k149: СВЯЗЬ ПРЕДСТАВЛЕНИЙ С ПРЕОБРАЗОВАНИЕМ (размещение детали в сборке): (REPRESENTATION_RELATIONSHIP(имя,
+                // описание,rep1,rep2) REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION(#преобразование) SHAPE_REPRESENTATION_RELATIONSHIP())
+                if (parts.TryGetValue("REPRESENTATION_RELATIONSHIP", out var rr) && rr.Count >= 4)
+                {
+                    var args = new List<string>(rr.Take(4));
+                    if (parts.TryGetValue("REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION", out var rt) && rt.Count >= 1) { args.Add(rt[0]); p.Entities[id] = ("REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION", args); }
+                    else p.Entities[id] = ("SHAPE_REPRESENTATION_RELATIONSHIP", args);
+                    continue;
+                }
                 if (parts.TryGetValue("B_SPLINE_CURVE_WITH_KNOTS", out var ck) && parts.TryGetValue("B_SPLINE_CURVE", out var cb2))
                 {
                     var args = new List<string> { "''" };

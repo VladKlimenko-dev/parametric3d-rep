@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Layout;
 using OpenTK.Mathematics;
 using Parametric3D.App.Viewport;
@@ -23,6 +23,42 @@ public partial class MainWindow
     private Vector3 _g6T0;
     private Quaternion _g6R0;
     private Vector3d _g6C0;
+
+    // ---------------------------------------------------------------- k149 (10:48, п. 5): ссылки для ограничений и соединений
+
+    private Action? _asmRefRun;
+    private string? _asmRefWhat;
+    /// <summary>Идёт выбор ссылок (граней, рёбер, вершин) для ограничения или соединения сборки.</summary>
+    public bool AsmRefPicking => _asmRefRun != null;
+
+    /// <summary>В сборке вне команд выбирается деталь целиком.</summary>
+    public bool WholePartMode() => Session.IsAssembly && Session.ActivePart == null && CurrentOperation == null && !InSketch && _asmRefRun == null;
+
+    /// <summary>Начать выбор двух ссылок для команды сборки; когда выбраны подходящие — команда выполняется.</summary>
+    public void BeginAsmRefPick(string what, Action run)
+    {
+        _asmRefRun = run; _asmRefWhat = what;
+        View.Selection.Clear();
+        View.Gizmo = null;
+        ShowToast(L("«{0}»: выберите две ссылки на разных компонентах (грани, рёбра, вершины). Esc — отмена", L(what)), error: false);
+        RefreshToolStates();
+    }
+
+    public void CancelAsmRefPick()
+    {
+        if (_asmRefRun == null) return;
+        _asmRefRun = null; _asmRefWhat = null;
+        View.Selection.Clear(); RefreshToolStates();
+    }
+
+    /// <summary>Выбор изменился: две ссылки готовы — выполнить команду.</summary>
+    private void AsmRefPickStep()
+    {
+        if (_asmRefRun is not { } run) return;
+        if (Commands.AssemblyCommands.SelectedGeos(this).Count < 2) return;
+        _asmRefRun = null; _asmRefWhat = null;
+        try { run(); } finally { View.Selection.Clear(); RefreshToolStates(); }
+    }
 
     /// <summary>Компонент свободен: не зафиксирован, без ограничений, связи — только «6 DOF».</summary>
     public static bool IsFree6(Part p) => !p.Fixed && p.Constraints.Count == 0 && p.Mates.All(m => m.Type == MateType.Free);

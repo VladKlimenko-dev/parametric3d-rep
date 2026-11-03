@@ -163,6 +163,22 @@ public sealed class Part : ModelItem
     /// </summary>
     public readonly HashSet<string> HiddenBodies = new();
 
+    /// <summary>
+    /// k149 (замечание 03.11, 10:48, п. 4): ПОЛУПРОЗРАЧНЫЕ ТЕЛА — прочие тела детали, пока правится одно (узел детали импорта
+    /// активен): видны на 15 % и не выбираются. Не сохраняется.
+    /// </summary>
+    public readonly HashSet<string> GhostBodies = new();
+
+    /// <summary>Номера граней полупрозрачных тел (для вида).</summary>
+    public HashSet<uint>? GhostFaceIds()
+    {
+        if (GhostBodies.Count == 0) return null;
+        var f = new HashSet<uint>();
+        for (int i = 0; i < Bodies.Count; i++)
+            if (GhostBodies.Contains(BodyName(i))) foreach (var x in Bodies[i].Faces) f.Add((uint)x.Id);
+        return f;
+    }
+
     /// <summary>Номера граней, рёбер и вершин скрытых тел (для вида).</summary>
     public (HashSet<uint> Faces, HashSet<uint> Edges, HashSet<uint> Vertices)? HiddenIds()
     {

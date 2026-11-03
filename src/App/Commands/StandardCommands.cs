@@ -55,7 +55,8 @@ public static class StandardCommands
         r.Add(new AppCommand { Short = "▾", Id = "edit.history", Label = "Журнал отмены", Group = E, Icon = "undo_history_but.svg", Synonyms = "history undo журнал история",
             Run = () => w.OpenHistory() });
         r.Add(new AppCommand { Short = "Удалить", Id = "edit.delete", Label = "Удалить", Group = E, Icon = "delete_but.svg", Gesture = K(Key.Delete), Synonyms = "delete remove",
-            CanRun = () => Modeling() && Deletable(w).Count > 0, Run = () => Delete(w), WhyDisabled = () => WhyNotDeletable(w) });
+            CanRun = () => Modeling() && Deletable(w).Count > 0 || w.Session?.IsAssembly == true && w.SelectedTreeMates().Count > 0,
+            Run = () => { if (w.Session.IsAssembly && w.SelectedTreeMates().Count > 0) w.DeleteTreeMates(); else Delete(w); }, WhyDisabled = () => WhyNotDeletable(w) });
         r.Add(new AppCommand { Short = "Изменить", Id = "edit.feature", Label = "Изменить операцию", Group = E, Icon = "tree_edit_def_but.svg", Synonyms = "edit definition редактировать",
             CanRun = () => Modeling() && w.SelectedItems().Any(i => i is Feature or Sketch || MainWindow.EditablePlane(i)), Run = () => w.EditSelected() });
         r.Add(new AppCommand { Short = "Подавить", Id = "edit.suppress", Label = "Подавить / вернуть", Group = E, Icon = "tree_suppress_but.svg", Synonyms = "suppress resume",

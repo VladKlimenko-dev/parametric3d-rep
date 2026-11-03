@@ -1258,6 +1258,93 @@ Check("UI-IMPORT-ASSEMBLY", () =>
     finally { foreach (var f in new[] { step, p3a, step1 }) if (File.Exists(f)) File.Delete(f); }
 });
 
+Check("UI-IMPORT-STEP-PLACEMENT", () =>
+{
+    // k149 (замечание 03.11, 10:32): СБОРКА STEP — ДЕТАЛИ НА СВОИХ МЕСТАХ. Файл: изделия «Болт» (цилиндр R5×20) и «Плита»
+    // (цилиндр R30×5), изделие-сборка «ASM» и три вхождения (NEXT_ASSEMBLY_USAGE_OCCURRENCE) с размещениями
+    // (ITEM_DEFINED_TRANSFORMATION в составной связи представлений): болт в (100,0,0), повёрнутый осью вдоль X; болт в (0,50,0);
+    // плита в (0,0,−5). После импорта — три компонента, у повторного вхождения — то же содержимое, центры тел — на местах;
+    // после сохранения (.p3a) и открытия — то же.
+    string W1(string name, Parametric3D.Kernel.Topology.TSolid b) { var pp = new Part(name); pp.Bodies.Add(b); return Parametric3D.Model.Exchange.Write(pp, Parametric3D.Model.Exchange.Format.Step); }
+    string bolt = W1("Болт", Parametric3D.Kernel.Ops.PrimitiveOp.Cylinder(Vector3d.Zero, 5, 20));
+    string plate = W1("Плита", Parametric3D.Kernel.Ops.PrimitiveOp.Cylinder(Vector3d.Zero, 30, 5));
+    List<string> Data(string t) { int a = t.IndexOf("DATA;") + 5, b = t.LastIndexOf("ENDSEC;"); return t[a..b].Split('\n').Select(x => x.Trim()).Where(x => x.Length > 0).ToList(); }
+    var d1 = Data(bolt);
+    var d2 = Data(plate).Select(l => System.Text.RegularExpressions.Regex.Replace(l, @"#(\d+)", m => "#" + (int.Parse(m.Groups[1].Value) + 100000))).ToList();
+    int Find(List<string> d, string type) => int.Parse(System.Text.RegularExpressions.Regex.Match(d.First(l => System.Text.RegularExpressions.Regex.IsMatch(l, @"=\s*" + type + @"\(")), @"^#(\d+)").Groups[1].Value);
+    int ac = Find(d1, "APPLICATION_CONTEXT"), pd1 = Find(d1, "PRODUCT_DEFINITION"), pd2 = Find(d2, "PRODUCT_DEFINITION");
+    int rep1 = Find(d1, "ADVANCED_BREP_SHAPE_REPRESENTATION"), rep2 = Find(d2, "ADVANCED_BREP_SHAPE_REPRESENTATION");
+    // начало представления изделия — первый элемент его представления (система координат)
+    int Origin(List<string> d, int rep) { var l = d.First(x => x.StartsWith($"#{rep}=") || x.StartsWith($"#{rep} =")); return int.Parse(System.Text.RegularExpressions.Regex.Match(l, @"REPRESENTATION\('[^']*',\s*\(\s*#(\d+)").Groups[1].Value); }
+    string ctxRef = System.Text.RegularExpressions.Regex.Match(d1.First(x => x.StartsWith($"#{rep1}=") || x.StartsWith($"#{rep1} =")), @"\),(#\d+)\)\s*;?$").Groups[1].Value;
+    var asm = new List<string>();
+    int id = 900000; int N() => ++id;
+    int pc = N(); asm.Add($"#{pc}=PRODUCT_CONTEXT('',#{ac},'mechanical');");
+    int pr = N(); asm.Add($"#{pr}=PRODUCT('ASM','ASM','',(#{pc}));");
+    int pf = N(); asm.Add($"#{pf}=PRODUCT_DEFINITION_FORMATION('','',#{pr});");
+    int pdc = N(); asm.Add($"#{pdc}=PRODUCT_DEFINITION_CONTEXT('part definition',#{ac},'design');");
+    int pdA = N(); asm.Add($"#{pdA}=PRODUCT_DEFINITION('design','',#{pf},#{pdc});");
+    int pdsA = N(); asm.Add($"#{pdsA}=PRODUCT_DEFINITION_SHAPE('','',#{pdA});");
+    string F(double v) => v.ToString("0.0###", System.Globalization.CultureInfo.InvariantCulture);
+    int Axis(Vector3d o, Vector3d z, Vector3d x)
+    {
+        int p0 = N(); asm.Add($"#{p0}=CARTESIAN_POINT('',({F(o.X)},{F(o.Y)},{F(o.Z)}));");
+        int dz = N(); asm.Add($"#{dz}=DIRECTION('',({F(z.X)},{F(z.Y)},{F(z.Z)}));");
+        int dx = N(); asm.Add($"#{dx}=DIRECTION('',({F(x.X)},{F(x.Y)},{F(x.Z)}));");
+        int a = N(); asm.Add($"#{a}=AXIS2_PLACEMENT_3D('',#{p0},#{dz},#{dx});"); return a;
+    }
+    int aO = Axis(Vector3d.Zero, Vector3d.UnitZ, Vector3d.UnitX);
+    var placed = new List<(int Pd, int Rep, int Org, Vector3d O, Vector3d Z, Vector3d X)>
+    {
+        (pd1, rep1, Origin(d1, rep1), new Vector3d(100, 0, 0), Vector3d.UnitX, -Vector3d.UnitZ),
+        (pd1, rep1, Origin(d1, rep1), new Vector3d(0, 50, 0), Vector3d.UnitZ, Vector3d.UnitX),
+        (pd2, rep2, Origin(d2, rep2), new Vector3d(0, 0, -5), Vector3d.UnitZ, Vector3d.UnitX),
+    };
+    var axes = placed.Select(q => Axis(q.O, q.Z, q.X)).ToList();
+    int repA = N(); asm.Add($"#{repA}=SHAPE_REPRESENTATION('ASM',(#{aO},{string.Join(",", axes.Select(a => "#" + a))}),{ctxRef});");
+    asm.Add($"#{N()}=SHAPE_DEFINITION_REPRESENTATION(#{pdsA},#{repA});");
+    for (int i = 0; i < placed.Count; i++)
+    {
+        var q = placed[i];
+        int idt = N(); asm.Add($"#{idt}=ITEM_DEFINED_TRANSFORMATION('','',#{q.Org},#{axes[i]});");
+        int rr = N(); asm.Add($"#{rr}=(REPRESENTATION_RELATIONSHIP('','',#{q.Rep},#{repA})REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION(#{idt})SHAPE_REPRESENTATION_RELATIONSHIP());");
+        int nauo = N(); asm.Add($"#{nauo}=NEXT_ASSEMBLY_USAGE_OCCURRENCE('{i + 1}','','',#{pdA},#{q.Pd},$);");
+        int pdsI = N(); asm.Add($"#{pdsI}=PRODUCT_DEFINITION_SHAPE('','',#{nauo});");
+        asm.Add($"#{N()}=CONTEXT_DEPENDENT_SHAPE_REPRESENTATION(#{rr},#{pdsI});");
+    }
+    string text = bolt[..(bolt.IndexOf("DATA;") + 5)] + "\n" + string.Join("\n", d1.Concat(d2).Concat(asm)) + "\nENDSEC;\nEND-ISO-10303-21;\n";
+    string step = Path.Combine(Path.GetTempPath(), $"uicheck_place_{Guid.NewGuid():N}.step"), p3a = Path.ChangeExtension(step, DocumentSession.AssemblyExtension);
+    File.WriteAllText(step, text);
+    try
+    {
+        var warns = new List<string>();
+        var s = DocumentSession.Import(step, warns);
+        Require(s.IsAssembly, "not an assembly: " + string.Join(" | ", warns));
+        s.Document.RebuildDirty();
+        var comps = s.Document.Root.Children.OfType<Part>().ToList();
+        Require(comps.Count == 3, $"components: {string.Join(", ", comps.Select(c => c.Name))} | {string.Join(" | ", warns)}");
+        Vector3d Centre(Part p) => Parametric3D.App.Commands.AssemblyCommands.ToWorld(p, (p.Bounds.Min + p.Bounds.Max) / 2);
+        var bolts = comps.Where(c => c.Name.StartsWith("Болт")).ToList(); var pl = comps.FirstOrDefault(c => c.Name.StartsWith("Плита"));
+        Require(bolts.Count == 2 && pl != null, "names: " + string.Join(", ", comps.Select(c => c.Name)));
+        Require(bolts.Any(b => (Centre(b) - new Vector3d(110, 0, 0)).Length < 1e-3), "rotated bolt is not at (110,0,0): " + string.Join(", ", bolts.Select(Centre)));
+        Require(bolts.Any(b => (Centre(b) - new Vector3d(0, 50, 10)).Length < 1e-3), "bolt 2 is not at (0,50,10): " + string.Join(", ", bolts.Select(Centre)));
+        // центр — по габариту сетки (у окружности R30 габарит граней-хорд несимметричен на ~0.01)
+        Require((Centre(pl!) - new Vector3d(0, 0, -2.5)).Length < 0.05, $"plate centre {Centre(pl!)}");
+        Require(bolts.All(b => Math.Abs(b.Volume - Math.PI * 25 * 20) < 1e-3 * Math.PI * 500) && comps.All(c => MainWindow.IsFree6(c)), "bolt volume or 6 DOF");
+        s.SaveAs(p3a);
+        var s2 = DocumentSession.OpenAssembly(p3a); s2.Document.RebuildDirty();
+        var c2 = s2.Document.Root.Children.OfType<Part>().ToList();
+        Require(c2.Count == 3 && c2.Any(b => (Centre(b) - new Vector3d(110, 0, 0)).Length < 1e-3) && c2.All(c => c.Bodies.Count == 1 && c.Features.OfType<FreeFormFeature>().Count() == 1), "after reopen the placements or parts differ");
+        // вставка того же файла в сборку (замечание 10:48, п. 1) — три компонента группой, на своих местах, 6 DOF
+        var sa = DocumentSession.NewAssembly(); var wa = Open(sa);
+        AssemblyCommands.AddComponents(wa, DocumentSession.ImportComponents(step, new List<string>())!, "asm");
+        var c3 = sa.Document.Root.Children.OfType<Part>().ToList();
+        Require(c3.Count == 3 && c3.All(c => c.SubAssembly == "asm" && MainWindow.IsFree6(c)) && c3.Any(b => (Centre(b) - new Vector3d(110, 0, 0)).Length < 1e-3), "inserting the STEP assembly as components: " + string.Join(", ", c3.Select(c => $"{c.Name}@{Centre(c)}")));
+        wa.Close();
+    }
+    finally { foreach (var f in new[] { step, p3a }) if (File.Exists(f)) File.Delete(f); }
+});
+
 Check("UI-GIZMO-6DOF", () =>
 {
     // k149 (замечание 03.11, 08:18): компонент с 6 DOF — маркер на виде (стрелки, площадки, кольца); перенос по X, поворот
@@ -1332,10 +1419,11 @@ Check("UI-IMPORT-PART-SHOW", () =>
         Require(part.HiddenBodies.Count == 0, "the eye did not show the body again");
         bool grid0 = w.ViewPort.ModelGrid;
         FreeFormCommands.Enter(w, part, nodes[0]);
-        Require(part.HiddenBodies.SetEquals(new[] { nodes[1].FFBody! }), "editing a part does not hide the other parts: " + string.Join(", ", part.HiddenBodies));
+        Require(part.GhostBodies.SetEquals(new[] { nodes[1].FFBody! }) && part.HiddenBodies.Count == 0, "activating a part does not make the other parts translucent: " + string.Join(", ", part.GhostBodies));
+        Require(part.StageIndex < 0 || part.StageIndex >= part.Features.Count, "activating an imported part moved the rollback bar");
         Require(w.ViewPort.ModelGrid == grid0, "entering FreeForm turned the grid on");
         FreeFormCommands.Exit(w);
-        Require(part.HiddenBodies.Count == 0, "the other parts are not shown again after Done");
+        Require(part.GhostBodies.Count == 0, "the other parts are not opaque again after Done");
         w.Close();
     }
     finally { if (File.Exists(step)) File.Delete(step); }
@@ -1401,9 +1489,16 @@ Check("UI-ASM-BUTTONS", () =>
     var joints = reg.All.Where(c => c.Id.StartsWith("joint.")).ToList();
     Require(mates.Count >= 10 && mates.All(c => IconProvider.Exists(c.Icon)), "mate icons missing: " + string.Join(", ", mates.Where(c => !IconProvider.Exists(c.Icon)).Select(c => c.Id)));
     w.ViewPort.Selection.Clear(); Dispatcher.UIThread.RunJobs();
-    var on = mates.Concat(joints).Where(c => c.Enabled).Select(c => c.Id).ToList();
-    Require(on.Count == 0, "enabled with nothing selected: " + string.Join(", ", on));
+    // k149 (10:48, п. 5): ничего не выбрано — ограничения и соединения доступны (начинают выбор ссылок), «6 DOF» — нет
+    Require(mates.All(c => c.Enabled) && joints.Where(c => c.Id != "joint.gimbal").All(c => c.Enabled) && !reg["joint.gimbal"].Enabled, "with nothing selected the mates must start reference picking");
     Require(!reg["as.edit_in_context"].Enabled && !reg["as.fix"].Enabled && !reg["as.move"].Enabled, "component commands enabled with nothing selected");
+    // выбрана деталь целиком — ограничения и соединения недоступны
+    Require(w.WholePartMode(), "assembly mode does not pick whole parts");
+    var bodyRef = new PickRef(b.Id, PickKind.Body, s.Document.Root, b);
+    Require(ReferenceEquals(w.HoverGroupOf(bodyRef), b), "a whole-part pick is not grouped to the part");
+    Select(w, bodyRef); Dispatcher.UIThread.RunJobs();
+    Require(!reg["mate.coincident"].Enabled && !reg["joint.pin"].Enabled && reg["joint.gimbal"].Enabled && reg["as.fix"].Enabled, "with a whole part selected");
+    w.ViewPort.Selection.Clear();
     PickRef Face(Part p, Vector3d n) { var f = p.Bodies[0].Faces.First(x => Refs.FacePlane(p, x.Id) is { } pl && (pl.N - n).Length < 1e-9); return new PickRef(f.Id, PickKind.Face, p, null); }
     Select(w, Face(b, -Vector3d.UnitZ)); Select(w, Face(a, Vector3d.UnitZ)); Dispatcher.UIThread.RunJobs();
     Require(reg["mate.coincident"].Enabled && reg["mate.distance"].Enabled && reg["joint.planar"].Enabled && reg["joint.fixed"].Enabled, "two planar faces: plane mates are not available");
@@ -1413,6 +1508,31 @@ Check("UI-ASM-BUTTONS", () =>
     var tips = w.GetVisualDescendants().OfType<Button>().Select(x => ToolTip.GetTip(x)?.ToString() ?? "").ToList();
     var missing = joints.Where(c => !tips.Any(t => t.Contains(Loc.L(c.Label)))).Select(c => c.Id).ToList();
     Require(missing.Count == 0, "joints not on the panel: " + string.Join(", ", missing));
+    // выбор ссылок: «Совпадение» без выбора — режим выбора ссылок; две грани — ограничение создано, режим закончен
+    w.ViewPort.Selection.Clear(); Dispatcher.UIThread.RunJobs();
+    int nc0 = b.Constraints.Count + a.Constraints.Count;
+    reg["mate.coincident"].Execute(); Dispatcher.UIThread.RunJobs();
+    Require(w.AsmRefPicking && !w.WholePartMode(), "the mate did not start reference picking");
+    Select(w, Face(b, -Vector3d.UnitZ)); Dispatcher.UIThread.RunJobs();
+    Require(w.AsmRefPicking, "one reference ended the picking");
+    Select(w, Face(a, Vector3d.UnitZ)); Dispatcher.UIThread.RunJobs();
+    var bb = s.Document.Root.Children.OfType<Part>().First(p => p.Name == "Кубик"); var aa = s.Document.Root.Children.OfType<Part>().First(p => p.Name == "Основание");
+    Require(!w.AsmRefPicking && bb.Constraints.Count + aa.Constraints.Count > nc0, "the constraint was not made from the picked references");
+    // удаление ограничения из дерева (10:48, п. 3)
+    w.RebuildTree(); Dispatcher.UIThread.RunJobs();
+    var cn = w.TreeRoots.SelectMany(r => r.SelfAndDescendants()).First(n => n.Item is InfoItem { Role: "constraint" });
+    w.SelectTreeNodeForTest(cn); Dispatcher.UIThread.RunJobs();
+    Require(reg["edit.delete"].Enabled, "Delete is not available for a constraint");
+    reg["edit.delete"].Execute(); Dispatcher.UIThread.RunJobs();
+    var bb2 = s.Document.Root.Children.OfType<Part>().First(p => p.Name == "Кубик"); var aa2 = s.Document.Root.Children.OfType<Part>().First(p => p.Name == "Основание");
+    Require(bb2.Constraints.Count + aa2.Constraints.Count == nc0, "the constraint was not deleted");
+    // правка компонента в контексте — прочие полупрозрачны (85 %) и в дереве неактивны (10:48, п. 4)
+    w.ActivateItem(bb2);
+    var scn = Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions(), bb2);
+    Require(scn.Meshes.Any(m => m.PartId == aa2.Id && m.Preview == 2 && Math.Abs(m.Color.W - 0.15f) < 1e-6) && scn.Meshes.Any(m => m.PartId == bb2.Id && m.Preview == 0), "the other component is not drawn translucent");
+    w.RebuildTree(); Dispatcher.UIThread.RunJobs();
+    var nodeA = w.TreeRoots.SelectMany(r => r.SelfAndDescendants()).First(n => !n.IsReference && ReferenceEquals(n.Item, aa2));
+    Require(nodeA.IsInactive, "the other component is not inactive in the tree");
     w.Close();
 });
 

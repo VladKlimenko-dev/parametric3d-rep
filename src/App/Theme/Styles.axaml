@@ -28,6 +28,14 @@
   <Style Selector="TextBlock.active">
     <Setter Property="FontWeight" Value="Bold" />
   </Style>
+  <!-- фон строки задаётся стилем (не местным значением): иначе подсветка строки (стиль) не перекрывает его -->
+  <Style Selector="Grid.treerow">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <!-- k149: при активной детали прочие — неактивны (приглушены) -->
+  <Style Selector="TextBlock.inactive">
+    <Setter Property="Opacity" Value="0.45" />
+  </Style>
   <Style Selector="Grid.treehot">
     <Setter Property="Background" Value="{DynamicResource P3.HoverBg}" />
   </Style>

@@ -43,7 +43,7 @@ public static class Exchange
             case Format.Step:
             {
                 var w = new StringWriter();
-                StepExact.Write(w, bodies, part.Name, warnings);
+                StepExact.Write(w, bodies, part.Name, warnings, part.BodyNameList.Count == part.Bodies.Count && part.BodyNameList.Any(n => n.Length > 0) ? part.BodyNameList : null);
                 return w.ToString();
             }
 

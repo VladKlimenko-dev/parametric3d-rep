@@ -57,7 +57,8 @@ public static class SceneBuilder
         };
         // п. 3: скрытая деталь прячет своё тело; её элементы видны или нет по своему глазу (глаз детали переключает их все,
         // но каждый можно включить отдельно)
-        if (visible && item is Part part) AddPart(part, xf, s, th);
+        // k149 (замечание 03.11, 10:48, п. 4): в сборке при правке компонента в контексте прочие компоненты — полупрозрачны
+        if (visible && item is Part part) AddPart(part, xf, s, th, ghostAll: !GhostOthersOff && active is Part ap && !ReferenceEquals(ap, part) && part.Parent is Assembly);
 
         var owner = item;
         var ownerBounds = OwnerBounds(item);
@@ -132,6 +133,19 @@ public static class SceneBuilder
         }
     }
 
+    private static (bool All, HashSet<uint> Edges, HashSet<uint> Vertices) GhostEdges(Part part, bool all)
+    {
+        var e = new HashSet<uint>(); var v = new HashSet<uint>();
+        if (!all)
+            for (int i = 0; i < part.Bodies.Count; i++)
+                if (part.GhostBodies.Contains(part.BodyName(i)))
+                {
+                    foreach (var x in part.Bodies[i].Edges) e.Add((uint)x.Id);
+                    foreach (var x in part.Bodies[i].Vertices) v.Add((uint)x.Id);
+                }
+        return (all, e, v);
+    }
+
     private static uint OwnerPartId(ModelItem owner) => owner is Part p ? p.Id : 0;
 
     private static Vector3 Tr(Vector3d p, Matrix4 xf) => Vector3.TransformPosition(new Vector3((float)p.X, (float)p.Y, (float)p.Z), xf);
@@ -141,7 +155,11 @@ public static class SceneBuilder
 
     // ------------------------------------------------------------------ тело
 
-    private static void AddPart(Part part, Matrix4 xf, SceneData s, RenderTheme th)
+    static readonly bool GhostOthersOff = Environment.GetEnvironmentVariable("P3D_GHOSTOTHERS") == "0";
+    /// <summary>Непрозрачность полупрозрачных тел (прозрачность 85 %).</summary>
+    public const float GhostAlpha = 0.15f;
+
+    private static void AddPart(Part part, Matrix4 xf, SceneData s, RenderTheme th, bool ghostAll = false)
     {
         var md = part.Mesh;
         if (md == null || md.Vertices.Length == 0) return;
@@ -164,6 +182,26 @@ public static class SceneBuilder
                 if (!hh.Faces.Contains(md.Vertices[idx[t]].FaceId)) { keep.Add(idx[t]); keep.Add(idx[t + 1]); keep.Add(idx[t + 2]); }
             idx = keep.ToArray();
         }
+        // k149: полупрозрачные тела (прочие детали при активной детали) — отдельной сеткой без выбора, рёбер и вершин
+        var ghostFaces = ghostAll || part.ShowsCached ? null : part.GhostFaceIds();
+        if (ghostAll || ghostFaces is { Count: > 0 })
+        {
+            var keep = new List<int>(idx.Length); var gh = new List<int>();
+            for (int t = 0; t + 2 < idx.Length; t += 3)
+            {
+                bool g = ghostAll || ghostFaces!.Contains(md.Vertices[idx[t]].FaceId);
+                var dst = g ? gh : keep; dst.Add(idx[t]); dst.Add(idx[t + 1]); dst.Add(idx[t + 2]);
+            }
+            idx = keep.ToArray();
+            if (gh.Count > 0)
+            {
+                var gi = new MeshItem { Model = xf, Color = new Vector4(color.X, color.Y, color.Z, GhostAlpha), MatColor = new Vector4(color.X, color.Y, color.Z, GhostAlpha), PartId = part.Id, Preview = 2,
+                    Pos = new Vector3[md.Vertices.Length], Nrm = new Vector3[md.Vertices.Length], Pick = new uint[md.Vertices.Length], Idx = gh.ToArray() };
+                for (int i = 0; i < md.Vertices.Length; i++) { gi.Pos[i] = md.Vertices[i].P; gi.Nrm[i] = md.Vertices[i].N; }
+                s.Meshes.Add(gi);
+            }
+        }
+        (bool All, HashSet<uint> Edges, HashSet<uint> Vertices)? ghostEdgeSkip = ghostAll || ghostFaces is { Count: > 0 } ? GhostEdges(part, ghostAll) : null;
         // номер выбора грани — по id грани
         var facePick = new Dictionary<uint, uint>();
         var item = new MeshItem
@@ -190,6 +228,7 @@ public static class SceneBuilder
         foreach (var (edgeId, pts) in md.EdgePolylines)
         {
             if (hid is { } he && he.Edges.Contains(edgeId)) continue;
+            if (ghostEdgeSkip is { } ge && (ge.All || ge.Edges.Contains(edgeId))) continue;
             uint pick = edgeId == 0 || part.ShowsCached ? 0u : s.AddPick(new PickRef(edgeId, PickKind.Edge, part, null), 2, part.Id);
             for (int i = 1; i < pts.Length; i++)
                 s.BodyEdges.Add(Line(Vector3.TransformPosition(pts[i - 1], xf), Vector3.TransformPosition(pts[i], xf), th.Edge, th.EdgeWidth, 0, pick));
@@ -198,6 +237,7 @@ public static class SceneBuilder
         foreach (var (vid, p) in md.Points)
         {
             if (hid is { } hv && hv.Vertices.Contains(vid)) continue;
+            if (ghostEdgeSkip is { } gv && (gv.All || gv.Vertices.Contains(vid))) continue;
             uint pick = part.ShowsCached ? 0u : s.AddPick(new PickRef(vid, PickKind.Vertex, part, null), 3, part.Id);
             s.BodyVertices.Add(new PointInst { P = Vector3.TransformPosition(p, xf), Color = SceneData.Pack(th.Vertex), Px = th.VertexSize, Shape = 0, Pick = pick });
         }

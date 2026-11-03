@@ -171,10 +171,14 @@ public static class StepImport
             return null;
         }
         var res = new Dictionary<int, string>();
+        var prodOf = brepOfShell.ToDictionary(kv => kv.Key, kv => repOfItem.TryGetValue(kv.Value, out int rep) ? ProductOf(rep) : null);
         foreach (var (sh, brep) in brepOfShell)
         {
-            string? nm = repOfItem.TryGetValue(brep, out int rep) ? ProductOf(rep) : null;
-            if (string.IsNullOrWhiteSpace(nm) && brepName.TryGetValue(brep, out var bn) && bn.Length > 0) nm = bn;
+            string? nm = prodOf[sh];
+            brepName.TryGetValue(brep, out var bn);
+            // у изделия несколько тел со своими именами — имена тел (иначе все тела назывались бы именем изделия)
+            if (!string.IsNullOrWhiteSpace(nm) && !string.IsNullOrWhiteSpace(bn) && prodOf.Values.Count(x => x == nm) > 1) nm = bn;
+            if (string.IsNullOrWhiteSpace(nm) && !string.IsNullOrWhiteSpace(bn)) nm = bn;
             if (!string.IsNullOrWhiteSpace(nm)) res[sh] = nm.Trim();
         }
         return res;
@@ -207,11 +211,17 @@ public static class StepImport
 
     /// <summary>Тела STEP; names — имена деталей по порядку тел (null — нет имени).</summary>
     public static List<TSolid> ReadExactSolids(string text, List<string>? warnings, List<string?>? names)
+        => ReadExactCore(StepParser.Parse(text), warnings, names, out _);
+
+    /// <summary>k149: тела и отображение «оболочка → тело» по уже разобранному файлу (сборка STEP).</summary>
+    public static List<TSolid> ReadExactSolidsWithShells(StepParser parser, List<string>? warnings, out Dictionary<int, TSolid> solidOfShell)
+        => ReadExactCore(parser, warnings, null, out solidOfShell);
+
+    static List<TSolid> ReadExactCore(StepParser parser, List<string>? warnings, List<string?>? names, out Dictionary<int, TSolid> solidOfShell)
     {
-        var parser = StepParser.Parse(text);
         if (parser.LengthUnitNote != null) warnings?.Add(parser.LengthUnitNote);
         var solids = new List<TSolid>();
-        var solidOfShell = new Dictionary<int, TSolid>();
+        solidOfShell = new Dictionary<int, TSolid>();
 
         foreach (var (id, e) in parser.Entities)
         {

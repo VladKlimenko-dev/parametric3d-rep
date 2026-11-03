@@ -386,6 +386,8 @@ public static class Strings
         ["Выберите рёбра или кривые эскиза"] = "Select edges or sketch curves",
         ["Проверка тела"] = "Check body",
         ["Активировать"] = "Activate",
+        ["«{0}»: выберите две ссылки на разных компонентах (грани, рёбра, вершины). Esc — отмена"] = "«{0}»: pick two references on different components (faces, edges, vertices). Esc — cancel",
+        ["Удалить ограничение"] = "Delete constraint", ["Удалить ограничения ({0})"] = "Delete constraints ({0})",
         ["Переместить компонент"] = "Move component", ["Переместить / повернуть компонент"] = "Move / rotate component", ["Переместить / повернуть"] = "Move / rotate",
         ["Сдвиг X, мм"] = "Shift X, mm", ["Сдвиг Y, мм"] = "Shift Y, mm", ["Сдвиг Z, мм"] = "Shift Z, mm",
         ["Поворот вокруг X, °"] = "Rotate about X, °", ["Поворот вокруг Y, °"] = "Rotate about Y, °", ["Поворот вокруг Z, °"] = "Rotate about Z, °",
