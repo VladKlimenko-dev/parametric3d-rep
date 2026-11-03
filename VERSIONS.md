@@ -5,6 +5,7 @@
 
 | Версия | Дата | Коммит | Архив | Что сделано |
 |---|---|---|---|---|
+| k152 | 2026-11-04 | [`55cf603`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/55cf603) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/55cf603.zip) | фаска у наклонного торца NURBS лофта — касательное продолжение граней NURBS второй попыткой, стык таблицы на краю области, допуск нового ребра |
 | k150 | 2026-11-04 | [`71d6d70`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/71d6d70) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/71d6d70.zip) | фаски и скругления у кривых рёбер — распространение по касательным, сечение стыка через вершину, проба выпуклости у ребра, конец ленты у острия; окно «Тесты ядра»; стратегическая цель (STRATEGY_AI_DESIGN.md) |
 | k149d | 2026-11-03 | [`6f6f0f0`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/6f6f0f0) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/6f6f0f0.zip) | разнесённый вид — скрытые не участвуют, положения пользователя в документе, «Сбросить разнесённый вид»; связи компонента в панели свойств; сопряжения под компонентами; фильтр дерева |
 | k149c | 2026-11-03 | [`84bafd0`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/84bafd0) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/84bafd0.zip) | сборка — активная подсборка, удаление компонентов и подсборок, отмена переноса, «Выйти из изоляции», все ограничения на панели, разнос без пересечений, без вершин у деталей |
