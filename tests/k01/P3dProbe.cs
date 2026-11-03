@@ -20,6 +20,8 @@ static partial class Program
         var (p, pars) = DocumentFile.Load(text);
         // k150: отладка прямого построителя на последней операции (PROBE_DR=<подстрока>)
         if (Environment.GetEnvironmentVariable("PROBE_DR") is { } pdr) Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (s.Contains(pdr)) Console.WriteLine("DBG " + s); };
+        // k152: отказы основания перпендикуляра (PROBE_FOOT=1), не больше 40 строк
+        int footN = 0; if (Environment.GetEnvironmentVariable("PROBE_FOOT") == "1") Parametric3D.Kernel.Geometry.Ssi.FootDebug = s => { if (footN++ < 40) Console.WriteLine("FOOT " + s); };
         p.Rebuild(pars);
         Parametric3D.Kernel.Ops.DirectRound.Debug = null;
         var f = p.Features[^1];

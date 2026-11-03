@@ -53,6 +53,8 @@ static partial class Program
         ["Kernel.Ops.DirectRound.OpenTanPropagations"] = "k150: распространение по касательным у незамкнутых кривых рёбер (разбор)",
         ["Kernel.Ops.DirectRound.JointThroughVHits"] = "k150: сечение стыка через вершину (разбор)",
         ["Kernel.Ops.DirectRound.CuspEnds"] = "k150: концы ленты у острия (разбор)",
+        ["Kernel.Ops.DirectRound.TolerantEdges"] = "k152: ленты с допуском новых рёбер (разбор)",
+        ["Kernel.Ops.DirectRound.TanRetried"] = "k152: ленты со второй попытки — касательное продолжение NURBS (разбор)",
         ["Kernel.Ops.DirectRound.MixedCorners"] = "06.2: счётчик смешанных углов (разбор)",
         ["Kernel.Ops.DirectRound.TanOpenChains"] = "06.11: счётчик открытых касательных цепочек (разбор)",
         ["Kernel.Ops.DirectRound.NCorners"] = "06.13: счётчик углов степени > 3 (разбор)",

@@ -28,6 +28,27 @@ public static partial class DirectRound
     /// </summary>
     static TSolid? BuildOpen(TSolid body, IReadOnlyList<EdgeRef> refs, double r, ref string? why, Func<TEdge, TFace, double>? chDist = null, RadiusLaw? varLaw = null)
     {
+        // k152: КАСАТЕЛЬНОЕ ПРОДОЛЖЕНИЕ ГРАНЕЙ NURBS — ВТОРОЙ ПОПЫТКОЙ. Первая — как прежде (многочлен крайнего промежутка, C∞);
+        // если лента не построена, а грани NURBS вычислялись за краем области, — повтор с касательным продолжением (Geometry.Ssi.TangentExt) и стыками
+        // таблицы на краю области (P3D_DRTANBREAK). Глобально касательное продолжение ломало ленты, которым многочлен годился
+        // (k145 лофт, k146, s111). Мутация P3D_DRTANRETRY=0 — касательное продолжение всегда (как в черновике k152).
+        if (!TanRetry || Geometry.Ssi.TangentExt) return BuildOpen0(body, refs, r, ref why, chDist, varLaw);
+        int ood = Geometry.Ssi.OutOfDomainEvals;
+        var res = BuildOpen0(body, refs, r, ref why, chDist, varLaw);
+        if (res != null || Geometry.Ssi.OutOfDomainEvals == ood) return res;
+        string? w2 = null;
+        Geometry.Ssi.TangentExt = true;
+        try { res = BuildOpen0(body, refs, r, ref w2, chDist, varLaw); }
+        finally { Geometry.Ssi.TangentExt = false; }
+        if (res != null) { Interlocked.Increment(ref TanRetried); Debug?.Invoke("open: built with tangent extension of NURBS faces"); }
+        return res;
+    }
+    static readonly bool TanRetry = Environment.GetEnvironmentVariable("P3D_DRTANRETRY") != "0";
+    /// <summary>k152: ленты, построенные со второй попытки — с касательным продолжением граней NURBS.</summary>
+    public static long TanRetried;
+
+    static TSolid? BuildOpen0(TSolid body, IReadOnlyList<EdgeRef> refs, double r, ref string? why, Func<TEdge, TFace, double>? chDist = null, RadiusLaw? varLaw = null)
+    {
         if (!OpenOn) { why = "open curved edges: off"; return null; }
         var sel = new List<TEdge>();
         var whole = FilletOp.WholeNamedEdges(new List<TSolid> { body }, refs);
@@ -1613,6 +1634,35 @@ public static partial class DirectRound
         // стыки формулы: узлы закона радиуса (закон там гладок лишь первого порядка — таблица не вставляет через них)
         var breaks = new List<double>();
         if (LawBreaks) foreach (var kt in knotT) if (kt > tLo && kt < tHi) breaks.Add((kt - tLo) * kU);
+        // k152: СТЫК У КРАЯ ОБЛАСТИ ГРАНИ NURBS. За краем область грани продолжена касательно (Ssi, P3D_SSITANEXT) — поверхность
+        // там гладка лишь первого порядка, и формула ленты — тоже: таблица пятой степени через край не вставляет (s102: 4.6e-3 мм
+        // у торца, куда край боковины выходит наискось). Параметр, где точка касания переходит край области, — стык таблицы.
+        // Мутация P3D_DRTANBREAK=0.
+        if (TanBreak && (Geometry.Ssi.TangentExt || !TanRetry))
+            foreach (var (F, side) in new[] { (FA, 0.0), (FB, 1.0) })
+            {
+                if (F.Surf is not NurbsSurface) continue;
+                double Out(double t)
+                {
+                    var q = Gen(t).Point(side); if (!double.IsFinite(q.X)) return double.NaN;
+                    Geometry.Ssi.ParamFoot(F.Surf, q, out var uv); if (!double.IsFinite(uv.X)) return double.NaN;
+                    return Math.Max(Math.Max(-uv.X, uv.X - 1), Math.Max(-uv.Y, uv.Y - 1));   // > 0 — за краем
+                }
+                const int Ns = 200; double tp = tLo, opB = Out(tp);
+                for (int i = 1; i <= Ns; i++)
+                {
+                    double tc = tLo + (tHi - tLo) * i / Ns, ocB = Out(tc);
+                    if (double.IsFinite(opB) && double.IsFinite(ocB) && (opB > 0) != (ocB > 0))
+                    {
+                        double a = tp, b = tc, fa = opB;
+                        for (int it = 0; it < 60; it++) { double m = 0.5 * (a + b), fm = Out(m); if (!double.IsFinite(fm)) break; if ((fm > 0) == (fa > 0)) { a = m; fa = fm; } else b = m; }
+                        double tb = 0.5 * (a + b);
+                        if (tb > tLo && tb < tHi) { breaks.Add((tb - tLo) * kU); Debug?.Invoke($"open: table break where the contact leaves the domain of {F.Tag} at t {tb:G8}"); }
+                    }
+                    tp = tc; opB = ocB;
+                }
+            }
+        breaks.Sort();
         // шаг таблицы: у закона с узлами — вчетверо мельче (кривизна сечений по u у узла выше)
         double tabStep = Math.Max(Lp / 20000, Math.Min(0.25, 0.4 * Math.Min(widthA, widthB)) / 32) / (knotT.Count > 0 ? 4 : 1);
         if (FastPreviewNow) tabStep *= 4;   // 21.10: быстрый предпросмотр — таблица реже (отход ~1e-6 мм, на экране не видно)
@@ -2799,6 +2849,29 @@ public static partial class DirectRound
         {
             if (BooleanOp.ForceAcceptFailure) return "forced acceptance failure (test)";
             var v = SolidValidator.Validate(solid);
+            // k152: ДОПУСК НОВОГО РЕБРА ЛЕНТЫ (как допуски рёбер у Parasolid). Если вся причина отказа — p-кривая новой кривой ленты
+            // (ProcCurve3) на грани, отходящая от ребра не больше предельного допуска сущности (1e-5 мм), — у ребра допуск = отход
+            // с запасом, и проверка повторяется. s102: край фаски на торце пересекает стыки таблицы у края области боковины,
+            // p-кривая (проекция с вставкой) отходит на 6.8e-7 мм при допуске 1e-7. Мутация P3D_DRTOLEDGE=0.
+            if (!v.IsValid && TolEdge)
+            {
+                var errs = v.Issues.Where(x => x.Severity == ValidationSeverity.Error).ToList();
+                if (errs.All(x => x.Code == "pcurve-inconsistent"))
+                {
+                    var bad = new Dictionary<TEdge, double>();
+                    foreach (var (ce, pc, dev) in PCurves.Measure(solid))
+                        if (pc != null && dev > Math.Max(ToleranceContext.Current.ModelAccuracy, ce.Edge.Tolerance))
+                            bad[ce.Edge] = Math.Max(bad.GetValueOrDefault(ce.Edge), dev);
+                    double cap = ToleranceContext.Current.MaxEntityTolerance;
+                    if (bad.Count > 0 && bad.All(kv => kv.Key.Curve is ProcCurve3 && kv.Value * 2 <= cap))
+                    {
+                        solid.BeginEdit("blend edge tolerance", EditKind.Layout);
+                        foreach (var (ed, dev) in bad) { ed.Tolerance = Math.Max(ed.Tolerance, 2 * dev); Debug?.Invoke($"open: edge e{ed.Id} tolerance {ed.Tolerance:E2} (p-curve deviation {dev:E2})"); }
+                        Interlocked.Increment(ref TolerantEdges);
+                        v = SolidValidator.Validate(solid);
+                    }
+                }
+            }
             if (!v.IsValid && Debug != null)
                 foreach (var iss in v.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(20))
                 {
@@ -2916,6 +2989,10 @@ public static partial class DirectRound
     /// Гладкая опорная кривая ребра для параметра хребта: многочлен Чебышёва по доле длины (интерполяция в узлах Чебышёва;
     /// степень растёт до невязки ≤ tol на 401 пробе). Параметр — миллиметры, t ∈ [0, Length]; вне — продолжение многочлена.
     /// </summary>
+    static readonly bool TolEdge = Environment.GetEnvironmentVariable("P3D_DRTOLEDGE") != "0";
+    /// <summary>k152: число лент, у которых новым рёбрам назначен допуск (P3D_DRTOLEDGE).</summary>
+    public static long TolerantEdges;
+    static readonly bool TanBreak = Environment.GetEnvironmentVariable("P3D_DRTANBREAK") != "0";
     sealed class RefCurve
     {
         double[,] _c = null!; int _n; public double Length;

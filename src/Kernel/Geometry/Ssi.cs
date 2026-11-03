@@ -60,9 +60,29 @@ public static class Ssi
     public static long ParamFootCalls, ParamFootGlobal, ParamFootFar;
     static readonly bool FootFar = Environment.GetEnvironmentVariable("P3D_FOOTFAR") != "0";
 
+    static readonly bool TanExt = Environment.GetEnvironmentVariable("P3D_SSITANEXT") != "0";
+    static readonly bool TanRetryOff = Environment.GetEnvironmentVariable("P3D_DRTANRETRY") == "0";
+    /// <summary>k152: касательное продолжение граней NURBS за краем области включено (вторая попытка DirectRound.BuildOpen;
+    /// при P3D_DRTANRETRY=0 — всегда).</summary>
+    [ThreadStatic] public static bool TangentExt;
+    /// <summary>k152: число вычислений грани NURBS за краем области (поток) — признак, что касательное продолжение что-то меняет.</summary>
+    [ThreadStatic] public static int OutOfDomainEvals;
     static void ParamDerivs(Surfaces.ISurface3 s, Vector2d uv, out Vector3d S, out Vector3d Su, out Vector3d Sv)
     {
-        if (s is Surfaces.NurbsSurface ns) { ns.DerivsExtended(uv, out S, out Su, out Sv); return; }
+        if (s is Surfaces.NurbsSurface ns)
+        {
+            // k152: ПРОДОЛЖЕНИЕ ЗА КРАЙ ОБЛАСТИ — КАСАТЕЛЬНОЕ (линейное, C1), как продление граней у Parasolid: многочлен крайнего
+            // промежутка за краем загибается (боковины лофта s102: A ∩ B продолжений за торцом поворачивает с радиусом ~1.5 мм
+            // в 2 мм за краем, основание и хребет ленты за торцом не находятся). Мутация P3D_SSITANEXT=0 — многочлен промежутка.
+            if (uv.X < 0 || uv.X > 1 || uv.Y < 0 || uv.Y > 1) OutOfDomainEvals++;
+            if (TanExt && (TangentExt || TanRetryOff) && (uv.X < 0 || uv.X > 1 || uv.Y < 0 || uv.Y > 1))
+            {
+                var c = new Vector2d(Math.Clamp(uv.X, 0, 1), Math.Clamp(uv.Y, 0, 1));
+                ns.DerivsExtended(c, out var S0, out Su, out Sv);
+                S = S0 + Su * (uv.X - c.X) + Sv * (uv.Y - c.Y); return;
+            }
+            ns.DerivsExtended(uv, out S, out Su, out Sv); return;
+        }
         if (s is Surfaces.SectionSurface ss && ss.IsProcedural) { ss.DerivsExtended(uv, out S, out Su, out Sv); return; }
         const double h = 1e-7;
         S = s.PointAt(uv);
