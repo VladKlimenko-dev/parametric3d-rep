@@ -15,15 +15,16 @@ public static class SceneBuilder
 {
     static readonly bool GhostRingOff = Environment.GetEnvironmentVariable("P3D_GHOSTRING") == "0";
     public static SceneData Build(Document doc, RenderTheme th, ShowOptions show, ModelItem? activeOwner = null, Sketch? activeSketch = null,
-                                  IReadOnlyCollection<uint>? pointSketches = null)
+                                  IReadOnlyCollection<uint>? pointSketches = null, string? activeGroup = null)
     {
         var s = new SceneData();
+        _activeGroup = activeGroup;
         _activeSketch = activeSketch;
         _pointSketches = pointSketches;
         _hiddenRoot = doc.RootIsHidden ? doc.Root : null;
         _previewPart = doc.PreviewPart;
         try { Walk(doc.Root, Matrix4.Identity, s, th, show, activeOwner, doc.Root.Visible); }
-        finally { _activeSketch = null; _hiddenRoot = null; _pointSketches = null; _previewPart = null; }
+        finally { _activeSketch = null; _hiddenRoot = null; _pointSketches = null; _previewPart = null; _activeGroup = null; }
         return s;
     }
 
@@ -39,6 +40,10 @@ public static class SceneBuilder
     [ThreadStatic] private static Part? _previewPart;
     public static bool IsStalePreview(Part part, Part? previewPart) =>
         !StalePreviewOff && ReferenceEquals(part, previewPart) && part.DirtyLongerThan(StaleAfterMs);
+
+    /// <summary>k149: активная подсборка (группа компонентов по Part.SubAssembly): прочие компоненты — полупрозрачны.</summary>
+    [ThreadStatic] private static string? _activeGroup;
+    public static bool InGroup(string? sub, string group) => sub == group || sub != null && sub.StartsWith(group + " / ", StringComparison.Ordinal);
 
     /// <summary>Эскиз в правке: виден всегда (и при скрытых эскизах), его точки выбираются (привязка, размеры).</summary>
     [ThreadStatic] private static Sketch? _activeSketch;
@@ -58,7 +63,13 @@ public static class SceneBuilder
         // п. 3: скрытая деталь прячет своё тело; её элементы видны или нет по своему глазу (глаз детали переключает их все,
         // но каждый можно включить отдельно)
         // k149 (замечание 03.11, 10:48, п. 4): в сборке при правке компонента в контексте прочие компоненты — полупрозрачны
-        if (visible && item is Part part) AddPart(part, xf, s, th, ghostAll: !GhostOthersOff && active is Part ap && !ReferenceEquals(ap, part) && part.Parent is Assembly);
+        if (visible && item is Part part)
+        {
+            bool inAsm = part.Parent is Assembly && _hiddenRoot == null;
+            bool ghost = !GhostOthersOff && part.Parent is Assembly && (active is Part ap && !ReferenceEquals(ap, part) || _activeGroup != null && !InGroup(part.SubAssembly, _activeGroup));
+            // k149 (замечание 03.11, 12:31, п. 2): в сборке у компонентов вне правки вершины не рисуются (выбирается деталь целиком)
+            AddPart(part, xf, s, th, ghostAll: ghost, noVertices: inAsm && !ReferenceEquals(active, part));
+        }
 
         var owner = item;
         var ownerBounds = OwnerBounds(item);
@@ -159,7 +170,7 @@ public static class SceneBuilder
     /// <summary>Непрозрачность полупрозрачных тел (прозрачность 85 %).</summary>
     public const float GhostAlpha = 0.15f;
 
-    private static void AddPart(Part part, Matrix4 xf, SceneData s, RenderTheme th, bool ghostAll = false)
+    private static void AddPart(Part part, Matrix4 xf, SceneData s, RenderTheme th, bool ghostAll = false, bool noVertices = false)
     {
         var md = part.Mesh;
         if (md == null || md.Vertices.Length == 0) return;
@@ -234,6 +245,7 @@ public static class SceneBuilder
                 s.BodyEdges.Add(Line(Vector3.TransformPosition(pts[i - 1], xf), Vector3.TransformPosition(pts[i], xf), th.Edge, th.EdgeWidth, 0, pick));
         }
         if (!stale)
+        if (!noVertices)
         foreach (var (vid, p) in md.Points)
         {
             if (hid is { } hv && hv.Vertices.Contains(vid)) continue;

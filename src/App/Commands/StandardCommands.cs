@@ -49,14 +49,19 @@ public static class StandardCommands
         // ------------------------------------------------------------ правка
         const string E = "Правка";
         r.Add(new AppCommand { Short = "↶", Id = "edit.undo", Label = "Отменить", Group = E, Icon = "undo_but.svg", Gesture = K(Key.Z, KeyModifiers.Control), Synonyms = "undo",
-            CanRun = () => w.InSketch ? w.CanSketchUndo : w.Session?.CanUndo == true && w.CurrentOperation == null, Run = () => { if (w.InSketch) w.SketchUndo(); else w.Session.Undo(); } });
+            CanRun = () => w.InSketch ? w.CanSketchUndo : w.Session?.CanUndo == true && w.CurrentOperation == null, Run = () => { if (w.InSketch) w.SketchUndo(); else { w.Session.Undo(); w.AfterUndoRedo(); } } });
         r.Add(new AppCommand { Short = "↷", Id = "edit.redo", Label = "Вернуть", Group = E, Icon = "redo_but.svg", Gesture = K(Key.Y, KeyModifiers.Control), Synonyms = "redo повторить",
-            CanRun = () => w.InSketch ? w.CanSketchRedo : w.Session?.CanRedo == true && w.CurrentOperation == null, Run = () => { if (w.InSketch) w.SketchRedo(); else w.Session.Redo(); } });
+            CanRun = () => w.InSketch ? w.CanSketchRedo : w.Session?.CanRedo == true && w.CurrentOperation == null, Run = () => { if (w.InSketch) w.SketchRedo(); else { w.Session.Redo(); w.AfterUndoRedo(); } } });
         r.Add(new AppCommand { Short = "▾", Id = "edit.history", Label = "Журнал отмены", Group = E, Icon = "undo_history_but.svg", Synonyms = "history undo журнал история",
             Run = () => w.OpenHistory() });
         r.Add(new AppCommand { Short = "Удалить", Id = "edit.delete", Label = "Удалить", Group = E, Icon = "delete_but.svg", Gesture = K(Key.Delete), Synonyms = "delete remove",
-            CanRun = () => Modeling() && Deletable(w).Count > 0 || w.Session?.IsAssembly == true && w.SelectedTreeMates().Count > 0,
-            Run = () => { if (w.Session.IsAssembly && w.SelectedTreeMates().Count > 0) w.DeleteTreeMates(); else Delete(w); }, WhyDisabled = () => WhyNotDeletable(w) });
+            CanRun = () => Modeling() && Deletable(w).Count > 0 || w.Session?.IsAssembly == true && (w.SelectedTreeMates().Count > 0 || DeletableComponents(w).Count > 0),
+            Run = () =>
+            {
+                if (w.Session.IsAssembly && w.SelectedTreeMates().Count > 0) w.DeleteTreeMates();
+                else if (DeletableComponents(w).Count > 0) DeleteComponents(w, DeletableComponents(w));
+                else Delete(w);
+            }, WhyDisabled = () => WhyNotDeletable(w) });
         r.Add(new AppCommand { Short = "Изменить", Id = "edit.feature", Label = "Изменить операцию", Group = E, Icon = "tree_edit_def_but.svg", Synonyms = "edit definition редактировать",
             CanRun = () => Modeling() && w.SelectedItems().Any(i => i is Feature or Sketch || MainWindow.EditablePlane(i)), Run = () => w.EditSelected() });
         r.Add(new AppCommand { Short = "Подавить", Id = "edit.suppress", Label = "Подавить / вернуть", Group = E, Icon = "tree_suppress_but.svg", Synonyms = "suppress resume",
@@ -92,9 +97,13 @@ public static class StandardCommands
             CanRun = () => w.SelectedItems().Count > 0, Run = () => { var s = w.SelectedItems(); SetVisible(w, s, AllHidden(s)); w.RefreshToolStates(); w.UpdateContextBarPublic(); } });
         r.Add(new AppCommand { Short = "Изолировать", Id = "view.isolate", Label = "Изолировать", Group = V, Icon = "isolate_but.svg", Synonyms = "isolate",
             CanRun = () => w.SelectedItems().Count > 0, Run = () => Isolate(w) });
+        // k149 (12:31, п. 5): выход из изоляции — видимость как до неё
+        r.Add(new AppCommand { Short = "Выйти из изоляции", Id = "view.deisolate", Label = "Выйти из изоляции", Group = V, Icon = "show_all_but.svg", Synonyms = "deisolate unisolate",
+            CanRun = () => Isolated(w), Run = () => Deisolate(w) });
         r.Add(new AppCommand { Short = "Показать всё", Id = "view.show_all", Label = "Показать всё", Group = V, Icon = "show_all_but.svg", Synonyms = "show all unhide",
             Run = () =>
             {
+                _iso.Remove(w.Session.Document);
                 foreach (var pp in w.Session.Document.AllParts()) pp.HiddenBodies.Clear();   // k149: и скрытые тела деталей импорта
                 SetVisible(w, w.Session.Document.Root.Descendants().Where(i => i is not Feature).ToList(), true);
             } });
@@ -504,8 +513,65 @@ public static class StandardCommands
         w.RebuildTree();
     }
 
+    // ------------------------------------------------------------ k149 (12:31, п. 5): изоляция с выходом
+    sealed class IsoSnap { public readonly Dictionary<ModelItem, (bool V, bool U)> Vis = new(ReferenceEqualityComparer.Instance); public readonly Dictionary<Part, string[]> Hidden = new(ReferenceEqualityComparer.Instance); }
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Document, IsoSnap> _iso = new();
+
+    /// <summary>Идёт изоляция (запомнена видимость до неё).</summary>
+    public static bool Isolated(MainWindow w) => w.Session?.Document is { } d && _iso.TryGetValue(d, out _);
+
+    public static void Deisolate(MainWindow w)
+    {
+        var d = w.Session.Document;
+        if (!_iso.TryGetValue(d, out var snap)) return;
+        _iso.Remove(d);
+        foreach (var i in d.Root.Descendants())
+            if (snap.Vis.TryGetValue(i, out var v)) { i.Visible = v.V; i.VisibleUserSet = v.U; }
+        foreach (var (p, h) in snap.Hidden) { p.HiddenBodies.Clear(); foreach (var b in h) p.HiddenBodies.Add(b); }
+        w.Session.MarkModified();
+        w.ViewPort.MarkDirty();
+        w.RebuildTree(); w.RefreshToolStates();
+    }
+
+    /// <summary>Компоненты сборки среди выбранного (в режиме сборки, не при правке в контексте).</summary>
+    public static List<Part> DeletableComponents(MainWindow w)
+    {
+        if (w.Session?.IsAssembly != true || w.Session.ActivePart != null || w.CurrentOperation != null || w.InSketch) return new();
+        var root = w.Session.Document.Root;
+        return w.SelectedItems().OfType<Part>().Where(p => p.Parent == root).Distinct().ToList();
+    }
+
+    /// <summary>k149 (12:31, п. 4, 7): удалить компоненты сборки одним шагом отмены; ограничения и связи на них — тоже.</summary>
+    public static void DeleteComponents(MainWindow w, List<Part> comps)
+    {
+        var root = w.Session.Document.Root;
+        var del = new HashSet<Part>(comps, ReferenceEqualityComparer.Instance);
+        string name = comps.Count == 1 ? Loc.L("Удалить «{0}»", comps[0].Name) : Loc.L("Удалить компоненты ({0})", comps.Count);
+        w.Session.Edit(name, () =>
+        {
+            foreach (var p in comps) root.Remove(p);
+            foreach (var p in root.Children.OfType<Part>())
+            {
+                p.Mates.RemoveAll(m => m.BasePart != null && del.Contains(m.BasePart));
+                p.Constraints.RemoveAll(c => c.BasePart != null && del.Contains(c.BasePart));
+            }
+        });
+        w.ViewPort.Selection.Clear();
+        w.ViewPort.Gizmo = null;
+        w.RebuildTree();
+        w.ViewPort.MarkDirty();
+        w.RefreshToolStates();
+    }
+
     private static void Isolate(MainWindow w)
     {
+        if (!_iso.TryGetValue(w.Session.Document, out _))
+        {
+            var snap = new IsoSnap();
+            foreach (var i in w.Session.Document.Root.Descendants()) snap.Vis[i] = (i.Visible, i.VisibleUserSet);
+            foreach (var pp in w.Session.Document.AllParts()) snap.Hidden[pp] = pp.HiddenBodies.ToArray();
+            _iso.Add(w.Session.Document, snap);
+        }
         var keep = new HashSet<ModelItem>(w.SelectedItems());
         // k149: выбраны детали импортированной сборки — в их детали видны только их тела
         foreach (var grp in keep.Select(ImportBody).OfType<(Part P, string Body)>().GroupBy(x => x.P))

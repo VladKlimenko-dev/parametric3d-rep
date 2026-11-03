@@ -68,7 +68,7 @@ public partial class MainWindow
     {
         if (Gizmo6Off || !Session.IsAssembly || Session.ActivePart != null || CurrentOperation != null || InSketch) return null;
         var comps = Commands.AssemblyCommands.SelectedComponents(this);
-        return comps.Count == 1 && IsFree6(comps[0]) ? comps[0] : null;
+        return comps.Count == 1 && IsFree6(comps[0]) && InActiveGroup(comps[0]) ? comps[0] : null;
     }
 
     private Vector3d CentreOf(Part p)
@@ -112,7 +112,7 @@ public partial class MainWindow
         if (p.Translation == _g6T0 && p.Rotation == _g6R0) Session.DiscardEdit();
         else Session.CommitEdit();
         View.Gizmo = null; RefreshGizmo6();
-        UpdateStatus();
+        UpdateStatus(); RefreshToolStates();
         return true;
     }
 
@@ -169,6 +169,6 @@ public partial class MainWindow
             ApplyMove(p, p.Translation, p.Rotation, c, shift, Vector3d.UnitZ, anglesDeg.Z);
         });
         Session.CommitEdit();
-        View.MarkDirty(); RefreshGizmo6(); UpdateStatus();
+        View.MarkDirty(); RefreshGizmo6(); UpdateStatus(); RefreshToolStates();
     }
 }

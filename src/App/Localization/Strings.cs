@@ -387,6 +387,8 @@ public static class Strings
         ["Проверка тела"] = "Check body",
         ["Активировать"] = "Activate",
         ["«{0}»: выберите две ссылки на разных компонентах (грани, рёбра, вершины). Esc — отмена"] = "«{0}»: pick two references on different components (faces, edges, vertices). Esc — cancel",
+        ["Подсборка «{0}»: прочие компоненты — полупрозрачны"] = "Subassembly «{0}»: other components are translucent",
+        ["Выйти из изоляции"] = "Deisolate", ["Удалить компонент"] = "Delete component", ["Удалить компоненты ({0})"] = "Delete components ({0})",
         ["Удалить ограничение"] = "Delete constraint", ["Удалить ограничения ({0})"] = "Delete constraints ({0})",
         ["Переместить компонент"] = "Move component", ["Переместить / повернуть компонент"] = "Move / rotate component", ["Переместить / повернуть"] = "Move / rotate",
         ["Сдвиг X, мм"] = "Shift X, mm", ["Сдвиг Y, мм"] = "Shift Y, mm", ["Сдвиг Z, мм"] = "Shift Z, mm",

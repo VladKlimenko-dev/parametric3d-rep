@@ -1536,6 +1536,90 @@ Check("UI-ASM-BUTTONS", () =>
     w.Close();
 });
 
+Check("UI-ASM-K149C", () =>
+{
+    // k149 (замечание 03.11, 12:31): активная подсборка; без вершин у деталей сборки; отмена переноса; удаление компонентов
+    // и подсборки; изоляция с выходом; все ограничения на панели; разнос без пересечений
+    var s = DocumentSession.NewAssembly(); var w = Open(s);
+    var a = AssemblyCommands.AddComponent(w, CubePart("Основание", 40), "add A");
+    var b = AssemblyCommands.AddComponent(w, CubePart("Кубик", 20), "add B");
+    var c = AssemblyCommands.AddComponent(w, CubePart("Крышка", 20), "add C");
+    b.SubAssembly = "Узел"; c.SubAssembly = "Узел";
+    s.Document.RebuildDirty();
+    var reg = CommandRegistry.Instance;
+    Part P(string n) => s.Document.Root.Children.OfType<Part>().First(p => p.Name == n);
+    TreeNode NodeOf(Func<TreeNode, bool> f) => w.TreeRoots.SelectMany(r => r.SelfAndDescendants()).First(f);
+    // (2) вершины в сборке не рисуются
+    var scn0 = Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions(), null);
+    Require(scn0.BodyVertices.Count == 0, $"assembly parts draw {scn0.BodyVertices.Count} vertices");
+    // (1) активная подсборка: прочие полупрозрачны, в дереве неактивны, не выбираются
+    w.RebuildTree(); Dispatcher.UIThread.RunJobs();
+    var sub = NodeOf(n => n.Item is InfoItem { Role: "subassembly", Name: "Узел" });
+    w.ActivateItem(sub.Item!);
+    Require(w.ActiveGroup == "Узел" && w.ViewPort.ActiveGroup == "Узел", "the subassembly did not become active");
+    var scn = Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions(), null, null, null, "Узел");
+    Require(scn.Meshes.Any(m => m.PartId == a.Id && m.Preview == 2) && scn.Meshes.Any(m => m.PartId == b.Id && m.Preview == 0), "outside the active subassembly is not translucent");
+    sub = NodeOf(n => n.Item is InfoItem { Role: "subassembly", Name: "Узел" });
+    Require(sub.IsActive && NodeOf(n => !n.IsReference && ReferenceEquals(n.Item, a)).IsInactive, "the tree does not show the active subassembly");
+    Require(!w.InActiveGroup(a) && w.InActiveGroup(b), "picking is not limited to the subassembly");
+    w.ActivateItem(s.Document.Root);
+    Require(w.ActiveGroup == null, "Activate on the assembly did not leave the subassembly");
+    // (7) подсборка в дереве — выбор её компонентов; удалить, скрыть, изолировать доступны
+    w.RebuildTree(); Dispatcher.UIThread.RunJobs();
+    w.SelectTreeNodeForTest(NodeOf(n => n.Item is InfoItem { Role: "subassembly", Name: "Узел" })); Dispatcher.UIThread.RunJobs();
+    Require(AssemblyCommands.SelectedComponents(w).Count == 2, $"subassembly node selects {AssemblyCommands.SelectedComponents(w).Count} components");
+    Require(reg["edit.delete"].Enabled && reg["view.hide"].Enabled && reg["view.isolate"].Enabled, "subassembly commands are not available");
+    // (5) изоляция и выход из неё
+    reg["view.isolate"].Execute(); Dispatcher.UIThread.RunJobs();
+    Require(!P("Основание").Visible && P("Кубик").Visible && reg["view.deisolate"].Enabled, "isolate");
+    reg["view.deisolate"].Execute(); Dispatcher.UIThread.RunJobs();
+    Require(P("Основание").Visible && !reg["view.deisolate"].Enabled, "deisolate did not restore visibility");
+    // (4) удаление подсборки — одним шагом, отмена возвращает
+    w.SelectTreeNodeForTest(NodeOf(n => n.Item is InfoItem { Role: "subassembly", Name: "Узел" })); Dispatcher.UIThread.RunJobs();
+    reg["edit.delete"].Execute(); Dispatcher.UIThread.RunJobs();
+    Require(s.Document.Root.Children.OfType<Part>().Count() == 1, "the subassembly was not deleted");
+    reg["edit.undo"].Execute(); Dispatcher.UIThread.RunJobs(); s.Document.RebuildDirty();
+    Require(s.Document.Root.Children.OfType<Part>().Count() == 3, "undo did not return the subassembly");
+    // один компонент
+    w.ViewPort.Selection.Clear(); Select(w, new PickRef(P("Крышка").Id, PickKind.Body, s.Document.Root, P("Крышка"))); Dispatcher.UIThread.RunJobs();
+    reg["edit.delete"].Execute(); Dispatcher.UIThread.RunJobs();
+    Require(s.Document.Root.Children.OfType<Part>().Count() == 2 && !s.Document.Root.Children.OfType<Part>().Any(p => p.Name == "Крышка"), "the component was not deleted");
+    // (3) отмена и повтор переноса: выбор снят (компоненты новые), кнопки доступны, положение возвращается
+    var bb = P("Кубик"); var t0 = bb.Translation;
+    w.ViewPort.Selection.Clear(); Select(w, new PickRef(bb.Id, PickKind.Body, s.Document.Root, bb));
+    w.MoveComponent(bb, new Vector3d(7, 0, 0), Vector3d.Zero);
+    Require(reg["edit.undo"].Enabled, "undo is not available after a move");
+    reg["edit.undo"].Execute(); Dispatcher.UIThread.RunJobs();
+    Require(Math.Abs(P("Кубик").Translation.X - t0.X) < 1e-5 && w.ViewPort.Selection.IsEmpty && reg["edit.redo"].Enabled, "undo of a move");
+    reg["edit.redo"].Execute(); Dispatcher.UIThread.RunJobs();
+    Require(Math.Abs(P("Кубик").Translation.X - t0.X - 7) < 1e-5, "redo of a move");
+    // (6) все ограничения — кнопками на панели
+    w.RebuildUi(); Dispatcher.UIThread.RunJobs();
+    var tips = w.GetVisualDescendants().OfType<Button>().Select(x => ToolTip.GetTip(x)?.ToString() ?? "").ToList();
+    var missing = reg.All.Where(x => x.Id.StartsWith("mate.")).Where(x => !tips.Any(t => t.Contains(Loc.L(x.Label)))).Select(x => x.Id).ToList();
+    Require(missing.Count == 0, "mates not on the panel: " + string.Join(", ", missing));
+    w.Close();
+    // (8) разнос: три пересекающихся куба и вложенный — габариты попарно не пересекаются
+    var s2 = DocumentSession.NewAssembly(); var w2 = Open(s2);
+    var ps = new List<Part>();
+    for (int i = 0; i < 4; i++) { var p = AssemblyCommands.AddComponent(w2, CubePart("К" + i, i == 3 ? 6 : 20), "add"); p.Translation = new Vector3(i * 5, i == 1 ? 3 : 0, 0); ps.Add(p); }
+    s2.Document.RebuildDirty();
+    AssemblyCommands.ToggleExplode(w2);
+    var comps = s2.Document.Root.Children.OfType<Part>().ToList();
+    var boxes = comps.Select(p => AssemblyCommands.WorldBox(p)!.Value).ToList();
+    for (int i = 0; i < boxes.Count; i++)
+        for (int j = i + 1; j < boxes.Count; j++)
+        {
+            var (x, y) = (boxes[i], boxes[j]);
+            bool hit = x.Min.X < y.Max.X && y.Min.X < x.Max.X && x.Min.Y < y.Max.Y && y.Min.Y < x.Max.Y && x.Min.Z < y.Max.Z && y.Min.Z < x.Max.Z;
+            Require(!hit, $"exploded {comps[i].Name} and {comps[j].Name} still intersect");
+        }
+    AssemblyCommands.ToggleExplode(w2);
+    var back = s2.Document.Root.Children.OfType<Part>().First(p => p.Name == "К1");
+    Require((back.Translation - new Vector3(5, 3, 0)).Length < 1e-5, "collapse did not restore the positions");
+    w2.Close();
+});
+
 Check("UI-DIALOG-SCROLL", () =>
 {
     // k149 (замечание 03.11, 06:41, п. 1): длинный отчёт («Проверка тела» в сотни строк) — окно не выше экрана, текст в

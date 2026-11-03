@@ -556,18 +556,18 @@ public static class AssemblyCommands
         }
         var view = root.ExplodedViews.FirstOrDefault();
         var parts = Components(w).ToList();
-        if (view == null)
+        // k149 (12:31, п. 8): автоматический вид — разнос без пересечений (прежний — радиальный на полгабарита — пересчитывается)
+        if (view == null || view.Name == L("Разнесённый вид") || view.Name == "Разнесённый вид")
         {
-            view = new ExplodedView(L("Разнесённый вид"));
-            var b = w.Session.Document.Bounds; var c = b.IsEmpty ? Vector3d.Zero : (b.Min + b.Max) / 2; double size = b.IsEmpty ? 100 : (b.Max - b.Min).Length;
-            foreach (var p in parts)
+            var steps = ExplodeSteps(parts);
+            if (view == null)
             {
-                var pb = p.Bounds; if (pb.IsEmpty) continue;
-                var pc = ToWorld(p, (pb.Min + pb.Max) / 2);
-                var d = pc - c; if (d.Length < 1e-6) d = Vector3d.UnitZ;
-                view.Steps.Add(new ExplodedView.Step { PartName = p.Name, Direction = d.Normalized(), Distance = 0.5 * size, Order = 0 });
+                view = new ExplodedView(L("Разнесённый вид"));
+                view.Steps.AddRange(steps);
+                var nv = view;
+                w.Session.Edit(L("Разнесённый вид"), () => root.ExplodedViews.Add(nv));
             }
-            w.Session.Edit(L("Разнесённый вид"), () => root.ExplodedViews.Add(view));
+            else { view.Steps.Clear(); view.Steps.AddRange(steps); }
         }
         var saved = new Dictionary<Part, Vector3>();
         foreach (var st in view.Steps)
@@ -578,6 +578,57 @@ public static class AssemblyCommands
             }
         _exploded.AddOrUpdate(root, saved);
         w.ViewPort.MarkDirty();
+    }
+
+    /// <summary>Габарит компонента в осях сборки.</summary>
+    public static (Vector3d Min, Vector3d Max)? WorldBox(Part p)
+    {
+        var b = p.Bounds; if (b.IsEmpty) return null;
+        var mn = new Vector3d(double.MaxValue); var mx = new Vector3d(double.MinValue);
+        for (int i = 0; i < 8; i++)
+        {
+            var q = ToWorld(p, new Vector3d((i & 1) != 0 ? b.Max.X : b.Min.X, (i & 2) != 0 ? b.Max.Y : b.Min.Y, (i & 4) != 0 ? b.Max.Z : b.Min.Z));
+            mn = Vector3d.ComponentMin(mn, q); mx = Vector3d.ComponentMax(mx, q);
+        }
+        return (mn, mx);
+    }
+
+    /// <summary>
+    /// k149 (12:31, п. 8): РАЗНОС БЕЗ ПЕРЕСЕЧЕНИЙ. Компоненты по удалению центра от центра сборки: ближний остаётся, каждый
+    /// следующий уходит по лучу от центра (у совпавших с центром — по осям ±X, ±Y, ±Z по очереди) на наименьшее расстояние, при
+    /// котором его габарит с зазором не пересекает габариты уже расставленных. Итог — габариты попарно не пересекаются.
+    /// </summary>
+    public static List<ExplodedView.Step> ExplodeSteps(List<Part> parts)
+    {
+        var items = parts.Select(p => (P: p, B: WorldBox(p))).Where(x => x.B != null).Select(x => (x.P, B: x.B!.Value)).ToList();
+        var res = new List<ExplodedView.Step>();
+        if (items.Count == 0) return res;
+        var mn = items.Select(x => x.B.Min).Aggregate(Vector3d.ComponentMin); var mx = items.Select(x => x.B.Max).Aggregate(Vector3d.ComponentMax);
+        var c = (mn + mx) / 2; double size = Math.Max((mx - mn).Length, 1e-3);
+        double gap = 0.04 * size;
+        var axes = new[] { Vector3d.UnitZ, Vector3d.UnitX, Vector3d.UnitY, -Vector3d.UnitX, -Vector3d.UnitY, -Vector3d.UnitZ };
+        int ax = 0;
+        var placed = new List<(Vector3d Min, Vector3d Max)>();
+        static bool Hit((Vector3d Min, Vector3d Max) a, (Vector3d Min, Vector3d Max) b, double g) =>
+            a.Min.X < b.Max.X + g && b.Min.X < a.Max.X + g && a.Min.Y < b.Max.Y + g && b.Min.Y < a.Max.Y + g && a.Min.Z < b.Max.Z + g && b.Min.Z < a.Max.Z + g;
+        foreach (var (p, b) in items.OrderBy(x => ((x.B.Min + x.B.Max) / 2 - c).Length).ThenBy(x => x.P.Name, StringComparer.Ordinal))
+        {
+            var pc = (b.Min + b.Max) / 2;
+            var d = pc - c;
+            d = d.Length < 1e-3 * size ? axes[ax++ % axes.Length] : d.Normalized();
+            double t = 0;
+            if (placed.Count > 0)
+            {
+                double step = gap;
+                for (int it = 0; it < 4000 && placed.Any(q => Hit((b.Min + d * t, b.Max + d * t), q, gap)); it++) t += step;
+                // уточнение вниз: наименьшее t без пересечений (с шагом / 16)
+                for (double fine = step / 2; fine > step / 32; fine /= 2)
+                    if (t - fine > 0 && !placed.Any(q => Hit((b.Min + d * (t - fine), b.Max + d * (t - fine)), q, gap))) t -= fine;
+            }
+            placed.Add((b.Min + d * t, b.Max + d * t));
+            res.Add(new ExplodedView.Step { PartName = p.Name, Direction = d, Distance = t, Order = 0 });
+        }
+        return res;
     }
 
     // ---------------------------------------------------------------- спецификация

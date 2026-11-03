@@ -336,7 +336,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     {
         if (_doc == null) return 0;
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-        _scene = SceneBuilder.Build(_doc, _r.Theme, Show, ActivePart, ActiveSketch, PointSketchIds.Count > 0 ? PointSketchIds : null);
+        _scene = SceneBuilder.Build(_doc, _r.Theme, Show, ActivePart, ActiveSketch, PointSketchIds.Count > 0 ? PointSketchIds : null, ActiveGroup);
         return System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
     }
     /// <summary>Ошибки OpenGL и исключения кадра с запуска.</summary>
@@ -446,7 +446,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         {
             _holdUntil = DateTime.MinValue;
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-            _scene = SceneBuilder.Build(_doc, _r.Theme, Show, ActivePart, ActiveSketch, PointSketchIds.Count > 0 ? PointSketchIds : null);
+            _scene = SceneBuilder.Build(_doc, _r.Theme, Show, ActivePart, ActiveSketch, PointSketchIds.Count > 0 ? PointSketchIds : null, ActiveGroup);
             _cpuPicker.PointSketches = PointSketchIds.Count > 0 ? PointSketchIds : null;
             _overlayDirty = true;   // u10: стрелки начала координат — из сцены
             _r.ShowAllVertices = Show.Vertices;
@@ -494,6 +494,12 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     // ================================================================ подсветка
 
     private ModelItem? _treeHover;
+
+    /// <summary>k149 (12:31, п. 1): активная подсборка — прочие компоненты полупрозрачны и не выбираются.</summary>
+    public string? ActiveGroup { get => _activeGroup; set { _activeGroup = value; MarkDirty(); } }
+    private string? _activeGroup;
+    /// <summary>k149: можно ли выбрать элемент под курсором (активная подсборка — только её компоненты).</summary>
+    public Func<PickRef, bool>? PickAllowed;
 
     /// <summary>k149: выбор деталей целиком (режим сборки вне команд, которым нужны ссылки на грани и рёбра).</summary>
     public Func<bool>? WholePartPick;
@@ -594,7 +600,8 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         switch (item)
         {
             case Part p:
-                for (int i = 1; i < t.Count; i++) if (t[i].PartId == p.Id) _r.SetFlags(i, flag);
+                // k149 (12:31, п. 2): деталь целиком — грани и рёбра, без вершин
+                for (int i = 1; i < t.Count; i++) if (t[i].PartId == p.Id && t[i].Priority != 3) _r.SetFlags(i, flag);
                 break;
             case Sketch sk:
                 for (int i = 1; i < t.Count; i++) if (t[i].SketchId == sk.Id) _r.SetFlags(i, flag);
@@ -849,6 +856,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         if (ActiveSketch != null && (r.IsEmpty || r.Kind == PickKind.Face) && FaceReferenceAt(req.P) is { IsEmpty: false } fref) r = fref;
         // k149 (замечание 03.11, 10:48, п. 5): в сборке выбирается деталь целиком — грань, ребро и вершина только там, где на
         // них ссылается команда (ограничение, соединение — режим выбора ссылок)
+        if (!r.IsEmpty && PickAllowed is { } pa && !pa(r)) r = PickRef.Empty;
         if (WholePartPick?.Invoke() == true && r.Owner is Part wp && r.Kind is PickKind.Face or PickKind.Edge or PickKind.Vertex)
             r = new PickRef(wp.Id, PickKind.Body, wp.Parent, wp);
         if (Selection.SetHover(r))
