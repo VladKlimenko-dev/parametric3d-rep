@@ -689,6 +689,12 @@ public static class DocumentFile
             PutS(d, "mode", bf.Mode.ToString()); d.Sections = bf.SectionSketchIds.ToList(); d.PathSketchId = bf.PathSketchId; d.PathLineId = bf.PathLineId; d.AxisEntityId = bf.AxisEntityId;
             if (bf.AsSurface) Flag(d, "surface");
             (d.Num ??= new())["steps"] = bf.Steps; d.Num["points"] = bf.Points;
+            if (bf.Mode == BlendKind.Sections)
+            {
+                // k160: переход по сечениям — поля «Перехода»
+                d.Samples = bf.Samples; d.Smooth = bf.Smooth; d.StartTangent = bf.StartTangent; d.EndTangent = bf.EndTangent;
+                d.Guides = bf.GuideSketchIds.Count > 0 ? bf.GuideSketchIds.ToList() : null;
+            }
         }),
         FreeFormFeature ffn => Dto("freeform", ffn, d => { PutS(d, "input", ffn.InputStep.Length > 0 ? ffn.InputStep : null); PutS(d, "sig", ffn.InputSig.Length > 0 ? ffn.InputSig : null); PutS(d, "import_of", ffn.ImportOf); }),
         FFPrimitiveFeature pr => Dto("ff_primitive", pr, d =>
@@ -1294,6 +1300,11 @@ public static class DocumentFile
                     foreach (uint old in fd.Sections) if (sketchById.TryGetValue(old, out var bs)) bf.SectionSketchIds.Add(bs.Id);
                     if (sketchById.TryGetValue(fd.PathSketchId, out var bp)) bf.PathSketchId = bp.Id;
                     bf.PathLineId = fd.PathLineId;   // k153: траектория — кривая
+                    if (bf.Mode == BlendKind.Sections)
+                    {
+                        bf.Samples = fd.Samples > 0 ? fd.Samples : 64; bf.Smooth = fd.Smooth; bf.StartTangent = fd.StartTangent; bf.EndTangent = fd.EndTangent;
+                        foreach (uint old in fd.Guides ?? new()) if (sketchById.TryGetValue(old, out var bg)) bf.GuideSketchIds.Add(bg.Id);
+                    }
                     part.AddFeature(bf);
                     break;
                 }

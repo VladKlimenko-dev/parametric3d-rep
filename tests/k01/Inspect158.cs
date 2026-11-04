@@ -39,3 +39,23 @@ static partial class Program
         Dump("rebuilt");
     }
 }
+
+static partial class Program
+{
+    /// <summary>k161: чертёж файла (4 вида по умолчанию) — картинка листа для разбора видов.</summary>
+    static void DrawPng(string file, string png, string? isoStyle = null)
+    {
+        var (p, pars) = DocumentFile.Load(File.ReadAllText(file));
+        if (!p.RestoredFromFile) p.Rebuild(pars);
+        var dd = new Parametric3D.Model.Drawing.DrawingDocument(); dd.EnsureViews();
+        if (isoStyle != null) dd.Views.First(v => v.Name == "iso").Style = isoStyle;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var sc = Parametric3D.Model.Drawing.DrawingScene.Build(dd, p.Bodies);
+        var g = dd.Compose(sc, new Parametric3D.Model.Drawing.FieldSource());
+        Console.WriteLine($"scene+compose {sw.ElapsedMilliseconds} ms, scale {dd.LastScale}, views {string.Join("; ", dd.Views.Select(v => $"{v.Name} {v.X:0},{v.Y:0}"))}");
+        // ломаные листа в JSON (картинку рисует tools-скрипт): [[kind, x0, y0, x1, y1, …], …]
+        var polys = g.Polylines.Select(q => new object[] { q.Kind.ToString() }.Concat(q.Points.SelectMany(t => new object[] { Math.Round(t.X, 3), Math.Round(t.Y, 3) })).ToArray())
+            .Concat(g.Lines.Select(l => new object[] { l.Kind.ToString(), l.X1, l.Y1, l.X2, l.Y2 })).ToList();
+        File.WriteAllText(png, System.Text.Json.JsonSerializer.Serialize(new { g.Width, g.Height, polys, shades = g.Shades.Select(sh => new object[] { sh.Argb }.Concat(sh.Pts.SelectMany(t => new object[] { t.X, t.Y })).ToArray()) }));
+    }
+}

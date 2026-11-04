@@ -630,6 +630,10 @@ public static class FilletOp
     }
 
     static readonly bool ReorderOff = Environment.GetEnvironmentVariable("P3D_BLENDREORDER") == "0";
+    /// <summary>k159: мутация «линия касания идёт назад» — P3D_RAILBACK=0: проверка выключена (прежнее).</summary>
+    static readonly bool RailBackOff = Environment.GetEnvironmentVariable("P3D_RAILBACK") == "0";
+    /// <summary>k159: разбор — отказов протянутого резца по линии касания, идущей назад.</summary>
+    public static long RailBackRefusals;
     static readonly bool ReorderForce = Environment.GetEnvironmentVariable("P3D_BLENDREORDERFORCE") == "1";
     /// <summary>k156: вторых проходов резцов в обратном порядке и удачных из них (разбор).</summary>
     public static long ReorderTries, ReorderWins;
@@ -1051,6 +1055,10 @@ public static class FilletOp
                         if (sweptTool != null) break;
                     }
                 }
+                // k159: линия фаски ушла с грани на изгибе ребра — форма невозможна, обходные пути строили веер; отказ всей
+                // операции с понятной причиной (как отказ «шире грани», k153). Мутация P3D_RAILBACK=0.
+                if (sweptTool == null && !RailBackOff && why != null && why.Contains("contact line leaves the face"))
+                    throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"{what}: {why}.");
                 if (sweptTool == null)
                 {
                     warnings.Add($"{what}: {why}.");
@@ -4795,6 +4803,32 @@ public static class FilletOp
         // Станции, которые сдвиг обгоняет (стенка нависает над ребром), выпадают — без складки резца. Мутация P3D_WALLCAP=0.
         var cum = new double[n];
         for (int k = 1; k < n; k++) cum[k] = cum[k - 1] + (samples[k].P - samples[k - 1].P).Length;
+        // k159 (замечание 04.11, 23:51 — фаска Sweep_Blend): ЛИНИЯ ФАСКИ УШЛА С ГРАНИ. Вогнутое ребро стенки и прежнего
+        // скругления — дуга радиуса около 6.6 с центром на краю стенки; фаска 9.11 больше радиуса: точка фаски на стенке (сдвиг
+        // к центру дуги на 9.11) выходит за край стенки, проекция прижимает её к краю, и линия фаски бежит по краю стенки,
+        // а ширина фаски падает до нуля у конца дуги. Сечения резца при этом не меняют знак объёма (проверка складки молчит),
+        // и заполнение выходило веером треугольников с вырожденными гранями (площадь 0). Стенка у начала дуги — острие между
+        // дугой и кромкой торца (кромка касается дуги в вершине), её ширина меньше фаски почти по всей дуге. Если на внутренних
+        // станциях ширина фаски по какой-либо грани меньше 60 % заданной на длине больше четверти размера — отказ протянутого
+        // резца и всей операции с понятной причиной (лучше отказ, чем неверная форма). Мутация P3D_RAILBACK=0.
+        if (!RailBackOff && !round && n >= 4 && cum[n - 1] > 0)
+        {
+            foreach (var (rail, face, d) in new[] { (A0, 1, d1), (B0, 2, d2) })
+            {
+                double shortLen = 0, minW = double.MaxValue;
+                for (int k = 1; k + 1 < n; k++)
+                {
+                    double wdt = (rail[k] - samples[k].P).Length;
+                    if (wdt < 0.6 * d) { shortLen += 0.5 * (cum[k + 1] - cum[k - 1]); minW = Math.Min(minW, wdt); }
+                }
+                if (shortLen > 0.25 * d)
+                {
+                    Interlocked.Increment(ref RailBackRefusals);
+                    refusal = $"the {what} ({d:0.###} mm) does not fit on face {face} along {shortLen:0.#} mm of the edge — the face narrows to a point beside the edge or the edge bends away (its contact line leaves the face, width down to {minW:0.##} mm); chamfer the edges separately or round the corner first";
+                    return null;
+                }
+            }
+        }
         (Vector3d[] Pts, double TMax, double TMin, ISurface3? Cap)? WallEnd(int i, Vector3d outward)
         {
             if (WallCapOff || EndWall(bodies, samples[i].F1, samples[i].F2, samples[i].P, outward, Math.Max(d1, d2)) is not { } w) { SweepDebug?.Invoke($"стенка у {i}: нет"); return null; }

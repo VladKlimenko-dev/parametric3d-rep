@@ -41,8 +41,21 @@ public static class SheetRender
     {
         if (white) c.DrawRect(0, 0, (float)g.Width * scale, (float)g.Height * scale, new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill });
         float Y(double y) => (float)((g.Height - y) * scale);
-        using var thick = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = (float)LineWidths.Thick * scale, IsAntialias = true, StrokeCap = SKStrokeCap.Square };
-        using var thin = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = (float)LineWidths.Thin * scale, IsAntialias = true, StrokeCap = SKStrokeCap.Butt };
+        // k161: закраска (изометрия «с тонами»): многоугольники граней под линиями
+        if (g.Shades.Count > 0)
+            using (var sp = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true })
+                foreach (var (pts, argb) in g.Shades)
+                {
+                    if (pts.Count < 3) continue;
+                    sp.Color = new SKColor(argb);
+                    using var path = new SKPath();
+                    path.MoveTo((float)pts[0].X * scale, Y(pts[0].Y));
+                    for (int i = 1; i < pts.Count; i++) path.LineTo((float)pts[i].X * scale, Y(pts[i].Y));
+                    path.Close();
+                    c.DrawPath(path, sp);
+                }
+        using var thick = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = (float)g.WidthOf(LineKind.Thick) * scale, IsAntialias = true, StrokeCap = SKStrokeCap.Square };
+        using var thin = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = (float)g.WidthOf(LineKind.Thin) * scale, IsAntialias = true, StrokeCap = SKStrokeCap.Butt };
         foreach (var l in g.Lines.OrderBy(l => l.Kind))
             c.DrawLine((float)l.X1 * scale, Y(l.Y1), (float)l.X2 * scale, Y(l.Y2), l.Kind == LineKind.Thick ? thick : thin);
         // ломаные видов: штрихи — по всей ломаной (ГОСТ 2.303)
@@ -51,7 +64,7 @@ public static class SheetRender
             var dash = LineWidths.Dash(grp.Key);
             using var paint = new SKPaint
             {
-                Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = (float)LineWidths.Of(grp.Key) * scale, IsAntialias = true,
+                Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = (float)g.WidthOf(grp.Key) * scale, IsAntialias = true,
                 StrokeCap = SKStrokeCap.Round, StrokeJoin = SKStrokeJoin.Round,
                 PathEffect = dash != null ? SKPathEffect.CreateDash(dash.Select(d => (float)d * scale).ToArray(), 0) : null,
             };
@@ -76,7 +89,7 @@ public static class SheetRender
             }
         foreach (var (cx, cy, r, k) in g.Circles)
         {
-            using var cp = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = (float)LineWidths.Of(k) * scale, IsAntialias = true,
+            using var cp = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = (float)g.WidthOf(k) * scale, IsAntialias = true,
                 PathEffect = LineWidths.Dash(k) is { } dsh ? SKPathEffect.CreateDash(dsh.Select(d => (float)d * scale).ToArray(), 0) : null };
             c.DrawCircle((float)cx * scale, Y(cy), (float)r * scale, cp);
         }

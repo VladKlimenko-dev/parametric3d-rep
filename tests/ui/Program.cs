@@ -8696,6 +8696,145 @@ Check("UI-HOLE-K153", () =>
     w2.CommitOperation(); w2.Close();
 });
 
+// k161 (замечания 05.11, 01:23): виды чертежа называются как виды окна модели (оси экрана те же); перенос вида — свободно
+// с притяжением и линиями-подсказками; изометрия — поворот кольцом и «Домой»; отображение «Тона»; меню размера (радиус ↔
+// диаметр, стрелки); перенос точки привязки базы; перенос размера не перестраивает остальные.
+Check("UI-DRAWING-K161", () =>
+{
+    // имена видов = оси экрана у кнопок видов окна модели
+    var map = new (string Name, Parametric3D.Render.ViewOrientation O)[]
+    {
+        ("front", Parametric3D.Render.ViewOrientation.Front), ("back", Parametric3D.Render.ViewOrientation.Back), ("left", Parametric3D.Render.ViewOrientation.Left),
+        ("right", Parametric3D.Render.ViewOrientation.Right), ("top", Parametric3D.Render.ViewOrientation.Top), ("bottom", Parametric3D.Render.ViewOrientation.Bottom),
+        ("iso", Parametric3D.Render.ViewOrientation.Isometric),
+    };
+    var bad = new List<string>();
+    foreach (var (name, o) in map)
+    {
+        var q = OpenTK.Mathematics.Quaternion.Invert(Parametric3D.Render.Camera.OrientationQuat(o));
+        var r = OpenTK.Mathematics.Vector3.Transform(OpenTK.Mathematics.Vector3.UnitX, q); var u = OpenTK.Mathematics.Vector3.Transform(OpenTK.Mathematics.Vector3.UnitY, q);
+        var f = Parametric3D.Model.Drawing.ViewFrame.Of(name);
+        double e = Math.Max(((Vector3d)r - f.Right).Length, ((Vector3d)u - f.Up).Length);
+        if (e > 1e-5) bad.Add($"{name}: {f.Right}/{f.Up} vs {r}/{u}");
+    }
+    Console.WriteLine($"  view names: {(bad.Count == 0 ? "match the model window" : string.Join("; ", bad))}");
+    Require(bad.Count == 0, "drawing views differ from the model window views: " + string.Join("; ", bad));
+
+    var sp = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 10), "k161"); var w = Open(sp); BuildNow(sp);
+    SheetWindow? dw = null;
+    try
+    {
+        var t = DrawingCommands.NewDrawing(w);
+        while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+        dw = t.Result!;
+        var d = dw.Drawing!;
+        // свободный перенос и притяжение: вид сверху сдвигается вбок и, вернувшись ближе 3 мм, встаёт под главный
+        var top = d.Views.First(v => v.Name == "top"); var front = d.Views.First(v => v.Name == "front");
+        double fx = front.X;
+        double x0 = top.X, y0 = top.Y;
+        dw.Down(x0, y0); dw.MoveTo(x0 + 20, y0); Dispatcher.UIThread.RunJobs();
+        Require(Math.Abs(front.X - fx) < 1e-9 && Math.Abs(top.X - (x0 + 20)) < 1e-9, "moving the top view moved the main view");
+        dw.MoveTo(x0 + 2, y0); Dispatcher.UIThread.RunJobs();
+        Console.WriteLine($"  snap: top.X {top.X:0.##} front.X {front.X:0.##}, guides {dw.Canvas.Overlay.Count}");
+        Require(Math.Abs(top.X - front.X) < 1e-9, "the top view snaps under the main view");
+        dw.Up();
+        // изометрия: выбор, кольцо поворота, «Домой»
+        var iso = d.Views.First(v => v.Name == "iso");
+        var ib = d.Boxes["iso"];
+        dw.Down(iso.X, iso.Y); dw.Up();
+        Require(dw.Selected == iso, "isometric selected");
+        double rr = Math.Max(ib.X1 - ib.X0, ib.Y1 - ib.Y0) / 2 + 4;
+        dw.Down(iso.X + rr, iso.Y);
+        for (int i = 1; i <= 3; i++) { dw.MoveTo(iso.X + rr + 10 * i, iso.Y); Dispatcher.UIThread.RunJobs(); }
+        dw.Up();
+        Console.WriteLine($"  iso dir after rotation: {iso.Dir}");
+        Require(iso.Dir.StartsWith("v:"), "the isometric view rotated");
+        dw.HomeView(iso);
+        Require(iso.Dir == "", "Home returns the default isometric");
+        // отображение «Тона»
+        dw.Change(() => { iso.Style = "shaded"; });
+        dw.InvalidateViews(); dw.Refresh();
+        Require(dw.Pages[0].Shades.Count > 50, $"shaded isometric: {dw.Pages[0].Shades.Count} tones");
+        // размеры: перенос одного не меняет другие; меню радиус ↔ диаметр
+        dw.Change(() => d.AutoDimensions(dw.Scene!));
+        var others = d.Dims.Skip(1).Select(x => (x.Offset, x.Y2)).ToList();
+        var dim = d.Dims[0]; var seg = d.Hit[dim].First();
+        double mx = (seg.X1 + seg.X2) / 2, my = (seg.Y1 + seg.Y2) / 2;
+        dw.Down(mx, my); var sw = System.Diagnostics.Stopwatch.StartNew();
+        for (int i = 1; i <= 10; i++) { dw.MoveTo(mx, my - i); Dispatcher.UIThread.RunJobs(); }
+        dw.Up(); double perStep = sw.Elapsed.TotalMilliseconds / 10;
+        bool same = d.Dims.Skip(1).Select(x => (x.Offset, x.Y2)).SequenceEqual(others);
+        Console.WriteLine($"  dim drag {perStep:0.#} ms/step, others unchanged {same}");
+        Require(same, "moving one dimension re-placed the others");
+        var rad = d.Dims.FirstOrDefault(x => x.Kind == "rad");
+        if (rad != null)
+        {
+            var rs = d.Hit[rad].First();
+            var items = dw.ContextItems((rs.X1 + rs.X2) / 2, (rs.Y1 + rs.Y2) / 2);
+            var toDia = items.FirstOrDefault(i => i.Text == Parametric3D.App.Loc.L("Диаметр вместо радиуса"));
+            Require(toDia.Run != null, "context menu: radius → diameter");
+            toDia.Run(); Require(rad.Kind == "dia", "the radius became a diameter");
+        }
+        // база: перенос точки привязки
+        var tview = "top"; var tb = d.Boxes[tview];
+        dw.StartPick("datum", ""); dw.Down(tb.X0, (tb.Y0 + tb.Y1) / 2);
+        var datum = d.Notes.Last(n => n.Kind == "datum");
+        var tp = d.ToSheet(tview, new OpenTK.Mathematics.Vector2d(datum.TX, datum.TY));
+        double ty0 = datum.TY;
+        dw.Down(tp.X, tp.Y); dw.MoveTo(tp.X, tp.Y - 8); dw.MoveTo(tp.X, tp.Y - 10); dw.Up();
+        Console.WriteLine($"  datum target {ty0:0.##} -> {datum.TY:0.##}");
+        Require(Math.Abs(datum.TY - ty0) > 1, "the datum attachment point moved");
+        Require(dw.Pages[0].InBounds(), "sheet bounds");
+    }
+    finally { dw?.Close(); w.Close(); }
+});
+
+// k160 (предложение 05.11, 00:33): одна операция «Переход»: команда «Переход по сечениям» открывает её с направляющей «Нет»
+// (тело по сечениям), переключатель «Направляющая» → «Траектория» (кривая) — тот же переход вдоль кривой, → «Нет» — снова по
+// сечениям; «Граничный переход» — та же операция с результатом «Поверхность».
+Check("UI-BLEND-K160", () =>
+{
+    var part = new Part("bl");
+    Sketch Sq(Parametric3D.Kernel.Frame3 f, double x0, double y0, double a)
+    {
+        var sk = new Sketch($"S{part.Sketches.Count() + 1}", f); part.Add(sk);
+        var q = new[] { new SkPoint(x0, y0), new SkPoint(x0 + a, y0), new SkPoint(x0 + a, y0 + a), new SkPoint(x0, y0 + a) };
+        for (int k = 0; k < 4; k++) sk.AddEntity(new SkLine(q[k], q[(k + 1) % 4]));
+        return sk;
+    }
+    var a = Sq(Parametric3D.Kernel.Frame3.XY, 0, 0, 10);
+    var b = Sq(new Parametric3D.Kernel.Frame3(new Vector3d(0, 0, 40), Vector3d.UnitX, Vector3d.UnitY), 2, 2, 6);
+    var curve = new DatumCurve("Curve1", new[] { new Vector3d(5, 5, 0), new Vector3d(5, 5, 20), new Vector3d(5, 5, 40) }); part.Add(curve);
+    var s = DocumentSession.FromPart(part, "blend"); var w = Open(s); BuildNow(s);
+    CommandRegistry.Instance["op.loft"].Execute(); Dispatcher.UIThread.RunJobs();
+    var bop = w.CurrentOperation as BlendOp;
+    Require(bop != null, $"«Blend» opened {w.CurrentOperation?.GetType().Name}");
+    bop!.Panel!.Refs[0].Take(new[] { new PickRef(a.Id, PickKind.SketchCurve, s.Part!, a), new PickRef(b.Id, PickKind.SketchCurve, s.Part!, b) });
+    bop.FieldChanged(); BuildNow(s);
+    var bf = s.Part!.Features.OfType<BlendFeature>().Single();
+    double v0 = s.Part.Volume;
+    Console.WriteLine($"  sections: mode {bf.Mode}, volume {v0:0.##}, error {bf.Error}");
+    Require(bf.Mode == BlendKind.Sections && bf.Error == null && Math.Abs(v0 - 40.0 / 3 * (100 + 36 + 60)) < 1e-6, "blend by sections");
+    void Seg(string text)
+    {
+        var tb = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(bop.Panel!.Host).OfType<Avalonia.Controls.Primitives.ToggleButton>().First(t => (t.Content as string) == Parametric3D.App.Loc.L(text));
+        tb.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Primitives.ToggleButton.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+    }
+    Seg("Траектория");
+    bop.Panel.Refs[1].Take(new[] { new PickRef(curve.Id, PickKind.DatumAxis, s.Part!, curve) });
+    bop.FieldChanged(); BuildNow(s);
+    Console.WriteLine($"  trajectory: mode {bf.Mode}, path {bf.PathLineId == curve.Id}, volume {s.Part.Volume:0.##}, error {bf.Error}");
+    Require(bf.Mode == BlendKind.Swept && bf.PathLineId == curve.Id && bf.Error == null && s.Part.Bodies.Count == 1, "the same blend along the trajectory");
+    Seg("Нет"); bop.FieldChanged(); BuildNow(s);
+    Require(bf.Mode == BlendKind.Sections && Math.Abs(s.Part.Volume - v0) < 1e-6, "back to sections");
+    w.CommitOperation(); BuildNow(s);
+    Require(s.Part.Features.OfType<BlendFeature>().Count() == 1 && bf.Error == null, "committed");
+    CommandRegistry.Instance["op.boundary_blend"].Execute(); Dispatcher.UIThread.RunJobs();
+    Require(w.CurrentOperation is BlendOp bo2 && bo2.EditedFeature is BlendFeature { AsSurface: true, Mode: BlendKind.Sections }, "«Boundary blend» = the blend with a surface result");
+    w.CancelOperation(); w.Close();
+});
+
 // k153 (замечание 04.11, 10:34, пп. 11–12): «Протяжка с переходом» берёт кривую-операцию как траекторию; «Протяжка» —
 // сечение как нарисовано, гизмо смещения сечения в начале траектории двигает тело (поля «Смещение по X/Y сечения»).
 Check("UI-SWEEP-K153", () =>
@@ -8963,9 +9102,10 @@ Check("UI-DRAWING-K158", () =>
         Require(av != null, $"aux view by a click; status: {dw.StatusText}");
         var f = Parametric3D.Model.Drawing.ViewFrame.Of(d.DirOf(av!));
         Console.WriteLine($"  aux {av!.Name} toward {f.Toward}");
-        Require(Math.Abs(Math.Abs(f.Toward.Z) - 1) < 1e-6 && dw.Pages[0].Texts.Count(x => x.Text == av.Label) == 2 && d.Boxes.ContainsKey(av.Name), "aux view along Z, arrow and caption");
+        Require(Math.Abs(Math.Abs(f.Toward.Y) - 1) < 1e-6 && dw.Pages[0].Texts.Count(x => x.Text == av.Label) == 2 && d.Boxes.ContainsKey(av.Name), "aux view along Y (k161: the up axis of the front view), arrow and caption");
         fb = d.Boxes["front"];   // после вспомогательного вида масштаб листа мог измениться
         double w0 = fb.X1 - fb.X0, s0 = d.Xf["front"].S;
+        Console.WriteLine($"  break clicks on: {d.ViewAt(fb.X0 + 0.35 * w0, (fb.Y0 + fb.Y1) / 2)}, {d.ViewAt(fb.X0 + 0.65 * w0, (fb.Y0 + fb.Y1) / 2)}; boxes {string.Join(" ", d.Boxes.Select(b => $"{b.Key}:{b.Value.X0:0},{b.Value.Y0:0},{b.Value.X1:0},{b.Value.Y1:0}"))}");
         dw.StartPick("break1", ""); dw.PickAt(fb.X0 + 0.35 * w0, (fb.Y0 + fb.Y1) / 2); dw.PickAt(fb.X0 + 0.65 * w0, (fb.Y0 + fb.Y1) / 2);
         var fv = d.Views.First(v => v.Name == "front");
         var fb2 = d.Boxes["front"];

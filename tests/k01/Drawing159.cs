@@ -21,7 +21,7 @@ static partial class Program
         cutter = Parametric3D.Kernel.Ops.TransformOp.Copy(cutter, Parametric3D.Kernel.Ops.TransformOp.Move(cc - c));
         var bodies = new List<TSolid> { cube };
         Parametric3D.Kernel.Ops.BooleanOp.Subtract(bodies, cutter, new List<string>());
-        return bodies.Single();
+        return Zup(bodies.Single());
     }
 
     /// <summary>
@@ -82,7 +82,7 @@ static partial class Program
             // (без раскладки — выноски под одним углом: тексты рядом друг на друге)
             var p = Parametric3D.App.Diagnostics.TestParts.Realistic(3, 10); p.Rebuild(null);
             var dd = new DrawingDocument(); dd.EnsureViews();
-            var sc = DrawingScene.Build(dd, p.Bodies);
+            var sc = DrawingScene.Build(dd, p.Bodies.Select(Zup).ToList());
             dd.AutoDimensions(sc);
             var (mn, mx) = (new Vector2d(sc.Lines["top"].SelectMany(l => l.Points).Min(q => q.X), sc.Lines["top"].SelectMany(l => l.Points).Min(q => q.Y)),
                             new Vector2d(sc.Lines["top"].SelectMany(l => l.Points).Max(q => q.X), sc.Lines["top"].SelectMany(l => l.Points).Max(q => q.Y)));
@@ -97,7 +97,7 @@ static partial class Program
             static string Tx(Vector2d[] t) => $"({t[0].X:0.#},{t[0].Y:0.#})";
             for (int i = 0; i < texts.Count; i++) for (int j = i + 1; j < texts.Count; j++) if (Ov(texts[i], texts[j])) { over++; pairs.Add(Tx(texts[i]) + LastDimTexts[i].Text + "~" + Tx(texts[j]) + LastDimTexts[j].Text); }
             // ряды: на каждой стороне вида — отступы 10, 17, 24 …
-            var rows = dd.Dims.Where(d => d.Arrange && !d.Hidden && d.Kind is "h" or "v").GroupBy(d => (d.View, d.Kind, Math.Sign(d.Offset)))
+            var rows = dd.Dims.Where(d => (d.Auto || d.Model) && d.FromBox && !d.Hidden && d.Kind is "h" or "v").GroupBy(d => (d.View, d.Kind, Math.Sign(d.Offset)))
                 .Select(gr => gr.Select(d => Math.Abs(d.Offset)).OrderBy(x => x).ToList()).ToList();
             bool rowsOk = rows.All(r => r.Select((x, i) => Math.Abs(x - (10 + 7 * i)) < 1e-9).All(b => b));
             Log(new { test = "KRN-DRAW-ARRANGE-K159", dims = dd.Dims.Count, texts = texts.Count, overlaps = over, pairs, dimsList = dd.Dims.Select(d => $"{d.View} {d.Kind} {d.Value:0.##} {d.Offset:0.#} {d.Y2:0}"), rows = rows.Select(r => string.Join("/", r)), angles = dd.Dims.Where(d => d.Kind == "dia" && d.Model).Select(d => d.Y2) });

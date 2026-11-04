@@ -77,7 +77,7 @@ static partial class Program
             var c = (bb.Min + bb.Max) / 2;
             var bodies = new List<Parametric3D.Kernel.Topology.TSolid> { cube };
             Parametric3D.Kernel.Ops.BooleanOp.Subtract(bodies, Parametric3D.Kernel.Ops.PrimitiveOp.Cylinder(new OpenTK.Mathematics.Vector3d(c.X, c.Y, bb.Min.Z - 5), 15, 110), new List<string>());
-            var body = bodies.Single();
+            var body = Zup(bodies.Single());
             Log(new { test = "KRN-DRAW-HLR-K155", surfaces = body.Faces.Select(f => (Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name ?? "-") + "/" + f.Surface?.GetType().Name).Distinct() });
             double Len(ViewLine l) { double s = 0; for (int i = 1; i < l.Points.Count; i++) s += (l.Points[i] - l.Points[i - 1]).Length; return s; }
             var front = ViewProjection.Project(body, ViewFrame.Of("front"));
@@ -106,14 +106,15 @@ static partial class Program
             DrawingView V(string n) => dd.Views.Single(v => v.Name == n);
             Log(new { test = "KRN-DRAW-HLR-K155", sheetScale = sheet.Texts.FirstOrDefault(t => t.Field == Fields.Scale)?.Text, views = dd.Views.Select(v => $"{v.Name} {v.X:0.#},{v.Y:0.#}"), polylines = sheet.Polylines.GroupBy(q => q.Kind).Select(q => $"{q.Key} {q.Count()}") });
             Require(sheet.Texts.Any(t => t.Field == Fields.Scale && t.Text == "1:2"), "sheet scale 1:2");
-            Require(Math.Abs(V("front").X - V("top").X) < 1e-9 && Math.Abs(V("front").Y - V("left").Y) < 1e-9 && V("top").Y < V("front").Y && V("left").X > V("front").X, "projection relation of views (GOST 2.305)");
+            // k161: вид слева — слева или справа от главного (что крупнее), вид сверху — под главным
+            Require(Math.Abs(V("front").X - V("top").X) < 1e-9 && Math.Abs(V("front").Y - V("left").Y) < 1e-9 && V("top").Y < V("front").Y && V("left").X != V("front").X, "projection relation of views (GOST 2.305)");
             Require(sheet.InBounds() && sheet.Polylines.All(q => q.Points.All(pt => pt.X >= 20 && pt.X <= 415 && pt.Y >= 5 + 55 && pt.Y <= 292)), "views inside the frame above the title block");
             Require(sheet.Polylines.Count(q => q.Kind == LineKind.Hidden) >= 4, "hidden lines (front and left: 2 each)");
             Require(sheet.Polylines.Count(q => q.Kind == LineKind.Center) == 4, $"centre lines: {sheet.Polylines.Count(q => q.Kind == LineKind.Center)}, want 4 (cross on top, axis on front and left)");
             // оси — только у полного оборота: на виде сверху детали с отверстиями и скруглёнными углами у каждого перекрестия есть
             // окружность вокруг (отверстие), у скруглений углов перекрестий нет (P3D_AXISFULLTURN=0 — есть, проверка падает)
             var real = Parametric3D.App.Diagnostics.TestParts.Realistic(3, 10); real.Rebuild(null);
-            var rb = real.Bodies.Single();
+            var rb = Zup(real.Bodies.Single());
             var topLines = ViewProjection.Project(rb, ViewFrame.Of("top"));
             var crosses = ViewProjection.Axes(rb, ViewFrame.Of("top")).Where(a => a.Cross).ToList();
             bool Ring(ViewAxis a)
@@ -130,10 +131,12 @@ static partial class Program
             // перенос с проекционной связью: главный — вместе с проекционными; вид сверху — только по вертикали
             double fx = V("front").X, fy = V("front").Y, tx = V("top").X, ty = V("top").Y, ix = V("iso").X;
             Require(dd.ViewAt(fx, fy) == "front" && dd.ViewAt(tx, ty) == "top", "view under the cursor");
+            // k161: виды переносятся свободно; выравнивание — притяжением (SnapView)
             dd.MoveView("front", 10, 5);
-            Require(V("front").X == fx + 10 && V("top").X == tx + 10 && V("left").Y == fy + 5 && V("iso").X == ix, "moving the main view moves its projections");
-            dd.MoveView("top", 7, -3);
-            Require(V("top").X == tx + 10 && V("top").Y == ty + 5 - 3, "the top view moves only vertically");
+            Require(V("front").X == fx + 10 && V("top").X == tx && V("iso").X == ix, "moving the main view moves only it");
+            dd.MoveView("top", 12, -3);
+            var guides = dd.SnapView("top");
+            Require(V("top").X == fx + 10 && guides.Count >= 1, $"the top view snaps under the main one: {V("top").X} vs {fx + 10}");
         });
 
         Check("KRN-DRAW-BOM-K155", () =>

@@ -468,7 +468,9 @@ public sealed class QuiltSolidFeature : Feature
     }
 }
 
-public enum BlendKind { Boundary = 0, Swept = 1, Rotational = 2 }
+/// <summary>k160: Sections — переход по сечениям без направляющей (как «Переход» LoftFeature: направляющие кривые, гладкость,
+/// касание нормалей крайних сечений). Boundary — прежний граничный переход (файлы до k160).</summary>
+public enum BlendKind { Boundary = 0, Swept = 1, Rotational = 2, Sections = 3 }
 
 /// <summary>
 /// ПЕРЕХОДЫ: граничный (тело или поверхность по сечениям — гладкий лофт), с протяжкой (сечения ведутся вдоль траектории:
@@ -487,7 +489,13 @@ public sealed class BlendFeature : Feature
     static readonly bool AxisAnyOff = Environment.GetEnvironmentVariable("P3D_BLENDAXISANY") == "0";
     static readonly bool PathCurveOff = Environment.GetEnvironmentVariable("P3D_BLENDPATHCURVE") == "0";
     public int Steps = 16, Points = 48;
+    /// <summary>k160: режим «по сечениям» — направляющие кривые (эскизы), гладкость, касание нормалей крайних сечений, точек по сечению.</summary>
+    public readonly List<uint> GuideSketchIds = new();
+    public bool Smooth = true;
+    public double StartTangent, EndTangent;
+    public int Samples = 64;
     public BlendFeature(string name = "Blend") { Name = name; }
+    public override bool InstantPreviewSafe => Mode == BlendKind.Sections;
     public override string Summary => $"{Mode} blend ({SectionSketchIds.Count} sections)" + (AsSurface ? " surface" : "") + (Cut ? " cut" : "");
 
     public override void Execute(BuildContext ctx)
@@ -506,6 +514,8 @@ public sealed class BlendFeature : Feature
         TSolid solid = Mode switch
         {
             BlendKind.Boundary => LoftOp.Build(profs, 64, smooth: profs.Count > 2),
+            // k160: по сечениям — тот же построитель, что у «Перехода» (LoftFeature): направляющие, гладкость, касание нормалей
+            BlendKind.Sections => LoftOp.Build(profs, Math.Clamp(Samples, 8, 512), Smooth, Guides(ctx), StartTangent, EndTangent),
             _ => Morph(ctx, sks, profs),
         };
         if (AsSurface)
@@ -517,6 +527,21 @@ public sealed class BlendFeature : Feature
         if (Cut) BooleanOp.Subtract(ctx.Bodies, solid, ctx.Warnings);
         else if (ctx.Bodies.Count == 0) ctx.Bodies.Add(solid);
         else BooleanOp.Unite(ctx.Bodies, solid, ctx.Warnings);
+    }
+
+    List<Parametric3D.Kernel.Curves.ICurve3>? Guides(BuildContext ctx)
+    {
+        List<Parametric3D.Kernel.Curves.ICurve3>? guides = null;
+        foreach (uint gid in GuideSketchIds)
+        {
+            var gs = ctx.FindSketch(gid) ?? throw new RebuildException(OperationOutcome.InvalidInput, $"{Name}: a guide sketch is not found.");
+            if (ctx.Parameters != null) gs.UpdateDimensionsFromParameters(ctx.Parameters);
+            gs.Solve(ctx.Solver); gs.RequireSolved(Name);
+            var gc = gs.Entities.Where(e => e.Role == Sketching.SkRole.Object && e is not Sketching.SkPoint).Select(e => e.ToCurve3(gs.Plane)).ToList();
+            if (gc.Count == 0) throw new RebuildException(OperationOutcome.InvalidInput, $"{Name}: a guide sketch has no curves.");
+            (guides ??= new()).AddRange(gc);
+        }
+        return guides;
     }
 
     /// <summary>Внешний контур сечения: N точек по длине от точки с наибольшим U, против часовой.</summary>
@@ -654,6 +679,7 @@ public sealed class BlendFeature : Feature
     {
         foreach (var id in SectionSketchIds) if (id != 0) yield return id;
         if (PathSketchId != 0) yield return PathSketchId;
+        foreach (var id in GuideSketchIds) if (id != 0) yield return id;
     }
 }
 

@@ -837,7 +837,7 @@ public partial class MainWindow : Window
             : new[]
             {
                 (new[] { "op.sketch" }, Array.Empty<string>()),
-                (new[] { "op.extrude", "op.revolve" }, new[] { "op.extrude_thin", "op.sweep", "op.helical_sweep", "op.loft", "op.boundary_blend", "op.swept_blend", "op.rotational_blend", "op.rib", "op.insert_body" }),
+                (new[] { "op.extrude", "op.revolve" }, new[] { "op.extrude_thin", "op.sweep", "op.helical_sweep", "op.loft", "op.rib", "op.insert_body" }),   // k160: один «Переход» (направляющая — в панели)
                 (Array.Empty<string>(), new[] { "op.surface_extrude", "op.surface_revolve", "op.fill", "op.surf_copy", "op.surf_offset", "op.surf_merge", "op.surf_trim", "op.surf_extend", "op.thicken", "op.surf_solidify", "op.replace_face" }),
                 (new[] { "op.hole", "op.round", "op.chamfer", "op.shell" }, new[] { "op.round_variable", "op.full_round", "op.vertex_round", "op.vertex_chamfer", "op.draft", "op.hole_coaxial", "op.hole_radial", "op.thread" }),
                 (Array.Empty<string>(), new[] { "op.face_offset", "op.face_move", "op.face_radius", "op.face_delete", "op.move_copy" }),

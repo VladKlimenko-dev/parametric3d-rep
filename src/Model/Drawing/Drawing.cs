@@ -44,6 +44,12 @@ public sealed class DrawingView
     public double BreakGap { get; set; } = 8;
     /// <summary>k159: поворот вида на листе (градусы, против часовой) вокруг центра вида.</summary>
     public double Angle { get; set; }
+    /// <summary>
+    /// k161: вид отображения (п. 9): "" — линии (невидимые — по ShowHidden), "hidden" — с невидимыми штриховыми, "wire" — каркас
+    /// (все рёбра сплошные), "shaded" — тона без линий, "shadedlines" — тона и видимые линии, "material" — цвет материала и
+    /// видимые линии.
+    /// </summary>
+    public string Style { get; set; } = "";
     [JsonIgnore] public bool HasBreak => BreakB > BreakA;
 }
 
@@ -75,6 +81,11 @@ public sealed class DrawingDim
     public bool FromBox { get; set; }
     /// <summary>k159: место выбирается автоматически (ряды за контуром, угол выноски без наложения текстов); перенос мышью — false.</summary>
     public bool Arrange { get; set; }
+    /// <summary>k161: сдвиг текста вдоль размерной линии от середины (мм листа); за концом — размерная линия продлевается под текст.</summary>
+    public double TextShift { get; set; }
+    /// <summary>k161: стрелки: 0 — по месту (снаружи, если не помещаются), 1 — внутри, 2 — снаружи. У диаметра большой
+    /// окружности: 2 — выноска с полкой вместо линии через центр.</summary>
+    public int Arrows { get; set; }
 
     [JsonIgnore] public double Value => Kind switch
     {
@@ -131,28 +142,76 @@ public sealed class DrawingScene
     /// <summary>Имя детали (позиции) каждого тела; пусто — одна деталь.</summary>
     public List<string> BodyItems = new();
     public readonly List<string> Problems = new();
+    /// <summary>k161: тона граней вида (закраска): треугольники в координатах вида от дальних к ближним, яркость 0…1, тело.</summary>
+    public readonly Dictionary<string, List<(Vector2d A, Vector2d B, Vector2d C, float Shade, int Body)>> Shades = new();
+    /// <summary>k161: цвет материала каждого тела (R, G, B 0…1) — стиль «Материал».</summary>
+    public List<(double R, double G, double B)> BodyColors = new();
 
     /// <summary>Разбор: видов спроецировано.</summary>
     public static long ViewsProjected;
 
     /// <summary>Виды документа: обычные и разрезы — из тел, выносные элементы — из линий вида-родителя внутри круга.</summary>
-    public static DrawingScene Build(DrawingDocument d, IReadOnlyList<TSolid> bodies, IReadOnlyList<string>? items = null)
+    public static DrawingScene Build(DrawingDocument d, IReadOnlyList<TSolid> bodies, IReadOnlyList<string>? items = null, IReadOnlyList<(double, double, double)>? colors = null)
     {
-        var sc = new DrawingScene { BodyItems = items?.ToList() ?? new() };
-        foreach (var v in d.Views.Where(v => !v.IsDetail))
+        var sc = new DrawingScene { BodyItems = items?.ToList() ?? new(), BodyColors = colors?.ToList() ?? new() };
+        foreach (var v in d.Views.Where(v => !v.IsDetail)) sc.BuildView(d, v, bodies);
+        sc.BuildDetails(d);
+        return sc;
+    }
+
+    /// <summary>k161: пересчитать один вид (поворот изометрии, стиль): линии, оси, дуги, тона; выносные элементы — заново.</summary>
+    public void Rebuild(DrawingDocument d, string view, IReadOnlyList<TSolid> bodies, double chord = 0.02)
+    {
+        var v = d.Views.FirstOrDefault(x => x.Name == view);
+        if (v == null || v.IsDetail) return;
+        BuildView(d, v, bodies, chord);
+        BuildDetails(d);
+    }
+
+    void BuildView(DrawingDocument d, DrawingView v, IReadOnlyList<TSolid> bodies, double chord = 0.02)
+    {
+        var sc = this;
+        var frame = ViewFrame.Of(d.DirOf(v));
+        IReadOnlyList<TSolid> src = bodies;
+        if (v.IsSection)
         {
-            var frame = ViewFrame.Of(d.DirOf(v));
-            IReadOnlyList<TSolid> src = bodies;
-            if (v.IsSection)
-            {
-                var (cut, boundary, problems) = SectionCut.Cut(bodies, frame, v.CutDepth);
-                src = cut; sc.SectionBoundary[v.Name] = boundary; sc.Problems.AddRange(problems.Select(p => $"{v.Name}: {p}"));
-            }
-            sc.Lines[v.Name] = ViewProjection.ProjectMany(src, frame);
-            sc.Axes[v.Name] = src.SelectMany(b => ViewProjection.Axes(b, frame)).ToList();
-            sc.Arcs[v.Name] = ViewProjection.Arcs(src, frame);
-            Interlocked.Increment(ref ViewsProjected);
+            var (cut, boundary, problems) = SectionCut.Cut(bodies, frame, v.CutDepth);
+            src = cut; sc.SectionBoundary[v.Name] = boundary; sc.Problems.AddRange(problems.Select(p => $"{v.Name}: {p}"));
         }
+        sc.Lines[v.Name] = ViewProjection.ProjectMany(src, frame, chord);
+        sc.Axes[v.Name] = src.SelectMany(b => ViewProjection.Axes(b, frame)).ToList();
+        sc.Arcs[v.Name] = ViewProjection.Arcs(src, frame);
+        if (v.Style is "shaded" or "shadedlines" or "material") sc.Shades[v.Name] = ShadeTriangles(src, frame);
+        else sc.Shades.Remove(v.Name);
+        Interlocked.Increment(ref ViewsProjected);
+    }
+
+    /// <summary>
+    /// k161: закраска вида: треугольники сетки тел, обращённые к наблюдателю, тон по нормали (свет от наблюдателя, сверху
+    /// справа), порядок — от дальних к ближним (рисуются по порядку — ближние закрывают дальние).
+    /// </summary>
+    static List<(Vector2d, Vector2d, Vector2d, float, int)> ShadeTriangles(IReadOnlyList<TSolid> bodies, ViewFrame f)
+    {
+        var res = new List<(Vector2d, Vector2d, Vector2d, float, int, double)>();
+        var light = (f.Toward * 0.8 + f.Up * 0.45 + f.Right * 0.25).Normalized();
+        for (int bi = 0; bi < bodies.Count; bi++)
+        {
+            var m = Parametric3D.Kernel.Tess.Tessellator.Tessellate(bodies[bi]);
+            for (int t = 0; t + 2 < m.Indices.Length; t += 3)
+            {
+                Vector3d a = (Vector3d)m.Vertices[m.Indices[t]].P, b = (Vector3d)m.Vertices[m.Indices[t + 1]].P, c = (Vector3d)m.Vertices[m.Indices[t + 2]].P;
+                var n = Vector3d.Cross(b - a, c - a); double nl = n.Length; if (nl < 1e-12) continue; n /= nl;
+                if (Vector3d.Dot(n, f.Toward) <= 0) continue;
+                float sh = (float)(0.35 + 0.65 * Math.Max(0, Vector3d.Dot(n, light)));
+                res.Add((f.Project(a), f.Project(b), f.Project(c), sh, bi, (f.Depth(a) + f.Depth(b) + f.Depth(c)) / 3));
+            }
+        }
+        return res.OrderBy(x => x.Item6).Select(x => (x.Item1, x.Item2, x.Item3, x.Item4, x.Item5)).ToList();
+    }
+
+    void BuildDetails(DrawingDocument d)
+    {
+        var sc = this;
         foreach (var v in d.Views.Where(v => v.IsDetail))
         {
             if (v.Parent == null || !sc.Lines.TryGetValue(v.Parent, out var pl)) { sc.Lines[v.Name] = new(); continue; }
@@ -162,7 +221,6 @@ public sealed class DrawingScene
             sc.Arcs[v.Name] = sc.Arcs[v.Parent].Where(a => (a.Center - c).Length < r).ToList();
             if (sc.SectionBoundary.TryGetValue(v.Parent, out var sb)) sc.SectionBoundary[v.Name] = sb.SelectMany(s => ClipSegment(s.A, s.B, c, r)).ToList();
         }
-        return sc;
     }
 
     /// <summary>Ломаная внутри круга: части отрезков, лежащие в круге (точки входа и выхода — пересечение с окружностью).</summary>
@@ -223,6 +281,8 @@ public sealed class DrawingDocument
     /// пересчитываются из мм модели.
     /// </summary>
     public string Units { get; set; } = "";
+    /// <summary>k161 (п. 4): толщина сплошной толстой основной линии S, мм (ГОСТ 2.303: 0.5…1.4; прежде 0.7).</summary>
+    public double LineS { get; set; } = 0.5;
     /// <summary>Единица длины модели (из детали; задаёт окно чертежа).</summary>
     [JsonIgnore] public string ModelUnits { get; set; } = "mm";
     static readonly bool UnitsOff = Environment.GetEnvironmentVariable("P3D_DRAWUNITS") == "0";
@@ -240,6 +300,7 @@ public sealed class DrawingDocument
     /// выделение, перенос.
     /// </summary>
     [JsonIgnore] public Dictionary<object, List<(double X1, double Y1, double X2, double Y2)>> Hit { get; } = new(ReferenceEqualityComparer.Instance);
+    [JsonIgnore] public Dictionary<object, List<Vector2d[]>> HitTexts { get; } = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>Знак диаметра: в шрифте ГОСТ тип А (GOST_A.TTF) он на месте U+2205 (на месте «Ø» — буква «Ш»).</summary>
     public const string Dia = "\u2205";
@@ -336,7 +397,9 @@ public sealed class DrawingDocument
     {
         var v = Views.FirstOrDefault(x => x.Name == name);
         if (v == null) return;
-        if (v.IsSection || v.IsDetail) { v.X += dx; v.Y += dy; return; }
+        // k161 (замечание 05.11, 01:23, п. 6): виды переносятся свободно (у повёрнутого вида проекционная связь теряет смысл);
+        // выравнивание с другими видами — притяжением при переносе (SnapView). Мутация P3D_VIEWLINK=0 — прежняя связь.
+        if (!LinkOff || v.IsSection || v.IsDetail || v.IsAux) { v.X += dx; v.Y += dy; return; }
         switch (name)
         {
             case "front":
@@ -346,6 +409,24 @@ public sealed class DrawingDocument
             case "left" or "right" or "back": v.X += dx; break;
             default: v.X += dx; v.Y += dy; break;
         }
+    }
+    static readonly bool LinkOff = Environment.GetEnvironmentVariable("P3D_VIEWLINK") == "0";
+
+    /// <summary>
+    /// k161: притяжение переносимого вида: центр по X или Y ближе tol мм к центру другого вида — выравнивается (проекционная
+    /// связь по выбору пользователя). Возвращает линии-подсказки (мм листа) для показа.
+    /// </summary>
+    public List<(double X1, double Y1, double X2, double Y2)> SnapView(string name, double tol = 3)
+    {
+        var res = new List<(double, double, double, double)>();
+        var v = Views.FirstOrDefault(x => x.Name == name);
+        if (v == null || !Boxes.ContainsKey(name)) return res;
+        var others = Views.Where(x => x != v && Boxes.ContainsKey(x.Name)).ToList();
+        var bx = others.Where(o => Math.Abs(o.X - v.X) < tol).OrderBy(o => Math.Abs(o.X - v.X)).FirstOrDefault();
+        var by = others.Where(o => Math.Abs(o.Y - v.Y) < tol).OrderBy(o => Math.Abs(o.Y - v.Y)).FirstOrDefault();
+        if (bx != null) { v.X = bx.X; res.Add((v.X, Math.Min(v.Y, bx.Y), v.X, Math.Max(v.Y, bx.Y))); }
+        if (by != null) { v.Y = by.Y; res.Add((Math.Min(v.X, by.X), v.Y, Math.Max(v.X, by.X), v.Y)); }
+        return res;
     }
 
     /// <summary>Вид под точкой листа (по габариту).</summary>
@@ -394,6 +475,7 @@ public sealed class DrawingDocument
     }
 
     static readonly string[] Grid = { "front", "top", "left", "iso" };
+    static readonly bool ArrangeOffV = Environment.GetEnvironmentVariable("P3D_VIEWARRANGE") == "0";
 
     /// <summary>Габарит для раскладки: у вида с разрывом — без полосы (промежуток не учитывается).</summary>
     static (Vector2d, Vector2d) BreakBox(DrawingView v, (Vector2d Min, Vector2d Max) b)
@@ -428,34 +510,49 @@ public sealed class DrawingDocument
         var extras = Views.Where(v => !Grid.Contains(v.Name)).ToList();
         const double gap = 20;
         double availW = x1 - x0 - 2 * gap, availH = y1 - y0 - tbH - 2 * gap;
-        (double wl, double wr, double ht, double hb, double we, double he) Dims(double s)
+        // k161 (замечание 05.11, 01:23, п. 2): два варианта сетки — «вид слева — слева от главного, вид сверху — под главным,
+        // изометрия — слева внизу» (просьба пользователя) и ГОСТ 2.305 (вид слева — справа, изометрия — справа внизу); берётся
+        // тот, при котором масштаб листа крупнее (равный — первый). Мутация P3D_VIEWARRANGE=0 — только ГОСТ (прежнее).
+        string[][] arrA = { new[] { "left", "iso" }, new[] { "front", "top" } }, arrB = { new[] { "front", "top" }, new[] { "left", "iso" } };
+        (double wl, double wr, double ht, double hb, double we, double he) Dims(double s, string[][] arr)
         {
-            double wl = Math.Max(Size("front", s).X, Size("top", s).X), wr = Math.Max(Size("left", s).X, Size("iso", s).X);
+            double wl = arr[0].Max(n => Size(n, s).X), wr = arr[1].Max(n => Size(n, s).X);
             double ht = Math.Max(Size("front", s).Y, Size("left", s).Y), hb = Math.Max(Size("top", s).Y, Size("iso", s).Y);
             double we = extras.Count == 0 ? 0 : extras.Max(v => Size(v.Name, s).X) + 10;   // +10 — подписи
             double he = extras.Sum(v => Size(v.Name, s).Y + 12) + Math.Max(0, extras.Count - 1) * 8;
             return (wl, wr, ht, hb, we, he);
         }
-        double Fit(double s)
+        double Fit(double s, string[][] arr)
         {
-            var (wl, wr, ht, hb, we, he) = Dims(s);
-            double w = wl + (wr > 0 ? gap + wr : 0) + (we > 0 ? gap + we : 0), h = Math.Max(ht + (hb > 0 ? gap + hb : 0), he);
+            var (wl, wr, ht, hb, we, he) = Dims(s, arr);
+            double w = wl + (wl > 0 && wr > 0 ? gap : 0) + wr + (we > 0 ? gap + we : 0), h = Math.Max(ht + (hb > 0 ? gap + hb : 0), he);
             return Math.Max(w / availW, h / availH);
         }
+        double Pick(string[][] arr) { foreach (var s in GostScales) if (Fit(s, arr) <= 1) return s; return GostScales.Last(); }
+        var arrangement = ArrangeOffV ? arrB : Pick(arrA) >= Pick(arrB) ? arrA : arrB;
         double scale = Scale;
-        if (scale <= 0) { scale = GostScales.Last(); foreach (var s in GostScales) if (Fit(s) <= 1) { scale = s; break; } }
-        var (wl2, wr2, ht2, hb2, we2, he2) = Dims(scale);
-        double totalW = wl2 + (wr2 > 0 ? gap + wr2 : 0) + (we2 > 0 ? gap + we2 : 0), totalH = Math.Max(ht2 + (hb2 > 0 ? gap + hb2 : 0), he2);
+        if (scale <= 0) scale = Pick(arrangement);
+        var (wl2, wr2, ht2, hb2, we2, he2) = Dims(scale, arrangement);
+        double g01 = wl2 > 0 && wr2 > 0 ? gap : 0;
+        double totalW = wl2 + g01 + wr2 + (we2 > 0 ? gap + we2 : 0), totalH = Math.Max(ht2 + (hb2 > 0 ? gap + hb2 : 0), he2);
         double left = x0 + gap + Math.Max(0, (availW - totalW) / 2), top = y1 - gap - Math.Max(0, (availH - totalH) / 2);
-        var centre = new Dictionary<string, (double X, double Y)>
+        var centre = new Dictionary<string, (double X, double Y)>();
+        for (int col = 0; col < 2; col++)
+            for (int row = 0; row < 2; row++)
+                centre[arrangement[col][row]] = (col == 0 ? left + wl2 / 2 : left + wl2 + g01 + wr2 / 2, row == 0 ? top - ht2 / 2 : top - ht2 - gap - hb2 / 2);
+        var (wl2b, wr2b) = (wl2, wr2 + g01);
+        double ex = left + wl2b + wr2b + gap + we2 / 2, ey = top;
+        // k161: виды уже стоят (пользователь мог их перенести, сетка прежняя) — новый прочий вид ставится справа от стоящих
+        // видов сетки и ниже стоящих прочих (прежде — по сетке заново: при новом виде сетка сдвигалась, и он ложился на главный)
+        var placedGrid = Views.Where(v => Grid.Contains(v.Name) && (v.X != 0 || v.Y != 0)).ToList();
+        if (placedGrid.Count > 0)
         {
-            ["front"] = (left + wl2 / 2, top - ht2 / 2),
-            ["left"] = (left + wl2 + gap + wr2 / 2, top - ht2 / 2),
-            ["top"] = (left + wl2 / 2, top - ht2 - gap - hb2 / 2),
-            ["iso"] = (left + wl2 + gap + wr2 / 2, top - ht2 - gap - hb2 / 2),
-        };
-        double ex = left + wl2 + (wr2 > 0 ? gap + wr2 : 0) + gap + we2 / 2, ey = top;
-        foreach (var v in extras)
+            ex = placedGrid.Max(v => v.X + Size(v.Name, scale).X / 2) + gap + we2 / 2;
+            ey = placedGrid.Max(v => v.Y + Size(v.Name, scale).Y / 2);
+            var placedExtra = extras.Where(v => v.X != 0 || v.Y != 0).ToList();
+            if (placedExtra.Count > 0) ey = placedExtra.Min(v => v.Y - Size(v.Name, scale).Y / 2) - 8;
+        }
+        foreach (var v in extras.Where(v => placedGrid.Count == 0 || v.X == 0 && v.Y == 0))
         {
             var sz = Size(v.Name, scale);
             ey -= 12;   // подпись над видом
@@ -488,9 +585,10 @@ public sealed class DrawingDocument
         Boxes.Clear(); Xf.Clear();
         var proj = scene.Lines;
         double scale = Layout(proj);
-        LastScale = scale; Hit.Clear();
+        LastScale = scale; Hit.Clear(); HitTexts.Clear();
         fields.Auto[Fields.Scale] = ScaleText(scale);
         var g = SheetLayout.Compose(Template, fields);
+        if (!LineSOff) g.ThickW = Math.Clamp(LineS, 0.3, 1.4);
         foreach (var v in Views)
         {
             if (!proj.TryGetValue(v.Name, out var lines)) continue;
@@ -513,11 +611,21 @@ public sealed class DrawingDocument
                 var cs = new[] { TF(mn), TF(new Vector2d(mx.X, mn.Y)), TF(mx), TF(new Vector2d(mn.X, mx.Y)) };
                 Boxes[v.Name] = (cs.Min(q => q.X), cs.Min(q => q.Y), cs.Max(q => q.X), cs.Max(q => q.Y));
             }
+            // k161: тона граней (под линиями)
+            if (scene.Shades.TryGetValue(v.Name, out var shades) && v.Style is "shaded" or "shadedlines" or "material")
+                foreach (var (a, b, c, sh, bi) in shades)
+                {
+                    var (r, gg, bb) = v.Style == "material" && bi < scene.BodyColors.Count ? scene.BodyColors[bi] : (0.78, 0.8, 0.84);
+                    uint argb = 0xFF000000u | (uint)Math.Clamp(r * sh * 255, 0, 255) << 16 | (uint)Math.Clamp(gg * sh * 255, 0, 255) << 8 | (uint)Math.Clamp(bb * sh * 255, 0, 255);
+                    g.Shades.Add((new List<(double, double)> { T(a), T(b), T(c) }, argb));
+                }
+            bool showHidden = v.Style switch { "hidden" or "wire" => true, "shaded" or "shadedlines" or "material" => false, _ => v.ShowHidden };
             foreach (var l in lines)
             {
-                if (!l.Visible && !v.ShowHidden) continue;
+                if (v.Style == "shaded") break;
+                if (!l.Visible && !showHidden) continue;
                 if (l.Kind == ViewLineKind.Tangent && !v.ShowTangent) continue;
-                var kind = !l.Visible ? LineKind.Hidden : l.Kind == ViewLineKind.Tangent ? LineKind.Thin : LineKind.Thick;
+                var kind = !l.Visible ? (v.Style == "wire" ? LineKind.Thick : LineKind.Hidden) : l.Kind == ViewLineKind.Tangent ? LineKind.Thin : LineKind.Thick;
                 if (brk) { foreach (var part in ClipBreak(l.Points, v.BreakA, v.BreakB)) g.Polylines.Add(new SheetPolyline(part.Select(T).ToList(), kind)); }
                 else g.Polylines.Add(new SheetPolyline(l.Points.Select(T).ToList(), kind));
             }
@@ -560,6 +668,10 @@ public sealed class DrawingDocument
                 {
                     if (d.Kind is "dia" or "rad") PlaceRadial(g, d);
                     else if (d.Kind is "h" or "v") PlaceRow(g, d, rows);
+                    // k161 (замечание 05.11, 01:23, п. 3): место выбирается один раз — после «Автоматических размеров» или
+                    // «Размеров модели»; дальше размер стоит, где поставлен (прежде раскладка шла при каждом выводе листа:
+                    // перенос размера мышью тормозил). Мутация P3D_ARRANGEONCE=0 — при каждом выводе.
+                    if (!ArrangeOnceOff) d.Arrange = false;
                 }
                 Capture(g, d, () => DrawDim(g, d));
             }
@@ -574,6 +686,8 @@ public sealed class DrawingDocument
 
     /// <summary>k159: мутация P3D_DIMARRANGE=0 — размеры без раскладки (ряды и углы выносок как заданы).</summary>
     static readonly bool ArrangeOff = Environment.GetEnvironmentVariable("P3D_DIMARRANGE") == "0";
+    static readonly bool LineSOff = Environment.GetEnvironmentVariable("P3D_LINES") == "0";
+    static readonly bool ArrangeOnceOff = Environment.GetEnvironmentVariable("P3D_ARRANGEONCE") == "0";
 
     /// <summary>Отрезки примитивов, добавленных draw(), — геометрия элемента для выбора мышью.</summary>
     void Capture(SheetGraphics g, object key, Action draw)
@@ -585,13 +699,16 @@ public sealed class DrawingDocument
         for (int i = np; i < g.Polylines.Count; i++) { var q = g.Polylines[i].Points; for (int k = 0; k + 1 < q.Count; k++) segs.Add((q[k].X, q[k].Y, q[k + 1].X, q[k + 1].Y)); }
         for (int i = nf; i < g.Fills.Count; i++) { var q = g.Fills[i]; for (int k = 0; k < q.Count; k++) { var b = q[(k + 1) % q.Count]; segs.Add((q[k].X, q[k].Y, b.X, b.Y)); } }
         for (int i = nc; i < g.Circles.Count; i++) { var (cx, cy, r, _) = g.Circles[i]; for (int k = 0; k < 16; k++) { double a0 = k * Math.PI / 8, a1 = (k + 1) * Math.PI / 8; segs.Add((cx + r * Math.Cos(a0), cy + r * Math.Sin(a0), cx + r * Math.Cos(a1), cy + r * Math.Sin(a1))); } }
+        // k161 (п. 11): текст — рамкой без диагоналей; попадание в текст — по прямоугольнику (HitTexts)
+        var rects = new List<Vector2d[]>();
         for (int i = nt; i < g.Texts.Count; i++)
         {
             var c = TextCorners(g.Texts[i]);
             for (int k = 0; k < 4; k++) segs.Add((c[k].X, c[k].Y, c[(k + 1) % 4].X, c[(k + 1) % 4].Y));
-            segs.Add((c[0].X, c[0].Y, c[2].X, c[2].Y)); segs.Add((c[1].X, c[1].Y, c[3].X, c[3].Y));
+            rects.Add(c);
         }
         Hit[key] = segs;
+        HitTexts[key] = rects;
     }
 
     /// <summary>Углы прямоугольника текста на листе (ширина — оценка по ГОСТ тип А).</summary>
@@ -614,6 +731,14 @@ public sealed class DrawingDocument
     public object? HitAt(double x, double y, double tol = 1.5)
     {
         object? best = null; double bd = tol;
+        // внутри прямоугольника текста — попадание
+        foreach (var (k, rs) in HitTexts)
+            foreach (var c in rs)
+            {
+                var e1 = c[1] - c[0]; var e2 = c[3] - c[0]; var q = new Vector2d(x, y) - c[0];
+                double a = Vector2d.Dot(q, e1) / Math.Max(1e-12, e1.LengthSquared), b = Vector2d.Dot(q, e2) / Math.Max(1e-12, e2.LengthSquared);
+                if (a >= 0 && a <= 1 && b >= 0 && b <= 1) return k;
+            }
         foreach (var (k, segs) in Hit)
             foreach (var (x1, y1, x2, y2) in segs)
             {
@@ -771,7 +896,7 @@ public sealed class DrawingDocument
         if (Math.Abs(L - h2) > 0.5) g.Line(P2.X + n.X * sg, P2.Y + n.Y * sg, q2.X + n.X * sg * 2, q2.Y + n.Y * sg * 2);
         double len = (q2 - q1).Length;
         var along = len > 1e-9 ? (q2 - q1) / len : u;
-        bool outside = len < 2 * ArrowL + 4;
+        bool outside = d.Arrows == 1 ? false : d.Arrows == 2 || len < 2 * ArrowL + 4;
         if (outside)
         {
             g.Line(q1.X - along.X * 8, q1.Y - along.Y * 8, q2.X + along.X * 8, q2.Y + along.Y * 8);
@@ -787,7 +912,21 @@ public sealed class DrawingDocument
         var up = new Vector2d(-along.Y, along.X);
         if (ang > 90.0001 || ang <= -90) { ang += ang > 0 ? -180 : 180; up = -up; }
         var m = (q1 + q2) / 2 + up * 1;
-        if (outside && len < TextW(text, TextH)) m += (q2 - q1).Length > 1e-9 ? along * (len / 2 + 8 + TextW(text, TextH) / 2) : Vector2d.Zero;
+        if (d.TextShift == 0 && outside && len < TextW(text, TextH)) m += (q2 - q1).Length > 1e-9 ? along * (len / 2 + 8 + TextW(text, TextH) / 2) : Vector2d.Zero;
+        if (d.TextShift != 0)
+        {
+            // k161: текст сдвинут вдоль линии; за концом — продление размерной линии под текст (полка)
+            double t = d.TextShift * (Vector2d.Dot(along, u) >= 0 ? 1 : -1);
+            m += along * t;
+            double tw = TextW(text, TextH);
+            var mid = (q1 + q2) / 2;
+            if (Math.Abs(t) + tw / 2 > len / 2)
+            {
+                var end = t > 0 ? q2 : q1;
+                var far = mid + along * (t + Math.Sign(t) * (tw / 2 + 1));
+                g.Line(end.X, end.Y, far.X, far.Y);
+            }
+        }
         g.Text(m.X, m.Y, TextH, text, TextAlign.Center, null, Math.Abs(ang) < 1e-9 ? 0 : ang);
     }
 
@@ -820,9 +959,14 @@ public sealed class DrawingDocument
         {
             var c = ToSheet(d.View, new Vector2d(d.X1, d.Y1));
             d.Y2 = Math.Atan2(sy - c.Y, sx - c.X) * 180 / Math.PI;
+            // k161: длина выноски — до курсора (без ограничения): Offset = выноска / 0.6
+            double r = d.X2 * Xf[d.View].S, dist = Math.Sqrt((sx - c.X) * (sx - c.X) + (sy - c.Y) * (sy - c.Y));
+            if (dist > r + 1) d.Offset = Math.Max(2, dist - r) / 0.6;
             return;
         }
-        var (_, _, _, n, h1, h2, L) = DimFrame(d);
+        var (_, _, u0, n, h1, h2, L) = DimFrame(d);
+        // k161: вдоль размерной линии — сдвиг текста (в том числе за концы — сбоку от размера)
+        d.TextShift += dx * u0.X + dy * u0.Y;
         double Ln = L + dx * n.X + dy * n.Y;
         double hi = Math.Max(h1, h2), lo = Math.Min(h1, h2);
         if (d.FromBox && Boxes.TryGetValue(d.View, out var b))
@@ -843,7 +987,7 @@ public sealed class DrawingDocument
         var dir = (Math.Cos(a), Math.Sin(a));
         var p = (c.X + r * dir.Item1, c.Y + r * dir.Item2);
         double tw = TextW(text, TextH);
-        if (d.Kind == "dia" && r > 12)
+        if (d.Kind == "dia" && r > 12 && d.Arrows != 2)
         {
             // большая окружность: размерная линия через центр, стрелки изнутри на окружность
             var p2 = (c.X - r * dir.Item1, c.Y - r * dir.Item2);

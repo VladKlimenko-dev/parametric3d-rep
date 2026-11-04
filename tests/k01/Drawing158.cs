@@ -39,7 +39,8 @@ static partial class Program
             cutter = Parametric3D.Kernel.Ops.TransformOp.Copy(cutter, Parametric3D.Kernel.Ops.TransformOp.Move(cc - c));
             var bodies = new List<TSolid> { cube };
             Parametric3D.Kernel.Ops.BooleanOp.Subtract(bodies, cutter, new List<string>());
-            var body = bodies.Single();
+            var body = Zup(bodies.Single());
+            n = new Vector3d(n.X, n.Z, -n.Y);   // k161: ось Y вверх
             double vol = AnalyticVolume.Of(body) ?? double.NaN;
             Require(Math.Abs(vol - 920000) < 1, $"body volume {vol:0.###}, want 920000");
 

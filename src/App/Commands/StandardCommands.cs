@@ -191,7 +191,7 @@ public static class StandardCommands
         // u13: кнопки таблицы иконок — формообразование, конструктивные, опорные
         Op("op.round_variable", "Переменное скругление", "Перем. скругл.", "f_round_variable_but.svg", () => new RoundOp { Variable = true }, "variable round fillet переменное скругление");
         Op("op.sweep", "Протяжка", "Протяжка", "f_sweep_but.svg", () => new SweepOp(), "sweep протяжка траектория");
-        Op("op.loft", "Переход по сечениям", "Переход", "f_blend_but.svg", () => new LoftOp(), "loft blend переход сечения");
+        Op("op.loft", "Переход (по сечениям, вдоль траектории, вокруг оси)", "Переход", "f_blend_but.svg", () => new BlendOp { StartMode = BlendKind.Sections }, "loft blend переход сечения");
         Op("op.draft", "Уклон", "Уклон", "f_draft_but.svg", () => new DraftOp(), "draft уклон литейный");
         Op("op.rib", "Ребро жёсткости", "Ребро", "f_rib_but.svg", () => new RibOp(), "rib ребро жёсткости");
         Op("op.axis", "Опорная ось", "Ось", "dat_axis_but.svg", () => new AxisOp(), "datum axis ось");
@@ -225,7 +225,7 @@ public static class StandardCommands
         Op("op.surf_solidify", "Отверждение квилта", "Отвердить", "surf_solidify_but.svg", () => new QuiltSolidOp { StartMode = QuiltSolidKind.Solidify }, "solidify отверждение квилта");
         Op("op.thicken", "Утолщение квилта", "Утолщить", "f_thicken_but.svg", () => new QuiltSolidOp(), "thicken утолщение квилта");
         Op("op.replace_face", "Замена грани квилтом", "Заменить грань", "dir_replace_face_but.svg", () => new QuiltSolidOp { StartMode = QuiltSolidKind.ReplaceFace }, "replace face замена грани");
-        Op("op.boundary_blend", "Граничный переход", "Гран. переход", "f_boundary_blend_but.svg", () => new BlendOp(), "boundary blend граничный переход");
+        Op("op.boundary_blend", "Граничный переход", "Гран. переход", "f_boundary_blend_but.svg", () => new BlendOp { StartMode = BlendKind.Sections, StartSurface = true }, "boundary blend граничный переход поверхность");
         Op("op.swept_blend", "Протяжка с переходом", "Протяжка-переход", "f_swept_blend_but.svg", () => new BlendOp { StartMode = BlendKind.Swept }, "swept blend протяжка переход");
         Op("op.rotational_blend", "Переход вращением", "Переход вращ.", "f_rotational_blend_but.svg", () => new BlendOp { StartMode = BlendKind.Rotational }, "rotational blend переход вращением");
         r.Add(new AppCommand { Id = "op.insert_body", Label = "Вставить FreeForm / тело из файла", Short = "Вставить тело", Group = M, Icon = "f_insert_freeform_but.svg", Synonyms = "insert freeform body step вставить тело",

@@ -13,6 +13,8 @@ public sealed class DrawingInput
 {
     public readonly List<TSolid> Bodies = new();
     public readonly List<string> Items = new();
+    /// <summary>k161: цвет материала каждого тела (стиль вида «Материал»).</summary>
+    public readonly List<(double R, double G, double B)> Colors = new();
     public Part? Part;
     public Dictionary<string, int>? Positions;
     public bool IsAssembly;
@@ -21,6 +23,7 @@ public sealed class DrawingInput
     {
         var d = new DrawingInput { Part = p };
         d.Bodies.AddRange(p.Bodies);
+        foreach (var b in p.Bodies) { var m = p.MaterialOf(b); d.Colors.Add((m.R, m.G, m.B)); }
         return d;
     }
 
@@ -41,6 +44,7 @@ public sealed class DrawingInput
                     {
                         d.Bodies.Add(identity ? b : TransformOp.Copy(b, x));
                         d.Items.Add(BomDocument.KeyOf(p));
+                        { var mt = p.MaterialOf(b); d.Colors.Add((mt.R, mt.G, mt.B)); }
                     }
                 }
                 else if (c is Assembly sa) Walk(sa, ToD(sa.LocalTransform) * parent);

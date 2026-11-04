@@ -589,12 +589,15 @@ static partial class Program
         if (mode is "cusp151" or "allB") CuspEndChecks();
         if (mode is "nurbsend152" or "allB") NurbsEndChecks();
         if (mode is "chamferovf153" or "allB") ChamferOverflowChecks();
+        if (mode is "chamfervertex159" or "allB") ChamferBendFitChecks();
         if (mode is "holes153" or "allB") Hole153Checks();
         if (mode is "sweeps153" or "allB") Sweep153Checks();
         if (mode is "drawing155" or "allB") Drawing155Checks();
         if (mode is "drawing156" or "allB") Drawing156Checks();
         if (mode is "drawing158" or "allB") Drawing158Checks();
         if (mode is "drawing159" or "allB") Drawing159Checks();
+        if (mode is "drawing161" or "allB") Drawing161Checks();
+        if (mode is "blend160" or "allB") Blend160Checks();
         if (mode is "brephist") { BrepHist(args.Skip(1)); return; }
         if (mode is "ovfdiag") { OvfDiag(args[1], args[2]); return; }
         if (mode is "breprt") { BrepRoundTrip(args.Skip(1)); return; }
@@ -604,6 +607,8 @@ static partial class Program
         if (mode is "savetime") { SaveTime(args[1]); return; }
         if (mode is "rebuilderr") { RebuildErrors(args[1]); return; }
         if (mode is "inspectfile") { InspectFile(args[1], args[2]); return; }
+        if (mode is "drawpng") { DrawPng(args[1], args[2], args.Length > 3 ? args[3] : null); return; }
+        if (mode is "facediag") { FaceDiag(args[1], args[2], args.Length > 3); return; }
         if (mode is "editlast") { EditLast(args[1], double.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture)); return; }
         if (mode is "chamfersweep") { ChamferSweep(args[1], args.Skip(2)); return; }
         if (mode is "loftseq") { LoftCorpusSeq(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), args.Length > 4 ? args[4] : "/tmp/claude-0/corpusseq"); return; }

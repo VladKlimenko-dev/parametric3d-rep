@@ -260,7 +260,42 @@ public sealed class SheetWindow : Window
     public object? Selected => _sel;
     public object? Hovered => _hover;
     object? _drag; double _lastX, _lastY; bool _moved;
-    Point? _panAt;
+    Point? _panAt; Point _panStart; bool _panRight;
+
+    /// <summary>
+    /// k161 (п. 12): меню размера — стрелки внутрь / наружу / по месту, радиус ↔ диаметр, текст к середине, место — заново,
+    /// удалить; меню обозначения — удалить.
+    /// </summary>
+    public List<(string Text, Action Run)> ContextItems(double x, double y)
+    {
+        var d = Drawing!;
+        var hit = d.HitAt(x, y);
+        var items = new List<(string, Action)>();
+        if (hit is DrawingDim dm)
+        {
+            _sel = dm; UpdateOverlay();
+            items.Add((L("Стрелки внутри"), () => Change(() => dm.Arrows = 1)));
+            items.Add((L("Стрелки снаружи"), () => Change(() => dm.Arrows = 2)));
+            items.Add((L("Стрелки по месту"), () => Change(() => dm.Arrows = 0)));
+            if (dm.Kind is "rad" or "dia") items.Add((dm.Kind == "rad" ? L("Диаметр вместо радиуса") : L("Радиус вместо диаметра"), () => Change(() => dm.Kind = dm.Kind == "rad" ? "dia" : "rad")));
+            if (dm.TextShift != 0) items.Add((L("Текст к середине"), () => Change(() => dm.TextShift = 0)));
+            items.Add((L("Место — автоматически"), () => Change(() => { dm.Arrange = true; dm.TextShift = 0; })));
+            items.Add((L("Удалить"), () => Change(() => { d.Dims.Remove(dm); _sel = null; })));
+        }
+        else if (hit is DrawingNote n)
+        {
+            _sel = n; UpdateOverlay();
+            items.Add((L("Удалить"), () => Change(() => { d.Notes.Remove(n); _sel = null; })));
+        }
+        return items;
+    }
+    void OpenContextMenu(double x, double y)
+    {
+        var items = ContextItems(x, y);
+        if (items.Count == 0) return;
+        var cm = new ContextMenu { ItemsSource = items.Select(i => { var mi = new MenuItem { Header = i.Text }; mi.Click += (_, _) => i.Run(); return mi; }).ToList() };
+        cm.Open(_canvas);
+    }
 
     void HookPointer()
     {
@@ -269,7 +304,7 @@ public sealed class SheetWindow : Window
         {
             var pt = e.GetCurrentPoint(_canvas);
             _canvas.Focus();
-            if (pt.Properties.IsRightButtonPressed || pt.Properties.IsMiddleButtonPressed) { _panAt = pt.Position; e.Pointer.Capture(_canvas); e.Handled = true; return; }
+            if (pt.Properties.IsRightButtonPressed || pt.Properties.IsMiddleButtonPressed) { _panAt = pt.Position; _panStart = pt.Position; _panRight = pt.Properties.IsRightButtonPressed; e.Pointer.Capture(_canvas); e.Handled = true; return; }
             if (!pt.Properties.IsLeftButtonPressed || Kind != Mode.Drawing) return;
             var (x, y) = _canvas.ToSheet(pt.Position);
             if (e.ClickCount >= 2 && _pick == null) { FocusFieldAt(x, y); e.Handled = true; return; }
@@ -284,7 +319,18 @@ public sealed class SheetWindow : Window
             var (x, y) = _canvas.ToSheet(pos);
             MoveTo(x, y);
         };
-        _canvas.PointerReleased += (_, e) => { _panAt = null; Up(); e.Pointer.Capture(null); };
+        _canvas.PointerReleased += (_, e) =>
+        {
+            // k161 (п. 12): правый щелчок без сдвига листа — меню элемента (размер, обозначение)
+            if (_panAt is { } pa && _panRight && Kind == Mode.Drawing && Math.Abs(pa.X - _panStart.X) + Math.Abs(pa.Y - _panStart.Y) < 4)
+            {
+                var (x, y) = _canvas.ToSheet(e.GetPosition(_canvas));
+                _panAt = null; e.Pointer.Capture(null);
+                OpenContextMenu(x, y);
+                return;
+            }
+            _panAt = null; Up(); e.Pointer.Capture(null);
+        };
         _canvas.PointerExited += (_, _) => { if (_drag == null && _hover != null) { _hover = null; _hoverSegs = null; UpdateOverlay(); } };
         KeyDown += (_, e) =>
         {
@@ -303,8 +349,24 @@ public sealed class SheetWindow : Window
     {
         if (_pick != null) { try { PickAt(x, y); } catch (Exception ex) { _status.Text = ex.Message; Core.AppLog.Write("sheet: pick", ex); } _hoverSegs = null; UpdateOverlay(); return; }
         var d = Drawing!;
+        _guides.Clear();
+        // k161 (п. 5): у выбранной изометрии — кнопка «Домой» и кольцо поворота
+        if (_sel is DrawingView sv && IsRotatable(sv) && d.Boxes.TryGetValue(sv.Name, out var sb))
+        {
+            var (hx, hy) = HomeAt(sb);
+            if (Math.Abs(x - hx) < 3.5 && Math.Abs(y - hy) < 3.5) { HomeView(sv); return; }
+            double rr = RingR(sb), dc = Math.Sqrt((x - sv.X) * (x - sv.X) + (y - sv.Y) * (y - sv.Y));
+            if (Math.Abs(dc - rr) < 2.5) { _drag = new RotateDrag(sv); _lastX = x; _lastY = y; _moved = false; _status.Text = L("Поворот вида: ведите мышью"); return; }
+        }
+        // k161 (п. 10): точку привязки обозначения (база, допуск, шероховатость, позиция) можно перенести
+        foreach (var n in d.Notes.Where(n => n.HasTarget && n.View != null && d.Xf.ContainsKey(n.View)))
+        {
+            var t = d.ToSheet(n.View!, new OpenTK.Mathematics.Vector2d(n.TX, n.TY));
+            if (Math.Abs(t.X - x) < 2.5 && Math.Abs(t.Y - y) < 2.5) { _sel = n; _drag = new TargetDrag(n); _lastX = x; _lastY = y; _moved = false; _status.Text = L("Точка привязки: перенос по контуру"); UpdateOverlay(); return; }
+        }
         _sel = d.HitAt(x, y) ?? (object?)(d.ViewAt(x, y) is { } vn ? d.Views.FirstOrDefault(v => v.Name == vn) : null);
         _drag = _sel; _lastX = x; _lastY = y; _moved = false;
+        if (_sel is DrawingView dv0) _free = (dv0.X, dv0.Y);
         _status.Text = _sel switch
         {
             DrawingDim dm => L("Размер {0}: перенос мышью, Delete — удалить", d.CaptionOf(dm)),
@@ -329,7 +391,21 @@ public sealed class SheetWindow : Window
             {
                 case DrawingDim dm: d.MoveDim(dm, dx, dy, x, y); break;
                 case DrawingNote n: n.X += dx; n.Y += dy; break;
-                case DrawingView v: d.MoveView(v.Name, dx, dy); break;
+                case TargetDrag td when td.Note.View is { } tv && _scene != null && _scene.Lines.ContainsKey(tv):
+                    {
+                        var q = Snap(tv, d.ToView(tv, x, y), 5, false);
+                        td.Note.TX = q.X; td.Note.TY = q.Y;
+                        break;
+                    }
+                case RotateDrag rd: RotateView(rd.View, dx, dy, coarse: true); break;
+                case DrawingView v:
+                    {
+                        // k161 (п. 6): свободный перенос с притяжением к центрам других видов (линии-подсказки)
+                        _free = (_free.X + dx, _free.Y + dy);
+                        v.X = _free.X; v.Y = _free.Y;
+                        _guides = d.SnapView(v.Name);
+                        break;
+                    }
             }
             _lastX = x; _lastY = y;
             Dirty = true;
@@ -341,8 +417,43 @@ public sealed class SheetWindow : Window
 
     public void Up()
     {
+        if (_drag is RotateDrag rd && _moved && _input != null) { _scene?.Rebuild(Drawing!, rd.View.Name, _input.Bodies); }
         if (_drag != null && _moved) { UpdateTitle(); RefreshNow(); BuildProps(); }
-        _drag = null;
+        _drag = null; _guides.Clear(); UpdateOverlay();
+    }
+
+    sealed record TargetDrag(DrawingNote Note);
+    sealed record RotateDrag(DrawingView View);
+    (double X, double Y) _free;
+    List<(double, double, double, double)> _guides = new();
+
+    static bool IsRotatable(DrawingView v) => v.Name == "iso";
+    static double RingR((double X0, double Y0, double X1, double Y1) b) => Math.Max(b.X1 - b.X0, b.Y1 - b.Y0) / 2 + 4;
+    static (double X, double Y) HomeAt((double X0, double Y0, double X1, double Y1) b) => (b.X1 + 6, b.Y1 + 6);
+
+    /// <summary>
+    /// k161 (п. 5): поворот вида в пространстве мышью: сдвиг по листу на 1 мм — 1° вокруг вертикали вида (влево-вправо) и
+    /// горизонтали (вверх-вниз). Рамка вида — своя («v:…»); при переносе — грубая сетка, после отпускания — точная.
+    /// </summary>
+    public void RotateView(DrawingView v, double dx, double dy, bool coarse = false)
+    {
+        var d = Drawing!;
+        var f = ViewFrame.Of(d.DirOf(v));
+        var qy = OpenTK.Mathematics.Quaterniond.FromAxisAngle(f.Up, dx * Math.PI / 180);
+        var qx = OpenTK.Mathematics.Quaterniond.FromAxisAngle(f.Right, -dy * Math.PI / 180);
+        var q = qx * qy;
+        var r = OpenTK.Mathematics.Vector3d.Transform(f.Right, q); var u = OpenTK.Mathematics.Vector3d.Transform(f.Up, q);
+        v.Dir = new ViewFrame(r.Normalized(), u.Normalized()).Encode();
+        EnsureScene();
+        if (_input != null) _scene!.Rebuild(d, v.Name, _input.Bodies, coarse ? 0.2 : 0.02);
+        Dirty = true;
+    }
+
+    /// <summary>k161: изометрия ГОСТ 2.317 — вернуть вид в положение по умолчанию («Домой»).</summary>
+    public void HomeView(DrawingView v)
+    {
+        Change(() => { v.Dir = ""; EnsureScene(); if (_input != null) _scene!.Rebuild(Drawing!, v.Name, _input.Bodies); });
+        _status.Text = L("Изометрия — положение по умолчанию");
     }
 
     /// <summary>Удалить выделенное: размер, обозначение, разрез / выносной / вспомогательный вид; основной вид — выключить.</summary>
@@ -372,7 +483,7 @@ public sealed class SheetWindow : Window
     static string ViewTitle(string n) => n switch { "front" => "Главный (спереди)", "top" => "Сверху", "left" => "Слева", "right" => "Справа", "bottom" => "Снизу", "back" => "Сзади", "iso" => "Изометрия", _ => n };
 
     List<(double, double, double, double)>? _hoverSegs;
-    static readonly SkiaSharp.SKColor HoverColor = new(30, 140, 255, 170), SelColor = new(255, 120, 0, 200), TargetColor = new(0, 170, 90, 210);
+    static readonly SkiaSharp.SKColor HoverColor = new(30, 140, 255, 170), SelColor = new(255, 120, 0, 200), TargetColor = new(0, 170, 90, 210), GizmoColor = new(200, 40, 160, 220);
 
     static List<(double, double, double, double)> RectSegs((double X0, double Y0, double X1, double Y1) b, double pad = 1)
     {
@@ -493,6 +604,18 @@ public sealed class SheetWindow : Window
             if (_hover != null && _hover != _sel) _canvas.Overlay.Add((SegsOf(_hover), HoverColor, _hover is DrawingView ? 1.2f : 3f));
             if (_sel != null) _canvas.Overlay.Add((SegsOf(_sel), SelColor, _sel is DrawingView ? 1.6f : 3f));
             if (_hoverSegs != null) _canvas.Overlay.Add((_hoverSegs, TargetColor, 3f));
+            if (_guides.Count > 0) _canvas.Overlay.Add((_guides.Select(gl => { var (x1, y1, x2, y2) = gl; return x1 == x2 ? (x1, y1 - 30, x2, y2 + 30) : (x1 - 30, y1, x2 + 30, y2); }).ToList(), TargetColor, 1.2f));
+            if (_sel is DrawingView gv && IsRotatable(gv) && Drawing.Boxes.TryGetValue(gv.Name, out var gb))
+            {
+                // кольцо поворота и кнопка «Домой» (домик)
+                _canvas.Overlay.Add((Ring(gv.X, gv.Y, RingR(gb)), GizmoColor, 2f));
+                var (hx, hy) = HomeAt(gb);
+                _canvas.Overlay.Add((new List<(double, double, double, double)>
+                {
+                    (hx - 3, hy - 3, hx + 3, hy - 3), (hx + 3, hy - 3, hx + 3, hy + 0.5), (hx - 3, hy - 3, hx - 3, hy + 0.5),
+                    (hx - 4, hy + 0.5, hx, hy + 3.5), (hx, hy + 3.5, hx + 4, hy + 0.5), (hx - 1, hy - 3, hx - 1, hy - 0.5), (hx - 1, hy - 0.5, hx + 1, hy - 0.5), (hx + 1, hy - 0.5, hx + 1, hy - 3),
+                }, GizmoColor, 2f));
+            }
         }
         _canvas.InvalidateVisual();
     }
@@ -564,6 +687,9 @@ public sealed class SheetWindow : Window
     public void PickAt(double x, double y)
     {
         var d = Drawing!;
+        // k161: новый вид (разрез, выносной, вспомогательный) не меняет подобранный масштаб — иначе прежние виды на своих
+        // местах меняли бы размер и заходили друг на друга
+        FreezeScale();
         var view = d.ViewAt(x, y);
         if (view == null || !d.Xf.ContainsKey(view)) { _status.Text = L("Щёлкните на виде"); return; }
         var q = d.ToView(view, x, y);
@@ -751,6 +877,12 @@ public sealed class SheetWindow : Window
                 var units = new ComboBox { ItemsSource = unitNames, SelectedIndex = Math.Max(0, Array.IndexOf(LengthUnits, d.Units)), MinWidth = 140, Name = "dr_units" };
                 units.SelectionChanged += (_, _) => { var u = LengthUnits[Math.Max(0, units.SelectedIndex)]; if (u != d.Units) Change(() => d.Units = u); };
                 dp.Children.Add(Row(L("Единицы длины"), units));
+                // k161 (п. 4): толщина основной линии S, ГОСТ 2.303
+                double[] sv = { 0.5, 0.6, 0.7, 0.8, 1.0, 1.4 };
+                var lineS = new ComboBox { ItemsSource = sv.Select(x => x.ToString("0.0", CultureInfo.InvariantCulture) + L(" мм")).ToList(), SelectedIndex = Math.Max(0, Array.FindIndex(sv, x => Math.Abs(x - d.LineS) < 1e-9)), MinWidth = 140 };
+                lineS.SelectionChanged += (_, _) => { double ns = sv[Math.Max(0, lineS.SelectedIndex)]; if (Math.Abs(ns - d.LineS) > 1e-9) Change(() => d.LineS = ns); };
+                ToolTip.SetTip(lineS, L("Толщина сплошной основной линии S (ГОСТ 2.303: 0,5…1,4 мм); тонкие — S/2"));
+                dp.Children.Add(Row(L("Основная линия"), lineS));
                 dp.Children.Add(new TextBlock { Text = d.SourcePath != null ? L("Модель: {0}", Path.GetFileName(d.SourcePath)) : L("Модель: открытый документ"), Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
 
                 var vp = Section(L("Виды"));
@@ -872,6 +1004,23 @@ public sealed class SheetWindow : Window
         ToolTip.SetTip(ang, L("Поворот вида на листе, °"));
         row.Children.Add(ang);
         row.Children.Add(new TextBlock { Text = "°", VerticalAlignment = VerticalAlignment.Center });
+        // k161 (п. 9): отображение вида
+        var styles = new[] { ("", "Видимые линии"), ("hidden", "С невидимыми линиями"), ("wire", "Каркас"), ("shaded", "Тона"), ("shadedlines", "Тона с линиями"), ("material", "Материал") };
+        var st = new ComboBox { ItemsSource = styles.Select(x => L(x.Item2)).ToList(), SelectedIndex = Math.Max(0, Array.FindIndex(styles, x => x.Item1 == dv.Style)), FontSize = 11, MinWidth = 96 };
+        st.SelectionChanged += (_, _) =>
+        {
+            var ns = styles[Math.Max(0, st.SelectedIndex)].Item1;
+            if (ns != dv.Style) Change(() => { dv.Style = ns; EnsureScene(); if (_input != null) _scene!.Rebuild(Drawing!, dv.Name, _input.Bodies); });
+        };
+        ToolTip.SetTip(st, L("Отображение вида"));
+        row.Children.Add(st);
+        if (IsRotatable(dv))
+        {
+            var home = new Button { Content = L("Домой"), FontSize = 11, Padding = new Thickness(4, 1) };
+            ToolTip.SetTip(home, L("Изометрия — положение по умолчанию (поворот — кольцо вокруг выбранного вида)"));
+            home.Click += (_, _) => HomeView(dv);
+            row.Children.Add(home);
+        }
         if (dv.HasBreak)
         {
             var nb = new Button { Content = L("без разрыва"), FontSize = 11, Padding = new Thickness(4, 1) };
@@ -1013,7 +1162,7 @@ public sealed class SheetWindow : Window
         _input = Input();
         _projSig = DrawingInput.Signature(_input.Bodies);
         d.ModelUnits = _input.Part?.Units.Length ?? "mm";
-        _scene = DrawingScene.Build(d, _input.Bodies, _input.Items);
+        _scene = DrawingScene.Build(d, _input.Bodies, _input.Items, _input.Colors);
         if (_scene.Problems.Count > 0) _status.Text = string.Join("; ", _scene.Problems.Take(2));
     }
 

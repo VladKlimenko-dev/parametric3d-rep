@@ -15,8 +15,16 @@ static partial class Program
         var c = (mn + mx) / 2;
         var bodies = new List<TSolid> { cube };
         Parametric3D.Kernel.Ops.BooleanOp.Subtract(bodies, Parametric3D.Kernel.Ops.PrimitiveOp.Cylinder(new Vector3d(c.X, c.Y, mn.Z - 5), 15, 110), new List<string>());
-        return (bodies.Single(), c);
+        return (Zup(bodies.Single()), c);
     }
+
+    /// <summary>
+    /// k161: тело, построенное «ось Z вверх» (проверки k155–k160), — в соглашение окна модели и чертежа «ось Y вверх»:
+    /// (x, y, z) → (x, z, −y). Координаты видов при этом прежние: спереди (x, z), сверху (x, y), слева (−y, z) — эталоны
+    /// проверок в координатах видов не меняются.
+    /// </summary>
+    internal static TSolid Zup(TSolid b) =>
+        Parametric3D.Kernel.Ops.TransformOp.Copy(b, new Parametric3D.Kernel.Ops.TransformOp.Xform(q => new Vector3d(q.X, q.Z, -q.Y), d => new Vector3d(d.X, d.Z, -d.Y), false));
 
     /// <summary>
     /// k156 (D2–D5):
@@ -110,7 +118,8 @@ static partial class Program
             Require(g.Texts.Any(t => t.Text == "100" && Math.Abs(t.Angle - 90) < 1e-9), "vertical dimension text rotated");
             // размеры модели: эскиз на XY — вид сверху
             var part = new Part("md");
-            var sk = new Parametric3D.Model.Sketching.Sketch("s", Parametric3D.Kernel.Frame3.XY);
+            // k161: плоскость эскиза, параллельная виду сверху (ось Y вверх: плоскость XZ, V = −Z)
+            var sk = new Parametric3D.Model.Sketching.Sketch("s", new Parametric3D.Kernel.Frame3(Vector3d.Zero, Vector3d.UnitX, -Vector3d.UnitZ));
             var a = new Parametric3D.Model.Sketching.SkPoint(new Vector2d(0, 0)); var b = new Parametric3D.Model.Sketching.SkPoint(new Vector2d(60, 0)); var e = new Parametric3D.Model.Sketching.SkPoint(new Vector2d(60, 40));
             var circ = new Parametric3D.Model.Sketching.SkCircle(new Parametric3D.Model.Sketching.SkPoint(new Vector2d(30, 20)), 8);
             var d1 = new Parametric3D.Model.Sketching.SkDimension(Parametric3D.Model.Sketching.DimensionType.DistanceHorizontal, 60, a, b);
@@ -173,7 +182,7 @@ static partial class Program
             // цилиндр Ø200 перед кубом (ближе к наблюдателю вида спереди: Y меньше) — закрывает куб целиком
             var cyl = Parametric3D.Kernel.Ops.PrimitiveOp.Cylinder(new Vector3d((mn.X + mx.X) / 2, mn.Y - 150, mn.Z - 10), 100, 120);
             var dd = new DrawingDocument(); dd.Views.Add(new DrawingView { Name = "front" });
-            var sc = DrawingScene.Build(dd, new[] { cube, cyl }, new[] { "Корпус", "Втулка" });
+            var sc = DrawingScene.Build(dd, new[] { Zup(cube), Zup(cyl) }, new[] { "Корпус", "Втулка" });
             var cubeVisible = sc.Lines["front"].Where(l => l.Body == 0 && l.Visible).Sum(Len);
             Log(new { test = "KRN-DRAW-ASM-K156", cubeVisible = Math.Round(cubeVisible, 2), cylVisible = Math.Round(sc.Lines["front"].Where(l => l.Body == 1 && l.Visible).Sum(Len), 2) });
             Require(cubeVisible < 1, $"cube edges behind the cylinder are visible: {cubeVisible:0.##}");
@@ -183,7 +192,7 @@ static partial class Program
             Require(balloons.Count == 1 && balloons[0].Position == 2, $"balloons: {string.Join(",", balloons.Select(b => b.Position))} (the hidden part has no visible line)");
             // куб сбоку от цилиндра: обе видимы — две позиции
             var cyl2 = Parametric3D.Kernel.Ops.PrimitiveOp.Cylinder(new Vector3d(mx.X + 60, (mn.Y + mx.Y) / 2, mn.Z), 20, 50);
-            var sc2 = DrawingScene.Build(dd, new[] { cube, cyl2 }, new[] { "Корпус", "Втулка" });
+            var sc2 = DrawingScene.Build(dd, new[] { Zup(cube), Zup(cyl2) }, new[] { "Корпус", "Втулка" });
             dd.Compose(sc2, new FieldSource());
             dd.AutoBalloons(sc2, new Dictionary<string, int> { ["Корпус"] = 1, ["Втулка"] = 2 });
             var b2 = dd.Notes.Where(n => n.Kind == "balloon").OrderBy(n => n.Position).ToList();

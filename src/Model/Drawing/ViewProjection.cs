@@ -13,14 +13,38 @@ public readonly record struct ViewFrame(Vector3d Right, Vector3d Up)
     public double Depth(Vector3d p) => Vector3d.Dot(p, Toward);
 
     /// <summary>
-    /// Основные виды ГОСТ 2.305 (метод первого угла; модель: Z вверх, вид спереди — со стороны −Y): спереди (главный), сверху,
-    /// слева, справа, снизу, сзади; изометрия ГОСТ 2.317.
+    /// Основные виды ГОСТ 2.305 и изометрия ГОСТ 2.317 — k161: как виды окна модели (Camera.OrientationQuat; ось Y вверх, вид
+    /// спереди — взгляд вдоль −Z): спереди (X вправо, Y вверх), сзади, слева (взгляд вдоль +X), справа, сверху (взгляд вдоль −Y,
+    /// X вправо, −Z вверх), снизу, изометрия — та же, что у кнопки «Изометрия». Прежде (k155–k160) чертёж считал вверх ось Z:
+    /// вид «спереди» показывал вид модели сверху, «сверху» — вид слева, «слева» — спереди. Мутация P3D_VIEWYUP=0 — прежнее.
     /// </summary>
-    public static ViewFrame Of(string name) => name switch
+    public static ViewFrame Of(string name) => ZUp ? OfZUp(name) : name switch
+    {
+        "front" => new(Vector3d.UnitX, Vector3d.UnitY),
+        "back" => new(-Vector3d.UnitX, Vector3d.UnitY),
+        "left" => new(Vector3d.UnitZ, Vector3d.UnitY),
+        "right" => new(-Vector3d.UnitZ, Vector3d.UnitY),
+        "top" => new(Vector3d.UnitX, -Vector3d.UnitZ),
+        "bottom" => new(Vector3d.UnitX, Vector3d.UnitZ),
+        "iso" => IsoYUp(),
+        _ when name.StartsWith("v:") => Parse(name),
+        _ => throw new ArgumentException("unknown view " + name),
+    };
+    static readonly bool ZUp = Environment.GetEnvironmentVariable("P3D_VIEWYUP") == "0";
+
+    /// <summary>Изометрия окна модели: поворот камеры Rx(−30°)·Ry(45°); оси листа — обратный поворот осей экрана.</summary>
+    static ViewFrame IsoYUp()
+    {
+        var q = Quaterniond.FromAxisAngle(Vector3d.UnitX, -Math.PI / 6) * Quaterniond.FromAxisAngle(Vector3d.UnitY, Math.PI / 4);
+        var inv = q.Inverted();
+        return new(Vector3d.Transform(Vector3d.UnitX, inv).Normalized(), Vector3d.Transform(Vector3d.UnitY, inv).Normalized());
+    }
+
+    static ViewFrame OfZUp(string name) => name switch
     {
         "front" => new(Vector3d.UnitX, Vector3d.UnitZ),
         "top" => new(Vector3d.UnitX, Vector3d.UnitY),
-        "left" => new(-Vector3d.UnitY, Vector3d.UnitZ),     // вид слева: смотрим с −X… взгляд вдоль +X
+        "left" => new(-Vector3d.UnitY, Vector3d.UnitZ),
         "right" => new(Vector3d.UnitY, Vector3d.UnitZ),
         "bottom" => new(Vector3d.UnitX, -Vector3d.UnitY),
         "back" => new(-Vector3d.UnitX, Vector3d.UnitZ),
