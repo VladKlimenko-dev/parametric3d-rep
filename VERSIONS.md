@@ -5,6 +5,7 @@
 
 | Версия | Дата | Коммит | Архив | Что сделано |
 |---|---|---|---|---|
+| k163 | 2026-11-05 | [`75bb418`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/75bb418) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/75bb418.zip) | чертёж — пропавшая линия на виде, проверка полноты размеров (⚠/✓), угловые размеры, размеры отверстий и уступов, центры дуг |
 | k162 | 2026-11-05 | [`a6199ff`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/a6199ff) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/a6199ff.zip) | окно чертежа — 25+ кадров при переносе и повороте; скрытие линий — ребро за своей гранью, шов на очерке; ширина панели свойств мышью |
 | k161 | 2026-11-05 | [`305d914`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/305d914) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/305d914.zip) | одна операция «Переход» (k160); фаска Sweep_Blend — отказ с причиной вместо веера (k160); чертёж — виды как в окне модели, раскладка, свободный перенос с притяжением, поворот изометрии, тона, размеры без перестроения |
 | k159 | 2026-11-05 | [`2325007`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/2325007) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/2325007.zip) | окно чертежа — лист вектором, подсветка, выбор и перенос размеров, масштаб и поворот видов, единицы, раскладка размеров; файлы STEP проверок в репозитории |
