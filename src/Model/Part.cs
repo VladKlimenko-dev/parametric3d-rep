@@ -1102,6 +1102,38 @@ public sealed class Part : ModelItem
         RestoredFromFile = true;
         Interlocked.Increment(ref RestoredParts);
     }
+    /// <summary>
+    /// k156: СОСТОЯНИЕ ПЕРЕД ПОСЛЕДНЕЙ ОПЕРАЦИЕЙ — для записи в документ: правка последней операции после открытия начинается с
+    /// него, а не с начала дерева (HelSweep: минуты → время одной операции). Null — нет состояния (без сохранённых состояний,
+    /// последняя операция — первая, поверхности или клетки FreeForm, тела предпросмотра).
+    /// </summary>
+    internal (int After, Features.BuildContext.Snapshot State)? CheckpointForSave()
+    {
+        if (!UseCheckpoints || IsDirty) return null;
+        int lastActive = -1;
+        for (int k = Math.Min(EffectiveStage, Features.Count) - 1; k >= 0; k--) if (!Features[k].Suppressed) { lastActive = k; break; }
+        if (lastActive <= 0) return null;
+        var cp = _checkpoints.Where(c => c.After < lastActive).MaxBy(c => c.After);
+        if (cp == null || cp.State.Quilts.Count > 0 || cp.State.Cages.Count > 0 || cp.State.Bodies.Any(b => b.IsPreview)) return null;
+        return (cp.After, cp.State);
+    }
+
+    /// <summary>k156: состояние после операции After из файла — правка операций после неё начнётся с него.</summary>
+    internal void AddRestoredCheckpoint(int after, Features.BuildContext.Snapshot state)
+    {
+        if (after < 0 || after >= Features.Count) return;
+        foreach (var b in state.Bodies) b.Publish();
+        _checkpoints.RemoveAll(c => c.After == after);
+        _checkpoints.Add(new Checkpoint { After = after, State = state });
+        _checkpoints.Sort((x, y) => x.After.CompareTo(y.After));
+        // итог операций до состояния — для пропущенных при перестроении (ошибки, созданные грани)
+        foreach (var f in Features.Take(after + 1))
+            _records[f] = new FeatureRecord { Error = f.Error, Created = f.CreatedFaceIds.ToList() };
+        Interlocked.Increment(ref RestoredCheckpoints);
+    }
+    /// <summary>k156: состояний, прочитанных из документа (разбор, проверки).</summary>
+    public static long RestoredCheckpoints;
+
     /// <summary>k153: деталь открыта из записанного тела (не перестраивалась с открытия).</summary>
     public bool RestoredFromFile { get; private set; }
     /// <summary>k156: как деталь открылась из файла (для сообщения пользователю: почему идёт перестроение).</summary>

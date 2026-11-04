@@ -92,6 +92,23 @@ public static class DocumentFile
                 doc.Display.Errors = errs.Count > 0 ? errs : null;
                 var cr = part.Features.Where(f => f.CreatedFaceIds.Count > 0).ToDictionary(f => f.Key, f => f.CreatedFaceIds.ToList());
                 doc.Display.Created = cr.Count > 0 ? cr : null;
+                // k156: состояние перед последней операцией (правка последней операции после открытия — без перестроения дерева)
+                if (!CheckpointSaveOff && part.CheckpointForSave() is { } cp)
+                {
+                    try
+                    {
+                        var st = cp.State;
+                        doc.Display.Checkpoint = new CheckpointDto
+                        {
+                            After = cp.After, Brep = Convert.ToBase64String(BrepFile.Write(st.Bodies)),
+                            BodyNames = st.Bodies.Select(b => st.BodyNames.TryGetValue(b, out var n) ? n : "").ToList(),
+                            Planes = st.Planes.ToDictionary(kv => kv.Key, kv => new[] { kv.Value.Origin.X, kv.Value.Origin.Y, kv.Value.Origin.Z, kv.Value.U.X, kv.Value.U.Y, kv.Value.U.Z, kv.Value.V.X, kv.Value.V.Y, kv.Value.V.Z, kv.Value.W.X, kv.Value.W.Y, kv.Value.W.Z }),
+                            Axes = st.Axes.ToDictionary(kv => kv.Key, kv => new[] { kv.Value.At.X, kv.Value.At.Y, kv.Value.At.Z, kv.Value.Dir.X, kv.Value.Dir.Y, kv.Value.Dir.Z }),
+                            Points = st.Points.ToDictionary(kv => kv.Key, kv => new[] { kv.Value.X, kv.Value.Y, kv.Value.Z }),
+                        };
+                    }
+                    catch (NotSupportedException) { doc.Display.Checkpoint = null; }
+                }
             }
             catch (NotSupportedException ex) { doc.Display.Brep = null; LastSaveNote = "тип геометрии не записывается: " + ex.Message; }
         }
@@ -827,10 +844,16 @@ public static class DocumentFile
     private static FeatureDto HoleExtras(HoleFeature hf, FeatureDto d)
     {
         if (hf.DrillPoint) { Flag(d, "drillpoint"); PutV(d, "drill_angle", hf.DrillAngle); }
-        if (hf.LinRef1 != null)
+        // k157: слот привязки — ребро (в Edges по порядку) или опорная плоскость (lin_p1, lin_p2)
+        if (hf.LinRef1 != null || hf.LinPlane1 != null)
         {
-            d.Edges.Add(SaveEdge(hf.LinRef1.Value)); PutV(d, "lin_d1", hf.LinD1);
-            if (hf.LinRef2 != null) { d.Edges.Add(SaveEdge(hf.LinRef2.Value)); PutV(d, "lin_d2", hf.LinD2); }
+            if (hf.LinPlane1 != null) PutS(d, "lin_p1", hf.LinPlane1); else d.Edges.Add(SaveEdge(hf.LinRef1!.Value));
+            PutV(d, "lin_d1", hf.LinD1);
+            if (hf.LinRef2 != null || hf.LinPlane2 != null)
+            {
+                if (hf.LinPlane2 != null) PutS(d, "lin_p2", hf.LinPlane2); else d.Edges.Add(SaveEdge(hf.LinRef2!.Value));
+                PutV(d, "lin_d2", hf.LinD2);
+            }
         }
         if (hf.RadFace != null)
         {
@@ -1437,8 +1460,14 @@ public static class DocumentFile
                     if (fd.FaceNames != null) hf.PointFaces.AddRange(fd.FaceNames);
                     // k153: дно-острие и привязки положения
                     hf.DrillPoint = HasFlag(fd, "drillpoint"); hf.DrillAngle = GetV(fd, "drill_angle", 118);
-                    if (fd.Edges.Count > 0) { hf.LinRef1 = LoadEdge(fd.Edges[0]); hf.LinD1 = GetV(fd, "lin_d1", 10); }
-                    if (fd.Edges.Count > 1) { hf.LinRef2 = LoadEdge(fd.Edges[1]); hf.LinD2 = GetV(fd, "lin_d2", 10); }
+                    {
+                        int ei = 0;
+                        hf.LinPlane1 = GetS(fd, "lin_p1"); hf.LinPlane2 = GetS(fd, "lin_p2");
+                        if (hf.LinPlane1 == null && fd.Edges.Count > ei) hf.LinRef1 = LoadEdge(fd.Edges[ei++]);
+                        if (hf.LinPlane1 != null || hf.LinRef1 != null) hf.LinD1 = GetV(fd, "lin_d1", 10);
+                        if (hf.LinPlane2 == null && fd.Edges.Count > ei) hf.LinRef2 = LoadEdge(fd.Edges[ei++]);
+                        if (hf.LinPlane2 != null || hf.LinRef2 != null) hf.LinD2 = GetV(fd, "lin_d2", 10);
+                    }
                     if (GetS(fd, "rad_face") is { } rface)
                     {
                         hf.RadFace = rface; hf.RadRefFace = GetS(fd, "rad_ref");
@@ -1586,6 +1615,21 @@ public static class DocumentFile
                             part.RestoreFromFile(bodies, cached, display.Volume, display.Area, display.BodyNames ?? new(), display.Warnings ?? new(),
                                 display.Errors ?? new(), display.Created ?? new(), table);
                             part.LoadNote = LoadNoteKind.Restored;
+                            // k156: состояние перед последней операцией
+                            if (display.Checkpoint is { Brep: { } cb } cpd && !CheckpointSaveOff)
+                            {
+                                try
+                                {
+                                    var cbodies = BrepFile.ReadAll(Convert.FromBase64String(cb)).Select(r => r.Body).ToList();
+                                    var names = new Dictionary<Kernel.Topology.TSolid, string>(ReferenceEqualityComparer.Instance);
+                                    for (int i = 0; i < cbodies.Count && i < (cpd.BodyNames?.Count ?? 0); i++) if (cpd.BodyNames![i].Length > 0) names[cbodies[i]] = cpd.BodyNames[i];
+                                    var planes = (cpd.Planes ?? new()).ToDictionary(kv => kv.Key, kv => Frame3.Raw(new Vector3d(kv.Value[0], kv.Value[1], kv.Value[2]), new Vector3d(kv.Value[3], kv.Value[4], kv.Value[5]), new Vector3d(kv.Value[6], kv.Value[7], kv.Value[8]), new Vector3d(kv.Value[9], kv.Value[10], kv.Value[11])));
+                                    var axes = (cpd.Axes ?? new()).ToDictionary(kv => kv.Key, kv => (new Vector3d(kv.Value[0], kv.Value[1], kv.Value[2]), new Vector3d(kv.Value[3], kv.Value[4], kv.Value[5])));
+                                    var points = (cpd.Points ?? new()).ToDictionary(kv => kv.Key, kv => new Vector3d(kv.Value[0], kv.Value[1], kv.Value[2]));
+                                    part.AddRestoredCheckpoint(cpd.After, new Features.BuildContext.Snapshot(cbodies, planes, axes, points, names));
+                                }
+                                catch (Exception ex) when (ex is FormatException or InvalidDataException or EndOfStreamException or IOException or InvalidCastException or IndexOutOfRangeException or ArgumentException) { }   // состояние не прочиталось — правка с начала дерева
+                            }
                         }
                         catch (Exception ex) when (ex is FormatException or InvalidDataException or EndOfStreamException or IOException or InvalidCastException or IndexOutOfRangeException or ArgumentException)
                         { Interlocked.Increment(ref BrepRejected); part.LoadNote = LoadNoteKind.BodiesRejected; part.LoadNoteDetail = ex.Message; }   // испорченная запись тел — открытие перестроением
@@ -1599,6 +1643,8 @@ public static class DocumentFile
         return (part, table);
     }
     public static long DisplayRejected;
+    /// <summary>k156: мутация P3D_SAVECHECKPOINT=0 — состояние перед последней операцией не пишется и не читается.</summary>
+    static readonly bool CheckpointSaveOff = Environment.GetEnvironmentVariable("P3D_SAVECHECKPOINT") == "0";
     /// <summary>k156: мутация P3D_AREAATSAVE=0 — площадь считается при записи (прежде: запись HelSweep 76 с).</summary>
     static readonly bool AreaAtSaveOff = Environment.GetEnvironmentVariable("P3D_AREAATSAVE") == "0";
     /// <summary>k156: причина, по которой при последней записи (этим потоком) тела детали не попали в файл; null — записаны.</summary>
@@ -1685,6 +1731,18 @@ public static class DocumentFile
         public List<string>? Warnings { get; set; }
         public Dictionary<string, string>? Errors { get; set; }
         public Dictionary<string, List<uint>>? Created { get; set; }
+        /// <summary>k156: состояние перед последней операцией.</summary>
+        public CheckpointDto? Checkpoint { get; set; }
+    }
+
+    private sealed class CheckpointDto
+    {
+        public int After { get; set; }
+        public string? Brep { get; set; }
+        public List<string>? BodyNames { get; set; }
+        public Dictionary<string, double[]>? Planes { get; set; }
+        public Dictionary<string, double[]>? Axes { get; set; }
+        public Dictionary<string, double[]>? Points { get; set; }
     }
 
     private sealed class FaceSetDto

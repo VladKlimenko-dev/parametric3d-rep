@@ -601,6 +601,7 @@ static partial class Program
         if (mode is "loadtime") { LoadTime(args[1]); return; }
         if (mode is "savetime") { SaveTime(args[1]); return; }
         if (mode is "rebuilderr") { RebuildErrors(args[1]); return; }
+        if (mode is "editlast") { EditLast(args[1], double.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture)); return; }
         if (mode is "chamfersweep") { ChamferSweep(args[1], args.Skip(2)); return; }
         if (mode is "loftseq") { LoftCorpusSeq(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), args.Length > 4 ? args[4] : "/tmp/claude-0/corpusseq"); return; }
         if (mode is "loftcorpus") { LoftCorpusRun(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), args.Length > 4 ? args[4] : "/tmp/claude-0/corpus"); return; }

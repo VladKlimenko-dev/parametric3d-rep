@@ -75,6 +75,32 @@ static partial class Program
             Require(a2 is { } b2 && Math.Abs(b2.X - 100) < 1e-6 && Math.Abs(b2.Y - 45) < 1e-6, "hole did not follow the edge: " + a2);
         });
 
+        Check("KRN-HOLE-REFS-K157", () =>
+        {
+            // k157 (BACKLOG k153: привязка к рёбрам-дугам и опорным плоскостям): брусок 100×60×30, отверстие ⌀10 в (30, 30);
+            // второе ⌀8 — в 25 от центра кромки первого (ребро-дуга) и в 15 от плоскости XZ (y = 0): центр (50, 15) — эталон
+            // по построению (25² = 20² + 15²). Мутации P3D_HOLEARCREF=0 (дуга — прямая по концам) и P3D_HOLEPLANEREF=0 —
+            // проверка падает.
+            var p = Block(100, out _, out _); p.Rebuild(null);
+            var h1 = new HoleFeature("H1") { Direction = -Vector3d.UnitZ, Diameter = new ValueRef(10), ThroughAll = true };
+            h1.Points.Add(new Vector3d(30, 30, 30)); p.AddFeature(h1); p.Rebuild(null);
+            Require(h1.Error == null, h1.Error ?? "");
+            var arc = p.Bodies[0].Faces.SelectMany(f => f.Edges).Distinct()
+                .First(e => e.Curve is Parametric3D.Kernel.Curves.ArcCurve3 a && Math.Abs(a.Radius - 5) < 1e-9 && Math.Abs(a.Frame.Origin.Z - 30) < 1e-9);
+            var h2 = new HoleFeature("H2") { Direction = -Vector3d.UnitZ, Diameter = new ValueRef(8), ThroughAll = true,
+                LinRef1 = EdgeRef.Of(arc), LinD1 = new ValueRef(25), LinPlane2 = "XZ", LinD2 = new ValueRef(15) };
+            h2.Points.Add(new Vector3d(55, 14, 30)); p.AddFeature(h2); p.Rebuild(null);
+            var c2 = p.Bodies[0].Faces.Where(f => f.Tag.EndsWith(HoleFeature.RoleWall)).Select(f => Parametric3D.Kernel.Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)))
+                .OfType<Parametric3D.Kernel.Geometry.Ssi.Cylinder>().FirstOrDefault(c => Math.Abs(c.R - 4) < 1e-9);
+            Log(new { test = "KRN-HOLE-REFS-K157", error = h2.Error, centre = c2?.P.ToString() });
+            Require(h2.Error == null && c2 != null && Math.Abs(c2.P.X - 50) < 1e-6 && Math.Abs(c2.P.Y - 15) < 1e-6, "hole not at 25 from the arc centre and 15 from XZ: " + (h2.Error ?? c2?.P.ToString()));
+            // запись и чтение: привязки сохраняются
+            var text = DocumentFile.Save(p, null, withDisplay: false);
+            var (q, _) = DocumentFile.Load(text);
+            var h2b = q.Features.OfType<HoleFeature>().Last();
+            Require(h2b.LinPlane2 == "XZ" && h2b.LinRef1 != null && h2b.LinPlane1 == null && h2b.LinRef2 == null && Math.Abs(h2b.LinD1.Value - 25) < 1e-12, "references after save and load");
+        });
+
         Check("KRN-HOLE-RADIAL-K153", () =>
         {
             var p = new Part("shaft");

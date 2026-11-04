@@ -1,4 +1,5 @@
 using OpenTK.Mathematics;
+using Parametric3D.Kernel;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
@@ -86,6 +87,15 @@ public sealed class HoleFeature : Feature
     public EdgeRef? LinRef1, LinRef2;
     public ValueRef LinD1 = new(10), LinD2 = new(10);
     /// <summary>
+    /// k157: привязка к опорной плоскости вместо ребра (имя плоскости детали): расстояние — от линии пересечения плоскости с
+    /// гранью входа. Заполненное имя важнее ребра того же номера.
+    /// </summary>
+    public string? LinPlane1, LinPlane2;
+    /// <summary>k157: мутация P3D_HOLEARCREF=0 — ребро-дуга как прямая через его концы (прежнее); P3D_HOLEPLANEREF=0 — плоскости не действуют.</summary>
+    public static readonly bool ArcRefOff = Environment.GetEnvironmentVariable("P3D_HOLEARCREF") == "0";
+    public static readonly bool PlaneRefOff = Environment.GetEnvironmentVariable("P3D_HOLEPLANEREF") == "0";
+    public bool HasLinear => LinRef1 != null || LinPlane1 != null && !PlaneRefOff;
+    /// <summary>
     /// РАДИАЛЬНАЯ ПРИВЯЗКА: отверстие в цилиндрической грани RadFace (по имени) к оси; положение — расстояние RadAxial вдоль
     /// оси от плоской грани RadRefFace (или от точки RadOrigin, если грани нет) и угол RadAngle вокруг оси от направления
     /// RadZeroDir. null RadFace — без привязки.
@@ -129,9 +139,59 @@ public sealed class HoleFeature : Feature
         return (foot + radial * cyl.R, -radial);
     }
 
+    /// <summary>
+    /// k157: ПРИВЯЗКА НА ГРАНИ ВХОДА — прямая (ребро-отрезок; линия пересечения опорной плоскости с гранью) или центр (ребро-дуга:
+    /// расстояние — от центра дуги). Линия — точка A и единичная нормаль M в плоскости грани; у центра M — направление от центра к
+    /// текущей точке (уточняется итерацией).
+    /// </summary>
+    public readonly record struct PlaceRef(Vector3d A, Vector3d M, bool Centre);
+
+    /// <summary>Привязка ребра или плоскости на грани (p — точка на грани, n — нормаль грани).</summary>
+    public static PlaceRef? RefOf(List<TSolid> bodies, EdgeRef? edge, Frame3? plane, Vector3d p, Vector3d n, bool throwIfMissing = false)
+    {
+        n = n.Normalized();
+        if (plane is { } pl && !PlaneRefOff)
+        {
+            var np = pl.W.Normalized();
+            var d = Vector3d.Cross(n, np);
+            if (d.LengthSquared < 1e-12) { if (throwIfMissing) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: the reference plane is parallel to the entry face."); return null; }
+            // точка на линии пересечения плоскости грани (n·x = h1) и опорной (np·x = h2)
+            double h1 = Vector3d.Dot(n, p), h2 = Vector3d.Dot(np, pl.Origin);
+            var a = (Vector3d.Cross(np, d) * h1 + Vector3d.Cross(d, n) * h2) / d.LengthSquared;
+            var m = Vector3d.Cross(n, d.Normalized());
+            if (Vector3d.Dot(p - a, m) < 0) m = -m;
+            return new PlaceRef(a, m, false);
+        }
+        if (edge is not { } r) return null;
+        var e = FilletOp.ResolveEdge(bodies, r, out var conflict);
+        if (e == null) { if (throwIfMissing) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"Hole: the reference edge is not found{(conflict != null ? " (" + conflict + ")" : "")}."); return null; }
+        if (!ArcRefOff && e.Curve is Kernel.Curves.ArcCurve3 arc)
+        {
+            // кромка-дуга (отверстие, бобышка, скругление угла): расстояние — от центра дуги, спроецированного на грань
+            var c = arc.Frame.Origin; c -= n * Vector3d.Dot(c - p, n);
+            var m = p - c; m -= n * Vector3d.Dot(m, n);
+            if (m.LengthSquared < 1e-18) m = Math.Abs(n.X) < 0.9 ? Vector3d.Cross(n, Vector3d.UnitX) : Vector3d.Cross(n, Vector3d.UnitY);
+            return new PlaceRef(c, m.Normalized(), true);
+        }
+        {
+            var a = e.Curve.PointAt(e.Curve.T0); var b = e.Curve.PointAt(e.Curve.T1);
+            var d = b - a; d -= n * Vector3d.Dot(d, n);
+            if (d.LengthSquared < 1e-18) { if (throwIfMissing) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: a reference edge is perpendicular to the entry face."); return null; }
+            a -= n * Vector3d.Dot(a - p, n);
+            var m = Vector3d.Cross(n, d.Normalized());
+            if (Vector3d.Dot(p - a, m) < 0) m = -m;
+            return new PlaceRef(a, m, false);
+        }
+    }
+
+    /// <summary>k157: расстояние точки до привязки (ребро-отрезок, ребро-дуга — от центра, опорная плоскость).</summary>
+    public static double? DistanceToRef(List<TSolid> bodies, EdgeRef? edge, Frame3? plane, Vector3d p, Vector3d n) =>
+        RefOf(bodies, edge, plane, p, n) is { } r ? Math.Abs(Vector3d.Dot(p - r.A, r.M)) : null;
+
     /// <summary>k153: расстояния точки p (на грани с нормалью n) до прямых рёбер-привязок — для гизмо и правки положения.</summary>
     public static double? DistanceToEdgeLine(List<TSolid> bodies, EdgeRef r, Vector3d p, Vector3d n)
     {
+        if (!ArcRefOff) return DistanceToRef(bodies, r, null, p, n);
         var e = FilletOp.ResolveEdge(bodies, r, out _);
         if (e == null) return null;
         n = n.Normalized();
@@ -147,10 +207,36 @@ public sealed class HoleFeature : Feature
     /// k153: центр отверстия по линейной привязке: в плоскости грани (точка p0 на ней, нормаль n) — на расстояниях от прямых
     /// рёбер-привязок; сторона каждой прямой — та, где лежит p0.
     /// </summary>
-    public Vector3d? LinearPlacement(List<TSolid> bodies, Vector3d p0, Vector3d n, Parametric3D.Model.Params.ParameterTable? pars)
+    public Vector3d? LinearPlacement(List<TSolid> bodies, Vector3d p0, Vector3d n, Parametric3D.Model.Params.ParameterTable? pars, Func<string, Frame3?>? planeOf = null)
     {
-        if (PlaceOff || LinRef1 == null) return null;
+        if (PlaceOff || !HasLinear) return null;
         n = n.Normalized();
+        Frame3? P1 = LinPlane1 != null && !PlaneRefOff ? planeOf?.Invoke(LinPlane1) ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"Hole: the reference plane '{LinPlane1}' is not found.") : null;
+        Frame3? P2 = LinPlane2 != null && !PlaneRefOff ? planeOf?.Invoke(LinPlane2) ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"Hole: the reference plane '{LinPlane2}' is not found.") : null;
+        bool any2 = P2 != null || LinRef2 != null;
+        bool arcs = !ArcRefOff;
+        if (arcs || P1 != null || P2 != null)
+        {
+            // k157: общий решатель — прямые и центры; у центра нормаль — от центра к текущей точке (несколько уточнений)
+            double d1v = LinD1.Resolve(pars), d2v = LinD2.Resolve(pars);
+            var x = p0;
+            for (int it = 0; it < 8; it++)
+            {
+                var q1r = RefOf(bodies, P1 != null ? null : LinRef1, P1, x, n, throwIfMissing: true)!.Value;
+                if (!any2) { var nx = x + q1r.M * (d1v - Vector3d.Dot(x - q1r.A, q1r.M)); if ((nx - x).Length < 1e-12) return nx; x = nx; continue; }
+                var q2r = RefOf(bodies, P2 != null ? null : LinRef2, P2, x, n, throwIfMissing: true)!.Value;
+                double cc = Vector3d.Dot(q1r.M, q2r.M);
+                double dt = 1 - cc * cc;
+                if (Math.Abs(dt) < 1e-9) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: the two references are parallel.");
+                double q1 = d1v - Vector3d.Dot(x - q1r.A, q1r.M), q2 = d2v - Vector3d.Dot(x - q2r.A, q2r.M);
+                double al = (q1 - cc * q2) / dt, be = (q2 - cc * q1) / dt;
+                var nxt = x + q1r.M * al + q2r.M * be;
+                bool done = (nxt - x).Length < 1e-12;
+                x = nxt;
+                if (done || !q1r.Centre && !q2r.Centre) return x;
+            }
+            return x;
+        }
         (Vector3d A, Vector3d Nrm)? Line(EdgeRef r)
         {
             var e = FilletOp.ResolveEdge(bodies, r, out var conflict);
@@ -269,7 +355,7 @@ public sealed class HoleFeature : Feature
         // k153: привязки положения — точка по рёбрам грани входа / по оси, углу и торцу цилиндра
         var qb = ctx.Bodies.Select(Kernel.Ops.InstantPreview.Query).ToList();
         if (RadialPlacement(qb, ctx.Parameters) is { } rp) { at = new List<Vector3d> { rp.P }; Direction = rp.Dir; }
-        else if (at.Count == 1 && LinearPlacement(qb, at[0], -Direction, ctx.Parameters) is { } lp) at[0] = lp;
+        else if (at.Count == 1 && LinearPlacement(qb, at[0], -Direction, ctx.Parameters, name => ctx.Planes.TryGetValue(name, out var fr) ? fr : name switch { "XY" => Frame3.XY, "XZ" => Frame3.XZ, "YZ" => Frame3.YZ, _ => null }) is { } lp) at[0] = lp;
         if (SketchId != 0 && ctx.FindSketch(SketchId) is { } sk)
             foreach (var p in sk.Entities.OfType<Sketching.SkPoint>())
                 at.Add(sk.Plane.ToWorld(new Vector2d(p.X, p.Y)));

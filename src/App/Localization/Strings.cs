@@ -1389,6 +1389,8 @@ public static class Strings
         ["Перезапустите Claude. Инструменты работают, пока Parametric3D открыт: дерево операций, параметры, массовые характеристики, снимок вида, правка значений (каждая — один шаг отмены)."] = "Restart Claude. The tools work while Parametric3D is open: build tree, parameters, mass properties, a picture of the view, editing values (each edit is one undo step).",
         ["Claude: {0}"] = "Claude: {0}",
         // k156 (D2–D5, открытие и сохранение)
+        ["От ребра или плоскости 1"] = "From edge or plane 1",
+        ["От ребра или плоскости 2"] = "From edge or plane 2",
         ["Расчёт закончен. Сохраните файл (Ctrl+S) — следующее открытие будет без перестроения."] = "The rebuild has finished. Save the file (Ctrl+S) — the next opening will be instant.",
         ["Размеры модели — только у чертежа детали"] = "Model dimensions — only in a part drawing",
         ["Перенесено размеров эскизов: {0}"] = "Sketch dimensions transferred: {0}",

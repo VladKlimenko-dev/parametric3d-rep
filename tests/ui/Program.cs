@@ -8661,7 +8661,7 @@ Check("UI-HOLE-K153", () =>
     var allE = part.Bodies[0].Faces.SelectMany(f => f.Edges).Distinct().ToList();
     double xmax = allE.Max(e => Math.Max(e.V0.P.X, e.V1.P.X)), ztop = allE.Max(e => e.V0.P.Z);
     var ex = allE.First(e => Math.Abs(e.V0.P.X - xmax) < 1e-6 && Math.Abs(e.V1.P.X - xmax) < 1e-6 && Math.Abs(e.V0.P.Z - ztop) < 1e-6 && Math.Abs(e.V1.P.Z - ztop) < 1e-6);
-    op.Panel.Refs.First(r => r.Label == "От ребра 1").Take(new[] { new PickRef(ex.Id, PickKind.Edge, part, null) }); op.FieldChanged(); BuildNow(s);
+    op.Panel.Refs.First(r => r.Label == "От ребра или плоскости 1").Take(new[] { new PickRef(ex.Id, PickKind.Edge, part, null) }); op.FieldChanged(); BuildNow(s);
     double dx = xmax - hf.Points[0].X;
     Console.WriteLine($"  edge ref: D1 {hf.LinD1.Value:0.###} vs {dx:0.###}");
     Require(hf.LinRef1 != null && Math.Abs(hf.LinD1.Value - dx) < 1e-3, "distance from the edge is not the current one");

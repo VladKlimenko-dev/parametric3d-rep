@@ -207,6 +207,34 @@ static partial class Program
         }
     }
 
+    /// <summary>k156: правка последней операции после открытия: время с состоянием из файла и объём против полного перестроения.</summary>
+    static void EditLast(string file, double factor)
+    {
+        var (p, pars) = DocumentFile.Load(File.ReadAllText(file));
+        if (!p.RestoredFromFile) p.Rebuild(pars);
+        string text = DocumentFile.Save(p, pars, withDisplay: true);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var (q, qp) = DocumentFile.Load(text);
+        Console.WriteLine($"open {sw.ElapsedMilliseconds} ms, restored {q.RestoredFromFile}, checkpoints {q.CheckpointCount}, file {text.Length / 1e6:0.0} MB");
+        int last = q.Features.Count - 1; while (last > 0 && q.Features[last].Suppressed) last--;
+        void Edit(Parametric3D.Model.Features.Feature f)
+        {
+            switch (f)
+            {
+                case Parametric3D.Model.Features.RoundFeature r: r.Radius = new Parametric3D.Model.Features.ValueRef(r.Radius.Value * factor); break;
+                case Parametric3D.Model.Features.ChamferFeature c: c.D1 = new Parametric3D.Model.Features.ValueRef(c.D1.Value * factor); c.D2 = new Parametric3D.Model.Features.ValueRef(c.D2.Value * factor); break;
+                default: throw new Exception("last feature: " + f.GetType().Name);
+            }
+        }
+        Edit(q.Features[last]); q.MarkDirtyFrom(q.Features[last]);
+        sw.Restart(); q.Rebuild(qp);
+        Console.WriteLine($"edit {q.Features[last].Name}: {sw.ElapsedMilliseconds} ms from {q.LastStartedAt}, volume {q.Volume:0.###}, error {q.Features[last].Error}");
+        var (r0, rp) = DocumentFile.Load(text);
+        Edit(r0.Features[last]); r0.MarkDirtyFrom(r0.Features[0]);
+        sw.Restart(); r0.Rebuild(rp);
+        Console.WriteLine($"full: {sw.ElapsedMilliseconds} ms, volume {r0.Volume:0.###}, error {r0.Features[last].Error}");
+    }
+
     static void StageTimes(string file)
     {
         var (p, pars) = DocumentFile.Load(File.ReadAllText(file));

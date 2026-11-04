@@ -492,11 +492,12 @@ public sealed class HoleOp : FeatureOp<HoleFeature>, IHandleOp
         p.Number("Угол зенковки", () => F.HeadAngle, v => F.HeadAngle = v, "°", visible: () => F.Kind == HoleKind.Countersink);
         // k153: положение — расстояния от двух рёбер грани входа (как «Linear» у Creo)
         p.Header("Положение");
-        _ref1 = p.Ref(new RefField { Label = "От ребра 1", Filter = PickFilter.Edges, Accept = r => r.Kind == PickKind.Edge, Single = true, Optional = true });
-        p.Number("Расстояние 1", () => F.LinD1, v => F.LinD1 = v, visible: () => F.LinRef1 != null || _ref1.Items.Count > 0);
-        _ref2 = p.Ref(new RefField { Label = "От ребра 2", Filter = PickFilter.Edges, Accept = r => r.Kind == PickKind.Edge, Single = true, Optional = true });
-        p.Number("Расстояние 2", () => F.LinD2, v => F.LinD2 = v, visible: () => F.LinRef2 != null || _ref2.Items.Count > 0);
-        if (Editing) { _ref1.Kept = F.LinRef1 != null ? 1 : 0; _ref2.Kept = F.LinRef2 != null ? 1 : 0; }
+        // k157: привязка — ребро (отрезок; дуга — от центра) или опорная плоскость
+        _ref1 = p.Ref(new RefField { Label = "От ребра или плоскости 1", Filter = PickFilter.Edges | PickFilter.Datums, Accept = r => r.Kind is PickKind.Edge or PickKind.DatumPlane, Single = true, Optional = true });
+        p.Number("Расстояние 1", () => F.LinD1, v => F.LinD1 = v, visible: () => F.LinRef1 != null || F.LinPlane1 != null || _ref1.Items.Count > 0);
+        _ref2 = p.Ref(new RefField { Label = "От ребра или плоскости 2", Filter = PickFilter.Edges | PickFilter.Datums, Accept = r => r.Kind is PickKind.Edge or PickKind.DatumPlane, Single = true, Optional = true });
+        p.Number("Расстояние 2", () => F.LinD2, v => F.LinD2 = v, visible: () => F.LinRef2 != null || F.LinPlane2 != null || _ref2.Items.Count > 0);
+        if (Editing) { _ref1.Kept = F.LinRef1 != null || F.LinPlane1 != null ? 1 : 0; _ref2.Kept = F.LinRef2 != null || F.LinPlane2 != null ? 1 : 0; }
     }
 
     protected override void SeedRefs() => Seed(_face, _pts);
@@ -534,23 +535,37 @@ public sealed class HoleOp : FeatureOp<HoleFeature>, IHandleOp
         bool newRef = false;
         if (_ref1.Touched)
         {
-            var e = _ref1.Items.Count > 0 && Part.FindEdge(_ref1.Items[0].Id) is { } e1 ? (EdgeRef?)EdgeRef.Of(e1) : null;
-            newRef |= !Equals(e, F.LinRef1); F.LinRef1 = e;
+            var (e, pl) = RefOfPick(_ref1);
+            newRef |= !Equals(e, F.LinRef1) || pl != F.LinPlane1; F.LinRef1 = e; F.LinPlane1 = pl;
         }
         if (_ref2.Touched)
         {
-            var e = _ref2.Items.Count > 0 && Part.FindEdge(_ref2.Items[0].Id) is { } e2 ? (EdgeRef?)EdgeRef.Of(e2) : null;
-            newRef |= !Equals(e, F.LinRef2); F.LinRef2 = e;
+            var (e, pl) = RefOfPick(_ref2);
+            newRef |= !Equals(e, F.LinRef2) || pl != F.LinPlane2; F.LinRef2 = e; F.LinPlane2 = pl;
         }
         if (newRef && F.Points.Count > 0) SyncDistances(F.Points[0]);
     }
 
-    /// <summary>Расстояния привязок — по точке (выбор ребра, гизмо).</summary>
+    /// <summary>k157: ребро или опорная плоскость из выбора поля привязки.</summary>
+    (EdgeRef? Edge, string? Plane) RefOfPick(RefField f)
+    {
+        if (f.Items.Count == 0) return (null, null);
+        var r = f.Items[0];
+        if (r.Kind == PickKind.DatumPlane && (r.Target as DatumPlane ?? r.Owner as DatumPlane) is { } dp) return (null, dp.Name);
+        return (Part.FindEdge(r.Id) is { } e ? EdgeRef.Of(e) : null, null);
+    }
+
+    /// <summary>k157: опорная плоскость детали по имени (для положения отверстия в окне операции).</summary>
+    Frame3? PlaneOf(string name) => Part.Children.OfType<DatumPlane>().FirstOrDefault(d => d.Name == name)?.Frame
+                                    ?? (name switch { "XY" => Frame3.XY, "XZ" => Frame3.XZ, "YZ" => Frame3.YZ, _ => null });
+
+    /// <summary>Расстояния привязок — по точке (выбор ребра или плоскости, гизмо).</summary>
     void SyncDistances(Vector3d at)
     {
         var bodies = Part.Bodies.ToList();
-        if (F.LinRef1 is { } r1 && HoleFeature.DistanceToEdgeLine(bodies, r1, at, FaceNormal) is { } d1) F.LinD1 = new ValueRef(Math.Round(d1, 3));
-        if (F.LinRef2 is { } r2 && HoleFeature.DistanceToEdgeLine(bodies, r2, at, FaceNormal) is { } d2) F.LinD2 = new ValueRef(Math.Round(d2, 3));
+        Frame3? p1 = F.LinPlane1 != null ? PlaneOf(F.LinPlane1) : null, p2 = F.LinPlane2 != null ? PlaneOf(F.LinPlane2) : null;
+        if ((F.LinRef1 != null || p1 != null) && HoleFeature.DistanceToRef(bodies, p1 != null ? null : F.LinRef1, p1, at, FaceNormal) is { } d1) F.LinD1 = new ValueRef(Math.Round(d1, 3));
+        if ((F.LinRef2 != null || p2 != null) && HoleFeature.DistanceToRef(bodies, p2 != null ? null : F.LinRef2, p2, at, FaceNormal) is { } d2) F.LinD2 = new ValueRef(Math.Round(d2, 3));
     }
 
     // ---------------------------------------------------------------- k153: ручка диаметра и гизмо положения
@@ -570,7 +585,7 @@ public sealed class HoleOp : FeatureOp<HoleFeature>, IHandleOp
         if (Math.Abs(n.Z) < 0.9) x = Vector3d.Cross(n, Vector3d.Cross(Vector3d.UnitZ, n)).Normalized();
         var y = Vector3d.Cross(n, x);
         var at = F.Points[0];
-        if (F.LinRef1 != null && F.LinearPlacement(Part.Bodies.ToList(), at, n, null) is { } lp) at = lp;
+        if (F.HasLinear && F.LinearPlacement(Part.Bodies.ToList(), at, n, null, PlaneOf) is { } lp) at = lp;
         return (at, x, y, n);
     }
 
@@ -590,7 +605,7 @@ public sealed class HoleOp : FeatureOp<HoleFeature>, IHandleOp
         if (_g0 is not { } g || F.Points.Count != 1) return;
         var at = _p0 + g.X * d.Delta.X + g.Y * d.Delta.Y;
         F.Points[0] = at; F.PointFaces.Clear();
-        if (F.LinRef1 != null || F.LinRef2 != null) SyncDistances(at);
+        if (F.LinRef1 != null || F.LinRef2 != null || F.LinPlane1 != null || F.LinPlane2 != null) SyncDistances(at);
         W.ViewPort.Gizmo = g with { Origin = at };
         GizmoValuesChanged();
     }

@@ -21,7 +21,10 @@ namespace Parametric3D.Kernel.Topology;
 public static class BrepFile
 {
     const int Magic = 0x42443350;   // «P3DB»
-    public const int FormatVersion = 2;   // k153: 2 — с многогранной точной формой
+    public const int FormatVersion = 3;   // k153: 2 — с многогранной точной формой; k156: 3 — фасеты по общим вершинам (2 читается)
+    /// <summary>k156: мутация P3D_BREPINDEXED=0 — фасеты тройками точек (вид 2, файл больше).</summary>
+    static readonly bool IndexedOff = Environment.GetEnvironmentVariable("P3D_BREPINDEXED") == "0";
+    [ThreadStatic] static int _readVersion;
     /// <summary>Мутация P3D_BREPFILE=0: тело в документ не пишется и из него не читается (прежнее).</summary>
     public static readonly bool Off = Environment.GetEnvironmentVariable("P3D_BREPFILE") == "0";
     /// <summary>Разбор: тел записано / прочитано / не записано (тип геометрии не поддержан).</summary>
@@ -42,7 +45,7 @@ public static class BrepFile
             using (var z = new DeflateStream(ms, CompressionLevel.Fastest, leaveOpen: true))
             using (var bw = new BinaryWriter(z))
             {
-                bw.Write(Magic); bw.Write(FormatVersion);
+                bw.Write(Magic); bw.Write(IndexedOff ? 2 : FormatVersion);
                 w.Emit(bw, bodies);
             }
             Interlocked.Add(ref Written, bodies.Count);
@@ -281,8 +284,20 @@ public static class BrepFile
                 {
                     f.Facets.EnsureFilled();
                     w.Write((byte)6); w.Write(f.Source != null ? _s[f.Source] : -1); V(w, f.FallbackNormal); w.Write(f.FromLoops);
-                    w.Write(f.Facets.Count);
-                    foreach (var (a, b, c) in f.Facets) { V(w, a); V(w, b); V(w, c); }
+                    if (IndexedOff)
+                    {
+                        w.Write(f.Facets.Count);
+                        foreach (var (a, b, c) in f.Facets) { V(w, a); V(w, b); V(w, c); }
+                        break;
+                    }
+                    // k156: вершины фасетов — один раз (у сетки грани каждая вершина — в ~6 треугольниках), треугольники — номерами;
+                    // точки те же до бита (словарь по точному значению)
+                    var idx = new Dictionary<Vector3d, int>(); var verts = new List<Vector3d>();
+                    int I(Vector3d q) { if (!idx.TryGetValue(q, out int k)) { k = verts.Count; idx[q] = k; verts.Add(q); } return k; }
+                    var tri = new int[f.Facets.Count * 3]; int t = 0;
+                    foreach (var (a, b, c) in f.Facets) { tri[t++] = I(a); tri[t++] = I(b); tri[t++] = I(c); }
+                    w.Write(verts.Count); foreach (var q in verts) V(w, q);
+                    w.Write(f.Facets.Count); foreach (int x in tri) w.Write(x);
                     break;
                 }
                 case OffsetSurface o: w.Write((byte)7); w.Write(_s[o.Base]); w.Write(o.Distance); break;
@@ -338,6 +353,36 @@ public static class BrepFile
     /// <summary>Выборка кривой по формуле: равномерно по параметру, вдвое гуще, пока кубическая вставка не сойдётся до 1e-7 мм (точность модели).</summary>
     static Vector3d[]? SampleProc(ProcCurve3 c)
     {
+        if (SampleReuseOff) return SampleProcOld(c);
+        // k156: середины, посчитанные для проверки уровня n, — это новые точки уровня 2n: каждая точка кривой считается один
+        // раз (прежде — заново на каждом уровне; запись лофта с фаской — 18.5 с, из них 7.7 с — 76800 вычислений хребта).
+        // Середины — все (без раннего выхода): они нужны следующему уровню. Мутация P3D_BREPSAMPLEREUSE=0.
+        int n = 256;
+        var pts = new Vector3d[n + 1];
+        for (int i = 0; i <= n; i++) pts[i] = c.PointAt(c.T0 + (c.T1 - c.T0) * i / n);
+        for (; n <= 65536; n *= 2)
+        {
+            var mids = new Vector3d[n];
+            double worst = 0;
+            for (int i = 0; i < n; i++)
+            {
+                mids[i] = c.PointAt(c.T0 + (c.T1 - c.T0) * (i + 0.5) / n);
+                worst = Math.Max(worst, (CatmullRom(pts, (i + 0.5) / n) - mids[i]).Length);
+            }
+            if (worst <= 1e-7) return pts;
+            if (n * 2 > 65536) break;
+            var next = new Vector3d[2 * n + 1];
+            for (int i = 0; i < n; i++) { next[2 * i] = pts[i]; next[2 * i + 1] = mids[i]; }
+            next[2 * n] = pts[n];
+            pts = next;
+        }
+        return null;
+    }
+
+    static readonly bool SampleReuseOff = Environment.GetEnvironmentVariable("P3D_BREPSAMPLEREUSE") == "0";
+
+    static Vector3d[]? SampleProcOld(ProcCurve3 c)
+    {
         for (int n = 256; n <= 65536; n *= 2)
         {
             var pts = new Vector3d[n + 1];
@@ -376,7 +421,8 @@ public static class BrepFile
         using var r = new BinaryReader(z);
         if (r.ReadInt32() != Magic) throw new InvalidDataException("not a body record");
         int ver = r.ReadInt32();
-        if (ver != FormatVersion) throw new InvalidDataException($"body record version {ver}");
+        if (ver != FormatVersion && ver != 2) throw new InvalidDataException($"body record version {ver}");
+        _readVersion = ver;
         int nc = r.ReadInt32(), ns = r.ReadInt32(), n2 = r.ReadInt32();
         var c3 = new ICurve3[nc]; var ss = new ISurface3[ns];
         while (true)
@@ -524,6 +570,16 @@ public static class BrepFile
             {
                 int src = r.ReadInt32(); var fn = V(r); bool fromLoops = r.ReadBoolean();
                 var f = new FacetedSurface(src >= 0 ? ss[src] : null, fn) { FromLoops = fromLoops };
+                if (_readVersion >= 3)
+                {
+                    int nv = r.ReadInt32(); var vs = new Vector3d[nv];
+                    for (int i = 0; i < nv; i++) vs[i] = V(r);
+                    int nt = r.ReadInt32();
+                    var tri3 = new List<(Vector3d, Vector3d, Vector3d)>(nt);
+                    for (int i = 0; i < nt; i++) tri3.Add((vs[r.ReadInt32()], vs[r.ReadInt32()], vs[r.ReadInt32()]));
+                    f.Facets.AddRange(tri3);
+                    return f;
+                }
                 int n = r.ReadInt32();
                 var tris = new List<(Vector3d, Vector3d, Vector3d)>(n);
                 for (int i = 0; i < n; i++) tris.Add((V(r), V(r), V(r)));

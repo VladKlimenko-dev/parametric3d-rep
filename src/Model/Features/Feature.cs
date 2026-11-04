@@ -125,6 +125,14 @@ public sealed class BuildContext
         public readonly Dictionary<TSolid, string> BodyNames;
         public readonly Dictionary<string, SubDCage> Cages;
 
+        /// <summary>k156: состояние из файла (тела, опорные плоскости, оси, точки, имена тел; без поверхностей и клеток FreeForm).</summary>
+        internal Snapshot(List<TSolid> bodies, Dictionary<string, Frame3> planes, Dictionary<string, (Vector3d, Vector3d)> axes,
+                          Dictionary<string, Vector3d> points, Dictionary<TSolid, string> bodyNames)
+        {
+            Bodies = bodies; Planes = planes; Axes = axes; Points = points; BodyNames = bodyNames;
+            Quilts = new(); Cages = new(); Warnings = 0;
+        }
+
         internal Snapshot(BuildContext c)
         {
             Cages = new Dictionary<string, SubDCage>(c.Cages);

@@ -56,6 +56,42 @@ static partial class Program
             Require(!r.RestoredFromFile && r.LoadNote == LoadNoteKind.CachedNoBodies, $"load note {r.LoadNote}");
         });
 
+        Check("KRN-FILE-CHECKPOINT-K156", () =>
+        {
+            // k156: СОСТОЯНИЕ ПЕРЕД ПОСЛЕДНЕЙ ОПЕРАЦИЕЙ В ДОКУМЕНТЕ. Деталь из 10 операций (выдавливания, вырезы, отверстия,
+            // скругления) записана и открыта (тело из файла); правка последней операции перестраивает только её (LastStartedAt =
+            // номер последней), объём — как при полном перестроении той же правки с начала. Мутация P3D_SAVECHECKPOINT=0 — с начала.
+            var p = Parametric3D.App.Diagnostics.TestParts.Realistic(3, 10); p.Rebuild(null);
+            string text = DocumentFile.Save(p, null, withDisplay: true);
+            var (q, qp) = DocumentFile.Load(text);
+            Require(q.RestoredFromFile, "not restored");
+            int last = q.Features.Count - 1;
+            while (last > 0 && q.Features[last].Suppressed) last--;
+            var lf = q.Features[last];
+            Log(new { test = "KRN-FILE-CHECKPOINT-K156", features = q.Features.Count, last = lf.GetType().Name, checkpoints = q.CheckpointCount, sizeMb = Math.Round(text.Length / 1e6, 2) });
+            // правка последней операции: подавить и вернуть — тот же итог; иначе — изменение числа
+            bool Edit(Parametric3D.Model.Features.Feature f)
+            {
+                switch (f)
+                {
+                    case Parametric3D.Model.Features.RoundFeature r: r.Radius = new Parametric3D.Model.Features.ValueRef(r.Radius.Value * 0.8); return true;
+                    case Parametric3D.Model.Features.ChamferFeature c: c.D1 = new Parametric3D.Model.Features.ValueRef(c.D1.Value * 0.8); c.D2 = new Parametric3D.Model.Features.ValueRef(c.D2.Value * 0.8); return true;
+                    case Parametric3D.Model.Features.ExtrudeFeature e: e.Side1.Distance = new Parametric3D.Model.Features.ValueRef(e.Side1.Distance.Value * 0.8); return true;
+                    case Parametric3D.Model.Features.HoleFeature h: h.Diameter = new Parametric3D.Model.Features.ValueRef(h.Diameter.Value * 0.8); return true;
+                }
+                return false;
+            }
+            Require(Edit(lf), "the last feature type is not edited by the check: " + lf.GetType().Name);
+            q.MarkDirtyFrom(lf); q.Rebuild(qp);
+            Log(new { test = "KRN-FILE-CHECKPOINT-K156", startedAt = q.LastStartedAt, executed = q.LastExecuted, volume = Math.Round(q.Volume, 4) });
+            Require(q.LastStartedAt == last, $"the edit rebuilt from feature {q.LastStartedAt}, want {last}");
+            // эталон: та же правка на детали, перестроенной с начала
+            var (r0, rp) = DocumentFile.Load(text);
+            Edit(r0.Features[last]); r0.MarkDirtyFrom(r0.Features[0]); r0.Rebuild(rp);
+            Require(Math.Abs(q.Volume - r0.Volume) < 1e-6 * Math.Max(1, r0.Volume) && q.Features.Count(f => f.Error != null) == r0.Features.Count(f => f.Error != null), $"volume {q.Volume} vs full {r0.Volume}");
+            Require(q.Bodies.Count == r0.Bodies.Count && q.Bodies.All(b => SolidValidator.Validate(b).IsValid), "bodies");
+        });
+
         Check("KRN-DRAW-DIMS-K156", () =>
         {
             var (body, c) = CubeWithHole();
