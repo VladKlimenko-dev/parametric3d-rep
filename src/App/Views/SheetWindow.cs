@@ -45,6 +45,8 @@ public sealed class SheetWindow : Window
     public Func<Part?>? FieldPart;
 
     readonly SheetCanvas _canvas = new();
+    /// <summary>Панель свойств (проверки: ширина).</summary>
+    public Control PropsHost { get; private set; } = null!;
     /// <summary>Поле листа (проверки).</summary>
     public SheetCanvas Canvas => _canvas;
     readonly StackPanel _props = new() { Spacing = 6, Margin = new Thickness(10) };
@@ -66,7 +68,10 @@ public sealed class SheetWindow : Window
         Width = 1200; Height = 820;
         this.Bind(BackgroundProperty, this.GetResourceObservable("P3.PanelBg"));
         var scroll = new Border { Child = _canvas, Background = new SolidColorBrush(Color.Parse("#5A5F66")) };
-        var right = new ScrollViewer { Content = _props, Width = kind == Mode.Bom ? 560 : 340 };
+        // k162: ширина панели свойств — перетаскиванием левого края
+        var right = new Border { Child = new ScrollViewer { Content = _props }, Width = kind == Mode.Bom ? 560 : 340, BorderThickness = new Thickness(1, 0, 0, 0), BorderBrush = new SolidColorBrush(Color.FromArgb(0x50, 0x80, 0x80, 0x80)), Background = Brushes.Transparent, Padding = new Thickness(PanelResize.Grip - 1, 0, 0, 0) };
+        PropsHost = right;
+        PanelResize.Attach(right, "sheet." + kind, 240, 1000);
         var dock = new DockPanel();
         DockPanel.SetDock(_ribbon, Dock.Top); dock.Children.Add(_ribbon);
         DockPanel.SetDock(_status, Dock.Bottom); dock.Children.Add(_status);
@@ -445,7 +450,8 @@ public sealed class SheetWindow : Window
         var r = OpenTK.Mathematics.Vector3d.Transform(f.Right, q); var u = OpenTK.Mathematics.Vector3d.Transform(f.Up, q);
         v.Dir = new ViewFrame(r.Normalized(), u.Normalized()).Encode();
         EnsureScene();
-        if (_input != null) _scene!.Rebuild(d, v.Name, _input.Bodies, coarse ? 0.2 : 0.02);
+        // k162: при ведении мышью — быстрый вид (рёбра без скрытия), точный — после отпускания (Up)
+        if (_input != null) { if (coarse) _scene!.RebuildFast(d, v.Name, _input.Bodies); else _scene!.Rebuild(d, v.Name, _input.Bodies); }
         Dirty = true;
     }
 
@@ -1160,11 +1166,16 @@ public sealed class SheetWindow : Window
         // k159: положения видов из файла чертежа сохраняются; место получают только виды с X = Y = 0, и только когда у них
         // есть линии (Layout) — прежде раскладка сбрасывалась при каждом построении после пустого (перенос пользователя терялся)
         _input = Input();
+        _partFields = null;
         _projSig = DrawingInput.Signature(_input.Bodies);
         d.ModelUnits = _input.Part?.Units.Length ?? "mm";
         _scene = DrawingScene.Build(d, _input.Bodies, _input.Items, _input.Colors);
         if (_scene.Problems.Count > 0) _status.Text = string.Join("; ", _scene.Problems.Take(2));
     }
+
+    /// <summary>Разбор скорости: время последнего вывода листа — виды, поля надписи, сборка листа (мс).</summary>
+    public (double Scene, double Fields, double Compose) LastTimes { get; private set; }
+    FieldSource? _partFields;
 
     public List<SheetGraphics> BuildPages()
     {
@@ -1172,9 +1183,16 @@ public sealed class SheetWindow : Window
         if (Kind == Mode.Drawing)
         {
             var d = Drawing!; d.Template = Template;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             EnsureScene();
-            var fs = _input?.Part != null ? FieldSource.FromPart(_input.Part) : FieldValues();
-            return new List<SheetGraphics> { d.Compose(_scene!, fs) };
+            double tScene = sw.Elapsed.TotalMilliseconds;
+            // k162: поля надписи модели (масса — объём тел по сетке, около 400 мс у детали пользователя) — один раз на вход
+            // чертежа; прежде — при каждом выводе листа, то есть на каждом шаге переноса (около 3 кадров в секунду)
+            var fs = _input?.Part != null ? (_partFields ??= FieldSource.FromPart(_input.Part)) : FieldValues();
+            double tFields = sw.Elapsed.TotalMilliseconds - tScene;
+            var g = d.Compose(_scene!, fs);
+            LastTimes = (tScene, tFields, sw.Elapsed.TotalMilliseconds - tScene - tFields);
+            return new List<SheetGraphics> { g };
         }
         return new List<SheetGraphics> { SheetLayout.Compose(Template, FieldValues()) };
     }

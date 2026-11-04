@@ -159,6 +159,25 @@ public sealed class DrawingScene
         return sc;
     }
 
+    /// <summary>
+    /// k162: быстрый вид при повороте мышью: рёбра тел (точки рёбер — из кэша) в новой проекции без скрытия линий, тона — из
+    /// кэша сетки. Полный вид (скрытие, очерки, оси) — Rebuild после отпускания мыши. Прежде каждый шаг поворота строил вид
+    /// полностью (около 350 мс на детали пользователя).
+    /// </summary>
+    public void RebuildFast(DrawingDocument d, string view, IReadOnlyList<TSolid> bodies)
+    {
+        var v = d.Views.FirstOrDefault(x => x.Name == view);
+        if (v == null || v.IsDetail || v.IsSection) return;
+        var frame = ViewFrame.Of(d.DirOf(v));
+        var lines = new List<ViewLine>();
+        for (int bi = 0; bi < bodies.Count; bi++)
+            foreach (var pts in ViewProjection.EdgePoints(bodies[bi]))
+                lines.Add(new ViewLine(pts.Select(frame.Project).ToList(), true, ViewLineKind.Edge, 0, bi));
+        Lines[view] = lines;
+        Axes[view] = new(); Arcs[view] = new();
+        if (v.Style is "shaded" or "shadedlines" or "material") Shades[view] = ShadeTriangles(bodies, frame);
+    }
+
     /// <summary>k161: пересчитать один вид (поворот изометрии, стиль): линии, оси, дуги, тона; выносные элементы — заново.</summary>
     public void Rebuild(DrawingDocument d, string view, IReadOnlyList<TSolid> bodies, double chord = 0.02)
     {
@@ -196,7 +215,7 @@ public sealed class DrawingScene
         var light = (f.Toward * 0.8 + f.Up * 0.45 + f.Right * 0.25).Normalized();
         for (int bi = 0; bi < bodies.Count; bi++)
         {
-            var m = Parametric3D.Kernel.Tess.Tessellator.Tessellate(bodies[bi]);
+            var m = ViewProjection.MeshOf(bodies[bi]);
             for (int t = 0; t + 2 < m.Indices.Length; t += 3)
             {
                 Vector3d a = (Vector3d)m.Vertices[m.Indices[t]].P, b = (Vector3d)m.Vertices[m.Indices[t + 1]].P, c = (Vector3d)m.Vertices[m.Indices[t + 2]].P;

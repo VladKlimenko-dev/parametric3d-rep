@@ -194,7 +194,7 @@ public static class UiLook
     public static double TreeIconPx => Math.Clamp(L.TreeIconPx, 10, 32);
     public static double TreeRowPx => Math.Clamp(L.TreeRowPx, 16, 48);
     public static double TreePanelPx => Math.Clamp(L.TreePanelPx, 160, 600);
-    public static double PropsPanelPx => Math.Clamp(L.PropsPanelPx, 220, 600);
+    public static double PropsPanelPx => Math.Clamp(L.PropsPanelPx, 220, 900);   // k162: до 900 (ширина — и перетаскиванием края)
     public static double PropsFontSize => L.PropsFontSize > 0 ? Math.Clamp(L.PropsFontSize, 9, 22) : UiFontSize;
     public static double HandleLengthPx => Math.Clamp(L.HandleLengthPx, 30, 200);
     public static double HandleKnobPx => Math.Clamp(L.HandleKnobPx, 6, 32);

@@ -1101,6 +1101,9 @@ public partial class MainWindow : Window
     public Parametric3D.App.Viewport.ViewCube CubeControl => Cube;
     public double TreeColumnWidth => WorkArea.ColumnDefinitions[0].Width.Value;
     public double PropsPanelWidth => PropsPanel.Width;
+    bool _propsResizeHooked;
+    /// <summary>Панель свойств (проверки: ширина перетаскиванием края).</summary>
+    public Control PropsPanelControl => PropsPanel;
     public static readonly bool PanelLookOff = Environment.GetEnvironmentVariable("P3D_PANELLOOK") == "0";
     /// <summary>
     /// k132 (замечание 28.10, 23:42, пп. 10, 12): куб вида (с кнопкой «Домой»), дерево модели (текст, значки, высота строки,
@@ -1108,6 +1111,12 @@ public partial class MainWindow : Window
     /// </summary>
     public void ApplyPanelLook()
     {
+        // k162 (просьба 05.11, 08:31): ширина панели свойств — перетаскиванием её левого края; запоминается в настройках
+        if (!_propsResizeHooked)
+        {
+            _propsResizeHooked = true;
+            PanelResize.Attach(PropsPanel, "main.props", 220, 900, w => { UserPrefs.Current.Look.PropsPanelPx = w; try { UserPrefs.Current.Save(); } catch { } });
+        }
         Cube.SetSize(UiLook.ViewCubePx);
         if (PanelLookOff) { Resources["P3.TreeIconPx"] = 16.0; Resources["P3.TreeRowPx"] = 24.0; return; }
         Resources["P3.TreeIconPx"] = UiLook.TreeIconPx;

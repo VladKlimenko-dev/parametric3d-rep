@@ -213,7 +213,7 @@ public static class SettingsDialog
 
         // ================================================================ Панель свойств
         section = "props";
-        Slider("Ширина панели свойств, пикс.", l => l.PropsPanelPx, (l, v) => l.PropsPanelPx = v, 220, 600, 10);
+        Slider("Ширина панели свойств, пикс.", l => l.PropsPanelPx, (l, v) => l.PropsPanelPx = v, 220, 900, 10);
         Slider("Размер текста панели (0 — как интерфейс)", l => l.PropsFontSize, (l, v) => l.PropsFontSize = v, 0, 22, 1);
 
         // ================================================================ Управление операциями

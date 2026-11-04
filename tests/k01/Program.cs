@@ -597,6 +597,7 @@ static partial class Program
         if (mode is "drawing158" or "allB") Drawing158Checks();
         if (mode is "drawing159" or "allB") Drawing159Checks();
         if (mode is "drawing161" or "allB") Drawing161Checks();
+        if (mode is "drawing162" or "allB") Drawing162Checks();
         if (mode is "blend160" or "allB") Blend160Checks();
         if (mode is "brephist") { BrepHist(args.Skip(1)); return; }
         if (mode is "ovfdiag") { OvfDiag(args[1], args[2]); return; }

@@ -96,6 +96,8 @@ public static class ViewProjection
     static readonly bool FullTurnOff = Environment.GetEnvironmentVariable("P3D_AXISFULLTURN") == "0";
     static readonly bool SharedOff = Environment.GetEnvironmentVariable("P3D_HLRSHARED") == "0";
     static readonly bool DedupOff = Environment.GetEnvironmentVariable("P3D_HLRDEDUP") == "0";
+    static readonly bool SkipNearOff = Environment.GetEnvironmentVariable("P3D_HLRSKIPNEAR") == "0";
+    static readonly bool SeamSilOff = Environment.GetEnvironmentVariable("P3D_HLRSEAMSIL") == "0";
     /// <summary>Разбор: точек, проверенных на видимость.</summary>
     public static long VisibilityTests;
 
@@ -139,11 +141,26 @@ public static class ViewProjection
             foreach (int i in cell)
             {
                 var t = Tris[i];
-                if (t.Face == skipA || t.Face == skipB) continue;
+                bool own = t.Face == skipA || t.Face == skipB;
+                if (own && SkipNearOff) continue;
+                // k161 (замечание 05.11, 01:23, п. 8): своя грань ребра закрывает его, если она перед ним на глубину больше 3 %
+                // габарита (ребро кармана на задней стороне трубы — за передней стороной той же цилиндрической грани).
+                // У очерка своя грань по сетке «перед» точкой на корень из прогиба (у R92 при прогибе 0.05 — около 3 мм): такие
+                // не закрывают. Прежде своя грань пропускалась целиком: ребро за ней рисовалось видимым. Мутация
+                // P3D_HLRSKIPNEAR=0 — прежнее.
                 if (!Inside(t, p.X, p.Y, out double z)) continue;
-                if (z > p.Z + Eps) return true;
+                if (z > p.Z + (own ? 150 * Eps : Eps)) return true;
             }
             return false;
+        }
+
+        /// <summary>Точка ближе d к габариту треугольника (в пространстве вида).</summary>
+        static bool Near(Tri t, Vector3d p, double d)
+        {
+            double dx = Math.Max(0, Math.Max(Math.Min(t.A.X, Math.Min(t.B.X, t.C.X)) - p.X, p.X - Math.Max(t.A.X, Math.Max(t.B.X, t.C.X))));
+            double dy = Math.Max(0, Math.Max(Math.Min(t.A.Y, Math.Min(t.B.Y, t.C.Y)) - p.Y, p.Y - Math.Max(t.A.Y, Math.Max(t.B.Y, t.C.Y))));
+            double dz = Math.Max(0, Math.Max(Math.Min(t.A.Z, Math.Min(t.B.Z, t.C.Z)) - p.Z, p.Z - Math.Max(t.A.Z, Math.Max(t.B.Z, t.C.Z))));
+            return dx * dx + dy * dy + dz * dz < d * d;
         }
 
         static bool Inside(Tri t, double x, double y, out double z)
@@ -173,7 +190,7 @@ public static class ViewProjection
     /// </summary>
     public static List<ViewLine> ProjectMany(IReadOnlyList<TSolid> bodies, ViewFrame view, double chord = 0.02, bool silhouettes = true)
     {
-        var meshes = bodies.Select(b => Tessellator.Tessellate(b)).ToList();
+        var meshes = bodies.Select(MeshOf).ToList();
         // мутация P3D_HLRSHARED=0: у каждого тела своя сцена (деталь не закрывает деталь)
         if (SharedOff && bodies.Count > 1)
         {
@@ -199,6 +216,10 @@ public static class ViewProjection
                 var faces = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
                 uint fa = faces.Count > 0 ? faces[0].Id : uint.MaxValue, fb = faces.Count > 1 ? faces[1].Id : uint.MaxValue;
                 var kind = faces.Count == 2 && Smooth(e, faces[0], faces[1]) ? ViewLineKind.Tangent : ViewLineKind.Edge;
+                // k161 (п. 7): гладкий стык граней, лежащий на очерке (нормаль поперёк взгляда: шов цилиндра у края вида), —
+                // это очерк, а не линия перехода; очерк сетки у такого шва выпадает (нуль n·w — в вершинах), и край вида
+                // оставался с разрывом. Мутация P3D_HLRSEAMSIL=0 — прежнее (линия перехода, не показывается).
+                if (kind == ViewLineKind.Tangent && !SeamSilOff && OnOutline(e, faces[0], view.Toward)) kind = ViewLineKind.Edge;   // как ребро: очерк сетки рядом — повтор (DropCovered)
                 var pts = Sample(e, chord);
                 Split(sc, view, pts, fa, fb, kind, e.Id, res);
             }
@@ -295,6 +316,17 @@ public static class ViewProjection
         return res;
     }
 
+    /// <summary>
+    /// k162: сетка тела для чертежа — один раз на тело (тела входа чертежа не меняются; новая модель — новые тела). Прежде
+    /// каждый вид, тона и масса строили сетку заново.
+    /// </summary>
+    public static MeshData MeshOf(TSolid b) => MeshCache.GetValue(b, x => Tessellator.Tessellate(x));
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, MeshData> MeshCache = new();
+
+    /// <summary>k162: точки рёбер тела (для быстрого вида при повороте), кэш на тело.</summary>
+    public static List<List<Vector3d>> EdgePoints(TSolid b) => EdgeCache.GetValue(b, x => x.Edges.Where(e => e.Curve != null).Select(e => Sample(e, 0.2)).ToList());
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, List<List<Vector3d>>> EdgeCache = new();
+
     /// <summary>Ребро гладкого стыка: нормали граней у трёх точек ребра совпадают (угол меньше ~1°).</summary>
     static bool Smooth(TEdge e, TFace a, TFace b)
     {
@@ -305,6 +337,19 @@ public static class ViewProjection
             try { na = a.NormalAt(p); nb = b.NormalAt(p); } catch { return false; }
             if (na.LengthSquared < 1e-24 || nb.LengthSquared < 1e-24) return false;
             if (Vector3d.Dot(na.Normalized(), nb.Normalized()) < 0.99985) return false;
+        }
+        return true;
+    }
+
+    /// <summary>Ребро на очерке: нормаль грани в трёх точках ребра поперёк взгляда.</summary>
+    static bool OnOutline(TEdge e, TFace f, Vector3d w)
+    {
+        for (int k = 1; k <= 3; k++)
+        {
+            var p = e.Curve!.PointAt(e.Curve.T0 + (e.Curve.T1 - e.Curve.T0) * k / 4.0);
+            Vector3d n;
+            try { n = f.NormalAt(p); } catch { return false; }
+            if (n.LengthSquared < 1e-24 || Math.Abs(Vector3d.Dot(n.Normalized(), w)) > 2e-3) return false;
         }
         return true;
     }

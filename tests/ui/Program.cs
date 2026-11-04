@@ -8696,6 +8696,74 @@ Check("UI-HOLE-K153", () =>
     w2.CommitOperation(); w2.Close();
 });
 
+// k162: разбор скорости окна чертежа на файле (P3D_DIAGSHEET=<файл .p3d>): перенос вида, размера, поворот изометрии —
+// время шага, вывода листа (виды, поля, сборка) и отрисовки листа Skia в кадр 1600×1000.
+if (Environment.GetEnvironmentVariable("P3D_DIAGSHEET") is { Length: > 0 } diagSheet)
+Check("UI-DIAG-SHEET", () =>
+{
+    var (dp, dpars) = DocumentFile.Load(File.ReadAllText(diagSheet));
+    if (!dp.RestoredFromFile) dp.Rebuild(dpars);
+    var sp = DocumentSession.FromPart(dp, "diag"); var w = Open(sp); BuildNow(sp);
+    var t = DrawingCommands.NewDrawing(w);
+    while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+    var dw = t.Result!; var d = dw.Drawing!;
+    double Draw()
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var surf = SkiaSharp.SKSurface.Create(new SkiaSharp.SKImageInfo(1600, 1000));
+        Parametric3D.App.Services.Drawing.SheetRender.Draw(surf.Canvas, dw.Pages[0], 3.5f);
+        surf.Canvas.Flush();
+        return sw.Elapsed.TotalMilliseconds;
+    }
+    void Run(string what, Action<int> step, int n = 15)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew(); double sc = 0, fi = 0, co = 0, dr = 0;
+        for (int i = 1; i <= n; i++) { step(i); Dispatcher.UIThread.RunJobs(); sc += dw.LastTimes.Scene; fi += dw.LastTimes.Fields; co += dw.LastTimes.Compose; dr += Draw(); }
+        Console.WriteLine($"  {what}: step {sw.Elapsed.TotalMilliseconds / n:0.#} ms (incl. draw), scene {sc / n:0.#}, fields {fi / n:0.#}, compose {co / n:0.#}, draw {dr / n:0.#}; lines {dw.Pages[0].Polylines.Count}, points {dw.Pages[0].Polylines.Sum(q => q.Points.Count)}, texts {dw.Pages[0].Texts.Count}");
+    }
+    var fv = d.Views.First(v => v.Name == "front");
+    dw.Down(fv.X, fv.Y); Run("view drag", i => dw.MoveTo(fv.X + 1, fv.Y)); dw.Up();
+    dw.Change(() => d.AutoDimensions(dw.Scene!));
+    var dim = d.Dims[0]; var seg = d.Hit[dim].First();
+    double mx = (seg.X1 + seg.X2) / 2, my = (seg.Y1 + seg.Y2) / 2;
+    dw.Down(mx, my); Run("dim drag", i => dw.MoveTo(mx, my - i)); dw.Up();
+    var iso = d.Views.First(v => v.Name == "iso");
+    Run("iso rotate", i => dw.RotateView(iso, 2, 1, coarse: true), 15);
+    { var sw2 = System.Diagnostics.Stopwatch.StartNew(); for (int i = 0; i < 10; i++) dw.Scene!.RebuildFast(d, "iso", dp.Bodies); Console.WriteLine($"  RebuildFast {sw2.Elapsed.TotalMilliseconds / 10:0.#} ms"); }
+    { var sw2 = System.Diagnostics.Stopwatch.StartNew(); for (int i = 0; i < 10; i++) dw.RotateView(iso, 1, 0, coarse: true); Console.WriteLine($"  RotateView {sw2.Elapsed.TotalMilliseconds / 10:0.#} ms"); }
+    { var sw2 = System.Diagnostics.Stopwatch.StartNew(); for (int i = 0; i < 10; i++) dw.Refresh(); Console.WriteLine($"  Refresh {sw2.Elapsed.TotalMilliseconds / 10:0.#} ms"); }
+    Run("hover", i => dw.MoveTo(fv.X + i, fv.Y));
+    dw.Close(); w.Close();
+});
+
+// k162 (просьба 05.11, 08:31): ширина панели свойств — перетаскиванием левого края мышью (окно модели и окно чертежа);
+// в окне модели ширина записывается в настройки.
+Check("UI-PANEL-RESIZE-K162", () =>
+{
+    var s = DocumentSession.Sample(); var w = Open(s);
+    CommandRegistry.Instance["op.extrude"].Execute(); Dispatcher.UIThread.RunJobs();
+    var pp = w.PropsPanelControl;
+    Require(pp.IsVisible, "properties panel shown");
+    double w0 = pp.Bounds.Width;
+    var edge = pp.TranslatePoint(new Point(2, 120), w)!.Value;
+    w.MouseMove(edge); w.MouseDown(edge, MouseButton.Left); Dispatcher.UIThread.RunJobs();
+    w.MouseMove(edge - new Point(80, 0)); Dispatcher.UIThread.RunJobs();
+    w.MouseUp(edge - new Point(80, 0), MouseButton.Left); Dispatcher.UIThread.RunJobs();
+    Console.WriteLine($"  main props: {w0:0} -> {pp.Width:0}, saved {UserPrefs.Current.Look.PropsPanelPx:0}");
+    Require(Math.Abs(pp.Width - (w0 + 80)) < 1.5 && Math.Abs(UserPrefs.Current.Look.PropsPanelPx - pp.Width) < 1e-9, "the properties panel widened by dragging its edge");
+    w.CancelOperation();
+    var t = DrawingCommands.NewDrawing(w);
+    while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+    var dw = t.Result!; dw.Show(); Dispatcher.UIThread.RunJobs();
+    var ph = dw.PropsHost; double s0 = ph.Bounds.Width;
+    var e2 = ph.TranslatePoint(new Point(2, 100), dw)!.Value;
+    dw.MouseMove(e2); dw.MouseDown(e2, MouseButton.Left); dw.MouseMove(e2 + new Point(60, 0)); dw.MouseUp(e2 + new Point(60, 0), MouseButton.Left); Dispatcher.UIThread.RunJobs();
+    Console.WriteLine($"  sheet props: {s0:0} -> {ph.Width:0}");
+    Require(Math.Abs(ph.Width - (s0 - 60)) < 1.5, "the drawing properties panel narrowed by dragging its edge");
+    UserPrefs.Current.Look.PropsPanelPx = 300; UserPrefs.Current.Save(); w.ApplyPanelLook();
+    dw.Close(); w.Close();
+});
+
 // k161 (замечания 05.11, 01:23): виды чертежа называются как виды окна модели (оси экрана те же); перенос вида — свободно
 // с притяжением и линиями-подсказками; изометрия — поворот кольцом и «Домой»; отображение «Тона»; меню размера (радиус ↔
 // диаметр, стрелки); перенос точки привязки базы; перенос размера не перестраивает остальные.
@@ -8766,6 +8834,15 @@ Check("UI-DRAWING-K161", () =>
         bool same = d.Dims.Skip(1).Select(x => (x.Offset, x.Y2)).SequenceEqual(others);
         Console.WriteLine($"  dim drag {perStep:0.#} ms/step, others unchanged {same}");
         Require(same, "moving one dimension re-placed the others");
+        // k162: шаг переноса не считает поля надписи заново (масса по сетке — сотни мс), поворот мышью — быстрый вид
+        Require(dw.LastTimes.Fields < 1, $"title block fields recomputed on a drag step: {dw.LastTimes.Fields:0.#} ms");
+        var isoV = d.Views.First(v => v.Name == "iso");
+        dw.RotateView(isoV, 1, 0, coarse: true);
+        var swr = System.Diagnostics.Stopwatch.StartNew(); for (int i = 0; i < 10; i++) dw.RotateView(isoV, 1, 0, coarse: true);
+        double rotMs = swr.Elapsed.TotalMilliseconds / 10;
+        Console.WriteLine($"  iso rotate step {rotMs:0.##} ms");
+        Require(rotMs < 20, $"iso rotation step {rotMs:0.#} ms");
+        dw.HomeView(isoV);
         var rad = d.Dims.FirstOrDefault(x => x.Kind == "rad");
         if (rad != null)
         {
