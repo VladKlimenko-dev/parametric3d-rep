@@ -1,0 +1,113 @@
+using Parametric3D.Model.Drawing;
+using SkiaSharp;
+
+namespace Parametric3D.App.Services.Drawing;
+
+/// <summary>
+/// k155 (D1): ВЫВОД ЛИСТА — одни и те же примитивы (SheetGraphics) рисуются в PDF (вектор, SKDocument) и в картинку для окна
+/// листа. Шрифт — ГОСТ тип А (GOST_A.TTF, встроен в сборку); высота шрифта по ГОСТ 2.304 — высота прописной буквы, размер
+/// шрифта подбирается по метрике CapHeight. Толщины линий — ГОСТ 2.303 (0.7 и 0.25 мм).
+/// </summary>
+public static class SheetRender
+{
+    public const float PtPerMm = 72f / 25.4f;
+    static SKTypeface? _gost;
+    /// <summary>Разбор: страниц PDF записано.</summary>
+    public static long PdfPages;
+
+    public static SKTypeface Gost
+    {
+        get
+        {
+            if (_gost != null) return _gost;
+            var asm = typeof(SheetRender).Assembly;
+            using var s = asm.GetManifestResourceStream("GOST_A.TTF");
+            _gost = s != null ? SKTypeface.FromStream(s) : null;
+            _gost ??= SKTypeface.Default;
+            return _gost;
+        }
+    }
+
+    /// <summary>Отношение высоты прописной к размеру шрифта (ГОСТ тип А — около 0.7).</summary>
+    static float CapRatio()
+    {
+        using var f = new SKFont(Gost, 100);
+        float cap = f.Metrics.CapHeight;
+        return cap > 1 ? cap / 100f : 0.7f;
+    }
+
+    /// <summary>Рисует лист на холсте: масштаб — единиц холста на мм; начало холста — левый верхний угол листа.</summary>
+    public static void Draw(SKCanvas c, SheetGraphics g, float scale, bool white = true)
+    {
+        if (white) c.DrawRect(0, 0, (float)g.Width * scale, (float)g.Height * scale, new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill });
+        float Y(double y) => (float)((g.Height - y) * scale);
+        using var thick = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = (float)LineWidths.Thick * scale, IsAntialias = true, StrokeCap = SKStrokeCap.Square };
+        using var thin = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = (float)LineWidths.Thin * scale, IsAntialias = true, StrokeCap = SKStrokeCap.Butt };
+        foreach (var l in g.Lines.OrderBy(l => l.Kind))
+            c.DrawLine((float)l.X1 * scale, Y(l.Y1), (float)l.X2 * scale, Y(l.Y2), l.Kind == LineKind.Thick ? thick : thin);
+        // ломаные видов: штрихи — по всей ломаной (ГОСТ 2.303)
+        foreach (var grp in g.Polylines.GroupBy(p => p.Kind))
+        {
+            var dash = LineWidths.Dash(grp.Key);
+            using var paint = new SKPaint
+            {
+                Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = (float)LineWidths.Of(grp.Key) * scale, IsAntialias = true,
+                StrokeCap = SKStrokeCap.Round, StrokeJoin = SKStrokeJoin.Round,
+                PathEffect = dash != null ? SKPathEffect.CreateDash(dash.Select(d => (float)d * scale).ToArray(), 0) : null,
+            };
+            foreach (var pl in grp)
+            {
+                if (pl.Points.Count < 2) continue;
+                using var path = new SKPath();
+                path.MoveTo((float)pl.Points[0].X * scale, Y(pl.Points[0].Y));
+                for (int i = 1; i < pl.Points.Count; i++) path.LineTo((float)pl.Points[i].X * scale, Y(pl.Points[i].Y));
+                c.DrawPath(path, paint);
+            }
+        }
+        float ratio = CapRatio();
+        using var ink = new SKPaint { Color = SKColors.Black, IsAntialias = true };
+        foreach (var t in g.Texts)
+        {
+            if (string.IsNullOrEmpty(t.Text)) continue;
+            using var font = new SKFont(Gost, (float)(t.Height / ratio) * scale);
+            var al = t.Align switch { TextAlign.Center => SKTextAlign.Center, TextAlign.Right => SKTextAlign.Right, _ => SKTextAlign.Left };
+            c.Save();
+            c.Translate((float)t.X * scale, Y(t.Y));
+            if (t.Angle != 0) c.RotateDegrees((float)-t.Angle);
+            c.DrawText(t.Text, 0, 0, al, font, ink);
+            c.Restore();
+        }
+    }
+
+    /// <summary>Векторный PDF: страница на лист, размер страницы — размер листа.</summary>
+    public static void WritePdf(Stream output, IEnumerable<SheetGraphics> pages, string title = "")
+    {
+        var meta = new SKDocumentPdfMetadata { Title = title, Creator = "Parametric3D", Producer = "Parametric3D", RasterDpi = 300 };
+        using var doc = SKDocument.CreatePdf(output, meta) ?? throw new InvalidOperationException("PDF backend is not available");
+        foreach (var g in pages)
+        {
+            var c = doc.BeginPage((float)g.Width * PtPerMm, (float)g.Height * PtPerMm);
+            Draw(c, g, PtPerMm, white: false);
+            doc.EndPage();
+            Interlocked.Increment(ref PdfPages);
+        }
+        doc.Close();
+    }
+
+    public static void WritePdf(string path, IEnumerable<SheetGraphics> pages, string title = "")
+    {
+        using var fs = File.Create(path);
+        WritePdf(fs, pages, title);
+    }
+
+    /// <summary>Картинка листа (PNG) для окна: pxPerMm точек на мм.</summary>
+    public static byte[] RenderPng(SheetGraphics g, float pxPerMm)
+    {
+        int w = Math.Max(1, (int)Math.Ceiling(g.Width * pxPerMm)), h = Math.Max(1, (int)Math.Ceiling(g.Height * pxPerMm));
+        using var bmp = new SKBitmap(w, h);
+        using (var c = new SKCanvas(bmp)) Draw(c, g, pxPerMm);
+        using var img = SKImage.FromBitmap(bmp);
+        using var data = img.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
+    }
+}

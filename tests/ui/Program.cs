@@ -8846,6 +8846,120 @@ Check("UI-MCP-K154", () =>
     }
 });
 
+// k155 (D1): ШАБЛОН ЛИСТА И ПЕРЕЧЕНЬ. Окно шаблона: A4 → A3 альбомный, ЕСКД, форма 1, поле «Обозначение» вручную и масса из
+// свойств детали; запись .p3dtpl и чтение. Перечень из открытой сборки: 3 одинаковых кубика — одна строка «3», правка строки
+// и удаление переживают «Обновить по модели»; запись .p3dbom и открытие. PDF: заголовок %PDF, страниц — по листам, шрифт ГОСТ
+// встроен (FontFile2), размер страницы A3 альбомной — 1190.55×841.89 pt.
+Check("UI-SHEET-K155", () =>
+{
+    var dir = Path.Combine(Path.GetTempPath(), $"p3d_sheet_{Guid.NewGuid():N}"); Directory.CreateDirectory(dir);
+    var sp = DocumentSession.FromPart(CubePart("Плита", 30), "sheet"); var wp = Open(sp); BuildNow(sp);
+    sp.Part!.Info.Code = "АБВГ.300100.001";
+    var tw = DrawingCommands.NewTemplate(wp);
+    try
+    {
+        tw.Change(() => { tw.Template.Format = "A3"; tw.Template.Landscape = true; tw.Template.Values[Parametric3D.Model.Drawing.Fields.Name] = "Плита опорная"; });
+        var g = tw.Pages.Single();
+        Require(Math.Abs(g.Width - 420) < 1e-9 && Math.Abs(g.Height - 297) < 1e-9, $"A3 landscape: {g.Width}x{g.Height}");
+        Require(g.Texts.Any(t => t.Field == Parametric3D.Model.Drawing.Fields.Designation && t.Text == "АБВГ.300100.001"), "designation from the part properties");
+        Require(g.Texts.Any(t => t.Field == Parametric3D.Model.Drawing.Fields.Name && t.Text == "Плита опорная"), "manual name");
+        Require(g.Texts.Any(t => t.Field == Parametric3D.Model.Drawing.Fields.Mass && t.Text.Length > 0), "mass from the part");
+        if (Environment.GetEnvironmentVariable("SHEETDUMP") is { } dump) File.WriteAllBytes(Path.Combine(dump, "a3.png"), Parametric3D.App.Services.Drawing.SheetRender.RenderPng(g, 4));
+        var tpath = Path.Combine(dir, "a3" + SheetWindow.TemplateExt);
+        tw.SaveTo(tpath);
+        var tw2 = SheetWindow.OpenFile(tpath);
+        Require(tw2.Template.Format == "A3" && tw2.Template.Landscape && tw2.Template.Values[Parametric3D.Model.Drawing.Fields.Name] == "Плита опорная", "template reopen");
+        tw2.Close();
+        var pdf = Path.Combine(dir, "a3.pdf");
+        Parametric3D.App.Services.Drawing.SheetRender.WritePdf(pdf, tw.BuildPages(), "a3");
+        var bytes = File.ReadAllBytes(pdf); var txt = System.Text.Encoding.Latin1.GetString(bytes);
+        Console.WriteLine($"  pdf {bytes.Length} bytes");
+        Require(txt.StartsWith("%PDF") && txt.Contains("FontFile2"), "PDF header or embedded GOST font");
+        var mb = System.Text.RegularExpressions.Regex.Match(txt, @"/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)");
+        double Num(int k) => double.Parse(mb.Groups[k].Value, System.Globalization.CultureInfo.InvariantCulture);
+        Require(mb.Success && Math.Abs(Num(1) - 420 * 72 / 25.4) < 0.5 && Math.Abs(Num(2) - 297 * 72 / 25.4) < 0.5, "A3 page size in the PDF: " + mb.Value);
+    }
+    finally { tw.Close(); wp.Close(); }
+
+    var s = DocumentSession.NewAssembly(); var w = Open(s);
+    for (int i = 0; i < 3; i++) { var c = AssemblyCommands.AddComponent(w, CubePart("Кубик", 20), "add"); c.Info.Code = "АБВГ.100.002"; }
+    var b0 = AssemblyCommands.AddComponent(w, CubePart("Основание", 40), "add"); b0.Info.Code = "АБВГ.100.001";
+    Dispatcher.UIThread.RunJobs();
+    SheetWindow? bw = null;
+    try
+    {
+        var t = DrawingCommands.NewBom(w);
+        while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+        bw = t.Result ?? throw new CheckFailed("no BoM window");
+        var bom = bw.Bom!;
+        Console.WriteLine($"  bom: {string.Join(" | ", bom.Visible.Select(r => $"{r.Position} {r.Designation} {r.Name} x{r.Quantity}"))}");
+        Require(bom.Visible.Count() == 2 && bom.Visible.Single(r => r.Designation == "АБВГ.100.002").Quantity == 3, "three equal cubes — one row of 3");
+        bw.Change(() => { var r = bom.Rows.Single(x => x.Designation == "АБВГ.100.002"); r.Name = "Кубик калиброванный"; r.Manual = true; }, rows: true);
+        var c4 = AssemblyCommands.AddComponent(w, CubePart("Кубик", 20), "add"); c4.Info.Code = "АБВГ.100.002";
+        bw.UpdateFromModel();
+        var row = bom.Rows.Single(x => x.Designation == "АБВГ.100.002");
+        Require(row.Name == "Кубик калиброванный" && row.Quantity == 4, $"edit after update: {row.Name} x{row.Quantity}");
+        var bpath = Path.Combine(dir, "uzel" + SheetWindow.BomExt);
+        bw.SaveTo(bpath);
+        var bw2 = SheetWindow.OpenFile(bpath);
+        Require(bw2.Bom!.Rows.Count == bom.Rows.Count && bw2.Pages.Count == 1, "BoM reopen");
+        bw2.Close();
+        var pdf = Path.Combine(dir, "bom.pdf");
+        Parametric3D.App.Services.Drawing.SheetRender.WritePdf(pdf, bw.BuildPages(), "bom");
+        var txt = System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(pdf));
+        Require(System.Text.RegularExpressions.Regex.Matches(txt, @"/Type\s*/Page\b").Count == 1, "BoM PDF pages");
+        Require(Parametric3D.App.Services.Drawing.SheetRender.RenderPng(bw.Pages[0], 2).Length > 1000, "sheet picture");
+        if (Environment.GetEnvironmentVariable("SHEETDUMP") is { } dump2) File.WriteAllBytes(Path.Combine(dump2, "bom.png"), Parametric3D.App.Services.Drawing.SheetRender.RenderPng(bw.Pages[0], 4));
+    }
+    finally { bw?.Close(); w.Close(); try { Directory.Delete(dir, true); } catch { } }
+});
+
+// k155 (D2, начало): ЧЕРТЁЖ ДЕТАЛИ. «Новый чертёж» открытой детали: A3, четыре вида (главный, сверху, слева, изометрия), видимый
+// контур — толстые линии, масштаб из ряда ГОСТ 2.302 в надписи; невидимые линии выключаются кнопкой; чертёж с файлом детали
+// (.p3drw) — запись и открытие, виды строятся из файла.
+Check("UI-DRAWING-K155", () =>
+{
+    var dir = Path.Combine(Path.GetTempPath(), $"p3d_drw_{Guid.NewGuid():N}"); Directory.CreateDirectory(dir);
+    var s = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 10), "drw"); var w = Open(s); BuildNow(s);
+    SheetWindow? dw = null;
+    try
+    {
+        dw = DrawingCommands.NewDrawing(w) ?? throw new CheckFailed("no drawing window");
+        var g = dw.Pages.Single();
+        int thick = g.Polylines.Count(q => q.Kind == Parametric3D.Model.Drawing.LineKind.Thick), hid = g.Polylines.Count(q => q.Kind == Parametric3D.Model.Drawing.LineKind.Hidden);
+        var scale = g.Texts.FirstOrDefault(t => t.Field == Parametric3D.Model.Drawing.Fields.Scale)?.Text;
+        Console.WriteLine($"  views {dw.Drawing!.Views.Count}, thick {thick}, hidden {hid}, scale {scale}");
+        Require(dw.Drawing.Views.Count == 4 && thick > 10 && scale != null && System.Text.RegularExpressions.Regex.IsMatch(scale, @"^\d+(,\d)?:\d+(,\d)?$"), "drawing views or scale");
+        Require(g.InBounds(), "a view line outside the sheet");
+        if (Environment.GetEnvironmentVariable("SHEETDUMP") is { } dump) File.WriteAllBytes(Path.Combine(dump, "drawing.png"), Parametric3D.App.Services.Drawing.SheetRender.RenderPng(g, 4));
+        dw.Change(() => { foreach (var v in dw.Drawing.Views) v.ShowHidden = false; });
+        Require(dw.Pages[0].Polylines.All(q => q.Kind != Parametric3D.Model.Drawing.LineKind.Hidden), "hidden lines switched off");
+        // ассоциативность: деталь перестроена — чертёж «устарел»; «Обновить по модели» — снова актуален
+        Require(!dw.Outdated, "a fresh drawing is outdated");
+        s.Part!.MarkDirtyFrom(s.Part.Features[0]); BuildNow(s);
+        Require(dw.Outdated, "the drawing did not notice the rebuilt part");
+        dw.InvalidateViews(); dw.Refresh();
+        Require(!dw.Outdated, "the drawing is still outdated after the update");
+        // чертёж с файлом детали
+        var ppath = Path.Combine(dir, "part" + DocumentSession.PartExtension);
+        File.WriteAllText(ppath, Parametric3D.Model.DocumentFile.Save(s.Part!, s.Document.Parameters, withDisplay: true));
+        dw.Drawing.SourcePath = ppath;
+        var dpath = Path.Combine(dir, "part" + SheetWindow.DrawingExt);
+        dw.SaveTo(dpath);
+        var dw2 = SheetWindow.OpenFile(dpath);
+        try
+        {
+            var g2 = dw2.Pages.Single();
+            Console.WriteLine($"  reopened: thick {g2.Polylines.Count(q => q.Kind == Parametric3D.Model.Drawing.LineKind.Thick)}");
+            Require(dw2.Kind == SheetWindow.Mode.Drawing && g2.Polylines.Count(q => q.Kind == Parametric3D.Model.Drawing.LineKind.Thick) == thick, "reopened drawing: views from the part file");
+        }
+        finally { dw2.Close(); }
+        var pdf = Path.Combine(dir, "d.pdf");
+        Parametric3D.App.Services.Drawing.SheetRender.WritePdf(pdf, dw.BuildPages(), "d");
+        Require(new FileInfo(pdf).Length > 2000, "drawing PDF");
+    }
+    finally { dw?.Close(); w.Close(); try { Directory.Delete(dir, true); } catch { } }
+});
 
 
 Console.WriteLine(JsonSerializer.Serialize(new { passed, failed }));

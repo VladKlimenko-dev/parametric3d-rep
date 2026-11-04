@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="140" height="111" viewBox="0 0 140 111" preserveAspectRatio="xMidYMid meet">
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-4259.95 -174.591)" d="M4307.1919 189.68187L4339.3457 208.14343L4339.3457 245.06653L4307.1919 263.52808L4275.0381 245.06653L4275.0381 208.14343L4307.1919 189.68187Z"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-4259.95 -174.591)" d="M4275.0381 208.14343L4307.1919 226.60498L4339.3457 208.14343M4307.1919 226.60498L4307.1919 263.52808"/>
+	<path fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(-4259.95 -174.591)" d="M4350.269 189.68187L4350.269 269.68195"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-4259.95 -174.591)" d="M4371.8076 195.68185L4371.8076 260.60501"/>
+	<path transform="matrix(0 -1 1 0 111.86 15.0908)" d="M0 0L-12 7.2000003L-12 -7.2000003L0 0Z"/>
+	<path transform="matrix(0 1 -1 0 111.86 92.0139)" d="M0 0L-12 7.2000003L-12 -7.2000003L0 0Z"/>
+	<path fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(-4259.95 -174.591)" d="M4359.5 189.68185L4384.1152 189.68185M4359.5 266.60501L4384.1152 266.60501"/>
+</svg>

@@ -386,6 +386,7 @@ public static class StandardCommands
         ContextCommands.Register(r, w);
         ContextCommands.RegisterEnv(r, w);
         AssemblyCommands.Register(r, w);
+        DrawingCommands.Register(r, w);   // k155 (D1)
         FreeFormCommands.Register(r, w);
     }
 

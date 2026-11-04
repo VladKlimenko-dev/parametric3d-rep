@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="117" height="110" viewBox="0 0 117 110" preserveAspectRatio="xMidYMid meet">
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1230.44 -174.818)" d="M1245.3025 218.08322L1303.6313 218.08322L1303.6313 269.68188L1245.3025 269.68188L1245.3025 218.08322Z"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1230.44 -174.818)" d="M1319.3354 224.08322L1319.3354 263.68192"/>
+	<path transform="matrix(0 -1 1 0 88.8969 43.2651)" d="M0 0L-12 7.2000003L-12 -7.2000003L0 0Z"/>
+	<path transform="matrix(0 1 -1 0 88.8969 94.8638)" d="M0 0L-12 7.2000003L-12 -7.2000003L0 0Z"/>
+	<path fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1230.44 -174.818)" d="M1245.3024 197.89243L1245.3024 211.35295M1303.6313 197.89243L1303.6313 211.35295M1308.1182 218.08322L1328.309 218.08322M1308.1182 269.68188L1328.309 269.68188"/>
+	<path transform="translate(-1230.44 -174.818)" d="M1319.3354 189.68187L1322.7006 198.65555L1331.6743 202.02068L1322.7006 205.3858L1319.3354 214.35948L1315.9703 205.3858L1306.9966 202.02068L1315.9703 198.65555L1319.3354 189.68187Z"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1230.44 -174.818)" d="M1251.3025 204.6227L1297.6315 204.6227"/>
+	<path transform="matrix(-1 0 0 -1 14.8639 29.8046)" d="M0 0L-12 7.2000003L-12 -7.2000003L0 0Z"/>
+	<path transform="translate(73.1929 29.8046)" d="M0 0L-12 7.2000003L-12 -7.2000003L0 0Z"/>
+</svg>

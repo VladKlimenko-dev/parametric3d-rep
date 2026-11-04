@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="112" height="110" viewBox="0 0 112 110" preserveAspectRatio="xMidYMid meet">
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-2293.43 -174.864)" d="M2308.25 189.68187L2308.25 234.68187M2349.1448 189.68187L2349.1448 234.68187M2390.0396 189.68187L2390.0396 234.68187"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-2293.43 -174.864)" d="M2314.25 204.68187L2343.1445 204.68187"/>
+	<path transform="matrix(-1 0 0 -1 14.8179 29.8179)" d="M0 0L-12 7.2000003L-12 -7.2000003L0 0Z"/>
+	<path transform="translate(55.7124 29.8179)" d="M0 0L-12 7.2000003L-12 -7.2000003L0 0Z"/>
+	<path fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="translate(-2293.43 -174.864)" d="M2355.1445 204.68187L2384.0396 204.68187"/>
+	<path transform="matrix(-1 0 0 -1 55.7124 29.8179)" d="M0 0L-12 7.2000003L-12 -7.2000003L0 0Z"/>
+	<path transform="translate(96.6074 29.8179)" d="M0 0L-12 7.2000003L-12 -7.2000003L0 0Z"/>
+	<path fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(-2293.43 -174.864)" d="M2349.1448 240.27008L2349.1448 269.68188M2337.7852 256.60999L2349.1448 269.68188L2360.5044 256.60999"/>
+</svg>
