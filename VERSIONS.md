@@ -5,6 +5,7 @@
 
 | Версия | Дата | Коммит | Архив | Что сделано |
 |---|---|---|---|---|
+| k161 | 2026-11-05 | [`305d914`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/305d914) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/305d914.zip) | одна операция «Переход» (k160); фаска Sweep_Blend — отказ с причиной вместо веера (k160); чертёж — виды как в окне модели, раскладка, свободный перенос с притяжением, поворот изометрии, тона, размеры без перестроения |
 | k159 | 2026-11-05 | [`2325007`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/2325007) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/2325007.zip) | окно чертежа — лист вектором, подсветка, выбор и перенос размеров, масштаб и поворот видов, единицы, раскладка размеров; файлы STEP проверок в репозитории |
 | k158 | 2026-11-04 | [`c2bd860`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/c2bd860) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/c2bd860.zip) | чертёж — вспомогательный вид и вид с разрывом; вертикальные габаритные размеры за контуром вида |
 | k157 | 2026-11-04 | [`292c5e1`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/292c5e1) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/292c5e1.zip) | состояние перед последней операцией в документе (правка последней операции после открытия — без перестроения дерева); запись тела компактнее и быстрее; отверстие — привязка к рёбрам-дугам и опорным плоскостям |
