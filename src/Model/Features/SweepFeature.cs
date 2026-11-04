@@ -29,8 +29,32 @@ public sealed class SweepFeature : Feature
     /// встаёт в её начало.
     /// </summary>
     public bool Reverse;
+    /// <summary>
+    /// k153: ПОЛОЖЕНИЕ СЕЧЕНИЯ ОТНОСИТЕЛЬНО ТРАЕКТОРИИ. true — сечение остаётся там, где нарисовано: к началу траектории
+    /// переносится ближайшая к нему точка плоскости сечения, а не начало координат эскиза (прежде тело уезжало от пути на
+    /// расстояние от начала эскиза до траектории). У новых протяжек — true; у записанных прежде — false (форма та же).
+    /// </summary>
+    public bool SectionAsDrawn;
+    /// <summary>k153: смещение сечения от траектории по осям U и V плоскости сечения, мм (гизмо и поля панели).</summary>
+    public ValueRef OffsetU = new(0), OffsetV = new(0);
+    /// <summary>k153: мутация P3D_SWEEPANCHOR=0 — сечение в начале координат эскиза, без смещения (прежнее).</summary>
+    public static readonly bool AnchorOff = Environment.GetEnvironmentVariable("P3D_SWEEPANCHOR") == "0";
 
     public SweepFeature(string name = "Sweep") { Name = name; }
+
+    /// <summary>
+    /// k153: начало координат сечения при протяжке: точка плоскости сечения, которая встаёт в начало траектории. Без
+    /// «как нарисовано» и без смещения — начало координат эскиза (прежнее).
+    /// </summary>
+    public static Frame3 AnchorFrame(Frame3 plane, Vector3d pathStart, bool asDrawn, double du, double dv)
+    {
+        if (AnchorOff || (!asDrawn && du == 0 && dv == 0)) return plane;
+        var w = plane.W.Normalized();
+        var o = asDrawn ? pathStart - w * Vector3d.Dot(pathStart - plane.Origin, w) : plane.Origin;
+        // сдвиг сечения на (du, dv) относительно траектории = сдвиг начала его координат на (−du, −dv)
+        o -= plane.U.Normalized() * du + plane.V.Normalized() * dv;
+        return new Frame3(o, plane.U, plane.V);
+    }
 
     public override string Summary => $"{(Cut ? "Sweep cut" : "Sweep")} {LengthFraction}";
 
@@ -53,6 +77,15 @@ public sealed class SweepFeature : Feature
         if (path == null)
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Sweep: no path.");
         if (Reverse && chain == null) path = path.Reversed();
+
+        // k153: где сечение относительно траектории (как нарисовано, смещение)
+        var anchor = AnchorFrame(profile.Plane, path.PointAt(path.T0), SectionAsDrawn, OffsetU.Resolve(ctx.Parameters), OffsetV.Resolve(ctx.Parameters));
+        if (!anchor.Origin.Equals(profile.Plane.Origin))
+        {
+            var moved = new Profile { Plane = anchor };
+            moved.Loops.AddRange(profile.Loops);
+            profile = moved;
+        }
 
         Kernel.Topology.TSolid? solid = null;
         double frac = LengthFraction.Resolve(ctx.Parameters);

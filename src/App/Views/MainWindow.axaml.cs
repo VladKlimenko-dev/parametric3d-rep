@@ -127,6 +127,8 @@ public partial class MainWindow : Window
         using var _ui = Diagnostics.UiTimes.Measure("окно: открыть документ");
         if (CurrentOperation != null) { CurrentOperation = null; HideOpPanel(); }
         if (InSketch) View.ExitSketch(false);
+        // k153: прежний документ закрыт — его фоновый расчёт и проверки прерываются (P3D_CLOSECANCEL)
+        if (Session != null && !ReferenceEquals(Session.Document, s.Document)) Session.Document.Close();
         if (Session != null) { Session.Replaced -= OnReplaced; Session.StateChanged -= OnStateChanged; Session.Document.BuildStarted -= OnBuild; Session.Document.BuildFinished -= OnBuild; Session.Document.VerifyStarted -= OnBuild; Session.Document.VerifyFinished -= OnBuild; }
         Session = s;
         if (Diagnostics.KernelWarmup.ShouldSkipFor(s)) Diagnostics.KernelWarmup.Yield();   // k136: прогрев уступает перестроению
@@ -500,7 +502,21 @@ public partial class MainWindow : Window
         ViewTools.Children.Add(ListButton("Виды ▾", "view_iso_but.svg", new[] { "view.front", "view.back", "view.left", "view.right", "view.top", "view.bottom", "view.normal", "view.zoom_sel", "view.section", "view.grid" }));
         ViewTools.Children.Add(ListButton("Выбор ▾", "sel_filter_but.svg", new[] { "sel.vertex", "sel.edge", "sel.face", "sel.body", "sel.feature", "sel.filter", "sel.box", "sel.lasso", "sel.tangent_chain", "sel.face_loop" }));
         ViewTools.Children.Add(ListButton("Анализ ▾", null, new[] { "an.measure", "an.area", "an.perimeter", "an.mass", "an.zebra", "an.curvature", "an.check_body", "an.heal" }));
+        // k153: «Готово / Отмена» эскиза — в панели вида, справа от «Анализ» за разделителем: место не зависит от размера окна
+        // (прежде — отдельная панель, которую при другом размере окна приходилось искать). Мутация P3D_SKBARVIEW=0 — прежнее.
+        if (!SketchBarInViewOff)
+        {
+            _viewSketchBar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, IsVisible = InSketch };
+            _viewSketchBar.Children.Add(Separator(true));
+            foreach (var id in new[] { "sk.finish", "sk.cancel" })
+                if (_reg.Find(id) is { } c) _viewSketchBar.Children.Add(CmdButton(c, 18, text: true));
+            ViewTools.Children.Add(_viewSketchBar);
+        }
     }
+    internal static readonly bool SketchBarInViewOff = Environment.GetEnvironmentVariable("P3D_SKBARVIEW") == "0";
+    private StackPanel? _viewSketchBar;
+    /// <summary>k153: кнопки завершения эскиза в панели вида (проверки).</summary>
+    internal StackPanel? ViewSketchBar => _viewSketchBar;
 
     /// <summary>u13: кнопка со списком команд (вид, выбор, анализ).</summary>
     private Button ListButton(string text, string? icon, string[] ids)
@@ -875,6 +891,7 @@ public partial class MainWindow : Window
         DimStack.Children.Clear();
         SketchSetStack.Children.Clear();
         ShapeBar.IsVisible = SketchBar.IsVisible = DimBar.IsVisible = SketchSetBar.IsVisible = InSketch;
+        if (!SketchBarInViewOff) { SketchBar.IsVisible = false; if (_viewSketchBar != null) _viewSketchBar.IsVisible = InSketch; }
         // k98 (замечание 14): порядок в эскизе — настройка эскиза, фигуры, связи, размеры, «Готово/Отмена»
         var order = InSketch ? new Control[] { SketchSetBar, ShapeBar, CommandBar, DimBar, SketchBar } : new Control[] { CommandBar, SketchSetBar, ShapeBar, DimBar, SketchBar };
         for (int i = 0; i < order.Length; i++)
@@ -2419,6 +2436,7 @@ public partial class MainWindow : Window
         _sketchStage = (part, part.StageIndex);
         // k116: без сброса сохранённых состояний — полоска сдвигается, состояния до неё остаются (выход не пересчитывает всё)
         part.StageIndex = stage; if (SketchStashOff) part.Invalidate(); else part.MarkStageMoved();
+        Session.Document.CancelBuildOf(part);   // k153: идущий расчёт всей детали (после открытия) правке эскиза не нужен
         View.MarkDirty();
     }
 

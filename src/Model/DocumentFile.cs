@@ -67,10 +67,28 @@ public static class DocumentFile
         string def = JsonSerializer.Serialize(doc, Opts);
         if (!withDisplay || DisplayOff) return def;
         Parametric3D.Kernel.Tess.MeshData md; double vol;
-        if (!part.IsDirty && !part.ShowsInstant && !part.ShowsCached && part.Mesh is { } cur && cur.Vertices.Length > 0) { md = cur; vol = part.Volume; }
+        bool built = false;
+        if (!part.IsDirty && !part.ShowsInstant && !part.ShowsCached && part.Mesh is { } cur && cur.Vertices.Length > 0) { md = cur; vol = part.Volume; built = true; }
         else if (!DisplayAnyOff && part.LastGoodDisplay is { } lg) { md = lg.Mesh; vol = lg.Volume; }   // k125: идёт расчёт — последняя показанная
         else return def;
         doc.Display = new DisplayDto { Signature = Signature(def), Volume = vol, Data = Convert.ToBase64String(DisplayCache.Pack(md)) };
+        // k153: ТЕЛА ДЕТАЛИ В ДОКУМЕНТЕ — у посчитанной и проверенной детали (сетка показа — её же), без поверхностей и клеток FreeForm
+        // (их формат — следующий шаг). Тип геометрии, которого формат не умеет, — тела не пишутся (открытие — перестроением).
+        if (built && !BrepFile.Off && part.Bodies.Count > 0 && !part.NeedsAcceptance && part.Quilts.Count == 0 && part.CagesByBody.Count == 0)
+        {
+            try
+            {
+                doc.Display.Brep = Convert.ToBase64String(BrepFile.Write(part.Bodies));
+                doc.Display.Area = part.Area;
+                doc.Display.BodyNames = part.Bodies.Select((_, i) => part.BodyName(i)).ToList();
+                doc.Display.Warnings = part.Warnings.Count > 0 ? part.Warnings.ToList() : null;
+                var errs = part.Features.Where(f => f.Error != null).ToDictionary(f => f.Key, f => f.Error!);
+                doc.Display.Errors = errs.Count > 0 ? errs : null;
+                var cr = part.Features.Where(f => f.CreatedFaceIds.Count > 0).ToDictionary(f => f.Key, f => f.CreatedFaceIds.ToList());
+                doc.Display.Created = cr.Count > 0 ? cr : null;
+            }
+            catch (NotSupportedException) { doc.Display.Brep = null; }
+        }
         return JsonSerializer.Serialize(doc, Opts);
     }
 
@@ -470,7 +488,9 @@ public static class DocumentFile
             Twist = Math.Abs(w.Twist.Value) > 0 || w.Twist.Formula != null ? w.Twist.Value : null,
             TwistFormula = w.Twist.Formula,
             KeepOrientation = w.KeepOrientation ? true : null,
-            Flags = w.Reverse ? new List<string> { "reverse" } : null,   // k107: направление протяжки
+            Flags = w.Reverse || w.SectionAsDrawn ? new[] { w.Reverse ? "reverse" : null, w.SectionAsDrawn ? "asdrawn" : null }.OfType<string>().ToList() : null,   // k107: направление; k153: сечение как нарисовано
+            OffsetU = w.OffsetU.Value != 0 || w.OffsetU.Formula != null ? w.OffsetU.Value : null, OffsetUFormula = w.OffsetU.Formula,
+            OffsetV = w.OffsetV.Value != 0 || w.OffsetV.Formula != null ? w.OffsetV.Value : null, OffsetVFormula = w.OffsetV.Formula,
             Cut = w.Cut
         },
 
@@ -643,7 +663,7 @@ public static class DocumentFile
         }),
         BlendFeature bf => Dto("blend", bf, d =>
         {
-            PutS(d, "mode", bf.Mode.ToString()); d.Sections = bf.SectionSketchIds.ToList(); d.PathSketchId = bf.PathSketchId; d.AxisEntityId = bf.AxisEntityId;
+            PutS(d, "mode", bf.Mode.ToString()); d.Sections = bf.SectionSketchIds.ToList(); d.PathSketchId = bf.PathSketchId; d.PathLineId = bf.PathLineId; d.AxisEntityId = bf.AxisEntityId;
             if (bf.AsSurface) Flag(d, "surface");
             (d.Num ??= new())["steps"] = bf.Steps; d.Num["points"] = bf.Points;
         }),
@@ -724,7 +744,7 @@ public static class DocumentFile
             StartTangent = lf.StartTangent, EndTangent = lf.EndTangent
         },
 
-        HoleFeature hf => new FeatureDto
+        HoleFeature hf => HoleExtras(hf, new FeatureDto
         {
             Kind = "hole", Name = hf.Name, Suppressed = hf.Suppressed,
             SketchId = hf.SketchId,
@@ -738,7 +758,7 @@ public static class DocumentFile
             HeadDiameter = hf.HeadDiameter.Value,
             HeadDepth = hf.HeadDepth.Value,
             HeadAngle = hf.HeadAngle.Value
-        },
+        }),
 
         DatumPlaneFeature dp => new FeatureDto
         {
@@ -795,6 +815,25 @@ public static class DocumentFile
         if (df.Total) l.Add("total");
         if (df.Reverse) l.Add("reverse");
         return l.Count > 0 ? l : null;
+    }
+
+    /// <summary>k153: дно-острие и привязки положения отверстия.</summary>
+    private static FeatureDto HoleExtras(HoleFeature hf, FeatureDto d)
+    {
+        if (hf.DrillPoint) { Flag(d, "drillpoint"); PutV(d, "drill_angle", hf.DrillAngle); }
+        if (hf.LinRef1 != null)
+        {
+            d.Edges.Add(SaveEdge(hf.LinRef1.Value)); PutV(d, "lin_d1", hf.LinD1);
+            if (hf.LinRef2 != null) { d.Edges.Add(SaveEdge(hf.LinRef2.Value)); PutV(d, "lin_d2", hf.LinD2); }
+        }
+        if (hf.RadFace != null)
+        {
+            PutS(d, "rad_face", hf.RadFace); PutS(d, "rad_ref", hf.RadRefFace);
+            PutV(d, "rad_axial", hf.RadAxial); PutV(d, "rad_angle", hf.RadAngle);
+            (d.Num ??= new())["rox"] = hf.RadOrigin.X; d.Num["roy"] = hf.RadOrigin.Y; d.Num["roz"] = hf.RadOrigin.Z;
+            d.Num["rzx"] = hf.RadZeroDir.X; d.Num["rzy"] = hf.RadZeroDir.Y; d.Num["rzz"] = hf.RadZeroDir.Z;
+        }
+        return d;
     }
 
     private static EdgeDto SaveEdge(EdgeRef e) => new()
@@ -1066,6 +1105,9 @@ public static class DocumentFile
                     if (fd.Twist is double tw) w.Twist = new ValueRef(tw) { Formula = fd.TwistFormula };
                     w.KeepOrientation = fd.KeepOrientation == true;
                     w.Reverse = fd.Flags?.Contains("reverse") == true;
+                    w.SectionAsDrawn = fd.Flags?.Contains("asdrawn") == true;
+                    if (fd.OffsetU is double ou) w.OffsetU = new ValueRef(ou) { Formula = fd.OffsetUFormula };
+                    if (fd.OffsetV is double ov) w.OffsetV = new ValueRef(ov) { Formula = fd.OffsetVFormula };
                     part.AddFeature(w);
                     break;
                 }
@@ -1222,6 +1264,7 @@ public static class DocumentFile
                     if (Enum.TryParse<BlendKind>(GetS(fd, "mode"), out var bm)) bf.Mode = bm;
                     foreach (uint old in fd.Sections) if (sketchById.TryGetValue(old, out var bs)) bf.SectionSketchIds.Add(bs.Id);
                     if (sketchById.TryGetValue(fd.PathSketchId, out var bp)) bf.PathSketchId = bp.Id;
+                    bf.PathLineId = fd.PathLineId;   // k153: траектория — кривая
                     part.AddFeature(bf);
                     break;
                 }
@@ -1386,6 +1429,17 @@ public static class DocumentFile
                     for (int i = 0; i + 2 < fd.OpenFaces.Count; i += 3)
                         hf.Points.Add(new Vector3d(fd.OpenFaces[i], fd.OpenFaces[i + 1], fd.OpenFaces[i + 2]));
                     if (fd.FaceNames != null) hf.PointFaces.AddRange(fd.FaceNames);
+                    // k153: дно-острие и привязки положения
+                    hf.DrillPoint = HasFlag(fd, "drillpoint"); hf.DrillAngle = GetV(fd, "drill_angle", 118);
+                    if (fd.Edges.Count > 0) { hf.LinRef1 = LoadEdge(fd.Edges[0]); hf.LinD1 = GetV(fd, "lin_d1", 10); }
+                    if (fd.Edges.Count > 1) { hf.LinRef2 = LoadEdge(fd.Edges[1]); hf.LinD2 = GetV(fd, "lin_d2", 10); }
+                    if (GetS(fd, "rad_face") is { } rface)
+                    {
+                        hf.RadFace = rface; hf.RadRefFace = GetS(fd, "rad_ref");
+                        hf.RadAxial = GetV(fd, "rad_axial", 10); hf.RadAngle = GetV(fd, "rad_angle", 0);
+                        hf.RadOrigin = new Vector3d(GetD(fd, "rox", 0), GetD(fd, "roy", 0), GetD(fd, "roz", 0));
+                        hf.RadZeroDir = new Vector3d(GetD(fd, "rzx", 1), GetD(fd, "rzy", 0), GetD(fd, "rzz", 0));
+                    }
                     part.AddFeature(hf);
                     break;
                 }
@@ -1511,13 +1565,33 @@ public static class DocumentFile
         part.HideConsumedSketchesOnLoad();
         if (displayOk && display!.Data is { } data)
         {
-            try { if (DisplayCache.Unpack(Convert.FromBase64String(data)) is { } cached) part.SetCachedDisplay(cached, display.Volume); }
+            try
+            {
+                if (DisplayCache.Unpack(Convert.FromBase64String(data)) is { } cached)
+                {
+                    part.SetCachedDisplay(cached, display.Volume);
+                    // k153: тела записаны — деталь сразу готова, без перестроения
+                    if (display.Brep is { } brep && !BrepFile.Off)
+                    {
+                        try
+                        {
+                            var bodies = BrepFile.ReadAll(Convert.FromBase64String(brep));
+                            part.RestoreFromFile(bodies, cached, display.Volume, display.Area ?? 0, display.BodyNames ?? new(), display.Warnings ?? new(),
+                                display.Errors ?? new(), display.Created ?? new(), table);
+                        }
+                        catch (Exception ex) when (ex is FormatException or InvalidDataException or EndOfStreamException or IOException or InvalidCastException or IndexOutOfRangeException or ArgumentException)
+                        { Interlocked.Increment(ref BrepRejected); }   // испорченная запись тел — открытие перестроением
+                    }
+                }
+            }
             catch (Exception ex) when (ex is FormatException or InvalidDataException or EndOfStreamException or IOException) { }   // испорченная сетка — просто без неё
         }
         else if (display != null) Interlocked.Increment(ref DisplayRejected);
         return (part, table);
     }
     public static long DisplayRejected;
+    /// <summary>k153: записей тел, которые не прочитались (открытие — перестроением).</summary>
+    public static long BrepRejected;
     /// <summary>Мутация P3D_EXTRUDEEND=0: «глубина до» и вторая сторона выдавливания не читаются (прежде).</summary>
     static readonly bool ExtrudeEndOff = Environment.GetEnvironmentVariable("P3D_EXTRUDEEND") == "0";
 
@@ -1590,6 +1664,14 @@ public static class DocumentFile
         public double Volume { get; set; }
         /// <summary>Сетка (DisplayCache.Pack): сжато, base64.</summary>
         public string? Data { get; set; }
+        /// <summary>k153: построенные тела (BrepFile): сжато, base64; null — не записаны (деталь открывается перестроением).</summary>
+        public string? Brep { get; set; }
+        /// <summary>k153: итог построения при записи тел — площадь, имена тел, предупреждения, ошибки и созданные грани операций (по ключу).</summary>
+        public double? Area { get; set; }
+        public List<string>? BodyNames { get; set; }
+        public List<string>? Warnings { get; set; }
+        public Dictionary<string, string>? Errors { get; set; }
+        public Dictionary<string, List<uint>>? Created { get; set; }
     }
 
     private sealed class FaceSetDto
@@ -1892,6 +1974,11 @@ public static class DocumentFile
         public double? Twist { get; set; }
         public string? TwistFormula { get; set; }
         public bool? KeepOrientation { get; set; }
+        /// <summary>k153: смещение сечения протяжки по осям плоскости сечения, мм.</summary>
+        public double? OffsetU { get; set; }
+        public string? OffsetUFormula { get; set; }
+        public double? OffsetV { get; set; }
+        public string? OffsetVFormula { get; set; }
         public string? RadiusEndFormula { get; set; }
         /// <summary>KRN-06 (06.2): закон радиуса по точкам (доли длины и радиусы, формулы радиусов).</summary>
         public List<double>? LawF { get; set; }

@@ -18,6 +18,8 @@ public sealed class SplineCurve3 : ICurve3
     private readonly Vector3d[] _cp;        // опорные точки
     private readonly double[] _w;           // веса
     private readonly double[] _knots;       // узловой вектор
+    /// <summary>k153: данные кривой (запись тела в документ).</summary>
+    internal (Vector3d[] Cp, double[] W, double[] Knots, int Degree) Data => (_cp, _w, _knots, _degree);
     private readonly int _degree;
     private double _length = -1;
 

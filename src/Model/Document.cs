@@ -109,7 +109,9 @@ public sealed class Document
 
     public void ParametersChanged()
     {
-        foreach (var p in AllParts()) p.ParametersChanged();
+        // k153: деталь из записанного тела — грязной, только если её параметры в самом деле изменились (открытие файла переписывает
+        // таблицу параметров документа теми же значениями)
+        foreach (var p in AllParts()) { if (p.RestoredFromFile && !p.IsDirty && !p.ParametersDiffer(ScopeFor(p))) continue; p.ParametersChanged(); }
         Invalidated?.Invoke();
     }
 
@@ -160,6 +162,46 @@ public sealed class Document
     /// <summary>Фоновая пересборка началась / закончилась (события — в главном потоке).</summary>
     public event Action? BuildStarted, BuildFinished;
 
+    // ================================================================ k153: закрытие документа
+    /// <summary>Мутация P3D_CLOSECANCEL=0: закрытый документ досчитывается в фоне (прежнее).</summary>
+    public static readonly bool CloseCancelOff = Environment.GetEnvironmentVariable("P3D_CLOSECANCEL") == "0";
+    private readonly CancellationTokenSource _closeCts = new();
+    /// <summary>Документ закрыт: фоновый расчёт и проверки прерваны, новых не будет.</summary>
+    public bool IsClosed { get; private set; }
+    /// <summary>k153: расчётов, прерванных закрытием документа (разбор, проверки).</summary>
+    public static long ClosedBuildsCancelled;
+    /// <summary>
+    /// k153: ЗАКРЫТЬ ДОКУМЕНТ — вся работа ядра над ним прекращается (как у CAD: закрытие модели прерывает перестроение).
+    /// Прежде расчёт закрытого документа шёл в фоне до конца (минуты у тяжёлой детали), а строка состояния и полоса хода
+    /// показывали «Обработка» уже у нового документа.
+    /// </summary>
+    private CancellationTokenSource? _roundCts;
+    /// <summary>Мутация P3D_STALECANCEL=0: сдвиг полоски отката у считаемой детали ждёт конца прежнего расчёта (прежнее).</summary>
+    public static readonly bool StaleCancelOff = Environment.GetEnvironmentVariable("P3D_STALECANCEL") == "0";
+    /// <summary>k153: расчётов, прерванных сдвигом полоски отката (разбор, проверки).</summary>
+    public static long StaleBuildsCancelled;
+    /// <summary>
+    /// k153: ДЕТАЛЬ ИЗМЕНИЛАСЬ ТАК, ЧТО ИДУЩИЙ РАСЧЁТ ЕЙ НЕ НУЖЕН (полоска отката сдвинута — правка эскиза с откатом к его месту).
+    /// Прежде новый расчёт ждал конца прежнего: после открытия тяжёлого документа правка первого эскиза минуты показывала
+    /// тело и очерки операций после эскиза. Теперь идущий круг прерывается, и следующий считает деталь с новой полоской.
+    /// </summary>
+    public void CancelBuildOf(Part p)
+    {
+        if (StaleCancelOff || !_isBuilding || !_progressParts.Contains(p)) return;
+        Interlocked.Increment(ref StaleBuildsCancelled);
+        try { _roundCts?.Cancel(); } catch (ObjectDisposedException) { }
+    }
+
+    public void Close()
+    {
+        if (IsClosed || CloseCancelOff) return;
+        IsClosed = true;
+        if (_isBuilding) Interlocked.Increment(ref ClosedBuildsCancelled);
+        try { _closeCts.Cancel(); } catch (ObjectDisposedException) { }
+        CancelRefine();
+        try { _verifyCts?.Cancel(); } catch (ObjectDisposedException) { }
+    }
+
     /// <summary>
     /// ПЕРЕСБОРКА В ФОНЕ.
     ///
@@ -172,6 +214,7 @@ public sealed class Document
     /// </summary>
     public Task<bool> RebuildDirtyAsync()
     {
+        if (IsClosed) return Task.FromResult(false);
         if (_building != null) return _building;
 
         // ИСПРАВЛЕНО. Прежде: _building ??= RunBuild(). Если грязных деталей нет,
@@ -244,6 +287,7 @@ public sealed class Document
             LastRounds = 0;
             for (int round = 0; round < 3; round++)
             {
+                if (IsClosed) break;
                 var dirty = AllParts().Where(p => p.IsDirty).ToList();
                 if (dirty.Count == 0) break;
                 LastRounds++;
@@ -255,11 +299,15 @@ public sealed class Document
                 var scopes = dirty.ToDictionary(p => p, ScopeFor);
                 // k113: уточнение мгновенного предпросмотра — с отменой (правка во время него прерывает его)
                 CancellationToken refineToken = CancellationToken.None;
+                // k153: расчёт круга можно прервать — закрытием документа или сдвигом полоски отката у считаемой детали (CancelBuildOf)
+                _roundCts?.Dispose();
+                _roundCts = CloseCancelOff ? new CancellationTokenSource() : CancellationTokenSource.CreateLinkedTokenSource(_closeCts.Token);
+                var closeToken = StaleCancelOff && CloseCancelOff ? CancellationToken.None : _roundCts.Token;
                 Part? refining = preview != null && dirty.Contains(preview) && preview.RefinePending ? preview : null;
                 if (refining != null)
                 {
                     refining.TakeRefine(); refining.SuppressInstant = true;
-                    _refineCts = new CancellationTokenSource(); refineToken = _refineCts.Token;
+                    _refineCts = CancellationTokenSource.CreateLinkedTokenSource(closeToken); refineToken = _refineCts.Token;
                     Interlocked.Increment(ref RefinesStarted);
                 }
                 long computeStart = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -275,7 +323,7 @@ public sealed class Document
                             long pc0 = System.Diagnostics.Stopwatch.GetTimestamp();
                             using (new Kernel.KernelContext(ks).Enter())
                             {
-                                var rr = p.Compute(scopes[p], solver, ReferenceEquals(p, refining) ? refineToken : CancellationToken.None);
+                                var rr = p.Compute(scopes[p], solver, ReferenceEquals(p, refining) ? refineToken : closeToken);
                                 LastPartComputeMs = System.Diagnostics.Stopwatch.GetElapsedTime(pc0).TotalMilliseconds;
                                 _computeEnd = System.Diagnostics.Stopwatch.GetTimestamp();
                                 return (Part: p, Result: rr, Failed: (Exception?)null);
@@ -288,9 +336,9 @@ public sealed class Document
                         if (!DeferChecksOff)
                         {
                             var ksd = Kernel.KernelSettings.Capture() with { Preview = true, LivePreview = false };
-                            using (new Kernel.KernelContext(ksd).Enter()) return (Part: p, Result: p.Compute(scopes[p], solver), Failed: (Exception?)null);
+                            using (new Kernel.KernelContext(ksd).Enter()) return (Part: p, Result: p.Compute(scopes[p], solver, closeToken), Failed: (Exception?)null);
                         }
-                        return (Part: p, Result: p.Compute(scopes[p], solver), Failed: (Exception?)null);
+                        return (Part: p, Result: p.Compute(scopes[p], solver, closeToken), Failed: (Exception?)null);
                     }
                     catch (Exception ex) { return (Part: p, Result: (Part.BuildResult?)null, Failed: ex); }
                 }).ToList());
@@ -298,6 +346,7 @@ public sealed class Document
                 LastResumeMs = _computeEnd != 0 ? System.Diagnostics.Stopwatch.GetElapsedTime(_computeEnd).TotalMilliseconds : double.NaN;
                 if (refining != null) { refining.SuppressInstant = false; _refineCts?.Dispose(); _refineCts = null; }
 
+                if (IsClosed) break;                 // k153: документ закрыт — результат не применяется
                 bool again = false;
                 long applyStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 foreach (var (part, result, failed) in results)
@@ -360,13 +409,13 @@ public sealed class Document
     /// </summary>
     private async Task<bool> VerifyPhase()
     {
-        if (DeferChecksOff) return false;
+        if (DeferChecksOff || IsClosed) return false;
         var parts = AllParts().Where(p => !p.IsDirty && p.NeedsAcceptance && !ReferenceEquals(p, PreviewPart)).ToList();
         if (parts.Count == 0) return false;
         var versions = parts.ToDictionary(p => p, p => p.Version);
         var scopes = parts.ToDictionary(p => p, ScopeFor);
         var solver = Solver;
-        _verifyCts = new CancellationTokenSource(); var token = _verifyCts.Token;
+        _verifyCts = CloseCancelOff ? new CancellationTokenSource() : CancellationTokenSource.CreateLinkedTokenSource(_closeCts.Token); var token = _verifyCts.Token;
         void OnChanged(ModelItem _) { if (parts.Any(p => p.Version != versions[p])) { try { _verifyCts?.Cancel(); } catch (ObjectDisposedException) { } } }
         Root.Changed += OnChanged;
         IsVerifying = true; Interlocked.Increment(ref VerifiesStarted);
@@ -384,6 +433,7 @@ public sealed class Document
             }).ToList());
             foreach (var (p, r) in results)
             {
+                if (IsClosed) break;
                 if (r == null) { Interlocked.Increment(ref VerifiesCancelled); continue; }
                 if (r.Executed > 0) Interlocked.Increment(ref VerifiesRejected);
                 // всё принято и тела те же — применять нечего (вид не перестраивается); иначе — как обычный результат

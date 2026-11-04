@@ -242,14 +242,18 @@ public abstract class Operation
         if (Dragging)
         {
             Panel?.Refresh();
-            if (LivePreview)
+            // k153: дешёвая операция (плоскость со смещением) — следует за ручкой всегда, и без полного предпросмотра
+            if (LivePreview || (CheapLive && !CheapLiveOff))
             {
-                try { RequestLive(); }
+                try { if (!LivePreview) { Apply(); W.ViewPort.Redraw(); } else RequestLive(); }
                 catch (Exception ex) { AppLog.Write("live preview " + Title, ex); }
             }
         }
         else FieldChanged();
     }
+    /// <summary>k153: операция без расчёта тела (плоскость): за ручкой — сразу, без полного предпросмотра. Мутация P3D_CHEAPLIVE=0.</summary>
+    public virtual bool CheapLive => false;
+    public static readonly bool CheapLiveOff = Environment.GetEnvironmentVariable("P3D_CHEAPLIVE") == "0";
 
     // ---------------------------------------------------------------- 13:09: гизмо (FreeForm: перенос, поворот, масштаб)
 

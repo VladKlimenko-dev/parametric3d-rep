@@ -344,11 +344,11 @@ public sealed class CurveOp : Operation
 }
 
 /// <summary>Соосное отверстие (на оси цилиндрической грани, ребра-окружности или опорной оси) и радиальное (в стенке цилиндра к оси).</summary>
-public sealed class AxialHoleOp : FeatureOp<HoleFeature>
+public sealed class AxialHoleOp : FeatureOp<HoleFeature>, IHandleOp
 {
     public bool Radial;
-    private RefField _axis = null!, _face = null!, _pt = null!;
-    public AxialHoleOp(HoleFeature? existing = null) : base(existing) { }
+    private RefField _axis = null!, _face = null!, _pt = null!, _end = null!;
+    public AxialHoleOp(HoleFeature? existing = null) : base(existing) { if (existing?.RadFace != null) Radial = true; }
     public override string Title => Radial ? "Отверстие радиальное" : "Отверстие соосное";
     public override string Icon => Radial ? "f_hole_radial_but.svg" : "f_hole_coaxial_but.svg";
     protected override HoleFeature Create() => new(L(Title)) { Diameter = new ValueRef(6) };
@@ -361,16 +361,38 @@ public sealed class AxialHoleOp : FeatureOp<HoleFeature>
         return Refs.LineOf(r);
     }
 
+    /// <summary>k153: типы радиального отверстия — низ (насквозь, плоское дно, острие сверла).</summary>
+    static readonly (string Icon, string Tip, int Bottom)[] RadTypes =
+    {
+        ("hole_all_through_ico.svg", "Простое насквозь", 0),
+        ("hole_straight_bottom_square_ico.svg", "Глухое, плоское дно", 1),
+        ("hole_straight_bottom_chamfer_ico.svg", "Глухое, острие сверла", 2),
+    };
+
     public override void Build(OpPanel p)
     {
         _axis = p.Ref(new RefField { Label = Radial ? "Цилиндрическая грань" : "Ось (цилиндр, окружность, ось)", Filter = PickFilter.Faces | PickFilter.Edges | PickFilter.Datums, Accept = r => AxisOf(r) != null && !(r.Kind == PickKind.Face && Refs.IsPlanar(r)), Single = true });
         if (Radial) _pt = p.Ref(new RefField { Label = "Положение (точка)", Filter = PickFilter.Vertices | PickFilter.SketchPoints | PickFilter.Datums, Accept = r => r.Kind is PickKind.Vertex or PickKind.SketchPoint or PickKind.DatumPoint, Single = true, Optional = true });
         else _face = p.Ref(new RefField { Label = "Грань входа", Filter = PickFilter.Faces | PickFilter.Datums, Accept = Refs.IsPlanar, Single = true });
         _pt ??= new RefField { Label = "", Optional = true }; _face ??= new RefField { Label = "", Optional = true };
-        p.Note(Radial ? "Без точки — в середине грани; сверлится к оси." : "Центр — пересечение оси с гранью входа.");
+        if (Editing && Radial) _axis.Kept = 1;
+        p.Note(Radial ? "Без точки — в середине грани; сверлится к оси. Гизмо: стрелка — вдоль оси, кольцо — вокруг оси; ручка — диаметр." : "Центр — пересечение оси с гранью входа.");
+        if (Radial)
+        {
+            p.IconSegments("Тип отверстия", RadTypes.Select(t => (t.Icon, t.Tip)).ToArray(),
+                () => F.ThroughAll ? 0 : F.DrillPoint ? 2 : 1, i => { F.ThroughAll = RadTypes[i].Bottom == 0; F.DrillPoint = RadTypes[i].Bottom == 2; });
+            // k153 (замечание 04.11, 10:34, п. 3): положение — вдоль оси от торца и угол вокруг оси
+            p.Header("Положение");
+            _end = p.Ref(new RefField { Label = "Торец (отсчёт вдоль оси)", Filter = PickFilter.Faces, Accept = Refs.IsPlanar, Single = true, Optional = true });
+            if (Editing) _end.Kept = F.RadRefFace != null ? 1 : 0;
+            p.Number("Расстояние от торца", () => F.RadAxial, v => F.RadAxial = v, visible: () => F.RadFace != null);
+            p.Number("Угол вокруг оси", () => F.RadAngle, v => F.RadAngle = v, "°", visible: () => F.RadFace != null);
+        }
+        else _end = new RefField { Label = "", Optional = true };
         p.Number("Диаметр", () => F.Diameter, v => F.Diameter = v);
-        p.Check("Насквозь", () => F.ThroughAll, v => F.ThroughAll = v);
+        if (!Radial) p.Check("Насквозь", () => F.ThroughAll, v => F.ThroughAll = v);
         p.Number("Глубина", () => F.Depth, v => F.Depth = v, visible: () => !F.ThroughAll);
+        if (Radial) p.Number("Угол острия", () => F.DrillAngle, v => F.DrillAngle = v, "°", visible: () => !F.ThroughAll && F.DrillPoint);
     }
 
     protected override void SeedRefs() { if (Radial) Seed(_axis, _pt); else Seed(_axis, _face); }
@@ -386,19 +408,98 @@ public sealed class AxialHoleOp : FeatureOp<HoleFeature>
             if (Math.Abs(den) < 1e-9) { W.ShowToast(L("Ось параллельна грани входа")); return; }
             var at = ax.At + d * (Vector3d.Dot(pl.Frame.Origin - ax.At, n) / den);
             F.Points.Clear(); F.PointFaces.Clear(); F.Points.Add(at); F.Direction = -n;
+            return;
         }
-        else
+        // k153: радиальная привязка — грань цилиндра по имени, торец, расстояние вдоль оси и угол (P3D_HOLEPLACE=0 — точка, как прежде)
+        var cylFace = MoreFields.FaceOf(_axis.Items[0]);
+        // k153: положение — заново только при новом выборе грани или точки (не при каждом пересчёте панели — гизмо)
+        string sig = string.Join(",", _axis.Items.Select(r => r.Id)) + "|" + string.Join(",", _pt.Items.Select(r => r.Id));
+        bool fresh = (_axis.Touched || _pt.Touched) && (sig != _placedSig || F.Points.Count == 0);
+        if (fresh) _placedSig = sig;
+        if (fresh)
         {
             Vector3d p0 = _pt.Items.Count > 0 && Refs.PointOf(_pt.Items[0]) is { } pp ? pp
                 : _axis.Items[0] is { Kind: PickKind.Face, Owner: Part fp } fr && Refs.FacePoint(fp, fr.Id) is { } fc ? fc : ax.At;
             var foot = ax.At + d * Vector3d.Dot(p0 - ax.At, d);
             var radial = p0 - foot;
             if (radial.LengthSquared < 1e-12) { W.ShowToast(L("Точка на оси — укажите точку на стенке")); return; }
-            double R = MoreFields.FaceOf(_axis.Items[0]) is { } f && Kernel.Ops.DirectEdit.RadiusAfter(f, 0) is { } rr ? rr : radial.Length;
+            double R = cylFace is { } f && Kernel.Ops.DirectEdit.RadiusAfter(f, 0) is { } rr ? rr : radial.Length;
             var on = foot + radial.Normalized() * R;
             F.Points.Clear(); F.PointFaces.Clear(); F.Points.Add(on); F.Direction = -radial.Normalized();
+            if (!HoleFeature.PlaceOff && cylFace != null && cylFace.Tag.Length > 0)
+            {
+                F.RadFace = cylFace.Tag;
+                // ноль угла — мировая X в плоскости поперёк оси (Y, если ось вдоль X); торец — ближайшая плоская грань поперёк оси
+                var z = Vector3d.UnitX - d * d.X; if (z.LengthSquared < 1e-6) z = Vector3d.UnitY - d * d.Y;
+                F.RadZeroDir = z.Normalized();
+                var y = Vector3d.Cross(d, F.RadZeroDir);
+                var rn = radial.Normalized();
+                F.RadAngle = new ValueRef(Math.Round(Math.Atan2(Vector3d.Dot(rn, y), Vector3d.Dot(rn, F.RadZeroDir)) * 180 / Math.PI, 3));
+                if (F.RadRefFace == null && _end.Items.Count == 0 && EndFace(cylFace, d) is { } ef) F.RadRefFace = ef.Tag;
+                SyncAxial(on);
+            }
+        }
+        if (_end.Touched && !HoleFeature.PlaceOff)
+        {
+            F.RadRefFace = _end.Items.Count > 0 && MoreFields.FaceOf(_end.Items[0]) is { } ef ? ef.Tag : null;
+            if (F.Points.Count > 0) SyncAxial(F.Points[0]);
         }
     }
+
+    private string? _placedSig;
+    /// <summary>Плоская грань поперёк оси, соседняя с гранью цилиндра (ближайший торец).</summary>
+    static Parametric3D.Kernel.Topology.TFace? EndFace(Parametric3D.Kernel.Topology.TFace cyl, Vector3d axis)
+    {
+        var near = cyl.Edges.SelectMany(e => e.CoEdges).Select(c => c.Loop?.Face).OfType<Parametric3D.Kernel.Topology.TFace>().Distinct().Where(f => f != cyl);
+        return near.FirstOrDefault(f => SketchFaceRef.PlaneOf(f) is { } pl && Math.Abs(Math.Abs(Vector3d.Dot(pl.N.Normalized(), axis)) - 1) < 1e-6 && f.Tag.Length > 0);
+    }
+
+    /// <summary>Расстояние вдоль оси от торца (или от начала отсчёта) до точки.</summary>
+    void SyncAxial(Vector3d at)
+    {
+        if (F.RadFace == null || HoleFeature.CylinderByName(Part.Bodies, F.RadFace) is not { } cyl) return;
+        double t0;
+        var pl = F.RadRefFace == null ? null : Part.Bodies.SelectMany(b => b.Faces).Where(f => f.Tag == F.RadRefFace).Select(SketchFaceRef.PlaneOf).FirstOrDefault(x => x != null);
+        if (pl is { } p) t0 = Vector3d.Dot(p.P - cyl.At, cyl.Axis);
+        else { F.RadOrigin = cyl.At; t0 = 0; }
+        F.RadAxial = new ValueRef(Math.Round(Vector3d.Dot(at - cyl.At, cyl.Axis) - t0, 3));
+    }
+
+    // ---------------------------------------------------------------- k153: ручка диаметра и гизмо (вдоль оси, вокруг оси)
+
+    public override Action<double>? DragValue => v => F.Diameter = new ValueRef(Math.Abs(v));
+    public override double? DragCurrent => F.Diameter.Value;
+    public override string DragLabel => "Ø";
+    public override double HandleToValue(double d) => 2 * d;
+    public override double ValueToHandle(double v) => v / 2;
+
+    (Vector3d P, Vector3d Axis, Vector3d Radial)? Place()
+    {
+        if (!Radial || F == null) return null;
+        if (F.RadialPlacement(Part.Bodies, null) is { } rp && F.RadFace != null && HoleFeature.CylinderByName(Part.Bodies, F.RadFace) is { } cyl)
+            return (rp.P, cyl.Axis, -rp.Dir);
+        return null;
+    }
+    public (Vector3d At, Vector3d Out)? HandleAt() => Place() is { } pl ? (pl.P, pl.Axis) : null;
+
+    public override void RefreshGizmo()
+    {
+        if (Place() is not { } pl) { W.ViewPort.Gizmo = null; return; }
+        var x = pl.Radial; var z = pl.Axis; var y = Vector3d.Cross(z, x);
+        W.ViewPort.Gizmo = new GizmoSpec(GizmoMode.Full, pl.P, x, y, z) { Mask = (1 << (int)GizmoPart.AxisZ) | (1 << (int)GizmoPart.RingZ) };
+    }
+    private GizmoSpec? _g0;
+    private double _ax0, _an0;
+    public override void GizmoStart(GizmoPart part) { _g0 = W.ViewPort.Gizmo; _ax0 = F.RadAxial.Value; _an0 = F.RadAngle.Value; }
+    public override void GizmoMove(GizmoDrag d)
+    {
+        if (_g0 is not { } g) return;
+        if (d.Part == GizmoPart.AxisZ) F.RadAxial = new ValueRef(Math.Round(_ax0 + d.Delta.Z, 3));
+        else if (d.Part == GizmoPart.RingZ) F.RadAngle = new ValueRef(Math.Round(_an0 + d.AngleDeg, 3));
+        if (Place() is { } pl) { F.Points.Clear(); F.Points.Add(pl.P); F.Direction = -pl.Radial; W.ViewPort.Gizmo = g with { Origin = pl.P, X = pl.Radial, Y = Vector3d.Cross(pl.Axis, pl.Radial) }; }
+        GizmoValuesChanged();
+    }
+    public override void GizmoEnd() => _g0 = null;
 }
 
 public sealed class FullRoundOp : FeatureOp<FullRoundFeature>

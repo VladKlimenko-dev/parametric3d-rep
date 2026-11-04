@@ -59,7 +59,7 @@ public sealed class SweepOp : FeatureOp<SweepFeature>
     {
         public uint Section, Path, PathLine;
         public bool Cut, Keep, Reverse;
-        public ValueRef Twist = new(0), Fraction = new(1);
+        public ValueRef Twist = new(0), Fraction = new(1), OffsetU = new(0), OffsetV = new(0);
     }
     public State? Seed;
 
@@ -70,8 +70,8 @@ public sealed class SweepOp : FeatureOp<SweepFeature>
     public override string Icon => "f_sweep_but.svg";
     protected override SweepFeature Create()
     {
-        var f = new SweepFeature();
-        if (Seed is { } s) { f.Cut = s.Cut; f.KeepOrientation = s.Keep; f.Reverse = s.Reverse; f.Twist = s.Twist; f.LengthFraction = s.Fraction; }
+        var f = new SweepFeature { SectionAsDrawn = !SweepFeature.AnchorOff };   // k153: новые протяжки — сечение как нарисовано
+        if (Seed is { } s) { f.Cut = s.Cut; f.KeepOrientation = s.Keep; f.Reverse = s.Reverse; f.Twist = s.Twist; f.LengthFraction = s.Fraction; f.OffsetU = s.OffsetU; f.OffsetV = s.OffsetV; }
         return f;
     }
 
@@ -110,8 +110,49 @@ public sealed class SweepOp : FeatureOp<SweepFeature>
         p.Number("Закрутка", () => F.Twist, v => F.Twist = v, "°");
         p.Number("Доля траектории", () => F.LengthFraction, v => F.LengthFraction = v, "");
         p.Check("Сечение без поворота", () => F.KeepOrientation, v => F.KeepOrientation = v);
-        p.Note("Сечение — замкнутый эскиз в начале траектории; траектория — эскиз с незамкнутой цепочкой. Стрелка на траектории — направление протяжки (щелчок — развернуть).");
+        // k153: положение сечения относительно траектории — как нарисовано или от начала координат эскиза; смещение — поля и гизмо
+        if (!SweepFeature.AnchorOff)
+        {
+            p.Check("Сечение как нарисовано", () => F.SectionAsDrawn, v => F.SectionAsDrawn = v);
+            p.Number("Смещение по X сечения", () => F.OffsetU, v => F.OffsetU = v, "мм");
+            p.Number("Смещение по Y сечения", () => F.OffsetV, v => F.OffsetV = v, "мм");
+        }
+        p.Note("Сечение — замкнутый эскиз в начале траектории; траектория — эскиз с незамкнутой цепочкой. Стрелка на траектории — направление протяжки (щелчок — развернуть). Гизмо в начале траектории сдвигает сечение относительно неё.");
     }
+
+    // ---------------------------------------------------------------- k153: гизмо смещения сечения
+
+    /// <summary>Рамка гизмо: начало — точка сечения, которая идёт по траектории; оси — X и Y плоскости сечения.</summary>
+    (Vector3d O, Vector3d X, Vector3d Y, Vector3d Z)? SectionGizmoFrame()
+    {
+        if (SweepFeature.AnchorOff || F == null || F.SectionSketchId == 0) return null;
+        if (Part.Sketches.FirstOrDefault(k => k.Id == F.SectionSketchId) is not { } sk) return null;
+        if (F.StartFrame(Part) is not { } st) return null;
+        var pl = sk.Plane;
+        var a = SweepFeature.AnchorFrame(pl, st.P, F.SectionAsDrawn, 0, 0);
+        var x = pl.U.Normalized(); var y = pl.V.Normalized();
+        return (a.Origin + x * F.OffsetU.Value + y * F.OffsetV.Value, x, y, pl.W.Normalized());
+    }
+
+    public override void RefreshGizmo()
+    {
+        if (SectionGizmoFrame() is not { } g) { W.ViewPort.Gizmo = null; return; }
+        W.ViewPort.Gizmo = new GizmoSpec(GizmoMode.Move, g.O, g.X, g.Y, g.Z)
+        { Mask = (1 << (int)GizmoPart.AxisX) | (1 << (int)GizmoPart.AxisY) | (1 << (int)GizmoPart.PlaneXY) };
+    }
+
+    private GizmoSpec? _g0;
+    private double _ou0, _ov0;
+    public override void GizmoStart(GizmoPart part) { _g0 = W.ViewPort.Gizmo; _ou0 = F.OffsetU.Value; _ov0 = F.OffsetV.Value; }
+    public override void GizmoMove(GizmoDrag d)
+    {
+        if (_g0 is not { } g) return;
+        F.OffsetU = new ValueRef(Math.Round(_ou0 + d.Delta.X, 3));
+        F.OffsetV = new ValueRef(Math.Round(_ov0 + d.Delta.Y, 3));
+        W.ViewPort.Gizmo = g with { Origin = g.Origin + g.X * d.Delta.X + g.Y * d.Delta.Y };
+        GizmoValuesChanged();
+    }
+    public override void GizmoEnd() => _g0 = null;
 
     /// <summary>Доступность кнопок зависит от выбора — обновить вместе с состоянием.</summary>
     public override void RefreshStatus() { base.RefreshStatus(); Panel?.Refresh(); }
@@ -165,7 +206,7 @@ public sealed class SweepOp : FeatureOp<SweepFeature>
     State Snapshot() => new()
     {
         Section = F.SectionSketchId, Path = F.PathSketchId, PathLine = F.PathLineId,
-        Cut = F.Cut, Keep = F.KeepOrientation, Reverse = F.Reverse, Twist = F.Twist, Fraction = F.LengthFraction,
+        Cut = F.Cut, Keep = F.KeepOrientation, Reverse = F.Reverse, Twist = F.Twist, Fraction = F.LengthFraction, OffsetU = F.OffsetU, OffsetV = F.OffsetV,
     };
 
     protected override void Push()

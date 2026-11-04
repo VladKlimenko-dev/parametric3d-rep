@@ -25,12 +25,16 @@ static partial class Program
                 var (q, _) = DocumentStorage.Load(path);
                 double loadMs = sw.Elapsed.TotalMilliseconds;
                 Console.WriteLine($"  file {size / 1024.0:0} KB, open {loadMs:0} ms; cached {q.ShowsCached}, dirty {q.IsDirty}, bodies {q.Bodies.Count}, triangles {q.Mesh?.Indices.Length / 3} (built {p.Mesh!.Indices.Length / 3})");
-                Require(q.ShowsCached && q.IsDirty && q.Bodies.Count == 0, "the opened part does not show the stored surfaces");
+                // k153: файл с записанным телом — деталь сразу с телами, не грязная (открытие без перестроения)
+                Require((q.ShowsCached && q.IsDirty && q.Bodies.Count == 0) || (q.RestoredFromFile && !q.IsDirty && q.Bodies.Count == p.Bodies.Count), "the opened part does not show the stored surfaces");
                 Require(q.Mesh!.Indices.Length == p.Mesh.Indices.Length && q.Mesh.Vertices.Length == p.Mesh.Vertices.Length && q.Mesh.EdgePolylines.Count == p.Mesh.EdgePolylines.Count
                         && q.Mesh.FaceRanges.Count == p.Mesh.FaceRanges.Count, "the stored mesh differs");
                 Require(Math.Abs(q.Volume - p.Volume) < 1e-9 && (q.Bounds.Min - p.Bounds.Min).Length < 1e-9 && (q.Bounds.Max - p.Bounds.Max).Length < 1e-9, "volume or bounds differ");
                 for (int i = 0; i < q.Mesh.Vertices.Length; i += 97)
-                    Require(q.Mesh.Vertices[i].P == p.Mesh.Vertices[i].P && q.Mesh.Vertices[i].FaceId == p.Mesh.Vertices[i].FaceId, "vertex differs");
+                    // k153: у детали из записанного тела номера граней в сетке — номера граней прочитанного тела (тот же порядок граней)
+                    Require(q.Mesh.Vertices[i].P == p.Mesh.Vertices[i].P && (q.RestoredFromFile
+                        ? q.FindFace(q.Mesh.Vertices[i].FaceId) is { } qf && p.FindFace(p.Mesh.Vertices[i].FaceId) is { } pf && qf.Tag == pf.Tag
+                        : q.Mesh.Vertices[i].FaceId == p.Mesh.Vertices[i].FaceId), "vertex differs");
                 sw.Restart(); q.Rebuild(null); double buildMs = sw.Elapsed.TotalMilliseconds;
                 Console.WriteLine($"  rebuild {buildMs:0} ms; cached {q.ShowsCached}, volume {q.Volume:0.###} vs {p.Volume:0.###}");
                 Require(!q.ShowsCached && q.Bodies.Count > 0 && Math.Abs(q.Volume - p.Volume) < 1e-6 * p.Volume, "the rebuild did not replace the stored surfaces");

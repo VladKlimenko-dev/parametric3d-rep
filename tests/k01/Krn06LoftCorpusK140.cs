@@ -37,13 +37,21 @@ static partial class Program
                 n++;
                 // k147: третий столбец «noswitch» — история записана до перехода боковой точки фаски (прежние операции шли
                 // резцом); воспроизводится так же, иначе тело перед последней операцией другое и случай не о том
-                bool noSwitch = row.Length > 2 && row[2].Trim() == "noswitch";
+                bool noSwitch = row.Length > 2 && row[2].Trim().StartsWith("noswitch");
                 Parametric3D.Kernel.Ops.DirectRound.ChamferSwitchOffForTest = noSwitch;
                 // k148h: «nocrease» — история до точного угла у излома шва (прежние операции резцом), воспроизводится так же
                 Parametric3D.Kernel.Ops.DirectRound.CreaseOffForTest = row.Length > 2 && row[2].Trim() == "nocrease";
                 (bool Ok, double Dv, long Ms, List<string> Problems) r;
                 try { r = CorpusFixture(Path.Combine(cdir, file)); } finally { Parametric3D.Kernel.Ops.DirectRound.ChamferSwitchOffForTest = false; Parametric3D.Kernel.Ops.DirectRound.CreaseOffForTest = false; }
                 Log(new { file, r.Ok, dv = Math.Round(r.Dv, 4), want, r.Ms, r.Problems });
+                // k153: «overflow» — фаска шире грани ребра (съедает полосу шириной 0.05 мм у s101_2, прежнюю фаску 1.7 мм у
+                // s102_5): норма — отказ с причиной «wider than the face» (под P3D_CHAMFEROVERFLOW=0 — прежнее построение)
+                if (row.Length > 2 && row[2].Contains("overflow"))
+                {
+                    bool refusedOk = !r.Ok && r.Problems.Count == 1 && r.Problems[0].Contains("wider than the face");
+                    if (!refusedOk && !OverflowCheckOff) fails.Add($"{file}: expected the 'wider than the face' refusal, got " + (r.Ok ? $"a body (dv {r.Dv:0.####})" : string.Join("; ", r.Problems)));
+                    if (!OverflowCheckOff) continue;
+                }
                 foreach (var pr in r.Problems) fails.Add($"{file}: {pr}");
                 if (r.Ok && Math.Abs(r.Dv - want) > 0.01 * Math.Abs(want) + 0.05) fails.Add($"{file}: removed volume {r.Dv:0.####}, expected {want:0.####}");
             }
@@ -51,6 +59,8 @@ static partial class Program
             Require(fails.Count == 0, string.Join(" | ", fails.Take(8)));
         });
     }
+
+    static readonly bool OverflowCheckOff = Environment.GetEnvironmentVariable("P3D_CHAMFEROVERFLOW") == "0";
 
     /// <summary>Случай корпуса: последняя операция файла — над телом без неё; замеры как в LoftCorpusRun.</summary>
     static (bool Ok, double Dv, long Ms, List<string> Problems) CorpusFixture(string file)

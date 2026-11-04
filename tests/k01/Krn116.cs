@@ -111,8 +111,8 @@ static partial class Program
             Require(json.Contains(sigLin) && winJson.Contains(sigWin), "signature not found in the file");
             var (w, _) = DocumentFile.Load(winJson);
             var (u, _) = DocumentFile.Load(json);
-            Console.WriteLine($"  Windows file: cached {w.ShowsCached}, this system: cached {u.ShowsCached}, rejected {DocumentFile.DisplayRejected - r0}");
-            Require(w.ShowsCached && u.ShowsCached, "the stored surfaces were rejected because of line endings");
+            Console.WriteLine($"  Windows file: cached {w.ShowsCached} restored {w.RestoredFromFile}, this system: cached {u.ShowsCached} restored {u.RestoredFromFile}, rejected {DocumentFile.DisplayRejected - r0}");
+            Require((w.ShowsCached || w.RestoredFromFile) && (u.ShowsCached || u.RestoredFromFile), "the stored surfaces were rejected because of line endings");   // k153: или тело из файла
         });
 
         Check("KRN-TREE-OWN-K116", () =>

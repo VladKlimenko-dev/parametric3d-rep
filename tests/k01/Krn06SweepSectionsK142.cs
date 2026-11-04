@@ -27,9 +27,10 @@ static partial class Program
                 p.Rebuild(pars);
                 var sets = new List<IReadOnlyList<(Vector3d P, Vector3d A, Vector3d B, Vector3d N1, Vector3d N2)>>();
                 Parametric3D.Kernel.Ops.FilletOp.SweepSectionSet = s => sets.Add(s);
+                Parametric3D.Kernel.Ops.FilletOp.OverflowOffForTest = true;   // k153: сама попытка резца, без отказа «шире грани»
                 try { p.AddFeature(last); p.Rebuild(pars); }
                 catch (Exception ex) when (ex is not OutOfMemoryException) { }
-                finally { Parametric3D.Kernel.Ops.FilletOp.SweepSectionSet = null; }
+                finally { Parametric3D.Kernel.Ops.FilletOp.SweepSectionSet = null; Parametric3D.Kernel.Ops.FilletOp.OverflowOffForTest = false; }
                 n++;
                 if (sets.Count == 0) { fails.Add($"{Path.GetFileName(file)}: no swept attempt"); continue; }
                 var s = sets[^1];

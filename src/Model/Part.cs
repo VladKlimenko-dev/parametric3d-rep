@@ -354,6 +354,8 @@ public sealed class Part : ModelItem
     /// (или формулы размеров её эскизов) ссылаются на изменившийся параметр.
     /// </summary>
     public void ParametersChanged() => SetDirty();
+    /// <summary>k153: значения параметров, от которых зависит деталь, отличаются от последнего расчёта (или записи тела).</summary>
+    public bool ParametersDiffer(ParameterTable? parameters) => _lastParams == null || Dependencies.Changed(_lastParams, Dependencies.Snapshot(parameters)).Count > 0;
 
     /// <summary>K06. Изменилось только представление (материал, цвет): геометрия не пересчитывается.</summary>
     public void AppearanceChanged() => SetDirty();
@@ -1054,6 +1056,53 @@ public sealed class Part : ModelItem
     public bool ShowsInstant { get; private set; }
     /// <summary>k114: на экране — сетка из файла (деталь ещё не перестроена: тел нет, выбора нет).</summary>
     public bool ShowsCached { get; private set; }
+
+    /// <summary>
+    /// k153: ДЕТАЛЬ ИЗ ЗАПИСАННОГО ТЕЛА — без перестроения (как открытие детали в CAD на Parasolid: тело читается из файла,
+    /// дерево не пересчитывается). Тела — прочитанные из документа, сетка показа — из файла (номера граней, рёбер и вершин в ней
+    /// переведены на новые), ошибки и созданные грани операций, предупреждения, имена тел, объём и площадь — записанные при
+    /// сохранении. Деталь не грязная: перестроение начнётся с первой правки (с начала дерева — сохранённых состояний нет).
+    /// </summary>
+    public void RestoreFromFile(IReadOnlyList<Kernel.Topology.BrepFile.Restored> bodies, MeshData md, double volume, double area,
+                                IReadOnlyList<string> bodyNames, IReadOnlyList<string> warnings,
+                                IReadOnlyDictionary<string, string> errors, IReadOnlyDictionary<string, List<uint>> created, ParameterTable? parameters)
+    {
+        var map = new Dictionary<uint, uint>();
+        foreach (var r in bodies) foreach (var kv in r.IdMap) map[kv.Key] = kv.Value;
+        uint M(uint id) => map.TryGetValue(id, out var n) ? n : id;
+        var mesh = new MeshData { Indices = md.Indices, Bounds = md.Bounds };
+        mesh.Vertices = md.Vertices.Select(v => new MeshVertex { P = v.P, N = v.N, FaceId = M(v.FaceId), Flags = v.Flags }).ToArray();
+        foreach (var (f, r) in md.FaceRanges) mesh.FaceRanges[M(f)] = r;
+        foreach (var (id, pts) in md.EdgePolylines) mesh.EdgePolylines.Add((M(id), pts));
+        foreach (var (id, pt) in md.Points) mesh.Points.Add((M(id), pt));
+        Bodies.Clear();
+        foreach (var r in bodies) { r.Body.Publish(); Bodies.Add(r.Body); }
+        BodyNameList.Clear(); BodyNameList.AddRange(bodyNames);
+        Warnings.Clear(); Warnings.AddRange(warnings);
+        foreach (var f in Features)
+        {
+            f.Error = errors.TryGetValue(f.Key, out var e) ? e : null;
+            f.CreatedFaceIds.Clear();
+            if (created.TryGetValue(f.Key, out var ids)) f.CreatedFaceIds.AddRange(ids.Select(M));
+        }
+        HideConsumedSketches();
+        Mesh = mesh; Volume = volume; Bounds = md.Bounds; ShowsCached = false; ShowsInstant = false;
+        LastGoodDisplay = (mesh, volume);
+        _areaFrom = new BuildResult { Area = area };
+        int failed = Features.Count(f => f.Error != null);
+        Error = failed > 0 ? $"Failed features in the build tree: {failed}." : null;
+        _lastInputs = (Kernel.KernelSettings.Capture(), Policy, Limits, EffectiveStage);
+        _lastParams = Dependencies.Snapshot(parameters);
+        _checkpoints.Clear(); _lastResult = null;
+        _dirtyFrom = int.MaxValue; _stageMoved = false;
+        _dirty = false;
+        RestoredFromFile = true;
+        Interlocked.Increment(ref RestoredParts);
+    }
+    /// <summary>k153: деталь открыта из записанного тела (не перестраивалась с открытия).</summary>
+    public bool RestoredFromFile { get; private set; }
+    /// <summary>k153: деталей, открытых без перестроения (разбор, проверки).</summary>
+    public static long RestoredParts;
 
     /// <summary>k114: показать сетку, записанную в файле, до перестроения (деталь остаётся грязной — перестроение в фоне).</summary>
     public void SetCachedDisplay(MeshData md, double volume)
@@ -1802,7 +1851,7 @@ public sealed class Part : ModelItem
                     // g.04: граница ошибки объёма (как AnalyticMeasure.Volume: допуски сущностей × площадь + измеренная квадратура +
                     // округление) — сверяется с бюджетом интегрирования
                     // граница — та же, что у AnalyticMeasure.Volume (у многогранного тела — с расхождением интеграла и многогранника)
-                    double err = Kernel.Topology.AnalyticMeasure.Volume(b, md).Error;
+                    double err = Kernel.Topology.AnalyticMeasure.Volume(b, md, ve, true).Error;   // k153: интеграл — уже посчитанный
                     result.VolumeError += err;
                     if (err > Kernel.ToleranceContext.Current.IntegrationRelative * Math.Abs(av.Value))
                         result.Warnings.Add($"Volume accuracy: ±{err:G3} mm³ exceeds the integration budget ({Kernel.ToleranceContext.Current.IntegrationRelative:G2} relative).");
@@ -1999,6 +2048,7 @@ public sealed class Part : ModelItem
         }
 
         LastStartedAt = r.StartedAt; LastExecuted = r.Executed;
+        RestoredFromFile = false;
         AppliedLog.Add((r.StartedAt, r.Executed));
         if (AppliedLog.Count > 64) AppliedLog.RemoveAt(0);
         Bodies.Clear();

@@ -76,6 +76,108 @@ public sealed class HoleFeature : Feature
     /// <summary>Направление сверления (от точки внутрь тела).</summary>
     public Vector3d Direction = -Vector3d.UnitZ;
 
+    // ================================================================ k153: привязка положения (замечание 04.11, 10:34, пп. 3–4)
+
+    /// <summary>
+    /// ЛИНЕЙНАЯ ПРИВЯЗКА (как «Linear» у Creo, размеры от кромок у SolidWorks): центр отверстия на грани входа — на расстоянии
+    /// LinD1 от прямой ребра LinRef1 и LinD2 от прямой ребра LinRef2 (в плоскости грани; сторона — та, где точка была при
+    /// задании). Правка детали, сдвигающая кромки, сдвигает и отверстие. null — точка без привязки (как прежде).
+    /// </summary>
+    public EdgeRef? LinRef1, LinRef2;
+    public ValueRef LinD1 = new(10), LinD2 = new(10);
+    /// <summary>
+    /// РАДИАЛЬНАЯ ПРИВЯЗКА: отверстие в цилиндрической грани RadFace (по имени) к оси; положение — расстояние RadAxial вдоль
+    /// оси от плоской грани RadRefFace (или от точки RadOrigin, если грани нет) и угол RadAngle вокруг оси от направления
+    /// RadZeroDir. null RadFace — без привязки.
+    /// </summary>
+    public string? RadFace, RadRefFace;
+    public ValueRef RadAxial = new(10), RadAngle = new(0);
+    public Vector3d RadOrigin, RadZeroDir = Vector3d.UnitX;
+    /// <summary>Мутация P3D_HOLEPLACE=0: привязки не действуют — отверстие в записанной точке (прежнее).</summary>
+    public static readonly bool PlaceOff = Environment.GetEnvironmentVariable("P3D_HOLEPLACE") == "0";
+
+    /// <summary>Ось и радиус цилиндрической грани по имени (у тела до операции).</summary>
+    public static (Vector3d At, Vector3d Axis, double R)? CylinderByName(IEnumerable<TSolid> bodies, string name)
+    {
+        foreach (var f in bodies.SelectMany(b => b.Faces))
+            if (f.Tag == name && Kernel.Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) is Kernel.Geometry.Ssi.Cylinder c)
+                return (c.P, c.Axis.Normalized(), c.R);
+        return null;
+    }
+
+    /// <summary>k153: точка и направление радиального отверстия по привязке (null — привязки нет).</summary>
+    public (Vector3d P, Vector3d Dir)? RadialPlacement(IReadOnlyList<TSolid> bodies, Parametric3D.Model.Params.ParameterTable? pars)
+    {
+        if (PlaceOff || RadFace == null) return null;
+        var cyl = CylinderByName(bodies, RadFace) ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"Hole: the cylindrical face '{EdgeRef.Bare(RadFace)}' no longer exists.");
+        var ax = cyl.Axis;
+        // начало отсчёта вдоль оси: плоская грань-привязка или записанная точка
+        double t0 = Vector3d.Dot(RadOrigin - cyl.At, ax);
+        if (RadRefFace != null)
+        {
+            var pl = bodies.SelectMany(b => b.Faces).Where(f => f.Tag == RadRefFace).Select(SketchFaceRef.PlaneOf).FirstOrDefault(x => x != null)
+                     ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"Hole: the reference face '{EdgeRef.Bare(RadRefFace)}' no longer exists.");
+            t0 = Vector3d.Dot(pl.P - cyl.At, ax);
+        }
+        var z = RadZeroDir - ax * Vector3d.Dot(RadZeroDir, ax);
+        if (z.LengthSquared < 1e-18) z = Math.Abs(ax.X) < 0.9 ? Vector3d.Cross(ax, Vector3d.UnitX) : Vector3d.Cross(ax, Vector3d.UnitY);
+        z.Normalize();
+        var y = Vector3d.Cross(ax, z);
+        double a = RadAngle.Resolve(pars) * Math.PI / 180;
+        var radial = z * Math.Cos(a) + y * Math.Sin(a);
+        var foot = cyl.At + ax * (t0 + RadAxial.Resolve(pars));
+        return (foot + radial * cyl.R, -radial);
+    }
+
+    /// <summary>k153: расстояния точки p (на грани с нормалью n) до прямых рёбер-привязок — для гизмо и правки положения.</summary>
+    public static double? DistanceToEdgeLine(List<TSolid> bodies, EdgeRef r, Vector3d p, Vector3d n)
+    {
+        var e = FilletOp.ResolveEdge(bodies, r, out _);
+        if (e == null) return null;
+        n = n.Normalized();
+        var a = e.Curve.PointAt(e.Curve.T0); var b = e.Curve.PointAt(e.Curve.T1);
+        var d = b - a; d -= n * Vector3d.Dot(d, n);
+        if (d.LengthSquared < 1e-18) return null;
+        a -= n * Vector3d.Dot(a - p, n);
+        var m = Vector3d.Cross(n, d.Normalized());
+        return Math.Abs(Vector3d.Dot(p - a, m));
+    }
+
+    /// <summary>
+    /// k153: центр отверстия по линейной привязке: в плоскости грани (точка p0 на ней, нормаль n) — на расстояниях от прямых
+    /// рёбер-привязок; сторона каждой прямой — та, где лежит p0.
+    /// </summary>
+    public Vector3d? LinearPlacement(List<TSolid> bodies, Vector3d p0, Vector3d n, Parametric3D.Model.Params.ParameterTable? pars)
+    {
+        if (PlaceOff || LinRef1 == null) return null;
+        n = n.Normalized();
+        (Vector3d A, Vector3d Nrm)? Line(EdgeRef r)
+        {
+            var e = FilletOp.ResolveEdge(bodies, r, out var conflict);
+            if (e == null) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"Hole: the reference edge is not found{(conflict != null ? " (" + conflict + ")" : "")}.");
+            var a = e.Curve.PointAt(e.Curve.T0); var b = e.Curve.PointAt(e.Curve.T1);
+            var d = b - a; d -= n * Vector3d.Dot(d, n);
+            if (d.LengthSquared < 1e-18) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: a reference edge is perpendicular to the entry face.");
+            a -= n * Vector3d.Dot(a - p0, n);
+            var m = Vector3d.Cross(n, d.Normalized());
+            if (Vector3d.Dot(p0 - a, m) < 0) m = -m;
+            return (a, m);
+        }
+        var l1 = Line(LinRef1.Value)!.Value;
+        double d1 = LinD1.Resolve(pars);
+        if (LinRef2 == null)
+            return p0 + l1.Nrm * (d1 - Vector3d.Dot(p0 - l1.A, l1.Nrm));
+        var l2 = Line(LinRef2.Value)!.Value;
+        double d2 = LinD2.Resolve(pars);
+        // X = p0 + α·m1 + β·m2: dot(X − A1, m1) = d1, dot(X − A2, m2) = d2
+        double c = Vector3d.Dot(l1.Nrm, l2.Nrm);
+        double r1 = d1 - Vector3d.Dot(p0 - l1.A, l1.Nrm), r2 = d2 - Vector3d.Dot(p0 - l2.A, l2.Nrm);
+        double det = 1 - c * c;
+        if (Math.Abs(det) < 1e-9) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: the two reference edges are parallel.");
+        double alpha = (r1 - c * r2) / det, beta = (r2 - c * r1) / det;
+        return p0 + l1.Nrm * alpha + l2.Nrm * beta;
+    }
+
     /// <summary>
     /// Вид отверстия. Имя намеренно то же, что у общего свойства операции, поэтому оно
     /// объявлено через new: здесь речь о виде ОТВЕРСТИЯ, а не о виде операции.
@@ -87,6 +189,15 @@ public sealed class HoleFeature : Feature
     /// <summary>Глубина; при сквозном не используется.</summary>
     public ValueRef Depth = new(20);
     public bool ThroughAll;
+    /// <summary>
+    /// k153 (замечание 04.11, 10:34, п. 4): ДНО ГЛУХОГО ОТВЕРСТИЯ — острие сверла (конус с углом при вершине DrillAngle, по
+    /// умолчанию 118°), а не плоское. Глубина — до конца цилиндрической части (как у Creo/SolidWorks «до плеча»). Мутация
+    /// P3D_HOLEDRILLPOINT=0 — дно всегда плоское (прежнее).
+    /// </summary>
+    public bool DrillPoint;
+    public ValueRef DrillAngle = new(118);
+    public static readonly bool DrillPointOff = Environment.GetEnvironmentVariable("P3D_HOLEDRILLPOINT") == "0";
+    bool PointBottom => DrillPoint && !ThroughAll && !DrillPointOff;
 
     /// <summary>Цекование: диаметр и глубина. Зенковка: диаметр и угол при вершине.</summary>
     public ValueRef HeadDiameter = new(12);
@@ -155,6 +266,10 @@ public sealed class HoleFeature : Feature
         if (Direction.LengthSquared < 1e-18) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: the direction is not set.");
 
         var at = FollowFaces(ctx);
+        // k153: привязки положения — точка по рёбрам грани входа / по оси, углу и торцу цилиндра
+        var qb = ctx.Bodies.Select(Kernel.Ops.InstantPreview.Query).ToList();
+        if (RadialPlacement(qb, ctx.Parameters) is { } rp) { at = new List<Vector3d> { rp.P }; Direction = rp.Dir; }
+        else if (at.Count == 1 && LinearPlacement(qb, at[0], -Direction, ctx.Parameters) is { } lp) at[0] = lp;
         if (SketchId != 0 && ctx.FindSketch(SketchId) is { } sk)
             foreach (var p in sk.Entities.OfType<Sketching.SkPoint>())
                 at.Add(sk.Plane.ToWorld(new Vector2d(p.X, p.Y)));
@@ -208,7 +323,8 @@ public sealed class HoleFeature : Feature
             routes.Add(trace);
             TSolid? exact = null;
             var body = ctx.Bodies[0];
-            string? off = Kernel.Ops.InstantPreview.Active ? "instant preview (mesh)" : !ExactHoles ? "exact holes switched off (HoleFeature.ExactHoles)" : ctx.Bodies.Count != 1 ? "the part has more than one body" : null;
+            string? off = Kernel.Ops.InstantPreview.Active ? "instant preview (mesh)" : !ExactHoles ? "exact holes switched off (HoleFeature.ExactHoles)" : ctx.Bodies.Count != 1 ? "the part has more than one body"
+                        : PointBottom ? "drill point bottom (one revolved tool)" : null;
             bool lastInvalid = false;
             bool Route(string name, string? notApplicable, Func<TSolid?> attempt, bool fullValidation, string? invalidWarning)
             {
@@ -305,6 +421,20 @@ public sealed class HoleFeature : Feature
             // вычитание вместо двух соосных резцов (совпадающие поверхности между операциями, верх конуса зенковки —
             // ровно на грани тела). Головка зенковки продолжена конусом выше поверхности на тот же запас, что у сверла
             // (снаружи тела — форма результата та же). Где профиль не сводится к одному телу — прежний путь.
+            // k153: острие сверла — одно тело вращения (головка, если есть, цилиндр и конус острия)
+            if (PointBottom)
+            {
+                double ang = DrillAngle.Resolve(ctx.Parameters);
+                if (ang <= 0 || ang >= 180) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: the drill point angle must be between 0 and 180 degrees.");
+                double len = depth + over, tip = d / 2 / Math.Tan(ang * Math.PI / 360);
+                var pp = (Kind != HoleKind.Simple ? CompositeProfile(d, len, over, ctx) : null) ?? new List<Vector2d> { new(0, 0), new(d / 2, 0), new(d / 2, len), new(0, len) };
+                if (Kind != HoleKind.Simple && pp.Count == 4)
+                    throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: the head does not fit the hole (wider head, shallower than the hole).");
+                pp[^1] = new Vector2d(0, len + tip);
+                trace[^1] = new("general-boolean", HoleRouteVerdict.Accepted, "drill point tool");
+                BooleanOp.Subtract(ctx.Bodies, Revolved(start, dir, pp), ctx.Warnings);
+                continue;
+            }
             if (Kind != HoleKind.Simple && CompositeTool && CompositeProfile(d, depth + over, over, ctx) is { } prof)
             {
                 trace[^1] = new("general-boolean", HoleRouteVerdict.Accepted, "composite tool");
@@ -353,7 +483,8 @@ public sealed class HoleFeature : Feature
 
     /// <summary>Роли граней отверстия — одни на все маршруты.</summary>
     public const string RoleWall = "hole:wall", RoleBottom = "hole:bottom", RoleCounterbore = "hole:counterbore",
-                        RoleCounterboreBottom = "hole:counterbore-bottom", RoleCountersink = "hole:countersink", RoleOther = "hole:face";
+                        RoleCounterboreBottom = "hole:counterbore-bottom", RoleCountersink = "hole:countersink", RoleOther = "hole:face",
+                        RoleDrillPoint = "hole:drill-point";
 
     /// <summary>
     /// KRN-07 (07.2): ЕДИНЫЙ КОНТРАКТ ИМЁН. Прежде имя грани отверстия зависело от маршрута: «quadric:hole» у соосного пути,
@@ -381,6 +512,7 @@ public sealed class HoleFeature : Feature
                 {
                     Kernel.Geometry.Ssi.Cylinder c when along(c.Axis) && Near(c.R, d / 2) => RoleWall,
                     Kernel.Geometry.Ssi.Cylinder c when along(c.Axis) && Kind == HoleKind.Counterbore && Near(c.R, hd / 2) => RoleCounterbore,
+                    Kernel.Geometry.Ssi.Cone c when along(c.Axis) && PointBottom && AtDepth(c.Apex, depth + d / 2 / Math.Tan(DrillAngle.Resolve(ctx.Parameters) * Math.PI / 360)) => RoleDrillPoint,
                     Kernel.Geometry.Ssi.Cone c when along(c.Axis) => RoleCountersink,
                     Kernel.Geometry.Ssi.Plane pl when along(pl.N) && AtDepth(pl.P, hh) => RoleCounterboreBottom,
                     Kernel.Geometry.Ssi.Plane pl when along(pl.N) && AtDepth(pl.P, depth) => RoleBottom,

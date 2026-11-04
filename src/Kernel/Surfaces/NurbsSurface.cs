@@ -20,6 +20,8 @@ public sealed class NurbsSurface : ISurface3
     private readonly double[,] _w;           // веса
     private readonly double[] _ku, _kv;      // узловые векторы
     private readonly int _du, _dv;           // степени
+    /// <summary>k153: данные поверхности (запись тела в документ).</summary>
+    internal (Vector3d[,] Cp, double[,] W, double[] Ku, double[] Kv, int Du, int Dv) Data => (_cp, _w, _ku, _kv, _du, _dv);
 
     /// <summary>Мутация P3D_NURBSDERIVS=0: производные разностями (прежнее; у края параметров — односторонние, ошибка O(h)).</summary>
     public static readonly bool DerivsOff = Environment.GetEnvironmentVariable("P3D_NURBSDERIVS") == "0";

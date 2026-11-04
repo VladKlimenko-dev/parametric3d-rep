@@ -169,16 +169,20 @@ public sealed class BlendOp : FeatureOp<BlendFeature>
         _secs = p.Ref(new RefField { Label = "Сечения по порядку", Filter = PickFilter.SketchCurves, Accept = Refs.IsSketch, Describe = r => L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?") });
         _secs.SketchFits = Refs.CurvesSketch;
         if (Editing) KeepSketches(_secs, F.SectionSketchIds.ToArray());
-        _path = StartMode == BlendKind.Swept ? p.Ref(QuiltFields.Sketch("Траектория")) : new RefField { Label = "", Optional = true };
+        // k153: траектория — эскиз, кривая или трёхмерная линия (как у протяжки)
+        _path = StartMode == BlendKind.Swept
+            ? p.Ref(new RefField { Label = "Траектория", Filter = PickFilter.SketchCurves | PickFilter.Datums, Accept = r => Refs.IsSketch(r) || r.Target is DatumCurve or Line3DItem, Single = true,
+                Describe = r => r.Target is DatumCurve or Line3DItem ? L("Кривая «{0}»", ((ModelItem)r.Target!).Name) : L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?") })
+            : new RefField { Label = "", Optional = true };
         if (StartMode == BlendKind.Swept) _path.SketchFits = Refs.CurvesSketch;
-        if (Editing) KeepSketches(_path, F.PathSketchId);
+        if (Editing) { if (F.PathSketchId != 0) KeepSketches(_path, F.PathSketchId); else _path.Kept = F.PathLineId != 0 ? 1 : 0; }
         _axis = StartMode == BlendKind.Rotational ? p.Ref(new RefField { Label = "Ось (отрезок эскиза)", Filter = PickFilter.SketchCurves, Accept = r => r.Target is SkLine, Single = true, Optional = true }) : new RefField { Label = "", Optional = true };
         p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
         p.Check("Поверхность (без торцов)", () => F.AsSurface, v => F.AsSurface = v);
         p.Note(StartMode switch
         {
             BlendKind.Swept => "Сечения — у точек траектории; форма между ними смешивается вдоль траектории.",
-            BlendKind.Rotational => "Сечения — в плоскостях через ось (осевая линия в эскизе сечения); промежуточные — поворотом.",
+            BlendKind.Rotational => "Сечения — в плоскостях через ось; ось — осевая линия в эскизе сечения или отрезок любого эскиза (поле «Ось»); промежуточные — поворотом.",
             _ => "Переход через замкнутые сечения; три и больше — гладко.",
         });
     }
@@ -191,12 +195,14 @@ public sealed class BlendOp : FeatureOp<BlendFeature>
         var sk = W.ViewPort.Selection.Items.Where(Refs.IsSketch).GroupBy(r => Refs.SketchOf(r)!.Id).Select(g => g.First()).ToList();
         if (StartMode == BlendKind.Swept && sk.Count > 2) { _secs.Take(sk.Take(sk.Count - 1).ToArray()); _path.Take(new[] { sk[^1] }); }
         else if (sk.Count > 0) _secs.Take(sk.ToArray());
+        if (StartMode == BlendKind.Swept && _path.Items.Count == 0 && W.ViewPort.Selection.Items.FirstOrDefault(r => r.Target is DatumCurve or Line3DItem) is { IsEmpty: false } dc) _path.Take(new[] { dc });
     }
 
     protected override void Push()
     {
         if (_secs.Touched) { F.SectionSketchIds.Clear(); foreach (var id in _secs.Items.Select(Refs.SketchOf).OfType<Sketch>().Select(s => s.Id).Distinct()) F.SectionSketchIds.Add(id); }
-        if (_path.Items.Count > 0 && Refs.SketchOf(_path.Items[0]) is { } ps) F.PathSketchId = ps.Id;
+        if (_path.Items.Count > 0 && _path.Items[0].Target is DatumCurve or Line3DItem) { F.PathLineId = ((ModelItem)_path.Items[0].Target!).Id; F.PathSketchId = 0; }
+        else if (_path.Items.Count > 0 && Refs.SketchOf(_path.Items[0]) is { } ps) { F.PathSketchId = ps.Id; F.PathLineId = 0; }
         if (_axis.Touched) F.AxisEntityId = _axis.Items.Count > 0 && _axis.Items[0].Target is SkLine ln ? ln.Id : 0;
     }
 }

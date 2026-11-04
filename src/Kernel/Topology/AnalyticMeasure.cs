@@ -104,7 +104,14 @@ public static class AnalyticMeasure
         return Math.Max(tol, Math.Max(ToleranceContext.Current.ModelAccuracy, 2 * Analytic.OperandTolerance.Measure(solid)));
     }
 
-    public static Measured Volume(TSolid solid, MeshData? mesh = null)
+    static readonly bool FastPolyBoundOff = Environment.GetEnvironmentVariable("P3D_FASTPOLYBOUND") == "0";
+    /// <summary>k153: границ объёма многогранного тела без полного аудита (разбор).</summary>
+    public static long FastPolyBounds;
+    static readonly bool ReuseOff = Environment.GetEnvironmentVariable("P3D_VOLREUSE") == "0";
+
+    public static Measured Volume(TSolid solid, MeshData? mesh = null) => Volume(solid, mesh, null, false);
+    /// <summary>k153: то же, с уже посчитанным интегралом объёма (деталь считает его сама — прежде он считался второй раз).</summary>
+    public static Measured Volume(TSolid solid, MeshData? mesh, (double Volume, double QuadratureError)? known, bool knownGiven)
     {
         mesh ??= Tessellator.Tessellate(solid);
         double v = MassProps.Volume(mesh), area = MassProps.Area(mesh);
@@ -112,7 +119,9 @@ public static class AnalyticMeasure
         // Точный путь: интеграл по настоящим кривым рёбер (AnalyticVolume). Ошибка — от того,
         // что вершины тела стоят на точной сетке, а не на пересечениях поверхностей: не больше
         // наибольшего допуска вершины или ребра на площадь поверхности, плюс квадратура.
-        if (AnalyticVolume.OfWithError(solid) is { } ve)
+        (double Volume, double QuadratureError)? veq;
+        using (Diagnostics.Prof.Time("мера: интеграл объёма")) veq = knownGiven && !ReuseOff ? known : AnalyticVolume.OfWithError(solid);
+        if (veq is { } ve)
         {
             double exactV = ve.Volume;
             double tol = EntityBound(solid);
@@ -124,14 +133,37 @@ public static class AnalyticMeasure
             // × площадь (истина — в пределах гранения от многогранника). Мутация P3D_POLYBOUND=0.
             if (!PolyBoundOff && solid.Exact != null && solid.ExactAuthoritative)
             {
+                // k153: грани поверхности сечений по формуле — отход фасет не мерится (минуты проекций), граница — бесконечность
+                if (!FastPolyBoundOff && solid.Faces.Any(f => GeometryAudit.AuthoritativeSurface(f) is SectionSurface { IsProcedural: true }))
+                {
+                    Interlocked.Increment(ref FastPolyBounds);
+                    Diagnostics.Prof.Count("мера: быстрая граница", 1);
+                    return new Measured(exactV, GeometryLevel.Analytic, double.PositiveInfinity, "analytic boundary integral");
+                }
                 double vp; try { vp = solid.Exact.Solid.VolumeMm3().ToDouble(); } catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { vp = double.NaN; }
-                var aud = GeometryAudit.Of(solid);
+                GeometryAudit aud;
+                using (Diagnostics.Prof.Time("мера: аудит (многогранник)")) aud = GeometryAudit.Of(solid);
                 double chordP = aud.Faces.Count == 0 ? 0 : aud.Faces.Max(f => double.IsNaN(f.ChordError) ? 0 : f.ChordError);
                 err += (double.IsNaN(vp) ? double.PositiveInfinity : Math.Abs(exactV - vp)) + 2 * chordP * area;
             }
             return new Measured(exactV, GeometryLevel.Analytic, err, "analytic boundary integral");
         }
-        var audit = GeometryAudit.Of(solid);
+        // k153 (замечание 04.11, 10:34, п. 5): МНОГОГРАННОЕ ТЕЛО — ГРАНИЦА БЕСКОНЕЧНА БЕЗ ПОЛНОГО АУДИТА. Тело с гранёными гранями
+        // (резец, многогранная форма) получает границу «бесконечность» при любом отходе фасет, а полный аудит мерил отход
+        // каждой фасеты от источника грани: у HelSweep (винтовая протяжка + фаска резцом) — 841 с из 16 минут перестроения.
+        // Мутация P3D_FASTPOLYBOUND=0 — полный аудит (прежнее).
+        // Так же — у тела с гранями поверхности сечений по формуле (лента, винтовая протяжка), объём которого по формулам не
+        // посчитан: отход фасет от такой грани мерится проекциями (~20 мс каждая, до 4000 на грань), а граница сеточного объёма
+        // для неё всё равно не подтверждается.
+        if (!FastPolyBoundOff && ((solid.Exact != null && solid.ExactAuthoritative) || solid.Guarantee is GuaranteeLevel.ExactPolyhedral or GuaranteeLevel.Approximate
+                                  || solid.Faces.Any(f => GeometryAudit.AuthoritativeSurface(f) is SectionSurface { IsProcedural: true })))
+        {
+            Interlocked.Increment(ref FastPolyBounds);
+            Diagnostics.Prof.Count("мера: быстрая граница", 1);
+            return new Measured(v, GeometryLevel.Faceted, double.PositiveInfinity, "mesh of analytic faces");
+        }
+        GeometryAudit audit;
+        using (Diagnostics.Prof.Time("мера: аудит геометрии")) audit = GeometryAudit.Of(solid);
         double chord = audit.Faces.Count == 0 ? 0 : audit.Faces.Max(f => double.IsNaN(f.ChordError) ? 0 : f.ChordError);
         bool faceted = audit.Faces.Any(f => f.Level != GeometryLevel.Analytic);
         // Грань без аналитической основы: ошибка неизвестна, граница — бесконечность.

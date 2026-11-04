@@ -29,6 +29,9 @@ public readonly struct Frame3
         V = Vector3d.Cross(W, U).Normalized();
     }
 
+    /// <summary>k153: рамка без нормировки (чтение тела из документа — те же числа, что при записи).</summary>
+    internal static Frame3 Raw(Vector3d origin, Vector3d u, Vector3d v, Vector3d w) => new(origin, u, v, w);
+
     private Frame3(Vector3d origin, Vector3d u, Vector3d v, Vector3d w)
     { Origin = origin; U = u; V = v; W = w; }
 

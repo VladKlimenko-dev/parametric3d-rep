@@ -22,6 +22,9 @@ public readonly struct SweepSection
     /// <summary>Отрезок (не дуга и не кривая Безье).</summary>
     public bool IsLine => !IsArc && Q == null;
 
+    /// <summary>k153: сечение по своим полям (чтение тела из документа).</summary>
+    internal static SweepSection Raw(bool arc, Vector3d a, Vector3d b, Vector3d c, Vector3d e1, Vector3d e2, double r, double phi, Vector3d[]? q) => new(arc, a, b, c, e1, e2, r, phi, q);
+
     private SweepSection(bool arc, Vector3d a, Vector3d b, Vector3d c, Vector3d e1, Vector3d e2, double r, double phi, Vector3d[]? q = null)
     { IsArc = arc; A = a; B = b; C = c; E1 = e1; E2 = e2; R = r; Phi = phi; Q = q; }
 
@@ -403,6 +406,27 @@ public sealed class SectionSurface : ISurface3
     /// <summary>KRN-06 (06.12): шаг таблицы формулы, заданный построителем (0 — по умолчанию: 0.25 мм и 1/20 ширины). Лента
     /// катящегося шара просит мельче: кубическая вставка с шагом 0.15 мм отходила от формулы на 1e-6 мм при допуске p-кривой 1e-7.</summary>
     private readonly double _tableStep;
+
+    /// <summary>k153: данные процедурной поверхности для записи тела в документ (таблица формулы считается, если её ещё нет).</summary>
+    internal (double[] StationU, double U0, double U1, double TableStep, double[] Start, (double H, SweepSection[] S)[] Pieces)? ProcData()
+    {
+        if (_gen == null) return null;
+        var t = Table();
+        return (_stationU!, _u0, _u1, _tableStep, t.Start, t.Pieces);
+    }
+    /// <summary>
+    /// k153: ПРОЦЕДУРНАЯ ПОВЕРХНОСТЬ ИЗ ДОКУМЕНТА — таблица формулы записана; формула — сама таблица (сечение между узлами — та же
+    /// вставка, что у построенной поверхности: точки совпадают с записанными до последнего знака).
+    /// </summary>
+    internal static SectionSurface FromTable(IReadOnlyList<double> stationU, IReadOnlyList<SweepSection> stations, bool closed, double u0, double u1,
+                                             IReadOnlyList<double> breaks, double tableStep, double[] start, (double H, SweepSection[] S)[] pieces)
+    {
+        SectionSurface? self = null;
+        var s = new SectionSurface(u => self!.SectionAt(u), stationU, stations, closed, u0, u1, breaks, tableStep);
+        s._tab = new Tab(start, pieces);
+        self = s;
+        return s;
+    }
 
     private Tab Table()
     {
@@ -966,6 +990,8 @@ public sealed class SectionIsoCurve : Curves.ICurve3
     public readonly SectionSurface Surface;
     public readonly double V, U0, U1;
     private readonly Vector3d _p0, _p1;
+    /// <summary>k153: концы (запись тела в документ).</summary>
+    internal (Vector3d P0, Vector3d P1) Ends => (_p0, _p1);
     private Vector3d[]? _pts;
 
     /// <summary>

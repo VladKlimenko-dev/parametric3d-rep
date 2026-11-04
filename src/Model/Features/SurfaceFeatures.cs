@@ -480,8 +480,12 @@ public sealed class BlendFeature : Feature
     public BlendKind Mode;
     public readonly List<uint> SectionSketchIds = new();
     public uint PathSketchId;
+    /// <summary>k153: траектория — кривая или трёхмерная линия (DatumCurve, Line3DItem) вместо эскиза.</summary>
+    public uint PathLineId;
     public uint AxisEntityId;
     public bool AsSurface;
+    static readonly bool AxisAnyOff = Environment.GetEnvironmentVariable("P3D_BLENDAXISANY") == "0";
+    static readonly bool PathCurveOff = Environment.GetEnvironmentVariable("P3D_BLENDPATHCURVE") == "0";
     public int Steps = 16, Points = 48;
     public BlendFeature(string name = "Blend") { Name = name; }
     public override string Summary => $"{Mode} blend ({SectionSketchIds.Count} sections)" + (AsSurface ? " surface" : "") + (Cut ? " cut" : "");
@@ -555,9 +559,25 @@ public sealed class BlendFeature : Feature
         var stations = new List<Frame3>(); var forms = new List<List<Vector2d>>();
         if (Mode == BlendKind.Rotational)
         {
-            var ax = (AxisEntityId != 0 ? sks[0].AxisFromEntity(AxisEntityId) : sks.Select(s => s.RevolutionAxis()).FirstOrDefault(a => a != null))
-                     ?? throw new RebuildException(OperationOutcome.InvalidInput, "Rotational blend: no axis (draw a centerline in a section).");
+            // k153: ось — отрезок любого эскиза детали (прежде — только первого сечения: осевая линия в отдельном эскизе не
+            // находилась, «no axis» при выбранной оси). Мутация P3D_BLENDAXISANY=0 — прежнее.
+            Frame3? axFound = null;
+            if (AxisEntityId != 0)
+            {
+                axFound = sks[0].AxisFromEntity(AxisEntityId);
+                if (axFound == null && !AxisAnyOff)
+                    axFound = sks.Skip(1).Concat(ctx.Part.Sketches).Select(s => s.AxisFromEntity(AxisEntityId)).FirstOrDefault(a => a != null);
+            }
+            else axFound = sks.Select(s => s.RevolutionAxis()).FirstOrDefault(a => a != null);
+            var ax = axFound ?? throw new RebuildException(OperationOutcome.InvalidInput,
+                AxisEntityId != 0 ? "Rotational blend: the selected axis line is not found." : "Rotational blend: no axis (draw a centerline in a section or select an axis line).");
             var w = ax.W.Normalized();
+            // k153: сечение вращением — в плоскости через ось; плоскость поперёк оси давала бессмысленный поворот (угол 0 → 2π)
+            for (int i = 0; i < frames.Count && !AxisAnyOff; i++)
+            {
+                double c = Math.Abs(Vector3d.Dot(profs[i].Plane.W.Normalized(), w));
+                if (c > 1e-3) throw new RebuildException(OperationOutcome.InvalidInput, $"Rotational blend: section {i + 1} ('{sks[i].Name}') is not in a plane through the axis (its plane is at {Math.Asin(Math.Min(1, c)) * 180 / Math.PI:0.#}° to the axis; it must contain the axis direction).");
+            }
             double Ang(Frame3 f) { var r = f.Origin - ax.Origin; r -= w * Vector3d.Dot(r, w); var r0 = frames[0].Origin - ax.Origin; r0 -= w * Vector3d.Dot(r0, w); return Math.Atan2(Vector3d.Dot(Vector3d.Cross(r0, r), w), Vector3d.Dot(r0, r)); }
             var angs = frames.Select(Ang).ToList();
             for (int i = 1; i < angs.Count; i++) while (angs[i] <= angs[i - 1] + 1e-9) angs[i] += 2 * Math.PI;
@@ -573,10 +593,21 @@ public sealed class BlendFeature : Feature
         }
         else
         {
-            var ps = ctx.FindSketch(PathSketchId) ?? throw new RebuildException(OperationOutcome.InvalidInput, "Swept blend: the path sketch is not found.");
             var pts = new List<Vector3d>();
-            var pc = ps.Entities.Where(e => e.Role == Sketching.SkRole.Object && e is not Sketching.SkPoint).Select(e => e.ToCurve3(ps.Plane)).ToList();
-            for (int i = 0; i < pc.Count; i++) pc[i].Tessellate(pts, i == 0);
+            // k153: траектория — эскиз, кривая (через точки, по уравнению, проекция) или трёхмерная линия, как у протяжки.
+            // Мутация P3D_BLENDPATHCURVE=0 — только эскиз (прежнее).
+            if (PathLineId != 0 && !PathCurveOff)
+            {
+                if (ctx.Part.FindById<Line3DItem>(PathLineId) is { } l3) { pts.Add(l3.A); pts.Add(l3.B); }
+                else if (ctx.Part.FindById<DatumCurve>(PathLineId) is { Points.Count: >= 2 } dc) pts.AddRange(dc.Points);
+                else throw new RebuildException(OperationOutcome.InvalidInput, "Swept blend: the path curve is not found.");
+            }
+            else
+            {
+                var ps = ctx.FindSketch(PathSketchId) ?? throw new RebuildException(OperationOutcome.InvalidInput, "Swept blend: the path sketch is not found.");
+                var pc = ps.Entities.Where(e => e.Role == Sketching.SkRole.Object && e is not Sketching.SkPoint).Select(e => e.ToCurve3(ps.Plane)).ToList();
+                for (int i = 0; i < pc.Count; i++) pc[i].Tessellate(pts, i == 0);
+            }
             if (pts.Count < 2) throw new RebuildException(OperationOutcome.InvalidInput, "Swept blend: the path is empty.");
             var path = new PolylineCurve3(pts);
             // параметры станций сечений — ближайшие точки траектории

@@ -629,6 +629,159 @@ public static class FilletOp
         finally { VariableLaw = null; }
     }
 
+    static readonly bool OverflowOff = Environment.GetEnvironmentVariable("P3D_CHAMFEROVERFLOW") == "0";
+    static readonly bool MajorityOff = Environment.GetEnvironmentVariable("P3D_CHAMFEROVFMAJ") == "0";
+    /// <summary>k153: проверка «фаска шире грани» выключена (проверки сечений резца k142 — им нужна сама попытка).</summary>
+    [ThreadStatic] public static bool OverflowOffForTest;
+    static readonly bool OvfDbg = Environment.GetEnvironmentVariable("P3D_OVFDBG") == "1";
+    /// <summary>k153: фасок, отвергнутых как шире грани (разбор).</summary>
+    public static long ChamferOverflows;
+
+    /// <summary>
+    /// k153: грань ребра, за край которой выходит линия касания фаски размера (d1 на первой грани, d2 на второй); null — не
+    /// выходит. Пробы — 5 точек в средней части ребра (30–70 % длины): у концов лента законно сходит на соседние грани (грань
+    /// ребра там сужается — у файла пользователя линза шириной 29.7 мм посередине и 13.8 мм в 10 % от конца); фаска шире грани
+    /// в средней части съедает грань целиком — это уже не фаска ребра. Точка касания — шаг d от
+    /// ребра по самой грани (16 шагов поперёк ребра внутрь грани, каждый — в касательной плоскости и на ближайшую точку грани);
+    /// выход — точка хода не продвигается по грани (касательный отход больше половины шага два шага подряд — край грани).
+    /// </summary>
+    static TFace? ChamferOverflow(TEdge e, double d1, double d2, int only = 0, HashSet<TEdge>? selected = null)
+    {
+        var faces = e.CoEdges.Where(c => c.Loop?.Face != null).Select(c => (Ce: c, F: c.Loop!.Face!)).ToList();
+        if (faces.Count != 2 || e.Curve == null) return null;
+        for (int k = 0; k < 2; k++)
+        {
+            var (ce, f) = faces[k];
+            double d = k == 0 ? d1 : d2;
+            if (d <= 0) continue;
+            // область хода: грань и грани, гладко (по касательной) примыкающие к ней, — линия касания законно переходит на них
+            // (Sweep_Blend: узкая полоса боковины лофта, за ней гладко — следующая); сход — только за острой кромкой
+            var region = SmoothRegion(f, e);
+            int fails = 0;
+            for (int i = 1; i <= 5; i++)
+            {
+                if (only != 0 && i != only) continue;
+                double t = e.Curve.T0 + (e.Curve.T1 - e.Curve.T0) * (0.3 + 0.4 * (i - 1) / 4.0);
+                var p = e.Curve.PointAt(t);
+                var T = e.Curve.TangentAt(t); if (T.LengthSquared < 1e-24) continue; T.Normalize();
+                if (ce.Reversed) T = -T;
+                Vector3d N;
+                try { N = f.NormalAt(p); } catch { continue; }
+                if (N.LengthSquared < 1e-24) continue;
+                N.Normalize();
+                var into = Vector3d.Cross(N, T);
+                if (into.LengthSquared < 1e-24) continue;
+                into.Normalize();
+                const int steps = 16;
+                double h = d / steps;
+                // сторона «внутрь грани»: из двух шагов h поперёк ребра — тот, что ложится на грань (меньший касательный отход;
+                // шаг 1e-3 мм тонул в отходе треугольников грани от точной поверхности)
+                if (Tangential(region, p - into * h) < Tangential(region, p + into * h)) into = -into;
+                // ход по самой грани: 16 шагов, направление — в касательной плоскости в текущей точке; сход с грани — точка шага
+                // не на грани (ближайшая точка грани — на её краю, касательный отход больше 1 % шага)
+                double worst = 0; int outRun = 0;
+                var q = p; var dir = into;
+                for (int st = 0; st < steps; st++)
+                {
+                    var target = q + dir * h;
+                    var (c, fc) = ClosestOnRegion(region, target);
+                    var dv = target - c;
+                    Vector3d nq;
+                    try { nq = fc.NormalAt(c); } catch { nq = N; }
+                    if (nq.LengthSquared < 1e-24) nq = N;
+                    nq.Normalize();
+                    double off = (dv - nq * Vector3d.Dot(dv, nq)).Length;
+                    worst = Math.Max(worst, off);
+                    // сход — устойчивый: два шага подряд точка не продвигается по грани (отход больше половины шага)
+                    outRun = off > 0.5 * h ? outRun + 1 : 0;
+                    if (outRun >= 2 || (st == steps - 1 && outRun >= 1))
+                    {
+                        // сход через другое выбранное ребро (цепочка фасок) — законно: там своя фаска
+                        if (selected != null && selected.Count > 1 && NearestEdge(region, c) is { } ne && selected.Contains(ne)) break;
+                        if (OvfDbg) Console.WriteLine($"OVF face {f.Tag} other {faces[1 - k].F.Tag} len {e.Curve.Length:0.###} i {i} d {d:0.###} step {st} off {off:0.####} p {p} into {into} c {c} fc {fc.Tag} near {(NearestEdge(region, c) is { } nn ? (nn == e ? "SELF" : nn.Curve!.Length.ToString("0.###") + " " + nn.Curve.GetType().Name) : "-")} ecurve {e.Curve.GetType().Name} faceSurf {f.Surface?.GetType().Name}");
+                        fails++; worst = -1;
+                        break;
+                    }
+                    q = c;
+                    var nd = dir - nq * Vector3d.Dot(dir, nq);
+                    if (nd.LengthSquared > 1e-24) dir = nd.Normalized();
+                }
+                if (OvfDbg && worst >= 0) Console.WriteLine($"OVF face {f.Tag} i {i} d {d:0.###} ok worst {worst:0.####}");
+            }
+            // k153: сход в большинстве проб (3 из 5) — фаска съедает грань по средней части ребра (файл пользователя: линза);
+            // сход в одной-двух пробах — грань сужается к одному концу (клин после прежней фаски, корпус seq_s101_2, seq_s102_5):
+            // там линия касания законно переходит через край, как у Parasolid при переходе ленты на соседнюю грань.
+            if (only != 0 ? fails > 0 : fails >= (MajorityOff ? 1 : 3)) return f;
+        }
+        return null;
+    }
+
+    /// <summary>k153: грань и грани, примыкающие к ней гладко (угол нормалей у середины общего ребра меньше ~1.1°), кроме самого ребра фаски.</summary>
+    static List<TFace> SmoothRegion(TFace f, TEdge skip)
+    {
+        var res = new List<TFace> { f }; var seen = new HashSet<TFace> { f };
+        for (int i = 0; i < res.Count && res.Count < 32; i++)
+            foreach (var ed in res[i].Edges)
+            {
+                if (ed == skip || ed.Curve == null) continue;
+                var other = ed.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().FirstOrDefault(x => x != res[i]);
+                if (other == null || seen.Contains(other)) continue;
+                var m = ed.Curve.PointAt((ed.Curve.T0 + ed.Curve.T1) / 2);
+                Vector3d na, nb;
+                try { na = res[i].NormalAt(m); nb = other.NormalAt(m); } catch { continue; }
+                if (na.LengthSquared < 1e-24 || nb.LengthSquared < 1e-24 || Vector3d.Dot(na.Normalized(), nb.Normalized()) < 0.9998) continue;
+                seen.Add(other); res.Add(other);
+            }
+        return res;
+    }
+
+    /// <summary>Ребро области граней, ближайшее к точке (по 33 пробам кривой).</summary>
+    static TEdge? NearestEdge(List<TFace> region, Vector3d q)
+    {
+        TEdge? best = null; double bd = double.MaxValue;
+        foreach (var ed in region.SelectMany(f => f.Edges).Distinct())
+        {
+            if (ed.Curve == null) continue;
+            for (int k = 0; k <= 32; k++)
+            {
+                double dd = (ed.Curve.PointAt(ed.Curve.T0 + (ed.Curve.T1 - ed.Curve.T0) * k / 32) - q).LengthSquared;
+                if (dd < bd) { bd = dd; best = ed; }
+            }
+        }
+        return best;
+    }
+
+    static (Vector3d P, TFace F) ClosestOnRegion(List<TFace> region, Vector3d q)
+    {
+        Vector3d best = q; TFace bf = region[0]; double bd = double.MaxValue;
+        foreach (var f in region) { var c = ClosestOnFace(f, q); double dd = (c - q).LengthSquared; if (dd < bd) { bd = dd; best = c; bf = f; } }
+        return (best, bf);
+    }
+
+    /// <summary>Касательная (вдоль грани) составляющая отхода точки от ближайшей точки области граней.</summary>
+    static double Tangential(List<TFace> region, Vector3d q)
+    {
+        var (c, f) = ClosestOnRegion(region, q);
+        var dv = q - c;
+        Vector3d n;
+        try { n = f.NormalAt(c); } catch { return dv.Length; }
+        if (n.LengthSquared < 1e-24) return dv.Length;
+        n.Normalize();
+        return (dv - n * Vector3d.Dot(dv, n)).Length;
+    }
+
+    /// <summary>k153: наибольший размер фаски, при котором линия касания остаётся на гранях (деление пополам, отношение d2/d1 то же).</summary>
+    static double MaxChamfer(TEdge e, double d1, double d2, HashSet<TEdge>? selected = null)
+    {
+        double k2 = d1 > 0 ? d2 / d1 : 1, lo = 0, hi = d1 > 0 ? d1 : d2;
+        for (int it = 0; it < 20; it++)
+        {
+            double m = (lo + hi) / 2;
+            if (ChamferOverflow(e, m, m * k2, 0, selected) == null) lo = m; else hi = m;
+        }
+        return Math.Max(lo, lo * k2);
+    }
+
     /// <summary>ДИАГНОСТИКА: каким путём строится резец.</summary>
     public static Action<string>? PathDebug;
 
@@ -755,6 +908,23 @@ public static class FilletOp
 
             found.Add((wanted, edge));
         }
+
+        // k153: ФАСКА ШИРЕ СОСЕДНЕЙ ГРАНИ (замечание 04.11, 10:34, п. 2). Линия касания фаски — на расстоянии d от ребра по грани;
+        // если она выходит за край грани (грань у́же фаски), резец режет соседние грани и элементы — тело годно, но это уже не
+        // фаска (у пользователя: фаска D 44.72 и больше на трубе с вырезом). Как у CAD — отказ «фаска шире грани» с наибольшим
+        // допустимым размером. Мутация P3D_CHAMFEROVERFLOW=0 — резец без проверки (прежнее).
+        if (!round && !OverflowOff)
+            foreach (var (_, e) in found)
+            {
+                var selSet = found.Select(x => x.Edge).ToHashSet();
+                if (!OverflowOffForTest && ChamferOverflow(e, size1, size2, 0, selSet) is { } of)
+                {
+                    double max = MaxChamfer(e, size1, size2, selSet);
+                    Interlocked.Increment(ref ChamferOverflows);
+                    throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput,
+                        $"{what}: the chamfer ({Math.Max(size1, size2):0.###} mm) is wider than the face '{EdgeRef.Bare(of.Tag)}' next to the edge — its contact line leaves the face; the largest chamfer here is about {max:0.##} mm.");
+                }
+            }
 
         // k140: ГЛАДКИЙ СТЫК В ЦЕПОЧКЕ. Цепочка по касательной (AutoChain) захватывает и рёбра гладкого стыка граней (край
         // прежнего скругления), у которых нет угла: прежде вся операция отказывала «a smooth join, not an edge». Такие рёбра
@@ -1508,6 +1678,8 @@ public static class FilletOp
     /// Поиск по координатам остаётся только для старых ссылок без подписей.
     /// </summary>
     private static TEdge? Resolve(List<TSolid> bodies, EdgeRef wanted) => Resolve(bodies, wanted, out _);
+    /// <summary>k153: ребро по ссылке (имена граней, затем координаты) — для привязок других операций (отверстие).</summary>
+    public static TEdge? ResolveEdge(List<TSolid> bodies, EdgeRef wanted, out string? conflict) => Resolve(bodies, wanted, out conflict, out _);
 
     static readonly bool MidFallbackOff = Environment.GetEnvironmentVariable("P3D_REFMIDFALLBACK") == "0";
     static readonly bool RefAmbiguityOff = Environment.GetEnvironmentVariable("P3D_REFAMBIGUITY") == "0";

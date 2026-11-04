@@ -111,6 +111,8 @@ public sealed class RefField
 public sealed class OpPanel
 {
     private readonly StackPanel _host;
+    /// <summary>k153: корень панели (проверки).</summary>
+    public StackPanel Host => _host;
     private readonly Operation _op;
     public readonly List<RefField> Refs = new();
     public TextBlock Status { get; }
@@ -309,6 +311,30 @@ public sealed class OpPanel
         }
         _syncers.Add(() => { int g = get(); for (int j = 0; j < buttons.Count; j++) buttons[j].IsChecked = j == g; });
         Row(label, sp);
+    }
+
+    /// <summary>
+    /// k153: выбор одним из вариантов-иконок (типы отверстия): кнопки с иконкой, подпись — в подсказке; выбранная — нажата.
+    /// Переносится по ширине панели.
+    /// </summary>
+    public void IconSegments(string label, (string Icon, string Tip)[] options, Func<int> get, Action<int> set, Func<bool>? visible = null)
+    {
+        var wp = new WrapPanel { Orientation = Orientation.Horizontal };
+        var buttons = new List<ToggleButton>();
+        for (int i = 0; i < options.Length; i++)
+        {
+            int k = i;
+            var b = new ToggleButton { Content = Icons.IconProvider.Content(options[i].Icon, L(options[i].Tip), 30), IsChecked = get() == i, Padding = new Thickness(3), Margin = new Thickness(0, 0, 2, 2) };
+            ToolTip.SetTip(b, L(options[i].Tip));
+            b.Click += (_, _) => { set(k); foreach (var o in buttons) o.IsChecked = buttons.IndexOf(o) == k; _op.FieldChanged(); };
+            buttons.Add(b);
+            wp.Children.Add(b);
+        }
+        _syncers.Add(() => { int g = get(); for (int j = 0; j < buttons.Count; j++) buttons[j].IsChecked = j == g; });
+        var head = new TextBlock { Text = L(label), Margin = new Thickness(0, 4, 0, 2) };
+        var sp = new StackPanel { Spacing = 0, Children = { head, wp } };
+        _host.Children.Add(sp);
+        When(sp, visible);
     }
 
     public void Finish() { _host.Children.Add(Status); Refresh(); }

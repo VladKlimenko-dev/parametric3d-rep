@@ -438,15 +438,39 @@ public sealed class ShellOp : FeatureOp<ShellFeature>
     }
 }
 
-public sealed class HoleOp : FeatureOp<HoleFeature>
+public sealed class HoleOp : FeatureOp<HoleFeature>, IHandleOp
 {
-    private RefField _face = null!, _pts = null!;
+    private RefField _face = null!, _pts = null!, _ref1 = null!, _ref2 = null!;
     private readonly RefCache<Vector3d> _cache = new();
     private Vector3d? _faceCentre, _faceNormal;
     public HoleOp(HoleFeature? existing = null) : base(existing) { }
     public override string Title => "Отверстие";
     public override string Icon => "f_hole_but.svg";
-    protected override HoleFeature Create() => new();
+    protected override HoleFeature Create() => new() { DrillPoint = false };
+
+    /// <summary>
+    /// k153 (замечание 04.11, 10:34, п. 4): ТИП ОТВЕРСТИЯ — верх (простой, цекование, зенковка) × низ (насквозь, плоское дно,
+    /// острие сверла), иконками пользователя.
+    /// </summary>
+    public static readonly (string Icon, string Tip, HoleKind Top, int Bottom)[] Types =
+    {
+        ("hole_all_through_ico.svg", "Простое насквозь", HoleKind.Simple, 0),
+        ("hole_through_top_square_ico.svg", "Насквозь с цекованием", HoleKind.Counterbore, 0),
+        ("hole_through_top_chamfer_ico.svg", "Насквозь с зенковкой", HoleKind.Countersink, 0),
+        ("hole_straight_bottom_square_ico.svg", "Глухое, плоское дно", HoleKind.Simple, 1),
+        ("hole_straight_bottom_chamfer_ico.svg", "Глухое, острие сверла", HoleKind.Simple, 2),
+        ("hole_top_square_bottom_square_ico.svg", "Цекование, плоское дно", HoleKind.Counterbore, 1),
+        ("hole_top_square_bottom_chamfer_ico.svg", "Цекование, острие сверла", HoleKind.Counterbore, 2),
+        ("hole_top_chamfer_bottom_square_ico.svg", "Зенковка, плоское дно", HoleKind.Countersink, 1),
+        ("hole_top_chamfer_bottom_chamfer_ico.svg", "Зенковка, острие сверла", HoleKind.Countersink, 2),
+    };
+    static int Bottom(HoleFeature f) => f.ThroughAll ? 0 : f.DrillPoint ? 2 : 1;
+    public int TypeIndex => Math.Max(0, Array.FindIndex(Types, t => t.Top == F.Kind && t.Bottom == Bottom(F)));
+    public void SetType(int i)
+    {
+        var t = Types[i];
+        F.Kind = t.Top; F.ThroughAll = t.Bottom == 0; F.DrillPoint = t.Bottom == 2;
+    }
 
     public override void Build(OpPanel p)
     {
@@ -458,17 +482,28 @@ public sealed class HoleOp : FeatureOp<HoleFeature>
             Accept = r => r.Kind is PickKind.Vertex or PickKind.SketchPoint or PickKind.DatumPoint,
         });
         if (Editing) { _face.Kept = 1; _pts.Kept = F.Points.Count; }
-        p.Note("Без точек — отверстие в середине грани.");
-        p.Choice("Вид", new[] { "Простое", "С цекованием", "С зенковкой" }, () => (int)F.Kind, v => F.Kind = (HoleKind)v);
+        p.Note("Без точек — отверстие в середине грани. Гизмо в центре отверстия двигает его по грани; ручка — диаметр.");
+        p.IconSegments("Тип отверстия", Types.Select(t => (t.Icon, t.Tip)).ToArray(), () => TypeIndex, SetType);
         p.Number("Диаметр", () => F.Diameter, v => F.Diameter = v);
-        p.Check("Насквозь", () => F.ThroughAll, v => F.ThroughAll = v);
         p.Number("Глубина", () => F.Depth, v => F.Depth = v, visible: () => !F.ThroughAll);
+        p.Number("Угол острия", () => F.DrillAngle, v => F.DrillAngle = v, "°", visible: () => !F.ThroughAll && F.DrillPoint);
         p.Number("Диаметр головки", () => F.HeadDiameter, v => F.HeadDiameter = v, visible: () => F.Kind != HoleKind.Simple);
         p.Number("Глубина головки", () => F.HeadDepth, v => F.HeadDepth = v, visible: () => F.Kind == HoleKind.Counterbore);
         p.Number("Угол зенковки", () => F.HeadAngle, v => F.HeadAngle = v, "°", visible: () => F.Kind == HoleKind.Countersink);
+        // k153: положение — расстояния от двух рёбер грани входа (как «Linear» у Creo)
+        p.Header("Положение");
+        _ref1 = p.Ref(new RefField { Label = "От ребра 1", Filter = PickFilter.Edges, Accept = r => r.Kind == PickKind.Edge, Single = true, Optional = true });
+        p.Number("Расстояние 1", () => F.LinD1, v => F.LinD1 = v, visible: () => F.LinRef1 != null || _ref1.Items.Count > 0);
+        _ref2 = p.Ref(new RefField { Label = "От ребра 2", Filter = PickFilter.Edges, Accept = r => r.Kind == PickKind.Edge, Single = true, Optional = true });
+        p.Number("Расстояние 2", () => F.LinD2, v => F.LinD2 = v, visible: () => F.LinRef2 != null || _ref2.Items.Count > 0);
+        if (Editing) { _ref1.Kept = F.LinRef1 != null ? 1 : 0; _ref2.Kept = F.LinRef2 != null ? 1 : 0; }
     }
 
     protected override void SeedRefs() => Seed(_face, _pts);
+
+    private string? _placedSig;
+    /// <summary>Нормаль грани входа (наружу) — против направления сверления.</summary>
+    Vector3d FaceNormal => _faceNormal ?? -F.Direction;
 
     protected override void Push()
     {
@@ -483,13 +518,83 @@ public sealed class HoleOp : FeatureOp<HoleFeature>
                 _faceNormal = pl.Frame.W;
             }
         }
-        if (!_face.Touched && !_pts.Touched) return;
-        if (_faceNormal is { } n) F.Direction = -n;
-        F.Points.Clear();
-        F.PointFaces.Clear();
-        F.Points.AddRange(_cache.Resolve(_pts, Refs.PointOf));
-        if (F.Points.Count == 0 && _faceCentre is { } c) F.Points.Add(c);
+        // k153: точка — заново только при новом выборе грани или точек (прежде — при каждом пересчёте панели: сдвиг гизмо
+        // возвращался в центр грани)
+        string sig = string.Join(",", _face.Items.Select(r => r.Id)) + "|" + string.Join(",", _pts.Items.Select(r => r.Id));
+        if ((_face.Touched || _pts.Touched) && (sig != _placedSig || F.Points.Count == 0))
+        {
+            _placedSig = sig;
+            if (_faceNormal is { } n) F.Direction = -n;
+            F.Points.Clear();
+            F.PointFaces.Clear();
+            F.Points.AddRange(_cache.Resolve(_pts, Refs.PointOf));
+            if (F.Points.Count == 0 && _faceCentre is { } c) F.Points.Add(c);
+        }
+        // k153: рёбра-привязки: при выборе ребра расстояние — текущее (отверстие не прыгает)
+        bool newRef = false;
+        if (_ref1.Touched)
+        {
+            var e = _ref1.Items.Count > 0 && Part.FindEdge(_ref1.Items[0].Id) is { } e1 ? (EdgeRef?)EdgeRef.Of(e1) : null;
+            newRef |= !Equals(e, F.LinRef1); F.LinRef1 = e;
+        }
+        if (_ref2.Touched)
+        {
+            var e = _ref2.Items.Count > 0 && Part.FindEdge(_ref2.Items[0].Id) is { } e2 ? (EdgeRef?)EdgeRef.Of(e2) : null;
+            newRef |= !Equals(e, F.LinRef2); F.LinRef2 = e;
+        }
+        if (newRef && F.Points.Count > 0) SyncDistances(F.Points[0]);
     }
+
+    /// <summary>Расстояния привязок — по точке (выбор ребра, гизмо).</summary>
+    void SyncDistances(Vector3d at)
+    {
+        var bodies = Part.Bodies.ToList();
+        if (F.LinRef1 is { } r1 && HoleFeature.DistanceToEdgeLine(bodies, r1, at, FaceNormal) is { } d1) F.LinD1 = new ValueRef(Math.Round(d1, 3));
+        if (F.LinRef2 is { } r2 && HoleFeature.DistanceToEdgeLine(bodies, r2, at, FaceNormal) is { } d2) F.LinD2 = new ValueRef(Math.Round(d2, 3));
+    }
+
+    // ---------------------------------------------------------------- k153: ручка диаметра и гизмо положения
+
+    public override Action<double>? DragValue => v => F.Diameter = new ValueRef(Math.Abs(v));
+    public override double? DragCurrent => F.Diameter.Value;
+    public override string DragLabel => "Ø";
+    public override double HandleToValue(double d) => 2 * d;
+    public override double ValueToHandle(double v) => v / 2;
+
+    /// <summary>Рамка грани входа в центре отверстия.</summary>
+    (Vector3d O, Vector3d X, Vector3d Y, Vector3d N)? HoleFrame()
+    {
+        if (F == null || F.Points.Count == 0 || F.Direction.LengthSquared < 1e-18) return null;
+        var n = -F.Direction.Normalized();
+        var x = Math.Abs(n.Z) < 0.9 ? Vector3d.Cross(Vector3d.UnitZ, n).Normalized() : Vector3d.Cross(n, Vector3d.UnitX).Normalized();
+        if (Math.Abs(n.Z) < 0.9) x = Vector3d.Cross(n, Vector3d.Cross(Vector3d.UnitZ, n)).Normalized();
+        var y = Vector3d.Cross(n, x);
+        var at = F.Points[0];
+        if (F.LinRef1 != null && F.LinearPlacement(Part.Bodies.ToList(), at, n, null) is { } lp) at = lp;
+        return (at, x, y, n);
+    }
+
+    public (Vector3d At, Vector3d Out)? HandleAt() => HoleFrame() is { } f ? (f.O, f.X) : null;
+
+    public override void RefreshGizmo()
+    {
+        if (F.Points.Count != 1 || HoleFrame() is not { } f) { W.ViewPort.Gizmo = null; return; }
+        W.ViewPort.Gizmo = new GizmoSpec(GizmoMode.Move, f.O, f.X, f.Y, f.N)
+        { Mask = (1 << (int)GizmoPart.AxisX) | (1 << (int)GizmoPart.AxisY) | (1 << (int)GizmoPart.PlaneXY) };
+    }
+    private GizmoSpec? _g0;
+    private Vector3d _p0;
+    public override void GizmoStart(GizmoPart part) { _g0 = W.ViewPort.Gizmo; _p0 = _g0?.Origin ?? Vector3d.Zero; }
+    public override void GizmoMove(GizmoDrag d)
+    {
+        if (_g0 is not { } g || F.Points.Count != 1) return;
+        var at = _p0 + g.X * d.Delta.X + g.Y * d.Delta.Y;
+        F.Points[0] = at; F.PointFaces.Clear();
+        if (F.LinRef1 != null || F.LinRef2 != null) SyncDistances(at);
+        W.ViewPort.Gizmo = g with { Origin = at };
+        GizmoValuesChanged();
+    }
+    public override void GizmoEnd() => _g0 = null;
 }
 
 // ====================================================================== зеркало и массивы
@@ -604,6 +709,8 @@ public sealed class PlaneOp : Operation, IHandleOp
     public override string Title => "Плоскость";
     public override string Icon => "dat_plane_but.svg";
     public override bool SignedDrag => true;
+    /// <summary>k153: плоскость следует за ручкой во время перетаскивания (прежде — только после отпускания).</summary>
+    public override bool CheapLive => true;
     /// <summary>Ручка есть у способов со смещением (смещение) и углом (угол).</summary>
     public bool HasHandle => _by is 0 or 4;
     public static readonly string[] Methods = { "Смещение от плоскости", "Через три точки", "Через прямую и точку", "Параллельно через точку", "Под углом к плоскости", "Перпендикулярно прямой или кривой", "Посередине между плоскостями", "Касательно к грани в точке" };
@@ -920,6 +1027,7 @@ public static class OperationFactory
         VertexRoundFeature x => new VertexRoundOp(x),
         VertexChamferFeature x => new VertexChamferOp(x),
         ShellFeature x => new ShellOp(x),
+        HoleFeature x when x.RadFace != null => new AxialHoleOp(x) { Radial = true },   // k153: радиальное — своей панелью
         HoleFeature x => new HoleOp(x),
         MirrorFeature x => new MirrorOp(x),
         LinearPatternFeature x => new LinearPatternOp(x),

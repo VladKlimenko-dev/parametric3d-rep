@@ -85,8 +85,9 @@ static partial class Program
             var raw = Parametric3D.Model.DocumentFile.StripDisplay(other)!;
             other = Parametric3D.Model.DocumentFile.ResignForTest(other, raw);
             var (q, _) = Parametric3D.Model.DocumentFile.Load(other);
-            Log(new { test = "KRN09-FILE-DISPLAY-RAWSIG", cached = q.ShowsCached });
-            Require(q.ShowsCached, "the display stored in the file was rejected");
+            Log(new { test = "KRN09-FILE-DISPLAY-RAWSIG", cached = q.ShowsCached, restored = q.RestoredFromFile });
+            // k153: с телом в файле деталь восстанавливается целиком (RestoredFromFile) — это тоже принятый показ
+            Require(q.ShowsCached || q.RestoredFromFile, "the display stored in the file was rejected");
         });
     }
 }

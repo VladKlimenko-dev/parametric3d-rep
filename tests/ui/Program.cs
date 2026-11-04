@@ -41,6 +41,14 @@ void Check(string name, Action body)
 
 void Require(bool cond, string msg) { if (!cond) throw new CheckFailed(msg); }
 
+// k153: убрать из файла записанное тело (открытие — перестроением, как у файлов без тела); подпись сетки не меняется
+void StripBrep(string path)
+{
+    var txt = File.ReadAllText(path);
+    txt = System.Text.RegularExpressions.Regex.Replace(txt, @",\s*""Brep""\s*:\s*""[^""]*""", "");
+    File.WriteAllText(path, txt);
+}
+
 MainWindow Open(DocumentSession s)
 {
     var w = new MainWindow(s) { Width = 1400, Height = 860 };
@@ -2194,8 +2202,13 @@ Check("UI-SKETCH-UX", () =>
     reg["sk.delete"].Execute();
     Require(!sk.Entities.Contains(circ) && !sk.Dimensions.Contains(rd), "circle not deleted with its dimension");
     // п. 11 (с 12:28 — в полосе панелей над видом): «Готово / Отмена» видны; полоса снизу — предложения
-    var bar = w.FindControl<Border>("SketchBar")!;
-    Require(bar.IsVisible && bar.Parent == w.FindControl<WrapPanel>("ToolTray"), "sketch done/cancel bar is not in the toolbar tray");
+    // k153 (замечание 04.11, п. 7): «Готово / Отмена» — в панели вида за «Анализ» (P3D_SKBARVIEW=0 — прежняя полоса)
+    if (MainWindow.SketchBarInViewOff)
+    {
+        var bar = w.FindControl<Border>("SketchBar")!;
+        Require(bar.IsVisible && bar.Parent == w.FindControl<WrapPanel>("ToolTray"), "sketch done/cancel bar is not in the toolbar tray");
+    }
+    else Require(w.ViewSketchBar is { IsVisible: true }, "sketch done/cancel buttons are not in the view bar");
     Require(w.FindControl<Border>("ShapeBar")!.IsVisible, "shape panel hidden");
     if (Environment.GetEnvironmentVariable("UI_SKSHOT") is { Length: > 0 } skshot)
     {
@@ -2255,7 +2268,7 @@ Check("UI-TOOLBAR-TRAY", () =>
     w.SelectItem(part.PlaneXY);
     w.StartOperation(new SketchOp());
     Run();
-    Require(w.FindControl<Border>("ShapeBar")!.IsVisible && w.FindControl<Border>("SketchBar")!.IsVisible, "sketch toolbars are not shown in the tray");
+    Require(w.FindControl<Border>("ShapeBar")!.IsVisible && (w.FindControl<Border>("SketchBar")!.IsVisible || w.ViewSketchBar is { IsVisible: true }), "sketch toolbars are not shown in the tray");
     var sk = w.ViewPort.ActiveSketch!;
     Rect(sk, 0, 0, 30, 20);
     sk.Visible = false;
@@ -5461,7 +5474,7 @@ Check("UI-INCR-K122", () =>
     string path = Path.Combine(Path.GetTempPath(), $"p3d_k122_{Guid.NewGuid():N}.p3d");
     try
     {
-        DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(7, 40), "incr").SaveAs(path);
+        DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(7, 40), "incr").SaveAs(path); StripBrep(path);   // k153: состояния строятся при открытии перестроением
         var w = Open(DocumentSession.NewPart());
         WaitTask(w.OpenAsync(path));
         var s = w.Session; BuildNow(s);
@@ -5560,7 +5573,7 @@ Check("UI-PROGRESS-K121", () =>
     try
     {
         var src = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(5, 24), "progress");
-        src.SaveAs(path);
+        src.SaveAs(path); StripBrep(path);   // k153: открытие перестроением (файл без записанного тела)
         var w = Open(DocumentSession.NewPart());
         var open = w.OpenAsync(path);
         var t0 = DateTime.Now;
@@ -6191,7 +6204,7 @@ Check("UI-FILE-DISPLAY-K114", () =>
         var src = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 20), "k114");
         src.Part!.Rebuild(null);
         double v0 = src.Part.Volume; int tri0 = src.Part.Mesh!.Indices.Length;
-        src.SaveAs(path);
+        src.SaveAs(path); StripBrep(path);   // k153: открытие перестроением (файл без записанного тела)
         var s = DocumentSession.Open(path);
         var part = s.Part!;
         var w = new MainWindow(s) { Width = 1400, Height = 860 };
@@ -6911,7 +6924,9 @@ Check("UI-SKETCH-K98", () =>
     // (14) порядок панелей
     var tray = w.FindControl<WrapPanel>("ToolTray")!;
     var visible = tray.Children.OfType<Border>().Where(b => b.IsVisible).Select(b => b.Name).ToList();
-    Require(visible.SequenceEqual(new[] { "SketchSetBar", "ShapeBar", "CommandBar", "DimBar", "SketchBar" }), "sketch panels order: " + string.Join(", ", visible));
+    // k153: «Готово / Отмена» — в панели вида (P3D_SKBARVIEW=0 — прежняя полоса последней)
+    var wantOrder = MainWindow.SketchBarInViewOff ? new[] { "SketchSetBar", "ShapeBar", "CommandBar", "DimBar", "SketchBar" } : new[] { "SketchSetBar", "ShapeBar", "CommandBar", "DimBar" };
+    Require(visible.SequenceEqual(wantOrder), "sketch panels order: " + string.Join(", ", visible));
     // (8) вид эскиза: ось U — вправо, V — вверх
     var camUp = vp.Camera.Up; var vAx = sk.Plane.V;
     Require(Vector3.Dot(camUp, new Vector3((float)vAx.X, (float)vAx.Y, (float)vAx.Z)) > 0.99f, $"sketch view up {camUp} is not the sketch V axis");
@@ -8508,6 +8523,252 @@ Check("BENCH-DRAG", () =>
         Console.WriteLine($"  {name}: faces {part.Bodies.Sum(b => b.Faces.Count())}; full [{M(full)}] apply [{M(apply)}] preview [{M(prev)}] scene [{M(scene)}] feature {part.LastFeatureMs.GetValueOrDefault(rf):0} err {rf.Error} faces {string.Join(",", part.LastFeatureMs.OrderByDescending(k => k.Value).Take(3).Select(k => k.Key.Name + "=" + k.Value.ToString("0")))}");
     }
 });
+
+// k153 (замечание 04.11, 09:08): ТЕЛО В ДОКУМЕНТЕ — открытие без перестроения. Деталь построена и сохранена; открытый файл
+// сразу показывает тело (не грязная, расчёт не идёт), грани выбираются (номера сетки — номера граней прочитанного тела),
+// объём, имена граней и рёбер — те же; правка операции перестраивает деталь с тем же итогом. P3D_BREPFILE=0 — прежнее.
+Check("UI-BREP-OPEN-K153", () =>
+{
+    string path = Path.Combine(Path.GetTempPath(), $"p3d_k153b_{Guid.NewGuid():N}.p3d");
+    try
+    {
+        var src = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(5, 24), "brep");
+        var w0 = Open(src); BuildNow(src);
+        var p0 = src.Part!;
+        double vol0 = p0.Volume; var tags0 = p0.Bodies.SelectMany(b => b.Faces).Select(f => f.Tag).OrderBy(x => x).ToList();
+        var etags0 = p0.Bodies.SelectMany(b => b.Faces.SelectMany(f => f.Edges)).Distinct().Select(e => e.Tag).OrderBy(x => x).ToList();
+        src.SaveAs(path); w0.Close();
+        long rebuilt0 = Parametric3D.Model.Part.RestoredParts;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var s = DocumentSession.Open(path);
+        double openMs = sw.Elapsed.TotalMilliseconds;
+        var part = s.Part!;
+        Console.WriteLine($"  open {openMs:0} ms: restored {part.RestoredFromFile}, dirty {part.IsDirty}, bodies {part.Bodies.Count}, volume {part.Volume:0.###} vs {vol0:0.###}, rejected {DocumentFile.BrepRejected}");
+        Require(part.RestoredFromFile && !part.IsDirty && part.Bodies.Count == p0.Bodies.Count, "the opened file did not restore the part bodies");
+        Require(Math.Abs(part.Volume - vol0) <= 1e-9 * Math.Max(1, vol0), $"volume {part.Volume} vs {vol0}");
+        var tags = part.Bodies.SelectMany(b => b.Faces).Select(f => f.Tag).OrderBy(x => x).ToList();
+        var etags = part.Bodies.SelectMany(b => b.Faces.SelectMany(f => f.Edges)).Distinct().Select(e => e.Tag).OrderBy(x => x).ToList();
+        Require(tags.SequenceEqual(tags0) && etags.SequenceEqual(etags0), "face or edge names differ");
+        var ids = part.Bodies.SelectMany(b => b.Faces).Select(f => f.Id).ToHashSet();
+        Require(part.Mesh!.FaceRanges.Keys.All(ids.Contains) && part.Mesh.Vertices.All(v => ids.Contains(v.FaceId)), "mesh face numbers are not the restored faces");
+        var w = Open(s);
+        Dispatcher.UIThread.RunJobs();
+        Require(!s.Document.IsBuilding && !part.IsDirty, "opening started a rebuild");
+        // выбор грани под курсором — грань прочитанного тела
+        var f0 = part.Bodies[0].Faces.First();
+        w.ViewPort.Selection.Select(new PickRef(f0.Id, PickKind.Face, part, null), false); Dispatcher.UIThread.RunJobs();
+        Require(part.FindFace(f0.Id) != null, "a restored face is not found by its number");
+        // правка операции — перестроение с тем же итогом
+        var last = part.Features.Last(f => !f.Suppressed);
+        part.MarkDirtyFrom(last); BuildNow(s);
+        Console.WriteLine($"  after edit: restored {part.RestoredFromFile}, volume {part.Volume:0.###}, errors {part.Features.Count(f => f.Error != null)}");
+        Require(!part.RestoredFromFile && Math.Abs(part.Volume - vol0) <= 1e-6 * Math.Max(1, vol0), "the rebuild after an edit differs");
+        w.Close();
+    }
+    finally { try { File.Delete(path); } catch { } }
+});
+
+// k153 (замечание 04.11, 10:34, п. 9): закрытие документа прекращает работу ядра над ним — фоновый расчёт прерывается, новый
+// документ не показывает «Обработку» прежнего (P3D_CLOSECANCEL=0 — расчёт закрытого идёт до конца).
+Check("UI-CLOSE-CANCEL-K153", () =>
+{
+    var s = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(7, 48), "close");
+    var w = new MainWindow(s) { Width = 1400, Height = 860 }; w.Show(); Dispatcher.UIThread.RunJobs();
+    var doc = s.Document;
+    for (int k = 0; k < 50 && (doc.IsBuilding || s.Part!.IsDirty); k++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(20); }
+    s.Part!.Invalidate();
+    var build = doc.RebuildDirtyAsync();
+    Require(doc.IsBuilding, "the build did not start");
+    Thread.Sleep(80);
+    long c0 = Document.ClosedBuildsCancelled;
+    w.SetSession(DocumentSession.NewPart());
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    while (!build.IsCompleted && sw.Elapsed.TotalSeconds < 60) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(2); }
+    double ms = sw.Elapsed.TotalMilliseconds;
+    Dispatcher.UIThread.RunJobs(); w.UpdateProgress();
+    Console.WriteLine($"  closed during the build: cancelled {Document.ClosedBuildsCancelled - c0}, old build ended in {ms:0} ms, old part dirty {s.Part!.IsDirty}, new building {w.Session.Document.IsBuilding}, progress {w.ProgressShown?.Stage ?? "—"}");
+    Require(doc.IsClosed && Document.ClosedBuildsCancelled > c0, "closing did not cancel the build");
+    Require(build.IsCompleted && ms < 5000, $"the closed document kept computing ({ms:0} ms)");
+    Require(!w.Session.Document.IsBuilding && w.ProgressShown == null, "the new document shows the old processing");
+    w.Close();
+});
+
+// k153 (п. 7, 8): «Готово / Отмена» эскиза — в панели вида за «Анализ»; плоскость со смещением следует за ручкой во время
+// перетаскивания (P3D_SKBARVIEW=0, P3D_CHEAPLIVE=0 — прежнее)
+Check("UI-SKBAR-PLANE-K153", () =>
+{
+    var s = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(2, 4), "skbar"); var w = Open(s); BuildNow(s);
+    var part = s.Part!;
+    w.BeginNewSketch(part, Parametric3D.Kernel.Frame3.XY, 0, "XY", null); Dispatcher.UIThread.RunJobs();
+    Require(w.InSketch, "no sketch");
+    var bar = w.ViewSketchBar;
+    Require(bar != null && bar.IsVisible && bar.Parent is Panel vt && vt.Children.IndexOf(bar) == vt.Children.Count - 1, "sketch finish buttons are not at the end of the view bar");
+    w.CancelSketch(); Dispatcher.UIThread.RunJobs();
+    Require(w.ViewSketchBar is { IsVisible: false }, "sketch buttons stay after the sketch");
+    // плоскость со смещением: перетаскивание ручки двигает плоскость сразу
+    var pm0 = UserPrefs.Current.PreviewMode; UserPrefs.Current.PreviewMode = "contour";
+    w.StartOperation(new PlaneOp { InitialMethod = 0 });
+    var op = (PlaneOp)w.CurrentOperation!;
+    w.ViewPort.Selection.Clear();
+    op.Panel!.Refs[0].Take(new[] { new PickRef(0, PickKind.DatumPlane, part, part.Planes.First()) }); op.FieldChanged();
+    var dp = part.Planes.Last();
+    double z0 = dp.Frame.Origin.Z;
+    op.BeginDrag(); op.SetDragValue(37); Dispatcher.UIThread.RunJobs();
+    double z1 = part.Planes.Last().Frame.Origin.Z;
+    Console.WriteLine($"  plane during drag: {z0:0.##} → {z1:0.##}");
+    Require(Math.Abs(Math.Abs(z1 - part.Planes.First().Frame.Origin.Z) - 37) < 1e-6, "the plane does not follow the handle while dragging");
+    op.EndDrag(); w.CancelOperation(); w.Close();
+    UserPrefs.Current.PreviewMode = pm0;
+});
+
+// k153 (замечание 04.11, 10:34, пп. 3–4): ОТВЕРСТИЕ — тип иконками (9 видов), гизмо положения на грани, ручка диаметра,
+// привязка к ребру (расстояние — текущее, правка расстояния двигает отверстие); РАДИАЛЬНОЕ — грань цилиндра по имени, торец,
+// гизмо вдоль оси и вокруг оси.
+Check("UI-HOLE-K153", () =>
+{
+    var part0 = Parametric3D.App.Diagnostics.TestParts.Block("blk", 100, 60, 20);
+    var s = DocumentSession.FromPart(part0, "hole"); var w = Open(s); BuildNow(s);
+    var part = s.Part!;
+    var top = part.Bodies[0].Faces.First(f => SketchFaceRef.PlaneOf(f) is { } pl && pl.N.Z > 0.99 && pl.P.Z > 19);
+    var op = new HoleOp(); w.StartOperation(op); Dispatcher.UIThread.RunJobs();
+    op.Panel!.Refs[0].Take(new[] { new PickRef(top.Id, PickKind.Face, part, null) }); op.FieldChanged(); BuildNow(s);
+    var hf = part.Features.OfType<HoleFeature>().Single();
+    Require(hf.Error == null && hf.Points.Count == 1, "hole on the face: " + hf.Error);
+    // тип: глухое с плоским дном, затем с остриём — объём меньше на конус острия
+    Require(op.Panel.Host.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.ToggleButton>().Count() >= HoleOp.Types.Length, "no hole type buttons");
+    hf.Depth = new ValueRef(10);
+    op.SetType(Array.FindIndex(HoleOp.Types, t => t.Top == HoleKind.Simple && t.Bottom == 1)); op.FieldChanged(); BuildNow(s);
+    double vFlat = part.Volume;
+    int drill = Array.FindIndex(HoleOp.Types, t => t.Top == HoleKind.Simple && t.Bottom == 2);
+    op.SetType(drill); op.FieldChanged(); BuildNow(s);
+    Require(!hf.ThroughAll && hf.DrillPoint && hf.Error == null, "drill point type: " + hf.Error);
+    double r0 = hf.Diameter.Value / 2, cone = Math.PI * r0 * r0 * (r0 / Math.Tan(59 * Math.PI / 180)) / 3;
+    Console.WriteLine($"  drill point: volume {vFlat - part.Volume:0.###} less (cone {cone:0.###})");
+    Require(Math.Abs(vFlat - part.Volume - cone) < 0.02 * cone, "the drill point did not remove the cone");
+    // гизмо: сдвиг по грани на (10, 5)
+    w.ViewPort.Gizmo = null; op.RefreshGizmo();
+    var g = w.ViewPort.Gizmo; Require(g != null, "no hole gizmo");
+    var p0 = hf.Points[0];
+    op.BeginDrag(); op.GizmoStart(GizmoPart.PlaneXY); op.GizmoMove(new GizmoDrag(GizmoPart.PlaneXY, new Vector3d(10, 5, 0), 0, KeyModifiers.None)); op.GizmoEnd(); op.EndDrag(); BuildNow(s);
+    var moved = hf.Points[0] - p0;
+    Console.WriteLine($"  gizmo moved {moved.Length:0.###} (want {Math.Sqrt(125):0.###}), error {hf.Error}; p0 {p0} now {hf.Points[0]} gizmo {g!.Origin} x {g.X} y {g.Y}");
+    Require(Math.Abs(moved.Length - Math.Sqrt(125)) < 1e-6 && hf.Error == null, "the gizmo did not move the hole");
+    // ручка диаметра
+    Require(op.HandleAt() != null, "no diameter handle");
+    op.SetDragValue(12); BuildNow(s);
+    Require(Math.Abs(hf.Diameter.Value - 12) < 1e-9 && hf.Error == null, "the handle did not set the diameter");
+    // привязка к ребру x = 100 верхней грани: расстояние — текущее; правка расстояния двигает отверстие
+    var allE = part.Bodies[0].Faces.SelectMany(f => f.Edges).Distinct().ToList();
+    double xmax = allE.Max(e => Math.Max(e.V0.P.X, e.V1.P.X)), ztop = allE.Max(e => e.V0.P.Z);
+    var ex = allE.First(e => Math.Abs(e.V0.P.X - xmax) < 1e-6 && Math.Abs(e.V1.P.X - xmax) < 1e-6 && Math.Abs(e.V0.P.Z - ztop) < 1e-6 && Math.Abs(e.V1.P.Z - ztop) < 1e-6);
+    op.Panel.Refs.First(r => r.Label == "От ребра 1").Take(new[] { new PickRef(ex.Id, PickKind.Edge, part, null) }); op.FieldChanged(); BuildNow(s);
+    double dx = xmax - hf.Points[0].X;
+    Console.WriteLine($"  edge ref: D1 {hf.LinD1.Value:0.###} vs {dx:0.###}");
+    Require(hf.LinRef1 != null && Math.Abs(hf.LinD1.Value - dx) < 1e-3, "distance from the edge is not the current one");
+    hf.LinD1 = new ValueRef(15); op.FieldChanged(); BuildNow(s);
+    var at = hf.LinearPlacement(part.Bodies.ToList(), hf.Points[0], -hf.Direction, null);
+    Console.WriteLine($"  distance 15 → hole at {at}, error {hf.Error}");
+    Require(at is { } q && Math.Abs(q.X - (xmax - 15)) < 1e-6 && hf.Error == null, "editing the distance did not move the hole: " + at);
+    w.CommitOperation(); BuildNow(s);
+    // правка готового отверстия открывает ту же панель с типом
+    Require(new HoleOp(hf) is { } ed, "edit");
+    w.Close();
+
+    // радиальное
+    var shaft = new Part("shaft");
+    var c = new Sketch("S", Parametric3D.Kernel.Frame3.XY); shaft.Add(c); c.AddEntity(new SkCircle(new SkPoint(0, 0), 20));
+    var exf = new ExtrudeFeature { SketchId = c.Id }; exf.Side1.Distance = new ValueRef(100); shaft.AddFeature(exf);
+    var s2 = DocumentSession.FromPart(shaft, "rad"); var w2 = Open(s2); BuildNow(s2);
+    var sp = s2.Part!;
+    var cylF = sp.Bodies[0].Faces.First(f => Parametric3D.Kernel.Geometry.ExactEdges.ShapeOf(Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)) is Parametric3D.Kernel.Geometry.Ssi.Cylinder);
+    var rop = new AxialHoleOp { Radial = true }; w2.StartOperation(rop); Dispatcher.UIThread.RunJobs();
+    rop.Panel!.Refs[0].Take(new[] { new PickRef(cylF.Id, PickKind.Face, sp, null) }); rop.FieldChanged(); BuildNow(s2);
+    var rh = sp.Features.OfType<HoleFeature>().Single();
+    Console.WriteLine($"  radial: face {rh.RadFace}, end {rh.RadRefFace}, axial {rh.RadAxial.Value:0.###}, angle {rh.RadAngle.Value:0.###}, error {rh.Error}");
+    Require(rh.RadFace != null && rh.RadRefFace != null && rh.Error == null, "radial placement not set");
+    double ax0 = rh.RadAxial.Value, an0 = rh.RadAngle.Value;
+    w2.ViewPort.Gizmo = null; rop.RefreshGizmo(); Require(w2.ViewPort.Gizmo != null, "no radial gizmo");
+    rop.BeginDrag(); rop.GizmoStart(GizmoPart.AxisZ); rop.GizmoMove(new GizmoDrag(GizmoPart.AxisZ, new Vector3d(0, 0, 7), 0, KeyModifiers.None)); rop.GizmoEnd(); rop.EndDrag();
+    rop.BeginDrag(); rop.GizmoStart(GizmoPart.RingZ); rop.GizmoMove(new GizmoDrag(GizmoPart.RingZ, Vector3d.Zero, 30, KeyModifiers.None)); rop.GizmoEnd(); rop.EndDrag(); BuildNow(s2);
+    Console.WriteLine($"  radial after gizmo: axial {rh.RadAxial.Value:0.###}, angle {rh.RadAngle.Value:0.###}, error {rh.Error}");
+    Require(Math.Abs(rh.RadAxial.Value - ax0 - 7) < 1e-6 && Math.Abs(rh.RadAngle.Value - an0 - 30) < 1e-6 && rh.Error == null, "radial gizmo");
+    Require(rop.HandleAt() != null, "no radial diameter handle");
+    w2.CommitOperation(); w2.Close();
+});
+
+// k153 (замечание 04.11, 10:34, пп. 11–12): «Протяжка с переходом» берёт кривую-операцию как траекторию; «Протяжка» —
+// сечение как нарисовано, гизмо смещения сечения в начале траектории двигает тело (поля «Смещение по X/Y сечения»).
+Check("UI-SWEEP-K153", () =>
+{
+    var part = new Part("sw");
+    Sketch Sq(Parametric3D.Kernel.Frame3 f, double x0, double y0, double a)
+    {
+        var sk = new Sketch($"S{part.Sketches.Count() + 1}", f); part.Add(sk);
+        var q = new[] { new SkPoint(x0, y0), new SkPoint(x0 + a, y0), new SkPoint(x0 + a, y0 + a), new SkPoint(x0, y0 + a) };
+        for (int k = 0; k < 4; k++) sk.AddEntity(new SkLine(q[k], q[(k + 1) % 4]));
+        return sk;
+    }
+    var a = Sq(Parametric3D.Kernel.Frame3.XY, 0, 0, 10);
+    var b = Sq(new Parametric3D.Kernel.Frame3(new Vector3d(0, 0, 40), Vector3d.UnitX, Vector3d.UnitY), 2, 2, 6);
+    var curve = new DatumCurve("Curve1", new[] { new Vector3d(5, 5, 0), new Vector3d(5, 5, 20), new Vector3d(5, 5, 40) }); part.Add(curve);
+    var s = DocumentSession.FromPart(part, "sweep"); var w = Open(s); BuildNow(s);
+    var bop = new BlendOp { StartMode = BlendKind.Swept }; w.StartOperation(bop); Dispatcher.UIThread.RunJobs();
+    bop.Panel!.Refs[0].Take(new[] { new PickRef(a.Id, PickKind.SketchCurve, s.Part!, a), new PickRef(b.Id, PickKind.SketchCurve, s.Part!, b) });
+    bool took = bop.Panel.Refs[1].Take(new[] { new PickRef(curve.Id, PickKind.DatumAxis, s.Part!, curve) });
+    bop.FieldChanged(); BuildNow(s);
+    var bf = s.Part!.Features.OfType<BlendFeature>().Single();
+    Console.WriteLine($"  swept blend: path field took the curve {took}, path line {bf.PathLineId == curve.Id}, error {bf.Error}");
+    Require(took && bf.PathLineId == curve.Id && bf.Error == null, "the swept blend does not take the curve as its path: " + bf.Error);
+    w.CancelOperation(); w.Close();
+
+    // протяжка: квадрат (30…40, 30…40) в XY, траектория — линия от (35, 35, 0) вверх
+    var p2 = new Part("sw2");
+    var sk2 = new Sketch("Sec", Parametric3D.Kernel.Frame3.XY); p2.Add(sk2);
+    var q2 = new[] { new SkPoint(30, 30), new SkPoint(40, 30), new SkPoint(40, 40), new SkPoint(30, 40) };
+    for (int k = 0; k < 4; k++) sk2.AddEntity(new SkLine(q2[k], q2[(k + 1) % 4]));
+    var line = new Line3DItem("L", new Vector3d(35, 35, 0), new Vector3d(35, 35, 50)); p2.Add(line);
+    var s2 = DocumentSession.FromPart(p2, "sweep2"); var w2 = Open(s2); BuildNow(s2);
+    var sop = new SweepOp(); w2.StartOperation(sop); Dispatcher.UIThread.RunJobs();
+    sop.Panel!.Refs[0].Take(new[] { new PickRef(sk2.Id, PickKind.SketchCurve, s2.Part!, sk2) });
+    sop.Panel.Refs.First(r => r.Label == "Траектория").Take(new[] { new PickRef(line.Id, PickKind.DatumAxis, s2.Part!, line) });
+    sop.FieldChanged(); BuildNow(s2);
+    var sf = s2.Part!.Features.OfType<SweepFeature>().Single();
+    var bb = s2.Part.Bodies.Count == 1 ? s2.Part.Bodies[0].Bounds : default;
+    Console.WriteLine($"  sweep as drawn {sf.SectionAsDrawn}: x {bb.Min.X:0.##}…{bb.Max.X:0.##}, error {sf.Error}");
+    Require(sf.SectionAsDrawn && sf.Error == null && Math.Abs(bb.Min.X - 30) < 0.05 && Math.Abs(bb.Max.X - 40) < 0.05, "the sweep body is not at the drawn section");
+    w2.ViewPort.Gizmo = null; sop.RefreshGizmo(); Require(w2.ViewPort.Gizmo != null, "no section offset gizmo");
+    sop.BeginDrag(); sop.GizmoStart(GizmoPart.AxisX); sop.GizmoMove(new GizmoDrag(GizmoPart.AxisX, new Vector3d(5, 0, 0), 0, KeyModifiers.None)); sop.GizmoEnd(); sop.EndDrag(); BuildNow(s2);
+    bb = s2.Part.Bodies[0].Bounds;
+    Console.WriteLine($"  after gizmo: offset X {sf.OffsetU.Value:0.##}, x {bb.Min.X:0.##}…{bb.Max.X:0.##}");
+    Require(Math.Abs(sf.OffsetU.Value - 5) < 1e-9 && Math.Abs(bb.Min.X - 35) < 0.05, "the gizmo did not offset the section");
+    w2.CommitOperation(); w2.Close();
+});
+
+// k153 (замечание 04.11, 10:34, п. 6): правка эскиза во время перестроения детали — идущий расчёт прерывается, деталь
+// считается с полоской у места эскиза сразу (прежде ждала конца полного расчёта — минуты у тяжёлой детали). P3D_STALECANCEL=0.
+Check("UI-SKETCH-ROLLBACK-CANCEL-K153", () =>
+{
+    var s = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(7, 48), "skroll");
+    var w = new MainWindow(s) { Width = 1400, Height = 860 }; w.Show(); Dispatcher.UIThread.RunJobs();
+    var doc = s.Document; var part = s.Part!;
+    for (int k = 0; k < 200 && (doc.IsBuilding || part.IsDirty); k++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(20); }
+    var sk = part.Sketches.First(x => part.Features.Count > 0 && part.Features[0].ConsumedSketchIds().Contains(x.Id));
+    part.Invalidate();
+    var build = doc.RebuildDirtyAsync();
+    Require(doc.IsBuilding, "the build did not start");
+    Thread.Sleep(80);
+    long c0 = Document.StaleBuildsCancelled;
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    w.EditSketch(sk);
+    while ((doc.IsBuilding || part.IsDirty) && sw.Elapsed.TotalSeconds < 60) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(2); }
+    double ms = sw.Elapsed.TotalMilliseconds;
+    Console.WriteLine($"  sketch edit during the build: cancelled {Document.StaleBuildsCancelled - c0}, rolled-back part ready in {ms:0} ms, stage {part.StageIndex}, bodies {part.Bodies.Count}");
+    Require(Document.StaleBuildsCancelled > c0, "the stale build was not cancelled");
+    Require(ms < 3000 && part.Bodies.Count == 0, "the rolled-back part was not computed promptly");
+    w.CancelSketch(); w.Close();
+});
+
+
 
 Console.WriteLine(JsonSerializer.Serialize(new { passed, failed }));
 return failed == 0 ? 0 : 1;
