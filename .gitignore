@@ -8,3 +8,4 @@ logs/**/a06/
 *.step
 .vs/
 *.user
+logs/regress_*/

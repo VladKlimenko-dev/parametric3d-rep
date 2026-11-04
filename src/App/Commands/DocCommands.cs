@@ -262,13 +262,58 @@ public static class DocCommands
         if (anchor != null) fl.ShowAt(anchor); else fl.ShowAt(w.ViewPort, showAtPointer: true);
     }
 
+    /// <summary>
+    /// k156: ВЫБОР НОВОГО ДОКУМЕНТА — плитки с иконками: деталь, сборка, FreeForm-тело, чертёж (из открытой детали или сборки,
+    /// иначе — выбор файла), шаблон листа, перечень (из сборки). Команда плитки — та же, что в меню «Файл».
+    /// </summary>
+    public static readonly (string Id, string Icon, string Label, string Hint)[] NewDocChoices =
+    {
+        ("file.new_part", "new_part_but.svg", "Деталь", "Твёрдое тело: эскизы и операции"),
+        ("file.new_assembly", "new_assembly_but.svg", "Сборка", "Детали и сопряжения"),
+        ("file.new_freeform", "new_freeform_but.svg", "FreeForm-тело", "Свободная форма из клетки"),
+        ("file.new_drawing", "new_drawing_but.svg", "Чертёж", "Виды, разрезы, размеры по ГОСТ / ISO"),
+        ("file.new_template", "new_template_but.svg", "Шаблон листа", "Формат, рамка, основная надпись"),
+        ("file.new_bom", "new_bom_but.svg", "Перечень (BoM)", "Спецификация из сборки"),
+    };
+    /// <summary>Разбор (проверки): последнее окно выбора.</summary>
+    public static Window? LastNewDocWindow;
+
     public static async Task NewDocument(MainWindow w)
     {
-        string part = L("Деталь"), asm = L("Сборка"), ff = L("FreeForm-тело");
-        var r = await Dialogs.Ask(w, L("Новый документ"), L("Что создать?"), part, asm, ff, L("Отмена"));
-        if (r == part) { if (await w.ConfirmDiscard()) w.SetSession(DocumentSession.NewPart()); }
-        else if (r == asm) CommandRegistry.Instance.Find("file.new_assembly")?.Run?.Invoke();
-        else if (r == ff) CommandRegistry.Instance.Find("file.new_freeform")?.Run?.Invoke();
+        string? chosen = null;
+        var win = new Window { Title = L("Новый документ"), SizeToContent = SizeToContent.WidthAndHeight, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner, ShowInTaskbar = false };
+        win.Bind(Window.BackgroundProperty, win.GetResourceObservable("P3.PanelBg"));
+        var grid = new Avalonia.Controls.Primitives.UniformGrid { Columns = 3, Margin = new Thickness(12) };
+        foreach (var (id, icon, label, hint) in NewDocChoices)
+        {
+            var cmd = CommandRegistry.Instance.Find(id);
+            var tile = new Button
+            {
+                Width = 170, Height = 120, Margin = new Thickness(5), HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
+                IsEnabled = cmd != null && (cmd.CanRun?.Invoke() ?? true),
+                Content = new StackPanel
+                {
+                    Spacing = 6, HorizontalAlignment = HorizontalAlignment.Center,
+                    Children =
+                    {
+                        new ContentControl { Content = Icons.IconProvider.Content(icon, L(label), 40), HorizontalAlignment = HorizontalAlignment.Center },
+                        new TextBlock { Text = L(label), FontWeight = Avalonia.Media.FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center },
+                        new TextBlock { Text = L(hint), FontSize = 11, Opacity = 0.75, TextWrapping = Avalonia.Media.TextWrapping.Wrap, TextAlignment = Avalonia.Media.TextAlignment.Center, MaxWidth = 150 },
+                    },
+                },
+            };
+            ToolTip.SetTip(tile, L(hint));
+            tile.Click += (_, _) => { chosen = id; win.Close(); };
+            grid.Children.Add(tile);
+        }
+        var cancel = new Button { Content = L("Отмена"), HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 12, 12) };
+        cancel.Click += (_, _) => win.Close();
+        win.Content = new StackPanel { Children = { grid, cancel } };
+        LastNewDocWindow = win;
+        await win.ShowDialog(w);
+        if (chosen == null) return;
+        if (chosen == "file.new_part") { if (await w.ConfirmDiscard()) w.SetSession(DocumentSession.NewPart()); return; }
+        CommandRegistry.Instance.Find(chosen)?.Run?.Invoke();
     }
 
     // ---------------------------------------------------------------- настройки, справка, все команды

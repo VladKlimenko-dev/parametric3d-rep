@@ -9,7 +9,10 @@ namespace Parametric3D.App.Commands;
 /// <summary>k155 (D1): команды листа — новый шаблон, новый перечень из сборки, открыть шаблон или перечень.</summary>
 public static class DrawingCommands
 {
-    static SheetWindow Show(MainWindow w, SheetWindow win)
+    static SheetWindow Show(MainWindow w, SheetWindow win) => ShowSheet(w, win);
+
+    /// <summary>Окно листа рядом с главным: связь с открытым документом (сборка — для перечня, деталь — поля надписи).</summary>
+    public static SheetWindow ShowSheet(MainWindow w, SheetWindow win)
     {
         win.OpenAssembly = () => w.Session.IsAssembly ? w.Session.Document.Root : null;
         win.FieldPart = () => w.Session.Part ?? w.Session.Document.Root.Parts.FirstOrDefault();
@@ -19,13 +22,39 @@ public static class DrawingCommands
         return win;
     }
 
-    /// <summary>k155 (D2): новый чертёж открытой детали (или первой детали сборки): главный, сверху, слева и изометрия на A3.</summary>
-    public static SheetWindow? NewDrawing(MainWindow w)
+    /// <summary>
+    /// k155–k156 (D2): новый чертёж — открытой детали или открытой сборки (все детали в своих положениях, позиции по перечню);
+    /// без открытой модели — выбор файла детали или сборки. Виды: главный, сверху, слева и изометрия на A3.
+    /// </summary>
+    public static async Task<SheetWindow?> NewDrawing(MainWindow w, string? modelPath = null)
     {
-        var part = w.Session.Part ?? w.Session.Document.Root.Parts.FirstOrDefault();
-        if (part == null || part.Bodies.Count == 0) { w.ShowToast(L("Чертёж: нет тела детали")); return null; }
-        var win = new SheetWindow(SheetWindow.Mode.Drawing, null, null, null, new DrawingDocument { SourcePath = w.Session.FilePath is { } fp && fp.EndsWith(Services.DocumentSession.PartExtension, StringComparison.OrdinalIgnoreCase) && !w.Session.Modified ? fp : null });
-        win.DrawingBodies = () => part.Bodies.ToList();
+        bool openHasBodies = w.Session.Document.AllParts().Any(p => p.Bodies.Count > 0);
+        if (modelPath == null && !openHasBodies)
+        {
+            var files = await w.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = L("Чертёж: деталь или сборка"), AllowMultiple = false,
+                FileTypeFilter = new[] { new FilePickerFileType(L("Деталь или сборка Parametric3D")) { Patterns = new[] { "*" + Services.DocumentSession.PartExtension, "*" + Services.DocumentSession.AssemblyExtension } } },
+            });
+            modelPath = files.FirstOrDefault()?.TryGetLocalPath();
+            if (modelPath == null) return null;
+        }
+        SheetWindow win;
+        if (modelPath != null)
+        {
+            win = new SheetWindow(SheetWindow.Mode.Drawing, null, null, null, new DrawingDocument { SourcePath = modelPath });
+        }
+        else
+        {
+            string? fp = w.Session.FilePath is { } f && !w.Session.Modified ? f : null;
+            win = new SheetWindow(SheetWindow.Mode.Drawing, null, null, null, new DrawingDocument { SourcePath = fp });
+            if (w.Session.IsAssembly) win.DrawingSource = () => DrawingInput.FromAssembly(w.Session.Document.Root);
+            else
+            {
+                var part = w.Session.Part ?? w.Session.Document.Root.Parts.First();
+                win.DrawingSource = () => DrawingInput.FromPart(part);
+            }
+        }
         return Show(w, win);
     }
 
@@ -73,7 +102,7 @@ public static class DrawingCommands
     public static void Register(CommandRegistry r, MainWindow w)
     {
         const string F = "Файл";
-        r.Add(new AppCommand { Id = "file.new_drawing", Label = "Новый чертёж (из детали)", Group = F, Icon = "new_drawing_but.svg", Synonyms = "new drawing чертёж виды проекции", Run = () => { NewDrawing(w); } });
+        r.Add(new AppCommand { Id = "file.new_drawing", Label = "Новый чертёж (из детали или сборки)", Group = F, Icon = "new_drawing_but.svg", Synonyms = "new drawing чертёж виды проекции", Run = async () => await NewDrawing(w) });
         r.Add(new AppCommand { Id = "file.new_template", Label = "Новый шаблон листа", Group = F, Icon = "new_template_but.svg", Synonyms = "new sheet template title block frame шаблон листа рамка основная надпись", Run = () => { NewTemplate(w); } });
         r.Add(new AppCommand { Id = "file.new_bom", Label = "Новый перечень (из сборки)", Group = F, Icon = "new_bom_but.svg", Synonyms = "new bom bill of materials parts list перечень спецификация", Run = async () => await NewBom(w) });
         r.Add(new AppCommand { Id = "file.open_sheet", Label = "Открыть чертёж, шаблон или перечень", Group = F, Icon = "doc_template_ico.svg", Synonyms = "open template bom открыть шаблон перечень p3dtpl p3dbom", Run = async () => await OpenSheet(w) });

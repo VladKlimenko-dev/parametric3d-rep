@@ -1,4 +1,4 @@
-using Parametric3D.Kernel;
+﻿using Parametric3D.Kernel;
 using Parametric3D.Kernel.Topology;
 using Parametric3D.Model;
 using Parametric3D.Model.Features;
@@ -14,6 +14,23 @@ static partial class Program
     /// </summary>
     static void ChamferOverflowChecks()
     {
+        // k156 (замечание 04.11, 19:20 — фаска внутреннего ребра Sweep_Blend): смешанная цепочка (рез выпуклой части, прибавка
+        // вогнутой). Фаска 10 на файле пользователя: прибавка после реза давала негодный стык (curve-off-surface 0.05 мм) —
+        // отказ операции. Второй порядок резцов (прибавка, затем рез) строит годное тело; объём — между фасками 9.72 и 10.5 того
+        // же порядка (654325 и ≈ 655,6 тыс.). Мутация P3D_BLENDREORDER=0 — отказ (проверка падает).
+        Check("KRN06-CHAMFER-REORDER-K156", () =>
+        {
+            var dir = UserModelsDir() ?? throw new Exception("tests/ui/data not found");
+            var (p, pars) = DocumentFile.Load(File.ReadAllText(Path.Combine(dir, "user_k150_sweep_blend_c972.p3d")));
+            p.Rebuild(pars);
+            var ch = p.Features.OfType<ChamferFeature>().Last();
+            ch.D1 = new ValueRef(10); ch.D2 = new ValueRef(10); p.MarkDirtyFrom(ch); p.Rebuild(pars);
+            Log(new { test = "KRN06-CHAMFER-REORDER-K156", error = ch.Error, volume = Math.Round(p.Volume, 3), tries = Parametric3D.Kernel.Ops.FilletOp.ReorderTries, wins = Parametric3D.Kernel.Ops.FilletOp.ReorderWins });
+            Require(ch.Error == null, "chamfer 10 refused: " + ch.Error);
+            Require(p.Bodies.Count == 1 && SolidValidator.Validate(p.Bodies[0]).IsValid, "the body is not valid");
+            Require(p.Volume > 654325 && p.Volume < 656000, $"volume {p.Volume:0.###}");
+        });
+
         Check("KRN06-CHAMFER-OVERFLOW-K153", () =>
         {
             var dir = UserModelsDir() ?? throw new Exception("tests/ui/data not found");

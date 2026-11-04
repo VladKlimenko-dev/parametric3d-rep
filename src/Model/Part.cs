@@ -1063,7 +1063,7 @@ public sealed class Part : ModelItem
     /// переведены на новые), ошибки и созданные грани операций, предупреждения, имена тел, объём и площадь — записанные при
     /// сохранении. Деталь не грязная: перестроение начнётся с первой правки (с начала дерева — сохранённых состояний нет).
     /// </summary>
-    public void RestoreFromFile(IReadOnlyList<Kernel.Topology.BrepFile.Restored> bodies, MeshData md, double volume, double area,
+    public void RestoreFromFile(IReadOnlyList<Kernel.Topology.BrepFile.Restored> bodies, MeshData md, double volume, double? area,
                                 IReadOnlyList<string> bodyNames, IReadOnlyList<string> warnings,
                                 IReadOnlyDictionary<string, string> errors, IReadOnlyDictionary<string, List<uint>> created, ParameterTable? parameters)
     {
@@ -1088,7 +1088,10 @@ public sealed class Part : ModelItem
         HideConsumedSketches();
         Mesh = mesh; Volume = volume; Bounds = md.Bounds; ShowsCached = false; ShowsInstant = false;
         LastGoodDisplay = (mesh, volume);
-        _areaFrom = new BuildResult { Area = area };
+        // k156: площадь не записана (при сохранении не была посчитана) — по запросу, как после перестроения
+        _areaFrom = new BuildResult();
+        if (area is { } ar) _areaFrom.Area = ar;
+        else foreach (var b in Bodies) { var bb = b; _areaFrom.AddAreaLater(() => Kernel.Topology.AnalyticVolume.AreaOf(bb) ?? MassProps.Area(Kernel.Tess.Tessellator.Tessellate(bb))); }
         int failed = Features.Count(f => f.Error != null);
         Error = failed > 0 ? $"Failed features in the build tree: {failed}." : null;
         _lastInputs = (Kernel.KernelSettings.Capture(), Policy, Limits, EffectiveStage);
@@ -1101,6 +1104,9 @@ public sealed class Part : ModelItem
     }
     /// <summary>k153: деталь открыта из записанного тела (не перестраивалась с открытия).</summary>
     public bool RestoredFromFile { get; private set; }
+    /// <summary>k156: как деталь открылась из файла (для сообщения пользователю: почему идёт перестроение).</summary>
+    public LoadNoteKind LoadNote = LoadNoteKind.None;
+    public string? LoadNoteDetail;
     /// <summary>k153: деталей, открытых без перестроения (разбор, проверки).</summary>
     public static long RestoredParts;
 
@@ -2889,3 +2895,7 @@ public sealed class FeatureHistory
         $"generated {Generated.Count}, modified {Modified.Count}, split {Split.Count}, deleted {Deleted.Count}; " +
         $"edges: generated {EdgesGenerated.Count}, modified {EdgesModified.Count}, deleted {EdgesDeleted.Count}";
 }
+
+/// <summary>k156: как деталь открылась: тело из файла; сетка без тел (файл до k153 или записан во время расчёта); тела не
+/// прочитаны; сетка отвергнута (описание правили вне программы); в файле нет ни сетки, ни тел.</summary>
+public enum LoadNoteKind { None, Restored, CachedNoBodies, BodiesRejected, DisplayRejected, NoDisplay }

@@ -74,12 +74,18 @@ public static class DocumentFile
         doc.Display = new DisplayDto { Signature = Signature(def), Volume = vol, Data = Convert.ToBase64String(DisplayCache.Pack(md)) };
         // k153: ТЕЛА ДЕТАЛИ В ДОКУМЕНТЕ — у посчитанной и проверенной детали (сетка показа — её же), без поверхностей и клеток FreeForm
         // (их формат — следующий шаг). Тип геометрии, которого формат не умеет, — тела не пишутся (открытие — перестроением).
+        // k156: почему тела не записаны — сообщение после сохранения (следующее открытие будет перестроением)
+        LastSaveNote = !built ? "деталь ещё перестраивается — сохраните после окончания расчёта"
+            : part.NeedsAcceptance ? "идёт проверка тел — сохраните после её окончания"
+            : part.Quilts.Count > 0 || part.CagesByBody.Count > 0 ? "поверхности и клетки FreeForm пока не записываются"
+            : null;
         if (built && !BrepFile.Off && part.Bodies.Count > 0 && !part.NeedsAcceptance && part.Quilts.Count == 0 && part.CagesByBody.Count == 0)
         {
             try
             {
                 doc.Display.Brep = Convert.ToBase64String(BrepFile.Write(part.Bodies));
-                doc.Display.Area = part.Area;
+                // k156: площадь — только если уже посчитана (ленту HelSweep считать при записи — 75 с); иначе — по запросу после открытия
+                doc.Display.Area = part.AreaPending && !AreaAtSaveOff ? null : part.Area;
                 doc.Display.BodyNames = part.Bodies.Select((_, i) => part.BodyName(i)).ToList();
                 doc.Display.Warnings = part.Warnings.Count > 0 ? part.Warnings.ToList() : null;
                 var errs = part.Features.Where(f => f.Error != null).ToDictionary(f => f.Key, f => f.Error!);
@@ -87,7 +93,7 @@ public static class DocumentFile
                 var cr = part.Features.Where(f => f.CreatedFaceIds.Count > 0).ToDictionary(f => f.Key, f => f.CreatedFaceIds.ToList());
                 doc.Display.Created = cr.Count > 0 ? cr : null;
             }
-            catch (NotSupportedException) { doc.Display.Brep = null; }
+            catch (NotSupportedException ex) { doc.Display.Brep = null; LastSaveNote = "тип геометрии не записывается: " + ex.Message; }
         }
         return JsonSerializer.Serialize(doc, Opts);
     }
@@ -1571,25 +1577,32 @@ public static class DocumentFile
                 {
                     part.SetCachedDisplay(cached, display.Volume);
                     // k153: тела записаны — деталь сразу готова, без перестроения
+                    part.LoadNote = LoadNoteKind.CachedNoBodies;
                     if (display.Brep is { } brep && !BrepFile.Off)
                     {
                         try
                         {
                             var bodies = BrepFile.ReadAll(Convert.FromBase64String(brep));
-                            part.RestoreFromFile(bodies, cached, display.Volume, display.Area ?? 0, display.BodyNames ?? new(), display.Warnings ?? new(),
+                            part.RestoreFromFile(bodies, cached, display.Volume, display.Area, display.BodyNames ?? new(), display.Warnings ?? new(),
                                 display.Errors ?? new(), display.Created ?? new(), table);
+                            part.LoadNote = LoadNoteKind.Restored;
                         }
                         catch (Exception ex) when (ex is FormatException or InvalidDataException or EndOfStreamException or IOException or InvalidCastException or IndexOutOfRangeException or ArgumentException)
-                        { Interlocked.Increment(ref BrepRejected); }   // испорченная запись тел — открытие перестроением
+                        { Interlocked.Increment(ref BrepRejected); part.LoadNote = LoadNoteKind.BodiesRejected; part.LoadNoteDetail = ex.Message; }   // испорченная запись тел — открытие перестроением
                     }
                 }
             }
             catch (Exception ex) when (ex is FormatException or InvalidDataException or EndOfStreamException or IOException) { }   // испорченная сетка — просто без неё
         }
-        else if (display != null) Interlocked.Increment(ref DisplayRejected);
+        else if (display != null) { Interlocked.Increment(ref DisplayRejected); part.LoadNote = LoadNoteKind.DisplayRejected; }
+        else part.LoadNote = part.Features.Count > 0 ? LoadNoteKind.NoDisplay : LoadNoteKind.Restored;
         return (part, table);
     }
     public static long DisplayRejected;
+    /// <summary>k156: мутация P3D_AREAATSAVE=0 — площадь считается при записи (прежде: запись HelSweep 76 с).</summary>
+    static readonly bool AreaAtSaveOff = Environment.GetEnvironmentVariable("P3D_AREAATSAVE") == "0";
+    /// <summary>k156: причина, по которой при последней записи (этим потоком) тела детали не попали в файл; null — записаны.</summary>
+    [ThreadStatic] public static string? LastSaveNote;
     /// <summary>k153: записей тел, которые не прочитались (открытие — перестроением).</summary>
     public static long BrepRejected;
     /// <summary>Мутация P3D_EXTRUDEEND=0: «глубина до» и вторая сторона выдавливания не читаются (прежде).</summary>

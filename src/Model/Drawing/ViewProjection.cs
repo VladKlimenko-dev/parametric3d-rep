@@ -38,7 +38,10 @@ public readonly record struct ViewFrame(Vector3d Right, Vector3d Up)
 }
 
 /// <summary>Линия вида: ломаная на плоскости вида (мм модели), видимость, вид линии и ребро-источник.</summary>
-public sealed record ViewLine(List<Vector2d> Points, bool Visible, ViewLineKind Kind, uint SourceId);
+/// <summary>Body — номер тела в списке проекции (для сборки: какой детали линия; выноски позиций).</summary>
+public sealed record ViewLine(List<Vector2d> Points, bool Visible, ViewLineKind Kind, uint SourceId, int Body = 0);
+/// <summary>Дуга ребра в плоскости вида (ось дуги — вдоль взгляда): центр, радиус, углы (рад, против часовой), полная окружность.</summary>
+public sealed record ViewArc(Vector2d Center, double Radius, double A0, double A1, bool Full, int Body = 0);
 public enum ViewLineKind { Edge, Silhouette, Tangent }
 /// <summary>Ось тела вращения на виде: Cross — ось вдоль взгляда (перекрестие центра окружности радиуса Radius), иначе — отрезок
 /// оси от Lo до Hi вдоль Dir через Center.</summary>
@@ -53,6 +56,7 @@ public sealed record ViewAxis(Vector2d Center, Vector2d Dir, double Lo, double H
 public static class ViewProjection
 {
     static readonly bool FullTurnOff = Environment.GetEnvironmentVariable("P3D_AXISFULLTURN") == "0";
+    static readonly bool SharedOff = Environment.GetEnvironmentVariable("P3D_HLRSHARED") == "0";
     static readonly bool DedupOff = Environment.GetEnvironmentVariable("P3D_HLRDEDUP") == "0";
     /// <summary>Разбор: точек, проверенных на видимость.</summary>
     public static long VisibilityTests;
@@ -122,28 +126,74 @@ public static class ViewProjection
     static Vector3d ToView(ViewFrame v, Vector3d p) => new(Vector3d.Dot(p, v.Right), Vector3d.Dot(p, v.Up), v.Depth(p));
 
     /// <summary>Линии вида тела. chord — наибольший отход ломаной от кривой (мм модели).</summary>
-    public static List<ViewLine> Project(TSolid body, ViewFrame view, double chord = 0.02, bool silhouettes = true)
+    public static List<ViewLine> Project(TSolid body, ViewFrame view, double chord = 0.02, bool silhouettes = true) =>
+        ProjectMany(new[] { body }, view, chord, silhouettes);
+
+    /// <summary>
+    /// k156 (D2): линии вида нескольких тел (сборка) — общая сцена скрытия: деталь закрывает деталь. Линии помечены номером
+    /// тела (Body).
+    /// </summary>
+    public static List<ViewLine> ProjectMany(IReadOnlyList<TSolid> bodies, ViewFrame view, double chord = 0.02, bool silhouettes = true)
     {
-        var mesh = Tessellator.Tessellate(body);
-        var sc = new Scene();
-        for (int t = 0; t + 2 < mesh.Indices.Length; t += 3)
+        var meshes = bodies.Select(b => Tessellator.Tessellate(b)).ToList();
+        // мутация P3D_HLRSHARED=0: у каждого тела своя сцена (деталь не закрывает деталь)
+        if (SharedOff && bodies.Count > 1)
         {
-            var a = mesh.Vertices[mesh.Indices[t]]; var b = mesh.Vertices[mesh.Indices[t + 1]]; var c = mesh.Vertices[mesh.Indices[t + 2]];
-            sc.Tris.Add(new Tri { A = ToView(view, (Vector3d)a.P), B = ToView(view, (Vector3d)b.P), C = ToView(view, (Vector3d)c.P), Face = a.FaceId });
+            var all = new List<ViewLine>();
+            for (int bi = 0; bi < bodies.Count; bi++) all.AddRange(ProjectMany(new[] { bodies[bi] }, view, chord, silhouettes).Select(l => l with { Body = bi }));
+            return all;
         }
+        var sc = new Scene();
+        foreach (var mesh in meshes)
+            for (int t = 0; t + 2 < mesh.Indices.Length; t += 3)
+            {
+                var a = mesh.Vertices[mesh.Indices[t]]; var b = mesh.Vertices[mesh.Indices[t + 1]]; var c = mesh.Vertices[mesh.Indices[t + 2]];
+                sc.Tris.Add(new Tri { A = ToView(view, (Vector3d)a.P), B = ToView(view, (Vector3d)b.P), C = ToView(view, (Vector3d)c.P), Face = a.FaceId });
+            }
         sc.Index();
         var res = new List<ViewLine>();
-        foreach (var e in body.Edges)
+        for (int bi = 0; bi < bodies.Count; bi++)
         {
-            if (e.Curve == null) continue;
-            var faces = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
-            uint fa = faces.Count > 0 ? faces[0].Id : uint.MaxValue, fb = faces.Count > 1 ? faces[1].Id : uint.MaxValue;
-            var kind = faces.Count == 2 && Smooth(e, faces[0], faces[1]) ? ViewLineKind.Tangent : ViewLineKind.Edge;
-            var pts = Sample(e, chord);
-            Split(sc, view, pts, fa, fb, kind, e.Id, res);
+            int from = res.Count;
+            foreach (var e in bodies[bi].Edges)
+            {
+                if (e.Curve == null) continue;
+                var faces = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
+                uint fa = faces.Count > 0 ? faces[0].Id : uint.MaxValue, fb = faces.Count > 1 ? faces[1].Id : uint.MaxValue;
+                var kind = faces.Count == 2 && Smooth(e, faces[0], faces[1]) ? ViewLineKind.Tangent : ViewLineKind.Edge;
+                var pts = Sample(e, chord);
+                Split(sc, view, pts, fa, fb, kind, e.Id, res);
+            }
+            if (silhouettes) Silhouettes(meshes[bi], view, sc, res);
+            for (int i = from; i < res.Count; i++) res[i] = res[i] with { Body = bi };
         }
-        if (silhouettes) Silhouettes(mesh, view, sc, res);
         return DropCovered(res, sc.Eps * 5);
+    }
+
+    /// <summary>
+    /// k156 (D3): дуги рёбер в плоскости вида (ось дуги вдоль взгляда) — для размеров радиусов и диаметров. Одинаковые по
+    /// проекции (верхняя и нижняя кромки отверстия) — одна.
+    /// </summary>
+    public static List<ViewArc> Arcs(IReadOnlyList<TSolid> bodies, ViewFrame view)
+    {
+        var w = view.Toward;
+        var res = new List<ViewArc>();
+        for (int bi = 0; bi < bodies.Count; bi++)
+            foreach (var e in bodies[bi].Edges)
+            {
+                if (e.Curve is not Kernel.Curves.ArcCurve3 a) continue;
+                if (Math.Abs(Math.Abs(Vector3d.Dot(a.Frame.W.Normalized(), w)) - 1) > 1e-9) continue;
+                var c = view.Project(a.Frame.Origin);
+                bool full = Math.Abs(Math.Abs(a.A1 - a.A0) - 2 * Math.PI) < 1e-6;
+                var p0 = view.Project(a.PointAt(a.T0)) - c; var p1 = view.Project(a.PointAt(a.T1)) - c; var pm = view.Project(a.PointAt((a.T0 + a.T1) / 2)) - c;
+                double a0 = Math.Atan2(p0.Y, p0.X), a1 = Math.Atan2(p1.Y, p1.X), am = Math.Atan2(pm.Y, pm.X);
+                // обход против часовой от a0 до a1 через am
+                double N(double x) { while (x < 0) x += 2 * Math.PI; while (x >= 2 * Math.PI) x -= 2 * Math.PI; return x; }
+                if (N(am - a0) > N(a1 - a0)) (a0, a1) = (a1, a0);
+                if (res.Any(r => (r.Center - c).Length < 1e-6 && Math.Abs(r.Radius - a.Radius) < 1e-6 && (r.Full || full || Math.Abs(N(r.A0 - a0)) < 1e-6))) continue;
+                res.Add(new ViewArc(c, a.Radius, a0, a1, full, bi));
+            }
+        return res;
     }
 
     /// <summary>

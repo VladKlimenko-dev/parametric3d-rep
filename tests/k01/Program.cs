@@ -592,11 +592,16 @@ static partial class Program
         if (mode is "holes153" or "allB") Hole153Checks();
         if (mode is "sweeps153" or "allB") Sweep153Checks();
         if (mode is "drawing155" or "allB") Drawing155Checks();
+        if (mode is "drawing156" or "allB") Drawing156Checks();
         if (mode is "brephist") { BrepHist(args.Skip(1)); return; }
         if (mode is "ovfdiag") { OvfDiag(args[1], args[2]); return; }
         if (mode is "breprt") { BrepRoundTrip(args.Skip(1)); return; }
         if (mode is "p3dobj") { P3dObj(args[1], args[2]); return; }
         if (mode is "stagetimes") { StageTimes(args[1]); return; }
+        if (mode is "loadtime") { LoadTime(args[1]); return; }
+        if (mode is "savetime") { SaveTime(args[1]); return; }
+        if (mode is "rebuilderr") { RebuildErrors(args[1]); return; }
+        if (mode is "chamfersweep") { ChamferSweep(args[1], args.Skip(2)); return; }
         if (mode is "loftseq") { LoftCorpusSeq(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), args.Length > 4 ? args[4] : "/tmp/claude-0/corpusseq"); return; }
         if (mode is "loftcorpus") { LoftCorpusRun(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), args.Length > 4 ? args[4] : "/tmp/claude-0/corpus"); return; }
         if (mode is "projprobe") { ProjProbe(args[1], args[2].Split(',').Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray(), args[3].Split(',').Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray()); return; }

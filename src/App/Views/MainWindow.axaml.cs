@@ -270,26 +270,38 @@ public partial class MainWindow : Window
             path = f?.TryGetLocalPath();
             if (path == null) return false;
         }
+        Parametric3D.Model.DocumentFile.LastSaveNote = null;
         Session.SaveAs(path);
         UserPrefs.Current.AddRecentFile(path);
-        ShowToast(L("Сохранено: {0}", path), error: false);
+        // k156: тела не попали в файл — сказать почему (следующее открытие будет перестроением)
+        if (Parametric3D.Model.DocumentFile.LastSaveNote is { } why) ShowToast(L("Сохранено без тела детали: {0}. Следующее открытие — с перестроением.", L(why)), error: false);
+        else ShowToast(L("Сохранено: {0}", path), error: false);
         return true;
     }
 
     public async Task OpenAsync(string? path = null)
     {
-        if (!await ConfirmDiscard()) return;
+        // k156: чертёж, шаблон листа и перечень открываются своим окном — текущий документ остаётся
+        static bool IsSheet(string p) => p.EndsWith(SheetWindow.DrawingExt, StringComparison.OrdinalIgnoreCase) || p.EndsWith(SheetWindow.TemplateExt, StringComparison.OrdinalIgnoreCase) || p.EndsWith(SheetWindow.BomExt, StringComparison.OrdinalIgnoreCase);
+        if (path != null && IsSheet(path)) { OpenSheetFile(path); return; }
         if (path == null)
         {
             var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
                 Title = L("Открыть"),
                 AllowMultiple = false,
-                FileTypeFilter = new[] { new FilePickerFileType(L("Деталь или сборка Parametric3D")) { Patterns = new[] { "*" + DocumentSession.PartExtension, "*" + DocumentSession.AssemblyExtension } } },
+                FileTypeFilter = new[]
+                {
+                    new FilePickerFileType(L("Документы Parametric3D")) { Patterns = new[] { "*" + DocumentSession.PartExtension, "*" + DocumentSession.AssemblyExtension, "*" + SheetWindow.DrawingExt, "*" + SheetWindow.TemplateExt, "*" + SheetWindow.BomExt } },
+                    new FilePickerFileType(L("Деталь или сборка Parametric3D")) { Patterns = new[] { "*" + DocumentSession.PartExtension, "*" + DocumentSession.AssemblyExtension } },
+                    new FilePickerFileType(L("Чертёж, шаблон листа, перечень")) { Patterns = new[] { "*" + SheetWindow.DrawingExt, "*" + SheetWindow.TemplateExt, "*" + SheetWindow.BomExt } },
+                },
             });
             path = files.FirstOrDefault()?.TryGetLocalPath();
             if (path == null) return;
+            if (IsSheet(path)) { OpenSheetFile(path); return; }
         }
+        if (!await ConfirmDiscard()) return;
         // k121: чтение и разбор файла — в фоне; в строке состояния — «Загрузка», затем ход обработки
         _loadingFile = Path.GetFileName(path);
         StartProgress();
@@ -300,6 +312,46 @@ public partial class MainWindow : Window
         SetSession(opened);
         UserPrefs.Current.AddRecentFile(path);
         StartProgress();
+        // k156: почему деталь перестраивается после открытия (файл до k153, сохранён во время расчёта, тела не прочитаны)
+        var notes = opened.Document.AllParts().Select(p => p.LoadNote).Where(n => n is not (Parametric3D.Model.LoadNoteKind.Restored or Parametric3D.Model.LoadNoteKind.None)).Distinct().ToList();
+        if (notes.Count > 0)
+        {
+            LastOpenNote = notes[0] switch
+            {
+                Parametric3D.Model.LoadNoteKind.CachedNoBodies => L("В файле нет тела детали (записан до k153 или во время расчёта): показана сохранённая сетка, идёт перестроение. Сохраните файл после расчёта — следующее открытие будет без перестроения."),
+                Parametric3D.Model.LoadNoteKind.BodiesRejected => L("Тело детали в файле не прочитано — перестроение."),
+                Parametric3D.Model.LoadNoteKind.DisplayRejected => L("Описание детали правилось вне программы — сохранённая сетка не взята, перестроение."),
+                _ => L("В файле нет сохранённой сетки и тела — перестроение. Сохраните файл после расчёта — следующее открытие будет без перестроения."),
+            };
+            ShowToast(LastOpenNote, error: false);
+            // по окончании расчёта — напоминание сохранить (тело попадёт в файл, следующее открытие — без перестроения)
+            var doc = opened.Document;
+            void Done()
+            {
+                if (doc.IsBuilding || doc.AllParts().Any(p => p.IsDirty)) return;
+                doc.BuildFinished -= Done;
+                if (!ReferenceEquals(Session?.Document, doc)) return;
+                if (doc.AllParts().Any(p => p.Error == null || p.Bodies.Count > 0))
+                    ShowToast(L("Расчёт закончен. Сохраните файл (Ctrl+S) — следующее открытие будет без перестроения."), error: false);
+            }
+            doc.BuildFinished += Done;
+        }
+        else LastOpenNote = null;
+    }
+
+    /// <summary>k156: сообщение о способе открытия последнего файла (проверки).</summary>
+    public string? LastOpenNote { get; private set; }
+
+    /// <summary>k156: открыть чертёж, шаблон листа или перечень в окне листа.</summary>
+    public SheetWindow? OpenSheetFile(string path)
+    {
+        try
+        {
+            var win = Commands.DrawingCommands.ShowSheet(this, SheetWindow.OpenFile(path));
+            UserPrefs.Current.AddRecentFile(path);
+            return win;
+        }
+        catch (Exception ex) { ShowToast(L("Не удалось открыть: {0}", ex.Message)); return null; }
     }
 
     public async Task ImportAsync()
@@ -965,7 +1017,7 @@ public partial class MainWindow : Window
     private void OpenFileMenu(Control anchor)
     {
         var items = new List<object>();
-        foreach (var id in new[] { "file.new_doc", "file.new_part", "file.new_assembly", "file.new_freeform", "file.sample", "file.open", "file.insert_part" }) if (_reg.Find(id) is { } fc) items.Add(Item(fc));
+        foreach (var id in new[] { "file.new_doc", "file.new_part", "file.new_assembly", "file.new_freeform", "file.new_drawing", "file.new_template", "file.new_bom", "file.sample", "file.open", "file.insert_part" }) if (_reg.Find(id) is { } fc) items.Add(Item(fc));
         var recent = new MenuItem { Header = L("Последние файлы"), Icon = null };
         var rec = UserPrefs.Current.RecentFiles.Where(File.Exists).ToList();
         foreach (var p in rec)
@@ -3869,8 +3921,12 @@ public partial class MainWindow : Window
     public IBrush Res(string key) =>
         this.TryFindResource(key, ActualThemeVariant, out var v) && v is IBrush b ? b : Brushes.Gray;
 
+    /// <summary>Текст последнего всплывающего сообщения (проверки).</summary>
+    public string? LastToast { get; private set; }
+
     public void ShowToast(string text, bool error = true)
     {
+        LastToast = text;
         ToastText.Text = text;
         Toast.BorderBrush = Res(error ? "P3.Error" : "P3.Border");
         Toast.IsVisible = true;

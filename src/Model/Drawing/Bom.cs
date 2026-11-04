@@ -77,6 +77,14 @@ public sealed class BomDocument
         StandardWords.Any(w => designation.Contains(w, StringComparison.OrdinalIgnoreCase) || name.StartsWith(w, StringComparison.OrdinalIgnoreCase) || name.Contains(" " + w + " ", StringComparison.OrdinalIgnoreCase))
             ? BomSections.Standard : BomSections.Parts;
 
+    /// <summary>Ключ строки перечня детали: обозначение, иначе файл детали, иначе имя без «[n]» (k156: общий с позициями чертежа).</summary>
+    public static string KeyOf(Part p)
+    {
+        string des = p.Info.Code ?? "";
+        return des.Length > 0 ? "code:" + des : p.SourcePath is { Length: > 0 } sp ? "file:" + Path.GetFileName(sp) : "name:" + DisplayName(p);
+    }
+    public static string DisplayName(Part p) => string.IsNullOrEmpty(p.Info.Title) ? BaseName(p.Name) : p.Info.Title;
+
     static string BaseName(string n) { int i = n.IndexOf(" ["); if (i < 0) i = n.IndexOf(" ("); return i > 0 ? n[..i] : n; }
 
     /// <summary>Строки из сборки (без правок пользователя): группировка одинаковых деталей, подсборки, вложенные сборки.</summary>
@@ -107,8 +115,8 @@ public sealed class BomDocument
                         continue;
                     }
                     string des = p.Info.Code ?? "";
-                    string name = string.IsNullOrEmpty(p.Info.Title) ? BaseName(p.Name) : p.Info.Title;
-                    string key = des.Length > 0 ? "code:" + des : p.SourcePath is { Length: > 0 } sp ? "file:" + Path.GetFileName(sp) : "name:" + name;
+                    string name = DisplayName(p);
+                    string key = KeyOf(p);
                     Add(key, () => new BomRow
                     {
                         Section = SectionOf(des, name), Designation = des, Name = name,

@@ -25,6 +25,11 @@ public sealed class SheetGraphics
     public double Width, Height;
     public readonly List<SheetLine> Lines = new();
     public readonly List<SheetPolyline> Polylines = new();
+    /// <summary>k156: залитые многоугольники (стрелки размеров, точки выносок, треугольник базы).</summary>
+    public readonly List<List<(double X, double Y)>> Fills = new();
+    /// <summary>k156: окружности (контур тонкой или толстой линией): выноски ISO, знак базы, выносной элемент.</summary>
+    public readonly List<(double X, double Y, double R, LineKind Kind)> Circles = new();
+    public void Poly(LineKind k, params (double X, double Y)[] pts) => Polylines.Add(new SheetPolyline(pts.ToList(), k));
     public readonly List<SheetText> Texts = new();
     public void Line(double x1, double y1, double x2, double y2, LineKind k = LineKind.Thin) => Lines.Add(new(x1, y1, x2, y2, k));
     public void Rect(double x, double y, double w, double h, LineKind k = LineKind.Thin)

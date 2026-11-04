@@ -64,6 +64,22 @@ public static class SheetRender
                 c.DrawPath(path, paint);
             }
         }
+        using (var fill = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Fill, IsAntialias = true })
+            foreach (var poly in g.Fills)
+            {
+                if (poly.Count < 3) continue;
+                using var path = new SKPath();
+                path.MoveTo((float)poly[0].X * scale, Y(poly[0].Y));
+                for (int i = 1; i < poly.Count; i++) path.LineTo((float)poly[i].X * scale, Y(poly[i].Y));
+                path.Close();
+                c.DrawPath(path, fill);
+            }
+        foreach (var (cx, cy, r, k) in g.Circles)
+        {
+            using var cp = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = (float)LineWidths.Of(k) * scale, IsAntialias = true,
+                PathEffect = LineWidths.Dash(k) is { } dsh ? SKPathEffect.CreateDash(dsh.Select(d => (float)d * scale).ToArray(), 0) : null };
+            c.DrawCircle((float)cx * scale, Y(cy), (float)r * scale, cp);
+        }
         float ratio = CapRatio();
         using var ink = new SKPaint { Color = SKColors.Black, IsAntialias = true };
         foreach (var t in g.Texts)

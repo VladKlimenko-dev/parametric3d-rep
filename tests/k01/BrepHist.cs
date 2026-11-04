@@ -132,6 +132,81 @@ static partial class Program
 static partial class Program
 {
     /// <summary>Разбор (k153): стадии расчёта детали со временем (режим «stagetimes файл»).</summary>
+    /// <summary>
+    /// k156: ВРЕМЯ ОТКРЫТИЯ. Файл как есть: чтение (DocumentFile.Load), восстановлено ли тело; если нет — перестроение и запись
+    /// с телом, затем повторное чтение. Печать: размер файла, время разбора JSON, восстановления тела, причина отказа.
+    /// </summary>
+    static void LoadTime(string file)
+    {
+        void One(string tag, string text)
+        {
+            long rej0 = DocumentFile.BrepRejected;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Parametric3D.Kernel.Diagnostics.Prof.Enabled = true;
+            var (p, pars) = DocumentFile.Load(text);
+            long ms = sw.ElapsedMilliseconds;
+            Console.WriteLine($"{tag}: {text.Length / 1e6:0.0} MB, load {ms} ms, restored {p.RestoredFromFile}, cached {p.ShowsCached}, dirty {p.IsDirty}, brepRejected {DocumentFile.BrepRejected - rej0}, hasBrep {text.Contains("\"Brep\"")}");
+            Console.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report());
+            Parametric3D.Kernel.Diagnostics.Prof.Reset();
+        }
+        string t0 = File.ReadAllText(file);
+        One("as is", t0);
+        var (q, qp) = DocumentFile.Load(t0);
+        var sw2 = System.Diagnostics.Stopwatch.StartNew();
+        if (!q.RestoredFromFile) q.Rebuild(qp);
+        Console.WriteLine($"rebuild {sw2.ElapsedMilliseconds} ms, errors {q.Features.Count(f => f.Error != null)}");
+        sw2.Restart();
+        string t1 = DocumentFile.Save(q, qp, withDisplay: true);
+        Console.WriteLine($"save {sw2.ElapsedMilliseconds} ms");
+        if (Environment.GetEnvironmentVariable("LOADTIME_KEEP") is { Length: > 0 } keep) File.WriteAllText(keep, t1);
+        One("resaved", t1);
+    }
+
+    /// <summary>k156: ВРЕМЯ ЗАПИСИ по частям: тела (BrepFile.Write), сетка показа, весь документ; профиль записи тел.</summary>
+    static void SaveTime(string file)
+    {
+        var (p, pars) = DocumentFile.Load(File.ReadAllText(file));
+        if (!p.RestoredFromFile) p.Rebuild(pars);
+        Parametric3D.Kernel.Diagnostics.Prof.Enabled = true;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var data = Parametric3D.Kernel.Topology.BrepFile.Write(p.Bodies);
+        Console.WriteLine($"brep write {sw.ElapsedMilliseconds} ms, {data.Length / 1e6:0.0} MB");
+        Console.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report());
+        Parametric3D.Kernel.Diagnostics.Prof.Reset();
+        sw.Restart();
+        var t = DocumentFile.Save(p, pars, withDisplay: true);
+        Console.WriteLine($"document save {sw.ElapsedMilliseconds} ms, {t.Length / 1e6:0.0} MB");
+        Console.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report());
+    }
+
+    /// <summary>k156: перестроение файла и ошибки операций (с выбранным числом процессоров — DOTNET_PROCESSOR_COUNT).</summary>
+    static void RebuildErrors(string file)
+    {
+        var (p, pars) = DocumentFile.Load(File.ReadAllText(file));
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        p.Rebuild(pars);
+        Console.WriteLine($"cpu {Environment.ProcessorCount}, rebuild {sw.ElapsedMilliseconds} ms, volume {p.Volume:0.###}");
+        foreach (var f in p.Features.Where(f => f.Error != null)) Console.WriteLine($"ERROR {f.Name}: {f.Error}");
+        foreach (var w in p.Warnings.Where(w => w.Contains("Chamfer") || w.Contains("rolled back"))) Console.WriteLine($"warn {w}");
+    }
+
+    /// <summary>k156: последняя фаска файла с разными размерами (перестроение с неё): ошибка, объём, гарантия.</summary>
+    static void ChamferSweep(string file, IEnumerable<string> sizes)
+    {
+        var (p, pars) = DocumentFile.Load(File.ReadAllText(file));
+        p.Rebuild(pars);
+        var ch = p.Features.OfType<Parametric3D.Model.Features.ChamferFeature>().Last();
+        foreach (var s in sizes)
+        {
+            double d = double.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+            ch.D1 = new Parametric3D.Model.Features.ValueRef(d); ch.D2 = new Parametric3D.Model.Features.ValueRef(d);
+            p.MarkDirtyFrom(ch);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            p.Rebuild(pars);
+            Console.WriteLine($"C{d}: {sw.ElapsedMilliseconds} ms, volume {p.Volume:0.###}, g {string.Join(",", p.Bodies.Select(b => b.Guarantee))}, error {ch.Error?.Split('\n').Last()}");
+        }
+    }
+
     static void StageTimes(string file)
     {
         var (p, pars) = DocumentFile.Load(File.ReadAllText(file));

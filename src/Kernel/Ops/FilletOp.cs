@@ -629,6 +629,11 @@ public static class FilletOp
         finally { VariableLaw = null; }
     }
 
+    static readonly bool ReorderOff = Environment.GetEnvironmentVariable("P3D_BLENDREORDER") == "0";
+    static readonly bool ReorderForce = Environment.GetEnvironmentVariable("P3D_BLENDREORDERFORCE") == "1";
+    /// <summary>k156: вторых проходов резцов в обратном порядке и удачных из них (разбор).</summary>
+    public static long ReorderTries, ReorderWins;
+    [ThreadStatic] static (List<TSolid> Bodies, int Done, List<string> Kinds, double? Known, double Abs)? _firstTry;
     static readonly bool OverflowOff = Environment.GetEnvironmentVariable("P3D_CHAMFEROVERFLOW") == "0";
     static readonly bool MajorityOff = Environment.GetEnvironmentVariable("P3D_CHAMFEROVFMAJ") == "0";
     /// <summary>k153: проверка «фаска шире грани» выключена (проверки сечений резца k142 — им нужна сама попытка).</summary>
@@ -1156,6 +1161,14 @@ public static class FilletOp
 
         bool carrierResult = false;
         double absChanged = 0;            // k140: сумма изменений по резцам (у смешанной цепочки рез и прибавка не гасят друг друга)
+        // k156 (замечание 04.11, 19:20 — фаска внутреннего ребра Sweep_Blend): ВТОРОЙ ПОРЯДОК РЕЗЦОВ. У смешанной цепочки (рез
+        // выпуклой части и прибавка вогнутой) прибавка после реза касалась тела в точке («touches itself at a point») или
+        // давала негодный стык (фаска 10: «curve-off-surface 0.05 мм») — откат прибавки, и вся операция отказывала по сверке
+        // объёма. Если хотя бы один резец откатился — тот же набор в обратном порядке от исходного тела; принимается, если в
+        // нём откатов нет. Мутация P3D_BLENDREORDER=0.
+        int rolledBack = 0; bool reordered = false;
+        if (ReorderForce) { jobs.Reverse(); reordered = true; }   // разбор: сразу обратный порядок
+    retryJobs:
         foreach (var (wanted, tool, kind, weight, adds, edgeCount) in jobs)
         {
             // СОСТОЯНИЕ ДО РЕЗА СОХРАНЯЕТСЯ ЦЕЛИКОМ.
@@ -1203,7 +1216,14 @@ public static class FilletOp
                         warnings.Add($"{what}: {far.Count} part(s) of the concave filler beyond a thin wall dropped.");
                     }
                 }
-                BooleanOp.Unite(bodies, toolU, warnings);
+                // k156: отказ прибавки (негодный стык) — как откат: тело прежнее, резец считается откатившимся
+                try { BooleanOp.Unite(bodies, toolU, warnings); }
+                catch (RebuildException ex) when (!ReorderOff && jobs.Count > 1 && !reordered)
+                {
+                    bodies.Clear(); bodies.AddRange(before); rolledBack++;
+                    warnings.Add($"{what}: the addition on edge {Show(wanted.Start)}-{Show(wanted.End)} was refused — {ex.Message}");
+                    continue;
+                }
             }
             else if (PreviewCsgNow && bodies.Count == 1 && MeshCsg(bodies[0], tool, subtract: true) is { } quick)
             {
@@ -1276,6 +1296,7 @@ public static class FilletOp
 
                 warnings.Add($"{what}: the cut on edge {Show(wanted.Start)}-{Show(wanted.End)} " +
                              $"was rolled back — {broke}.");
+                rolledBack++;
                 continue;
             }
 
@@ -1291,6 +1312,28 @@ public static class FilletOp
             if (adds) AppliedAddition?.Invoke(tool);
             else AppliedTool?.Invoke(tool);
         }
+
+        if (rolledBack > 0 && !reordered && !ReorderOff && jobs.Count > 1 && !carrierResult)
+        {
+            var firstTry = (Bodies: new List<TSolid>(bodies), Done: done, Kinds: new List<string>(kinds), Known: knownVolume, Abs: absChanged);
+            reordered = true; rolledBack = 0;
+            bodies.Clear(); bodies.AddRange(original);
+            done = 0; kinds.Clear(); knownVolume = null; absChanged = 0;
+            jobs.Reverse();
+            // второй проход; если и в нём откаты — прежний результат (ниже)
+            Interlocked.Increment(ref ReorderTries);
+            warnings.Add($"{what}: retrying the cutters in the reverse order.");
+            _firstTry = firstTry;
+            goto retryJobs;
+        }
+        if (reordered && _firstTry is { } ft && rolledBack > 0)
+        {
+            // второй порядок не лучше — прежний результат
+            bodies.Clear(); bodies.AddRange(ft.Bodies);
+            done = ft.Done; kinds.Clear(); kinds.AddRange(ft.Kinds); knownVolume = ft.Known; absChanged = ft.Abs;
+        }
+        else if (reordered && rolledBack == 0) Interlocked.Increment(ref ReorderWins);
+        _firstTry = null;
 
         // KRN-06 (06.16): ОБХОДНОЙ ПУТЬ СВЕРЯЕТСЯ С НЕЗАВИСИМОЙ ОЦЕНКОЙ. Протянутый резец по кривой пересечения (кромка
         // поперечного отверстия в валу, r = 1) снимал 90.7 мм³ при эталоне OpenCascade 7.75 — в 12 раз больше, и результат

@@ -8846,6 +8846,143 @@ Check("UI-MCP-K154", () =>
     }
 });
 
+// k156 (просьба 04.11, 19:11 и 19:20): ВЫБОР НОВОГО ДОКУМЕНТА — шесть плиток (деталь, сборка, FreeForm, чертёж, шаблон,
+// перечень); «Чертёж» открывает окно чертежа открытой модели. Чертёж сборки: две детали — общая сцена, позиции по перечню.
+// Размеры: автоматические; щелчками — линейный и диаметр; разрез и выносной элемент — щелчком; DXF; .p3drw — через «Открыть».
+// Открытие файла без тела — сообщение «нет тела… сохраните»; сохранение во время расчёта — «сохранено без тела».
+Check("UI-DRAWING-K156", () =>
+{
+    var dir = Path.Combine(Path.GetTempPath(), $"p3d_k156_{Guid.NewGuid():N}"); Directory.CreateDirectory(dir);
+    var sp = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 10), "k156"); var w = Open(sp); BuildNow(sp);
+    var opened = new List<SheetWindow>();
+    try
+    {
+        // выбор нового документа
+        Require(DocCommands.NewDocChoices.Length == 6 && DocCommands.NewDocChoices.Any(c => c.Id == "file.new_drawing") && DocCommands.NewDocChoices.Any(c => c.Id == "file.new_template") && DocCommands.NewDocChoices.Any(c => c.Id == "file.new_bom"), "new document choices");
+        var last0 = SheetWindow.Last;
+        var tnd = DocCommands.NewDocument(w);
+        for (int i = 0; i < 200 && DocCommands.LastNewDocWindow is not { IsVisible: true }; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); }
+        var tiles = DocCommands.LastNewDocWindow!.GetVisualDescendants().OfType<Button>().Where(b => b.Width == 170).ToList();
+        Console.WriteLine($"  tiles {tiles.Count}");
+        Require(tiles.Count == 6 && tiles.All(b => b.IsEnabled || DocCommands.NewDocChoices[tiles.IndexOf(b)].Id == "file.new_bom"), "six tiles (parts list needs an assembly)");
+        tiles[3].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        for (int i = 0; i < 400 && (!tnd.IsCompleted || ReferenceEquals(SheetWindow.Last, last0)); i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); }
+        var dw = SheetWindow.Last!;
+        Require(!ReferenceEquals(dw, last0) && dw.Kind == SheetWindow.Mode.Drawing && dw.Pages[0].Polylines.Count > 20, "the Drawing tile opened a drawing of the open part");
+        opened.Add(dw);
+        // размеры
+        dw.Change(() => dw.Drawing!.AutoDimensions(dw.Scene!));
+        int auto = dw.Drawing!.Dims.Count;
+        var top = dw.Drawing.Boxes["front"];
+        // щелчки: линейный размер по двум углам главного вида
+        dw.StartPick("dim1", "");
+        dw.PickAt(top.X0, top.Y0); dw.PickAt(top.X1, top.Y0);
+        var lin = dw.Drawing.Dims.Last();
+        Console.WriteLine($"  dims: auto {auto}, picked {lin.Kind} {lin.Value:0.###}");
+        Require(dw.Drawing.Dims.Count == auto + 1 && lin.Kind == "h" && Math.Abs(lin.Value - (top.X1 - top.X0) / dw.Drawing.Xf["front"].S) < 1e-6, "picked linear dimension = view width");
+        // разрез щелчком по середине вида сверху, выносной — по углу главного
+        var tb = dw.Drawing.Boxes["top"];
+        dw.StartPick("section", ""); dw.PickAt((tb.X0 + tb.X1) / 2, (tb.Y0 + tb.Y1) / 2);
+        dw.StartPick("detail", ""); dw.PickAt(top.X0 + 2, top.Y1 - 2);
+        var g = dw.Pages[0];
+        Console.WriteLine($"  views {string.Join(",", dw.Drawing.Views.Select(v => v.Name))}; hatch-capable {dw.Scene!.SectionBoundary.Values.Sum(b => b.Count)}");
+        Require(dw.Drawing.Views.Count(v => v.IsSection) == 1 && dw.Drawing.Views.Count(v => v.IsDetail) == 1 && dw.Scene.SectionBoundary.Values.Any(b => b.Count > 0), "section and detail by clicks");
+        Require(g.InBounds(), "sheet bounds");
+        if (Environment.GetEnvironmentVariable("SHEETDUMP") is { } dump) File.WriteAllBytes(Path.Combine(dump, "k156.png"), Parametric3D.App.Services.Drawing.SheetRender.RenderPng(g, 4));
+        var dxf = Path.Combine(dir, "d.dxf");
+        Parametric3D.Model.Drawing.DxfWriter.Save(dxf, dw.BuildPages());
+        Require(File.ReadAllText(dxf).Contains("ENTITIES"), "DXF");
+        var dpath = Path.Combine(dir, "d" + SheetWindow.DrawingExt);
+        dw.SaveTo(dpath);
+        var ot = w.OpenAsync(dpath);
+        while (!ot.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+        Require(SheetWindow.Last is { Kind: SheetWindow.Mode.Drawing } dw2 && !ReferenceEquals(dw2, dw) && dw2.Drawing!.Dims.Count == dw.Drawing.Dims.Count && ReferenceEquals(w.Session, sp), "Open routes .p3drw to the drawing window and keeps the document");
+        opened.Add(SheetWindow.Last!);
+    }
+    finally { foreach (var o in opened) o.Close(); w.Close(); }
+
+    // чертёж сборки: две детали, позиции
+    var sa = DocumentSession.NewAssembly(); var wa = Open(sa);
+    try
+    {
+        var a = AssemblyCommands.AddComponent(wa, CubePart("Основание", 40), "add"); a.Info.Code = "АБВГ.1";
+        var b = AssemblyCommands.AddComponent(wa, CubePart("Кубик", 20), "add"); b.Info.Code = "АБВГ.2";
+        b.Translation = new OpenTK.Mathematics.Vector3(60, 0, 0);
+        BuildNow(sa);
+        var t = DrawingCommands.NewDrawing(wa);
+        while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+        var aw = t.Result!; opened.Add(aw);
+        aw.Change(() => aw.Drawing!.AutoBalloons(aw.Scene!, Parametric3D.Model.Drawing.DrawingInput.FromAssembly(sa.Document.Root).Positions));
+        var balloons = aw.Drawing!.Notes.Where(n => n.Kind == "balloon").Select(n => n.Position).OrderBy(x => x).ToList();
+        Console.WriteLine($"  assembly: bodies {aw.Scene!.BodyItems.Count}, balloons {string.Join(",", balloons)}");
+        Require(aw.Scene.BodyItems.Count == 2 && balloons.SequenceEqual(new[] { 1, 2 }), "assembly drawing balloons 1, 2");
+        aw.Close();
+    }
+    finally { wa.Close(); }
+
+    // открытие файла без тела и сохранение во время расчёта — сообщения
+    var cp = Path.Combine(dir, "cube" + DocumentSession.PartExtension);
+    var sc = DocumentSession.FromPart(CubePart("Куб", 30), "c"); var wc = Open(sc); BuildNow(sc);
+    sc.SaveAs(cp); StripBrep(cp); wc.Close();
+    var w3 = Open(DocumentSession.NewPart());
+    try
+    {
+        var o3 = w3.OpenAsync(cp);
+        while (!o3.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+        Console.WriteLine($"  open note: {w3.LastOpenNote}");
+        Require(w3.LastOpenNote != null && w3.Session.Part!.LoadNote == Parametric3D.Model.LoadNoteKind.CachedNoBodies, "the open note about a file without bodies");
+        var s3 = w3.SaveAsync(false);
+        while (!s3.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+        Console.WriteLine($"  save toast: {w3.LastToast}");
+        Require(w3.LastToast != null && w3.LastToast.Contains(Parametric3D.App.Loc.L("Сохранено без тела детали: {0}. Следующее открытие — с перестроением.").Split(':')[0]), "the save note while the part is not built");
+        BuildNow(w3.Session);
+        Console.WriteLine($"  after build: {w3.LastToast}");
+        Require(w3.LastToast != null && w3.LastToast.Contains("Ctrl+S"), "the reminder to save after the rebuild");
+        var s4 = w3.SaveAsync(false);
+        while (!s4.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+        Require(File.ReadAllText(cp).Contains("\"Brep\""), "after the build the file gets the bodies");
+    }
+    finally { w3.Close(); try { Directory.Delete(dir, true); } catch { } }
+});
+
+// k156: ДИАГНОСТИКА ОТКРЫТИЯ (только с P3D_DIAGOPEN=<файл>): открытие как в приложении (OpenAsync), время до показа, до
+// конца расчёта и проверки, ошибки операций; затем сохранение с телом и повторное открытие.
+if (Environment.GetEnvironmentVariable("P3D_DIAGOPEN") is { Length: > 0 } diagFile)
+Check("UI-DIAG-OPEN", () =>
+{
+    foreach (var round in new[] { "as is", "resaved" })
+    {
+        var w = Open(DocumentSession.NewPart());
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var t = w.OpenAsync(diagFile);
+        while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+        var s = w.Session; var part = s.Part!;
+        Console.WriteLine($"  [{round}] opened {sw.ElapsedMilliseconds} ms: restored {part.RestoredFromFile}, cached {part.ShowsCached}, dirty {part.IsDirty}, mesh {(part.Mesh?.Vertices.Length ?? 0)}");
+        long shown = part.Mesh is { Vertices.Length: > 0 } ? sw.ElapsedMilliseconds : -1;
+        // в приложении перестроение запускает кадр вида (PrepareScene); здесь — так же, по одному запуску на расчёт
+        Task<bool>? bt = null;
+        while (sw.Elapsed.TotalSeconds < 900 && (bt is { IsCompleted: false } || s.Document.IsBuilding || s.Document.IsVerifying || s.Document.AllParts().Any(p => p.IsDirty)))
+        {
+            if ((bt == null || bt.IsCompleted) && !s.Document.IsBuilding && s.Document.AllParts().Any(p => p.IsDirty)) bt = s.Document.RebuildDirtyAsync();
+            Dispatcher.UIThread.RunJobs(); Thread.Sleep(5);
+            if (shown < 0 && part.Mesh is { Vertices.Length: > 0 }) shown = sw.ElapsedMilliseconds;
+        }
+        Console.WriteLine($"  [{round}] needsAcceptance {part.NeedsAcceptance}, showsInstant {part.ShowsInstant}, cached {part.ShowsCached}, dirty {part.IsDirty}");
+        Console.WriteLine($"  [{round}] shown {shown} ms, idle {sw.ElapsedMilliseconds} ms, building {s.Document.IsBuilding}, verifying {s.Document.IsVerifying}");
+        foreach (var f in part.Features.Where(f => f.Error != null)) Console.WriteLine($"  [{round}] ERROR {f.Name}: {f.Error}");
+        foreach (var wn in part.Warnings) Console.WriteLine($"  [{round}] warn: {wn.Replace('\n', ' ')}");
+        if (round == "as is")
+        {
+            var tmp = Path.Combine(Path.GetTempPath(), "p3d_diag_" + Path.GetFileName(diagFile));
+            var saved = Parametric3D.Model.DocumentFile.Save(part, s.Document.Parameters, withDisplay: true);
+            Console.WriteLine($"  [{round}] saved {saved.Length / 1e6:0.0} MB, brep {saved.Contains("\"Brep\"")}");
+            File.WriteAllText(tmp, saved);
+            diagFile = tmp;
+        }
+        w.Close();
+    }
+});
+
 // k155 (D1): ШАБЛОН ЛИСТА И ПЕРЕЧЕНЬ. Окно шаблона: A4 → A3 альбомный, ЕСКД, форма 1, поле «Обозначение» вручную и масса из
 // свойств детали; запись .p3dtpl и чтение. Перечень из открытой сборки: 3 одинаковых кубика — одна строка «3», правка строки
 // и удаление переживают «Обновить по модели»; запись .p3dbom и открытие. PDF: заголовок %PDF, страниц — по листам, шрифт ГОСТ
@@ -8924,7 +9061,9 @@ Check("UI-DRAWING-K155", () =>
     SheetWindow? dw = null;
     try
     {
-        dw = DrawingCommands.NewDrawing(w) ?? throw new CheckFailed("no drawing window");
+        var tnd = DrawingCommands.NewDrawing(w);
+        while (!tnd.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+        dw = tnd.Result ?? throw new CheckFailed("no drawing window");
         var g = dw.Pages.Single();
         int thick = g.Polylines.Count(q => q.Kind == Parametric3D.Model.Drawing.LineKind.Thick), hid = g.Polylines.Count(q => q.Kind == Parametric3D.Model.Drawing.LineKind.Hidden);
         var scale = g.Texts.FirstOrDefault(t => t.Field == Parametric3D.Model.Drawing.Fields.Scale)?.Text;

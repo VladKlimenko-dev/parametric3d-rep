@@ -26,10 +26,17 @@ public sealed class SheetWindow : Window
     public BomDocument? Bom;
     /// <summary>k155 (D2): чертёж — виды детали на листе.</summary>
     public DrawingDocument? Drawing;
-    /// <summary>Тела детали чертежа (открытая деталь); у чертежа с файлом детали — из файла.</summary>
-    public Func<IReadOnlyList<Kernel.Topology.TSolid>>? DrawingBodies;
-    Dictionary<string, List<ViewLine>>? _proj;
-    Dictionary<string, List<ViewAxis>>? _axes;
+    /// <summary>Источник чертежа (открытая деталь или сборка); у чертежа с файлом — из файла.</summary>
+    public Func<DrawingInput?>? DrawingSource;
+    /// <summary>Совместимость (k155): тела открытой детали.</summary>
+    public Func<IReadOnlyList<Kernel.Topology.TSolid>>? DrawingBodies
+    {
+        set => DrawingSource = value == null ? null : () => { var d = new DrawingInput(); d.Bodies.AddRange(value()); return d; };
+    }
+    DrawingScene? _scene;
+    DrawingInput? _input;
+    /// <summary>Проекции видов последнего построения (проверки).</summary>
+    public DrawingScene? Scene => _scene;
     public string? FilePath;
     public bool Dirty;
     /// <summary>Сборка-источник открытого документа (перечень «из сборки»), если перечень делается из открытой сборки.</summary>
@@ -100,7 +107,7 @@ public sealed class SheetWindow : Window
         Sep();
         if (Kind == Mode.Drawing)
         {
-            Btn("dr_update_but.svg", "Обновить по модели", () => { _proj = null; _axes = null; Refresh(); });
+            Btn("dr_update_but.svg", "Обновить по модели", () => { InvalidateViews(); Refresh(); BuildProps(); });
             Btn("dr_base_view_but.svg", "Главный вид", () => ToggleView("front"));
             Btn("dr_projected_view_but.svg", "Проекционные виды (сверху, слева)", () => { ToggleView("top"); ToggleView("left"); });
             Btn("dr_3d_view_but.svg", "3D-вид (изометрия ГОСТ 2.317)", () => ToggleView("iso"));
@@ -116,6 +123,46 @@ public sealed class SheetWindow : Window
                 d.Scale = order[(i + 1) % order.Length];
                 Relayout();
             }));
+            Sep();
+            // D3: размеры
+            Btn("dr_auto_dims_but.svg", "Автоматические размеры (габариты, отверстия, радиусы)", () => Change(() => { EnsureScene(); Drawing!.AutoDimensions(_scene!); }));
+            Btn("dr_show_model_dims_but.svg", "Размеры модели (из эскизов)", () => Change(() =>
+            {
+                EnsureScene();
+                int n = _input?.Part != null ? Drawing!.ModelDimensions(_input.Part) : 0;
+                _status.Text = _input?.Part == null ? L("Размеры модели — только у чертежа детали") : L("Перенесено размеров эскизов: {0}", n);
+            }));
+            Btn("dr_dims_toggle_but.svg", "Показать / скрыть размеры", () => Change(() => Drawing!.ShowDims = !Drawing.ShowDims));
+            Btn("dr_dim_linear_but.svg", "Линейный размер: два щелчка по точкам вида", () => StartPick("dim1", L("Размер: щёлкните первую точку на виде")));
+            Btn("dr_dim_diameter_but.svg", "Диаметр: щелчок по окружности", () => StartPick("dia", L("Диаметр: щёлкните окружность")));
+            Btn("dr_dim_radial_but.svg", "Радиус: щелчок по дуге", () => StartPick("rad", L("Радиус: щёлкните дугу")));
+            Sep();
+            // D4: обозначения
+            Btn("dr_roughness_but.svg", "Шероховатость: щелчок по контуру (Esc — неуказанная в углу)", () => StartPick("rough", L("Шероховатость: щёлкните поверхность на виде; Esc — неуказанная шероховатость в углу листа")));
+            Btn("dr_gdt_frame_but.svg", "Допуск формы и расположения: щелчок по контуру", () => StartPick("gdt", L("Допуск: щёлкните поверхность на виде")));
+            Btn("dr_datum_but.svg", "База: щелчок по контуру", () => StartPick("datum", L("База: щёлкните поверхность на виде")));
+            Btn("dr_gdt_toggle_but.svg", "Допуски формы и расположения вкл/выкл", () => Change(() => Drawing!.ShowGdt = !Drawing.ShowGdt));
+            Btn("dr_note_but.svg", "Технические требования (текст над надписью)", () => Change(() =>
+            {
+                var (x0, y0, x1, _) = SheetLayout.FrameRect(Template);
+                double y = y0 + SheetLayout.TitleHeight(Template.TitleBlock) + 40;
+                Drawing!.Notes.Add(new DrawingNote { Kind = "text", X = x1 - 185, Y = y, Text = L("1. * Размеры для справок.\n2. Неуказанные предельные отклонения размеров: H14, h14, ±IT14/2.") });
+            }));
+            Btn("dr_balloon_but.svg", "Позиция: щелчок по детали", () => StartPick("balloon", L("Позиция: щёлкните деталь на виде")));
+            Btn("dr_auto_balloon_but.svg", "Позиции сборки (по перечню)", () => Change(() => { EnsureScene(); Drawing!.AutoBalloons(_scene!, _input?.Positions, Drawing.Views.Any(v => v.Name == "front") ? "front" : Drawing.Views[0].Name); }));
+            Sep();
+            // D5: разрезы, выносные, таблицы, DXF
+            Btn("dr_section_view_but.svg", "Разрез: щелчок на виде — место секущей плоскости", () => StartPick("section", L("Разрез: щёлкните на виде место секущей плоскости")));
+            Btn("dr_detail_view_but.svg", "Выносной элемент: щелчок — центр круга", () => StartPick("detail", L("Выносной элемент: щёлкните центр")));
+            Btn("dr_hole_table_but.svg", "Таблица отверстий", () => Change(() =>
+            {
+                EnsureScene();
+                string view = Drawing!.Views.Where(v => !v.IsDetail && _scene!.Axes.ContainsKey(v.Name)).OrderByDescending(v => _scene!.Axes[v.Name].Count(a => a.Cross)).Select(v => v.Name).FirstOrDefault() ?? "top";
+                var (x0, _, _, y1) = SheetLayout.FrameRect(Template);
+                Drawing.Notes.RemoveAll(n => n.Kind == "holes");
+                Drawing.Notes.Add(new DrawingNote { Kind = "holes", View = view, X = x0 + 5, Y = y1 - 5 });
+            }));
+            Btn("export_dxf_but.svg", "Вывод в DXF", () => _ = ExportDxfAsync());
             Sep();
         }
         if (Kind is Mode.Template or Mode.Drawing)
@@ -192,24 +239,162 @@ public sealed class SheetWindow : Window
     string? _dragView; Point _dragAt;
     (double X, double Y) SheetMm(Point p) => (p.X / _zoom, (Pages.Count > 0 ? Pages[_page].Height : 0) - p.Y / _zoom);
 
+    DrawingNote? _dragNote;
+
     void HookDrag()
     {
         _sheet.PointerPressed += (_, e) =>
         {
             var p = e.GetPosition(_sheet); var (x, y) = SheetMm(p);
-            _dragView = Drawing!.ViewAt(x, y); _dragAt = p;
-            if (_dragView != null) { e.Pointer.Capture(_sheet); _status.Text = L("Вид: {0}", _dragView); }
+            if (_pick != null) { try { PickAt(x, y); } catch (Exception ex) { _status.Text = ex.Message; Core.AppLog.Write("sheet: pick", ex); } return; }
+            _dragAt = p;
+            // обозначение под курсором (место на листе ближе 5 мм) — переносится оно, иначе — вид
+            _dragNote = Drawing!.Notes.Where(n => n.Kind != "rough" || n.HasTarget || n.X != 0).OrderBy(n => Math.Abs(n.X - x) + Math.Abs(n.Y - y)).FirstOrDefault(n => Math.Abs(n.X - x) < 8 && Math.Abs(n.Y - y) < 8);
+            _dragView = _dragNote == null ? Drawing.ViewAt(x, y) : null;
+            if (_dragView != null || _dragNote != null) { e.Pointer.Capture(_sheet); _status.Text = _dragNote != null ? L("Обозначение") : L("Вид: {0}", _dragView!); }
         };
         _sheet.PointerMoved += (_, e) =>
         {
-            if (_dragView == null) return;
+            if (_dragView == null && _dragNote == null) return;
             var p = e.GetPosition(_sheet);
             double dx = (p.X - _dragAt.X) / _zoom, dy = -(p.Y - _dragAt.Y) / _zoom;
             if (Math.Abs(dx) + Math.Abs(dy) < 0.5) return;
-            Drawing!.MoveView(_dragView, dx, dy); _dragAt = p;
+            if (_dragNote != null) { _dragNote.X += dx; _dragNote.Y += dy; }
+            else Drawing!.MoveView(_dragView!, dx, dy);
+            _dragAt = p;
             Dirty = true; UpdateTitle(); Refresh();
         };
-        _sheet.PointerReleased += (_, e) => { _dragView = null; e.Pointer.Capture(null); };
+        _sheet.PointerReleased += (_, e) => { _dragView = null; _dragNote = null; e.Pointer.Capture(null); };
+        KeyDown += (_, e) =>
+        {
+            if (e.Key != Avalonia.Input.Key.Escape || _pick == null) return;
+            // Esc в режиме шероховатости — неуказанная шероховатость в углу листа
+            if (_pick == "rough") Change(() => { Drawing!.Notes.RemoveAll(n => n.Kind == "rough" && !n.HasTarget); Drawing.Notes.Add(new DrawingNote { Kind = "rough", Value = "Ra 6,3" }); });
+            _pick = null; _status.Text = "";
+        };
+    }
+
+    // ------------------------------------------------------------------ щелчки по виду: размеры, обозначения, разрезы
+
+    string? _pick; (string View, OpenTK.Mathematics.Vector2d P)? _first;
+
+    public void StartPick(string mode, string hint) { EnsureScene(); _pick = mode; _first = null; _status.Text = hint; }
+
+    /// <summary>Ближайшая точка линий вида (вершины ломаных; snap — в мм листа) или сама точка щелчка.</summary>
+    OpenTK.Mathematics.Vector2d Snap(string view, OpenTK.Mathematics.Vector2d q, double snapMm, bool vertices)
+    {
+        double s = Drawing!.Xf[view].S, best = snapMm / s; var res = q;
+        foreach (var l in _scene!.Lines[view])
+        {
+            if (!l.Visible) continue;
+            for (int i = 0; i < l.Points.Count; i++)
+            {
+                if (vertices && i != 0 && i != l.Points.Count - 1) continue;
+                double dd = (l.Points[i] - q).Length;
+                if (dd < best) { best = dd; res = l.Points[i]; }
+                if (!vertices && i + 1 < l.Points.Count)
+                {
+                    var a = l.Points[i]; var ab = l.Points[i + 1] - a;
+                    double t = ab.LengthSquared < 1e-24 ? 0 : Math.Clamp(OpenTK.Mathematics.Vector2d.Dot(q - a, ab) / ab.LengthSquared, 0, 1);
+                    var c = a + ab * t; double dc = (c - q).Length;
+                    if (dc < best) { best = dc; res = c; }
+                }
+            }
+        }
+        return res;
+    }
+
+    /// <summary>Тело (деталь) у ближайшей к точке видимой линии вида.</summary>
+    int BodyAt(string view, OpenTK.Mathematics.Vector2d q)
+    {
+        int body = -1; double best = double.MaxValue;
+        foreach (var l in _scene!.Lines[view])
+            for (int i = 0; i + 1 < l.Points.Count; i++)
+            {
+                var a = l.Points[i]; var ab = l.Points[i + 1] - a;
+                double t = ab.LengthSquared < 1e-24 ? 0 : Math.Clamp(OpenTK.Mathematics.Vector2d.Dot(q - a, ab) / ab.LengthSquared, 0, 1);
+                double d = (a + ab * t - q).Length;
+                if (d < best) { best = d; body = l.Body; }
+            }
+        return body;
+    }
+
+    public void PickAt(double x, double y)
+    {
+        var d = Drawing!;
+        var view = d.ViewAt(x, y);
+        if (view == null || !d.Xf.ContainsKey(view)) { _status.Text = L("Щёлкните на виде"); return; }
+        var q = d.ToView(view, x, y);
+        double s = d.Xf[view].S;
+        string mode = _pick!;
+        switch (mode)
+        {
+            case "dim1":
+                _first = (view, Snap(view, q, 4, true)); _pick = "dim2"; _status.Text = L("Размер: щёлкните вторую точку"); return;
+            case "dim2":
+                {
+                    if (_first is not { } f || f.View != view) { _status.Text = L("Вторая точка — на том же виде"); return; }
+                    var b = Snap(view, q, 4, true);
+                    double dx = Math.Abs(b.X - f.P.X), dy = Math.Abs(b.Y - f.P.Y);
+                    string kind = dx > 3 * dy ? "h" : dy > 3 * dx ? "v" : "al";
+                    var mid = d.Xf[view].Mid;
+                    // размерная линия — снаружи: от середины вида в сторону точек
+                    double off = kind == "h" ? ((f.P.Y + b.Y) / 2 >= mid.Y ? 10 : -10) : kind == "v" ? ((f.P.X + b.X) / 2 >= mid.X ? -10 : 10) : 8;
+                    Change(() => d.Dims.Add(new DrawingDim { View = view, Kind = kind, X1 = f.P.X, Y1 = f.P.Y, X2 = b.X, Y2 = b.Y, Offset = off }));
+                    _pick = null; return;
+                }
+            case "dia" or "rad":
+                {
+                    // окружность — по осям (перекрестие) или дуге ребра; ближайшая к щелчку по расстоянию до линии окружности
+                    var arcs = _scene!.Arcs.GetValueOrDefault(view) ?? new();
+                    var cands = arcs.Where(a => mode == "rad" ? !a.Full : true).Select(a => (C: a.Center, R: a.Radius, A: Math.Atan2(q.Y - a.Center.Y, q.X - a.Center.X)))
+                        .Concat(mode == "dia" ? (_scene.Axes.GetValueOrDefault(view) ?? new()).Where(a => a.Cross).Select(a => (C: a.Center, R: a.Radius, A: Math.Atan2(q.Y - a.Center.Y, q.X - a.Center.X))) : Enumerable.Empty<(OpenTK.Mathematics.Vector2d C, double R, double A)>())
+                        .OrderBy(c => Math.Abs((q - c.C).Length - c.R)).ToList();
+                    if (cands.Count == 0 || Math.Abs((q - cands[0].C).Length - cands[0].R) * s > 5) { _status.Text = mode == "dia" ? L("Окружность не найдена — щёлкните ближе к ней") : L("Дуга не найдена — щёлкните ближе к ней"); return; }
+                    var c0 = cands[0];
+                    Change(() => d.Dims.Add(new DrawingDim { View = view, Kind = mode, X1 = c0.C.X, Y1 = c0.C.Y, X2 = c0.R, Y2 = c0.A * 180 / Math.PI }));
+                    _pick = null; return;
+                }
+            case "rough" or "gdt" or "datum" or "balloon":
+                {
+                    var t = Snap(view, q, 5, false);
+                    var note = new DrawingNote { Kind = mode, View = view, HasTarget = true, TX = t.X, TY = t.Y };
+                    var ts = d.ToSheet(view, t);
+                    switch (mode)
+                    {
+                        case "rough": note.Value = "Ra 3,2"; note.HasTarget = true; note.X = ts.X; note.Y = ts.Y; break;
+                        case "gdt": note.Symbol = "perp"; note.Value = "0,05"; note.Datums = d.Notes.Where(n => n.Kind == "datum").Select(n => n.Text).FirstOrDefault() ?? ""; note.X = ts.X + 12; note.Y = ts.Y + 10; break;
+                        case "datum": note.Text = d.NextLetter(); note.X = ts.X; note.Y = ts.Y - 15; break;
+                        default:
+                            {
+                                int body = BodyAt(view, q);
+                                string item = body >= 0 && body < _scene!.BodyItems.Count ? _scene.BodyItems[body] : "";
+                                note.Position = _input?.Positions != null && _input.Positions.TryGetValue(item, out var pp) ? pp : d.Notes.Where(n => n.Kind == "balloon").Select(n => n.Position).DefaultIfEmpty(0).Max() + 1;
+                                note.Text = item; note.X = d.Boxes[view].X1 + 12; note.Y = ts.Y;
+                                break;
+                            }
+                    }
+                    Change(() => d.Notes.Add(note));
+                    _pick = null; return;
+                }
+            case "section":
+                {
+                    var parent = d.Views.First(v => v.Name == view);
+                    if (parent.IsSection || parent.IsDetail || d.DirOf(parent) == "iso") { _status.Text = L("Разрез — на основном виде"); return; }
+                    string dir = d.DirOf(parent) switch { "top" or "bottom" => "front", "front" or "back" => "left", _ => "front" };
+                    var pf = ViewFrame.Of(d.DirOf(parent)); var sf = ViewFrame.Of(dir);
+                    double depth = OpenTK.Mathematics.Vector3d.Dot(pf.Right * q.X + pf.Up * q.Y, sf.Toward);
+                    Change(() => { d.AddSection(_scene!, view, dir, depth); InvalidateViews(); });
+                    _pick = null; return;
+                }
+            case "detail":
+                {
+                    double r = 12 / s;
+                    double ds = DrawingDocument.GostScales.Where(g => g >= 2 * s - 1e-12).DefaultIfEmpty(2 * s).Min();
+                    Change(() => { d.AddDetail(view, q, r, ds); InvalidateViews(); });
+                    _pick = null; return;
+                }
+        }
     }
 
     void Move(int d) => Change(() =>
@@ -278,7 +463,8 @@ public sealed class SheetWindow : Window
                     _props.Children.Add(row);
                 }
                 _props.Children.Add(new TextBlock { Text = L("Масштаб листа: {0}", d.Scale > 0 ? DrawingDocument.ScaleText(d.Scale) : L("подбирается")), Opacity = 0.8 });
-                _props.Children.Add(new TextBlock { Text = d.SourcePath != null ? L("Деталь: {0}", Path.GetFileName(d.SourcePath)) : L("Деталь: открытый документ"), Opacity = 0.8 });
+                _props.Children.Add(new TextBlock { Text = d.SourcePath != null ? L("Модель: {0}", Path.GetFileName(d.SourcePath)) : L("Модель: открытый документ"), Opacity = 0.8 });
+                DrawingProps(d);
             }
             _props.Children.Add(new TextBlock { Text = L("Лист"), FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 8, 0, 0) });
             _formatBox = new ComboBox { ItemsSource = SheetFormats.All.Select(f => f.Code).ToList(), SelectedItem = Template.Format, MinWidth = 120 };
@@ -356,6 +542,82 @@ public sealed class SheetWindow : Window
         }
     }
 
+    /// <summary>Разрезы и выносные, размеры, обозначения — списком с правкой.</summary>
+    void DrawingProps(DrawingDocument d)
+    {
+        TextBlock Head(string t) => new() { Text = t, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 8, 0, 0) };
+        Button Del(Action a) { var b = new Button { Content = "×", Padding = new Thickness(6, 0) }; b.Click += (_, _) => Change(a); return b; }
+        static double Num(string v, double old) => double.TryParse(v.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var x) ? x : old;
+        var extra = d.Views.Where(v => v.IsSection || v.IsDetail).ToList();
+        if (extra.Count > 0)
+        {
+            _props.Children.Add(Head(L("Разрезы и выносные элементы")));
+            foreach (var v in extra)
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+                row.Children.Add(new TextBlock { Text = v.IsSection ? $"{v.Label}-{v.Label}" : v.Label, MinWidth = 40, VerticalAlignment = VerticalAlignment.Center });
+                if (v.IsSection) row.Children.Add(Field(v.CutDepth.ToString("0.###", CultureInfo.InvariantCulture), t => { double n = Num(t, v.CutDepth); if (n != v.CutDepth) Change(() => { v.CutDepth = n; InvalidateViews(); }); }, 80));
+                else row.Children.Add(Field(v.DetailR.ToString("0.###", CultureInfo.InvariantCulture), t => { double n = Num(t, v.DetailR); if (n > 0 && n != v.DetailR) Change(() => { v.DetailR = n; InvalidateViews(); }); }, 80));
+                row.Children.Add(new TextBlock { Text = v.IsSection ? L("глубина, мм") : L("радиус, мм"), Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center });
+                row.Children.Add(Del(() => { d.Views.Remove(v); InvalidateViews(); }));
+                _props.Children.Add(row);
+            }
+        }
+        if (d.Dims.Count > 0)
+        {
+            _props.Children.Add(Head(L("Размеры")));
+            foreach (var dim in d.Dims.ToList())
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+                var show = new CheckBox { IsChecked = !dim.Hidden, MinWidth = 0 };
+                show.IsCheckedChanged += (_, _) => { bool h = show.IsChecked != true; if (h != dim.Hidden) Change(() => dim.Hidden = h); };
+                row.Children.Add(show);
+                row.Children.Add(new TextBlock { Text = $"{dim.View}: {dim.Caption(Template.Standard == SheetStandard.Eskd)}", MinWidth = 120, VerticalAlignment = VerticalAlignment.Center });
+                var tol = Field(dim.Tol, t => { if (t != dim.Tol) Change(() => dim.Tol = t); }, 60); tol.Watermark = L("допуск");
+                var txt = Field(dim.Text, t => { if (t != dim.Text) Change(() => dim.Text = t); }, 60); txt.Watermark = L("текст");
+                var off = Field(dim.Offset.ToString("0.#", CultureInfo.InvariantCulture), t => { double n = Num(t, dim.Offset); if (n != dim.Offset) Change(() => dim.Offset = n); }, 44);
+                row.Children.Add(tol); row.Children.Add(txt); row.Children.Add(off); row.Children.Add(Del(() => d.Dims.Remove(dim)));
+                _props.Children.Add(row);
+            }
+        }
+        if (d.Notes.Count > 0)
+        {
+            _props.Children.Add(Head(L("Обозначения")));
+            foreach (var n in d.Notes.ToList())
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+                string kind = n.Kind switch { "rough" => L("Шероховатость"), "gdt" => L("Допуск"), "datum" => L("База"), "balloon" => L("Позиция"), "holes" => L("Таблица отверстий"), _ => L("Текст") };
+                row.Children.Add(new TextBlock { Text = kind, MinWidth = 90, VerticalAlignment = VerticalAlignment.Center });
+                switch (n.Kind)
+                {
+                    case "rough": row.Children.Add(Field(n.Value, t => { if (t != n.Value) Change(() => n.Value = t); }, 90)); break;
+                    case "gdt":
+                        {
+                            var sym = new ComboBox { ItemsSource = DrawingDocument.GdtSymbols.Select(x => L(x.Name)).ToList(), SelectedIndex = Math.Max(0, Array.FindIndex(DrawingDocument.GdtSymbols, x => x.Key == n.Symbol)), FontSize = 11, MinWidth = 120 };
+                            sym.SelectionChanged += (_, _) => { var k = DrawingDocument.GdtSymbols[Math.Max(0, sym.SelectedIndex)].Key; if (k != n.Symbol) Change(() => n.Symbol = k); };
+                            row.Children.Add(sym);
+                            row.Children.Add(Field(n.Value, t => { if (t != n.Value) Change(() => n.Value = t); }, 54));
+                            var db = Field(n.Datums, t => { if (t != n.Datums) Change(() => n.Datums = t); }, 40); db.Watermark = L("базы");
+                            row.Children.Add(db);
+                            break;
+                        }
+                    case "datum": row.Children.Add(Field(n.Text, t => { if (t != n.Text) Change(() => n.Text = t); }, 40)); break;
+                    case "balloon": row.Children.Add(Field(n.Position.ToString(CultureInfo.InvariantCulture), t => { if (int.TryParse(t, out var k) && k != n.Position) Change(() => n.Position = k); }, 40)); break;
+                    case "holes": break;
+                    default:
+                        {
+                            var tb = new TextBox { Text = n.Text, AcceptsReturn = true, MinHeight = 44, Width = 220, FontSize = 12 };
+                            tb.LostFocus += (_, _) => { if (tb.Text != n.Text) Change(() => n.Text = tb.Text ?? ""); };
+                            row.Children.Add(tb);
+                            break;
+                        }
+                }
+                row.Children.Add(Del(() => d.Notes.Remove(n)));
+                _props.Children.Add(row);
+            }
+        }
+    }
+
     static string FormName(TitleBlockForm f) => f switch { TitleBlockForm.Form1 => L("форма 1"), TitleBlockForm.Form2 => L("форма 2"), TitleBlockForm.Form2a => L("форма 2а"), _ => "ISO 7200" };
 
     static Control Row(string label, Control c)
@@ -370,28 +632,49 @@ public sealed class SheetWindow : Window
 
     FieldSource FieldValues() => FieldSource.FromPart(FieldPart?.Invoke());
 
-    /// <summary>Тела детали чертежа: файл детали или открытая деталь.</summary>
-    IReadOnlyList<Kernel.Topology.TSolid> Bodies()
+    /// <summary>Источник чертежа: файл модели (деталь или сборка) или открытый документ.</summary>
+    DrawingInput Input()
     {
+        // открытый документ — его модель (файл может быть старее правок); иначе — файл модели
+        if (DrawingSource?.Invoke() is { } open && open.Bodies.Count > 0) return open;
         if (Drawing?.SourcePath is { Length: > 0 } sp && File.Exists(sp))
         {
-            var (p, pars) = DocumentFile.Load(File.ReadAllText(sp));
-            if (!p.RestoredFromFile) p.Rebuild(pars);
-            _sourcePart = p;
-            return p.Bodies.ToList();
+            if (_fileInput is { } fi && fi.Path == sp && fi.Stamp == File.GetLastWriteTimeUtc(sp)) return fi.Input;
+            var inp = DrawingInput.FromFile(sp);
+            _fileInput = (sp, File.GetLastWriteTimeUtc(sp), inp);
+            return inp;
         }
-        return DrawingBodies?.Invoke() ?? Array.Empty<Kernel.Topology.TSolid>();
+        return DrawingSource?.Invoke() ?? new DrawingInput();
     }
-    Part? _sourcePart;
+    (string Path, DateTime Stamp, DrawingInput Input)? _fileInput;
     string _projSig = "";
-    /// <summary>Отпечаток тел детали: число граней и рёбер, объём сетки до 1e-6 — для метки «устарел».</summary>
-    static string Signature(IReadOnlyList<Kernel.Topology.TSolid> bodies) =>
-        string.Join(";", bodies.Select(b => $"{b.Faces.Count()}/{b.Edges.Count()}/{b.Id}"));
-    /// <summary>Чертёж открытой детали устарел: тела детали изменились после построения видов.</summary>
-    public bool Outdated => Kind == Mode.Drawing && _proj != null && DrawingBodies != null && Drawing?.SourcePath == null
-                            && Signature(DrawingBodies()) != _projSig;
-    /// <summary>Виды построить заново (сменилась деталь или источник тел).</summary>
-    public void InvalidateViews() { _proj = null; _axes = null; }
+    /// <summary>Чертёж устарел: тела модели изменились после построения видов (открытый документ — по отпечатку тел; файл — по
+    /// времени записи файла).</summary>
+    public bool Outdated
+    {
+        get
+        {
+            if (Kind != Mode.Drawing || _scene == null) return false;
+            if (DrawingSource != null) return DrawingInput.Signature(DrawingSource()?.Bodies ?? new()) != _projSig;
+            if (Drawing?.SourcePath is { Length: > 0 } sp) return File.Exists(sp) && _fileInput is { } fi && fi.Stamp != File.GetLastWriteTimeUtc(sp);
+            return false;
+        }
+    }
+    /// <summary>Виды построить заново (сменилась модель, разрез, выносной элемент).</summary>
+    public void InvalidateViews() { _scene = null; _fileInput = _fileInput is { } fi && Drawing?.SourcePath is { } sp && File.Exists(sp) && fi.Stamp != File.GetLastWriteTimeUtc(sp) ? null : _fileInput; }
+
+    /// <summary>Проекции видов: построить, если их нет или набор видов изменился.</summary>
+    void EnsureScene()
+    {
+        var d = Drawing!;
+        if (_scene != null && d.Views.All(v => _scene.Lines.ContainsKey(v.Name))) return;
+        bool wasEmpty = _scene == null || _scene.Lines.Values.All(l => l.Count == 0);
+        _input = Input();
+        _projSig = DrawingInput.Signature(_input.Bodies);
+        _scene = DrawingScene.Build(d, _input.Bodies, _input.Items);
+        if (wasEmpty) foreach (var v in d.Views) { v.X = 0; v.Y = 0; }   // габариты видов новые — раскладка заново
+        if (_scene.Problems.Count > 0) _status.Text = string.Join("; ", _scene.Problems.Take(2));
+    }
 
     public List<SheetGraphics> BuildPages()
     {
@@ -399,17 +682,9 @@ public sealed class SheetWindow : Window
         if (Kind == Mode.Drawing)
         {
             var d = Drawing!; d.Template = Template;
-            if (_proj == null || _axes == null || d.Views.Any(v => !_proj.ContainsKey(v.Name)))
-            {
-                var bodies = Bodies();
-                _projSig = Signature(bodies);
-                _proj = new(); _axes = new();
-                foreach (var v in d.Views) { v.X = 0; v.Y = 0; }   // габариты видов новые — раскладка заново
-                foreach (var n in new[] { "front", "top", "left", "right", "bottom", "back", "iso" })
-                    if (d.Views.Any(v => v.Name == n)) { _proj[n] = DrawingDocument.ProjectBodies(bodies, n); _axes[n] = DrawingDocument.AxesOf(bodies, n); }
-            }
-            var fs = _sourcePart != null ? FieldSource.FromPart(_sourcePart) : FieldValues();
-            return new List<SheetGraphics> { d.Compose(_proj, fs, _axes) };
+            EnsureScene();
+            var fs = _input?.Part != null ? FieldSource.FromPart(_input.Part) : FieldValues();
+            return new List<SheetGraphics> { d.Compose(_scene!, fs) };
         }
         return new List<SheetGraphics> { SheetLayout.Compose(Template, FieldValues()) };
     }
@@ -502,6 +777,20 @@ public sealed class SheetWindow : Window
         if (path == null) return;
         SheetRender.WritePdf(path, BuildPages(), Kind == Mode.Bom ? Bom!.Title : Template.Name);
         _status.Text = L("PDF записан: {0}", Path.GetFileName(path));
+    }
+
+    async Task ExportDxfAsync()
+    {
+        var f = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = L("Вывод в DXF"), DefaultExtension = ".dxf",
+            SuggestedFileName = Path.GetFileNameWithoutExtension(FilePath ?? L("Чертёж")) + ".dxf",
+            FileTypeChoices = new[] { new FilePickerFileType("DXF") { Patterns = new[] { "*.dxf" } } },
+        });
+        var path = f?.TryGetLocalPath();
+        if (path == null) return;
+        DxfWriter.Save(path, BuildPages());
+        _status.Text = L("DXF записан: {0}", Path.GetFileName(path));
     }
 
     async Task ExportCsvAsync()
