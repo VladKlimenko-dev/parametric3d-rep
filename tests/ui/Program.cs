@@ -8945,6 +8945,43 @@ Check("UI-DRAWING-K156", () =>
     finally { w3.Close(); try { Directory.Delete(dir, true); } catch { } }
 });
 
+// k158: вспомогательный вид щелчком по линии вида (по верхней кромке главного вида — взгляд по ±Z, буква на стрелке и над видом);
+// разрыв вида двумя щелчками (ширина вида на листе меньше, размер ширины — по модели); два щелчка в одной точке — разрыв убран.
+Check("UI-DRAWING-K158", () =>
+{
+    var sp = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 10), "k158"); var w = Open(sp); BuildNow(sp);
+    SheetWindow? dw = null;
+    try
+    {
+        var t = DrawingCommands.NewDrawing(w);
+        while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+        dw = t.Result!;
+        var d = dw.Drawing!;
+        var fb = d.Boxes["front"];
+        dw.StartPick("aux", ""); dw.PickAt((fb.X0 + fb.X1) / 2 + 3, fb.Y1);
+        var av = d.Views.SingleOrDefault(v => v.IsAux);
+        Require(av != null, $"aux view by a click; status: {dw.StatusText}");
+        var f = Parametric3D.Model.Drawing.ViewFrame.Of(d.DirOf(av!));
+        Console.WriteLine($"  aux {av!.Name} toward {f.Toward}");
+        Require(Math.Abs(Math.Abs(f.Toward.Z) - 1) < 1e-6 && dw.Pages[0].Texts.Count(x => x.Text == av.Label) == 2 && d.Boxes.ContainsKey(av.Name), "aux view along Z, arrow and caption");
+        fb = d.Boxes["front"];   // после вспомогательного вида масштаб листа мог измениться
+        double w0 = fb.X1 - fb.X0, s0 = d.Xf["front"].S;
+        dw.StartPick("break1", ""); dw.PickAt(fb.X0 + 0.35 * w0, (fb.Y0 + fb.Y1) / 2); dw.PickAt(fb.X0 + 0.65 * w0, (fb.Y0 + fb.Y1) / 2);
+        var fv = d.Views.First(v => v.Name == "front");
+        var fb2 = d.Boxes["front"];
+        Console.WriteLine($"  break [{fv.BreakA:0.##}, {fv.BreakB:0.##}] width {w0:0.##} -> {fb2.X1 - fb2.X0:0.##}");
+        Require(fv.HasBreak && Math.Abs(fb2.X1 - fb2.X0 - (0.7 * w0 / s0 * d.Xf["front"].S + fv.BreakGap)) < 0.01, "break view by two clicks");
+        dw.Change(() => d.AutoDimensions(dw.Scene!));
+        var wd = d.Dims.First(x => x.View == "front" && x.Kind == "h");
+        Require(Math.Abs(wd.Value - w0 / s0) < 1e-6, $"width dimension {wd.Value} — full model width");
+        Require(dw.Pages[0].InBounds(), "sheet bounds");
+        if (Environment.GetEnvironmentVariable("SHEETDUMP") is { } dump) File.WriteAllBytes(Path.Combine(dump, "k158.png"), Parametric3D.App.Services.Drawing.SheetRender.RenderPng(dw.Pages[0], 4));
+        dw.StartPick("break1", ""); dw.PickAt(fb2.X0 + 5, fb2.Y0 + 5); dw.PickAt(fb2.X0 + 5, fb2.Y0 + 5);
+        Require(!fv.HasBreak, "the break removed by two clicks at one point");
+    }
+    finally { dw?.Close(); w.Close(); }
+});
+
 // k156: ДИАГНОСТИКА ОТКРЫТИЯ (только с P3D_DIAGOPEN=<файл>): открытие как в приложении (OpenAsync), время до показа, до
 // конца расчёта и проверки, ошибки операций; затем сохранение с телом и повторное открытие.
 if (Environment.GetEnvironmentVariable("P3D_DIAGOPEN") is { Length: > 0 } diagFile)

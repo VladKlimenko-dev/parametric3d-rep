@@ -154,6 +154,8 @@ public sealed class SheetWindow : Window
             // D5: разрезы, выносные, таблицы, DXF
             Btn("dr_section_view_but.svg", "Разрез: щелчок на виде — место секущей плоскости", () => StartPick("section", L("Разрез: щёлкните на виде место секущей плоскости")));
             Btn("dr_detail_view_but.svg", "Выносной элемент: щелчок — центр круга", () => StartPick("detail", L("Выносной элемент: щёлкните центр")));
+            Btn("dr_aux_view_but.svg", "Вспомогательный вид: щелчок по наклонной линии вида", () => StartPick("aux", L("Вспомогательный вид: щёлкните наклонную линию на виде")));
+            Btn("dr_break_view_but.svg", "Разрыв вида: два щелчка — края удаляемой полосы (два щелчка в одной точке — убрать разрыв)", () => StartPick("break1", L("Разрыв: щёлкните левый край полосы")));
             Btn("dr_hole_table_but.svg", "Таблица отверстий", () => Change(() =>
             {
                 EnsureScene();
@@ -278,6 +280,7 @@ public sealed class SheetWindow : Window
 
     string? _pick; (string View, OpenTK.Mathematics.Vector2d P)? _first;
 
+    public string StatusText => _status.Text ?? "";
     public void StartPick(string mode, string hint) { EnsureScene(); _pick = mode; _first = null; _status.Text = hint; }
 
     /// <summary>Ближайшая точка линий вида (вершины ломаных; snap — в мм листа) или сама точка щелчка.</summary>
@@ -380,11 +383,44 @@ public sealed class SheetWindow : Window
             case "section":
                 {
                     var parent = d.Views.First(v => v.Name == view);
-                    if (parent.IsSection || parent.IsDetail || d.DirOf(parent) == "iso") { _status.Text = L("Разрез — на основном виде"); return; }
+                    if (parent.IsSection || parent.IsDetail || parent.IsAux || d.DirOf(parent) == "iso") { _status.Text = L("Разрез — на основном виде"); return; }
                     string dir = d.DirOf(parent) switch { "top" or "bottom" => "front", "front" or "back" => "left", _ => "front" };
                     var pf = ViewFrame.Of(d.DirOf(parent)); var sf = ViewFrame.Of(dir);
                     double depth = OpenTK.Mathematics.Vector3d.Dot(pf.Right * q.X + pf.Up * q.Y, sf.Toward);
                     Change(() => { d.AddSection(_scene!, view, dir, depth); InvalidateViews(); });
+                    _pick = null; return;
+                }
+            case "aux":
+                {
+                    var parent = d.Views.First(v => v.Name == view);
+                    if (parent.IsDetail || d.DirOf(parent) == "iso") { _status.Text = L("Вспомогательный вид — на основном виде или разрезе"); return; }
+                    // ближайший видимый отрезок линий вида (в пределах 5 мм листа)
+                    (OpenTK.Mathematics.Vector2d A, OpenTK.Mathematics.Vector2d B)? seg = null; double best = 5 / s;
+                    foreach (var l in _scene!.Lines[view])
+                        for (int i = 0; l.Visible && i + 1 < l.Points.Count; i++)
+                        {
+                            var a = l.Points[i]; var ab = l.Points[i + 1] - a;
+                            if (ab.Length < 1e-6) continue;
+                            double t = Math.Clamp(OpenTK.Mathematics.Vector2d.Dot(q - a, ab) / ab.LengthSquared, 0, 1);
+                            double dd = (a + ab * t - q).Length;
+                            if (dd < best) { best = dd; seg = (a, l.Points[i + 1]); }
+                        }
+                    if (seg is not { } sg) { _status.Text = L("Вспомогательный вид: щёлкните ближе к линии"); return; }
+                    Change(() => { d.AddAuxiliary(_scene!, view, sg.A, sg.B); InvalidateViews(); });
+                    _pick = null; return;
+                }
+            case "break1":
+                {
+                    var parent = d.Views.First(v => v.Name == view);
+                    if (parent.IsDetail || parent.Name == "iso") { _status.Text = L("Разрыв — на основном виде или разрезе"); return; }
+                    _first = (view, q); _pick = "break2"; _status.Text = L("Разрыв: щёлкните правый край полосы"); return;
+                }
+            case "break2":
+                {
+                    if (_first is not { } f || f.View != view) { _status.Text = L("Второй край — на том же виде"); return; }
+                    var bv = d.Views.First(v => v.Name == view);
+                    if (Math.Abs(q.X - f.P.X) * s < 1) Change(() => { bv.BreakA = bv.BreakB = 0; });
+                    else Change(() => d.AddBreak(view, f.P.X, q.X));
                     _pick = null; return;
                 }
             case "detail":

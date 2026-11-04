@@ -25,8 +25,22 @@ public readonly record struct ViewFrame(Vector3d Right, Vector3d Up)
         "bottom" => new(Vector3d.UnitX, -Vector3d.UnitY),
         "back" => new(-Vector3d.UnitX, Vector3d.UnitZ),
         "iso" => Iso(),
+        _ when name.StartsWith("v:") => Parse(name),
         _ => throw new ArgumentException("unknown view " + name),
     };
+
+    /// <summary>k158: своя рамка вида (вспомогательный вид): «v:Rx,Ry,Rz;Ux,Uy,Uz».</summary>
+    public string Encode() => FormattableString.Invariant($"v:{Right.X:R},{Right.Y:R},{Right.Z:R};{Up.X:R},{Up.Y:R},{Up.Z:R}");
+
+    static ViewFrame Parse(string s)
+    {
+        var n = s[2..].Split(',', ';').Select(t => double.Parse(t, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+        if (n.Length != 6) throw new ArgumentException("bad view frame " + s);
+        var r = new Vector3d(n[0], n[1], n[2]).Normalized();
+        var u = new Vector3d(n[3], n[4], n[5]);
+        u = (u - r * Vector3d.Dot(u, r)).Normalized();
+        return new(r, u);
+    }
 
     static ViewFrame Iso()
     {

@@ -593,6 +593,7 @@ static partial class Program
         if (mode is "sweeps153" or "allB") Sweep153Checks();
         if (mode is "drawing155" or "allB") Drawing155Checks();
         if (mode is "drawing156" or "allB") Drawing156Checks();
+        if (mode is "drawing158" or "allB") Drawing158Checks();
         if (mode is "brephist") { BrepHist(args.Skip(1)); return; }
         if (mode is "ovfdiag") { OvfDiag(args[1], args[2]); return; }
         if (mode is "breprt") { BrepRoundTrip(args.Skip(1)); return; }

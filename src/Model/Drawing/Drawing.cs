@@ -32,6 +32,17 @@ public sealed class DrawingView
     public double DetailX { get; set; }
     public double DetailY { get; set; }
     public double DetailR { get; set; }
+    /// <summary>
+    /// k158: вспомогательный вид ГОСТ 2.305 п. 6 (взгляд перпендикулярно наклонной линии вида-родителя): Dir — своя рамка
+    /// «v:…» (ViewFrame.Encode), на виде-родителе — стрелка с буквой Label, над видом — буква.
+    /// </summary>
+    public bool IsAux { get; set; }
+    /// <summary>k158: вид с разрывом ГОСТ 2.305 п. 9.3: полоса [BreakA, BreakB] по X вида (мм модели) не показывается, правая часть
+    /// придвигается (промежуток BreakGap мм листа), на краях — тонкие волнистые линии обрыва. Размеры — по модели (полная длина).</summary>
+    public double BreakA { get; set; }
+    public double BreakB { get; set; }
+    public double BreakGap { get; set; } = 8;
+    [JsonIgnore] public bool HasBreak => BreakB > BreakA;
 }
 
 /// <summary>
@@ -210,13 +221,65 @@ public sealed class DrawingDocument
     public (double X, double Y) ToSheet(string view, Vector2d p)
     {
         var (mid, s, x, y) = Xf[view];
-        return (x + (p.X - mid.X) * s, y + (p.Y - mid.Y) * s);
+        double px = Fold(Views.FirstOrDefault(v => v.Name == view), p.X, s);
+        return (x + (px - mid.X) * s, y + (p.Y - mid.Y) * s);
     }
     /// <summary>Лист → вид.</summary>
     public Vector2d ToView(string view, double sx, double sy)
     {
         var (mid, s, x, y) = Xf[view];
-        return new Vector2d(mid.X + (sx - x) / s, mid.Y + (sy - y) / s);
+        return new Vector2d(Unfold(Views.FirstOrDefault(v => v.Name == view), mid.X + (sx - x) / s, s), mid.Y + (sy - y) / s);
+    }
+
+    /// <summary>k158: мутация «вид с разрывом»: P3D_VIEWBREAK=0 — разрыв не применяется (вид целиком).</summary>
+    static readonly bool BreakOff = Environment.GetEnvironmentVariable("P3D_VIEWBREAK") == "0";
+    /// <summary>X вида → X вида с разрывом (правая часть придвинута; точки внутри полосы — к её левому краю).</summary>
+    public static double Fold(DrawingView? v, double x, double s)
+    {
+        if (v == null || !v.HasBreak || BreakOff) return x;
+        if (x <= v.BreakA) return x;
+        if (x >= v.BreakB) return x - (v.BreakB - v.BreakA) + v.BreakGap / s;
+        return v.BreakA;
+    }
+    public static double Unfold(DrawingView? v, double x, double s)
+    {
+        if (v == null || !v.HasBreak || BreakOff) return x;
+        if (x <= v.BreakA) return x;
+        double g = v.BreakGap / s;
+        if (x >= v.BreakA + g) return x + (v.BreakB - v.BreakA) - g;
+        return x - v.BreakA < g / 2 ? v.BreakA : v.BreakB;
+    }
+    /// <summary>Ломаная без полосы разрыва (части слева и справа от неё).</summary>
+    public static IEnumerable<List<Vector2d>> ClipBreak(List<Vector2d> pts, double a, double b)
+    {
+        var cur = new List<Vector2d>();
+        for (int i = 0; i + 1 < pts.Count; i++)
+        {
+            var p = pts[i]; var q = pts[i + 1];
+            var parts = new List<(double T0, double T1)>();
+            foreach (var (lo, hi) in new[] { (double.NegativeInfinity, a), (b, double.PositiveInfinity) })
+            {
+                // часть отрезка с lo <= x <= hi
+                double t0 = 0, t1 = 1, dx = q.X - p.X;
+                if (Math.Abs(dx) < 1e-15) { if (p.X < lo || p.X > hi) continue; }
+                else
+                {
+                    double ta = (lo - p.X) / dx, tb = (hi - p.X) / dx;
+                    if (ta > tb) (ta, tb) = (tb, ta);
+                    t0 = Math.Max(t0, ta); t1 = Math.Min(t1, tb);
+                    if (t1 - t0 < 1e-12) continue;
+                }
+                parts.Add((t0, t1));
+            }
+            foreach (var (t0, t1) in parts.OrderBy(x => x.T0))
+            {
+                var A = p + (q - p) * t0; var B = p + (q - p) * t1;
+                if (cur.Count > 0 && (cur[^1] - A).Length > 1e-9) { if (cur.Count > 1) yield return cur; cur = new(); }
+                if (cur.Count == 0) cur.Add(A);
+                cur.Add(B);
+            }
+        }
+        if (cur.Count > 1) yield return cur;
     }
 
     /// <summary>
@@ -286,6 +349,14 @@ public sealed class DrawingDocument
 
     static readonly string[] Grid = { "front", "top", "left", "iso" };
 
+    /// <summary>Габарит для раскладки: у вида с разрывом — без полосы (промежуток не учитывается).</summary>
+    static (Vector2d, Vector2d) BreakBox(DrawingView v, (Vector2d Min, Vector2d Max) b)
+    {
+        if (!v.HasBreak || BreakOff || v.IsDetail) return b;
+        double cut = Math.Max(0, Math.Min(b.Max.X, v.BreakB) - Math.Max(b.Min.X, v.BreakA));
+        return (b.Min, new Vector2d(b.Max.X - cut, b.Max.Y));
+    }
+
     /// <summary>
     /// Раскладка: масштаб листа (если 0 — наибольший из ряда, при котором виды с промежутками 20 мм помещаются в рамку над
     /// основной надписью) и центры видов по ГОСТ 2.305 (у видов с X = Y = 0). Свой масштаб вида учитывается. Прочие виды
@@ -296,7 +367,7 @@ public sealed class DrawingDocument
         var (x0, y0, x1, y1) = SheetLayout.FrameRect(Template);
         double tbH = SheetLayout.TitleHeight(Template.TitleBlock);
         var box = Views.ToDictionary(v => v.Name, v => v.IsDetail ? (new Vector2d(v.DetailX - v.DetailR, v.DetailY - v.DetailR), new Vector2d(v.DetailX + v.DetailR, v.DetailY + v.DetailR))
-                                                     : proj.TryGetValue(v.Name, out var l) ? Box(l) : (Vector2d.Zero, Vector2d.Zero));
+                                                     : proj.TryGetValue(v.Name, out var l) ? BreakBox(v, Box(l)) : (Vector2d.Zero, Vector2d.Zero));
         DrawingView? V(string n) => Views.FirstOrDefault(v => v.Name == n);
         // размер вида на листе при масштабе листа s (свой масштаб вида — постоянен)
         Vector2d Size(string n, double s) => V(n) is { } v ? (box[n].Item2 - box[n].Item1) * (v.Scale > 0 ? v.Scale : s) : Vector2d.Zero;
@@ -372,31 +443,41 @@ public sealed class DrawingDocument
             Vector2d mid;
             // выносной элемент — центр круга в середине вида
             if (v.IsDetail) { mid = new Vector2d(v.DetailX, v.DetailY); mn = mid - new Vector2d(v.DetailR); mx = mid + new Vector2d(v.DetailR); }
-            else mid = (mn + mx) / 2;
+            else
+            {
+                // k158: вид с разрывом — габарит по придвинутой правой части
+                mn.X = Fold(v, mn.X, s); mx.X = Fold(v, mx.X, s);
+                mid = (mn + mx) / 2;
+            }
             Xf[v.Name] = (mid, s, v.X, v.Y);
-            (double, double) T(Vector2d p) => (v.X + (p.X - mid.X) * s, v.Y + (p.Y - mid.Y) * s);
+            bool brk = v.HasBreak && !BreakOff && !v.IsDetail;
+            (double, double) T(Vector2d p) => (v.X + (Fold(v, p.X, s) - mid.X) * s, v.Y + (p.Y - mid.Y) * s);
             Boxes[v.Name] = (v.X + (mn.X - mid.X) * s, v.Y + (mn.Y - mid.Y) * s, v.X + (mx.X - mid.X) * s, v.Y + (mx.Y - mid.Y) * s);
             foreach (var l in lines)
             {
                 if (!l.Visible && !v.ShowHidden) continue;
                 if (l.Kind == ViewLineKind.Tangent && !v.ShowTangent) continue;
                 var kind = !l.Visible ? LineKind.Hidden : l.Kind == ViewLineKind.Tangent ? LineKind.Thin : LineKind.Thick;
-                g.Polylines.Add(new SheetPolyline(l.Points.Select(T).ToList(), kind));
+                if (brk) { foreach (var part in ClipBreak(l.Points, v.BreakA, v.BreakB)) g.Polylines.Add(new SheetPolyline(part.Select(T).ToList(), kind)); }
+                else g.Polylines.Add(new SheetPolyline(l.Points.Select(T).ToList(), kind));
             }
+            if (brk) BreakLines(g, v, s, T(new Vector2d(v.BreakA, 0)).Item1, Boxes[v.Name].Y0, Boxes[v.Name].Y1);
             // штриховка фигуры сечения ГОСТ 2.306: 45°, шаг 3 мм листа
             if (scene.SectionBoundary.TryGetValue(v.Name, out var sb) && sb.Count > 0)
                 foreach (var (a, b) in SectionCut.Hatch(sb, 45, 3 / s))
-                    g.Polylines.Add(new SheetPolyline(new() { T(a), T(b) }, LineKind.Thin));
+                    foreach (var part in brk ? ClipBreak(new() { a, b }, v.BreakA, v.BreakB) : new[] { new List<Vector2d> { a, b } })
+                        g.Polylines.Add(new SheetPolyline(part.Select(T).ToList(), LineKind.Thin));
             if (v.CenterLines && v.Name != "iso" && scene.Axes.TryGetValue(v.Name, out var ax)) AxisLines(g, ax, T, s);
             // подписи: «А–А», «Б (2:1)», свой масштаб «(1:2)»
-            string caption = v.IsSection ? $"{v.Label}-{v.Label}" : v.IsDetail ? v.Label : "";
+            string caption = v.IsSection ? $"{v.Label}-{v.Label}" : v.IsDetail || v.IsAux ? v.Label : "";
             if (v.Scale > 0 && Math.Abs(v.Scale - scale) > 1e-12) caption = (caption + $" ({ScaleText(v.Scale)})").Trim();
-            if (caption.Length > 0) g.Text(v.X, Boxes[v.Name].Y1 + 5, v.IsSection || v.IsDetail ? 7 : SheetLayout.ValueH, caption, TextAlign.Center);
+            if (caption.Length > 0) g.Text(v.X, Boxes[v.Name].Y1 + 5, v.IsSection || v.IsDetail || v.IsAux ? 7 : SheetLayout.ValueH, caption, TextAlign.Center);
         }
         // линии разреза и круги выносных элементов — на виде-родителе
-        foreach (var v in Views.Where(v => (v.IsSection || v.IsDetail) && v.Parent != null && Xf.ContainsKey(v.Parent!)))
+        foreach (var v in Views.Where(v => (v.IsSection || v.IsDetail || v.IsAux) && v.Parent != null && Xf.ContainsKey(v.Parent!)))
         {
             if (v.IsSection) CutLine(g, v);
+            else if (v.IsAux) AuxArrow(g, v);
             else
             {
                 var (cx, cy) = ToSheet(v.Parent!, new Vector2d(v.DetailX, v.DetailY));
@@ -416,6 +497,38 @@ public sealed class DrawingDocument
             DrawNote(g, n, scene);
         }
         return g;
+    }
+
+    /// <summary>k158: линии обрыва ГОСТ 2.303 — тонкие волнистые на краях полосы разрыва (за контур вида на 2 мм).</summary>
+    static void BreakLines(SheetGraphics g, DrawingView v, double s, double xa, double y0, double y1)
+    {
+        foreach (double x in new[] { xa, xa + v.BreakGap })
+        {
+            var pts = new List<(double X, double Y)>();
+            double ya = y0 - 2, yb = y1 + 2; int n = Math.Max(8, (int)((yb - ya) / 1.5));
+            for (int i = 0; i <= n; i++) { double y = ya + (yb - ya) * i / n; pts.Add((x + 1.2 * Math.Sin((y - ya) / 6 * Math.PI), y)); }
+            g.Polylines.Add(new SheetPolyline(pts, LineKind.Thin));
+        }
+    }
+
+    /// <summary>Направление вспомогательного вида на виде-родителе (лист): от наклонной линии к наблюдателю.</summary>
+    public Vector2d AuxDir(DrawingView aux)
+    {
+        var pf = ViewFrame.Of(DirOf(Views.First(x => x.Name == aux.Parent))); var af = ViewFrame.Of(DirOf(aux));
+        var n2 = new Vector2d(Vector3d.Dot(af.Toward, pf.Right), Vector3d.Dot(af.Toward, pf.Up));
+        return n2.Length < 1e-9 ? Vector2d.UnitY : n2.Normalized();
+    }
+
+    /// <summary>k158: стрелка вспомогательного вида ГОСТ 2.305 п. 6.2: перпендикулярно наклонной линии, к ней; буква у стрелки.</summary>
+    void AuxArrow(SheetGraphics g, DrawingView aux)
+    {
+        var n2 = AuxDir(aux);
+        var (mx, my) = ToSheet(aux.Parent!, new Vector2d(aux.DetailX, aux.DetailY));
+        var tip = (mx + n2.X * 6, my + n2.Y * 6); var tail = (mx + n2.X * 20, my + n2.Y * 20);
+        g.Line(tail.Item1, tail.Item2, tip.Item1 + n2.X * ArrowL, tip.Item2 + n2.Y * ArrowL);
+        Arrow(g, tip, (-n2.X, -n2.Y));
+        var side = new Vector2d(-n2.Y, n2.X);
+        g.Text(tail.Item1 + side.X * 4, tail.Item2 + side.Y * 4 - 3.5, 7, aux.Label, TextAlign.Center);
     }
 
     /// <summary>Линия разреза ГОСТ 2.305: разомкнутая (толстые штрихи 10 мм за контуром вида), стрелки по направлению взгляда, буквы.</summary>
@@ -750,6 +863,9 @@ public sealed class DrawingDocument
     /// (дуги не полного оборота) — по одному на значение. Прежние автоматические размеры заменяются; скрытые пользователем
     /// остаются скрытыми.
     /// </summary>
+    /// <summary>k158: мутация P3D_VDIMSIDE=0 — вертикальные габаритные размеры внутри вида (прежнее, ошибка k156).</summary>
+    static readonly bool VDimSideOff = Environment.GetEnvironmentVariable("P3D_VDIMSIDE") == "0";
+
     public void AutoDimensions(DrawingScene scene)
     {
         var hidden = Dims.Where(d => d.Auto && d.Hidden).Select(Key).ToHashSet();
@@ -762,10 +878,11 @@ public sealed class DrawingDocument
             if (v.Name == "front" || v.IsSection && !Views.Any(x => x.Name == "front"))
             {
                 Add(new DrawingDim { View = v.Name, Kind = "h", X1 = mn.X, Y1 = mn.Y, X2 = mx.X, Y2 = mn.Y, Offset = -10 });
-                Add(new DrawingDim { View = v.Name, Kind = "v", X1 = mx.X, Y1 = mn.Y, X2 = mx.X, Y2 = mx.Y, Offset = 10 });
+                // k158: у вертикального размера нормаль размерной линии — влево (−X листа): справа от вида — отступ < 0
+                Add(new DrawingDim { View = v.Name, Kind = "v", X1 = mx.X, Y1 = mn.Y, X2 = mx.X, Y2 = mx.Y, Offset = VDimSideOff ? 10 : -10 });
             }
             if (v.Name == "top")
-                Add(new DrawingDim { View = v.Name, Kind = "v", X1 = mn.X, Y1 = mn.Y, X2 = mn.X, Y2 = mx.Y, Offset = -10 });
+                Add(new DrawingDim { View = v.Name, Kind = "v", X1 = mn.X, Y1 = mn.Y, X2 = mn.X, Y2 = mx.Y, Offset = VDimSideOff ? -10 : 10 });
             if (v.Name == "left" && !Views.Any(x => x.Name == "top"))
                 Add(new DrawingDim { View = v.Name, Kind = "h", X1 = mn.X, Y1 = mn.Y, X2 = mx.X, Y2 = mn.Y, Offset = -10 });
         }
@@ -915,6 +1032,42 @@ public sealed class DrawingDocument
         var v = new DrawingView { Name = $"{letter}-{letter}", Dir = dir, IsSection = true, Parent = parent, Label = letter, CutDepth = d, ShowHidden = false };
         Views.Add(v);
         return v;
+    }
+
+    /// <summary>
+    /// k158: вспомогательный вид: взгляд перпендикулярно линии (a, b) вида-родителя (координаты вида, мм модели) — наклонная
+    /// грань видна в натуральную величину. Наблюдатель — с внешней стороны линии (от середины габарита вида-родителя).
+    /// </summary>
+    public DrawingView AddAuxiliary(DrawingScene scene, string parent, Vector2d a, Vector2d b)
+    {
+        var pv = Views.First(x => x.Name == parent);
+        var pf = ViewFrame.Of(DirOf(pv));
+        var t2 = b - a; if (t2.Length < 1e-9) throw new ArgumentException("aux: zero line");
+        t2.Normalize();
+        var n2 = new Vector2d(-t2.Y, t2.X);
+        var m = (a + b) / 2;
+        if (scene.Lines.TryGetValue(parent, out var pl) && pl.Count > 0)
+        {
+            var (mn, mx) = Box(pl);
+            if (Vector2d.Dot(m - (mn + mx) / 2, n2) < 0) n2 = -n2;
+        }
+        var T3 = (pf.Right * t2.X + pf.Up * t2.Y).Normalized();
+        var N3 = (pf.Right * n2.X + pf.Up * n2.Y).Normalized();
+        // мутация P3D_AUXFRAME=0 — вид смотрит как вид-родитель (без своей рамки)
+        var frame = AuxFrameOff ? pf : new ViewFrame(T3, Vector3d.Cross(N3, T3).Normalized());
+        var letter = NextLetter();
+        var v = new DrawingView { Name = letter, Dir = frame.Encode(), IsAux = true, Parent = parent, Label = letter, DetailX = m.X, DetailY = m.Y, ShowHidden = false };
+        Views.Add(v);
+        return v;
+    }
+
+    static readonly bool AuxFrameOff = Environment.GetEnvironmentVariable("P3D_AUXFRAME") == "0";
+
+    /// <summary>k158: разрыв вида: полоса [a, b] по X вида (мм модели) не показывается.</summary>
+    public void AddBreak(string view, double a, double b)
+    {
+        var v = Views.First(x => x.Name == view);
+        v.BreakA = Math.Min(a, b); v.BreakB = Math.Max(a, b);
     }
 
     /// <summary>D5: выносной элемент: круг на виде-родителе (центр и радиус — мм модели), масштаб — в 2 раза крупнее листа.</summary>
