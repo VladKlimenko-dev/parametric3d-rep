@@ -8,6 +8,14 @@ internal static class Program
     public static void Main(string[] args)
     {
         AppStartup.Args = args;
+        // k154: мост MCP для Claude Desktop — «Parametric3D --mcp-stdio»: без окна, сообщения по stdin/stdout, инструменты —
+        // у запущенного приложения
+        if (args.Contains("--mcp-stdio"))
+        {
+            Console.InputEncoding = System.Text.Encoding.UTF8; Console.OutputEncoding = new System.Text.UTF8Encoding(false);
+            Services.Mcp.McpBridge.Run(Console.In, Console.Out);
+            return;
+        }
         // АВАРИЙНОЕ ЗАВЕРШЕНИЕ (13:09: выход 0xC0000409 — необработанное исключение вне потока окна): полный текст
         // исключения с трассой — в журнал приложения до завершения процесса
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>

@@ -8768,6 +8768,84 @@ Check("UI-SKETCH-ROLLBACK-CANCEL-K153", () =>
     w.CancelSketch(); w.Close();
 });
 
+// k154 (просьба 04.11, 14:42): СЕРВЕР MCP — подключение Claude к открытому документу. HTTP на 127.0.0.1 с ключом: initialize,
+// tools/list, list_features, get_feature, set_feature_value (одним шагом отмены, с перестроением), get_mass_properties,
+// set_parameter, undo; без ключа — 401; мост stdio отвечает на initialize и tools/list сам, tools/call передаёт приложению.
+Check("UI-MCP-K154", () =>
+{
+    var s = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 10), "mcp"); var w = Open(s); BuildNow(s);
+    var part = s.Part!;
+    var dir0 = Parametric3D.App.Services.Mcp.McpHost.InfoDir;
+    Parametric3D.App.Services.Mcp.McpHost.InfoDir = Path.Combine(Path.GetTempPath(), $"p3d_mcp_{Guid.NewGuid():N}");
+    var host = Parametric3D.App.Services.Mcp.McpHost.Start(() => w, 48853);
+    try
+    {
+        Require(host != null && File.Exists(Parametric3D.App.Services.Mcp.McpHost.InfoPath), "the MCP server did not start");
+        using var http = new HttpClient();
+        string url = $"http://127.0.0.1:{host!.Port}/mcp";
+        T Wait<T>(Task<T> t) { while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); } return t.Result; }
+        int id = 0;
+        System.Text.Json.Nodes.JsonNode Call(string method, System.Text.Json.Nodes.JsonObject? prms = null, string? token = null)
+        {
+            var msg = new System.Text.Json.Nodes.JsonObject { ["jsonrpc"] = "2.0", ["id"] = ++id, ["method"] = method, ["params"] = prms ?? new System.Text.Json.Nodes.JsonObject() };
+            var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = new StringContent(msg.ToJsonString(), System.Text.Encoding.UTF8, "application/json") };
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token ?? host.Token);
+            var resp = Wait(http.SendAsync(req));
+            var text = Wait(resp.Content.ReadAsStringAsync());
+            return resp.IsSuccessStatusCode ? System.Text.Json.Nodes.JsonNode.Parse(text)! : new System.Text.Json.Nodes.JsonObject { ["status"] = (int)resp.StatusCode };
+        }
+        string Tool(string name, System.Text.Json.Nodes.JsonObject? args = null)
+        {
+            var r = Call("tools/call", new System.Text.Json.Nodes.JsonObject { ["name"] = name, ["arguments"] = args ?? new System.Text.Json.Nodes.JsonObject() });
+            var res = r["result"] ?? throw new CheckFailed($"{name}: {r.ToJsonString()}");
+            Require(res["isError"]?.GetValue<bool>() != true, $"{name} failed: {res["content"]?[0]?["text"]}");
+            return res["content"]![0]!["text"]!.GetValue<string>();
+        }
+        var bad = Call("initialize", null, "wrong");
+        Require(bad["status"]?.GetValue<int>() == 401, "a request without the key was accepted");
+        var init = Call("initialize", new System.Text.Json.Nodes.JsonObject { ["protocolVersion"] = "2025-06-18" });
+        Require(init["result"]?["serverInfo"]?["name"]?.GetValue<string>() == "parametric3d", "initialize");
+        var tools = Call("tools/list")["result"]!["tools"]!.AsArray();
+        Console.WriteLine($"  tools: {string.Join(", ", tools.Select(t => t!["name"]))}");
+        Require(tools.Count >= 15, "tools/list");
+        var tree = System.Text.Json.Nodes.JsonNode.Parse(Tool("list_features"))!.AsArray();
+        Require(tree.Count == part.Features.Count, "list_features");
+        // правка: первая операция с числом Radius / D1 / Side1.Distance
+        var f = part.Features.First(x => x is ExtrudeFeature);
+        string key = f.Key;
+        var fv = System.Text.Json.Nodes.JsonNode.Parse(Tool("get_feature", new System.Text.Json.Nodes.JsonObject { ["feature"] = key }))!;
+        double d0 = ((ExtrudeFeature)f).Side1.Distance.Value;
+        Require(fv["values"]?["Side1"]?["Distance"] != null, "get_feature does not show Side1.Distance: " + fv.ToJsonString());
+        double v0 = part.Volume; int undo0 = s.UndoNames.Count;
+        string rep = Tool("set_feature_value", new System.Text.Json.Nodes.JsonObject { ["feature"] = key, ["field"] = "Side1.Distance", ["value"] = d0 + 5 });
+        Console.WriteLine($"  set_feature_value: {rep.Split('\n')[0]}");
+        Require(Math.Abs(((ExtrudeFeature)f).Side1.Distance.Value - d0 - 5) < 1e-9 && !part.IsDirty && Math.Abs(part.Volume - v0) > 1e-6, "the edit was not applied and rebuilt");
+        Require(s.UndoNames.Count == undo0 + 1, "the edit is not one undo step");
+        var mass = System.Text.Json.Nodes.JsonNode.Parse(Tool("get_mass_properties"))!;
+        Require(Math.Abs(mass["volume_mm3"]!.GetValue<double>() - part.Volume) < 1e-6, "get_mass_properties");
+        Tool("undo"); BuildNow(s);
+        Require(Math.Abs(((ExtrudeFeature)s.Part!.Features.First(x => x.Key == key)).Side1.Distance.Value - d0) < 1e-9, "undo did not restore the value");
+        // мост stdio
+        var input = new StringReader(string.Join("\n",
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\"}}",
+            "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+            "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}",
+            "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"get_document\",\"arguments\":{}}}"));
+        var output = new StringWriter();
+        var bridge = Task.Run(() => Parametric3D.App.Services.Mcp.McpBridge.Run(input, output));
+        Wait(bridge);
+        var outs = output.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Console.WriteLine($"  bridge: {outs.Length} replies; last {outs.Last()[..Math.Min(120, outs.Last().Length)]}");
+        Require(outs.Length == 3 && outs[2].Contains("mcp") && outs[2].Contains("\"isError\":false"), "the stdio bridge did not reach the app");
+    }
+    finally
+    {
+        host?.Dispose();
+        Parametric3D.App.Services.Mcp.McpHost.InfoDir = dir0;
+        w.Close();
+    }
+});
+
 
 
 Console.WriteLine(JsonSerializer.Serialize(new { passed, failed }));

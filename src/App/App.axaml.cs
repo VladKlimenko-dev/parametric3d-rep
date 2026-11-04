@@ -55,6 +55,9 @@ public partial class App : Application
             var w = new MainWindow(session);
             if (startDbg) { Console.WriteLine($"START window ctor {swStart.ElapsedMilliseconds} ms"); w.Opened += (_, _) => Console.WriteLine($"START opened {swStart.ElapsedMilliseconds} ms ({(DateTime.Now - System.Diagnostics.Process.GetCurrentProcess().StartTime).TotalMilliseconds:0} ms since process start)"); }
             d.MainWindow = w;
+            // k154: сервер MCP — подключение Claude и других ассистентов к открытому документу (P3D_MCP=0 — без него)
+            try { Services.Mcp.McpHost.Start(() => d.MainWindow as MainWindow); } catch (Exception ex) { Core.AppLog.Write("MCP start", ex); }
+            d.Exit += (_, _) => Services.Mcp.McpHost.Current?.Dispose();
             if (AppStartup.Arg("--shot") is { } shot) Diagnostics.ShotRunner.Start(w, shot, () => d.Shutdown());
             // 20:17: прогрев ядра в фоне (первая операция — без компиляции кода ядра); не в проверочных запусках
             else if (!AppStartup.Flag("--selftest") && !Diagnostics.KernelWarmup.ShouldSkipFor(session)) Diagnostics.KernelWarmup.Start();

@@ -115,6 +115,7 @@ public static class DocCommands
             CanRun = () => w.SelectedItems().Count == 1, Run = async () => await Rename(w) });
         r.Add(new AppCommand { Id = "app.settings", Label = "Настройки", Group = A, Icon = "settings_but.svg", Synonyms = "settings preferences options настройки", Run = async () => await Settings(w) });
         r.Add(new AppCommand { Id = "app.help", Label = "Справка и подсказки", Group = A, Icon = "help_but.svg", Synonyms = "help справка подсказки клавиши", Gesture = K(Key.F1), Run = async () => await Help(w) });
+        r.Add(new AppCommand { Id = "app.mcp", Label = "Подключить Claude (MCP)", Group = A, Synonyms = "mcp claude ai assistant ассистент ии подключить", Run = async () => await McpInfo(w) });
         r.Add(new AppCommand { Id = "app.all_commands", Label = "Все команды", Group = A, Icon = "all_commands_but.svg", Synonyms = "all commands все команды список", Run = async () => await AllCommands(w) });
         r.Add(new AppCommand { Id = "part.material", Label = "Материал детали", Group = A, Icon = "material_but.svg", Synonyms = "material материал плотность", CanRun = HasPart, Run = () => MaterialMenu(w, null) });
         r.Add(new AppCommand { Id = "part.units", Label = "Единицы: мм / дюймы", Group = A, Icon = "units_but.svg", Synonyms = "units inch mm единицы дюймы миллиметры",
@@ -218,6 +219,24 @@ public static class DocCommands
         var old = it.Name;
         w.Session.Edit(L("Переименовать"), () => { it.Name = name.Trim(); if (it is Part rp) AssemblyCommands.Renamed(w, rp, old); });
         w.RebuildTree();
+    }
+
+    /// <summary>
+    /// k154: ПОДКЛЮЧЕНИЕ CLAUDE (MCP) — состояние сервера и готовые настройки: для Claude Desktop — фрагмент файла настроек
+    /// (команда — этот исполняемый файл с --mcp-stdio), для Claude Code — команда claude mcp add. «Копировать» — фрагмент в буфер.
+    /// </summary>
+    public static async Task McpInfo(MainWindow w)
+    {
+        var h = Services.Mcp.McpHost.Current;
+        string exe = Environment.ProcessPath ?? "Parametric3D.exe";
+        string json = "{\n  \"mcpServers\": {\n    \"parametric3d\": {\n      \"command\": " + System.Text.Json.JsonSerializer.Serialize(exe) + ",\n      \"args\": [\"--mcp-stdio\"]\n    }\n  }\n}";
+        string text = (h != null ? L("Сервер MCP работает: {0}", $"http://127.0.0.1:{h.Port}/mcp") : L("Сервер MCP выключен (P3D_MCP=0)."))
+            + "\n\n" + L("Claude Desktop: Настройки → Разработчик → Изменить настройки (claude_desktop_config.json) — добавьте:")
+            + "\n\n" + json
+            + "\n\n" + L("Claude Code (терминал):") + "\n\nclaude mcp add parametric3d -- \"" + exe + "\" --mcp-stdio"
+            + "\n\n" + L("Перезапустите Claude. Инструменты работают, пока Parametric3D открыт: дерево операций, параметры, массовые характеристики, снимок вида, правка значений (каждая — один шаг отмены).");
+        var r = await Dialogs.Ask(w, L("Подключить Claude (MCP)"), text, L("Копировать"), L("Закрыть"));
+        if (r == L("Копировать") && TopLevel.GetTopLevel(w)?.Clipboard is { } cb) await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(cb, json);
     }
 
     public static async Task CloseDocument(MainWindow w)
