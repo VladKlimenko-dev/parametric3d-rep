@@ -226,8 +226,13 @@ public static class ViewProjection
             if (silhouettes) Silhouettes(meshes[bi], view, sc, res);
             for (int i = from; i < res.Count; i++) res[i] = res[i] with { Body = bi };
         }
+        if (DbgEdge is { } de)
+            foreach (var l in res.Where(l => l.SourceId.ToString() == de))
+                Console.WriteLine($"HLRDBG edge {de}: {(l.Visible ? "V" : "h")} {l.Kind} n {l.Points.Count} x {l.Points.Min(q => q.X):0.###}..{l.Points.Max(q => q.X):0.###} y {l.Points.Min(q => q.Y):0.###}..{l.Points.Max(q => q.Y):0.###}");
         return DropCovered(res, sc.Eps * 5);
     }
+    static readonly string? DbgEdge = Environment.GetEnvironmentVariable("P3D_HLRDBG");
+    static readonly bool SimplifyOff = Environment.GetEnvironmentVariable("P3D_HLRSIMPLIFY") == "0";
 
     /// <summary>
     /// k156 (D3): дуги рёбер в плоскости вида (ось дуги вдоль взгляда) — для размеров радиусов и диаметров. Одинаковые по
@@ -452,7 +457,7 @@ public static class ViewProjection
     static double Length(List<Vector2d> p) { double s = 0; for (int i = 1; i < p.Count; i++) s += (p[i] - p[i - 1]).Length; return s; }
 
     /// <summary>Убрать промежуточные точки на прямых участках.</summary>
-    static List<Vector2d> Simplify(List<Vector2d> p)
+    public static List<Vector2d> Simplify(List<Vector2d> p)
     {
         if (p.Count < 3) return p;
         var r = new List<Vector2d> { p[0] };
@@ -461,7 +466,12 @@ public static class ViewProjection
             var a = r[^1]; var b = p[i]; var c = p[i + 1];
             var ab = b - a; var ac = c - a;
             double cross = Math.Abs(ab.X * ac.Y - ab.Y * ac.X);
-            if (cross > 1e-9 * Math.Max(1, ac.LengthSquared) || Vector2d.Dot(ab, ac) < 0) r.Add(b);
+            // k163 (замечание 05.11, 09:22, п. 2): точка поворота назад (дуга в плоскости, видимой «с ребра»: её проекция идёт
+            // вверх и возвращается по той же прямой) — сохраняется; прежде проверялось направление a→c, и если c не дальше
+            // a, вершина b выпадала — от дуги оставался отрезок нулевой длины, край вида (торец трубы) рисовался не до
+            // конца. Мутация P3D_HLRSIMPLIFY=0 — прежнее.
+            bool back = SimplifyOff ? Vector2d.Dot(ab, ac) < 0 : Vector2d.Dot(ab, c - b) < 0;
+            if (cross > 1e-9 * Math.Max(1, ac.LengthSquared) || back) r.Add(b);
         }
         r.Add(p[^1]);
         return r;

@@ -86,6 +86,9 @@ public sealed class DrawingDim
     /// <summary>k161: стрелки: 0 — по месту (снаружи, если не помещаются), 1 — внутри, 2 — снаружи. У диаметра большой
     /// окружности: 2 — выноска с полкой вместо линии через центр.</summary>
     public int Arrows { get; set; }
+    /// <summary>k163: назначение автоматического размера: overall — габарит, circle — диаметр окружности, centre — положение
+    /// центра, step — ступень вдоль вида; пусто — прочие.</summary>
+    public string Role { get; set; } = "";
 
     [JsonIgnore] public double Value => Kind switch
     {
@@ -93,6 +96,7 @@ public sealed class DrawingDim
         "v" => Math.Abs(Y2 - Y1),
         "dia" => 2 * X2,
         "rad" => X2,
+        "ang" => ((Y2 - X2) % 360 + 360) % 360,   // k163: угол — от направления X2 до Y2 против часовой (градусы вида)
         _ => Math.Sqrt((X2 - X1) * (X2 - X1) + (Y2 - Y1) * (Y2 - Y1)),
     };
 
@@ -100,7 +104,7 @@ public sealed class DrawingDim
     public string Caption(bool comma, double unit = 1, string fmt = "0.##")
     {
         if (Text.Length > 0) return Text;
-        string v = (Value / unit).ToString(fmt, CultureInfo.InvariantCulture);
+        string v = (Kind == "ang" ? Value : Value / unit).ToString(Kind == "ang" ? "0.##" : fmt, CultureInfo.InvariantCulture) + (Kind == "ang" ? "°" : "");
         if (comma) v = v.Replace('.', ',');
         string pre = Kind == "dia" ? DrawingDocument.Dia : Kind == "rad" ? "R" : "";
         string cnt = Count > 1 ? $"{Count} отв. " : "";
@@ -655,6 +659,26 @@ public sealed class DrawingDocument
                     foreach (var part in brk ? ClipBreak(new() { a, b }, v.BreakA, v.BreakB) : new[] { new List<Vector2d> { a, b } })
                         g.Polylines.Add(new SheetPolyline(part.Select(T).ToList(), LineKind.Thin));
             if (v.CenterLines && v.Name != "iso" && scene.Axes.TryGetValue(v.Name, out var ax)) AxisLines(g, ax, T, s);
+            // k163 (замечание 05.11, 09:22, п. 3.1): центры дуг, не отмеченные осями тел вращения (дуги профиля, скругления
+            // паза), — перекрестие тонкими штрихпунктирными: полудлина — радиус дуги + 3 мм листа, но не больше 15 мм листа.
+            // Мутация P3D_ARCCENTERS=0 — только оси тел вращения (прежнее).
+            if (v.CenterLines && v.Name != "iso" && !ArcCentersOff && scene.Arcs.TryGetValue(v.Name, out var arcsV))
+            {
+                var marked = (scene.Axes.GetValueOrDefault(v.Name) ?? new()).Where(a => a.Cross).Select(a => a.Center).ToList();
+                var done = new List<Vector2d>();
+                foreach (var a in arcsV.OrderByDescending(a => a.Radius))
+                {
+                    if (marked.Any(c => (c - a.Center).Length < 1e-3) || done.Any(c => (c - a.Center).Length < 1e-3)) continue;
+                    done.Add(a.Center);
+                    double hl = Math.Min(a.Radius * s + 3, 15) / s;
+                    var c0 = a.Center;
+                    foreach (var (p, q) in new[] { (c0 - Vector2d.UnitX * hl, c0 + Vector2d.UnitX * hl), (c0 - Vector2d.UnitY * hl, c0 + Vector2d.UnitY * hl) })
+                    {
+                        var (x1, y1) = T(p); var (x2, y2) = T(q);
+                        g.Line(x1, y1, x2, y2, LineKind.Center);
+                    }
+                }
+            }
             // подписи: «А–А», «Б (2:1)», свой масштаб «(1:2)»
             string caption = v.IsSection ? $"{v.Label}-{v.Label}" : v.IsDetail || v.IsAux ? v.Label : "";
             if (v.Scale > 0 && Math.Abs(v.Scale - scale) > 1e-12) caption = (caption + $" ({ScaleText(v.Scale)})").Trim();
@@ -907,6 +931,7 @@ public sealed class DrawingDocument
     {
         string text = CaptionOf(d);
         if (d.Kind is "dia" or "rad") { DrawRadial(g, d, text); return; }
+        if (d.Kind == "ang") { DrawAngle(g, d, text); return; }
         var (P1, P2, u, n, h1, h2, L) = DimFrame(d);
         var q1 = P1 + n * (L - h1); var q2 = P2 + n * (L - h2);
         double sg = Math.Sign(d.Offset == 0 ? 1 : d.Offset);
@@ -974,6 +999,13 @@ public sealed class DrawingDocument
     public void MoveDim(DrawingDim d, double dx, double dy, double sx, double sy)
     {
         d.Arrange = false;
+        if (d.Kind == "ang")
+        {
+            // k163: угловой — радиус дуги до курсора
+            var c = ToSheet(d.View, new Vector2d(d.X1, d.Y1));
+            d.Offset = Math.Max(5, Math.Sqrt((sx - c.X) * (sx - c.X) + (sy - c.Y) * (sy - c.Y)));
+            return;
+        }
         if (d.Kind is "dia" or "rad")
         {
             var c = ToSheet(d.View, new Vector2d(d.X1, d.Y1));
@@ -997,6 +1029,29 @@ public sealed class DrawingDocument
         else if (Ln <= lo) d.Offset = Ln - lo;
         else if (d.FromBox) { d.FromBox = false; d.Offset = Ln >= Math.Max(h1, h2) ? Ln - Math.Max(h1, h2) : Ln <= Math.Min(h1, h2) ? Ln - Math.Min(h1, h2) : (d.Offset >= 0 ? 0 : -0.0001); }
         else d.Offset = d.Offset >= 0 ? 0 : -0.0001;
+    }
+
+    /// <summary>
+    /// k163: угловой размер ГОСТ 2.307 п. 2.4: дуга с центром в вершине угла радиусом Offset мм листа (по умолчанию 15),
+    /// выносные линии от вершины по сторонам угла до дуги + 2 мм, стрелки на концах дуги, текст — над серединой дуги.
+    /// </summary>
+    void DrawAngle(SheetGraphics g, DrawingDim d, string text)
+    {
+        var c = ToSheet(d.View, new Vector2d(d.X1, d.Y1));
+        double rot = Views.FirstOrDefault(v => v.Name == d.View)?.Angle ?? 0;
+        double a0 = (d.X2 + rot) * Math.PI / 180, sweep = d.Value * Math.PI / 180;
+        double r = d.Offset > 0 ? d.Offset : 15;
+        (double, double) At(double a, double rr) => (c.X + rr * Math.Cos(a), c.Y + rr * Math.Sin(a));
+        foreach (var a in new[] { a0, a0 + sweep }) { var (x, y) = At(a, r + 2); g.Line(c.X, c.Y, x, y); }
+        int n = Math.Max(8, (int)(sweep * r / 1.5));
+        var pts = Enumerable.Range(0, n + 1).Select(k => At(a0 + sweep * k / n, r)).ToList();
+        g.Polylines.Add(new SheetPolyline(pts, LineKind.Thin));
+        Arrow(g, At(a0, r), (Math.Sin(a0), -Math.Cos(a0)));
+        Arrow(g, At(a0 + sweep, r), (-Math.Sin(a0 + sweep), Math.Cos(a0 + sweep)));
+        double am = a0 + sweep / 2;
+        var (tx, ty) = At(am, r + 1.5);
+        double ta = am * 180 / Math.PI - 90; ta = ((ta % 360) + 360) % 360; if (ta > 90 && ta < 270) ta -= 180;
+        g.Text(tx, ty, TextH, text, TextAlign.Center, null, ta);
     }
 
     void DrawRadial(SheetGraphics g, DrawingDim d, string text)
@@ -1278,19 +1333,19 @@ public sealed class DrawingDocument
             {
                 // k158: у вертикального размера нормаль размерной линии — влево (−X листа): справа от вида — отступ < 0
                 var a = Ext(q => q.X, q => q.Y, mn); var b = Ext(q => -q.X, q => q.Y, new Vector2d(mx.X, mn.Y));
-                Add(new DrawingDim { View = v.Name, Kind = "h", X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Offset = -10, FromBox = !ExtremeOff });
+                Add(new DrawingDim { View = v.Name, Kind = "h", X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Offset = -10, FromBox = !ExtremeOff, Role = "overall" });
                 var c = Ext(q => q.Y, q => -q.X, new Vector2d(mx.X, mn.Y)); var e = Ext(q => -q.Y, q => -q.X, mx);
-                Add(new DrawingDim { View = v.Name, Kind = "v", X1 = c.X, Y1 = c.Y, X2 = e.X, Y2 = e.Y, Offset = VDimSideOff ? 10 : -10, FromBox = !ExtremeOff });
+                Add(new DrawingDim { View = v.Name, Kind = "v", X1 = c.X, Y1 = c.Y, X2 = e.X, Y2 = e.Y, Offset = VDimSideOff ? 10 : -10, FromBox = !ExtremeOff, Role = "overall" });
             }
             if (v.Name == "top")
             {
                 var c = Ext(q => q.Y, q => q.X, mn); var e = Ext(q => -q.Y, q => q.X, new Vector2d(mn.X, mx.Y));
-                Add(new DrawingDim { View = v.Name, Kind = "v", X1 = c.X, Y1 = c.Y, X2 = e.X, Y2 = e.Y, Offset = VDimSideOff ? -10 : 10, FromBox = !ExtremeOff });
+                Add(new DrawingDim { View = v.Name, Kind = "v", X1 = c.X, Y1 = c.Y, X2 = e.X, Y2 = e.Y, Offset = VDimSideOff ? -10 : 10, FromBox = !ExtremeOff, Role = "overall" });
             }
             if (v.Name == "left" && !Views.Any(x => x.Name == "top"))
             {
                 var a = Ext(q => q.X, q => q.Y, mn); var b = Ext(q => -q.X, q => q.Y, new Vector2d(mx.X, mn.Y));
-                Add(new DrawingDim { View = v.Name, Kind = "h", X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Offset = -10, FromBox = !ExtremeOff });
+                Add(new DrawingDim { View = v.Name, Kind = "h", X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Offset = -10, FromBox = !ExtremeOff, Role = "overall" });
             }
         }
         // диаметры отверстий: вид с наибольшим числом перекрестий
@@ -1311,10 +1366,82 @@ public sealed class DrawingDocument
                 double am = (arc.A0 + arc.A1) / 2; if (arc.A1 < arc.A0) am += Math.PI;
                 Add(new DrawingDim { View = v.Name, Kind = "rad", X1 = arc.Center.X, Y1 = arc.Center.Y, X2 = arc.Radius, Y2 = am * 180 / Math.PI });
             }
+        if (!MoreDimsOff) MoreDimensions(scene, Add);
         ArrangeDims(scene);
     }
 
     static readonly bool ExtremeOff = Environment.GetEnvironmentVariable("P3D_DIMEXTREME") == "0";
+    static readonly bool MoreDimsOff = Environment.GetEnvironmentVariable("P3D_MOREDIMS") == "0";
+    static readonly bool ModelAngOff = Environment.GetEnvironmentVariable("P3D_MODELDIMS163") == "0";
+    static readonly bool ArcCentersOff = Environment.GetEnvironmentVariable("P3D_ARCCENTERS") == "0";
+
+    /// <summary>
+    /// k163 (замечание 05.11, 09:22, п. 3.2): ещё автоматические размеры, без которых деталь по чертежу не воспроизвести:
+    /// - диаметры полных окружностей вида (не только отверстий-перекрестий), по одному на значение;
+    /// - положение центров дуг относительно центра наибольшей окружности вида — по горизонтали и вертикали (смещения осей,
+    ///   как ℄1…℄6 на чертеже пользователя);
+    /// - ступени на виде вдоль оси детали: положение вертикальных видимых рёбер от левого края контура (не больше 8; ближе
+    ///   0.5 мм к краю или друг к другу — один).
+    /// Мутация P3D_MOREDIMS=0 — без них (прежнее).
+    /// </summary>
+    void MoreDimensions(DrawingScene scene, Action<DrawingDim> add)
+    {
+        var have = new HashSet<string>(Dims.Where(d => d.Kind is "dia" or "rad").Select(d => $"{d.View}|{Math.Round(d.X2, 3)}"));
+        foreach (var v in Views.Where(v => !v.IsDetail && v.Name != "iso" && scene.Arcs.ContainsKey(v.Name)))
+        {
+            var arcs = scene.Arcs[v.Name];
+            foreach (var grp in arcs.Where(a => a.Full).GroupBy(a => Math.Round(a.Radius, 3)))
+            {
+                if (have.Contains($"{v.Name}|{grp.Key}") || Dims.Any(d => d.Kind is "dia" or "rad" && Math.Abs(d.X2 - grp.Key) < 1e-3)) continue;
+                var a = grp.First();
+                add(new DrawingDim { View = v.Name, Kind = "dia", X1 = a.Center.X, Y1 = a.Center.Y, X2 = a.Radius, Y2 = 45, Count = grp.Count(), Role = "circle" });
+                have.Add($"{v.Name}|{grp.Key}");
+            }
+            // центры дуг относительно центра наибольшей окружности
+            // главный центр — ось наибольшей окружности тела вращения (перекрестие), иначе центр наибольшей дуги
+            var cross = (scene.Axes.GetValueOrDefault(v.Name) ?? new()).Where(a => a.Cross).OrderByDescending(a => a.Radius).FirstOrDefault();
+            if (arcs.Count < (cross != null ? 1 : 2)) continue;
+            var main = cross != null && (arcs.Count == 0 || cross.Radius >= arcs.Max(a => a.Radius) - 1e-6) ? cross.Center : arcs.OrderByDescending(a => a.Radius).First().Center;
+            var centres = new List<Vector2d>();
+            foreach (var a in arcs.OrderByDescending(a => a.Radius))
+                if ((a.Center - main).Length > 1e-3 && !centres.Any(c => (c - a.Center).Length < 1e-3)) centres.Add(a.Center);
+            var dx = new HashSet<double>(); var dy = new HashSet<double>();
+            foreach (var c in centres.Take(8))
+            {
+                if (Math.Abs(c.X - main.X) > 1e-3 && dx.Add(Math.Round(c.X - main.X, 3)))
+                    add(new DrawingDim { View = v.Name, Kind = "h", X1 = main.X, Y1 = main.Y, X2 = c.X, Y2 = c.Y, Offset = -10, Role = "centre" });
+                if (Math.Abs(c.Y - main.Y) > 1e-3 && dy.Add(Math.Round(c.Y - main.Y, 3)))
+                    add(new DrawingDim { View = v.Name, Kind = "v", X1 = main.X, Y1 = main.Y, X2 = c.X, Y2 = c.Y, Offset = 10, Role = "centre" });
+            }
+        }
+        // ступени вдоль вида: вертикальные видимые рёбра
+        foreach (var v in Views.Where(v => !v.IsDetail && v.Name != "iso" && scene.Lines.ContainsKey(v.Name)))
+        {
+            var lines = scene.Lines[v.Name];
+            var vis = lines.Where(l => l.Visible && l.Kind == ViewLineKind.Edge).ToList();
+            if (vis.Count == 0) continue;
+            var (mn, mx) = Box(lines);
+            double w = mx.X - mn.X, h = mx.Y - mn.Y;
+            if (w < 1.5 * h) continue;   // ступени — у вытянутого вдоль листа вида (вал, труба)
+            var xs = new List<(double X, double Y)>();
+            foreach (var l in vis)
+                for (int i = 0; i + 1 < l.Points.Count; i++)
+                {
+                    var a = l.Points[i]; var b = l.Points[i + 1];
+                    if (Math.Abs(a.X - b.X) < 1e-6 && Math.Abs(a.Y - b.Y) > 0.05 * h) xs.Add((a.X, Math.Min(a.Y, b.Y)));
+                }
+            var leftPt = lines.Where(l => l.Visible).SelectMany(l => l.Points).OrderBy(q => q.X).ThenBy(q => q.Y).First();
+            var steps = new List<double>();
+            foreach (var (x, y) in xs.OrderBy(q => q.X))
+            {
+                if (x - mn.X < 0.5 || mx.X - x < 0.5 || steps.Any(sx => Math.Abs(sx - x) < 0.5)) continue;
+                steps.Add(x);
+                if (steps.Count > 8) break;
+                double yb = xs.Where(q => Math.Abs(q.X - x) < 1e-6).Min(q => q.Y);
+                add(new DrawingDim { View = v.Name, Kind = "h", X1 = leftPt.X, Y1 = leftPt.Y, X2 = x, Y2 = yb, Offset = -10, Role = "step" });
+            }
+        }
+    }
 
     /// <summary>
     /// k159: РАСКЛАДКА РАЗМЕРОВ (ГОСТ 2.307 п. 1.12: первая размерная линия — не ближе 10 мм к контуру, параллельные — через 7 мм,
@@ -1388,6 +1515,55 @@ public sealed class DrawingDocument
                                 Sketching.DimensionType.DistanceVertical => uIsH ? "v" : "h",
                                 _ => Math.Abs(a.Y - b.Y) < 1e-9 ? "h" : Math.Abs(a.X - b.X) < 1e-9 ? "v" : "al",
                             };
+                            dd = new DrawingDim { View = view.Name, Kind = kind, X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Offset = 8 + 7 * (added % 3) };
+                            break;
+                        }
+                    case Sketching.DimensionType.AngleLineLine when !ModelAngOff && d.Items.Count >= 2 && d.Items[0] is Sketching.SkLine la && d.Items[1] is Sketching.SkLine lb:
+                        {
+                            // k163: угол двух отрезков эскиза — вершина в точке пересечения прямых, стороны — к дальним концам;
+                            // из четырёх пар направлений — та, у которой угол против часовой равен размеру
+                            Vector2d A0 = P(la.A.P), A1 = P(la.B.P), B0 = P(lb.A.P), B1 = P(lb.B.P);
+                            var ua = A1 - A0; var ub = B1 - B0;
+                            double den = ua.X * ub.Y - ua.Y * ub.X;
+                            if (Math.Abs(den) < 1e-12) break;
+                            double t = ((B0.X - A0.X) * ub.Y - (B0.Y - A0.Y) * ub.X) / den;
+                            var vx = A0 + ua * t;
+                            Vector2d Far(Vector2d p0, Vector2d p1) => (p0 - vx).Length > (p1 - vx).Length ? p0 - vx : p1 - vx;
+                            var da = Far(A0, A1).Normalized(); var db = Far(B0, B1).Normalized();
+                            double best = double.MaxValue; (double, double) pick = (0, 0);
+                            foreach (var sa in new[] { 1.0, -1.0 })
+                                foreach (var sb in new[] { 1.0, -1.0 })
+                                    foreach (var (p0, p1) in new[] { (da * sa, db * sb), (db * sb, da * sa) })
+                                    {
+                                        double a0 = Math.Atan2(p0.Y, p0.X) * 180 / Math.PI, a1 = Math.Atan2(p1.Y, p1.X) * 180 / Math.PI;
+                                        double sw = ((a1 - a0) % 360 + 360) % 360;
+                                        double err = Math.Abs(sw - Math.Abs(d.Value)) + (sa < 0 ? 0.01 : 0) + (sb < 0 ? 0.01 : 0);
+                                        if (err < best) { best = err; pick = (a0, a1); }
+                                    }
+                            dd = new DrawingDim { View = view.Name, Kind = "ang", X1 = vx.X, Y1 = vx.Y, X2 = pick.Item1, Y2 = pick.Item2, Offset = 15 };
+                            break;
+                        }
+                    case Sketching.DimensionType.DistancePointLine or Sketching.DimensionType.DistanceLineLine when !ModelAngOff:
+                        {
+                            // k163: расстояние точки (или отрезка) до прямой — от точки до её проекции на прямую
+                            var line = d.Items.OfType<Sketching.SkLine>().LastOrDefault();
+                            var other = d.Items.FirstOrDefault(x => x != line);
+                            if (line == null || other == null) break;
+                            Vector2d q = other switch { Sketching.SkPoint sp => sp.P, Sketching.SkLine ol => ol.A.P, Sketching.SkCircle oc => oc.Center.P, Sketching.SkArc oa => oa.Center.P, _ => line.A.P };
+                            var u = (line.B.P - line.A.P); if (u.Length < 1e-12) break; u.Normalize();
+                            var foot = line.A.P + u * Vector2d.Dot(q - line.A.P, u);
+                            var a = P(q); var b = P(foot);
+                            string kind = Math.Abs(a.Y - b.Y) < 1e-9 ? "h" : Math.Abs(a.X - b.X) < 1e-9 ? "v" : "al";
+                            dd = new DrawingDim { View = view.Name, Kind = kind, X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Offset = 8 + 7 * (added % 3) };
+                            break;
+                        }
+                    case Sketching.DimensionType.CoordX or Sketching.DimensionType.CoordY when !ModelAngOff && pts.Length >= 1:
+                        {
+                            // k163: координата точки от начала эскиза
+                            var q = pts[0];
+                            var o = d.Type == Sketching.DimensionType.CoordX ? new Vector2d(0, q.Y) : new Vector2d(q.X, 0);
+                            var a = P(o); var b = P(q);
+                            string kind = Math.Abs(a.Y - b.Y) < 1e-9 ? "h" : Math.Abs(a.X - b.X) < 1e-9 ? "v" : "al";
                             dd = new DrawingDim { View = view.Name, Kind = kind, X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Offset = 8 + 7 * (added % 3) };
                             break;
                         }

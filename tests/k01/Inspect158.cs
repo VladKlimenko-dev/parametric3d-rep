@@ -48,14 +48,73 @@ static partial class Program
         var (p, pars) = DocumentFile.Load(File.ReadAllText(file));
         if (!p.RestoredFromFile) p.Rebuild(pars);
         var dd = new Parametric3D.Model.Drawing.DrawingDocument(); dd.EnsureViews();
+        // k163: чертёж из файла (.p3drw) вместо видов по умолчанию
+        if (isoStyle != null && isoStyle.EndsWith(".p3drw")) { dd = Parametric3D.Model.Drawing.DrawingDocument.FromJson(File.ReadAllText(isoStyle)); isoStyle = null; }
         if (isoStyle != null) dd.Views.First(v => v.Name == "iso").Style = isoStyle;
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var sc = Parametric3D.Model.Drawing.DrawingScene.Build(dd, p.Bodies);
         var g = dd.Compose(sc, new Parametric3D.Model.Drawing.FieldSource());
+        if (Environment.GetEnvironmentVariable("P3D_DBGEDGE") is { } de)
+            foreach (var (vn, ls) in sc.Lines)
+                foreach (var l in ls.Where(l => l.SourceId.ToString() == de))
+                    Console.WriteLine($"{vn}: {(l.Visible ? "V" : "h")} {l.Kind} pts {l.Points.Count} sheet {string.Join(" ", l.Points.Take(3).Select(q => dd.ToSheet(vn, q)).Select(q => $"({q.X:0.##},{q.Y:0.##})"))}");
         Console.WriteLine($"scene+compose {sw.ElapsedMilliseconds} ms, scale {dd.LastScale}, views {string.Join("; ", dd.Views.Select(v => $"{v.Name} {v.X:0},{v.Y:0}"))}");
         // ломаные листа в JSON (картинку рисует tools-скрипт): [[kind, x0, y0, x1, y1, …], …]
         var polys = g.Polylines.Select(q => new object[] { q.Kind.ToString() }.Concat(q.Points.SelectMany(t => new object[] { Math.Round(t.X, 3), Math.Round(t.Y, 3) })).ToArray())
             .Concat(g.Lines.Select(l => new object[] { l.Kind.ToString(), l.X1, l.Y1, l.X2, l.Y2 })).ToList();
         File.WriteAllText(png, System.Text.Json.JsonSerializer.Serialize(new { g.Width, g.Height, polys, shades = g.Shades.Select(sh => new object[] { sh.Argb }.Concat(sh.Pts.SelectMany(t => new object[] { t.X, t.Y })).ToArray()) }));
+    }
+}
+
+static partial class Program
+{
+    /// <summary>k163: разбор линий вида у края: рёбра тела, чья проекция — в полосе X вида [x0, x1], их участки (видимые/нет).</summary>
+    static void ViewLinesDbg(string file, string view, double x0, double x1)
+    {
+        var (p, pars) = DocumentFile.Load(File.ReadAllText(file));
+        if (!p.RestoredFromFile) p.Rebuild(pars);
+        var f = Parametric3D.Model.Drawing.ViewFrame.Of(view);
+        var body = p.Bodies.Single();
+        var lines = Parametric3D.Model.Drawing.ViewProjection.Project(body, f);
+        foreach (var e in body.Edges.Where(e => e.Curve != null))
+        {
+            var pts = Enumerable.Range(0, 9).Select(k => f.Project(e.Curve!.PointAt(e.Curve.T0 + (e.Curve.T1 - e.Curve.T0) * k / 8.0))).ToList();
+            if (pts.Any(q => q.X < x0 || q.X > x1)) continue;
+            var faces = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().Select(fc => $"{fc.Id}:{fc.Surface?.GetType().Name}").ToList();
+            var parts = lines.Where(l => l.SourceId == e.Id).Select(l => $"{(l.Visible ? "V" : "h")}{l.Kind}[{l.Points.Min(q => q.Y):0.#}..{l.Points.Max(q => q.Y):0.#}]").ToList();
+            Console.WriteLine($"edge {e.Id} {e.Curve!.GetType().Name} y {pts.Min(q => q.Y):0.#}..{pts.Max(q => q.Y):0.#} x {pts.Min(q => q.X):0.##}..{pts.Max(q => q.X):0.##} faces {string.Join(",", faces)} -> {string.Join(" ", parts)}");
+        }
+        foreach (var l in lines.Where(l => l.Points.All(q => q.X >= x0 && q.X <= x1)))
+            Console.WriteLine($"line edge {l.SourceId} {(l.Visible ? "V" : "h")} {l.Kind} y {l.Points.Min(q => q.Y):0.#}..{l.Points.Max(q => q.Y):0.#}");
+        if (Environment.GetEnvironmentVariable("P3D_DBGDRW") is { } drw)
+        {
+            var dd = Parametric3D.Model.Drawing.DrawingDocument.FromJson(File.ReadAllText(drw));
+            var sc = Parametric3D.Model.Drawing.DrawingScene.Build(dd, p.Bodies);
+            foreach (var l in sc.Lines[view].Where(l => l.Points.All(q => q.X >= x0 && q.X <= x1)))
+                Console.WriteLine($"scene edge {l.SourceId} {(l.Visible ? "V" : "h")} {l.Kind} y {l.Points.Min(q => q.Y):0.#}..{l.Points.Max(q => q.Y):0.#} dir {dd.DirOf(dd.Views.First(v => v.Name == view))}");
+        }
+    }
+}
+
+static partial class Program
+{
+    /// <summary>k163: автоматические размеры и размеры модели на чертеже файла, проверка полноты.</summary>
+    static void DrawCheck(string file, string? drw)
+    {
+        var (p, pars) = DocumentFile.Load(File.ReadAllText(file));
+        if (!p.RestoredFromFile) p.Rebuild(pars);
+        var dd = drw != null ? Parametric3D.Model.Drawing.DrawingDocument.FromJson(File.ReadAllText(drw)) : new Parametric3D.Model.Drawing.DrawingDocument();
+        dd.EnsureViews();
+        var sc = Parametric3D.Model.Drawing.DrawingScene.Build(dd, p.Bodies);
+        dd.Dims.Clear();
+        dd.AutoDimensions(sc); int auto = dd.Dims.Count;
+        dd.ModelDimensions(p); dd.ArrangeDims(sc);
+        dd.Compose(sc, new Parametric3D.Model.Drawing.FieldSource());
+        var items = Parametric3D.Model.Drawing.DrawingCheck.Run(dd, p);
+        Console.WriteLine($"dims: auto {auto}, total {dd.Dims.Count}; roles {string.Join(",", dd.Dims.GroupBy(d => d.Role + (d.Model ? "model" : "")).Select(g => $"{g.Key}:{g.Count()}"))}");
+        Console.WriteLine($"check: {items.Count} items, covered {items.Count(i => i.Covered)}");
+        foreach (var it in items.Where(i => !i.Covered)) Console.WriteLine($"  missing {it.Kind} {it.Label}");
+        foreach (var d in dd.Dims.Where(d => d.Auto)) Console.WriteLine($"  auto {d.View} {d.Kind} {d.Role} {d.Value:0.###} ({d.X1:0.##},{d.Y1:0.##})-({d.X2:0.##},{d.Y2:0.##})");
+        foreach (var (vn, arcs) in sc.Arcs) Console.WriteLine($"  arcs {vn}: {string.Join(" ", arcs.Select(a => $"R{a.Radius:0.##}@({a.Center.X:0.##},{a.Center.Y:0.##}){(a.Full ? "F" : "")}"))}");
     }
 }

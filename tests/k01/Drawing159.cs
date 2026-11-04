@@ -60,7 +60,7 @@ static partial class Program
             dd.AutoDimensions(sc);
             var g = dd.Compose(sc, new FieldSource());
             var bad = new List<string>();
-            foreach (var d in dd.Dims.Where(d => d.Kind is "h" or "v"))
+            foreach (var d in dd.Dims.Where(d => d.Kind is "h" or "v" && d.Role == "overall"))   // k163: габаритные
             {
                 var pts = sc.Lines[d.View].Where(l => l.Visible).SelectMany(l => l.Points).ToList();
                 foreach (var e in new[] { new Vector2d(d.X1, d.Y1), new Vector2d(d.X2, d.Y2) })

@@ -8736,6 +8736,34 @@ Check("UI-DIAG-SHEET", () =>
     dw.Close(); w.Close();
 });
 
+// k163 (замечание 05.11, 09:22, п. 3): кнопка проверки размеров чертежа — «внимание», пока размеры детали не все на листе
+// (подсказка — список), щелчок показывает элементы без размеров красным; после «Автоматических размеров» и «Размеров модели»
+// указанных больше.
+Check("UI-DRAWING-CHECK-K163", () =>
+{
+    var sp = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 10), "k163"); var w = Open(sp); BuildNow(sp);
+    var t = DrawingCommands.NewDrawing(w);
+    while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+    var dw = t.Result!; var d = dw.Drawing!;
+    try
+    {
+        dw.Refresh();
+        int c0 = dw.CheckItems.Count(i => i.Covered), n = dw.CheckItems.Count;
+        Console.WriteLine($"  check: {c0} of {n} before dimensions");
+        Require(n > 3 && c0 < n, "the check lists the part dimensions");
+        dw.ShowMissing = true; dw.Refresh();
+        int red = dw.Canvas.Overlay.Count;
+        Console.WriteLine($"  missing shown: overlay groups {red}");
+        Require(red > 0, "missing dimensions are shown on the sheet");
+        dw.Change(() => { d.AutoDimensions(dw.Scene!); });
+        int nm = d.ModelDimensions(sp.Part!); dw.Change(() => d.ArrangeDims(dw.Scene!));
+        int c1 = dw.CheckItems.Count(i => i.Covered);
+        Console.WriteLine($"  after auto + model ({nm}): {c1} of {n}");
+        Require(c1 > c0, "dimensions added: more covered");
+    }
+    finally { dw.Close(); w.Close(); }
+});
+
 // k162 (просьба 05.11, 08:31): ширина панели свойств — перетаскиванием левого края мышью (окно модели и окно чертежа);
 // в окне модели ширина записывается в настройки.
 Check("UI-PANEL-RESIZE-K162", () =>
@@ -8826,8 +8854,8 @@ Check("UI-DRAWING-K161", () =>
         // размеры: перенос одного не меняет другие; меню радиус ↔ диаметр
         dw.Change(() => d.AutoDimensions(dw.Scene!));
         var others = d.Dims.Skip(1).Select(x => (x.Offset, x.Y2)).ToList();
-        var dim = d.Dims[0]; var seg = d.Hit[dim].First();
-        double mx = (seg.X1 + seg.X2) / 2, my = (seg.Y1 + seg.Y2) / 2;
+        var dim = d.Dims[0]; var tc = d.HitTexts[dim][0];
+        double mx = (tc[0].X + tc[2].X) / 2, my = (tc[0].Y + tc[2].Y) / 2;   // k163: по тексту — выносные линии соседних размеров совпадают
         dw.Down(mx, my); var sw = System.Diagnostics.Stopwatch.StartNew();
         for (int i = 1; i <= 10; i++) { dw.MoveTo(mx, my - i); Dispatcher.UIThread.RunJobs(); }
         dw.Up(); double perStep = sw.Elapsed.TotalMilliseconds / 10;
@@ -9260,8 +9288,8 @@ Check("UI-DRAWING-K159", () =>
         // размеры: подсветка, выбор, перенос, удаление
         dw.Change(() => d.AutoDimensions(dw.Scene!));
         var dim = d.Dims.First(q => q.View == "front" && q.Kind == "h");
-        var seg = d.Hit[dim].First();
-        double mx = (seg.X1 + seg.X2) / 2, my = (seg.Y1 + seg.Y2) / 2;
+        var tc = d.HitTexts[dim][0];
+        double mx = (tc[0].X + tc[2].X) / 2, my = (tc[0].Y + tc[2].Y) / 2;   // k163: по тексту — выносные линии соседних размеров совпадают
         dw.MoveTo(mx, my);
         Require(dw.Hovered == dim, $"dimension highlighted under the cursor ({dw.Hovered?.GetType().Name})");
         double L0 = d.DimFrame(dim).L;
@@ -9327,6 +9355,14 @@ Check("UI-DIAG-OPEN", () =>
         }
         Console.WriteLine($"  [{round}] needsAcceptance {part.NeedsAcceptance}, showsInstant {part.ShowsInstant}, cached {part.ShowsCached}, dirty {part.IsDirty}");
         Console.WriteLine($"  [{round}] shown {shown} ms, idle {sw.ElapsedMilliseconds} ms, building {s.Document.IsBuilding}, verifying {s.Document.IsVerifying}");
+        {
+            // k163: сцена окна вида (SceneBuilder.Build — в потоке окна, как в PrepareScene) — время до первого кадра с телом
+            var swS = System.Diagnostics.Stopwatch.StartNew();
+            var scn = Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, w.ViewPort.Theme, w.ViewPort.Show);
+            Console.WriteLine($"  [{round}] scene build {swS.ElapsedMilliseconds} ms");
+            swS.Restart(); scn = Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, w.ViewPort.Theme, w.ViewPort.Show);
+            Console.WriteLine($"  [{round}] scene build again {swS.ElapsedMilliseconds} ms");
+        }
         foreach (var f in part.Features.Where(f => f.Error != null)) Console.WriteLine($"  [{round}] ERROR {f.Name}: {f.Error}");
         foreach (var wn in part.Warnings) Console.WriteLine($"  [{round}] warn: {wn.Replace('\n', ' ')}");
         if (round == "as is")

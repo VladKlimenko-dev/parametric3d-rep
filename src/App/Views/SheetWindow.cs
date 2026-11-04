@@ -172,6 +172,9 @@ public sealed class SheetWindow : Window
             }));
             Btn("export_dxf_but.svg", "Вывод в DXF", () => _ = ExportDxfAsync());
             Sep();
+            // k163 (замечание 05.11, 09:22, п. 3): проверка полноты размеров — значок «внимание» или «годно», подсказка — что не
+            // указано; щелчок — показать на листе элементы детали без размеров
+            _checkBtn = Btn("state_warning_ico.svg", "Проверка размеров чертежа", () => { ShowMissing = !ShowMissing; UpdateOverlay(); });
         }
         if (Kind is Mode.Template or Mode.Drawing)
         {
@@ -610,6 +613,10 @@ public sealed class SheetWindow : Window
             if (_hover != null && _hover != _sel) _canvas.Overlay.Add((SegsOf(_hover), HoverColor, _hover is DrawingView ? 1.2f : 3f));
             if (_sel != null) _canvas.Overlay.Add((SegsOf(_sel), SelColor, _sel is DrawingView ? 1.6f : 3f));
             if (_hoverSegs != null) _canvas.Overlay.Add((_hoverSegs, TargetColor, 3f));
+            if (ShowMissing)
+                foreach (var it in CheckItems.Where(i => !i.Covered))
+                    if (DrawingCheck.Geometry(Drawing, it, _input?.Part) is { } geo && Drawing.Xf.ContainsKey(geo.View))
+                        _canvas.Overlay.Add((geo.Lines.SelectMany(l => SheetSegs(geo.View, l)).ToList(), MissingColor, 2.5f));
             if (_guides.Count > 0) _canvas.Overlay.Add((_guides.Select(gl => { var (x1, y1, x2, y2) = gl; return x1 == x2 ? (x1, y1 - 30, x2, y2 + 30) : (x1 - 30, y1, x2 + 30, y2); }).ToList(), TargetColor, 1.2f));
             if (_sel is DrawingView gv && IsRotatable(gv) && Drawing.Boxes.TryGetValue(gv.Name, out var gb))
             {
@@ -1197,11 +1204,35 @@ public sealed class SheetWindow : Window
         return new List<SheetGraphics> { SheetLayout.Compose(Template, FieldValues()) };
     }
 
+    Button? _checkBtn;
+    /// <summary>k163: показывать на листе элементы детали, чьи размеры не указаны.</summary>
+    public bool ShowMissing { get; set; }
+    /// <summary>k163: итог последней проверки полноты размеров.</summary>
+    public List<DrawingCheck.Item> CheckItems { get; private set; } = new();
+    bool _checkOk;
+    void UpdateCheck()
+    {
+        if (Kind != Mode.Drawing || _checkBtn == null || _input?.Part is not { } part) return;
+        try { CheckItems = DrawingCheck.Run(Drawing!, part); } catch (Exception ex) { Core.AppLog.Write("sheet: check", ex); return; }
+        var miss = CheckItems.Where(i => !i.Covered).ToList();
+        bool ok = miss.Count == 0;
+        string tip = ok
+            ? L("Размеры чертежа полные: указаны все {0} размеров детали.", CheckItems.Count)
+            : L("Размеры чертежа неполные: указано {0} из {1}. Не указаны:", CheckItems.Count - miss.Count, CheckItems.Count) + "\n" +
+              string.Join("\n", miss.Take(25).Select(i => "• " + i.Label)) + (miss.Count > 25 ? "\n…" : "") +
+              "\n" + L("Щелчок — показать на чертеже элементы без размеров (красным).");
+        if (ok != _checkOk || _checkBtn.Content == null) _checkBtn.Content = Icons.IconProvider.Content(ok ? "state_ok_ico.svg" : "state_warning_ico.svg", tip, 26);
+        _checkOk = ok;
+        ToolTip.SetTip(_checkBtn, tip);
+    }
+    static readonly SkiaSharp.SKColor MissingColor = new(220, 30, 30, 200);
+
     public void Refresh()
     {
         try
         {
             Pages = BuildPages();
+            if (_drag == null) UpdateCheck();
             _page = Math.Clamp(_page, 0, Math.Max(0, Pages.Count - 1));
             var g = Pages[_page];
             _canvas.Graphics = g;
