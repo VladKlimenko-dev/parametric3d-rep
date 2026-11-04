@@ -5,6 +5,7 @@
 
 | Версия | Дата | Коммит | Архив | Что сделано |
 |---|---|---|---|---|
+| k159 | 2026-11-05 | [`2325007`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/2325007) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/2325007.zip) | окно чертежа — лист вектором, подсветка, выбор и перенос размеров, масштаб и поворот видов, единицы, раскладка размеров; файлы STEP проверок в репозитории |
 | k158 | 2026-11-04 | [`c2bd860`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/c2bd860) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/c2bd860.zip) | чертёж — вспомогательный вид и вид с разрывом; вертикальные габаритные размеры за контуром вида |
 | k157 | 2026-11-04 | [`292c5e1`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/292c5e1) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/292c5e1.zip) | состояние перед последней операцией в документе (правка последней операции после открытия — без перестроения дерева); запись тела компактнее и быстрее; отверстие — привязка к рёбрам-дугам и опорным плоскостям |
 | k156 | 2026-11-04 | [`5fbd491`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/5fbd491) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/5fbd491.zip) | чертёж — разрезы, выносные элементы, размеры, обозначения, позиции сборки, DXF (D2–D5); выбор нового документа; сообщения об открытии и сохранении без тела, запись без расчёта площади; второй порядок резцов смешанной цепочки; regress.bat — регрессия на своём компьютере |
