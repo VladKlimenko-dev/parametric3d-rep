@@ -88,14 +88,19 @@ static partial class Program
                 var a = AnswerOf(Path.Combine(dir, r[0]));
                 double v = double.Parse(r[5], CultureInfo.InvariantCulture), ar = double.Parse(r[6], CultureInfo.InvariantCulture);
                 if (mut) v *= 1 + 1e-6;   // мутация проверки: эталон объёма сдвинут на 1e-6
-                bool Rel(double x, double y) => Math.Abs(x - y) <= 1e-9 * Math.Max(1, Math.Abs(y));
+                // k159: у тела с многогранными гранями (ExactPolyhedral: резец, сетка) объём и площадь зависят от сложения в
+                // несколько потоков и математики платформы (Windows и Linux дают 648068.808 и 648068.752 — 8.6e-8): допуск 1e-6;
+                // у точных тел — 1e-9; площадь многогранного тела — 1e-5 (71506.889 и 71507.198)
+                bool poly = r.Length > 10 && r[10] == "ExactPolyhedral";
+                bool Rel(double x, double y) => Math.Abs(x - y) <= (poly ? 1e-6 : 1e-9) * Math.Max(1, Math.Abs(y));
+                bool RelA(double x, double y) => Math.Abs(x - y) <= (poly ? 1e-5 : 1e-9) * Math.Max(1, Math.Abs(y));
                 var diff = new List<string>();
                 if (a.Features != int.Parse(r[1])) diff.Add($"features {a.Features}≠{r[1]}");
                 if (a.Errors != int.Parse(r[2])) diff.Add($"errors {a.Errors}≠{r[2]}");
                 if (a.Bodies != int.Parse(r[3])) diff.Add($"bodies {a.Bodies}≠{r[3]}");
                 if (a.Faces != int.Parse(r[4])) diff.Add($"faces {a.Faces}≠{r[4]}");
                 if (!Rel(a.Volume, v)) diff.Add($"volume {Fmt(a.Volume)}≠{Fmt(v)}");
-                if (!Rel(a.Area, ar)) diff.Add($"area {Fmt(a.Area)}≠{Fmt(ar)}");
+                if (!RelA(a.Area, ar)) diff.Add($"area {Fmt(a.Area)}≠{Fmt(ar)}");
                 if ((a.Valid ? "1" : "0") != r[7]) diff.Add($"valid {a.Valid}");
                 if (a.Sketches != r[8]) diff.Add($"sketches {a.Sketches}≠{r[8]}");
                 double ps = double.Parse(r[9], CultureInfo.InvariantCulture);

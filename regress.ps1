@@ -16,7 +16,9 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { Fail 'dotnet не
 if (-not $NoPull -and (Test-Path .git) -and (Get-Command git -ErrorAction SilentlyContinue)) {
     if (-not (git status --porcelain --untracked-files=no)) { Write-Host 'Обновление с GitHub…' -ForegroundColor Cyan; git pull --ff-only | Out-Host }
 }
-$ver = if (Get-Command git -ErrorAction SilentlyContinue) { git log -1 --format='%h %ad %s' --date=short } else { '(без git)' }
+$ver = if ((Test-Path .git) -and (Get-Command git -ErrorAction SilentlyContinue)) { git log -1 --format='%h %ad %s' --date=short } else { '' }
+# k159: архив с GitHub (без .git) — версия по первому разделу CHANGELOG
+if (-not $ver -and (Test-Path 'CHANGELOG_K00_K10.md')) { $ver = (Select-String -Path 'CHANGELOG_K00_K10.md' -Pattern '^## (k\d+[^:]*)' | Select-Object -First 1).Matches[0].Groups[1].Value + ' (архив)' }
 Write-Host "Версия: $ver" -ForegroundColor Green
 
 $stamp = Get-Date -Format 'yyyyMMdd_HHmm'
@@ -87,7 +89,8 @@ $sum.Add(("Время: {0:0} мин" -f ((Get-Date) - $t0).TotalMinutes))
 foreach ($f in Get-ChildItem $logs -Filter '*.log' | Where-Object { $_.Name -notlike 'build_*' -and $_.Name -ne 'seq.log' }) {
     $text = Get-Content $f.FullName
     $total = ($text | Select-String -Pattern '^\{"passed":\d+,"failed":\d+\}' | Select-Object -Last 1)
-    $fails = $text | Select-String -Pattern '"(ok|Ok)":false' | ForEach-Object { $_.Line.Substring(0, [Math]::Min(300, $_.Line.Length)) }
+    # k159: ожидаемый отказ (случаи корпуса «overflow», отметка expected) — не провал
+    $fails = $text | Select-String -Pattern '"(ok|Ok)":false' | Where-Object { $_.Line -notmatch '"expected":"refusal"' } | ForEach-Object { $_.Line.Substring(0, [Math]::Min(300, $_.Line.Length)) }
     $sum.Add("")
     $sum.Add("== $($f.BaseName): $(if ($total) { $total.Line } else { '(итога нет — этап прерван?)' })")
     foreach ($x in $fails) { $sum.Add("  ПРОВАЛ: $x") }

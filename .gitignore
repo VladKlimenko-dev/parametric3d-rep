@@ -9,3 +9,4 @@ logs/**/a06/
 .vs/
 *.user
 logs/regress_*/
+!tests/stepfiles/*.step

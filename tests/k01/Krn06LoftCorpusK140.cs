@@ -43,7 +43,8 @@ static partial class Program
                 Parametric3D.Kernel.Ops.DirectRound.CreaseOffForTest = row.Length > 2 && row[2].Trim() == "nocrease";
                 (bool Ok, double Dv, long Ms, List<string> Problems) r;
                 try { r = CorpusFixture(Path.Combine(cdir, file)); } finally { Parametric3D.Kernel.Ops.DirectRound.ChamferSwitchOffForTest = false; Parametric3D.Kernel.Ops.DirectRound.CreaseOffForTest = false; }
-                Log(new { file, r.Ok, dv = Math.Round(r.Dv, 4), want, r.Ms, r.Problems });
+                // k159: у ожидаемого отказа («overflow») — отметка expected, чтобы итог регрессии не считал строку провалом
+                Log(new { file, r.Ok, dv = Math.Round(r.Dv, 4), want, r.Ms, r.Problems, expected = row.Length > 2 && row[2].Contains("overflow") ? "refusal" : null });
                 // k153: «overflow» — фаска шире грани ребра (съедает полосу шириной 0.05 мм у s101_2, прежнюю фаску 1.7 мм у
                 // s102_5): норма — отказ с причиной «wider than the face» (под P3D_CHAMFEROVERFLOW=0 — прежнее построение)
                 if (row.Length > 2 && row[2].Contains("overflow"))

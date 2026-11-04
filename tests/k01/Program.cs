@@ -594,6 +594,7 @@ static partial class Program
         if (mode is "drawing155" or "allB") Drawing155Checks();
         if (mode is "drawing156" or "allB") Drawing156Checks();
         if (mode is "drawing158" or "allB") Drawing158Checks();
+        if (mode is "drawing159" or "allB") Drawing159Checks();
         if (mode is "brephist") { BrepHist(args.Skip(1)); return; }
         if (mode is "ovfdiag") { OvfDiag(args[1], args[2]); return; }
         if (mode is "breprt") { BrepRoundTrip(args.Skip(1)); return; }
@@ -602,6 +603,7 @@ static partial class Program
         if (mode is "loadtime") { LoadTime(args[1]); return; }
         if (mode is "savetime") { SaveTime(args[1]); return; }
         if (mode is "rebuilderr") { RebuildErrors(args[1]); return; }
+        if (mode is "inspectfile") { InspectFile(args[1], args[2]); return; }
         if (mode is "editlast") { EditLast(args[1], double.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture)); return; }
         if (mode is "chamfersweep") { ChamferSweep(args[1], args.Skip(2)); return; }
         if (mode is "loftseq") { LoftCorpusSeq(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), args.Length > 4 ? args[4] : "/tmp/claude-0/corpusseq"); return; }

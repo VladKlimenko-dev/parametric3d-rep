@@ -8982,6 +8982,110 @@ Check("UI-DRAWING-K158", () =>
     finally { dw?.Close(); w.Close(); }
 });
 
+// k159 (замечания 04.11, 23:51, п. 2): окно чертежа — поле листа вектором (перенос вида быстро), подсветка вида, размера и цели
+// привязки; выбор, перенос и удаление размера; масштаб листа из ряда ГОСТ (меняет виды, места видов сохраняются); выключение
+// и включение вида не сбрасывает перенос; поворот вида; разделы панели сворачиваются; двойной щелчок по надписи — поле;
+// положения видов — в файле чертежа.
+Check("UI-DRAWING-K159", () =>
+{
+    var sp = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 10), "k159"); var w = Open(sp); BuildNow(sp);
+    SheetWindow? dw = null, dw2 = null;
+    var dir = Path.Combine(Path.GetTempPath(), $"p3d_k159_{Guid.NewGuid():N}"); Directory.CreateDirectory(dir);
+    try
+    {
+        var t = DrawingCommands.NewDrawing(w);
+        while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+        dw = t.Result!;
+        for (int i = 0; i < 50; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); }
+        var d = dw.Drawing!;
+        // разделы панели — сворачиваемые
+        var secs = dw.Sections.ToList();
+        Console.WriteLine($"  sections: {string.Join(", ", secs.Select(x => x.Tag))}");
+        Require(secs.Count >= 4 && secs.Any(x => (string?)x.Tag == Parametric3D.App.Loc.L("Виды")), "collapsible sections");
+        // подсветка вида под курсором
+        var fb = d.Boxes["front"];
+        dw.MoveTo((fb.X0 + fb.X1) / 2, (fb.Y0 + fb.Y1) / 2);
+        Console.WriteLine($"  hover: {dw.Hovered} {(dw.Hovered as Parametric3D.Model.Drawing.DrawingView)?.Name}, overlay {dw.Canvas.Overlay.Count}, at view {d.ViewAt((fb.X0 + fb.X1) / 2, (fb.Y0 + fb.Y1) / 2)}");
+        Require(dw.Hovered is Parametric3D.Model.Drawing.DrawingView { Name: "front" } && dw.Canvas.Overlay.Count > 0, "view box highlighted under the cursor");
+        // перенос вида: 20 шагов
+        var top0 = (d.Views.First(v => v.Name == "top").X, d.Views.First(v => v.Name == "top").Y);
+        double x = (fb.X0 + fb.X1) / 2, y = (fb.Y0 + fb.Y1) / 2;
+        dw.Down(x, y);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        for (int i = 1; i <= 20; i++) { dw.MoveTo(x + i, y); Dispatcher.UIThread.RunJobs(); }
+        dw.Up();
+        double perStep = sw.Elapsed.TotalMilliseconds / 20;
+        var front = d.Views.First(v => v.Name == "front");
+        Console.WriteLine($"  view drag: {perStep:0.#} ms per step, frame {dw.Canvas.LastFrameMs:0.#} ms");
+        Require(Math.Abs(d.Boxes["front"].X0 - fb.X0 - 20) < 1e-6, "front view moved by 20 mm");
+        Require(perStep < 400, $"drag step {perStep:0} ms");
+        // выключить и включить вид сверху: главный остаётся на месте, вид сверху — там же, где был
+        var fx = front.X;
+        var topV = d.Views.First(v => v.Name == "top"); double tx = topV.X, ty = topV.Y;
+        var bx = dw.GetType().GetMethod("ToggleView", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        bx.Invoke(dw, new object[] { "top" }); bx.Invoke(dw, new object[] { "top" });
+        var top2 = d.Views.First(v => v.Name == "top");
+        Console.WriteLine($"  toggle: front {fx:0.#} -> {front.X:0.#}; top ({tx:0.#},{ty:0.#}) -> ({top2.X:0.#},{top2.Y:0.#})");
+        Require(Math.Abs(front.X - fx) < 1e-9 && Math.Abs(top2.X - tx) < 1e-9 && Math.Abs(top2.Y - ty) < 1e-9, "views keep their places after a view is switched off and on");
+        // масштаб листа — выбор из ряда ГОСТ: размер видов меняется, места — нет
+        var sc = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(dw).OfType<ComboBox>().First(c => c.Name == "dr_sheet_scale");
+        double s0 = d.LastScale, w0 = d.Boxes["front"].X1 - d.Boxes["front"].X0;
+        int idx = Array.IndexOf(Parametric3D.Model.Drawing.DrawingDocument.GostScales, s0);
+        sc.SelectedIndex = 1 + idx + 1;   // следующий меньший масштаб
+        double s1 = d.LastScale, w1 = d.Boxes["front"].X1 - d.Boxes["front"].X0;
+        Console.WriteLine($"  scale {s0} -> {s1}, width {w0:0.#} -> {w1:0.#}");
+        Require(s1 < s0 && Math.Abs(w1 / w0 - s1 / s0) < 1e-6 && Math.Abs(front.X - fx) < 1e-9, "the sheet scale changes the views, not their places");
+        // поворот вида
+        dw.Change(() => front.Angle = 90);
+        var fr = d.Boxes["front"];
+        Require(Math.Abs((fr.X1 - fr.X0) - (d.Boxes["front"].Y1 - d.Boxes["front"].Y0)) > -1 && Math.Abs((fr.Y1 - fr.Y0) - w1) < 1e-6, "rotated view: width becomes height");
+        dw.Change(() => front.Angle = 0);
+        // размеры: подсветка, выбор, перенос, удаление
+        dw.Change(() => d.AutoDimensions(dw.Scene!));
+        var dim = d.Dims.First(q => q.View == "front" && q.Kind == "h");
+        var seg = d.Hit[dim].First();
+        double mx = (seg.X1 + seg.X2) / 2, my = (seg.Y1 + seg.Y2) / 2;
+        dw.MoveTo(mx, my);
+        Require(dw.Hovered == dim, $"dimension highlighted under the cursor ({dw.Hovered?.GetType().Name})");
+        double L0 = d.DimFrame(dim).L;
+        dw.Down(mx, my); Require(dw.Selected == dim, "dimension selected");
+        for (int i = 1; i <= 5; i++) { dw.MoveTo(mx, my - i); Dispatcher.UIThread.RunJobs(); }
+        dw.Up();
+        double L1 = d.DimFrame(dim).L;
+        Console.WriteLine($"  dimension moved {L0:0.##} -> {L1:0.##}");
+        Require(Math.Abs(L1 - (L0 - 5)) < 1e-6, "dimension moved with the mouse");
+        int nd = d.Dims.Count; dw.DeleteSelected();
+        Require(d.Dims.Count == nd - 1 && !d.Dims.Contains(dim), "selected dimension deleted");
+        // цель привязки подсвечивается в режиме щелчка: диаметр — окружность отверстия
+        var hv = d.Views.Where(v => dw.Scene!.Axes.ContainsKey(v.Name)).OrderByDescending(v => dw.Scene!.Axes[v.Name].Count(a => a.Cross)).First().Name;
+        var ax = dw.Scene!.Axes[hv].First(a => a.Cross);
+        var on = d.ToSheet(hv, ax.Center + new OpenTK.Mathematics.Vector2d(ax.Radius, 0));
+        dw.StartPick("dia", "");
+        var pv = dw.PickPreview(on.X, on.Y);
+        Require(pv != null && pv.Count > 8, "the circle is highlighted before the click");
+        dw.Down(on.X, on.Y);
+        Require(d.Dims.Any(q => q.Kind == "dia" && !q.Auto), "diameter by the click");
+        // двойной щелчок по надписи — поле в панели
+        var ft = dw.Pages[0].Texts.First(q => q.Field == Parametric3D.Model.Drawing.Fields.Designation);
+        var field = dw.FocusFieldAt(ft.X, ft.Y + 1);
+        Require(field == Parametric3D.Model.Drawing.Fields.Designation, $"title block field by a double click: {field}");
+        // положения видов — в файле чертежа
+        var path = Path.Combine(dir, "k159" + SheetWindow.DrawingExt);
+        dw.SaveTo(path);
+        dw2 = SheetWindow.OpenFile(path);
+        dw2.DrawingSource = dw.DrawingSource;
+        dw2.Refresh();
+        var f2 = dw2.Drawing!.Views.First(v => v.Name == "front");
+        Console.WriteLine($"  reopened front ({f2.X:0.#},{f2.Y:0.#}) vs ({front.X:0.#},{front.Y:0.#})");
+        Require(Math.Abs(f2.X - front.X) < 1e-9 && Math.Abs(f2.Y - front.Y) < 1e-9, "view places are kept in the drawing file");
+        // колесо мыши — увеличение в точке
+        var z0 = dw.Canvas.Zoom; var at = new Avalonia.Point(200, 150); var before = dw.Canvas.ToSheet(at);
+        dw.Canvas.ZoomAt(at, 1.5); var after = dw.Canvas.ToSheet(at);
+        Require(Math.Abs(dw.Canvas.Zoom / z0 - 1.5) < 1e-9 && Math.Abs(before.X - after.X) < 1e-9 && Math.Abs(before.Y - after.Y) < 1e-9, "zoom at the cursor keeps the point under it");
+    }
+    finally { dw2?.Close(); dw?.Close(); w.Close(); try { Directory.Delete(dir, true); } catch { } }
+});
+
 // k156: ДИАГНОСТИКА ОТКРЫТИЯ (только с P3D_DIAGOPEN=<файл>): открытие как в приложении (OpenAsync), время до показа, до
 // конца расчёта и проверки, ошибки операций; затем сохранение с телом и повторное открытие.
 if (Environment.GetEnvironmentVariable("P3D_DIAGOPEN") is { Length: > 0 } diagFile)
