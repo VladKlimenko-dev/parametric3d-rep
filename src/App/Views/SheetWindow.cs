@@ -362,12 +362,8 @@ public sealed partial class SheetWindow : Window
             items.Add((L("Стрелки снаружи"), () => Change(() => dm.Arrows = 2)));
             items.Add((L("Стрелки по месту"), () => Change(() => dm.Arrows = 0)));
             if (dm.Kind is "rad" or "dia") items.Add((dm.Kind == "rad" ? L("Диаметр вместо радиуса") : L("Радиус вместо диаметра"), () => Change(() => dm.Kind = dm.Kind == "rad" ? "dia" : "rad")));
-            // k170 (замечание 05.11, 18:34, п. 6.2): угловой — внутренний ↔ внешний, смежный
-            if (dm.Kind == "ang")
-            {
-                items.Add((dm.Value > 180 ? L("Внутренний угол") : L("Внешний угол (360° − угол)"), () => Change(() => DrawingDocument.AngleOuter(dm))));
-                items.Add((L("Смежный угол (180° − угол)"), () => Change(() => DrawingDocument.AngleAdjacent(dm))));
-            }
+            // k170: угловой — смежный угол (180° − угол); k171: внутри / снаружи — стрелки (пункты выше), как у эскиза
+            if (dm.Kind == "ang") items.Add((L("Смежный угол (180° − угол)"), () => Change(() => DrawingDocument.AngleAdjacent(dm))));
             if (dm.TextShift != 0) items.Add((L("Текст к середине"), () => Change(() => dm.TextShift = 0)));
             items.Add((L("Место — автоматически"), () => Change(() => { dm.Arrange = true; dm.TextShift = 0; })));
             items.Add((L("Удалить"), () => Change(() => { d.Dims.Remove(dm); _sel = null; })));
@@ -1718,12 +1714,14 @@ public sealed partial class SheetWindow : Window
                 ToolTip.SetTip(tup, L("Верхнее отклонение (Upper): +0,015"));
                 ToolTip.SetTip(tlo, L("Нижнее отклонение (Lower): 0,010 или −0,010; равные верхнему по величине — «±»"));
                 row.Children.Add(tup); row.Children.Add(tlo);
-                if (dim.Kind == "ang")
+                // k171 (замечание 05.11, 20:10, п. 2–3): стрелки внутри ↔ снаружи у углового, радиуса и диаметра
+                if (dim.Kind is "ang" or "rad" or "dia")
                 {
-                    var outer = new Button { Content = dim.Value > 180 ? "∠ " + L("внеш.") : "∠ " + L("внутр."), Padding = new Thickness(4, 0), FontSize = 11, Name = "dr_ang_outer" };
-                    ToolTip.SetTip(outer, L("Угол: внутренний ↔ внешний (360° − угол); смежный — в меню размера"));
-                    outer.Click += (_, _) => Change(() => DrawingDocument.AngleOuter(dim));
-                    row.Children.Add(outer);
+                    bool outNow = dim.Arrows == 2;
+                    var tg = new Button { Content = outNow ? L("снаружи") : L("внутри"), Padding = new Thickness(4, 0), FontSize = 11, Name = "dr_dim_arrows" };
+                    ToolTip.SetTip(tg, L("Стрелки: внутри ↔ снаружи"));
+                    tg.Click += (_, _) => Change(() => dim.Arrows = dim.Arrows == 2 ? 1 : 2);
+                    row.Children.Add(tg);
                 }
                 row.Children.Add(Del(() => d.Dims.Remove(dim)));
                 // k170 (замечание 05.11, 18:34, п. 8): строка списка ↔ размер на листе: курсор над строкой — размер подсвечен на

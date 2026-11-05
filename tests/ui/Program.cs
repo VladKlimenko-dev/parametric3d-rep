@@ -8775,6 +8775,113 @@ Check("UI-DIAG-SHEET", () =>
     dw.Close(); w.Close();
 });
 
+// k171 (замечание 05.11, 20:10): угловой размер — подпись за сторонами на полке (п. 1), стрелки внутри / снаружи (п. 2);
+// радиус и диаметр чертежа — стрелки внутри / снаружи, подпись радиуса внутрь окружности (п. 3); то же в эскизе (п. 4);
+// проверка полноты и размеры модели — только сильные размеры эскиза (п. 5).
+Check("UI-DRAWING-K171", () =>
+{
+    var part = new Part("k171");
+    var sk = new Sketch("S", Parametric3D.Kernel.Frame3.XY); part.Add(sk);
+    var q = new[] { new SkPoint(0, 0), new SkPoint(60, 0), new SkPoint(80, 40), new SkPoint(20, 40) };
+    for (int k = 0; k < 4; k++) sk.AddEntity(new SkLine(q[k], q[(k + 1) % 4]));
+    var c1 = (SkCircle)sk.AddEntity(new SkCircle(new SkPoint(28, 18), 5));
+    var c2 = (SkCircle)sk.AddEntity(new SkCircle(new SkPoint(55, 25), 3));
+    sk.AddDimension(DimensionType.DistancePointPoint, 60, q[0], q[1]);
+    var weak = sk.AddDimension(DimensionType.Radius, 3, c2); weak.IsDefault = true;
+    var ex = new ExtrudeFeature { SketchId = sk.Id }; ex.Side1.Distance = new ValueRef(10); part.AddFeature(ex);
+    part.Rebuild(null);
+    var sp = DocumentSession.FromPart(part, "k171"); var w = Open(sp); BuildNow(sp);
+    var t = DrawingCommands.NewDrawing(w);
+    while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+    var dw = t.Result!; var d = dw.Drawing!;
+    try
+    {
+        dw.Refresh();
+        (double X, double Y) S(double x, double y) => d.ToSheet("front", new OpenTK.Mathematics.Vector2d(x, y));
+        double DistC(OpenTK.Mathematics.Vector2d c, (double X1, double Y1, double X2, double Y2) sg)
+        {
+            double dx = sg.X2 - sg.X1, dy = sg.Y2 - sg.Y1, l2 = dx * dx + dy * dy;
+            double u = l2 < 1e-18 ? 0 : Math.Clamp(((c.X - sg.X1) * dx + (c.Y - sg.Y1) * dy) / l2, 0, 1);
+            return Math.Sqrt(Math.Pow(sg.X1 + u * dx - c.X, 2) + Math.Pow(sg.Y1 + u * dy - c.Y, 2));
+        }
+        // 5. только сильные размеры: слабый R3 — не в списке недостающих и не переносится «Размерами модели»
+        Require(dw.CheckItems.All(i => i.Dim != weak) && dw.CheckItems.Any(i => i.Value == 60), "weak sketch dimensions are not required");
+        dw.Change(() => d.ModelDimensions(part));
+        Require(d.Dims.All(x => !(x.Kind is "rad" or "dia" && Math.Abs(x.X2 - 3) < 1e-9)), "weak dimensions are not brought to the drawing");
+        dw.Change(() => d.Dims.Clear());
+        // 1–2. угловой: нижняя и левая стороны
+        dw.StartPick("ang1", "");
+        var a1 = S(30, 0); dw.PickAt(a1.X, a1.Y); var a2 = S(5, 10); dw.PickAt(a2.X, a2.Y);
+        var an = d.Dims.Last(); dw.Change(() => an.Offset = 12);
+        var cv = S(an.X1, an.Y1);
+        double rot0 = an.X2 * Math.PI / 180;
+        // подпись — за нижней стороной (ниже оси X)
+        d.MoveDim(an, 0, 0, cv.X + 12, cv.Y - 4); dw.Refresh();
+        var g = dw.Pages[0];
+        var txt = g.Texts.First(x => x.Text.StartsWith(d.CaptionOf(an).TrimEnd('°')) || x.Text == d.CaptionOf(an));
+        var corners = Parametric3D.Model.Drawing.DrawingDocument.TextCorners(txt);
+        double tx0 = corners.Min(p => p.X), tx1 = corners.Max(p => p.X), ty0 = corners.Min(p => p.Y), ty1 = corners.Max(p => p.Y);
+        bool crossed = d.Hit[an].Any(sg => { for (int k = 0; k <= 10; k++) { double x = sg.X1 + (sg.X2 - sg.X1) * k / 10, y = sg.Y1 + (sg.Y2 - sg.Y1) * k / 10; if (x > tx0 + 0.2 && x < tx1 - 0.2 && y > ty0 + 0.3 && y < ty1 - 0.3) return true; } return false; });
+        bool shelf = d.Hit[an].Any(sg => Math.Abs(sg.Y1 - sg.Y2) < 1e-9 && Math.Abs(sg.X2 - sg.X1) >= tx1 - tx0 - 0.5 && sg.Y1 <= ty0 + 0.01);
+        Console.WriteLine($"  angle text «{txt.Text}» angle {txt.Angle}, crossed {crossed}, shelf {shelf}");
+        Require(txt.Angle == 0 && !crossed && shelf, "the angle text outside the sides is on a horizontal shelf, the arc does not cross it");
+        if (Environment.GetEnvironmentVariable("P3D_SHOTDIR") is { } shots171) { dw.Show(); Dispatcher.UIThread.RunJobs(); dw.CaptureRenderedFrame()?.Save(Path.Combine(shots171, "k171_angle.png")); }
+        // стрелки снаружи: между сторонами дуги нет
+        dw.Change(() => { an.TextShift = 0; an.Arrows = 2; });
+        double sw = an.Value * Math.PI / 180;
+        var between = d.Hit[an].Where(sg => { double am = Math.Atan2((sg.Y1 + sg.Y2) / 2 - cv.Y, (sg.X1 + sg.X2) / 2 - cv.X); double rel = ((am - rot0) % (2 * Math.PI) + 4 * Math.PI) % (2 * Math.PI); double rr = Math.Sqrt(Math.Pow((sg.X1 + sg.X2) / 2 - cv.X, 2) + Math.Pow((sg.Y1 + sg.Y2) / 2 - cv.Y, 2)); return rel > 0.15 * sw && rel < 0.85 * sw && Math.Abs(rr - an.Offset) < 0.3; }).Count();
+        Console.WriteLine($"  angle arrows outside: arc pieces between the sides {between}");
+        Require(between == 0, "arrows outside — no arc between the sides");
+        // 3. радиус: подпись внутрь — стрелка изнутри (линия от центра)
+        var rd = new Parametric3D.Model.Drawing.DrawingDim { View = "front", Kind = "rad", X1 = 28, Y1 = 18, X2 = 5, Y2 = 30, Arrows = 2 };
+        dw.Change(() => d.Dims.Add(rd));
+        var rc = S(28, 18); var rcv = new OpenTK.Mathematics.Vector2d(rc.X, rc.Y); double rs = 5 * d.Xf["front"].S;
+        Require(!d.Hit[rd].Any(sg => DistC(rcv, sg) < 0.05), "radius, arrow outside: no line from the centre");
+        d.MoveDim(rd, 0, 0, rc.X + rs * 0.4, rc.Y + 0.5); dw.Refresh();
+        Console.WriteLine($"  radius text inside: offset {rd.Offset:0.##}, arrows {rd.Arrows}");
+        Require(rd.Offset < 0 && rd.Arrows == 0 && d.Hit[rd].Any(sg => DistC(rcv, sg) < 0.05), "radius text inside — the arrow from inside (line from the centre)");
+        // диаметр: снаружи — две стрелки, хорды через центр нет; внутри — хорда через центр
+        var dd = new Parametric3D.Model.Drawing.DrawingDim { View = "front", Kind = "dia", X1 = 28, Y1 = 18, X2 = 5, Y2 = 30, Arrows = 2 };
+        dw.Change(() => { d.Dims.Remove(rd); d.Dims.Add(dd); });
+        var ds = d.Hit[dd]; var u = new OpenTK.Mathematics.Vector2d(Math.Cos(30 * Math.PI / 180), Math.Sin(30 * Math.PI / 180));
+        double far = ds.Max(sg => Math.Max(OpenTK.Mathematics.Vector2d.Dot(new OpenTK.Mathematics.Vector2d(sg.X1, sg.Y1) - rcv, u), OpenTK.Mathematics.Vector2d.Dot(new OpenTK.Mathematics.Vector2d(sg.X2, sg.Y2) - rcv, u)));
+        double near = ds.Min(sg => Math.Min(OpenTK.Mathematics.Vector2d.Dot(new OpenTK.Mathematics.Vector2d(sg.X1, sg.Y1) - rcv, u), OpenTK.Mathematics.Vector2d.Dot(new OpenTK.Mathematics.Vector2d(sg.X2, sg.Y2) - rcv, u)));
+        Console.WriteLine($"  diameter outside: along the line {near:0.##}…{far:0.##} (r {rs:0.##}), through the centre {ds.Any(sg => DistC(rcv, sg) < 0.05)}");
+        Require(!ds.Any(sg => DistC(rcv, sg) < 0.05) && near < -rs - 1 && far > rs + 1, "diameter, arrows outside on both sides, no chord through the centre");
+        if (Environment.GetEnvironmentVariable("P3D_SHOTDIR") is { } shots171b) { Dispatcher.UIThread.RunJobs(); dw.CaptureRenderedFrame()?.Save(Path.Combine(shots171b, "k171_dia.png")); }
+        dw.Change(() => dd.Arrows = 1);
+        Require(d.Hit[dd].Any(sg => DistC(rcv, sg) < 0.05), "diameter, arrows inside — the line through the centre");
+    }
+    finally { dw.Close(); w.Close(); }
+});
+
+// k171 (п. 4): эскиз — стрелки диаметра снаружи, радиус со стрелкой изнутри, диаметр с подписью внутри — обе стрелки.
+Check("UI-SKETCH-K171", () =>
+{
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var w = Open(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp()); Run();
+    var vp = w.ViewPort; var sk = vp.ActiveSketch!;
+    vp.EnterSketch(sk, animate: false); Run();
+    var circ = sk.AddEntity(new SkCircle(new SkPoint(60, 0), 10));
+    var dd = sk.AddDimension(DimensionType.Diameter, 20, circ); dd.Locked = true; dd.Formula = "20";
+    for (int i = 0; i < 40 && vp.PixelSize > 0.03; i++) { var cp = vp.Project(sk.Plane.ToWorld(new Vector2d(60, 0)))!.Value; vp.Camera.Zoom(1, (int)(cp.X * vp.Scaling), (int)(cp.Y * vp.Scaling)); }
+    Run();
+    dd.TextOffset = new Vector2d(16, 12); dd.Arrows = ArrowPlacement.Outside;
+    vp.InvalidateOverlay(); vp.BuildOverlayForTest();
+    Require(SketchDimensions.LastDiameterText == "outside", "diameter, arrows outside: " + SketchDimensions.LastDiameterText);
+    dd.TextOffset = new Vector2d(4, 3); dd.Arrows = ArrowPlacement.Auto; dd.SingleArrow = true;
+    vp.InvalidateOverlay(); vp.BuildOverlayForTest();
+    Require(SketchDimensions.LastRadialArrows == 2, "diameter with the text inside — both arrows even with «one arrow»: " + SketchDimensions.LastRadialArrows);
+    sk.Dimensions.Remove(dd);
+    var rd = sk.AddDimension(DimensionType.Radius, 10, circ); rd.Locked = true; rd.Formula = "10";
+    rd.TextOffset = new Vector2d(16, 12); rd.Arrows = ArrowPlacement.Inside;
+    vp.InvalidateOverlay(); vp.BuildOverlayForTest();
+    Require(SketchDimensions.LastDiameterText == "radius-inside", "radius, arrow inside with the text outside: " + SketchDimensions.LastDiameterText);
+    w.FinishSketch(); Run();
+});
+
 // k170 (замечание 05.11, 18:34): окно создания документа — поля одной ширины по одному краю (п. 1); куб вида окна детали у
 // изометрии, на месте при повороте (п. 2); поля панели не перестраиваются под курсором ввода (п. 3); допуски — дефис вместо
 // квадратика, строки не пересекаются (п. 4); подписи панели не под полями (п. 5); угловой размер — выносные от сторон,

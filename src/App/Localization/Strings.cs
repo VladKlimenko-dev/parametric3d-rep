@@ -1756,5 +1756,8 @@ public static class Strings
         ["Щелчок по кнопке — красным на листе элементы детали, у которых не указан размер; курсор на красной линии — какого размера не хватает."] = "Click the button to show in red the part elements whose dimension is missing; hover a red line to see which dimension is missing.",
         ["Не указан размер {0}"] = "Missing dimension {0}",
         ["щелчок в списке у кнопки проверки ставит его"] = "click it in the list under the check button to place it",
+        ["снаружи"] = "outside",
+        ["внутри"] = "inside",
+        ["Стрелки: внутри ↔ снаружи"] = "Arrows: inside ↔ outside",
     };
 }

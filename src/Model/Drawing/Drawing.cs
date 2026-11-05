@@ -1264,6 +1264,8 @@ public sealed class DrawingDocument
             // k161: длина выноски — до курсора (без ограничения): Offset = выноска / 0.6
             double r = d.X2 * Xf[d.View].S, dist = Math.Sqrt((sx - c.X) * (sx - c.X) + (sy - c.Y) * (sy - c.Y));
             if (dist > r + 1) d.Offset = Math.Max(2, dist - r) / 0.6;
+            // k171 (п. 3): подпись внутрь окружности — полка внутри, стрелки внутри (у радиуса — изнутри, у диаметра — обе)
+            else if (!RadArrowsOff && dist < r - 1) { d.Offset = -Math.Max(0.5, r - dist) / 0.6; if (d.Arrows == 2) d.Arrows = 0; }
             return;
         }
         var (_, _, u0, n, h1, h2, L) = DimFrame(d);
@@ -1308,19 +1310,54 @@ public sealed class DrawingDocument
             if (r > t1) { var (x0, y0) = At(a, t1); var (x, y) = At(a, r + 2); g.Line(x0, y0, x, y); }
             else if (r < t0) { var (x0, y0) = At(a, Math.Max(0, r - 2)); var (x, y) = At(a, t0); g.Line(x0, y0, x, y); }
         }
-        // подпись: середина дуги или перенесённая (TextShift — градусы от середины); за сторонами — дуга продлевается
+        // подпись: середина дуги или перенесённая (TextShift — градусы от середины)
         double am = a0 + sweep / 2 + (AngTextFreeOff ? 0 : d.TextShift * Math.PI / 180);
-        double e0 = Math.Min(a0, am - 0.06), e1 = Math.Max(a0 + sweep, am + 0.06);
-        if (AngTextFreeOff || Math.Abs(d.TextShift) < 1e-9) { e0 = a0; e1 = a0 + sweep; }
-        int n = Math.Max(8, (int)((e1 - e0) * r / 1.5));
-        var pts = Enumerable.Range(0, n + 1).Select(k => At(e0 + (e1 - e0) * k / n, r)).ToList();
-        g.Polylines.Add(new SheetPolyline(pts, LineKind.Thin));
-        Arrow(g, At(a0, r), (Math.Sin(a0), -Math.Cos(a0)));
-        Arrow(g, At(a0 + sweep, r), (-Math.Sin(a0 + sweep), Math.Cos(a0 + sweep)));
+        double a1 = a0 + sweep;
+        // k171 (замечание 05.11, 20:10, п. 2): СТРЕЛКИ ВНУТРИ / СНАРУЖИ, как у углового размера эскиза: внутри — дуга между
+        // сторонами, стрелки на сторонах; снаружи — дуги между сторонами нет, за каждой стороной хвост, стрелки остриями к
+        // сторонам. По месту — снаружи, если дуга короче двух стрелок. Мутация P3D_ANGARROWS=0 — всегда внутри (прежнее).
+        bool outArrows = !AngArrowsOff && (d.Arrows == 2 || d.Arrows == 0 && sweep * r < 2 * ArrowL + 1);
+        // k171 (п. 1): подпись за сторонами угла — ВЫНОСКА: дуга продлевается за ближнюю сторону на 5 мм, оттуда горизонтальная
+        // полка, значение над полкой (прежде дуга продлевалась до подписи и перечёркивала её). Мутация P3D_ANGLEADER=0.
+        double outBy = am < a0 ? a0 - am : am > a1 ? am - a1 : 0;
+        bool leader = !AngTextFreeOff && !AngLeaderOff && outBy * r > 2;
+        double ext = 5 / Math.Max(r, 1e-6), tail = (ArrowL + 3) / Math.Max(r, 1e-6);
+        void Arc(double f, double t)
+        {
+            int n = Math.Max(8, (int)(Math.Abs(t - f) * r / 1.5));
+            g.Polylines.Add(new SheetPolyline(Enumerable.Range(0, n + 1).Select(k => At(f + (t - f) * k / n, r)).ToList(), LineKind.Thin));
+        }
+        if (outArrows)
+        {
+            Arc(a0 - tail, a0); Arc(a1, a1 + tail);
+            Arrow(g, At(a0, r), (-Math.Sin(a0), Math.Cos(a0)));
+            Arrow(g, At(a1, r), (Math.Sin(a1), -Math.Cos(a1)));
+        }
+        else
+        {
+            double e0 = a0, e1 = a1;
+            if (!leader && !AngTextFreeOff && Math.Abs(d.TextShift) > 1e-9) { e0 = Math.Min(a0, am - 0.06); e1 = Math.Max(a1, am + 0.06); }
+            Arc(e0, e1);
+            Arrow(g, At(a0, r), (Math.Sin(a0), -Math.Cos(a0)));
+            Arrow(g, At(a1, r), (-Math.Sin(a1), Math.Cos(a1)));
+        }
+        if (leader)
+        {
+            bool atStart = am < a0;
+            double from = atStart ? a0 - (outArrows ? tail : 0) : a1 + (outArrows ? tail : 0), to = atStart ? from - ext : from + ext;
+            Arc(from, to);
+            var (ex, ey) = At(to, r);
+            double tw = DimTextW(d, text), sd = ex >= c.X ? 1 : -1;
+            g.Line(ex, ey, ex + sd * (tw + 2), ey);
+            DimText(g, d, new Vector2d(ex + sd * (tw + 2) / 2, ey + 1), 0, text);
+            return;
+        }
         var (tx, ty) = At(am, r + 1.5);
         double ta = am * 180 / Math.PI - 90; ta = ((ta % 360) + 360) % 360; if (ta > 90 && ta < 270) ta -= 180;
         DimText(g, d, new Vector2d(tx, ty), ta, text);
     }
+    static readonly bool AngArrowsOff = Environment.GetEnvironmentVariable("P3D_ANGARROWS") == "0";
+    static readonly bool AngLeaderOff = Environment.GetEnvironmentVariable("P3D_ANGLEADER") == "0";
     static readonly bool AngExtOff = Environment.GetEnvironmentVariable("P3D_ANGEXT") == "0";
     static readonly bool AngTextFreeOff = Environment.GetEnvironmentVariable("P3D_ANGTEXTFREE") == "0";
 
@@ -1568,9 +1605,18 @@ public sealed class DrawingDocument
         double tw = DimTextW(d, text);
         // k165: у пронумерованного центра диаметр — на полке с «℄N» (как на чертеже-образце), а не линией через центр
         bool numbered = !CenterNosOff && CentreNo(d.View, new Vector2d(c.X, c.Y)) != null;
-        if (d.Kind == "dia" && r > 12 && d.Arrows != 2 && !numbered)
+        double lead = d.Offset > 0 ? 0.6 * d.Offset : d.Offset < 0 && !RadArrowsOff ? 0.6 * d.Offset : 6;
+        // k171 (замечание 05.11, 20:10, п. 3): СТРЕЛКИ ВНУТРИ / СНАРУЖИ. Подпись внутри окружности (Offset < 0: полка на
+        // 0.6·|Offset| ближе к центру от окружности) — стрелки внутри. Радиус: внутри — линия от центра и стрелка изнутри;
+        // снаружи — стрелка снаружи остриём к центру, линии от центра нет. Диаметр: внутри — линия через центр и две стрелки;
+        // снаружи — две стрелки снаружи остриями к окружности, хорды через центр нет. По месту (0): радиус — внутри, диаметр —
+        // внутри у большой окружности без номера центра, иначе снаружи. Мутация P3D_RADARROWS=0 — прежнее.
+        bool textIn = !RadArrowsOff && lead < 0 && -lead < r - 0.5;
+        bool inside = RadArrowsOff ? d.Kind == "rad" || d.Kind == "dia" && r > 12 && d.Arrows != 2 && !numbered
+            : textIn || d.Arrows == 1 || d.Arrows == 0 && (d.Kind == "rad" || r > 12 && !numbered);
+        if (d.Kind == "dia" && inside && (RadArrowsOff || textIn || d.Arrows == 0))
         {
-            // большая окружность: размерная линия через центр, стрелки изнутри на окружность
+            // линия через центр, стрелки изнутри на окружность; подпись — вдоль линии (там, куда перенесена, или посередине)
             var p2 = (c.X - r * dir.Item1, c.Y - r * dir.Item2);
             g.Line(p.Item1, p.Item2, p2.Item1, p2.Item2);
             Arrow(g, p, dir); Arrow(g, p2, (-dir.Item1, -dir.Item2));
@@ -1578,33 +1624,56 @@ public sealed class DrawingDocument
             ang = ((ang + 180) % 360 + 360) % 360 - 180;   // k164: угол выноски 315° → −45° (прежде текст выходил вверх ногами)
             if (ang > 90.0001 || ang <= -90) { ang += ang > 0 ? -180 : 180; up = (-up.Item1, -up.Item2); }
             // k164: текст — посередине между центром и стрелкой (прежде — над центром: диаметры одного центра ложились друг на друга)
-            double tf = CenterPrioOff ? 0 : 0.5;
+            double tf = textIn ? Math.Clamp((r + lead) / r, 0, 1) : CenterPrioOff ? 0 : 0.5;
             DimText(g, d, new Vector2d(c.X + dir.Item1 * r * tf + up.Item1, c.Y + dir.Item2 * r * tf + up.Item2), ang, text);
             return;
         }
+        if (lead < 0 && !textIn) lead = 6;
         // выноска с полкой: от окружности наружу 6 мм (k159: у диаметра и радиуса Offset — длина выноски: 0.6·Offset, по
         // умолчанию 10 → 6 мм; раскладка удлиняет выноску, если ни один угол не свободен), полка по длине текста
-        double lead = d.Offset > 0 ? 0.6 * d.Offset : 6;
         var k = (p.Item1 + dir.Item1 * lead, p.Item2 + dir.Item2 * lead);
         double side = dir.Item1 >= 0 ? 1 : -1;
+        if (textIn) side = -side;   // полка внутри — к центру
         // k164 (п. 5): номер центра «℄N» под полкой
         int? cno = CentreNo(d.View, new Vector2d(c.X, c.Y));
         if (cno is { } no) tw = Math.Max(tw, SignW(no, TextH));
         var e = (k.Item1 + side * (tw + 2), k.Item2);
         if (cno is { } no2) CenterSign(g, (k.Item1 + e.Item1) / 2 - SignW(no2, TextH) / 2, k.Item2 - 1.5 - TextH, TextH, no2);
-        if (d.Kind == "rad")
+        if (d.Kind == "dia" && inside)
         {
-            // радиус: линия от центра через дугу, стрелка на дуге (остриём наружу)
-            g.Poly(LineKind.Thin, (c.X, c.Y), p, k, e);
+            // диаметр, стрелки внутри, подпись снаружи: линия через центр, две стрелки, от стрелки — выноска к полке
+            var p2 = (c.X - r * dir.Item1, c.Y - r * dir.Item2);
+            g.Poly(LineKind.Thin, p2, p, k, e);
+            Arrow(g, p, dir); Arrow(g, p2, (-dir.Item1, -dir.Item2));
+        }
+        else if (d.Kind == "rad" && inside)
+        {
+            // радиус изнутри: линия от центра до дуги, стрелка на дуге (остриём наружу); полка — снаружи или внутри
+            if (textIn) { g.Poly(LineKind.Thin, (c.X, c.Y), p); g.Poly(LineKind.Thin, k, e); }
+            else g.Poly(LineKind.Thin, (c.X, c.Y), p, k, e);
             Arrow(g, p, dir);
         }
-        else
+        else if (d.Kind == "rad")
         {
+            // радиус снаружи: стрелка снаружи остриём к центру, линии от центра нет
             g.Poly(LineKind.Thin, p, k, e);
             Arrow(g, p, (-dir.Item1, -dir.Item2));
         }
+        else
+        {
+            // диаметр снаружи: две стрелки снаружи остриями к окружности, у второй — короткий хвост; хорды через центр нет
+            var p2 = (c.X - r * dir.Item1, c.Y - r * dir.Item2);
+            g.Poly(LineKind.Thin, p, k, e);
+            Arrow(g, p, (-dir.Item1, -dir.Item2));
+            if (!RadArrowsOff)
+            {
+                g.Line(p2.Item1, p2.Item2, p2.Item1 - dir.Item1 * (ArrowL + 3), p2.Item2 - dir.Item2 * (ArrowL + 3));
+                Arrow(g, p2, dir);
+            }
+        }
         DimText(g, d, new Vector2d((k.Item1 + e.Item1) / 2, k.Item2 + 1), 0, text);
     }
+    static readonly bool RadArrowsOff = Environment.GetEnvironmentVariable("P3D_RADARROWS") == "0";
 
     // ------------------------------------------------------------------ обозначения
 
@@ -2013,6 +2082,7 @@ public sealed class DrawingDocument
             foreach (var d in sk.Dimensions)
             {
                 if (!d.Enabled || d.Reference) continue;
+                if (d.IsDefault && !DrawingCheck.StrongOff) continue;   // k171 (п. 5): слабые размеры эскиза на чертёж не переносятся
                 var dd = FromSketchDim(sk, d, added);
                 if (dd == null) continue;
                 dd.Model = true; dd.Arrange = true;

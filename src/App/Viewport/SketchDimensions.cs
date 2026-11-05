@@ -457,12 +457,18 @@ public static class SketchDimensions
         // которая на экране могла быть вертикальной)
         var (hR, hU) = ScreenAxes();
 
+        // k171 (замечание 05.11, 20:10, п. 4): СТРЕЛКИ ВНУТРИ / СНАРУЖИ У РАДИУСА И ДИАМЕТРА (прежде переключатель на них не
+        // действовал): диаметр — две стрелки внутри (линия через центр) или две снаружи (без хорды через центр, выноска от
+        // хвоста стрелки); радиус — стрелка изнутри (линия от центра) или снаружи (без линии от центра). Подпись внутри
+        // окружности — стрелки внутри, у диаметра обе, и при «одной стрелке». Мутация P3D_SKRADARROWS=0 — прежнее.
+        bool arrowsOut = !RadArrowsOff && d.Arrows == ArrowPlacement.Outside, arrowsIn = !RadArrowsOff && d.Arrows == ArrowPlacement.Inside;
         if (!outside)
         {
             Vector2d from = diameter ? center - dir * radius : center;
             Line(batch, plane, style, from, onCurve);
             Arrow(batch, plane, style, onCurve, -dir, px);
-            if (diameter && !d.SingleArrow) Arrow(batch, plane, style, from, dir, px);
+            if (diameter && (!d.SingleArrow || !RadArrowsOff)) Arrow(batch, plane, style, from, dir, px);
+            LastRadialArrows = diameter && (!d.SingleArrow || !RadArrowsOff) ? 2 : 1; LastDiameterText = diameter ? "inside" : "radius";
 
             Vector2d at = diameter ? center : center + dir * (radius * 0.5);
             // k105 (замечание 4): внутренний диаметр — подпись ВДОЛЬ размерной линии, там, куда её утащили (между центром и
@@ -482,6 +488,33 @@ public static class SketchDimensions
         // Подпись снаружи.
         Vector2d textAt = center + dir * reach;
 
+        if (diameter && arrowsOut)
+        {
+            // две стрелки снаружи, остриями к окружности; хорды через центр нет; выноска — от хвоста стрелки к подписи
+            double al = ArrowLengthPx * px; var opp = center - dir * radius;
+            Arrow(batch, plane, style, onCurve, dir, px);
+            Arrow(batch, plane, style, opp, -dir, px);
+            Line(batch, plane, style, opp - dir * al, opp - dir * (al * 2.2));
+            Vector2d sd0 = hR; if (Vector2d.Dot(dir, sd0) < 0) sd0 = -sd0;
+            Line(batch, plane, style, onCurve + dir * al, textAt);
+            Line(batch, plane, style, textAt, textAt + sd0 * (textHalf * 2 + 4 * px));
+            Text(batch, plane, style, d, textAt + sd0 * (textHalf + 2 * px), sd0, new Vector2d(-sd0.Y, sd0.X), px);
+            LastDiameterText = "outside";
+            return;
+        }
+        if (!diameter && arrowsIn)
+        {
+            // радиус: линия от центра, стрелка изнутри на кривой; выноска наружу к полке под подписью
+            Line(batch, plane, style, center, onCurve);
+            Arrow(batch, plane, style, onCurve, -dir, px);
+            Vector2d sd1 = hR; if (Vector2d.Dot(dir, sd1) < 0) sd1 = -sd1;
+            Vector2d st = textAt - dir * textHalf;
+            Line(batch, plane, style, onCurve, st);
+            Line(batch, plane, style, st, st + sd1 * (textHalf * 2));
+            Text(batch, plane, style, d, st + sd1 * textHalf, sd1, new Vector2d(-sd1.Y, sd1.X), px);
+            LastDiameterText = "radius-inside";
+            return;
+        }
         if (diameter)
         {
             // Линия замера остаётся внутри окружности, наружу уходит
@@ -535,6 +568,9 @@ public static class SketchDimensions
     static readonly bool ArcExtOff = Environment.GetEnvironmentVariable("P3D_ARCEXT") == "0";
     static readonly bool DiaInsideOff = Environment.GetEnvironmentVariable("P3D_DIAINTEXT") == "0";
     static readonly bool DiaShelfOff = Environment.GetEnvironmentVariable("P3D_DIAOUTSHELF") == "0";
+    static readonly bool RadArrowsOff = Environment.GetEnvironmentVariable("P3D_SKRADARROWS") == "0";
+    /// <summary>Разбор (k171): стрелок у последнего радиального размера с подписью внутри.</summary>
+    public static int LastRadialArrows;
     /// <summary>Разбор (k105): как нарисована подпись последнего диаметра — «along» (вдоль линии), «shelf» (на полке).</summary>
     public static string LastDiameterText = "";
     /// <summary>Разбор: угол продолжения дуги у последнего радиального размера (0 — не рисовалось).</summary>

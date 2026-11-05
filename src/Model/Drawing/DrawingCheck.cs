@@ -24,7 +24,9 @@ public static class DrawingCheck
         var live = part.Features.Where(f => !f.Suppressed).ToList();
         var sketchIds = new HashSet<uint>(live.SelectMany(f => f.ConsumedSketchIds()));
         foreach (var sk in part.Sketches.Where(s => sketchIds.Contains(s.Id)))
-            foreach (var dm in sk.Dimensions.Where(x => x.Enabled && !x.Reference))
+            // k171 (замечание 05.11, 20:10, п. 5): только сильные (заданные) размеры эскиза; слабые (серые, IsDefault) — не размер
+            // детали: у эскизов вырезов они произвольны. Мутация P3D_CHECKSTRONG=0 — и слабые (прежнее).
+            foreach (var dm in sk.Dimensions.Where(x => x.Enabled && !x.Reference && (!x.IsDefault || StrongOff)))
             {
                 char kind = dm.Type switch
                 {
@@ -64,6 +66,7 @@ public static class DrawingCheck
         if (kind == 'A') return new DrawingDim { Kind = "ang", X2 = 0, Y2 = v }.Caption(d.UsesComma).TrimEnd('°');
         return d.FormatLength(v);
     }
+    internal static readonly bool StrongOff = Environment.GetEnvironmentVariable("P3D_CHECKSTRONG") == "0";
     static readonly bool UnitsOff = Environment.GetEnvironmentVariable("P3D_CHECKUNITS") == "0";
 
     /// <summary>
