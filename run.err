@@ -1,0 +1,1072 @@
+== STEP s104 0
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.03)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.39, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.736, 0.675, -0.052) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.44, 0.891, -0.111) NA (-0.695, 0.682, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR edge (-17.7, 22.1, 0)->(0.3, 40.5, 0) sigma -1
+DR edge (-35.8, 3.7, 0)->(-17.7, 22.1, 0) sigma -1
+DR open: convexity probe at 0.25 p (-13.218, 26.699, 0) nA (-0.711, 0.698, -0.086) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-8.703, 31.303, 0) nA (-0.707, 0.694, -0.135) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-4.188, 35.906, 0) nA (-0.702, 0.689, -0.182) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: chamfer joint 0: side point passes onto the next face at t 0.21671165 (end 0), seam point (-17.5262, 22.1962, -2.0585)
+DR open: chamfer joint 0 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.91E-011 at t 0.221688 (Δ 25.7926) widths 2.06/2.06 Lp 29.399
+DR open: sigma -1 shapes ParamSurf/Plane ends joint/ParamSurf t [-1.8055, 27.593] contacts A [-5.52647E-14, 25.7879] B [-5.52647E-14, 25.5052] Δ 25.7926
+DR open: convexity probe at 0.25 p (-31.279, 8.285, 0) nA (-0.713, 0.699, -0.054) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-26.764, 12.889, 0) nA (-0.713, 0.699, -0.048) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-22.248, 17.492, 0) nA (-0.713, 0.7, -0.043) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: chamfer joint 1: side point off the seam by 3.8E-003, no crossing on this link (the other one switches)
+DR open: chamfer joint 1 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.43E-014 at t 4.52404 (Δ 25.7926) widths 2.06/2.06 Lp 29.725
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/joint t [-2.1269, 27.598] contacts A [0.288577, 25.7926] B [-0.32138, 25.7926] Δ 25.7926
+DR open: 1 tangent joint(s)
+DR finish: assembled 0.0s
+DR finish: meshed 0.3s
+DR finish: validated 0.9s
+DR finish: volume 0.9s
+DR finish: checked 0.9s
+== REBUILDCHECK s104 0
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.03)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.39, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.736, 0.675, -0.052) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.44, 0.891, -0.111) NA (-0.695, 0.682, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR edge (-17.7, 22.1, 0)->(0.3, 40.5, 0) sigma -1
+DR edge (-35.8, 3.7, 0)->(-17.7, 22.1, 0) sigma -1
+DR open: convexity probe at 0.25 p (-13.218, 26.699, 0) nA (-0.711, 0.698, -0.086) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-8.703, 31.303, 0) nA (-0.707, 0.694, -0.135) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-4.188, 35.906, 0) nA (-0.702, 0.689, -0.182) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: chamfer joint 0: side point passes onto the next face at t 0.21671165 (end 0), seam point (-17.5262, 22.1962, -2.0585)
+DR open: chamfer joint 0 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.91E-011 at t 0.221688 (Δ 25.7926) widths 2.06/2.06 Lp 29.399
+DR open: sigma -1 shapes ParamSurf/Plane ends joint/ParamSurf t [-1.8055, 27.593] contacts A [-5.52647E-14, 25.7879] B [-5.52647E-14, 25.5052] Δ 25.7926
+DR open: convexity probe at 0.25 p (-31.279, 8.285, 0) nA (-0.713, 0.699, -0.054) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-26.764, 12.889, 0) nA (-0.713, 0.699, -0.048) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-22.248, 17.492, 0) nA (-0.713, 0.7, -0.043) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: chamfer joint 1: side point off the seam by 3.8E-003, no crossing on this link (the other one switches)
+DR open: chamfer joint 1 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.43E-014 at t 4.52404 (Δ 25.7926) widths 2.06/2.06 Lp 29.725
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/joint t [-2.1269, 27.598] contacts A [0.288577, 25.7926] B [-0.32138, 25.7926] Δ 25.7926
+DR open: 1 tangent joint(s)
+DR finish: assembled 0.0s
+DR finish: meshed 0.2s
+DR finish: validated 0.8s
+DR finish: volume 0.8s
+DR finish: checked 0.8s
+== REBUILDCHECK END s104 0
+== STEP s104 1
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.034)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.431, 0.896, -0.11) NA (-0.685, 0.692, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.559, 0.548, 0.622)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.52, 0.509, 0.686)
+DR edge (30.7, 12.7, -77.1)->(32.6, -10.3, -77.1) sigma -1
+DR open: convexity probe at 0.25 p (31.206, 6.973, -77.143) nA (0.993, 0.081, 0.086) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.5 p (31.674, 1.205, -77.143) nA (0.996, 0.081, 0.031) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.75 p (32.143, -4.562, -77.143) nA (0.996, 0.081, -0.024) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: table vs formula 4.50E-014 at t 23.3246 (Δ 23.1471) widths 1.58/1.58 Lp 29.467
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/ParamSurf t [-3.16, 26.307] contacts A [-0.0762753, 23.1363] B [-1.58, 24.7271] Δ 23.1471
+DR finish: assembled 0.0s
+DR finish: meshed 0.0s
+DR finish: validated 0.7s
+DR finish: volume 0.7s
+DR finish: checked 0.7s
+== REBUILDCHECK s104 1
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.03)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.39, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.736, 0.675, -0.052) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.44, 0.891, -0.111) NA (-0.695, 0.682, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR edge (-17.7, 22.1, 0)->(0.3, 40.5, 0) sigma -1
+DR edge (-35.8, 3.7, 0)->(-17.7, 22.1, 0) sigma -1
+DR open: convexity probe at 0.25 p (-13.218, 26.699, 0) nA (-0.711, 0.698, -0.086) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-8.703, 31.303, 0) nA (-0.707, 0.694, -0.135) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-4.188, 35.906, 0) nA (-0.702, 0.689, -0.182) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: chamfer joint 0: side point passes onto the next face at t 0.21671165 (end 0), seam point (-17.5262, 22.1962, -2.0585)
+DR open: chamfer joint 0 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.91E-011 at t 0.221688 (Δ 25.7926) widths 2.06/2.06 Lp 29.399
+DR open: sigma -1 shapes ParamSurf/Plane ends joint/ParamSurf t [-1.8055, 27.593] contacts A [-5.52647E-14, 25.7879] B [-5.52647E-14, 25.5052] Δ 25.7926
+DR open: convexity probe at 0.25 p (-31.279, 8.285, 0) nA (-0.713, 0.699, -0.054) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-26.764, 12.889, 0) nA (-0.713, 0.699, -0.048) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-22.248, 17.492, 0) nA (-0.713, 0.7, -0.043) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: chamfer joint 1: side point off the seam by 3.8E-003, no crossing on this link (the other one switches)
+DR open: chamfer joint 1 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.43E-014 at t 4.52404 (Δ 25.7926) widths 2.06/2.06 Lp 29.725
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/joint t [-2.1269, 27.598] contacts A [0.288577, 25.7926] B [-0.32138, 25.7926] Δ 25.7926
+DR open: 1 tangent joint(s)
+DR finish: assembled 0.0s
+DR finish: meshed 0.2s
+DR finish: validated 0.8s
+DR finish: volume 0.8s
+DR finish: checked 0.8s
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.034)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.431, 0.896, -0.11) NA (-0.685, 0.692, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.559, 0.548, 0.622)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.52, 0.509, 0.686)
+DR edge (30.7, 12.7, -77.1)->(32.6, -10.3, -77.1) sigma -1
+DR open: convexity probe at 0.25 p (31.206, 6.973, -77.143) nA (0.993, 0.081, 0.086) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.5 p (31.674, 1.205, -77.143) nA (0.996, 0.081, 0.031) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.75 p (32.143, -4.562, -77.143) nA (0.996, 0.081, -0.024) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: table vs formula 4.50E-014 at t 23.3246 (Δ 23.1471) widths 1.58/1.58 Lp 29.467
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/ParamSurf t [-3.16, 26.307] contacts A [-0.0762753, 23.1363] B [-1.58, 24.7271] Δ 23.1471
+DR finish: assembled 0.0s
+DR finish: meshed 0.0s
+DR finish: validated 0.7s
+DR finish: volume 0.7s
+DR finish: checked 0.7s
+== REBUILDCHECK END s104 1
+== STEP s104 2
+DR build declined: not a straight edge
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table vs formula 2.58E-011 at t 3.92968 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: generic parameter rejected: ends 1.04E-014 NaN; tol edge 0.0E+000 vertex 0.0E+000; curve ProcCurve3; faces NurbsSurface/SectionSurface; guarantee ExactAnalytic
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 0.018177387
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 25.734239
+DR open: table vs formula 3.44E-011 at t 25.7386 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: generic parameter rejected: ends 1.04E-014 NaN; tol edge 0.0E+000 vertex 0.0E+000; curve ProcCurve3; faces NurbsSurface/SectionSurface; guarantee ExactAnalytic
+DR declined: not a straight edge | open curved: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+== REBUILDCHECK s104 2
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.03)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.39, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.736, 0.675, -0.052) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.44, 0.891, -0.111) NA (-0.695, 0.682, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR edge (-17.7, 22.1, 0)->(0.3, 40.5, 0) sigma -1
+DR edge (-35.8, 3.7, 0)->(-17.7, 22.1, 0) sigma -1
+DR open: convexity probe at 0.25 p (-13.218, 26.699, 0) nA (-0.711, 0.698, -0.086) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-8.703, 31.303, 0) nA (-0.707, 0.694, -0.135) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-4.188, 35.906, 0) nA (-0.702, 0.689, -0.182) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: chamfer joint 0: side point passes onto the next face at t 0.21671165 (end 0), seam point (-17.5262, 22.1962, -2.0585)
+DR open: chamfer joint 0 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.91E-011 at t 0.221688 (Δ 25.7926) widths 2.06/2.06 Lp 29.399
+DR open: sigma -1 shapes ParamSurf/Plane ends joint/ParamSurf t [-1.8055, 27.593] contacts A [-5.52647E-14, 25.7879] B [-5.52647E-14, 25.5052] Δ 25.7926
+DR open: convexity probe at 0.25 p (-31.279, 8.285, 0) nA (-0.713, 0.699, -0.054) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-26.764, 12.889, 0) nA (-0.713, 0.699, -0.048) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-22.248, 17.492, 0) nA (-0.713, 0.7, -0.043) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: chamfer joint 1: side point off the seam by 3.8E-003, no crossing on this link (the other one switches)
+DR open: chamfer joint 1 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.43E-014 at t 4.52404 (Δ 25.7926) widths 2.06/2.06 Lp 29.725
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/joint t [-2.1269, 27.598] contacts A [0.288577, 25.7926] B [-0.32138, 25.7926] Δ 25.7926
+DR open: 1 tangent joint(s)
+DR finish: assembled 0.0s
+DR finish: meshed 0.2s
+DR finish: validated 0.8s
+DR finish: volume 0.8s
+DR finish: checked 0.8s
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.034)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.431, 0.896, -0.11) NA (-0.685, 0.692, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.559, 0.548, 0.622)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.52, 0.509, 0.686)
+DR edge (30.7, 12.7, -77.1)->(32.6, -10.3, -77.1) sigma -1
+DR open: convexity probe at 0.25 p (31.206, 6.973, -77.143) nA (0.993, 0.081, 0.086) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.5 p (31.674, 1.205, -77.143) nA (0.996, 0.081, 0.031) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.75 p (32.143, -4.562, -77.143) nA (0.996, 0.081, -0.024) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: table vs formula 4.50E-014 at t 23.3246 (Δ 23.1471) widths 1.58/1.58 Lp 29.467
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/ParamSurf t [-3.16, 26.307] contacts A [-0.0762753, 23.1363] B [-1.58, 24.7271] Δ 23.1471
+DR finish: assembled 0.0s
+DR finish: meshed 0.0s
+DR finish: validated 0.7s
+DR finish: volume 0.7s
+DR finish: checked 0.7s
+DR build declined: not a straight edge
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table vs formula 2.58E-011 at t 3.92968 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: generic parameter rejected: ends 1.04E-014 NaN; tol edge 0.0E+000 vertex 0.0E+000; curve ProcCurve3; faces NurbsSurface/SectionSurface; guarantee ExactAnalytic
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 0.018177387
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 25.734239
+DR open: table vs formula 3.44E-011 at t 25.7386 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: generic parameter rejected: ends 1.04E-014 NaN; tol edge 0.0E+000 vertex 0.0E+000; curve ProcCurve3; faces NurbsSurface/SectionSurface; guarantee ExactAnalytic
+DR declined: not a straight edge | open curved: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+== REBUILDCHECK END s104 2
+== STEP s104 3
+DR face #d000000001/loft:side[1] NI (0.913, 0.407, 0.02) NA (0.79, 0.609, -0.071)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.759, -0.648, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.969, 0.241, 0.047)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.24, 0.967, 0.087)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.968, -0.24, 0.067)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.514, 0.504, 0.694)
+DR face #d000000006/chamfer:face NI (0.714, 0.063, -0.697) NA (0.752, 0.071, -0.655)
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.789, 0.608, 0.092)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.431, 0.896, -0.11) NA (-0.08, 0.981, -0.176)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.241, -0.97, 0.026)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.515, 0.504, 0.694)
+DR face #d00000000a/round:face NI (-0.67, 0.655, 0.35) NA (-0.714, 0.698, -0.059)
+DR face #d00000000a/round:cap[1] NI (-0.765, -0.641, 0.058) NA (-0.709, -0.705, 0.009)
+DR edge (13.1, 27.7, -77.1)->(29, 14.2, -77.1) sigma -1
+DR open: convexity probe at 0.25 p (17.084, 24.345, -77.143) nA (-0, -0, -1) nB (0.648, 0.762, 0) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.5 p (21.068, 20.959, -77.143) nA (-0, -0, -1) nB (0.647, 0.762, 0.019) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.75 p (25.052, 17.574, -77.143) nA (-0, -0, -1) nB (0.647, 0.761, 0.039) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: strip of #d000000001/loft:side[0] (width 4.04) meets LineCurve3 (19.515, 15.604, 0)->(30.511, 12.799, -75.579) at (30.167, 12.887, -73.217), distance 3.935
+DR open: convexity probe at 0.25 p (17.084, 24.345, -77.143) nA (-0, -0, -1) nB (0.648, 0.762, 0) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.5 p (21.068, 20.959, -77.143) nA (-0, -0, -1) nB (0.647, 0.762, 0.019) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.75 p (25.052, 17.574, -77.143) nA (-0, -0, -1) nB (0.647, 0.761, 0.039) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: strip of #d000000001/loft:side[0] (width 4.04) meets LineCurve3 (19.515, 15.604, 0)->(30.511, 12.799, -75.579) at (30.167, 12.887, -73.217), distance 3.935
+DR declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only) | curved chamfer: open curved: another edge of the face in the blend strip | cavity: cavity: the cavity body is not valid
+== REBUILDCHECK s104 3
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.03)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.39, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.736, 0.675, -0.052) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.44, 0.891, -0.111) NA (-0.695, 0.682, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR edge (-17.7, 22.1, 0)->(0.3, 40.5, 0) sigma -1
+DR edge (-35.8, 3.7, 0)->(-17.7, 22.1, 0) sigma -1
+DR open: convexity probe at 0.25 p (-13.218, 26.699, 0) nA (-0.711, 0.698, -0.086) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-8.703, 31.303, 0) nA (-0.707, 0.694, -0.135) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-4.188, 35.906, 0) nA (-0.702, 0.689, -0.182) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: chamfer joint 0: side point passes onto the next face at t 0.21671165 (end 0), seam point (-17.5262, 22.1962, -2.0585)
+DR open: chamfer joint 0 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.91E-011 at t 0.221688 (Δ 25.7926) widths 2.06/2.06 Lp 29.399
+DR open: sigma -1 shapes ParamSurf/Plane ends joint/ParamSurf t [-1.8055, 27.593] contacts A [-5.52647E-14, 25.7879] B [-5.52647E-14, 25.5052] Δ 25.7926
+DR open: convexity probe at 0.25 p (-31.279, 8.285, 0) nA (-0.713, 0.699, -0.054) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-26.764, 12.889, 0) nA (-0.713, 0.699, -0.048) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-22.248, 17.492, 0) nA (-0.713, 0.7, -0.043) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: chamfer joint 1: side point off the seam by 3.8E-003, no crossing on this link (the other one switches)
+DR open: chamfer joint 1 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.43E-014 at t 4.52404 (Δ 25.7926) widths 2.06/2.06 Lp 29.725
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/joint t [-2.1269, 27.598] contacts A [0.288577, 25.7926] B [-0.32138, 25.7926] Δ 25.7926
+DR open: 1 tangent joint(s)
+DR finish: assembled 0.0s
+DR finish: meshed 0.2s
+DR finish: validated 0.8s
+DR finish: volume 0.8s
+DR finish: checked 0.8s
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.034)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.431, 0.896, -0.11) NA (-0.685, 0.692, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.559, 0.548, 0.622)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.52, 0.509, 0.686)
+DR edge (30.7, 12.7, -77.1)->(32.6, -10.3, -77.1) sigma -1
+DR open: convexity probe at 0.25 p (31.206, 6.973, -77.143) nA (0.993, 0.081, 0.086) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.5 p (31.674, 1.205, -77.143) nA (0.996, 0.081, 0.031) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.75 p (32.143, -4.562, -77.143) nA (0.996, 0.081, -0.024) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: table vs formula 4.50E-014 at t 23.3246 (Δ 23.1471) widths 1.58/1.58 Lp 29.467
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/ParamSurf t [-3.16, 26.307] contacts A [-0.0762753, 23.1363] B [-1.58, 24.7271] Δ 23.1471
+DR finish: assembled 0.0s
+DR finish: meshed 0.0s
+DR finish: validated 0.7s
+DR finish: volume 0.7s
+DR finish: checked 0.7s
+DR build declined: not a straight edge
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table vs formula 2.58E-011 at t 3.92968 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: generic parameter rejected: ends 1.04E-014 NaN; tol edge 0.0E+000 vertex 0.0E+000; curve ProcCurve3; faces NurbsSurface/SectionSurface; guarantee ExactAnalytic
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 0.018177387
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 25.734239
+DR open: table vs formula 3.44E-011 at t 25.7386 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: generic parameter rejected: ends 1.04E-014 NaN; tol edge 0.0E+000 vertex 0.0E+000; curve ProcCurve3; faces NurbsSurface/SectionSurface; guarantee ExactAnalytic
+DR declined: not a straight edge | open curved: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+DR face #d000000001/loft:side[1] NI (0.913, 0.407, 0.02) NA (0.79, 0.609, -0.071)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.759, -0.648, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.969, 0.241, 0.047)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.24, 0.967, 0.087)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.968, -0.24, 0.067)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.514, 0.504, 0.694)
+DR face #d000000006/chamfer:face NI (0.714, 0.063, -0.697) NA (0.752, 0.071, -0.655)
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.789, 0.608, 0.092)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.431, 0.896, -0.11) NA (-0.08, 0.981, -0.176)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.241, -0.97, 0.026)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.515, 0.504, 0.694)
+DR face #d00000000a/round:face NI (-0.67, 0.655, 0.35) NA (-0.714, 0.698, -0.059)
+DR face #d00000000a/round:cap[1] NI (-0.765, -0.641, 0.058) NA (-0.709, -0.705, 0.009)
+DR edge (13.1, 27.7, -77.1)->(29, 14.2, -77.1) sigma -1
+DR open: convexity probe at 0.25 p (17.084, 24.345, -77.143) nA (-0, -0, -1) nB (0.648, 0.762, 0) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.5 p (21.068, 20.959, -77.143) nA (-0, -0, -1) nB (0.647, 0.762, 0.019) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.75 p (25.052, 17.574, -77.143) nA (-0, -0, -1) nB (0.647, 0.761, 0.039) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: strip of #d000000001/loft:side[0] (width 4.04) meets LineCurve3 (19.515, 15.604, 0)->(30.511, 12.799, -75.579) at (30.167, 12.887, -73.217), distance 3.935
+DR open: convexity probe at 0.25 p (17.084, 24.345, -77.143) nA (-0, -0, -1) nB (0.648, 0.762, 0) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.5 p (21.068, 20.959, -77.143) nA (-0, -0, -1) nB (0.647, 0.762, 0.019) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.75 p (25.052, 17.574, -77.143) nA (-0, -0, -1) nB (0.647, 0.761, 0.039) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: strip of #d000000001/loft:side[0] (width 4.04) meets LineCurve3 (19.515, 15.604, 0)->(30.511, 12.799, -75.579) at (30.167, 12.887, -73.217), distance 3.935
+DR declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only) | curved chamfer: open curved: another edge of the face in the blend strip | cavity: cavity: the cavity body is not valid
+== REBUILDCHECK END s104 3
+== STEP s104 4
+DR face #d000000001/loft:side[1] NI (0.913, 0.408, 0.02) NA (0.79, 0.609, -0.071)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.759, -0.648, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (0, -0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.969, 0.241, 0.047)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.24, 0.967, 0.087)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.968, -0.24, 0.067)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.514, 0.504, 0.694)
+DR face #d000000006/chamfer:face NI (0.707, 0.063, -0.705) NA (0.74, 0.06, -0.67)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d00000000a/round:face NI (-0.67, 0.655, 0.351) NA (-0.714, 0.698, -0.059)
+DR face #d000000001/loft:side[0] NI (0.738, 0.674, 0.046) NA (0.789, 0.608, 0.092)
+DR face #d000000001/loft:side[7] NI (-0.433, 0.895, -0.109) NA (-0.08, 0.989, -0.124)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.515, 0.504, 0.694)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.241, -0.97, 0.026)
+DR face #d00000000a/round:cap[1] NI (-0.765, -0.641, 0.058) NA (-0.709, -0.705, 0.009)
+DR face #d00000000f/chamfer:face NI (0.466, 0.542, -0.699) NA (0.471, 0.555, -0.686)
+DR edge (8.1, -6.1, -77.1)->(11.6, 8, -77.1) sigma -1
+DR build declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only)
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (8.935, -2.584, -77.143) nA (-0, -0, -1) nB (-0.966, 0.24, 0.092) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.5 p (9.812, 0.949, -77.143) nA (-0, -0, -1) nB (-0.965, 0.239, 0.109) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.75 p (10.689, 4.482, -77.143) nA (-0, -0, -1) nB (-0.966, 0.24, 0.092) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: table vs formula 4.30E-014 at t 12.3102 (Δ 14.5606) widths 2.254/2.254 Lp 16.966
+DR open: sigma -1 shapes Plane/ParamSurf ends ParamSurf/ParamSurf t [-1.2675, 15.698] contacts A [1.43152E-06, 14.5606] B [-0.248302, 14.6789] Δ 14.5606
+DR open: NURBS face #d000000001/loft:side[1] extended u [-0.05729, 1.203] v [-0.05, 1.05], deviation inside 2.8E-014
+DR open: NURBS face #d000000001/loft:side[3] extended u [-0.2029, 1] v [0, 1.05], deviation inside 1.5E-014
+DR finish: assembled 0.0s
+DR finish: meshed 0.5s
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 6564) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 6.58E-005 мм (элемент 6568) | edge tol 0.00E+000 curve IntersectionCurve3 (30.848, 9.288, -75.572)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.67E-006 мм (элемент 6570) | edge tol 0.00E+000 curve LineCurve3 (19.515, 15.604, 0)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 3.48E-006 мм (элемент 6571) | edge tol 1.78E-015 curve LineCurve3 (38.703, -9.302, 0)->(19.515, 15.604, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 6575) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.50E-006 мм (элемент 6577) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.49E-006 мм (элемент 6579) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(31.164, -12.033, -77.143)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 3.20E-006 мм (элемент 6580) | edge tol 0.00E+000 curve IntersectionCurve3 (31.164, -12.033, -77.143)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 2.60E-006 мм при допуске 1.00E-007 (элемент 6564) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (SectionIsoCurve) на 2.79E-004 мм при допуске 1.00E-007 (элемент 6566) | edge tol 0.00E+000 curve SectionIsoCurve (32.735, -10.309, -75.568)->(30.848, 9.288, -75.572)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 7.08E-005 мм при допуске 1.00E-007 (элемент 6570) | edge tol 0.00E+000 curve LineCurve3 (19.515, 15.604, 0)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.48E-006 мм при допуске 1.00E-007 (элемент 6571) | edge tol 1.78E-015 curve LineCurve3 (38.703, -9.302, 0)->(19.515, 15.604, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 4.19E-006 мм при допуске 1.00E-007 (элемент 6564) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 5.77E-004 мм при допуске 1.00E-007 (элемент 6575) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.37E-004 мм при допуске 1.00E-007 (элемент 6577) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 4.48E-006 мм при допуске 1.00E-007 (элемент 6579) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(31.164, -12.033, -77.143)
+DR finish: validated 2.9s
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 6564)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 6.58E-005 мм (элемент 6568)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.67E-006 мм (элемент 6570)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 3.48E-006 мм (элемент 6571)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 6575)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.50E-006 мм (элемент 6577)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.49E-006 мм (элемент 6579)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 3.20E-006 мм (элемент 6580)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 2.60E-006 мм при допуске 1.00E-007 (элемент 6564)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (SectionIsoCurve) на 2.79E-004 мм при допуске 1.00E-007 (элемент 6566)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 7.08E-005 мм при допуске 1.00E-007 (элемент 6570)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.48E-006 мм при допуске 1.00E-007 (элемент 6571)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 4.19E-006 мм при допуске 1.00E-007 (элемент 6564)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 5.77E-004 мм при допуске 1.00E-007 (элемент 6575)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.37E-004 мм при допуске 1.00E-007 (элемент 6577)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 4.48E-006 мм при допуске 1.00E-007 (элемент 6579)
+DR open invalid edge e6564 LineCurve3 (38.7033, -9.302, 0)->(32.7352, -10.3093, -75.5678) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:side[2] NurbsSurface
+DR open invalid edge e6566 SectionIsoCurve (32.7352, -10.3093, -75.5678)->(30.8478, 9.2876, -75.572) faces #d000000001/loft:side[1] NurbsSurface / #d000000006/chamfer:face SectionSurface
+DR open invalid edge e6568 IntersectionCurve3 (30.8478, 9.2876, -75.572)->(30.155, 12.8897, -73.1344) faces #d000000001/loft:side[1] NurbsSurface / #d00000000f/chamfer:face SectionSurface
+DR open invalid edge e6570 LineCurve3 (19.5153, 15.6038, 0)->(30.155, 12.8897, -73.1344) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:side[0] NurbsSurface
+DR open invalid edge e6571 LineCurve3 (38.7033, -9.302, 0)->(19.5153, 15.6038, 0) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:start PlaneSurface
+DR open invalid edge e6575 LineCurve3 (38.7033, -9.302, 0)->(19.8088, -27.4451, 0) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:start PlaneSurface
+DR open invalid edge e6577 LineCurve3 (17.6212, -27.9683, -77.1428)->(19.8088, -27.4451, 0) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:side[3] NurbsSurface
+DR open invalid edge e6579 LineCurve3 (17.6212, -27.9683, -77.1428)->(31.1638, -12.0329, -77.1428) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:end PlaneSurface
+DR open invalid edge e6580 IntersectionCurve3 (31.1638, -12.0329, -77.1428)->(32.7352, -10.3093, -75.5678) faces #d000000001/loft:side[2] NurbsSurface / #d000000006/chamfer:face SectionSurface
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (8.935, -2.584, -77.143) nA (-0, -0, -1) nB (-0.966, 0.24, 0.092) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.5 p (9.812, 0.949, -77.143) nA (-0, -0, -1) nB (-0.965, 0.239, 0.109) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.75 p (10.689, 4.482, -77.143) nA (-0, -0, -1) nB (-0.966, 0.24, 0.092) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t -0.24830166
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 14.67886
+DR open: table vs formula 4.98E-010 at t -0.252586 (Δ 14.5606) widths 2.254/2.254 Lp 16.966
+DR open: sigma -1 shapes Plane/ParamSurf ends ParamSurf/ParamSurf t [-1.2675, 15.698] contacts A [1.43152E-06, 14.5606] B [-0.248302, 14.6789] Δ 14.5606
+DR open: NURBS face #d000000001/loft:side[1] extended u [-0.05729, 1.203] v [-0.05, 1.05], deviation inside 2.1E-014
+DR open: NURBS face #d000000001/loft:side[3] extended u [-0.2029, 1] v [0, 1.05], deviation inside 1.5E-014
+DR finish: assembled 0.0s
+DR finish: meshed 0.2s
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 6721) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 6.58E-005 мм (элемент 6725) | edge tol 0.00E+000 curve IntersectionCurve3 (30.848, 9.288, -75.572)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.67E-006 мм (элемент 6727) | edge tol 0.00E+000 curve LineCurve3 (19.515, 15.604, 0)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 3.48E-006 мм (элемент 6728) | edge tol 1.78E-015 curve LineCurve3 (38.703, -9.302, 0)->(19.515, 15.604, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 6732) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.50E-006 мм (элемент 6734) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.49E-006 мм (элемент 6736) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(31.164, -12.033, -77.143)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 3.20E-006 мм (элемент 6737) | edge tol 0.00E+000 curve IntersectionCurve3 (31.164, -12.033, -77.143)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 2.60E-006 мм при допуске 1.00E-007 (элемент 6721) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (SectionIsoCurve) на 2.79E-004 мм при допуске 1.00E-007 (элемент 6723) | edge tol 0.00E+000 curve SectionIsoCurve (32.735, -10.309, -75.568)->(30.848, 9.288, -75.572)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 7.08E-005 мм при допуске 1.00E-007 (элемент 6727) | edge tol 0.00E+000 curve LineCurve3 (19.515, 15.604, 0)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.48E-006 мм при допуске 1.00E-007 (элемент 6728) | edge tol 1.78E-015 curve LineCurve3 (38.703, -9.302, 0)->(19.515, 15.604, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 4.19E-006 мм при допуске 1.00E-007 (элемент 6721) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 5.77E-004 мм при допуске 1.00E-007 (элемент 6732) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.37E-004 мм при допуске 1.00E-007 (элемент 6734) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 4.48E-006 мм при допуске 1.00E-007 (элемент 6736) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(31.164, -12.033, -77.143)
+DR finish: validated 2.7s
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 6721)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 6.58E-005 мм (элемент 6725)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.67E-006 мм (элемент 6727)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 3.48E-006 мм (элемент 6728)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 6732)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.50E-006 мм (элемент 6734)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.49E-006 мм (элемент 6736)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 3.20E-006 мм (элемент 6737)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 2.60E-006 мм при допуске 1.00E-007 (элемент 6721)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (SectionIsoCurve) на 2.79E-004 мм при допуске 1.00E-007 (элемент 6723)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 7.08E-005 мм при допуске 1.00E-007 (элемент 6727)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.48E-006 мм при допуске 1.00E-007 (элемент 6728)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 4.19E-006 мм при допуске 1.00E-007 (элемент 6721)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 5.77E-004 мм при допуске 1.00E-007 (элемент 6732)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.37E-004 мм при допуске 1.00E-007 (элемент 6734)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 4.48E-006 мм при допуске 1.00E-007 (элемент 6736)
+DR open invalid edge e6721 LineCurve3 (38.7033, -9.302, 0)->(32.7352, -10.3093, -75.5678) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:side[2] NurbsSurface
+DR open invalid edge e6723 SectionIsoCurve (32.7352, -10.3093, -75.5678)->(30.8478, 9.2876, -75.572) faces #d000000001/loft:side[1] NurbsSurface / #d000000006/chamfer:face SectionSurface
+DR open invalid edge e6725 IntersectionCurve3 (30.8478, 9.2876, -75.572)->(30.155, 12.8897, -73.1344) faces #d000000001/loft:side[1] NurbsSurface / #d00000000f/chamfer:face SectionSurface
+DR open invalid edge e6727 LineCurve3 (19.5153, 15.6038, 0)->(30.155, 12.8897, -73.1344) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:side[0] NurbsSurface
+DR open invalid edge e6728 LineCurve3 (38.7033, -9.302, 0)->(19.5153, 15.6038, 0) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:start PlaneSurface
+DR open invalid edge e6732 LineCurve3 (38.7033, -9.302, 0)->(19.8088, -27.4451, 0) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:start PlaneSurface
+DR open invalid edge e6734 LineCurve3 (17.6212, -27.9683, -77.1428)->(19.8088, -27.4451, 0) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:side[3] NurbsSurface
+DR open invalid edge e6736 LineCurve3 (17.6212, -27.9683, -77.1428)->(31.1638, -12.0329, -77.1428) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:end PlaneSurface
+DR open invalid edge e6737 IntersectionCurve3 (31.1638, -12.0329, -77.1428)->(32.7352, -10.3093, -75.5678) faces #d000000001/loft:side[2] NurbsSurface / #d000000006/chamfer:face SectionSurface
+DR declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only) | open curved: result invalid: BRep: 16 error(s); Mesh: ok [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 6564) / [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 6.58E-005 мм (элемен
+== REBUILDCHECK s104 4
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.03)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.39, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.736, 0.675, -0.052) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.44, 0.891, -0.111) NA (-0.695, 0.682, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR edge (-17.7, 22.1, 0)->(0.3, 40.5, 0) sigma -1
+DR edge (-35.8, 3.7, 0)->(-17.7, 22.1, 0) sigma -1
+DR open: convexity probe at 0.25 p (-13.218, 26.699, 0) nA (-0.711, 0.698, -0.086) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-8.703, 31.303, 0) nA (-0.707, 0.694, -0.135) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-4.188, 35.906, 0) nA (-0.702, 0.689, -0.182) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: chamfer joint 0: side point passes onto the next face at t 0.21671165 (end 0), seam point (-17.5262, 22.1962, -2.0585)
+DR open: chamfer joint 0 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.91E-011 at t 0.221688 (Δ 25.7926) widths 2.06/2.06 Lp 29.399
+DR open: sigma -1 shapes ParamSurf/Plane ends joint/ParamSurf t [-1.8055, 27.593] contacts A [-5.52647E-14, 25.7879] B [-5.52647E-14, 25.5052] Δ 25.7926
+DR open: convexity probe at 0.25 p (-31.279, 8.285, 0) nA (-0.713, 0.699, -0.054) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-26.764, 12.889, 0) nA (-0.713, 0.699, -0.048) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-22.248, 17.492, 0) nA (-0.713, 0.7, -0.043) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: chamfer joint 1: side point off the seam by 3.8E-003, no crossing on this link (the other one switches)
+DR open: chamfer joint 1 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.43E-014 at t 4.52404 (Δ 25.7926) widths 2.06/2.06 Lp 29.725
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/joint t [-2.1269, 27.598] contacts A [0.288577, 25.7926] B [-0.32138, 25.7926] Δ 25.7926
+DR open: 1 tangent joint(s)
+DR finish: assembled 0.0s
+DR finish: meshed 0.2s
+DR finish: validated 0.8s
+DR finish: volume 0.8s
+DR finish: checked 0.8s
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.034)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.431, 0.896, -0.11) NA (-0.685, 0.692, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.559, 0.548, 0.622)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.52, 0.509, 0.686)
+DR edge (30.7, 12.7, -77.1)->(32.6, -10.3, -77.1) sigma -1
+DR open: convexity probe at 0.25 p (31.206, 6.973, -77.143) nA (0.993, 0.081, 0.086) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.5 p (31.674, 1.205, -77.143) nA (0.996, 0.081, 0.031) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.75 p (32.143, -4.562, -77.143) nA (0.996, 0.081, -0.024) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: table vs formula 4.50E-014 at t 23.3246 (Δ 23.1471) widths 1.58/1.58 Lp 29.467
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/ParamSurf t [-3.16, 26.307] contacts A [-0.0762753, 23.1363] B [-1.58, 24.7271] Δ 23.1471
+DR finish: assembled 0.0s
+DR finish: meshed 0.0s
+DR finish: validated 0.7s
+DR finish: volume 0.7s
+DR finish: checked 0.7s
+DR build declined: not a straight edge
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table vs formula 2.58E-011 at t 3.92968 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: generic parameter rejected: ends 1.04E-014 NaN; tol edge 0.0E+000 vertex 0.0E+000; curve ProcCurve3; faces NurbsSurface/SectionSurface; guarantee ExactAnalytic
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 0.018177387
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 25.734239
+DR open: table vs formula 3.44E-011 at t 25.7386 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: generic parameter rejected: ends 1.04E-014 NaN; tol edge 0.0E+000 vertex 0.0E+000; curve ProcCurve3; faces NurbsSurface/SectionSurface; guarantee ExactAnalytic
+DR declined: not a straight edge | open curved: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+DR face #d000000001/loft:side[1] NI (0.913, 0.407, 0.02) NA (0.79, 0.609, -0.071)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.759, -0.648, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.969, 0.241, 0.047)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.24, 0.967, 0.087)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.968, -0.24, 0.067)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.514, 0.504, 0.694)
+DR face #d000000006/chamfer:face NI (0.714, 0.063, -0.697) NA (0.752, 0.071, -0.655)
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.789, 0.608, 0.092)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.431, 0.896, -0.11) NA (-0.08, 0.981, -0.176)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.241, -0.97, 0.026)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.515, 0.504, 0.694)
+DR face #d00000000a/round:face NI (-0.67, 0.655, 0.35) NA (-0.714, 0.698, -0.059)
+DR face #d00000000a/round:cap[1] NI (-0.765, -0.641, 0.058) NA (-0.709, -0.705, 0.009)
+DR edge (13.1, 27.7, -77.1)->(29, 14.2, -77.1) sigma -1
+DR open: convexity probe at 0.25 p (17.084, 24.345, -77.143) nA (-0, -0, -1) nB (0.648, 0.762, 0) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.5 p (21.068, 20.959, -77.143) nA (-0, -0, -1) nB (0.647, 0.762, 0.019) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.75 p (25.052, 17.574, -77.143) nA (-0, -0, -1) nB (0.647, 0.761, 0.039) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: strip of #d000000001/loft:side[0] (width 4.04) meets LineCurve3 (19.515, 15.604, 0)->(30.511, 12.799, -75.579) at (30.167, 12.887, -73.217), distance 3.935
+DR open: convexity probe at 0.25 p (17.084, 24.345, -77.143) nA (-0, -0, -1) nB (0.648, 0.762, 0) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.5 p (21.068, 20.959, -77.143) nA (-0, -0, -1) nB (0.647, 0.762, 0.019) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.75 p (25.052, 17.574, -77.143) nA (-0, -0, -1) nB (0.647, 0.761, 0.039) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: strip of #d000000001/loft:side[0] (width 4.04) meets LineCurve3 (19.515, 15.604, 0)->(30.511, 12.799, -75.579) at (30.167, 12.887, -73.217), distance 3.935
+DR declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only) | curved chamfer: open curved: another edge of the face in the blend strip | cavity: cavity: the cavity body is not valid
+DR face #d000000001/loft:side[1] NI (0.913, 0.408, 0.02) NA (0.79, 0.609, -0.071)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.759, -0.648, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (0, -0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.969, 0.241, 0.047)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.24, 0.967, 0.087)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.968, -0.24, 0.067)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.514, 0.504, 0.694)
+DR face #d000000006/chamfer:face NI (0.707, 0.063, -0.705) NA (0.74, 0.06, -0.67)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d00000000a/round:face NI (-0.67, 0.655, 0.351) NA (-0.714, 0.698, -0.059)
+DR face #d000000001/loft:side[0] NI (0.738, 0.674, 0.046) NA (0.789, 0.608, 0.092)
+DR face #d000000001/loft:side[7] NI (-0.433, 0.895, -0.109) NA (-0.08, 0.989, -0.124)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.515, 0.504, 0.694)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.241, -0.97, 0.026)
+DR face #d00000000a/round:cap[1] NI (-0.765, -0.641, 0.058) NA (-0.709, -0.705, 0.009)
+DR face #d00000000f/chamfer:face NI (0.466, 0.542, -0.699) NA (0.471, 0.555, -0.686)
+DR edge (8.1, -6.1, -77.1)->(11.6, 8, -77.1) sigma -1
+DR build declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only)
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (8.935, -2.584, -77.143) nA (-0, -0, -1) nB (-0.966, 0.24, 0.092) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.5 p (9.812, 0.949, -77.143) nA (-0, -0, -1) nB (-0.965, 0.239, 0.109) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.75 p (10.689, 4.482, -77.143) nA (-0, -0, -1) nB (-0.966, 0.24, 0.092) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: table vs formula 4.30E-014 at t 12.3102 (Δ 14.5606) widths 2.254/2.254 Lp 16.966
+DR open: sigma -1 shapes Plane/ParamSurf ends ParamSurf/ParamSurf t [-1.2675, 15.698] contacts A [1.43152E-06, 14.5606] B [-0.248302, 14.6789] Δ 14.5606
+DR open: NURBS face #d000000001/loft:side[1] extended u [-0.05729, 1.203] v [-0.05, 1.05], deviation inside 2.8E-014
+DR open: NURBS face #d000000001/loft:side[3] extended u [-0.2029, 1] v [0, 1.05], deviation inside 1.5E-014
+DR finish: assembled 0.0s
+DR finish: meshed 0.4s
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 9028) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 6.58E-005 мм (элемент 9032) | edge tol 0.00E+000 curve IntersectionCurve3 (30.848, 9.288, -75.572)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.67E-006 мм (элемент 9034) | edge tol 0.00E+000 curve LineCurve3 (19.515, 15.604, 0)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 3.48E-006 мм (элемент 9035) | edge tol 1.78E-015 curve LineCurve3 (38.703, -9.302, 0)->(19.515, 15.604, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 9039) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.50E-006 мм (элемент 9041) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.49E-006 мм (элемент 9043) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(31.164, -12.033, -77.143)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 3.20E-006 мм (элемент 9044) | edge tol 0.00E+000 curve IntersectionCurve3 (31.164, -12.033, -77.143)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 2.60E-006 мм при допуске 1.00E-007 (элемент 9028) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (SectionIsoCurve) на 2.79E-004 мм при допуске 1.00E-007 (элемент 9030) | edge tol 0.00E+000 curve SectionIsoCurve (32.735, -10.309, -75.568)->(30.848, 9.288, -75.572)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 7.08E-005 мм при допуске 1.00E-007 (элемент 9034) | edge tol 0.00E+000 curve LineCurve3 (19.515, 15.604, 0)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.48E-006 мм при допуске 1.00E-007 (элемент 9035) | edge tol 1.78E-015 curve LineCurve3 (38.703, -9.302, 0)->(19.515, 15.604, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 4.19E-006 мм при допуске 1.00E-007 (элемент 9028) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 5.77E-004 мм при допуске 1.00E-007 (элемент 9039) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.37E-004 мм при допуске 1.00E-007 (элемент 9041) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 4.48E-006 мм при допуске 1.00E-007 (элемент 9043) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(31.164, -12.033, -77.143)
+DR finish: validated 2.9s
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 9028)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 6.58E-005 мм (элемент 9032)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.67E-006 мм (элемент 9034)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 3.48E-006 мм (элемент 9035)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 9039)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.50E-006 мм (элемент 9041)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.49E-006 мм (элемент 9043)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 3.20E-006 мм (элемент 9044)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 2.60E-006 мм при допуске 1.00E-007 (элемент 9028)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (SectionIsoCurve) на 2.79E-004 мм при допуске 1.00E-007 (элемент 9030)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 7.08E-005 мм при допуске 1.00E-007 (элемент 9034)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.48E-006 мм при допуске 1.00E-007 (элемент 9035)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 4.19E-006 мм при допуске 1.00E-007 (элемент 9028)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 5.77E-004 мм при допуске 1.00E-007 (элемент 9039)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.37E-004 мм при допуске 1.00E-007 (элемент 9041)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 4.48E-006 мм при допуске 1.00E-007 (элемент 9043)
+DR open invalid edge e9028 LineCurve3 (38.7033, -9.302, 0)->(32.7352, -10.3093, -75.5678) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:side[2] NurbsSurface
+DR open invalid edge e9030 SectionIsoCurve (32.7352, -10.3093, -75.5678)->(30.8478, 9.2876, -75.572) faces #d000000001/loft:side[1] NurbsSurface / #d000000006/chamfer:face SectionSurface
+DR open invalid edge e9032 IntersectionCurve3 (30.8478, 9.2876, -75.572)->(30.155, 12.8897, -73.1344) faces #d000000001/loft:side[1] NurbsSurface / #d00000000f/chamfer:face SectionSurface
+DR open invalid edge e9034 LineCurve3 (19.5153, 15.6038, 0)->(30.155, 12.8897, -73.1344) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:side[0] NurbsSurface
+DR open invalid edge e9035 LineCurve3 (38.7033, -9.302, 0)->(19.5153, 15.6038, 0) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:start PlaneSurface
+DR open invalid edge e9039 LineCurve3 (38.7033, -9.302, 0)->(19.8088, -27.4451, 0) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:start PlaneSurface
+DR open invalid edge e9041 LineCurve3 (17.6212, -27.9683, -77.1428)->(19.8088, -27.4451, 0) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:side[3] NurbsSurface
+DR open invalid edge e9043 LineCurve3 (17.6212, -27.9683, -77.1428)->(31.1638, -12.0329, -77.1428) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:end PlaneSurface
+DR open invalid edge e9044 IntersectionCurve3 (31.1638, -12.0329, -77.1428)->(32.7352, -10.3093, -75.5678) faces #d000000001/loft:side[2] NurbsSurface / #d000000006/chamfer:face SectionSurface
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (8.935, -2.584, -77.143) nA (-0, -0, -1) nB (-0.966, 0.24, 0.092) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.5 p (9.812, 0.949, -77.143) nA (-0, -0, -1) nB (-0.965, 0.239, 0.109) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.75 p (10.689, 4.482, -77.143) nA (-0, -0, -1) nB (-0.966, 0.24, 0.092) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t -0.24830166
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 14.67886
+DR open: table vs formula 4.98E-010 at t -0.252586 (Δ 14.5606) widths 2.254/2.254 Lp 16.966
+DR open: sigma -1 shapes Plane/ParamSurf ends ParamSurf/ParamSurf t [-1.2675, 15.698] contacts A [1.43152E-06, 14.5606] B [-0.248302, 14.6789] Δ 14.5606
+DR open: NURBS face #d000000001/loft:side[1] extended u [-0.05729, 1.203] v [-0.05, 1.05], deviation inside 2.1E-014
+DR open: NURBS face #d000000001/loft:side[3] extended u [-0.2029, 1] v [0, 1.05], deviation inside 1.5E-014
+DR finish: assembled 0.0s
+DR finish: meshed 0.2s
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 9185) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 6.58E-005 мм (элемент 9189) | edge tol 0.00E+000 curve IntersectionCurve3 (30.848, 9.288, -75.572)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.67E-006 мм (элемент 9191) | edge tol 0.00E+000 curve LineCurve3 (19.515, 15.604, 0)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 3.48E-006 мм (элемент 9192) | edge tol 1.78E-015 curve LineCurve3 (38.703, -9.302, 0)->(19.515, 15.604, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 9196) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.50E-006 мм (элемент 9198) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.49E-006 мм (элемент 9200) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(31.164, -12.033, -77.143)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 3.20E-006 мм (элемент 9201) | edge tol 0.00E+000 curve IntersectionCurve3 (31.164, -12.033, -77.143)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 2.60E-006 мм при допуске 1.00E-007 (элемент 9185) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (SectionIsoCurve) на 2.79E-004 мм при допуске 1.00E-007 (элемент 9187) | edge tol 0.00E+000 curve SectionIsoCurve (32.735, -10.309, -75.568)->(30.848, 9.288, -75.572)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 7.08E-005 мм при допуске 1.00E-007 (элемент 9191) | edge tol 0.00E+000 curve LineCurve3 (19.515, 15.604, 0)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.48E-006 мм при допуске 1.00E-007 (элемент 9192) | edge tol 1.78E-015 curve LineCurve3 (38.703, -9.302, 0)->(19.515, 15.604, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 4.19E-006 мм при допуске 1.00E-007 (элемент 9185) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 5.77E-004 мм при допуске 1.00E-007 (элемент 9196) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.37E-004 мм при допуске 1.00E-007 (элемент 9198) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 4.48E-006 мм при допуске 1.00E-007 (элемент 9200) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(31.164, -12.033, -77.143)
+DR finish: validated 2.7s
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 9185)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 6.58E-005 мм (элемент 9189)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.67E-006 мм (элемент 9191)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 3.48E-006 мм (элемент 9192)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 9196)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.50E-006 мм (элемент 9198)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.49E-006 мм (элемент 9200)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 3.20E-006 мм (элемент 9201)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 2.60E-006 мм при допуске 1.00E-007 (элемент 9185)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (SectionIsoCurve) на 2.79E-004 мм при допуске 1.00E-007 (элемент 9187)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 7.08E-005 мм при допуске 1.00E-007 (элемент 9191)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.48E-006 мм при допуске 1.00E-007 (элемент 9192)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 4.19E-006 мм при допуске 1.00E-007 (элемент 9185)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 5.77E-004 мм при допуске 1.00E-007 (элемент 9196)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.37E-004 мм при допуске 1.00E-007 (элемент 9198)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 4.48E-006 мм при допуске 1.00E-007 (элемент 9200)
+DR open invalid edge e9185 LineCurve3 (38.7033, -9.302, 0)->(32.7352, -10.3093, -75.5678) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:side[2] NurbsSurface
+DR open invalid edge e9187 SectionIsoCurve (32.7352, -10.3093, -75.5678)->(30.8478, 9.2876, -75.572) faces #d000000001/loft:side[1] NurbsSurface / #d000000006/chamfer:face SectionSurface
+DR open invalid edge e9189 IntersectionCurve3 (30.8478, 9.2876, -75.572)->(30.155, 12.8897, -73.1344) faces #d000000001/loft:side[1] NurbsSurface / #d00000000f/chamfer:face SectionSurface
+DR open invalid edge e9191 LineCurve3 (19.5153, 15.6038, 0)->(30.155, 12.8897, -73.1344) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:side[0] NurbsSurface
+DR open invalid edge e9192 LineCurve3 (38.7033, -9.302, 0)->(19.5153, 15.6038, 0) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:start PlaneSurface
+DR open invalid edge e9196 LineCurve3 (38.7033, -9.302, 0)->(19.8088, -27.4451, 0) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:start PlaneSurface
+DR open invalid edge e9198 LineCurve3 (17.6212, -27.9683, -77.1428)->(19.8088, -27.4451, 0) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:side[3] NurbsSurface
+DR open invalid edge e9200 LineCurve3 (17.6212, -27.9683, -77.1428)->(31.1638, -12.0329, -77.1428) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:end PlaneSurface
+DR open invalid edge e9201 IntersectionCurve3 (31.1638, -12.0329, -77.1428)->(32.7352, -10.3093, -75.5678) faces #d000000001/loft:side[2] NurbsSurface / #d000000006/chamfer:face SectionSurface
+DR declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only) | open curved: result invalid: BRep: 16 error(s); Mesh: ok [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 9028) / [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 6.58E-005 мм (элемен
+== REBUILDCHECK END s104 4
+== STEP s104 5
+DR build declined: face without an exact surface
+DR open: equal cylinders declined: face without an exact surface
+DR declined: face without an exact surface | open curved: face without an exact surface
+== REBUILDCHECK s104 5
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.03)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.39, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.736, 0.675, -0.052) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.44, 0.891, -0.111) NA (-0.695, 0.682, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR edge (-17.7, 22.1, 0)->(0.3, 40.5, 0) sigma -1
+DR edge (-35.8, 3.7, 0)->(-17.7, 22.1, 0) sigma -1
+DR open: convexity probe at 0.25 p (-13.218, 26.699, 0) nA (-0.711, 0.698, -0.086) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-8.703, 31.303, 0) nA (-0.707, 0.694, -0.135) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-4.188, 35.906, 0) nA (-0.702, 0.689, -0.182) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: chamfer joint 0: side point passes onto the next face at t 0.21671165 (end 0), seam point (-17.5262, 22.1962, -2.0585)
+DR open: chamfer joint 0 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.91E-011 at t 0.221688 (Δ 25.7926) widths 2.06/2.06 Lp 29.399
+DR open: sigma -1 shapes ParamSurf/Plane ends joint/ParamSurf t [-1.8055, 27.593] contacts A [-5.52647E-14, 25.7879] B [-5.52647E-14, 25.5052] Δ 25.7926
+DR open: convexity probe at 0.25 p (-31.279, 8.285, 0) nA (-0.713, 0.699, -0.054) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-26.764, 12.889, 0) nA (-0.713, 0.699, -0.048) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-22.248, 17.492, 0) nA (-0.713, 0.7, -0.043) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: chamfer joint 1: side point off the seam by 3.8E-003, no crossing on this link (the other one switches)
+DR open: chamfer joint 1 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.43E-014 at t 4.52404 (Δ 25.7926) widths 2.06/2.06 Lp 29.725
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/joint t [-2.1269, 27.598] contacts A [0.288577, 25.7926] B [-0.32138, 25.7926] Δ 25.7926
+DR open: 1 tangent joint(s)
+DR finish: assembled 0.0s
+DR finish: meshed 0.2s
+DR finish: validated 0.8s
+DR finish: volume 0.8s
+DR finish: checked 0.8s
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.034)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.431, 0.896, -0.11) NA (-0.685, 0.692, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.559, 0.548, 0.622)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.52, 0.509, 0.686)
+DR edge (30.7, 12.7, -77.1)->(32.6, -10.3, -77.1) sigma -1
+DR open: convexity probe at 0.25 p (31.206, 6.973, -77.143) nA (0.993, 0.081, 0.086) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.5 p (31.674, 1.205, -77.143) nA (0.996, 0.081, 0.031) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.75 p (32.143, -4.562, -77.143) nA (0.996, 0.081, -0.024) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: table vs formula 4.50E-014 at t 23.3246 (Δ 23.1471) widths 1.58/1.58 Lp 29.467
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/ParamSurf t [-3.16, 26.307] contacts A [-0.0762753, 23.1363] B [-1.58, 24.7271] Δ 23.1471
+DR finish: assembled 0.0s
+DR finish: meshed 0.1s
+DR finish: validated 0.7s
+DR finish: volume 0.7s
+DR finish: checked 0.7s
+DR build declined: not a straight edge
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table vs formula 2.58E-011 at t 3.92968 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: generic parameter rejected: ends 1.04E-014 NaN; tol edge 0.0E+000 vertex 0.0E+000; curve ProcCurve3; faces NurbsSurface/SectionSurface; guarantee ExactAnalytic
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 0.018177387
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 25.734239
+DR open: table vs formula 3.44E-011 at t 25.7386 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: generic parameter rejected: ends 1.04E-014 NaN; tol edge 0.0E+000 vertex 0.0E+000; curve ProcCurve3; faces NurbsSurface/SectionSurface; guarantee ExactAnalytic
+DR declined: not a straight edge | open curved: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+DR face #d000000001/loft:side[1] NI (0.913, 0.407, 0.02) NA (0.79, 0.609, -0.071)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.759, -0.648, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.969, 0.241, 0.047)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.24, 0.967, 0.087)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.968, -0.24, 0.067)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.514, 0.504, 0.694)
+DR face #d000000006/chamfer:face NI (0.714, 0.063, -0.697) NA (0.752, 0.071, -0.655)
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.789, 0.608, 0.092)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.431, 0.896, -0.11) NA (-0.08, 0.981, -0.176)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.241, -0.97, 0.026)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.515, 0.504, 0.694)
+DR face #d00000000a/round:face NI (-0.67, 0.655, 0.35) NA (-0.714, 0.698, -0.059)
+DR face #d00000000a/round:cap[1] NI (-0.765, -0.641, 0.058) NA (-0.709, -0.705, 0.009)
+DR edge (13.1, 27.7, -77.1)->(29, 14.2, -77.1) sigma -1
+DR open: convexity probe at 0.25 p (17.084, 24.345, -77.143) nA (-0, -0, -1) nB (0.648, 0.762, 0) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.5 p (21.068, 20.959, -77.143) nA (-0, -0, -1) nB (0.647, 0.762, 0.019) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.75 p (25.052, 17.574, -77.143) nA (-0, -0, -1) nB (0.647, 0.761, 0.039) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: strip of #d000000001/loft:side[0] (width 4.04) meets LineCurve3 (19.515, 15.604, 0)->(30.511, 12.799, -75.579) at (30.167, 12.887, -73.217), distance 3.935
+DR open: convexity probe at 0.25 p (17.084, 24.345, -77.143) nA (-0, -0, -1) nB (0.648, 0.762, 0) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.5 p (21.068, 20.959, -77.143) nA (-0, -0, -1) nB (0.647, 0.762, 0.019) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.75 p (25.052, 17.574, -77.143) nA (-0, -0, -1) nB (0.647, 0.761, 0.039) inside False (eps 1.05), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: strip of #d000000001/loft:side[0] (width 4.04) meets LineCurve3 (19.515, 15.604, 0)->(30.511, 12.799, -75.579) at (30.167, 12.887, -73.217), distance 3.935
+DR declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only) | curved chamfer: open curved: another edge of the face in the blend strip | cavity: cavity: the cavity body is not valid
+DR face #d000000001/loft:side[1] NI (0.913, 0.408, 0.02) NA (0.79, 0.609, -0.071)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.759, -0.648, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (0, -0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.969, 0.241, 0.047)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.24, 0.967, 0.087)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.968, -0.24, 0.067)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.514, 0.504, 0.694)
+DR face #d000000006/chamfer:face NI (0.707, 0.063, -0.705) NA (0.74, 0.06, -0.67)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d00000000a/round:face NI (-0.67, 0.655, 0.351) NA (-0.714, 0.698, -0.059)
+DR face #d000000001/loft:side[0] NI (0.738, 0.674, 0.046) NA (0.789, 0.608, 0.092)
+DR face #d000000001/loft:side[7] NI (-0.433, 0.895, -0.109) NA (-0.08, 0.989, -0.124)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.515, 0.504, 0.694)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.241, -0.97, 0.026)
+DR face #d00000000a/round:cap[1] NI (-0.765, -0.641, 0.058) NA (-0.709, -0.705, 0.009)
+DR face #d00000000f/chamfer:face NI (0.466, 0.542, -0.699) NA (0.471, 0.555, -0.686)
+DR edge (8.1, -6.1, -77.1)->(11.6, 8, -77.1) sigma -1
+DR build declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only)
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (8.935, -2.584, -77.143) nA (-0, -0, -1) nB (-0.966, 0.24, 0.092) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.5 p (9.812, 0.949, -77.143) nA (-0, -0, -1) nB (-0.965, 0.239, 0.109) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.75 p (10.689, 4.482, -77.143) nA (-0, -0, -1) nB (-0.966, 0.24, 0.092) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: table vs formula 4.30E-014 at t 12.3102 (Δ 14.5606) widths 2.254/2.254 Lp 16.966
+DR open: sigma -1 shapes Plane/ParamSurf ends ParamSurf/ParamSurf t [-1.2675, 15.698] contacts A [1.43152E-06, 14.5606] B [-0.248302, 14.6789] Δ 14.5606
+DR open: NURBS face #d000000001/loft:side[1] extended u [-0.05729, 1.203] v [-0.05, 1.05], deviation inside 2.8E-014
+DR open: NURBS face #d000000001/loft:side[3] extended u [-0.2029, 1] v [0, 1.05], deviation inside 1.5E-014
+DR finish: assembled 0.0s
+DR finish: meshed 0.4s
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 12064) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 6.58E-005 мм (элемент 12068) | edge tol 0.00E+000 curve IntersectionCurve3 (30.848, 9.288, -75.572)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.67E-006 мм (элемент 12070) | edge tol 0.00E+000 curve LineCurve3 (19.515, 15.604, 0)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 3.48E-006 мм (элемент 12071) | edge tol 1.78E-015 curve LineCurve3 (38.703, -9.302, 0)->(19.515, 15.604, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 12075) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.50E-006 мм (элемент 12077) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.49E-006 мм (элемент 12079) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(31.164, -12.033, -77.143)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 3.20E-006 мм (элемент 12080) | edge tol 0.00E+000 curve IntersectionCurve3 (31.164, -12.033, -77.143)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 2.60E-006 мм при допуске 1.00E-007 (элемент 12064) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (SectionIsoCurve) на 2.79E-004 мм при допуске 1.00E-007 (элемент 12066) | edge tol 0.00E+000 curve SectionIsoCurve (32.735, -10.309, -75.568)->(30.848, 9.288, -75.572)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 7.08E-005 мм при допуске 1.00E-007 (элемент 12070) | edge tol 0.00E+000 curve LineCurve3 (19.515, 15.604, 0)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.48E-006 мм при допуске 1.00E-007 (элемент 12071) | edge tol 1.78E-015 curve LineCurve3 (38.703, -9.302, 0)->(19.515, 15.604, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 4.19E-006 мм при допуске 1.00E-007 (элемент 12064) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 5.77E-004 мм при допуске 1.00E-007 (элемент 12075) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.37E-004 мм при допуске 1.00E-007 (элемент 12077) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 4.48E-006 мм при допуске 1.00E-007 (элемент 12079) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(31.164, -12.033, -77.143)
+DR finish: validated 2.8s
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 12064)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 6.58E-005 мм (элемент 12068)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.67E-006 мм (элемент 12070)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 3.48E-006 мм (элемент 12071)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 12075)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.50E-006 мм (элемент 12077)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.49E-006 мм (элемент 12079)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 3.20E-006 мм (элемент 12080)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 2.60E-006 мм при допуске 1.00E-007 (элемент 12064)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (SectionIsoCurve) на 2.79E-004 мм при допуске 1.00E-007 (элемент 12066)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 7.08E-005 мм при допуске 1.00E-007 (элемент 12070)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.48E-006 мм при допуске 1.00E-007 (элемент 12071)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 4.19E-006 мм при допуске 1.00E-007 (элемент 12064)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 5.77E-004 мм при допуске 1.00E-007 (элемент 12075)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.37E-004 мм при допуске 1.00E-007 (элемент 12077)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 4.48E-006 мм при допуске 1.00E-007 (элемент 12079)
+DR open invalid edge e12064 LineCurve3 (38.7033, -9.302, 0)->(32.7352, -10.3093, -75.5678) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:side[2] NurbsSurface
+DR open invalid edge e12066 SectionIsoCurve (32.7352, -10.3093, -75.5678)->(30.8478, 9.2876, -75.572) faces #d000000001/loft:side[1] NurbsSurface / #d000000006/chamfer:face SectionSurface
+DR open invalid edge e12068 IntersectionCurve3 (30.8478, 9.2876, -75.572)->(30.155, 12.8897, -73.1344) faces #d000000001/loft:side[1] NurbsSurface / #d00000000f/chamfer:face SectionSurface
+DR open invalid edge e12070 LineCurve3 (19.5153, 15.6038, 0)->(30.155, 12.8897, -73.1344) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:side[0] NurbsSurface
+DR open invalid edge e12071 LineCurve3 (38.7033, -9.302, 0)->(19.5153, 15.6038, 0) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:start PlaneSurface
+DR open invalid edge e12075 LineCurve3 (38.7033, -9.302, 0)->(19.8088, -27.4451, 0) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:start PlaneSurface
+DR open invalid edge e12077 LineCurve3 (17.6212, -27.9683, -77.1428)->(19.8088, -27.4451, 0) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:side[3] NurbsSurface
+DR open invalid edge e12079 LineCurve3 (17.6212, -27.9683, -77.1428)->(31.1638, -12.0329, -77.1428) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:end PlaneSurface
+DR open invalid edge e12080 IntersectionCurve3 (31.1638, -12.0329, -77.1428)->(32.7352, -10.3093, -75.5678) faces #d000000001/loft:side[2] NurbsSurface / #d000000006/chamfer:face SectionSurface
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (8.935, -2.584, -77.143) nA (-0, -0, -1) nB (-0.966, 0.24, 0.092) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.5 p (9.812, 0.949, -77.143) nA (-0, -0, -1) nB (-0.965, 0.239, 0.109) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: convexity probe at 0.75 p (10.689, 4.482, -77.143) nA (-0, -0, -1) nB (-0.966, 0.24, 0.092) inside False (eps 0.728), faces #d000000001/loft:end/#d000000001/loft:side[0]
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t -0.24830166
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 14.67886
+DR open: table vs formula 4.98E-010 at t -0.252586 (Δ 14.5606) widths 2.254/2.254 Lp 16.966
+DR open: sigma -1 shapes Plane/ParamSurf ends ParamSurf/ParamSurf t [-1.2675, 15.698] contacts A [1.43152E-06, 14.5606] B [-0.248302, 14.6789] Δ 14.5606
+DR open: NURBS face #d000000001/loft:side[1] extended u [-0.05729, 1.203] v [-0.05, 1.05], deviation inside 2.1E-014
+DR open: NURBS face #d000000001/loft:side[3] extended u [-0.2029, 1] v [0, 1.05], deviation inside 1.5E-014
+DR finish: assembled 0.0s
+DR finish: meshed 0.2s
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 12221) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 6.58E-005 мм (элемент 12225) | edge tol 0.00E+000 curve IntersectionCurve3 (30.848, 9.288, -75.572)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.67E-006 мм (элемент 12227) | edge tol 0.00E+000 curve LineCurve3 (19.515, 15.604, 0)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 3.48E-006 мм (элемент 12228) | edge tol 1.78E-015 curve LineCurve3 (38.703, -9.302, 0)->(19.515, 15.604, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 12232) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.50E-006 мм (элемент 12234) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.49E-006 мм (элемент 12236) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(31.164, -12.033, -77.143)
+DR   invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 3.20E-006 мм (элемент 12237) | edge tol 0.00E+000 curve IntersectionCurve3 (31.164, -12.033, -77.143)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 2.60E-006 мм при допуске 1.00E-007 (элемент 12221) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (SectionIsoCurve) на 2.79E-004 мм при допуске 1.00E-007 (элемент 12223) | edge tol 0.00E+000 curve SectionIsoCurve (32.735, -10.309, -75.568)->(30.848, 9.288, -75.572)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 7.08E-005 мм при допуске 1.00E-007 (элемент 12227) | edge tol 0.00E+000 curve LineCurve3 (19.515, 15.604, 0)->(30.155, 12.89, -73.134)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.48E-006 мм при допуске 1.00E-007 (элемент 12228) | edge tol 1.78E-015 curve LineCurve3 (38.703, -9.302, 0)->(19.515, 15.604, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 4.19E-006 мм при допуске 1.00E-007 (элемент 12221) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(32.735, -10.309, -75.568)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 5.77E-004 мм при допуске 1.00E-007 (элемент 12232) | edge tol 0.00E+000 curve LineCurve3 (38.703, -9.302, 0)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.37E-004 мм при допуске 1.00E-007 (элемент 12234) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(19.809, -27.445, 0)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 4.48E-006 мм при допуске 1.00E-007 (элемент 12236) | edge tol 0.00E+000 curve LineCurve3 (17.621, -27.968, -77.143)->(31.164, -12.033, -77.143)
+DR finish: validated 2.6s
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 12221)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 6.58E-005 мм (элемент 12225)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.67E-006 мм (элемент 12227)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 3.48E-006 мм (элемент 12228)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 12232)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.50E-006 мм (элемент 12234)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.49E-006 мм (элемент 12236)
+DR invalid: [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 3.20E-006 мм (элемент 12237)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 2.60E-006 мм при допуске 1.00E-007 (элемент 12221)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (SectionIsoCurve) на 2.79E-004 мм при допуске 1.00E-007 (элемент 12223)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 7.08E-005 мм при допуске 1.00E-007 (элемент 12227)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.48E-006 мм при допуске 1.00E-007 (элемент 12228)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 4.19E-006 мм при допуске 1.00E-007 (элемент 12221)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 5.77E-004 мм при допуске 1.00E-007 (элемент 12232)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (LineCurve3) на 3.37E-004 мм при допуске 1.00E-007 (элемент 12234)
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 4.48E-006 мм при допуске 1.00E-007 (элемент 12236)
+DR open invalid edge e12221 LineCurve3 (38.7033, -9.302, 0)->(32.7352, -10.3093, -75.5678) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:side[2] NurbsSurface
+DR open invalid edge e12223 SectionIsoCurve (32.7352, -10.3093, -75.5678)->(30.8478, 9.2876, -75.572) faces #d000000001/loft:side[1] NurbsSurface / #d000000006/chamfer:face SectionSurface
+DR open invalid edge e12225 IntersectionCurve3 (30.8478, 9.2876, -75.572)->(30.155, 12.8897, -73.1344) faces #d000000001/loft:side[1] NurbsSurface / #d00000000f/chamfer:face SectionSurface
+DR open invalid edge e12227 LineCurve3 (19.5153, 15.6038, 0)->(30.155, 12.8897, -73.1344) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:side[0] NurbsSurface
+DR open invalid edge e12228 LineCurve3 (38.7033, -9.302, 0)->(19.5153, 15.6038, 0) faces #d000000001/loft:side[1] NurbsSurface / #d000000001/loft:start PlaneSurface
+DR open invalid edge e12232 LineCurve3 (38.7033, -9.302, 0)->(19.8088, -27.4451, 0) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:start PlaneSurface
+DR open invalid edge e12234 LineCurve3 (17.6212, -27.9683, -77.1428)->(19.8088, -27.4451, 0) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:side[3] NurbsSurface
+DR open invalid edge e12236 LineCurve3 (17.6212, -27.9683, -77.1428)->(31.1638, -12.0329, -77.1428) faces #d000000001/loft:side[2] NurbsSurface / #d000000001/loft:end PlaneSurface
+DR open invalid edge e12237 IntersectionCurve3 (31.1638, -12.0329, -77.1428)->(32.7352, -10.3093, -75.5678) faces #d000000001/loft:side[2] NurbsSurface / #d000000006/chamfer:face SectionSurface
+DR declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only) | open curved: result invalid: BRep: 16 error(s); Mesh: ok [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 4.19E-006 мм (элемент 12064) / [BRep/Error] curve-off-surface: кривая ребра (IntersectionCurve3) отходит от смежных поверхностей на 6.58E-005 мм (элеме
+DR build declined: face without an exact surface
+DR open: equal cylinders declined: face without an exact surface
+DR declined: face without an exact surface | open curved: face without an exact surface
+== REBUILDCHECK END s104 5
+seconds 168 nproc 4 env LOFT_DRALL=1 cmd loftseq 1 104 6 res/out
