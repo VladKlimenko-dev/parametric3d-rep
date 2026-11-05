@@ -88,6 +88,18 @@ public static class ExactAdapter
         finally { _inDerived = was; }
     }
 
+    /// <summary>Я1, разбор: P3D_TOEXACTTRACE=1 — каждый перевод тела в точную форму в stderr (дорога и признаки тела).</summary>
+    static readonly bool ToExactTrace = Environment.GetEnvironmentVariable("P3D_TOEXACTTRACE") == "1";
+    [ThreadStatic] static string? _path;
+    static void TracePath(TSolid solid, string path, ExactBody? r)
+    {
+        if (!ToExactTrace) return;
+        var lz = solid.LazyDerivedExact;
+        Console.Error.WriteLine($"TOEXACT solid {solid.Id} path {path} guarantee {solid.Guarantee} faces {solid.Faces.Count()} rev {solid.Revision}" +
+            $" exact {(solid.Exact != null ? (solid.ExactIsCurrent ? "current" : "stale") : "none")} lazy {(lz is { } l ? (l.Revision == solid.Revision ? "current" : "old") : "none")}" +
+            $" published {solid.IsPublished} derived {_inDerived} polys {r?.Solid.Polygons.Count}");
+    }
+
     public static ExactBody ToExact(TSolid solid, PlaneRegistry registry, List<string>? warnings)
     {
         bool cacheable = !FormCacheOff && solid.Exact == null && !(solid.LazyDerivedExact is { } lz0 && lz0.Revision == solid.Revision);
@@ -95,13 +107,17 @@ public static class ExactAdapter
         if (cacheable && _formCache.TryGetValue(solid, out var hit) && hit.Revision == solid.Revision && hit.Settings.Equals(key))
         {
             Interlocked.Increment(ref FormCacheHits);
-            return new ExactBody(hit.Form.Solid.Import(registry), hit.Form.Sources);
+            var hb = new ExactBody(hit.Form.Solid.Import(registry), hit.Form.Sources);
+            TracePath(solid, "form-cache", hb);
+            return hb;
         }
         long rev = solid.Revision;
         // запоминается только вход без замечаний: грань, которую не удалось разметить, выпадает из формы с предупреждением
         // (операция затем откажет) — такая форма не должна достаться следующему расчёту (KRN01-G10-INTERRUPT-ALL-OPERATIONS)
         var local = new List<string>();
+        _path = "triangles";
         var made = ToExactCore(solid, registry, local);
+        TracePath(solid, _path ?? "?", made);
         warnings?.AddRange(local);
         if (cacheable && solid.Revision == rev && local.Count == 0)
             _formCache.AddOrUpdate(solid, new CachedForm { Revision = rev, Settings = key!, Form = made });
@@ -116,7 +132,7 @@ public static class ExactAdapter
             // от правки формы после её получения (TSolid.BeginEdit). Замер перед решением: на allA, allB, allS
             // и FProbe устаревшая форма не встречалась ни разу — на корпусе поведение то же, а неверный ответ
             // в будущем исключён. Счётчик остаётся: сколько раз форма отвергнута.
-            if (solid.ExactIsCurrent) return new ExactBody(cached.Solid.Import(registry), cached.Sources);
+            if (solid.ExactIsCurrent) { _path = "exact"; return new ExactBody(cached.Solid.Import(registry), cached.Sources); }
             Interlocked.Increment(ref StaleExactUses);
             StaleExactTrace?.Invoke($"stale exact ignored on solid {solid.Id}: revision {solid.Revision}, exact {solid.ExactRevision}, authoritative {solid.ExactAuthoritative}, last edit {solid.LastEdit}");
         }
@@ -125,6 +141,7 @@ public static class ExactAdapter
         if (solid.Exact == null && solid.LazyDerivedExact is { } lz && lz.Revision == solid.Revision)
         {
             var form = lz.Form.Value;
+            _path = "lazy";
             return new ExactBody(form.Solid.Import(registry), form.Sources);
         }
 
@@ -134,7 +151,7 @@ public static class ExactAdapter
         if (LazyRemeshOn && !_inDerived && solid.Exact == null && solid.Guarantee == GuaranteeLevel.ExactAnalytic)
         {
             _inDerived = true;
-            try { var d = DerivedOf(solid); return new ExactBody(d.Solid.Import(registry), d.Sources); }
+            try { var d = DerivedOf(solid); _path = "derived"; return new ExactBody(d.Solid.Import(registry), d.Sources); }
             finally { _inDerived = false; }
         }
 
@@ -142,7 +159,7 @@ public static class ExactAdapter
         // Отключение для сравнения с общим путём: P3D_CYLINDERINPUT=0.
         if (Environment.GetEnvironmentVariable("P3D_CYLINDERINPUT") != "0" &&
             ExactCylinderInput.TryBuild(solid, registry, out var direct))
-            return direct!;
+        { _path = "cylinder"; return direct!; }
 
         // Треугольники берутся той же дорогой, что у прежней булевой, —
         // с согласованной ориентацией, — но в двойной точности.

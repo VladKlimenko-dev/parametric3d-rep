@@ -54,11 +54,8 @@ jobs:
       matrix:
         include:
           - { name: s106,           cmd: 'loftseq 1 106 6 OUT',  env: '' }
-          - { name: s106_remesh,        cmd: 'loftseq 1 106 6 OUT',  env: 'P3D_LAZYREMESH=1' }
-          - { name: s106_full_remesh,   cmd: 'loftseq 1 106 6 OUT',  env: 'P3D_LAZYREMESH=1 SEQ_STEPMODE=full' }
-          - { name: corpus_remesh,      cmd: 'loftseq 10 101 6 OUT', env: 'P3D_LAZYREMESH=1' }
-          - { name: allA_remesh,        cmd: 'allA',                 env: 'P3D_LAZYREMESH=1' }
-          - { name: allB_remesh,        cmd: 'allB',                 env: 'P3D_LAZYREMESH=1' }
+          - { name: s106_trace,        cmd: 'loftseq 1 106 6 OUT',  env: 'P3D_TOEXACTTRACE=1' }
+          - { name: s106_full_trace,   cmd: 'loftseq 1 106 6 OUT',  env: 'P3D_TOEXACTTRACE=1 SEQ_STEPMODE=full' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
