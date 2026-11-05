@@ -607,6 +607,8 @@ static partial class Program
                 // k143: путь операции — прямой построитель (замена граней, как Parasolid) или резец; причина отказа прямого
                 string? drWhy = null; var drPrev = Parametric3D.Kernel.Ops.DirectRound.Debug;
                 Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (Environment.GetEnvironmentVariable("LOFT_DRDEBUG") is { } dd && s.Contains(dd)) Console.WriteLine("DBG " + (s.Length > 300 && Environment.GetEnvironmentVariable("LOFT_DRFULL") != "1" ? s[..300] : s)); if (s.StartsWith("declined")) drWhy = s.Length > 200 ? s[..200] : s; };
+                // Я1, опыт: SEQ_STEPMODE=full — шаг считается полным пересчётом дерева (без сохранённых состояний)
+                if (Environment.GetEnvironmentVariable("SEQ_STEPMODE") == "full") p.Invalidate();
                 try { p.Rebuild(null); } catch (Exception ex) when (ex is not OutOfMemoryException) { f.Error = "exception: " + ex.Message; }
                 finally { Parametric3D.Kernel.Ops.DirectRound.Debug = drPrev; }
                 double ms = sw.ElapsedMilliseconds; totalMs += ms;
@@ -678,6 +680,7 @@ static partial class Program
         try { var loaded = DocumentFile.Load(bare); q = loaded.Part; q.Rebuild(loaded.Parameters); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return new { file = "exception: " + ex.Message }; }
         var g = q.Features.Count > 0 ? q.Features[^1] : null;
+        string refsS = RefsOf(f), refsF = g == null ? "" : RefsOf(g);
         bool errS = f.Error != null, errF = g?.Error != null;
         string gs = string.Join(",", p.Bodies.Select(b => b.Guarantee.ToString()));
         string gf = string.Join(",", q.Bodies.Select(b => b.Guarantee.ToString()));
@@ -687,6 +690,19 @@ static partial class Program
         {
             session = new { error = f.Error?.Split('\n').Last(), bodies = p.Bodies.Count, volume = Math.Round(p.Volume, 6), guarantee = gs },
             file = new { error = g?.Error?.Split('\n').Last(), bodies = q.Bodies.Count, volume = Math.Round(q.Volume, 6), guarantee = gf },
+            refsSame = refsS == refsF,
+            refsSession = refsS,
+            refsFile = refsS == refsF ? null : refsF,
         };
+    }
+
+    /// <summary>Ссылки операции на рёбра — побитово (концы, середина, имена граней и концов, кусок).</summary>
+    static string RefsOf(Feature x)
+    {
+        static string D(double v) => BitConverter.DoubleToInt64Bits(v).ToString("x");
+        static string Ref(EdgeRef e) => $"{D(e.Start.X)},{D(e.Start.Y)},{D(e.Start.Z)}>{D(e.End.X)},{D(e.End.Y)},{D(e.End.Z)}" +
+            $"~{(e.Mid is { } m ? $"{D(m.X)},{D(m.Y)},{D(m.Z)}" : "-")};{e.FaceA}/{e.FaceB}/{e.End0}/{e.End1}/{e.Piece}";
+        return x is RoundFeature r ? string.Join(" | ", r.Edges.Select(Ref))
+             : x is ChamferFeature c ? string.Join(" | ", c.Edges.Select(Ref)) : "";
     }
 }
