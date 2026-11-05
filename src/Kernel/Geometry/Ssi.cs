@@ -58,6 +58,9 @@ public static class Ssi
     [ThreadStatic] public static Action<string>? FootDebug;
     /// <summary>Разбор: вызовы основания на поверхности общего вида и из них — с общей проекцией (без годной подсказки).</summary>
     public static long ParamFootCalls, ParamFootGlobal, ParamFootFar;
+    /// <summary>Я1: каноническое уточнение основания (P3D_FOOTCANON=1); промахи — уточнение не сошлось к тому же корню.</summary>
+    static readonly bool FootCanon = Environment.GetEnvironmentVariable("P3D_FOOTCANON") == "1";
+    public static long FootCanonMiss;
     static readonly bool FootFar = Environment.GetEnvironmentVariable("P3D_FOOTFAR") != "0";
 
     static readonly bool TanExt = Environment.GetEnvironmentVariable("P3D_SSITANEXT") != "0";
@@ -163,6 +166,17 @@ public static class Ssi
                 FootDebug($"ParamFoot failed at {x:0.######}: global uv {g:0.######} newton {nok} uv {u2:0.######} L {w2.Length:E3} ortho {Vector3d.Dot(w2, Su2) / Su2.Length:E2} {Vector3d.Dot(w2, Sv2) / Sv2.Length:E2}");
             }
             return (new Vector3d(double.NaN), new Vector3d(double.NaN));
+        }
+        // Я1 (REFERENCE_SOLUTIONS п. 6; BACKLOG k149, s106): ОСНОВАНИЕ — ФУНКЦИЯ ПОВЕРХНОСТИ И ТОЧКИ, А НЕ ИСТОРИИ ЗАПРОСОВ.
+        // Ньютон с подсказки (последнее основание на этой поверхности в потоке) сходится к тому же корню, но последние биты
+        // зависят от старта: лишний запрос (отладочный вывод, проверка, другой поток) менял биты всех следующих — скругление
+        // корпуса s106 давало c7f8… с отладочным обработчиком и 89d9… без него, а неустойчивая булева резца на шаге 5
+        // раздувала это до отказа. Здесь найденный параметр округляется на сетку 2^-20 и уточняется заново от неё:
+        // подсказка ускоряет поиск, но в ответ не входит. Мутация/эксперимент: P3D_FOOTCANON=1.
+        if (FootCanon)
+        {
+            var uc = new Vector2d(Math.Round(uv.X * 1048576.0) / 1048576.0, Math.Round(uv.Y * 1048576.0) / 1048576.0);
+            if (FootNewton(s, x, ref uc) && (uc - uv).Length < 1e-5) uv = uc; else Interlocked.Increment(ref FootCanonMiss);
         }
         SetFootHint(s, uv); footUv = uv;
         ParamDerivs(s, uv, out var P, out var Su, out var Sv);
