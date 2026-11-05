@@ -37,13 +37,16 @@ public static class SheetRender
     }
 
     /// <summary>Рисует лист на холсте: масштаб — единиц холста на мм; начало холста — левый верхний угол листа.</summary>
+    static readonly bool ShadeSeamOff = Environment.GetEnvironmentVariable("P3D_SHADESEAM") == "0";
     public static void Draw(SKCanvas c, SheetGraphics g, float scale, bool white = true)
     {
         if (white) c.DrawRect(0, 0, (float)g.Width * scale, (float)g.Height * scale, new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill });
         float Y(double y) => (float)((g.Height - y) * scale);
         // k161: закраска (изометрия «с тонами»): многоугольники граней под линиями
         if (g.Shades.Count > 0)
-            using (var sp = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true })
+            // k166 (замечание 05.11, 15:03, п. 2–4): треугольники тонов — заливка и обводка тем же цветом в 1 точку: прежде
+            // сглаживание краёв оставляло светлые щели между соседними треугольниками — на виде «Тона» была видна сетка
+            using (var sp = new SKPaint { Style = ShadeSeamOff ? SKPaintStyle.Fill : SKPaintStyle.StrokeAndFill, StrokeWidth = 1f, StrokeJoin = SKStrokeJoin.Round, IsAntialias = true })
                 foreach (var (pts, argb) in g.Shades)
                 {
                     if (pts.Count < 3) continue;

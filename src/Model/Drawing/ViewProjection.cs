@@ -98,6 +98,8 @@ public static class ViewProjection
     static readonly bool DedupOff = Environment.GetEnvironmentVariable("P3D_HLRDEDUP") == "0";
     static readonly bool SkipNearOff = Environment.GetEnvironmentVariable("P3D_HLRSKIPNEAR") == "0";
     static readonly bool SeamSilOff = Environment.GetEnvironmentVariable("P3D_HLRSEAMSIL") == "0";
+    static readonly bool SilOutOff = Environment.GetEnvironmentVariable("P3D_HLRSILOUT") == "0";
+    static readonly bool SmoothOwnOff = Environment.GetEnvironmentVariable("P3D_HLRSMOOTHOWN") == "0";
     /// <summary>Разбор: точек, проверенных на видимость.</summary>
     public static long VisibilityTests;
 
@@ -109,6 +111,14 @@ public static class ViewProjection
         public double MinX, MinY, Cell; public int Nx, Ny;
         public List<int>[] Grid = Array.Empty<List<int>>();
         public double Eps;
+        /// <summary>
+        /// k166 (замечание 05.11, 15:03, п. 1, 5): грани, соединённые гладкими рёбрами (цилиндр, разрезанный на несколько граней
+        /// швами и продольными рёбрами), — одна «своя» поверхность для правила своей грани. Прежде очерк одной грани закрывала
+        /// сетка соседней гладкой грани (по сетке она «перед» очерком на корень из прогиба): на изометрии очерки трубы шли с
+        /// разрывами. Мутация P3D_HLRSMOOTHOWN=0 — своя только сама грань.
+        /// </summary>
+        public Dictionary<uint, uint> Group = new();
+        public uint G(uint f) => Group.TryGetValue(f, out var g) ? g : f;
 
         public void Index()
         {
@@ -133,23 +143,43 @@ public static class ViewProjection
         int CellY(double y) => Math.Clamp((int)((y - MinY) / Cell), 0, Ny - 1);
 
         /// <summary>Точка (координаты вида, Z — к наблюдателю) закрыта треугольником, кроме граней skip.</summary>
-        public bool Hidden(Vector3d p, uint skipA, uint skipB)
+        public bool Hidden(Vector3d p, uint skipA, uint skipB) => Hidden(p, skipA, skipB, Vector3d.Zero);
+
+        /// <summary>
+        /// k166: shift — сдвиг точки очерка наружу: свои (гладко соединённые) грани проверяются у сдвинутой точки, чужие — у
+        /// самой точки (сдвиг не уводит очерк под чужую кромку).
+        /// </summary>
+        public bool Hidden(Vector3d p, uint skipA, uint skipB, Vector3d shift)
         {
             Interlocked.Increment(ref VisibilityTests);
-            var cell = Grid[CellY(p.Y) * Nx + CellX(p.X)];
-            if (cell == null) return false;
-            foreach (int i in cell)
+            uint ga = G(skipA), gb = G(skipB);
+            bool shifted = shift != Vector3d.Zero;
+            // проход 0 — точка (без сдвига — все грани, со сдвигом — чужие); 1 и 2 — свои грани у точки, сдвинутой в обе
+            // стороны (у вогнутого участка «наружу» — под свою же поверхность): своя закрывает, только если закрывает обе
+            bool ownPlus = false;
+            for (int pass = 0; pass < (shifted ? 3 : 1); pass++)
             {
-                var t = Tris[i];
-                bool own = t.Face == skipA || t.Face == skipB;
-                if (own && SkipNearOff) continue;
-                // k161 (замечание 05.11, 01:23, п. 8): своя грань ребра закрывает его, если она перед ним на глубину больше 3 %
-                // габарита (ребро кармана на задней стороне трубы — за передней стороной той же цилиндрической грани).
-                // У очерка своя грань по сетке «перед» точкой на корень из прогиба (у R92 при прогибе 0.05 — около 3 мм): такие
-                // не закрывают. Прежде своя грань пропускалась целиком: ребро за ней рисовалось видимым. Мутация
-                // P3D_HLRSKIPNEAR=0 — прежнее.
-                if (!Inside(t, p.X, p.Y, out double z)) continue;
-                if (z > p.Z + (own ? 150 * Eps : Eps)) return true;
+                var q = pass == 0 ? p : pass == 1 ? p + shift : p - shift;
+                bool hit = false;
+                var cell = Grid[CellY(q.Y) * Nx + CellX(q.X)];
+                if (cell != null)
+                    foreach (int i in cell)
+                    {
+                        var t = Tris[i];
+                        bool own = t.Face == skipA || t.Face == skipB || !SmoothOwnOff && (G(t.Face) == ga || G(t.Face) == gb);
+                        if (own && SkipNearOff) continue;
+                        if (shifted && own != (pass > 0)) continue;
+                        // k161 (замечание 05.11, 01:23, п. 8): своя грань ребра закрывает его, если она перед ним на глубину больше 3 %
+                        // габарита (ребро кармана на задней стороне трубы — за передней стороной той же цилиндрической грани).
+                        // У очерка своя грань по сетке «перед» точкой на корень из прогиба (у R92 при прогибе 0.05 — около 3 мм): такие
+                        // не закрывают. Прежде своя грань пропускалась целиком: ребро за ней рисовалось видимым. Мутация
+                        // P3D_HLRSKIPNEAR=0 — прежнее.
+                        if (!Inside(t, q.X, q.Y, out double z)) continue;
+                        if (z > q.Z + (own ? 150 * Eps : Eps)) { hit = true; break; }
+                    }
+                if (pass == 0 && hit) return true;
+                if (pass == 1) { if (!hit) return false; ownPlus = true; }
+                if (pass == 2) return hit && ownPlus;
             }
             return false;
         }
@@ -206,6 +236,22 @@ public static class ViewProjection
                 sc.Tris.Add(new Tri { A = ToView(view, (Vector3d)a.P), B = ToView(view, (Vector3d)b.P), C = ToView(view, (Vector3d)c.P), Face = a.FaceId });
             }
         sc.Index();
+        // k166: группы гладко соединённых граней (объединение по гладким рёбрам)
+        if (!SmoothOwnOff)
+            foreach (var b in bodies)
+            {
+                uint Find(uint f) { while (sc.Group.TryGetValue(f, out var g) && g != f) { var gg = sc.Group.TryGetValue(g, out var g2) ? g2 : g; sc.Group[f] = gg; f = g; } return f; }
+                foreach (var e in b.Edges)
+                {
+                    if (e.Curve == null) continue;
+                    var fs = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
+                    if (fs.Count != 2 || !Smooth(e, fs[0], fs[1])) continue;
+                    uint r0 = Find(fs[0].Id), r1 = Find(fs[1].Id);
+                    if (r0 != r1) sc.Group[Math.Max(r0, r1)] = Math.Min(r0, r1);
+                    sc.Group.TryAdd(Math.Min(r0, r1), Math.Min(r0, r1));
+                }
+                foreach (var f in sc.Group.Keys.ToList()) sc.Group[f] = Find(f);
+            }
         var res = new List<ViewLine>();
         for (int bi = 0; bi < bodies.Count; bi++)
         {
@@ -297,7 +343,8 @@ public static class ViewProjection
     /// объединяются; ось вдоль взгляда — перекрестие центра, поперёк взгляда — отрезок по длине граней; наклонные оси не
     /// рисуются (на них — вспомогательные виды, D5).
     /// </summary>
-    public static List<ViewAxis> Axes(TSolid body, ViewFrame view)
+    /// <param name="tilted">k167 (замечание 05.11, 16:17, п. 7): и наклонные к виду оси (изометрия) — проекция оси по длине граней.</param>
+    public static List<ViewAxis> Axes(TSolid body, ViewFrame view, bool tilted = false)
     {
         var w = view.Toward;
         var groups = new List<(Vector3d O, Vector3d W, List<Vector3d> Pts)>();
@@ -342,7 +389,7 @@ public static class ViewProjection
                 if (bins.Count(b => b) < 30) continue;
             }
             if (along > 1 - 1e-9) { res.Add(new ViewAxis(view.Project(o), Vector2d.UnitX, -r, r, true, r)); continue; }
-            if (along > 1e-9) continue;
+            if (along > 1e-9 && !tilted) continue;
             var d2 = view.Project(o + W) - view.Project(o);
             if (d2.Length < 1e-12) continue;
             d2.Normalize();
@@ -409,23 +456,35 @@ public static class ViewProjection
     }
 
     /// <summary>Ломаная → видимые и невидимые участки: пробы через шаг не больше 1/64 габарита, граница — делением пополам.</summary>
-    static void Split(Scene sc, ViewFrame view, List<Vector3d> pts3, uint fa, uint fb, ViewLineKind kind, uint id, List<ViewLine> res)
+    static void Split(Scene sc, ViewFrame view, List<Vector3d> pts3, uint fa, uint fb, ViewLineKind kind, uint id, List<ViewLine> res, List<Vector3d>? normals = null)
     {
         var pv = pts3.Select(p => ToView(view, p)).ToList();
+        // k166 (замечание 05.11, 15:03, п. 1, 5): ОЧЕРК — ПРОВЕРКА СНАРУЖИ. Очерк по нормалям вершин лежит на точной поверхности,
+        // а очертание сетки — снаружи от него на прогиб граней; передние грани той же поверхности по сетке «закрывали» очерк
+        // (труба R92, грубая сетка: на глубину 12.6 мм — на пороге правила своей грани), и очерки изометрии шли с разрывами.
+        // Точка очерка проверяется сдвинутой наружу по нормали поверхности (она поперёк взгляда — в плоскости вида) на
+        // 6·Eps (0.1 % габарита): за очертанием сетки своей поверхности, под чужими гранями — как прежде. Мутация
+        // P3D_HLRSILOUT=0 — без сдвига.
+        var nv = normals != null && !SilOutOff ? normals.Select(n => { var q = new Vector3d(Vector3d.Dot(n, view.Right), Vector3d.Dot(n, view.Up), 0); return q.LengthSquared > 1e-24 ? q.Normalized() * (6 * sc.Eps) : Vector3d.Zero; }).ToList() : null;
         double step = Math.Max(sc.Cell / 2, 1e-3);
         var dense = new List<Vector3d> { pv[0] };
+        var off = new List<Vector3d> { nv?[0] ?? Vector3d.Zero };
         for (int i = 1; i < pv.Count; i++)
         {
             double len = new Vector2d(pv[i].X - pv[i - 1].X, pv[i].Y - pv[i - 1].Y).Length;
             int n = Math.Clamp((int)Math.Ceiling(len / step), 1, 512);
-            for (int k = 1; k <= n; k++) dense.Add(pv[i - 1] + (pv[i] - pv[i - 1]) * (k / (double)n));
+            for (int k = 1; k <= n; k++) { dense.Add(pv[i - 1] + (pv[i] - pv[i - 1]) * (k / (double)n)); off.Add(nv == null ? Vector3d.Zero : nv[i - 1] + (nv[i] - nv[i - 1]) * (k / (double)n)); }
         }
-        bool Hid(Vector3d p) => sc.Hidden(p, fa, fb);
+        // сдвиг точки отрезка [i−1, i] — по ближайшей пробе (деление пополам идёт внутри одного отрезка)
+        Vector3d curOff = Vector3d.Zero;
+        bool Hid(Vector3d p) => sc.Hidden(p, fa, fb, curOff);
         var cur = new List<Vector2d> { dense[0].Xy };
         // видимость участка — по его середине (у концов ребро касается соседних граней)
+        curOff = (off[0] + off[Math.Min(1, off.Count - 1)]) / 2;
         bool vis = !Hid((dense[0] + dense[Math.Min(1, dense.Count - 1)]) / 2);
         for (int i = 1; i < dense.Count; i++)
         {
+            curOff = (off[i - 1] + off[i]) / 2;
             bool v = !Hid((dense[i - 1] + dense[i]) / 2);
             if (v != vis)
             {
@@ -519,6 +578,7 @@ public static class ViewProjection
     {
         var w = view.Toward;
         var byFace = new Dictionary<uint, List<(Vector3d A, Vector3d B)>>();
+        var normalAt = new Dictionary<(long, long, long), Vector3d>();
         for (int t = 0; t + 2 < mesh.Indices.Length; t += 3)
         {
             var v0 = mesh.Vertices[mesh.Indices[t]]; var v1 = mesh.Vertices[mesh.Indices[t + 1]]; var v2 = mesh.Vertices[mesh.Indices[t + 2]];
@@ -530,11 +590,12 @@ public static class ViewProjection
             double g0 = G(n0), g1 = G(n1), g2 = G(n2);
             double G(Vector3d n) { double g = Vector3d.Dot(n, w); return Math.Abs(g) < 1e-12 ? 1e-12 : g; }
             var P = new[] { (Vector3d)v0.P, (Vector3d)v1.P, (Vector3d)v2.P }; var g = new[] { g0, g1, g2 };
+            var N = new[] { n0, n1, n2 };
             var cross = new List<Vector3d>(2);
             for (int k = 0; k < 3; k++)
             {
                 int m = (k + 1) % 3;
-                if (g[k] * g[m] < 0) { double u = g[k] / (g[k] - g[m]); cross.Add(P[k] + (P[m] - P[k]) * u); }
+                if (g[k] * g[m] < 0) { double u = g[k] / (g[k] - g[m]); var cp = P[k] + (P[m] - P[k]) * u; cross.Add(cp); normalAt.TryAdd(Key(cp), N[k] + (N[m] - N[k]) * u); }
             }
             if (cross.Count != 2 || (cross[0] - cross[1]).LengthSquared < 1e-18) continue;
             (byFace.TryGetValue(v0.FaceId, out var l) ? l : byFace[v0.FaceId] = new()).Add((cross[0], cross[1]));
@@ -562,7 +623,8 @@ public static class ViewProjection
                         var other = Key(segs[next].A) == Key(end) ? segs[next].B : segs[next].A;
                         if (fwd) chain.AddLast(other); else chain.AddFirst(other);
                     }
-                Split(sc, view, chain.ToList(), face, uint.MaxValue, ViewLineKind.Silhouette, face, res);
+                var cl = chain.ToList();
+                Split(sc, view, cl, face, uint.MaxValue, ViewLineKind.Silhouette, face, res, cl.Select(q => normalAt.TryGetValue(Key(q), out var nn) ? nn : Vector3d.Zero).ToList());
             }
         }
     }

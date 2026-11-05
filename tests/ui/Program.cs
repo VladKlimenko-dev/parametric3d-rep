@@ -1086,6 +1086,8 @@ static void PathTo(object target, (object, string)[] extra)
             }
         }
 
+// k167: виды чертежа в проверках строятся сразу (фоновое построение — в UI-DRAWING-K167)
+SheetWindow.SyncViews = Environment.GetEnvironmentVariable("P3D_ASYNCVIEWS") != "1";
 string IconsTsv = Path.Combine(AppContext.BaseDirectory, "icons.tsv");
 
 Check("UI-COMMAND-REGISTRY", () =>
@@ -5050,7 +5052,7 @@ Check("UI-UNITS-INPUT-K128", () =>
 
 Check("UI-SKETCH-GCS-K128", () =>
 {
-    // k128 (замечание 28.10, 17:00): эскиз пользователя PART-01 (in/kg/s).
+    // k128 (замечание 28.10, 17:00): эскиз пользователя (in/kg/s).
     // (A) угол «отрезок — ось» 30° → 20°: дуга размера пересекает отрезок там же, где прежде (центр дуги — пересечение
     //     прямых — уезжает на 140 мм; прежде радиус дуги был постоянным, и размер «убегал» влево);
     // (B) свободный конец нижнего отрезка тянут вправо до +300 мм: на каждом шаге все связи и сильные размеры выполнены,
@@ -8714,6 +8716,8 @@ Check("UI-DIAG-PNG", () =>
     while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
     var dw = t.Result!; var d = dw.Drawing!;
     if (Environment.GetEnvironmentVariable("P3D_DIAGPNGSCALE") is { Length: > 0 } dsc) dw.Change(() => d.Scale = double.Parse(dsc, System.Globalization.CultureInfo.InvariantCulture));
+    // k166: стиль и направление изометрии (P3D_DIAGPNGISO=shaded|material|…, P3D_ISODIR=v:…)
+    if (Environment.GetEnvironmentVariable("P3D_DIAGPNGISO") is { Length: > 0 } dst) { var iv = d.Views.First(v => v.Name == "iso"); dw.Change(() => { iv.Style = dst; if (Environment.GetEnvironmentVariable("P3D_ISODIR") is { Length: > 0 } idr) iv.Dir = idr; }); dw.InvalidateViews(); dw.Refresh(); }
     if (Environment.GetEnvironmentVariable("P3D_DIAGPNGONLY") is { Length: > 0 } donly) { dw.Change(() => d.Views.RemoveAll(v => v.Name != donly)); dw.InvalidateViews(); dw.Refresh(); }
     dw.Change(() => d.AutoDimensions(dw.Scene!));
     if (Environment.GetEnvironmentVariable("P3D_DIAGPNGMODEL") != "0") { d.ModelDimensions(dp); dw.Change(() => d.ArrangeDims(dw.Scene!)); }
@@ -8771,6 +8775,314 @@ Check("UI-DIAG-SHEET", () =>
     dw.Close(); w.Close();
 });
 
+// k169 (замечание 05.11, 16:17, п. 15–17): окно создания документа (шаблоны папки, новый шаблон с новыми параметрами, картинка
+// листа), листы чертежа: «Добавить лист» (формат первого, форма 2а), ярлыки листов, у каждого листа свои данные, «+» — лист из
+// окна создания, запись и чтение всех листов.
+Check("UI-DRAWING-K169", () =>
+{
+    var tdir = Path.Combine(Path.GetTempPath(), "p3d_k169_tpl_" + Guid.NewGuid().ToString("N")[..8]);
+    Environment.SetEnvironmentVariable("P3D_TEMPLATES", tdir);
+    var sp = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 10), "k169"); var w = Open(sp); BuildNow(sp);
+    SheetWindow? dw = null, dw2 = null;
+    try
+    {
+        // 17. окно создания: шаблоны по умолчанию в папке, имя по параметрам, новый шаблон
+        var dlg = new NewDocumentDialog("k169");
+        int seeded = Directory.GetFiles(tdir, "*.p3dtpl").Length;
+        dlg.Set("base", 0);
+        string baseName = dlg.TemplateName;
+        dlg.Set("std", 0); dlg.Set("units", 3); dlg.Set("format", 4); dlg.Set("orient", 1);
+        Console.WriteLine($"  templates {seeded}, base «{baseName}» -> «{dlg.TemplateName}», preview {dlg.HasPreview}");
+        Require(seeded == 4 && dlg.HasPreview, "default templates in the folder, sheet preview");
+        Require(dlg.TemplateName == "ЕСКД in/lb/s A4 PT" && dlg.TemplateName != baseName, "template name from the parameters");
+        dlg.Accept();
+        var res = dlg.Accepted!;
+        Require(res.TemplateCreated && File.Exists(Path.Combine(tdir, NewDocumentDialog.FileNameOf(res.Template.Name))) && res.DocType == "drawing", "new template saved to the folder");
+        var tc = DrawingCommands.Create(w, res);
+        while (!tc.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+        dw = tc.Result!;
+        Console.WriteLine($"  drawing: {dw.Template.Format} {(dw.Template.Landscape ? "LS" : "PT")}, units {dw.Drawing!.Units}");
+        Require(dw.Template.Format == "A4" && !dw.Template.Landscape && dw.Drawing.Units == "in", "drawing from the dialog: format, orientation, units");
+        // 15. «Добавить лист»: формат первого, форма 2а, без видов
+        var first = dw.Drawing;
+        dw.Press("Добавить лист (формат первого листа)");
+        Require(dw.Sheets.Count == 2 && dw.SheetIndex == 1 && dw.Template.Format == "A4" && dw.Template.TitleBlock == Parametric3D.Model.Drawing.TitleBlockForm.Form2a && dw.Drawing!.Views.Count == 0, "second sheet: same format, form 2a, no views");
+        var fields = dw.Pages[0].Texts.Where(x => x.Field == Parametric3D.Model.Drawing.Fields.Sheet).Select(x => x.Text).ToList();
+        Console.WriteLine($"  sheet 2 field: {string.Join(",", fields)}");
+        // 16. ярлыки: «Лист 1», «Лист 2», «+»; у каждого листа свои данные
+        var tabs = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(dw).OfType<Button>().Where(b => b.Name?.StartsWith("dr_sheet_tab") == true).Select(b => b.Name).ToList();
+        Console.WriteLine($"  tabs: {string.Join(", ", tabs)}");
+        Require(tabs.SequenceEqual(new[] { "dr_sheet_tab_1", "dr_sheet_tab_2", "dr_sheet_tab_add" }), "sheet tabs");
+        dw.Change(() => dw.Drawing!.Notes.Add(new Parametric3D.Model.Drawing.DrawingNote { Kind = "text", X = 50, Y = 50, Text = "лист 2" }));
+        dw.SwitchSheet(0);
+        Require(ReferenceEquals(dw.Drawing, first) && first.Notes.All(n => n.Text != "лист 2") && first.Views.Count > 0, "sheet 1 — its own data");
+        dw.SwitchSheet(1);
+        Require(dw.Drawing!.Notes.Any(n => n.Text == "лист 2"), "sheet 2 — its own data");
+        // «+»: лист из окна создания (тип — чертёж: с видами)
+        var dlg2 = new NewDocumentDialog("k169", sheetMode: true, baseTemplate: first.Template);
+        dlg2.Set("format", 3); dlg2.Set("orient", 0); dlg2.Accept();
+        var s3 = dw.ApplyNewSheet(dlg2.Accepted!);
+        Require(dw.Sheets.Count == 3 && dw.SheetIndex == 2 && s3.Template.Format == "A3" && s3.Views.Count > 0, "third sheet from the dialog");
+        // запись и чтение всех листов
+        var path = Path.Combine(tdir, "k169" + SheetWindow.DrawingExt);
+        dw.SaveTo(path);
+        dw2 = SheetWindow.OpenFile(path);
+        Console.WriteLine($"  reopened: sheets {dw2.Sheets.Count}, formats {string.Join(",", dw2.Sheets.Select(x => x.Template.Format))}");
+        Require(dw2.Sheets.Count == 3 && dw2.Sheets[1].Notes.Any(n => n.Text == "лист 2") && dw2.Sheets[2].Template.Format == "A3", "all sheets saved and read");
+    }
+    finally { dw?.Close(); dw2?.Close(); w.Close(); Environment.SetEnvironmentVariable("P3D_TEMPLATES", null); try { Directory.Delete(tdir, true); } catch { } }
+});
+
+// k168 (замечание 05.11, 16:17, п. 8, 10–14): куб вида у изометрии (грань, угол, поворот), «Таблица на листе» — переключатель,
+// таблица: название, строки и столбцы в панели, правка ячейки на листе, меню строк и столбцов, перенос за шапку с притяжением
+// к рамке и место после смены стандарта, язык чертежа, линия шаблона двумя щелчками (перенос, концы, удаление).
+Check("UI-DRAWING-K168", () =>
+{
+    var sp = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 10), "k168"); var w = Open(sp); BuildNow(sp);
+    var t = DrawingCommands.NewDrawing(w);
+    while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+    var dw = t.Result!; var d = dw.Drawing!; var tpl = dw.Template;
+    try
+    {
+        dw.Refresh();
+        // 8. куб вида: щелчок по грани — вид по нормали грани
+        var iso = d.Views.First(v => v.Name == "iso");
+        dw.Down(iso.X, iso.Y); dw.Up();
+        var cube = dw.CubeOf(iso);
+        Require(cube is { Faces: 3 }, $"view cube with 3 visible faces: {cube?.Faces}");
+        var hit = dw.FirstCubeFace(iso);
+        Require(hit != null, "a cube face point");
+        dw.Down(hit!.Value.P.X, hit.Value.P.Y); dw.Up();
+        var fr = Parametric3D.Model.Drawing.ViewFrame.Of(d.DirOf(iso));
+        Console.WriteLine($"  cube face {hit.Value.N}: toward {fr.Toward}");
+        Require((fr.Toward - hit.Value.N).Length < 1e-9, "the view looks along the face normal");
+        dw.HomeView(iso);
+        // 10. таблица — переключатель
+        int tables0 = tpl.Items.Count(i => i.Kind == "table");
+        dw.Press("Таблица на листе");
+        var tab = tpl.Items.Single(i => i.Kind == "table");
+        Require(dw.ToggleState("Таблица на листе") == true && !tab.Hidden, "table on");
+        dw.Press("Таблица на листе");
+        Require(tpl.Items.Count(i => i.Kind == "table") == 1 && tab.Hidden && dw.ToggleState("Таблица на листе") == false, "second press hides the table (not a new one)");
+        dw.Press("Таблица на листе");
+        Require(!tab.Hidden && tpl.Items.Count(i => i.Kind == "table") == 1, "third press shows it again");
+        // 11. панель: название, строки, столбцы
+        var nr = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(dw).OfType<NumericUpDown>().First(x => x.Name == "dr_table_rows");
+        nr.Value = 6; Dispatcher.UIThread.RunJobs();
+        var nc = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(dw).OfType<NumericUpDown>().First(x => x.Name == "dr_table_cols");
+        nc.Value = 4; Dispatcher.UIThread.RunJobs();
+        Console.WriteLine($"  table {tab.Rows}x{tab.Columns!.Count}");
+        Require(tab.Rows == 6 && tab.Columns.Count == 4 && tab.Cells!.All(r => r.Count == 4), "rows and columns from the panel");
+        // подсветка ячейки и правка на листе
+        double cx = tab.ColX(1) + 2, cy = tab.Y - tab.RowH * 2.5;
+        dw.MoveTo(cx, cy);
+        Require(dw.HoveredTemplate is { Part: "cell", Row: 2, Col: 1 }, $"cell highlighted: {dw.HoveredTemplate}");
+        dw.DoubleClick(cx, cy);
+        Require(dw.CellEditor != null, "cell editor on the sheet");
+        dw.CellEditor!.Text = "Проверка";
+        dw.EndCellEdit(true);
+        Require(tab.Cells[2][1] == "Проверка" && dw.Pages[0].Texts.Any(x => x.Text == "Проверка"), "cell text on the sheet");
+        // строка: подсветка левее таблицы, меню
+        dw.MoveTo(tab.X - 2, cy);
+        Require(dw.HoveredTemplate is { Part: "row", Row: 2 }, "row highlighted left of the table");
+        var menu = dw.TableMenuAt(tab.X - 2, cy);
+        Console.WriteLine($"  row menu: {string.Join(" | ", menu.Select(m => m.Text))}");
+        Require(menu.Count == 5, "row menu: above, below, copy, paste, delete");
+        menu.First(m => m.Text == "Копировать строку").Run();
+        menu.First(m => m.Text == "Добавить строку выше").Run();
+        Require(tab.Rows == 7 && tab.Cells[2][1] == "" && tab.Cells[3][1] == "Проверка", "row added above");
+        dw.TableMenuAt(tab.X - 2, tab.Y - tab.RowH * 3.5).First(m => m.Text == "Удалить строку").Run();
+        Require(tab.Rows == 6 && tab.Cells[2][1] == "", "row deleted");
+        // столбец: подсветка выше таблицы, меню
+        dw.MoveTo(tab.ColX(2) + 2, tab.Y + 2);
+        Require(dw.HoveredTemplate is { Part: "col", Col: 2 }, "column highlighted above the table");
+        dw.TableMenuAt(tab.ColX(2) + 2, tab.Y + 2).First(m => m.Text == "Добавить столбец справа").Run();
+        Require(tab.Columns.Count == 5, "column added");
+        dw.TableMenuAt(tab.ColX(3) + 2, tab.Y + 2).First(m => m.Text == "Удалить столбец").Run();
+        Require(tab.Columns.Count == 4, "column deleted");
+        // 14. перенос за шапку с притяжением к углу рамки; после смены стандарта — на месте
+        var (x0, y0, x1, y1) = Parametric3D.Model.Drawing.SheetLayout.FrameRect(tpl);
+        double hx = tab.X + 3, hy = tab.Y - tab.RowH / 2;
+        dw.Down(hx, hy);
+        for (int i = 1; i <= 10; i++) { dw.MoveTo(hx - 20 * i, hy - 3 * i); Dispatcher.UIThread.RunJobs(); }
+        dw.Up();
+        Require(Math.Abs(tab.X - x1 + tab.TableW) > 1, "table moved");
+        double ex = x1 - tab.TableW + 1.5, ey = y1 - 1.5;
+        dw.Down(tab.X + 3, tab.Y - tab.RowH / 2);
+        dw.MoveTo(tab.X + 3 + (ex - tab.X), tab.Y - tab.RowH / 2 + (ey - tab.Y)); dw.Up();
+        Console.WriteLine($"  table at {tab.X:0.##},{tab.Y:0.##} snap {tab.Snap} (frame corner {x1 - tab.TableW:0.##},{y1:0.##})");
+        Require(Math.Abs(tab.X - (x1 - tab.TableW)) < 1e-9 && Math.Abs(tab.Y - y1) < 1e-9 && tab.Snap == "tr", "snaps to the frame corner");
+        dw.Press("Стандарт оформления (ЕСКД / ISO)");
+        var (_, _, x1b, y1b) = Parametric3D.Model.Drawing.SheetLayout.FrameRect(tpl);
+        Console.WriteLine($"  after standard change: table {tab.X:0.##},{tab.Y:0.##}, frame corner {x1b - tab.TableW:0.##},{y1b:0.##}");
+        Require(Math.Abs(tab.X - (x1b - tab.TableW)) < 1e-9 && Math.Abs(tab.Y - y1b) < 1e-9, "stays in the frame corner after the standard change");
+        dw.Press("Стандарт оформления (ЕСКД / ISO)");
+        // 12. язык: шапка таблицы и подписи надписи — английские
+        dw.Change(() => tpl.Language = "en");
+        var txt = dw.Pages[0].Texts.Select(x => x.Text).ToList();
+        Console.WriteLine($"  en: Rev. {txt.Contains("Rev.")}, Description {txt.Contains("Description")}, Drawn {txt.Contains("Drawn")}");
+        Require(txt.Contains("Rev.") && txt.Contains("Description") && txt.Contains("Drawn") && !txt.Contains("Содержание"), "drawing language — English");
+        dw.Change(() => tpl.Language = "");
+        // 13. линия шаблона двумя щелчками; перенос; конец; удаление
+        dw.Press("Линия шаблона");
+        dw.PickAt(60, 100); dw.PickAt(160, 100);
+        var line = tpl.Items.Last(i => i.Kind == "line");
+        Require(line.X == 60 && line.Y == 100 && line.X2 == 160 && line.Y2 == 100, "line by two clicks");
+        dw.MoveTo(110, 100.3);
+        Require(dw.HoveredTemplate is { Part: "line" }, "line highlighted");
+        dw.Down(110, 100.3); dw.MoveTo(110, 110.3); dw.Up();
+        Require(line.Y == 110 && line.Y2 == 110, $"line moved: {line.Y}");
+        dw.Down(160, 110); dw.MoveTo(170, 120); dw.Up();
+        Require(line.X2 == 170 && line.Y2 == 120 && line.X == 60, "line end moved");
+        dw.Down(110, 115); dw.Up();
+        dw.DeleteSelected();
+        Require(!tpl.Items.Contains(line), "line deleted");
+    }
+    finally { dw.Close(); w.Close(); }
+});
+
+// k167 (замечание 05.11, 16:17, п. 1–7, 9): допуски Upper / Lower (разные — одно над другим мелко, равные — «±» тем же шрифтом),
+// панель размеров без полей текста и смещения, двойной щелчок по полю надписи после ввода, автоматические размеры и осевые
+// линии — у выбранного вида, осевые на изометрии, имена в строке состояния, разрез — в фоне с ходом в строке состояния.
+Check("UI-DRAWING-K167", () =>
+{
+    var sp = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 10), "k167"); var w = Open(sp); BuildNow(sp);
+    var t = DrawingCommands.NewDrawing(w);
+    while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+    var dw = t.Result!; var d = dw.Drawing!;
+    try
+    {
+        dw.Refresh();
+        dw.Change(() => d.AutoDimensions(dw.Scene!));
+        var dim = d.Dims.First(x => x.View == "front" && x.Kind == "h");
+        // 1. допуски: разные — два текста мелким шрифтом, верхний выше нижнего
+        dw.Change(() => { dim.TolUp = "0.015"; dim.TolLo = "0.010"; });
+        var texts = dw.Pages[0].Texts;
+        var up = texts.FirstOrDefault(x => x.Text == "+0,015"); var lo = texts.FirstOrDefault(x => x.Text == "−0,01");
+        Console.WriteLine($"  stacked: up {(up == null ? "-" : $"{up.Height}@{up.Y:0.##}")}, lo {(lo == null ? "-" : $"{lo.Height}@{lo.Y:0.##}")}");
+        Require(up != null && lo != null && up.Height < 3.5 && lo.Height < 3.5 && up.Y > lo.Y, "upper over lower, smaller font");
+        // равные — «±» тем же шрифтом через пробел
+        dw.Change(() => { dim.TolUp = "0.1"; dim.TolLo = "0.1"; });
+        var pm = dw.Pages[0].Texts.FirstOrDefault(x => x.Text.EndsWith(" ±0,1"));
+        Console.WriteLine($"  equal: {pm?.Text} h {pm?.Height}");
+        Require(pm != null && Math.Abs(pm.Height - 3.5) < 1e-9, "equal deviations — ± in the dimension font");
+        // только верхнее — одно, сверху
+        dw.Change(() => { dim.TolUp = "0.2"; dim.TolLo = ""; });
+        Require(dw.Pages[0].Texts.Any(x => x.Text == "+0,2" && x.Height < 3.5) && !dw.Pages[0].Texts.Any(x => x.Text.StartsWith("−")), "upper only");
+        // 2–3. панель: заголовки отклонений, нет полей текста и смещения
+        var tbs = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(dw).OfType<TextBlock>().Select(x => x.Text).ToList();
+        var boxes = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(dw).OfType<TextBox>().ToList();
+        Console.WriteLine($"  panel: headers {tbs.Contains("Верхнее (+)")}/{tbs.Contains("Нижнее (−)")}, tol boxes {boxes.Count(x => x.Name == "dr_tol_up")}, text boxes {boxes.Count(x => x.Watermark as string == "текст")}");
+        Require(tbs.Contains("Верхнее (+)") && tbs.Contains("Нижнее (−)") && boxes.Count(x => x.Name == "dr_tol_up") == d.Dims.Count && !boxes.Any(x => x.Watermark as string is "текст"), "deviation columns, no text/offset fields");
+        // 4. двойной щелчок по полю надписи после ввода значения
+        var ft = dw.Pages[0].Texts.First(q => q.Field == Parametric3D.Model.Drawing.Fields.Designation);
+        dw.FocusFieldAt(ft.X, ft.Y + 1); Dispatcher.UIThread.RunJobs();
+        var fb = TopLevel.GetTopLevel(dw)!.FocusManager!.GetFocusedElement() as TextBox;
+        Require(fb != null, "the field is focused");
+        fb!.Text = "АБВГ.123";
+        fb.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
+        Dispatcher.UIThread.RunJobs();
+        var ft2 = dw.Pages[0].Texts.First(q => q.Field == Parametric3D.Model.Drawing.Fields.Designation);
+        dw.FocusFieldAt(ft2.X, ft2.Y + 1); Dispatcher.UIThread.RunJobs();
+        var fb2 = TopLevel.GetTopLevel(dw)!.FocusManager!.GetFocusedElement() as TextBox;
+        Console.WriteLine($"  title field after edit: {fb2?.Text}, attached {(fb2 != null && TopLevel.GetTopLevel(fb2) != null)}");
+        Require(fb2 != null && TopLevel.GetTopLevel(fb2) != null && fb2.Text == "АБВГ.123", "double click on the field again starts editing");
+        // 6. автоматические размеры — у выбранного вида
+        var top = d.Views.First(v => v.Name == "top");
+        // перенесённый автоматический размер другого вида — остаётся, где перенесён
+        var moved = d.Dims.First(x => x.View == "front" && x.Auto && x.Kind is "h" or "v"); dw.Change(() => { moved.Offset += 7; moved.Arrange = false; });
+        var other = d.Dims.Where(x => x.View != "top").Select(x => (x.View, x.Kind, x.Value, x.Offset)).ToList();
+        dw.Down(top.X, top.Y); dw.Up();
+        Require(dw.Selected == top, "top view selected");
+        dw.Press("Автоматические размеры (габариты, отверстия, радиусы)");
+        var other2 = d.Dims.Where(x => x.View != "top").Select(x => (x.View, x.Kind, x.Value, x.Offset)).ToList();
+        Console.WriteLine($"  auto dims on the top view: others {other.Count} -> {other2.Count}, top {d.Dims.Count(x => x.View == "top")}");
+        Require(other.SequenceEqual(other2) && d.Dims.Any(x => x.View == "top"), "other views untouched");
+        // 7. осевые линии: переключатель, у выбранного вида; на изометрии — есть
+        var iso = d.Views.First(v => v.Name == "iso");
+        Require(dw.Scene!.Axes.TryGetValue("iso", out var ia) && ia.Count > 0 && d.CenterSegs.TryGetValue("iso", out var isg) && isg.Count > 0, "centre lines on the isometric view");
+        dw.Down(iso.X, iso.Y); dw.Up();
+        Require(dw.ToggleState("Осевые линии") == true, "toggle shows on");
+        dw.Press("Осевые линии");
+        Console.WriteLine($"  centre lines: iso {iso.CenterLines}, front {d.Views.First(v => v.Name == "front").CenterLines}, toggle {dw.ToggleState("Осевые линии")}");
+        Require(!iso.CenterLines && d.Views.First(v => v.Name == "front").CenterLines && dw.ToggleState("Осевые линии") == false, "only the selected view, toggle off");
+        Require(!d.CenterSegs.TryGetValue("iso", out var isg2) || isg2.Count == 0, "isometric centre lines off");
+        // 9. строка состояния — имя под курсором
+        var hd = d.Dims.First(x => x.View == "front"); var tc = d.HitTexts[hd][0];
+        dw.MoveTo((tc[0].X + tc[2].X) / 2, (tc[0].Y + tc[2].Y) / 2);
+        Console.WriteLine($"  status: {dw.StatusText}");
+        Require(dw.StatusText.Contains(d.CaptionOf(hd)), "the hovered dimension is named in the status line");
+        // 5. разрез — в фоне, ход в строке состояния
+        SheetWindow.SyncViews = false;
+        try
+        {
+            var tb = d.Boxes["top"];
+            dw.StartPick("section", ""); dw.PickAt((tb.X0 + tb.X1) / 2, (tb.Y0 + tb.Y1) / 2);
+            bool async = dw.BuildingViews; double pv = dw.ProgressValue; string st = dw.StatusText;
+            dw.WaitViews();
+            var sec = d.Views.Last(v => v.IsSection);
+            Console.WriteLine($"  section: background {async}, progress {pv:0.##}, status «{st}», lines {dw.Scene!.Lines.GetValueOrDefault(sec.Name)?.Count}");
+            Require(async && pv >= 0 && st.StartsWith("Строится"), "the section is built in the background with progress");
+            Require(!dw.BuildingViews && dw.Scene!.Lines.TryGetValue(sec.Name, out var sl) && sl.Count > 0, "the section view is built");
+        }
+        finally { SheetWindow.SyncViews = true; }
+    }
+    finally { dw.Close(); w.Close(); }
+});
+
+// k166 (замечание 05.11, 15:03, п. 6, 10, 11): элементы детали — подсветка под курсором и выбор щелчком без инструмента (Ctrl или
+// Shift — ещё), «Размер (авто)» ставит размер по выбранным; без выбранных — режим выбора нескольких элементов, Enter или средняя
+// кнопка — размер или цепочка; радиус нацеливания вдвое меньше.
+Check("UI-DRAWING-K166", () =>
+{
+    var part = new Part("k166");
+    var sk = new Sketch("S", Parametric3D.Kernel.Frame3.XY); part.Add(sk);
+    var q = new[] { new SkPoint(0, 0), new SkPoint(60, 0), new SkPoint(80, 40), new SkPoint(20, 40) };
+    for (int k = 0; k < 4; k++) sk.AddEntity(new SkLine(q[k], q[(k + 1) % 4]));
+    sk.AddEntity(new SkCircle(new SkPoint(40, 20), 5));
+    var ex = new ExtrudeFeature { SketchId = sk.Id }; ex.Side1.Distance = new ValueRef(10); part.AddFeature(ex);
+    part.Rebuild(null);
+    var sp = DocumentSession.FromPart(part, "k166"); var w = Open(sp); BuildNow(sp);
+    var t = DrawingCommands.NewDrawing(w);
+    while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+    var dw = t.Result!; var d = dw.Drawing!;
+    try
+    {
+        dw.Refresh(); dw.StartPick("dim1", ""); dw.CancelPick();
+        (double X, double Y) S(double x, double y) => d.ToSheet("front", new OpenTK.Mathematics.Vector2d(x, y));
+        double want = 60 * 40 / Math.Sqrt(20 * 20 + 40 * 40);
+        // подсветка элемента без инструмента
+        var a1 = S(10, 20); dw.MoveTo(a1.X, a1.Y);
+        Console.WriteLine($"  hover: {dw.HoveredElement?.El.What}");
+        Require(dw.HoveredElement is { } he && he.El.Kind == 'L', "the line under the cursor is highlighted without a tool");
+        // выбор: щелчок, щелчок с Ctrl; «Размер (авто)» — по выбранным
+        dw.AddModifier = false; dw.Down(a1.X, a1.Y); dw.Up();
+        var a2 = S(70, 20); dw.AddModifier = true; dw.Down(a2.X, a2.Y); dw.Up(); dw.AddModifier = false;
+        Console.WriteLine($"  selected {dw.SelectedElements.Count}");
+        Require(dw.SelectedElements.Count == 2, "two lines selected (click, Ctrl+click)");
+        int n0 = d.Dims.Count;
+        dw.AutoDimButton();
+        var par = d.Dims.Last();
+        Console.WriteLine($"  from the selection: {par.Kind} {par.Value:0.###}");
+        Require(d.Dims.Count == n0 + 1 && par.Kind == "al" && Math.Abs(par.Value - want) < 1e-6 && dw.SelectedElements.Count == 0, "dimension from the selected elements");
+        // без выбранных — режим: три элемента, Enter — цепочка из двух размеров
+        dw.AutoDimButton();
+        foreach (var (x, y) in new[] { (10.0, 20.0), (40.0, 20.0), (70.0, 20.0) }) { var p = S(x, y); dw.PickAt(p.X, p.Y); }
+        Require(dw.SelectedElements.Count == 3, $"three elements collected: {dw.SelectedElements.Count}");
+        int n1 = d.Dims.Count; dw.FinishAuto();
+        var chain = d.Dims.Skip(n1).ToList();
+        Console.WriteLine($"  chain: {string.Join(", ", chain.Select(c => $"{c.Kind} {c.Value:0.###}"))}");
+        Require(chain.Count == 2 && Math.Abs(chain.Sum(c => c.Value) - want) < 1e-6, "chain: line — hole centre — line");
+        // радиус нацеливания: линия в 3 мм листа — не цель (прежде 4 мм — цель)
+        double s = d.Xf["front"].S;
+        var nrm = new OpenTK.Mathematics.Vector2d(-40, 20).Normalized();
+        var far = new OpenTK.Mathematics.Vector2d(10, 20) + nrm * (3 / s);
+        Require(dw.ElementAt("front", far) == null, "a line 3 mm away is not picked");
+        Require(dw.ElementAt("front", new OpenTK.Mathematics.Vector2d(10, 20) + nrm * (1.5 / s)) is { Kind: 'L' }, "a line 1.5 mm away is picked");
+    }
+    finally { dw.Close(); w.Close(); }
+});
+
 // k165 (замечание 05.11, 13:27): «Размер (авто)» по элементам (п. 3) — две параллельные наклонные линии: расстояние между
 // ними поперёк линий; точка и линия; две линии под углом — угол; кнопка углового размера (п. 4); подписи центров — перенос
 // мышью, не перескакивают при переносе размеров (п. 1–2); обозначения — вместе с видом (п. 6); основная линия 0.1 мм (п. 5).
@@ -8798,14 +9110,14 @@ Check("UI-DRAWING-K165", () =>
         var a1 = S(10, 20); var pv = dw.PickPreview(a1.X, a1.Y);
         Require(pv != null && pv.Count > 0, "the line under the cursor is highlighted");
         dw.PickAt(a1.X, a1.Y);
-        var a2 = S(70, 20); dw.PickAt(a2.X, a2.Y);
+        var a2 = S(70, 20); dw.PickAt(a2.X, a2.Y); dw.FinishAuto();
         var par = d.Dims.Last();
         var u = new OpenTK.Mathematics.Vector2d(par.X2 - par.X1, par.Y2 - par.Y1); var edge = new OpenTK.Mathematics.Vector2d(20, 40).Normalized();
         Console.WriteLine($"  parallel lines: {par.Kind} {par.Value:0.###} (want {want:0.###}), along the edge {OpenTK.Mathematics.Vector2d.Dot(u.Normalized(), edge):0.######}");
         Require(par.Kind == "al" && Math.Abs(par.Value - want) < 1e-6 && Math.Abs(OpenTK.Mathematics.Vector2d.Dot(u.Normalized(), edge)) < 1e-9, "distance between parallel lines, across them");
         // точка и линия: вершина (20, 40) и нижняя линия — 40
         dw.StartPick("auto1", "");
-        var b1 = S(20, 40); dw.PickAt(b1.X, b1.Y); var b2 = S(40, 0); dw.PickAt(b2.X, b2.Y);
+        var b1 = S(20, 40); dw.PickAt(b1.X, b1.Y); var b2 = S(40, 0); dw.PickAt(b2.X, b2.Y); dw.FinishAuto();
         var pl = d.Dims.Last();
         Console.WriteLine($"  point and line: {pl.Kind} {pl.Value:0.###}");
         Require(pl.Kind == "v" && Math.Abs(pl.Value - 40) < 1e-6, "distance from the point to the line");
@@ -8814,14 +9126,14 @@ Check("UI-DRAWING-K165", () =>
         foreach (var mode in new[] { "auto1", "ang1" })
         {
             dw.StartPick(mode, "");
-            var c1 = S(30, 0); dw.PickAt(c1.X, c1.Y); var c2 = S(5, 10); dw.PickAt(c2.X, c2.Y);
+            var c1 = S(30, 0); dw.PickAt(c1.X, c1.Y); var c2 = S(5, 10); dw.PickAt(c2.X, c2.Y); if (mode == "auto1") dw.FinishAuto();
             var an = d.Dims.Last();
             Console.WriteLine($"  {mode}: {an.Kind} {an.Value:0.###}° at ({an.X1:0.###},{an.Y1:0.###}), text {d.CaptionOf(an)}");
             Require(an.Kind == "ang" && Math.Abs(an.Value - wantA) < 1e-6 && Math.Abs(an.X1) < 1e-6 && Math.Abs(an.Y1) < 1e-6, "angle between the lines");
         }
         // окружность — диаметр
         dw.StartPick("auto1", "");
-        var h1 = S(33, 18); dw.PickAt(h1.X, h1.Y);
+        var h1 = S(33, 18); dw.PickAt(h1.X, h1.Y); dw.FinishAuto();
         Require(d.Dims.Last().Kind == "dia" && Math.Abs(d.Dims.Last().X2 - 5) < 1e-6, "circle — diameter");
         // подписи центров: перенос мышью, не перескакивают при переносе размера
         dw.Change(() => d.AutoDimensions(dw.Scene!));
@@ -9011,9 +9323,10 @@ Check("UI-DRAWING-K161", () =>
         var ib = d.Boxes["iso"];
         dw.Down(iso.X, iso.Y); dw.Up();
         Require(dw.Selected == iso, "isometric selected");
-        double rr = Math.Max(ib.X1 - ib.X0, ib.Y1 - ib.Y0) / 2 + 4;
-        dw.Down(iso.X + rr, iso.Y);
-        for (int i = 1; i <= 3; i++) { dw.MoveTo(iso.X + rr + 10 * i, iso.Y); Dispatcher.UIThread.RunJobs(); }
+        // k168: поворот — ведением по кубу вида (прежде — кольцо)
+        var cubeC = dw.CubeOf(iso)!.Value.C;
+        dw.Down(cubeC.X, cubeC.Y);
+        for (int i = 1; i <= 3; i++) { dw.MoveTo(cubeC.X + 3 * i, cubeC.Y); Dispatcher.UIThread.RunJobs(); }
         dw.Up();
         Console.WriteLine($"  iso dir after rotation: {iso.Dir}");
         Require(iso.Dir.StartsWith("v:"), "the isometric view rotated");
@@ -9281,7 +9594,12 @@ Check("UI-DRAWING-K156", () =>
         var tiles = DocCommands.LastNewDocWindow!.GetVisualDescendants().OfType<Button>().Where(b => b.Width == 170).ToList();
         Console.WriteLine($"  tiles {tiles.Count}");
         Require(tiles.Count == 6 && tiles.All(b => b.IsEnabled || DocCommands.NewDocChoices[tiles.IndexOf(b)].Id == "file.new_bom"), "six tiles (parts list needs an assembly)");
+        var nd0 = NewDocumentDialog.LastOpened;
         tiles[3].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        // k169: «Чертёж» открывает окно создания документа — «Создать»
+        for (int i = 0; i < 400 && ReferenceEquals(NewDocumentDialog.LastOpened, nd0); i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); }
+        Require(NewDocumentDialog.LastOpened != null && !ReferenceEquals(NewDocumentDialog.LastOpened, nd0), "the Drawing tile opened the document creation window");
+        NewDocumentDialog.LastOpened!.Accept();
         for (int i = 0; i < 400 && (!tnd.IsCompleted || ReferenceEquals(SheetWindow.Last, last0)); i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); }
         var dw = SheetWindow.Last!;
         Require(!ReferenceEquals(dw, last0) && dw.Kind == SheetWindow.Mode.Drawing && dw.Pages[0].Polylines.Count > 20, "the Drawing tile opened a drawing of the open part");

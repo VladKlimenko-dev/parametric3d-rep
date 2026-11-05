@@ -49,7 +49,22 @@ public static class SheetLayout
                 default: Iso7200(g, x1 - 180, y0, V); break;
             }
         }
-        foreach (var it in t.Items) Item(g, it);
+        // k168 (п. 12): подписи рамки и основной надписи — на языке чертежа (значения полей — как есть)
+        string lang = t.Lang;
+        for (int i = 0; i < g.Texts.Count; i++)
+        {
+            var tx = g.Texts[i];
+            if (tx.Field != null) continue;
+            string tr = Tr(tx.Text, lang);
+            if (tr == tx.Text && !TrOff)
+                foreach (var (ru, en) in new[] { ("Листов ", "Sheets "), ("Лист ", "Sheet ") })
+                {
+                    if (lang == "en" && tx.Text.StartsWith(ru)) { tr = en + tx.Text[ru.Length..]; break; }
+                    if (lang == "ru" && tx.Text.StartsWith(en)) { tr = ru + tx.Text[en.Length..]; break; }
+                }
+            if (tr != tx.Text) g.Texts[i] = tx with { Text = tr };
+        }
+        foreach (var it in t.Items) Item(g, it, lang);
         return g;
     }
 
@@ -185,9 +200,37 @@ public static class SheetLayout
         g.Text(bx + 167.5, by + 1.5, ValueH, $"{v(Fields.Sheet)}/{v(Fields.Sheets)}", TextAlign.Center);
     }
 
-    /// <summary>Свободный элемент шаблона.</summary>
-    static void Item(SheetGraphics g, TemplateItem it)
+    /// <summary>
+    /// k168 (замечание 05.11, 16:17, п. 12): подписи листа на языке чертежа: основная надпись ЕСКД и ISO, боковые графы, шапки
+    /// таблиц по умолчанию. Текст пользователя (не из словаря) — как введён.
+    /// </summary>
+    static readonly (string Ru, string En)[] Labels =
     {
+        ("Изм.", "Rev."), ("Лист", "Sheet"), ("№ докум.", "Doc. No."), ("Подп.", "Sign."), ("Дата", "Date"), ("Разраб.", "Drawn"),
+        ("Пров.", "Checked"), ("Т.контр.", "Tech. ctrl"), ("Н.контр.", "Std. ctrl"), ("Утв.", "Approved"), ("Лит.", "Status"),
+        ("Масса", "Mass"), ("Масштаб", "Scale"), ("Листов", "Sheets"), ("Инв. № подл.", "Orig. inv. No."), ("Подп. и дата", "Sign. & date"),
+        ("Взам. инв. №", "Repl. inv. No."), ("Инв. № дубл.", "Dupl. inv. No."), ("Содержание", "Description"),
+        ("Владелец", "Legal owner"), ("Разработал", "Created by"), ("Утвердил", "Approved by"), ("Тип документа", "Document type"),
+        ("Статус документа", "Document status"), ("Наименование", "Title"), ("Обозначение", "Identification number"),
+        ("Дата выпуска", "Date of issue"), ("Материал", "Material"), ("Масса, кг", "Mass, kg"),
+    };
+    public static string Tr(string s, string lang)
+    {
+        if (string.IsNullOrEmpty(s) || TrOff) return s;
+        string t = s.TrimEnd(); string tail = s[t.Length..];
+        foreach (var (ru, en) in Labels)
+        {
+            if (lang == "en" && t == ru) return en + tail;
+            if (lang == "ru" && t == en) return ru + tail;
+        }
+        return s;
+    }
+    static readonly bool TrOff = Environment.GetEnvironmentVariable("P3D_SHEETLANG") == "0";
+
+    /// <summary>Свободный элемент шаблона.</summary>
+    static void Item(SheetGraphics g, TemplateItem it, string lang = "ru")
+    {
+        if (it.Hidden) return;
         switch (it.Kind)
         {
             case "line": g.Line(it.X, it.Y, it.X2, it.Y2, it.Thick ? LineKind.Thick : LineKind.Thin); break;
@@ -196,6 +239,7 @@ public static class SheetLayout
                     var cols = it.Columns ?? new List<double> { 50 };
                     double w = cols.Sum(), rh = it.Height <= 0 ? 8 : it.Height;
                     int rows = Math.Max(1, it.Rows);
+                    if (it.Title.Length > 0) g.Text(it.X + w / 2, it.Y + 2, ValueH, it.Title, TextAlign.Center);
                     g.Rect(it.X, it.Y - rows * rh, w, rows * rh, LineKind.Thick);
                     for (int r = 1; r < rows; r++) g.Line(it.X, it.Y - r * rh, it.X + w, it.Y - r * rh);
                     double cx = it.X;
@@ -204,7 +248,7 @@ public static class SheetLayout
                         if (c > 0) g.Line(cx, it.Y, cx, it.Y - rows * rh, LineKind.Thick);
                         for (int r = 0; r < rows; r++)
                             if (it.Cells != null && r < it.Cells.Count && c < it.Cells[r].Count)
-                                g.CellLeft(cx, it.Y - (r + 1) * rh, cols[c], rh, Math.Min(ValueH, rh * 0.6), it.Cells[r][c]);
+                                g.CellLeft(cx, it.Y - (r + 1) * rh, cols[c], rh, Math.Min(ValueH, rh * 0.6), Tr(it.Cells[r][c], lang));
                         cx += cols[c];
                     }
                     break;

@@ -453,7 +453,7 @@ public static class BooleanOp
             TSolid? res;
             using (Diagnostics.Prof.Time("булева: общий маршрут целиком")) res = TryAnalyticGeneralCore(body, other, kind, warn);
             // k148d: РАЗБОР ПОЧТИ КАСАНИЙ НЕ УДАЛСЯ — ПОВТОР ПО-ПРЕЖНЕМУ. Касание вырезом окружности стыка в её вершине-шве
-            // (KRN05-TOOL-FACE-ON-JUNCTION-CIRCLE, размеры PART-01): вершина касания совпадает со швом, и разметка грани
+            // (KRN05-TOOL-FACE-ON-JUNCTION-CIRCLE, размеры модели пользователя): вершина касания совпадает со швом, и разметка грани
             // конуса у неё не сходится с соседней; прежний разбор (перемычка k133) там верен. Если общий маршрут отказал, а
             // почти касания разбирались, — ещё раз без них. Мутация P3D_NEARTANRETRY=0.
             long m1 = Interlocked.Read(ref Analytic.SsiEvents.NearTangentMerges) + Interlocked.Read(ref Analytic.FaceIntersect.TouchSplits);

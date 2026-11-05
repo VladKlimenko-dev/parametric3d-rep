@@ -64,7 +64,7 @@ static partial class Program
     {
         Check("KRN05-USER-X05-FULL-TREE", () =>
         {
-            // k133: деталь пользователя PART-01 целиком (полоса отката снята): вырез — точное тело (P3D_PCARCDEV=0,
+            // k133: деталь пользователя целиком (полоса отката снята): вырез — точное тело (P3D_PCARCDEV=0,
             // P3D_CLIPONEDGE=0, P3D_CLIPBRIDGE=0 — многогранное), круговой массив выреза строится (P3D_TANGENTFAR=0 — отказ)
             var dir = UserModelsDir() ?? throw new Exception("tests/ui/data not found");
             var (p, pars) = Parametric3D.Model.DocumentFile.Load(File.ReadAllText(Path.Combine(dir, "user_k132_x05.p3d")));

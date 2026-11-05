@@ -70,8 +70,15 @@ public sealed class DrawingDim
     public double Offset { get; set; } = 10;
     /// <summary>Текст вместо значения (пусто — значение).</summary>
     public string Text { get; set; } = "";
-    /// <summary>Допуск или посадка: «±0,1», «H7», «+0,2/-0,1».</summary>
+    /// <summary>Допуск или посадка: «±0,1», «H7», «+0,2/-0,1» (прежние файлы; k167 — TolUp, TolLo).</summary>
     public string Tol { get; set; } = "";
+    /// <summary>
+    /// k167 (замечание 05.11, 16:17, п. 1): верхнее и нижнее отклонения (числа в единицах чертежа; пусто — нет). Разные — одно
+    /// над другим мелким шрифтом («+» сверху, «−» снизу); одно — на своём месте; равные по величине («+a», «−a») — «±a» тем же
+    /// шрифтом через пробел. Нижнее без знака — со знаком «−».
+    /// </summary>
+    public string TolUp { get; set; } = "";
+    public string TolLo { get; set; } = "";
     /// <summary>Число одинаковых элементов («4 отв.»).</summary>
     public int Count { get; set; } = 1;
     public bool Auto { get; set; }
@@ -178,6 +185,34 @@ public sealed class DrawingScene
     }
 
     /// <summary>
+    /// k167: построить только эти виды (новый разрез, выносной, включённый вид) в отдельной сцене — в фоне; progress — доля и
+    /// этап. Merge — перенести их в сцену чертежа (и выносные элементы заново).
+    /// </summary>
+    public static DrawingScene BuildSome(DrawingDocument d, IReadOnlyList<TSolid> bodies, IReadOnlyList<DrawingView> views, Action<double, string>? progress)
+    {
+        var sc = new DrawingScene();
+        var list = views.Where(v => !v.IsDetail).ToList();
+        for (int i = 0; i < list.Count; i++)
+        {
+            int k = i;
+            sc.BuildView(d, list[i], bodies, 0.02, (f, st) => progress?.Invoke((k + f) / Math.Max(1, list.Count), st));
+        }
+        progress?.Invoke(1, "готово");
+        return sc;
+    }
+
+    public void Merge(DrawingDocument d, DrawingScene o)
+    {
+        foreach (var (k, v) in o.Lines) Lines[k] = v;
+        foreach (var (k, v) in o.Axes) Axes[k] = v;
+        foreach (var (k, v) in o.Arcs) Arcs[k] = v;
+        foreach (var (k, v) in o.SectionBoundary) SectionBoundary[k] = v;
+        foreach (var (k, v) in o.Shades) Shades[k] = v;
+        Problems.AddRange(o.Problems);
+        BuildDetails(d);
+    }
+
+    /// <summary>
     /// k162: быстрый вид при повороте мышью: рёбра тел (точки рёбер — из кэша) в новой проекции без скрытия линий, тона — из
     /// кэша сетки. Полный вид (скрытие, очерки, оси) — Rebuild после отпускания мыши. Прежде каждый шаг поворота строил вид
     /// полностью (около 350 мс на детали пользователя).
@@ -193,7 +228,7 @@ public sealed class DrawingScene
                 lines.Add(new ViewLine(pts.Select(frame.Project).ToList(), true, ViewLineKind.Edge, 0, bi));
         Lines[view] = lines;
         Axes[view] = new(); Arcs[view] = new();
-        if (v.Style is "shaded" or "shadedlines" or "material") Shades[view] = ShadeTriangles(bodies, frame);
+        if (v.Style is "shaded" or "shadedlines" or "material") Shades[view] = ShadeTriangles(bodies, frame, fast: true);   // при повороте — без дробления
     }
 
     /// <summary>k161: пересчитать один вид (поворот изометрии, стиль): линии, оси, дуги, тона; выносные элементы — заново.</summary>
@@ -205,18 +240,22 @@ public sealed class DrawingScene
         BuildDetails(d);
     }
 
-    void BuildView(DrawingDocument d, DrawingView v, IReadOnlyList<TSolid> bodies, double chord = 0.02)
+    void BuildView(DrawingDocument d, DrawingView v, IReadOnlyList<TSolid> bodies, double chord = 0.02, Action<double, string>? progress = null)
     {
         var sc = this;
         var frame = ViewFrame.Of(d.DirOf(v));
         IReadOnlyList<TSolid> src = bodies;
         if (v.IsSection)
         {
+            progress?.Invoke(0.05, "сечение");
             var (cut, boundary, problems) = SectionCut.Cut(bodies, frame, v.CutDepth);
             src = cut; sc.SectionBoundary[v.Name] = boundary; sc.Problems.AddRange(problems.Select(p => $"{v.Name}: {p}"));
         }
+        progress?.Invoke(v.IsSection ? 0.45 : 0.1, "скрытие линий");
         sc.Lines[v.Name] = ViewProjection.ProjectMany(src, frame, chord);
-        sc.Axes[v.Name] = src.SelectMany(b => ViewProjection.Axes(b, frame)).ToList();
+        progress?.Invoke(0.85, "оси и дуги");
+        bool tilted = v.Name == "iso" || d.DirOf(v).StartsWith("v:");
+        sc.Axes[v.Name] = src.SelectMany(b => ViewProjection.Axes(b, frame, tilted && !DrawingDocument.IsoAxesOff)).ToList();
         sc.Arcs[v.Name] = ViewProjection.Arcs(src, frame);
         if (v.Style is "shaded" or "shadedlines" or "material") sc.Shades[v.Name] = ShadeTriangles(src, frame);
         else sc.Shades.Remove(v.Name);
@@ -227,20 +266,91 @@ public sealed class DrawingScene
     /// k161: закраска вида: треугольники сетки тел, обращённые к наблюдателю, тон по нормали (свет от наблюдателя, сверху
     /// справа), порядок — от дальних к ближним (рисуются по порядку — ближние закрывают дальние).
     /// </summary>
-    static List<(Vector2d, Vector2d, Vector2d, float, int)> ShadeTriangles(IReadOnlyList<TSolid> bodies, ViewFrame f)
+    static readonly bool ShadeVnOff = Environment.GetEnvironmentVariable("P3D_SHADEVN") == "0";
+    static List<(Vector2d, Vector2d, Vector2d, float, int)> ShadeTriangles(IReadOnlyList<TSolid> bodies, ViewFrame f, bool fast = false)
     {
         var res = new List<(Vector2d, Vector2d, Vector2d, float, int, double)>();
         var light = (f.Toward * 0.8 + f.Up * 0.45 + f.Right * 0.25).Normalized();
+        double Lit(Vector3d nn) => 0.35 + 0.65 * Math.Max(0, Vector3d.Dot(nn, light));
+        // k166 (замечание 05.11, 15:03, п. 2–4): ГЛАДКИЙ ТОН. Прежде тон треугольника — по его нормали, один на треугольник: у
+        // тела из файла (многогранные грани, большие треугольники — до 700 мм² на трубе R92) соседние треугольники одной
+        // поверхности заметно различались — на видах «Тона», «Тона с линиями», «Материал» была видна сетка. Теперь:
+        // - нормали в вершинах — точные нормали поверхности (цилиндр, тело вращения, выдавливание, плоскость — в том числе
+        //   источник многогранной грани), иначе — сглаженные по треугольникам той же точки (излом больше 25° остаётся);
+        // - треугольник больше 1 % габарита с заметно разным тоном в вершинах (больше 2 %) дробится пополам по длинной
+        //   стороне, тон — по нормалям в его вершинах;
+        // - отбрасывается треугольник, обращённый назад и по своей, и по сглаженной нормали (тонкий перевёрнутый треугольник
+        //   сетки не оставляет дыры).
+        // При повороте мышью (fast) — без дробления. Мутация P3D_SHADEVN=0 — по нормали треугольника (прежнее).
+        double size = 1;
+        foreach (var b in bodies) { var bb = b.Bounds; size = Math.Max(size, (bb.Max - bb.Min).Length); }
+        double maxEdge = fast ? double.MaxValue : 0.01 * size;
         for (int bi = 0; bi < bodies.Count; bi++)
         {
             var m = ViewProjection.MeshOf(bodies[bi]);
+            static (long, long, long) K(Vector3d p) => ((long)Math.Round(p.X * 1e5), (long)Math.Round(p.Y * 1e5), (long)Math.Round(p.Z * 1e5));
+            var acc = new Dictionary<(long, long, long), List<Vector3d>>();
+            double cos25 = Math.Cos(25 * Math.PI / 180);
+            var faceSrf = new Dictionary<uint, Kernel.Surfaces.ISurface3?>();
+            if (!ShadeVnOff)
+            {
+                for (int t = 0; t + 2 < m.Indices.Length; t += 3)
+                {
+                    Vector3d a = (Vector3d)m.Vertices[m.Indices[t]].P, b = (Vector3d)m.Vertices[m.Indices[t + 1]].P, c = (Vector3d)m.Vertices[m.Indices[t + 2]].P;
+                    var cr = Vector3d.Cross(b - a, c - a);   // длина — удвоенная площадь
+                    if (cr.LengthSquared < 1e-24) continue;
+                    foreach (var p in new[] { a, b, c }) { var k = K(p); (acc.TryGetValue(k, out var l) ? l : acc[k] = new()).Add(cr); }
+                }
+                foreach (var fc in bodies[bi].Faces)
+                    faceSrf[fc.Id] = Kernel.Topology.GeometryAudit.AuthoritativeSurface(fc) is var srf && srf is Kernel.Surfaces.CylinderSurface or Kernel.Surfaces.RevolvedSurface or Kernel.Surfaces.ExtrudedSurface or Kernel.Surfaces.PlaneSurface ? srf : null;
+            }
             for (int t = 0; t + 2 < m.Indices.Length; t += 3)
             {
-                Vector3d a = (Vector3d)m.Vertices[m.Indices[t]].P, b = (Vector3d)m.Vertices[m.Indices[t + 1]].P, c = (Vector3d)m.Vertices[m.Indices[t + 2]].P;
+                var va = m.Vertices[m.Indices[t]];
+                Vector3d a = (Vector3d)va.P, b = (Vector3d)m.Vertices[m.Indices[t + 1]].P, c = (Vector3d)m.Vertices[m.Indices[t + 2]].P;
                 var n = Vector3d.Cross(b - a, c - a); double nl = n.Length; if (nl < 1e-12) continue; n /= nl;
-                if (Vector3d.Dot(n, f.Toward) <= 0) continue;
-                float sh = (float)(0.35 + 0.65 * Math.Max(0, Vector3d.Dot(n, light)));
-                res.Add((f.Project(a), f.Project(b), f.Project(c), sh, bi, (f.Depth(a) + f.Depth(b) + f.Depth(c)) / 3));
+                if (ShadeVnOff)
+                {
+                    if (Vector3d.Dot(n, f.Toward) <= 0) continue;
+                    res.Add((f.Project(a), f.Project(b), f.Project(c), (float)Lit(n), bi, (f.Depth(a) + f.Depth(b) + f.Depth(c)) / 3));
+                    continue;
+                }
+                var srfT = faceSrf.GetValueOrDefault(va.FaceId);
+                Vector3d Exact(Vector3d p)
+                {
+                    if (srfT == null) return Vector3d.Zero;
+                    var ne = srfT.NormalAt(srfT.ProjectToUV(p)); double l = ne.Length;
+                    if (!(l > 1e-12)) return Vector3d.Zero;
+                    ne /= l; if (Vector3d.Dot(ne, n) < 0) ne = -ne;
+                    return Vector3d.Dot(ne, n) > 0.5 ? ne : Vector3d.Zero;
+                }
+                Vector3d S(Vector3d p)
+                {
+                    var ne = Exact(p); if (ne != Vector3d.Zero) return ne;
+                    var v = Vector3d.Zero;
+                    if (acc.TryGetValue(K(p), out var l)) foreach (var cr in l) if (Vector3d.Dot(cr, n) > cos25 * cr.Length) v += cr;
+                    double vl = v.Length; return vl > 1e-18 ? v / vl : n;
+                }
+                var na = S(a); var nb = S(b); var nc = S(c);
+                if (Vector3d.Dot(n, f.Toward) <= 0 && Vector3d.Dot(na + nb + nc, f.Toward) <= 0) continue;
+                void Emit(Vector3d p0, Vector3d p1, Vector3d p2, Vector3d n0, Vector3d n1, Vector3d n2, int depth)
+                {
+                    double l01 = (p1 - p0).Length, l12 = (p2 - p1).Length, l20 = (p0 - p2).Length;
+                    double lm = Math.Max(l01, Math.Max(l12, l20));
+                    // дробится, только если тон по вершинам заметно разный (больше 2 %) и треугольник большой
+                    double t0 = Lit(n0), t1 = Lit(n1), t2 = Lit(n2);
+                    if (lm > maxEdge && depth < 10 && Math.Max(Math.Abs(t0 - t1), Math.Max(Math.Abs(t1 - t2), Math.Abs(t2 - t0))) > 0.02)
+                    {
+                        // пополам по длинной стороне; нормаль середины — точная или средняя
+                        Vector3d Mid(Vector3d x, Vector3d y, Vector3d nx, Vector3d ny) { var mp = (x + y) / 2; var ne = Exact(mp); return ne != Vector3d.Zero ? ne : (nx + ny).Normalized(); }
+                        if (lm == l01) { var mp = (p0 + p1) / 2; var nm = Mid(p0, p1, n0, n1); Emit(p0, mp, p2, n0, nm, n2, depth + 1); Emit(mp, p1, p2, nm, n1, n2, depth + 1); }
+                        else if (lm == l12) { var mp = (p1 + p2) / 2; var nm = Mid(p1, p2, n1, n2); Emit(p0, p1, mp, n0, n1, nm, depth + 1); Emit(p0, mp, p2, n0, nm, n2, depth + 1); }
+                        else { var mp = (p2 + p0) / 2; var nm = Mid(p2, p0, n2, n0); Emit(p0, p1, mp, n0, n1, nm, depth + 1); Emit(mp, p1, p2, nm, n1, n2, depth + 1); }
+                        return;
+                    }
+                    res.Add((f.Project(p0), f.Project(p1), f.Project(p2), (float)((t0 + t1 + t2) / 3), bi, (f.Depth(p0) + f.Depth(p1) + f.Depth(p2)) / 3));
+                }
+                Emit(a, b, c, na, nb, nc, 0);
             }
         }
         return res.OrderBy(x => x.Item6).Select(x => (x.Item1, x.Item2, x.Item3, x.Item4, x.Item5)).ToList();
@@ -306,6 +416,13 @@ public sealed class DrawingDocument
     public List<DrawingDim> Dims { get; set; } = new();
     public List<DrawingNote> Notes { get; set; } = new();
     public bool ShowDims { get; set; } = true;
+    /// <summary>
+    /// k169 (замечание 05.11, 16:17, п. 15–16): следующие листы чертежа (у каждого — свой шаблон, виды, размеры, обозначения,
+    /// модель: как отдельный документ). Лист 1 — сам документ.
+    /// </summary>
+    public List<DrawingDocument> MoreSheets { get; set; } = new();
+    /// <summary>k169: лист без видов по умолчанию (новый лист, аннотация).</summary>
+    public bool NoDefaultViews { get; set; }
     /// <summary>Слой допусков формы и расположения (рамки и базы) — вкл/выкл.</summary>
     public bool ShowGdt { get; set; } = true;
     /// <summary>k164 (замечание 05.11, 10:33, п. 5): номера центров «℄N» у центров и под полкой диаметров и радиусов.</summary>
@@ -511,7 +628,7 @@ public sealed class DrawingDocument
     /// <summary>Стандартный набор видов, если их нет: главный, сверху, слева, изометрия.</summary>
     public void EnsureViews()
     {
-        if (Views.Count > 0) return;
+        if (Views.Count > 0 || NoDefaultViews) return;
         // аксонометрия — без невидимых линий (ГОСТ 2.317: невидимый контур на аксонометрии не показывают)
         foreach (var n in new[] { "front", "top", "left", "iso" }) Views.Add(new DrawingView { Name = n, ShowHidden = n != "iso" });
     }
@@ -687,7 +804,8 @@ public sealed class DrawingDocument
                     foreach (var part in brk ? ClipBreak(new() { a, b }, v.BreakA, v.BreakB) : new[] { new List<Vector2d> { a, b } })
                         g.Polylines.Add(new SheetPolyline(part.Select(T).ToList(), LineKind.Thin));
             int cl0 = g.Lines.Count, cp0 = g.Polylines.Count;
-            if (v.CenterLines && v.Name != "iso" && scene.Axes.TryGetValue(v.Name, out var ax)) AxisLines(g, ax, T, s);
+            // k167 (п. 7): осевые и на изометрии (оси тел вращения в проекции)
+            if (v.CenterLines && (v.Name != "iso" || !IsoAxesOff) && scene.Axes.TryGetValue(v.Name, out var ax)) AxisLines(g, ax, T, s);
             // k163 (замечание 05.11, 09:22, п. 3.1): центры дуг, не отмеченные осями тел вращения (дуги профиля, скругления
             // паза), — перекрестие тонкими штрихпунктирными: полудлина — радиус дуги + 3 мм листа, но не больше 15 мм листа.
             // Мутация P3D_ARCCENTERS=0 — только оси тел вращения (прежнее).
@@ -975,6 +1093,54 @@ public sealed class DrawingDocument
         g.Fills.Add(new() { tip, (bx + nx * ArrowW, by + ny * ArrowW), (bx - nx * ArrowW, by - ny * ArrowW) });
     }
 
+    // ------------------------------------------------------------------ k167: допуски размера
+
+    static readonly bool TolStackOff = Environment.GetEnvironmentVariable("P3D_TOLSTACK") == "0";
+
+    static double? TolNum(string s) => double.TryParse(s.Trim().Replace(',', '.').Replace('−', '-'), NumberStyles.Float, CultureInfo.InvariantCulture, out double v) ? v : null;
+
+    /// <summary>Отклонения размера: (±-часть к тексту, верхнее, нижнее) — подписи со знаками; пусто — нет.</summary>
+    (string Pm, string? Up, string? Lo) TolParts(DrawingDim d)
+    {
+        if (TolStackOff) return ("", null, null);
+        double? up = d.TolUp.Trim().Length > 0 ? TolNum(d.TolUp) : null, lo = d.TolLo.Trim().Length > 0 ? TolNum(d.TolLo) : null;
+        // нижнее без знака — отклонение вниз
+        if (lo is { } l0 && !d.TolLo.Trim().StartsWith("+") && !d.TolLo.Trim().StartsWith("-") && !d.TolLo.Trim().StartsWith("−")) lo = -Math.Abs(l0);
+        string F(double v) { var t = Math.Abs(v).ToString("0.####", CultureInfo.InvariantCulture); if (Comma) t = t.Replace('.', ','); return t; }
+        string S(double v) => v == 0 ? "0" : (v > 0 ? "+" : "−") + F(v);
+        if (up is { } u && lo is { } l && Math.Abs(u + l) < 1e-12 && u > 0) return (" ±" + F(u), null, null);
+        return ("", up is { } uu ? S(uu) : null, lo is { } ll ? S(ll) : null);
+    }
+
+    /// <summary>k167: ширина подписи размера с отклонениями (мм листа).</summary>
+    double DimTextW(DrawingDim d, string text)
+    {
+        var (pm, up, lo) = TolParts(d);
+        double w = TextW(text + pm, TextH);
+        if (up != null || lo != null) w += 0.6 + TextW((up ?? "").Length >= (lo ?? "").Length ? up ?? "" : lo ?? "", TolH);
+        return w;
+    }
+    const double TolH = 2.5;
+
+    /// <summary>
+    /// k167: подпись размера с отклонениями: m — середина подписи (над размерной линией), ang — угол текста (градусы листа).
+    /// Верхнее отклонение — над серединой высоты основного текста, нижнее — у его основания (ГОСТ 2.307 п. 1.20).
+    /// </summary>
+    void DimText(SheetGraphics g, DrawingDim d, Vector2d m, double ang, string text)
+    {
+        var (pm, up, lo) = TolParts(d);
+        string main = text + pm;
+        if (up == null && lo == null) { g.Text(m.X, m.Y, TextH, main, TextAlign.Center, null, Math.Abs(ang) < 1e-9 ? 0 : ang); return; }
+        double a = ang * Math.PI / 180; var along = new Vector2d(Math.Cos(a), Math.Sin(a)); var upv = new Vector2d(-along.Y, along.X);
+        double w = TextW(main, TextH), tw = TextW((up ?? "").Length >= (lo ?? "").Length ? up ?? "" : lo ?? "", TolH), total = w + 0.6 + tw;
+        var cm = m - along * (total / 2 - w / 2);
+        g.Text(cm.X, cm.Y, TextH, main, TextAlign.Center, null, Math.Abs(ang) < 1e-9 ? 0 : ang);
+        var t0 = cm + along * (w / 2 + 0.6);
+        double ta = Math.Abs(ang) < 1e-9 ? 0 : ang;
+        if (up != null) { var p = t0 + upv * (TextH * 0.55); g.Text(p.X, p.Y, TolH, up, TextAlign.Left, null, ta); }
+        if (lo != null) { var p = t0 + upv * (-0.15); g.Text(p.X, p.Y, TolH, lo, TextAlign.Left, null, ta); }
+    }
+
     void DrawDim(SheetGraphics g, DrawingDim d)
     {
         string text = CaptionOf(d);
@@ -1006,13 +1172,13 @@ public sealed class DrawingDocument
         var up = new Vector2d(-along.Y, along.X);
         if (ang > 90.0001 || ang <= -90) { ang += ang > 0 ? -180 : 180; up = -up; }
         var m = (q1 + q2) / 2 + up * 1;
-        if (d.TextShift == 0 && outside && len < TextW(text, TextH)) m += (q2 - q1).Length > 1e-9 ? along * (len / 2 + 8 + TextW(text, TextH) / 2) : Vector2d.Zero;
+        if (d.TextShift == 0 && outside && len < DimTextW(d, text)) m += (q2 - q1).Length > 1e-9 ? along * (len / 2 + 8 + DimTextW(d, text) / 2) : Vector2d.Zero;
         if (d.TextShift != 0)
         {
             // k161: текст сдвинут вдоль линии; за концом — продление размерной линии под текст (полка)
             double t = d.TextShift * (Vector2d.Dot(along, u) >= 0 ? 1 : -1);
             m += along * t;
-            double tw = TextW(text, TextH);
+            double tw = DimTextW(d, text);
             var mid = (q1 + q2) / 2;
             if (Math.Abs(t) + tw / 2 > len / 2)
             {
@@ -1021,7 +1187,7 @@ public sealed class DrawingDocument
                 g.Line(end.X, end.Y, far.X, far.Y);
             }
         }
-        g.Text(m.X, m.Y, TextH, text, TextAlign.Center, null, Math.Abs(ang) < 1e-9 ? 0 : ang);
+        DimText(g, d, m, ang, text);
     }
 
     /// <summary>
@@ -1101,7 +1267,7 @@ public sealed class DrawingDocument
         double am = a0 + sweep / 2;
         var (tx, ty) = At(am, r + 1.5);
         double ta = am * 180 / Math.PI - 90; ta = ((ta % 360) + 360) % 360; if (ta > 90 && ta < 270) ta -= 180;
-        g.Text(tx, ty, TextH, text, TextAlign.Center, null, ta);
+        DimText(g, d, new Vector2d(tx, ty), ta, text);
     }
 
     // ------------------------------------------------------------------ k164: осевые линии в приоритете, номера центров
@@ -1315,7 +1481,7 @@ public sealed class DrawingDocument
         double r = d.X2 * Xf[d.View].S, a = d.Y2 * Math.PI / 180;
         var dir = (Math.Cos(a), Math.Sin(a));
         var p = (c.X + r * dir.Item1, c.Y + r * dir.Item2);
-        double tw = TextW(text, TextH);
+        double tw = DimTextW(d, text);
         // k165: у пронумерованного центра диаметр — на полке с «℄N» (как на чертеже-образце), а не линией через центр
         bool numbered = !CenterNosOff && CentreNo(d.View, new Vector2d(c.X, c.Y)) != null;
         if (d.Kind == "dia" && r > 12 && d.Arrows != 2 && !numbered)
@@ -1329,7 +1495,7 @@ public sealed class DrawingDocument
             if (ang > 90.0001 || ang <= -90) { ang += ang > 0 ? -180 : 180; up = (-up.Item1, -up.Item2); }
             // k164: текст — посередине между центром и стрелкой (прежде — над центром: диаметры одного центра ложились друг на друга)
             double tf = CenterPrioOff ? 0 : 0.5;
-            g.Text(c.X + dir.Item1 * r * tf + up.Item1, c.Y + dir.Item2 * r * tf + up.Item2, TextH, text, TextAlign.Center, null, ang);
+            DimText(g, d, new Vector2d(c.X + dir.Item1 * r * tf + up.Item1, c.Y + dir.Item2 * r * tf + up.Item2), ang, text);
             return;
         }
         // выноска с полкой: от окружности наружу 6 мм (k159: у диаметра и радиуса Offset — длина выноски: 0.6·Offset, по
@@ -1353,7 +1519,7 @@ public sealed class DrawingDocument
             g.Poly(LineKind.Thin, p, k, e);
             Arrow(g, p, (-dir.Item1, -dir.Item2));
         }
-        g.Text((k.Item1 + e.Item1) / 2, k.Item2 + 1, TextH, text, TextAlign.Center);
+        DimText(g, d, new Vector2d((k.Item1 + e.Item1) / 2, k.Item2 + 1), 0, text);
     }
 
     // ------------------------------------------------------------------ обозначения
@@ -1574,12 +1740,15 @@ public sealed class DrawingDocument
     /// <summary>k158: мутация P3D_VDIMSIDE=0 — вертикальные габаритные размеры внутри вида (прежнее, ошибка k156).</summary>
     static readonly bool VDimSideOff = Environment.GetEnvironmentVariable("P3D_VDIMSIDE") == "0";
 
-    public void AutoDimensions(DrawingScene scene)
+    /// <summary>k167 (замечание 05.11, 16:17, п. 6): onlyView — размеры только этого вида (выбранного), остальные не трогаются.</summary>
+    public void AutoDimensions(DrawingScene scene, string? onlyView = null)
     {
-        var hidden = Dims.Where(d => d.Auto && d.Hidden).Select(Key).ToHashSet();
-        Dims.RemoveAll(d => d.Auto);
-        void Add(DrawingDim d) { d.Auto = true; d.Arrange = true; d.Hidden = hidden.Contains(Key(d)); Dims.Add(d); }
-        foreach (var v in Views.Where(v => !v.IsDetail && v.Name != "iso"))
+        if (OneViewOff) onlyView = null;
+        bool In(string v) => onlyView == null || v == onlyView;
+        var hidden = Dims.Where(d => d.Auto && d.Hidden && In(d.View)).Select(Key).ToHashSet();
+        Dims.RemoveAll(d => d.Auto && In(d.View));
+        void Add(DrawingDim d) { if (!In(d.View)) return; d.Auto = true; d.Arrange = true; d.Hidden = hidden.Contains(Key(d)); Dims.Add(d); }
+        foreach (var v in Views.Where(v => !v.IsDetail && v.Name != "iso" && In(v.Name)))
         {
             if (!scene.Lines.TryGetValue(v.Name, out var lines) || lines.Count == 0) continue;
             var (mn, mx) = Box(lines);
@@ -1613,7 +1782,7 @@ public sealed class DrawingDocument
             }
         }
         // диаметры отверстий: вид с наибольшим числом перекрестий
-        var holeView = Views.Where(v => !v.IsDetail && scene.Axes.ContainsKey(v.Name)).OrderByDescending(v => scene.Axes[v.Name].Count(a => a.Cross)).FirstOrDefault();
+        var holeView = Views.Where(v => !v.IsDetail && scene.Axes.ContainsKey(v.Name) && In(v.Name)).OrderByDescending(v => scene.Axes[v.Name].Count(a => a.Cross)).FirstOrDefault();
         if (holeView != null)
             foreach (var grp in scene.Axes[holeView.Name].Where(a => a.Cross).GroupBy(a => Math.Round(a.Radius, 4)))
             {
@@ -1622,7 +1791,7 @@ public sealed class DrawingDocument
             }
         // радиусы: дуги не полного оборота, по одному на значение
         var seen = new HashSet<double>();
-        foreach (var v in Views.Where(v => !v.IsDetail && v.Name != "iso" && scene.Arcs.ContainsKey(v.Name)))
+        foreach (var v in Views.Where(v => !v.IsDetail && v.Name != "iso" && scene.Arcs.ContainsKey(v.Name) && In(v.Name)))
             foreach (var arc in scene.Arcs[v.Name].Where(a => !a.Full))
             {
                 double r = Math.Round(arc.Radius, 4);
@@ -1632,14 +1801,16 @@ public sealed class DrawingDocument
                 double am = (arc.A0 + arc.A1) / 2; if (arc.A1 < arc.A0) am += Math.PI;
                 Add(new DrawingDim { View = v.Name, Kind = "rad", X1 = arc.Center.X, Y1 = arc.Center.Y, X2 = arc.Radius, Y2 = am * 180 / Math.PI });
             }
-        if (!MoreDimsOff) MoreDimensions(scene, Add);
+        if (!MoreDimsOff) MoreDimensions(scene, Add, onlyView);
         // k165: места подписей центров — подобрать заново (только по «Автоматическим размерам»)
-        CentreMarks.Clear();
+        CentreMarks.RemoveAll(m => In(m.View));
         ArrangeDims(scene);
     }
 
     static readonly bool ExtremeOff = Environment.GetEnvironmentVariable("P3D_DIMEXTREME") == "0";
     static readonly bool MoreDimsOff = Environment.GetEnvironmentVariable("P3D_MOREDIMS") == "0";
+    internal static readonly bool IsoAxesOff = Environment.GetEnvironmentVariable("P3D_ISOAXES") == "0";
+    static readonly bool OneViewOff = Environment.GetEnvironmentVariable("P3D_AUTODIMSVIEW") == "0";
     static readonly bool ModelAngOff = Environment.GetEnvironmentVariable("P3D_MODELDIMS163") == "0";
     static readonly bool ArcCentersOff = Environment.GetEnvironmentVariable("P3D_ARCCENTERS") == "0";
 
@@ -1652,10 +1823,10 @@ public sealed class DrawingDocument
     ///   0.5 мм к краю или друг к другу — один).
     /// Мутация P3D_MOREDIMS=0 — без них (прежнее).
     /// </summary>
-    void MoreDimensions(DrawingScene scene, Action<DrawingDim> add)
+    void MoreDimensions(DrawingScene scene, Action<DrawingDim> add, string? onlyView = null)
     {
         var have = new HashSet<string>(Dims.Where(d => d.Kind is "dia" or "rad").Select(d => $"{d.View}|{Math.Round(d.X2, 3)}"));
-        foreach (var v in Views.Where(v => !v.IsDetail && v.Name != "iso" && scene.Arcs.ContainsKey(v.Name)))
+        foreach (var v in Views.Where(v => (onlyView == null || v.Name == onlyView) && !v.IsDetail && v.Name != "iso" && scene.Arcs.ContainsKey(v.Name)))
         {
             var arcs = scene.Arcs[v.Name];
             foreach (var grp in arcs.Where(a => a.Full).GroupBy(a => Math.Round(a.Radius, 3)))
@@ -1683,7 +1854,7 @@ public sealed class DrawingDocument
             }
         }
         // ступени вдоль вида: вертикальные видимые рёбра
-        foreach (var v in Views.Where(v => !v.IsDetail && v.Name != "iso" && scene.Lines.ContainsKey(v.Name)))
+        foreach (var v in Views.Where(v => (onlyView == null || v.Name == onlyView) && !v.IsDetail && v.Name != "iso" && scene.Lines.ContainsKey(v.Name)))
         {
             var lines = scene.Lines[v.Name];
             var vis = lines.Where(l => l.Visible && l.Kind == ViewLineKind.Edge).ToList();

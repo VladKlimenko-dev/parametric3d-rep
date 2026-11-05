@@ -3,7 +3,7 @@ using Parametric3D.Kernel.Geometry;
 
 static partial class Program
 {
-    /// <summary>Разбор: тор × цилиндр PART-01 (тонкая трубка r 1.5 у кольца R 187, цилиндр R 50 поперёк).</summary>
+    /// <summary>Разбор: тор × цилиндр модели пользователя (тонкая трубка r 1.5 у кольца R 187, цилиндр R 50 поперёк).</summary>
     static void SsiTorusCylProbe()
     {
         {

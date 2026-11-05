@@ -58,6 +58,29 @@ public static class DrawingCommands
         return Show(w, win);
     }
 
+    /// <summary>
+    /// k169 (замечание 05.11, 16:17, п. 17): новый документ через окно создания: имя файла, модель, тип (чертёж, спецификация,
+    /// аннотация), шаблон из папки шаблонов (с новыми параметрами — новый шаблон), стандарт, единицы, формат, ориентация.
+    /// </summary>
+    public static async Task<SheetWindow?> NewDocument(MainWindow w)
+    {
+        string name = w.Session.Document.Title is { Length: > 0 } tt ? tt : L("открытый документ");
+        var dlg = new NewDocumentDialog(name);
+        var res = await dlg.ShowDialog<NewDocumentDialog.Result?>(w);
+        return res == null ? null : await Create(w, res);
+    }
+
+    /// <summary>Документ по ответу окна создания (и для проверок).</summary>
+    public static async Task<SheetWindow?> Create(MainWindow w, NewDocumentDialog.Result res)
+    {
+        SheetWindow? win = res.DocType == "bom" ? await NewBom(w, res.ModelPath) : await NewDrawing(w, res.ModelPath);
+        if (win == null) return null;
+        if (res.DocType == "annotation" && win.Drawing != null) { win.Drawing.Views.Clear(); win.Drawing.NoDefaultViews = true; win.InvalidateViews(); }
+        win.ApplyTemplate(res.Template);
+        if (res.FileName.Length > 0) win.SuggestedName = res.FileName;
+        return win;
+    }
+
     public static SheetWindow NewTemplate(MainWindow w) => Show(w, new SheetWindow(SheetWindow.Mode.Template, SheetLayout.Default()));
 
     /// <summary>Новый перечень — только из сборки: открытая сборка или файл сборки (выбор).</summary>
@@ -102,7 +125,7 @@ public static class DrawingCommands
     public static void Register(CommandRegistry r, MainWindow w)
     {
         const string F = "Файл";
-        r.Add(new AppCommand { Id = "file.new_drawing", Label = "Новый чертёж (из детали или сборки)", Group = F, Icon = "new_drawing_but.svg", Synonyms = "new drawing чертёж виды проекции", Run = async () => await NewDrawing(w) });
+        r.Add(new AppCommand { Id = "file.new_drawing", Label = "Новый чертёж (из детали или сборки)", Group = F, Icon = "new_drawing_but.svg", Synonyms = "new drawing чертёж виды проекции", Run = async () => await NewDocument(w) });
         r.Add(new AppCommand { Id = "file.new_template", Label = "Новый шаблон листа", Group = F, Icon = "new_template_but.svg", Synonyms = "new sheet template title block frame шаблон листа рамка основная надпись", Run = () => { NewTemplate(w); } });
         r.Add(new AppCommand { Id = "file.new_bom", Label = "Новый перечень (из сборки)", Group = F, Icon = "new_bom_but.svg", Synonyms = "new bom bill of materials parts list перечень спецификация", Run = async () => await NewBom(w) });
         r.Add(new AppCommand { Id = "file.open_sheet", Label = "Открыть чертёж, шаблон или перечень", Group = F, Icon = "doc_template_ico.svg", Synonyms = "open template bom открыть шаблон перечень p3dtpl p3dbom", Run = async () => await OpenSheet(w) });

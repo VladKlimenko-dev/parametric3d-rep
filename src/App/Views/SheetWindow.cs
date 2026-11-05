@@ -18,7 +18,7 @@ namespace Parametric3D.App.Views;
 /// разделы, обновить по модели), слева — лист (картинка из тех же примитивов, что и PDF), справа — свойства: поля надписи
 /// у шаблона, строки у перечня (правка в ячейках). Вывод — PDF; печать — через PDF в системной программе просмотра.
 /// </summary>
-public sealed class SheetWindow : Window
+public sealed partial class SheetWindow : Window
 {
     public enum Mode { Template, Bom, Drawing }
     public readonly Mode Kind;
@@ -52,6 +52,18 @@ public sealed class SheetWindow : Window
     readonly StackPanel _props = new() { Spacing = 6, Margin = new Thickness(10) };
     readonly WrapPanel _ribbon = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(6, 4) };
     readonly TextBlock _status = new() { Margin = new Thickness(8, 2), Opacity = 0.75 };
+    readonly Canvas _editHost = new();
+    static readonly bool TableToggleOff = Environment.GetEnvironmentVariable("P3D_TABLETOGGLE") == "0";
+    static readonly bool CubeOff = Environment.GetEnvironmentVariable("P3D_VIEWCUBE") == "0";
+    readonly TextBlock _sheetInfo = new() { Margin = new Thickness(8, 2), Opacity = 0.6 };
+    public string SheetInfo => _sheetInfo.Text ?? "";
+    readonly ProgressBar _progress = new() { Width = 220, Height = 10, Minimum = 0, Maximum = 1, IsVisible = false, Margin = new Thickness(8, 4), VerticalAlignment = VerticalAlignment.Center };
+    /// <summary>k167: виды строятся в фоне (false — сразу, на месте; проверки).</summary>
+    public static bool SyncViews = Environment.GetEnvironmentVariable("P3D_ASYNCVIEWS") == "0";
+    readonly HashSet<string> _building = new();
+    /// <summary>k167: виды, которые строятся в фоне.</summary>
+    public bool BuildingViews => _building.Count > 0;
+    public double ProgressValue => _progress.IsVisible ? _progress.Value : -1;
     int _page;
     int _selRow = -1;
     /// <summary>Последние листы (проверки).</summary>
@@ -63,18 +75,25 @@ public sealed class SheetWindow : Window
         Kind = kind; Bom = bom; FilePath = path; Drawing = drawing;
         if (kind == Mode.Drawing) Drawing ??= new DrawingDocument();
         Template = tpl ?? bom?.Template ?? Drawing?.Template ?? SheetLayout.Default();
-        if (Drawing != null) { Drawing.Template = Template; Drawing.EnsureViews(); }
+        if (Drawing != null) { Drawing.Template = Template; Drawing.EnsureViews(); _root = Drawing; }
         if (Bom != null) Bom.Template ??= Template;
         Width = 1200; Height = 820;
         this.Bind(BackgroundProperty, this.GetResourceObservable("P3.PanelBg"));
-        var scroll = new Border { Child = _canvas, Background = new SolidColorBrush(Color.Parse("#5A5F66")) };
+        // k168: поверх поля листа — место для поля ввода ячейки таблицы (правка на листе)
+        var scroll = new Border { Child = new Panel { Children = { _canvas, _editHost } }, Background = new SolidColorBrush(Color.Parse("#5A5F66")) };
         // k162: ширина панели свойств — перетаскиванием левого края
         var right = new Border { Child = new ScrollViewer { Content = _props }, Width = kind == Mode.Bom ? 560 : 340, BorderThickness = new Thickness(1, 0, 0, 0), BorderBrush = new SolidColorBrush(Color.FromArgb(0x50, 0x80, 0x80, 0x80)), Background = Brushes.Transparent, Padding = new Thickness(PanelResize.Grip - 1, 0, 0, 0) };
         PropsHost = right;
         PanelResize.Attach(right, "sheet." + kind, 240, 1000);
         var dock = new DockPanel();
         DockPanel.SetDock(_ribbon, Dock.Top); dock.Children.Add(_ribbon);
-        DockPanel.SetDock(_status, Dock.Bottom); dock.Children.Add(_status);
+        // k167 (замечание 05.11, 16:17, п. 5): строка состояния — текст и полоса хода построения видов
+        var statusRow = new DockPanel();
+        DockPanel.SetDock(_sheetInfo, Dock.Right); statusRow.Children.Add(_sheetInfo);
+        DockPanel.SetDock(_progress, Dock.Right); statusRow.Children.Add(_progress); statusRow.Children.Add(_status);
+        DockPanel.SetDock(statusRow, Dock.Bottom); dock.Children.Add(statusRow);
+        // k169 (п. 16): ярлыки листов над строкой состояния
+        if (kind == Mode.Drawing) { DockPanel.SetDock(_tabs, Dock.Bottom); dock.Children.Add(_tabs); }
         DockPanel.SetDock(right, Dock.Right); dock.Children.Add(right);
         dock.Children.Add(scroll);
         Content = dock;
@@ -88,6 +107,7 @@ public sealed class SheetWindow : Window
         }
         Refresh();
         UpdateTitle();
+        UpdateTabs();
         Last = this;
     }
 
@@ -103,6 +123,26 @@ public sealed class SheetWindow : Window
         _ribbon.Children.Add(b);
         return b;
     }
+    // k167 (замечание 05.11, 16:17, п. 7, 10): кнопки-переключатели — включённая подсвечена
+    readonly List<(Button B, Func<bool> On)> _toggles = new();
+    Button Toggle(string icon, string tip, Action run, Func<bool> on) { var b = Btn(icon, tip, run); _toggles.Add((b, on)); return b; }
+    static readonly IBrush ToggleOnBrush = new SolidColorBrush(Color.FromArgb(110, 60, 140, 230));
+    public void UpdateToggles()
+    {
+        foreach (var (b, on) in _toggles)
+        {
+            bool v; try { v = on(); } catch { v = false; }
+            b.Background = v ? ToggleOnBrush : null;
+            b.Tag = v;
+        }
+    }
+    /// <summary>k167: состояние кнопки-переключателя по подсказке (для проверок).</summary>
+    public bool? ToggleState(string tip) => _toggles.FirstOrDefault(t => ToolTip.GetTip(t.B) as string == L(tip)).B?.Tag as bool?;
+    /// <summary>k167: вид, к которому относятся кнопки видов: выбранный, иначе — все.</summary>
+    IEnumerable<DrawingView> TargetViews() => _sel is DrawingView sv ? new[] { sv } : Drawing!.Views;
+    /// <summary>k167: нажать кнопку ленты по подсказке (для проверок).</summary>
+    public void Press(string tip) { foreach (var c in _ribbon.Children.OfType<Button>()) if (ToolTip.GetTip(c) as string == L(tip)) { c.Command?.Execute(null); c.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); return; } throw new InvalidOperationException("no button " + tip); }
+
     void Sep() => _ribbon.Children.Add(new Border { Width = 1, Margin = new Thickness(6, 4), Background = Brushes.Gray, Height = 26 });
 
     void BuildRibbon()
@@ -117,9 +157,10 @@ public sealed class SheetWindow : Window
             Btn("dr_base_view_but.svg", "Главный вид", () => ToggleView("front"));
             Btn("dr_projected_view_but.svg", "Проекционные виды (сверху, слева)", () => { ToggleView("top"); ToggleView("left"); });
             Btn("dr_3d_view_but.svg", "3D-вид (изометрия ГОСТ 2.317)", () => ToggleView("iso"));
-            Btn("dr_hidden_lines_but.svg", "Невидимые линии", () => Change(() => { bool on = !Drawing!.Views.All(v => v.ShowHidden); foreach (var v in Drawing.Views) v.ShowHidden = on; }));
-            Btn("dr_tangent_edges_but.svg", "Линии перехода", () => Change(() => { bool on = !Drawing!.Views.All(v => v.ShowTangent); foreach (var v in Drawing.Views) v.ShowTangent = on; }));
-            Btn("dr_centerline_but.svg", "Осевые линии", () => Change(() => { bool on = !Drawing!.Views.All(v => v.CenterLines); foreach (var v in Drawing.Views) v.CenterLines = on; }));
+            Toggle("dr_hidden_lines_but.svg", "Невидимые линии", () => Change(() => { bool on = !TargetViews().All(v => v.ShowHidden); foreach (var v in TargetViews()) v.ShowHidden = on; }), () => TargetViews().All(v => v.ShowHidden));
+            Toggle("dr_tangent_edges_but.svg", "Линии перехода", () => Change(() => { bool on = !TargetViews().All(v => v.ShowTangent); foreach (var v in TargetViews()) v.ShowTangent = on; }), () => TargetViews().All(v => v.ShowTangent));
+            // k167 (п. 7): переключатель; выбран вид — только для него (в том числе изометрия)
+            Toggle("dr_centerline_but.svg", "Осевые линии", () => Change(() => { bool on = !TargetViews().All(v => v.CenterLines); foreach (var v in TargetViews()) v.CenterLines = on; }), () => TargetViews().All(v => v.CenterLines));
             Btn("dr_view_scale_but.svg", "Масштаб листа (ряд ГОСТ 2.302)", () => Change(() =>
             {
                 // авто → 1:1 → уменьшения → увеличения → авто
@@ -130,7 +171,14 @@ public sealed class SheetWindow : Window
             }));
             Sep();
             // D3: размеры
-            Btn("dr_auto_dims_but.svg", "Автоматические размеры (габариты, отверстия, радиусы)", () => Change(() => { EnsureScene(); Drawing!.AutoDimensions(_scene!); }));
+            // k167 (п. 6): выбран вид — размеры только на нём
+            Btn("dr_auto_dims_but.svg", "Автоматические размеры (габариты, отверстия, радиусы)", () => Change(() =>
+            {
+                EnsureScene();
+                var only = _sel is DrawingView sv ? sv.Name : null;
+                Drawing!.AutoDimensions(_scene!, only);
+                _status.Text = only != null ? L("Автоматические размеры: вид «{0}»", ViewLabel(only)) : L("Автоматические размеры: все виды");
+            }));
             Btn("dr_show_model_dims_but.svg", "Размеры модели (из эскизов)", () => Change(() =>
             {
                 EnsureScene();
@@ -138,10 +186,10 @@ public sealed class SheetWindow : Window
                 Drawing!.ArrangeDims(_scene!);
                 _status.Text = _input?.Part == null ? L("Размеры модели — только у чертежа детали") : L("Перенесено размеров эскизов: {0}", n);
             }));
-            Btn("dr_dims_toggle_but.svg", "Показать / скрыть размеры", () => Change(() => Drawing!.ShowDims = !Drawing.ShowDims));
+            Toggle("dr_dims_toggle_but.svg", "Показать / скрыть размеры", () => Change(() => Drawing!.ShowDims = !Drawing.ShowDims), () => Drawing!.ShowDims);
             Btn("dr_dim_linear_but.svg", "Линейный размер: два щелчка по точкам вида", () => StartPick("dim1", L("Размер: щёлкните первую точку на виде")));
             // k165 (замечание 05.11, 13:27, п. 3–4): размер с подбором типа по элементам и угловой размер
-            Btn("dr_dim_auto_but.svg", "Размер (авто): тип по выбранным элементам — две параллельные линии (расстояние между ними), точка и линия, две линии под углом (угол), окружность (диаметр), дуга (радиус), две точки", () => StartPick("auto1", L("Размер (авто): щёлкните линию, точку, окружность или дугу")));
+            Btn("dr_dim_auto_but.svg", "Размер (авто): тип по выбранным элементам — две параллельные линии (расстояние между ними), точка и линия, две линии под углом (угол), окружность (диаметр), дуга (радиус), две точки, несколько — цепочка. Элементы выбираются щелчком до или после нажатия (Ctrl или Shift — ещё), Enter или средняя кнопка — поставить", () => AutoDimButton());
             Btn("dr_dim_angle_but.svg", "Угловой размер: щелчки по двум линиям", () => StartPick("ang1", L("Угол: щёлкните первую линию")));
             Btn("dr_dim_diameter_but.svg", "Диаметр: щелчок по окружности", () => StartPick("dia", L("Диаметр: щёлкните окружность")));
             Btn("dr_dim_radial_but.svg", "Радиус: щелчок по дуге", () => StartPick("rad", L("Радиус: щёлкните дугу")));
@@ -150,7 +198,7 @@ public sealed class SheetWindow : Window
             Btn("dr_roughness_but.svg", "Шероховатость: щелчок по контуру (Esc — неуказанная в углу)", () => StartPick("rough", L("Шероховатость: щёлкните поверхность на виде; Esc — неуказанная шероховатость в углу листа")));
             Btn("dr_gdt_frame_but.svg", "Допуск формы и расположения: щелчок по контуру", () => StartPick("gdt", L("Допуск: щёлкните поверхность на виде")));
             Btn("dr_datum_but.svg", "База: щелчок по контуру", () => StartPick("datum", L("База: щёлкните поверхность на виде")));
-            Btn("dr_gdt_toggle_but.svg", "Допуски формы и расположения вкл/выкл", () => Change(() => Drawing!.ShowGdt = !Drawing.ShowGdt));
+            Toggle("dr_gdt_toggle_but.svg", "Допуски формы и расположения вкл/выкл", () => Change(() => Drawing!.ShowGdt = !Drawing.ShowGdt), () => Drawing!.ShowGdt);
             Btn("dr_note_but.svg", "Технические требования (текст над надписью)", () => Change(() =>
             {
                 var (x0, y0, x1, _) = SheetLayout.FrameRect(Template);
@@ -197,16 +245,30 @@ public sealed class SheetWindow : Window
                 var (x0, _, _, y1) = SheetLayout.FrameRect(Template);
                 Template.Items.Add(new TemplateItem { Kind = "text", X = x0 + 10, Y = y1 - 15, Height = 5, Text = L("1. Размеры для справок.") });
             }));
-            Btn("tpl_line_but.svg", "Линия шаблона", () => Change(() =>
+            // k168 (замечание 05.11, 16:17, п. 13): линия — двумя щелчками (в окне шаблона — как прежде, сразу)
+            Btn("tpl_line_but.svg", "Линия шаблона", () =>
             {
-                var (x0, y0, x1, _) = SheetLayout.FrameRect(Template);
-                Template.Items.Add(new TemplateItem { Kind = "line", X = x0 + 10, Y = y0 + 80, X2 = x1 - 10, Y2 = y0 + 80 });
-            }));
-            Btn("tpl_table_but.svg", "Таблица на листе", () => Change(() =>
+                if (Kind == Mode.Drawing) { StartPick("tline1", L("Линия шаблона: щёлкните первую точку")); return; }
+                Change(() =>
+                {
+                    var (x0, y0, x1, _) = SheetLayout.FrameRect(Template);
+                    Template.Items.Add(new TemplateItem { Kind = "line", X = x0 + 10, Y = y0 + 80, X2 = x1 - 10, Y2 = y0 + 80 });
+                });
+            });
+            // k168 (п. 10): переключатель видимости таблицы (нет таблицы — новая, у правого верхнего угла рамки)
+            Toggle("tpl_table_but.svg", "Таблица на листе", () => Change(() =>
             {
-                var (_, _, x1, y1) = SheetLayout.FrameRect(Template);
-                Template.Items.Add(new TemplateItem { Kind = "table", X = x1 - 130, Y = y1, Height = 8, Rows = 4, Columns = new() { 20, 70, 40 }, Cells = new() { new() { L("Изм."), L("Содержание"), L("Дата") } } });
-            }));
+                var tables = Template.Items.Where(i => i.Kind == "table").ToList();
+                if (tables.Count == 0 || TableToggleOff)
+                {
+                    var (_, _, x1, y1) = SheetLayout.FrameRect(Template);
+                    bool en = Template.Lang == "en";
+                    Template.Items.Add(new TemplateItem { Kind = "table", X = x1 - 130, Y = y1, Height = 8, Rows = 4, Columns = new() { 20, 70, 40 }, Snap = "tr", Cells = new() { new() { en ? "Rev." : "Изм.", en ? "Description" : "Содержание", en ? "Date" : "Дата" } } });
+                    return;
+                }
+                bool show = tables.All(t => t.Hidden);
+                foreach (var t in tables) t.Hidden = !show;
+            }), () => Template.Items.Any(i => i.Kind == "table" && !i.Hidden));
         }
         else
         {
@@ -234,7 +296,9 @@ public sealed class SheetWindow : Window
         Sep();
         Btn("view_zoom_sel_but.svg", "Крупнее (колесо мыши — в точке под курсором, правая кнопка — сдвиг листа)", () => _canvas.ZoomAt(new Point(_canvas.Bounds.Width / 2, _canvas.Bounds.Height / 2), 1.25));
         Btn("view_fit_but.svg", "Лист целиком", () => _canvas.Fit());
-        Btn("dr_sheet_ico.svg", "Следующий лист", () => { _page = Pages.Count == 0 ? 0 : (_page + 1) % Pages.Count; Refresh(); });
+        Btn("dr_sheet_ico.svg", "Следующий лист", () => { if (Kind == Mode.Drawing && Sheets.Count > 1) { SwitchSheet((SheetIndex + 1) % Sheets.Count); return; } _page = Pages.Count == 0 ? 0 : (_page + 1) % Pages.Count; Refresh(); });
+        // k169 (п. 15): новый лист того же формата, что и первый
+        if (Kind == Mode.Drawing) Btn("dr_add_sheet_but.svg", "Добавить лист (формат первого листа)", () => AddSheet());
     }
 
     /// <summary>Раскладка видов заново (формат, ориентация, масштаб, набор видов).</summary>
@@ -282,6 +346,8 @@ public sealed class SheetWindow : Window
     {
         var d = Drawing!;
         var hit = d.HitAt(x, y);
+        // k168 (п. 11): строка и столбец таблицы, линия и таблица шаблона
+        if (hit == null && TemplateAt(x, y) is { } tpc) { _sel = tpc.It; UpdateOverlay(); return TableMenu(tpc.It, tpc.Part, tpc.Row, tpc.Col); }
         var items = new List<(string, Action)>();
         if (hit is DrawingDim dm)
         {
@@ -311,15 +377,18 @@ public sealed class SheetWindow : Window
 
     void HookPointer()
     {
-        _canvas.PointerWheelChanged += (_, e) => { _canvas.ZoomAt(e.GetPosition(_canvas), Math.Pow(1.2, e.Delta.Y)); e.Handled = true; };
+        _canvas.PointerWheelChanged += (_, e) => { EndCellEdit(true); _canvas.ZoomAt(e.GetPosition(_canvas), Math.Pow(1.2, e.Delta.Y)); e.Handled = true; };
         _canvas.PointerPressed += (_, e) =>
         {
             var pt = e.GetCurrentPoint(_canvas);
             _canvas.Focus();
+            AddModifier = (e.KeyModifiers & (Avalonia.Input.KeyModifiers.Control | Avalonia.Input.KeyModifiers.Shift | Avalonia.Input.KeyModifiers.Meta)) != 0;
+            // k166 (п. 11): средняя кнопка в режиме «Размер (авто)» — поставить размер
+            if (pt.Properties.IsMiddleButtonPressed && _pick == "auto") { FinishAuto(); e.Handled = true; return; }
             if (pt.Properties.IsRightButtonPressed || pt.Properties.IsMiddleButtonPressed) { _panAt = pt.Position; _panStart = pt.Position; _panRight = pt.Properties.IsRightButtonPressed; e.Pointer.Capture(_canvas); e.Handled = true; return; }
             if (!pt.Properties.IsLeftButtonPressed || Kind != Mode.Drawing) return;
             var (x, y) = _canvas.ToSheet(pt.Position);
-            if (e.ClickCount >= 2 && _pick == null) { FocusFieldAt(x, y); e.Handled = true; return; }
+            if (e.ClickCount >= 2 && _pick == null) { DoubleClick(x, y); e.Handled = true; return; }
             Down(x, y);
             if (_drag != null) e.Pointer.Capture(_canvas);
         };
@@ -348,11 +417,12 @@ public sealed class SheetWindow : Window
         {
             if (Kind != Mode.Drawing) return;
             if (e.Key == Avalonia.Input.Key.Delete && _pick == null && _sel != null && FocusManager?.GetFocusedElement() is not TextBox) { DeleteSelected(); e.Handled = true; return; }
+            if (e.Key == Avalonia.Input.Key.Enter && _pick == "auto") { FinishAuto(); e.Handled = true; return; }
             if (e.Key != Avalonia.Input.Key.Escape) return;
-            if (_pick == null) { _sel = null; UpdateOverlay(); return; }
+            if (_pick == null) { _sel = null; _elSel.Clear(); UpdateOverlay(); return; }
             // Esc в режиме шероховатости — неуказанная шероховатость в углу листа
             if (_pick == "rough") Change(() => { Drawing!.Notes.RemoveAll(n => n.Kind == "rough" && !n.HasTarget); Drawing.Notes.Add(new DrawingNote { Kind = "rough", Value = "Ra 6,3" }); });
-            _pick = null; _status.Text = ""; _hoverSegs = null; UpdateOverlay();
+            _pick = null; _elSel.Clear(); _status.Text = ""; _hoverSegs = null; UpdateOverlay();
         };
     }
 
@@ -367,8 +437,17 @@ public sealed class SheetWindow : Window
         {
             var (hx, hy) = HomeAt(sb);
             if (Math.Abs(x - hx) < 3.5 && Math.Abs(y - hy) < 3.5) { HomeView(sv); return; }
-            double rr = RingR(sb), dc = Math.Sqrt((x - sv.X) * (x - sv.X) + (y - sv.Y) * (y - sv.Y));
-            if (Math.Abs(dc - rr) < 2.5) { _drag = new RotateDrag(sv); _lastX = x; _lastY = y; _moved = false; _status.Text = L("Поворот вида: ведите мышью"); return; }
+            // k168 (замечание 05.11, 16:17, п. 8): куб вида в правом верхнем углу изометрии: щелчок по грани — вид по ней, по
+            // углу — изометрия с этого угла, ведение мышью — поворот. Мутация P3D_VIEWCUBE=0 — кольцо поворота (прежнее).
+            if (!CubeOff)
+            {
+                if (CubeHit(sv, sb, x, y) is { } ch) { _drag = new CubeDrag(sv, ch.Face, ch.Corner); _lastX = x; _lastY = y; _moved = false; _status.Text = L("Куб вида: щелчок — грань или угол, ведение — поворот"); return; }
+            }
+            else
+            {
+                double rr = RingR(sb), dc = Math.Sqrt((x - sv.X) * (x - sv.X) + (y - sv.Y) * (y - sv.Y));
+                if (Math.Abs(dc - rr) < 2.5) { _drag = new RotateDrag(sv); _lastX = x; _lastY = y; _moved = false; _status.Text = L("Поворот вида: ведите мышью"); return; }
+            }
         }
         // k161 (п. 10): точку привязки обозначения (база, допуск, шероховатость, позиция) можно перенести
         foreach (var n in d.Notes.Where(n => n.HasTarget && n.View != null && d.Xf.ContainsKey(n.View)))
@@ -376,7 +455,20 @@ public sealed class SheetWindow : Window
             var t = d.ToSheet(n.View!, new OpenTK.Mathematics.Vector2d(n.TX, n.TY));
             if (Math.Abs(t.X - x) < 2.5 && Math.Abs(t.Y - y) < 2.5) { _sel = n; _drag = new TargetDrag(n); _lastX = x; _lastY = y; _moved = false; _status.Text = L("Точка привязки: перенос по контуру"); UpdateOverlay(); return; }
         }
-        _sel = d.HitAt(x, y) ?? (object?)(d.ViewAt(x, y) is { } vn ? d.Views.FirstOrDefault(v => v.Name == vn) : null);
+        var hitDn = d.HitAt(x, y);
+        // k168: элементы шаблона — линия (перенос, концы), таблица (перенос за шапку)
+        if (hitDn == null && TemplateAt(x, y) is { } tpd)
+        {
+            _sel = tpd.It; _lastX = x; _lastY = y; _moved = false; _pendingEl = null; _elSel.Clear();
+            _drag = tpd.Part switch { "end0" => new LineEndDrag(tpd.It, 0), "end1" => new LineEndDrag(tpd.It, 1), "line" => tpd.It, "head" => new TableDrag(tpd.It), _ => null };
+            if (_drag is TableDrag) _free = (tpd.It.X, tpd.It.Y);
+            _status.Text = DescribeTpl(tpd.It, tpd.Part, tpd.Row, tpd.Col);
+            UpdateOverlay(); return;
+        }
+        // k166 (п. 10): щелчок по элементу детали (без переноса) — выбор элемента; перенос мышью — по-прежнему перенос вида
+        _pendingEl = hitDn == null ? ElementUnder(x, y) : null;
+        if (_pendingEl == null && !AddModifier && _elSel.Count > 0) _elSel.Clear();
+        _sel = hitDn ?? (object?)(d.ViewAt(x, y) is { } vn ? d.Views.FirstOrDefault(v => v.Name == vn) : null);
         _drag = _sel; _lastX = x; _lastY = y; _moved = false;
         if (_sel is DrawingView dv0) _free = (dv0.X, dv0.Y);
         _status.Text = _sel switch
@@ -413,6 +505,16 @@ public sealed class SheetWindow : Window
                         break;
                     }
                 case RotateDrag rd: RotateView(rd.View, dx, dy, coarse: true); break;
+                case CubeDrag cd: RotateView(cd.View, dx * 4, dy * 4, coarse: true); break;
+                case LineEndDrag le: if (le.End == 0) { le.It.X += dx; le.It.Y += dy; } else { le.It.X2 += dx; le.It.Y2 += dy; } break;
+                case TemplateItem ti when ti.Kind == "line": ti.X += dx; ti.Y += dy; ti.X2 += dx; ti.Y2 += dy; break;
+                case TableDrag td:
+                    {
+                        _free = (_free.X + dx, _free.Y + dy);
+                        var (nx, ny, code) = SnapTable(td.It, _free.X, _free.Y);
+                        td.It.X = nx; td.It.Y = ny; td.It.Snap = code;
+                        break;
+                    }
                 case DrawingView v:
                     {
                         // k161 (п. 6): свободный перенос с притяжением к центрам других видов (линии-подсказки)
@@ -438,7 +540,20 @@ public sealed class SheetWindow : Window
     public void Up()
     {
         if (_drag is RotateDrag rd && _moved && _input != null) { _scene?.Rebuild(Drawing!, rd.View.Name, _input.Bodies); }
+        if (_drag is CubeDrag cdu)
+        {
+            if (_moved && _input != null) _scene?.Rebuild(Drawing!, cdu.View.Name, _input.Bodies);
+            else if (!_moved) { var cv = cdu; _drag = null; CubeOrient(cv.View, cv.Face, cv.Corner); _guides.Clear(); UpdateOverlay(); return; }
+        }
         if (_drag != null && _moved) { UpdateTitle(); RefreshNow(); BuildProps(); }
+        else if (_pendingEl is { } pe)
+        {
+            if (!AddModifier || _elSel.Count > 0 && _elSel[0].View != pe.View) { bool again = _elSel.Count == 1 && SameEl(_elSel[0].El, pe.El); _elSel.Clear(); if (!again) _elSel.Add(pe); }
+            else ToggleEl(pe);
+            _sel = null;
+            _status.Text = _elSel.Count == 0 ? "" : L("Выбрано элементов: {0} — «Размер (авто)» поставит размер; Ctrl или Shift — ещё", _elSel.Count);
+        }
+        _pendingEl = null;
         _drag = null; _guides.Clear(); UpdateOverlay();
     }
 
@@ -486,6 +601,7 @@ public sealed class SheetWindow : Window
         {
             case DrawingDim dm: Change(() => d.Dims.Remove(dm)); break;
             case DrawingNote n: Change(() => d.Notes.Remove(n)); break;
+            case TemplateItem ti: Change(() => Template.Items.Remove(ti)); break;
             case DrawingView v when v.IsSection || v.IsDetail || v.IsAux: Change(() => { d.Views.RemoveAll(x => x == v || x.Parent == v.Name); d.Dims.RemoveAll(x => x.View == v.Name); InvalidateViews(); }); break;
             case DrawingView v: ToggleView(v.Name); break;
         }
@@ -500,6 +616,25 @@ public sealed class SheetWindow : Window
         Avalonia.Threading.Dispatcher.UIThread.Post(() => { _refreshPending = false; RefreshNow(); }, Avalonia.Threading.DispatcherPriority.Render);
     }
     void RefreshNow() { Refresh(); }
+
+    string ViewLabel(string name) { var v = Drawing?.Views.FirstOrDefault(x => x.Name == name); return v == null ? name : v.IsSection ? $"{v.Label}-{v.Label}" : v.Label.Length > 0 ? v.Label : L(ViewTitle(name)); }
+
+    /// <summary>k167 (замечание 05.11, 16:17, п. 9): имя элемента листа для строки состояния.</summary>
+    public string Describe(object? o) => o switch
+    {
+        DrawingDim dm => L("Размер {0} ({1})", Drawing!.CaptionOf(dm), ViewLabel(dm.View)),
+        DrawingNote n => n.Kind switch { "rough" => L("Шероховатость {0}", n.Value), "gdt" => L("Допуск формы {0}", n.Value), "datum" => L("База {0}", n.Text), "balloon" => L("Позиция {0}", n.Position), "holes" => L("Таблица отверстий"), _ => L("Текст") },
+        DrawingView v => L("Вид «{0}»", ViewLabel(v.Name)),
+        CentreMark cm => Drawing!.CenterNos.FirstOrDefault(c => c.View == cm.View && Math.Abs(c.PV.X - cm.CX) < 1e-9 && Math.Abs(c.PV.Y - cm.CY) < 1e-9) is { No: > 0 } cn ? L("Номер центра ℄{0}", cn.No) : L("Номер центра"),
+        _ => "",
+    };
+    string DescribeEl(string view, PickEl e) => e.Kind switch
+    {
+        'C' => (e.Full ? L("Окружность ⌀{0}", Fmt(2 * e.R)) : L("Дуга R{0}", Fmt(e.R))) + $" ({ViewLabel(view)})",
+        'L' => L(e.What) + $" {Fmt((e.B - e.A).Length)} ({ViewLabel(view)})",
+        _ => L(e.What) + $" ({Fmt(e.P.X)}; {Fmt(e.P.Y)}) ({ViewLabel(view)})",
+    };
+    static string Fmt(double v) => v.ToString("0.###", CultureInfo.InvariantCulture);
 
     static string ViewTitle(string n) => n switch { "front" => "Главный (спереди)", "top" => "Сверху", "left" => "Слева", "right" => "Справа", "bottom" => "Снизу", "back" => "Сзади", "iso" => "Изометрия", _ => n };
 
@@ -525,10 +660,16 @@ public sealed class SheetWindow : Window
         foreach (var p in pts) { var q = d.ToSheet(view, p); if (prev is { } a) res.Add((a.X, a.Y, q.X, q.Y)); prev = q; }
         return res;
     }
+    /// <summary>k166 (п. 8): радиус кружка вершины — 4 точки экрана (мм листа), прежде 1.2 мм листа при любом увеличении.</summary>
+    double VertexR => Math.Clamp(4 / Math.Max(1e-6, _canvas.Zoom), 0.1, 1.2);
+
     List<(double, double, double, double)> Ring(double x, double y, double r)
     {
         var res = new List<(double, double, double, double)>();
-        for (int k = 0; k < 16; k++) { double a0 = k * Math.PI / 8, a1 = (k + 1) * Math.PI / 8; res.Add((x + r * Math.Cos(a0), y + r * Math.Sin(a0), x + r * Math.Cos(a1), y + r * Math.Sin(a1))); }
+        // k166 (замечание 05.11, 15:03, п. 7): окружность подсветки — гладкая: отрезок не длиннее 2 точек экрана (прежде 16
+        // отрезков на любую окружность — гранёная)
+        int nseg = Math.Clamp((int)Math.Ceiling(2 * Math.PI * r * _canvas.Zoom / 2), 24, 1440);
+        for (int k = 0; k < nseg; k++) { double a0 = k * 2 * Math.PI / nseg, a1 = (k + 1) * 2 * Math.PI / nseg; res.Add((x + r * Math.Cos(a0), y + r * Math.Sin(a0), x + r * Math.Cos(a1), y + r * Math.Sin(a1))); }
         return res;
     }
 
@@ -539,19 +680,45 @@ public sealed class SheetWindow : Window
     public void Hover(double x, double y)
     {
         var d = Drawing!;
-        _hoverSegs = null; _hover = null;
+        _hoverSegs = null; _hover = null; _hoverTpl = null;
+        _hoverEl = null;
         if (_pick != null) _hoverSegs = PickPreview(x, y);
         else
         {
-            _hover = d.HitAt(x, y) ?? (object?)(d.ViewAt(x, y) is { } vn ? d.Views.FirstOrDefault(v => v.Name == vn) : null);
+            _hover = d.HitAt(x, y);
+            _hoverTpl = _hover == null ? TemplateAt(x, y) : null;
+            // k166 (замечание 05.11, 15:03, п. 10): элемент детали под курсором — подсветка (щелчок — выбор, с Ctrl или Shift — ещё)
+            if (_hover == null && _hoverTpl == null && ElementUnder(x, y) is { } he) _hoverEl = (he.View, he.El);
+            // вид под курсором — и при подсветке элемента детали (габарит вида тогда не рисуется)
+            if (_hover == null && _hoverTpl == null && d.ViewAt(x, y) is { } vn) _hover = d.Views.FirstOrDefault(v => v.Name == vn);
+            // k167 (п. 9): в строке состояния — что под курсором, иначе — что выбрано
+            string hs = _hoverTpl is { } ht ? DescribeTpl(ht.It, ht.Part, ht.Row, ht.Col) : _hoverEl is { } he2 ? DescribeEl(he2.View, he2.El) : Describe(_hover);
+            if (hs.Length == 0) hs = SelectionText();
+            if (hs.Length > 0) _status.Text = hs;
         }
         UpdateOverlay();
+    }
+
+    string SelectionText()
+    {
+        if (_elSel.Count == 1) return L("Выбрано: {0}", DescribeEl(_elSel[0].View, _elSel[0].El));
+        if (_elSel.Count > 1) return L("Выбрано элементов: {0}", _elSel.Count);
+        return _sel != null ? L("Выбрано: {0}", Describe(_sel)) : "";
+    }
+
+    (string View, PickEl El, OpenTK.Mathematics.Vector2d Q)? ElementUnder(double x, double y)
+    {
+        var d = Drawing!;
+        if (_scene == null || d.ViewAt(x, y) is not { } vn || vn == "iso" || !d.Xf.ContainsKey(vn) || !_scene.Lines.ContainsKey(vn)) return null;
+        var q = d.ToView(vn, x, y);
+        return ElementAt(vn, q) is { } el ? (vn, el, q) : null;
     }
 
     /// <summary>Отрезки подсветки цели щелчка в режиме pick (мм листа); null — цели нет.</summary>
     public List<(double, double, double, double)>? PickPreview(double x, double y)
     {
         var d = Drawing!;
+        if (TemplatePreview(x, y) is { } tpv) return tpv;
         var view = d.ViewAt(x, y);
         if (view == null || !d.Xf.ContainsKey(view) || _scene == null || !_scene.Lines.ContainsKey(view)) return null;
         var q = d.ToView(view, x, y); double s = d.Xf[view].S;
@@ -561,13 +728,20 @@ public sealed class SheetWindow : Window
                 {
                     // k164 (замечание 05.11, 10:33, п. 1): подсвечивается элемент детали под курсором — линия контура, окружность
                     // или дуга с центром, осевая — и точка, к которой привяжется размер
-                    var (t, what, geo) = SnapTarget(view, q, 4);
+                    var (t, what, geo) = SnapTarget(view, q, 2);
                     var ts = d.ToSheet(view, t);
-                    var res = Ring(ts.X, ts.Y, 1.2);
+                    var res = Ring(ts.X, ts.Y, VertexR);
                     foreach (var gl in geo) res.AddRange(SheetSegs(view, gl));
                     _status.Text = what.Length > 0 ? L(_pick == "dim1" ? "Размер: первая точка — {0}" : "Размер: вторая точка — {0}", L(what)) : _status.Text;
                     if (_pick == "dim2" && _first is { } f && f.View == view) { var a = d.ToSheet(view, f.P); res.Add((a.X, a.Y, ts.X, ts.Y)); }
                     return res;
+                }
+            case "auto":
+                {
+                    var res = new List<(double, double, double, double)>();
+                    foreach (var se in _elSel) if (se.View == view) res.AddRange(ElementSegs(view, se.El));
+                    if (ElementAt(view, q) is { } el) { res.AddRange(ElementSegs(view, el)); _status.Text = L("Размер (авто): {0}", L(el.What)) + (_elSel.Count > 0 ? " · " + L("выбрано {0}", _elSel.Count) : ""); }
+                    return res.Count == 0 ? null : res;
                 }
             case "auto1" or "auto2" or "ang1" or "ang2":
                 {
@@ -585,13 +759,13 @@ public sealed class SheetWindow : Window
             case "dia" or "rad":
                 {
                     var c = FindCircle(view, q, _pick);
-                    if (c == null || Math.Abs((q - c.Value.C).Length - c.Value.R) * s > 5) return null;
+                    if (c == null || Math.Abs((q - c.Value.C).Length - c.Value.R) * s > 2.5) return null;
                     var cs = d.ToSheet(view, c.Value.C);
                     return Ring(cs.X, cs.Y, c.Value.R * s);
                 }
             case "rough" or "gdt" or "datum" or "aux":
                 {
-                    var seg = NearestSegment(view, q, 5 / s);
+                    var seg = NearestSegment(view, q, 2.5 / s);
                     return seg == null ? null : SheetSegs(view, new[] { seg.Value.A, seg.Value.B });
                 }
             case "balloon":
@@ -636,21 +810,29 @@ public sealed class SheetWindow : Window
 
     void UpdateOverlay()
     {
+        UpdateToggles();
         _canvas.Overlay.Clear();
         if (Kind == Mode.Drawing && Drawing != null)
         {
-            if (_hover != null && _hover != _sel) _canvas.Overlay.Add((SegsOf(_hover), HoverColor, _hover is DrawingView ? 1.2f : 3f));
+            if (_hover != null && _hover != _sel && !(_hover is DrawingView && _hoverEl != null)) _canvas.Overlay.Add((SegsOf(_hover), HoverColor, _hover is DrawingView ? 1.2f : 3f));
             if (_sel != null) _canvas.Overlay.Add((SegsOf(_sel), SelColor, _sel is DrawingView ? 1.6f : 3f));
             if (_hoverSegs != null) _canvas.Overlay.Add((_hoverSegs, TargetColor, 3f));
+            if (_pick == null)
+            {
+                foreach (var se in _elSel) if (Drawing.Xf.ContainsKey(se.View)) _canvas.Overlay.Add((ElementSegs(se.View, se.El), SelColor, 3f));
+                if (_hoverEl is { } hel && Drawing.Xf.ContainsKey(hel.View)) _canvas.Overlay.Add((ElementSegs(hel.View, hel.El), HoverColor, 3f));
+            }
             if (ShowMissing)
                 foreach (var it in CheckItems.Where(i => !i.Covered))
                     if (DrawingCheck.Geometry(Drawing, it, _input?.Part) is { } geo && Drawing.Xf.ContainsKey(geo.View))
                         _canvas.Overlay.Add((geo.Lines.SelectMany(l => SheetSegs(geo.View, l)).ToList(), MissingColor, 2.5f));
             if (_guides.Count > 0) _canvas.Overlay.Add((_guides.Select(gl => { var (x1, y1, x2, y2) = gl; return x1 == x2 ? (x1, y1 - 30, x2, y2 + 30) : (x1 - 30, y1, x2 + 30, y2); }).ToList(), TargetColor, 1.2f));
+            if (_hoverTpl is { } htp) _canvas.Overlay.Add((TemplateSegs(htp.It, htp.Part, htp.Row, htp.Col), HoverColor, 2.5f));
+            if (_sel is TemplateItem sti) _canvas.Overlay.Add((TemplateSegs(sti, sti.Kind == "line" ? "line" : "table", -1, -1), SelColor, 2.5f));
             if (_sel is DrawingView gv && IsRotatable(gv) && Drawing.Boxes.TryGetValue(gv.Name, out var gb))
             {
-                // кольцо поворота и кнопка «Домой» (домик)
-                _canvas.Overlay.Add((Ring(gv.X, gv.Y, RingR(gb)), GizmoColor, 2f));
+                // k168: куб вида (прежде — кольцо поворота) и кнопка «Домой» (домик)
+                _canvas.Overlay.Add((CubeOff ? Ring(gv.X, gv.Y, RingR(gb)) : CubeSegs(gv, gb), GizmoColor, 2f));
                 var (hx, hy) = HomeAt(gb);
                 _canvas.Overlay.Add((new List<(double, double, double, double)>
                 {
@@ -665,18 +847,34 @@ public sealed class SheetWindow : Window
     /// <summary>
     /// Двойной щелчок по полю основной надписи — фокус на поле в панели свойств (раздел раскрывается). Возвращает имя поля.
     /// </summary>
+    /// <summary>k168: двойной щелчок: ячейка таблицы — правка на листе, поле надписи — фокус в панели.</summary>
+    public void DoubleClick(double x, double y)
+    {
+        if (TemplateAt(x, y) is { Part: "cell" or "head" } tc) { _drag = null; BeginCellEdit(tc.It, tc.Row, tc.Col); return; }
+        FocusFieldAt(x, y);
+    }
+
     public string? FocusFieldAt(double x, double y)
     {
         if (Pages.Count == 0) return null;
         var t = Pages[_page].Texts.Where(t => t.Field != null).OrderBy(t => Math.Abs(t.X - x) + Math.Abs(t.Y + t.Height / 2 - y)).FirstOrDefault();
         if (t == null || Math.Abs(t.X - x) > 25 || Math.Abs(t.Y + t.Height / 2 - y) > 6) return null;
-        if (_fieldControls.TryGetValue(t.Field!, out var c))
-        {
-            for (var p = c.Parent; p != null; p = p.Parent) if (p is Expander ex) ex.IsExpanded = true;
-            c.Focus(); c.BringIntoView();
-            _status.Text = L("Поле надписи: {0}", t.Field!);
-        }
+        // k167 (замечание 05.11, 16:17, п. 4): фокус — и после перестроения панели. Прежде после ввода значения панель
+        // перестраивалась уже после двойного щелчка: фокус оставался у удалённого поля, повторный двойной щелчок не начинал правку.
+        _pendingFocus = t.Field;
+        FocusPending();
+        Avalonia.Threading.Dispatcher.UIThread.Post(FocusPending, Avalonia.Threading.DispatcherPriority.Background);
+        _status.Text = L("Поле надписи: {0}", t.Field!);
         return t.Field;
+    }
+    string? _pendingFocus;
+    void FocusPending()
+    {
+        if (_pendingFocus is not { } f || !_fieldControls.TryGetValue(f, out var c)) return;
+        for (var p = c.Parent; p != null; p = p.Parent) if (p is Expander ex) ex.IsExpanded = true;
+        c.Focus(); c.BringIntoView();
+        if (c is TextBox tb) tb.SelectAll();
+        if (c.IsFocused) _pendingFocus = null;
     }
     readonly Dictionary<string, Control> _fieldControls = new();
 
@@ -696,7 +894,9 @@ public sealed class SheetWindow : Window
     {
         double s = Drawing!.Xf[view].S;
         static OpenTK.Mathematics.Vector2d V(double x, double y) => new(x, y);
-        PickEl? best = null; double bd = 1.5 / s;
+        // k166 (замечание 05.11, 15:03, п. 6): радиусы нацеливания — вдвое меньше (точки и окружности 0.75 мм листа, линии 2 мм):
+        // мелкий элемент между двумя крупными выбирается
+        PickEl? best = null; double bd = 0.75 / s;
         if (!linesOnly)
         {
             // шов полной окружности (концы рёбер-половинок) — не точка: щелчок по окружности — окружность
@@ -712,7 +912,7 @@ public sealed class SheetWindow : Window
             foreach (var a in _scene.Axes.GetValueOrDefault(view) ?? new())
                 if (a.Cross && (a.Center - q).Length < bd) { bd = (a.Center - q).Length; best = new PickEl('P', a.Center, a.Center, a.Center, 0, false, "центр окружности"); }
             if (best != null) return best;
-            bd = 1.5 / s;
+            bd = 0.75 / s;
             foreach (var a in _scene.Arcs.GetValueOrDefault(view) ?? new())
             {
                 double dd = Math.Abs((a.Center - q).Length - a.Radius);
@@ -726,7 +926,7 @@ public sealed class SheetWindow : Window
             if (best != null) return best;
         }
         // прямые линии контура (ломаная по прямой) и осевые
-        bd = 4 / s;
+        bd = 2 / s;
         static double SegD(OpenTK.Mathematics.Vector2d q, OpenTK.Mathematics.Vector2d a, OpenTK.Mathematics.Vector2d b)
         {
             var ab = b - a; double t = Math.Clamp(OpenTK.Mathematics.Vector2d.Dot(q - a, ab) / Math.Max(1e-18, ab.LengthSquared), 0, 1);
@@ -747,7 +947,7 @@ public sealed class SheetWindow : Window
             var lines = a.Cross
                 ? new[] { (A: a.Center - V(a.Radius + 3 / s, 0), B: a.Center + V(a.Radius + 3 / s, 0)), (A: a.Center - V(0, a.Radius + 3 / s), B: a.Center + V(0, a.Radius + 3 / s)) }
                 : new[] { (A: a.Center + a.Dir * (a.Lo - 3 / s), B: a.Center + a.Dir * (a.Hi + 3 / s)) };
-            foreach (var (A, B) in lines) { double dd = SegD(q, A, B) + 0.5 / s; if (dd < bd) { bd = dd; best = new PickEl('L', A, A, B, 0, false, "осевая линия"); } }
+            foreach (var (A, B) in lines) { double dd = SegD(q, A, B) + 0.25 / s; if (dd < bd) { bd = dd; best = new PickEl('L', A, A, B, 0, false, "осевая линия"); } }
         }
         return best;
     }
@@ -758,8 +958,8 @@ public sealed class SheetWindow : Window
         double s = d.Xf[view].S;
         switch (e.Kind)
         {
-            case 'P': { var t = d.ToSheet(view, e.P); return Ring(t.X, t.Y, 1.2); }
-            case 'C': { var t = d.ToSheet(view, e.P); var r = Ring(t.X, t.Y, e.R * s); r.AddRange(Ring(t.X, t.Y, 0.6)); return r; }
+            case 'P': { var t = d.ToSheet(view, e.P); return Ring(t.X, t.Y, VertexR); }
+            case 'C': { var t = d.ToSheet(view, e.P); var r = Ring(t.X, t.Y, e.R * s); r.AddRange(Ring(t.X, t.Y, VertexR * 0.6)); return r; }
             default: return SheetSegs(view, new[] { e.A, e.B });
         }
     }
@@ -823,7 +1023,83 @@ public sealed class SheetWindow : Window
     }
 
     public string StatusText => _status.Text ?? "";
-    public void StartPick(string mode, string hint) { EnsureScene(); _pick = mode; _first = null; _firstEl = null; _status.Text = hint; }
+    public void StartPick(string mode, string hint) { EnsureScene(); _pick = mode == "auto1" ? "auto" : mode; _first = null; _firstEl = null; if (_pick == "auto") _elSel.Clear(); _status.Text = hint; }
+
+    // ------------------------------------------------------------------ k166: выбор элементов детали и «Размер (авто)»
+
+    readonly List<(string View, PickEl El, OpenTK.Mathematics.Vector2d Q)> _elSel = new();
+    (string View, PickEl El)? _hoverEl;
+    (string View, PickEl El, OpenTK.Mathematics.Vector2d Q)? _pendingEl;
+    /// <summary>k166: щелчок с Ctrl или Shift — добавить элемент к выбранным.</summary>
+    public bool AddModifier { get; set; }
+    /// <summary>k166: выбранные элементы детали (вид, элемент, точка щелчка).</summary>
+    public IReadOnlyList<(string View, PickEl El, OpenTK.Mathematics.Vector2d Q)> SelectedElements => _elSel;
+    public (string View, PickEl El)? HoveredElement => _hoverEl;
+
+    static bool SameEl(PickEl a, PickEl b) => a.Kind == b.Kind && (a.A - b.A).Length < 1e-9 && (a.B - b.B).Length < 1e-9 && (a.P - b.P).Length < 1e-9;
+    void ToggleEl((string View, PickEl El, OpenTK.Mathematics.Vector2d Q) e)
+    {
+        int i = _elSel.FindIndex(x => x.View == e.View && SameEl(x.El, e.El));
+        if (i >= 0) _elSel.RemoveAt(i); else _elSel.Add(e);
+    }
+
+    /// <summary>
+    /// k166 (п. 10): кнопка «Размер (авто)»: выбранные элементы — размер сразу; ничего не выбрано — режим выбора элементов
+    /// (п. 11): щелчки (Ctrl или Shift — так же) на одном виде, Enter или средняя кнопка — поставить.
+    /// </summary>
+    public void AutoDimButton()
+    {
+        if (_elSel.Count > 0) { CreateAutoDims(_elSel.ToList()); _elSel.Clear(); UpdateOverlay(); return; }
+        StartPick("auto", L("Размер (авто): щёлкните элементы (Ctrl или Shift — ещё), Enter или средняя кнопка — поставить размер"));
+    }
+
+    /// <summary>k166 (п. 11): завершить выбор элементов в режиме «Размер (авто)» — поставить размер или цепочку.</summary>
+    public void FinishAuto()
+    {
+        if (_pick != "auto") return;
+        var list = _elSel.ToList();
+        _pick = null; _elSel.Clear(); _hoverSegs = null;
+        if (list.Count > 0) CreateAutoDims(list); else _status.Text = "";
+        UpdateOverlay();
+    }
+
+    /// <summary>
+    /// k166: размеры по элементам: один элемент — диаметр окружности, радиус дуги, длина линии; два — по паре (AutoDim);
+    /// три и больше — цепочка по соседним парам, размерные линии цепочки — на одной высоте.
+    /// </summary>
+    void CreateAutoDims(List<(string View, PickEl El, OpenTK.Mathematics.Vector2d Q)> list)
+    {
+        var d = Drawing!;
+        var view = list[0].View;
+        var es = list.Where(e => e.View == view).ToList();
+        var made = new List<DrawingDim>();
+        if (es.Count == 1)
+        {
+            var (_, e, q) = es[0];
+            if (e.Kind == 'C') made.Add(new DrawingDim { View = view, Kind = e.Full ? "dia" : "rad", X1 = e.P.X, Y1 = e.P.Y, X2 = e.R, Y2 = Math.Atan2(q.Y - e.P.Y, q.X - e.P.X) * 180 / Math.PI });
+            else if (e.Kind == 'L' && AutoDim(view, e, q, e, q, false) is { } dl) made.Add(dl);
+        }
+        else
+            for (int i = 0; i + 1 < es.Count; i++)
+                if (AutoDim(view, es[i].El, es[i].Q, es[i + 1].El, es[i + 1].Q, false) is { } dm) made.Add(dm);
+        if (made.Count == 0) { _status.Text = L("Размер по этим элементам не поставить"); return; }
+        Change(() => d.Dims.AddRange(made));
+        // цепочка: размерные линии того же вида (горизонтальные, вертикальные) — на высоте первой
+        if (made.Count > 1 && made[0].Kind is "h" or "v")
+        {
+            double L0 = d.DimFrame(made[0]).L;
+            foreach (var dm in made.Skip(1).Where(x => x.Kind == made[0].Kind))
+            {
+                var (_, _, _, _, h1, h2, _) = d.DimFrame(dm);
+                double hi = Math.Max(h1, h2), lo = Math.Min(h1, h2);
+                dm.FromBox = false;
+                dm.Offset = L0 >= hi ? L0 - hi : L0 <= lo ? L0 - lo : dm.Offset;
+                dm.Arrange = false;
+            }
+            Change(() => { });
+        }
+        _status.Text = made.Count == 1 ? L("Размер {0}", d.CaptionOf(made[0])) : L("Цепочка из {0} размеров", made.Count);
+    }
     /// <summary>k164: выход из режима щелчка (как Esc).</summary>
     public void CancelPick() { _pick = null; _first = null; _status.Text = ""; _hoverSegs = null; UpdateOverlay(); }
 
@@ -876,7 +1152,7 @@ public sealed class SheetWindow : Window
         {
             double dd = (a.Center - q).Length;
             // по самой дуге — тоже центр (щелчок по окружности — размер от её центра)
-            double dr = Math.Abs((a.Center - q).Length - a.Radius) + 1 / s;
+            double dr = Math.Abs((a.Center - q).Length - a.Radius) + 0.5 / s;
             double dm = Math.Min(dd, dr);
             if (dm < best)
             {
@@ -905,7 +1181,7 @@ public sealed class SheetWindow : Window
             foreach (var (A, B) in lines)
             {
                 var ab = B - A; double t = Math.Clamp(OpenTK.Mathematics.Vector2d.Dot(q - A, ab) / Math.Max(1e-18, ab.LengthSquared), 0, 1);
-                var c = A + ab * t; double dd = (c - q).Length + 1 / s;
+                var c = A + ab * t; double dd = (c - q).Length + 0.5 / s;
                 if (dd < best) { best = dd; res = (c, "осевая линия", new() { new() { A, B } }); }
             }
         }
@@ -916,7 +1192,7 @@ public sealed class SheetWindow : Window
             foreach (var (A, B) in new[] { (a.Center - V(hl, 0), a.Center + V(hl, 0)), (a.Center - V(0, hl), a.Center + V(0, hl)) })
             {
                 var ab = B - A; double t = Math.Clamp(OpenTK.Mathematics.Vector2d.Dot(q - A, ab) / Math.Max(1e-18, ab.LengthSquared), 0, 1);
-                var c = A + ab * t; double dd = (c - q).Length + 1 / s;
+                var c = A + ab * t; double dd = (c - q).Length + 0.5 / s;
                 if (dd < best) { best = dd; res = (c, "осевая линия", new() { new() { A, B } }); }
             }
         }
@@ -943,6 +1219,7 @@ public sealed class SheetWindow : Window
         var d = Drawing!;
         // k161: новый вид (разрез, выносной, вспомогательный) не меняет подобранный масштаб — иначе прежние виды на своих
         // местах меняли бы размер и заходили друг на друга
+        if (TemplatePick(x, y)) return;
         FreezeScale();
         var view = d.ViewAt(x, y);
         if (view == null || !d.Xf.ContainsKey(view)) { _status.Text = L("Щёлкните на виде"); return; }
@@ -952,7 +1229,17 @@ public sealed class SheetWindow : Window
         switch (mode)
         {
             case "dim1":
-                _first = (view, SnapTarget(view, q, 4).P); _pick = "dim2"; _status.Text = L("Размер: щёлкните вторую точку"); return;
+                _first = (view, SnapTarget(view, q, 2).P); _pick = "dim2"; _status.Text = L("Размер: щёлкните вторую точку"); return;
+            case "auto":
+                {
+                    // k166 (замечание 05.11, 15:03, п. 11): элементы — щелчками (Ctrl или Shift — так же), на одном виде; размер
+                    // или цепочка — по Enter или средней кнопке
+                    if (ElementAt(view, q) is not { } ea) { _status.Text = L("Элемент не найден — щёлкните ближе к линии, точке или окружности"); return; }
+                    if (_elSel.Count > 0 && _elSel[0].View != view) { _status.Text = L("Элементы размера — на одном виде"); return; }
+                    ToggleEl((view, ea, q));
+                    _status.Text = L("Размер (авто): выбрано {0}; Enter или средняя кнопка — поставить", _elSel.Count);
+                    return;
+                }
             case "auto1" or "ang1":
                 {
                     bool ang = mode == "ang1";
@@ -981,7 +1268,7 @@ public sealed class SheetWindow : Window
             case "dim2":
                 {
                     if (_first is not { } f || f.View != view) { _status.Text = L("Вторая точка — на том же виде"); return; }
-                    var b = SnapTarget(view, q, 4).P;
+                    var b = SnapTarget(view, q, 2).P;
                     double dx = Math.Abs(b.X - f.P.X), dy = Math.Abs(b.Y - f.P.Y);
                     string kind = dx > 3 * dy ? "h" : dy > 3 * dx ? "v" : "al";
                     var mid = d.Xf[view].Mid;
@@ -997,7 +1284,7 @@ public sealed class SheetWindow : Window
                     var cands = arcs.Where(a => mode == "rad" ? !a.Full : true).Select(a => (C: a.Center, R: a.Radius, A: Math.Atan2(q.Y - a.Center.Y, q.X - a.Center.X)))
                         .Concat(mode == "dia" ? (_scene.Axes.GetValueOrDefault(view) ?? new()).Where(a => a.Cross).Select(a => (C: a.Center, R: a.Radius, A: Math.Atan2(q.Y - a.Center.Y, q.X - a.Center.X))) : Enumerable.Empty<(OpenTK.Mathematics.Vector2d C, double R, double A)>())
                         .OrderBy(c => Math.Abs((q - c.C).Length - c.R)).ToList();
-                    if (cands.Count == 0 || Math.Abs((q - cands[0].C).Length - cands[0].R) * s > 5) { _status.Text = mode == "dia" ? L("Окружность не найдена — щёлкните ближе к ней") : L("Дуга не найдена — щёлкните ближе к ней"); return; }
+                    if (cands.Count == 0 || Math.Abs((q - cands[0].C).Length - cands[0].R) * s > 2.5) { _status.Text = mode == "dia" ? L("Окружность не найдена — щёлкните ближе к ней") : L("Дуга не найдена — щёлкните ближе к ней"); return; }
                     var c0 = cands[0];
                     Change(() => d.Dims.Add(new DrawingDim { View = view, Kind = mode, X1 = c0.C.X, Y1 = c0.C.Y, X2 = c0.R, Y2 = c0.A * 180 / Math.PI }));
                     _pick = null; return;
@@ -1031,7 +1318,7 @@ public sealed class SheetWindow : Window
                     string dir = d.DirOf(parent) switch { "top" or "bottom" => "front", "front" or "back" => "left", _ => "front" };
                     var pf = ViewFrame.Of(d.DirOf(parent)); var sf = ViewFrame.Of(dir);
                     double depth = OpenTK.Mathematics.Vector3d.Dot(pf.Right * q.X + pf.Up * q.Y, sf.Toward);
-                    Change(() => { d.AddSection(_scene!, view, dir, depth); InvalidateViews(); });
+                    Change(() => { d.AddSection(_scene!, view, dir, depth); });   // k167: строится только новый вид (в фоне)
                     _pick = null; return;
                 }
             case "aux":
@@ -1050,7 +1337,7 @@ public sealed class SheetWindow : Window
                             if (dd < best) { best = dd; seg = (a, l.Points[i + 1]); }
                         }
                     if (seg is not { } sg) { _status.Text = L("Вспомогательный вид: щёлкните ближе к линии"); return; }
-                    Change(() => { d.AddAuxiliary(_scene!, view, sg.A, sg.B); InvalidateViews(); });
+                    Change(() => { d.AddAuxiliary(_scene!, view, sg.A, sg.B); });
                     _pick = null; return;
                 }
             case "break1":
@@ -1071,7 +1358,7 @@ public sealed class SheetWindow : Window
                 {
                     double r = 12 / s;
                     double ds = DrawingDocument.GostScales.Where(g => g >= 2 * s - 1e-12).DefaultIfEmpty(2 * s).Min();
-                    Change(() => { d.AddDetail(view, q, r, ds); InvalidateViews(); });
+                    Change(() => { d.AddDetail(view, q, r, ds); });
                     _pick = null; return;
                 }
         }
@@ -1133,6 +1420,12 @@ public sealed class SheetWindow : Window
 
     void BuildProps()
     {
+        BuildPropsCore();
+        if (_pendingFocus != null) Avalonia.Threading.Dispatcher.UIThread.Post(FocusPending, Avalonia.Threading.DispatcherPriority.Background);
+    }
+
+    void BuildPropsCore()
+    {
         _props.Children.Clear();
         _fieldControls.Clear();
         if (Kind is Mode.Template or Mode.Drawing)
@@ -1156,6 +1449,11 @@ public sealed class SheetWindow : Window
                 var units = new ComboBox { ItemsSource = unitNames, SelectedIndex = Math.Max(0, Array.IndexOf(LengthUnits, d.Units)), MinWidth = 140, Name = "dr_units" };
                 units.SelectionChanged += (_, _) => { var u = LengthUnits[Math.Max(0, units.SelectedIndex)]; if (u != d.Units) Change(() => d.Units = u); };
                 dp.Children.Add(Row(L("Единицы длины"), units));
+                // k168 (замечание 05.11, 16:17, п. 12): язык надписей листа
+                string[] langs = { "", "ru", "en" };
+                var lang = new ComboBox { ItemsSource = new[] { L("по стандарту ({0})", Template.Lang == "en" ? "English" : "Русский"), "Русский", "English" }, SelectedIndex = Math.Max(0, Array.IndexOf(langs, Template.Language)), MinWidth = 140, Name = "dr_language" };
+                lang.SelectionChanged += (_, _) => { var l2 = langs[Math.Max(0, lang.SelectedIndex)]; if (l2 != Template.Language) Change(() => Template.Language = l2); };
+                dp.Children.Add(Row(L("Язык чертежа"), lang));
                 // k161 (п. 4): толщина основной линии S, ГОСТ 2.303
                 double[] sv = { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.0, 1.4 };   // k165 (п. 5): и 0,1…0,4 мм
                 var lineS = new ComboBox { ItemsSource = sv.Select(x => x.ToString("0.0", CultureInfo.InvariantCulture) + L(" мм")).ToList(), SelectedIndex = Math.Max(0, Array.FindIndex(sv, x => Math.Abs(x - d.LineS) < 1e-9)), MinWidth = 140 };
@@ -1210,11 +1508,31 @@ public sealed class SheetWindow : Window
                 {
                     var del = new Button { Content = "×", Padding = new Thickness(6, 0) };
                     del.Click += (_, _) => Change(() => Template.Items.Remove(it));
+                    // k168: видимость элемента
+                    var vis = new CheckBox { IsChecked = !it.Hidden, MinWidth = 0 };
+                    vis.IsCheckedChanged += (_, _) => { bool h = vis.IsChecked != true; if (h != it.Hidden) Change(() => it.Hidden = h); };
+                    if (it.Kind == "table")
+                    {
+                        // k168 (замечание 05.11, 16:17, п. 11): название, число строк и столбцов
+                        var box = new StackPanel { Spacing = 3 };
+                        if (it == _sel) box.Background = new SolidColorBrush(Color.FromArgb(60, 255, 120, 0));
+                        var title = Field(it.Title, t => { if (t != it.Title) Change(() => it.Title = t); }, 200); title.Watermark = L("Название таблицы"); title.Name = "dr_table_title";
+                        box.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { vis, title, del } });
+                        var rows = new NumericUpDown { Minimum = 1, Maximum = 200, Increment = 1, Value = Math.Max(1, it.Rows), FormatString = "0", Width = 110, Name = "dr_table_rows" };
+                        rows.ValueChanged += (_, e) => { int n = (int)(e.NewValue ?? 1); if (n != it.Rows) Change(() => { it.NormalizeCells(); while (it.Rows < n) it.InsertRow(it.Rows); while (it.Rows > n && it.Rows > 1) it.DeleteRow(it.Rows - 1); }); };
+                        var cols = new NumericUpDown { Minimum = 1, Maximum = 50, Increment = 1, Value = Math.Max(1, it.Columns?.Count ?? 1), FormatString = "0", Width = 110, Name = "dr_table_cols" };
+                        cols.ValueChanged += (_, e) => { int n = (int)(e.NewValue ?? 1); if (n != (it.Columns?.Count ?? 1)) Change(() => { it.NormalizeCells(); while (it.Columns!.Count < n) it.InsertColumn(it.Columns.Count); while (it.Columns.Count > n && it.Columns.Count > 1) it.DeleteColumn(it.Columns.Count - 1); }); };
+                        box.Children.Add(Row(L("Строк"), rows));
+                        box.Children.Add(Row(L("Столбцов"), cols));
+                        box.Children.Add(new TextBlock { Text = L("Двойной щелчок по ячейке на листе — правка; левее строки и выше столбца — правый щелчок: добавить, копировать, вставить, удалить"), Opacity = 0.7, FontSize = 11, TextWrapping = TextWrapping.Wrap, MaxWidth = 300 });
+                        ip.Children.Add(box);
+                        continue;
+                    }
                     Control body = it.Kind == "text"
                         ? new TextBox { Text = it.Text, AcceptsReturn = true, MinHeight = 44, Width = 230, FontSize = 12 }
-                        : new TextBlock { Text = it.Kind == "line" ? L("Линия") : L("Таблица {0}×{1}", it.Rows, it.Columns?.Count ?? 0), VerticalAlignment = VerticalAlignment.Center };
+                        : new TextBlock { Text = L("Линия {0}, {1} — {2}, {3}", Math.Round(it.X, 1), Math.Round(it.Y, 1), Math.Round(it.X2, 1), Math.Round(it.Y2, 1)), VerticalAlignment = VerticalAlignment.Center };
                     if (body is TextBox tb) tb.LostFocus += (_, _) => Change(() => it.Text = tb.Text ?? "");
-                    ip.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { body, del } });
+                    ip.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { vis, body, del } });
                 }
             }
             return;
@@ -1326,8 +1644,8 @@ public sealed class SheetWindow : Window
             {
                 var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
                 row.Children.Add(new TextBlock { Text = v.IsSection ? $"{v.Label}-{v.Label}" : v.Label, MinWidth = 34, VerticalAlignment = VerticalAlignment.Center });
-                if (v.IsSection) row.Children.Add(Field(v.CutDepth.ToString("0.###", CultureInfo.InvariantCulture), t => { double n = Num(t, v.CutDepth); if (n != v.CutDepth) Change(() => { v.CutDepth = n; InvalidateViews(); }); }, 64));
-                else if (v.IsDetail) row.Children.Add(Field(v.DetailR.ToString("0.###", CultureInfo.InvariantCulture), t => { double n = Num(t, v.DetailR); if (n > 0 && n != v.DetailR) Change(() => { v.DetailR = n; InvalidateViews(); }); }, 64));
+                if (v.IsSection) row.Children.Add(Field(v.CutDepth.ToString("0.###", CultureInfo.InvariantCulture), t => { double n = Num(t, v.CutDepth); if (n != v.CutDepth) Change(() => { v.CutDepth = n; DropView(v.Name); }); }, 64));
+                else if (v.IsDetail) row.Children.Add(Field(v.DetailR.ToString("0.###", CultureInfo.InvariantCulture), t => { double n = Num(t, v.DetailR); if (n > 0 && n != v.DetailR) Change(() => { v.DetailR = n; DropView(v.Name); }); }, 64));
                 if (!v.IsAux) row.Children.Add(new TextBlock { Text = v.IsSection ? L("глуб.") : L("R"), Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center });
                 AddViewControls(row, v);
                 row.Children.Add(Del(() => { d.Views.RemoveAll(x => x == v || x.Parent == v.Name); d.Dims.RemoveAll(x => x.View == v.Name); InvalidateViews(); }));
@@ -1337,6 +1655,14 @@ public sealed class SheetWindow : Window
         if (d.Dims.Count > 0)
         {
             var dp = Section(L("Размеры ({0})", d.Dims.Count));
+            // k167 (замечание 05.11, 16:17, п. 1–3): отклонения — два поля (Upper / Lower) с заголовками; поля текста и
+            // смещения размерной линии убраны (смещение — мышью, текст — значение модели)
+            var head = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+            head.Children.Add(new TextBlock { Text = "", MinWidth = 24 });
+            head.Children.Add(new TextBlock { Text = L("Размер"), MinWidth = 110, Opacity = 0.7, FontSize = 11 });
+            head.Children.Add(new TextBlock { Text = L("Верхнее (+)"), Width = 64, Opacity = 0.7, FontSize = 11 });
+            head.Children.Add(new TextBlock { Text = L("Нижнее (−)"), Width = 64, Opacity = 0.7, FontSize = 11 });
+            dp.Children.Add(head);
             foreach (var dim in d.Dims.ToList())
             {
                 var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
@@ -1344,10 +1670,11 @@ public sealed class SheetWindow : Window
                 show.IsCheckedChanged += (_, _) => { bool h = show.IsChecked != true; if (h != dim.Hidden) Change(() => dim.Hidden = h); };
                 row.Children.Add(show);
                 row.Children.Add(new TextBlock { Text = $"{dim.View}: {d.CaptionOf(dim)}", MinWidth = 110, VerticalAlignment = VerticalAlignment.Center });
-                var tol = Field(dim.Tol, t => { if (t != dim.Tol) Change(() => dim.Tol = t); }, 60); tol.Watermark = L("допуск");
-                var txt = Field(dim.Text, t => { if (t != dim.Text) Change(() => dim.Text = t); }, 60); txt.Watermark = L("текст");
-                var off = Field(dim.Offset.ToString("0.#", CultureInfo.InvariantCulture), t => { double n = Num(t, dim.Offset); if (n != dim.Offset) Change(() => { dim.Offset = n; dim.Arrange = false; }); }, 44);
-                row.Children.Add(tol); row.Children.Add(txt); row.Children.Add(off); row.Children.Add(Del(() => d.Dims.Remove(dim)));
+                var tup = Field(dim.TolUp, t => { if (t != dim.TolUp) Change(() => { dim.TolUp = t; dim.Tol = ""; }); }, 64); tup.Watermark = "+0,1"; tup.Name = "dr_tol_up";
+                var tlo = Field(dim.TolLo, t => { if (t != dim.TolLo) Change(() => { dim.TolLo = t; dim.Tol = ""; }); }, 64); tlo.Watermark = "−0,1"; tlo.Name = "dr_tol_lo";
+                ToolTip.SetTip(tup, L("Верхнее отклонение (Upper): +0,015"));
+                ToolTip.SetTip(tlo, L("Нижнее отклонение (Lower): 0,010 или −0,010; равные верхнему по величине — «±»"));
+                row.Children.Add(tup); row.Children.Add(tlo); row.Children.Add(Del(() => d.Dims.Remove(dim)));
                 if (dim == _sel) row.Background = new SolidColorBrush(Color.FromArgb(60, 255, 120, 0));
                 dp.Children.Add(row);
             }
@@ -1409,7 +1736,9 @@ public sealed class SheetWindow : Window
     DrawingInput Input()
     {
         // открытый документ — его модель (файл может быть старее правок); иначе — файл модели
-        if (DrawingSource?.Invoke() is { } open && open.Bodies.Count > 0) return open;
+        // k169: лист с другой моделью — её файл (открытый документ — у листов с моделью листа 1)
+        bool ownModel = Drawing != null && _root != null && !ReferenceEquals(Drawing, _root) && Drawing.SourcePath is { Length: > 0 } && Drawing.SourcePath != _root.SourcePath;
+        if (!ownModel && DrawingSource?.Invoke() is { } open && open.Bodies.Count > 0) return open;
         if (Drawing?.SourcePath is { Length: > 0 } sp && File.Exists(sp))
         {
             if (_fileInput is { } fi && fi.Path == sp && fi.Stamp == File.GetLastWriteTimeUtc(sp)) return fi.Input;
@@ -1434,13 +1763,26 @@ public sealed class SheetWindow : Window
         }
     }
     /// <summary>Виды построить заново (сменилась модель, разрез, выносной элемент).</summary>
+    /// <summary>k167: вид устарел — перестроить только его (в фоне).</summary>
+    void DropView(string name) { if (_scene != null) { _scene.Lines.Remove(name); _scene.Shades.Remove(name); } }
     public void InvalidateViews() { _scene = null; _fileInput = _fileInput is { } fi && Drawing?.SourcePath is { } sp && File.Exists(sp) && fi.Stamp != File.GetLastWriteTimeUtc(sp) ? null : _fileInput; }
 
     /// <summary>Проекции видов: построить, если их нет или набор видов изменился.</summary>
     void EnsureScene()
     {
         var d = Drawing!;
-        if (_scene != null && d.Views.All(v => _scene.Lines.ContainsKey(v.Name))) return;
+        if (_scene != null && d.Views.All(v => _scene.Lines.ContainsKey(v.Name) || _building.Contains(v.Name))) return;
+        // k167 (замечание 05.11, 16:17, п. 5): новый вид (разрез, выносной, вспомогательный, включённый) — строится только он,
+        // в фоне, с ходом в строке состояния; прежде — все виды заново, около 10 с без отклика окна
+        if (_scene != null && _input != null && !IncrementalOff)
+        {
+            var missing = d.Views.Where(v => !_scene.Lines.ContainsKey(v.Name) && !_building.Contains(v.Name)).ToList();
+            if (missing.All(v => !v.IsDetail || _scene.Lines.ContainsKey(v.Parent ?? "")))
+            {
+                BuildViewsAsync(missing);
+                return;
+            }
+        }
         // k159: положения видов из файла чертежа сохраняются; место получают только виды с X = Y = 0, и только когда у них
         // есть линии (Layout) — прежде раскладка сбрасывалась при каждом построении после пустого (перенос пользователя терялся)
         _input = Input();
@@ -1451,12 +1793,51 @@ public sealed class SheetWindow : Window
         if (_scene.Problems.Count > 0) _status.Text = string.Join("; ", _scene.Problems.Take(2));
     }
 
+    static readonly bool IncrementalOff = Environment.GetEnvironmentVariable("P3D_VIEWSINCR") == "0";
+
+    void BuildViewsAsync(List<DrawingView> views)
+    {
+        var d = Drawing!; var scene = _scene!; var bodies = _input!.Bodies;
+        if (views.Count == 0) return;
+        string what = string.Join(", ", views.Select(v => ViewLabel(v.Name)));
+        if (SyncViews)
+        {
+            var part = DrawingScene.BuildSome(d, bodies, views, null);
+            scene.Merge(d, part);
+            return;
+        }
+        foreach (var v in views) _building.Add(v.Name);
+        _status.Text = L("Строится вид: {0}…", what);
+        _progress.IsVisible = true; _progress.Value = 0;
+        var names = views.Select(v => v.Name).ToList();
+        System.Threading.Tasks.Task.Run(() => DrawingScene.BuildSome(d, bodies, views, (f, stage) =>
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => { _progress.Value = f; _status.Text = L("Строится вид: {0} — {1}", what, L(stage)); })))
+            .ContinueWith(t => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                foreach (var n in names) _building.Remove(n);
+                _progress.IsVisible = _building.Count > 0;
+                if (t.IsFaulted) { _status.Text = L("Вид не построен: {0}", t.Exception?.GetBaseException().Message ?? ""); Core.AppLog.Write("sheet: view build", t.Exception!); return; }
+                if (!ReferenceEquals(_scene, scene)) return;   // сцена перестроена целиком
+                scene.Merge(d, t.Result);
+                _status.Text = L("Вид построен: {0}", what);
+                RefreshNow(); BuildProps();
+            }));
+    }
+
+    /// <summary>k167: дождаться построения видов в фоне (проверки).</summary>
+    public void WaitViews(int ms = 120000)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (_building.Count > 0 && sw.ElapsedMilliseconds < ms) { Avalonia.Threading.Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); }
+    }
+
     /// <summary>Разбор скорости: время последнего вывода листа — виды, поля надписи, сборка листа (мс).</summary>
     public (double Scene, double Fields, double Compose) LastTimes { get; private set; }
     FieldSource? _partFields;
 
     public List<SheetGraphics> BuildPages()
     {
+        ReSnap();   // k168 (п. 14): таблицы, прилипшие к рамке, — на месте после смены формата и стандарта
         if (Kind == Mode.Bom) { Bom!.Template = Template; return Bom.Pages(); }
         if (Kind == Mode.Drawing)
         {
@@ -1467,6 +1848,9 @@ public sealed class SheetWindow : Window
             // k162: поля надписи модели (масса — объём тел по сетке, около 400 мс у детали пользователя) — один раз на вход
             // чертежа; прежде — при каждом выводе листа, то есть на каждом шаге переноса (около 3 кадров в секунду)
             var fs = _input?.Part != null ? (_partFields ??= FieldSource.FromPart(_input.Part)) : FieldValues();
+            // k169: номер листа и число листов
+            fs.Auto[Model.Drawing.Fields.Sheet] = (SheetIndex + 1).ToString(CultureInfo.InvariantCulture);
+            fs.Auto[Model.Drawing.Fields.Sheets] = Math.Max(1, Sheets.Count).ToString(CultureInfo.InvariantCulture);
             double tFields = sw.Elapsed.TotalMilliseconds - tScene;
             var g = d.Compose(_scene!, fs);
             LastTimes = (tScene, tFields, sw.Elapsed.TotalMilliseconds - tScene - tFields);
@@ -1507,9 +1891,10 @@ public sealed class SheetWindow : Window
             _page = Math.Clamp(_page, 0, Math.Max(0, Pages.Count - 1));
             var g = Pages[_page];
             _canvas.Graphics = g;
-            if (_sel != null && Kind == Mode.Drawing && !(Drawing!.Dims.Contains(_sel) || Drawing.Notes.Contains(_sel) || Drawing.Views.Contains(_sel) || _sel is CentreMark cm0 && Drawing.CentreMarks.Contains(cm0))) _sel = null;
+            if (_sel != null && Kind == Mode.Drawing && !(Drawing!.Dims.Contains(_sel) || Drawing.Notes.Contains(_sel) || Drawing.Views.Contains(_sel) || _sel is CentreMark cm0 && Drawing.CentreMarks.Contains(cm0) || _sel is TemplateItem ti0 && Template.Items.Contains(ti0))) _sel = null;
             UpdateOverlay();
-            _status.Text = $"{Template.Format} {(Template.Landscape ? L("альбомная") : L("книжная"))} · {L("лист {0} из {1}", _page + 1, Pages.Count)}" +
+            // k167: формат и номер листа — справа в строке состояния (прежде затирали сообщения и ход построения видов)
+            _sheetInfo.Text = $"{Template.Format} {(Template.Landscape ? L("альбомная") : L("книжная"))} · {L("лист {0} из {1}", _page + 1, Pages.Count)}" +
                            (Kind == Mode.Bom ? " · " + L("строк: {0}", Bom!.Visible.Count()) : "");
         }
         catch (Exception ex) { _status.Text = ex.Message; Core.AppLog.Write("sheet: refresh", ex); }
@@ -1553,7 +1938,7 @@ public sealed class SheetWindow : Window
     public void SaveTo(string path)
     {
         if (Kind == Mode.Bom) { Bom!.Template = Template; Bom.Save(path); }
-        else if (Kind == Mode.Drawing) { Drawing!.Template = Template; File.WriteAllText(path, Drawing.ToJson()); }
+        else if (Kind == Mode.Drawing) { Drawing!.Template = Template; File.WriteAllText(path, (_root ?? Drawing).ToJson()); }   // k169: все листы
         else Template.Save(path);
         FilePath = path; Dirty = false; UpdateTitle();
         _status.Text = L("Сохранено: {0}", Path.GetFileName(path));
@@ -1567,7 +1952,7 @@ public sealed class SheetWindow : Window
             string ext = Kind == Mode.Bom ? BomExt : Kind == Mode.Drawing ? DrawingExt : TemplateExt;
             var f = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
-                Title = L("Сохранить"), DefaultExtension = ext, SuggestedFileName = (Kind == Mode.Bom ? (Bom!.Title.Length > 0 ? Bom.Title : L("Перечень")) : Template.Name) + ext,
+                Title = L("Сохранить"), DefaultExtension = ext, SuggestedFileName = (SuggestedName ?? (Kind == Mode.Bom ? (Bom!.Title.Length > 0 ? Bom.Title : L("Перечень")) : Template.Name)) + ext,
                 FileTypeChoices = new[] { new FilePickerFileType(Kind == Mode.Bom ? L("Перечень") : Kind == Mode.Drawing ? L("Чертёж") : L("Шаблон листа")) { Patterns = new[] { "*" + ext } } },
             });
             path = f?.TryGetLocalPath();
@@ -1626,6 +2011,23 @@ public sealed class SheetWindow : Window
     }
 
     // ------------------------------------------------------------------ открытие
+
+    /// <summary>k169: имя файла из окна создания документа (предлагается при первой записи).</summary>
+    public string? SuggestedName { get; set; }
+
+    /// <summary>k169 (п. 17): шаблон из окна создания документа — лист и единицы чертежа.</summary>
+    public void ApplyTemplate(SheetTemplate t)
+    {
+        Template = t;
+        if (Drawing != null)
+        {
+            Drawing.Template = t;
+            var u = t.Units.Split('/')[0];
+            if (u is "mm" or "cm" or "m" or "in" or "ft") Drawing.Units = u;
+        }
+        if (Bom != null) Bom.Template = t;
+        Refresh(); BuildProps(); UpdateTabs();
+    }
 
     public static SheetWindow OpenFile(string path)
     {

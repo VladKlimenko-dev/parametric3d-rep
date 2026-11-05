@@ -51,6 +51,7 @@ static partial class Program
         // k163: чертёж из файла (.p3drw) вместо видов по умолчанию
         if (isoStyle != null && isoStyle.EndsWith(".p3drw")) { dd = Parametric3D.Model.Drawing.DrawingDocument.FromJson(File.ReadAllText(isoStyle)); isoStyle = null; }
         if (isoStyle != null) dd.Views.First(v => v.Name == "iso").Style = isoStyle;
+        if (Environment.GetEnvironmentVariable("P3D_ISODIR") is { Length: > 0 } idir) dd.Views.First(v => v.Name == "iso").Dir = idir;
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var sc = Parametric3D.Model.Drawing.DrawingScene.Build(dd, p.Bodies);
         var g = dd.Compose(sc, new Parametric3D.Model.Drawing.FieldSource());
@@ -137,5 +138,77 @@ static partial class Program
                 var p0 = f.Project(c.PointAt(c.T0)); var p1 = f.Project(c.PointAt(c.T1));
                 Console.WriteLine($"edge {e.Id}: {c.GetType().Name} {extra} from ({p0.X:0.###},{p0.Y:0.###}) to ({p1.X:0.###},{p1.Y:0.###}) d {best:0.###}");
             }
+    }
+}
+
+static partial class Program
+{
+    /// <summary>
+    /// k166: разрывы линий видов: короткие невидимые куски между видимыми кусками той же линии (ребро, очерк) — по направлениям
+    /// взгляда (изометрия, повёрнутая вокруг оси Y через 30°, и с другой стороны). Печать: направление, число и длина разрывов.
+    /// </summary>
+    static void HlrGaps(string file, string? only = null)
+    {
+        var (p, pars) = DocumentFile.Load(File.ReadAllText(file));
+        if (!p.RestoredFromFile) p.Rebuild(pars);
+        var iso = Parametric3D.Model.Drawing.ViewFrame.Of("iso");
+        for (int k = 0; k < 12; k++)
+        {
+            if (only != null && k.ToString() != only) continue;
+            double a = k * Math.PI / 6;
+            Vector3d Ry(Vector3d v) => new(v.X * Math.Cos(a) + v.Z * Math.Sin(a), v.Y, -v.X * Math.Sin(a) + v.Z * Math.Cos(a));
+            var f = new Parametric3D.Model.Drawing.ViewFrame(Ry(iso.Right), Ry(iso.Up));
+            var lines = Parametric3D.Model.Drawing.ViewProjection.ProjectMany(p.Bodies, f);
+            int gaps = 0; double glen = 0; var kinds = new Dictionary<string, int>();
+            static double Len(List<Vector2d> q) { double l = 0; for (int i = 1; i < q.Count; i++) l += (q[i] - q[i - 1]).Length; return l; }
+            foreach (var grp in lines.GroupBy(l => (l.SourceId, l.Kind, l.Body)))
+            {
+                var vis = grp.Where(l => l.Visible).ToList();
+                double total = grp.Sum(l => Len(l.Points));
+                foreach (var h in grp.Where(l => !l.Visible))
+                {
+                    double hl = Len(h.Points);
+                    if (hl > 0.05 * total || hl > 5) continue;
+                    bool Touch(Vector2d e) => vis.Any(v => (v.Points[0] - e).Length < 1e-4 || (v.Points[^1] - e).Length < 1e-4);
+                    if (Touch(h.Points[0]) && Touch(h.Points[^1]))
+                    {
+                        gaps++; glen += hl; kinds[grp.Key.Kind.ToString()] = kinds.GetValueOrDefault(grp.Key.Kind.ToString()) + 1;
+                        if (only != null) Console.WriteLine($"  gap src {grp.Key.SourceId} {grp.Key.Kind} len {hl:0.###} at ({h.Points[0].X:0.###},{h.Points[0].Y:0.###})");
+                    }
+                }
+            }
+            Console.WriteLine($"dir {k * 30}°: lines {lines.Count}, gaps {gaps}, length {glen:0.##} mm, " + string.Join(", ", kinds.Select(x => $"{x.Key} {x.Value}")) + $" | v:{f.Right.X:0.####},{f.Right.Y:0.####},{f.Right.Z:0.####};{f.Up.X:0.####},{f.Up.Y:0.####},{f.Up.Z:0.####}");
+        }
+    }
+}
+
+static partial class Program
+{
+    /// <summary>k166: грани тела по виду поверхности (своей и точной — источника), площадь и число треугольников сетки.</summary>
+    static void SrfStat(string file)
+    {
+        var (p, pars) = DocumentFile.Load(File.ReadAllText(file));
+        if (!p.RestoredFromFile) p.Rebuild(pars);
+        foreach (var b in p.Bodies)
+        {
+            var m = Parametric3D.Model.Drawing.ViewProjection.MeshOf(b);
+            var tris = new Dictionary<uint, int>();
+            for (int t = 0; t + 2 < m.Indices.Length; t += 3) { var f = m.Vertices[m.Indices[t]].FaceId; tris[f] = tris.GetValueOrDefault(f) + 1; }
+            foreach (var g in b.Faces.GroupBy(f => $"{f.Surface.GetType().Name} -> {Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name ?? "null"}"))
+                Console.WriteLine($"{g.Key}: faces {g.Count()}, tris {g.Sum(f => tris.GetValueOrDefault(f.Id))}");
+            // точная нормаль против нормали сетки в вершинах
+            var byId = b.Faces.ToDictionary(f => f.Id);
+            var stat = new Dictionary<string, (int N, double Max, double Sum)>();
+            for (int i = 0; i < m.Vertices.Length; i += 7)
+            {
+                var v = m.Vertices[i]; if (!byId.TryGetValue(v.FaceId, out var f)) continue;
+                var srf = Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f); if (srf == null) continue;
+                var ne = srf.NormalAt(srf.ProjectToUV((Vector3d)v.P)).Normalized(); var nm = ((Vector3d)v.N).Normalized();
+                double ang = Math.Acos(Math.Clamp(Math.Abs(Vector3d.Dot(ne, nm)), -1, 1)) * 180 / Math.PI;
+                var pr = srf.PointAt(srf.ProjectToUV((Vector3d)v.P)); double dist = (pr - (Vector3d)v.P).Length;
+                var k = srf.GetType().Name; var o = stat.GetValueOrDefault(k); stat[k] = (o.N + 1, Math.Max(o.Max, ang), o.Sum + dist);
+            }
+            foreach (var (k, o) in stat) Console.WriteLine($"  {k}: vertices {o.N}, max angle exact vs mesh normal {o.Max:0.##}°, mean projection distance {o.Sum / Math.Max(1, o.N):0.####}");
+        }
     }
 }

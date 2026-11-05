@@ -100,6 +100,53 @@ public sealed class TemplateItem
     public List<double>? Columns { get; set; }
     public int Rows { get; set; }
     public List<List<string>>? Cells { get; set; }
+    /// <summary>k168 (замечание 05.11, 16:17, п. 10): элемент скрыт (кнопка «Таблица на листе» — переключатель видимости).</summary>
+    public bool Hidden { get; set; }
+    /// <summary>k168 (п. 11): название таблицы (над таблицей).</summary>
+    public string Title { get; set; } = "";
+    /// <summary>
+    /// k168 (п. 14): к чему прилипла таблица: tr / tl / br / bl — угол рамки, title — над основной надписью справа; пусто —
+    /// свободно. При смене формата и стандарта место пересчитывается.
+    /// </summary>
+    public string Snap { get; set; } = "";
+
+    public double TableW => (Columns ?? new List<double> { 50 }).Sum();
+    public double RowH => Height <= 0 ? 8 : Height;
+    public double TableH => Math.Max(1, Rows) * RowH;
+
+    /// <summary>k168: ячейки — по числу строк и столбцов (недостающие — пустые).</summary>
+    public void NormalizeCells()
+    {
+        Columns ??= new List<double> { 50 };
+        Cells ??= new();
+        while (Cells.Count < Rows) Cells.Add(new());
+        if (Cells.Count > Rows) Cells.RemoveRange(Rows, Cells.Count - Rows);
+        foreach (var r in Cells) { while (r.Count < Columns.Count) r.Add(""); if (r.Count > Columns.Count) r.RemoveRange(Columns.Count, r.Count - Columns.Count); }
+    }
+    public void InsertRow(int at, List<string>? cells = null)
+    {
+        NormalizeCells(); at = Math.Clamp(at, 0, Rows);
+        var row = Enumerable.Range(0, Columns!.Count).Select(i => cells != null && i < cells.Count ? cells[i] : "").ToList();
+        Cells!.Insert(at, row); Rows++;
+    }
+    public void DeleteRow(int r) { NormalizeCells(); if (Rows <= 1 || r < 0 || r >= Rows) return; Cells!.RemoveAt(r); Rows--; }
+    public void InsertColumn(int at, List<string>? cells = null, double width = 30)
+    {
+        NormalizeCells(); at = Math.Clamp(at, 0, Columns!.Count);
+        Columns.Insert(at, width);
+        for (int r = 0; r < Rows; r++) Cells![r].Insert(at, cells != null && r < cells.Count ? cells[r] : "");
+    }
+    public void DeleteColumn(int c) { NormalizeCells(); if (Columns!.Count <= 1 || c < 0 || c >= Columns.Count) return; Columns.RemoveAt(c); foreach (var r in Cells!) r.RemoveAt(c); }
+    /// <summary>Ячейка (строка, столбец) в точке листа; -1 — вне таблицы.</summary>
+    public (int Row, int Col) CellAt(double x, double y)
+    {
+        if (x < X || x > X + TableW || y > Y || y < Y - TableH) return (-1, -1);
+        int r = Math.Clamp((int)((Y - y) / RowH), 0, Math.Max(1, Rows) - 1);
+        double cx = X; var cols = Columns ?? new List<double> { 50 };
+        for (int c = 0; c < cols.Count; c++) { if (x <= cx + cols[c]) return (r, c); cx += cols[c]; }
+        return (r, cols.Count - 1);
+    }
+    public double ColX(int c) { double cx = X; var cols = Columns ?? new List<double> { 50 }; for (int i = 0; i < c && i < cols.Count; i++) cx += cols[i]; return cx; }
 }
 
 /// <summary>
@@ -119,6 +166,16 @@ public sealed class SheetTemplate
     /// <summary>Значения полей основной надписи, заданные вручную (имя поля — Fields.*); пустое — из свойств детали.</summary>
     public Dictionary<string, string> Values { get; set; } = new();
     public List<TemplateItem> Items { get; set; } = new();
+    /// <summary>k168 (замечание 05.11, 16:17, п. 12): язык надписей листа: ru, en; пусто — по стандарту (ЕСКД — ru, ISO — en).</summary>
+    public string Language { get; set; } = "";
+    public string Lang => Language.Length > 0 ? Language : Standard == SheetStandard.Iso ? "en" : "ru";
+    /// <summary>k169 (п. 17): система единиц чертежа: «mm/kg/s», «in/lb/s» … (длина — первая).</summary>
+    public string Units { get; set; } = "mm/kg/s";
+
+    /// <summary>k169: копия шаблона (через JSON).</summary>
+    public SheetTemplate Clone() => FromJson(ToJson());
+    /// <summary>k169 (п. 17): имя шаблона по параметрам: «ЕСКД mm/kg/s A3 LS».</summary>
+    public string AutoName => $"{(Standard == SheetStandard.Iso ? "ISO" : "ЕСКД")} {Units} {Format} {(Landscape ? "LS" : "PT")}";
 
     static readonly JsonSerializerOptions Opts = new() { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     public string ToJson() => JsonSerializer.Serialize(this, Opts);
