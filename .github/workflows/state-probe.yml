@@ -54,7 +54,9 @@ jobs:
       matrix:
         include:
           - { name: s106,           cmd: 'loftseq 1 106 6 OUT',  env: '' }
-          - { name: s106_fields,        cmd: 'loftseq 1 106 1 OUT', env: '' }
+          - { name: s106_bits_meshreuse,   cmd: 'loftseq 1 106 6 OUT', env: 'P3D_MESHREUSE=0' }
+          - { name: s106_bits_keepfaces,   cmd: 'loftseq 1 106 6 OUT', env: 'P3D_DRKEEPFACES=0' }
+          - { name: s106_bits_both,        cmd: 'loftseq 1 106 6 OUT', env: 'P3D_MESHREUSE=0 P3D_DRKEEPFACES=0' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
