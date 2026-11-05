@@ -1,0 +1,1 @@
+seconds 723 nproc 4 env P3D_LAZYREMESH=1 SEQ_STEPMODE=full cmd loftseq 1 106 6 res/out
