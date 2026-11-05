@@ -5,6 +5,7 @@
 
 | Версия | Дата | Коммит | Архив | Что сделано |
 |---|---|---|---|---|
+| k165 | 2026-11-05 | [`eb11c3b`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/eb11c3b) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/eb11c3b.zip) | рез по сеткам — касание по вершинам и неизменные входы (UI-ROUND-RIM-BALL); чертёж — «Размер (авто)», угловой размер, номера центров по осям, подписи центров на месте |
 | k164 | 2026-11-05 | [`e1c271f`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/e1c271f) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/e1c271f.zip) | чертёж — подсветка цели размера, осевые линии поверх выносных, дуги на цилиндрах, номера центров ℄ |
 | k163 | 2026-11-05 | [`75bb418`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/75bb418) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/75bb418.zip) | чертёж — пропавшая линия на виде, проверка полноты размеров (⚠/✓), угловые размеры, размеры отверстий и уступов, центры дуг |
 | k162 | 2026-11-05 | [`a6199ff`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/a6199ff) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/a6199ff.zip) | окно чертежа — 25+ кадров при переносе и повороте; скрытие линий — ребро за своей гранью, шов на очерке; ширина панели свойств мышью |
