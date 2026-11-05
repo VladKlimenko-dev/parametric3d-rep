@@ -603,7 +603,7 @@ static partial class Program
             }
             for (int st = 0; st < steps; st++)
             {
-                if (reload is "bare" or "body" && st > 0)
+                if (reload is "bare" or "body" && (st > 0 || Environment.GetEnvironmentVariable("SEQ_RELOAD0") == "1"))
                 {
                     string jr = DocumentFile.Save(p);
                     if (reload == "bare") jr = DocumentFile.StripDisplay(jr) ?? jr;
@@ -626,7 +626,8 @@ static partial class Program
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 // k143: путь операции — прямой построитель (замена граней, как Parasolid) или резец; причина отказа прямого
                 string? drWhy = null; var drPrev = Parametric3D.Kernel.Ops.DirectRound.Debug;
-                Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (Environment.GetEnvironmentVariable("LOFT_DRDEBUG") is { } dd && s.Contains(dd)) Console.WriteLine("DBG " + (s.Length > 300 && Environment.GetEnvironmentVariable("LOFT_DRFULL") != "1" ? s[..300] : s)); if (s.StartsWith("declined")) drWhy = s.Length > 200 ? s[..200] : s; };
+                bool drAll = Environment.GetEnvironmentVariable("LOFT_DRALL") == "1";
+                Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (drAll) Console.Error.WriteLine("DR " + (s.Length > 400 ? s[..400] : s)); if (Environment.GetEnvironmentVariable("LOFT_DRDEBUG") is { } dd && s.Contains(dd)) Console.WriteLine("DBG " + (s.Length > 300 && Environment.GetEnvironmentVariable("LOFT_DRFULL") != "1" ? s[..300] : s)); if (s.StartsWith("declined")) drWhy = s.Length > 200 ? s[..200] : s; };
                 // Я1, опыт: SEQ_STEPMODE=full — шаг считается полным пересчётом дерева (без сохранённых состояний)
                 if (Environment.GetEnvironmentVariable("SEQ_STEPMODE") == "full") p.Invalidate();
                 try { p.Rebuild(null); } catch (Exception ex) when (ex is not OutOfMemoryException) { f.Error = "exception: " + ex.Message; }
@@ -699,8 +700,11 @@ static partial class Program
         string json = DocumentFile.Save(p);
         string bare = DocumentFile.StripDisplay(json) ?? json;
         Part q;
+        var drPrev2 = Parametric3D.Kernel.Ops.DirectRound.Debug;
+        if (Environment.GetEnvironmentVariable("LOFT_DRALL") == "1") Parametric3D.Kernel.Ops.DirectRound.Debug = s => Console.Error.WriteLine("DR " + (s.Length > 400 ? s[..400] : s));
         try { var loaded = DocumentFile.Load(bare); q = loaded.Part; q.Rebuild(loaded.Parameters); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return new { file = "exception: " + ex.Message }; }
+        finally { Parametric3D.Kernel.Ops.DirectRound.Debug = drPrev2; }
         var g = q.Features.Count > 0 ? q.Features[^1] : null;
         string refsS = RefsOf(f), refsF = g == null ? "" : RefsOf(g);
         // побитовая подпись тел: сеанс, файл, файл повторно (недетерминизм самого пересчёта отличается от истории сеанса)

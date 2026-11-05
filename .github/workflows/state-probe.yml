@@ -54,7 +54,8 @@ jobs:
       matrix:
         include:
           - { name: s106,           cmd: 'loftseq 1 106 6 OUT',  env: '' }
-          - { name: s106_partfields,       cmd: 'loftseq 1 106 1 OUT', env: '' }
+          - { name: s106_drall,            cmd: 'loftseq 1 106 1 OUT', env: 'LOFT_DRALL=1' }
+          - { name: s106_reload0,          cmd: 'loftseq 1 106 1 OUT', env: 'SEQ_RELOAD=bare SEQ_RELOAD0=1' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
