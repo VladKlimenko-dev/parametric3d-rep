@@ -666,7 +666,29 @@ public static partial class DirectRound
                     if (ok) Debug?.Invoke($"open: generic parameter ends snapped to the vertices (t {tS:G6} … {tE:G6} of {rc.Length:G6})");
                 }
                 if (ok) { edgeAt = AtG; Delta = D; rad0 = rad1 = 1; }
-                else Debug?.Invoke($"open: generic parameter rejected: ends {(AtG(0) - P0).Length:E2} {(AtG(D) - P1).Length:E2}; tol edge {chain.Max(x => x.Curve is null ? 0 : x.Tolerance):E1} vertex {chain.SelectMany(x => new[] { x.V0, x.V1 }).Max(v => v.Tolerance):E1}; curve {string.Join(",", chain.Select(x => x.Curve.GetType().Name))}; faces {SurfName(FA.Surf)}/{SurfName(FB.Surf)}; guarantee {body.Guarantee}");
+                else if (Debug != null)
+                {
+                    // Я2 (разбор): почему точка A ∩ B в плоскости сечения у конца не найдена — остатки Ньютона без ограничения хода
+                    string Diag(double t)
+                    {
+                        var c = rc.At(t + tS); var n = rc.D(t + tS).Normalized(); var x = c; int it = 0; string stop = "iter";
+                        for (; it < 40; it++)
+                        {
+                            var (f1, g1) = Geometry.Ssi.Implicit(shA, x); var (f2, g2) = Geometry.Ssi.Implicit(shB, x);
+                            if (!double.IsFinite(f1)) { stop = "A NaN"; break; }
+                            if (!double.IsFinite(f2)) { stop = "B NaN"; break; }
+                            var dx = Solve3(new[] { g1, g2, n }, new[] { -f1, -f2, -Vector3d.Dot(x - c, n) });
+                            if (dx == null || !double.IsFinite(dx.Value.X)) { stop = $"singular (angle {Vector3d.CalculateAngle(g1, g2) * 180 / Math.PI:G3}°)"; break; }
+                            x += dx.Value;
+                            if (dx.Value.Length < 1e-15 * Math.Max(1, x.Length)) { stop = "conv"; break; }
+                        }
+                        double e1 = double.NaN, e2 = double.NaN;
+                        try { e1 = Geometry.Ssi.Implicit(shA, x).F; e2 = Geometry.Ssi.Implicit(shB, x).F; } catch { }
+                        return $"t {t:G5}: {stop} after {it}, |fA| {Math.Abs(e1):E1} |fB| {Math.Abs(e2):E1} move {(x - c).Length:E2} (reach {0.25 * Math.Max(r, 1e-3):G3}), vertex {Math.Min((x - P0).Length, (x - P1).Length):E2}";
+                    }
+                    Debug($"open: generic parameter ends: {Diag(0)}; {Diag(D)}");
+                }
+                if (!ok) Debug?.Invoke($"open: generic parameter rejected: ends {(AtG(0) - P0).Length:E2} {(AtG(D) - P1).Length:E2}; tol edge {chain.Max(x => x.Curve is null ? 0 : x.Tolerance):E1} vertex {chain.SelectMany(x => new[] { x.V0, x.V1 }).Max(v => v.Tolerance):E1}; curve {string.Join(",", chain.Select(x => x.Curve.GetType().Name))}; faces {SurfName(FA.Surf)}/{SurfName(FB.Surf)}; guarantee {body.Guarantee}");
             }
         }
         if (edgeAt == null) { why = "open curved: no smooth parameter for the edge (no axis, reference curve not fitted)"; return false; }

@@ -717,6 +717,7 @@ static partial class Program
         Part q;
         var drPrev2 = Parametric3D.Kernel.Ops.DirectRound.Debug;
         if (Environment.GetEnvironmentVariable("LOFT_DRALL") == "1") Parametric3D.Kernel.Ops.DirectRound.Debug = s => Console.Error.WriteLine("DR " + (s.Length > 400 ? s[..400] : s));
+        if (Environment.GetEnvironmentVariable("LOFT_FOOTDBG") == "1") { int fn = 0; Parametric3D.Kernel.Geometry.Ssi.FootDebug = s => { if (System.Threading.Interlocked.Increment(ref fn) < 400) Console.Error.WriteLine("FOOT " + s); }; }
         try { var loaded = DocumentFile.Load(bare); q = loaded.Part; q.Rebuild(loaded.Parameters); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return new { file = "exception: " + ex.Message }; }
         finally { Parametric3D.Kernel.Ops.DirectRound.Debug = drPrev2; }
