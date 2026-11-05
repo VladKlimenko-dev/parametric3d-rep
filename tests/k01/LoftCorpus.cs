@@ -573,6 +573,9 @@ static partial class Program
         int ok = 0, bad = 0, refused = 0, legit = 0; var why = new Dictionary<string, int>(); double totalMs = 0;
         // Я1 (REFERENCE_SOLUTIONS п. 6): сверка «шаг в сеансе = тот же шаг из файла без тел» — SEQ_REBUILDCHECK=1
         bool rebuildCheck = Environment.GetEnvironmentVariable("SEQ_REBUILDCHECK") == "1"; int rebuildChecked = 0, rebuildDiff = 0;
+        // Я1, опыты: SEQ_SKIPSTEP=<n> — шаг n не делается (случайные выборы те же); SEQ_RELOAD=bare|body — перед каждым шагом
+        // деталь заменяется прочитанной из своего текста (bare — без тел и состояний, body — с ними)
+        string? skipStep = Environment.GetEnvironmentVariable("SEQ_SKIPSTEP"), reload = Environment.GetEnvironmentVariable("SEQ_RELOAD");
         for (int sd = seed0; sd < seed0 + count; sd++)
         {
             CorpusModel m;
@@ -581,6 +584,12 @@ static partial class Program
             var p = m.Part; var rnd = new Random(sd * 31 + 7);
             for (int st = 0; st < steps; st++)
             {
+                if (reload is "bare" or "body" && st > 0)
+                {
+                    string jr = DocumentFile.Save(p);
+                    if (reload == "bare") jr = DocumentFile.StripDisplay(jr) ?? jr;
+                    var lr = DocumentFile.Load(jr); p = lr.Part; p.Rebuild(lr.Parameters);
+                }
                 var edges = p.Bodies[0].Edges.Where(e => e.Curve != null && Program.Sharp(e) && SharpEverywhere(e) && EdgeLen(e) > 2).ToList();
                 if (edges.Count == 0) break;
                 var e = edges[rnd.Next(edges.Count)];
@@ -590,6 +599,7 @@ static partial class Program
                 double size = Math.Round(Math.Clamp(minLen * (0.05 + 0.15 * rnd.NextDouble()), 0.3, 6), 2);
                 double? expect = 0; foreach (var ce in chain) { var x = CorpusExpected(ce, round, size); expect = x == null || expect == null ? null : expect + x; }
                 var before = TopologyClone.Deep(p.Bodies[0]); double v0 = p.Volume;
+                if (skipStep == st.ToString()) { Log(new { seed = sd, step = st, skipped = true }); continue; }
                 Feature f = round ? new RoundFeature($"R{st}") { Radius = new ValueRef(size) } : new ChamferFeature($"C{st}") { D1 = new ValueRef(size), D2 = new ValueRef(size) };
                 foreach (var ce in chain) { if (f is RoundFeature rf) rf.Edges.Add(EdgeRef.Of(ce)); else ((ChamferFeature)f).Edges.Add(EdgeRef.Of(ce)); }
                 p.AddFeature(f);
