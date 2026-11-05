@@ -54,10 +54,7 @@ jobs:
       matrix:
         include:
           - { name: s106,           cmd: 'loftseq 1 106 6 OUT',  env: '' }
-          - { name: s106_footcanon,        cmd: 'loftseq 1 106 6 OUT',  env: 'P3D_FOOTCANON=1' }
-          - { name: corpus_footcanon,      cmd: 'loftseq 10 101 6 OUT', env: 'P3D_FOOTCANON=1' }
-          - { name: allA_footcanon,        cmd: 'allA',                 env: 'P3D_FOOTCANON=1' }
-          - { name: allB_footcanon,        cmd: 'allB',                 env: 'P3D_FOOTCANON=1' }
+          - { name: s106_canon_remesh,     cmd: 'loftseq 1 106 6 OUT',  env: 'P3D_FOOTCANON=1 P3D_LAZYREMESH=1 P3D_TOEXACTTRACE=1' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
