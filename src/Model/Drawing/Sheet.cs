@@ -31,7 +31,8 @@ public sealed class SheetGraphics
     public readonly List<(double X, double Y, double R, LineKind Kind)> Circles = new();
     /// <summary>k161: толщина сплошной толстой основной линии S (мм; ГОСТ 2.303: 0.5–1.4). Тонкие — S/3…S/2, штриховая — S/2.</summary>
     public double ThickW = LineWidths.Thick;
-    public double WidthOf(LineKind k) => k switch { LineKind.Thick => ThickW, LineKind.Hidden => Math.Max(LineWidths.Thin, ThickW / 2), _ => Math.Min(LineWidths.Thin, ThickW / 2) };
+    // k165: штриховая не толще основной (S от 0.1 мм)
+    public double WidthOf(LineKind k) => k switch { LineKind.Thick => ThickW, LineKind.Hidden => Math.Min(ThickW, Math.Max(LineWidths.Thin, ThickW / 2)), _ => Math.Min(LineWidths.Thin, ThickW / 2) };
     /// <summary>k161: цветные многоугольники (закраска изометрии: тон грани), рисуются под линиями. Цвет — ARGB.</summary>
     public readonly List<(List<(double X, double Y)> Pts, uint Argb)> Shades = new();
     public void Poly(LineKind k, params (double X, double Y)[] pts) => Polylines.Add(new SheetPolyline(pts.ToList(), k));

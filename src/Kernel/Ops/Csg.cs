@@ -40,6 +40,9 @@ public sealed class CsgPolygon
 
     public CsgPolygon Split(List<Vector3d> v) => new(v, Tag, N, W) { Origin = Origin ?? this };
 
+    /// <summary>k165: перевёрнутая копия (исходный многоугольник не меняется; Origin — тот же).</summary>
+    public CsgPolygon Flipped() { var c = new CsgPolygon(new List<Vector3d>(V), Tag, N, W) { Origin = Origin }; c.Flip(); return c; }
+
     public void Flip()
     {
         V.Reverse();

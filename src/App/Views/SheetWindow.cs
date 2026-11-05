@@ -140,6 +140,9 @@ public sealed class SheetWindow : Window
             }));
             Btn("dr_dims_toggle_but.svg", "Показать / скрыть размеры", () => Change(() => Drawing!.ShowDims = !Drawing.ShowDims));
             Btn("dr_dim_linear_but.svg", "Линейный размер: два щелчка по точкам вида", () => StartPick("dim1", L("Размер: щёлкните первую точку на виде")));
+            // k165 (замечание 05.11, 13:27, п. 3–4): размер с подбором типа по элементам и угловой размер
+            Btn("dr_dim_auto_but.svg", "Размер (авто): тип по выбранным элементам — две параллельные линии (расстояние между ними), точка и линия, две линии под углом (угол), окружность (диаметр), дуга (радиус), две точки", () => StartPick("auto1", L("Размер (авто): щёлкните линию, точку, окружность или дугу")));
+            Btn("dr_dim_angle_but.svg", "Угловой размер: щелчки по двум линиям", () => StartPick("ang1", L("Угол: щёлкните первую линию")));
             Btn("dr_dim_diameter_but.svg", "Диаметр: щелчок по окружности", () => StartPick("dia", L("Диаметр: щёлкните окружность")));
             Btn("dr_dim_radial_but.svg", "Радиус: щелчок по дуге", () => StartPick("rad", L("Радиус: щёлкните дугу")));
             Sep();
@@ -268,6 +271,7 @@ public sealed class SheetWindow : Window
     public object? Selected => _sel;
     public object? Hovered => _hover;
     object? _drag; double _lastX, _lastY; bool _moved;
+    static readonly bool NotesWithViewOff = Environment.GetEnvironmentVariable("P3D_NOTESWITHVIEW") == "0";
     Point? _panAt; Point _panStart; bool _panRight;
 
     /// <summary>
@@ -379,6 +383,7 @@ public sealed class SheetWindow : Window
         {
             DrawingDim dm => L("Размер {0}: перенос мышью, Delete — удалить", d.CaptionOf(dm)),
             DrawingNote => L("Обозначение: перенос мышью, Delete — удалить"),
+            CentreMark => L("Номер центра: перенос мышью"),
             DrawingView v => L("Вид: {0}", v.Label.Length > 0 ? v.Label : L(ViewTitle(v.Name))),
             _ => "",
         };
@@ -399,6 +404,8 @@ public sealed class SheetWindow : Window
             {
                 case DrawingDim dm: d.MoveDim(dm, dx, dy, x, y); break;
                 case DrawingNote n: n.X += dx; n.Y += dy; break;
+                // k165 (п. 2): подпись центра «℄N» — перенос мышью (смещение выноски от центра)
+                case CentreMark cm: cm.DX += dx; cm.DY += dy; cm.Placed = true; break;
                 case TargetDrag td when td.Note.View is { } tv && _scene != null && _scene.Lines.ContainsKey(tv):
                     {
                         var q = Snap(tv, d.ToView(tv, x, y), 5, false);
@@ -410,8 +417,13 @@ public sealed class SheetWindow : Window
                     {
                         // k161 (п. 6): свободный перенос с притяжением к центрам других видов (линии-подсказки)
                         _free = (_free.X + dx, _free.Y + dy);
+                        double ox = v.X, oy = v.Y;
                         v.X = _free.X; v.Y = _free.Y;
                         _guides = d.SnapView(v.Name);
+                        // k165 (замечание 05.11, 13:27, п. 6): обозначения вида (допуски, базы, шероховатость, позиции) — вместе с
+                        // видом; прежде у изометрии рамки допусков оставались на месте. Мутация P3D_NOTESWITHVIEW=0.
+                        if (!NotesWithViewOff)
+                            foreach (var n in d.Notes.Where(n => n.View == v.Name)) { n.X += v.X - ox; n.Y += v.Y - oy; }
                         break;
                     }
             }
@@ -557,6 +569,19 @@ public sealed class SheetWindow : Window
                     if (_pick == "dim2" && _first is { } f && f.View == view) { var a = d.ToSheet(view, f.P); res.Add((a.X, a.Y, ts.X, ts.Y)); }
                     return res;
                 }
+            case "auto1" or "auto2" or "ang1" or "ang2":
+                {
+                    // k165: подсветка элемента под курсором и уже выбранного первого
+                    bool ang = _pick.StartsWith("ang");
+                    var res = new List<(double, double, double, double)>();
+                    if (_firstEl is { } fe && fe.View == view) res.AddRange(ElementSegs(view, fe.El));
+                    if (ElementAt(view, q, linesOnly: ang) is { } el)
+                    {
+                        res.AddRange(ElementSegs(view, el));
+                        _status.Text = L(ang ? "Угол: {0}" : "Размер (авто): {0}", L(el.What));
+                    }
+                    return res.Count == 0 ? null : res;
+                }
             case "dia" or "rad":
                 {
                     var c = FindCircle(view, q, _pick);
@@ -658,9 +683,147 @@ public sealed class SheetWindow : Window
     // ------------------------------------------------------------------ щелчки по виду: размеры, обозначения, разрезы
 
     string? _pick; (string View, OpenTK.Mathematics.Vector2d P)? _first;
+    /// <summary>k165: первый элемент размера (авто) и углового: вид, элемент, точка щелчка (вид).</summary>
+    (string View, PickEl El, OpenTK.Mathematics.Vector2d Q)? _firstEl;
+
+    /// <summary>
+    /// k165: элемент вида под курсором для размера (авто) и углового: точка (конец линии, центр), окружность или дуга,
+    /// прямая линия контура или осевая. Точки и окружности — в пределах 1.5 мм листа, линии — 4 мм.
+    /// </summary>
+    public readonly record struct PickEl(char Kind, OpenTK.Mathematics.Vector2d P, OpenTK.Mathematics.Vector2d A, OpenTK.Mathematics.Vector2d B, double R, bool Full, string What);
+
+    public PickEl? ElementAt(string view, OpenTK.Mathematics.Vector2d q, bool linesOnly = false)
+    {
+        double s = Drawing!.Xf[view].S;
+        static OpenTK.Mathematics.Vector2d V(double x, double y) => new(x, y);
+        PickEl? best = null; double bd = 1.5 / s;
+        if (!linesOnly)
+        {
+            // шов полной окружности (концы рёбер-половинок) — не точка: щелчок по окружности — окружность
+            var fulls = (_scene!.Arcs.GetValueOrDefault(view) ?? new()).Where(a => a.Full).Select(a => (a.Center, a.Radius))
+                .Concat((_scene.Axes.GetValueOrDefault(view) ?? new()).Where(a => a.Cross).Select(a => (a.Center, a.Radius))).ToList();
+            bool Seam(OpenTK.Mathematics.Vector2d pt) => fulls.Any(c => Math.Abs((pt - c.Center).Length - c.Radius) < 1e-6 * Math.Max(1, c.Radius));
+            foreach (var l in _scene!.Lines[view])
+                if (l.Visible && l.Points.Count >= 2)
+                    foreach (var pt in new[] { l.Points[0], l.Points[^1] })
+                        if ((pt - q).Length < bd && !Seam(pt)) { bd = (pt - q).Length; best = new PickEl('P', pt, pt, pt, 0, false, "конец линии"); }
+            foreach (var a in _scene.Arcs.GetValueOrDefault(view) ?? new())
+                if ((a.Center - q).Length < bd) { bd = (a.Center - q).Length; best = new PickEl('P', a.Center, a.Center, a.Center, 0, false, a.Full ? "центр окружности" : "центр дуги"); }
+            foreach (var a in _scene.Axes.GetValueOrDefault(view) ?? new())
+                if (a.Cross && (a.Center - q).Length < bd) { bd = (a.Center - q).Length; best = new PickEl('P', a.Center, a.Center, a.Center, 0, false, "центр окружности"); }
+            if (best != null) return best;
+            bd = 1.5 / s;
+            foreach (var a in _scene.Arcs.GetValueOrDefault(view) ?? new())
+            {
+                double dd = Math.Abs((a.Center - q).Length - a.Radius);
+                if (dd < bd) { bd = dd; best = new PickEl('C', a.Center, a.Center, a.Center, a.Radius, a.Full, a.Full ? "окружность" : "дуга"); }
+            }
+            foreach (var a in _scene.Axes.GetValueOrDefault(view) ?? new())
+            {
+                double dd = Math.Abs((a.Center - q).Length - a.Radius);
+                if (a.Cross && dd < bd) { bd = dd; best = new PickEl('C', a.Center, a.Center, a.Center, a.Radius, true, "окружность"); }
+            }
+            if (best != null) return best;
+        }
+        // прямые линии контура (ломаная по прямой) и осевые
+        bd = 4 / s;
+        static double SegD(OpenTK.Mathematics.Vector2d q, OpenTK.Mathematics.Vector2d a, OpenTK.Mathematics.Vector2d b)
+        {
+            var ab = b - a; double t = Math.Clamp(OpenTK.Mathematics.Vector2d.Dot(q - a, ab) / Math.Max(1e-18, ab.LengthSquared), 0, 1);
+            return (a + ab * t - q).Length;
+        }
+        foreach (var l in _scene!.Lines[view])
+        {
+            if (!l.Visible || l.Points.Count < 2) continue;
+            var a = l.Points[0]; var b = l.Points[^1]; var ab = b - a; double len = ab.Length;
+            if (len < 1e-9) continue;
+            var n = new OpenTK.Mathematics.Vector2d(-ab.Y, ab.X) / len;
+            if (l.Points.Any(p => Math.Abs(OpenTK.Mathematics.Vector2d.Dot(p - a, n)) > 1e-6 * Math.Max(1, len))) continue;   // не прямая
+            double dd = SegD(q, a, b);
+            if (dd < bd) { bd = dd; best = new PickEl('L', a, a, b, 0, false, "линия"); }
+        }
+        foreach (var a in _scene.Axes.GetValueOrDefault(view) ?? new())
+        {
+            var lines = a.Cross
+                ? new[] { (A: a.Center - V(a.Radius + 3 / s, 0), B: a.Center + V(a.Radius + 3 / s, 0)), (A: a.Center - V(0, a.Radius + 3 / s), B: a.Center + V(0, a.Radius + 3 / s)) }
+                : new[] { (A: a.Center + a.Dir * (a.Lo - 3 / s), B: a.Center + a.Dir * (a.Hi + 3 / s)) };
+            foreach (var (A, B) in lines) { double dd = SegD(q, A, B) + 0.5 / s; if (dd < bd) { bd = dd; best = new PickEl('L', A, A, B, 0, false, "осевая линия"); } }
+        }
+        return best;
+    }
+
+    List<(double, double, double, double)> ElementSegs(string view, PickEl e)
+    {
+        var d = Drawing!;
+        double s = d.Xf[view].S;
+        switch (e.Kind)
+        {
+            case 'P': { var t = d.ToSheet(view, e.P); return Ring(t.X, t.Y, 1.2); }
+            case 'C': { var t = d.ToSheet(view, e.P); var r = Ring(t.X, t.Y, e.R * s); r.AddRange(Ring(t.X, t.Y, 0.6)); return r; }
+            default: return SheetSegs(view, new[] { e.A, e.B });
+        }
+    }
+
+    /// <summary>
+    /// k165: размер по двум элементам. Две параллельные линии — расстояние между ними (размерная линия поперёк, выносные —
+    /// вдоль линий; у линий по осям вида — горизонтальный или вертикальный); точка и линия — расстояние до линии; две линии
+    /// под углом — угловой размер; точки — как «Линейный размер»; одна и та же линия — её длина.
+    /// </summary>
+    DrawingDim? AutoDim(string view, PickEl e1, OpenTK.Mathematics.Vector2d q1, PickEl e2, OpenTK.Mathematics.Vector2d q2, bool angleOnly)
+    {
+        var d = Drawing!;
+        var mid = d.Xf[view].Mid; double s = d.Xf[view].S;
+        OpenTK.Mathematics.Vector2d Pt(PickEl e) => e.P;
+        DrawingDim Linear(OpenTK.Mathematics.Vector2d a, OpenTK.Mathematics.Vector2d b, OpenTK.Mathematics.Vector2d? along = null)
+        {
+            var ab = b - a;
+            double dx = Math.Abs(ab.X), dy = Math.Abs(ab.Y);
+            string kind = dx > 1e3 * dy ? "h" : dy > 1e3 * dx ? "v" : along == null && dx > 3 * dy ? "h" : along == null && dy > 3 * dx ? "v" : "al";
+            double off = kind == "h" ? ((a.Y + b.Y) / 2 >= mid.Y ? 10 : -10) : kind == "v" ? ((a.X + b.X) / 2 >= mid.X ? -10 : 10) : 8;
+            return new DrawingDim { View = view, Kind = kind, X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Offset = off };
+        }
+        static OpenTK.Mathematics.Vector2d Foot(OpenTK.Mathematics.Vector2d p, OpenTK.Mathematics.Vector2d a, OpenTK.Mathematics.Vector2d b)
+        { var u = (b - a).Normalized(); return a + u * OpenTK.Mathematics.Vector2d.Dot(p - a, u); }
+        static OpenTK.Mathematics.Vector2d Near(OpenTK.Mathematics.Vector2d q, OpenTK.Mathematics.Vector2d a, OpenTK.Mathematics.Vector2d b)
+        { var ab = b - a; double t = Math.Clamp(OpenTK.Mathematics.Vector2d.Dot(q - a, ab) / Math.Max(1e-18, ab.LengthSquared), 0, 1); return a + ab * t; }
+        if (e1.Kind == 'L' && e2.Kind == 'L')
+        {
+            var u1 = (e1.B - e1.A).Normalized(); var u2 = (e2.B - e2.A).Normalized();
+            double cr = u1.X * u2.Y - u1.Y * u2.X;
+            bool same = (e1.A - e2.A).Length < 1e-9 && (e1.B - e2.B).Length < 1e-9;
+            if (same && !angleOnly) return Linear(e1.A, e1.B, e1.B - e1.A);
+            if (Math.Abs(cr) < Math.Sin(0.5 * Math.PI / 180))
+            {
+                if (angleOnly) return null;
+                // параллельные: от точки первой линии у щелчка — перпендикуляр на вторую
+                var p = Near(q1, e1.A, e1.B); var f = Foot(p, e2.A, e2.B);
+                return Linear(p, f, f - p);
+            }
+            // угол: вершина — пересечение; стороны — к щелчкам
+            var w = e2.A - e1.A;
+            double t1 = (w.X * u2.Y - w.Y * u2.X) / cr;
+            var vx = e1.A + u1 * t1;
+            OpenTK.Mathematics.Vector2d Side(OpenTK.Mathematics.Vector2d u, OpenTK.Mathematics.Vector2d q, PickEl e)
+            {
+                var r = q - vx; if (r.Length < 1e-9) r = (e.A + e.B) / 2 - vx;
+                return OpenTK.Mathematics.Vector2d.Dot(r, u) >= 0 ? u : -u;
+            }
+            var s1 = Side(u1, q1, e1); var s2 = Side(u2, q2, e2);
+            double a1 = Math.Atan2(s1.Y, s1.X) * 180 / Math.PI, a2 = Math.Atan2(s2.Y, s2.X) * 180 / Math.PI;
+            double sweep = ((a2 - a1) % 360 + 360) % 360;
+            if (sweep > 180) { (a1, a2) = (a2, a1); sweep = 360 - sweep; }
+            var qm = d.ToSheet(view, (q1 + q2) / 2); var vs = d.ToSheet(view, vx);
+            double rad = Math.Clamp(Math.Sqrt((qm.X - vs.X) * (qm.X - vs.X) + (qm.Y - vs.Y) * (qm.Y - vs.Y)), 8, 60);
+            return new DrawingDim { View = view, Kind = "ang", X1 = vx.X, Y1 = vx.Y, X2 = a1, Y2 = a1 + sweep, Offset = rad };
+        }
+        if (angleOnly) return null;
+        if (e1.Kind == 'L' && e2.Kind != 'L') return Linear(Pt(e2), Foot(Pt(e2), e1.A, e1.B), Foot(Pt(e2), e1.A, e1.B) - Pt(e2));
+        if (e2.Kind == 'L' && e1.Kind != 'L') return Linear(Pt(e1), Foot(Pt(e1), e2.A, e2.B), Foot(Pt(e1), e2.A, e2.B) - Pt(e1));
+        return Linear(Pt(e1), Pt(e2));
+    }
 
     public string StatusText => _status.Text ?? "";
-    public void StartPick(string mode, string hint) { EnsureScene(); _pick = mode; _first = null; _status.Text = hint; }
+    public void StartPick(string mode, string hint) { EnsureScene(); _pick = mode; _first = null; _firstEl = null; _status.Text = hint; }
     /// <summary>k164: выход из режима щелчка (как Esc).</summary>
     public void CancelPick() { _pick = null; _first = null; _status.Text = ""; _hoverSegs = null; UpdateOverlay(); }
 
@@ -790,6 +953,31 @@ public sealed class SheetWindow : Window
         {
             case "dim1":
                 _first = (view, SnapTarget(view, q, 4).P); _pick = "dim2"; _status.Text = L("Размер: щёлкните вторую точку"); return;
+            case "auto1" or "ang1":
+                {
+                    bool ang = mode == "ang1";
+                    if (ElementAt(view, q, linesOnly: ang) is not { } e1) { _status.Text = ang ? L("Линия не найдена — щёлкните ближе к ней") : L("Элемент не найден — щёлкните ближе к линии, точке или окружности"); return; }
+                    if (e1.Kind == 'C' && !ang)
+                    {
+                        // окружность — диаметр, дуга — радиус
+                        double am = Math.Atan2(q.Y - e1.P.Y, q.X - e1.P.X) * 180 / Math.PI;
+                        Change(() => d.Dims.Add(new DrawingDim { View = view, Kind = e1.Full ? "dia" : "rad", X1 = e1.P.X, Y1 = e1.P.Y, X2 = e1.R, Y2 = am }));
+                        _pick = null; return;
+                    }
+                    _firstEl = (view, e1, q); _pick = ang ? "ang2" : "auto2";
+                    _status.Text = ang ? L("Угол: щёлкните вторую линию") : L("Размер (авто): щёлкните второй элемент");
+                    return;
+                }
+            case "auto2" or "ang2":
+                {
+                    bool ang = mode == "ang2";
+                    if (_firstEl is not { } f1 || f1.View != view) { _status.Text = L("Второй элемент — на том же виде"); return; }
+                    if (ElementAt(view, q, linesOnly: ang) is not { } e2) { _status.Text = L("Элемент не найден — щёлкните ближе к нему"); return; }
+                    var dm = AutoDim(view, f1.El, f1.Q, e2, q, ang);
+                    if (dm == null) { _status.Text = L("Линии параллельны — угла нет"); return; }
+                    Change(() => d.Dims.Add(dm));
+                    _pick = null; _firstEl = null; return;
+                }
             case "dim2":
                 {
                     if (_first is not { } f || f.View != view) { _status.Text = L("Вторая точка — на том же виде"); return; }
@@ -969,10 +1157,10 @@ public sealed class SheetWindow : Window
                 units.SelectionChanged += (_, _) => { var u = LengthUnits[Math.Max(0, units.SelectedIndex)]; if (u != d.Units) Change(() => d.Units = u); };
                 dp.Children.Add(Row(L("Единицы длины"), units));
                 // k161 (п. 4): толщина основной линии S, ГОСТ 2.303
-                double[] sv = { 0.5, 0.6, 0.7, 0.8, 1.0, 1.4 };
+                double[] sv = { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.0, 1.4 };   // k165 (п. 5): и 0,1…0,4 мм
                 var lineS = new ComboBox { ItemsSource = sv.Select(x => x.ToString("0.0", CultureInfo.InvariantCulture) + L(" мм")).ToList(), SelectedIndex = Math.Max(0, Array.FindIndex(sv, x => Math.Abs(x - d.LineS) < 1e-9)), MinWidth = 140 };
                 lineS.SelectionChanged += (_, _) => { double ns = sv[Math.Max(0, lineS.SelectedIndex)]; if (Math.Abs(ns - d.LineS) > 1e-9) Change(() => d.LineS = ns); };
-                ToolTip.SetTip(lineS, L("Толщина сплошной основной линии S (ГОСТ 2.303: 0,5…1,4 мм); тонкие — S/2"));
+                ToolTip.SetTip(lineS, L("Толщина сплошной основной линии S (ГОСТ 2.303: 0,5…1,4 мм; 0,1…0,4 — тонкие стенки и мелкие элементы); тонкие — S/2"));
                 dp.Children.Add(Row(L("Основная линия"), lineS));
                 // k164 (п. 5): номера центров «℄N»
                 var cnos = new CheckBox { Content = L("Номера центров (℄)"), IsChecked = d.CenterNumbers, Name = "dr_center_numbers" };
@@ -1319,7 +1507,7 @@ public sealed class SheetWindow : Window
             _page = Math.Clamp(_page, 0, Math.Max(0, Pages.Count - 1));
             var g = Pages[_page];
             _canvas.Graphics = g;
-            if (_sel != null && Kind == Mode.Drawing && !(Drawing!.Dims.Contains(_sel) || Drawing.Notes.Contains(_sel) || Drawing.Views.Contains(_sel))) _sel = null;
+            if (_sel != null && Kind == Mode.Drawing && !(Drawing!.Dims.Contains(_sel) || Drawing.Notes.Contains(_sel) || Drawing.Views.Contains(_sel) || _sel is CentreMark cm0 && Drawing.CentreMarks.Contains(cm0))) _sel = null;
             UpdateOverlay();
             _status.Text = $"{Template.Format} {(Template.Landscape ? L("альбомная") : L("книжная"))} · {L("лист {0} из {1}", _page + 1, Pages.Count)}" +
                            (Kind == Mode.Bom ? " · " + L("строк: {0}", Bom!.Visible.Count()) : "");

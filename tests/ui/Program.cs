@@ -7481,8 +7481,13 @@ void RimBall(bool cutter)
     var swM = System.Diagnostics.Stopwatch.StartNew();
     if (cutter)
     {
+        long ff0 = Parametric3D.Kernel.Ops.BooleanOp.MeshFaceFailures, ab1 = Parametric3D.Kernel.Ops.BooleanOp.MeshEarlyAborts;
         Parametric3D.Kernel.Ops.BooleanOp.MeshExactlySolid(part.Bodies[0]);
-        Require(Parametric3D.Kernel.Ops.BooleanOp.MeshEarlyAborts > abort0, "the face meshing went on after a face failed");
+        long failed = Parametric3D.Kernel.Ops.BooleanOp.MeshFaceFailures - ff0;
+        Console.WriteLine($"  face meshing: failed faces {failed}, early exits {Parametric3D.Kernel.Ops.BooleanOp.MeshEarlyAborts - ab1}");
+        // k165: с исправленным резом по сеткам (MeshCut: области касания) у итога все грани строятся — ранний выход нужен только
+        // при отказе грани
+        Require(failed == 0 || Parametric3D.Kernel.Ops.BooleanOp.MeshEarlyAborts > ab1, "the face meshing went on after a face failed");
     }
     Console.WriteLine($"  {(cutter ? "cutter" : "rebuild")}: preview {tPreview} ms (volume {vPreview:0.#}), exact after commit {tExact} ms (volume {part.Volume:0.#}, removed {removed:0.#}), face meshing {swM.ElapsedMilliseconds} ms");
     w.Close();
@@ -8764,6 +8769,91 @@ Check("UI-DIAG-SHEET", () =>
     { var sw2 = System.Diagnostics.Stopwatch.StartNew(); for (int i = 0; i < 10; i++) dw.Refresh(); Console.WriteLine($"  Refresh {sw2.Elapsed.TotalMilliseconds / 10:0.#} ms"); }
     Run("hover", i => dw.MoveTo(fv.X + i, fv.Y));
     dw.Close(); w.Close();
+});
+
+// k165 (замечание 05.11, 13:27): «Размер (авто)» по элементам (п. 3) — две параллельные наклонные линии: расстояние между
+// ними поперёк линий; точка и линия; две линии под углом — угол; кнопка углового размера (п. 4); подписи центров — перенос
+// мышью, не перескакивают при переносе размеров (п. 1–2); обозначения — вместе с видом (п. 6); основная линия 0.1 мм (п. 5).
+Check("UI-DRAWING-K165", () =>
+{
+    var part = new Part("k165");
+    var sk = new Sketch("S", Parametric3D.Kernel.Frame3.XY); part.Add(sk);
+    var q = new[] { new SkPoint(0, 0), new SkPoint(60, 0), new SkPoint(80, 40), new SkPoint(20, 40) };
+    for (int k = 0; k < 4; k++) sk.AddEntity(new SkLine(q[k], q[(k + 1) % 4]));
+    sk.AddEntity(new SkCircle(new SkPoint(28, 18), 5)); sk.AddEntity(new SkCircle(new SkPoint(52, 24), 3));
+    var ex = new ExtrudeFeature { SketchId = sk.Id }; ex.Side1.Distance = new ValueRef(10); part.AddFeature(ex);
+    part.Rebuild(null);
+    var sp = DocumentSession.FromPart(part, "k165"); var w = Open(sp); BuildNow(sp);
+    var t = DrawingCommands.NewDrawing(w);
+    while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+    var dw = t.Result!; var d = dw.Drawing!;
+    try
+    {
+        dw.Refresh();
+        var fv = "front";
+        (double X, double Y) S(double x, double y) => d.ToSheet(fv, new OpenTK.Mathematics.Vector2d(x, y));
+        // параллельные наклонные: левая (0,0)–(20,40), правая (60,0)–(80,40); расстояние 60·sin(atan2(40,20))
+        double want = 60 * 40 / Math.Sqrt(20 * 20 + 40 * 40);
+        dw.StartPick("auto1", "");
+        var a1 = S(10, 20); var pv = dw.PickPreview(a1.X, a1.Y);
+        Require(pv != null && pv.Count > 0, "the line under the cursor is highlighted");
+        dw.PickAt(a1.X, a1.Y);
+        var a2 = S(70, 20); dw.PickAt(a2.X, a2.Y);
+        var par = d.Dims.Last();
+        var u = new OpenTK.Mathematics.Vector2d(par.X2 - par.X1, par.Y2 - par.Y1); var edge = new OpenTK.Mathematics.Vector2d(20, 40).Normalized();
+        Console.WriteLine($"  parallel lines: {par.Kind} {par.Value:0.###} (want {want:0.###}), along the edge {OpenTK.Mathematics.Vector2d.Dot(u.Normalized(), edge):0.######}");
+        Require(par.Kind == "al" && Math.Abs(par.Value - want) < 1e-6 && Math.Abs(OpenTK.Mathematics.Vector2d.Dot(u.Normalized(), edge)) < 1e-9, "distance between parallel lines, across them");
+        // точка и линия: вершина (20, 40) и нижняя линия — 40
+        dw.StartPick("auto1", "");
+        var b1 = S(20, 40); dw.PickAt(b1.X, b1.Y); var b2 = S(40, 0); dw.PickAt(b2.X, b2.Y);
+        var pl = d.Dims.Last();
+        Console.WriteLine($"  point and line: {pl.Kind} {pl.Value:0.###}");
+        Require(pl.Kind == "v" && Math.Abs(pl.Value - 40) < 1e-6, "distance from the point to the line");
+        // две линии под углом (авто и кнопка «Угловой размер»): нижняя и левая — atan2(40, 20)
+        double wantA = Math.Atan2(40, 20) * 180 / Math.PI;
+        foreach (var mode in new[] { "auto1", "ang1" })
+        {
+            dw.StartPick(mode, "");
+            var c1 = S(30, 0); dw.PickAt(c1.X, c1.Y); var c2 = S(5, 10); dw.PickAt(c2.X, c2.Y);
+            var an = d.Dims.Last();
+            Console.WriteLine($"  {mode}: {an.Kind} {an.Value:0.###}° at ({an.X1:0.###},{an.Y1:0.###}), text {d.CaptionOf(an)}");
+            Require(an.Kind == "ang" && Math.Abs(an.Value - wantA) < 1e-6 && Math.Abs(an.X1) < 1e-6 && Math.Abs(an.Y1) < 1e-6, "angle between the lines");
+        }
+        // окружность — диаметр
+        dw.StartPick("auto1", "");
+        var h1 = S(33, 18); dw.PickAt(h1.X, h1.Y);
+        Require(d.Dims.Last().Kind == "dia" && Math.Abs(d.Dims.Last().X2 - 5) < 1e-6, "circle — diameter");
+        // подписи центров: перенос мышью, не перескакивают при переносе размера
+        dw.Change(() => d.AutoDimensions(dw.Scene!));
+        dw.Refresh();
+        var mk = d.CentreMarks.FirstOrDefault(m => d.Hit.ContainsKey(m));
+        Require(mk != null, "centre labels drawn");
+        var tx = d.HitTexts[mk!].First(); double mx = (tx[0].X + tx[2].X) / 2, my = (tx[0].Y + tx[2].Y) / 2;
+        dw.MoveTo(mx, my);
+        Require(dw.Hovered == mk, "the centre label is highlighted under the cursor");
+        double dx0 = mk.DX, dy0 = mk.DY;
+        dw.Down(mx, my); for (int i = 1; i <= 5; i++) { dw.MoveTo(mx + i, my + i); Dispatcher.UIThread.RunJobs(); } dw.Up();
+        Console.WriteLine($"  centre label moved {mk.DX - dx0:0.##}, {mk.DY - dy0:0.##}");
+        Require(Math.Abs(mk.DX - dx0 - 5) < 1e-6 && Math.Abs(mk.DY - dy0 - 5) < 1e-6, "the centre label follows the mouse");
+        double kx = mk.DX, ky = mk.DY;
+        var dim = d.Dims.First(x => x.Kind is "h" or "v"); var dt = d.HitTexts[dim][0];
+        double ex0 = (dt[0].X + dt[2].X) / 2, ey0 = (dt[0].Y + dt[2].Y) / 2;
+        dw.Down(ex0, ey0); for (int i = 1; i <= 5; i++) { dw.MoveTo(ex0, ey0 - i); Dispatcher.UIThread.RunJobs(); } dw.Up();
+        Require(mk.DX == kx && mk.DY == ky, "moving a dimension does not move the centre labels");
+        // обозначение у изометрии — вместе с видом
+        var iso = d.Views.First(v => v.Name == "iso");
+        var note = new Parametric3D.Model.Drawing.DrawingNote { Kind = "gdt", View = "iso", HasTarget = true, Symbol = "perp", Value = "0,05", X = iso.X + 30, Y = iso.Y + 20 };
+        dw.Change(() => d.Notes.Add(note));
+        double nx0 = note.X, ny0 = note.Y, vx0 = iso.X, vy0 = iso.Y;
+        var ib = d.Boxes["iso"]; double gx = ib.X0 + 2, gy = (ib.Y0 + ib.Y1) / 2;
+        dw.Down(gx, gy); for (int i = 1; i <= 8; i++) { dw.MoveTo(gx + 3 * i, gy + i); Dispatcher.UIThread.RunJobs(); } dw.Up();
+        Console.WriteLine($"  iso moved {iso.X - vx0:0.##},{iso.Y - vy0:0.##}; note moved {note.X - nx0:0.##},{note.Y - ny0:0.##}");
+        Require(Math.Abs(iso.X - vx0) > 1 && Math.Abs(note.X - nx0 - (iso.X - vx0)) < 1e-9 && Math.Abs(note.Y - ny0 - (iso.Y - vy0)) < 1e-9, "the tolerance frame moves with its view");
+        // основная линия 0,1 мм
+        dw.Change(() => d.LineS = 0.1);
+        Require(Math.Abs(dw.Pages[0].ThickW - 0.1) < 1e-12, "main line 0.1 mm");
+    }
+    finally { dw.Close(); w.Close(); }
 });
 
 // k164 (замечание 05.11, 10:33): при создании размера под курсором подсвечивается элемент детали (п. 1) — центр окружности с

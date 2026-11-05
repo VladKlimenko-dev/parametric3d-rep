@@ -118,6 +118,20 @@ public sealed class DrawingDim
 /// (Symbol, Value, Datums), datum — знак базы (Text — буква), balloon — позиция ГОСТ 2.109 (Position), holes — таблица отверстий.
 /// X, Y — место на листе (мм); цель (TX, TY) — точка на виде View (мм модели), к ней — выноска.
 /// </summary>
+/// <summary>
+/// k165: подпись центра «℄N»: центр (вид, координаты вида — мм модели), место выноски — смещение конца выноски от центра (мм
+/// листа); Placed — место подобрано или задано мышью.
+/// </summary>
+public sealed class CentreMark
+{
+    public string View { get; set; } = "";
+    public double CX { get; set; }
+    public double CY { get; set; }
+    public double DX { get; set; }
+    public double DY { get; set; }
+    public bool Placed { get; set; }
+}
+
 public sealed class DrawingNote
 {
     public string Kind { get; set; } = "text";
@@ -300,7 +314,14 @@ public sealed class DrawingDocument
     [JsonIgnore] public Dictionary<string, List<(Vector2d A, Vector2d B)>> CenterSegs { get; } = new();
     [JsonIgnore] public Dictionary<string, List<Vector2d>> CenterPts { get; } = new();
     /// <summary>k164: номера центров после Compose: вид, точка листа, номер.</summary>
-    [JsonIgnore] public List<(string View, Vector2d P, int No)> CenterNos { get; } = new();
+    [JsonIgnore] public List<(string View, Vector2d P, int No, Vector2d PV)> CenterNos { get; } = new();
+    /// <summary>k165: центры вида в координатах вида (мм модели) — в том же порядке, что CenterPts.</summary>
+    [JsonIgnore] public Dictionary<string, List<Vector2d>> CenterPtsView { get; } = new();
+    /// <summary>
+    /// k165 (замечание 05.11, 13:27, п. 1–2): места подписей центров «℄N» — подобраны один раз («Автоматические размеры»
+    /// подбирают заново) и переносятся мышью; в файле.
+    /// </summary>
+    public List<CentreMark> CentreMarks { get; set; } = new();
     /// <summary>Габариты видов на листе после Compose (мм листа) — для выбора и переноса вида мышью.</summary>
     [JsonIgnore] public Dictionary<string, (double X0, double Y0, double X1, double Y1)> Boxes { get; } = new();
     /// <summary>Преобразование вида «модель → лист» после Compose: середина проекции, масштаб, центр на листе.</summary>
@@ -615,10 +636,10 @@ public sealed class DrawingDocument
         Boxes.Clear(); Xf.Clear();
         var proj = scene.Lines;
         double scale = Layout(proj);
-        LastScale = scale; Hit.Clear(); HitTexts.Clear(); CenterSegs.Clear(); CenterPts.Clear(); CenterNos.Clear();
+        LastScale = scale; Hit.Clear(); HitTexts.Clear(); CenterSegs.Clear(); CenterPts.Clear(); CenterNos.Clear(); CenterPtsView.Clear();
         fields.Auto[Fields.Scale] = ScaleText(scale);
         var g = SheetLayout.Compose(Template, fields);
-        if (!LineSOff) g.ThickW = Math.Clamp(LineS, 0.3, 1.4);
+        if (!LineSOff) g.ThickW = Math.Clamp(LineS, 0.1, 1.4);   // k165 (п. 5): от 0.1 мм
         foreach (var v in Views)
         {
             if (!proj.TryGetValue(v.Name, out var lines)) continue;
@@ -696,13 +717,13 @@ public sealed class DrawingDocument
                     if (g.Polylines[i].Kind == LineKind.Center)
                         for (int k = 0; k + 1 < g.Polylines[i].Points.Count; k++) { var (ax0, ay0) = g.Polylines[i].Points[k]; var (ax1, ay1) = g.Polylines[i].Points[k + 1]; segs.Add((new(ax0, ay0), new(ax1, ay1))); }
                 CenterSegs[v.Name] = segs;
-                var pts = new List<Vector2d>();
+                var pts = new List<Vector2d>(); var ptsV = new List<Vector2d>();
                 if (v.Name != "iso")
                 {
-                    foreach (var a in scene.Axes.GetValueOrDefault(v.Name) ?? new()) if (a.Cross) { var (px, py) = T(a.Center); pts.Add(new(px, py)); }
-                    foreach (var a in scene.Arcs.GetValueOrDefault(v.Name) ?? new()) { var (px, py) = T(a.Center); var pp = new Vector2d(px, py); if (!pts.Any(q => (q - pp).Length < 0.05)) pts.Add(pp); }
+                    foreach (var a in scene.Axes.GetValueOrDefault(v.Name) ?? new()) if (a.Cross) { var (px, py) = T(a.Center); pts.Add(new(px, py)); ptsV.Add(a.Center); }
+                    foreach (var a in scene.Arcs.GetValueOrDefault(v.Name) ?? new()) { var (px, py) = T(a.Center); var pp = new Vector2d(px, py); if (!pts.Any(q => (q - pp).Length < 0.05)) { pts.Add(pp); ptsV.Add(a.Center); } }
                 }
-                CenterPts[v.Name] = pts;
+                CenterPts[v.Name] = pts; CenterPtsView[v.Name] = ptsV;
             }
             // подписи: «А–А», «Б (2:1)», свой масштаб «(1:2)»
             string caption = v.IsSection ? $"{v.Label}-{v.Label}" : v.IsDetail || v.IsAux ? v.Label : "";
@@ -1087,6 +1108,7 @@ public sealed class DrawingDocument
 
     static readonly bool CenterPrioOff = Environment.GetEnvironmentVariable("P3D_CENTERPRIO") == "0";
     static readonly bool CenterNosOff = Environment.GetEnvironmentVariable("P3D_CENTERNOS") == "0";
+    static readonly bool MarksOnceOff = Environment.GetEnvironmentVariable("P3D_CENTERMARKSONCE") == "0";
 
     bool IsCentre(string view, Vector2d p) => CenterPts.TryGetValue(view, out var pts) && pts.Any(q => (q - p).Length < 0.05);
 
@@ -1142,22 +1164,41 @@ public sealed class DrawingDocument
 
     /// <summary>
     /// k164 (замечание 05.11, 10:33, п. 5): номера центров, к которым относятся размеры: центры диаметров и радиусов и концы
-    /// линейных размеров в центрах. Сквозная нумерация: на каждом виде — сначала главный центр (у наибольшей окружности или
-    /// дуги), затем сверху вниз, слева направо.
+    /// линейных размеров в центрах. k165 (замечание 05.11, 13:27, п. 7): номер — у ОСИ В ПРОСТРАНСТВЕ (прямая через центр
+    /// вдоль взгляда вида), один на всех видах и разрезах: прежде нумерация шла по видам, и у одного центра на виде спереди и
+    /// на разрезе А–А номера были разные (1 и 7). Порядок: сначала основные виды по списку, затем разрезы и выносные; на
+    /// первом виде — главный центр (у наибольшей окружности или дуги), затем сверху вниз, слева направо. Мутация
+    /// P3D_CENTERNOS3D=0 — по видам (прежнее).
     /// </summary>
     void NumberCentres()
     {
-        int no = 0;
-        foreach (var v in Views)
+        var keys = new List<(Vector3d D, Vector3d Foot)>();
+        double tol = 1e-4 * Math.Max(1, Boxes.Values.Select(b => Math.Max(b.X1 - b.X0, b.Y1 - b.Y0)).DefaultIfEmpty(1).Max());
+        int Key(DrawingView v, Vector2d pv)
+        {
+            var f = ViewFrame.Of(DirOf(v));
+            var d = f.Toward;
+            if (d.X < -1e-9 || Math.Abs(d.X) <= 1e-9 && (d.Y < -1e-9 || Math.Abs(d.Y) <= 1e-9 && d.Z < 0)) d = -d;
+            var P = f.Right * pv.X + f.Up * pv.Y;
+            var foot = P - d * Vector3d.Dot(P, d);
+            for (int i = 0; i < keys.Count; i++)
+                if (Vector3d.Cross(keys[i].D, d).Length < 1e-6 && (keys[i].Foot - foot).Length < tol) return i;
+            keys.Add((d, foot)); return keys.Count - 1;
+        }
+        var all = new List<(string View, Vector2d P, Vector2d PV, int Key)>();
+        int byView = 0;
+        foreach (var v in Views.OrderBy(v => v.IsSection || v.IsDetail || v.IsAux ? 1 : 0))
         {
             if (!CenterPts.TryGetValue(v.Name, out var pts) || pts.Count == 0) continue;
-            var used = new List<(Vector2d P, double R)>();
+            var ptsV = CenterPtsView[v.Name];
+            var used = new List<(Vector2d P, Vector2d PV, double R)>();
             void Use(Vector2d p, double r)
             {
-                var c = pts.FirstOrDefault(q => (q - p).Length < 0.05, new Vector2d(double.NaN));
-                if (double.IsNaN(c.X)) return;
+                int ci = pts.FindIndex(q => (q - p).Length < 0.05);
+                if (ci < 0) return;
+                var c = pts[ci];
                 int i = used.FindIndex(u => (u.P - c).Length < 0.05);
-                if (i < 0) used.Add((c, r)); else if (r > used[i].R) used[i] = (c, r);
+                if (i < 0) used.Add((c, ptsV[ci], r)); else if (r > used[i].R) used[i] = (c, ptsV[ci], r);
             }
             foreach (var d in Dims.Where(d => !d.Hidden && d.View == v.Name))
             {
@@ -1168,12 +1209,15 @@ public sealed class DrawingDocument
                     Use(new(x1, y1), 0); Use(new(x2, y2), 0);
                 }
             }
-            if (used.Count < 2) continue;   // один центр — нумеровать нечего
+            if (used.Count == 0) continue;
             var main = used.OrderByDescending(u => u.R).First();
             foreach (var u in new[] { main }.Concat(used.Where(u => u != main).OrderByDescending(u => Math.Round(u.P.Y, 2)).ThenBy(u => u.P.X)))
-                CenterNos.Add((v.Name, u.P, ++no));
+                all.Add((v.Name, u.P, u.PV, CenterNos3dOff ? byView++ : Key(v, u.PV)));
         }
+        if (all.Select(a => a.Key).Distinct().Count() < 2) return;   // один центр — нумеровать нечего
+        foreach (var a in all) CenterNos.Add((a.View, a.P, a.Key + 1, a.PV));
     }
+    static readonly bool CenterNos3dOff = Environment.GetEnvironmentVariable("P3D_CENTERNOS3D") == "0";
 
     int? CentreNo(string view, Vector2d p)
     {
@@ -1218,10 +1262,20 @@ public sealed class DrawingDocument
             }
             return true;
         }
-        foreach (var (view, p, no) in CenterNos)
+        foreach (var (view, p, no, pv) in CenterNos)
         {
             double w = SignW(no, h);
             (double, double, double, double)? best = null; (Vector2d, Vector2d) lead = default; double bestScore = double.MaxValue;
+            // k165 (замечание 05.11, 13:27, п. 1): место подписи — подобранное раньше или перенесённое мышью; подбор — один раз
+            double mtol = 1e-6 * Math.Max(1, pv.Length);
+            var mark = CentreMarks.FirstOrDefault(m => m.View == view && Math.Abs(m.CX - pv.X) < mtol && Math.Abs(m.CY - pv.Y) < mtol);
+            if (mark is { Placed: true } && !MarksOnceOff)
+            {
+                var e = p + new Vector2d(mark.DX, mark.DY);
+                double x0 = mark.DX >= 0 ? e.X : e.X - w, y0 = e.Y + 0.6;
+                best = (x0, y0, x0 + w, y0 + h); lead = (p, e); bestScore = 0;
+            }
+            else
             // место с наименьшим числом наложений: текст — 100, пересечённая линия — 1, длина выноски — 0.05 на мм; свободное
             // место ближе к центру — сразу
             foreach (double len in new[] { 5.0, 8.0, 11.0, 14.0, 18.0, 24.0 })
@@ -1240,11 +1294,17 @@ public sealed class DrawingDocument
                 }
                 if (bestScore < 1) break;
             }
-            var (bx0, by0, bx1, by1) = best.Value;
-            SolidLine(g, view, lead.Item1, lead.Item2, LineKind.Thin);
-            // полка под подписью — выноска читается (как в ASME Y14.5: «℄N» на полке)
-            g.Line(lead.Item2.X, lead.Item2.Y, Math.Abs(lead.Item2.X - bx0) < 1e-9 ? bx1 : bx0, lead.Item2.Y);
-            CenterSign(g, bx0, by0, h, no);
+            if (mark == null) CentreMarks.Add(mark = new CentreMark { View = view, CX = pv.X, CY = pv.Y });
+            mark.DX = lead.Item2.X - p.X; mark.DY = lead.Item2.Y - p.Y; mark.Placed = true;
+            var (bx0, by0, bx1, by1) = best!.Value;
+            var leadF = lead;
+            Capture(g, mark, () =>
+            {
+                SolidLine(g, view, leadF.Item1, leadF.Item2, LineKind.Thin);
+                // полка под подписью — выноска читается (как в ASME Y14.5: «℄N» на полке)
+                g.Line(leadF.Item2.X, leadF.Item2.Y, Math.Abs(leadF.Item2.X - bx0) < 1e-9 ? bx1 : bx0, leadF.Item2.Y);
+                CenterSign(g, bx0, by0, h, no);
+            });
             boxes.Add((bx0, by0, bx1, by1));
         }
     }
@@ -1256,7 +1316,9 @@ public sealed class DrawingDocument
         var dir = (Math.Cos(a), Math.Sin(a));
         var p = (c.X + r * dir.Item1, c.Y + r * dir.Item2);
         double tw = TextW(text, TextH);
-        if (d.Kind == "dia" && r > 12 && d.Arrows != 2)
+        // k165: у пронумерованного центра диаметр — на полке с «℄N» (как на чертеже-образце), а не линией через центр
+        bool numbered = !CenterNosOff && CentreNo(d.View, new Vector2d(c.X, c.Y)) != null;
+        if (d.Kind == "dia" && r > 12 && d.Arrows != 2 && !numbered)
         {
             // большая окружность: размерная линия через центр, стрелки изнутри на окружность
             var p2 = (c.X - r * dir.Item1, c.Y - r * dir.Item2);
@@ -1571,6 +1633,8 @@ public sealed class DrawingDocument
                 Add(new DrawingDim { View = v.Name, Kind = "rad", X1 = arc.Center.X, Y1 = arc.Center.Y, X2 = arc.Radius, Y2 = am * 180 / Math.PI });
             }
         if (!MoreDimsOff) MoreDimensions(scene, Add);
+        // k165: места подписей центров — подобрать заново (только по «Автоматическим размерам»)
+        CentreMarks.Clear();
         ArrangeDims(scene);
     }
 

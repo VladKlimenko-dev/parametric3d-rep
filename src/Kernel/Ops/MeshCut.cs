@@ -204,6 +204,9 @@ public static class MeshCut
         };
     }
     static readonly bool RegionsOff = Environment.GetEnvironmentVariable("P3D_MESHCUTREGIONS") == "0";
+    static readonly bool RegionTouchOff = Environment.GetEnvironmentVariable("P3D_MESHCUTREGIONTOUCH") == "0";
+    const double RegionTouchEps = ContactEps;
+    static readonly bool FlipCopyOff = Environment.GetEnvironmentVariable("P3D_MESHCUTFLIPCOPY") == "0";
     static readonly bool BspMemoOff = Environment.GetEnvironmentVariable("P3D_MESHCUTBSPMEMO") == "0";
     static readonly bool BothSidesOff = Environment.GetEnvironmentVariable("P3D_MESHCUTBOTHSIDES") == "0";
     public static long RegionProbes, PieceProbes, BspMemoHits;
@@ -226,6 +229,11 @@ public static class MeshCut
             if (k && bothSides && OnSurface(other, c, ContactEps)) k = false;
             return k;
         }
+        // k165 (UI-ROUND-RIM-BALL): ПЕРЕВОРОТ — КОПИЕЙ. Многоугольники тела T, оставленные внутри A, переворачивались на месте —
+        // во входном списке. Входы реза не одноразовые: резец минус шар (предпросмотр скругления у шара) отдавал свои куски, и
+        // следующий рез переворачивал их ещё раз; сетка резца (кэш тела) портилась — рез тела выходил незамкнутым (|va| 22 при
+        // площади 8063), и предпросмотр шёл точным путём. Мутация P3D_MESHCUTFLIPCOPY=0 — на месте (прежнее).
+        CsgPolygon Flip(CsgPolygon f) { if (!flip) return f; if (FlipCopyOff) { f.Flip(); return f; } return f.Flipped(); }
         var whole = new List<CsgPolygon>();
         // k113: дерево разбиения — одно на одинаковый набор соседей (у малого резца у всех ближних треугольников тела соседи —
         // весь резец: прежде дерево из ~100 многоугольников строилось заново для каждого, O(n²) на каждый). P3D_MESHCUTBSPMEMO=0.
@@ -249,17 +257,23 @@ public static class MeshCut
             SplitInto(tree0, p, pieces, ref split);
             foreach (var f in pieces) if (!ReferenceEquals(f, p)) split = true;
             if (!split && !RegionsOff) { whole.Add(p); continue; }
-            foreach (var f in pieces) { Interlocked.Increment(ref PieceProbes); if (Keep(f)) { if (flip) f.Flip(); res.Add(f); } }
+            foreach (var f in pieces) { Interlocked.Increment(ref PieceProbes); if (Keep(f)) res.Add(Flip(f)); }
         }
         if (whole.Count == 0) return;
         // области нетронутых: смежность по общим вершинам
         var parent = new int[whole.Count]; for (int i = 0; i < parent.Length; i++) parent[i] = i;
         int Find(int x) { while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
         var byVertex = new Dictionary<Vector3d, int>();
+        // k165 (UI-ROUND-RIM-BALL): вершина на поверхности другого тела — не связь областей. Резец скругления касается стенки
+        // по линии через вершины сетки тела, не разрезая многоугольников: области по обе стороны линии касания (внутри и снаружи
+        // резца) сливались в одну и получали один ответ — рез выходил незамкнутым (|va| 22) с лишним снятым объёмом (354 мм³
+        // вместо 165). Мутация P3D_MESHCUTREGIONTOUCH=0 — связь через любую общую вершину (прежнее).
+        var touch = new Dictionary<Vector3d, bool>();
+        bool Touch(Vector3d v) => !RegionTouchOff && (touch.TryGetValue(v, out bool t) ? t : touch[v] = OnSurface(other, v, RegionTouchEps));
         for (int i = 0; i < whole.Count; i++)
             foreach (var v in whole[i].V)
             {
-                if (byVertex.TryGetValue(v, out int j)) { int a = Find(i), b = Find(j); if (a != b) parent[a] = b; }
+                if (byVertex.TryGetValue(v, out int j)) { if (Touch(v)) continue; int a = Find(i), b = Find(j); if (a != b) parent[a] = b; }
                 else byVertex[v] = i;
             }
         var verdict = new Dictionary<int, bool>();
@@ -267,7 +281,7 @@ public static class MeshCut
         {
             int r = Find(i);
             if (!verdict.TryGetValue(r, out bool keep)) { Interlocked.Increment(ref RegionProbes); verdict[r] = keep = Keep(whole[i]); }
-            if (keep) { var f = whole[i]; if (flip) f.Flip(); res.Add(f); }
+            if (keep) res.Add(Flip(whole[i]));
         }
     }
 

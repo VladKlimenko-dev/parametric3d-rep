@@ -2636,6 +2636,9 @@ public static class BooleanOp
 
     static readonly bool EarlyAbortOff = Environment.GetEnvironmentVariable("P3D_MESHEARLYABORT") == "0";
     public static long MeshEarlyAborts;
+    /// <summary>k165: отказов точной сетки грани (для проверки раннего выхода: без отказа выхода нет).</summary>
+    public static long MeshFaceFailures;
+    static readonly bool DonorFailOff = Environment.GetEnvironmentVariable("P3D_DONORFAIL") == "0";
     static double FacetArea(FacetedSurface fs) { double a = 0; foreach (var (x, y, z) in fs.Facets) a += Vector3d.Cross(y - x, z - x).Length / 2; return a; }
     static readonly bool MeshFaceDbg = Environment.GetEnvironmentVariable("P3D_MESHFACEDBG") == "1";
     static readonly bool MeshAgainDbg = Environment.GetEnvironmentVariable("P3D_MESHAGAIN") == "1";
@@ -3001,6 +3004,9 @@ public static class BooleanOp
                             prepared[f] = CopyRaw(copy);
                             Interlocked.Increment(ref donors.Reused);
                             Interlocked.Increment(ref DonorHits);
+                            // k165: донор с неудавшейся сеткой — тоже отказ грани (прежде ранний выход не срабатывал: остальные
+                            // грани считались зря)
+                            if (copy.M == null && !DonorFailOff && FacetArea((FacetedSurface)f.Surface) >= 1e-6) { Interlocked.Exchange(ref failedAny, 1); Interlocked.Increment(ref MeshFaceFailures); }
                             return;
                         }
                         var mm = ExactFaceMesher.Mesh(f, out string? w2, out var n2);
@@ -3018,7 +3024,7 @@ public static class BooleanOp
                         if (MeshFaceDbg) Console.Error.WriteLine($"MESHFACE {f.Id} {FaceKindName(f)} src {(((FacetedSurface)f.Surface).Source?.GetType().Name)} facets {((FacetedSurface)f.Surface).Facets.Count} edges {f.Edges.Count()} -> tris {(mm?.T.Count ?? 0) / 3} {dt * 1000.0 / System.Diagnostics.Stopwatch.Frequency:0} ms why {w2}");
 
                         prepared[f] = (mm, w2, n2);
-                        if (mm == null && FacetArea((FacetedSurface)f.Surface) >= 1e-6) Interlocked.Exchange(ref failedAny, 1);
+                        if (mm == null && FacetArea((FacetedSurface)f.Surface) >= 1e-6) { Interlocked.Exchange(ref failedAny, 1); Interlocked.Increment(ref MeshFaceFailures); }
                     }
                     catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { run.Faulted = true; prepared[f] = (null, ex.Message, null); Interlocked.Exchange(ref failedAny, 1); }
                 }

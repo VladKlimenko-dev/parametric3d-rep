@@ -18,10 +18,14 @@ static partial class Program
             var fs = p.Features;
             Require(fs.Count >= 4, $"features {fs.Count}");
             for (int i = 0; i < 3; i++) Require(fs[i].Error == null, $"{fs[i].Name}: {fs[i].Error}");
-            // k150: с сечением стыка через вершину (P3D_DRJOINTV) резец больше не даёт ребро кратности 3 — фаска строится запасным
-            // путём; норма теперь — фаска применена без ошибки, тело одно и годное (многогранное; точная лента — BACKLOG,
-            // смешанная вершина). Прежняя норма (отказ с причиной) — при P3D_DRJOINTV=0.
-            Require(fs[3].Error == null, $"{fs[3].Name}: {fs[3].Error?.Split('\n')[0]}");
+            // k150: с сечением стыка через вершину (P3D_DRJOINTV) резец больше не давал ребро кратности 3 — фаска строилась запасным
+            // путём (многогранно). k165: с проверкой ширины фаски по граням (k160, P3D_RAILBACK) этот резец — тот же случай, что
+            // фаска 9.11 и 9.72: у вершины ширина фаски на грани падает до 0.84 мм из 7.21 на участке 3.5 мм (неправильная
+            // геометрия, веер треугольников). Норма — отказ с причиной, тело — как до фаски; под P3D_RAILBACK=0 — прежнее
+            // (фаска резцом). Правильный угол — сопряжение фасок у вершины (BACKLOG).
+            bool railBack = Environment.GetEnvironmentVariable("P3D_RAILBACK") != "0";
+            if (railBack) Require(fs[3].Error != null && fs[3].Error!.Contains("does not fit on face"), $"{fs[3].Name}: want the reasoned refusal, got {fs[3].Error?.Split('\n')[0] ?? "built"}");
+            else Require(fs[3].Error == null, $"{fs[3].Name}: {fs[3].Error?.Split('\n')[0]}");
             Require(p.Bodies.Count == 1, $"bodies {p.Bodies.Count}");
             var v = Parametric3D.Kernel.Topology.SolidValidator.Validate(p.Bodies[0]);
             Log(new { test = "KRN06-USER-SWEEPBLEND-MIXED-CONVEXITY", guarantee = p.Bodies[0].Guarantee.ToString(), faces = p.Bodies[0].Faces.Count(), verdict = v.Summary() });
