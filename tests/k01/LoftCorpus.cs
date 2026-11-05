@@ -582,6 +582,18 @@ static partial class Program
             try { m = CorpusMake(sd); m.Part.Rebuild(null); } catch (Exception ex) { Log(new { seed = sd, loft = "exception " + ex.Message }); continue; }
             if (m.Part.Features[0].Error != null || m.Part.Bodies.Count != 1) { Log(new { seed = sd, loft = "refused" }); continue; }
             var p = m.Part; var rnd = new Random(sd * 31 + 7);
+            if (rebuildCheck)
+            {
+                // Я1: меняет ли запись и чтение саму модель (лофт до первой правки): тела побитово и текст документа
+                string t0 = DocumentFile.StripDisplay(DocumentFile.Save(p)) ?? DocumentFile.Save(p);
+                var l0 = DocumentFile.Load(t0); l0.Part.Rebuild(l0.Parameters);
+                string t1 = DocumentFile.StripDisplay(DocumentFile.Save(l0.Part)) ?? DocumentFile.Save(l0.Part);
+                int firstDiff = -1; for (int i = 0; i < Math.Min(t0.Length, t1.Length); i++) if (t0[i] != t1[i]) { firstDiff = i; break; }
+                if (firstDiff < 0 && t0.Length != t1.Length) firstDiff = Math.Min(t0.Length, t1.Length);
+                Log(new { seed = sd, roundtrip = true, bodySession = BodyBits(p), bodyFile = BodyBits(l0.Part), textSame = t0 == t1, firstDiff,
+                          textSession = firstDiff < 0 ? null : t0.Substring(Math.Max(0, firstDiff - 80), Math.Min(200, t0.Length - Math.Max(0, firstDiff - 80))),
+                          textFile = firstDiff < 0 ? null : t1.Substring(Math.Max(0, firstDiff - 80), Math.Min(200, t1.Length - Math.Max(0, firstDiff - 80))) });
+            }
             for (int st = 0; st < steps; st++)
             {
                 if (reload is "bare" or "body" && st > 0)
