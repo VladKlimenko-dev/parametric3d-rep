@@ -1,0 +1,4 @@
+== STEP s106 0
+== REBUILDCHECK s106 0
+== REBUILDCHECK END s106 0
+seconds 48 nproc 4 env SEQ_RELOAD=bare SEQ_RELOAD0=1 cmd loftseq 1 106 1 res/out
