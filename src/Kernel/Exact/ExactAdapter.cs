@@ -55,12 +55,11 @@ public static class ExactAdapter
     /// Я1 (REFERENCE_SOLUTIONS п. 6; BACKLOG k149, корпус s106 шаг 5): ЛЕНИВАЯ ПРОИЗВОДНАЯ ФОРМА — В НАСТРОЙКАХ МОМЕНТА СОЗДАНИЯ.
     /// Lazy вычисляется при первом обращении — в контексте той операции, что обратилась первой (в сеансе это могла быть
     /// отвергнутая операция над тем же телом), и форма остаётся на теле. Здесь снимок настроек, политики и расширений
-    /// берётся при создании; отмена и сроки — нет (форма живёт дольше операции). Эксперимент: P3D_LAZYCTX=1.
+    /// берётся при создании; отмена и сроки — нет (форма живёт дольше операции). Вместе с P3D_LAZYREMESH (мутация =0).
     /// </summary>
-    internal static readonly bool LazyCtxOn = Environment.GetEnvironmentVariable("P3D_LAZYCTX") == "1";
     public static Lazy<ExactBody> LazyDerived(Func<ExactBody> make)
     {
-        if (!LazyCtxOn && !LazyRemeshOn) return new Lazy<ExactBody>(make, LazyThreadSafetyMode.ExecutionAndPublication);
+        if (!LazyRemeshOn) return new Lazy<ExactBody>(make, LazyThreadSafetyMode.ExecutionAndPublication);
         var cur = KernelContext.Current;
         var ctx = new KernelContext(KernelSettings.Capture(), cur?.Policy ?? OperationPolicy.Strict).WithExtensionsOf(cur);
         // PublicationOnly: отказ при расчёте формы (сбой этапа, отмена) не запоминается — следующий расчёт строит форму
@@ -74,9 +73,10 @@ public static class ExactAdapter
     /// из треугольников, что лежат на гранях тела в момент обращения: у итогового тела прошлого расчёта это сетка показа (с
     /// донорами), у промежуточного тела в общем пересчёте — сетка по требованию. Один и тот же шаг давал разную многогранную
     /// булеву в сеансе и при перестроении из файла («показ не меняет геометрию», 01.12). Здесь копия тела размечается по
-    /// контурам заново — форма становится функцией точного B-rep и настроек момента создания. Эксперимент: P3D_LAZYREMESH=1.
+    /// контурам заново — форма становится функцией точного B-rep и настроек момента создания. Мутация: P3D_LAZYREMESH=0
+    /// (KRN-Y1-SESSION-EQUALS-FILE падает).
     /// </summary>
-    internal static readonly bool LazyRemeshOn = Environment.GetEnvironmentVariable("P3D_LAZYREMESH") == "1";
+    internal static readonly bool LazyRemeshOn = Environment.GetEnvironmentVariable("P3D_LAZYREMESH") != "0";
     [ThreadStatic] static bool _inDerived;
     public static ExactBody DerivedOf(TSolid solid, List<string>? warnings = null)
     {
@@ -178,7 +178,7 @@ public static class ExactAdapter
             return new ExactBody(form.Solid.Import(registry), form.Sources);
         }
 
-        // Я1 (P3D_LAZYREMESH=1): аналитическое тело без ленивой формы (ревизия ушла вперёд: имена граней, перенос) —
+        // Я1 (мутация P3D_LAZYREMESH=0): аналитическое тело без ленивой формы (ревизия ушла вперёд: имена граней, перенос) —
         // той же дорогой, что ленивая форма: копия, своя разметка по контурам. Иначе форма бралась из треугольников, что
         // лежат на гранях сейчас, и одно тело в сеансе и при полном пересчёте давало разную многогранную булеву.
         if (LazyRemeshOn && !_inDerived && solid.Exact == null && solid.Guarantee == GuaranteeLevel.ExactAnalytic)

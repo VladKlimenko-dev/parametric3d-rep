@@ -58,8 +58,8 @@ public static class Ssi
     [ThreadStatic] public static Action<string>? FootDebug;
     /// <summary>Разбор: вызовы основания на поверхности общего вида и из них — с общей проекцией (без годной подсказки).</summary>
     public static long ParamFootCalls, ParamFootGlobal, ParamFootFar;
-    /// <summary>Я1: каноническое уточнение основания (P3D_FOOTCANON=1); промахи — уточнение не сошлось к тому же корню.</summary>
-    static readonly bool FootCanon = Environment.GetEnvironmentVariable("P3D_FOOTCANON") == "1";
+    /// <summary>Я1: каноническое уточнение основания (мутация P3D_FOOTCANON=0); промахи — уточнение не сошлось к тому же корню.</summary>
+    static readonly bool FootCanon = Environment.GetEnvironmentVariable("P3D_FOOTCANON") != "0";
     public static long FootCanonMiss;
     static readonly bool FootFar = Environment.GetEnvironmentVariable("P3D_FOOTFAR") != "0";
 
@@ -172,7 +172,7 @@ public static class Ssi
         // зависят от старта: лишний запрос (отладочный вывод, проверка, другой поток) менял биты всех следующих — скругление
         // корпуса s106 давало c7f8… с отладочным обработчиком и 89d9… без него, а неустойчивая булева резца на шаге 5
         // раздувала это до отказа. Здесь найденный параметр округляется на сетку 2^-20 и уточняется заново от неё:
-        // подсказка ускоряет поиск, но в ответ не входит. Мутация/эксперимент: P3D_FOOTCANON=1.
+        // подсказка ускоряет поиск, но в ответ не входит. Мутация: P3D_FOOTCANON=0 (KRN-Y1-SESSION-EQUALS-FILE падает).
         if (FootCanon)
         {
             var uc = new Vector2d(Math.Round(uv.X * 1048576.0) / 1048576.0, Math.Round(uv.Y * 1048576.0) / 1048576.0);
