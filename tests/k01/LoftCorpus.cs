@@ -592,6 +592,11 @@ static partial class Program
                 if (firstDiff < 0 && t0.Length != t1.Length) firstDiff = Math.Min(t0.Length, t1.Length);
                 var gs0 = GeomBits(p); var gf0 = GeomBits(l0.Part);
                 Log(new { seed = sd, roundtrip = true, geomSame = gs0.SequenceEqual(gf0), geomDiff = gs0.Zip(gf0).Where(z => z.First != z.Second).Take(6).Select(z => z.First + " <> " + z.Second).ToList() });
+                var pd = FieldDiff(p, l0.Part).Where(x => !x.StartsWith("Bodies") && !x.StartsWith("Features")).Take(40).ToList();
+                var sk = new List<string>();
+                var ss = p.Sketches.ToList(); var sf = l0.Part.Sketches.ToList();
+                for (int i = 0; i < Math.Min(ss.Count, sf.Count); i++) foreach (var d in FieldDiff(ss[i], sf[i]).Take(10)) sk.Add($"{ss[i].Name}.{d}");
+                Log(new { seed = sd, partFields = pd, sketchFields = sk.Take(40).ToList(), settingsSession = Parametric3D.Kernel.KernelSettings.Capture().ToString().Length });
                 Log(new { seed = sd, roundtrip = true, bodySession = BodyBits(p), bodyFile = BodyBits(l0.Part), textSame = t0 == t1, firstDiff,
                           textSession = firstDiff < 0 ? null : t0.Substring(Math.Max(0, firstDiff - 80), Math.Min(200, t0.Length - Math.Max(0, firstDiff - 80))),
                           textFile = firstDiff < 0 ? null : t1.Substring(Math.Max(0, firstDiff - 80), Math.Min(200, t1.Length - Math.Max(0, firstDiff - 80))) });
