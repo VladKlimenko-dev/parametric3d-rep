@@ -1,0 +1,27 @@
+== STEP s106 0
+== REBUILDCHECK s106 0
+== REBUILDCHECK END s106 0
+== STEP s106 1
+== REBUILDCHECK s106 1
+== REBUILDCHECK END s106 1
+== STEP s106 2
+== REBUILDCHECK s106 2
+== REBUILDCHECK END s106 2
+== STEP s106 3
+== REBUILDCHECK s106 3
+== REBUILDCHECK END s106 3
+== STEP s106 4
+== REBUILDCHECK s106 4
+== REBUILDCHECK END s106 4
+== STEP s106 5
+TOEXACT solid 9339 path triangles guarantee ExactAnalytic faces 25 rev 0 exact none lazy none published False derived True polys 48467
+TOEXACT solid 7713 path lazy guarantee ExactAnalytic faces 25 rev 2 exact none lazy current published True derived False polys 48467
+TOEXACT solid 7904 path triangles guarantee Unspecified faces 5 rev 0 exact none lazy none published False derived False polys 1597
+TOEXACT solid 9530 path triangles guarantee Unspecified faces 6 rev 0 exact none lazy none published False derived False polys 6
+== REBUILDCHECK s106 5
+TOEXACT solid 12100 path triangles guarantee ExactAnalytic faces 25 rev 0 exact none lazy none published False derived True polys 48475
+TOEXACT solid 10474 path lazy guarantee ExactAnalytic faces 25 rev 2 exact none lazy current published True derived False polys 48475
+TOEXACT solid 10665 path triangles guarantee Unspecified faces 5 rev 0 exact none lazy none published False derived False polys 1597
+TOEXACT solid 12291 path triangles guarantee Unspecified faces 6 rev 0 exact none lazy none published False derived False polys 6
+== REBUILDCHECK END s106 5
+seconds 613 nproc 4 env P3D_TOEXACTTRACE=1 SEQ_STEPMODE=full cmd loftseq 1 106 6 res/out
