@@ -54,7 +54,8 @@ jobs:
       matrix:
         include:
           - { name: s106,           cmd: 'loftseq 1 106 6 OUT',  env: '' }
-          - { name: s106_ckptclone,     cmd: 'loftseq 1 106 6 OUT', env: 'P3D_CKPTCLONE=1' }
+          - { name: s106_fullbits,      cmd: 'loftseq 1 106 2 OUT', env: 'SEQ_STEPMODE=full' }
+          - { name: s106_reloadbits,    cmd: 'loftseq 1 106 2 OUT', env: 'SEQ_RELOAD=bare' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
