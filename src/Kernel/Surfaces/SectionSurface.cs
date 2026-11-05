@@ -102,6 +102,23 @@ public readonly struct SweepSection
         return CatmullRom(s1, s2, s3, s4, t);
     }
 
+    /// <summary>Я2: смесь двух сечений одного вида (1 − w)·a + w·b покомпонентно (дуга — с нормировкой осей); сечения разного
+    /// вида — ближайшее.</summary>
+    public static SweepSection Blend(in SweepSection a, in SweepSection b, double w)
+    {
+        double u = 1 - w;
+        if (a.IsArc && b.IsArc)
+        {
+            Vector3d e1 = (a.E1 * u + b.E1 * w).Normalized();
+            Vector3d e2 = a.E2 * u + b.E2 * w; e2 = (e2 - e1 * Vector3d.Dot(e2, e1)).Normalized();
+            return Arc(a.C * u + b.C * w, e1, e2, a.R * u + b.R * w, a.Phi * u + b.Phi * w);
+        }
+        if (a.IsLine && b.IsLine) return Line(a.A * u + b.A * w, a.B * u + b.B * w);
+        double ww = w;
+        if (BezierMix(new[] { a, b }, p => p[0] * (1 - ww) + p[1] * ww) is { } bz) return bz;
+        return w < 0.5 ? a : b;
+    }
+
     /// <summary>Кубическая интерполяция Катмулла — Рома между s1 и s2 (t ∈ [0, 1]).</summary>
     public static SweepSection CatmullRom(SweepSection s0, SweepSection s1, SweepSection s2, SweepSection s3, double t)
     {
@@ -295,6 +312,21 @@ public sealed class SectionSurface : ISurface3
             if (Quad && n >= 3) return k < 0 ? Extrap2(sec[0], sec[1], sec[2], -k) : Extrap2(sec[n - 1], sec[n - 2], sec[n - 3], k - (n - 1));
             return k < 0 ? Extrap(sec[0], sec[1], -k) : Extrap(sec[n - 1], sec[n - 2], k - (n - 1));
         }
+        if (HighOrder && Smooth && !wrap && n >= 6)
+        {
+            // Я2: ГЛАДКАЯ ВСТАВКА (C2 по u). Скользящее окно Лагранжа меняется в узле таблицы — поверхность лишь C0: касательная
+            // прыгает на ~h⁵, и основание перпендикуляра у точки в узле не сходится (Ньютон качается через узел; s102: точка ребра
+            // в 2e-9 мм от ленты прежней фаски — «основания нет», общий параметр ребра — NaN, скругление уходило в резец).
+            // Здесь — смесь двух окон (левого i−3…i+2 и правого i−2…i+3) с весом пятой степени 6t⁵ − 15t⁴ + 10t³: правое окно
+            // промежутка i−1 — то же, что левое окна i, вес и его две производные в узлах — 0 и 1, поэтому поверхность C2,
+            // а точность — та же, что у окна (~h⁶). Мутация P3D_SECSMOOTH=0 — одно окно, как прежде.
+            int stL = Math.Clamp(ti - 3, 0, n - 6), stR = Math.Clamp(ti - 2, 0, n - 6);
+            var L = SweepSection.Lagrange6(sec[stL], sec[stL + 1], sec[stL + 2], sec[stL + 3], sec[stL + 4], sec[stL + 5], tf + (ti - stL - 2));
+            if (stL == stR) return L;
+            var R = SweepSection.Lagrange6(sec[stR], sec[stR + 1], sec[stR + 2], sec[stR + 3], sec[stR + 4], sec[stR + 5], tf + (ti - stR - 2));
+            double w = tf * tf * tf * (10 + tf * (-15 + 6 * tf));
+            return SweepSection.Blend(L, R, w);
+        }
         if (HighOrder && n >= 6)
         {
             // узлы −2…3 вокруг промежутка; у краёв куска — сдвинутое окно внутри куска (не продолжение за стык)
@@ -312,6 +344,7 @@ public sealed class SectionSurface : ISurface3
     static readonly double TabScale = double.TryParse(Environment.GetEnvironmentVariable("P3D_SECTABK"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var tk) ? tk : 8;
 
     static readonly bool Quad = Environment.GetEnvironmentVariable("P3D_SECEXTRAP2") != "0";
+    static readonly bool Smooth = Environment.GetEnvironmentVariable("P3D_SECSMOOTH") != "0";
 
     /// <summary>Продолжение за конец по трём узлам (многочлен Ньютона второй степени): a − kΔ₁ + k(k+1)/2·Δ₂.</summary>
     private static SweepSection Extrap2(SweepSection a, SweepSection b, SweepSection c, int steps)
