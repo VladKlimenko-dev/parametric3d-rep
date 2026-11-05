@@ -526,7 +526,7 @@ static partial class Program
         if (mode is "chamferchain146" or "allB") Krn06ChamferChainK146Checks();
         if (mode is "loftcorpus140" or "allB") Krn06LoftCorpusK140Checks();
         if (mode is "y1" or "allB") Krn01SessionEqualsFileChecks();
-        if (mode is "y2" or "allA") KrnY2SectionTableChecks();
+        if (mode is "y2" or "allA") { KrnY2SectionTableChecks(); KrnY2SectionBreakChecks(); }
         if (mode is "sweepsec142" or "allB") Krn06SweepSectionsK142Checks();
         if (mode is "x05pattern" or "allA") Krn05X05PatternChecks();
         if (mode is "sweepblend148" or "allA") Krn06SweepBlendK148Checks();

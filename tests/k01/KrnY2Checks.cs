@@ -51,4 +51,41 @@ static partial class Program
             Require(worstKink < 1e-6, $"tangent jump at a table node {worstKink:E2}");
         });
     }
+    /// <summary>
+    /// Я2: СТЫК КУСКОВ ТАБЛИЦЫ НЕПРЕРЫВЕН. Лента по цепочке звеньев (формула со стыком: хребет — ломаная с изломом скорости)
+    /// таблицей по кускам; узел у стыка считался в 1e-9 изнутри куска, и куски расходились на S_u·2e-9 — у вершины на стыке
+    /// основание не находилось (s102 шаг 1). Норма: разрыв в стыке меньше 1e-12 мм, основание точки стыка найдено.
+    /// Мутация P3D_SECBREAKNODE=0 — проверка падает.
+    /// </summary>
+    static void KrnY2SectionBreakChecks()
+    {
+        Check("KRN-Y2-SECTION-BREAK-C0", () =>
+        {
+            const double ub = 7.3;
+            SweepSection Gen(double u)
+            {
+                // хребет: отрезок до стыка, за ним — дуга той же касательной (стык G1, как у касательной цепочки рёбер)
+                Vector3d c; Vector3d t;
+                if (u < ub) { c = new Vector3d(u, 0, 0); t = Vector3d.UnitX; }
+                else { double a = (u - ub) / 12.0; c = new Vector3d(ub + 12 * Math.Sin(a), 12 * (1 - Math.Cos(a)), 0); t = new Vector3d(Math.Cos(a), Math.Sin(a), 0); }
+                var n = Vector3d.Cross(Vector3d.UnitZ, t);
+                return SweepSection.Line(c + n * 1.5, c + Vector3d.UnitZ * 1.5);
+            }
+            double u0 = 0, u1 = 20;
+            var us = Enumerable.Range(0, 11).Select(i => u0 + (u1 - u0) * i / 10.0).ToList();
+            var ss = new SectionSurface(Gen, us, us.Select(Gen).ToList(), false, u0, u1, new[] { ub }, 0.05);
+            double jump = 0; int fails = 0;
+            foreach (double v in new[] { 0.0, 0.3, 0.5, 1.0 })
+            {
+                var l = ss.PointAt(new Vector2d(ub - 1e-13, v)); var r = ss.PointAt(new Vector2d(ub + 1e-13, v));
+                jump = Math.Max(jump, (l - r).Length);
+                var x = Gen(ub).Point(v);
+                var (p, _) = Parametric3D.Kernel.Geometry.Ssi.ParamFoot(ss, x);
+                if (!double.IsFinite(p.X) || (p - x).Length > 1e-9) fails++;
+            }
+            Log(new { test = "KRN-Y2-SECTION-BREAK-C0", jump, fails });
+            Require(jump < 1e-12, $"table pieces part at the joint by {jump:E2} mm");
+            Require(fails == 0, $"{fails} foot point(s) not found at the joint");
+        });
+    }
 }

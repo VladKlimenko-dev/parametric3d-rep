@@ -345,6 +345,7 @@ public sealed class SectionSurface : ISurface3
 
     static readonly bool Quad = Environment.GetEnvironmentVariable("P3D_SECEXTRAP2") != "0";
     static readonly bool Smooth = Environment.GetEnvironmentVariable("P3D_SECSMOOTH") != "0";
+    static readonly bool BreakNode = Environment.GetEnvironmentVariable("P3D_SECBREAKNODE") != "0";
 
     /// <summary>Продолжение за конец по трём узлам (многочлен Ньютона второй степени): a − kΔ₁ + k(k+1)/2·Δ₂.</summary>
     private static SweepSection Extrap2(SweepSection a, SweepSection b, SweepSection c, int steps)
@@ -500,6 +501,16 @@ public sealed class SectionSurface : ISurface3
             }
             else for (int k = 0; k <= n; k++) Node(k);
             Interlocked.Add(ref TableSections, n + 1);
+            // Я2: УЗЕЛ У СТЫКА — В САМОМ СТЫКЕ. Узел считается в 1e-9 изнутри куска (формула на стыке берёт одно из звеньев), и
+            // соседние куски расходились на S_u·2e-9: у вершины на стыке цепочки (s102: фаска по двум рёбрам) поверхность
+            // с разрывом 2e-9 мм, основание перпендикуляра качалось через стык и не находилось. Здесь узел переносится в стык
+            // линейным продолжением по соседнему узлу (ошибка ~ε²·S_uu ~ 1e-18). Мутация P3D_SECBREAKNODE=0.
+            if (BreakNode && n >= 1)
+            {
+                const double eps = 1e-9;
+                if (p > 0) arr[0] = SweepSection.Blend(arr[0], arr[1], -eps / (h - eps));
+                if (p + 2 < cuts.Count) arr[n] = SweepSection.Blend(arr[n], arr[n - 1], -eps / (h - eps));
+            }
             starts.Add(a); pieces.Add((h, arr));
         }
         t = new Tab(starts.ToArray(), pieces.ToArray());

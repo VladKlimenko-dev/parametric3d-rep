@@ -170,7 +170,7 @@ public static class Ssi
                 {
                     // Я2 (разбор): ход Ньютона по шагам — параметры полностью, остаток, длины производных
                     var sb = new System.Text.StringBuilder($"  trace {s.GetType().Name}");
-                    if (s is Surfaces.SectionSurface sx) sb.Append($" proc {sx.IsProcedural} u [{sx.UMin:R}, {sx.UMax:R}]");
+                    if (s is Surfaces.SectionSurface sx) sb.Append($" proc {sx.IsProcedural} u [{sx.UMin:R}, {sx.UMax:R}] breaks [{string.Join(", ", sx.Breaks.Select(b => b.ToString("R")))}]");
                     var uu = g;
                     for (int it = 0; it < 8; it++)
                     {
