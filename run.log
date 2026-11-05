@@ -1,0 +1,7 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["loftseq","1","106","1","res/out"]}
+{"seed":106,"roundtrip":true,"geomSame":true,"geomDiff":[]}
+{"seed":106,"roundtrip":true,"bodySession":"11:7c8cdbf75a2907ae:78b761f30df49d6e","bodyFile":"11:7c8cdbf75a2907ae:78b761f30df49d6e","textSame":false,"firstDiff":211,"textSession":"  \u0022temperature\u0022: \u0022K\u0022\n  },\n  \u0022Parameters\u0022: [],\n  \u0022Sketches\u0022: [\n    {\n      \u0022Id\u0022: 7,\n      \u0022Name\u0022: \u0022S1\u0022,\n      \u0022Plane\u0022: [\n        0,\n        0,\n        0,\n        1,\n        0,\n        0,\n        0,\n   ","textFile":"  \u0022temperature\u0022: \u0022K\u0022\n  },\n  \u0022Parameters\u0022: [],\n  \u0022Sketches\u0022: [\n    {\n      \u0022Id\u0022: 117,\n      \u0022Name\u0022: \u0022S1\u0022,\n      \u0022Plane\u0022: [\n        0,\n        0,\n        0,\n        1,\n        0,\n        0,\n        0,\n "}
+{"tag":"s106 step 0 R2.71 edge (-1.51,35.09,-161.04) chain 7","ms":25907,"guarantee":"ExactAnalytic","dv":220.6858,"expect":221.5394,"problems":[],"dr":null}
+{"bits":true,"step":"R0","session":"22:c7f83462b451ea7d:402b0f05d2843e53","file":"22:89d9be12170960c4:43beea3dad58046a","file2":"","sameSF":false,"sameFF":null}
+{"ok":1,"bad":0,"refused":0,"legit":0,"totalOpSeconds":25.9}
+{"rebuildChecked":1,"rebuildDiff":0}
