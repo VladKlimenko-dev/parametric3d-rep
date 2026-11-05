@@ -389,7 +389,12 @@ static partial class Program
         if (mode is "perfprof") { PerfProfile(); return; }
         if (mode is "perf") { Perf(args); return; }
         if (mode is "meshreuse") { MeshReuseExperiment(); MeshReuseIdentity(); }
-        if (mode is "globals") { foreach (var g in UnboundGlobals()) Console.WriteLine(g); return; }
+        if (mode is "globals")
+        {
+            foreach (var g in UnboundGlobals()) Console.WriteLine(g);
+            foreach (var g in StaticCollections()) Console.WriteLine("static-readonly-collection " + g);   // Я1: отчёт
+            return;
+        }
         if (mode is "guarantees" or "allA") Guarantees();
         if (mode is "guarantees" or "allA") Representations();
         if (mode is "survey" or "allS") Survey(false);

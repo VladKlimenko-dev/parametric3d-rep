@@ -76,6 +76,9 @@ dotnet build tests/k01/K01Checks.csproj -c Release -o out/k01 -p:LocalDeps=tools
 
 Диагностика маршрутов булевой — переменные `ANROUTE=1`, `GENCAPTURE=<причина>`, `GENVERIFY=1`.
 
+**Детерминизм (цель Я1):** `tools\seq_state_probe.ps1` — корпус `loftseq` со сверкой «шаг в сеансе = тот же шаг из файла
+без тел» (`SEQ_REBUILDCHECK=1`), то же под мутациями памятей ядра; итог — `logs\stateprobe_*\SUMMARY.txt`.
+
 **Сверка с OpenCascade:** `tools/occt_check.py`, `occt_diff.py`, `occt_mass.py`, `occt_time.py` (нужен pythonocc).
 
 **Базовый прогон KRN-00** — `bash tools/run_baseline.sh <вывод>` (Linux): allA, allB, allS, g11poly, наборы A06

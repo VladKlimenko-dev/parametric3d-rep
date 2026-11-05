@@ -309,6 +309,9 @@
       `static readonly Dictionary` изменяем. Следующий шаг — прогон: `loftseq 1 106 6` отдельно и `loftseq 10 101 6`, под
       мутациями `P3D_EXACTINCACHE=0`, `P3D_FACEMESHMEMO=0`, `P3D_AREACACHE=0`, `P3D_VALCACHE=0`, `P3D_MESHVALMEMO=0`,
       `P3D_AUDITCACHE=0`, `P3D_MESHREUSE=0`; сверка «шаг в сеансе = шаг из файла без тел» (`DocumentFile.StripDisplay`).
+      Инструмент готов (05.11): `tools/seq_state_probe.ps1` (итог — `logs\stateprobe_*\SUMMARY.txt`), сверка в `loftseq`
+      по `SEQ_REBUILDCHECK=1`, отчёт `K01Checks globals` о коллекциях static readonly; разбор чужих решений —
+      `REFERENCE_SOLUTIONS.md`, п. 6.
       Перед правкой — разбор, как кэши и реестры устроены в OCCT (BRepGraph_CacheRegistry, общие TShape) и Parasolid.
 - [ ] Винтовая протяжка (k148: точно, винтовым движением сечения) — булева с телом: грани в несколько витков в общем маршруте
       через представление NURBS не сходятся с краями («a boundary point is off the NURBS surface», HelSweep 5 витков) —

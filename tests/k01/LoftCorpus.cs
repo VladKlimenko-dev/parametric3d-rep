@@ -571,6 +571,8 @@ static partial class Program
     {
         Directory.CreateDirectory(outDir);
         int ok = 0, bad = 0, refused = 0, legit = 0; var why = new Dictionary<string, int>(); double totalMs = 0;
+        // Я1 (REFERENCE_SOLUTIONS п. 6): сверка «шаг в сеансе = тот же шаг из файла без тел» — SEQ_REBUILDCHECK=1
+        bool rebuildCheck = Environment.GetEnvironmentVariable("SEQ_REBUILDCHECK") == "1"; int rebuildChecked = 0, rebuildDiff = 0;
         for (int sd = seed0; sd < seed0 + count; sd++)
         {
             CorpusModel m;
@@ -624,6 +626,16 @@ static partial class Program
                     Log(new { tag, ms, guarantee = b.Guarantee.ToString(), dv = Math.Round(dv, 4), expect = clean && expect is { } e2 ? Math.Round(e2, 4) : (double?)null, problems, dr = drWhy });
                 }
                 if (f.Error != null || p.Bodies.Count != 1) Log(new { tag, ms, problems });
+                if (rebuildCheck)
+                {
+                    rebuildChecked++;
+                    var rc = SeqRebuildCompare(p, f);
+                    if (rc != null)
+                    {
+                        rebuildDiff++; Log(new { tag, rebuildcheck = rc });
+                        try { File.WriteAllText(Path.Combine(outDir, $"rebuild_s{sd}_{st}.p3d"), DocumentFile.Save(p)); } catch { }
+                    }
+                }
                 if (Environment.GetEnvironmentVariable("CORPUS_SAVEALL") == "1")
                     try { File.WriteAllText(Path.Combine(outDir, $"all_s{sd}_{st}.p3d"), DocumentFile.Save(p)); } catch { }
                 if (problems.Count == 0) { ok++; continue; }
@@ -639,6 +651,32 @@ static partial class Program
             }
         }
         Log(new { ok, bad, refused, legit, totalOpSeconds = Math.Round(totalMs / 1000, 1) });
+        if (rebuildCheck) Log(new { rebuildChecked, rebuildDiff });
         foreach (var kv in why.OrderByDescending(k => k.Value)) Console.WriteLine($"{kv.Value,4}  {kv.Key}");
+    }
+
+    /// <summary>
+    /// Я1: тот же шаг, перестроенный из текста документа без тел и сохранённых состояний (DocumentFile.StripDisplay) в этом
+    /// же процессе. Null — результат тот же (отказ, число тел, уровни гарантии, объём до 1e-6 отн.); иначе — оба результата.
+    /// Различие при одинаковом входе означает, что шаг зависит от истории сеанса (BACKLOG k149, корпус s106).
+    /// </summary>
+    static object? SeqRebuildCompare(Part p, Feature f)
+    {
+        string json = DocumentFile.Save(p);
+        string bare = DocumentFile.StripDisplay(json) ?? json;
+        Part q;
+        try { var loaded = DocumentFile.Load(bare); q = loaded.Part; q.Rebuild(loaded.Parameters); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return new { file = "exception: " + ex.Message }; }
+        var g = q.Features.Count > 0 ? q.Features[^1] : null;
+        bool errS = f.Error != null, errF = g?.Error != null;
+        string gs = string.Join(",", p.Bodies.Select(b => b.Guarantee.ToString()));
+        string gf = string.Join(",", q.Bodies.Select(b => b.Guarantee.ToString()));
+        double dv = Math.Abs(p.Volume - q.Volume);
+        if (errS == errF && p.Bodies.Count == q.Bodies.Count && gs == gf && dv <= 1e-6 * Math.Max(1, Math.Abs(p.Volume))) return null;
+        return new
+        {
+            session = new { error = f.Error?.Split('\n').Last(), bodies = p.Bodies.Count, volume = Math.Round(p.Volume, 6), guarantee = gs },
+            file = new { error = g?.Error?.Split('\n').Last(), bodies = q.Bodies.Count, volume = Math.Round(q.Volume, 6), guarantee = gf },
+        };
     }
 }
