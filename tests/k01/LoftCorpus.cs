@@ -627,6 +627,14 @@ static partial class Program
                 // k143: путь операции — прямой построитель (замена граней, как Parasolid) или резец; причина отказа прямого
                 string? drWhy = null; var drPrev = Parametric3D.Kernel.Ops.DirectRound.Debug;
                 bool drAll = Environment.GetEnvironmentVariable("LOFT_DRALL") == "1";
+                // Я1, опыт SEQ_FILEFIRST=1: тот же шаг из текста документа — раньше сеанса в этом процессе
+                if (Environment.GetEnvironmentVariable("SEQ_FILEFIRST") == "1" && st == 0)
+                {
+                    string tf = DocumentFile.Save(p); tf = DocumentFile.StripDisplay(tf) ?? tf;
+                    var lf = DocumentFile.Load(tf); lf.Part.Rebuild(lf.Parameters);
+                    Log(new { fileFirst = true, step = st, file = BodyBits(lf.Part), error = lf.Part.Features[^1].Error });
+                }
+                if (Environment.GetEnvironmentVariable("SEQ_NOHOOK") == "1") Parametric3D.Kernel.Ops.DirectRound.Debug = null; else
                 Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (drAll) Console.Error.WriteLine("DR " + (s.Length > 400 ? s[..400] : s)); if (Environment.GetEnvironmentVariable("LOFT_DRDEBUG") is { } dd && s.Contains(dd)) Console.WriteLine("DBG " + (s.Length > 300 && Environment.GetEnvironmentVariable("LOFT_DRFULL") != "1" ? s[..300] : s)); if (s.StartsWith("declined")) drWhy = s.Length > 200 ? s[..200] : s; };
                 // Я1, опыт: SEQ_STEPMODE=full — шаг считается полным пересчётом дерева (без сохранённых состояний)
                 if (Environment.GetEnvironmentVariable("SEQ_STEPMODE") == "full") p.Invalidate();
