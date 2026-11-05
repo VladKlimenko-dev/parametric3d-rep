@@ -38,6 +38,9 @@ public sealed class SheetCanvas : Control
         set { _g = value; if (!_fitted && value != null && Bounds.Width > 10) Fit(); InvalidateVisual(); }
     }
 
+    /// <summary>k170: сменились перенос или увеличение листа.</summary>
+    public event Action? ViewChanged;
+    Point _lastPan; double _lastZoom;
     public SheetCanvas() { ClipToBounds = true; Focusable = true; }
 
     protected override void OnSizeChanged(SizeChangedEventArgs e)
@@ -77,6 +80,8 @@ public sealed class SheetCanvas : Control
 
     public override void Render(DrawingContext context)
     {
+        // k170: перенос или увеличение листа — владелец переставляет элементы поверх листа (куб вида)
+        if (Pan != _lastPan || Zoom != _lastZoom) { _lastPan = Pan; _lastZoom = Zoom; Avalonia.Threading.Dispatcher.UIThread.Post(() => ViewChanged?.Invoke()); }
         var sw = System.Diagnostics.Stopwatch.StartNew();
         double rs = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1;
         int w = Math.Max(1, (int)Math.Ceiling(Bounds.Width * rs)), h = Math.Max(1, (int)Math.Ceiling(Bounds.Height * rs));

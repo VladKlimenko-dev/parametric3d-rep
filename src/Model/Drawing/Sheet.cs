@@ -37,6 +37,8 @@ public sealed class SheetGraphics
     public readonly List<(List<(double X, double Y)> Pts, uint Argb)> Shades = new();
     public void Poly(LineKind k, params (double X, double Y)[] pts) => Polylines.Add(new SheetPolyline(pts.ToList(), k));
     public readonly List<SheetText> Texts = new();
+    /// <summary>k170: серый слой поверх листа (предлагаемый размер проверки полноты).</summary>
+    public SheetGraphics? Ghost;
     public void Line(double x1, double y1, double x2, double y2, LineKind k = LineKind.Thin) => Lines.Add(new(x1, y1, x2, y2, k));
     public void Rect(double x, double y, double w, double h, LineKind k = LineKind.Thin)
     { Line(x, y, x + w, y, k); Line(x + w, y, x + w, y + h, k); Line(x + w, y + h, x, y + h, k); Line(x, y + h, x, y, k); }

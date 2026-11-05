@@ -8775,6 +8775,170 @@ Check("UI-DIAG-SHEET", () =>
     dw.Close(); w.Close();
 });
 
+// k170 (замечание 05.11, 18:34): окно создания документа — поля одной ширины по одному краю (п. 1); куб вида окна детали у
+// изометрии, на месте при повороте (п. 2); поля панели не перестраиваются под курсором ввода (п. 3); допуски — дефис вместо
+// квадратика, строки не пересекаются (п. 4); подписи панели не под полями (п. 5); угловой размер — выносные от сторон,
+// внешний и смежный угол, подпись в любом месте (п. 6); список недостающих размеров — в дюймах, серый размер, щелчок ставит
+// (п. 7); строка списка размеров ↔ размер на листе (п. 8).
+Check("UI-DRAWING-K170", () =>
+{
+    string? shots = Environment.GetEnvironmentVariable("P3D_SHOTDIR");
+    var tdir = Path.Combine(Path.GetTempPath(), "p3d_k170_tpl_" + Guid.NewGuid().ToString("N")[..8]);
+    Environment.SetEnvironmentVariable("P3D_TEMPLATES", tdir);
+    // 1. окно создания документа
+    {
+        var dlg = new NewDocumentDialog("part");
+        dlg.Show(); Dispatcher.UIThread.RunJobs(); dlg.UpdateLayout(); Dispatcher.UIThread.RunJobs();
+        var names = new[] { "nd_file", "nd_type", "nd_base", "nd_name", "nd_std", "nd_units", "nd_format", "nd_orient" };
+        var boxes = names.Select(n => dlg.GetVisualDescendants().OfType<Control>().First(c => c.Name == n)).Select(c => (c.Name, P: c.TranslatePoint(new Point(0, 0), dlg)!.Value, c.Bounds.Width)).ToList();
+        var model = dlg.GetVisualDescendants().OfType<Control>().First(c => c.Name == "nd_model");
+        var mp = model.Parent as Control; var mpx = mp!.TranslatePoint(new Point(0, 0), dlg)!.Value;
+        var prev = dlg.GetVisualDescendants().OfType<Control>().First(c => c.Name == "nd_preview"); var pp = prev.TranslatePoint(new Point(0, 0), dlg)!.Value;
+        double x0 = boxes[0].P.X, w0 = boxes[0].Width, right = boxes.Max(b => b.P.X + b.Width);
+        Console.WriteLine($"  dialog fields x {string.Join(",", boxes.Select(b => b.P.X.ToString("0")))} w {string.Join(",", boxes.Select(b => b.Width.ToString("0")))}; model row x {mpx.X:0} w {mp.Bounds.Width:0}; preview x {pp.X:0} (fields end {right:0})");
+        if (shots != null) dlg.CaptureRenderedFrame()?.Save(Path.Combine(shots, "k170_dialog.png"));
+        Require(boxes.All(b => Math.Abs(b.P.X - x0) < 0.5 && Math.Abs(b.Width - w0) < 0.5) && Math.Abs(mpx.X - x0) < 0.5 && Math.Abs(mp.Bounds.Width - w0) < 0.5, "fields aligned on one left edge, one width");
+        Require(pp.X - right >= 20, "space between the fields and the sheet preview");
+        dlg.Close();
+    }
+    var part = new Part("k170");
+    var sk = new Sketch("S", Parametric3D.Kernel.Frame3.XY); part.Add(sk);
+    var q = new[] { new SkPoint(0, 0), new SkPoint(60, 0), new SkPoint(80, 40), new SkPoint(20, 40) };
+    var ls = new SkLine[4];
+    for (int k = 0; k < 4; k++) ls[k] = (SkLine)sk.AddEntity(new SkLine(q[k], q[(k + 1) % 4]));
+    var c1 = (SkCircle)sk.AddEntity(new SkCircle(new SkPoint(28, 18), 5));
+    sk.AddDimension(DimensionType.DistancePointPoint, 60, q[0], q[1]);
+    sk.AddDimension(DimensionType.Radius, 5, c1);
+    var ex = new ExtrudeFeature { SketchId = sk.Id }; ex.Side1.Distance = new ValueRef(10); part.AddFeature(ex);
+    part.Rebuild(null);
+    var sp = DocumentSession.FromPart(part, "k170"); var w = Open(sp); BuildNow(sp);
+    var t = DrawingCommands.NewDrawing(w);
+    while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+    var dw = t.Result!; var d = dw.Drawing!;
+    try
+    {
+        dw.Refresh(); Dispatcher.UIThread.RunJobs();
+        // 2. куб вида у изометрии
+        var iso = d.Views.First(v => v.Name == "iso");
+        dw.Down(iso.X, iso.Y); dw.Up(); Dispatcher.UIThread.RunJobs();
+        var cube = dw.SheetCube; var at0 = dw.CubeOf(iso);
+        Require(cube is { IsVisible: true } && cube.Host != null && at0 is { Shown: true }, "the part window view cube at the selected isometric");
+        var box0 = d.Boxes["iso"];
+        for (int i = 0; i < 4; i++) { cube!.Drag(25, 8); Dispatcher.UIThread.RunJobs(); }
+        cube!.DragEnd(); dw.Refresh(); Dispatcher.UIThread.RunJobs();
+        var box1 = d.Boxes["iso"]; var at1 = dw.CubeOf(iso);
+        Console.WriteLine($"  cube at {at0!.Value.C} -> {at1!.Value.C}; iso box {box0} -> {box1}");
+        Require(iso.Dir.StartsWith("v:") && at1.Value.C == at0.Value.C && (Math.Abs(box1.X1 - box0.X1) > 1e-3 || Math.Abs(box1.Y1 - box0.Y1) > 1e-3), "the cube stays in place while the view rotates");
+        cube.Click(new OpenTK.Mathematics.Vector3i(0, 0, 1), 0);
+        var f0 = Parametric3D.Model.Drawing.ViewFrame.Of(d.DirOf(iso));
+        cube.Click(default, Parametric3D.App.Viewport.ViewCube.CwButton);
+        var f1 = Parametric3D.Model.Drawing.ViewFrame.Of(d.DirOf(iso));
+        Console.WriteLine($"  front: up {f0.Up}; CW: up {f1.Up}, toward {f1.Toward}");
+        Require((f0.Toward - OpenTK.Mathematics.Vector3d.UnitZ).Length < 1e-6 && (f1.Toward - f0.Toward).Length < 1e-6 && Math.Abs(OpenTK.Mathematics.Vector3d.Dot(f0.Up, f1.Up)) < 1e-6, "face click — front; CW button — 90° about the view direction");
+        if (shots != null) dw.CaptureRenderedFrame()?.Save(Path.Combine(shots, "k170_cube.png"));
+        cube.Click(default, Parametric3D.App.Viewport.ViewCube.HomeButton);
+        Require(iso.Dir == "", "Home — the default isometric");
+        // 4. допуски: дефис вместо минуса, строки не пересекаются, нижнее — на основании текста
+        var dim = new Parametric3D.Model.Drawing.DrawingDim { View = "front", Kind = "h", X1 = 0, Y1 = 0, X2 = 60, Y2 = 0, Offset = -12, TolUp = "+0,5", TolLo = "0,2" };
+        dw.Change(() => d.Dims.Add(dim)); dw.Refresh();
+        var g = dw.Pages[0];
+        var main = g.Texts.First(x => x.Text.StartsWith("60")); var up = g.Texts.First(x => x.Text == "+0,5"); var lo = g.Texts.First(x => x.Text.EndsWith("0,2") && x.Text != "+0,2");
+        Console.WriteLine($"  tolerances: main y {main.Y:0.###}, upper y {up.Y:0.###}, lower y {lo.Y:0.###} «{lo.Text}» drawn «{Parametric3D.App.Services.Drawing.SheetRender.GlyphSafe(lo.Text)}»");
+        Require(Math.Abs(lo.Y - main.Y) < 1e-9 && up.Y - lo.Y >= up.Height + 0.5, "lower deviation on the text baseline, upper above it without overlap");
+        Require(!Parametric3D.App.Services.Drawing.SheetRender.GlyphSafe(lo.Text).Contains('−') || Parametric3D.App.Services.Drawing.SheetRender.Gost.ContainsGlyph('−'), "no missing minus glyph");
+        // 3. поле основной надписи: курсор ввода в поле — панель не перестраивается
+        dw.Show(); Dispatcher.UIThread.RunJobs();
+        foreach (var s0 in dw.Sections) s0.IsExpanded = true;
+        Dispatcher.UIThread.RunJobs();
+        var fld = (TextBox)dw.TitleField(Parametric3D.Model.Drawing.Fields.Designation)!;
+        fld.Focus(); Dispatcher.UIThread.RunJobs();
+        fld.Text = "PART-01";
+        dw.Change(() => { });   // любое изменение чертежа (пересчёт, перенос) — прежде перестраивало панель
+        Dispatcher.UIThread.RunJobs();
+        bool alive = TopLevel.GetTopLevel(fld) != null && fld.IsFocused;
+        Console.WriteLine($"  title field focused after a drawing change: {alive}, panel rebuild postponed {dw.PropsStale}");
+        Require(alive && fld.Text == "PART-01", "the focused field stays (no rebuild under the cursor)");
+        dw.Canvas.Focus(); Dispatcher.UIThread.RunJobs(); Dispatcher.UIThread.RunJobs();
+        Require(!dw.PropsStale, "the panel is rebuilt after the cursor leaves the fields");
+        // 5. «Язык чертежа»: подпись не под полем
+        foreach (var s0 in dw.Sections) s0.IsExpanded = true;
+        Dispatcher.UIThread.RunJobs(); dw.UpdateLayout(); Dispatcher.UIThread.RunJobs();
+        var langBox = dw.GetVisualDescendants().OfType<ComboBox>().First(x => x.Name == "dr_language");
+        var langLbl = ((Grid)langBox.Parent!).Children.OfType<TextBlock>().First();
+        var natural = new TextBlock { Text = langLbl.Text, FontSize = langLbl.FontSize, FontFamily = langLbl.FontFamily }; natural.Measure(Size.Infinity);
+        double lblRight = langLbl.TranslatePoint(new Point(0, 0), dw)!.Value.X + natural.DesiredSize.Width, boxLeft = langBox.TranslatePoint(new Point(0, 0), dw)!.Value.X;
+        Console.WriteLine($"  «{langLbl.Text}» ends at {lblRight:0.#}, the combo starts at {boxLeft:0.#}");
+        Require(boxLeft >= lblRight - 0.5, "the label is not under the combo box");
+        {
+            // подпись длиннее прежних 110 точек (английский интерфейс, крупный шрифт) — поле правее подписи
+            var longBox = new ComboBox(); var shortBox = new ComboBox();
+            var host = new StackPanel { Children = { SheetWindow.PropRow("Drawing language (long)", longBox), SheetWindow.PropRow("Scale", shortBox) } };
+            Grid.SetIsSharedSizeScope(host, true);
+            var tw = new Window { Width = 400, Height = 120, Content = host }; tw.Show(); Dispatcher.UIThread.RunJobs(); tw.UpdateLayout();
+            var lt = ((Grid)longBox.Parent!).Children.OfType<TextBlock>().First();
+            var nat = new TextBlock { Text = lt.Text, FontSize = lt.FontSize, FontFamily = lt.FontFamily }; nat.Measure(Size.Infinity);
+            double lx = lt.TranslatePoint(new Point(0, 0), tw)!.Value.X, bx = longBox.TranslatePoint(new Point(0, 0), tw)!.Value.X, sx = shortBox.TranslatePoint(new Point(0, 0), tw)!.Value.X;
+            Console.WriteLine($"  long label {nat.DesiredSize.Width:0.#} wide: box at {bx - lx:0.#}, short row box at {sx - lx:0.#}");
+            tw.Close();
+            Require(bx - lx >= Math.Min(nat.DesiredSize.Width, 170) - 0.5 && Math.Abs(bx - sx) < 0.5, "long labels push the fields right, all rows aligned");
+        }
+        // 6. угловой размер: нижняя и левая стороны
+        dw.StartPick("ang1", "");
+        (double X, double Y) S(double x, double y) => d.ToSheet("front", new OpenTK.Mathematics.Vector2d(x, y));
+        var a1 = S(30, 0); dw.PickAt(a1.X, a1.Y); var a2 = S(5, 10); dw.PickAt(a2.X, a2.Y);
+        var an = d.Dims.Last(); double th = an.Value;
+        dw.Change(() => an.Offset = 4); dw.Refresh();   // дуга ближе к вершине, чем отрезки сторон? — стороны от 0: выносных нет
+        var r0 = d.RayRange("front", new OpenTK.Mathematics.Vector2d(an.X1, an.Y1), new OpenTK.Mathematics.Vector2d(Math.Cos(an.X2 * Math.PI / 180), Math.Sin(an.X2 * Math.PI / 180)));
+        Require(r0 is { Min: < 1e-6 } && r0.Value.Max > 50, $"the side segment along the ray: {r0}");
+        var vxs = S(an.X1, an.Y1);
+        bool fromVertex = d.Hit[an].Any(sg => Math.Abs(sg.X1 - vxs.X) < 1e-6 && Math.Abs(sg.Y1 - vxs.Y) < 1e-6 && Math.Sqrt((sg.X2 - sg.X1) * (sg.X2 - sg.X1) + (sg.Y2 - sg.Y1) * (sg.Y2 - sg.Y1)) > 3.5);
+        Require(!fromVertex, "no extension lines from the vertex across the part");
+        Parametric3D.Model.Drawing.DrawingDocument.AngleOuter(an);
+        Require(Math.Abs(an.Value - (360 - th)) < 1e-9, "outer angle 360° − θ");
+        Parametric3D.Model.Drawing.DrawingDocument.AngleOuter(an);
+        Parametric3D.Model.Drawing.DrawingDocument.AngleAdjacent(an);
+        Require(Math.Abs(an.Value - (180 - th)) < 1e-9, "adjacent angle 180° − θ");
+        Parametric3D.Model.Drawing.DrawingDocument.AngleAdjacent(an); Parametric3D.Model.Drawing.DrawingDocument.AngleAdjacent(an); Parametric3D.Model.Drawing.DrawingDocument.AngleAdjacent(an);
+        Require(Math.Abs(an.Value - th) < 1e-9, "four adjacent steps — the angle again");
+        // подпись — в стороне от дуги (ниже нижней стороны)
+        var c0 = S(an.X1, an.Y1);
+        d.MoveDim(an, 0, 0, c0.X + 10, c0.Y - 12);
+        Console.WriteLine($"  angle text shift {an.TextShift:0.#}°, radius {an.Offset:0.##}");
+        Require(Math.Abs(an.TextShift) > 1 && Math.Abs(an.Offset - Math.Sqrt(244)) < 1e-9, "the angle text moves to any place");
+        dw.Refresh();
+        // 8. размер на листе ↔ строка списка
+        var tx = d.HitTexts[dim][0]; double mx = (tx[0].X + tx[2].X) / 2, my = (tx[0].Y + tx[2].Y) / 2;
+        dw.MoveTo(mx, my);
+        Require(dw.ListHighlighted == dim, "hovering the dimension highlights its row in the list");
+        dw.MoveTo(1, 1); dw.ListHover = dim;
+        Require(dw.ListHighlighted == dim && dw.Canvas.Overlay.Any(o => o.Segs.Count == d.Hit[dim].Count), "hovering the row highlights the dimension on the sheet");
+        dw.ListHover = null;
+        // 7. проверка полноты: дюймы, серый размер, щелчок ставит
+        dw.Change(() => { d.Dims.Clear(); d.Units = "in"; }); dw.Refresh();
+        var rows = dw.CheckRows;
+        Console.WriteLine($"  missing: {string.Join("; ", rows.Select(r => r.It.Label + (r.Dim != null ? " [" + r.Dim.Kind + "]" : "")))}");
+        var r60 = rows.First(r => r.It.Value == 60);
+        Require(r60.It.Label.Contains(d.FormatLength(60)) && d.FormatLength(60) == "2,362", "the list in drawing units (inches)");
+        var r5 = rows.First(r => r.It.Kind == 'R');
+        dw.HoverCheckRow(r5.It); dw.Refresh();
+        Require(d.Ghost != null && dw.Pages[0].Ghost is { Texts.Count: > 0 } && r5.Row.Background != Avalonia.Media.Brushes.Transparent, "hovering a row: the row highlighted, the dimension shown grey");
+        if (shots != null) dw.CaptureRenderedFrame()?.Save(Path.Combine(shots, "k170_ghost.png"));
+        int n0 = d.Dims.Count;
+        dw.AddCheckDim(r5.It); dw.Refresh();
+        Require(d.Dims.Count == n0 + 1 && d.Dims.Last().Kind == "rad" && Math.Abs(d.Dims.Last().X2 - 5) < 1e-9 && d.Ghost == null, "click — the dimension is placed");
+        Require(dw.CheckItems.First(i => i.Kind == 'R').Covered, "the radius is no longer missing");
+        // красная линия — подсказка
+        dw.ShowMissing = true; dw.Refresh();
+        var miss = dw.CheckItems.First(i => !i.Covered && i.Dim != null);
+        var geo = Parametric3D.Model.Drawing.DrawingCheck.Geometry(d, miss, part)!.Value;
+        var gp = d.ToSheet(geo.View, (geo.Lines[0][0] + geo.Lines[0][1]) / 2);
+        dw.MoveTo(gp.X, gp.Y);
+        Console.WriteLine($"  red line tip: {dw.CanvasTip}");
+        Require(dw.MissingAt(gp.X, gp.Y) == miss && (dw.CanvasTip ?? "").Contains(miss.Label), "a tooltip with the missing dimension over the red line");
+    }
+    finally { dw.Close(); w.Close(); Environment.SetEnvironmentVariable("P3D_TEMPLATES", null); }
+});
+
 // k169 (замечание 05.11, 16:17, п. 15–17): окно создания документа (шаблоны папки, новый шаблон с новыми параметрами, картинка
 // листа), листы чертежа: «Добавить лист» (формат первого, форма 2а), ярлыки листов, у каждого листа свои данные, «+» — лист из
 // окна создания, запись и чтение всех листов.
@@ -8849,13 +9013,12 @@ Check("UI-DRAWING-K168", () =>
         var iso = d.Views.First(v => v.Name == "iso");
         dw.Down(iso.X, iso.Y); dw.Up();
         var cube = dw.CubeOf(iso);
-        Require(cube is { Faces: 3 }, $"view cube with 3 visible faces: {cube?.Faces}");
-        var hit = dw.FirstCubeFace(iso);
-        Require(hit != null, "a cube face point");
-        dw.Down(hit!.Value.P.X, hit.Value.P.Y); dw.Up();
+        Require(cube is { Shown: true } && dw.SheetCube != null, $"view cube shown: {cube}");
+        // k170: куб окна детали — щелчок по грани «ПЕРЕД» (+Z)
+        dw.SheetCube!.Click(new OpenTK.Mathematics.Vector3i(0, 0, 1), 0);
         var fr = Parametric3D.Model.Drawing.ViewFrame.Of(d.DirOf(iso));
-        Console.WriteLine($"  cube face {hit.Value.N}: toward {fr.Toward}");
-        Require((fr.Toward - hit.Value.N).Length < 1e-9, "the view looks along the face normal");
+        Console.WriteLine($"  cube face +Z: toward {fr.Toward}");
+        Require((fr.Toward - OpenTK.Mathematics.Vector3d.UnitZ).Length < 1e-6, "the view looks along the face normal");
         dw.HomeView(iso);
         // 10. таблица — переключатель
         int tables0 = tpl.Items.Count(i => i.Kind == "table");
@@ -9324,10 +9487,9 @@ Check("UI-DRAWING-K161", () =>
         dw.Down(iso.X, iso.Y); dw.Up();
         Require(dw.Selected == iso, "isometric selected");
         // k168: поворот — ведением по кубу вида (прежде — кольцо)
-        var cubeC = dw.CubeOf(iso)!.Value.C;
-        dw.Down(cubeC.X, cubeC.Y);
-        for (int i = 1; i <= 3; i++) { dw.MoveTo(cubeC.X + 3 * i, cubeC.Y); Dispatcher.UIThread.RunJobs(); }
-        dw.Up();
+        Require(dw.SheetCube is { IsVisible: true }, "view cube shown");
+        for (int i = 1; i <= 3; i++) { dw.SheetCube!.Drag(12, 0); Dispatcher.UIThread.RunJobs(); }
+        dw.SheetCube!.DragEnd();
         Console.WriteLine($"  iso dir after rotation: {iso.Dir}");
         Require(iso.Dir.StartsWith("v:"), "the isometric view rotated");
         dw.HomeView(iso);

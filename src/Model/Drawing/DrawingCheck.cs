@@ -36,7 +36,7 @@ public static class DrawingCheck
                 if (Math.Abs(dm.Value) < 1e-9) continue;   // нулевой размер — совпадение, не размер
                 string unit = kind == 'A' ? "°" : "";
                 string pre = kind switch { 'R' => "R", 'D' => DrawingDocument.Dia, _ => "" };
-                res.Add(new Item($"{sk.Name}: {pre}{Fmt(Math.Abs(dm.Value))}{unit}", Math.Abs(dm.Value), kind, sk, dm, null, Covered(d, Math.Abs(dm.Value), kind)));
+                res.Add(new Item($"{sk.Name}: {pre}{F(d, Math.Abs(dm.Value), kind)}{unit}", Math.Abs(dm.Value), kind, sk, dm, null, Covered(d, Math.Abs(dm.Value), kind)));
             }
         foreach (var f in live)
             foreach (var sl in Params.FeatureDims.Of(f))
@@ -48,12 +48,35 @@ public static class DrawingCheck
                 if (k == ValueRef.KindNumber) continue;   // число (количество, коэффициент) — не размер
                 char kind = k == ValueRef.KindAngle ? 'A' : 'L';
                 if (kind == 'A' && Math.Abs(Math.Abs(v.Value) - 360) < 1e-9) continue;   // полный оборот — не размер
-                res.Add(new Item($"{f.Name}: {sl.Name} {Fmt(Math.Abs(v.Value))}{(kind == 'A' ? "°" : "")}", Math.Abs(v.Value), kind, null, null, f, Covered(d, Math.Abs(v.Value), kind)));
+                res.Add(new Item($"{f.Name}: {sl.Name} {F(d, Math.Abs(v.Value), kind)}{(kind == 'A' ? "°" : "")}", Math.Abs(v.Value), kind, null, null, f, Covered(d, Math.Abs(v.Value), kind)));
             }
         return res;
     }
 
     static string Fmt(double v) => v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+    /// <summary>
+    /// k170 (замечание 05.11, 18:34, п. 7.2): величина в единицах чертежа (мм, дюймы…) и с его запятой — как подписи размеров на
+    /// листе; прежде — всегда мм. Мутация P3D_CHECKUNITS=0.
+    /// </summary>
+    static string F(DrawingDocument d, double v, char kind)
+    {
+        if (UnitsOff) return Fmt(v);
+        if (kind == 'A') return new DrawingDim { Kind = "ang", X2 = 0, Y2 = v }.Caption(d.UsesComma).TrimEnd('°');
+        return d.FormatLength(v);
+    }
+    static readonly bool UnitsOff = Environment.GetEnvironmentVariable("P3D_CHECKUNITS") == "0";
+
+    /// <summary>
+    /// k170 (п. 7.3): недостающий размер как размер чертежа (для серого показа и постановки щелчком): размер эскиза — на виде,
+    /// параллельном эскизу (как «Размеры модели»); поле операции (глубина, угол…) — null (ставится вручную).
+    /// </summary>
+    public static DrawingDim? Suggest(DrawingDocument d, Item it)
+    {
+        if (it.Sketch is not { } sk || it.Dim is not { } dm) return null;
+        var dd = d.FromSketchDim(sk, dm);
+        if (dd != null) dd.Arrange = true;
+        return dd;
+    }
 
     static bool Close(double a, double b) => Math.Abs(a - b) <= Math.Max(1e-3, 1e-6 * Math.Abs(b));
 

@@ -1,6 +1,7 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.VisualTree;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -80,6 +81,10 @@ public sealed partial class SheetWindow : Window
         Width = 1200; Height = 820;
         this.Bind(BackgroundProperty, this.GetResourceObservable("P3.PanelBg"));
         // k168: поверх поля листа — место для поля ввода ячейки таблицы (правка на листе)
+        _canvas.ViewChanged += UpdateCube; _editHost.ClipToBounds = true;
+        Grid.SetIsSharedSizeScope(_props, true);
+        // k170: курсор ввода ушёл из полей панели — отложенное перестроение панели
+        _props.AddHandler(Avalonia.Input.InputElement.LostFocusEvent, (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (_propsStale && !TextInProps()) BuildProps(); }), handledEventsToo: true);
         var scroll = new Border { Child = new Panel { Children = { _canvas, _editHost } }, Background = new SolidColorBrush(Color.Parse("#5A5F66")) };
         // k162: ширина панели свойств — перетаскиванием левого края
         var right = new Border { Child = new ScrollViewer { Content = _props }, Width = kind == Mode.Bom ? 560 : 340, BorderThickness = new Thickness(1, 0, 0, 0), BorderBrush = new SolidColorBrush(Color.FromArgb(0x50, 0x80, 0x80, 0x80)), Background = Brushes.Transparent, Padding = new Thickness(PanelResize.Grip - 1, 0, 0, 0) };
@@ -225,7 +230,8 @@ public sealed partial class SheetWindow : Window
             Sep();
             // k163 (замечание 05.11, 09:22, п. 3): проверка полноты размеров — значок «внимание» или «годно», подсказка — что не
             // указано; щелчок — показать на листе элементы детали без размеров
-            _checkBtn = Btn("state_warning_ico.svg", "Проверка размеров чертежа", () => { ShowMissing = !ShowMissing; UpdateOverlay(); });
+            _checkBtn = Toggle("state_warning_ico.svg", "Проверка размеров чертежа", () => { ShowMissing = !ShowMissing; UpdateOverlay(); }, () => ShowMissing);
+            InitCheckList(_checkBtn);
         }
         if (Kind is Mode.Template or Mode.Drawing)
         {
@@ -356,6 +362,12 @@ public sealed partial class SheetWindow : Window
             items.Add((L("Стрелки снаружи"), () => Change(() => dm.Arrows = 2)));
             items.Add((L("Стрелки по месту"), () => Change(() => dm.Arrows = 0)));
             if (dm.Kind is "rad" or "dia") items.Add((dm.Kind == "rad" ? L("Диаметр вместо радиуса") : L("Радиус вместо диаметра"), () => Change(() => dm.Kind = dm.Kind == "rad" ? "dia" : "rad")));
+            // k170 (замечание 05.11, 18:34, п. 6.2): угловой — внутренний ↔ внешний, смежный
+            if (dm.Kind == "ang")
+            {
+                items.Add((dm.Value > 180 ? L("Внутренний угол") : L("Внешний угол (360° − угол)"), () => Change(() => DrawingDocument.AngleOuter(dm))));
+                items.Add((L("Смежный угол (180° − угол)"), () => Change(() => DrawingDocument.AngleAdjacent(dm))));
+            }
             if (dm.TextShift != 0) items.Add((L("Текст к середине"), () => Change(() => dm.TextShift = 0)));
             items.Add((L("Место — автоматически"), () => Change(() => { dm.Arrange = true; dm.TextShift = 0; })));
             items.Add((L("Удалить"), () => Change(() => { d.Dims.Remove(dm); _sel = null; })));
@@ -433,17 +445,12 @@ public sealed partial class SheetWindow : Window
         var d = Drawing!;
         _guides.Clear();
         // k161 (п. 5): у выбранной изометрии — кнопка «Домой» и кольцо поворота
-        if (_sel is DrawingView sv && IsRotatable(sv) && d.Boxes.TryGetValue(sv.Name, out var sb))
+        // k168 (замечание 05.11, 16:17, п. 8), k170 (18:34, п. 2): у выбранной изометрии — куб вида окна детали (свой элемент
+        // поверх листа, мышь принимает сам). Мутации P3D_VIEWCUBE=0, P3D_SHEETCUBE=0 — кольцо поворота и домик (k161).
+        if ((CubeOff || SheetCubeOff) && _sel is DrawingView sv && IsRotatable(sv) && d.Boxes.TryGetValue(sv.Name, out var sb))
         {
             var (hx, hy) = HomeAt(sb);
             if (Math.Abs(x - hx) < 3.5 && Math.Abs(y - hy) < 3.5) { HomeView(sv); return; }
-            // k168 (замечание 05.11, 16:17, п. 8): куб вида в правом верхнем углу изометрии: щелчок по грани — вид по ней, по
-            // углу — изометрия с этого угла, ведение мышью — поворот. Мутация P3D_VIEWCUBE=0 — кольцо поворота (прежнее).
-            if (!CubeOff)
-            {
-                if (CubeHit(sv, sb, x, y) is { } ch) { _drag = new CubeDrag(sv, ch.Face, ch.Corner); _lastX = x; _lastY = y; _moved = false; _status.Text = L("Куб вида: щелчок — грань или угол, ведение — поворот"); return; }
-            }
-            else
             {
                 double rr = RingR(sb), dc = Math.Sqrt((x - sv.X) * (x - sv.X) + (y - sv.Y) * (y - sv.Y));
                 if (Math.Abs(dc - rr) < 2.5) { _drag = new RotateDrag(sv); _lastX = x; _lastY = y; _moved = false; _status.Text = L("Поворот вида: ведите мышью"); return; }
@@ -470,7 +477,7 @@ public sealed partial class SheetWindow : Window
         if (_pendingEl == null && !AddModifier && _elSel.Count > 0) _elSel.Clear();
         _sel = hitDn ?? (object?)(d.ViewAt(x, y) is { } vn ? d.Views.FirstOrDefault(v => v.Name == vn) : null);
         _drag = _sel; _lastX = x; _lastY = y; _moved = false;
-        if (_sel is DrawingView dv0) _free = (dv0.X, dv0.Y);
+        if (_sel is DrawingView dv0) { _free = (dv0.X, dv0.Y); if (IsRotatable(dv0)) PlaceCube(dv0); }
         _status.Text = _sel switch
         {
             DrawingDim dm => L("Размер {0}: перенос мышью, Delete — удалить", d.CaptionOf(dm)),
@@ -505,7 +512,6 @@ public sealed partial class SheetWindow : Window
                         break;
                     }
                 case RotateDrag rd: RotateView(rd.View, dx, dy, coarse: true); break;
-                case CubeDrag cd: RotateView(cd.View, dx * 4, dy * 4, coarse: true); break;
                 case LineEndDrag le: if (le.End == 0) { le.It.X += dx; le.It.Y += dy; } else { le.It.X2 += dx; le.It.Y2 += dy; } break;
                 case TemplateItem ti when ti.Kind == "line": ti.X += dx; ti.Y += dy; ti.X2 += dx; ti.Y2 += dy; break;
                 case TableDrag td:
@@ -540,12 +546,8 @@ public sealed partial class SheetWindow : Window
     public void Up()
     {
         if (_drag is RotateDrag rd && _moved && _input != null) { _scene?.Rebuild(Drawing!, rd.View.Name, _input.Bodies); }
-        if (_drag is CubeDrag cdu)
-        {
-            if (_moved && _input != null) _scene?.Rebuild(Drawing!, cdu.View.Name, _input.Bodies);
-            else if (!_moved) { var cv = cdu; _drag = null; CubeOrient(cv.View, cv.Face, cv.Corner); _guides.Clear(); UpdateOverlay(); return; }
-        }
         if (_drag != null && _moved) { UpdateTitle(); RefreshNow(); BuildProps(); }
+        if (_drag is DrawingView mv && _moved && IsRotatable(mv)) PlaceCube(mv);
         else if (_pendingEl is { } pe)
         {
             if (!AddModifier || _elSel.Count > 0 && _elSel[0].View != pe.View) { bool again = _elSel.Count == 1 && SameEl(_elSel[0].El, pe.El); _elSel.Clear(); if (!again) _elSel.Add(pe); }
@@ -694,6 +696,10 @@ public sealed partial class SheetWindow : Window
             // k167 (п. 9): в строке состояния — что под курсором, иначе — что выбрано
             string hs = _hoverTpl is { } ht ? DescribeTpl(ht.It, ht.Part, ht.Row, ht.Col) : _hoverEl is { } he2 ? DescribeEl(he2.View, he2.El) : Describe(_hover);
             if (hs.Length == 0) hs = SelectionText();
+            // k170 (п. 7.4): курсор на красной линии проверки полноты — подсказка: какого размера не хватает
+            var mi = MissingAt(x, y);
+            if (mi != null) hs = MissingTip(mi);
+            ShowMissingTip(mi);
             if (hs.Length > 0) _status.Text = hs;
         }
         UpdateOverlay();
@@ -808,31 +814,45 @@ public sealed partial class SheetWindow : Window
         return cands.Count == 0 ? null : cands[0];
     }
 
+    readonly Dictionary<DrawingDim, Panel> _dimRows = new(ReferenceEqualityComparer.Instance);
+    DrawingDim? _listHover;
+    /// <summary>Подсвеченная строка списка размеров (для проверок): размер под курсором на листе или наведённая строка.</summary>
+    public DrawingDim? ListHighlighted { get; private set; }
+    public DrawingDim? ListHover { get => _listHover; set { _listHover = value; UpdateOverlay(); } }
+    static readonly bool DimLinkOff = Environment.GetEnvironmentVariable("P3D_DIMLINK") == "0";
+    static readonly IBrush RowHover = new SolidColorBrush(Color.FromArgb(70, 30, 140, 255)), RowSel = new SolidColorBrush(Color.FromArgb(60, 255, 120, 0));
+    void UpdateDimRows()
+    {
+        ListHighlighted = DimLinkOff ? null : _hover as DrawingDim ?? _listHover;
+        foreach (var (dm, row) in _dimRows)
+            row.Background = !DimLinkOff && ReferenceEquals(dm, ListHighlighted) ? RowHover : ReferenceEquals(dm, _sel) ? RowSel : Brushes.Transparent;
+    }
+
     void UpdateOverlay()
     {
         UpdateToggles();
+        UpdateCube();
+        UpdateDimRows();
         _canvas.Overlay.Clear();
         if (Kind == Mode.Drawing && Drawing != null)
         {
             if (_hover != null && _hover != _sel && !(_hover is DrawingView && _hoverEl != null)) _canvas.Overlay.Add((SegsOf(_hover), HoverColor, _hover is DrawingView ? 1.2f : 3f));
             if (_sel != null) _canvas.Overlay.Add((SegsOf(_sel), SelColor, _sel is DrawingView ? 1.6f : 3f));
+            if (!DimLinkOff && _listHover is { } lh && lh != _sel && Drawing.Dims.Contains(lh)) _canvas.Overlay.Add((SegsOf(lh), HoverColor, 3f));
             if (_hoverSegs != null) _canvas.Overlay.Add((_hoverSegs, TargetColor, 3f));
             if (_pick == null)
             {
                 foreach (var se in _elSel) if (Drawing.Xf.ContainsKey(se.View)) _canvas.Overlay.Add((ElementSegs(se.View, se.El), SelColor, 3f));
                 if (_hoverEl is { } hel && Drawing.Xf.ContainsKey(hel.View)) _canvas.Overlay.Add((ElementSegs(hel.View, hel.El), HoverColor, 3f));
             }
-            if (ShowMissing)
-                foreach (var it in CheckItems.Where(i => !i.Covered))
-                    if (DrawingCheck.Geometry(Drawing, it, _input?.Part) is { } geo && Drawing.Xf.ContainsKey(geo.View))
-                        _canvas.Overlay.Add((geo.Lines.SelectMany(l => SheetSegs(geo.View, l)).ToList(), MissingColor, 2.5f));
+            MissingOverlay();
             if (_guides.Count > 0) _canvas.Overlay.Add((_guides.Select(gl => { var (x1, y1, x2, y2) = gl; return x1 == x2 ? (x1, y1 - 30, x2, y2 + 30) : (x1 - 30, y1, x2 + 30, y2); }).ToList(), TargetColor, 1.2f));
             if (_hoverTpl is { } htp) _canvas.Overlay.Add((TemplateSegs(htp.It, htp.Part, htp.Row, htp.Col), HoverColor, 2.5f));
             if (_sel is TemplateItem sti) _canvas.Overlay.Add((TemplateSegs(sti, sti.Kind == "line" ? "line" : "table", -1, -1), SelColor, 2.5f));
-            if (_sel is DrawingView gv && IsRotatable(gv) && Drawing.Boxes.TryGetValue(gv.Name, out var gb))
+            if ((CubeOff || SheetCubeOff) && _sel is DrawingView gv && IsRotatable(gv) && Drawing.Boxes.TryGetValue(gv.Name, out var gb))
             {
-                // k168: куб вида (прежде — кольцо поворота) и кнопка «Домой» (домик)
-                _canvas.Overlay.Add((CubeOff ? Ring(gv.X, gv.Y, RingR(gb)) : CubeSegs(gv, gb), GizmoColor, 2f));
+                // k161: кольцо поворота и кнопка «Домой» (домик); k170 — куб вида окна детали (UpdateCube)
+                _canvas.Overlay.Add((Ring(gv.X, gv.Y, RingR(gb)), GizmoColor, 2f));
                 var (hx, hy) = HomeAt(gb);
                 _canvas.Overlay.Add((new List<(double, double, double, double)>
                 {
@@ -877,6 +897,8 @@ public sealed partial class SheetWindow : Window
         if (c.IsFocused) _pendingFocus = null;
     }
     readonly Dictionary<string, Control> _fieldControls = new();
+    /// <summary>Поле основной надписи в панели (для проверок).</summary>
+    public Control? TitleField(string field) => _fieldControls.GetValueOrDefault(field);
 
     // ------------------------------------------------------------------ щелчки по виду: размеры, обозначения, разрезы
 
@@ -1388,10 +1410,26 @@ public sealed partial class SheetWindow : Window
     static TextBox Field(string text, Action<string> set, double width = double.NaN)
     {
         var tb = new TextBox { Text = text, MinWidth = 40, Width = width, Padding = new Thickness(4, 2), FontSize = 12 };
-        tb.LostFocus += (_, _) => set(tb.Text ?? "");
-        tb.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) set(tb.Text ?? ""); };
+        // k170 (замечание 05.11, 18:34, п. 3): значение применяется, только если изменено (прежде — при каждой потере фокуса, и
+        // панель перестраивалась под щелчком по соседнему полю: поле, по которому щёлкнули, пропадало)
+        string last = text;
+        void Commit() { var t = tb.Text ?? ""; if (t == last && !PropsGuardOff) return; last = t; set(t); }
+        tb.LostFocus += (_, _) => Commit();
+        tb.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) Commit(); };
         return tb;
     }
+    internal static readonly bool PropsGuardOff = Environment.GetEnvironmentVariable("P3D_PROPSGUARD") == "0";
+
+    /// <summary>Курсор ввода — в текстовом поле панели свойств.</summary>
+    public bool TextInProps()
+    {
+        if (FocusManager?.GetFocusedElement() is not Control c) return false;
+        for (Control? p = c; p != null; p = p.Parent as Control) if (ReferenceEquals(p, _props)) return c is TextBox || c.FindAncestorOfType<TextBox>() != null;
+        return false;
+    }
+    bool _propsStale;
+    /// <summary>Перестроение панели ждало ухода курсора ввода из полей панели (для проверок).</summary>
+    public bool PropsStale => _propsStale;
 
     static readonly (string Field, string Label)[] FieldLabels =
     {
@@ -1420,6 +1458,11 @@ public sealed partial class SheetWindow : Window
 
     void BuildProps()
     {
+        // k170 (замечание 05.11, 18:34, п. 3): пока курсор ввода в текстовом поле панели (поля основной надписи, допуски…),
+        // панель не перестраивается: перестроение — когда курсор уйдёт из полей панели. Прежде каждое применённое значение и
+        // каждый пересчёт видов перестраивали панель под курсором: поле теряло фокус и набранный текст. Мутация P3D_PROPSGUARD=0.
+        if (!PropsGuardOff && _pendingFocus == null && TextInProps()) { _propsStale = true; return; }
+        _propsStale = false;
         BuildPropsCore();
         if (_pendingFocus != null) Avalonia.Threading.Dispatcher.UIThread.Post(FocusPending, Avalonia.Threading.DispatcherPriority.Background);
     }
@@ -1427,7 +1470,7 @@ public sealed partial class SheetWindow : Window
     void BuildPropsCore()
     {
         _props.Children.Clear();
-        _fieldControls.Clear();
+        _fieldControls.Clear(); _dimRows.Clear();
         if (Kind is Mode.Template or Mode.Drawing)
         {
             if (Kind == Mode.Drawing)
@@ -1674,8 +1717,22 @@ public sealed partial class SheetWindow : Window
                 var tlo = Field(dim.TolLo, t => { if (t != dim.TolLo) Change(() => { dim.TolLo = t; dim.Tol = ""; }); }, 64); tlo.Watermark = "−0,1"; tlo.Name = "dr_tol_lo";
                 ToolTip.SetTip(tup, L("Верхнее отклонение (Upper): +0,015"));
                 ToolTip.SetTip(tlo, L("Нижнее отклонение (Lower): 0,010 или −0,010; равные верхнему по величине — «±»"));
-                row.Children.Add(tup); row.Children.Add(tlo); row.Children.Add(Del(() => d.Dims.Remove(dim)));
-                if (dim == _sel) row.Background = new SolidColorBrush(Color.FromArgb(60, 255, 120, 0));
+                row.Children.Add(tup); row.Children.Add(tlo);
+                if (dim.Kind == "ang")
+                {
+                    var outer = new Button { Content = dim.Value > 180 ? "∠ " + L("внеш.") : "∠ " + L("внутр."), Padding = new Thickness(4, 0), FontSize = 11, Name = "dr_ang_outer" };
+                    ToolTip.SetTip(outer, L("Угол: внутренний ↔ внешний (360° − угол); смежный — в меню размера"));
+                    outer.Click += (_, _) => Change(() => DrawingDocument.AngleOuter(dim));
+                    row.Children.Add(outer);
+                }
+                row.Children.Add(Del(() => d.Dims.Remove(dim)));
+                // k170 (замечание 05.11, 18:34, п. 8): строка списка ↔ размер на листе: курсор над строкой — размер подсвечен на
+                // листе, курсор над размером на листе — строка подсвечена; щелчок по строке — размер выбран
+                row.Background = Brushes.Transparent;
+                row.PointerEntered += (_, _) => { _listHover = dim; UpdateOverlay(); };
+                row.PointerExited += (_, _) => { if (_listHover == dim) { _listHover = null; UpdateOverlay(); } };
+                row.PointerPressed += (_, e) => { if (e.Source is TextBlock or StackPanel) { _sel = dim; UpdateOverlay(); _status.Text = Describe(dim); } };
+                _dimRows[dim] = row;
                 dp.Children.Add(row);
             }
         }
@@ -1720,10 +1777,17 @@ public sealed partial class SheetWindow : Window
 
     static string FormName(TitleBlockForm f) => f switch { TitleBlockForm.Form1 => L("форма 1"), TitleBlockForm.Form2 => L("форма 2"), TitleBlockForm.Form2a => L("форма 2а"), _ => "ISO 7200" };
 
+    internal static readonly bool LabelsOff = Environment.GetEnvironmentVariable("P3D_PROPSLABELS") == "0";
+    /// <summary>Строка панели «подпись — поле» (для проверок).</summary>
+    public static Control PropRow(string label, Control c) => Row(label, c);
     static Control Row(string label, Control c)
     {
-        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("110,*") };
-        var t = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center };
+        // k170 (замечание 05.11, 18:34, п. 5): столбец подписей — по самой длинной подписи панели (общая ширина у всех строк,
+        // 110…170), поля — правее; прежде 110 точек, и «Язык чертежа» уходил под поле. Мутация P3D_PROPSLABELS=0.
+        var g = new Grid();
+        if (LabelsOff) g.ColumnDefinitions = new ColumnDefinitions("110,*");
+        else { g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MinWidth = 110, SharedSizeGroup = "plabel" }); g.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star)); }
+        var t = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Margin = LabelsOff ? default : new Thickness(0, 0, 8, 0), MaxWidth = LabelsOff ? double.PositiveInfinity : 170, TextWrapping = LabelsOff ? TextWrapping.NoWrap : TextWrapping.Wrap };
         Grid.SetColumn(c, 1); g.Children.Add(t); g.Children.Add(c);
         return g;
     }
@@ -1878,7 +1942,8 @@ public sealed partial class SheetWindow : Window
               "\n" + L("Щелчок — показать на чертеже элементы без размеров (красным).");
         if (ok != _checkOk || _checkBtn.Content == null) _checkBtn.Content = Icons.IconProvider.Content(ok ? "state_ok_ico.svg" : "state_warning_ico.svg", tip, 26);
         _checkOk = ok;
-        ToolTip.SetTip(_checkBtn, tip);
+        // k170 (п. 7.3): вместо подсказки — список под кнопкой (наведение — серый размер на листе, щелчок — размер поставлен)
+        if (CheckListOff) ToolTip.SetTip(_checkBtn, tip); else { ToolTip.SetTip(_checkBtn, null); FillCheckList(miss); }
     }
     static readonly SkiaSharp.SKColor MissingColor = new(220, 30, 30, 200);
 

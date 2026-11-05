@@ -31,6 +31,15 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
 
     public ModelViewport? Viewport { get; set; }
 
+    /// <summary>
+    /// k170 (замечание 05.11, 18:34, п. 2): ВЛАДЕЛЕЦ КУБА БЕЗ КАМЕРЫ — изометрия на листе чертежа. Куб тот же, что в окне детали
+    /// (надписи, грани, рёбра, углы, кольцо, «Домой», повороты на 90°), поворот берётся и задаётся через владельца.
+    /// </summary>
+    public IViewCubeHost? Host { get; set; }
+    /// <summary>Кнопки поворота на 90° видны всегда (а не только во взгляде по нормали к грани).</summary>
+    public bool AlwaysRoll { get; set; }
+    bool HasView => Viewport != null || Host != null;
+
     private const double Margin = 1.25;      // доля полуразмера контрола под куб с кольцом
     private const double Band = 0.26;        // ширина полосы ребра (доля стороны грани в [-1, 1] → 2·Band)
     private const double RingR = 1.85, RingW = 0.22;
@@ -67,7 +76,7 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
         new(-Vector3.UnitZ, -Vector3.UnitX, Vector3.UnitY, FaceLabels[5]),
     };
 
-    private Quaternion Rot => Viewport?.Camera.State.Rotation ?? Quaternion.Identity;
+    private Quaternion Rot => Host?.Rotation ?? Viewport?.Camera.State.Rotation ?? Quaternion.Identity;
     private double Scale => Math.Min(Bounds.Width, Bounds.Height) / 2 / (RingR + RingW + 0.15);
     private APoint Center => new(Bounds.Width / 2, Bounds.Height / 2 + 6 * K);
     /// <summary>k132 (замечание 28.10, 23:42, п. 10): масштаб куба и его кнопок («Домой», повороты, стрелки) от размера 150.</summary>
@@ -111,7 +120,7 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
     /// <summary>Взгляд по нормали к грани: ось, к которой ближе всего направление взгляда.</summary>
     private Face? AlignedFace()
     {
-        if (Viewport == null) return null;
+        if (!HasView) return null;
         foreach (var f in Faces) if (ToCam(f.N).Z > 0.9995f) return f;
         return null;
     }
@@ -123,7 +132,7 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
 
     public override void Render(DrawingContext dc)
     {
-        if (Viewport == null) return;
+        if (!HasView) return;
         var faceBrush = Res("P3.CubeFace", "#C9CED6");
         var edgePen = new Pen(Res("P3.CubeEdge", "#5B6270"), 1);
         var textBrush = Res("P3.CubeText", "#2A2E36");
@@ -223,7 +232,7 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
     {
         // «Домой»
         DrawIconOr(dc, "viewcube_home_but.svg", HomeRect, _hoverExtra == Extra.Home ? accent : dim, HouseGeometry(HomeRect));
-        if (AlignedFace() == null) return;
+        if (AlignedFace() == null && !AlwaysRoll) return;
         DrawIconOr(dc, "viewcube_rot_ccw_but.svg", CcwRect, _hoverExtra == Extra.RotCcw ? accent : dim, ArcArrow(CcwRect, false));
         DrawIconOr(dc, "viewcube_rot_cw_but.svg", CwRect, _hoverExtra == Extra.RotCw ? accent : dim, ArcArrow(CwRect, true));
         foreach (var (e, p) in Triangles())
@@ -301,6 +310,11 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
     private (Vector3i Region, Extra Extra) HitTest(APoint p)
     {
         if (HomeRect.Inflate(4).Contains(p)) return (default, Extra.Home);
+        if (AlwaysRoll && AlignedFace() == null)
+        {
+            if (CcwRect.Inflate(3).Contains(p)) return (default, Extra.RotCcw);
+            if (CwRect.Inflate(3).Contains(p)) return (default, Extra.RotCw);
+        }
         if (AlignedFace() != null)
         {
             if (CcwRect.Inflate(3).Contains(p)) return (default, Extra.RotCcw);
@@ -349,6 +363,13 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
     {
         base.OnPointerMoved(e);
         var p = e.GetPosition(this);
+        if (_pressed && Host != null)
+        {
+            if (!_dragging && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > 3) _dragging = true;
+            if (_dragging) { Drag((float)(p.X - _last.X), (float)(p.Y - _last.Y)); InvalidateVisual(); }
+            _last = p;
+            return;
+        }
         if (_pressed && Viewport != null)
         {
             if (!_dragging && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > 3) _dragging = true;
@@ -397,7 +418,7 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
         if (!_pressed) return;
         _pressed = false;
         e.Pointer.Capture(null);
-        if (_dragging) { _dragging = false; return; }
+        if (_dragging) { _dragging = false; Host?.DragEnd(); return; }
         Click(_pressedRegion, _pressedExtra);
         e.Handled = true;
     }
@@ -405,8 +426,27 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
     /// <summary>Действие куба (для проверок — без мыши).</summary>
     public void Click(Vector3i region, int extra) => Click(region, (Extra)extra);
 
+    /// <summary>Ведение мышью у владельца без камеры (для проверок — без мыши): как Camera.Orbit, кольцо — вокруг вертикали.</summary>
+    public void Drag(float dx, float dy, bool ring = false)
+    {
+        if (Host == null) return;
+        var q = Host.Rotation;
+        if (ring || _pressedExtra == Extra.Ring) q = q * Quaternion.FromAxisAngle(Vector3.UnitY, dx * 0.012f);
+        else
+        {
+            const float k = 0.006f * 2.2f;
+            q = Quaternion.FromAxisAngle(Vector3.UnitX, dy * k) * q * Quaternion.FromAxisAngle(Vector3.UnitY, dx * k);
+        }
+        q.Normalize();
+        Host.Live(q);
+    }
+    public void DragEnd() => Host?.DragEnd();
+    /// <summary>Область куба по направлению (−1, 0, 1)³ и кнопки: 1 — «Домой», 2 — против часовой, 3 — по часовой.</summary>
+    public const int HomeButton = 1, CcwButton = 2, CwButton = 3;
+
     private void Click(Vector3i region, Extra extra)
     {
+        if (Host != null) { HostClick(region, extra); return; }
         if (Viewport == null) return;
         var q = Viewport.Camera.State.Rotation;
         switch (extra)
@@ -425,8 +465,41 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
         Viewport.AnimateTo(ViewMath.LookFrom(new Vector3(region.X, region.Y, region.Z), Viewport.Camera.Up));
     }
 
+    private void HostClick(Vector3i region, Extra extra)
+    {
+        var h = Host!; var q = h.Rotation;
+        switch (extra)
+        {
+            case Extra.Home: h.Home(); InvalidateVisual(); return;
+            case Extra.RotCcw: h.Orient(Quaternion.FromAxisAngle(Vector3.UnitZ, MathHelper.PiOver2) * q); InvalidateVisual(); return;
+            case Extra.RotCw: h.Orient(Quaternion.FromAxisAngle(Vector3.UnitZ, -MathHelper.PiOver2) * q); InvalidateVisual(); return;
+            case Extra.Up: h.Orient(Quaternion.FromAxisAngle(Vector3.UnitX, MathHelper.PiOver2) * q); InvalidateVisual(); return;
+            case Extra.Down: h.Orient(Quaternion.FromAxisAngle(Vector3.UnitX, -MathHelper.PiOver2) * q); InvalidateVisual(); return;
+            case Extra.Left: h.Orient(Quaternion.FromAxisAngle(Vector3.UnitY, MathHelper.PiOver2) * q); InvalidateVisual(); return;
+            case Extra.Right: h.Orient(Quaternion.FromAxisAngle(Vector3.UnitY, -MathHelper.PiOver2) * q); InvalidateVisual(); return;
+            case Extra.Ring: return;
+        }
+        if (region == default) return;
+        var up = Vector3.Transform(Vector3.UnitY, Quaternion.Invert(q));
+        h.Orient(ViewMath.LookFrom(new Vector3(region.X, region.Y, region.Z), up));
+        InvalidateVisual();
+    }
+
     /// <summary>Перерисовать вслед за камерой.</summary>
     public void Sync() => InvalidateVisual();
+}
+
+/// <summary>k170: владелец куба вида без камеры (изометрия на листе): поворот «мир → камера», как Camera.State.Rotation.</summary>
+public interface IViewCubeHost
+{
+    Quaternion Rotation { get; }
+    /// <summary>Поворот при ведении мышью (быстрый показ).</summary>
+    void Live(Quaternion q);
+    /// <summary>Ведение закончено — точный показ.</summary>
+    void DragEnd();
+    /// <summary>Щелчок по грани, ребру, углу или повороту — новый поворот.</summary>
+    void Orient(Quaternion q);
+    void Home();
 }
 
 /// <summary>Повороты камеры по направлению взгляда.</summary>

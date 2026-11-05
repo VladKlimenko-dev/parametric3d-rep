@@ -17,7 +17,6 @@ public sealed partial class SheetWindow
 {
     sealed record LineEndDrag(TemplateItem It, int End);
     sealed record TableDrag(TemplateItem It);
-    sealed record CubeDrag(DrawingView View, Vector3d? Face, Vector3d? Corner);
 
     /// <summary>Под курсором — элемент шаблона и что именно: end0, end1, line, head, cell, row, col.</summary>
     public (TemplateItem It, string Part, int Row, int Col)? TemplateAt(double x, double y)
@@ -228,89 +227,101 @@ public sealed partial class SheetWindow
     /// <summary>Пункты меню строки или столбца таблицы в точке (для проверок).</summary>
     public List<(string Text, Action Run)> TableMenuAt(double x, double y) => TemplateAt(x, y) is { } t ? TableMenu(t.It, t.Part, t.Row, t.Col) : new();
 
-    // ------------------------------------------------------------------ куб вида у изометрии (п. 8)
+    // ------------------------------------------------------------------ куб вида у изометрии (п. 8; k170 — п. 2 замечания 18:34)
 
-    /// <summary>Куб вида: центр, ребро (мм листа), углы на листе и видимые грани (нормаль, углы).</summary>
-    (Vector2d C, double S, Vector2d[] P, List<(Vector3d N, int[] Q)> Faces) Cube(DrawingView v, (double X0, double Y0, double X1, double Y1) b)
+    /// <summary>
+    /// k170 (замечание 05.11, 18:34, п. 2): КУБ ВИДА — ТОТ ЖЕ, ЧТО В ОКНЕ ДЕТАЛИ (Viewport.ViewCube): надписи граней, рёбра и
+    /// углы (щелчок — вид по ним), ведение — поворот, кольцо — вокруг вертикали; слева сверху «Домой», сверху — поворот на 90°
+    /// против и по часовой. Куб стоит на месте листа: место (правый верхний угол рамки вида) задаётся, только когда изометрию
+    /// выбирают щелчком, и не меняется при повороте (рамка вида при повороте меняется). Прежде (k168) — каркас куба по рамке
+    /// вида, без надписей, и он «уезжал» при повороте. Мутация P3D_SHEETCUBE=0 — прежний каркас.
+    /// </summary>
+    sealed class SheetCubeHost : Viewport.IViewCubeHost
     {
-        var f = ViewFrame.Of(Drawing!.DirOf(v));
-        double s = 4.5;
-        var c = new Vector2d(b.X1 - 7, b.Y1 - 7);
-        var corners = new Vector3d[8];
-        for (int i = 0; i < 8; i++) corners[i] = new Vector3d((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1);
-        var P = corners.Select(q => c + new Vector2d(Vector3d.Dot(q, f.Right), Vector3d.Dot(q, f.Up)) * (s / 2)).ToArray();
-        var faces = new List<(Vector3d, int[])>
+        readonly SheetWindow _w; public DrawingView? View;
+        public SheetCubeHost(SheetWindow w) => _w = w;
+        public Quaternion Rotation => View == null ? Quaternion.Identity : ToQuat(ViewFrame.Of(_w.Drawing!.DirOf(View)));
+        public void Live(Quaternion q) { if (View == null) return; _w.SetFrame(View, FromQuat(q), coarse: true); _w._cubeMoved = true; _w.RequestRefresh(); }
+        public void DragEnd()
         {
-            (Vector3d.UnitX, new[] { 1, 3, 7, 5 }), (-Vector3d.UnitX, new[] { 0, 4, 6, 2 }),
-            (Vector3d.UnitY, new[] { 2, 6, 7, 3 }), (-Vector3d.UnitY, new[] { 0, 1, 5, 4 }),
-            (Vector3d.UnitZ, new[] { 4, 5, 7, 6 }), (-Vector3d.UnitZ, new[] { 0, 2, 3, 1 }),
-        };
-        return (c, s, P, faces.Where(fc => Vector3d.Dot(fc.Item1, f.Toward) > 1e-6).ToList());
+            if (View == null || !_w._cubeMoved) return;
+            _w._cubeMoved = false;
+            if (_w._input != null) _w._scene?.Rebuild(_w.Drawing!, View.Name, _w._input.Bodies);
+            _w.UpdateTitle(); _w.RefreshNow(); _w.BuildProps();
+        }
+        public void Orient(Quaternion q) { if (View == null) return; var v = View; _w.Change(() => _w.SetFrame(v, FromQuat(q), coarse: false)); }
+        public void Home() { if (View != null) _w.HomeView(View); }
+    }
+    internal static readonly bool SheetCubeOff = Environment.GetEnvironmentVariable("P3D_SHEETCUBE") == "0";
+    SheetCubeHost? _cubeHost; Viewport.ViewCube? _cube; (string View, double X, double Y)? _cubeAt; bool _cubeMoved;
+    /// <summary>Куб вида листа (для проверок).</summary>
+    public Viewport.ViewCube? SheetCube => _cube;
+    public const double SheetCubePx = 120;
+
+    /// <summary>Поворот «мир → камера» по рамке вида: строки — вправо, вверх, к наблюдателю (как ViewMath.FromForwardUp).</summary>
+    public static Quaternion ToQuat(ViewFrame f)
+    {
+        var r = f.Right; var u = f.Up; var t = f.Toward;
+        var m = new Matrix3((float)r.X, (float)r.Y, (float)r.Z, (float)u.X, (float)u.Y, (float)u.Z, (float)t.X, (float)t.Y, (float)t.Z);
+        var q = Quaternion.FromMatrix(m); q.Normalize(); return q;
+    }
+    public static ViewFrame FromQuat(Quaternion q)
+    {
+        var inv = Quaternion.Invert(q);
+        var r = Vector3.Transform(Vector3.UnitX, inv); var u = Vector3.Transform(Vector3.UnitY, inv);
+        // округление float: оси к точным ±1 и 0, если ближе 1e-5 (виды по граням — точные, как у ViewFrame.Of)
+        static Vector3d Clean(Vector3 a) { var v = new Vector3d(a.X, a.Y, a.Z); v = new(Snap(v.X), Snap(v.Y), Snap(v.Z)); return v.Normalized(); }
+        static double Snap(double x) => Math.Abs(x) < 1e-5 ? 0 : Math.Abs(Math.Abs(x) - 1) < 1e-5 ? Math.Sign(x) : x;
+        var rr = Clean(r); var uu = Clean(u); uu = (uu - rr * Vector3d.Dot(uu, rr)).Normalized();
+        return new ViewFrame(rr, uu);
+    }
+    void SetFrame(DrawingView v, ViewFrame f, bool coarse)
+    {
+        v.Dir = f.Encode();
+        EnsureScene();
+        if (_input != null) { if (coarse) _scene!.RebuildFast(Drawing!, v.Name, _input.Bodies); else _scene!.Rebuild(Drawing!, v.Name, _input.Bodies); }
+        Dirty = true;
     }
 
-    /// <summary>Куб под курсором: угол (направление) или грань (нормаль); null — мимо.</summary>
-    (Vector3d? Face, Vector3d? Corner)? CubeHit(DrawingView v, (double, double, double, double) b, double x, double y)
+    /// <summary>Изометрию выбрали щелчком — куб на её правый верхний угол (место листа запоминается).</summary>
+    void PlaceCube(DrawingView v)
     {
-        var (c, s, P, faces) = Cube(v, b);
-        var q = new Vector2d(x, y);
-        var vis = faces.SelectMany(f => f.Q).Distinct().ToList();
-        foreach (int i in vis)
-            if ((P[i] - q).Length < 0.9) return (null, new Vector3d((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
-        foreach (var (n, quad) in faces)
-        {
-            bool inside = true; double sign = 0;
-            for (int k = 0; k < 4 && inside; k++)
-            {
-                var a = P[quad[k]]; var bb = P[quad[(k + 1) % 4]];
-                double cr = (bb.X - a.X) * (q.Y - a.Y) - (bb.Y - a.Y) * (q.X - a.X);
-                if (sign == 0) sign = Math.Sign(cr); else if (Math.Sign(cr) != sign && Math.Abs(cr) > 1e-12) inside = false;
-            }
-            if (inside) return (n, null);
-        }
-        return null;
+        if (SheetCubeOff || CubeOff || Drawing == null || !Drawing.Boxes.TryGetValue(v.Name, out var b)) return;
+        _cubeAt = (v.Name, b.X1, b.Y1);
+        UpdateCube();
     }
-
-    List<(double, double, double, double)> CubeSegs(DrawingView v, (double X0, double Y0, double X1, double Y1) b, Vector3d? hot = null)
+    /// <summary>Показать или спрятать куб: виден у выбранной изометрии, на запомненном месте листа (с переносом и увеличением листа).</summary>
+    void UpdateCube()
     {
-        var (c, s, P, faces) = Cube(v, b);
-        var segs = new List<(double, double, double, double)>();
-        foreach (var (n, q) in faces)
+        bool show = !SheetCubeOff && !CubeOff && Kind == Mode.Drawing && _sel is DrawingView v && IsRotatable(v) && _cubeAt is { } at && at.View == v.Name;
+        if (!show) { if (_cube != null) _cube.IsVisible = false; return; }
+        var view = (DrawingView)_sel!;
+        if (_cube == null)
         {
-            for (int k = 0; k < 4; k++) { var a = P[q[k]]; var e = P[q[(k + 1) % 4]]; segs.Add((a.X, a.Y, e.X, e.Y)); }
-            // буква грани — короткий штрих по нормали (какая грань — видно по положению)
+            _cubeHost = new SheetCubeHost(this);
+            _cube = new Viewport.ViewCube { Host = _cubeHost, AlwaysRoll = true, Name = "dr_view_cube" };
+            _editHost.Children.Add(_cube);
         }
-        return segs;
+        _cubeHost!.View = view;
+        _cube.Width = _cube.Height = SheetCubePx;
+        var p = _canvas.FromSheet(_cubeAt!.Value.X, _cubeAt.Value.Y);
+        // у правого верхнего угла рамки вида, почти целиком снаружи (куб не закрывает сам вид)
+        Avalonia.Controls.Canvas.SetLeft(_cube, p.X - SheetCubePx * 0.3);
+        Avalonia.Controls.Canvas.SetTop(_cube, p.Y - SheetCubePx * 0.72);
+        _cube.IsVisible = true;
+        _cube.InvalidateVisual();
     }
 
     /// <summary>Вид куба: грань — взгляд по нормали (спереди, сверху…), угол — изометрия с этого угла.</summary>
     public void CubeOrient(DrawingView v, Vector3d? face, Vector3d? corner)
     {
-        ViewFrame f;
-        if (face is { } n)
-        {
-            string name = n.X > 0.5 ? "right" : n.X < -0.5 ? "left" : n.Y > 0.5 ? "top" : n.Y < -0.5 ? "bottom" : n.Z > 0.5 ? "front" : "back";
-            f = ViewFrame.Of(name);
-        }
-        else if (corner is { } cn)
-        {
-            var t = cn.Normalized();
-            var r = Vector3d.Cross(Vector3d.UnitY, t).Normalized();
-            f = new ViewFrame(r, Vector3d.Cross(t, r).Normalized());
-        }
-        else return;
-        Change(() => { v.Dir = f.Encode(); EnsureScene(); if (_input != null) _scene!.Rebuild(Drawing!, v.Name, _input.Bodies); });
+        var d = face ?? corner; if (d is not { } dd) return;
+        var up = Vector3.UnitY;
+        if (_cubeHost != null) up = Vector3.Transform(Vector3.UnitY, Quaternion.Invert(ToQuat(ViewFrame.Of(Drawing!.DirOf(v)))));
+        var q = Viewport.ViewMath.LookFrom(new Vector3((float)dd.X, (float)dd.Y, (float)dd.Z), up);
+        Change(() => SetFrame(v, FromQuat(q), coarse: false));
         _status.Text = face != null ? L("Вид куба: грань") : L("Вид куба: изометрия с угла");
     }
-    /// <summary>Точка внутри первой видимой грани куба и её нормаль (для проверок).</summary>
-    public (Vector2d P, Vector3d N)? FirstCubeFace(DrawingView v)
-    {
-        if (!Drawing!.Boxes.TryGetValue(v.Name, out var b)) return null;
-        var (_, _, P, faces) = Cube(v, b);
-        if (faces.Count == 0) return null;
-        var (n, q) = faces[0];
-        var c = (P[q[0]] + P[q[1]] + P[q[2]] + P[q[3]]) / 4;
-        return (c, n);
-    }
-    /// <summary>Положение куба (для проверок): центр и видимые грани.</summary>
-    public (Vector2d C, int Faces)? CubeOf(DrawingView v) => Drawing!.Boxes.TryGetValue(v.Name, out var b) ? (Cube(v, b).C, Cube(v, b).Faces.Count) : null;
+    /// <summary>Положение куба (для проверок): место на листе и показан ли он.</summary>
+    public (Vector2d C, bool Shown)? CubeOf(DrawingView v) => _cubeAt is { } a && a.View == v.Name ? (new Vector2d(a.X, a.Y), _cube?.IsVisible == true) : null;
 }

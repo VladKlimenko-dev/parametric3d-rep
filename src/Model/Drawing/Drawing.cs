@@ -429,6 +429,8 @@ public sealed class DrawingDocument
     public bool CenterNumbers { get; set; } = true;
     /// <summary>k164: осевые линии на листе (мм листа) и центры по видам после Compose — приоритет осевых над выносными.</summary>
     [JsonIgnore] public Dictionary<string, List<(Vector2d A, Vector2d B)>> CenterSegs { get; } = new();
+    /// <summary>k170: видимые отрезки контура вида (мм модели, координаты вида) — для выносных линий углового размера.</summary>
+    [JsonIgnore] public Dictionary<string, List<(Vector2d A, Vector2d B)>> ViewSegs { get; } = new();
     [JsonIgnore] public Dictionary<string, List<Vector2d>> CenterPts { get; } = new();
     /// <summary>k164: номера центров после Compose: вид, точка листа, номер.</summary>
     [JsonIgnore] public List<(string View, Vector2d P, int No, Vector2d PV)> CenterNos { get; } = new();
@@ -459,6 +461,12 @@ public sealed class DrawingDocument
     static string UnitFormat(string u) => u switch { "cm" => "0.###", "m" => "0.####", "in" => "0.###", "ft" => "0.####", _ => "0.##" };
     /// <summary>Подпись размера в единицах чертежа.</summary>
     public string CaptionOf(DrawingDim d) => d.Caption(Comma, MmPer(EffectiveUnits), UnitFormat(EffectiveUnits));
+    /// <summary>k170: длина (мм) в единицах чертежа, как подпись размера (без знака единицы).</summary>
+    public string FormatLength(double mm) { var t = (mm / MmPer(EffectiveUnits)).ToString(UnitFormat(EffectiveUnits), CultureInfo.InvariantCulture); return Comma ? t.Replace('.', ',') : t; }
+    [JsonIgnore] public bool UsesComma => Comma;
+    /// <summary>k170 (п. 7.3): размер — серый показ на листе (недостающий размер под курсором в списке проверки); не в Dims.</summary>
+    [JsonIgnore] public DrawingDim? Ghost { get; set; }
+    [JsonIgnore] public List<(double X1, double Y1, double X2, double Y2)>? GhostSegs { get; private set; }
     /// <summary>k159: положения и свойства выключенных основных видов — при включении вид встаёт туда же.</summary>
     public Dictionary<string, double[]> Parked { get; set; } = new();
     /// <summary>Масштаб листа последнего Compose (подобранный или заданный).</summary>
@@ -753,7 +761,7 @@ public sealed class DrawingDocument
         Boxes.Clear(); Xf.Clear();
         var proj = scene.Lines;
         double scale = Layout(proj);
-        LastScale = scale; Hit.Clear(); HitTexts.Clear(); CenterSegs.Clear(); CenterPts.Clear(); CenterNos.Clear(); CenterPtsView.Clear();
+        LastScale = scale; Hit.Clear(); HitTexts.Clear(); CenterSegs.Clear(); ViewSegs.Clear(); GhostSegs = null; CenterPts.Clear(); CenterNos.Clear(); CenterPtsView.Clear();
         fields.Auto[Fields.Scale] = ScaleText(scale);
         var g = SheetLayout.Compose(Template, fields);
         if (!LineSOff) g.ThickW = Math.Clamp(LineS, 0.1, 1.4);   // k165 (п. 5): от 0.1 мм
@@ -787,6 +795,11 @@ public sealed class DrawingDocument
                     uint argb = 0xFF000000u | (uint)Math.Clamp(r * sh * 255, 0, 255) << 16 | (uint)Math.Clamp(gg * sh * 255, 0, 255) << 8 | (uint)Math.Clamp(bb * sh * 255, 0, 255);
                     g.Shades.Add((new List<(double, double)> { T(a), T(b), T(c) }, argb));
                 }
+            {
+                var vs = new List<(Vector2d, Vector2d)>();
+                foreach (var l in lines) if (l.Visible) for (int k = 0; k + 1 < l.Points.Count; k++) vs.Add((l.Points[k], l.Points[k + 1]));
+                ViewSegs[v.Name] = vs;
+            }
             bool showHidden = v.Style switch { "hidden" or "wire" => true, "shaded" or "shadedlines" or "material" => false, _ => v.ShowHidden };
             foreach (var l in lines)
             {
@@ -884,6 +897,14 @@ public sealed class DrawingDocument
                 Capture(g, d, () => DrawDim(g, d));
             }
             CentreLabels(g);
+            if (Ghost is { } gh && Xf.ContainsKey(gh.View))
+            {
+                var gg = new SheetGraphics { Width = g.Width, Height = g.Height, ThickW = g.ThickW };
+                if (gh.Arrange && gh.Kind is "dia" or "rad") PlaceRadial(gg, gh);
+                Capture(gg, gh, () => DrawDim(gg, gh));
+                GhostSegs = Hit[gh]; Hit.Remove(gh); HitTexts.Remove(gh);
+                g.Ghost = gg;
+            }
         }
         foreach (var n in Notes)
         {
@@ -1121,6 +1142,7 @@ public sealed class DrawingDocument
         return w;
     }
     const double TolH = 2.5;
+    static readonly bool TolGapOff = Environment.GetEnvironmentVariable("P3D_TOLGAP") == "0";
 
     /// <summary>
     /// k167: подпись размера с отклонениями: m — середина подписи (над размерной линией), ang — угол текста (градусы листа).
@@ -1137,8 +1159,12 @@ public sealed class DrawingDocument
         g.Text(cm.X, cm.Y, TextH, main, TextAlign.Center, null, Math.Abs(ang) < 1e-9 ? 0 : ang);
         var t0 = cm + along * (w / 2 + 0.6);
         double ta = Math.Abs(ang) < 1e-9 ? 0 : ang;
-        if (up != null) { var p = t0 + upv * (TextH * 0.55); g.Text(p.X, p.Y, TolH, up, TextAlign.Left, null, ta); }
-        if (lo != null) { var p = t0 + upv * (-0.15); g.Text(p.X, p.Y, TolH, lo, TextAlign.Left, null, ta); }
+        // k170 (замечание 05.11, 18:34, п. 4): нижнее — на линии основания основного текста (прежде на 0.15 мм ниже — касалось
+        // полки), верхнее — над нижним с промежутком 0.8 мм (прежде на 0.55 высоты текста — строки пересекались). Мутация
+        // P3D_TOLGAP=0 — прежнее.
+        double upY = TolGapOff ? TextH * 0.55 : TolH + 0.8, loY = TolGapOff ? -0.15 : 0;
+        if (up != null) { var p = t0 + upv * upY; g.Text(p.X, p.Y, TolH, up, TextAlign.Left, null, ta); }
+        if (lo != null) { var p = t0 + upv * loY; g.Text(p.X, p.Y, TolH, lo, TextAlign.Left, null, ta); }
     }
 
     void DrawDim(SheetGraphics g, DrawingDim d)
@@ -1217,9 +1243,18 @@ public sealed class DrawingDocument
         d.Arrange = false;
         if (d.Kind == "ang")
         {
-            // k163: угловой — радиус дуги до курсора
+            // k163: угловой — радиус дуги до курсора; k170 (замечание 05.11, 18:34, п. 6.3): и угол подписи — к курсору (подпись
+            // в любом месте листа: за сторонами угла дуга продлевается до подписи). TextShift — поворот подписи от середины дуги,
+            // градусы. Мутация P3D_ANGTEXTFREE=0 — только радиус (подпись над серединой дуги).
             var c = ToSheet(d.View, new Vector2d(d.X1, d.Y1));
             d.Offset = Math.Max(5, Math.Sqrt((sx - c.X) * (sx - c.X) + (sy - c.Y) * (sy - c.Y)));
+            if (!AngTextFreeOff)
+            {
+                double rot = Views.FirstOrDefault(v => v.Name == d.View)?.Angle ?? 0;
+                double mid = d.X2 + rot + d.Value / 2, at = Math.Atan2(sy - c.Y, sx - c.X) * 180 / Math.PI;
+                d.TextShift = ((at - mid) % 360 + 540) % 360 - 180;
+                if (Math.Abs(d.TextShift) < d.Value / 2 * 0.15) d.TextShift = 0;   // у середины — на середину
+            }
             return;
         }
         if (d.Kind is "dia" or "rad")
@@ -1249,7 +1284,12 @@ public sealed class DrawingDocument
 
     /// <summary>
     /// k163: угловой размер ГОСТ 2.307 п. 2.4: дуга с центром в вершине угла радиусом Offset мм листа (по умолчанию 15),
-    /// выносные линии от вершины по сторонам угла до дуги + 2 мм, стрелки на концах дуги, текст — над серединой дуги.
+    /// стрелки на концах дуги, текст — над серединой дуги (k170 — или там, куда перенесён: TextShift, градусы от середины).
+    /// k170 (замечание 05.11, 18:34, п. 6.1): ВЫНОСНЫЕ ЛИНИИ — ОТ СТОРОН УГЛА, А НЕ ОТ ВЕРШИНЫ: от ближнего к дуге конца
+    /// отрезка контура на этой стороне (отрезки вида на луче стороны) до дуги + 2 мм; дуга между концами отрезка — выносной нет.
+    /// Прежде линии шли от вершины через всю деталь и выходили по ту сторону измеряемых линий. Сторона без отрезка контура
+    /// (продолжение линии за вершину, «смежный» угол) — от ближнего конца отрезка на продолжении через вершину. Мутация
+    /// P3D_ANGEXT=0 — от вершины (прежнее).
     /// </summary>
     void DrawAngle(SheetGraphics g, DrawingDim d, string text)
     {
@@ -1257,18 +1297,62 @@ public sealed class DrawingDocument
         double rot = Views.FirstOrDefault(v => v.Name == d.View)?.Angle ?? 0;
         double a0 = (d.X2 + rot) * Math.PI / 180, sweep = d.Value * Math.PI / 180;
         double r = d.Offset > 0 ? d.Offset : 15;
+        double s = Xf.TryGetValue(d.View, out var xf) ? xf.S : 1;
         (double, double) At(double a, double rr) => (c.X + rr * Math.Cos(a), c.Y + rr * Math.Sin(a));
-        foreach (var a in new[] { a0, a0 + sweep }) { var (x, y) = At(a, r + 2); g.Line(c.X, c.Y, x, y); }
-        int n = Math.Max(8, (int)(sweep * r / 1.5));
-        var pts = Enumerable.Range(0, n + 1).Select(k => At(a0 + sweep * k / n, r)).ToList();
+        for (int side = 0; side < 2; side++)
+        {
+            double a = side == 0 ? a0 : a0 + sweep, va = (side == 0 ? d.X2 : d.X2 + d.Value) * Math.PI / 180;
+            var range = AngExtOff ? null : RayRange(d.View, new Vector2d(d.X1, d.Y1), new Vector2d(Math.Cos(va), Math.Sin(va)));
+            if (range is not { } rg) { var (x, y) = At(a, r + 2); g.Line(c.X, c.Y, x, y); continue; }
+            double t0 = rg.Min * s, t1 = rg.Max * s;
+            if (r > t1) { var (x0, y0) = At(a, t1); var (x, y) = At(a, r + 2); g.Line(x0, y0, x, y); }
+            else if (r < t0) { var (x0, y0) = At(a, Math.Max(0, r - 2)); var (x, y) = At(a, t0); g.Line(x0, y0, x, y); }
+        }
+        // подпись: середина дуги или перенесённая (TextShift — градусы от середины); за сторонами — дуга продлевается
+        double am = a0 + sweep / 2 + (AngTextFreeOff ? 0 : d.TextShift * Math.PI / 180);
+        double e0 = Math.Min(a0, am - 0.06), e1 = Math.Max(a0 + sweep, am + 0.06);
+        if (AngTextFreeOff || Math.Abs(d.TextShift) < 1e-9) { e0 = a0; e1 = a0 + sweep; }
+        int n = Math.Max(8, (int)((e1 - e0) * r / 1.5));
+        var pts = Enumerable.Range(0, n + 1).Select(k => At(e0 + (e1 - e0) * k / n, r)).ToList();
         g.Polylines.Add(new SheetPolyline(pts, LineKind.Thin));
         Arrow(g, At(a0, r), (Math.Sin(a0), -Math.Cos(a0)));
         Arrow(g, At(a0 + sweep, r), (-Math.Sin(a0 + sweep), Math.Cos(a0 + sweep)));
-        double am = a0 + sweep / 2;
         var (tx, ty) = At(am, r + 1.5);
         double ta = am * 180 / Math.PI - 90; ta = ((ta % 360) + 360) % 360; if (ta > 90 && ta < 270) ta -= 180;
         DimText(g, d, new Vector2d(tx, ty), ta, text);
     }
+    static readonly bool AngExtOff = Environment.GetEnvironmentVariable("P3D_ANGEXT") == "0";
+    static readonly bool AngTextFreeOff = Environment.GetEnvironmentVariable("P3D_ANGTEXTFREE") == "0";
+
+    /// <summary>
+    /// k170: отрезки контура вида на прямой «вершина + t·u» (до 0.02 мм модели от прямой): промежуток t (мм модели), ближайший к
+    /// стороне угла (t ≥ 0) — иначе на продолжении за вершину; нет отрезков — null.
+    /// </summary>
+    public (double Min, double Max)? RayRange(string view, Vector2d vx, Vector2d u)
+    {
+        if (!ViewSegs.TryGetValue(view, out var segs)) return null;
+        double tol = 0.02;
+        var pos = new List<(double, double)>(); var neg = new List<(double, double)>();
+        foreach (var (A, B) in segs)
+        {
+            var ra = A - vx; var rb = B - vx;
+            if (Math.Abs(ra.X * u.Y - ra.Y * u.X) > tol || Math.Abs(rb.X * u.Y - rb.Y * u.X) > tol) continue;
+            double ta = Vector2d.Dot(ra, u), tb = Vector2d.Dot(rb, u);
+            if (Math.Abs(ta - tb) < 1e-9) continue;
+            var iv = (Math.Min(ta, tb), Math.Max(ta, tb));
+            if (iv.Item2 > 1e-6) pos.Add(iv); else neg.Add(iv);
+        }
+        var use = pos.Count > 0 ? pos : neg;
+        if (use.Count == 0) return null;
+        return (use.Min(q => q.Item1), use.Max(q => q.Item2));
+    }
+
+    /// <summary>
+    /// k170 (замечание 05.11, 18:34, п. 6.2): угловой размер — внутренний ↔ внешний (360° − угол, дуга с другой стороны вершины)
+    /// и смежный угол (180° − угол: сторона — продолжение за вершину; два раза подряд — вертикальный угол).
+    /// </summary>
+    public static void AngleOuter(DrawingDim d) { if (d.Kind != "ang") return; (d.X2, d.Y2) = (d.Y2, d.X2); d.TextShift = 0; }
+    public static void AngleAdjacent(DrawingDim d) { if (d.Kind != "ang") return; (d.X2, d.Y2) = (d.Y2, d.X2 + 180); d.TextShift = 0; }
 
     // ------------------------------------------------------------------ k164: осевые линии в приоритете, номера центров
 
@@ -1926,100 +2010,108 @@ public sealed class DrawingDocument
         Dims.RemoveAll(d => d.Model);
         int added = 0;
         foreach (var sk in part.Sketches)
-        {
-            var w = sk.Plane.W.Normalized();
-            var view = Views.Where(v => !v.IsDetail && !v.IsSection && v.Name != "iso")
-                            .FirstOrDefault(v => Math.Abs(Math.Abs(Vector3d.Dot(ViewFrame.Of(DirOf(v)).Toward, w)) - 1) < 1e-6);
-            if (view == null) continue;
-            var f = ViewFrame.Of(DirOf(view));
-            Vector2d P(Vector2d skp) => f.Project(sk.Plane.ToWorld(skp));
             foreach (var d in sk.Dimensions)
             {
                 if (!d.Enabled || d.Reference) continue;
-                DrawingDim? dd = null;
-                Vector2d[] pts = d.Items.SelectMany(PointsOf).ToArray();
-                switch (d.Type)
-                {
-                    case Sketching.DimensionType.DistancePointPoint when pts.Length >= 2:
-                    case Sketching.DimensionType.DistanceHorizontal when pts.Length >= 2:
-                    case Sketching.DimensionType.DistanceVertical when pts.Length >= 2:
-                        {
-                            var a = P(pts[0]); var b = P(pts[^1]);
-                            // ось U эскиза на виде: идёт ли она по горизонтали листа
-                            var uOnView = f.Project(sk.Plane.ToWorld(new Vector2d(1, 0))) - f.Project(sk.Plane.ToWorld(Vector2d.Zero));
-                            bool uIsH = Math.Abs(uOnView.X) > 0.5;
-                            string kind = d.Type switch
-                            {
-                                Sketching.DimensionType.DistanceHorizontal => uIsH ? "h" : "v",
-                                Sketching.DimensionType.DistanceVertical => uIsH ? "v" : "h",
-                                _ => Math.Abs(a.Y - b.Y) < 1e-9 ? "h" : Math.Abs(a.X - b.X) < 1e-9 ? "v" : "al",
-                            };
-                            dd = new DrawingDim { View = view.Name, Kind = kind, X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Offset = 8 + 7 * (added % 3) };
-                            break;
-                        }
-                    case Sketching.DimensionType.AngleLineLine when !ModelAngOff && d.Items.Count >= 2 && d.Items[0] is Sketching.SkLine la && d.Items[1] is Sketching.SkLine lb:
-                        {
-                            // k163: угол двух отрезков эскиза — вершина в точке пересечения прямых, стороны — к дальним концам;
-                            // из четырёх пар направлений — та, у которой угол против часовой равен размеру
-                            Vector2d A0 = P(la.A.P), A1 = P(la.B.P), B0 = P(lb.A.P), B1 = P(lb.B.P);
-                            var ua = A1 - A0; var ub = B1 - B0;
-                            double den = ua.X * ub.Y - ua.Y * ub.X;
-                            if (Math.Abs(den) < 1e-12) break;
-                            double t = ((B0.X - A0.X) * ub.Y - (B0.Y - A0.Y) * ub.X) / den;
-                            var vx = A0 + ua * t;
-                            Vector2d Far(Vector2d p0, Vector2d p1) => (p0 - vx).Length > (p1 - vx).Length ? p0 - vx : p1 - vx;
-                            var da = Far(A0, A1).Normalized(); var db = Far(B0, B1).Normalized();
-                            double best = double.MaxValue; (double, double) pick = (0, 0);
-                            foreach (var sa in new[] { 1.0, -1.0 })
-                                foreach (var sb in new[] { 1.0, -1.0 })
-                                    foreach (var (p0, p1) in new[] { (da * sa, db * sb), (db * sb, da * sa) })
-                                    {
-                                        double a0 = Math.Atan2(p0.Y, p0.X) * 180 / Math.PI, a1 = Math.Atan2(p1.Y, p1.X) * 180 / Math.PI;
-                                        double sw = ((a1 - a0) % 360 + 360) % 360;
-                                        double err = Math.Abs(sw - Math.Abs(d.Value)) + (sa < 0 ? 0.01 : 0) + (sb < 0 ? 0.01 : 0);
-                                        if (err < best) { best = err; pick = (a0, a1); }
-                                    }
-                            dd = new DrawingDim { View = view.Name, Kind = "ang", X1 = vx.X, Y1 = vx.Y, X2 = pick.Item1, Y2 = pick.Item2, Offset = 15 };
-                            break;
-                        }
-                    case Sketching.DimensionType.DistancePointLine or Sketching.DimensionType.DistanceLineLine when !ModelAngOff:
-                        {
-                            // k163: расстояние точки (или отрезка) до прямой — от точки до её проекции на прямую
-                            var line = d.Items.OfType<Sketching.SkLine>().LastOrDefault();
-                            var other = d.Items.FirstOrDefault(x => x != line);
-                            if (line == null || other == null) break;
-                            Vector2d q = other switch { Sketching.SkPoint sp => sp.P, Sketching.SkLine ol => ol.A.P, Sketching.SkCircle oc => oc.Center.P, Sketching.SkArc oa => oa.Center.P, _ => line.A.P };
-                            var u = (line.B.P - line.A.P); if (u.Length < 1e-12) break; u.Normalize();
-                            var foot = line.A.P + u * Vector2d.Dot(q - line.A.P, u);
-                            var a = P(q); var b = P(foot);
-                            string kind = Math.Abs(a.Y - b.Y) < 1e-9 ? "h" : Math.Abs(a.X - b.X) < 1e-9 ? "v" : "al";
-                            dd = new DrawingDim { View = view.Name, Kind = kind, X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Offset = 8 + 7 * (added % 3) };
-                            break;
-                        }
-                    case Sketching.DimensionType.CoordX or Sketching.DimensionType.CoordY when !ModelAngOff && pts.Length >= 1:
-                        {
-                            // k163: координата точки от начала эскиза
-                            var q = pts[0];
-                            var o = d.Type == Sketching.DimensionType.CoordX ? new Vector2d(0, q.Y) : new Vector2d(q.X, 0);
-                            var a = P(o); var b = P(q);
-                            string kind = Math.Abs(a.Y - b.Y) < 1e-9 ? "h" : Math.Abs(a.X - b.X) < 1e-9 ? "v" : "al";
-                            dd = new DrawingDim { View = view.Name, Kind = kind, X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Offset = 8 + 7 * (added % 3) };
-                            break;
-                        }
-                    case Sketching.DimensionType.Radius or Sketching.DimensionType.Diameter:
-                        {
-                            var e = d.Items.FirstOrDefault(x => x is Sketching.SkCircle or Sketching.SkArc);
-                            if (e is Sketching.SkCircle ci) dd = new DrawingDim { View = view.Name, Kind = d.Type == Sketching.DimensionType.Radius ? "rad" : "dia", X1 = P(ci.Center.P).X, Y1 = P(ci.Center.P).Y, X2 = ci.Radius, Y2 = 45 };
-                            else if (e is Sketching.SkArc ar) dd = new DrawingDim { View = view.Name, Kind = d.Type == Sketching.DimensionType.Radius ? "rad" : "dia", X1 = P(ar.Center.P).X, Y1 = P(ar.Center.P).Y, X2 = ar.Radius, Y2 = 45 };
-                            break;
-                        }
-                }
+                var dd = FromSketchDim(sk, d, added);
                 if (dd == null) continue;
                 dd.Model = true; dd.Arrange = true;
                 Dims.Add(dd); added++;
             }
-        }
         return added;
+    }
+
+    /// <summary>
+    /// k170: размер чертежа по размеру эскиза — на виде, плоскость которого параллельна плоскости эскиза (нет такого вида или
+    /// вид размера не переносится — null). Общий для «Размеров модели» и недостающих размеров проверки полноты (п. 7.3).
+    /// </summary>
+    public DrawingDim? FromSketchDim(Sketching.Sketch sk, Sketching.SkDimension d, int added = 0)
+    {
+        var w = sk.Plane.W.Normalized();
+        var view = Views.Where(v => !v.IsDetail && !v.IsSection && v.Name != "iso")
+                        .FirstOrDefault(v => Math.Abs(Math.Abs(Vector3d.Dot(ViewFrame.Of(DirOf(v)).Toward, w)) - 1) < 1e-6);
+        if (view == null) return null;
+        var f = ViewFrame.Of(DirOf(view));
+        Vector2d P(Vector2d skp) => f.Project(sk.Plane.ToWorld(skp));
+            DrawingDim? dd = null;
+            Vector2d[] pts = d.Items.SelectMany(PointsOf).ToArray();
+            switch (d.Type)
+            {
+                case Sketching.DimensionType.DistancePointPoint when pts.Length >= 2:
+                case Sketching.DimensionType.DistanceHorizontal when pts.Length >= 2:
+                case Sketching.DimensionType.DistanceVertical when pts.Length >= 2:
+                    {
+                        var a = P(pts[0]); var b = P(pts[^1]);
+                        // ось U эскиза на виде: идёт ли она по горизонтали листа
+                        var uOnView = f.Project(sk.Plane.ToWorld(new Vector2d(1, 0))) - f.Project(sk.Plane.ToWorld(Vector2d.Zero));
+                        bool uIsH = Math.Abs(uOnView.X) > 0.5;
+                        string kind = d.Type switch
+                        {
+                            Sketching.DimensionType.DistanceHorizontal => uIsH ? "h" : "v",
+                            Sketching.DimensionType.DistanceVertical => uIsH ? "v" : "h",
+                            _ => Math.Abs(a.Y - b.Y) < 1e-9 ? "h" : Math.Abs(a.X - b.X) < 1e-9 ? "v" : "al",
+                        };
+                        dd = new DrawingDim { View = view.Name, Kind = kind, X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Offset = 8 + 7 * (added % 3) };
+                        break;
+                    }
+                case Sketching.DimensionType.AngleLineLine when !ModelAngOff && d.Items.Count >= 2 && d.Items[0] is Sketching.SkLine la && d.Items[1] is Sketching.SkLine lb:
+                    {
+                        // k163: угол двух отрезков эскиза — вершина в точке пересечения прямых, стороны — к дальним концам;
+                        // из четырёх пар направлений — та, у которой угол против часовой равен размеру
+                        Vector2d A0 = P(la.A.P), A1 = P(la.B.P), B0 = P(lb.A.P), B1 = P(lb.B.P);
+                        var ua = A1 - A0; var ub = B1 - B0;
+                        double den = ua.X * ub.Y - ua.Y * ub.X;
+                        if (Math.Abs(den) < 1e-12) break;
+                        double t = ((B0.X - A0.X) * ub.Y - (B0.Y - A0.Y) * ub.X) / den;
+                        var vx = A0 + ua * t;
+                        Vector2d Far(Vector2d p0, Vector2d p1) => (p0 - vx).Length > (p1 - vx).Length ? p0 - vx : p1 - vx;
+                        var da = Far(A0, A1).Normalized(); var db = Far(B0, B1).Normalized();
+                        double best = double.MaxValue; (double, double) pick = (0, 0);
+                        foreach (var sa in new[] { 1.0, -1.0 })
+                            foreach (var sb in new[] { 1.0, -1.0 })
+                                foreach (var (p0, p1) in new[] { (da * sa, db * sb), (db * sb, da * sa) })
+                                {
+                                    double a0 = Math.Atan2(p0.Y, p0.X) * 180 / Math.PI, a1 = Math.Atan2(p1.Y, p1.X) * 180 / Math.PI;
+                                    double sw = ((a1 - a0) % 360 + 360) % 360;
+                                    double err = Math.Abs(sw - Math.Abs(d.Value)) + (sa < 0 ? 0.01 : 0) + (sb < 0 ? 0.01 : 0);
+                                    if (err < best) { best = err; pick = (a0, a1); }
+                                }
+                        dd = new DrawingDim { View = view.Name, Kind = "ang", X1 = vx.X, Y1 = vx.Y, X2 = pick.Item1, Y2 = pick.Item2, Offset = 15 };
+                        break;
+                    }
+                case Sketching.DimensionType.DistancePointLine or Sketching.DimensionType.DistanceLineLine when !ModelAngOff:
+                    {
+                        // k163: расстояние точки (или отрезка) до прямой — от точки до её проекции на прямую
+                        var line = d.Items.OfType<Sketching.SkLine>().LastOrDefault();
+                        var other = d.Items.FirstOrDefault(x => x != line);
+                        if (line == null || other == null) break;
+                        Vector2d q = other switch { Sketching.SkPoint sp => sp.P, Sketching.SkLine ol => ol.A.P, Sketching.SkCircle oc => oc.Center.P, Sketching.SkArc oa => oa.Center.P, _ => line.A.P };
+                        var u = (line.B.P - line.A.P); if (u.Length < 1e-12) break; u.Normalize();
+                        var foot = line.A.P + u * Vector2d.Dot(q - line.A.P, u);
+                        var a = P(q); var b = P(foot);
+                        string kind = Math.Abs(a.Y - b.Y) < 1e-9 ? "h" : Math.Abs(a.X - b.X) < 1e-9 ? "v" : "al";
+                        dd = new DrawingDim { View = view.Name, Kind = kind, X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Offset = 8 + 7 * (added % 3) };
+                        break;
+                    }
+                case Sketching.DimensionType.CoordX or Sketching.DimensionType.CoordY when !ModelAngOff && pts.Length >= 1:
+                    {
+                        // k163: координата точки от начала эскиза
+                        var q = pts[0];
+                        var o = d.Type == Sketching.DimensionType.CoordX ? new Vector2d(0, q.Y) : new Vector2d(q.X, 0);
+                        var a = P(o); var b = P(q);
+                        string kind = Math.Abs(a.Y - b.Y) < 1e-9 ? "h" : Math.Abs(a.X - b.X) < 1e-9 ? "v" : "al";
+                        dd = new DrawingDim { View = view.Name, Kind = kind, X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Offset = 8 + 7 * (added % 3) };
+                        break;
+                    }
+                case Sketching.DimensionType.Radius or Sketching.DimensionType.Diameter:
+                    {
+                        var e = d.Items.FirstOrDefault(x => x is Sketching.SkCircle or Sketching.SkArc);
+                        if (e is Sketching.SkCircle ci) dd = new DrawingDim { View = view.Name, Kind = d.Type == Sketching.DimensionType.Radius ? "rad" : "dia", X1 = P(ci.Center.P).X, Y1 = P(ci.Center.P).Y, X2 = ci.Radius, Y2 = 45 };
+                        else if (e is Sketching.SkArc ar) dd = new DrawingDim { View = view.Name, Kind = d.Type == Sketching.DimensionType.Radius ? "rad" : "dia", X1 = P(ar.Center.P).X, Y1 = P(ar.Center.P).Y, X2 = ar.Radius, Y2 = 45 };
+                        break;
+                    }
+            }
+        return dd;
     }
 
     static IEnumerable<Vector2d> PointsOf(Sketching.SkEntity e) => e switch

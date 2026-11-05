@@ -52,15 +52,15 @@ public sealed class NewDocumentDialog : Window
     }
     public static string FileNameOf(string name) => string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) || c == '/' ? '_' : c)) + TemplateExt;
 
-    readonly TextBox _file = new() { Name = "nd_file", MinWidth = 260 };
-    readonly TextBox _model = new() { Name = "nd_model", MinWidth = 220, IsReadOnly = true };
-    readonly ComboBox _type = new() { Name = "nd_type", MinWidth = 260 };
-    readonly ComboBox _base = new() { Name = "nd_base", MinWidth = 260 };
-    readonly TextBox _name = new() { Name = "nd_name", MinWidth = 260 };
-    readonly ComboBox _std = new() { Name = "nd_std", MinWidth = 260, ItemsSource = new[] { "ЕСКД", "ISO" } };
-    readonly ComboBox _units = new() { Name = "nd_units", MinWidth = 260, ItemsSource = UnitSystems };
-    readonly ComboBox _format = new() { Name = "nd_format", MinWidth = 260, ItemsSource = Formats };
-    readonly ComboBox _orient = new() { Name = "nd_orient", MinWidth = 260 };
+    readonly TextBox _file = new() { Name = "nd_file" };
+    readonly TextBox _model = new() { Name = "nd_model", IsReadOnly = true };
+    readonly ComboBox _type = new() { Name = "nd_type" };
+    readonly ComboBox _base = new() { Name = "nd_base" };
+    readonly TextBox _name = new() { Name = "nd_name" };
+    readonly ComboBox _std = new() { Name = "nd_std", ItemsSource = new[] { "ЕСКД", "ISO" } };
+    readonly ComboBox _units = new() { Name = "nd_units", ItemsSource = UnitSystems };
+    readonly ComboBox _format = new() { Name = "nd_format", ItemsSource = Formats };
+    readonly ComboBox _orient = new() { Name = "nd_orient" };
     readonly Image _preview = new() { Name = "nd_preview", Width = 320, Height = 240, Stretch = Stretch.Uniform };
     readonly List<(string Name, string Path, SheetTemplate T)> _templates;
     readonly string[] _types;
@@ -77,7 +77,7 @@ public sealed class NewDocumentDialog : Window
     {
         Title = sheetMode ? L("Новый лист") : L("Новый документ");
         LastOpened = this;
-        Width = 720; Height = 520; CanResize = true;
+        Width = 860; Height = 470; CanResize = true;
         this.Bind(BackgroundProperty, this.GetResourceObservable("P3.PanelBg"));
         _templates = LoadTemplates();
         _types = sheetMode ? new[] { "drawing", "annotation" } : new[] { "drawing", "bom", "annotation" };
@@ -104,14 +104,20 @@ public sealed class NewDocumentDialog : Window
             });
             if (files.FirstOrDefault()?.TryGetLocalPath() is { } p) SetModel(p);
         };
-        var form = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), RowDefinitions = new RowDefinitions(string.Join(",", Enumerable.Repeat("Auto", 9))), Margin = new Thickness(12) };
+        // k170 (замечание 05.11, 18:34, п. 1): подписи — столбец своей ширины, поля ввода — по одному левому краю и одной
+        // ширины (FieldW), высота строк одна; картинка листа — правее, с промежутком 24.
+        var form = new Grid { ColumnDefinitions = new ColumnDefinitions($"Auto,{FieldW}"), RowDefinitions = new RowDefinitions(string.Join(",", Enumerable.Repeat("36", 9))), Margin = new Thickness(16, 16, 0, 16), VerticalAlignment = VerticalAlignment.Top };
         void Row(int r, string label, Control c)
         {
-            var l = new TextBlock { Text = L(label), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 3, 10, 3) };
+            var l = new TextBlock { Text = L(label), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 16, 0) };
             Grid.SetRow(l, r); form.Children.Add(l);
-            c.Margin = new Thickness(0, 3); Grid.SetRow(c, r); Grid.SetColumn(c, 1); form.Children.Add(c);
+            c.Margin = new Thickness(0); c.Width = FieldW; c.Height = 30; c.HorizontalAlignment = HorizontalAlignment.Left; c.VerticalAlignment = VerticalAlignment.Center;
+            if (c is TextBox tb) tb.VerticalContentAlignment = VerticalAlignment.Center;
+            Grid.SetRow(c, r); Grid.SetColumn(c, 1); form.Children.Add(c);
         }
         Row(0, "Имя файла", _file);
+        browse.Width = 34; browse.Height = 30; browse.Margin = new Thickness(6, 0, 0, 0); browse.HorizontalContentAlignment = HorizontalAlignment.Center;
+        _model.Height = 30; _model.VerticalContentAlignment = VerticalAlignment.Center;
         Row(1, "Деталь или сборка", new DockPanel { Children = { Dock(browse, Avalonia.Controls.Dock.Right), _model } });
         Row(2, "Тип документа", _type);
         Row(3, "Базовый шаблон", _base);
@@ -120,16 +126,19 @@ public sealed class NewDocumentDialog : Window
         Row(6, "Система единиц", _units);
         Row(7, "Формат листа", _format);
         Row(8, "Ориентация листа", _orient);
-        var ok = new Button { Content = L("Создать"), IsDefault = true, Padding = new Thickness(16, 4), Name = "nd_ok" };
-        var cancel = new Button { Content = L("Отмена"), IsCancel = true, Padding = new Thickness(16, 4) };
+        var ok = new Button { Content = L("Создать"), IsDefault = true, Width = 110, HorizontalContentAlignment = HorizontalAlignment.Center, Name = "nd_ok" };
+        var cancel = new Button { Content = L("Отмена"), IsCancel = true, Width = 110, HorizontalContentAlignment = HorizontalAlignment.Center };
         ok.Click += (_, _) => Accept();
         cancel.Click += (_, _) => Close(null);
-        var right = new StackPanel { Margin = new Thickness(12), Spacing = 8, Children = { new Border { Child = _preview, BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1) }, new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Children = { ok, cancel } } } };
+        var right = new StackPanel { Margin = new Thickness(24, 16, 16, 16), Spacing = 8, VerticalAlignment = VerticalAlignment.Top, Children = { new TextBlock { Text = L("Пример листа"), Opacity = 0.75 }, new Border { Child = _preview, BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1), Background = Brushes.White, Padding = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Left } } };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(16, 0, 16, 16), Children = { ok, cancel } };
         var root = new DockPanel();
-        DockPanel.SetDock(right, Avalonia.Controls.Dock.Right); root.Children.Add(right); root.Children.Add(form);
+        DockPanel.SetDock(buttons, Avalonia.Controls.Dock.Bottom); root.Children.Add(buttons);
+        root.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Children = { form, right } });
         Content = root;
         FillFromBase();
     }
+    const double FieldW = 300;
     static Control Dock(Control c, Avalonia.Controls.Dock d) { DockPanel.SetDock(c, d); return c; }
 
     public void SetModel(string path) { _modelPath = path; _model.Text = Path.GetFileName(path); }

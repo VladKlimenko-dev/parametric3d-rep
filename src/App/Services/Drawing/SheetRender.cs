@@ -28,6 +28,20 @@ public static class SheetRender
         }
     }
 
+    /// <summary>
+    /// k170 (замечание 05.11, 18:34, п. 4): знаки, которых нет в шрифте ГОСТ, — близкими, что есть: минус U+2212 → дефис (прежде —
+    /// квадратик перед нижним отклонением), длинное тире → дефис. Мутация P3D_GLYPHSAFE=0.
+    /// </summary>
+    public static string GlyphSafe(string s)
+    {
+        if (GlyphSafeOff || s.IndexOfAny(Risky) < 0) return s;
+        var sb = new System.Text.StringBuilder(s.Length);
+        foreach (char ch in s) sb.Append(Array.IndexOf(Risky, ch) >= 0 && !Gost.ContainsGlyph(ch) ? '-' : ch);
+        return sb.ToString();
+    }
+    static readonly char[] Risky = { '\u2212', '\u2013', '\u2014', '\u2012' };
+    static readonly bool GlyphSafeOff = Environment.GetEnvironmentVariable("P3D_GLYPHSAFE") == "0";
+
     /// <summary>Отношение высоты прописной к размеру шрифта (ГОСТ тип А — около 0.7).</summary>
     static float CapRatio()
     {
@@ -114,7 +128,15 @@ public static class SheetRender
             c.Save();
             c.Translate((float)t.X * scale, Y(t.Y));
             if (t.Angle != 0) c.RotateDegrees((float)-t.Angle);
-            c.DrawText(t.Text, 0, 0, al, font, ink);
+            c.DrawText(GlyphSafe(t.Text), 0, 0, al, font, ink);
+            c.Restore();
+        }
+        // k170: серый слой (предлагаемый размер проверки полноты)
+        if (g.Ghost is { } gh)
+        {
+            using var gp = new SKPaint { ColorFilter = SKColorFilter.CreateBlendMode(new SKColor(140, 140, 140, 230), SKBlendMode.SrcIn) };
+            c.SaveLayer(gp);
+            Draw(c, gh, scale, white: false);
             c.Restore();
         }
     }
