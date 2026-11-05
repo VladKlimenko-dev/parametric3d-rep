@@ -1,0 +1,11 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["loftseq","1","106","6","res/s106_areacache"]}
+{"tag":"s106 step 0 R2.71 edge (-1.51,35.09,-161.04) chain 7","ms":20094,"guarantee":"ExactAnalytic","dv":220.6858,"expect":221.5394,"problems":[],"dr":null}
+{"tag":"s106 step 1 C2.54 edge (10.06,-25.9,0)","ms":8119,"guarantee":"ExactAnalytic","dv":91.4675,"expect":86.7874,"problems":[],"dr":null}
+{"tag":"s106 step 2 R0.41 edge (23.39,-21.8,-1.27)","ms":8280,"guarantee":"ExactAnalytic","dv":0.0726,"expect":null,"problems":[],"dr":null}
+{"tag":"s106 step 3 R2.58 edge (-31.25,-1.97,0)","ms":7914,"guarantee":"ExactAnalytic","dv":42.5751,"expect":41.4508,"problems":[],"dr":null}
+{"tag":"s106 step 4 C0.3 edge (9.78,-25.82,-2.54) chain 2","ms":7196,"legit":"Chamfer: only straight edges are supported so far.","full":"Chamfer refused (exception at chamfer.build): Chamfer: none of the selected edges could be processed.\nChamfer: the swept chamfer would intersect itself \u2014 the chain turns too sharply for this size.\nChamfer: only straight edges are supported so far.\nChamfer: only straight edges are supported so far."}
+{"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","ms":15201,"problems":["refused: Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges."]}
+{"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+{"ok":4,"bad":0,"refused":1,"legit":1,"totalOpSeconds":66.8}
+{"rebuildChecked":5,"rebuildDiff":1}
+   1  refused: Round: the cut on edge (#, #, #)-(#, #, 0) was rolled back — the cut removed # while the tool itself weighs only #; 0 open edges.
