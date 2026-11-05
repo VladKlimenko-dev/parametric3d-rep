@@ -233,7 +233,8 @@ BooleanOp.Evaluate (тело, резец, вид, политика)
 
 ## Направление
 
-По `STRATEGY_AI_DESIGN.md` и `BACKLOG.md`:
+Сравнение с Parasolid и OCCT по 36 возможностям (готовность ≈ 68 % уровня Parasolid, OCCT ≈ 75 %) и промежуточные цели
+Я1–Я8, П1–П6 — `KERNEL_COMPARISON.md`. По `STRATEGY_AI_DESIGN.md` и `BACKLOG.md`:
 
 1. **Надёжное ядро (идёт).** Скругления и фаски — прямым путём как основным; углы и смешанные вершины (пп. 1–4); винтовые
    грани (п. 5); причина п. 7.
@@ -266,6 +267,7 @@ BooleanOp.Evaluate (тело, резец, вид, политика)
 - `BACKLOG.md` — открытые задачи и замечания пользователя; `KNOWN_LIMITATIONS.md` — ограничения.
 - `KERNEL_SUPPORT_MATRIX.md`, `PROGRESS_ITEMS.tsv`, `PROGRESS_SCORE.txt` — матрица возможностей и счёт.
 - `REFERENCE_SOLUTIONS.md` — решения других ядер (OCCT, SMLib) по разобранным случаям.
+- `KERNEL_COMPARISON.md` — возможности против Parasolid и OCCT, готовность, промежуточные цели.
 - `OCCT_COMPARISON.md`, `KRN10_SPEED_ANALYSIS.md` — скорость.
 - `HANDOFF_NEXT_BRANCH.md` — сборка, проверки, порядок работы.
 - Документы лежат в корне и копией в `src/docs/release/`; часть копий расходится (см. `HANDOFF_NEXT_BRANCH.md`, раздел 6).
