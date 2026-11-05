@@ -567,8 +567,11 @@ static partial class Program
     /// случайных острых рёбер (с цепочкой), каждая — поверх предыдущих. Замеры те же: отказ, годность, объём против сечения
     /// по граням (для рёбер, не задетых прежними правками), щепки, время.
     /// </summary>
+    /// <summary>Я1: итог последнего прогона LoftCorpusSeq — шагов сверено, расхождений по объёму/отказу, расхождений побитово.</summary>
+    static (int Checked, int Diff, int BitsDiff) LastSeqRebuild;
     static void LoftCorpusSeq(int count, int seed0, int steps, string outDir)
     {
+        int bitsDiff = 0;
         Directory.CreateDirectory(outDir);
         int ok = 0, bad = 0, refused = 0, legit = 0; var why = new Dictionary<string, int>(); double totalMs = 0;
         // Я1 (REFERENCE_SOLUTIONS п. 6): сверка «шаг в сеансе = тот же шаг из файла без тел» — SEQ_REBUILDCHECK=1
@@ -671,7 +674,9 @@ static partial class Program
                 {
                     rebuildChecked++;
                     Console.Error.WriteLine($"== REBUILDCHECK s{sd} {st}");
+                    _bitsDiffNow = false;
                     var rc = SeqRebuildCompare(p, f);
+                    if (_bitsDiffNow) bitsDiff++;
                     Console.Error.WriteLine($"== REBUILDCHECK END s{sd} {st}");
                     if (rc != null)
                     {
@@ -694,7 +699,8 @@ static partial class Program
             }
         }
         Log(new { ok, bad, refused, legit, totalOpSeconds = Math.Round(totalMs / 1000, 1) });
-        if (rebuildCheck) Log(new { rebuildChecked, rebuildDiff });
+        if (rebuildCheck) Log(new { rebuildChecked, rebuildDiff, bitsDiff });
+        LastSeqRebuild = (rebuildChecked, rebuildDiff, bitsDiff);
         foreach (var kv in why.OrderByDescending(k => k.Value)) Console.WriteLine($"{kv.Value,4}  {kv.Key}");
     }
 
@@ -703,6 +709,7 @@ static partial class Program
     /// же процессе. Null — результат тот же (отказ, число тел, уровни гарантии, объём до 1e-6 отн.); иначе — оба результата.
     /// Различие при одинаковом входе означает, что шаг зависит от истории сеанса (BACKLOG k149, корпус s106).
     /// </summary>
+    [ThreadStatic] static bool _bitsDiffNow;
     static object? SeqRebuildCompare(Part p, Feature f)
     {
         string json = DocumentFile.Save(p);
@@ -720,6 +727,7 @@ static partial class Program
         if (Environment.GetEnvironmentVariable("SEQ_BITS2") == "1")
             try { var l2 = DocumentFile.Load(bare); l2.Part.Rebuild(l2.Parameters); bitsF2 = BodyBits(l2.Part); } catch (Exception ex) when (ex is not OutOfMemoryException) { bitsF2 = "exception"; }
         Log(new { bits = true, step = f.Name, session = bitsS, file = bitsF, file2 = bitsF2, sameSF = bitsS == bitsF, sameFF = bitsF2 == "" ? (bool?)null : bitsF == bitsF2 });
+        if (bitsS != bitsF) _bitsDiffNow = true;
         // Я1: поля операций сеанса против прочитанных из файла (отражением; значения, не попадающие в файл)
         var fdiff = new List<string>();
         for (int i = 0; i < Math.Min(p.Features.Count, q.Features.Count); i++)

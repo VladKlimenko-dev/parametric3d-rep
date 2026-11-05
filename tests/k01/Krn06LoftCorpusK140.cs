@@ -19,6 +19,29 @@ static partial class Program
     /// k142 — P3D_NORMALCONTINUITY (seq_s106_4: фаска 0.3 цепочки из 4, прежде «both faces must be planar»);
     /// k143 — P3D_ENDTRIM (seq_s101_4, seq_s102_2, seq_s102_5, seq_s110_5: прежние законные отказы — складка резца у конца).
     /// </summary>
+    /// <summary>
+    /// Я1 (REFERENCE_SOLUTIONS п. 6; BACKLOG k149): ШАГ В СЕАНСЕ = ТОТ ЖЕ ШАГ ИЗ ФАЙЛА, ПОБИТОВО. Модель корпуса s106, 6 правок
+    /// подряд (как loftseq, с отладочным обработчиком прямого построителя); после каждой — перестроение из текста документа
+    /// без тел и сравнение тел побитово (вершины) и по отказу, телам, гарантии, объёму. Прежде расходилось с первой правки:
+    /// основание перпендикуляра на NURBS зависело от подсказки прежних запросов (мутация P3D_FOOTCANON=0), производная
+    /// многогранная форма — от треугольников, что лежат на гранях (мутация P3D_LAZYREMESH=0; шаг 5: откат на 478 мм³ в сеансе
+    /// против годного тела из файла).
+    /// </summary>
+    static void Krn01SessionEqualsFileChecks()
+    {
+        Check("KRN-Y1-SESSION-EQUALS-FILE", () =>
+        {
+            var was = Environment.GetEnvironmentVariable("SEQ_REBUILDCHECK");
+            Environment.SetEnvironmentVariable("SEQ_REBUILDCHECK", "1");
+            try { LoftCorpusSeq(1, 106, 6, Path.Combine(Path.GetTempPath(), "p3d_y1_seq")); }
+            finally { Environment.SetEnvironmentVariable("SEQ_REBUILDCHECK", was); }
+            var (n, d, b) = LastSeqRebuild;
+            Log(new { test = "KRN-Y1-SESSION-EQUALS-FILE", steps = n, diff = d, bitsDiff = b });
+            Require(n >= 5, $"only {n} steps checked");
+            Require(d == 0 && b == 0, $"session differs from file: {d} step(s) by result, {b} step(s) bitwise");
+        });
+    }
+
     static void Krn06LoftCorpusK140Checks()
     {
         Check("KRN06-LOFT-CORPUS-K140", () =>
