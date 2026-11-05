@@ -1,0 +1,1 @@
+seconds 250 nproc 4 env P3D_LAZYCTX=1 cmd loftseq 1 106 6 res/out
