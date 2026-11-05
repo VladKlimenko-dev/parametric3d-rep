@@ -642,6 +642,15 @@ public static partial class DirectRound
                 // Мутация P3D_DRTOLEND=0 — как прежде (1e-5·L у концов, 1e-6 по ребру).
                 bool tolerant = TolEnds && body.Guarantee != GuaranteeLevel.ExactAnalytic;
                 double endTol = Math.Max(1e-5 * Math.Max(1, rc.Length), tolerant ? 1e-4 : 0), runTol = tolerant ? 1e-4 : 1e-6;
+                // Я2: ДОПУСК, ОБЪЯВЛЕННЫЙ НА САМИХ РЁБРАХ И ВЕРШИНАХ (как трубка ребра и шар вершины у Parasolid): ребро неточного
+                // тела после резца несёт свой допуск (s105 шаг 5: дуга с допуском 6e-3 мм) — отход точного A ∩ B от него в пределах
+                // этого допуска не отказ (лента всё равно заменяет ребро, итог проверяет проверка геометрии). Мутация P3D_DRTOLCHAIN=0.
+                if (tolerant && TolChain)
+                {
+                    double eTol = chain.Max(x => x.Curve is null ? 0 : x.Tolerance);
+                    double vTol = chain.SelectMany(x => new[] { x.V0, x.V1 }).Max(v => v.Tolerance);
+                    runTol = Math.Max(runTol, 1.5 * Math.Max(eTol, vTol)); endTol = Math.Max(endTol, 1.5 * vTol);
+                }
                 double tS = marchHere ? TAt(P0) : 0, tE = marchHere ? TAt(P1) : rc.Length;
                 Vector3d AtG(double t) => AtCore(t + tS);
                 double D = tE - tS;
@@ -665,6 +674,7 @@ public static partial class DirectRound
                     tS = TAt(P0); tE = TAt(P1); D = tE - tS; ok = Fits();
                     if (ok) Debug?.Invoke($"open: generic parameter ends snapped to the vertices (t {tS:G6} … {tE:G6} of {rc.Length:G6})");
                 }
+                if (ok && tolerant && TolChain && runTol > 1e-4) Interlocked.Increment(ref TolChainHits);
                 if (ok) { edgeAt = AtG; Delta = D; rad0 = rad1 = 1; }
                 else if (Debug != null)
                 {
@@ -2625,6 +2635,9 @@ public static partial class DirectRound
         try { return FinishDirectCore(all, op, ref why, swF); }
         finally { if (Debug != null && ProfDbg) { Debug(Diagnostics.Prof.Report()); Diagnostics.Prof.Enabled = profWas; } }
     }
+    static readonly bool TolChain = Environment.GetEnvironmentVariable("P3D_DRTOLCHAIN") != "0";
+    /// <summary>Я2: рёбер, принятых по общему параметру благодаря допуску самих рёбер и вершин.</summary>
+    public static long TolChainHits;
     static readonly bool ProfDbg = Environment.GetEnvironmentVariable("P3D_OPENPROF") == "1";
     static readonly bool EndScanDbg = Environment.GetEnvironmentVariable("P3D_ENDSCAN") == "1";
     static readonly bool EndHole = Environment.GetEnvironmentVariable("P3D_DRENDHOLE") != "0";

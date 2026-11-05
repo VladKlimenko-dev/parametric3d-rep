@@ -53,10 +53,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: dbg2_s102, cmd: 'loftseq 1 102 6 OUT', env: 'LOFT_DRALL=1 LOFT_FOOTDBG=1 P3D_DROPENPAR=0' }
-          - { name: dbg2_s104, cmd: 'loftseq 1 104 6 OUT', env: 'LOFT_DRALL=1 LOFT_FOOTDBG=1 P3D_DROPENPAR=0' }
-          - { name: dbg2_s105, cmd: 'loftseq 1 105 6 OUT', env: 'LOFT_DRALL=1 LOFT_FOOTDBG=1 P3D_DROPENPAR=0' }
-          - { name: dbg2_s110, cmd: 'loftseq 1 110 6 OUT', env: 'LOFT_DRALL=1 LOFT_FOOTDBG=1 P3D_DROPENPAR=0' }
+          - { name: tol_s105, cmd: 'loftseq 1 105 6 OUT', env: 'LOFT_DRALL=1' }
+          - { name: tol_s105_mut, cmd: 'loftseq 1 105 6 OUT', env: 'P3D_DRTOLCHAIN=0' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
