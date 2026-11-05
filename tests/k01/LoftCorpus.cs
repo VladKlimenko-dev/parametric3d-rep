@@ -684,6 +684,11 @@ static partial class Program
         catch (Exception ex) when (ex is not OutOfMemoryException) { return new { file = "exception: " + ex.Message }; }
         var g = q.Features.Count > 0 ? q.Features[^1] : null;
         string refsS = RefsOf(f), refsF = g == null ? "" : RefsOf(g);
+        // побитовая подпись тел: сеанс, файл, файл повторно (недетерминизм самого пересчёта отличается от истории сеанса)
+        string bitsS = BodyBits(p), bitsF = BodyBits(q), bitsF2 = "";
+        if (Environment.GetEnvironmentVariable("SEQ_BITS2") == "1")
+            try { var l2 = DocumentFile.Load(bare); l2.Part.Rebuild(l2.Parameters); bitsF2 = BodyBits(l2.Part); } catch (Exception ex) when (ex is not OutOfMemoryException) { bitsF2 = "exception"; }
+        Log(new { bits = true, step = f.Name, session = bitsS, file = bitsF, file2 = bitsF2, sameSF = bitsS == bitsF, sameFF = bitsF2 == "" ? (bool?)null : bitsF == bitsF2 });
         bool errS = f.Error != null, errF = g?.Error != null;
         string gs = string.Join(",", p.Bodies.Select(b => b.Guarantee.ToString()));
         string gf = string.Join(",", q.Bodies.Select(b => b.Guarantee.ToString()));
@@ -697,6 +702,23 @@ static partial class Program
             refsSession = refsS,
             refsFile = refsS == refsF ? null : refsF,
         };
+    }
+
+    /// <summary>Побитовая подпись тел детали: вершины (порядок не важен) и число граней.</summary>
+    static string BodyBits(Part x)
+    {
+        ulong sum = 0, xr = 0; int faces = 0;
+        foreach (var b in x.Bodies)
+        {
+            faces += b.Faces.Count();
+            foreach (var v in b.Vertices)
+            {
+                ulong h = 1469598103934665603UL;
+                foreach (var d in new[] { v.P.X, v.P.Y, v.P.Z }) { h ^= (ulong)BitConverter.DoubleToInt64Bits(d); h *= 1099511628211UL; }
+                sum += h; xr ^= h;
+            }
+        }
+        return $"{faces}:{sum:x16}:{xr:x16}";
     }
 
     /// <summary>Ссылки операции на рёбра — побитово (концы, середина, имена граней и концов, кусок).</summary>
