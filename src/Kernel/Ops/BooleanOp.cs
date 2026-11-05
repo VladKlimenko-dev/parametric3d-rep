@@ -685,7 +685,7 @@ public static class BooleanOp
         else if (Checks() != null) return null;
         // производная многогранная форма — лениво, из собранного тела (имена — текущие на момент построения)
         var derived = rawForLazy == null
-            ? Exact.ExactAdapter.LazyDerived(() => Exact.ExactAdapter.ToExact(TopologyClone.Deep(r), new Exact.PlaneRegistry(), null))
+            ? Exact.ExactAdapter.LazyDerived(() => Exact.ExactAdapter.DerivedOf(r))
             : Exact.ExactAdapter.LazyDerived(() =>
             {
                 // ЭКСПЕРИМЕНТ r48: ленивая форма — разметкой в 10 раз мельче (хорда 0.002 мм, шаг угла 0.75°)

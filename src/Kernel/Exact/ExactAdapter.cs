@@ -60,10 +60,29 @@ public static class ExactAdapter
     internal static readonly bool LazyCtxOn = Environment.GetEnvironmentVariable("P3D_LAZYCTX") == "1";
     public static Lazy<ExactBody> LazyDerived(Func<ExactBody> make)
     {
-        if (!LazyCtxOn) return new Lazy<ExactBody>(make, LazyThreadSafetyMode.ExecutionAndPublication);
+        if (!LazyCtxOn && !LazyRemeshOn) return new Lazy<ExactBody>(make, LazyThreadSafetyMode.ExecutionAndPublication);
         var cur = KernelContext.Current;
         var ctx = new KernelContext(KernelSettings.Capture(), cur?.Policy ?? OperationPolicy.Strict).WithExtensionsOf(cur);
         return new Lazy<ExactBody>(() => { using var _ = ctx.Enter(); return make(); }, LazyThreadSafetyMode.ExecutionAndPublication);
+    }
+
+    /// <summary>
+    /// Я1 (BACKLOG k149, s106 шаг 5): ПРОИЗВОДНАЯ ФОРМА АНАЛИТИЧЕСКОГО ТЕЛА — ПО СВОЕЙ РАЗМЕТКЕ ГРАНЕЙ. Прежде форма бралась
+    /// из треугольников, что лежат на гранях тела в момент обращения: у итогового тела прошлого расчёта это сетка показа (с
+    /// донорами), у промежуточного тела в общем пересчёте — сетка по требованию. Один и тот же шаг давал разную многогранную
+    /// булеву в сеансе и при перестроении из файла («показ не меняет геометрию», 01.12). Здесь копия тела размечается по
+    /// контурам заново — форма становится функцией точного B-rep и настроек момента создания. Эксперимент: P3D_LAZYREMESH=1.
+    /// </summary>
+    internal static readonly bool LazyRemeshOn = Environment.GetEnvironmentVariable("P3D_LAZYREMESH") == "1";
+    public static ExactBody DerivedOf(TSolid solid)
+    {
+        var copy = TopologyClone.Deep(solid);
+        if (LazyRemeshOn)
+        {
+            TopologyConventions.Normalize(copy);
+            Export.StepImport.MeshFacesFromLoops(copy, null, "LazyDerived");
+        }
+        return ToExact(copy, new PlaneRegistry(), null);
     }
 
     public static ExactBody ToExact(TSolid solid, PlaneRegistry registry, List<string>? warnings)
