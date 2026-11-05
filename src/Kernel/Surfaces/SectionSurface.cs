@@ -503,13 +503,22 @@ public sealed class SectionSurface : ISurface3
             Interlocked.Add(ref TableSections, n + 1);
             // Я2: УЗЕЛ У СТЫКА — В САМОМ СТЫКЕ. Узел считается в 1e-9 изнутри куска (формула на стыке берёт одно из звеньев), и
             // соседние куски расходились на S_u·2e-9: у вершины на стыке цепочки (s102: фаска по двум рёбрам) поверхность
-            // с разрывом 2e-9 мм, основание перпендикуляра качалось через стык и не находилось. Здесь узел переносится в стык
-            // линейным продолжением по соседнему узлу (ошибка ~ε²·S_uu ~ 1e-18). Мутация P3D_SECBREAKNODE=0.
+            // с разрывом 2e-9 мм, основание перпендикуляра качалось через стык и не находилось. Здесь узел — сама формула в стыке,
+            // если она продолжает этот кусок (сверка с линейным продолжением по соседнему узлу, ошибка которого ~ε·h·S_uu/2):
+            // тогда у обоих кусков в стыке один и тот же узел, разрыва нет. Сечение формулы в стыке другого вида (лента
+            // с разрывом) — линейное продолжение. Мутация P3D_SECBREAKNODE=0.
             if (BreakNode && n >= 1)
             {
                 const double eps = 1e-9;
-                if (p > 0) arr[0] = SweepSection.Blend(arr[0], arr[1], -eps / (h - eps));
-                if (p + 2 < cuts.Count) arr[n] = SweepSection.Blend(arr[n], arr[n - 1], -eps / (h - eps));
+                SweepSection AtJoint(SweepSection inner, SweepSection next, double u)
+                {
+                    var ex = SweepSection.Blend(inner, next, -eps / (h - eps));
+                    var f = _gen!(u);
+                    double d = 0; foreach (double v in new[] { 0.0, 0.5, 1.0 }) d = Math.Max(d, (f.Point(v) - ex.Point(v)).Length);
+                    return d < 1e-7 ? f : ex;
+                }
+                if (p > 0) arr[0] = AtJoint(arr[0], arr[1], a);
+                if (p + 2 < cuts.Count) arr[n] = AtJoint(arr[n], arr[n - 1], b);
             }
             starts.Add(a); pieces.Add((h, arr));
         }
