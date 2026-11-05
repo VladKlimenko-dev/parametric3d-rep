@@ -766,7 +766,15 @@ static partial class Program
                 try { if (src != null) { var q = src.PointAt(new Vector2d(0.3, 0.6)); var q2 = src.PointAt(new Vector2d(0.71, 0.13)); sh = H(q.X, q.Y, q.Z, q2.X, q2.Y, q2.Z); } } catch { sh = "x"; }
                 var cs = new List<double>();
                 foreach (var l in f.Loops) foreach (var ce in l.CoEdges) { var c = ce.Edge.Curve; var m = c.PointAt(c.T0 + 0.37 * (c.T1 - c.T0)); cs.Add(m.X); cs.Add(m.Y); cs.Add(m.Z); cs.Add(c.T0); cs.Add(c.T1); }
-                res.Add($"{f.Tag} {src?.GetType().Name} s {sh} c {H(cs.ToArray())}");
+                var tol = new List<double>(); var pl = new List<double>();
+                foreach (var l in f.Loops) foreach (var ce in l.CoEdges)
+                {
+                    tol.Add(ce.Edge.Tolerance); tol.Add(ce.Edge.V0.Tolerance); tol.Add(ce.Edge.V1.Tolerance); tol.Add(ce.Reversed ? 1 : 0);
+                    if (ce.Edge.PolylineCache is { } pc) { pl.Add(pc.Count); foreach (var q in pc) { pl.Add(q.X); pl.Add(q.Y); pl.Add(q.Z); } } else pl.Add(-1);
+                }
+                var fc = new List<double>();
+                if (f.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface fs3) { fc.Add(fs3.Facets.Count); foreach (var (A, B, C) in fs3.Facets.ReadView) { fc.Add(A.X); fc.Add(A.Y); fc.Add(A.Z); fc.Add(B.X); fc.Add(C.Z); } }
+                res.Add($"{f.Tag} {src?.GetType().Name} rev {f.Reversed} s {sh} c {H(cs.ToArray())} tol {H(tol.ToArray())} poly {H(pl.ToArray())} facets {H(fc.ToArray())}/{(fc.Count > 0 ? fc[0] : -1)}");
             }
         return res;
     }
