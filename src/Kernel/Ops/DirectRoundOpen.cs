@@ -696,7 +696,8 @@ public static partial class DirectRound
                         try { e1 = Geometry.Ssi.Implicit(shA, x).F; e2 = Geometry.Ssi.Implicit(shB, x).F; } catch { }
                         return $"t {t:G5}: {stop} after {it}, |fA| {Math.Abs(e1):E1} |fB| {Math.Abs(e2):E1} move {(x - c).Length:E2} (reach {0.25 * Math.Max(r, 1e-3):G3}), vertex {Math.Min((x - P0).Length, (x - P1).Length):E2}";
                     }
-                    Debug($"open: generic parameter ends: {Diag(0)}; {Diag(D)}");
+                    double worstRun = 0; for (int i = 0; i < 64; i++) { var q = AtG(D * (i + 0.37) / 64); worstRun = Math.Max(worstRun, double.IsNaN(q.X) ? double.PositiveInfinity : OffChain(q)); }
+                    Debug($"open: generic parameter ends: {Diag(0)}; {Diag(D)}; run off the chain {worstRun:E2} (tol {runTol:E1}), ends tol {endTol:E1}");
                 }
                 if (!ok) Debug?.Invoke($"open: generic parameter rejected: ends {(AtG(0) - P0).Length:E2} {(AtG(D) - P1).Length:E2}; tol edge {chain.Max(x => x.Curve is null ? 0 : x.Tolerance):E1} vertex {chain.SelectMany(x => new[] { x.V0, x.V1 }).Max(v => v.Tolerance):E1}; curve {string.Join(",", chain.Select(x => x.Curve.GetType().Name))}; faces {SurfName(FA.Surf)}/{SurfName(FB.Surf)}; guarantee {body.Guarantee}");
             }
