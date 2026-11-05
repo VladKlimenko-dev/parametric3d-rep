@@ -1,0 +1,152 @@
+# Цель Я1: зависит ли шаг от истории сеанса (BACKLOG k149, корпус s106; REFERENCE_SOLUTIONS, п. 6).
+# То же, что tools/seq_state_probe.ps1, но на машинах GitHub (Linux): сборка K01Checks, корпус loftseq со сверкой
+# «шаг в сеансе = тот же шаг из файла без тел» (SEQ_REBUILDCHECK=1), те же прогоны под мутациями памятей ядра.
+# Итог — ветка ya1/state-probe-results: SUMMARY.txt и журналы.
+name: state-probe
+
+on:
+  push:
+    branches: [ya1/state-probe]
+    paths:
+      - '.github/workflows/state-probe.yml'
+      - 'tests/k01/**'
+      - 'src/Kernel/**'
+      - 'src/Model/**'
+      - 'src/Core/**'
+  workflow_dispatch:
+    inputs:
+      full:
+        description: 'мутации на всём корпусе (дольше)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: state-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Сборка K01Checks
+        run: dotnet build tests/k01/K01Checks.csproj -c Release -o out/k01 -v q --nologo 2>&1 | tee build.log; test ${PIPESTATUS[0]} -eq 0
+      - name: Отчёт globals
+        run: DOTNET_TieredCompilation=0 out/k01/K01Checks globals > globals.txt 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build
+          path: |
+            build.log
+            globals.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: k01-bin
+          path: out/k01
+          retention-days: 2
+
+  probe:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: s106,                  seeds: '1 106',  mut: '' }
+          - { name: corpus,                seeds: '10 101', mut: '' }
+          - { name: s106_exactincache,     seeds: '1 106',  mut: P3D_EXACTINCACHE }
+          - { name: s106_facemeshmemo,     seeds: '1 106',  mut: P3D_FACEMESHMEMO }
+          - { name: s106_areacache,        seeds: '1 106',  mut: P3D_AREACACHE }
+          - { name: s106_valcache,         seeds: '1 106',  mut: P3D_VALCACHE }
+          - { name: s106_meshvalmemo,      seeds: '1 106',  mut: P3D_MESHVALMEMO }
+          - { name: s106_auditcache,       seeds: '1 106',  mut: P3D_AUDITCACHE }
+          - { name: s106_auditchordmemo,   seeds: '1 106',  mut: P3D_AUDITCHORDMEMO }
+          - { name: s106_meshreuse,        seeds: '1 106',  mut: P3D_MESHREUSE }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: k01-bin
+          path: out/k01
+      - name: Прогон ${{ matrix.name }}
+        run: |
+          chmod +x out/k01/K01Checks
+          mkdir -p res/${{ matrix.name }}
+          export DOTNET_TieredCompilation=0 SEQ_REBUILDCHECK=1 P3D_USERMODELS="$PWD/tests/ui/data"
+          if [ -n "${{ matrix.mut }}" ]; then export ${{ matrix.mut }}=0; fi
+          SEEDS="${{ matrix.seeds }}"
+          if [ "${{ github.event.inputs.full }}" = "true" ] && [ -n "${{ matrix.mut }}" ]; then SEEDS="10 101"; fi
+          start=$(date +%s)
+          timeout 330m out/k01/K01Checks loftseq $SEEDS 6 res/${{ matrix.name }} > res/${{ matrix.name }}.log 2> res/${{ matrix.name }}.err || echo "exit $?" >> res/${{ matrix.name }}.err
+          echo "seconds $(( $(date +%s) - start )) nproc $(nproc)" >> res/${{ matrix.name }}.err
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: res-${{ matrix.name }}
+          path: res
+
+  collect:
+    needs: [build, probe]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: art
+      - name: Сводка
+        run: |
+          mkdir -p out
+          cp -r art/res-*/* out/ 2>/dev/null || true
+          cp art/build/* out/ 2>/dev/null || true
+          python3 - <<'EOF'
+          import glob, json, os, re
+          L = ["Parametric3D — Я1, состояние между операциями (GitHub Actions, Linux).",
+               "Коммит: " + os.environ.get("GITHUB_SHA", "")[:7], ""]
+          for log in sorted(glob.glob("out/*.log")):
+              name = os.path.basename(log)[:-4]
+              if name == "build": continue
+              lines = open(log, encoding="utf-8", errors="replace").read().splitlines()
+              total = [l for l in lines if re.search(r'"ok":\d+,"bad"', l)]
+              rc = [l for l in lines if '"rebuildChecked"' in l]
+              L.append("== " + name)
+              L.append("   итог: " + (total[-1] if total else "нет (см. .err)"))
+              L.append("   сеанс против файла: " + (rc[-1] if rc else "нет"))
+              for l in lines:
+                  if '"rebuildcheck"' in l: L.append("   РАСХОЖДЕНИЕ: " + l)
+              for l in lines:
+                  if '"tag":"s106 step' in l: L.append("   s106: " + l[:600])
+              err = "out/" + name + ".err"
+              if os.path.exists(err):
+                  tail = open(err, encoding="utf-8", errors="replace").read().splitlines()[-3:]
+                  L.append("   .err: " + " | ".join(tail))
+          L.append("")
+          L.append("== коллекции в полях static readonly (общие на процесс памяти; опись G5 их не видит)")
+          if os.path.exists("out/globals.txt"):
+              for l in open("out/globals.txt", encoding="utf-8", errors="replace"):
+                  if l.startswith("static-readonly-collection"): L.append("   " + l.rstrip())
+          open("out/SUMMARY.txt", "w", encoding="utf-8").write("\n".join(L) + "\n")
+          print("\n".join(L))
+          EOF
+      - name: Итог — в ветку ya1/state-probe-results
+        run: |
+          find out -name '*.p3d' -size +20M -delete
+          cd out
+          git init -q -b ya1/state-probe-results
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git commit -q -m "state-probe ${GITHUB_SHA::7} (run ${GITHUB_RUN_ID})"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" ya1/state-probe-results
