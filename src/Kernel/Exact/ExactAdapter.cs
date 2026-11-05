@@ -51,6 +51,21 @@ public static class ExactAdapter
     internal static readonly bool FormCacheOff = Environment.GetEnvironmentVariable("P3D_EXACTINCACHE") == "0";
     public static long FormCacheHits;
 
+    /// <summary>
+    /// Я1 (REFERENCE_SOLUTIONS п. 6; BACKLOG k149, корпус s106 шаг 5): ЛЕНИВАЯ ПРОИЗВОДНАЯ ФОРМА — В НАСТРОЙКАХ МОМЕНТА СОЗДАНИЯ.
+    /// Lazy вычисляется при первом обращении — в контексте той операции, что обратилась первой (в сеансе это могла быть
+    /// отвергнутая операция над тем же телом), и форма остаётся на теле. Здесь снимок настроек, политики и расширений
+    /// берётся при создании; отмена и сроки — нет (форма живёт дольше операции). Эксперимент: P3D_LAZYCTX=1.
+    /// </summary>
+    internal static readonly bool LazyCtxOn = Environment.GetEnvironmentVariable("P3D_LAZYCTX") == "1";
+    public static Lazy<ExactBody> LazyDerived(Func<ExactBody> make)
+    {
+        if (!LazyCtxOn) return new Lazy<ExactBody>(make, LazyThreadSafetyMode.ExecutionAndPublication);
+        var cur = KernelContext.Current;
+        var ctx = new KernelContext(KernelSettings.Capture(), cur?.Policy ?? OperationPolicy.Strict).WithExtensionsOf(cur);
+        return new Lazy<ExactBody>(() => { using var _ = ctx.Enter(); return make(); }, LazyThreadSafetyMode.ExecutionAndPublication);
+    }
+
     public static ExactBody ToExact(TSolid solid, PlaneRegistry registry, List<string>? warnings)
     {
         bool cacheable = !FormCacheOff && solid.Exact == null && !(solid.LazyDerivedExact is { } lz0 && lz0.Revision == solid.Revision);

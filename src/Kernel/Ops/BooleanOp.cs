@@ -685,15 +685,15 @@ public static class BooleanOp
         else if (Checks() != null) return null;
         // производная многогранная форма — лениво, из собранного тела (имена — текущие на момент построения)
         var derived = rawForLazy == null
-            ? new Lazy<Exact.ExactBody>(() => Exact.ExactAdapter.ToExact(TopologyClone.Deep(r), new Exact.PlaneRegistry(), null), LazyThreadSafetyMode.ExecutionAndPublication)
-            : new Lazy<Exact.ExactBody>(() =>
+            ? Exact.ExactAdapter.LazyDerived(() => Exact.ExactAdapter.ToExact(TopologyClone.Deep(r), new Exact.PlaneRegistry(), null))
+            : Exact.ExactAdapter.LazyDerived(() =>
             {
                 // ЭКСПЕРИМЕНТ r48: ленивая форма — разметкой в 10 раз мельче (хорда 0.002 мм, шаг угла 0.75°)
                 using var _c = new KernelContext(KernelSettings.Capture() with { Chord = 0.006, ChordAngle = Math.PI / 60 }).Enter();
                 Topology.TopologyConventions.Normalize(rawForLazy);
                 Export.StepImport.MeshFacesFromLoops(rawForLazy, null, "LazyFine");
                 return Exact.ExactAdapter.ToExact(rawForLazy, new Exact.PlaneRegistry(), null);
-            }, LazyThreadSafetyMode.ExecutionAndPublication);
+            });
         r.LazyDerivedExact = (derived, r.Revision);
         if (Analytic.GeneralBoolean.LastProvenance is { } pv) r.SetProvenance(FinalizeProvenance(r, pv, body, other));
         RouteDbg("general accepted");
@@ -854,7 +854,7 @@ public static class BooleanOp
         var raw = Analytic.PrismBuild.LastPreUnify ?? Topology.TopologyClone.Deep(r);
         var map = Analytic.PrismBuild.LastPreUnify != null ? Analytic.PrismBuild.LastPreUnifyMap : null;
         var rawFaces = raw.Faces.ToList();
-        var derived = new Lazy<Exact.ExactBody>(() =>
+        var derived = Exact.ExactAdapter.LazyDerived(() =>
         {
             // всё дорогое — по требованию: соглашение копии и треугольники цилиндрических граней по точкам рёбер
             Topology.TopologyConventions.Normalize(raw);
@@ -862,7 +862,7 @@ public static class BooleanOp
             // ТЕКУЩИЕ имена граней результата (деталь дописывает ключ операции уже после операции) — в копию.
             if (map != null) for (int i = 0; i < rawFaces.Count && i < map.Count; i++) rawFaces[i].Tag = map[i].Tag;
             return Exact.ExactAdapter.ToExact(raw, new Exact.PlaneRegistry(), null);
-        }, LazyThreadSafetyMode.ExecutionAndPublication);
+        });
         profLazy.Dispose();
         var w = new List<string>();
         int unmeshed;
