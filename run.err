@@ -1,0 +1,1 @@
+seconds 569 nproc 4 env SEQ_RELOAD=bare cmd loftseq 1 106 6 res/out
