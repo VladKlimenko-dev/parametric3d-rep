@@ -1,0 +1,1 @@
+seconds 30 nproc 4 env P3D_FOOTCANON=1 P3D_LAZYREMESH=1 cmd krn01g

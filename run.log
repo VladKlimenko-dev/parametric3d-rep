@@ -1,0 +1,9 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["krn01g"]}
+G03: operations 26, exact 24, refused 2
+{"test":"KRN01-G03-NO-HIDDEN-FACETING","ok":true}
+{"test":"KRN01-G06-OUTCOMES-ALL-OPERATIONS","ok":true}
+G10: operations 26, interruptions 448, escaped 263, refused 13, problems 0
+{"test":"KRN01-G10-INTERRUPT-ALL-OPERATIONS","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":31,"buildMerges":130,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":1013,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":3,"failed":0}
