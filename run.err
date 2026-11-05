@@ -1,0 +1,2 @@
+exit 1
+seconds 4 nproc 4 env P3D_SECSMOOTH=0 cmd y2
