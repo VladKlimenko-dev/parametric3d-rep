@@ -81,7 +81,10 @@ public static class ExactAdapter
         if (LazyRemeshOn)
         {
             TopologyConventions.Normalize(copy);
-            Export.StepImport.MeshFacesFromLoops(copy, null, "LazyDerived");
+            int failed;
+            using (new Tess.ExactFaceMesher.NoMemoScope(true))
+                failed = Export.StepImport.MeshFacesFromLoops(copy, null, "LazyDerived");
+            if (ToExactTrace) Console.Error.WriteLine($"DERIVED solid {solid.Id} faces {copy.Faces.Count()} not-from-loops {failed}");
         }
         bool was = _inDerived; _inDerived = true;
         try { return ToExact(copy, new PlaneRegistry(), null); }
