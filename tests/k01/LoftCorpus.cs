@@ -600,6 +600,7 @@ static partial class Program
                 double? expect = 0; foreach (var ce in chain) { var x = CorpusExpected(ce, round, size); expect = x == null || expect == null ? null : expect + x; }
                 var before = TopologyClone.Deep(p.Bodies[0]); double v0 = p.Volume;
                 if (skipStep == st.ToString()) { Log(new { seed = sd, step = st, skipped = true }); continue; }
+                Console.Error.WriteLine($"== STEP s{sd} {st}");
                 Feature f = round ? new RoundFeature($"R{st}") { Radius = new ValueRef(size) } : new ChamferFeature($"C{st}") { D1 = new ValueRef(size), D2 = new ValueRef(size) };
                 foreach (var ce in chain) { if (f is RoundFeature rf) rf.Edges.Add(EdgeRef.Of(ce)); else ((ChamferFeature)f).Edges.Add(EdgeRef.Of(ce)); }
                 p.AddFeature(f);
@@ -641,7 +642,9 @@ static partial class Program
                 if (rebuildCheck)
                 {
                     rebuildChecked++;
+                    Console.Error.WriteLine($"== REBUILDCHECK s{sd} {st}");
                     var rc = SeqRebuildCompare(p, f);
+                    Console.Error.WriteLine($"== REBUILDCHECK END s{sd} {st}");
                     if (rc != null)
                     {
                         rebuildDiff++; Log(new { tag, rebuildcheck = rc });
