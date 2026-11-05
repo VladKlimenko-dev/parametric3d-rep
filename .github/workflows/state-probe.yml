@@ -53,9 +53,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: y1_both,  cmd: 'y1', env: 'P3D_FOOTCANON=1 P3D_LAZYREMESH=1' }
-          - { name: y1_base,  cmd: 'y1', env: '' }
-          - { name: y1_canon, cmd: 'y1', env: 'P3D_FOOTCANON=1' }
+          - { name: g10_both,  cmd: 'krn01g', env: 'P3D_FOOTCANON=1 P3D_LAZYREMESH=1' }
+          - { name: allA_both2, cmd: 'allA',  env: 'P3D_FOOTCANON=1 P3D_LAZYREMESH=1' }
+          - { name: y1_both2,  cmd: 'y1',     env: 'P3D_FOOTCANON=1 P3D_LAZYREMESH=1' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

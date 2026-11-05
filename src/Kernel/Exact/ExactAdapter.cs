@@ -63,7 +63,10 @@ public static class ExactAdapter
         if (!LazyCtxOn && !LazyRemeshOn) return new Lazy<ExactBody>(make, LazyThreadSafetyMode.ExecutionAndPublication);
         var cur = KernelContext.Current;
         var ctx = new KernelContext(KernelSettings.Capture(), cur?.Policy ?? OperationPolicy.Strict).WithExtensionsOf(cur);
-        return new Lazy<ExactBody>(() => { using var _ = ctx.Enter(); return make(); }, LazyThreadSafetyMode.ExecutionAndPublication);
+        // PublicationOnly: отказ при расчёте формы (сбой этапа, отмена) не запоминается — следующий расчёт строит форму
+        // заново (KRN01-G10-INTERRUPT-ALL-OPERATIONS); форма — функция тела, повторный расчёт даёт то же самое.
+        return new Lazy<ExactBody>(() => { using var _ = ctx.Enter(); return make(); },
+            LazyRemeshOn ? LazyThreadSafetyMode.PublicationOnly : LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     /// <summary>
@@ -75,7 +78,7 @@ public static class ExactAdapter
     /// </summary>
     internal static readonly bool LazyRemeshOn = Environment.GetEnvironmentVariable("P3D_LAZYREMESH") == "1";
     [ThreadStatic] static bool _inDerived;
-    public static ExactBody DerivedOf(TSolid solid)
+    public static ExactBody DerivedOf(TSolid solid, List<string>? warnings = null)
     {
         var copy = TopologyClone.Deep(solid);
         if (LazyRemeshOn)
@@ -104,8 +107,18 @@ public static class ExactAdapter
             }
         }
         bool was = _inDerived; _inDerived = true;
-        try { return ToExact(copy, new PlaneRegistry(), null); }
+        var local = new List<string>();
+        ExactBody made;
+        try { made = ToExact(copy, new PlaneRegistry(), local); }
         finally { _inDerived = was; }
+        // Неполная форма (грань не разметилась — сбой, отмена) не остаётся на теле: у ленивой формы — отказ без
+        // запоминания, у прямой дороги — замечания вызывающему (форма не попадает в _formCache, операция откажет).
+        if (local.Count > 0 && LazyRemeshOn)
+        {
+            if (warnings == null) throw new InvalidOperationException("derived exact form incomplete: " + local[0]);
+            warnings.AddRange(local);
+        }
+        return made;
     }
 
     /// <summary>Я1, разбор: P3D_TOEXACTTRACE=1 — каждый перевод тела в точную форму в stderr (дорога и признаки тела).</summary>
@@ -171,7 +184,7 @@ public static class ExactAdapter
         if (LazyRemeshOn && !_inDerived && solid.Exact == null && solid.Guarantee == GuaranteeLevel.ExactAnalytic)
         {
             _inDerived = true;
-            try { var d = DerivedOf(solid); _path = "derived"; return new ExactBody(d.Solid.Import(registry), d.Sources); }
+            try { var d = DerivedOf(solid, warnings ?? new List<string>()); _path = "derived"; return new ExactBody(d.Solid.Import(registry), d.Sources); }
             finally { _inDerived = false; }
         }
 
