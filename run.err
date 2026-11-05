@@ -1,0 +1,77 @@
+== STEP s106 0
+== REBUILDCHECK s106 0
+== REBUILDCHECK END s106 0
+== STEP s106 1
+== REBUILDCHECK s106 1
+== REBUILDCHECK END s106 1
+== STEP s106 2
+== REBUILDCHECK s106 2
+== REBUILDCHECK END s106 2
+== STEP s106 3
+== REBUILDCHECK s106 3
+== REBUILDCHECK END s106 3
+== STEP s106 4
+== STEP s106 5
+DERIVED solid 2848 faces 25 not-from-loops 0 settings KernelSettings { Chord = 0.02, ChordAngle = 0.1308996938995747, UseExactKernel = True, LocalizeBooleans = True, ExactCylinderCuts = False, SnapVertices = False, HealAfterBoolean = False, HealTolerance = 0.001, HealTinyEdges = False, Audit = False, AuditDepth = 5, VerifyEveryAnswer = False, ExactSectionsByFacets = False, ExactMeshing = True, DeferMeshing = True, ExactDisplay = False, QMeshEnabled = True, FaceCache = False, CdtCheckSides = False, CdtOldLegalize = False, ExactEdgesEnabled = False, ExactEdgesSnapVertices = True, ExactEdgesReplaceCurves = True, SplitRings = True, ToleranceFloor = 1E-07, VertexBallMargin = 2E-06, ExactEdgesOnExport = True, UseUvMesher = True, DeclinePoles = True, UvAllowBands = True, PlanarInput = True, OwnPlanesInGeneralPath = True, TJunctionSeverity = Error, ReuseFaceMeshes = True, SplitCurvedRegions = True, AnalyticPrism = True, AnalyticGeneral = True, AnalyticSpheres = True, GeometryPolicy = AllowBoundedFaceting, BooleanThreads = 1, MeshThreads = 1, OpTag = , Preview = False, LivePreview = False, Tolerance = ToleranceContext { ModelAccuracy = 1E-07, AngularAccuracy = 1E-12, MinFeature = 0.0001, HalfSizeBox = 500000, MaxEntityTolerance = 1E-05, Sewing = 1E-06, ExportFit = 0.0001, ImportHeal = 0.0001, IntegrationRelative = 1E-05, SsiAccuracy = 1E-05, FacetChord = 0.02, FacetAngle = 0.1308996938995747 } }
+DFACE 0 #d000000001/loft:side[0] NurbsSurface loops 1 coedges 7 rev False geom b9ff0e9ff6e10ba9 tris 2633
+DFACE 1 #d000000001/loft:side[1] NurbsSurface loops 1 coedges 6 rev False geom b50a80d58f18602d tris 2549
+DFACE 2 #d000000001/loft:side[2] NurbsSurface loops 1 coedges 8 rev False geom d8ee465e62163fc9 tris 2533
+DFACE 3 #d000000001/loft:side[3] NurbsSurface loops 1 coedges 9 rev False geom 99443308aa6c709b tris 2873
+DFACE 4 #d000000001/loft:side[4] NurbsSurface loops 1 coedges 9 rev False geom 0ae5e4ee0e86e8b9 tris 2785
+DFACE 5 #d000000001/loft:side[5] NurbsSurface loops 1 coedges 8 rev False geom 7138afc2fa6eb22d tris 2671
+DFACE 6 #d000000001/loft:side[6] NurbsSurface loops 1 coedges 8 rev False geom d40598086b3638d6 tris 2831
+DFACE 7 #d000000001/loft:start PlaneSurface loops 2 coedges 10 rev False geom 2408756ad3cb83cd tris 105
+DFACE 8 #d000000001/loft:end PlaneSurface loops 2 coedges 13 rev False geom 5e6f55f6a22cd771 tris 224
+DFACE 9 #d000000001/loft:side[0] NurbsSurface loops 1 coedges 4 rev False geom 8ff1979d2943db6e tris 13200
+DFACE 10 #d000000001/loft:side[1] NurbsSurface loops 1 coedges 4 rev False geom b707dc290b772913 tris 11632
+DFACE 11 #d000000003/round:face SectionSurface loops 1 coedges 7 rev False geom d8f571853f6f5202 tris 434
+DFACE 12 #d000000003/round:face SectionSurface loops 1 coedges 6 rev False geom 6793cf8796ed3610 tris 75
+DFACE 13 #d000000003/round:face SectionSurface loops 1 coedges 5 rev False geom 2ac749550b103bf7 tris 433
+DFACE 14 #d000000003/round:face SectionSurface loops 1 coedges 6 rev False geom ada38dc0fb1607a9 tris 75
+DFACE 15 #d000000003/round:face SectionSurface loops 1 coedges 6 rev False geom 20dfd3eafc4a65ab tris 437
+DFACE 16 #d000000003/round:face SectionSurface loops 1 coedges 6 rev False geom 077002398a751c6f tris 448
+DFACE 17 #d000000003/round:face SectionSurface loops 1 coedges 5 rev False geom de033cd618f473e3 tris 822
+DFACE 18 #d000000003/round:face SectionSurface loops 1 coedges 6 rev False geom f3e1943cd428b6fc tris 90
+DFACE 19 #d000000003/round:face SectionSurface loops 1 coedges 5 rev False geom d1ffcbf91e4539d1 tris 431
+DFACE 20 #d000000003/round:face SectionSurface loops 1 coedges 6 rev False geom 06719323864b8d90 tris 75
+DFACE 21 #d000000003/round:face SectionSurface loops 1 coedges 4 rev False geom dc717df8951a869b tris 588
+DFACE 22 #d000000006/chamfer:face SectionSurface loops 1 coedges 4 rev False geom 4712361cfc592fd6 tris 62
+DFACE 23 #d00000000a/round:face SectionSurface loops 1 coedges 4 rev False geom d7a4a4701a508659 tris 150
+DFACE 24 #d00000000f/round:face SectionSurface loops 1 coedges 4 rev False geom 55e9891a173e142c tris 674
+TOEXACT solid 5715 path triangles guarantee ExactAnalytic faces 25 rev 1 exact none lazy none published False derived True polys 48555
+TOEXACT solid 2848 path lazy guarantee ExactAnalytic faces 25 rev 2 exact none lazy current published True derived False polys 48555
+TOEXACT solid 4280 path triangles guarantee Unspecified faces 5 rev 0 exact none lazy none published False derived False polys 1597
+TOEXACT solid 5906 path triangles guarantee Unspecified faces 6 rev 0 exact none lazy none published False derived False polys 6
+== REBUILDCHECK s106 5
+DERIVED solid 6850 faces 25 not-from-loops 0 settings KernelSettings { Chord = 0.02, ChordAngle = 0.1308996938995747, UseExactKernel = True, LocalizeBooleans = True, ExactCylinderCuts = False, SnapVertices = False, HealAfterBoolean = False, HealTolerance = 0.001, HealTinyEdges = False, Audit = False, AuditDepth = 5, VerifyEveryAnswer = False, ExactSectionsByFacets = False, ExactMeshing = True, DeferMeshing = True, ExactDisplay = False, QMeshEnabled = True, FaceCache = False, CdtCheckSides = False, CdtOldLegalize = False, ExactEdgesEnabled = False, ExactEdgesSnapVertices = True, ExactEdgesReplaceCurves = True, SplitRings = True, ToleranceFloor = 1E-07, VertexBallMargin = 2E-06, ExactEdgesOnExport = True, UseUvMesher = True, DeclinePoles = True, UvAllowBands = True, PlanarInput = True, OwnPlanesInGeneralPath = True, TJunctionSeverity = Error, ReuseFaceMeshes = True, SplitCurvedRegions = True, AnalyticPrism = True, AnalyticGeneral = True, AnalyticSpheres = True, GeometryPolicy = AllowBoundedFaceting, BooleanThreads = 1, MeshThreads = 1, OpTag = , Preview = False, LivePreview = False, Tolerance = ToleranceContext { ModelAccuracy = 1E-07, AngularAccuracy = 1E-12, MinFeature = 0.0001, HalfSizeBox = 500000, MaxEntityTolerance = 1E-05, Sewing = 1E-06, ExportFit = 0.0001, ImportHeal = 0.0001, IntegrationRelative = 1E-05, SsiAccuracy = 1E-05, FacetChord = 0.02, FacetAngle = 0.1308996938995747 } }
+DFACE 0 #d000000001/loft:side[0] NurbsSurface loops 1 coedges 7 rev False geom b9ff0e9ff6e10ba9 tris 2633
+DFACE 1 #d000000001/loft:side[1] NurbsSurface loops 1 coedges 6 rev False geom b50a80d58f18602d tris 2549
+DFACE 2 #d000000001/loft:side[2] NurbsSurface loops 1 coedges 8 rev False geom d8ee465e62163fc9 tris 2533
+DFACE 3 #d000000001/loft:side[3] NurbsSurface loops 1 coedges 9 rev False geom 99443308aa6c709b tris 2873
+DFACE 4 #d000000001/loft:side[4] NurbsSurface loops 1 coedges 9 rev False geom 0ae5e4ee0e86e8b9 tris 2785
+DFACE 5 #d000000001/loft:side[5] NurbsSurface loops 1 coedges 8 rev False geom 7138afc2fa6eb22d tris 2671
+DFACE 6 #d000000001/loft:side[6] NurbsSurface loops 1 coedges 8 rev False geom d40598086b3638d6 tris 2831
+DFACE 7 #d000000001/loft:start PlaneSurface loops 2 coedges 10 rev False geom 2408756ad3cb83cd tris 105
+DFACE 8 #d000000001/loft:end PlaneSurface loops 2 coedges 13 rev False geom 5e6f55f6a22cd771 tris 224
+DFACE 9 #d000000001/loft:side[0] NurbsSurface loops 1 coedges 4 rev False geom 8ff1979d2943db6e tris 13200
+DFACE 10 #d000000001/loft:side[1] NurbsSurface loops 1 coedges 4 rev False geom b707dc290b772913 tris 11632
+DFACE 11 #d000000003/round:face SectionSurface loops 1 coedges 7 rev False geom d8f571853f6f5202 tris 434
+DFACE 12 #d000000003/round:face SectionSurface loops 1 coedges 6 rev False geom 6793cf8796ed3610 tris 75
+DFACE 13 #d000000003/round:face SectionSurface loops 1 coedges 5 rev False geom 2ac749550b103bf7 tris 433
+DFACE 14 #d000000003/round:face SectionSurface loops 1 coedges 6 rev False geom ada38dc0fb1607a9 tris 75
+DFACE 15 #d000000003/round:face SectionSurface loops 1 coedges 6 rev False geom 20dfd3eafc4a65ab tris 437
+DFACE 16 #d000000003/round:face SectionSurface loops 1 coedges 6 rev False geom 077002398a751c6f tris 448
+DFACE 17 #d000000003/round:face SectionSurface loops 1 coedges 5 rev False geom de033cd618f473e3 tris 822
+DFACE 18 #d000000003/round:face SectionSurface loops 1 coedges 6 rev False geom f3e1943cd428b6fc tris 90
+DFACE 19 #d000000003/round:face SectionSurface loops 1 coedges 5 rev False geom d1ffcbf91e4539d1 tris 431
+DFACE 20 #d000000003/round:face SectionSurface loops 1 coedges 6 rev False geom 06719323864b8d90 tris 75
+DFACE 21 #d000000003/round:face SectionSurface loops 1 coedges 4 rev False geom dc717df8951a869b tris 588
+DFACE 22 #d000000006/chamfer:face SectionSurface loops 1 coedges 4 rev False geom 4712361cfc592fd6 tris 62
+DFACE 23 #d00000000a/round:face SectionSurface loops 1 coedges 4 rev False geom d7a4a4701a508659 tris 150
+DFACE 24 #d00000000f/round:face SectionSurface loops 1 coedges 4 rev False geom 55e9891a173e142c tris 674
+TOEXACT solid 8476 path triangles guarantee ExactAnalytic faces 25 rev 1 exact none lazy none published False derived True polys 48555
+TOEXACT solid 6850 path lazy guarantee ExactAnalytic faces 25 rev 2 exact none lazy current published True derived False polys 48555
+TOEXACT solid 7041 path triangles guarantee Unspecified faces 5 rev 0 exact none lazy none published False derived False polys 1597
+TOEXACT solid 8667 path triangles guarantee Unspecified faces 6 rev 0 exact none lazy none published False derived False polys 6
+== REBUILDCHECK END s106 5
+seconds 430 nproc 4 env P3D_FOOTCANON=1 P3D_LAZYREMESH=1 P3D_TOEXACTTRACE=1 cmd loftseq 1 106 6 res/out
