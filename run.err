@@ -1,0 +1,979 @@
+== STEP s102 0
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open end 0: t -11.9608 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -23.9216 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -47.8431 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -95.6863 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -191.3725 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -382.7450 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -765.4900 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -1530.9800 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -3061.9601 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 0.35842928
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 65.073593
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 0.00044068367
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 65.073593
+DR open: table vs formula 1.36E-012 at t 65.0558 (Δ 65.074) widths 6/6 Lp 68.264
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-1.4951, 66.569] contacts A [0.358429, 65.0736] B [0.000440684, 65.0736] Δ 65.074
+DR finish: assembled 0.0s
+DR finish: meshed 0.1s
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 216) | edge tol 0.00E+000 curve ProcCurve3 (29.252, 6.847, -0)->(25.747, 13.795, -0)
+DR finish: validated 0.5s
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 216)
+DR open invalid edge e216 ProcCurve3:chamfer end (29.2522, 6.8469, -0)->(25.7468, 13.7945, -0) faces #d000000001/loft:start PlaneSurface / chamfer:face SectionSurface
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 150/0 steps of 0.12 mm
+DR open: reference fit degree 8 worst 1.62E+000 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 12 worst 9.59E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 16 worst 7.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 24 worst 2.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 32 worst 1.40E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 48 worst 5.75E-002 (tol 1.0E-003) length 83.0734
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 151/150 steps of 0.12 mm
+DR open: reference fit degree 8 worst 4.20E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 12 worst 2.26E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 16 worst 1.90E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 24 worst 8.10E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 32 worst 2.82E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 48 worst 2.68E-002 (tol 1.0E-003) length 101.194
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR declined: not a straight edge | curved chamfer: open curved: the blend does not leave the end face (end face too oblique?) | generic parameter: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+== REBUILDCHECK s102 0
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open end 0: t -11.9608 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -23.9216 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -47.8431 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -95.6863 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -191.3725 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -382.7450 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -765.4900 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -1530.9800 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -3061.9601 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 0.35842928
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 65.073593
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 0.00044068367
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 65.073593
+DR open: table vs formula 1.36E-012 at t 65.0558 (Δ 65.074) widths 6/6 Lp 68.264
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-1.4951, 66.569] contacts A [0.358429, 65.0736] B [0.000440684, 65.0736] Δ 65.074
+DR finish: assembled 0.0s
+DR finish: meshed 0.1s
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 3083) | edge tol 0.00E+000 curve ProcCurve3 (29.252, 6.847, -0)->(25.747, 13.795, -0)
+DR finish: validated 0.4s
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 3083)
+DR open invalid edge e3083 ProcCurve3:chamfer end (29.2522, 6.8469, -0)->(25.7468, 13.7945, -0) faces #d000000001/loft:start PlaneSurface / chamfer:face SectionSurface
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 150/0 steps of 0.12 mm
+DR open: reference fit degree 8 worst 1.62E+000 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 12 worst 9.59E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 16 worst 7.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 24 worst 2.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 32 worst 1.40E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 48 worst 5.75E-002 (tol 1.0E-003) length 83.0734
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 151/150 steps of 0.12 mm
+DR open: reference fit degree 8 worst 4.20E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 12 worst 2.26E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 16 worst 1.90E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 24 worst 8.10E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 32 worst 2.82E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 48 worst 2.68E-002 (tol 1.0E-003) length 101.194
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR declined: not a straight edge | curved chamfer: open curved: the blend does not leave the end face (end face too oblique?) | generic parameter: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+== REBUILDCHECK END s102 0
+== STEP s102 1
+DR open: convexity probe at 0.25 p (23.997, 10.631, -11.582) nA (0.292, 0.873, -0.39) nB (0.895, 0.325, -0.305) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (20.123, 3.186, -29.488) nA (0.466, 0.771, -0.434) nB (0.956, 0.131, -0.264) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (16.516, -4.298, -47.395) nA (0.651, 0.663, -0.368) nB (0.987, -0.071, -0.146) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: reference fit degree 8 worst 3.07E-002 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 12 worst 5.33E-003 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 16 worst 1.26E-003 (tol 1.0E-003) length 63.5082
+DR open: generic parameter ends: t 0: conv after 2, |fA| 1.5E-031 |fB| 1.6E-015 move 5.58E-005 (reach 1.5), vertex 8.21E-005; t 63.508: conv after 2, |fA| 5.7E-016 |fB| 0.0E+000 move 4.34E-005 (reach 1.5), vertex 8.75E-005; run off the chain Infinity (tol 1.0E-004), ends tol 6.4E-004
+DR open: generic parameter rejected: ends 8.21E-005 8.75E-005; tol edge 0.0E+000 vertex 1.8E-015; curve SectionIsoCurve; faces NurbsSurface/SectionSurface; guarantee ExactPolyhedral
+DR open: convexity probe at 0.25 p (23.997, 10.631, -11.582) nA (0.292, 0.873, -0.39) nB (0.895, 0.325, -0.305) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (20.123, 3.186, -29.488) nA (0.466, 0.771, -0.434) nB (0.956, 0.131, -0.264) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (16.516, -4.298, -47.395) nA (0.651, 0.663, -0.368) nB (0.987, -0.071, -0.146) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: reference fit degree 8 worst 3.07E-002 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 12 worst 5.33E-003 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 16 worst 1.26E-003 (tol 1.0E-003) length 63.5082
+DR open end 0: t -11.9854 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -23.9708 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -47.9415 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -95.8830 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -191.7661 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -383.5321 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -767.0643 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -1534.1285 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -3068.2571 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR declined: not a straight edge | curved chamfer: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+== REBUILDCHECK s102 1
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open end 0: t -11.9608 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -23.9216 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -47.8431 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -95.6863 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -191.3725 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -382.7450 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -765.4900 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -1530.9800 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -3061.9601 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 0.35842928
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 65.073593
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 0.00044068367
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 65.073593
+DR open: table vs formula 1.36E-012 at t 65.0558 (Δ 65.074) widths 6/6 Lp 68.264
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-1.4951, 66.569] contacts A [0.358429, 65.0736] B [0.000440684, 65.0736] Δ 65.074
+DR finish: assembled 0.0s
+DR finish: meshed 0.1s
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 6428) | edge tol 0.00E+000 curve ProcCurve3 (29.252, 6.847, -0)->(25.747, 13.795, -0)
+DR finish: validated 0.4s
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 6428)
+DR open invalid edge e6428 ProcCurve3:chamfer end (29.2522, 6.8469, -0)->(25.7468, 13.7945, -0) faces #d000000001/loft:start PlaneSurface / chamfer:face SectionSurface
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 150/0 steps of 0.12 mm
+DR open: reference fit degree 8 worst 1.62E+000 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 12 worst 9.59E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 16 worst 7.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 24 worst 2.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 32 worst 1.40E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 48 worst 5.75E-002 (tol 1.0E-003) length 83.0734
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 151/150 steps of 0.12 mm
+DR open: reference fit degree 8 worst 4.20E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 12 worst 2.26E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 16 worst 1.90E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 24 worst 8.10E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 32 worst 2.82E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 48 worst 2.68E-002 (tol 1.0E-003) length 101.194
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR declined: not a straight edge | curved chamfer: open curved: the blend does not leave the end face (end face too oblique?) | generic parameter: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+DR open: convexity probe at 0.25 p (23.997, 10.631, -11.582) nA (0.292, 0.873, -0.39) nB (0.895, 0.325, -0.305) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (20.123, 3.186, -29.488) nA (0.466, 0.771, -0.434) nB (0.956, 0.131, -0.264) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (16.516, -4.298, -47.395) nA (0.651, 0.663, -0.368) nB (0.987, -0.071, -0.146) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: reference fit degree 8 worst 3.07E-002 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 12 worst 5.33E-003 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 16 worst 1.26E-003 (tol 1.0E-003) length 63.5082
+DR open: generic parameter ends: t 0: conv after 2, |fA| 1.5E-031 |fB| 1.6E-015 move 5.58E-005 (reach 1.5), vertex 8.21E-005; t 63.508: conv after 2, |fA| 5.7E-016 |fB| 0.0E+000 move 4.34E-005 (reach 1.5), vertex 8.75E-005; run off the chain Infinity (tol 1.0E-004), ends tol 6.4E-004
+DR open: generic parameter rejected: ends 8.21E-005 8.75E-005; tol edge 0.0E+000 vertex 1.8E-015; curve SectionIsoCurve; faces NurbsSurface/SectionSurface; guarantee ExactPolyhedral
+DR open: convexity probe at 0.25 p (23.997, 10.631, -11.582) nA (0.292, 0.873, -0.39) nB (0.895, 0.325, -0.305) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (20.123, 3.186, -29.488) nA (0.466, 0.771, -0.434) nB (0.956, 0.131, -0.264) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (16.516, -4.298, -47.395) nA (0.651, 0.663, -0.368) nB (0.987, -0.071, -0.146) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: reference fit degree 8 worst 3.07E-002 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 12 worst 5.33E-003 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 16 worst 1.26E-003 (tol 1.0E-003) length 63.5082
+DR open end 0: t -11.9854 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -23.9708 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -47.9415 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -95.8830 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -191.7661 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -383.5321 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -767.0643 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -1534.1285 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -3068.2571 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR declined: not a straight edge | curved chamfer: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+== REBUILDCHECK END s102 1
+== STEP s102 2
+DR build declined: not a straight edge
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (16.89, -9.176, -43.377) nA (0.972, -0.082, -0.22) nB (0.881, 0.314, -0.353) inside False (eps 1.78), faces #d000000003/chamfer:face/#d000000006/chamfer:face
+DR open: convexity probe at 0.5 p (20.96, -3.086, -29.055) nA (0.946, 0.078, -0.316) nB (0.78, 0.45, -0.434) inside False (eps 1.78), faces #d000000003/chamfer:face/#d000000006/chamfer:face
+DR open: convexity probe at 0.75 p (25.109, 3.309, -14.866) nA (0.9, 0.246, -0.361) nB (0.672, 0.591, -0.447) inside False (eps 1.78), faces #d000000003/chamfer:face/#d000000006/chamfer:face
+DR open: reference fit degree 8 worst 5.12E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 12 worst 5.31E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 16 worst 5.08E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 24 worst 4.85E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 32 worst 5.18E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 48 worst 5.33E-002 (tol 1.0E-003) length 64.707
+DR open: reference curve not fitted (PolylineCurve3, chain 1: PolylineCurve3)
+DR declined: not a straight edge | open curved: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+== REBUILDCHECK s102 2
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open end 0: t -11.9608 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -23.9216 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -47.8431 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -95.6863 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -191.3725 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -382.7450 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -765.4900 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -1530.9800 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -3061.9601 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 0.35842928
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 65.073593
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 0.00044068367
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 65.073593
+DR open: table vs formula 1.36E-012 at t 65.0558 (Δ 65.074) widths 6/6 Lp 68.264
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-1.4951, 66.569] contacts A [0.358429, 65.0736] B [0.000440684, 65.0736] Δ 65.074
+DR finish: assembled 0.0s
+DR finish: meshed 0.1s
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 11407) | edge tol 0.00E+000 curve ProcCurve3 (29.252, 6.847, -0)->(25.747, 13.795, -0)
+DR finish: validated 0.4s
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 11407)
+DR open invalid edge e11407 ProcCurve3:chamfer end (29.2522, 6.8469, -0)->(25.7468, 13.7945, -0) faces #d000000001/loft:start PlaneSurface / chamfer:face SectionSurface
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 150/0 steps of 0.12 mm
+DR open: reference fit degree 8 worst 1.62E+000 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 12 worst 9.59E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 16 worst 7.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 24 worst 2.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 32 worst 1.40E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 48 worst 5.75E-002 (tol 1.0E-003) length 83.0734
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 151/150 steps of 0.12 mm
+DR open: reference fit degree 8 worst 4.20E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 12 worst 2.26E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 16 worst 1.90E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 24 worst 8.10E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 32 worst 2.82E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 48 worst 2.68E-002 (tol 1.0E-003) length 101.194
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR declined: not a straight edge | curved chamfer: open curved: the blend does not leave the end face (end face too oblique?) | generic parameter: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+DR open: convexity probe at 0.25 p (23.997, 10.631, -11.582) nA (0.292, 0.873, -0.39) nB (0.895, 0.325, -0.305) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (20.123, 3.186, -29.488) nA (0.466, 0.771, -0.434) nB (0.956, 0.131, -0.264) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (16.516, -4.298, -47.395) nA (0.651, 0.663, -0.368) nB (0.987, -0.071, -0.146) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: reference fit degree 8 worst 3.07E-002 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 12 worst 5.33E-003 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 16 worst 1.26E-003 (tol 1.0E-003) length 63.5082
+DR open: generic parameter ends: t 0: conv after 2, |fA| 1.5E-031 |fB| 1.6E-015 move 5.58E-005 (reach 1.5), vertex 8.21E-005; t 63.508: conv after 2, |fA| 5.7E-016 |fB| 0.0E+000 move 4.34E-005 (reach 1.5), vertex 8.75E-005; run off the chain Infinity (tol 1.0E-004), ends tol 6.4E-004
+DR open: generic parameter rejected: ends 8.21E-005 8.75E-005; tol edge 0.0E+000 vertex 1.8E-015; curve SectionIsoCurve; faces NurbsSurface/SectionSurface; guarantee ExactPolyhedral
+DR open: convexity probe at 0.25 p (23.997, 10.631, -11.582) nA (0.292, 0.873, -0.39) nB (0.895, 0.325, -0.305) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (20.123, 3.186, -29.488) nA (0.466, 0.771, -0.434) nB (0.956, 0.131, -0.264) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (16.516, -4.298, -47.395) nA (0.651, 0.663, -0.368) nB (0.987, -0.071, -0.146) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: reference fit degree 8 worst 3.07E-002 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 12 worst 5.33E-003 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 16 worst 1.26E-003 (tol 1.0E-003) length 63.5082
+DR open end 0: t -11.9854 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -23.9708 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -47.9415 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -95.8830 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -191.7661 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -383.5321 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -767.0643 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -1534.1285 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -3068.2571 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR declined: not a straight edge | curved chamfer: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+DR build declined: not a straight edge
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (16.89, -9.176, -43.377) nA (0.972, -0.082, -0.22) nB (0.881, 0.314, -0.353) inside False (eps 1.78), faces #d000000003/chamfer:face/#d000000006/chamfer:face
+DR open: convexity probe at 0.5 p (20.96, -3.086, -29.055) nA (0.946, 0.078, -0.316) nB (0.78, 0.45, -0.434) inside False (eps 1.78), faces #d000000003/chamfer:face/#d000000006/chamfer:face
+DR open: convexity probe at 0.75 p (25.109, 3.309, -14.866) nA (0.9, 0.246, -0.361) nB (0.672, 0.591, -0.447) inside False (eps 1.78), faces #d000000003/chamfer:face/#d000000006/chamfer:face
+DR open: reference fit degree 8 worst 5.12E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 12 worst 5.31E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 16 worst 5.08E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 24 worst 4.85E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 32 worst 5.18E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 48 worst 5.33E-002 (tol 1.0E-003) length 64.707
+DR open: reference curve not fitted (PolylineCurve3, chain 1: PolylineCurve3)
+DR declined: not a straight edge | open curved: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+== REBUILDCHECK END s102 2
+== STEP s102 3
+DR open: convexity probe at 0.25 p (-13.817, 23.516, -25.607) nA (-0.859, 0.5, -0.114) nB (0.472, 0.881, 0.036) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (-13.443, 23.443, -28.74) nA (-0.847, 0.519, -0.113) nB (0.508, 0.86, 0.04) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (-12.933, 23.342, -33.015) nA (-0.831, 0.545, -0.112) nB (0.557, 0.829, 0.047) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 5.43E-003 (tol 3.0E-004) length 58.9409
+DR open: reference fit degree 12 worst 6.74E-004 (tol 3.0E-004) length 58.9409
+DR open: table vs formula 1.02E-013 at t 58.6752 (Δ 58.9409) widths 0.3/0.3 Lp 60.141
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-0.5999, 59.541] contacts A [1.22181E-05, 58.9409] B [1.22181E-05, 58.9409] Δ 58.9409
+DR open: NURBS face #d000000001/loft:side[2] extended u [-0.05, 1] v [0, 1], deviation inside 2.2E-014
+DR finish: assembled 0.0s
+DR   face 16391 #d000000001/loft:side[0] NurbsSurface: LineCurve3 (29.252, 6.847, 0)->(16.285, -24.003, 0) | IntersectionCurve3 (16.285, -24.003, 0)->(4.212, -26.713, -27.599) | LineCurve3 (4.212, -26.713, -27.599)->(3.908, -26.781, -28.169) | LineCurve3 (3.908, -26.781, -28.169)->(3.604, -26.85, -28.74) | LineCurve3 (3.604, -26.85, -28.74)->(2.996, -26.986, -29.882) | LineCurve3 (2.996, -26.986, -29
+DR   face 16413 #d000000001/loft:side[1] NurbsSurface: IntersectionCurve3 (4.212, -26.713, -27.599)->(16.285, -24.003, 0) | LineCurve3 (16.285, -24.003, 0)->(-31.577, -12.379, 0) | IntersectionCurve3 (-31.577, -12.379, 0)->(-31.448, -6.566, -26.459) | LineCurve3 (-31.448, -6.566, -26.459)->(-31.444, -6.413, -27.028) | LineCurve3 (-31.444, -6.413, -27.028)->(-31.441, -6.259, -27.599) | LineCurve3 (-31
+DR   face 16438 #d000000001/loft:start PlaneSurface: LineCurve3 (16.285, -24.003, 0)->(29.252, 6.847, 0) | LineCurve3 (29.252, 6.847, 0)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.438, 0)->(19.916, 15.211, 0) | LineCurve3 (19.916, 15.211, 0)->(-15.993, 23.932, -0) | ProcCurve3:chamfer end (-15.993, 23.932, -0)->(-16.401, 23.726, -0) | LineCurve3 (-16.401, 23.726, -0)->(-31.577, -12.379, 0) | LineCurve
+DR   face 16449 #d000000001/loft:end PlaneSurface: LineCurve3 (13.934, -15.201, -58.622)->(-9.685, -29.833, -58.622) | LineCurve3 (-9.685, -29.833, -58.622)->(-31.284, 0.786, -58.622) | LineCurve3 (-31.284, 0.786, -58.622)->(-10.67, 22.638, -58.622) | ProcCurve3:chamfer end (-10.67, 22.638, -58.622)->(-10.271, 22.627, -58.622) | LineCurve3 (-10.271, 22.627, -58.622)->(11.288, -2.876, -58.622) | LineC
+DR   face 16462 #d000000003/chamfer:face SectionSurface: IntersectionCurve3 (29.252, 6.847, 0)->(13.934, -15.201, -58.622) | LineCurve3 (13.934, -15.201, -58.622)->(14.1, -14.154, -58.622) | SectionIsoCurve (14.1, -14.154, -58.622)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(28.292, 8.176, -1.667) | SectionIsoCurve (28.292, 8.176, -1.667)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.
+DR   face 16469 #d000000001/loft:side[2] NurbsSurface: IntersectionCurve3 (-31.448, -6.566, -26.459)->(-31.577, -12.379, 0) | LineCurve3 (-31.577, -12.379, 0)->(-16.401, 23.726, -0) | ProcCurve3:chamfer contact (-16.401, 23.726, -0)->(-10.67, 22.638, -58.622) | LineCurve3 (-10.67, 22.638, -58.622)->(-31.284, 0.786, -58.622) | IntersectionCurve3 (-31.284, 0.786, -58.622)->(-31.414, -5.027, -32.163) | 
+DR   face 16472 #d000000001/loft:side[3] NurbsSurface: LineCurve3 (-15.993, 23.932, -0)->(19.916, 15.211, 0) | PolylineCurve3 (19.916, 15.211, 0)->(11.288, -2.876, -58.622) | LineCurve3 (11.288, -2.876, -58.622)->(-10.271, 22.627, -58.622) | ProcCurve3:chamfer contact (-10.271, 22.627, -58.622)->(-15.993, 23.932, -0)
+DR   face 16476 #d000000006/chamfer:face SectionSurface: LineCurve3 (19.916, 15.211, 0)->(28.45, 8.438, 0) | SectionIsoCurve (28.45, 8.438, 0)->(28.292, 8.176, -1.667) | PolylineCurve3 (28.292, 8.176, -1.667)->(27.659, 8.696, -1.652) | SectionIsoCurve (27.659, 8.696, -1.652)->(14.013, -12.635, -58.622) | LineCurve3 (14.013, -12.635, -58.622)->(11.288, -2.876, -58.622) | PolylineCurve3 (11.288, -2.876
+DR   face 16481 #d00000000a/round:face SectionSurface: PolylineCurve3 (14.1, -14.154, -58.622)->(14.013, -12.635, -58.622) | SectionIsoCurve (14.013, -12.635, -58.622)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.622, 7.501, -1.6) | SectionIsoCurve (28.622, 7.501, -1.6)->(14.1, -14.154, -58.622)
+DR   face 16481 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.067, 1.387, -20.418)->(23.273, 1.178, -20.355) | SectionIsoCurve (23.273, 1.178, -20.355)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.067, 1.387, -20.418)
+DR   face 16481 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.703, 2.37, -18.19)->(23.912, 2.169, -18.131) | SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.703, 2.37, -18.19)
+DR   face 16481 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.989, -6.884, -38.651)->(17.86, -6.65, -38.701) | SectionIsoCurve (17.86, -6.65, -38.701)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.989, -6.884, -38.651)
+DR   face 16481 #d00000000a/round:face SectionSurface: SectionIsoCurve (19.211, -4.993, -34.276)->(19.258, -4.962, -34.138) | SectionIsoCurve (19.258, -4.962, -34.138)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.211, -4.993, -34.276)
+DR   face 16481 #d00000000a/round:face SectionSurface: SectionIsoCurve (18.575, -5.725, -36.282)->(18.419, -5.657, -36.525) | SectionIsoCurve (18.419, -5.657, -36.525)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.575, -5.725, -36.282)
+DR   face 16481 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.426, -7.72, -40.712)->(17.251, -7.552, -40.942) | SectionIsoCurve (17.251, -7.552, -40.942)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.426, -7.72, -40.712)
+DR   face 16481 #d00000000a/round:face SectionSurface: SectionIsoCurve (21.251, -1.939, -27.288)->(21.383, -1.682, -26.79) | SectionIsoCurve (21.383, -1.682, -26.79)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.251, -1.939, -27.288)
+DR   face 16481 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.026, -3.75, -31.44)->(19.712, -3.659, -31.914) | SectionIsoCurve (19.712, -3.659, -31.914)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(20.026, -3.75, -31.44)
+DR   face 16481 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.708, -2.711, -29.098)->(20.387, -2.642, -29.579) | SectionIsoCurve (20.387, -2.642, -29.579)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.708, -2.711, -29.098)
+DR   face 16481 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.04, -0.613, -24.474)->(21.716, -0.585, -24.962) | SectionIsoCurve (21.716, -0.585, -24.962)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(22.04, -0.613, -24.474)
+DR   face 16481 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.418, 0.372, -22.687)->(22.619, 0.167, -22.609) | SectionIsoCurve (22.619, 0.167, -22.609)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.418, 0.372, -22.687)
+DR   face 16561 #d00000000a/round:cap[1] PlaneSurface: PolylineCurve3 (28.292, 8.176, -1.667)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.292, 8.176, -1.667)
+DR   face 16563 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.273, 1.178, -20.355)->(23.067, 1.387, -20.418) | SectionIsoCurve (23.067, 1.387, -20.418)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.273, 1.178, -20.355)
+DR   face 16565 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.37, -18.19) | SectionIsoCurve (23.703, 2.37, -18.19)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.912, 2.169, -18.131)
+DR   face 16567 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.86, -6.65, -38.701)->(17.989, -6.884, -38.651) | SectionIsoCurve (17.989, -6.884, -38.651)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.86, -6.65, -38.701)
+DR   face 16569 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.258, -4.962, -34.138)->(19.211, -4.993, -34.276) | SectionIsoCurve (19.211, -4.993, -34.276)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.258, -4.962, -34.138)
+DR   face 16571 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (18.419, -5.657, -36.525)->(18.575, -5.725, -36.282) | SectionIsoCurve (18.575, -5.725, -36.282)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.419, -5.657, -36.525)
+DR   face 16573 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.251, -7.552, -40.942)->(17.426, -7.72, -40.712) | SectionIsoCurve (17.426, -7.72, -40.712)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.251, -7.552, -40.942)
+DR   face 16575 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.383, -1.682, -26.79)->(21.251, -1.939, -27.288) | SectionIsoCurve (21.251, -1.939, -27.288)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.383, -1.682, -26.79)
+DR   face 16577 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.712, -3.659, -31.914)->(20.026, -3.75, -31.44) | SectionIsoCurve (20.026, -3.75, -31.44)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(19.712, -3.659, -31.914)
+DR   face 16579 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (20.387, -2.642, -29.579)->(20.708, -2.711, -29.098) | SectionIsoCurve (20.708, -2.711, -29.098)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.387, -2.642, -29.579)
+DR   face 16581 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.716, -0.585, -24.962)->(22.04, -0.613, -24.474) | SectionIsoCurve (22.04, -0.613, -24.474)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(21.716, -0.585, -24.962)
+DR   face 16583 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (22.619, 0.167, -22.609)->(22.418, 0.372, -22.687) | SectionIsoCurve (22.418, 0.372, -22.687)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.619, 0.167, -22.609)
+DR   face 16585 chamfer:face SectionSurface: ProcCurve3:chamfer end (-16.401, 23.726, -0)->(-15.993, 23.932, -0) | ProcCurve3:chamfer contact (-15.993, 23.932, -0)->(-10.271, 22.627, -58.622) | ProcCurve3:chamfer end (-10.271, 22.627, -58.622)->(-10.67, 22.638, -58.622) | ProcCurve3:chamfer contact (-10.67, 22.638, -58.622)->(-16.401, 23.726, -0)
+DR open: convexity probe at 0.25 p (-13.817, 23.516, -25.607) nA (-0.859, 0.5, -0.114) nB (0.472, 0.881, 0.036) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (-13.443, 23.443, -28.74) nA (-0.847, 0.519, -0.113) nB (0.508, 0.86, 0.04) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (-12.933, 23.342, -33.015) nA (-0.831, 0.545, -0.112) nB (0.557, 0.829, 0.047) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 5.43E-003 (tol 3.0E-004) length 58.9409
+DR open: reference fit degree 12 worst 6.74E-004 (tol 3.0E-004) length 58.9409
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[2] at t 1.2218094E-05
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[2] at t 58.940868
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 1.2218094E-05
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 58.940868
+DR open: table vs formula 3.18E-014 at t 53.9715 (Δ 58.9409) widths 0.3/0.3 Lp 60.142
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-0.5999, 59.541] contacts A [1.22181E-05, 58.9409] B [1.22181E-05, 58.9409] Δ 58.9409
+DR open: NURBS face #d000000001/loft:side[2] extended u [-0.05, 1] v [0, 1], deviation inside 2.2E-014
+DR finish: assembled 0.0s
+DR   face 16589 #d000000001/loft:side[0] NurbsSurface: LineCurve3 (29.252, 6.847, 0)->(16.285, -24.003, 0) | IntersectionCurve3 (16.285, -24.003, 0)->(4.212, -26.713, -27.599) | LineCurve3 (4.212, -26.713, -27.599)->(3.908, -26.781, -28.169) | LineCurve3 (3.908, -26.781, -28.169)->(3.604, -26.85, -28.74) | LineCurve3 (3.604, -26.85, -28.74)->(2.996, -26.986, -29.882) | LineCurve3 (2.996, -26.986, -29
+DR   face 16611 #d000000001/loft:side[1] NurbsSurface: IntersectionCurve3 (4.212, -26.713, -27.599)->(16.285, -24.003, 0) | LineCurve3 (16.285, -24.003, 0)->(-31.577, -12.379, 0) | IntersectionCurve3 (-31.577, -12.379, 0)->(-31.448, -6.566, -26.459) | LineCurve3 (-31.448, -6.566, -26.459)->(-31.444, -6.413, -27.028) | LineCurve3 (-31.444, -6.413, -27.028)->(-31.441, -6.259, -27.599) | LineCurve3 (-31
+DR   face 16636 #d000000001/loft:start PlaneSurface: LineCurve3 (16.285, -24.003, 0)->(29.252, 6.847, 0) | LineCurve3 (29.252, 6.847, 0)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.438, 0)->(19.916, 15.211, 0) | LineCurve3 (19.916, 15.211, 0)->(-15.993, 23.932, 0) | ProcCurve3:chamfer end (-15.993, 23.932, 0)->(-16.401, 23.726, 0) | LineCurve3 (-16.401, 23.726, 0)->(-31.577, -12.379, 0) | LineCurve3 (-
+DR   face 16647 #d000000001/loft:end PlaneSurface: LineCurve3 (13.934, -15.201, -58.622)->(-9.685, -29.833, -58.622) | LineCurve3 (-9.685, -29.833, -58.622)->(-31.284, 0.786, -58.622) | LineCurve3 (-31.284, 0.786, -58.622)->(-10.67, 22.638, -58.622) | ProcCurve3:chamfer end (-10.67, 22.638, -58.622)->(-10.271, 22.627, -58.622) | LineCurve3 (-10.271, 22.627, -58.622)->(11.288, -2.876, -58.622) | LineC
+DR   face 16660 #d000000003/chamfer:face SectionSurface: IntersectionCurve3 (29.252, 6.847, 0)->(13.934, -15.201, -58.622) | LineCurve3 (13.934, -15.201, -58.622)->(14.1, -14.154, -58.622) | SectionIsoCurve (14.1, -14.154, -58.622)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(28.292, 8.176, -1.667) | SectionIsoCurve (28.292, 8.176, -1.667)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.
+DR   face 16667 #d000000001/loft:side[2] NurbsSurface: IntersectionCurve3 (-31.448, -6.566, -26.459)->(-31.577, -12.379, 0) | LineCurve3 (-31.577, -12.379, 0)->(-16.401, 23.726, 0) | ProcCurve3:chamfer contact (-16.401, 23.726, 0)->(-10.67, 22.638, -58.622) | LineCurve3 (-10.67, 22.638, -58.622)->(-31.284, 0.786, -58.622) | IntersectionCurve3 (-31.284, 0.786, -58.622)->(-31.414, -5.027, -32.163) | Li
+DR   face 16670 #d000000001/loft:side[3] NurbsSurface: LineCurve3 (-15.993, 23.932, 0)->(19.916, 15.211, 0) | PolylineCurve3 (19.916, 15.211, 0)->(11.288, -2.876, -58.622) | LineCurve3 (11.288, -2.876, -58.622)->(-10.271, 22.627, -58.622) | ProcCurve3:chamfer contact (-10.271, 22.627, -58.622)->(-15.993, 23.932, 0)
+DR   face 16674 #d000000006/chamfer:face SectionSurface: LineCurve3 (19.916, 15.211, 0)->(28.45, 8.438, 0) | SectionIsoCurve (28.45, 8.438, 0)->(28.292, 8.176, -1.667) | PolylineCurve3 (28.292, 8.176, -1.667)->(27.659, 8.696, -1.652) | SectionIsoCurve (27.659, 8.696, -1.652)->(14.013, -12.635, -58.622) | LineCurve3 (14.013, -12.635, -58.622)->(11.288, -2.876, -58.622) | PolylineCurve3 (11.288, -2.876
+DR   face 16679 #d00000000a/round:face SectionSurface: PolylineCurve3 (14.1, -14.154, -58.622)->(14.013, -12.635, -58.622) | SectionIsoCurve (14.013, -12.635, -58.622)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.622, 7.501, -1.6) | SectionIsoCurve (28.622, 7.501, -1.6)->(14.1, -14.154, -58.622)
+DR   face 16679 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.067, 1.387, -20.418)->(23.273, 1.178, -20.355) | SectionIsoCurve (23.273, 1.178, -20.355)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.067, 1.387, -20.418)
+DR   face 16679 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.703, 2.37, -18.19)->(23.912, 2.169, -18.131) | SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.703, 2.37, -18.19)
+DR   face 16679 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.989, -6.884, -38.651)->(17.86, -6.65, -38.701) | SectionIsoCurve (17.86, -6.65, -38.701)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.989, -6.884, -38.651)
+DR   face 16679 #d00000000a/round:face SectionSurface: SectionIsoCurve (19.211, -4.993, -34.276)->(19.258, -4.962, -34.138) | SectionIsoCurve (19.258, -4.962, -34.138)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.211, -4.993, -34.276)
+DR   face 16679 #d00000000a/round:face SectionSurface: SectionIsoCurve (18.575, -5.725, -36.282)->(18.419, -5.657, -36.525) | SectionIsoCurve (18.419, -5.657, -36.525)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.575, -5.725, -36.282)
+DR   face 16679 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.426, -7.72, -40.712)->(17.251, -7.552, -40.942) | SectionIsoCurve (17.251, -7.552, -40.942)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.426, -7.72, -40.712)
+DR   face 16679 #d00000000a/round:face SectionSurface: SectionIsoCurve (21.251, -1.939, -27.288)->(21.383, -1.682, -26.79) | SectionIsoCurve (21.383, -1.682, -26.79)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.251, -1.939, -27.288)
+DR   face 16679 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.026, -3.75, -31.44)->(19.712, -3.659, -31.914) | SectionIsoCurve (19.712, -3.659, -31.914)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(20.026, -3.75, -31.44)
+DR   face 16679 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.708, -2.711, -29.098)->(20.387, -2.642, -29.579) | SectionIsoCurve (20.387, -2.642, -29.579)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.708, -2.711, -29.098)
+DR   face 16679 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.04, -0.613, -24.474)->(21.716, -0.585, -24.962) | SectionIsoCurve (21.716, -0.585, -24.962)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(22.04, -0.613, -24.474)
+DR   face 16679 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.418, 0.372, -22.687)->(22.619, 0.167, -22.609) | SectionIsoCurve (22.619, 0.167, -22.609)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.418, 0.372, -22.687)
+DR   face 16759 #d00000000a/round:cap[1] PlaneSurface: PolylineCurve3 (28.292, 8.176, -1.667)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.292, 8.176, -1.667)
+DR   face 16761 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.273, 1.178, -20.355)->(23.067, 1.387, -20.418) | SectionIsoCurve (23.067, 1.387, -20.418)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.273, 1.178, -20.355)
+DR   face 16763 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.37, -18.19) | SectionIsoCurve (23.703, 2.37, -18.19)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.912, 2.169, -18.131)
+DR   face 16765 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.86, -6.65, -38.701)->(17.989, -6.884, -38.651) | SectionIsoCurve (17.989, -6.884, -38.651)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.86, -6.65, -38.701)
+DR   face 16767 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.258, -4.962, -34.138)->(19.211, -4.993, -34.276) | SectionIsoCurve (19.211, -4.993, -34.276)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.258, -4.962, -34.138)
+DR   face 16769 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (18.419, -5.657, -36.525)->(18.575, -5.725, -36.282) | SectionIsoCurve (18.575, -5.725, -36.282)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.419, -5.657, -36.525)
+DR   face 16771 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.251, -7.552, -40.942)->(17.426, -7.72, -40.712) | SectionIsoCurve (17.426, -7.72, -40.712)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.251, -7.552, -40.942)
+DR   face 16773 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.383, -1.682, -26.79)->(21.251, -1.939, -27.288) | SectionIsoCurve (21.251, -1.939, -27.288)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.383, -1.682, -26.79)
+DR   face 16775 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.712, -3.659, -31.914)->(20.026, -3.75, -31.44) | SectionIsoCurve (20.026, -3.75, -31.44)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(19.712, -3.659, -31.914)
+DR   face 16777 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (20.387, -2.642, -29.579)->(20.708, -2.711, -29.098) | SectionIsoCurve (20.708, -2.711, -29.098)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.387, -2.642, -29.579)
+DR   face 16779 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.716, -0.585, -24.962)->(22.04, -0.613, -24.474) | SectionIsoCurve (22.04, -0.613, -24.474)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(21.716, -0.585, -24.962)
+DR   face 16781 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (22.619, 0.167, -22.609)->(22.418, 0.372, -22.687) | SectionIsoCurve (22.418, 0.372, -22.687)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.619, 0.167, -22.609)
+DR   face 16783 chamfer:face SectionSurface: ProcCurve3:chamfer end (-16.401, 23.726, 0)->(-15.993, 23.932, 0) | ProcCurve3:chamfer contact (-15.993, 23.932, 0)->(-10.271, 22.627, -58.622) | ProcCurve3:chamfer end (-10.271, 22.627, -58.622)->(-10.67, 22.638, -58.622) | ProcCurve3:chamfer contact (-10.67, 22.638, -58.622)->(-16.401, 23.726, 0)
+DR declined: not a straight edge | curved chamfer: faces not meshed: AnalyticPrism: грань 16481 [SectionSurface] не построена по контурам: непарная сторона вне контура: 4 из 116; способ 2; кольцо нет, полоса 0/0, контуров 12; conformal: surface kind not supported / AnalyticPrism: 21 face(s) meshed from their loops, 1 left as is.
+== REBUILDCHECK s102 3
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open end 0: t -11.9608 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -23.9216 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -47.8431 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -95.6863 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -191.3725 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -382.7450 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -765.4900 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -1530.9800 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -3061.9601 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 0.35842928
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 65.073593
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 0.00044068367
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 65.073593
+DR open: table vs formula 1.36E-012 at t 65.0558 (Δ 65.074) widths 6/6 Lp 68.264
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-1.4951, 66.569] contacts A [0.358429, 65.0736] B [0.000440684, 65.0736] Δ 65.074
+DR finish: assembled 0.0s
+DR finish: meshed 0.1s
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 18001) | edge tol 0.00E+000 curve ProcCurve3 (29.252, 6.847, -0)->(25.747, 13.795, -0)
+DR finish: validated 0.4s
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 18001)
+DR open invalid edge e18001 ProcCurve3:chamfer end (29.2522, 6.8469, -0)->(25.7468, 13.7945, -0) faces #d000000001/loft:start PlaneSurface / chamfer:face SectionSurface
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 150/0 steps of 0.12 mm
+DR open: reference fit degree 8 worst 1.62E+000 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 12 worst 9.59E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 16 worst 7.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 24 worst 2.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 32 worst 1.40E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 48 worst 5.75E-002 (tol 1.0E-003) length 83.0734
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 151/150 steps of 0.12 mm
+DR open: reference fit degree 8 worst 4.20E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 12 worst 2.26E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 16 worst 1.90E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 24 worst 8.10E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 32 worst 2.82E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 48 worst 2.68E-002 (tol 1.0E-003) length 101.194
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR declined: not a straight edge | curved chamfer: open curved: the blend does not leave the end face (end face too oblique?) | generic parameter: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+DR open: convexity probe at 0.25 p (23.997, 10.631, -11.582) nA (0.292, 0.873, -0.39) nB (0.895, 0.325, -0.305) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (20.123, 3.186, -29.488) nA (0.466, 0.771, -0.434) nB (0.956, 0.131, -0.264) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (16.516, -4.298, -47.395) nA (0.651, 0.663, -0.368) nB (0.987, -0.071, -0.146) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: reference fit degree 8 worst 3.07E-002 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 12 worst 5.33E-003 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 16 worst 1.26E-003 (tol 1.0E-003) length 63.5082
+DR open: generic parameter ends: t 0: conv after 2, |fA| 1.5E-031 |fB| 1.6E-015 move 5.58E-005 (reach 1.5), vertex 8.21E-005; t 63.508: conv after 2, |fA| 5.7E-016 |fB| 0.0E+000 move 4.34E-005 (reach 1.5), vertex 8.75E-005; run off the chain Infinity (tol 1.0E-004), ends tol 6.4E-004
+DR open: generic parameter rejected: ends 8.21E-005 8.75E-005; tol edge 0.0E+000 vertex 1.8E-015; curve SectionIsoCurve; faces NurbsSurface/SectionSurface; guarantee ExactPolyhedral
+DR open: convexity probe at 0.25 p (23.997, 10.631, -11.582) nA (0.292, 0.873, -0.39) nB (0.895, 0.325, -0.305) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (20.123, 3.186, -29.488) nA (0.466, 0.771, -0.434) nB (0.956, 0.131, -0.264) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (16.516, -4.298, -47.395) nA (0.651, 0.663, -0.368) nB (0.987, -0.071, -0.146) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: reference fit degree 8 worst 3.07E-002 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 12 worst 5.33E-003 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 16 worst 1.26E-003 (tol 1.0E-003) length 63.5082
+DR open end 0: t -11.9854 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -23.9708 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -47.9415 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -95.8830 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -191.7661 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -383.5321 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -767.0643 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -1534.1285 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -3068.2571 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR declined: not a straight edge | curved chamfer: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+DR build declined: not a straight edge
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (16.89, -9.176, -43.377) nA (0.972, -0.082, -0.22) nB (0.881, 0.314, -0.353) inside False (eps 1.78), faces #d000000003/chamfer:face/#d000000006/chamfer:face
+DR open: convexity probe at 0.5 p (20.96, -3.086, -29.055) nA (0.946, 0.078, -0.316) nB (0.78, 0.45, -0.434) inside False (eps 1.78), faces #d000000003/chamfer:face/#d000000006/chamfer:face
+DR open: convexity probe at 0.75 p (25.109, 3.309, -14.866) nA (0.9, 0.246, -0.361) nB (0.672, 0.591, -0.447) inside False (eps 1.78), faces #d000000003/chamfer:face/#d000000006/chamfer:face
+DR open: reference fit degree 8 worst 5.12E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 12 worst 5.31E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 16 worst 5.08E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 24 worst 4.85E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 32 worst 5.18E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 48 worst 5.33E-002 (tol 1.0E-003) length 64.707
+DR open: reference curve not fitted (PolylineCurve3, chain 1: PolylineCurve3)
+DR declined: not a straight edge | open curved: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+DR open: convexity probe at 0.25 p (-13.817, 23.516, -25.607) nA (-0.859, 0.5, -0.114) nB (0.472, 0.881, 0.036) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (-13.443, 23.443, -28.74) nA (-0.847, 0.519, -0.113) nB (0.508, 0.86, 0.04) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (-12.933, 23.342, -33.015) nA (-0.831, 0.545, -0.112) nB (0.557, 0.829, 0.047) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 5.43E-003 (tol 3.0E-004) length 58.9409
+DR open: reference fit degree 12 worst 6.74E-004 (tol 3.0E-004) length 58.9409
+DR open: table vs formula 1.02E-013 at t 58.6752 (Δ 58.9409) widths 0.3/0.3 Lp 60.141
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-0.5999, 59.541] contacts A [1.22181E-05, 58.9409] B [1.22181E-05, 58.9409] Δ 58.9409
+DR open: NURBS face #d000000001/loft:side[2] extended u [-0.05, 1] v [0, 1], deviation inside 2.2E-014
+DR finish: assembled 0.0s
+DR   face 22759 #d000000001/loft:side[0] NurbsSurface: LineCurve3 (29.252, 6.847, 0)->(16.285, -24.003, 0) | IntersectionCurve3 (16.285, -24.003, 0)->(4.212, -26.713, -27.599) | LineCurve3 (4.212, -26.713, -27.599)->(3.908, -26.781, -28.169) | LineCurve3 (3.908, -26.781, -28.169)->(3.604, -26.85, -28.74) | LineCurve3 (3.604, -26.85, -28.74)->(2.996, -26.986, -29.882) | LineCurve3 (2.996, -26.986, -29
+DR   face 22781 #d000000001/loft:side[1] NurbsSurface: IntersectionCurve3 (4.212, -26.713, -27.599)->(16.285, -24.003, 0) | LineCurve3 (16.285, -24.003, 0)->(-31.577, -12.379, 0) | IntersectionCurve3 (-31.577, -12.379, 0)->(-31.448, -6.566, -26.459) | LineCurve3 (-31.448, -6.566, -26.459)->(-31.444, -6.413, -27.028) | LineCurve3 (-31.444, -6.413, -27.028)->(-31.441, -6.259, -27.599) | LineCurve3 (-31
+DR   face 22806 #d000000001/loft:start PlaneSurface: LineCurve3 (16.285, -24.003, 0)->(29.252, 6.847, 0) | LineCurve3 (29.252, 6.847, 0)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.438, 0)->(19.916, 15.211, 0) | LineCurve3 (19.916, 15.211, 0)->(-15.993, 23.932, -0) | ProcCurve3:chamfer end (-15.993, 23.932, -0)->(-16.401, 23.726, -0) | LineCurve3 (-16.401, 23.726, -0)->(-31.577, -12.379, 0) | LineCurve
+DR   face 22817 #d000000001/loft:end PlaneSurface: LineCurve3 (13.934, -15.201, -58.622)->(-9.685, -29.833, -58.622) | LineCurve3 (-9.685, -29.833, -58.622)->(-31.284, 0.786, -58.622) | LineCurve3 (-31.284, 0.786, -58.622)->(-10.67, 22.638, -58.622) | ProcCurve3:chamfer end (-10.67, 22.638, -58.622)->(-10.271, 22.627, -58.622) | LineCurve3 (-10.271, 22.627, -58.622)->(11.288, -2.876, -58.622) | LineC
+DR   face 22830 #d000000003/chamfer:face SectionSurface: IntersectionCurve3 (29.252, 6.847, 0)->(13.934, -15.201, -58.622) | LineCurve3 (13.934, -15.201, -58.622)->(14.1, -14.154, -58.622) | SectionIsoCurve (14.1, -14.154, -58.622)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(28.292, 8.176, -1.667) | SectionIsoCurve (28.292, 8.176, -1.667)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.
+DR   face 22837 #d000000001/loft:side[2] NurbsSurface: IntersectionCurve3 (-31.448, -6.566, -26.459)->(-31.577, -12.379, 0) | LineCurve3 (-31.577, -12.379, 0)->(-16.401, 23.726, -0) | ProcCurve3:chamfer contact (-16.401, 23.726, -0)->(-10.67, 22.638, -58.622) | LineCurve3 (-10.67, 22.638, -58.622)->(-31.284, 0.786, -58.622) | IntersectionCurve3 (-31.284, 0.786, -58.622)->(-31.414, -5.027, -32.163) | 
+DR   face 22840 #d000000001/loft:side[3] NurbsSurface: LineCurve3 (-15.993, 23.932, -0)->(19.916, 15.211, 0) | PolylineCurve3 (19.916, 15.211, 0)->(11.288, -2.876, -58.622) | LineCurve3 (11.288, -2.876, -58.622)->(-10.271, 22.627, -58.622) | ProcCurve3:chamfer contact (-10.271, 22.627, -58.622)->(-15.993, 23.932, -0)
+DR   face 22844 #d000000006/chamfer:face SectionSurface: LineCurve3 (19.916, 15.211, 0)->(28.45, 8.438, 0) | SectionIsoCurve (28.45, 8.438, 0)->(28.292, 8.176, -1.667) | PolylineCurve3 (28.292, 8.176, -1.667)->(27.659, 8.696, -1.652) | SectionIsoCurve (27.659, 8.696, -1.652)->(14.013, -12.635, -58.622) | LineCurve3 (14.013, -12.635, -58.622)->(11.288, -2.876, -58.622) | PolylineCurve3 (11.288, -2.876
+DR   face 22849 #d00000000a/round:face SectionSurface: PolylineCurve3 (14.1, -14.154, -58.622)->(14.013, -12.635, -58.622) | SectionIsoCurve (14.013, -12.635, -58.622)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.622, 7.501, -1.6) | SectionIsoCurve (28.622, 7.501, -1.6)->(14.1, -14.154, -58.622)
+DR   face 22849 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.067, 1.387, -20.418)->(23.273, 1.178, -20.355) | SectionIsoCurve (23.273, 1.178, -20.355)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.067, 1.387, -20.418)
+DR   face 22849 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.703, 2.37, -18.19)->(23.912, 2.169, -18.131) | SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.703, 2.37, -18.19)
+DR   face 22849 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.989, -6.884, -38.651)->(17.86, -6.65, -38.701) | SectionIsoCurve (17.86, -6.65, -38.701)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.989, -6.884, -38.651)
+DR   face 22849 #d00000000a/round:face SectionSurface: SectionIsoCurve (19.211, -4.993, -34.276)->(19.258, -4.962, -34.138) | SectionIsoCurve (19.258, -4.962, -34.138)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.211, -4.993, -34.276)
+DR   face 22849 #d00000000a/round:face SectionSurface: SectionIsoCurve (18.575, -5.725, -36.282)->(18.419, -5.657, -36.525) | SectionIsoCurve (18.419, -5.657, -36.525)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.575, -5.725, -36.282)
+DR   face 22849 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.426, -7.72, -40.712)->(17.251, -7.552, -40.942) | SectionIsoCurve (17.251, -7.552, -40.942)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.426, -7.72, -40.712)
+DR   face 22849 #d00000000a/round:face SectionSurface: SectionIsoCurve (21.251, -1.939, -27.288)->(21.383, -1.682, -26.79) | SectionIsoCurve (21.383, -1.682, -26.79)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.251, -1.939, -27.288)
+DR   face 22849 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.026, -3.75, -31.44)->(19.712, -3.659, -31.914) | SectionIsoCurve (19.712, -3.659, -31.914)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(20.026, -3.75, -31.44)
+DR   face 22849 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.708, -2.711, -29.098)->(20.387, -2.642, -29.579) | SectionIsoCurve (20.387, -2.642, -29.579)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.708, -2.711, -29.098)
+DR   face 22849 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.04, -0.613, -24.474)->(21.716, -0.585, -24.962) | SectionIsoCurve (21.716, -0.585, -24.962)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(22.04, -0.613, -24.474)
+DR   face 22849 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.418, 0.372, -22.687)->(22.619, 0.167, -22.609) | SectionIsoCurve (22.619, 0.167, -22.609)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.418, 0.372, -22.687)
+DR   face 22929 #d00000000a/round:cap[1] PlaneSurface: PolylineCurve3 (28.292, 8.176, -1.667)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.292, 8.176, -1.667)
+DR   face 22931 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.273, 1.178, -20.355)->(23.067, 1.387, -20.418) | SectionIsoCurve (23.067, 1.387, -20.418)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.273, 1.178, -20.355)
+DR   face 22933 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.37, -18.19) | SectionIsoCurve (23.703, 2.37, -18.19)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.912, 2.169, -18.131)
+DR   face 22935 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.86, -6.65, -38.701)->(17.989, -6.884, -38.651) | SectionIsoCurve (17.989, -6.884, -38.651)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.86, -6.65, -38.701)
+DR   face 22937 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.258, -4.962, -34.138)->(19.211, -4.993, -34.276) | SectionIsoCurve (19.211, -4.993, -34.276)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.258, -4.962, -34.138)
+DR   face 22939 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (18.419, -5.657, -36.525)->(18.575, -5.725, -36.282) | SectionIsoCurve (18.575, -5.725, -36.282)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.419, -5.657, -36.525)
+DR   face 22941 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.251, -7.552, -40.942)->(17.426, -7.72, -40.712) | SectionIsoCurve (17.426, -7.72, -40.712)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.251, -7.552, -40.942)
+DR   face 22943 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.383, -1.682, -26.79)->(21.251, -1.939, -27.288) | SectionIsoCurve (21.251, -1.939, -27.288)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.383, -1.682, -26.79)
+DR   face 22945 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.712, -3.659, -31.914)->(20.026, -3.75, -31.44) | SectionIsoCurve (20.026, -3.75, -31.44)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(19.712, -3.659, -31.914)
+DR   face 22947 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (20.387, -2.642, -29.579)->(20.708, -2.711, -29.098) | SectionIsoCurve (20.708, -2.711, -29.098)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.387, -2.642, -29.579)
+DR   face 22949 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.716, -0.585, -24.962)->(22.04, -0.613, -24.474) | SectionIsoCurve (22.04, -0.613, -24.474)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(21.716, -0.585, -24.962)
+DR   face 22951 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (22.619, 0.167, -22.609)->(22.418, 0.372, -22.687) | SectionIsoCurve (22.418, 0.372, -22.687)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.619, 0.167, -22.609)
+DR   face 22953 chamfer:face SectionSurface: ProcCurve3:chamfer end (-16.401, 23.726, -0)->(-15.993, 23.932, -0) | ProcCurve3:chamfer contact (-15.993, 23.932, -0)->(-10.271, 22.627, -58.622) | ProcCurve3:chamfer end (-10.271, 22.627, -58.622)->(-10.67, 22.638, -58.622) | ProcCurve3:chamfer contact (-10.67, 22.638, -58.622)->(-16.401, 23.726, -0)
+DR open: convexity probe at 0.25 p (-13.817, 23.516, -25.607) nA (-0.859, 0.5, -0.114) nB (0.472, 0.881, 0.036) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (-13.443, 23.443, -28.74) nA (-0.847, 0.519, -0.113) nB (0.508, 0.86, 0.04) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (-12.933, 23.342, -33.015) nA (-0.831, 0.545, -0.112) nB (0.557, 0.829, 0.047) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 5.43E-003 (tol 3.0E-004) length 58.9409
+DR open: reference fit degree 12 worst 6.74E-004 (tol 3.0E-004) length 58.9409
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[2] at t 1.2218094E-05
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[2] at t 58.940868
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 1.2218094E-05
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 58.940868
+DR open: table vs formula 3.18E-014 at t 53.9715 (Δ 58.9409) widths 0.3/0.3 Lp 60.142
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-0.5999, 59.541] contacts A [1.22181E-05, 58.9409] B [1.22181E-05, 58.9409] Δ 58.9409
+DR open: NURBS face #d000000001/loft:side[2] extended u [-0.05, 1] v [0, 1], deviation inside 2.2E-014
+DR finish: assembled 0.0s
+DR   face 22957 #d000000001/loft:side[0] NurbsSurface: LineCurve3 (29.252, 6.847, 0)->(16.285, -24.003, 0) | IntersectionCurve3 (16.285, -24.003, 0)->(4.212, -26.713, -27.599) | LineCurve3 (4.212, -26.713, -27.599)->(3.908, -26.781, -28.169) | LineCurve3 (3.908, -26.781, -28.169)->(3.604, -26.85, -28.74) | LineCurve3 (3.604, -26.85, -28.74)->(2.996, -26.986, -29.882) | LineCurve3 (2.996, -26.986, -29
+DR   face 22979 #d000000001/loft:side[1] NurbsSurface: IntersectionCurve3 (4.212, -26.713, -27.599)->(16.285, -24.003, 0) | LineCurve3 (16.285, -24.003, 0)->(-31.577, -12.379, 0) | IntersectionCurve3 (-31.577, -12.379, 0)->(-31.448, -6.566, -26.459) | LineCurve3 (-31.448, -6.566, -26.459)->(-31.444, -6.413, -27.028) | LineCurve3 (-31.444, -6.413, -27.028)->(-31.441, -6.259, -27.599) | LineCurve3 (-31
+DR   face 23004 #d000000001/loft:start PlaneSurface: LineCurve3 (16.285, -24.003, 0)->(29.252, 6.847, 0) | LineCurve3 (29.252, 6.847, 0)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.438, 0)->(19.916, 15.211, 0) | LineCurve3 (19.916, 15.211, 0)->(-15.993, 23.932, 0) | ProcCurve3:chamfer end (-15.993, 23.932, 0)->(-16.401, 23.726, 0) | LineCurve3 (-16.401, 23.726, 0)->(-31.577, -12.379, 0) | LineCurve3 (-
+DR   face 23015 #d000000001/loft:end PlaneSurface: LineCurve3 (13.934, -15.201, -58.622)->(-9.685, -29.833, -58.622) | LineCurve3 (-9.685, -29.833, -58.622)->(-31.284, 0.786, -58.622) | LineCurve3 (-31.284, 0.786, -58.622)->(-10.67, 22.638, -58.622) | ProcCurve3:chamfer end (-10.67, 22.638, -58.622)->(-10.271, 22.627, -58.622) | LineCurve3 (-10.271, 22.627, -58.622)->(11.288, -2.876, -58.622) | LineC
+DR   face 23028 #d000000003/chamfer:face SectionSurface: IntersectionCurve3 (29.252, 6.847, 0)->(13.934, -15.201, -58.622) | LineCurve3 (13.934, -15.201, -58.622)->(14.1, -14.154, -58.622) | SectionIsoCurve (14.1, -14.154, -58.622)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(28.292, 8.176, -1.667) | SectionIsoCurve (28.292, 8.176, -1.667)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.
+DR   face 23035 #d000000001/loft:side[2] NurbsSurface: IntersectionCurve3 (-31.448, -6.566, -26.459)->(-31.577, -12.379, 0) | LineCurve3 (-31.577, -12.379, 0)->(-16.401, 23.726, 0) | ProcCurve3:chamfer contact (-16.401, 23.726, 0)->(-10.67, 22.638, -58.622) | LineCurve3 (-10.67, 22.638, -58.622)->(-31.284, 0.786, -58.622) | IntersectionCurve3 (-31.284, 0.786, -58.622)->(-31.414, -5.027, -32.163) | Li
+DR   face 23038 #d000000001/loft:side[3] NurbsSurface: LineCurve3 (-15.993, 23.932, 0)->(19.916, 15.211, 0) | PolylineCurve3 (19.916, 15.211, 0)->(11.288, -2.876, -58.622) | LineCurve3 (11.288, -2.876, -58.622)->(-10.271, 22.627, -58.622) | ProcCurve3:chamfer contact (-10.271, 22.627, -58.622)->(-15.993, 23.932, 0)
+DR   face 23042 #d000000006/chamfer:face SectionSurface: LineCurve3 (19.916, 15.211, 0)->(28.45, 8.438, 0) | SectionIsoCurve (28.45, 8.438, 0)->(28.292, 8.176, -1.667) | PolylineCurve3 (28.292, 8.176, -1.667)->(27.659, 8.696, -1.652) | SectionIsoCurve (27.659, 8.696, -1.652)->(14.013, -12.635, -58.622) | LineCurve3 (14.013, -12.635, -58.622)->(11.288, -2.876, -58.622) | PolylineCurve3 (11.288, -2.876
+DR   face 23047 #d00000000a/round:face SectionSurface: PolylineCurve3 (14.1, -14.154, -58.622)->(14.013, -12.635, -58.622) | SectionIsoCurve (14.013, -12.635, -58.622)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.622, 7.501, -1.6) | SectionIsoCurve (28.622, 7.501, -1.6)->(14.1, -14.154, -58.622)
+DR   face 23047 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.067, 1.387, -20.418)->(23.273, 1.178, -20.355) | SectionIsoCurve (23.273, 1.178, -20.355)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.067, 1.387, -20.418)
+DR   face 23047 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.703, 2.37, -18.19)->(23.912, 2.169, -18.131) | SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.703, 2.37, -18.19)
+DR   face 23047 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.989, -6.884, -38.651)->(17.86, -6.65, -38.701) | SectionIsoCurve (17.86, -6.65, -38.701)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.989, -6.884, -38.651)
+DR   face 23047 #d00000000a/round:face SectionSurface: SectionIsoCurve (19.211, -4.993, -34.276)->(19.258, -4.962, -34.138) | SectionIsoCurve (19.258, -4.962, -34.138)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.211, -4.993, -34.276)
+DR   face 23047 #d00000000a/round:face SectionSurface: SectionIsoCurve (18.575, -5.725, -36.282)->(18.419, -5.657, -36.525) | SectionIsoCurve (18.419, -5.657, -36.525)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.575, -5.725, -36.282)
+DR   face 23047 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.426, -7.72, -40.712)->(17.251, -7.552, -40.942) | SectionIsoCurve (17.251, -7.552, -40.942)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.426, -7.72, -40.712)
+DR   face 23047 #d00000000a/round:face SectionSurface: SectionIsoCurve (21.251, -1.939, -27.288)->(21.383, -1.682, -26.79) | SectionIsoCurve (21.383, -1.682, -26.79)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.251, -1.939, -27.288)
+DR   face 23047 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.026, -3.75, -31.44)->(19.712, -3.659, -31.914) | SectionIsoCurve (19.712, -3.659, -31.914)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(20.026, -3.75, -31.44)
+DR   face 23047 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.708, -2.711, -29.098)->(20.387, -2.642, -29.579) | SectionIsoCurve (20.387, -2.642, -29.579)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.708, -2.711, -29.098)
+DR   face 23047 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.04, -0.613, -24.474)->(21.716, -0.585, -24.962) | SectionIsoCurve (21.716, -0.585, -24.962)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(22.04, -0.613, -24.474)
+DR   face 23047 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.418, 0.372, -22.687)->(22.619, 0.167, -22.609) | SectionIsoCurve (22.619, 0.167, -22.609)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.418, 0.372, -22.687)
+DR   face 23127 #d00000000a/round:cap[1] PlaneSurface: PolylineCurve3 (28.292, 8.176, -1.667)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.292, 8.176, -1.667)
+DR   face 23129 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.273, 1.178, -20.355)->(23.067, 1.387, -20.418) | SectionIsoCurve (23.067, 1.387, -20.418)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.273, 1.178, -20.355)
+DR   face 23131 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.37, -18.19) | SectionIsoCurve (23.703, 2.37, -18.19)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.912, 2.169, -18.131)
+DR   face 23133 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.86, -6.65, -38.701)->(17.989, -6.884, -38.651) | SectionIsoCurve (17.989, -6.884, -38.651)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.86, -6.65, -38.701)
+DR   face 23135 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.258, -4.962, -34.138)->(19.211, -4.993, -34.276) | SectionIsoCurve (19.211, -4.993, -34.276)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.258, -4.962, -34.138)
+DR   face 23137 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (18.419, -5.657, -36.525)->(18.575, -5.725, -36.282) | SectionIsoCurve (18.575, -5.725, -36.282)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.419, -5.657, -36.525)
+DR   face 23139 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.251, -7.552, -40.942)->(17.426, -7.72, -40.712) | SectionIsoCurve (17.426, -7.72, -40.712)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.251, -7.552, -40.942)
+DR   face 23141 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.383, -1.682, -26.79)->(21.251, -1.939, -27.288) | SectionIsoCurve (21.251, -1.939, -27.288)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.383, -1.682, -26.79)
+DR   face 23143 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.712, -3.659, -31.914)->(20.026, -3.75, -31.44) | SectionIsoCurve (20.026, -3.75, -31.44)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(19.712, -3.659, -31.914)
+DR   face 23145 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (20.387, -2.642, -29.579)->(20.708, -2.711, -29.098) | SectionIsoCurve (20.708, -2.711, -29.098)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.387, -2.642, -29.579)
+DR   face 23147 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.716, -0.585, -24.962)->(22.04, -0.613, -24.474) | SectionIsoCurve (22.04, -0.613, -24.474)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(21.716, -0.585, -24.962)
+DR   face 23149 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (22.619, 0.167, -22.609)->(22.418, 0.372, -22.687) | SectionIsoCurve (22.418, 0.372, -22.687)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.619, 0.167, -22.609)
+DR   face 23151 chamfer:face SectionSurface: ProcCurve3:chamfer end (-16.401, 23.726, 0)->(-15.993, 23.932, 0) | ProcCurve3:chamfer contact (-15.993, 23.932, 0)->(-10.271, 22.627, -58.622) | ProcCurve3:chamfer end (-10.271, 22.627, -58.622)->(-10.67, 22.638, -58.622) | ProcCurve3:chamfer contact (-10.67, 22.638, -58.622)->(-16.401, 23.726, 0)
+DR declined: not a straight edge | curved chamfer: faces not meshed: AnalyticPrism: грань 22849 [SectionSurface] не построена по контурам: непарная сторона вне контура: 4 из 116; способ 2; кольцо нет, полоса 0/0, контуров 12; conformal: surface kind not supported / AnalyticPrism: 21 face(s) meshed from their loops, 1 left as is.
+== REBUILDCHECK END s102 3
+== STEP s102 4
+DR build declined: not a straight edge
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (3.984, -26.764, -28.026) nA (0.743, -0.584, -0.326) nB (-0.472, -0.81, 0.348) inside False (eps 0.15), faces #d000000001/loft:side[0]/#d000000001/loft:side[1]
+DR open: convexity probe at 0.5 p (3.3, -26.918, -29.311) nA (0.735, -0.597, -0.32) nB (-0.486, -0.799, 0.355) inside False (eps 0.15), faces #d000000001/loft:side[0]/#d000000001/loft:side[1]
+DR open: convexity probe at 0.75 p (2.615, -27.072, -30.595) nA (0.727, -0.611, -0.314) nB (-0.5, -0.787, 0.361) inside False (eps 0.15), faces #d000000001/loft:side[0]/#d000000001/loft:side[1]
+DR open: reference fit degree 8 worst 3.31E-002 (tol 3.0E-004) length 64.707
+DR open: reference fit degree 12 worst 4.64E-003 (tol 3.0E-004) length 64.707
+DR open: reference fit degree 16 worst 6.85E-004 (tol 3.0E-004) length 64.707
+DR open: table vs formula 1.48E-012 at t -0.201852 (Δ 64.707) widths 0.2995/0.2997 Lp 65.909
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-0.59962, 65.307] contacts A [-2.67481E-06, 64.707] B [-2.67481E-06, 64.707] Δ 64.707
+DR finish: assembled 0.0s
+DR   face 24459 #d000000001/loft:side[0] NurbsSurface: ProcCurve3:rolling-ball contact (16.384, -23.767, 0)->(-9.445, -29.685, -58.622) | LineCurve3 (-9.445, -29.685, -58.622)->(13.934, -15.201, -58.622) | IntersectionCurve3 (13.934, -15.201, -58.622)->(29.252, 6.847, 0) | LineCurve3 (29.252, 6.847, 0)->(16.384, -23.767, 0)
+DR   face 24469 #d000000001/loft:side[1] NurbsSurface: ProcCurve3:rolling-ball contact (-9.848, -29.603, -58.622)->(16.037, -23.942, 0) | LineCurve3 (16.037, -23.942, 0)->(-31.577, -12.379, 0) | IntersectionCurve3 (-31.577, -12.379, 0)->(-31.448, -6.566, -26.459) | LineCurve3 (-31.448, -6.566, -26.459)->(-31.444, -6.413, -27.028) | LineCurve3 (-31.444, -6.413, -27.028)->(-31.441, -6.259, -27.599) | L
+DR   face 24497 #d000000001/loft:start PlaneSurface: LineCurve3 (16.384, -23.767, 0)->(29.252, 6.847, 0) | LineCurve3 (29.252, 6.847, 0)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.438, 0)->(19.916, 15.211, 0) | LineCurve3 (19.916, 15.211, 0)->(-15.993, 23.932, 0) | LineCurve3 (-15.993, 23.932, 0)->(-16.401, 23.726, 0) | LineCurve3 (-16.401, 23.726, 0)->(-31.577, -12.379, 0) | LineCurve3 (-31.577, -12.
+DR   face 24509 #d000000001/loft:end PlaneSurface: LineCurve3 (13.934, -15.201, -58.622)->(-9.445, -29.685, -58.622) | ProcCurve3:rolling-ball end (-9.445, -29.685, -58.622)->(-9.848, -29.603, -58.622) | LineCurve3 (-9.848, -29.603, -58.622)->(-31.284, 0.786, -58.622) | LineCurve3 (-31.284, 0.786, -58.622)->(-10.67, 22.638, -58.622) | LineCurve3 (-10.67, 22.638, -58.622)->(-10.271, 22.627, -58.622) |
+DR   face 24523 #d000000003/chamfer:face SectionSurface: IntersectionCurve3 (29.252, 6.847, 0)->(13.934, -15.201, -58.622) | LineCurve3 (13.934, -15.201, -58.622)->(14.1, -14.154, -58.622) | SectionIsoCurve (14.1, -14.154, -58.622)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(28.292, 8.176, -1.667) | SectionIsoCurve (28.292, 8.176, -1.667)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.
+DR   face 24530 #d000000001/loft:side[2] NurbsSurface: IntersectionCurve3 (-31.448, -6.566, -26.459)->(-31.577, -12.379, 0) | LineCurve3 (-31.577, -12.379, 0)->(-16.401, 23.726, 0) | SectionIsoCurve (-16.401, 23.726, 0)->(-10.67, 22.638, -58.622) | LineCurve3 (-10.67, 22.638, -58.622)->(-31.284, 0.786, -58.622) | IntersectionCurve3 (-31.284, 0.786, -58.622)->(-31.414, -5.027, -32.163) | LineCurve3 (-
+DR   face 24533 #d000000001/loft:side[3] NurbsSurface: LineCurve3 (-15.993, 23.932, 0)->(19.916, 15.211, 0) | PolylineCurve3 (19.916, 15.211, 0)->(11.288, -2.876, -58.622) | LineCurve3 (11.288, -2.876, -58.622)->(-10.271, 22.627, -58.622) | SectionIsoCurve (-10.271, 22.627, -58.622)->(-15.993, 23.932, 0)
+DR   face 24537 #d000000006/chamfer:face SectionSurface: LineCurve3 (19.916, 15.211, 0)->(28.45, 8.438, 0) | SectionIsoCurve (28.45, 8.438, 0)->(28.292, 8.176, -1.667) | PolylineCurve3 (28.292, 8.176, -1.667)->(27.659, 8.696, -1.652) | SectionIsoCurve (27.659, 8.696, -1.652)->(14.013, -12.635, -58.622) | LineCurve3 (14.013, -12.635, -58.622)->(11.288, -2.876, -58.622) | PolylineCurve3 (11.288, -2.876
+DR   face 24542 #d00000000a/round:face SectionSurface: PolylineCurve3 (14.1, -14.154, -58.622)->(14.013, -12.635, -58.622) | SectionIsoCurve (14.013, -12.635, -58.622)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.622, 7.501, -1.6) | SectionIsoCurve (28.622, 7.501, -1.6)->(14.1, -14.154, -58.622)
+DR   face 24542 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.067, 1.387, -20.418)->(23.273, 1.178, -20.355) | SectionIsoCurve (23.273, 1.178, -20.355)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.067, 1.387, -20.418)
+DR   face 24542 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.703, 2.37, -18.19)->(23.912, 2.169, -18.131) | SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.703, 2.37, -18.19)
+DR   face 24542 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.989, -6.884, -38.651)->(17.86, -6.65, -38.701) | SectionIsoCurve (17.86, -6.65, -38.701)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.989, -6.884, -38.651)
+DR   face 24542 #d00000000a/round:face SectionSurface: SectionIsoCurve (19.211, -4.993, -34.276)->(19.258, -4.962, -34.138) | SectionIsoCurve (19.258, -4.962, -34.138)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.211, -4.993, -34.276)
+DR   face 24542 #d00000000a/round:face SectionSurface: SectionIsoCurve (18.575, -5.725, -36.282)->(18.419, -5.657, -36.525) | SectionIsoCurve (18.419, -5.657, -36.525)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.575, -5.725, -36.282)
+DR   face 24542 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.426, -7.72, -40.712)->(17.251, -7.552, -40.942) | SectionIsoCurve (17.251, -7.552, -40.942)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.426, -7.72, -40.712)
+DR   face 24542 #d00000000a/round:face SectionSurface: SectionIsoCurve (21.251, -1.939, -27.288)->(21.383, -1.682, -26.79) | SectionIsoCurve (21.383, -1.682, -26.79)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.251, -1.939, -27.288)
+DR   face 24542 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.026, -3.75, -31.44)->(19.712, -3.659, -31.914) | SectionIsoCurve (19.712, -3.659, -31.914)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(20.026, -3.75, -31.44)
+DR   face 24542 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.708, -2.711, -29.098)->(20.387, -2.642, -29.579) | SectionIsoCurve (20.387, -2.642, -29.579)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.708, -2.711, -29.098)
+DR   face 24542 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.04, -0.613, -24.474)->(21.716, -0.585, -24.962) | SectionIsoCurve (21.716, -0.585, -24.962)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(22.04, -0.613, -24.474)
+DR   face 24542 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.418, 0.372, -22.687)->(22.619, 0.167, -22.609) | SectionIsoCurve (22.619, 0.167, -22.609)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.418, 0.372, -22.687)
+DR   face 24622 #d00000000a/round:cap[1] PlaneSurface: PolylineCurve3 (28.292, 8.176, -1.667)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.292, 8.176, -1.667)
+DR   face 24624 #d00000000f/chamfer:face SectionSurface: LineCurve3 (-16.401, 23.726, 0)->(-15.993, 23.932, 0) | SectionIsoCurve (-15.993, 23.932, 0)->(-10.271, 22.627, -58.622) | LineCurve3 (-10.271, 22.627, -58.622)->(-10.67, 22.638, -58.622) | SectionIsoCurve (-10.67, 22.638, -58.622)->(-16.401, 23.726, 0)
+DR   face 24626 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.273, 1.178, -20.355)->(23.067, 1.387, -20.418) | SectionIsoCurve (23.067, 1.387, -20.418)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.273, 1.178, -20.355)
+DR   face 24628 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.37, -18.19) | SectionIsoCurve (23.703, 2.37, -18.19)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.912, 2.169, -18.131)
+DR   face 24630 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.86, -6.65, -38.701)->(17.989, -6.884, -38.651) | SectionIsoCurve (17.989, -6.884, -38.651)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.86, -6.65, -38.701)
+DR   face 24632 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.258, -4.962, -34.138)->(19.211, -4.993, -34.276) | SectionIsoCurve (19.211, -4.993, -34.276)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.258, -4.962, -34.138)
+DR   face 24634 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (18.419, -5.657, -36.525)->(18.575, -5.725, -36.282) | SectionIsoCurve (18.575, -5.725, -36.282)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.419, -5.657, -36.525)
+DR   face 24636 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.251, -7.552, -40.942)->(17.426, -7.72, -40.712) | SectionIsoCurve (17.426, -7.72, -40.712)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.251, -7.552, -40.942)
+DR   face 24638 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.383, -1.682, -26.79)->(21.251, -1.939, -27.288) | SectionIsoCurve (21.251, -1.939, -27.288)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.383, -1.682, -26.79)
+DR   face 24640 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.712, -3.659, -31.914)->(20.026, -3.75, -31.44) | SectionIsoCurve (20.026, -3.75, -31.44)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(19.712, -3.659, -31.914)
+DR   face 24642 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (20.387, -2.642, -29.579)->(20.708, -2.711, -29.098) | SectionIsoCurve (20.708, -2.711, -29.098)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.387, -2.642, -29.579)
+DR   face 24644 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.716, -0.585, -24.962)->(22.04, -0.613, -24.474) | SectionIsoCurve (22.04, -0.613, -24.474)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(21.716, -0.585, -24.962)
+DR   face 24646 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (22.619, 0.167, -22.609)->(22.418, 0.372, -22.687) | SectionIsoCurve (22.418, 0.372, -22.687)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.619, 0.167, -22.609)
+DR   face 24648 round:face SectionSurface: ProcCurve3:rolling-ball contact (-9.445, -29.685, -58.622)->(16.384, -23.767, 0) | ProcCurve3:rolling-ball end (16.384, -23.767, 0)->(16.037, -23.942, 0) | ProcCurve3:rolling-ball contact (16.037, -23.942, 0)->(-9.848, -29.603, -58.622) | ProcCurve3:rolling-ball end (-9.848, -29.603, -58.622)->(-9.445, -29.685, -58.622)
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (3.984, -26.764, -28.026) nA (0.743, -0.584, -0.326) nB (-0.472, -0.81, 0.348) inside False (eps 0.15), faces #d000000001/loft:side[0]/#d000000001/loft:side[1]
+DR open: convexity probe at 0.5 p (3.3, -26.918, -29.311) nA (0.735, -0.597, -0.32) nB (-0.486, -0.799, 0.355) inside False (eps 0.15), faces #d000000001/loft:side[0]/#d000000001/loft:side[1]
+DR open: convexity probe at 0.75 p (2.615, -27.072, -30.595) nA (0.727, -0.611, -0.314) nB (-0.5, -0.787, 0.361) inside False (eps 0.15), faces #d000000001/loft:side[0]/#d000000001/loft:side[1]
+DR open: reference fit degree 8 worst 3.31E-002 (tol 3.0E-004) length 64.707
+DR open: reference fit degree 12 worst 4.64E-003 (tol 3.0E-004) length 64.707
+DR open: reference fit degree 16 worst 6.85E-004 (tol 3.0E-004) length 64.707
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t -2.6748142E-06
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 64.706959
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[1] at t -2.6748142E-06
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[1] at t 64.706959
+DR open: table vs formula 3.83E-014 at t 59.0312 (Δ 64.707) widths 0.2995/0.2997 Lp 65.916
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-0.59962, 65.307] contacts A [-2.67481E-06, 64.707] B [-2.67481E-06, 64.707] Δ 64.707
+DR finish: assembled 0.0s
+DR   face 24652 #d000000001/loft:side[0] NurbsSurface: ProcCurve3:rolling-ball contact (16.384, -23.767, -0)->(-9.445, -29.685, -58.622) | LineCurve3 (-9.445, -29.685, -58.622)->(13.934, -15.201, -58.622) | IntersectionCurve3 (13.934, -15.201, -58.622)->(29.252, 6.847, 0) | LineCurve3 (29.252, 6.847, 0)->(16.384, -23.767, -0)
+DR   face 24662 #d000000001/loft:side[1] NurbsSurface: ProcCurve3:rolling-ball contact (-9.848, -29.603, -58.622)->(16.037, -23.942, 0) | LineCurve3 (16.037, -23.942, 0)->(-31.577, -12.379, 0) | IntersectionCurve3 (-31.577, -12.379, 0)->(-31.448, -6.566, -26.459) | LineCurve3 (-31.448, -6.566, -26.459)->(-31.444, -6.413, -27.028) | LineCurve3 (-31.444, -6.413, -27.028)->(-31.441, -6.259, -27.599) | L
+DR   face 24690 #d000000001/loft:start PlaneSurface: LineCurve3 (16.384, -23.767, -0)->(29.252, 6.847, 0) | LineCurve3 (29.252, 6.847, 0)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.438, 0)->(19.916, 15.211, 0) | LineCurve3 (19.916, 15.211, 0)->(-15.993, 23.932, 0) | LineCurve3 (-15.993, 23.932, 0)->(-16.401, 23.726, 0) | LineCurve3 (-16.401, 23.726, 0)->(-31.577, -12.379, 0) | LineCurve3 (-31.577, -12
+DR   face 24702 #d000000001/loft:end PlaneSurface: LineCurve3 (13.934, -15.201, -58.622)->(-9.445, -29.685, -58.622) | ProcCurve3:rolling-ball end (-9.445, -29.685, -58.622)->(-9.848, -29.603, -58.622) | LineCurve3 (-9.848, -29.603, -58.622)->(-31.284, 0.786, -58.622) | LineCurve3 (-31.284, 0.786, -58.622)->(-10.67, 22.638, -58.622) | LineCurve3 (-10.67, 22.638, -58.622)->(-10.271, 22.627, -58.622) |
+DR   face 24716 #d000000003/chamfer:face SectionSurface: IntersectionCurve3 (29.252, 6.847, 0)->(13.934, -15.201, -58.622) | LineCurve3 (13.934, -15.201, -58.622)->(14.1, -14.154, -58.622) | SectionIsoCurve (14.1, -14.154, -58.622)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(28.292, 8.176, -1.667) | SectionIsoCurve (28.292, 8.176, -1.667)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.
+DR   face 24723 #d000000001/loft:side[2] NurbsSurface: IntersectionCurve3 (-31.448, -6.566, -26.459)->(-31.577, -12.379, 0) | LineCurve3 (-31.577, -12.379, 0)->(-16.401, 23.726, 0) | SectionIsoCurve (-16.401, 23.726, 0)->(-10.67, 22.638, -58.622) | LineCurve3 (-10.67, 22.638, -58.622)->(-31.284, 0.786, -58.622) | IntersectionCurve3 (-31.284, 0.786, -58.622)->(-31.414, -5.027, -32.163) | LineCurve3 (-
+DR   face 24726 #d000000001/loft:side[3] NurbsSurface: LineCurve3 (-15.993, 23.932, 0)->(19.916, 15.211, 0) | PolylineCurve3 (19.916, 15.211, 0)->(11.288, -2.876, -58.622) | LineCurve3 (11.288, -2.876, -58.622)->(-10.271, 22.627, -58.622) | SectionIsoCurve (-10.271, 22.627, -58.622)->(-15.993, 23.932, 0)
+DR   face 24730 #d000000006/chamfer:face SectionSurface: LineCurve3 (19.916, 15.211, 0)->(28.45, 8.438, 0) | SectionIsoCurve (28.45, 8.438, 0)->(28.292, 8.176, -1.667) | PolylineCurve3 (28.292, 8.176, -1.667)->(27.659, 8.696, -1.652) | SectionIsoCurve (27.659, 8.696, -1.652)->(14.013, -12.635, -58.622) | LineCurve3 (14.013, -12.635, -58.622)->(11.288, -2.876, -58.622) | PolylineCurve3 (11.288, -2.876
+DR   face 24735 #d00000000a/round:face SectionSurface: PolylineCurve3 (14.1, -14.154, -58.622)->(14.013, -12.635, -58.622) | SectionIsoCurve (14.013, -12.635, -58.622)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.622, 7.501, -1.6) | SectionIsoCurve (28.622, 7.501, -1.6)->(14.1, -14.154, -58.622)
+DR   face 24735 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.067, 1.387, -20.418)->(23.273, 1.178, -20.355) | SectionIsoCurve (23.273, 1.178, -20.355)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.067, 1.387, -20.418)
+DR   face 24735 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.703, 2.37, -18.19)->(23.912, 2.169, -18.131) | SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.703, 2.37, -18.19)
+DR   face 24735 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.989, -6.884, -38.651)->(17.86, -6.65, -38.701) | SectionIsoCurve (17.86, -6.65, -38.701)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.989, -6.884, -38.651)
+DR   face 24735 #d00000000a/round:face SectionSurface: SectionIsoCurve (19.211, -4.993, -34.276)->(19.258, -4.962, -34.138) | SectionIsoCurve (19.258, -4.962, -34.138)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.211, -4.993, -34.276)
+DR   face 24735 #d00000000a/round:face SectionSurface: SectionIsoCurve (18.575, -5.725, -36.282)->(18.419, -5.657, -36.525) | SectionIsoCurve (18.419, -5.657, -36.525)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.575, -5.725, -36.282)
+DR   face 24735 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.426, -7.72, -40.712)->(17.251, -7.552, -40.942) | SectionIsoCurve (17.251, -7.552, -40.942)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.426, -7.72, -40.712)
+DR   face 24735 #d00000000a/round:face SectionSurface: SectionIsoCurve (21.251, -1.939, -27.288)->(21.383, -1.682, -26.79) | SectionIsoCurve (21.383, -1.682, -26.79)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.251, -1.939, -27.288)
+DR   face 24735 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.026, -3.75, -31.44)->(19.712, -3.659, -31.914) | SectionIsoCurve (19.712, -3.659, -31.914)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(20.026, -3.75, -31.44)
+DR   face 24735 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.708, -2.711, -29.098)->(20.387, -2.642, -29.579) | SectionIsoCurve (20.387, -2.642, -29.579)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.708, -2.711, -29.098)
+DR   face 24735 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.04, -0.613, -24.474)->(21.716, -0.585, -24.962) | SectionIsoCurve (21.716, -0.585, -24.962)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(22.04, -0.613, -24.474)
+DR   face 24735 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.418, 0.372, -22.687)->(22.619, 0.167, -22.609) | SectionIsoCurve (22.619, 0.167, -22.609)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.418, 0.372, -22.687)
+DR   face 24815 #d00000000a/round:cap[1] PlaneSurface: PolylineCurve3 (28.292, 8.176, -1.667)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.292, 8.176, -1.667)
+DR   face 24817 #d00000000f/chamfer:face SectionSurface: LineCurve3 (-16.401, 23.726, 0)->(-15.993, 23.932, 0) | SectionIsoCurve (-15.993, 23.932, 0)->(-10.271, 22.627, -58.622) | LineCurve3 (-10.271, 22.627, -58.622)->(-10.67, 22.638, -58.622) | SectionIsoCurve (-10.67, 22.638, -58.622)->(-16.401, 23.726, 0)
+DR   face 24819 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.273, 1.178, -20.355)->(23.067, 1.387, -20.418) | SectionIsoCurve (23.067, 1.387, -20.418)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.273, 1.178, -20.355)
+DR   face 24821 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.37, -18.19) | SectionIsoCurve (23.703, 2.37, -18.19)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.912, 2.169, -18.131)
+DR   face 24823 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.86, -6.65, -38.701)->(17.989, -6.884, -38.651) | SectionIsoCurve (17.989, -6.884, -38.651)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.86, -6.65, -38.701)
+DR   face 24825 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.258, -4.962, -34.138)->(19.211, -4.993, -34.276) | SectionIsoCurve (19.211, -4.993, -34.276)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.258, -4.962, -34.138)
+DR   face 24827 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (18.419, -5.657, -36.525)->(18.575, -5.725, -36.282) | SectionIsoCurve (18.575, -5.725, -36.282)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.419, -5.657, -36.525)
+DR   face 24829 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.251, -7.552, -40.942)->(17.426, -7.72, -40.712) | SectionIsoCurve (17.426, -7.72, -40.712)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.251, -7.552, -40.942)
+DR   face 24831 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.383, -1.682, -26.79)->(21.251, -1.939, -27.288) | SectionIsoCurve (21.251, -1.939, -27.288)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.383, -1.682, -26.79)
+DR   face 24833 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.712, -3.659, -31.914)->(20.026, -3.75, -31.44) | SectionIsoCurve (20.026, -3.75, -31.44)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(19.712, -3.659, -31.914)
+DR   face 24835 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (20.387, -2.642, -29.579)->(20.708, -2.711, -29.098) | SectionIsoCurve (20.708, -2.711, -29.098)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.387, -2.642, -29.579)
+DR   face 24837 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.716, -0.585, -24.962)->(22.04, -0.613, -24.474) | SectionIsoCurve (22.04, -0.613, -24.474)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(21.716, -0.585, -24.962)
+DR   face 24839 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (22.619, 0.167, -22.609)->(22.418, 0.372, -22.687) | SectionIsoCurve (22.418, 0.372, -22.687)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.619, 0.167, -22.609)
+DR   face 24841 round:face SectionSurface: ProcCurve3:rolling-ball contact (-9.445, -29.685, -58.622)->(16.384, -23.767, -0) | ProcCurve3:rolling-ball end (16.384, -23.767, -0)->(16.037, -23.942, 0) | ProcCurve3:rolling-ball contact (16.037, -23.942, 0)->(-9.848, -29.603, -58.622) | ProcCurve3:rolling-ball end (-9.848, -29.603, -58.622)->(-9.445, -29.685, -58.622)
+DR declined: not a straight edge | open curved: faces not meshed: AnalyticPrism: грань 24542 [SectionSurface] не построена по контурам: непарная сторона вне контура: 4 из 116; способ 2; кольцо нет, полоса 0/0, контуров 12; conformal: surface kind not supported / AnalyticPrism: 22 face(s) meshed from their loops, 1 left as is.
+== REBUILDCHECK s102 4
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open end 0: t -11.9608 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -23.9216 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -47.8431 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -95.6863 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -191.3725 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -382.7450 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -765.4900 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -1530.9800 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -3061.9601 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 0.35842928
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 65.073593
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 0.00044068367
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 65.073593
+DR open: table vs formula 1.36E-012 at t 65.0558 (Δ 65.074) widths 6/6 Lp 68.264
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-1.4951, 66.569] contacts A [0.358429, 65.0736] B [0.000440684, 65.0736] Δ 65.074
+DR finish: assembled 0.0s
+DR finish: meshed 0.1s
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 25973) | edge tol 0.00E+000 curve ProcCurve3 (29.252, 6.847, -0)->(25.747, 13.795, -0)
+DR finish: validated 0.4s
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 25973)
+DR open invalid edge e25973 ProcCurve3:chamfer end (29.2522, 6.8469, -0)->(25.7468, 13.7945, -0) faces #d000000001/loft:start PlaneSurface / chamfer:face SectionSurface
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 150/0 steps of 0.12 mm
+DR open: reference fit degree 8 worst 1.62E+000 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 12 worst 9.59E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 16 worst 7.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 24 worst 2.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 32 worst 1.40E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 48 worst 5.75E-002 (tol 1.0E-003) length 83.0734
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 151/150 steps of 0.12 mm
+DR open: reference fit degree 8 worst 4.20E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 12 worst 2.26E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 16 worst 1.90E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 24 worst 8.10E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 32 worst 2.82E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 48 worst 2.68E-002 (tol 1.0E-003) length 101.194
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR declined: not a straight edge | curved chamfer: open curved: the blend does not leave the end face (end face too oblique?) | generic parameter: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+DR open: convexity probe at 0.25 p (23.997, 10.631, -11.582) nA (0.292, 0.873, -0.39) nB (0.895, 0.325, -0.305) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (20.123, 3.186, -29.488) nA (0.466, 0.771, -0.434) nB (0.956, 0.131, -0.264) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (16.516, -4.298, -47.395) nA (0.651, 0.663, -0.368) nB (0.987, -0.071, -0.146) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: reference fit degree 8 worst 3.07E-002 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 12 worst 5.33E-003 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 16 worst 1.26E-003 (tol 1.0E-003) length 63.5082
+DR open: generic parameter ends: t 0: conv after 2, |fA| 1.5E-031 |fB| 1.6E-015 move 5.58E-005 (reach 1.5), vertex 8.21E-005; t 63.508: conv after 2, |fA| 5.7E-016 |fB| 0.0E+000 move 4.34E-005 (reach 1.5), vertex 8.75E-005; run off the chain Infinity (tol 1.0E-004), ends tol 6.4E-004
+DR open: generic parameter rejected: ends 8.21E-005 8.75E-005; tol edge 0.0E+000 vertex 1.8E-015; curve SectionIsoCurve; faces NurbsSurface/SectionSurface; guarantee ExactPolyhedral
+DR open: convexity probe at 0.25 p (23.997, 10.631, -11.582) nA (0.292, 0.873, -0.39) nB (0.895, 0.325, -0.305) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (20.123, 3.186, -29.488) nA (0.466, 0.771, -0.434) nB (0.956, 0.131, -0.264) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (16.516, -4.298, -47.395) nA (0.651, 0.663, -0.368) nB (0.987, -0.071, -0.146) inside False (eps 3), faces #d000000001/loft:side[3]/#d000000003/chamfer:face
+DR open: reference fit degree 8 worst 3.07E-002 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 12 worst 5.33E-003 (tol 1.0E-003) length 63.5082
+DR open: reference fit degree 16 worst 1.26E-003 (tol 1.0E-003) length 63.5082
+DR open end 0: t -11.9854 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -23.9708 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -47.9415 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -95.8830 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -191.7661 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -383.5321 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -767.0643 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -1534.1285 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -3068.2571 (Δ 63.5082) spine null edge (NaN, NaN, NaN) f []
+DR declined: not a straight edge | curved chamfer: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+DR build declined: not a straight edge
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (16.89, -9.176, -43.377) nA (0.972, -0.082, -0.22) nB (0.881, 0.314, -0.353) inside False (eps 1.78), faces #d000000003/chamfer:face/#d000000006/chamfer:face
+DR open: convexity probe at 0.5 p (20.96, -3.086, -29.055) nA (0.946, 0.078, -0.316) nB (0.78, 0.45, -0.434) inside False (eps 1.78), faces #d000000003/chamfer:face/#d000000006/chamfer:face
+DR open: convexity probe at 0.75 p (25.109, 3.309, -14.866) nA (0.9, 0.246, -0.361) nB (0.672, 0.591, -0.447) inside False (eps 1.78), faces #d000000003/chamfer:face/#d000000006/chamfer:face
+DR open: reference fit degree 8 worst 5.12E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 12 worst 5.31E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 16 worst 5.08E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 24 worst 4.85E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 32 worst 5.18E-002 (tol 1.0E-003) length 64.707
+DR open: reference fit degree 48 worst 5.33E-002 (tol 1.0E-003) length 64.707
+DR open: reference curve not fitted (PolylineCurve3, chain 1: PolylineCurve3)
+DR declined: not a straight edge | open curved: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+DR open: convexity probe at 0.25 p (-13.817, 23.516, -25.607) nA (-0.859, 0.5, -0.114) nB (0.472, 0.881, 0.036) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (-13.443, 23.443, -28.74) nA (-0.847, 0.519, -0.113) nB (0.508, 0.86, 0.04) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (-12.933, 23.342, -33.015) nA (-0.831, 0.545, -0.112) nB (0.557, 0.829, 0.047) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 5.43E-003 (tol 3.0E-004) length 58.9409
+DR open: reference fit degree 12 worst 6.74E-004 (tol 3.0E-004) length 58.9409
+DR open: table vs formula 1.02E-013 at t 58.6752 (Δ 58.9409) widths 0.3/0.3 Lp 60.141
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-0.5999, 59.541] contacts A [1.22181E-05, 58.9409] B [1.22181E-05, 58.9409] Δ 58.9409
+DR open: NURBS face #d000000001/loft:side[2] extended u [-0.05, 1] v [0, 1], deviation inside 2.2E-014
+DR finish: assembled 0.0s
+DR   face 30731 #d000000001/loft:side[0] NurbsSurface: LineCurve3 (29.252, 6.847, 0)->(16.285, -24.003, 0) | IntersectionCurve3 (16.285, -24.003, 0)->(4.212, -26.713, -27.599) | LineCurve3 (4.212, -26.713, -27.599)->(3.908, -26.781, -28.169) | LineCurve3 (3.908, -26.781, -28.169)->(3.604, -26.85, -28.74) | LineCurve3 (3.604, -26.85, -28.74)->(2.996, -26.986, -29.882) | LineCurve3 (2.996, -26.986, -29
+DR   face 30753 #d000000001/loft:side[1] NurbsSurface: IntersectionCurve3 (4.212, -26.713, -27.599)->(16.285, -24.003, 0) | LineCurve3 (16.285, -24.003, 0)->(-31.577, -12.379, 0) | IntersectionCurve3 (-31.577, -12.379, 0)->(-31.448, -6.566, -26.459) | LineCurve3 (-31.448, -6.566, -26.459)->(-31.444, -6.413, -27.028) | LineCurve3 (-31.444, -6.413, -27.028)->(-31.441, -6.259, -27.599) | LineCurve3 (-31
+DR   face 30778 #d000000001/loft:start PlaneSurface: LineCurve3 (16.285, -24.003, 0)->(29.252, 6.847, 0) | LineCurve3 (29.252, 6.847, 0)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.438, 0)->(19.916, 15.211, 0) | LineCurve3 (19.916, 15.211, 0)->(-15.993, 23.932, -0) | ProcCurve3:chamfer end (-15.993, 23.932, -0)->(-16.401, 23.726, -0) | LineCurve3 (-16.401, 23.726, -0)->(-31.577, -12.379, 0) | LineCurve
+DR   face 30789 #d000000001/loft:end PlaneSurface: LineCurve3 (13.934, -15.201, -58.622)->(-9.685, -29.833, -58.622) | LineCurve3 (-9.685, -29.833, -58.622)->(-31.284, 0.786, -58.622) | LineCurve3 (-31.284, 0.786, -58.622)->(-10.67, 22.638, -58.622) | ProcCurve3:chamfer end (-10.67, 22.638, -58.622)->(-10.271, 22.627, -58.622) | LineCurve3 (-10.271, 22.627, -58.622)->(11.288, -2.876, -58.622) | LineC
+DR   face 30802 #d000000003/chamfer:face SectionSurface: IntersectionCurve3 (29.252, 6.847, 0)->(13.934, -15.201, -58.622) | LineCurve3 (13.934, -15.201, -58.622)->(14.1, -14.154, -58.622) | SectionIsoCurve (14.1, -14.154, -58.622)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(28.292, 8.176, -1.667) | SectionIsoCurve (28.292, 8.176, -1.667)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.
+DR   face 30809 #d000000001/loft:side[2] NurbsSurface: IntersectionCurve3 (-31.448, -6.566, -26.459)->(-31.577, -12.379, 0) | LineCurve3 (-31.577, -12.379, 0)->(-16.401, 23.726, -0) | ProcCurve3:chamfer contact (-16.401, 23.726, -0)->(-10.67, 22.638, -58.622) | LineCurve3 (-10.67, 22.638, -58.622)->(-31.284, 0.786, -58.622) | IntersectionCurve3 (-31.284, 0.786, -58.622)->(-31.414, -5.027, -32.163) | 
+DR   face 30812 #d000000001/loft:side[3] NurbsSurface: LineCurve3 (-15.993, 23.932, -0)->(19.916, 15.211, 0) | PolylineCurve3 (19.916, 15.211, 0)->(11.288, -2.876, -58.622) | LineCurve3 (11.288, -2.876, -58.622)->(-10.271, 22.627, -58.622) | ProcCurve3:chamfer contact (-10.271, 22.627, -58.622)->(-15.993, 23.932, -0)
+DR   face 30816 #d000000006/chamfer:face SectionSurface: LineCurve3 (19.916, 15.211, 0)->(28.45, 8.438, 0) | SectionIsoCurve (28.45, 8.438, 0)->(28.292, 8.176, -1.667) | PolylineCurve3 (28.292, 8.176, -1.667)->(27.659, 8.696, -1.652) | SectionIsoCurve (27.659, 8.696, -1.652)->(14.013, -12.635, -58.622) | LineCurve3 (14.013, -12.635, -58.622)->(11.288, -2.876, -58.622) | PolylineCurve3 (11.288, -2.876
+DR   face 30821 #d00000000a/round:face SectionSurface: PolylineCurve3 (14.1, -14.154, -58.622)->(14.013, -12.635, -58.622) | SectionIsoCurve (14.013, -12.635, -58.622)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.622, 7.501, -1.6) | SectionIsoCurve (28.622, 7.501, -1.6)->(14.1, -14.154, -58.622)
+DR   face 30821 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.067, 1.387, -20.418)->(23.273, 1.178, -20.355) | SectionIsoCurve (23.273, 1.178, -20.355)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.067, 1.387, -20.418)
+DR   face 30821 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.703, 2.37, -18.19)->(23.912, 2.169, -18.131) | SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.703, 2.37, -18.19)
+DR   face 30821 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.989, -6.884, -38.651)->(17.86, -6.65, -38.701) | SectionIsoCurve (17.86, -6.65, -38.701)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.989, -6.884, -38.651)
+DR   face 30821 #d00000000a/round:face SectionSurface: SectionIsoCurve (19.211, -4.993, -34.276)->(19.258, -4.962, -34.138) | SectionIsoCurve (19.258, -4.962, -34.138)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.211, -4.993, -34.276)
+DR   face 30821 #d00000000a/round:face SectionSurface: SectionIsoCurve (18.575, -5.725, -36.282)->(18.419, -5.657, -36.525) | SectionIsoCurve (18.419, -5.657, -36.525)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.575, -5.725, -36.282)
+DR   face 30821 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.426, -7.72, -40.712)->(17.251, -7.552, -40.942) | SectionIsoCurve (17.251, -7.552, -40.942)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.426, -7.72, -40.712)
+DR   face 30821 #d00000000a/round:face SectionSurface: SectionIsoCurve (21.251, -1.939, -27.288)->(21.383, -1.682, -26.79) | SectionIsoCurve (21.383, -1.682, -26.79)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.251, -1.939, -27.288)
+DR   face 30821 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.026, -3.75, -31.44)->(19.712, -3.659, -31.914) | SectionIsoCurve (19.712, -3.659, -31.914)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(20.026, -3.75, -31.44)
+DR   face 30821 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.708, -2.711, -29.098)->(20.387, -2.642, -29.579) | SectionIsoCurve (20.387, -2.642, -29.579)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.708, -2.711, -29.098)
+DR   face 30821 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.04, -0.613, -24.474)->(21.716, -0.585, -24.962) | SectionIsoCurve (21.716, -0.585, -24.962)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(22.04, -0.613, -24.474)
+DR   face 30821 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.418, 0.372, -22.687)->(22.619, 0.167, -22.609) | SectionIsoCurve (22.619, 0.167, -22.609)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.418, 0.372, -22.687)
+DR   face 30901 #d00000000a/round:cap[1] PlaneSurface: PolylineCurve3 (28.292, 8.176, -1.667)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.292, 8.176, -1.667)
+DR   face 30903 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.273, 1.178, -20.355)->(23.067, 1.387, -20.418) | SectionIsoCurve (23.067, 1.387, -20.418)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.273, 1.178, -20.355)
+DR   face 30905 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.37, -18.19) | SectionIsoCurve (23.703, 2.37, -18.19)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.912, 2.169, -18.131)
+DR   face 30907 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.86, -6.65, -38.701)->(17.989, -6.884, -38.651) | SectionIsoCurve (17.989, -6.884, -38.651)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.86, -6.65, -38.701)
+DR   face 30909 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.258, -4.962, -34.138)->(19.211, -4.993, -34.276) | SectionIsoCurve (19.211, -4.993, -34.276)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.258, -4.962, -34.138)
+DR   face 30911 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (18.419, -5.657, -36.525)->(18.575, -5.725, -36.282) | SectionIsoCurve (18.575, -5.725, -36.282)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.419, -5.657, -36.525)
+DR   face 30913 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.251, -7.552, -40.942)->(17.426, -7.72, -40.712) | SectionIsoCurve (17.426, -7.72, -40.712)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.251, -7.552, -40.942)
+DR   face 30915 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.383, -1.682, -26.79)->(21.251, -1.939, -27.288) | SectionIsoCurve (21.251, -1.939, -27.288)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.383, -1.682, -26.79)
+DR   face 30917 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.712, -3.659, -31.914)->(20.026, -3.75, -31.44) | SectionIsoCurve (20.026, -3.75, -31.44)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(19.712, -3.659, -31.914)
+DR   face 30919 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (20.387, -2.642, -29.579)->(20.708, -2.711, -29.098) | SectionIsoCurve (20.708, -2.711, -29.098)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.387, -2.642, -29.579)
+DR   face 30921 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.716, -0.585, -24.962)->(22.04, -0.613, -24.474) | SectionIsoCurve (22.04, -0.613, -24.474)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(21.716, -0.585, -24.962)
+DR   face 30923 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (22.619, 0.167, -22.609)->(22.418, 0.372, -22.687) | SectionIsoCurve (22.418, 0.372, -22.687)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.619, 0.167, -22.609)
+DR   face 30925 chamfer:face SectionSurface: ProcCurve3:chamfer end (-16.401, 23.726, -0)->(-15.993, 23.932, -0) | ProcCurve3:chamfer contact (-15.993, 23.932, -0)->(-10.271, 22.627, -58.622) | ProcCurve3:chamfer end (-10.271, 22.627, -58.622)->(-10.67, 22.638, -58.622) | ProcCurve3:chamfer contact (-10.67, 22.638, -58.622)->(-16.401, 23.726, -0)
+DR open: convexity probe at 0.25 p (-13.817, 23.516, -25.607) nA (-0.859, 0.5, -0.114) nB (0.472, 0.881, 0.036) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (-13.443, 23.443, -28.74) nA (-0.847, 0.519, -0.113) nB (0.508, 0.86, 0.04) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (-12.933, 23.342, -33.015) nA (-0.831, 0.545, -0.112) nB (0.557, 0.829, 0.047) inside False (eps 0.15), faces #d000000001/loft:side[2]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 5.43E-003 (tol 3.0E-004) length 58.9409
+DR open: reference fit degree 12 worst 6.74E-004 (tol 3.0E-004) length 58.9409
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[2] at t 1.2218094E-05
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[2] at t 58.940868
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 1.2218094E-05
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 58.940868
+DR open: table vs formula 3.18E-014 at t 53.9715 (Δ 58.9409) widths 0.3/0.3 Lp 60.142
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-0.5999, 59.541] contacts A [1.22181E-05, 58.9409] B [1.22181E-05, 58.9409] Δ 58.9409
+DR open: NURBS face #d000000001/loft:side[2] extended u [-0.05, 1] v [0, 1], deviation inside 2.2E-014
+DR finish: assembled 0.0s
+DR   face 30929 #d000000001/loft:side[0] NurbsSurface: LineCurve3 (29.252, 6.847, 0)->(16.285, -24.003, 0) | IntersectionCurve3 (16.285, -24.003, 0)->(4.212, -26.713, -27.599) | LineCurve3 (4.212, -26.713, -27.599)->(3.908, -26.781, -28.169) | LineCurve3 (3.908, -26.781, -28.169)->(3.604, -26.85, -28.74) | LineCurve3 (3.604, -26.85, -28.74)->(2.996, -26.986, -29.882) | LineCurve3 (2.996, -26.986, -29
+DR   face 30951 #d000000001/loft:side[1] NurbsSurface: IntersectionCurve3 (4.212, -26.713, -27.599)->(16.285, -24.003, 0) | LineCurve3 (16.285, -24.003, 0)->(-31.577, -12.379, 0) | IntersectionCurve3 (-31.577, -12.379, 0)->(-31.448, -6.566, -26.459) | LineCurve3 (-31.448, -6.566, -26.459)->(-31.444, -6.413, -27.028) | LineCurve3 (-31.444, -6.413, -27.028)->(-31.441, -6.259, -27.599) | LineCurve3 (-31
+DR   face 30976 #d000000001/loft:start PlaneSurface: LineCurve3 (16.285, -24.003, 0)->(29.252, 6.847, 0) | LineCurve3 (29.252, 6.847, 0)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.438, 0)->(19.916, 15.211, 0) | LineCurve3 (19.916, 15.211, 0)->(-15.993, 23.932, 0) | ProcCurve3:chamfer end (-15.993, 23.932, 0)->(-16.401, 23.726, 0) | LineCurve3 (-16.401, 23.726, 0)->(-31.577, -12.379, 0) | LineCurve3 (-
+DR   face 30987 #d000000001/loft:end PlaneSurface: LineCurve3 (13.934, -15.201, -58.622)->(-9.685, -29.833, -58.622) | LineCurve3 (-9.685, -29.833, -58.622)->(-31.284, 0.786, -58.622) | LineCurve3 (-31.284, 0.786, -58.622)->(-10.67, 22.638, -58.622) | ProcCurve3:chamfer end (-10.67, 22.638, -58.622)->(-10.271, 22.627, -58.622) | LineCurve3 (-10.271, 22.627, -58.622)->(11.288, -2.876, -58.622) | LineC
+DR   face 31000 #d000000003/chamfer:face SectionSurface: IntersectionCurve3 (29.252, 6.847, 0)->(13.934, -15.201, -58.622) | LineCurve3 (13.934, -15.201, -58.622)->(14.1, -14.154, -58.622) | SectionIsoCurve (14.1, -14.154, -58.622)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(28.292, 8.176, -1.667) | SectionIsoCurve (28.292, 8.176, -1.667)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.
+DR   face 31007 #d000000001/loft:side[2] NurbsSurface: IntersectionCurve3 (-31.448, -6.566, -26.459)->(-31.577, -12.379, 0) | LineCurve3 (-31.577, -12.379, 0)->(-16.401, 23.726, 0) | ProcCurve3:chamfer contact (-16.401, 23.726, 0)->(-10.67, 22.638, -58.622) | LineCurve3 (-10.67, 22.638, -58.622)->(-31.284, 0.786, -58.622) | IntersectionCurve3 (-31.284, 0.786, -58.622)->(-31.414, -5.027, -32.163) | Li
+DR   face 31010 #d000000001/loft:side[3] NurbsSurface: LineCurve3 (-15.993, 23.932, 0)->(19.916, 15.211, 0) | PolylineCurve3 (19.916, 15.211, 0)->(11.288, -2.876, -58.622) | LineCurve3 (11.288, -2.876, -58.622)->(-10.271, 22.627, -58.622) | ProcCurve3:chamfer contact (-10.271, 22.627, -58.622)->(-15.993, 23.932, 0)
+DR   face 31014 #d000000006/chamfer:face SectionSurface: LineCurve3 (19.916, 15.211, 0)->(28.45, 8.438, 0) | SectionIsoCurve (28.45, 8.438, 0)->(28.292, 8.176, -1.667) | PolylineCurve3 (28.292, 8.176, -1.667)->(27.659, 8.696, -1.652) | SectionIsoCurve (27.659, 8.696, -1.652)->(14.013, -12.635, -58.622) | LineCurve3 (14.013, -12.635, -58.622)->(11.288, -2.876, -58.622) | PolylineCurve3 (11.288, -2.876
+DR   face 31019 #d00000000a/round:face SectionSurface: PolylineCurve3 (14.1, -14.154, -58.622)->(14.013, -12.635, -58.622) | SectionIsoCurve (14.013, -12.635, -58.622)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.622, 7.501, -1.6) | SectionIsoCurve (28.622, 7.501, -1.6)->(14.1, -14.154, -58.622)
+DR   face 31019 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.067, 1.387, -20.418)->(23.273, 1.178, -20.355) | SectionIsoCurve (23.273, 1.178, -20.355)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.067, 1.387, -20.418)
+DR   face 31019 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.703, 2.37, -18.19)->(23.912, 2.169, -18.131) | SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.703, 2.37, -18.19)
+DR   face 31019 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.989, -6.884, -38.651)->(17.86, -6.65, -38.701) | SectionIsoCurve (17.86, -6.65, -38.701)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.989, -6.884, -38.651)
+DR   face 31019 #d00000000a/round:face SectionSurface: SectionIsoCurve (19.211, -4.993, -34.276)->(19.258, -4.962, -34.138) | SectionIsoCurve (19.258, -4.962, -34.138)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.211, -4.993, -34.276)
+DR   face 31019 #d00000000a/round:face SectionSurface: SectionIsoCurve (18.575, -5.725, -36.282)->(18.419, -5.657, -36.525) | SectionIsoCurve (18.419, -5.657, -36.525)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.575, -5.725, -36.282)
+DR   face 31019 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.426, -7.72, -40.712)->(17.251, -7.552, -40.942) | SectionIsoCurve (17.251, -7.552, -40.942)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.426, -7.72, -40.712)
+DR   face 31019 #d00000000a/round:face SectionSurface: SectionIsoCurve (21.251, -1.939, -27.288)->(21.383, -1.682, -26.79) | SectionIsoCurve (21.383, -1.682, -26.79)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.251, -1.939, -27.288)
+DR   face 31019 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.026, -3.75, -31.44)->(19.712, -3.659, -31.914) | SectionIsoCurve (19.712, -3.659, -31.914)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(20.026, -3.75, -31.44)
+DR   face 31019 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.708, -2.711, -29.098)->(20.387, -2.642, -29.579) | SectionIsoCurve (20.387, -2.642, -29.579)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.708, -2.711, -29.098)
+DR   face 31019 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.04, -0.613, -24.474)->(21.716, -0.585, -24.962) | SectionIsoCurve (21.716, -0.585, -24.962)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(22.04, -0.613, -24.474)
+DR   face 31019 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.418, 0.372, -22.687)->(22.619, 0.167, -22.609) | SectionIsoCurve (22.619, 0.167, -22.609)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.418, 0.372, -22.687)
+DR   face 31099 #d00000000a/round:cap[1] PlaneSurface: PolylineCurve3 (28.292, 8.176, -1.667)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.292, 8.176, -1.667)
+DR   face 31101 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.273, 1.178, -20.355)->(23.067, 1.387, -20.418) | SectionIsoCurve (23.067, 1.387, -20.418)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.273, 1.178, -20.355)
+DR   face 31103 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.37, -18.19) | SectionIsoCurve (23.703, 2.37, -18.19)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.912, 2.169, -18.131)
+DR   face 31105 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.86, -6.65, -38.701)->(17.989, -6.884, -38.651) | SectionIsoCurve (17.989, -6.884, -38.651)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.86, -6.65, -38.701)
+DR   face 31107 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.258, -4.962, -34.138)->(19.211, -4.993, -34.276) | SectionIsoCurve (19.211, -4.993, -34.276)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.258, -4.962, -34.138)
+DR   face 31109 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (18.419, -5.657, -36.525)->(18.575, -5.725, -36.282) | SectionIsoCurve (18.575, -5.725, -36.282)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.419, -5.657, -36.525)
+DR   face 31111 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.251, -7.552, -40.942)->(17.426, -7.72, -40.712) | SectionIsoCurve (17.426, -7.72, -40.712)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.251, -7.552, -40.942)
+DR   face 31113 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.383, -1.682, -26.79)->(21.251, -1.939, -27.288) | SectionIsoCurve (21.251, -1.939, -27.288)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.383, -1.682, -26.79)
+DR   face 31115 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.712, -3.659, -31.914)->(20.026, -3.75, -31.44) | SectionIsoCurve (20.026, -3.75, -31.44)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(19.712, -3.659, -31.914)
+DR   face 31117 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (20.387, -2.642, -29.579)->(20.708, -2.711, -29.098) | SectionIsoCurve (20.708, -2.711, -29.098)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.387, -2.642, -29.579)
+DR   face 31119 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.716, -0.585, -24.962)->(22.04, -0.613, -24.474) | SectionIsoCurve (22.04, -0.613, -24.474)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(21.716, -0.585, -24.962)
+DR   face 31121 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (22.619, 0.167, -22.609)->(22.418, 0.372, -22.687) | SectionIsoCurve (22.418, 0.372, -22.687)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.619, 0.167, -22.609)
+DR   face 31123 chamfer:face SectionSurface: ProcCurve3:chamfer end (-16.401, 23.726, 0)->(-15.993, 23.932, 0) | ProcCurve3:chamfer contact (-15.993, 23.932, 0)->(-10.271, 22.627, -58.622) | ProcCurve3:chamfer end (-10.271, 22.627, -58.622)->(-10.67, 22.638, -58.622) | ProcCurve3:chamfer contact (-10.67, 22.638, -58.622)->(-16.401, 23.726, 0)
+DR declined: not a straight edge | curved chamfer: faces not meshed: AnalyticPrism: грань 30821 [SectionSurface] не построена по контурам: непарная сторона вне контура: 4 из 116; способ 2; кольцо нет, полоса 0/0, контуров 12; conformal: surface kind not supported / AnalyticPrism: 21 face(s) meshed from their loops, 1 left as is.
+DR build declined: not a straight edge
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (3.984, -26.764, -28.026) nA (0.743, -0.584, -0.326) nB (-0.472, -0.81, 0.348) inside False (eps 0.15), faces #d000000001/loft:side[0]/#d000000001/loft:side[1]
+DR open: convexity probe at 0.5 p (3.3, -26.918, -29.311) nA (0.735, -0.597, -0.32) nB (-0.486, -0.799, 0.355) inside False (eps 0.15), faces #d000000001/loft:side[0]/#d000000001/loft:side[1]
+DR open: convexity probe at 0.75 p (2.615, -27.072, -30.595) nA (0.727, -0.611, -0.314) nB (-0.5, -0.787, 0.361) inside False (eps 0.15), faces #d000000001/loft:side[0]/#d000000001/loft:side[1]
+DR open: reference fit degree 8 worst 3.31E-002 (tol 3.0E-004) length 64.707
+DR open: reference fit degree 12 worst 4.64E-003 (tol 3.0E-004) length 64.707
+DR open: reference fit degree 16 worst 6.85E-004 (tol 3.0E-004) length 64.707
+DR open: table vs formula 1.48E-012 at t -0.201852 (Δ 64.707) widths 0.2995/0.2997 Lp 65.909
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-0.59962, 65.307] contacts A [-2.67481E-06, 64.707] B [-2.67481E-06, 64.707] Δ 64.707
+DR finish: assembled 0.0s
+DR   face 32232 #d000000001/loft:side[0] NurbsSurface: ProcCurve3:rolling-ball contact (16.384, -23.767, 0)->(-9.445, -29.685, -58.622) | LineCurve3 (-9.445, -29.685, -58.622)->(13.934, -15.201, -58.622) | IntersectionCurve3 (13.934, -15.201, -58.622)->(29.252, 6.847, 0) | LineCurve3 (29.252, 6.847, 0)->(16.384, -23.767, 0)
+DR   face 32242 #d000000001/loft:side[1] NurbsSurface: ProcCurve3:rolling-ball contact (-9.848, -29.603, -58.622)->(16.037, -23.942, 0) | LineCurve3 (16.037, -23.942, 0)->(-31.577, -12.379, 0) | IntersectionCurve3 (-31.577, -12.379, 0)->(-31.448, -6.566, -26.459) | LineCurve3 (-31.448, -6.566, -26.459)->(-31.444, -6.413, -27.028) | LineCurve3 (-31.444, -6.413, -27.028)->(-31.441, -6.259, -27.599) | L
+DR   face 32270 #d000000001/loft:start PlaneSurface: LineCurve3 (16.384, -23.767, 0)->(29.252, 6.847, 0) | LineCurve3 (29.252, 6.847, 0)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.438, 0)->(19.916, 15.211, 0) | LineCurve3 (19.916, 15.211, 0)->(-15.993, 23.932, 0) | LineCurve3 (-15.993, 23.932, 0)->(-16.401, 23.726, 0) | LineCurve3 (-16.401, 23.726, 0)->(-31.577, -12.379, 0) | LineCurve3 (-31.577, -12.
+DR   face 32282 #d000000001/loft:end PlaneSurface: LineCurve3 (13.934, -15.201, -58.622)->(-9.445, -29.685, -58.622) | ProcCurve3:rolling-ball end (-9.445, -29.685, -58.622)->(-9.848, -29.603, -58.622) | LineCurve3 (-9.848, -29.603, -58.622)->(-31.284, 0.786, -58.622) | LineCurve3 (-31.284, 0.786, -58.622)->(-10.67, 22.638, -58.622) | LineCurve3 (-10.67, 22.638, -58.622)->(-10.271, 22.627, -58.622) |
+DR   face 32296 #d000000003/chamfer:face SectionSurface: IntersectionCurve3 (29.252, 6.847, 0)->(13.934, -15.201, -58.622) | LineCurve3 (13.934, -15.201, -58.622)->(14.1, -14.154, -58.622) | SectionIsoCurve (14.1, -14.154, -58.622)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(28.292, 8.176, -1.667) | SectionIsoCurve (28.292, 8.176, -1.667)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.
+DR   face 32303 #d000000001/loft:side[2] NurbsSurface: IntersectionCurve3 (-31.448, -6.566, -26.459)->(-31.577, -12.379, 0) | LineCurve3 (-31.577, -12.379, 0)->(-16.401, 23.726, 0) | SectionIsoCurve (-16.401, 23.726, 0)->(-10.67, 22.638, -58.622) | LineCurve3 (-10.67, 22.638, -58.622)->(-31.284, 0.786, -58.622) | IntersectionCurve3 (-31.284, 0.786, -58.622)->(-31.414, -5.027, -32.163) | LineCurve3 (-
+DR   face 32306 #d000000001/loft:side[3] NurbsSurface: LineCurve3 (-15.993, 23.932, 0)->(19.916, 15.211, 0) | PolylineCurve3 (19.916, 15.211, 0)->(11.288, -2.876, -58.622) | LineCurve3 (11.288, -2.876, -58.622)->(-10.271, 22.627, -58.622) | SectionIsoCurve (-10.271, 22.627, -58.622)->(-15.993, 23.932, 0)
+DR   face 32310 #d000000006/chamfer:face SectionSurface: LineCurve3 (19.916, 15.211, 0)->(28.45, 8.438, 0) | SectionIsoCurve (28.45, 8.438, 0)->(28.292, 8.176, -1.667) | PolylineCurve3 (28.292, 8.176, -1.667)->(27.659, 8.696, -1.652) | SectionIsoCurve (27.659, 8.696, -1.652)->(14.013, -12.635, -58.622) | LineCurve3 (14.013, -12.635, -58.622)->(11.288, -2.876, -58.622) | PolylineCurve3 (11.288, -2.876
+DR   face 32315 #d00000000a/round:face SectionSurface: PolylineCurve3 (14.1, -14.154, -58.622)->(14.013, -12.635, -58.622) | SectionIsoCurve (14.013, -12.635, -58.622)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.622, 7.501, -1.6) | SectionIsoCurve (28.622, 7.501, -1.6)->(14.1, -14.154, -58.622)
+DR   face 32315 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.067, 1.387, -20.418)->(23.273, 1.178, -20.355) | SectionIsoCurve (23.273, 1.178, -20.355)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.067, 1.387, -20.418)
+DR   face 32315 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.703, 2.37, -18.19)->(23.912, 2.169, -18.131) | SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.703, 2.37, -18.19)
+DR   face 32315 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.989, -6.884, -38.651)->(17.86, -6.65, -38.701) | SectionIsoCurve (17.86, -6.65, -38.701)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.989, -6.884, -38.651)
+DR   face 32315 #d00000000a/round:face SectionSurface: SectionIsoCurve (19.211, -4.993, -34.276)->(19.258, -4.962, -34.138) | SectionIsoCurve (19.258, -4.962, -34.138)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.211, -4.993, -34.276)
+DR   face 32315 #d00000000a/round:face SectionSurface: SectionIsoCurve (18.575, -5.725, -36.282)->(18.419, -5.657, -36.525) | SectionIsoCurve (18.419, -5.657, -36.525)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.575, -5.725, -36.282)
+DR   face 32315 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.426, -7.72, -40.712)->(17.251, -7.552, -40.942) | SectionIsoCurve (17.251, -7.552, -40.942)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.426, -7.72, -40.712)
+DR   face 32315 #d00000000a/round:face SectionSurface: SectionIsoCurve (21.251, -1.939, -27.288)->(21.383, -1.682, -26.79) | SectionIsoCurve (21.383, -1.682, -26.79)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.251, -1.939, -27.288)
+DR   face 32315 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.026, -3.75, -31.44)->(19.712, -3.659, -31.914) | SectionIsoCurve (19.712, -3.659, -31.914)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(20.026, -3.75, -31.44)
+DR   face 32315 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.708, -2.711, -29.098)->(20.387, -2.642, -29.579) | SectionIsoCurve (20.387, -2.642, -29.579)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.708, -2.711, -29.098)
+DR   face 32315 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.04, -0.613, -24.474)->(21.716, -0.585, -24.962) | SectionIsoCurve (21.716, -0.585, -24.962)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(22.04, -0.613, -24.474)
+DR   face 32315 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.418, 0.372, -22.687)->(22.619, 0.167, -22.609) | SectionIsoCurve (22.619, 0.167, -22.609)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.418, 0.372, -22.687)
+DR   face 32395 #d00000000a/round:cap[1] PlaneSurface: PolylineCurve3 (28.292, 8.176, -1.667)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.292, 8.176, -1.667)
+DR   face 32397 #d00000000f/chamfer:face SectionSurface: LineCurve3 (-16.401, 23.726, 0)->(-15.993, 23.932, 0) | SectionIsoCurve (-15.993, 23.932, 0)->(-10.271, 22.627, -58.622) | LineCurve3 (-10.271, 22.627, -58.622)->(-10.67, 22.638, -58.622) | SectionIsoCurve (-10.67, 22.638, -58.622)->(-16.401, 23.726, 0)
+DR   face 32399 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.273, 1.178, -20.355)->(23.067, 1.387, -20.418) | SectionIsoCurve (23.067, 1.387, -20.418)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.273, 1.178, -20.355)
+DR   face 32401 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.37, -18.19) | SectionIsoCurve (23.703, 2.37, -18.19)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.912, 2.169, -18.131)
+DR   face 32403 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.86, -6.65, -38.701)->(17.989, -6.884, -38.651) | SectionIsoCurve (17.989, -6.884, -38.651)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.86, -6.65, -38.701)
+DR   face 32405 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.258, -4.962, -34.138)->(19.211, -4.993, -34.276) | SectionIsoCurve (19.211, -4.993, -34.276)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.258, -4.962, -34.138)
+DR   face 32407 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (18.419, -5.657, -36.525)->(18.575, -5.725, -36.282) | SectionIsoCurve (18.575, -5.725, -36.282)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.419, -5.657, -36.525)
+DR   face 32409 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.251, -7.552, -40.942)->(17.426, -7.72, -40.712) | SectionIsoCurve (17.426, -7.72, -40.712)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.251, -7.552, -40.942)
+DR   face 32411 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.383, -1.682, -26.79)->(21.251, -1.939, -27.288) | SectionIsoCurve (21.251, -1.939, -27.288)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.383, -1.682, -26.79)
+DR   face 32413 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.712, -3.659, -31.914)->(20.026, -3.75, -31.44) | SectionIsoCurve (20.026, -3.75, -31.44)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(19.712, -3.659, -31.914)
+DR   face 32415 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (20.387, -2.642, -29.579)->(20.708, -2.711, -29.098) | SectionIsoCurve (20.708, -2.711, -29.098)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.387, -2.642, -29.579)
+DR   face 32417 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.716, -0.585, -24.962)->(22.04, -0.613, -24.474) | SectionIsoCurve (22.04, -0.613, -24.474)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(21.716, -0.585, -24.962)
+DR   face 32419 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (22.619, 0.167, -22.609)->(22.418, 0.372, -22.687) | SectionIsoCurve (22.418, 0.372, -22.687)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.619, 0.167, -22.609)
+DR   face 32421 round:face SectionSurface: ProcCurve3:rolling-ball contact (-9.445, -29.685, -58.622)->(16.384, -23.767, 0) | ProcCurve3:rolling-ball end (16.384, -23.767, 0)->(16.037, -23.942, 0) | ProcCurve3:rolling-ball contact (16.037, -23.942, 0)->(-9.848, -29.603, -58.622) | ProcCurve3:rolling-ball end (-9.848, -29.603, -58.622)->(-9.445, -29.685, -58.622)
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (3.984, -26.764, -28.026) nA (0.743, -0.584, -0.326) nB (-0.472, -0.81, 0.348) inside False (eps 0.15), faces #d000000001/loft:side[0]/#d000000001/loft:side[1]
+DR open: convexity probe at 0.5 p (3.3, -26.918, -29.311) nA (0.735, -0.597, -0.32) nB (-0.486, -0.799, 0.355) inside False (eps 0.15), faces #d000000001/loft:side[0]/#d000000001/loft:side[1]
+DR open: convexity probe at 0.75 p (2.615, -27.072, -30.595) nA (0.727, -0.611, -0.314) nB (-0.5, -0.787, 0.361) inside False (eps 0.15), faces #d000000001/loft:side[0]/#d000000001/loft:side[1]
+DR open: reference fit degree 8 worst 3.31E-002 (tol 3.0E-004) length 64.707
+DR open: reference fit degree 12 worst 4.64E-003 (tol 3.0E-004) length 64.707
+DR open: reference fit degree 16 worst 6.85E-004 (tol 3.0E-004) length 64.707
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t -2.6748142E-06
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 64.706959
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[1] at t -2.6748142E-06
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[1] at t 64.706959
+DR open: table vs formula 3.83E-014 at t 59.0312 (Δ 64.707) widths 0.2995/0.2997 Lp 65.916
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-0.59962, 65.307] contacts A [-2.67481E-06, 64.707] B [-2.67481E-06, 64.707] Δ 64.707
+DR finish: assembled 0.0s
+DR   face 32425 #d000000001/loft:side[0] NurbsSurface: ProcCurve3:rolling-ball contact (16.384, -23.767, -0)->(-9.445, -29.685, -58.622) | LineCurve3 (-9.445, -29.685, -58.622)->(13.934, -15.201, -58.622) | IntersectionCurve3 (13.934, -15.201, -58.622)->(29.252, 6.847, 0) | LineCurve3 (29.252, 6.847, 0)->(16.384, -23.767, -0)
+DR   face 32435 #d000000001/loft:side[1] NurbsSurface: ProcCurve3:rolling-ball contact (-9.848, -29.603, -58.622)->(16.037, -23.942, 0) | LineCurve3 (16.037, -23.942, 0)->(-31.577, -12.379, 0) | IntersectionCurve3 (-31.577, -12.379, 0)->(-31.448, -6.566, -26.459) | LineCurve3 (-31.448, -6.566, -26.459)->(-31.444, -6.413, -27.028) | LineCurve3 (-31.444, -6.413, -27.028)->(-31.441, -6.259, -27.599) | L
+DR   face 32463 #d000000001/loft:start PlaneSurface: LineCurve3 (16.384, -23.767, -0)->(29.252, 6.847, 0) | LineCurve3 (29.252, 6.847, 0)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.438, 0)->(19.916, 15.211, 0) | LineCurve3 (19.916, 15.211, 0)->(-15.993, 23.932, 0) | LineCurve3 (-15.993, 23.932, 0)->(-16.401, 23.726, 0) | LineCurve3 (-16.401, 23.726, 0)->(-31.577, -12.379, 0) | LineCurve3 (-31.577, -12
+DR   face 32475 #d000000001/loft:end PlaneSurface: LineCurve3 (13.934, -15.201, -58.622)->(-9.445, -29.685, -58.622) | ProcCurve3:rolling-ball end (-9.445, -29.685, -58.622)->(-9.848, -29.603, -58.622) | LineCurve3 (-9.848, -29.603, -58.622)->(-31.284, 0.786, -58.622) | LineCurve3 (-31.284, 0.786, -58.622)->(-10.67, 22.638, -58.622) | LineCurve3 (-10.67, 22.638, -58.622)->(-10.271, 22.627, -58.622) |
+DR   face 32489 #d000000003/chamfer:face SectionSurface: IntersectionCurve3 (29.252, 6.847, 0)->(13.934, -15.201, -58.622) | LineCurve3 (13.934, -15.201, -58.622)->(14.1, -14.154, -58.622) | SectionIsoCurve (14.1, -14.154, -58.622)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(28.292, 8.176, -1.667) | SectionIsoCurve (28.292, 8.176, -1.667)->(28.45, 8.438, 0) | LineCurve3 (28.45, 8.
+DR   face 32496 #d000000001/loft:side[2] NurbsSurface: IntersectionCurve3 (-31.448, -6.566, -26.459)->(-31.577, -12.379, 0) | LineCurve3 (-31.577, -12.379, 0)->(-16.401, 23.726, 0) | SectionIsoCurve (-16.401, 23.726, 0)->(-10.67, 22.638, -58.622) | LineCurve3 (-10.67, 22.638, -58.622)->(-31.284, 0.786, -58.622) | IntersectionCurve3 (-31.284, 0.786, -58.622)->(-31.414, -5.027, -32.163) | LineCurve3 (-
+DR   face 32499 #d000000001/loft:side[3] NurbsSurface: LineCurve3 (-15.993, 23.932, 0)->(19.916, 15.211, 0) | PolylineCurve3 (19.916, 15.211, 0)->(11.288, -2.876, -58.622) | LineCurve3 (11.288, -2.876, -58.622)->(-10.271, 22.627, -58.622) | SectionIsoCurve (-10.271, 22.627, -58.622)->(-15.993, 23.932, 0)
+DR   face 32503 #d000000006/chamfer:face SectionSurface: LineCurve3 (19.916, 15.211, 0)->(28.45, 8.438, 0) | SectionIsoCurve (28.45, 8.438, 0)->(28.292, 8.176, -1.667) | PolylineCurve3 (28.292, 8.176, -1.667)->(27.659, 8.696, -1.652) | SectionIsoCurve (27.659, 8.696, -1.652)->(14.013, -12.635, -58.622) | LineCurve3 (14.013, -12.635, -58.622)->(11.288, -2.876, -58.622) | PolylineCurve3 (11.288, -2.876
+DR   face 32508 #d00000000a/round:face SectionSurface: PolylineCurve3 (14.1, -14.154, -58.622)->(14.013, -12.635, -58.622) | SectionIsoCurve (14.013, -12.635, -58.622)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.622, 7.501, -1.6) | SectionIsoCurve (28.622, 7.501, -1.6)->(14.1, -14.154, -58.622)
+DR   face 32508 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.067, 1.387, -20.418)->(23.273, 1.178, -20.355) | SectionIsoCurve (23.273, 1.178, -20.355)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.067, 1.387, -20.418)
+DR   face 32508 #d00000000a/round:face SectionSurface: SectionIsoCurve (23.703, 2.37, -18.19)->(23.912, 2.169, -18.131) | SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.703, 2.37, -18.19)
+DR   face 32508 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.989, -6.884, -38.651)->(17.86, -6.65, -38.701) | SectionIsoCurve (17.86, -6.65, -38.701)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.989, -6.884, -38.651)
+DR   face 32508 #d00000000a/round:face SectionSurface: SectionIsoCurve (19.211, -4.993, -34.276)->(19.258, -4.962, -34.138) | SectionIsoCurve (19.258, -4.962, -34.138)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.211, -4.993, -34.276)
+DR   face 32508 #d00000000a/round:face SectionSurface: SectionIsoCurve (18.575, -5.725, -36.282)->(18.419, -5.657, -36.525) | SectionIsoCurve (18.419, -5.657, -36.525)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.575, -5.725, -36.282)
+DR   face 32508 #d00000000a/round:face SectionSurface: SectionIsoCurve (17.426, -7.72, -40.712)->(17.251, -7.552, -40.942) | SectionIsoCurve (17.251, -7.552, -40.942)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.426, -7.72, -40.712)
+DR   face 32508 #d00000000a/round:face SectionSurface: SectionIsoCurve (21.251, -1.939, -27.288)->(21.383, -1.682, -26.79) | SectionIsoCurve (21.383, -1.682, -26.79)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.251, -1.939, -27.288)
+DR   face 32508 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.026, -3.75, -31.44)->(19.712, -3.659, -31.914) | SectionIsoCurve (19.712, -3.659, -31.914)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(20.026, -3.75, -31.44)
+DR   face 32508 #d00000000a/round:face SectionSurface: SectionIsoCurve (20.708, -2.711, -29.098)->(20.387, -2.642, -29.579) | SectionIsoCurve (20.387, -2.642, -29.579)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.708, -2.711, -29.098)
+DR   face 32508 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.04, -0.613, -24.474)->(21.716, -0.585, -24.962) | SectionIsoCurve (21.716, -0.585, -24.962)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(22.04, -0.613, -24.474)
+DR   face 32508 #d00000000a/round:face SectionSurface: SectionIsoCurve (22.418, 0.372, -22.687)->(22.619, 0.167, -22.609) | SectionIsoCurve (22.619, 0.167, -22.609)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.418, 0.372, -22.687)
+DR   face 32588 #d00000000a/round:cap[1] PlaneSurface: PolylineCurve3 (28.292, 8.176, -1.667)->(28.622, 7.501, -1.6) | PolylineCurve3 (28.622, 7.501, -1.6)->(27.659, 8.696, -1.652) | PolylineCurve3 (27.659, 8.696, -1.652)->(28.292, 8.176, -1.667)
+DR   face 32590 #d00000000f/chamfer:face SectionSurface: LineCurve3 (-16.401, 23.726, 0)->(-15.993, 23.932, 0) | SectionIsoCurve (-15.993, 23.932, 0)->(-10.271, 22.627, -58.622) | LineCurve3 (-10.271, 22.627, -58.622)->(-10.67, 22.638, -58.622) | SectionIsoCurve (-10.67, 22.638, -58.622)->(-16.401, 23.726, 0)
+DR   face 32592 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.273, 1.178, -20.355)->(23.067, 1.387, -20.418) | SectionIsoCurve (23.067, 1.387, -20.418)->(23.057, 1.43, -20.378) | SectionIsoCurve (23.057, 1.43, -20.378)->(23.273, 1.178, -20.355)
+DR   face 32594 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (23.912, 2.169, -18.131)->(23.703, 2.37, -18.19) | SectionIsoCurve (23.703, 2.37, -18.19)->(23.703, 2.4, -18.15) | SectionIsoCurve (23.703, 2.4, -18.15)->(23.912, 2.169, -18.131)
+DR   face 32596 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.86, -6.65, -38.701)->(17.989, -6.884, -38.651) | SectionIsoCurve (17.989, -6.884, -38.651)->(17.947, -6.922, -38.787) | SectionIsoCurve (17.947, -6.922, -38.787)->(17.86, -6.65, -38.701)
+DR   face 32598 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.258, -4.962, -34.138)->(19.211, -4.993, -34.276) | SectionIsoCurve (19.211, -4.993, -34.276)->(19.082, -4.681, -34.194) | SectionIsoCurve (19.082, -4.681, -34.194)->(19.258, -4.962, -34.138)
+DR   face 32600 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (18.419, -5.657, -36.525)->(18.575, -5.725, -36.282) | SectionIsoCurve (18.575, -5.725, -36.282)->(18.61, -5.945, -36.422) | SectionIsoCurve (18.61, -5.945, -36.422)->(18.419, -5.657, -36.525)
+DR   face 32602 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (17.251, -7.552, -40.942)->(17.426, -7.72, -40.712) | SectionIsoCurve (17.426, -7.72, -40.712)->(17.368, -7.838, -40.947) | SectionIsoCurve (17.368, -7.838, -40.947)->(17.251, -7.552, -40.942)
+DR   face 32604 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.383, -1.682, -26.79)->(21.251, -1.939, -27.288) | SectionIsoCurve (21.251, -1.939, -27.288)->(21.058, -1.614, -27.257) | SectionIsoCurve (21.058, -1.614, -27.257)->(21.383, -1.682, -26.79)
+DR   face 32606 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (19.712, -3.659, -31.914)->(20.026, -3.75, -31.44) | SectionIsoCurve (20.026, -3.75, -31.44)->(19.899, -4, -31.923) | SectionIsoCurve (19.899, -4, -31.923)->(19.712, -3.659, -31.914)
+DR   face 32608 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (20.387, -2.642, -29.579)->(20.708, -2.711, -29.098) | SectionIsoCurve (20.708, -2.711, -29.098)->(20.572, -2.975, -29.607) | SectionIsoCurve (20.572, -2.975, -29.607)->(20.387, -2.642, -29.579)
+DR   face 32610 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (21.716, -0.585, -24.962)->(22.04, -0.613, -24.474) | SectionIsoCurve (22.04, -0.613, -24.474)->(21.945, -0.868, -24.912) | SectionIsoCurve (21.945, -0.868, -24.912)->(21.716, -0.585, -24.962)
+DR   face 32612 #d000000006/chamfer:face SectionSurface: SectionIsoCurve (22.619, 0.167, -22.609)->(22.418, 0.372, -22.687) | SectionIsoCurve (22.418, 0.372, -22.687)->(22.721, 0.383, -22.199) | SectionIsoCurve (22.721, 0.383, -22.199)->(22.619, 0.167, -22.609)
+DR   face 32614 round:face SectionSurface: ProcCurve3:rolling-ball contact (-9.445, -29.685, -58.622)->(16.384, -23.767, -0) | ProcCurve3:rolling-ball end (16.384, -23.767, -0)->(16.037, -23.942, 0) | ProcCurve3:rolling-ball contact (16.037, -23.942, 0)->(-9.848, -29.603, -58.622) | ProcCurve3:rolling-ball end (-9.848, -29.603, -58.622)->(-9.445, -29.685, -58.622)
+DR declined: not a straight edge | open curved: faces not meshed: AnalyticPrism: грань 32315 [SectionSurface] не построена по контурам: непарная сторона вне контура: 4 из 116; способ 2; кольцо нет, полоса 0/0, контуров 12; conformal: surface kind not supported / AnalyticPrism: 22 face(s) meshed from their loops, 1 left as is.
+== REBUILDCHECK END s102 4
+== STEP s102 5
+DR open: convexity probe at 0.25 p (16.733, -10.979, -43.336) nA (0.642, -0.758, 0.115) nB (0.968, -0.096, -0.231) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (21.122, -4.966, -28.948) nA (0.779, -0.627, 0.025) nB (0.942, 0.062, -0.331) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (25.671, 1.373, -14.749) nA (0.873, -0.486, -0.054) nB (0.897, 0.231, -0.378) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000003/chamfer:face
+DR open: reference fit degree 8 worst 4.19E-002 (tol 1.0E-003) length 64.8013
+DR open: reference fit degree 12 worst 1.33E-002 (tol 1.0E-003) length 64.8013
+DR open: reference fit degree 16 worst 5.73E-003 (tol 1.0E-003) length 64.8013
+DR open: reference fit degree 24 worst 1.33E-002 (tol 1.0E-003) length 64.8013
+DR open: reference fit degree 32 worst 1.77E-002 (tol 1.0E-003) length 64.8013
+DR open: reference fit degree 48 worst 2.73E-003 (tol 1.0E-003) length 64.8013
+DR open: reference curve not fitted (IntersectionCurve3, chain 1: IntersectionCurve3)
+DR declined: not a straight edge | curved chamfer: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+seconds 438 nproc 4 env LOFT_DRALL=1 P3D_DROPENPAR=0 cmd loftseq 1 102 6 res/out
