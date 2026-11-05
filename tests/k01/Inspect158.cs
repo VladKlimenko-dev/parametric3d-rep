@@ -118,3 +118,24 @@ static partial class Program
         foreach (var (vn, arcs) in sc.Arcs) Console.WriteLine($"  arcs {vn}: {string.Join(" ", arcs.Select(a => $"R{a.Radius:0.##}@({a.Center.X:0.##},{a.Center.Y:0.##}){(a.Full ? "F" : "")}"))}");
     }
 }
+
+static partial class Program
+{
+    /// <summary>k164: рёбра тела, чья проекция на вид проходит у точки (x, y) ближе r: тип кривой, ось, радиус.</summary>
+    static void EdgesNear(string file, string view, double x, double y, double r)
+    {
+        var (p, pars) = DocumentFile.Load(File.ReadAllText(file));
+        if (!p.RestoredFromFile) p.Rebuild(pars);
+        var f = Parametric3D.Model.Drawing.ViewFrame.Of(view);
+        foreach (var body in p.Bodies)
+            foreach (var e in body.Edges.Where(e => e.Curve != null))
+            {
+                var c = e.Curve!; double best = 1e9;
+                for (int k = 0; k <= 40; k++) { var q = f.Project(c.PointAt(c.T0 + (c.T1 - c.T0) * k / 40.0)); best = Math.Min(best, (q - new OpenTK.Mathematics.Vector2d(x, y)).Length); }
+                if (best > r) continue;
+                string extra = c is Parametric3D.Kernel.Curves.ArcCurve3 a ? $"R {a.Radius:0.###} c {f.Project(a.Frame.Origin)} W {a.Frame.W}" : "";
+                var p0 = f.Project(c.PointAt(c.T0)); var p1 = f.Project(c.PointAt(c.T1));
+                Console.WriteLine($"edge {e.Id}: {c.GetType().Name} {extra} from ({p0.X:0.###},{p0.Y:0.###}) to ({p1.X:0.###},{p1.Y:0.###}) d {best:0.###}");
+            }
+    }
+}

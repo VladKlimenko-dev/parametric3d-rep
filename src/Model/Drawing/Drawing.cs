@@ -294,6 +294,13 @@ public sealed class DrawingDocument
     public bool ShowDims { get; set; } = true;
     /// <summary>Слой допусков формы и расположения (рамки и базы) — вкл/выкл.</summary>
     public bool ShowGdt { get; set; } = true;
+    /// <summary>k164 (замечание 05.11, 10:33, п. 5): номера центров «℄N» у центров и под полкой диаметров и радиусов.</summary>
+    public bool CenterNumbers { get; set; } = true;
+    /// <summary>k164: осевые линии на листе (мм листа) и центры по видам после Compose — приоритет осевых над выносными.</summary>
+    [JsonIgnore] public Dictionary<string, List<(Vector2d A, Vector2d B)>> CenterSegs { get; } = new();
+    [JsonIgnore] public Dictionary<string, List<Vector2d>> CenterPts { get; } = new();
+    /// <summary>k164: номера центров после Compose: вид, точка листа, номер.</summary>
+    [JsonIgnore] public List<(string View, Vector2d P, int No)> CenterNos { get; } = new();
     /// <summary>Габариты видов на листе после Compose (мм листа) — для выбора и переноса вида мышью.</summary>
     [JsonIgnore] public Dictionary<string, (double X0, double Y0, double X1, double Y1)> Boxes { get; } = new();
     /// <summary>Преобразование вида «модель → лист» после Compose: середина проекции, масштаб, центр на листе.</summary>
@@ -608,7 +615,7 @@ public sealed class DrawingDocument
         Boxes.Clear(); Xf.Clear();
         var proj = scene.Lines;
         double scale = Layout(proj);
-        LastScale = scale; Hit.Clear(); HitTexts.Clear();
+        LastScale = scale; Hit.Clear(); HitTexts.Clear(); CenterSegs.Clear(); CenterPts.Clear(); CenterNos.Clear();
         fields.Auto[Fields.Scale] = ScaleText(scale);
         var g = SheetLayout.Compose(Template, fields);
         if (!LineSOff) g.ThickW = Math.Clamp(LineS, 0.3, 1.4);
@@ -658,6 +665,7 @@ public sealed class DrawingDocument
                 foreach (var (a, b) in SectionCut.Hatch(sb, 45 - v.Angle, 3 / s))
                     foreach (var part in brk ? ClipBreak(new() { a, b }, v.BreakA, v.BreakB) : new[] { new List<Vector2d> { a, b } })
                         g.Polylines.Add(new SheetPolyline(part.Select(T).ToList(), LineKind.Thin));
+            int cl0 = g.Lines.Count, cp0 = g.Polylines.Count;
             if (v.CenterLines && v.Name != "iso" && scene.Axes.TryGetValue(v.Name, out var ax)) AxisLines(g, ax, T, s);
             // k163 (замечание 05.11, 09:22, п. 3.1): центры дуг, не отмеченные осями тел вращения (дуги профиля, скругления
             // паза), — перекрестие тонкими штрихпунктирными: полудлина — радиус дуги + 3 мм листа, но не больше 15 мм листа.
@@ -674,10 +682,27 @@ public sealed class DrawingDocument
                     var c0 = a.Center;
                     foreach (var (p, q) in new[] { (c0 - Vector2d.UnitX * hl, c0 + Vector2d.UnitX * hl), (c0 - Vector2d.UnitY * hl, c0 + Vector2d.UnitY * hl) })
                     {
-                        var (x1, y1) = T(p); var (x2, y2) = T(q);
-                        g.Line(x1, y1, x2, y2, LineKind.Center);
+                        // k164 (замечание 05.11, 10:33, п. 3): ломаной — отрезки листа (Lines) рисовались без штрихов: осевая
+                        // выходила сплошной
+                        g.Polylines.Add(new SheetPolyline(new() { T(p), T(q) }, LineKind.Center));
                     }
                 }
+            }
+            // k164: осевые линии и центры вида (лист) — для приоритета осевых над выносными и для номеров центров
+            {
+                var segs = new List<(Vector2d, Vector2d)>();
+                for (int i = cl0; i < g.Lines.Count; i++) if (g.Lines[i].Kind == LineKind.Center) segs.Add((new(g.Lines[i].X1, g.Lines[i].Y1), new(g.Lines[i].X2, g.Lines[i].Y2)));
+                for (int i = cp0; i < g.Polylines.Count; i++)
+                    if (g.Polylines[i].Kind == LineKind.Center)
+                        for (int k = 0; k + 1 < g.Polylines[i].Points.Count; k++) { var (ax0, ay0) = g.Polylines[i].Points[k]; var (ax1, ay1) = g.Polylines[i].Points[k + 1]; segs.Add((new(ax0, ay0), new(ax1, ay1))); }
+                CenterSegs[v.Name] = segs;
+                var pts = new List<Vector2d>();
+                if (v.Name != "iso")
+                {
+                    foreach (var a in scene.Axes.GetValueOrDefault(v.Name) ?? new()) if (a.Cross) { var (px, py) = T(a.Center); pts.Add(new(px, py)); }
+                    foreach (var a in scene.Arcs.GetValueOrDefault(v.Name) ?? new()) { var (px, py) = T(a.Center); var pp = new Vector2d(px, py); if (!pts.Any(q => (q - pp).Length < 0.05)) pts.Add(pp); }
+                }
+                CenterPts[v.Name] = pts;
             }
             // подписи: «А–А», «Б (2:1)», свой масштаб «(1:2)»
             string caption = v.IsSection ? $"{v.Label}-{v.Label}" : v.IsDetail || v.IsAux ? v.Label : "";
@@ -702,6 +727,7 @@ public sealed class DrawingDocument
             }
         }
         // k159: сначала линейные размеры, затем диаметры и радиусы — у них угол выноски подбирается без наложения текстов
+        if (ShowDims && CenterNumbers && !CenterNosOff) NumberCentres();
         if (ShowDims)
         {
             var rows = new Dictionary<(string, string, int), int>();
@@ -718,6 +744,7 @@ public sealed class DrawingDocument
                 }
                 Capture(g, d, () => DrawDim(g, d));
             }
+            CentreLabels(g);
         }
         foreach (var n in Notes)
         {
@@ -936,19 +963,21 @@ public sealed class DrawingDocument
         var q1 = P1 + n * (L - h1); var q2 = P2 + n * (L - h2);
         double sg = Math.Sign(d.Offset == 0 ? 1 : d.Offset);
         // выносные линии: от точки до размерной + 2 мм за неё
-        if (Math.Abs(L - h1) > 0.5) g.Line(P1.X + n.X * sg, P1.Y + n.Y * sg, q1.X + n.X * sg * 2, q1.Y + n.Y * sg * 2);
-        if (Math.Abs(L - h2) > 0.5) g.Line(P2.X + n.X * sg, P2.Y + n.Y * sg, q2.X + n.X * sg * 2, q2.Y + n.Y * sg * 2);
+        // k164 (замечание 05.11, 10:33, п. 3): выносная от центра — продолжение осевой (штрихпунктир от центра), участки, лежащие
+        // на осевой, не рисуются: осевая видна, не сливается со сплошной
+        ExtLine(g, d.View, P1, n * sg, q1 + n * sg * 2, Math.Abs(L - h1) > 0.5);
+        ExtLine(g, d.View, P2, n * sg, q2 + n * sg * 2, Math.Abs(L - h2) > 0.5);
         double len = (q2 - q1).Length;
         var along = len > 1e-9 ? (q2 - q1) / len : u;
         bool outside = d.Arrows == 1 ? false : d.Arrows == 2 || len < 2 * ArrowL + 4;
         if (outside)
         {
-            g.Line(q1.X - along.X * 8, q1.Y - along.Y * 8, q2.X + along.X * 8, q2.Y + along.Y * 8);
+            SolidLine(g, d.View, q1 - along * 8, q2 + along * 8, LineKind.Thin);
             Arrow(g, (q1.X, q1.Y), (along.X, along.Y)); Arrow(g, (q2.X, q2.Y), (-along.X, -along.Y));
         }
         else
         {
-            g.Line(q1.X, q1.Y, q2.X, q2.Y);
+            SolidLine(g, d.View, q1, q2, LineKind.Thin);
             Arrow(g, (q1.X, q1.Y), (-along.X, -along.Y)); Arrow(g, (q2.X, q2.Y), (along.X, along.Y));
         }
         // текст над размерной линией, по её направлению (читаемо: угол в (−90°, 90°])
@@ -1054,6 +1083,172 @@ public sealed class DrawingDocument
         g.Text(tx, ty, TextH, text, TextAlign.Center, null, ta);
     }
 
+    // ------------------------------------------------------------------ k164: осевые линии в приоритете, номера центров
+
+    static readonly bool CenterPrioOff = Environment.GetEnvironmentVariable("P3D_CENTERPRIO") == "0";
+    static readonly bool CenterNosOff = Environment.GetEnvironmentVariable("P3D_CENTERNOS") == "0";
+
+    bool IsCentre(string view, Vector2d p) => CenterPts.TryGetValue(view, out var pts) && pts.Any(q => (q - p).Length < 0.05);
+
+    /// <summary>
+    /// k164: выносная линия от точки P (смещение gap — отступ от точки) до end. От центра (окружности, дуги) — штрихпунктирная от
+    /// самого центра: продолжение осевой (ГОСТ 2.307 п. 1.6: размер от оси — выносная — продолжение осевой). Участки на осевых
+    /// линии не рисуются. Мутация P3D_CENTERPRIO=0 — сплошная поверх осевой (прежнее).
+    /// </summary>
+    void ExtLine(SheetGraphics g, string view, Vector2d P, Vector2d gap, Vector2d end, bool draw)
+    {
+        if (CenterPrioOff) { if (draw) g.Line(P.X + gap.X, P.Y + gap.Y, end.X, end.Y); return; }
+        bool centre = IsCentre(view, P);
+        if (!draw && !centre) return;
+        if (centre) SolidLine(g, view, P, end, LineKind.Center);
+        else SolidLine(g, view, P + gap, end, LineKind.Thin);
+    }
+
+    /// <summary>k164: отрезок a–b без участков, лежащих на осевых линиях вида (там видна осевая).</summary>
+    void SolidLine(SheetGraphics g, string view, Vector2d a, Vector2d b, LineKind kind)
+    {
+        var ab = b - a; double len = ab.Length;
+        if (len < 1e-9) return;
+        if (CenterPrioOff) { g.Line(a.X, a.Y, b.X, b.Y); return; }
+        var cs = CenterSegs.GetValueOrDefault(view) ?? new();
+        var u = ab / len;
+        var cover = new List<(double S, double E)>();
+        foreach (var (p, q) in cs)
+        {
+            var pq = q - p; double l = pq.Length;
+            if (l < 1e-9) continue;
+            var v = pq / l;
+            if (Math.Abs(u.X * v.Y - u.Y * v.X) > 1e-3) continue;
+            var ap = p - a;
+            if (Math.Abs(ap.X * u.Y - ap.Y * u.X) > 0.05) continue;
+            double t1 = Vector2d.Dot(p - a, u), t2 = Vector2d.Dot(q - a, u);
+            cover.Add((Math.Min(t1, t2), Math.Max(t1, t2)));
+        }
+        double t = 0;
+        foreach (var (cs0, ce) in cover.OrderBy(c => c.S))
+        {
+            if (ce <= t) continue;
+            if (cs0 > t + 0.3) { var x0 = a + u * t; var x1 = a + u * Math.Min(cs0, len); if (Math.Min(cs0, len) > t) Seg(x0, x1); }
+            t = Math.Max(t, ce);
+            if (t >= len) return;
+        }
+        if (len - t > 0.3) Seg(a + u * t, b);
+        void Seg(Vector2d x0, Vector2d x1)
+        {
+            if (kind == LineKind.Center) g.Polylines.Add(new SheetPolyline(new() { (x0.X, x0.Y), (x1.X, x1.Y) }, LineKind.Center));
+            else g.Line(x0.X, x0.Y, x1.X, x1.Y, kind);
+        }
+    }
+
+    /// <summary>
+    /// k164 (замечание 05.11, 10:33, п. 5): номера центров, к которым относятся размеры: центры диаметров и радиусов и концы
+    /// линейных размеров в центрах. Сквозная нумерация: на каждом виде — сначала главный центр (у наибольшей окружности или
+    /// дуги), затем сверху вниз, слева направо.
+    /// </summary>
+    void NumberCentres()
+    {
+        int no = 0;
+        foreach (var v in Views)
+        {
+            if (!CenterPts.TryGetValue(v.Name, out var pts) || pts.Count == 0) continue;
+            var used = new List<(Vector2d P, double R)>();
+            void Use(Vector2d p, double r)
+            {
+                var c = pts.FirstOrDefault(q => (q - p).Length < 0.05, new Vector2d(double.NaN));
+                if (double.IsNaN(c.X)) return;
+                int i = used.FindIndex(u => (u.P - c).Length < 0.05);
+                if (i < 0) used.Add((c, r)); else if (r > used[i].R) used[i] = (c, r);
+            }
+            foreach (var d in Dims.Where(d => !d.Hidden && d.View == v.Name))
+            {
+                if (d.Kind is "dia" or "rad") { var (x, y) = ToSheet(d.View, new Vector2d(d.X1, d.Y1)); Use(new(x, y), d.X2); }
+                else if (d.Kind is "h" or "v" or "al")
+                {
+                    var (x1, y1) = ToSheet(d.View, new Vector2d(d.X1, d.Y1)); var (x2, y2) = ToSheet(d.View, new Vector2d(d.X2, d.Y2));
+                    Use(new(x1, y1), 0); Use(new(x2, y2), 0);
+                }
+            }
+            if (used.Count < 2) continue;   // один центр — нумеровать нечего
+            var main = used.OrderByDescending(u => u.R).First();
+            foreach (var u in new[] { main }.Concat(used.Where(u => u != main).OrderByDescending(u => Math.Round(u.P.Y, 2)).ThenBy(u => u.P.X)))
+                CenterNos.Add((v.Name, u.P, ++no));
+        }
+    }
+
+    int? CentreNo(string view, Vector2d p)
+    {
+        foreach (var c in CenterNos) if (c.View == view && (c.P - p).Length < 0.05) return c.No;
+        return null;
+    }
+
+    static double SignW(int no, double h) => 1.0 * h + TextW(no.ToString(CultureInfo.InvariantCulture), h);
+
+    /// <summary>k164: знак центра «℄» (буквы C и L одна на другой) и номер: x, y — левый нижний угол, h — высота шрифта.</summary>
+    static void CenterSign(SheetGraphics g, double x, double y, double h, int no)
+    {
+        double cx = x + 0.42 * h, cy = y + 0.5 * h, r = 0.42 * h;
+        var arc = Enumerable.Range(0, 17).Select(k => { double a = (50 + 260.0 * k / 16) * Math.PI / 180; return (cx + r * Math.Cos(a), cy + r * Math.Sin(a)); }).ToList();
+        g.Polylines.Add(new SheetPolyline(arc, LineKind.Thin));
+        g.Line(cx, y + h, cx, y); g.Line(cx, y, cx + 0.5 * h, y);
+        g.Text(x + 1.0 * h, y, h, no.ToString(CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// k164: подписи центров «℄N» с выноской от центра: направление из ряда 315°, 225°, 45°, 135°, 330°, 210° … (не по осям),
+    /// длина 5…14 мм — первое место, где подпись не ложится на тексты листа и на другие подписи.
+    /// </summary>
+    void CentreLabels(SheetGraphics g)
+    {
+        double h = TextH;
+        var boxes = g.Texts.Select(t => TextCorners(t)).Select(c => (X0: c.Min(q => q.X), Y0: c.Min(q => q.Y), X1: c.Max(q => q.X), Y1: c.Max(q => q.Y))).ToList();
+        // линии листа (кроме осевых): подпись не ставится на линию контура или размера
+        var segs = new List<(double X1, double Y1, double X2, double Y2)>();
+        foreach (var pl in g.Polylines) if (pl.Kind != LineKind.Center) for (int i = 0; i + 1 < pl.Points.Count; i++) segs.Add((pl.Points[i].X, pl.Points[i].Y, pl.Points[i + 1].X, pl.Points[i + 1].Y));
+        foreach (var l in g.Lines) if (l.Kind != LineKind.Center) segs.Add((l.X1, l.Y1, l.X2, l.Y2));
+        static bool Cross((double X1, double Y1, double X2, double Y2) sg, (double, double, double, double) b)
+        {
+            // отсечение Лианга — Барски
+            double t0 = 0, t1 = 1, dx = sg.X2 - sg.X1, dy = sg.Y2 - sg.Y1;
+            foreach (var (pp, qq) in new[] { (-dx, sg.X1 - b.Item1), (dx, b.Item3 - sg.X1), (-dy, sg.Y1 - b.Item2), (dy, b.Item4 - sg.Y1) })
+            {
+                if (Math.Abs(pp) < 1e-12) { if (qq < 0) return false; continue; }
+                double r = qq / pp;
+                if (pp < 0) { if (r > t1) return false; if (r > t0) t0 = r; }
+                else { if (r < t0) return false; if (r < t1) t1 = r; }
+            }
+            return true;
+        }
+        foreach (var (view, p, no) in CenterNos)
+        {
+            double w = SignW(no, h);
+            (double, double, double, double)? best = null; (Vector2d, Vector2d) lead = default; double bestScore = double.MaxValue;
+            // место с наименьшим числом наложений: текст — 100, пересечённая линия — 1, длина выноски — 0.05 на мм; свободное
+            // место ближе к центру — сразу
+            foreach (double len in new[] { 5.0, 8.0, 11.0, 14.0, 18.0, 24.0 })
+            {
+                foreach (double deg in new[] { -45.0, -135, 45, 135, -30, -150, 30, 150, -60, -120, 60, 120 })
+                {
+                    double a = deg * Math.PI / 180;
+                    var e = p + new Vector2d(Math.Cos(a), Math.Sin(a)) * len;
+                    bool right = Math.Cos(a) >= -1e-9;
+                    double x0 = right ? e.X : e.X - w, y0 = e.Y + 0.6;
+                    var bx = (x0 - 0.3, y0 - 0.3, x0 + w + 0.3, y0 + h + 0.3);
+                    int tx = boxes.Count(b => b.X0 < bx.Item3 && bx.Item1 < b.X1 && b.Y0 < bx.Item4 && bx.Item2 < b.Y1);
+                    int sx = segs.Count(sg => Math.Max(sg.X1, sg.X2) >= bx.Item1 && Math.Min(sg.X1, sg.X2) <= bx.Item3 && Math.Max(sg.Y1, sg.Y2) >= bx.Item2 && Math.Min(sg.Y1, sg.Y2) <= bx.Item4 && Cross(sg, bx));
+                    double score = 100 * tx + sx + 0.05 * len;
+                    if (score < bestScore) { bestScore = score; best = (x0, y0, x0 + w, y0 + h); lead = (p, e); }
+                }
+                if (bestScore < 1) break;
+            }
+            var (bx0, by0, bx1, by1) = best.Value;
+            SolidLine(g, view, lead.Item1, lead.Item2, LineKind.Thin);
+            // полка под подписью — выноска читается (как в ASME Y14.5: «℄N» на полке)
+            g.Line(lead.Item2.X, lead.Item2.Y, Math.Abs(lead.Item2.X - bx0) < 1e-9 ? bx1 : bx0, lead.Item2.Y);
+            CenterSign(g, bx0, by0, h, no);
+            boxes.Add((bx0, by0, bx1, by1));
+        }
+    }
+
     void DrawRadial(SheetGraphics g, DrawingDim d, string text)
     {
         var c = ToSheet(d.View, new Vector2d(d.X1, d.Y1));
@@ -1068,8 +1263,11 @@ public sealed class DrawingDocument
             g.Line(p.Item1, p.Item2, p2.Item1, p2.Item2);
             Arrow(g, p, dir); Arrow(g, p2, (-dir.Item1, -dir.Item2));
             double ang = a * 180 / Math.PI; var up = (-dir.Item2, dir.Item1);
+            ang = ((ang + 180) % 360 + 360) % 360 - 180;   // k164: угол выноски 315° → −45° (прежде текст выходил вверх ногами)
             if (ang > 90.0001 || ang <= -90) { ang += ang > 0 ? -180 : 180; up = (-up.Item1, -up.Item2); }
-            g.Text(c.X + up.Item1, c.Y + up.Item2, TextH, text, TextAlign.Center, null, ang);
+            // k164: текст — посередине между центром и стрелкой (прежде — над центром: диаметры одного центра ложились друг на друга)
+            double tf = CenterPrioOff ? 0 : 0.5;
+            g.Text(c.X + dir.Item1 * r * tf + up.Item1, c.Y + dir.Item2 * r * tf + up.Item2, TextH, text, TextAlign.Center, null, ang);
             return;
         }
         // выноска с полкой: от окружности наружу 6 мм (k159: у диаметра и радиуса Offset — длина выноски: 0.6·Offset, по
@@ -1077,7 +1275,11 @@ public sealed class DrawingDocument
         double lead = d.Offset > 0 ? 0.6 * d.Offset : 6;
         var k = (p.Item1 + dir.Item1 * lead, p.Item2 + dir.Item2 * lead);
         double side = dir.Item1 >= 0 ? 1 : -1;
+        // k164 (п. 5): номер центра «℄N» под полкой
+        int? cno = CentreNo(d.View, new Vector2d(c.X, c.Y));
+        if (cno is { } no) tw = Math.Max(tw, SignW(no, TextH));
         var e = (k.Item1 + side * (tw + 2), k.Item2);
+        if (cno is { } no2) CenterSign(g, (k.Item1 + e.Item1) / 2 - SignW(no2, TextH) / 2, k.Item2 - 1.5 - TextH, TextH, no2);
         if (d.Kind == "rad")
         {
             // радиус: линия от центра через дугу, стрелка на дуге (остриём наружу)
@@ -1362,6 +1564,8 @@ public sealed class DrawingDocument
             foreach (var arc in scene.Arcs[v.Name].Where(a => !a.Full))
             {
                 double r = Math.Round(arc.Radius, 4);
+                // k164: дуга окружности, у которой уже есть диаметр (перекрестие того же центра и радиуса), — не радиус
+                if ((scene.Axes.GetValueOrDefault(v.Name) ?? new()).Any(a => a.Cross && (a.Center - arc.Center).Length < 1e-6 * Math.Max(1, arc.Radius) && Math.Abs(a.Radius - arc.Radius) < 1e-6 * Math.Max(1, arc.Radius))) continue;
                 if (!seen.Add(r)) continue;
                 double am = (arc.A0 + arc.A1) / 2; if (arc.A1 < arc.A0) am += Math.PI;
                 Add(new DrawingDim { View = v.Name, Kind = "rad", X1 = arc.Center.X, Y1 = arc.Center.Y, X2 = arc.Radius, Y2 = am * 180 / Math.PI });

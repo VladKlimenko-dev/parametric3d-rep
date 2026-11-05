@@ -547,9 +547,13 @@ public sealed class SheetWindow : Window
         {
             case "dim1" or "dim2":
                 {
-                    var t = Snap(view, q, 4, true);
+                    // k164 (замечание 05.11, 10:33, п. 1): подсвечивается элемент детали под курсором — линия контура, окружность
+                    // или дуга с центром, осевая — и точка, к которой привяжется размер
+                    var (t, what, geo) = SnapTarget(view, q, 4);
                     var ts = d.ToSheet(view, t);
                     var res = Ring(ts.X, ts.Y, 1.2);
+                    foreach (var gl in geo) res.AddRange(SheetSegs(view, gl));
+                    _status.Text = what.Length > 0 ? L(_pick == "dim1" ? "Размер: первая точка — {0}" : "Размер: вторая точка — {0}", L(what)) : _status.Text;
                     if (_pick == "dim2" && _first is { } f && f.View == view) { var a = d.ToSheet(view, f.P); res.Add((a.X, a.Y, ts.X, ts.Y)); }
                     return res;
                 }
@@ -657,6 +661,8 @@ public sealed class SheetWindow : Window
 
     public string StatusText => _status.Text ?? "";
     public void StartPick(string mode, string hint) { EnsureScene(); _pick = mode; _first = null; _status.Text = hint; }
+    /// <summary>k164: выход из режима щелчка (как Esc).</summary>
+    public void CancelPick() { _pick = null; _first = null; _status.Text = ""; _hoverSegs = null; UpdateOverlay(); }
 
     /// <summary>Ближайшая точка линий вида (вершины ломаных; snap — в мм листа) или сама точка щелчка.</summary>
     OpenTK.Mathematics.Vector2d Snap(string view, OpenTK.Mathematics.Vector2d q, double snapMm, bool vertices)
@@ -677,6 +683,78 @@ public sealed class SheetWindow : Window
                     var c = a + ab * t; double dc = (c - q).Length;
                     if (dc < best) { best = dc; res = c; }
                 }
+            }
+        }
+        return res;
+    }
+
+    /// <summary>
+    /// k164: цель привязки размера: конец линии контура, центр окружности или дуги, точка осевой линии (размер между осями).
+    /// Ближайшая в пределах snapMm мм листа; центры и концы — с запасом 1 мм против точек на осевой. Возвращает точку (вида),
+    /// что это и геометрию элемента для подсветки (вид). Ничего рядом — точка курсора.
+    /// </summary>
+    public (OpenTK.Mathematics.Vector2d P, string What, List<List<OpenTK.Mathematics.Vector2d>> Geo) SnapTarget(string view, OpenTK.Mathematics.Vector2d q, double snapMm)
+    {
+        double s = Drawing!.Xf[view].S, best = snapMm / s;
+        var res = (P: q, What: "", Geo: new List<List<OpenTK.Mathematics.Vector2d>>());
+        static OpenTK.Mathematics.Vector2d V(double x, double y) => new(x, y);
+        // линия контура: конец (вершина)
+        foreach (var l in _scene!.Lines[view])
+        {
+            if (!l.Visible || l.Points.Count < 2) continue;
+            foreach (var pt in new[] { l.Points[0], l.Points[^1] })
+            {
+                double dd = (pt - q).Length;
+                if (dd < best) { best = dd; res = (pt, "конец линии", new() { l.Points }); }
+            }
+        }
+        // центры окружностей и дуг
+        foreach (var a in _scene.Arcs.GetValueOrDefault(view) ?? new())
+        {
+            double dd = (a.Center - q).Length;
+            // по самой дуге — тоже центр (щелчок по окружности — размер от её центра)
+            double dr = Math.Abs((a.Center - q).Length - a.Radius) + 1 / s;
+            double dm = Math.Min(dd, dr);
+            if (dm < best)
+            {
+                best = dm;
+                int n = a.Full ? 48 : Math.Max(8, (int)(Math.Abs(a.A1 - a.A0) / (2 * Math.PI) * 48));
+                double a0 = a.A0, a1 = a.A1; if (!a.Full && a1 < a0) a1 += 2 * Math.PI; if (a.Full) { a0 = 0; a1 = 2 * Math.PI; }
+                var arc = Enumerable.Range(0, n + 1).Select(k => a.Center + a.Radius * V(Math.Cos(a0 + (a1 - a0) * k / n), Math.Sin(a0 + (a1 - a0) * k / n))).ToList();
+                double hl = 2 / s;
+                res = (a.Center, a.Full ? "центр окружности" : "центр дуги", new() { arc, new() { a.Center - V(hl, 0), a.Center + V(hl, 0) }, new() { a.Center - V(0, hl), a.Center + V(0, hl) } });
+            }
+        }
+        foreach (var a in _scene.Axes.GetValueOrDefault(view) ?? new())
+        {
+            if (a.Cross)
+            {
+                double dd = (a.Center - q).Length;
+                if (dd < best) { best = dd; double hl = a.Radius + 3 / s; res = (a.Center, "центр окружности", new() { new() { a.Center - V(hl, 0), a.Center + V(hl, 0) }, new() { a.Center - V(0, hl), a.Center + V(0, hl) } }); }
+            }
+        }
+        // точка на осевой линии (размер между осями): с запасом 1 мм — центры и концы ближе
+        foreach (var a in _scene.Axes.GetValueOrDefault(view) ?? new())
+        {
+            var lines = a.Cross
+                ? new[] { (A: a.Center - V(a.Radius + 3 / s, 0), B: a.Center + V(a.Radius + 3 / s, 0)), (A: a.Center - V(0, a.Radius + 3 / s), B: a.Center + V(0, a.Radius + 3 / s)) }
+                : new[] { (A: a.Center + a.Dir * (a.Lo - 3 / s), B: a.Center + a.Dir * (a.Hi + 3 / s)) };
+            foreach (var (A, B) in lines)
+            {
+                var ab = B - A; double t = Math.Clamp(OpenTK.Mathematics.Vector2d.Dot(q - A, ab) / Math.Max(1e-18, ab.LengthSquared), 0, 1);
+                var c = A + ab * t; double dd = (c - q).Length + 1 / s;
+                if (dd < best) { best = dd; res = (c, "осевая линия", new() { new() { A, B } }); }
+            }
+        }
+        // осевые центров дуг (перекрестие: полудлина — радиус + 3 мм, не больше 15 мм листа, как на листе)
+        foreach (var a in _scene.Arcs.GetValueOrDefault(view) ?? new())
+        {
+            double hl = Math.Min(a.Radius * s + 3, 15) / s;
+            foreach (var (A, B) in new[] { (a.Center - V(hl, 0), a.Center + V(hl, 0)), (a.Center - V(0, hl), a.Center + V(0, hl)) })
+            {
+                var ab = B - A; double t = Math.Clamp(OpenTK.Mathematics.Vector2d.Dot(q - A, ab) / Math.Max(1e-18, ab.LengthSquared), 0, 1);
+                var c = A + ab * t; double dd = (c - q).Length + 1 / s;
+                if (dd < best) { best = dd; res = (c, "осевая линия", new() { new() { A, B } }); }
             }
         }
         return res;
@@ -711,11 +789,11 @@ public sealed class SheetWindow : Window
         switch (mode)
         {
             case "dim1":
-                _first = (view, Snap(view, q, 4, true)); _pick = "dim2"; _status.Text = L("Размер: щёлкните вторую точку"); return;
+                _first = (view, SnapTarget(view, q, 4).P); _pick = "dim2"; _status.Text = L("Размер: щёлкните вторую точку"); return;
             case "dim2":
                 {
                     if (_first is not { } f || f.View != view) { _status.Text = L("Вторая точка — на том же виде"); return; }
-                    var b = Snap(view, q, 4, true);
+                    var b = SnapTarget(view, q, 4).P;
                     double dx = Math.Abs(b.X - f.P.X), dy = Math.Abs(b.Y - f.P.Y);
                     string kind = dx > 3 * dy ? "h" : dy > 3 * dx ? "v" : "al";
                     var mid = d.Xf[view].Mid;
@@ -896,6 +974,11 @@ public sealed class SheetWindow : Window
                 lineS.SelectionChanged += (_, _) => { double ns = sv[Math.Max(0, lineS.SelectedIndex)]; if (Math.Abs(ns - d.LineS) > 1e-9) Change(() => d.LineS = ns); };
                 ToolTip.SetTip(lineS, L("Толщина сплошной основной линии S (ГОСТ 2.303: 0,5…1,4 мм); тонкие — S/2"));
                 dp.Children.Add(Row(L("Основная линия"), lineS));
+                // k164 (п. 5): номера центров «℄N»
+                var cnos = new CheckBox { Content = L("Номера центров (℄)"), IsChecked = d.CenterNumbers, Name = "dr_center_numbers" };
+                cnos.IsCheckedChanged += (_, _) => { bool nv = cnos.IsChecked == true; if (nv != d.CenterNumbers) Change(() => d.CenterNumbers = nv); };
+                ToolTip.SetTip(cnos, L("Нумерация центров окружностей и дуг, к которым относятся размеры: подпись у центра и номер под полкой диаметра или радиуса"));
+                dp.Children.Add(cnos);
                 dp.Children.Add(new TextBlock { Text = d.SourcePath != null ? L("Модель: {0}", Path.GetFileName(d.SourcePath)) : L("Модель: открытый документ"), Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
 
                 var vp = Section(L("Виды"));

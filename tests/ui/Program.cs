@@ -8698,6 +8698,36 @@ Check("UI-HOLE-K153", () =>
 
 // k162: разбор скорости окна чертежа на файле (P3D_DIAGSHEET=<файл .p3d>): перенос вида, размера, поворот изометрии —
 // время шага, вывода листа (виды, поля, сборка) и отрисовки листа Skia в кадр 1600×1000.
+// k164: картинка листа с автоматическими размерами и размерами модели (разбор чертежа файла): P3D_DIAGPNG=<p3d>, P3D_DIAGPNGOUT=<png>
+if (Environment.GetEnvironmentVariable("P3D_DIAGPNG") is { Length: > 0 } diagPng)
+Check("UI-DIAG-PNG", () =>
+{
+    var (dp, dpars) = DocumentFile.Load(File.ReadAllText(diagPng));
+    if (!dp.RestoredFromFile) dp.Rebuild(dpars);
+    var sp = DocumentSession.FromPart(dp, "diag"); var w = Open(sp); BuildNow(sp);
+    var t = DrawingCommands.NewDrawing(w);
+    while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+    var dw = t.Result!; var d = dw.Drawing!;
+    if (Environment.GetEnvironmentVariable("P3D_DIAGPNGSCALE") is { Length: > 0 } dsc) dw.Change(() => d.Scale = double.Parse(dsc, System.Globalization.CultureInfo.InvariantCulture));
+    if (Environment.GetEnvironmentVariable("P3D_DIAGPNGONLY") is { Length: > 0 } donly) { dw.Change(() => d.Views.RemoveAll(v => v.Name != donly)); dw.InvalidateViews(); dw.Refresh(); }
+    dw.Change(() => d.AutoDimensions(dw.Scene!));
+    if (Environment.GetEnvironmentVariable("P3D_DIAGPNGMODEL") != "0") { d.ModelDimensions(dp); dw.Change(() => d.ArrangeDims(dw.Scene!)); }
+    dw.Refresh();
+    var g = dw.Pages[0]; float z = float.Parse(Environment.GetEnvironmentVariable("P3D_DIAGPNGZ") ?? "5", System.Globalization.CultureInfo.InvariantCulture);
+    using var surf = SkiaSharp.SKSurface.Create(new SkiaSharp.SKImageInfo((int)(g.Width * z), (int)(g.Height * z)));
+    surf.Canvas.Clear(SkiaSharp.SKColors.White);
+    Parametric3D.App.Services.Drawing.SheetRender.Draw(surf.Canvas, g, z);
+    using var img = surf.Snapshot(); using var data = img.Encode(SkiaSharp.SKEncodedImageFormat.Png, 90);
+    File.WriteAllBytes(Environment.GetEnvironmentVariable("P3D_DIAGPNGOUT") ?? "/tmp/sheet.png", data.ToArray());
+    foreach (var v in d.Views) if (d.Boxes.TryGetValue(v.Name, out var b)) Console.WriteLine($"  view {v.Name}: box {b.X0:0},{b.Y0:0}..{b.X1:0},{b.Y1:0}");
+    Console.WriteLine($"  dims {d.Dims.Count}: " + string.Join("; ", d.Dims.Select(x => $"{x.View}/{x.Kind}/{x.Role}/{x.Value:0.###}")));
+    var miss = dw.CheckItems.Where(i => !i.Covered).ToList();
+    Console.WriteLine($"  check {dw.CheckItems.Count - miss.Count} of {dw.CheckItems.Count}; missing: " + string.Join("; ", miss.Select(i => i.Label)));
+    foreach (var (vn, arcs) in dw.Scene!.Arcs) foreach (var a in arcs) Console.WriteLine($"  arc {vn}: c ({a.Center.X:0.###},{a.Center.Y:0.###}) r {a.Radius:0.###} {a.A0 * 180 / Math.PI:0}..{a.A1 * 180 / Math.PI:0} full {a.Full}");
+    foreach (var (vn, axes) in dw.Scene!.Axes) foreach (var a in axes) Console.WriteLine($"  axis {vn}: c ({a.Center.X:0.###},{a.Center.Y:0.###}) dir ({a.Dir.X:0.##},{a.Dir.Y:0.##}) {a.Lo:0.#}..{a.Hi:0.#} cross {a.Cross} r {a.Radius:0.###}");
+    dw.Close(); w.Close();
+});
+
 if (Environment.GetEnvironmentVariable("P3D_DIAGSHEET") is { Length: > 0 } diagSheet)
 Check("UI-DIAG-SHEET", () =>
 {
@@ -8734,6 +8764,58 @@ Check("UI-DIAG-SHEET", () =>
     { var sw2 = System.Diagnostics.Stopwatch.StartNew(); for (int i = 0; i < 10; i++) dw.Refresh(); Console.WriteLine($"  Refresh {sw2.Elapsed.TotalMilliseconds / 10:0.#} ms"); }
     Run("hover", i => dw.MoveTo(fv.X + i, fv.Y));
     dw.Close(); w.Close();
+});
+
+// k164 (замечание 05.11, 10:33): при создании размера под курсором подсвечивается элемент детали (п. 1) — центр окружности с
+// окружностью, осевая линия, линия контура; щелчок по центрам даёт размер между центрами; номера центров (п. 5) — флажок в
+// разделе «Чертёж».
+Check("UI-DRAWING-K164", () =>
+{
+    var sp = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 10), "k164"); var w = Open(sp); BuildNow(sp);
+    var t = DrawingCommands.NewDrawing(w);
+    while (!t.IsCompleted) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(1); }
+    var dw = t.Result!; var d = dw.Drawing!;
+    try
+    {
+        dw.Refresh();
+        var hv = d.Views.Where(v => dw.Scene!.Axes.ContainsKey(v.Name)).OrderByDescending(v => dw.Scene!.Axes[v.Name].Count(a => a.Cross)).First().Name;
+        var crosses = dw.Scene!.Axes[hv].Where(a => a.Cross).ToList();
+        Require(crosses.Count >= 2, $"two holes on the view {hv}");
+        double s = d.Xf[hv].S;
+        var c0 = crosses[0].Center; var c1 = crosses.First(a => (a.Center - c0).Length > 1e-3).Center;
+        var near = c0 + new OpenTK.Mathematics.Vector2d(1.0 / s, 0.5 / s);
+        dw.StartPick("dim1", "");
+        var tg = dw.SnapTarget(hv, near, 4);
+        var ns = d.ToSheet(hv, near);
+        var pv = dw.PickPreview(ns.X, ns.Y);
+        Console.WriteLine($"  near the centre: {tg.What}, highlight {pv?.Count} segments, status: {dw.StatusText}");
+        Require(tg.What.StartsWith("центр") && (tg.P - c0).Length < 1e-9, "snaps to the hole centre");
+        Require(pv != null && pv.Count > 30, "the hole and its centre are highlighted before the click");
+        dw.PickAt(ns.X, ns.Y);
+        var n1 = d.ToSheet(hv, c1 + new OpenTK.Mathematics.Vector2d(0.5 / s, -1.0 / s));
+        int nd = d.Dims.Count;
+        dw.PickAt(n1.X, n1.Y);
+        var dm = d.Dims.Last();
+        Console.WriteLine($"  centre-to-centre: {dm.Kind} {dm.Value:0.###} from ({dm.X1:0.###},{dm.Y1:0.###}) to ({dm.X2:0.###},{dm.Y2:0.###})");
+        Require(d.Dims.Count == nd + 1 && (new OpenTK.Mathematics.Vector2d(dm.X1, dm.Y1) - c0).Length < 1e-9 && (new OpenTK.Mathematics.Vector2d(dm.X2, dm.Y2) - c1).Length < 1e-9, "dimension between the centres");
+        // осевая линия вдали от центров
+        var ax = crosses[0];
+        var onAxis = ax.Center + new OpenTK.Mathematics.Vector2d(ax.Radius + 1.5 / s, 0.3 / s);
+        dw.StartPick("dim1", "");
+        var ta = dw.SnapTarget(hv, onAxis, 4);
+        Console.WriteLine($"  near the centre line: {ta.What} at ({ta.P.X:0.###},{ta.P.Y:0.###})");
+        Require(ta.What == "осевая линия" && Math.Abs(ta.P.Y - ax.Center.Y) < 1e-9 || ta.What.StartsWith("конец"), "snaps to the centre line");
+        dw.CancelPick();
+        // номера центров
+        dw.Refresh();
+        int nos = d.CenterNos.Count;
+        var cb = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(dw).OfType<CheckBox>().FirstOrDefault(c => c.Name == "dr_center_numbers");
+        Console.WriteLine($"  centre numbers {nos}, check box {(cb != null)}");
+        Require(nos >= 2 && cb != null && cb.IsChecked == true, "centres numbered, check box on");
+        cb!.IsChecked = false; Dispatcher.UIThread.RunJobs();
+        Require(!d.CenterNumbers && d.CenterNos.Count == 0, "centre numbers off");
+    }
+    finally { dw.Close(); w.Close(); }
 });
 
 // k163 (замечание 05.11, 09:22, п. 3): кнопка проверки размеров чертежа — «внимание», пока размеры детали не все на листе

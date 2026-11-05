@@ -257,8 +257,40 @@ public static class ViewProjection
                 if (res.Any(r => (r.Center - c).Length < 1e-6 && Math.Abs(r.Radius - a.Radius) < 1e-6 && (r.Full || full || Math.Abs(N(r.A0 - a0)) < 1e-6))) continue;
                 res.Add(new ViewArc(c, a.Radius, a0, a1, full, bi));
             }
+        // k164 (замечание 05.11, 10:33, п. 4): ребро на цилиндре с осью вдоль взгляда — дуга на виде, даже если кривая ребра не
+        // дуга (линия пересечения: паз прорезан через кривую грань). Прежде такие дуги (верх шпоночного паза) не давали ни
+        // центра, ни радиуса. Проверка — все точки проекции на окружности цилиндра. Мутация P3D_ARCSONCYL=0.
+        if (!ArcsOnCylOff)
+            for (int bi = 0; bi < bodies.Count; bi++)
+                foreach (var f in bodies[bi].Faces)
+                {
+                    var srf = GeometryAudit.AuthoritativeSurface(f);
+                    (Vector3d O, Vector3d W, double R)? cyl = srf switch
+                    {
+                        Kernel.Surfaces.CylinderSurface cs => (cs.Axis.Origin, cs.Axis.W, cs.Radius),
+                        Kernel.Surfaces.ExtrudedSurface es when es.Base is Kernel.Curves.ArcCurve3 arc && Math.Abs(Math.Abs(Vector3d.Dot(arc.Frame.W.Normalized(), es.Dir.Normalized())) - 1) < 1e-9 => (arc.Frame.Origin, es.Dir, arc.Radius),
+                        _ => null,
+                    };
+                    if (cyl is not { } cy || Math.Abs(Math.Abs(Vector3d.Dot(cy.W.Normalized(), w)) - 1) > 1e-9) continue;
+                    var c = view.Project(cy.O);
+                    foreach (var e in f.Edges)
+                    {
+                        if (e.Curve is null or Kernel.Curves.ArcCurve3) continue;
+                        var cu = e.Curve;
+                        var pts = Enumerable.Range(0, 25).Select(k => view.Project(cu.PointAt(cu.T0 + (cu.T1 - cu.T0) * k / 24.0)) - c).ToList();
+                        if (pts.Any(q => Math.Abs(q.Length - cy.R) > 1e-4 * Math.Max(1, cy.R))) continue;
+                        if ((pts[0] - pts[24]).Length < 1e-4 * cy.R && pts.Max(q => (q - pts[0]).Length) < 1e-3 * cy.R) continue;   // ребро вдоль взгляда — точка
+                        bool full = (pts[0] - pts[24]).Length < 1e-6 * Math.Max(1, cy.R);
+                        double a0 = Math.Atan2(pts[0].Y, pts[0].X), a1 = Math.Atan2(pts[24].Y, pts[24].X), am = Math.Atan2(pts[12].Y, pts[12].X);
+                        double N(double x) { while (x < 0) x += 2 * Math.PI; while (x >= 2 * Math.PI) x -= 2 * Math.PI; return x; }
+                        if (N(am - a0) > N(a1 - a0)) (a0, a1) = (a1, a0);
+                        if (res.Any(r => (r.Center - c).Length < 1e-6 * Math.Max(1, cy.R) && Math.Abs(r.Radius - cy.R) < 1e-6 * Math.Max(1, cy.R) && (r.Full || full || Math.Min(N(r.A0 - a0), 2 * Math.PI - N(r.A0 - a0)) < 1e-4))) continue;
+                        res.Add(new ViewArc(c, cy.R, a0, a1, full, bi));
+                    }
+                }
         return res;
     }
+    static readonly bool ArcsOnCylOff = Environment.GetEnvironmentVariable("P3D_ARCSONCYL") == "0";
 
     /// <summary>
     /// Оси граней вращения (цилиндр, поверхность вращения): грани с общей осью (та же прямая с точностью 1e-6 габарита)

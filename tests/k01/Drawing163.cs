@@ -92,7 +92,7 @@ static partial class Program
             var dd = new DrawingDocument { Scale = 1 }; dd.Views.Add(new DrawingView { Name = "front" });
             var sc = DrawingScene.Build(dd, p.Bodies);
             var g = dd.Compose(sc, new FieldSource());
-            int centre = g.Lines.Count(l => l.Kind == LineKind.Center);
+            int centre = g.Lines.Count(l => l.Kind == LineKind.Center) + g.Polylines.Count(l => l.Kind == LineKind.Center);   // k164: осевые — ломаными (со штрихами)
             Log(new { test = "KRN-DRAW-CENTERS-K163", centre, arcs = sc.Arcs["front"].Count, err = ex.Error });
             Require(ex.Error == null && centre >= 4, $"centre lines of the slot arcs: {centre}");
         });

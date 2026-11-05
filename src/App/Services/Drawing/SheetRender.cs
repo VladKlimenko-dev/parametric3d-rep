@@ -56,8 +56,16 @@ public static class SheetRender
                 }
         using var thick = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = (float)g.WidthOf(LineKind.Thick) * scale, IsAntialias = true, StrokeCap = SKStrokeCap.Square };
         using var thin = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = (float)g.WidthOf(LineKind.Thin) * scale, IsAntialias = true, StrokeCap = SKStrokeCap.Butt };
+        // k164: отрезок штриховой и штрихпунктирной линии — со штрихами (прежде все отрезки — сплошные)
         foreach (var l in g.Lines.OrderBy(l => l.Kind))
-            c.DrawLine((float)l.X1 * scale, Y(l.Y1), (float)l.X2 * scale, Y(l.Y2), l.Kind == LineKind.Thick ? thick : thin);
+        {
+            if (LineWidths.Dash(l.Kind) is { } ld)
+            {
+                using var dp = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = (float)g.WidthOf(l.Kind) * scale, IsAntialias = true, PathEffect = SKPathEffect.CreateDash(ld.Select(d => (float)d * scale).ToArray(), 0) };
+                c.DrawLine((float)l.X1 * scale, Y(l.Y1), (float)l.X2 * scale, Y(l.Y2), dp);
+            }
+            else c.DrawLine((float)l.X1 * scale, Y(l.Y1), (float)l.X2 * scale, Y(l.Y2), l.Kind == LineKind.Thick ? thick : thin);
+        }
         // ломаные видов: штрихи — по всей ломаной (ГОСТ 2.303)
         foreach (var grp in g.Polylines.GroupBy(p => p.Kind))
         {

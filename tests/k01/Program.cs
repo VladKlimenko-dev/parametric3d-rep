@@ -599,6 +599,7 @@ static partial class Program
         if (mode is "drawing161" or "allB") Drawing161Checks();
         if (mode is "drawing162" or "allB") Drawing162Checks();
         if (mode is "drawing163" or "allB") Drawing163Checks();
+        if (mode is "drawing164" or "allB") Drawing164Checks();
         if (mode is "blend160" or "allB") Blend160Checks();
         if (mode is "brephist") { BrepHist(args.Skip(1)); return; }
         if (mode is "ovfdiag") { OvfDiag(args[1], args[2]); return; }
@@ -609,6 +610,7 @@ static partial class Program
         if (mode is "savetime") { SaveTime(args[1]); return; }
         if (mode is "rebuilderr") { RebuildErrors(args[1]); return; }
         if (mode is "inspectfile") { InspectFile(args[1], args[2]); return; }
+        if (mode == "edgesnear") { EdgesNear(args[1], args[2], double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture), double.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture), double.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture)); return; }
         if (mode is "viewlines") { ViewLinesDbg(args[1], args[2], double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture), double.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture)); return; }
         if (mode is "drawcheck") { DrawCheck(args[1], args.Length > 2 ? args[2] : null); return; }
         if (mode is "drawpng") { DrawPng(args[1], args[2], args.Length > 3 ? args[3] : null); return; }
