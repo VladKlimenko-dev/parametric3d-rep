@@ -1,0 +1,167 @@
+Parametric3D — Я1, состояние между операциями (GitHub Actions, Linux).
+Коммит: fe9d43e
+
+== corpus
+   итог: нет (см. .err)
+   сеанс против файла: нет
+   РАСХОЖДЕНИЕ: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.46 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   s106: {"tag":"s106 step 0 R2.71 edge (-1.51,35.09,-161.04) chain 7","ms":19316,"guarantee":"ExactAnalytic","dv":220.6858,"expect":221.5394,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 1 C2.54 edge (10.06,-25.9,0)","ms":8032,"guarantee":"ExactAnalytic","dv":91.4675,"expect":86.7874,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 2 R0.41 edge (23.39,-21.8,-1.27)","ms":9439,"guarantee":"ExactAnalytic","dv":0.0726,"expect":null,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 3 R2.58 edge (-31.25,-1.97,0)","ms":7938,"guarantee":"ExactAnalytic","dv":42.5751,"expect":41.4508,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 4 C0.3 edge (9.78,-25.82,-2.54) chain 2","ms":7065,"legit":"Chamfer: only straight edges are supported so far.","full":"Chamfer refused (exception at chamfer.build): Chamfer: none of the selected edges could be processed.\nChamfer: the swept chamfer would intersect itself \u2014 the chain turns too sharply for this size.\nChamfer: only straight edges are supported so far.\nChamfer: only straight edges are supported so far."}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","ms":14600,"problems":["refused: Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.46 while the tool itself weighs only 10.592; 0 open edges."]}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.46 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   .err: 
+== s106
+   итог: {"ok":4,"bad":0,"refused":1,"legit":1,"totalOpSeconds":97.7}
+   сеанс против файла: {"rebuildChecked":5,"rebuildDiff":1}
+   РАСХОЖДЕНИЕ: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   s106: {"tag":"s106 step 0 R2.71 edge (-1.51,35.09,-161.04) chain 7","ms":29945,"guarantee":"ExactAnalytic","dv":220.6858,"expect":221.5394,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 1 C2.54 edge (10.06,-25.9,0)","ms":12555,"guarantee":"ExactAnalytic","dv":91.4675,"expect":86.7874,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 2 R0.41 edge (23.39,-21.8,-1.27)","ms":12127,"guarantee":"ExactAnalytic","dv":0.0726,"expect":null,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 3 R2.58 edge (-31.25,-1.97,0)","ms":11850,"guarantee":"ExactAnalytic","dv":42.5751,"expect":41.4508,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 4 C0.3 edge (9.78,-25.82,-2.54) chain 2","ms":8692,"legit":"Chamfer: only straight edges are supported so far.","full":"Chamfer refused (exception at chamfer.build): Chamfer: none of the selected edges could be processed.\nChamfer: the swept chamfer would intersect itself \u2014 the chain turns too sharply for this size.\nChamfer: only straight edges are supported so far.\nChamfer: only straight edges are supported so far."}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","ms":22554,"problems":["refused: Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges."]}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   .err: seconds 393 nproc 4
+== s106_areacache
+   итог: {"ok":4,"bad":0,"refused":1,"legit":1,"totalOpSeconds":66.8}
+   сеанс против файла: {"rebuildChecked":5,"rebuildDiff":1}
+   РАСХОЖДЕНИЕ: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   s106: {"tag":"s106 step 0 R2.71 edge (-1.51,35.09,-161.04) chain 7","ms":20094,"guarantee":"ExactAnalytic","dv":220.6858,"expect":221.5394,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 1 C2.54 edge (10.06,-25.9,0)","ms":8119,"guarantee":"ExactAnalytic","dv":91.4675,"expect":86.7874,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 2 R0.41 edge (23.39,-21.8,-1.27)","ms":8280,"guarantee":"ExactAnalytic","dv":0.0726,"expect":null,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 3 R2.58 edge (-31.25,-1.97,0)","ms":7914,"guarantee":"ExactAnalytic","dv":42.5751,"expect":41.4508,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 4 C0.3 edge (9.78,-25.82,-2.54) chain 2","ms":7196,"legit":"Chamfer: only straight edges are supported so far.","full":"Chamfer refused (exception at chamfer.build): Chamfer: none of the selected edges could be processed.\nChamfer: the swept chamfer would intersect itself \u2014 the chain turns too sharply for this size.\nChamfer: only straight edges are supported so far.\nChamfer: only straight edges are supported so far."}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","ms":15201,"problems":["refused: Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges."]}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   .err: seconds 270 nproc 4
+== s106_auditcache
+   итог: {"ok":4,"bad":0,"refused":1,"legit":1,"totalOpSeconds":65.3}
+   сеанс против файла: {"rebuildChecked":5,"rebuildDiff":1}
+   РАСХОЖДЕНИЕ: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.42 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   s106: {"tag":"s106 step 0 R2.71 edge (-1.51,35.09,-161.04) chain 7","ms":19834,"guarantee":"ExactAnalytic","dv":220.6858,"expect":221.5394,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 1 C2.54 edge (10.06,-25.9,0)","ms":8103,"guarantee":"ExactAnalytic","dv":91.4675,"expect":86.7874,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 2 R0.41 edge (23.39,-21.8,-1.27)","ms":8382,"guarantee":"ExactAnalytic","dv":0.0726,"expect":null,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 3 R2.58 edge (-31.25,-1.97,0)","ms":8122,"guarantee":"ExactAnalytic","dv":42.5751,"expect":41.4508,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 4 C0.3 edge (9.78,-25.82,-2.54) chain 2","ms":5789,"legit":"Chamfer: only straight edges are supported so far.","full":"Chamfer refused (exception at chamfer.build): Chamfer: none of the selected edges could be processed.\nChamfer: the swept chamfer would intersect itself \u2014 the chain turns too sharply for this size.\nChamfer: only straight edges are supported so far.\nChamfer: only straight edges are supported so far."}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","ms":15090,"problems":["refused: Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.42 while the tool itself weighs only 10.592; 0 open edges."]}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.42 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   .err: seconds 260 nproc 4
+== s106_auditchordmemo
+   итог: {"ok":4,"bad":0,"refused":1,"legit":1,"totalOpSeconds":89.7}
+   сеанс против файла: {"rebuildChecked":5,"rebuildDiff":1}
+   РАСХОЖДЕНИЕ: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.454 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   s106: {"tag":"s106 step 0 R2.71 edge (-1.51,35.09,-161.04) chain 7","ms":26355,"guarantee":"ExactAnalytic","dv":220.6858,"expect":221.5394,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 1 C2.54 edge (10.06,-25.9,0)","ms":11332,"guarantee":"ExactAnalytic","dv":91.4675,"expect":86.7874,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 2 R0.41 edge (23.39,-21.8,-1.27)","ms":11546,"guarantee":"ExactAnalytic","dv":0.0726,"expect":null,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 3 R2.58 edge (-31.25,-1.97,0)","ms":11179,"guarantee":"ExactAnalytic","dv":42.5751,"expect":41.4508,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 4 C0.3 edge (9.78,-25.82,-2.54) chain 2","ms":9242,"legit":"Chamfer: only straight edges are supported so far.","full":"Chamfer refused (exception at chamfer.build): Chamfer: none of the selected edges could be processed.\nChamfer: the swept chamfer would intersect itself \u2014 the chain turns too sharply for this size.\nChamfer: only straight edges are supported so far.\nChamfer: only straight edges are supported so far."}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","ms":20090,"problems":["refused: Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.454 while the tool itself weighs only 10.592; 0 open edges."]}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.454 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   .err: seconds 362 nproc 4
+== s106_exactincache
+   итог: {"ok":4,"bad":0,"refused":1,"legit":1,"totalOpSeconds":97.1}
+   сеанс против файла: {"rebuildChecked":5,"rebuildDiff":1}
+   РАСХОЖДЕНИЕ: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   s106: {"tag":"s106 step 0 R2.71 edge (-1.51,35.09,-161.04) chain 7","ms":29388,"guarantee":"ExactAnalytic","dv":220.6858,"expect":221.5394,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 1 C2.54 edge (10.06,-25.9,0)","ms":12234,"guarantee":"ExactAnalytic","dv":91.4675,"expect":86.7874,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 2 R0.41 edge (23.39,-21.8,-1.27)","ms":12169,"guarantee":"ExactAnalytic","dv":0.0726,"expect":null,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 3 R2.58 edge (-31.25,-1.97,0)","ms":11991,"guarantee":"ExactAnalytic","dv":42.5751,"expect":41.4508,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 4 C0.3 edge (9.78,-25.82,-2.54) chain 2","ms":9029,"legit":"Chamfer: only straight edges are supported so far.","full":"Chamfer refused (exception at chamfer.build): Chamfer: none of the selected edges could be processed.\nChamfer: the swept chamfer would intersect itself \u2014 the chain turns too sharply for this size.\nChamfer: only straight edges are supported so far.\nChamfer: only straight edges are supported so far."}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","ms":22263,"problems":["refused: Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges."]}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   .err: seconds 391 nproc 4
+== s106_facemeshmemo
+   итог: {"ok":4,"bad":0,"refused":1,"legit":1,"totalOpSeconds":70.5}
+   сеанс против файла: {"rebuildChecked":5,"rebuildDiff":1}
+   РАСХОЖДЕНИЕ: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.479 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481901,"guarantee":"ExactPolyhedral"}}}
+   s106: {"tag":"s106 step 0 R2.71 edge (-1.51,35.09,-161.04) chain 7","ms":20081,"guarantee":"ExactAnalytic","dv":220.6858,"expect":221.5394,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 1 C2.54 edge (10.06,-25.9,0)","ms":9207,"guarantee":"ExactAnalytic","dv":91.4675,"expect":86.7874,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 2 R0.41 edge (23.39,-21.8,-1.27)","ms":9847,"guarantee":"ExactAnalytic","dv":0.0726,"expect":null,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 3 R2.58 edge (-31.25,-1.97,0)","ms":9077,"guarantee":"ExactAnalytic","dv":42.5751,"expect":41.4508,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 4 C0.3 edge (9.78,-25.82,-2.54) chain 2","ms":7157,"legit":"Chamfer: only straight edges are supported so far.","full":"Chamfer refused (exception at chamfer.build): Chamfer: none of the selected edges could be processed.\nChamfer: the swept chamfer would intersect itself \u2014 the chain turns too sharply for this size.\nChamfer: only straight edges are supported so far.\nChamfer: only straight edges are supported so far."}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","ms":15093,"problems":["refused: Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.479 while the tool itself weighs only 10.592; 0 open edges."]}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.479 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481901,"guarantee":"ExactPolyhedral"}}}
+   .err: seconds 279 nproc 4
+== s106_meshreuse
+   итог: {"ok":4,"bad":0,"refused":1,"legit":1,"totalOpSeconds":68.2}
+   сеанс против файла: {"rebuildChecked":5,"rebuildDiff":1}
+   РАСХОЖДЕНИЕ: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 203.24 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   s106: {"tag":"s106 step 0 R2.71 edge (-1.51,35.09,-161.04) chain 7","ms":18616,"guarantee":"ExactAnalytic","dv":220.6858,"expect":221.5394,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 1 C2.54 edge (10.06,-25.9,0)","ms":10166,"guarantee":"ExactAnalytic","dv":91.4675,"expect":86.7874,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 2 R0.41 edge (23.39,-21.8,-1.27)","ms":10457,"guarantee":"ExactAnalytic","dv":0.0726,"expect":null,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 3 R2.58 edge (-31.25,-1.97,0)","ms":10251,"guarantee":"ExactAnalytic","dv":42.5751,"expect":41.4508,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 4 C0.3 edge (9.78,-25.82,-2.54) chain 2","ms":5760,"legit":"Chamfer: only straight edges are supported so far.","full":"Chamfer refused (exception at chamfer.build): Chamfer: none of the selected edges could be processed.\nChamfer: the swept chamfer would intersect itself \u2014 the chain turns too sharply for this size.\nChamfer: only straight edges are supported so far.\nChamfer: only straight edges are supported so far."}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","ms":12909,"problems":["refused: Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 203.24 while the tool itself weighs only 10.592; 0 open edges."]}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 203.24 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   .err: seconds 254 nproc 4
+== s106_meshvalmemo
+   итог: {"ok":4,"bad":0,"refused":1,"legit":1,"totalOpSeconds":87.3}
+   сеанс против файла: {"rebuildChecked":5,"rebuildDiff":1}
+   РАСХОЖДЕНИЕ: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   s106: {"tag":"s106 step 0 R2.71 edge (-1.51,35.09,-161.04) chain 7","ms":25972,"guarantee":"ExactAnalytic","dv":220.6858,"expect":221.5394,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 1 C2.54 edge (10.06,-25.9,0)","ms":10611,"guarantee":"ExactAnalytic","dv":91.4675,"expect":86.7874,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 2 R0.41 edge (23.39,-21.8,-1.27)","ms":10864,"guarantee":"ExactAnalytic","dv":0.0726,"expect":null,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 3 R2.58 edge (-31.25,-1.97,0)","ms":10438,"guarantee":"ExactAnalytic","dv":42.5751,"expect":41.4508,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 4 C0.3 edge (9.78,-25.82,-2.54) chain 2","ms":9357,"legit":"Chamfer: only straight edges are supported so far.","full":"Chamfer refused (exception at chamfer.build): Chamfer: none of the selected edges could be processed.\nChamfer: the swept chamfer would intersect itself \u2014 the chain turns too sharply for this size.\nChamfer: only straight edges are supported so far.\nChamfer: only straight edges are supported so far."}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","ms":20051,"problems":["refused: Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges."]}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   .err: seconds 352 nproc 4
+== s106_valcache
+   итог: {"ok":4,"bad":0,"refused":1,"legit":1,"totalOpSeconds":93.6}
+   сеанс против файла: {"rebuildChecked":5,"rebuildDiff":1}
+   РАСХОЖДЕНИЕ: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   s106: {"tag":"s106 step 0 R2.71 edge (-1.51,35.09,-161.04) chain 7","ms":27040,"guarantee":"ExactAnalytic","dv":220.6858,"expect":221.5394,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 1 C2.54 edge (10.06,-25.9,0)","ms":11767,"guarantee":"ExactAnalytic","dv":91.4675,"expect":86.7874,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 2 R0.41 edge (23.39,-21.8,-1.27)","ms":12014,"guarantee":"ExactAnalytic","dv":0.0726,"expect":null,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 3 R2.58 edge (-31.25,-1.97,0)","ms":11677,"guarantee":"ExactAnalytic","dv":42.5751,"expect":41.4508,"problems":[],"dr":null}
+   s106: {"tag":"s106 step 4 C0.3 edge (9.78,-25.82,-2.54) chain 2","ms":10352,"legit":"Chamfer: only straight edges are supported so far.","full":"Chamfer refused (exception at chamfer.build): Chamfer: none of the selected edges could be processed.\nChamfer: the swept chamfer would intersect itself \u2014 the chain turns too sharply for this size.\nChamfer: only straight edges are supported so far.\nChamfer: only straight edges are supported so far."}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","ms":20777,"problems":["refused: Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges."]}
+   s106: {"tag":"s106 step 5 R0.69 edge (-28.57,-14.66,-0.77) chain 2","rebuildcheck":{"session":{"error":"Round: the cut on edge (-29.41, -13.99, -2.64)-(-26.55, -15.78, 0) was rolled back \u2014 the cut removed 478.462 while the tool itself weighs only 10.592; 0 open edges.","bodies":1,"volume":297797.066378,"guarantee":"ExactAnalytic"},"file":{"error":null,"bodies":1,"volume":297796.481225,"guarantee":"ExactPolyhedral"}}}
+   .err: seconds 369 nproc 4
+
+== коллекции в полях static readonly (общие на процесс памяти; опись G5 их не видит)
+   static-readonly-collection Core.Units.Catalog : Dictionary`2
+   static-readonly-collection Kernel.Analytic.FaceIntersect._evMemo : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Analytic.FaceSplit._closestMemo : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Diagnostics.Prof.Allocated : Dictionary`2
+   static-readonly-collection Kernel.Diagnostics.Prof.Counts : Dictionary`2
+   static-readonly-collection Kernel.Diagnostics.Prof.Totals : Dictionary`2
+   static-readonly-collection Kernel.Exact.ExactAdapter._csgMemo : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Exact.ExactAdapter._formCache : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Ops.BooleanOp.TagNames : ConcurrentDictionary`2
+   static-readonly-collection Kernel.Ops.BooleanOp._previewMeshBodies : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Ops.DirectRound._solidTris : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Ops.FilletOp.PreClipped : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Ops.FilletOp.PreviewPolys : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Ops.FilletOp._reachTris : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Ops.InstantPreview._carriers : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Ops.InstantPreview._sources : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Query.PreparedBody._cache : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Tess.AnalysisMesher.FellBack : ConcurrentDictionary`2
+   static-readonly-collection Kernel.Tess.ExactFaceMesher.Remembered : Dictionary`2
+   static-readonly-collection Kernel.Tess.ExactFaceMesher._faceMemo : ConcurrentDictionary`2
+   static-readonly-collection Kernel.Tess.Tessellator._polyMemo : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Topology.AnalyticVolume.CornerMemo : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Topology.AnalyticVolume._areaCache : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Topology.AnalyticVolume._bandRange : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Topology.AnalyticVolume._bandVBreaks : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Topology.AnalyticVolume._normCache : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Topology.AnalyticVolume._slabCache : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Topology.AnalyticVolume._volCache : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Topology.EdgeRef.HoleAliases : Dictionary`2
+   static-readonly-collection Kernel.Topology.GeometryAudit._chord : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Topology.GeometryAudit._chordContent : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Topology.GeometryAudit._off : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Topology.SolidValidator._meshValMemo : ConcurrentDictionary`2
+   static-readonly-collection Kernel.Topology.SolidValidator._valCache : ConditionalWeakTable`2
+   static-readonly-collection Kernel.Topology.TopologyConventions._curvePts : ConditionalWeakTable`2
+   static-readonly-collection Model.Configurations.Base : ConditionalWeakTable`2
+   static-readonly-collection Model.Drawing.ViewProjection.EdgeCache : ConditionalWeakTable`2
+   static-readonly-collection Model.Drawing.ViewProjection.MeshCache : ConditionalWeakTable`2
+   static-readonly-collection Model.FeatureHistory.EdgeInfoCache : ConditionalWeakTable`2
+   static-readonly-collection Model.FeatureHistory.EdgeSigCache : ConditionalWeakTable`2
+   static-readonly-collection Model.FeatureHistory.FaceSigCache : ConditionalWeakTable`2
+   static-readonly-collection Model.FeatureHistory._edgeMaps : ConditionalWeakTable`2
