@@ -1,0 +1,1 @@
+seconds 458 nproc 4 env SEQ_STEPMODE=full cmd loftseq 1 106 6 res/out
