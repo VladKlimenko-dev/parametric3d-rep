@@ -84,7 +84,24 @@ public static class ExactAdapter
             int failed;
             using (new Tess.ExactFaceMesher.NoMemoScope(true))
                 failed = Export.StepImport.MeshFacesFromLoops(copy, null, "LazyDerived");
-            if (ToExactTrace) Console.Error.WriteLine($"DERIVED solid {solid.Id} faces {copy.Faces.Count()} not-from-loops {failed}");
+            if (ToExactTrace)
+            {
+                Console.Error.WriteLine($"DERIVED solid {solid.Id} faces {copy.Faces.Count()} not-from-loops {failed} settings {KernelSettings.Capture()}");
+                int fi = 0;
+                foreach (var f in copy.Faces)
+                {
+                    ulong h = 1469598103934665603UL;
+                    void D(double d) { h ^= (ulong)BitConverter.DoubleToInt64Bits(d); h *= 1099511628211UL; }
+                    foreach (var l in f.Loops) foreach (var ce in l.CoEdges)
+                    {
+                        var c = ce.Edge.Curve; D(ce.Edge.V0.P.X); D(ce.Edge.V0.P.Y); D(ce.Edge.V0.P.Z); D(ce.Edge.V1.P.X); D(ce.Edge.V1.P.Y); D(ce.Edge.V1.P.Z);
+                        var m = c.PointAt(0.5 * (c.T0 + c.T1)); D(m.X); D(m.Y); D(m.Z); D(ce.Reversed ? 1 : 0);
+                    }
+                    var src = f.Surface is Surfaces.FacetedSurface fs ? fs.Source : f.Surface;
+                    int tris = f.Surface is Surfaces.FacetedSurface fs2 ? fs2.Facets.Count : -1;
+                    Console.Error.WriteLine($"DFACE {fi++} {f.Tag} {src?.GetType().Name} loops {f.Loops.Count} coedges {f.Loops.Sum(l => l.CoEdges.Count)} rev {f.Reversed} geom {h:x16} tris {tris}");
+                }
+            }
         }
         bool was = _inDerived; _inDerived = true;
         try { return ToExact(copy, new PlaneRegistry(), null); }
