@@ -78,10 +78,9 @@ dotnet build tests/k01/K01Checks.csproj -c Release -o out/k01 -p:LocalDeps=tools
 
 **Сверка с OpenCascade:** `tools/occt_check.py`, `occt_diff.py`, `occt_mass.py`, `occt_time.py` (нужен pythonocc).
 
-**Не работает в текущем виде:**
-
-- `tools/build_checks.sh` собирает и `tests/fprobe/FProbe.csproj`, которого в репозитории нет;
-- команды FProbe и A06 из прежней редакции (`tests/run_local.sh`, `run_suites.sh`) не входят в действующую регрессию.
+**Базовый прогон KRN-00** — `bash tools/run_baseline.sh <вывод>` (Linux): allA, allB, allS, g11poly, наборы A06
+(`tests/run_local.sh`, `run_suites.sh`), сверка с OpenCascade, замеры, манифест. FProbe (`tests/fprobe`) из репозитория
+убран: `tools/build_checks.sh` его не собирает, базовый прогон пропускает.
 
 ## 3. Состояние (k171)
 
@@ -152,8 +151,7 @@ PROGRESS_METHOD, REFERENCE_SOLUTIONS, STRATEGY_AI_DESIGN, UI_ICONS. Расход
 5. **Технический долг:**
    - мутации, которые не роняют ни одной проверки (`P3D_POLYFAN` и др., BACKLOG k140) — убрать или закрепить случаем;
    - полный прогон мутаций на фикстурах корпуса;
-   - расхождения документов (раздел 6 и `KERNEL_OVERVIEW.md`, «Расхождения в документах»);
-   - `tools/build_checks.sh` без FProbe.
+   - две копии документов (раздел 6).
 
 Вопросы к пользователю, открытые в BACKLOG:
 

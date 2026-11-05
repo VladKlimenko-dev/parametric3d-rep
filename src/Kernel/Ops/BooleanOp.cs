@@ -304,7 +304,6 @@ public static class BooleanOp
     /// <summary>Эксперимент r48: ленивая форма результатов общей булевой — разметкой в 10 раз мельче (P3D_LAZYFINE=1).</summary>
     public static readonly bool LazyFine = Environment.GetEnvironmentVariable("P3D_LAZYFINE") == "1";
 
-    /// <summary>Сферы в маршруте общей булевой (этап 2б). ВЫКЛЮЧЕНО; P3D_ANALYTICSPHERES=1 — включить.</summary>
     /// <summary>KRN-01 (g.10): исключение при разбиении грани входа — отдельный код (сбой), P3D_FACEFAILSPLIT=0 — прежний face-missing.</summary>
     internal static readonly bool SplitFaceFailure = Environment.GetEnvironmentVariable("P3D_FACEFAILSPLIT") != "0";
     /// <summary>
