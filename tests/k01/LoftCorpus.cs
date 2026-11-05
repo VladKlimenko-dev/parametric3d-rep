@@ -703,6 +703,11 @@ static partial class Program
         if (Environment.GetEnvironmentVariable("SEQ_BITS2") == "1")
             try { var l2 = DocumentFile.Load(bare); l2.Part.Rebuild(l2.Parameters); bitsF2 = BodyBits(l2.Part); } catch (Exception ex) when (ex is not OutOfMemoryException) { bitsF2 = "exception"; }
         Log(new { bits = true, step = f.Name, session = bitsS, file = bitsF, file2 = bitsF2, sameSF = bitsS == bitsF, sameFF = bitsF2 == "" ? (bool?)null : bitsF == bitsF2 });
+        // Я1: поля операций сеанса против прочитанных из файла (отражением; значения, не попадающие в файл)
+        var fdiff = new List<string>();
+        for (int i = 0; i < Math.Min(p.Features.Count, q.Features.Count); i++)
+            foreach (var d in FieldDiff(p.Features[i], q.Features[i])) fdiff.Add($"{p.Features[i].Name}.{d}");
+        if (fdiff.Count > 0) Log(new { featureFields = true, step = f.Name, diff = fdiff.Take(40).ToList() });
         bool errS = f.Error != null, errF = g?.Error != null;
         string gs = string.Join(",", p.Bodies.Select(b => b.Guarantee.ToString()));
         string gf = string.Join(",", q.Bodies.Select(b => b.Guarantee.ToString()));
@@ -716,6 +721,36 @@ static partial class Program
             refsSession = refsS,
             refsFile = refsS == refsF ? null : refsF,
         };
+    }
+
+    /// <summary>Я1: различия открытых полей и свойств двух операций одного типа (простые значения, списки — по ToString элементов).</summary>
+    static IEnumerable<string> FieldDiff(object a, object b)
+    {
+        if (a.GetType() != b.GetType()) { yield return $"type {a.GetType().Name} <> {b.GetType().Name}"; yield break; }
+        var t = a.GetType();
+        static string V(object? o)
+        {
+            if (o == null) return "null";
+            if (o is double d) return BitConverter.DoubleToInt64Bits(d).ToString("x");
+            if (o is string s0) return s0;
+            if (o is System.Collections.IEnumerable en) { var parts = new List<string>(); foreach (var x in en) parts.Add(x is double dx ? BitConverter.DoubleToInt64Bits(dx).ToString("x") : x?.ToString() ?? "null"); return "[" + string.Join(",", parts) + "]"; }
+            return o.ToString() ?? "";
+        }
+        var skip = new HashSet<string> { "Error", "Warnings", "CreatedFaceIds", "Key" };
+        foreach (var m in t.GetMembers(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (skip.Contains(m.Name)) continue;
+            object? va, vb;
+            try
+            {
+                if (m is System.Reflection.FieldInfo fi) { va = fi.GetValue(a); vb = fi.GetValue(b); }
+                else if (m is System.Reflection.PropertyInfo pi && pi.GetIndexParameters().Length == 0 && pi.CanRead) { va = pi.GetValue(a); vb = pi.GetValue(b); }
+                else continue;
+            }
+            catch { continue; }
+            string sa = V(va), sb = V(vb);
+            if (sa != sb) yield return $"{m.Name}: {(sa.Length > 120 ? sa[..120] : sa)} <> {(sb.Length > 120 ? sb[..120] : sb)}";
+        }
     }
 
     /// <summary>Я1: подпись поверхностей и кривых по граням — точки поверхности в (0.3, 0.6) по параметру и середины кривых рёбер.</summary>
