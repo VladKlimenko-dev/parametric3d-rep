@@ -345,6 +345,8 @@ public sealed class Part : ModelItem
     public string? LastFailure;
 
     public void Invalidate() { ForgetCheckpoints(); SetDirty(); }
+    /// <summary>Я1, опыт: итоговая разметка и показ — по копиям итоговых тел (P3D_CKPTCLONE=1).</summary>
+    static readonly bool CkptCloneOn = Environment.GetEnvironmentVariable("P3D_CKPTCLONE") == "1";
     /// <summary>k116: полоска сдвинута — пересчёт по сдвигу (ApplyOutsideChanges), сохранённые состояния до неё остаются.</summary>
     public void MarkStageMoved() => SetDirty();
 
@@ -1834,6 +1836,21 @@ public sealed class Part : ModelItem
         // тела на экран не идут, а размечать их заново на каждой операции дороже всего
         // остального вместе (измерено на настоящей детали: 5.2 с из 8.0 с).
         Kernel.KernelContext.Checkpoint("final mesh");
+        // Я1, опыт P3D_CKPTCLONE=1 (BACKLOG k149, s106): итоговые тела — те же объекты, что в сохранённом состоянии последней
+        // операции; итоговая разметка ниже готовит их к показу, и следующая правка получала на вход размеченное тело, а полный
+        // пересчёт — неразмеченное (биты результата расходились уже на первой операции после состояния). Здесь показ и
+        // разметка идут по копиям, состояние остаётся как при полном пересчёте.
+        if (CkptCloneOn && UseCheckpoints)
+            for (int i = 0; i < result.Bodies.Count; i++)
+            {
+                var src = result.Bodies[i];
+                if (src.IsPublished) continue;
+                var c = Kernel.Topology.TopologyClone.Deep(src);
+                c.Guarantee = src.Guarantee;
+                if (src.Provenance is { } pv) c.SetProvenance(pv);
+                src.Publish();   // состояние неизменяемо, как прежде
+                result.Bodies[i] = c;
+            }
         using (Kernel.Diagnostics.Prof.Time("дерево: итоговая разметка"))
         if (Kernel.Ops.BooleanOp.ExactMeshing)
         {
