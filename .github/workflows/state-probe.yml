@@ -54,8 +54,7 @@ jobs:
       matrix:
         include:
           - { name: s106,           cmd: 'loftseq 1 106 6 OUT',  env: '' }
-          - { name: s106_fullbits,      cmd: 'loftseq 1 106 2 OUT', env: 'SEQ_STEPMODE=full' }
-          - { name: s106_reloadbits,    cmd: 'loftseq 1 106 2 OUT', env: 'SEQ_RELOAD=bare' }
+          - { name: s106_roundtrip,     cmd: 'loftseq 1 106 1 OUT', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

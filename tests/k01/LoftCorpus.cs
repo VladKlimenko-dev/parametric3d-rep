@@ -590,6 +590,8 @@ static partial class Program
                 string t1 = DocumentFile.StripDisplay(DocumentFile.Save(l0.Part)) ?? DocumentFile.Save(l0.Part);
                 int firstDiff = -1; for (int i = 0; i < Math.Min(t0.Length, t1.Length); i++) if (t0[i] != t1[i]) { firstDiff = i; break; }
                 if (firstDiff < 0 && t0.Length != t1.Length) firstDiff = Math.Min(t0.Length, t1.Length);
+                var gs0 = GeomBits(p); var gf0 = GeomBits(l0.Part);
+                Log(new { seed = sd, roundtrip = true, geomSame = gs0.SequenceEqual(gf0), geomDiff = gs0.Zip(gf0).Where(z => z.First != z.Second).Take(6).Select(z => z.First + " <> " + z.Second).ToList() });
                 Log(new { seed = sd, roundtrip = true, bodySession = BodyBits(p), bodyFile = BodyBits(l0.Part), textSame = t0 == t1, firstDiff,
                           textSession = firstDiff < 0 ? null : t0.Substring(Math.Max(0, firstDiff - 80), Math.Min(200, t0.Length - Math.Max(0, firstDiff - 80))),
                           textFile = firstDiff < 0 ? null : t1.Substring(Math.Max(0, firstDiff - 80), Math.Min(200, t1.Length - Math.Max(0, firstDiff - 80))) });
@@ -714,6 +716,24 @@ static partial class Program
             refsSession = refsS,
             refsFile = refsS == refsF ? null : refsF,
         };
+    }
+
+    /// <summary>Я1: подпись поверхностей и кривых по граням — точки поверхности в (0.3, 0.6) по параметру и середины кривых рёбер.</summary>
+    static List<string> GeomBits(Part x)
+    {
+        var res = new List<string>();
+        static string H(params double[] ds) { ulong h = 1469598103934665603UL; foreach (var d in ds) { h ^= (ulong)BitConverter.DoubleToInt64Bits(d); h *= 1099511628211UL; } return h.ToString("x16"); }
+        foreach (var b in x.Bodies)
+            foreach (var f in b.Faces)
+            {
+                var src = f.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface fs ? fs.Source : f.Surface;
+                string sh = "-";
+                try { if (src != null) { var q = src.PointAt(new Vector2d(0.3, 0.6)); var q2 = src.PointAt(new Vector2d(0.71, 0.13)); sh = H(q.X, q.Y, q.Z, q2.X, q2.Y, q2.Z); } } catch { sh = "x"; }
+                var cs = new List<double>();
+                foreach (var l in f.Loops) foreach (var ce in l.CoEdges) { var c = ce.Edge.Curve; var m = c.PointAt(c.T0 + 0.37 * (c.T1 - c.T0)); cs.Add(m.X); cs.Add(m.Y); cs.Add(m.Z); cs.Add(c.T0); cs.Add(c.T1); }
+                res.Add($"{f.Tag} {src?.GetType().Name} s {sh} c {H(cs.ToArray())}");
+            }
+        return res;
     }
 
     /// <summary>Побитовая подпись тел детали: вершины (порядок не важен) и число граней.</summary>
