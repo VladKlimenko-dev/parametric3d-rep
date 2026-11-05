@@ -1844,7 +1844,6 @@ public sealed class Part : ModelItem
             for (int i = 0; i < result.Bodies.Count; i++)
             {
                 var src = result.Bodies[i];
-                if (src.IsPublished) continue;
                 var c = Kernel.Topology.TopologyClone.Deep(src);
                 c.Guarantee = src.Guarantee;
                 if (src.Provenance is { } pv) c.SetProvenance(pv);
