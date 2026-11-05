@@ -5,6 +5,7 @@
 
 | Версия | Дата | Коммит | Архив | Что сделано |
 |---|---|---|---|---|
+| k170 | 2026-11-05 | [`6ddd32b`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/6ddd32b) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/6ddd32b.zip) | окно чертежа — 8 пунктов замечания 05.11 18:34 (окно создания документа, куб вида окна детали, правка полей панели, допуски, угловой размер, список недостающих размеров, список размеров ↔ лист) |
 | k167 | 2026-11-05 | [`5ad19aa`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/5ad19aa) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/5ad19aa.zip) | окно чертежа — 17 пунктов замечания 05.11 16:17 (допуски, переключатели, куб вида, таблица на листе, линия шаблона, язык, листы, окно создания документа); k166: изометрия без разрывов очерков и сетки тонов, выбор элементов детали и «Размер (авто)» |
 | k165 | 2026-11-05 | [`f8f334b`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/f8f334b) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/f8f334b.zip) | рез по сеткам — касание по вершинам и неизменные входы (UI-ROUND-RIM-BALL); чертёж — «Размер (авто)», угловой размер, номера центров по осям, подписи центров на месте |
 | k164 | 2026-11-05 | [`29980b2`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/29980b2) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/29980b2.zip) | чертёж — подсветка цели размера, осевые линии поверх выносных, дуги на цилиндрах, номера центров ℄ |
