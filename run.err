@@ -1,0 +1,2 @@
+exit 1
+seconds 1 nproc 4 env P3D_SECBREAKNODE=0 cmd y2
