@@ -1,0 +1,1 @@
+seconds 276 nproc 4 env SEQ_SKIPSTEP=4 cmd loftseq 1 106 6 res/out
