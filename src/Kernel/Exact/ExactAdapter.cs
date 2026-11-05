@@ -74,6 +74,7 @@ public static class ExactAdapter
     /// контурам заново — форма становится функцией точного B-rep и настроек момента создания. Эксперимент: P3D_LAZYREMESH=1.
     /// </summary>
     internal static readonly bool LazyRemeshOn = Environment.GetEnvironmentVariable("P3D_LAZYREMESH") == "1";
+    [ThreadStatic] static bool _inDerived;
     public static ExactBody DerivedOf(TSolid solid)
     {
         var copy = TopologyClone.Deep(solid);
@@ -82,7 +83,9 @@ public static class ExactAdapter
             TopologyConventions.Normalize(copy);
             Export.StepImport.MeshFacesFromLoops(copy, null, "LazyDerived");
         }
-        return ToExact(copy, new PlaneRegistry(), null);
+        bool was = _inDerived; _inDerived = true;
+        try { return ToExact(copy, new PlaneRegistry(), null); }
+        finally { _inDerived = was; }
     }
 
     public static ExactBody ToExact(TSolid solid, PlaneRegistry registry, List<string>? warnings)
@@ -123,6 +126,16 @@ public static class ExactAdapter
         {
             var form = lz.Form.Value;
             return new ExactBody(form.Solid.Import(registry), form.Sources);
+        }
+
+        // Я1 (P3D_LAZYREMESH=1): аналитическое тело без ленивой формы (ревизия ушла вперёд: имена граней, перенос) —
+        // той же дорогой, что ленивая форма: копия, своя разметка по контурам. Иначе форма бралась из треугольников, что
+        // лежат на гранях сейчас, и одно тело в сеансе и при полном пересчёте давало разную многогранную булеву.
+        if (LazyRemeshOn && !_inDerived && solid.Exact == null && solid.Guarantee == GuaranteeLevel.ExactAnalytic)
+        {
+            _inDerived = true;
+            try { var d = DerivedOf(solid); return new ExactBody(d.Solid.Import(registry), d.Sources); }
+            finally { _inDerived = false; }
         }
 
         // A04. Только целый цилиндр вдоль +Z со строго проверенной топологией.
