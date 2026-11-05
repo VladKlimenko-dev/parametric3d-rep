@@ -166,7 +166,7 @@ public static class Ssi
                 var g = s.ProjectToUV(x); var u2 = g; bool nok = FootNewton(s, x, ref u2);
                 ParamDerivs(s, u2, out var S2, out var Su2, out var Sv2); var w2 = x - S2;
                 FootDebug($"ParamFoot failed at {x:0.######}: global uv {g:0.######} newton {nok} uv {u2:0.######} L {w2.Length:E3} ortho {Vector3d.Dot(w2, Su2) / Su2.Length:E2} {Vector3d.Dot(w2, Sv2) / Sv2.Length:E2}");
-                if (FootTrace && _footTraceN++ < 6)
+                if (FootTrace && s is Surfaces.SectionSurface && _footTraceN++ < 6)
                 {
                     // Я2 (разбор): ход Ньютона по шагам — параметры полностью, остаток, длины производных
                     var sb = new System.Text.StringBuilder($"  trace {s.GetType().Name}");
