@@ -1,0 +1,7 @@
+== STEP s106 0
+== REBUILDCHECK s106 0
+== REBUILDCHECK END s106 0
+== STEP s106 1
+== REBUILDCHECK s106 1
+== REBUILDCHECK END s106 1
+seconds 142 nproc 4 env SEQ_STEPMODE=full cmd loftseq 1 106 2 res/out
