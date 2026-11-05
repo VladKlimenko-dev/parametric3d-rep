@@ -53,11 +53,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: y2b,        cmd: 'y2',                   env: '' }
-          - { name: y2b_mut,    cmd: 'y2',                   env: 'P3D_SECBREAKNODE=0' }
-          - { name: dbg6_s102,  cmd: 'loftseq 1 102 6 OUT',  env: 'LOFT_DRALL=1 LOFT_FOOTDBG=1 P3D_DROPENPAR=0 P3D_FOOTTRACE=1' }
-          - { name: y2b_corpus, cmd: 'loftseq 10 101 6 OUT', env: '' }
-          - { name: y2b_allA,   cmd: 'allA',                 env: '' }
+          - { name: y2c,        cmd: 'y2',                   env: '' }
+          - { name: y2c_corpus, cmd: 'loftseq 10 101 6 OUT', env: '' }
+          - { name: y2c_dbg102, cmd: 'loftseq 1 102 6 OUT',  env: 'LOFT_DRALL=1 P3D_DROPENPAR=0' }
+          - { name: y2c_dbg110, cmd: 'loftseq 1 110 6 OUT',  env: 'LOFT_DRALL=1 P3D_DROPENPAR=0' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
