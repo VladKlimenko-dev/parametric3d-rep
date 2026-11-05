@@ -1,0 +1,2 @@
+exit 1
+seconds 1723 nproc 4 env P3D_LAZYREMESH=1 cmd allA
