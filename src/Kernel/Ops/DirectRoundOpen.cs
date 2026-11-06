@@ -854,12 +854,14 @@ public static partial class DirectRound
                 var (f1, gA) = Geometry.Ssi.Implicit(sh1, x); var (f2, gB) = Geometry.Ssi.Implicit(sh2, x);
                 double f3 = Vector3d.Dot(x - P, tg);
                 var dx = Solve3(new[] { gA, gB, tg }, new[] { oA - f1, oB - f2, -f3 });
+                if (Debug != null && (dx == null || !double.IsFinite(f1 + f2)) && Interlocked.Increment(ref _spDbg) < 12) Debug($"open: spine fails at t {t:G12} it {it}: x {x} f1 {f1 - oA:E3} f2 {f2 - oB:E3} gA {gA} gB {gB} dx {(dx == null ? "singular" : dx.Value.ToString())}");
                 if (dx == null) return null;
                 x += dx.Value;
                 if (dx.Value.Length < 1e-15 * Math.Max(1, x.Length)) break;
             }
             double ea = Geometry.Ssi.Implicit(sh1, x).F - oA, eb = Geometry.Ssi.Implicit(sh2, x).F - oB;
-            if (Math.Abs(ea) > 1e-9 * Math.Max(1, rr) || Math.Abs(eb) > 1e-9 * Math.Max(1, rr) || Math.Abs(Vector3d.Dot(x - P, tg)) > 1e-9 * Math.Max(1, rr)) return null;
+            if (Math.Abs(ea) > 1e-9 * Math.Max(1, rr) || Math.Abs(eb) > 1e-9 * Math.Max(1, rr) || Math.Abs(Vector3d.Dot(x - P, tg)) > 1e-9 * Math.Max(1, rr))
+            { if (Debug != null && Interlocked.Increment(ref _spDbg) < 12) Debug($"open: spine not converged at t {t:G12}: x {x} ea {ea:E3} eb {eb:E3}"); return null; }
             return x;
         }
         // k148: режим хребта у конца k: 0 — обычный, 1 — на шве, 2 — на соседней грани E
@@ -2890,7 +2892,7 @@ public static partial class DirectRound
     /// <summary>Я2, опыт (по умолчанию выключен, P3D_DRSECBREAK=1): стыки таблицы ленты там, где касание или ребро переходят
     /// стык ленты прежней правки. s110 шаг 2: отход таблицы 2.2e-4 → 2.7e-7 мм, но ещё больше допуска 2e-8 — фаска не принята;
     /// s109 шаг 5: «формула не определена» у стыка (шар катится через складку прежней ленты). BACKLOG, Я2.</summary>
-    static int _genNanDbg;
+    static int _genNanDbg, _spDbg;
     static readonly bool SecBreak = Environment.GetEnvironmentVariable("P3D_DRSECBREAK") == "1";
     /// <summary>Я2: стыков таблицы ленты там, где касание переходит стык ленты прежней правки.</summary>
     public static long SecBreaks;
