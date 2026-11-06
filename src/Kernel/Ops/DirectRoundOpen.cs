@@ -1878,6 +1878,12 @@ public static partial class DirectRound
             if (TabNan && nanChk > 0)
             {
                 int iNan = Array.FindIndex(devs, double.IsNaN);
+                if (Debug != null)
+                {
+                    double Un = ((useLo - tLo) + (useHi - useLo) * (iNan + 0.5) / nChk) * kU, tn = tLo + Un / kU;
+                    var ta = surf.SectionAt(Un); var ex = surf.ExactSectionAt(Un); var spn = ch ? (Vector3d?)Ed(tn) : Spine(tn);
+                    Debug($"open: NaN probe t {tn:G10}: table {ta.Point(0.5):0.####} formula {ex.Point(0.5):0.####} spine {(spn == null ? "null" : spn.Value.ToString("0.####"))} breaks near: {string.Join(" ", breaks.Where(b => Math.Abs(b - Un) < 0.2 * kU).Select(b => (tLo + b / kU).ToString("G10")))}");
+                }
                 why = $"open curved: blend formula undefined at {nanChk} of {nChk} probes (first at t {tLo + ((useLo - tLo) + (useHi - useLo) * (iNan + 0.5) / nChk):G6})"; return false;
             }
             Debug?.Invoke($"open: table vs formula {worstTab:E2} at t {tLo + worstU / kU:G6} (Δ {Delta:G6}) widths {widthA:G4}/{widthB:G4} Lp {Lp:G5}");
