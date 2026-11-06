@@ -1,0 +1,25 @@
+== STEP s109 0
+== REBUILDCHECK s109 0
+== REBUILDCHECK END s109 0
+== STEP s109 1
+== REBUILDCHECK s109 1
+== REBUILDCHECK END s109 1
+== STEP s109 2
+== REBUILDCHECK s109 2
+== REBUILDCHECK END s109 2
+== STEP s109 3
+== REBUILDCHECK s109 3
+== REBUILDCHECK END s109 3
+== STEP s109 4
+== REBUILDCHECK s109 4
+== REBUILDCHECK END s109 4
+== STEP s109 5
+SLAB #d000000006/chamfer:face: odd crossings 1 at v 0.999998; edges IntersectionCurve3 v 1→0.5625 [0.5625, 1] u 3.04571→3.0558; LineCurve3 v 1→1 [1, 1] u 45.9886→3.04571; ArcCurve3 v 0→1 [0, 1] u 46.4878→45.9873; LineCurve3 v 0.0625→0 [0, 0.0625] u 3.07638→3.07872; LineCurve3 v 0.125→0.0625 [0.0625, 0.125] u 3.07393→3.07638; LineCurve3 v 0.1875→0.125 [0.125, 0.1875] u 3.07138→3.07393; LineCurve3 v 0.25→0.1875 [0.1875, 0.25] u 3.06876→3.07138; LineCurve3 v 0.375→0.25 [0.25, 0.375] u 3.06344→3.06876; LineCurve3 v 0.4375→0.375 [0.375, 0.4375] u 3.06082→3.06344; LineCurve3 v 0.5→0.4375 [0.4375, 0.5] u 3.05826→3.06082; LineCurve3 v 0.5625→0.5 [0.5, 0.5625] u 3.0558→3.05826; breaks 0 8.204E-06 0.0625 0.125 0.1875 0.25
+SLAB #d000000006/chamfer:face: odd crossings 1 at v 0.999998; edges IntersectionCurve3 v 1→0.5625 [0.5625, 1] u 3.04571→3.0558; LineCurve3 v 1→1 [1, 1] u 45.9886→3.04571; ArcCurve3 v 0→1 [0, 1] u 46.4878→45.9873; LineCurve3 v 0.0625→0 [0, 0.0625] u 3.07638→3.07872; LineCurve3 v 0.125→0.0625 [0.0625, 0.125] u 3.07393→3.07638; LineCurve3 v 0.1875→0.125 [0.125, 0.1875] u 3.07138→3.07393; LineCurve3 v 0.25→0.1875 [0.1875, 0.25] u 3.06876→3.07138; LineCurve3 v 0.375→0.25 [0.25, 0.375] u 3.06344→3.06876; LineCurve3 v 0.4375→0.375 [0.375, 0.4375] u 3.06082→3.06344; LineCurve3 v 0.5→0.4375 [0.4375, 0.5] u 3.05826→3.06082; LineCurve3 v 0.5625→0.5 [0.5, 0.5625] u 3.0558→3.05826; breaks 0 8.204E-06 0.0625 0.125 0.1875 0.25
+SLAB #d000000006/chamfer:face: odd crossings 1 at v 0.999998; edges IntersectionCurve3 v 1→0.5625 [0.5625, 1] u 3.04571→3.0558; LineCurve3 v 1→1 [1, 1] u 45.9886→3.04571; ArcCurve3 v 0→1 [0, 1] u 46.4878→45.9873; LineCurve3 v 0.0625→0 [0, 0.0625] u 3.07638→3.07872; LineCurve3 v 0.125→0.0625 [0.0625, 0.125] u 3.07393→3.07638; LineCurve3 v 0.1875→0.125 [0.125, 0.1875] u 3.07138→3.07393; LineCurve3 v 0.25→0.1875 [0.1875, 0.25] u 3.06876→3.07138; LineCurve3 v 0.375→0.25 [0.25, 0.375] u 3.06344→3.06876; LineCurve3 v 0.4375→0.375 [0.375, 0.4375] u 3.06082→3.06344; LineCurve3 v 0.5→0.4375 [0.4375, 0.5] u 3.05826→3.06082; LineCurve3 v 0.5625→0.5 [0.5, 0.5625] u 3.0558→3.05826; breaks 0 8.204E-06 0.0625 0.125 0.1875 0.25
+== REBUILDCHECK s109 5
+SLAB #d000000006/chamfer:face: odd crossings 1 at v 0.999998; edges IntersectionCurve3 v 1→0.5625 [0.5625, 1] u 3.04571→3.0558; LineCurve3 v 1→1 [1, 1] u 45.9886→3.04571; ArcCurve3 v 0→1 [0, 1] u 46.4878→45.9873; LineCurve3 v 0.0625→0 [0, 0.0625] u 3.07638→3.07872; LineCurve3 v 0.125→0.0625 [0.0625, 0.125] u 3.07393→3.07638; LineCurve3 v 0.1875→0.125 [0.125, 0.1875] u 3.07138→3.07393; LineCurve3 v 0.25→0.1875 [0.1875, 0.25] u 3.06876→3.07138; LineCurve3 v 0.375→0.25 [0.25, 0.375] u 3.06344→3.06876; LineCurve3 v 0.4375→0.375 [0.375, 0.4375] u 3.06082→3.06344; LineCurve3 v 0.5→0.4375 [0.4375, 0.5] u 3.05826→3.06082; LineCurve3 v 0.5625→0.5 [0.5, 0.5625] u 3.0558→3.05826; breaks 0 8.204E-06 0.0625 0.125 0.1875 0.25
+SLAB #d000000006/chamfer:face: odd crossings 1 at v 0.999998; edges IntersectionCurve3 v 1→0.5625 [0.5625, 1] u 3.04571→3.0558; LineCurve3 v 1→1 [1, 1] u 45.9886→3.04571; ArcCurve3 v 0→1 [0, 1] u 46.4878→45.9873; LineCurve3 v 0.0625→0 [0, 0.0625] u 3.07638→3.07872; LineCurve3 v 0.125→0.0625 [0.0625, 0.125] u 3.07393→3.07638; LineCurve3 v 0.1875→0.125 [0.125, 0.1875] u 3.07138→3.07393; LineCurve3 v 0.25→0.1875 [0.1875, 0.25] u 3.06876→3.07138; LineCurve3 v 0.375→0.25 [0.25, 0.375] u 3.06344→3.06876; LineCurve3 v 0.4375→0.375 [0.375, 0.4375] u 3.06082→3.06344; LineCurve3 v 0.5→0.4375 [0.4375, 0.5] u 3.05826→3.06082; LineCurve3 v 0.5625→0.5 [0.5, 0.5625] u 3.0558→3.05826; breaks 0 8.204E-06 0.0625 0.125 0.1875 0.25
+SLAB #d000000006/chamfer:face: odd crossings 1 at v 0.999998; edges IntersectionCurve3 v 1→0.5625 [0.5625, 1] u 3.04571→3.0558; LineCurve3 v 1→1 [1, 1] u 45.9886→3.04571; ArcCurve3 v 0→1 [0, 1] u 46.4878→45.9873; LineCurve3 v 0.0625→0 [0, 0.0625] u 3.07638→3.07872; LineCurve3 v 0.125→0.0625 [0.0625, 0.125] u 3.07393→3.07638; LineCurve3 v 0.1875→0.125 [0.125, 0.1875] u 3.07138→3.07393; LineCurve3 v 0.25→0.1875 [0.1875, 0.25] u 3.06876→3.07138; LineCurve3 v 0.375→0.25 [0.25, 0.375] u 3.06344→3.06876; LineCurve3 v 0.4375→0.375 [0.375, 0.4375] u 3.06082→3.06344; LineCurve3 v 0.5→0.4375 [0.4375, 0.5] u 3.05826→3.06082; LineCurve3 v 0.5625→0.5 [0.5, 0.5625] u 3.0558→3.05826; breaks 0 8.204E-06 0.0625 0.125 0.1875 0.25
+== REBUILDCHECK END s109 5
+seconds 178 nproc 4 env P3D_CHAINDBG=1 P3D_DRSECBREAK=1 P3D_SLABEDGEV=0 cmd loftseq 1 109 6 res/out
