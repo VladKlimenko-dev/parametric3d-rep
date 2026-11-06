@@ -1108,6 +1108,7 @@ public static class DocumentFile
 
             // k124: угловые размеры к осям из файла до k124 — в новое правило (геометрия та же)
             if (sd.AxisRays != true) DimensionMeasure.MigrateAxisAngles(s);
+            foreach (var g in s.Gears) s.Clean(g);   // k178: концы и центры кривых шестерни — не отдельные точки (после связей и размеров)
             byOldOf[sd.Id] = byOld;
             part.Children.Add(s);
             s.Parent = part;          // k110: правка прочитанного эскиза извещает деталь (ссылки, пересчёт операций)

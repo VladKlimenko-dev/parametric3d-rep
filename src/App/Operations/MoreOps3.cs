@@ -90,7 +90,7 @@ public sealed class CsysOp : Operation
     protected override void Apply()
     {
         if (Compute() is not { } f) return;
-        if (_cs == null) { _cs = new DatumCsys(L("СК{0}", Part.Children.OfType<DatumCsys>().Count() + 1), f); Part.Add(_cs); }
+        if (_cs == null) { _cs = new DatumCsys(L("СК{0}", Part.Children.OfType<DatumCsys>().Count() + 1), f); Part.AddAtStage(_cs); }
         else { _cs.Frame = f; _cs.NotifyChanged(_cs); }
         W.ViewPort.MarkDirty();
     }
@@ -219,7 +219,20 @@ public sealed class CurveOp : Operation
         _curBox.SelectionChanged += (_, _) => { if (_syncBox || _curBox.SelectedIndex < 0) return; _cur = _curBox.SelectedIndex; SyncFace(); Panel?.Refresh(); RefreshStatus(); };
         var g = new Avalonia.Controls.Grid { ColumnDefinitions = new Avalonia.Controls.ColumnDefinitions("108,*"), Margin = new Avalonia.Thickness(0, 1) };
         g.Children.Add(new Avalonia.Controls.TextBlock { Text = L("Точка"), Classes = { "dim" }, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
-        Avalonia.Controls.Grid.SetColumn(_curBox, 1); g.Children.Add(_curBox);
+        // k178: выбор точки — список и кнопки «предыдущая / следующая»
+        var dock = new Avalonia.Controls.DockPanel();
+        Avalonia.Controls.Button Step(string text, int d, string tip)
+        {
+            var b = new Avalonia.Controls.Button { Content = text, Classes = { "tool" }, Padding = new Avalonia.Thickness(6, 0), MinHeight = 22, Name = d < 0 ? "curve_point_prev" : "curve_point_next" };
+            Avalonia.Controls.ToolTip.SetTip(b, L(tip));
+            b.Click += (_, _) => { if (_specs.Count == 0) return; CurrentPoint = (_cur + d + _specs.Count) % _specs.Count; RefreshStatus(); };
+            Avalonia.Controls.DockPanel.SetDock(b, Avalonia.Controls.Dock.Right);
+            return b;
+        }
+        dock.Children.Add(Step("▶", 1, "Следующая точка"));
+        dock.Children.Add(Step("◀", -1, "Предыдущая точка"));
+        dock.Children.Add(_curBox);
+        Avalonia.Controls.Grid.SetColumn(dock, 1); g.Children.Add(dock);
         p.Host.Children.Add(g);
         bool Smooth() => _smooth && Cur != null;
         p.Check("По нормали эскиза", () => Cur?.NormalToSketch ?? false, v => { if (Cur is { } c) { c.NormalToSketch = v && c.FromSketch; if (c.NormalToSketch) c.NormalToSurface = false; } },
@@ -557,7 +570,7 @@ public sealed class CurveOp : Operation
     {
         if (Compute() is not { Count: >= 2 } pts) return;
         string src = Mode switch { 1 => $"x={_fx}; y={_fy}; z={_fz}; t={_t0.Value}..{_t1.Value}", 2 => "projection", _ => "through points" };
-        if (_dc == null) { _dc = new DatumCurve(L("Кривая{0}", Part.Children.OfType<DatumCurve>().Count() + 1), pts, src); Part.Add(_dc); }
+        if (_dc == null) { _dc = new DatumCurve(L("Кривая{0}", Part.Children.OfType<DatumCurve>().Count() + 1), pts, src); Part.AddAtStage(_dc); }
         else { _dc.Points.Clear(); _dc.Points.AddRange(pts); _dc.Source = src; _dc.NotifyChanged(_dc); }
         // k137: построение — для правки
         _dc.Mode = Mode; _dc.Closed = _closed; _dc.Smooth = _smooth;

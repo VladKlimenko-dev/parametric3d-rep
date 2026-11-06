@@ -1760,7 +1760,7 @@ public static class Strings
         ["внутри"] = "inside",
         ["Стрелки: внутри ↔ снаружи"] = "Arrows: inside ↔ outside",
         // k177: касательные кривой через точки; направляющие — опорные кривые
-        ["Касательные в точках"] = "Point tangents", ["Точка"] = "Point", ["По нормали эскиза"] = "Normal to sketch", ["По нормали поверхности"] = "Normal to surface",
+        ["Касательные в точках"] = "Point tangents", ["Следующая точка"] = "Next point", ["Предыдущая точка"] = "Previous point", ["Точка"] = "Point", ["По нормали эскиза"] = "Normal to sketch", ["По нормали поверхности"] = "Normal to surface",
         ["Поверхность"] = "Surface", ["Обратить направление"] = "Reverse direction", ["Вес касательной"] = "Tangent weight",
         ["Всем точкам эскизов — по нормали эскиза"] = "All sketch points: normal to sketch", ["Снять условия у всех точек"] = "Clear all point conditions",
         ["эскиз «{0}»"] = "sketch «{0}»", ["точка эскиза"] = "sketch point", ["вершина"] = "vertex", ["точка"] = "point",

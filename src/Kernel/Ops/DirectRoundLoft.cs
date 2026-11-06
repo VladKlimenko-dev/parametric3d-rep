@@ -540,24 +540,47 @@ public static partial class DirectRound
                 }
                 return sideG[(j, span)] = r;
             }
+            // k178: ПРОЛЁТ ДЕЛИТСЯ ПО ГРАНИЦАМ КУСКОВ НАПРАВЛЯЮЩИХ — общим для всех звеньев пролёта (соседние грани делят сторону
+            // в тех же точках): каждая грань звена — несколько граней, у каждой по v один кусок Безье (как у направляющей из одного
+            // куска). Сеть строится для всего пролёта (поверхность Кунса с узлами кратности степени), куски — её строки; общая
+            // граница соседних по v граней — изолиния сети (строка опорных точек при узле полной кратности — точно кривая).
+            var sidePiece = new Dictionary<(int, int, int), ICurve3>();
             for (int span = 0; span < S - 1; span++)
+            {
+                var ub = Enumerable.Range(0, N).SelectMany(jj => SideG(jj, span).B).OrderBy(x => x).ToList();
+                for (int i = ub.Count - 1; i > 0; i--) if (ub[i] - ub[i - 1] < 1e-12) ub.RemoveAt(i);
+                ub[0] = 0; ub[^1] = 1;
+                int nI = ub.Count - 1;
+                ICurve3 SidePiece(int jj, int m)
+                {
+                    jj %= N;
+                    if (sidePiece.TryGetValue((jj, span, m), out var c)) return c;
+                    var sd = SideG(jj, span);
+                    if (nI == 1) c = sd.C;
+                    else
+                    {
+                        var q = Refine(sd.Q, sd.B, ub)[m];
+                        var pts = q.Select(x => x.Xyz / x.W).ToList();
+                        if (guideAt[jj] < 0) c = new LineCurve3(pts[0], pts[^1]);
+                        else if (q.All(x => Math.Abs(x.W - 1) < 1e-15)) c = new BezierCurve3(pts);
+                        else c = new SplineCurve3(pts, q.Length - 1, q.Select(x => x.W).ToList(), Enumerable.Repeat(0.0, q.Length).Concat(Enumerable.Repeat(1.0, q.Length)).ToList());
+                    }
+                    return sidePiece[(jj, span, m)] = c;
+                }
                 for (int j = 0; j < N; j++)
                 {
                     int c0 = colStart[j], cn = D * K[j] + 1;
                     var sl = SideG(j, span); var sr = SideG(j + 1, span);
-                    var ub = sl.B.Concat(sr.B).OrderBy(x => x).ToList();
-                    for (int i = ub.Count - 1; i > 0; i--) if (ub[i] - ub[i - 1] < 1e-12) ub.RemoveAt(i);
-                    ub[0] = 0; ub[^1] = 1;
                     var pl = Refine(sl.Q, sl.B, ub); var pr = Refine(sr.Q, sr.B, ub);
                     int Dv = Math.Max(1, pl.Concat(pr).Max(q => q.Length - 1));
                     pl = pl.Select(q => { while (q.Length - 1 < Dv) q = Elevate(q); return q; }).ToList();
                     pr = pr.Select(q => { while (q.Length - 1 < Dv) q = Elevate(q); return q; }).ToList();
-                    int nv = (ub.Count - 1) * Dv + 1;
+                    int nv = nI * Dv + 1;
                     Vector4d[] Net(List<Vector4d[]> pcs) { var n = new Vector4d[nv]; for (int i = 0; i < pcs.Count; i++) for (int k = 0; k <= Dv; k++) n[i * Dv + k] = pcs[i][k]; return n; }
                     var GL = Net(pl); var GR = Net(pr);
                     var kvb = new double[nv + Dv + 1];
                     for (int i = 0; i <= Dv; i++) { kvb[i] = 0; kvb[nv + i] = 1; }
-                    for (int i = 1; i < ub.Count - 1; i++) for (int k = 0; k < Dv; k++) kvb[Dv + 1 + (i - 1) * Dv + k] = ub[i];
+                    for (int i = 1; i < nI; i++) for (int k = 0; k < Dv; k++) kvb[Dv + 1 + (i - 1) * Dv + k] = ub[i];
                     var ku = new double[cn + D + 1];
                     for (int i = 0; i <= D; i++) { ku[i] = 0; ku[cn + i] = 1; }
                     for (int p = 1; p < K[j]; p++) for (int i = 0; i < D; i++) ku[D * p + 1 + i] = (double)p / K[j];
@@ -575,20 +598,38 @@ public static partial class DirectRound
                             cp[a, b] = q.Xyz / q.W; w[a, b] = q.W;
                         }
                     }
-                    var ns = new NurbsSurface(cp, D, Dv, w, ku, kvb);
                     var lo = loops[span][j]; var hi = loops[span + 1][j];
-                    var A0 = Start(lo); var B0 = End(lo); var A1 = Start(hi); var B1 = End(hi);
-                    var loop = new List<Seg>
+                    // изолинии по v на границах кусков (общие для соседних по v граней звена)
+                    var iso = new ICurve3?[nI + 1];
+                    iso[0] = lo; iso[nI] = hi;
+                    for (int m = 1; m < nI; m++)
                     {
-                        new() { Curve = lo, A = A0, B = B0 },
-                        new() { Curve = SideG(j + 1, span).C, A = B0, B = B1 },
-                        new() { Curve = hi, A = B1, B = A1 },
-                        new() { Curve = SideG(j, span).C, A = A1, B = A0 },
-                    };
-                    var fd = new FDesc { Surf = ns, Rev = false, Tag = $"loft:side[{j}]" + (S > 2 ? $".{span}" : ""), Touched = true, Hint = ns.PointAt(new Vector2d(0.5, 0.5)) };
-                    fd.Loops.Add(loop);
-                    faces.Add(fd);
+                        int row = m * Dv;
+                        var ip = Enumerable.Range(0, cn).Select(a => cp[a, row]).ToList();
+                        var iw = Enumerable.Range(0, cn).Select(a => w[a, row]).ToList();
+                        iso[m] = new SplineCurve3(ip, D, iw.All(x => Math.Abs(x - 1) < 1e-15) ? null : iw, ku);
+                    }
+                    for (int m = 0; m < nI; m++)
+                    {
+                        var scp = new Vector3d[cn, Dv + 1]; var sw = new double[cn, Dv + 1];
+                        for (int a = 0; a < cn; a++) for (int b = 0; b <= Dv; b++) { scp[a, b] = cp[a, m * Dv + b]; sw[a, b] = w[a, m * Dv + b]; }
+                        var kb = new double[2 * Dv + 2]; for (int i = 0; i <= Dv; i++) { kb[i] = 0; kb[Dv + 1 + i] = 1; }
+                        var ns = new NurbsSurface(scp, D, Dv, sw, ku, kb);
+                        Vector3d A0 = m == 0 ? Start(lo) : cp[0, m * Dv], B0 = m == 0 ? End(lo) : cp[cn - 1, m * Dv];
+                        Vector3d A1 = m == nI - 1 ? Start(hi) : cp[0, (m + 1) * Dv], B1 = m == nI - 1 ? End(hi) : cp[cn - 1, (m + 1) * Dv];
+                        var loop = new List<Seg>
+                        {
+                            new() { Curve = iso[m]!, A = A0, B = B0 },
+                            new() { Curve = SidePiece(j + 1, m), A = B0, B = B1 },
+                            new() { Curve = iso[m + 1]!, A = B1, B = A1 },
+                            new() { Curve = SidePiece(j, m), A = A1, B = A0 },
+                        };
+                        var fd = new FDesc { Surf = ns, Rev = false, Tag = $"loft:side[{j}]" + (S > 2 ? $".{span}" : "") + (nI > 1 ? $"/{m}" : ""), Touched = true, Hint = ns.PointAt(new Vector2d(0.5, 0.5)) };
+                        fd.Loops.Add(loop);
+                        faces.Add(fd);
+                    }
                 }
+            }
             return true;
         }
     }

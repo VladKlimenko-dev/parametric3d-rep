@@ -9112,6 +9112,34 @@ Check("UI-DRAWING-K169", () =>
 // k177: кривая через точки — касательные в каждой точке: «По нормали эскиза» (точка эскиза), «По нормали поверхности» (грань в
 // точке: у вершины блока — три, по умолчанию ближайшая к перпендикуляру хода кривой; щелчок на виде — другая), обратить, вес;
 // стрелки на виде; кривая — сплайн с касательными точно по условиям. P3D_CURVETANGENTS=0 — без раздела.
+// k178: ОТКРЫТИЕ БЕЗ ПЕРЕСТРОЕНИЯ — тела из файла показываются сразу, деталь без связей с другими файлами не перестраивается
+// (тела после открытия и после того, как окно постояло, — те же объекты). P3D_OPENFILE — разбор файла пользователя.
+Check("UI-OPEN-STORED-K178", () =>
+{
+    string? user = Environment.GetEnvironmentVariable("P3D_OPENFILE");
+    string path;
+    if (user is { Length: > 0 }) path = user;
+    else
+    {
+        var part0 = Parametric3D.App.Diagnostics.TestParts.Block("os");
+        var s0 = DocumentSession.FromPart(part0, "os"); var w0 = Open(s0); BuildNow(s0);
+        for (int i = 0; i < 20; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(20); }
+        path = Path.Combine(Path.GetTempPath(), "p3d_open_stored.p3d"); s0.SaveAs(path); w0.Close();
+    }
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    var s = DocumentSession.Open(path);
+    long openMs = sw.ElapsedMilliseconds;
+    var p = s.Part!;
+    var b0 = p.Bodies.ToList();
+    Console.WriteLine($"  open {openMs} ms: note {p.LoadNote} {p.LoadNoteDetail}, restored {p.RestoredFromFile}, dirty {p.IsDirty}, bodies {p.Bodies.Count}, cached {p.ShowsCached}");
+    var w = Open(s);
+    var t1 = DateTime.Now; while ((DateTime.Now - t1).TotalMilliseconds < 3000) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(10); }
+    bool same = p.Bodies.Count == b0.Count && p.Bodies.Zip(b0).All(z => ReferenceEquals(z.First, z.Second));
+    Console.WriteLine($"  after 3 s: dirty {p.IsDirty}, building {s.Document.IsBuilding}, verifying {s.Document.IsVerifying}, same bodies {same}, features with errors {p.Features.Count(f => f.Error != null)}");
+    w.Close();
+    Require(p.RestoredFromFile && !p.IsDirty && same, "the part was rebuilt on open (or its bodies were not taken from the file)");
+});
+
 Check("UI-CURVE-TANGENTS-K177", () =>
 {
     var part = Parametric3D.App.Diagnostics.TestParts.Block("ct");
@@ -9143,7 +9171,14 @@ Check("UI-CURVE-TANGENTS-K177", () =>
     var faceField = op.Panel.Refs.First(r => r.Label == "Поверхность");
     op.Activate(faceField); w.ViewPort.Selection.Select(new PickRef(top.Id, PickKind.Face, part, null), additive: false); Run();
     Require(op.PointSpecs[0].FaceId == top.Id && Math.Abs(op.PointSpecs[0].FaceNormal.Z - 1) < 1e-9, $"picked face: {op.PointSpecs[0].FaceId} want {top.Id}");
-    op.CurrentPoint = 1; Run();
+    // k178: точка выбирается списком панели (и кнопками ◀ ▶)
+    var box = op.Panel.Host.GetVisualDescendants().OfType<ComboBox>().First(c => c.Name == "curve_point");
+    Require(box.ItemCount == 2, $"point list items: {box.ItemCount}");
+    box.SelectedIndex = 1; Run();
+    Require(op.CurrentPoint == 1, "the point list does not select the second point");
+    op.Panel.Host.GetVisualDescendants().OfType<Button>().First(b => b.Name == "curve_point_next").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Run();
+    Require(op.CurrentPoint == 0 && box.SelectedIndex == 0, "the next-point button");
+    box.SelectedIndex = 1; Run();
     // k178: у точки эскиза «По нормали эскиза» — по умолчанию включено (поверхность при этом недоступна)
     Require(chk["По нормали эскиза"].IsEnabled && ((CheckBox)chk["По нормали эскиза"]).IsChecked == true && op.PointSpecs[1].NormalToSketch && !chk["По нормали поверхности"].IsEnabled,
             "a sketch point: «normal to sketch» is not on by default");
@@ -9166,6 +9201,7 @@ Check("UI-CURVE-TANGENTS-K177", () =>
     // вошла вдоль хода (−Z к нулю у вершины на высоте 20 — вниз), у конца обращена: вверх
     Require(t0.Z < 0 && t1.Z > 0, $"tangent signs {t0.Z} {t1.Z}");
     // правка: условия на месте
+    Require(MainWindow.EditablePlane(dc), "the spline curve through points is not editable");
     var ed = new CurveOp { Mode = 0, EditTarget = dc }; w.StartOperation(ed); Run();
     Require(ed.PointSpecs.Count == 2 && ed.PointSpecs[0].NormalToSurface && ed.PointSpecs[1].NormalToSketch && ed.PointSpecs[1].Flip, "conditions lost on edit");
     // k178: при правке флажки текущей точки доступны сразу (прежде — серые до первой правки поля)

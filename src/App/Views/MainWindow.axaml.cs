@@ -2405,7 +2405,8 @@ public partial class MainWindow : Window
         // k132 (п. 2): и опорная ось, точка (кроме начала координат)
         || !AxisOp.EditOff && (i is DatumAxis { Parent: Part } || i is DatumPoint { Parent: Part dpp } dpt && !ReferenceEquals(dpt, dpp.Origin))
         // k137 (п. 7): и опорная кривая (через точки, по уравнению, проекция; кривая FreeForm — своей правкой)
-        || !CurveOp.EditOff && i is DatumCurve { Parent: Part, IsNurbs: false };
+        // k178: кривая через точки с k177 — сплайн (IsNurbs), но своей правкой (точки построения есть); прежде — не правилась
+        || !CurveOp.EditOff && i is DatumCurve { Parent: Part } dcv && (!dcv.IsNurbs || dcv.Mode == 0 && dcv.Inputs.Count >= 2);
 
     public void EditSelected()
     {
