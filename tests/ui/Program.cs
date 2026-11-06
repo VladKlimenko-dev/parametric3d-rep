@@ -9186,17 +9186,24 @@ Check("UI-ASM-LINK-K178", () =>
     File.SetLastWriteTimeUtc(asmPath, DateTime.UtcNow.AddMinutes(-10));
     SavePart(50);   // файл детали изменён после записи сборки
     var w = Open(DocumentSession.NewPart());
+    MainWindow.LinkRefreshDelayMs = 1500;
     var task = w.OpenAsync(asmPath);
     var t0 = DateTime.Now;
-    while (!task.IsCompleted && (DateTime.Now - t0).TotalSeconds < 30) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); }
-    var c0 = w.Session.Document.Root.Children.OfType<Parametric3D.Model.Part>().Single();
-    double v0 = c0.Volume; bool r0 = c0.RestoredFromFile;
+    // первый показ — сразу после смены документа (обновление компонента ещё читает файл в фоне)
+    double v0 = -1; bool r0 = false;
+    while (v0 < 0 && (DateTime.Now - t0).TotalSeconds < 30)
+    {
+        Dispatcher.UIThread.RunJobs(Avalonia.Threading.DispatcherPriority.Send);
+        if (w.Session.FilePath == asmPath) { var c0 = w.Session.Document.Root.Children.OfType<Parametric3D.Model.Part>().Single(); v0 = c0.Volume; r0 = c0.RestoredFromFile; break; }
+        Dispatcher.UIThread.RunJobs(); Thread.Sleep(1);
+    }
     while (w.LinkRefreshDone == null && (DateTime.Now - t0).TotalSeconds < 60) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(10); }
     for (int i = 0; i < 30; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(10); }
     var c1 = w.Session.Document.Root.Children.OfType<Parametric3D.Model.Part>().Single();
     Console.WriteLine($"  opened: restored {r0}, volume {v0:F1}; refreshed {w.LinkRefreshDone}, volume {c1.Volume:F1}, source {Path.GetFileName(c1.SourcePath)}");
     Require(r0 && Math.Abs(v0 - 120000) < 1e-3, "the assembly was not shown from its stored bodies");
     Require(w.LinkRefreshDone == 1 && Math.Abs(c1.Volume - 60000) < 1e-3 && c1.SourcePath == pa, "the linked component was not refreshed from its changed file");
+    MainWindow.LinkRefreshDelayMs = 0;
     w.Close();
     try { Directory.Delete(dir, true); } catch { }
 });

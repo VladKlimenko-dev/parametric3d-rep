@@ -355,6 +355,7 @@ public partial class MainWindow : Window
             .Where(p => p.SourcePath is { Length: > 0 } sp && sp.EndsWith(DocumentSession.PartExtension, StringComparison.OrdinalIgnoreCase)
                         && File.Exists(sp) && File.GetLastWriteTimeUtc(sp) > asmTime).ToList();
         int n = 0;
+        if (stale.Count > 0 && LinkRefreshDelayMs > 0) await Task.Delay(LinkRefreshDelayMs);   // проверки: первый показ — до обновления
         foreach (var old in stale)
         {
             Parametric3D.Model.Part fresh;
@@ -370,6 +371,8 @@ public partial class MainWindow : Window
         return n;
     }
     static readonly bool LinkRefreshOff = Environment.GetEnvironmentVariable("P3D_LINKREFRESH") == "0";
+    /// <summary>k178: задержка фонового обновления связей (только проверки — первый показ сборки из её файла).</summary>
+    public static int LinkRefreshDelayMs;
     /// <summary>k178: компонентов, обновлённых из файлов после последнего открытия сборки (null — обновление ещё идёт).</summary>
     public int? LinkRefreshDone { get; private set; }
 
