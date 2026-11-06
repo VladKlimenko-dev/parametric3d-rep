@@ -94,7 +94,7 @@ public static class AnalyticVolume
         try
         {
             v = OfCore(solid);
-            if (v is { } vv && PolyhedralAuthoritative(solid) && !AgreesWithPolyhedron(solid, vv)) { PolyVolumeRejected++; v = null; }
+            if (v is { } vv && PolyhedralAuthoritative(solid) && !AgreesWithPolyhedron(solid, vv)) { PolyVolumeRejected++; if (ChainDbg) Console.Error.WriteLine($"VOLPOLY reject {vv:G10}"); v = null; }
         }
         finally { quad = _quadErr; _quadErr = q0 + quad; }
         if (key != null && solid.Revision == rev && TopoFingerprint.Of(solid, display: SolidValidator.KeyDisplayOff) == fp)
@@ -157,7 +157,7 @@ public static class AnalyticVolume
                 Interlocked.Increment(ref ParallelRuns);
                 for (int i = 0; i < parts.Length; i++)
                 {
-                    if (parts[i] is not { } c2 || double.IsNaN(c2)) return null;
+                    if (parts[i] is not { } c2 || double.IsNaN(c2)) { if (ChainDbg) Console.Error.WriteLine($"VOLNULL face {faceList[i].Tag} {GeometryAudit.AuthoritativeSurface(faceList[i])?.GetType().Name}"); return null; }
                     sum += c2; _quadErr += quads[i];
                 }
                 return sum / 3;
@@ -167,7 +167,7 @@ public static class AnalyticVolume
                 double? c;
                 using (Diagnostics.Prof.Time("объём: грань " + (GeometryAudit.AuthoritativeSurface(f)?.GetType().Name ?? "?")))
                     c = FaceIntegral(f);
-                if (c == null || double.IsNaN(c.Value)) return null;
+                if (c == null || double.IsNaN(c.Value)) { if (ChainDbg) Console.Error.WriteLine($"VOLNULL face {f.Tag}"); return null; }
                 sum += c.Value;
             }
             return sum / 3;
