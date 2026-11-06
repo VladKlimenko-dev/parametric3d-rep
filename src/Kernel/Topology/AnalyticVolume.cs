@@ -888,6 +888,7 @@ public static class AnalyticVolume
 
     /// <summary>Разбор: точек квадратуры ленты и посчитанных (не из памяти) площадей граней.</summary>
     public static long BandPoints, AreasComputed;
+    static int _nanDbg;
 
     static double? BandOpenIntegralAt(TFace f, SectionSurface ss, (Func<double, double> L, Func<double, double> R) rg, bool area, int mu, int mv)
     {
@@ -924,6 +925,7 @@ public static class AnalyticVolume
                             var s0 = ss.SectionAt(u);
                             var P = s0.Point(v); var su = (ss.SectionAt(u + h).Point(v) - ss.SectionAt(u - h).Point(v)) / (2 * h); var sv = s0.Deriv(v);
                             var c = Vector3d.Cross(su, sv);
+                            if (ChainDbg && !double.IsFinite(c.X + P.X) && Interlocked.Increment(ref _nanDbg) < 6) Console.Error.WriteLine($"BANDNAN {f.Tag} u {u:G10} v {v:G8} P {P} su {su} sv {sv} piece {pa:G8}..{pb:G8} uLR {uL:G8}..{uR:G8} surf u {ss.UMin:G8}..{ss.UMax:G8} breaks {string.Join(" ", ss.Breaks.Select(x => x.ToString("G8")))}");
                             rv += Vector3d.Dot(P - origin, c) * w; ra += c.Length * w; rva += c * w;
                         }
                 }
