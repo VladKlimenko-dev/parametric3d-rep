@@ -167,7 +167,7 @@ public static class AnalyticVolume
                 double? c;
                 using (Diagnostics.Prof.Time("объём: грань " + (GeometryAudit.AuthoritativeSurface(f)?.GetType().Name ?? "?")))
                     c = FaceIntegral(f);
-                if (c == null || double.IsNaN(c.Value)) { if (ChainDbg) Console.Error.WriteLine($"VOLNULL face {f.Tag}"); return null; }
+                if (c == null || double.IsNaN(c.Value)) { if (ChainDbg) Console.Error.WriteLine($"VOLNULL face {f.Tag} seq {f.Surface.GetType().Name} {GeometryAudit.AuthoritativeSurface(f)?.GetType().Name}"); return null; }
                 sum += c.Value;
             }
             return sum / 3;
