@@ -275,6 +275,8 @@ public static class StandardCommands
         Tool("sk.spline_through", "Сплайн через точки", "Сплайн т.", "sk_spline_but.svg", () => new SplineThroughTool(), "spline through points сплайн через точки");
         Tool("sk.spline_cv", "Сплайн по контрольным точкам", "Сплайн КТ", "sk_spline_cv_but.svg", () => new SplineTool(), "spline control points сплайн контрольные");
         Tool("sk.slot", "Паз", "Паз", "sk_slot_but.svg", () => new SlotTool(), "slot паз");
+        // k176: шестерня — центр и делительный радиус; параметры зубчатого венца — на панели свойств
+        Tool("sk.gear", "Шестерня", "Шестерня", "sk_gear_but.svg", () => new GearTool(), "gear шестерня зубчатое колесо эвольвента involute cycloidal sprocket");
         Tool("sk.csys", "Система координат эскиза", "СК эскиза", "sk_csys_but.svg", () => new SketchCsysTool(), "sketch coordinate system origin начало система координат");
         Tool("sk.trim", "Обрезка", "Обрезка", "sk_trim_but.svg", () => new TrimTool(), "trim обрезка", K(Key.T));
         Tool("sk.split", "Разделить", "Разделить", "sk_split_but.svg", () => new TrimTool(split: true), "split разделить");

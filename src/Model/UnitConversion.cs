@@ -84,6 +84,8 @@ public static class UnitConversion
                     if (e is SkCircle c) c.Radius *= k;
                     if (e is SkEllipse el) { el.RU *= k; el.RV *= k; }
                 }
+                // k176: шестерни — размеры параметров (модуль, центр, боковой зазор, допуск) в новых единицах
+                foreach (var g in sk.Gears) { g.P.Module *= k; g.P.CenterX *= k; g.P.CenterY *= k; g.P.Backlash *= k; g.P.Tolerance *= k; }
                 sk.Plane = new Frame3(sk.Plane.Origin * k, sk.Plane.U, sk.Plane.V);
                 sk.BaseFrame = new Frame3(sk.BaseFrame.Origin * k, sk.BaseFrame.U, sk.BaseFrame.V);
                 sk.OriginOffset *= k;

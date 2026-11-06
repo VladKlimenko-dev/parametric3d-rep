@@ -303,6 +303,8 @@ public sealed class Sketch : ModelItem
     public readonly List<uint> ReferenceIds = new();
 
     public readonly List<SkEntity> Entities = new();
+    /// <summary>k176: шестерни эскиза (параметры и номера построенных элементов, SketchGear.cs).</summary>
+    public readonly List<SkGear> Gears = new();
 
     // ------------------------------------------------------------ k96: встроенные ссылки — нуль и оси эскиза
 
@@ -419,6 +421,9 @@ public sealed class Sketch : ModelItem
         // бывшего узла продолжает жить на чертеже.
         var points = e.Handles.ToList();
         Entities.Remove(e);
+        // k176: элемент шестерни удалён — у шестерни его больше нет; шестерня без элементов уходит
+        foreach (var g in Gears) g.Items.Remove(e.Id);
+        Gears.RemoveAll(g => !g.Items.Any(id => Entities.Any(x => x.Id == id)));
 
         var orphans = new HashSet<SkPoint>(
             points.Where(p => !Entities.Any(other => other.Handles.Contains(p))));

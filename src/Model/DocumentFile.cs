@@ -323,6 +323,16 @@ public static class DocumentFile
                 }
         }
 
+        // k176: шестерни эскиза — параметры и номера элементов (сами элементы записаны выше обычным порядком)
+        if (!GearSaveOff && s.Gears.Count > 0)
+            dto.Gears = s.Gears.Select(g => new GearDto
+            {
+                Profile = g.P.Profile.ToString(), Internal = g.P.Internal ? true : null, Teeth = g.P.Teeth, Module = g.P.Module, Alpha = g.P.PressureAngle,
+                X = g.P.ProfileShift, Ha = g.P.AddendumCoef, C = g.P.ClearanceCoef, Rf = g.P.RootFilletCoef, Ra = g.P.TipRoundCoef, Backlash = g.P.Backlash,
+                Rolling = g.P.RollingCircleCoef, Rot = g.P.Rotation, Cx = g.P.CenterX, Cy = g.P.CenterY, Tol = g.P.Tolerance, Pitch = g.P.PitchCircle,
+                Items = g.Items.ToList(), Centre = g.CenterId,
+            }).ToList();
+
         foreach (var c in s.Constraints)
             dto.Constraints.Add(new ConstraintDto
             {
@@ -1045,6 +1055,21 @@ public static class DocumentFile
                     if (ed.Role is int rl && Enum.IsDefined(typeof(SkRole), rl)) le.Role = (SkRole)rl;
                     if (ed.Fixed == true) le.Fixed = true;
                     if (ed.Src != null) le.ReferenceSource = ed.Src;
+                }
+            // k176: шестерни — номера элементов переводятся на новые
+            if (sd.Gears != null)
+                foreach (var gd in sd.Gears)
+                {
+                    var gp = new GearParams
+                    {
+                        Profile = Enum.TryParse<GearProfile>(gd.Profile, out var gpf) ? gpf : GearProfile.Involute, Internal = gd.Internal == true, Teeth = gd.Teeth,
+                        Module = gd.Module, PressureAngle = gd.Alpha, ProfileShift = gd.X, AddendumCoef = gd.Ha, ClearanceCoef = gd.C, RootFilletCoef = gd.Rf,
+                        TipRoundCoef = gd.Ra, Backlash = gd.Backlash, RollingCircleCoef = gd.Rolling, Rotation = gd.Rot, CenterX = gd.Cx, CenterY = gd.Cy,
+                        Tolerance = gd.Tol > 0 ? gd.Tol : 1e-3, PitchCircle = gd.Pitch,
+                    };
+                    var g = new SkGear { P = gp, CenterId = byOld.TryGetValue(gd.Centre, out var gce) ? gce.Id : 0 };
+                    foreach (var oid in gd.Items) if (byOld.TryGetValue(oid, out var ge)) g.Items.Add(ge.Id);
+                    if (g.Items.Count > 0) s.Gears.Add(g); else lost.Add($"sketch '{sd.Name}': gear without elements");
                 }
             // k96: встроенные ссылки (нуль, оси) — по особым номерам
             foreach (var bid in new[] { Sketch.OriginSaveId, Sketch.AxisHSaveId, Sketch.AxisVSaveId }) byOld[bid] = s.BuiltinBySaveId(bid)!;
@@ -1913,6 +1938,8 @@ public static class DocumentFile
         public List<EntityDto> Entities { get; set; } = new();
         public List<ConstraintDto> Constraints { get; set; } = new();
         public List<DimensionDto> Dimensions { get; set; } = new();
+        /// <summary>k176: шестерни эскиза (null — нет).</summary>
+        public List<GearDto>? Gears { get; set; }
         /// <summary>k109: место в дереве — сколько операций перед эскизом (null — файл до k109).</summary>
         public int? Slot { get; set; }
         /// <summary>k116: видимость, заданная пользователем (глаз в дереве); null — по умолчанию программы.</summary>
@@ -1922,6 +1949,32 @@ public static class DocumentFile
     }
 
     static readonly bool SplineSaveOff = Environment.GetEnvironmentVariable("P3D_SKSPLINESAVE") == "0";
+
+    /// <summary>k176: мутация — шестерни эскиза в файл не пишутся (после открытия — закреплённая геометрия без параметров).</summary>
+    static readonly bool GearSaveOff = Environment.GetEnvironmentVariable("P3D_SKGEARSAVE") == "0";
+
+    private sealed class GearDto
+    {
+        public string Profile { get; set; } = "Involute";
+        public bool? Internal { get; set; }
+        public int Teeth { get; set; }
+        public double Module { get; set; }
+        public double Alpha { get; set; }
+        public double X { get; set; }
+        public double Ha { get; set; }
+        public double C { get; set; }
+        public double Rf { get; set; }
+        public double Ra { get; set; }
+        public double Backlash { get; set; }
+        public double Rolling { get; set; }
+        public double Rot { get; set; }
+        public double Cx { get; set; }
+        public double Cy { get; set; }
+        public double Tol { get; set; }
+        public bool Pitch { get; set; } = true;
+        public List<uint> Items { get; set; } = new();
+        public uint Centre { get; set; }
+    }
 
     static readonly bool RoleSaveOff = Environment.GetEnvironmentVariable("P3D_SKROLESAVE") == "0";
 
