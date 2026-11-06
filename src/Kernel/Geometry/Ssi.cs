@@ -302,9 +302,10 @@ public static class Ssi
             if (side < 0) un = Math.Clamp(un, b - lim, b - eps); else un = Math.Clamp(un, b + eps, b + lim);
             dv = Math.Clamp(dv, -0.25, 0.25);
             double step = Math.Abs(un - u) + Math.Abs(dv); u = un; v += dv;
-            if (step < 1e-15 * Math.Max(1, span)) { conv = true; break; }
+            if (step < 1e-13 * Math.Max(1, span)) { conv = true; break; }
         }
-        if (!conv) return null;
+        // производная по u — разностная: последние шаги качаются на 1e-14…1e-13; годность решает ортогональность ниже
+        if (!conv) FootDebug?.Invoke($"  piece {b:G8}/{side}: not converged at u {u:G12} v {v:G8}");
         Ev(u, v); var w = x - P; double L = w.Length; if (!(L > 1e-12)) return null;
         if (Math.Abs(Vector3d.Dot(w, Su)) > 1e-9 * Math.Max(L, 1e-3) * Su.Length || Math.Abs(Vector3d.Dot(w, Sv)) > 1e-9 * Math.Max(L, 1e-3) * Sv.Length)
         { FootDebug?.Invoke($"  piece {b:G8}/{side}: u {u:G12} v {v:G8} not orthogonal {Vector3d.Dot(w, Su) / Su.Length:E3} {Vector3d.Dot(w, Sv) / Sv.Length:E3}"); return null; }
