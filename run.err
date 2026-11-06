@@ -1,0 +1,94 @@
+== STEP s109 0
+== REBUILDCHECK s109 0
+== REBUILDCHECK END s109 0
+== STEP s109 1
+== REBUILDCHECK s109 1
+== REBUILDCHECK END s109 1
+== STEP s109 2
+== REBUILDCHECK s109 2
+== REBUILDCHECK END s109 2
+== STEP s109 3
+== REBUILDCHECK s109 3
+== REBUILDCHECK END s109 3
+== STEP s109 4
+== REBUILDCHECK s109 4
+== REBUILDCHECK END s109 4
+== STEP s109 5
+ARCNEW R 796.32114
+   at System.Environment.get_StackTrace()
+   at Parametric3D.Kernel.Curves.ArcCurve3..ctor(Frame3 frame, Double radius, Double a0, Double a1) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Curves/ICurve3.cs:line 52
+   at Parametric3D.Kernel.Ops.BooleanOp.FitArc(List`1 pts, String& why, Nullable`1 known) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 5649
+   at Parametric3D.Kernel.Ops.BooleanOp.MergeArcs(List`1 segments, VertexWeld weld, HashSet`1 corners, List`1 warnings, Dictionary`2 faces) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 5216
+   at Parametric3D.Kernel.Ops.BooleanOp.BuildEdges(Dictionary`2 groups, Dictionary`2 faces, VertexWeld weld, TSolid solid, List`1 warnings, Boolean exactEdges) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 4390
+   at Parametric3D.Kernel.Ops.BooleanOp.FromPolygons(List`1 polys, Dictionary`2 sources, List`1 warnings, Boolean tJunctionFree, Boolean exactEdges) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 2329
+   at Parametric3D.Kernel.Ops.BooleanOp.TryExact(List`1 bodies, TSolid other, List`1 warnings, Boolean subtract, Boolean intersect) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 1821
+   at Parametric3D.Kernel.Ops.BooleanOp.Apply(List`1 bodies, TSolid other, List`1 warnings, Boolean subtract) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 1569
+   at Parametric3D.Kernel.Ops.BooleanOp.SubtractCore(List`1 bodies, TSolid tool, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 1542
+   at Parametric3D.Kernel.Ops.BooleanOp.EvaluateCore(IReadOnlyList`1 bodies, TSolid other, BooleanKind kind, OperationPolicy policy, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 1270
+   at Parametric3D.Kernel.Ops.BooleanOp.Evaluate(IReadOnlyList`1 bodies, TSolid other, BooleanKind kind, OperationPolicy policy, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 1172
+   at Parametric3D.Kernel.Ops.BooleanOp.Subtract(List`1 bodies, TSolid tool, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 240
+   at Parametric3D.Kernel.Ops.FilletOp.Apply(List`1 bodies, IReadOnlyList`1 edges, List`1 warnings, String what, Double size1, Double size2, Boolean round) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/FilletOp.cs:line 1240
+   at Parametric3D.Kernel.Ops.FilletOp.RoundEdges(List`1 bodies, IReadOnlyList`1 edges, Double radius, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/FilletOp.cs:line 100
+   at Parametric3D.Kernel.OperationContract.Run(String name, IReadOnlyList`1 bodies, Action`1 op, List`1 warnings, Nullable`1 policy) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/OperationResult.cs:line 380
+   at Parametric3D.Kernel.OperationContract.Apply(String name, List`1 bodies, Action`1 op, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/OperationResult.cs:line 479
+   at Parametric3D.Model.Features.RoundFeature.Execute(BuildContext ctx) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Model/Features/RoundChamferFeatures.cs:line 88
+   at Parametric3D.Model.Part.ComputeFull(ParameterTable parameters, ISketchSolver solver, CancellationToken cancellation, KernelSettings settingsNow) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Model/Part.cs:line 1622
+   at Parametric3D.Model.Part.ComputeCore(ParameterTable parameters, ISketchSolver solver, CancellationToken cancellation) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Model/Part.cs:line 1425
+   at Parametric3D.Model.Part.Compute(ParameterTable parameters, ISketchSolver solver, CancellationToken cancellation) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Model/Part.cs:line 1271
+   at Parametric3D.Model.Part.Rebuild(ParameterTable parameters, ISketchSolver solver) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Model/Part.cs:line 1221
+   at Program.LoftCorpusSeq(Int32 count, Int32 seed0, Int32 steps, String outDir) in /home/runner/work/parametric3d-rep/parametric3d-rep/tests/k01/LoftCorpus.cs:line 647
+   at Program.Main(String[] args) in /home/runner/work/parametric3d-rep/parametric3d-rep/tests/k01/Program.cs:line 635
+ARCSRC R 796.321 face #d000000001/loft:side[0] surf FacetedSurface src NurbsSurface
+ARCNEW R 793.97422
+   at System.Environment.get_StackTrace()
+   at Parametric3D.Kernel.Curves.ArcCurve3..ctor(Frame3 frame, Double radius, Double a0, Double a1) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Curves/ICurve3.cs:line 52
+   at Parametric3D.Kernel.Ops.BooleanOp.FitArc(List`1 pts, String& why, Nullable`1 known) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 5649
+   at Parametric3D.Kernel.Ops.BooleanOp.ArcIfRound(ICurve3 c) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 4951
+   at Parametric3D.Kernel.Ops.BooleanOp.MergeArcs(List`1 segments, VertexWeld weld, HashSet`1 corners, List`1 warnings, Dictionary`2 faces) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 5241
+   at Parametric3D.Kernel.Ops.BooleanOp.BuildEdges(Dictionary`2 groups, Dictionary`2 faces, VertexWeld weld, TSolid solid, List`1 warnings, Boolean exactEdges) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 4390
+   at Parametric3D.Kernel.Ops.BooleanOp.FromPolygons(List`1 polys, Dictionary`2 sources, List`1 warnings, Boolean tJunctionFree, Boolean exactEdges) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 2329
+   at Parametric3D.Kernel.Ops.BooleanOp.TryExact(List`1 bodies, TSolid other, List`1 warnings, Boolean subtract, Boolean intersect) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 1821
+   at Parametric3D.Kernel.Ops.BooleanOp.Apply(List`1 bodies, TSolid other, List`1 warnings, Boolean subtract) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 1569
+   at Parametric3D.Kernel.Ops.BooleanOp.SubtractCore(List`1 bodies, TSolid tool, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 1542
+   at Parametric3D.Kernel.Ops.BooleanOp.EvaluateCore(IReadOnlyList`1 bodies, TSolid other, BooleanKind kind, OperationPolicy policy, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 1270
+   at Parametric3D.Kernel.Ops.BooleanOp.Evaluate(IReadOnlyList`1 bodies, TSolid other, BooleanKind kind, OperationPolicy policy, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 1172
+   at Parametric3D.Kernel.Ops.BooleanOp.Subtract(List`1 bodies, TSolid tool, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 240
+   at Parametric3D.Kernel.Ops.FilletOp.Apply(List`1 bodies, IReadOnlyList`1 edges, List`1 warnings, String what, Double size1, Double size2, Boolean round) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/FilletOp.cs:line 1240
+   at Parametric3D.Kernel.Ops.FilletOp.RoundEdges(List`1 bodies, IReadOnlyList`1 edges, Double radius, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/FilletOp.cs:line 100
+   at Parametric3D.Kernel.OperationContract.Run(String name, IReadOnlyList`1 bodies, Action`1 op, List`1 warnings, Nullable`1 policy) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/OperationResult.cs:line 380
+   at Parametric3D.Kernel.OperationContract.Apply(String name, List`1 bodies, Action`1 op, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/OperationResult.cs:line 479
+   at Parametric3D.Model.Features.RoundFeature.Execute(BuildContext ctx) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Model/Features/RoundChamferFeatures.cs:line 88
+   at Parametric3D.Model.Part.ComputeFull(ParameterTable parameters, ISketchSolver solver, CancellationToken cancellation, KernelSettings settingsNow) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Model/Part.cs:line 1622
+   at Parametric3D.Model.Part.ComputeCore(ParameterTable parameters, ISketchSolver solver, CancellationToken cancellation) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Model/Part.cs:line 1425
+   at Parametric3D.Model.Part.Compute(ParameterTable parameters, ISketchSolver solver, CancellationToken cancellation) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Model/Part.cs:line 1271
+   at Parametric3D.Model.Part.Rebuild(ParameterTable parameters, ISketchSolver solver) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Model/Part.cs:line 1221
+   at Program.LoftCorpusSeq(Int32 count, Int32 seed0, Int32 steps, String outDir) in /home/runner/work/parametric3d-rep/parametric3d-rep/tests/k01/LoftCorpus.cs:line 647
+   at Program.Main(String[] args) in /home/runner/work/parametric3d-rep/parametric3d-rep/tests/k01/Program.cs:line 635
+== REBUILDCHECK s109 5
+ARCNEW R 796.32114
+   at System.Environment.get_StackTrace()
+   at Parametric3D.Kernel.Curves.ArcCurve3..ctor(Frame3 frame, Double radius, Double a0, Double a1) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Curves/ICurve3.cs:line 52
+   at Parametric3D.Kernel.Ops.BooleanOp.FitArc(List`1 pts, String& why, Nullable`1 known) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 5649
+   at Parametric3D.Kernel.Ops.BooleanOp.MergeArcs(List`1 segments, VertexWeld weld, HashSet`1 corners, List`1 warnings, Dictionary`2 faces) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 5216
+   at Parametric3D.Kernel.Ops.BooleanOp.BuildEdges(Dictionary`2 groups, Dictionary`2 faces, VertexWeld weld, TSolid solid, List`1 warnings, Boolean exactEdges) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 4390
+   at Parametric3D.Kernel.Ops.BooleanOp.FromPolygons(List`1 polys, Dictionary`2 sources, List`1 warnings, Boolean tJunctionFree, Boolean exactEdges) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 2329
+   at Parametric3D.Kernel.Ops.BooleanOp.TryExact(List`1 bodies, TSolid other, List`1 warnings, Boolean subtract, Boolean intersect) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 1821
+   at Parametric3D.Kernel.Ops.BooleanOp.Apply(List`1 bodies, TSolid other, List`1 warnings, Boolean subtract) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 1569
+   at Parametric3D.Kernel.Ops.BooleanOp.SubtractCore(List`1 bodies, TSolid tool, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 1542
+   at Parametric3D.Kernel.Ops.BooleanOp.EvaluateCore(IReadOnlyList`1 bodies, TSolid other, BooleanKind kind, OperationPolicy policy, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 1270
+   at Parametric3D.Kernel.Ops.BooleanOp.Evaluate(IReadOnlyList`1 bodies, TSolid other, BooleanKind kind, OperationPolicy policy, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 1172
+   at Parametric3D.Kernel.Ops.BooleanOp.Subtract(List`1 bodies, TSolid tool, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/BooleanOp.cs:line 240
+   at Parametric3D.Kernel.Ops.FilletOp.Apply(List`1 bodies, IReadOnlyList`1 edges, List`1 warnings, String what, Double size1, Double size2, Boolean round) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/FilletOp.cs:line 1240
+   at Parametric3D.Kernel.Ops.FilletOp.RoundEdges(List`1 bodies, IReadOnlyList`1 edges, Double radius, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/Ops/FilletOp.cs:line 100
+   at Parametric3D.Kernel.OperationContract.Run(String name, IReadOnlyList`1 bodies, Action`1 op, List`1 warnings, Nullable`1 policy) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/OperationResult.cs:line 380
+   at Parametric3D.Kernel.OperationContract.Apply(String name, List`1 bodies, Action`1 op, List`1 warnings) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Kernel/OperationResult.cs:line 479
+   at Parametric3D.Model.Features.RoundFeature.Execute(BuildContext ctx) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Model/Features/RoundChamferFeatures.cs:line 88
+   at Parametric3D.Model.Part.ComputeFull(ParameterTable parameters, ISketchSolver solver, CancellationToken cancellation, KernelSettings settingsNow) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Model/Part.cs:line 1622
+   at Parametric3D.Model.Part.ComputeCore(ParameterTable parameters, ISketchSolver solver, CancellationToken cancellation) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Model/Part.cs:line 1425
+   at Parametric3D.Model.Part.Compute(ParameterTable parameters, ISketchSolver solver, CancellationToken cancellation) in /home/runner/work/parametric3d-rep/parametric3d-rep/src/Model/Part.cs:line 1271
+   at Program.SeqRebuildCompare(Part p, Feature f) in /home/runner/work/parametric3d-rep/parametric3d-rep/tests/k01/LoftCorpus.cs:line 725
+   at Program.LoftCorpusSeq(Int32 count, Int32 seed0, Int32 steps, String outDir) in /home/runner/work/parametric3d-rep/parametric3d-rep/tests/k01/LoftCorpus.cs:line 682
+   at Program.Main(String[] args) in /home/runner/work/parametric3d-rep/parametric3d-rep/tests/k01/Program.cs:line 635
+ARCSRC R 796.321 face #d000000001/loft:side[0] surf FacetedSurface src NurbsSurface
+== REBUILDCHECK END s109 5
+seconds 283 nproc 4 env P3D_ARCDBG=1 P3D_DRSECBREAK=1 cmd loftseq 1 109 6 res/out
