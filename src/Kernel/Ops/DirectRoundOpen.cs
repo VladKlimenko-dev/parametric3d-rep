@@ -1480,7 +1480,7 @@ public static partial class DirectRound
                 }
             if (!found) { why = "open curved: no blend section inside the end face"; return false; }
         }
-        if (!(inT[0] < inT[1])) { why = "open curved: the edge is too short for the radius"; return false; }
+        if (!(inT[0] < inT[1])) { Debug?.Invoke($"open: end brackets in {inT[0]:G6}/{inT[1]:G6} out {outT[0]:G6}/{outT[1]:G6} (Δ {Delta:G6}, two {two[0]}/{two[1]})"); why = "open curved: the edge is too short for the radius"; return false; }
         // корень f_k(сечение(t)(v)) по t в скобке [inT, outT] (Иллинойс), одна смена знака
         double Root(int k, Func<double, double> g) => RootIn(g, inT[k], outT[k]);
         double RootIn(Func<double, double> g, double a, double b)
