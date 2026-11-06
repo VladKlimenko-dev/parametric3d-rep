@@ -948,6 +948,7 @@ public static partial class DirectRound
             genCount++;
             if (ch) return SweepSection.Line(ChA(t), ChB(t));
             var x = S(t); var qa = SideFoot(true, t, x); var qb = SideFoot(false, t, x);
+            if (Debug != null && !double.IsFinite(x.X + qa.X + qb.X) && Interlocked.Increment(ref _genNanDbg) < 8) Debug($"open: Gen NaN at t {t:G12}: centre {x} footA {qa} footB {qb}");
             // характеристическая окружность огибающей шаров: в плоскости (y − c)·c' = −r r', центр c − (r r'/|c'|²) c',
             // радиус √(r² − (r r')²/|c'|²); линии касания на ней лежат (d/dt dist(c, A) = r'). Постоянный радиус — большой круг.
             var cc = x; double rad = Rt(t);
@@ -2889,6 +2890,7 @@ public static partial class DirectRound
     /// <summary>Я2, опыт (по умолчанию выключен, P3D_DRSECBREAK=1): стыки таблицы ленты там, где касание или ребро переходят
     /// стык ленты прежней правки. s110 шаг 2: отход таблицы 2.2e-4 → 2.7e-7 мм, но ещё больше допуска 2e-8 — фаска не принята;
     /// s109 шаг 5: «формула не определена» у стыка (шар катится через складку прежней ленты). BACKLOG, Я2.</summary>
+    static int _genNanDbg;
     static readonly bool SecBreak = Environment.GetEnvironmentVariable("P3D_DRSECBREAK") == "1";
     /// <summary>Я2: стыков таблицы ленты там, где касание переходит стык ленты прежней правки.</summary>
     public static long SecBreaks;
