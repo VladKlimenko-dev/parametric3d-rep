@@ -53,9 +53,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: g178_curve,   cmd: 'curve177', env: '' }
-          - { name: g178_allA,    cmd: 'allA', env: '' }
-          - { name: g178_allB,    cmd: 'allB', env: '' }
+          - { name: g178_m_pieces, cmd: 'curve177', env: 'P3D_LOFTGUIDEPIECES=0' }
+          - { name: g178_m_clean,  cmd: 'gear', env: 'P3D_GEARCLEAN=0' }
+          - { name: g178_m_memo,   cmd: 'gear', env: 'P3D_SKDIAGMEMO=0' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
