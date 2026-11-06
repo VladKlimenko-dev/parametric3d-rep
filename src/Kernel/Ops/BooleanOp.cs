@@ -4896,6 +4896,7 @@ public static class BooleanOp
     public static long ArcsOffSurface;
     /// <summary>k140: дуга лежит на точных поверхностях граней-хозяев (в пределах допуска хорды); грани без точной поверхности
     /// не проверяются.</summary>
+    static readonly bool ArcOnSrc32 = Environment.GetEnvironmentVariable("P3D_ARCONSRC32") != "0";
     static bool ArcOnSources(ICurve3 arc, HashSet<uint> owners, Dictionary<uint, TFace> faces)
     {
         double tol = Parametric3D.Core.Tol.Chord;
@@ -4908,9 +4909,12 @@ public static class BooleanOp
             // у кривой — 10⁻³ мм: дуга, подогнанная по хордам гранения, расходится с поверхностью на прогиб (0.015 мм), а
             // проверка тела мерит ребро по измеренной ошибке гранения грани (бывает меньше хорды)
             double tolS = s.IsPlanar ? (ArcPlaneOff ? double.MaxValue : 1e-4) : (ArcPlaneOff ? tol : 1e-3);
-            for (int i = 1; i < 8; i++)
+            // Я2: проверка — по 32 точкам (было 8): у почти прямой дуги (R 794 мм по ленте скругления, корпус s109 шаг 5) отход
+            // 2.6e-3 мм лежал между восьмыми долями, и дуга вставала вместо изокривой ленты. Мутация P3D_ARCONSRC32=0.
+            int ns = ArcOnSrc32 ? 32 : 8;
+            for (int i = 1; i < ns; i++)
             {
-                var q = arc.PointAt(arc.T0 + (arc.T1 - arc.T0) * i / 8.0);
+                var q = arc.PointAt(arc.T0 + (arc.T1 - arc.T0) * i / (double)ns);
                 double d;
                 try { d = (Parametric3D.Kernel.Curves.ExactSurfaces.ProjectUnsigned(s, q).P - q).Length; } catch { return true; }
                 if (d > tolS) return false;
