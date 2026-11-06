@@ -1,0 +1,12 @@
+  points 2, faces at vertex 3, at sketch point 1, from sketch -S
+  vertex: face 51 normal (1, 0, 0)
+  tangents: start (0, 0, -0.9999999999999999), end (0, 0, 0.9999999999999999)
+{"test":"UI-CURVE-TANGENTS-K177","ok":true,"error":null}
+  sections: mode Sections, volume 2613.33, error 
+  trajectory: mode Swept, path True, volume 2613.33, error 
+{"test":"UI-BLEND-K160","ok":true,"error":null}
+  swept blend: path field took the curve True, path line True, error 
+  sweep as drawn True: x 29.98…40.02, error 
+  after gizmo: offset X 5, x 34.98…45.02
+{"test":"UI-SWEEP-K153","ok":true,"error":null}
+{"passed":3,"failed":0}
