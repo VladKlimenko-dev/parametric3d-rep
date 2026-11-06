@@ -8,7 +8,8 @@ bash tools/build_checks.sh "$OUT" || exit 1
 for s in allA allB allS; do "$OUT/k01/K01Checks" $s > "$OUT/$s.log" 2>&1; echo "$s: $(tail -1 "$OUT/$s.log")"; done
 # Ворота g.11: сетка показа многогранных результатов многообразна во float (случаи разностных серий 8, 9)
 "$OUT/k01/K01Checks" g11poly > "$OUT/g11poly.log" 2>&1; echo "G11POLY: $(tail -1 "$OUT/g11poly.log")"
-"$OUT/fprobe/FProbe" rotations > "$OUT/fprobe.log" 2>&1; echo "FProbe: $(tail -1 "$OUT/fprobe.log")"
+# FProbe убран из репозитория (tests/fprobe нет); запускается, только если собран рядом
+if [ -x "$OUT/fprobe/FProbe" ]; then "$OUT/fprobe/FProbe" rotations > "$OUT/fprobe.log" 2>&1; echo "FProbe: $(tail -1 "$OUT/fprobe.log")"; else echo "FProbe: SKIPPED (tests/fprobe нет)"; fi
 bash tests/run_local.sh "$ROOT/src" "$OUT/a06" "$ROOT/tools/deps" > "$OUT/a06_build.log" 2>&1 && bash tests/run_suites.sh "$OUT/a06" > "$OUT/a06_summary.txt" 2>&1
 echo "A06: $(grep -c 'rc=0' "$OUT/a06_summary.txt")/9"
 # g.13: серверы сборки (компилятор, MSBuild) после сборок не нужны — замеры времени дальше идут без них

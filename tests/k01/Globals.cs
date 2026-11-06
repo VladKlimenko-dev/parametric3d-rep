@@ -29,4 +29,30 @@ static partial class Program
         found.Sort(StringComparer.Ordinal);
         return found;
     }
+
+    /// <summary>
+    /// Я1 (REFERENCE_SOLUTIONS п. 6): коллекции в полях static readonly. UnboundGlobals их не видит (IsInitOnly), а
+    /// static readonly Dictionary изменяем — это общие на процесс памяти. Пока отчёт (режим «globals»), не проверка.
+    /// </summary>
+    internal static List<string> StaticCollections()
+    {
+        var found = new List<string>();
+        var asm = typeof(Parametric3D.Kernel.KernelContext).Assembly;
+        foreach (var t in asm.GetTypes())
+        {
+            string ns = t.Namespace ?? "";
+            if (!(ns.StartsWith("Parametric3D.Kernel") || ns.StartsWith("Parametric3D.Model") || ns.StartsWith("Parametric3D.Core"))) continue;
+            if (t.IsDefined(typeof(CompilerGeneratedAttribute))) continue;
+            foreach (var f in t.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+            {
+                if (!f.IsInitOnly) continue;
+                var ft = f.FieldType;
+                bool coll = (ft.Namespace ?? "").StartsWith("System.Collections")
+                            || (ft.IsGenericType && ft.GetGenericTypeDefinition() == typeof(ConditionalWeakTable<,>));
+                if (coll) found.Add($"{t.FullName!.Replace("Parametric3D.", "")}.{f.Name} : {ft.Name}");
+            }
+        }
+        found.Sort(StringComparer.Ordinal);
+        return found;
+    }
 }

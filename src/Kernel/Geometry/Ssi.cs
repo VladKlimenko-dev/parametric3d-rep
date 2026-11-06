@@ -56,8 +56,13 @@ public static class Ssi
     /// <summary>Замер (k97): поверхностей с подсказкой основания в этом потоке (прежний словарь).</summary>
     public static int FootHintCount => FootWeak ? _footHintsWeak?.Count() ?? 0 : _footHints?.Count ?? 0;
     [ThreadStatic] public static Action<string>? FootDebug;
+    static readonly bool FootTrace = Environment.GetEnvironmentVariable("P3D_FOOTTRACE") == "1";
+    [ThreadStatic] static int _footTraceN;
     /// <summary>Разбор: вызовы основания на поверхности общего вида и из них — с общей проекцией (без годной подсказки).</summary>
     public static long ParamFootCalls, ParamFootGlobal, ParamFootFar;
+    /// <summary>Я1: каноническое уточнение основания (мутация P3D_FOOTCANON=0); промахи — уточнение не сошлось к тому же корню.</summary>
+    static readonly bool FootCanon = Environment.GetEnvironmentVariable("P3D_FOOTCANON") != "0";
+    public static long FootCanonMiss;
     static readonly bool FootFar = Environment.GetEnvironmentVariable("P3D_FOOTFAR") != "0";
 
     static readonly bool TanExt = Environment.GetEnvironmentVariable("P3D_SSITANEXT") != "0";
@@ -161,8 +166,37 @@ public static class Ssi
                 var g = s.ProjectToUV(x); var u2 = g; bool nok = FootNewton(s, x, ref u2);
                 ParamDerivs(s, u2, out var S2, out var Su2, out var Sv2); var w2 = x - S2;
                 FootDebug($"ParamFoot failed at {x:0.######}: global uv {g:0.######} newton {nok} uv {u2:0.######} L {w2.Length:E3} ortho {Vector3d.Dot(w2, Su2) / Su2.Length:E2} {Vector3d.Dot(w2, Sv2) / Sv2.Length:E2}");
+                if (FootTrace && s is Surfaces.SectionSurface && _footTraceN++ < 6)
+                {
+                    // Я2 (разбор): ход Ньютона по шагам — параметры полностью, остаток, длины производных
+                    var sb = new System.Text.StringBuilder($"  trace {s.GetType().Name}");
+                    if (s is Surfaces.SectionSurface sx) sb.Append($" proc {sx.IsProcedural} u [{sx.UMin:R}, {sx.UMax:R}] breaks [{string.Join(", ", sx.Breaks.Select(b => b.ToString("R")))}]");
+                    var uu = g;
+                    for (int it = 0; it < 8; it++)
+                    {
+                        ParamDerivs(s, uu, out var S3, out var Su3, out var Sv3); var r3 = S3 - x;
+                        sb.Append($" | {it}: uv ({uu.X:R}, {uu.Y:R}) |r| {r3.Length:E3} |Su| {Su3.Length:E3} |Sv| {Sv3.Length:E3}");
+                        double a11 = Vector3d.Dot(Su3, Su3), a12 = Vector3d.Dot(Su3, Sv3), a22 = Vector3d.Dot(Sv3, Sv3);
+                        double b1 = -Vector3d.Dot(Su3, r3), b2 = -Vector3d.Dot(Sv3, r3), det = a11 * a22 - a12 * a12;
+                        sb.Append($" det {det:E2}");
+                        if (!(Math.Abs(det) > 1e-300)) break;
+                        uu += new Vector2d((b1 * a22 - b2 * a12) / det, (a11 * b2 - a12 * b1) / det);
+                    }
+                    FootDebug(sb.ToString());
+                }
             }
             return (new Vector3d(double.NaN), new Vector3d(double.NaN));
+        }
+        // Я1 (REFERENCE_SOLUTIONS п. 6; BACKLOG k149, s106): ОСНОВАНИЕ — ФУНКЦИЯ ПОВЕРХНОСТИ И ТОЧКИ, А НЕ ИСТОРИИ ЗАПРОСОВ.
+        // Ньютон с подсказки (последнее основание на этой поверхности в потоке) сходится к тому же корню, но последние биты
+        // зависят от старта: лишний запрос (отладочный вывод, проверка, другой поток) менял биты всех следующих — скругление
+        // корпуса s106 давало c7f8… с отладочным обработчиком и 89d9… без него, а неустойчивая булева резца на шаге 5
+        // раздувала это до отказа. Здесь найденный параметр округляется на сетку 2^-20 и уточняется заново от неё:
+        // подсказка ускоряет поиск, но в ответ не входит. Мутация: P3D_FOOTCANON=0 (KRN-Y1-SESSION-EQUALS-FILE падает).
+        if (FootCanon)
+        {
+            var uc = new Vector2d(Math.Round(uv.X * 1048576.0) / 1048576.0, Math.Round(uv.Y * 1048576.0) / 1048576.0);
+            if (FootNewton(s, x, ref uc) && (uc - uv).Length < 1e-5) uv = uc; else Interlocked.Increment(ref FootCanonMiss);
         }
         SetFootHint(s, uv); footUv = uv;
         ParamDerivs(s, uv, out var P, out var Su, out var Sv);

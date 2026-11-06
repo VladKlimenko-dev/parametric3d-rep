@@ -1,0 +1,43 @@
+name: ui-probe
+# Проверки приложения (tests/ui, Avalonia.Headless) на Linux — для сравнения ветки с main по отдельным проверкам.
+on:
+  push:
+    branches: [ya1/state-probe]
+    paths:
+      - '.github/workflows/ui-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: ui_main,   ref: 'main' }
+          - { name: ui_branch, ref: 'ya1/state-probe' }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Сборка UiChecks
+        run: dotnet build tests/ui/UiChecks.csproj -c Release -o out/ui -v q --nologo 2>&1 | tail -5
+      - name: Проверки
+        run: |
+          mkdir -p res
+          export DOTNET_TieredCompilation=0 P3D_USERMODELS="$PWD/tests/ui/data"
+          NAMES="UI-DATUM-TREE-K132|UI-PART-PANEL-K120|UI-DRAWING-K167|UI-DRAWING-K168"
+          git rev-parse --short HEAD > res/sha.txt
+          timeout 60m out/ui/Parametric3D.UiChecks "$NAMES" > res/run.log 2> res/run.err || echo "exit $?" >> res/run.err
+      - name: Итог — в ветку ya1/res/${{ matrix.name }}
+        if: always()
+        run: |
+          cd res && git init -q -b r && git config user.name github-actions && git config user.email github-actions@users.noreply.github.com
+          git add -A && git commit -q -m "${{ matrix.name }}" && git push -f -q "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" r:ya1/res/${{ matrix.name }}

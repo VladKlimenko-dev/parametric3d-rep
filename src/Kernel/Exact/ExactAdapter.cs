@@ -51,6 +51,88 @@ public static class ExactAdapter
     internal static readonly bool FormCacheOff = Environment.GetEnvironmentVariable("P3D_EXACTINCACHE") == "0";
     public static long FormCacheHits;
 
+    /// <summary>
+    /// Я1 (REFERENCE_SOLUTIONS п. 6; BACKLOG k149, корпус s106 шаг 5): ЛЕНИВАЯ ПРОИЗВОДНАЯ ФОРМА — В НАСТРОЙКАХ МОМЕНТА СОЗДАНИЯ.
+    /// Lazy вычисляется при первом обращении — в контексте той операции, что обратилась первой (в сеансе это могла быть
+    /// отвергнутая операция над тем же телом), и форма остаётся на теле. Здесь снимок настроек, политики и расширений
+    /// берётся при создании; отмена и сроки — нет (форма живёт дольше операции). Вместе с P3D_LAZYREMESH (мутация =0).
+    /// </summary>
+    public static Lazy<ExactBody> LazyDerived(Func<ExactBody> make)
+    {
+        if (!LazyRemeshOn) return new Lazy<ExactBody>(make, LazyThreadSafetyMode.ExecutionAndPublication);
+        var cur = KernelContext.Current;
+        var ctx = new KernelContext(KernelSettings.Capture(), cur?.Policy ?? OperationPolicy.Strict).WithExtensionsOf(cur);
+        // PublicationOnly: отказ при расчёте формы (сбой этапа, отмена) не запоминается — следующий расчёт строит форму
+        // заново (KRN01-G10-INTERRUPT-ALL-OPERATIONS); форма — функция тела, повторный расчёт даёт то же самое.
+        return new Lazy<ExactBody>(() => { using var _ = ctx.Enter(); return make(); },
+            LazyRemeshOn ? LazyThreadSafetyMode.PublicationOnly : LazyThreadSafetyMode.ExecutionAndPublication);
+    }
+
+    /// <summary>
+    /// Я1 (BACKLOG k149, s106 шаг 5): ПРОИЗВОДНАЯ ФОРМА АНАЛИТИЧЕСКОГО ТЕЛА — ПО СВОЕЙ РАЗМЕТКЕ ГРАНЕЙ. Прежде форма бралась
+    /// из треугольников, что лежат на гранях тела в момент обращения: у итогового тела прошлого расчёта это сетка показа (с
+    /// донорами), у промежуточного тела в общем пересчёте — сетка по требованию. Один и тот же шаг давал разную многогранную
+    /// булеву в сеансе и при перестроении из файла («показ не меняет геометрию», 01.12). Здесь копия тела размечается по
+    /// контурам заново — форма становится функцией точного B-rep и настроек момента создания. Мутация: P3D_LAZYREMESH=0
+    /// (KRN-Y1-SESSION-EQUALS-FILE падает).
+    /// </summary>
+    internal static readonly bool LazyRemeshOn = Environment.GetEnvironmentVariable("P3D_LAZYREMESH") != "0";
+    [ThreadStatic] static bool _inDerived;
+    public static ExactBody DerivedOf(TSolid solid, List<string>? warnings = null)
+    {
+        var copy = TopologyClone.Deep(solid);
+        if (LazyRemeshOn)
+        {
+            TopologyConventions.Normalize(copy);
+            int failed;
+            using (new Tess.ExactFaceMesher.NoMemoScope(true))
+                failed = Export.StepImport.MeshFacesFromLoops(copy, null, "LazyDerived");
+            if (ToExactTrace)
+            {
+                Console.Error.WriteLine($"DERIVED solid {solid.Id} faces {copy.Faces.Count()} not-from-loops {failed} settings {KernelSettings.Capture()}");
+                int fi = 0;
+                foreach (var f in copy.Faces)
+                {
+                    ulong h = 1469598103934665603UL;
+                    void D(double d) { h ^= (ulong)BitConverter.DoubleToInt64Bits(d); h *= 1099511628211UL; }
+                    foreach (var l in f.Loops) foreach (var ce in l.CoEdges)
+                    {
+                        var c = ce.Edge.Curve; D(ce.Edge.V0.P.X); D(ce.Edge.V0.P.Y); D(ce.Edge.V0.P.Z); D(ce.Edge.V1.P.X); D(ce.Edge.V1.P.Y); D(ce.Edge.V1.P.Z);
+                        var m = c.PointAt(0.5 * (c.T0 + c.T1)); D(m.X); D(m.Y); D(m.Z); D(ce.Reversed ? 1 : 0);
+                    }
+                    var src = f.Surface is Surfaces.FacetedSurface fs ? fs.Source : f.Surface;
+                    int tris = f.Surface is Surfaces.FacetedSurface fs2 ? fs2.Facets.Count : -1;
+                    Console.Error.WriteLine($"DFACE {fi++} {f.Tag} {src?.GetType().Name} loops {f.Loops.Count} coedges {f.Loops.Sum(l => l.CoEdges.Count)} rev {f.Reversed} geom {h:x16} tris {tris}");
+                }
+            }
+        }
+        bool was = _inDerived; _inDerived = true;
+        var local = new List<string>();
+        ExactBody made;
+        try { made = ToExact(copy, new PlaneRegistry(), local); }
+        finally { _inDerived = was; }
+        // Неполная форма (грань не разметилась — сбой, отмена) не остаётся на теле: у ленивой формы — отказ без
+        // запоминания, у прямой дороги — замечания вызывающему (форма не попадает в _formCache, операция откажет).
+        if (local.Count > 0 && LazyRemeshOn)
+        {
+            if (warnings == null) throw new InvalidOperationException("derived exact form incomplete: " + local[0]);
+            warnings.AddRange(local);
+        }
+        return made;
+    }
+
+    /// <summary>Я1, разбор: P3D_TOEXACTTRACE=1 — каждый перевод тела в точную форму в stderr (дорога и признаки тела).</summary>
+    static readonly bool ToExactTrace = Environment.GetEnvironmentVariable("P3D_TOEXACTTRACE") == "1";
+    [ThreadStatic] static string? _path;
+    static void TracePath(TSolid solid, string path, ExactBody? r)
+    {
+        if (!ToExactTrace) return;
+        var lz = solid.LazyDerivedExact;
+        Console.Error.WriteLine($"TOEXACT solid {solid.Id} path {path} guarantee {solid.Guarantee} faces {solid.Faces.Count()} rev {solid.Revision}" +
+            $" exact {(solid.Exact != null ? (solid.ExactIsCurrent ? "current" : "stale") : "none")} lazy {(lz is { } l ? (l.Revision == solid.Revision ? "current" : "old") : "none")}" +
+            $" published {solid.IsPublished} derived {_inDerived} polys {r?.Solid.Polygons.Count}");
+    }
+
     public static ExactBody ToExact(TSolid solid, PlaneRegistry registry, List<string>? warnings)
     {
         bool cacheable = !FormCacheOff && solid.Exact == null && !(solid.LazyDerivedExact is { } lz0 && lz0.Revision == solid.Revision);
@@ -58,13 +140,17 @@ public static class ExactAdapter
         if (cacheable && _formCache.TryGetValue(solid, out var hit) && hit.Revision == solid.Revision && hit.Settings.Equals(key))
         {
             Interlocked.Increment(ref FormCacheHits);
-            return new ExactBody(hit.Form.Solid.Import(registry), hit.Form.Sources);
+            var hb = new ExactBody(hit.Form.Solid.Import(registry), hit.Form.Sources);
+            TracePath(solid, "form-cache", hb);
+            return hb;
         }
         long rev = solid.Revision;
         // запоминается только вход без замечаний: грань, которую не удалось разметить, выпадает из формы с предупреждением
         // (операция затем откажет) — такая форма не должна достаться следующему расчёту (KRN01-G10-INTERRUPT-ALL-OPERATIONS)
         var local = new List<string>();
+        _path = "triangles";
         var made = ToExactCore(solid, registry, local);
+        TracePath(solid, _path ?? "?", made);
         warnings?.AddRange(local);
         if (cacheable && solid.Revision == rev && local.Count == 0)
             _formCache.AddOrUpdate(solid, new CachedForm { Revision = rev, Settings = key!, Form = made });
@@ -79,7 +165,7 @@ public static class ExactAdapter
             // от правки формы после её получения (TSolid.BeginEdit). Замер перед решением: на allA, allB, allS
             // и FProbe устаревшая форма не встречалась ни разу — на корпусе поведение то же, а неверный ответ
             // в будущем исключён. Счётчик остаётся: сколько раз форма отвергнута.
-            if (solid.ExactIsCurrent) return new ExactBody(cached.Solid.Import(registry), cached.Sources);
+            if (solid.ExactIsCurrent) { _path = "exact"; return new ExactBody(cached.Solid.Import(registry), cached.Sources); }
             Interlocked.Increment(ref StaleExactUses);
             StaleExactTrace?.Invoke($"stale exact ignored on solid {solid.Id}: revision {solid.Revision}, exact {solid.ExactRevision}, authoritative {solid.ExactAuthoritative}, last edit {solid.LastEdit}");
         }
@@ -88,14 +174,25 @@ public static class ExactAdapter
         if (solid.Exact == null && solid.LazyDerivedExact is { } lz && lz.Revision == solid.Revision)
         {
             var form = lz.Form.Value;
+            _path = "lazy";
             return new ExactBody(form.Solid.Import(registry), form.Sources);
+        }
+
+        // Я1 (мутация P3D_LAZYREMESH=0): аналитическое тело без ленивой формы (ревизия ушла вперёд: имена граней, перенос) —
+        // той же дорогой, что ленивая форма: копия, своя разметка по контурам. Иначе форма бралась из треугольников, что
+        // лежат на гранях сейчас, и одно тело в сеансе и при полном пересчёте давало разную многогранную булеву.
+        if (LazyRemeshOn && !_inDerived && solid.Exact == null && solid.Guarantee == GuaranteeLevel.ExactAnalytic)
+        {
+            _inDerived = true;
+            try { var d = DerivedOf(solid, warnings ?? new List<string>()); _path = "derived"; return new ExactBody(d.Solid.Import(registry), d.Sources); }
+            finally { _inDerived = false; }
         }
 
         // A04. Только целый цилиндр вдоль +Z со строго проверенной топологией.
         // Отключение для сравнения с общим путём: P3D_CYLINDERINPUT=0.
         if (Environment.GetEnvironmentVariable("P3D_CYLINDERINPUT") != "0" &&
             ExactCylinderInput.TryBuild(solid, registry, out var direct))
-            return direct!;
+        { _path = "cylinder"; return direct!; }
 
         // Треугольники берутся той же дорогой, что у прежней булевой, —
         // с согласованной ориентацией, — но в двойной точности.

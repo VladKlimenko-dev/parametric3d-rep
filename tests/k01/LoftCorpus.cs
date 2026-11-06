@@ -567,18 +567,51 @@ static partial class Program
     /// случайных острых рёбер (с цепочкой), каждая — поверх предыдущих. Замеры те же: отказ, годность, объём против сечения
     /// по граням (для рёбер, не задетых прежними правками), щепки, время.
     /// </summary>
+    /// <summary>Я1: итог последнего прогона LoftCorpusSeq — шагов сверено, расхождений по объёму/отказу, расхождений побитово.</summary>
+    static (int Checked, int Diff, int BitsDiff) LastSeqRebuild;
     static void LoftCorpusSeq(int count, int seed0, int steps, string outDir)
     {
+        int bitsDiff = 0;
         Directory.CreateDirectory(outDir);
         int ok = 0, bad = 0, refused = 0, legit = 0; var why = new Dictionary<string, int>(); double totalMs = 0;
+        // Я1 (REFERENCE_SOLUTIONS п. 6): сверка «шаг в сеансе = тот же шаг из файла без тел» — SEQ_REBUILDCHECK=1
+        bool rebuildCheck = Environment.GetEnvironmentVariable("SEQ_REBUILDCHECK") == "1"; int rebuildChecked = 0, rebuildDiff = 0;
+        // Я1, опыты: SEQ_SKIPSTEP=<n> — шаг n не делается (случайные выборы те же); SEQ_RELOAD=bare|body — перед каждым шагом
+        // деталь заменяется прочитанной из своего текста (bare — без тел и состояний, body — с ними)
+        string? skipStep = Environment.GetEnvironmentVariable("SEQ_SKIPSTEP"), reload = Environment.GetEnvironmentVariable("SEQ_RELOAD");
         for (int sd = seed0; sd < seed0 + count; sd++)
         {
             CorpusModel m;
             try { m = CorpusMake(sd); m.Part.Rebuild(null); } catch (Exception ex) { Log(new { seed = sd, loft = "exception " + ex.Message }); continue; }
             if (m.Part.Features[0].Error != null || m.Part.Bodies.Count != 1) { Log(new { seed = sd, loft = "refused" }); continue; }
             var p = m.Part; var rnd = new Random(sd * 31 + 7);
+            if (rebuildCheck)
+            {
+                // Я1: меняет ли запись и чтение саму модель (лофт до первой правки): тела побитово и текст документа
+                string t0 = DocumentFile.StripDisplay(DocumentFile.Save(p)) ?? DocumentFile.Save(p);
+                var l0 = DocumentFile.Load(t0); l0.Part.Rebuild(l0.Parameters);
+                string t1 = DocumentFile.StripDisplay(DocumentFile.Save(l0.Part)) ?? DocumentFile.Save(l0.Part);
+                int firstDiff = -1; for (int i = 0; i < Math.Min(t0.Length, t1.Length); i++) if (t0[i] != t1[i]) { firstDiff = i; break; }
+                if (firstDiff < 0 && t0.Length != t1.Length) firstDiff = Math.Min(t0.Length, t1.Length);
+                var gs0 = GeomBits(p); var gf0 = GeomBits(l0.Part);
+                Log(new { seed = sd, roundtrip = true, geomSame = gs0.SequenceEqual(gf0), geomDiff = gs0.Zip(gf0).Where(z => z.First != z.Second).Take(6).Select(z => z.First + " <> " + z.Second).ToList() });
+                var pd = FieldDiff(p, l0.Part).Where(x => !x.StartsWith("Bodies") && !x.StartsWith("Features")).Take(40).ToList();
+                var sk = new List<string>();
+                var ss = p.Sketches.ToList(); var sf = l0.Part.Sketches.ToList();
+                for (int i = 0; i < Math.Min(ss.Count, sf.Count); i++) foreach (var d in FieldDiff(ss[i], sf[i]).Take(10)) sk.Add($"{ss[i].Name}.{d}");
+                Log(new { seed = sd, partFields = pd, sketchFields = sk.Take(40).ToList(), settingsSession = Parametric3D.Kernel.KernelSettings.Capture().ToString().Length });
+                Log(new { seed = sd, roundtrip = true, bodySession = BodyBits(p), bodyFile = BodyBits(l0.Part), textSame = t0 == t1, firstDiff,
+                          textSession = firstDiff < 0 ? null : t0.Substring(Math.Max(0, firstDiff - 80), Math.Min(200, t0.Length - Math.Max(0, firstDiff - 80))),
+                          textFile = firstDiff < 0 ? null : t1.Substring(Math.Max(0, firstDiff - 80), Math.Min(200, t1.Length - Math.Max(0, firstDiff - 80))) });
+            }
             for (int st = 0; st < steps; st++)
             {
+                if (reload is "bare" or "body" && (st > 0 || Environment.GetEnvironmentVariable("SEQ_RELOAD0") == "1"))
+                {
+                    string jr = DocumentFile.Save(p);
+                    if (reload == "bare") jr = DocumentFile.StripDisplay(jr) ?? jr;
+                    var lr = DocumentFile.Load(jr); p = lr.Part; p.Rebuild(lr.Parameters);
+                }
                 var edges = p.Bodies[0].Edges.Where(e => e.Curve != null && Program.Sharp(e) && SharpEverywhere(e) && EdgeLen(e) > 2).ToList();
                 if (edges.Count == 0) break;
                 var e = edges[rnd.Next(edges.Count)];
@@ -588,13 +621,26 @@ static partial class Program
                 double size = Math.Round(Math.Clamp(minLen * (0.05 + 0.15 * rnd.NextDouble()), 0.3, 6), 2);
                 double? expect = 0; foreach (var ce in chain) { var x = CorpusExpected(ce, round, size); expect = x == null || expect == null ? null : expect + x; }
                 var before = TopologyClone.Deep(p.Bodies[0]); double v0 = p.Volume;
+                if (skipStep == st.ToString()) { Log(new { seed = sd, step = st, skipped = true }); continue; }
+                Console.Error.WriteLine($"== STEP s{sd} {st}");
                 Feature f = round ? new RoundFeature($"R{st}") { Radius = new ValueRef(size) } : new ChamferFeature($"C{st}") { D1 = new ValueRef(size), D2 = new ValueRef(size) };
                 foreach (var ce in chain) { if (f is RoundFeature rf) rf.Edges.Add(EdgeRef.Of(ce)); else ((ChamferFeature)f).Edges.Add(EdgeRef.Of(ce)); }
                 p.AddFeature(f);
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 // k143: путь операции — прямой построитель (замена граней, как Parasolid) или резец; причина отказа прямого
                 string? drWhy = null; var drPrev = Parametric3D.Kernel.Ops.DirectRound.Debug;
-                Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (Environment.GetEnvironmentVariable("LOFT_DRDEBUG") is { } dd && s.Contains(dd)) Console.WriteLine("DBG " + (s.Length > 300 && Environment.GetEnvironmentVariable("LOFT_DRFULL") != "1" ? s[..300] : s)); if (s.StartsWith("declined")) drWhy = s.Length > 200 ? s[..200] : s; };
+                bool drAll = Environment.GetEnvironmentVariable("LOFT_DRALL") == "1";
+                // Я1, опыт SEQ_FILEFIRST=1: тот же шаг из текста документа — раньше сеанса в этом процессе
+                if (Environment.GetEnvironmentVariable("SEQ_FILEFIRST") == "1" && st == 0)
+                {
+                    string tf = DocumentFile.Save(p); tf = DocumentFile.StripDisplay(tf) ?? tf;
+                    var lf = DocumentFile.Load(tf); lf.Part.Rebuild(lf.Parameters);
+                    Log(new { fileFirst = true, step = st, file = BodyBits(lf.Part), error = lf.Part.Features[^1].Error });
+                }
+                if (Environment.GetEnvironmentVariable("SEQ_NOHOOK") == "1") Parametric3D.Kernel.Ops.DirectRound.Debug = null; else
+                Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (drAll) Console.Error.WriteLine("DR " + (s.Length > 400 ? s[..400] : s)); if (Environment.GetEnvironmentVariable("LOFT_DRDEBUG") is { } dd && s.Contains(dd)) Console.WriteLine("DBG " + (s.Length > 300 && Environment.GetEnvironmentVariable("LOFT_DRFULL") != "1" ? s[..300] : s)); if (s.StartsWith("declined")) drWhy = s.Length > 200 ? s[..200] : s; };
+                // Я1, опыт: SEQ_STEPMODE=full — шаг считается полным пересчётом дерева (без сохранённых состояний)
+                if (Environment.GetEnvironmentVariable("SEQ_STEPMODE") == "full") p.Invalidate();
                 try { p.Rebuild(null); } catch (Exception ex) when (ex is not OutOfMemoryException) { f.Error = "exception: " + ex.Message; }
                 finally { Parametric3D.Kernel.Ops.DirectRound.Debug = drPrev; }
                 double ms = sw.ElapsedMilliseconds; totalMs += ms;
@@ -624,6 +670,20 @@ static partial class Program
                     Log(new { tag, ms, guarantee = b.Guarantee.ToString(), dv = Math.Round(dv, 4), expect = clean && expect is { } e2 ? Math.Round(e2, 4) : (double?)null, problems, dr = drWhy });
                 }
                 if (f.Error != null || p.Bodies.Count != 1) Log(new { tag, ms, problems });
+                if (rebuildCheck)
+                {
+                    rebuildChecked++;
+                    Console.Error.WriteLine($"== REBUILDCHECK s{sd} {st}");
+                    _bitsDiffNow = false;
+                    var rc = SeqRebuildCompare(p, f);
+                    if (_bitsDiffNow) bitsDiff++;
+                    Console.Error.WriteLine($"== REBUILDCHECK END s{sd} {st}");
+                    if (rc != null)
+                    {
+                        rebuildDiff++; Log(new { tag, rebuildcheck = rc });
+                        try { File.WriteAllText(Path.Combine(outDir, $"rebuild_s{sd}_{st}.p3d"), DocumentFile.Save(p)); } catch { }
+                    }
+                }
                 if (Environment.GetEnvironmentVariable("CORPUS_SAVEALL") == "1")
                     try { File.WriteAllText(Path.Combine(outDir, $"all_s{sd}_{st}.p3d"), DocumentFile.Save(p)); } catch { }
                 if (problems.Count == 0) { ok++; continue; }
@@ -639,6 +699,136 @@ static partial class Program
             }
         }
         Log(new { ok, bad, refused, legit, totalOpSeconds = Math.Round(totalMs / 1000, 1) });
+        if (rebuildCheck) Log(new { rebuildChecked, rebuildDiff, bitsDiff });
+        LastSeqRebuild = (rebuildChecked, rebuildDiff, bitsDiff);
         foreach (var kv in why.OrderByDescending(k => k.Value)) Console.WriteLine($"{kv.Value,4}  {kv.Key}");
+    }
+
+    /// <summary>
+    /// Я1: тот же шаг, перестроенный из текста документа без тел и сохранённых состояний (DocumentFile.StripDisplay) в этом
+    /// же процессе. Null — результат тот же (отказ, число тел, уровни гарантии, объём до 1e-6 отн.); иначе — оба результата.
+    /// Различие при одинаковом входе означает, что шаг зависит от истории сеанса (BACKLOG k149, корпус s106).
+    /// </summary>
+    [ThreadStatic] static bool _bitsDiffNow;
+    static object? SeqRebuildCompare(Part p, Feature f)
+    {
+        string json = DocumentFile.Save(p);
+        string bare = DocumentFile.StripDisplay(json) ?? json;
+        Part q;
+        var drPrev2 = Parametric3D.Kernel.Ops.DirectRound.Debug;
+        if (Environment.GetEnvironmentVariable("LOFT_DRALL") == "1") Parametric3D.Kernel.Ops.DirectRound.Debug = s => Console.Error.WriteLine("DR " + (s.Length > 400 ? s[..400] : s));
+        if (Environment.GetEnvironmentVariable("LOFT_FOOTDBG") == "1") { int fn = 0; Parametric3D.Kernel.Geometry.Ssi.FootDebug = s => { if (System.Threading.Interlocked.Increment(ref fn) < 400) Console.Error.WriteLine("FOOT " + s); }; }
+        try { var loaded = DocumentFile.Load(bare); q = loaded.Part; q.Rebuild(loaded.Parameters); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return new { file = "exception: " + ex.Message }; }
+        finally { Parametric3D.Kernel.Ops.DirectRound.Debug = drPrev2; }
+        var g = q.Features.Count > 0 ? q.Features[^1] : null;
+        string refsS = RefsOf(f), refsF = g == null ? "" : RefsOf(g);
+        // побитовая подпись тел: сеанс, файл, файл повторно (недетерминизм самого пересчёта отличается от истории сеанса)
+        string bitsS = BodyBits(p), bitsF = BodyBits(q), bitsF2 = "";
+        if (Environment.GetEnvironmentVariable("SEQ_BITS2") == "1")
+            try { var l2 = DocumentFile.Load(bare); l2.Part.Rebuild(l2.Parameters); bitsF2 = BodyBits(l2.Part); } catch (Exception ex) when (ex is not OutOfMemoryException) { bitsF2 = "exception"; }
+        Log(new { bits = true, step = f.Name, session = bitsS, file = bitsF, file2 = bitsF2, sameSF = bitsS == bitsF, sameFF = bitsF2 == "" ? (bool?)null : bitsF == bitsF2 });
+        if (bitsS != bitsF) _bitsDiffNow = true;
+        // Я1: поля операций сеанса против прочитанных из файла (отражением; значения, не попадающие в файл)
+        var fdiff = new List<string>();
+        for (int i = 0; i < Math.Min(p.Features.Count, q.Features.Count); i++)
+            foreach (var d in FieldDiff(p.Features[i], q.Features[i])) fdiff.Add($"{p.Features[i].Name}.{d}");
+        if (fdiff.Count > 0) Log(new { featureFields = true, step = f.Name, diff = fdiff.Take(40).ToList() });
+        bool errS = f.Error != null, errF = g?.Error != null;
+        string gs = string.Join(",", p.Bodies.Select(b => b.Guarantee.ToString()));
+        string gf = string.Join(",", q.Bodies.Select(b => b.Guarantee.ToString()));
+        double dv = Math.Abs(p.Volume - q.Volume);
+        if (errS == errF && p.Bodies.Count == q.Bodies.Count && gs == gf && dv <= 1e-6 * Math.Max(1, Math.Abs(p.Volume))) return null;
+        return new
+        {
+            session = new { error = f.Error?.Split('\n').Last(), bodies = p.Bodies.Count, volume = Math.Round(p.Volume, 6), guarantee = gs },
+            file = new { error = g?.Error?.Split('\n').Last(), bodies = q.Bodies.Count, volume = Math.Round(q.Volume, 6), guarantee = gf },
+            refsSame = refsS == refsF,
+            refsSession = refsS,
+            refsFile = refsS == refsF ? null : refsF,
+        };
+    }
+
+    /// <summary>Я1: различия открытых полей и свойств двух операций одного типа (простые значения, списки — по ToString элементов).</summary>
+    static IEnumerable<string> FieldDiff(object a, object b)
+    {
+        if (a.GetType() != b.GetType()) { yield return $"type {a.GetType().Name} <> {b.GetType().Name}"; yield break; }
+        var t = a.GetType();
+        static string V(object? o)
+        {
+            if (o == null) return "null";
+            if (o is double d) return BitConverter.DoubleToInt64Bits(d).ToString("x");
+            if (o is string s0) return s0;
+            if (o is System.Collections.IEnumerable en) { var parts = new List<string>(); foreach (var x in en) parts.Add(x is double dx ? BitConverter.DoubleToInt64Bits(dx).ToString("x") : x?.ToString() ?? "null"); return "[" + string.Join(",", parts) + "]"; }
+            return o.ToString() ?? "";
+        }
+        var skip = new HashSet<string> { "Error", "Warnings", "CreatedFaceIds", "Key" };
+        foreach (var m in t.GetMembers(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (skip.Contains(m.Name)) continue;
+            object? va, vb;
+            try
+            {
+                if (m is System.Reflection.FieldInfo fi) { va = fi.GetValue(a); vb = fi.GetValue(b); }
+                else if (m is System.Reflection.PropertyInfo pi && pi.GetIndexParameters().Length == 0 && pi.CanRead) { va = pi.GetValue(a); vb = pi.GetValue(b); }
+                else continue;
+            }
+            catch { continue; }
+            string sa = V(va), sb = V(vb);
+            if (sa != sb) yield return $"{m.Name}: {(sa.Length > 120 ? sa[..120] : sa)} <> {(sb.Length > 120 ? sb[..120] : sb)}";
+        }
+    }
+
+    /// <summary>Я1: подпись поверхностей и кривых по граням — точки поверхности в (0.3, 0.6) по параметру и середины кривых рёбер.</summary>
+    static List<string> GeomBits(Part x)
+    {
+        var res = new List<string>();
+        static string H(params double[] ds) { ulong h = 1469598103934665603UL; foreach (var d in ds) { h ^= (ulong)BitConverter.DoubleToInt64Bits(d); h *= 1099511628211UL; } return h.ToString("x16"); }
+        foreach (var b in x.Bodies)
+            foreach (var f in b.Faces)
+            {
+                var src = f.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface fs ? fs.Source : f.Surface;
+                string sh = "-";
+                try { if (src != null) { var q = src.PointAt(new Vector2d(0.3, 0.6)); var q2 = src.PointAt(new Vector2d(0.71, 0.13)); sh = H(q.X, q.Y, q.Z, q2.X, q2.Y, q2.Z); } } catch { sh = "x"; }
+                var cs = new List<double>();
+                foreach (var l in f.Loops) foreach (var ce in l.CoEdges) { var c = ce.Edge.Curve; var m = c.PointAt(c.T0 + 0.37 * (c.T1 - c.T0)); cs.Add(m.X); cs.Add(m.Y); cs.Add(m.Z); cs.Add(c.T0); cs.Add(c.T1); }
+                var tol = new List<double>(); var pl = new List<double>();
+                foreach (var l in f.Loops) foreach (var ce in l.CoEdges)
+                {
+                    tol.Add(ce.Edge.Tolerance); tol.Add(ce.Edge.V0.Tolerance); tol.Add(ce.Edge.V1.Tolerance); tol.Add(ce.Reversed ? 1 : 0);
+                    if (ce.Edge.PolylineCache is { } pc) { pl.Add(pc.Count); foreach (var q in pc) { pl.Add(q.X); pl.Add(q.Y); pl.Add(q.Z); } } else pl.Add(-1);
+                }
+                var fc = new List<double>();
+                if (f.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface fs3) { fc.Add(fs3.Facets.Count); foreach (var (A, B, C) in fs3.Facets.ReadView) { fc.Add(A.X); fc.Add(A.Y); fc.Add(A.Z); fc.Add(B.X); fc.Add(C.Z); } }
+                res.Add($"{f.Tag} {src?.GetType().Name} rev {f.Reversed} s {sh} c {H(cs.ToArray())} tol {H(tol.ToArray())} poly {H(pl.ToArray())} facets {H(fc.ToArray())}/{(fc.Count > 0 ? fc[0] : -1)}");
+            }
+        return res;
+    }
+
+    /// <summary>Побитовая подпись тел детали: вершины (порядок не важен) и число граней.</summary>
+    static string BodyBits(Part x)
+    {
+        ulong sum = 0, xr = 0; int faces = 0;
+        foreach (var b in x.Bodies)
+        {
+            faces += b.Faces.Count();
+            foreach (var v in b.Vertices)
+            {
+                ulong h = 1469598103934665603UL;
+                foreach (var d in new[] { v.P.X, v.P.Y, v.P.Z }) { h ^= (ulong)BitConverter.DoubleToInt64Bits(d); h *= 1099511628211UL; }
+                sum += h; xr ^= h;
+            }
+        }
+        return $"{faces}:{sum:x16}:{xr:x16}";
+    }
+
+    /// <summary>Ссылки операции на рёбра — побитово (концы, середина, имена граней и концов, кусок).</summary>
+    static string RefsOf(Feature x)
+    {
+        static string D(double v) => BitConverter.DoubleToInt64Bits(v).ToString("x");
+        static string Ref(EdgeRef e) => $"{D(e.Start.X)},{D(e.Start.Y)},{D(e.Start.Z)}>{D(e.End.X)},{D(e.End.Y)},{D(e.End.Z)}" +
+            $"~{(e.Mid is { } m ? $"{D(m.X)},{D(m.Y)},{D(m.Z)}" : "-")};{e.FaceA}/{e.FaceB}/{e.End0}/{e.End1}/{e.Piece}";
+        return x is RoundFeature r ? string.Join(" | ", r.Edges.Select(Ref))
+             : x is ChamferFeature c ? string.Join(" | ", c.Edges.Select(Ref)) : "";
     }
 }

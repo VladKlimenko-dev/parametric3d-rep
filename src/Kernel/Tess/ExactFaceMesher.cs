@@ -821,6 +821,19 @@ public static partial class ExactFaceMesher
     }
 
     static readonly bool FaceMemoOff = Environment.GetEnvironmentVariable("P3D_FACEMESHMEMO") == "0";
+    /// <summary>
+    /// Я1: без памяти сеток граней на время вычисления (AsyncLocal — действует и в Parallel.For того же вычисления). Нужна
+    /// производной форме тела (ExactAdapter.DerivedOf): ключ памяти — тождество поверхности и кривых, копия тела делит с
+    /// оригиналом геометрию и получала бы прежнюю сетку грани, то есть форма зависела бы от истории.
+    /// </summary>
+    private static readonly AsyncLocal<bool> _noMemo = new();
+    public readonly struct NoMemoScope : IDisposable
+    {
+        private readonly bool _was;
+        public NoMemoScope(bool on) { _was = _noMemo.Value; _noMemo.Value = on || _was; }
+        public void Dispose() => _noMemo.Value = _was;
+    }
+    static bool MemoOff => FaceMemoOff || _noMemo.Value;
     /// <summary>Разбор: сеток граней из памяти грани.</summary>
     public static long FaceMemoHits;
     /// <summary>
@@ -935,7 +948,7 @@ public static partial class ExactFaceMesher
         // памяти. Мутация P3D_FACEMESHMEMO=0.
         ulong fk = 0; string tolKey = "";
         bool memoHit = false; string? memoWhy = null; List<Vector3d>? memoN = null; (List<Vector3d> P, List<int> T)? memoM = null;
-        if (!FaceMemoOff && Snap == null)
+        if (!MemoOff && Snap == null)
         {
             // сторона грани в ключ не входит: та же грань с другой стороной (соглашение о сторонах после построителя) — та же
             // сетка с обратным обходом треугольников и обратными нормалями
@@ -967,7 +980,7 @@ public static partial class ExactFaceMesher
         else made = MeshUncached(f, out why, out normals);
         // в память — только посчитанные сетки: отказ разметки у грани без треугольников гранения у её гранёной копии мог бы
         // смениться сеткой по ним (иначе копия получала бы чужой отказ)
-        if (!memoHit && made != null && !FaceMemoOff && Snap == null && MemoKey(f) == fk)
+        if (!memoHit && made != null && !MemoOff && Snap == null && MemoKey(f) == fk)
         {
             // k96 (самотест 17:56: +155 МБ за 80 правок, после удаления детали память не возвращалась): память сеток
             // ограничена по ОБЪЁМУ (точки сеток и нормалей), а не только по числу граней — у мелкой разметки крупных граней

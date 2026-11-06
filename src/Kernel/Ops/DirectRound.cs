@@ -1565,8 +1565,7 @@ public static partial class DirectRound
             solid.SetProvenance(pv);
         }
         if (Lazy)
-            solid.LazyDerivedExact = (new Lazy<Exact.ExactBody>(() => Exact.ExactAdapter.ToExact(TopologyClone.Deep(solid), new Exact.PlaneRegistry(), null),
-                LazyThreadSafetyMode.ExecutionAndPublication), solid.Revision);
+            solid.LazyDerivedExact = (Exact.ExactAdapter.LazyDerived(() => Exact.ExactAdapter.DerivedOf(solid)), solid.Revision);
         return solid;
     }
 

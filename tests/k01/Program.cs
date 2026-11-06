@@ -389,7 +389,12 @@ static partial class Program
         if (mode is "perfprof") { PerfProfile(); return; }
         if (mode is "perf") { Perf(args); return; }
         if (mode is "meshreuse") { MeshReuseExperiment(); MeshReuseIdentity(); }
-        if (mode is "globals") { foreach (var g in UnboundGlobals()) Console.WriteLine(g); return; }
+        if (mode is "globals")
+        {
+            foreach (var g in UnboundGlobals()) Console.WriteLine(g);
+            foreach (var g in StaticCollections()) Console.WriteLine("static-readonly-collection " + g);   // Я1: отчёт
+            return;
+        }
         if (mode is "guarantees" or "allA") Guarantees();
         if (mode is "guarantees" or "allA") Representations();
         if (mode is "survey" or "allS") Survey(false);
@@ -520,6 +525,9 @@ static partial class Program
         if (mode is "tangentchain145" or "allB") Krn06TangentChainK145Checks();
         if (mode is "chamferchain146" or "allB") Krn06ChamferChainK146Checks();
         if (mode is "loftcorpus140" or "allB") Krn06LoftCorpusK140Checks();
+        if (mode is "y1" or "allB") Krn01SessionEqualsFileChecks();
+        if (mode is "y2" or "allA") KrnY2SectionTableChecks();
+        if (mode is "y2break") KrnY2SectionBreakChecks();   // опыт P3D_SECBREAKNODE=1 (по умолчанию выключен)
         if (mode is "sweepsec142" or "allB") Krn06SweepSectionsK142Checks();
         if (mode is "x05pattern" or "allA") Krn05X05PatternChecks();
         if (mode is "sweepblend148" or "allA") Krn06SweepBlendK148Checks();
