@@ -968,7 +968,7 @@ public static class AnalyticVolume
     static readonly bool SlabOff = Environment.GetEnvironmentVariable("P3D_BANDSLAB") == "0";
     /// <summary>k148f: граней ленты, посчитанных полосами по v.</summary>
     public static long BandSlabs;
-    private sealed class SlabEdge { public ICurve3 C = null!; public double[] S = null!; public Vector2d[] Uv = null!; }
+    private sealed class SlabEdge { public TEdge? E; public ICurve3 C = null!; public double[] S = null!; public Vector2d[] Uv = null!; }
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TFace, Tuple<SectionSurface, SlabEdge[], double[]>> _slabCache = new();
 
     /// <summary>
@@ -1020,7 +1020,7 @@ public static class AnalyticVolume
                     if (vmax <= 1e-6) { constV.Add(0); continue; }
                     if (vmin >= 1 - 1e-6) { constV.Add(1); continue; }
                 }
-                edges.Add(new SlabEdge { C = c, S = sv, Uv = uv });
+                edges.Add(new SlabEdge { E = ce.Edge, C = c, S = sv, Uv = uv });
             }
             // Я2: конец соседнего ребра у края v = const — на самом краю: вершина проецируется с отходом до 1e-5 по v (точность
             // вершины, s109 шаг 5: дуга новой ленты кончается на краю прежней фаски при v = 8e-6), и горизонтали в щели
@@ -1068,7 +1068,7 @@ public static class AnalyticVolume
                 {
                     double dmax = 0, um = 0, vm = 0; int im = 0;
                     for (int i = 0; i < e.S.Length; i++) { double d = (e.C.PointAt(e.S[i]) - ss.SectionAt(e.Uv[i].X).Point(e.Uv[i].Y)).Length; if (d > dmax) { dmax = d; um = e.Uv[i].X; vm = e.Uv[i].Y; im = i; } }
-                    Console.Error.WriteLine($"SLABE {f.Tag}: {e.C.GetType().Name} dist max {dmax:G4} at i {im} u {um:G8} v {vm:G6}; v samples {string.Join(" ", e.Uv.Where((q, i) => i % 8 == 0 || i == e.Uv.Length - 1).Select(q => $"{q.X:G7}:{q.Y:G4}"))}");
+                    Console.Error.WriteLine($"SLABE {f.Tag} (surf {ss.GetHashCode()} u {ss.UMin:G6}..{ss.UMax:G6}): {e.C.GetType().Name} {(e.C is ArcCurve3 ac ? $"R {ac.Radius:G8} C {ac.Frame.Origin:0.####} N {ac.Frame.W:0.####} " : "")}tol {e.E?.Tolerance:G3} faces {e.E?.FaceA?.Tag}:{e.E?.FaceA?.Surface?.GetType().Name} / {e.E?.FaceB?.Tag}:{e.E?.FaceB?.Surface?.GetType().Name} dist max {dmax:G4} at i {im} u {um:G8} v {vm:G6}; v samples {string.Join(" ", e.Uv.Where((q, i) => i % 8 == 0 || i == e.Uv.Length - 1).Select(q => $"{q.X:G7}:{q.Y:G4}"))}");
                 }
             if (us.Count % 2 != 0) { if (ChainDbg) Console.Error.WriteLine($"SLAB {f.Tag}: odd crossings {us.Count} at v {v:G6}; edges {string.Join("; ", eds.Select(e => $"{e.C.GetType().Name} v {e.Uv[0].Y:G4}→{e.Uv[^1].Y:G4} [{e.Uv.Min(q => q.Y):G4}, {e.Uv.Max(q => q.Y):G4}] u {e.Uv[0].X:G6}→{e.Uv[^1].X:G6}"))}; breaks {string.Join(" ", vb.Take(6).Select(x => x.ToString("G4")))}"); return null; }
             us.Sort();
