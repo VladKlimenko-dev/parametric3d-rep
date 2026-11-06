@@ -53,8 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: g176_gear,    cmd: 'gear', env: '' }
-          - { name: g176_allA,    cmd: 'allA', env: '' }
+          - { name: g176_svg,     cmd: 'gear', env: 'GEAR_SVG=res/out' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

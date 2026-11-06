@@ -205,6 +205,34 @@ static partial class Program
                 if (sk.AddGear(bad, out var wb) != null) problems.Add("bad parameters accepted"); else report.Add(new { test = "bad", why = wb });
             }
 
+            // разбор: картинки контуров (GEAR_SVG — папка)
+            if (Environment.GetEnvironmentVariable("GEAR_SVG") is { Length: > 0 } dir)
+            {
+                Directory.CreateDirectory(dir);
+                foreach (var (nm, gp) in new[]
+                {
+                    ("external_z20_involute", new GearParams { Teeth = 20, Module = 2, TipRoundCoef = 0.05 }),
+                    ("internal_z40_involute", new GearParams { Internal = true, Teeth = 40, Module = 2 }),
+                    ("external_z12_cycloidal", new GearParams { Profile = GearProfile.Cycloidal, Teeth = 12, Module = 3 }),
+                    ("external_z10_straight", new GearParams { Profile = GearProfile.StraightFlank, Teeth = 10, Module = 4, PressureAngle = 12 }),
+                })
+                {
+                    var segs = GearGeometry.Build(gp, out _)!;
+                    var sb = new System.Text.StringBuilder();
+                    double R = Math.Max(gp.TipRadius, gp.RootRadius) * 1.08;
+                    sb.Append($"<svg xmlns='http://www.w3.org/2000/svg' viewBox='{-R:0.###} {-R:0.###} {2 * R:0.###} {2 * R:0.###}' width='600' height='600'><g transform='scale(1,-1)'>");
+                    sb.Append($"<circle r='{gp.PitchRadius:0.###}' fill='none' stroke='#9ab' stroke-dasharray='1,0.6' stroke-width='{R / 400:0.####}'/>");
+                    var col = new Dictionary<GearGeometry.SegKind, string> { [GearGeometry.SegKind.Line] = "#c33", [GearGeometry.SegKind.Arc] = "#36c", [GearGeometry.SegKind.Bezier] = "#222" };
+                    foreach (var sg in segs)
+                    {
+                        sb.Append("<polyline fill='none' stroke='" + col[sg.Kind] + $"' stroke-width='{R / 250:0.####}' points='");
+                        for (int k = 0; k <= 24; k++) { var q = SegAt(sg, k / 24.0); sb.Append($"{q.X:0.#####},{q.Y:0.#####} "); }
+                        sb.Append("'/>");
+                    }
+                    sb.Append("</g></svg>");
+                    File.WriteAllText(Path.Combine(dir, nm + ".svg"), sb.ToString());
+                }
+            }
             Log(new { test = "SK-GEAR-K176", report, problems });
             Require(problems.Count == 0, string.Join("; ", problems));
         });
