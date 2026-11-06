@@ -1,0 +1,1 @@
+seconds 26 nproc 4 env GEAR_SVG=res/out cmd gear
