@@ -1,0 +1,15 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["instant"]}
+  boss          instant True, volume preview 320763.2 exact 320774.1 (dV 0.003%), error 
+  pocket        instant True, volume preview 318548.2 exact 318556.2 (dV 0.003%), error 
+  hole          instant True, volume preview 319184.3 exact 319190.8 (dV 0.002%), error 
+  round         instant True, volume preview 319490.8 exact 319501.5 (dV 0.003%), error 
+  chamfer       instant False, volume preview 318648 exact 319452.8 (dV 0.252%), error 
+  pattern       instant True, volume preview 319617.1 exact 319624.8 (dV 0.002%), error 
+  revolve       instant True, volume preview 325018.3 exact 325034.1 (dV 0.005%), error 
+  touching cut  instant True, volume preview 319552.6 exact 319560.2 (dV 0.002%), error 
+  mid edit: instant True at 4 (operation 4), rollbacks 1
+  counters: instant 10, region probes 16, tree memo 1315, reach memo 7, reach cull 10, solid triangles memo 33
+{"test":"KRN-INSTANT-PREVIEW-K113","ok":false,"error":"chamfer: not instant; chamfer: volume 318648 vs 319452.8"}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":3,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":116,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":0,"failed":1}

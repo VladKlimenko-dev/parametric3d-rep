@@ -1,0 +1,2 @@
+exit 1
+seconds 28 nproc 4 env  cmd instant
