@@ -15,6 +15,129 @@ public static partial class DirectRound
     static readonly bool LoftGuidesOff = Environment.GetEnvironmentVariable("P3D_LOFTGUIDES") == "0";
     const double GuideTol = 1e-7;
 
+    /// <summary>
+    /// k178: НАПРАВЛЯЮЩАЯ ИЗ НЕСКОЛЬКИХ КУСКОВ — цепочка однородных кусков Безье на параметре [0, 1] (B — границы кусков).
+    /// Сплайн (кривая через N точек — N − 1 кубических кусков) раскладывается вставкой узлов до кратности степени.
+    /// Мутация P3D_LOFTGUIDEPIECES=0 — только один кусок (прежнее).
+    /// </summary>
+    internal sealed class GuidePw
+    {
+        public List<Vector4d[]> P = new();
+        public double[] B = { 0, 1 };
+        public int Count => P.Count;
+        public GuidePw Reversed()
+        {
+            var r = new GuidePw { P = Enumerable.Reverse(P).Select(q => Enumerable.Reverse(q).ToArray()).ToList() };
+            r.B = Enumerable.Reverse(B).Select(b => 1 - b).ToArray();
+            return r;
+        }
+        /// <summary>Кусок и местный параметр для параметра t.</summary>
+        public (int I, double U) Local(double t)
+        {
+            int i = 0; while (i < P.Count - 1 && t > B[i + 1]) i++;
+            double d = B[i + 1] - B[i];
+            return (i, d > 0 ? Math.Clamp((t - B[i]) / d, 0, 1) : 0);
+        }
+        public Vector3d Pt(double t) { var (i, u) = Local(t); return Pt4(P[i], u); }
+    }
+    static readonly bool GuidePiecesOff = Environment.GetEnvironmentVariable("P3D_LOFTGUIDEPIECES") == "0";
+
+    static GuidePw? GuideBezPw(ICurve3 c)
+    {
+        if (GuideBez(c) is { } q) return new GuidePw { P = { q } };
+        if (GuidePiecesOff || c is not SplineCurve3 sp) return null;
+        // вставка узлов до кратности степени во всех внутренних узлах
+        var s = sp;
+        int p = s.Degree;
+        double lo = s.Knots[p], hi = s.Knots[s.Knots.Count - p - 1];
+        if (!(hi > lo)) return null;
+        for (int guard = 0; guard < 4096; guard++)
+        {
+            var kn = s.Knots; bool done = true;
+            for (int i = p + 1; i < kn.Count - p - 1; i++)
+            {
+                double k = kn[i]; if (k <= lo + 1e-14 || k >= hi - 1e-14) continue;
+                int mult = kn.Count(x => Math.Abs(x - k) <= 1e-14 * Math.Max(1, Math.Abs(k)));
+                if (mult < p) { s = s.InsertKnot(k); done = false; break; }
+            }
+            if (done) break;
+        }
+        var cp = s.ControlPoints; var w = s.Weights;
+        if ((cp.Count - 1) % p != 0) return null;
+        int n = (cp.Count - 1) / p;
+        var g = new GuidePw { P = new() };
+        var br = new List<double> { 0 };
+        var distinct = s.Knots.Where(k => k > lo + 1e-14 && k < hi - 1e-14).Distinct().OrderBy(k => k).ToList();
+        if (distinct.Count != n - 1) return null;
+        foreach (var k in distinct) br.Add((k - lo) / (hi - lo));
+        br.Add(1);
+        for (int i = 0; i < n; i++) g.P.Add(Enumerable.Range(i * p, p + 1).Select(j => new Vector4d(cp[j] * w[j], w[j])).ToArray());
+        g.B = br.ToArray();
+        return g;
+    }
+
+    /// <summary>Однородная кривая Безье на ступень выше (та же кривая).</summary>
+    static Vector4d[] ElevateG(Vector4d[] q)
+    {
+        int n = q.Length - 1; var r = new Vector4d[n + 2]; r[0] = q[0]; r[n + 1] = q[n];
+        for (int i = 1; i <= n; i++) { double a = (double)i / (n + 1); r[i] = q[i - 1] * a + q[i] * (1 - a); }
+        return r;
+    }
+
+    /// <summary>
+    /// Участок направляющей [t0, t1] — кускИ на местном параметре [0, 1] (границы — b). У одного рационального куска — прежняя
+    /// нормировка весов концов; у нескольких — веса не трогаются (кривая через точки — веса 1).
+    /// </summary>
+    static (List<Vector4d[]> Q, double[] B) SubPieces(GuidePw g, double t0, double t1)
+    {
+        if (g.Count == 1) return (new() { SubPiece(g.P[0], t0, t1) }, new[] { 0.0, 1.0 });
+        var res = new List<Vector4d[]>(); var bs = new List<double> { 0 };
+        double L = t1 - t0;
+        for (int i = 0; i < g.Count; i++)
+        {
+            double a = Math.Max(t0, g.B[i]), b = Math.Min(t1, g.B[i + 1]);
+            if (!(b > a + 1e-13 * Math.Max(1, L))) continue;
+            double d = g.B[i + 1] - g.B[i];
+            double ua = (a - g.B[i]) / d, ub = (b - g.B[i]) / d;
+            var q = g.P[i];
+            if (ua > 1e-15) q = SplitAt(q, ua).R;
+            double s = (ub - ua) / (1 - ua);
+            if (s < 1 - 1e-15) q = SplitAt(q, s).L;
+            res.Add((Vector4d[])q.Clone()); bs.Add((b - t0) / L);
+        }
+        bs[^1] = 1;
+        return (res, bs.ToArray());
+    }
+
+    /// <summary>Куски на границах u (общее разбиение двух сторон грани): разрезаются в недостающих границах.</summary>
+    static List<Vector4d[]> Refine(List<Vector4d[]> q, double[] b, List<double> u)
+    {
+        var res = new List<Vector4d[]>();
+        for (int k = 0; k + 1 < u.Count; k++)
+        {
+            double a = u[k], c = u[k + 1], m = (a + c) / 2;
+            int i = 0; while (i < q.Count - 1 && m > b[i + 1]) i++;
+            double d = b[i + 1] - b[i], ua = (a - b[i]) / d, ub = (c - b[i]) / d;
+            var r = q[i];
+            if (ua > 1e-15) r = SplitAt(r, ua).R;
+            double s = (ub - ua) / (1 - ua);
+            if (s < 1 - 1e-15) r = SplitAt(r, s).L;
+            res.Add(r);
+        }
+        return res;
+    }
+
+    static (double T, double D) ClosestT(GuidePw g, Vector3d p)
+    {
+        double bt = 0, bd = double.MaxValue;
+        for (int i = 0; i < g.Count; i++)
+        {
+            var (t, d) = ClosestT(g.P[i], p);
+            if (d < bd) { bd = d; bt = g.B[i] + (g.B[i + 1] - g.B[i]) * t; }
+        }
+        return (bt, bd);
+    }
+
     /// <summary>Направляющая — один однородный кусок Безье; null — вид не поддержан.</summary>
     static Vector4d[]? GuideBez(ICurve3 c)
     {
@@ -80,14 +203,14 @@ public static partial class DirectRound
 
     /// <summary>Сечение-окружность делится на дуги в точках, где его плоскость пересекают направляющие. null — направляющая
     /// не пересекает окружность (причина в why).</summary>
-    static List<ICurve3>? SplitCircleAtGuides(ArcCurve3 a, List<Vector4d[]> g4, ref string? why)
+    static List<ICurve3>? SplitCircleAtGuides(ArcCurve3 a, List<GuidePw> g4, ref string? why)
     {
         var U = a.Frame.U.Normalized(); var V = a.Frame.V.Normalized(); var W = Vector3d.Cross(U, V).Normalized(); var O = a.Frame.Origin;
         var ang = new List<double>();
         foreach (var q in g4)
         {
-            double F(double t) => Vector3d.Dot(Pt4(q, t) - O, W);
-            const int M = 512; double? root = null;
+            double F(double t) => Vector3d.Dot(q.Pt(t) - O, W);
+            int M = 512 * Math.Max(1, q.Count); double? root = null;
             for (int i = 0; i <= M && root == null; i++)
             {
                 double t = (double)i / M; if (Math.Abs(F(t)) < 1e-12) { root = t; break; }
@@ -99,7 +222,7 @@ public static partial class DirectRound
                 }
             }
             if (root == null) { why = "loft: a guide does not cross the plane of a circular section"; return null; }
-            var p = Pt4(q, root.Value) - O;
+            var p = q.Pt(root.Value) - O;
             if (Math.Abs(p.Length - a.Radius) > GuideTol * 10) { why = $"loft: a guide misses a circular section by {Math.Abs(p.Length - a.Radius):E1} mm"; return null; }
             ang.Add(Math.Atan2(Vector3d.Dot(p, V), Vector3d.Dot(p, U)));
         }
@@ -116,10 +239,27 @@ public static partial class DirectRound
     }
 
     /// <summary>Край грани по куску направляющей между сечениями: кривая того же вида с концами A, B.</summary>
+    static ICurve3 GuideEdge(ICurve3 src, List<Vector4d[]> subs, double[] b, Vector3d A, Vector3d B)
+    {
+        if (subs.Count == 1) return GuideEdge(src, subs[0], A, B);
+        // несколько кусков — B-сплайн (кратность внутренних узлов = степень), концы — вершины сечений
+        int p = subs.Max(x => x.Length - 1);
+        var pcs = subs.Select(q => { while (q.Length - 1 < p) q = ElevateG(q); return q; }).ToList();
+        var cp = new List<Vector3d>(); var w = new List<double>();
+        for (int i = 0; i < pcs.Count; i++)
+            for (int j = i == 0 ? 0 : 1; j <= p; j++) { cp.Add(pcs[i][j].Xyz / pcs[i][j].W); w.Add(pcs[i][j].W); }
+        cp[0] = A; cp[^1] = B;
+        var kn = new List<double>(); for (int i = 0; i <= p; i++) kn.Add(0);
+        for (int i = 1; i < b.Length - 1; i++) for (int k = 0; k < p; k++) kn.Add(b[i]);
+        for (int i = 0; i <= p; i++) kn.Add(1);
+        return new SplineCurve3(cp, p, w.All(x => Math.Abs(x - 1) < 1e-15) ? null : w, kn);
+    }
+
     static ICurve3 GuideEdge(ICurve3 src, Vector4d[] sub, Vector3d A, Vector3d B)
     {
         switch (src)
         {
+            case SplineCurve3: return new BezierCurve3(sub.Select(x => x.Xyz / x.W));
             case BezierCurve3: return new BezierCurve3(sub.Select(x => x.Xyz / x.W));
             case ArcCurve3 a:
             {

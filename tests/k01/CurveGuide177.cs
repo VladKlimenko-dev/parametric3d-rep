@@ -51,7 +51,7 @@ static partial class Program
             if (CurveThrough.AsBezier(s2) != null) problems.Add("a three-piece curve passed as one Bezier");
 
             // 3. модель пользователя: две шестерни, кривая через соответственные вершины, переход по сечениям
-            Part MakePart(bool guide)
+            Part MakePart(bool guide, int mids = 0)
             {
                 var part = new Part("gear");
                 var sk1 = new Sketch("Sketch1", Frame3.XY); part.Add(sk1);
@@ -66,9 +66,16 @@ static partial class Program
                 var A = new Vector3d(segs1[tipArc].End.X, segs1[tipArc].End.Y, 0);
                 var B2 = fr2.ToWorld(segs2[tipArc].End);
                 var specs = new[] { new CurvePointSpec { SketchId = sk1.Id, SketchNormal = Vector3d.UnitZ, NormalToSketch = true }, new CurvePointSpec { SketchId = sk2.Id, SketchNormal = Vector3d.UnitZ, NormalToSketch = true } };
-                var sp = CurveThrough.Build(new[] { A, B2 }, specs.Select(x => x.Direction).ToList(), new[] { false, false }, null, false)!;
+                // k178: промежуточные точки — на прямой A…B, отодвинутые от оси на 4 мм (кривая из mids + 1 кусков)
+                var pts = new List<Vector3d> { A };
+                for (int m = 1; m <= mids; m++) { var c = A + (B2 - A) * (m / (double)(mids + 1)); var rad = new Vector3d(c.X, c.Y, 0).Normalized(); pts.Add(c + rad * 4); }
+                pts.Add(B2);
+                var allSpecs = new List<CurvePointSpec> { specs[0] };
+                for (int m = 0; m < mids; m++) allSpecs.Add(new CurvePointSpec());
+                allSpecs.Add(specs[1]);
+                var sp = CurveThrough.Build(pts, allSpecs.Select(x => x.Direction).ToList(), null, null, false)!;
                 var dc = new DatumCurve("Curve1", Array.Empty<Vector3d>(), "through points") { Mode = 0 };
-                dc.Inputs.Add(A); dc.Inputs.Add(B2); dc.Specs.AddRange(specs); dc.SetSpline(sp);
+                dc.Inputs.AddRange(pts); dc.Specs.AddRange(allSpecs); dc.SetSpline(sp);
                 part.Add(dc);
                 var bf = new BlendFeature { Mode = BlendKind.Sections, StartTangent = 0.5, EndTangent = 0.5, Smooth = true };
                 bf.SectionSketchIds.Add(sk1.Id); bf.SectionSketchIds.Add(sk2.Id);
@@ -93,6 +100,41 @@ static partial class Program
             if (rbf.GuideCurveIds.Count != 1 || rbf.GuideCurveIds[0] != rdc.Id) problems.Add("guide curve id lost in the file");
             if (rdc.Specs.Count != 2 || !rdc.Specs.All(x => x.NormalToSketch && x.FromSketch)) problems.Add("point conditions lost in the file");
             if (rbf.Error != null || Math.Abs(r.Volume - p.Volume) > 1e-6 * p.Volume) problems.Add($"file volume {r.Volume} vs {p.Volume} ({rbf.Error})");
+
+            // 4. k178: направляющая через четыре точки — три куска; боковое ребро тела проходит через промежуточные точки
+            {
+                var sw4 = System.Diagnostics.Stopwatch.StartNew();
+                var p4 = MakePart(true, 2);
+                var bf4 = p4.Features.OfType<BlendFeature>().Single();
+                var dc4 = p4.Children.OfType<DatumCurve>().Single();
+                double worst = 0;
+                if (p4.Bodies.Count == 1)
+                    foreach (var m in dc4.Inputs.Skip(1).Take(2))
+                    {
+                        double best = double.MaxValue;
+                        foreach (var e in p4.Bodies[0].Edges)
+                            for (int i = 0; i <= 400; i++) best = Math.Min(best, (e.Curve.PointAt(e.Curve.T0 + (e.Curve.T1 - e.Curve.T0) * i / 400.0) - m).Length);
+                        // уточнение: ближайшая точка самой кривой ребра у лучшего отсчёта
+                        worst = Math.Max(worst, best);
+                    }
+                rep.Add(new { test = "guide of three pieces", ms = sw4.ElapsedMilliseconds, error = bf4.Error, volume = p4.Volume, bodies = p4.Bodies.Count, offMids = worst, pieces = dc4.Spline is { } s4 ? (s4.ControlPoints.Count - 1) / s4.Degree : 0 });
+                if (bf4.Error != null || p4.Bodies.Count != 1) problems.Add($"blend with a three-piece guide: {bf4.Error}");
+                else if (!(worst < 0.05)) problems.Add($"the side edge misses the inner points of the guide ({worst:E2} mm)");
+                else
+                {
+                    // точнее: ребро по направляющей — та же кривая (сравнение по 200 точкам направляющей)
+                    var g = dc4.Spline!; double dev = 0;
+                    var edge = p4.Bodies[0].Edges.OrderBy(e => (e.Curve.PointAt((e.Curve.T0 + e.Curve.T1) / 2) - g.PointAt(0.5)).Length).First();
+                    for (int i = 0; i <= 200; i++)
+                    {
+                        var q = g.PointAt(i / 200.0); double b2 = double.MaxValue;
+                        for (int k = 0; k <= 2000; k++) b2 = Math.Min(b2, (edge.Curve.PointAt(edge.Curve.T0 + (edge.Curve.T1 - edge.Curve.T0) * k / 2000.0) - q).Length);
+                        dev = Math.Max(dev, b2);
+                    }
+                    rep.Add(new { test = "edge vs guide", dev });
+                    if (dev > 0.05) problems.Add($"the side edge deviates from the guide by {dev:E2} mm");
+                }
+            }
 
             Log(new { test = "CURVE-TANGENTS-GUIDE-K177", rep, problems });
             Require(problems.Count == 0, string.Join("; ", problems));

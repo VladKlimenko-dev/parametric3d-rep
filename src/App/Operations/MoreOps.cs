@@ -308,7 +308,7 @@ public sealed class LoftOp : FeatureOp<LoftFeature>
         {
             Label = "Направляющие", Filter = PickFilter.SketchCurves | PickFilter.Datums, Accept = Refs.IsGuide, Optional = true,
             Describe = Refs.GuideName,
-            Tip = "Не обязательно. Эскизы с кривыми (отрезок, дуга меньше 180°, сплайн), опорные кривые (через две точки) или трёхмерные линии, каждая из которых проходит через соответственные вершины всех сечений: кривая задаёт, по какому пути вершина переходит от сечения к сечению. Без направляющих путь вершин — прямая или плавная кривая.",
+            Tip = "Не обязательно. Эскизы с кривыми (отрезок, дуга меньше 180°, сплайн), опорные кривые через точки или трёхмерные линии, каждая из которых проходит через соответственные вершины всех сечений: кривая задаёт, по какому пути вершина переходит от сечения к сечению. Без направляющих путь вершин — прямая или плавная кривая.",
         });
         _secs.SketchFits = Refs.ClosedSketch; _guides.SketchFits = Refs.CurvesSketch;
         if (Editing) { KeepSketches(_secs, F.SectionSketchIds.ToArray()); KeepSketches(_guides, F.GuideSketchIds.ToArray()); Refs.KeepGuides(_guides, Part, F.GuideSketchIds, F.GuideCurveIds); }
