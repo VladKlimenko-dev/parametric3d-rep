@@ -1392,6 +1392,7 @@ public static class Strings
         ["От ребра или плоскости 1"] = "From edge or plane 1",
         ["От ребра или плоскости 2"] = "From edge or plane 2",
         ["Расчёт закончен. Сохраните файл (Ctrl+S) — следующее открытие будет без перестроения."] = "The rebuild has finished. Save the file (Ctrl+S) — the next opening will be instant.",
+        ["Обновлено компонентов из изменённых файлов: {0}"] = "Components updated from changed files: {0}",
         ["Размеры модели — только у чертежа детали"] = "Model dimensions — only in a part drawing",
         ["Перенесено размеров эскизов: {0}"] = "Sketch dimensions transferred: {0}",
         ["Размер: щёлкните первую точку на виде"] = "Dimension: click the first point on a view",

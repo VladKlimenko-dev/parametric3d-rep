@@ -77,13 +77,22 @@ public static class DocumentFile
         // k156: почему тела не записаны — сообщение после сохранения (следующее открытие будет перестроением)
         LastSaveNote = !built ? "деталь ещё перестраивается — сохраните после окончания расчёта"
             : part.NeedsAcceptance ? "идёт проверка тел — сохраните после её окончания"
-            : part.Quilts.Count > 0 || part.CagesByBody.Count > 0 ? "поверхности и клетки FreeForm пока не записываются"
+            : part.CagesByBody.Count > 0 ? "клетки FreeForm пока не записываются"
+            : !QuiltsSavable(part) ? "поверхности FreeForm и объединённые поверхности пока не записываются"
             : null;
-        if (built && !BrepFile.Off && part.Bodies.Count > 0 && !part.NeedsAcceptance && part.Quilts.Count == 0 && part.CagesByBody.Count == 0)
+        if (built && !BrepFile.Off && (part.Bodies.Count > 0 || part.Quilts.Count > 0) && !part.NeedsAcceptance && QuiltsSavable(part) && part.CagesByBody.Count == 0)
         {
             try
             {
                 doc.Display.Brep = Convert.ToBase64String(BrepFile.Write(part.Bodies));
+                // k178: ПОСТРОЕННЫЕ ПОВЕРХНОСТИ (квилты) — тела-основы отдельной записью и грани квилта номерами: деталь с поверхностями
+                // (Blend, Sweep поверхностью, Fill…) тоже открывается без перестроения
+                if (part.Quilts.Count > 0)
+                {
+                    var parents = part.Quilts.Select(q => q.Parent).Distinct(ReferenceEqualityComparer.Instance).Cast<Kernel.Topology.TSolid>().ToList();
+                    doc.Display.QuiltBrep = Convert.ToBase64String(BrepFile.Write(parents));
+                    doc.Display.Quilts = part.Quilts.Select(q => new QuiltDto { Key = q.Key, Name = q.Name, Body = parents.IndexOf(q.Parent), Faces = q.Faces.Select(f => f.Id).ToList() }).ToList();
+                }
                 // k156: площадь — только если уже посчитана (ленту HelSweep считать при записи — 75 с); иначе — по запросу после открытия
                 doc.Display.Area = part.AreaPending && !AreaAtSaveOff ? null : part.Area;
                 doc.Display.BodyNames = part.Bodies.Select((_, i) => part.BodyName(i)).ToList();
@@ -110,10 +119,14 @@ public static class DocumentFile
                     catch (NotSupportedException) { doc.Display.Checkpoint = null; }
                 }
             }
-            catch (NotSupportedException ex) { doc.Display.Brep = null; LastSaveNote = "тип геометрии не записывается: " + ex.Message; }
+            catch (NotSupportedException ex) { doc.Display.Brep = null; doc.Display.QuiltBrep = null; doc.Display.Quilts = null; LastSaveNote = "тип геометрии не записывается: " + ex.Message; }
         }
         return JsonSerializer.Serialize(doc, Opts);
     }
+
+    /// <summary>k178: мутация P3D_QUILTSAVE=0 — поверхности в файл не пишутся (деталь с поверхностями открывается перестроением).</summary>
+    static readonly bool QuiltSaveOff = Environment.GetEnvironmentVariable("P3D_QUILTSAVE") == "0";
+    static bool QuiltsSavable(Part part) => part.Quilts.Count == 0 || !QuiltSaveOff && part.Quilts.All(q => q.Parts.Count == 0 && q.Nurbs == null);
 
     public static readonly bool DisplayOff = Environment.GetEnvironmentVariable("P3D_FILEDISPLAY") == "0";
     static readonly bool RawSigOff = Environment.GetEnvironmentVariable("P3D_DISPLAYRAWSIG") == "0";
@@ -1658,8 +1671,15 @@ public static class DocumentFile
                         try
                         {
                             var bodies = BrepFile.ReadAll(Convert.FromBase64String(brep));
+                            List<(string Key, string Name, BrepFile.Restored Body, List<uint> Faces)>? quilts = null;
+                            if (display.Quilts is { Count: > 0 } qds)
+                            {
+                                if (display.QuiltBrep is not { } qb) throw new InvalidDataException("surfaces without their bodies");
+                                var qbodies = BrepFile.ReadAll(Convert.FromBase64String(qb));
+                                quilts = qds.Select(q => (q.Key, q.Name, q.Body >= 0 && q.Body < qbodies.Count ? qbodies[q.Body] : throw new InvalidDataException("surface body index"), q.Faces ?? new())).ToList();
+                            }
                             part.RestoreFromFile(bodies, cached, display.Volume, display.Area, display.BodyNames ?? new(), display.Warnings ?? new(),
-                                display.Errors ?? new(), display.Created ?? new(), table);
+                                display.Errors ?? new(), display.Created ?? new(), table, quilts);
                             part.LoadNote = LoadNoteKind.Restored;
                             // k156: состояние перед последней операцией
                             if (display.Checkpoint is { Brep: { } cb } cpd && !CheckpointSaveOff)
@@ -1812,6 +1832,17 @@ public static class DocumentFile
         public Dictionary<string, List<uint>>? Created { get; set; }
         /// <summary>k156: состояние перед последней операцией.</summary>
         public CheckpointDto? Checkpoint { get; set; }
+        /// <summary>k178: тела-основы поверхностей (BrepFile) и сами поверхности: ключ операции, имя, основа, номера граней.</summary>
+        public string? QuiltBrep { get; set; }
+        public List<QuiltDto>? Quilts { get; set; }
+    }
+
+    private sealed class QuiltDto
+    {
+        public string Key { get; set; } = "";
+        public string Name { get; set; } = "";
+        public int Body { get; set; }
+        public List<uint>? Faces { get; set; }
     }
 
     private sealed class CheckpointDto

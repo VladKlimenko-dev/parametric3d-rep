@@ -9140,6 +9140,67 @@ Check("UI-OPEN-STORED-K178", () =>
     Require(p.RestoredFromFile && !p.IsDirty && same, "the part was rebuilt on open (or its bodies were not taken from the file)");
 });
 
+// k178 (п. 3.1): ПОВЕРХНОСТИ В ФАЙЛЕ — деталь с поверхностью (квилтом) открывается без перестроения: поверхность — из файла
+// (та же площадь, грани основы). P3D_QUILTSAVE=0 — поверхности не пишутся, открытие перестроением.
+Check("UI-OPEN-QUILT-K178", () =>
+{
+    var s0 = DocumentSession.NewPart(); var w0 = Open(s0); var part0 = s0.Part!;
+    var ln = DrawSketch(w0, part0, part0.PlaneXY, sk => { var l = new LineTool(chain: false); l.Click(new SketchInput(sk, Vector2d.Zero, null)); l.Click(new SketchInput(sk, new Vector2d(20, 0), null)); });
+    var se = new SurfaceFeature { SketchId = ln.Id, Depth = new ValueRef(10) }; part0.AddFeature(se); s0.Document.RebuildDirty(); BuildNow(s0);
+    for (int i = 0; i < 20; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(20); }
+    double a0 = Parametric3D.Model.Features.QuiltUtilT.Area(part0.Quilts.Single());
+    var path = Path.Combine(Path.GetTempPath(), "p3d_open_quilt.p3d"); s0.SaveAs(path); w0.Close();
+    var s = DocumentSession.Open(path); var p = s.Part!;
+    Console.WriteLine($"  open: note {p.LoadNote}, restored {p.RestoredFromFile}, dirty {p.IsDirty}, quilts {p.Quilts.Count}, area {a0:F6}");
+    Require(p.RestoredFromFile && !p.IsDirty, "a part with a surface was rebuilt on open");
+    var w = Open(s);
+    var t1 = DateTime.Now; while ((DateTime.Now - t1).TotalMilliseconds < 2000) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(10); }
+    double a1 = p.Quilts.Count == 1 ? Parametric3D.Model.Features.QuiltUtilT.Area(p.Quilts[0]) : -1;
+    Console.WriteLine($"  after 2 s: restored {p.RestoredFromFile}, dirty {p.IsDirty}, quilt key {p.Quilts.FirstOrDefault()?.Key == se.Key}, area {a1:F6}");
+    Require(p.RestoredFromFile && p.Quilts.Count == 1 && p.Quilts[0].Key == se.Key && Math.Abs(a1 - a0) < 1e-9 && Math.Abs(a0 - 200) < 1e-6, "the surface was not taken from the file");
+    // правка после открытия — обычное перестроение (поверхность пересчитывается)
+    se = p.Features.OfType<SurfaceFeature>().Single(); se.Depth = new ValueRef(15); p.MarkDirtyFrom(se); s.Document.RebuildDirty(); BuildNow(s);
+    double a2 = p.Quilts.Count == 1 ? Parametric3D.Model.Features.QuiltUtilT.Area(p.Quilts[0]) : -1;
+    Console.WriteLine($"  edit depth 15: area {a2:F6}");
+    Require(Math.Abs(a2 - 300) < 1e-6, "editing after the opening does not rebuild the surface");
+    w.Close();
+});
+
+// k178 (п. 3.3): СБОРКА СО СВЯЗЯМИ — открывается сразу с телами из своего файла; компонент, чей файл детали записан позже
+// сборки, обновляется в фоне (без вопроса). P3D_LINKREFRESH=0 — компонент остаётся прежним.
+Check("UI-ASM-LINK-K178", () =>
+{
+    string dir = Path.Combine(Path.GetTempPath(), "p3d_link_" + Guid.NewGuid().ToString("N")[..8]); Directory.CreateDirectory(dir);
+    string pa = Path.Combine(dir, "a.p3d"), asmPath = Path.Combine(dir, "asm.p3a");
+    void SavePart(double width)
+    {
+        var sp = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Block("a", width), "a"); var wp = Open(sp); BuildNow(sp);
+        for (int i = 0; i < 10; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(20); }
+        sp.SaveAs(pa); wp.Close();
+    }
+    SavePart(100);
+    var sa = DocumentSession.NewAssembly(); var wa = Open(sa);
+    var comp = AssemblyCommands.AddComponent(wa, AssemblyCommands.LoadComponent(pa, new List<string>()), "add");
+    BuildNow(sa); for (int i = 0; i < 10; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(20); }
+    sa.SaveAs(asmPath); wa.Close();
+    File.SetLastWriteTimeUtc(asmPath, DateTime.UtcNow.AddMinutes(-10));
+    SavePart(50);   // файл детали изменён после записи сборки
+    var w = Open(DocumentSession.NewPart());
+    var task = w.OpenAsync(asmPath);
+    var t0 = DateTime.Now;
+    while (!task.IsCompleted && (DateTime.Now - t0).TotalSeconds < 30) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); }
+    var c0 = w.Session.Document.Root.Children.OfType<Parametric3D.Model.Part>().Single();
+    double v0 = c0.Volume; bool r0 = c0.RestoredFromFile;
+    while (w.LinkRefreshDone == null && (DateTime.Now - t0).TotalSeconds < 60) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(10); }
+    for (int i = 0; i < 30; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(10); }
+    var c1 = w.Session.Document.Root.Children.OfType<Parametric3D.Model.Part>().Single();
+    Console.WriteLine($"  opened: restored {r0}, volume {v0:F1}; refreshed {w.LinkRefreshDone}, volume {c1.Volume:F1}, source {Path.GetFileName(c1.SourcePath)}");
+    Require(r0 && Math.Abs(v0 - 120000) < 1e-3, "the assembly was not shown from its stored bodies");
+    Require(w.LinkRefreshDone == 1 && Math.Abs(c1.Volume - 60000) < 1e-3 && c1.SourcePath == pa, "the linked component was not refreshed from its changed file");
+    w.Close();
+    try { Directory.Delete(dir, true); } catch { }
+});
+
 Check("UI-CURVE-TANGENTS-K177", () =>
 {
     var part = Parametric3D.App.Diagnostics.TestParts.Block("ct");

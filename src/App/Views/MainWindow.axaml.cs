@@ -312,6 +312,8 @@ public partial class MainWindow : Window
         SetSession(opened);
         UserPrefs.Current.AddRecentFile(path);
         StartProgress();
+        // k178 (п. 3.3): сборка показана из записанных тел; компоненты, чьи файлы изменились после записи сборки, — в фоне
+        if (opened.IsAssembly) _ = RefreshLinkedAsync(opened);
         // k156: почему деталь перестраивается после открытия (файл до k153, сохранён во время расчёта, тела не прочитаны)
         var notes = opened.Document.AllParts().Select(p => p.LoadNote).Where(n => n is not (Parametric3D.Model.LoadNoteKind.Restored or Parametric3D.Model.LoadNoteKind.None)).Distinct().ToList();
         if (notes.Count > 0)
@@ -338,6 +340,38 @@ public partial class MainWindow : Window
         }
         else LastOpenNote = null;
     }
+
+    /// <summary>
+    /// k178 (п. 3.3): СВЯЗИ С ДРУГИМИ ФАЙЛАМИ — В ФОНЕ. Сборка открывается сразу с телами компонентов из своего файла; компонент,
+    /// вставленный из файла детали, который записан позже сборки, читается в фоне (из его же записанного тела — без перестроения)
+    /// и заменяет прежний (положение, фиксация и ограничения — прежние). Как у Creo/SolidWorks: сборка показывается из
+    /// сохранённого представления, ссылки обновляются после открытия. Мутация P3D_LINKREFRESH=0 — без обновления.
+    /// </summary>
+    public async Task<int> RefreshLinkedAsync(DocumentSession s)
+    {
+        if (LinkRefreshOff || s.FilePath is not { } asmPath || !File.Exists(asmPath)) { LinkRefreshDone = 0; return 0; }
+        var asmTime = File.GetLastWriteTimeUtc(asmPath);
+        var stale = s.Document.Root.Children.OfType<Parametric3D.Model.Part>()
+            .Where(p => p.SourcePath is { Length: > 0 } sp && sp.EndsWith(DocumentSession.PartExtension, StringComparison.OrdinalIgnoreCase)
+                        && File.Exists(sp) && File.GetLastWriteTimeUtc(sp) > asmTime).ToList();
+        int n = 0;
+        foreach (var old in stale)
+        {
+            Parametric3D.Model.Part fresh;
+            try { fresh = await Task.Run(() => Commands.AssemblyCommands.LoadComponent(old.SourcePath!, new List<string>())); }
+            catch (Exception ex) { Core.AppLog.Write($"link refresh: {old.SourcePath}: {ex.Message}"); continue; }
+            if (!ReferenceEquals(Session, s) || old.Parent == null) break;   // документ закрыт или компонент удалён
+            fresh.Name = old.Name; fresh.Visible = old.Visible; fresh.Skeleton = old.Skeleton;
+            Commands.AssemblyCommands.Replace(this, old, fresh);
+            n++;
+        }
+        LinkRefreshDone = n;
+        if (n > 0) ShowToast(L("Обновлено компонентов из изменённых файлов: {0}", n), error: false);
+        return n;
+    }
+    static readonly bool LinkRefreshOff = Environment.GetEnvironmentVariable("P3D_LINKREFRESH") == "0";
+    /// <summary>k178: компонентов, обновлённых из файлов после последнего открытия сборки (null — обновление ещё идёт).</summary>
+    public int? LinkRefreshDone { get; private set; }
 
     /// <summary>k156: сообщение о способе открытия последнего файла (проверки).</summary>
     public string? LastOpenNote { get; private set; }
