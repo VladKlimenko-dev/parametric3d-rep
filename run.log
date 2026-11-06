@@ -1,0 +1,26 @@
+{"test":"UI-ICON-GRAY","ok":true,"error":null}
+{"test":"UI-THEME-ICONS","ok":true,"error":null}
+{"info":"UI-SKETCH-UX","empty":"trim\u2026","twoPoints":["sk.merge_points","con.horizontal","con.vertical","dim.linear","dim.vertical","con.fix","sk.delete"],"twoLines":["sk.fillet","sk.chamfer","con.equal","dim.angle","sk.offset","sk.transform","sk.toggle_construction","sk.trim","con.fix","sk.delete"],"radius":["dim.to_diameter","dim.single_arrow","dim.outside","dim.make_strong","dim.lock_toggle","dim.ref_toggle","dim.link_param","dim.edit_value","dim.delete"]}
+{"test":"UI-SKETCH-UX","ok":true,"error":null}
+  lines: 20.000000 20.000000
+  arc: R 10.000000 sweep 60.0000°
+  trim: [100.000,110.000]
+  ellipse: (700, -1.1150802503578916E-14) 8.000000 3.000000
+  offset: 4 lines, x 902.0000..908.0000
+  area: (87.43362938623454, 1)
+  solve: Underconstrained, entities 49, constraints 78: Coincident 30, Horizontal 7, PointOnEntity 11, Parallel 5, Equal 7, Vertical 8, Tangent 6, MidPoint 1, Perpendicular 1, Symmetric 2; conflicts: 
+{"test":"UI-U13B-SKETCH","ok":true,"error":null}
+{"test":"UI-LANGUAGE","ok":true,"error":null}
+  tree info nodes: none
+  part panel on tree click: prop_Имя, prop_Номер детали, prop_material, prop_units, prop_units_new, prop_Допуски
+  custom system: Лаборатория (cm, kg); size row: 10 × 6 × 2 см
+  English panel, Russian texts: none
+  reopened: Корпус, PN-120, Сталь 45, Лаборатория cm/kg, ISO 2768-mK
+{"test":"UI-PART-PANEL-K120","ok":true,"error":null}
+  preloaded 591 of 437
+  switch: live swaps 699, 91.8 ms
+{"test":"UI-ICON-THEME-K118","ok":true,"error":null}
+  gear: z 18 m 4.969 items 218, selected 1
+  panel: ШЕСТЕРНЯ | prop_Профиль зуба, prop_Венец, prop_Число зубьев, prop_Модуль, prop_Диаметральный шаг, prop_Окружной шаг, prop_Делительный диаметр, prop_Угол профиля, °, prop_Смещение x, prop_Высота головки h*a, prop_Радиальный зазор c*, prop_Переходная кривая ρ*f, prop_Скругление вершины ρ*a, prop_Боковой зазор, prop_Центр X, prop_Центр Y, prop_Поворот, °, prop_Допуск профиля, prop_Делительная окружность
+{"test":"UI-SKETCH-GEAR-K176","ok":true,"error":null}
+{"passed":8,"failed":0}
