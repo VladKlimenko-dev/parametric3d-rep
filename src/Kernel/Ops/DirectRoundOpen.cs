@@ -424,7 +424,11 @@ public static partial class DirectRound
                         two[k] = true; fe2[k] = FE2d; sh2[k] = s2; se2[k] = sE2; mEdge[k] = tM;
                         conv2[k] = Vector3d.Dot(NormalOf(FE2d, V), u1) < 0;
                         ends[k] = (FE1d, s1, tA2, tB2, V, sE1);
-                        Debug?.Invoke($"open: end {k}: two end faces {FE1d.Tag} / {FE2d.Tag}, crease {(conv2[k] ? "convex" : "concave")}");
+                        if (Debug != null)
+                        {
+                            var mA = ca.PointAt(0.5 * (ca.T0 + ca.T1)); var cb = tB2.Curve; var mB = cb.PointAt(0.5 * (cb.T0 + cb.T1));
+                            Debug($"open: end {k}: two end faces {FE1d.Tag} (rev {FE1d.Rev}) / {FE2d.Tag} (rev {FE2d.Rev}), crease {(conv2[k] ? "convex" : "concave")}; sE {sE1}/{sE2}; n1 V {NormalOf(FE1d, V):0.###} mid {NormalOf(FE1d, mA):0.###} g1 V {Geometry.Ssi.Implicit(s1, V).G:0.###} mid {Geometry.Ssi.Implicit(s1, mA).G:0.###}; n2 V {NormalOf(FE2d, V):0.###} mid {NormalOf(FE2d, mB):0.###} g2 V {Geometry.Ssi.Implicit(s2, V).G:0.###} mid {Geometry.Ssi.Implicit(s2, mB).G:0.###}; f2 at mid eA {sE2 * Geometry.Ssi.Implicit(s2, mA).F:E2}, f1 at mid eB {sE1 * Geometry.Ssi.Implicit(s1, mB).F:E2}");
+                        }
                         continue;
                     }
                 }
