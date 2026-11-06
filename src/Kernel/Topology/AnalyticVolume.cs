@@ -1027,7 +1027,7 @@ public static class AnalyticVolume
                     {
                         double lv = vmax <= 1e-2 ? 0 : 1, dmx = 0;
                         double du = 1e-2 * Math.Max(1e-9, ss.UMax - ss.UMin);
-                        for (int i = 0; i <= K && dmx <= etol; i++)
+                        for (int i = 0; i <= K && (dmx <= etol || ChainDbg); i++)
                         {   // расстояние до края — до ближайшей точки края (золотым сечением по u около проекции)
                             var pt = c.PointAt(sv[i]); double D(double u) => (pt - ss.SectionAt(u).Point(lv)).Length;
                             double lo = Math.Max(ss.UMin, uv[i].X - du), hi = Math.Min(ss.UMax, uv[i].X + du);
