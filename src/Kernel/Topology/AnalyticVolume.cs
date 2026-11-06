@@ -737,7 +737,6 @@ public static class AnalyticVolume
     static readonly bool LinearSideOff = Environment.GetEnvironmentVariable("P3D_BANDLINSIDE") == "0";
     static readonly bool BandChainOff = Environment.GetEnvironmentVariable("P3D_BANDCHAIN") == "0";
     static readonly bool SlabVClamp = Environment.GetEnvironmentVariable("P3D_SLABVCLAMP") != "0";
-    static readonly bool SlabConstV = Environment.GetEnvironmentVariable("P3D_SLABCONSTV") != "0";
     static readonly bool ChainDbg = Environment.GetEnvironmentVariable("P3D_CHAINDBG") == "1";
     /// <summary>k148e: граней ленты со стороной из нескольких рёбер.</summary>
     public static long BandChains;
@@ -1009,22 +1008,9 @@ public static class AnalyticVolume
                         { double m1 = lo + (hi - lo) * 0.381966, m2 = lo + (hi - lo) * 0.618034; if (V(m1) < V(m2)) hi = m2; else lo = m1; }
                         brk.Add(ss.ProjectToUV(c.PointAt((lo + hi) / 2)).Y);
                     }
+                // край по v = const (у ленты — v = 0 или 1 с шумом проекции) горизонтали не пересекает
+                if (uv.Max(q => q.Y) - uv.Min(q => q.Y) <= 1e-9) continue;
                 edges.Add(new SlabEdge { C = c, S = sv, Uv = uv });
-            }
-            // край по v = const (у ленты — v = 0 или 1 с шумом проекции) горизонтали не пересекает — если он и есть нижняя или
-            // верхняя граница области. Я2: у переполнения ленты на грань прежней фаски край новой ленты от точки на ребре v = 0
-            // уходит касательно к нему и чуть ниже (v ≈ −3e-5): тогда ребро v = 0 — внутренняя граница полоски, без него
-            // горизонтали в полоске пересекают контур нечётно (s102 шаг 2). Мутация P3D_SLABCONSTV=0 — пропуск всегда.
-            if (edges.Count > 0)
-            {
-                double vMin = edges.Min(e => e.Uv.Min(q => q.Y)), vMax = edges.Max(e => e.Uv.Max(q => q.Y));
-                edges.RemoveAll(e =>
-                {
-                    double lo = e.Uv.Min(q => q.Y), hi = e.Uv.Max(q => q.Y);
-                    if (hi - lo > 1e-9) return false;
-                    if (!SlabConstV) return true;
-                    return lo - vMin <= 1e-9 || vMax - hi <= 1e-9;
-                });
             }
             brk.Sort();
             // изломы ближе 1e-6 доли — один (концы соседних рёбер в проекции расходятся на 1e-9…1e-7: узлы Гаусса в такой

@@ -53,14 +53,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: ov5_y2o,      cmd: 'y2o', env: '' }
-          - { name: ov5_y2o_m1,   cmd: 'y2o', env: 'P3D_DRENDOVER=0' }
-          - { name: ov5_y2o_m2,   cmd: 'y2o', env: 'P3D_SLABVCLAMP=0' }
-          - { name: ov5_y2o_m3,   cmd: 'y2o', env: 'P3D_SLABCONSTV=0' }
-          - { name: ov5_corpus,   cmd: 'loftseq 10 101 6 OUT', env: '' }
-          - { name: ov5_allA,     cmd: 'allA', env: '' }
-          - { name: ov5_allB,     cmd: 'allB', env: '' }
-          - { name: ov5_fix,      cmd: 'loftcorpus140', env: '' }
+          - { name: ov6_y2o,      cmd: 'y2o', env: '' }
+          - { name: ov6_y2o_m1,   cmd: 'y2o', env: 'P3D_DRENDOVER=0' }
+          - { name: ov6_y2o_m2,   cmd: 'y2o', env: 'P3D_SLABVCLAMP=0' }
+          - { name: ov6_corpus,   cmd: 'loftseq 10 101 6 OUT', env: '' }
+          - { name: ov6_allA,     cmd: 'allA', env: '' }
+          - { name: ov6_allB,     cmd: 'allB', env: '' }
+          - { name: ov6_fix,      cmd: 'loftcorpus140', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
