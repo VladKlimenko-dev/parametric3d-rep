@@ -292,6 +292,13 @@
 - [ ] k149b: импорт STEP-сборки — размещения вхождений (NAUO + CDSR, ITEM_DEFINED_TRANSFORMATION / CARTESIAN_TRANSFORMATION_OPERATOR),
       подсборки, повторные вхождения — сделано. Остаток: MAPPED_ITEM (вхождения через отображённые представления) не
       разбирается; проверить на файлах пользователя (SolidWorks, Inventor, NX).
+- [ ] **Проверки приложения, прогон пользователя 06.11 (Windows, 16 ядер, архив ветки `ya1/state-probe`):** ui1 48/2, ui2 46/2 —
+      UI-DATUM-TREE-K132 («tree icons kept the old theme»), UI-PART-PANEL-K120 («sizes are not shown in the part unit system»),
+      UI-DRAWING-K168 (Sequence contains no matching element), UI-DRAWING-K167 («deviation columns, no text/offset fields»).
+      На Linux (`.github/workflows/ui-probe.yml`) все четыре годны и на `main` (0ca26b7), и на ветке — дело в среде Windows или
+      в порядке прогона, не в ветке (она приложение не трогает). Первые две уже падали у пользователя при прогоне вместе
+      с этапами ядра (k159). Нужен прогон тех же четырёх на `main` у пользователя. Ядро там же: allA 414/0, allB 241/0, fix 1/0,
+      корпус 60 / точных 28 — как на Linux.
 - [ ] **Я2: почему прямой построитель отказывает (корпус `loftseq 10 101 6`, 06.11; ветка `ya1/state-probe`).** Точно 28 из 56
       шагов; 28 — через резец (многогранно). Последняя причина отказа прямого пути (отладка `LOFT_DRALL=1`):
       | Причина | Шаги | Сколько |
