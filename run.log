@@ -1,0 +1,13 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["loftcorpus140"]}
+{"file":"case_s3_C2.17_73931.p3d","Ok":true,"dv":239.9796,"want":239.9796,"Ms":18314,"Problems":[],"expected":null}
+{"file":"case_s3_R2.17_73931.p3d","Ok":true,"dv":96.7719,"want":97.4204,"Ms":1977,"Problems":[],"expected":null}
+{"file":"fail_s10_C2.19_38878.p3d","Ok":true,"dv":52.0596,"want":52.1729,"Ms":518,"Problems":[],"expected":null}
+{"file":"fail_s10_R2.19_38878.p3d","Ok":true,"dv":27.271,"want":27.5096,"Ms":533,"Problems":[],"expected":null}
+{"file":"fail_s13_C1.24_4280.p3d","Ok":true,"dv":9.3578,"want":9.3636,"Ms":2885,"Problems":[],"expected":null}
+{"file":"fail_s15_C0.3_45190.p3d","Ok":true,"dv":0.7025,"want":0.7025,"Ms":56400,"Problems":[],"expected":null}
+{"file":"fail_s15_R0.3_7163.p3d","Ok":true,"dv":0.3056,"want":0.3056,"Ms":60673,"Problems":[],"expected":null}
+{"file":"fail_s15_R0.3_97952.p3d","Ok":true,"dv":0.306,"want":0.306,"Ms":60709,"Problems":[],"expected":null}
+{"file":"fail_s16_R3.01_73375.p3d","Ok":true,"dv":94.7567,"want":95.518,"Ms":4928,"Problems":[],"expected":null}
+{"file":"fail_s17_R1.27_12570.p3d","Ok":true,"dv":3.9246,"want":3.9246,"Ms":10485,"Problems":[],"expected":null}
+{"file":"fail_s1_C2.43_17.p3d","Ok":true,"dv":161.6533,"want":161.6925,"Ms":4184,"Problems":[],"expected":null}
+{"file":"fail_s20_C3.83_25305.p3d","Ok":true,"dv":151.0913,"want":151.9239,"Ms":898,"Problems":[],"expected":null}
