@@ -53,7 +53,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: cr2_d109sb, cmd: 'loftseq 1 109 6 OUT', env: 'LOFT_DRALL=1 P3D_DROPENPAR=0 P3D_DRSECBREAK=1 P3D_CHAINDBG=1' }
+          - { name: r175_y2,     cmd: 'y2',   env: '' }
+          - { name: r175_y2o,    cmd: 'y2o',  env: '' }
+          - { name: r175_corpus, cmd: 'loftseq 10 101 6 OUT', env: '' }
+          - { name: r175_allA,   cmd: 'allA', env: '' }
+          - { name: r175_allB,   cmd: 'allB', env: '' }
+          - { name: r175_fix,    cmd: 'loftcorpus140', env: '' }
+          - { name: r175_mut1,   cmd: 'y2', env: 'P3D_SECNODENAN=0' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
