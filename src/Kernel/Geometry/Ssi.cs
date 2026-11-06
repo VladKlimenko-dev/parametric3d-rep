@@ -287,8 +287,8 @@ public static class Ssi
         void Ev(double uu, double vv)
         {
             var s0 = sc.SectionAt(uu); P = s0.Point(vv); Sv = s0.Deriv(vv);
-            double u2 = uu - side * h;   // вторая точка — глубже в кусок
-            Su = (P - sc.SectionAt(u2).Point(vv)) / (side * h);
+            double u2 = uu + side * h;   // вторая точка — глубже в кусок (side −1: левее)
+            Su = (P - sc.SectionAt(u2).Point(vv)) / (uu - u2);
         }
         bool conv = false;
         for (int it = 0; it < 60; it++)
