@@ -1,0 +1,132 @@
+== STEP s102 0
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open end 0: t -11.9608 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -23.9216 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -47.8431 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -95.6863 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -191.3725 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -382.7450 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -765.4900 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -1530.9800 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -3061.9601 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 0.35842928
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 65.073593
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 0.00044068367
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 65.073593
+DR open: table vs formula 1.36E-012 at t 65.0558 (Δ 65.074) widths 6/6 Lp 68.264
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-1.4951, 66.569] contacts A [0.358429, 65.0736] B [0.000440684, 65.0736] Δ 65.074
+DR finish: assembled 0.0s
+DR finish: meshed 0.1s
+PCDBG edge 216 ProcCurve3 rev True surf SectionSurface  dev 0.000146
+   t 0.000 xyz (25.74682650111144, 13.794528356585554, -1.7494277952531446E-15) uvP (1.4999186403074722, 1.0000000000000002) proj (1.4999186403074722, 1.0000000000000002) S(uv) (25.746826501111443, 13.794528356585557, -1.949900304593288E-15)
+   t 0.125 xyz (26.18501728519506, 12.926123337678263, -1.495510763183326E-15) uvP (1.4999186403074722, 0.8750000000000001) proj (1.4999186403074722, 0.8750000000000001) S(uv) (26.185017285195062, 12.926123337678264, -1.545762715520942E-15)
+   t 0.250 xyz (26.62320806927868, 12.057718318770968, 8.345113026669321E-16) uvP (1.4999186403074685, 0.75) proj (1.4999186403074685, 0.75) S(uv) (26.62320806927868, 12.057718318770968, 8.345113026669321E-16)
+   t 0.375 xyz (27.0613988533623, 11.189313299863677, -9.876766990436895E-16) uvP (1.499918640307473, 0.6250000000000003) proj (1.499918640307473, 0.6249999999999999) S(uv) (27.061398853362306, 11.189313299863684, -1.0146443576593517E-15)
+   t 0.500 xyz (27.49958963744592, 10.320908280956385, 8.345113026669321E-16) uvP (1.4999186403074685, 0.49999999999999983) proj (1.4999186403074685, 0.49999999999999983) S(uv) (27.49958963744592, 10.320908280956385, 8.345113026669321E-16)
+   t 0.625 xyz (27.937780421529542, 9.452503262049094, -4.798426349040529E-16) uvP (1.499918640307475, 0.3749999999999999) proj (1.499918640307475, 0.3749999999999999) S(uv) (27.937780421529546, 9.452503262049095, -4.685176815455566E-16)
+   t 0.750 xyz (28.37597120561316, 8.584098243141801, -1.1533606423980915E-14) uvP (1.4999186403075984, 0.25000000000000017) proj (1.4999186403075984, 0.24999999999999975) S(uv) (28.375971205613155, 8.584098243141803, -1.1539674261304665E-14)
+   t 0.875 xyz (28.81416191921134, 7.715696767854688, 8.25294693695966E-16) uvP (1.4999186403033467, 0.12500041064070055) proj (1.4999186403033467, 0.12500041064070055) S(uv) (28.81416055018502, 7.715696077054075, 4.124201028122587E-12)
+   t 1.000 xyz (29.25219687485369, 6.846917316622627, -3.7420543603722445E-16) uvP (1.8589557406022614, -6.299047903928E-17) proj (1.8589557406022585, -2.698662246727847E-16) S(uv) (29.252196874853688, 6.846917316622627, -5.930106008577214E-16)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 216) | edge tol 0.00E+000 curve ProcCurve3 (29.252, 6.847, -0)->(25.747, 13.795, -0)
+DR finish: validated 0.3s
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 216)
+DR open invalid edge e216 ProcCurve3:chamfer end (29.2522, 6.8469, -0)->(25.7468, 13.7945, -0) faces #d000000001/loft:start PlaneSurface / chamfer:face SectionSurface
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 150/0 steps of 0.12 mm
+DR open: reference fit degree 8 worst 1.62E+000 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 12 worst 9.59E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 16 worst 7.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 24 worst 2.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 32 worst 1.40E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 48 worst 5.75E-002 (tol 1.0E-003) length 83.0734
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 151/150 steps of 0.12 mm
+DR open: reference fit degree 8 worst 4.20E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 12 worst 2.26E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 16 worst 1.90E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 24 worst 8.10E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 32 worst 2.82E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 48 worst 2.68E-002 (tol 1.0E-003) length 101.194
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR declined: not a straight edge | curved chamfer: open curved: the blend does not leave the end face (end face too oblique?) | generic parameter: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+== REBUILDCHECK s102 0
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open end 0: t -11.9608 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -23.9216 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -47.8431 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -95.6863 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -191.3725 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -382.7450 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -765.4900 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -1530.9800 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open end 0: t -3061.9601 (Δ 65.0740) spine null edge (NaN, NaN, NaN) f []
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: reference fit degree 8 worst 3.48E-002 (tol 1.0E-003) length 65.074
+DR open: reference fit degree 12 worst 4.93E-003 (tol 1.0E-003) length 65.074
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 0.35842928
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[0] at t 65.073593
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 0.00044068367
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[3] at t 65.073593
+DR open: table vs formula 1.36E-012 at t 65.0558 (Δ 65.074) widths 6/6 Lp 68.264
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends Plane/Plane t [-1.4951, 66.569] contacts A [0.358429, 65.0736] B [0.000440684, 65.0736] Δ 65.074
+DR finish: assembled 0.0s
+DR finish: meshed 0.0s
+PCDBG edge 3083 ProcCurve3 rev True surf SectionSurface  dev 0.000146
+   t 0.000 xyz (25.74682650111144, 13.794528356585554, -1.7494277952531446E-15) uvP (1.4999186403074722, 1.0000000000000002) proj (1.4999186403074722, 1.0000000000000002) S(uv) (25.746826501111443, 13.794528356585557, -1.949900304593288E-15)
+   t 0.125 xyz (26.18501728519506, 12.926123337678263, -1.495510763183326E-15) uvP (1.4999186403074722, 0.8750000000000001) proj (1.4999186403074722, 0.8750000000000001) S(uv) (26.185017285195062, 12.926123337678264, -1.545762715520942E-15)
+   t 0.250 xyz (26.62320806927868, 12.057718318770968, 8.345113026669321E-16) uvP (1.4999186403074685, 0.75) proj (1.4999186403074685, 0.75) S(uv) (26.62320806927868, 12.057718318770968, 8.345113026669321E-16)
+   t 0.375 xyz (27.0613988533623, 11.189313299863677, -9.876766990436895E-16) uvP (1.499918640307473, 0.6250000000000003) proj (1.499918640307473, 0.6249999999999999) S(uv) (27.061398853362306, 11.189313299863684, -1.0146443576593517E-15)
+   t 0.500 xyz (27.49958963744592, 10.320908280956385, 8.345113026669321E-16) uvP (1.4999186403074685, 0.49999999999999983) proj (1.4999186403074685, 0.49999999999999983) S(uv) (27.49958963744592, 10.320908280956385, 8.345113026669321E-16)
+   t 0.625 xyz (27.937780421529542, 9.452503262049094, -4.798426349040529E-16) uvP (1.499918640307475, 0.3749999999999999) proj (1.499918640307475, 0.3749999999999999) S(uv) (27.937780421529546, 9.452503262049095, -4.685176815455566E-16)
+   t 0.750 xyz (28.37597120561316, 8.584098243141801, -1.1533606423980915E-14) uvP (1.4999186403075984, 0.25000000000000017) proj (1.4999186403075984, 0.24999999999999975) S(uv) (28.375971205613155, 8.584098243141803, -1.1539674261304665E-14)
+   t 0.875 xyz (28.81416191921134, 7.715696767854688, 8.25294693695966E-16) uvP (1.4999186403033467, 0.12500041064070055) proj (1.4999186403033467, 0.12500041064070055) S(uv) (28.81416055018502, 7.715696077054075, 4.124201028122587E-12)
+   t 1.000 xyz (29.25219687485369, 6.846917316622627, -3.7420543603722445E-16) uvP (1.8589557406022614, -6.299047903928E-17) proj (1.8589557406022585, -2.698662246727847E-16) S(uv) (29.252196874853688, 6.846917316622627, -5.930106008577214E-16)
+DR   invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 3083) | edge tol 0.00E+000 curve ProcCurve3 (29.252, 6.847, -0)->(25.747, 13.795, -0)
+DR finish: validated 0.2s
+DR invalid: [BRep/Error] pcurve-inconsistent: p-кривая (ProjectedCurve2) отходит от ребра (ProcCurve3) на 1.46E-004 мм при допуске 1.00E-007 (элемент 3083)
+DR open invalid edge e3083 ProcCurve3:chamfer end (29.2522, 6.8469, -0)->(25.7468, 13.7945, -0) faces #d000000001/loft:start PlaneSurface / chamfer:face SectionSurface
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 150/0 steps of 0.12 mm
+DR open: reference fit degree 8 worst 1.62E+000 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 12 worst 9.59E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 16 worst 7.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 24 worst 2.82E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 32 worst 1.40E-001 (tol 1.0E-003) length 83.0734
+DR open: reference fit degree 48 worst 5.75E-002 (tol 1.0E-003) length 83.0734
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR open: convexity probe at 0.25 p (29.618, 8.563, -11.942) nA (0.887, -0.461, 0.002) nB (0.288, 0.85, -0.441) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.5 p (25.306, 0.169, -29.311) nA (0.771, -0.626, 0.115) nB (0.449, 0.747, -0.49) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: convexity probe at 0.75 p (20.995, -8.225, -46.68) nA (0.601, -0.773, 0.205) nB (0.627, 0.65, -0.429) inside False (eps 3), faces #d000000001/loft:side[0]/#d000000001/loft:side[3]
+DR open: march extension 151/150 steps of 0.12 mm
+DR open: reference fit degree 8 worst 4.20E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 12 worst 2.26E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 16 worst 1.90E-001 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 24 worst 8.10E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 32 worst 2.82E-002 (tol 1.0E-003) length 101.194
+DR open: reference fit degree 48 worst 2.68E-002 (tol 1.0E-003) length 101.194
+DR open: reference curve not fitted (SplineCurve3, chain 1: SplineCurve3)
+DR declined: not a straight edge | curved chamfer: open curved: the blend does not leave the end face (end face too oblique?) | generic parameter: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+== REBUILDCHECK END s102 0
+seconds 20 nproc 4 env P3D_SECBREAKNODE=1 P3D_PCDBG=1 P3D_DROPENPAR=0 LOFT_DRALL=1 cmd loftseq 1 102 1 res/out
