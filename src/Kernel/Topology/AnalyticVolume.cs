@@ -736,6 +736,7 @@ public static class AnalyticVolume
     static T Prof1<T>(string n, Func<T> f) { using (Diagnostics.Prof.Time(n)) return f(); }
     static readonly bool LinearSideOff = Environment.GetEnvironmentVariable("P3D_BANDLINSIDE") == "0";
     static readonly bool BandChainOff = Environment.GetEnvironmentVariable("P3D_BANDCHAIN") == "0";
+    static readonly bool SlabVClamp = Environment.GetEnvironmentVariable("P3D_SLABVCLAMP") != "0";
     static readonly bool SlabConstV = Environment.GetEnvironmentVariable("P3D_SLABCONSTV") != "0";
     static readonly bool ChainDbg = Environment.GetEnvironmentVariable("P3D_CHAINDBG") == "1";
     /// <summary>k148e: граней ленты со стороной из нескольких рёбер.</summary>
@@ -990,7 +991,13 @@ public static class AnalyticVolume
             {
                 var c = ce.Edge.Curve;
                 var sv = new double[K + 1]; var uv = new Vector2d[K + 1];
-                for (int i = 0; i <= K; i++) { sv[i] = c.T0 + (c.T1 - c.T0) * i / K; uv[i] = ss.ProjectToUV(c.PointAt(sv[i])); if (!double.IsFinite(uv[i].X + uv[i].Y)) return null; }
+                for (int i = 0; i <= K; i++)
+                {
+                    sv[i] = c.T0 + (c.T1 - c.T0) * i / K; uv[i] = ss.ProjectToUV(c.PointAt(sv[i])); if (!double.IsFinite(uv[i].X + uv[i].Y)) return null;
+                    // Я2: у вершины веера (сечения ленты сходятся в точку на краю v = 0) проекция неоднозначна и даёт v ≈ −3e-5:
+                    // край области по v — сам край ленты (s102 шаг 2, грань прежней фаски). Мутация P3D_SLABVCLAMP=0.
+                    if (SlabVClamp) { if (uv[i].Y < 0 && uv[i].Y > -1e-4) uv[i].Y = 0; else if (uv[i].Y > 1 && uv[i].Y < 1 + 1e-4) uv[i].Y = 1; }
+                }
                 for (int i = 1; i <= K; i++) if (Math.Abs(uv[i].X - uv[i - 1].X) > 0.25 * Math.Max(1e-9, ss.UMax - ss.UMin)) { if (ChainDbg) Console.Error.WriteLine($"SLAB {f.Tag}: u jump on {c.GetType().Name} {uv[i - 1]} → {uv[i]} (u {ss.UMin:G5}..{ss.UMax:G5})"); return null; }   // скачок по u — не та лента
                 brk.Add(uv[0].Y); brk.Add(uv[K].Y);
                 for (int i = 1; i < K; i++)
