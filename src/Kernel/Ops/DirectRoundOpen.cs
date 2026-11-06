@@ -1403,7 +1403,18 @@ public static partial class DirectRound
                 Interlocked.Increment(ref CuspEnds);
                 Debug?.Invoke($"open: end {k} at a cusp: end face tangent to a face of the edge along the seam, beyond the seam {mcu:0.###}, f {fBefore:E2}/{fBeyond:E2}");
             }
-            if (!(fBeyond * fBefore < 0)) { why = $"open curved: the edge does not cross the end face (end {k} at {ends[k].V}, face {ends[k].FE.Surf.GetType().Name} {ends[k].FE.Tag}, f {fBefore:E2}/{fBeyond:E2})"; return false; }
+            if (!(fBeyond * fBefore < 0))
+            {
+                if (two[k] && Debug != null)
+                {
+                    foreach (double sg in new[] { -1.0, 1.0 })
+                    {
+                        var xx = Ed(tEnd + sg * dk * 1e-4 * step);
+                        Debug($"open: end {k} two-face {(sg < 0 ? "before" : "beyond")}: f1 {ends[k].SE * Geometry.Ssi.Implicit(ends[k].ShE, xx).F:E3} f2 {se2[k] * Geometry.Ssi.Implicit(sh2[k]!, xx).F:E3} (convex {conv2[k]}, endSign {endSign[k]}), at {xx:0.#####}, V {ends[k].V:0.#####}, tEnd {tEnd:G8} Δ {Delta:G8}");
+                    }
+                }
+                why = $"open curved: the edge does not cross the end face (end {k} at {ends[k].V}, face {ends[k].FE.Surf.GetType().Name} {ends[k].FE.Tag}, f {fBefore:E2}/{fBeyond:E2})"; return false;
+            }
             if (fBeyond < 0) endSign[k] = -1;
             // k144b: доли шага — только при гранях NURBS (стенки лофта и их продолжения): у аналитических граней отказ удвоением
             // уводит ребро на другой маршрут (цилиндр ∪ шар — фаска 3/5 на кривой пересечения: с долями лента строится здесь,
