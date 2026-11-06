@@ -1,0 +1,1 @@
+seconds 26 nproc 4 env CORPUS_ONLY=seq_s101_4 P3D_DRTABREFINE=0 cmd loftcorpus140
