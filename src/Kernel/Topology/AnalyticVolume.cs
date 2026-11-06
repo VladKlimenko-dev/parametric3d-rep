@@ -954,6 +954,7 @@ public static class AnalyticVolume
                         var s0 = ss.SectionAt(u);
                         var P = s0.Point(v); var su = (ss.SectionAt(u + h).Point(v) - ss.SectionAt(u - h).Point(v)) / (2 * h); var sv = s0.Deriv(v);
                         var c = Vector3d.Cross(su, sv);
+                        if (ChainDbg && !double.IsFinite(c.X + P.X) && Interlocked.Increment(ref _nanDbg) < 6) Console.Error.WriteLine($"BANDNAN seq {f.Tag} u {u:G10} v {v:G8} P {P} su {su} sv {sv} piece {pa:G8}..{pb:G8} uLR {uL:G8}..{uR:G8} surf u {ss.UMin:G8}..{ss.UMax:G8} breaks {string.Join(" ", ss.Breaks.Select(x => x.ToString("G8")))}");
                         vol += Vector3d.Dot(P - _origin, c) * w; ar += c.Length * w; va += c * w;
                     }
                 }
