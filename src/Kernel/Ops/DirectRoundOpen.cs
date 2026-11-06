@@ -394,10 +394,41 @@ public static partial class DirectRound
         var allEdges = body.Edges.ToList();
         var ends = new (FDesc FE, Geometry.Ssi.Shape ShE, TEdge EA, TEdge EB, Vector3d V, double SE)[2];
         var joint = new int[2];   // k145: 0 — торец; 1/2 — стык касательной цепочки, гладкое ребро на стороне A/B
+        // Я2: ДВУХГРАННЫЙ ТОРЕЦ — в конечной вершине четыре грани: A, B и два торца E1 (у A) и E2 (у B), сходящиеся по ребру m
+        // (s108 шаг 2: торцы — грани прежних правок под 74°). Край ленты — по E1 до точки, где m протыкает ленту, дальше по E2;
+        // «за торцом» — снаружи обоих (выпуклый излом m: max) или любого (вогнутый: min) — как у Parasolid/OCCT, где край ленты
+        // пересекается с гранями у вершины по очереди (ChFi3d PerformIntersectionAtEnd). Мутация P3D_DRTWOEND=0.
+        var two = new bool[2]; var fe2 = new FDesc?[2]; var sh2 = new Geometry.Ssi.Shape?[2]; var se2 = new double[2];
+        var mEdge = new TEdge?[2]; var conv2 = new bool[2];
         for (int k = 0; k < 2; k++)
         {
             var V = k == 0 ? P0 : P1;
             var at = allEdges.Where(x => !chainSet.Contains(x) && ((x.V0.P - V).Length < 1e-7 || (x.V1.P - V).Length < 1e-7)).ToList();
+            if (at.Count == 3 && TwoEnd)
+            {
+                TFace? Oth(TEdge x, TFace f) { var xf = x.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList(); return xf.Count == 2 && xf.Contains(f) ? xf.First(y => y != f) : null; }
+                var tA2 = at.FirstOrDefault(x => Oth(x, fs[0]) is TFace o && o != fs[1]);
+                var tB2 = at.FirstOrDefault(x => x != tA2 && Oth(x, fs[1]) is TFace o && o != fs[0]);
+                var tM = at.FirstOrDefault(x => x != tA2 && x != tB2);
+                if (tA2 != null && tB2 != null && tM != null && (jctx == null || !jctx.Pts.Any(q => (q - V).Length < 1e-7)))
+                {
+                    var f1 = Oth(tA2, fs[0])!; var f2 = Oth(tB2, fs[1])!;
+                    if (f1 != f2 && Oth(tM, f1) == f2 && byFace.TryGetValue(f1, out var FE1d) && byFace.TryGetValue(f2, out var FE2d)
+                        && BlendShapeOf(FE1d.Surf) is { } s1 && BlendShapeOf(FE2d.Surf) is { } s2
+                        && (tA2.V0.P - tA2.V1.P).Length > 1e-7 && (tB2.V0.P - tB2.V1.P).Length > 1e-7 && (tM.V0.P - tM.V1.P).Length > 1e-7)
+                    {
+                        double sE1 = Vector3d.Dot(NormalOf(FE1d, V), Geometry.Ssi.Implicit(s1, V).G) > 0 ? 1 : -1;
+                        double sE2 = Vector3d.Dot(NormalOf(FE2d, V), Geometry.Ssi.Implicit(s2, V).G) > 0 ? 1 : -1;
+                        var ca = tA2.Curve; bool a0 = (ca.PointAt(ca.T0) - V).Length <= (ca.PointAt(ca.T1) - V).Length;
+                        var u1 = ca.TangentAt(a0 ? ca.T0 : ca.T1); if (!a0) u1 = -u1;
+                        two[k] = true; fe2[k] = FE2d; sh2[k] = s2; se2[k] = sE2; mEdge[k] = tM;
+                        conv2[k] = Vector3d.Dot(NormalOf(FE2d, V), u1) < 0;
+                        ends[k] = (FE1d, s1, tA2, tB2, V, sE1);
+                        Debug?.Invoke($"open: end {k}: two end faces {FE1d.Tag} / {FE2d.Tag}, crease {(conv2[k] ? "convex" : "concave")}");
+                        continue;
+                    }
+                }
+            }
             if (at.Count != 2)
             {
                 if (Debug != null)
@@ -437,6 +468,7 @@ public static partial class DirectRound
             ends[k] = (FE, shE, eA, eB, V, sE);
         }
         if (ends[0].FE == FA || ends[0].FE == FB || ends[1].FE == FA || ends[1].FE == FB) { why = "open curved: end face is a face of the edge"; return false; }
+        for (int k = 0; k < 2; k++) if (two[k] && (fe2[k] == FA || fe2[k] == FB || fe2[k] == ends[1 - k].FE || (two[1 - k] && fe2[k] == fe2[1 - k]))) { why = "open curved: two-face end shares a face"; return false; }
 
         var Pm = E.PointAt((E.T0 + E.T1) / 2);
         double sA = Vector3d.Dot(NormalOf(FA, Pm), Geometry.Ssi.Implicit(shA, Pm).G) > 0 ? 1 : -1;
@@ -950,9 +982,15 @@ public static partial class DirectRound
         // торцом» — сторона материала у E или за продолжением шва: на стороне касания корень — пересечение контакта с
         // продолжением шва (поперёк), на остальной ленте — с самим торцом
         var cusp = new Vector3d?[2];
-        double Fend(int k, Vector3d x) => cusp[k] is { } mc
+        double Fend(int k, Vector3d x) => two[k] ? endSign[k] * F2End(k, x)
+            : cusp[k] is { } mc
             ? Math.Max(-ends[k].SE * Geometry.Ssi.Implicit(ends[k].ShE, x).F, Vector3d.Dot(x - ends[k].V, mc))
             : endSign[k] * ends[k].SE * Geometry.Ssi.Implicit(ends[k].ShE, x).F;
+        double F2End(int k, Vector3d x)
+        {
+            double f1 = ends[k].SE * Geometry.Ssi.Implicit(ends[k].ShE, x).F, f2 = se2[k] * Geometry.Ssi.Implicit(sh2[k]!, x).F;
+            return conv2[k] ? Math.Max(f1, f2) : Math.Min(f1, f2);
+        }
         // направление «за шов»: торец E касается грани A (или B) в вершине, шов A ∩ E — гладкий; m — в грани касания поперёк
         // шва, по ходу ребра за конец
         Vector3d? CuspDir(int k, double tEnd, double dk)
@@ -1356,7 +1394,7 @@ public static partial class DirectRound
                 continue;
             }
             double fBeyond = Fend(k, Ed(tEnd + dk * 1e-4 * step)), fBefore = Fend(k, Ed(tEnd - dk * 1e-4 * step));
-            if (!(fBeyond * fBefore < 0) && CuspEnd && CuspDir(k, tEnd, dk) is { } mcu)
+            if (!(fBeyond * fBefore < 0) && CuspEnd && !two[k] && CuspDir(k, tEnd, dk) is { } mcu)
             {
                 // k150: ОСТРИЕ (карман со скруглённой кромкой, Sweep_Blend): ребро торец только касается — торец касается грани
                 // ребра вдоль шва (A ∩ E), а лента торец пересекает целиком. Конец — по «за торцом или за швом». Мутация P3D_DRCUSPEND=0.
@@ -1890,7 +1928,7 @@ public static partial class DirectRound
             }
             if (oA) bA = main; else bB = main;
         }
-        bool anyJoint = joint[0] != 0 || joint[1] != 0;
+        bool anyJoint = joint[0] != 0 || joint[1] != 0 || two[0] || two[1];
         if (OpenCylOn && !anyJoint && !ch && varLaw == null && knotT.Count == 0 && chain.Count == 1 && chain[0].Curve is LineCurve3
             && shA is Geometry.Ssi.Plane && shB is Geometry.Ssi.Plane && ends[0].ShE is Geometry.Ssi.Plane pe0 && ends[1].ShE is Geometry.Ssi.Plane pe1
             && OpenCylinder(Spine, Gen, QA, QB, EndPt, r, tLo, tHi, tA0, tA1, tB0, tB1, pe0, pe1) is { } oc)
@@ -1932,7 +1970,31 @@ public static partial class DirectRound
             else jctx.Arcs.Add((V, arc, qa, qb, jC[k], jShT[k]!, jOffT[k]));
             if (k == 0) bE0 = arc; else bE1 = arc;
         }
+        // Я2: двухгранный торец — точка, где ребро m протыкает ленту (край переходит с E1 на E2)
+        var pStar = new Vector3d[2]; var vStar = new double[2];
+        ICurve3?[] bEa = new ICurve3?[2], bEb = new ICurve3?[2];
+        for (int k = 0; k < 2; k++)
+        {
+            if (!two[k]) continue;
+            if (swPart[0] != null || swPart[1] != null || crOn[0] || crOn[1] || joint[k] != 0) { why = "open curved: two-face end with a seam switch"; return false; }
+            double H(double v) { var x = EndPt(k, v); return ends[k].SE * Geometry.Ssi.Implicit(ends[k].ShE, x).F - se2[k] * Geometry.Ssi.Implicit(sh2[k]!, x).F; }
+            double h0 = H(0), h1 = H(1);
+            // край на стороне A — на E1, на стороне B — на E2: у выпуклого излома f1 = 0 ≥ f2 у A (H ≥ 0), у вогнутого — наоборот
+            if (!double.IsFinite(h0 + h1) || !(h0 * h1 < 0) || (h0 > 0) != conv2[k]) { why = $"open curved: two-face end — the end curve does not pass from E1 to E2 ({h0:E1}/{h1:E1})"; return false; }
+            double va = 0, vb = 1, ha = h0;
+            for (int it = 0; it < 64 && vb - va > 1e-15; it++) { double vm = 0.5 * (va + vb), hm = H(vm); if (!double.IsFinite(hm)) { why = "open curved: two-face end — end curve undefined"; return false; } if ((hm > 0) == (ha > 0)) { va = vm; ha = hm; } else vb = vm; }
+            vStar[k] = 0.5 * (va + vb); pStar[k] = EndPt(k, vStar[k]);
+            var mc = mEdge[k]!.Curve; double dm = (mc.PointAt(CurveParam.Closest(mc, pStar[k])) - pStar[k]).Length;
+            if (dm > 1e-7) { why = $"open curved: two-face end — the crease edge misses the blend ({dm:E1} mm)"; return false; }
+            var bE = k == 0 ? bE0 : bE1;
+            bEa[k] = Analytic.GeneralBoolean.SubCurve(bE, bE.T0, bE.T0 + (bE.T1 - bE.T0) * vStar[k]);
+            bEb[k] = Analytic.GeneralBoolean.SubCurve(bE, bE.T0 + (bE.T1 - bE.T0) * vStar[k], bE.T1);
+            if ((bEa[k]!.PointAt(bEa[k]!.T1) - pStar[k]).Length > 1e-7) { why = "open curved: two-face end — end curve split misses the crease point"; return false; }
+            Interlocked.Increment(ref TwoEnds);
+            Debug?.Invoke($"open: end {k}: crease point {pStar[k]:0.####} at v {vStar[k]:G6}");
+        }
         var cuts = new Dictionary<TEdge, List<(Vector3d Old, Vector3d New)>>();
+        for (int k = 0; k < 2; k++) if (two[k]) cuts[mEdge[k]!] = new() { (ends[k].V, pStar[k]) };
         foreach (var (x, oldP, q, kk, isA) in new[] { (ends[0].EA, P0, qa0, 0, true), (ends[0].EB, P0, qb0, 0, false), (ends[1].EA, P1, qa1, 1, true), (ends[1].EB, P1, qb1, 1, false) })
         {
             // стык: ребро общей стороны — соседнее звено цепочки (его заменит своя лента), укорачивается только гладкое
@@ -1961,6 +2023,32 @@ public static partial class DirectRound
             if (joint[k] != 0) continue;
             var (FEk, _, eA, eB, V, _) = ends[k];
             bool done = false;
+            if (two[k])
+            {
+                // E1: между A∩E1 и m — край от qa до точки излома; E2: между m и B∩E2 — от точки излома до qb
+                var ps = pStar[k];
+                foreach (var (F, e1x, e2x, c, a, b) in new[] { (FEk, eA, mEdge[k]!, bEa[k]!, qa, ps), (fe2[k]!, mEdge[k]!, eB, bEb[k]!, ps, qb) })
+                {
+                    bool d2 = false;
+                    foreach (var loop in F.Loops)
+                    {
+                        int n2 = loop.Count;
+                        for (int i = 0; i < n2 && !d2; i++)
+                        {
+                            var s1 = loop[i]; var s2 = loop[(i + 1) % n2];
+                            if ((s1.B - V).Length > 1e-7 || (s2.A - V).Length > 1e-7) continue;
+                            if (s1.Id == e1x && s2.Id == e2x) loop.Insert(i + 1, new Seg { Curve = c, A = a, B = b });
+                            else if (s1.Id == e2x && s2.Id == e1x) loop.Insert(i + 1, new Seg { Curve = c, A = b, B = a });
+                            else continue;
+                            d2 = true;
+                        }
+                        if (d2) break;
+                    }
+                    if (!d2) { why = "open curved: two-face end — corner not found in an end face"; return false; }
+                    F.Touched = true;
+                }
+                continue;
+            }
             foreach (var loop in FEk.Loops)
             {
                 int n = loop.Count;
@@ -1979,7 +2067,7 @@ public static partial class DirectRound
             FEk.Touched = true;
         }
         // звенья с укороченными рёбрами — во всех гранях
-        foreach (var F in new[] { FA, FB, ends[0].FE, ends[1].FE }.Distinct())
+        foreach (var F in new[] { FA, FB, ends[0].FE, ends[1].FE, fe2[0], fe2[1] }.OfType<FDesc>().Distinct())
             foreach (var loop in F.Loops)
                 foreach (var sg in loop)
                     if (sg.Id != null && trimmed.TryGetValue(sg.Id, out var tr))
@@ -2020,13 +2108,12 @@ public static partial class DirectRound
         var want = ch ? (Geometry.Ssi.Implicit(shA, Em).G * sA + Geometry.Ssi.Implicit(shB, Em).G * sB) : (mid - gm.C).Normalized() * (-sigma);
         var nS = ReferenceEquals(bSurf, surf) ? surf.NormalAt(new Vector2d((tm - tLo) * kU, 0.5)) : bSurf.NormalAt(bSurf.ProjectToUV(mid));
         var bl = new FDesc { Surf = bSurf, Rev = Vector3d.Dot(nS, want) < 0, Tag = ch ? "chamfer:face" : "round:face", Touched = true, Hint = mid };
-        bl.Loops.Add(new List<Seg>
-        {
-            new() { Curve = bA, A = qa0, B = qa1 },
-            new() { Curve = bE1, A = qa1, B = qb1 },
-            new() { Curve = bB, A = qb1, B = qb0 },
-            new() { Curve = bE0, A = qb0, B = qa0 },
-        });
+        bl.Loops.Add(new List<Seg> { new() { Curve = bA, A = qa0, B = qa1 } });
+        if (two[1]) { bl.Loops[0].Add(new() { Curve = bEa[1]!, A = qa1, B = pStar[1] }); bl.Loops[0].Add(new() { Curve = bEb[1]!, A = pStar[1], B = qb1 }); }
+        else bl.Loops[0].Add(new() { Curve = bE1, A = qa1, B = qb1 });
+        bl.Loops[0].Add(new() { Curve = bB, A = qb1, B = qb0 });
+        if (two[0]) { bl.Loops[0].Add(new() { Curve = bEb[0]!, A = qb0, B = pStar[0] }); bl.Loops[0].Add(new() { Curve = bEa[0]!, A = pStar[0], B = qa0 }); }
+        else bl.Loops[0].Add(new() { Curve = bE0, A = qb0, B = qa0 });
         foreach (bool oA in new[] { true, false })
         {
             // сторона T ленты: куски по порядку от конца 0 к концу 1 (у стороны B обход ленты — обратный)
@@ -2723,6 +2810,9 @@ public static partial class DirectRound
     static bool TabRefine => TabRefineOn && !_tabRefineOff.Value;
     /// <summary>Я2: таблиц ленты, перестроенных мельче из-за отхода от формулы.</summary>
     public static long TabRefines;
+    static readonly bool TwoEnd = Environment.GetEnvironmentVariable("P3D_DRTWOEND") != "0";
+    /// <summary>Я2: лент с двухгранным торцом (вершина степени 4).</summary>
+    public static long TwoEnds;
     static readonly bool ProfDbg = Environment.GetEnvironmentVariable("P3D_OPENPROF") == "1";
     static readonly bool EndScanDbg = Environment.GetEnvironmentVariable("P3D_ENDSCAN") == "1";
     static readonly bool EndHole = Environment.GetEnvironmentVariable("P3D_DRENDHOLE") != "0";
