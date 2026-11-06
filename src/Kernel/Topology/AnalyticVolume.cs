@@ -1249,11 +1249,13 @@ public static class AnalyticVolume
             case RevolvedSurface rv2:
                 return RevolvedIntegral(f, rv2);
             case SectionSurface band when !BandOff && BandRange(f, band) != null:
-                return BandIntegral(f, band, area: false);
+            { var r0 = BandIntegral(f, band, area: false); if (r0 == null && ChainDbg) Console.Error.WriteLine($"VOLBAND null {f.Tag}"); return r0; }
             case SectionSurface ob when BandOpenRange(f, ob) is { } orr:
-                return BandOpenIntegral(f, ob, orr, area: false);
+            { var r1 = BandOpenIntegral(f, ob, orr, area: false); if (r1 == null && ChainDbg) Console.Error.WriteLine($"VOLBANDOPEN null {f.Tag} range {orr}"); return r1; }
             case SectionSurface sl when !SlabOff && sl.IsProcedural && !sl.Closed:
-                return BandSlabIntegral(f, sl, area: false);
+            { var r2 = BandSlabIntegral(f, sl, area: false); if (r2 == null && ChainDbg) Console.Error.WriteLine($"VOLSLAB null {f.Tag}"); return r2; }
+            case SectionSurface sx when ChainDbg:
+                Console.Error.WriteLine($"VOLSEC none {f.Tag} procedural {sx.IsProcedural} closed {sx.Closed}"); return null;
             case CornerPatchSurface cpv when WholePatch(f, cpv):
             {
                 var oc = _origin;
