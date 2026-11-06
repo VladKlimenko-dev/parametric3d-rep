@@ -397,7 +397,7 @@ public static partial class DirectRound
         // Я2: ДВУХГРАННЫЙ ТОРЕЦ — в конечной вершине четыре грани: A, B и два торца E1 (у A) и E2 (у B), сходящиеся по ребру m
         // (s108 шаг 2: торцы — грани прежних правок под 74°). Край ленты — по E1 до точки, где m протыкает ленту, дальше по E2;
         // «за торцом» — снаружи обоих (выпуклый излом m: max) или любого (вогнутый: min) — как у Parasolid/OCCT, где край ленты
-        // пересекается с гранями у вершины по очереди (ChFi3d PerformIntersectionAtEnd). Мутация P3D_DRTWOEND=0.
+        // пересекается с гранями у вершины по очереди (ChFi3d PerformIntersectionAtEnd). Опыт: P3D_DRTWOEND=1.
         var two = new bool[2]; var fe2 = new FDesc?[2]; var sh2 = new Geometry.Ssi.Shape?[2]; var se2 = new double[2];
         var mEdge = new TEdge?[2]; var conv2 = new bool[2];
         for (int k = 0; k < 2; k++)
@@ -2829,7 +2829,10 @@ public static partial class DirectRound
     static bool TabRefine => TabRefineOn && !_tabRefineOff.Value;
     /// <summary>Я2: таблиц ленты, перестроенных мельче из-за отхода от формулы.</summary>
     public static long TabRefines;
-    static readonly bool TwoEnd = Environment.GetEnvironmentVariable("P3D_DRTWOEND") != "0";
+    /// <summary>Я2, опыт (по умолчанию выключен, P3D_DRTWOEND=1): двухгранный торец ленты. На корпусе единственный случай
+    /// (s108 шаг 2) — переполнение: фаска 4.56 шире грани A у торца, «целиком внутри» сечения нет до t = −504; годного случая
+    /// для проверки нет — BACKLOG, Я2.</summary>
+    static readonly bool TwoEnd = Environment.GetEnvironmentVariable("P3D_DRTWOEND") == "1";
     /// <summary>Я2: лент с двухгранным торцом (вершина степени 4).</summary>
     public static long TwoEnds;
     static readonly bool ProfDbg = Environment.GetEnvironmentVariable("P3D_OPENPROF") == "1";
