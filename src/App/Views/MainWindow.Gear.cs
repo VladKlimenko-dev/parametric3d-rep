@@ -64,13 +64,12 @@ public partial class MainWindow
         // правка: копия параметров → перестроение; не строится — параметры прежние, причина — в панели
         void Apply(Action<GearParams> change)
         {
-            var old = p.Clone();
-            change(p);
-            if (!sk.Regenerate(g, out var why))
-            {
-                g.P = old; sk.Regenerate(g, out _);
-                _gearError = why;
-            }
+            var np = p.Clone();
+            change(np);
+            // проверка до правки эскиза: негодные параметры не меняют ни шестерню, ни стек отмены
+            if (GearGeometry.Build(np, out var why) == null) { _gearError = why; Avalonia.Threading.Dispatcher.UIThread.Post(ShowProperties); return; }
+            var old = g.P; g.P = np;
+            if (!sk.Regenerate(g, out why)) { g.P = old; sk.Regenerate(g, out _); _gearError = why; }
             else { _gearError = null; GearTool.Defaults = g.P.Clone(); }
             SelectGear(sk, g);
             View.MarkDirty(); View.InvalidateOverlay();

@@ -201,7 +201,7 @@ static partial class Program
                 st.RestoreInto(sk);
                 if (sk.Gears.Single().P.Teeth != 23 || sk.Entities.Count != n0) problems.Add("undo snapshot lost the gear");
                 // недопустимые параметры — отказ без изменения
-                var bad = new GearParams { Teeth = 8, Module = 2, ProfileShift = -2 };
+                var bad = new GearParams { Teeth = 8, Module = 2, ProfileShift = -3 };
                 if (sk.AddGear(bad, out var wb) != null) problems.Add("bad parameters accepted"); else report.Add(new { test = "bad", why = wb });
             }
 

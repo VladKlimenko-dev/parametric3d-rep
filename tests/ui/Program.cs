@@ -9107,6 +9107,58 @@ Check("UI-DRAWING-K169", () =>
 // k168 (замечание 05.11, 16:17, п. 8, 10–14): куб вида у изометрии (грань, угол, поворот), «Таблица на листе» — переключатель,
 // таблица: название, строки и столбцы в панели, правка ячейки на листе, меню строк и столбцов, перенос за шапку с притяжением
 // к рамке и место после смены стандарта, язык чертежа, линия шаблона двумя щелчками (перенос, концы, удаление).
+// k176: инструмент «Шестерня» (центр, делительный радиус) и панель свойств шестерни: все параметры, правка перестраивает венец,
+// отмена в эскизе возвращает прежний; кнопка — на панели фигур с иконкой sk_gear_but.svg. P3D_GEARPANEL=0 — панели нет.
+Check("UI-SKETCH-GEAR-K176", () =>
+{
+    var s = DocumentSession.NewPart(); var w = Open(s); var part = s.Part!;
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    try {
+    Require(MainWindow.ShapeTools.Contains("sk.gear"), "no Gear button on the shapes bar");
+    w.ViewPort.Selection.Clear(); w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp()); Run();
+    Require(w.InSketch, "sketch mode");
+    var sk = w.ViewPort.ActiveSketch!;
+    if (!w.PropertiesVisible) w.ToggleProperties();
+    GearTool.Defaults = new GearParams { Teeth = 18 };
+    w.SetTool(new GearTool()); Run();
+    w.ViewPort.SimulateToolClick(0.5, 0.5); w.ViewPort.SimulateToolClick(0.62, 0.5); Run();
+    Require(sk.Gears.Count == 1, $"gears in the sketch: {sk.Gears.Count}");
+    var g = sk.Gears[0];
+    Console.WriteLine($"  gear: z {g.P.Teeth} m {g.P.Module:0.####} items {g.Items.Count}, selected {w.ViewPort.Selection.Count}");
+    Require(g.P.Teeth == 18 && g.P.Module > 0 && g.Items.Count > 18 * 5, "gear geometry");
+    w.ShowProperties(); Run();
+    var texts = w.PropsPanelTexts();
+    var names = w.PropsBodyPanel.GetVisualDescendants().OfType<Control>().Where(c => c.Name?.StartsWith("prop_") == true).Select(c => c.Name!).ToList();
+    Console.WriteLine($"  panel: {texts.FirstOrDefault()} | {string.Join(", ", names)}");
+    Require(texts.FirstOrDefault() == "ШЕСТЕРНЯ", "the gear panel is not shown after the tool");
+    foreach (var n in new[] { "prop_Профиль зуба", "prop_Венец", "prop_Число зубьев", "prop_Модуль", "prop_Диаметральный шаг", "prop_Делительный диаметр", "prop_Угол профиля, °", "prop_Смещение x",
+                              "prop_Высота головки h*a", "prop_Радиальный зазор c*", "prop_Переходная кривая ρ*f", "prop_Скругление вершины ρ*a", "prop_Боковой зазор", "prop_Центр X", "prop_Поворот, °", "prop_Допуск профиля" })
+        Require(names.Contains(n), "no field " + n);
+    void Enter(string n, string v) { var t = w.PropsBodyPanel.GetVisualDescendants().OfType<TextBox>().First(x => x.Name == n); t.Text = v; t.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter }); Run(); }
+    int depth0 = w.SketchUndoDepth;
+    Enter("prop_Число зубьев", "24"); Enter("prop_Модуль", "1.5");
+    g = sk.Gears.Single();
+    Require(g.P.Teeth == 24 && Math.Abs(g.P.Module - 1.5) < 1e-12, $"edited: z {g.P.Teeth} m {g.P.Module}");
+    Require(Math.Abs(sk.Entities.OfType<SkCircle>().Where(c => g.Items.Contains(c.Id)).Single().Radius - 18) < 1e-9, "pitch circle after the edit");
+    w.ShowProperties(); Run();
+    var rim = w.PropsBodyPanel.GetVisualDescendants().OfType<ComboBox>().First(c => c.Name == "prop_Венец");
+    rim.SelectedIndex = 1; Run();
+    Require(sk.Gears.Single().P.Internal, "internal rim not set");
+    w.ShowProperties(); Run();
+    var prof = w.PropsBodyPanel.GetVisualDescendants().OfType<ComboBox>().First(c => c.Name == "prop_Профиль зуба");
+    prof.SelectedIndex = 1; Run(); w.ShowProperties(); Run();
+    Require(sk.Gears.Single().P.Profile == GearProfile.Cycloidal, "cycloidal profile not set");
+    Require(w.PropsBodyPanel.GetVisualDescendants().OfType<TextBox>().Any(x => x.Name == "prop_Производящая окружность, модулей (0 — z/4)"), "no rolling circle field for the cycloidal gear");
+    // недопустимое значение — шестерня прежняя, причина в панели
+    Enter("prop_Смещение x", "-9");
+    Require(sk.Gears.Single().P.ProfileShift == 0 && w.PropsPanelTexts().Contains("Ошибка"), "bad shift accepted or no error shown");
+    Require(w.SketchUndoDepth > depth0, "edits are not undo steps");
+    while (w.SketchUndoDepth > depth0) w.SketchUndo();
+    Run();
+    Require(sk.Gears.Single().P.Profile == GearProfile.Involute && !sk.Gears.Single().P.Internal && sk.Gears.Single().P.Teeth == 18, "undo did not restore the gear");
+    } finally { w.Close(); }
+});
+
 Check("UI-DRAWING-K168", () =>
 {
     var sp = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Realistic(3, 10), "k168"); var w = Open(sp); BuildNow(sp);

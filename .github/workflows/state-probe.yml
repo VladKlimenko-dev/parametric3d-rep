@@ -54,7 +54,7 @@ jobs:
       matrix:
         include:
           - { name: g176_gear,    cmd: 'gear', env: '' }
-          - { name: g176_gearmut, cmd: 'gear', env: 'P3D_SKGEARSAVE=0' }
+          - { name: g176_allA,    cmd: 'allA', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
