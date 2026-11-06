@@ -53,9 +53,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: cr_y2,     cmd: 'y2', env: '' }
-          - { name: cr_y2_m,   cmd: 'y2', env: 'P3D_FOOTCREASE=0' }
-          - { name: cr_d109,   cmd: 'loftseq 1 109 6 OUT', env: 'LOFT_DRALL=1 P3D_DROPENPAR=0' }
+          - { name: cr_d109sb, cmd: 'loftseq 1 109 6 OUT', env: 'LOFT_DRALL=1 P3D_DROPENPAR=0 P3D_DRSECBREAK=1' }
+          - { name: cr_corpus_sb, cmd: 'loftseq 10 101 6 OUT', env: 'P3D_DRSECBREAK=1' }
+          - { name: cr_corpus, cmd: 'loftseq 10 101 6 OUT', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
