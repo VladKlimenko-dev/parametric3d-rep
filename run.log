@@ -1,0 +1,14 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["loftblends139"]}
+{"loft":645529.99,"hollow":1,"guarantee":"ExactAnalytic"}
+{"tag":"4.1 round R10.29","volume":644280.526,"valid":true,"guarantee":"ExactPolyhedral"}
+{"tag":"4.3 round R6.27","volume":644850.616,"valid":true,"guarantee":"ExactPolyhedral"}
+{"tag":"4.4 chamfer 2.18 at the round","volume":644787.999,"valid":true,"guarantee":"ExactPolyhedral"}
+{"tag":"k144 round R10.29 direct","volume":644582.926,"valid":true,"guarantee":"ExactAnalytic"}
+{"tag":"k144 chamfer 3 direct","volume":645437.827,"valid":true,"guarantee":"ExactAnalytic"}
+{"tag":"k144 round R3 direct","volume":645477.506,"valid":true,"guarantee":"ExactAnalytic"}
+{"tag":"k144 chamfer 10.29 direct","volume":644433.392,"valid":true,"guarantee":"ExactAnalytic"}
+{"tag":"k144 round R1 direct","volume":645525.192,"valid":true,"guarantee":"ExactAnalytic"}
+{"test":"KRN06-LOFT-BLENDS-K139","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":1,"failed":0}
