@@ -1026,6 +1026,7 @@ public static class AnalyticVolume
                     {
                         double lv = vmax <= 1e-2 ? 0 : 1, dmx = 0;
                         for (int i = 0; i <= K && dmx <= etol; i++) dmx = Math.Max(dmx, (c.PointAt(sv[i]) - ss.SectionAt(uv[i].X).Point(lv)).Length);
+                        if (ChainDbg) Console.Error.WriteLine($"SLABT {f.Tag}: edge {c.GetType().Name} tol {etol:G4} off the edge v = {lv} by {dmx:G4}");
                         if (dmx <= etol) { constV.Add(lv); continue; }
                     }
                 }
