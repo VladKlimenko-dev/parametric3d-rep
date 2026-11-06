@@ -1,0 +1,2 @@
+exit 1
+seconds 16 nproc 4 env P3D_LOFTGUIDEPIECES=0 cmd curve177
