@@ -1700,7 +1700,15 @@ public static partial class DirectRound
             double t = tLo + (tHi - tLo) * i / N;
             if (!ch && !(Rt(t) > 1e-6)) { why = "variable radius: radius not positive along the blend (extension)"; return false; }
             var x = preX[i];
-            if (x == null) { why = "open curved: ball centre not found (radius too large?)"; return false; }
+            if (x == null)
+            {
+                if (Debug != null)
+                {
+                    var Pn = Ed(t); var oa = Geometry.Ssi.Implicit(shA, Pn); var ob = Geometry.Ssi.Implicit(shB, Pn);
+                    Debug($"open: ball centre not found at t {t:G8} (range {tLo:G6}…{tHi:G6}, Δ {Delta:G6}), edge point {Pn:0.####}, fA {oa.F:E2} fB {ob.F:E2}, B {FB.Tag} {FB.Surf.GetType().Name} uv {FB.Surf.ProjectToUV(Pn):0.#####}");
+                }
+                why = "open curved: ball centre not found (radius too large?)"; return false;
+            }
             var P = Ed(t); Ps.Add(P);
             var qa = ch ? ChA(t) : SideFoot(true, t, x.Value); var qb = ch ? ChB(t) : SideFoot(false, t, x.Value);
             if (ch)
