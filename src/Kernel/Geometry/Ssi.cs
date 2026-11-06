@@ -58,10 +58,13 @@ public static class Ssi
     [ThreadStatic] public static Action<string>? FootDebug;
     static readonly bool FootCrease = Environment.GetEnvironmentVariable("P3D_FOOTCREASE") != "0";
     static readonly bool FootPiece = Environment.GetEnvironmentVariable("P3D_FOOTPIECE") != "0";
+    static readonly bool FootMin = Environment.GetEnvironmentVariable("P3D_FOOTMIN") != "0";
     /// <summary>Я2: оснований на выпуклой складке ленты.</summary>
     public static long FootCreaseHits;
     /// <summary>Я2: оснований на куске ленты у складки (PieceFoot).</summary>
     public static long FootPieceHits;
+    /// <summary>Я2: оснований минимумом расстояния (MinFoot).</summary>
+    public static long FootMinHits;
     static readonly bool FootOnSurf = Environment.GetEnvironmentVariable("P3D_FOOTONSURF") != "0";
     static readonly bool FootTrace = Environment.GetEnvironmentVariable("P3D_FOOTTRACE") == "1";
     [ThreadStatic] static int _footTraceN;
@@ -198,6 +201,7 @@ public static class Ssi
                 }
             }
             if (FootCrease && s is Surfaces.SectionSurface { IsProcedural: true } sc && CreaseFoot(sc, x) is { } cf) { footUv = cf.Uv; Interlocked.Increment(ref FootCreaseHits); return (cf.P, cf.N); }
+            if (FootMin && s is Surfaces.SectionSurface { IsProcedural: true } sm && MinFoot(sm, x) is { } mf) { footUv = mf.Uv; Interlocked.Increment(ref FootMinHits); return (mf.P, mf.N); }
             return (new Vector3d(double.NaN), new Vector3d(double.NaN));
         }
         // Я1 (REFERENCE_SOLUTIONS п. 6; BACKLOG k149, s106): ОСНОВАНИЕ — ФУНКЦИЯ ПОВЕРХНОСТИ И ТОЧКИ, А НЕ ИСТОРИИ ЗАПРОСОВ.
@@ -314,6 +318,51 @@ public static class Ssi
         var nRef = sc.NormalAt(new Vector2d(Math.Clamp(u, sc.UMin, sc.UMax), Math.Clamp(v, 0, 1)));
         if (Vector3d.Dot(n, nRef) < 0) n = -n;
         return (P, n, new Vector2d(u, v));
+    }
+
+    /// <summary>
+    /// Я2: БЛИЖАЙШАЯ ТОЧКА ЛЕНТЫ — МИНИМУМОМ РАССТОЯНИЯ, без условия ортогональности. У стыка кусков таблицы ленты прежней фаски
+    /// (s109 шаг 5) поверхность в ±1e-4 от стыка гладкая лишь кусочно: ортогонального основания с точностью 1e-9 нет ни на одном
+    /// куске, ни на линии стыка, а расстояние до ленты определено и непрерывно дифференцируемо снаружи выпуклой складки (градиент —
+    /// (x − P)/|x − P|). Здесь — минимум по u золотым сечением в окне около проекции; при каждом u — ближайшая точка сечения по v
+    /// (Ньютон). Годна, если минимум внутри окна и внутри ленты по u. Мутация P3D_FOOTMIN=0.
+    /// </summary>
+    static (Vector3d P, Vector3d N, Vector2d Uv)? MinFoot(Surfaces.SectionSurface sc, Vector3d x)
+    {
+        var g = sc.ProjectToUV(x); if (!double.IsFinite(g.X + g.Y)) return null;
+        double span = Math.Max(1e-9, sc.UMax - sc.UMin), win = 0.01 * span;
+        double vLast = Math.Clamp(g.Y, -0.5, 1.5);
+        (double D, double V, Vector3d P) AtU(double u)
+        {
+            var sec = sc.SectionAt(u); double v = vLast;
+            for (int it = 0; it < 40; it++)
+            {
+                var P0 = sec.Point(v); var d1 = sec.Deriv(v); double hv = 1e-6;
+                var d2 = (sec.Deriv(v + hv) - sec.Deriv(v - hv)) / (2 * hv);
+                double f = Vector3d.Dot(P0 - x, d1), df = Vector3d.Dot(d1, d1) + Vector3d.Dot(P0 - x, d2);
+                if (!(Math.Abs(df) > 1e-300)) break;
+                double dv = Math.Clamp(-f / df, -0.25, 0.25); v += dv;
+                if (Math.Abs(dv) < 1e-15) break;
+            }
+            var P = sec.Point(v); return ((P - x).Length, v, P);
+        }
+        double lo = Math.Max(sc.UMin, g.X - win), hi = Math.Min(sc.UMax, g.X + win);
+        double m1 = lo + (hi - lo) * 0.381966011250105, m2 = lo + (hi - lo) * 0.618033988749895;
+        var f1 = AtU(m1); var f2 = AtU(m2);
+        for (int it = 0; it < 90 && hi - lo > 1e-15 * Math.Max(1, span); it++)
+        {
+            if (f1.D < f2.D) { hi = m2; m2 = m1; f2 = f1; m1 = lo + (hi - lo) * 0.381966011250105; vLast = f2.V; f1 = AtU(m1); }
+            else { lo = m1; m1 = m2; f1 = f2; m2 = lo + (hi - lo) * 0.618033988749895; vLast = f1.V; f2 = AtU(m2); }
+        }
+        double um = (lo + hi) / 2; vLast = f1.V; var best = AtU(um);
+        double wl = Math.Max(sc.UMin, g.X - win), wh = Math.Min(sc.UMax, g.X + win);
+        if (um - wl < 1e-6 * win || wh - um < 1e-6 * win) { FootDebug?.Invoke($"  minfoot: at the window edge u {um:G10} [{wl:G8}, {wh:G8}]"); return null; }
+        var sec2 = sc.SectionAt(um); var w = x - best.P; double L = w.Length;
+        if (!(L > 1e-12)) return null;
+        if (Math.Abs(Vector3d.Dot(w, sec2.Deriv(best.V))) > 1e-9 * Math.Max(L, 1e-3) * sec2.Deriv(best.V).Length) { FootDebug?.Invoke($"  minfoot: v not orthogonal at u {um:G10} v {best.V:G8}"); return null; }
+        var nRef = sc.NormalAt(new Vector2d(um, Math.Clamp(best.V, 0, 1)));
+        var N = w / L; if (Vector3d.Dot(N, nRef) < 0) N = -N;
+        return (best.P, N, new Vector2d(um, best.V));
     }
 
     public enum Kind { Curves, Empty, Coincident, Tangent }
