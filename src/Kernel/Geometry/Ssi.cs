@@ -56,6 +56,9 @@ public static class Ssi
     /// <summary>Замер (k97): поверхностей с подсказкой основания в этом потоке (прежний словарь).</summary>
     public static int FootHintCount => FootWeak ? _footHintsWeak?.Count() ?? 0 : _footHints?.Count ?? 0;
     [ThreadStatic] public static Action<string>? FootDebug;
+    static readonly bool FootCrease = Environment.GetEnvironmentVariable("P3D_FOOTCREASE") != "0";
+    /// <summary>Я2: оснований на выпуклой складке ленты.</summary>
+    public static long FootCreaseHits;
     static readonly bool FootOnSurf = Environment.GetEnvironmentVariable("P3D_FOOTONSURF") != "0";
     static readonly bool FootTrace = Environment.GetEnvironmentVariable("P3D_FOOTTRACE") == "1";
     [ThreadStatic] static int _footTraceN;
@@ -191,6 +194,7 @@ public static class Ssi
                     FootDebug(sb.ToString());
                 }
             }
+            if (FootCrease && s is Surfaces.SectionSurface { IsProcedural: true } sc && CreaseFoot(sc, x) is { } cf) { footUv = cf.Uv; Interlocked.Increment(ref FootCreaseHits); return (cf.P, cf.N); }
             return (new Vector3d(double.NaN), new Vector3d(double.NaN));
         }
         // Я1 (REFERENCE_SOLUTIONS п. 6; BACKLOG k149, s106): ОСНОВАНИЕ — ФУНКЦИЯ ПОВЕРХНОСТИ И ТОЧКИ, А НЕ ИСТОРИИ ЗАПРОСОВ.
@@ -212,6 +216,47 @@ public static class Ssi
         var nRef = s.NormalAt(new Vector2d(Math.Clamp(uv.X, 0, 1), Math.Clamp(uv.Y, 0, 1)));
         if (Vector3d.Dot(n, nRef) < 0) n = -n;
         return (P, n);
+    }
+
+    /// <summary>
+    /// Я2: ОСНОВАНИЕ НА ВЫПУКЛОЙ СКЛАДКЕ ЛЕНТЫ. У точки снаружи выпуклой складки (стык кусков ленты прежней фаски по цепочке)
+    /// ортогонального основания нет ни на одном куске: ближайшая точка — на самой складке, расстояние — до линии складки. Шар
+    /// катящегося скругления, переходящий через складку, касается её линии (s109 шаг 5: R1.9 по прежней фаске C2.93 — формула
+    /// ленты не определена у стыка, отказ). Основание — на линии стыка u = b: точка сечения ближайшая по v; годна, если остаток
+    /// смотрит «за» оба куска (по касательной левого — вперёд, правого — назад). Нормаль — по остатку, в знаке нормали ленты.
+    /// Мутация P3D_FOOTCREASE=0.
+    /// </summary>
+    static (Vector3d P, Vector3d N, Vector2d Uv)? CreaseFoot(Surfaces.SectionSurface sc, Vector3d x)
+    {
+        var br = sc.Breaks; if (br.Count == 0) return null;
+        var g = sc.ProjectToUV(x); double span = Math.Max(1e-9, sc.UMax - sc.UMin);
+        (Vector3d P, Vector3d N, Vector2d Uv)? best = null; double bestL = double.MaxValue;
+        foreach (double b in br)
+        {
+            if (Math.Abs(b - g.X) > 0.05 * span) continue;
+            var sec = sc.SectionAt(b);
+            double v = Math.Clamp(g.Y, -0.5, 1.5);
+            for (int it = 0; it < 50; it++)
+            {
+                var P0 = sec.Point(v); var d1 = sec.Deriv(v); double hv = 1e-6;
+                var d2 = (sec.Deriv(v + hv) - sec.Deriv(v - hv)) / (2 * hv);
+                double f = Vector3d.Dot(P0 - x, d1), df = Vector3d.Dot(d1, d1) + Vector3d.Dot(P0 - x, d2);
+                if (!(Math.Abs(df) > 1e-300)) break;
+                double dv = -f / df; v += Math.Clamp(dv, -0.25, 0.25);
+                if (Math.Abs(dv) < 1e-14) break;
+            }
+            var P = sec.Point(v); var Sv = sec.Deriv(v); var w = x - P; double L = w.Length;
+            if (!(L > 1e-12) || Math.Abs(Vector3d.Dot(w, Sv)) > 1e-9 * Math.Max(L, 1e-3) * Sv.Length) continue;
+            double h = 1e-6 * span;
+            var SuL = (P - sc.SectionAt(b - h).Point(v)) / h; var SuR = (sc.SectionAt(b + h).Point(v) - P) / h;
+            if (!(Vector3d.Dot(w, SuL) > 0 && Vector3d.Dot(w, SuR) < 0)) continue;     // не выпуклая сторона складки
+            var nL = Vector3d.Cross(SuL, Sv); if (!(nL.LengthSquared > 0)) continue;
+            var nRef = sc.NormalAt(new Vector2d(b, Math.Clamp(v, 0, 1)));
+            if (Vector3d.Dot(nL, nRef) < 0) nL = -nL;
+            var N = w / L; if (Vector3d.Dot(N, nL) < 0) N = -N;
+            if (L < bestL) { bestL = L; best = (P, N, new Vector2d(b, v)); }
+        }
+        return best;
     }
 
     public enum Kind { Curves, Empty, Coincident, Tangent }
