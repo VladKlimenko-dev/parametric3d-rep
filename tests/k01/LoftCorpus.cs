@@ -569,8 +569,11 @@ static partial class Program
     /// </summary>
     /// <summary>Я1: итог последнего прогона LoftCorpusSeq — шагов сверено, расхождений по объёму/отказу, расхождений побитово.</summary>
     static (int Checked, int Diff, int BitsDiff) LastSeqRebuild;
+    /// <summary>Итоги шагов последнего loftseq: метка шага → уровень гарантии.</summary>
+    static readonly List<(string Tag, string Guarantee)> LastSeqSteps = new();
     static void LoftCorpusSeq(int count, int seed0, int steps, string outDir)
     {
+        lock (LastSeqSteps) LastSeqSteps.Clear();
         int bitsDiff = 0;
         Directory.CreateDirectory(outDir);
         int ok = 0, bad = 0, refused = 0, legit = 0; var why = new Dictionary<string, int>(); double totalMs = 0;
@@ -638,7 +641,7 @@ static partial class Program
                     Log(new { fileFirst = true, step = st, file = BodyBits(lf.Part), error = lf.Part.Features[^1].Error });
                 }
                 if (Environment.GetEnvironmentVariable("SEQ_NOHOOK") == "1") Parametric3D.Kernel.Ops.DirectRound.Debug = null; else
-                Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (drAll) Console.Error.WriteLine("DR " + (s.Length > 400 ? s[..400] : s)); if (Environment.GetEnvironmentVariable("LOFT_DRDEBUG") is { } dd && s.Contains(dd)) Console.WriteLine("DBG " + (s.Length > 300 && Environment.GetEnvironmentVariable("LOFT_DRFULL") != "1" ? s[..300] : s)); if (s.StartsWith("declined")) drWhy = s.Length > 200 ? s[..200] : s; };
+                Parametric3D.Kernel.Ops.DirectRound.Debug = s => { if (drAll) Console.Error.WriteLine("DR " + (s.Length > 3000 ? s[..3000] : s)); if (Environment.GetEnvironmentVariable("LOFT_DRDEBUG") is { } dd && s.Contains(dd)) Console.WriteLine("DBG " + (s.Length > 300 && Environment.GetEnvironmentVariable("LOFT_DRFULL") != "1" ? s[..300] : s)); if (s.StartsWith("declined")) drWhy = s.Length > 200 ? s[..200] : s; };
                 // Я1, опыт: SEQ_STEPMODE=full — шаг считается полным пересчётом дерева (без сохранённых состояний)
                 if (Environment.GetEnvironmentVariable("SEQ_STEPMODE") == "full") p.Invalidate();
                 try { p.Rebuild(null); } catch (Exception ex) when (ex is not OutOfMemoryException) { f.Error = "exception: " + ex.Message; }
@@ -667,6 +670,7 @@ static partial class Program
                         if (Math.Abs(dv - ex) > tol) problems.Add($"volume change {dv:0.###} vs formula {ex:0.###}");
                     }
                     if (dv < 1e-6) problems.Add("nothing changed");
+                    lock (LastSeqSteps) LastSeqSteps.Add((tag, b.Guarantee.ToString()));
                     Log(new { tag, ms, guarantee = b.Guarantee.ToString(), dv = Math.Round(dv, 4), expect = clean && expect is { } e2 ? Math.Round(e2, 4) : (double?)null, problems, dr = drWhy });
                 }
                 if (f.Error != null || p.Bodies.Count != 1) Log(new { tag, ms, problems });
@@ -716,7 +720,7 @@ static partial class Program
         string bare = DocumentFile.StripDisplay(json) ?? json;
         Part q;
         var drPrev2 = Parametric3D.Kernel.Ops.DirectRound.Debug;
-        if (Environment.GetEnvironmentVariable("LOFT_DRALL") == "1") Parametric3D.Kernel.Ops.DirectRound.Debug = s => Console.Error.WriteLine("DR " + (s.Length > 400 ? s[..400] : s));
+        if (Environment.GetEnvironmentVariable("LOFT_DRALL") == "1") Parametric3D.Kernel.Ops.DirectRound.Debug = s => Console.Error.WriteLine("DR " + (s.Length > 3000 ? s[..3000] : s));
         if (Environment.GetEnvironmentVariable("LOFT_FOOTDBG") == "1") { int fn = 0; Parametric3D.Kernel.Geometry.Ssi.FootDebug = s => { if (System.Threading.Interlocked.Increment(ref fn) < 400) Console.Error.WriteLine("FOOT " + s); }; }
         try { var loaded = DocumentFile.Load(bare); q = loaded.Part; q.Rebuild(loaded.Parameters); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return new { file = "exception: " + ex.Message }; }

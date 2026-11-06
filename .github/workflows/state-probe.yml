@@ -53,12 +53,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: f5_y2,      cmd: 'y2',                   env: '' }
-          - { name: f5_y2_mut,  cmd: 'y2',                   env: 'P3D_FOOTONSURF=0' }
-          - { name: f5_corpus,  cmd: 'loftseq 10 101 6 OUT', env: '' }
-          - { name: f5_allA,    cmd: 'allA',                 env: '' }
-          - { name: f5_allB,    cmd: 'allB',                 env: '' }
-          - { name: f5_fix,     cmd: 'loftcorpus140',        env: '' }
+          - { name: tr4_sec142, cmd: 'sweepsec142', env: '' }
+          - { name: tr4_sec142_m1, cmd: 'sweepsec142', env: 'P3D_SIDEMAJORITY=0' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

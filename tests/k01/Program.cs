@@ -526,6 +526,7 @@ static partial class Program
         if (mode is "chamferchain146" or "allB") Krn06ChamferChainK146Checks();
         if (mode is "loftcorpus140" or "allB") Krn06LoftCorpusK140Checks();
         if (mode is "y1" or "allB") Krn01SessionEqualsFileChecks();
+        if (mode is "y2s" or "allB") KrnY2ChainChamferChecks();
         if (mode is "y2" or "allA") { KrnY2SectionTableChecks(); KrnY2SectionCreaseFootChecks(); }
         if (mode is "y2break") KrnY2SectionBreakChecks();   // опыт P3D_SECBREAKNODE=1 (по умолчанию выключен)
         if (mode is "sweepsec142" or "allB") Krn06SweepSectionsK142Checks();

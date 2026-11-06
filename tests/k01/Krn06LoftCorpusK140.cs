@@ -64,8 +64,10 @@ static partial class Program
                 Parametric3D.Kernel.Ops.DirectRound.ChamferSwitchOffForTest = noSwitch;
                 // k148h: «nocrease» — история до точного угла у излома шва (прежние операции резцом), воспроизводится так же
                 Parametric3D.Kernel.Ops.DirectRound.CreaseOffForTest = row.Length > 2 && row[2].Trim() == "nocrease";
+                // Я2: «norefine» — история до мелкой таблицы ленты (прежние операции резцом), воспроизводится так же
+                Parametric3D.Kernel.Ops.DirectRound.TabRefineOffForTest = row.Length > 2 && row[2].Trim() == "norefine";
                 (bool Ok, double Dv, long Ms, List<string> Problems) r;
-                try { r = CorpusFixture(Path.Combine(cdir, file)); } finally { Parametric3D.Kernel.Ops.DirectRound.ChamferSwitchOffForTest = false; Parametric3D.Kernel.Ops.DirectRound.CreaseOffForTest = false; }
+                try { r = CorpusFixture(Path.Combine(cdir, file)); } finally { Parametric3D.Kernel.Ops.DirectRound.ChamferSwitchOffForTest = false; Parametric3D.Kernel.Ops.DirectRound.CreaseOffForTest = false; Parametric3D.Kernel.Ops.DirectRound.TabRefineOffForTest = false; }
                 // k159: у ожидаемого отказа («overflow») — отметка expected, чтобы итог регрессии не считал строку провалом
                 Log(new { file, r.Ok, dv = Math.Round(r.Dv, 4), want, r.Ms, r.Problems, expected = row.Length > 2 && row[2].Contains("overflow") ? "refusal" : null });
                 // k153: «overflow» — фаска шире грани ребра (съедает полосу шириной 0.05 мм у s101_2, прежнюю фаску 1.7 мм у
@@ -90,6 +92,7 @@ static partial class Program
     static (bool Ok, double Dv, long Ms, List<string> Problems) CorpusFixture(string file)
     {
         var problems = new List<string>();
+        if (Environment.GetEnvironmentVariable("LOFT_DRALL") == "1") Parametric3D.Kernel.Ops.DirectRound.Debug = s => Console.Error.WriteLine("DR " + (s.Length > 3000 ? s[..3000] : s));
         string text = File.ReadAllText(file);
         var (p0, pars0) = DocumentFile.Load(text);
         var last = p0.Features[^1];

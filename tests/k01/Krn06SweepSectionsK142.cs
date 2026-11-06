@@ -21,6 +21,9 @@ static partial class Program
             foreach (var file in Directory.GetFiles(Path.Combine(dir, "corpus_k142_sections"), "*.p3d").OrderBy(x => x))
             {
                 string text = File.ReadAllText(file);
+                // Я2 (k174): случаи записаны до мелкой таблицы ленты; с ней прежние шаги и сама правка s101 строятся прямо (резца
+                // нет — проверять нечего). Здесь проверяются сечения резца — история и правка воспроизводятся как при записи.
+                Parametric3D.Kernel.Ops.DirectRound.TabRefineOffForTest = true;
                 var (p, pars) = DocumentFile.Load(text);
                 var last = p.Features[^1];
                 p.RemoveFeature(last);
@@ -30,7 +33,7 @@ static partial class Program
                 Parametric3D.Kernel.Ops.FilletOp.OverflowOffForTest = true;   // k153: сама попытка резца, без отказа «шире грани»
                 try { p.AddFeature(last); p.Rebuild(pars); }
                 catch (Exception ex) when (ex is not OutOfMemoryException) { }
-                finally { Parametric3D.Kernel.Ops.FilletOp.SweepSectionSet = null; Parametric3D.Kernel.Ops.FilletOp.OverflowOffForTest = false; }
+                finally { Parametric3D.Kernel.Ops.FilletOp.SweepSectionSet = null; Parametric3D.Kernel.Ops.FilletOp.OverflowOffForTest = false; Parametric3D.Kernel.Ops.DirectRound.TabRefineOffForTest = false; }
                 n++;
                 if (sets.Count == 0) { fails.Add($"{Path.GetFileName(file)}: no swept attempt"); continue; }
                 var s = sets[^1];

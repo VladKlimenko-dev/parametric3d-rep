@@ -122,4 +122,22 @@ static partial class Program
             Require(worst < 1e-8, $"foot on the crease is off by {worst:E2} mm");
         });
     }
+    /// <summary>
+    /// Я2: ФАСКА ПО ЦЕПОЧКЕ ЧЕРЕЗ СТЫК ЛЕНТЫ ПРЕЖНЕЙ ФАСКИ — ПРЯМО И ТОЧНО (корпус s110 шаг 2: C6 по цепочке из 4 рёбер, грань B —
+    /// лента прежней фаски со стыком кусков). Отход таблицы новой ленты от формулы был 2.2e-4 мм (допуск 2e-8) — отказ, резец,
+    /// многогранный итог. Теперь таблица перестраивается мельче, пока отход велик. Норма: шаг 2 — ExactAnalytic.
+    /// Мутация P3D_DRTABREFINE=0 — проверка падает.
+    /// </summary>
+    static void KrnY2ChainChamferChecks()
+    {
+        Check("KRN-Y2-S110-CHAIN-CHAMFER-EXACT", () =>
+        {
+            LoftCorpusSeq(1, 110, 3, Path.Combine(Path.GetTempPath(), "p3d_y2_s110"));
+            List<(string Tag, string Guarantee)> st; lock (LastSeqSteps) st = LastSeqSteps.ToList();
+            var s2 = st.FirstOrDefault(x => x.Tag.StartsWith("s110 step 2"));
+            Log(new { test = "KRN-Y2-S110-CHAIN-CHAMFER-EXACT", steps = st.Select(x => $"{x.Tag[..Math.Min(40, x.Tag.Length)]}: {x.Guarantee}").ToList() });
+            Require(s2.Tag != null, "step 2 not built");
+            Require(s2.Guarantee == "ExactAnalytic", $"step 2 is {s2.Guarantee}");
+        });
+    }
 }

@@ -1743,7 +1743,9 @@ public static partial class DirectRound
         double tabStep = Math.Max(Lp / 20000, Math.Min(0.25, 0.4 * Math.Min(widthA, widthB)) / 32) / (knotT.Count > 0 ? 4 : 1);
         if (FastPreviewNow) tabStep *= 4;   // 21.10: быстрый предпросмотр — таблица реже (отход ~1e-6 мм, на экране не видно)
         Phase("таблица");
-        var surf = new SectionSurface(U => Gen(tLo + U / kU), us.Select(t => (t - tLo) * kU).ToList(), secs, false, 0, Lp, breaks, tabStep) { ParallelTable = true };
+        SectionSurface MakeSurf() => new SectionSurface(U => Gen(tLo + U / kU), us.Select(t => (t - tLo) * kU).ToList(), secs, false, 0, Lp, breaks, tabStep) { ParallelTable = true };
+        var surf = MakeSurf();
+        for (int refine = 0; ; refine++)
         {
             double worstTab = 0, worstU = 0;
             int nChk = FastPreviewNow ? 100 : 1000;
@@ -1781,7 +1783,19 @@ public static partial class DirectRound
                 }
             }
             // таблица — представление формулы: её отход — в пятой доле точности модели (1e-7 → 2e-8 мм)
-            if (worstTab > (FastPreviewNow ? 1e-4 : Math.Max(1e-8, 0.2 * ToleranceContext.Current.ModelAccuracy))) { why = $"open curved: blend surface table deviates from the formula ({worstTab:E1} mm)"; return false; }
+            if (worstTab > (FastPreviewNow ? 1e-4 : Math.Max(1e-8, 0.2 * ToleranceContext.Current.ModelAccuracy)))
+            {
+                // Я2: ТАБЛИЦА МЕЛЬЧЕ, ЕСЛИ ОТХОД ВЕЛИК. Ошибка вставки пятой степени ~h⁶: шаг вчетверо мельче — отход в ~4000 раз
+                // меньше, если формула гладкая (излом формулы так не лечится — на то стыки таблицы). До двух раз. Мутация
+                // P3D_DRTABREFINE=0.
+                if (TabRefine && !FastPreviewNow && refine < 2 && double.IsFinite(worstTab))
+                {
+                    Debug?.Invoke($"open: table refined ×4 (deviation {worstTab:E1} mm, step {tabStep:E2})");
+                    tabStep /= 4; surf = MakeSurf(); Interlocked.Increment(ref TabRefines); continue;
+                }
+                why = $"open curved: blend surface table deviates from the formula ({worstTab:E1} mm)"; return false;
+            }
+            break;
         }
 
         Phase("кривые");
@@ -2685,6 +2699,14 @@ public static partial class DirectRound
     static readonly bool SecBreak = Environment.GetEnvironmentVariable("P3D_DRSECBREAK") == "1";
     /// <summary>Я2: стыков таблицы ленты там, где касание переходит стык ленты прежней правки.</summary>
     public static long SecBreaks;
+    static readonly bool TabRefineOn = Environment.GetEnvironmentVariable("P3D_DRTABREFINE") != "0";
+    static readonly AsyncLocal<bool> _tabRefineOff = new();
+    /// <summary>Фикстуры: история, записанная до мелкой таблицы (прежние операции шли резцом), воспроизводится так же
+    /// (метка «norefine» в manifest.tsv корпуса k140). Течёт и в параллельные пробы.</summary>
+    public static bool TabRefineOffForTest { get => _tabRefineOff.Value; set => _tabRefineOff.Value = value; }
+    static bool TabRefine => TabRefineOn && !_tabRefineOff.Value;
+    /// <summary>Я2: таблиц ленты, перестроенных мельче из-за отхода от формулы.</summary>
+    public static long TabRefines;
     static readonly bool ProfDbg = Environment.GetEnvironmentVariable("P3D_OPENPROF") == "1";
     static readonly bool EndScanDbg = Environment.GetEnvironmentVariable("P3D_ENDSCAN") == "1";
     static readonly bool EndHole = Environment.GetEnvironmentVariable("P3D_DRENDHOLE") != "0";
