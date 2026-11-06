@@ -737,6 +737,7 @@ public static class AnalyticVolume
     static readonly bool LinearSideOff = Environment.GetEnvironmentVariable("P3D_BANDLINSIDE") == "0";
     static readonly bool BandChainOff = Environment.GetEnvironmentVariable("P3D_BANDCHAIN") == "0";
     static readonly bool SlabVClamp = Environment.GetEnvironmentVariable("P3D_SLABVCLAMP") != "0";
+    static readonly bool SlabEdgeV = Environment.GetEnvironmentVariable("P3D_SLABEDGEV") != "0";
     static readonly bool ChainDbg = Environment.GetEnvironmentVariable("P3D_CHAINDBG") == "1";
     /// <summary>k148e: граней ленты со стороной из нескольких рёбер.</summary>
     public static long BandChains;
@@ -1010,6 +1011,15 @@ public static class AnalyticVolume
                     }
                 // край по v = const (у ленты — v = 0 или 1 с шумом проекции) горизонтали не пересекает
                 if (uv.Max(q => q.Y) - uv.Min(q => q.Y) <= 1e-9) { constV.Add(uv[0].Y); continue; }
+                // Я2: край ленты v = 0 или 1, у которого проекция шумит больше 1e-9 (у конца дуги новой ленты на краю прежней фаски,
+                // s109 шаг 5: v ≈ 1 − 1e-8…1e-6) — тоже край v = const: иначе горизонталь у самого края пересекает его как попало,
+                // а конец соседней дуги (v ≈ 0.999997) к краю не прижат. Мутация P3D_SLABEDGEV=0.
+                if (SlabEdgeV)
+                {
+                    double vmin = uv.Min(q => q.Y), vmax = uv.Max(q => q.Y);
+                    if (vmax <= 1e-6) { constV.Add(0); continue; }
+                    if (vmin >= 1 - 1e-6) { constV.Add(1); continue; }
+                }
                 edges.Add(new SlabEdge { C = c, S = sv, Uv = uv });
             }
             // Я2: конец соседнего ребра у края v = const — на самом краю: вершина проецируется с отходом до 1e-5 по v (точность
