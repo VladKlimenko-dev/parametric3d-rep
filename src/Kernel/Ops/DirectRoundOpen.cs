@@ -1679,6 +1679,15 @@ public static partial class DirectRound
         double useLo = tLo, useHi = tHi;
         tLo = Math.Max(outT[0], tLo - 0.05 * Delta); tHi = Math.Min(outT[1], tHi + 0.05 * Delta);
         if (!(tLo <= useLo && tHi >= useHi)) { why = "open curved: blend range beyond the extension"; return false; }
+        // Я2: ЗАПАС ПРОДЛЕНИЯ — ТОЛЬКО ТАМ, ГДЕ РЕБРО И ХРЕБЕТ ОПРЕДЕЛЕНЫ (s109 шаг 5: у четвёртого звена цепочки продолжение
+        // ребра за начало не определено уже в 1.38 мм; запас 5 % его захватывал — «ball centre not found»). Граница — делением
+        // между нужным промежутком и запасом. Мутация P3D_DRRANGEFIT=0.
+        if (RangeFit)
+        {
+            bool Def(double t) { var p = Ed(t); return double.IsFinite(p.X) && (ch || Spine(t) != null); }
+            if (!Def(tLo) && Def(useLo)) { double a = useLo, b = tLo; for (int it = 0; it < 50; it++) { double m = 0.5 * (a + b); if (Def(m)) a = m; else b = m; } tLo = a; Interlocked.Increment(ref RangeFits); }
+            if (!Def(tHi) && Def(useHi)) { double a = useHi, b = tHi; for (int it = 0; it < 50; it++) { double m = 0.5 * (a + b); if (Def(m)) a = m; else b = m; } tHi = a; Interlocked.Increment(ref RangeFits); }
+        }
         Phase("сверки");
         // СВЕРКИ по пробам на всём продлённом промежутке: хребет, касание на радиусе, ход вперёд, дуга меньше полуокружности
         const int N = 256;
@@ -2900,6 +2909,8 @@ public static partial class DirectRound
     static readonly bool TwoEnd = Environment.GetEnvironmentVariable("P3D_DRTWOEND") == "1";
     /// <summary>Я2: лент с двухгранным торцом (вершина степени 4).</summary>
     public static long TwoEnds;
+    static readonly bool RangeFit = Environment.GetEnvironmentVariable("P3D_DRRANGEFIT") != "0";
+    public static long RangeFits;
     static readonly bool ProfDbg = Environment.GetEnvironmentVariable("P3D_OPENPROF") == "1";
     static readonly bool EndScanDbg = Environment.GetEnvironmentVariable("P3D_ENDSCAN") == "1";
     static readonly bool EndHole = Environment.GetEnvironmentVariable("P3D_DRENDHOLE") != "0";
