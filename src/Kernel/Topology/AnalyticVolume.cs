@@ -1249,11 +1249,11 @@ public static class AnalyticVolume
             case RevolvedSurface rv2:
                 return RevolvedIntegral(f, rv2);
             case SectionSurface band when !BandOff && BandRange(f, band) != null:
-            { var r0 = BandIntegral(f, band, area: false); if (r0 == null && ChainDbg) Console.Error.WriteLine($"VOLBAND null {f.Tag}"); return r0; }
+            { var r0 = BandIntegral(f, band, area: false); if ((r0 == null || double.IsNaN(r0.Value)) && ChainDbg) Console.Error.WriteLine($"VOLBAND {r0} {f.Tag}"); return r0; }
             case SectionSurface ob when BandOpenRange(f, ob) is { } orr:
-            { var r1 = BandOpenIntegral(f, ob, orr, area: false); if (r1 == null && ChainDbg) Console.Error.WriteLine($"VOLBANDOPEN null {f.Tag} range {orr}"); return r1; }
+            { var r1 = BandOpenIntegral(f, ob, orr, area: false); if ((r1 == null || double.IsNaN(r1.Value)) && ChainDbg) Console.Error.WriteLine($"VOLBANDOPEN {r1} {f.Tag} range {orr}"); return r1; }
             case SectionSurface sl when !SlabOff && sl.IsProcedural && !sl.Closed:
-            { var r2 = BandSlabIntegral(f, sl, area: false); if (r2 == null && ChainDbg) Console.Error.WriteLine($"VOLSLAB null {f.Tag}"); return r2; }
+            { var r2 = BandSlabIntegral(f, sl, area: false); if ((r2 == null || double.IsNaN(r2.Value)) && ChainDbg) Console.Error.WriteLine($"VOLSLAB {r2} {f.Tag}"); return r2; }
             case SectionSurface sx when ChainDbg:
                 Console.Error.WriteLine($"VOLSEC none {f.Tag} procedural {sx.IsProcedural} closed {sx.Closed}"); return null;
             case CornerPatchSurface cpv when WholePatch(f, cpv):
