@@ -1,0 +1,2 @@
+exit 1
+seconds 41 nproc 4 env P3D_SKGEARSAVE=0 cmd gear
