@@ -53,6 +53,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { name: ip_base,  cmd: 'instant', env: '' }
+          - { name: ip_over0, cmd: 'instant', env: 'P3D_DRENDOVER=0' }
           - { name: r175_y2,     cmd: 'y2',   env: '' }
           - { name: r175_y2o,    cmd: 'y2o',  env: '' }
           - { name: r175_corpus, cmd: 'loftseq 10 101 6 OUT', env: '' }
