@@ -1021,7 +1021,8 @@ public static class AnalyticVolume
                     if (vmin >= 1 - 1e-6) { constV.Add(1); continue; }
                     // ребро неточного тела по краю ленты — в пределах своего допуска от края (s109 шаг 5: дуга по грани лофта с
                     // допуском 4.7e-3 отходит от края v = 0 на 2.6e-3 мм, по v — до 5e-4): тоже край
-                    double etol = ce.Edge.Tolerance;
+                    // допуск ребра измерен по выборке точек (s109: 4.744e-3 при отходе 4.748e-3) — запас 5 %
+                    double etol = 1.05 * ce.Edge.Tolerance;
                     if (etol > 0 && (vmax <= 1e-2 || vmin >= 1 - 1e-2))
                     {
                         double lv = vmax <= 1e-2 ? 0 : 1, dmx = 0;
