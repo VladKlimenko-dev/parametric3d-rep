@@ -233,7 +233,7 @@ public static class Ssi
         (Vector3d P, Vector3d N, Vector2d Uv)? best = null; double bestL = double.MaxValue;
         foreach (double b in br)
         {
-            if (Math.Abs(b - g.X) > 0.05 * span) continue;
+            if (Math.Abs(b - g.X) > 0.05 * span) { FootDebug?.Invoke($"  crease {b:G8}: far from projection u {g.X:G8} (span {span:G6})"); continue; }
             var sec = sc.SectionAt(b);
             double v = Math.Clamp(g.Y, -0.5, 1.5);
             for (int it = 0; it < 50; it++)
@@ -246,13 +246,13 @@ public static class Ssi
                 if (Math.Abs(dv) < 1e-14) break;
             }
             var P = sec.Point(v); var Sv = sec.Deriv(v); var w = x - P; double L = w.Length;
-            if (!(L > 1e-12) || Math.Abs(Vector3d.Dot(w, Sv)) > 1e-9 * Math.Max(L, 1e-3) * Sv.Length) continue;
+            if (!(L > 1e-12) || Math.Abs(Vector3d.Dot(w, Sv)) > 1e-9 * Math.Max(L, 1e-3) * Sv.Length) { FootDebug?.Invoke($"  crease {b:G8}: v {v:G8} L {L:E3} not orthogonal {Vector3d.Dot(w, Sv) / Math.Max(1e-300, Sv.Length):E3}"); continue; }
             double h = 1e-6 * span;
             var SuL = (P - sc.SectionAt(b - h).Point(v)) / h; var SuR = (sc.SectionAt(b + h).Point(v) - P) / h;
             // не выпуклая сторона складки; на её границе (касание как раз входит на складку или сходит с неё) остаток ортогонален
             // одному из кусков — допуск 1e-7 доли
             double tolS = 1e-7 * L;
-            if (!(Vector3d.Dot(w, SuL) > -tolS * SuL.Length && Vector3d.Dot(w, SuR) < tolS * SuR.Length)) continue;
+            if (!(Vector3d.Dot(w, SuL) > -tolS * SuL.Length && Vector3d.Dot(w, SuR) < tolS * SuR.Length)) { FootDebug?.Invoke($"  crease {b:G8}: v {v:G8} L {L:E3} not beyond: wSuL {Vector3d.Dot(w, SuL) / SuL.Length:E3} wSuR {Vector3d.Dot(w, SuR) / SuR.Length:E3}"); continue; }
             var nL = Vector3d.Cross(SuL, Sv); if (!(nL.LengthSquared > 0)) continue;
             var nRef = sc.NormalAt(new Vector2d(b, Math.Clamp(v, 0, 1)));
             if (Vector3d.Dot(nL, nRef) < 0) nL = -nL;
