@@ -4896,6 +4896,7 @@ public static class BooleanOp
     public static long ArcsOffSurface;
     /// <summary>k140: дуга лежит на точных поверхностях граней-хозяев (в пределах допуска хорды); грани без точной поверхности
     /// не проверяются.</summary>
+    static readonly bool ArcDbg = Environment.GetEnvironmentVariable("P3D_ARCDBG") == "1";
     static readonly bool ArcOnSrc32 = Environment.GetEnvironmentVariable("P3D_ARCONSRC32") != "0";
     static bool ArcOnSources(ICurve3 arc, HashSet<uint> owners, Dictionary<uint, TFace> faces)
     {
@@ -4904,6 +4905,7 @@ public static class BooleanOp
         {
             if (!faces.TryGetValue(tag, out var f)) continue;
             ISurface3? s = f.Surface is FacetedSurface fs ? fs.Source : f.Surface;
+            if (ArcDbg && arc is ArcCurve3 adb && adb.Radius > 100) Console.Error.WriteLine($"ARCSRC R {adb.Radius:G6} face {f.Tag} surf {f.Surface.GetType().Name} src {s?.GetType().Name ?? "null"}");
             if (s == null || s is FacetedSurface) continue;
             // k140: у плоской грани гранения нет — дуга лежит в её плоскости (как точная грань, 10⁻⁴ мм)
             // у кривой — 10⁻³ мм: дуга, подогнанная по хордам гранения, расходится с поверхностью на прогиб (0.015 мм), а

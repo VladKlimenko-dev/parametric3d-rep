@@ -49,7 +49,8 @@ public sealed class ArcCurve3 : ICurve3
     public readonly double A0, A1;  // A1 может быть меньше A0 (обратное направление)
 
     public ArcCurve3(Frame3 frame, double radius, double a0, double a1)
-    { Frame = frame; Radius = radius; A0 = a0; A1 = a1; }
+    { Frame = frame; Radius = radius; A0 = a0; A1 = a1; if (_dbg && radius > 790 && radius < 800 && System.Threading.Interlocked.Increment(ref _dbgN) < 4) Console.Error.WriteLine($"ARCNEW R {radius:G8}\n{Environment.StackTrace}"); }
+    static readonly bool _dbg = Environment.GetEnvironmentVariable("P3D_ARCDBG") == "1"; static int _dbgN;
 
     public static ArcCurve3 FullCircle(Frame3 f, double r) => new ArcCurve3(f, r, 0, Math.PI * 2);
 
