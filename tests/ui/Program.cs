@@ -9208,6 +9208,42 @@ Check("UI-ASM-LINK-K178", () =>
     try { Directory.Delete(dir, true); } catch { }
 });
 
+// k178 (замечание 07.11, п. 4 и про полоску): в правке Sketch1 не видны и не ловятся кривые эскиза, созданного позже
+// (Sketch2 на параллельной плоскости; P3D_SKLATERHIDE=0 — ловятся); кривая через точки, созданная при полоске расчёта выше
+// операции, встаёт в дерево на место полоски, а не в конец (P3D_DATUMATSTAGE=0 — в конец).
+Check("UI-LATER-K178", () =>
+{
+    var part = Parametric3D.App.Diagnostics.TestParts.Block("lt");
+    var s1 = new Sketch("S1", part.PlaneXY.Frame); part.Add(s1); var a = s1.AddEntity(new SkPoint(new Vector2d(-200, 0))); var b = s1.AddEntity(new SkPoint(new Vector2d(-200, 50)));
+    var s2 = new Sketch("S2", new Parametric3D.Kernel.Frame3(new Vector3d(0, 0, -30), Vector3d.UnitX, Vector3d.UnitY)); part.Add(s2);
+    s2.AddEntity(new SkLine(new SkPoint(130, 0), new SkPoint(150, 0)));
+    var s = DocumentSession.FromPart(part, "lt"); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    try
+    {
+        Require(s2.IsAfter(s1) && !s1.IsAfter(s2), "tree order of the sketches");
+        var vp = w.ViewPort;
+        vp.EnterSketch(s1, animate: false); vp.ZoomToFit(animate: false); Run();
+        var pt = vp.Project(s2.Plane.ToWorld(new Vector2d(140, 0)))!.Value;
+        var under = vp.PickForTest(pt);
+        Console.WriteLine($"  edit S1, over S2 curve: {under.Kind} {(under.Owner as ModelItem)?.Name}");
+        Require(!(under.Kind == PickKind.SketchCurve && ReferenceEquals(under.Owner, s2)), "a later sketch is pickable while editing an earlier one");
+        w.FinishSketch(); Run();
+        // полоска — перед выдавливанием; новая кривая — на её месте
+        part.StageIndex = 0; s.Document.RebuildDirty(); BuildNow(s); Run();
+        var op = new CurveOp { Mode = 0 };
+        w.StartOperation(op); Run();
+        w.ViewPort.Selection.Select(new PickRef(a.Id, PickKind.SketchPoint, s1, a), additive: true); Run();
+        w.ViewPort.Selection.Select(new PickRef(b.Id, PickKind.SketchPoint, s1, b), additive: true); Run();
+        w.CommitOperation(); Run();
+        var dc = part.Children.OfType<DatumCurve>().FirstOrDefault();
+        int slot = dc == null ? -1 : part.ItemSlot(dc);
+        Console.WriteLine($"  curve at stage 0: {dc?.Name} slot {slot} of {part.Features.Count}");
+        Require(dc != null && slot == 0, "the new curve is not placed at the rollback bar");
+    }
+    finally { w.Close(); }
+});
+
 Check("UI-CURVE-TANGENTS-K177", () =>
 {
     var part = Parametric3D.App.Diagnostics.TestParts.Block("ct");
