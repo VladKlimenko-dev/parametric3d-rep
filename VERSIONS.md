@@ -5,6 +5,7 @@
 
 | Версия | Дата | Коммит | Архив | Что сделано |
 |---|---|---|---|---|
+| k175 | 2026-11-07 | [`8c31428`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/8c31428) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/8c31428.zip) | ядро: переполнение ленты на соседнюю грань у конца, основание на выпуклой складке ленты; s102 шаг 2, s105 шаги 2–5 — точно, корпус 35 из 60 (Я2); архив ядра k174 — `archive/` |
 | k174 | 2026-11-06 | [`b2e5aa3`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/b2e5aa3) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/b2e5aa3.zip) | ядро: таблица ленты мельче при большом отходе от формулы; s110 шаг 2 — точно, корпус 30 из 60 (Я2); архив ядра k173 — `archive/` |
 | k173 | 2026-11-06 | [`d7a5536`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/d7a5536) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/d7a5536.zip) | ядро: основание перпендикуляра у складки ленты прежней правки; s102 шаг 1 — точно, корпус 29 из 56 (Я2); архив ядра k172 — `archive/` |
 | k172 | 2026-11-06 | [`9471960`](https://github.com/VladKlimenko-dev/parametric3d-rep/commit/9471960) | [zip](https://github.com/VladKlimenko-dev/parametric3d-rep/archive/9471960.zip) | ядро: детерминизм «сеанс = файл» (Я1), гладкая таблица ленты (Я2); сравнение с OCCT и Parasolid, цели Я1–Я8; архив ядра k171 — `archive/` |
