@@ -1,0 +1,314 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["allA"]}
+{"scenario":"S-SPHERE","speedOpenEdges":0,"triangles":1202,"hash":"602BD9933C31F436","volume":46933.489603064234,"verdict":"BRep: ok; Mesh: ok; Geometry: ok","metrics":{"brep.faces":7,"brep.edges":13,"brep.shells":1,"brep.shortestEdge":20,"brep.microEdges":0,"brep.singularEdges":0,"brep.loopOrientationErrors":0,"brep.minPoleClearance":11.31370849898476,"brep.poleOnBoundary":0,"brep.disconnectedLoops":0,"brep.multiComponentFaces":0,"brep.exactVolume":46927.66970757468,"brep.pinchedVertices":0,"brep.faceComponents":1,"brep.coedgesSameDirection":0,"brep.convention":1,"geometry.analyticFaces":7,"geometry.analyticEdges":13,"geometry.facetedEdges":0,"geometry.maxChordError":0.030557815740982607,"geometry.inconsistentEdges":0,"pcurve.exact":26,"pcurve.numeric":0,"pcurve.missing":0,"pcurve.maxDeviation":1.8115356374411762E-14,"pcurve.inconsistent":0,"mesh.triangles":1202,"mesh.vertices":603,"mesh.collapsedTriangles":0,"mesh.zeroAreaTriangles":0,"mesh.edges":1803,"mesh.openEdges":0,"mesh.nonManifoldEdges":0,"mesh.sameDirectionEdges":0,"mesh.badLinkVertices":0,"mesh.pinchedVertices":0,"mesh.shortestEdge":0.25313833803354074,"mesh.microEdges":0,"mesh.components":1,"mesh.volume":46933.48960306419,"mesh.cavities":0,"geometry.selfIntersections":0,"geometry.pairs.transversal":0,"geometry.pairs.coplanarOverlap":0,"geometry.pairs.tJunction":0,"geometry.pairs.duplicate":0,"geometry.pairs.adjacent":7494,"geometry.pairs.tested":7568},"issues":[]}
+{"scenario":"S-SPHERE","distinctVertexPairsCloserThan1e5":0,"minDistance":0}
+{"test":"K01-SPHERE-OPEN-EDGES","ok":true}
+{"test":"K01-SPHERE-VALIDATOR","ok":true}
+{"test":"K01-SPHERE-VOLUME","ok":true}
+{"test":"K01-NEG-CONTROL-TET","ok":true}
+{"test":"K01-NEG-CONTROL-CUBE","ok":true}
+{"test":"K01-NEG-MISSING-TRIANGLE","ok":true}
+{"test":"K01-NEG-FLIPPED-TRIANGLE","ok":true}
+{"test":"K01-NEG-NONMANIFOLD-EDGE","ok":true}
+{"test":"K01-NEG-PINCH-VERTEX","ok":true}
+{"test":"K01-NEG-INSIDE-OUT","ok":true}
+{"test":"K01-POS-CAVITY","ok":true}
+{"test":"K01-POS-TWO-COMPONENTS","ok":true}
+{"test":"K01-NEG-ORPHAN-CAVITY","ok":true}
+{"test":"K01-NEG-SELF-INTERSECTION","ok":true}
+{"test":"K01-NEG-BROKEN-FACE","ok":true}
+{"test":"K01-NEG-BREP-MISSING-FACE","ok":true}
+{"test":"K01-NEG-EXACT-DROPPED-POLYGON","ok":true}
+{"test":"K01-NEG-EXACT-DUPLICATED-POLYGON","ok":true}
+{"test":"K01-NEEDLE-QUALITY","ok":true}
+{"test":"K01-WELD-KEEPS-CLOSURE","ok":true}
+{"test":"SX-DISJOINT-FAR","ok":true}
+{"test":"SX-DISJOINT-ABOVE","ok":true}
+{"test":"SX-DISJOINT-COPLANAR","ok":true}
+{"test":"SX-ADJ-EDGE-BENT","ok":true}
+{"test":"SX-ADJ-EDGE-FLAT","ok":true}
+{"test":"SX-ADJ-VERTEX","ok":true}
+{"test":"SX-TRANSVERSAL","ok":true}
+{"test":"SX-TRANSVERSAL-SHARED-VERTEX","ok":true}
+{"test":"SX-TRANSVERSAL-DEGENERATE","ok":true}
+{"test":"SX-COPLANAR-OVERLAP","ok":true}
+{"test":"SX-COPLANAR-CONTAINED","ok":true}
+{"test":"SX-COPLANAR-FOLD-EDGE","ok":true}
+{"test":"SX-TJUNCTION-COPLANAR","ok":true}
+{"test":"SX-TOUCH-FACE","ok":true}
+{"test":"SX-TOUCH-EDGE-EDGE","ok":true}
+{"test":"SX-DUPLICATE","ok":true}
+{"test":"SX-DUPLICATE-FILM","ok":true}
+{"test":"SX-DUPLICATE-SAME-INDICES","ok":true}
+{"test":"SX-EXACT-ORIENT","ok":true}
+{"test":"SX-MESH-CONTROL-CUBES","ok":true}
+{"test":"SX-MESH-TRANSVERSAL","ok":true}
+{"test":"SX-MESH-COPLANAR-OVERLAP","ok":true}
+{"test":"SX-MESH-DUPLICATE","ok":true}
+{"test":"SX-MESH-TJUNCTION","ok":true}
+{"test":"G6-DISPLAY-ATOMIC","reads":501,"mixed":0,"atomic":true}
+{"test":"G6-DISPLAY-ATOMIC","ok":true}
+{"test":"G6-EXACT-IMMUTABLE","polygons":17,"publicFields":"readonly, no arrays or lists"}
+{"test":"G6-EXACT-IMMUTABLE","ok":true}
+{"test":"G5-GLOBALS-INVENTORY","unbound":381,"allowed":53,"statistics":328}
+{"test":"G5-GLOBALS-INVENTORY","ok":true}
+{"test":"G5-SETGLOBAL-INSIDE-THROWS","ok":true}
+{"test":"G5-CONTEXT-ISOLATION","ok":true}
+{"test":"G5-CONTEXT-DRIVES-RESULT","tagsWithSeveralPlanes_on":0,"tagsWithSeveralPlanes_off":3}
+{"test":"G5-CONTEXT-DRIVES-RESULT","ok":true}
+{"test":"G5-MODEL-SNAPSHOT-DURING-REBUILD","stages":45}
+{"test":"G5-MODEL-SNAPSHOT-DURING-REBUILD","ok":true}
+{"test":"G6-PUBLISH-FREEZES-FORM","ok":true}
+{"test":"G6-EXACT-STATE-BY-EDIT-KIND","ok":true}
+{"test":"G6-MESH-REVISION","ok":true}
+{"test":"G6-CLONE-FAITHFUL","ok":true}
+{"test":"G6-STEP-EXACT-EDGES-APPLIED","warning":"STEP: 68 edge(s) written as exact intersection curves."}
+{"test":"G6-STEP-EXACT-EDGES-APPLIED","ok":true}
+{"test":"G6-STALE-EXACT-NOT-USED","cachedV":48000,"rebuiltV":45742.766531795336}
+{"test":"G6-STALE-EXACT-NOT-USED","ok":true}
+{"test":"G6-PUBLISHED-RESULT-STATES","ok":true}
+{"test":"KRN02-AUDIT-BUDGET","ok":true}
+{"test":"KRN02-OPERATION-TOLERANCE","ok":true}
+{"test":"KRN02-SECTION-TANGENCY-VERTEX","ok":true}
+{"test":"KRN02-DEGENERATE-CONTOUR","ok":true}
+{"test":"KRN02-DEGENERATE-CONTOUR-FAR","ok":true}
+{"test":"KRN02-REGION-BOX","pairsNew":922,"pairsOld":9563}
+{"test":"KRN02-REGION-BOX-SAME","ok":true}
+{"test":"KRN02-ANALYTIC-ACCURACY-ACROSS-DOMAIN","ok":true}
+{"test":"KRN02-METAMORPHIC","ok":true}
+{"test":"KRN02-SMALL-FAR","ok":true}
+{"test":"KRN02-ACCURACY-REPORT","ok":true}
+{"test":"KRN02-CONE-AXIS","ok":true}
+{"test":"KRN02-MESH-VOLUME-FAR","ok":true}
+{"test":"KRN02-TORUS-VOLUME","ok":true}
+{"test":"KRN03-BODIES-AND-CAVITIES","ok":true}
+{"test":"KRN03-SEAMS","ok":true}
+{"test":"KRN03-SHORT-EDGES","ok":true}
+{"test":"KRN03-PCURVES","ok":true}
+{"test":"KRN03-SPHERE-CAP-BY-LOOP","ok":true}
+{"test":"KRN03-CONCAVE-ROUND-SPHERE","ok":true}
+{"test":"KRN03-SHELL-INVARIANT-ALL-OPS","ok":true}
+{"test":"KRN03-SPHERE-CHART-CONTRACT","ok":true}
+{"test":"KRN03-TORUS-DOMAIN","ok":true}
+{"test":"KRN03-DRILL-TIP","ok":true}
+{"test":"KRN03-MULTIBODY-OPS","ok":true}
+{"test":"KRN05-BOOLEAN-IDENTITIES","pairs":60,"fails":0,"first":[]}
+{"test":"KRN05-BOOLEAN-IDENTITIES","ok":true}
+{"test":"KRN05-SELF-IDENTITIES","ops":84,"exact":56,"fails":0,"first":[]}
+{"test":"KRN05-SELF-IDENTITIES","ok":true}
+{"test":"KRN05-NESTED-DISJOINT-ANALYTIC","ok":true}
+{"test":"KRN07-REVOLVE-EXTRUDE","name":"revolve ring full","volume":6283.1853071797095,"expected":6283.185307179587,"bound":6.2831853071795875E-06,"guarantee":"Unspecified"}
+{"test":"KRN07-REVOLVE-EXTRUDE","name":"revolve ring 90\u00B0","volume":1570.7963267948965,"expected":1570.7963267948967,"bound":1.5707963267948969E-06,"guarantee":"Unspecified"}
+{"test":"KRN07-REVOLVE-EXTRUDE","name":"revolve ring \u2212135\u00B0","volume":2356.1944901923484,"expected":2356.1944901923453,"bound":2.356194490192345E-06,"guarantee":"Unspecified"}
+{"test":"KRN07-REVOLVE-EXTRUDE","name":"revolve triangle on the axis (cone)","volume":2094.395102393207,"expected":2094.3951023931954,"bound":2.0943951023931957E-06,"guarantee":"Unspecified"}
+{"test":"KRN07-REVOLVE-EXTRUDE","name":"revolve half disk on the axis (sphere)","volume":2144.660584850632,"expected":2144.660584850632,"bound":2.144660584850632E-06,"guarantee":"Unspecified"}
+{"test":"KRN07-REVOLVE-EXTRUDE","name":"extrude plate with hole","volume":13042.83197364921,"expected":13042.831973649209,"bound":1.3042831973649209E-05,"guarantee":"Unspecified"}
+{"test":"KRN07-REVOLVE-EXTRUDE","name":"extrude oblique","meshVolume":13046.704372927823,"expected":13042.831973649209}
+{"test":"KRN07-REVOLVE-EXTRUDE","name":"extrude oblique without hole","volume":14400,"expected":14400,"bound":1.4400000000000001E-05,"guarantee":"Unspecified"}
+{"test":"KRN07-REVOLVE-EXTRUDE-ACCEPTANCE","ok":true}
+{"test":"KRN07-SHELL","name":"box open top t2","volume":11712,"expected":11712,"bound":1.1712E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-SHELL","name":"box closed t2","volume":15744,"expected":15744,"bound":1.5744E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-SHELL","name":"box outward t2 closed","volume":19584,"expected":19584,"bound":1.9584E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-SHELL","name":"box outward t2 open top","volume":13952,"expected":13952,"bound":1.3952000000000001E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-SHELL","name":"box open top t2, front wall t5","volume":14736,"expected":14736,"bound":1.4736000000000001E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-SHELL","name":"part: wall x=\u002B30 t4","volume":40608,"reloaded":40608,"expected":40608}
+{"test":"KRN07-SHELL","name":"L-profile closed t2","volume":14544,"expected":14544,"bound":1.4544000000000002E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-SHELL","name":"L-profile open top of the tall part t2","volume":12672,"expected":12672,"bound":1.2672E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-SHELL","name":"L-profile with a hole closed t2","volume":15436.212313619502,"expected":15436.212313619504,"bound":1.5436212313619504E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-SHELL","name":"box open top and front t3","volume":14034,"expected":14034,"bound":1.4034000000000001E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-SHELL","name":"rotated box open top t2","volume":11712.000000000016,"expected":11712,"bound":1.1712E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-SHELL","name":"hex prism open top t2","volume":6193.813687866303,"expected":6193.81368786631,"bound":6.193813687866311E-06,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-SHELL","name":"plate with hole open top t2","volume":13345.628179866695,"expected":13345.62817986669,"bound":1.334562817986669E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-SHELL-ACCEPTANCE","ok":true}
+{"test":"KRN07-DRAFT","name":"box one face 5deg","volume":47300.09069179261,"expected":47300.09069179261,"bound":4.7300090691792615E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-DRAFT","name":"box four sides 5deg","volume":44582.09896558226,"expected":44582.09896558226,"bound":4.4582098965582265E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-DRAFT","name":"box one face -5deg (outward)","volume":48699.909308207396,"expected":48699.90930820739,"bound":4.8699909308207394E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-DRAFT","name":"box four sides -5deg (outward)","volume":51581.19204765619,"expected":51581.19204765619,"bound":5.15811920476562E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-DRAFT","name":"box one face 5deg, neutral at mid-height","volume":48000,"expected":48000,"bound":4.8E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-DRAFT","name":"boss side 3deg (cone)","volume":50729.27713603738,"expected":50729.27713603737,"bound":5.0729277136037374E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-DRAFT","name":"hole wall 3deg (cone)","volume":46076.906228759144,"expected":46076.90622875916,"bound":4.607690622875916E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-DRAFT","name":"L-profile outer face 5deg","volume":35300.090691792604,"expected":35300.09069179261,"bound":3.5300090691792615E-05,"guarantee":"ExactAnalytic"}
+{"test":"KRN07-DRAFT-ACCEPTANCE","ok":true}
+{"test":"KRN07-SWEEP-ACCEPTANCE","ok":true}
+{"test":"KRN07-LOFT-ACCEPTANCE","ok":true}
+{"test":"KRN07-PATTERN-MIRROR-ACCEPTANCE","ok":true}
+{"test":"KRN09-THIN-ELEMENTS-AND-WATERTIGHT-DISPLAY","ok":true}
+{"test":"KRN09-LOAD-INVALID-VALUES-AND-LIMITS","ok":true}
+{"test":"KRN01-PROVENANCE","name":"shell with a hole","op":"shell with a hole (composed)","faces":14,"mapped":14,"fromInput":14,"generated":0,"deleted":0}
+{"test":"KRN01-PROVENANCE","name":"linear pattern","op":"linear pattern (composed)","faces":6,"mapped":6,"fromInput":6,"generated":0,"deleted":0}
+{"test":"KRN01-PROVENANCE","name":"mirror","op":"mirror (composed)","faces":6,"mapped":6,"fromInput":6,"generated":0,"deleted":1}
+{"test":"KRN01-PROVENANCE","name":"vertex round","op":"vertex-round.direct","faces":7,"mapped":7,"fromInput":6,"generated":1,"deleted":0}
+{"test":"KRN01-PROVENANCE","name":"chamfer 2/3 (cutter path)","op":"chamfer.direct","faces":7,"mapped":7,"fromInput":6,"generated":1,"deleted":0}
+{"test":"KRN01-ACCURACY-AND-PROVENANCE-IN-RESULT","ok":true}
+{"test":"KRN04-REFINE-AT-CLOSED-EDGE-SEAM","ok":true}
+{"test":"KRN02-UV-METRIC-PHYSICAL-TOLERANCE","ok":true}
+{"test":"KRN01-DIAGNOSTICS-NAME-ENTITIES","ok":true}
+{"test":"KRN09-DISPLAY-FAULT-ISOLATED","ok":true}
+{"test":"KRN05-SAME-DOMAIN-MERGE-PROVEN","ok":true}
+  clean: V 3744.7954572672134, curved faces 1, faces 7, ExactAnalytic
+  corrupted: V 3744.7954572672134, faces 8, refused 1
+{"test":"KRN05-SAME-DOMAIN-MERGE-CYLINDER","ok":true}
+  unify clean: V 3434.5133223538364, faces 7, ExactAnalytic
+  unify corrupted: V 3434.5133223538364, faces 8, refused 1
+{"test":"KRN05-UNIFY-SIDES-PROVEN","ok":true}
+{"test":"KRN05-PARTITION","traced":true,"named":true,"outcome":"Success","guarantee":"ExactPolyhedral"}
+{"test":"KRN05-PARTITION","closed":"sphere","named":true,"outcome":"Success","guarantee":"ExactPolyhedral"}
+{"test":"KRN05-PARTITION","closed":"torus","named":true,"outcome":"Success","guarantee":"ExactPolyhedral"}
+{"test":"KRN05-PARTITION","cone":"cone apex up","named":true,"outcome":"Success","guarantee":"ExactPolyhedral"}
+{"test":"KRN05-PARTITION","cone":"cone apex down","named":true,"outcome":"Success","guarantee":"ExactPolyhedral"}
+{"test":"KRN05-PARTITION-CHECKED","ok":true}
+{"test":"KRN05-SHARED","built":4,"late":0}
+{"test":"KRN05-SHARED-BY-CONSTRUCTION","ok":true}
+{"test":"KRN05-TOUCH-POLICY-REGULARIZED","ok":true}
+{"test":"KRN08-SELECTORS-BY-ROLE","ok":true}
+{"test":"KRN08-PROVENANCE","name":"direct round of one edge","operation":"round.direct","got":"kept 2 modified 4 split 0 generated 1 deleted 0 merged 0"}
+{"test":"KRN08-PROVENANCE","name":"direct round of a corner","operation":"round.direct","got":"kept 0 modified 6 split 0 generated 4 deleted 0 merged 0"}
+{"test":"KRN08-PROVENANCE","name":"box \u2212 through cylinder (2.5D)","operation":"boolean.prism.Subtract","got":"kept 4 modified 3 split 0 generated 0 deleted 2 merged 0"}
+{"test":"KRN08-PROVENANCE","name":"box \u222A box flush (2.5D)","operation":"boolean.prism.Union","got":"kept 4 modified 4 split 2 generated 0 deleted 1 merged 2"}
+{"test":"KRN08-PROVENANCE","name":"box \u2212 sphere (general)","operation":"boolean.Subtract","got":"kept 5 modified 2 split 0 generated 0 deleted 0 merged 0"}
+{"test":"KRN08-PROVENANCE","name":"box \u2212 torus (general)","operation":"boolean.Subtract","got":"kept 5 modified 1 split 2 generated 0 deleted 0 merged 0"}
+{"test":"KRN08-PROVENANCE","name":"tangent draft of a rounded box","operation":"draft.rebuild","got":"kept 1 modified 9 split 0 generated 0 deleted 0 merged 0"}
+{"test":"KRN08-PROVENANCE","ok":true}
+{"test":"Q3-DISTANCE-AND-BOUNDS","ok":true}
+{"test":"Q1-CLASSIFY-ALL-KINDS","name":"box","n":4000,"wrong":0,"unknown":0}
+{"test":"Q1-CLASSIFY-ALL-KINDS","name":"cylinder","n":4000,"wrong":0,"unknown":0}
+{"test":"Q1-CLASSIFY-ALL-KINDS","name":"cone","n":4000,"wrong":0,"unknown":0}
+{"test":"Q1-CLASSIFY-ALL-KINDS","name":"sphere","n":4000,"wrong":0,"unknown":0}
+{"test":"Q1-CLASSIFY-ALL-KINDS","name":"torus","n":4000,"wrong":0,"unknown":0}
+{"test":"Q1-CLASSIFY-ALL-KINDS","name":"NURBS quarter cylinder","n":4000,"wrong":0,"unknown":0}
+{"test":"Q1-CLASSIFY-ALL-KINDS","name":"NURBS trimmed (quarter cylinder minus a cross hole)","n":4000,"wrong":0,"unknown":0}
+{"test":"Q1-CLASSIFY-ALL-KINDS","ok":true}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"sphere\u2013sphere","Distance":9.6155281280883,"want":9.615528128088304,"WhereA":"face","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"box\u2013box (faces)","Distance":5,"want":5,"WhereA":"face","WhereB":"vertex"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"box\u2013box (corners)","Distance":13,"want":13,"WhereA":"vertex","WhereB":"vertex"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"box\u2013box (edges crossing)","Distance":2,"want":2,"WhereA":"vertex","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"cylinder\u2013sphere (side)","Distance":11,"want":11,"WhereA":"edge","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"cylinder\u2013sphere (rim)","Distance":10.142135623730947,"want":10.142135623730951,"WhereA":"vertex","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"torus\u2013sphere (in the hole)","Distance":4.999999999999999,"want":5,"WhereA":"face","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"cone\u2013plane box","Distance":5,"want":5,"WhereA":"vertex","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"cylinders, crossing axes","Distance":5,"want":5,"WhereA":"edge","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"rotated cylinder\u2013sphere","Distance":11,"want":11,"WhereA":"edge","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"NURBS quarter cylinder\u2013sphere","Distance":4.970562748477136,"want":4.970562748477139,"WhereA":"face","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"overlapping","Distance":0,"want":0,"WhereA":"inside","WhereB":"contact"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"contained","Distance":0,"want":0,"WhereA":"contact","WhereB":"inside"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","ok":true}
+{"test":"Q2-MASS","name":"box 60\u00D740\u00D720","route":"analytic boundary integral","dV":0,"eV":0.0009279999999999999,"dC":3.370400129833633E-14,"eC":7.233871234307528E-07,"dJ":2.60770320892334E-08,"eJ":3.8976002060833914,"relJ":1.8738462529247073E-07}
+{"test":"Q2-MASS","name":"box 60\u00D740\u00D720 (rotated, moved)","route":"analytic boundary integral","dV":2.1827872842550278E-11,"eV":0.0009279999999999999,"dC":1.4197803601653502E-13,"eC":1.0357966996424405E-06,"dJ":3.129243850708008E-07,"eJ":7.9910652851079504,"relJ":4.048926378495862E-07}
+{"test":"Q2-MASS","name":"cylinder r10 h30","route":"analytic boundary integral","dV":7.275957614183426E-12,"eV":0.0002604629533308689,"dC":1.3866186096933003E-12,"eC":5.694673555479823E-07,"dJ":1.8102582544088364E-07,"eJ":0.3317831828325172,"relJ":3.520328905503812E-07}
+{"test":"Q2-MASS","name":"cylinder r10 h30 (rotated, moved)","route":"analytic boundary integral","dV":0,"eV":0.0002604914570218404,"dC":1.6860723982825609E-12,"eC":6.959989039729315E-07,"dJ":1.8905848264694214E-07,"eJ":0.4955481443253864,"relJ":5.273327159560465E-07}
+{"test":"Q2-MASS","name":"sphere r12","route":"analytic boundary integral","dV":0,"eV":0.00018771282376022606,"dC":1.734723475976807E-18,"eC":5.390522769575982E-07,"dJ":1.1641532182693481E-10,"eJ":0.24330653014982348,"relJ":5.835780309588648E-07}
+{"test":"Q2-MASS","name":"sphere r12 (rotated, moved)","route":"analytic boundary integral","dV":0,"eV":0.00018771282376022568,"dC":0,"eC":5.389349668832832E-07,"dJ":2.3283064365386963E-10,"eJ":0.24320064356841237,"relJ":5.833240588083976E-07}
+{"test":"Q2-MASS","name":"cone r10 h24","route":"analytic boundary integral","dV":9.094947017729282E-13,"eV":0.00011545045190264519,"dC":2.561433893785868E-12,"eC":1.1271433329455791E-06,"dJ":5.977926775813103E-07,"eJ":0.20852427661536338,"relJ":2.266917307240218E-06}
+{"test":"Q2-MASS","name":"cone r10 h24 (rotated, moved)","route":"analytic boundary integral","dV":5.002220859751105E-12,"eV":0.00011545045362058013,"dC":2.006367536592033E-10,"eC":1.0727621850201374E-06,"dJ":2.645785571075976E-06,"eJ":0.18888454853128844,"relJ":2.0555738691704025E-06}
+{"test":"Q2-MASS","name":"torus R20 r6","route":"analytic boundary integral","dV":1.8189894035458565E-12,"eV":0.0004873184588981951,"dC":0,"eC":1.27743860366835E-06,"dJ":4.656612873077393E-10,"eJ":2.029144265831701,"relJ":3.343665411057938E-07}
+{"test":"Q2-MASS","name":"torus R20 r6 (rotated, moved)","route":"analytic boundary integral","dV":1.8189894035458565E-12,"eV":0.0004873184588981818,"dC":0,"eC":1.307112199835904E-06,"dJ":3.725290298461914E-09,"eJ":2.1245090670886153,"relJ":3.69907580921339E-07}
+{"test":"Q2-MASS","name":"lemon (spindle torus, poles)","route":"analytic boundary integral","dV":9.947598300641403E-14,"eV":1.0075427141134867E-05,"dC":1.423479087580704E-16,"eC":5.914020903937694E-07,"dJ":2.2737367544323206E-13,"eJ":0.0008502454647111135,"relJ":2.463943144224211E-06}
+{"test":"Q2-MASS","name":"lemon (spindle torus, poles) (rotated, moved)","route":"analytic boundary integral","dV":9.947598300641403E-14,"eV":1.0075427141134863E-05,"dC":0,"eC":5.79180322080926E-07,"dJ":4.263256414560601E-14,"eJ":0.0008154666597712322,"relJ":2.3683499035558884E-06}
+{"test":"Q2-MASS","name":"apple (spindle torus, poles)","route":"analytic boundary integral","dV":3.979039320256561E-13,"eV":3.052325229110694E-05,"dC":1.6830950192560467E-16,"eC":5.222900425645089E-07,"dJ":4.001776687800884E-11,"eJ":0.006363081075635737,"relJ":1.224312902891448E-06}
+{"test":"Q2-MASS","name":"apple (spindle torus, poles) (rotated, moved)","route":"analytic boundary integral","dV":3.979039320256561E-13,"eV":3.052325229110688E-05,"dC":0,"eC":5.295579034077791E-07,"dJ":5.093170329928398E-11,"eJ":0.006541402502758087,"relJ":1.2790782429324175E-06}
+{"test":"Q2-MASS","name":"plate 60\u00D740\u00D720 with hole r8","route":"analytic boundary integral","dV":7.275957614183426E-12,"eV":0.0009843565622668115,"dC":2.2606539957242026E-13,"eC":8.579441741988987E-07,"dJ":1.7881393432617188E-07,"eJ":4.33882927637377,"relJ":2.1444926379431655E-07}
+{"test":"Q2-MASS","name":"plate 60\u00D740\u00D720 with hole r8 (rotated, moved)","route":"analytic boundary integral","dV":1.4551915228366852E-11,"eV":0.0009843565622668115,"dC":3.6869996830933636E-13,"eC":1.219626251728302E-06,"dJ":7.82310962677002E-08,"eJ":8.768150603470357,"relJ":4.5691791861368427E-07}
+{"test":"Q2-MASS","name":"box 80\u00D780\u00D740 minus half-buried torus R20 r6","route":"refined mesh of analytic faces (\u00D74^3)","dV":2.9103830456733704E-11,"eV":0.0029227655346366135,"dC":1.9924248940818173E-05,"eC":0.0002524584966279276,"dJ":174.3196474313736,"eJ":6371.371264054214,"relJ":2.359484385677516E-05}
+{"test":"Q2-MASS","name":"box 80\u00D780\u00D740 minus half-buried torus R20 r6 (rotated, moved)","route":"refined mesh of analytic faces (\u00D74^3)","dV":2.0372681319713593E-10,"eV":0.0029227655520180683,"dC":1.9924248981079417E-05,"eC":0.00025245852459583937,"dJ":174.08451789617538,"eJ":6371.374373945353,"relJ":2.4648358505673436E-05}
+{"test":"Q2-MASS-PROPERTIES-BOUNDS","ok":true}
+{"test":"UNITS-CONVERSIONS-EXACT","ok":true}
+{"test":"UNITS-EXPRESSIONS","ok":true}
+{"test":"UNITS-PARAMETERS-AND-DOCUMENT","ok":true}
+STEP inch: bodies 1, mesh volume 98322383.99999994
+UNITS-STEP-IGES-READ step 98322383.99999999 iges 6000 igesIn 98322384 note IGES: units IN, model scale 1 — lengths × 25.4 to mm nullIn False warn IGES: units IN, model scale 1 — lengths × 25.4 to mm | IGES: 6 face(s) read. | IGES: 6 face(s) meshed from their loops, 0 left as is.
+{"test":"UNITS-STEP-IGES-READ","ok":true}
+{"test":"K09-VERTEX-DIRECT-EXACT","ok":true}
+{"test":"KRN02-PREDICATES-EXACT-CONSISTENT","n":16384,"naiveWrong":5346,"exactWrong":0}
+{"test":"KRN02-PREDICATES-EXACT-CONSISTENT","ok":true}
+{"test":"KRN02-PREDICATES-POINT-IN-POLYGON","n":4096,"wrong":0}
+{"test":"KRN02-PREDICATES-POINT-IN-POLYGON","ok":true}
+{"test":"KRN02-PREDICATES-CDT-NEAR-COLLINEAR","triangles":200,"cw":0,"sum":12.500000000000004,"area":12.500000000000002}
+{"test":"KRN02-PREDICATES-CDT-NEAR-COLLINEAR","ok":true}
+  half d8 r1: dV 3.860725437218207 reference 3.8607254385784615 OpenCascade 3.8743577014 (-3.5E-003) tangency 1.9E-007
+  half d8 r2: dV 17.40367316955235 reference 17.403673170734045 OpenCascade 17.4728044852 (-4.0E-003) tangency 1.9E-007
+  offset 1.5 d8 r1: dV 3.1870023043084075 reference 3.187002303470934 OpenCascade 3.1861342498 (2.7E-004) tangency 1.5E-007
+  offset 1.5 d8 r2: dV 14.714442836986564 reference 14.714442840491982 OpenCascade 14.7641345461 (-3.4E-003) tangency 1.6E-007
+  rot 20 d8 r1: dV 3.860725434635242 reference 3.860725438856056 OpenCascade 3.88008258 (-5.0E-003) tangency 1.9E-007
+  rot 20 d8 r2: dV 17.40367316910124 reference 17.403673171448393 OpenCascade 17.4634399856 (-3.4E-003) tangency 2.0E-007
+  rot 35 off 0.8 d8 r1.5: dV 8.265292339303414 reference 8.265292343916661 OpenCascade 8.3460258936 (-9.7E-003) tangency 1.7E-007
+  half d30 r1: dV 38.36943042362691 reference 38.36943043494608 OpenCascade 38.6491731674 (-7.2E-003) tangency 2.1E-007
+  rot 20 d30 r1: dV 38.369430425562314 reference 38.36943043471767 OpenCascade 38.6682224875 (-7.7E-003) tangency 2.1E-007
+{"test":"KRN06-OPEN-QUADRIC-ROLLING-BALL","ok":true}
+  closed hole d8 c1: dV 13.569708583119791 reference 13.569708545680475 OpenCascade 13.5137227429 (4.1E-003)
+  closed hole d8 c2: dV 58.55285017330607 reference 58.552850135107754 OpenCascade 58.6322087325 (-1.4E-003)
+  closed boss R8 c2: dV 104.68375384085812 reference 104.68375391077564 OpenCascade 104.5419840614 (1.4E-003)
+  closed hole d30 c1: dV 44.213490475551225 reference 44.2134897805226 OpenCascade 44.5249632579 (-7.0E-003)
+  closed hole d8 c1x2: dV 29.550791767978808 reference 29.55079172801014 OpenCascade NaN (NaN)
+  half d8 c1: dV 6.7848542721621925 reference 6.784854272784356 OpenCascade 6.7584015445 (3.9E-003)
+  offset 1.5 d8 c1: dV 5.2511486737275845 reference 5.251148674619334 OpenCascade 5.250313358 (1.6E-004)
+  rot 35 off 0.8 d8 c1.5: dV 14.046557879402826 reference 14.046557872660506 OpenCascade NaN (NaN)
+{"test":"KRN06-CURVED-CHAMFER-EXACT","ok":true}
+    NURBS closed hole d8 r1: V0 123663.19084679423 ±3.6E-008, V1 123655.46939126257 ±3.2E-003
+    NURBS closed hole d8 r1: prep 1.4 s, total 3.3 s, feet 109981 (global 1)
+  NURBS closed hole d8 r1: dV 7.721455531660467 reference 7.721450878381295 (6.0E-007)
+    NURBS half hole d8 r2: V0 61831.59542340361 ±3.6E-004, V1 61814.19175023178 ±3.9E-005
+    NURBS half hole d8 r2: prep 3.1 s, total 4.2 s, feet 28547 (global 1)
+  NURBS half hole d8 r2: dV 17.403673171829723 reference 17.403673170734045 (6.3E-011)
+    NURBS closed boss R8 r3: V0 129767.06458493724 ±5.4E-003, V1 129829.95290495177 ±1.4E-003
+    NURBS closed boss R8 r3: prep 1.3 s, total 3.1 s, feet 121202 (global 1515)
+  NURBS closed boss R8 r3: dV 62.888320014535566 reference 62.88832101419214 (-1.6E-008)
+    NURBS closed hole d8 chamfer 1: V0 123663.19084679423 ±3.6E-008, V1 123649.62113809535 ±3.2E-003
+    NURBS closed hole d8 chamfer 1: prep 1.3 s, total 3.7 s, feet 486395 (global 1)
+  NURBS closed hole d8 chamfer 1: dV 13.569708698880277 reference 13.569708545680475 (1.1E-008)
+    analytic oblique end r2: V0 123245.08988076977 ±0.0E+000, V1 123243.27823690588 ±1.3E-005
+    analytic oblique end r2: prep 0.1 s, total 0.4 s, feet 0 (global 0)
+    NURBS oblique end r2: V0 123245.08988075498 ±2.4E-004, V1 123243.27823690366 ±2.3E-004
+    NURBS oblique end r2: prep 1.5 s, total 2.8 s, feet 48772 (global 31)
+  NURBS oblique end r2 vs analytic: dV 1.8116438513243338 reference 1.8116438638826367 (-6.9E-009)
+    analytic oblique end chamfer 1.5: V0 123245.08988076977 ±0.0E+000, V1 123191.38542317056 ±1.6E-005
+    analytic oblique end chamfer 1.5: prep 0.1 s, total 0.4 s, feet 0 (global 0)
+    NURBS oblique end chamfer 1.5: V0 123245.08988075498 ±2.4E-004, V1 123191.3854231891 ±2.4E-004
+    NURBS oblique end chamfer 1.5: prep 1.5 s, total 2.4 s, feet 60918 (global 33)
+  NURBS oblique end chamfer 1.5 vs analytic: dV 53.70445756588015 reference 53.704457599204034 (-6.2E-010)
+{"test":"KRN06-NURBS-ROLLING-BALL-INVARIANT","ok":true}
+  reference self-check: 3.860725438366184 vs 3.8607254385784615
+  half d8 r1→2: dV 9.550361878005788 reference 9.550361863309865 (1.5E-009)
+  half d8 r2→0.8: dV 8.405487892887322 reference 8.405487885772388 (8.5E-010)
+  offset 1.5 d8 r0.7→1.6: dV 4.558502208063146 reference 4.558502199833875 (1.8E-009)
+  half d30 r1→2.5: dV 144.28918877227989 reference 144.289188846992 (-5.2E-010)
+{"test":"KRN06-VARIABLE-RADIUS-CURVED","ok":true}
+  round r2: left 1.0940691604628228 + right 0.7175747047876939 = 1.8116438652505167, full 1.8116438638826367 (7.6E-010, tol 1.6E-004)
+  chamfer 1.5: left 38.20143694046419 + right 15.503020636329893 = 53.704457576794084, full 53.704457599204034 (-4.2E-010, tol 1.6E-004)
+{"test":"KRN06-BLOCKED-END-ADDITIVE","ok":true}
+  d8 1-2-1.2: built in 3.2 s, end points 322, sections per end point 3.95
+  d8 1-2-1.2: dV 12.464661578575033 reference 12.464661412130907 (1.3E-008)
+  d8 2-0.8-1.5-1: built in 10.8 s, end points 10392, sections per end point 4.00
+  d8 2-0.8-1.5-1: dV 6.147876854192873 reference 6.1478786618536745 (-2.9E-007)
+  d8 2-0.8-1.5-1: STEP exact True, back 61782.822091715796 analytic False Unspecified faces ExtrudedSurface:2,PlaneSurface:4,NurbsSurface:1
+  d30b 1-1.8-1.2: built in 5.1 s, end points 130, sections per end point 3.88
+  d30b 1-1.8-1.2: dV 130.55175572423468 reference 130.55175573201018 (-6.0E-011)
+  d30c 2.5-1: built in 3.7 s, end points 130, sections per end point 3.88
+  d30c 2.5-1: dV 144.2891887601436 reference 144.28918884025813 (-5.6E-010)
+{"test":"KRN06-RADIUS-LAW-POINTS","ok":true}
+  r1: dV 10.897960987498664 reference 10.897960992623586 (-4.7E-010)
+  r2: dV 43.53254028745869 reference 43.53254030222227 (-3.4E-010)
+  r3.5: dV 133.07717344433695 reference 133.07717346971992 (-1.9E-010)
+{"test":"KRN06-PLANE-PLANE-CURVED-END","ok":true}
+{"test":"G05-TORUS-EXACT-ROUTE","ok":true}
+diff dump: 80 cases → /tmp/rp_8_79_2611
+diff dump: 92 cases → /tmp/rp_8_91_2611
+diff dump: 23 cases → /tmp/rp_10_22_2611
+diff dump: 32 cases → /tmp/rp_8_31_2611
+diff dump: 40 cases → /tmp/rp_8_39_2611
+diff dump: 17 cases → /tmp/rp_8_16_2611
+diff dump: 25 cases → /tmp/rp_8_24_2611
+diff dump: 48 cases → /tmp/rp_8_47_2611
+diff dump: 62 cases → /tmp/rp_8_61_2611
+diff dump: 159 cases → /tmp/rp_8_158_2611
+diff dump: 44 cases → /tmp/rp_8_43_2611
+diff dump: 46 cases → /tmp/rp_8_45_2611
+diff dump: 75 cases → /tmp/rp_8_74_2611
+diff dump: 83 cases → /tmp/rp_8_82_2611
+diff dump: 10 cases → /tmp/rp_8_9_2611
+diff dump: 200 cases → /tmp/rp_8_199_2611
+{"test":"G05-TORUS-OCCT-CASES","ok":true}
+{"test":"G05-TORUS-WAVY-BAND","ok":true}
+{"test":"G05-TRACE-CERTIFICATE-SMALL-LOOP","delta":0.001,"curves":1,"Uncertified":null}
+{"test":"G05-TRACE-CERTIFICATE-SMALL-LOOP","delta":0.0001,"curves":1,"Uncertified":"trace certificate: too many cells"}
+{"test":"G05-TRACE-CERTIFICATE-SMALL-LOOP","delta":2E-05,"curves":1,"Uncertified":"trace certificate: near-tangent cell at (13.920018, 1.746423, 1.771127) (single branch not proven)"}
+{"test":"G05-TRACE-CERTIFICATE-SMALL-LOOP","ok":true}
+{"test":"G05-TRACE-CELL-BOUND-RIGOROUS","ok":true}
