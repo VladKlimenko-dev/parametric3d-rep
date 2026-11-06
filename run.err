@@ -1,0 +1,2 @@
+exit 1
+seconds 82 nproc 4 env P3D_GUIDECURVES=0 cmd curve177
