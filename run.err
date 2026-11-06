@@ -1,0 +1,2 @@
+exit 1
+seconds 38 nproc 4 env GUIDE_OFF=0.05 cmd curve177
