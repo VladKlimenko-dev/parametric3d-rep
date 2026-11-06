@@ -70,7 +70,7 @@ static partial class Program
                 // (кривая из mids + 1 кусков; ход вершины — плавный, грани у вершины не перекручиваются)
                 var base2 = CurveThrough.Build(new[] { A, B2 }, specs.Select(x => x.Direction).ToList(), null, null, false)!;
                 var pts = new List<Vector3d> { A };
-                for (int m = 1; m <= mids; m++) { var c = base2.PointAt(m / (double)(mids + 1)); var rad = new Vector3d(c.X, c.Y, 0).Normalized(); pts.Add(c + rad * 0.5); }
+                for (int m = 1; m <= mids; m++) { var c = base2.PointAt(m / (double)(mids + 1)); var rad = new Vector3d(c.X, c.Y, 0).Normalized(); pts.Add(c + rad * (double.TryParse(Environment.GetEnvironmentVariable("GUIDE_OFF"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var gof) ? gof : 0.5)); }
                 pts.Add(B2);
                 var allSpecs = new List<CurvePointSpec> { specs[0] };
                 for (int m = 0; m < mids; m++) allSpecs.Add(new CurvePointSpec());

@@ -53,8 +53,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: g178_curve,   cmd: 'curve177', env: '' }
-          - { name: g178_allA,    cmd: 'allA', env: '' }
+          - { name: g178_off0,    cmd: 'curve177', env: 'GUIDE_OFF=0' }
+          - { name: g178_off2,    cmd: 'curve177', env: 'GUIDE_OFF=0.05' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
