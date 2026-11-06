@@ -346,7 +346,10 @@ public sealed class SectionSurface : ISurface3
     static readonly bool Quad = Environment.GetEnvironmentVariable("P3D_SECEXTRAP2") != "0";
     static readonly bool Smooth = Environment.GetEnvironmentVariable("P3D_SECSMOOTH") != "0";
     static readonly bool JointDbg = Environment.GetEnvironmentVariable("P3D_SECJOINTDBG") == "1";
-    static readonly bool BreakNode = Environment.GetEnvironmentVariable("P3D_SECBREAKNODE") != "0";
+    /// <summary>Я2, опыт (по умолчанию выключен, P3D_SECBREAKNODE=1): узел у стыка кусков — в самом стыке. Разрыв ленты в стыке
+    /// уходит (2e-9 → 2e-13 мм), но на корпусе s102 шаг 0 (фаска 6 по кромке лофта) прямая фаска стала негодной — p-кривая торца
+    /// отходит на 1.5e-4 мм, причина не найдена (BACKLOG, Я2). Проверка KRN-Y2-SECTION-BREAK-C0 — режим y2break.</summary>
+    static readonly bool BreakNode = Environment.GetEnvironmentVariable("P3D_SECBREAKNODE") == "1";
 
     /// <summary>Продолжение за конец по трём узлам (многочлен Ньютона второй степени): a − kΔ₁ + k(k+1)/2·Δ₂.</summary>
     private static SweepSection Extrap2(SweepSection a, SweepSection b, SweepSection c, int steps)
@@ -507,7 +510,7 @@ public sealed class SectionSurface : ISurface3
             // с разрывом 2e-9 мм, основание перпендикуляра качалось через стык и не находилось. Здесь узел — сама формула в стыке,
             // если она продолжает этот кусок (сверка с линейным продолжением по соседнему узлу, ошибка которого ~ε·h·S_uu/2):
             // тогда у обоих кусков в стыке один и тот же узел, разрыва нет. Сечение формулы в стыке другого вида (лента
-            // с разрывом) — линейное продолжение. Мутация P3D_SECBREAKNODE=0.
+            // с разрывом) — линейное продолжение. Опыт: P3D_SECBREAKNODE=1 (по умолчанию выключен).
             // кусок короче микрона (два почти совпавших стыка — контакты обеих граней уходят с области в одной точке) не трогается:
             // продолжение по узлу в 1e-9 от стыка там бессмысленно (s102 шаг 0: p-кривая торца отходила на 1.5e-4 мм)
             if (BreakNode && n >= 1 && h > 1e-6)
