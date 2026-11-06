@@ -98,4 +98,25 @@ static partial class Program
             Require(problems.Count == 0, string.Join("; ", problems));
         });
     }
+
+    /// <summary>Разбор: файл пользователя — «По сечениям» с Curve1 направляющей (как есть и с касательными по нормалям эскизов).</summary>
+    static void GearFile(string path)
+    {
+        foreach (bool tangents in new[] { false, true })
+        {
+            var (p, ps) = DocumentFile.Load(File.ReadAllText(path));
+            var dc = p.Children.OfType<DatumCurve>().First(c => c.Name == "Curve1");
+            if (tangents)
+            {
+                var specs = dc.Inputs.Select(q => new CurvePointSpec { SketchNormal = Vector3d.UnitZ, SketchId = 1, NormalToSketch = true }).ToList();
+                dc.Specs.Clear(); dc.Specs.AddRange(specs);
+                dc.SetSpline(CurveThrough.Build(dc.Inputs, specs.Select(x => x.Direction).ToList(), null, null, false)!);
+            }
+            var bf = p.Features.OfType<BlendFeature>().First();
+            bf.GuideCurveIds.Clear(); bf.GuideCurveIds.Add(dc.Id);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            p.Rebuild(ps);
+            Log(new { test = "gearfile", tangents, ms = sw.ElapsedMilliseconds, error = bf.Error, volume = p.Volume, bodies = p.Bodies.Count, guide = dc.GuideCurve(out var why)?.GetType().Name, why });
+        }
+    }
 }
