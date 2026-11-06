@@ -1,0 +1,352 @@
+== STEP s108 0
+DR face #d000000001/loft:side[0].0 NI (0.959, -0.031, -0.28) NA (0.952, -0.076, -0.295)
+DR face #d000000001/loft:side[1].0 NI (0.029, -0.992, -0.124) NA (-0.471, -0.843, 0.258)
+DR face #d000000001/loft:side[2].0 NI (-0.383, -0.883, -0.271) NA (-0.48, -0.859, -0.18)
+DR face #d000000001/loft:side[3].0 NI (-0.991, 0.072, 0.111) NA (-0.445, 0.746, 0.496)
+DR face #d000000001/loft:side[4].0 NI (-0.763, 0.642, -0.074) NA (-0.511, 0.857, 0.075)
+DR face #d000000001/loft:side[5].0 NI (-0.274, 0.957, -0.095) NA (-0.505, 0.847, -0.166)
+DR face #d000000001/loft:side[6].0 NI (0.091, 0.994, 0.056) NA (-0.512, 0.859, 0.024)
+DR face #d000000001/loft:side[7].0 NI (0.944, 0.258, -0.207) NA (0.652, 0.696, -0.299)
+DR face #d000000001/loft:side[0].1 NI (0.958, -0.147, 0.246) NA (0.943, 0.013, 0.331)
+DR face #d000000001/loft:side[1].1 NI (-0.072, -0.995, -0.071) NA (-0.466, -0.834, -0.296)
+DR face #d000000001/loft:side[2].1 NI (-0.42, -0.907, 0.034) NA (-0.488, -0.873, -0.02)
+DR face #d000000001/loft:side[3].1 NI (-0.99, 0.059, -0.127) NA (-0.487, 0.817, -0.308)
+DR face #d000000001/loft:side[4].1 NI (-0.822, 0.555, 0.128) NA (-0.512, 0.859, 0.031)
+DR face #d000000001/loft:side[5].1 NI (-0.445, 0.863, 0.24) NA (-0.496, 0.832, 0.249)
+DR face #d000000001/loft:side[6].1 NI (0.028, 0.984, 0.174) NA (-0.5, 0.838, 0.218)
+DR face #d000000001/loft:side[7].1 NI (0.939, 0.201, 0.28) NA (0.98, 0.014, 0.199)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0].0 NI (-0.184, -0.977, -0.107) NA (-0.472, -0.873, -0.123)
+DR face #d000000001/loft:side[1].0 NI (-0.977, 0.183, 0.113) NA (-0.875, 0.473, 0.104)
+DR face #d000000001/loft:side[2].0 NI (0.182, 0.969, 0.166) NA (0.473, 0.876, 0.089)
+DR face #d000000001/loft:side[3].0 NI (0.981, -0.184, -0.053) NA (0.872, -0.471, -0.138)
+DR face #d000000001/loft:side[0].1 NI (0.301, -0.951, -0.072) NA (0.439, -0.898, -0.023)
+DR face #d000000001/loft:side[1].1 NI (-0.995, -0.048, -0.09) NA (-0.992, 0.069, -0.103)
+DR face #d000000001/loft:side[2].1 NI (0.249, 0.956, 0.155) NA (0.556, 0.826, 0.088)
+DR face #d000000001/loft:side[3].1 NI (0.953, -0.298, 0.051) NA (0.431, -0.882, -0.19)
+DR edge (7.1, -24, -157.6)->(-22.5, -13.4, -157.6) sigma -1
+DR build declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only)
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (-0.283, -21.384, -157.641) nA (-0.337, -0.94, 0.045) nB (-0, -0, -1) inside False (eps 1.57), faces #d000000001/loft:side[2].1/#d000000001/loft:end
+DR open: convexity probe at 0.5 p (-7.681, -18.729, -157.641) nA (-0.337, -0.939, 0.062) nB (-0, -0, -1) inside False (eps 1.57), faces #d000000001/loft:side[2].1/#d000000001/loft:end
+DR open: convexity probe at 0.75 p (-15.08, -16.075, -157.641) nA (-0.337, -0.938, 0.079) nB (-0, -0, -1) inside False (eps 1.57), faces #d000000001/loft:side[2].1/#d000000001/loft:end
+DR open: table vs formula 8.59E-014 at t 12.0377 (Δ 31.4418) widths 6.21/6.234 Lp 47.923
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/ParamSurf t [-7.9607, 39.962] contacts A [1.60845, 33.4769] B [-5.75975, 37.761] Δ 31.4418
+DR finish: assembled 0.0s
+DR finish: meshed 0.2s
+DR finish: validated 0.5s
+DR finish: volume 0.5s
+DR finish: checked 0.5s
+== REBUILDCHECK s108 0
+DR face #d000000001/loft:side[0].0 NI (0.959, -0.031, -0.28) NA (0.952, -0.076, -0.295)
+DR face #d000000001/loft:side[1].0 NI (0.029, -0.992, -0.124) NA (-0.471, -0.843, 0.258)
+DR face #d000000001/loft:side[2].0 NI (-0.383, -0.883, -0.271) NA (-0.48, -0.859, -0.18)
+DR face #d000000001/loft:side[3].0 NI (-0.991, 0.072, 0.111) NA (-0.445, 0.746, 0.496)
+DR face #d000000001/loft:side[4].0 NI (-0.763, 0.642, -0.074) NA (-0.511, 0.857, 0.075)
+DR face #d000000001/loft:side[5].0 NI (-0.274, 0.957, -0.095) NA (-0.505, 0.847, -0.166)
+DR face #d000000001/loft:side[6].0 NI (0.091, 0.994, 0.056) NA (-0.512, 0.859, 0.024)
+DR face #d000000001/loft:side[7].0 NI (0.944, 0.258, -0.207) NA (0.652, 0.696, -0.299)
+DR face #d000000001/loft:side[0].1 NI (0.958, -0.147, 0.246) NA (0.943, 0.013, 0.331)
+DR face #d000000001/loft:side[1].1 NI (-0.072, -0.995, -0.071) NA (-0.466, -0.834, -0.296)
+DR face #d000000001/loft:side[2].1 NI (-0.42, -0.907, 0.034) NA (-0.488, -0.873, -0.02)
+DR face #d000000001/loft:side[3].1 NI (-0.99, 0.059, -0.127) NA (-0.487, 0.817, -0.308)
+DR face #d000000001/loft:side[4].1 NI (-0.822, 0.555, 0.128) NA (-0.512, 0.859, 0.031)
+DR face #d000000001/loft:side[5].1 NI (-0.445, 0.863, 0.24) NA (-0.496, 0.832, 0.249)
+DR face #d000000001/loft:side[6].1 NI (0.028, 0.984, 0.174) NA (-0.5, 0.838, 0.218)
+DR face #d000000001/loft:side[7].1 NI (0.939, 0.201, 0.28) NA (0.98, 0.014, 0.199)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0].0 NI (-0.184, -0.977, -0.107) NA (-0.472, -0.873, -0.123)
+DR face #d000000001/loft:side[1].0 NI (-0.977, 0.183, 0.113) NA (-0.875, 0.473, 0.104)
+DR face #d000000001/loft:side[2].0 NI (0.182, 0.969, 0.166) NA (0.473, 0.876, 0.089)
+DR face #d000000001/loft:side[3].0 NI (0.981, -0.184, -0.053) NA (0.872, -0.471, -0.138)
+DR face #d000000001/loft:side[0].1 NI (0.301, -0.951, -0.072) NA (0.439, -0.898, -0.023)
+DR face #d000000001/loft:side[1].1 NI (-0.995, -0.048, -0.09) NA (-0.992, 0.069, -0.103)
+DR face #d000000001/loft:side[2].1 NI (0.249, 0.956, 0.155) NA (0.556, 0.826, 0.088)
+DR face #d000000001/loft:side[3].1 NI (0.953, -0.298, 0.051) NA (0.431, -0.882, -0.19)
+DR edge (7.1, -24, -157.6)->(-22.5, -13.4, -157.6) sigma -1
+DR build declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only)
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (-0.283, -21.384, -157.641) nA (-0.337, -0.94, 0.045) nB (-0, -0, -1) inside False (eps 1.57), faces #d000000001/loft:side[2].1/#d000000001/loft:end
+DR open: convexity probe at 0.5 p (-7.681, -18.729, -157.641) nA (-0.337, -0.939, 0.062) nB (-0, -0, -1) inside False (eps 1.57), faces #d000000001/loft:side[2].1/#d000000001/loft:end
+DR open: convexity probe at 0.75 p (-15.08, -16.075, -157.641) nA (-0.337, -0.938, 0.079) nB (-0, -0, -1) inside False (eps 1.57), faces #d000000001/loft:side[2].1/#d000000001/loft:end
+DR open: table vs formula 8.59E-014 at t 12.0377 (Δ 31.4418) widths 6.21/6.234 Lp 47.923
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/ParamSurf t [-7.9607, 39.962] contacts A [1.60845, 33.4769] B [-5.75975, 37.761] Δ 31.4418
+DR finish: assembled 0.0s
+DR finish: meshed 0.1s
+DR finish: validated 0.4s
+DR finish: volume 0.4s
+DR finish: checked 0.4s
+== REBUILDCHECK END s108 0
+== STEP s108 1
+DR face #d000000001/loft:side[0].0 NI (0.959, -0.031, -0.28) NA (0.952, -0.076, -0.295)
+DR face #d000000001/loft:side[1].0 NI (0.029, -0.992, -0.124) NA (-0.471, -0.843, 0.258)
+DR face #d000000001/loft:side[2].0 NI (-0.383, -0.883, -0.271) NA (-0.48, -0.859, -0.18)
+DR face #d000000001/loft:side[3].0 NI (-0.991, 0.072, 0.111) NA (-0.445, 0.746, 0.496)
+DR face #d000000001/loft:side[4].0 NI (-0.763, 0.642, -0.074) NA (-0.511, 0.857, 0.075)
+DR face #d000000001/loft:side[5].0 NI (-0.274, 0.957, -0.095) NA (-0.505, 0.847, -0.166)
+DR face #d000000001/loft:side[6].0 NI (0.091, 0.994, 0.056) NA (-0.512, 0.859, 0.024)
+DR face #d000000001/loft:side[7].0 NI (0.944, 0.258, -0.207) NA (0.652, 0.696, -0.299)
+DR face #d000000001/loft:side[0].1 NI (0.958, -0.147, 0.246) NA (0.943, 0.013, 0.331)
+DR face #d000000001/loft:side[1].1 NI (-0.074, -0.995, -0.072) NA (-0.466, -0.834, -0.296)
+DR face #d000000001/loft:side[2].1 NI (-0.425, -0.905, 0.032) NA (-0.488, -0.873, -0.02)
+DR face #d000000001/loft:side[3].1 NI (-0.99, 0.063, -0.127) NA (-0.487, 0.817, -0.308)
+DR face #d000000001/loft:side[4].1 NI (-0.822, 0.555, 0.128) NA (-0.512, 0.859, 0.031)
+DR face #d000000001/loft:side[5].1 NI (-0.445, 0.863, 0.24) NA (-0.496, 0.832, 0.249)
+DR face #d000000001/loft:side[6].1 NI (0.028, 0.984, 0.174) NA (-0.5, 0.838, 0.218)
+DR face #d000000001/loft:side[7].1 NI (0.939, 0.201, 0.28) NA (0.98, 0.014, 0.199)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0].0 NI (-0.184, -0.977, -0.107) NA (-0.472, -0.873, -0.123)
+DR face #d000000001/loft:side[1].0 NI (-0.977, 0.183, 0.113) NA (-0.875, 0.473, 0.104)
+DR face #d000000001/loft:side[2].0 NI (0.182, 0.969, 0.166) NA (0.473, 0.876, 0.089)
+DR face #d000000001/loft:side[3].0 NI (0.981, -0.184, -0.053) NA (0.872, -0.471, -0.138)
+DR face #d000000001/loft:side[0].1 NI (0.301, -0.951, -0.072) NA (0.439, -0.898, -0.023)
+DR face #d000000001/loft:side[1].1 NI (-0.995, -0.048, -0.09) NA (-0.992, 0.069, -0.103)
+DR face #d000000001/loft:side[2].1 NI (0.249, 0.956, 0.155) NA (0.556, 0.826, 0.088)
+DR face #d000000001/loft:side[3].1 NI (0.953, -0.298, 0.051) NA (0.431, -0.882, -0.19)
+DR face #d000000003/round:face NI (-0.242, -0.649, -0.721) NA (0, -0, -1)
+DR edge (-7.8, 8.7, 0)->(9.4, -0.6, 0) sigma -1
+DR open: convexity probe at 0.25 p (-3.511, 6.382, 0) nA (0, 0, 1) nB (-0.475, -0.88, -0.015) inside False (eps 0.975), faces #d000000001/loft:start/#d000000001/loft:side[0].0
+DR open: convexity probe at 0.5 p (0.778, 4.065, 0) nA (0, 0, 1) nB (-0.475, -0.879, -0.051) inside False (eps 0.975), faces #d000000001/loft:start/#d000000001/loft:side[0].0
+DR open: convexity probe at 0.75 p (5.066, 1.749, 0) nA (0, 0, 1) nB (-0.473, -0.877, -0.087) inside False (eps 0.975), faces #d000000001/loft:start/#d000000001/loft:side[0].0
+DR open: table vs formula 7.39E-015 at t 19.3196 (Δ 19.4964) widths 2.4/2.4 Lp 22.559
+DR open: sigma -1 shapes Plane/ParamSurf ends ParamSurf/ParamSurf t [-1.6979, 20.861] contacts A [-1.43123E-14, 19.4964] B [-0.333186, 18.9037] Δ 19.4964
+DR open: NURBS face #d000000001/loft:side[1].0 extended u [0, 1.179] v [0, 1], deviation inside 2.8E-014
+DR open: NURBS face #d000000001/loft:side[3].0 extended u [-0.1793, 1] v [0, 1], deviation inside 1.5E-014
+DR finish: assembled 0.0s
+DR finish: meshed 0.0s
+DR finish: validated 0.4s
+DR finish: volume 0.4s
+DR finish: checked 0.4s
+== REBUILDCHECK s108 1
+DR face #d000000001/loft:side[0].0 NI (0.959, -0.031, -0.28) NA (0.952, -0.076, -0.295)
+DR face #d000000001/loft:side[1].0 NI (0.029, -0.992, -0.124) NA (-0.471, -0.843, 0.258)
+DR face #d000000001/loft:side[2].0 NI (-0.383, -0.883, -0.271) NA (-0.48, -0.859, -0.18)
+DR face #d000000001/loft:side[3].0 NI (-0.991, 0.072, 0.111) NA (-0.445, 0.746, 0.496)
+DR face #d000000001/loft:side[4].0 NI (-0.763, 0.642, -0.074) NA (-0.511, 0.857, 0.075)
+DR face #d000000001/loft:side[5].0 NI (-0.274, 0.957, -0.095) NA (-0.505, 0.847, -0.166)
+DR face #d000000001/loft:side[6].0 NI (0.091, 0.994, 0.056) NA (-0.512, 0.859, 0.024)
+DR face #d000000001/loft:side[7].0 NI (0.944, 0.258, -0.207) NA (0.652, 0.696, -0.299)
+DR face #d000000001/loft:side[0].1 NI (0.958, -0.147, 0.246) NA (0.943, 0.013, 0.331)
+DR face #d000000001/loft:side[1].1 NI (-0.072, -0.995, -0.071) NA (-0.466, -0.834, -0.296)
+DR face #d000000001/loft:side[2].1 NI (-0.42, -0.907, 0.034) NA (-0.488, -0.873, -0.02)
+DR face #d000000001/loft:side[3].1 NI (-0.99, 0.059, -0.127) NA (-0.487, 0.817, -0.308)
+DR face #d000000001/loft:side[4].1 NI (-0.822, 0.555, 0.128) NA (-0.512, 0.859, 0.031)
+DR face #d000000001/loft:side[5].1 NI (-0.445, 0.863, 0.24) NA (-0.496, 0.832, 0.249)
+DR face #d000000001/loft:side[6].1 NI (0.028, 0.984, 0.174) NA (-0.5, 0.838, 0.218)
+DR face #d000000001/loft:side[7].1 NI (0.939, 0.201, 0.28) NA (0.98, 0.014, 0.199)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0].0 NI (-0.184, -0.977, -0.107) NA (-0.472, -0.873, -0.123)
+DR face #d000000001/loft:side[1].0 NI (-0.977, 0.183, 0.113) NA (-0.875, 0.473, 0.104)
+DR face #d000000001/loft:side[2].0 NI (0.182, 0.969, 0.166) NA (0.473, 0.876, 0.089)
+DR face #d000000001/loft:side[3].0 NI (0.981, -0.184, -0.053) NA (0.872, -0.471, -0.138)
+DR face #d000000001/loft:side[0].1 NI (0.301, -0.951, -0.072) NA (0.439, -0.898, -0.023)
+DR face #d000000001/loft:side[1].1 NI (-0.995, -0.048, -0.09) NA (-0.992, 0.069, -0.103)
+DR face #d000000001/loft:side[2].1 NI (0.249, 0.956, 0.155) NA (0.556, 0.826, 0.088)
+DR face #d000000001/loft:side[3].1 NI (0.953, -0.298, 0.051) NA (0.431, -0.882, -0.19)
+DR edge (7.1, -24, -157.6)->(-22.5, -13.4, -157.6) sigma -1
+DR build declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only)
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (-0.283, -21.384, -157.641) nA (-0.337, -0.94, 0.045) nB (-0, -0, -1) inside False (eps 1.57), faces #d000000001/loft:side[2].1/#d000000001/loft:end
+DR open: convexity probe at 0.5 p (-7.681, -18.729, -157.641) nA (-0.337, -0.939, 0.062) nB (-0, -0, -1) inside False (eps 1.57), faces #d000000001/loft:side[2].1/#d000000001/loft:end
+DR open: convexity probe at 0.75 p (-15.08, -16.075, -157.641) nA (-0.337, -0.938, 0.079) nB (-0, -0, -1) inside False (eps 1.57), faces #d000000001/loft:side[2].1/#d000000001/loft:end
+DR open: table vs formula 8.59E-014 at t 12.0377 (Δ 31.4418) widths 6.21/6.234 Lp 47.923
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/ParamSurf t [-7.9607, 39.962] contacts A [1.60845, 33.4769] B [-5.75975, 37.761] Δ 31.4418
+DR finish: assembled 0.0s
+DR finish: meshed 0.1s
+DR finish: validated 0.4s
+DR finish: volume 0.4s
+DR finish: checked 0.4s
+DR face #d000000001/loft:side[0].0 NI (0.959, -0.031, -0.28) NA (0.952, -0.076, -0.295)
+DR face #d000000001/loft:side[1].0 NI (0.029, -0.992, -0.124) NA (-0.471, -0.843, 0.258)
+DR face #d000000001/loft:side[2].0 NI (-0.383, -0.883, -0.271) NA (-0.48, -0.859, -0.18)
+DR face #d000000001/loft:side[3].0 NI (-0.991, 0.072, 0.111) NA (-0.445, 0.746, 0.496)
+DR face #d000000001/loft:side[4].0 NI (-0.763, 0.642, -0.074) NA (-0.511, 0.857, 0.075)
+DR face #d000000001/loft:side[5].0 NI (-0.274, 0.957, -0.095) NA (-0.505, 0.847, -0.166)
+DR face #d000000001/loft:side[6].0 NI (0.091, 0.994, 0.056) NA (-0.512, 0.859, 0.024)
+DR face #d000000001/loft:side[7].0 NI (0.944, 0.258, -0.207) NA (0.652, 0.696, -0.299)
+DR face #d000000001/loft:side[0].1 NI (0.958, -0.147, 0.246) NA (0.943, 0.013, 0.331)
+DR face #d000000001/loft:side[1].1 NI (-0.074, -0.995, -0.072) NA (-0.466, -0.834, -0.296)
+DR face #d000000001/loft:side[2].1 NI (-0.425, -0.905, 0.032) NA (-0.488, -0.873, -0.02)
+DR face #d000000001/loft:side[3].1 NI (-0.99, 0.063, -0.127) NA (-0.487, 0.817, -0.308)
+DR face #d000000001/loft:side[4].1 NI (-0.822, 0.555, 0.128) NA (-0.512, 0.859, 0.031)
+DR face #d000000001/loft:side[5].1 NI (-0.445, 0.863, 0.24) NA (-0.496, 0.832, 0.249)
+DR face #d000000001/loft:side[6].1 NI (0.028, 0.984, 0.174) NA (-0.5, 0.838, 0.218)
+DR face #d000000001/loft:side[7].1 NI (0.939, 0.201, 0.28) NA (0.98, 0.014, 0.199)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0].0 NI (-0.184, -0.977, -0.107) NA (-0.472, -0.873, -0.123)
+DR face #d000000001/loft:side[1].0 NI (-0.977, 0.183, 0.113) NA (-0.875, 0.473, 0.104)
+DR face #d000000001/loft:side[2].0 NI (0.182, 0.969, 0.166) NA (0.473, 0.876, 0.089)
+DR face #d000000001/loft:side[3].0 NI (0.981, -0.184, -0.053) NA (0.872, -0.471, -0.138)
+DR face #d000000001/loft:side[0].1 NI (0.301, -0.951, -0.072) NA (0.439, -0.898, -0.023)
+DR face #d000000001/loft:side[1].1 NI (-0.995, -0.048, -0.09) NA (-0.992, 0.069, -0.103)
+DR face #d000000001/loft:side[2].1 NI (0.249, 0.956, 0.155) NA (0.556, 0.826, 0.088)
+DR face #d000000001/loft:side[3].1 NI (0.953, -0.298, 0.051) NA (0.431, -0.882, -0.19)
+DR face #d000000003/round:face NI (-0.242, -0.649, -0.721) NA (0, -0, -1)
+DR edge (-7.8, 8.7, 0)->(9.4, -0.6, 0) sigma -1
+DR open: convexity probe at 0.25 p (-3.511, 6.382, 0) nA (0, 0, 1) nB (-0.475, -0.88, -0.015) inside False (eps 0.975), faces #d000000001/loft:start/#d000000001/loft:side[0].0
+DR open: convexity probe at 0.5 p (0.778, 4.065, 0) nA (0, 0, 1) nB (-0.475, -0.879, -0.051) inside False (eps 0.975), faces #d000000001/loft:start/#d000000001/loft:side[0].0
+DR open: convexity probe at 0.75 p (5.066, 1.749, 0) nA (0, 0, 1) nB (-0.473, -0.877, -0.087) inside False (eps 0.975), faces #d000000001/loft:start/#d000000001/loft:side[0].0
+DR open: table vs formula 7.39E-015 at t 19.3196 (Δ 19.4964) widths 2.4/2.4 Lp 22.559
+DR open: sigma -1 shapes Plane/ParamSurf ends ParamSurf/ParamSurf t [-1.6979, 20.861] contacts A [-1.43123E-14, 19.4964] B [-0.333186, 18.9037] Δ 19.4964
+DR open: NURBS face #d000000001/loft:side[1].0 extended u [0, 1.179] v [0, 1], deviation inside 2.8E-014
+DR open: NURBS face #d000000001/loft:side[3].0 extended u [-0.1793, 1] v [0, 1], deviation inside 1.5E-014
+DR finish: assembled 0.0s
+DR finish: meshed 0.0s
+DR finish: validated 0.4s
+DR finish: volume 0.4s
+DR finish: checked 0.4s
+== REBUILDCHECK END s108 1
+== STEP s108 2
+DR face #d000000001/loft:side[0].0 NI (0.959, -0.031, -0.28) NA (0.952, -0.076, -0.295)
+DR face #d000000001/loft:side[1].0 NI (0.029, -0.992, -0.124) NA (-0.471, -0.843, 0.258)
+DR face #d000000001/loft:side[2].0 NI (-0.383, -0.883, -0.271) NA (-0.48, -0.859, -0.18)
+DR face #d000000001/loft:side[3].0 NI (-0.991, 0.072, 0.111) NA (-0.445, 0.746, 0.496)
+DR face #d000000001/loft:side[4].0 NI (-0.763, 0.642, -0.074) NA (-0.511, 0.857, 0.075)
+DR face #d000000001/loft:side[5].0 NI (-0.274, 0.957, -0.095) NA (-0.505, 0.847, -0.166)
+DR face #d000000001/loft:side[6].0 NI (0.091, 0.994, 0.056) NA (-0.512, 0.859, 0.024)
+DR face #d000000001/loft:side[7].0 NI (0.944, 0.258, -0.207) NA (0.652, 0.696, -0.299)
+DR face #d000000001/loft:side[0].1 NI (0.958, -0.147, 0.246) NA (0.943, 0.013, 0.331)
+DR face #d000000001/loft:side[1].1 NI (-0.074, -0.995, -0.072) NA (-0.466, -0.834, -0.296)
+DR face #d000000001/loft:side[2].1 NI (-0.425, -0.905, 0.032) NA (-0.488, -0.873, -0.02)
+DR face #d000000001/loft:side[3].1 NI (-0.99, 0.063, -0.127) NA (-0.487, 0.817, -0.308)
+DR face #d000000001/loft:side[4].1 NI (-0.822, 0.555, 0.128) NA (-0.512, 0.859, 0.031)
+DR face #d000000001/loft:side[5].1 NI (-0.445, 0.863, 0.24) NA (-0.496, 0.832, 0.249)
+DR face #d000000001/loft:side[6].1 NI (0.028, 0.984, 0.174) NA (-0.5, 0.838, 0.218)
+DR face #d000000001/loft:side[7].1 NI (0.939, 0.201, 0.28) NA (0.98, 0.014, 0.199)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0].0 NI (-0.171, -0.979, -0.109) NA (-0.456, -0.881, -0.127)
+DR face #d000000001/loft:side[1].0 NI (-0.976, 0.184, 0.113) NA (-0.875, 0.473, 0.104)
+DR face #d000000001/loft:side[2].0 NI (0.182, 0.969, 0.166) NA (0.473, 0.876, 0.089)
+DR face #d000000001/loft:side[3].0 NI (0.981, -0.185, -0.053) NA (0.869, -0.469, -0.155)
+DR face #d000000001/loft:side[0].1 NI (0.301, -0.951, -0.072) NA (0.439, -0.898, -0.023)
+DR face #d000000001/loft:side[1].1 NI (-0.995, -0.048, -0.09) NA (-0.992, 0.069, -0.103)
+DR face #d000000001/loft:side[2].1 NI (0.249, 0.956, 0.155) NA (0.556, 0.826, 0.088)
+DR face #d000000001/loft:side[3].1 NI (0.953, -0.298, 0.051) NA (0.431, -0.882, -0.19)
+DR face #d000000003/round:face NI (-0.242, -0.649, -0.721) NA (0, -0, -1)
+DR face #d000000006/chamfer:face NI (-0.339, -0.641, 0.688) NA (-0.357, -0.66, 0.661)
+DR edge (-27.6, -29.4, 0)->(-47.9, 4.7, -69.4) sigma 
+DR open: end 1 vertex (-47.854, 4.686, -69.392): edge LineCurve3 (-15.984, -13.125, -69.392)->(-47.854, 4.686, -69.392) between A/FacetedSurface#3556, normals at mid 13.76°
+DR open: end 1 vertex (-47.854, 4.686, -69.392): edge LineCurve3 (-47.854, 4.686, -69.392)->(-32.174, 14.034, -69.392) between B/FacetedSurface#8825, normals at mid 26.24°
+DR open: end 1 vertex (-47.854, 4.686, -69.392): edge LineCurve3 (-47.854, 4.686, -69.392)->(-24.264, -12.147, -151.433) between FacetedSurface#3556/FacetedSurface#8825, normals at mid 73.6°
+DR declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only) | curved chamfer: open curved: end vertex of degree 4 (three faces expected)
+== REBUILDCHECK s108 2
+DR face #d000000001/loft:side[0].0 NI (0.959, -0.031, -0.28) NA (0.952, -0.076, -0.295)
+DR face #d000000001/loft:side[1].0 NI (0.029, -0.992, -0.124) NA (-0.471, -0.843, 0.258)
+DR face #d000000001/loft:side[2].0 NI (-0.383, -0.883, -0.271) NA (-0.48, -0.859, -0.18)
+DR face #d000000001/loft:side[3].0 NI (-0.991, 0.072, 0.111) NA (-0.445, 0.746, 0.496)
+DR face #d000000001/loft:side[4].0 NI (-0.763, 0.642, -0.074) NA (-0.511, 0.857, 0.075)
+DR face #d000000001/loft:side[5].0 NI (-0.274, 0.957, -0.095) NA (-0.505, 0.847, -0.166)
+DR face #d000000001/loft:side[6].0 NI (0.091, 0.994, 0.056) NA (-0.512, 0.859, 0.024)
+DR face #d000000001/loft:side[7].0 NI (0.944, 0.258, -0.207) NA (0.652, 0.696, -0.299)
+DR face #d000000001/loft:side[0].1 NI (0.958, -0.147, 0.246) NA (0.943, 0.013, 0.331)
+DR face #d000000001/loft:side[1].1 NI (-0.072, -0.995, -0.071) NA (-0.466, -0.834, -0.296)
+DR face #d000000001/loft:side[2].1 NI (-0.42, -0.907, 0.034) NA (-0.488, -0.873, -0.02)
+DR face #d000000001/loft:side[3].1 NI (-0.99, 0.059, -0.127) NA (-0.487, 0.817, -0.308)
+DR face #d000000001/loft:side[4].1 NI (-0.822, 0.555, 0.128) NA (-0.512, 0.859, 0.031)
+DR face #d000000001/loft:side[5].1 NI (-0.445, 0.863, 0.24) NA (-0.496, 0.832, 0.249)
+DR face #d000000001/loft:side[6].1 NI (0.028, 0.984, 0.174) NA (-0.5, 0.838, 0.218)
+DR face #d000000001/loft:side[7].1 NI (0.939, 0.201, 0.28) NA (0.98, 0.014, 0.199)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0].0 NI (-0.184, -0.977, -0.107) NA (-0.472, -0.873, -0.123)
+DR face #d000000001/loft:side[1].0 NI (-0.977, 0.183, 0.113) NA (-0.875, 0.473, 0.104)
+DR face #d000000001/loft:side[2].0 NI (0.182, 0.969, 0.166) NA (0.473, 0.876, 0.089)
+DR face #d000000001/loft:side[3].0 NI (0.981, -0.184, -0.053) NA (0.872, -0.471, -0.138)
+DR face #d000000001/loft:side[0].1 NI (0.301, -0.951, -0.072) NA (0.439, -0.898, -0.023)
+DR face #d000000001/loft:side[1].1 NI (-0.995, -0.048, -0.09) NA (-0.992, 0.069, -0.103)
+DR face #d000000001/loft:side[2].1 NI (0.249, 0.956, 0.155) NA (0.556, 0.826, 0.088)
+DR face #d000000001/loft:side[3].1 NI (0.953, -0.298, 0.051) NA (0.431, -0.882, -0.19)
+DR edge (7.1, -24, -157.6)->(-22.5, -13.4, -157.6) sigma -1
+DR build declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only)
+DR open: equal cylinders declined: equal cylinders: not two cylinders
+DR open: convexity probe at 0.25 p (-0.283, -21.384, -157.641) nA (-0.337, -0.94, 0.045) nB (-0, -0, -1) inside False (eps 1.57), faces #d000000001/loft:side[2].1/#d000000001/loft:end
+DR open: convexity probe at 0.5 p (-7.681, -18.729, -157.641) nA (-0.337, -0.939, 0.062) nB (-0, -0, -1) inside False (eps 1.57), faces #d000000001/loft:side[2].1/#d000000001/loft:end
+DR open: convexity probe at 0.75 p (-15.08, -16.075, -157.641) nA (-0.337, -0.938, 0.079) nB (-0, -0, -1) inside False (eps 1.57), faces #d000000001/loft:side[2].1/#d000000001/loft:end
+DR open: table vs formula 8.59E-014 at t 12.0377 (Δ 31.4418) widths 6.21/6.234 Lp 47.923
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/ParamSurf t [-7.9607, 39.962] contacts A [1.60845, 33.4769] B [-5.75975, 37.761] Δ 31.4418
+DR finish: assembled 0.0s
+DR finish: meshed 0.1s
+DR finish: validated 0.4s
+DR finish: volume 0.4s
+DR finish: checked 0.4s
+DR face #d000000001/loft:side[0].0 NI (0.959, -0.031, -0.28) NA (0.952, -0.076, -0.295)
+DR face #d000000001/loft:side[1].0 NI (0.029, -0.992, -0.124) NA (-0.471, -0.843, 0.258)
+DR face #d000000001/loft:side[2].0 NI (-0.383, -0.883, -0.271) NA (-0.48, -0.859, -0.18)
+DR face #d000000001/loft:side[3].0 NI (-0.991, 0.072, 0.111) NA (-0.445, 0.746, 0.496)
+DR face #d000000001/loft:side[4].0 NI (-0.763, 0.642, -0.074) NA (-0.511, 0.857, 0.075)
+DR face #d000000001/loft:side[5].0 NI (-0.274, 0.957, -0.095) NA (-0.505, 0.847, -0.166)
+DR face #d000000001/loft:side[6].0 NI (0.091, 0.994, 0.056) NA (-0.512, 0.859, 0.024)
+DR face #d000000001/loft:side[7].0 NI (0.944, 0.258, -0.207) NA (0.652, 0.696, -0.299)
+DR face #d000000001/loft:side[0].1 NI (0.958, -0.147, 0.246) NA (0.943, 0.013, 0.331)
+DR face #d000000001/loft:side[1].1 NI (-0.074, -0.995, -0.072) NA (-0.466, -0.834, -0.296)
+DR face #d000000001/loft:side[2].1 NI (-0.425, -0.905, 0.032) NA (-0.488, -0.873, -0.02)
+DR face #d000000001/loft:side[3].1 NI (-0.99, 0.063, -0.127) NA (-0.487, 0.817, -0.308)
+DR face #d000000001/loft:side[4].1 NI (-0.822, 0.555, 0.128) NA (-0.512, 0.859, 0.031)
+DR face #d000000001/loft:side[5].1 NI (-0.445, 0.863, 0.24) NA (-0.496, 0.832, 0.249)
+DR face #d000000001/loft:side[6].1 NI (0.028, 0.984, 0.174) NA (-0.5, 0.838, 0.218)
+DR face #d000000001/loft:side[7].1 NI (0.939, 0.201, 0.28) NA (0.98, 0.014, 0.199)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0].0 NI (-0.184, -0.977, -0.107) NA (-0.472, -0.873, -0.123)
+DR face #d000000001/loft:side[1].0 NI (-0.977, 0.183, 0.113) NA (-0.875, 0.473, 0.104)
+DR face #d000000001/loft:side[2].0 NI (0.182, 0.969, 0.166) NA (0.473, 0.876, 0.089)
+DR face #d000000001/loft:side[3].0 NI (0.981, -0.184, -0.053) NA (0.872, -0.471, -0.138)
+DR face #d000000001/loft:side[0].1 NI (0.301, -0.951, -0.072) NA (0.439, -0.898, -0.023)
+DR face #d000000001/loft:side[1].1 NI (-0.995, -0.048, -0.09) NA (-0.992, 0.069, -0.103)
+DR face #d000000001/loft:side[2].1 NI (0.249, 0.956, 0.155) NA (0.556, 0.826, 0.088)
+DR face #d000000001/loft:side[3].1 NI (0.953, -0.298, 0.051) NA (0.431, -0.882, -0.19)
+DR face #d000000003/round:face NI (-0.242, -0.649, -0.721) NA (0, -0, -1)
+DR edge (-7.8, 8.7, 0)->(9.4, -0.6, 0) sigma -1
+DR open: convexity probe at 0.25 p (-3.511, 6.382, 0) nA (0, 0, 1) nB (-0.475, -0.88, -0.015) inside False (eps 0.975), faces #d000000001/loft:start/#d000000001/loft:side[0].0
+DR open: convexity probe at 0.5 p (0.778, 4.065, 0) nA (0, 0, 1) nB (-0.475, -0.879, -0.051) inside False (eps 0.975), faces #d000000001/loft:start/#d000000001/loft:side[0].0
+DR open: convexity probe at 0.75 p (5.066, 1.749, 0) nA (0, 0, 1) nB (-0.473, -0.877, -0.087) inside False (eps 0.975), faces #d000000001/loft:start/#d000000001/loft:side[0].0
+DR open: table vs formula 7.39E-015 at t 19.3196 (Δ 19.4964) widths 2.4/2.4 Lp 22.559
+DR open: sigma -1 shapes Plane/ParamSurf ends ParamSurf/ParamSurf t [-1.6979, 20.861] contacts A [-1.43123E-14, 19.4964] B [-0.333186, 18.9037] Δ 19.4964
+DR open: NURBS face #d000000001/loft:side[1].0 extended u [0, 1.179] v [0, 1], deviation inside 2.8E-014
+DR open: NURBS face #d000000001/loft:side[3].0 extended u [-0.1793, 1] v [0, 1], deviation inside 1.5E-014
+DR finish: assembled 0.0s
+DR finish: meshed 0.0s
+DR finish: validated 0.4s
+DR finish: volume 0.4s
+DR finish: checked 0.4s
+DR face #d000000001/loft:side[0].0 NI (0.959, -0.031, -0.28) NA (0.952, -0.076, -0.295)
+DR face #d000000001/loft:side[1].0 NI (0.029, -0.992, -0.124) NA (-0.471, -0.843, 0.258)
+DR face #d000000001/loft:side[2].0 NI (-0.383, -0.883, -0.271) NA (-0.48, -0.859, -0.18)
+DR face #d000000001/loft:side[3].0 NI (-0.991, 0.072, 0.111) NA (-0.445, 0.746, 0.496)
+DR face #d000000001/loft:side[4].0 NI (-0.763, 0.642, -0.074) NA (-0.511, 0.857, 0.075)
+DR face #d000000001/loft:side[5].0 NI (-0.274, 0.957, -0.095) NA (-0.505, 0.847, -0.166)
+DR face #d000000001/loft:side[6].0 NI (0.091, 0.994, 0.056) NA (-0.512, 0.859, 0.024)
+DR face #d000000001/loft:side[7].0 NI (0.944, 0.258, -0.207) NA (0.652, 0.696, -0.299)
+DR face #d000000001/loft:side[0].1 NI (0.958, -0.147, 0.246) NA (0.943, 0.013, 0.331)
+DR face #d000000001/loft:side[1].1 NI (-0.074, -0.995, -0.072) NA (-0.466, -0.834, -0.296)
+DR face #d000000001/loft:side[2].1 NI (-0.425, -0.905, 0.032) NA (-0.488, -0.873, -0.02)
+DR face #d000000001/loft:side[3].1 NI (-0.99, 0.063, -0.127) NA (-0.487, 0.817, -0.308)
+DR face #d000000001/loft:side[4].1 NI (-0.822, 0.555, 0.128) NA (-0.512, 0.859, 0.031)
+DR face #d000000001/loft:side[5].1 NI (-0.445, 0.863, 0.24) NA (-0.496, 0.832, 0.249)
+DR face #d000000001/loft:side[6].1 NI (0.028, 0.984, 0.174) NA (-0.5, 0.838, 0.218)
+DR face #d000000001/loft:side[7].1 NI (0.939, 0.201, 0.28) NA (0.98, 0.014, 0.199)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0].0 NI (-0.171, -0.979, -0.109) NA (-0.456, -0.881, -0.127)
+DR face #d000000001/loft:side[1].0 NI (-0.976, 0.184, 0.113) NA (-0.875, 0.473, 0.104)
+DR face #d000000001/loft:side[2].0 NI (0.182, 0.969, 0.166) NA (0.473, 0.876, 0.089)
+DR face #d000000001/loft:side[3].0 NI (0.981, -0.185, -0.053) NA (0.869, -0.469, -0.155)
+DR face #d000000001/loft:side[0].1 NI (0.301, -0.951, -0.072) NA (0.439, -0.898, -0.023)
+DR face #d000000001/loft:side[1].1 NI (-0.995, -0.048, -0.09) NA (-0.992, 0.069, -0.103)
+DR face #d000000001/loft:side[2].1 NI (0.249, 0.956, 0.155) NA (0.556, 0.826, 0.088)
+DR face #d000000001/loft:side[3].1 NI (0.953, -0.298, 0.051) NA (0.431, -0.882, -0.19)
+DR face #d000000003/round:face NI (-0.242, -0.649, -0.721) NA (0, -0, -1)
+DR face #d000000006/chamfer:face NI (-0.339, -0.641, 0.688) NA (-0.357, -0.66, 0.661)
+DR edge (-27.6, -29.4, 0)->(-47.9, 4.7, -69.4) sigma 
+DR open: end 1 vertex (-47.854, 4.686, -69.392): edge LineCurve3 (-15.984, -13.125, -69.392)->(-47.854, 4.686, -69.392) between A/FacetedSurface#6136, normals at mid 13.76°
+DR open: end 1 vertex (-47.854, 4.686, -69.392): edge LineCurve3 (-47.854, 4.686, -69.392)->(-32.174, 14.034, -69.392) between B/FacetedSurface#7504, normals at mid 26.24°
+DR open: end 1 vertex (-47.854, 4.686, -69.392): edge LineCurve3 (-47.854, 4.686, -69.392)->(-24.264, -12.147, -151.433) between FacetedSurface#6136/FacetedSurface#7504, normals at mid 73.6°
+DR declined: a face of the edge is not planar (plane/cylinder: rounds of edges along the axis only) | curved chamfer: open curved: end vertex of degree 4 (three faces expected)
+== REBUILDCHECK END s108 2
+seconds 29 nproc 4 env LOFT_DRALL=1 P3D_DROPENPAR=0 cmd loftseq 1 108 3 res/out
