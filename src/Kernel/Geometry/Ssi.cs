@@ -57,8 +57,11 @@ public static class Ssi
     public static int FootHintCount => FootWeak ? _footHintsWeak?.Count() ?? 0 : _footHints?.Count ?? 0;
     [ThreadStatic] public static Action<string>? FootDebug;
     static readonly bool FootCrease = Environment.GetEnvironmentVariable("P3D_FOOTCREASE") != "0";
+    static readonly bool FootPiece = Environment.GetEnvironmentVariable("P3D_FOOTPIECE") != "0";
     /// <summary>Я2: оснований на выпуклой складке ленты.</summary>
     public static long FootCreaseHits;
+    /// <summary>Я2: оснований на куске ленты у складки (PieceFoot).</summary>
+    public static long FootPieceHits;
     static readonly bool FootOnSurf = Environment.GetEnvironmentVariable("P3D_FOOTONSURF") != "0";
     static readonly bool FootTrace = Environment.GetEnvironmentVariable("P3D_FOOTTRACE") == "1";
     [ThreadStatic] static int _footTraceN;
@@ -252,6 +255,14 @@ public static class Ssi
             // не выпуклая сторона складки; на её границе (касание как раз входит на складку или сходит с неё) остаток ортогонален
             // одному из кусков — допуск 1e-7 доли
             double tolS = 1e-7 * L;
+            if (FootPiece && !(Vector3d.Dot(w, SuL) > -tolS * SuL.Length && Vector3d.Dot(w, SuR) < tolS * SuR.Length)
+                && PieceFoot(sc, x, b, Vector3d.Dot(w, SuL) <= -tolS * SuL.Length ? -1 : 1, v, span) is { } pf)
+            {   // Я2: основание — на самом куске у складки (Ньютон по куску, без перехода через стык)
+                Interlocked.Increment(ref FootPieceHits);
+                var wl = x - pf.P; double Ll = wl.Length;
+                if (Ll < bestL) { bestL = Ll; best = pf; }
+                continue;
+            }
             if (!(Vector3d.Dot(w, SuL) > -tolS * SuL.Length && Vector3d.Dot(w, SuR) < tolS * SuR.Length)) { FootDebug?.Invoke($"  crease {b:G8}: v {v:G8} L {L:E3} not beyond: wSuL {Vector3d.Dot(w, SuL) / SuL.Length:E3} wSuR {Vector3d.Dot(w, SuR) / SuR.Length:E3}"); continue; }
             var nL = Vector3d.Cross(SuL, Sv); if (!(nL.LengthSquared > 0)) continue;
             var nRef = sc.NormalAt(new Vector2d(b, Math.Clamp(v, 0, 1)));
@@ -260,6 +271,47 @@ public static class Ssi
             if (L < bestL) { bestL = L; best = (P, N, new Vector2d(b, v)); }
         }
         return best;
+    }
+
+    /// <summary>
+    /// Я2: ОСНОВАНИЕ НА КУСКЕ ЛЕНТЫ У САМОЙ СКЛАДКИ. Точка у края конуса нормалей складки (s109 шаг 5: остаток к левому куску —
+    /// −1.4e-4 мм при расстоянии 1.9): ортогональное основание есть, но в 1e-4 от стыка, и общий Ньютон перескакивает через стык на
+    /// другой кусок. Здесь — Ньютон по (u, v) только по куску со стороны side (−1 — левее стыка b, +1 — правее), производная по
+    /// u — односторонняя внутри куска. Мутация P3D_FOOTPIECE=0.
+    /// </summary>
+    static (Vector3d P, Vector3d N, Vector2d Uv)? PieceFoot(Surfaces.SectionSurface sc, Vector3d x, double b, int side, double v0, double span)
+    {
+        double eps = 1e-12 * span, lim = 0.05 * span, h = 1e-7 * span;
+        double u = b + side * Math.Max(eps, 1e-9 * span), v = v0;
+        Vector3d P = default, Su = default, Sv = default;
+        void Ev(double uu, double vv)
+        {
+            var s0 = sc.SectionAt(uu); P = s0.Point(vv); Sv = s0.Deriv(vv);
+            double u2 = uu - side * h;   // вторая точка — глубже в кусок
+            Su = (P - sc.SectionAt(u2).Point(vv)) / (side * h);
+        }
+        bool conv = false;
+        for (int it = 0; it < 60; it++)
+        {
+            Ev(u, v); var r = P - x;
+            double a11 = Vector3d.Dot(Su, Su), a12 = Vector3d.Dot(Su, Sv), a22 = Vector3d.Dot(Sv, Sv);
+            double b1 = -Vector3d.Dot(Su, r), b2 = -Vector3d.Dot(Sv, r), det = a11 * a22 - a12 * a12;
+            if (!(Math.Abs(det) > 1e-300)) return null;
+            double du = (b1 * a22 - b2 * a12) / det, dv = (a11 * b2 - a12 * b1) / det;
+            double un = u + du;
+            if (side < 0) un = Math.Clamp(un, b - lim, b - eps); else un = Math.Clamp(un, b + eps, b + lim);
+            dv = Math.Clamp(dv, -0.25, 0.25);
+            double step = Math.Abs(un - u) + Math.Abs(dv); u = un; v += dv;
+            if (step < 1e-15 * Math.Max(1, span)) { conv = true; break; }
+        }
+        if (!conv) return null;
+        Ev(u, v); var w = x - P; double L = w.Length; if (!(L > 1e-12)) return null;
+        if (Math.Abs(Vector3d.Dot(w, Su)) > 1e-9 * Math.Max(L, 1e-3) * Su.Length || Math.Abs(Vector3d.Dot(w, Sv)) > 1e-9 * Math.Max(L, 1e-3) * Sv.Length)
+        { FootDebug?.Invoke($"  piece {b:G8}/{side}: u {u:G12} v {v:G8} not orthogonal {Vector3d.Dot(w, Su) / Su.Length:E3} {Vector3d.Dot(w, Sv) / Sv.Length:E3}"); return null; }
+        var n = Vector3d.Cross(Su, Sv); if (!(n.LengthSquared > 0)) return null; n.Normalize();
+        var nRef = sc.NormalAt(new Vector2d(Math.Clamp(u, sc.UMin, sc.UMax), Math.Clamp(v, 0, 1)));
+        if (Vector3d.Dot(n, nRef) < 0) n = -n;
+        return (P, n, new Vector2d(u, v));
     }
 
     public enum Kind { Curves, Empty, Coincident, Tangent }
