@@ -144,18 +144,23 @@ static partial class Program
     /// Я2: ПЕРЕПОЛНЕНИЕ ЛЕНТЫ НА СЛЕДУЮЩУЮ ГРАНЬ У КОНЦА — ПРЯМО И ТОЧНО (корпус s102 шаг 2: скругление R2.09; ребро торца у
     /// конца 1 короче ширины ленты, линия касания уходит за его дальний конец на грань прежней фаски). Прежде — отказ «another
     /// edge of the face in the blend strip», резец, многогранный итог. Норма: шаг 2 — ExactAnalytic.
-    /// Мутации P3D_DRENDOVER=0 (переполнения нет), P3D_SLABVCLAMP=0 (объём грани прежней фаски у вершины веера) — падает.
+    /// Мутации P3D_DRENDOVER=0 (переполнения нет), P3D_SLABVCLAMP=0 (объём грани прежней фаски у вершины веера, s102),
+    /// P3D_DRTWOSWITCH=0 (переполнение с переходом шва на другом конце, s105) — падает.
     /// </summary>
     static void KrnY2EndOverflowChecks()
     {
         Check("KRN-Y2-S102-END-OVERFLOW-EXACT", () =>
         {
-            LoftCorpusSeq(1, 102, 3, Path.Combine(Path.GetTempPath(), "p3d_y2_s102"));
-            List<(string Tag, string Guarantee)> st; lock (LastSeqSteps) st = LastSeqSteps.ToList();
-            var s2 = st.FirstOrDefault(x => x.Tag.StartsWith("s102 step 2"));
-            Log(new { test = "KRN-Y2-S102-END-OVERFLOW-EXACT", steps = st.Select(x => $"{x.Tag[..Math.Min(40, x.Tag.Length)]}: {x.Guarantee}").ToList(), overflows = Parametric3D.Kernel.Ops.DirectRound.EndOvers });
-            Require(s2.Tag != null, "step 2 not built");
-            Require(s2.Guarantee == "ExactAnalytic", $"step 2 is {s2.Guarantee}");
+            // s102 шаг 2 — переполнение у конца 1; s105 шаг 2 (фаска 4.69 по цепочке) — у конца 0, на конце 1 — переход шва
+            foreach (int seed in new[] { 102, 105 })
+            {
+                LoftCorpusSeq(1, seed, 3, Path.Combine(Path.GetTempPath(), $"p3d_y2_s{seed}"));
+                List<(string Tag, string Guarantee)> st; lock (LastSeqSteps) st = LastSeqSteps.ToList();
+                var s2 = st.FirstOrDefault(x => x.Tag.StartsWith($"s{seed} step 2"));
+                Log(new { test = "KRN-Y2-S102-END-OVERFLOW-EXACT", seed, steps = st.Select(x => $"{x.Tag[..Math.Min(40, x.Tag.Length)]}: {x.Guarantee}").ToList(), overflows = Parametric3D.Kernel.Ops.DirectRound.EndOvers });
+                Require(s2.Tag != null, $"s{seed} step 2 not built");
+                Require(s2.Guarantee == "ExactAnalytic", $"s{seed} step 2 is {s2.Guarantee}");
+            }
         });
     }
 }
