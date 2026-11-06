@@ -501,9 +501,14 @@ public sealed class SectionSurface : ISurface3
                 // портил вставку на весь шаблон вокруг. Мутация P3D_SECNODENAN=0.
                 if (NodeNan && !double.IsFinite(arr[k].Point(0.5).X))
                 {
-                    double dir = k == 0 ? 1 : k == n ? -1 : 1, d = 1e-6 * h;
-                    var s1 = _gen!(u + dir * d); var s2 = _gen!(u + dir * 2 * d);
-                    if (double.IsFinite(s1.Point(0.5).X) && double.IsFinite(s2.Point(0.5).X)) { arr[k] = SweepSection.Blend(s1, s2, -1); Interlocked.Increment(ref NodeNanFixes); }
+                    bool fixedN = false;
+                    foreach (double dd in new[] { 1e-6, 1e-4, 1e-2 })
+                        foreach (double dir in k == 0 ? new[] { 1.0 } : k == n ? new[] { -1.0 } : new[] { 1.0, -1.0 })
+                        {
+                            if (fixedN) break;
+                            double d = dd * h; var s1 = _gen!(u + dir * d); var s2 = _gen!(u + dir * 2 * d);
+                            if (double.IsFinite(s1.Point(0.5).X) && double.IsFinite(s2.Point(0.5).X)) { arr[k] = SweepSection.Blend(s1, s2, -1); Interlocked.Increment(ref NodeNanFixes); fixedN = true; }
+                        }
                 }
             }
             // 20:17 (скорость): узлы таблицы независимы — в несколько потоков, если формула построителя это допускает
