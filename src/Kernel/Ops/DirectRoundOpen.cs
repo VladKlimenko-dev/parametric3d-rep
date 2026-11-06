@@ -398,7 +398,23 @@ public static partial class DirectRound
         {
             var V = k == 0 ? P0 : P1;
             var at = allEdges.Where(x => !chainSet.Contains(x) && ((x.V0.P - V).Length < 1e-7 || (x.V1.P - V).Length < 1e-7)).ToList();
-            if (at.Count != 2) { why = $"open curved: end vertex of degree {at.Count + 1} (three faces expected)"; return false; }
+            if (at.Count != 2)
+            {
+                if (Debug != null)
+                    foreach (var x in at)
+                    {
+                        var xf = x.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
+                        string nm(TFace f) => f == fs[0] ? "A" : f == fs[1] ? "B" : $"{f.Surface.GetType().Name}#{f.GetHashCode() % 10000}";
+                        double ang = double.NaN;
+                        if (xf.Count == 2 && byFace.TryGetValue(xf[0], out var d0) && byFace.TryGetValue(xf[1], out var d1))
+                        {
+                            var pm = x.Curve.PointAt(0.5 * (x.Curve.T0 + x.Curve.T1));
+                            ang = Vector3d.CalculateAngle(NormalOf(d0, pm), NormalOf(d1, pm)) * 180 / Math.PI;
+                        }
+                        Debug($"open: end {k} vertex {V:0.###}: edge {x.Curve.GetType().Name} {x.V0.P:0.###}->{x.V1.P:0.###} between {string.Join("/", xf.Select(nm))}, normals at mid {ang:G4}°");
+                    }
+                why = $"open curved: end vertex of degree {at.Count + 1} (three faces expected)"; return false;
+            }
             TFace? Other(TEdge x, TFace f) { var xf = x.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList(); return xf.Count == 2 && xf.Contains(f) ? xf.First(y => y != f) : null; }
             var eA = at.FirstOrDefault(x => Other(x, fs[0]) is TFace o && o != fs[1]);
             var eB = at.FirstOrDefault(x => x != eA && Other(x, fs[1]) is TFace o && o != fs[0]);
