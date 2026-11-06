@@ -1407,6 +1407,10 @@ public static partial class DirectRound
                 Interlocked.Increment(ref CuspEnds);
                 Debug?.Invoke($"open: end {k} at a cusp: end face tangent to a face of the edge along the seam, beyond the seam {mcu:0.###}, f {fBefore:E2}/{fBeyond:E2}");
             }
+            // Я2: у двухгранного торца само ребро идёт в вершину по ребру излома двух торцов (f1 и f2 у конца ребра меняют знак
+            // навстречу друг другу, max(f1, f2) знака не меняет) — проверка «ребро пересекает торец» тут не о том; пересечение
+            // торца сечениями ленты проверяется ниже (сечение целиком за торцом, скобка края)
+            if (two[k]) { fBefore = -1; fBeyond = 1; }
             if (!(fBeyond * fBefore < 0))
             {
                 if (two[k] && Debug != null)
