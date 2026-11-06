@@ -1019,6 +1019,15 @@ public static class AnalyticVolume
                     double vmin = uv.Min(q => q.Y), vmax = uv.Max(q => q.Y);
                     if (vmax <= 1e-6) { constV.Add(0); continue; }
                     if (vmin >= 1 - 1e-6) { constV.Add(1); continue; }
+                    // ребро неточного тела по краю ленты — в пределах своего допуска от края (s109 шаг 5: дуга по грани лофта с
+                    // допуском 4.7e-3 отходит от края v = 0 на 2.6e-3 мм, по v — до 5e-4): тоже край
+                    double etol = ce.Edge.Tolerance;
+                    if (etol > 0 && (vmax <= 1e-2 || vmin >= 1 - 1e-2))
+                    {
+                        double lv = vmax <= 1e-2 ? 0 : 1, dmx = 0;
+                        for (int i = 0; i <= K && dmx <= etol; i++) dmx = Math.Max(dmx, (c.PointAt(sv[i]) - ss.SectionAt(uv[i].X).Point(lv)).Length);
+                        if (dmx <= etol) { constV.Add(lv); continue; }
+                    }
                 }
                 edges.Add(new SlabEdge { E = ce.Edge, C = c, S = sv, Uv = uv });
             }
