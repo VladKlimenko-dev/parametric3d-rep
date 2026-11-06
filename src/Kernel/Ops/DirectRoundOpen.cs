@@ -1763,7 +1763,9 @@ public static partial class DirectRound
                     var q = sg.Curve.PointAt(sg.Curve.T0 + (sg.Curve.T1 - sg.Curve.T0) * k / 32.0);
                     if (StripTight ? InStrip(q, F == FA ? QAs : QBs, F == FA ? tA0 : tB0, F == FA ? tA1 : tB1) : Ps.Min(p => (p - q).Length) <= 1.5 * w + 1e-6)
                     {
-                      if (EndOver && sg.Id != null && (k == 0 || k == 32))
+                      // в быстром предпросмотре — нет (там проверки мягче, и у фаски детали KRN-INSTANT-PREVIEW-K113 переполнение
+                      // давало тело с объёмом на 0.25 % меньше точного; точный расчёт переполнения там не берёт)
+                      if (EndOver && !FastPreviewNow && sg.Id != null && (k == 0 || k == 32))
                         for (int ke = 0; ke < 2; ke++)
                         {
                             if (joint[ke] != 0 || two[ke]) continue;
