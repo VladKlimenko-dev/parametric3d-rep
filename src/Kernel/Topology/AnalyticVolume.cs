@@ -984,7 +984,7 @@ public static class AnalyticVolume
         Tuple<SectionSurface, SlabEdge[], double[]>? cache;
         if (!_slabCache.TryGetValue(f, out cache) || !ReferenceEquals(cache.Item1, ss))
         {
-            var edges = new List<SlabEdge>(); var brk = new List<double>();
+            var edges = new List<SlabEdge>(); var brk = new List<double>(); var constV = new List<double>();
             const int K = 96;
             foreach (var ce in f.Loops.SelectMany(l => l.CoEdges))
             {
@@ -1009,9 +1009,17 @@ public static class AnalyticVolume
                         brk.Add(ss.ProjectToUV(c.PointAt((lo + hi) / 2)).Y);
                     }
                 // край по v = const (у ленты — v = 0 или 1 с шумом проекции) горизонтали не пересекает
-                if (uv.Max(q => q.Y) - uv.Min(q => q.Y) <= 1e-9) continue;
+                if (uv.Max(q => q.Y) - uv.Min(q => q.Y) <= 1e-9) { constV.Add(uv[0].Y); continue; }
                 edges.Add(new SlabEdge { C = c, S = sv, Uv = uv });
             }
+            // Я2: конец соседнего ребра у края v = const — на самом краю: вершина проецируется с отходом до 1e-5 по v (точность
+            // вершины, s109 шаг 5: дуга новой ленты кончается на краю прежней фаски при v = 8e-6), и горизонтали в щели
+            // пересекают контур нечётно. Мутация P3D_SLABVCLAMP=0.
+            if (SlabVClamp)
+                foreach (var e in edges)
+                    foreach (int i in new[] { 0, K })
+                        foreach (double lv in constV)
+                            if (Math.Abs(e.Uv[i].Y - lv) < 1e-4 && Math.Abs(e.Uv[i].Y - lv) > 0) { e.Uv[i].Y = lv; brk.Add(lv); }
             brk.Sort();
             // изломы ближе 1e-6 доли — один (концы соседних рёбер в проекции расходятся на 1e-9…1e-7: узлы Гаусса в такой
             // щели не пересекают ни одно из двух рёбер)
