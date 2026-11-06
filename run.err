@@ -1,0 +1,2 @@
+exit 1
+seconds 1479 nproc 4 env  cmd loftcorpus140
