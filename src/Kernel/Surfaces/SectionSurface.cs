@@ -345,6 +345,7 @@ public sealed class SectionSurface : ISurface3
 
     static readonly bool Quad = Environment.GetEnvironmentVariable("P3D_SECEXTRAP2") != "0";
     static readonly bool Smooth = Environment.GetEnvironmentVariable("P3D_SECSMOOTH") != "0";
+    static readonly bool JointDbg = Environment.GetEnvironmentVariable("P3D_SECJOINTDBG") == "1";
     static readonly bool BreakNode = Environment.GetEnvironmentVariable("P3D_SECBREAKNODE") != "0";
 
     /// <summary>Продолжение за конец по трём узлам (многочлен Ньютона второй степени): a − kΔ₁ + k(k+1)/2·Δ₂.</summary>
@@ -517,6 +518,7 @@ public sealed class SectionSurface : ISurface3
                     var ex = SweepSection.Blend(inner, next, -eps / (h - eps));
                     var f = _gen!(u);
                     double d = 0; foreach (double v in new[] { 0.0, 0.5, 1.0 }) d = Math.Max(d, (f.Point(v) - ex.Point(v)).Length);
+                    if (JointDbg) Console.Error.WriteLine($"SECJOINT u {u:R} piece [{a:R}, {b:R}] n {n} h {h:E3} d {d:E2} inner-vs-ex {Math.Max((inner.Point(0) - ex.Point(0)).Length, (inner.Point(1) - ex.Point(1)).Length):E2} kind {(f.IsArc ? "arc" : f.IsLine ? "line" : "bez")}/{(inner.IsArc ? "arc" : inner.IsLine ? "line" : "bez")}");
                     return d < 1e-7 ? f : ex;
                 }
                 if (p > 0) arr[0] = AtJoint(arr[0], arr[1], a);
