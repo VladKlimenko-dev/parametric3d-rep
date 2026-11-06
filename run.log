@@ -1,0 +1,42 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["loftcorpus140"]}
+{"file":"case_s3_C2.17_73931.p3d","Ok":true,"dv":239.9796,"want":239.9796,"Ms":19121,"Problems":[],"expected":null}
+{"file":"case_s3_R2.17_73931.p3d","Ok":true,"dv":96.7719,"want":97.4204,"Ms":1980,"Problems":[],"expected":null}
+{"file":"fail_s10_C2.19_38878.p3d","Ok":true,"dv":52.0596,"want":52.1729,"Ms":514,"Problems":[],"expected":null}
+{"file":"fail_s10_R2.19_38878.p3d","Ok":true,"dv":27.271,"want":27.5096,"Ms":523,"Problems":[],"expected":null}
+{"file":"fail_s13_C1.24_4280.p3d","Ok":true,"dv":9.3578,"want":9.3636,"Ms":2883,"Problems":[],"expected":null}
+{"file":"fail_s15_C0.3_45190.p3d","Ok":true,"dv":0.7025,"want":0.7025,"Ms":57115,"Problems":[],"expected":null}
+{"file":"fail_s15_R0.3_7163.p3d","Ok":true,"dv":0.3056,"want":0.3056,"Ms":62112,"Problems":[],"expected":null}
+{"file":"fail_s15_R0.3_97952.p3d","Ok":true,"dv":0.306,"want":0.306,"Ms":63245,"Problems":[],"expected":null}
+{"file":"fail_s16_R3.01_73375.p3d","Ok":true,"dv":94.7567,"want":95.518,"Ms":5089,"Problems":[],"expected":null}
+{"file":"fail_s17_R1.27_12570.p3d","Ok":true,"dv":3.9246,"want":3.9246,"Ms":10820,"Problems":[],"expected":null}
+{"file":"fail_s1_C2.43_17.p3d","Ok":true,"dv":161.6533,"want":161.6925,"Ms":4241,"Problems":[],"expected":null}
+{"file":"fail_s20_C3.83_25305.p3d","Ok":true,"dv":151.0913,"want":151.9239,"Ms":893,"Problems":[],"expected":null}
+{"file":"fail_s27_R1.5_56299.p3d","Ok":true,"dv":9.313,"want":9.3129,"Ms":54565,"Problems":[],"expected":null}
+{"file":"fail_s27_R3.76_56299.p3d","Ok":true,"dv":60.1361,"want":60.1361,"Ms":59539,"Problems":[],"expected":null}
+{"file":"fail_s28_C3.64_26407.p3d","Ok":true,"dv":358.2212,"want":358.0539,"Ms":2239,"Problems":[],"expected":null}
+{"file":"fail_s30_R1.83_79931.p3d","Ok":true,"dv":39.1051,"want":39.1444,"Ms":921,"Problems":[],"expected":null}
+{"file":"fail_s32_R0.63_83816.p3d","Ok":true,"dv":12.306,"want":12.306,"Ms":2302,"Problems":[],"expected":null}
+{"file":"fail_s47_R2.4_92620.p3d","Ok":true,"dv":417.7341,"want":417.7341,"Ms":26786,"Problems":[],"expected":null}
+{"file":"fail_s47_R6_85935.p3d","Ok":true,"dv":255.8371,"want":255.8371,"Ms":1528,"Problems":[],"expected":null}
+{"file":"fail_s48_R1.44_42264.p3d","Ok":true,"dv":5.3125,"want":5.4037,"Ms":1850,"Problems":[],"expected":null}
+{"file":"fail_s50_R6_79539.p3d","Ok":true,"dv":338.8945,"want":338.8945,"Ms":3090,"Problems":[],"expected":null}
+{"file":"fail_s6_C1.96_51445.p3d","Ok":true,"dv":38.8093,"want":38.7385,"Ms":1905,"Problems":[],"expected":null}
+{"file":"fail_s6_R1.96_51445.p3d","Ok":true,"dv":12.9509,"want":12.9509,"Ms":2859,"Problems":[],"expected":null}
+{"file":"fail_s7_C2.4_59130.p3d","Ok":true,"dv":167.3223,"want":167.5085,"Ms":2076,"Problems":[],"expected":null}
+{"file":"fail_s8_R1.16_51223.p3d","Ok":true,"dv":4.6211,"want":4.6554,"Ms":2085,"Problems":[],"expected":null}
+{"file":"seq_s101_2.p3d","Ok":false,"dv":0,"want":0.1074,"Ms":5045,"Problems":["refused: Chamfer refused (exception at chamfer.build): Chamfer: the chamfer (0.3 mm) is wider than the face \u0027loft:end\u0027 next to the edge \u2014 its contact line leaves the face; the largest chamfer here is about 0.09 mm."],"expected":"refusal"}
+{"file":"seq_s106_2.p3d","Ok":true,"dv":1.702,"want":1.702,"Ms":121276,"Problems":[],"expected":null}
+{"file":"fail_s48_R0.58_93964.p3d","Ok":true,"dv":3.9262,"want":3.9169,"Ms":1914,"Problems":[],"expected":null}
+{"file":"seq_s105_4.p3d","Ok":true,"dv":403.6517,"want":403.2693,"Ms":58602,"Problems":[],"expected":null}
+{"file":"fail_s58_R0.63_19089.p3d","Ok":true,"dv":1.3729,"want":1.3729,"Ms":601924,"Problems":[],"expected":null}
+{"file":"fail_s71_R2.13_28941.p3d","Ok":true,"dv":32.8935,"want":32.8935,"Ms":14250,"Problems":[],"expected":null}
+{"file":"seq_s108_2.p3d","Ok":true,"dv":19.3213,"want":19.3226,"Ms":15217,"Problems":[],"expected":null}
+{"file":"seq_s106_4.p3d","Ok":true,"dv":2.6165,"want":2.6165,"Ms":143323,"Problems":[],"expected":null}
+{"file":"seq_s101_4.p3d","Ok":true,"dv":0.0412,"want":0.054,"Ms":19067,"Problems":[],"expected":null}
+{"file":"seq_s102_2.p3d","Ok":true,"dv":3.5511,"want":3.5511,"Ms":62746,"Problems":[],"expected":null}
+{"file":"seq_s102_5.p3d","Ok":false,"dv":0,"want":654.9758,"Ms":108682,"Problems":["refused: Chamfer refused (exception at chamfer.build): Chamfer: the chamfer (6 mm) is wider than the face \u0027chamfer:face\u0027 next to the edge \u2014 its contact line leaves the face; the largest chamfer here is about 1.86 mm."],"expected":"refusal"}
+{"file":"seq_s110_5.p3d","Ok":true,"dv":306.6749,"want":306.6749,"Ms":162057,"Problems":[],"expected":null}
+{"test":"KRN06-LOFT-CORPUS-K140","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":1714,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":1,"failed":0}
