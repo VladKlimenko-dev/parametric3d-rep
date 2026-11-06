@@ -117,7 +117,23 @@ public sealed class CurveOp : Operation
     public DatumCurve? EditTarget;
     public static readonly bool EditOff = Environment.GetEnvironmentVariable("P3D_CURVEEDIT") == "0";
     static readonly bool AccumulateOff = Environment.GetEnvironmentVariable("P3D_PICKORDER") == "0";
-    private (List<Vector3d> Pts, string Src, int Mode, List<Vector3d> In, bool Closed, bool Smooth)? _orig;
+    private (List<Vector3d> Pts, string Src, int Mode, List<Vector3d> In, bool Closed, bool Smooth, List<Vector3d>? Cv, List<double>? Wt, List<double>? Kn, int Deg, List<CurvePointSpec> Specs)? _orig;
+    // k177: условия касательных по точкам (через точки)
+    private readonly List<CurvePointSpec> _specs = new();
+    private readonly List<List<uint>> _cands = new();
+    private List<Vector3d> _specPts = new(), _tan = new();
+    private int _cur;
+    private Avalonia.Controls.ComboBox? _curBox;
+    private bool _syncBox;
+    private RefField _face = null!;
+    private SplineCurve3? _spline;
+    public static readonly bool TangentsOff = Environment.GetEnvironmentVariable("P3D_CURVETANGENTS") == "0";
+    CurvePointSpec? Cur => _cur >= 0 && _cur < _specs.Count ? _specs[_cur] : null;
+    List<uint> CurCands => _cur >= 0 && _cur < _cands.Count ? _cands[_cur] : new();
+    /// <summary>Разбор (проверки): условия точек и выбор точки панели.</summary>
+    public IReadOnlyList<CurvePointSpec> PointSpecs => _specs;
+    public IReadOnlyList<uint> CandidateFaces(int i) => i >= 0 && i < _cands.Count ? _cands[i] : Array.Empty<uint>();
+    public int CurrentPoint { get => _cur; set { _cur = Math.Clamp(value, 0, Math.Max(0, _specs.Count - 1)); SyncFace(); Panel?.Refresh(); UpdatePointBox(); } }
     /// <summary>Способ по кривой файла до k137 (без записанного способа): по описанию построения.</summary>
     public static int ModeOf(DatumCurve dc) => dc.Mode >= 0 ? dc.Mode : dc.Source.StartsWith("x=") ? 1 : dc.Source == "projection" ? 2 : 0;
     public override string Title => Mode switch { 1 => "Кривая по уравнению", 2 => "Проекция кривой на грань", _ => "Кривая через точки" };
@@ -129,7 +145,8 @@ public sealed class CurveOp : Operation
         {
             W.Session.BeginEdit(L("Изменить «{0}»", dc.Name));
             _dc = dc; Mode = ModeOf(dc); _closed = dc.Closed; _smooth = dc.Smooth;
-            _orig = (dc.Points.ToList(), dc.Source, dc.Mode, dc.Inputs.ToList(), dc.Closed, dc.Smooth);
+            _orig = (dc.Points.ToList(), dc.Source, dc.Mode, dc.Inputs.ToList(), dc.Closed, dc.Smooth, dc.Control?.ToList(), dc.Weights?.ToList(), dc.Knots?.ToList(), dc.Degree, dc.Specs.Select(x => x.Copy()).ToList());
+            _specs.AddRange(dc.Specs.Select(x => x.Copy())); _specPts = dc.Inputs.ToList();
             // уравнение — из описания построения «x=…; y=…; z=…; t=a..b»
             if (Mode == 1)
             {
@@ -179,11 +196,212 @@ public sealed class CurveOp : Operation
                 p.Check("Гладкая", () => _smooth, v => _smooth = v);
                 p.Check("Замкнутая", () => _closed, v => _closed = v);
                 _src = _faces = _dir = new RefField { Label = "", Optional = true };
+                if (!TangentsOff) BuildTangents(p);
                 break;
         }
     }
 
     static void Text(OpPanel p, string label, Func<string> get, Action<string> set) => p.Text(label, get, set);
+
+    /// <summary>
+    /// k177: КАСАТЕЛЬНЫЕ В ТОЧКАХ. Точка выбирается списком (или щелчком по стрелке касательной на виде — обращение); у каждой
+    /// точки: «По нормали эскиза» (точка эскиза — касательная по нормали его плоскости), «По нормали поверхности» (грань,
+    /// сходящаяся в точке: одна — сама, несколько — та, что ближе всех к перпендикуляру хода кривой; другую — щелчком на виде),
+    /// «Обратить направление», вес касательной. Условие одной точки не трогает соседние; точка без условия — касательная по
+    /// соседям. У ломаной (не гладкой) условий нет. Мутация P3D_CURVETANGENTS=0 — без раздела.
+    /// </summary>
+    void BuildTangents(OpPanel p)
+    {
+        p.Header("Касательные в точках");
+        _curBox = new Avalonia.Controls.ComboBox { HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch, Name = "curve_point" };
+        _curBox.SelectionChanged += (_, _) => { if (_syncBox || _curBox.SelectedIndex < 0) return; _cur = _curBox.SelectedIndex; SyncFace(); Panel?.Refresh(); RefreshStatus(); };
+        var g = new Avalonia.Controls.Grid { ColumnDefinitions = new Avalonia.Controls.ColumnDefinitions("108,*"), Margin = new Avalonia.Thickness(0, 1) };
+        g.Children.Add(new Avalonia.Controls.TextBlock { Text = L("Точка"), Classes = { "dim" }, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
+        Avalonia.Controls.Grid.SetColumn(_curBox, 1); g.Children.Add(_curBox);
+        p.Host.Children.Add(g);
+        bool Smooth() => _smooth && Cur != null;
+        p.Check("По нормали эскиза", () => Cur?.NormalToSketch ?? false, v => { if (Cur is { } c) { c.NormalToSketch = v && c.FromSketch; if (c.NormalToSketch) c.NormalToSurface = false; } },
+                enabled: () => Smooth() && Cur!.FromSketch,
+                tip: "Касательная в точке — по нормали плоскости эскиза, на котором построена точка. Доступно у точек эскиза.");
+        p.Check("По нормали поверхности", () => Cur?.NormalToSurface ?? false, v => { if (Cur is { } c) { c.NormalToSurface = v && CurCands.Count > 0 && !c.NormalToSketch; if (c.NormalToSurface && !CurCands.Contains(c.FaceId)) c.FaceId = DefaultFace(_cur); SyncFace(); } },
+                enabled: () => Smooth() && !Cur!.NormalToSketch && CurCands.Count > 0,
+                tip: "Касательная в точке — по нормали поверхности, сходящейся в этой точке. Доступно, если точка лежит на грани тела; при «По нормали эскиза» — нет.");
+        _face = p.Ref(new RefField
+        {
+            Label = "Поверхность", Filter = PickFilter.Faces, Single = true, Optional = true,
+            Accept = r => r.Kind == PickKind.Face && CurCands.Contains(r.Id), Prefer = r => r.Kind == PickKind.Face && CurCands.Contains(r.Id),
+            Enabled = () => Smooth() && Cur!.NormalToSurface && !Cur.NormalToSketch && CurCands.Count > 0,
+            Describe = r => L("Грань #{0}", r.Id),
+            Tip = "Грань, по нормали которой идёт касательная в точке. Щелчок по виду — другая из граней, сходящихся в точке. По умолчанию: одна грань — она; несколько — та, что ближе к перпендикуляру хода кривой.",
+        });
+        p.Check("Обратить направление", () => Cur?.Flip ?? false, v => { if (Cur is { } c) c.Flip = v; }, enabled: () => Smooth() && Cur!.Constrained,
+                tip: "Касательная — в обратную сторону (по умолчанию — по ходу кривой). То же — щелчок по стрелке точки на виде.");
+        p.Number("Вес касательной", () => new ValueRef(Cur?.Weight ?? 1), v => { if (Cur is { } c && v.Value > 0) c.Weight = Math.Clamp(v.Value, 0.05, 10); }, unit: "", scrub: 0.1);
+        p.Button("Всем точкам эскизов — по нормали эскиза", () => { foreach (var c in _specs) if (c.FromSketch) { c.NormalToSketch = true; c.NormalToSurface = false; } SyncFace(); FieldChanged(); }, enabled: () => _smooth && _specs.Any(c => c.FromSketch));
+        p.Button("Снять условия у всех точек", () => { foreach (var c in _specs) { c.NormalToSketch = c.NormalToSurface = c.Flip = false; c.Weight = 1; } SyncFace(); FieldChanged(); }, enabled: () => _specs.Any(c => c.NormalToSketch || c.NormalToSurface || c.Flip || Math.Abs(c.Weight - 1) > 1e-12));
+        p.Info(() => TangentSummary());
+        p.Note("Стрелки на виде — касательные точек с условием; щелчок по стрелке обращает её. Вес — длина касательной в долях хорды участка (1 — обычная).");
+    }
+
+    string SourceName(int i)
+    {
+        var c = _specs[i];
+        if (c.SketchId != 0 && Part.Sketches.FirstOrDefault(s => s.Id == c.SketchId) is { } sk) return L("эскиз «{0}»", sk.Name);
+        if (c.FromSketch) return L("точка эскиза");
+        if (c.VertexId != 0) return L("вершина");
+        return L("точка");
+    }
+    string CondName(CurvePointSpec c) => c.NormalToSketch && c.FromSketch ? L("по нормали эскиза") : c.NormalToSurface && c.FaceNormal.LengthSquared > 0 ? L("по нормали грани #{0}", c.FaceId) : L("свободно");
+    string TangentSummary()
+    {
+        if (!_smooth) return L("Ломаная: касательных нет.");
+        if (_specs.Count == 0) return L("Выберите точки.");
+        return string.Join("; ", _specs.Select((c, i) => $"{i + 1}: {CondName(c)}{(c.Constrained && c.Flip ? " ⇄" : "")}{(Math.Abs(c.Weight - 1) > 1e-12 ? $" ×{c.Weight:0.##}" : "")}"));
+    }
+
+    void UpdatePointBox()
+    {
+        if (_curBox == null) return;
+        _syncBox = true;
+        try
+        {
+            _curBox.ItemsSource = _specs.Select((c, i) => $"{i + 1} — {SourceName(i)} ({CondName(c)})").ToList();
+            if (_specs.Count > 0) _curBox.SelectedIndex = Math.Clamp(_cur, 0, _specs.Count - 1);
+        }
+        finally { _syncBox = false; }
+    }
+
+    /// <summary>Поле «Поверхность» — грань текущей точки (без отметки «тронуто»: правка самой точки — по щелчку).</summary>
+    void SyncFace()
+    {
+        if (_face == null) return;
+        _face.Items.Clear();
+        if (Cur is { NormalToSurface: true, FaceId: > 0 } c) _face.Items.Add(new PickRef(c.FaceId, PickKind.Face, Part, null));
+        _face.Refresh();
+    }
+
+    IEnumerable<Parametric3D.Kernel.Topology.TFace> AllFaces() => Part.Bodies.SelectMany(b => b.Faces).Concat(Part.Quilts.SelectMany(q => q.Faces));
+
+    Dictionary<uint, List<(Vector3d A, Vector3d B, Vector3d C)>>? _faceTris;
+    object? _faceTrisFor;
+    /// <summary>Грани тела, сходящиеся в точке: у вершины — грани её рёбер; иначе — грани, на поверхности и внутри контура которых точка.</summary>
+    List<uint> FacesAt(Vector3d q, PickRef? r)
+    {
+        var res = new List<uint>();
+        Parametric3D.Kernel.Topology.TVertex? vx = r is { Kind: PickKind.Vertex } vr ? Part.FindVertex(vr.Id) : null;
+        vx ??= Part.Bodies.SelectMany(b => b.Vertices).FirstOrDefault(v => (v.P - q).Length <= 1e-7 * Math.Max(1, q.Length));
+        if (vx != null)
+        {
+            foreach (var e in vx.Edges) foreach (var f in new[] { e.FaceA, e.FaceB }) if (f != null && !res.Contains(f.Id)) res.Add(f.Id);
+            if (res.Count > 0) return res;
+        }
+        if (!ReferenceEquals(_faceTrisFor, Part.Mesh))
+        {
+            _faceTrisFor = Part.Mesh; _faceTris = new();
+            if (Part.Mesh is { } md)
+                for (int i = 0; i + 2 < md.Indices.Length; i += 3)
+                {
+                    var v0 = md.Vertices[md.Indices[i]]; var v1 = md.Vertices[md.Indices[i + 1]]; var v2 = md.Vertices[md.Indices[i + 2]];
+                    if (!_faceTris.TryGetValue(v0.FaceId, out var l)) _faceTris[v0.FaceId] = l = new();
+                    l.Add((new Vector3d(v0.P.X, v0.P.Y, v0.P.Z), new Vector3d(v1.P.X, v1.P.Y, v1.P.Z), new Vector3d(v2.P.X, v2.P.Y, v2.P.Z)));
+                }
+        }
+        double tolMesh = Math.Max(1e-2, 3 * Tol.Chord);
+        foreach (var f in AllFaces())
+        {
+            if (res.Contains(f.Id)) continue;
+            var su = Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f) ?? f.Surface;
+            try { if ((su.PointAt(su.ProjectToUV(q)) - q).Length > Math.Max(1e-4, 1e-6 * q.Length)) continue; } catch { continue; }
+            if (_faceTris == null || !_faceTris.TryGetValue(f.Id, out var tris)) continue;
+            if (tris.Any(t => DistTri(q, t.A, t.B, t.C) <= tolMesh)) res.Add(f.Id);
+        }
+        return res;
+    }
+
+    static double DistTri(Vector3d p, Vector3d a, Vector3d b, Vector3d c)
+    {
+        // ближайшая точка треугольника (Эриксон, «Real-Time Collision Detection», 5.1.5)
+        var ab = b - a; var ac = c - a; var ap = p - a;
+        double d1 = Vector3d.Dot(ab, ap), d2 = Vector3d.Dot(ac, ap); if (d1 <= 0 && d2 <= 0) return (p - a).Length;
+        var bp = p - b; double d3 = Vector3d.Dot(ab, bp), d4 = Vector3d.Dot(ac, bp); if (d3 >= 0 && d4 <= d3) return (p - b).Length;
+        double vc = d1 * d4 - d3 * d2; if (vc <= 0 && d1 >= 0 && d3 <= 0) return (p - (a + ab * (d1 / (d1 - d3)))).Length;
+        var cp = p - c; double d5 = Vector3d.Dot(ab, cp), d6 = Vector3d.Dot(ac, cp); if (d6 >= 0 && d5 <= d6) return (p - c).Length;
+        double vb = d5 * d2 - d1 * d6; if (vb <= 0 && d2 >= 0 && d6 <= 0) return (p - (a + ac * (d2 / (d2 - d6)))).Length;
+        double va = d3 * d6 - d5 * d4; if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) return (p - (b + (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6))))).Length;
+        double den = 1 / (va + vb + vc); return (p - (a + ab * (vb * den) + ac * (vc * den))).Length;
+    }
+
+    /// <summary>Грань по умолчанию: одна — она; несколько — та, чья нормаль ближе всех к ходу кривой (грань — ближе к перпендикуляру кривой).</summary>
+    uint DefaultFace(int i)
+    {
+        var cands = i < _cands.Count ? _cands[i] : new();
+        if (cands.Count == 0) return 0;
+        if (cands.Count == 1) return cands[0];
+        var free = _specPts.Count >= 2 ? CurveThrough.Tangents(_specPts, _specPts.Select(_ => (Vector3d?)null).ToList(), _specPts.Select(_ => false).ToList(), _closed) : null;
+        var t = free != null && i < free.Length ? free[i] : Vector3d.UnitZ;
+        uint best = cands[0]; double bd = -1;
+        foreach (var id in cands)
+            if (Part.FindFace(id) is { } f)
+            {
+                double d; try { d = Math.Abs(Vector3d.Dot(f.NormalAt(_specPts[i]).Normalized(), t)); } catch { continue; }
+                if (d > bd) { bd = d; best = id; }
+            }
+        return best;
+    }
+
+    /// <summary>Условия точек — по новому списку точек: у прежней точки (то же место) — прежние, у новой — по ссылке; грани — заново.</summary>
+    void SyncSpecs(List<Vector3d> q, List<PickRef>? refs)
+    {
+        var old = _specs.Select((c, i) => (C: c, P: i < _specPts.Count ? _specPts[i] : new Vector3d(double.NaN))).ToList();
+        var used = new bool[old.Count];
+        _specs.Clear(); _cands.Clear();
+        var oldPts = _specPts;
+        _specPts = q.ToList();
+        for (int i = 0; i < q.Count; i++)
+        {
+            CurvePointSpec? c = null;
+            for (int k = 0; k < old.Count; k++) if (!used[k] && (old[k].P - q[i]).Length <= 1e-9 * Math.Max(1, q[i].Length)) { used[k] = true; c = old[k].C; break; }
+            c ??= new CurvePointSpec();
+            var r = refs != null && i < refs.Count ? refs[i] : (PickRef?)null;
+            if (r is { Kind: PickKind.SketchPoint } sr && Refs.SketchOf(sr) is { } sk) { c.SketchId = sk.Id; c.SketchPointId = sr.Id; c.SketchNormal = sk.Plane.W.Normalized(); }
+            else if (r is { Kind: PickKind.Vertex } vr) { c.VertexId = vr.Id; }
+            if (!c.FromSketch)
+                // точка эскиза — и без ссылки (правка, кривая до k177): эскиз, у которого есть точка в этом месте
+                foreach (var sk2 in Part.Sketches)
+                {
+                    var hit = sk2.Entities.SelectMany(e => e.Handles)
+                        .FirstOrDefault(pt => (sk2.Plane.ToWorld(pt.P) - q[i]).Length <= 1e-7 * Math.Max(1, q[i].Length));
+                    if (hit != null) { c.SketchId = sk2.Id; c.SketchPointId = hit.Id; c.SketchNormal = sk2.Plane.W.Normalized(); break; }
+                }
+            if (!c.FromSketch) c.NormalToSketch = false;
+            _specs.Add(c);
+            _cands.Add(FacesAt(q[i], r));
+        }
+        for (int i = 0; i < _specs.Count; i++)
+        {
+            var c = _specs[i]; var cands = _cands[i];
+            if (cands.Count == 0) { c.NormalToSurface = false; c.FaceNormal = Vector3d.Zero; continue; }
+            if (!cands.Contains(c.FaceId))
+                c.FaceId = c.FaceTag != null && cands.FirstOrDefault(id => Part.FindFace(id)?.Tag == c.FaceTag) is var byTag && byTag != 0 ? byTag : DefaultFace(i);
+            if (Part.FindFace(c.FaceId) is { } f) { c.FaceTag = f.Tag; try { c.FaceNormal = f.NormalAt(q[i]).Normalized(); } catch { c.FaceNormal = Vector3d.Zero; } }
+        }
+        _cur = Math.Clamp(_cur, 0, Math.Max(0, _specs.Count - 1));
+        UpdatePointBox();
+        SyncFace();
+    }
+
+    public override IEnumerable<(Vector3d At, Vector3d Dir)> ViewArrows()
+    {
+        if (Mode != 0 || !_smooth || TangentsOff) yield break;
+        for (int i = 0; i < _specs.Count && i < _tan.Count && i < _specPts.Count; i++)
+            if (_specs[i].Constrained) yield return (_specPts[i], _tan[i]);
+    }
+
+    public override void ArrowClicked(int index)
+    {
+        int k = -1;
+        for (int i = 0; i < _specs.Count; i++) if (_specs[i].Constrained && ++k == index) { _specs[i].Flip = !_specs[i].Flip; _cur = i; UpdatePointBox(); FieldChanged(); return; }
+    }
 
     public override void Prime()
     {
@@ -304,10 +522,24 @@ public sealed class CurveOp : Operation
             }
             default:
             {
-                var q = _pts.Items.Select(Refs.PointOf).OfType<Vector3d>().ToList();
-                if (q.Count == 0 && !_pts.Touched && EditTarget is { } edc && edc.Inputs.Count >= 2) q = edc.Inputs.ToList();
+                var refs = _pts.Items.Where(r => Refs.PointOf(r) != null).ToList();
+                var q = refs.Select(r => Refs.PointOf(r)!.Value).ToList();
+                bool kept = false;
+                if (q.Count == 0 && !_pts.Touched && EditTarget is { } edc && edc.Inputs.Count >= 2) { q = edc.Inputs.ToList(); kept = true; }
                 _lastInputs = q;
-                return q.Count >= 2 ? ThroughPoints(q, _closed, _smooth) : null;
+                _spline = null;
+                if (TangentsOff) return q.Count >= 2 ? ThroughPoints(q, _closed, _smooth) : null;
+                // k177: условия касательных; гладкая — кубические участки (точно через точки, касательные по условиям)
+                if (_face != null && Cur is { NormalToSurface: true } fc && _face.Items.Count > 0 && _face.Items[0].Id != fc.FaceId) fc.FaceId = _face.Items[0].Id;
+                SyncSpecs(q, kept ? null : refs);
+                if (q.Count < 2) return null;
+                if (!_smooth) { _tan = new(); return ThroughPoints(q, _closed, false); }
+                var dirs = _specs.Select(c => c.Direction).ToList(); var flips = _specs.Select(c => c.Flip).ToList(); var wts = _specs.Select(c => c.Weight).ToList();
+                _spline = CurveThrough.Build(q, dirs, flips, wts, _closed);
+                if (_spline == null) return null;
+                _tan = CurveThrough.Tangents(q, dirs, flips, _closed && q.Count >= 3).ToList();
+                int ns = Math.Max(64, 24 * q.Count);
+                return Enumerable.Range(0, ns + 1).Select(i => _spline.PointAt(_spline.T0 + (_spline.T1 - _spline.T0) * i / ns)).ToList();
             }
         }
     }
@@ -321,6 +553,11 @@ public sealed class CurveOp : Operation
         // k137: построение — для правки
         _dc.Mode = Mode; _dc.Closed = _closed; _dc.Smooth = _smooth;
         _dc.Inputs.Clear(); if (Mode == 0) _dc.Inputs.AddRange(_lastInputs);
+        // k177: гладкая через точки — сплайн (точки кривой — по нему); условия касательных — для правки
+        if (Mode == 0 && _spline != null) _dc.SetSpline(_spline);
+        else { _dc.Control = null; _dc.Weights = null; _dc.Knots = null; }
+        _dc.Specs.Clear(); if (Mode == 0 && !TangentsOff) _dc.Specs.AddRange(_specs.Select(c => c.Copy()));
+        _dc.NotifyChanged(_dc);
         W.ViewPort.MarkDirty();
     }
     private List<Vector3d> _lastInputs = new();
@@ -336,7 +573,9 @@ public sealed class CurveOp : Operation
         if (EditTarget is { } dc && _orig is { } o)
         {
             dc.Points.Clear(); dc.Points.AddRange(o.Pts); dc.Source = o.Src; dc.Mode = o.Mode; dc.Inputs.Clear(); dc.Inputs.AddRange(o.In);
-            dc.Closed = o.Closed; dc.Smooth = o.Smooth; dc.NotifyChanged(dc);
+            dc.Closed = o.Closed; dc.Smooth = o.Smooth;
+            dc.Control = o.Cv; dc.Weights = o.Wt; dc.Knots = o.Kn; dc.Degree = o.Deg; dc.Specs.Clear(); dc.Specs.AddRange(o.Specs);
+            dc.NotifyChanged(dc);
             W.Session.DiscardEdit(); W.ViewPort.MarkDirty(); return;
         }
         if (_dc != null) Part.Remove(_dc); W.Session.DiscardEdit();

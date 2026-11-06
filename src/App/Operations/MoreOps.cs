@@ -306,17 +306,17 @@ public sealed class LoftOp : FeatureOp<LoftFeature>
         });
         _guides = p.Ref(new RefField
         {
-            Label = "Направляющие", Filter = PickFilter.SketchCurves, Accept = Refs.IsSketch, Optional = true,
-            Describe = r => L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?"),
-            Tip = "Не обязательно. Эскизы с кривыми (отрезок, дуга меньше 180°, сплайн), каждая из которых проходит через соответственные вершины всех сечений: кривая задаёт, по какому пути вершина переходит от сечения к сечению. Без направляющих путь вершин — прямая или плавная кривая.",
+            Label = "Направляющие", Filter = PickFilter.SketchCurves | PickFilter.Datums, Accept = Refs.IsGuide, Optional = true,
+            Describe = Refs.GuideName,
+            Tip = "Не обязательно. Эскизы с кривыми (отрезок, дуга меньше 180°, сплайн), опорные кривые (через две точки) или трёхмерные линии, каждая из которых проходит через соответственные вершины всех сечений: кривая задаёт, по какому пути вершина переходит от сечения к сечению. Без направляющих путь вершин — прямая или плавная кривая.",
         });
         _secs.SketchFits = Refs.ClosedSketch; _guides.SketchFits = Refs.CurvesSketch;
-        if (Editing) { KeepSketches(_secs, F.SectionSketchIds.ToArray()); KeepSketches(_guides, F.GuideSketchIds.ToArray()); }
+        if (Editing) { KeepSketches(_secs, F.SectionSketchIds.ToArray()); KeepSketches(_guides, F.GuideSketchIds.ToArray()); Refs.KeepGuides(_guides, Part, F.GuideSketchIds, F.GuideCurveIds); }
         p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
         p.Check("Гладкий переход", () => F.Smooth, v => F.Smooth = v,
                 tip: "Включено — одна плавная поверхность через все сечения, без изломов на средних сечениях. Выключено — прямые между соседними сечениями (излом на каждом среднем сечении).");
         p.Check("По нормалям крайних сечений", () => Math.Abs(F.StartTangent) > 1e-12 || Math.Abs(F.EndTangent) > 1e-12,
-                v => { F.StartTangent = F.EndTangent = v ? NormalTangent : 0; if (v) F.Smooth = true; },
+                v => { F.StartTangent = F.EndTangent = v ? NormalTangent : 0; if (v) F.Smooth = true; }, enabled: () => !_guides.IsSet && F.GuideSketchIds.Count + F.GuideCurveIds.Count == 0,
                 tip: "Переход выходит из первого сечения и входит в последнее перпендикулярно плоскостям их эскизов, а между ними плавно поворачивается от одного к другому. Включает гладкий переход. С направляющими не сочетается.");
         p.Note("Сечения — по порядку выбора (не меньше двух). Наведите на поле или флажок — подсказка.");
     }
@@ -333,11 +333,7 @@ public sealed class LoftOp : FeatureOp<LoftFeature>
             F.SectionSketchIds.Clear();
             foreach (var r in _secs.Items) if (Refs.SketchOf(r) is { } s && !F.SectionSketchIds.Contains(s.Id)) F.SectionSketchIds.Add(s.Id);
         }
-        if (_guides.Touched)
-        {
-            F.GuideSketchIds.Clear();
-            foreach (var r in _guides.Items) if (Refs.SketchOf(r) is { } s && !F.GuideSketchIds.Contains(s.Id)) F.GuideSketchIds.Add(s.Id);
-        }
+        Refs.PushGuides(_guides, F.GuideSketchIds, F.GuideCurveIds);
     }
 
     protected override bool MissingRequiredExtra => F.SectionSketchIds.Count < 2;

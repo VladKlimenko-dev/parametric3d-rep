@@ -528,6 +528,28 @@ public static class Refs
 
     public static bool IsSketch(PickRef r) => SketchOf(r) != null;
 
+    /// <summary>k177: направляющая лофта — эскиз с кривыми, опорная кривая или трёхмерная линия.</summary>
+    public static bool IsGuide(PickRef r) => IsSketch(r) || r.Target is DatumCurve or Line3DItem;
+    public static string GuideName(PickRef r) => r.Target is DatumCurve or Line3DItem ? L("Кривая «{0}»", ((ModelItem)r.Target!).Name) : L("Эскиз «{0}»", SketchOf(r)?.Name ?? "?");
+    /// <summary>k177: поле направляющих → номера эскизов и опорных кривых операции.</summary>
+    public static void PushGuides(RefField f, List<uint> sketches, List<uint> curves)
+    {
+        if (!f.Touched) return;
+        sketches.Clear(); curves.Clear();
+        foreach (var r in f.Items)
+        {
+            if (r.Target is DatumCurve or Line3DItem) { uint id = ((ModelItem)r.Target!).Id; if (!curves.Contains(id)) curves.Add(id); }
+            else if (SketchOf(r) is { } s && !sketches.Contains(s.Id)) sketches.Add(s.Id);
+        }
+    }
+    /// <summary>k177: правка — направляющие операции подписью поля (пока поле не трогали).</summary>
+    public static void KeepGuides(RefField f, Part part, IEnumerable<uint> sketches, IEnumerable<uint> curves)
+    {
+        var names = sketches.Select(id => part.Sketches.FirstOrDefault(s => s.Id == id)).OfType<Sketch>().Select(s => L("Эскиз «{0}»", s.Name))
+            .Concat(curves.Select(id => (ModelItem?)part.FindById<DatumCurve>(id) ?? part.FindById<Line3DItem>(id)).OfType<ModelItem>().Select(c => L("Кривая «{0}»", c.Name))).ToList();
+        if (names.Count > 0) { f.KeptText = string.Join(", ", names); f.Kept = names.Count; }
+    }
+
     /// <summary>k148: эскиз годен телу — есть замкнутый контур без самопересечений.</summary>
     public static bool ClosedSketch(Sketch s) { var p = s.ToSolidProfile(s.Name); return !p.IsEmpty; }
     /// <summary>k148: эскиз годен траектории или направляющей — есть кривые (роль «объект»).</summary>
