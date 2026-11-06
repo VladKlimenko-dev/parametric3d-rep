@@ -1063,6 +1063,13 @@ public static class AnalyticVolume
                     }
                     us.Add(ss.ProjectToUV(e.C.PointAt(md)).X);
                 }
+            if (us.Count % 2 != 0 && ChainDbg)
+                foreach (var e in eds)
+                {
+                    double dmax = 0, um = 0, vm = 0; int im = 0;
+                    for (int i = 0; i < e.S.Length; i++) { double d = (e.C.PointAt(e.S[i]) - ss.SectionAt(e.Uv[i].X).Point(e.Uv[i].Y)).Length; if (d > dmax) { dmax = d; um = e.Uv[i].X; vm = e.Uv[i].Y; im = i; } }
+                    Console.Error.WriteLine($"SLABE {f.Tag}: {e.C.GetType().Name} dist max {dmax:G4} at i {im} u {um:G8} v {vm:G6}; v samples {string.Join(" ", e.Uv.Where((q, i) => i % 8 == 0 || i == e.Uv.Length - 1).Select(q => $"{q.X:G7}:{q.Y:G4}"))}");
+                }
             if (us.Count % 2 != 0) { if (ChainDbg) Console.Error.WriteLine($"SLAB {f.Tag}: odd crossings {us.Count} at v {v:G6}; edges {string.Join("; ", eds.Select(e => $"{e.C.GetType().Name} v {e.Uv[0].Y:G4}→{e.Uv[^1].Y:G4} [{e.Uv.Min(q => q.Y):G4}, {e.Uv.Max(q => q.Y):G4}] u {e.Uv[0].X:G6}→{e.Uv[^1].X:G6}"))}; breaks {string.Join(" ", vb.Take(6).Select(x => x.ToString("G4")))}"); return null; }
             us.Sort();
             return us;
