@@ -53,7 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: d199_s109sb, cmd: 'loftseq 1 109 6 OUT', env: 'LOFT_DRALL=1 LOFT_FOOTDBG=1 P3D_DRSECBREAK=1' }
+          - { name: d200_s109sb, cmd: 'loftseq 1 109 6 OUT', env: 'LOFT_DRALL=1 LOFT_FOOTDBG=1 P3D_DRSECBREAK=1' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
