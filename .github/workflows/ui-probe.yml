@@ -32,7 +32,7 @@ jobs:
         run: |
           mkdir -p res
           export DOTNET_TieredCompilation=0 P3D_USERMODELS="$PWD/tests/ui/data"
-          NAMES="UI-CURVE-TANGENTS-K177|UI-SKETCH-GEAR-K176|UI-LANGUAGE|UI-BLEND-CURVE-TREE-K137"
+          NAMES="UI-BLEND-K160|UI-SWEEP-K153|UI-CURVE-TANGENTS-K177"
           git rev-parse --short HEAD > res/sha.txt
           timeout 60m out/ui/Parametric3D.UiChecks "$NAMES" > res/run.log 2> res/run.err || echo "exit $?" >> res/run.err
       - name: Итог — в ветку ya1/res/${{ matrix.name }}
