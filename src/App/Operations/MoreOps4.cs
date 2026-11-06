@@ -204,17 +204,17 @@ public sealed class BlendOp : FeatureOp<BlendFeature>
         if (Editing && F.AxisEntityId != 0) _axis.Kept = 1;
         _guides = p.Ref(new RefField
         {
-            Label = "Направляющие кривые", Filter = PickFilter.SketchCurves, Accept = Refs.IsSketch, Optional = true, Describe = r => L("Эскиз «{0}»", Refs.SketchOf(r)?.Name ?? "?"),
-            Tip = "Не обязательно. Кривые через соответственные вершины всех сечений: по какому пути вершина переходит от сечения к сечению.",
+            Label = "Направляющие кривые", Filter = PickFilter.SketchCurves | PickFilter.Datums, Accept = Refs.IsGuide, Optional = true, Describe = Refs.GuideName,
+            Tip = "Не обязательно. Кривые через соответственные вершины всех сечений: по какому пути вершина переходит от сечения к сечению. Эскиз с кривыми, опорная кривая (через две точки — с касательными по нормалям эскизов или граней) или трёхмерная линия.",
         }, () => Mode == BlendKind.Sections);
         _guides.SketchFits = Refs.CurvesSketch;
-        if (Editing) KeepSketches(_guides, F.GuideSketchIds.ToArray());
+        if (Editing) { KeepSketches(_guides, F.GuideSketchIds.ToArray()); Refs.KeepGuides(_guides, Part, F.GuideSketchIds, F.GuideCurveIds); }
         p.Segments("Результат", new[] { "Тело", "Поверхность" }, () => F.AsSurface ? 1 : 0, v => F.AsSurface = v == 1);
         p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
         p.Check("Гладкий переход", () => F.Smooth, v => F.Smooth = v, visible: () => Mode == BlendKind.Sections,
                 tip: "Включено — одна плавная поверхность через все сечения. Выключено — прямые между соседними сечениями.");
         p.Check("По нормалям крайних сечений", () => Math.Abs(F.StartTangent) > 1e-12 || Math.Abs(F.EndTangent) > 1e-12,
-                v => { F.StartTangent = F.EndTangent = v ? LoftOp.NormalTangent : 0; if (v) F.Smooth = true; }, visible: () => Mode == BlendKind.Sections,
+                v => { F.StartTangent = F.EndTangent = v ? LoftOp.NormalTangent : 0; if (v) F.Smooth = true; }, enabled: () => !_guides.IsSet && F.GuideSketchIds.Count + F.GuideCurveIds.Count == 0, visible: () => Mode == BlendKind.Sections,
                 tip: "Переход выходит из первого сечения и входит в последнее перпендикулярно плоскостям их эскизов. С направляющими не сочетается.");
         p.Note("Направляющая: нет — сечения соединяются по порядку; траектория — сечения ведутся вдоль кривой; ось — сечения в плоскостях через ось, промежуточные — поворотом.");
     }
@@ -236,7 +236,7 @@ public sealed class BlendOp : FeatureOp<BlendFeature>
         if (_path.Items.Count > 0 && _path.Items[0].Target is DatumCurve or Line3DItem) { F.PathLineId = ((ModelItem)_path.Items[0].Target!).Id; F.PathSketchId = 0; }
         else if (_path.Items.Count > 0 && Refs.SketchOf(_path.Items[0]) is { } ps) { F.PathSketchId = ps.Id; F.PathLineId = 0; }
         if (_axis.Touched) F.AxisEntityId = _axis.Items.Count > 0 && _axis.Items[0].Target is SkLine ln ? ln.Id : 0;
-        if (_guides.Touched) { F.GuideSketchIds.Clear(); foreach (var id in _guides.Items.Select(Refs.SketchOf).OfType<Sketch>().Select(s => s.Id).Distinct()) F.GuideSketchIds.Add(id); }
+        Refs.PushGuides(_guides, F.GuideSketchIds, F.GuideCurveIds);
     }
 }
 

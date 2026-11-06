@@ -24,6 +24,8 @@ public sealed class LoftFeature : Feature
     /// <summary>KRN-07 (07.4): эскизы направляющих — каждая кривая эскиза (кроме точек) — направляющая через соответственные
     /// вершины сечений.</summary>
     public readonly List<uint> GuideSketchIds = new();
+    /// <summary>k177: направляющие — опорные кривые и трёхмерные линии (DatumCurve, Line3DItem).</summary>
+    public readonly List<uint> GuideCurveIds = new();
 
     /// <summary>KRN-07 (07.4): касательная к нормали первого / последнего сечения (длина — доля расстояния между центрами
     /// крайних сечений; 0 — без условия).</summary>
@@ -71,7 +73,10 @@ public sealed class LoftFeature : Feature
             if (gc.Count == 0) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Loft: a guide sketch has no curves.");
             guides.AddRange(gc);
         }
-        var solid = LoftOp.Build(sections, Math.Clamp(Samples, 8, 512), Smooth, guides, StartTangent, EndTangent);
+        if (GuideCurveIds.Count > 0) (guides ??= new()).AddRange(GuideCurves.Of(ctx.Part, GuideCurveIds, Name));
+        double t0 = StartTangent, t1 = EndTangent;
+        if (guides is { Count: > 0 } && (Math.Abs(t0) > 1e-12 || Math.Abs(t1) > 1e-12)) { ctx.Warnings.Add($"{Name}: end-section tangency is ignored with guide curves (the guides set the direction)."); t0 = t1 = 0; }
+        var solid = LoftOp.Build(sections, Math.Clamp(Samples, 8, 512), Smooth, guides, t0, t1);
 
         if (Cut) BooleanOp.Subtract(ctx.Bodies, solid, ctx.Warnings);
         else BooleanOp.Unite(ctx.Bodies, solid, ctx.Warnings);
@@ -81,5 +86,32 @@ public sealed class LoftFeature : Feature
     {
         foreach (uint id in SectionSketchIds) if (id != 0) yield return id;
         foreach (uint id in GuideSketchIds) if (id != 0) yield return id;
+    }
+}
+
+/// <summary>
+/// k177: НАПРАВЛЯЮЩИЕ ЛОФТА — ОПОРНЫЕ КРИВЫЕ. Кривая «через точки» (одним куском — через две точки, с касательными по нормалям
+/// эскизов или граней), трёхмерная линия, ломаная на прямой. Кривая из нескольких кусков — отказ с причиной.
+/// Мутация P3D_GUIDECURVES=0 — опорные кривые направляющими не берутся.
+/// </summary>
+public static class GuideCurves
+{
+    public static readonly bool Off = Environment.GetEnvironmentVariable("P3D_GUIDECURVES") == "0";
+
+    public static List<Parametric3D.Kernel.Curves.ICurve3> Of(Part part, IEnumerable<uint> ids, string op)
+    {
+        var res = new List<Parametric3D.Kernel.Curves.ICurve3>();
+        if (Off) return res;
+        foreach (uint id in ids)
+        {
+            if (part.FindById<Line3DItem>(id) is { } ln) { res.Add(new Parametric3D.Kernel.Curves.LineCurve3(ln.A, ln.B)); continue; }
+            if (part.FindById<DatumCurve>(id) is { } dc)
+            {
+                res.Add(dc.GuideCurve(out var why) ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, $"{op}: {why}."));
+                continue;
+            }
+            throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"{op}: a guide curve is not found.");
+        }
+        return res;
     }
 }

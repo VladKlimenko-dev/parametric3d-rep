@@ -491,6 +491,8 @@ public sealed class BlendFeature : Feature
     public int Steps = 16, Points = 48;
     /// <summary>k160: режим «по сечениям» — направляющие кривые (эскизы), гладкость, касание нормалей крайних сечений, точек по сечению.</summary>
     public readonly List<uint> GuideSketchIds = new();
+    /// <summary>k177: направляющие — опорные кривые и трёхмерные линии (GuideCurves).</summary>
+    public readonly List<uint> GuideCurveIds = new();
     public bool Smooth = true;
     public double StartTangent, EndTangent;
     public int Samples = 64;
@@ -515,7 +517,7 @@ public sealed class BlendFeature : Feature
         {
             BlendKind.Boundary => LoftOp.Build(profs, 64, smooth: profs.Count > 2),
             // k160: по сечениям — тот же построитель, что у «Перехода» (LoftFeature): направляющие, гладкость, касание нормалей
-            BlendKind.Sections => LoftOp.Build(profs, Math.Clamp(Samples, 8, 512), Smooth, Guides(ctx), StartTangent, EndTangent),
+            BlendKind.Sections => SectionsBlend(ctx, profs),
             _ => Morph(ctx, sks, profs),
         };
         if (AsSurface)
@@ -527,6 +529,16 @@ public sealed class BlendFeature : Feature
         if (Cut) BooleanOp.Subtract(ctx.Bodies, solid, ctx.Warnings);
         else if (ctx.Bodies.Count == 0) ctx.Bodies.Add(solid);
         else BooleanOp.Unite(ctx.Bodies, solid, ctx.Warnings);
+    }
+
+    /// <summary>k177: с направляющими касательная у крайних сечений задаётся самими направляющими — условие «по нормалям» не ставится
+    /// (прежде — отказ «end tangency together with guide curves is not supported»), в предупреждениях — запись.</summary>
+    TSolid SectionsBlend(BuildContext ctx, List<Profile> profs)
+    {
+        var g = Guides(ctx);
+        double t0 = StartTangent, t1 = EndTangent;
+        if (g is { Count: > 0 } && (Math.Abs(t0) > 1e-12 || Math.Abs(t1) > 1e-12)) { ctx.Warnings.Add($"{Name}: end-section tangency is ignored with guide curves (the guides set the direction)."); t0 = t1 = 0; }
+        return LoftOp.Build(profs, Math.Clamp(Samples, 8, 512), Smooth, g, t0, t1);
     }
 
     List<Parametric3D.Kernel.Curves.ICurve3>? Guides(BuildContext ctx)
@@ -541,6 +553,7 @@ public sealed class BlendFeature : Feature
             if (gc.Count == 0) throw new RebuildException(OperationOutcome.InvalidInput, $"{Name}: a guide sketch has no curves.");
             (guides ??= new()).AddRange(gc);
         }
+        if (GuideCurveIds.Count > 0) (guides ??= new()).AddRange(GuideCurves.Of(ctx.Part, GuideCurveIds, Name));
         return guides;
     }
 

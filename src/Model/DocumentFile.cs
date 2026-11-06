@@ -379,7 +379,8 @@ public static class DocumentFile
                 DatumCsys cs => new DatumDto { Kind = "csys", P = V(cs.Frame.Origin, cs.Frame.U, cs.Frame.V) },
                 DatumCurve dc => new DatumDto { Kind = "curve", P = V(dc.Points.ToArray()), Source = dc.Source,
                     Cv = dc.IsNurbs ? V(dc.Control!.ToArray()) : null, Wt = dc.IsNurbs ? dc.Weights : null, Kn = dc.IsNurbs ? dc.Knots : null, Deg = dc.IsNurbs ? dc.Degree : null,
-                    Method = dc.Mode >= 0 ? dc.Mode : null, In = dc.Inputs.Count > 0 ? V(dc.Inputs.ToArray()) : null, Flip = dc.Closed ? true : null, Sm = dc.Smooth ? null : false },
+                    Method = dc.Mode >= 0 ? dc.Mode : null, In = dc.Inputs.Count > 0 ? V(dc.Inputs.ToArray()) : null, Flip = dc.Closed ? true : null, Sm = dc.Smooth ? null : false,
+                    Specs = dc.Specs.Count > 0 && !CurveSpecSaveOff ? dc.Specs.Select(SpecDto.Of).ToList() : null },
                 _ => null,
             };
             if (d == null) continue;
@@ -416,6 +417,9 @@ public static class DocumentFile
         return axes.Count == 1 && (_datumIds == null || _datumIds.Count == 0) ? axes[0].Id : old;
     }
 
+    /// <summary>k177: номер опорного элемента из файла — новый (кривые и линии траекторий и направляющих).</summary>
+    static uint MapDatum(uint old) => old != 0 && !DatumIdOff && _datumIds != null && _datumIds.TryGetValue(old, out var nw) ? nw : old;
+
     private static void LoadDatums(Part part, List<DatumDto>? list)
     {
         _datumSlots = new();
@@ -445,6 +449,7 @@ public static class DocumentFile
             {   // k137: построение — для правки
                 kdc.Mode = d.Method ?? -1; kdc.Closed = d.Flip ?? false; kdc.Smooth = d.Sm ?? true;
                 if (d.In is { Count: >= 3 } inp) kdc.Inputs.AddRange(Enumerable.Range(0, inp.Count / 3).Select(i => At(inp, i)));
+                if (d.Specs != null) kdc.Specs.AddRange(d.Specs.Select(x => x.To()));
             }
             it.Visible = !d.Hidden;
             part.Add(it);
@@ -704,6 +709,7 @@ public static class DocumentFile
                 // k160: переход по сечениям — поля «Перехода»
                 d.Samples = bf.Samples; d.Smooth = bf.Smooth; d.StartTangent = bf.StartTangent; d.EndTangent = bf.EndTangent;
                 d.Guides = bf.GuideSketchIds.Count > 0 ? bf.GuideSketchIds.ToList() : null;
+                d.GuideCurves = bf.GuideCurveIds.Count > 0 ? bf.GuideCurveIds.ToList() : null;
             }
         }),
         FreeFormFeature ffn => Dto("freeform", ffn, d => { PutS(d, "input", ffn.InputStep.Length > 0 ? ffn.InputStep : null); PutS(d, "sig", ffn.InputSig.Length > 0 ? ffn.InputSig : null); PutS(d, "import_of", ffn.ImportOf); }),
@@ -780,6 +786,7 @@ public static class DocumentFile
             Samples = lf.Samples,
             Smooth = lf.Smooth,
             Guides = lf.GuideSketchIds.Count > 0 ? lf.GuideSketchIds.ToList() : null,
+            GuideCurves = lf.GuideCurveIds.Count > 0 ? lf.GuideCurveIds.ToList() : null,
             StartTangent = lf.StartTangent, EndTangent = lf.EndTangent
         },
 
@@ -1324,11 +1331,12 @@ public static class DocumentFile
                     if (Enum.TryParse<BlendKind>(GetS(fd, "mode"), out var bm)) bf.Mode = bm;
                     foreach (uint old in fd.Sections) if (sketchById.TryGetValue(old, out var bs)) bf.SectionSketchIds.Add(bs.Id);
                     if (sketchById.TryGetValue(fd.PathSketchId, out var bp)) bf.PathSketchId = bp.Id;
-                    bf.PathLineId = fd.PathLineId;   // k153: траектория — кривая
+                    bf.PathLineId = MapDatum(fd.PathLineId);   // k153: траектория — кривая (k177: номер — новый, как у осей)
                     if (bf.Mode == BlendKind.Sections)
                     {
                         bf.Samples = fd.Samples > 0 ? fd.Samples : 64; bf.Smooth = fd.Smooth; bf.StartTangent = fd.StartTangent; bf.EndTangent = fd.EndTangent;
                         foreach (uint old in fd.Guides ?? new()) if (sketchById.TryGetValue(old, out var bg)) bf.GuideSketchIds.Add(bg.Id);
+                        foreach (uint old in fd.GuideCurves ?? new()) bf.GuideCurveIds.Add(MapDatum(old));
                     }
                     part.AddFeature(bf);
                     break;
@@ -1475,6 +1483,7 @@ public static class DocumentFile
                         if (sketchById.TryGetValue(old, out var sk2)) lf.SectionSketchIds.Add(sk2.Id);
                     foreach (uint old in fd.Guides ?? new())
                         if (sketchById.TryGetValue(old, out var sk3)) lf.GuideSketchIds.Add(sk3.Id);
+                    foreach (uint old in fd.GuideCurves ?? new()) lf.GuideCurveIds.Add(MapDatum(old));
                     part.AddFeature(lf);
                     break;
                 }
@@ -1719,6 +1728,39 @@ public static class DocumentFile
         /// <summary>k137: точки построения опорной кривой «через точки»; гладкая (false — нет).</summary>
         public List<double>? In { get; set; }
         public bool? Sm { get; set; }
+        /// <summary>k177: условия касательных в точках построения.</summary>
+        public List<SpecDto>? Specs { get; set; }
+    }
+
+    /// <summary>k177: мутация — условия касательных кривой «через точки» в файл не пишутся.</summary>
+    static readonly bool CurveSpecSaveOff = Environment.GetEnvironmentVariable("P3D_CURVESPECSAVE") == "0";
+
+    private sealed class SpecDto
+    {
+        public uint Sk { get; set; }
+        public uint SkPt { get; set; }
+        public double[]? SkN { get; set; }
+        public uint Vx { get; set; }
+        public bool? NSk { get; set; }
+        public bool? NSf { get; set; }
+        public bool? Flip { get; set; }
+        public string? Face { get; set; }
+        public uint FaceId { get; set; }
+        public double[]? FN { get; set; }
+        public double W { get; set; } = 1;
+        public bool? Pick { get; set; }
+        public static SpecDto Of(CurvePointSpec c) => new()
+        {
+            Sk = c.SketchId, SkPt = c.SketchPointId, SkN = c.SketchNormal.LengthSquared > 0 ? new[] { c.SketchNormal.X, c.SketchNormal.Y, c.SketchNormal.Z } : null,
+            Vx = c.VertexId, NSk = c.NormalToSketch ? true : null, NSf = c.NormalToSurface ? true : null, Flip = c.Flip ? true : null,
+            Face = c.FaceTag, FaceId = c.FaceId, FN = c.FaceNormal.LengthSquared > 0 ? new[] { c.FaceNormal.X, c.FaceNormal.Y, c.FaceNormal.Z } : null, W = c.Weight, Pick = c.FaceAuto ? null : true,
+        };
+        public CurvePointSpec To() => new()
+        {
+            SketchId = Sk, SketchPointId = SkPt, SketchNormal = SkN is { Length: 3 } a ? new Vector3d(a[0], a[1], a[2]) : Vector3d.Zero,
+            VertexId = Vx, NormalToSketch = NSk == true, NormalToSurface = NSf == true, Flip = Flip == true, FaceTag = Face, FaceId = FaceId,
+            FaceNormal = FN is { Length: 3 } b ? new Vector3d(b[0], b[1], b[2]) : Vector3d.Zero, Weight = W > 0 ? W : 1, FaceAuto = Pick != true,
+        };
     }
 
     private sealed class DocDto
@@ -2128,6 +2170,8 @@ public static class DocumentFile
         public bool Smooth { get; set; }
         /// <summary>KRN-07 (07.4): эскизы направляющих лофта.</summary>
         public List<uint>? Guides { get; set; }
+        /// <summary>k177: направляющие — опорные кривые и линии (номера опорных элементов).</summary>
+        public List<uint>? GuideCurves { get; set; }
         /// <summary>KRN-07 (07.4): касательные лофта у крайних сечений.</summary>
         public double StartTangent { get; set; }
         public double EndTangent { get; set; }

@@ -9109,6 +9109,67 @@ Check("UI-DRAWING-K169", () =>
 // к рамке и место после смены стандарта, язык чертежа, линия шаблона двумя щелчками (перенос, концы, удаление).
 // k176: инструмент «Шестерня» (центр, делительный радиус) и панель свойств шестерни: все параметры, правка перестраивает венец,
 // отмена в эскизе возвращает прежний; кнопка — на панели фигур с иконкой sk_gear_but.svg. P3D_GEARPANEL=0 — панели нет.
+// k177: кривая через точки — касательные в каждой точке: «По нормали эскиза» (точка эскиза), «По нормали поверхности» (грань в
+// точке: у вершины блока — три, по умолчанию ближайшая к перпендикуляру хода кривой; щелчок на виде — другая), обратить, вес;
+// стрелки на виде; кривая — сплайн с касательными точно по условиям. P3D_CURVETANGENTS=0 — без раздела.
+Check("UI-CURVE-TANGENTS-K177", () =>
+{
+    var part = Parametric3D.App.Diagnostics.TestParts.Block("ct");
+    var sk = new Sketch("P", part.PlaneXY.Frame); part.Add(sk); var sp = sk.AddEntity(new SkPoint(new Vector2d(0, 0)));
+    var s = DocumentSession.FromPart(part, "ct"); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    try {
+    var vx = part.Bodies[0].Vertices.First(v => (v.P - new Vector3d(50, 30, 20)).Length < 1e-6);
+    var op = new CurveOp { Mode = 0 };
+    w.StartOperation(op); Run();
+    w.ViewPort.Selection.Select(new PickRef(vx.Id, PickKind.Vertex, part, null), additive: true); Run();
+    w.ViewPort.Selection.Select(new PickRef(sp.Id, PickKind.SketchPoint, sk, sp), additive: true); Run();
+    Console.WriteLine($"  points {op.PointSpecs.Count}, faces at vertex {op.CandidateFaces(0).Count}, at sketch point {op.CandidateFaces(1).Count}, from sketch {op.PointSpecs.Select(c => c.FromSketch).Aggregate("", (a, b) => a + (b ? "S" : "-"))}");
+    Require(op.PointSpecs.Count == 2, "two points not taken");
+    Require(op.CandidateFaces(0).Count == 3 && op.CandidateFaces(1).Count == 1, "faces meeting at the points");
+    Require(!op.PointSpecs[0].FromSketch && op.PointSpecs[1].FromSketch, "sketch point source");
+    var chk = op.Panel!.Checks;
+    op.CurrentPoint = 0; Run();
+    Require(!chk["По нормали эскиза"].IsEnabled && chk["По нормали поверхности"].IsEnabled, "toggles of a body vertex");
+    ((CheckBox)chk["По нормали поверхности"]).IsChecked = true; Run();
+    var c0 = op.PointSpecs[0];
+    var f0 = part.FindFace(c0.FaceId);
+    Console.WriteLine($"  vertex: face {c0.FaceId} normal {c0.FaceNormal}");
+    Require(c0.NormalToSurface && f0 != null && op.CandidateFaces(0).Contains(c0.FaceId) && c0.FaceNormal.LengthSquared > 0.5, "default face of the vertex");
+    // ход кривой от вершины (50,30,20) к (0,0,0): ближе всех к нему — нормаль боковой грани +X (|0.83|) — она по умолчанию
+    Require(Math.Abs(c0.FaceNormal.X - 1) < 1e-9, $"default face: normal {c0.FaceNormal}, want +X");
+    // другая грань — щелчком на виде (верхняя)
+    var top = part.Bodies[0].Faces.First(f => Math.Abs(f.NormalAt(vx.P).Z - 1) < 1e-9);
+    var faceField = op.Panel.Refs.First(r => r.Label == "Поверхность");
+    op.Activate(faceField); w.ViewPort.Selection.Select(new PickRef(top.Id, PickKind.Face, part, null), additive: false); Run();
+    Require(op.PointSpecs[0].FaceId == top.Id && Math.Abs(op.PointSpecs[0].FaceNormal.Z - 1) < 1e-9, $"picked face: {op.PointSpecs[0].FaceId} want {top.Id}");
+    op.CurrentPoint = 1; Run();
+    Require(chk["По нормали эскиза"].IsEnabled && chk["По нормали поверхности"].IsEnabled, "toggles of a sketch point on a face");
+    ((CheckBox)chk["По нормали эскиза"]).IsChecked = true; Run();
+    Require(op.PointSpecs[1].NormalToSketch && !chk["По нормали поверхности"].IsEnabled, "normal to sketch disables normal to surface");
+    var arrows = op.ViewArrows().ToList();
+    Require(arrows.Count == 2, $"tangent arrows: {arrows.Count}");
+    op.ArrowClicked(1); Run();
+    Require(op.PointSpecs[1].Flip, "arrow click does not reverse");
+    w.CommitOperation(); Run();
+    var dc = part.Children.OfType<DatumCurve>().Last();
+    var spl = dc.Spline;
+    Require(spl != null && dc.Specs.Count == 2 && dc.GuideCurve(out _) != null, "the curve is not a one-piece spline with point conditions");
+    var cp = spl!.ControlPoints;
+    var t0 = (cp[1] - cp[0]).Normalized(); var t1 = (cp[^1] - cp[^2]).Normalized();
+    Console.WriteLine($"  tangents: start {t0}, end {t1}");
+    Require(Math.Abs(Math.Abs(t0.Z) - 1) < 1e-9 && Math.Abs(Math.Abs(t1.Z) - 1) < 1e-9, "tangents do not follow the top face and the sketch normals");
+    // вошла вдоль хода (−Z к нулю у вершины на высоте 20 — вниз), у конца обращена: вверх
+    Require(t0.Z < 0 && t1.Z > 0, $"tangent signs {t0.Z} {t1.Z}");
+    // правка: условия на месте
+    var ed = new CurveOp { Mode = 0, EditTarget = dc }; w.StartOperation(ed); Run();
+    Require(ed.PointSpecs.Count == 2 && ed.PointSpecs[0].NormalToSurface && ed.PointSpecs[1].NormalToSketch && ed.PointSpecs[1].Flip, "conditions lost on edit");
+    w.CancelOperation(); Run();
+    // направляющие «По сечениям» принимают опорную кривую
+    Require(Refs.IsGuide(new PickRef(dc.Id, PickKind.DatumAxis, part, dc)), "a datum curve is not accepted as a guide");
+    } finally { w.Close(); }
+});
+
 Check("UI-SKETCH-GEAR-K176", () =>
 {
     var s = DocumentSession.NewPart(); var w = Open(s); var part = s.Part!;

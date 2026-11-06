@@ -160,6 +160,8 @@ public sealed class DatumCurve : ModelItem
     /// построения «через точки», замкнутая, гладкая — для правки кривой.</summary>
     public int Mode = -1;
     public readonly List<Vector3d> Inputs = new();
+    /// <summary>k177: по точкам построения — откуда точка и условие касательной (CurveThrough.cs); пусто — без условий.</summary>
+    public readonly List<CurvePointSpec> Specs = new();
     public bool Closed, Smooth = true;
     public double Length { get { double l = 0; for (int i = 1; i < Points.Count; i++) l += (Points[i] - Points[i - 1]).Length; return l; } }
 
@@ -185,6 +187,28 @@ public sealed class DatumCurve : ModelItem
         int n = samples > 0 ? samples : Math.Max(64, Control!.Count * 24);
         Points.Clear();
         for (int i = 0; i <= n; i++) Points.Add(sp.PointAt(sp.T0 + (sp.T1 - sp.T0) * i / n));
+    }
+
+    /// <summary>
+    /// k177: кривая направляющей лофта (переход, «По сечениям»): отрезок (ломаная из двух точек или все точки на прямой), кривая
+    /// Безье (сплайн из одного куска). null — кривая из нескольких кусков (причина — why).
+    /// </summary>
+    public Kernel.Curves.ICurve3? GuideCurve(out string? why)
+    {
+        why = null;
+        if (Spline is { } sp)
+        {
+            if (CurveThrough.AsBezier(sp) is { } bz) return bz;
+            why = $"the curve «{Name}» has {Math.Max(1, (sp.ControlPoints.Count - 1) / Math.Max(1, sp.Degree))} pieces; a guide of a sections blend must be one piece (a curve through two points, a line or an arc)";
+            return null;
+        }
+        if (Points.Count >= 2)
+        {
+            var a = Points[0]; var b = Points[^1]; var ab = b - a; double L = ab.Length;
+            if (L > 1e-9 && Points.All(q => (q - a - ab * (Vector3d.Dot(q - a, ab) / (L * L))).Length <= 1e-7 * Math.Max(1, L))) return new Kernel.Curves.LineCurve3(a, b);
+        }
+        why = $"the curve «{Name}» is a polyline; edit it (smooth curve through points) to use it as a guide";
+        return null;
     }
 
     /// <summary>Кривая ядра: сплайн или ломаная.</summary>
