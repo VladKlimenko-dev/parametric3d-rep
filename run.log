@@ -1,0 +1,4 @@
+  open 1837 ms: note Restored , restored True, dirty False, bodies 1, cached False
+  after 3 s: dirty False, building False, verifying False, same bodies True, features with errors 0
+{"test":"UI-OPEN-STORED-K178","ok":true,"error":null}
+{"passed":1,"failed":0}
