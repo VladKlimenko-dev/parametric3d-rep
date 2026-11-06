@@ -128,6 +128,8 @@ public sealed class CurveOp : Operation
     private RefField _face = null!;
     private SplineCurve3? _spline;
     public static readonly bool TangentsOff = Environment.GetEnvironmentVariable("P3D_CURVETANGENTS") == "0";
+    /// <summary>k178: мутация — у новой точки эскиза «По нормали эскиза» не включается само.</summary>
+    public static readonly bool NormalDefaultOff = Environment.GetEnvironmentVariable("P3D_CURVENORMALDEFAULT") == "0";
     CurvePointSpec? Cur => _cur >= 0 && _cur < _specs.Count ? _specs[_cur] : null;
     List<uint> CurCands => _cur >= 0 && _cur < _cands.Count ? _cands[_cur] : new();
     /// <summary>Разбор (проверки): условия точек и выбор точки панели.</summary>
@@ -361,6 +363,7 @@ public sealed class CurveOp : Operation
         {
             CurvePointSpec? c = null;
             for (int k = 0; k < old.Count; k++) if (!used[k] && (old[k].P - q[i]).Length <= 1e-9 * Math.Max(1, q[i].Length)) { used[k] = true; c = old[k].C; break; }
+            bool fresh = c == null;
             c ??= new CurvePointSpec();
             var r = refs != null && i < refs.Count ? refs[i] : (PickRef?)null;
             if (r is { Kind: PickKind.SketchPoint } sr && Refs.SketchOf(sr) is { } sk) { c.SketchId = sk.Id; c.SketchPointId = sr.Id; c.SketchNormal = sk.Plane.W.Normalized(); }
@@ -374,6 +377,8 @@ public sealed class CurveOp : Operation
                     if (hit != null) { c.SketchId = sk2.Id; c.SketchPointId = hit.Id; c.SketchNormal = sk2.Plane.W.Normalized(); break; }
                 }
             if (!c.FromSketch) c.NormalToSketch = false;
+            // k178: у новой точки эскиза — «По нормали эскиза» по умолчанию (если не задана нормаль поверхности)
+            else if (fresh && !c.NormalToSurface && !NormalDefaultOff) c.NormalToSketch = true;
             _specs.Add(c);
             _cands.Add(FacesAt(q[i], r));
         }
@@ -410,7 +415,9 @@ public sealed class CurveOp : Operation
         if (EditTarget != null) { }   // правка: выбор до команды — не ссылки кривой
         else if (Mode == 0) Seed(_pts); else if (Mode == 2) Seed(_src, _faces, _dir);
         foreach (var f in new[] { _pts, _src, _faces, _dir }) f.Refresh();
-        Panel?.Refresh(); Apply(); RefreshStatus();
+        // k178: состояние флажков точек — после построения (при правке точки известны только после Apply; прежде флажки
+        // оставались недоступными до первой правки поля)
+        Apply(); Panel?.Refresh(); RefreshStatus();
     }
 
     /// <summary>Гладкая кривая через точки: центростремительный Кэтмулл–Ром (без петель), k точек на участок.</summary>

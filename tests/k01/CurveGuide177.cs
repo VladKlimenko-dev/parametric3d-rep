@@ -127,8 +127,8 @@ static partial class Program
                     var edge = p4.Bodies[0].Edges.OrderBy(e => (e.Curve.PointAt((e.Curve.T0 + e.Curve.T1) / 2) - g.PointAt(0.5)).Length).First();
                     for (int i = 0; i <= 200; i++)
                     {
-                        var q = g.PointAt(i / 200.0); double b2 = double.MaxValue;
-                        for (int k = 0; k <= 2000; k++) b2 = Math.Min(b2, (edge.Curve.PointAt(edge.Curve.T0 + (edge.Curve.T1 - edge.Curve.T0) * k / 2000.0) - q).Length);
+                        var gq = g.PointAt(i / 200.0); double b2 = double.MaxValue;
+                        for (int k = 0; k <= 2000; k++) b2 = Math.Min(b2, (edge.Curve.PointAt(edge.Curve.T0 + (edge.Curve.T1 - edge.Curve.T0) * k / 2000.0) - gq).Length);
                         dev = Math.Max(dev, b2);
                     }
                     rep.Add(new { test = "edge vs guide", dev });

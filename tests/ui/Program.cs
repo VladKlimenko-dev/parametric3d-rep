@@ -9144,7 +9144,11 @@ Check("UI-CURVE-TANGENTS-K177", () =>
     op.Activate(faceField); w.ViewPort.Selection.Select(new PickRef(top.Id, PickKind.Face, part, null), additive: false); Run();
     Require(op.PointSpecs[0].FaceId == top.Id && Math.Abs(op.PointSpecs[0].FaceNormal.Z - 1) < 1e-9, $"picked face: {op.PointSpecs[0].FaceId} want {top.Id}");
     op.CurrentPoint = 1; Run();
-    Require(chk["По нормали эскиза"].IsEnabled && chk["По нормали поверхности"].IsEnabled, "toggles of a sketch point on a face");
+    // k178: у точки эскиза «По нормали эскиза» — по умолчанию включено (поверхность при этом недоступна)
+    Require(chk["По нормали эскиза"].IsEnabled && ((CheckBox)chk["По нормали эскиза"]).IsChecked == true && op.PointSpecs[1].NormalToSketch && !chk["По нормали поверхности"].IsEnabled,
+            "a sketch point: «normal to sketch» is not on by default");
+    ((CheckBox)chk["По нормали эскиза"]).IsChecked = false; Run();
+    Require(!op.PointSpecs[1].NormalToSketch && chk["По нормали поверхности"].IsEnabled, "a sketch point on a face: normal to surface after unchecking normal to sketch");
     ((CheckBox)chk["По нормали эскиза"]).IsChecked = true; Run();
     Require(op.PointSpecs[1].NormalToSketch && !chk["По нормали поверхности"].IsEnabled, "normal to sketch disables normal to surface");
     var arrows = op.ViewArrows().ToList();
@@ -9164,6 +9168,18 @@ Check("UI-CURVE-TANGENTS-K177", () =>
     // правка: условия на месте
     var ed = new CurveOp { Mode = 0, EditTarget = dc }; w.StartOperation(ed); Run();
     Require(ed.PointSpecs.Count == 2 && ed.PointSpecs[0].NormalToSurface && ed.PointSpecs[1].NormalToSketch && ed.PointSpecs[1].Flip, "conditions lost on edit");
+    // k178: при правке флажки текущей точки доступны сразу (прежде — серые до первой правки поля)
+    var chkE = ed.Panel!.Checks;
+    Console.WriteLine($"  edit: surface enabled {chkE["По нормали поверхности"].IsEnabled} checked {((CheckBox)chkE["По нормали поверхности"]).IsChecked}");
+    Require(chkE["По нормали поверхности"].IsEnabled && ((CheckBox)chkE["По нормали поверхности"]).IsChecked == true, "edit: the toggles of the current point are inactive");
+    w.CancelOperation(); Run();
+    // кривая до k177 (без условий): точки эскиза узнаются по месту, «По нормали эскиза» — включено
+    var old = new DatumCurve("Old", new[] { new Vector3d(0, 0, 0), new Vector3d(50, 30, 20) }, "through points") { Mode = 0 };
+    old.Inputs.Add(new Vector3d(0, 0, 0)); old.Inputs.Add(new Vector3d(50, 30, 20)); part.Add(old);
+    var ed2 = new CurveOp { Mode = 0, EditTarget = old }; w.StartOperation(ed2); Run();
+    ed2.CurrentPoint = 0; Run();
+    Console.WriteLine($"  old curve: specs {ed2.PointSpecs.Count}, sketch {ed2.PointSpecs.FirstOrDefault()?.FromSketch} on {ed2.PointSpecs.FirstOrDefault()?.NormalToSketch}, toggle enabled {ed2.Panel!.Checks["По нормали эскиза"].IsEnabled}");
+    Require(ed2.PointSpecs.Count == 2 && ed2.PointSpecs[0].FromSketch && ed2.PointSpecs[0].NormalToSketch && ed2.Panel.Checks["По нормали эскиза"].IsEnabled, "edit of an old curve: the sketch point is not normal to sketch by default");
     w.CancelOperation(); Run();
     // направляющие «По сечениям» принимают опорную кривую
     Require(Refs.IsGuide(new PickRef(dc.Id, PickKind.DatumAxis, part, dc)), "a datum curve is not accepted as a guide");
