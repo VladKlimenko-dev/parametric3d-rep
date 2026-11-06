@@ -53,8 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: ov_dbg105, cmd: 'loftseq 1 105 3 OUT', env: 'LOFT_DRALL=1 P3D_DROPENPAR=0' }
-          - { name: ov_dbg102, cmd: 'loftseq 1 102 3 OUT', env: 'LOFT_DRALL=1 P3D_DROPENPAR=0' }
+          - { name: ov2_dbg102, cmd: 'loftseq 1 102 3 OUT', env: 'LOFT_DRALL=1 P3D_DROPENPAR=0 P3D_CHAINDBG=1' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
