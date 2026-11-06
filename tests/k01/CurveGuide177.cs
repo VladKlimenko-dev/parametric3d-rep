@@ -66,9 +66,11 @@ static partial class Program
                 var A = new Vector3d(segs1[tipArc].End.X, segs1[tipArc].End.Y, 0);
                 var B2 = fr2.ToWorld(segs2[tipArc].End);
                 var specs = new[] { new CurvePointSpec { SketchId = sk1.Id, SketchNormal = Vector3d.UnitZ, NormalToSketch = true }, new CurvePointSpec { SketchId = sk2.Id, SketchNormal = Vector3d.UnitZ, NormalToSketch = true } };
-                // k178: промежуточные точки — на прямой A…B, отодвинутые от оси на 4 мм (кривая из mids + 1 кусков)
+                // k178: промежуточные точки — на кривой через A и B (касательные по нормалям эскизов), отодвинутые от оси на 0.5 мм
+                // (кривая из mids + 1 кусков; ход вершины — плавный, грани у вершины не перекручиваются)
+                var base2 = CurveThrough.Build(new[] { A, B2 }, specs.Select(x => x.Direction).ToList(), null, null, false)!;
                 var pts = new List<Vector3d> { A };
-                for (int m = 1; m <= mids; m++) { var c = A + (B2 - A) * (m / (double)(mids + 1)); var rad = new Vector3d(c.X, c.Y, 0).Normalized(); pts.Add(c + rad * 4); }
+                for (int m = 1; m <= mids; m++) { var c = base2.PointAt(m / (double)(mids + 1)); var rad = new Vector3d(c.X, c.Y, 0).Normalized(); pts.Add(c + rad * 0.5); }
                 pts.Add(B2);
                 var allSpecs = new List<CurvePointSpec> { specs[0] };
                 for (int m = 0; m < mids; m++) allSpecs.Add(new CurvePointSpec());

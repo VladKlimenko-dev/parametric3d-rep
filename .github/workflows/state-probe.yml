@@ -54,8 +54,7 @@ jobs:
       matrix:
         include:
           - { name: g178_curve,   cmd: 'curve177', env: '' }
-          - { name: g178_mut,     cmd: 'curve177', env: 'P3D_LOFTGUIDEPIECES=0' }
-          - { name: g178_guides,  cmd: 'loftguides', env: '' }
+          - { name: g178_allA,    cmd: 'allA', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
