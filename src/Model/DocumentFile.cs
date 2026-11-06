@@ -1748,17 +1748,18 @@ public static class DocumentFile
         public uint FaceId { get; set; }
         public double[]? FN { get; set; }
         public double W { get; set; } = 1;
+        public bool? Pick { get; set; }
         public static SpecDto Of(CurvePointSpec c) => new()
         {
             Sk = c.SketchId, SkPt = c.SketchPointId, SkN = c.SketchNormal.LengthSquared > 0 ? new[] { c.SketchNormal.X, c.SketchNormal.Y, c.SketchNormal.Z } : null,
             Vx = c.VertexId, NSk = c.NormalToSketch ? true : null, NSf = c.NormalToSurface ? true : null, Flip = c.Flip ? true : null,
-            Face = c.FaceTag, FaceId = c.FaceId, FN = c.FaceNormal.LengthSquared > 0 ? new[] { c.FaceNormal.X, c.FaceNormal.Y, c.FaceNormal.Z } : null, W = c.Weight,
+            Face = c.FaceTag, FaceId = c.FaceId, FN = c.FaceNormal.LengthSquared > 0 ? new[] { c.FaceNormal.X, c.FaceNormal.Y, c.FaceNormal.Z } : null, W = c.Weight, Pick = c.FaceAuto ? null : true,
         };
         public CurvePointSpec To() => new()
         {
             SketchId = Sk, SketchPointId = SkPt, SketchNormal = SkN is { Length: 3 } a ? new Vector3d(a[0], a[1], a[2]) : Vector3d.Zero,
             VertexId = Vx, NormalToSketch = NSk == true, NormalToSurface = NSf == true, Flip = Flip == true, FaceTag = Face, FaceId = FaceId,
-            FaceNormal = FN is { Length: 3 } b ? new Vector3d(b[0], b[1], b[2]) : Vector3d.Zero, Weight = W > 0 ? W : 1,
+            FaceNormal = FN is { Length: 3 } b ? new Vector3d(b[0], b[1], b[2]) : Vector3d.Zero, Weight = W > 0 ? W : 1, FaceAuto = Pick != true,
         };
     }
 

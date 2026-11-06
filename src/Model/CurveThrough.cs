@@ -23,6 +23,8 @@ public sealed class CurvePointSpec
     public string? FaceTag;
     public uint FaceId;
     public Vector3d FaceNormal;
+    /// <summary>Грань выбрана по умолчанию (не щелчком): при смене точек кривой выбирается заново.</summary>
+    public bool FaceAuto = true;
     /// <summary>Длина касательной в долях хорды соседнего участка (1 — обычная).</summary>
     public double Weight = 1;
 

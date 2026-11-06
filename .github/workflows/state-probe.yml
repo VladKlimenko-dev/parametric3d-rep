@@ -54,8 +54,7 @@ jobs:
       matrix:
         include:
           - { name: c177_curve,   cmd: 'curve177', env: '' }
-          - { name: c177_mut,     cmd: 'curve177', env: 'P3D_GUIDECURVES=0' }
-          - { name: c177_gear,    cmd: 'gear', env: '' }
+          - { name: c177_allA,    cmd: 'allA', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

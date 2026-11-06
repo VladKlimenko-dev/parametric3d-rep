@@ -223,7 +223,7 @@ public sealed class CurveOp : Operation
         p.Check("По нормали эскиза", () => Cur?.NormalToSketch ?? false, v => { if (Cur is { } c) { c.NormalToSketch = v && c.FromSketch; if (c.NormalToSketch) c.NormalToSurface = false; } },
                 enabled: () => Smooth() && Cur!.FromSketch,
                 tip: "Касательная в точке — по нормали плоскости эскиза, на котором построена точка. Доступно у точек эскиза.");
-        p.Check("По нормали поверхности", () => Cur?.NormalToSurface ?? false, v => { if (Cur is { } c) { c.NormalToSurface = v && CurCands.Count > 0 && !c.NormalToSketch; if (c.NormalToSurface && !CurCands.Contains(c.FaceId)) c.FaceId = DefaultFace(_cur); SyncFace(); } },
+        p.Check("По нормали поверхности", () => Cur?.NormalToSurface ?? false, v => { if (Cur is { } c) { c.NormalToSurface = v && CurCands.Count > 0 && !c.NormalToSketch; if (c.NormalToSurface && (c.FaceAuto || !CurCands.Contains(c.FaceId))) { c.FaceId = DefaultFace(_cur); c.FaceAuto = true; } SyncFace(); } },
                 enabled: () => Smooth() && !Cur!.NormalToSketch && CurCands.Count > 0,
                 tip: "Касательная в точке — по нормали поверхности, сходящейся в этой точке. Доступно, если точка лежит на грани тела; при «По нормали эскиза» — нет.");
         _face = p.Ref(new RefField
@@ -381,7 +381,9 @@ public sealed class CurveOp : Operation
         {
             var c = _specs[i]; var cands = _cands[i];
             if (cands.Count == 0) { c.NormalToSurface = false; c.FaceNormal = Vector3d.Zero; continue; }
-            if (!cands.Contains(c.FaceId))
+            if (!c.NormalToSurface) continue;   // грань — при включении (по умолчанию — по ходу кривой с теми точками, что есть тогда)
+            if (c.FaceAuto) c.FaceId = DefaultFace(i);
+            else if (!cands.Contains(c.FaceId))
                 c.FaceId = c.FaceTag != null && cands.FirstOrDefault(id => Part.FindFace(id)?.Tag == c.FaceTag) is var byTag && byTag != 0 ? byTag : DefaultFace(i);
             if (Part.FindFace(c.FaceId) is { } f) { c.FaceTag = f.Tag; try { c.FaceNormal = f.NormalAt(q[i]).Normalized(); } catch { c.FaceNormal = Vector3d.Zero; } }
         }
@@ -530,7 +532,7 @@ public sealed class CurveOp : Operation
                 _spline = null;
                 if (TangentsOff) return q.Count >= 2 ? ThroughPoints(q, _closed, _smooth) : null;
                 // k177: условия касательных; гладкая — кубические участки (точно через точки, касательные по условиям)
-                if (_face != null && Cur is { NormalToSurface: true } fc && _face.Items.Count > 0 && _face.Items[0].Id != fc.FaceId) fc.FaceId = _face.Items[0].Id;
+                if (_face != null && Cur is { NormalToSurface: true } fc && _face.Items.Count > 0 && _face.Items[0].Id != fc.FaceId) { fc.FaceId = _face.Items[0].Id; fc.FaceAuto = false; }
                 SyncSpecs(q, kept ? null : refs);
                 if (q.Count < 2) return null;
                 if (!_smooth) { _tan = new(); return ThroughPoints(q, _closed, false); }
