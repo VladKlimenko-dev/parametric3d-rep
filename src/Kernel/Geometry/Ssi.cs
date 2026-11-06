@@ -56,6 +56,7 @@ public static class Ssi
     /// <summary>Замер (k97): поверхностей с подсказкой основания в этом потоке (прежний словарь).</summary>
     public static int FootHintCount => FootWeak ? _footHintsWeak?.Count() ?? 0 : _footHints?.Count ?? 0;
     [ThreadStatic] public static Action<string>? FootDebug;
+    static readonly bool FootOnSurf = Environment.GetEnvironmentVariable("P3D_FOOTONSURF") != "0";
     static readonly bool FootTrace = Environment.GetEnvironmentVariable("P3D_FOOTTRACE") == "1";
     [ThreadStatic] static int _footTraceN;
     /// <summary>Разбор: вызовы основания на поверхности общего вида и из них — с общей проекцией (без годной подсказки).</summary>
@@ -116,6 +117,11 @@ public static class Ssi
     {
         ParamDerivs(s, uv, out var S1, out var Su1, out var Sv1);
         var w = x - S1; double L = w.Length;
+        // Я2: ТОЧКА НА САМОЙ ПОВЕРХНОСТИ (в 1e-8 мм — в десятой доле точности модели) — основание найдено, даже если остаток
+        // не ортогонален: у складки поверхности (стык кусков ленты прежней правки) ортогонального основания нет, ближайшая точка —
+        // на линии складки, и Ньютон качается через неё на 1e-9 мм (s110 шаг 2: касание новой фаски на стыке прежней — NaN,
+        // формула ленты не определена). Мутация P3D_FOOTONSURF=0.
+        if (FootOnSurf && L <= 1e-8) return true;
         // ортогональность — относительно max(L, 1e-5 мм): у точки на самой поверхности остаток w — шум округления, и его угол
         // с касательной ничего не значит (касательный сдвиг основания там ~1e-14 мм)
         double Lr = Math.Max(L, 1e-3);

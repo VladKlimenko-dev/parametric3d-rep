@@ -1685,7 +1685,60 @@ public static partial class DirectRound
                     tp = tc; opB = ocB;
                 }
             }
+        // Я2: СТЫК ФОРМУЛЫ, ГДЕ КАСАНИЕ ПЕРЕХОДИТ СТЫК ЛЕНТЫ ПРЕЖНЕЙ ПРАВКИ. Грань — лента прежней фаски или скругления
+        // (процедурная SectionSurface) со своими стыками кусков (вершины цепочки, веер у угла) и концами промежутка (дальше —
+        // продолжение второго порядка): там лента гладка лишь нулевого или первого порядка, и формула новой ленты — тоже.
+        // Таблица пятой степени через такой излом не вставляет (s110 шаг 2: вторая разность формулы 3e-4 → 2e-6 мм при переходе
+        // касания B через стык ленты прежней фаски, отход таблицы 2.2e-4 мм — отказ). Параметр перехода — стык таблицы.
+        // Опыт: P3D_DRSECBREAK=1 (по умолчанию выключен).
+        if (SecBreak)
+            foreach (var (F, side) in new[] { (FA, 0.0), (FB, 1.0) })
+            {
+                if (F.Surf is not SectionSurface { IsProcedural: true } ssF) continue;
+                var marks = ssF.Breaks.ToList();
+                if (!ssF.Closed) { marks.Add(ssF.UMin); marks.Add(ssF.UMax); }
+                if (marks.Count == 0) continue;
+                Debug?.Invoke($"open: section face {F.Tag}: u [{ssF.UMin:G9}, {ssF.UMax:G9}] breaks [{string.Join(", ", ssF.Breaks.Select(b => b.ToString("G9")))}]");
+                // по касанию ленты и по самому ребру: формула фаски зависит от грани между ребром и линией касания, и излом
+                // приходит и там, где стык прежней ленты пересекает ребро
+                foreach (bool atEdge in new[] { false, true })
+                {
+                double U(double t)
+                {
+                    var q = atEdge ? Ed(t) : Gen(t).Point(side); if (!double.IsFinite(q.X)) return double.NaN;
+                    Geometry.Ssi.ParamFoot(ssF, q, out var uv); return uv.X;
+                }
+                const int Ns = 200; var uPrev = U(tLo); double tp = tLo;
+                for (int i = 1; i <= Ns; i++)
+                {
+                    double tc = tLo + (tHi - tLo) * i / Ns, uc = U(tc);
+                    if (double.IsFinite(uPrev) && double.IsFinite(uc))
+                        foreach (double mk in marks)
+                        {
+                            if (!((uPrev - mk) * (uc - mk) < 0)) continue;
+                            // касание может идти по самой складке (выпуклый стык прежней ленты): u = стык на промежутке t, и формула
+                            // изломана на обоих его концах — вход и выход ищутся порознь (s110 шаг 2: вход 51.606, выход ~51.614)
+                            double sgn = uPrev < mk ? -1 : 1, epsU = 1e-9 * Math.Max(1, Math.Abs(mk));
+                            foreach (bool exit in new[] { false, true })
+                            {
+                                // вход — граница «ещё по старую сторону стыка», выход — «уже по новую»
+                                bool Old(double t) { double d = U(t) - mk; return double.IsFinite(d) && d * sgn > epsU; }
+                                bool New(double t) { double d = U(t) - mk; return double.IsFinite(d) && -d * sgn > epsU; }
+                                double a = tp, b = tc;
+                                for (int it = 0; it < 60; it++) { double m = 0.5 * (a + b); if (exit ? !New(m) : Old(m)) a = m; else b = m; }
+                                double tb = 0.5 * (a + b);
+                                if (exit && breaks.Count > 0 && Math.Abs(breaks[^1] - (tb - tLo) * kU) < 1e-6 * kU) continue;   // выход совпал со входом
+                                if (tb > tLo && tb < tHi) { breaks.Add((tb - tLo) * kU); Interlocked.Increment(ref SecBreaks); Debug?.Invoke($"open: table break where the {(atEdge ? "edge" : "contact")} {(exit ? "leaves" : "reaches")} a joint of {F.Tag} (u {mk:G8}) at t {tb:G8}"); }
+                            }
+                        }
+                    tp = tc; uPrev = uc;
+                }
+                }
+            }
         breaks.Sort();
+        // почти совпавшие стыки (касание и ребро переходят стык прежней ленты в одном месте) — один стык: кусок короче
+        // 1e-7 мм таблица не вставляет
+        if (SecBreak) for (int i = breaks.Count - 1; i > 0; i--) if (breaks[i] - breaks[i - 1] < 1e-7) breaks.RemoveAt(i);
         // шаг таблицы: у закона с узлами — вчетверо мельче (кривизна сечений по u у узла выше)
         double tabStep = Math.Max(Lp / 20000, Math.Min(0.25, 0.4 * Math.Min(widthA, widthB)) / 32) / (knotT.Count > 0 ? 4 : 1);
         if (FastPreviewNow) tabStep *= 4;   // 21.10: быстрый предпросмотр — таблица реже (отход ~1e-6 мм, на экране не видно)
@@ -2626,6 +2679,12 @@ public static partial class DirectRound
         try { return FinishDirectCore(all, op, ref why, swF); }
         finally { if (Debug != null && ProfDbg) { Debug(Diagnostics.Prof.Report()); Diagnostics.Prof.Enabled = profWas; } }
     }
+    /// <summary>Я2, опыт (по умолчанию выключен, P3D_DRSECBREAK=1): стыки таблицы ленты там, где касание или ребро переходят
+    /// стык ленты прежней правки. s110 шаг 2: отход таблицы 2.2e-4 → 2.7e-7 мм, но ещё больше допуска 2e-8 — фаска не принята;
+    /// s109 шаг 5: «формула не определена» у стыка (шар катится через складку прежней ленты). BACKLOG, Я2.</summary>
+    static readonly bool SecBreak = Environment.GetEnvironmentVariable("P3D_DRSECBREAK") == "1";
+    /// <summary>Я2: стыков таблицы ленты там, где касание переходит стык ленты прежней правки.</summary>
+    public static long SecBreaks;
     static readonly bool ProfDbg = Environment.GetEnvironmentVariable("P3D_OPENPROF") == "1";
     static readonly bool EndScanDbg = Environment.GetEnvironmentVariable("P3D_ENDSCAN") == "1";
     static readonly bool EndHole = Environment.GetEnvironmentVariable("P3D_DRENDHOLE") != "0";

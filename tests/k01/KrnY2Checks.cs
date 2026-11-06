@@ -88,4 +88,38 @@ static partial class Program
             Require(fails == 0, $"{fails} foot point(s) not found at the joint");
         });
     }
+    /// <summary>
+    /// Я2: ОСНОВАНИЕ ПЕРПЕНДИКУЛЯРА НА СКЛАДКЕ ЛЕНТЫ. Лента — стенка вдоль ломаной с поворотом 30° в стыке кусков (складка G0,
+    /// как стык прежней фаски по цепочке). Основание (Ssi.ParamFoot) точки на линии стыка не находилось: ортогонального
+    /// основания у складки нет, Ньютон качался через неё на 1e-9 мм (s110 шаг 2: формула новой фаски не определена там, где
+    /// касание на стыке прежней). Норма: основание точек складки найдено, отход меньше 1e-8 мм. Мутация P3D_FOOTONSURF=0 —
+    /// проверка падает.
+    /// </summary>
+    static void KrnY2SectionCreaseFootChecks()
+    {
+        Check("KRN-Y2-SECTION-CREASE-FOOT", () =>
+        {
+            const double ub = 6.1;
+            double ang = 30 * Math.PI / 180;
+            var t2 = new Vector3d(Math.Cos(ang), Math.Sin(ang), 0);
+            SweepSection Gen(double u)
+            {
+                Vector3d c = u < ub ? new Vector3d(u, 0, 0) : new Vector3d(ub, 0, 0) + t2 * (u - ub);
+                return SweepSection.Line(c, c + new Vector3d(0, 0, 2));
+            }
+            double u0 = 0, u1 = 14;
+            var us = Enumerable.Range(0, 15).Select(i => u0 + (u1 - u0) * i / 14.0).ToList();
+            var ss = new SectionSurface(Gen, us, us.Select(Gen).ToList(), false, u0, u1, new[] { ub }, 0.05);
+            int fails = 0; double worst = 0;
+            foreach (double v in new[] { 0.2, 0.5, 0.8 })
+            {
+                var x = Gen(ub).Point(v);
+                var (p, _) = Parametric3D.Kernel.Geometry.Ssi.ParamFoot(ss, x);
+                if (!double.IsFinite(p.X)) fails++; else worst = Math.Max(worst, (p - x).Length);
+            }
+            Log(new { test = "KRN-Y2-SECTION-CREASE-FOOT", fails, worst });
+            Require(fails == 0, $"{fails} foot point(s) on the crease not found");
+            Require(worst < 1e-8, $"foot on the crease is off by {worst:E2} mm");
+        });
+    }
 }
