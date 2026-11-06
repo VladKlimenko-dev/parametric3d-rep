@@ -1,0 +1,403 @@
+== STEP s104 0
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.03)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.39, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.736, 0.675, -0.052) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.44, 0.891, -0.111) NA (-0.695, 0.682, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR edge (-17.7, 22.1, 0)->(0.3, 40.5, 0) sigma -1
+DR edge (-35.8, 3.7, 0)->(-17.7, 22.1, 0) sigma -1
+DR open: convexity probe at 0.25 p (-13.218, 26.699, 0) nA (-0.711, 0.698, -0.086) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-8.703, 31.303, 0) nA (-0.707, 0.694, -0.135) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-4.188, 35.906, 0) nA (-0.702, 0.689, -0.182) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: chamfer joint 0: side point passes onto the next face at t 0.21671165 (end 0), seam point (-17.5262, 22.1962, -2.0585)
+DR open: chamfer joint 0 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.91E-011 at t 0.221688 (Δ 25.7926) widths 2.06/2.06 Lp 29.399
+DR open: sigma -1 shapes ParamSurf/Plane ends joint/ParamSurf t [-1.8055, 27.593] contacts A [-5.52647E-14, 25.7879] B [-5.52647E-14, 25.5052] Δ 25.7926
+DR open: convexity probe at 0.25 p (-31.279, 8.285, 0) nA (-0.713, 0.699, -0.054) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-26.764, 12.889, 0) nA (-0.713, 0.699, -0.048) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-22.248, 17.492, 0) nA (-0.713, 0.7, -0.043) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: chamfer joint 1: side point off the seam by 3.8E-003, no crossing on this link (the other one switches)
+DR open: chamfer joint 1 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.34E-014 at t 2.62384 (Δ 25.7926) widths 2.06/2.06 Lp 29.725
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/joint t [-2.1269, 27.598] contacts A [0.288577, 25.7926] B [-0.32138, 25.7926] Δ 25.7926
+DR open: 1 tangent joint(s)
+DR finish: assembled 0.0s
+DR finish: meshed 0.2s
+DR finish: validated 0.8s
+DR finish: volume 0.8s
+DR finish: checked 0.8s
+== REBUILDCHECK s104 0
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.03)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.39, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.736, 0.675, -0.052) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.44, 0.891, -0.111) NA (-0.695, 0.682, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR edge (-17.7, 22.1, 0)->(0.3, 40.5, 0) sigma -1
+DR edge (-35.8, 3.7, 0)->(-17.7, 22.1, 0) sigma -1
+DR open: convexity probe at 0.25 p (-13.218, 26.699, 0) nA (-0.711, 0.698, -0.086) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-8.703, 31.303, 0) nA (-0.707, 0.694, -0.135) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-4.188, 35.906, 0) nA (-0.702, 0.689, -0.182) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: chamfer joint 0: side point passes onto the next face at t 0.21671165 (end 0), seam point (-17.5262, 22.1962, -2.0585)
+DR open: chamfer joint 0 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.91E-011 at t 0.221688 (Δ 25.7926) widths 2.06/2.06 Lp 29.399
+DR open: sigma -1 shapes ParamSurf/Plane ends joint/ParamSurf t [-1.8055, 27.593] contacts A [-5.52647E-14, 25.7879] B [-5.52647E-14, 25.5052] Δ 25.7926
+DR open: convexity probe at 0.25 p (-31.279, 8.285, 0) nA (-0.713, 0.699, -0.054) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-26.764, 12.889, 0) nA (-0.713, 0.699, -0.048) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-22.248, 17.492, 0) nA (-0.713, 0.7, -0.043) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: chamfer joint 1: side point off the seam by 3.8E-003, no crossing on this link (the other one switches)
+DR open: chamfer joint 1 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.34E-014 at t 2.62384 (Δ 25.7926) widths 2.06/2.06 Lp 29.725
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/joint t [-2.1269, 27.598] contacts A [0.288577, 25.7926] B [-0.32138, 25.7926] Δ 25.7926
+DR open: 1 tangent joint(s)
+DR finish: assembled 0.0s
+DR finish: meshed 0.2s
+DR finish: validated 0.7s
+DR finish: volume 0.7s
+DR finish: checked 0.7s
+== REBUILDCHECK END s104 0
+== STEP s104 1
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.034)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.431, 0.896, -0.11) NA (-0.685, 0.692, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.559, 0.548, 0.622)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.52, 0.509, 0.686)
+DR edge (30.7, 12.7, -77.1)->(32.6, -10.3, -77.1) sigma -1
+DR open: convexity probe at 0.25 p (31.206, 6.973, -77.143) nA (0.993, 0.081, 0.086) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.5 p (31.674, 1.205, -77.143) nA (0.996, 0.081, 0.031) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.75 p (32.143, -4.562, -77.143) nA (0.996, 0.081, -0.024) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: table vs formula 4.33E-014 at t 22.1264 (Δ 23.1471) widths 1.58/1.58 Lp 29.467
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/ParamSurf t [-3.16, 26.307] contacts A [-0.0762753, 23.1363] B [-1.58, 24.7271] Δ 23.1471
+DR finish: assembled 0.0s
+DR finish: meshed 0.0s
+DR finish: validated 0.6s
+DR finish: volume 0.6s
+DR finish: checked 0.6s
+== REBUILDCHECK s104 1
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.03)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.39, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.736, 0.675, -0.052) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.44, 0.891, -0.111) NA (-0.695, 0.682, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR edge (-17.7, 22.1, 0)->(0.3, 40.5, 0) sigma -1
+DR edge (-35.8, 3.7, 0)->(-17.7, 22.1, 0) sigma -1
+DR open: convexity probe at 0.25 p (-13.218, 26.699, 0) nA (-0.711, 0.698, -0.086) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-8.703, 31.303, 0) nA (-0.707, 0.694, -0.135) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-4.188, 35.906, 0) nA (-0.702, 0.689, -0.182) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: chamfer joint 0: side point passes onto the next face at t 0.21671165 (end 0), seam point (-17.5262, 22.1962, -2.0585)
+DR open: chamfer joint 0 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.91E-011 at t 0.221688 (Δ 25.7926) widths 2.06/2.06 Lp 29.399
+DR open: sigma -1 shapes ParamSurf/Plane ends joint/ParamSurf t [-1.8055, 27.593] contacts A [-5.52647E-14, 25.7879] B [-5.52647E-14, 25.5052] Δ 25.7926
+DR open: convexity probe at 0.25 p (-31.279, 8.285, 0) nA (-0.713, 0.699, -0.054) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-26.764, 12.889, 0) nA (-0.713, 0.699, -0.048) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-22.248, 17.492, 0) nA (-0.713, 0.7, -0.043) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: chamfer joint 1: side point off the seam by 3.8E-003, no crossing on this link (the other one switches)
+DR open: chamfer joint 1 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.34E-014 at t 2.62384 (Δ 25.7926) widths 2.06/2.06 Lp 29.725
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/joint t [-2.1269, 27.598] contacts A [0.288577, 25.7926] B [-0.32138, 25.7926] Δ 25.7926
+DR open: 1 tangent joint(s)
+DR finish: assembled 0.0s
+DR finish: meshed 0.2s
+DR finish: validated 0.7s
+DR finish: volume 0.7s
+DR finish: checked 0.7s
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.034)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.431, 0.896, -0.11) NA (-0.685, 0.692, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.559, 0.548, 0.622)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.52, 0.509, 0.686)
+DR edge (30.7, 12.7, -77.1)->(32.6, -10.3, -77.1) sigma -1
+DR open: convexity probe at 0.25 p (31.206, 6.973, -77.143) nA (0.993, 0.081, 0.086) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.5 p (31.674, 1.205, -77.143) nA (0.996, 0.081, 0.031) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.75 p (32.143, -4.562, -77.143) nA (0.996, 0.081, -0.024) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: table vs formula 4.33E-014 at t 22.1264 (Δ 23.1471) widths 1.58/1.58 Lp 29.467
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/ParamSurf t [-3.16, 26.307] contacts A [-0.0762753, 23.1363] B [-1.58, 24.7271] Δ 23.1471
+DR finish: assembled 0.0s
+DR finish: meshed 0.0s
+DR finish: validated 0.6s
+DR finish: volume 0.6s
+DR finish: checked 0.6s
+== REBUILDCHECK END s104 1
+== STEP s104 2
+DR build declined: not a straight edge
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table vs formula 3.01E-011 at t 1.76185 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 0 at t -0.00017308972 (end 0), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open end 1: t 0.3142 (Δ 0.2167) spine (-17.24, 22.05, -2.18) edge (-17.46, 22.27, -2.06) f [0.00 0.00 0.00 -0.00 -0.00 -0.01 -0.01 -0.02 -0.02 -0.03 -0.04 -0.04 -0.05 -0.06 -0.07 -0.08 -0.09]
+DR open end 1: t 0.4118 (Δ 0.2167) spine (-17.17, 22.12, -2.18) edge (-17.39, 22.34, -2.06) f [0.00 0.00 0.00 -0.00 -0.00 -0.01 -0.01 -0.01 -0.02 -0.03 -0.03 -0.04 -0.05 -0.06 -0.07 -0.08 -0.09]
+DR open end 1: t 0.6068 (Δ 0.2167) spine (-17.04, 22.26, -2.18) edge (-17.25, 22.47, -2.07) f [0.01 0.01 0.01 0.00 0.00 -0.00 -0.01 -0.01 -0.02 -0.02 -0.03 -0.04 -0.05 -0.05 -0.06 -0.07 -0.08]
+DR open end 1: t 0.9969 (Δ 0.2167) spine (-16.76, 22.54, -2.19) edge (-16.98, 22.75, -2.07) f [0.01 0.01 0.01 0.01 0.01 0.00 0.00 -0.00 -0.01 -0.02 -0.02 -0.03 -0.04 -0.05 -0.06 -0.07 -0.08]
+DR open end 1: t 1.7770 (Δ 0.2167) spine (-16.22, 23.1, -2.2) edge (-16.43, 23.31, -2.09) f [0.03 0.03 0.03 0.03 0.02 0.02 0.01 0.01 0.00 -0.00 -0.01 -0.02 -0.02 -0.03 -0.04 -0.05 -0.06]
+DR open end 1: t 3.3374 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open end 1: t 6.4580 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open end 1: t 12.6993 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open end 1: t 25.1819 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 0.018177387
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 25.734239
+DR open: table vs formula 3.88E-011 at t 25.7386 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 0 at t -0.00017308972 (end 0), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open end 1: t 0.3142 (Δ 0.2167) spine (-17.24, 22.05, -2.18) edge (-17.46, 22.27, -2.06) f [0.00 0.00 0.00 -0.00 -0.00 -0.01 -0.01 -0.02 -0.02 -0.03 -0.04 -0.04 -0.05 -0.06 -0.07 -0.08 -0.09]
+DR open end 1: t 0.4118 (Δ 0.2167) spine (-17.17, 22.12, -2.18) edge (-17.39, 22.34, -2.06) f [0.00 0.00 0.00 -0.00 -0.00 -0.01 -0.01 -0.01 -0.02 -0.03 -0.03 -0.04 -0.05 -0.06 -0.07 -0.08 -0.09]
+DR open end 1: t 0.6068 (Δ 0.2167) spine (-17.04, 22.26, -2.18) edge (-17.25, 22.47, -2.07) f [0.01 0.01 0.01 0.00 0.00 -0.00 -0.01 -0.01 -0.02 -0.02 -0.03 -0.04 -0.05 -0.05 -0.06 -0.07 -0.08]
+DR open end 1: t 0.9969 (Δ 0.2167) spine (-16.76, 22.54, -2.19) edge (-16.98, 22.75, -2.07) f [0.01 0.01 0.01 0.01 0.01 0.00 0.00 -0.00 -0.01 -0.02 -0.02 -0.03 -0.04 -0.05 -0.06 -0.07 -0.08]
+DR open end 1: t 1.7770 (Δ 0.2167) spine (-16.22, 23.1, -2.2) edge (-16.43, 23.31, -2.09) f [0.03 0.03 0.03 0.03 0.02 0.02 0.01 0.01 0.00 -0.00 -0.01 -0.02 -0.02 -0.03 -0.04 -0.05 -0.06]
+DR open end 1: t 3.3374 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open end 1: t 6.4580 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open end 1: t 12.6993 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open end 1: t 25.1819 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: march extension 626/626 steps of 0.006 mm
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table vs formula 3.61E-011 at t 1.76185 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: march extension 626/625 steps of 0.006 mm
+DR open: reference fit degree 8 worst 1.92E-003 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 12 worst 1.24E-003 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 16 worst 8.83E-004 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 24 worst 8.29E-004 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 32 worst 7.72E-004 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 48 worst 6.21E-004 (tol 3.0E-004) length 7.72271
+DR open: reference curve not fitted (ProcCurve3, chain 1: ProcCurve3)
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: march extension 625/625 steps of 0.006 mm
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 0.018177387
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 25.734239
+DR open: table vs formula 3.87E-011 at t 25.7386 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: march extension 626/625 steps of 0.006 mm
+DR open: reference fit degree 8 worst 1.92E-003 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 12 worst 1.24E-003 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 16 worst 8.83E-004 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 24 worst 8.29E-004 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 32 worst 7.72E-004 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 48 worst 6.21E-004 (tol 3.0E-004) length 7.72271
+DR open: reference curve not fitted (ProcCurve3, chain 1: ProcCurve3)
+DR declined: not a straight edge | open curved: open curved: the blend does not leave the end face (end face too oblique?) | generic parameter: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+== REBUILDCHECK s104 2
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.03)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.39, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.736, 0.675, -0.052) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.44, 0.891, -0.111) NA (-0.695, 0.682, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR edge (-17.7, 22.1, 0)->(0.3, 40.5, 0) sigma -1
+DR edge (-35.8, 3.7, 0)->(-17.7, 22.1, 0) sigma -1
+DR open: convexity probe at 0.25 p (-13.218, 26.699, 0) nA (-0.711, 0.698, -0.086) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-8.703, 31.303, 0) nA (-0.707, 0.694, -0.135) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-4.188, 35.906, 0) nA (-0.702, 0.689, -0.182) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[7]/#d000000001/loft:start
+DR open: chamfer joint 0: side point passes onto the next face at t 0.21671165 (end 0), seam point (-17.5262, 22.1962, -2.0585)
+DR open: chamfer joint 0 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.91E-011 at t 0.221688 (Δ 25.7926) widths 2.06/2.06 Lp 29.399
+DR open: sigma -1 shapes ParamSurf/Plane ends joint/ParamSurf t [-1.8055, 27.593] contacts A [-5.52647E-14, 25.7879] B [-5.52647E-14, 25.5052] Δ 25.7926
+DR open: convexity probe at 0.25 p (-31.279, 8.285, 0) nA (-0.713, 0.699, -0.054) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.5 p (-26.764, 12.889, 0) nA (-0.713, 0.699, -0.048) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: convexity probe at 0.75 p (-22.248, 17.492, 0) nA (-0.713, 0.7, -0.043) nB (0, 0, 1) inside False (eps 1.03), faces #d000000001/loft:side[6]/#d000000001/loft:start
+DR open: chamfer joint 1: side point off the seam by 3.8E-003, no crossing on this link (the other one switches)
+DR open: chamfer joint 1 at the vertex, side point (-17.6777, 22.0412, -2.0585) (off the other side 3.8E-003)
+DR open: table vs formula 2.34E-014 at t 2.62384 (Δ 25.7926) widths 2.06/2.06 Lp 29.725
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/joint t [-2.1269, 27.598] contacts A [0.288577, 25.7926] B [-0.32138, 25.7926] Δ 25.7926
+DR open: 1 tangent joint(s)
+DR finish: assembled 0.0s
+DR finish: meshed 0.2s
+DR finish: validated 0.7s
+DR finish: volume 0.7s
+DR finish: checked 0.7s
+DR face #d000000001/loft:side[0] NI (0.734, 0.678, 0.045) NA (0.792, 0.61, 0.034)
+DR face #d000000001/loft:side[1] NI (0.915, 0.402, 0.02) NA (0.987, 0.08, 0.141)
+DR face #d000000001/loft:side[2] NI (0.726, -0.687, -0.032) NA (0.761, -0.647, -0.051)
+DR face #d000000001/loft:side[3] NI (0.428, -0.897, -0.112) NA (0.081, -0.997, 0.004)
+DR face #d000000001/loft:side[4] NI (-0.74, -0.672, -0.038) NA (-0.644, -0.758, -0.102)
+DR face #d000000001/loft:side[5] NI (-0.919, -0.389, -0.058) NA (-0.995, -0.081, 0.066)
+DR face #d000000001/loft:side[6] NI (-0.737, 0.674, -0.053) NA (-0.76, 0.646, -0.069)
+DR face #d000000001/loft:side[7] NI (-0.431, 0.896, -0.11) NA (-0.685, 0.692, -0.228)
+DR face #d000000001/loft:start NI (0, 0, 1) NA (0, 0, 1)
+DR face #d000000001/loft:end NI (-0, 0, -1) NA (-0, -0, -1)
+DR face #d000000001/loft:side[0] NI (-0.966, 0.24, 0.1) NA (-0.514, 0.853, 0.095)
+DR face #d000000001/loft:side[1] NI (0.239, 0.961, 0.139) NA (0.852, 0.513, 0.108)
+DR face #d000000001/loft:side[2] NI (0.964, -0.239, 0.119) NA (0.515, -0.855, 0.066)
+DR face #d000000001/loft:side[3] NI (-0.24, -0.968, 0.079) NA (-0.855, -0.515, 0.052)
+DR face #d000000003/chamfer:face NI (-0.533, 0.53, 0.659) NA (-0.559, 0.548, 0.622)
+DR face #d000000003/chamfer:face NI (-0.517, 0.507, 0.69) NA (-0.52, 0.509, 0.686)
+DR edge (30.7, 12.7, -77.1)->(32.6, -10.3, -77.1) sigma -1
+DR open: convexity probe at 0.25 p (31.206, 6.973, -77.143) nA (0.993, 0.081, 0.086) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.5 p (31.674, 1.205, -77.143) nA (0.996, 0.081, 0.031) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: convexity probe at 0.75 p (32.143, -4.562, -77.143) nA (0.996, 0.081, -0.024) nB (-0, -0, -1) inside False (eps 0.79), faces #d000000001/loft:side[1]/#d000000001/loft:end
+DR open: table vs formula 4.33E-014 at t 22.1264 (Δ 23.1471) widths 1.58/1.58 Lp 29.467
+DR open: sigma -1 shapes ParamSurf/Plane ends ParamSurf/ParamSurf t [-3.16, 26.307] contacts A [-0.0762753, 23.1363] B [-1.58, 24.7271] Δ 23.1471
+DR finish: assembled 0.0s
+DR finish: meshed 0.0s
+DR finish: validated 0.6s
+DR finish: volume 0.6s
+DR finish: checked 0.6s
+DR build declined: not a straight edge
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table vs formula 3.01E-011 at t 1.76185 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 0 at t -0.00017308972 (end 0), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open end 1: t 0.3142 (Δ 0.2167) spine (-17.24, 22.05, -2.18) edge (-17.46, 22.27, -2.06) f [0.00 0.00 0.00 -0.00 -0.00 -0.01 -0.01 -0.02 -0.02 -0.03 -0.04 -0.04 -0.05 -0.06 -0.07 -0.08 -0.09]
+DR open end 1: t 0.4118 (Δ 0.2167) spine (-17.17, 22.12, -2.18) edge (-17.39, 22.34, -2.06) f [0.00 0.00 0.00 -0.00 -0.00 -0.01 -0.01 -0.01 -0.02 -0.03 -0.03 -0.04 -0.05 -0.06 -0.07 -0.08 -0.09]
+DR open end 1: t 0.6068 (Δ 0.2167) spine (-17.04, 22.26, -2.18) edge (-17.25, 22.47, -2.07) f [0.01 0.01 0.01 0.00 0.00 -0.00 -0.01 -0.01 -0.02 -0.02 -0.03 -0.04 -0.05 -0.05 -0.06 -0.07 -0.08]
+DR open end 1: t 0.9969 (Δ 0.2167) spine (-16.76, 22.54, -2.19) edge (-16.98, 22.75, -2.07) f [0.01 0.01 0.01 0.01 0.01 0.00 0.00 -0.00 -0.01 -0.02 -0.02 -0.03 -0.04 -0.05 -0.06 -0.07 -0.08]
+DR open end 1: t 1.7770 (Δ 0.2167) spine (-16.22, 23.1, -2.2) edge (-16.43, 23.31, -2.09) f [0.03 0.03 0.03 0.03 0.02 0.02 0.01 0.01 0.00 -0.00 -0.01 -0.02 -0.02 -0.03 -0.04 -0.05 -0.06]
+DR open end 1: t 3.3374 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open end 1: t 6.4580 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open end 1: t 12.6993 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open end 1: t 25.1819 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 0.018177387
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 25.734239
+DR open: table vs formula 3.88E-011 at t 25.7386 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: joint 0 at t -0.00017308972 (end 0), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open end 1: t 0.3142 (Δ 0.2167) spine (-17.24, 22.05, -2.18) edge (-17.46, 22.27, -2.06) f [0.00 0.00 0.00 -0.00 -0.00 -0.01 -0.01 -0.02 -0.02 -0.03 -0.04 -0.04 -0.05 -0.06 -0.07 -0.08 -0.09]
+DR open end 1: t 0.4118 (Δ 0.2167) spine (-17.17, 22.12, -2.18) edge (-17.39, 22.34, -2.06) f [0.00 0.00 0.00 -0.00 -0.00 -0.01 -0.01 -0.01 -0.02 -0.03 -0.03 -0.04 -0.05 -0.06 -0.07 -0.08 -0.09]
+DR open end 1: t 0.6068 (Δ 0.2167) spine (-17.04, 22.26, -2.18) edge (-17.25, 22.47, -2.07) f [0.01 0.01 0.01 0.00 0.00 -0.00 -0.01 -0.01 -0.02 -0.02 -0.03 -0.04 -0.05 -0.05 -0.06 -0.07 -0.08]
+DR open end 1: t 0.9969 (Δ 0.2167) spine (-16.76, 22.54, -2.19) edge (-16.98, 22.75, -2.07) f [0.01 0.01 0.01 0.01 0.01 0.00 0.00 -0.00 -0.01 -0.02 -0.02 -0.03 -0.04 -0.05 -0.06 -0.07 -0.08]
+DR open end 1: t 1.7770 (Δ 0.2167) spine (-16.22, 23.1, -2.2) edge (-16.43, 23.31, -2.09) f [0.03 0.03 0.03 0.03 0.02 0.02 0.01 0.01 0.00 -0.00 -0.01 -0.02 -0.02 -0.03 -0.04 -0.05 -0.06]
+DR open end 1: t 3.3374 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open end 1: t 6.4580 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open end 1: t 12.6993 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open end 1: t 25.1819 (Δ 0.2167) spine null edge (NaN, NaN, NaN) f []
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: march extension 626/626 steps of 0.006 mm
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table vs formula 3.61E-011 at t 1.76185 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: march extension 626/625 steps of 0.006 mm
+DR open: reference fit degree 8 worst 1.92E-003 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 12 worst 1.24E-003 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 16 worst 8.83E-004 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 24 worst 8.29E-004 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 32 worst 7.72E-004 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 48 worst 6.21E-004 (tol 3.0E-004) length 7.72271
+DR open: reference curve not fitted (ProcCurve3, chain 1: ProcCurve3)
+DR open: equal cylinders declined: equal cylinders: edges are not between the same two faces
+DR open: convexity probe at 0.25 p (-31.048, 8.362, -2.057) nA (-0.714, 0.698, -0.054) nB (-0.519, 0.507, 0.688) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-26.591, 12.922, -2.058) nA (-0.714, 0.698, -0.049) nB (-0.518, 0.506, 0.69) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-22.135, 17.482, -2.058) nA (-0.714, 0.698, -0.043) nB (-0.516, 0.505, 0.692) inside False (eps 0.15), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: march extension 625/625 steps of 0.006 mm
+DR open: joint 1 at t 25.503896 (end 25.5041), smooth edge on B, contact (-17.6145, 21.9792, -1.9666)
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 0.018177387
+DR open: table break where the contact leaves the domain of #d000000001/loft:side[6] at t 25.734239
+DR open: table vs formula 3.87E-011 at t 25.7386 (Δ 25.5041) widths 0.1295/0.1295 Lp 26.704
+DR open: sigma -1 shapes ParamSurf/ParamSurf ends ParamSurf/joint t [-0.6, 26.104] contacts A [0.0181774, 25.5039] B [-0.0291358, 25.5039] Δ 25.5041
+DR open: convexity probe at 0.25 p (-17.64, 22.08, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.5 p (-17.602, 22.119, -2.059) nA (-0.715, 0.698, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: convexity probe at 0.75 p (-17.564, 22.157, -2.059) nA (-0.715, 0.699, -0.038) nB (-0.515, 0.504, 0.694) inside False (eps 0.0108), faces #d000000001/loft:side[6]/#d000000003/chamfer:face
+DR open: march extension 626/625 steps of 0.006 mm
+DR open: reference fit degree 8 worst 1.92E-003 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 12 worst 1.24E-003 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 16 worst 8.83E-004 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 24 worst 8.29E-004 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 32 worst 7.72E-004 (tol 3.0E-004) length 7.72271
+DR open: reference fit degree 48 worst 6.21E-004 (tol 3.0E-004) length 7.72271
+DR open: reference curve not fitted (ProcCurve3, chain 1: ProcCurve3)
+DR declined: not a straight edge | open curved: open curved: the blend does not leave the end face (end face too oblique?) | generic parameter: open curved: no smooth parameter for the edge (no axis, reference curve not fitted)
+== REBUILDCHECK END s104 2
+seconds 48 nproc 4 env LOFT_DRALL=1 P3D_DROPENPAR=0 cmd loftseq 1 104 3 res/out
