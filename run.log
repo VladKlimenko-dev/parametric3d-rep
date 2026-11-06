@@ -1,0 +1,8 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["y2"]}
+{"test":"KRN-Y2-SECTION-TABLE-C2","nodes":8,"fails":0,"worstKink":9.389416608313658E-11,"worstFoot":4.440892098500626E-15}
+{"test":"KRN-Y2-SECTION-TABLE-C2","ok":true}
+{"test":"KRN-Y2-SECTION-CREASE-FOOT","fails":0,"worst":1.999979562731781E-09}
+{"test":"KRN-Y2-SECTION-CREASE-FOOT","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":2,"failed":0}
