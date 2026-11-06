@@ -2033,7 +2033,8 @@ public static partial class DirectRound
         for (int k = 0; k < 2; k++)
         {
             if (!two[k]) continue;
-            if (swPart[0] != null || swPart[1] != null || crOn[0] || crOn[1] || joint[k] != 0) { why = "open curved: two-face end with a seam switch"; return false; }
+            // переход шва на другом конце годен (его куски — на своей стороне ленты); на этом — нет
+            if (swPart[k] != null || crOn[k] || joint[k] != 0 || (TwoSwitchOff && (swPart[1 - k] != null || crOn[1 - k]))) { why = "open curved: two-face end with a seam switch"; return false; }
             double H(double v) { var x = EndPt(k, v); return ends[k].SE * Geometry.Ssi.Implicit(ends[k].ShE, x).F - se2[k] * Geometry.Ssi.Implicit(sh2[k]!, x).F; }
             double h0 = H(0), h1 = H(1);
             // край на стороне A — на E1, на стороне B — на E2: у выпуклого излома f1 = 0 ≥ f2 у A (H ≥ 0), у вогнутого — наоборот
@@ -2183,7 +2184,7 @@ public static partial class DirectRound
             // сторона T ленты: куски по порядку от конца 0 к концу 1 (у стороны B обход ленты — обратный)
             bool s0 = swPart[0] != null && swOnA[0] == oA, s1 = swPart[1] != null && swOnA[1] == oA;
             if (!s0 && !s1) continue;
-            var lp = bl.Loops[0]; int iT = oA ? 0 : 2; var mainC = lp[iT].Curve;
+            var lp = bl.Loops[0]; int iT = oA ? 0 : lp.FindIndex(x => ReferenceEquals(x.Curve, bB)); var mainC = lp[iT].Curve;   // Я2: у двухгранного конца 1 сторона B — не третья
             Vector3d e0 = oA ? qa0 : qb0, e1 = oA ? qa1 : qb1, m0 = s0 ? swQ[0] : e0, m1 = s1 ? swQ[1] : e1;
             var pieces = new List<Seg>();
             if (s0) foreach (var pc in swParts[0]!) pieces.Add(new Seg { Curve = pc.C, A = pc.A, B = pc.B });
@@ -2881,6 +2882,7 @@ public static partial class DirectRound
     [ThreadStatic] static List<(Vector3d V, bool OnA, TEdge? Sg, Vector3d Q)>? _overHints;
     /// <summary>Я2: повторов с переполнением на следующую грань у конца.</summary>
     public static long EndOvers;
+    static readonly bool TwoSwitchOff = Environment.GetEnvironmentVariable("P3D_DRTWOSWITCH") == "0";
     static readonly bool TwoEnd = Environment.GetEnvironmentVariable("P3D_DRTWOEND") == "1";
     /// <summary>Я2: лент с двухгранным торцом (вершина степени 4).</summary>
     public static long TwoEnds;

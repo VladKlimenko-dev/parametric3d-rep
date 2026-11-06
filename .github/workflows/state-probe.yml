@@ -53,13 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: ov6_y2o,      cmd: 'y2o', env: '' }
-          - { name: ov6_y2o_m1,   cmd: 'y2o', env: 'P3D_DRENDOVER=0' }
-          - { name: ov6_y2o_m2,   cmd: 'y2o', env: 'P3D_SLABVCLAMP=0' }
-          - { name: ov6_corpus,   cmd: 'loftseq 10 101 6 OUT', env: '' }
-          - { name: ov6_allA,     cmd: 'allA', env: '' }
-          - { name: ov6_allB,     cmd: 'allB', env: '' }
-          - { name: ov6_fix,      cmd: 'loftcorpus140', env: '' }
+          - { name: sw_dbg105, cmd: 'loftseq 1 105 3 OUT', env: 'LOFT_DRALL=1 P3D_DROPENPAR=0' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
