@@ -610,6 +610,7 @@ static partial class Program
         if (mode is "drawing162" or "allB") Drawing162Checks();
         if (mode is "drawing163" or "allB") Drawing163Checks();
         if (mode is "drawing164" or "allB") Drawing164Checks();
+        if (mode is "gear" or "allA") SkGearChecks();   // k176: шестерня эскиза
         if (mode is "meshcut165" or "allB") MeshCut165Checks();
         if (mode is "drawing165" or "allB") Drawing165Checks();
         if (mode is "drawing166" or "allB") Drawing166Checks();

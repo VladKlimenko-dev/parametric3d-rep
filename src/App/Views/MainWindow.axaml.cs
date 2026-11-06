@@ -923,7 +923,7 @@ public partial class MainWindow : Window
     {
         "sk.line", "sk.centerline", "sk.rect", "sk.rect_center", "sk.rect_3p", "sk.circle", "sk.circle_2p", "sk.circle3",
         "sk.arc3", "sk.arc_center", "sk.arc_tangent", "sk.ellipse", "sk.ellipse_5p", "sk.spline_through", "sk.spline_cv",
-        "sk.slot", "sk.polygon", "sk.point", "sk.text", "sk.csys",
+        "sk.slot", "sk.polygon", "sk.gear", "sk.point", "sk.text", "sk.csys",
     };
 
     /// <summary>k98: панель настройки эскиза (первая слева в эскизе).</summary>
@@ -1202,7 +1202,7 @@ public partial class MainWindow : Window
         SetupDocks();
         View.ComponentDragStarted += _ => Session.BeginEdit(L("Перетащить компонент"));
         View.ComponentDragEnded += _ => { Session.CommitEdit(); Commands.AssemblyCommands.Solve(this); };
-        View.SketchEdited += () => { SketchCheckpoint(); ScheduleTree(); UpdateStatus(); UpdateContextBar(); };
+        View.SketchEdited += () => { SketchCheckpoint(); ScheduleTree(); UpdateStatus(); UpdateContextBar(); AfterGearTool(); };
         View.SketchEntered += sk => { if (!SketchUndoOff) ResetSketchUndo(sk); };
         View.OpArrowClicked += i => { try { CurrentOperation?.ArrowClicked(i); } catch (Exception ex) { AppLog.Write("operation arrow", ex); } };
         View.ExpandEdge = r => r.Owner is Part p ? Topo.ChainRefs(p, r) : new List<PickRef> { r };
@@ -3450,6 +3450,9 @@ public partial class MainWindow : Window
             ShowPartProperties(part);
             return;
         }
+        // k176: выбрана шестерня эскиза — её параметры
+        if (SelectedGear() is { } gear && View.ActiveSketch is { } gsk) { ShowGearProperties(gsk, gear); return; }
+        _gearError = null;
         PropsTitle.Text = L("ВЫБРАНО");
         ShowSelectionList();
     }
