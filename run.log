@@ -1,0 +1,31 @@
+  features 3, stage 2, children: Origin, XY, XZ, YZ, Sketch1, Revolve, Sketch2, Extrude, Circular pattern, Axis1
+  (A) method 2 (Пересечение двух плоскостей), refs 2, axis (1, 0, 0)
+  (B) new axis slot 2 (stage 2); children: Origin, XY, XZ, YZ, Sketch1, Revolve, Sketch2, Extrude, Ось2, Circular pattern, Axis1
+  (E) edit: AxisOp, method 2, refs 2
+  (C) bar to Axis1: stage -1, effective 3 of 3
+  (D) drag: drop line shown True, target 3, after release stage -1 (effective 3)
+  (F) light theme: tree icons 11, stale 0; widths 16,9,14
+{"test":"UI-DATUM-TREE-K132","ok":true,"error":null}
+  tree info nodes: none
+  part panel on tree click: prop_Имя, prop_Номер детали, prop_material, prop_units, prop_units_new, prop_Допуски
+  custom system: Лаборатория (cm, kg); size row: 10 × 6 × 2 см
+  English panel, Russian texts: none
+  reopened: Корпус, PN-120, Сталь 45, Лаборатория cm/kg, ISO 2768-mK
+{"test":"UI-PART-PANEL-K120","ok":true,"error":null}
+  cube face +Z: toward (0, 0, 1)
+  table 6x4
+  row menu: Добавить строку выше | Добавить строку ниже | Копировать строку | Вставить строку из буфера | Удалить строку
+  table at 255,292 snap tr (frame corner 255,292)
+  after standard change: table 250,287, frame corner 250,287
+  en: Rev. True, Description True, Drawn True
+{"test":"UI-DRAWING-K168","ok":true,"error":null}
+  stacked: up 2.5@276.53, lo 2.5@273.23
+  equal: 160 ±0,1 h 3.5
+  panel: headers True/True, tol boxes 27, text boxes 0
+  title field after edit: АБВГ.123, attached True
+  auto dims on the top view: others 26 -> 26, top 1
+  centre lines: iso False, front True, toggle False
+  status: Размер 160 (Главный (спереди))
+  section: background True, progress 0, status «Строится вид: А-А…», lines 15
+{"test":"UI-DRAWING-K167","ok":true,"error":null}
+{"passed":4,"failed":0}
