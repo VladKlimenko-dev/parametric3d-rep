@@ -1,0 +1,11 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["loftguides"]}
+  square 5 → 3, four Bezier guides: V 3064.0000000000805 want 3064 (2.6E-014) ExactAnalytic, 6 faces
+  same, guides drawn top to bottom: V 3064.0000000000805 want 3064 (2.6E-014) ExactAnalytic, 6 faces
+  three sections (middle on the guides): V 3064.0000000001182 want 3064 (3.9E-014) ExactAnalytic, 10 faces
+  circle r10 → r5, four straight guides: V 5497.7871437818585 want 5497.787143782138 (-5.1E-014) ExactAnalytic, 6 faces
+  guide off the vertices: refused (Loft: the loft along guide curves declined: loft: guide 1 does not pass through a vertex of section 1 (5.0E+000 mm))
+  model (LoftFeature.GuideSketchIds): V 3064.0000000001005 want 3064 (3.3E-014)
+{"test":"KRN07-LOFT-GUIDES","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":1,"failed":0}
