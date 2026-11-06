@@ -124,14 +124,14 @@ static partial class Program
                 else if (!(worst < 0.05)) problems.Add($"the side edge misses the inner points of the guide ({worst:E2} mm)");
                 else
                 {
-                    // точнее: ребро по направляющей — та же кривая (сравнение по 200 точкам направляющей)
+                    // точнее: рёбра по направляющей (по одному на кусок) — та же кривая: каждая из 200 точек направляющей лежит на одном из рёбер
                     var g = dc4.Spline!; double dev = 0;
-                    var edge = p4.Bodies[0].Edges.OrderBy(e => (e.Curve.PointAt((e.Curve.T0 + e.Curve.T1) / 2) - g.PointAt(0.5)).Length).First();
+                    var samp = p4.Bodies[0].Edges.Select(e => Enumerable.Range(0, 801).Select(k => e.Curve.PointAt(e.Curve.T0 + (e.Curve.T1 - e.Curve.T0) * k / 800.0)).ToArray()).ToList();
+                    double g0 = g.T0, g1 = g.T1;
                     for (int i = 0; i <= 200; i++)
                     {
-                        var gq = g.PointAt(i / 200.0); double b2 = double.MaxValue;
-                        for (int k = 0; k <= 2000; k++) b2 = Math.Min(b2, (edge.Curve.PointAt(edge.Curve.T0 + (edge.Curve.T1 - edge.Curve.T0) * k / 2000.0) - gq).Length);
-                        dev = Math.Max(dev, b2);
+                        var gq = g.PointAt(g0 + (g1 - g0) * i / 200.0);
+                        dev = Math.Max(dev, samp.Min(a => a.Min(x => (x - gq).Length)));
                     }
                     rep.Add(new { test = "edge vs guide", dev });
                     if (dev > 0.05) problems.Add($"the side edge deviates from the guide by {dev:E2} mm");
