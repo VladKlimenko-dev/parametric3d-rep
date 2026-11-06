@@ -1052,7 +1052,7 @@ public static class AnalyticVolume
                     }
                     us.Add(ss.ProjectToUV(e.C.PointAt(md)).X);
                 }
-            if (us.Count % 2 != 0) { if (ChainDbg) Console.Error.WriteLine($"SLAB {f.Tag}: odd crossings {us.Count} at v {v:G6}"); return null; }
+            if (us.Count % 2 != 0) { if (ChainDbg) Console.Error.WriteLine($"SLAB {f.Tag}: odd crossings {us.Count} at v {v:G6}; edges {string.Join("; ", eds.Select(e => $"{e.C.GetType().Name} v {e.Uv[0].Y:G4}→{e.Uv[^1].Y:G4} [{e.Uv.Min(q => q.Y):G4}, {e.Uv.Max(q => q.Y):G4}] u {e.Uv[0].X:G6}→{e.Uv[^1].X:G6}"))}; breaks {string.Join(" ", vb.Take(6).Select(x => x.ToString("G4")))}"); return null; }
             us.Sort();
             return us;
         }
