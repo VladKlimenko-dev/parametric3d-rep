@@ -344,6 +344,8 @@ public sealed class SectionSurface : ISurface3
     static readonly double TabScale = double.TryParse(Environment.GetEnvironmentVariable("P3D_SECTABK"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var tk) ? tk : 8;
 
     static readonly bool Quad = Environment.GetEnvironmentVariable("P3D_SECEXTRAP2") != "0";
+    static readonly bool NodeNan = Environment.GetEnvironmentVariable("P3D_SECNODENAN") != "0";
+    public static long NodeNanFixes;
     static readonly bool Smooth = Environment.GetEnvironmentVariable("P3D_SECSMOOTH") != "0";
     static readonly bool JointDbg = Environment.GetEnvironmentVariable("P3D_SECJOINTDBG") == "1";
     /// <summary>Я2, опыт (по умолчанию выключен, P3D_SECBREAKNODE=1): узел у стыка кусков — в самом стыке. Разрыв ленты в стыке
@@ -494,6 +496,20 @@ public sealed class SectionSurface : ISurface3
                 if (k == 0 && p > 0) u += 1e-9;
                 if (k == n && p + 2 < cuts.Count) u -= 1e-9;
                 arr[k] = _gen!(u);
+                // Я2: ФОРМУЛА НЕ ОПРЕДЕЛЕНА В САМОМ УЗЛЕ (у стыка таблицы, где касание входит на складку прежней ленты, s109 шаг 5) —
+                // узел продолжается линейно из двух точек внутри куска в 1e-6 и 2e-6 шага (ошибка ~δ²·S_uu ~ 1e-12): NaN узла
+                // портил вставку на весь шаблон вокруг. Мутация P3D_SECNODENAN=0.
+                if (NodeNan && !double.IsFinite(arr[k].Point(0.5).X))
+                {
+                    bool fixedN = false;
+                    foreach (double dd in new[] { 1e-6, 1e-4, 1e-2 })
+                        foreach (double dir in k == 0 ? new[] { 1.0 } : k == n ? new[] { -1.0 } : new[] { 1.0, -1.0 })
+                        {
+                            if (fixedN) break;
+                            double d = dd * h; var s1 = _gen!(u + dir * d); var s2 = _gen!(u + dir * 2 * d);
+                            if (double.IsFinite(s1.Point(0.5).X) && double.IsFinite(s2.Point(0.5).X)) { arr[k] = SweepSection.Blend(s1, s2, -1); Interlocked.Increment(ref NodeNanFixes); fixedN = true; }
+                        }
+                }
             }
             // 20:17 (скорость): узлы таблицы независимы — в несколько потоков, если формула построителя это допускает
             // (ParallelTable; на 16 потоках пользователя таблица ленты — в разы быстрее). Мутация P3D_SECPAR=0.

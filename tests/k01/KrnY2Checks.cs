@@ -140,4 +140,67 @@ static partial class Program
             Require(s2.Guarantee == "ExactAnalytic", $"step 2 is {s2.Guarantee}");
         });
     }
+    /// <summary>
+    /// Я2: ПЕРЕПОЛНЕНИЕ ЛЕНТЫ НА СЛЕДУЮЩУЮ ГРАНЬ У КОНЦА — ПРЯМО И ТОЧНО (корпус s102 шаг 2: скругление R2.09; ребро торца у
+    /// конца 1 короче ширины ленты, линия касания уходит за его дальний конец на грань прежней фаски). Прежде — отказ «another
+    /// edge of the face in the blend strip», резец, многогранный итог. Норма: шаг 2 — ExactAnalytic.
+    /// Мутации P3D_DRENDOVER=0 (переполнения нет), P3D_SLABVCLAMP=0 (объём грани прежней фаски у вершины веера, s102),
+    /// P3D_DRTWOSWITCH=0 (переполнение с переходом шва на другом конце, s105) — падает.
+    /// </summary>
+    static void KrnY2EndOverflowChecks()
+    {
+        Check("KRN-Y2-S102-END-OVERFLOW-EXACT", () =>
+        {
+            // s102 шаг 2 — переполнение у конца 1; s105 шаг 2 (фаска 4.69 по цепочке) — у конца 0, на конце 1 — переход шва
+            foreach (int seed in new[] { 102, 105 })
+            {
+                LoftCorpusSeq(1, seed, 3, Path.Combine(Path.GetTempPath(), $"p3d_y2_s{seed}"));
+                List<(string Tag, string Guarantee)> st; lock (LastSeqSteps) st = LastSeqSteps.ToList();
+                var s2 = st.FirstOrDefault(x => x.Tag.StartsWith($"s{seed} step 2"));
+                Log(new { test = "KRN-Y2-S102-END-OVERFLOW-EXACT", seed, steps = st.Select(x => $"{x.Tag[..Math.Min(40, x.Tag.Length)]}: {x.Guarantee}").ToList(), overflows = Parametric3D.Kernel.Ops.DirectRound.EndOvers });
+                Require(s2.Tag != null, $"s{seed} step 2 not built");
+                Require(s2.Guarantee == "ExactAnalytic", $"s{seed} step 2 is {s2.Guarantee}");
+            }
+        });
+    }
+    /// <summary>
+    /// Я2: ОСНОВАНИЕ У ТОЧКИ СНАРУЖИ ВЫПУКЛОЙ СКЛАДКИ ЛЕНТЫ — НА САМОЙ СКЛАДКЕ. Стенка вдоль ломаной с поворотом 30° (как стык
+    /// прежней фаски по цепочке); точка в 0.5 мм снаружи угла по биссектрисе. Ортогонального основания нет ни на одном куске
+    /// (прежде NaN — шар катящегося скругления через складку не находился, s109 шаг 5). Норма: основание — точка складки,
+    /// расстояние 0.5, нормаль — к точке. Мутация P3D_FOOTCREASE=0 — проверка падает.
+    /// </summary>
+    static void KrnY2CreaseOffsetFootChecks()
+    {
+        Check("KRN-Y2-SECTION-CREASE-OFFSET-FOOT", () =>
+        {
+            const double ub = 6.1;
+            double ang = 30 * Math.PI / 180;
+            var t2 = new Vector3d(Math.Cos(ang), Math.Sin(ang), 0);
+            SweepSection Gen(double u)
+            {
+                Vector3d c = u < ub ? new Vector3d(u, 0, 0) : new Vector3d(ub, 0, 0) + t2 * (u - ub);
+                return SweepSection.Line(c, c + new Vector3d(0, 0, 2));
+            }
+            double u0 = 0, u1 = 14;
+            var us = Enumerable.Range(0, 15).Select(i => u0 + (u1 - u0) * i / 14.0).ToList();
+            var ss = new SectionSurface(Gen, us, us.Select(Gen).ToList(), false, u0, u1, new[] { ub }, 0.05);
+            // наружу угла: нормали кусков n1 = (0, -1, 0)·s, n2 = (sin, -cos, 0)·s; биссектриса — по их сумме (сторона — выпуклая)
+            var n1 = new Vector3d(0, -1, 0); var n2 = new Vector3d(Math.Sin(ang), -Math.Cos(ang), 0);
+            var bis = (n1 + n2).Normalized();
+            int fails = 0; double worst = 0;
+            foreach (double z in new[] { 0.4, 1.0, 1.6 })
+                foreach (double sg in new[] { 1.0, -1.0 })
+                {
+                    var c = new Vector3d(ub, 0, z); var x = c + bis * (0.5 * sg);
+                    var (p, nn) = Parametric3D.Kernel.Geometry.Ssi.ParamFoot(ss, x);
+                    if (!double.IsFinite(p.X)) { fails++; continue; }
+                    // снаружи выпуклой стороны — точка складки; с вогнутой стороны основание обычное (на куске), отход любой
+                    if (Vector3d.Dot(x - c, ss.NormalAt(new Vector2d(ub - 0.5, 0.5))) * Vector3d.Dot(bis, ss.NormalAt(new Vector2d(ub - 0.5, 0.5))) > 0)
+                        worst = Math.Max(worst, (p - c).Length);
+                }
+            Log(new { test = "KRN-Y2-SECTION-CREASE-OFFSET-FOOT", fails, worst });
+            Require(fails == 0, $"{fails} foot point(s) not found");
+            Require(worst < 1e-7, $"foot outside the convex crease is off the crease by {worst:E2} mm");
+        });
+    }
 }

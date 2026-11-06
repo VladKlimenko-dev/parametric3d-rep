@@ -736,6 +736,7 @@ public static class AnalyticVolume
     static T Prof1<T>(string n, Func<T> f) { using (Diagnostics.Prof.Time(n)) return f(); }
     static readonly bool LinearSideOff = Environment.GetEnvironmentVariable("P3D_BANDLINSIDE") == "0";
     static readonly bool BandChainOff = Environment.GetEnvironmentVariable("P3D_BANDCHAIN") == "0";
+    static readonly bool SlabVClamp = Environment.GetEnvironmentVariable("P3D_SLABVCLAMP") != "0";
     static readonly bool ChainDbg = Environment.GetEnvironmentVariable("P3D_CHAINDBG") == "1";
     /// <summary>k148e: граней ленты со стороной из нескольких рёбер.</summary>
     public static long BandChains;
@@ -983,13 +984,19 @@ public static class AnalyticVolume
         Tuple<SectionSurface, SlabEdge[], double[]>? cache;
         if (!_slabCache.TryGetValue(f, out cache) || !ReferenceEquals(cache.Item1, ss))
         {
-            var edges = new List<SlabEdge>(); var brk = new List<double>();
+            var edges = new List<SlabEdge>(); var brk = new List<double>(); var constV = new List<double>();
             const int K = 96;
             foreach (var ce in f.Loops.SelectMany(l => l.CoEdges))
             {
                 var c = ce.Edge.Curve;
                 var sv = new double[K + 1]; var uv = new Vector2d[K + 1];
-                for (int i = 0; i <= K; i++) { sv[i] = c.T0 + (c.T1 - c.T0) * i / K; uv[i] = ss.ProjectToUV(c.PointAt(sv[i])); if (!double.IsFinite(uv[i].X + uv[i].Y)) return null; }
+                for (int i = 0; i <= K; i++)
+                {
+                    sv[i] = c.T0 + (c.T1 - c.T0) * i / K; uv[i] = ss.ProjectToUV(c.PointAt(sv[i])); if (!double.IsFinite(uv[i].X + uv[i].Y)) return null;
+                    // Я2: у вершины веера (сечения ленты сходятся в точку на краю v = 0) проекция неоднозначна и даёт v ≈ −3e-5:
+                    // край области по v — сам край ленты (s102 шаг 2, грань прежней фаски). Мутация P3D_SLABVCLAMP=0.
+                    if (SlabVClamp) { if (uv[i].Y < 0 && uv[i].Y > -1e-4) uv[i].Y = 0; else if (uv[i].Y > 1 && uv[i].Y < 1 + 1e-4) uv[i].Y = 1; }
+                }
                 for (int i = 1; i <= K; i++) if (Math.Abs(uv[i].X - uv[i - 1].X) > 0.25 * Math.Max(1e-9, ss.UMax - ss.UMin)) { if (ChainDbg) Console.Error.WriteLine($"SLAB {f.Tag}: u jump on {c.GetType().Name} {uv[i - 1]} → {uv[i]} (u {ss.UMin:G5}..{ss.UMax:G5})"); return null; }   // скачок по u — не та лента
                 brk.Add(uv[0].Y); brk.Add(uv[K].Y);
                 for (int i = 1; i < K; i++)
@@ -1002,9 +1009,17 @@ public static class AnalyticVolume
                         brk.Add(ss.ProjectToUV(c.PointAt((lo + hi) / 2)).Y);
                     }
                 // край по v = const (у ленты — v = 0 или 1 с шумом проекции) горизонтали не пересекает
-                if (uv.Max(q => q.Y) - uv.Min(q => q.Y) <= 1e-9) continue;
+                if (uv.Max(q => q.Y) - uv.Min(q => q.Y) <= 1e-9) { constV.Add(uv[0].Y); continue; }
                 edges.Add(new SlabEdge { C = c, S = sv, Uv = uv });
             }
+            // Я2: конец соседнего ребра у края v = const — на самом краю: вершина проецируется с отходом до 1e-5 по v (точность
+            // вершины, s109 шаг 5: дуга новой ленты кончается на краю прежней фаски при v = 8e-6), и горизонтали в щели
+            // пересекают контур нечётно. Мутация P3D_SLABVCLAMP=0.
+            if (SlabVClamp)
+                foreach (var e in edges)
+                    foreach (int i in new[] { 0, K })
+                        foreach (double lv in constV)
+                            if (Math.Abs(e.Uv[i].Y - lv) < 1e-4 && Math.Abs(e.Uv[i].Y - lv) > 0) { e.Uv[i].Y = lv; brk.Add(lv); }
             brk.Sort();
             // изломы ближе 1e-6 доли — один (концы соседних рёбер в проекции расходятся на 1e-9…1e-7: узлы Гаусса в такой
             // щели не пересекают ни одно из двух рёбер)
@@ -1038,7 +1053,7 @@ public static class AnalyticVolume
                     }
                     us.Add(ss.ProjectToUV(e.C.PointAt(md)).X);
                 }
-            if (us.Count % 2 != 0) { if (ChainDbg) Console.Error.WriteLine($"SLAB {f.Tag}: odd crossings {us.Count} at v {v:G6}"); return null; }
+            if (us.Count % 2 != 0) { if (ChainDbg) Console.Error.WriteLine($"SLAB {f.Tag}: odd crossings {us.Count} at v {v:G6}; edges {string.Join("; ", eds.Select(e => $"{e.C.GetType().Name} v {e.Uv[0].Y:G4}→{e.Uv[^1].Y:G4} [{e.Uv.Min(q => q.Y):G4}, {e.Uv.Max(q => q.Y):G4}] u {e.Uv[0].X:G6}→{e.Uv[^1].X:G6}"))}; breaks {string.Join(" ", vb.Take(6).Select(x => x.ToString("G4")))}"); return null; }
             us.Sort();
             return us;
         }

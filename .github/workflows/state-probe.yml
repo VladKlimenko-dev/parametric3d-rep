@@ -53,8 +53,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: tr4_sec142, cmd: 'sweepsec142', env: '' }
-          - { name: tr4_sec142_m1, cmd: 'sweepsec142', env: 'P3D_SIDEMAJORITY=0' }
+          - { name: r175b_instant, cmd: 'instant', env: '' }
+          - { name: r175b_y2o,     cmd: 'y2o',  env: '' }
+          - { name: r175b_corpus,  cmd: 'loftseq 10 101 6 OUT', env: '' }
+          - { name: r175b_allA,    cmd: 'allA', env: '' }
+          - { name: r175b_allB,    cmd: 'allB', env: '' }
+          - { name: r175b_fix,     cmd: 'loftcorpus140', env: '' }
+          - { name: r175b_mut1,    cmd: 'y2', env: 'P3D_SECNODENAN=0' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

@@ -527,7 +527,8 @@ static partial class Program
         if (mode is "loftcorpus140" or "allB") Krn06LoftCorpusK140Checks();
         if (mode is "y1" or "allB") Krn01SessionEqualsFileChecks();
         if (mode is "y2s" or "allB") KrnY2ChainChamferChecks();
-        if (mode is "y2" or "allA") { KrnY2SectionTableChecks(); KrnY2SectionCreaseFootChecks(); }
+        if (mode is "y2o" or "allB") KrnY2EndOverflowChecks();
+        if (mode is "y2" or "allA") { KrnY2SectionTableChecks(); KrnY2SectionCreaseFootChecks(); KrnY2CreaseOffsetFootChecks(); }
         if (mode is "y2break") KrnY2SectionBreakChecks();   // опыт P3D_SECBREAKNODE=1 (по умолчанию выключен)
         if (mode is "sweepsec142" or "allB") Krn06SweepSectionsK142Checks();
         if (mode is "x05pattern" or "allA") Krn05X05PatternChecks();
