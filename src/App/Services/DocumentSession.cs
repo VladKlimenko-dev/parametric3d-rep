@@ -154,7 +154,7 @@ public sealed class DocumentSession
     /// </summary>
     public static Part ImportPart(string path, List<string> warnings)
     {
-        string text = File.ReadAllText(path);
+        string text = ReadImportText(path, warnings);
         var read = Exchange.Read(text, out _, warnings) ?? throw new InvalidDataException(string.Join("\n", warnings));
         var part = new Part(Path.GetFileNameWithoutExtension(path));
         var imp = new Parametric3D.Model.Features.InsertBodyFeature(Loc.L("Импорт «{0}»", Path.GetFileName(path)))
@@ -180,7 +180,7 @@ public sealed class DocumentSession
     public static List<Part>? ImportComponents(string path, List<string> warnings)
     {
         if (Environment.GetEnvironmentVariable("P3D_IMPORTASM") == "0") return null;
-        string text = File.ReadAllText(path);
+        string text = ReadImportText(path, warnings);
         // k149 (замечание 03.11, 10:32): структура изделий STEP — детали на своих местах (размещения сборки)
         if (Exchange.Guess(text) == Exchange.Format.Step && !(Environment.GetEnvironmentVariable("P3D_STEPPLACE") == "0"))
         {
@@ -275,6 +275,21 @@ public sealed class DocumentSession
         else { double S = Math.Sqrt(1 + m22 - m00 - m11) * 2; qw = (m10 - m01) / S; qx = (m02 + m20) / S; qy = (m12 + m21) / S; qz = 0.25 * S; }
         return OpenTK.Mathematics.Quaternion.Normalize(new OpenTK.Mathematics.Quaternion((float)qx, (float)qy, (float)qz, (float)qw));
     }
+
+    /// <summary>
+    /// k182: текст для импорта: STEP/IGES — как есть; SolidWorks (.sldprt) и Parasolid (.x_b) — переводом тел Parasolid в STEP
+    /// (Kernel.Export.Parasolid). Перевод кэшируется по пути: импорт сначала пробует сборку, потом деталь.
+    /// </summary>
+    static string ReadImportText(string path, List<string> warnings)
+    {
+        if (!Kernel.Export.Parasolid.ParasolidImport.Handles(path)) return File.ReadAllText(path);
+        var stamp = File.GetLastWriteTimeUtc(path);
+        if (_importCache is { } c && c.Path == path && c.Stamp == stamp) return c.Text;
+        var text = Kernel.Export.Parasolid.ParasolidImport.StepTextOf(path, warnings);
+        _importCache = (path, stamp, text);
+        return text;
+    }
+    static (string Path, DateTime Stamp, string Text)? _importCache;
 
     public static DocumentSession Import(string path, List<string> warnings)
     {

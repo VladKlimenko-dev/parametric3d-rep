@@ -399,7 +399,8 @@ public partial class MainWindow : Window
             Title = L("Импорт"),
             FileTypeFilter = new[]
             {
-                new FilePickerFileType("STEP, IGES, STL") { Patterns = new[] { "*.step", "*.stp", "*.iges", "*.igs", "*.stl" } },
+                new FilePickerFileType("STEP, IGES, STL, SolidWorks, Parasolid") { Patterns = new[] { "*.step", "*.stp", "*.iges", "*.igs", "*.stl", "*.sldprt", "*.SLDPRT", "*.x_b" } },
+                new FilePickerFileType("SolidWorks (.sldprt), Parasolid (.x_b)") { Patterns = new[] { "*.sldprt", "*.SLDPRT", "*.x_b" } },
                 new FilePickerFileType("STL") { Patterns = new[] { "*.stl" } },
             },
         });
