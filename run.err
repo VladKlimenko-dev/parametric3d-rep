@@ -1,0 +1,2 @@
+exit 1
+seconds 31 nproc 4 env P3D_ROUGHAREA=0 cmd seqs110
