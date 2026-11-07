@@ -341,11 +341,19 @@ static partial class Program
                     foreach (var x in new[] { ba, bb, res }) AllCDumpFaces(x);
                 };
             p.Limits = new KernelLimits { Deadline = DateTime.UtcNow.AddSeconds(stepSec) };
+            bool prof = Environment.GetEnvironmentVariable("P3D_ALLC_PROF") != "0" && !Parametric3D.Kernel.Diagnostics.Prof.Enabled && set != "R";
+            if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
             var sw = Stopwatch.StartNew();
             try { p.Rebuild(null); }
             catch (Exception e) { r.Error = "exception: " + e.GetType().Name + ": " + e.Message; }
             r.Ms = sw.Elapsed.TotalMilliseconds;
             BooleanOp.GeneralAcceptProbe = null;
+            // медленный шаг (> 3 с) — профиль этапов ядра в отчёт (P3D_ALLC_PROF=0 — без профиля)
+            if (prof)
+            {
+                if (r.Ms > 3000) Console.WriteLine($"ALLCPROF {id} step {k + 1} {op.Name} [{r.Params}] {r.Ms:0} ms\n" + Parametric3D.Kernel.Diagnostics.Prof.Report());
+                Parametric3D.Kernel.Diagnostics.Prof.Enabled = false;
+            }
             p.Limits = KernelLimits.None;
             var added = p.Features.Skip(nf).ToList();
             r.Error ??= added.Select(x => x.Error).FirstOrDefault(x => x != null);
