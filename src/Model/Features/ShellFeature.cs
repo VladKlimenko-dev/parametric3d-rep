@@ -34,6 +34,8 @@ public sealed class ShellFeature : Feature
     public override string Summary =>
         $"Shell {Thickness}" + (OpenFaces.Count > 0 ? $" ({OpenFaces.Count} open)" : "");
 
+    static readonly bool ShellWhyOff = Environment.GetEnvironmentVariable("P3D_SHELLWHY") == "0";
+
     public override void Execute(BuildContext ctx)
     {
         double t = Thickness.Resolve(ctx.Parameters);
@@ -59,6 +61,12 @@ public sealed class ShellFeature : Feature
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Shell: a face thickness must be non-zero and of the same sign as the wall thickness.");
         Kernel.OperationContract.Apply("Shell", ctx.Bodies, b => hollowed = ShellOp.Hollow(b, t, open, ctx.Warnings, ft.Count > 0 ? ft : null));
         if (!hollowed)
+        {
+            // k181: причина, которую может исправить пользователь, — в тексте ошибки (а не только в предупреждениях): стенка толще
+            // радиуса бобышки по окружности (так же отвечают SolidWorks и Creo: «толщина слишком велика»). Мутация P3D_SHELLWHY=0.
+            if (!ShellWhyOff && ctx.Warnings.Any(w => w.StartsWith("Shell") && w.Contains("would shrink to a point")))
+                throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Shell: the wall is thicker than the radius of a round feature — reduce the thickness.");
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Shell: the body could not be hollowed.");
+        }
     }
 }

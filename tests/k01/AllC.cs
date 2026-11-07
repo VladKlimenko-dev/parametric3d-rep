@@ -373,7 +373,7 @@ static partial class Program
             void Fail(string w) { why.Add(w); v = "FAIL"; }
             void Warn(string w) { why.Add(w); if (v == "OK") v = "WARN"; }
             // законный отказ по геометрии (размер больше места) — не дефект ядра: отмечается отдельно
-            string[] legit = { "is wider than the face", "is too thick", "larger than the face" };
+            string[] legit = { "is wider than the face", "is too thick", "larger than the face", "is thicker than the radius" };
             if (r.Error != null && legit.Any(r.Error.Contains)) { why.Add("refused (geometry): " + r.Error); v = "REFUSED"; }
             else if (r.Error != null) Fail("error: " + r.Error);
             else
