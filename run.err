@@ -1,0 +1,8 @@
+computing
+done:  vol 394.78417604357327
+validate: BRep: ok; Mesh: ok
+  face RevolvedSurface base=ArcCurve3 sweep 1.5707963267948966 loops=2
+  face PlaneSurface base= loops=1
+  face PlaneSurface base= loops=1
+  profile curve ArcCurve3 W·planeW=1
+seconds 3 nproc 4 env  cmd sweeparc
