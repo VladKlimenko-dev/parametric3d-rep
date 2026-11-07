@@ -424,7 +424,12 @@ static partial class Program
                 foreach (var (a, bb, cc) in fs.Facets.ReadView) { n += Vector3d.Cross(bb - a, cc - a); c += (a + bb + cc) / 3; m++; }
                 c /= m;
                 double dn = double.NaN; try { dn = Vector3d.Dot(n.Normalized(), f.NormalAt(c)); } catch { }
-                facet = $"facets {m} sum-n ({n.X:0.#},{n.Y:0.#},{n.Z:0.#}) dot(face normal) {dn:0.###}";
+                facet = $"facets {m} sum-n ({n.X:0.#},{n.Y:0.#},{n.Z:0.#}) dot(face normal) {dn:0.###} sense {fs.Sense} lazy {fs.LazySense}";
+                if (fs.DisplaySnapshot is { } ds)
+                {
+                    var dn2 = Vector3d.Zero; foreach (var (a, bb, cc) in ds.Tris) dn2 += Vector3d.Cross(bb - a, cc - a);
+                    facet += $" display {ds.Tris.Count} sum-n ({dn2.X:0.#},{dn2.Y:0.#},{dn2.Z:0.#})";
+                }
             }
             string sn = "-";
             try { var c0 = f.Loops[0].CoEdges[0].Edge.Curve.PointAt(0.5 * (f.Loops[0].CoEdges[0].Edge.Curve.T0 + f.Loops[0].CoEdges[0].Edge.Curve.T1)); var q = src!.NormalAt(src.ProjectToUV(c0)); sn = $"({q.X:0.##},{q.Y:0.##},{q.Z:0.##})"; } catch { }
