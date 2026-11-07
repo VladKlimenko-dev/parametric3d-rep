@@ -1,0 +1,1 @@
+seconds 129 nproc 4 env P3D_STAGES=1 cmd userfile179 tests/k01/data/user_k181_gearcut.p3d
