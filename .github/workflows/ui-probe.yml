@@ -18,10 +18,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: ui178_1, ref: 'kern/guides', names: 'UI-A|UI-B|UI-C|UI-D', env: '' }
-          - { name: ui178_2, ref: 'kern/guides', names: 'UI-E|UI-F|UI-G|UI-H|UI-I|UI-J|UI-K|UI-L', env: '' }
-          - { name: ui178_3, ref: 'kern/guides', names: 'UI-M|UI-N|UI-O|UI-P|UI-Q|UI-R', env: '' }
-          - { name: ui178_4, ref: 'kern/guides', names: 'UI-S|UI-T|UI-U|UI-V|UI-W|UI-X|UI-Y|UI-Z', env: '' }
+          - { name: ui178_g, ref: 'kern/guides', names: 'UI-GHOSTRING-K127|UI-DRAWING-K170|UI-SKETCH-K109', env: '' }
+          - { name: ui_main_k170, ref: 'main', names: 'UI-DRAWING-K170|UI-GHOSTRING-K127', env: '' }
     steps:
       - uses: actions/checkout@v4
         with:

@@ -4278,13 +4278,19 @@ Check("UI-GHOSTRING-K127", () =>
     // кругом, как прежде) того же размера, что точки правимого эскиза, и выбираются наведением. P3D_GHOSTRING=0 — залитые.
     var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "user_k125_tube.p3d"));
     BuildNow(s);
-    var part = s.Part!; var sk = part.Sketches.First(k => k.Name == "Sketch4");
+    // k178: в правке видны только эскизы, стоящие в дереве раньше правимого — эскиз с параллельным соседом выше по дереву
+    // (в этом файле у Sketch4 параллельные соседи — ниже: Sketch5, 6, 8)
+    var part = s.Part!;
+    var sk = part.Sketches.FirstOrDefault(k => k.Name == "Sketch4" && part.Sketches.Any(o => k.IsAfter(o) && o.IsParallelTo(k) && o.Entities.Count > 0))
+             ?? part.Sketches.First(k => part.Sketches.Any(o => k.IsAfter(o) && o.IsParallelTo(k) && o.Entities.Count > 0));
+    Console.WriteLine($"  edited sketch: {sk.Name}");
     var sc = Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions(), part, sk);
     var pts = sc.Points.Where(q => q.Pick != 0 && sc.PickTable[(int)q.Pick].Ref.Kind == PickKind.SketchPoint).ToList();
     var own = pts.Where(q => sc.PickTable[(int)q.Pick].SketchId == sk.Id).ToList();
     var ghost = pts.Where(q => sc.PickTable[(int)q.Pick].SketchId != sk.Id).ToList();
     Console.WriteLine($"  sketch points: own {own.Count} (shapes {string.Join(",", own.Select(q => q.Shape).Distinct())}, px {string.Join(",", own.Select(q => q.Px).Distinct())}), neighbour {ghost.Count} (shapes {string.Join(",", ghost.Select(q => q.Shape).Distinct())}, px {string.Join(",", ghost.Select(q => q.Px).Distinct())})");
-    Require(own.Count > 0 && ghost.Count > 0, "no neighbour sketch points drawn while editing Sketch4");
+    Require(own.Count > 0 && ghost.Count > 0, $"no neighbour sketch points drawn while editing {sk.Name}");
+    Require(ghost.All(q => part.Sketches.FirstOrDefault(o => o.Id == sc.PickTable[(int)q.Pick].SketchId) is not { } o || !o.IsAfter(sk)), "points of a later sketch are drawn");
     Require(ghost.All(q => q.Shape == 4), "neighbour sketch points are not drawn as unfilled rings");
     Require(own.All(q => q.Shape != 4), "points of the edited sketch are drawn as rings");
     Require(ghost.All(q => own.Any(o => o.Shape == 0 && o.Px == q.Px)), "ring size differs from a normal point");
