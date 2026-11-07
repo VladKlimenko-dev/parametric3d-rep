@@ -1,0 +1,2 @@
+exit 1
+seconds 317 nproc 4 env P3D_POLYMEMO=0 cmd guide179
