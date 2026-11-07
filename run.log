@@ -1,0 +1,588 @@
+{"test":"UI-COMMAND-REGISTRY","ok":true,"error":null}
+{"test":"UI-PALETTE-SEARCH","ok":true,"error":null}
+{"test":"UI-UNDO-REDO","ok":true,"error":null}
+{"test":"UI-FILE-ROUNDTRIP","ok":true,"error":null}
+{"test":"UI-IMPORT-STEP","ok":true,"error":null}
+{"test":"UI-IMPORT-ASSEMBLY","ok":true,"error":null}
+{"test":"UI-IMPORT-STEP-PLACEMENT","ok":true,"error":null}
+{"test":"UI-GIZMO-6DOF","ok":true,"error":null}
+{"test":"UI-IMPORT-PART-SHOW","ok":true,"error":null}
+{"test":"UI-TREE-ACTIVE-HOT","ok":true,"error":null}
+{"test":"UI-ASM-BUTTONS","ok":true,"error":null}
+{"test":"UI-ASM-K149C","ok":true,"error":null}
+  ОС: Ubuntu 26.04.1 LTS X64 | Процессор: AMD EPYC 9V45 96-Core Processor; логических ядер: 4 | Память: 15.6 ГБ | .NET: .NET 8.0.33
+{"test":"UI-KERNELTEST-K150","ok":true,"error":null}
+{"test":"UI-ASM-K149D","ok":true,"error":null}
+{"test":"UI-DIALOG-SCROLL","ok":true,"error":null}
+{"test":"UI-ICON-GRAY","ok":true,"error":null}
+{"test":"UI-VIEW-PICK","ok":true,"error":null}
+{"test":"UI-VIEWCUBE-ORIENT","ok":true,"error":null}
+{"test":"UI-THEME-ICONS","ok":true,"error":null}
+{"test":"UI-ICONS-USER-SET","ok":true,"error":null}
+{"test":"UI-TREE-VISIBILITY","ok":true,"error":null}
+{"test":"UI-OPERATION-ROUND","ok":true,"error":null}
+{"test":"UI-SKETCH-EXTRUDE","ok":true,"error":null}
+{"info":"UI-CONSTRAINT-GLYPHS","placements":9,"drawn":9,"loopBuilds":1}
+{"test":"UI-CONSTRAINT-GLYPHS","ok":true,"error":null}
+{"info":"UI-SKETCH-UX","empty":"trim\u2026","twoPoints":["sk.merge_points","con.horizontal","con.vertical","dim.linear","dim.vertical","con.fix","sk.delete"],"twoLines":["sk.fillet","sk.chamfer","con.equal","dim.angle","sk.offset","sk.transform","sk.toggle_construction","sk.trim","con.fix","sk.delete"],"radius":["dim.to_diameter","dim.single_arrow","dim.outside","dim.make_strong","dim.lock_toggle","dim.ref_toggle","dim.link_param","dim.edit_value","dim.delete"]}
+{"test":"UI-SKETCH-UX","ok":true,"error":null}
+{"test":"UI-TOOLBAR-TRAY","ok":true,"error":null}
+  selected 2: XY,YZ
+{"test":"UI-HIDE-TOGGLE","ok":true,"error":null}
+  move: gizmo GizmoSpec { Mode = Move, Origin = (0, 0, 10), X = (1, 0, 0), Y = (0, 1, 0), Z = (0, 0, 1), Mask = 0 }, error , volume 24000.0000
+  move: shift (20, 7, 0), box (0.0000, -8.0000, 0.0000)–(40.0000, 22.0000, 20.0000), gizmo (20.0000, 7.0000, 10.0000)
+  scale X one side: (0.0000, -8.0000, 0.0000)–(60.0000, 22.0000, 20.0000)
+  scale Y both sides: (0.0000, -14.0000, 0.0000)–(60.0000, 28.0000, 20.0000)
+  scale Z keep ratio: (-15.0000, -24.5000, 0.0000)–(75.0000, 38.5000, 30.0000), S (2.25, 2.1, 1.5), volume 170100.0000
+  scale corner: (-60.0000, -56.0000, -15.0000)–(120.0000, 70.0000, 45.0000)
+  rotate Z 90: (5.0000, -13.0000, 0.0000)–(35.0000, 27.0000, 20.0000)
+  then X 90: (5.0000, -3.0000, -10.0000)–(35.0000, 17.0000, 30.0000), axis (0.5774, -0.5774, 0.5774) angle 120
+  local gizmo: X (0.8660, 0.5000, 0.0000) Y (-0.5000, 0.8660, 0.0000) origin (20.0000, 7.0000, 10.0000)
+  global: shift (8.66, 5, 0), gizmo X (1.0000, 0.0000, 0.0000)
+{"test":"UI-FF-GIZMO","ok":true,"error":null}
+  fallback: mode wgl → angle, toast «Сбой видеодрайвера (OpenGL WGL). Со следующего запуска графика — ANGLE (Direct3D 11); перезапустите приложение.»
+{"test":"UI-FRAME-GUARD","ok":true,"error":null}
+  warm-up: 2563 ms, errors 0; code optimized
+{"test":"UI-KERNEL-WARMUP","ok":true,"error":null}
+{"test":"UI-DELETE-FEATURE-SKETCH","ok":true,"error":null}
+  outline: 1 arc(s), 4 line(s); corner (-50, 50, 50); edges LineCurve3 ArcCurve3 LineCurve3 LineCurve3 ProcCurve3
+  generic: arc -> SkArc; line -> SkLine; ellipse -> 16 entities
+{"test":"UI-FACE-OUTLINE-ARCS","ok":true,"error":null}
+{"test":"UI-ROLLBACK-BAR","ok":true,"error":null}
+  flipped: z -20..0 (was 0..20)
+  on XZ: bounds (-20, -20, -50) .. (40, 0, 50)
+{"test":"UI-SKETCH-SETUP","ok":true,"error":null}
+  loft: error , volume 9333.3333 want 9333.3333
+  sweep: error , volume 3926.9908 want 3926.9908
+{"test":"UI-U13-LOFT-SWEEP","ok":true,"error":null}
+  lines: 20.000000 20.000000
+  arc: R 10.000000 sweep 60.0000°
+  trim: [100.000,110.000]
+  ellipse: (700, -1.1150802503578916E-14) 8.000000 3.000000
+  offset: 4 lines, x 902.0000..908.0000
+  area: (87.43362938623454, 1)
+  solve: Underconstrained, entities 49, constraints 78: Coincident 30, Horizontal 7, PointOnEntity 11, Parallel 5, Equal 7, Vertical 8, Tangent 6, MidPoint 1, Perpendicular 1, Symmetric 2; conflicts: 
+{"test":"UI-U13B-SKETCH","ok":true,"error":null}
+  thin: error , volume 1440.000000
+  thin outside: error , volume 1760.000000
+  helical: error , volume 592.176 want 594.048
+  move: x 80.000..100.000 y 0.000..40.000
+  offset face: error , volume 12000.000000
+  new radius: error , volume 7922.743339 want 7922.743339
+  delete round: error , volume 8000.000000
+  points pattern: error , volume 7623.008882
+  curve pattern: error , volume 7497.345175
+  fill pattern: error , volume 6994.690351
+  thread: error , d 4 internal True
+{"test":"UI-U13C-FEATURES","ok":true,"error":null}
+  region: 6 items, kinds Face
+  measure: Вершина: (0; 0; 0) | Вершина: (40; 20; 10) | Расстояние: 45.826 (dX 40, dY 20, dZ 10)
+  comb: 97 lines, spike 2.0000..2.0000
+{"test":"UI-U13D-VIEW-SELECT","ok":true,"error":null}
+  paste: 1, features 3, sketches 3, volume 7874.336294, error 
+  configurations: high 15748.673, no hole 8000.000, base 7874.336
+{"test":"UI-U13D-DOC","ok":true,"error":null}
+  tree info nodes: rollback
+{"test":"UI-U13D-CONTEXT","ok":true,"error":null}
+  coaxial: error , at (10, 10, 10), dir (-0, -0, -1), volume 7717.2567
+  parents of round: Extrude
+  replace sketch: volume 11717.2567
+  radial: error , at (10, 0, 20), dir (-1, -0, -0), removed 250.064 (≈ 251.327)
+  full round: error , volume 7570.7963 want 7570.7963, faces 6
+{"test":"UI-U13E-DATUMS-HOLES","ok":true,"error":null}
+  surface extrude: error , quilts 1, area 200.000000
+  thicken: error , volume 400.000000
+  extend: error , area 623.6068
+  trim: error , area 50.000000
+  thicken fill: error , volume 150.000000
+  surface revolve: error , area 1256.2280
+  thicken cylinder: error , volume 2261.9467 want 2261.9467; parent faces ; 
+  offset copy: error /, area 800.0000, z 15.0000..15.0000
+  replace face: error , volume 12000.000000; 
+  insert body: error , volume 24000.0000
+  boundary blend: error , volume 9333.3333
+  swept blend: error , volume 1628.9669 want 1633.6282
+  rotational blend: error , volume 882.1543 want 883.5729
+{"test":"UI-U13F-SURFACES","ok":true,"error":null}
+  cube placed: centre (-10, -10, 30), constraints 3
+  pin: hub origin (5, 0, 0), shaft origin (5, 0, 0), hub axis (0, 0, 1)
+  bom: Вал x1; Втулка x1; Кубик x3; Основание x1
+  mirror: centre (10, -10, 30) (source (-10, -10, 30)), volume 8000.000
+  reopened: 7 components, fixed 2, constraints 3, joints 1
+{"test":"UI-U13G-ASSEMBLY","ok":true,"error":null}
+  box: error , volume 24000.000000, bodies Тело 1, frozen True
+  cylinder: bodies 2 (Тело 1,Тело 2), volume 36566.370614
+  subtract: bodies 1, volume 17716.814693 want 17716.814693
+  copy + scale: bodies Тело 1,Тело 3, volume 19931.416529
+  split: bodies Тело 1,Тело 1.2,Тело 3, volume 19931.416529
+  mirror + array: bodies 5 (Тело 1,Тело 3,Тело 4,Тело 1 [2],Тело 1 [3]), volume 57579.648
+  fillet on one body: volume 57502.3911, removed 77.2567 want 77.2567, bodies 5
+  push-pull: added 4429.2037 want 4429.2037
+  align: added 4429.2037 want 4429.2037
+  tree: freeform node with 12 steps, icon tree_freeform_ico.svg
+  reopened: freeform True, steps 13, volume 66360.7984, bodies 5
+  undo to mirror: steps 8, bodies 2
+  in freeform: bodies 2 (Исходное тело,Тело 1), volume 68188.790
+  done: bodies 1, volume 67665.191 want 67665.191
+  upstream changed: refs changed True, volume 67665.191
+  update refs: refs changed False, volume 99141.593 want 99141.593
+{"test":"UI-U13H-FREEFORM","ok":true,"error":null}
+  interpolate: control points 5, deviation 3.36E-004
+  rebuild half circle R20 with 8 control points: deviation 5.20E-003
+  offset square: perimeter 96.000000
+  fillet corners: 4, length 76.5661 want 76.5664
+  pipe R3/r2 L50: error , volume 785.3982 want 785.3982
+  pipe along helix (length 378.06): error , volume 1183.218 want 1187.722, bodies 2
+  box: error , bodies Тело 1,Тело 2,Тело 3
+  imprint closed square: error , faces 6 → 7, volume change 0.00E+000
+  imprint open line: error , faces 7 → 8, volume change 0.00E+000
+  isoparm on a cylinder: 97 points, z 0.000..30.000
+{"test":"UI-U13I-CURVES","ok":true,"error":null}
+  ruled: error , quilt area 1264.9111 want 1264.9111, grid 25×2
+  extend: area 1581.1388 want 1581.1388
+  cv edit: error , replaces True, cp00 (0, 0, 5)
+  network: deviation from curves 3.90E-003, from the paraboloid at (10,10) 4.38E-004
+  patch: area 400.000000
+  planar + thicken: volume 800.000000
+  stitch: error , volume added 1000.000000, bodies 2, quilts left 1
+  blend: error , mid (29.99999999999999, 99.99999999999999, 10.000000000000002), normal at the first edge (-4.440892098500856E-16, -1.5987211554602584E-15, -1)
+  replace face by NURBS: error , volume added 810.566 want 810.569
+  reopened: quilts 3 (was 3), volume 10610.5656 (was 10610.5656)
+{"test":"UI-U13J-SURFACES","ok":true,"error":null}
+  box cage: error , body Тело 1, volume L2 8402.81, faces 6, cage 8/6
+  volume L3 7993.87, L4 7894.23
+  all creased: volume 24000.000000
+  extrude: error , cage 12/10, volume 18675.53, bodies 1
+  edge loop: error , cage 16/14, closed True
+  reopened: volume 21417.940 (was 21417.940), cages 1, creases 2
+  to NURBS: error , faces 56 (NURBS 56), open edges 0, volume 20560.45 (subd L5 20737.83), cages 0
+{"test":"UI-U13K-SUBD","ok":true,"error":null}
+  mid plane: (0, -16.66666603088379, -16.66666603088379) n (1, 0, 0)
+  draft: error , volume 1000000.00 -> 973796.11
+  face axis: (-50, -40, 40) dir (1, 0, 0)
+  tangent plane at (-16.66666603088379, -49.99189869233356, 40.4024431911997), distance from axis 10.000000
+  arc centre point (50, -40, 40) (arc centre (50, -40, 40))
+{"test":"UI-U13-DATUMS-DRAFT","ok":true,"error":null}
+{"test":"UI-U13-TREE","ok":true,"error":null}
+{"test":"UI-PARAMETERS-SCOPE","ok":true,"error":null}
+{"test":"UI-LANGUAGE","ok":true,"error":null}
+{"test":"UI-TANGENT-CHAIN-CHAMFER","ok":true,"error":null}
+{"test":"UI-OP-RELEASE","ok":true,"error":null}
+{"test":"UI-SKETCH-K109B","ok":true,"error":null}
+{"test":"UI-SKETCH-K109","ok":true,"error":null}
+{"test":"UI-TREE-K109","ok":true,"error":null}
+  paste: features 17 -> 19, groups G1, G1 (2)
+  mirror: sources 2, error , tree children 2
+  hover: hole 256 segments (0.95, 0.3, 0.3, 1), boss 256 segments (0.25, 0.8, 0.35, 1), after leaving 0
+  hidden plane: outline 4 segments, after a click elsewhere 0
+{"test":"UI-TREE-GROUP-K115","ok":true,"error":null}
+  (2) preview pending: edges 0, vertices 0, picks False, meshes 1; not in preview: edges 1136, picks True
+  (5) tree scroll bar True, content right gap 14
+  (7) branch expanded False -> True, after reopening True
+  (9) cancel: same part True, dirty False, restores 1, sketch restored True, volume 319756.239 vs 319756.239, can undo False (was False)
+  (9) OK without changes: same part True, dirty False, restores 2, can undo False
+{"test":"UI-K116","ok":true,"error":null}
+  (A) open 162 ms: cached True, mesh 409310 verts, consumed sketches 9, shown 0
+  (B) build 5702 ms, allocated 3.54 GB: uv failures 0, seam moves 9, volume 8421325.775, errors 0
+  (B2) rebuild from #10: 1721 ms, applied [9+3], donor faces 35
+  (C) saved dirty, reopened: cached True, verts 65168 vs 65168, volume 8421325.775 vs 8421325.775
+{"test":"UI-SPEED-K125","ok":true,"error":null}
+  edited sketch: Sketch2
+  sketch points: own 21 (shapes 1,0, px 7,5), neighbour 22 (shapes 4, px 5)
+{"test":"UI-GHOSTRING-K127","ok":true,"error":null}
+  (A) view width 1126 px, pan steps 2, moved 77.104, error 0.000004
+  (B) pan steps 0, moved 0
+  (C) shift+scroll: target moved 24.737, distance 343.335 -> 343.335, ortho 216.506 -> 216.506
+      scroll: distance 343.335 -> 306.549, ortho 216.506 -> 216.506
+{"test":"UI-TOUCHPAN-K127","ok":true,"error":null}
+  (A) shown 1121 ms, checked 4789 ms (verify 3569 ms): verifies 1, lazy faces 279, filled before show 59, deferred partition checks 59, pending False, volume 8421325.775
+      eager rebuild: volume 8421325.775, faces 35 vs 35
+  (B) grid regions 372, straight darts 3758, cuts skipped by box 60328, tight trace balls 1128, cone certificates 4, classifier box skips 320314, boundary samples skipped 560, closest-param memo hits 8451, draft pick skips 56, edge-event memo hits 12539, face boundary indexes 375
+  (C) verification seen True, cancelled 1, dirty False, pending False, volume 8421325.775
+{"test":"UI-SPEED-K126","ok":true,"error":null}
+  model view groups: Тема цветов | Пол | Сетка пола | Свет 1 (основной) | Свет 2 (заполняющий) | Рассеянный свет (Ambient) | Опорные плоскости | Модель | Куб вида
+  live: cube 150 → 200, floor gap 0 → 7, applied 15
+  drag on the arrows: gap 7 → 17 while dragging, renderer 17
+  after cancel: cube 150, floor gap 0
+  section drag: offset 0 → 5, plane moved True; angle A 0 → -4
+{"test":"UI-SCRUB-LIVE-K139","ok":true,"error":null}
+  row at 172.5, 442, hit Grid ctx Blend, window 1400, 860
+  double click «Blend»: operation LoftOp; last press: clicks 2 at 170.5, 204 ctx Blend
+  loft tips: guides True, smooth True, normal toggle True
+  curve: rename True, delete True ()
+  curve edit: CurveOp target Curve1
+  curve through points: sketch points shown True (ids 103336; visible Sketch1:False:103264,Sketch2:False:103292,Sketch3:True:103336; active Точки по порядку filter Vertices, SketchPoints, Datums), picks accumulate True
+{"test":"UI-BLEND-CURVE-TREE-K137","ok":true,"error":null}
+  features 12, skip warm-up True, stopped True
+{"test":"UI-OPEN-WARMUP-YIELDS-K136","ok":true,"error":null}
+  floor H: default (52.399998, 26.199999), size 0 (20, 10), size 100 (200, 100), circle (22.36068, 22.36068), square (20, 20)
+  grid: mm (10, 10), inch (25.4, 5), theme (10, 10); px 0 0.1 100 2
+  after opening a document: gap 7, shape Ellipse, grid False
+  settings in EN: 156 texts, untranslated 0: 
+  settings in RU: 156 texts, untranslated 0: 
+{"test":"UI-FLOOR-SETTINGS-K133","ok":true,"error":null}
+  sections 8; model rows visible 27/27, other visible 0
+  search 'Цвета для темы': 4 rows
+  sketch color: light shown '', dark shown back '#AA0000', synced combos 4/4
+  after OK: look gap 5, sketch dark #AA0000 light #00AA00; theme gap 5, light1 (-0.45, 0.9, 0.62), outline False, numeric boxes 40
+  planes 3, outline lines 0
+  cube 220, home 5.866666666666666, 5.866666666666666, 35.199999999999996, 35.199999999999996
+  tree icon 22, props width 360
+  floor: (-3, (10, -3, 5), (26, 13))
+{"test":"UI-MODELVIEW-K132","ok":true,"error":null}
+  features 3, stage 2, children: Origin, XY, XZ, YZ, Sketch1, Revolve, Sketch2, Extrude, Circular pattern, Axis1
+  (A) method 2 (Пересечение двух плоскостей), refs 2, axis (1, 0, 0)
+  (B) new axis slot 2 (stage 2); children: Origin, XY, XZ, YZ, Sketch1, Revolve, Sketch2, Extrude, Ось2, Circular pattern, Axis1
+  (E) edit: AxisOp, method 2, refs 2
+  (C) bar to Axis1: stage -1, effective 3 of 3
+  (D) drag: drop line shown True, target 3, after release stage -1 (effective 3)
+  (F) light theme: tree icons 11, stale 0; widths 16,9,14
+{"test":"UI-DATUM-TREE-K132","ok":true,"error":null}
+  (A) silhouettes 4 → 4, worst world shift 0; plane V (1, 0, 0)
+  (B) setup on an empty new sketch: operation SketchSetupOp, sketch kept True
+  (B) after setup: in sketch True, same True
+{"test":"UI-SKETCH-ROLL-SETUP-K131","ok":true,"error":null}
+  horizontal 30, vertical 20
+  horizontal → 45: ok True, dx 45, dy 20
+  vertical dimension line (128.29,10)-(128.29,30)
+  diagonal dimension menu: Сделать слабым | Заблокировать | Сделать справочным | Сделать горизонтальным | Сделать вертикальным
+  made vertical: type DistanceVertical, value 15, geometry moved 0
+{"test":"UI-SKETCH-AXISDIM-K130","ok":true,"error":null}
+  entering the sketch: sketch on screen x 132..994, y 93..610 of 1126x703, inside True, fill 76 %
+  fit all in the sketch: sketch on screen x 130..996, y 92..611 of 1126x703, inside True, fill 77 %
+{"test":"UI-SKETCH-FIT-K130","ok":true,"error":null}
+  hover at point A: SketchPoint ; screen 765.2410250902176, 564.1421038508415
+  selected 3: SketchPoint, SketchPoint, SketchCurve; point A True, point B True, line True; geometry moved 0
+  glyph Horizontal at screen 611.9038065075874, 648.4623002409935, glyph hit SketchConstraint, hover SketchConstraint, view 1126x703
+  click on a Horizontal glyph: selected SketchConstraint
+  coincident glyph 9.6 px from its point
+{"test":"UI-SKETCH-PICK-K130","ok":true,"error":null}
+  (A) panel «2/2» kind 1: 25.4 (want 25.4)
+  (A) panel «10mm» kind 1: 10 (want 10)
+  (A) panel «1in+5mm» kind 1: 30.4 (want 30.4)
+  (A) panel «45/2» kind 2: 22.5 (want 22.5)
+  (A) panel «90deg/3» kind 2: 30 (want 30)
+  (A) panel «6/2» kind 3: 3 (want 3)
+  (A) rebuild «2/2»: depth 25.4 mm, volume/area 25.4
+  (B) «2»: 50.8 mm
+  (B) «10 mm»: 10 mm
+  (B) «1.5*2»: 76.2 mm
+  (B) «4.5in»: 114.3 mm
+{"test":"UI-UNITS-INPUT-K128","ok":true,"error":null}
+  (A) 30°: corner (-232.3,0) r 272, arc meets the segment line at (3.22,135.99), segment mid (3.18,135.96)
+      20°: corner (-372.2,0) r 399.6, arc meets the segment line at (3.22,136.66), segment mid (3.18,136.64); value 20
+  (C) «12.625/2»: value 160.3375 mm, formula 12.625/2, after recalculation 160.3375 mm, line at y 160.3375
+  (B) 30 drag steps: bad 0, worst dimension error 0, worst move of other points 0, end x 645.018
+  (D) drags 120 (×10 steps): broken steps 0, jumps 0, steps undone 0
+  (E) point put across the line: solved to x 6.35, status Underconstrained
+  (F) old-style drags: broken steps 0, undone 67
+{"test":"UI-SKETCH-GCS-K128","ok":true,"error":null}
+  (A) loaded: Underconstrained, horizontal at y 131.685 (strong 131.685), length 67.315
+  (B) distance to the axis 5.18 in: ok True None; residual 0.0E+000, dim error 0.0E+000, shortest 20
+  (B) horizontal length 2.12 in: ok True None; residual 0.0E+000, dim error 0.0E+000, shortest 20
+  (B) vertical length 0.75 in: ok True None; residual 0.0E+000, dim error 0.0E+000, shortest 19.05
+  (B) angle to the axis 30°: ok True None; residual 2.2E-020, dim error 3.6E-015, shortest 19.05
+  (B) slanted length 2.71 in: ok True None; residual 1.9E-020, dim error 7.1E-015, shortest 19.05
+  (B) vertical to the horizontal line: ok False, participants Horizontal, moved 0.0E+000
+  (C) angle 26.57, direction (0.8944271909999159, 0.4472135954999579) -> (0.8944271909999159, 0.4472135954999579)
+  (C) old file: Underconstrained, axis angle 155.94 (shown 24.06), geometry moved 0.0E+000
+  (D) random sketches: accepted 933, rejected 297 (without participants 0), bad 0; collapse held 0, rejected 2
+{"test":"UI-SKETCH-DIMS-K124","ok":true,"error":null}
+  angle to the axis: value 26.57, label 26.57°, supplement False; extensions (150,20)-(126.9,8.4)
+  after 30°: value 30, label 30.00°, line angle 30°
+  undo depth 4 -> 5
+  roll: vertical→horizontal True, horizontal→vertical True, world moved 0.0E+000, status Underconstrained, view up · V 0.816
+  undo: depth 5, plane U (0, 1, 0) (was (0, 1, 0)), vertical on line True
+  resolve table: AngleLineLine 155.94
+  after delete: vertical True, line dir (0,-14.215)
+{"test":"UI-SKETCH-K123","ok":true,"error":null}
+  convert: asked 2, units in, volume 120000 -> 120000, dim 100 mm formula '', label 3.94, params w 25.4 in, h Real 50.8 in; dims 1, feature values 2, parameters 2, formulas dropped 2, points 0, scale 1
+  keep numbers: volume 120000 -> 1966447680 (×16387.1), depth 508 mm; dims 1, feature values 2, parameters 2, formulas dropped 2, points 4, scale 25.4
+{"test":"UI-UNITS-K123","ok":true,"error":null}
+  opened: 22 features, states 22, first build [0+22]
+  rollback to 11: [11+0], back to the end: [22+0], volume 312838.969
+  sketch of #18: [18+4], volume 312838.969 -> 312838.969
+  feature #18 depth: applied [18+1] [18+4], volume 312838.969 -> 312963.277
+  undo [22+0] volume 312838.969; redo [22+0] volume 312963.277
+  full rebuild: [0+22], volume 312963.277, faces 48 vs 48
+{"test":"UI-INCR-K122","ok":true,"error":null}
+  tooltips checked 22 × 3 widths, cut or wrapped: 0
+{"test":"UI-TOOLTIP-K121","ok":true,"error":null}
+  open: RanToCompletion , part real5 features 17
+  stages: Обработка… → Загрузка «p3d_k121p_bf2e9e7765 → Обработка: 0 из 18 → Обработка: 2 из 18 → Обработка: 4 из 18 → Проверка детали… → Отображение…; processing samples 3, percent 0…22
+{"test":"UI-PROGRESS-K121","ok":true,"error":null}
+  before: Plate,Hole1,Hole2,Hole3,Hole4,Hole5,Pocket6,Boss7,Round8,Round9,Boss10,Chamfer11
+  after:  Plate,Hole2,Hole3,Hole4,Hole1,Hole5,Pocket6,Boss7,Round8,Round9,Boss10,Chamfer11; members at 4,5,6; volume 317324.765 -> 317324.765
+  undo: Plate,Hole1,Hole2,Hole3,Hole4,Hole5,Pocket6,Boss7,Round8,Round9,Boss10,Chamfer11
+  shape-changing group: order Block,Pocket,Boss,Hole, groups -,-,-,-, volume 116934.071 -> 116934.071
+{"test":"UI-GROUP-REAL-K121","ok":true,"error":null}
+  tree info nodes: none
+  part panel on tree click: prop_Имя, prop_Номер детали, prop_material, prop_units, prop_units_new, prop_Допуски
+  custom system: Лаборатория (cm, kg); size row: 10 × 6 × 2 см
+  English panel, Russian texts: none
+  reopened: Корпус, PN-120, Сталь 45, Лаборатория cm/kg, ISO 2768-mK
+{"test":"UI-PART-PANEL-K120","ok":true,"error":null}
+  region of 136 items: changed 1 time(s), 470 ms, rows 136
+  hover row 275099: view highlight 275099
+  Group button: two features True, one feature False
+{"test":"UI-SELECTION-K120","ok":true,"error":null}
+  settings: language index 1, sliders 27, numeric boxes 40, units row False
+  after OK: language en, English True
+  tree bar: tree.rebuild, tree.needs_attention, tree.resume, tree.insert_here, tree.reorder_up, tree.reorder_down, tree.edit_dims, tree.group, tree.parents_children, tree.replace_refs; title: tree_filter, tree_collapse, tree_expand
+  text buttons 3, cut: none
+{"test":"UI-PANELS-K120","ok":true,"error":null}
+  measure: Замер 1 = 20, in tree True
+  drawn 1, label at 578.0000302791595, 370.4807608127594
+  drag: offset 6.276 -> 1.546, modified True, selection 2
+  reopened: 20, offset 1.546, stale False
+{"test":"UI-MEASURE-K120","ok":true,"error":null}
+  exact: точное тело: граней 106 (плоскостей 6, цилиндров 100, конусов 0, сфер 0, торов 0); рёбра: прямых 12, окружностей 400, эллипсов 0, ломаных 0; выравниваний 200; 3699 мс; faces 106 (source 106), volume 7748672.588 vs 7748672.588, error 
+  flat: тело из плоских граней: граней 4806 (плоскостей 4806, цилиндров 0, конусов 0, сфер 0, торов 0); рёбра: прямых 14412, окружностей 0, эллипсов 0, ломаных 0; выравниваний 0; 3084 мс; faces 4806
+{"test":"UI-STL-IMPORT-K119","ok":true,"error":null}
+  ctrl: tree 2, view 2
+  shift: tree 5, view 5
+{"test":"UI-TREE-MULTI-K118","ok":true,"error":null}
+  features before the plane: 1 → after reopening 1
+{"test":"UI-DATUM-ORDER-K118","ok":true,"error":null}
+  reopened: offset 7, angle A 15
+{"test":"UI-SECTION-MEMORY-K118","ok":true,"error":null}
+  hover: highlighted 1 of 1, row background #26808080
+  glyphs drawn 4, with background 0
+{"test":"UI-SKETCH-REFS-K118","ok":true,"error":null}
+  filter «s"PK"»: 1 of 3
+  hover row s"PK".d0: peek d0, segments 119
+{"test":"UI-PARAMS-K118","ok":true,"error":null}
+  property fields: prop_Имя, prop_Номер детали, prop_material, prop_units, prop_units_new, prop_Допуски
+  PA depends on: PB (y), Узел (z)
+{"test":"UI-PART-PROPS-K118","ok":true,"error":null}
+  preloaded 261 of 437
+  switch: live swaps 11434, 12.5 ms
+{"test":"UI-ICON-THEME-K118","ok":true,"error":null}
+  editing: plane 35, sketch 35
+  cancelled: plane 20, sketch 20
+  after reopening: method 0, base XY, plane 50, sketch 50
+{"test":"UI-PLANE-EDIT-K116","ok":true,"error":null}
+  opened: cached True, dirty True, bodies 0, scene vertices 5646, face picks False, bounds 191.3
+  built: cached False, bodies 1, volume 319756.239 vs 319756.239
+{"test":"UI-FILE-DISPLAY-K114","ok":true,"error":null}
+  pocket preview: part compute median 0.5 ms (max 0.7), scene median 0.0 ms; instant 9, volume 983500 (before 1000000)
+  scheduled refine: started 1, instant False
+  refined: instant False, volume 983500 (instant 983500), error 
+  cancel: cancelled 1, instant True, depth 21
+{"test":"UI-PREVIEW-K113","ok":true,"error":null}
+  draft: error , hinge True, moving True, 90 -> 87; info «Угол к соседней грани: 90° → 87°»
+  after handle: angle 6, applied 6, error 
+{"test":"UI-DRAFT-K112","ok":true,"error":null}
+{"test":"UI-SWEEP-K107","ok":true,"error":null}
+{"test":"UI-SKETCH-K106","ok":true,"error":null}
+{"test":"UI-SKETCH-K105","ok":true,"error":null}
+{"test":"UI-REORDER-K104","ok":true,"error":null}
+{"test":"UI-K103","ok":true,"error":null}
+{"test":"UI-PARAMS-K102","ok":true,"error":null}
+{"test":"UI-SKETCH-K101","ok":true,"error":null}
+{"test":"UI-SECTION-K99","ok":true,"error":null}
+{"test":"UI-SKETCH-K98","ok":true,"error":null}
+{"test":"UI-SKETCH-K97","ok":true,"error":null}
+{"test":"UI-SKETCH-K96","ok":true,"error":null}
+{"test":"UI-SKETCH-REFERENCES-DIMS","ok":true,"error":null}
+{"test":"UI-CANCEL-KEEPS-PART","ok":true,"error":null}
+{"test":"UI-CTRL-TOGGLE","ok":true,"error":null}
+{"test":"UI-HANDLE-CONTOUR","ok":true,"error":null}
+  preview tris 74, final tris 80
+{"test":"UI-HANDLE-LIVE","ok":true,"error":null}
+  cold: preview 1112 ms, exact after commit 444 ms
+  warm: preview 408 ms, exact after commit 880 ms
+{"test":"UI-OP-PREVIEW-FAST","ok":true,"error":null}
+  rebuild: preview 1437 ms (volume 54943.8), exact after commit 689 ms (volume 55000.8, removed 158.4), face meshing 0 ms
+  face meshing: failed faces 0, early exits 0
+  cutter: preview 1263 ms (volume 54881.7), exact after commit 3247 ms (volume 55002, removed 157.2), face meshing 118 ms
+{"test":"UI-ROUND-RIM-BALL","ok":true,"error":null}
+  preview 618 ms (volume 55274.8), exact after commit 666 ms (added 152.748), faces 4
+{"test":"UI-ROUND-CAP-SPHERE","ok":true,"error":null}
+  union 722 ms (eager caps: 879 ms), volume 11047.483, faces 8, display tris 22740
+{"test":"UI-POLY-FAST","ok":true,"error":null}
+  torus tris 7584, cyl ∪ cyl tris 8016
+{"test":"UI-MESH-FAST","ok":true,"error":null}
+  preview 154 ms (volume 11047.48), exact 54 ms (volume 11047.48)
+{"test":"UI-PREVIEW-MESHBOOL","ok":true,"error":null}
+  before=True: features +1, points 1, error , dir (-0, -0, -1), volume 1000000 -> 999436
+  before=False: features +1, points 1, error , dir (-0, -0, -1), volume 1000000 -> 999436
+{"test":"UI-HOLE-ON-FACE","ok":true,"error":null}
+  shell volumes: inward 5 mm 230500, outward 3 mm 157308
+{"test":"UI-SHELL-HANDLE","ok":true,"error":null}
+  variable round 10→20 on line–arc–line: 636 ms, faces 11
+  variable chamfer 10→20 on line–arc–line: 130 ms, faces 10
+{"test":"UI-VAR-CHAIN","ok":true,"error":null}
+  shell 2 (open round True): volume 109879.7 of 991415.9; Shell: wall 2, 1 face(s) left open.
+  shell 2 (open round False): volume 113354.9 of 991415.9; Shell: wall 2, cavity by offsetting all faces (exact).
+{"test":"UI-SHELL-OPEN-ROUND","ok":true,"error":null}
+  seams: 2 (the two lines along the round)
+{"test":"UI-SEAM-EDGES","ok":true,"error":null}
+  inner round R60 after shell: vertices beyond the R80 wall 0
+  inner chamfer 40 after shell: vertices beyond the R80 wall 0
+{"test":"UI-SHELL-INNER-BLEND","ok":true,"error":null}
+  outward shell -3.66: Shell: wall 3.66 outward, by offsetting all faces (exact).
+  outward shell -8: Shell: wall 8 outward, by offsetting all faces (exact).
+  outward shell -16: Shell: wall 16 outward, by offsetting all faces (exact).
+{"test":"UI-SHELL-OUT-CONE","ok":true,"error":null}
+  shell 5.31 over R4: wall 237632.7314, sharp wall 238279.2689 − removed 646.5375 = 237632.7314
+  shell 8 over R4: wall 342894.6998, sharp wall 343541.2367 − removed 646.5375 = 342894.6992
+{"test":"UI-SHELL-SHARPEN","ok":true,"error":null}
+  outward 2.82 at a tangent open face: volume 147686.2526, formula 147686.2526
+{"test":"UI-SHELL-OUT-TANGENT","ok":true,"error":null}
+  shell 5, open bottom (one tangent edge): volume 233011.6137, formula 233011.6137; Shell: wall 5, cavity by offsetting all faces and extending it through the open face(s) (exact).
+{"test":"UI-SHELL-OPEN-MIXED","ok":true,"error":null}
+  mirror of a round: 15 ms, volume 982831.853 (want 982831.853)
+{"test":"UI-MIRROR-OPS","ok":true,"error":null}
+  pattern of a cut (step 15): 10 ms, volume 975973.446 (want 975973.446), bodies 1
+  pattern of a cut (step 5): 110 ms, volume 977201.807, bodies 1
+{"test":"UI-PATTERN-OPS","ok":true,"error":null}
+  open round R2.1: 72 ms, cylinder faces 1, volume 315690.487707
+{"test":"UI-OPEN-CYL","ok":true,"error":null}
+{"test":"UI-STATUS-DETAILS","ok":true,"error":null}
+{"test":"UI-HELIX-EDIT","ok":true,"error":null}
+  open 7 ms: restored True, dirty False, bodies 1, volume 316458.127 vs 316458.127, rejected 0
+  after edit: restored False, volume 316458.127, errors 0
+{"test":"UI-BREP-OPEN-K153","ok":true,"error":null}
+  closed during the build: cancelled 1, old build ended in 254 ms, old part dirty True, new building False, progress —
+{"test":"UI-CLOSE-CANCEL-K153","ok":true,"error":null}
+  plane during drag: 20 → 37
+{"test":"UI-SKBAR-PLANE-K153","ok":true,"error":null}
+  drill point: volume 17.026 less (cone 16.989)
+  gizmo moved 11.18 (want 11.18), error ; p0 (0, 0, 20) now (-5, 10, 20) gizmo (0, 0, 20) x (0, 1, 0) y (-1, 0, 0)
+  edge ref: D1 55 vs 55
+  distance 15 → hole at (35, 10, 20), error 
+  radial: face #93b3a71e23/extrude[0]:side[0.0], end #93b3a71e23/extrude[0]:bottom, axial 33.333, angle 52.394, error 
+  radial after gizmo: axial 40.333, angle 82.394, error 
+{"test":"UI-HOLE-K153","ok":true,"error":null}
+  angle text «63,43°» angle 0, crossed False, shelf True
+  angle arrows outside: arc pieces between the sides 0
+  radius text inside: offset -4.9, arrows 0
+  diameter outside: along the line -11…19.75 (r 5), through the centre False
+{"test":"UI-DRAWING-K171","ok":true,"error":null}
+{"test":"UI-SKETCH-K171","ok":true,"error":null}
+  dialog fields x 173,173,173,173,173,173,173,173 w 300,300,300,300,300,300,300,300; model row x 173 w 300; preview x 502 (fields end 473)
+  cube at (199.31980515339464, 172.15934284052062) -> (199.31980515339464, 172.15934284052062); iso box (135.68019484660536, 119.84065715947938, 199.31980515339464, 172.15934284052062) -> (118.13541751172878, 102.21272045689136, 216.86458248827122, 189.78727954310864)
+  front: up (0, 1, 0); CW: up (-1, 0, 0), toward (0, -0, 1)
+  tolerances: main y 181.159, upper y 184.459, lower y 181.159 «−0,2» drawn «-0,2»
+  title field focused after a drawing change: True, panel rebuild postponed True
+  «Язык чертежа» ends at 997, the combo starts at 1021
+  long label 174 wide: box at 141, short row box at 141
+{"test":"UI-DRAWING-K170","ok":false,"error":"long labels push the fields right, all rows aligned"}
+  templates 4, base «ISO mm/kg/s A3 LS» -> «ЕСКД in/lb/s A4 PT», preview True
+  drawing: A4 PT, units in
+  sheet 2 field: 2
+  tabs: dr_sheet_tab_1, dr_sheet_tab_2, dr_sheet_tab_add
+  reopened: sheets 3, formats A4,A4,A3
+{"test":"UI-DRAWING-K169","ok":true,"error":null}
+  open 0 ms: note Restored , restored True, dirty False, bodies 1, cached False
+  after 3 s: dirty False, building False, verifying False, same bodies True, features with errors 0
+{"test":"UI-OPEN-STORED-K178","ok":true,"error":null}
+  open: note Restored, restored True, dirty False, quilts 1, area 200.000000
+  after 2 s: restored True, dirty False, quilt key True, area 200.000000
+  edit depth 15: area 300.000000
+{"test":"UI-OPEN-QUILT-K178","ok":true,"error":null}
+  opened: restored True, volume 120000.0; refreshed 1, volume 60000.0, source a.p3d
+{"test":"UI-ASM-LINK-K178","ok":true,"error":null}
+  edit S1, over S2 curve: SketchCurve S1
+  curve at stage 0: Кривая1 slot 0 of 1
+{"test":"UI-LATER-K178","ok":true,"error":null}
+  fill: triangles 2/2, computed 1, reused 1, overlay lines 555
+  pasted: S1,F (2),F, slot 0 of 1, seq True
+{"test":"UI-SKETCH-FILL-K179","ok":true,"error":null}
+  points 2, faces at vertex 3, at sketch point 1, from sketch -S
+  vertex: face 885854 normal (1, 0, 0)
+  tangents: start (0, 0, -0.9999999999999999), end (0, 0, 0.9999999999999999)
+  edit: surface enabled True checked True
+  old curve: specs 2, sketch True on True, toggle enabled True
+{"test":"UI-CURVE-TANGENTS-K177","ok":true,"error":null}
+  gear: z 18 m 4.969 items 218, selected 1
+  panel: ШЕСТЕРНЯ | prop_Профиль зуба, prop_Венец, prop_Число зубьев, prop_Модуль, prop_Диаметральный шаг, prop_Окружной шаг, prop_Делительный диаметр, prop_Угол профиля, °, prop_Смещение x, prop_Высота головки h*a, prop_Радиальный зазор c*, prop_Переходная кривая ρ*f, prop_Скругление вершины ρ*a, prop_Боковой зазор, prop_Центр X, prop_Центр Y, prop_Поворот, °, prop_Допуск профиля, prop_Делительная окружность
+{"test":"UI-SKETCH-GEAR-K176","ok":true,"error":null}
+  cube face +Z: toward (0, 0, 1)
+  table 6x4
+  row menu: Добавить строку выше | Добавить строку ниже | Копировать строку | Вставить строку из буфера | Удалить строку
+  table at 255,292 snap tr (frame corner 255,292)
+  after standard change: table 250,287, frame corner 250,287
+  en: Rev. True, Description True, Drawn True
+{"test":"UI-DRAWING-K168","ok":true,"error":null}
+  stacked: up 2.5@276.53, lo 2.5@273.23
+  equal: 160 ±0,1 h 3.5
+  panel: headers True/True, tol boxes 27, text boxes 0
+  title field after edit: АБВГ.123, attached True
+  auto dims on the top view: others 26 -> 26, top 1
+  centre lines: iso False, front True, toggle False
+  status: Размер 160 (Главный (спереди))
+  section: background True, progress 0, status «Строится вид: А-А…», lines 15
+{"test":"UI-DRAWING-K167","ok":true,"error":null}
+  hover: линия
+  selected 2
+  from the selection: al 53.666
+  chain: al 26.833, al 26.833
+{"test":"UI-DRAWING-K166","ok":true,"error":null}
+  parallel lines: al 53.666 (want 53.666), along the edge 0
+  point and line: v 40
+  auto1: ang 63.435° at (0,0), text 63,43°
+  ang1: ang 63.435° at (0,0), text 63,43°
+  centre label moved 5, 5
+  iso moved 24,8; note moved 24,8
+{"test":"UI-DRAWING-K165","ok":true,"error":null}
+  near the centre: центр окружности, highlight 74 segments, status: Размер: первая точка — центр окружности
+  centre-to-centre: al 48.574 from (25.686,25.549) to (58.14,-10.591)
+  near the centre line: осевая линия at (30.781,25.549)
+  centre numbers 2, check box True
+{"test":"UI-DRAWING-K164","ok":true,"error":null}
+  check: 0 of 50 before dimensions
+  missing shown: overlay groups 3
+  after auto + model (0): 5 of 50
+{"test":"UI-DRAWING-CHECK-K163","ok":true,"error":null}
+  main props: 300 -> 380, saved 380
+  sheet props: 340 -> 280
+{"test":"UI-PANEL-RESIZE-K162","ok":true,"error":null}
+  view names: match the model window
+  snap: top.X 259.32 front.X 259.32, guides 2
+  iso dir after rotation: v:0.30524794621510043,0,0.9522729080108617;-0.476136284278352,0.8660255066876618,0.15262391870209374
+  dim drag 106.2 ms/step, others unchanged True
+  iso rotate step 3.17 ms
+  datum target -2.28 -> -22.28
+{"test":"UI-DRAWING-K161","ok":true,"error":null}
+  sections: mode Sections, volume 2613.33, error 
+  trajectory: mode Swept, path True, volume 2613.33, error 
+{"test":"UI-BLEND-K160","ok":true,"error":null}
+  swept blend: path field took the curve True, path line True, error 
+  sweep as drawn True: x 29.98…40.02, error 
+  after gizmo: offset X 5, x 34.98…45.02
+{"test":"UI-SWEEP-K153","ok":true,"error":null}
+  sketch edit during the build: cancelled 1, rolled-back part ready in 610 ms, stage 0, bodies 0
+{"test":"UI-SKETCH-ROLLBACK-CANCEL-K153","ok":true,"error":null}
+  tools: get_document, list_features, get_feature, set_feature_value, suppress_feature, get_parameters, set_parameter, rebuild, get_mass_properties, capture_view, undo, redo, open_document, save_document, export
+  set_feature_value: Plate.Side1.Distance = 25. part 'real3': 1 body(ies), volume 396156.206277 mm³, built in 0.7 s; no feature errors.
+  bridge: 3 replies; last {"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"{\n  \u0022name\u0022: \u0022mcp\u0022,\n  \u0022fil
+{"test":"UI-MCP-K154","ok":true,"error":null}
+  tiles 6
+  dims: auto 27, picked h 160
+  views front,top,left,iso,А-А,Б; hatch-capable 344
+  assembly: bodies 2, balloons 1,2
+  open note: В файле нет тела детали (записан до k153 или во время расчёта): показана сохранённая сетка, идёт перестроение. Сохраните файл после расчёта — следующее открытие будет без перестроения.
+  save toast: Сохранено без тела детали: деталь ещё перестраивается — сохраните после окончания расчёта. Следующее открытие — с перестроением.
+  after build: Расчёт закончен. Сохраните файл (Ctrl+S) — следующее открытие будет без перестроения.
+{"test":"UI-DRAWING-K156","ok":true,"error":null}
+  aux А toward (0, 1, 0)
+  break clicks on: front, front; boxes front:219,198,299,248 top:219,135,299,147 left:161,198,174,248 iso:136,104,199,178 А:324,224,404,236
+  break [-24, 24] width 80 -> 64
+{"test":"UI-DRAWING-K158","ok":true,"error":null}
+  sections: Чертёж, Виды, Лист, Поля основной надписи
+  hover: Parametric3D.Model.Drawing.DrawingView front, overlay 1, at view front
+  view drag: 16.3 ms per step, frame 1 ms
+  toggle: front 279.3 -> 279.3; top (259.3,141) -> (259.3,141)
+  scale 0.5 -> 0.4, width 80 -> 64
+  dimension moved 267.23 -> 262.23
+  reopened front (279.3,223.2) vs (279.3,223.2)
+{"test":"UI-DRAWING-K159","ok":true,"error":null}
+  pdf 24862 bytes
+  bom: 1 АБВГ.100.002 Кубик x3 | 2 АБВГ.100.001 Основание x1
+{"test":"UI-SHEET-K155","ok":true,"error":null}
+  views 4, thick 74, hidden 38, scale 1:2
+  reopened: thick 74
+{"test":"UI-DRAWING-K155","ok":true,"error":null}
+{"passed":165,"failed":1}
