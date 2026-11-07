@@ -1266,8 +1266,9 @@ public static class AnalyticVolume
     static double? NurbsDomainIntegral(TFace f, NurbsSurface ns, bool area)
     {
         var o = _origin;
-        double Integrate(int sub)
+        double Integrate(int sub, double[]? xu = null, double[]? wu = null, double[]? xv = null, double[]? wv = null)
         {
+            xu ??= GL8X; wu ??= GL8W; xv ??= GL8X; wv ??= GL8W;
             var ku = ns.KnotsU.Distinct().OrderBy(x => x).ToList(); var kv = ns.KnotsV.Distinct().OrderBy(x => x).ToList();
             double sum = 0;
             for (int i = 0; i + 1 < ku.Count; i++)
@@ -1278,13 +1279,13 @@ public static class AnalyticVolume
                         for (int sj = 0; sj < sub; sj++)
                         {
                             double b0 = kv[j] + (kv[j + 1] - kv[j]) * sj / sub, b1 = kv[j] + (kv[j + 1] - kv[j]) * (sj + 1) / sub, mb = (b0 + b1) / 2, rb = (b1 - b0) / 2;
-                            for (int gi = 0; gi < GL8X.Length; gi++)
-                                for (int gj = 0; gj < GL8X.Length; gj++)
+                            for (int gi = 0; gi < xu.Length; gi++)
+                                for (int gj = 0; gj < xv.Length; gj++)
                                 {
-                                    ns.Derivs(new Vector2d(ma + ra * GL8X[gi], mb + rb * GL8X[gj]), out var S, out var Su, out var Sv);
+                                    ns.Derivs(new Vector2d(ma + ra * xu[gi], mb + rb * xv[gj]), out var S, out var Su, out var Sv);
                                     var n = Vector3d.Cross(Su, Sv);
                                     double g = area ? n.Length : Vector3d.Dot(S - o, n);
-                                    sum += GL8W[gi] * GL8W[gj] * ra * rb * g;
+                                    sum += wu[gi] * wv[gj] * ra * rb * g;
                                 }
                         }
                 }
@@ -1296,8 +1297,13 @@ public static class AnalyticVolume
         // делений пролёта — одно. Площадь (корень — не многочлен) для самопроверки сетки (допуск 5e-3) — деления 2 и 1 вместо 4 и 2.
         // Мутация P3D_NURBSEXACTQUAD=0.
         double fine, coarse;
-        bool poly = !NurbsExactQuadOff && !area && 3 * ns.DegreeU - 1 <= 15 && 3 * ns.DegreeV - 1 <= 15 && NonRational(ns);
-        if (poly) { fine = coarse = Integrate(1); Interlocked.Increment(ref NurbsExactQuads); }
+        // степени выше 5 — Гаусс с n = ⌈3p/2⌉ точками (точен до степени 2n − 1 ≥ 3p − 1)
+        bool poly = !NurbsExactQuadOff && !area && ns.DegreeU <= 12 && ns.DegreeV <= 12 && NonRational(ns);
+        if (poly)
+        {
+            var (xu, wu) = Gauss((3 * ns.DegreeU + 1) / 2); var (xv, wv) = Gauss((3 * ns.DegreeV + 1) / 2);
+            fine = coarse = Integrate(1, xu, wu, xv, wv); Interlocked.Increment(ref NurbsExactQuads);
+        }
         else if (area && _rough && !NurbsExactQuadOff) { fine = Integrate(2); coarse = Integrate(1); }
         else { fine = Integrate(4); coarse = Integrate(2); }
         if (!double.IsFinite(fine) || !double.IsFinite(coarse)) return null;
@@ -1314,6 +1320,31 @@ public static class AnalyticVolume
     static readonly bool NurbsExactQuadOff = Environment.GetEnvironmentVariable("P3D_NURBSEXACTQUAD") == "0";
     /// <summary>k180: потоков граней NURBS, взятых точно одним Гауссом на пролёт (разбор).</summary>
     public static long NurbsExactQuads;
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (double[] X, double[] W)> _gauss = new();
+    /// <summary>k180: узлы и веса Гаусса — Лежандра для n точек на [−1, 1] (Ньютон по многочлену Лежандра).</summary>
+    static (double[] X, double[] W) Gauss(int n)
+    {
+        n = Math.Max(1, n);
+        if (n == 8) return (GL8X, GL8W);
+        return _gauss.GetOrAdd(n, k =>
+        {
+            var x = new double[k]; var w = new double[k];
+            for (int i = 0; i < k; i++)
+            {
+                double z = Math.Cos(Math.PI * (i + 0.75) / (k + 0.5)), pp = 0;
+                for (int it = 0; it < 100; it++)
+                {
+                    double p1 = 1, p2 = 0;
+                    for (int j = 1; j <= k; j++) { double p3 = p2; p2 = p1; p1 = ((2 * j - 1) * z * p2 - (j - 1) * p3) / j; }
+                    pp = k * (z * p1 - p2) / (z * z - 1);
+                    double z1 = z; z = z1 - p1 / pp;
+                    if (Math.Abs(z - z1) < 1e-16) break;
+                }
+                x[k - 1 - i] = z; w[k - 1 - i] = 2 / ((1 - z * z) * pp * pp);
+            }
+            return (x, w);
+        });
+    }
     static bool NonRational(NurbsSurface ns)
     {
         double w0 = ns.Weight(0, 0);

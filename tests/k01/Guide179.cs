@@ -279,6 +279,21 @@ static partial class Program
             Require(bf.Error == null && valid, $"blend: {bf.Error}, valid {valid}");
             Require(bez > 0, "no Bezier edges in the guided blend");
             Require(fac.Item1 == 0 && fac.Item2 == 0 && !part.Warnings.Any(w => w.Contains("faceted")), $"exact Bezier edges counted as faceted ({fac.Item2})");
+            // объём по формуле: сечение на t — квадрат со стороной 20·z(t), z(t) = h00 + 1.5·h01 (подобие по направляющей),
+            // высота — осевая часть направляющей (кубическая Эрмита, плечи по хорде L): V = ∫ (20 z)² |dZ/dt| dt
+            double L = (B - A).Length, want = 0; int N = 4000;
+            var (gx, gw) = (new[] { -0.7745966692414834, 0, 0.7745966692414834 }, new[] { 5.0 / 9, 8.0 / 9, 5.0 / 9 });
+            for (int i = 0; i < N; i++)
+                for (int k = 0; k < 3; k++)
+                {
+                    double t = (i + 0.5 + 0.5 * gx[k]) / N;
+                    double h00 = 2 * t * t * t - 3 * t * t + 1, h01 = -2 * t * t * t + 3 * t * t;
+                    double d10 = 3 * t * t - 4 * t + 1, d01 = -6 * t * t + 6 * t, d11 = 3 * t * t - 2 * t;
+                    double z = h00 + 1.5 * h01, dz = -30 * d01 - L * (d10 + d11);
+                    want += gw[k] / 2 / N * Math.Pow(20 * z, 2) * Math.Abs(dz);
+                }
+            Log(new { test = "similarity volume", volume = part.Volume, want, rel = (part.Volume - want) / want });
+            Require(Math.Abs(part.Volume - want) < 1e-10 * want, $"similarity loft volume {part.Volume} vs {want}");
         });
     }
 }
