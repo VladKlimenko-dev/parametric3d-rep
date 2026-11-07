@@ -209,11 +209,9 @@ public static class AnalyticFlux
             Point = (a, b) => p0 + u * a + v * b,
             Normal = (a, b) => n,
             PeriodicA = false,
-            B0 = 0,
-            BKnots = !FluxKnotsOff && s is NurbsSurface nk ? nk.KnotsV.Distinct().OrderBy(x => x).ToArray() : null
+            B0 = 0
         };
     }
-    static readonly bool FluxKnotsOff = Environment.GetEnvironmentVariable("P3D_FLUXKNOTS") == "0";
 
     private static Param Cylinder(Vector3d o, Vector3d w, Vector3d u0, double R)
     {
