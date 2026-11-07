@@ -211,4 +211,28 @@ static partial class Program
         p.Rebuild(ps);
         foreach (var f in p.Features) Log(new { test = "feature", f.Name, f.Seq, error = f.Error, ms = sw2.ElapsedMilliseconds, volume = p.Volume, faces = p.Bodies.FirstOrDefault()?.Faces.Count(), warnings = p.Warnings.ToList() });
     }
+
+    /// <summary>k179: разбор — переход шестерен разного модуля без запасного пути; развёртка грани, не разбитой сеткой.</summary>
+    static void GuideDump(string outDir)
+    {
+        Directory.CreateDirectory(outDir);
+        Parametric3D.Kernel.Tess.ExactFaceMesher.UVDumpPath = Path.Combine(outDir, "uv.txt");
+        var part = new Part("g");
+        var sk1 = new Sketch("Sketch1", Frame3.XY); part.Add(sk1);
+        sk1.AddGear(new GearParams { Teeth = 10, Module = 10, PitchCircle = false }, out _);
+        var fr2 = new Frame3(new Vector3d(0, 0, -70), Vector3d.UnitX, Vector3d.UnitY);
+        var sk2 = new Sketch("Sketch2", fr2); part.Add(sk2);
+        sk2.AddGear(new GearParams { Teeth = 10, Module = 22.627416997969522, Rotation = 45, PitchCircle = false }, out _);
+        var ta = sk1.AllPoints().Where(p => p.Owner != null).OrderByDescending(p => p.P.Length).ThenBy(p => Math.Atan2(p.P.Y, p.P.X)).First();
+        double ang = Math.Atan2(ta.P.Y, ta.P.X) + Math.PI / 4;
+        var want = new Vector2d(Math.Cos(ang), Math.Sin(ang)) * ta.P.Length * 2.2627416997969522;
+        var tb = sk2.AllPoints().OrderBy(p => (p.P - want).Length).First();
+        var A = sk1.Plane.ToWorld(ta.P); var B = sk2.Plane.ToWorld(tb.P);
+        var sp = CurveThrough.Build(new[] { A, B }, new Vector3d?[] { Vector3d.UnitZ, Vector3d.UnitZ }, null, null, false)!;
+        var dc = new DatumCurve("Curve1", Array.Empty<Vector3d>(), "through points") { Mode = 0 }; dc.Inputs.Add(A); dc.Inputs.Add(B); dc.SetSpline(sp); part.Add(dc);
+        var bf = new BlendFeature { Mode = BlendKind.Sections, Smooth = true }; bf.SectionSketchIds.Add(sk1.Id); bf.SectionSketchIds.Add(sk2.Id); bf.GuideCurveIds.Add(dc.Id);
+        part.AddFeature(bf); part.Rebuild(null);
+        Log(new { test = "guidedump", bf.Error, part.Volume, warnings = part.Warnings.ToList(), dump = File.Exists(ExactFaceMesherDump()) });
+        static string ExactFaceMesherDump() => Parametric3D.Kernel.Tess.ExactFaceMesher.UVDumpPath!;
+    }
 }

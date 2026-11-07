@@ -53,18 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: g179_allA, cmd: 'allA', env: '' }
-          - { name: g179_allB, cmd: 'allB', env: '' }
-          - { name: g179_user, cmd: 'userfile179 tests/ui/data/user_k179_gear.p3d', env: '' }
-          - { name: g179_m_guideall, cmd: 'guide179', env: 'P3D_GUIDEALL=0' }
-          - { name: g179_m_guideholes, cmd: 'guide179', env: 'P3D_GUIDEHOLES=0' }
-          - { name: g179_m_gearids, cmd: 'guide179', env: 'P3D_GEARIDS=0' }
-          - { name: g179_m_curvefollow, cmd: 'guide179', env: 'P3D_CURVEFOLLOW=0' }
-          - { name: g179_m_specmap, cmd: 'guide179', env: 'P3D_SPECMAP=0' }
-          - { name: g179_m_curvedeps, cmd: 'guide179', env: 'P3D_CURVEDEPS=0' }
-          - { name: g179_m_creationorder, cmd: 'guide179', env: 'P3D_CREATIONORDER=0' }
-          - { name: g179_m_polymemo, cmd: 'guide179', env: 'P3D_POLYMEMO=0' }
-          - { name: g179_m_fixedresiduals, cmd: 'guide179', env: 'P3D_FIXEDRESIDUALS=0' }
+          - { name: g179_dump, cmd: 'guidedump OUT', env: 'P3D_GUIDEALLFALLBACK=0' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
