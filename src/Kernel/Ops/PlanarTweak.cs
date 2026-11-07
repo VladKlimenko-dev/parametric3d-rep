@@ -282,7 +282,7 @@ public static class PlanarTweak
         {
             clone.Guarantee = body.Guarantee;
             var vr2 = SolidValidator.Validate(clone);
-            if (vr2.IsValid) vr = vr2; else clone.Guarantee = GuaranteeLevel.ExactAnalytic;
+            vr = vr2;
         }
         if (!vr.IsValid && Environment.GetEnvironmentVariable("P3D_TWEAKDUMP") == "1")
         {

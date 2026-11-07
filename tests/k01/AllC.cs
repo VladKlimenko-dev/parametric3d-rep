@@ -35,7 +35,7 @@ static partial class Program
         if (sets.Contains('1'))
             foreach (var op in ops) for (int k = 0; k < five.Length; k++) cases.Add(("S1", $"S1:{op.Name}@{five[k]:0.##}/s{k % 3}", new() { (op, five[k], k % 3) }));
         if (sets.Contains('2'))
-            foreach (var op in ops) foreach (var f in three) cases.Add(("S2", $"S2:{op.Name}x3@{f:0.##}", new() { (op, f, 0), (op, f, 1), (op, f, 2) }));
+            foreach (var op in ops.Where(o => o.Repeat)) foreach (var f in three) cases.Add(("S2", $"S2:{op.Name}x3@{f:0.##}", new() { (op, f, 0), (op, f, 1), (op, f, 2) }));
         if (sets.Contains('3'))
             foreach (var a in ops) foreach (var b in ops) if (a != b) foreach (var f in three)
                         cases.Add(("S3", $"S3:{a.Name}+{b.Name}@{f:0.##}", new() { (a, f, 0), (b, f, 1) }));
@@ -48,6 +48,7 @@ static partial class Program
             {
                 int i = rnd.Next(ops.Count), j = rnd.Next(ops.Count), k = rnd.Next(ops.Count);
                 if (i == j || j == k || i == k) continue;
+                if (new[] { i, j, k }.Count(x => !ops[x].Repeat) > 1) continue;
                 if (!seen.Add($"{i},{j},{k}")) continue;
                 foreach (var f in three)
                     cases.Add(("S4", $"S4:{ops[i].Name}+{ops[j].Name}+{ops[k].Name}@{f:0.##}", new() { (ops[i], f, 0), (ops[j], f, 1), (ops[k], f, 2) }));
@@ -91,7 +92,11 @@ static partial class Program
 
     /// <summary>Операция AllC: имя, знак ΔV (+1 добавляет, −1 снимает, 0 — любой), применение к детали (размер f ∈ (0,1), слот 0..2)
     /// с возвратом параметров и ожидаемого ΔV на нетронутом блоке (null — нет формулы).</summary>
-    sealed record AllCOp(string Name, int Sign, Func<Part, double, int, (string Prm, double? Want)> Apply);
+    sealed record AllCOp(string Name, int Sign, Func<Part, double, int, (string Prm, double? Want)> Apply)
+    {
+        /// <summary>Повтор подряд имеет смысл (оболочка оболочки — нет: стенки уже тонкие).</summary>
+        public bool Repeat { get; init; } = true;
+    }
 
     // грани-слоты: верх (+Z), +X, +Y — сходятся в углу (50,30,40); рамка (центр, U, V), U×V = наружная нормаль; полуразмеры по U и V; толщина вдоль −n
     static (Vector3d C, Vector3d U, Vector3d V, double A, double B, double T) AllCFace(int slot) => slot switch
@@ -267,7 +272,7 @@ static partial class Program
             var (c, u, v, a, b, t) = AllCFace(s); double th = 1 + f * 8;
             var sh = new ShellFeature("Shell") { Thickness = new ValueRef(th) }; sh.OpenFaces.Add(c); p.AddFeature(sh);
             return ($"t{N(th)} open face{s}", -(2 * a - 2 * th) * (2 * b - 2 * th) * (t - th));
-        }));
+        }) { Repeat = false });
         ops.Add(new("draft_in", -1, (p, f, s) =>
         {
             var (at, w) = AllCSide(s); double ang = 1 + f * 12;
@@ -337,7 +342,19 @@ static partial class Program
             r.V1 = p.Volume; r.Dv = r.V1 - r.V0;
             r.Bodies = p.Bodies.Count; r.Faces = p.Bodies.Sum(b => b.Faces.Count());
             r.Guarantee = string.Join(",", p.Bodies.Select(b => b.Guarantee));
-            try { r.Valid = p.Bodies.Count > 0 && p.Bodies.All(b => SolidValidator.Validate(b).IsValid); } catch (Exception e) { r.Valid = false; r.Why = "validator: " + e.Message; }
+            string? invalidWhy = null;
+            try
+            {
+                r.Valid = p.Bodies.Count > 0;
+                foreach (var b in p.Bodies)
+                {
+                    var vr = SolidValidator.Validate(b);
+                    if (vr.IsValid) continue;
+                    r.Valid = false;
+                    invalidWhy ??= vr.Summary() + " " + string.Join(" / ", vr.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(3));
+                }
+            }
+            catch (Exception e) { r.Valid = false; invalidWhy = "validator: " + e.Message; }
             r.Warnings.AddRange(p.Warnings.Distinct());
             var dg = added.Where(x => p.Downgrades.ContainsKey(x)).Select(x => p.Downgrades[x]).ToList();
             if (dg.Count > 0) r.Downgrade = $"{dg.Sum(x => x.Faces)} faceted face(s), {dg.Sum(x => x.Edges)} faceted edge(s)";
@@ -349,7 +366,7 @@ static partial class Program
             else
             {
                 if (p.Bodies.Count == 0) Fail("no body");
-                else if (!r.Valid) Fail("invalid body");
+                else if (!r.Valid) Fail("invalid body: " + invalidWhy);
                 double tiny = 1e-10 * Math.Max(1, r.V0);
                 if (Math.Abs(r.Dv) <= tiny) Fail("no change in volume");
                 else if (op.Sign != 0 && Math.Sign(r.Dv) != op.Sign) Fail($"volume changed the wrong way ({r.Dv:G6})");
