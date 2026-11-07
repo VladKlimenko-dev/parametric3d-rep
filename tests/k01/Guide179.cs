@@ -169,6 +169,17 @@ static partial class Program
                 rep.Add(new { test = "polyline memo", reusedSame = r1 - r0, reusedMoved = r2 - r1 });
                 if (r1 - r0 != 1 || r2 != r1) problems.Add($"sketch polylines: reused {r1 - r0} for the same geometry, {r2 - r1} after a move");
             }
+            // 6. файл пользователя: Sketch1 — шестерня с закреплёнными точками (замыкание венца — 1e-5 мм) не противоречива
+            {
+                string uf = Path.Combine("tests", "ui", "data", "user_k179_gear.p3d");
+                if (File.Exists(uf))
+                {
+                    var (up, _) = DocumentFile.Load(File.ReadAllText(uf));
+                    var st = up.Sketches.First(k => k.Name == "Sketch1").Solve(new NumericSketchSolver());
+                    rep.Add(new { test = "user Sketch1", status = st.ToString() });
+                    if (st is SolveStatus.Inconsistent or SolveStatus.DidNotConverge) problems.Add($"user Sketch1 (fixed gear only): {st}");
+                }
+            }
             Log(new { test = "GUIDE-ALL-K179", rep, problems });
             if (problems.Count > 0) throw new Exception(string.Join("; ", problems));
         });
@@ -198,6 +209,6 @@ static partial class Program
             Log(new { test = "curve", dc.Name, dc.Seq, specs = dc.Specs.Select(c => new { c.SketchId, c.SketchPointId, found = p.Sketches.FirstOrDefault(k => k.Id == c.SketchId)?.AllPoints().Any(x => x.Id == c.SketchPointId) }).ToList() });
         var sw2 = System.Diagnostics.Stopwatch.StartNew();
         p.Rebuild(ps);
-        foreach (var f in p.Features) Log(new { test = "feature", f.Name, f.Seq, error = f.Error, ms = sw2.ElapsedMilliseconds, volume = p.Volume, faces = p.Bodies.FirstOrDefault()?.Faces.Count() });
+        foreach (var f in p.Features) Log(new { test = "feature", f.Name, f.Seq, error = f.Error, ms = sw2.ElapsedMilliseconds, volume = p.Volume, faces = p.Bodies.FirstOrDefault()?.Faces.Count(), warnings = p.Warnings.ToList() });
     }
 }

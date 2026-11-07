@@ -18,7 +18,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: ui179, ref: 'kern/k179', names: 'UI-GHOSTRING-K127|UI-SKETCH-FILL-K179|UI-LATER-K178', env: '' }
+          - { name: ui179_1, ref: 'kern/k179', names: 'UI-A|UI-B|UI-C|UI-D', env: '' }
+          - { name: ui179_2, ref: 'kern/k179', names: 'UI-E|UI-F|UI-G|UI-H|UI-I|UI-J|UI-K|UI-L', env: '' }
+          - { name: ui179_3, ref: 'kern/k179', names: 'UI-M|UI-N|UI-O|UI-P|UI-Q|UI-R', env: '' }
+          - { name: ui179_4, ref: 'kern/k179', names: 'UI-S|UI-T|UI-U|UI-V|UI-W|UI-X|UI-Y|UI-Z', env: '' }
+          - { name: ui179_m_fill, ref: 'kern/k179', names: 'UI-SKETCH-FILL-K179', env: 'P3D_PASTEATSTAGE=0' }
+          - { name: ui179_m_ghost, ref: 'kern/k179', names: 'UI-GHOSTRING-K127', env: 'P3D_GHOSTHOVER=0' }
     steps:
       - uses: actions/checkout@v4
         with:
