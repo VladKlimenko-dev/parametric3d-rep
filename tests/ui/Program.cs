@@ -4278,13 +4278,19 @@ Check("UI-GHOSTRING-K127", () =>
     // кругом, как прежде) того же размера, что точки правимого эскиза, и выбираются наведением. P3D_GHOSTRING=0 — залитые.
     var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "user_k125_tube.p3d"));
     BuildNow(s);
-    var part = s.Part!; var sk = part.Sketches.First(k => k.Name == "Sketch4");
+    // k178: в правке видны только эскизы, стоящие в дереве раньше правимого — эскиз с параллельным соседом выше по дереву
+    // (в этом файле у Sketch4 параллельные соседи — ниже: Sketch5, 6, 8)
+    var part = s.Part!;
+    var sk = part.Sketches.FirstOrDefault(k => k.Name == "Sketch4" && part.Sketches.Any(o => k.IsAfter(o) && o.IsParallelTo(k) && o.Entities.Count > 0))
+             ?? part.Sketches.First(k => part.Sketches.Any(o => k.IsAfter(o) && o.IsParallelTo(k) && o.Entities.Count > 0));
+    Console.WriteLine($"  edited sketch: {sk.Name}");
     var sc = Parametric3D.Render.Engine.SceneBuilder.Build(s.Document, Parametric3D.Render.Engine.RenderTheme.DarkTheme(), new Parametric3D.Render.Engine.ShowOptions(), part, sk);
     var pts = sc.Points.Where(q => q.Pick != 0 && sc.PickTable[(int)q.Pick].Ref.Kind == PickKind.SketchPoint).ToList();
     var own = pts.Where(q => sc.PickTable[(int)q.Pick].SketchId == sk.Id).ToList();
     var ghost = pts.Where(q => sc.PickTable[(int)q.Pick].SketchId != sk.Id).ToList();
     Console.WriteLine($"  sketch points: own {own.Count} (shapes {string.Join(",", own.Select(q => q.Shape).Distinct())}, px {string.Join(",", own.Select(q => q.Px).Distinct())}), neighbour {ghost.Count} (shapes {string.Join(",", ghost.Select(q => q.Shape).Distinct())}, px {string.Join(",", ghost.Select(q => q.Px).Distinct())})");
-    Require(own.Count > 0 && ghost.Count > 0, "no neighbour sketch points drawn while editing Sketch4");
+    Require(own.Count > 0 && ghost.Count > 0, $"no neighbour sketch points drawn while editing {sk.Name}");
+    Require(ghost.All(q => part.Sketches.FirstOrDefault(o => o.Id == sc.PickTable[(int)q.Pick].SketchId) is not { } o || !o.IsAfter(sk)), "points of a later sketch are drawn");
     Require(ghost.All(q => q.Shape == 4), "neighbour sketch points are not drawn as unfilled rings");
     Require(own.All(q => q.Shape != 4), "points of the edited sketch are drawn as rings");
     Require(ghost.All(q => own.Any(o => o.Shape == 0 && o.Px == q.Px)), "ring size differs from a normal point");
@@ -9112,6 +9118,138 @@ Check("UI-DRAWING-K169", () =>
 // k177: кривая через точки — касательные в каждой точке: «По нормали эскиза» (точка эскиза), «По нормали поверхности» (грань в
 // точке: у вершины блока — три, по умолчанию ближайшая к перпендикуляру хода кривой; щелчок на виде — другая), обратить, вес;
 // стрелки на виде; кривая — сплайн с касательными точно по условиям. P3D_CURVETANGENTS=0 — без раздела.
+// k178: ОТКРЫТИЕ БЕЗ ПЕРЕСТРОЕНИЯ — тела из файла показываются сразу, деталь без связей с другими файлами не перестраивается
+// (тела после открытия и после того, как окно постояло, — те же объекты). P3D_OPENFILE — разбор файла пользователя.
+Check("UI-OPEN-STORED-K178", () =>
+{
+    string? user = Environment.GetEnvironmentVariable("P3D_OPENFILE");
+    string path;
+    if (user is { Length: > 0 }) path = user;
+    else
+    {
+        var part0 = Parametric3D.App.Diagnostics.TestParts.Block("os");
+        var s0 = DocumentSession.FromPart(part0, "os"); var w0 = Open(s0); BuildNow(s0);
+        for (int i = 0; i < 20; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(20); }
+        path = Path.Combine(Path.GetTempPath(), "p3d_open_stored.p3d"); s0.SaveAs(path); w0.Close();
+    }
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    var s = DocumentSession.Open(path);
+    long openMs = sw.ElapsedMilliseconds;
+    var p = s.Part!;
+    var b0 = p.Bodies.ToList();
+    Console.WriteLine($"  open {openMs} ms: note {p.LoadNote} {p.LoadNoteDetail}, restored {p.RestoredFromFile}, dirty {p.IsDirty}, bodies {p.Bodies.Count}, cached {p.ShowsCached}");
+    var w = Open(s);
+    var t1 = DateTime.Now; while ((DateTime.Now - t1).TotalMilliseconds < 3000) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(10); }
+    bool same = p.Bodies.Count == b0.Count && p.Bodies.Zip(b0).All(z => ReferenceEquals(z.First, z.Second));
+    Console.WriteLine($"  after 3 s: dirty {p.IsDirty}, building {s.Document.IsBuilding}, verifying {s.Document.IsVerifying}, same bodies {same}, features with errors {p.Features.Count(f => f.Error != null)}");
+    w.Close();
+    Require(p.RestoredFromFile && !p.IsDirty && same, "the part was rebuilt on open (or its bodies were not taken from the file)");
+});
+
+// k178 (п. 3.1): ПОВЕРХНОСТИ В ФАЙЛЕ — деталь с поверхностью (квилтом) открывается без перестроения: поверхность — из файла
+// (та же площадь, грани основы). P3D_QUILTSAVE=0 — поверхности не пишутся, открытие перестроением.
+Check("UI-OPEN-QUILT-K178", () =>
+{
+    var s0 = DocumentSession.NewPart(); var w0 = Open(s0); var part0 = s0.Part!;
+    var ln = DrawSketch(w0, part0, part0.PlaneXY, sk => { var l = new LineTool(chain: false); l.Click(new SketchInput(sk, Vector2d.Zero, null)); l.Click(new SketchInput(sk, new Vector2d(20, 0), null)); });
+    var se = new SurfaceFeature { SketchId = ln.Id, Depth = new ValueRef(10) }; part0.AddFeature(se); s0.Document.RebuildDirty(); BuildNow(s0);
+    for (int i = 0; i < 20; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(20); }
+    double a0 = Parametric3D.Model.Features.QuiltUtilT.Area(part0.Quilts.Single());
+    var path = Path.Combine(Path.GetTempPath(), "p3d_open_quilt.p3d"); s0.SaveAs(path); w0.Close();
+    var s = DocumentSession.Open(path); var p = s.Part!;
+    Console.WriteLine($"  open: note {p.LoadNote}, restored {p.RestoredFromFile}, dirty {p.IsDirty}, quilts {p.Quilts.Count}, area {a0:F6}");
+    Require(p.RestoredFromFile && !p.IsDirty, "a part with a surface was rebuilt on open");
+    var w = Open(s);
+    var t1 = DateTime.Now; while ((DateTime.Now - t1).TotalMilliseconds < 2000) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(10); }
+    double a1 = p.Quilts.Count == 1 ? Parametric3D.Model.Features.QuiltUtilT.Area(p.Quilts[0]) : -1;
+    Console.WriteLine($"  after 2 s: restored {p.RestoredFromFile}, dirty {p.IsDirty}, quilt key {p.Quilts.FirstOrDefault()?.Key == se.Key}, area {a1:F6}");
+    Require(p.RestoredFromFile && p.Quilts.Count == 1 && p.Quilts[0].Key == se.Key && Math.Abs(a1 - a0) < 1e-9 && Math.Abs(a0 - 200) < 1e-6, "the surface was not taken from the file");
+    // правка после открытия — обычное перестроение (поверхность пересчитывается)
+    se = p.Features.OfType<SurfaceFeature>().Single(); se.Depth = new ValueRef(15); p.MarkDirtyFrom(se); s.Document.RebuildDirty(); BuildNow(s);
+    double a2 = p.Quilts.Count == 1 ? Parametric3D.Model.Features.QuiltUtilT.Area(p.Quilts[0]) : -1;
+    Console.WriteLine($"  edit depth 15: area {a2:F6}");
+    Require(Math.Abs(a2 - 300) < 1e-6, "editing after the opening does not rebuild the surface");
+    w.Close();
+});
+
+// k178 (п. 3.3): СБОРКА СО СВЯЗЯМИ — открывается сразу с телами из своего файла; компонент, чей файл детали записан позже
+// сборки, обновляется в фоне (без вопроса). P3D_LINKREFRESH=0 — компонент остаётся прежним.
+Check("UI-ASM-LINK-K178", () =>
+{
+    string dir = Path.Combine(Path.GetTempPath(), "p3d_link_" + Guid.NewGuid().ToString("N")[..8]); Directory.CreateDirectory(dir);
+    string pa = Path.Combine(dir, "a.p3d"), asmPath = Path.Combine(dir, "asm.p3a");
+    void SavePart(double width)
+    {
+        var sp = DocumentSession.FromPart(Parametric3D.App.Diagnostics.TestParts.Block("a", width), "a"); var wp = Open(sp); BuildNow(sp);
+        for (int i = 0; i < 10; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(20); }
+        sp.SaveAs(pa); wp.Close();
+    }
+    SavePart(100);
+    var sa = DocumentSession.NewAssembly(); var wa = Open(sa);
+    var comp = AssemblyCommands.AddComponent(wa, AssemblyCommands.LoadComponent(pa, new List<string>()), "add");
+    BuildNow(sa); for (int i = 0; i < 10; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(20); }
+    sa.SaveAs(asmPath); wa.Close();
+    File.SetLastWriteTimeUtc(asmPath, DateTime.UtcNow.AddMinutes(-10));
+    SavePart(50);   // файл детали изменён после записи сборки
+    var w = Open(DocumentSession.NewPart());
+    MainWindow.LinkRefreshDelayMs = 1500;
+    var task = w.OpenAsync(asmPath);
+    var t0 = DateTime.Now;
+    // первый показ — сразу после смены документа (обновление компонента ещё читает файл в фоне)
+    double v0 = -1; bool r0 = false;
+    while (v0 < 0 && (DateTime.Now - t0).TotalSeconds < 30)
+    {
+        Dispatcher.UIThread.RunJobs(Avalonia.Threading.DispatcherPriority.Send);
+        if (w.Session.FilePath == asmPath) { var c0 = w.Session.Document.Root.Children.OfType<Parametric3D.Model.Part>().Single(); v0 = c0.Volume; r0 = c0.RestoredFromFile; break; }
+        Dispatcher.UIThread.RunJobs(); Thread.Sleep(1);
+    }
+    while (w.LinkRefreshDone == null && (DateTime.Now - t0).TotalSeconds < 60) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(10); }
+    for (int i = 0; i < 30; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(10); }
+    var c1 = w.Session.Document.Root.Children.OfType<Parametric3D.Model.Part>().Single();
+    Console.WriteLine($"  opened: restored {r0}, volume {v0:F1}; refreshed {w.LinkRefreshDone}, volume {c1.Volume:F1}, source {Path.GetFileName(c1.SourcePath)}");
+    Require(r0 && Math.Abs(v0 - 120000) < 1e-3, "the assembly was not shown from its stored bodies");
+    Require(w.LinkRefreshDone == 1 && Math.Abs(c1.Volume - 60000) < 1e-3 && c1.SourcePath == pa, "the linked component was not refreshed from its changed file");
+    MainWindow.LinkRefreshDelayMs = 0;
+    w.Close();
+    try { Directory.Delete(dir, true); } catch { }
+});
+
+// k178 (замечание 07.11, п. 4 и про полоску): в правке Sketch1 не видны и не ловятся кривые эскиза, созданного позже
+// (Sketch2 на параллельной плоскости; P3D_SKLATERHIDE=0 — ловятся); кривая через точки, созданная при полоске расчёта выше
+// операции, встаёт в дерево на место полоски, а не в конец (P3D_DATUMATSTAGE=0 — в конец).
+Check("UI-LATER-K178", () =>
+{
+    var part = Parametric3D.App.Diagnostics.TestParts.Block("lt");
+    var s1 = new Sketch("S1", part.PlaneXY.Frame); part.Add(s1); var a = s1.AddEntity(new SkPoint(new Vector2d(-200, 0))); var b = s1.AddEntity(new SkPoint(new Vector2d(-200, 50)));
+    var s2 = new Sketch("S2", new Parametric3D.Kernel.Frame3(new Vector3d(0, 0, -30), Vector3d.UnitX, Vector3d.UnitY)); part.Add(s2);
+    s2.AddEntity(new SkLine(new SkPoint(130, 0), new SkPoint(150, 0)));
+    var s = DocumentSession.FromPart(part, "lt"); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    try
+    {
+        Require(s2.IsAfter(s1) && !s1.IsAfter(s2), "tree order of the sketches");
+        var vp = w.ViewPort;
+        vp.EnterSketch(s1, animate: false); vp.ZoomToFit(animate: false); Run();
+        var pt = vp.Project(s2.Plane.ToWorld(new Vector2d(140, 0)))!.Value;
+        var under = vp.PickForTest(pt);
+        Console.WriteLine($"  edit S1, over S2 curve: {under.Kind} {(under.Owner as ModelItem)?.Name}");
+        Require(!(under.Kind == PickKind.SketchCurve && ReferenceEquals(under.Owner, s2)), "a later sketch is pickable while editing an earlier one");
+        w.FinishSketch(); Run();
+        // полоска — перед выдавливанием; новая кривая — на её месте
+        part.StageIndex = 0; s.Document.RebuildDirty(); BuildNow(s); Run();
+        var op = new CurveOp { Mode = 0 };
+        w.StartOperation(op); Run();
+        w.ViewPort.Selection.Select(new PickRef(a.Id, PickKind.SketchPoint, s1, a), additive: true); Run();
+        w.ViewPort.Selection.Select(new PickRef(b.Id, PickKind.SketchPoint, s1, b), additive: true); Run();
+        w.CommitOperation(); Run();
+        var dc = part.Children.OfType<DatumCurve>().FirstOrDefault();
+        int slot = dc == null ? -1 : part.ItemSlot(dc);
+        Console.WriteLine($"  curve at stage 0: {dc?.Name} slot {slot} of {part.Features.Count}");
+        Require(dc != null && slot == 0, "the new curve is not placed at the rollback bar");
+    }
+    finally { w.Close(); }
+});
+
 Check("UI-CURVE-TANGENTS-K177", () =>
 {
     var part = Parametric3D.App.Diagnostics.TestParts.Block("ct");
@@ -9143,8 +9281,19 @@ Check("UI-CURVE-TANGENTS-K177", () =>
     var faceField = op.Panel.Refs.First(r => r.Label == "Поверхность");
     op.Activate(faceField); w.ViewPort.Selection.Select(new PickRef(top.Id, PickKind.Face, part, null), additive: false); Run();
     Require(op.PointSpecs[0].FaceId == top.Id && Math.Abs(op.PointSpecs[0].FaceNormal.Z - 1) < 1e-9, $"picked face: {op.PointSpecs[0].FaceId} want {top.Id}");
-    op.CurrentPoint = 1; Run();
-    Require(chk["По нормали эскиза"].IsEnabled && chk["По нормали поверхности"].IsEnabled, "toggles of a sketch point on a face");
+    // k178: точка выбирается списком панели (и кнопками ◀ ▶)
+    var box = op.Panel.Host.GetVisualDescendants().OfType<ComboBox>().First(c => c.Name == "curve_point");
+    Require(box.ItemCount == 2, $"point list items: {box.ItemCount}");
+    box.SelectedIndex = 1; Run();
+    Require(op.CurrentPoint == 1, "the point list does not select the second point");
+    op.Panel.Host.GetVisualDescendants().OfType<Button>().First(b => b.Name == "curve_point_next").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Run();
+    Require(op.CurrentPoint == 0 && box.SelectedIndex == 0, "the next-point button");
+    box.SelectedIndex = 1; Run();
+    // k178: у точки эскиза «По нормали эскиза» — по умолчанию включено (поверхность при этом недоступна)
+    Require(chk["По нормали эскиза"].IsEnabled && ((CheckBox)chk["По нормали эскиза"]).IsChecked == true && op.PointSpecs[1].NormalToSketch && !chk["По нормали поверхности"].IsEnabled,
+            "a sketch point: «normal to sketch» is not on by default");
+    ((CheckBox)chk["По нормали эскиза"]).IsChecked = false; Run();
+    Require(!op.PointSpecs[1].NormalToSketch && chk["По нормали поверхности"].IsEnabled, "a sketch point on a face: normal to surface after unchecking normal to sketch");
     ((CheckBox)chk["По нормали эскиза"]).IsChecked = true; Run();
     Require(op.PointSpecs[1].NormalToSketch && !chk["По нормали поверхности"].IsEnabled, "normal to sketch disables normal to surface");
     var arrows = op.ViewArrows().ToList();
@@ -9162,8 +9311,21 @@ Check("UI-CURVE-TANGENTS-K177", () =>
     // вошла вдоль хода (−Z к нулю у вершины на высоте 20 — вниз), у конца обращена: вверх
     Require(t0.Z < 0 && t1.Z > 0, $"tangent signs {t0.Z} {t1.Z}");
     // правка: условия на месте
+    Require(MainWindow.EditablePlane(dc), "the spline curve through points is not editable");
     var ed = new CurveOp { Mode = 0, EditTarget = dc }; w.StartOperation(ed); Run();
     Require(ed.PointSpecs.Count == 2 && ed.PointSpecs[0].NormalToSurface && ed.PointSpecs[1].NormalToSketch && ed.PointSpecs[1].Flip, "conditions lost on edit");
+    // k178: при правке флажки текущей точки доступны сразу (прежде — серые до первой правки поля)
+    var chkE = ed.Panel!.Checks;
+    Console.WriteLine($"  edit: surface enabled {chkE["По нормали поверхности"].IsEnabled} checked {((CheckBox)chkE["По нормали поверхности"]).IsChecked}");
+    Require(chkE["По нормали поверхности"].IsEnabled && ((CheckBox)chkE["По нормали поверхности"]).IsChecked == true, "edit: the toggles of the current point are inactive");
+    w.CancelOperation(); Run();
+    // кривая до k177 (без условий): точки эскиза узнаются по месту, «По нормали эскиза» — включено
+    var old = new DatumCurve("Old", new[] { new Vector3d(0, 0, 0), new Vector3d(50, 30, 20) }, "through points") { Mode = 0 };
+    old.Inputs.Add(new Vector3d(0, 0, 0)); old.Inputs.Add(new Vector3d(50, 30, 20)); part.Add(old);
+    var ed2 = new CurveOp { Mode = 0, EditTarget = old }; w.StartOperation(ed2); Run();
+    ed2.CurrentPoint = 0; Run();
+    Console.WriteLine($"  old curve: specs {ed2.PointSpecs.Count}, sketch {ed2.PointSpecs.FirstOrDefault()?.FromSketch} on {ed2.PointSpecs.FirstOrDefault()?.NormalToSketch}, toggle enabled {ed2.Panel!.Checks["По нормали эскиза"].IsEnabled}");
+    Require(ed2.PointSpecs.Count == 2 && ed2.PointSpecs[0].FromSketch && ed2.PointSpecs[0].NormalToSketch && ed2.Panel.Checks["По нормали эскиза"].IsEnabled, "edit of an old curve: the sketch point is not normal to sketch by default");
     w.CancelOperation(); Run();
     // направляющие «По сечениям» принимают опорную кривую
     Require(Refs.IsGuide(new PickRef(dc.Id, PickKind.DatumAxis, part, dc)), "a datum curve is not accepted as a guide");

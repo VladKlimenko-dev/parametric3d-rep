@@ -191,16 +191,15 @@ public sealed class DatumCurve : ModelItem
 
     /// <summary>
     /// k177: кривая направляющей лофта (переход, «По сечениям»): отрезок (ломаная из двух точек или все точки на прямой), кривая
-    /// Безье (сплайн из одного куска). null — кривая из нескольких кусков (причина — why).
+    /// Безье (сплайн из одного куска), сплайн из нескольких кусков (k178). null — ломаная (причина — why).
     /// </summary>
     public Kernel.Curves.ICurve3? GuideCurve(out string? why)
     {
         why = null;
         if (Spline is { } sp)
         {
-            if (CurveThrough.AsBezier(sp) is { } bz) return bz;
-            why = $"the curve «{Name}» has {Math.Max(1, (sp.ControlPoints.Count - 1) / Math.Max(1, sp.Degree))} pieces; a guide of a sections blend must be one piece (a curve through two points, a line or an arc)";
-            return null;
+            // k178: кривая из нескольких кусков (через три и больше точек) — сплайн; лофт раскладывает его на куски Безье
+            return CurveThrough.AsBezier(sp) is { } bz ? bz : sp;
         }
         if (Points.Count >= 2)
         {

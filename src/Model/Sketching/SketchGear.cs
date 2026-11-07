@@ -499,7 +499,9 @@ public static class SketchGears
         {
             var gone = sk.Entities.Where(e => old.Contains(e.Id)).ToList();
             var pts = new HashSet<SkEntity>(gone.SelectMany(e => e.Handles.Cast<SkEntity>().Prepend(e)), ReferenceEqualityComparer.Instance);
-            sk.Entities.RemoveAll(e => old.Contains(e.Id));
+            // k178: и точки этих элементов, ставшие отдельными точками эскиза (так их читает файл) — иначе после правки
+            // размера оставались точки прежней шестерни
+            sk.Entities.RemoveAll(e => old.Contains(e.Id) || e is SkPoint && pts.Contains(e));
             sk.Constraints.RemoveAll(c => c.Items.Any(pts.Contains));
             sk.Dimensions.RemoveAll(d => d.Items.Any(pts.Contains));
         }
@@ -533,8 +535,32 @@ public static class SketchGears
             }
             prev = b;
         }
+        Clean(sk, g);
         sk.BumpStructure();
         sk.NotifyChanged(sk);
         return true;
     }
+
+    /// <summary>
+    /// k178: ЛИШНИЕ ТОЧКИ ШЕСТЕРНИ. Файл записывает концы и центры кривых точками, при чтении каждая становится отдельной точкой
+    /// эскиза: у шестерни это сотни точек поверх её же кривых (и тормоз вида), а после перестройки — точки прежней шестерни.
+    /// Убираются: отдельные точки, которые — концы или центры кривых шестерни; закреплённые точки ни при чём (ни у одного
+    /// элемента, ни у связи, ни у размера) — следы прежних перестроений. Мутация P3D_GEARCLEAN=0.
+    /// </summary>
+    public static int Clean(this Sketch sk, SkGear g)
+    {
+        if (CleanOff) return 0;
+        var items = new HashSet<uint>(g.Items);
+        var handles = new HashSet<SkPoint>(sk.Entities.Where(e => items.Contains(e.Id) && e is not SkPoint).SelectMany(e => e.Handles), ReferenceEqualityComparer.Instance);
+        var used = new HashSet<SkEntity>(ReferenceEqualityComparer.Instance);
+        foreach (var e in sk.Entities) if (e is not SkPoint && !items.Contains(e.Id)) foreach (var h in e.Handles) used.Add(h);
+        foreach (var c in sk.Constraints) foreach (var x in c.Items) used.Add(x);
+        foreach (var d in sk.Dimensions) foreach (var x in d.Items) used.Add(x);
+        var alive = new HashSet<SkEntity>(sk.Entities.Where(e => e is not SkPoint), ReferenceEqualityComparer.Instance);
+        int n = sk.Entities.RemoveAll(e => e is SkPoint p && !items.Contains(p.Id) && !used.Contains(p)
+            && (handles.Contains(p) || p.Fixed && (p.Owner == null || !alive.Contains(p.Owner))));
+        if (n > 0) sk.BumpStructure();
+        return n;
+    }
+    static readonly bool CleanOff = Environment.GetEnvironmentVariable("P3D_GEARCLEAN") == "0";
 }

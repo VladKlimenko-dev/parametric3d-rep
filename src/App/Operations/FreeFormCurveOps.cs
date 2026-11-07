@@ -376,7 +376,7 @@ public sealed class FFCurveOp : Operation
                 string baseName = L("Кривая{0}", Part.Children.OfType<DatumCurve>().Count() + 1);
                 _dc = target = new DatumCurve(baseName, pts, source);
                 if (sp != null) _dc.SetSpline(sp, pts.Count - 1);
-                Part.Add(_dc);
+                Part.AddAtStage(_dc);
             }
             else
             {

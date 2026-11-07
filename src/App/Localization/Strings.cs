@@ -1392,6 +1392,7 @@ public static class Strings
         ["От ребра или плоскости 1"] = "From edge or plane 1",
         ["От ребра или плоскости 2"] = "From edge or plane 2",
         ["Расчёт закончен. Сохраните файл (Ctrl+S) — следующее открытие будет без перестроения."] = "The rebuild has finished. Save the file (Ctrl+S) — the next opening will be instant.",
+        ["Обновлено компонентов из изменённых файлов: {0}"] = "Components updated from changed files: {0}",
         ["Размеры модели — только у чертежа детали"] = "Model dimensions — only in a part drawing",
         ["Перенесено размеров эскизов: {0}"] = "Sketch dimensions transferred: {0}",
         ["Размер: щёлкните первую точку на виде"] = "Dimension: click the first point on a view",
@@ -1760,7 +1761,7 @@ public static class Strings
         ["внутри"] = "inside",
         ["Стрелки: внутри ↔ снаружи"] = "Arrows: inside ↔ outside",
         // k177: касательные кривой через точки; направляющие — опорные кривые
-        ["Касательные в точках"] = "Point tangents", ["Точка"] = "Point", ["По нормали эскиза"] = "Normal to sketch", ["По нормали поверхности"] = "Normal to surface",
+        ["Касательные в точках"] = "Point tangents", ["Следующая точка"] = "Next point", ["Предыдущая точка"] = "Previous point", ["Точка"] = "Point", ["По нормали эскиза"] = "Normal to sketch", ["По нормали поверхности"] = "Normal to surface",
         ["Поверхность"] = "Surface", ["Обратить направление"] = "Reverse direction", ["Вес касательной"] = "Tangent weight",
         ["Всем точкам эскизов — по нормали эскиза"] = "All sketch points: normal to sketch", ["Снять условия у всех точек"] = "Clear all point conditions",
         ["эскиз «{0}»"] = "sketch «{0}»", ["точка эскиза"] = "sketch point", ["вершина"] = "vertex", ["точка"] = "point",

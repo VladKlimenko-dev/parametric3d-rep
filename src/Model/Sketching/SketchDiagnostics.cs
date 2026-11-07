@@ -18,9 +18,50 @@ namespace Parametric3D.Model.Sketching;
 /// </summary>
 public static class SketchDiagnostics
 {
+    /// <summary>
+    /// k178: ПРИЗНАКИ — ПО ГЕОМЕТРИИ, А НЕ ПО КАДРУ. Проверка звала из построения слоя поверх вида при каждом движении мыши; у
+    /// эскиза шестерни (140 кривых, стороны соседних зубьев перекрываются габаритами — попарная проверка звеньев) это давало 5
+    /// кадров в секунду. Теперь пересчёт — только если изменились состав, роли, положения точек или настройка подсветки
+    /// (отпечаток эскиза). Мутация P3D_SKDIAGMEMO=0.
+    /// </summary>
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Sketch, StrongBox> _memo = new();
+    sealed class StrongBox { public long Key; }
+    static readonly bool MemoOff = Environment.GetEnvironmentVariable("P3D_SKDIAGMEMO") == "0";
+    /// <summary>Разбор: сколько раз признаки пересчитаны и сколько — взяты из памяти.</summary>
+    public static long Computed, Reused;
+
+    static long Fingerprint(Sketch sk)
+    {
+        unchecked
+        {
+            long h = sk.StructureVersion * 1000003L + sk.Entities.Count + (Core.Settings.Current.HighlightSketchErrors ? 7 : 0);
+            foreach (var e in sk.Entities)
+            {
+                h = h * 31 + (int)e.Role + e.Id;
+                switch (e)
+                {
+                    case SkCircle c: h = h * 31 + BitConverter.DoubleToInt64Bits(c.Radius); break;
+                    case SkEllipse el: h = h * 31 + BitConverter.DoubleToInt64Bits(el.RU) * 3 + BitConverter.DoubleToInt64Bits(el.RV) * 5 + BitConverter.DoubleToInt64Bits(el.Rotation) + BitConverter.DoubleToInt64Bits(el.A0) * 7 + BitConverter.DoubleToInt64Bits(el.A1) * 11; break;
+                    case SkArc a: h = h * 31 + (a.CCW ? 1 : 2); break;
+                }
+                foreach (var q in e.Handles) h = h * 1000033L + BitConverter.DoubleToInt64Bits(q.X) * 17 + BitConverter.DoubleToInt64Bits(q.Y);
+            }
+            foreach (var c in sk.Constraints) if (c.Type == ConstraintType.Coincident) h = h * 31 + (c.Enabled ? 3 : 5) + c.Items.Sum(x => (long)x.Id);
+            return h;
+        }
+    }
+
     /// <summary>Пересчитывает признаки ошибок по всему эскизу.</summary>
     public static void Update(Sketch sk)
     {
+        if (!MemoOff)
+        {
+            long key = Fingerprint(sk);
+            var box = _memo.GetOrCreateValue(sk);
+            if (box.Key == key && key != 0) { Interlocked.Increment(ref Reused); return; }
+            box.Key = key;
+        }
+        Interlocked.Increment(ref Computed);
         foreach (var e in sk.Entities)
         {
             e.SelfIntersects = false;

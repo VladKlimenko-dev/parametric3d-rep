@@ -84,6 +84,7 @@ public static class SceneBuilder
             // k109 (11:11): в правке эскиза видны и эскизы на параллельных плоскостях (скрытые тоже) — их кривые берутся в ссылки
             bool ghost = c is Sketch gsk && _activeSketch != null && !ReferenceEquals(c, _activeSketch) && !Sketch.ParallelGhostOff && gsk.IsParallelTo(_activeSketch);
             if (!c.Visible && !ReferenceEquals(c, _activeSketch) && !ghost) continue;
+            if (c is Sketch lsk && _activeSketch != null && lsk.IsAfter(_activeSketch)) continue;   // k178: позднейшие эскизы — не в правке раннего
             if (component && item is Part cpp && (ReferenceEquals(c, cpp.PlaneXY) || ReferenceEquals(c, cpp.PlaneXZ) || ReferenceEquals(c, cpp.PlaneYZ) || ReferenceEquals(c, cpp.Origin))) continue;
             switch (c)
             {

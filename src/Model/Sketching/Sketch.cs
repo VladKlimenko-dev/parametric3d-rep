@@ -381,6 +381,17 @@ public sealed class Sketch : ModelItem
     /// <summary>k109 (11:11): плоскость эскиза параллельна плоскости other (такой эскиз виден и служит ссылкой при правке).</summary>
     public bool IsParallelTo(Sketch other) => !ReferenceEquals(this, other) && Math.Abs(OpenTK.Mathematics.Vector3d.Dot(Plane.W.Normalized(), other.Plane.W.Normalized())) > 1 - 1e-6;
     public static readonly bool ParallelGhostOff = Environment.GetEnvironmentVariable("P3D_SKGHOST") == "0";
+    /// <summary>
+    /// k178: эскиз стоит в дереве ПОСЛЕ other (у той же детали). В правке эскиза более поздние эскизы не показываются и не
+    /// ловятся: при правке Sketch1 точки Sketch2 (созданного позже) были видны как ссылка. Мутация P3D_SKLATERHIDE=0.
+    /// </summary>
+    public bool IsAfter(Sketch other)
+    {
+        if (LaterHideOff || ReferenceEquals(this, other) || Parent is not ModelItem p || !ReferenceEquals(p, other.Parent)) return false;
+        int a = p.Children.IndexOf(this), b = p.Children.IndexOf(other);
+        return a >= 0 && b >= 0 && a > b;
+    }
+    public static readonly bool LaterHideOff = Environment.GetEnvironmentVariable("P3D_SKLATERHIDE") == "0";
 
     /// <summary>
     /// Пересчитывает значения размеров, которые эскизом не управляют:

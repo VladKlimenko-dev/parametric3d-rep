@@ -1065,10 +1065,22 @@ public sealed class Part : ModelItem
     /// </summary>
     public void RestoreFromFile(IReadOnlyList<Kernel.Topology.BrepFile.Restored> bodies, MeshData md, double volume, double? area,
                                 IReadOnlyList<string> bodyNames, IReadOnlyList<string> warnings,
-                                IReadOnlyDictionary<string, string> errors, IReadOnlyDictionary<string, List<uint>> created, ParameterTable? parameters)
+                                IReadOnlyDictionary<string, string> errors, IReadOnlyDictionary<string, List<uint>> created, ParameterTable? parameters,
+                                IReadOnlyList<(string Key, string Name, Kernel.Topology.BrepFile.Restored Body, List<uint> Faces)>? quilts = null)
     {
         var map = new Dictionary<uint, uint>();
         foreach (var r in bodies) foreach (var kv in r.IdMap) map[kv.Key] = kv.Value;
+        // k178: поверхности (квилты) — основы из файла, грани по прежним номерам
+        Quilts.Clear();
+        if (quilts != null)
+        {
+            foreach (var r in quilts.Select(q => q.Body).Distinct()) { foreach (var kv in r.IdMap) map[kv.Key] = kv.Value; r.Body.Publish(); }
+            foreach (var q in quilts)
+            {
+                var want = q.Faces.Select(id => map.TryGetValue(id, out var n) ? n : id).ToHashSet();
+                Quilts.Add(new Quilt(q.Key, q.Name, q.Body.Body, q.Body.Body.Faces.Where(f => want.Contains(f.Id))));
+            }
+        }
         uint M(uint id) => map.TryGetValue(id, out var n) ? n : id;
         var mesh = new MeshData { Indices = md.Indices, Bounds = md.Bounds };
         mesh.Vertices = md.Vertices.Select(v => new MeshVertex { P = v.P, N = v.N, FaceId = M(v.FaceId), Flags = v.Flags }).ToArray();

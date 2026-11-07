@@ -205,7 +205,7 @@ public sealed class BlendOp : FeatureOp<BlendFeature>
         _guides = p.Ref(new RefField
         {
             Label = "Направляющие кривые", Filter = PickFilter.SketchCurves | PickFilter.Datums, Accept = Refs.IsGuide, Optional = true, Describe = Refs.GuideName,
-            Tip = "Не обязательно. Кривые через соответственные вершины всех сечений: по какому пути вершина переходит от сечения к сечению. Эскиз с кривыми, опорная кривая (через две точки — с касательными по нормалям эскизов или граней) или трёхмерная линия.",
+            Tip = "Не обязательно. Кривые через соответственные вершины всех сечений: по какому пути вершина переходит от сечения к сечению. Эскиз с кривыми, опорная кривая через точки (с касательными по нормалям эскизов или граней) или трёхмерная линия.",
         }, () => Mode == BlendKind.Sections);
         _guides.SketchFits = Refs.CurvesSketch;
         if (Editing) { KeepSketches(_guides, F.GuideSketchIds.ToArray()); Refs.KeepGuides(_guides, Part, F.GuideSketchIds, F.GuideCurveIds); }
