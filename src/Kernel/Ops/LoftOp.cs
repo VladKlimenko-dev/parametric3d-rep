@@ -35,6 +35,7 @@ public static class LoftOp
         {
             if (Math.Abs(tanStart) > 1e-12 || Math.Abs(tanEnd) > 1e-12)
                 throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: end tangency together with guide curves is not supported.");
+            LastNote = null;
             return Guided(sections, smooth, guides, guideAll);
         }
         _smooth = smooth || Math.Abs(tanStart) > 1e-12 || Math.Abs(tanEnd) > 1e-12; _tan0 = tanStart; _tan1 = tanEnd;
@@ -70,14 +71,32 @@ public static class LoftOp
                    ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: guide curves need sections of lines, arcs and Bezier curves.");
             var holeSecs = chains.Select(ch => ExactSections(ch.Select((h, k) => OneLoop(sections[k], h)).ToList())).ToList();
             if (holeSecs.Any(h => h == null)) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: the holes of the sections are not lines, arcs and Bezier curves.");
-            return DirectRound.NurbsLoftHollow(outerSecs, holeSecs.Select(h => (IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)>)h!).ToList(), smooth, ref why, 0, 0, guides, guideAll)
+            var hs = holeSecs.Select(h => (IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)>)h!).ToList();
+            var hb = DirectRound.NurbsLoftHollow(outerSecs, hs, smooth, ref why, 0, 0, guides, guideAll);
+            if (hb == null && guideAll && !GuideAllFallbackOff)
+            {
+                string? why2 = null;
+                hb = DirectRound.NurbsLoftHollow(outerSecs, hs, smooth, ref why2, 0, 0, guides, false);
+                if (hb != null) LastNote = "the guide could not drive all edges (" + why + "); only the guide's own edges follow it";
+            }
+            return hb
                    ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: the loft along guide curves declined: " + why);
         }
         var secs = ExactSections(sections, false)
                    ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: guide curves need sections of lines, arcs and Bezier curves.");
-        return DirectRound.NurbsLoft(secs, smooth, ref why, guides, 0, 0, guideAll)
-               ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: the loft along guide curves declined: " + why);
+        var body = DirectRound.NurbsLoft(secs, smooth, ref why, guides, 0, 0, guideAll);
+        // k179: перенесённые направляющие дали негодное тело — тело по своим рёбрам направляющих (как прежде), с записью
+        if (body == null && guideAll && !GuideAllFallbackOff)
+        {
+            string? why2 = null;
+            body = DirectRound.NurbsLoft(secs, smooth, ref why2, guides, 0, 0, false);
+            if (body != null) LastNote = "the guide could not drive all edges (" + why + "); only the guide's own edges follow it";
+        }
+        return body ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: the loft along guide curves declined: " + why);
     }
+    static readonly bool GuideAllFallbackOff = Environment.GetEnvironmentVariable("P3D_GUIDEALLFALLBACK") == "0";
+    /// <summary>k179: запись последнего лофта (переход по направляющим — не все рёбра); операция переносит её в предупреждения.</summary>
+    [ThreadStatic] public static string? LastNote;
     static readonly bool GuideHolesOff = Environment.GetEnvironmentVariable("P3D_GUIDEHOLES") == "0";
 
     static List<(List<ICurve3> Loop, Vector3d Normal)>? ExactSections(IReadOnlyList<Profile> sections, bool splitCircles = true)

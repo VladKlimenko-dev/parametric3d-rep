@@ -27,14 +27,14 @@ static partial class Program
         {
             var problems = new List<string>();
             var rep = new List<object>();
-            (Part P, Sketch S1, Sketch S2, DatumCurve C, BlendFeature B) Make(bool edgeOnly = false, double hole = 0)
+            (Part P, Sketch S1, Sketch S2, DatumCurve C, BlendFeature B) Make(bool edgeOnly = false, double hole = 0, double m2 = 10)
             {
                 var part = new Part("gear179");
                 var sk1 = new Sketch("Sketch1", Frame3.XY); part.Add(sk1);
                 sk1.AddGear(new GearParams { Teeth = 10, Module = 10, PitchCircle = false }, out _);
                 var fr2 = new Frame3(new Vector3d(0, 0, -70), Vector3d.UnitX, Vector3d.UnitY);
                 var sk2 = new Sketch("Sketch2", fr2); part.Add(sk2);
-                sk2.AddGear(new GearParams { Teeth = 10, Module = 10, Rotation = 45, PitchCircle = false }, out _);
+                sk2.AddGear(new GearParams { Teeth = 10, Module = m2, Rotation = 45, PitchCircle = false }, out _);
                 if (hole > 0) { sk1.AddEntity(new SkCircle(new SkPoint(0, 0), hole)); sk2.AddEntity(new SkCircle(new SkPoint(0, 0), hole)); }
                 var (pa, pb) = TipPair(sk1, sk2);
                 var specs = new[]
@@ -59,7 +59,8 @@ static partial class Program
                 var ta = a.AllPoints().Where(p => p.Owner != null).OrderByDescending(p => p.P.Length).ThenBy(p => Math.Atan2(p.P.Y, p.P.X)).First();
                 double ang = Math.Atan2(ta.P.Y, ta.P.X) + Math.PI / 4;
                 var want = new Vector2d(Math.Cos(ang), Math.Sin(ang)) * ta.P.Length;
-                var tb = b.AllPoints().OrderBy(p => (p.P - want).Length).First();
+                double sc = b.Gears.Single().P.Module / a.Gears.Single().P.Module;
+                var tb = b.AllPoints().OrderBy(p => (p.P - want * sc).Length).First();
                 return (ta, tb);
             }
             double EdgeDist(Part p, Vector3d q) => p.Bodies.Count == 0 ? double.NaN : p.Bodies.SelectMany(x => x.Edges).Min(e =>
@@ -74,7 +75,7 @@ static partial class Program
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var (p1, s1, s2, c1, b1) = Make();
             long ms1 = sw.ElapsedMilliseconds;
-            var g = c1.Spline!; var mid = g.PointAt(0.5);
+            var g = c1.Spline!; var mid = g.PointAt(0.25);   // середина хорды у кубической с осевыми касательными — на хорде; четверть — нет
             double worst = 0;
             for (int k = 1; k < 10; k++) worst = Math.Max(worst, EdgeDist(p1, RotZ(mid, 2 * Math.PI * k / 10)));
             var (pe, _, _, _, be) = Make(edgeOnly: true);
@@ -85,6 +86,14 @@ static partial class Program
             else if (!(worst < 1e-3)) problems.Add($"the other tooth edges do not follow the guide (off {worst:E2} mm)");
             if (be.Error != null || !(worstE > 0.1)) problems.Add($"«guide drives only its edge»: {be.Error}, off {worstE:E2}");
 
+            // 1б. вторая шестерня крупнее (модуль 22.6 — как у пользователя): все рёбра или (запасной путь) — свои, с записью
+            {
+                var (ps, _, _, cs, bs) = Make(m2: 22.627416997969522);
+                var gs = cs.Spline!.PointAt(0.25); double ws = 0;
+                for (int k = 1; k < 10; k++) ws = Math.Max(ws, EdgeDist(ps, RotZ(gs, 2 * Math.PI * k / 10)));
+                rep.Add(new { test = "scaled gear", error = bs.Error, volume = ps.Volume, warnings = ps.Warnings.Where(x => x.Contains("guide")).ToList(), offRotatedGuides = ws });
+                if (bs.Error != null || ps.Bodies.Count != 1) problems.Add($"scaled gear blend: {bs.Error}");
+            }
             // 2. отверстие при направляющей
             var (ph, _, _, _, bh) = Make(hole: 10);
             rep.Add(new { test = "hole", error = bh.Error, volume = ph.Volume, bodies = ph.Bodies.Count, want = p1.Volume - Math.PI * 100 * 70 });
