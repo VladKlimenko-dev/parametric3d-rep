@@ -397,12 +397,32 @@ public static class Tessellator
         // g.11: у тела с авторитетной многогранной формой обход задан самой формой (многоугольники точного ядра ориентированы);
         // «исправление по нормалям» переворачивало участки граней с несогласованной гладкой нормалью (серия 9, случай 65:
         // 141 сторона с одинаковым обходом). Мутация P3D_POLYWINDING=0.
+        string? traceTag = Environment.GetEnvironmentVariable("P3D_TESSTRACE");
+        void Trace(string stage)
+        {
+            if (string.IsNullOrEmpty(traceTag)) return;
+            foreach (var tf in faces.Where(q => (q.Tag ?? "").Contains(traceTag)))
+                if (md.FaceRanges.TryGetValue(tf.Id, out var fr))
+                {
+                    var n = Vector3d.Zero;
+                    for (int t = fr.IndexStart; t + 2 < fr.IndexStart + fr.IndexCount; t += 3)
+                    {
+                        var a = md.Vertices[md.Indices[t]]; var bq = md.Vertices[md.Indices[t + 1]]; var cq = md.Vertices[md.Indices[t + 2]];
+                        var cr = Vector3.Cross(bq.P - a.P, cq.P - a.P); n += new Vector3d(cr.X, cr.Y, cr.Z);
+                    }
+                    var sh = fr.IndexCount > 0 ? md.Vertices[md.Indices[fr.IndexStart]].N : default;
+                    Console.Error.WriteLine($"TESSTRACE {stage} face {tf.Id} {tf.Tag} tris {fr.IndexCount / 3} sum-n ({n.X:0.#},{n.Y:0.#},{n.Z:0.#}) shading0 ({sh.X:0.##},{sh.Y:0.##},{sh.Z:0.##}) vol {MassProps.SignedVolume(md):0.#}");
+                }
+        }
+        Trace("assembled");
         if (!(polyAuth && PolyFacetsOnly && PolyFine && !PolyWindingOld))
             FixWindingByNormals(md, faces.Where(q => q.Surface is Surfaces.FacetedSurface fq && fq.Source != null
                 && Geometry.ExactEdges.ShapeOf(fq.Source) is { } shq && shq is not Geometry.Ssi.ParamSurf).Select(q => q.Id).ToHashSet());
 
+        Trace("fixwinding");
         double vol = MassProps.SignedVolume(md);
         if (vol < 0) FlipAll(md);
+        Trace("final");
 
         var b = Bounds3.Empty;
         foreach (var v in md.Vertices) b.Add(new Vector3d(v.P.X, v.P.Y, v.P.Z));
