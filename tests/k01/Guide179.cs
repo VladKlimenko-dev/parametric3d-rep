@@ -210,8 +210,11 @@ static partial class Program
         }
         foreach (var dc in p.Children.OfType<DatumCurve>())
             Log(new { test = "curve", dc.Name, dc.Seq, specs = dc.Specs.Select(c => new { c.SketchId, c.SketchPointId, found = p.Sketches.FirstOrDefault(k => k.Id == c.SketchId)?.AllPoints().Any(x => x.Id == c.SketchPointId) }).ToList() });
+        bool prof = Environment.GetEnvironmentVariable("P3D_PROFREPORT") == "1";
+        if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
         var sw2 = System.Diagnostics.Stopwatch.StartNew();
         p.Rebuild(ps);
+        if (prof) Console.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report());
         foreach (var f in p.Features) Log(new { test = "feature", f.Name, f.Seq, error = f.Error, ms = sw2.ElapsedMilliseconds, volume = p.Volume, faces = p.Bodies.FirstOrDefault()?.Faces.Count(), warnings = p.Warnings.ToList() });
     }
 
