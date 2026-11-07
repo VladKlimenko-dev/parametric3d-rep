@@ -1,0 +1,9 @@
+  ОС: Ubuntu 26.04.1 LTS X64 | Процессор: AMD EPYC 9V74 80-Core Processor; логических ядер: 4 | Память: 15.6 ГБ | .NET: .NET 8.0.33
+{"test":"UI-KERNELTEST-K150","ok":true,"error":null}
+  floor H: default (52.399998, 26.199999), size 0 (20, 10), size 100 (200, 100), circle (22.36068, 22.36068), square (20, 20)
+  grid: mm (10, 10), inch (25.4, 5), theme (10, 10); px 0 0.1 100 2
+  after opening a document: gap 7, shape Ellipse, grid False
+  settings in EN: 156 texts, untranslated 0: 
+  settings in RU: 156 texts, untranslated 0: 
+{"test":"UI-FLOOR-SETTINGS-K133","ok":true,"error":null}
+{"passed":2,"failed":0}
