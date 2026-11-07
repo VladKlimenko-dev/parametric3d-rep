@@ -306,10 +306,20 @@ public static class QMesher
         return Math.Abs(d) < 1e-30 ? f.Reversed : d < 0;
     }
 
+    /// <summary>
+    /// k181: СТОРОНА ПЛОСКОЙ ГРАНИ — ДЕЙСТВУЮЩАЯ. Нормаль здесь — голой плоскости источника; у грани, размеченной от контуров,
+    /// сторону несут треугольники (Reversed = false, Sense &lt; 0 — источник смотрит внутрь). Низ блока после бобышки по окружности
+    /// и следующей общей булевой выходил вывернутым (AllC: 100+ случаев «сторон в одну сторону»). Стенки квадрик — прежним
+    /// путём (их нормаль — гранёной поверхности, уже со стороной: опыт g.11 переворачивал их дважды). Мутация P3D_QMPLANESIDE=0.
+    /// </summary>
+    static readonly bool PlaneSideOff = Environment.GetEnvironmentVariable("P3D_QMPLANESIDE") == "0";
+    private static bool PlaneReversed(TFace f) =>
+        !PlaneSideOff && f.Surface is FacetedSurface fs && fs.Source != null && fs.Sense != 0 ? f.Reversed ^ (fs.Sense < 0) : EffReversed(f);
+
     private static void Emit(TFace f, List<Vector3d> pts, List<int> tris, Vector3d normal, MeshBuilder mb)
     {
         Vector3d n = normal.LengthSquared < 1e-24 ? Vector3d.UnitZ : normal.Normalized();
-        if (EffReversed(f)) n = -n;
+        if (PlaneReversed(f)) n = -n;
 
         int start = mb.VertexCount;
         foreach (var p in pts) mb.AddVertex(p, n);
