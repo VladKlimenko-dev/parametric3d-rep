@@ -269,7 +269,7 @@ public static class XtToStep
             return E($"B_SPLINE_CURVE_WITH_KNOTS('',{deg},({P}),.UNSPECIFIED.,.F.,.F.,({string.Join(",", ms)}),({string.Join(",", ks.Select(N))}),.UNSPECIFIED.)");
         }
         static readonly bool PolyMode = Environment.GetEnvironmentVariable("P3D_XTPOLY") == "1";
-        static readonly bool ConeFlipOff = Environment.GetEnvironmentVariable("P3D_XTCONEFLIP") == "0";
+        static readonly bool ConeFlipOff = Environment.GetEnvironmentVariable("P3D_XTCONEFLIP") != "1";   // естественная нормаль конуса XT (P + vA + …) — наружу, как у STEP
 
         /// <summary>Плотная ломаная кривой свободной формы в естественном направлении; null — аналитическая кривая (прямая,
         /// окружность, эллипс — их обрезает сам импорт по вершинам).</summary>
@@ -401,8 +401,9 @@ public static class XtToStep
                 case "PLANE": r = E($"PLANE('',#{Ax2(sn.V("pvec"), sn.V("normal"), sn.V("x_axis"))})"); break;
                 case "CYLINDER": r = E($"CYLINDRICAL_SURFACE('',#{Ax2(sn.V("pvec"), sn.V("axis"), sn.V("x_axis"))},{N(sn.D("radius") * S)})"); break;
                 case "CONE":
-                    // радиус Parasolid растёт против оси (R = P − vA + …): ось STEP — обратная
-                    r = E($"CONICAL_SURFACE('',#{Ax2(sn.V("pvec"), -sn.V("axis"), sn.V("x_axis"))},{N(sn.D("radius") * S)},{N(Math.Atan2(sn.D("sin_half_angle"), sn.D("cos_half_angle")))})"); break;
+                    // радиус растёт ПО оси A (проверено по окружностям рёбер на конусах всех десяти файлов: в справочнике XT
+                    // формула напечатана как P − vA + …, но окружности ложатся на конус только при P + vA + …): ось STEP — та же
+                    r = E($"CONICAL_SURFACE('',#{Ax2(sn.V("pvec"), sn.V("axis"), sn.V("x_axis"))},{N(sn.D("radius") * S)},{N(Math.Atan2(sn.D("sin_half_angle"), sn.D("cos_half_angle")))})"); break;
                 case "SPHERE": r = E($"SPHERICAL_SURFACE('',#{Ax2(sn.V("centre"), sn.V("axis"), sn.V("x_axis"))},{N(sn.D("radius") * S)})"); break;
                 case "TORUS": r = E($"TOROIDAL_SURFACE('',#{Ax2(sn.V("centre"), sn.V("axis"), sn.V("x_axis"))},{N(sn.D("major_radius") * S)},{N(sn.D("minor_radius") * S)})"); break;
                 case "B_SURFACE": if (f[sn.P("nurbs")] is { } ns) r = BSurf(ns); break;

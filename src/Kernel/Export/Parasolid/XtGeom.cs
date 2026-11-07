@@ -6,7 +6,7 @@ namespace Parametric3D.Kernel.Export.Parasolid;
 /// ПОВЕРХНОСТИ PARASOLID XT ДЛЯ РАСЧЁТА: точка по параметрам и ближайшая точка (проекция) — для поверхностей скругления
 /// (BLENDED_EDGE: касание шара с опорными поверхностями) и кривых на поверхности (SP_CURVE). Параметризация — по Parasolid XT
 /// Format Reference (раздел «Surfaces»): плоскость P + uX + vY; цилиндр P + vA + r(X cos u + Y sin u); конус
-/// P − vA + (X cos u + Y sin u)(r + v tg a); шар C + r(cos v (X cos u + Y sin u) + A sin v); тор C + (R + r cos v)(X cos u +
+/// P + vA + (X cos u + Y sin u)(r + v tg a) (в справочнике знак при vA напечатан минусом — данные ему не отвечают); шар C + r(cos v (X cos u + Y sin u) + A sin v); тор C + (R + r cos v)(X cos u +
 /// Y sin u) + r sin v A; B-поверхность — NURBS (вершины по u — внешний индекс, однородные при весах).
 /// </summary>
 internal abstract class XtSurf
@@ -54,13 +54,13 @@ internal abstract class XtSurf
     {
         readonly Vector3d P, A, X, Y; readonly double R, S, C;
         public Cone(Vector3d p, Vector3d a, Vector3d x, double r, double s, double c) { P = p; A = a.Normalized(); X = x.Normalized(); Y = Vector3d.Cross(A, X); R = r; S = s; C = c; }
-        public override Vector3d At(double u, double v) => P - A * v + (X * Math.Cos(u) + Y * Math.Sin(u)) * (R + v * S / C);
+        public override Vector3d At(double u, double v) => P + A * v + (X * Math.Cos(u) + Y * Math.Sin(u)) * (R + v * S / C);
         public override Vector3d Project(Vector3d q)
         {
-            // в меридиане точки: образующая — прямая от (h = 0, ρ = R) с направлением (−1, tg a) по (h вдоль A, ρ)
+            // в меридиане точки: образующая — прямая от (h = 0, ρ = R) с направлением (1, tg a) по (h вдоль A, ρ)
             var d = q - P; double h = Vector3d.Dot(d, A); var rad = d - A * h; double rho = rad.Length;
             var e = rho > 1e-30 ? rad / rho : X;
-            var g = new Vector2d(-C, S);                    // единичное направление образующей (h, ρ) — на единицу длины
+            var g = new Vector2d(C, S);                    // единичное направление образующей (h, ρ) — на единицу длины
             var w = new Vector2d(h, rho - R);
             double t = Vector2d.Dot(w, g);
             if (R + t * S < 0) t = -R / S;                   // не за вершину
