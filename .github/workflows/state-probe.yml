@@ -55,6 +55,7 @@ jobs:
         include:
           - { name: k182_sld, cmd: 'sldprt', env: '' }
           - { name: k182_sldc, cmd: 'sldprt', env: 'P3D_XTCONEFLIP=0' }
+          - { name: k182_sldo, cmd: 'sldprt tests/k01/data/sw_hex_screw.SLDPRT tests/k01/data/sw_socket_screw.SLDPRT tests/k01/data/sw_hex_nut.SLDPRT', env: 'P3D_SLDOUT=res/out' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

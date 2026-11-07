@@ -25,6 +25,7 @@ internal abstract class XtSurf
             case "SPHERE": return new Sph(n.V("centre"), n.V("axis"), n.V("x_axis"), n.D("radius"));
             case "TORUS": return new Tor(n.V("centre"), n.V("axis"), n.V("x_axis"), n.D("major_radius"), n.D("minor_radius"));
             case "B_SURFACE": return f[n.P("nurbs")] is { } ns ? XtNurbsSurf.Of(f, ns) : null;
+            case "BLENDED_EDGE": return XtBlendSurf.Of(f, n, 0);
             case "OFFSET_SURF": return f[n.P("surface")] is { } bs && Of(f, bs) is { } b ? new Off(b, n.D("offset") * (n.C("sense") == '-' ? -1 : 1) * (bs.C("sense") == '-' ? -1 : 1)) : null;
         }
         return null;
@@ -252,5 +253,250 @@ internal static class XtBasis
         for (int i = 1; i < n; i++) t[i] = tot > 0 ? t[i - 1] + (q[i] - q[i - 1]).Length / tot : (double)i / (n - 1);
         t[n - 1] = 1;
         return t;
+    }
+}
+
+/// <summary>NURBS-кривая XT (однородные вершины при весах; размерность 2 — кривая параметров поверхности).</summary>
+internal sealed class XtNurbsCurve
+{
+    public int Deg, N, Dim; public double[] K = Array.Empty<double>(); public double[][] H = Array.Empty<double[]>(); public bool Rational;
+    public double T0 => K[Deg]; public double T1 => K[N];
+
+    public static XtNurbsCurve? Of(XtFile f, XtNode n)
+    {
+        var c = new XtNurbsCurve { Deg = n.I("degree"), N = n.I("n_vertices"), Rational = n.L("rational") };
+        int vd = n.I("vertex_dim"); c.Dim = c.Rational ? vd - 1 : vd;
+        var vs = f[n.P("bspline_vertices")]?.DA("vertices");
+        c.K = XtNurbsSurf.Expand(f, n.P("knots"), n.P("knot_mult"));
+        if (vs == null || vs.Length < c.N * vd || c.K.Length != c.N + c.Deg + 1 || c.Dim < 2) return null;
+        c.H = new double[c.N][];
+        for (int i = 0; i < c.N; i++) { c.H[i] = new double[c.Dim + 1]; for (int k = 0; k < c.Dim; k++) c.H[i][k] = vs[i * vd + k]; c.H[i][c.Dim] = c.Rational ? vs[i * vd + vd - 1] : 1; }
+        return c;
+    }
+
+    public double[] At(double t)
+    {
+        t = Math.Clamp(t, T0, T1);
+        var b = XtBasis.Eval(K, Deg, N, t);
+        var acc = new double[Dim + 1];
+        for (int i = 0; i < N; i++) if (b[i] != 0) for (int k = 0; k <= Dim; k++) acc[k] += b[i] * H[i][k];
+        var r = new double[Dim];
+        for (int k = 0; k < Dim; k++) r[k] = acc[Dim] != 0 ? acc[k] / acc[Dim] : acc[k];
+        return r;
+    }
+
+    public Vector3d At3(double t) { var p = At(t); return new Vector3d(p[0], p[1], Dim > 2 ? p[2] : 0); }
+
+    /// <summary>Точки по пролётам узлов (не реже per на пролёт).</summary>
+    public List<double> Params(int per)
+    {
+        var res = new List<double>();
+        for (int i = Deg; i < N; i++)
+        {
+            double a = K[i], b = K[i + 1];
+            if (b - a <= 1e-15) continue;
+            for (int j = 0; j < per; j++) res.Add(a + (b - a) * j / per);
+        }
+        res.Add(T1);
+        return res;
+    }
+}
+
+/// <summary>Ломаные кривых: плотная разбивка, уточнение пересечения и обрезка по вершинам ребра.</summary>
+internal static class XtPoly
+{
+    /// <summary>Сгущение ломаной кривой пересечения двух поверхностей: точки между узлами карты переносятся на обе поверхности
+    /// попеременной проекцией (сходится к линии пересечения при пересечении под углом).</summary>
+    public static List<Vector3d> Densify(IReadOnlyList<Vector3d> chart, XtSurf? a, XtSurf? b, int per)
+    {
+        var res = new List<Vector3d>();
+        for (int i = 0; i + 1 < chart.Count; i++)
+        {
+            res.Add(chart[i]);
+            for (int k = 1; k < per; k++)
+            {
+                var p = Vector3d.Lerp(chart[i], chart[i + 1], (double)k / per);
+                if (a != null && b != null)
+                    for (int it = 0; it < 60; it++)
+                    {
+                        var q = b.Project(a.Project(p));
+                        bool done = (q - p).Length < 1e-13;
+                        p = q;
+                        if (done) break;
+                    }
+                res.Add(p);
+            }
+        }
+        if (chart.Count > 0) res.Add(chart[^1]);
+        return res;
+    }
+
+    /// <summary>Участок ломаной между ближайшими к s и e точками (по ходу ломаной), концы — точно s и e.</summary>
+    public static List<Vector3d> Trim(IReadOnlyList<Vector3d> pts, Vector3d s, Vector3d e)
+    {
+        (int I, double T, double D) Near(Vector3d q)
+        {
+            int bi = 0; double bt = 0, bd = double.MaxValue;
+            for (int i = 0; i + 1 < pts.Count; i++)
+            {
+                var ab = pts[i + 1] - pts[i]; double l2 = ab.LengthSquared;
+                double t = l2 > 0 ? Math.Clamp(Vector3d.Dot(q - pts[i], ab) / l2, 0, 1) : 0;
+                double d = (pts[i] + ab * t - q).LengthSquared;
+                if (d < bd) { bd = d; bi = i; bt = t; }
+            }
+            return (bi, bt, bd);
+        }
+        if (pts.Count < 2) return pts.ToList();
+        var ns = Near(s); var ne = Near(e);
+        var res = new List<Vector3d>();
+        bool fwd = (ns.I, ns.T).CompareTo((ne.I, ne.T)) <= 0;
+        var (a, b) = fwd ? (ns, ne) : (ne, ns);
+        res.Add(fwd ? s : e);
+        for (int i = a.I + 1; i <= b.I; i++) res.Add(pts[i]);
+        res.Add(fwd ? e : s);
+        if (!fwd) res.Reverse();
+        // убрать совпадающие точки у концов
+        var clean = new List<Vector3d>();
+        foreach (var p in res) if (clean.Count == 0 || (clean[^1] - p).Length > 1e-12) clean.Add(p);
+        return clean;
+    }
+}
+
+
+/// <summary>
+/// СКРУГЛЕНИЕ PARASOLID (BLENDED_EDGE): ось шара — пересечение опорных поверхностей, смещённых на range (знак — сторона), сечение
+/// — дуга с центром на оси от точки касания первой опоры до второй (v = 0 → 1; при обратной оси — наоборот). Радиус 0 — «край
+/// обрыва» (cliff edge): поверхность вырождается в свою ось (кривую). Ось уточняется между точками карты попеременной проекцией
+/// на смещённые опоры.
+/// </summary>
+internal sealed class XtBlendSurf : XtSurf
+{
+    public List<Vector3d> Spine = new();
+    public XtSurf S0 = null!, S1 = null!;
+    public double R0, R1;
+    public bool Rev;
+
+    public static XtBlendSurf? Of(XtFile f, XtNode n, int depth)
+    {
+        if (depth > 3) return null;
+        var ss = n.PA("surface"); var sp = f[n.P("spine")];
+        if (ss.Length < 2 || sp == null || f[ss[0]] is not { } a || f[ss[1]] is not { } b) return null;
+        XtSurf? s0 = a.Name == "BLENDED_EDGE" ? Of(f, a, depth + 1) : XtSurf.Of(f, a);
+        XtSurf? s1 = b.Name == "BLENDED_EDGE" ? Of(f, b, depth + 1) : XtSurf.Of(f, b);
+        if (s0 == null || s1 == null) return null;
+        var rg = n.DA("range");
+        var bl = new XtBlendSurf { S0 = s0, S1 = s1, R0 = rg.Length > 0 ? Math.Abs(rg[0]) : 0, R1 = rg.Length > 1 ? Math.Abs(rg[1]) : 0, Rev = sp.C("sense") == '-' };
+        List<Vector3d> raw;
+        switch (sp.Name)
+        {
+            case "INTERSECTION": raw = f[sp.P("chart")]?.VA("hvec").ToList() ?? new(); break;
+            case "CIRCLE":
+            {
+                var c = sp.V("centre"); var z = sp.V("normal").Normalized(); var x = sp.V("x_axis").Normalized(); var y = Vector3d.Cross(z, x); double r = sp.D("radius");
+                raw = Enumerable.Range(0, 129).Select(i => c + (x * Math.Cos(2 * Math.PI * i / 128) + y * Math.Sin(2 * Math.PI * i / 128)) * r).ToList();
+                break;
+            }
+            case "LINE": raw = new() { sp.V("pvec") - sp.V("direction") * 0.1, sp.V("pvec") + sp.V("direction") * 0.1 }; break;
+            case "B_CURVE":
+                raw = f[sp.P("nurbs")] is { } nb && XtNurbsCurve.Of(f, nb) is { Dim: 3 } nc ? nc.Params(16).Select(nc.At3).ToList() : new();
+                break;
+            default: return null;
+        }
+        if (raw.Count < 2) return null;
+        // уточнение оси: точки между узлами карты — на обе смещённые опоры
+        if (sp.Name == "INTERSECTION")
+        {
+            var dense = new List<Vector3d>();
+            for (int i = 0; i + 1 < raw.Count; i++)
+            {
+                dense.Add(raw[i]);
+                for (int k = 1; k < 8; k++) dense.Add(bl.OnSpine(Vector3d.Lerp(raw[i], raw[i + 1], k / 8.0)));
+            }
+            dense.Add(raw[^1]);
+            raw = dense;
+        }
+        // открытая ось — с запасом за концы (грань скругления доходит до торцов чуть дальше точек карты)
+        if ((raw[0] - raw[^1]).Length > 1e-9)
+        {
+            double ext = Math.Max(2 * Math.Max(bl.R0, bl.R1), 1e-5);
+            var d0 = (raw[0] - raw[1]); var d1 = (raw[^1] - raw[^2]);
+            if (d0.LengthSquared > 0) raw.Insert(0, bl.OnSpine(raw[0] + d0.Normalized() * ext));
+            if (d1.LengthSquared > 0) raw.Add(bl.OnSpine(raw[^1] + d1.Normalized() * ext));
+        }
+        bl.Spine = raw;
+        return bl;
+    }
+
+    static Vector3d Offset(XtSurf s, Vector3d q, double d)
+    {
+        var p = s.Project(q); var t = q - p;
+        return d <= 0 || t.LengthSquared < 1e-30 ? p : p + t.Normalized() * d;
+    }
+
+    internal Vector3d OnSpine(Vector3d p)
+    {
+        for (int it = 0; it < 80; it++)
+        {
+            var q = Offset(S1, Offset(S0, p, R0), R1);
+            bool done = (q - p).Length < 1e-13; p = q;
+            if (done) break;
+        }
+        return p;
+    }
+
+    /// <summary>Точки касания шара с центром c (по порядку v: от первой опоры, при обратной оси — от второй).</summary>
+    public (Vector3d A, Vector3d B) Contacts(Vector3d c)
+    {
+        var a = S0.Project(c); var b = S1.Project(c);
+        return Rev ? (b, a) : (a, b);
+    }
+
+    /// <summary>Точки дуги сечения с центром c.</summary>
+    public Vector3d[] Arc(Vector3d c, int m)
+    {
+        var (a, b) = Contacts(c);
+        var res = new Vector3d[m];
+        var ea = a - c; var eb = b - c; double r = 0.5 * (ea.Length + eb.Length);
+        if (r < 1e-12) { for (int j = 0; j < m; j++) res[j] = c; return res; }
+        ea.Normalize(); eb.Normalize();
+        double ang = Math.Acos(Math.Clamp(Vector3d.Dot(ea, eb), -1, 1));
+        var nn = Vector3d.Cross(ea, eb);
+        if (nn.LengthSquared < 1e-24) { for (int j = 0; j < m; j++) res[j] = Vector3d.Lerp(a, b, j / (double)(m - 1)); return res; }
+        nn.Normalize(); var e2 = Vector3d.Cross(nn, ea);
+        for (int j = 0; j < m; j++) { double t = ang * j / (m - 1); res[j] = c + (ea * Math.Cos(t) + e2 * Math.Sin(t)) * r; }
+        return res;
+    }
+
+    public override Vector3d At(double u, double v)
+    {
+        double x = Math.Clamp(u, 0, 1) * (Spine.Count - 1); int i = Math.Min((int)x, Spine.Count - 2);
+        var c = Vector3d.Lerp(Spine[i], Spine[i + 1], x - i);
+        var arc = Arc(c, 33); double y = Math.Clamp(v, 0, 1) * 32; int j = Math.Min((int)y, 31);
+        return Vector3d.Lerp(arc[j], arc[j + 1], y - j);
+    }
+
+    public override Vector3d Project(Vector3d q)
+    {
+        // ближайшая точка оси, затем ближайшая точка дуги сечения
+        int bi = 0; double bt = 0, bd = double.MaxValue;
+        for (int i = 0; i + 1 < Spine.Count; i++)
+        {
+            var ab = Spine[i + 1] - Spine[i]; double l2 = ab.LengthSquared;
+            double t = l2 > 0 ? Math.Clamp(Vector3d.Dot(q - Spine[i], ab) / l2, 0, 1) : 0;
+            double d = (Spine[i] + ab * t - q).LengthSquared;
+            if (d < bd) { bd = d; bi = i; bt = t; }
+        }
+        var c = Spine[bi] + (Spine[Math.Min(bi + 1, Spine.Count - 1)] - Spine[bi]) * bt;
+        if (R0 < 1e-12 && R1 < 1e-12) return c;
+        var arc = Arc(c, 33);
+        var best = arc[0]; double bdd = double.MaxValue;
+        for (int j = 0; j + 1 < arc.Length; j++)
+        {
+            var ab = arc[j + 1] - arc[j]; double l2 = ab.LengthSquared;
+            double t = l2 > 0 ? Math.Clamp(Vector3d.Dot(q - arc[j], ab) / l2, 0, 1) : 0;
+            var pp = arc[j] + ab * t; double d = (pp - q).LengthSquared;
+            if (d < bdd) { bdd = d; best = pp; }
+        }
+        return best;
     }
 }

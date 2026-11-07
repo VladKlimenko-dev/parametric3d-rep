@@ -149,7 +149,20 @@ public static class XtToStep
             bool sense = true;
             int? cid = null;
             Vector3d? ringStart = null;
-            if (cn == null)
+            Vector3d? pS = vStart != null ? f[vStart.P("point")]?.V("pvec") : null, pE = vEnd != null ? f[vEnd.P("point")]?.V("pvec") : null;
+            // кривые свободной формы (пересечение, B-кривая, кривая на поверхности) — плотной ломаной от начала ребра до конца,
+            // затем кубическим B-сплайном: в файле они длиннее ребра (пределы кривой) или заданы редкой картой
+            var free = cn != null && (Dense(cn) is { Count: >= 2 } dn) ? dn : cn == null ? TolerantDense(h) : null;
+            if (free != null)
+            {
+                bool closed = pS == null || pE == null || (pS.Value - pE.Value).Length < 1e-12;
+                List<Vector3d> pts;
+                if (!closed) { pts = XtPoly.Trim(free, pS!.Value, pE!.Value); sense = true; }
+                else { pts = free; sense = cn == null || cn.C("sense") != '-'; if (pS != null && pE != null && (free[0] - pS.Value).Length > 1e-9 && (free[^1] - pS.Value).Length > 1e-9) warn?.Add("Parasolid: a closed free-form edge does not start at its vertex."); }
+                ringStart = pts[0];
+                cid = Interp(pts);
+            }
+            else if (cn == null)
             {
                 // ребро с допуском: кривая — у плавников (обрезанная кривая на поверхности)
                 int guard = 0;
@@ -257,6 +270,59 @@ public static class XtToStep
         }
         static readonly bool PolyMode = Environment.GetEnvironmentVariable("P3D_XTPOLY") == "1";
         static readonly bool ConeFlipOff = Environment.GetEnvironmentVariable("P3D_XTCONEFLIP") == "0";
+
+        /// <summary>Плотная ломаная кривой свободной формы в естественном направлении; null — аналитическая кривая (прямая,
+        /// окружность, эллипс — их обрезает сам импорт по вершинам).</summary>
+        List<Vector3d>? Dense(XtNode cn, int depth = 0)
+        {
+            if (depth > 4) return null;
+            switch (cn.Name)
+            {
+                case "INTERSECTION":
+                {
+                    var ch = f[cn.P("chart")]; var pts = ch?.VA("hvec");
+                    if (pts == null || pts.Length < 2) return null;
+                    var ss = cn.PA("surface");
+                    XtSurf? a = ss.Length > 0 && f[ss[0]] is { } a0 ? XtSurf.Of(f, a0) : null, b = ss.Length > 1 && f[ss[1]] is { } b0 ? XtSurf.Of(f, b0) : null;
+                    return XtPoly.Densify(pts, a, b, 8);
+                }
+                case "B_CURVE":
+                {
+                    if (f[cn.P("nurbs")] is not { } nb || XtNurbsCurve.Of(f, nb) is not { Dim: 3 } nc) return null;
+                    return nc.Params(Math.Max(8, 4 * nc.Deg)).Select(nc.At3).ToList();
+                }
+                case "TRIMMED_CURVE":
+                {
+                    var bc = f[cn.P("basis_curve")];
+                    if (bc == null || bc.Name is "LINE" or "CIRCLE" or "ELLIPSE") return null;
+                    var d = Dense(bc, depth + 1);
+                    if (d == null) return null;
+                    return XtPoly.Trim(d, cn.V("point_1"), cn.V("point_2"));
+                }
+                case "SP_CURVE":
+                {
+                    var sf = f[cn.P("surface")]; var bcv = f[cn.P("b_curve")];
+                    if (sf == null || bcv == null || XtSurf.Of(f, sf) is not { } xs || f[bcv.P("nurbs")] is not { } nb2) return null;
+                    var pts = SampleSp(nb2, xs);
+                    return pts.Count >= 2 ? pts : null;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>Ребро с допуском (без своей кривой): ломаная по кривой первого плавника, в направлении ребра.</summary>
+        List<Vector3d>? TolerantDense(XtNode h)
+        {
+            int guard = 0;
+            for (var x = h; x != null && guard++ < 64; x = f[x.P("other")] is { } oo && oo.Id != h.Id ? oo : null)
+                if (f[x.P("curve")] is { } fc && Dense(fc) is { Count: >= 2 } d)
+                {
+                    bool rev = (fc.C("sense") == '-') != (x.C("sense") == '-');
+                    if (rev) d.Reverse();
+                    return d;
+                }
+            return null;
+        }
 
         int Poly(IReadOnlyList<Vector3d> pts)
         {
@@ -388,40 +454,25 @@ public static class XtToStep
         /// </summary>
         int? Blend(XtNode sn)
         {
-            var sp = f[sn.P("spine")]; var ss = sn.PA("surface");
-            if (sp == null || ss.Length < 2 || f[ss[0]] is not { } s0n || f[ss[1]] is not { } s1n) return null;
-            var s0 = XtSurf.Of(f, s0n); var s1 = XtSurf.Of(f, s1n);
-            if (s0 == null || s1 == null) return null;
-            List<Vector3d> spine;
-            if (sp.Name == "INTERSECTION" && f[sp.P("chart")] is { } ch) spine = ch.VA("hvec").ToList();
-            else if (sp.Name is "LINE" or "CIRCLE" or "B_CURVE" or "ELLIPSE") spine = SampleCurve(sp);
-            else return null;
-            if (spine.Count < 2) return null;
-            // плотность по оси: не реже, чем через радиус шара, и не меньше 4 сечений
-            double rad = Math.Max(Math.Abs(sn.DA("range") is { Length: > 0 } rg ? rg[0] : 0), 1e-9);
-            var dense = new List<Vector3d> { spine[0] };
-            for (int i = 1; i < spine.Count; i++)
+            var bl = XtBlendSurf.Of(f, sn, 0);
+            if (bl == null || bl.Spine.Count < 2) return null;
+            double rad = Math.Max(Math.Max(bl.R0, bl.R1), 1e-6);
+            // сечения: не реже чем через радиус шара по оси, от 4 до 80
+            var sp = bl.Spine;
+            double len = 0; for (int i = 1; i < sp.Count; i++) len += (sp[i] - sp[i - 1]).Length;
+            int nu = Math.Clamp((int)Math.Ceiling(len / rad) + 1, 4, 80);
+            var cum = new double[sp.Count]; for (int i = 1; i < sp.Count; i++) cum[i] = cum[i - 1] + (sp[i] - sp[i - 1]).Length;
+            Vector3d At(double s0)
             {
-                int k = Math.Max(1, (int)Math.Ceiling((spine[i] - spine[i - 1]).Length / Math.Max(rad, 1e-6)));
-                if (spine.Count == 2) k = Math.Max(k, 3);
-                for (int j = 1; j <= k; j++) dense.Add(Vector3d.Lerp(spine[i - 1], spine[i], (double)j / k));
+                int i = Array.BinarySearch(cum, s0); if (i < 0) i = ~i - 1; i = Math.Clamp(i, 0, sp.Count - 2);
+                double seg = cum[i + 1] - cum[i]; return seg > 0 ? Vector3d.Lerp(sp[i], sp[i + 1], (s0 - cum[i]) / seg) : sp[i];
             }
-            if (dense.Count > 60) { var dd = new List<Vector3d>(); for (int i = 0; i < 60; i++) dd.Add(dense[(int)Math.Round((double)i * (dense.Count - 1) / 59)]); dense = dd; }
-            bool rev = sp.C("sense") == '-';
             const int M = 9;
-            var grid = new Vector3d[dense.Count, M];
-            for (int i = 0; i < dense.Count; i++)
+            var grid = new Vector3d[nu, M];
+            for (int i = 0; i < nu; i++)
             {
-                var c = dense[i];
-                var a = s0.Project(c); var b = s1.Project(c);
-                if (rev) (a, b) = (b, a);
-                var ea = a - c; var eb = b - c; double r = 0.5 * (ea.Length + eb.Length);
-                if (ea.LengthSquared < 1e-30 || eb.LengthSquared < 1e-30) return null;
-                ea.Normalize(); eb.Normalize();
-                double ang = Math.Acos(Math.Clamp(Vector3d.Dot(ea, eb), -1, 1));
-                var nn = Vector3d.Cross(ea, eb); if (nn.LengthSquared < 1e-24) return null; nn.Normalize();
-                var e2 = Vector3d.Cross(nn, ea);
-                for (int j = 0; j < M; j++) { double t = ang * j / (M - 1); grid[i, j] = c + (ea * Math.Cos(t) + e2 * Math.Sin(t)) * r; }
+                var arc = bl.Arc(At(len * i / (nu - 1)), M);
+                for (int j = 0; j < M; j++) grid[i, j] = arc[j];
             }
             return FitSurface(grid);
         }
