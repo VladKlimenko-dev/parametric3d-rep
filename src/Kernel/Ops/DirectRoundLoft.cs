@@ -66,6 +66,9 @@ public static partial class DirectRound
         }
     }
     public static long GuidedLofts;
+    /// <summary>k179: направляющих, перенесённых к вершинам без своей (разбор).</summary>
+    public static long GuideAllSynth;
+    static readonly bool GuideAllOff = Environment.GetEnvironmentVariable("P3D_GUIDEALL") == "0";
 
     /// <summary>
     /// KRN-07 (07.4): ТОЧНЫЙ ЛОФТ ПО ОТРЕЗКАМ И ДУГАМ. Каждое сечение — замкнутый контур из N отрезков и дуг (у всех сечений N
@@ -77,8 +80,8 @@ public static partial class DirectRound
     /// боковые рёбра — NURBS-кривые столбцов опорных точек; торцы — плоские грани по самим сечениям. Тело собирается и
     /// проверяется (годность, аналитический объём, объём по фасетам). null — отказ (причина в why).
     /// </summary>
-    internal static TSolid? NurbsLoft(IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)> sections, bool smooth, ref string? why, IReadOnlyList<ICurve3>? guides = null, double tanStart = 0, double tanEnd = 0)
-        => NurbsLoftCore(sections, smooth, ref why, guides, tanStart, tanEnd, null);
+    internal static TSolid? NurbsLoft(IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)> sections, bool smooth, ref string? why, IReadOnlyList<ICurve3>? guides = null, double tanStart = 0, double tanEnd = 0, bool guideAll = false)
+        => NurbsLoftCore(sections, smooth, ref why, guides, tanStart, tanEnd, null, guideAll);
 
     static readonly bool LoftHollowOff = Environment.GetEnvironmentVariable("P3D_LOFTHOLLOW") == "0";
     public static long HollowLofts;
@@ -91,11 +94,13 @@ public static partial class DirectRound
     /// внешнего лофта; иначе null (прежний путь). Мутация P3D_LOFTHOLLOW=0.
     /// </summary>
     internal static TSolid? NurbsLoftHollow(IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)> outer,
-        IReadOnlyList<IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)>> holes, bool smooth, ref string? why, double tanStart = 0, double tanEnd = 0)
+        IReadOnlyList<IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)>> holes, bool smooth, ref string? why, double tanStart = 0, double tanEnd = 0,
+        IReadOnlyList<ICurve3>? guides = null, bool guideAll = false)
     {
         if (LoftHollowOff) { why = "hollow loft is off"; return null; }
         var of = new List<FDesc>();
-        NurbsLoftCore(outer, smooth, ref why, null, tanStart, tanEnd, of);
+        // k179: направляющие ведут внешний контур; отверстия — лофт по сечениям без направляющих (как и прежде у отверстий)
+        NurbsLoftCore(outer, smooth, ref why, guides, tanStart, tanEnd, of, guideAll);
         if (of.Count == 0) return null;
         var outerSides = of.Where(f => f.Tag.StartsWith("loft:side")).ToList();
         var start = of.FirstOrDefault(f => f.Tag == "loft:start"); var end = of.FirstOrDefault(f => f.Tag == "loft:end");
@@ -151,8 +156,9 @@ public static partial class DirectRound
     }
     public static long HollowRejected;
 
-    static TSolid? NurbsLoftCore(IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)> sections, bool smooth, ref string? why, IReadOnlyList<ICurve3>? guides, double tanStart, double tanEnd, List<FDesc>? collect)
+    static TSolid? NurbsLoftCore(IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)> sections, bool smooth, ref string? why, IReadOnlyList<ICurve3>? guides, double tanStart, double tanEnd, List<FDesc>? collect, bool guideAll = false)
     {
+        var gsrc = guides?.ToList();
         if (LoftNurbsOff) { why = "NURBS loft is off"; return null; }
         // KRN-07 (07.4): НАПРАВЛЯЮЩИЕ (DirectRoundLoftGuides.cs). Сечение-окружность делится на дуги в точках направляющих.
         List<GuidePw>? G4 = null;
@@ -283,6 +289,45 @@ public static partial class DirectRound
                 for (int k = 1; k < S; k++) if (gv[g, k] != gv[g, 0]) { why = $"loft: guide {g + 1} connects vertices that do not correspond to those of guide 1"; return null; }
                 if (guideAt[gv[g, 0]] >= 0) { why = "loft: two guides pass through one vertex"; return null; }
                 guideAt[gv[g, 0]] = g;
+            }
+            // k179: НАПРАВЛЯЮЩАЯ ВЕДЁТ ВСЕ РЁБРА (как «Global» у SolidWorks, направляющая с влиянием на весь контур у Creo): у
+            // вершины без своей направляющей — направляющая ближайшей по углу вокруг оси лофта, перенесённая к этой вершине.
+            // Перенос: Gj(t) = Aj + (Bj − Aj)·t + L·(G(t) − A − (B − A)·t) — отход направляющей от её хорды, осевая часть как есть,
+            // поперечная — повёрнута вокруг оси на угол между вершинами и масштабирована отношением их расстояний до оси.
+            // Отображение аффинное — Gj того же вида и с теми же границами кусков (точно, общий узловой вектор). Два сечения.
+            // Мутация P3D_GUIDEALL=0 — только свои рёбра (прежнее).
+            if (guideAll && !GuideAllOff && S == 2 && guideAt.Any(x => x < 0))
+            {
+                var ax = run; var C0 = cent[0]; var C1 = cent[S - 1];
+                Vector3d Perp(Vector3d v) => v - ax * Vector3d.Dot(v, ax);
+                double Ang(Vector3d v) { var u = Perp(v); var e1 = Perp(Math.Abs(ax.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY).Normalized(); var e2 = Vector3d.Cross(ax, e1); return Math.Atan2(Vector3d.Dot(u, e2), Vector3d.Dot(u, e1)); }
+                var gl = new List<GuidePw>(G4); var gtl = new List<double[]>(); for (int g = 0; g < G; g++) gtl.Add(new[] { gt[g, 0], gt[g, 1] });
+                for (int j = 0; j < N; j++)
+                {
+                    if (guideAt[j] >= 0) continue;
+                    var Aj = Start(loops[0][j]); var Bj = Start(loops[S - 1][j]);
+                    double aj0 = Ang(Aj - C0), aj1 = Ang(Bj - C1);
+                    int bg = -1; double bd = double.MaxValue, phi = 0, kr = 1;
+                    for (int g = 0; g < G; g++)
+                    {
+                        var Ag = Start(loops[0][Array.IndexOf(guideAt, g)]); var Bg = Start(loops[S - 1][Array.IndexOf(guideAt, g)]);
+                        double d0 = Math.IEEERemainder(aj0 - Ang(Ag - C0), 2 * Math.PI), d1 = Math.IEEERemainder(aj1 - Ang(Bg - C1), 2 * Math.PI);
+                        double rg = Perp(Ag - C0).Length + Perp(Bg - C1).Length;
+                        if (rg < 1e-9 * Math.Max(1, (C1 - C0).Length)) continue;
+                        double dd = Math.Abs(d0) + Math.Abs(d1);
+                        if (dd < bd) { bd = dd; bg = g; phi = d0 + Math.IEEERemainder(d1 - d0, 2 * Math.PI) / 2; kr = (Perp(Aj - C0).Length + Perp(Bj - C1).Length) / rg; }
+                    }
+                    if (bg < 0) continue;
+                    var A = Start(loops[0][Array.IndexOf(guideAt, bg)]); var B = Start(loops[S - 1][Array.IndexOf(guideAt, bg)]);
+                    double cph = Math.Cos(phi), sph = Math.Sin(phi);
+                    Vector3d Lm(Vector3d v) { var a = ax * Vector3d.Dot(v, ax); var pp = v - a; return a + (pp * cph + Vector3d.Cross(ax, pp) * sph) * kr; }
+                    var syn = TransformGuide(G4[bg], Lm, Aj - Lm(A), (Bj - Aj) - Lm(B - A), gt[bg, 0], gt[bg, 1]);
+                    guideAt[j] = gl.Count; gl.Add(syn); gtl.Add(new[] { 0.0, 1.0 });
+                    gsrc!.Add(PwToSpline(syn));
+                    Interlocked.Increment(ref GuideAllSynth);
+                }
+                G4 = gl; G = gl.Count; gt = new double[G, S];
+                for (int g = 0; g < G; g++) { gt[g, 0] = gtl[g][0]; gt[g, 1] = gtl[g][1]; }
             }
         }
         // сопоставление звеньев: начало каждого следующего сечения — поворот, ближайший по вершинам относительно центров
@@ -536,7 +581,7 @@ public static partial class DirectRound
                     var (subs, bs) = SubPieces(G4![g], gt[g, span], gt[g, span + 1]);
                     var f = subs[0]; f[0] = new Vector4d(A, 1);
                     var l = subs[^1]; l[^1] = new Vector4d(B, 1);
-                    r = (GuideEdge(guides![g], subs, bs, A, B), subs, bs);
+                    r = (GuideEdge(gsrc![g], subs, bs, A, B), subs, bs);
                 }
                 return sideG[(j, span)] = r;
             }

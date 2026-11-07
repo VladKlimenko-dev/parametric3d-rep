@@ -29,13 +29,13 @@ public static class LoftOp
     /// <param name="tanStart">KRN-07 (07.4): касательная к нормали первого сечения (длина — доля расстояния между центрами
     /// крайних сечений; 0 — без условия); <paramref name="tanEnd"/> — у последнего. Условие делает лофт гладким.</param>
     public static TSolid Build(IReadOnlyList<Profile> sections, int samples = 64, bool smooth = false, IReadOnlyList<ICurve3>? guides = null,
-                               double tanStart = 0, double tanEnd = 0)
+                               double tanStart = 0, double tanEnd = 0, bool guideAll = false)
     {
         if (guides is { Count: > 0 })
         {
             if (Math.Abs(tanStart) > 1e-12 || Math.Abs(tanEnd) > 1e-12)
                 throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: end tangency together with guide curves is not supported.");
-            return Guided(sections, smooth, guides);
+            return Guided(sections, smooth, guides, guideAll);
         }
         _smooth = smooth || Math.Abs(tanStart) > 1e-12 || Math.Abs(tanEnd) > 1e-12; _tan0 = tanStart; _tan1 = tanEnd;
         try { return BuildCore(sections, samples); } finally { _smooth = false; _tan0 = _tan1 = 0; }
@@ -56,16 +56,29 @@ public static class LoftOp
 
     /// <summary>Сечения для точного лофта: внешний контур из отрезков и дуг; целая окружность — на N равных дуг (N — число
     /// звеньев у сечений-многоугольников), начало — по направлению первой вершины соседнего сечения. null — не подходит.</summary>
-    static TSolid Guided(IReadOnlyList<Profile> sections, bool smooth, IReadOnlyList<ICurve3> guides)
+    static TSolid Guided(IReadOnlyList<Profile> sections, bool smooth, IReadOnlyList<ICurve3> guides, bool guideAll)
     {
         if (sections.Count < 2) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Loft: at least two sections are needed.");
-        if (sections.Any(x => x.Loops.Count > 1)) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: guide curves with holes in the sections are not supported.");
+        string? why = null;
+        if (sections.Any(x => x.Loops.Count > 1))
+        {
+            // k179: ОТВЕРСТИЯ В СЕЧЕНИЯХ ПРИ НАПРАВЛЯЮЩИХ — внешний контур по направляющим, отверстия — лофтом по своим контурам
+            // (цепочки — как у лофта без направляющих), одним телом (NurbsLoftHollow). Мутация P3D_GUIDEHOLES=0 — прежний отказ.
+            if (GuideHolesOff) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: guide curves with holes in the sections are not supported.");
+            var chains = HoleChains(sections);
+            var outerSecs = ExactSections(sections.Select(x => OneLoop(x, x.Outers.First())).ToList(), false)
+                   ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: guide curves need sections of lines, arcs and Bezier curves.");
+            var holeSecs = chains.Select(ch => ExactSections(ch.Select((h, k) => OneLoop(sections[k], h)).ToList())).ToList();
+            if (holeSecs.Any(h => h == null)) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: the holes of the sections are not lines, arcs and Bezier curves.");
+            return DirectRound.NurbsLoftHollow(outerSecs, holeSecs.Select(h => (IReadOnlyList<(List<ICurve3> Loop, Vector3d Normal)>)h!).ToList(), smooth, ref why, 0, 0, guides, guideAll)
+                   ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: the loft along guide curves declined: " + why);
+        }
         var secs = ExactSections(sections, false)
                    ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: guide curves need sections of lines, arcs and Bezier curves.");
-        string? why = null;
-        return DirectRound.NurbsLoft(secs, smooth, ref why, guides)
+        return DirectRound.NurbsLoft(secs, smooth, ref why, guides, 0, 0, guideAll)
                ?? throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Loft: the loft along guide curves declined: " + why);
     }
+    static readonly bool GuideHolesOff = Environment.GetEnvironmentVariable("P3D_GUIDEHOLES") == "0";
 
     static List<(List<ICurve3> Loop, Vector3d Normal)>? ExactSections(IReadOnlyList<Profile> sections, bool splitCircles = true)
     {
@@ -112,7 +125,8 @@ public static class LoftOp
         return Centre(pts);
     }
 
-    private static TSolid BuildWithHoles(IReadOnlyList<Profile> sections, int samples)
+    /// <summary>Цепочки отверстий по сечениям (отверстие следующего сечения — ближайшее по смещению от центра внешнего контура).</summary>
+    private static List<List<ProfileLoop>> HoleChains(IReadOnlyList<Profile> sections)
     {
         int n0 = sections[0].Loops.Count;
         for (int k = 0; k < sections.Count; k++)
@@ -142,6 +156,12 @@ public static class LoftOp
                 ch.Add(ranked[0].H); free.Remove(ranked[0].H);
             }
         }
+        return chains;
+    }
+
+    private static TSolid BuildWithHoles(IReadOnlyList<Profile> sections, int samples)
+    {
+        var chains = HoleChains(sections);
         // k139: точный лофт с отверстиями — одним телом, без булевой (DirectRound.NurbsLoftHollow)
         if (!DirectRound.LoftNurbsOff)
         {

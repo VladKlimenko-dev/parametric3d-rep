@@ -18,8 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: ui_main,   ref: 'main' }
-          - { name: ui_branch, ref: 'ya1/state-probe' }
+          - { name: ui179, ref: 'kern/k179', names: 'UI-GHOSTRING-K127|UI-LATER-K178|UI-SKETCH-K109|UI-CURVE-TANGENTS-K177|UI-BLEND-K160|UI-SKETCH-GEAR-K176', env: '' }
     steps:
       - uses: actions/checkout@v4
         with:

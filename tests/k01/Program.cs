@@ -612,6 +612,8 @@ static partial class Program
         if (mode is "drawing164" or "allB") Drawing164Checks();
         if (mode is "gear" or "allA") SkGearChecks();   // k176: шестерня эскиза
         if (mode is "curve177" or "allB") CurveGuideChecks();
+        if (mode is "guide179" or "allB") Guide179Checks();   // k179: направляющая ведёт все рёбра, кривая за точкой эскиза, порядок создания
+        if (mode == "userfile179") { UserFile179(args[1]); return; }
         if (mode == "gearfile") GearFile(args[1]);   // k177: касательные кривой через точки, направляющая-кривая
         if (mode is "meshcut165" or "allB") MeshCut165Checks();
         if (mode is "drawing165" or "allB") Drawing165Checks();

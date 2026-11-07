@@ -247,7 +247,7 @@ public static class DocumentFile
             Features = part.Features.Select(f =>
             {
                 var d = SaveFeature(f) ?? throw new InvalidOperationException($"Feature '{f.Name}' ({f.GetType().Name}) cannot be saved.");
-                d.Key = f.Key; d.Policy = f.Policy?.ToString();
+                d.Key = f.Key; d.Policy = f.Policy?.ToString(); d.Seq = f.Seq;
                 if (!string.IsNullOrEmpty(f.Group)) (d.Str ??= new())["group"] = f.Group;
                 if (f.FreeForm != null) (d.Str ??= new())["ff"] = f.FreeForm;
                 if (f.FFBody != null) (d.Str ??= new())["ffbody"] = f.FFBody;
@@ -261,7 +261,7 @@ public static class DocumentFile
 
     private static SketchDto SaveSketch(Sketch s)
     {
-        var dto = new SketchDto { Id = s.Id, Name = s.Name, AxisRays = DimensionMeasure.AxisRayOff ? null : true, Plane = new[]
+        var dto = new SketchDto { Id = s.Id, Seq = s.Seq, Name = s.Name, AxisRays = DimensionMeasure.AxisRayOff ? null : true, Plane = new[]
         {
             s.Plane.Origin.X, s.Plane.Origin.Y, s.Plane.Origin.Z,
             s.Plane.U.X, s.Plane.U.Y, s.Plane.U.Z,
@@ -399,6 +399,7 @@ public static class DocumentFile
             if (d == null) continue;
             d.Name = c.Name; d.Hidden = !c.Visible;
             if (!DatumIdOff) d.Id = c.Id;
+            d.Seq = c.Seq;
             if (!DatumSlotOff) d.Slot = part.ItemSlot(c);
             res.Add(d);
         }
@@ -465,6 +466,8 @@ public static class DocumentFile
                 if (d.Specs != null) kdc.Specs.AddRange(d.Specs.Select(x => x.To()));
             }
             it.Visible = !d.Hidden;
+            // k179: порядок создания — из файла; у файла до k179 — прежний номер элемента (номера растут по времени создания)
+            it.RestoreSeq(d.Seq ?? (d.Id is uint lid ? lid : 0));
             part.Add(it);
             if (d.Id is uint oid && oid != 0) _datumIds![oid] = it.Id;
             if (d.Slot is int sl && sl > 0) _datumSlots!.Add((it, sl));
@@ -723,6 +726,7 @@ public static class DocumentFile
                 d.Samples = bf.Samples; d.Smooth = bf.Smooth; d.StartTangent = bf.StartTangent; d.EndTangent = bf.EndTangent;
                 d.Guides = bf.GuideSketchIds.Count > 0 ? bf.GuideSketchIds.ToList() : null;
                 d.GuideCurves = bf.GuideCurveIds.Count > 0 ? bf.GuideCurveIds.ToList() : null;
+                d.GuideEdgeOnly = bf.GuideEdgeOnly ? true : null;
             }
         }),
         FreeFormFeature ffn => Dto("freeform", ffn, d => { PutS(d, "input", ffn.InputStep.Length > 0 ? ffn.InputStep : null); PutS(d, "sig", ffn.InputSig.Length > 0 ? ffn.InputSig : null); PutS(d, "import_of", ffn.ImportOf); }),
@@ -800,6 +804,7 @@ public static class DocumentFile
             Smooth = lf.Smooth,
             Guides = lf.GuideSketchIds.Count > 0 ? lf.GuideSketchIds.ToList() : null,
             GuideCurves = lf.GuideCurveIds.Count > 0 ? lf.GuideCurveIds.ToList() : null,
+            GuideEdgeOnly = lf.GuideEdgeOnly ? true : null,
             StartTangent = lf.StartTangent, EndTangent = lf.EndTangent
         },
 
@@ -1123,6 +1128,7 @@ public static class DocumentFile
             if (sd.AxisRays != true) DimensionMeasure.MigrateAxisAngles(s);
             foreach (var g in s.Gears) s.Clean(g);   // k178: концы и центры кривых шестерни — не отдельные точки (после связей и размеров)
             byOldOf[sd.Id] = byOld;
+            s.RestoreSeq(sd.Seq ?? sd.Id);   // k179: порядок создания (файл до k179 — прежний номер эскиза)
             part.Children.Add(s);
             s.Parent = part;          // k110: правка прочитанного эскиза извещает деталь (ссылки, пересчёт операций)
             sketchById[sd.Id] = s;
@@ -1351,6 +1357,7 @@ public static class DocumentFile
                         bf.Samples = fd.Samples > 0 ? fd.Samples : 64; bf.Smooth = fd.Smooth; bf.StartTangent = fd.StartTangent; bf.EndTangent = fd.EndTangent;
                         foreach (uint old in fd.Guides ?? new()) if (sketchById.TryGetValue(old, out var bg)) bf.GuideSketchIds.Add(bg.Id);
                         foreach (uint old in fd.GuideCurves ?? new()) bf.GuideCurveIds.Add(MapDatum(old));
+                        bf.GuideEdgeOnly = fd.GuideEdgeOnly == true;
                     }
                     part.AddFeature(bf);
                     break;
@@ -1498,6 +1505,7 @@ public static class DocumentFile
                     foreach (uint old in fd.Guides ?? new())
                         if (sketchById.TryGetValue(old, out var sk3)) lf.GuideSketchIds.Add(sk3.Id);
                     foreach (uint old in fd.GuideCurves ?? new()) lf.GuideCurveIds.Add(MapDatum(old));
+                    lf.GuideEdgeOnly = fd.GuideEdgeOnly == true;
                     part.AddFeature(lf);
                     break;
                 }
@@ -1635,6 +1643,22 @@ public static class DocumentFile
         }
 
         if (doc.Stage is int stg && stg >= 0 && stg < part.Features.Count) part.StageIndex = part.ClampStage(stg);
+        // k179: порядок создания операций — из файла
+        {
+            var seqByKey = doc.Features.Where(x => !string.IsNullOrEmpty(x.Key) && x.Seq is > 0).GroupBy(x => x.Key!).ToDictionary(g => g.Key, g => g.First().Seq!.Value);
+            foreach (var f in part.Features) if (seqByKey.TryGetValue(f.Key, out var sq)) f.RestoreSeq(sq);
+        }
+        // k179 (замечание 07.11, п. 3): условия точек опорных кривых — на новые номера эскизов и их точек (прежде номера
+        // оставались файловыми: после открытия кривая не находила свою точку эскиза и не шла за ней). Мутация P3D_SPECMAP=0.
+        if (!SpecMapOff)
+            foreach (var dc in part.Children.OfType<DatumCurve>())
+                foreach (var c in dc.Specs)
+                {
+                    if (c.SketchId == 0) continue;
+                    uint oldSk = c.SketchId;
+                    if (sketchById.TryGetValue(oldSk, out var nsk)) c.SketchId = nsk.Id; else { c.SketchId = 0; c.SketchPointId = 0; continue; }
+                    if (byOldOf.TryGetValue(oldSk, out var bo2) && bo2.TryGetValue(c.SketchPointId, out var npt)) c.SketchPointId = npt.Id; else c.SketchPointId = 0;
+                }
         // k110: ссылки на другие эскизы — на новые номера эскизов
         foreach (var sk in part.Sketches)
             foreach (var e in sk.Entities.SelectMany(x => x.Handles.Prepend(x)).Distinct())
@@ -1710,6 +1734,7 @@ public static class DocumentFile
     }
     public static long DisplayRejected;
     /// <summary>k156: мутация P3D_SAVECHECKPOINT=0 — состояние перед последней операцией не пишется и не читается.</summary>
+    static readonly bool SpecMapOff = Environment.GetEnvironmentVariable("P3D_SPECMAP") == "0";
     static readonly bool CheckpointSaveOff = Environment.GetEnvironmentVariable("P3D_SAVECHECKPOINT") == "0";
     /// <summary>k156: мутация P3D_AREAATSAVE=0 — площадь считается при записи (прежде: запись HelSweep 76 с).</summary>
     static readonly bool AreaAtSaveOff = Environment.GetEnvironmentVariable("P3D_AREAATSAVE") == "0";
@@ -1725,6 +1750,8 @@ public static class DocumentFile
     /// <summary>u13: опорные элементы, созданные пользователем (плоскости, оси, точки, системы координат, кривые, линии).</summary>
     private sealed class DatumDto
     {
+        /// <summary>k179: порядок создания.</summary>
+        public long? Seq { get; set; }
         public string Kind { get; set; } = "";
         public string Name { get; set; } = "";
         /// <summary>k148: номер элемента при записи (ссылки операций на него).</summary>
@@ -1995,6 +2022,8 @@ public static class DocumentFile
 
     private sealed class SketchDto
     {
+        /// <summary>k179: порядок создания.</summary>
+        public long? Seq { get; set; }
         public uint Id { get; set; }
         public string Name { get; set; } = "эскиз";
         public double[] Plane { get; set; } = Array.Empty<double>();
@@ -2132,6 +2161,8 @@ public static class DocumentFile
 
     private sealed class FeatureDto
     {
+        /// <summary>k179: порядок создания.</summary>
+        public long? Seq { get; set; }
         /// <summary>K05: постоянный ключ операции; у документов до K05 отсутствует.</summary>
         public string? Key { get; set; }
         /// <summary>Отдельные значения и формулы (фаска вершины: размер на каждое ребро).</summary>
@@ -2204,6 +2235,8 @@ public static class DocumentFile
         public List<uint>? Guides { get; set; }
         /// <summary>k177: направляющие — опорные кривые и линии (номера опорных элементов).</summary>
         public List<uint>? GuideCurves { get; set; }
+        /// <summary>k179: направляющие ведут только свои рёбра.</summary>
+        public bool? GuideEdgeOnly { get; set; }
         /// <summary>KRN-07 (07.4): касательные лофта у крайних сечений.</summary>
         public double StartTangent { get; set; }
         public double EndTangent { get; set; }

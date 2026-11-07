@@ -14,6 +14,7 @@ namespace Parametric3D.Render.Engine;
 public static class SceneBuilder
 {
     static readonly bool GhostRingOff = Environment.GetEnvironmentVariable("P3D_GHOSTRING") == "0";
+    public static readonly bool GhostHoverOff = Environment.GetEnvironmentVariable("P3D_GHOSTHOVER") == "0";
     public static SceneData Build(Document doc, RenderTheme th, ShowOptions show, ModelItem? activeOwner = null, Sketch? activeSketch = null,
                                   IReadOnlyCollection<uint>? pointSketches = null, string? activeGroup = null)
     {
@@ -84,7 +85,7 @@ public static class SceneBuilder
             // k109 (11:11): в правке эскиза видны и эскизы на параллельных плоскостях (скрытые тоже) — их кривые берутся в ссылки
             bool ghost = c is Sketch gsk && _activeSketch != null && !ReferenceEquals(c, _activeSketch) && !Sketch.ParallelGhostOff && gsk.IsParallelTo(_activeSketch);
             if (!c.Visible && !ReferenceEquals(c, _activeSketch) && !ghost) continue;
-            if (c is Sketch lsk && _activeSketch != null && lsk.IsAfter(_activeSketch)) continue;   // k178: позднейшие эскизы — не в правке раннего
+            if (_activeSketch != null && _activeSketch.HidesLater(c)) continue;   // k178/k179: созданное позже — не в правке раннего эскиза
             if (component && item is Part cpp && (ReferenceEquals(c, cpp.PlaneXY) || ReferenceEquals(c, cpp.PlaneXZ) || ReferenceEquals(c, cpp.PlaneYZ) || ReferenceEquals(c, cpp.Origin))) continue;
             switch (c)
             {
@@ -363,7 +364,10 @@ public static class SceneBuilder
                 // k127 (замечание 28.10, 14:36, п. 2): точки эскиза-соседа (возможные опорные) — кольцом без заливки того же
                 // размера; под курсором и выбранные — как прежде (шейдер рисует их залитыми). P3D_GHOSTRING=0 — залитые.
                 uint shp = ghost && !GhostRingOff ? 4u : 0u;
-                s.Points.Add(new PointInst { P = Tr(plane.ToWorld(q.P), xf), Color = SceneData.Pack(th.SketchPoint), Px = q.Owner == null ? th.SketchPointPx : th.SketchPointPx - 1f, Shape = shp, Pick = pick });
+                // k179 (замечание 07.11, п. 5): точки эскиза-соседа не видны — только под курсором (шейдер рисует наведённую цветом
+                // наведения); щелчок делает её ссылкой правимого эскиза — тогда она видна как его точка. P3D_GHOSTHOVER=0 — кольца.
+                var pc = th.SketchPoint; if (ghost && !GhostHoverOff) pc.W = 0f;
+                s.Points.Add(new PointInst { P = Tr(plane.ToWorld(q.P), xf), Color = SceneData.Pack(pc), Px = q.Owner == null ? th.SketchPointPx : th.SketchPointPx - 1f, Shape = shp, Pick = pick });
             }
     }
 }

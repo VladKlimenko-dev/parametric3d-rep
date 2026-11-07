@@ -129,7 +129,7 @@ public sealed class ScenePicker
         {
             bool ghost = c is Sketch gsk && activeSketch != null && c != activeSketch && !Sketch.ParallelGhostOff && gsk.IsParallelTo(activeSketch);
             if (!c.Visible && c != activeSketch && !ghost) { continue; }
-            if (c is Sketch lsk && activeSketch != null && lsk.IsAfter(activeSketch)) continue;   // k178: позднейшие эскизы — не в правке раннего
+            if (activeSketch != null && activeSketch.HidesLater(c)) continue;   // k178/k179: созданное позже — не в правке раннего эскиза
             // служебный корень документа детали: его опорных элементов нет
             if (ReferenceEquals(item, _hiddenRoot) && c is not (Part or Assembly)) continue;
             if (c is Part cpart && item is Assembly stageAsm && stageAsm.IsBeyondStage(cpart)) continue;

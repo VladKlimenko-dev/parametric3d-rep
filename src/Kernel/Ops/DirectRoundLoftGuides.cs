@@ -127,6 +127,62 @@ public static partial class DirectRound
         return res;
     }
 
+    /// <summary>
+    /// k179: направляющая, перенесённая аффинно: G′(t) = L·G(t) + c + d·t на участке [t0, t1] исходной (параметр участка — [0, 1]).
+    /// Многочлен — те же степени (c + d·t — степень 1, поднятая); рациональный кусок — степень на 1 выше (произведение на вес).
+    /// </summary>
+    static GuidePw TransformGuide(GuidePw g, Func<Vector3d, Vector3d> L, Vector3d c, Vector3d d, double t0, double t1)
+    {
+        var (subs, bs) = SubPieces(g, t0, t1);
+        var r = new GuidePw { P = new(), B = (double[])bs.Clone() };
+        for (int i = 0; i < subs.Count; i++)
+        {
+            var q = subs[i]; int D = q.Length - 1;
+            // параметр исходной на куске: t = t0 + (t1 − t0)·(b_i + (b_i+1 − b_i)·s)
+            double ta = t0 + (t1 - t0) * bs[i], tb = t0 + (t1 - t0) * bs[i + 1];
+            // c + d·t в начале и в конце куска (в долях участка: t в [0, 1] участка — как у хорды A→B)
+            double ua = (ta - t0) / (t1 - t0), ub = (tb - t0) / (t1 - t0);
+            Vector3d e0 = c + d * ua, e1 = c + d * ub;
+            bool poly = q.All(x => Math.Abs(x.W - 1) < 1e-15);
+            if (poly)
+                r.P.Add(Enumerable.Range(0, D + 1).Select(k => new Vector4d(L(q[k].Xyz) + e0 + (e1 - e0) * ((double)k / D), 1)).ToArray());
+            else
+            {
+                // числитель: L(w·X) (степень D → D+1) + e(s)·w(s) (1 × D → D+1); вес: w (D → D+1)
+                var lx = ElevateG(q.Select(x => new Vector4d(L(x.Xyz), x.W)).ToArray());
+                var res = new Vector4d[D + 2];
+                for (int k = 0; k <= D + 1; k++)
+                {
+                    var ew = Vector3d.Zero;
+                    for (int a = 0; a <= 1; a++)
+                    {
+                        int b = k - a; if (b < 0 || b > D) continue;
+                        double coef = Binom(1, a) * Binom(D, b) / Binom(D + 1, k);
+                        ew += (a == 0 ? e0 : e1) * (coef * q[b].W);
+                    }
+                    res[k] = new Vector4d(lx[k].Xyz + ew, lx[k].W);
+                }
+                r.P.Add(res);
+            }
+        }
+        return r;
+    }
+    static double Binom(int n, int k) { double r = 1; for (int i = 1; i <= k; i++) r = r * (n - k + i) / i; return r; }
+
+    /// <summary>k179: цепочка кусков — B-сплайн (кратность внутренних узлов = степень).</summary>
+    static SplineCurve3 PwToSpline(GuidePw g)
+    {
+        int p = g.P.Max(x => x.Length - 1);
+        var pcs = g.P.Select(q => { while (q.Length - 1 < p) q = ElevateG(q); return q; }).ToList();
+        var cp = new List<Vector3d>(); var w = new List<double>();
+        for (int i = 0; i < pcs.Count; i++)
+            for (int j = i == 0 ? 0 : 1; j <= p; j++) { cp.Add(pcs[i][j].Xyz / pcs[i][j].W); w.Add(pcs[i][j].W); }
+        var kn = new List<double>(); for (int i = 0; i <= p; i++) kn.Add(0);
+        for (int i = 1; i < g.B.Length - 1; i++) for (int k = 0; k < p; k++) kn.Add(g.B[i]);
+        for (int i = 0; i <= p; i++) kn.Add(1);
+        return new SplineCurve3(cp, p, w.All(x => Math.Abs(x - 1) < 1e-15) ? null : w, kn);
+    }
+
     static (double T, double D) ClosestT(GuidePw g, Vector3d p)
     {
         double bt = 0, bd = double.MaxValue;
@@ -257,6 +313,13 @@ public static partial class DirectRound
 
     static ICurve3 GuideEdge(ICurve3 src, Vector4d[] sub, Vector3d A, Vector3d B)
     {
+        // k179: рациональный кусок сплайна (перенесённая направляющая дуги) — рациональная кривая Безье, не многочлен
+        if (src is SplineCurve3 or BezierCurve3 && sub.Any(x => Math.Abs(x.W - 1) > 1e-15))
+        {
+            var cp = sub.Select(x => x.Xyz / x.W).ToList(); cp[0] = A; cp[^1] = B;
+            int p = sub.Length - 1;
+            return new SplineCurve3(cp, p, sub.Select(x => x.W).ToList(), Enumerable.Repeat(0.0, p + 1).Concat(Enumerable.Repeat(1.0, p + 1)).ToList());
+        }
         switch (src)
         {
             case SplineCurve3: return new BezierCurve3(sub.Select(x => x.Xyz / x.W));

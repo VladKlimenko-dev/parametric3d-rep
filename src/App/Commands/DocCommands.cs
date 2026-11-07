@@ -154,7 +154,10 @@ public static class DocCommands
             void TakeSketch(Sketch s)
             {
                 if (!movedSketches.Add(s)) return;
-                tmp.Remove(s); s.Name = UniqueName(part, s.Name); part.Add(s);
+                // k179 (замечание 07.11, п. 7): вставленный эскиз — на место полоски расчёта (прежде — в конец дерева) и создан
+                // сейчас (порядок создания — новый). Мутация P3D_PASTEATSTAGE=0 — в конец.
+                tmp.Remove(s); s.Name = UniqueName(part, s.Name); s.RenewSeq();
+                if (PasteAtStageOff) part.Add(s); else part.AddAtStage(s);
             }
             foreach (var (_, idx) in _clip.OrderBy(c => c.Index))
             {
@@ -179,7 +182,7 @@ public static class DocCommands
             foreach (var f in made)
             {
                 tmp.RemoveFeature(f);
-                f.Key = Feature.NewKey();
+                f.Key = Feature.NewKey(); f.RenewSeq();
                 f.Name = UniqueName(part, f.Name);
                 if (!string.IsNullOrEmpty(f.Group) && !PasteGroupOff)
                 {
@@ -200,6 +203,7 @@ public static class DocCommands
         return made;
     }
 
+    static readonly bool PasteAtStageOff = Environment.GetEnvironmentVariable("P3D_PASTEATSTAGE") == "0";
     static readonly bool PasteGroupOff = Environment.GetEnvironmentVariable("P3D_PASTEGROUP") == "0";
 
     static string UniqueName(Part part, string name)

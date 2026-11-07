@@ -53,13 +53,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: r175b_instant, cmd: 'instant', env: '' }
-          - { name: r175b_y2o,     cmd: 'y2o',  env: '' }
-          - { name: r175b_corpus,  cmd: 'loftseq 10 101 6 OUT', env: '' }
-          - { name: r175b_allA,    cmd: 'allA', env: '' }
-          - { name: r175b_allB,    cmd: 'allB', env: '' }
-          - { name: r175b_fix,     cmd: 'loftcorpus140', env: '' }
-          - { name: r175b_mut1,    cmd: 'y2', env: 'P3D_SECNODENAN=0' }
+          - { name: g179_guide, cmd: 'guide179', env: '' }
+          - { name: g179_user,  cmd: 'userfile179 tests/ui/data/user_k179_gear.p3d', env: '' }
+          - { name: g179_lg,    cmd: 'loftguides', env: '' }
+          - { name: g179_curve, cmd: 'curve177', env: '' }
+          - { name: g179_gear,  cmd: 'gear', env: '' }
+          - { name: g179_blend, cmd: 'blend160', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

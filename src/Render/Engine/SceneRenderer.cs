@@ -108,6 +108,9 @@ public sealed class SceneRenderer : IDisposable
     public float FeaElementFraction = 1f / 15;
     // надстройка: сетка эскиза (с глубиной), построение инструмента и привязки (поверх всего) — меняются без пересборки сцены
     private readonly InstGpu _ovGrid = new(), _ovLines = new(), _ovPoints = new();
+    // k179: сплошная заливка замкнутых областей эскиза (треугольники, один цвет)
+    private int _ovFillVao = -1, _ovFillVbo = -1, _ovFillN; private Vector4 _ovFillColor;
+    private Vector3[]? _ovFillSrc;
     private int _planeVao = -1, _planeVbo = -1;
     private readonly List<(uint Pick, Vector4 Fill)> _planes = new();
 
@@ -263,6 +266,26 @@ public sealed class SceneRenderer : IDisposable
         UploadLines(_ovGrid, grid);
         UploadLines(_ovLines, lines);
         UploadPoints(_ovPoints, points);
+    }
+
+    /// <summary>k179: заливка эскиза — треугольники в мире (null — нет); те же данные — без новой загрузки.</summary>
+    public void SetOverlayFill(Vector3[]? tris, Vector4 color)
+    {
+        _ovFillColor = color;
+        if (ReferenceEquals(tris, _ovFillSrc) && (tris == null || _ovFillVao >= 0)) return;
+        EnsureShaders();
+        Del(ref _ovFillVbo);
+        if (_ovFillVao >= 0) { GL.DeleteVertexArray(_ovFillVao); _ovFillVao = -1; }
+        _ovFillN = 0; _ovFillSrc = tris;
+        if (tris == null || tris.Length < 3) return;
+        var v = new float[tris.Length * 3];
+        for (int i = 0; i < tris.Length; i++) Put(v, i * 3, tris[i]);
+        _ovFillVao = GL.GenVertexArray();
+        GL.BindVertexArray(_ovFillVao);
+        _ovFillVbo = Buffer(v, 4);
+        GL.EnableVertexAttribArray(0); GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 12, 0);
+        GL.BindVertexArray(0);
+        _ovFillN = tris.Length;
     }
 
     private static void ReleaseInst(InstGpu g)
@@ -452,6 +475,19 @@ public sealed class SceneRenderer : IDisposable
 
         // опорные плоскости — прозрачные, после тел
         DrawPlanes(f, pick: false);
+
+        // k179: заливка эскиза — под его линиями (линии эскиза рисуются поверх, без глубины)
+        if (_ovFillN > 0 && _ovFillVao >= 0 && SketchMode)
+        {
+            GL.Disable(EnableCap.DepthTest); GL.DepthMask(false);
+            _fill!.Use();
+            _fill.Set("uView", f.View); _fill.Set("uProj", f.Proj);
+            SetCommon(_fill, f);
+            _fill.Set("uPickMode", 0); _fill.Set("uPick", 0u); _fill.Set("uColor", _ovFillColor);
+            GL.BindVertexArray(_ovFillVao);
+            GL.DrawArrays(PrimitiveType.Triangles, 0, _ovFillN);
+            GL.DepthMask(true); GL.Enable(EnableCap.DepthTest);
+        }
 
         // линии и точки опорных элементов и эскизов
         // в эскизе его линии и точки не заслоняются ничем (плоскость эскиза может совпадать с гранью или опорной плоскостью)
@@ -1148,6 +1184,7 @@ public sealed class SceneRenderer : IDisposable
         {
             ReleaseScene();
             ReleaseInst(_ovGrid); ReleaseInst(_ovLines); ReleaseInst(_ovPoints);
+            Del(ref _ovFillVbo); if (_ovFillVao >= 0) GL.DeleteVertexArray(_ovFillVao); _ovFillVao = -1; _ovFillN = 0; _ovFillSrc = null;
             ReleaseTargets();
             if (_flagsTex >= 0) GL.DeleteTexture(_flagsTex);
             _flagsTex = -1;

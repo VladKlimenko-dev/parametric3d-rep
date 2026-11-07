@@ -495,6 +495,11 @@ public static class SketchGears
         if (segs == null) { g.Error = why; return false; }
         g.Error = null;
         var old = new HashSet<uint>(g.Items);
+        // k179 (замечание 07.11, п. 3): НОМЕРА ЭЛЕМЕНТОВ ШЕСТЕРНИ — ПРЕЖНИЕ. Перестройка (другой модуль, число зубьев) создавала
+        // все элементы заново с новыми номерами: опорная кривая, взятая с вершины зуба, теряла свою точку. Теперь номера
+        // переходят к новым элементам по порядку построения (тот же зуб, та же вершина, если строение зуба то же). Мутация
+        // P3D_GEARIDS=0.
+        var oldSeq = IdsOff ? new List<uint>() : Sequence(sk, g.Items);
         if (old.Count > 0)
         {
             var gone = sk.Entities.Where(e => old.Contains(e.Id)).ToList();
@@ -535,10 +540,33 @@ public static class SketchGears
             }
             prev = b;
         }
+        if (oldSeq.Count > 0)
+        {
+            var neu = Sequence(sk, g.Items);
+            var taken = new HashSet<uint>(sk.Entities.SelectMany(e => e.Handles.Cast<SkEntity>().Prepend(e)).Where(e => !neu.Contains(e.Id)).Select(e => e.Id));
+            var byId = sk.Entities.SelectMany(e => e.Handles.Cast<SkEntity>().Prepend(e)).GroupBy(e => e.Id).ToDictionary(x => x.Key, x => x.First());
+            for (int i = 0; i < Math.Min(neu.Count, oldSeq.Count); i++)
+                if (!taken.Contains(oldSeq[i]) && byId.TryGetValue(neu[i], out var ne)) ne.Id = oldSeq[i];
+            for (int i = 0; i < g.Items.Count; i++) if (byId.TryGetValue(g.Items[i], out var ie)) g.Items[i] = ie.Id;
+            if (byId.TryGetValue(g.CenterId, out var ce)) g.CenterId = ce.Id;
+        }
         Clean(sk, g);
         sk.BumpStructure();
         sk.NotifyChanged(sk);
         return true;
+    }
+    static readonly bool IdsOff = Environment.GetEnvironmentVariable("P3D_GEARIDS") == "0";
+    /// <summary>k179: номера элементов шестерни в порядке построения (элемент, затем его точки; без повторов).</summary>
+    static List<uint> Sequence(Sketch sk, List<uint> items)
+    {
+        var res = new List<uint>(); var seen = new HashSet<uint>();
+        var byId = sk.Entities.GroupBy(e => e.Id).ToDictionary(x => x.Key, x => x.First());
+        foreach (var id in items)
+        {
+            if (!byId.TryGetValue(id, out var e)) continue;
+            foreach (var h in e.Handles.Cast<SkEntity>().Prepend(e)) if (seen.Add(h.Id)) res.Add(h.Id);
+        }
+        return res;
     }
 
     /// <summary>

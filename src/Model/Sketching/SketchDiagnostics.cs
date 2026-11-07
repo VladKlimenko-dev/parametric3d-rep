@@ -30,26 +30,7 @@ public static class SketchDiagnostics
     /// <summary>Разбор: сколько раз признаки пересчитаны и сколько — взяты из памяти.</summary>
     public static long Computed, Reused;
 
-    static long Fingerprint(Sketch sk)
-    {
-        unchecked
-        {
-            long h = sk.StructureVersion * 1000003L + sk.Entities.Count + (Core.Settings.Current.HighlightSketchErrors ? 7 : 0);
-            foreach (var e in sk.Entities)
-            {
-                h = h * 31 + (int)e.Role + e.Id;
-                switch (e)
-                {
-                    case SkCircle c: h = h * 31 + BitConverter.DoubleToInt64Bits(c.Radius); break;
-                    case SkEllipse el: h = h * 31 + BitConverter.DoubleToInt64Bits(el.RU) * 3 + BitConverter.DoubleToInt64Bits(el.RV) * 5 + BitConverter.DoubleToInt64Bits(el.Rotation) + BitConverter.DoubleToInt64Bits(el.A0) * 7 + BitConverter.DoubleToInt64Bits(el.A1) * 11; break;
-                    case SkArc a: h = h * 31 + (a.CCW ? 1 : 2); break;
-                }
-                foreach (var q in e.Handles) h = h * 1000033L + BitConverter.DoubleToInt64Bits(q.X) * 17 + BitConverter.DoubleToInt64Bits(q.Y);
-            }
-            foreach (var c in sk.Constraints) if (c.Type == ConstraintType.Coincident) h = h * 31 + (c.Enabled ? 3 : 5) + c.Items.Sum(x => (long)x.Id);
-            return h;
-        }
-    }
+    static long Fingerprint(Sketch sk) => sk.GeometryStamp() * 31 + (Core.Settings.Current.HighlightSketchErrors ? 7 : 0);
 
     /// <summary>Пересчитывает признаки ошибок по всему эскизу.</summary>
     public static void Update(Sketch sk)

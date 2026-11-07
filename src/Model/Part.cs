@@ -330,6 +330,10 @@ public sealed class Part : ModelItem
             if (f is Feature feat) MarkDirtyFrom(feat);
             else if (f is Sketching.Sketch sk) SketchChanged(sk);
             else if (f is DatumPlane or DatumAxis or DatumPoint) DatumChanged((ModelItem)f);
+            // k179 (замечание 07.11, п. 1): правка опорной кривой, линии, системы координат — пересчёт операций, которые на неё
+            // ссылаются (прежде — только сброс состояний: переход по кривой перестраивался лишь кнопкой «Перестроить»).
+            // Мутация P3D_CURVEDEPS=0.
+            else if (!CurveDepsOff && f is DatumCurve or Line3DItem or DatumCsys) DatumChanged((ModelItem)f);
             else if (_removingFeature == 0 || RemoveMissingOff) ForgetCheckpoints();   // удаление операции: отметку ставит RemoveFeature
         };
     }
@@ -376,11 +380,52 @@ public sealed class Part : ModelItem
         SetDirty();
     }
 
+    static readonly bool CurveDepsOff = Environment.GetEnvironmentVariable("P3D_CURVEDEPS") == "0";
+    static readonly bool CurveFollowOff = Environment.GetEnvironmentVariable("P3D_CURVEFOLLOW") == "0";
+
+    /// <summary>
+    /// k179 (замечание 07.11, п. 3): ОПОРНАЯ КРИВАЯ ИДЁТ ЗА ТОЧКАМИ ЭСКИЗА. Точка кривой, взятая с точки эскиза (условие точки —
+    /// номер эскиза и точки), после правки эскиза — на новом месте точки; нормаль эскиза — новая; кривая строится заново
+    /// (касательные по тем же условиям) и извещает деталь — операции по ней пересчитываются. Точка исчезла — кривая остаётся.
+    /// Мутация P3D_CURVEFOLLOW=0.
+    /// </summary>
+    void CurvesFollow(Sketching.Sketch sk)
+    {
+        if (CurveFollowOff) return;
+        foreach (var dc in Children.OfType<DatumCurve>().ToList())
+        {
+            if (dc.Mode != 0 || dc.Specs.Count != dc.Inputs.Count || !dc.Specs.Any(c => c.SketchId == sk.Id)) continue;
+            bool moved = false;
+            for (int i = 0; i < dc.Specs.Count; i++)
+            {
+                var c = dc.Specs[i];
+                if (c.SketchId != sk.Id || c.SketchPointId == 0) continue;
+                var pt = sk.Entities.SelectMany(e => e.Handles.Prepend(e)).OfType<Sketching.SkPoint>().FirstOrDefault(x => x.Id == c.SketchPointId);
+                if (pt == null) continue;
+                var w = sk.Plane.ToWorld(pt.P);
+                var n = sk.Plane.W.Normalized();
+                if ((w - dc.Inputs[i]).Length > 1e-12 * Math.Max(1, w.Length) || (n - c.SketchNormal).Length > 1e-12) { dc.Inputs[i] = w; c.SketchNormal = n; moved = true; }
+            }
+            if (!moved) continue;
+            if (dc.Smooth && dc.Inputs.Count >= 2)
+            {
+                var sp = CurveThrough.Build(dc.Inputs, dc.Specs.Select(c => c.Direction).ToList(), dc.Specs.Select(c => c.Flip).ToList(), dc.Specs.Select(c => c.Weight).ToList(), dc.Closed);
+                if (sp != null) dc.SetSpline(sp, Math.Max(64, 24 * dc.Inputs.Count));
+            }
+            else { dc.Control = null; dc.Points.Clear(); dc.Points.AddRange(dc.Inputs); if (dc.Closed && dc.Inputs.Count > 2) dc.Points.Add(dc.Inputs[0]); }
+            Interlocked.Increment(ref CurvesFollowed);
+            dc.NotifyChanged(dc);
+        }
+    }
+    /// <summary>k179: опорных кривых, перестроенных за точками эскиза (разбор).</summary>
+    public static long CurvesFollowed;
+
     private void SketchChanged(Sketching.Sketch sk)
     {
         int at = Features.FindIndex(f => Dependencies.SketchesOf(f).Contains(sk.Id));
         if (at >= 0) DirtyFromIndex(at);
         SetDirty();
+        CurvesFollow(sk);
         // k110: ссылки других эскизов на этот — за ним
         if (_propagating == 0)
         {
