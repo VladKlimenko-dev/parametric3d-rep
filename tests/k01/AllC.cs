@@ -403,6 +403,8 @@ static partial class Program
     static void AllCDumpFaces(TSolid b)
     {
         Console.WriteLine($"  body guarantee {b.Guarantee}, faces {b.Faces.Count()}, exact {(b.Exact != null)}, qexact {(b.QExact != null)}");
+        Parametric3D.Kernel.Tess.MeshData? mesh = null;
+        try { mesh = Parametric3D.Kernel.Tess.Tessellator.Tessellate(b); } catch (Exception e) { Console.WriteLine("  tessellate: " + e.Message); }
         int i = 0;
         foreach (var f in b.Faces)
         {
@@ -416,7 +418,20 @@ static partial class Program
                 double dn = double.NaN; try { dn = Vector3d.Dot(n.Normalized(), f.NormalAt(c)); } catch { }
                 facet = $"facets {m} sum-n ({n.X:0.#},{n.Y:0.#},{n.Z:0.#}) dot(face normal) {dn:0.###}";
             }
-            Console.WriteLine($"  F{i++} tag {f.Tag} {src?.GetType().Name} rev {f.Reversed} loops {f.Loops.Count} {facet}");
+            string sn = "-";
+            try { var c0 = f.Loops[0].CoEdges[0].Edge.Curve.PointAt(0.5 * (f.Loops[0].CoEdges[0].Edge.Curve.T0 + f.Loops[0].CoEdges[0].Edge.Curve.T1)); var q = src!.NormalAt(src.ProjectToUV(c0)); sn = $"({q.X:0.##},{q.Y:0.##},{q.Z:0.##})"; } catch { }
+            string ms = "-";
+            if (mesh != null && mesh.FaceRanges.TryGetValue(f.Id, out var fr))
+            {
+                var n = Vector3d.Zero;
+                for (int t = fr.IndexStart; t + 2 < fr.IndexStart + fr.IndexCount; t += 3)
+                {
+                    var a = mesh.Vertices[mesh.Indices[t]].P; var bb = mesh.Vertices[mesh.Indices[t + 1]].P; var cc = mesh.Vertices[mesh.Indices[t + 2]].P;
+                    var cr = Vector3.Cross(bb - a, cc - a); n += new Vector3d(cr.X, cr.Y, cr.Z);
+                }
+                ms = $"mesh tris {fr.IndexCount / 3} sum-n ({n.X:0.#},{n.Y:0.#},{n.Z:0.#})";
+            }
+            Console.WriteLine($"  F{i++} id {f.Id} tag {f.Tag} {src?.GetType().Name} src-n {sn} rev {f.Reversed} loops {f.Loops.Count} {facet} | {ms}");
         }
     }
 

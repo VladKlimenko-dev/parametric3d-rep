@@ -55,11 +55,9 @@ jobs:
         include:
           - { name: k181_d1, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:boss_circle+loft_add@0.15' }
           - { name: k181_d2, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:boss_circle+chamfer_edge@0.15' }
-          - { name: k181_d3, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:boss_circle+shell@0.15' }
           - { name: k181_d4, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:round_edge+boss_circle@0.15' }
-          - { name: k181_d5, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:sweep_add+draft_out@0.15' }
-          - { name: k181_d6, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:round_edge+vertex_round@0.15' }
-          - { name: k181_allc1, cmd: 'allC', env: 'P3D_ALLC_SETS=12' }
+          - { name: k181_d7, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:boss_circle+vertex_chamfer@0.15' }
+          - { name: k181_d8, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:boss_circle+hole_through@0.15' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
