@@ -1261,7 +1261,9 @@ public static class AnalyticVolume
     // Тогда интеграл — прямо по области (Гаусс по пролётам узлов), сторона — по нормали грани. Мутация P3D_WHOLENURBS=0.
     static readonly bool WholeNurbsOff = Environment.GetEnvironmentVariable("P3D_WHOLENURBS") == "0";
     static bool WholeNurbs(TFace f, NurbsSurface ns) =>
-        !WholeNurbsOff && (f.Loops.All(l => l.CoEdges.Count == 0) || ns.WholeDomainBoundary(f) != null);
+        !WholeNurbsOff && (f.Loops.All(l => l.CoEdges.Count == 0) || ns.WholeDomainBoundary(f) != null || !NurbsRectOff && ns.FullRectFace(f));
+    /// <summary>k180: мутация P3D_NURBSRECT=0 — грань-лоскут целиком (лофт) через поток по краю, как прежде.</summary>
+    static readonly bool NurbsRectOff = Environment.GetEnvironmentVariable("P3D_NURBSRECT") == "0";
 
     static double? NurbsDomainIntegral(TFace f, NurbsSurface ns, bool area)
     {

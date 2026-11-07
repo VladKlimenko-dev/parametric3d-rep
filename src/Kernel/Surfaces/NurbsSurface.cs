@@ -663,6 +663,32 @@ public sealed class NurbsSurface : ISurface3
         return closedU || closedV ? res : null;
     }
 
+    /// <summary>
+    /// k180: грань — ВСЯ ОБЛАСТЬ ПАРАМЕТРОВ открытого лоскута (грань лофта, перехода): один контур, его рёбра лежат на краях
+    /// области и покрывают все четыре края. Тогда интеграл по грани — интеграл по области (без потока через край).
+    /// </summary>
+    public bool FullRectFace(TFace face)
+    {
+        if (face.Loops.Count != 1 || face.Loops[0].CoEdges.Count == 0) return false;
+        var (u0, u1, v0, v1) = Domain;
+        double tu = 1e-7 * (u1 - u0), tv = 1e-7 * (v1 - v0);
+        bool su0 = false, su1 = false, sv0 = false, sv1 = false;
+        foreach (var ce in face.Loops[0].CoEdges)
+        {
+            var c = ce.Edge.Curve;
+            foreach (double f in new[] { 0.0, 0.25, 0.5, 0.75 })
+            {
+                var p = c.PointAt(c.T0 + (c.T1 - c.T0) * f);
+                var uv = ProjectToUV(p);
+                if ((PointAt(uv) - p).Length > Math.Max(1e-7, Tol.Weld)) return false;
+                bool a = Math.Abs(uv.X - u0) < tu, b = Math.Abs(uv.X - u1) < tu, cc = Math.Abs(uv.Y - v0) < tv, d = Math.Abs(uv.Y - v1) < tv;
+                if (!a && !b && !cc && !d) return false;
+                if (f == 0.5) { su0 |= a; su1 |= b; sv0 |= cc; sv1 |= d; }
+            }
+        }
+        return su0 && su1 && sv0 && sv1;
+    }
+
     public void TessellateFace(TFace face, MeshBuilder mb)
     {
         // ГРАНЕНИЕ ИДЁТ ПО КОНТУРУ ГРАНИ, а не по всей области параметров: иначе у вырезанного

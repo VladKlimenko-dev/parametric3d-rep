@@ -56,6 +56,9 @@ jobs:
           - { name: k180_prof, cmd: 'userfile179 tests/ui/data/user_k179_gear.p3d', env: 'P3D_PROFREPORT=1' }
           - { name: k180_a, cmd: 'audit180', env: '' }
           - { name: k180_am, cmd: 'audit180', env: 'P3D_NURBSEXACTQUAD=0' }
+          - { name: k180_ar, cmd: 'audit180', env: 'P3D_NURBSRECT=0' }
+          - { name: k180_lg, cmd: 'loftguides', env: '' }
+          - { name: k180_c, cmd: 'curve177', env: '' }
           - { name: k180_g, cmd: 'guide179', env: '' }
           - { name: k180_um, cmd: 'usermodels', env: '' }
     steps:
