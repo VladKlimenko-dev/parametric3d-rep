@@ -1,0 +1,11 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["sweeps153"]}
+{"test":"KRN-BLEND-ROT-AXIS-K153","error":null,"bodies":1}
+{"test":"KRN-BLEND-ROT-AXIS-K153","parallel":"Rotational blend: section 1 (\u0027S1\u0027) is not in a plane through the axis (its plane is at 90\u00B0 to the axis; it must contain the axis direction)."}
+{"test":"KRN-BLEND-ROT-AXIS-K153","ok":true}
+{"test":"KRN-BLEND-SWEPT-CURVE-K153","error":null,"bodies":1}
+{"test":"KRN-BLEND-SWEPT-CURVE-K153","ok":true}
+{"test":"KRN-SWEEP-ANCHOR-K153","drawn":"29.98\u202640.02","shifted":"34.98\u202645.02","old":"34.98\u202675.02","err":null}
+{"test":"KRN-SWEEP-ANCHOR-K153","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":3,"failed":0}
