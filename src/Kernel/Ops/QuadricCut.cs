@@ -1303,6 +1303,8 @@ public static class QuadricCut
         // ТОЧНОЕ ОПИСАНИЕ РЕЗУЛЬТАТА: тело исходного + вырез-цилиндр. Оно и есть то, чего телу
         // не хватало: плоскостное точное представление цилиндр вместить не может.
         solid.QExact = DescribeCut(body, axisAt, radius, dir, wallLow, zHigh, bottomAt != null);
+        // k181: тело с гранями NURBS (точного плоскостного описания нет) — точное, как исходное: стенка и кромки отверстия точные
+        if (solid.QExact == null && !NurbsOff && body.Guarantee is GuaranteeLevel.ExactAnalytic or GuaranteeLevel.ExactQuadric) solid.Guarantee = body.Guarantee;
 
         warnings?.Add($"QuadricCut: hole \u2300{2 * radius:0.###} " +
                       (bottomAt == null ? "through" : $"to depth {zHigh - bottomAt.Value:0.###}") +
