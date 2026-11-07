@@ -1,0 +1,3 @@
+  open: note CachedNoBodies, restored False, dirty True, quilts 0, area 200.000000
+{"test":"UI-OPEN-QUILT-K178","ok":false,"error":"a part with a surface was rebuilt on open"}
+{"passed":0,"failed":1}
