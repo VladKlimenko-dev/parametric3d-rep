@@ -59,37 +59,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Сборка K01Checks
-        run: dotnet build tests/k01/K01Checks.csproj -c Release -o out/k01 -v q --nologo 2>&1 | tee build.log; test ${PIPESTATUS[0]} -eq 0
-      - name: Итог сборки — в ветку ya1/res/build
-        if: always()
-        run: |
-          mkdir -p res && cp build.log res/
-          (DOTNET_TieredCompilation=0 out/k01/K01Checks globals > res/globals.txt 2>&1 || true)
-          cd res && git init -q -b r && git config user.name github-actions && git config user.email github-actions@users.noreply.github.com
-          git add -A && git commit -q -m "build ${GITHUB_SHA::7}" && git push -f -q "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" r:ya1/res/build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: k01-bin
-          path: out/k01
-          retention-days: 2
-
-  probe:
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 340
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { name: k181_cut, cmd: 'cut181', env: '' }
-          - { name: k181_draft, cmd: 'draft181', env: '' }
-          - { name: k181_md, cmd: 'draft181', env: 'P3D_TWEAKCYL=0' }
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
       - uses: actions/download-artifact@v4
         with:
           name: k01-bin
