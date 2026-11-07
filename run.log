@@ -1,0 +1,52 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["allC"]}
+ALLC: 22 operations, 1 cases (sets 3, triples 200, step deadline 90 s)
+ALLC: operations: boss_rect, boss_circle, pocket_rect, pocket_circle, cut_rect_through, cut_circle_through, hole_through, hole_blind, revolve_add, revolve_cut, loft_add, sweep_add, round_edge, chamfer_edge, vertex_round, vertex_chamfer, shell, draft_in, draft_out, linear_pattern, circular_pattern, mirror
+ALLCDIAG S3:vertex_round+shell@0.15 step 2 shell: before
+  body guarantee ExactAnalytic, faces 7, exact False, qexact False
+  F0 id 122 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface src-n (0,-1,0) rev False loops 1 facets 2 sum-n (0,-8000,0) dot(face normal) 1 sense 1 lazy 0 display 2 sum-n (0,-8000,0) | mesh tris 2 sum-n (0,-8000,0)
+  F1 id 132 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface src-n (1,0,0) rev False loops 1 facets 22 sum-n (4798.9,0,0) dot(face normal) 1 sense 1 lazy 0 display 22 sum-n (4798.9,0,0) | mesh tris 22 sum-n (4798.9,0,0)
+  F2 id 141 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface src-n (0,1,-0) rev False loops 1 facets 22 sum-n (0,7998.9,0) dot(face normal) 1 sense 1 lazy 0 display 22 sum-n (0,7998.9,0) | mesh tris 22 sum-n (0,7998.9,0)
+  F3 id 150 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface src-n (-1,0,0) rev False loops 1 facets 2 sum-n (-4800,0,0) dot(face normal) 1 sense 1 lazy 0 display 2 sum-n (-4800,0,0) | mesh tris 2 sum-n (-4800,0,0)
+  F4 id 154 tag #d000000001/extrude[0]:bottom PlaneSurface src-n (0,0,1) rev False loops 1 facets 2 sum-n (0,0,-12000) dot(face normal) 1 sense -1 lazy 0 display 2 sum-n (0,0,-12000) | mesh tris 2 sum-n (0,0,-12000)
+  F5 id 156 tag #d000000001/extrude[0]:top PlaneSurface src-n (0,0,1) rev False loops 1 facets 22 sum-n (0,0,11998.9) dot(face normal) 1 sense 1 lazy 0 display 22 sum-n (0,0,11998.9) | mesh tris 22 sum-n (0,0,11998.9)
+  F6 id 159 tag #d000000002/round:vertex RevolvedSurface src-n (-0.71,-0.5,-0.5) rev False loops 1 facets 66 sum-n (1.1,1.1,1.1) dot(face normal) 1 sense -1 lazy 0 display 66 sum-n (1.1,1.1,1.1) | mesh tris 60 sum-n (1.1,1.1,1.1)
+ALLCDIAG S3:vertex_round+shell@0.15 step 2 shell: after
+  body guarantee ExactAnalytic, faces 7, exact False, qexact False
+  F0 id 198 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface src-n (0,-1,0) rev False loops 1 facets 2 sum-n (0,-8000,0) dot(face normal) 1 sense 1 lazy 0 display 2 sum-n (0,-8000,0) | mesh tris 2 sum-n (0,-8000,0)
+  F1 id 208 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface src-n (1,0,0) rev False loops 1 facets 22 sum-n (4798.9,0,0) dot(face normal) 1 sense 1 lazy 0 display 22 sum-n (4798.9,0,0) | mesh tris 22 sum-n (4798.9,0,0)
+  F2 id 217 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface src-n (0,1,-0) rev False loops 1 facets 22 sum-n (0,7998.9,0) dot(face normal) 1 sense 1 lazy 0 display 22 sum-n (0,7998.9,0) | mesh tris 22 sum-n (0,7998.9,0)
+  F3 id 226 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface src-n (-1,0,0) rev False loops 1 facets 2 sum-n (-4800,0,0) dot(face normal) 1 sense 1 lazy 0 display 2 sum-n (-4800,0,0) | mesh tris 2 sum-n (-4800,0,0)
+  F4 id 230 tag #d000000001/extrude[0]:bottom PlaneSurface src-n (0,0,1) rev False loops 1 facets 2 sum-n (0,0,-12000) dot(face normal) 1 sense -1 lazy 0 display 2 sum-n (0,0,-12000) | mesh tris 2 sum-n (0,0,-12000)
+  F5 id 232 tag #d000000001/extrude[0]:top PlaneSurface src-n (0,0,1) rev False loops 1 facets 22 sum-n (0,0,11998.9) dot(face normal) 1 sense 1 lazy 0 display 22 sum-n (0,0,11998.9) | mesh tris 22 sum-n (0,0,11998.9)
+  F6 id 235 tag #d000000002/round:vertex RevolvedSurface src-n (-0.71,-0.5,-0.5) rev False loops 1 facets 66 sum-n (1.1,1.1,1.1) dot(face normal) 1 sense -1 lazy 0 display 66 sum-n (1.1,1.1,1.1) | mesh tris 60 sum-n (1.1,1.1,1.1)
+{"allc":"S3:vertex_round\u002Bshell@0.15","set":"S3","step":1,"op":"vertex_round","f":0.15,"slot":0,"prm":"R2.25 vertex0","verdict":"OK","why":null,"ms":516,"v0":240000,"v1":239999.8593,"dv":-0.1407,"want":null,"rel":null,"faces":7,"bodies":1,"guarantee":"ExactAnalytic","valid":true,"error":null,"downgrade":null,"warnings":["Vertex round: direct build (exact sphere, R 2.25)."]}
+{"allc":"S3:vertex_round\u002Bshell@0.15","set":"S3","step":2,"op":"shell","f":0.15,"slot":1,"prm":"t2.2 open face1","verdict":"FAIL","why":"error: Shell: the body could not be hollowed.","ms":138.4,"v0":239999.8593,"v1":239999.8593,"dv":0,"want":null,"rel":null,"faces":7,"bodies":1,"guarantee":"ExactAnalytic","valid":true,"error":"Shell: the body could not be hollowed.","downgrade":null,"warnings":["Vertex round: direct build (exact sphere, R 2.25).","Shell: a RevolvedSurface face cannot be hollowed yet (planar, cylindrical and spherical faces are supported).","debug: offset: move (50, 30, 38.40900974233027): no solution of the tangent planes (3 normals: (1, 0, 0)/0.55 (0, 1, -0)/-2.2 (0.7071067811865486, 0.7071067811865466, 2.051160198809139E-15)/-2.2)","debug: offset: offset vertex (50, 30, 38.40900974233027): faces ExtrudedSurface #d000000001/extrude[0]:side[0.1] n (1, 0, 0) d 0.55 | ExtrudedSurface #d000000001/extrude[0]:side[0.2] n (0, 1, -0) d -2.2 | RevolvedSurface #d000000002/round:vertex n (0.7071067811865486, 0.7071067811865466, 2.051160198\u2026","debug: offset solid declined: offset: a vertex has no consistent position on the offset faces","debug: open face at blends declined: an open face meets a neighbour at a sharp edge (not at a blend)","debug: offset: move (50, 30, 38.40900974233027): no solution of the tangent planes (3 normals: (1, 0, 0)/-2.2 (0, 1, -0)/-2.2 (0.7071067811865486, 0.7071067811865466, 2.051160198809139E-15)/-2.2)","debug: offset: offset vertex (50, 30, 38.40900974233027): faces ExtrudedSurface #d000000001/extrude[0]:side[0.1] n (1, 0, 0) d -2.2 | ExtrudedSurface #d000000001/extrude[0]:side[0.2] n (0, 1, -0) d -2.2 | RevolvedSurface #d000000002/round:vertex n (0.7071067811865486, 0.7071067811865466, 2.051160198\u2026","debug: extended body declined: offset: a vertex has no consistent position on the offset faces"]}
+{"test":"ALLC S3:vertex_round\u002Bshell@0.15","ok":false,"verdict":"FAIL","ms":654.4445,"error":"step 2 shell: error: Shell: the body could not be hollowed."}
+
+=================== ALLC SUMMARY ===================
+steps 2, cases 1, total 00:00:01, step time sum 0.7 s
+  FAIL  1
+  OK    1
+by set: S3: 2 steps, FAIL 1, WARN 0, SLOW 0
+
+by operation (step verdicts; time median / max ms):
+  shell                n     1  FAIL    1  WARN    0  SLOW   0  median      138  max      138
+  vertex_round         n     1  FAIL    0  WARN    0  SLOW   0  median      516  max      516
+
+failure reasons (grouped, operation | reason head):
+     1  shell | error: Shell: the body could not be hollowed.   e.g. S3:vertex_round+shell@0.15 step 2 [t2.2 open face1]
+
+pairs that fail only together (first op passes alone, second fails after it):
+  S3:vertex_round+shell: 0.15 error: Shell: the body could not be hollowed.
+
+slowest 25 steps:
+        516 ms  S3:vertex_round+shell@0.15 step 1 vertex_round [R2.25 vertex0] OK faces 7
+        138 ms  S3:vertex_round+shell@0.15 step 2 shell [t2.2 open face1] FAIL faces 7
+
+warnings (grouped, operation | reason head):
+Reproduce one case: K01Checks allC with P3D_ALLC_ONLY=<case id>, P3D_ALLC_OUT=<folder> saves failed models.
+
+{"test":"ALLC-SUMMARY","ok":true,"steps":2,"fail":1,"warn":0,"slow":0,"seconds":2}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":0,"failed":0}

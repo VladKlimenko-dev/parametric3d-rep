@@ -1,0 +1,1 @@
+seconds 3 nproc 4 env P3D_ALLC_SETS=3 P3D_ALLC_ONLY=vertex_round+shell@0.15 P3D_ALLC_DIAG=1 P3D_OFFSETMOVEDBG=1 cmd allC
