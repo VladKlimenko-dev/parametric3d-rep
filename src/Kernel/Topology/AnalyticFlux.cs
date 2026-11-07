@@ -34,6 +34,8 @@ public static class AnalyticFlux
         public Func<double, double, Vector3d> Normal = null!;   // P_α × P_β
         public bool PeriodicA;
         public double B0;                                     // нижний предел внутреннего интеграла
+        /// <summary>k180: узлы поверхности по β (NURBS) — внутренний интеграл режется по ним (между узлами — многочлен).</summary>
+        public double[]? BKnots;
     }
 
     /// <summary>Поток поля через все грани тела; null — есть неподдержанная грань.</summary>
@@ -207,9 +209,11 @@ public static class AnalyticFlux
             Point = (a, b) => p0 + u * a + v * b,
             Normal = (a, b) => n,
             PeriodicA = false,
-            B0 = 0
+            B0 = 0,
+            BKnots = !FluxKnotsOff && s is NurbsSurface nk ? nk.KnotsV.Distinct().OrderBy(x => x).ToArray() : null
         };
     }
+    static readonly bool FluxKnotsOff = Environment.GetEnvironmentVariable("P3D_FLUXKNOTS") == "0";
 
     private static Param Cylinder(Vector3d o, Vector3d w, Vector3d u0, double R)
     {
@@ -244,9 +248,11 @@ public static class AnalyticFlux
                 return Vector3d.Cross(su, sv);
             },
             PeriodicA = false,
-            B0 = 0
+            B0 = 0,
+            BKnots = !FluxKnotsOff && s is NurbsSurface nk ? nk.KnotsV.Distinct().OrderBy(x => x).ToArray() : null
         };
     }
+    static readonly bool FluxKnotsOff = Environment.GetEnvironmentVariable("P3D_FLUXKNOTS") == "0";
 
     /// <summary>
     /// Поверхность вращения: P(θ, s) = o + z(s)w + ρ(s)r̂(θ), s — параметр образующей.
@@ -310,6 +316,28 @@ public static class AnalyticFlux
         double lo = p.B0, hi = b;
         if (hi == lo) return 0;
         int pieces = 4 * PieceScale;
+        // k180: внутренний интеграл грани NURBS — по пролётам узлов (через узел подынтегральное теряет гладкость, и Гаусс по
+        // равным кускам давал у стенки лофта корпуса отход 2e-5 отн.: интеграл по области и поток через край расходились на мм³)
+        if (p.BKnots is { Length: > 2 } bk)
+        {
+            double a0 = Math.Min(lo, hi), a1 = Math.Max(lo, hi), sgn = hi >= lo ? 1 : -1;
+            var cuts = new List<double> { a0 };
+            foreach (var k in bk) if (k > a0 + 1e-14 && k < a1 - 1e-14) cuts.Add(k);
+            cuts.Add(a1);
+            double tot = 0;
+            for (int c = 0; c + 1 < cuts.Count; c++)
+            {
+                double c0 = cuts[c], c1 = cuts[c + 1];
+                int np = Math.Max(2, (int)Math.Ceiling(pieces * (c1 - c0) / (a1 - a0)));
+                double st = (c1 - c0) / np;
+                for (int k = 0; k < np; k++)
+                {
+                    double m = c0 + st * (k + 0.5), r = st / 2;
+                    for (int i = 0; i < GX.Length; i++) tot += GW[i] * r * g(a, m + r * GX[i]);
+                }
+            }
+            return sgn * tot;
+        }
         double sum = 0, step = (hi - lo) / pieces;
         for (int k = 0; k < pieces; k++)
         {
