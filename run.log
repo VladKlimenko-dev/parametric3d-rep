@@ -1,0 +1,2 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["usermodel1","tests/ui/data/user_k150_sweep_blend_c972.p3d"]}
+TSV	user_k150_sweep_blend_c972.p3d	3	1	1	11	645199.8947345767	72940.57883351085	1	15/9/Underconstrained/0;10/4/Ok/0;18/7/Underconstrained/0	5932.302749335393	ExactAnalytic
