@@ -1,0 +1,1 @@
+seconds 40 nproc 4 env  cmd usermodel1 tests/ui/data/user_k179_gear.p3d

@@ -1,0 +1,2 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["usermodel1","tests/ui/data/user_k179_gear.p3d"]}
+TSV	user_k179_gear.p3d	1	0	1	142	772714.2418010868	87333.47225978044	1	142/2/Underconstrained/0;144/0/Ok/0	90174.14615977724	ExactAnalytic
