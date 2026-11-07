@@ -1,0 +1,81 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["k08a"]}
+{"test":"K08-AUDIT","total":195,"faceted":0,"inconsistent":0}
+{"test":"K08-AUDIT-CORPUS-CONSISTENT","ok":true}
+{"test":"K08-AUDIT-DETECTS-WRONG-CURVE","ok":true}
+{"test":"K08-AUDIT-POLYLINE-IS-FACETED","ok":true}
+{"test":"K08-MEASURE","radius":"8 (Analytic, \u00B10, cylinder)","thickness":"20 (Analytic, \u00B10, parallel planes)","rim":"50.265482 (Analytic, \u00B10, 1 arcs)"}
+{"test":"K08-MEASURE-ANALYTIC","ok":true}
+{"test":"K08-VOLUME","id":"S-HOLE","v":"43978.761403 (Analytic, \u00B10.000984, analytic boundary integral)","analytic":43978.761403405064,"deviation":7.275957614183426E-12}
+{"test":"K08-VOLUME","id":"S-HOLES8","v":"43476.106579 (Analytic, \u00B10.00118, analytic boundary integral)","analytic":43476.106578830695,"deviation":4.3655745685100555E-11}
+{"test":"K08-VOLUME","id":"S-SPHERE","v":"46927.669708 (Analytic, \u00B10.000947, analytic boundary integral)","analytic":46927.669707574685,"deviation":7.275957614183426E-12}
+{"test":"K08-VOLUME","id":"S-BOX","v":"48000 (Analytic, \u00B10, planar mesh)","analytic":48000,"deviation":0}
+{"test":"K08-VOLUME-BOUND-HOLDS","ok":true}
+{"test":"K08-TILTED","tilt":0.2,"summary":"faces analytic 7/7, edges analytic 14/14, inconsistent 0, max chord error 0.01991 mm","kinds":["LineCurve3\u00D712","EllipseCurve3\u00D72"],"warnings":[]}
+{"test":"K08-TILTED","tilt":0.45,"summary":"faces analytic 7/7, edges analytic 14/14, inconsistent 0, max chord error 0.01999 mm","kinds":["LineCurve3\u00D712","EllipseCurve3\u00D72"],"warnings":[]}
+{"test":"K08-TILTED","tilt":0.8,"summary":"faces analytic 7/7, edges analytic 14/14, inconsistent 0, max chord error 0.02724 mm","kinds":["LineCurve3\u00D712","EllipseCurve3\u00D72"],"warnings":[]}
+{"test":"K08-TILTED-HOLE-EDGES-ANALYTIC","ok":true}
+{"test":"K08-SHAFT","d":4,"features":["ok","ok"],"exactPath":true,"verdict":"BRep: ok; Exact: ok; Mesh: ok; Geometry: ok","volume":18599.491509446074,"analytic":18599.49154543994,"geometry":"faces analytic 4/4, edges analytic 4/4, inconsistent 0, max chord error 0.02466 mm","warnings":["QuadricCut: this case is not supported yet (planar body, through hole along Z).","CrossHole: 4 face(s) meshed from their loops, 0 left as is.","CrossHole: hole \u23004 through a shaft \u230020, rim error up to 1.42E-013 mm; faces meshed from their loops."]}
+{"test":"K08-SHAFT","d":8,"features":["ok","ok"],"exactPath":true,"verdict":"BRep: ok; Exact: ok; Mesh: ok; Geometry: ok","volume":17864.77623352467,"analytic":17864.776368199284,"geometry":"faces analytic 4/4, edges analytic 4/4, inconsistent 0, max chord error 0.02466 mm","warnings":["QuadricCut: this case is not supported yet (planar body, through hole along Z).","CrossHole: 4 face(s) meshed from their loops, 0 left as is.","CrossHole: hole \u23008 through a shaft \u230020, rim error up to 1.75E-013 mm; faces meshed from their loops."]}
+{"test":"K08-SHAFT","d":12,"features":["ok","ok"],"exactPath":true,"verdict":"BRep: ok; Exact: ok; Mesh: ok; Geometry: ok","volume":16694.59330135361,"analytic":16694.593565839652,"geometry":"faces analytic 4/4, edges analytic 4/4, inconsistent 0, max chord error 0.02466 mm","warnings":["QuadricCut: this case is not supported yet (planar body, through hole along Z).","CrossHole: 4 face(s) meshed from their loops, 0 left as is.","CrossHole: hole \u230012 through a shaft \u230020, rim error up to 7.33E-013 mm; faces meshed from their loops."]}
+{"test":"K08-SHAFT-CROSS-HOLE","ok":true}
+{"test":"K08-AV","id":"S-BOX","analytic":48000,"mesh":48000,"exact":48000,"errAnalytic":0,"errMesh":0}
+{"dbgFace":9311,"outer":true,"rev":true,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":40,"sweep":0,"v0":"60,0","v1":"60,40"}
+{"dbgFace":9311,"outer":true,"rev":true,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":60,"sweep":0,"v0":"0,0","v1":"60,0"}
+{"dbgFace":9311,"outer":true,"rev":true,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":40,"sweep":0,"v0":"0,40","v1":"0,0"}
+{"dbgFace":9311,"outer":true,"rev":true,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":60,"sweep":0,"v0":"60,40","v1":"0,40"}
+{"dbgFace":9311,"outer":false,"rev":false,"curve":"ArcCurve3","closed":true,"c0v0":0,"c1v1":3.552713678800501E-15,"c0v1":0,"sweep":6.283185307179586,"v0":"22,20","v1":"22,20"}
+{"dbgFace":9314,"outer":true,"rev":false,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":40,"sweep":0,"v0":"60,0","v1":"60,40"}
+{"dbgFace":9314,"outer":true,"rev":false,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":60,"sweep":0,"v0":"60,40","v1":"0,40"}
+{"dbgFace":9314,"outer":true,"rev":false,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":40,"sweep":0,"v0":"0,40","v1":"0,0"}
+{"dbgFace":9314,"outer":true,"rev":false,"curve":"LineCurve3","closed":false,"c0v0":0,"c1v1":0,"c0v1":60,"sweep":0,"v0":"0,0","v1":"60,0"}
+{"dbgFace":9314,"outer":false,"rev":true,"curve":"ArcCurve3","closed":true,"c0v0":0,"c1v1":3.552713678800501E-15,"c0v1":0,"sweep":6.283185307179586,"v0":"38,20","v1":"38,20"}
+{"areas":9293,"a":[800,0],"origin":"(60, 0, 0)"}
+{"areas":9297,"a":[1200,0],"origin":"(60, 40, 0)"}
+{"areas":9300,"a":[800,0],"origin":"(0, 40, 0)"}
+{"areas":9303,"a":[1200,0],"origin":"(0, 0, 0)"}
+{"areas":9311,"a":[2400,0,-201.0606681834928,3.552713678800501E-15],"origin":"(0, 0, 0)"}
+{"areas":9314,"a":[2400,0,-201.06066818349336,3.552713678800501E-15],"origin":"(0, 0, 20)"}
+{"face":9293,"src":"PlaneSurface","integral":48000,"loops":["O4:\u002B\u002B--"]}
+{"face":9297,"src":"PlaneSurface","integral":48000,"loops":["O4:\u002B\u002B--"]}
+{"face":9300,"src":"PlaneSurface","integral":0,"loops":["O4:\u002B\u002B--"]}
+{"face":9303,"src":"PlaneSurface","integral":0,"loops":["O4:\u002B\u002B--"]}
+{"face":9311,"src":"PlaneSurface","integral":0,"loops":["O4:----","I1:\u002B"]}
+{"face":9314,"src":"PlaneSurface","integral":43978.76140340507,"loops":["O4:\u002B\u002B\u002B\u002B","I1:-"]}
+{"face":9317,"src":"ExtrudedSurface","integral":-8042.47719318987,"loops":["O1:-","O1:\u002B"]}
+{"test":"K08-AV","id":"S-HOLE","analytic":43978.76140340506,"mesh":43978.76140340506,"exact":43978.761403405064,"errAnalytic":7.275957614183426E-12,"errMesh":7.275957614183426E-12}
+{"test":"K08-AV","id":"S-HOLES4","analytic":45738.05328941537,"mesh":45738.05328941537,"exact":45738.05328941535,"errAnalytic":2.1827872842550278E-11,"errMesh":2.1827872842550278E-11}
+{"test":"K08-AV","id":"S-HOLES8","analytic":43476.10657883074,"mesh":43476.10657883074,"exact":43476.106578830695,"errAnalytic":4.3655745685100555E-11,"errMesh":4.3655745685100555E-11}
+{"test":"K08-AV","id":"S-SPHERE","analytic":46927.66970757468,"mesh":46927.66970757468,"exact":46927.669707574685,"errAnalytic":7.275957614183426E-12,"errMesh":7.275957614183426E-12}
+{"test":"K08-AV","id":"S-OVERLAP","analytic":24000,"mesh":24000,"exact":24000,"errAnalytic":0,"errMesh":0}
+{"test":"K08-AV","id":"SHAFT-d4","analytic":18599.491509446074,"mesh":18599.491509446074,"exact":18599.49154543994,"errAnalytic":3.5993867641082034E-05,"errMesh":3.5993867641082034E-05}
+{"test":"K08-AV","id":"SHAFT-d8","analytic":17864.77623352467,"mesh":17864.77623352467,"exact":17864.776368199284,"errAnalytic":0.00013467461394611746,"errMesh":0.00013467461394611746}
+{"test":"K08-ANALYTIC-VOLUME","ok":true}
+{"test":"K08-AREA","id":"S-BOX","analytic":8800,"exact":8800,"mesh":8800}
+{"test":"K08-AREA","id":"S-HOLE","analytic":9403.185789489238,"exact":9403.18578948924,"mesh":9403.778078615665}
+{"test":"K08-AREA","id":"S-SPHERE","analytic":9001.061929829748,"exact":9001.061929829748,"mesh":9000.435411274433}
+{"test":"K08-PART-VOLUME","Volume":197150.44407846127,"expect":197150.44407846124,"MassFromMesh":false}
+{"test":"K08-ANALYTIC-AREA-AND-PART","ok":true}
+{"test":"K08-AV-REV","id":"half torus","analytic":4934.802200544677,"mesh":4919.593227042774,"exact":4934.802200544679,"conv":1,"faces":["RevolvedSurface:14804.407","ExtrudedSurface:-0","ExtrudedSurface:-0"]}
+{"normalize":"cone frustum","report":"faces 3, loops 3, rings 4 (multi-ring loops 1), components 2, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 0\u21920, Reversed changed 4, reordered loops 0, split loops 1, roles changed 0, multi-region faces 0, faces split 0","Problems":[]}
+{"test":"K08-AV-REV","id":"cone frustum","analytic":2450.4422698000567,"mesh":2443.998061039448,"exact":2450.4422698000385,"conv":1,"faces":["RevolvedSurface:-0","RevolvedSurface:6597.345","RevolvedSurface:753.982"]}
+{"test":"K08-AV-REV","id":"countersink","analytic":71321.4159868246,"mesh":71323.3522347038,"exact":71321.4159868246,"conv":1,"faces":["ExtrudedSurface:36000","ExtrudedSurface:36000","ExtrudedSurface:36000","ExtrudedSurface:36000","PlaneSurface:35717.257","PlaneSurface:34869.027","ExtrudedSurface:-961.327","RevolvedSurface:339.292"]}
+{"test":"K08-ANALYTIC-VOLUME-REVOLVED","ok":true}
+{"test":"K08-BUILD-INDEPENDENT-OF-CHORD","ok":true}
+{"test":"K08-PART-COM","com":"(-0.22303195902703232, 1.1018652559495848E-15, -4.6282349382778793E-14)","analytic":true,"expect":-0.22303195902703474}
+{"test":"K08-COM","id":"hole centred","volume":43978.761403405115,"exactV":43978.761403405064,"com":"(30, 20.000000000000025, 10.00000000000009)","exactCom":"(30, 20, 10)","err":9.394560025681182E-14}
+{"test":"K08-COM","id":"hole off-centre","volume":45738.05328941535,"exactV":45738.05328941535,"com":"(30.74181558283816, 19.999999999999993, 10.000000000000053)","exactCom":"(30.741815582838143, 20, 10)","err":5.662093887263079E-14}
+{"test":"K08-COM","id":"sphere cut","volume":46927.66970756059,"exactV":46927.669707574685,"com":"(29.999999999998398, 19.999999999998895, 9.840045071623484)","exactCom":"(30, 20, 9.840045071622944)","err":2.0198231801856982E-12}
+{"test":"K08-COM","id":"cone","volume":2450.442269804021,"exactV":2450.4422698000385,"com":"(-2.752316929708547E-13, -2.7409187191230953E-13, 5.480769230786562)","exactCom":"(0, 0, 5.480769230769231)","err":1.7335377810875476E-11}
+{"test":"K08-ANALYTIC-CENTROID","ok":true}
+{"inertia":"box 60\u00D740\u00D720","V":47999.999999999905,"cg":"(30.000000000000092, 19.999999999999964, 9.99999999999998)","J":"8000000 16000000 20800000 | -0 -0 -0","expect":"(8000000, 16000000, 20800000)","eD":5.373014853550837E-15,"eO":6.05359673500061E-15}
+{"inertia":"cylinder r5 h20","V":1570.7963267946573,"cg":"(1.0000000000001976, 2.0000000000001417, 12.999999999998282)","J":"62177.355 62177.355 19634.954 | 0 -0 -0","expect":"(62177.35460229799, 62177.35460229799, 19634.95408493621)","eD":3.056547099793261E-13,"eO":8.706244419012963E-14}
+{"inertia":"box with a hole R8","V":43978.761403405115,"cg":"(30, 20.000000000000025, 10.00000000000009)","J":"7801618.896 15801618.896 20671320.365 | 0 0 0","expect":"(7801618.895901317, 15801618.895901317, 20671320.364908963)","eD":5.316354343343391E-15,"eO":1.5041319752647735E-14}
+OK   box 60×40×20: diag rel 5.4E-015, off 6.1E-015
+OK   cylinder r5 h20: diag rel 3.1E-013, off 8.7E-014
+OK   box with a hole R8: diag rel 5.3E-015, off 1.5E-014
+OK   part of two bodies: Iyy 483333.333 vs 483333.333
+OK   principal axes of a rotated box: moments (7999999.9999999665, 15999999.999999974, 20799999.999999918), first axis at 30°
+{"test":"K09-ANALYTIC-INERTIA","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":7,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":13,"failed":0}
