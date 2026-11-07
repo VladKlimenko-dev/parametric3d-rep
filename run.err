@@ -1,0 +1,2 @@
+exit 1
+seconds 227 nproc 4 env P3D_GUIDEALLFALLBACK=0 cmd guide179
