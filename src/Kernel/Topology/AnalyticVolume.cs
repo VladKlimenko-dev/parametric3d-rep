@@ -1265,10 +1265,18 @@ public static class AnalyticVolume
         rect = false;
         if (WholeNurbsOff) return false;
         if (f.Loops.All(l => l.CoEdges.Count == 0) || ns.WholeDomainBoundary(f) != null) return true;
-        // лоскут целиком — только у грани с самой поверхностью NURBS: у гранёной обёртки (стенка лофта корпуса — сетка с
-        // источником NURBS) соседи считают по сетке, точный интеграл одной грани рассогласовал бы тело (объём зависел от начала)
-        if (!NurbsRectOff && f.Surface is NurbsSurface && ns.FullRectFace(f)) { rect = true; return true; }
+        // лоскут целиком — только если все соседи грани точные: у соседа-сетки (стенка лофта корпуса) край считается по сетке,
+        // точный интеграл одной грани рассогласовал бы тело с ним (объём зависел от начала отсчёта)
+        if (!NurbsRectOff && ExactNeighbours(f) && ns.FullRectFace(f)) { rect = true; return true; }
         return false;
+    }
+    static bool ExactNeighbours(TFace f)
+    {
+        foreach (var l in f.Loops)
+            foreach (var ce in l.CoEdges)
+                foreach (var o in ce.Edge.CoEdges)
+                    if (o.Loop?.Face is { } g && !ReferenceEquals(g, f) && GeometryAudit.AuthoritativeSurface(g) is null or FacetedSurface) return false;
+        return true;
     }
     /// <summary>k180: граней-лоскутов целиком, проинтегрированных по области (разбор).</summary>
     public static long NurbsRectFaces;
