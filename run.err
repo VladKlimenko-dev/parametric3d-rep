@@ -1,0 +1,1 @@
+seconds 2 nproc 4 env P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:round_edge+vertex_round@0.15 cmd allC

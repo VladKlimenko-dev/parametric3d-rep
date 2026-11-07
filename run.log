@@ -1,0 +1,52 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["allC"]}
+ALLC: 22 operations, 1 cases (sets 3, triples 200, step deadline 90 s)
+ALLC: operations: boss_rect, boss_circle, pocket_rect, pocket_circle, cut_rect_through, cut_circle_through, hole_through, hole_blind, revolve_add, revolve_cut, loft_add, sweep_add, round_edge, chamfer_edge, vertex_round, vertex_chamfer, shell, draft_in, draft_out, linear_pattern, circular_pattern, mirror
+ALLCDIAG S3:round_edge+vertex_round@0.15 step 2 vertex_round: before
+  body guarantee ExactAnalytic, faces 7, exact False, qexact False
+  F0 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface rev False loops 1 facets 14 sum-n (0,-7996.8,0) dot(face normal) 1
+  F1 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface rev False loops 1 facets 2 sum-n (4476,0,0) dot(face normal) 1
+  F2 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface rev False loops 1 facets 14 sum-n (0,7996.8,0) dot(face normal) 1
+  F3 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface rev False loops 1 facets 2 sum-n (-4800,0,0) dot(face normal) 1
+  F4 tag #d000000001/extrude[0]:bottom PlaneSurface rev False loops 1 facets 2 sum-n (0,0,-12000) dot(face normal) 1
+  F5 tag #d000000001/extrude[0]:top PlaneSurface rev False loops 1 facets 2 sum-n (0,0,11676) dot(face normal) 1
+  F6 tag #d000000002/round:face CylinderSurface rev False loops 1 facets 36 sum-n (324,0,324) dot(face normal) 1
+ALLCDIAG S3:round_edge+vertex_round@0.15 step 2 vertex_round: after
+  body guarantee ExactAnalytic, faces 7, exact False, qexact False
+  F0 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface rev False loops 1 facets 14 sum-n (0,-7996.8,0) dot(face normal) 1
+  F1 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface rev False loops 1 facets 2 sum-n (4476,0,0) dot(face normal) 1
+  F2 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface rev False loops 1 facets 14 sum-n (0,7996.8,0) dot(face normal) 1
+  F3 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface rev False loops 1 facets 2 sum-n (-4800,0,0) dot(face normal) 1
+  F4 tag #d000000001/extrude[0]:bottom PlaneSurface rev False loops 1 facets 2 sum-n (0,0,-12000) dot(face normal) 1
+  F5 tag #d000000001/extrude[0]:top PlaneSurface rev False loops 1 facets 2 sum-n (0,0,11676) dot(face normal) 1
+  F6 tag #d000000002/round:face CylinderSurface rev False loops 1 facets 36 sum-n (324,0,324) dot(face normal) 1
+{"allc":"S3:round_edge\u002Bvertex_round@0.15","set":"S3","step":1,"op":"round_edge","f":0.15,"slot":0,"prm":"R2.7 edge0","verdict":"OK","why":null,"ms":386.1,"v0":240000,"v1":239906.1332,"dv":-93.8668,"want":-93.8668,"rel":-2.0528994382049523E-13,"faces":7,"bodies":1,"guarantee":"ExactAnalytic","valid":true,"error":null,"downgrade":null,"warnings":["Round: direct blend (1 edge(s), exact blend surfaces)."]}
+{"allc":"S3:round_edge\u002Bvertex_round@0.15","set":"S3","step":2,"op":"vertex_round","f":0.15,"slot":1,"prm":"R2.25 vertex1","verdict":"FAIL","why":"error: VertexRound refused (exception at vertexround.build): Vertex round: the sphere R 2.25 does not meet an edge of the corner (the edge is too short).","ms":44.7,"v0":239906.1332,"v1":239906.1332,"dv":0,"want":null,"rel":null,"faces":7,"bodies":1,"guarantee":"ExactAnalytic","valid":true,"error":"VertexRound refused (exception at vertexround.build): Vertex round: the sphere R 2.25 does not meet an edge of the corner (the edge is too short).","downgrade":null,"warnings":["Round: direct blend (1 edge(s), exact blend surfaces)."]}
+{"test":"ALLC S3:round_edge\u002Bvertex_round@0.15","ok":false,"verdict":"FAIL","ms":430.7978,"error":"step 2 vertex_round: error: VertexRound refused (exception at vertexround.build): Vertex round: the sphere R 2.25 does not meet an edge of the corner (the edge is too short)."}
+
+=================== ALLC SUMMARY ===================
+steps 2, cases 1, total 00:00:01, step time sum 0.4 s
+  FAIL  1
+  OK    1
+by set: S3: 2 steps, FAIL 1, WARN 0, SLOW 0
+
+by operation (step verdicts; time median / max ms):
+  vertex_round         n     1  FAIL    1  WARN    0  SLOW   0  median       45  max       45
+  round_edge           n     1  FAIL    0  WARN    0  SLOW   0  median      386  max      386
+
+failure reasons (grouped, operation | reason head):
+     1  vertex_round | error: VertexRound refused (exception at vertexround.build): Vertex round: the sphere R # does not meet an edg   e.g. S3:round_edge+vertex_round@0.15 step 2 [R2.25 vertex1]
+
+pairs that fail only together (first op passes alone, second fails after it):
+  S3:round_edge+vertex_round: 0.15 error: VertexRound refused (exception at vertexround.build): Vertex round: the sphere R # does not meet an edg
+
+slowest 25 steps:
+        386 ms  S3:round_edge+vertex_round@0.15 step 1 round_edge [R2.7 edge0] OK faces 7
+         45 ms  S3:round_edge+vertex_round@0.15 step 2 vertex_round [R2.25 vertex1] FAIL faces 7
+
+warnings (grouped, operation | reason head):
+Reproduce one case: K01Checks allC with P3D_ALLC_ONLY=<case id>, P3D_ALLC_OUT=<folder> saves failed models.
+
+{"test":"ALLC-SUMMARY","ok":true,"steps":2,"fail":1,"warn":0,"slow":0,"seconds":1}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":0,"failed":0}
