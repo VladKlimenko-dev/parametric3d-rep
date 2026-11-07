@@ -1,0 +1,82 @@
+{"test":"UI-FILE-ROUNDTRIP","ok":true,"error":null}
+{"test":"UI-IMPORT-STEP","ok":true,"error":null}
+{"test":"UI-IMPORT-ASSEMBLY","ok":true,"error":null}
+{"test":"UI-IMPORT-STEP-PLACEMENT","ok":true,"error":null}
+{"test":"UI-GIZMO-6DOF","ok":true,"error":null}
+{"test":"UI-IMPORT-PART-SHOW","ok":true,"error":null}
+  ОС: Ubuntu 26.04.1 LTS X64 | Процессор: AMD EPYC 9V74 80-Core Processor; логических ядер: 4 | Память: 15.6 ГБ | .NET: .NET 8.0.33
+{"test":"UI-KERNELTEST-K150","ok":true,"error":null}
+{"test":"UI-ICON-GRAY","ok":true,"error":null}
+{"test":"UI-ICONS-USER-SET","ok":true,"error":null}
+  selected 2: XY,YZ
+{"test":"UI-HIDE-TOGGLE","ok":true,"error":null}
+  move: gizmo GizmoSpec { Mode = Move, Origin = (0, 0, 10), X = (1, 0, 0), Y = (0, 1, 0), Z = (0, 0, 1), Mask = 0 }, error , volume 24000.0000
+  move: shift (20, 7, 0), box (0.0000, -8.0000, 0.0000)–(40.0000, 22.0000, 20.0000), gizmo (20.0000, 7.0000, 10.0000)
+  scale X one side: (0.0000, -8.0000, 0.0000)–(60.0000, 22.0000, 20.0000)
+  scale Y both sides: (0.0000, -14.0000, 0.0000)–(60.0000, 28.0000, 20.0000)
+  scale Z keep ratio: (-15.0000, -24.5000, 0.0000)–(75.0000, 38.5000, 30.0000), S (2.25, 2.1, 1.5), volume 170100.0000
+  scale corner: (-60.0000, -56.0000, -15.0000)–(120.0000, 70.0000, 45.0000)
+  rotate Z 90: (5.0000, -13.0000, 0.0000)–(35.0000, 27.0000, 20.0000)
+  then X 90: (5.0000, -3.0000, -10.0000)–(35.0000, 17.0000, 30.0000), axis (0.5774, -0.5774, 0.5774) angle 120
+  local gizmo: X (0.8660, 0.5000, 0.0000) Y (-0.5000, 0.8660, 0.0000) origin (20.0000, 7.0000, 10.0000)
+  global: shift (8.66, 5, 0), gizmo X (1.0000, 0.0000, 0.0000)
+{"test":"UI-FF-GIZMO","ok":true,"error":null}
+  fallback: mode wgl → angle, toast «Сбой видеодрайвера (OpenGL WGL). Со следующего запуска графика — ANGLE (Direct3D 11); перезапустите приложение.»
+{"test":"UI-FRAME-GUARD","ok":true,"error":null}
+  warm-up: 3059 ms, errors 0; code optimized
+{"test":"UI-KERNEL-WARMUP","ok":true,"error":null}
+  outline: 1 arc(s), 4 line(s); corner (-50, 50, 50); edges LineCurve3 ArcCurve3 LineCurve3 LineCurve3 ProcCurve3
+  generic: arc -> SkArc; line -> SkLine; ellipse -> 16 entities
+{"test":"UI-FACE-OUTLINE-ARCS","ok":true,"error":null}
+{"test":"UI-LANGUAGE","ok":true,"error":null}
+  (2) preview pending: edges 0, vertices 0, picks False, meshes 1; not in preview: edges 1136, picks True
+  (5) tree scroll bar True, content right gap 14
+  (7) branch expanded False -> True, after reopening True
+  (9) cancel: same part True, dirty False, restores 1, sketch restored True, volume 319756.239 vs 319756.239, can undo False (was False)
+  (9) OK without changes: same part True, dirty False, restores 2, can undo False
+{"test":"UI-K116","ok":true,"error":null}
+  sketch points: own 11 (shapes 1,0, px 7,5), neighbour 0 (shapes , px )
+{"test":"UI-GHOSTRING-K127","ok":false,"error":"no neighbour sketch points drawn while editing Sketch4"}
+  floor H: default (52.399998, 26.199999), size 0 (20, 10), size 100 (200, 100), circle (22.36068, 22.36068), square (20, 20)
+  grid: mm (10, 10), inch (25.4, 5), theme (10, 10); px 0 0.1 100 2
+  after opening a document: gap 7, shape Ellipse, grid False
+  settings in EN: 156 texts, untranslated 0: 
+  settings in RU: 156 texts, untranslated 0: 
+{"test":"UI-FLOOR-SETTINGS-K133","ok":true,"error":null}
+  opened: 22 features, states 22, first build [0+22]
+  rollback to 11: [11+0], back to the end: [22+0], volume 312838.969
+  sketch of #18: [18+4], volume 312838.969 -> 312838.969
+  feature #18 depth: applied [18+1] [18+4], volume 312838.969 -> 312963.277
+  undo [22+0] volume 312838.969; redo [22+0] volume 312963.277
+  full rebuild: [0+22], volume 312963.277, faces 48 vs 48
+{"test":"UI-INCR-K122","ok":true,"error":null}
+  before: Plate,Hole1,Hole2,Hole3,Hole4,Hole5,Pocket6,Boss7,Round8,Round9,Boss10,Chamfer11
+  after:  Plate,Hole2,Hole3,Hole4,Hole1,Hole5,Pocket6,Boss7,Round8,Round9,Boss10,Chamfer11; members at 4,5,6; volume 317324.765 -> 317324.765
+  undo: Plate,Hole1,Hole2,Hole3,Hole4,Hole5,Pocket6,Boss7,Round8,Round9,Boss10,Chamfer11
+  shape-changing group: order Block,Pocket,Boss,Hole, groups -,-,-,-, volume 116934.071 -> 116934.071
+{"test":"UI-GROUP-REAL-K121","ok":true,"error":null}
+  preloaded 437 of 437
+  switch: live swaps 2075, 88.1 ms
+{"test":"UI-ICON-THEME-K118","ok":true,"error":null}
+  opened: cached True, dirty True, bodies 0, scene vertices 5646, face picks False, bounds 191.3
+  built: cached False, bodies 1, volume 319756.239 vs 319756.239
+{"test":"UI-FILE-DISPLAY-K114","ok":true,"error":null}
+{"test":"UI-K103","ok":true,"error":null}
+{"test":"UI-HANDLE-CONTOUR","ok":true,"error":null}
+  preview tris 74, final tris 80
+{"test":"UI-HANDLE-LIVE","ok":true,"error":null}
+  before=True: features +1, points 1, error , dir (-0, -0, -1), volume 1000000 -> 999436
+  before=False: features +1, points 1, error , dir (-0, -0, -1), volume 1000000 -> 999436
+{"test":"UI-HOLE-ON-FACE","ok":true,"error":null}
+{"test":"UI-HELIX-EDIT","ok":true,"error":null}
+  drill point: volume 17.027 less (cone 16.989)
+  gizmo moved 11.18 (want 11.18), error ; p0 (0, 0, 20) now (-5, 10, 20) gizmo (0, 0, 20) x (0, 1, 0) y (-1, 0, 0)
+  edge ref: D1 55 vs 55
+  distance 15 → hole at (35, 10, 20), error 
+  radial: face #63105cf58b/extrude[0]:side[0.0], end #63105cf58b/extrude[0]:bottom, axial 33.333, angle 52.394, error 
+  radial after gizmo: axial 40.333, angle 82.394, error 
+{"test":"UI-HOLE-K153","ok":true,"error":null}
+  edit S1, over S2 curve: SketchCurve S1
+  curve at stage 0: Кривая1 slot 0 of 1
+{"test":"UI-LATER-K178","ok":true,"error":null}
+{"passed":28,"failed":1}
