@@ -1,0 +1,48 @@
+TWEAKFACE 0 ExtrudedSurface pick=False touched=True grow=False n=5
+TWEAKFACE 1 ExtrudedSurface pick=False touched=True grow=False n=4
+TWEAKFACE 2 ExtrudedSurface pick=True touched=True grow=False n=6
+TWEAKFACE 3 PlaneSurface pick=False touched=True grow=False n=5
+TWEAKFACE 4 PlaneSurface pick=False touched=True grow=False n=4
+TWEAKFACE 5 CylinderSurface pick=False touched=True grow=True n=4
+TWEAKFACE 6 PlaneSurface pick=False touched=True grow=False n=4
+TWEAKFACE 7 ExtrudedSurface pick=False touched=False grow=False n=3
+TWEAKFACE 8 SectionSurface pick=False touched=False grow=False n=7
+TWEAKSRC guarantee ExactPolyhedral: as exact BRep: 15 error(s); Exact: ok; Mesh: ok
+TWEAKSRC   [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 7.07E-005 мм (элемент 1386)
+TWEAKSRC   [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 7.07E-005 мм (элемент 1389)
+TWEAKSRC   [BRep/Error] curve-off-surface: кривая ребра (ArcCurve3) отходит от смежных поверхностей на 3.53E-006 мм (элемент 1401)
+TWEAKSRC   [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 7.07E-005 мм (элемент 1409)
+TWEAKSRC   [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 7.07E-005 мм (элемент 1414)
+TWEAKSRC   [BRep/Error] curve-off-surface: кривая ребра (ArcCurve3) отходит от смежных поверхностей на 7.07E-005 мм (элемент 1419)
+TWEAKSRC   [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 7.07E-005 мм (элемент 1422)
+TWEAKSRC   [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (ArcCurve3) на 3.53E-006 мм при допуске 2.89E-006 (элемент 1401)
+TWEAKDUMP [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 7.07E-005 мм (элемент 1331)
+   edge 1331 LineCurve3 c0=(-4.4101, -50, 50) c1=(50, -50, -4.4101) v0=(-4.4101, -50, 50) v1=(50, -50, -4.4101) m0=False m1=False tol=1E-06 faces=[0:FacetedSurface,8:FacetedSurface]
+TWEAKDUMP [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 7.07E-005 мм (элемент 1334)
+   edge 1334 LineCurve3 c0=(-4.4101, 50, -30) c1=(-4.4101, 50, -40.46) v0=(-4.4101, 50, -30) v1=(-4.4101, 50, -40.46) m0=False m1=False tol=1E-06 faces=[1:FacetedSurface,8:FacetedSurface]
+TWEAKDUMP [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 7.07E-005 мм (элемент 1354)
+   edge 1354 LineCurve3 c0=(5.1299, 40.46, -50) c1=(50, -4.4101, -50) v0=(5.1299, 40.46, -50) v1=(50, -4.4101, -50) m0=False m1=False tol=1E-06 faces=[3:FacetedSurface,8:FacetedSurface]
+TWEAKDUMP [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 7.07E-005 мм (элемент 1359)
+   edge 1359 LineCurve3 c0=(-4.4101, -50, 50) c1=(-4.4101, -30, 50) v0=(-4.4101, -50, 50) v1=(-4.4101, -30, 50) m0=False m1=False tol=1E-06 faces=[4:FacetedSurface,8:FacetedSurface]
+TWEAKDUMP [BRep/Error] curve-off-surface: кривая ребра (ArcCurve3) отходит от смежных поверхностей на 7.07E-005 мм (элемент 1364)
+   edge 1364 ArcCurve3 c0=(-4.4101, -30, 50.000000000002174) c1=(-4.4101, 50.000000000001435, -30) v0=(-4.4101, -30, 50) v1=(-4.4101, 50, -30) m0=False m1=False tol=2.1742607714259066E-12 faces=[5:FacetedSurfaceg,8:FacetedSurface]
+TWEAKDUMP [BRep/Error] curve-off-surface: кривая ребра (LineCurve3) отходит от смежных поверхностей на 7.07E-005 мм (элемент 1367)
+   edge 1367 LineCurve3 c0=(-4.4101, 50, -40.46) c1=(5.129899999999999, 40.46, -50) v0=(-4.4101, 50, -40.46) v1=(5.1299, 40.46, -50) m0=False m1=False tol=8.881784197001252E-16 faces=[6:FacetedSurface,8:FacetedSurface]
+TWEAKDUMP [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (SectionIsoCurve) на 2.16E-003 мм при допуске 1.00E-007 (элемент 1370)
+   edge 1370 SectionIsoCurve c0=(50, -4.4101, -50) c1=(50, -50, -4.4101) v0=(50, -4.4101, -50) v1=(50, -50, -4.4101) m0=False m1=False tol=1E-06 faces=[7:FacetedSurface,8:FacetedSurface]
+TWEAKDUMP [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 7.07E-005 мм при допуске 1.00E-007 (элемент 1331)
+   edge 1331 LineCurve3 c0=(-4.4101, -50, 50) c1=(50, -50, -4.4101) v0=(-4.4101, -50, 50) v1=(50, -50, -4.4101) m0=False m1=False tol=1E-06 faces=[0:FacetedSurface,8:FacetedSurface]
+TWEAKDUMP [BRep/Error] pcurve-inconsistent: p-кривая (Hermite2) отходит от ребра (SectionIsoCurve) на 7.07E-005 мм при допуске 1.00E-007 (элемент 1370)
+   edge 1370 SectionIsoCurve c0=(50, -4.4101, -50) c1=(50, -50, -4.4101) v0=(50, -4.4101, -50) v1=(50, -50, -4.4101) m0=False m1=False tol=1E-06 faces=[7:FacetedSurface,8:FacetedSurface]
+TWEAKDUMP [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 7.07E-005 мм при допуске 1.00E-007 (элемент 1354)
+   edge 1354 LineCurve3 c0=(5.1299, 40.46, -50) c1=(50, -4.4101, -50) v0=(5.1299, 40.46, -50) v1=(50, -4.4101, -50) m0=False m1=False tol=1E-06 faces=[3:FacetedSurface,8:FacetedSurface]
+TWEAKDUMP [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 7.07E-005 мм при допуске 1.00E-007 (элемент 1367)
+   edge 1367 LineCurve3 c0=(-4.4101, 50, -40.46) c1=(5.129899999999999, 40.46, -50) v0=(-4.4101, 50, -40.46) v1=(5.1299, 40.46, -50) m0=False m1=False tol=8.881784197001252E-16 faces=[6:FacetedSurface,8:FacetedSurface]
+TWEAKDUMP [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 7.07E-005 мм при допуске 1.00E-007 (элемент 1334)
+   edge 1334 LineCurve3 c0=(-4.4101, 50, -30) c1=(-4.4101, 50, -40.46) v0=(-4.4101, 50, -30) v1=(-4.4101, 50, -40.46) m0=False m1=False tol=1E-06 faces=[1:FacetedSurface,8:FacetedSurface]
+TWEAKDUMP [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (ArcCurve3) на 7.07E-005 мм при допуске 1.00E-007 (элемент 1364)
+   edge 1364 ArcCurve3 c0=(-4.4101, -30, 50.000000000002174) c1=(-4.4101, 50.000000000001435, -30) v0=(-4.4101, -30, 50) v1=(-4.4101, 50, -30) m0=False m1=False tol=2.1742607714259066E-12 faces=[5:FacetedSurfaceg,8:FacetedSurface]
+TWEAKDUMP [BRep/Error] pcurve-inconsistent: p-кривая (Line2) отходит от ребра (LineCurve3) на 7.07E-005 мм при допуске 1.00E-007 (элемент 1359)
+   edge 1359 LineCurve3 c0=(-4.4101, -50, 50) c1=(-4.4101, -30, 50) v0=(-4.4101, -50, 50) v1=(-4.4101, -30, 50) m0=False m1=False tol=1E-06 faces=[4:FacetedSurface,8:FacetedSurface]
+exit 1
+seconds 7 nproc 4 env P3D_TWEAKDUMP=1 cmd draft181
