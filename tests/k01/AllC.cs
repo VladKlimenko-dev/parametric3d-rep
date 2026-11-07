@@ -338,8 +338,7 @@ static partial class Program
             r.Bodies = p.Bodies.Count; r.Faces = p.Bodies.Sum(b => b.Faces.Count());
             r.Guarantee = string.Join(",", p.Bodies.Select(b => b.Guarantee));
             try { r.Valid = p.Bodies.Count > 0 && p.Bodies.All(b => SolidValidator.Validate(b).IsValid); } catch (Exception e) { r.Valid = false; r.Why = "validator: " + e.Message; }
-            r.Warnings.AddRange(added.SelectMany(x => x.Warnings));
-            r.Warnings.AddRange(p.Warnings.Where(w => !r.Warnings.Contains(w)));
+            r.Warnings.AddRange(p.Warnings.Distinct());
             var dg = added.Where(x => p.Downgrades.ContainsKey(x)).Select(x => p.Downgrades[x]).ToList();
             if (dg.Count > 0) r.Downgrade = $"{dg.Sum(x => x.Faces)} faceted face(s), {dg.Sum(x => x.Edges)} faceted edge(s)";
             // вердикт
