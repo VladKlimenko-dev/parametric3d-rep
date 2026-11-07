@@ -1,0 +1,154 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["k09"]}
+{"k09":"shell cube 60, t=2, open top","ok":true,"expected":34112,"vol":34112,"rel":0,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"revolve ring 360\u00B0","ok":true,"expected":28274.333882308136,"vol":28274.33388230832,"rel":6.5620261801383E-15,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"revolve ring 90\u00B0","ok":true,"expected":7068.583470577034,"vol":7068.5834705770185,"rel":2.1873420600461E-15,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"sweep circle r5 along 40","ok":true,"expected":3141.5926535897934,"vol":3141.5926535897906,"rel":8.685034650183042E-16,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"loft square 20 \u2192 10 over 30","ok":true,"expected":7000,"vol":7000,"rel":0,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"draft 5\u00B0 on the sides of a cube 60 (neutral bottom)","ok":true,"expected":180409.3260355199,"vol":180409.32603551992,"rel":1.613210973971689E-16,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"mirror box across x=0","ok":true,"expected":8000,"vol":8000,"rel":0,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok | BRep: ok; Mesh: ok"}
+{"k09":"linear pattern 3 \u00D7 20","ok":true,"expected":3000,"vol":3000,"rel":0,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok | BRep: ok; Mesh: ok | BRep: ok; Mesh: ok"}
+{"k09":"circular pattern 4","ok":true,"expected":4000,"vol":4000,"rel":0,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok | BRep: ok; Mesh: ok | BRep: ok; Mesh: ok | BRep: ok; Mesh: ok"}
+{"k09":"shell cylinder r10 h30, t=2, open top","ok":true,"expected":3795.04392553647,"vol":3795.0439255364713,"rel":3.5947991101751006E-16,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"shell too thick (cube 10, t=6) must be refused","ok":true,"expected":-1,"vol":1000,"rel":-1,"analytic":true,"err":"Shell: Shell: the body could not be hollowed.","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"sweep circle r2 along a quarter arc R20","ok":true,"expected":394.7841760435743,"vol":394.78417604357327,"rel":2.5917491165644154E-15,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"revolve circle 90\u00B0 (torus segment)","ok":true,"expected":394.78417604357435,"vol":394.78417604357634,"rel":5.039512171097474E-15,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"revolve cut groove in a cylinder","ok":true,"expected":8293.804605477053,"vol":8293.804605477053,"rel":0,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"extrude symmetric two-sided","ok":true,"expected":3000,"vol":3000,"rel":0,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"loft circle r10 \u2192 r5 over 30 (cone frustum)","ok":true,"expected":5497.787143782138,"vol":5497.787143782254,"rel":2.117494162330342E-14,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"rib in an L-bracket (triangle 30\u00D730, t=3)","ok":true,"expected":8850,"vol":8850,"rel":0,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+{"k09":"sweep circle r2 along a line 20 \u002B tangent arc R20 (90\u00B0)","ok":true,"expected":646.1115883307577,"vol":646.1114582644589,"rel":2.013062468291459E-07,"analytic":true,"err":"","verdict":"BRep: ok; Exact: ok; Mesh: ok"}
+{"k09":"sweep circle r3 along an L-shaped polyline 40 \u002B 30 (mitred corner)","ok":true,"expected":1979.2033717615698,"vol":1979.2033717615695,"rel":1.148814107167069E-16,"analytic":true,"err":"","verdict":"BRep: ok; Mesh: ok"}
+OK   shell cube 60, t=2, open top
+OK   revolve ring 360°
+OK   revolve ring 90°
+OK   sweep circle r5 along 40
+OK   loft square 20 → 10 over 30
+OK   draft 5° on the sides of a cube 60 (neutral bottom)
+OK   mirror box across x=0
+OK   linear pattern 3 × 20
+OK   circular pattern 4
+OK   shell cylinder r10 h30, t=2, open top
+OK   shell too thick (cube 10, t=6) must be refused
+OK   sweep circle r2 along a quarter arc R20
+OK   revolve circle 90° (torus segment)
+OK   revolve cut groove in a cylinder
+OK   extrude symmetric two-sided
+OK   loft circle r10 → r5 over 30 (cone frustum)
+OK   rib in an L-bracket (triangle 30×30, t=3)
+OK   sweep circle r2 along a line 20 + tangent arc R20 (90°)
+OK   sweep circle r3 along an L-shaped polyline 40 + 30 (mitred corner)
+{"test":"K09-OPERATION-MATRIX","ok":true}
+{"solver":"fully constrained","scale":1,"status":"Ok","dof":0,"want":"Ok","wantDof":0,"geo":true,"ok":true,"a":"(-0,0)","c":"(10,6)"}
+{"solver":"one dimension missing","scale":1,"status":"Underconstrained","dof":1,"want":"Underconstrained","wantDof":1,"geo":true,"ok":true,"a":"(-0,0)","c":"(10,5.9)"}
+{"solver":"conflicting dimensions","scale":1,"status":"Inconsistent","dof":0,"want":"Inconsistent","wantDof":0,"geo":true,"ok":true,"a":"(0,-0)","c":"(6.0774,3.328)"}
+{"solver":"redundant but consistent","scale":1,"status":"Overconstrained","dof":0,"want":"Overconstrained","wantDof":0,"geo":true,"ok":true,"a":"(-0,0)","c":"(10,6)"}
+{"solver":"fully constrained","scale":1000,"status":"Ok","dof":0,"want":"Ok","wantDof":0,"geo":true,"ok":true,"a":"(0,0)","c":"(10000,6000)"}
+{"solver":"one dimension missing","scale":1000,"status":"Underconstrained","dof":1,"want":"Underconstrained","wantDof":1,"geo":true,"ok":true,"a":"(0,0)","c":"(10000,5900)"}
+{"solver":"conflicting dimensions","scale":1000,"status":"Inconsistent","dof":0,"want":"Inconsistent","wantDof":0,"geo":true,"ok":true,"a":"(-0.0145,0.0085)","c":"(6077.3847,3328.0235)"}
+{"solver":"redundant but consistent","scale":1000,"status":"Overconstrained","dof":0,"want":"Overconstrained","wantDof":0,"geo":true,"ok":true,"a":"(0,0)","c":"(10000,6000)"}
+{"solver":"fully constrained","scale":0.001,"status":"Ok","dof":0,"want":"Ok","wantDof":0,"geo":true,"ok":true,"a":"(-0,0)","c":"(0.01,0.006)"}
+{"solver":"one dimension missing","scale":0.001,"status":"Underconstrained","dof":1,"want":"Underconstrained","wantDof":1,"geo":true,"ok":true,"a":"(-0,0)","c":"(0.01,0.0059)"}
+{"solver":"conflicting dimensions","scale":0.001,"status":"Inconsistent","dof":0,"want":"Inconsistent","wantDof":0,"geo":true,"ok":true,"a":"(0,0)","c":"(0.0061,0.0033)"}
+{"solver":"redundant but consistent","scale":0.001,"status":"Overconstrained","dof":0,"want":"Overconstrained","wantDof":0,"geo":true,"ok":true,"a":"(-0,0)","c":"(0.01,0.006)"}
+OK   fully constrained ×1: Ok/0 (want Ok/0)
+OK   one dimension missing ×1: Underconstrained/1 (want Underconstrained/1)
+OK   conflicting dimensions ×1: Inconsistent/0 (want Inconsistent/0)
+OK   redundant but consistent ×1: Overconstrained/0 (want Overconstrained/0)
+OK   fully constrained ×1000: Ok/0 (want Ok/0)
+OK   one dimension missing ×1000: Underconstrained/1 (want Underconstrained/1)
+OK   conflicting dimensions ×1000: Inconsistent/0 (want Inconsistent/0)
+OK   redundant but consistent ×1000: Overconstrained/0 (want Overconstrained/0)
+OK   fully constrained ×0.001: Ok/0 (want Ok/0)
+OK   one dimension missing ×0.001: Underconstrained/1 (want Underconstrained/1)
+OK   conflicting dimensions ×0.001: Inconsistent/0 (want Inconsistent/0)
+OK   redundant but consistent ×0.001: Overconstrained/0 (want Overconstrained/0)
+{"test":"K09-SKETCH-SOLVER","ok":true}
+{"solver2":"branch","flips":[]}
+{"solver2":"tangent","status":"Underconstrained","dof":2,"dist":5,"radius":5}
+{"solver2":"big","rectangles":5,"variables":40,"status":"Ok","dof":0,"ms":0.5649}
+{"solver2":"big","rectangles":20,"variables":160,"status":"Ok","dof":0,"ms":1.0947}
+{"solver2":"big","rectangles":50,"variables":400,"status":"Ok","dof":0,"ms":4.5103}
+OK   triangle keeps its branch: 
+OK   line tangent to a circle: distance 5, status Underconstrained, dof 2
+OK   5 rectangles (40 variables): Ok/0 in 1 ms
+OK   20 rectangles (160 variables): Ok/0 in 1 ms
+OK   50 rectangles (400 variables): Ok/0 in 5 ms
+{"test":"K09-SKETCH-SOLVER-2","ok":true}
+{"grid":4,"variables":50,"status":"Ok","dof":0,"ms":1.2621,"corner":"(40,40)"}
+{"grid":8,"variables":162,"status":"Ok","dof":0,"ms":21.614,"corner":"(80,80)"}
+{"grid":12,"variables":338,"status":"Ok","dof":0,"ms":21.4635,"corner":"(120,120)"}
+{"test":"K09-SKETCH-SOLVER-CONNECTED-GRID","ok":true}
+{"fillet":"one vertical edge","edges":1,"err":null,"vol":47961.37166941154,"expected":47961.37166941154,"rel":0,"verdict":"BRep: ok; Mesh: ok","ms":128.5463,"analytic":true}
+{"fillet":"four vertical edges","edges":4,"err":null,"vol":47845.48667764617,"expected":47845.486677646164,"rel":1.5207197416977718E-16,"verdict":"BRep: ok; Mesh: ok","ms":6.9853,"analytic":true}
+{"fillet":"four top edges (closed loop)","edges":4,"err":null,"vol":47624.07069082156,"expected":47624.07069082156,"rel":0,"verdict":"BRep: ok; Mesh: ok","ms":71.8668,"analytic":true}
+{"fillet":"all twelve edges (corner blends)","edges":12,"err":null,"vol":47109.0793915247,"expected":47109.07939152466,"rel":7.722457866044008E-16,"verdict":"BRep: ok; Mesh: ok","ms":109.3728,"analytic":true}
+{"fillet":"variable 2\u21924","vol":47959.55700323787,"expect":47959.94099050086,"verdict":"BRep: ok; Mesh: ok","warnings":["Round: direct variable blend R2\u2192R4 (exact cone)."]}
+OK   one vertical edge: vol 47961.372 vs 47961.372 (rel 0.0E+000) BRep: ok; Mesh: ok
+OK   four vertical edges: vol 47845.487 vs 47845.487 (rel 1.5E-016) BRep: ok; Mesh: ok
+OK   four top edges (closed loop): vol 47624.071 vs 47624.071 (rel 0.0E+000) BRep: ok; Mesh: ok
+OK   all twelve edges (corner blends): vol 47109.079 vs 47109.079 (rel 7.7E-016) BRep: ok; Mesh: ok
+OK   variable radius 2→4: vol 47959.557 vs 47959.941 BRep: ok; Mesh: ok
+{"test":"K09-FILLET-MATRIX","ok":true}
+{"prismDetail":"all","analytic":13086.928283427267,"massFromMesh":false,"audit":"faces analytic 20/20, edges analytic 36/36, inconsistent 0, max chord error 0.01925 mm","issues":[]}
+{"prism":"all edges","err":null,"vol":13086.928283427267,"expect":13086.92828342726,"diff":7.275957614183426E-12,"rel":5.559713827879225E-16,"verdict":"BRep: ok; Mesh: ok","warnings":[]}
+{"prism":"vertical only","vol":13486.585702109986,"exp":13486.585702109986,"verdict":"BRep: ok; Mesh: ok"}
+{"prism":"top three only","vol":13638.086713287601,"exp":-1,"verdict":"BRep: ok; Mesh: ok"}
+{"test":"K09-PRISM-ROUND-ALL-EDGES-VALID","ok":true}
+OK   coincident: Ok (1.3000177302036521E-21, 7.0002744276714195E-22)
+OK   point on line: Underconstrained (4, 1.0755932902603588E-21)
+OK   point on circle: Underconstrained |p| 5
+OK   parallel: Underconstrained 
+OK   perpendicular: Underconstrained 
+OK   equal lengths: Underconstrained 10
+OK   equal radii: Underconstrained 4
+OK   symmetric about a line: Ok (3, 1)
+OK   midpoint: Ok (5, 2)
+OK   concentric: Underconstrained (1, 1)
+OK   tangent circle–circle: Underconstrained centre distance 8
+OK   tangent line–arc: Underconstrained line y 5
+OK   angle 30° between lines: Underconstrained 30°
+OK   distance point–line: Underconstrained (3, 7)
+OK   ellipse semi-axes: Ok 12×4
+OK   point on ellipse: Underconstrained x²/a²+y²/b² = 1
+OK   tangent line–ellipse (rotated 20°): Underconstrained line y 3.928584709 vs 3.928584709
+OK   unsupported combination reported: Tangent SkEllipse+SkEllipse
+{"test":"K09-SOLVER-CONSTRAINTS","ok":true}
+{"vertexOp":"chamfer uniform d6","vol":215964,"expected":215964,"rel":0,"analytic":true,"err":null,"verdict":"BRep: ok; Mesh: ok","why":null}
+{"vertexOp":"chamfer per edge 4/6/9","vol":215964,"expected":215964,"rel":0,"analytic":true,"err":null,"verdict":"BRep: ok; Mesh: ok","why":null}
+{"vertexOp":"round R6","vol":215997.3323948991,"expected":215997.3323959956,"rel":5.0763905289682655E-12,"analytic":true,"err":null,"verdict":"BRep: ok; Mesh: ok","why":null}
+{"vertexOp":"chamfer uniform d4 at a 60\u00B0 corner","vol":13847.168856243987,"expected":13847.168856243983,"rel":2.6272365455060304E-16,"analytic":true,"err":null,"verdict":"BRep: ok; Mesh: ok","why":null}
+OK   chamfer uniform d6: vol 215964 vs 215964 (rel 0.0E+000, exact) BRep: ok; Mesh: ok 
+OK   chamfer per edge 4/6/9: vol 215964 vs 215964 (rel 0.0E+000, exact) BRep: ok; Mesh: ok 
+OK   round R6: vol 215997.332395 vs 215997.332396 (rel 5.1E-012, exact) BRep: ok; Mesh: ok 
+OK   chamfer uniform d4 at a 60° corner: vol 13847.168856 vs 13847.168856 (rel 2.6E-016, exact) BRep: ok; Mesh: ok 
+OK   round R4 at a 60° corner: vol 13854.994 (< 13856.406) BRep: ok; Mesh: ok 
+OK   too large a radius is refused: VertexRound refused (exception at vertexround.build): Vertex round: radius 90 needs a setback of 63.64 that does not fit on an edge of length 60.
+OK   a point that is not a vertex is refused: VertexChamfer refused (exception at vertexchamfer.build): Vertex chamfer: no vertex at the selected point.
+OK   document round trip: 215962.456247 vs 215962.456247 ;;
+{"test":"K09-VERTEX-CHAMFER-AND-ROUND","ok":true}
+OK   N=4 chamfer uniform d6: removed 50.911688 vs 50.911688; pyramid volume 5333.333 vs 5333.333; BRep: ok; Mesh: ok
+OK   N=4 chamfer per edge (tilted plane): removed 46.256402 vs 46.256402; BRep: ok; Mesh: ok
+OK   N=4 chamfer per edge (non-coplanar): BRep: ok; Mesh: ok; cut points on the edges: True
+OK   N=4 round R4: removed 4.0161 vs quadrature 4.0241; tangent points True; BRep: ok; Exact: ok; Mesh: ok
+OK   N=5 chamfer uniform d6: removed 60.524866 vs 60.524866; pyramid volume 6340.377 vs 6340.377; BRep: ok; Mesh: ok
+OK   N=5 chamfer per edge (tilted plane): removed 55.277343 vs 55.277343; BRep: ok; Mesh: ok
+OK   N=5 chamfer per edge (non-coplanar): BRep: ok; Mesh: ok; cut points on the edges: True
+OK   N=5 round R4: removed 5.054 vs quadrature 5.0573; tangent points True; BRep: ok; Exact: ok; Mesh: ok
+OK   N=6 chamfer uniform d6: removed 66.136223 vs 66.136223; pyramid volume 6928.203 vs 6928.203; BRep: ok; Mesh: ok
+OK   N=6 chamfer per edge (tilted plane): removed 60.595006 vs 60.595006; BRep: ok; Mesh: ok
+OK   N=6 chamfer per edge (non-coplanar): BRep: ok; Mesh: ok; cut points on the edges: True
+OK   N=6 round R4: removed 5.7504 vs quadrature 5.7483; tangent points True; BRep: ok; Exact: ok; Mesh: ok
+OK   irregular 4-edge corner round R3: BRep: ok; Mesh: ok; removed 1.2916
+OK   irregular 4-edge corner chamfer d4: BRep: ok; Mesh: ok
+{"test":"K09-VERTEX-N-EDGES","ok":true}
+OK   concave corner chamfer d6 (adds d³/6): added 36 vs 36; BRep: ok; Mesh: ok
+OK   concave corner chamfer 4/6/9: added 36 vs 36; BRep: ok; Mesh: ok
+OK   concave corner round R6 (adds the cube corner outside the sphere): added 2.667605 vs 2.667604; BRep: ok; Mesh: ok
+OK   concave 4-edge corner chamfer d6: edges 4, concave True; added 50.911688 vs 50.911688; BRep: ok; Mesh: ok
+OK   concave 4-edge corner round R4: added 4.0211; BRep: ok; Mesh: ok
+OK   saddle vertex refused: Vertex: the corner is neither convex nor concave (a saddle vertex); a vertex chamfer or round is not defined for it.
+OK   concave round in the tree and the document:  189000 → 189001.543753, reloaded 189001.543753
+{"test":"K09-VERTEX-CONCAVE","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":1,"buildMerges":4,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":1456,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":10,"failed":0}
