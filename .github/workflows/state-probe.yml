@@ -53,9 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k182_shell3, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_ONLY=shell' }
-          - { name: k182_shell4, cmd: 'allC', env: 'P3D_ALLC_SETS=4 P3D_ALLC_ONLY=shell' }
-          - { name: k182_shell2, cmd: 'allC', env: 'P3D_ALLC_SETS=1' }
+          - { name: k182_sweep, cmd: 'allC', env: 'P3D_ALLC_SETS=1 P3D_ALLC_ONLY=sweep_add@0.1 P3D_ROUTETRACE=1' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
