@@ -1,0 +1,4 @@
+  points 2, faces at vertex 3, at sketch point 1, from sketch -S
+  vertex: face 51 normal (1, 0, 0)
+{"test":"UI-CURVE-TANGENTS-K177","ok":false,"error":"a sketch point: \u00ABnormal to sketch\u00BB is not on by default"}
+{"passed":0,"failed":1}
