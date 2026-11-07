@@ -1,0 +1,29 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["allC"]}
+ALLC: 22 operations, 1 cases (sets 1, triples 200, step deadline 90 s)
+ALLC: operations: boss_rect, boss_circle, pocket_rect, pocket_circle, cut_rect_through, cut_circle_through, hole_through, hole_blind, revolve_add, revolve_cut, loft_add, sweep_add, round_edge, chamfer_edge, vertex_round, vertex_chamfer, shell, draft_in, draft_out, linear_pattern, circular_pattern, mirror
+{"allc":"S1:sweep_add@0.1/s0","set":"S1","step":1,"op":"sweep_add","f":0.1,"slot":0,"prm":"circle r1.75 along quarter arc R7.25 face0","verdict":"WARN","why":"faceted: 1 faceted face(s), 0 faceted edge(s); guarantee ExactPolyhedral","ms":1408.3,"v0":240000,"v1":240109.568,"dv":109.568,"want":109.568,"rel":-4.1330952877572857E-07,"faces":8,"bodies":1,"guarantee":"ExactPolyhedral","valid":true,"error":null,"downgrade":"1 faceted face(s), 0 faceted edge(s)","warnings":["Boolean: 6 chord chain(s) restored to arcs (96 segments collapsed).","Geometry downgrade after SweepFeature: 1 faceted face(s), 0 faceted edge(s) (policy AllowBoundedFaceting).","Volume accuracy: \u00B11.13E\u002B03 mm\u00B3 exceeds the integration budget (1E-05 relative)."]}
+{"test":"ALLC S1:sweep_add@0.1/s0","ok":true,"verdict":"WARN","ms":1408.3175,"error":null}
+
+=================== ALLC SUMMARY ===================
+steps 1, cases 1, total 00:00:02, step time sum 1.4 s
+  WARN  1
+by set: S1: 1 steps, FAIL 0, WARN 1, SLOW 0
+
+by operation (step verdicts; time median / max ms):
+  sweep_add            n     1  FAIL    0  WARN    1  SLOW   0  median     1408  max     1408
+
+failure reasons (grouped, operation | reason head):
+
+pairs that fail only together (first op passes alone, second fails after it):
+
+slowest 25 steps:
+       1408 ms  S1:sweep_add@0.1/s0 step 1 sweep_add [circle r1.75 along quarter arc R7.25 face0] WARN faces 8
+
+warnings (grouped, operation | reason head):
+     1  sweep_add | faceted: # faceted face(s), # faceted edge(s)   e.g. S1:sweep_add@0.1/s0
+Reproduce one case: K01Checks allC with P3D_ALLC_ONLY=<case id>, P3D_ALLC_OUT=<folder> saves failed models.
+
+{"test":"ALLC-SUMMARY","ok":true,"steps":1,"fail":0,"warn":1,"slow":0,"seconds":2}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":0,"failed":0}
