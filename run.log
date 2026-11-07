@@ -1,0 +1,10 @@
+  edited sketch: Sketch2
+  sketch points: own 21 (shapes 1,0, px 7,5), neighbour 22 (shapes 4, px 5)
+{"test":"UI-GHOSTRING-K127","ok":true,"error":null}
+  edit S1, over S2 curve: SketchCurve S1
+  curve at stage 0: Кривая1 slot 0 of 1
+{"test":"UI-LATER-K178","ok":true,"error":null}
+  fill: triangles 2/2, computed 1, reused 1, overlay lines 555
+  pasted: S1,F (2),F, slot 0 of 1, seq True
+{"test":"UI-SKETCH-FILL-K179","ok":true,"error":null}
+{"passed":3,"failed":0}
