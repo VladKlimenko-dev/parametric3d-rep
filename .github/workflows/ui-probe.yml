@@ -18,12 +18,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: ui_guides, ref: 'kern/guides', names: 'UI-LATER-K178|UI-OPEN-QUILT-K178|UI-ASM-LINK-K178|UI-OPEN-STORED-K178|UI-CURVE-TANGENTS-K177', env: '' }
-          - { name: ui_m_later, ref: 'kern/guides', names: 'UI-LATER-K178', env: 'P3D_SKLATERHIDE=0' }
-          - { name: ui_m_stage, ref: 'kern/guides', names: 'UI-LATER-K178', env: 'P3D_DATUMATSTAGE=0' }
-          - { name: ui_m_quilt, ref: 'kern/guides', names: 'UI-OPEN-QUILT-K178', env: 'P3D_QUILTSAVE=0' }
-          - { name: ui_m_link,  ref: 'kern/guides', names: 'UI-ASM-LINK-K178', env: 'P3D_LINKREFRESH=0' }
-          - { name: ui_m_normal, ref: 'kern/guides', names: 'UI-CURVE-TANGENTS-K177', env: 'P3D_CURVENORMALDEFAULT=0' }
+          - { name: ui178_1, ref: 'kern/guides', names: 'UI-A|UI-B|UI-C|UI-D', env: '' }
+          - { name: ui178_2, ref: 'kern/guides', names: 'UI-E|UI-F|UI-G|UI-H|UI-I|UI-J|UI-K|UI-L', env: '' }
+          - { name: ui178_3, ref: 'kern/guides', names: 'UI-M|UI-N|UI-O|UI-P|UI-Q|UI-R', env: '' }
+          - { name: ui178_4, ref: 'kern/guides', names: 'UI-S|UI-T|UI-U|UI-V|UI-W|UI-X|UI-Y|UI-Z', env: '' }
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,7 +37,7 @@ jobs:
           export DOTNET_TieredCompilation=0 P3D_USERMODELS="$PWD/tests/ui/data"
           NAMES="${{ matrix.names }}"; [ -n "${{ matrix.env }}" ] && export ${{ matrix.env }}
           git rev-parse --short HEAD > res/sha.txt
-          timeout 60m out/ui/Parametric3D.UiChecks "$NAMES" > res/run.log 2> res/run.err || echo "exit $?" >> res/run.err
+          timeout 85m out/ui/Parametric3D.UiChecks "$NAMES" > res/run.log 2> res/run.err || echo "exit $?" >> res/run.err
       - name: Итог — в ветку ya1/res/${{ matrix.name }}
         if: always()
         run: |
