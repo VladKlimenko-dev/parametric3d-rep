@@ -1,0 +1,6 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["curve177"]}
+{"test":"CURVE-TANGENTS-GUIDE-K177","rep":[{"test":"gear blend","ms":31266,"error":null,"volume":1455015.8552699422,"bodies":1,"edgeOff":2.929642751054232E-14},{"test":"file","guides":[2226],"curve":2226,"specs":2,"volume":1455015.8552699422,"Error":null},{"test":"guide of three pieces","ms":56107,"error":null,"volume":1450522.2846320148,"bodies":1,"offMids":2.0097183471152322E-14,"pieces":3},{"test":"edge vs guide","dev":0.03305970891714362}],"problems":[]}
+{"test":"CURVE-TANGENTS-GUIDE-K177","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":1,"failed":0}
