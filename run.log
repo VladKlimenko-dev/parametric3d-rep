@@ -1,0 +1,19 @@
+  open 102 ms: note Restored , restored True, dirty False, bodies 1, cached False
+  after 3 s: dirty False, building False, verifying False, same bodies True, features with errors 0
+{"test":"UI-OPEN-STORED-K178","ok":true,"error":null}
+  open: note Restored, restored True, dirty False, quilts 1, area 200.000000
+  after 2 s: restored True, dirty False, quilt key True, area 200.000000
+  edit depth 15: area 300.000000
+{"test":"UI-OPEN-QUILT-K178","ok":true,"error":null}
+  opened: restored True, volume 120000.0; refreshed 1, volume 60000.0, source a.p3d
+{"test":"UI-ASM-LINK-K178","ok":true,"error":null}
+  edit S1, over S2 curve: SketchCurve S1
+  curve at stage 0: Кривая1 slot 0 of 1
+{"test":"UI-LATER-K178","ok":true,"error":null}
+  points 2, faces at vertex 3, at sketch point 1, from sketch -S
+  vertex: face 926 normal (1, 0, 0)
+  tangents: start (0, 0, -0.9999999999999999), end (0, 0, 0.9999999999999999)
+  edit: surface enabled True checked True
+  old curve: specs 2, sketch True on True, toggle enabled True
+{"test":"UI-CURVE-TANGENTS-K177","ok":true,"error":null}
+{"passed":5,"failed":0}
