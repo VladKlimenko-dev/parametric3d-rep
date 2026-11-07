@@ -1,0 +1,4 @@
+  fill: triangles 2/2, computed 1, reused 1, overlay lines 555
+  pasted: S1,F,F (2), slot 1 of 1, seq True
+{"test":"UI-SKETCH-FILL-K179","ok":false,"error":"the pasted sketch is not placed at the rollback bar"}
+{"passed":0,"failed":1}
