@@ -18,7 +18,6 @@ namespace Parametric3D.Model.Sketching;
 /// </summary>
 public static class SketchDiagnostics
 {
-    /// <summary>Пересчитывает признаки ошибок по всему эскизу.</summary>
     /// <summary>
     /// k178: ПРИЗНАКИ — ПО ГЕОМЕТРИИ, А НЕ ПО КАДРУ. Проверка звала из построения слоя поверх вида при каждом движении мыши; у
     /// эскиза шестерни (140 кривых, стороны соседних зубьев перекрываются габаритами — попарная проверка звеньев) это давало 5
@@ -52,6 +51,7 @@ public static class SketchDiagnostics
         }
     }
 
+    /// <summary>Пересчитывает признаки ошибок по всему эскизу.</summary>
     public static void Update(Sketch sk)
     {
         if (!MemoOff)

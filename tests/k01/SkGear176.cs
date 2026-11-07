@@ -200,6 +200,16 @@ static partial class Program
                     int lone1 = rsk.Entities.Count(e => e is SkPoint && !rg.Items.Contains(e.Id));
                     report.Add(new { test = "lone points", afterLoad = lone0, afterRegenerate = lone1 });
                     if (lone0 != 0 || lone1 != 0) problems.Add($"stray gear points: after load {lone0}, after regenerate {lone1}");
+                    // k178: признаки ошибок эскиза — по геометрии: тот же эскиз — из памяти, сдвиг точки — пересчёт (P3D_SKDIAGMEMO=0 — всегда пересчёт)
+                    SketchDiagnostics.Update(rsk);
+                    long dc0 = SketchDiagnostics.Computed, dr0 = SketchDiagnostics.Reused;
+                    SketchDiagnostics.Update(rsk); SketchDiagnostics.Update(rsk);
+                    long dc1 = SketchDiagnostics.Computed, dr1 = SketchDiagnostics.Reused;
+                    var hp = rsk.Entities.SelectMany(e => e.Handles).First(); hp.P = hp.P + new Vector2d(0.01, 0);
+                    SketchDiagnostics.Update(rsk);
+                    long dc2 = SketchDiagnostics.Computed;
+                    report.Add(new { test = "diagnostics memo", reused = dr1 - dr0, computedSame = dc1 - dc0, computedMoved = dc2 - dc1 });
+                    if (dr1 - dr0 != 2 || dc1 != dc0 || dc2 - dc1 != 1) problems.Add($"sketch diagnostics recomputed for an unchanged sketch ({dc1 - dc0}) or not after a move ({dc2 - dc1})");
                 }
                 var st = SketchState.Capture(sk); int n0 = sk.Entities.Count;
                 g.P.Teeth = 30; sk.Regenerate(g, out _);
