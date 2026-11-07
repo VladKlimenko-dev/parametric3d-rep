@@ -53,10 +53,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k180_um, cmd: 'usermodels', env: '' }
-          - { name: k180_m4, cmd: 'seqs110', env: 'P3D_FLUXKNOTS=0' }
-          - { name: k180_allA, cmd: 'allA', env: '' }
-          - { name: k180_allB, cmd: 'allB', env: '' }
+          - { name: k180_lb, cmd: 'loftblends139', env: '' }
+          - { name: k180_r555, cmd: 'sweepblend148e', env: '' }
+          - { name: k180_s110, cmd: 'seqs110', env: '' }
+          - { name: k180_s106, cmd: 'seqs106', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
