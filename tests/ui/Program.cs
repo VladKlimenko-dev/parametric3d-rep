@@ -4293,7 +4293,7 @@ Check("UI-GHOSTRING-K127", () =>
     Require(ghost.All(q => part.Sketches.FirstOrDefault(o => o.Id == sc.PickTable[(int)q.Pick].SketchId) is not { } o || !o.IsAfter(sk)), "points of a later sketch are drawn");
     Require(ghost.All(q => q.Shape == 4), "neighbour sketch points are not drawn as unfilled rings");
     // k179 (замечание 07.11, п. 5): точки соседа не видны, пока не под курсором (прозрачны; наведённую шейдер рисует цветом наведения)
-    Require(Parametric3D.Render.Engine.SceneBuilder.GhostHoverOff || ghost.All(q => (q.Color >> 24) == 0), "neighbour sketch points are drawn before the cursor is over them");
+    Require(ghost.All(q => (q.Color >> 24) == 0), "neighbour sketch points are drawn before the cursor is over them");
     Require(own.All(q => q.Shape != 4), "points of the edited sketch are drawn as rings");
     Require(ghost.All(q => own.Any(o => o.Shape == 0 && o.Px == q.Px)), "ring size differs from a normal point");
 });
@@ -9268,7 +9268,7 @@ Check("UI-SKETCH-FILL-K179", () =>
         var (_, l2, _) = vp.BuildOverlayForTest(); int t2 = vp.FillTriangles;
         long c1 = ModelViewport.FillComputed, r1 = ModelViewport.FillReused;
         Console.WriteLine($"  fill: triangles {t1}/{t2}, computed {c1 - c0}, reused {r1 - r0}, overlay lines {l1}");
-        Require(ModelViewport.SolidFillOff || t1 >= 2 && t2 == t1 && c1 - c0 == 1 && r1 - r0 == 1, "the sketch fill is not solid triangles from memory");
+        Require(t1 >= 2 && t2 == t1 && c1 - c0 == 1 && r1 - r0 == 1, "the sketch fill is not solid triangles from memory");
         w.FinishSketch(); Run();
         // вставка эскиза при полоске перед выдавливанием
         part = s.Part!; var fsk = part.Sketches.First(k => k.Name == "F");
