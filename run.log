@@ -1,0 +1,5 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["rectdebug","corpus_k148h_s110_0.p3d"]}
+stage 1: face 47 FacetedSurface rev False deg 2x3 cp 3x5 domain 178720.71184645896 flux 178720.71184645034 diff 8.614733815193176E-09
+stage 1: face 57 FacetedSurface rev False deg 2x3 cp 3x5 domain 255787.7286324568 flux 255787.7286324607 diff -3.899913281202316E-09
+stage 1: face 64 FacetedSurface rev False deg 2x3 cp 3x5 domain 180726.9189839671 flux 180726.9189839629 diff 4.190951585769653E-09
+stage 1: face 71 FacetedSurface rev False deg 2x3 cp 3x5 domain 43103.23798059865 flux 43103.23798059585 diff 2.801243681460619E-09
