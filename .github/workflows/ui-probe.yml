@@ -32,9 +32,9 @@ jobs:
         run: |
           mkdir -p res
           export DOTNET_TieredCompilation=0 P3D_USERMODELS="$PWD/tests/ui/data"
-          NAMES="UI-DATUM-TREE-K132|UI-PART-PANEL-K120|UI-DRAWING-K167|UI-DRAWING-K168"
+          NAMES="${{ matrix.names }}"; [ -n "${{ matrix.env }}" ] && export ${{ matrix.env }}
           git rev-parse --short HEAD > res/sha.txt
-          timeout 60m out/ui/Parametric3D.UiChecks "$NAMES" > res/run.log 2> res/run.err || echo "exit $?" >> res/run.err
+          timeout 85m out/ui/Parametric3D.UiChecks "$NAMES" > res/run.log 2> res/run.err || echo "exit $?" >> res/run.err
       - name: Итог — в ветку ya1/res/${{ matrix.name }}
         if: always()
         run: |
