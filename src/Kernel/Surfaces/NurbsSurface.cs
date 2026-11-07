@@ -253,15 +253,18 @@ public sealed class NurbsSurface : ISurface3
     {
         // Ближайшая точка ищется в два приёма: грубо по сетке значений, затем спуском по
         // параметрам. Для поверхности общего вида точного решения нет.
-        const int grid = 12;
+        // k182: сетка — по числу пролётов (резьба из SolidWorks: сотни вершин и десятки витков в одной грани; на сетке 12×12
+        // начальная точка попадала на чужой виток, и Ньютон сходился к ложному минимуму — контур грани в параметрах рвался).
+        // Мутация P3D_NURBSGRIDADAPT=0 — прежняя сетка 12×12.
+        int gu = GridAdaptOff ? 12 : Math.Clamp(3 * (CountU - _du) + 2, 12, 512), gv = GridAdaptOff ? 12 : Math.Clamp(3 * (CountV - _dv) + 2, 12, 512);
         double bestU = 0, bestV = 0, best = double.MaxValue;
         // KRN-07 (07.8): точки сетки — один раз на поверхность (прежде 169 вычислений на каждую проекцию)
-        var g = _grid ??= BuildGrid(grid);
-        for (int i = 0; i <= grid; i++)
-            for (int j = 0; j <= grid; j++)
+        var g = _grid ??= BuildGrid(gu, gv);
+        for (int i = 0; i <= gu; i++)
+            for (int j = 0; j <= gv; j++)
             {
                 double d = (g[i, j] - p).LengthSquared;
-                if (d < best) { best = d; bestU = i / (double)grid; bestV = j / (double)grid; }
+                if (d < best) { best = d; bestU = i / (double)gu; bestV = j / (double)gv; }
             }
 
         // k140 (скорость): СРАЗУ НЬЮТОН. Гаусс — Ньютон с точными производными (Derivs) от лучшей точки сетки, шаг делится
@@ -293,7 +296,7 @@ public sealed class NurbsSurface : ISurface3
             bestU = u; bestV = v; best = bd;
         }
 
-        double step = 1.0 / grid;
+        double step = 1.0 / Math.Max(gu, gv);
         for (int pass = 0; pass < 40 && step > 1e-6; pass++)
         {
             bool moved = false;
@@ -368,6 +371,7 @@ public sealed class NurbsSurface : ISurface3
     }
 
     static readonly bool ProjNewtonOff = Environment.GetEnvironmentVariable("P3D_NURBSPROJNEWTON") == "0";
+    static readonly bool GridAdaptOff = Environment.GetEnvironmentVariable("P3D_NURBSGRIDADAPT") == "0";
     public static long ProjNewtonHits;
     static readonly bool ProjHalvingOff = Environment.GetEnvironmentVariable("P3D_NURBSPROJHALF") == "0";
     /// <summary>Мутация P3D_NURBSFAST=0: точка — прежним путём (де Бур с выделениями памяти).</summary>
@@ -590,10 +594,10 @@ public sealed class NurbsSurface : ISurface3
     }
 
     private Vector3d[,]? _grid;
-    private Vector3d[,] BuildGrid(int n)
+    private Vector3d[,] BuildGrid(int nu, int nv)
     {
-        var g = new Vector3d[n + 1, n + 1];
-        for (int i = 0; i <= n; i++) for (int j = 0; j <= n; j++) g[i, j] = PointAt(new Vector2d(i / (double)n, j / (double)n));
+        var g = new Vector3d[nu + 1, nv + 1];
+        for (int i = 0; i <= nu; i++) for (int j = 0; j <= nv; j++) g[i, j] = PointAt(new Vector2d(i / (double)nu, j / (double)nv));
         return g;
     }
 
