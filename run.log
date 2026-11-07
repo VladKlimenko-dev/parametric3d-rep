@@ -1,0 +1,8 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["cut181"]}
+{"test":"CUT-THROUGH-FLIP-K181","circle":false,"inward":{"Error":"Cut: the cut does not reach the body in this direction \u2014 flip the direction.","Volume":120000,"want":112000},"outward":{"Error":"Cut: the cut does not reach the body in this direction \u2014 flip the direction.","Volume":120000}}
+{"test":"CUT-THROUGH-FLIP-K181","circle":true,"inward":{"Error":"Cut: the cut does not reach the body in this direction \u2014 flip the direction.","Volume":120000,"want":115978.76140340506},"outward":{"Error":"Cut: the cut does not reach the body in this direction \u2014 flip the direction.","Volume":120000}}
+{"test":"gear cut","Error":"Extrude: the cut does not reach the body in this direction \u2014 flip the direction.","ms":662,"removed":0,"want":188495.5592153876,"guarantee":"ExactAnalytic","faces":142,"warnings":[]}
+{"test":"CUT-THROUGH-FLIP-K181","ok":false,"error":"rectangle cut into the plate: Cut: the cut does not reach the body in this direction \u2014 flip the direction. volume 120000 want 112000; circle cut into the plate: Cut: the cut does not reach the body in this direction \u2014 flip the direction. volume 120000 want 115978.76140340506; gear cut: Extrude: the cut does not reach the body in this direction \u2014 flip the direction., removed 0 want 188495.5592153876"}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":0,"failed":1}

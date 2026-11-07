@@ -1,0 +1,2 @@
+exit 1
+seconds 16 nproc 4 env P3D_THROUGHFLIP=0 cmd cut181
