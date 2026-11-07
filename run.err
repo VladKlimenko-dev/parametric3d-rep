@@ -1,0 +1,2 @@
+exit 1
+seconds 7 nproc 4 env P3D_TWEAKKEEPG=0 cmd draft181
