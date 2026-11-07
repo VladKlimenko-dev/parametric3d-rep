@@ -76,6 +76,7 @@ static partial class Program
             int n = p.Features.Count;
             p.StageIndex = n - 1; p.MarkStageMoved(); p.Rebuild(ps);
             double v0 = p.Volume;
+            string g0 = string.Join(",", p.Bodies.Select(b => b.Guarantee));
             p.StageIndex = n; p.MarkStageMoved(); p.Rebuild(ps);
             var f = p.Features[n - 1];
             double t = Math.Tan(16.77 * Math.PI / 180), mom = 100 * 100 * 50.0, rem = 0, ch = 0; int N = 20000;
@@ -88,10 +89,11 @@ static partial class Program
             double want = t * (mom - rem - ch), added = p.Volume - v0;
             string g = string.Join(",", p.Bodies.Select(b => b.Guarantee));
             bool valid = p.Bodies.Count == 1 && Parametric3D.Kernel.Topology.SolidValidator.Validate(p.Bodies[0]).IsValid;
-            Log(new { test = "DRAFT-OUT-ROUNDED-K181", f.Error, added, want, rel = (added - want) / want, guarantee = g, valid, faces = p.Bodies.Sum(b => b.Faces.Count()), warnings = p.Warnings.ToList() });
+            Log(new { test = "DRAFT-OUT-ROUNDED-K181", f.Error, added, want, rel = (added - want) / want, guarantee = g, input = g0, valid, faces = p.Bodies.Sum(b => b.Faces.Count()), warnings = p.Warnings.ToList() });
             Require(f.Error == null && valid, $"draft: {f.Error}, valid {valid}");
             Require(p.Warnings.Any(w => w.Contains("exact plane replacement")), "the draft was not built by plane replacement: " + string.Join(" | ", p.Warnings));
-            Require(g == "ExactAnalytic", "body " + g);
+            // вход — рациональный Boolean со своими расхождениями до 1e-4 мм: тело наследует его гарантию (не хуже входа)
+            Require(g == "ExactAnalytic" || g == g0, $"body {g}, input {g0}");
             Require(Math.Abs(added - want) < 1e-4 * want, $"added volume {added} vs {want}");
         });
     }

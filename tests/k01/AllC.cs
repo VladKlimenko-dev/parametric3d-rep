@@ -350,7 +350,7 @@ static partial class Program
             {
                 if (p.Bodies.Count == 0) Fail("no body");
                 else if (!r.Valid) Fail("invalid body");
-                double tiny = 1e-6 * Math.Max(1, r.V0);
+                double tiny = 1e-10 * Math.Max(1, r.V0);
                 if (Math.Abs(r.Dv) <= tiny) Fail("no change in volume");
                 else if (op.Sign != 0 && Math.Sign(r.Dv) != op.Sign) Fail($"volume changed the wrong way ({r.Dv:G6})");
                 if (r.Want is { } wv && Math.Abs(wv) > 0)

@@ -16,6 +16,8 @@ namespace Parametric3D.Kernel.Ops;
 public static class PlanarTweak
 {
     static readonly bool TweakCylOff = Environment.GetEnvironmentVariable("P3D_TWEAKCYL") == "0";
+    static readonly bool TolResetOff = Environment.GetEnvironmentVariable("P3D_TWEAKTOL") == "0";
+    static readonly bool KeepGuaranteeOff = Environment.GetEnvironmentVariable("P3D_TWEAKKEEPG") == "0";
     /// <summary>Мутация P3D_TWEAKPROV=0: результат замены плоскостей (уклон, оболочка) без карты происхождения.</summary>
     internal static readonly bool ProvOff = Environment.GetEnvironmentVariable("P3D_TWEAKPROV") == "0";
 
@@ -213,7 +215,7 @@ public static class PlanarTweak
         foreach (var (v, fs) in faceOfLoop) if (moved.ContainsKey(v)) touched.UnionWith(fs);
         foreach (var i in radii.Keys) touched.Add(i);
         foreach (var e in clone.Edges.Where(e => moved.ContainsKey(e.V0) || moved.ContainsKey(e.V1)))
-        { e.Curve = newArcs.TryGetValue(e, out var na) ? na : newEll.TryGetValue(e, out var ne) ? ne : new LineCurve3(e.V0.P, e.V1.P); e.PolylineCache = null; }
+        { e.Curve = newArcs.TryGetValue(e, out var na) ? na : newEll.TryGetValue(e, out var ne) ? ne : new LineCurve3(e.V0.P, e.V1.P); e.PolylineCache = null; if (!TolResetOff) e.Tolerance = 0; }
         foreach (int i in touched)
         {
             var f = cf[i];
@@ -273,6 +275,15 @@ public static class PlanarTweak
         if (Analytic.PrismBuild.Finish(clone, wl) > 0) { why = "faces not meshed: " + string.Join(" / ", wl.Take(2)); return null; }
         clone.Guarantee = GuaranteeLevel.ExactAnalytic;
         var vr = SolidValidator.Validate(clone);
+        // k181: вход — рациональный Boolean (ExactPolyhedral) с собственными расхождениями кривых и поверхностей (до 1e-4 мм): новая
+        // геометрия точна, но прежние рёбра остаются как были — тело наследует гарантию входа, а не повышается до аналитической
+        // (так и Parasolid: допуск ребра «tolerant edge» переходит в результат). Мутация P3D_TWEAKKEEPG=0.
+        if (!vr.IsValid && !KeepGuaranteeOff && body.Guarantee == GuaranteeLevel.ExactPolyhedral)
+        {
+            clone.Guarantee = body.Guarantee;
+            var vr2 = SolidValidator.Validate(clone);
+            if (vr2.IsValid) vr = vr2; else clone.Guarantee = GuaranteeLevel.ExactAnalytic;
+        }
         if (!vr.IsValid && Environment.GetEnvironmentVariable("P3D_TWEAKDUMP") == "1")
         {
             var byId = clone.Edges.GroupBy(e => e.Id).ToDictionary(g => g.Key, g => g.First());
