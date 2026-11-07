@@ -1,0 +1,2 @@
+exit 1
+seconds 30 nproc 4 env P3D_SKDIAGMEMO=0 cmd gear
