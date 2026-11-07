@@ -61,6 +61,7 @@ public sealed class GeometryAudit
     /// </summary>
     /// <summary>Мутация P3D_AUDITPROC=0: кривая по формуле (линия касания катящегося шара) — не точная.</summary>
     static readonly bool AuditProcOff = Environment.GetEnvironmentVariable("P3D_AUDITPROC") == "0";
+    static readonly bool AuditBezierOff = Environment.GetEnvironmentVariable("P3D_AUDITBEZIER") == "0";
     static readonly bool ChordParOff = Environment.GetEnvironmentVariable("P3D_AUDITCHORDPAR") == "0";
     static readonly bool AuditParOff = Environment.GetEnvironmentVariable("P3D_AUDITPAR") == "0";
     /// <summary>Сколько раз отходы рёбер мерились параллельно.</summary>
@@ -174,7 +175,9 @@ public sealed class GeometryAudit
         {
             var e = edgeList[ei];
             string kind = e.Curve.GetType().Name;
-            bool analytic = e.Curve is LineCurve3 or ArcCurve3 or EllipseCurve3 or SplineCurve3 or IntersectionCurve3 || (e.Curve is ProcCurve3 && !AuditProcOff);
+            // k180: кривая Безье (боковые рёбра лофта по направляющим, сплайновые звенья сечений) — точная кривая, как сплайн; прежде
+            // такие рёбра шли в «гранёные» (у перехода шестерен по направляющей — 300 «гранёных» рёбер). Мутация P3D_AUDITBEZIER=0.
+            bool analytic = e.Curve is LineCurve3 or ArcCurve3 or EllipseCurve3 or SplineCurve3 or IntersectionCurve3 || (e.Curve is BezierCurve3 && !AuditBezierOff) || (e.Curve is ProcCurve3 && !AuditProcOff);
             var faces = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Distinct().ToList();
             var (da, db) = offs[ei];
 

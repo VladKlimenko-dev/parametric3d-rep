@@ -242,3 +242,40 @@ static partial class Program
         static string ExactFaceMesherDump() => Parametric3D.Kernel.Tess.ExactFaceMesher.UVDumpPath!;
     }
 }
+
+static partial class Program
+{
+    /// <summary>
+    /// k180: рёбра-кривые Безье — точные в аудите геометрии. Переход двух квадратов с одной направляющей-кривой Безье (поверхность
+    /// подобия): боковые рёбра — кривые Безье; «гранёных» рёбер нет, понижения геометрии нет. P3D_AUDITBEZIER=0 — рёбра гранёные.
+    /// </summary>
+    static void Audit180Checks()
+    {
+        Check("AUDIT-BEZIER-K180", () =>
+        {
+            var part = new Part("a180");
+            Sketch Sq(string n, Frame3 fr, double h)
+            {
+                var sk = new Sketch(n, fr); part.Add(sk);
+                var p = new[] { new SkPoint(-h, -h), new SkPoint(h, -h), new SkPoint(h, h), new SkPoint(-h, h) };
+                for (int i = 0; i < 4; i++) sk.AddEntity(new SkLine(p[i], p[(i + 1) % 4]));
+                return sk;
+            }
+            var s1 = Sq("S1", Frame3.XY, 10);
+            var s2 = Sq("S2", new Frame3(new Vector3d(0, 0, -30), Vector3d.UnitX, Vector3d.UnitY), 15);
+            var A = new Vector3d(10, 10, 0); var B = new Vector3d(15, 15, -30);
+            var sp = CurveThrough.Build(new[] { A, B }, new Vector3d?[] { Vector3d.UnitZ, Vector3d.UnitZ }, null, null, false)!;
+            var dc = new DatumCurve("G", Array.Empty<Vector3d>(), "through points") { Mode = 0 }; dc.Inputs.Add(A); dc.Inputs.Add(B); dc.SetSpline(sp); part.Add(dc);
+            var bf = new BlendFeature { Mode = BlendKind.Sections, Smooth = true }; bf.SectionSketchIds.Add(s1.Id); bf.SectionSketchIds.Add(s2.Id); bf.GuideCurveIds.Add(dc.Id);
+            part.AddFeature(bf); part.Rebuild(null);
+            var body = part.Bodies.FirstOrDefault();
+            var fac = body == null ? (-1, -1) : Parametric3D.Kernel.Topology.GeometryAudit.Faceted(body);
+            int bez = body?.Edges.Count(e => e.Curve is BezierCurve3) ?? 0;
+            bool valid = body != null && Parametric3D.Kernel.Topology.SolidValidator.Validate(body).IsValid;
+            Log(new { test = "AUDIT-BEZIER-K180", error = bf.Error, volume = part.Volume, valid, bezierEdges = bez, facetedFaces = fac.Item1, facetedEdges = fac.Item2, warnings = part.Warnings.ToList() });
+            Require(bf.Error == null && valid, $"blend: {bf.Error}, valid {valid}");
+            Require(bez > 0, "no Bezier edges in the guided blend");
+            Require(fac.Item1 == 0 && fac.Item2 == 0 && !part.Warnings.Any(w => w.Contains("faceted")), $"exact Bezier edges counted as faceted ({fac.Item2})");
+        });
+    }
+}
