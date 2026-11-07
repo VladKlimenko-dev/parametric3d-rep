@@ -153,15 +153,27 @@ internal sealed class XtNurbsSurf : XtSurf
         return acc.W != 0 ? acc.Xyz / acc.W : acc.Xyz;
     }
 
+    // Сетка точек для начального приближения проекции — считается один раз (резьба: сотни вершин; прежде 625 вычислений
+    // поверхности на каждую проекцию, а проекций при сгущении кривых — сотни тысяч).
+    Vector3d[,]? grid; int gu, gv;
+    void BuildGrid()
+    {
+        var (u0, u1, v0, v1) = Range;
+        gu = Math.Clamp(3 * (Nu - Du), 24, 240); gv = Math.Clamp(3 * (Nv - Dv), 24, 240);
+        var g = new Vector3d[gu + 1, gv + 1];
+        for (int i = 0; i <= gu; i++) for (int j = 0; j <= gv; j++) g[i, j] = At(u0 + (u1 - u0) * i / gu, v0 + (v1 - v0) * j / gv);
+        grid = g;
+    }
+
     public override Vector3d Project(Vector3d q)
     {
         var (u0, u1, v0, v1) = Range;
+        if (grid == null) BuildGrid();
+        var gr = grid!;
         double bu = u0, bv = v0, best = double.MaxValue;
-        const int G = 24;
-        for (int i = 0; i <= G; i++) for (int j = 0; j <= G; j++)
+        for (int i = 0; i <= gu; i++) for (int j = 0; j <= gv; j++)
             {
-                double u = u0 + (u1 - u0) * i / G, v = v0 + (v1 - v0) * j / G;
-                double d = (At(u, v) - q).LengthSquared; if (d < best) { best = d; bu = u; bv = v; }
+                double d = (gr[i, j] - q).LengthSquared; if (d < best) { best = d; bu = u0 + (u1 - u0) * i / gu; bv = v0 + (v1 - v0) * j / gv; }
             }
         double hu = 1e-7 * Math.Max(1, u1 - u0), hv = 1e-7 * Math.Max(1, v1 - v0);
         for (int it = 0; it < 30; it++)
@@ -320,7 +332,7 @@ internal static class XtPoly
                     for (int it = 0; it < 60; it++)
                     {
                         var q = b.Project(a.Project(p));
-                        bool done = (q - p).Length < 1e-13;
+                        bool done = (q - p).Length < 1e-11;
                         p = q;
                         if (done) break;
                     }
@@ -438,7 +450,7 @@ internal sealed class XtBlendSurf : XtSurf
         for (int it = 0; it < 80; it++)
         {
             var q = Offset(S1, Offset(S0, p, R0), R1);
-            bool done = (q - p).Length < 1e-13; p = q;
+            bool done = (q - p).Length < 1e-11; p = q;
             if (done) break;
         }
         return p;

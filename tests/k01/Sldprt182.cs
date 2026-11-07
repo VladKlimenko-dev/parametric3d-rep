@@ -1,3 +1,4 @@
+using OpenTK.Mathematics;
 using System.Text.RegularExpressions;
 using Parametric3D.Kernel.Export.Parasolid;
 using Parametric3D.Kernel.Topology;
@@ -8,8 +9,9 @@ static partial class Program
     /// <summary>
     /// k182: ИМПОРТ SOLIDWORKS (.SLDPRT) — контейнер → Parasolid XT → STEP → тела (Exchange.Read). Файлы пользователя (винты
     /// McMaster-Carr: шестигранная головка, полукруглая с крестом, под шестигранник; резьба — B-поверхности, скругления
-    /// шлица — BLENDED_EDGE). Проверяется: поток XT дочитан до конца, ни одна грань не пропущена, тело одно и годно, объём и
-    /// площадь — как в свойствах массы SolidWorks (SW-MassProp-Config: x, y, z центра, объём, площадь… в СИ).
+    /// шлица — BLENDED_EDGE). Проверяется: поток XT дочитан до конца, ни одна грань не пропущена, тел столько же, сколько твёрдых BODY в XT,
+    /// все годны, габарит по вершинам совпадает с XT, объём положителен и не больше объёма габарита. Свойства массы SolidWorks
+    /// (SW-MassProp-Config) только выводятся: их номер конфигурации часто не совпадает с сохранённой геометрией (устаревшие).
     /// Режим «sldprt файл…» — разбор любых файлов с выводом STEP рядом (P3D_SLDOUT=папка).
     /// </summary>
     static void SldprtChecks(IEnumerable<string>? files = null)
@@ -30,22 +32,32 @@ static partial class Program
                 if (Environment.GetEnvironmentVariable("P3D_SLDOUT") is { Length: > 0 } od) { Directory.CreateDirectory(od); File.WriteAllText(Path.Combine(od, Path.GetFileNameWithoutExtension(path) + ".step"), step); }
                 var part = Exchange.Read(step, out _, w);
                 double tAll = sw.Elapsed.TotalMilliseconds;
-                var b = part?.Bodies.FirstOrDefault();
-                var vr = b == null ? null : SolidValidator.Validate(b);
-                double? vol = b == null ? null : AnalyticVolume.Of(b) ?? part!.Volume;
-                double? area = b == null ? null : AnalyticVolume.AreaOf(b);
+                var bodies = part?.Bodies ?? new List<TSolid>();
+                var b = bodies.FirstOrDefault();
+                var vrs = bodies.Select(x => SolidValidator.Validate(x)).ToList();
+                var vr = vrs.FirstOrDefault(x => !x.IsValid) ?? vrs.FirstOrDefault();
+                double vol = bodies.Sum(x => AnalyticVolume.Of(x) ?? 0), area = bodies.Sum(x => AnalyticVolume.AreaOf(x) ?? 0);
+                // Габарит по точкам XT (вершины) и по вершинам импортированных тел — должны совпасть; объём не больше объёма габарита.
+                var xtPts = f.OfType("POINT").Select(n => n.V("pvec") * 1000).ToList();
+                var bodyPts = bodies.SelectMany(x => x.Vertices).Select(v => v.P).ToList();
+                (Vector3d lo, Vector3d hi) Box(List<Vector3d> pts) => pts.Count == 0 ? (Vector3d.Zero, Vector3d.Zero)
+                    : (new Vector3d(pts.Min(q => q.X), pts.Min(q => q.Y), pts.Min(q => q.Z)), new Vector3d(pts.Max(q => q.X), pts.Max(q => q.Y), pts.Max(q => q.Z)));
+                var (xl, xh) = Box(xtPts); var (bl, bh) = Box(bodyPts);
+                double boxGap = Math.Max((xl - bl).Length, (xh - bh).Length), boxVol = (xh.X - xl.X) * (xh.Y - xl.Y) * (xh.Z - xl.Z);
+                int xtBodies = f.OfType("BODY").Count(n => n.I("body_type") == 1);
                 var (swVol, swArea) = SwMassProps(bytes);
                 Log(new { test = "sldprt", file = Path.GetFileName(path), f.Modeller, f.Schema, nodes = f.Order.Count, f.Truncated, faces = counts.GetValueOrDefault("FACE"),
                     surfaces = counts.Where(kv => kv.Key is "PLANE" or "CYLINDER" or "CONE" or "SPHERE" or "TORUS" or "B_SURFACE" or "BLENDED_EDGE" or "SWEPT_SURF" or "SPUN_SURF" or "OFFSET_SURF").ToDictionary(kv => kv.Key, kv => kv.Value),
                     curves = counts.Where(kv => kv.Key is "LINE" or "CIRCLE" or "ELLIPSE" or "B_CURVE" or "INTERSECTION" or "SP_CURVE" or "TRIMMED_CURVE").ToDictionary(kv => kv.Key, kv => kv.Value),
-                    stepKb = step.Length / 1024, bodies = part?.Bodies.Count ?? 0, bodyFaces = b?.Faces.Count() ?? 0, valid = vr?.IsValid, verdict = vr?.Summary(),
-                    errors = vr?.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(4).Select(x => x.ToString()).ToList(),
-                    guarantee = b?.Guarantee.ToString(), volume = vol, area, swVolume = swVol, swArea, msConvert = Math.Round(tConv), msTotal = Math.Round(tAll), warnings = w.Take(12).ToList() });
+                    stepKb = step.Length / 1024, xtBodies, bodies = bodies.Count, bodyFaces = bodies.Sum(x => x.Faces.Count()), valid = vrs.Count > 0 && vrs.All(x => x.IsValid), verdict = vr?.Summary(),
+                    errors = vrs.SelectMany(x => x.Issues).Where(x => x.Severity == ValidationSeverity.Error).Take(4).Select(x => x.ToString()).ToList(),
+                    guarantee = b?.Guarantee.ToString(), volume = vol, area, boxVol, boxGap, swVolume = swVol, swArea, msConvert = Math.Round(tConv), msTotal = Math.Round(tAll), warnings = w.Take(12).ToList() });
                 Require(!f.Truncated, "XT stream not read to the end");
                 Require(!w.Any(x => x.Contains("were left out") || x.Contains("is not supported; the edge")), "faces or edges left out: " + string.Join(" | ", w.Where(x => x.Contains("left out"))));
-                Require(part != null && part.Bodies.Count == 1, $"bodies {part?.Bodies.Count ?? 0}");
-                Require(vr!.IsValid, "invalid body: " + vr.Summary());
-                if (swArea is double sa && area is double a) Require(Math.Abs(a - sa) <= Math.Max(2, 2e-3 * sa), $"area {a:F2} vs SolidWorks {sa:F2} mm²");
+                Require(bodies.Count == xtBodies, $"bodies {bodies.Count} of {xtBodies}");
+                Require(vrs.All(x => x.IsValid), "invalid body: " + vr?.Summary());
+                Require(boxGap <= 1e-3, $"bounding box differs from the XT vertices by {boxGap:G3} mm");
+                Require(vol > 0 && vol <= boxVol * (1 + 1e-6), $"volume {vol:F2} mm³ outside (0, {boxVol:F2}] of the bounding box");
             });
         }
     }
