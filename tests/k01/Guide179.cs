@@ -217,6 +217,9 @@ static partial class Program
     {
         Directory.CreateDirectory(outDir);
         Parametric3D.Kernel.Tess.ExactFaceMesher.UVDumpPath = Path.Combine(outDir, "uv.txt");
+        Parametric3D.Kernel.Tess.ExactFaceMesher.ObjDumpPath = Path.Combine(outDir, "face.obj");
+        var dbg = new List<string>();
+        Parametric3D.Kernel.Tess.ExactFaceMesher.SeamDebug = m => { lock (dbg) if (dbg.Count < 200) dbg.Add(m); };
         var part = new Part("g");
         var sk1 = new Sketch("Sketch1", Frame3.XY); part.Add(sk1);
         sk1.AddGear(new GearParams { Teeth = 10, Module = 10, PitchCircle = false }, out _);
@@ -232,7 +235,7 @@ static partial class Program
         var dc = new DatumCurve("Curve1", Array.Empty<Vector3d>(), "through points") { Mode = 0 }; dc.Inputs.Add(A); dc.Inputs.Add(B); dc.SetSpline(sp); part.Add(dc);
         var bf = new BlendFeature { Mode = BlendKind.Sections, Smooth = true }; bf.SectionSketchIds.Add(sk1.Id); bf.SectionSketchIds.Add(sk2.Id); bf.GuideCurveIds.Add(dc.Id);
         part.AddFeature(bf); part.Rebuild(null);
-        Log(new { test = "guidedump", bf.Error, part.Volume, warnings = part.Warnings.ToList(), dump = File.Exists(ExactFaceMesherDump()) });
+        Log(new { test = "guidedump", bf.Error, part.Volume, warnings = part.Warnings.ToList(), dump = File.Exists(ExactFaceMesherDump()), dbg });
         static string ExactFaceMesherDump() => Parametric3D.Kernel.Tess.ExactFaceMesher.UVDumpPath!;
     }
 }
