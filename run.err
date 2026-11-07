@@ -1,0 +1,2 @@
+exit 1
+seconds 234 nproc 4 env P3D_FIXEDRESIDUALS=0 cmd guide179
