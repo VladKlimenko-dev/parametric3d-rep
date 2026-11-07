@@ -1,0 +1,2 @@
+exit 1
+seconds 22 nproc 4 env P3D_FLUXKNOTS=0 cmd seqs110
