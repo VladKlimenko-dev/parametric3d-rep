@@ -1,0 +1,90 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["allC"]}
+ALLC: 22 operations, 1 cases (sets 3, triples 200, step deadline 90 s)
+ALLC: operations: boss_rect, boss_circle, pocket_rect, pocket_circle, cut_rect_through, cut_circle_through, hole_through, hole_blind, revolve_add, revolve_cut, loft_add, sweep_add, round_edge, chamfer_edge, vertex_round, vertex_chamfer, shell, draft_in, draft_out, linear_pattern, circular_pattern, mirror
+ALLCDIAG general boolean Unite accepted: operand A, operand B, result
+  body guarantee ExactAnalytic, faces 6, exact False, qexact False
+  F0 id 98 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface src-n (0,-1,0) rev False loops 1 - | mesh tris 2 sum-n (0,-8000,0)
+  F1 id 108 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface src-n (1,0,0) rev False loops 1 - | mesh tris 2 sum-n (4800,0,0)
+  F2 id 115 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface src-n (0,1,-0) rev False loops 1 - | mesh tris 2 sum-n (0,8000,0)
+  F3 id 122 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface src-n (-1,0,0) rev False loops 1 - | mesh tris 2 sum-n (-4800,0,0)
+  F4 id 126 tag #d000000001/extrude[0]:bottom PlaneSurface src-n (0,0,1) rev True loops 1 - | mesh tris 2 sum-n (0,0,-12000)
+  F5 id 128 tag #d000000001/extrude[0]:top PlaneSurface src-n (0,0,1) rev False loops 1 - | mesh tris 2 sum-n (0,0,12000)
+  body guarantee Unspecified, faces 2, exact False, qexact False
+  F0 id 139 tag revolve:side[0.0] RevolvedSurface src-n (0,0,1) rev True loops 1 - | mesh tris 48 sum-n (0,0,-45.7)
+  F1 id 141 tag revolve:side[0.1] RevolvedSurface src-n (0.95,0,-0.3) rev True loops 1 - | mesh tris 48 sum-n (0,0,45.7)
+  body guarantee Unspecified, faces 7, exact False, qexact False
+  F0 id 183 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface src-n (0,-1,0) rev False loops 1 facets 2 sum-n (0,-8000,0) dot(face normal) 1 sense 1 lazy 0 | mesh tris 2 sum-n (0,-8000,0)
+  F1 id 185 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface src-n (1,0,0) rev False loops 1 facets 2 sum-n (4800,0,0) dot(face normal) 1 sense 1 lazy 0 | mesh tris 2 sum-n (4800,0,0)
+  F2 id 187 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface src-n (0,1,-0) rev False loops 1 facets 2 sum-n (0,8000,0) dot(face normal) 1 sense 1 lazy 0 | mesh tris 2 sum-n (0,8000,0)
+  F3 id 189 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface src-n (-1,0,0) rev False loops 1 facets 2 sum-n (-4800,0,0) dot(face normal) 1 sense 1 lazy 0 | mesh tris 2 sum-n (-4800,0,0)
+  F4 id 191 tag #d000000001/extrude[0]:bottom PlaneSurface src-n (0,0,1) rev False loops 1 facets 2 sum-n (0,0,-12000) dot(face normal) 1 sense -1 lazy 0 | mesh tris 2 sum-n (0,0,-12000)
+  F5 id 193 tag #d000000001/extrude[0]:top PlaneSurface src-n (0,0,1) rev False loops 2 facets 52 sum-n (0,0,11954.3) dot(face normal) 1 sense 1 lazy 0 | mesh tris 52 sum-n (0,0,11954.3)
+  F6 id 196 tag revolve:side[0.1] RevolvedSurface src-n (0.95,0,-0.3) rev False loops 1 facets 720 sum-n (0,0,45.7) dot(face normal) 0.303 sense -1 lazy 0 | mesh tris 720 sum-n (0,0,45.7)
+ALLCDIAG general boolean Unite accepted: operand A, operand B, result
+  body guarantee ExactAnalytic, faces 6, exact False, qexact False
+  F0 id 201 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface src-n (0,-1,0) rev False loops 1 - | mesh tris 2 sum-n (0,-8000,0)
+  F1 id 211 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface src-n (1,0,0) rev False loops 1 - | mesh tris 2 sum-n (4800,0,0)
+  F2 id 218 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface src-n (0,1,-0) rev False loops 1 - | mesh tris 2 sum-n (0,8000,0)
+  F3 id 225 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface src-n (-1,0,0) rev False loops 1 - | mesh tris 2 sum-n (-4800,0,0)
+  F4 id 229 tag #d000000001/extrude[0]:bottom PlaneSurface src-n (0,0,1) rev True loops 1 - | mesh tris 2 sum-n (0,0,-12000)
+  F5 id 231 tag #d000000001/extrude[0]:top PlaneSurface src-n (0,0,1) rev False loops 1 - | mesh tris 2 sum-n (0,0,12000)
+  body guarantee Unspecified, faces 2, exact False, qexact False
+  F0 id 242 tag revolve:side[0.0] RevolvedSurface src-n (0,0,1) rev True loops 1 - | mesh tris 48 sum-n (0,0,-45.7)
+  F1 id 244 tag revolve:side[0.1] RevolvedSurface src-n (0.95,0,-0.3) rev True loops 1 - | mesh tris 48 sum-n (0,0,45.7)
+  body guarantee Unspecified, faces 7, exact False, qexact False
+  F0 id 286 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface src-n (0,-1,0) rev False loops 1 facets 2 sum-n (0,-8000,0) dot(face normal) 1 sense 1 lazy 0 | mesh tris 2 sum-n (0,-8000,0)
+  F1 id 288 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface src-n (1,0,0) rev False loops 1 facets 2 sum-n (4800,0,0) dot(face normal) 1 sense 1 lazy 0 | mesh tris 2 sum-n (4800,0,0)
+  F2 id 290 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface src-n (0,1,-0) rev False loops 1 facets 2 sum-n (0,8000,0) dot(face normal) 1 sense 1 lazy 0 | mesh tris 2 sum-n (0,8000,0)
+  F3 id 292 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface src-n (-1,0,0) rev False loops 1 facets 2 sum-n (-4800,0,0) dot(face normal) 1 sense 1 lazy 0 | mesh tris 2 sum-n (-4800,0,0)
+  F4 id 294 tag #d000000001/extrude[0]:bottom PlaneSurface src-n (0,0,1) rev False loops 1 facets 2 sum-n (0,0,-12000) dot(face normal) 1 sense -1 lazy 0 | mesh tris 2 sum-n (0,0,-12000)
+  F5 id 296 tag #d000000001/extrude[0]:top PlaneSurface src-n (0,0,1) rev False loops 2 facets 52 sum-n (0,0,11954.3) dot(face normal) 1 sense 1 lazy 0 | mesh tris 52 sum-n (0,0,11954.3)
+  F6 id 299 tag revolve:side[0.1] RevolvedSurface src-n (0.95,0,-0.3) rev False loops 1 facets 720 sum-n (0,0,45.7) dot(face normal) 0.303 sense -1 lazy 0 | mesh tris 720 sum-n (0,0,45.7)
+ALLCDIAG S3:revolve_add+shell@0.15 step 2 shell: before
+  body guarantee ExactAnalytic, faces 7, exact False, qexact False
+  F0 id 183 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface src-n (0,-1,0) rev False loops 1 facets 2 sum-n (0,-8000,0) dot(face normal) 1 sense 1 lazy 0 display 2 sum-n (0,-8000,0) | mesh tris 2 sum-n (0,-8000,0)
+  F1 id 185 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface src-n (1,0,0) rev False loops 1 facets 2 sum-n (4800,0,0) dot(face normal) 1 sense 1 lazy 0 display 2 sum-n (4800,0,0) | mesh tris 2 sum-n (4800,0,0)
+  F2 id 187 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface src-n (0,1,-0) rev False loops 1 facets 2 sum-n (0,8000,0) dot(face normal) 1 sense 1 lazy 0 display 2 sum-n (0,8000,0) | mesh tris 2 sum-n (0,8000,0)
+  F3 id 189 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface src-n (-1,0,0) rev False loops 1 facets 2 sum-n (-4800,0,0) dot(face normal) 1 sense 1 lazy 0 display 2 sum-n (-4800,0,0) | mesh tris 2 sum-n (-4800,0,0)
+  F4 id 191 tag #d000000001/extrude[0]:bottom PlaneSurface src-n (0,0,1) rev False loops 1 facets 2 sum-n (0,0,-12000) dot(face normal) 1 sense -1 lazy 0 display 2 sum-n (0,0,-12000) | mesh tris 2 sum-n (0,0,-12000)
+  F5 id 193 tag #d000000001/extrude[0]:top PlaneSurface src-n (0,0,1) rev False loops 2 facets 52 sum-n (0,0,11954.3) dot(face normal) 1 sense 1 lazy 0 display 52 sum-n (0,0,11954.3) | mesh tris 52 sum-n (0,0,11954.3)
+  F6 id 196 tag #d000000002/revolve:side[0.1] RevolvedSurface src-n (0.95,0,-0.3) rev False loops 1 facets 720 sum-n (0,0,45.7) dot(face normal) 0.303 sense -1 lazy 0 display 720 sum-n (0,0,45.7) | mesh tris 720 sum-n (0,0,45.7)
+ALLCDIAG S3:revolve_add+shell@0.15 step 2 shell: after
+  body guarantee ExactAnalytic, faces 7, exact False, qexact False
+  F0 id 286 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface src-n (0,-1,0) rev False loops 1 facets 2 sum-n (0,-8000,0) dot(face normal) 1 sense 1 lazy 0 display 2 sum-n (0,-8000,0) | mesh tris 2 sum-n (0,-8000,0)
+  F1 id 288 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface src-n (1,0,0) rev False loops 1 facets 2 sum-n (4800,0,0) dot(face normal) 1 sense 1 lazy 0 display 2 sum-n (4800,0,0) | mesh tris 2 sum-n (4800,0,0)
+  F2 id 290 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface src-n (0,1,-0) rev False loops 1 facets 2 sum-n (0,8000,0) dot(face normal) 1 sense 1 lazy 0 display 2 sum-n (0,8000,0) | mesh tris 2 sum-n (0,8000,0)
+  F3 id 292 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface src-n (-1,0,0) rev False loops 1 facets 2 sum-n (-4800,0,0) dot(face normal) 1 sense 1 lazy 0 display 2 sum-n (-4800,0,0) | mesh tris 2 sum-n (-4800,0,0)
+  F4 id 294 tag #d000000001/extrude[0]:bottom PlaneSurface src-n (0,0,1) rev False loops 1 facets 2 sum-n (0,0,-12000) dot(face normal) 1 sense -1 lazy 0 display 2 sum-n (0,0,-12000) | mesh tris 2 sum-n (0,0,-12000)
+  F5 id 296 tag #d000000001/extrude[0]:top PlaneSurface src-n (0,0,1) rev False loops 2 facets 52 sum-n (0,0,11954.3) dot(face normal) 1 sense 1 lazy 0 display 52 sum-n (0,0,11954.3) | mesh tris 52 sum-n (0,0,11954.3)
+  F6 id 299 tag #d000000002/revolve:side[0.1] RevolvedSurface src-n (0.95,0,-0.3) rev False loops 1 facets 720 sum-n (0,0,45.7) dot(face normal) 0.303 sense -1 lazy 0 display 720 sum-n (0,0,45.7) | mesh tris 720 sum-n (0,0,45.7)
+{"allc":"S3:revolve_add\u002Bshell@0.15","set":"S3","step":1,"op":"revolve_add","f":0.15,"slot":0,"prm":"cone R2.7 h8.5 face0","verdict":"OK","why":null,"ms":897.8,"v0":240000,"v1":240064.8896,"dv":64.8896,"want":64.8896,"rel":-9.789322824961219E-14,"faces":7,"bodies":1,"guarantee":"ExactAnalytic","valid":true,"error":null,"downgrade":null,"warnings":["Boolean: general analytic path (7 faces, exact surfaces)."]}
+{"allc":"S3:revolve_add\u002Bshell@0.15","set":"S3","step":2,"op":"shell","f":0.15,"slot":1,"prm":"t2.2 open face1","verdict":"FAIL","why":"error: Shell: the body could not be hollowed.","ms":142.4,"v0":240064.8896,"v1":240064.8896,"dv":0,"want":null,"rel":null,"faces":7,"bodies":1,"guarantee":"ExactAnalytic","valid":true,"error":"Shell: the body could not be hollowed.","downgrade":null,"warnings":["Boolean: general analytic path (7 faces, exact surfaces).","Shell: a RevolvedSurface face cannot be hollowed yet (planar, cylindrical and spherical faces are supported).","debug: offset: offset surf #d000000002/revolve:side[0.1] Parametric3D.Kernel.Surfaces.RevolvedSurface probe (20.2, 10.5, 40) d -2.2 moved (18.10323956426396, 10.5, 39.33397021453091) on new at (17.007336659610424, 10.5, 39.68208054895027) gen (19.084727114361996, 10.5, 36.244102001259314)-\u003E(12.70323\u2026","debug: offset solid declined: offset: the RevolvedSurface offset does not carry the moved point","debug: open face at blends declined: an open face meets a neighbour at a sharp edge (not at a blend)","debug: offset: offset surf #d000000002/revolve:side[0.1] Parametric3D.Kernel.Surfaces.RevolvedSurface probe (20.2, 10.5, 40) d -2.2 moved (18.10323956426396, 10.5, 39.33397021453091) on new at (17.007336659610424, 10.5, 39.68208054895027) gen (19.084727114361996, 10.5, 36.244102001259314)-\u003E(12.70323\u2026","debug: extended body declined: offset: the RevolvedSurface offset does not carry the moved point"]}
+{"test":"ALLC S3:revolve_add\u002Bshell@0.15","ok":false,"verdict":"FAIL","ms":1040.1293,"error":"step 2 shell: error: Shell: the body could not be hollowed."}
+
+=================== ALLC SUMMARY ===================
+steps 2, cases 1, total 00:00:02, step time sum 1.0 s
+  FAIL  1
+  OK    1
+by set: S3: 2 steps, FAIL 1, WARN 0, SLOW 0
+
+by operation (step verdicts; time median / max ms):
+  shell                n     1  FAIL    1  WARN    0  SLOW   0  median      142  max      142
+  revolve_add          n     1  FAIL    0  WARN    0  SLOW   0  median      898  max      898
+
+failure reasons (grouped, operation | reason head):
+     1  shell | error: Shell: the body could not be hollowed.   e.g. S3:revolve_add+shell@0.15 step 2 [t2.2 open face1]
+
+pairs that fail only together (first op passes alone, second fails after it):
+  S3:revolve_add+shell: 0.15 error: Shell: the body could not be hollowed.
+
+slowest 25 steps:
+        898 ms  S3:revolve_add+shell@0.15 step 1 revolve_add [cone R2.7 h8.5 face0] OK faces 7
+        142 ms  S3:revolve_add+shell@0.15 step 2 shell [t2.2 open face1] FAIL faces 7
+
+warnings (grouped, operation | reason head):
+Reproduce one case: K01Checks allC with P3D_ALLC_ONLY=<case id>, P3D_ALLC_OUT=<folder> saves failed models.
+
+{"test":"ALLC-SUMMARY","ok":true,"steps":2,"fail":1,"warn":0,"slow":0,"seconds":2}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":0,"failed":0}
