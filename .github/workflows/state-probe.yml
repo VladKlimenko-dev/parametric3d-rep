@@ -54,6 +54,8 @@ jobs:
       matrix:
         include:
           - { name: k181_dump, cmd: 'draft181', env: 'P3D_TWEAKDUMP=1' }
+          - { name: k181_allc1, cmd: 'allC', env: 'P3D_ALLC_SETS=1' }
+          - { name: k181_allc2, cmd: 'allC', env: 'P3D_ALLC_SETS=2' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

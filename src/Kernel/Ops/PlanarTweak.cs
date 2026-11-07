@@ -276,6 +276,12 @@ public static class PlanarTweak
         if (!vr.IsValid && Environment.GetEnvironmentVariable("P3D_TWEAKDUMP") == "1")
         {
             var byId = clone.Edges.GroupBy(e => e.Id).ToDictionary(g => g.Key, g => g.First());
+            for (int k = 0; k < cf.Count; k++)
+                Console.Error.WriteLine($"TWEAKFACE {k} {GeometryAudit.AuthoritativeSurface(faces[k])?.GetType().Name} pick={picks.ContainsKey(k)} touched={touched.Contains(k)} grow={cylGrow.Contains(k)} n={faces[k].Loops.Sum(l => l.CoEdges.Count)}");
+            var src0 = TopologyClone.Deep(body); src0.Guarantee = GuaranteeLevel.ExactAnalytic;
+            var vr0 = SolidValidator.Validate(src0);
+            Console.Error.WriteLine($"TWEAKSRC guarantee {body.Guarantee}: as exact {vr0.Summary()}");
+            foreach (var x in vr0.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(8)) Console.Error.WriteLine("TWEAKSRC   " + x);
             foreach (var x in vr.Issues.Where(x => x.Severity == ValidationSeverity.Error))
             {
                 Console.Error.WriteLine("TWEAKDUMP " + x);

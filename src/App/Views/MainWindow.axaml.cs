@@ -1094,7 +1094,7 @@ public partial class MainWindow : Window
             pv.Items.Add(mi);
         }
         items.Add(pv);
-        foreach (var id in new[] { "app.selftest", "app.kerneltest", "app.parameters", "app.theme", "app.language", "app.exit" }) items.Add(Item(_reg[id]));
+        foreach (var id in new[] { "app.selftest", "app.kerneltest", "app.kerneltest_allc", "app.parameters", "app.theme", "app.language", "app.exit" }) items.Add(Item(_reg[id]));
         new ContextMenu { ItemsSource = items, Placement = PlacementMode.BottomEdgeAlignedLeft }.Open(anchor);
     }
 
@@ -3809,7 +3809,7 @@ public partial class MainWindow : Window
     // ================================================================ тест (замер скорости и отчёт)
 
     /// <summary>k150: окно «Тесты ядра» (прогон K01Checks и отчёт в файл).</summary>
-    public async Task OpenKernelTest() => await new KernelTestWindow().ShowDialog(this);
+    public async Task OpenKernelTest(string? only = null) => await new KernelTestWindow(only).ShowDialog(this);
 
     public async Task OpenSelfTest()
     {

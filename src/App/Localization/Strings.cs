@@ -762,6 +762,8 @@ public static class Strings
         ["Подсборка"] = "Subassembly",
         ["Разнесённый вид"] = "Exploded view",
         ["Тесты ядра: прогон и отчёт"] = "Kernel tests: run and report",
+        ["Tests AllC: операции, пары и тройки — отчёт"] = "Tests AllC: operations, pairs and triples — report",
+        ["Tests AllC — все операции × размеры, пары и тройки операций (время и параметры каждого шага)"] = "Tests AllC — every operation × sizes, pairs and triples of operations (time and parameters of each step)",
         ["Тесты ядра"] = "Kernel tests",
         ["allA — основные проверки ядра"] = "allA — main kernel checks",
         ["allB — расширенные проверки ядра"] = "allB — extended kernel checks",

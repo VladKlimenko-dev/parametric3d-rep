@@ -27,6 +27,7 @@ public sealed class KernelTestWindow : Window
         ("allB", "allB — расширенные проверки ядра", true),
         ("loftcorpus140", "Фикстуры лофтов (скругления и фаски)", false),
         ("loftseq", "Последовательный корпус лофтов (60 операций)", false),
+        ("allC", "Tests AllC — все операции × размеры, пары и тройки операций (время и параметры каждого шага)", false),
     };
 
     private readonly TextBox _log = new()
@@ -41,7 +42,10 @@ public sealed class KernelTestWindow : Window
     private Process? _proc;
     private string? _report;
 
-    public KernelTestWindow()
+    public KernelTestWindow() : this(null) { }
+
+    /// <summary>k181: <paramref name="only"/> — отметить только этот набор (пункт меню «Tests AllC»).</summary>
+    public KernelTestWindow(string? only)
     {
         Title = L("Тесты ядра");
         Width = 780; Height = 620; MinWidth = 560; MinHeight = 420;
@@ -57,7 +61,7 @@ public sealed class KernelTestWindow : Window
         var boxes = new StackPanel { Spacing = 2, Margin = new Thickness(0, 0, 0, 8) };
         foreach (var (mode, label, on) in Suites)
         {
-            var cb = new CheckBox { Content = L(label), IsChecked = on, Name = "kt_" + mode, Tag = mode };
+            var cb = new CheckBox { Content = L(label), IsChecked = only == null ? on : mode == only, Name = "kt_" + mode, Tag = mode };
             _boxes.Add(cb); boxes.Children.Add(cb);
         }
         _start = new Button { Content = L("Запустить"), Classes = { "accent" }, MinWidth = 110, Name = "kt_start" };
