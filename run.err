@@ -1,0 +1,1 @@
+seconds 120 nproc 4 env P3D_ALLC_SETS=12 cmd allC
