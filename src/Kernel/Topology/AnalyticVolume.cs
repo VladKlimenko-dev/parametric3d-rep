@@ -1265,7 +1265,9 @@ public static class AnalyticVolume
         rect = false;
         if (WholeNurbsOff) return false;
         if (f.Loops.All(l => l.CoEdges.Count == 0) || ns.WholeDomainBoundary(f) != null) return true;
-        if (!NurbsRectOff && ns.FullRectFace(f)) { rect = true; return true; }
+        // лоскут целиком — только у грани с самой поверхностью NURBS: у гранёной обёртки (стенка лофта корпуса — сетка с
+        // источником NURBS) соседи считают по сетке, точный интеграл одной грани рассогласовал бы тело (объём зависел от начала)
+        if (!NurbsRectOff && f.Surface is NurbsSurface && ns.FullRectFace(f)) { rect = true; return true; }
         return false;
     }
     /// <summary>k180: граней-лоскутов целиком, проинтегрированных по области (разбор).</summary>
