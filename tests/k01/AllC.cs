@@ -486,3 +486,31 @@ static partial class Program
         }
     }
 }
+
+static partial class Program
+{
+    /// <summary>
+    /// k181: ОТОБРАННЫЕ СЛУЧАИ AllC (в allA). Бобышка по окружности (точный путь) + следующая общая булева — сетка низа тела
+    /// выдавалась из памяти перевёрнутой (P3D_MEMOSIDE=0); скругление + бобышка на соседней боковой грани — плоская грань
+    /// выдавливания с вырезом гранилась полной полосой (P3D_STRIPTRIM=0); бобышка по окружности — гарантия ExactQuadric
+    /// (P3D_EXTRUDEQGUAR=0).
+    /// </summary>
+    static void AllCRegressChecks()
+    {
+        Check("ALLC-REGRESS-K181", () =>
+        {
+            var ops = AllCOps().ToDictionary(o => o.Name);
+            var fails = new List<string>();
+            foreach (var (a, b) in new[] { ("boss_circle", "loft_add"), ("boss_circle", "hole_through"), ("boss_circle", "vertex_chamfer"), ("round_edge", "boss_circle"), ("round_edge", "cut_circle_through") })
+                foreach (var f in new[] { 0.15, 0.4 })
+                {
+                    string id = $"R:{a}+{b}@{f}";
+                    var rows = AllCRun("R", id, new() { (ops[a], f, 0), (ops[b], f, 1) }, 90);
+                    foreach (var r in rows) Log(r.ToLog());
+                    foreach (var r in rows.Where(r => r.Verdict == "FAIL" || r.Op == "boss_circle" && !r.Guarantee.Contains("Exact")))
+                        fails.Add($"{id} step {r.Step} {r.Op}: {r.Verdict} {r.Why} ({r.Guarantee})");
+                }
+            Require(fails.Count == 0, string.Join(" | ", fails.Take(6)));
+        });
+    }
+}

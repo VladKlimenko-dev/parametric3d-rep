@@ -53,8 +53,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k181_d1, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:boss_circle+loft_add@0.15' }
-          - { name: k181_d8, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:boss_circle+hole_through@0.15' }
+          - { name: k181_reg, cmd: 'allcreg', env: '' }
+          - { name: k181_rm1, cmd: 'allcreg', env: 'P3D_MEMOSIDE=0' }
+          - { name: k181_rm2, cmd: 'allcreg', env: 'P3D_STRIPTRIM=0' }
+          - { name: k181_rm3, cmd: 'allcreg', env: 'P3D_EXTRUDEQGUAR=0' }
+          - { name: k181_allc3, cmd: 'allC', env: 'P3D_ALLC_SETS=3' }
+          - { name: k181_allc4, cmd: 'allC', env: 'P3D_ALLC_SETS=4' }
+          - { name: k181_allA, cmd: 'allA', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
