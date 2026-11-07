@@ -37,9 +37,9 @@ static partial class Program
                 var vrs = bodies.Select(x => SolidValidator.Validate(x)).ToList();
                 var vr = vrs.FirstOrDefault(x => !x.IsValid) ?? vrs.FirstOrDefault();
                 double vol = bodies.Sum(x => AnalyticVolume.Of(x) ?? 0), area = bodies.Sum(x => AnalyticVolume.AreaOf(x) ?? 0);
-                // Габарит по точкам XT (вершины) и по вершинам импортированных тел — должны совпасть; объём не больше объёма габарита.
-                var xtPts = f.OfType("POINT").Select(n => n.V("pvec") * 1000).ToList();
-                var bodyPts = bodies.SelectMany(x => x.Vertices).Select(v => v.P).ToList();
+                // Габарит по вершинам и дугам (окружности, эллипсы) рёбер XT и тех же рёбер импортированных тел — должны совпасть; объём не больше объёма габарита.
+                var xtPts = XtExtentPoints(f);
+                var bodyPts = bodies.SelectMany(BodyExtentPoints).ToList();
                 (Vector3d lo, Vector3d hi) Box(List<Vector3d> pts) => pts.Count == 0 ? (Vector3d.Zero, Vector3d.Zero)
                     : (new Vector3d(pts.Min(q => q.X), pts.Min(q => q.Y), pts.Min(q => q.Z)), new Vector3d(pts.Max(q => q.X), pts.Max(q => q.Y), pts.Max(q => q.Z)));
                 var (xl, xh) = Box(xtPts); var (bl, bh) = Box(bodyPts);
@@ -56,7 +56,7 @@ static partial class Program
                 Require(!w.Any(x => x.Contains("were left out") || x.Contains("is not supported; the edge")), "faces or edges left out: " + string.Join(" | ", w.Where(x => x.Contains("left out"))));
                 Require(bodies.Count == xtBodies, $"bodies {bodies.Count} of {xtBodies}");
                 Require(vrs.All(x => x.IsValid), "invalid body: " + vr?.Summary());
-                Require(boxGap <= 1e-3, $"bounding box differs from the XT vertices by {boxGap:G3} mm");
+                Require(boxGap <= 1e-3, $"bounding box differs from the XT edges by {boxGap:G3} mm");
                 Require(vol > 0 && vol <= boxVol * (1 + 1e-6), $"volume {vol:F2} mm³ outside (0, {boxVol:F2}] of the bounding box");
             });
         }
@@ -72,5 +72,42 @@ static partial class Program
         if (!m.Success) return (null, null);
         var v = m.Groups[1].Value.Split(',').Select(s => double.TryParse(s.Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : double.NaN).ToArray();
         return v.Length >= 5 ? (v[3] * 1e9, v[4] * 1e6) : (null, null);
+    }
+
+    /// <summary>Точки габарита XT: вершины и дуги окружностей и эллипсов рёбер (направление дуги — по знаку кривой; ребро с
+    /// одной вершиной — полная окружность), мм.</summary>
+    static List<Vector3d> XtExtentPoints(XtFile f)
+    {
+        var res = f.OfType("POINT").Select(n => n.V("pvec") * 1000).ToList();
+        foreach (var e in f.OfType("EDGE"))
+        {
+            var cn = f[e.P("curve")]; var h = f[e.P("halfedge")];
+            if (cn == null || h == null || cn.Name is not ("CIRCLE" or "ELLIPSE")) continue;
+            var o = f[h.P("other")];
+            var vE = h.C("sense") != '-' ? f[h.P("vertex")] : o == null ? null : f[o.P("vertex")];
+            var vS = h.C("sense") != '-' ? (o == null ? null : f[o.P("vertex")]) : f[h.P("vertex")];
+            var c = cn.V("centre"); var z = cn.V("normal").Normalized(); var x = cn.V("x_axis").Normalized(); var y = Vector3d.Cross(z, x);
+            double ra = cn.Name == "CIRCLE" ? cn.D("radius") : cn.D("major_radius"), rb = cn.Name == "CIRCLE" ? ra : cn.D("minor_radius");
+            double Ang(Vector3d q) => Math.Atan2(Vector3d.Dot(q - c, y) / rb, Vector3d.Dot(q - c, x) / ra);
+            double a0 = 0, sweep = 2 * Math.PI;
+            if (vS != null && vE != null && f[vS.P("point")] is { } ps && f[vE.P("point")] is { } pe && (ps.V("pvec") - pe.V("pvec")).Length > 1e-12)
+            {
+                a0 = Ang(ps.V("pvec")); double a1 = Ang(pe.V("pvec"));
+                bool ccw = cn.C("sense") != '-';
+                sweep = ccw ? a1 - a0 : a0 - a1; sweep = ((sweep % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+                if (!ccw) sweep = -sweep;
+            }
+            for (int i = 0; i <= 64; i++) { double t = a0 + sweep * i / 64; res.Add((c + x * (ra * Math.Cos(t)) + y * (rb * Math.Sin(t))) * 1000); }
+        }
+        return res;
+    }
+
+    /// <summary>Точки габарита тела: вершины и дуги (окружности, эллипсы) его рёбер, мм.</summary>
+    static IEnumerable<Vector3d> BodyExtentPoints(TSolid b)
+    {
+        foreach (var v in b.Vertices) yield return v.P;
+        foreach (var e in b.Edges)
+            if (e.Curve is Parametric3D.Kernel.Curves.ArcCurve3 or Parametric3D.Kernel.Curves.EllipseCurve3)
+                for (int i = 0; i <= 64; i++) yield return e.Curve.PointAt(e.Curve.T0 + (e.Curve.T1 - e.Curve.T0) * i / 64);
     }
 }
