@@ -239,11 +239,20 @@ public static class PlanarTweak
                     bool rev0 = f.Reversed;
                     // сторона — как у исходной: нормаль в той же точке
                     var probe = faces[i].Loops[0].CoEdges[0].Edge.Curve.PointAt(0.5);
-                    var n0 = src.NormalAt(src.ProjectToUV(probe)); if (rev0) n0 = -n0;
+                    Vector3d n0; try { n0 = faces[i].NormalAt(probe); } catch { n0 = src.NormalAt(src.ProjectToUV(probe)); if (rev0) n0 = -n0; }
                     var n1 = ns.NormalAt(ns.ProjectToUV(probe));
                     f.Surface = ns; f.Reversed = Vector3d.Dot(n0, n1) < 0;
                 }
-                else if (src is not CylinderSurface) { why = "a rounded neighbour of an unsupported surface kind"; return null; }
+                else if (src is CylinderSurface cs0)
+                {
+                    // снять обёртку прежних фасетов (их площадь — до продления: разметка по контурам отвергалась); сторона — по
+                    // наружной нормали исходной грани в точке
+                    var probe = faces[i].Loops[0].CoEdges[0].Edge.Curve.PointAt(0.5);
+                    Vector3d nOut; try { nOut = faces[i].NormalAt(probe); } catch { why = "no normal on a rounded neighbour"; return null; }
+                    var n1 = cs0.NormalAt(cs0.ProjectToUV(probe));
+                    f.Surface = cs0; f.Reversed = Vector3d.Dot(nOut, n1) < 0;
+                }
+                else { why = "a rounded neighbour of an unsupported surface kind"; return null; }
             }
             else if (CylOf(i) is { } cy && GeometryAudit.AuthoritativeSurface(faces[i]) is ExtrudedSurface ex && ex.Base is ArcCurve3 ba
                      && cylConvex.TryGetValue(i, out var cvx) && cvx is bool convex)
