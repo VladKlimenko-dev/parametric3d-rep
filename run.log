@@ -1,0 +1,23 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["sweepexact"]}
+  bezier S × circle r1: V 145.20622056540216 want 145.2062205716157 (-4.3E-011) ExactAnalytic
+  bezier S × square 2: V 184.88230216612723 want 184.88230217331758 (-3.9E-011) ExactAnalytic
+  bezier S × ring 1.5/0.5: V 290.4124411309852 want 290.4124411432314 (-4.2E-011) ExactAnalytic
+  bezier 3D × circle r1: V 188.20118018552958 want 188.20118018670152 (-6.2E-012) ExactAnalytic
+  bezier 3D × square 2: V 239.62518497754579 want 239.6251849795362 (-8.3E-012) ExactAnalytic
+  bezier 3D × ring 1.5/0.5: V 376.40236037169257 want 376.40236037340304 (-4.5E-012) ExactAnalytic
+  line 40 × square 2, twist 90°: V 159.99999999828637 want 160.00000000127244 (-1.9E-011) ExactAnalytic, 6 faces
+  bezier S × square 2, twist 180°: V 184.88230216683255 want 184.88230217331758 (-3.5E-011) ExactAnalytic, 6 faces
+  bezier S × circle r1, kept orientation: V 125.66370614260735 want 125.66370614359172 (-7.8E-012) ExactAnalytic
+  bezier S × square 2, kept orientation: V 159.99999999711204 want 160 (-1.8E-011) ExactAnalytic
+  closed ellipse × circle r1: V 320.7817283653814 want 320.7817283902167 (-7.7E-011) ExactAnalytic, 16 faces
+  closed ellipse × square 2, twist 360°: V 408.43198178241863 want 408.4319818149181 (-8.0E-011) ExactAnalytic, 16 faces
+{"test":"KRN07-SWEEP-EXACT-SMOOTH-PATH","ok":true}
+  lens × bezier S: V 291.18962591099756 want 291.1896258476749 (2.2E-010) ExactAnalytic, 4 faces
+  lens × bezier 3D: V 377.40966634168075 want 377.4096662451731 (2.6E-010) ExactAnalytic, 4 faces
+  lens × bezier S, twist 180°: V 291.18962591104776 want 291.1896258476749 (2.2E-010) ExactAnalytic, 4 faces
+  D × bezier S, kept orientation: V 383.99999999600533 want 383.9999999089905 (2.3E-010) ExactAnalytic, 4 faces
+  spline drop × bezier S, kept orientation: V 649.9999999918012 want 649.9999998375445 (2.4E-010) ExactAnalytic, 5 faces
+{"test":"KRN07-SWEEP-BEZIER-SECTION","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":2,"failed":0}
