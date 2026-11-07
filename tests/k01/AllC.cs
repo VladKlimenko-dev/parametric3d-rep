@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using OpenTK.Mathematics;
 using Parametric3D.Kernel;
+using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Topology;
 using Parametric3D.Model;
@@ -333,11 +334,18 @@ static partial class Program
             catch (Exception e) { r.Verdict = "FAIL"; r.Why = "setup: " + e.Message; break; }
             if (pristine) r.Want = want;
             var before = p.Bodies.ToList();
+            if (Environment.GetEnvironmentVariable("P3D_ALLC_DIAG") == "1")
+                BooleanOp.GeneralAcceptProbe = (ba, bb, kind, res) =>
+                {
+                    Console.WriteLine($"ALLCDIAG general boolean {kind} accepted: operand A, operand B, result");
+                    foreach (var x in new[] { ba, bb, res }) AllCDumpFaces(x);
+                };
             p.Limits = new KernelLimits { Deadline = DateTime.UtcNow.AddSeconds(stepSec) };
             var sw = Stopwatch.StartNew();
             try { p.Rebuild(null); }
             catch (Exception e) { r.Error = "exception: " + e.GetType().Name + ": " + e.Message; }
             r.Ms = sw.Elapsed.TotalMilliseconds;
+            BooleanOp.GeneralAcceptProbe = null;
             p.Limits = KernelLimits.None;
             var added = p.Features.Skip(nf).ToList();
             r.Error ??= added.Select(x => x.Error).FirstOrDefault(x => x != null);
