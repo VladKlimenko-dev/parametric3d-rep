@@ -1329,6 +1329,21 @@ public static class AnalyticVolume
         if (rect) Interlocked.Increment(ref NurbsRectFaces);
         _quadErr += Math.Abs(fine - coarse);
         if (area) return Math.Abs(fine);
+        // k180: у лоскута целиком сторона — по обходу контура в области параметров (соглашение K05: внешний контур — против
+        // часовой вокруг наружной нормали; против часовой в (u, v) — наружу S_u × S_v), а не по нормали грани в одной точке
+        // (у узкого или сложенного лоскута проекция точки попадала не туда — знак грани выходил неверным, объём зависел от начала)
+        if (rect)
+        {
+            var uvl = new List<Vector2d>();
+            foreach (var ce in f.Loops[0].CoEdges)
+            {
+                var c = ce.Edge.Curve;
+                for (int k = 0; k < 4; k++) { double fr = k / 4.0; if (ce.Reversed) fr = 1 - fr; uvl.Add(ns.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * fr))); }
+            }
+            double sa = 0; for (int i = 0; i < uvl.Count; i++) { var a0 = uvl[i]; var b0 = uvl[(i + 1) % uvl.Count]; sa += a0.X * b0.Y - b0.X * a0.Y; }
+            var (du0, du1, dv0, dv1) = ns.Domain;
+            if (Math.Abs(sa) > 0.5 * (du1 - du0) * (dv1 - dv0)) return fine * Math.Sign(sa);
+        }
         // сторона: нормаль S_u × S_v против наружной нормали грани в точке внутри области
         ns.Derivs(new Vector2d(0.37 * (ns.KnotsU[^1] + ns.KnotsU[0]) + 0.13 * ns.KnotsU[0], 0.41 * ns.KnotsV[^1] + 0.59 * ns.KnotsV[0]), out var P, out var pu, out var pv);
         var nn = Vector3d.Cross(pu, pv);
