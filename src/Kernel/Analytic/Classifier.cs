@@ -372,6 +372,28 @@ public sealed partial class AnalyticFace
         public const int Line = 0, Arc = 1, Horizontal = 2, Vertical = 3;
     }
 
+
+    static readonly bool TorusMeshHintOff = Environment.GetEnvironmentVariable("P3D_TORUSMESHHINT") == "0";
+    /// <summary>k182: точка внутри грани — центр наибольшего треугольника её сетки, перенесённый на поверхность грани.</summary>
+    static Vector3d? MeshInteriorPoint(TFace f, AnalyticFace fd)
+    {
+        try
+        {
+            var mb = new Tess.MeshBuilder();
+            f.Surface.TessellateFace(f, mb);
+            var md = new Tess.MeshData(); mb.FillInto(md);
+            double best = 0; Vector3d? c = null;
+            for (int i = 0; i + 2 < md.Indices.Length; i += 3)
+            {
+                Vector3d a = mb.PositionsD[md.Indices[i]], b = mb.PositionsD[md.Indices[i + 1]], q = mb.PositionsD[md.Indices[i + 2]];
+                double ar = Vector3d.Cross(b - a, q - a).Length;
+                if (ar > best) { best = ar; c = (a + b + q) / 3; }
+            }
+            return c is { } cc ? fd.ProjectTo(cc) : null;
+        }
+        catch (Exception ex) when (ex is ArithmeticException or ArgumentException or InvalidOperationException or IndexOutOfRangeException or NullReferenceException) { return null; }
+    }
+
     /// <summary>null — поверхность грани не плоскость и не цилиндр (why).</summary>
     public static AnalyticFace? Of(TFace f, out string? why)
     {
@@ -482,7 +504,13 @@ public sealed partial class AnalyticFace
             fd.FullSurface = fd.TorBounds.Count == 0;
             if (!fd.FullSurface)
             {
-                if (f.InteriorHint is not { } hint || fd.SurfaceDistance(hint) > 1e-6 * Math.Max(1, fd.R)) { why = $"face {f.Id}: torus face without an interior point"; return null; }
+                var hint0 = f.InteriorHint;
+                // k182: ГРАНЬ ТОРА БЕЗ ТОЧКИ ГРАНИ (неполный оборот замкнутой кривой — протяжка круга по дуге): точка — центр
+                // наибольшего треугольника сетки грани, перенесённый на поверхность. Прежде отказ общего пути, и бобышка-протяжка
+                // шла сеточной булевой — гранёная грань, объём ±1e3 мм³ (AllC: каждая протяжка — WARN). Точку грани самой грани
+                // не ставим: общий разрез объёма с ней отказывает у таких граней (k95). Мутация P3D_TORUSMESHHINT=0.
+                if (hint0 == null && !TorusMeshHintOff) hint0 = MeshInteriorPoint(f, fd);
+                if (hint0 is not { } hint || fd.SurfaceDistance(hint) > 1e-6 * Math.Max(1, fd.R)) { why = $"face {f.Id}: torus face without an interior point"; return null; }
                 fd.TorHint = fd.ProjectTo(hint);
             }
             why = null;

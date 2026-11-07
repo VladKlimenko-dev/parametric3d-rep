@@ -439,6 +439,7 @@ public static partial class DirectRound
                     var ge = fe.First(f => f != common[0]); var gx = fx.First(f => f != common[0]);
                     if (Math.Abs(Vector3d.Dot(Nrm(ge, V), Nrm(gx, V))) < 1 - 1e-9) continue;  // вторые грани не касаются
                     sel.Add(x); added.Add(x);
+                    Debug?.Invoke($"tangent closure: from {e.Curve.GetType().Name} [{string.Join(",", fe.Select(f => f.Tag))}] at {V} added {x.Curve.GetType().Name} [{string.Join(",", fx.Select(f => f.Tag))}] {x.V0.P}->{x.V1.P}");
                 }
         }
         return added.Count == 0 ? null : refs.Concat(added.Select(EdgeRef.Of)).ToList();
