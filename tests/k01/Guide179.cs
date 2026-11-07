@@ -256,6 +256,7 @@ static partial class Program
     {
         Check("AUDIT-BEZIER-K180", () =>
         {
+            long q0 = Parametric3D.Kernel.Topology.AnalyticVolume.NurbsExactQuads, r0 = Parametric3D.Kernel.Topology.AnalyticVolume.NurbsRectFaces;
             var part = new Part("a180");
             Sketch Sq(string n, Frame3 fr, double h)
             {
@@ -292,7 +293,12 @@ static partial class Program
                     double z = h00 + 1.5 * h01, dz = -30 * d01 - L * (d10 + d11);
                     want += gw[k] / 2 / N * Math.Pow(20 * z, 2) * Math.Abs(dz);
                 }
-            Log(new { test = "similarity volume", volume = part.Volume, want, rel = (part.Volume - want) / want });
+            long q1 = Parametric3D.Kernel.Topology.AnalyticVolume.NurbsExactQuads, r1 = Parametric3D.Kernel.Topology.AnalyticVolume.NurbsRectFaces;
+            Log(new { test = "similarity volume", volume = part.Volume, want, rel = (part.Volume - want) / want, exactQuads = q1 - q0, rectFaces = r1 - r0 });
+            // боковые грани — многочленные лоскуты целиком: объём по области (P3D_NURBSRECT=0 — поток по краю) и точным Гауссом
+            // (P3D_NURBSEXACTQUAD=0 — деления 4 и 2)
+            Require(r1 - r0 >= 4, $"the loft side faces were not integrated over the parameter domain ({r1 - r0})");
+            Require(q1 - q0 >= 4, $"the polynomial loft faces were not integrated by the exact Gauss rule ({q1 - q0})");
             Require(Math.Abs(part.Volume - want) < 1e-10 * want, $"similarity loft volume {part.Volume} vs {want}");
         });
     }

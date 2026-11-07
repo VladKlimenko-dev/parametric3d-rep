@@ -1260,8 +1260,15 @@ public static class AnalyticVolume
     // здесь не годится: проекция точки шва даёт один край области из двух, и вклады шва взаимно гасятся (объём шара — 0).
     // Тогда интеграл — прямо по области (Гаусс по пролётам узлов), сторона — по нормали грани. Мутация P3D_WHOLENURBS=0.
     static readonly bool WholeNurbsOff = Environment.GetEnvironmentVariable("P3D_WHOLENURBS") == "0";
-    static bool WholeNurbs(TFace f, NurbsSurface ns) =>
-        !WholeNurbsOff && (f.Loops.All(l => l.CoEdges.Count == 0) || ns.WholeDomainBoundary(f) != null || !NurbsRectOff && ns.FullRectFace(f));
+    static bool WholeNurbs(TFace f, NurbsSurface ns)
+    {
+        if (WholeNurbsOff) return false;
+        if (f.Loops.All(l => l.CoEdges.Count == 0) || ns.WholeDomainBoundary(f) != null) return true;
+        if (!NurbsRectOff && ns.FullRectFace(f)) { Interlocked.Increment(ref NurbsRectFaces); return true; }
+        return false;
+    }
+    /// <summary>k180: граней-лоскутов целиком, проинтегрированных по области (разбор).</summary>
+    public static long NurbsRectFaces;
     /// <summary>k180: мутация P3D_NURBSRECT=0 — грань-лоскут целиком (лофт) через поток по краю, как прежде.</summary>
     static readonly bool NurbsRectOff = Environment.GetEnvironmentVariable("P3D_NURBSRECT") == "0";
 
