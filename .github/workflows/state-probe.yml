@@ -53,9 +53,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k180_r0, cmd: 'usermodel1 tests/ui/data/user_k148_sweep_blend.p3d', env: '' }
-          - { name: k180_r1, cmd: 'usermodel1 tests/ui/data/user_k148e_sweep_blend_r555.p3d', env: '' }
-          - { name: k180_r2, cmd: 'usermodel1 tests/ui/data/user_k150_sweep_blend_c972.p3d', env: '' }
+          - { name: k180_um, cmd: 'usermodels', env: '' }
+          - { name: k180_m4, cmd: 'seqs110', env: 'P3D_FLUXKNOTS=0' }
+          - { name: k180_allA, cmd: 'allA', env: '' }
+          - { name: k180_allB, cmd: 'allB', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
