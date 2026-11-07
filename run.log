@@ -1,0 +1,10 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["sweepblend148e"]}
+{"step":1,"feature":"Blend","error":null,"guarantee":"ExactAnalytic","volume":645529.994813}
+{"step":2,"feature":"Chamfer","error":null,"guarantee":"ExactAnalytic","volume":643912.991574}
+{"step":3,"feature":"Round","error":null,"guarantee":"ExactAnalytic","volume":643765.881389}
+{"step":4,"feature":"Chamfer","error":null,"guarantee":"ExactAnalytic","volume":643663.356055}
+{"step":5,"feature":"Round","error":null,"guarantee":"ExactAnalytic","volume":643495.865449}
+{"test":"KRN06-USER-SWEEPBLEND-ROUND-AT-CHAMFER","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":1,"failed":0}
