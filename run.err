@@ -1,0 +1,1 @@
+seconds 20 nproc 4 env  cmd userfile179 tests/ui/data/user_k179_gear.p3d
