@@ -1,0 +1,4 @@
+  edit S1, over S2 curve: SketchCurve S1
+  curve at stage 0: Кривая1 slot 1 of 1
+{"test":"UI-LATER-K178","ok":false,"error":"the new curve is not placed at the rollback bar"}
+{"passed":0,"failed":1}
