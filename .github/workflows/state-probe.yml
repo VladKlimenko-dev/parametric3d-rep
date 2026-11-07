@@ -53,7 +53,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k181_dump, cmd: 'draft181', env: 'P3D_TWEAKDUMP=1' }
+          - { name: k181_draft, cmd: 'draft181', env: '' }
+          - { name: k181_md, cmd: 'draft181', env: 'P3D_TWEAKKEEPG=0' }
+          - { name: k181_mv, cmd: 'draft181', env: 'P3D_VALKEYGUAR=0' }
+          - { name: k181_allc3, cmd: 'allC', env: 'P3D_ALLC_SETS=3' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
