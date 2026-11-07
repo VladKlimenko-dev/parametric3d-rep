@@ -676,11 +676,13 @@ public sealed class NurbsSurface : ISurface3
         foreach (var ce in face.Loops[0].CoEdges)
         {
             var c = ce.Edge.Curve;
-            foreach (double f in new[] { 0.0, 0.25, 0.5, 0.75 })
+            foreach (double f in new[] { 0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875 })
             {
                 var p = c.PointAt(c.T0 + (c.T1 - c.T0) * f);
                 var uv = ProjectToUV(p);
-                if ((PointAt(uv) - p).Length > Math.Max(1e-7, Tol.Weld)) return false;
+                // ребро — ровно край поверхности (до шума проекции): у ребра-приближения (линия пересечения с допуском) поток
+                // через край у соседей идёт по ребру, а интеграл по области — по краю поверхности; тело рассогласуется
+                if ((PointAt(uv) - p).Length > 1e-9 * Math.Max(1, p.Length)) return false;
                 bool a = Math.Abs(uv.X - u0) < tu, b = Math.Abs(uv.X - u1) < tu, cc = Math.Abs(uv.Y - v0) < tv, d = Math.Abs(uv.Y - v1) < tv;
                 if (!a && !b && !cc && !d) return false;
                 if (f == 0.5) { su0 |= a; su1 |= b; sv0 |= cc; sv1 |= d; }
