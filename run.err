@@ -1,0 +1,2 @@
+exit 1
+seconds 157 nproc 4 env P3D_QUADRICNURBS=0 cmd cut181
