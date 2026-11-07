@@ -153,6 +153,25 @@ public sealed class NumericSketchSolver : ISketchSolver
         // 9 с. Связь переменных определяется по самим невязкам (сдвиг переменной — какие
         // невязки изменились), и каждая связная часть решается отдельно.
         var comps = Components(vars, residuals);
+        // k179 (замечание 07.11, п. 8): НЕВЯЗКИ ОДНОЙ ЗАКРЕПЛЁННОЙ ГЕОМЕТРИИ — ДАННОСТЬ. Невязка, не зависящая ни от одной
+        // переменной (дуга шестерни: все её точки закреплены, концы на радиусах, различающихся на 1e-5 мм от замыкания венца),
+        // решателем не меняется; прежде она шла в оценку и эскиз объявлялся противоречивым («Inconsistent») без единой связи и
+        // без конфликтов в списке. Теперь такие невязки в оценку не идут, если малы (≤ 1e-4 размера эскиза); большие —
+        // по-прежнему противоречие. Мутация P3D_FIXEDRESIDUALS=0.
+        if (!FixedResidualsOff)
+        {
+            var inComp = new HashSet<ResidualFn>(comps.SelectMany(c => c.Fns));
+            var fixedOnly = residuals.Where(r => !inComp.Contains(r)).ToList();
+            if (fixedOnly.Count > 0)
+            {
+                double Lr = 1;
+                foreach (var e in sk.Entities) foreach (var q in e.Handles) Lr = Math.Max(Lr, Math.Max(Math.Abs(q.X), Math.Abs(q.Y)));
+                var buf = new List<double>(); double worst = 0;
+                foreach (var r in fixedOnly) { buf.Clear(); r(buf); foreach (var v in buf) worst = Math.Max(worst, Math.Abs(v)); }
+                if (worst <= 1e-4 * Lr) { residuals = residuals.Where(inComp.Contains).ToList(); Interlocked.Increment(ref FixedResidualsDropped); }
+                if (residuals.Count == 0) { ApplyFreeTargets(vars); dof = vars.Count; return SolveStatus.Underconstrained; }
+            }
+        }
         if (comps.Count > 1)
         {
             dof = 0;
@@ -193,6 +212,10 @@ public sealed class NumericSketchSolver : ISketchSolver
     }
 
     /// <summary>Связные части: переменные и невязки, связанные через общие переменные.</summary>
+    static readonly bool FixedResidualsOff = Environment.GetEnvironmentVariable("P3D_FIXEDRESIDUALS") == "0";
+    /// <summary>k179: решений, в которых малые невязки закреплённой геометрии не шли в оценку (разбор).</summary>
+    public static long FixedResidualsDropped;
+
     private static List<(List<Var> Vars, List<ResidualFn> Fns)> Components(List<Var> vars, List<ResidualFn> fns)
     {
         int n = vars.Count, m = fns.Count;

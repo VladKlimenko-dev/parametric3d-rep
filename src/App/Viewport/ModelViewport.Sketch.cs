@@ -536,6 +536,7 @@ public sealed partial class ModelViewport
         var grid = new List<LineInst>();
         var lines = new List<LineInst>();
         var pts = new List<PointInst>();
+        _ovFill = null;
         AddHandleOverlay(lines, pts);
         AddGizmoOverlay(lines, pts);
         AddOriginOverlay(lines, pts);
@@ -623,8 +624,18 @@ public sealed partial class ModelViewport
             }
             if (ShowFilled)
             {
-                var hc = th.SketchCurve; hc.W = 0.35f;
-                foreach (var (a, b) in Hatch(skd)) lines.Add(Inst(W(a), W(b), hc, 1f, 0));
+                if (SolidFillOff)
+                {
+                    var hc = th.SketchCurve; hc.W = 0.35f;
+                    foreach (var (a, b) in Hatch(skd)) lines.Add(Inst(W(a), W(b), hc, 1f, 0));
+                }
+                else
+                {
+                    // k179 (замечание 07.11, п. 6): СПЛОШНАЯ ЗАЛИВКА замкнутых областей — треугольники (из памяти, пока геометрия
+                    // эскиза та же), а не штрихи: штриховка строила профиль эскиза и сотни линий при каждом движении мыши.
+                    var fc = th.SketchCurve; fc.W = 0.16f;
+                    _ovFill = FillTris(skd); _ovFillColor = fc;
+                }
             }
         }
 
@@ -696,6 +707,47 @@ public sealed partial class ModelViewport
             if (_snap != null) pts.Add(new PointInst { P = W(_snap.P), Color = SceneData.Pack(th.Select), Px = 11, Shape = 1 });
         }
         return (grid, lines, pts);
+    }
+
+    Vector3[]? _ovFill; Vector4 _ovFillColor;
+    public static readonly bool SolidFillOff = Environment.GetEnvironmentVariable("P3D_SOLIDFILL") == "0";
+    readonly System.Runtime.CompilerServices.ConditionalWeakTable<Sketch, FillMemo> _fillMemo = new();
+    sealed class FillMemo { public long Key; public Vector3[] Tris = Array.Empty<Vector3>(); }
+    /// <summary>k179: заливка — треугольников в последнем слое и сколько раз взята из памяти (проверки).</summary>
+    public int FillTriangles => (_ovFill?.Length ?? 0) / 3;
+    public static long FillReused, FillComputed;
+
+    /// <summary>k179: треугольники замкнутых областей эскиза (внешние контуры с их отверстиями), в мире.</summary>
+    Vector3[] FillTris(Sketch sk)
+    {
+        long key = sk.GeometryStamp();
+        var memo = _fillMemo.GetOrCreateValue(sk);
+        if (memo.Key == key && key != 0) { Interlocked.Increment(ref FillReused); return memo.Tris; }
+        Interlocked.Increment(ref FillComputed);
+        var res = new List<Vector3>();
+        try
+        {
+            var prof = sk.ToProfile();
+            var outers = prof.Loops.Where(l => l.IsOuter).Select(l => l.Sample(sk.Plane)).Where(l => l.Count >= 3).ToList();
+            var inners = prof.Loops.Where(l => !l.IsOuter).Select(l => l.Sample(sk.Plane)).Where(l => l.Count >= 3).ToList();
+            static bool Inside(List<Vector2d> poly, Vector2d q)
+            {
+                bool c = false;
+                for (int i = 0, j = poly.Count - 1; i < poly.Count; j = i++)
+                    if ((poly[i].Y > q.Y) != (poly[j].Y > q.Y) && q.X < (poly[j].X - poly[i].X) * (q.Y - poly[i].Y) / (poly[j].Y - poly[i].Y) + poly[i].X) c = !c;
+                return c;
+            }
+            foreach (var o in outers)
+            {
+                var hs = inners.Where(h => Inside(o, h[0]) && !outers.Any(o2 => !ReferenceEquals(o2, o) && Inside(o, o2[0]) && Inside(o2, h[0]))).Select(h => (IReadOnlyList<Vector2d>)h).ToList();
+                var oo = o.Count > 1 && (o[0] - o[^1]).Length < 1e-12 ? o.Take(o.Count - 1).ToList() : o;
+                var idx = Kernel.Tess.Triangulator.Triangulate(oo, hs.Select(h => (IReadOnlyList<Vector2d>)(h.Count > 1 && (h[0] - h[^1]).Length < 1e-12 ? h.Take(h.Count - 1).ToList() : h)).ToList(), out var p2);
+                foreach (int k in idx) res.Add(V3(sk.Plane.ToWorld(p2[k])));
+            }
+        }
+        catch { }
+        memo.Key = key; memo.Tris = res.ToArray();
+        return memo.Tris;
     }
 
     /// <summary>Штриховка замкнутых областей эскиза под 45° (чёт-нечет по всем контурам профиля).</summary>

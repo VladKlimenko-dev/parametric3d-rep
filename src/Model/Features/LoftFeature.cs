@@ -26,6 +26,8 @@ public sealed class LoftFeature : Feature
     public readonly List<uint> GuideSketchIds = new();
     /// <summary>k177: направляющие — опорные кривые и трёхмерные линии (DatumCurve, Line3DItem).</summary>
     public readonly List<uint> GuideCurveIds = new();
+    /// <summary>k179: направляющая ведёт только своё ребро (прежнее); иначе — все рёбра контура.</summary>
+    public bool GuideEdgeOnly;
 
     /// <summary>KRN-07 (07.4): касательная к нормали первого / последнего сечения (длина — доля расстояния между центрами
     /// крайних сечений; 0 — без условия).</summary>
@@ -76,7 +78,8 @@ public sealed class LoftFeature : Feature
         if (GuideCurveIds.Count > 0) (guides ??= new()).AddRange(GuideCurves.Of(ctx.Part, GuideCurveIds, Name));
         double t0 = StartTangent, t1 = EndTangent;
         if (guides is { Count: > 0 } && (Math.Abs(t0) > 1e-12 || Math.Abs(t1) > 1e-12)) { ctx.Warnings.Add($"{Name}: end-section tangency is ignored with guide curves (the guides set the direction)."); t0 = t1 = 0; }
-        var solid = LoftOp.Build(sections, Math.Clamp(Samples, 8, 512), Smooth, guides, t0, t1);
+        var solid = LoftOp.Build(sections, Math.Clamp(Samples, 8, 512), Smooth, guides, t0, t1, guideAll: !GuideEdgeOnly);
+        if (LoftOp.LastNote is { } note) { ctx.Warnings.Add($"{Name}: {note}."); LoftOp.LastNote = null; }
 
         if (Cut) BooleanOp.Subtract(ctx.Bodies, solid, ctx.Warnings);
         else BooleanOp.Unite(ctx.Bodies, solid, ctx.Warnings);

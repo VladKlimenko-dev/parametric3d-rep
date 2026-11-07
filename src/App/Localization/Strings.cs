@@ -1392,6 +1392,8 @@ public static class Strings
         ["От ребра или плоскости 1"] = "From edge or plane 1",
         ["От ребра или плоскости 2"] = "From edge or plane 2",
         ["Расчёт закончен. Сохраните файл (Ctrl+S) — следующее открытие будет без перестроения."] = "The rebuild has finished. Save the file (Ctrl+S) — the next opening will be instant.",
+        ["Направляющая ведёт все рёбра"] = "Guide drives all edges",
+        ["Включено — у рёбер без своей направляющей форма ближайшей направляющей, перенесённая к ним (весь контур изгибается одинаково). Выключено — направляющая ведёт только своё ребро, остальные рёбра — прямые."] = "On — edges without a guide of their own follow the nearest guide carried over to them (the whole contour bends alike). Off — a guide drives only its own edge, the other edges are straight.",
         ["Обновлено компонентов из изменённых файлов: {0}"] = "Components updated from changed files: {0}",
         ["Размеры модели — только у чертежа детали"] = "Model dimensions — only in a part drawing",
         ["Перенесено размеров эскизов: {0}"] = "Sketch dimensions transferred: {0}",

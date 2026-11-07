@@ -26,6 +26,37 @@ public abstract class ModelItem
     public readonly uint Id = Ids.New();
     public abstract ItemKind Kind { get; }
 
+    /// <summary>
+    /// k179: ПОРЯДОК СОЗДАНИЯ — номер по времени создания элемента (растёт; в файле — свой, при чтении — прежний). Порядок
+    /// операций и видимость в правке эскиза — по нему, а не по месту в дереве: операция, созданная позже, может включать
+    /// эскизы, созданные раньше, и стоять в дереве выше элемента, созданного до неё.
+    /// </summary>
+    public long Seq { get; private set; } = Interlocked.Increment(ref _seqCounter);
+    static long _seqCounter;
+    /// <summary>k179: элемент создан сейчас (вставка копии) — новый номер порядка.</summary>
+    public void RenewSeq() => Seq = Interlocked.Increment(ref _seqCounter);
+    /// <summary>Порядок из файла (номер, прочитанный при открытии); счётчик — не ниже него.</summary>
+    public void RestoreSeq(long seq)
+    {
+        if (seq <= 0) return;
+        Seq = seq;
+        long cur;
+        while ((cur = Interlocked.Read(ref _seqCounter)) < seq && Interlocked.CompareExchange(ref _seqCounter, seq, cur) != cur) { }
+    }
+    /// <summary>Создан позже other (у элементов одной детали). Мутация P3D_CREATIONORDER=0 — по месту в дереве (k178).</summary>
+    public bool CreatedAfter(ModelItem other)
+    {
+        if (ReferenceEquals(this, other)) return false;
+        if (CreationOrderOff)
+        {
+            if (Parent is not ModelItem p || !ReferenceEquals(p, other.Parent)) return false;
+            int a = p.Children.IndexOf(this), b = p.Children.IndexOf(other);
+            return a >= 0 && b >= 0 && a > b;
+        }
+        return Seq > other.Seq;
+    }
+    public static readonly bool CreationOrderOff = Environment.GetEnvironmentVariable("P3D_CREATIONORDER") == "0";
+
     public string Name = "item";
     public ModelItem? Parent;
     public readonly List<ModelItem> Children = new();

@@ -213,6 +213,8 @@ public sealed class BlendOp : FeatureOp<BlendFeature>
         p.Segments("Тело", new[] { "Добавить", "Вырезать" }, () => F.Cut ? 1 : 0, v => F.Cut = v == 1);
         p.Check("Гладкий переход", () => F.Smooth, v => F.Smooth = v, visible: () => Mode == BlendKind.Sections,
                 tip: "Включено — одна плавная поверхность через все сечения. Выключено — прямые между соседними сечениями.");
+        p.Check("Направляющая ведёт все рёбра", () => !F.GuideEdgeOnly, v => F.GuideEdgeOnly = !v, enabled: () => _guides.IsSet || F.GuideSketchIds.Count + F.GuideCurveIds.Count > 0, visible: () => Mode == BlendKind.Sections,
+                tip: "Включено — у рёбер без своей направляющей форма ближайшей направляющей, перенесённая к ним (весь контур изгибается одинаково). Выключено — направляющая ведёт только своё ребро, остальные рёбра — прямые.");
         p.Check("По нормалям крайних сечений", () => Math.Abs(F.StartTangent) > 1e-12 || Math.Abs(F.EndTangent) > 1e-12,
                 v => { F.StartTangent = F.EndTangent = v ? LoftOp.NormalTangent : 0; if (v) F.Smooth = true; }, enabled: () => !_guides.IsSet && F.GuideSketchIds.Count + F.GuideCurveIds.Count == 0, visible: () => Mode == BlendKind.Sections,
                 tip: "Переход выходит из первого сечения и входит в последнее перпендикулярно плоскостям их эскизов. С направляющими не сочетается.");

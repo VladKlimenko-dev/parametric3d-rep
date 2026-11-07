@@ -382,14 +382,16 @@ public sealed class Sketch : ModelItem
     public bool IsParallelTo(Sketch other) => !ReferenceEquals(this, other) && Math.Abs(OpenTK.Mathematics.Vector3d.Dot(Plane.W.Normalized(), other.Plane.W.Normalized())) > 1 - 1e-6;
     public static readonly bool ParallelGhostOff = Environment.GetEnvironmentVariable("P3D_SKGHOST") == "0";
     /// <summary>
-    /// k178: эскиз стоит в дереве ПОСЛЕ other (у той же детали). В правке эскиза более поздние эскизы не показываются и не
-    /// ловятся: при правке Sketch1 точки Sketch2 (созданного позже) были видны как ссылка. Мутация P3D_SKLATERHIDE=0.
+    /// k178/k179: элемент создан ПОСЛЕ other (порядок создания, не место в дереве). В правке эскиза созданные позже эскизы,
+    /// опорные кривые, линии, оси, точки и системы координат не показываются и не ловятся. Мутация P3D_SKLATERHIDE=0.
     /// </summary>
-    public bool IsAfter(Sketch other)
+    public bool IsAfter(ModelItem other) => !LaterHideOff && CreatedAfter(other);
+    /// <summary>k179: в правке этого эскиза элемент c не показывается (создан позже; стандартные плоскости и начало — всегда видны).</summary>
+    public bool HidesLater(ModelItem c)
     {
-        if (LaterHideOff || ReferenceEquals(this, other) || Parent is not ModelItem p || !ReferenceEquals(p, other.Parent)) return false;
-        int a = p.Children.IndexOf(this), b = p.Children.IndexOf(other);
-        return a >= 0 && b >= 0 && a > b;
+        if (LaterHideOff || ReferenceEquals(c, this) || c is Part or Assembly or Features.Feature) return false;
+        if (Parent is Part pp && (ReferenceEquals(c, pp.Origin) || ReferenceEquals(c, pp.PlaneXY) || ReferenceEquals(c, pp.PlaneXZ) || ReferenceEquals(c, pp.PlaneYZ))) return false;
+        return c is Sketch or DatumCurve or Line3DItem or DatumAxis or DatumPoint or DatumCsys or DatumPlane && c.CreatedAfter(this);
     }
     public static readonly bool LaterHideOff = Environment.GetEnvironmentVariable("P3D_SKLATERHIDE") == "0";
 
@@ -839,6 +841,12 @@ public sealed class Sketch : ModelItem
     /// <summary>Плоские ломаные всех элементов (для рендера).</summary>
     public IEnumerable<(SkEntity Entity, List<Vector2d> Pts, bool Closed)> Polylines()
     {
+        // k179 (замечание 07.11, п. 6): ломаные — из памяти, пока геометрия эскиза та же (отпечаток): вид, выбор под курсором и
+        // слой поверх вида звали разбиение всех кривых (у шестерни — 140 кривых двух эскизов) при каждом движении мыши.
+        // Мутация P3D_POLYMEMO=0.
+        long key = PolyMemoOff ? 0 : GeometryStamp();
+        if (!PolyMemoOff && _polyMemo != null && _polyKey == key && SameEntities(_polyMemo)) { Interlocked.Increment(ref PolylinesReused); return _polyMemo; }
+        var res = new List<(SkEntity, List<Vector2d>, bool)>();
         foreach (var e in Entities)
         {
             if (e is SkPoint) continue;
@@ -847,9 +855,55 @@ public sealed class Sketch : ModelItem
             if (pts.Count < 2) continue;
             bool closed = e is SkCircle || (e is SkEllipse el && Math.Abs(el.A1 - el.A0 - Math.PI * 2) < 1e-9);
             if (closed && pts.Count > 1) pts.RemoveAt(pts.Count - 1);
-            yield return (e, pts, closed);
+            res.Add((e, pts, closed));
+        }
+        if (!PolyMemoOff) { _polyMemo = res; _polyKey = key; }
+        return res;
+    }
+    List<(SkEntity, List<Vector2d>, bool)>? _polyMemo; long _polyKey;
+    /// <summary>Память — о тех же объектах (отмена правки возвращает элементы новыми объектами с прежними номерами).</summary>
+    bool SameEntities(List<(SkEntity E, List<Vector2d>, bool)> memo)
+    {
+        int i = 0;
+        foreach (var e in Entities)
+        {
+            if (e is SkPoint) continue;
+            // элемент без ломаной (меньше двух точек) в памяти не записан — сравнение по порядку тех, что записаны
+            if (i < memo.Count && ReferenceEquals(memo[i].E, e)) { i++; continue; }
+            var t = new List<Vector2d>(); e.Tessellate(t, true); if (t.Count < 2) continue;
+            return false;
+        }
+        return i == memo.Count;
+    }
+    static readonly bool PolyMemoOff = Environment.GetEnvironmentVariable("P3D_POLYMEMO") == "0";
+    /// <summary>k179: ломаных, взятых из памяти (разбор).</summary>
+    public static long PolylinesReused;
+
+    /// <summary>
+    /// k178/k179: ОТПЕЧАТОК ГЕОМЕТРИИ ЭСКИЗА — состав, роли, положения точек, радиусы и совпадения. Тот же отпечаток — та же
+    /// геометрия (признаки ошибок, ломаные, заливка берутся из памяти).
+    /// </summary>
+    public long GeometryStamp()
+    {
+        unchecked
+        {
+            long h = StructureVersion * 1000003L + Entities.Count;
+            foreach (var e in Entities)
+            {
+                h = h * 31 + (int)e.Role + e.Id + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(e) * 7L;   // тот же объект (отмена возвращает новые)
+                switch (e)
+                {
+                    case SkCircle c: h = h * 31 + BitConverter.DoubleToInt64Bits(c.Radius); break;
+                    case SkEllipse el: h = h * 31 + BitConverter.DoubleToInt64Bits(el.RU) * 3 + BitConverter.DoubleToInt64Bits(el.RV) * 5 + BitConverter.DoubleToInt64Bits(el.Rotation) + BitConverter.DoubleToInt64Bits(el.A0) * 7 + BitConverter.DoubleToInt64Bits(el.A1) * 11; break;
+                    case SkArc a: h = h * 31 + (a.CCW ? 1 : 2); break;
+                }
+                foreach (var q in e.Handles) h = h * 1000033L + BitConverter.DoubleToInt64Bits(q.X) * 17 + BitConverter.DoubleToInt64Bits(q.Y);
+            }
+            foreach (var c in Constraints) if (c.Type == ConstraintType.Coincident) h = h * 31 + (c.Enabled ? 3 : 5) + c.Items.Sum(x => (long)x.Id);
+            return h;
         }
     }
+
 
     /// <summary>Плоский профиль для ядра: только элементы роли Object.</summary>
     public Profile ToProfile()
