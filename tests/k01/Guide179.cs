@@ -93,6 +93,9 @@ static partial class Program
                 for (int k = 1; k < 10; k++) ws = Math.Max(ws, EdgeDist(ps, RotZ(gs, 2 * Math.PI * k / 10)));
                 rep.Add(new { test = "scaled gear", error = bs.Error, volume = ps.Volume, warnings = ps.Warnings.Where(x => x.Contains("guide")).ToList(), offRotatedGuides = ws });
                 if (bs.Error != null || ps.Bodies.Count != 1) problems.Add($"scaled gear blend: {bs.Error}");
+                // k179: поверхность подобия — все рёбра, без запасного пути: кривая вершины k-го зуба — направляющая, повёрнутая
+                // на 36°·k (сечения подобны)
+                else if (!(ws < 1e-6) || ps.Warnings.Any(x => x.Contains("could not drive all edges"))) problems.Add($"scaled gear: the other edges do not follow the guide ({ws:E2}); {string.Join(" | ", ps.Warnings)}");
             }
             // 2. отверстие при направляющей
             var (ph, _, _, _, bh) = Make(hole: 10);

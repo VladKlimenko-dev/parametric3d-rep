@@ -69,6 +69,9 @@ public static partial class DirectRound
     /// <summary>k179: направляющих, перенесённых к вершинам без своей (разбор).</summary>
     public static long GuideAllSynth;
     static readonly bool GuideAllOff = Environment.GetEnvironmentVariable("P3D_GUIDEALL") == "0";
+    static readonly bool SimGuideOff = Environment.GetEnvironmentVariable("P3D_SIMGUIDE") == "0";
+    /// <summary>k179: лофтов поверхностью подобия по направляющей (разбор).</summary>
+    public static long SimGuideLofts;
 
     /// <summary>
     /// KRN-07 (07.4): ТОЧНЫЙ ЛОФТ ПО ОТРЕЗКАМ И ДУГАМ. Каждое сечение — замкнутый контур из N отрезков и дуг (у всех сечений N
@@ -256,6 +259,7 @@ public static partial class DirectRound
         // обязаны соединять вершины с одним номером
         int G = G4?.Count ?? 0;
         var gt = new double[G, S]; var guideAt = Enumerable.Repeat(-1, N).ToArray();
+        bool simGuide = false;
         if (G4 != null)
         {
             var gv = new int[G, S];
@@ -296,7 +300,10 @@ public static partial class DirectRound
             // поперечная — повёрнута вокруг оси на угол между вершинами и масштабирована отношением их расстояний до оси.
             // Отображение аффинное — Gj того же вида и с теми же границами кусков (точно, общий узловой вектор). Два сечения.
             // Мутация P3D_GUIDEALL=0 — только свои рёбра (прежнее).
-            if (guideAll && !GuideAllOff && S == 2 && guideAt.Any(x => x < 0))
+            // k179: одна направляющая, два сечения, направляющая — многочлен: точная поверхность ПОДОБИЯ (SimilarityFaces) вместо
+            // перенесённых направляющих и Кунса (у сечений, повёрнутых и разного размера, Кунс складывался внутри грани)
+            simGuide = guideAll && !GuideAllOff && !SimGuideOff && S == 2 && G == 1 && guideAt.Any(x => x < 0) && G4[0].P.All(q => q.All(x => Math.Abs(x.W - 1) < 1e-15));
+            if (guideAll && !GuideAllOff && !simGuide && S == 2 && guideAt.Any(x => x < 0))
             {
                 var ax = run; var C0 = cent[0]; var C1 = cent[S - 1];
                 Vector3d Perp(Vector3d v) => v - ax * Vector3d.Dot(v, ax);
@@ -564,9 +571,135 @@ public static partial class DirectRound
         // S = (1−v)·C_k(u) + v·C_{k+1}(u) + (1−u)·G_j(v) + u·G_{j+1}(v) − билинейная по углам. Члены (1−v), (1−u) — точно в
         // базисах (коэффициенты Бернштейна 1 − b/n и абсциссы Гревиля узлового вектора по u), сеть опорных точек — сумма.
         // Края: v = 0, 1 — сечения, u = 0, 1 — куски направляющих (угловые точки с весом 1, поэтому в проекции — ровно они).
+        // k179: ПОВЕРХНОСТЬ ПОДОБИЯ ПО НАПРАВЛЯЮЩЕЙ. Поперечная часть точки сечения — комплексное число в плоскости, перпендикулярной
+        // оси лофта (ось — через центры сечений); направляющая задаёт подобие z(t) = G⊥(t) / A⊥ (поворот и масштаб — многочлен
+        // по t, как сама направляющая). Точка поверхности: X⊥(u, t) = z(t)·[(1 − t)·P0⊥(u) + t·P1⊥(u) / z(1)], по оси —
+        // (1 − t)·h0(u) + t·h1(u) + отход направляющей от хорды по оси. На концах — ровно сечения; у вершины направляющей —
+        // ровно направляющая; у прочих вершин — направляющая, повёрнутая и масштабированная (у подобных сечений промежуточное
+        // сечение — подобная копия: грань не складывается). Многочлен по t степени направляющей + 1 (точно), веса сечений —
+        // одинаковые у обоих (иначе — отказ, запасной путь — свои рёбра). Мутация P3D_SIMGUIDE=0 — перенесённые направляющие.
+        bool SimilarityFaces(out string? gw)
+        {
+            gw = null;
+            var ax = run; var C0 = cent[0];
+            var e1 = Vector3d.Cross(ax, Math.Abs(ax.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY).Normalized(); var e2 = Vector3d.Cross(ax, e1);
+            (double Re, double Im) Cx(Vector3d v) { var d = v - C0; return (Vector3d.Dot(d, e1), Vector3d.Dot(d, e2)); }
+            double Axl(Vector3d v) => Vector3d.Dot(v - C0, ax);
+            static (double, double) Mul((double Re, double Im) a, (double Re, double Im) b) => (a.Re * b.Re - a.Im * b.Im, a.Re * b.Im + a.Im * b.Re);
+            static (double, double) Div((double Re, double Im) a, (double Re, double Im) b) { double d = b.Re * b.Re + b.Im * b.Im; return ((a.Re * b.Re + a.Im * b.Im) / d, (a.Im * b.Re - a.Re * b.Im) / d); }
+            int jg = Array.IndexOf(guideAt, 0);
+            var Av = Start(loops[0][jg]); var Bv = Start(loops[1][jg]);
+            var aP = Cx(Av);
+            if (Math.Sqrt(aP.Re * aP.Re + aP.Im * aP.Im) < 1e-6 * Math.Max(1, (cent[1] - cent[0]).Length)) { gw = "loft: the guide runs along the loft axis"; return false; }
+            var z1 = Div(Cx(Bv), aP);
+            if (Math.Sqrt(z1.Item1 * z1.Item1 + z1.Item2 * z1.Item2) < 1e-9) { gw = "loft: the guide ends on the loft axis"; return false; }
+            double aAx = Axl(Av), bAx = Axl(Bv);
+            // столбцы сечений: однородные (wX, w); веса у сечений — одинаковые
+            var w0 = new double[nu]; var q0 = new (double, double)[nu]; var q1 = new (double, double)[nu]; var h0 = new double[nu]; var h1 = new double[nu];
+            for (int a = 0; a < nu; a++)
+            {
+                double wa = H[0, a].W, wb = H[1, a].W;
+                if (Math.Abs(wa - wb) > 1e-12 * Math.Max(1, Math.Abs(wa))) { gw = "loft: the section weights differ (similarity guide)"; return false; }
+                var X0 = H[0, a].Xyz / wa; var X1 = H[1, a].Xyz / wb;
+                w0[a] = wa; q0[a] = Cx(X0); q1[a] = Div(Cx(X1), z1); h0[a] = Axl(X0); h1[a] = Axl(X1);
+            }
+            var g = G4![0];
+            int nI = g.Count;
+            int Dg = g.P.Max(q => q.Length - 1), Dv = Dg + 1;
+            var pcs = g.P.Select(q => { while (q.Length - 1 < Dg) q = ElevateG(q); return q; }).ToList();
+            static double Bn(int n, int k) { double r = 1; for (int i = 1; i <= k; i++) r = r * (n - k + i) / i; return r; }
+            // опорные точки поверхности: [кусок][столбец, строка]
+            var net = new Vector3d[nI][,];
+            for (int m = 0; m < nI; m++)
+            {
+                double b0 = g.B[m], b1 = g.B[m + 1];
+                var zc = new (double, double)[Dg + 1]; var dax = new double[Dg + 1];
+                for (int k = 0; k <= Dg; k++)
+                {
+                    var P = pcs[m][k].Xyz / pcs[m][k].W;
+                    zc[k] = Div(Cx(P), aP);
+                    double tk = b0 + (b1 - b0) * k / Dg;
+                    dax[k] = Axl(P) - ((1 - tk) * aAx + tk * bAx);
+                }
+                // отход по оси — степень Dg → Dv
+                var daxE = new double[Dv + 1]; daxE[0] = dax[0]; daxE[Dv] = dax[Dg];
+                for (int r = 1; r < Dv; r++) { double al = (double)r / Dv; daxE[r] = dax[r - 1] * al + dax[r] * (1 - al); }
+                var cp = new Vector3d[nu, Dv + 1];
+                for (int a = 0; a < nu; a++)
+                {
+                    (double, double) Ql(double t) => ((1 - t) * q0[a].Item1 + t * q1[a].Item1, (1 - t) * q0[a].Item2 + t * q1[a].Item2);
+                    var QA = Ql(b0); var QB = Ql(b1);
+                    double HA = (1 - b0) * h0[a] + b0 * h1[a], HB = (1 - b1) * h0[a] + b1 * h1[a];
+                    for (int r = 0; r <= Dv; r++)
+                    {
+                        (double Re, double Im) pr = (0, 0);
+                        for (int l = 0; l <= 1; l++)
+                        {
+                            int k = r - l; if (k < 0 || k > Dg) continue;
+                            double c = Bn(Dg, k) * Bn(1, l) / Bn(Dv, r);
+                            var t2 = Mul(zc[k], l == 0 ? QA : QB);
+                            pr = (pr.Re + c * t2.Item1, pr.Im + c * t2.Item2);
+                        }
+                        double hx = HA + (HB - HA) * r / Dv + daxE[r];
+                        cp[a, r] = C0 + ax * hx + e1 * pr.Re + e2 * pr.Im;
+                    }
+                }
+                net[m] = cp;
+            }
+            // рёбра: столбцы у вершин (общие соседним граням), изолинии на стыках кусков (общие кускам звена)
+            var colCurve = new Dictionary<(int, int), ICurve3>();
+            ICurve3 Col(int jj, int m)
+            {
+                jj %= N;
+                if (colCurve.TryGetValue((jj, m), out var c)) return c;
+                int a = colStart[jj];
+                var pts = Enumerable.Range(0, Dv + 1).Select(r => net[m][a, r]).ToList();
+                if (m == 0) pts[0] = Start(loops[0][jj]);
+                if (m == nI - 1) pts[^1] = Start(loops[1][jj]);
+                return colCurve[(jj, m)] = new BezierCurve3(pts);
+            }
+            for (int j = 0; j < N; j++)
+            {
+                int c0 = colStart[j], cn = D * K[j] + 1;
+                var ku = new double[cn + D + 1];
+                for (int i = 0; i <= D; i++) { ku[i] = 0; ku[cn + i] = 1; }
+                for (int p = 1; p < K[j]; p++) for (int i = 0; i < D; i++) ku[D * p + 1 + i] = (double)p / K[j];
+                var lo = loops[0][j]; var hi = loops[1][j];
+                var iso = new ICurve3?[nI + 1]; iso[0] = lo; iso[nI] = hi;
+                for (int m = 1; m < nI; m++)
+                {
+                    var ip = Enumerable.Range(0, cn).Select(a => net[m][c0 + a, 0]).ToList();
+                    var iw = Enumerable.Range(0, cn).Select(a => w0[c0 + a]).ToList();
+                    iso[m] = new SplineCurve3(ip, D, iw.All(x => Math.Abs(x - 1) < 1e-15) ? null : iw, ku);
+                }
+                for (int m = 0; m < nI; m++)
+                {
+                    var scp = new Vector3d[cn, Dv + 1]; var sw = new double[cn, Dv + 1];
+                    for (int a = 0; a < cn; a++) for (int r = 0; r <= Dv; r++) { scp[a, r] = net[m][c0 + a, r]; sw[a, r] = w0[c0 + a]; }
+                    var kb = new double[2 * Dv + 2]; for (int i = 0; i <= Dv; i++) { kb[i] = 0; kb[Dv + 1 + i] = 1; }
+                    var ns = new NurbsSurface(scp, D, Dv, sw, ku, kb);
+                    Vector3d A0 = m == 0 ? Start(lo) : net[m][c0, 0], B0 = m == 0 ? End(lo) : net[m][c0 + cn - 1, 0];
+                    Vector3d A1 = m == nI - 1 ? Start(hi) : net[m][c0, Dv], B1 = m == nI - 1 ? End(hi) : net[m][c0 + cn - 1, Dv];
+                    var loop = new List<Seg>
+                    {
+                        new() { Curve = iso[m]!, A = A0, B = B0 },
+                        new() { Curve = Col(j + 1, m), A = B0, B = B1 },
+                        new() { Curve = iso[m + 1]!, A = B1, B = A1 },
+                        new() { Curve = Col(j, m), A = A1, B = A0 },
+                    };
+                    var fd = new FDesc { Surf = ns, Rev = false, Tag = $"loft:side[{j}]" + (nI > 1 ? $"/{m}" : ""), Touched = true, Hint = ns.PointAt(new Vector2d(0.5, 0.5)) };
+                    fd.Loops.Add(loop);
+                    faces.Add(fd);
+                }
+            }
+            Interlocked.Increment(ref SimGuideLofts);
+            return true;
+        }
+
         bool GuidedFaces(out string? gw)
         {
             gw = null;
+            if (simGuide) return SimilarityFaces(out gw);
             // k178: сторона грани — один кусок или несколько (направляющая-сплайн); по v — общее разбиение двух сторон
             var sideG = new Dictionary<(int, int), (ICurve3 C, List<Vector4d[]> Q, double[] B)>();
             (ICurve3 C, List<Vector4d[]> Q, double[] B) SideG(int j, int span)

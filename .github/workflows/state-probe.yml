@@ -53,7 +53,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: g179_dump, cmd: 'guidedump OUT', env: 'P3D_GUIDEALLFALLBACK=0' }
+          - { name: g179s_guide, cmd: 'guide179', env: '' }
+          - { name: g179s_curve, cmd: 'curve177', env: '' }
+          - { name: g179s_user, cmd: 'userfile179 tests/ui/data/user_k179_gear.p3d', env: '' }
+          - { name: g179s_lg, cmd: 'loftguides', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
