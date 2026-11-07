@@ -594,22 +594,23 @@ public static partial class DirectRound
             var z1 = Div(Cx(Bv), aP);
             if (Math.Sqrt(z1.Item1 * z1.Item1 + z1.Item2 * z1.Item2) < 1e-9) { gw = "loft: the guide ends on the loft axis"; return false; }
             double aAx = Axl(Av), bAx = Axl(Bv);
-            // столбцы сечений: однородные (wX, w); веса у сечений — одинаковые
-            var w0 = new double[nu]; var q0 = new (double, double)[nu]; var q1 = new (double, double)[nu]; var h0 = new double[nu]; var h1 = new double[nu];
+            // столбцы сечений: однородные (wX, w); веса сечений могут различаться — смесь однородная (точно)
+            var wA = new double[nu]; var wB = new double[nu]; var q0 = new (double, double)[nu]; var q1 = new (double, double)[nu]; var h0 = new double[nu]; var h1 = new double[nu];
             for (int a = 0; a < nu; a++)
             {
                 double wa = H[0, a].W, wb = H[1, a].W;
-                if (Math.Abs(wa - wb) > 1e-12 * Math.Max(1, Math.Abs(wa))) { gw = "loft: the section weights differ (similarity guide)"; return false; }
+                if (!(wa > 0) || !(wb > 0)) { gw = "loft: a non-positive section weight (similarity guide)"; return false; }
                 var X0 = H[0, a].Xyz / wa; var X1 = H[1, a].Xyz / wb;
-                w0[a] = wa; q0[a] = Cx(X0); q1[a] = Div(Cx(X1), z1); h0[a] = Axl(X0); h1[a] = Axl(X1);
+                var c0q = Cx(X0); var c1q = Div(Cx(X1), z1);
+                wA[a] = wa; wB[a] = wb; q0[a] = (c0q.Item1 * wa, c0q.Item2 * wa); q1[a] = (c1q.Item1 * wb, c1q.Item2 * wb); h0[a] = Axl(X0) * wa; h1[a] = Axl(X1) * wb;
             }
             var g = G4![0];
             int nI = g.Count;
             int Dg = g.P.Max(q => q.Length - 1), Dv = Dg + 1;
             var pcs = g.P.Select(q => { while (q.Length - 1 < Dg) q = ElevateG(q); return q; }).ToList();
             static double Bn(int n, int k) { double r = 1; for (int i = 1; i <= k; i++) r = r * (n - k + i) / i; return r; }
-            // опорные точки поверхности: [кусок][столбец, строка]
-            var net = new Vector3d[nI][,];
+            // опорные точки и веса поверхности: [кусок][столбец, строка]
+            var net = new Vector3d[nI][,]; var netW = new double[nI][,];
             for (int m = 0; m < nI; m++)
             {
                 double b0 = g.B[m], b1 = g.B[m + 1];
@@ -621,30 +622,31 @@ public static partial class DirectRound
                     double tk = b0 + (b1 - b0) * k / Dg;
                     dax[k] = Axl(P) - ((1 - tk) * aAx + tk * bAx);
                 }
-                // отход по оси — степень Dg → Dv
-                var daxE = new double[Dv + 1]; daxE[0] = dax[0]; daxE[Dv] = dax[Dg];
-                for (int r = 1; r < Dv; r++) { double al = (double)r / Dv; daxE[r] = dax[r - 1] * al + dax[r] * (1 - al); }
-                var cp = new Vector3d[nu, Dv + 1];
+                var cp = new Vector3d[nu, Dv + 1]; var cw = new double[nu, Dv + 1];
                 for (int a = 0; a < nu; a++)
                 {
                     (double, double) Ql(double t) => ((1 - t) * q0[a].Item1 + t * q1[a].Item1, (1 - t) * q0[a].Item2 + t * q1[a].Item2);
                     var QA = Ql(b0); var QB = Ql(b1);
                     double HA = (1 - b0) * h0[a] + b0 * h1[a], HB = (1 - b1) * h0[a] + b1 * h1[a];
+                    double WA = (1 - b0) * wA[a] + b0 * wB[a], WB = (1 - b1) * wA[a] + b1 * wB[a];
                     for (int r = 0; r <= Dv; r++)
                     {
-                        (double Re, double Im) pr = (0, 0);
+                        (double Re, double Im) pr = (0, 0); double wd = 0;
                         for (int l = 0; l <= 1; l++)
                         {
                             int k = r - l; if (k < 0 || k > Dg) continue;
                             double c = Bn(Dg, k) * Bn(1, l) / Bn(Dv, r);
                             var t2 = Mul(zc[k], l == 0 ? QA : QB);
                             pr = (pr.Re + c * t2.Item1, pr.Im + c * t2.Item2);
+                            wd += c * dax[k] * (l == 0 ? WA : WB);
                         }
-                        double hx = HA + (HB - HA) * r / Dv + daxE[r];
-                        cp[a, r] = C0 + ax * hx + e1 * pr.Re + e2 * pr.Im;
+                        double wr = WA + (WB - WA) * r / Dv;
+                        double hx = HA + (HB - HA) * r / Dv + wd;
+                        cp[a, r] = C0 + ax * (hx / wr) + e1 * (pr.Re / wr) + e2 * (pr.Im / wr);
+                        cw[a, r] = wr;
                     }
                 }
-                net[m] = cp;
+                net[m] = cp; netW[m] = cw;
             }
             // рёбра: столбцы у вершин (общие соседним граням), изолинии на стыках кусков (общие кускам звена)
             var colCurve = new Dictionary<(int, int), ICurve3>();
@@ -654,9 +656,11 @@ public static partial class DirectRound
                 if (colCurve.TryGetValue((jj, m), out var c)) return c;
                 int a = colStart[jj];
                 var pts = Enumerable.Range(0, Dv + 1).Select(r => net[m][a, r]).ToList();
+                var ws = Enumerable.Range(0, Dv + 1).Select(r => netW[m][a, r]).ToList();
                 if (m == 0) pts[0] = Start(loops[0][jj]);
                 if (m == nI - 1) pts[^1] = Start(loops[1][jj]);
-                return colCurve[(jj, m)] = new BezierCurve3(pts);
+                if (ws.All(x => Math.Abs(x - 1) < 1e-15)) return colCurve[(jj, m)] = new BezierCurve3(pts);
+                return colCurve[(jj, m)] = new SplineCurve3(pts, Dv, ws, Enumerable.Repeat(0.0, Dv + 1).Concat(Enumerable.Repeat(1.0, Dv + 1)).ToList());
             }
             for (int j = 0; j < N; j++)
             {
@@ -669,13 +673,13 @@ public static partial class DirectRound
                 for (int m = 1; m < nI; m++)
                 {
                     var ip = Enumerable.Range(0, cn).Select(a => net[m][c0 + a, 0]).ToList();
-                    var iw = Enumerable.Range(0, cn).Select(a => w0[c0 + a]).ToList();
+                    var iw = Enumerable.Range(0, cn).Select(a => netW[m][c0 + a, 0]).ToList();
                     iso[m] = new SplineCurve3(ip, D, iw.All(x => Math.Abs(x - 1) < 1e-15) ? null : iw, ku);
                 }
                 for (int m = 0; m < nI; m++)
                 {
                     var scp = new Vector3d[cn, Dv + 1]; var sw = new double[cn, Dv + 1];
-                    for (int a = 0; a < cn; a++) for (int r = 0; r <= Dv; r++) { scp[a, r] = net[m][c0 + a, r]; sw[a, r] = w0[c0 + a]; }
+                    for (int a = 0; a < cn; a++) for (int r = 0; r <= Dv; r++) { scp[a, r] = net[m][c0 + a, r]; sw[a, r] = netW[m][c0 + a, r]; }
                     var kb = new double[2 * Dv + 2]; for (int i = 0; i <= Dv; i++) { kb[i] = 0; kb[Dv + 1 + i] = 1; }
                     var ns = new NurbsSurface(scp, D, Dv, sw, ku, kb);
                     Vector3d A0 = m == 0 ? Start(lo) : net[m][c0, 0], B0 = m == 0 ? End(lo) : net[m][c0 + cn - 1, 0];
