@@ -44,9 +44,13 @@ public static class ImportHeal
         try { return (src.PointAt(src.ProjectToUV(p)) - p).Length; } catch { return 0; }
     }
 
-    public static Report Heal(TSolid b, List<string>? warnings, string label)
+    static readonly bool FileAccOff = Environment.GetEnvironmentVariable("P3D_HEALFILEACC") == "0";
+
+    public static Report Heal(TSolid b, List<string>? warnings, string label, double fileAccuracy = 0)
     {
-        double budget = ToleranceContext.Current.ImportHeal;
+        // k182: бюджет — не меньше точности файла (STEP: GLOBAL_UNCERTAINTY; Parasolid: допуски рёбер и вершин), но не больше
+        // 0,01 мм — как OCCT при read.precision.mode = File. Мутация P3D_HEALFILEACC=0 — только общий бюджет.
+        double budget = Math.Max(ToleranceContext.Current.ImportHeal, FileAccOff ? 0 : Math.Min(fileAccuracy, 0.01));
         if (b.TopologyConvention < TopologyConventions.Version) TopologyConventions.Normalize(b);
         bool changed = false;
         // 1. зазоры вершин

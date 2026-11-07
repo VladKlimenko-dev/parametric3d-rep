@@ -55,7 +55,10 @@ public static class XtToStep
         int uLen = c.E("(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.))");
         int uAng = c.E("(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.))");
         int uSol = c.E("(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT())");
-        int unc = c.E($"UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-06),#{uLen},'distance_accuracy_value','')");
+        // точность модели — наибольший допуск рёбер и вершин XT (допусковые элементы Parasolid), мм; не меньше 10⁻⁶ мм
+        double acc = 1e-6;
+        foreach (var n in f.Order) if (n.Name is "EDGE" or "VERTEX" && n.D("tolerance") is double tl && tl > 0 && tl < 1e-3) acc = Math.Max(acc, tl * S);
+        int unc = c.E($"UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE({N(acc)}),#{uLen},'distance_accuracy_value','')");
         int ctx = c.E($"(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#{unc}))GLOBAL_UNIT_ASSIGNED_CONTEXT((#{uLen},#{uAng},#{uSol}))REPRESENTATION_CONTEXT('',''))");
         int origin = c.E($"AXIS2_PLACEMENT_3D('',#{c.Pt(Vector3d.Zero)},#{c.Dir(Vector3d.UnitZ)},#{c.Dir(Vector3d.UnitX)})");
         c.E($"ADVANCED_BREP_SHAPE_REPRESENTATION('{Esc(name)}',(#{origin},{string.Join(",", solids.Select(x => "#" + x))}),#{ctx})");
@@ -495,7 +498,7 @@ public static class XtToStep
             var Pw = new Vector3d[nu, 3]; var W = new double[nu, 3]; var cen = new List<Vector3d>(nu);
             for (int i = 0; i < nu; i++)
             {
-                var c = at(len * i / (nu - 1)); cen.Add(c);
+                var c = bl.OnSpine(at(len * i / (nu - 1))); cen.Add(c);
                 var (pa, pb) = bl.Contacts(c);
                 var ea = pa - c; var eb = pb - c; double r = 0.5 * (ea.Length + eb.Length);
                 Vector3d m; double w;

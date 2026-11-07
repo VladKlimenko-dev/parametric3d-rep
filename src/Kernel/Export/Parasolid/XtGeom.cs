@@ -321,6 +321,8 @@ internal sealed class XtNurbsCurve
 /// <summary>Ломаные кривых: плотная разбивка, уточнение пересечения и обрезка по вершинам ребра.</summary>
 internal static class XtPoly
 {
+    static readonly bool BlendEdgeOff = Environment.GetEnvironmentVariable("P3D_XTBLENDEDGE") == "0";
+
     /// <summary>Сгущение ломаной кривой пересечения двух поверхностей: точки между узлами карты переносятся на обе поверхности
     /// попеременной проекцией (сходится к линии пересечения при пересечении под углом).</summary>
     public static List<Vector3d> Densify(IReadOnlyList<Vector3d> chart, XtSurf? a, XtSurf? b, int per)
@@ -332,6 +334,13 @@ internal static class XtPoly
             for (int k = 1; k < per; k++)
             {
                 var p = Vector3d.Lerp(chart[i], chart[i + 1], (double)k / per);
+                // край скругления: опора касается скругления — попеременная проекция на касающиеся поверхности не сходится;
+                // точка берётся касанием шара с опорой (центр — на обеих смещённых опорах)
+                if (!BlendEdgeOff && (a as XtBlendSurf ?? b as XtBlendSurf) is { } bl && (a is XtBlendSurf ? b : a) is { } other)
+                {
+                    var q = bl.EdgeNear(p);
+                    if ((other.Project(q) - q).Length < 1e-8) { res.Add(q); continue; }
+                }
                 if (a != null && b != null)
                     for (int it = 0; it < 60; it++)
                     {
@@ -521,9 +530,9 @@ internal sealed class XtBlendSurf : XtSurf
         return Vector3d.Lerp(arc[j], arc[j + 1], y - j);
     }
 
-    public override Vector3d Project(Vector3d q)
+    /// <summary>Ближайшая к q точка оси (ломаной центров шара), уточнённая на обе смещённые опоры.</summary>
+    public Vector3d SpineNear(Vector3d q)
     {
-        // ближайшая точка оси, затем ближайшая точка дуги сечения
         int bi = 0; double bt = 0, bd = double.MaxValue;
         for (int i = 0; i + 1 < Spine.Count; i++)
         {
@@ -532,7 +541,22 @@ internal sealed class XtBlendSurf : XtSurf
             double d = (Spine[i] + ab * t - q).LengthSquared;
             if (d < bd) { bd = d; bi = i; bt = t; }
         }
-        var c = Spine[bi] + (Spine[Math.Min(bi + 1, Spine.Count - 1)] - Spine[bi]) * bt;
+        return Spine[bi] + (Spine[Math.Min(bi + 1, Spine.Count - 1)] - Spine[bi]) * bt;
+    }
+
+    /// <summary>Точка края скругления (касания шара с опорой) у q: центр шара — точный (на обеих смещённых опорах) в плоскости
+    /// сечения около q, касание — ближайшее к q из двух.</summary>
+    public Vector3d EdgeNear(Vector3d q)
+    {
+        var c = OnSpine(SpineNear(q));
+        var (a, b) = Contacts(c);
+        return (a - q).LengthSquared <= (b - q).LengthSquared ? a : b;
+    }
+
+    public override Vector3d Project(Vector3d q)
+    {
+        // ближайшая точка оси, затем ближайшая точка дуги сечения
+        var c = SpineNear(q);
         if (R0 < 1e-12 && R1 < 1e-12) return c;
         var arc = Arc(c, 33);
         var best = arc[0]; double bdd = double.MaxValue;
