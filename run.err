@@ -1,0 +1,1 @@
+seconds 6 nproc 4 env P3D_ALLC_SETS=1 P3D_ALLC_ONLY=sweep P3D_TORUSMESHHINT=0 cmd allC

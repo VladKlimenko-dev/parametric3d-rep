@@ -1,0 +1,41 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["allC"]}
+ALLC: 22 operations, 5 cases (sets 1, triples 200, step deadline 90 s)
+ALLC: operations: boss_rect, boss_circle, pocket_rect, pocket_circle, cut_rect_through, cut_circle_through, hole_through, hole_blind, revolve_add, revolve_cut, loft_add, sweep_add, round_edge, chamfer_edge, vertex_round, vertex_chamfer, shell, draft_in, draft_out, linear_pattern, circular_pattern, mirror
+{"allc":"S1:sweep_add@0.1/s0","set":"S1","step":1,"op":"sweep_add","f":0.1,"slot":0,"prm":"circle r1.75 along quarter arc R7.25 face0","verdict":"WARN","why":"faceted: 1 faceted face(s), 0 faceted edge(s); guarantee ExactPolyhedral","ms":963.4,"v0":240000,"v1":240109.568,"dv":109.568,"want":109.568,"rel":-4.1330952877572857E-07,"faces":8,"bodies":1,"guarantee":"ExactPolyhedral","valid":true,"error":null,"downgrade":"1 faceted face(s), 0 faceted edge(s)","warnings":["Boolean: 6 chord chain(s) restored to arcs (96 segments collapsed).","Geometry downgrade after SweepFeature: 1 faceted face(s), 0 faceted edge(s) (policy AllowBoundedFaceting).","Volume accuracy: \u00B11.13E\u002B03 mm\u00B3 exceeds the integration budget (1E-05 relative)."]}
+{"test":"ALLC S1:sweep_add@0.1/s0","ok":true,"verdict":"WARN","ms":963.4478,"error":null}
+{"allc":"S1:sweep_add@0.25/s1","set":"S1","step":1,"op":"sweep_add","f":0.25,"slot":1,"prm":"circle r2.25 along quarter arc R11.75 face1","verdict":"WARN","why":"faceted: 1 faceted face(s), 0 faceted edge(s); guarantee ExactPolyhedral","ms":263.4,"v0":240000,"v1":240293.5444,"dv":293.5444,"want":293.5436,"rel":2.749080968903931E-06,"faces":8,"bodies":1,"guarantee":"ExactPolyhedral","valid":true,"error":null,"downgrade":"1 faceted face(s), 0 faceted edge(s)","warnings":["Boolean: 6 chord chain(s) restored to arcs (96 segments collapsed).","Geometry downgrade after SweepFeature: 1 faceted face(s), 0 faceted edge(s) (policy AllowBoundedFaceting).","Volume accuracy: \u00B11.19E\u002B03 mm\u00B3 exceeds the integration budget (1E-05 relative)."]}
+{"test":"ALLC S1:sweep_add@0.25/s1","ok":true,"verdict":"WARN","ms":263.4131,"error":null}
+{"allc":"S1:sweep_add@0.45/s2","set":"S1","step":1,"op":"sweep_add","f":0.45,"slot":2,"prm":"circle r3.25 along quarter arc R18.75 face2","verdict":"WARN","why":"faceted: 1 faceted face(s), 0 faceted edge(s); guarantee ExactPolyhedral","ms":383.7,"v0":240000,"v1":240977.3228,"dv":977.3228,"want":977.3222,"rel":6.644035320254586E-07,"faces":8,"bodies":1,"guarantee":"ExactPolyhedral","valid":true,"error":null,"downgrade":"1 faceted face(s), 0 faceted edge(s)","warnings":["Boolean: 6 chord chain(s) restored to arcs (96 segments collapsed).","Geometry downgrade after SweepFeature: 1 faceted face(s), 0 faceted edge(s) (policy AllowBoundedFaceting).","Volume accuracy: \u00B11.29E\u002B03 mm\u00B3 exceeds the integration budget (1E-05 relative)."]}
+{"test":"ALLC S1:sweep_add@0.45/s2","ok":true,"verdict":"WARN","ms":383.7114,"error":null}
+{"allc":"S1:sweep_add@0.65/s0","set":"S1","step":1,"op":"sweep_add","f":0.65,"slot":0,"prm":"circle r5.875 along quarter arc R30.625 face0","verdict":"WARN","why":"faceted: 1 faceted face(s), 0 faceted edge(s); guarantee ExactPolyhedral","ms":427.7,"v0":240000,"v1":245216.2886,"dv":5216.2886,"want":5216.2883,"rel":4.484776477917053E-08,"faces":8,"bodies":1,"guarantee":"ExactPolyhedral","valid":true,"error":null,"downgrade":"1 faceted face(s), 0 faceted edge(s)","warnings":["Boolean: 6 chord chain(s) restored to arcs (96 segments collapsed).","Geometry downgrade after SweepFeature: 1 faceted face(s), 0 faceted edge(s) (policy AllowBoundedFaceting).","Volume accuracy: \u00B11.7E\u002B03 mm\u00B3 exceeds the integration budget (1E-05 relative)."]}
+{"test":"ALLC S1:sweep_add@0.65/s0","ok":true,"verdict":"WARN","ms":427.6536,"error":null}
+{"allc":"S1:sweep_add@0.85/s1","set":"S1","step":1,"op":"sweep_add","f":0.85,"slot":1,"prm":"circle r5.25 along quarter arc R32.75 face1","verdict":"WARN","why":"faceted: 1 faceted face(s), 0 faceted edge(s); guarantee ExactPolyhedral","ms":422.3,"v0":240000,"v1":244454.5073,"dv":4454.5073,"want":4454.5072,"rel":3.077151622700748E-08,"faces":8,"bodies":1,"guarantee":"ExactPolyhedral","valid":true,"error":null,"downgrade":"1 faceted face(s), 0 faceted edge(s)","warnings":["Boolean: 6 chord chain(s) restored to arcs (96 segments collapsed).","Geometry downgrade after SweepFeature: 1 faceted face(s), 0 faceted edge(s) (policy AllowBoundedFaceting).","Volume accuracy: \u00B11.58E\u002B03 mm\u00B3 exceeds the integration budget (1E-05 relative)."]}
+{"test":"ALLC S1:sweep_add@0.85/s1","ok":true,"verdict":"WARN","ms":422.2618,"error":null}
+
+=================== ALLC SUMMARY ===================
+steps 5, cases 5, total 00:00:03, step time sum 2.5 s
+  WARN  5
+by set: S1: 5 steps, FAIL 0, WARN 5, SLOW 0
+
+by operation (step verdicts; time median / max ms):
+  sweep_add            n     5  FAIL    0  WARN    5  SLOW   0  median      422  max      963
+
+failure reasons (grouped, operation | reason head):
+
+pairs that fail only together (first op passes alone, second fails after it):
+
+slowest 25 steps:
+        963 ms  S1:sweep_add@0.1/s0 step 1 sweep_add [circle r1.75 along quarter arc R7.25 face0] WARN faces 8
+        428 ms  S1:sweep_add@0.65/s0 step 1 sweep_add [circle r5.875 along quarter arc R30.625 face0] WARN faces 8
+        422 ms  S1:sweep_add@0.85/s1 step 1 sweep_add [circle r5.25 along quarter arc R32.75 face1] WARN faces 8
+        384 ms  S1:sweep_add@0.45/s2 step 1 sweep_add [circle r3.25 along quarter arc R18.75 face2] WARN faces 8
+        263 ms  S1:sweep_add@0.25/s1 step 1 sweep_add [circle r2.25 along quarter arc R11.75 face1] WARN faces 8
+
+warnings (grouped, operation | reason head):
+     5  sweep_add | faceted: # faceted face(s), # faceted edge(s)   e.g. S1:sweep_add@0.1/s0
+Reproduce one case: K01Checks allC with P3D_ALLC_ONLY=<case id>, P3D_ALLC_OUT=<folder> saves failed models.
+
+{"test":"ALLC-SUMMARY","ok":true,"steps":5,"fail":0,"warn":5,"slow":0,"seconds":4}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":0,"failed":0}
