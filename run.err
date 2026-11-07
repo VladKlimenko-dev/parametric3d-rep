@@ -1,0 +1,1 @@
+seconds 9 nproc 4 env P3D_NURBSRECT=0 cmd usermodel1 tests/ui/data/user_k150_sweep_blend_c972.p3d
