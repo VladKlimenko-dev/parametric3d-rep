@@ -1,0 +1,7 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["audit180"]}
+{"test":"AUDIT-BEZIER-K180","error":null,"volume":19117.417409580357,"valid":true,"bezierEdges":4,"facetedFaces":0,"facetedEdges":0,"warnings":[]}
+{"test":"similarity volume","volume":19117.417409580357,"want":19117.417409580292,"rel":3.42533811574544E-15,"exactQuads":0,"rectFaces":12}
+{"test":"AUDIT-BEZIER-K180","ok":false,"error":"the polynomial loft faces were not integrated by the exact Gauss rule (0)"}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":0,"failed":1}

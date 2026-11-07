@@ -1,0 +1,2 @@
+exit 1
+seconds 3 nproc 4 env P3D_NURBSEXACTQUAD=0 cmd audit180
