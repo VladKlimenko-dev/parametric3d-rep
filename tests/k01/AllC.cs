@@ -343,11 +343,15 @@ static partial class Program
             p.Limits = new KernelLimits { Deadline = DateTime.UtcNow.AddSeconds(stepSec) };
             bool prof = Environment.GetEnvironmentVariable("P3D_ALLC_PROF") != "0" && !Parametric3D.Kernel.Diagnostics.Prof.Enabled && set != "R";
             if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
+            // причины отказа внутренних маршрутов оболочки — в отчёт (иначе видна только итоговая «could not be hollowed»)
+            var dbg = new List<string>();
+            ShellOp.ShellDebug = m => { lock (dbg) if (dbg.Count < 12) dbg.Add(m); };
             var sw = Stopwatch.StartNew();
             try { p.Rebuild(null); }
             catch (Exception e) { r.Error = "exception: " + e.GetType().Name + ": " + e.Message; }
             r.Ms = sw.Elapsed.TotalMilliseconds;
             BooleanOp.GeneralAcceptProbe = null;
+            ShellOp.ShellDebug = null;
             // медленный шаг (> 3 с) — профиль этапов ядра в отчёт (P3D_ALLC_PROF=0 — без профиля)
             if (prof)
             {
@@ -374,6 +378,7 @@ static partial class Program
             }
             catch (Exception e) { r.Valid = false; invalidWhy = "validator: " + e.Message; }
             r.Warnings.AddRange(p.Warnings.Distinct());
+            if (r.Error != null) r.Warnings.AddRange(dbg.Select(m => "debug: " + m));
             var dg = added.Where(x => p.Downgrades.ContainsKey(x)).Select(x => p.Downgrades[x]).ToList();
             if (dg.Count > 0) r.Downgrade = $"{dg.Sum(x => x.Faces)} faceted face(s), {dg.Sum(x => x.Edges)} faceted edge(s)";
             // вердикт
