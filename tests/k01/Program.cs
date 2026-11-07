@@ -15,7 +15,8 @@ using Parametric3D.Kernel.Topology;
 static partial class Program
 {
     static int Passed, Failed;
-    static void Log(object o) => Console.WriteLine(JsonSerializer.Serialize(o));
+    static readonly JsonSerializerOptions LogOpts = new() { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
+    static void Log(object o) => Console.WriteLine(JsonSerializer.Serialize(o, LogOpts));
     static void Require(bool ok, string why) { if (!ok) throw new Exception(why); }
     static string? CurrentCheck;
     static void Check(string id, Action a)

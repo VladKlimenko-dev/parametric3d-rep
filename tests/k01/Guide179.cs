@@ -108,7 +108,7 @@ static partial class Program
                 double endOff = dc.Spline is { } s ? (s.PointAt(s.T1) - want).Length : double.NaN;
                 p.Rebuild(null);
                 double eOff = EdgeDist(p, dc.Spline!.PointAt(0.5));
-                rep.Add(new { test = "follow " + stage, pointKept = after != null, before = before?.P, after = after?.P, inputOff = off, curveEnd = endOff, dirty, error = bf.Error, v0, v1 = p.Volume, edgeOff = eOff });
+                rep.Add(new { test = "follow " + stage, pointKept = after != null, before = before == null ? null : new[] { before.X, before.Y }, after = after == null ? null : new[] { after.X, after.Y }, inputOff = off, curveEnd = endOff, dirty, error = bf.Error, v0, v1 = p.Volume, edgeOff = eOff });
                 if (before == null) problems.Add($"{stage}: the curve point of the sketch is not found before the edit");
                 else if (after == null) problems.Add($"{stage}: the gear point the curve is attached to got a new number");
                 else if (!(off < 1e-9) || !(endOff < 1e-9)) problems.Add($"{stage}: the curve did not follow the sketch point ({off:E2})");
