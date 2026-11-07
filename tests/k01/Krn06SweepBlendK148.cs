@@ -125,16 +125,16 @@ static partial class Program
     /// Прежде — резец (многогранно). Мутации P3D_DRCREASE3=0, P3D_DRCREASEBEVEL=0 роняют.
     /// </summary>
     static void Krn06SeqS110Checks() =>
-        SeqCornerCheck("KRN06-SEQ-S110-CREASE-BEVEL", "corpus_k148h_s110_0.p3d", 2558.8996,
-            "замер k148h (начало — центр); формула сечений по рёбрам (без углов, 12 сечений на ребро) — 2563.75 (0.2 %)");
+        SeqCornerCheck("KRN06-SEQ-S110-CREASE-BEVEL", "corpus_k148h_s110_0.p3d", 2558.9073,
+            "замер k180 (начало — центр; k148h — 2558.8996: поток через край грани NURBS — равными кусками поперёк узлов, ошибка 2e-5 отн. на стенку); формула сечений по рёбрам (без углов, 12 сечений на ребро) — 2563.75 (0.2 %)");
 
     /// <summary>k149: корпус s106, шаг 0 — R2.71 по кромке лофта, цепочка из 7 звеньев. У одной вершины шов гладок только в ней
     /// самой и наклонён над стороной T: шар звена касается T за швом и перекатывается через ребро шва на соседнюю грань (кусок
     /// края на шве 5e-4 мм); у другого конца того же звена — вогнутый излом (скос). Прежде — резцом (многогранно).</summary>
     static void Krn06SeqS106Checks() =>
         SeqCornerCheck("KRN06-SEQ-S106-SEAM-ROLL", "corpus_k149_s106_0.p3d", S106Want,
-            "замер k149 (начало — центр); формула сечений — 221.54 (0.4 %), резец снимал 225.57");
-    const double S106Want = 220.6858;
+            "замер k180 (начало — центр; k149 — 220.6858, поток поперёк узлов); формула сечений — 221.54 (0.2 %), резец снимал 225.57");
+    const double S106Want = 221.0195;
 
     static void SeqCornerCheck(string id, string file, double want, string note)
     {
@@ -172,7 +172,8 @@ static partial class Program
                 double rc = before.C - after.C, rz = before.Z - after.Z;
                 Log(new { feature = f.Name, guarantee = g, removedCentre = Math.Round(rc, 6), removedZero = Math.Round(rz, 6), note });
                 if (!(Math.Abs(rc - want) <= 1e-3)) fails.Add($"removed {rc:0.######}, expected {want:0.####}");
-                if (!(Math.Abs(rc - rz) < 0.5)) fails.Add($"removed volume depends on the origin: {rc:0.###} / {rz:0.###}");
+                // k180: поток через край по пролётам узлов — от начала снятый объём не зависит до 1e-5…5e-4 мм³ (прежде — до 7 мм³)
+                if (!(Math.Abs(rc - rz) < 0.01)) fails.Add($"removed volume depends on the origin: {rc:0.######} / {rz:0.######}");
             }
             Require(fails.Count == 0, string.Join("; ", fails));
         });

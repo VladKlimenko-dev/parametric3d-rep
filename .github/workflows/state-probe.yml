@@ -53,12 +53,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k180_rd110, cmd: 'rectdebug corpus_k148h_s110_0.p3d', env: '' }
-          - { name: k180_s110, cmd: 'seqs110', env: '' }
-          - { name: k180_s106, cmd: 'seqs106', env: '' }
-          - { name: k180_sb, cmd: 'sweepblend148', env: '' }
-          - { name: k180_um, cmd: 'usermodels', env: '' }
-          - { name: k180_a, cmd: 'audit180', env: '' }
+          - { name: k180_r0, cmd: 'usermodel1 tests/ui/data/user_k148_sweep_blend.p3d', env: '' }
+          - { name: k180_r1, cmd: 'usermodel1 tests/ui/data/user_k148e_sweep_blend_r555.p3d', env: '' }
+          - { name: k180_r2, cmd: 'usermodel1 tests/ui/data/user_k150_sweep_blend_c972.p3d', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
