@@ -15,6 +15,7 @@ namespace Parametric3D.Kernel.Ops;
 /// </summary>
 public static class PlanarTweak
 {
+    static readonly bool TweakCylOff = Environment.GetEnvironmentVariable("P3D_TWEAKCYL") == "0";
     /// <summary>Мутация P3D_TWEAKPROV=0: результат замены плоскостей (уклон, оболочка) без карты происхождения.</summary>
     internal static readonly bool ProvOff = Environment.GetEnvironmentVariable("P3D_TWEAKPROV") == "0";
 
@@ -114,6 +115,19 @@ public static class PlanarTweak
         {
             if (!fs.Any(picks.ContainsKey) || circleVerts.Contains(v)) continue;
             var pls = new List<(Vector3d P, Vector3d N)>();
+            // k181: у вершины — цилиндр (скругление) рядом с выбранной гранью: вершина скользит по своему третьему ребру-отрезку
+            // (образующая цилиндра или ребро плоских соседей) до новой плоскости. Мутация P3D_TWEAKCYL=0.
+            if (!TweakCylOff && fs.Any(i => Pl(i) == null) && fs.All(i => Pl(i) != null || CylOf(i) != null) && fs.Count(picks.ContainsKey) == 1)
+            {
+                int ip = fs.First(picks.ContainsKey);
+                var slide = clone.Edges.Where(e => (ReferenceEquals(e.V0, v) || ReferenceEquals(e.V1, v)) && !e.CoEdges.Any(c => c.Loop?.Face is { } ff && idxOf[ff] == ip)).ToList();
+                if (slide.Count != 1 || slide[0].Curve is not LineCurve3 sl) { why = "a vertex at a rounded neighbour does not slide along one straight edge"; return null; }
+                var (pp0, pn0) = picks[ip];
+                var ldir = (sl.B - sl.A).Normalized();
+                double den0 = Vector3d.Dot(ldir, pn0); if (Math.Abs(den0) < 1e-9) { why = "a sliding edge is parallel to the new plane"; return null; }
+                moved[v] = v.P + ldir * (Vector3d.Dot(pp0 - v.P, pn0) / den0);
+                continue;
+            }
             foreach (int i in fs) { if (Pl(i) is not { } q) { why = "a non-planar face meets a drafted face"; return null; } pls.Add(q); }
             // три независимые плоскости (сначала выбранные), прочие — проверка
             var order = fs.OrderByDescending(picks.ContainsKey).Select(i => Pl(i)!.Value).ToList();
@@ -146,7 +160,35 @@ public static class PlanarTweak
             var na = new ArcCurve3(new Frame3(c2, ac.Frame.U, ac.Frame.V), r2, ac.A0, ac.A1);
             newArcs[e] = na; moved[v] = na.PointAt(na.T0);
         }
-        foreach (var e in clone.Edges.Where(e => (moved.ContainsKey(e.V0) || moved.ContainsKey(e.V1)) && !newArcs.ContainsKey(e)))
+        // k181: ребро выбранной грани и цилиндра — эллипс (сечение цилиндра новой плоскостью), дуга той же стороны
+        var newEll = new Dictionary<TEdge, ICurve3>(ReferenceEqualityComparer.Instance);
+        var cylGrow = new HashSet<int>();
+        if (!TweakCylOff)
+            foreach (var e in clone.Edges)
+            {
+                if (newArcs.ContainsKey(e) || e.Curve is not ArcCurve3 oa) continue;
+                if (!moved.ContainsKey(e.V0) || !moved.ContainsKey(e.V1)) continue;
+                var fs2 = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Select(f => idxOf[f]).Distinct().ToList();
+                int ip = fs2.FirstOrDefault(picks.ContainsKey, -1), ic = fs2.FirstOrDefault(k => !picks.ContainsKey(k) && CylOf(k) != null, -1);
+                if (ip < 0 || ic < 0) continue;
+                var cy = CylOf(ic)!; var w = cy.Axis.Normalized(); var (pp, pn) = picks[ip];
+                double cw = Vector3d.Dot(w, pn); if (Math.Abs(cw) < 1e-6) { why = "a new plane runs along a rounded neighbour"; return null; }
+                var c = cy.P + w * (Vector3d.Dot(pp - cy.P, pn) / cw);
+                var vmin = Vector3d.Cross(w, pn); if (vmin.LengthSquared < 1e-18) { vmin = Vector3d.Cross(pn, Math.Abs(pn.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY); }
+                vmin = vmin.Normalized(); var umaj = Vector3d.Cross(vmin, pn).Normalized();
+                double ra = cy.R / Math.Abs(cw), rb = cy.R;
+                double Th(Vector3d q) { var d = q - c; return Math.Atan2(Vector3d.Dot(d, vmin) / rb, Vector3d.Dot(d, umaj) / ra); }
+                var m0 = oa.PointAt(0.5); var mN = m0 + w * (Vector3d.Dot(pp - m0, pn) / cw);
+                double t0 = Th(moved[e.V0]), t1 = Th(moved[e.V1]), tm = Th(mN);
+                double d01 = t1 - t0; while (d01 <= -Math.PI) d01 += 2 * Math.PI; while (d01 > Math.PI) d01 -= 2 * Math.PI;
+                double d0m = tm - t0; while (d0m <= -Math.PI) d0m += 2 * Math.PI; while (d0m > Math.PI) d0m -= 2 * Math.PI;
+                bool between = d01 >= 0 ? d0m >= 0 && d0m <= d01 : d0m <= 0 && d0m >= d01;
+                if (!between) d01 -= Math.Sign(d01) * 2 * Math.PI;
+                var ell = new EllipseCurve3(new Frame3(c, umaj, vmin), ra, rb, t0, t0 + d01);
+                if ((ell.PointAt(0) - moved[e.V0]).Length > 1e-7 * scale || (ell.PointAt(1) - moved[e.V1]).Length > 1e-7 * scale) { why = "the new edge on a rounded neighbour does not meet its vertices"; return null; }
+                newEll[e] = ell; cylGrow.Add(ic);
+            }
+        foreach (var e in clone.Edges.Where(e => (moved.ContainsKey(e.V0) || moved.ContainsKey(e.V1)) && !newArcs.ContainsKey(e) && !newEll.ContainsKey(e)))
         {
             if (e.Curve is not LineCurve3) { why = "a curved edge meets a drafted face"; return null; }
             var a0 = moved.TryGetValue(e.V0, out var q0) ? q0 : e.V0.P; var a1 = moved.TryGetValue(e.V1, out var q1) ? q1 : e.V1.P;
@@ -171,13 +213,38 @@ public static class PlanarTweak
         foreach (var (v, fs) in faceOfLoop) if (moved.ContainsKey(v)) touched.UnionWith(fs);
         foreach (var i in radii.Keys) touched.Add(i);
         foreach (var e in clone.Edges.Where(e => moved.ContainsKey(e.V0) || moved.ContainsKey(e.V1)))
-        { e.Curve = newArcs.TryGetValue(e, out var na) ? na : new LineCurve3(e.V0.P, e.V1.P); e.PolylineCache = null; }
+        { e.Curve = newArcs.TryGetValue(e, out var na) ? na : newEll.TryGetValue(e, out var ne) ? ne : new LineCurve3(e.V0.P, e.V1.P); e.PolylineCache = null; }
         foreach (int i in touched)
         {
             var f = cf[i];
             // плоскость с НАРУЖНОЙ нормалью и Reversed = false: сторона не зависит от того, как была записана исходная грань
             if (picks.TryGetValue(i, out var q)) { f.Surface = new PlaneSurface(Frame3.FromNormal(q.P, q.N)); f.Reversed = false; }
             else if (outward[i] is { } no && PlaneOf(faces[i]) is { } pl) { f.Surface = new PlaneSurface(Frame3.FromNormal(pl.P, no)); f.Reversed = false; }
+            else if (cylGrow.Contains(i) && !cylConvex.ContainsKey(i) && CylOf(i) is { } cyg)
+            {
+                // k181: цилиндр-сосед (скругление) — та же поверхность, продлённая вдоль оси за новые вершины (запас 10 %)
+                var src = GeometryAudit.AuthoritativeSurface(faces[i]);
+                var wg = cyg.Axis.Normalized();
+                double lo = double.MaxValue, hi = double.MinValue;
+                foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) foreach (var q in new[] { ce.Start.P, ce.End.P }) { double tq = Vector3d.Dot(q - cyg.P, wg); lo = Math.Min(lo, tq); hi = Math.Max(hi, tq); }
+                double mg = 0.1 * Math.Max(hi - lo, cyg.R);
+                if (src is ExtrudedSurface exg && exg.Base is ArcCurve3 bg)
+                {
+                    var dg = exg.Dir.Normalized();
+                    double s0 = Vector3d.Dot(bg.Frame.Origin - cyg.P, dg);
+                    double loD = Vector3d.Dot(wg, dg) > 0 ? lo : -hi, hiD = Vector3d.Dot(wg, dg) > 0 ? hi : -lo;
+                    var shift = dg * (loD - mg - s0);
+                    var nb = new ArcCurve3(new Frame3(bg.Frame.Origin + shift, bg.Frame.U, bg.Frame.V), bg.Radius, bg.A0, bg.A1);
+                    var ns = new ExtrudedSurface(nb, dg * (hiD - loD + 2 * mg));
+                    bool rev0 = f.Reversed;
+                    // сторона — как у исходной: нормаль в той же точке
+                    var probe = faces[i].Loops[0].CoEdges[0].Edge.Curve.PointAt(0.5);
+                    var n0 = src.NormalAt(src.ProjectToUV(probe)); if (rev0) n0 = -n0;
+                    var n1 = ns.NormalAt(ns.ProjectToUV(probe));
+                    f.Surface = ns; f.Reversed = Vector3d.Dot(n0, n1) < 0;
+                }
+                else if (src is not CylinderSurface) { why = "a rounded neighbour of an unsupported surface kind"; return null; }
+            }
             else if (CylOf(i) is { } cy && GeometryAudit.AuthoritativeSurface(faces[i]) is ExtrudedSurface ex && ex.Base is ArcCurve3 ba
                      && cylConvex.TryGetValue(i, out var cvx) && cvx is bool convex)
             {

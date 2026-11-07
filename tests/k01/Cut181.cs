@@ -58,4 +58,41 @@ static partial class Program
             Require(fails.Count == 0, string.Join("; ", fails));
         });
     }
+
+    /// <summary>
+    /// k181 (замечание 07.11, 21:16): УКЛОН НАРУЖУ У ГРАНИ СО СКРУГЛЁННЫМ СОСЕДОМ (файл пользователя: куб 100, скругление R80
+    /// по верхнему ребру вдоль X, фаски; уклон грани x = −50 на 16.77° наружу вокруг вертикального ребра). Прежде плоскость не
+    /// заменялась («a non-planar face meets a drafted face») и прибавлялся клин — прямоугольная призма во всю высоту грани и
+    /// с запасом 5 % сверху и снизу, без скругления: «лишняя форма». Теперь — замена плоскости: вершины у скругления скользят
+    /// по образующим, ребро с цилиндром — эллипс, цилиндр продлён. Прибавка объёма — по формуле tg α·∬(y + 50) dA по контуру
+    /// грани (квадрат без угла скругления и треугольника фаски). P3D_TWEAKCYL=0 — клин.
+    /// </summary>
+    static void Draft181Checks()
+    {
+        Check("DRAFT-OUT-ROUNDED-K181", () =>
+        {
+            string uf = Path.Combine("tests", "k01", "data", "user_k181_draft.p3d");
+            var (p, ps) = DocumentFile.Load(File.ReadAllText(uf));
+            int n = p.Features.Count;
+            p.StageIndex = n - 1; p.MarkStageMoved(); p.Rebuild(ps);
+            double v0 = p.Volume;
+            p.StageIndex = n; p.MarkStageMoved(); p.Rebuild(ps);
+            var f = p.Features[n - 1];
+            double t = Math.Tan(16.77 * Math.PI / 180), mom = 100 * 100 * 50.0, rem = 0, ch = 0; int N = 20000;
+            for (int i = 0; i < N; i++)
+            {
+                double y = -30 + 80 * (i + 0.5) / N, zl = -30 + Math.Sqrt(Math.Max(0, 6400 - (y + 30) * (y + 30)));
+                rem += (50 - zl) * (y + 50) * 80 / N;
+                double c = 9.54, y2 = 50 - c + c * (i + 0.5) / N; ch += (y2 - (50 - c)) * (y2 + 50) * c / N;
+            }
+            double want = t * (mom - rem - ch), added = p.Volume - v0;
+            string g = string.Join(",", p.Bodies.Select(b => b.Guarantee));
+            bool valid = p.Bodies.Count == 1 && Parametric3D.Kernel.Topology.SolidValidator.Validate(p.Bodies[0]).IsValid;
+            Log(new { test = "DRAFT-OUT-ROUNDED-K181", f.Error, added, want, rel = (added - want) / want, guarantee = g, valid, faces = p.Bodies.Sum(b => b.Faces.Count()), warnings = p.Warnings.ToList() });
+            Require(f.Error == null && valid, $"draft: {f.Error}, valid {valid}");
+            Require(p.Warnings.Any(w => w.Contains("exact plane replacement")), "the draft was not built by plane replacement: " + string.Join(" | ", p.Warnings));
+            Require(g == "ExactAnalytic", "body " + g);
+            Require(Math.Abs(added - want) < 1e-4 * want, $"added volume {added} vs {want}");
+        });
+    }
 }

@@ -616,7 +616,8 @@ static partial class Program
         if (mode is "curve177" or "allB") CurveGuideChecks();
         if (mode is "guide179" or "allB") Guide179Checks();
         if (mode is "audit180" or "allA") Audit180Checks();
-        if (mode is "cut181" or "allA") Cut181Checks();   // k181: вырез насквозь — по направлению, мимо тела — ошибка, отверстие в торце перехода   // k180: рёбра Безье — точные в аудите   // k179: направляющая ведёт все рёбра, кривая за точкой эскиза, порядок создания
+        if (mode is "cut181" or "allA") Cut181Checks();
+        if (mode is "draft181" or "allA") Draft181Checks();   // k181: уклон наружу у грани со скруглённым соседом   // k181: вырез насквозь — по направлению, мимо тела — ошибка, отверстие в торце перехода   // k180: рёбра Безье — точные в аудите   // k179: направляющая ведёт все рёбра, кривая за точкой эскиза, порядок создания
         if (mode == "userfile179") { UserFile179(args[1]); return; }
         if (mode == "guidedump") { GuideDump(args[1]); return; }
         if (mode == "rectdebug") { RectDebugMode(args[1]); return; }
