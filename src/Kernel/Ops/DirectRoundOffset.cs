@@ -60,6 +60,7 @@ public static partial class DirectRound
     }
     static readonly bool ProcTrimOff = Environment.GetEnvironmentVariable("P3D_OFFSETPROCTRIM") == "0";
     static readonly bool MoveDbg = Environment.GetEnvironmentVariable("P3D_OFFSETMOVEDBG") == "1";
+    static readonly bool AxisProbeOff = Environment.GetEnvironmentVariable("P3D_OFFSETAXISPROBE") == "0";
     static readonly bool FreeFormOff = Environment.GetEnvironmentVariable("P3D_OFFSETFREEFORM") == "0";
     static readonly bool SectionOffOff = Environment.GetEnvironmentVariable("P3D_OFFSETSECTION") == "0";
     static readonly bool NearTanOff = Environment.GetEnvironmentVariable("P3D_OFFSETNEARTAN") == "0";
@@ -125,6 +126,20 @@ public static partial class DirectRound
             if (src == null) { why = "face without an exact surface"; return null; }
             double d = offset(f);
             var probe = f.Loops.SelectMany(l => l.CoEdges).FirstOrDefault()?.Start.P ?? f.InteriorHint ?? src.PointAt(new Vector2d(0.3, 0.3));
+            // k182: ПРОБА ВНЕ ОСИ ПОВЕРХНОСТИ ВРАЩЕНИЯ. Первая вершина грани конуса — его вершина на оси (шов от вершины к основанию):
+            // нормаль там не определена, смещённая образующая «не несла сдвинутую точку» (AllC: вращение-конус + оболочка).
+            // Берётся точка контура (вершина или середина ребра), дальше всех от оси. Мутация P3D_OFFSETAXISPROBE=0.
+            if (!AxisProbeOff && src is RevolvedSurface rvp)
+            {
+                var axw = rvp.Axis.W.Normalized(); var axo = rvp.Axis.Origin;
+                double Rad(Vector3d q) { var r0 = q - axo; return (r0 - axw * Vector3d.Dot(r0, axw)).Length; }
+                if (Rad(probe) <= 1e3 * tol)
+                {
+                    var cands = f.Loops.SelectMany(l => l.CoEdges).SelectMany(c => c.Edge?.Curve is { } ec ? new[] { c.Start.P, ec.PointAt(0.5 * (ec.T0 + ec.T1)) } : new[] { c.Start.P });
+                    var best = cands.OrderByDescending(Rad).FirstOrDefault();
+                    if (Rad(best) > 1e3 * tol) probe = best;
+                }
+            }
             var no = Out(f, probe);
             ISurface3? ns = null;
             switch (src)

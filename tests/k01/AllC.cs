@@ -346,12 +346,13 @@ static partial class Program
             // причины отказа внутренних маршрутов оболочки — в отчёт (иначе видна только итоговая «could not be hollowed»)
             var dbg = new List<string>();
             ShellOp.ShellDebug = m => { lock (dbg) if (dbg.Count < 12) dbg.Add(m); };
+            if (Environment.GetEnvironmentVariable("P3D_ALLC_DIAG") == "1") DirectRound.Debug = m => { lock (dbg) if (dbg.Count < 40) dbg.Add("offset: " + m); };
             var sw = Stopwatch.StartNew();
             try { p.Rebuild(null); }
             catch (Exception e) { r.Error = "exception: " + e.GetType().Name + ": " + e.Message; }
             r.Ms = sw.Elapsed.TotalMilliseconds;
             BooleanOp.GeneralAcceptProbe = null;
-            ShellOp.ShellDebug = null;
+            ShellOp.ShellDebug = null; DirectRound.Debug = null;
             // медленный шаг (> 3 с) — профиль этапов ядра в отчёт (P3D_ALLC_PROF=0 — без профиля)
             if (prof)
             {
