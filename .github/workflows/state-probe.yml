@@ -53,12 +53,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k180_a, cmd: 'audit180', env: '' }
-          - { name: k180_um, cmd: 'usermodels', env: '' }
-          - { name: k180_s110, cmd: 'seqs110', env: '' }
-          - { name: k180_s106, cmd: 'seqs106', env: '' }
-          - { name: k180_sb, cmd: 'sweepblend148', env: '' }
-          - { name: k180_allA, cmd: 'allA', env: '' }
+          - { name: k180_s110_nurbsrect, cmd: 'seqs110', env: 'P3D_NURBSRECT=0' }
+          - { name: k180_s110_nurbsexactquad, cmd: 'seqs110', env: 'P3D_NURBSEXACTQUAD=0' }
+          - { name: k180_s110_auditbezier, cmd: 'seqs110', env: 'P3D_AUDITBEZIER=0' }
+          - { name: k180_s110_rougharea, cmd: 'seqs110', env: 'P3D_ROUGHAREA=0' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
