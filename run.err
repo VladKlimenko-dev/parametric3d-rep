@@ -1,0 +1,2 @@
+exit 1
+seconds 299 nproc 4 env P3D_GUIDEHOLES=0 cmd guide179
