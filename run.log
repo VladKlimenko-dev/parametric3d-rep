@@ -1,0 +1,18 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["usermodels"]}
+{"test":"KRN05-USER-X05-FULL-TREE","errors":"","downgrades":"","faces":107,"volume":41485663.280197024}
+{"test":"KRN05-USER-X05-FULL-TREE","ok":true}
+{"model":"user_k123_part.p3d","Features":0,"Errors":0,"Faces":0,"Volume":0,"ms":0,"same":true}
+{"model":"user_k124_dims.p3d","Features":0,"Errors":0,"Faces":0,"Volume":0,"ms":0,"same":true}
+{"model":"user_k125_tube.p3d","Features":12,"Errors":0,"Faces":35,"Volume":8421325.774718478,"ms":8575,"same":true}
+{"model":"user_k128_x05.p3d","Features":0,"Errors":0,"Faces":0,"Volume":0,"ms":0,"same":true}
+{"model":"user_k132_x05.p3d","Features":3,"Errors":0,"Faces":37,"Volume":43026382.96667489,"ms":1235,"same":true}
+{"model":"user_k136_x05.p3d","Features":3,"Errors":0,"Faces":167,"Volume":41172038.02418906,"ms":18427,"same":true}
+{"model":"user_k148_sweep_blend.p3d","Features":4,"Errors":1,"Faces":15,"Volume":642818.1512486242,"ms":23227,"same":true}
+{"model":"user_k148e_sweep_blend_r555.p3d","Features":5,"Errors":0,"Faces":18,"Volume":643495.9426403386,"ms":28530,"same":true}
+{"model":"user_k150_sweep_blend_c972.p3d","Features":3,"Errors":1,"Faces":11,"Volume":645199.8833428299,"ms":4486,"same":true}
+{"model":"user_k153_tube_chamfer.p3d","Features":16,"Errors":1,"Faces":47,"Volume":8243382.442603476,"ms":16478,"same":true}
+{"model":"user_k179_gear.p3d","Features":1,"Errors":0,"Faces":142,"Volume":772714.2418010868,"ms":42980,"same":true}
+{"test":"KRN00-USER-MODELS","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":99,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":5691,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":2630,"tracedUncertain":0,"sampledEdges":0}
+{"passed":2,"failed":0}
