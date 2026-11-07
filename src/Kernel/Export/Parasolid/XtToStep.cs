@@ -223,7 +223,7 @@ public static class XtToStep
                     if (pts.Length < 2) return null;
                     ringStart = pts[0];
                     if (curves.TryGetValue(cn.Id, out var id)) return id;
-                    return curves[cn.Id] = Poly(pts);
+                    return curves[cn.Id] = Interp(pts);
                 }
                 case "SP_CURVE":
                 {
@@ -233,11 +233,30 @@ public static class XtToStep
                     if (pts.Count < 2) return null;
                     ringStart = pts[0];
                     if (curves.TryGetValue(cn.Id, out var id)) return id;
-                    return curves[cn.Id] = Poly(pts);
+                    return curves[cn.Id] = Interp(pts);
                 }
             }
             return null;
         }
+
+        /// <summary>Кубический B-сплайн через точки (кривая пересечения по карте Parasolid): ломаная восстанавливалась импортом
+        /// в дуги по цепочкам хорд — у винтовых кривых резьбы дуга уходила с поверхности на миллиметры.</summary>
+        int Interp(IReadOnlyList<Vector3d> raw)
+        {
+            var q = new List<Vector3d>();
+            foreach (var p in raw) if (q.Count == 0 || (q[^1] - p).Length > 1e-12) q.Add(p);
+            if (q.Count < 2 || PolyMode) return Poly(raw);
+            int deg = Math.Min(3, q.Count - 1);
+            var prm = XtBasis.Chord(q);
+            var (k, _) = XtBasis.Setup(prm, deg);
+            var cp = XtBasis.Solve(k, deg, prm, q);
+            var ks = new List<double>(); var ms = new List<int>();
+            foreach (var x in k) { if (ks.Count > 0 && Math.Abs(ks[^1] - x) < 1e-14) ms[^1]++; else { ks.Add(x); ms.Add(1); } }
+            string P = string.Join(",", cp.Select(p => "#" + Pt(p)));
+            return E($"B_SPLINE_CURVE_WITH_KNOTS('',{deg},({P}),.UNSPECIFIED.,.F.,.F.,({string.Join(",", ms)}),({string.Join(",", ks.Select(N))}),.UNSPECIFIED.)");
+        }
+        static readonly bool PolyMode = Environment.GetEnvironmentVariable("P3D_XTPOLY") == "1";
+        static readonly bool ConeFlipOff = Environment.GetEnvironmentVariable("P3D_XTCONEFLIP") == "0";
 
         int Poly(IReadOnlyList<Vector3d> pts)
         {
@@ -308,7 +327,7 @@ public static class XtToStep
 
         int? Surface(XtNode sn, out bool flip)
         {
-            flip = sn.Name == "CONE";
+            flip = sn.Name == "CONE" && !ConeFlipOff;
             if (surfs.TryGetValue(sn.Id, out var id)) { flip = surfFlip[sn.Id]; return id; }
             int? r = null;
             switch (sn.Name)
