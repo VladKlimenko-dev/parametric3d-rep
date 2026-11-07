@@ -1,0 +1,1 @@
+seconds 24 nproc 4 env P3D_PROFREPORT=1 cmd userfile179 tests/ui/data/user_k179_gear.p3d
