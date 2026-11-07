@@ -1,0 +1,79 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["allC"]}
+ALLC: 22 operations, 1 cases (sets 3, triples 200, step deadline 90 s)
+ALLC: operations: boss_rect, boss_circle, pocket_rect, pocket_circle, cut_rect_through, cut_circle_through, hole_through, hole_blind, revolve_add, revolve_cut, loft_add, sweep_add, round_edge, chamfer_edge, vertex_round, vertex_chamfer, shell, draft_in, draft_out, linear_pattern, circular_pattern, mirror
+ALLCDIAG general boolean Subtract accepted: operand A, operand B, result
+  body guarantee ExactQuadric, faces 8, exact False, qexact False
+  F0 id 255 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface src-n (0,-1,0) rev False loops 1 - | mesh tris 2 sum-n (0,-8000,0)
+  F1 id 265 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface src-n (1,0,0) rev False loops 1 - | mesh tris 2 sum-n (4800,0,0)
+  F2 id 272 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface src-n (0,1,-0) rev False loops 1 - | mesh tris 2 sum-n (0,8000,0)
+  F3 id 279 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface src-n (-1,0,0) rev False loops 1 - | mesh tris 2 sum-n (-4800,0,0)
+  F4 id 283 tag #d000000001/extrude[0]:bottom PlaneSurface src-n (0,0,1) rev True loops 1 - | mesh tris 2 sum-n (0,0,-12000)
+  F5 id 285 tag #d000000001/extrude[0]:top PlaneSurface src-n (0,0,1) rev False loops 2 - | mesh tris 52 sum-n (0,0,11954.3)
+  F6 id 296 tag #d000000002/quadric:boss ExtrudedSurface src-n (0.71,-0.71,0) rev False loops 2 - | mesh tris 96 sum-n (0,0,0)
+  F7 id 306 tag #d000000002/quadric:boss-top PlaneSurface src-n (0,0,1) rev False loops 1 - | mesh tris 46 sum-n (0,0,45.7)
+  body guarantee Unspecified, faces 3, exact False, qexact False
+  F0 id 324 tag extrude[0]:side[0.0] ExtrudedSurface src-n (-0,0,-1) rev False loops 2 facets 130 sum-n (-0,-0,0) dot(face normal) -0.908 sense 1 lazy 0 | mesh tris 130 sum-n (-0,-0,0)
+  F1 id 331 tag extrude[0]:bottom PlaneSurface src-n (-1,0,0) rev False loops 1 facets 46 sum-n (9,0,0) dot(face normal) 1 sense -1 lazy 0 | mesh tris 46 sum-n (9,0,0)
+  F2 id 333 tag extrude[0]:top PlaneSurface src-n (-1,0,0) rev False loops 1 facets 46 sum-n (-9,0,0) dot(face normal) 1 sense 1 lazy 0 | mesh tris 46 sum-n (-9,0,0)
+  body guarantee Unspecified, faces 9, exact False, qexact False
+  F0 id 378 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface src-n (0,-1,0) rev False loops 1 facets 2 sum-n (0,-8000,0) dot(face normal) 1 sense 1 lazy 0 | mesh tris 2 sum-n (0,-8000,0)
+  F1 id 380 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface src-n (1,0,0) rev False loops 2 facets 52 sum-n (4791,0,0) dot(face normal) 1 sense 1 lazy 0 | mesh tris 52 sum-n (4791,0,0)
+  F2 id 383 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface src-n (0,1,-0) rev False loops 1 facets 2 sum-n (0,8000,0) dot(face normal) 1 sense 1 lazy 0 | mesh tris 2 sum-n (0,8000,0)
+  F3 id 385 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface src-n (-1,0,0) rev False loops 2 facets 52 sum-n (-4791,0,0) dot(face normal) 1 sense 1 lazy 0 | mesh tris 52 sum-n (-4791,0,0)
+  F4 id 388 tag #d000000001/extrude[0]:bottom PlaneSurface src-n (0,0,1) rev False loops 1 facets 2 sum-n (0,0,-12000) dot(face normal) 1 sense -1 lazy 0 | mesh tris 2 sum-n (0,0,-12000)
+  F5 id 390 tag #d000000001/extrude[0]:top PlaneSurface src-n (0,0,1) rev False loops 2 facets 52 sum-n (0,0,11954.3) dot(face normal) 1 sense 1 lazy 0 | mesh tris 52 sum-n (0,0,11954.3)
+  F6 id 393 tag #d000000002/quadric:boss ExtrudedSurface src-n (1,-0,0) rev False loops 2 facets 148 sum-n (0,0,0) dot(face normal) -0.978 sense 1 lazy 0 | mesh tris 148 sum-n (0,0,0)
+  F7 id 396 tag #d000000002/quadric:boss-top PlaneSurface src-n (0,0,1) rev False loops 1 facets 46 sum-n (0,0,45.7) dot(face normal) 1 sense 1 lazy 0 | mesh tris 46 sum-n (0,0,45.7)
+  F8 id 398 tag extrude[0]:side[0.0] ExtrudedSurface src-n (0,1,0) rev False loops 2 facets 130 sum-n (-0,0,-0) dot(face normal) -0.387 sense -1 lazy 0 | mesh tris 130 sum-n (-0,0,0)
+ALLCDIAG S3:boss_circle+hole_through@0.15 step 2 hole_through: before
+  body guarantee ExactQuadric, faces 8, exact False, qexact False
+  F0 id 151 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface src-n (0,-1,0) rev False loops 1 - | mesh tris 2 sum-n (0,-8000,0)
+  F1 id 161 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface src-n (1,0,0) rev False loops 1 - | mesh tris 2 sum-n (4800,0,0)
+  F2 id 168 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface src-n (0,1,-0) rev False loops 1 - | mesh tris 2 sum-n (0,8000,0)
+  F3 id 175 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface src-n (-1,0,0) rev False loops 1 - | mesh tris 2 sum-n (-4800,0,0)
+  F4 id 179 tag #d000000001/extrude[0]:bottom PlaneSurface src-n (0,0,1) rev True loops 1 - | mesh tris 2 sum-n (0,0,-12000)
+  F5 id 181 tag #d000000001/extrude[0]:top PlaneSurface src-n (0,0,1) rev False loops 2 - | mesh tris 52 sum-n (0,0,11954.3)
+  F6 id 192 tag #d000000002/quadric:boss ExtrudedSurface src-n (0.71,-0.71,0) rev False loops 2 - | mesh tris 96 sum-n (0,0,0)
+  F7 id 202 tag #d000000002/quadric:boss-top PlaneSurface src-n (0,0,1) rev False loops 1 - | mesh tris 46 sum-n (0,0,45.7)
+ALLCDIAG S3:boss_circle+hole_through@0.15 step 2 hole_through: after
+  body guarantee ExactAnalytic, faces 9, exact False, qexact False
+  F0 id 378 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface src-n (0,-1,0) rev False loops 1 facets 2 sum-n (0,-8000,0) dot(face normal) 1 sense 1 lazy 0 display 2 sum-n (0,-8000,0) | mesh tris 2 sum-n (0,-8000,0)
+  F1 id 380 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface src-n (1,0,0) rev False loops 2 facets 52 sum-n (4791,0,0) dot(face normal) 1 sense 1 lazy 0 display 52 sum-n (4791,0,0) | mesh tris 52 sum-n (4791,0,0)
+  F2 id 383 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface src-n (0,1,-0) rev False loops 1 facets 2 sum-n (0,8000,0) dot(face normal) 1 sense 1 lazy 0 display 2 sum-n (0,8000,0) | mesh tris 2 sum-n (0,8000,0)
+  F3 id 385 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface src-n (-1,0,0) rev False loops 2 facets 52 sum-n (-4791,0,0) dot(face normal) 1 sense 1 lazy 0 display 52 sum-n (-4791,0,0) | mesh tris 52 sum-n (-4791,0,0)
+  F4 id 388 tag #d000000001/extrude[0]:bottom PlaneSurface src-n (0,0,1) rev False loops 1 facets 2 sum-n (0,0,-12000) dot(face normal) 1 sense -1 lazy 0 display 2 sum-n (0,0,-12000) | mesh tris 2 sum-n (0,0,12000)
+  F5 id 390 tag #d000000001/extrude[0]:top PlaneSurface src-n (0,0,1) rev False loops 2 facets 52 sum-n (0,0,11954.3) dot(face normal) 1 sense 1 lazy 0 display 52 sum-n (0,0,11954.3) | mesh tris 52 sum-n (0,0,11954.3)
+  F6 id 393 tag #d000000002/quadric:boss ExtrudedSurface src-n (1,-0,0) rev False loops 2 facets 148 sum-n (0,0,0) dot(face normal) -0.978 sense 1 lazy 0 display 148 sum-n (0,0,0) | mesh tris 96 sum-n (0,0,0)
+  F7 id 396 tag #d000000002/quadric:boss-top PlaneSurface src-n (0,0,1) rev False loops 1 facets 46 sum-n (0,0,45.7) dot(face normal) 1 sense 1 lazy 0 display 46 sum-n (0,0,45.7) | mesh tris 46 sum-n (0,0,45.7)
+  F8 id 398 tag #d000000003/hole:wall ExtrudedSurface src-n (0,1,0) rev False loops 2 facets 130 sum-n (-0,0,-0) dot(face normal) -0.387 sense -1 lazy 0 display 130 sum-n (-0,0,-0) | mesh tris 96 sum-n (0,0,0)
+{"allc":"S3:boss_circle\u002Bhole_through@0.15","set":"S3","step":1,"op":"boss_circle","f":0.15,"slot":0,"prm":"circle r2.7 h8.5 face0","verdict":"OK","why":null,"ms":121.6,"v0":240000,"v1":240194.6688,"dv":194.6688,"want":194.6688,"rel":-9.782022807940369E-14,"faces":8,"bodies":1,"guarantee":"ExactQuadric","valid":true,"error":null,"downgrade":null,"warnings":["QuadricCut: boss \u23005.4 \u00D7 8.5 added without faceting."]}
+{"allc":"S3:boss_circle\u002Bhole_through@0.15","set":"S3","step":2,"op":"hole_through","f":0.15,"slot":1,"prm":"d2.4 through face1","verdict":"FAIL","why":"invalid body: BRep: ok; Mesh: 4 error(s) [Mesh/Error] orientation: \u0441\u0442\u043E\u0440\u043E\u043D, \u043E\u0431\u0445\u043E\u0434\u0438\u043C\u044B\u0445 \u043E\u0431\u0435\u0438\u043C\u0438 \u0441\u0442\u043E\u0440\u043E\u043D\u0430\u043C\u0438 \u0432 \u043E\u0434\u043D\u0443 \u0441\u0442\u043E\u0440\u043E\u043D\u0443: 4 at (0, -30, 0) / [Mesh/Error] orientation: \u0441\u0442\u043E\u0440\u043E\u043D, \u043E\u0431\u0445\u043E\u0434\u0438\u043C\u044B\u0445 \u043E\u0431\u0435\u0438\u043C\u0438 \u0441\u0442\u043E\u0440\u043E\u043D\u0430\u043C\u0438 \u0432 \u043E\u0434\u043D\u0443 \u0441\u0442\u043E\u0440\u043E\u043D\u0443 at (50, 0, 0) / [Mesh/Error] orientation: \u0441\u0442\u043E\u0440\u043E\u043D, \u043E\u0431\u0445\u043E\u0434\u0438\u043C\u044B\u0445 \u043E\u0431\u0435\u0438\u043C\u0438 \u0441\u0442\u043E\u0440\u043E\u043D\u0430\u043C\u0438 \u0432 \u043E\u0434\u043D\u0443 \u0441\u0442\u043E\u0440\u043E\u043D\u0443 at (0, 30, 0)","ms":691.5,"v0":240194.6688,"v1":239742.2794,"dv":-452.3893,"want":null,"rel":null,"faces":9,"bodies":1,"guarantee":"ExactAnalytic","valid":false,"error":null,"downgrade":null,"warnings":["QuadricCut: boss \u23005.4 \u00D7 8.5 added without faceting.","QuadricCut: this case is not supported yet (planar body, through hole along Z).","Boolean: general analytic path (9 faces, exact surfaces)."]}
+{"test":"ALLC S3:boss_circle\u002Bhole_through@0.15","ok":false,"verdict":"FAIL","ms":813.0311,"error":"step 2 hole_through: invalid body: BRep: ok; Mesh: 4 error(s) [Mesh/Error] orientation: \u0441\u0442\u043E\u0440\u043E\u043D, \u043E\u0431\u0445\u043E\u0434\u0438\u043C\u044B\u0445 \u043E\u0431\u0435\u0438\u043C\u0438 \u0441\u0442\u043E\u0440\u043E\u043D\u0430\u043C\u0438 \u0432 \u043E\u0434\u043D\u0443 \u0441\u0442\u043E\u0440\u043E\u043D\u0443: 4 at (0, -30, 0) / [Mesh/Error] orientation: \u0441\u0442\u043E\u0440\u043E\u043D, \u043E\u0431\u0445\u043E\u0434\u0438\u043C\u044B\u0445 \u043E\u0431\u0435\u0438\u043C\u0438 \u0441\u0442\u043E\u0440\u043E\u043D\u0430\u043C\u0438 \u0432 \u043E\u0434\u043D\u0443 \u0441\u0442\u043E\u0440\u043E\u043D\u0443 at (50, 0, 0) / [Mesh/Error] orientation: \u0441\u0442\u043E\u0440\u043E\u043D, \u043E\u0431\u0445\u043E\u0434\u0438\u043C\u044B\u0445 \u043E\u0431\u0435\u0438\u043C\u0438 \u0441\u0442\u043E\u0440\u043E\u043D\u0430\u043C\u0438 \u0432 \u043E\u0434\u043D\u0443 \u0441\u0442\u043E\u0440\u043E\u043D\u0443 at (0, 30, 0)"}
+
+=================== ALLC SUMMARY ===================
+steps 2, cases 1, total 00:00:02, step time sum 0.8 s
+  FAIL  1
+  OK    1
+by set: S3: 2 steps, FAIL 1, WARN 0, SLOW 0
+
+by operation (step verdicts; time median / max ms):
+  hole_through         n     1  FAIL    1  WARN    0  SLOW   0  median      691  max      691
+  boss_circle          n     1  FAIL    0  WARN    0  SLOW   0  median      122  max      122
+
+failure reasons (grouped, operation | reason head):
+     1  hole_through | invalid body: BRep: ok   e.g. S3:boss_circle+hole_through@0.15 step 2 [d2.4 through face1]
+
+pairs that fail only together (first op passes alone, second fails after it):
+  S3:boss_circle+hole_through: 0.15 invalid body: BRep: ok
+
+slowest 25 steps:
+        691 ms  S3:boss_circle+hole_through@0.15 step 2 hole_through [d2.4 through face1] FAIL faces 9
+        122 ms  S3:boss_circle+hole_through@0.15 step 1 boss_circle [circle r2.7 h8.5 face0] OK faces 8
+
+warnings (grouped, operation | reason head):
+Reproduce one case: K01Checks allC with P3D_ALLC_ONLY=<case id>, P3D_ALLC_OUT=<folder> saves failed models.
+
+{"test":"ALLC-SUMMARY","ok":true,"steps":2,"fail":1,"warn":0,"slow":0,"seconds":2}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":0,"failed":0}

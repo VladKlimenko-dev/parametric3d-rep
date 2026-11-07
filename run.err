@@ -1,0 +1,10 @@
+TESSTRACE assembled face 19 #d000000001/extrude[0]:bottom tris 2 sum-n (0,0,-12000) shading0 (-0,-0,-1) vol 240000
+TESSTRACE fixwinding face 19 #d000000001/extrude[0]:bottom tris 2 sum-n (0,0,-12000) shading0 (-0,-0,-1) vol 240000
+TESSTRACE final face 19 #d000000001/extrude[0]:bottom tris 2 sum-n (0,0,-12000) shading0 (-0,-0,-1) vol 240000
+TESSTRACE assembled face 331 extrude[0]:bottom tris 46 sum-n (9,0,0) shading0 (1,0,0) vol 1709.9
+TESSTRACE fixwinding face 331 extrude[0]:bottom tris 46 sum-n (9,0,0) shading0 (1,0,0) vol 1709.9
+TESSTRACE final face 331 extrude[0]:bottom tris 46 sum-n (9,0,0) shading0 (1,0,0) vol 1709.9
+TESSTRACE assembled face 388 #d000000001/extrude[0]:bottom tris 2 sum-n (0,0,-12000) shading0 (0,0,-1) vol 239743
+TESSTRACE fixwinding face 388 #d000000001/extrude[0]:bottom tris 2 sum-n (0,0,-12000) shading0 (0,0,-1) vol 239743
+TESSTRACE final face 388 #d000000001/extrude[0]:bottom tris 2 sum-n (0,0,-12000) shading0 (0,0,-1) vol 239743
+seconds 3 nproc 4 env P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:boss_circle+hole_through@0.15 P3D_TESSTRACE=bottom cmd allC
