@@ -16,6 +16,7 @@ namespace Parametric3D.Kernel.Ops;
 public static class PlanarTweak
 {
     static readonly bool TweakCylOff = Environment.GetEnvironmentVariable("P3D_TWEAKCYL") == "0";
+    static readonly bool ArcsOff = Environment.GetEnvironmentVariable("P3D_TWEAKARCS") == "0";
     static readonly bool TolResetOff = Environment.GetEnvironmentVariable("P3D_TWEAKTOL") == "0";
     static readonly bool KeepGuaranteeOff = Environment.GetEnvironmentVariable("P3D_TWEAKKEEPG") == "0";
     /// <summary>Мутация P3D_TWEAKPROV=0: результат замены плоскостей (уклон, оболочка) без карты происхождения.</summary>
@@ -98,7 +99,7 @@ public static class PlanarTweak
         var circles = new Dictionary<TEdge, (int Plane, int Cyl)>(ReferenceEqualityComparer.Instance);
         foreach (var e in clone.Edges)
         {
-            if (e.Curve is not ArcCurve3 ac || !ReferenceEquals(e.V0, e.V1)) continue;
+            if (e.Curve is not ArcCurve3 ac || !ReferenceEquals(e.V0, e.V1) && (ArcsOff || radii.Count == 0)) continue;
             var fs = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Select(f => idxOf[f]).Distinct().ToList();
             if (fs.Count != 2) continue;
             int ip = fs.FirstOrDefault(k => PlaneOf(faces[k]) != null, -1), ic = fs.FirstOrDefault(k => CylOf(k) != null, -1);
@@ -107,10 +108,33 @@ public static class PlanarTweak
             if (Math.Abs(Math.Abs(Vector3d.Dot(w, ac.Frame.W.Normalized())) - 1) > 1e-9 || Math.Abs(Math.Abs(Vector3d.Dot(w, PlaneOf(faces[ip])!.N.Normalized())) - 1) > 1e-9) continue;
             circles[e] = (ip, ic);
         }
+        // k181: ЦИЛИНДР ИЗ ДВУХ ПОЛОВИН (точный путь бобышки и отверстия: кромка — две дуги, половины стенки — по образующим):
+        // образующая между двумя гранями одного цилиндра (та же ось, тот же радиус) идёт за своими концами — дугами. Прежде такой
+        // цилиндр не смещался («not bounded by full circles»), и оболочка тела с бобышкой или отверстием по окружности
+        // отказывала (AllC: 80 случаев). Мутация P3D_TWEAKARCS=0.
+        bool SameCyl(int a, int b)
+        {
+            if (CylOf(a) is not { } ca || CylOf(b) is not { } cb) return false;
+            var wa = ca.Axis.Normalized(); var wb = cb.Axis.Normalized();
+            if (Math.Abs(Math.Abs(Vector3d.Dot(wa, wb)) - 1) > 1e-9 || Math.Abs(ca.R - cb.R) > 1e-9 * Math.Max(1, ca.R)) return false;
+            var d = cb.P - ca.P; d -= wa * Vector3d.Dot(d, wa);
+            return d.Length <= 1e-9 * Math.Max(1, ca.R) && radii.GetValueOrDefault(a, double.NaN).Equals(radii.GetValueOrDefault(b, double.NaN));
+        }
+        var seams = new HashSet<TEdge>(ReferenceEqualityComparer.Instance);
+        if (!ArcsOff)
+            foreach (var e in clone.Edges)
+            {
+                if (e.Curve is not LineCurve3 sl) continue;
+                var fs = e.CoEdges.Select(c => c.Loop?.Face).OfType<TFace>().Select(f => idxOf[f]).Distinct().ToList();
+                if (fs.Count != 2 || !SameCyl(fs[0], fs[1])) continue;
+                var w = CylOf(fs[0])!.Axis.Normalized();
+                if (Math.Abs(Math.Abs(Vector3d.Dot((sl.B - sl.A).Normalized(), w)) - 1) > 1e-9) continue;
+                seams.Add(e);
+            }
         foreach (var (i, _) in radii)
             foreach (var e in cf[i].Loops.SelectMany(l => l.CoEdges).Select(c => c.Edge))
-                if (!circles.ContainsKey(e)) { why = "a cylinder to offset is not bounded by full circles across its axis"; return null; }
-        var circleVerts = new HashSet<TVertex>(circles.Keys.Select(e => e.V0), ReferenceEqualityComparer.Instance);
+                if (!circles.ContainsKey(e) && !seams.Contains(e)) { why = "a cylinder to offset is not bounded by full circles across its axis"; return null; }
+        var circleVerts = new HashSet<TVertex>(circles.Keys.SelectMany(e => new[] { e.V0, e.V1 }), ReferenceEqualityComparer.Instance);
         double scale = Math.Max(1, body.Vertices.Max(v => v.P.Length));
         var moved = new Dictionary<TVertex, Vector3d>(ReferenceEqualityComparer.Instance);
         foreach (var (v, fs) in faceOfLoop)
@@ -152,7 +176,11 @@ public static class PlanarTweak
         {
             if (!picks.ContainsKey(ip) && !radii.ContainsKey(ic)) continue;
             var v = e.V0;
-            if (faceOfLoop[v].Count != 2) { why = "a circle vertex is shared with other faces"; return null; }
+            bool open = !ReferenceEquals(e.V0, e.V1);
+            if (!open && faceOfLoop[v].Count != 2) { why = "a circle vertex is shared with other faces"; return null; }
+            if (open)
+                foreach (var vx in new[] { e.V0, e.V1 })
+                    if (faceOfLoop[vx].Any(k => k != ip && !(CylOf(k) != null && SameCyl(k, ic) || k == ic))) { why = "an arc vertex is shared with other faces"; return null; }
             var ac = (ArcCurve3)e.Curve; var cy = CylOf(ic)!; var w = cy.Axis.Normalized();
             var (pp, pn) = Pl(ip)!.Value;
             double den = Vector3d.Dot(w, pn); if (Math.Abs(den) < 1e-12) { why = "a circle plane is along the axis"; return null; }
@@ -160,7 +188,14 @@ public static class PlanarTweak
             double r2 = radii.TryGetValue(ic, out var rr) ? rr : ac.Radius;
             if (!(r2 > 1e-6)) { why = "a circle would shrink to a point"; return null; }
             var na = new ArcCurve3(new Frame3(c2, ac.Frame.U, ac.Frame.V), r2, ac.A0, ac.A1);
-            newArcs[e] = na; moved[v] = na.PointAt(na.T0);
+            newArcs[e] = na;
+            if (!open) moved[v] = na.PointAt(na.T0);
+            else
+                foreach (var (vx, q) in new[] { (e.V0, na.PointAt(na.T0)), (e.V1, na.PointAt(na.T1)) })
+                {
+                    if (moved.TryGetValue(vx, out var prev) && (prev - q).Length > 1e-9 * scale) { why = "arc ends disagree at a shared vertex"; return null; }
+                    moved[vx] = q;
+                }
         }
         // k181: ребро выбранной грани и цилиндра — эллипс (сечение цилиндра новой плоскостью), дуга той же стороны
         var newEll = new Dictionary<TEdge, ICurve3>(ReferenceEqualityComparer.Instance);

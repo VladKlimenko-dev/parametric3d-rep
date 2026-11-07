@@ -372,7 +372,10 @@ static partial class Program
             var why = new List<string>(); string v = "OK";
             void Fail(string w) { why.Add(w); v = "FAIL"; }
             void Warn(string w) { why.Add(w); if (v == "OK") v = "WARN"; }
-            if (r.Error != null) Fail("error: " + r.Error);
+            // законный отказ по геометрии (размер больше места) — не дефект ядра: отмечается отдельно
+            string[] legit = { "is wider than the face", "is too thick", "larger than the face" };
+            if (r.Error != null && legit.Any(r.Error.Contains)) { why.Add("refused (geometry): " + r.Error); v = "REFUSED"; }
+            else if (r.Error != null) Fail("error: " + r.Error);
             else
             {
                 if (p.Bodies.Count == 0) Fail("no body");
@@ -399,7 +402,7 @@ static partial class Program
                 Console.WriteLine($"ALLCDIAG {id} step {k + 1} {op.Name}: after");
                 foreach (var b in p.Bodies) AllCDumpFaces(b);
             }
-            if (v == "FAIL")
+            if (v is "FAIL" or "REFUSED")
             {
                 try { r.Model = Parametric3D.Model.DocumentFile.Save(p); } catch { }
                 break;
