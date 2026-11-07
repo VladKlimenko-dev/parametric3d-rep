@@ -1270,6 +1270,24 @@ public static class AnalyticVolume
         if (!NurbsRectOff && ExactNeighbours(f) && ns.FullRectFace(f)) { rect = true; return true; }
         return false;
     }
+    /// <summary>k180, разбор: у граней-лоскутов целиком — интеграл по области и поток через край (начало отсчёта — ноль).</summary>
+    public static List<string> RectDebug(TSolid solid)
+    {
+        var res = new List<string>();
+        var prev = _origin; _origin = Vector3d.Zero;
+        try
+        {
+            foreach (var f in solid.Faces)
+            {
+                if (GeometryAudit.AuthoritativeSurface(f) is not NurbsSurface ns || !WholeNurbs(f, ns, out bool rect) || !rect) continue;
+                double? d = NurbsDomainIntegral(f, ns, false, true);
+                double? fl = AnalyticFlux.FaceFluxOf(f, x => x);
+                res.Add($"face {f.Id} {f.Surface.GetType().Name} rev {f.Reversed} deg {ns.DegreeU}x{ns.DegreeV} cp {ns.CountU}x{ns.CountV} domain {d} flux {fl} diff {(d - fl)}");
+            }
+        }
+        finally { _origin = prev; }
+        return res;
+    }
     static bool ExactNeighbours(TFace f)
     {
         foreach (var l in f.Loops)

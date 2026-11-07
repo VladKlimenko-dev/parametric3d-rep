@@ -303,3 +303,18 @@ static partial class Program
         });
     }
 }
+
+static partial class Program
+{
+    static void RectDebugMode(string file)
+    {
+        var dir = UserModelsDir()!;
+        var (p, pars) = DocumentFile.Load(File.ReadAllText(Path.Combine(dir, file)));
+        int n = p.Features.Count;
+        foreach (int st in new[] { n - 1, n })
+        {
+            p.StageIndex = st; p.MarkStageMoved(); p.Rebuild(pars);
+            foreach (var b in p.Bodies) foreach (var l in Parametric3D.Kernel.Topology.AnalyticVolume.RectDebug(b)) Console.WriteLine($"stage {st}: {l}");
+        }
+    }
+}

@@ -53,11 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k180_a, cmd: 'audit180', env: '' }
-          - { name: k180_s110, cmd: 'seqs110', env: '' }
-          - { name: k180_s106, cmd: 'seqs106', env: '' }
-          - { name: k180_sb, cmd: 'sweepblend148', env: '' }
-          - { name: k180_um, cmd: 'usermodels', env: '' }
+          - { name: k180_rd110, cmd: 'rectdebug corpus_k148h_s110_0.p3d', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
