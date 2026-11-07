@@ -235,7 +235,7 @@ public static class AnalyticVolume
     /// </summary>
     public static double? FaceAreaRough(TFace f)
     {
-        if (RoughAreaOff || GeometryAudit.AuthoritativeSurface(f) is not SectionSurface) return FaceArea(f);
+        if (RoughAreaOff || GeometryAudit.AuthoritativeSurface(f) is not (SectionSurface or NurbsSurface)) return FaceArea(f);
         _rough = true;
         try { return FaceAreaCore(f); } finally { _rough = false; }
     }
@@ -307,7 +307,7 @@ public static class AnalyticVolume
             case PlaneSurface pl: return PlaneArea(f, pl.F.Origin, pl.F.U, pl.F.V);
             case ExtrudedSurface { Base: SplineCurve3 or BezierCurve3 } when !AnalyticFlux.ExtSplineOff: return AnalyticFlux.FaceAreaOf(f);
             case OffsetSurface when !AnalyticFlux.OffsetVolOff: return AnalyticFlux.FaceAreaOf(f);
-            case NurbsSurface nsw when !NurbsVolOff && WholeNurbs(f, nsw): return NurbsDomainIntegral(f, nsw, area: true);
+            case NurbsSurface nsw when !NurbsVolOff && WholeNurbs(f, nsw, out bool rectA) && NurbsDomainIntegral(f, nsw, area: true, rectA) is { } da: return da;
             case NurbsSurface when !NurbsVolOff: return AnalyticFlux.FaceAreaOf(f);
             case CornerPatchSurface cpa when WholePatch(f, cpa): return CornerIntegral(f, cpa, (x, n) => n.Length, area: true);
             case ExtrudedSurface exl when exl.Base is LineCurve3 ln:
@@ -1234,8 +1234,8 @@ public static class AnalyticVolume
                 var oe = _origin;
                 return AnalyticFlux.FaceFluxOf(f, x => x - oe);
             }
-            case NurbsSurface nsw when !NurbsVolOff && WholeNurbs(f, nsw):
-                return NurbsDomainIntegral(f, nsw, area: false);
+            case NurbsSurface nsw when !NurbsVolOff && WholeNurbs(f, nsw, out bool rectV) && NurbsDomainIntegral(f, nsw, area: false, rectV) is { } dv:
+                return dv;
             case NurbsSurface when !NurbsVolOff:
             {
                 // KRN-07 N1b: грань NURBS — поток (x − o) по краю (AnalyticFlux, общая параметризация (u, v))
@@ -1260,14 +1260,53 @@ public static class AnalyticVolume
     // здесь не годится: проекция точки шва даёт один край области из двух, и вклады шва взаимно гасятся (объём шара — 0).
     // Тогда интеграл — прямо по области (Гаусс по пролётам узлов), сторона — по нормали грани. Мутация P3D_WHOLENURBS=0.
     static readonly bool WholeNurbsOff = Environment.GetEnvironmentVariable("P3D_WHOLENURBS") == "0";
-    static bool WholeNurbs(TFace f, NurbsSurface ns) =>
-        !WholeNurbsOff && (f.Loops.All(l => l.CoEdges.Count == 0) || ns.WholeDomainBoundary(f) != null);
+    static bool WholeNurbs(TFace f, NurbsSurface ns, out bool rect)
+    {
+        rect = false;
+        if (WholeNurbsOff) return false;
+        if (f.Loops.All(l => l.CoEdges.Count == 0) || ns.WholeDomainBoundary(f) != null) return true;
+        // лоскут целиком — только если все соседи грани точные: у соседа-сетки (стенка лофта корпуса) край считается по сетке,
+        // точный интеграл одной грани рассогласовал бы тело с ним (объём зависел от начала отсчёта)
+        if (!NurbsRectOff && ExactNeighbours(f) && ns.FullRectFace(f)) { rect = true; return true; }
+        return false;
+    }
+    /// <summary>k180, разбор: у граней-лоскутов целиком — интеграл по области и поток через край (начало отсчёта — ноль).</summary>
+    public static List<string> RectDebug(TSolid solid)
+    {
+        var res = new List<string>();
+        var prev = _origin; _origin = Vector3d.Zero;
+        try
+        {
+            foreach (var f in solid.Faces)
+            {
+                if (GeometryAudit.AuthoritativeSurface(f) is not NurbsSurface ns || !WholeNurbs(f, ns, out bool rect) || !rect) continue;
+                double? d = NurbsDomainIntegral(f, ns, false, true);
+                double? fl = AnalyticFlux.FaceFluxOf(f, x => x);
+                res.Add($"face {f.Id} {f.Surface.GetType().Name} rev {f.Reversed} deg {ns.DegreeU}x{ns.DegreeV} cp {ns.CountU}x{ns.CountV} domain {d} flux {fl} diff {(d - fl)}");
+            }
+        }
+        finally { _origin = prev; }
+        return res;
+    }
+    static bool ExactNeighbours(TFace f)
+    {
+        foreach (var l in f.Loops)
+            foreach (var ce in l.CoEdges)
+                foreach (var o in ce.Edge.CoEdges)
+                    if (o.Loop?.Face is { } g && !ReferenceEquals(g, f) && GeometryAudit.AuthoritativeSurface(g) is null or FacetedSurface) return false;
+        return true;
+    }
+    /// <summary>k180: граней-лоскутов целиком, проинтегрированных по области (разбор).</summary>
+    public static long NurbsRectFaces;
+    /// <summary>k180: мутация P3D_NURBSRECT=0 — грань-лоскут целиком (лофт) через поток по краю, как прежде.</summary>
+    static readonly bool NurbsRectOff = Environment.GetEnvironmentVariable("P3D_NURBSRECT") == "0";
 
-    static double? NurbsDomainIntegral(TFace f, NurbsSurface ns, bool area)
+    static double? NurbsDomainIntegral(TFace f, NurbsSurface ns, bool area, bool rect = false)
     {
         var o = _origin;
-        double Integrate(int sub)
+        double Integrate(int sub, double[]? xu = null, double[]? wu = null, double[]? xv = null, double[]? wv = null)
         {
+            xu ??= GL8X; wu ??= GL8W; xv ??= GL8X; wv ??= GL8W;
             var ku = ns.KnotsU.Distinct().OrderBy(x => x).ToList(); var kv = ns.KnotsV.Distinct().OrderBy(x => x).ToList();
             double sum = 0;
             for (int i = 0; i + 1 < ku.Count; i++)
@@ -1278,22 +1317,61 @@ public static class AnalyticVolume
                         for (int sj = 0; sj < sub; sj++)
                         {
                             double b0 = kv[j] + (kv[j + 1] - kv[j]) * sj / sub, b1 = kv[j] + (kv[j + 1] - kv[j]) * (sj + 1) / sub, mb = (b0 + b1) / 2, rb = (b1 - b0) / 2;
-                            for (int gi = 0; gi < GL8X.Length; gi++)
-                                for (int gj = 0; gj < GL8X.Length; gj++)
+                            for (int gi = 0; gi < xu.Length; gi++)
+                                for (int gj = 0; gj < xv.Length; gj++)
                                 {
-                                    ns.Derivs(new Vector2d(ma + ra * GL8X[gi], mb + rb * GL8X[gj]), out var S, out var Su, out var Sv);
+                                    ns.Derivs(new Vector2d(ma + ra * xu[gi], mb + rb * xv[gj]), out var S, out var Su, out var Sv);
                                     var n = Vector3d.Cross(Su, Sv);
                                     double g = area ? n.Length : Vector3d.Dot(S - o, n);
-                                    sum += GL8W[gi] * GL8W[gj] * ra * rb * g;
+                                    sum += wu[gi] * wv[gj] * ra * rb * g;
                                 }
                         }
                 }
             return sum;
         }
-        double fine = Integrate(4), coarse = Integrate(2);
+        // k180 (скорость; переход шестерен по направляющей — 140 граней NURBS, объём и площадь — 10 из 26 с): ПОТОК У МНОГОЧЛЕННОЙ
+        // ГРАНИ — ТОЧНО ОДНИМ ГАУССОМ НА ПРОЛЁТ: (S − o)·(S_u × S_v) у нерациональной поверхности степеней (p, q) — многочлен
+        // степеней (3p − 1, 3q − 1); Гаусс по 8 точкам точен до степени 15 (p, q ≤ 5) — ошибка квадратуры ноль, вместо 4² + 2²
+        // делений пролёта — одно. Площадь (корень — не многочлен) для самопроверки сетки (допуск 5e-3) — деления 2 и 1 вместо 4 и 2.
+        // Мутация P3D_NURBSEXACTQUAD=0.
+        double fine, coarse;
+        // степени выше 5 — Гаусс с n = ⌈3p/2⌉ точками (точен до степени 2n − 1 ≥ 3p − 1)
+        bool poly = !NurbsExactQuadOff && !area && ns.DegreeU <= 12 && ns.DegreeV <= 12 && NonRational(ns);
+        if (poly)
+        {
+            var (xu, wu) = Gauss((3 * ns.DegreeU + 1) / 2); var (xv, wv) = Gauss((3 * ns.DegreeV + 1) / 2);
+            fine = coarse = Integrate(1, xu, wu, xv, wv); Interlocked.Increment(ref NurbsExactQuads);
+        }
+        else if (area && _rough && !NurbsExactQuadOff) { fine = Integrate(2); coarse = Integrate(1); }
+        else { fine = Integrate(NurbsSub); coarse = Integrate(Math.Max(1, NurbsSub / 2)); }
         if (!double.IsFinite(fine) || !double.IsFinite(coarse)) return null;
+        // k180: лоскут целиком (грань лофта, скругления) — квадратура должна сойтись: у лоскута со сторонами-полюсами
+        // подынтегральное негладкое, деления 4 и 2 давали отход до 7 мм³ (объём зависел от начала отсчёта). Не сошлось за
+        // деления 16 — поток через край (прежний путь).
+        if (rect && !poly)
+        {
+            int sub = NurbsSub;
+            while (Math.Abs(fine - coarse) > 1e-11 * Math.Max(1, Math.Abs(fine)) && sub < 32) { coarse = fine; sub *= 2; fine = Integrate(sub); }
+            if (Math.Abs(fine - coarse) > 1e-11 * Math.Max(1, Math.Abs(fine))) return null;
+        }
+        if (rect) Interlocked.Increment(ref NurbsRectFaces);
         _quadErr += Math.Abs(fine - coarse);
         if (area) return Math.Abs(fine);
+        // k180: у лоскута целиком сторона — по обходу контура в области параметров (соглашение K05: внешний контур — против
+        // часовой вокруг наружной нормали; против часовой в (u, v) — наружу S_u × S_v), а не по нормали грани в одной точке
+        // (у узкого или сложенного лоскута проекция точки попадала не туда — знак грани выходил неверным, объём зависел от начала)
+        if (rect)
+        {
+            var uvl = new List<Vector2d>();
+            foreach (var ce in f.Loops[0].CoEdges)
+            {
+                var c = ce.Edge.Curve;
+                for (int k = 0; k < 4; k++) { double fr = k / 4.0; if (ce.Reversed) fr = 1 - fr; uvl.Add(ns.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * fr))); }
+            }
+            double sa = 0; for (int i = 0; i < uvl.Count; i++) { var a0 = uvl[i]; var b0 = uvl[(i + 1) % uvl.Count]; sa += a0.X * b0.Y - b0.X * a0.Y; }
+            var (du0, du1, dv0, dv1) = ns.Domain;
+            if (Math.Abs(sa) > 0.5 * (du1 - du0) * (dv1 - dv0)) return fine * Math.Sign(sa);
+        }
         // сторона: нормаль S_u × S_v против наружной нормали грани в точке внутри области
         ns.Derivs(new Vector2d(0.37 * (ns.KnotsU[^1] + ns.KnotsU[0]) + 0.13 * ns.KnotsU[0], 0.41 * ns.KnotsV[^1] + 0.59 * ns.KnotsV[0]), out var P, out var pu, out var pv);
         var nn = Vector3d.Cross(pu, pv);
@@ -1301,6 +1379,42 @@ public static class AnalyticVolume
         double d = Vector3d.Dot(nn, outN);
         if (Math.Abs(d) < 1e-12 * nn.Length) return null;
         return fine * Math.Sign(d);
+    }
+    /// <summary>Разбор: деления пролёта у квадратуры грани NURBS по области (по умолчанию 4; P3D_NURBSSUB).</summary>
+    static readonly int NurbsSub = int.TryParse(Environment.GetEnvironmentVariable("P3D_NURBSSUB"), out var nsub) && nsub >= 2 ? nsub : 4;
+    static readonly bool NurbsExactQuadOff = Environment.GetEnvironmentVariable("P3D_NURBSEXACTQUAD") == "0";
+    /// <summary>k180: потоков граней NURBS, взятых точно одним Гауссом на пролёт (разбор).</summary>
+    public static long NurbsExactQuads;
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (double[] X, double[] W)> _gauss = new();
+    /// <summary>k180: узлы и веса Гаусса — Лежандра для n точек на [−1, 1] (Ньютон по многочлену Лежандра).</summary>
+    static (double[] X, double[] W) Gauss(int n)
+    {
+        n = Math.Max(1, n);
+        if (n == 8) return (GL8X, GL8W);
+        return _gauss.GetOrAdd(n, k =>
+        {
+            var x = new double[k]; var w = new double[k];
+            for (int i = 0; i < k; i++)
+            {
+                double z = Math.Cos(Math.PI * (i + 0.75) / (k + 0.5)), pp = 0;
+                for (int it = 0; it < 100; it++)
+                {
+                    double p1 = 1, p2 = 0;
+                    for (int j = 1; j <= k; j++) { double p3 = p2; p2 = p1; p1 = ((2 * j - 1) * z * p2 - (j - 1) * p3) / j; }
+                    pp = k * (z * p1 - p2) / (z * z - 1);
+                    double z1 = z; z = z1 - p1 / pp;
+                    if (Math.Abs(z - z1) < 1e-16) break;
+                }
+                x[k - 1 - i] = z; w[k - 1 - i] = 2 / ((1 - z * z) * pp * pp);
+            }
+            return (x, w);
+        });
+    }
+    static bool NonRational(NurbsSurface ns)
+    {
+        double w0 = ns.Weight(0, 0);
+        for (int i = 0; i < ns.CountU; i++) for (int j = 0; j < ns.CountV; j++) if (Math.Abs(ns.Weight(i, j) - w0) > 1e-15 * Math.Abs(w0)) return false;
+        return true;
     }
     static readonly double[] GL8X = { -0.9602898564975363, -0.7966664774136267, -0.5255324099163290, -0.1834346424956498, 0.1834346424956498, 0.5255324099163290, 0.7966664774136267, 0.9602898564975363 };
     static readonly double[] GL8W = { 0.1012285362903763, 0.2223810344533745, 0.3137066458778873, 0.3626837833783620, 0.3626837833783620, 0.3137066458778873, 0.2223810344533745, 0.1012285362903763 };

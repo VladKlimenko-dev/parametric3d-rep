@@ -210,8 +210,11 @@ static partial class Program
         }
         foreach (var dc in p.Children.OfType<DatumCurve>())
             Log(new { test = "curve", dc.Name, dc.Seq, specs = dc.Specs.Select(c => new { c.SketchId, c.SketchPointId, found = p.Sketches.FirstOrDefault(k => k.Id == c.SketchId)?.AllPoints().Any(x => x.Id == c.SketchPointId) }).ToList() });
+        bool prof = Environment.GetEnvironmentVariable("P3D_PROFREPORT") == "1";
+        if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
         var sw2 = System.Diagnostics.Stopwatch.StartNew();
         p.Rebuild(ps);
+        if (prof) Console.WriteLine(Parametric3D.Kernel.Diagnostics.Prof.Report());
         foreach (var f in p.Features) Log(new { test = "feature", f.Name, f.Seq, error = f.Error, ms = sw2.ElapsedMilliseconds, volume = p.Volume, faces = p.Bodies.FirstOrDefault()?.Faces.Count(), warnings = p.Warnings.ToList() });
     }
 
@@ -240,5 +243,78 @@ static partial class Program
         part.AddFeature(bf); part.Rebuild(null);
         Log(new { test = "guidedump", bf.Error, part.Volume, warnings = part.Warnings.ToList(), dump = File.Exists(ExactFaceMesherDump()), dbg });
         static string ExactFaceMesherDump() => Parametric3D.Kernel.Tess.ExactFaceMesher.UVDumpPath!;
+    }
+}
+
+static partial class Program
+{
+    /// <summary>
+    /// k180: рёбра-кривые Безье — точные в аудите геометрии. Переход двух квадратов с одной направляющей-кривой Безье (поверхность
+    /// подобия): боковые рёбра — кривые Безье; «гранёных» рёбер нет, понижения геометрии нет. P3D_AUDITBEZIER=0 — рёбра гранёные.
+    /// </summary>
+    static void Audit180Checks()
+    {
+        Check("AUDIT-BEZIER-K180", () =>
+        {
+            long q0 = Parametric3D.Kernel.Topology.AnalyticVolume.NurbsExactQuads, r0 = Parametric3D.Kernel.Topology.AnalyticVolume.NurbsRectFaces;
+            var part = new Part("a180");
+            Sketch Sq(string n, Frame3 fr, double h)
+            {
+                var sk = new Sketch(n, fr); part.Add(sk);
+                var p = new[] { new SkPoint(-h, -h), new SkPoint(h, -h), new SkPoint(h, h), new SkPoint(-h, h) };
+                for (int i = 0; i < 4; i++) sk.AddEntity(new SkLine(p[i], p[(i + 1) % 4]));
+                return sk;
+            }
+            var s1 = Sq("S1", Frame3.XY, 10);
+            var s2 = Sq("S2", new Frame3(new Vector3d(0, 0, -30), Vector3d.UnitX, Vector3d.UnitY), 15);
+            var A = new Vector3d(10, 10, 0); var B = new Vector3d(15, 15, -30);
+            var sp = CurveThrough.Build(new[] { A, B }, new Vector3d?[] { Vector3d.UnitZ, Vector3d.UnitZ }, null, null, false)!;
+            var dc = new DatumCurve("G", Array.Empty<Vector3d>(), "through points") { Mode = 0 }; dc.Inputs.Add(A); dc.Inputs.Add(B); dc.SetSpline(sp); part.Add(dc);
+            var bf = new BlendFeature { Mode = BlendKind.Sections, Smooth = true }; bf.SectionSketchIds.Add(s1.Id); bf.SectionSketchIds.Add(s2.Id); bf.GuideCurveIds.Add(dc.Id);
+            part.AddFeature(bf); part.Rebuild(null);
+            var body = part.Bodies.FirstOrDefault();
+            var fac = body == null ? (-1, -1) : Parametric3D.Kernel.Topology.GeometryAudit.Faceted(body);
+            int bez = body?.Edges.Count(e => e.Curve is BezierCurve3) ?? 0;
+            bool valid = body != null && Parametric3D.Kernel.Topology.SolidValidator.Validate(body).IsValid;
+            Log(new { test = "AUDIT-BEZIER-K180", error = bf.Error, volume = part.Volume, valid, bezierEdges = bez, facetedFaces = fac.Item1, facetedEdges = fac.Item2, warnings = part.Warnings.ToList() });
+            Require(bf.Error == null && valid, $"blend: {bf.Error}, valid {valid}");
+            Require(bez > 0, "no Bezier edges in the guided blend");
+            Require(fac.Item1 == 0 && fac.Item2 == 0 && !part.Warnings.Any(w => w.Contains("faceted")), $"exact Bezier edges counted as faceted ({fac.Item2})");
+            // объём по формуле: сечение на t — квадрат со стороной 20·z(t), z(t) = h00 + 1.5·h01 (подобие по направляющей),
+            // высота — осевая часть направляющей (кубическая Эрмита, плечи по хорде L): V = ∫ (20 z)² |dZ/dt| dt
+            double L = (B - A).Length, want = 0; int N = 4000;
+            var (gx, gw) = (new[] { -0.7745966692414834, 0, 0.7745966692414834 }, new[] { 5.0 / 9, 8.0 / 9, 5.0 / 9 });
+            for (int i = 0; i < N; i++)
+                for (int k = 0; k < 3; k++)
+                {
+                    double t = (i + 0.5 + 0.5 * gx[k]) / N;
+                    double h00 = 2 * t * t * t - 3 * t * t + 1, h01 = -2 * t * t * t + 3 * t * t;
+                    double d10 = 3 * t * t - 4 * t + 1, d01 = -6 * t * t + 6 * t, d11 = 3 * t * t - 2 * t;
+                    double z = h00 + 1.5 * h01, dz = -30 * d01 - L * (d10 + d11);
+                    want += gw[k] / 2 / N * Math.Pow(20 * z, 2) * Math.Abs(dz);
+                }
+            long q1 = Parametric3D.Kernel.Topology.AnalyticVolume.NurbsExactQuads, r1 = Parametric3D.Kernel.Topology.AnalyticVolume.NurbsRectFaces;
+            Log(new { test = "similarity volume", volume = part.Volume, want, rel = (part.Volume - want) / want, exactQuads = q1 - q0, rectFaces = r1 - r0 });
+            // боковые грани — многочленные лоскуты целиком: объём по области (P3D_NURBSRECT=0 — поток по краю) и точным Гауссом
+            // (P3D_NURBSEXACTQUAD=0 — деления 4 и 2)
+            Require(r1 - r0 >= 4, $"the loft side faces were not integrated over the parameter domain ({r1 - r0})");
+            Require(q1 - q0 >= 4, $"the polynomial loft faces were not integrated by the exact Gauss rule ({q1 - q0})");
+            Require(Math.Abs(part.Volume - want) < 1e-10 * want, $"similarity loft volume {part.Volume} vs {want}");
+        });
+    }
+}
+
+static partial class Program
+{
+    static void RectDebugMode(string file)
+    {
+        var dir = UserModelsDir()!;
+        var (p, pars) = DocumentFile.Load(File.ReadAllText(Path.Combine(dir, file)));
+        int n = p.Features.Count;
+        foreach (int st in new[] { n - 1, n })
+        {
+            p.StageIndex = st; p.MarkStageMoved(); p.Rebuild(pars);
+            foreach (var b in p.Bodies) foreach (var l in Parametric3D.Kernel.Topology.AnalyticVolume.RectDebug(b)) Console.WriteLine($"stage {st}: {l}");
+        }
     }
 }

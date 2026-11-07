@@ -71,10 +71,11 @@ static partial class Program
             } finally { Parametric3D.Kernel.Ops.DirectRound.OffForTest = false; }
             // k144 (замечание 31.10, п. 1–2: фаска и скругление кромки окна — «сдвиг и неправильная форма»): прямой путь,
             // тело точное; торцы ленты — по продолжению соседних стенок окна (P3D_DREXTENDNURBS, P3D_FOOTFAR, P3D_DRENDFINE,
-            // P3D_DRSTRIPTIGHT; R1 — тонкие треугольники у касательного угла торца, P3D_EARTHIN). Объём — точный (замер k144).
-            foreach (var (tag, round, size, want) in new[] { ("k144 round R10.29 direct", true, 10.29, 644582.926), ("k144 chamfer 3 direct", false, 3.0, 645437.827),
-                                                              ("k144 round R3 direct", true, 3.0, 645477.506), ("k144 chamfer 10.29 direct", false, 10.29, 644433.392),
-                                                              ("k144 round R1 direct", true, 1.0, 645525.192) })
+            // P3D_DRSTRIPTIGHT; R1 — тонкие треугольники у касательного угла торца, P3D_EARTHIN). Объём — точный (замер k180 по точному
+            // потоку граней NURBS; замер k144 — 644582.926, 645437.827, 645477.506, 644433.392, 645525.192: поток поперёк узлов).
+            foreach (var (tag, round, size, want) in new[] { ("k144 round R10.29 direct", true, 10.29, 644582.870), ("k144 chamfer 3 direct", false, 3.0, 645437.839),
+                                                              ("k144 round R3 direct", true, 3.0, 645477.513), ("k144 chamfer 10.29 direct", false, 10.29, 644433.431),
+                                                              ("k144 round R1 direct", true, 1.0, 645525.201) })
             {
                 long b0 = Parametric3D.Kernel.Ops.DirectRound.Built;
                 Case(tag, Stage(0), new[] { 10.0, 10, 0, -10, 10, 0 }, round, size, want,

@@ -663,6 +663,42 @@ public sealed class NurbsSurface : ISurface3
         return closedU || closedV ? res : null;
     }
 
+    /// <summary>
+    /// k180: грань — ВСЯ ОБЛАСТЬ ПАРАМЕТРОВ открытого лоскута (грань лофта, перехода): один контур, его рёбра лежат на краях
+    /// области и покрывают все четыре края. Тогда интеграл по грани — интеграл по области (без потока через край).
+    /// </summary>
+    public bool FullRectFace(TFace face)
+    {
+        if (face.Loops.Count != 1 || face.Loops[0].CoEdges.Count == 0) return false;
+        var (u0, u1, v0, v1) = Domain;
+        double tu = 1e-7 * (u1 - u0), tv = 1e-7 * (v1 - v0);
+        bool su0 = false, su1 = false, sv0 = false, sv1 = false;
+        foreach (var ce in face.Loops[0].CoEdges)
+        {
+            var c = ce.Edge.Curve;
+            foreach (double f in new[] { 0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875 })
+            {
+                var p = c.PointAt(c.T0 + (c.T1 - c.T0) * f);
+                var uv = ProjectToUV(p);
+                // ребро — ровно край поверхности (до шума проекции): у ребра-приближения (линия пересечения с допуском) поток
+                // через край у соседей идёт по ребру, а интеграл по области — по краю поверхности; тело рассогласуется
+                if ((PointAt(uv) - p).Length > 1e-9 * Math.Max(1, p.Length)) return false;
+                bool a = Math.Abs(uv.X - u0) < tu, b = Math.Abs(uv.X - u1) < tu, cc = Math.Abs(uv.Y - v0) < tv, d = Math.Abs(uv.Y - v1) < tv;
+                if (!a && !b && !cc && !d) return false;
+                if (f == 0.5) { su0 |= a; su1 |= b; sv0 |= cc; sv1 |= d; }
+            }
+        }
+        if (!(su0 && su1 && sv0 && sv1)) return false;
+        // контур — ровно край области: длина рёбер контура = длина четырёх краёв (сторона-полюс — длины 0). Иначе грань — часть
+        // лоскута (край идёт по краю области лишь местами), интеграл по области неверен (замер k180: объём зависел от начала).
+        static double Len(Func<double, Vector3d> f) { double l = 0; var a = f(0); for (int i = 1; i <= 64; i++) { var b = f(i / 64.0); l += (b - a).Length; a = b; } return l; }
+        double dom = Len(t => PointAt(new Vector2d(u0, v0 + (v1 - v0) * t))) + Len(t => PointAt(new Vector2d(u1, v0 + (v1 - v0) * t)))
+                   + Len(t => PointAt(new Vector2d(u0 + (u1 - u0) * t, v0))) + Len(t => PointAt(new Vector2d(u0 + (u1 - u0) * t, v1)));
+        double loop = 0;
+        foreach (var ce in face.Loops[0].CoEdges) { var c = ce.Edge.Curve; loop += Len(t => c.PointAt(c.T0 + (c.T1 - c.T0) * t)); }
+        return Math.Abs(dom - loop) <= 1e-6 * Math.Max(1e-9, dom);
+    }
+
     public void TessellateFace(TFace face, MeshBuilder mb)
     {
         // ГРАНЕНИЕ ИДЁТ ПО КОНТУРУ ГРАНИ, а не по всей области параметров: иначе у вырезанного
