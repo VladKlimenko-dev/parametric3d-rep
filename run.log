@@ -1,0 +1,133 @@
+{"test":"UI-COMMAND-REGISTRY","ok":true,"error":null}
+{"test":"UI-ASM-BUTTONS","ok":true,"error":null}
+{"test":"UI-ASM-K149C","ok":true,"error":null}
+{"test":"UI-ASM-K149D","ok":true,"error":null}
+{"test":"UI-DIALOG-SCROLL","ok":true,"error":null}
+{"info":"UI-CONSTRAINT-GLYPHS","placements":9,"drawn":9,"loopBuilds":1}
+{"test":"UI-CONSTRAINT-GLYPHS","ok":true,"error":null}
+{"test":"UI-DELETE-FEATURE-SKETCH","ok":true,"error":null}
+  row at 172.5, 442, hit Grid ctx Blend, window 1400, 860
+  double click «Blend»: operation LoftOp; last press: clicks 2 at 170.5, 204 ctx Blend
+  loft tips: guides True, smooth True, normal toggle True
+  curve: rename True, delete True ()
+  curve edit: CurveOp target Curve1
+  curve through points: sketch points shown True (ids 2564; visible Sketch1:False:2492,Sketch2:False:2520,Sketch3:True:2564; active Точки по порядку filter Vertices, SketchPoints, Datums), picks accumulate True
+{"test":"UI-BLEND-CURVE-TREE-K137","ok":true,"error":null}
+  features 3, stage 2, children: Origin, XY, XZ, YZ, Sketch1, Revolve, Sketch2, Extrude, Circular pattern, Axis1
+  (A) method 2 (Пересечение двух плоскостей), refs 2, axis (1, 0, 0)
+  (B) new axis slot 2 (stage 2); children: Origin, XY, XZ, YZ, Sketch1, Revolve, Sketch2, Extrude, Ось2, Circular pattern, Axis1
+  (E) edit: AxisOp, method 2, refs 2
+  (C) bar to Axis1: stage -1, effective 3 of 3
+  (D) drag: drop line shown True, target 3, after release stage -1 (effective 3)
+  (F) light theme: tree icons 11, stale 0; widths 16,9,14
+{"test":"UI-DATUM-TREE-K132","ok":true,"error":null}
+  features before the plane: 1 → after reopening 1
+{"test":"UI-DATUM-ORDER-K118","ok":true,"error":null}
+  draft: error , hinge True, moving True, 90 -> 87; info «Угол к соседней грани: 90° → 87°»
+  after handle: angle 6, applied 6, error 
+{"test":"UI-DRAFT-K112","ok":true,"error":null}
+{"test":"UI-CANCEL-KEEPS-PART","ok":true,"error":null}
+{"test":"UI-CTRL-TOGGLE","ok":true,"error":null}
+  open 13 ms: restored True, dirty False, bodies 1, volume 316458.127 vs 316458.127, rejected 0
+  after edit: restored False, volume 316458.127, errors 0
+{"test":"UI-BREP-OPEN-K153","ok":true,"error":null}
+  closed during the build: cancelled 1, old build ended in 43 ms, old part dirty True, new building False, progress —
+{"test":"UI-CLOSE-CANCEL-K153","ok":true,"error":null}
+  angle text «63,43°» angle 0, crossed False, shelf True
+  angle arrows outside: arc pieces between the sides 0
+  radius text inside: offset -4.9, arrows 0
+  diameter outside: along the line -11…19.75 (r 5), through the centre False
+{"test":"UI-DRAWING-K171","ok":true,"error":null}
+  dialog fields x 173,173,173,173,173,173,173,173 w 300,300,300,300,300,300,300,300; model row x 173 w 300; preview x 502 (fields end 473)
+  cube at (199.31980515339464, 172.15934284052062) -> (199.31980515339464, 172.15934284052062); iso box (135.68019484660536, 119.84065715947938, 199.31980515339464, 172.15934284052062) -> (118.13541751172878, 102.21272045689136, 216.86458248827122, 189.78727954310864)
+  front: up (0, 1, 0); CW: up (-1, 0, 0), toward (0, -0, 1)
+  tolerances: main y 181.159, upper y 184.459, lower y 181.159 «−0,2» drawn «-0,2»
+  title field focused after a drawing change: True, panel rebuild postponed True
+  «Язык чертежа» ends at 997, the combo starts at 1021
+  long label 174 wide: box at 141, short row box at 141
+{"test":"UI-DRAWING-K170","ok":false,"error":"long labels push the fields right, all rows aligned"}
+  templates 4, base «ISO mm/kg/s A3 LS» -> «ЕСКД in/lb/s A4 PT», preview True
+  drawing: A4 PT, units in
+  sheet 2 field: 2
+  tabs: dr_sheet_tab_1, dr_sheet_tab_2, dr_sheet_tab_add
+  reopened: sheets 3, formats A4,A4,A3
+{"test":"UI-DRAWING-K169","ok":true,"error":null}
+  opened: restored True, volume 120000.0; refreshed 1, volume 60000.0, source a.p3d
+{"test":"UI-ASM-LINK-K178","ok":true,"error":null}
+  points 2, faces at vertex 3, at sketch point 1, from sketch -S
+  vertex: face 32175 normal (1, 0, 0)
+  tangents: start (0, 0, -0.9999999999999999), end (0, 0, 0.9999999999999999)
+  edit: surface enabled True checked True
+  old curve: specs 2, sketch True on True, toggle enabled True
+{"test":"UI-CURVE-TANGENTS-K177","ok":true,"error":null}
+  cube face +Z: toward (0, 0, 1)
+  table 6x4
+  row menu: Добавить строку выше | Добавить строку ниже | Копировать строку | Вставить строку из буфера | Удалить строку
+  table at 255,292 snap tr (frame corner 255,292)
+  after standard change: table 250,287, frame corner 250,287
+  en: Rev. True, Description True, Drawn True
+{"test":"UI-DRAWING-K168","ok":true,"error":null}
+  stacked: up 2.5@276.53, lo 2.5@273.23
+  equal: 160 ±0,1 h 3.5
+  panel: headers True/True, tol boxes 27, text boxes 0
+  title field after edit: АБВГ.123, attached True
+  auto dims on the top view: others 26 -> 26, top 1
+  centre lines: iso False, front True, toggle False
+  status: Размер 160 (Главный (спереди))
+  section: background True, progress 0, status «Строится вид: А-А…», lines 15
+{"test":"UI-DRAWING-K167","ok":true,"error":null}
+  hover: линия
+  selected 2
+  from the selection: al 53.666
+  chain: al 26.833, al 26.833
+{"test":"UI-DRAWING-K166","ok":true,"error":null}
+  parallel lines: al 53.666 (want 53.666), along the edge 0
+  point and line: v 40
+  auto1: ang 63.435° at (0,0), text 63,43°
+  ang1: ang 63.435° at (0,0), text 63,43°
+  centre label moved 5, 5
+  iso moved 24,8; note moved 24,8
+{"test":"UI-DRAWING-K165","ok":true,"error":null}
+  near the centre: центр окружности, highlight 74 segments, status: Размер: первая точка — центр окружности
+  centre-to-centre: al 48.574 from (25.686,25.549) to (58.14,-10.591)
+  near the centre line: осевая линия at (30.781,25.549)
+  centre numbers 2, check box True
+{"test":"UI-DRAWING-K164","ok":true,"error":null}
+  check: 0 of 50 before dimensions
+  missing shown: overlay groups 3
+  after auto + model (0): 5 of 50
+{"test":"UI-DRAWING-CHECK-K163","ok":true,"error":null}
+  view names: match the model window
+  snap: top.X 259.32 front.X 259.32, guides 2
+  iso dir after rotation: v:0.30524794621510043,0,0.9522729080108617;-0.476136284278352,0.8660255066876618,0.15262391870209374
+  dim drag 46.4 ms/step, others unchanged True
+  iso rotate step 2.36 ms
+  datum target -2.28 -> -22.28
+{"test":"UI-DRAWING-K161","ok":true,"error":null}
+  sections: mode Sections, volume 2613.33, error 
+  trajectory: mode Swept, path True, volume 2613.33, error 
+{"test":"UI-BLEND-K160","ok":true,"error":null}
+  tiles 6
+  dims: auto 27, picked h 160
+  views front,top,left,iso,А-А,Б; hatch-capable 344
+  assembly: bodies 2, balloons 1,2
+  open note: В файле нет тела детали (записан до k153 или во время расчёта): показана сохранённая сетка, идёт перестроение. Сохраните файл после расчёта — следующее открытие будет без перестроения.
+  save toast: Сохранено без тела детали: деталь ещё перестраивается — сохраните после окончания расчёта. Следующее открытие — с перестроением.
+  after build: Расчёт закончен. Сохраните файл (Ctrl+S) — следующее открытие будет без перестроения.
+{"test":"UI-DRAWING-K156","ok":true,"error":null}
+  aux А toward (0, 1, 0)
+  break clicks on: front, front; boxes front:219,198,299,248 top:219,135,299,147 left:161,198,174,248 iso:136,104,199,178 А:324,224,404,236
+  break [-24, 24] width 80 -> 64
+{"test":"UI-DRAWING-K158","ok":true,"error":null}
+  sections: Чертёж, Виды, Лист, Поля основной надписи
+  hover: Parametric3D.Model.Drawing.DrawingView front, overlay 1, at view front
+  view drag: 3.7 ms per step, frame 0.6 ms
+  toggle: front 279.3 -> 279.3; top (259.3,141) -> (259.3,141)
+  scale 0.5 -> 0.4, width 80 -> 64
+  dimension moved 267.23 -> 262.23
+  reopened front (279.3,223.2) vs (279.3,223.2)
+{"test":"UI-DRAWING-K159","ok":true,"error":null}
+  views 4, thick 74, hidden 38, scale 1:2
+  reopened: thick 74
+{"test":"UI-DRAWING-K155","ok":true,"error":null}
+{"passed":31,"failed":1}
