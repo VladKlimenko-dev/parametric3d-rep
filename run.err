@@ -1,0 +1,1 @@
+seconds 2 nproc 4 env P3D_ALLC_SETS=2 P3D_ALLC_ONLY=round_edgex3@0.15 P3D_ALLC_DIAG=1 cmd allC
