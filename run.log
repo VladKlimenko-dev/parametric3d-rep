@@ -1,0 +1,89 @@
+{"test":"UI-PALETTE-SEARCH","ok":true,"error":null}
+{"test":"UI-OPERATION-ROUND","ok":true,"error":null}
+{"test":"UI-ROLLBACK-BAR","ok":true,"error":null}
+{"test":"UI-PARAMETERS-SCOPE","ok":true,"error":null}
+{"test":"UI-OP-RELEASE","ok":true,"error":null}
+  features 12, skip warm-up True, stopped True
+{"test":"UI-OPEN-WARMUP-YIELDS-K136","ok":true,"error":null}
+  sections 8; model rows visible 27/27, other visible 0
+  search 'Цвета для темы': 4 rows
+  sketch color: light shown '', dark shown back '#AA0000', synced combos 4/4
+  after OK: look gap 5, sketch dark #AA0000 light #00AA00; theme gap 5, light1 (-0.45, 0.9, 0.62), outline False, numeric boxes 40
+  planes 3, outline lines 0
+  cube 220, home 5.866666666666666, 5.866666666666666, 35.199999999999996, 35.199999999999996
+  tree icon 22, props width 360
+  floor: (-3, (10, -3, 5), (26, 13))
+{"test":"UI-MODELVIEW-K132","ok":true,"error":null}
+  open: RanToCompletion , part real5 features 17
+  stages: Обработка… → Загрузка «p3d_k121p_247631a732 → Обработка: 0 из 18 → Обработка: 2 из 18 → Обработка: 7 из 18 → Обработка: 8 из 18 → Обработка: 14 из 18 → Обработка: 15 из 18; processing samples 171, percent 0…94
+{"test":"UI-PROGRESS-K121","ok":true,"error":null}
+  tree info nodes: none
+  part panel on tree click: prop_Имя, prop_Номер детали, prop_material, prop_units, prop_units_new, prop_Допуски
+  custom system: Лаборатория (cm, kg); size row: 10 × 6 × 2 см
+  English panel, Russian texts: none
+  reopened: Корпус, PN-120, Сталь 45, Лаборатория cm/kg, ISO 2768-mK
+{"test":"UI-PART-PANEL-K120","ok":true,"error":null}
+  settings: language index 1, sliders 27, numeric boxes 40, units row False
+  after OK: language en, English True
+  tree bar: tree.rebuild, tree.needs_attention, tree.resume, tree.insert_here, tree.reorder_up, tree.reorder_down, tree.edit_dims, tree.group, tree.parents_children, tree.replace_refs; title: tree_filter, tree_collapse, tree_expand
+  text buttons 3, cut: none
+{"test":"UI-PANELS-K120","ok":true,"error":null}
+  measure: Замер 1 = 20, in tree True
+  drawn 1, label at 578.0000302791595, 370.4807608127594
+  drag: offset 6.276 -> 1.546, modified True, selection 2
+  reopened: 20, offset 1.546, stale False
+{"test":"UI-MEASURE-K120","ok":true,"error":null}
+  filter «s"PK"»: 1 of 3
+  hover row s"PK".d0: peek d0, segments 119
+{"test":"UI-PARAMS-K118","ok":true,"error":null}
+  property fields: prop_Имя, prop_Номер детали, prop_material, prop_units, prop_units_new, prop_Допуски
+  PA depends on: PB (y), Узел (z)
+{"test":"UI-PART-PROPS-K118","ok":true,"error":null}
+  editing: plane 35, sketch 35
+  cancelled: plane 20, sketch 20
+  after reopening: method 0, base XY, plane 50, sketch 50
+{"test":"UI-PLANE-EDIT-K116","ok":true,"error":null}
+  pocket preview: part compute median 0.7 ms (max 23.9), scene median 0.0 ms; instant 9, volume 983500 (before 1000000)
+  scheduled refine: started 1, instant False
+  refined: instant False, volume 983500 (instant 983500), error 
+  cancel: cancelled 1, instant True, depth 21
+{"test":"UI-PREVIEW-K113","ok":true,"error":null}
+{"test":"UI-REORDER-K104","ok":true,"error":null}
+{"test":"UI-PARAMS-K102","ok":true,"error":null}
+  cold: preview 345 ms, exact after commit 315 ms
+  warm: preview 330 ms, exact after commit 334 ms
+{"test":"UI-OP-PREVIEW-FAST","ok":true,"error":null}
+  rebuild: preview 572 ms (volume 54943.8), exact after commit 731 ms (volume 55000.8, removed 158.4), face meshing 0 ms
+  face meshing: failed faces 0, early exits 0
+  cutter: preview 398 ms (volume 54881.7), exact after commit 4359 ms (volume 55002, removed 157.2), face meshing 157 ms
+{"test":"UI-ROUND-RIM-BALL","ok":true,"error":null}
+  preview 326 ms (volume 55274.8), exact after commit 755 ms (added 152.748), faces 4
+{"test":"UI-ROUND-CAP-SPHERE","ok":true,"error":null}
+  union 1019 ms (eager caps: 1275 ms), volume 11047.483, faces 8, display tris 22740
+{"test":"UI-POLY-FAST","ok":true,"error":null}
+  torus tris 7584, cyl ∪ cyl tris 8016
+{"test":"UI-MESH-FAST","ok":true,"error":null}
+  preview 211 ms (volume 11047.48), exact 77 ms (volume 11047.48)
+{"test":"UI-PREVIEW-MESHBOOL","ok":true,"error":null}
+  mirror of a round: 7 ms, volume 982831.853 (want 982831.853)
+{"test":"UI-MIRROR-OPS","ok":true,"error":null}
+  pattern of a cut (step 15): 18 ms, volume 975973.446 (want 975973.446), bodies 1
+  pattern of a cut (step 5): 151 ms, volume 977201.807, bodies 1
+{"test":"UI-PATTERN-OPS","ok":true,"error":null}
+  open round R2.1: 109 ms, cylinder faces 1, volume 315690.487707
+{"test":"UI-OPEN-CYL","ok":true,"error":null}
+  open 0 ms: note Restored , restored True, dirty False, bodies 1, cached False
+  after 3 s: dirty False, building False, verifying False, same bodies True, features with errors 0
+{"test":"UI-OPEN-STORED-K178","ok":true,"error":null}
+  open: note Restored, restored True, dirty False, quilts 1, area 200.000000
+  after 2 s: restored True, dirty False, quilt key True, area 200.000000
+  edit depth 15: area 300.000000
+{"test":"UI-OPEN-QUILT-K178","ok":true,"error":null}
+  main props: 300 -> 380, saved 380
+  sheet props: 340 -> 280
+{"test":"UI-PANEL-RESIZE-K162","ok":true,"error":null}
+  tools: get_document, list_features, get_feature, set_feature_value, suppress_feature, get_parameters, set_parameter, rebuild, get_mass_properties, capture_view, undo, redo, open_document, save_document, export
+  set_feature_value: Plate.Side1.Distance = 25. part 'real3': 1 body(ies), volume 396156.206277 mm³, built in 0.2 s; no feature errors.
+  bridge: 3 replies; last {"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"{\n  \u0022name\u0022: \u0022mcp\u0022,\n  \u0022fil
+{"test":"UI-MCP-K154","ok":true,"error":null}
+{"passed":30,"failed":0}
