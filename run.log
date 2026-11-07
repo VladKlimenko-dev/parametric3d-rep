@@ -1,0 +1,4 @@
+  edited sketch: Sketch2
+  sketch points: own 21 (shapes 1,0, px 7,5), neighbour 22 (shapes 4, px 5)
+{"test":"UI-GHOSTRING-K127","ok":false,"error":"neighbour sketch points are drawn before the cursor is over them"}
+{"passed":0,"failed":1}
