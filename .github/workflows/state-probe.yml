@@ -53,8 +53,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k181_stages, cmd: 'userfile179 tests/k01/data/user_k181_gearcut.p3d', env: 'P3D_STAGES=1' }
-          - { name: k181_prof, cmd: 'userfile179 tests/k01/data/user_k181_gearcut.p3d', env: 'P3D_PROFREPORT=1' }
+          - { name: k181_cut, cmd: 'cut181', env: '' }
+          - { name: k181_m1, cmd: 'cut181', env: 'P3D_THROUGHFLIP=0' }
+          - { name: k181_m2, cmd: 'cut181', env: 'P3D_CUTMISS=0' }
+          - { name: k181_m3, cmd: 'cut181', env: 'P3D_QUADRICNURBS=0' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

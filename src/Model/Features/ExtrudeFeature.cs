@@ -69,6 +69,9 @@ public sealed class ExtrudeFeature : Feature
     /// (измерено: куб 100, карман r=10 на 20 снимал π·100·100 вместо π·100·20). Мутация P3D_POCKETREACH=0.
     /// </summary>
     private static readonly bool ReachOld = Environment.GetEnvironmentVariable("P3D_POCKETREACH") == "0";
+    static readonly bool ThroughFlipOff = Environment.GetEnvironmentVariable("P3D_THROUGHFLIP") == "0";
+    static readonly bool CutMissOff = Environment.GetEnvironmentVariable("P3D_CUTMISS") == "0";
+
     private static double Reach(Kernel.Topology.TSolid body, Vector3d from, Vector3d dir)
     {
         double at = Vector3d.Dot(from, dir);
@@ -222,6 +225,37 @@ public sealed class ExtrudeFeature : Feature
 
         if (Cut)
         {
+            // k181: ВЫРЕЗ МИМО ТЕЛА — ОШИБКА (как «The feature does not intersect the part» у Creo), а не молчаливая операция
+            // без изменений: габарит резца и тела не пересекаются. Мутация P3D_CUTMISS=0.
+            if (!CutMissOff && ctx.Bodies.Count > 0 && _x == null)
+            {
+                static Kernel.Bounds3 Box(Kernel.Topology.TSolid t)
+                {
+                    var bx = Kernel.Bounds3.Empty;
+                    foreach (var e in t.Edges) { var c = e.Curve; for (int i = 0; i <= 16; i++) bx.Add(c.PointAt(c.T0 + (c.T1 - c.T0) * i / 16.0)); }
+                    foreach (var v in t.Vertices) bx.Add(v.P);
+                    return bx;
+                }
+                var tb = Box(solid); bool hits = false;
+                foreach (var b in ctx.Bodies)
+                {
+                    var bb = Box(b);
+                    if (bb.IsEmpty || tb.IsEmpty) { hits = true; break; }
+                    // запас — 1 % габарита тела (грань может выгибаться за свои рёбра): ошибка — только при явном промахе
+                    double m = 0.01 * (bb.Max - bb.Min).Length;
+                    if (tb.Min.X < bb.Max.X + m && tb.Max.X > bb.Min.X - m && tb.Min.Y < bb.Max.Y + m && tb.Max.Y > bb.Min.Y - m && tb.Min.Z < bb.Max.Z + m && tb.Max.Z > bb.Min.Z - m)
+                    {
+                        // габариты задеваются; резец лишь касается торца снаружи (вырез насквозь от грани наружу) — тоже мимо:
+                        // вдоль направления выреза резец целиком по ту сторону плоскости эскиза, где тела нет
+                        var axisN = dir.Normalized();
+                        double sAt = Vector3d.Dot(shifted.Plane.Origin, axisN), bodyFar = double.MinValue;
+                        foreach (var v in b.Vertices) bodyFar = Math.Max(bodyFar, Vector3d.Dot(v.P, axisN));
+                        foreach (var e in b.Edges) { var c = e.Curve; for (int i = 0; i <= 16; i++) bodyFar = Math.Max(bodyFar, Vector3d.Dot(c.PointAt(c.T0 + (c.T1 - c.T0) * i / 16.0), axisN)); }
+                        if (bodyFar > sAt + 1e-6 * Math.Max(1, (bb.Max - bb.Min).Length)) { hits = true; break; }
+                    }
+                }
+                if (!hits) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"{Name}: the cut does not reach the body in this direction — flip the direction.");
+            }
             // ВЫРЕЗ ПО ОКРУЖНОСТИ — ТОЧНЫМ ПУТЁМ. Здесь известен замысел: эскиз из одной
             // окружности, выдавленный насквозь или на глубину, — это отверстие, и резец не
             // обязан граниться. Именно знание замысла и позволяет резать точно: во всяком
@@ -237,8 +271,11 @@ public sealed class ExtrudeFeature : Feature
                 // случай уходил обычным путём.
                 double depth = dir.Length;
                 double reach = Reach(ctx.Bodies[0], centre, axis);
+                // k181: сквозное точное отверстие режет тело целиком вдоль оси — только если позади плоскости эскиза тела нет
+                // (эскиз на торце или вне тела); иначе — общий путь (вырез — только в свою сторону)
+                bool behind = !ThroughFlipOff && Reach(ctx.Bodies[0], centre, -axis) > Core.Tol.Chord;
 
-                var exact = depth >= reach - Core.Tol.Chord
+                var exact = behind ? null : depth >= reach - Core.Tol.Chord
                     ? Kernel.Ops.QuadricCut.Cut(ctx.Bodies[0], centre, radius, ctx.Warnings, axis)
                     : Kernel.Ops.QuadricCut.CutBlind(ctx.Bodies[0], centre, radius, depth, ctx.Warnings, axis);
 
@@ -266,11 +303,13 @@ public sealed class ExtrudeFeature : Feature
         }
     }
 
+    // k181 (замечание 07.11, 21:08): «Насквозь» — тоже по направлению стороны (Flip). Прежде обращение не учитывалось: вырез
+    // насквозь от торца, обращённый внутрь тела, шёл наружу и ничего не снимал (без ошибки). Мутация P3D_THROUGHFLIP=0.
     private double Depth(ExtrudeSide s, BuildContext ctx) => s.End switch
     {
-        EndType.ThroughAll => ThroughAllSize,
-        EndType.ToNext => ThroughAllSize,      // до реализации булевых — как «насквозь»
-        EndType.ToSelected => ThroughAllSize,
+        EndType.ThroughAll => ThroughAllSize * (s.Flip && !ThroughFlipOff ? -1 : 1),
+        EndType.ToNext => ThroughAllSize * (s.Flip && !ThroughFlipOff ? -1 : 1),      // до реализации булевых — как «насквозь»
+        EndType.ToSelected => ThroughAllSize * (s.Flip && !ThroughFlipOff ? -1 : 1),
         _ => Math.Abs(s.Distance.Resolve(ctx.Parameters)) * (s.Flip ? -1 : 1)
     };
     public override IEnumerable<uint> ConsumedSketchIds()
