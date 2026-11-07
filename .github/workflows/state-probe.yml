@@ -55,10 +55,8 @@ jobs:
         include:
           - { name: g179_guide, cmd: 'guide179', env: '' }
           - { name: g179_user,  cmd: 'userfile179 tests/ui/data/user_k179_gear.p3d', env: '' }
-          - { name: g179_lg,    cmd: 'loftguides', env: '' }
           - { name: g179_curve, cmd: 'curve177', env: '' }
-          - { name: g179_gear,  cmd: 'gear', env: '' }
-          - { name: g179_blend, cmd: 'blend160', env: '' }
+          - { name: g179_k09,   cmd: 'k09', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
