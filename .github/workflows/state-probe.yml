@@ -53,10 +53,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k181_draft, cmd: 'draft181', env: '' }
-          - { name: k181_md, cmd: 'draft181', env: 'P3D_TWEAKKEEPG=0' }
-          - { name: k181_mv, cmd: 'draft181', env: 'P3D_VALKEYGUAR=0' }
-          - { name: k181_allc3, cmd: 'allC', env: 'P3D_ALLC_SETS=3' }
+          - { name: k181_d1, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:boss_circle+loft_add@0.15' }
+          - { name: k181_d2, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:boss_circle+chamfer_edge@0.15' }
+          - { name: k181_d3, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:boss_circle+shell@0.15' }
+          - { name: k181_d4, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:round_edge+boss_circle@0.15' }
+          - { name: k181_d5, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:sweep_add+draft_out@0.15' }
+          - { name: k181_d6, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_DIAG=1 P3D_ALLC_ONLY=S3:round_edge+vertex_round@0.15' }
+          - { name: k181_allc1, cmd: 'allC', env: 'P3D_ALLC_SETS=12' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

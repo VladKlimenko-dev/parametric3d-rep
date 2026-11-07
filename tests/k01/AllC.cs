@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using OpenTK.Mathematics;
 using Parametric3D.Kernel;
+using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Topology;
 using Parametric3D.Model;
 using Parametric3D.Model.Features;
@@ -331,6 +332,7 @@ static partial class Program
             try { (r.Params, want) = op.Apply(p, f, slot); }
             catch (Exception e) { r.Verdict = "FAIL"; r.Why = "setup: " + e.Message; break; }
             if (pristine) r.Want = want;
+            var before = p.Bodies.ToList();
             p.Limits = new KernelLimits { Deadline = DateTime.UtcNow.AddSeconds(stepSec) };
             var sw = Stopwatch.StartNew();
             try { p.Rebuild(null); }
@@ -382,6 +384,13 @@ static partial class Program
             if (r.Ms > 10000 && v != "FAIL") { why.Add($"slow {r.Ms / 1000:0.0} s"); v = "SLOW"; }
             r.Verdict = v; r.Why = string.Join("; ", why);
             pristine = false;
+            if (v == "FAIL" && Environment.GetEnvironmentVariable("P3D_ALLC_DIAG") == "1")
+            {
+                Console.WriteLine($"ALLCDIAG {id} step {k + 1} {op.Name}: before");
+                foreach (var b in before) AllCDumpFaces(b);
+                Console.WriteLine($"ALLCDIAG {id} step {k + 1} {op.Name}: after");
+                foreach (var b in p.Bodies) AllCDumpFaces(b);
+            }
             if (v == "FAIL")
             {
                 try { r.Model = Parametric3D.Model.DocumentFile.Save(p); } catch { }
@@ -389,6 +398,26 @@ static partial class Program
             }
         }
         return rows;
+    }
+
+    static void AllCDumpFaces(TSolid b)
+    {
+        Console.WriteLine($"  body guarantee {b.Guarantee}, faces {b.Faces.Count()}, exact {(b.Exact != null)}, qexact {(b.QExact != null)}");
+        int i = 0;
+        foreach (var f in b.Faces)
+        {
+            var src = GeometryAudit.AuthoritativeSurface(f);
+            string facet = "-";
+            if (f.Surface is FacetedSurface fs && !fs.Facets.IsPending && fs.Facets.Count > 0)
+            {
+                var n = Vector3d.Zero; var c = Vector3d.Zero; int m = 0;
+                foreach (var (a, bb, cc) in fs.Facets.ReadView) { n += Vector3d.Cross(bb - a, cc - a); c += (a + bb + cc) / 3; m++; }
+                c /= m;
+                double dn = double.NaN; try { dn = Vector3d.Dot(n.Normalized(), f.NormalAt(c)); } catch { }
+                facet = $"facets {m} sum-n ({n.X:0.#},{n.Y:0.#},{n.Z:0.#}) dot(face normal) {dn:0.###}";
+            }
+            Console.WriteLine($"  F{i++} tag {f.Tag} {src?.GetType().Name} rev {f.Reversed} loops {f.Loops.Count} {facet}");
+        }
     }
 
     static void AllCSummary(List<AllCRow> rows, TimeSpan elapsed)

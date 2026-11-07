@@ -279,7 +279,7 @@ public sealed class ExtrudeFeature : Feature
                     ? Kernel.Ops.QuadricCut.Cut(ctx.Bodies[0], centre, radius, ctx.Warnings, axis)
                     : Kernel.Ops.QuadricCut.CutBlind(ctx.Bodies[0], centre, radius, depth, ctx.Warnings, axis);
 
-                if (exact != null) { ctx.Bodies[0] = exact; return; }
+                if (exact != null) { if (!QGuarOff && exact.Guarantee == Kernel.GuaranteeLevel.Unspecified) exact.Guarantee = Kernel.GuaranteeLevel.ExactQuadric; ctx.Bodies[0] = exact; return; }
             }
 
             BooleanOp.Subtract(ctx.Bodies, solid, ctx.Warnings);
@@ -296,7 +296,9 @@ public sealed class ExtrudeFeature : Feature
 
                 var grown = Kernel.Ops.QuadricCut.AddBoss(ctx.Bodies[0], centre, radius,
                                                           dir.Length, ctx.Warnings, axis);
-                if (grown != null) { ctx.Bodies[0] = grown; return; }
+                // k181: точный путь объявляет уровень гарантии, как отверстие (KRN-07): на исходном теле без контракта (выдавленный
+                // блок) результат оставался «Unspecified». Мутация P3D_EXTRUDEQGUAR=0.
+                if (grown != null) { if (!QGuarOff && grown.Guarantee == Kernel.GuaranteeLevel.Unspecified) grown.Guarantee = Kernel.GuaranteeLevel.ExactQuadric; ctx.Bodies[0] = grown; return; }
             }
 
             BooleanOp.Unite(ctx.Bodies, solid, ctx.Warnings);
@@ -305,6 +307,7 @@ public sealed class ExtrudeFeature : Feature
 
     // k181 (замечание 07.11, 21:08): «Насквозь» — тоже по направлению стороны (Flip). Прежде обращение не учитывалось: вырез
     // насквозь от торца, обращённый внутрь тела, шёл наружу и ничего не снимал (без ошибки). Мутация P3D_THROUGHFLIP=0.
+    static readonly bool QGuarOff = Environment.GetEnvironmentVariable("P3D_EXTRUDEQGUAR") == "0";
     private double Depth(ExtrudeSide s, BuildContext ctx) => s.End switch
     {
         EndType.ThroughAll => ThroughAllSize * (s.Flip && !ThroughFlipOff ? -1 : 1),
