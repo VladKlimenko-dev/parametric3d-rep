@@ -9,3 +9,4 @@ user_k148_sweep_blend.p3d	4	1	1	15	642818.1512487647	72344.15601579362	1	15/9/Un
 user_k148e_sweep_blend_r555.p3d	5	0	1	18	643495.9426408102	72704.25401008707	1	15/9/Underconstrained/0;10/4/Ok/0;18/7/Underconstrained/0	5932.302749335393	ExactAnalytic
 user_k150_sweep_blend_c972.p3d	3	1	1	11	645199.8833294437	72940.58267670295	1	15/9/Underconstrained/0;10/4/Ok/0;18/7/Underconstrained/0	5932.302749335393	ExactAnalytic
 user_k153_tube_chamfer.p3d	16	1	1	47	8243382.442603476	564737.4380563425	1	16/5/Ok/0;14/4/Ok/0;29/4/Overconstrained/0;7/2/Ok/0;20/10/Underconstrained/0;10/2/Underconstrained/0;19/0/Overconstrained/0;7/2/Underconstrained/0;29/4/Overconstrained/0;21/3/Overconstrained/0;18/3/Overconstrained/0;18/5/Underconstrained/0	35104.346968082	ExactAnalytic
+user_k179_gear.p3d	1	0	1	142	772714.2418010868	87333.47225978044	1	142/2/Underconstrained/0;144/0/Ok/0	90174.14615977724	ExactAnalytic

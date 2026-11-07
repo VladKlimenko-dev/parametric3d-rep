@@ -15,7 +15,8 @@ using Parametric3D.Kernel.Topology;
 static partial class Program
 {
     static int Passed, Failed;
-    static void Log(object o) => Console.WriteLine(JsonSerializer.Serialize(o));
+    static readonly JsonSerializerOptions LogOpts = new() { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
+    static void Log(object o) => Console.WriteLine(JsonSerializer.Serialize(o, LogOpts));
     static void Require(bool ok, string why) { if (!ok) throw new Exception(why); }
     static string? CurrentCheck;
     static void Check(string id, Action a)
@@ -541,6 +542,7 @@ static partial class Program
         if (mode is "sweptconvex" or "allA") Krn06SweptConvexMidChecks();
         if (mode is "loftcaps" or "allA") Krn06LoftCapBlendChecks();
         if (mode is "usermodels-ref") { UserModelsRef(); return; }
+        if (mode is "usermodel1") { var a = AnswerOf(args[1]); Console.WriteLine("TSV\t" + string.Join('\t', a.File, a.Features, a.Errors, a.Bodies, a.Faces, Fmt(a.Volume), Fmt(a.Area), a.Valid ? 1 : 0, a.Sketches, Fmt(a.PointSum), a.Guarantee)); return; }
         if (mode is "userprobe") { UserProbe(args[1]); return; }
         if (mode is "blendeach") { BlendEachEdgeProbe(int.Parse(args[1]), int.Parse(args[2]), double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture)); return; }
         if (mode is "torcase") { var row = ReplayDiffCase(8, int.Parse(args[1]), TorOps8Long); Console.WriteLine(string.Join(" | ", row)); return; }
@@ -612,6 +614,9 @@ static partial class Program
         if (mode is "drawing164" or "allB") Drawing164Checks();
         if (mode is "gear" or "allA") SkGearChecks();   // k176: шестерня эскиза
         if (mode is "curve177" or "allB") CurveGuideChecks();
+        if (mode is "guide179" or "allB") Guide179Checks();   // k179: направляющая ведёт все рёбра, кривая за точкой эскиза, порядок создания
+        if (mode == "userfile179") { UserFile179(args[1]); return; }
+        if (mode == "guidedump") { GuideDump(args[1]); return; }
         if (mode == "gearfile") GearFile(args[1]);   // k177: касательные кривой через точки, направляющая-кривая
         if (mode is "meshcut165" or "allB") MeshCut165Checks();
         if (mode is "drawing165" or "allB") Drawing165Checks();
