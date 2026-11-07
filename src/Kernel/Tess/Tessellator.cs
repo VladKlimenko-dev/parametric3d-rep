@@ -37,6 +37,26 @@ public static class Tessellator
     /// Построитель точной сетки такие контуры умеет — проверено, он принимает и вал с двумя
     /// вырезами (3036 треугольников), и стенку отверстия (96).
     /// </summary>
+    static readonly bool StripTrimOff = Environment.GetEnvironmentVariable("P3D_STRIPTRIM") == "0";
+
+    /// <summary>k181: грань — вся полоса плоского выдавливания (один контур, все рёбра — по краям полосы u ∈ {0,1}, v ∈ {0,1}).</summary>
+    internal static bool FullStrip(TFace f, Surfaces.ExtrudedSurface s)
+    {
+        if (f.Loops.Count != 1) return false;
+        bool OnRim(Vector3d p)
+        {
+            var uv = s.ProjectToUV(p);
+            const double e = 1e-7;
+            return Math.Abs(uv.X) < e || Math.Abs(uv.X - 1) < e || Math.Abs(uv.Y) < e || Math.Abs(uv.Y - 1) < e;
+        }
+        foreach (var ce in f.Loops[0].CoEdges)
+        {
+            var c = ce.Edge?.Curve; if (c == null) return false;
+            if (!OnRim(c.PointAt(c.T0)) || !OnRim(c.PointAt(c.T1)) || !OnRim(c.PointAt(0.5 * (c.T0 + c.T1)))) return false;
+        }
+        return true;
+    }
+
     private static bool NeedsExactMesher(TFace f)
     {
         // Условие узкое СОЗНАТЕЛЬНО. Кривые пересечения встречаются и у обычных тел после
@@ -231,7 +251,14 @@ public static class Tessellator
                 if (facets && faces[i].Surface is Surfaces.FacetedSurface fs) fs.TessellateFacetsFlat(faces[i], own);
                 else if (polyAuth && PolyFacetsOnly && faces[i].Surface is Surfaces.FacetedSurface pf) pf.TessellateFacets(faces[i], own);
                 else if (!polyAuth && NeedsExactMesher(faces[i]) && ExactInto(faces[i], own)) { }
-                else if (faces[i].Surface is Surfaces.ExtrudedSurface exd) exd.TessellateDisplay(faces[i], own);   // KRN-09: одна полоса (P3D_DISPLAYONEROW)
+                else if (faces[i].Surface is Surfaces.ExtrudedSurface exd)
+                {
+                    // k181: ПЛОСКАЯ ГРАНЬ ВЫДАВЛИВАНИЯ, ОБРЕЗАННАЯ КОНТУРАМИ (отверстие или бобышка точным путём на боковой грани, край
+                    // скругления), — по контурам: полная полоса накрывала вырез и обрезанный край (сетка незамкнута: AllC, скругление +
+                    // бобышка на соседней грани — 54 стороны без пары). Мутация P3D_STRIPTRIM=0.
+                    if (!StripTrimOff && exd.IsPlanar && !FullStrip(faces[i], exd) && ExactInto(faces[i], own)) { }
+                    else exd.TessellateDisplay(faces[i], own);   // KRN-09: одна полоса (P3D_DISPLAYONEROW)
+                }
                 else faces[i].Surface.TessellateFace(faces[i], own);
             }
             catch (Exception ex) when (!KernelContext.IsCancellation(ex))
@@ -370,12 +397,32 @@ public static class Tessellator
         // g.11: у тела с авторитетной многогранной формой обход задан самой формой (многоугольники точного ядра ориентированы);
         // «исправление по нормалям» переворачивало участки граней с несогласованной гладкой нормалью (серия 9, случай 65:
         // 141 сторона с одинаковым обходом). Мутация P3D_POLYWINDING=0.
+        string? traceTag = Environment.GetEnvironmentVariable("P3D_TESSTRACE");
+        void Trace(string stage)
+        {
+            if (string.IsNullOrEmpty(traceTag)) return;
+            foreach (var tf in faces.Where(q => (q.Tag ?? "").Contains(traceTag)))
+                if (md.FaceRanges.TryGetValue(tf.Id, out var fr))
+                {
+                    var n = Vector3d.Zero;
+                    for (int t = fr.IndexStart; t + 2 < fr.IndexStart + fr.IndexCount; t += 3)
+                    {
+                        var a = md.Vertices[md.Indices[t]]; var bq = md.Vertices[md.Indices[t + 1]]; var cq = md.Vertices[md.Indices[t + 2]];
+                        var cr = Vector3.Cross(bq.P - a.P, cq.P - a.P); n += new Vector3d(cr.X, cr.Y, cr.Z);
+                    }
+                    var sh = fr.IndexCount > 0 ? md.Vertices[md.Indices[fr.IndexStart]].N : default;
+                    Console.Error.WriteLine($"TESSTRACE {stage} face {tf.Id} {tf.Tag} tris {fr.IndexCount / 3} sum-n ({n.X:0.#},{n.Y:0.#},{n.Z:0.#}) shading0 ({sh.X:0.##},{sh.Y:0.##},{sh.Z:0.##}) vol {MassProps.SignedVolume(md):0.#}");
+                }
+        }
+        Trace("assembled");
         if (!(polyAuth && PolyFacetsOnly && PolyFine && !PolyWindingOld))
             FixWindingByNormals(md, faces.Where(q => q.Surface is Surfaces.FacetedSurface fq && fq.Source != null
                 && Geometry.ExactEdges.ShapeOf(fq.Source) is { } shq && shq is not Geometry.Ssi.ParamSurf).Select(q => q.Id).ToHashSet());
 
+        Trace("fixwinding");
         double vol = MassProps.SignedVolume(md);
         if (vol < 0) FlipAll(md);
+        Trace("final");
 
         var b = Bounds3.Empty;
         foreach (var v in md.Vertices) b.Add(new Vector3d(v.P.X, v.P.Y, v.P.Z));

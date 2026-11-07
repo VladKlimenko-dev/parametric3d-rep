@@ -125,22 +125,25 @@ public static class SolidValidator
         // Мутация P3D_CACHEKEYTOL=0: ключ без бюджета точности.
         if (CacheKeyTolOff) ks = ks with { Tolerance = ToleranceContext.Default };
         long rev = solid.Revision; var ex = solid.Exact; ulong fp = TopoFingerprint.Of(solid, display: ValKeyDisplayOff);
+        // k181: гарантия тела меняет допуски аудита (точное тело — без послабления на гранение); прежде смена гарантии без
+        // смены ревизии отдавала раздел, посчитанный при прежней гарантии. Мутация P3D_VALKEYGUAR=0.
+        var gk = ValKeyGuarOff ? GuaranteeLevel.Unspecified : solid.Guarantee;
         var e = _valCache.GetValue(solid, _ => new ValEntry());
         lock (e)
         {
             if (ValCacheDbg) Console.Error.WriteLine($"VALCACHE {key} solid {System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(solid)} rev {rev}/{e.Revision} fp {fp}/{e.Print} exact {ReferenceEquals(e.Exact, ex)} settings {(e.Settings == null ? "null" : e.Settings.Equals(ks) ? "same" : "diff:" + e.Settings + " vs " + ks)} has {e.Sections.ContainsKey(key)}");
-            if (e.Revision != rev || e.Print != fp || !ReferenceEquals(e.Exact, ex) || e.Settings == null || !e.Settings.Equals(ks))
-            { e.Sections.Clear(); e.Revision = rev; e.Print = fp; e.Exact = ex; e.Settings = ks; }
+            if (e.Revision != rev || e.Print != fp || !ReferenceEquals(e.Exact, ex) || e.Settings == null || !e.Settings.Equals(ks) || e.Guarantee != gk)
+            { e.Sections.Clear(); e.Revision = rev; e.Print = fp; e.Exact = ex; e.Settings = ks; e.Guarantee = gk; }
             if (e.Sections.TryGetValue(key, out var hit)) { Interlocked.Increment(ref ValidationCacheHits); return Copy(hit); }
         }
         var rep = run();
-        if (solid.Revision == rev && ReferenceEquals(ex, solid.Exact) && TopoFingerprint.Of(solid, display: ValKeyDisplayOff) == fp)
-            lock (e) if (e.Revision == rev && e.Print == fp && ReferenceEquals(e.Exact, ex)) e.Sections[key] = Copy(rep);
+        if (solid.Revision == rev && ReferenceEquals(ex, solid.Exact) && TopoFingerprint.Of(solid, display: ValKeyDisplayOff) == fp && (ValKeyGuarOff || solid.Guarantee == gk))
+            lock (e) if (e.Revision == rev && e.Print == fp && ReferenceEquals(e.Exact, ex) && e.Guarantee == gk) e.Sections[key] = Copy(rep);
         return rep;
     }
     private sealed class ValEntry
     {
-        public long Revision = long.MinValue; public ulong Print; public object? Exact; public KernelSettings? Settings;
+        public long Revision = long.MinValue; public ulong Print; public object? Exact; public KernelSettings? Settings; public GuaranteeLevel Guarantee;
         public readonly Dictionary<string, ValidationReport> Sections = new();
     }
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, ValEntry> _valCache = new();
@@ -148,6 +151,7 @@ public static class SolidValidator
     internal static bool KeyDisplayOff => ValKeyDisplayOff;
     static readonly bool ValCacheDbg = Environment.GetEnvironmentVariable("P3D_VALCACHEDBG") == "1";
     static readonly bool ValCacheOff = Environment.GetEnvironmentVariable("P3D_VALCACHE") == "0";
+    static readonly bool ValKeyGuarOff = Environment.GetEnvironmentVariable("P3D_VALKEYGUAR") == "0";
     static readonly bool CacheKeyTolOff = Environment.GetEnvironmentVariable("P3D_CACHEKEYTOL") == "0";
     /// <summary>u11: разделов проверки тела из памяти (разбор).</summary>
     public static long ValidationCacheHits;

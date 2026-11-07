@@ -861,6 +861,14 @@ public static partial class ExactFaceMesher
     public static long FaceMemoResets;
     static readonly long MemoBudget = long.TryParse(Environment.GetEnvironmentVariable("P3D_FACEMEMOBUDGET"), out var mb) ? mb : 3_000_000;
 
+    // k181: СТОРОНА ГРАНИ ДЛЯ ПАМЯТИ СЕТОК — ДЕЙСТВУЮЩАЯ. У гранёной грани (разметка по контурам) сторону несут треугольники:
+    // Reversed = false, а нормаль источника может смотреть внутрь (Sense < 0). Память сравнивала голый флаг: сетка, запомненная
+    // для той же грани без обёртки (плоскость +Z, Reversed = true — низ блока), выдавалась обёрнутой грани (Reversed = false)
+    // перевёрнутой — низ тела смотрел внутрь, сетка «стороны в одну сторону» (AllC: бобышка по окружности + любая следующая
+    // общая булева — 100+ случаев). Мутация P3D_MEMOSIDE=0.
+    static readonly bool MemoSideOff = Environment.GetEnvironmentVariable("P3D_MEMOSIDE") == "0";
+    static bool MemoSide(TFace f) => MemoSideOff ? f.Reversed : f.Reversed ^ (f.Surface is FacetedSurface fs && fs.Source != null && fs.Sense < 0);
+
     private static string? KeyOf(TFace f)
     {
         var src = f.Surface is FacetedSurface fs ? fs.Source : f.Surface;
@@ -956,7 +964,7 @@ public static partial class ExactFaceMesher
             if (_faceMemo.TryGetValue(fk, out var fm) && fm.Key == fk && fm.Tol == tolKey)
             {
                 Interlocked.Increment(ref FaceMemoHits);
-                bool flip = fm.Reversed != f.Reversed;
+                bool flip = fm.Reversed != MemoSide(f);
                 memoWhy = fm.Why;
                 memoN = fm.N == null ? null : flip ? fm.N.Select(n => -n).ToList() : new List<Vector3d>(fm.N);
                 if (fm.M != null)
@@ -990,7 +998,7 @@ public static partial class ExactFaceMesher
             {
                 _faceMemo.Clear(); Interlocked.Exchange(ref _memoWeight, add); Interlocked.Increment(ref FaceMemoResets);
             }
-            _faceMemo[fk] = new FaceMemo { Key = fk, Tol = tolKey, Why = why, Reversed = f.Reversed, N = normals == null ? null : new List<Vector3d>(normals),
+            _faceMemo[fk] = new FaceMemo { Key = fk, Tol = tolKey, Why = why, Reversed = MemoSide(f), N = normals == null ? null : new List<Vector3d>(normals),
                 M = made is { } mm0 ? (new List<Vector3d>(mm0.P), new List<int>(mm0.T)) : null };
         }
         if (MeshTrace && made is { } mtr && Topology.GeometryAudit.AuthoritativeSurface(f) is { } fsr2) Console.Error.WriteLine($"MESHTRACE   result folded {Folded(fsr2, mtr.P, mtr.T)} tris {mtr.T.Count / 3}");

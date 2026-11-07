@@ -448,6 +448,49 @@ public static class QuadricCut
     /// Ось задаётся направлением; поддержаны X, Y и Z — наклонная требует поворота формы и
     /// делается отдельно.
     /// </summary>
+    static readonly bool NurbsOff = Environment.GetEnvironmentVariable("P3D_QUADRICNURBS") == "0";
+    /// <summary>k181: нижняя оценка расстояния от оси до поверхности NURBS — до выпуклой оболочки проекций опорных точек
+    /// на плоскость поперёк оси (0 — ось проходит через оболочку).</summary>
+    public static double NurbsClearance(Surfaces.NurbsSurface ns, Vector3d axisAt, Vector3d dir)
+    {
+        var e1 = Vector3d.Cross(dir, Math.Abs(dir.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY).Normalized(); var e2 = Vector3d.Cross(dir, e1);
+        var pts = new List<Vector2d>();
+        for (int i = 0; i < ns.CountU; i++)
+            for (int j = 0; j < ns.CountV; j++)
+            {
+                if (!(ns.Weight(i, j) > 0)) return 0;
+                var d = ns.ControlPoint(i, j) - axisAt;
+                pts.Add(new Vector2d(Vector3d.Dot(d, e1), Vector3d.Dot(d, e2)));
+            }
+        // выпуклая оболочка (монотонная цепь)
+        pts.Sort((a, b) => a.X != b.X ? a.X.CompareTo(b.X) : a.Y.CompareTo(b.Y));
+        static double Cr(Vector2d o, Vector2d a, Vector2d b) => (a.X - o.X) * (b.Y - o.Y) - (a.Y - o.Y) * (b.X - o.X);
+        var h = new List<Vector2d>();
+        for (int pass = 0; pass < 2; pass++)
+        {
+            int start = h.Count;
+            for (int k = 0; k < pts.Count; k++)
+            {
+                var q = pass == 0 ? pts[k] : pts[pts.Count - 1 - k];
+                while (h.Count >= start + 2 && Cr(h[^2], h[^1], q) <= 0) h.RemoveAt(h.Count - 1);
+                h.Add(q);
+            }
+            h.RemoveAt(h.Count - 1);
+        }
+        if (h.Count == 0) return 0;
+        if (h.Count == 1) return h[0].Length;
+        bool inside = h.Count >= 3;
+        double best = double.MaxValue;
+        for (int k = 0; k < h.Count; k++)
+        {
+            var a = h[k]; var b = h[(k + 1) % h.Count];
+            if (Cr(a, b, Vector2d.Zero) < 0) inside = false;
+            var ab = b - a; double t = ab.LengthSquared > 0 ? Math.Clamp(Vector2d.Dot(-a, ab) / ab.LengthSquared, 0, 1) : 0;
+            best = Math.Min(best, (a + ab * t).Length);
+        }
+        return inside ? 0 : best;
+    }
+
     public static bool Fits(TSolid body, Vector3d axisAt, double radius, out double zLow, out double zHigh,
                             Vector3d? along = null)
     {
@@ -466,7 +509,11 @@ public static class QuadricCut
                        || (src is ExtrudedSurface exl && exl.Base is LineCurve3);
             bool existingHole = src is ExtrudedSurface exa && exa.Base is ArcCurve3;
             bool round = !RoundsOff && (src is CylinderSurface || src is RevolvedSurface { Base: LineCurve3 });
-            if (!planar && !existingHole && !round) return false;
+            // k181: грань NURBS (переход, лофт), которую отверстие не задевает: выпуклая оболочка её опорных точек (грань в ней
+            // лежит — веса положительны) в проекции поперёк оси дальше радиуса от оси. Отверстие в торце шестерни-перехода
+            // прежде уходило общей булевой (107 с, тело — многогранное). Мутация P3D_QUADRICNURBS=0.
+            bool clearNurbs = !NurbsOff && src is Surfaces.NurbsSurface nsc && NurbsClearance(nsc, axisAt, dir) > radius + Tol.Weld;
+            if (!planar && !existingHole && !round && !clearNurbs) return false;
         }
 
         // НОВОЕ ОТВЕРСТИЕ НЕ ДОЛЖНО ЗАДЕВАТЬ ПРЕЖНИЕ. Пересекающиеся отверстия дают ребро на
@@ -1256,6 +1303,8 @@ public static class QuadricCut
         // ТОЧНОЕ ОПИСАНИЕ РЕЗУЛЬТАТА: тело исходного + вырез-цилиндр. Оно и есть то, чего телу
         // не хватало: плоскостное точное представление цилиндр вместить не может.
         solid.QExact = DescribeCut(body, axisAt, radius, dir, wallLow, zHigh, bottomAt != null);
+        // k181: тело с гранями NURBS (точного плоскостного описания нет) — точное, как исходное: стенка и кромки отверстия точные
+        if (solid.QExact == null && !NurbsOff && body.Guarantee is GuaranteeLevel.ExactAnalytic or GuaranteeLevel.ExactQuadric) solid.Guarantee = body.Guarantee;
 
         warnings?.Add($"QuadricCut: hole \u2300{2 * radius:0.###} " +
                       (bottomAt == null ? "through" : $"to depth {zHigh - bottomAt.Value:0.###}") +

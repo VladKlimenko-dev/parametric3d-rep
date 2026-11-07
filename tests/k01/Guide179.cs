@@ -210,6 +210,15 @@ static partial class Program
         }
         foreach (var dc in p.Children.OfType<DatumCurve>())
             Log(new { test = "curve", dc.Name, dc.Seq, specs = dc.Specs.Select(c => new { c.SketchId, c.SketchPointId, found = p.Sketches.FirstOrDefault(k => k.Id == c.SketchId)?.AllPoints().Any(x => x.Id == c.SketchPointId) }).ToList() });
+        // k181: по шагам дерева — объём, грани, гарантия, ошибки и предупреждения
+        if (Environment.GetEnvironmentVariable("P3D_STAGES") == "1")
+            for (int st = 1; st <= p.Features.Count; st++)
+            {
+                var sws = System.Diagnostics.Stopwatch.StartNew();
+                p.StageIndex = st; p.MarkStageMoved(); p.Rebuild(ps);
+                var f = p.Features[st - 1];
+                Log(new { test = "stage", st, f.Name, ms = sws.ElapsedMilliseconds, error = f.Error, volume = p.Volume, bodies = p.Bodies.Count, faces = p.Bodies.Sum(b => b.Faces.Count()), guarantee = string.Join(",", p.Bodies.Select(b => b.Guarantee)), warnings = p.Warnings.ToList(), downgrades = p.Downgrades.Select(d => d.Key.Name).ToList() });
+            }
         bool prof = Environment.GetEnvironmentVariable("P3D_PROFREPORT") == "1";
         if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
         var sw2 = System.Diagnostics.Stopwatch.StartNew();
