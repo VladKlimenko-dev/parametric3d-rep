@@ -1,0 +1,2 @@
+exit 1
+seconds 191 nproc 4 env P3D_GEARIDS=0 cmd guide179
