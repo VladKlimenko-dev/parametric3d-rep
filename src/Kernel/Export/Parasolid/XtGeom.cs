@@ -228,31 +228,35 @@ internal static class XtBasis
         return (k, prm.ToArray());
     }
 
+    /// <summary>Вершины интерполирующего B-сплайна. Матрица коллокации ленточная (в строке i ненулевые лишь столбцы i − p…i + p)
+    /// и вполне положительная — исключение Гаусса без перестановок по ленте (де Бур), O(n·p²): тысячи точек плотной винтовой
+    /// линии резьбы решаются мгновенно (прежде полный Гаусс O(n³)).</summary>
     public static Vector3d[] Solve(double[] knots, int p, double[] prm, IReadOnlyList<Vector3d> q)
     {
-        int n = q.Count;
-        var A = new double[n, n];
-        for (int i = 0; i < n; i++) { var b = Eval(knots, p, n, prm[i]); if (i == n - 1) { b = new double[n]; b[n - 1] = 1; } for (int j = 0; j < n; j++) A[i, j] = b[j]; }
-        var X = new Vector3d[n]; var B = q.ToArray();
-        // Гаусс с выбором ведущего
-        var M = (double[,])A.Clone();
-        var idx = Enumerable.Range(0, n).ToArray();
+        int n = q.Count, w = 2 * p + 1;
+        var M = new double[n, w];                 // M[i, j − i + p]
+        for (int i = 0; i < n; i++)
+        {
+            double[] b;
+            if (i == n - 1) { b = new double[n]; b[n - 1] = 1; } else b = Eval(knots, p, n, prm[i]);
+            for (int j = Math.Max(0, i - p); j <= Math.Min(n - 1, i + p); j++) M[i, j - i + p] = b[j];
+        }
+        var B = q.ToArray();
         for (int c = 0; c < n; c++)
         {
-            int piv = c; for (int r = c + 1; r < n; r++) if (Math.Abs(M[r, c]) > Math.Abs(M[piv, c])) piv = r;
-            if (piv != c) { for (int j = 0; j < n; j++) (M[c, j], M[piv, j]) = (M[piv, j], M[c, j]); (B[c], B[piv]) = (B[piv], B[c]); }
-            double d = M[c, c]; if (Math.Abs(d) < 1e-300) continue;
-            for (int r = c + 1; r < n; r++)
+            double d = M[c, p]; if (Math.Abs(d) < 1e-300) continue;
+            for (int r = c + 1; r <= Math.Min(n - 1, c + p); r++)
             {
-                double fct = M[r, c] / d; if (fct == 0) continue;
-                for (int j = c; j < n; j++) M[r, j] -= fct * M[c, j];
+                double fct = M[r, c - r + p] / d; if (fct == 0) continue;
+                for (int j = c; j <= Math.Min(n - 1, c + p); j++) M[r, j - r + p] -= fct * M[c, j - c + p];
                 B[r] -= B[c] * fct;
             }
         }
+        var X = new Vector3d[n];
         for (int r = n - 1; r >= 0; r--)
         {
-            var s = B[r]; for (int j = r + 1; j < n; j++) s -= X[j] * M[r, j];
-            X[r] = M[r, r] != 0 ? s / M[r, r] : s;
+            var s = B[r]; for (int j = r + 1; j <= Math.Min(n - 1, r + p); j++) s -= X[j] * M[r, j - r + p];
+            X[r] = M[r, p] != 0 ? s / M[r, p] : s;
         }
         return X;
     }
@@ -340,6 +344,36 @@ internal static class XtPoly
             }
         }
         if (chart.Count > 0) res.Add(chart[^1]);
+        return res;
+    }
+
+    /// <summary>Ломаная кривой F на [t0, t1]: m равных шагов, затем дробление пополам, пока середина шага отходит от хорды больше
+    /// 10 мкм (в метрах XT — 10⁻⁵; кубическая интерполяция по таким точкам отходит от кривой на сотые доли микрона) или шаг поворачивает больше чем на 10°; не глубже 16 делений, не больше 40 000 точек.</summary>
+    public static List<Vector3d> Adaptive(Func<double, Vector3d> F, double t0, double t1, int m)
+    {
+        var res = new List<Vector3d> { F(t0) };
+        void Rec(double a, Vector3d pa, double b, Vector3d pb, int depth)
+        {
+            double c = 0.5 * (a + b); var pc = F(c);
+            var ab = pb - pa; double l2 = ab.LengthSquared;
+            double t = l2 > 0 ? Math.Clamp(Vector3d.Dot(pc - pa, ab) / l2, 0, 1) : 0.5;
+            double dev = (pa + ab * t - pc).Length;
+            var d1 = pc - pa; var d2 = pb - pc;
+            double cosA = d1.LengthSquared > 0 && d2.LengthSquared > 0 ? Vector3d.Dot(d1.Normalized(), d2.Normalized()) : 1;
+            if (depth < 16 && res.Count < 40000 && (dev > 1e-5 || cosA < 0.985))
+            {
+                Rec(a, pa, c, pc, depth + 1); Rec(c, pc, b, pb, depth + 1);
+            }
+            else res.Add(pb);
+        }
+        var prev = res[0];
+        for (int i = 1; i <= m; i++)
+        {
+            double a = t0 + (t1 - t0) * (i - 1) / m, b = t0 + (t1 - t0) * i / m;
+            var pb = F(b);
+            Rec(a, prev, b, pb, 0);
+            prev = pb;
+        }
         return res;
     }
 

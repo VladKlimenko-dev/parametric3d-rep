@@ -374,9 +374,8 @@ public static class XtToStep
             if (vd < 2 || vs.Length < n * vd || k.Length != n + deg + 1) return res;
             double t0 = k[deg], t1 = k[n];
             int m = Math.Max(16, 8 * (n - deg));
-            for (int s = 0; s <= m; s++)
+            Vector3d F(double t)
             {
-                double t = t0 + (t1 - t0) * s / m;
                 var b = XtBasis.Eval(k, deg, n, t);
                 double u = 0, v = 0, w = 0;
                 for (int i = 0; i < n; i++)
@@ -386,9 +385,11 @@ public static class XtToStep
                     u += b[i] * vs[i * vd]; v += b[i] * vs[i * vd + 1]; w += b[i] * wi;
                 }
                 if (rat && w != 0) { u /= w; v /= w; }
-                res.Add(xs.At(u, v));
+                return xs.At(u, v);
             }
-            return res;
+            // k182: дробление по отклонению от хорды — прямая в параметрах резьбовой поверхности даёт в пространстве винтовую
+            // линию в десятки витков (гайка: 16 точек на 8 витков — хорда отходила от резьбы на 14 мм)
+            return XtPoly.Adaptive(F, t0, t1, m);
         }
 
         int? Surface(XtNode sn, out bool flip)
@@ -453,21 +454,24 @@ public static class XtToStep
         /// с центром на оси от точки касания первой опорной (v = 0) до второй (v = 1; при обратной оси — наоборот). Поверхность —
         /// интерполяция сечений B-сплайном (по оси — кубическая по точкам оси, поперёк — кубическая по 9 точкам дуги).
         /// </summary>
+        static readonly bool BlendArcOff = Environment.GetEnvironmentVariable("P3D_XTBLENDARC") == "0";
+
         int? Blend(XtNode sn)
         {
             var bl = XtBlendSurf.Of(f, sn, 0);
             if (bl == null || bl.Spine.Count < 2) return null;
             double rad = Math.Max(Math.Max(bl.R0, bl.R1), 1e-6);
-            // сечения: не реже чем через радиус шара по оси, от 4 до 80
             var sp = bl.Spine;
             double len = 0; for (int i = 1; i < sp.Count; i++) len += (sp[i] - sp[i - 1]).Length;
-            int nu = Math.Clamp((int)Math.Ceiling(len / rad) + 1, 4, 80);
             var cum = new double[sp.Count]; for (int i = 1; i < sp.Count; i++) cum[i] = cum[i - 1] + (sp[i] - sp[i - 1]).Length;
             Vector3d At(double s0)
             {
                 int i = Array.BinarySearch(cum, s0); if (i < 0) i = ~i - 1; i = Math.Clamp(i, 0, sp.Count - 2);
                 double seg = cum[i + 1] - cum[i]; return seg > 0 ? Vector3d.Lerp(sp[i], sp[i + 1], (s0 - cum[i]) / seg) : sp[i];
             }
+            if (!BlendArcOff && ArcBlend(bl, len, rad, At) is int ex) return ex;
+            // запасной путь: бикубическая сетка по 9 точкам дуги, сечения не реже чем через радиус шара (от 4 до 80)
+            int nu = Math.Clamp((int)Math.Ceiling(len / rad) + 1, 4, 80);
             const int M = 9;
             var grid = new Vector3d[nu, M];
             for (int i = 0; i < nu; i++)
@@ -476,6 +480,63 @@ public static class XtToStep
                 for (int j = 0; j < M; j++) grid[i, j] = arc[j];
             }
             return FitSurface(grid);
+        }
+
+        /// <summary>
+        /// k182: ПОВЕРХНОСТЬ СКРУГЛЕНИЯ — РАЦИОНАЛЬНАЯ, СЕЧЕНИЯ ТОЧНЫЕ ДУГИ. По v — рациональная квадратичная дуга (три вершины:
+        /// точки касания и пересечение касательных, вес среднего cos(θ/2)) — сечение шаром точное; по u — кубическая интерполяция
+        /// однородных вершин по сечениям через четверть радиуса (от 8 до 400). Прежде бикубическая сетка по 9 точкам дуги через
+        /// радиус отходила от опор на десятые доли миллиметра (гайки: скругление шестигранника с конусом фаски). Мутация
+        /// P3D_XTBLENDARC=0 — прежняя сетка.
+        /// </summary>
+        int? ArcBlend(XtBlendSurf bl, double len, double rad, Func<double, Vector3d> at)
+        {
+            int nu = Math.Clamp((int)Math.Ceiling(4 * len / rad) + 1, 8, 400);
+            var Pw = new Vector3d[nu, 3]; var W = new double[nu, 3]; var cen = new List<Vector3d>(nu);
+            for (int i = 0; i < nu; i++)
+            {
+                var c = at(len * i / (nu - 1)); cen.Add(c);
+                var (pa, pb) = bl.Contacts(c);
+                var ea = pa - c; var eb = pb - c; double r = 0.5 * (ea.Length + eb.Length);
+                Vector3d m; double w;
+                if (r < 1e-12 || ea.LengthSquared < 1e-24 || eb.LengthSquared < 1e-24) { pa = pb = m = c; w = 1; }
+                else
+                {
+                    var na = ea.Normalized(); var nb = eb.Normalized();
+                    double cosT = Math.Clamp(Vector3d.Dot(na, nb), -1, 1);
+                    if (cosT < -0.999) return null;                       // сечение в полкруга и больше — одной дугой не задать
+                    w = Math.Sqrt((1 + cosT) / 2);                        // cos(θ/2)
+                    var bis = na + nb;
+                    m = bis.LengthSquared > 1e-24 ? c + bis.Normalized() * (r / Math.Max(w, 1e-12)) : (pa + pb) / 2;
+                    pa = c + na * r; pb = c + nb * r;
+                }
+                Pw[i, 0] = pa; Pw[i, 1] = m * w; Pw[i, 2] = pb; W[i, 0] = 1; W[i, 1] = w; W[i, 2] = 1;
+            }
+            var pu = XtBasis.Chord(cen);
+            for (int i = 1; i < nu; i++) if (pu[i] <= pu[i - 1]) return null;
+            int du = 3;
+            var (ku, _) = XtBasis.Setup(pu, du);
+            var P = new Vector3d[nu, 3]; var Wt = new double[nu, 3];
+            for (int j = 0; j < 3; j++)
+            {
+                var xyz = XtBasis.Solve(ku, du, pu, Enumerable.Range(0, nu).Select(i => Pw[i, j]).ToList());
+                var ww = XtBasis.Solve(ku, du, pu, Enumerable.Range(0, nu).Select(i => new Vector3d(W[i, j], 0, 0)).ToList());
+                for (int i = 0; i < nu; i++)
+                {
+                    if (ww[i].X <= 1e-9) return null;                     // вес не положителен — интерполяция не годится
+                    Wt[i, j] = ww[i].X; P[i, j] = xyz[i] / ww[i].X;
+                }
+            }
+            var rows = new List<string>(); var wrows = new List<string>();
+            for (int i = 0; i < nu; i++)
+            {
+                rows.Add("(" + string.Join(",", Enumerable.Range(0, 3).Select(j => "#" + Pt(P[i, j]))) + ")");
+                wrows.Add("(" + string.Join(",", Enumerable.Range(0, 3).Select(j => N(Wt[i, j]))) + ")");
+            }
+            var ks = new List<double>(); var ms = new List<int>();
+            foreach (var x in ku) { if (ks.Count > 0 && Math.Abs(ks[^1] - x) < 1e-14) ms[^1]++; else { ks.Add(x); ms.Add(1); } }
+            string knots = $"({string.Join(",", ms)}),(3,3),({string.Join(",", ks.Select(N))}),(0.,1.)";
+            return E($"(BOUNDED_SURFACE()B_SPLINE_SURFACE({du},2,({string.Join(",", rows)}),.UNSPECIFIED.,.F.,.F.,.F.)B_SPLINE_SURFACE_WITH_KNOTS({knots},.UNSPECIFIED.)GEOMETRIC_REPRESENTATION_ITEM()RATIONAL_B_SPLINE_SURFACE(({string.Join(",", wrows)}))REPRESENTATION_ITEM('')SURFACE())");
         }
 
         List<Vector3d> SampleCurve(XtNode cn)
