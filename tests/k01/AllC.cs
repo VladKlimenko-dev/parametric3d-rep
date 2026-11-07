@@ -501,7 +501,7 @@ static partial class Program
     /// k181: ОТОБРАННЫЕ СЛУЧАИ AllC (в allA). Бобышка по окружности (точный путь) + следующая общая булева — низ тела в общей разметке
     /// квадрик (QMesher) выходил вывернутым (P3D_QMPLANESIDE=0); скругление + бобышка на соседней боковой грани — плоская грань
     /// выдавливания с вырезом гранилась полной полосой (P3D_STRIPTRIM=0); бобышка по окружности — гарантия ExactQuadric
-    /// (P3D_EXTRUDEQGUAR=0).
+    /// (P3D_EXTRUDEQGUAR=0); оболочка тела с бобышкой/отверстием по окружности — цилиндр из двух половин (P3D_TWEAKARCS=0).
     /// </summary>
     static void AllCRegressChecks()
     {
@@ -509,7 +509,8 @@ static partial class Program
         {
             var ops = AllCOps().ToDictionary(o => o.Name);
             var fails = new List<string>();
-            foreach (var (a, b) in new[] { ("boss_circle", "loft_add"), ("boss_circle", "hole_through"), ("boss_circle", "vertex_chamfer"), ("round_edge", "boss_circle"), ("round_edge", "cut_circle_through") })
+            foreach (var (a, b) in new[] { ("boss_circle", "loft_add"), ("boss_circle", "hole_through"), ("boss_circle", "vertex_chamfer"), ("round_edge", "boss_circle"), ("round_edge", "cut_circle_through"),
+                                           ("boss_circle", "shell"), ("hole_through", "shell"), ("cut_circle_through", "shell") })
                 foreach (var f in new[] { 0.15, 0.4 })
                 {
                     string id = $"R:{a}+{b}@{f}";
