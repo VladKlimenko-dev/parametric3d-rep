@@ -1,0 +1,8 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["cut181"]}
+{"test":"CUT-THROUGH-FLIP-K181","circle":false,"inward":{"Error":null,"Volume":112000,"want":112000},"outward":{"Error":null,"Volume":120000}}
+{"test":"CUT-THROUGH-FLIP-K181","circle":true,"inward":{"Error":null,"Volume":115978.7614034051,"want":115978.76140340506},"outward":{"Error":null,"Volume":120000}}
+{"test":"gear cut","Error":null,"ms":13979,"removed":188495.55921538756,"want":188495.5592153876,"guarantee":"Unspecified","faces":143,"warnings":["QuadricCut: hole \u230040 through cut without faceting the tool."]}
+{"test":"CUT-THROUGH-FLIP-K181","ok":false,"error":"rectangle cut away from the plate: no error (), volume 120000; circle cut away from the plate: no error (), volume 120000; gear cut: body Unspecified"}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":0,"failed":1}
