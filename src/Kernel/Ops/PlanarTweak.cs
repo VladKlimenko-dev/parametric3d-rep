@@ -273,6 +273,19 @@ public static class PlanarTweak
         if (Analytic.PrismBuild.Finish(clone, wl) > 0) { why = "faces not meshed: " + string.Join(" / ", wl.Take(2)); return null; }
         clone.Guarantee = GuaranteeLevel.ExactAnalytic;
         var vr = SolidValidator.Validate(clone);
+        if (!vr.IsValid && Environment.GetEnvironmentVariable("P3D_TWEAKDUMP") == "1")
+        {
+            var byId = clone.Edges.GroupBy(e => e.Id).ToDictionary(g => g.Key, g => g.First());
+            foreach (var x in vr.Issues.Where(x => x.Severity == ValidationSeverity.Error))
+            {
+                Console.Error.WriteLine("TWEAKDUMP " + x);
+                if (x.Element is uint id && byId.TryGetValue(id, out var e))
+                {
+                    var c = e.Curve; var fsx = e.CoEdges.Select(ce => ce.Loop?.Face).OfType<TFace>().Select(ff => idxOf[ff] + ":" + ff.Surface?.GetType().Name + (picks.ContainsKey(idxOf[ff]) ? "*" : "") + (cylGrow.Contains(idxOf[ff]) ? "g" : ""));
+                    Console.Error.WriteLine($"   edge {id} {c?.GetType().Name} c0={c?.PointAt(c.T0)} c1={c?.PointAt(c.T1)} v0={e.V0?.P} v1={e.V1?.P} m0={moved.ContainsKey(e.V0!)} m1={moved.ContainsKey(e.V1!)} tol={e.EffectiveTolerance} faces=[{string.Join(",", fsx)}]");
+                }
+            }
+        }
         if (!vr.IsValid) { why = "result invalid: " + vr.Summary() + " " + string.Join(" / ", vr.Issues.Where(x => x.Severity == ValidationSeverity.Error).Take(2)); return null; }
         if (AnalyticVolume.Of(clone) is not { } vol || vol <= 0) { why = "no analytic volume"; return null; }
         if (BooleanOp.VolumeVsFacets(clone) is { } vf && !vf.Agree) { why = $"volume {vf.Va:G8} vs facets {vf.Vf:G8}"; return null; }
