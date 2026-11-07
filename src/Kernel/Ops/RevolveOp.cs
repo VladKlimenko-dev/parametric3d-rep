@@ -21,6 +21,10 @@ public static class RevolveOp
     public static readonly bool HintOff = Environment.GetEnvironmentVariable("P3D_REVOLVEHINT") == "0";
     public static long HintsSet;
     static readonly bool PartialHint = Environment.GetEnvironmentVariable("P3D_REVOLVEHINTPART") == "1";
+    // k182: точка грани и у НЕПОЛНОГО оборота замкнутой кривой (окружность по дуге: протяжка круга по дуге — тор): без неё общий
+    // путь булевой отказывал («torus face without an interior point»), и бобышка-протяжка шла сеточной булевой — грань гранёная,
+    // объём ±1e3 мм³ (AllC: каждая протяжка — WARN). Мутация P3D_REVOLVEHINTCLOSED=0.
+    static readonly bool ClosedHintOff = Environment.GetEnvironmentVariable("P3D_REVOLVEHINTCLOSED") == "0";
 
     public static TSolid Build(Profile profile, Frame3 axis, double a0, double a1,
                                IReadOnlyList<double>? angles = null)
@@ -156,7 +160,7 @@ public static class RevolveOp
                 // дважды с противоположным обходом и сокращается.
                 // k94: точка грани ПОЛНОГО оборота — середина кривой профиля, повёрнутая на средний угол. Без неё классификатор
                 // общего пути отказывал по тору («torus face without an interior point»). P3D_REVOLVEHINT=0 — прежнее.
-                if (!HintOff && (full || PartialHint)) { var cc = loop.Curves[i]; f.InteriorHint = Rot(cc.PointAt(0.5 * (cc.T0 + cc.T1)), axis, 0.5 * (a0 + a1)); System.Threading.Interlocked.Increment(ref HintsSet); }
+                if (!HintOff && (full || PartialHint || !ClosedHintOff && n == 1 && loop.Curves[0].IsClosed)) { var cc = loop.Curves[i]; f.InteriorHint = Rot(cc.PointAt(0.5 * (cc.T0 + cc.T1)), axis, 0.5 * (a0 + a1)); System.Threading.Interlocked.Increment(ref HintsSet); }
                 var fl = f.AddLoop(true);
                 if (!full) fl.Add(es[i], esRev[i]);
                 if (ea[j] != null) fl.Add(ea[j]!, eaRev[j]);
