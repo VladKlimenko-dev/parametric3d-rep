@@ -226,7 +226,7 @@ public static class PlanarTweak
                 var src = GeometryAudit.AuthoritativeSurface(faces[i]);
                 var wg = cyg.Axis.Normalized();
                 double lo = double.MaxValue, hi = double.MinValue;
-                foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) foreach (var q in new[] { ce.Start.P, ce.End.P }) { double tq = Vector3d.Dot(q - cyg.P, wg); lo = Math.Min(lo, tq); hi = Math.Max(hi, tq); }
+                foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) foreach (var qv in new[] { ce.Start.P, ce.End.P }) { double tq = Vector3d.Dot(qv - cyg.P, wg); lo = Math.Min(lo, tq); hi = Math.Max(hi, tq); }
                 double mg = 0.1 * Math.Max(hi - lo, cyg.R);
                 if (src is ExtrudedSurface exg && exg.Base is ArcCurve3 bg)
                 {
