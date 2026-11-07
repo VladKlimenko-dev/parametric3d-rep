@@ -1,0 +1,3 @@
+  fill: triangles 0/0, computed 0, reused 0, overlay lines 615
+{"test":"UI-SKETCH-FILL-K179","ok":false,"error":"the sketch fill is not solid triangles from memory"}
+{"passed":0,"failed":1}
