@@ -1,0 +1,6 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["seqs106"]}
+{"feature":"R0","guarantee":"ExactAnalytic","removedCentre":221.019519,"removedZero":221.018974,"note":"\u0437\u0430\u043C\u0435\u0440 k180 (\u043D\u0430\u0447\u0430\u043B\u043E \u2014 \u0446\u0435\u043D\u0442\u0440; k149 \u2014 220.6858, \u043F\u043E\u0442\u043E\u043A \u043F\u043E\u043F\u0435\u0440\u0451\u043A \u0443\u0437\u043B\u043E\u0432); \u0444\u043E\u0440\u043C\u0443\u043B\u0430 \u0441\u0435\u0447\u0435\u043D\u0438\u0439 \u2014 221.54 (0.2 %), \u0440\u0435\u0437\u0435\u0446 \u0441\u043D\u0438\u043C\u0430\u043B 225.57"}
+{"test":"KRN06-SEQ-S106-SEAM-ROLL","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":1,"failed":0}
