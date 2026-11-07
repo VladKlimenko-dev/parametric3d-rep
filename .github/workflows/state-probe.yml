@@ -53,9 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: g179h_allA, cmd: 'allA', env: '' }
-          - { name: g179h_allB, cmd: 'allB', env: '' }
-          - { name: g179h_m_sim, cmd: 'guide179', env: 'P3D_SIMGUIDE=0' }
+          - { name: g179_ref, cmd: 'usermodel1 tests/ui/data/user_k179_gear.p3d', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

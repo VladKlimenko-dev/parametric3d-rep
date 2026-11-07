@@ -542,6 +542,7 @@ static partial class Program
         if (mode is "sweptconvex" or "allA") Krn06SweptConvexMidChecks();
         if (mode is "loftcaps" or "allA") Krn06LoftCapBlendChecks();
         if (mode is "usermodels-ref") { UserModelsRef(); return; }
+        if (mode is "usermodel1") { var a = AnswerOf(args[1]); Console.WriteLine("TSV\t" + string.Join('\t', a.File, a.Features, a.Errors, a.Bodies, a.Faces, Fmt(a.Volume), Fmt(a.Area), a.Valid ? 1 : 0, a.Sketches, Fmt(a.PointSum), a.Guarantee)); return; }
         if (mode is "userprobe") { UserProbe(args[1]); return; }
         if (mode is "blendeach") { BlendEachEdgeProbe(int.Parse(args[1]), int.Parse(args[2]), double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture)); return; }
         if (mode is "torcase") { var row = ReplayDiffCase(8, int.Parse(args[1]), TorOps8Long); Console.WriteLine(string.Join(" | ", row)); return; }
