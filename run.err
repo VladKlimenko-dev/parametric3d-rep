@@ -1,0 +1,2 @@
+exit 1
+seconds 194 nproc 4 env P3D_CURVEFOLLOW=0 cmd guide179
