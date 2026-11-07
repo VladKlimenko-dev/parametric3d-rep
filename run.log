@@ -1,0 +1,14 @@
+{"test":"UI-SKETCH-K109B","ok":true,"error":null}
+{"test":"UI-SKETCH-K109","ok":true,"error":null}
+  edited sketch: Sketch2
+  sketch points: own 21 (shapes 1,0, px 7,5), neighbour 22 (shapes 4, px 5)
+{"test":"UI-GHOSTRING-K127","ok":true,"error":null}
+  dialog fields x 173,173,173,173,173,173,173,173 w 300,300,300,300,300,300,300,300; model row x 173 w 300; preview x 502 (fields end 473)
+  cube at (199.31980515339464, 172.15934284052062) -> (199.31980515339464, 172.15934284052062); iso box (135.68019484660536, 119.84065715947938, 199.31980515339464, 172.15934284052062) -> (118.13541751172878, 102.21272045689136, 216.86458248827122, 189.78727954310864)
+  front: up (0, 1, 0); CW: up (-1, 0, 0), toward (0, -0, 1)
+  tolerances: main y 181.159, upper y 184.459, lower y 181.159 «−0,2» drawn «-0,2»
+  title field focused after a drawing change: True, panel rebuild postponed True
+  «Язык чертежа» ends at 997, the combo starts at 1021
+  long label 174 wide: box at 141, short row box at 141
+{"test":"UI-DRAWING-K170","ok":false,"error":"long labels push the fields right, all rows aligned"}
+{"passed":3,"failed":1}
