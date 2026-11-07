@@ -235,7 +235,7 @@ public static class AnalyticVolume
     /// </summary>
     public static double? FaceAreaRough(TFace f)
     {
-        if (RoughAreaOff || GeometryAudit.AuthoritativeSurface(f) is not SectionSurface) return FaceArea(f);
+        if (RoughAreaOff || GeometryAudit.AuthoritativeSurface(f) is not (SectionSurface or NurbsSurface)) return FaceArea(f);
         _rough = true;
         try { return FaceAreaCore(f); } finally { _rough = false; }
     }
@@ -1290,7 +1290,16 @@ public static class AnalyticVolume
                 }
             return sum;
         }
-        double fine = Integrate(4), coarse = Integrate(2);
+        // k180 (скорость; переход шестерен по направляющей — 140 граней NURBS, объём и площадь — 10 из 26 с): ПОТОК У МНОГОЧЛЕННОЙ
+        // ГРАНИ — ТОЧНО ОДНИМ ГАУССОМ НА ПРОЛЁТ: (S − o)·(S_u × S_v) у нерациональной поверхности степеней (p, q) — многочлен
+        // степеней (3p − 1, 3q − 1); Гаусс по 8 точкам точен до степени 15 (p, q ≤ 5) — ошибка квадратуры ноль, вместо 4² + 2²
+        // делений пролёта — одно. Площадь (корень — не многочлен) для самопроверки сетки (допуск 5e-3) — деления 2 и 1 вместо 4 и 2.
+        // Мутация P3D_NURBSEXACTQUAD=0.
+        double fine, coarse;
+        bool poly = !NurbsExactQuadOff && !area && 3 * ns.DegreeU - 1 <= 15 && 3 * ns.DegreeV - 1 <= 15 && NonRational(ns);
+        if (poly) { fine = coarse = Integrate(1); Interlocked.Increment(ref NurbsExactQuads); }
+        else if (area && _rough && !NurbsExactQuadOff) { fine = Integrate(2); coarse = Integrate(1); }
+        else { fine = Integrate(4); coarse = Integrate(2); }
         if (!double.IsFinite(fine) || !double.IsFinite(coarse)) return null;
         _quadErr += Math.Abs(fine - coarse);
         if (area) return Math.Abs(fine);
@@ -1301,6 +1310,15 @@ public static class AnalyticVolume
         double d = Vector3d.Dot(nn, outN);
         if (Math.Abs(d) < 1e-12 * nn.Length) return null;
         return fine * Math.Sign(d);
+    }
+    static readonly bool NurbsExactQuadOff = Environment.GetEnvironmentVariable("P3D_NURBSEXACTQUAD") == "0";
+    /// <summary>k180: потоков граней NURBS, взятых точно одним Гауссом на пролёт (разбор).</summary>
+    public static long NurbsExactQuads;
+    static bool NonRational(NurbsSurface ns)
+    {
+        double w0 = ns.Weight(0, 0);
+        for (int i = 0; i < ns.CountU; i++) for (int j = 0; j < ns.CountV; j++) if (Math.Abs(ns.Weight(i, j) - w0) > 1e-15 * Math.Abs(w0)) return false;
+        return true;
     }
     static readonly double[] GL8X = { -0.9602898564975363, -0.7966664774136267, -0.5255324099163290, -0.1834346424956498, 0.1834346424956498, 0.5255324099163290, 0.7966664774136267, 0.9602898564975363 };
     static readonly double[] GL8W = { 0.1012285362903763, 0.2223810344533745, 0.3137066458778873, 0.3626837833783620, 0.3626837833783620, 0.3137066458778873, 0.2223810344533745, 0.1012285362903763 };

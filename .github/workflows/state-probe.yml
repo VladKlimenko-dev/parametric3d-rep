@@ -54,6 +54,11 @@ jobs:
       matrix:
         include:
           - { name: k180_prof, cmd: 'userfile179 tests/ui/data/user_k179_gear.p3d', env: 'P3D_PROFREPORT=1' }
+          - { name: k180_a, cmd: 'audit180', env: '' }
+          - { name: k180_g, cmd: 'guide179', env: '' }
+          - { name: k180_um, cmd: 'usermodels', env: '' }
+          - { name: k180_allA, cmd: 'allA', env: '' }
+          - { name: k180_allB, cmd: 'allB', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
