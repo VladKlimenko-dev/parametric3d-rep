@@ -53,14 +53,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k180_prof, cmd: 'userfile179 tests/ui/data/user_k179_gear.p3d', env: 'P3D_PROFREPORT=1' }
-          - { name: k180_a, cmd: 'audit180', env: '' }
-          - { name: k180_am, cmd: 'audit180', env: 'P3D_NURBSEXACTQUAD=0' }
-          - { name: k180_ar, cmd: 'audit180', env: 'P3D_NURBSRECT=0' }
-          - { name: k180_lg, cmd: 'loftguides', env: '' }
-          - { name: k180_c, cmd: 'curve177', env: '' }
-          - { name: k180_g, cmd: 'guide179', env: '' }
-          - { name: k180_um, cmd: 'usermodels', env: '' }
+          - { name: k180_k148_new, cmd: 'usermodel1 tests/ui/data/user_k148_sweep_blend.p3d', env: '' }
+          - { name: k180_k148_old, cmd: 'usermodel1 tests/ui/data/user_k148_sweep_blend.p3d', env: 'P3D_NURBSRECT=0' }
+          - { name: k180_k148_n16, cmd: 'usermodel1 tests/ui/data/user_k148_sweep_blend.p3d', env: 'P3D_NURBSSUB=16' }
+          - { name: k180_k148_o16, cmd: 'usermodel1 tests/ui/data/user_k148_sweep_blend.p3d', env: 'P3D_NURBSRECT=0 P3D_NURBSSUB=16' }
+          - { name: k180_k150_new, cmd: 'usermodel1 tests/ui/data/user_k150_sweep_blend_c972.p3d', env: '' }
+          - { name: k180_k150_old, cmd: 'usermodel1 tests/ui/data/user_k150_sweep_blend_c972.p3d', env: 'P3D_NURBSRECT=0' }
+          - { name: k180_k150_n16, cmd: 'usermodel1 tests/ui/data/user_k150_sweep_blend_c972.p3d', env: 'P3D_NURBSSUB=16' }
+          - { name: k180_k150_o16, cmd: 'usermodel1 tests/ui/data/user_k150_sweep_blend_c972.p3d', env: 'P3D_NURBSRECT=0 P3D_NURBSSUB=16' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

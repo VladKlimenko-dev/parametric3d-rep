@@ -1307,7 +1307,7 @@ public static class AnalyticVolume
             fine = coarse = Integrate(1, xu, wu, xv, wv); Interlocked.Increment(ref NurbsExactQuads);
         }
         else if (area && _rough && !NurbsExactQuadOff) { fine = Integrate(2); coarse = Integrate(1); }
-        else { fine = Integrate(4); coarse = Integrate(2); }
+        else { fine = Integrate(NurbsSub); coarse = Integrate(Math.Max(1, NurbsSub / 2)); }
         if (!double.IsFinite(fine) || !double.IsFinite(coarse)) return null;
         _quadErr += Math.Abs(fine - coarse);
         if (area) return Math.Abs(fine);
@@ -1319,6 +1319,8 @@ public static class AnalyticVolume
         if (Math.Abs(d) < 1e-12 * nn.Length) return null;
         return fine * Math.Sign(d);
     }
+    /// <summary>Разбор: деления пролёта у квадратуры грани NURBS по области (по умолчанию 4; P3D_NURBSSUB).</summary>
+    static readonly int NurbsSub = int.TryParse(Environment.GetEnvironmentVariable("P3D_NURBSSUB"), out var nsub) && nsub >= 2 ? nsub : 4;
     static readonly bool NurbsExactQuadOff = Environment.GetEnvironmentVariable("P3D_NURBSEXACTQUAD") == "0";
     /// <summary>k180: потоков граней NURBS, взятых точно одним Гауссом на пролёт (разбор).</summary>
     public static long NurbsExactQuads;
