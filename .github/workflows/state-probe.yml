@@ -53,6 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { name: k182_sweep, cmd: 'allC', env: 'P3D_ALLC_SETS=1 P3D_ALLC_ONLY=sweep_add@0.1 P3D_ROUTETRACE=1' }
           - { name: k182_r3, cmd: 'allC', env: 'P3D_ALLC_SETS=2 P3D_ALLC_ONLY=round_edgex3@0.15 P3D_ALLC_DIAG=1' }
           - { name: k182_sw1, cmd: 'allC', env: 'P3D_ALLC_SETS=12 P3D_ALLC_ONLY=sweep' }
           - { name: k182_sw3, cmd: 'allC', env: 'P3D_ALLC_SETS=3 P3D_ALLC_ONLY=sweep' }
