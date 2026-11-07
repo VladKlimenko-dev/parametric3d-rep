@@ -1,0 +1,54 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["allC"]}
+ALLC: 22 operations, 1 cases (sets 3, triples 200, step deadline 90 s)
+ALLC: operations: boss_rect, boss_circle, pocket_rect, pocket_circle, cut_rect_through, cut_circle_through, hole_through, hole_blind, revolve_add, revolve_cut, loft_add, sweep_add, round_edge, chamfer_edge, vertex_round, vertex_chamfer, shell, draft_in, draft_out, linear_pattern, circular_pattern, mirror
+ALLCDIAG S3:boss_circle+shell@0.15 step 2 shell: before
+  body guarantee ExactQuadric, faces 8, exact False, qexact False
+  F0 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface rev False loops 1 -
+  F1 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface rev False loops 1 -
+  F2 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface rev False loops 1 -
+  F3 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface rev False loops 1 -
+  F4 tag #d000000001/extrude[0]:bottom PlaneSurface rev True loops 1 -
+  F5 tag #d000000001/extrude[0]:top PlaneSurface rev False loops 2 -
+  F6 tag #d000000002/quadric:boss ExtrudedSurface rev False loops 2 -
+  F7 tag #d000000002/quadric:boss-top PlaneSurface rev False loops 1 -
+ALLCDIAG S3:boss_circle+shell@0.15 step 2 shell: after
+  body guarantee ExactQuadric, faces 8, exact False, qexact False
+  F0 tag #d000000001/extrude[0]:side[0.0] ExtrudedSurface rev False loops 1 -
+  F1 tag #d000000001/extrude[0]:side[0.1] ExtrudedSurface rev False loops 1 -
+  F2 tag #d000000001/extrude[0]:side[0.2] ExtrudedSurface rev False loops 1 -
+  F3 tag #d000000001/extrude[0]:side[0.3] ExtrudedSurface rev False loops 1 -
+  F4 tag #d000000001/extrude[0]:bottom PlaneSurface rev True loops 1 -
+  F5 tag #d000000001/extrude[0]:top PlaneSurface rev False loops 2 -
+  F6 tag #d000000002/quadric:boss ExtrudedSurface rev False loops 2 -
+  F7 tag #d000000002/quadric:boss-top PlaneSurface rev False loops 1 -
+{"allc":"S3:boss_circle\u002Bshell@0.15","set":"S3","step":1,"op":"boss_circle","f":0.15,"slot":0,"prm":"circle r2.7 h8.5 face0","verdict":"OK","why":null,"ms":148.6,"v0":240000,"v1":240194.6688,"dv":194.6688,"want":194.6688,"rel":-9.782022807940369E-14,"faces":8,"bodies":1,"guarantee":"ExactQuadric","valid":true,"error":null,"downgrade":null,"warnings":["QuadricCut: boss \u23005.4 \u00D7 8.5 added without faceting."]}
+{"allc":"S3:boss_circle\u002Bshell@0.15","set":"S3","step":2,"op":"shell","f":0.15,"slot":1,"prm":"t2.2 open face1","verdict":"FAIL","why":"error: Shell: the body could not be hollowed.","ms":1127.7,"v0":240194.6688,"v1":240194.6688,"dv":0,"want":null,"rel":null,"faces":8,"bodies":1,"guarantee":"ExactQuadric","valid":true,"error":"Shell: the body could not be hollowed.","downgrade":null,"warnings":["QuadricCut: boss \u23005.4 \u00D7 8.5 added without faceting.","Shell: a concave body is hollowed only by plane offset, which declined: a cylinder to offset is not bounded by full circles across its axis."]}
+{"test":"ALLC S3:boss_circle\u002Bshell@0.15","ok":false,"verdict":"FAIL","ms":1276.3756,"error":"step 2 shell: error: Shell: the body could not be hollowed."}
+
+=================== ALLC SUMMARY ===================
+steps 2, cases 1, total 00:00:02, step time sum 1.3 s
+  FAIL  1
+  OK    1
+by set: S3: 2 steps, FAIL 1, WARN 0, SLOW 0
+
+by operation (step verdicts; time median / max ms):
+  shell                n     1  FAIL    1  WARN    0  SLOW   0  median     1128  max     1128
+  boss_circle          n     1  FAIL    0  WARN    0  SLOW   0  median      149  max      149
+
+failure reasons (grouped, operation | reason head):
+     1  shell | error: Shell: the body could not be hollowed.   e.g. S3:boss_circle+shell@0.15 step 2 [t2.2 open face1]
+
+pairs that fail only together (first op passes alone, second fails after it):
+  S3:boss_circle+shell: 0.15 error: Shell: the body could not be hollowed.
+
+slowest 25 steps:
+       1128 ms  S3:boss_circle+shell@0.15 step 2 shell [t2.2 open face1] FAIL faces 8
+        149 ms  S3:boss_circle+shell@0.15 step 1 boss_circle [circle r2.7 h8.5 face0] OK faces 8
+
+warnings (grouped, operation | reason head):
+Reproduce one case: K01Checks allC with P3D_ALLC_ONLY=<case id>, P3D_ALLC_OUT=<folder> saves failed models.
+
+{"test":"ALLC-SUMMARY","ok":true,"steps":2,"fail":1,"warn":0,"slow":0,"seconds":2}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":0,"failed":0}
