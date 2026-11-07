@@ -307,7 +307,7 @@ public static class AnalyticVolume
             case PlaneSurface pl: return PlaneArea(f, pl.F.Origin, pl.F.U, pl.F.V);
             case ExtrudedSurface { Base: SplineCurve3 or BezierCurve3 } when !AnalyticFlux.ExtSplineOff: return AnalyticFlux.FaceAreaOf(f);
             case OffsetSurface when !AnalyticFlux.OffsetVolOff: return AnalyticFlux.FaceAreaOf(f);
-            case NurbsSurface nsw when !NurbsVolOff && WholeNurbs(f, nsw): return NurbsDomainIntegral(f, nsw, area: true);
+            case NurbsSurface nsw when !NurbsVolOff && WholeNurbs(f, nsw, out bool rectA) && NurbsDomainIntegral(f, nsw, area: true, rectA) is { } da: return da;
             case NurbsSurface when !NurbsVolOff: return AnalyticFlux.FaceAreaOf(f);
             case CornerPatchSurface cpa when WholePatch(f, cpa): return CornerIntegral(f, cpa, (x, n) => n.Length, area: true);
             case ExtrudedSurface exl when exl.Base is LineCurve3 ln:
@@ -1234,8 +1234,8 @@ public static class AnalyticVolume
                 var oe = _origin;
                 return AnalyticFlux.FaceFluxOf(f, x => x - oe);
             }
-            case NurbsSurface nsw when !NurbsVolOff && WholeNurbs(f, nsw):
-                return NurbsDomainIntegral(f, nsw, area: false);
+            case NurbsSurface nsw when !NurbsVolOff && WholeNurbs(f, nsw, out bool rectV) && NurbsDomainIntegral(f, nsw, area: false, rectV) is { } dv:
+                return dv;
             case NurbsSurface when !NurbsVolOff:
             {
                 // KRN-07 N1b: грань NURBS — поток (x − o) по краю (AnalyticFlux, общая параметризация (u, v))
@@ -1260,11 +1260,12 @@ public static class AnalyticVolume
     // здесь не годится: проекция точки шва даёт один край области из двух, и вклады шва взаимно гасятся (объём шара — 0).
     // Тогда интеграл — прямо по области (Гаусс по пролётам узлов), сторона — по нормали грани. Мутация P3D_WHOLENURBS=0.
     static readonly bool WholeNurbsOff = Environment.GetEnvironmentVariable("P3D_WHOLENURBS") == "0";
-    static bool WholeNurbs(TFace f, NurbsSurface ns)
+    static bool WholeNurbs(TFace f, NurbsSurface ns, out bool rect)
     {
+        rect = false;
         if (WholeNurbsOff) return false;
         if (f.Loops.All(l => l.CoEdges.Count == 0) || ns.WholeDomainBoundary(f) != null) return true;
-        if (!NurbsRectOff && ns.FullRectFace(f)) { Interlocked.Increment(ref NurbsRectFaces); return true; }
+        if (!NurbsRectOff && ns.FullRectFace(f)) { rect = true; return true; }
         return false;
     }
     /// <summary>k180: граней-лоскутов целиком, проинтегрированных по области (разбор).</summary>
@@ -1272,7 +1273,7 @@ public static class AnalyticVolume
     /// <summary>k180: мутация P3D_NURBSRECT=0 — грань-лоскут целиком (лофт) через поток по краю, как прежде.</summary>
     static readonly bool NurbsRectOff = Environment.GetEnvironmentVariable("P3D_NURBSRECT") == "0";
 
-    static double? NurbsDomainIntegral(TFace f, NurbsSurface ns, bool area)
+    static double? NurbsDomainIntegral(TFace f, NurbsSurface ns, bool area, bool rect = false)
     {
         var o = _origin;
         double Integrate(int sub, double[]? xu = null, double[]? wu = null, double[]? xv = null, double[]? wv = null)
@@ -1316,6 +1317,16 @@ public static class AnalyticVolume
         else if (area && _rough && !NurbsExactQuadOff) { fine = Integrate(2); coarse = Integrate(1); }
         else { fine = Integrate(NurbsSub); coarse = Integrate(Math.Max(1, NurbsSub / 2)); }
         if (!double.IsFinite(fine) || !double.IsFinite(coarse)) return null;
+        // k180: лоскут целиком (грань лофта, скругления) — квадратура должна сойтись: у лоскута со сторонами-полюсами
+        // подынтегральное негладкое, деления 4 и 2 давали отход до 7 мм³ (объём зависел от начала отсчёта). Не сошлось за
+        // деления 16 — поток через край (прежний путь).
+        if (rect && !poly)
+        {
+            int sub = NurbsSub;
+            while (Math.Abs(fine - coarse) > 1e-11 * Math.Max(1, Math.Abs(fine)) && sub < 32) { coarse = fine; sub *= 2; fine = Integrate(sub); }
+            if (Math.Abs(fine - coarse) > 1e-11 * Math.Max(1, Math.Abs(fine))) return null;
+        }
+        if (rect) Interlocked.Increment(ref NurbsRectFaces);
         _quadErr += Math.Abs(fine - coarse);
         if (area) return Math.Abs(fine);
         // сторона: нормаль S_u × S_v против наружной нормали грани в точке внутри области
