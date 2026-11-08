@@ -127,6 +127,42 @@ public static class StepImport
         return (lo, hi);
     }
 
+    static readonly bool LensOff = Environment.GetEnvironmentVariable("P3D_LENSFACE") == "0";
+
+    /// <summary>Сетка грани-линзы: один контур из двух рёбер с общими концами и площадью меньше 1e-6 квадрата длины.</summary>
+    static (List<Vector3d> P, List<int> T)? LensMesh(TFace f)
+    {
+        if (f.Loops.Count != 1 || f.Loops[0].CoEdges.Count != 2) return null;
+        var ces = f.Loops[0].CoEdges;
+        var e0 = ces[0].Edge; var e1 = ces[1].Edge;
+        if (ReferenceEquals(e0, e1) || ReferenceEquals(e0.V0, e0.V1) || ReferenceEquals(e1.V0, e1.V1)) return null;
+        bool sameEnds = ReferenceEquals(e0.V0, e1.V0) && ReferenceEquals(e0.V1, e1.V1) || ReferenceEquals(e0.V0, e1.V1) && ReferenceEquals(e0.V1, e1.V0);
+        if (!sameEnds) return null;
+        double area;
+        try { area = Math.Abs(AnalyticVolume.FaceArea(f) ?? double.NaN); } catch { return null; }
+        List<Vector3d> a, b;
+        try { a = Tess.ExactFaceMesher.EdgePoints(e0).ToList(); b = Tess.ExactFaceMesher.EdgePoints(e1).ToList(); } catch { return null; }
+        double len = 0; for (int i = 1; i < a.Count; i++) len += (a[i] - a[i - 1]).Length;
+        if (!double.IsFinite(area) || len <= 0 || area > 1e-6 * len * len) return null;
+        // обе ломаные — от V0 первого ребра
+        if (!ReferenceEquals(e1.V0, e0.V0)) b.Reverse();
+        var P = new List<Vector3d>(); var T = new List<int>();
+        int ia = 0, ib = 0;
+        P.AddRange(a); P.AddRange(b);
+        int A(int i) => i; int B(int j) => a.Count + j;
+        // молния: на каждом шаге — к более короткой диагонали; общие концы — точки первой ломаной
+        while (ia < a.Count - 1 || ib < b.Count - 1)
+        {
+            bool stepA = ib >= b.Count - 1 || ia < a.Count - 1 && (a[ia + 1] - b[ib]).LengthSquared <= (b[ib + 1] - a[ia]).LengthSquared;
+            if (stepA) { T.Add(A(ia)); T.Add(A(ia + 1)); T.Add(ib == 0 || ib == b.Count - 1 ? (ib == 0 ? A(0) : A(a.Count - 1)) : B(ib)); ia++; }
+            else { int q0 = ib == 0 ? A(0) : B(ib), q1 = ib + 1 == b.Count - 1 ? A(a.Count - 1) : B(ib + 1); T.Add(A(ia)); T.Add(q1); T.Add(q0); ib++; }
+        }
+        // вырожденные (две одинаковые вершины) — вон
+        var T2 = new List<int>();
+        for (int i = 0; i + 2 < T.Count; i += 3) if (T[i] != T[i + 1] && T[i + 1] != T[i + 2] && T[i] != T[i + 2]) { T2.Add(T[i]); T2.Add(T[i + 1]); T2.Add(T[i + 2]); }
+        return T2.Count > 0 ? (P, T2) : null;
+    }
+
     static readonly bool EdgeIdOff = Environment.GetEnvironmentVariable("P3D_STEPEDGEID") == "0";
     static readonly bool EdgeTolOff = Environment.GetEnvironmentVariable("P3D_STEPEDGETOL") == "0";
     static readonly bool ImpRangeOff = Environment.GetEnvironmentVariable("P3D_IMPRANGE") == "0";
@@ -799,7 +835,11 @@ public static class StepImport
             if (seamOnly) { failed++; continue; }
 
             (List<Vector3d> P, List<int> T)? got2; string? why2;
-            if (pre[fIdx] is { } pr) { got2 = pr.M; why2 = pr.Why; }
+            // k184: ГРАНЬ-ЛИНЗА — два ребра с общими концами почти совпадают (площадь грани ~0): разметка по поверхности брала
+            // дополнение (весь пояс цилиндра, 205 мм² при точной площади 0 — фильтр 4218K62). Сетка — полоса «молнией» между
+            // двумя ломаными рёбер. Мутация P3D_LENSFACE=0.
+            if (!LensOff && LensMesh(f2) is { } lens) { got2 = lens; why2 = null; }
+            else if (pre[fIdx] is { } pr) { got2 = pr.M; why2 = pr.Why; }
             else using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("разметка грани: " + (Topology.GeometryAudit.AuthoritativeSurface(f2)?.GetType().Name ?? "?") + (Topology.GeometryAudit.AuthoritativeSurface(f2) is Surfaces.RevolvedSurface rvp ? "/" + Geometry.ExactEdges.ShapeOf(rvp)?.GetType().Name : "")) : null)
                 got2 = Tess.ExactFaceMesher.Mesh(f2, out why2, out _);
             if (got2 == null)
