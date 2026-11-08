@@ -254,6 +254,7 @@ public sealed class ExtrudedSurface : ISurface3
 /// <summary>Поверхность вращения базовой кривой вокруг оси (Axis.Origin, Axis.W) от A0 до A1.</summary>
 public sealed class RevolvedSurface : ISurface3
 {
+    static readonly bool RevProjClamp = Environment.GetEnvironmentVariable("P3D_REVPROJCLAMP") == "1";
     public readonly ICurve3 Base;
     public readonly Frame3 Axis;
     public readonly double A0, A1;
@@ -393,7 +394,10 @@ public sealed class RevolvedSurface : ISurface3
 
         // Разворачиваем точку назад к образующей и ищем ближайший u,
         // затем уточняем делением шага пополам.
-        Vector3d back = RotateAbout(p, Axis.Origin, Axis.W, -(A0 + Sweep * Math.Clamp(v, 0, 1)));
+        // k184: поворот назад — на тот же угол, что в ответе (v за развёрткой не обрезается): прежде профиль искался по точке,
+        // повёрнутой на край развёртки, а угол возвращался свой — ответ не лежал рядом с точкой (бачок 1358K26: точка на конусе
+        // «в 0.47 мм» от него, когда развёртка по контуру с винтовыми рёбрами вышла меньше грани). Мутация P3D_REVPROJCLAMP=1.
+        Vector3d back = RotateAbout(p, Axis.Origin, Axis.W, -(A0 + Sweep * (RevProjClamp ? Math.Clamp(v, 0, 1) : v)));
 
         // Параметр профиля — точно (этап 1): прежде перебор с делением шага.
         return new Vector2d(Curves.CurveParam.Closest(Base, back), v);
