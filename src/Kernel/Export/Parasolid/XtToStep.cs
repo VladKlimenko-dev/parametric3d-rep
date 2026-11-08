@@ -518,6 +518,15 @@ public static class XtToStep
                     }
                     break;
                 case "BLENDED_EDGE": r = Blend(sn); break;
+                case "OFFSET_SURF":
+                    // смещение по естественной нормали основы со знаком её «sense»; естественная нормаль — как у основы
+                    if (f[sn.P("surface")] is { } bsn && Surface(bsn, out bool bflip) is int bid)
+                    {
+                        double d = sn.D("offset") * S * (bsn.C("sense") == '-' ? -1 : 1) * (bflip ? -1 : 1);
+                        r = E($"OFFSET_SURFACE('',#{bid},{N(d)},.F.)");
+                        flip = bflip;
+                    }
+                    break;
                 case "SPUN_SURF":
                     // ISO 10303-42: у SURFACE_OF_REVOLUTION u — угол, v — образующая; у XT наоборот — нормаль обратная
                     if (f[sn.P("profile")] is { } pf && CurveOf(pf, out _, out _) is int pid)

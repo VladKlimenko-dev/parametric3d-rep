@@ -299,6 +299,27 @@ public sealed class StepParser
                 return new RevolvedSurface(new LineCurve3(p0, p1), f, 0, 2 * Math.PI);
             }
 
+            case "SURFACE_OF_REVOLUTION":
+            {
+                // k183: поверхность вращения кривой (Parasolid SPUN_SURF: образующая — B-кривая). Мутация P3D_STEPREVOL=0.
+                if (RevolOff) return null;
+                var bc = Curve(a[1]);
+                if (bc == null || !Entities.TryGetValue(Ref(a[2]), out var ax) || ax.Type != "AXIS1_PLACEMENT") return null;
+                var o = Point(ax.Args[1]);
+                var w = ax.Args.Count > 2 && ax.Args[2].Trim() != "$" ? Direction(ax.Args[2]) : Vector3d.UnitZ;
+                return new RevolvedSurface(bc, Frame3.FromNormal(o, w.Normalized()), 0, 2 * Math.PI);
+            }
+
+            case "OFFSET_SURFACE":
+            {
+                // k183: смещённая поверхность (Parasolid OFFSET_SURF): смещение — по нормали основы по стандарту
+                if (RevolOff) return null;
+                var bs = Surface(a[1]);
+                if (bs == null) return null;
+                double d = Num(a[2]) * LengthScale;
+                return new OffsetSurface(bs, StepImport.OurNormalIsCanonical(bs) ? d : -d);
+            }
+
             case "SURFACE_OF_LINEAR_EXTRUSION":
             {
                 // Протяжка кривой по прямой: у нас это выдавливание.
@@ -433,6 +454,7 @@ public sealed class StepParser
     public readonly Dictionary<ICurve3, (Vector3d Start, Vector3d End)> LastEnds = new(ReferenceEqualityComparer.Instance);
 
     static readonly bool SpindleOff = Environment.GetEnvironmentVariable("P3D_SPINDLETORUS") == "0";
+    static readonly bool RevolOff = Environment.GetEnvironmentVariable("P3D_STEPREVOL") == "0";
     static readonly bool NoBoundOff = Environment.GetEnvironmentVariable("P3D_STEPNOBOUND") == "0";
 
     public (ISurface3 Surface, List<List<ICurve3>> Loops, bool SameSense)? Face(string arg)

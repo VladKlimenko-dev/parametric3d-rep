@@ -104,6 +104,22 @@ public static class StepImport
                 var centre = rv.Axis.Origin + w * Vector3d.Dot(c - rv.Axis.Origin, w);
                 canon = p - (centre + Radial(centre, w, p).Normalized() * off); break;
             }
+            case Surfaces.OffsetSurface os:
+                return OurNormalIsCanonical(os.Base);
+            case Surfaces.RevolvedSurface rv:
+            {
+                // k183: вращение произвольной кривой (SURFACE_OF_REVOLUTION): нормаль по стандарту — (касательная по углу) ×
+                // (касательная образующей), u — угол, v — образующая (ISO 10303-42)
+                double tm = 0.5 * (rv.Base.T0 + rv.Base.T1);
+                uv = new Vector2d(tm, 0.5);
+                var p = s.PointAt(uv); var w = rv.Axis.W.Normalized();
+                var ta = Vector3d.Cross(w, Radial(rv.Axis.Origin, w, p));
+                double h = 1e-6 * Math.Max(1e-9, rv.Base.T1 - rv.Base.T0);
+                var tc = s.PointAt(new Vector2d(Math.Min(rv.Base.T1, tm + h), 0.5)) - s.PointAt(new Vector2d(Math.Max(rv.Base.T0, tm - h), 0.5));
+                canon = Vector3d.Cross(ta, tc);
+                if (canon.LengthSquared < 1e-30) return true;
+                break;
+            }
             default: return true;
         }
         var n = s.NormalAt(uv);
