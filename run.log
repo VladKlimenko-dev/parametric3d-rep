@@ -1,0 +1,9 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["krn06lcch"]}
+{"test":"KRN06-LINECYL-CHAMFER","name":"D-profile one edge C3","volume":6976.025552708396,"occt":6976.0255527084,"guarantee":"ExactAnalytic","planes":1,"n":1}
+{"test":"KRN06-LINECYL-CHAMFER","name":"D-profile both edges C2","volume":6986.981292517659,"occt":6986.98129251766,"guarantee":"ExactAnalytic","planes":2,"n":2}
+{"test":"KRN06-LINECYL-CHAMFER","name":"shaft on plate concave C2","volume":54145.89306819657,"occt":54145.89306819657,"guarantee":"ExactAnalytic","planes":1,"n":1}
+{"test":"KRN06-LINECYL-CHAMFER","name":"shaft on plate concave C3","volume":54280.01292879426,"occt":54280.01292879427,"guarantee":"ExactAnalytic","planes":1,"n":1}
+{"test":"KRN06-DIRECT-CHAMFER-LINE-CYLINDER","ok":false,"error":"Chamfer: none of the selected edges could be processed.\nBoolean: general analytic path (12 faces, exact surfaces).\nChamfer: the cut on edge (15, 0, 0)-(15, 0, 20) was rolled back \u2014 the result touches itself along an edge (four faces meet there): 2 open edges, first at (14.92, 1.52, 10) faces [1171,1173,1187,1187]; (14.69, 3.02, 10) faces [1173,1175,1187,1187]."}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":1,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":21,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":0,"failed":1}
