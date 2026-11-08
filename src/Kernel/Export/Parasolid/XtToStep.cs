@@ -484,17 +484,35 @@ public static class XtToStep
             // иначе — ломаная по тем же точкам (точно через них, без выбросов). Мутация P3D_XTINTERPCHECK=0.
             if (!InterpCheckOff && deg == 3)
             {
-                int ncp = cp.Length; bool wild = false;
-                for (int i = 0; i + 1 < q.Count && !wild; i++)
+                double Turn(int m) { if (m <= 0 || m + 1 >= q.Count) return 0; var x = q[m] - q[m - 1]; var y = q[m + 1] - q[m]; double cs = Vector3d.Dot(x, y) / Math.Max(1e-300, x.Length * y.Length); return Math.Acos(Math.Clamp(cs, -1, 1)); }
+                bool Wild(double[] kk, double[] pr, Vector3d[] cc)
                 {
-                    double tm = 0.5 * (prm[i] + prm[i + 1]);
-                    var N = XtBasis.Eval(k, deg, ncp, tm); var c = Vector3d.Zero;
-                    for (int j = 0; j < ncp; j++) if (N[j] != 0) c += cp[j] * N[j];
-                    var ab = q[i + 1] - q[i]; double l = ab.Length;
-                    double t = l > 0 ? Math.Clamp(Vector3d.Dot(c - q[i], ab) / (l * l), 0, 1) : 0;
-                    if ((q[i] + ab * t - c).Length > 0.25 * l + 1e-6) wild = true;
+                    int ncp = cc.Length;
+                    for (int i = 0; i + 1 < q.Count; i++)
+                    {
+                        double tm = 0.5 * (pr[i] + pr[i + 1]);
+                        var N = XtBasis.Eval(kk, deg, ncp, tm); var c = Vector3d.Zero;
+                        for (int j = 0; j < ncp; j++) if (N[j] != 0) c += cc[j] * N[j];
+                        var ab = q[i + 1] - q[i]; double l = ab.Length;
+                        double t = l > 0 ? Math.Clamp(Vector3d.Dot(c - q[i], ab) / (l * l), 0, 1) : 0;
+                        // ожидаемый прогиб — по повороту соседних звеньев (дуга с поворотом α на звене l отходит на ≈ l·α/8)
+                        double expect = l * Math.Max(Turn(i), Turn(i + 1)) / 8;
+                        double dev = (q[i] + ab * t - c).Length;
+                        if (dev > 0.25 * l + 1e-6 || dev > 4 * expect + 2e-3) return true;
+                    }
+                    return false;
                 }
-                if (wild) return Poly(q);
+                if (Wild(k, prm, cp))
+                {
+                    // центростремительные параметры (корень из хорды) раскачиваются меньше при неравных звеньях; не помогло — ломаная
+                    var pc = new double[q.Count]; double acc = 0;
+                    for (int i = 1; i < q.Count; i++) { acc += Math.Sqrt((q[i] - q[i - 1]).Length); pc[i] = acc; }
+                    for (int i = 1; i < q.Count; i++) pc[i] /= acc;
+                    var (k2, _) = XtBasis.Setup(pc, deg);
+                    var cp2 = XtBasis.Solve(k2, deg, pc, q);
+                    if (Wild(k2, pc, cp2)) return Poly(q);
+                    k = k2; cp = cp2;
+                }
             }
             var ks = new List<double>(); var ms = new List<int>();
             foreach (var x in k) { if (ks.Count > 0 && Math.Abs(ks[^1] - x) < 1e-14) ms[^1]++; else { ks.Add(x); ms.Add(1); } }

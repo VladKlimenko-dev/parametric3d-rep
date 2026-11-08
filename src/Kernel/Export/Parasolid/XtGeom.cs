@@ -554,6 +554,7 @@ internal static class XtPoly
     }
 
     /// <summary>Участок ломаной между ближайшими к s и e точками (по ходу ломаной), концы — точно s и e.</summary>
+    static readonly bool TrimRingOff = Environment.GetEnvironmentVariable("P3D_XTTRIMRING") == "0";
     public static List<Vector3d> Trim(IReadOnlyList<Vector3d> pts, Vector3d s, Vector3d e)
     {
         (int I, double T, double D) Near(Vector3d q)
@@ -570,6 +571,20 @@ internal static class XtPoly
         }
         if (pts.Count < 2) return pts.ToList();
         var ns = Near(s); var ne = Near(e);
+        // k184: ЗАМКНУТАЯ ОБРЕЗКА (точки начала и конца совпадают — кольцо плавника без вершины): весь обход от s до s. Прежде из
+        // кольца оставались две совпавшие точки, ломаная пропадала, и ребро строилось по обрезанной кривой плавника незамкнутым
+        // (муфта 5706N22: «замкнутое ребро не замкнуто: 1.8 мм»). Мутация P3D_XTTRIMRING=0.
+        if (!TrimRingOff && (s - e).Length < 1e-9 && pts.Count > 2)
+        {
+            var ring = new List<Vector3d> { s };
+            for (int k = 1; k <= pts.Count; k++)
+            {
+                var q = pts[(ns.I + k) % pts.Count];
+                if ((q - ring[^1]).Length > 1e-12) ring.Add(q);
+            }
+            if ((ring[^1] - s).Length > 1e-12) ring.Add(s); else ring[^1] = s;
+            return ring;
+        }
         var res = new List<Vector3d>();
         bool fwd = (ns.I, ns.T).CompareTo((ne.I, ne.T)) <= 0;
         var (a, b) = fwd ? (ns, ne) : (ne, ns);
