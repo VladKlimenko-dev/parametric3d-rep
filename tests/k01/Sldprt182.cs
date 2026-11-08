@@ -20,7 +20,7 @@ static partial class Program
         var list = files?.ToList() ?? Directory.GetFiles(Path.Combine("tests", "k01", "data"), "sw_*.SLDPRT").OrderBy(x => x).ToList();
         foreach (var path in list)
         {
-            Check("SLDPRT-IMPORT-K182 " + Path.GetFileName(path), () =>
+            Check("SLDPRT-IMPORT-K182 " + Path.GetFileName(path), () => WithTimeout(Path.GetFileName(path), () =>
             {
                 var w = new List<string>();
                 var bytes = File.ReadAllBytes(path);
@@ -59,7 +59,7 @@ static partial class Program
                 Require(vrs.All(x => x.IsValid), "invalid body: " + vr?.Summary());
                 Require(boxGap <= 1e-3, $"bounding box differs from the XT edges by {boxGap:G3} mm");
                 Require(vol > 0 && vol <= boxVol * (1 + 1e-6), $"volume {vol:F2} mm³ outside (0, {boxVol:F2}] of the bounding box");
-            });
+            }));
         }
     }
 
@@ -110,5 +110,16 @@ static partial class Program
         foreach (var e in b.Edges)
             if (e.Curve is Parametric3D.Kernel.Curves.ArcCurve3 or Parametric3D.Kernel.Curves.EllipseCurve3)
                 for (int i = 0; i <= 64; i++) yield return e.Curve.PointAt(e.Curve.T0 + (e.Curve.T1 - e.Curve.T0) * i / 64);
+    }
+
+    /// <summary>Разбор файла не дольше P3D_SLDTIMEOUT секунд (по умолчанию 300): долгий файл не задерживает остальные.</summary>
+    static void WithTimeout(string name, Action work)
+    {
+        int lim = int.TryParse(Environment.GetEnvironmentVariable("P3D_SLDTIMEOUT"), out var l) ? l : 300;
+        var t = Task.Run(work);
+        bool done;
+        try { done = t.Wait(TimeSpan.FromSeconds(lim)); }
+        catch (AggregateException ae) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ae.InnerException ?? ae).Throw(); throw; }
+        if (!done) { Log(new { test = "sldprt", file = name, timeout = lim }); throw new Exception($"timeout {lim} s"); }
     }
 }
