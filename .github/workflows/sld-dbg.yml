@@ -1,0 +1,75 @@
+# Цель Я1: зависит ли шаг от истории сеанса (BACKLOG k149, корпус s106; REFERENCE_SOLUTIONS, п. 6).
+# Сборка K01Checks на машинах GitHub (Linux) и прогоны со сверкой «шаг в сеансе = тот же шаг из файла без тел»
+# (SEQ_REBUILDCHECK=1) и наборы проверок. Каждый прогон кладёт итог в свою ветку ya1/res/<имя>.
+name: sld-dbg
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sld-dbg-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Сборка K01Checks
+        run: dotnet build tests/k01/K01Checks.csproj -c Release -o out/k01 -v q --nologo 2>&1 | tee build.log; test ${PIPESTATUS[0]} -eq 0
+      - name: Итог сборки — в ветку ya1/res/build
+        if: always()
+        run: |
+          mkdir -p res && cp build.log res/
+          (DOTNET_TieredCompilation=0 out/k01/K01Checks globals > res/globals.txt 2>&1 || true)
+          cd res && git init -q -b r && git config user.name github-actions && git config user.email github-actions@users.noreply.github.com
+          git add -A && git commit -q -m "build ${GITHUB_SHA::7}" && git push -f -q "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" r:ya1/res/build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: k01-bin
+          path: out/k01
+          retention-days: 2
+
+  probe:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: k184_dbg, cmd: 'sldprt tests/k01/data/sw_drill_2901a107.SLDPRT tests/k01/data/sw_drill_29045a758.SLDPRT tests/k01/data/sw_bur_4295a56.SLDPRT tests/k01/data/sw_ujoint_6445k6.SLDPRT tests/k01/data/sw_enclosure_7812k81.SLDPRT tests/k01/data/sw_pin_1809n56.SLDPRT tests/k01/data/sw_ujoint_60075k97.SLDPRT tests/k01/data/sw_starter_7595k62.SLDPRT', env: 'P3D_SLDOUT=res/out P3D_SLDDIAG=1' }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: k01-bin
+          path: out/k01
+      - name: Прогон ${{ matrix.name }}
+        run: |
+          chmod +x out/k01/K01Checks
+          mkdir -p res/out
+          export DOTNET_TieredCompilation=0 SEQ_REBUILDCHECK=1 P3D_USERMODELS="$PWD/tests/ui/data"
+          if [ -n "${{ matrix.env }}" ]; then export ${{ matrix.env }}; fi
+          CMD="${{ matrix.cmd }}"; CMD="${CMD/OUT/res/out}"
+          # корпус деталей SolidWorks — отдельная ветка corpus/sldprt (в клон main не входит)
+          if [[ "$CMD" == *CORPUS* ]]; then git fetch -q --depth 1 origin corpus/sldprt && mkdir -p corpus && git --work-tree=corpus checkout FETCH_HEAD -- . && CMD="${CMD//CORPUS/corpus}"; fi
+          start=$(date +%s)
+          timeout 330m out/k01/K01Checks $CMD > res/run.log 2> res/run.err || echo "exit $?" >> res/run.err
+          echo "seconds $(( $(date +%s) - start )) nproc $(nproc) env ${{ matrix.env }} cmd $CMD" >> res/run.err
+          find res -name '*.p3d' -size +20M -delete
+      - name: Итог — в ветку ya1/res/${{ matrix.name }}
+        if: always()
+        run: |
+          cd res && git init -q -b r && git config user.name github-actions && git config user.email github-actions@users.noreply.github.com
+          git add -A && git commit -q -m "${{ matrix.name }} ${GITHUB_SHA::7}" && git push -f -q "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" r:ya1/res/${{ matrix.name }}
