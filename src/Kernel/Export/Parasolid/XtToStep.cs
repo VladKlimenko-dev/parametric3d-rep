@@ -525,7 +525,19 @@ public static class XtToStep
         /// </summary>
         int? ArcBlend(XtBlendSurf bl, double len, double rad, Func<double, Vector3d> at)
         {
-            int nu = Math.Clamp((int)Math.Ceiling(4 * len / rad) + 1, 8, 400);
+            // шаг сечений по кривизне оси: ошибка кубической интерполяции ≈ 5/384·h⁴/ρ³ (ρ — наименьший радиус кривизны оси)
+            // не больше 0,1 мкм; не реже 1,5 радиуса шара, от 8 до 160 сечений (прежде — через четверть радиуса, до 400:
+            // гайка с замком размечалась 11 минут — время уходило на сетку граней с сотнями пролётов)
+            double rho = double.MaxValue; var spn = bl.Spine;
+            for (int i = 1; i + 1 < spn.Count; i++)
+            {
+                var a = spn[i] - spn[i - 1]; var b = spn[i + 1] - spn[i]; double la = a.Length, lb = b.Length;
+                if (la < 1e-12 || lb < 1e-12) continue;
+                double ang = Math.Acos(Math.Clamp(Vector3d.Dot(a, b) / (la * lb), -1, 1));
+                if (ang > 1e-9) rho = Math.Min(rho, 0.5 * (la + lb) / ang);
+            }
+            double h = Math.Min(1.5 * rad, rho < double.MaxValue ? Math.Pow(1e-7 * 384 / 5 * rho * rho * rho, 0.25) : double.MaxValue);
+            int nu = Math.Clamp((int)Math.Ceiling(len / Math.Max(h, 1e-9)) + 1, 8, 160);
             var Pw = new Vector3d[nu, 3]; var W = new double[nu, 3]; var cen = new List<Vector3d>(nu);
             for (int i = 0; i < nu; i++)
             {
