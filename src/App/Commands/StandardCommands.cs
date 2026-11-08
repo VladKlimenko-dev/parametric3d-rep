@@ -285,6 +285,8 @@ public static class StandardCommands
             r.Add(new AppCommand { Id = id, Label = label, Group = S, Icon = icon, Synonyms = syn, CanRun = () => w.InSketch, Run = run });
         SkCmd("sk.polygon", "Многоугольник", "sk_polygon_but.svg", () => SketchEditCommands.Polygon(w), "polygon многоугольник");
         SkCmd("sk.text", "Текст", "sk_text_but.svg", () => SketchEditCommands.Text(w), "text текст надпись");
+        // k184: изображение-подложка в эскиз (png, jpg, bmp)
+        SkCmd("sk.image", "Импорт изображения", "sk_image_but.svg", () => _ = w.ImportSketchImageAsync(), "import image picture png jpg bmp изображение картинка подложка");
         SkCmd("sk.fillet", "Скругление угла", "sk_fillet_but.svg", () => SketchEditCommands.Corner(w, false), "sketch fillet скругление угла");
         SkCmd("sk.chamfer", "Фаска угла", "sk_chamfer_but.svg", () => SketchEditCommands.Corner(w, true), "sketch chamfer фаска угла");
         SkCmd("sk.mirror", "Зеркало относительно осевой", "sk_mirror_but.svg", () => SketchEditCommands.Mirror(w), "sketch mirror зеркало осевая");

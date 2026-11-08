@@ -59,6 +59,8 @@ public partial class MainWindow
             foreach (var i in d.Items) b.Append(',').Append(i.Id);
             b.Append('|');
         }
+        // k184: изображения-подложки — правка их места и размера тоже шаг отмены
+        foreach (var im in sk.Images) b.Append("img").Append(im.FileName).Append(im.Center.X.ToString(fmt, ci)).Append(',').Append(im.Center.Y.ToString(fmt, ci)).Append(',').Append(im.Width.ToString(fmt, ci)).Append(',').Append(im.Height.ToString(fmt, ci)).Append(',').Append(im.Angle.ToString(fmt, ci)).Append('|');
         return b.ToString();
     }
 

@@ -124,8 +124,8 @@ public static class SketchSuggest
 
         // ---- удаление в эскизе (Delete)
         r.Add(new AppCommand { Id = "sk.delete", Label = "Удалить из эскиза", Short = "Удалить", Group = S, Icon = "delete_but.svg", Gesture = new KeyGesture(Key.Delete), Synonyms = "delete удалить",
-            CanRun = () => In() && w.ViewPort.Selection.Items.Any(x => ReferenceEquals(x.Owner, w.ViewPort.ActiveSketch) && x.Target is SkEntity or SkConstraint or SkDimension),
-            Run = () => Delete(w) });
+            CanRun = () => In() && (w.ImageLayer?.Selected != null || w.ViewPort.Selection.Items.Any(x => ReferenceEquals(x.Owner, w.ViewPort.ActiveSketch) && x.Target is SkEntity or SkConstraint or SkDimension)),
+            Run = () => { if (!w.DeleteSelectedSketchImage()) Delete(w); } });
     }
 
     /// <summary>k109: выбранные элементы эскиза, у которых меняется роль (кривые и точки; ссылки — нет).</summary>

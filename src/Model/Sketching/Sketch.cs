@@ -305,6 +305,8 @@ public sealed class Sketch : ModelItem
     public readonly List<SkEntity> Entities = new();
     /// <summary>k176: шестерни эскиза (параметры и номера построенных элементов, SketchGear.cs).</summary>
     public readonly List<SkGear> Gears = new();
+    /// <summary>k184: изображения-подложки эскиза (видны только при его правке).</summary>
+    public readonly List<SkImage> Images = new();
 
     // ------------------------------------------------------------ k96: встроенные ссылки — нуль и оси эскиза
 

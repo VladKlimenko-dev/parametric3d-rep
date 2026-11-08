@@ -31,6 +31,7 @@ public sealed class SketchState
     internal readonly List<SkConstraint> Constraints = new();
     internal readonly List<SkDimension> Dimensions = new();
     internal readonly List<SkGear> Gears = new();
+    internal readonly List<SkImage> Images = new();
 
     /// <summary>Снимает состояние эскиза.</summary>
     public static SketchState Capture(Sketch sk)
@@ -100,6 +101,7 @@ public sealed class SketchState
 
         // k176: шестерни — параметры и номера элементов (номера элементов в снимке те же)
         foreach (var g in sk.Gears) s.Gears.Add(g.Copy());
+        foreach (var im in sk.Images) s.Images.Add(im.Copy());
         return s;
     }
 
@@ -123,6 +125,8 @@ public sealed class SketchState
         sk.Dimensions.AddRange(Dimensions);
         sk.Gears.Clear();
         sk.Gears.AddRange(Gears.Select(g => g.Copy()));
+        sk.Images.Clear();
+        sk.Images.AddRange(Images.Select(im => im.Copy()));
         sk.NextDimIndex = Math.Max(sk.NextDimIndex, NextDimIndex);
 
         sk.BumpStructure();

@@ -6518,6 +6518,65 @@ Check("UI-SWEEP-K107", () =>
     Require(lp.Features.OfType<SweepFeature>().Single().Reverse, "reverse is not saved");
 });
 
+Check("UI-SKETCH-IMAGE-K184", () =>
+{
+    // k184 (замечание 09.11, 06:35, п. 3): изображение в эскизе — вставка (левый нижний угол в начале эскиза, размер по
+    // пикселям), ручки: угол — пропорционально, середина вертикальной стороны — ширина, горизонтальной — высота, поворот;
+    // видно только в своём эскизе; сохраняется в файле детали.
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var w = Open(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp()); Run();
+    var vp = w.ViewPort; var sk = vp.ActiveSketch!;
+    vp.EnterSketch(sk, animate: false); Run();
+    string png = Path.Combine(Path.GetTempPath(), $"uicheck_img_{Guid.NewGuid():N}.png"), p3d = Path.ChangeExtension(png, DocumentSession.PartExtension);
+    var wb = new Avalonia.Media.Imaging.WriteableBitmap(new Avalonia.PixelSize(40, 20), new Avalonia.Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+    using (var fb = wb.Lock()) { var px = new int[40 * 20]; Array.Fill(px, unchecked((int)0xFF3366CC)); System.Runtime.InteropServices.Marshal.Copy(px, 0, fb.Address, px.Length); }
+    wb.Save(png);
+    try
+    {
+        var im = w.InsertSketchImage(sk, png); Run();
+        double k = 25.4 / 96;
+        Require(sk.Images.Count == 1 && im.PixelWidth == 40 && im.PixelHeight == 20, $"image {im.PixelWidth}x{im.PixelHeight}");
+        Require(Math.Abs(im.Width - 40 * k) < 1e-9 && Math.Abs(im.Height - 20 * k) < 1e-9 && (im.At(-1, -1) - Vector2d.Zero).Length < 1e-9, "the lower-left corner is not at the sketch origin");
+        Require(ReferenceEquals(w.ImageLayer.Selected, im) && w.ImageLayer.Handles(out var rot).Count == 8 && rot != null, "no handles on the selected image");
+        w.ImageLayer.InvalidateVisual(); Run();
+        // угол (1,1): пропорционально, противоположный угол на месте
+        var o = im.Copy();
+        SketchImageLayer.Apply(im, o, 2, 1, 1, o.At(1, 1), o.At(-1, -1) + (o.At(1, 1) - o.At(-1, -1)) * 2, false);
+        Require(Math.Abs(im.Width - 2 * o.Width) < 1e-9 && Math.Abs(im.Height - 2 * o.Height) < 1e-9 && (im.At(-1, -1) - o.At(-1, -1)).Length < 1e-9, $"corner scaling {im.Width}x{im.Height}");
+        // правая сторона: только ширина
+        o = im.Copy();
+        SketchImageLayer.Apply(im, o, 2, 1, 0, o.At(1, 0), o.At(1, 0) + new Vector2d(5, 3), false);
+        Require(Math.Abs(im.Width - (o.Width + 5)) < 1e-9 && Math.Abs(im.Height - o.Height) < 1e-9, "width handle");
+        // верхняя сторона: только высота
+        o = im.Copy();
+        SketchImageLayer.Apply(im, o, 2, 0, 1, o.At(0, 1), o.At(0, 1) + new Vector2d(3, 4), false);
+        Require(Math.Abs(im.Height - (o.Height + 4)) < 1e-9 && Math.Abs(im.Width - o.Width) < 1e-9, "height handle");
+        // поворот на 90° вокруг центра
+        o = im.Copy();
+        SketchImageLayer.Apply(im, o, 3, 0, 0, o.Center + new Vector2d(10, 0), o.Center + new Vector2d(0, 10), false);
+        Require(Math.Abs(im.Angle - 90) < 1e-9 && (im.Center - o.Center).Length < 1e-12, $"rotation {im.Angle}");
+        // перенос
+        o = im.Copy();
+        SketchImageLayer.Apply(im, o, 1, 0, 0, Vector2d.Zero, new Vector2d(7, -2), false);
+        Require((im.Center - (o.Center + new Vector2d(7, -2))).Length < 1e-12, "move");
+        // свойства
+        w.ShowProperties(); Run();
+        var ptitle = w.FindControl<TextBlock>("PropsTitle")?.Text;
+        Require(ptitle == Loc.L("ИЗОБРАЖЕНИЕ"), "the properties panel does not show the image: " + ptitle);
+        // файл детали: изображение на месте
+        sk.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(10, 0)));
+        w.FinishSketch(); Run();
+        s.SaveAs(p3d);
+        var s2 = DocumentSession.Open(p3d);
+        var sk2 = s2.Part!.Sketches.First();
+        Require(sk2.Images.Count == 1 && sk2.Images[0].PixelWidth == 40 && Math.Abs(sk2.Images[0].Angle - 90) < 1e-9 && sk2.Images[0].Data.Length > 0, "the image is not saved with the sketch");
+        w.Close();
+    }
+    finally { foreach (var f in new[] { png, p3d }) if (File.Exists(f)) File.Delete(f); }
+});
+
 Check("UI-SKETCH-K106", () =>
 {
     // k106 (снимок 13:13): вершина открытого конца — поверх красного квадрата (2); совпадение концов дуг, уже касающихся,
