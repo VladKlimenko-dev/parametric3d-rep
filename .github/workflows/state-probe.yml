@@ -53,7 +53,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k182_sld, cmd: 'sldprt', env: 'P3D_SLDOUT=res/out' }
+          - { name: k182_sld, cmd: 'sldprt tests/k01/data/sw_cable_holder_a.SLDPRT tests/k01/data/sw_cable_holder_b.SLDPRT tests/k01/data/sw_finishing_nail.SLDPRT tests/k01/data/sw_hex_nut.SLDPRT tests/k01/data/sw_hex_screw.SLDPRT tests/k01/data/sw_locknut_b.SLDPRT tests/k01/data/sw_pan_phillips_screw.SLDPRT tests/k01/data/sw_socket_screw.SLDPRT tests/k01/data/sw_steel_nail.SLDPRT', env: 'P3D_SLDOUT=res/out' }
+          - { name: k182_sldl, cmd: 'sldprt tests/k01/data/sw_locknut_a.SLDPRT', env: 'P3D_SLDOUT=res/out' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
