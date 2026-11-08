@@ -45,13 +45,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k184_q0, cmd: 'krn11qual', env: '' }
-          - { name: k184_q1, cmd: 'krn11qual', env: 'P3D_NURBSMULTI=0' }
-          - { name: k184_q2, cmd: 'krn11qual', env: 'P3D_CDTGRID=0' }
-          - { name: k184_q3, cmd: 'krn11qual', env: 'P3D_CONFSTALL=0' }
-          - { name: k184_q4, cmd: 'krn11qual', env: 'P3D_CONFBASE=0' }
-          - { name: k184_q5, cmd: 'krn11qual', env: 'P3D_CAPFIX=0' }
-          - { name: k184_q6, cmd: 'krn11qual', env: 'P3D_CUSPCLOSED=0' }
+          - { name: k184_cv, cmd: 'sldprt tests/k01/data/sw_cv_1358k26.SLDPRT tests/k01/data/sw_cv_5706n12.SLDPRT', env: 'P3D_SLDOUT=res/out' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
