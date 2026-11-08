@@ -71,7 +71,7 @@ static partial class Program
                     curves = counts.Where(kv => kv.Key is "LINE" or "CIRCLE" or "ELLIPSE" or "B_CURVE" or "INTERSECTION" or "SP_CURVE" or "TRIMMED_CURVE").ToDictionary(kv => kv.Key, kv => kv.Value),
                     stepKb = step.Length / 1024, xtBodies, bodies = bodies.Count, bodyFaces = bodies.Sum(x => x.Faces.Count()), valid = vrs.Count > 0 && vrs.All(x => x.IsValid), verdict = vr?.Summary(),
                     errors = vrs.SelectMany(x => x.Issues).Where(x => x.Severity == ValidationSeverity.Error).Take(4).Select(x => x.ToString()).ToList(),
-                    guarantee = b?.Guarantee.ToString(), volume = vol, area, boxVol, boxGap, xtBox = new[] { xl.X, xl.Y, xl.Z, xh.X, xh.Y, xh.Z }, bodyBox = new[] { bl.X, bl.Y, bl.Z, bh.X, bh.Y, bh.Z }, swVolume = swVol, swArea, msConvert = Math.Round(tConv), msTotal = Math.Round(tAll), warnings = w.Take(12).ToList() });
+                    guarantee = b?.Guarantee.ToString(), volume = vol, area, boxVol, boxGap, xtBox = new[] { xl.X, xl.Y, xl.Z, xh.X, xh.Y, xh.Z }, bodyBox = new[] { bl.X, bl.Y, bl.Z, bh.X, bh.Y, bh.Z }, swVolume = swVol, swArea, msConvert = Math.Round(tConv), msTotal = Math.Round(tAll), warnings = w.Take(12).ToList(), heal = w.Where(x => x.Contains("HEALSIDE") || x.Contains("turned") || x.StartsWith("Import:")).Take(40).ToList() });
                 bool good = !truncated && !w.Any(x => x.Contains("were left out") || x.Contains("is not supported; the edge")) && bodies.Count == xtBodies
                             && vrs.Count > 0 && vrs.All(x => x.IsValid) && boxGap <= 1e-3 && vol > 0 && vol <= boxVol * (1 + 1e-6);
                 if (good) Interlocked.Increment(ref sldGood);
