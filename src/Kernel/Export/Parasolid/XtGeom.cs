@@ -39,6 +39,7 @@ internal abstract class XtSurf
             case "TORUS": return new Tor(n.V("centre"), n.V("axis"), n.V("x_axis"), n.D("major_radius"), n.D("minor_radius"));
             case "B_SURFACE": return f[n.P("nurbs")] is { } ns ? XtNurbsSurf.Of(f, ns) : null;
             case "BLENDED_EDGE": return XtBlendSurf.Of(f, n, 0);
+            case "SPUN_SURF": return XtSpun.Of(f, n);
             // граница скругления (вспомогательная поверхность, пересекающая опору по краю скругления): проекция — точка края
             case "BLEND_BOUND": return f[n.P("blend")] is { } bn && Of(f, bn) is XtBlendSurf bb ? new BlendBound(bb, n.I("boundary")) : null;
             case "OFFSET_SURF": return f[n.P("surface")] is { } bs && Of(f, bs) is { } b ? new Off(b, n.D("offset") * (n.C("sense") == '-' ? -1 : 1) * (bs.C("sense") == '-' ? -1 : 1)) : null;
@@ -128,6 +129,72 @@ internal abstract class XtSurf
             var n = dn.Normalized();
             return p + n * Math.Abs(D);
         }
+    }
+}
+
+/// <summary>
+/// ПОВЕРХНОСТЬ ВРАЩЕНИЯ XT (SPUN_SURF): R(u, v) = Z(u) + (C(u) − Z(u)) cos v + A × (C(u) − Z(u)) sin v, C — образующая
+/// (B-кривая, окружность, прямая), Z — её проекция на ось. Проекция точки — в меридиане: ближайшая точка образующей в
+/// координатах (высота по оси, расстояние до оси), затем поворот в полуплоскость точки.
+/// </summary>
+internal sealed class XtSpun : XtSurf
+{
+    public Vector3d P, A; public Func<double, Vector3d> C = null!; public double T0, T1;
+    List<(double T, Vector2d M)> mer = new();
+
+    public static XtSpun? Of(XtFile f, XtNode n)
+    {
+        var pr = f[n.P("profile")]; if (pr == null) return null;
+        var s = new XtSpun { P = n.V("base"), A = n.V("axis").Normalized() };
+        switch (pr.Name)
+        {
+            case "B_CURVE":
+                if (f[pr.P("nurbs")] is not { } nb || XtNurbsCurve.Of(f, nb) is not { Dim: 3 } nc) return null;
+                s.C = nc.At3; s.T0 = nc.T0; s.T1 = nc.T1; break;
+            case "CIRCLE":
+            {
+                var c = pr.V("centre"); var z = pr.V("normal").Normalized(); var x = pr.V("x_axis").Normalized(); var y = Vector3d.Cross(z, x); double r = pr.D("radius");
+                s.C = t => c + (x * Math.Cos(t) + y * Math.Sin(t)) * r; s.T0 = 0; s.T1 = 2 * Math.PI; break;
+            }
+            case "LINE":
+            {
+                var o = pr.V("pvec"); var d = pr.V("direction").Normalized();
+                s.C = t => o + d * t; s.T0 = -1; s.T1 = 1; break;
+            }
+            default: return null;
+        }
+        int m = 256;
+        for (int i = 0; i <= m; i++) { double t = s.T0 + (s.T1 - s.T0) * i / m; s.mer.Add((t, s.Mer(s.C(t)))); }
+        return s;
+    }
+
+    Vector2d Mer(Vector3d q) { var d = q - P; double h = Vector3d.Dot(d, A); return new Vector2d(h, (d - A * h).Length); }
+
+    public override Vector3d At(double u, double v)
+    {
+        var c = C(u); var d = c - P; var z = P + A * Vector3d.Dot(d, A); var r = c - z;
+        return z + r * Math.Cos(v) + Vector3d.Cross(A, r) * Math.Sin(v);
+    }
+
+    public override Vector3d Project(Vector3d q)
+    {
+        var mq = Mer(q);
+        int bi = 0; double bd = double.MaxValue;
+        for (int i = 0; i < mer.Count; i++) { double d = (mer[i].M - mq).LengthSquared; if (d < bd) { bd = d; bi = i; } }
+        double t = mer[bi].T, h = (T1 - T0) * 1e-7;
+        for (int it = 0; it < 30; it++)
+        {
+            var m0 = Mer(C(t)); var dm = (Mer(C(Math.Min(T1, t + h))) - Mer(C(Math.Max(T0, t - h)))) / (Math.Min(T1, t + h) - Math.Max(T0, t - h));
+            double dd = Vector2d.Dot(dm, dm); if (dd < 1e-300) break;
+            double step = Vector2d.Dot(m0 - mq, dm) / dd;
+            double nt = Math.Clamp(t - step, T0, T1);
+            bool done = Math.Abs(nt - t) < 1e-13 * Math.Max(1, T1 - T0); t = nt;
+            if (done) break;
+        }
+        var mm = Mer(C(t));
+        var dq = q - P; var rad = dq - A * Vector3d.Dot(dq, A);
+        var e = rad.LengthSquared > 1e-30 ? rad.Normalized() : (Math.Abs(A.X) < 0.9 ? Vector3d.Cross(A, Vector3d.UnitX) : Vector3d.Cross(A, Vector3d.UnitY)).Normalized();
+        return P + A * mm.X + e * mm.Y;
     }
 }
 
@@ -477,6 +544,13 @@ internal sealed class XtBlendSurf : XtSurf
             {
                 var c = sp.V("centre"); var z = sp.V("normal").Normalized(); var x = sp.V("x_axis").Normalized(); var y = Vector3d.Cross(z, x); double r = sp.D("radius");
                 raw = Enumerable.Range(0, 129).Select(i => c + (x * Math.Cos(2 * Math.PI * i / 128) + y * Math.Sin(2 * Math.PI * i / 128)) * r).ToList();
+                break;
+            }
+            case "ELLIPSE":
+            {
+                var c = sp.V("centre"); var z = sp.V("normal").Normalized(); var x = sp.V("x_axis").Normalized(); var y = Vector3d.Cross(z, x);
+                double ra = sp.D("major_radius"), rb = sp.D("minor_radius");
+                raw = Enumerable.Range(0, 257).Select(i => c + x * (ra * Math.Cos(2 * Math.PI * i / 256)) + y * (rb * Math.Sin(2 * Math.PI * i / 256))).ToList();
                 break;
             }
             case "LINE": raw = new() { sp.V("pvec") - sp.V("direction") * 0.1, sp.V("pvec") + sp.V("direction") * 0.1 }; break;

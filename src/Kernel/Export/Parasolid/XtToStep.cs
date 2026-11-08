@@ -126,7 +126,8 @@ public static class XtToStep
                 int loop = E($"EDGE_LOOP('',({string.Join(",", oes.Select(x => "#" + x))}))");
                 bounds.Add(E($"FACE_BOUND('',#{loop},.T.)"));
             }
-            if (bounds.Count == 0) { Skip("face without edges"); return null; }
+            // грань без рёбер — вся замкнутая поверхность (шарик подшипника): грань без контуров
+            if (bounds.Count == 0 && sn.Name is not ("SPHERE" or "TORUS" or "B_SURFACE" or "SPUN_SURF")) { Skip("face without edges"); return null; }
             return E($"ADVANCED_FACE('',({string.Join(",", bounds.Select(x => "#" + x))}),#{sid},{(same ? ".T." : ".F.")})");
         }
 
@@ -161,7 +162,22 @@ public static class XtToStep
                 bool closed = pS == null || pE == null || (pS.Value - pE.Value).Length < 1e-12;
                 List<Vector3d> pts;
                 if (!closed) { pts = XtPoly.Trim(free, pS!.Value, pE!.Value); sense = true; }
-                else { pts = free; sense = cn == null || cn.C("sense") != '-'; if (pS != null && pE != null && (free[0] - pS.Value).Length > 1e-9 && (free[^1] - pS.Value).Length > 1e-9) warn?.Add("Parasolid: a closed free-form edge does not start at its vertex."); }
+                else
+                {
+                    pts = free; sense = cn == null || cn.C("sense") != '-';
+                    // кольцо с вершиной: ломаная начинается и кончается точно в вершине (прежде — в начале кривой файла,
+                    // и замкнутое ребро «не замыкалось» на свою вершину)
+                    if (pS != null && pts.Count > 2)
+                    {
+                        var ring = pts.ToList(); if ((ring[0] - ring[^1]).Length < 1e-9) ring.RemoveAt(ring.Count - 1);
+                        int bi = 0; double bd = double.MaxValue;
+                        for (int i = 0; i < ring.Count; i++) { double d = (ring[i] - pS.Value).LengthSquared; if (d < bd) { bd = d; bi = i; } }
+                        pts = new List<Vector3d> { pS.Value };
+                        for (int i = 1; i < ring.Count; i++) pts.Add(ring[(bi + i) % ring.Count]);
+                        pts.Add(pS.Value);
+                        if (Math.Sqrt(bd) > 1e-6) warn?.Add("Parasolid: a closed free-form edge does not pass through its vertex.");
+                    }
+                }
                 ringStart = pts[0];
                 cid = Interp(pts);
             }
@@ -419,6 +435,14 @@ public static class XtToStep
                     }
                     break;
                 case "BLENDED_EDGE": r = Blend(sn); break;
+                case "SPUN_SURF":
+                    // ISO 10303-42: у SURFACE_OF_REVOLUTION u — угол, v — образующая; у XT наоборот — нормаль обратная
+                    if (f[sn.P("profile")] is { } pf && CurveOf(pf, out _, out _) is int pid)
+                    {
+                        r = E($"SURFACE_OF_REVOLUTION('',#{pid},#{E($"AXIS1_PLACEMENT('',#{Pt(sn.V("base"))},#{Dir(sn.V("axis"))})")})");
+                        flip = true;
+                    }
+                    break;
             }
             if (r != null) { surfs[sn.Id] = r.Value; surfFlip[sn.Id] = flip; }
             return r;
