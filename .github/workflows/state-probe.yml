@@ -53,13 +53,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: r175b_instant, cmd: 'instant', env: '' }
-          - { name: r175b_y2o,     cmd: 'y2o',  env: '' }
-          - { name: r175b_corpus,  cmd: 'loftseq 10 101 6 OUT', env: '' }
-          - { name: r175b_allA,    cmd: 'allA', env: '' }
-          - { name: r175b_allB,    cmd: 'allB', env: '' }
-          - { name: r175b_fix,     cmd: 'loftcorpus140', env: '' }
-          - { name: r175b_mut1,    cmd: 'y2', env: 'P3D_SECNODENAN=0' }
+          - { name: k183_c1s0, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=0/6' }
+          - { name: k183_c1s1, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=1/6' }
+          - { name: k183_c1s2, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=2/6' }
+          - { name: k183_c1s3, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=3/6' }
+          - { name: k183_c1s4, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=4/6' }
+          - { name: k183_c1s5, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=5/6' }
+          - { name: k183_sld, cmd: 'sldprt', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -76,6 +76,8 @@ jobs:
           export DOTNET_TieredCompilation=0 SEQ_REBUILDCHECK=1 P3D_USERMODELS="$PWD/tests/ui/data"
           if [ -n "${{ matrix.env }}" ]; then export ${{ matrix.env }}; fi
           CMD="${{ matrix.cmd }}"; CMD="${CMD/OUT/res/out}"
+          # корпус деталей SolidWorks — отдельная ветка corpus/sldprt (в клон main не входит)
+          if [[ "$CMD" == *CORPUS* ]]; then git fetch -q --depth 1 origin corpus/sldprt && mkdir -p corpus && git --work-tree=corpus checkout FETCH_HEAD -- . && CMD="${CMD//CORPUS/corpus}"; fi
           start=$(date +%s)
           timeout 330m out/k01/K01Checks $CMD > res/run.log 2> res/run.err || echo "exit $?" >> res/run.err
           echo "seconds $(( $(date +%s) - start )) nproc $(nproc) env ${{ matrix.env }} cmd $CMD" >> res/run.err

@@ -17,8 +17,16 @@ static partial class Program
     /// </summary>
     static void SldprtChecks(IEnumerable<string>? files = null, bool goldOnly = false)
     {
-        var list = files?.ToList() ?? Directory.GetFiles(Path.Combine("tests", "k01", "data"), "sw_*.SLDPRT").OrderBy(x => x).ToList();
+        // аргумент-каталог — все детали в нём (корпус: ветка corpus/sldprt); P3D_SLDSHARD=i/n — каждая n-я начиная с i
+        var list = files?.SelectMany(a => Directory.Exists(a) ? Directory.GetFiles(a, "*.*", SearchOption.AllDirectories)
+                        .Where(x => x.EndsWith(".sldprt", StringComparison.OrdinalIgnoreCase) || x.EndsWith(".x_b", StringComparison.OrdinalIgnoreCase)).OrderBy(x => x, StringComparer.Ordinal)
+                        : new[] { a }).ToList()
+                   ?? Directory.GetFiles(Path.Combine("tests", "k01", "data"), "sw_*.SLDPRT").OrderBy(x => x).ToList();
+        if (Environment.GetEnvironmentVariable("P3D_SLDSHARD") is { } sh && sh.Split('/') is [var si, var sn] && int.TryParse(si, out var shI) && int.TryParse(sn, out var shN) && shN > 0)
+            list = list.Where((_, k) => k % shN == shI).ToList();
         if (goldOnly && files == null) list = list.Where(x => Gold.Contains(Path.GetFileNameWithoutExtension(x))).ToList();
+        sldGood = 0;
+        var sw0 = System.Diagnostics.Stopwatch.StartNew();
         foreach (var path in list)
         {
             Check("SLDPRT-IMPORT-K182 " + Path.GetFileName(path), () => WithTimeout(Path.GetFileName(path), () =>
@@ -60,6 +68,9 @@ static partial class Program
                     stepKb = step.Length / 1024, xtBodies, bodies = bodies.Count, bodyFaces = bodies.Sum(x => x.Faces.Count()), valid = vrs.Count > 0 && vrs.All(x => x.IsValid), verdict = vr?.Summary(),
                     errors = vrs.SelectMany(x => x.Issues).Where(x => x.Severity == ValidationSeverity.Error).Take(4).Select(x => x.ToString()).ToList(),
                     guarantee = b?.Guarantee.ToString(), volume = vol, area, boxVol, boxGap, xtBox = new[] { xl.X, xl.Y, xl.Z, xh.X, xh.Y, xh.Z }, bodyBox = new[] { bl.X, bl.Y, bl.Z, bh.X, bh.Y, bh.Z }, swVolume = swVol, swArea, msConvert = Math.Round(tConv), msTotal = Math.Round(tAll), warnings = w.Take(12).ToList() });
+                bool good = !f.Truncated && !w.Any(x => x.Contains("were left out") || x.Contains("is not supported; the edge")) && bodies.Count == xtBodies
+                            && vrs.Count > 0 && vrs.All(x => x.IsValid) && boxGap <= 1e-3 && vol > 0 && vol <= boxVol * (1 + 1e-6);
+                if (good) Interlocked.Increment(ref sldGood);
                 // обязательная планка — для файлов, которые уже годны (ГОДНЫЕ); остальные — для сведения (лог), пока импорт
                 // доводится (k183+): провал такого файла не валит прогон
                 if (!Gold.Contains(Path.GetFileNameWithoutExtension(path)) && Environment.GetEnvironmentVariable("P3D_SLDSTRICT") != "1") return;
@@ -71,7 +82,9 @@ static partial class Program
                 Require(vol > 0 && vol <= boxVol * (1 + 1e-6), $"volume {vol:F2} mm³ outside (0, {boxVol:F2}] of the bounding box");
             }));
         }
+        Log(new { test = "sldprt-summary", files = list.Count, good = sldGood, seconds = Math.Round(sw0.Elapsed.TotalSeconds) });
     }
+    static int sldGood;
 
     /// <summary>Объём и площадь из свойств массы SolidWorks (мм³, мм²) — поля 4 и 5 записи SW-MassProp-Config-N (СИ).</summary>
     static (double? Vol, double? Area) SwMassProps(byte[] bytes)
