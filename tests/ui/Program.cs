@@ -1279,6 +1279,47 @@ Check("UI-IMPORT-ASSEMBLY", () =>
     finally { foreach (var f in new[] { step, p3a, step1 }) if (File.Exists(f)) File.Delete(f); }
 });
 
+Check("UI-IMPORT-INTO-K184", () =>
+{
+    // k184 (замечание 09.11, 06:18): импорт — в текущий документ. Деталь → «в сборку»: текущая деталь первым компонентом
+    // (зафиксирована), файл — вторым; в сборке — в место строки отката (строка сдвигается за вставленный); «нет» — операция
+    // «Импорт» в текущую деталь. Ход импорта растёт и доходит до конца.
+    string step1 = Path.Combine(Path.GetTempPath(), $"uicheck_into_{Guid.NewGuid():N}.step");
+    var src1 = new Part("ball"); src1.Bodies.Add(Parametric3D.Kernel.Ops.PrimitiveOp.Sphere(new Vector3d(80, 0, 0), 5));
+    File.WriteAllText(step1, Parametric3D.Model.Exchange.Write(src1, Parametric3D.Model.Exchange.Format.Step));
+    try
+    {
+        Parametric3D.Kernel.Export.ImportProgress.Begin();
+        var pr = DocumentSession.PrepareImport(step1, new List<string>());
+        double mid = Parametric3D.Kernel.Export.ImportProgress.Value;
+        Parametric3D.Kernel.Export.ImportProgress.End();
+        Require(mid >= 0.15 && Parametric3D.Kernel.Export.ImportProgress.Value == 1, $"import progress {mid}");
+        Require(pr.Single != null && pr.Components == null, "a one-body file is not prepared as one part");
+        var s = DocumentSession.Sample(); s.Part!.Rebuild(s.Document.Parameters);
+        string partName = s.Part.Name;
+        var w = Open(s);
+        var asm = DocumentSession.AssemblyFromPart(s);
+        w.SetSession(asm);
+        w.InsertPrepared(pr);
+        var comps = asm.Document.Root.Children.OfType<Part>().ToList();
+        Require(asm.IsAssembly && comps.Count == 2 && comps[0].Name == partName && comps[0].Fixed, $"assembly from part: {string.Join(", ", comps.Select(c => c.Name))}");
+        // строка отката сборки перед первым компонентом: вставка — на её место, строка — за вставленным
+        asm.Document.Root.StageIndex = 0;
+        w.InsertPrepared(DocumentSession.PrepareImport(step1, new List<string>()));
+        comps = asm.Document.Root.Children.OfType<Part>().ToList();
+        Require(comps.Count == 3 && comps[0].Name.StartsWith(Path.GetFileNameWithoutExtension(step1)) && asm.Document.Root.StageIndex == 1, $"insert at the bar: {string.Join(", ", comps.Select(c => c.Name))}, bar {asm.Document.Root.StageIndex}");
+        w.Close();
+        // «нет»: в текущую деталь
+        var s2 = DocumentSession.Sample(); s2.Part!.Rebuild(s2.Document.Parameters);
+        int n0 = s2.Part.Features.Count; double v0 = s2.Part.Volume;
+        DocumentSession.MoveFeaturesInto(DocumentSession.PrepareImport(step1, new List<string>()).Single!, s2.Part);
+        s2.Part.Rebuild(s2.Document.Parameters);
+        Require(s2.Part.Features.Count > n0 && s2.Part.Features.OfType<InsertBodyFeature>().Any(), "no import operation in the current part");
+        Require(s2.Part.Volume > v0 + 400, $"volume after import into the part: {s2.Part.Volume} vs {v0}");
+    }
+    finally { if (File.Exists(step1)) File.Delete(step1); }
+});
+
 Check("UI-IMPORT-STEP-PLACEMENT", () =>
 {
     // k149 (замечание 03.11, 10:32): СБОРКА STEP — ДЕТАЛИ НА СВОИХ МЕСТАХ. Файл: изделия «Болт» (цилиндр R5×20) и «Плита»

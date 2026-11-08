@@ -155,7 +155,8 @@ public sealed class DocumentSession
     public static Part ImportPart(string path, List<string> warnings)
     {
         string text = ReadImportText(path, warnings);
-        var read = Exchange.Read(text, out _, warnings) ?? throw new InvalidDataException(string.Join("\n", warnings));
+        var read = _readCache is { } rc && ReferenceEquals(rc.Text, text) ? rc.Read : Exchange.Read(text, out _, warnings) ?? throw new InvalidDataException(string.Join("\n", warnings));
+        _readCache = null;
         var part = new Part(Path.GetFileNameWithoutExtension(path));
         var imp = new Parametric3D.Model.Features.InsertBodyFeature(Loc.L("Импорт «{0}»", Path.GetFileName(path)))
         {
@@ -190,7 +191,8 @@ public sealed class DocumentSession
         }
         var read = Exchange.Read(text, out var fmt, warnings) ?? throw new InvalidDataException(string.Join("\n", warnings));
         var bodies = Parametric3D.Model.Features.InsertBodyFeature.Separated(read.Bodies.ToList(), read.BodyNameList, out var names);
-        if (bodies.Count < 2) return null;
+        // k184: одно тело — деталь; прочитанное отдаётся ImportPart (прежде файл читался второй раз — вдвое дольше)
+        if (bodies.Count < 2) { _readCache = (text, read); return null; }
         string file = Path.GetFileName(path);
         var list = new List<Part>();
         for (int i = 0; i < bodies.Count; i++)
@@ -290,6 +292,58 @@ public sealed class DocumentSession
         return text;
     }
     static (string Path, DateTime Stamp, string Text)? _importCache;
+    static (string Text, Part Read)? _readCache;
+
+    /// <summary>k184: прочитанный файл для вставки в текущий документ: компоненты (несколько деталей) или одна деталь.</summary>
+    public sealed record Prepared(List<Part>? Components, Part? Single, string Name);
+
+    /// <summary>k184: чтение файла импорта (в фоне): сборка из деталей файла или одна деталь — без документа.</summary>
+    public static Prepared PrepareImport(string path, List<string> warnings)
+    {
+        var comps = ImportComponents(path, warnings);
+        return comps != null ? new Prepared(comps, null, Path.GetFileNameWithoutExtension(path)) : new Prepared(null, ImportPart(path, warnings), Path.GetFileNameWithoutExtension(path));
+    }
+
+    /// <summary>k184: новый документ из прочитанного (текущий документ пуст).</summary>
+    public static DocumentSession FromPrepared(Prepared pr)
+    {
+        if (pr.Components != null)
+        {
+            var doc = new Document(pr.Name);
+            var s = new DocumentSession(doc, null) { IsAssembly = true, Modified = true };
+            foreach (var c in pr.Components) doc.Root.Add(c);
+            return s;
+        }
+        var d = new Document(pr.Single!.Name);
+        d.Root.Add(pr.Single);
+        return new DocumentSession(d, null) { Modified = true };
+    }
+
+    /// <summary>
+    /// k184: ДЕТАЛЬ → СБОРКА. Деталь текущего документа — первым компонентом новой сборки (на месте, основа — зафиксирована);
+    /// параметры документа переходят в сборку. Файл детали, если был, — источник компонента.
+    /// </summary>
+    public static DocumentSession AssemblyFromPart(DocumentSession ps)
+    {
+        var part = ps.Part ?? throw new InvalidOperationException("no part");
+        var doc = new Document(Loc.L("Сборка «{0}»", part.Name));
+        CopyParameters(ps.Document.Parameters, doc.Parameters);
+        ps.Document.Root.Remove(part);
+        if (ps.FilePath != null) part.SourcePath = ps.FilePath;
+        part.Fixed = true;
+        doc.Root.Add(part);
+        return new DocumentSession(doc, null) { IsAssembly = true, Modified = true };
+    }
+
+    /// <summary>k184: операции прочитанной детали (импорт и узлы FreeForm) — в текущую деталь, в место строки отката.</summary>
+    public static void MoveFeaturesInto(Part from, Part target)
+    {
+        foreach (var f in from.Features.ToList())
+        {
+            from.Features.Remove(f); from.Remove(f);
+            target.AddFeature(f);
+        }
+    }
 
     public static DocumentSession Import(string path, List<string> warnings)
     {

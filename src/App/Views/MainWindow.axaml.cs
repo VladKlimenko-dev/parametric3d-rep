@@ -391,9 +391,17 @@ public partial class MainWindow : Window
         catch (Exception ex) { ShowToast(L("Не удалось открыть: {0}", ex.Message)); return null; }
     }
 
+    /// <summary>
+    /// k184 (замечание 09.11, 06:18, п. 2): ИМПОРТ — В ТЕКУЩИЙ ДОКУМЕНТ, а не новым документом. Пустой новый документ —
+    /// заменяется прочитанным, как прежде. Деталь — вопрос «преобразовать в сборку?»: да — новая сборка, текущая деталь первым
+    /// компонентом, файл — вторым (деталь или подсборка из деталей файла); нет — тела файла операцией «Импорт» в текущую деталь
+    /// (в место строки отката). Сборка — компонент или подсборка в место строки отката сборки. Чтение — в фоне, с полосой хода
+    /// в строке состояния (п. 1). STL — прежним путём (своё окно настроек). P3D_IMPORTINTO=0 — прежнее поведение.
+    /// </summary>
     public async Task ImportAsync()
     {
-        if (!await ConfirmDiscard()) return;
+        bool into = Environment.GetEnvironmentVariable("P3D_IMPORTINTO") != "0";
+        if (!into && !await ConfirmDiscard()) return;
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = L("Импорт"),
@@ -406,10 +414,51 @@ public partial class MainWindow : Window
         });
         var path = files.FirstOrDefault()?.TryGetLocalPath();
         if (path == null) return;
-        if (Path.GetExtension(path).Equals(".stl", StringComparison.OrdinalIgnoreCase)) { await ImportStlAsync(path); return; }
+        if (Path.GetExtension(path).Equals(".stl", StringComparison.OrdinalIgnoreCase)) { if (into && !await ConfirmDiscard()) return; await ImportStlAsync(path); return; }
+        await ImportFileAsync(path, into);
+    }
+
+    /// <summary>k184: прочитать файл (в фоне, с полосой хода) и вставить в текущий документ (см. ImportAsync).</summary>
+    public async Task ImportFileAsync(string path, bool into = true)
+    {
         var warnings = new List<string>();
-        SetSession(DocumentSession.Import(path, warnings));
+        _loadingFile = Path.GetFileName(path);
+        Parametric3D.Kernel.Export.ImportProgress.Begin();
+        StartProgress();
+        DocumentSession.Prepared pr;
+        try { pr = await Task.Run(() => DocumentSession.PrepareImport(path, warnings)); }
+        catch (Exception ex) { ShowToast(L("Импорт: ") + ex.Message); return; }
+        finally { Parametric3D.Kernel.Export.ImportProgress.End(); _loadingFile = null; UpdateProgress(); }
+        var cur = Session;
+        bool empty = cur == null || (!cur.IsAssembly && cur.FilePath == null && !cur.Modified && cur.Part is { } p0 && p0.Features.Count == 0 && p0.Bodies.Count == 0);
+        if (!into || empty) SetSession(DocumentSession.FromPrepared(pr));
+        else if (cur!.IsAssembly) InsertPrepared(pr);
+        else
+        {
+            string yes = L("Да, в сборку"), no = L("Нет, в эту деталь"), cancel = L("Отмена");
+            var r = await Dialogs.Ask(this, L("Импорт"), L("Преобразовать «{0}» в сборку? Текущая деталь станет первым компонентом, «{1}» — вторым.", cur.Title, pr.Name), yes, no, cancel);
+            if (r == yes)
+            {
+                SetSession(DocumentSession.AssemblyFromPart(cur));
+                RebuildTree();
+                InsertPrepared(pr);
+            }
+            else if (r == no && cur.Part is { } target)
+            {
+                var srcs = pr.Components ?? new List<Parametric3D.Model.Part> { pr.Single! };
+                cur.Edit(L("Импорт «{0}»", pr.Name), () => { foreach (var src in srcs) DocumentSession.MoveFeaturesInto(src, target); });
+                View.MarkDirty(); RebuildTree();
+            }
+            else return;
+        }
+        StartProgress();
         if (warnings.Count > 0) ShowToast(string.Join("\n", warnings.Take(6)), error: false);
+    }
+
+    public void InsertPrepared(DocumentSession.Prepared pr)
+    {
+        if (pr.Components != null) Commands.AssemblyCommands.AddComponents(this, pr.Components, pr.Name);
+        else { pr.Single!.Name = pr.Name; Commands.AssemblyCommands.AddComponent(this, pr.Single, L("Импорт «{0}»", pr.Name)); }
     }
 
     /// <summary>
@@ -3860,7 +3909,9 @@ public partial class MainWindow : Window
         if (StatusProgressOff) return;
         string? stage = null; double pct = 0; bool ind = false;
         var doc = Session?.Document;
-        if (_loadingFile != null) { stage = L("Загрузка «{0}»…", _loadingFile); ind = true; }
+        // k184 (замечание 09.11, 06:18, п. 1): импорт — заполняющаяся полоса по этапам (перевод, разбор, разметка граней, лечение)
+        if (_loadingFile != null && Parametric3D.Kernel.Export.ImportProgress.Active) { pct = 100 * Parametric3D.Kernel.Export.ImportProgress.Value; stage = L("Импорт «{0}»", _loadingFile); }
+        else if (_loadingFile != null) { stage = L("Загрузка «{0}»…", _loadingFile); ind = true; }
         // k126: деталь показана, идут отложенные проверки (правка их прерывает)
         else if (doc != null && doc.IsVerifying) { stage = L("Проверка детали…"); ind = true; }
         else if (doc != null && doc.IsBuilding)

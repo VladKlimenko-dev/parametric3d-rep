@@ -32,6 +32,9 @@ public static class XtToStep
         var shells = new List<int>();
         int skipped = 0; var skippedKinds = new HashSet<string>();
         double acc = 1e-6;
+        // k184: ход импорта — по граням всех тел
+        int facesAll = files.Sum(ff => ff.OfType("FACE").Count()), facesDone = 0;
+        ImportProgress.SetFaceTotal(facesAll);
         foreach (var f in files)
         {
         c = new Ctx(f, warnings) { Sb = sb, NextBox = box };
@@ -59,7 +62,7 @@ public static class XtToStep
             foreach (var faces in faceLists)
             {
                 var ids = new List<int>();
-                foreach (var fc in faces) if (c.Face(fc) is int fid) ids.Add(fid);
+                foreach (var fc in faces) { if (c.Face(fc) is int fid) ids.Add(fid); ImportProgress.Convert(++facesDone, facesAll); }
                 if (ids.Count > 0) shells.Add(c.E($"CLOSED_SHELL('',({string.Join(",", ids.Select(x => "#" + x))}))"));
             }
         }

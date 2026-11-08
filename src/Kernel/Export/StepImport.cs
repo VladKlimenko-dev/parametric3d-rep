@@ -659,6 +659,7 @@ public static class StepImport
         using var _oh = Diagnostics.Overhead.Scope();
         int built = 0, failed = 0;
         var faceList = solid.Faces.ToList();
+        ImportProgress.FacesAdded(faceList.Count);
         // 20:17 (скорость): ДОНОР И СЕТКИ ГРАНЕЙ — ЗАРАНЕЕ, ПАРАЛЛЕЛЬНО. Грани размечались по одной (скругление на пересечении
         // цилиндра и шара: 310 мс на 5 граней, из них 2–3 кривые по ~100 мс). Построитель сетки грани уже идёт параллельно в
         // разметке отображения (Tessellator); точки рёбер считаются заранее последовательно — общий кэш ребра у соседних
@@ -688,6 +689,7 @@ public static class StepImport
                         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
                         try { var m = Tess.ExactFaceMesher.Mesh(fi, out var w, out _); pre[i] = (m, w); }
                         catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { pre[i] = null; }
+                        ImportProgress.FaceDone();
                         if (SlowFaceDbg && System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds > 300)
                         {
                             var src0 = Topology.GeometryAudit.AuthoritativeSurface(fi);

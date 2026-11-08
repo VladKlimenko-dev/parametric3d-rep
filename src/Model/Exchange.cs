@@ -146,6 +146,7 @@ public static class Exchange
         format = Guess(text);
 
         var stepNames = new List<string?>();
+        Kernel.Export.ImportProgress.Set("parse", 0.15, 0.2, 0.5);
         List<TSolid>? bodies = format switch
         {
             Format.Step => StepImport.ReadExactSolids(text, warnings, stepNames) is { Count: > 0 } exact
@@ -164,7 +165,7 @@ public static class Exchange
         // KRN-09 (09.5): лечение в бюджете с отчётом (строка на тело в предупреждениях)
         double acc = format == Format.Step ? StepAccuracyMm(text) : 0;
         if (!Kernel.Export.ImportHeal.Off)
-            for (int i = 0; i < bodies.Count; i++) Kernel.Export.ImportHeal.Heal(bodies[i], warnings, $"body {i + 1}", acc);
+            for (int i = 0; i < bodies.Count; i++) { Kernel.Export.ImportHeal.Heal(bodies[i], warnings, $"body {i + 1}", acc); Kernel.Export.ImportProgress.Set("heal", 0.92, 0.97, (i + 1.0) / bodies.Count); }
         var part = new Part("импорт");
         foreach (var b in bodies) part.Bodies.Add(b);
         // k149: имена деталей файла (STEP: изделие оболочки), по порядку тел; нет — пусто
