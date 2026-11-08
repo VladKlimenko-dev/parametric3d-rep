@@ -95,7 +95,7 @@ internal abstract class XtSurf
         readonly XtBlendSurf B; readonly int Idx;
         public BlendBound(XtBlendSurf b, int idx) { B = b; Idx = idx; }
         public override Vector3d At(double u, double v) => B.At(u, Idx == 0 ? 0 : 1);
-        public override Vector3d Project(Vector3d q) { var c = B.OnSpine(B.SpineNear(q)); return (Idx == 0 ? B.S0 : B.S1).Project(c); }
+        public override Vector3d Project(Vector3d q) { var c = B.CentreAt(q); return (Idx == 0 ? B.S0 : B.S1).Project(c); }
     }
     sealed class Off : XtSurf
     {
@@ -474,7 +474,7 @@ internal sealed class XtBlendSurf : XtSurf
             for (int i = 0; i + 1 < raw.Count; i++)
             {
                 dense.Add(raw[i]);
-                for (int k = 1; k < 8; k++) dense.Add(bl.OnSpine(Vector3d.Lerp(raw[i], raw[i + 1], k / 8.0)));
+                for (int k = 1; k < 8; k++) dense.Add(bl.OnSpineIn(Vector3d.Lerp(raw[i], raw[i + 1], k / 8.0), raw[i + 1] - raw[i]));
             }
             dense.Add(raw[^1]);
             raw = dense;
@@ -484,8 +484,8 @@ internal sealed class XtBlendSurf : XtSurf
         {
             double ext = Math.Max(2 * Math.Max(bl.R0, bl.R1), 1e-5);
             var d0 = (raw[0] - raw[1]); var d1 = (raw[^1] - raw[^2]);
-            if (d0.LengthSquared > 0) raw.Insert(0, bl.OnSpine(raw[0] + d0.Normalized() * ext));
-            if (d1.LengthSquared > 0) raw.Add(bl.OnSpine(raw[^1] + d1.Normalized() * ext));
+            if (d0.LengthSquared > 0) raw.Insert(0, bl.OnSpineIn(raw[0] + d0.Normalized() * ext, d0));
+            if (d1.LengthSquared > 0) raw.Add(bl.OnSpineIn(raw[^1] + d1.Normalized() * ext, d1));
         }
         bl.Spine = raw;
         return bl;
@@ -540,6 +540,38 @@ internal sealed class XtBlendSurf : XtSurf
     }
 
     /// <summary>Ближайшая к q точка оси (ломаной центров шара), уточнённая на обе смещённые опоры.</summary>
+    /// <summary>Точный центр шара в нормальной плоскости оси через ближайшую к q точку оси: попеременно — на обе смещённые
+    /// опоры и обратно в плоскость. Без плоскости центр сползал вдоль оси, и точки сгущённой кривой шли вразнобой (зигзаг).</summary>
+    public Vector3d CentreAt(Vector3d q)
+    {
+        int bi = 0; double bt = 0, bd = double.MaxValue;
+        for (int i = 0; i + 1 < Spine.Count; i++)
+        {
+            var ab = Spine[i + 1] - Spine[i]; double l2 = ab.LengthSquared;
+            double t = l2 > 0 ? Math.Clamp(Vector3d.Dot(q - Spine[i], ab) / l2, 0, 1) : 0;
+            double d = (Spine[i] + ab * t - q).LengthSquared;
+            if (d < bd) { bd = d; bi = i; bt = t; }
+        }
+        var c0 = Spine[bi] + (Spine[bi + 1] - Spine[bi]) * bt;
+        return OnSpineIn(c0, Spine[bi + 1] - Spine[bi]);
+    }
+
+    /// <summary>Точка оси в плоскости через c0 с нормалью tg (см. CentreAt).</summary>
+    internal Vector3d OnSpineIn(Vector3d c0, Vector3d tg)
+    {
+        if (tg.LengthSquared < 1e-30) return OnSpine(c0);
+        tg.Normalize();
+        var c = c0;
+        for (int it = 0; it < 60; it++)
+        {
+            var c1 = Offset(S1, Offset(S0, c, R0), R1);
+            c1 -= tg * Vector3d.Dot(c1 - c0, tg);
+            bool done = (c1 - c).Length < 1e-12; c = c1;
+            if (done) break;
+        }
+        return c;
+    }
+
     public Vector3d SpineNear(Vector3d q)
     {
         int bi = 0; double bt = 0, bd = double.MaxValue;
@@ -557,7 +589,7 @@ internal sealed class XtBlendSurf : XtSurf
     /// сечения около q, касание — ближайшее к q из двух.</summary>
     public Vector3d EdgeNear(Vector3d q)
     {
-        var c = OnSpine(SpineNear(q));
+        var c = CentreAt(q);
         var (a, b) = Contacts(c);
         return (a - q).LengthSquared <= (b - q).LengthSquared ? a : b;
     }

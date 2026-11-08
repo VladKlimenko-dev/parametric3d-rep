@@ -403,9 +403,8 @@ public static partial class ExactFaceMesher
             for (int i = 0; i < allB.Count; i++) for (int j = i + 1; j < allB.Count; j++) { double d = (allB[i] - allB[j]).Length; if (d < mind) { mind = d; at = allB[i]; } }
             ConformalDebug($"face {f.Id}: loops {loops.Count} [{string.Join(",", loops.Select(l => l.Count))}], closest boundary points {mind:G3} at {at}");
         }
-        // k182: грань шара без точки внутри (импорт: угол трёх скруглений — сферический треугольник) — точка по обходу
-        // наружного контура грани (топология обходит наружную нормаль против часовой): обход вокруг нормали в середине
-        // контура против часовой — внутренность у середины, иначе — у противоположной точки шара. Мутация P3D_SPHEREHINT=0.
+        // k182: грань шара без точки внутри (импорт: угол трёх скруглений — сферический треугольник) — точка у середины
+        // контура на шаре, если контур — малая шапка (см. SphereHint). Мутация P3D_SPHEREHINT=0.
         var hint0 = f.InteriorHint ?? (SphereHintOff ? null : SphereHint(f, src));
         var maps = ConformalMaps(src, loops, hint0);
         if (maps.Count == 0) { why = "conformal: surface kind not supported"; return null; }
@@ -575,12 +574,10 @@ public static partial class ExactFaceMesher
         if (pts.Count < 3) return null;
         var m = pts.Aggregate(Vector3d.Zero, (a, q) => a + q) / pts.Count;
         var d = m - sp.C; if (d.Length < 1e-6 * sp.R) return null;
-        var mp = sp.C + d.Normalized() * sp.R;
-        Vector3d area = Vector3d.Zero;
-        for (int i = 0; i < pts.Count; i++) area += Vector3d.Cross(pts[i] - m, pts[(i + 1) % pts.Count] - m);
-        var n = f.NormalAt(mp);
-        double s = Vector3d.Dot(area, n);
-        if (Math.Abs(s) < 1e-18) return null;
-        return s > 0 ? mp : sp.C - d.Normalized() * sp.R;
+        // только контур, заметно не доходящий до большого круга (середина дальше 0,3 R от центра): грань — малая шапка
+        // у середины (дополнение — почти весь шар с малым отверстием — в теле из файла не встречается). Ближе к большому
+        // кругу сторону не угадать — отказ, как прежде.
+        if (d.Length < 0.3 * sp.R) return null;
+        return sp.C + d.Normalized() * sp.R;
     }
 }

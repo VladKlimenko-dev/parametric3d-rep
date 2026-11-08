@@ -498,7 +498,7 @@ public static class XtToStep
             var Pw = new Vector3d[nu, 3]; var W = new double[nu, 3]; var cen = new List<Vector3d>(nu);
             for (int i = 0; i < nu; i++)
             {
-                var c = bl.OnSpine(at(len * i / (nu - 1))); cen.Add(c);
+                var c = bl.CentreAt(at(len * i / (nu - 1))); cen.Add(c);
                 var (pa, pb) = bl.Contacts(c);
                 var ea = pa - c; var eb = pb - c; double r = 0.5 * (ea.Length + eb.Length);
                 Vector3d m; double w;
