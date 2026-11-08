@@ -45,7 +45,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k184_dbg, cmd: 'sldprt tests/k01/data/sw_ujoint_2455k22.SLDPRT tests/k01/data/sw_mount_60945k17.SLDPRT tests/k01/data/sw_plate_8856n18.SLDPRT tests/k01/data/sw_barricade_92735t25.SLDPRT tests/k01/data/sw_bur_4295a56.SLDPRT tests/k01/data/sw_pan_phillips_screw.SLDPRT tests/k01/data/sw_ujoint_60075k97.SLDPRT tests/k01/data/sw_starter_7595k62.SLDPRT', env: 'P3D_SLDDIAG=1' }
+          - { name: k184_dbg, cmd: 'sldprt tests/k01/data/sw_hosefit_2802n11.SLDPRT', env: 'P3D_SLDPROF=1 P3D_SLOWFACE=1 P3D_SLDTIMEOUT=3000' }
+          - { name: k184_exp, cmd: 'sldprt tests/k01/data/sw_to_6168t106.SLDPRT', env: 'P3D_SLDPROF=1 P3D_SLOWFACE=1 P3D_SLDTIMEOUT=3000' }
+          - { name: k184_exp2, cmd: 'sldprt tests/k01/data/sw_to_2425t37.SLDPRT', env: 'P3D_SLDPROF=1 P3D_SLOWFACE=1 P3D_SLDTIMEOUT=3000' }
+          - { name: k184_exp3, cmd: 'sldprt tests/k01/data/sw_to_5706n22.SLDPRT tests/k01/data/sw_to_3099t34.SLDPRT', env: 'P3D_SLDPROF=1 P3D_SLOWFACE=1 P3D_SLDTIMEOUT=3000' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
