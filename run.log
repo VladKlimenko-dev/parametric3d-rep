@@ -1,0 +1,97 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["stepreal"]}
+{"test":"K10-STEP-REAL-ANALYTIC","seed":8001,"before":318595.35032001574,"after":318595.35032001574,"diff":0,"conv":1}
+{"test":"K10-STEP-REAL","seed":8001,"ok":true,"faces":30,"v0":318595.35032001574,"v1":318592.63131410186,"rel":8.534355291594781E-06,"verdict":"BRep: ok; Mesh: ok","warnings":["STEP: 68 edge(s) written as exact intersection curves.\u00D71","STEP: 30 face(s) meshed from their loops, 0 left as is.\u00D71"]}
+{"test":"K10-STEP-REAL-ANALYTIC","seed":8002,"before":317309.7888896477,"after":317309.78888964775,"diff":5.820766091346741E-11,"conv":1}
+{"test":"K10-STEP-REAL","seed":8002,"ok":true,"faces":28,"v0":317309.7888896477,"v1":317311.5039886087,"rel":5.40512464814025E-06,"verdict":"BRep: ok; Mesh: ok","warnings":["STEP: 80 edge(s) written as exact intersection curves.\u00D71","STEP: 28 face(s) meshed from their loops, 0 left as is.\u00D71"]}
+{"test":"K10-STEP-REAL-ANALYTIC","seed":8003,"before":321458.1453983925,"after":321458.14539839263,"diff":1.1641532182693481E-10,"conv":1}
+{"test":"K10-STEP-REAL","seed":8003,"ok":true,"faces":33,"v0":321458.1453983925,"v1":321448.71481278987,"rel":2.9336900425901553E-05,"verdict":"BRep: ok; Mesh: ok","warnings":["STEP: 70 edge(s) written as exact intersection curves.\u00D71","STEP: 33 face(s) meshed from their loops, 0 left as is.\u00D71"]}
+{"test":"K10-STEP-REAL-ANALYTIC","seed":8004,"before":313742.3654026757,"after":313742.36540267564,"diff":-5.820766091346741E-11,"conv":1}
+{"test":"K10-STEP-REAL","seed":8004,"ok":true,"faces":35,"v0":313742.3654026757,"v1":313748.7663615016,"rel":2.0401958841857173E-05,"verdict":"BRep: ok; Mesh: ok","warnings":["STEP: 90 edge(s) written as exact intersection curves.\u00D71","STEP: 35 face(s) meshed from their loops, 0 left as is.\u00D71"]}
+{"test":"K10-STEP-ROUNDTRIP-REALISTIC","ok":true}
+{"test":"K10-STEP-SHAFT","d":4,"ok":true,"v0":18599.491509446074,"vm":18573.491801338743,"va":18599.49152364417,"verdict":"BRep: ok; Mesh: ok","warnings":["STEP: 2 edge(s) written as exact intersection curves.","STEP: an intersection curve is written as a cubic B-spline (65 poles, deviation 7.1E-006 mm).","STEP: 4 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-STEP-SHAFT","d":8,"ok":true,"v0":17864.77623352467,"vm":17841.40071534324,"va":17864.776287386747,"verdict":"BRep: ok; Mesh: ok","warnings":["STEP: 2 edge(s) written as exact intersection curves.","STEP: an intersection curve is written as a cubic B-spline (65 poles, deviation 2.8E-005 mm).","STEP: 4 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-STEP-ROUNDTRIP-CROSS-HOLE","ok":true}
+{"dbgArc":14717,"curveTess":200.4882312499992,"same":true,"cacheCount":49,"src":"PlaneSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":200.48823124999925,"faceRev":false}
+{"dbgArc":14730,"curveTess":-200.48823124999925,"same":true,"cacheCount":49,"src":"PlaneSurface","z":20,"sweep":-6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":-200.4882312499993,"faceRev":false}
+{"dbgArc":14755,"curveTess":200.4882312499992,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":-200.4882312499992,"faceRev":false}
+{"dbgArc":14755,"curveTess":-200.48823124999925,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":20,"sweep":-6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":200.48823124999927,"faceRev":false}
+{"fi":14717,"src":"PlaneSurface","integral":-0,"area":-2198.9380701702535,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":14730,"src":"PlaneSurface","integral":43978.76140340507,"area":2198.9380701702535,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":14743,"src":"PlaneSurface","integral":-0,"area":-1200,"loops":["Ol-l\u002Bl-l\u002B"]}
+{"fi":14747,"src":"PlaneSurface","integral":48000,"area":800,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":14750,"src":"PlaneSurface","integral":48000,"area":1200,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":14753,"src":"PlaneSurface","integral":-0,"area":-800,"loops":["Ol-l-l-l-"]}
+{"fi":14755,"src":"ExtrudedSurface","integral":-8042.47719318987,"area":-1005.3096491487322,"loops":["Oa-","Oa-l-l\u002B"]}
+{"test":"K10-FOREIGN","faces":7,"vm":43986.78111543999,"va":43978.76140340507,"exact":43978.761403405064,"verdict":"BRep: ok; Mesh: ok","conv":1,"norm":"faces 7, loops 9, rings 10 (multi-ring loops 1), components 3, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 0\u21920, Reversed changed 0, reordered loops 1, split loops 1, roles changed 0, multi-region faces 0, faces split 0","issues":[],"warnings":["STEP: 7 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-STEP-FOREIGN-BOX-HOLE none","ok":true}
+{"dbgArc":14761,"curveTess":200.4882312499992,"same":true,"cacheCount":49,"src":"PlaneSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":200.48823124999925,"faceRev":false}
+{"dbgArc":14774,"curveTess":-200.48823124999925,"same":true,"cacheCount":49,"src":"PlaneSurface","z":20,"sweep":-6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":-200.4882312499993,"faceRev":false}
+{"dbgArc":14799,"curveTess":200.4882312499992,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":-200.4882312499992,"faceRev":false}
+{"dbgArc":14799,"curveTess":-200.48823124999925,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":20,"sweep":-6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":200.48823124999927,"faceRev":false}
+{"fi":14761,"src":"PlaneSurface","integral":-0,"area":-2198.9380701702535,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":14774,"src":"PlaneSurface","integral":43978.76140340507,"area":2198.9380701702535,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":14787,"src":"PlaneSurface","integral":-0,"area":-1200,"loops":["Ol-l\u002Bl-l\u002B"]}
+{"fi":14791,"src":"PlaneSurface","integral":48000,"area":800,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":14794,"src":"PlaneSurface","integral":48000,"area":1200,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":14797,"src":"PlaneSurface","integral":-0,"area":-800,"loops":["Ol-l-l-l-"]}
+{"fi":14799,"src":"ExtrudedSurface","integral":-8042.47719318987,"area":-1005.3096491487322,"loops":["Oa-","Oa-l-l\u002B"]}
+{"test":"K10-FOREIGN","faces":7,"vm":43986.78111543999,"va":43978.76140340507,"exact":43978.761403405064,"verdict":"BRep: ok; Mesh: ok","conv":1,"norm":"faces 7, loops 9, rings 10 (multi-ring loops 1), components 3, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 0\u21920, Reversed changed 0, reordered loops 1, split loops 1, roles changed 0, multi-region faces 0, faces split 0","issues":[],"warnings":["STEP: 7 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-STEP-FOREIGN-BOX-HOLE mm","ok":true}
+{"dbgArc":14805,"curveTess":200.48823124966833,"same":true,"cacheCount":49,"src":"PlaneSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":200.48823124990713,"faceRev":false}
+{"dbgArc":14818,"curveTess":-200.48823124966822,"same":true,"cacheCount":49,"src":"PlaneSurface","z":19.9999999999962,"sweep":-6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":-200.48823124990702,"faceRev":false}
+{"dbgArc":14843,"curveTess":200.48823124966833,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":-200.4882312499071,"faceRev":false}
+{"dbgArc":14843,"curveTess":-200.48823124966822,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":19.9999999999962,"sweep":-6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":200.48823124990705,"faceRev":false}
+{"fi":14805,"src":"PlaneSurface","integral":-0,"area":-2198.9380701767845,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":14818,"src":"PlaneSurface","integral":43978.76140352733,"area":2198.9380701767845,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":14831,"src":"PlaneSurface","integral":-0,"area":-1200.0000000000518,"loops":["Ol-l\u002Bl-l\u002B"]}
+{"fi":14835,"src":"PlaneSurface","integral":48000.00000011487,"area":800.0000000017279,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":14838,"src":"PlaneSurface","integral":48000.00000011487,"area":1200.0000000000518,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":14841,"src":"PlaneSurface","integral":-0,"area":-800.0000000017279,"loops":["Ol-l-l-l-"]}
+{"fi":14843,"src":"ExtrudedSurface","integral":-8042.477193175068,"area":-1005.3096491477149,"loops":["Oa-","Oa-l-l\u002B"]}
+{"test":"K10-FOREIGN","faces":7,"vm":43986.781115439975,"va":43978.761403527344,"exact":43978.761403405064,"verdict":"BRep: ok; Mesh: ok","conv":1,"norm":"faces 7, loops 9, rings 10 (multi-ring loops 1), components 3, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 0\u21920, Reversed changed 0, reordered loops 1, split loops 1, roles changed 0, multi-region faces 0, faces split 0","issues":[],"warnings":["STEP: lengths are scaled by 25.4 to millimetres.","STEP: 7 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-STEP-FOREIGN-BOX-HOLE inch","ok":true}
+{"dbgArc":14849,"curveTess":200.4882312499992,"same":true,"cacheCount":49,"src":"PlaneSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":200.48823124999925,"faceRev":false}
+{"dbgArc":14862,"curveTess":-200.48823124999925,"same":true,"cacheCount":49,"src":"PlaneSurface","z":20,"sweep":-6.283185307179586,"frameWz":1,"Reversed":false,"newellZ":-200.4882312499993,"faceRev":false}
+{"dbgArc":14887,"curveTess":200.4882312499992,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":0,"sweep":6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":-200.4882312499992,"faceRev":false}
+{"dbgArc":14887,"curveTess":-200.48823124999925,"same":true,"cacheCount":49,"src":"ExtrudedSurface","z":20,"sweep":-6.283185307179586,"frameWz":1,"Reversed":true,"newellZ":200.48823124999927,"faceRev":false}
+{"fi":14849,"src":"PlaneSurface","integral":-0,"area":-2198.9380701702535,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":14862,"src":"PlaneSurface","integral":43978.76140340507,"area":2198.9380701702535,"loops":["Ol\u002Bl\u002Bl\u002Bl\u002B","Ia\u002B"]}
+{"fi":14875,"src":"PlaneSurface","integral":-0,"area":-1200,"loops":["Ol-l\u002Bl-l\u002B"]}
+{"fi":14879,"src":"PlaneSurface","integral":48000,"area":800,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":14882,"src":"PlaneSurface","integral":48000,"area":1200,"loops":["Ol-l\u002Bl-l-"]}
+{"fi":14885,"src":"PlaneSurface","integral":-0,"area":-800,"loops":["Ol-l-l-l-"]}
+{"fi":14887,"src":"ExtrudedSurface","integral":-8042.47719318987,"area":-1005.3096491487322,"loops":["Oa-","Oa-l-l\u002B"]}
+{"test":"K10-FOREIGN","faces":7,"vm":43986.78111543999,"va":43978.76140340507,"exact":43978.761403405064,"verdict":"BRep: ok; Mesh: ok","conv":1,"norm":"faces 7, loops 9, rings 10 (multi-ring loops 1), components 3, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 0\u21920, Reversed changed 0, reordered loops 1, split loops 1, roles changed 0, multi-region faces 0, faces split 0","issues":[],"warnings":["STEP: lengths are scaled by 1000 to millimetres.","STEP: 7 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-STEP-FOREIGN-BOX-HOLE m","ok":true}
+{"test":"K10-NURBS","faces":["NurbsSurface","PlaneSurface","PlaneSurface","PlaneSurface","PlaneSurface"],"vm":1569.3223305431386,"exact":1570.7963267948967,"rel":0.0009383751582648974,"nurbsOffCylinder":3.552713678800501E-15,"verdict":"BRep: ok; Mesh: ok","warnings":["STEP: 5 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-NURBS-ANALYTIC","volume":1570.7963267947518,"exact":1570.7963267948967,"err":1.4483703125733882E-10,"com":"(4.244131815783661, 4.2441318157839545, 10.000000000000396)","comExact":4.244131815783875}
+{"test":"K10-STEP-FOREIGN-RATIONAL-NURBS","ok":true}
+IGESNORM faces 30, loops 40, rings 46 (multi-ring loops 6), components 15, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 0→0, Reversed changed 0, reordered loops 6, split loops 6, roles changed 0, multi-region faces 0, faces split 0 | 
+IGESANALYTIC REAL-8001: analytic 318595.3503200157 vs 318595.35032001574 diff -5.820766091346741E-11 conv 1
+IGESNORM faces 28, loops 40, rings 48 (multi-ring loops 8), components 18, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 0→0, Reversed changed 0, reordered loops 9, split loops 8, roles changed 0, multi-region faces 0, faces split 0 | 
+IGESANALYTIC REAL-8002: analytic 317309.7888896477 vs 317309.7888896477 diff 0 conv 1
+IGESNORM faces 33, loops 40, rings 44 (multi-ring loops 4), components 12, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 0→0, Reversed changed 0, reordered loops 4, split loops 4, roles changed 0, multi-region faces 0, faces split 0 | 
+IGESANALYTIC REAL-8003: analytic 321458.1453983926 vs 321458.1453983925 diff 5.820766091346741E-11 conv 1
+IGESNORM faces 35, loops 52, rings 62 (multi-ring loops 10), components 23, unanchored 0, unclosed 0, contradictions 0, irregular edges 0, same-direction edges 0→0, Reversed changed 0, reordered loops 12, split loops 10, roles changed 0, multi-region faces 0, faces split 0 | 
+IGESANALYTIC REAL-8004: analytic 313742.36540267576 vs 313742.3654026757 diff 5.820766091346741E-11 conv 1
+OK   S-BOX: 48000 vs 48000 (rel 0.0E+000) BRep: ok; Mesh: ok | IGES: 6 face(s) of 1 body(ies) written. | IGES: 6 face(s) read. | IGES: 6 face(s) meshed from their loops, 0 left as is.
+OK   S-HOLE: 43988.453 vs 43978.761 (rel 2.2E-004) BRep: ok; Mesh: ok | IGES: 7 face(s) of 1 body(ies) written. | IGES: 7 face(s) read. | IGES: 7 face(s) meshed from their loops, 0 left as is.
+OK   S-HOLES4: 45743.907 vs 45738.053 (rel 1.3E-004) BRep: ok; Mesh: ok | IGES: 10 face(s) of 1 body(ies) written. | IGES: 10 face(s) read. | IGES: 10 face(s) meshed from their loops, 0 left as is.
+OK   S-UNION: 90000 vs 90000 (rel 0.0E+000) BRep: ok; Mesh: ok | IGES: 12 face(s) of 1 body(ies) written. | IGES: 12 face(s) read. | IGES: 12 face(s) meshed from their loops, 0 left as is.
+OK   S-ROUND: 47960.988 vs 47961.372 (rel 8.0E-006) BRep: ok; Mesh: ok | IGES: 7 face(s) of 1 body(ies) written. | IGES: 7 face(s) read. | IGES: 7 face(s) meshed from their loops, 0 left as is.
+OK   S-SPHERE: 46933.49 vs 46927.67 (rel 1.2E-004) BRep: ok; Mesh: ok | IGES: 7 face(s) of 1 body(ies) written. | IGES: 7 face(s) read. | IGES: 7 face(s) meshed from their loops, 0 left as is.
+OK   S-ROUNDHOLE: 43941.152 vs 43933.204 (rel 1.8E-004) BRep: ok; Mesh: ok | IGES: 8 face(s) of 1 body(ies) written. | IGES: 8 face(s) read. | IGES: 8 face(s) meshed from their loops, 0 left as is.
+OK   REAL-8001: 318592.245 vs 318595.35 (rel 9.7E-006) BRep: ok; Mesh: ok
+OK   REAL-8002: 317311.158 vs 317309.789 (rel 4.3E-006) BRep: ok; Mesh: ok
+OK   REAL-8003: 321446.546 vs 321458.145 (rel 3.6E-005) BRep: ok; Mesh: ok
+OK   REAL-8004: 313748.798 vs 313742.365 (rel 2.1E-005) BRep: ok; Mesh: ok
+{"test":"K10-IGES-ROUNDTRIP","ok":true}
+{"test":"K10-IGES-FOREIGN","faces":7,"vm":43988.453487676124,"va":43978.76140340507,"exact":43978.761403405064,"verdict":"BRep: ok; Mesh: ok","warnings":["IGES: 7 face(s) read.","IGES: 7 face(s) meshed from their loops, 0 left as is."]}
+{"test":"K10-IGES-FOREIGN-BOX-HOLE","ok":true}
+IGES OpenCascade files: 17/17
+{"test":"K10-IGES-OCCT-FILES","ok":true}
+IGES catalogue back: 44/44
+{"test":"K10-IGES-CATALOGUE-BACK","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":1,"buildMerges":4,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":31,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":11,"failed":0}
