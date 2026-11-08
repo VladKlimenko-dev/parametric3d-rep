@@ -1,0 +1,1 @@
+seconds 20 nproc 4 env P3D_XTBLENDEDGE=0 cmd sldprt tests/k01/data/sw_pan_phillips_screw.SLDPRT tests/k01/data/sw_9657k294_compression_spring.SLDPRT tests/k01/data/sw_cable_holder_b.SLDPRT
