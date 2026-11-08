@@ -519,6 +519,7 @@ public static class XtToStep
             string P = string.Join(",", cp.Select(p => "#" + Pt(p)));
             return E($"B_SPLINE_CURVE_WITH_KNOTS('',{deg},({P}),.UNSPECIFIED.,.F.,.F.,({string.Join(",", ms)}),({string.Join(",", ks.Select(N))}),.UNSPECIFIED.)");
         }
+        static readonly bool IntDbg = Environment.GetEnvironmentVariable("P3D_XTINTDBG") == "1";
         static readonly bool PolyMode = Environment.GetEnvironmentVariable("P3D_XTPOLY") == "1";
         static readonly bool InterpCleanOff = Environment.GetEnvironmentVariable("P3D_XTINTERPCLEAN") == "0";
         static readonly bool InterpCheckOff = Environment.GetEnvironmentVariable("P3D_XTINTERPCHECK") == "0";
@@ -537,7 +538,13 @@ public static class XtToStep
                     if (pts == null || pts.Length < 2) return null;
                     var ss = cn.PA("surface");
                     XtSurf? a = ss.Length > 0 && f[ss[0]] is { } a0 ? XtSurf.Of(f, a0) : null, b = ss.Length > 1 && f[ss[1]] is { } b0 ? XtSurf.Of(f, b0) : null;
-                    return XtPoly.Densify(pts, a, b, 8);
+                    var dz = XtPoly.Densify(pts, a, b, 8);
+                    if (IntDbg && a != null && b != null)
+                    {
+                        double wa = 0, wb = 0; foreach (var q in dz) { wa = Math.Max(wa, (a.Project(q) - q).Length); wb = Math.Max(wb, (b.Project(q) - q).Length); }
+                        if (wa > 1e-7 || wb > 1e-7) Console.Error.WriteLine($"XTINT node {cn.Id} chart {pts.Length} dense {dz.Count} offA {wa * 1000:G3} mm ({a.GetType().Name}) offB {wb * 1000:G3} mm ({b.GetType().Name})");
+                    }
+                    return dz;
                 }
                 case "B_CURVE":
                 {

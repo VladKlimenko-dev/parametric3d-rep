@@ -45,8 +45,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k184_cv, cmd: 'sldprt tests/k01/data/sw_to_6168t106.SLDPRT tests/k01/data/sw_to_5706n22.SLDPRT', env: 'P3D_SLDOUT=res/out' }
-          - { name: k184_cv2, cmd: 'sldprt tests/k01/data/sw_cv_1423n12.SLDPRT tests/k01/data/sw_cv_1358k26.SLDPRT tests/k01/data/sw_cv_5706n12.SLDPRT', env: 'P3D_SLDOUT=res/out' }
+          - { name: k184_cv, cmd: 'sldprt tests/k01/data/sw_to_6168t106.SLDPRT tests/k01/data/sw_cv_1423n12.SLDPRT', env: 'P3D_XTINTDBG=1' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
