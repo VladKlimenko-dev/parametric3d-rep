@@ -563,7 +563,9 @@ public static partial class ExactFaceMesher
     /// <summary>Точка внутри грани шара с одним контуром — по обходу контура (см. вызов); null — не определить.</summary>
     static Vector3d? SphereHint(TFace f, ISurface3 src)
     {
-        if (f.Loops.Count != 1 || Geometry.ExactEdges.ShapeOf(src) is not Geometry.Ssi.Sphere sp) return null;
+        // только угловой треугольник (контур из 3–4 дуг, как у угла трёх скруглений): у купола с вырезом середина контура может
+        // лечь в сам вырез
+        if (f.Loops.Count != 1 || f.Loops[0].CoEdges.Count > 4 || Geometry.ExactEdges.ShapeOf(src) is not Geometry.Ssi.Sphere sp) return null;
         var pts = new List<Vector3d>();
         foreach (var ce in f.Loops[0].CoEdges)
         {
