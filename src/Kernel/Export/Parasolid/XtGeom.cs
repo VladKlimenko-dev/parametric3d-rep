@@ -257,7 +257,11 @@ internal sealed class XtNurbsSurf : XtSurf
     void BuildGrid()
     {
         var (u0, u1, v0, v1) = Range;
-        gu = Math.Clamp(3 * (Nu - Du), 24, 240); gv = Math.Clamp(3 * (Nv - Dv), 24, 240);
+        // k184: до 1536 точек по каждому направлению (8 на пролёт): у резьбы 104 пролёта по витку, и при 240 точках шаг сетки
+        // вдоль витка (3.8 мм) больше шага резьбы — ближайшая точка сетки оказывалась на соседнем витке. P3D_XTGRIDFINE=0 — прежняя.
+        int cap = GridFineOff ? 240 : 1536, per = GridFineOff ? 3 : 8;
+        gu = Math.Clamp(per * (Nu - Du), 24, cap); gv = Math.Clamp(per * (Nv - Dv), 24, cap);
+        while (!GridFineOff && (long)(gu + 1) * (gv + 1) > 250_000) { if (gu >= gv) gu = Math.Max(24, gu * 3 / 4); else gv = Math.Max(24, gv * 3 / 4); if (gu == 24 && gv == 24) break; }
         var g = new Vector3d[gu + 1, gv + 1];
         for (int i = 0; i <= gu; i++) for (int j = 0; j <= gv; j++) g[i, j] = At(u0 + (u1 - u0) * i / gu, v0 + (v1 - v0) * j / gv);
         grid = g;
@@ -300,6 +304,35 @@ internal sealed class XtNurbsSurf : XtSurf
         return (bu, bv, false);
     }
 
+    static readonly bool GridFineOff = Environment.GetEnvironmentVariable("P3D_XTGRIDFINE") == "0";
+
+    /// <summary>Гаусс — Ньютон с делением шага, пока расстояние не убывает.</summary>
+    (double U, double V, double D2) Descent(Vector3d q, double bu, double bv)
+    {
+        var (u0, u1, v0, v1) = Range;
+        double hu = 1e-7 * Math.Max(1, u1 - u0), hv = 1e-7 * Math.Max(1, v1 - v0);
+        double bd = (At(bu, bv) - q).LengthSquared;
+        for (int it = 0; it < 40; it++)
+        {
+            var p = At(bu, bv);
+            var su = (At(bu + hu, bv) - At(bu - hu, bv)) / (2 * hu); var sv = (At(bu, bv + hv) - At(bu, bv - hv)) / (2 * hv);
+            var r = p - q;
+            double a = Vector3d.Dot(su, su), b = Vector3d.Dot(su, sv), c = Vector3d.Dot(sv, sv), det = a * c - b * b;
+            if (Math.Abs(det) < 1e-300) break;
+            double g1 = Vector3d.Dot(r, su), g2 = Vector3d.Dot(r, sv);
+            double du = (c * g1 - b * g2) / det, dv = (a * g2 - b * g1) / det;
+            double fr = 1; bool moved = false;
+            for (int h = 0; h < 30; h++, fr *= 0.5)
+            {
+                double nu = Math.Clamp(bu - du * fr, u0, u1), nv = Math.Clamp(bv - dv * fr, v0, v1);
+                double nd = (At(nu, nv) - q).LengthSquared;
+                if (nd < bd) { bu = nu; bv = nv; bd = nd; moved = true; break; }
+            }
+            if (!moved || Math.Abs(du * fr) < 1e-13 * Math.Max(1, u1 - u0) && Math.Abs(dv * fr) < 1e-13 * Math.Max(1, v1 - v0)) break;
+        }
+        return (bu, bv, bd);
+    }
+
     (double U, double V) ProjectUvFull(Vector3d q)
     {
         var (u0, u1, v0, v1) = Range;
@@ -310,6 +343,27 @@ internal sealed class XtNurbsSurf : XtSurf
             {
                 double d = (gr[i, j] - q).LengthSquared; if (d < best) { best = d; bu = u0 + (u1 - u0) * i / gu; bv = v0 + (v1 - v0) * j / gv; }
             }
+        if (!GridFineOff)
+        {
+            // k184: спуск с проверкой убывания от лучших точек сетки, разнесённых на 3 ячейки (ложный минимум соседнего витка)
+            var cand = new List<(double D, int I, int J)>();
+            for (int i = 0; i <= gu; i++) for (int j = 0; j <= gv; j++)
+                {
+                    double d = (gr[i, j] - q).LengthSquared;
+                    if (cand.Count == 6 && d >= cand[^1].D) continue;
+                    int near = cand.FindIndex(c => Math.Abs(c.I - i) <= 3 && Math.Abs(c.J - j) <= 3);
+                    if (near >= 0) { if (d < cand[near].D) cand[near] = (d, i, j); else continue; } else cand.Add((d, i, j));
+                    cand.Sort((x, y) => x.D.CompareTo(y.D)); if (cand.Count > 6) cand.RemoveAt(6);
+                }
+            double bestD = double.MaxValue; (double, double) bestUv = (bu, bv);
+            foreach (var (_, ci, cj) in cand)
+            {
+                var (ru, rv, rd) = Descent(q, u0 + (u1 - u0) * ci / gu, v0 + (v1 - v0) * cj / gv);
+                if (rd < bestD) { bestD = rd; bestUv = (ru, rv); }
+                if (bestD < 1e-24) break;
+            }
+            return bestUv;
+        }
         double hu = 1e-7 * Math.Max(1, u1 - u0), hv = 1e-7 * Math.Max(1, v1 - v0);
         for (int it = 0; it < 30; it++)
         {
