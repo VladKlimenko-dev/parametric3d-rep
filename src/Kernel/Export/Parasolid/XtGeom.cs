@@ -256,7 +256,10 @@ internal sealed class XtNurbsSurf : XtSurf
         grid = g;
     }
 
-    public override Vector3d Project(Vector3d q)
+    public override Vector3d Project(Vector3d q) { var (u, v) = ProjectUv(q); return At(u, v); }
+
+    /// <summary>Параметры ближайшей к q точки.</summary>
+    public (double U, double V) ProjectUv(Vector3d q)
     {
         var (u0, u1, v0, v1) = Range;
         if (grid == null) BuildGrid();
@@ -279,7 +282,7 @@ internal sealed class XtNurbsSurf : XtSurf
             bu = Math.Clamp(bu - du, u0, u1); bv = Math.Clamp(bv - dv, v0, v1);
             if (Math.Abs(du) < 1e-12 * Math.Max(1, u1 - u0) && Math.Abs(dv) < 1e-12 * Math.Max(1, v1 - v0)) break;
         }
-        return At(bu, bv);
+        return (bu, bv);
     }
 }
 

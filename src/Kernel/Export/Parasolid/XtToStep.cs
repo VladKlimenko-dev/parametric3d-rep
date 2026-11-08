@@ -87,6 +87,8 @@ public static class XtToStep
         int next = 1;
         readonly Dictionary<int, int> edges = new(), verts = new(), surfs = new(), curves = new();
         readonly Dictionary<int, bool> surfFlip = new();
+        readonly Dictionary<int, int> blendSign = new();
+        int curBlend;
         public int Skipped; public readonly HashSet<string> SkippedKinds = new();
         public Ctx(XtFile f, List<string>? w) { this.f = f; warn = w; }
 
@@ -108,6 +110,7 @@ public static class XtToStep
             if (sid == null) { Skip(sn.Name); return null; }
             bool same = (fc.C("sense") != '-') == (sn.C("sense") != '-');
             if (flip) same = !same;
+            if (sn.Name == "BLENDED_EDGE" && !BlendSideOff && BlendSame(fc, sn) is bool bs) same = bs;
             var bounds = new List<int>();
             var seenL = new HashSet<int>();
             for (var lp = f[fc.P("loop")]; lp != null && seenL.Add(lp.Id); lp = f[lp.P("next")])
@@ -129,6 +132,71 @@ public static class XtToStep
             // грань без рёбер — вся замкнутая поверхность (шарик подшипника): грань без контуров
             if (bounds.Count == 0 && sn.Name is not ("SPHERE" or "TORUS" or "B_SURFACE" or "SPUN_SURF")) { Skip("face without edges"); return null; }
             return E($"ADVANCED_FACE('',({string.Join(",", bounds.Select(x => "#" + x))}),#{sid},{(same ? ".T." : ".F.")})");
+        }
+
+        static readonly bool BlendSideOff = Environment.GetEnvironmentVariable("P3D_XTBLENDSIDE") == "0";
+
+        /// <summary>
+        /// k183: СТОРОНА ГРАНИ СКРУГЛЕНИЯ — ПО ОПОРЕ. Наружная нормаль скругления в точке касания совпадает с наружной нормалью
+        /// соседней грани опоры (касание); обе — вдоль радиуса шара. Знак радиуса у опоры — из её естественной нормали и знаков
+        /// грани; у нашей поверхности — из построения (blendSign). Так сторона не зависит от того, как понимать параметры
+        /// скругления XT при оси со знаком «−» (винт с полукруглой головкой: грань шлица была вывернута).
+        /// </summary>
+        bool? BlendSame(XtNode fc, XtNode sn)
+        {
+            if (!blendSign.TryGetValue(sn.Id, out int sOurs) || XtSurf.Of(f, sn) is not XtBlendSurf bl) return null;
+            var sup = sn.PA("surface");
+            var seenL = new HashSet<int>();
+            for (var lp = f[fc.P("loop")]; lp != null && seenL.Add(lp.Id); lp = f[lp.P("next")])
+            {
+                var seenH = new HashSet<int>();
+                for (var h = f[lp.P("halfedge")]; h != null && seenH.Add(h.Id); h = f[h.P("forward")])
+                {
+                    var o = f[h.P("other")]; if (o == null) continue;
+                    var of = f[f[o.P("loop")]?.P("face") ?? 1]; if (of == null) continue;
+                    var osn = f[of.P("surface")]; if (osn == null || !sup.Contains(osn.Id) || osn.Name == "BLENDED_EDGE") continue;
+                    var v = f[h.P("vertex")]; var pv = v == null ? null : f[v.P("point")];
+                    if (pv == null) continue;
+                    var P = pv.V("pvec"); var c = bl.CentreAt(P); var rad = P - c;
+                    if (rad.LengthSquared < 1e-24) continue;
+                    var n = NatNormal(osn, P); if (n == null) continue;
+                    double so = Vector3d.Dot(n.Value, rad) * ((of.C("sense") != '-') == (osn.C("sense") != '-') ? 1 : -1);
+                    if (Math.Abs(so) < 1e-18) continue;
+                    return (so > 0) == (sOurs > 0);
+                }
+            }
+            return null;
+        }
+
+        /// <summary>Естественная нормаль поверхности XT в точке (не единичная), null — вид не поддержан.</summary>
+        Vector3d? NatNormal(XtNode s, Vector3d q)
+        {
+            switch (s.Name)
+            {
+                case "PLANE": return s.V("normal");
+                case "CYLINDER": { var a = s.V("axis").Normalized(); var d = q - s.V("pvec"); return d - a * Vector3d.Dot(d, a); }
+                case "CONE":
+                {
+                    var a = s.V("axis").Normalized(); var d = q - s.V("pvec"); var e = d - a * Vector3d.Dot(d, a);
+                    if (e.LengthSquared < 1e-30) return null; e.Normalize();
+                    return e * s.D("cos_half_angle") - a * s.D("sin_half_angle");
+                }
+                case "SPHERE": return q - s.V("centre");
+                case "TORUS":
+                {
+                    var a = s.V("axis").Normalized(); var d = q - s.V("centre"); var e = d - a * Vector3d.Dot(d, a);
+                    if (e.LengthSquared < 1e-30) return null;
+                    return q - (s.V("centre") + e.Normalized() * s.D("major_radius"));
+                }
+                case "B_SURFACE":
+                    if (XtSurf.Of(f, s) is XtNurbsSurf ns && ns.ProjectUv(q) is var (u, v))
+                    {
+                        var (u0, u1, v0, v1) = ns.Range; double hu = 1e-6 * (u1 - u0), hv = 1e-6 * (v1 - v0);
+                        return Vector3d.Cross(ns.At(Math.Min(u1, u + hu), v) - ns.At(Math.Max(u0, u - hu), v), ns.At(u, Math.Min(v1, v + hv)) - ns.At(u, Math.Max(v0, v - hv)));
+                    }
+                    return null;
+            }
+            return null;
         }
 
         void Skip(string kind) { Skipped++; SkippedKinds.Add(kind); }
@@ -500,7 +568,7 @@ public static class XtToStep
 
         int? Blend(XtNode sn)
         {
-            var bl = XtSurf.Of(f, sn) as XtBlendSurf;
+            var bl = XtSurf.Of(f, sn) as XtBlendSurf; curBlend = sn.Id;
             if (bl == null || bl.Spine.Count < 2) return null;
             double rad = Math.Max(Math.Max(bl.R0, bl.R1), 1e-6);
             var sp = bl.Spine;
@@ -565,6 +633,15 @@ public static class XtToStep
                     pa = c + na * r; pb = c + nb * r;
                 }
                 Pw[i, 0] = pa; Pw[i, 1] = m * w; Pw[i, 2] = pb; W[i, 0] = 1; W[i, 1] = w; W[i, 2] = 1;
+            }
+            {
+                // знак нормали нашей поверхности относительно радиуса шара (в середине оси): du × касательная дуги в A к B
+                int m = nu / 2, m0 = Math.Max(0, m - 1), m1 = Math.Min(nu - 1, m + 1);
+                var c = cen[m]; var ra = Pw[m, 0] - c; var rb = Pw[m, 2] - c;
+                var tA = rb - ra * (Vector3d.Dot(rb, ra) / Math.Max(ra.LengthSquared, 1e-300));
+                var nn = Vector3d.Cross(cen[m1] - cen[m0], tA);
+                double sg = Vector3d.Dot(nn, ra);
+                if (Math.Abs(sg) > 0) blendSign[curBlend] = sg > 0 ? 1 : -1;
             }
             var pu = XtBasis.Chord(cen);
             for (int i = 1; i < nu; i++) if (pu[i] <= pu[i - 1]) return null;
