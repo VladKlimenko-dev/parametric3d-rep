@@ -580,6 +580,8 @@ public static partial class ExactFaceMesher
         // только у вершин без списка рёбер (прочитанное тело): у построенного тела список полон, а добавка соседей по граням
         // меняла разметку промежуточных тел операций (фаска прямой/цилиндр откатывалась)
         if (CuspFacesOff || seen.Count > 0) yield break;
+        // и только у граней прочитанного тела (метка грани файла): промежуточные тела операций тоже бывают без списка рёбер вершин
+        if (!e.CoEdges.Any(c => c.Loop?.Face?.Tag is { } tg && (tg.StartsWith("step:", StringComparison.Ordinal) || tg.StartsWith("iges:", StringComparison.Ordinal)))) yield break;
         foreach (var ce in e.CoEdges)
         {
             var f = ce.Loop?.Face; if (f == null) continue;
