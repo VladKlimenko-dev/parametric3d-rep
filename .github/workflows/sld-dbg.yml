@@ -45,7 +45,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k184_oe, cmd: 'sldprt tests/k01/data/sw_oe_60945k27.SLDPRT tests/k01/data/sw_oe_37855t11.SLDPRT', env: 'P3D_SLDDIAG=1 P3D_SLDDIAGOBJ=res/out' }
+          - { name: k184_oe, cmd: 'sldprt tests/k01/data/sw_oe_60945k27.SLDPRT', env: 'P3D_SLDOUT=res/out' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
