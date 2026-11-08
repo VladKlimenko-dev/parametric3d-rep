@@ -228,7 +228,7 @@ static partial class Program
                 return hits % 2 == 0 ? "out" : "IN";
             }
             var fstats = bodies[bi].Faces.Where(x => mentioned.Contains(x.Tag) && faceStat.ContainsKey(x.Id))
-                .Select(x => { var st = faceStat[x.Id]; var cc = st.A > 0 ? st.S / st.A : Vector3d.Zero; var ag = agree.GetValueOrDefault(x.Id); return $"{x.Tag}: tris {st.N} area {st.A:G4} centroid ({cc.X:F3},{cc.Y:F3},{cc.Z:F3}) normal agrees {ag.Yes}/{ag.Yes + ag.No} rev {x.Reversed} ray {Ray(x)}"; }).ToList();
+                .Select(x => { var st = faceStat[x.Id]; var cc = st.A > 0 ? st.S / st.A : Vector3d.Zero; var ag = agree.GetValueOrDefault(x.Id); return $"{x.Tag}: tris {st.N} area {st.A:G4} centroid ({cc.X:F3},{cc.Y:F3},{cc.Z:F3}) normal agrees {ag.Yes}/{ag.Yes + ag.No} rev {x.Reversed} ray {Ray(x)} exactArea {AnalyticVolume.FaceArea(x):G4}"; }).ToList();
             Log(new { test = "sldprt-diag", file, body = bi + 1, faces = cnt.OrderByDescending(kv => kv.Value).Take(12).Select(kv => $"{kv.Key} ×{kv.Value}").ToList(), fstats });
         }
     }
