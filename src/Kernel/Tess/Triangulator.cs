@@ -12,6 +12,8 @@ namespace Parametric3D.Kernel.Tess;
 /// </summary>
 public static class Triangulator
 {
+    static readonly bool EarResumeOff = Environment.GetEnvironmentVariable("P3D_EARRESUME") == "0";
+
     /// <summary>Сколько раз ушей не нашлось и треугольник отрезан принудительно (признак негодной триангуляции).</summary>
     [ThreadStatic] public static long ForcedClips;
 
@@ -245,11 +247,16 @@ public static class Triangulator
         int guard = 0;
         int maxGuard = n * n + 16;
 
+        // k183: поиск уха продолжается с места последнего отсечения, а не с начала: на длинной узкой полосе (грань резьбы в
+        // развёртке — тысячи точек по двум краям) прежний перезапуск давал O(n³) — минуты на грань. Мутация P3D_EARRESUME=0.
+        int start = 0;
         while (idx.Count > 3 && guard++ < maxGuard)
         {
             bool clipped = false;
-            for (int k = 0; k < idx.Count; k++)
+            int cnt = idx.Count;
+            for (int kk = 0; kk < cnt; kk++)
             {
+                int k = EarResumeOff ? kk : (start + kk) % idx.Count;
                 int ip = idx[(k - 1 + idx.Count) % idx.Count];
                 int ic = idx[k];
                 int inx = idx[(k + 1) % idx.Count];
@@ -279,6 +286,7 @@ public static class Triangulator
 
                 tris.Add(ip); tris.Add(ic); tris.Add(inx);
                 idx.RemoveAt(k);
+                start = Math.Max(0, k - 1);
                 clipped = true;
                 break;
             }

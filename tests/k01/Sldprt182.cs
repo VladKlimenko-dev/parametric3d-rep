@@ -17,8 +17,16 @@ static partial class Program
     /// </summary>
     static void SldprtChecks(IEnumerable<string>? files = null, bool goldOnly = false)
     {
-        var list = files?.ToList() ?? Directory.GetFiles(Path.Combine("tests", "k01", "data"), "sw_*.SLDPRT").OrderBy(x => x).ToList();
+        // аргумент-каталог — все детали в нём (корпус: ветка corpus/sldprt); P3D_SLDSHARD=i/n — каждая n-я начиная с i
+        var list = files?.SelectMany<string, string>(a => Directory.Exists(a) ? Directory.GetFiles(a, "*.*", SearchOption.AllDirectories)
+                        .Where(x => x.EndsWith(".sldprt", StringComparison.OrdinalIgnoreCase) || x.EndsWith(".x_b", StringComparison.OrdinalIgnoreCase)).OrderBy(x => x, StringComparer.Ordinal)
+                        : new[] { a }).ToList()
+                   ?? Directory.GetFiles(Path.Combine("tests", "k01", "data"), "sw_*.SLDPRT").OrderBy(x => x).ToList();
+        if (Environment.GetEnvironmentVariable("P3D_SLDSHARD") is { } sh && sh.Split('/') is [var si, var sn] && int.TryParse(si, out var shI) && int.TryParse(sn, out var shN) && shN > 0)
+            list = list.Where((_, k) => k % shN == shI).ToList();
         if (goldOnly && files == null) list = list.Where(x => Gold.Contains(Path.GetFileNameWithoutExtension(x))).ToList();
+        sldGood = 0;
+        var sw0 = System.Diagnostics.Stopwatch.StartNew();
         foreach (var path in list)
         {
             Check("SLDPRT-IMPORT-K182 " + Path.GetFileName(path), () => WithTimeout(Path.GetFileName(path), () =>
@@ -26,44 +34,50 @@ static partial class Program
                 var w = new List<string>();
                 var bytes = File.ReadAllBytes(path);
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                var xt = SldprtFile.PartitionXt(bytes, w);
-                var f = XtReader.Read(xt);
-                var counts = f.Order.GroupBy(n => n.Name).ToDictionary(g => g.Key, g => g.Count());
+                var fs = SldprtFile.PartsXt(bytes, w).Select(x => XtReader.Read(x)).ToList();
+                var f = fs[0];
+                bool truncated = fs.Any(x => x.Truncated);
+                var counts = fs.SelectMany(x => x.Order).GroupBy(n => n.Name).ToDictionary(g => g.Key, g => g.Count());
+                bool prof0 = Environment.GetEnvironmentVariable("P3D_SLDPROF") == "1";
+                if (prof0) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
                 sldStage = "convert";
-                string step = XtToStep.Convert(f, Path.GetFileNameWithoutExtension(path), w);
+                string step = XtToStep.Convert(fs, Path.GetFileNameWithoutExtension(path), w);
                 double tConv = sw.Elapsed.TotalMilliseconds;
                 sldStage = $"read STEP (convert {tConv:F0} ms, {step.Length / 1024} KB)";
                 if (Environment.GetEnvironmentVariable("P3D_SLDOUT") is { Length: > 0 } od) { Directory.CreateDirectory(od); File.WriteAllText(Path.Combine(od, Path.GetFileNameWithoutExtension(path) + ".step"), step); }
                 bool prof = Environment.GetEnvironmentVariable("P3D_SLDPROF") == "1";
-                if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
                 var part = Exchange.Read(step, out _, w);
-                if (prof) { Console.Error.WriteLine("SLDPROF " + Path.GetFileName(path) + "\n" + Parametric3D.Kernel.Diagnostics.Prof.Report()); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
+                if (prof) Console.Error.WriteLine("SLDPROF convert+read " + Path.GetFileName(path) + "\n" + Parametric3D.Kernel.Diagnostics.Prof.Report());
                 double tAll = sw.Elapsed.TotalMilliseconds;
                 sldStage = $"validate (convert {tConv:F0} ms, read {sw.Elapsed.TotalMilliseconds - tConv:F0} ms)";
                 var bodies = part?.Bodies ?? new List<TSolid>();
                 var b = bodies.FirstOrDefault();
                 var vrs = bodies.Select(x => SolidValidator.Validate(x)).ToList();
                 var vr = vrs.FirstOrDefault(x => !x.IsValid) ?? vrs.FirstOrDefault();
+                if (prof) { Console.Error.WriteLine("SLDPROF all " + Path.GetFileName(path) + "\n" + Parametric3D.Kernel.Diagnostics.Prof.Report()); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
                 double vol = bodies.Sum(x => AnalyticVolume.Of(x) ?? 0), area = bodies.Sum(x => AnalyticVolume.AreaOf(x) ?? 0);
                 // Габарит по вершинам и дугам (окружности, эллипсы) рёбер XT и тех же рёбер импортированных тел — должны совпасть; объём не больше объёма габарита.
-                var xtPts = XtExtentPoints(f);
+                var xtPts = fs.SelectMany(XtExtentPoints).ToList();
                 var bodyPts = bodies.SelectMany(BodyExtentPoints).ToList();
                 (Vector3d lo, Vector3d hi) Box(List<Vector3d> pts) => pts.Count == 0 ? (Vector3d.Zero, Vector3d.Zero)
                     : (new Vector3d(pts.Min(q => q.X), pts.Min(q => q.Y), pts.Min(q => q.Z)), new Vector3d(pts.Max(q => q.X), pts.Max(q => q.Y), pts.Max(q => q.Z)));
                 var (xl, xh) = Box(xtPts); var (bl, bh) = Box(bodyPts);
                 double boxGap = Math.Max((xl - bl).Length, (xh - bh).Length), boxVol = (xh.X - xl.X) * (xh.Y - xl.Y) * (xh.Z - xl.Z);
-                int xtBodies = f.OfType("BODY").Count(n => n.I("body_type") == 1);
+                int xtBodies = fs.Sum(x => x.OfType("BODY").Count(n => n.I("body_type") == 1));
                 var (swVol, swArea) = SwMassProps(bytes);
-                Log(new { test = "sldprt", file = Path.GetFileName(path), f.Modeller, f.Schema, nodes = f.Order.Count, f.Truncated, faces = counts.GetValueOrDefault("FACE"),
+                Log(new { test = "sldprt", file = Path.GetFileName(path), f.Modeller, f.Schema, nodes = fs.Sum(x => x.Order.Count), Truncated = truncated, parts = fs.Count, faces = counts.GetValueOrDefault("FACE"),
                     surfaces = counts.Where(kv => kv.Key is "PLANE" or "CYLINDER" or "CONE" or "SPHERE" or "TORUS" or "B_SURFACE" or "BLENDED_EDGE" or "SWEPT_SURF" or "SPUN_SURF" or "OFFSET_SURF").ToDictionary(kv => kv.Key, kv => kv.Value),
                     curves = counts.Where(kv => kv.Key is "LINE" or "CIRCLE" or "ELLIPSE" or "B_CURVE" or "INTERSECTION" or "SP_CURVE" or "TRIMMED_CURVE").ToDictionary(kv => kv.Key, kv => kv.Value),
                     stepKb = step.Length / 1024, xtBodies, bodies = bodies.Count, bodyFaces = bodies.Sum(x => x.Faces.Count()), valid = vrs.Count > 0 && vrs.All(x => x.IsValid), verdict = vr?.Summary(),
                     errors = vrs.SelectMany(x => x.Issues).Where(x => x.Severity == ValidationSeverity.Error).Take(4).Select(x => x.ToString()).ToList(),
                     guarantee = b?.Guarantee.ToString(), volume = vol, area, boxVol, boxGap, xtBox = new[] { xl.X, xl.Y, xl.Z, xh.X, xh.Y, xh.Z }, bodyBox = new[] { bl.X, bl.Y, bl.Z, bh.X, bh.Y, bh.Z }, swVolume = swVol, swArea, msConvert = Math.Round(tConv), msTotal = Math.Round(tAll), warnings = w.Take(12).ToList() });
+                bool good = !truncated && !w.Any(x => x.Contains("were left out") || x.Contains("is not supported; the edge")) && bodies.Count == xtBodies
+                            && vrs.Count > 0 && vrs.All(x => x.IsValid) && boxGap <= 1e-3 && vol > 0 && vol <= boxVol * (1 + 1e-6);
+                if (good) Interlocked.Increment(ref sldGood);
                 // обязательная планка — для файлов, которые уже годны (ГОДНЫЕ); остальные — для сведения (лог), пока импорт
                 // доводится (k183+): провал такого файла не валит прогон
                 if (!Gold.Contains(Path.GetFileNameWithoutExtension(path)) && Environment.GetEnvironmentVariable("P3D_SLDSTRICT") != "1") return;
-                Require(!f.Truncated, "XT stream not read to the end");
+                Require(!truncated, "XT stream not read to the end");
                 Require(!w.Any(x => x.Contains("were left out") || x.Contains("is not supported; the edge")), "faces or edges left out: " + string.Join(" | ", w.Where(x => x.Contains("left out"))));
                 Require(bodies.Count == xtBodies, $"bodies {bodies.Count} of {xtBodies}");
                 Require(vrs.All(x => x.IsValid), "invalid body: " + vr?.Summary());
@@ -71,7 +85,9 @@ static partial class Program
                 Require(vol > 0 && vol <= boxVol * (1 + 1e-6), $"volume {vol:F2} mm³ outside (0, {boxVol:F2}] of the bounding box");
             }));
         }
+        Log(new { test = "sldprt-summary", files = list.Count, good = sldGood, seconds = Math.Round(sw0.Elapsed.TotalSeconds) });
     }
+    static int sldGood;
 
     /// <summary>Объём и площадь из свойств массы SolidWorks (мм³, мм²) — поля 4 и 5 записи SW-MassProp-Config-N (СИ).</summary>
     static (double? Vol, double? Area) SwMassProps(byte[] bytes)

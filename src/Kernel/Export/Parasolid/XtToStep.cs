@@ -22,12 +22,25 @@ public static class XtToStep
     const double S = 1000.0;   // метры XT → мм STEP
     static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    public static string Convert(XtFile f, string name, List<string>? warnings = null)
+    public static string Convert(XtFile f, string name, List<string>? warnings = null) => Convert(new[] { f }, name, warnings);
+
+    /// <summary>Несколько потоков XT (тела импортированных элементов SolidWorks) — в один файл STEP: тело на оболочку.</summary>
+    public static string Convert(IReadOnlyList<XtFile> files, string name, List<string>? warnings = null)
     {
-        var c = new Ctx(f, warnings);
+        var sb = new StringBuilder(); var box = new[] { 1 };
+        Ctx c = null!;
         var shells = new List<int>();
+        int skipped = 0; var skippedKinds = new HashSet<string>();
+        double acc = 1e-6;
+        foreach (var f in files)
+        {
+        c = new Ctx(f, warnings) { Sb = sb, NextBox = box };
+        // точность модели — наибольший допуск рёбер и вершин XT (допусковые элементы Parasolid), мм; не меньше 10⁻⁶ мм
+        foreach (var n in f.Order) if (n.Name is "EDGE" or "VERTEX" && n.D("tolerance") is double tl && tl > 0 && tl < 1e-3) acc = Math.Max(acc, tl * S);
         foreach (var body in f.OfType("BODY"))
         {
+            // только твёрдые тела (body_type 1): листовые и проволочные тела — не оболочки тела
+            if (body.I("body_type") is int bt && bt != 1 && bt != 0) { warnings?.Add($"Parasolid: a non-solid body (type {bt}) was left out."); continue; }
             var faceLists = new List<List<XtNode>>();
             foreach (var region in f.OfType("REGION").Where(r => r.P("body") == body.Id && r.C("type") == 'S'))
                 for (var sh = f[region.P("shell")]; sh != null; sh = f[sh.P("next")])
@@ -50,28 +63,27 @@ public static class XtToStep
                 if (ids.Count > 0) shells.Add(c.E($"CLOSED_SHELL('',({string.Join(",", ids.Select(x => "#" + x))}))"));
             }
         }
+        skipped += c.Skipped; skippedKinds.UnionWith(c.SkippedKinds);
+        }
         if (shells.Count == 0) throw new InvalidDataException("Parasolid: no solid body faces in the file.");
         var solids = shells.Select(sh => c.E($"MANIFOLD_SOLID_BREP('{Esc(name)}',#{sh})")).ToList();
         int uLen = c.E("(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.))");
         int uAng = c.E("(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.))");
         int uSol = c.E("(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT())");
-        // точность модели — наибольший допуск рёбер и вершин XT (допусковые элементы Parasolid), мм; не меньше 10⁻⁶ мм
-        double acc = 1e-6;
-        foreach (var n in f.Order) if (n.Name is "EDGE" or "VERTEX" && n.D("tolerance") is double tl && tl > 0 && tl < 1e-3) acc = Math.Max(acc, tl * S);
         int unc = c.E($"UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE({N(acc)}),#{uLen},'distance_accuracy_value','')");
         int ctx = c.E($"(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#{unc}))GLOBAL_UNIT_ASSIGNED_CONTEXT((#{uLen},#{uAng},#{uSol}))REPRESENTATION_CONTEXT('',''))");
         int origin = c.E($"AXIS2_PLACEMENT_3D('',#{c.Pt(Vector3d.Zero)},#{c.Dir(Vector3d.UnitZ)},#{c.Dir(Vector3d.UnitX)})");
         c.E($"ADVANCED_BREP_SHAPE_REPRESENTATION('{Esc(name)}',(#{origin},{string.Join(",", solids.Select(x => "#" + x))}),#{ctx})");
-        if (c.Skipped > 0) warnings?.Add($"Parasolid: {c.Skipped} face(s) with an unsupported surface were left out ({string.Join(", ", c.SkippedKinds)}).");
+        if (skipped > 0) warnings?.Add($"Parasolid: {skipped} face(s) with an unsupported surface were left out ({string.Join(", ", skippedKinds)}).");
         var w = new StringBuilder();
         w.AppendLine("ISO-10303-21;");
         w.AppendLine("HEADER;");
         w.AppendLine("FILE_DESCRIPTION(('Parametric3D import of a Parasolid body'),'2;1');");
-        w.AppendLine($"FILE_NAME('{Esc(name)}','',(''),(''),'Parametric3D','{Esc(f.Modeller)}','');");
+        w.AppendLine($"FILE_NAME('{Esc(name)}','',(''),(''),'Parametric3D','{Esc(files[0].Modeller)}','');");
         w.AppendLine("FILE_SCHEMA(('AUTOMOTIVE_DESIGN'));");
         w.AppendLine("ENDSEC;");
         w.AppendLine("DATA;");
-        w.Append(c.Sb);
+        w.Append(sb);
         w.AppendLine("ENDSEC;");
         w.AppendLine("END-ISO-10303-21;");
         return w.ToString();
@@ -82,15 +94,17 @@ public static class XtToStep
 
     sealed class Ctx
     {
-        public readonly StringBuilder Sb = new();
+        public StringBuilder Sb = new();
         readonly XtFile f; readonly List<string>? warn;
-        int next = 1;
+        public int[] NextBox = { 1 };
         readonly Dictionary<int, int> edges = new(), verts = new(), surfs = new(), curves = new();
         readonly Dictionary<int, bool> surfFlip = new();
+        readonly Dictionary<int, int> blendSign = new();
+        int curBlend;
         public int Skipped; public readonly HashSet<string> SkippedKinds = new();
         public Ctx(XtFile f, List<string>? w) { this.f = f; warn = w; }
 
-        public int E(string body) { int id = next++; Sb.Append('#').Append(id).Append('=').Append(body).Append(";\n"); return id; }
+        public int E(string body) { int id = NextBox[0]++; Sb.Append('#').Append(id).Append('=').Append(body).Append(";\n"); return id; }
         public int Pt(Vector3d p) => E($"CARTESIAN_POINT('',({N(p.X * S)},{N(p.Y * S)},{N(p.Z * S)}))");
         public int Dir(Vector3d d) { d = d.LengthSquared > 0 ? d.Normalized() : Vector3d.UnitZ; return E($"DIRECTION('',({N(d.X)},{N(d.Y)},{N(d.Z)}))"); }
         int Ax2(Vector3d o, Vector3d z, Vector3d x)
@@ -104,14 +118,19 @@ public static class XtToStep
         {
             var sn = f[fc.P("surface")];
             if (sn == null) { Skip("no surface"); return null; }
-            int? sid = Surface(sn, out bool flip);
+            int? sid;
+            bool flip;
+            using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("XT: поверхность " + sn.Name) : null) sid = Surface(sn, out flip);
             if (sid == null) { Skip(sn.Name); return null; }
             bool same = (fc.C("sense") != '-') == (sn.C("sense") != '-');
             if (flip) same = !same;
+            if (sn.Name == "BLENDED_EDGE" && !BlendSideOff && BlendSame(fc, sn) is bool bs) same = bs;
             var bounds = new List<int>();
+            var boundScore = new List<double>();
             var seenL = new HashSet<int>();
             for (var lp = f[fc.P("loop")]; lp != null && seenL.Add(lp.Id); lp = f[lp.P("next")])
             {
+                double score = OuterScore(lp, sn, (fc.C("sense") != '-') == (sn.C("sense") != '-'));
                 var oes = new List<int>();
                 var h0 = f[lp.P("halfedge")];
                 var seenH = new HashSet<int>();
@@ -124,11 +143,164 @@ public static class XtToStep
                 }
                 if (oes.Count == 0) continue;
                 int loop = E($"EDGE_LOOP('',({string.Join(",", oes.Select(x => "#" + x))}))");
-                bounds.Add(E($"FACE_BOUND('',#{loop},.T.)"));
+                bounds.Add(loop); boundScore.Add(score);
+            }
+            // k183: НАРУЖНЫЙ КОНТУР — ПЕРВЫМ (FACE_OUTER_BOUND). Порядок петель XT не обещает наружную первой, а импорт берёт
+            // первую за наружную: у корпуса 7812K81 плоская грань с отверстием читалась двумя несвязными кусками.
+            // Мутация P3D_XTOUTERLOOP=0 — прежний порядок.
+            if (bounds.Count > 0)
+            {
+                int oi = 0;
+                if (!OuterLoopOff) for (int i = 1; i < bounds.Count; i++) if (boundScore[i] > boundScore[oi]) oi = i;
+                var ordered = new List<int>();
+                ordered.Add(E($"FACE_OUTER_BOUND('',#{bounds[oi]},.T.)"));
+                for (int i = 0; i < bounds.Count; i++) if (i != oi) ordered.Add(E($"FACE_BOUND('',#{bounds[i]},.T.)"));
+                bounds = ordered;
             }
             // грань без рёбер — вся замкнутая поверхность (шарик подшипника): грань без контуров
             if (bounds.Count == 0 && sn.Name is not ("SPHERE" or "TORUS" or "B_SURFACE" or "SPUN_SURF")) { Skip("face without edges"); return null; }
             return E($"ADVANCED_FACE('',({string.Join(",", bounds.Select(x => "#" + x))}),#{sid},{(same ? ".T." : ".F.")})");
+        }
+
+        static readonly bool BlendSideOff = Environment.GetEnvironmentVariable("P3D_XTBLENDSIDE") == "0";
+
+        /// <summary>
+        /// k183: СТОРОНА ГРАНИ СКРУГЛЕНИЯ — ПО ОПОРЕ. Наружная нормаль скругления в точке касания совпадает с наружной нормалью
+        /// соседней грани опоры (касание); обе — вдоль радиуса шара. Знак радиуса у опоры — из её естественной нормали и знаков
+        /// грани; у нашей поверхности — из построения (blendSign). Так сторона не зависит от того, как понимать параметры
+        /// скругления XT при оси со знаком «−» (винт с полукруглой головкой: грань шлица была вывернута).
+        /// </summary>
+        bool? BlendSame(XtNode fc, XtNode sn)
+        {
+            if (!blendSign.TryGetValue(sn.Id, out int sOurs) || XtSurf.Of(f, sn) is not XtBlendSurf bl) { if (XtDebug) warn?.Add($"XTDBG blend {sn.Id}: no sign"); return null; }
+            // опоры скругления (у смещённой — и её основа): соседняя грань на опоре касается скругления по ребру
+            var sup = new HashSet<int>();
+            foreach (int id in sn.PA("surface")) { sup.Add(id); if (f[id] is { Name: "OFFSET_SURF" } os) sup.Add(os.P("surface")); }
+            foreach (bool supportsOnly in new[] { true, false })
+            {
+                var seenL = new HashSet<int>();
+                for (var lp = f[fc.P("loop")]; lp != null && seenL.Add(lp.Id); lp = f[lp.P("next")])
+                {
+                    var seenH = new HashSet<int>();
+                    for (var h = f[lp.P("halfedge")]; h != null && seenH.Add(h.Id); h = f[h.P("forward")])
+                    {
+                        var o = f[h.P("other")]; if (o == null) continue;
+                        var of = f[f[o.P("loop")]?.P("face") ?? 1]; if (of == null) continue;
+                        var osn = f[of.P("surface")]; if (osn == null || osn.Name == "BLENDED_EDGE") continue;
+                        if (supportsOnly != sup.Contains(osn.Id)) continue;
+                        // точка — середина ребра (по двум вершинам, спроецированная на соседа): у вершины-угла центр шара неточен
+                        Vector3d? a0 = f[f[h.P("vertex")]?.P("point") ?? 1]?.V("pvec"), b0 = f[f[o.P("vertex")]?.P("point") ?? 1]?.V("pvec");
+                        if (a0 == null && b0 == null) continue;
+                        var mid = a0 != null && b0 != null ? (a0.Value + b0.Value) / 2 : (a0 ?? b0)!.Value;
+                        var P = XtSurf.Of(f, osn) is { } xs ? xs.Project(mid) : mid;
+                        var n = NatNormal(osn, P); if (n == null || !(n.Value.LengthSquared > 0)) continue;   // малые детали: нормаль по разностям ~10⁻¹⁸ м²
+                        var nh = n.Value.Normalized();
+                        // центр шара — на нормали соседа на расстоянии радиуса, с той стороны, где ось скругления ближе
+                        // (у опор-NURBS уточнение центра на смещённых опорах ненадёжно: «нет касательного соседа» у сверла)
+                        double r = Math.Max(bl.R0, bl.R1);
+                        double cosR;
+                        if (r > 1e-12)
+                        {
+                            var cp = P + nh * r; var cm = P - nh * r;
+                            double dp = (bl.SpineNear(cp) - cp).Length, dm = (bl.SpineNear(cm) - cm).Length;
+                            if (Math.Min(dp, dm) > 0.2 * r && !supportsOnly) continue;          // сосед не касается шара
+                            cosR = dp < dm ? -1 : 1;                                             // P − c вдоль −n или +n
+                        }
+                        else
+                        {
+                            var c = bl.CentreAt(P); var rad = P - c; if (rad.LengthSquared < 1e-24) continue;
+                            cosR = Vector3d.Dot(nh, rad.Normalized()); if (Math.Abs(cosR) < 0.9) continue;
+                        }
+                        double so = cosR * ((of.C("sense") != '-') == (osn.C("sense") != '-') ? 1 : -1);
+                        if (XtDebug) warn?.Add($"XTDBG blend {sn.Id} face {fc.Id}: neighbour {of.Id} {osn.Name} support={supportsOnly} cos {cosR:F3} faceSense {of.C("sense")} surfSense {osn.C("sense")} ours {sOurs} -> same {(so > 0) == (sOurs > 0)}");
+                        return (so > 0) == (sOurs > 0);
+                    }
+                }
+            }
+            if (XtDebug) warn?.Add($"XTDBG blend {sn.Id}: no tangent neighbour");
+            return null;
+        }
+        static readonly bool XtDebug = Environment.GetEnvironmentVariable("P3D_XTDEBUG") == "1";
+
+        /// <summary>Естественная нормаль поверхности XT в точке (не единичная), null — вид не поддержан.</summary>
+        Vector3d? NatNormal(XtNode s, Vector3d q)
+        {
+            switch (s.Name)
+            {
+                case "PLANE": return s.V("normal");
+                case "CYLINDER": { var a = s.V("axis").Normalized(); var d = q - s.V("pvec"); return d - a * Vector3d.Dot(d, a); }
+                case "CONE":
+                {
+                    var a = s.V("axis").Normalized(); var d = q - s.V("pvec"); var e = d - a * Vector3d.Dot(d, a);
+                    if (e.LengthSquared < 1e-30) return null; e.Normalize();
+                    return e * s.D("cos_half_angle") - a * s.D("sin_half_angle");
+                }
+                case "SPHERE": return q - s.V("centre");
+                case "OFFSET_SURF": return f[s.P("surface")] is { } ob ? NatNormal(ob, q) : null;
+                case "TORUS":
+                {
+                    var a = s.V("axis").Normalized(); var d = q - s.V("centre"); var e = d - a * Vector3d.Dot(d, a);
+                    if (e.LengthSquared < 1e-30) return null;
+                    return q - (s.V("centre") + e.Normalized() * s.D("major_radius"));
+                }
+                case "B_SURFACE":
+                    if (XtSurf.Of(f, s) is XtNurbsSurf ns && ns.ProjectUv(q) is var (u, v))
+                    {
+                        var (u0, u1, v0, v1) = ns.Range; double hu = 1e-6 * (u1 - u0), hv = 1e-6 * (v1 - v0);
+                        return Vector3d.Cross(ns.At(Math.Min(u1, u + hu), v) - ns.At(Math.Max(u0, u - hu), v), ns.At(u, Math.Min(v1, v + hv)) - ns.At(u, Math.Max(v0, v - hv)));
+                    }
+                    return null;
+            }
+            return null;
+        }
+
+        static readonly bool OuterLoopOff = Environment.GetEnvironmentVariable("P3D_XTOUTERLOOP") == "0";
+
+        /// <summary>
+        /// Оценка «наружности» петли: у плоскости — площадь со знаком относительно наружной нормали грани (наружная петля
+        /// обходит нормаль против часовой — площадь положительна и наибольшая; отверстия — отрицательны); у прочих поверхностей —
+        /// диагональ габарита петли. Точки петли — вершины плавников и дуги окружностей между ними.
+        /// </summary>
+        double OuterScore(XtNode lp, XtNode sn, bool faceSameAsSurface)
+        {
+            var pts = new List<Vector3d>();
+            var seenH = new HashSet<int>();
+            for (var h = f[lp.P("halfedge")]; h != null && seenH.Add(h.Id); h = f[h.P("forward")])
+            {
+                var o = f[h.P("other")];
+                bool fwd = h.C("sense") != '-';
+                // начало хода по плавнику: вершина предыдущего (вершина плавника — его конец)
+                var vEnd = f[h.P("vertex")]; var vStart = o != null ? f[o.P("vertex")] : null;
+                Vector3d? pe = vEnd != null ? f[vEnd.P("point")]?.V("pvec") : null, ps = vStart != null ? f[vStart.P("point")]?.V("pvec") : null;
+                var e = f[h.P("edge")]; var cn = e != null ? f[e.P("curve")] : null;
+                if (cn != null && cn.Name == "CIRCLE")
+                {
+                    var c = cn.V("centre"); var z = cn.V("normal").Normalized(); var x = cn.V("x_axis").Normalized(); var y = Vector3d.Cross(z, x); double r = cn.D("radius");
+                    // направление хода по окружности: знак кривой и знак плавника
+                    bool ccw = (cn.C("sense") != '-') == fwd;
+                    double A(Vector3d q) => Math.Atan2(Vector3d.Dot(q - c, y), Vector3d.Dot(q - c, x));
+                    double a0, sw;
+                    if (ps != null && pe != null && (ps.Value - pe.Value).Length > 1e-12)
+                    {
+                        a0 = A(ps.Value); double a1 = A(pe.Value);
+                        sw = ccw ? a1 - a0 : a0 - a1; sw = ((sw % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI); if (!ccw) sw = -sw;
+                    }
+                    else { a0 = pe != null ? A(pe.Value) : 0; sw = ccw ? 2 * Math.PI : -2 * Math.PI; }
+                    for (int i = 0; i < 32; i++) { double t = a0 + sw * i / 32; pts.Add(c + (x * Math.Cos(t) + y * Math.Sin(t)) * r); }
+                }
+                else if (ps != null) pts.Add(ps.Value);
+            }
+            if (pts.Count < 2) return 0;
+            if (sn.Name == "PLANE")
+            {
+                var n = sn.V("normal").Normalized() * (faceSameAsSurface ? 1 : -1);
+                var area = Vector3d.Zero; var c0 = pts[0];
+                for (int i = 1; i + 1 < pts.Count; i++) area += Vector3d.Cross(pts[i] - c0, pts[i + 1] - c0);
+                return Math.Abs(Vector3d.Dot(area, n)) * 0.5;   // наружная охватывает отверстия — наибольшая по модулю
+            }
+            var lo = pts[0]; var hi = pts[0];
+            foreach (var q in pts) { lo = Vector3d.ComponentMin(lo, q); hi = Vector3d.ComponentMax(hi, q); }
+            return (hi - lo).Length;
         }
 
         void Skip(string kind) { Skipped++; SkippedKinds.Add(kind); }
@@ -156,7 +328,9 @@ public static class XtToStep
             Vector3d? pS = vStart != null ? f[vStart.P("point")]?.V("pvec") : null, pE = vEnd != null ? f[vEnd.P("point")]?.V("pvec") : null;
             // кривые свободной формы (пересечение, B-кривая, кривая на поверхности) — плотной ломаной от начала ребра до конца,
             // затем кубическим B-сплайном: в файле они длиннее ребра (пределы кривой) или заданы редкой картой
-            var free = cn != null && (Dense(cn) is { Count: >= 2 } dn) ? dn : cn == null ? TolerantDense(h) : null;
+            List<Vector3d>? free;
+            using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("XT: кривая " + (cn?.Name ?? "допусковая")) : null)
+                free = cn != null && (Dense(cn) is { Count: >= 2 } dn) ? dn : cn == null ? TolerantDense(h) : null;
             if (free != null)
             {
                 bool closed = pS == null || pE == null || (pS.Value - pE.Value).Length < 1e-12;
@@ -186,7 +360,7 @@ public static class XtToStep
                     }
                 }
                 ringStart = pts[0];
-                cid = Interp(pts);
+                using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("XT: сплайн по точкам") : null) cid = Interp(pts);
             }
             else if (cn == null)
             {
@@ -450,6 +624,15 @@ public static class XtToStep
                     }
                     break;
                 case "BLENDED_EDGE": r = Blend(sn); break;
+                case "OFFSET_SURF":
+                    // смещение по естественной нормали основы со знаком её «sense»; естественная нормаль — как у основы
+                    if (f[sn.P("surface")] is { } bsn && Surface(bsn, out bool bflip) is int bid)
+                    {
+                        double d = sn.D("offset") * S * (bsn.C("sense") == '-' ? -1 : 1) * (bflip ? -1 : 1);
+                        r = E($"OFFSET_SURFACE('',#{bid},{N(d)},.F.)");
+                        flip = bflip;
+                    }
+                    break;
                 case "SPUN_SURF":
                     // ISO 10303-42: у SURFACE_OF_REVOLUTION u — угол, v — образующая; у XT наоборот — нормаль обратная
                     if (f[sn.P("profile")] is { } pf && CurveOf(pf, out _, out _) is int pid)
@@ -500,7 +683,7 @@ public static class XtToStep
 
         int? Blend(XtNode sn)
         {
-            var bl = XtSurf.Of(f, sn) as XtBlendSurf;
+            var bl = XtSurf.Of(f, sn) as XtBlendSurf; curBlend = sn.Id;
             if (bl == null || bl.Spine.Count < 2) return null;
             double rad = Math.Max(Math.Max(bl.R0, bl.R1), 1e-6);
             var sp = bl.Spine;
@@ -546,50 +729,73 @@ public static class XtToStep
             }
             double h = Math.Min(1.5 * rad, rho < double.MaxValue ? Math.Pow(1e-7 * 384 / 5 * rho * rho * rho, 0.25) : double.MaxValue);
             int nu = Math.Clamp((int)Math.Ceiling(len / Math.Max(h, 1e-9)) + 1, 8, 160);
-            var Pw = new Vector3d[nu, 3]; var W = new double[nu, 3]; var cen = new List<Vector3d>(nu);
+            // сечение — две половины дуги (рациональные квадратичные, пять вершин): вес середины половины cos(θ/4) ≥ 0,7 при
+            // любом сечении до полукруга и больше — кубическая интерполяция весов по u не уходит в ноль (у кончика сверла
+            // одна дуга почти в полкруга давала отрицательные веса и запасную сетку)
+            const int NV = 5;
+            var Pw = new Vector3d[nu, NV]; var W = new double[nu, NV]; var cen = new List<Vector3d>(nu);
+            Vector3d? prevMid = null;
             for (int i = 0; i < nu; i++)
             {
                 var c = bl.CentreAt(at(len * i / (nu - 1))); cen.Add(c);
                 var (pa, pb) = bl.Contacts(c);
                 var ea = pa - c; var eb = pb - c; double r = 0.5 * (ea.Length + eb.Length);
-                Vector3d m; double w;
-                if (r < 1e-12 || ea.LengthSquared < 1e-24 || eb.LengthSquared < 1e-24) { pa = pb = m = c; w = 1; }
+                if (r < 1e-12 || ea.LengthSquared < 1e-24 || eb.LengthSquared < 1e-24)
+                {
+                    for (int j = 0; j < NV; j++) { Pw[i, j] = c; W[i, j] = 1; }
+                    continue;
+                }
+                var na = ea.Normalized(); var nb = eb.Normalized();
+                var bis = na + nb;
+                Vector3d nm;
+                if (bis.LengthSquared > 1e-8) nm = bis.Normalized();
                 else
                 {
-                    var na = ea.Normalized(); var nb = eb.Normalized();
-                    double cosT = Math.Clamp(Vector3d.Dot(na, nb), -1, 1);
-                    if (cosT < -0.999) return null;                       // сечение в полкруга и больше — одной дугой не задать
-                    w = Math.Sqrt((1 + cosT) / 2);                        // cos(θ/2)
-                    var bis = na + nb;
-                    m = bis.LengthSquared > 1e-24 ? c + bis.Normalized() * (r / Math.Max(w, 1e-12)) : (pa + pb) / 2;
-                    pa = c + na * r; pb = c + nb * r;
+                    // полкруга: середина — поворот na на 90° вокруг оси (направление — как у соседнего сечения)
+                    var tg = at(Math.Min(len, len * (i + 0.5) / (nu - 1))) - at(Math.Max(0, len * (i - 0.5) / (nu - 1)));
+                    nm = Vector3d.Cross(tg, na); if (nm.LengthSquared < 1e-30) { warn?.Add("Parasolid: a blend section has no plane — fitted grid used."); return null; }
+                    nm.Normalize(); if (prevMid is { } pm && Vector3d.Dot(pm, nm) < 0) nm = -nm;
                 }
-                Pw[i, 0] = pa; Pw[i, 1] = m * w; Pw[i, 2] = pb; W[i, 0] = 1; W[i, 1] = w; W[i, 2] = 1;
+                prevMid = nm;
+                double cosH = Math.Clamp(Vector3d.Dot(na, nm), -1, 1);          // cos(θ/2)
+                double w = Math.Sqrt((1 + cosH) / 2);                             // cos(θ/4)
+                var m1 = c + (na + nm).Normalized() * (r / w); var m2 = c + (nm + nb).Normalized() * (r / w);
+                Pw[i, 0] = c + na * r; Pw[i, 1] = m1 * w; Pw[i, 2] = c + nm * r; Pw[i, 3] = m2 * w; Pw[i, 4] = c + nb * r;
+                W[i, 0] = 1; W[i, 1] = w; W[i, 2] = 1; W[i, 3] = w; W[i, 4] = 1;
+            }
+            {
+                // знак нормали нашей поверхности относительно радиуса шара (в середине оси): du × касательная дуги в A к B
+                int m = nu / 2, m0 = Math.Max(0, m - 1), m1 = Math.Min(nu - 1, m + 1);
+                var c = cen[m]; var ra = Pw[m, 0] - c; var rb = Pw[m, 2] - c;
+                var tA = rb - ra * (Vector3d.Dot(rb, ra) / Math.Max(ra.LengthSquared, 1e-300));
+                var nn = Vector3d.Cross(cen[m1] - cen[m0], tA);
+                double sg = Vector3d.Dot(nn, ra);
+                if (Math.Abs(sg) > 0) blendSign[curBlend] = sg > 0 ? 1 : -1;
             }
             var pu = XtBasis.Chord(cen);
-            for (int i = 1; i < nu; i++) if (pu[i] <= pu[i - 1]) return null;
+            for (int i = 1; i < nu; i++) if (pu[i] <= pu[i - 1]) { warn?.Add("Parasolid: blend section centres repeat along the spine — fitted grid used."); return null; }
             int du = 3;
             var (ku, _) = XtBasis.Setup(pu, du);
-            var P = new Vector3d[nu, 3]; var Wt = new double[nu, 3];
-            for (int j = 0; j < 3; j++)
+            var P = new Vector3d[nu, NV]; var Wt = new double[nu, NV];
+            for (int j = 0; j < NV; j++)
             {
                 var xyz = XtBasis.Solve(ku, du, pu, Enumerable.Range(0, nu).Select(i => Pw[i, j]).ToList());
                 var ww = XtBasis.Solve(ku, du, pu, Enumerable.Range(0, nu).Select(i => new Vector3d(W[i, j], 0, 0)).ToList());
                 for (int i = 0; i < nu; i++)
                 {
-                    if (ww[i].X <= 1e-9) return null;                     // вес не положителен — интерполяция не годится
+                    if (ww[i].X <= 1e-9) { warn?.Add("Parasolid: blend weights not positive — fitted grid used."); return null; }
                     Wt[i, j] = ww[i].X; P[i, j] = xyz[i] / ww[i].X;
                 }
             }
             var rows = new List<string>(); var wrows = new List<string>();
             for (int i = 0; i < nu; i++)
             {
-                rows.Add("(" + string.Join(",", Enumerable.Range(0, 3).Select(j => "#" + Pt(P[i, j]))) + ")");
-                wrows.Add("(" + string.Join(",", Enumerable.Range(0, 3).Select(j => N(Wt[i, j]))) + ")");
+                rows.Add("(" + string.Join(",", Enumerable.Range(0, NV).Select(j => "#" + Pt(P[i, j]))) + ")");
+                wrows.Add("(" + string.Join(",", Enumerable.Range(0, NV).Select(j => N(Wt[i, j]))) + ")");
             }
             var ks = new List<double>(); var ms = new List<int>();
             foreach (var x in ku) { if (ks.Count > 0 && Math.Abs(ks[^1] - x) < 1e-14) ms[^1]++; else { ks.Add(x); ms.Add(1); } }
-            string knots = $"({string.Join(",", ms)}),(3,3),({string.Join(",", ks.Select(N))}),(0.,1.)";
+            string knots = $"({string.Join(",", ms)}),(3,2,3),({string.Join(",", ks.Select(N))}),(0.,0.5,1.)";
             return E($"(BOUNDED_SURFACE()B_SPLINE_SURFACE({du},2,({string.Join(",", rows)}),.UNSPECIFIED.,.F.,.F.,.F.)B_SPLINE_SURFACE_WITH_KNOTS({knots},.UNSPECIFIED.)GEOMETRIC_REPRESENTATION_ITEM()RATIONAL_B_SPLINE_SURFACE(({string.Join(",", wrows)}))REPRESENTATION_ITEM('')SURFACE())");
         }
 
