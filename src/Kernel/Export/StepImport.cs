@@ -90,6 +90,41 @@ public static class StepImport
     /// проекция на поверхность упиралась в край, и ребро «отходило» на 0.47 мм (бачок 1358K26). Прямая — концы; прочие — 33
     /// точки. Мутация P3D_IMPRANGE=0.
     /// </summary>
+    static readonly bool MeridianOff = Environment.GetEnvironmentVariable("P3D_IMPMERIDIAN") == "0";
+
+    /// <summary>k184: размах тела вращения между двумя контурами-меридианами (каждый — на постоянном угле); null — не тот случай.</summary>
+    static (double Lo, double Hi)? MeridianSweep(Surfaces.RevolvedSurface rv, List<List<Curves.ICurve3>> loops, bool sameSense)
+    {
+        var w = rv.Axis.W.Normalized();
+        double sgnOut = (sameSense ^ !OurNormalIsCanonical(rv)) ? 1 : -1;
+        var res = new List<(double V, int Dir)>();
+        foreach (var lc in loops)
+        {
+            double vmin = double.MaxValue, vmax = double.MinValue;
+            foreach (var c in lc)
+                for (int k = 0; k <= 8; k++)
+                {
+                    double v = rv.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * k / 8.0)).Y;
+                    vmin = Math.Min(vmin, v); vmax = Math.Max(vmax, v);
+                }
+            if (vmax - vmin > 1e-4 && vmax - vmin < 1 - 1e-4) return null;   // не меридиан
+            var c0 = lc[0]; double tm = (c0.T0 + c0.T1) / 2;
+            var q = c0.PointAt(tm); var t = c0.TangentAt(tm);
+            var uv = rv.ProjectToUV(q);
+            var n = rv.NormalAt(uv) * sgnOut;
+            var left = Vector3d.Cross(n, t);
+            var radial = q - rv.Axis.Origin; radial -= w * Vector3d.Dot(radial, w);
+            var eTheta = Vector3d.Cross(w, radial);
+            double d = Vector3d.Dot(left, eTheta) * Math.Sign(rv.A1 - rv.A0);
+            if (Math.Abs(d) < 1e-12) return null;
+            res.Add(((uv.Y % 1 + 1) % 1, Math.Sign(d)));
+        }
+        if (res.Count != 2 || res[0].Dir == res[1].Dir) return null;
+        var start = res[0].Dir > 0 ? res[0] : res[1]; var end = res[0].Dir > 0 ? res[1] : res[0];
+        double lo = start.V, hi = end.V; if (hi <= lo) hi += 1;
+        return (lo, hi);
+    }
+
     static readonly bool EdgeTolOff = Environment.GetEnvironmentVariable("P3D_STEPEDGETOL") == "0";
     static readonly bool ImpRangeOff = Environment.GetEnvironmentVariable("P3D_IMPRANGE") == "0";
     static IEnumerable<double> RangeSamples(Curves.ICurve3 c)
@@ -401,6 +436,12 @@ public static class StepImport
                     }
 
                     double span = hi - lo;
+                    // k184: ГРАНЬ МЕЖДУ ДВУМЯ МЕРИДИАНАМИ (колено трубы: тор, ограниченный двумя окружностями сечения). Каждый
+                    // контур — на своём угле, и [меньший, больший] угол — лишь одна из двух дуг; бралась она, хотя грань могла
+                    // лежать по другую сторону шва (подъёмник 3645T16: сетка на 278° вместо 82°, точная площадь 0). Сторона —
+                    // по обходу контура: грань слева от него, если смотреть против нормали грани. Мутация P3D_IMPMERIDIAN=0.
+                    if (!MeridianOff && got.Value.Loops.Count == 2 && MeridianSweep(rvAng, got.Value.Loops, got.Value.SameSense) is { } ms)
+                    { lo = ms.Lo; hi = ms.Hi; span = hi - lo; }
                     if (span > 1e-6 && span < 0.999)
                     {
                         double full = rvAng.A1 - rvAng.A0;
