@@ -3181,9 +3181,46 @@ public static partial class ExactFaceMesher
                 if (c0 == c1) continue;
                 flip.Add(c0 ? l[0] : l[1]);
             }
-            if (flip.Count == 0) return any;
+            if (flip.Count == 0) break;
             any = true;
             foreach (int t in flip) { (T[t + 1], T[t + 2]) = (T[t + 2], T[t + 1]); Interlocked.Increment(ref CapsFixed); }
+        }
+        // k184: ЩЕПКА ИЗ НЕСКОЛЬКИХ ТРЕУГОЛЬНИКОВ (две почти совпадающие ломаные края одной грани: хорда одного ребра и
+        // дуга другого — гнездо 1423N12): переворачиваются по одному треугольники у сторон, пройденных дважды в одну сторону,
+        // пока это уменьшает число таких сторон (сторона с обходами f и b вперёд и назад стоит max(f, b) − 1).
+        if (!CapGreedyOff) any |= GreedyFlips(T, id);
+        return any;
+    }
+    static readonly bool CapGreedyOff = Environment.GetEnvironmentVariable("P3D_CAPGREEDY") == "0";
+
+    static bool GreedyFlips(List<int> T, int[] id)
+    {
+        var cnt = new Dictionary<(int, int), int>();
+        void Count(int t, int sgn)
+        {
+            for (int k = 0; k < 3; k++)
+            {
+                int a = id[T[t + k]], b = id[T[t + (k + 1) % 3]];
+                if (a != b) cnt[(a, b)] = cnt.GetValueOrDefault((a, b)) + sgn;
+            }
+        }
+        for (int t = 0; t + 2 < T.Count; t += 3) Count(t, 1);
+        int Cost(int a, int b) { int f = cnt.GetValueOrDefault((a, b)), r = cnt.GetValueOrDefault((b, a)); return Math.Max(0, Math.Max(f, r) - 1); }
+        if (!cnt.Any(kv => kv.Value >= 2)) return false;   // сторон, пройденных дважды в одну сторону, нет — сетка в порядке
+        int Local(int t) { int c = 0; for (int k = 0; k < 3; k++) { int a = id[T[t + k]], b = id[T[t + (k + 1) % 3]]; if (a != b) c += Cost(a, b); } return c; }
+        bool any = false;
+        for (int round = 0; round < 4; round++)
+        {
+            bool changed = false;
+            for (int t = 0; t + 2 < T.Count; t += 3)
+            {
+                int before = Local(t);
+                if (before == 0) continue;
+                Count(t, -1); (T[t + 1], T[t + 2]) = (T[t + 2], T[t + 1]); Count(t, 1);
+                if (Local(t) < before) { changed = any = true; Interlocked.Increment(ref CapsFixed); }
+                else { Count(t, -1); (T[t + 1], T[t + 2]) = (T[t + 2], T[t + 1]); Count(t, 1); }
+            }
+            if (!changed) break;
         }
         return any;
     }
