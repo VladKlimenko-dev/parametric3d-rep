@@ -190,7 +190,8 @@ static partial class Program
                         if (dp > proj) { proj = dp; worstUv = uv; worstP = q; }
                         brute = Math.Max(brute, db);
                     }
-                    parts.Add($"{ce.Loop!.Face!.Tag} {sf.GetType().Name}: proj {proj:G3} at uv ({worstUv.X:0.####},{worstUv.Y:0.####}) p ({worstP.X:0.###},{worstP.Y:0.###},{worstP.Z:0.###}), grid64x4096 {brute:G3}");
+                    string extra = sf is Parametric3D.Kernel.Surfaces.RevolvedSurface rvd ? $" base {rvd.Base.GetType().Name} {rvd.Base.PointAt(rvd.Base.T0)}->{rvd.Base.PointAt(rvd.Base.T1)} axis {rvd.Axis.Origin}/{rvd.Axis.W}" : "";
+                    parts.Add($"{ce.Loop!.Face!.Tag} {sf.GetType().Name}{extra}: proj {proj:G3} at uv ({worstUv.X:0.####},{worstUv.Y:0.####}) p ({worstP.X:0.###},{worstP.Y:0.###},{worstP.Z:0.###}), grid64x4096 {brute:G3}");
                 }
                 Log(new { test = "sldprt-curveoff", file, body = bi + 1, edge = eid, curve = e.Curve.GetType().Name, parts });
             }
