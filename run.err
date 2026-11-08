@@ -1,0 +1,1 @@
+seconds 45 nproc 4 env P3D_SLDDIAG=1 P3D_SLDDIAGOBJ=res/out cmd sldprt tests/k01/data/sw_oe_60945k27.SLDPRT
