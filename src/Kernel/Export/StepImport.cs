@@ -305,6 +305,7 @@ public static class StepImport
             // крышки прочитанного тела оставались с одним ребром и нулевой площадью.
             var edges = new Dictionary<string, TEdge>();
             var edgeByEc = new Dictionary<int, TEdge>();
+            var ecOfEdge = new Dictionary<TEdge, int>(ReferenceEqualityComparer.Instance);
             var edgeKeyOf = new Dictionary<TEdge, string>(ReferenceEqualityComparer.Instance);
 
             static (long, long, long) K(Vector3d p) =>
@@ -563,8 +564,11 @@ public static class StepImport
                         if (!EdgeIdOff && parser.EdgeCurveOf.TryGetValue(c, out int ecId))
                         {
                             if (edgeByEc.TryGetValue(ecId, out var known)) key = edgeKeyOf[known];
-                            else if (edges.TryGetValue(key, out var taken) && taken.CoEdges.Count >= 2)
+                            else if (edges.TryGetValue(key, out var taken) &&
+                                     (taken.CoEdges.Count >= 2 || parser.EdgeCurveUses(ecId) >= 2 && ecOfEdge.TryGetValue(taken, out int takenEc) && parser.EdgeCurveUses(takenEc) >= 2))
                             {
+                                // занято двумя гранями — или оба EDGE_CURVE полноценны (по две ссылки): это разные рёбра файла
+                                // (тонкая грань-линза между двумя рёбрами с общими концами — фильтр 4218K62)
                                 key = key + "#ec" + ecId;
                             }
                         }
@@ -580,7 +584,7 @@ public static class StepImport
                             edges[key] = edge;
                             edgeKeyOf[edge] = key;
                         }
-                        if (!EdgeIdOff && parser.EdgeCurveOf.TryGetValue(c, out int ecId2)) edgeByEc.TryAdd(ecId2, edge);
+                        if (!EdgeIdOff && parser.EdgeCurveOf.TryGetValue(c, out int ecId2)) { edgeByEc.TryAdd(ecId2, edge); ecOfEdge.TryAdd(edge, ecId2); }
                         if (!EdgeTolOff && parser.EdgeTolerance.TryGetValue(c, out double ftol)) edge.Tolerance = Math.Max(edge.Tolerance, ftol);
                         // НАПРАВЛЕНИЕ ОБХОДА. У замкнутой окружности начало и конец совпадают,
                         // и сравнение концов всегда давало «не развёрнуто»: верхняя окружность

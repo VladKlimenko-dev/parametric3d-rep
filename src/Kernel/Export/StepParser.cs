@@ -455,6 +455,19 @@ public sealed class StepParser
     public readonly Dictionary<ICurve3, double> EdgeTolerance = new(ReferenceEqualityComparer.Instance);
     /// <summary>k184: номер EDGE_CURVE кривой контура (одно ребро файла — у двух граней).</summary>
     public readonly Dictionary<ICurve3, int> EdgeCurveOf = new(ReferenceEqualityComparer.Instance);
+    Dictionary<int, int>? _ecUses;
+    /// <summary>k184: сколько ORIENTED_EDGE ссылается на EDGE_CURVE (у годного файла — два).</summary>
+    public int EdgeCurveUses(int ec)
+    {
+        if (_ecUses == null)
+        {
+            var d = new Dictionary<int, int>();
+            foreach (var (_, en) in Entities)
+                if (en.Type == "ORIENTED_EDGE" && en.Args.Count > 3) { int r = Ref(en.Args[3]); d[r] = d.GetValueOrDefault(r) + 1; }
+            _ecUses = d;
+        }
+        return _ecUses.GetValueOrDefault(ec);
+    }
 
     static readonly bool SpindleOff = Environment.GetEnvironmentVariable("P3D_SPINDLETORUS") == "0";
     static readonly bool RevolOff = Environment.GetEnvironmentVariable("P3D_STEPREVOL") == "0";
