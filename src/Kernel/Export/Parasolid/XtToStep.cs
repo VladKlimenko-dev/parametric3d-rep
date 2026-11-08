@@ -172,7 +172,7 @@ public static class XtToStep
         /// </summary>
         bool? BlendSame(XtNode fc, XtNode sn)
         {
-            if (!blendSign.TryGetValue(sn.Id, out int sOurs) || XtSurf.Of(f, sn) is not XtBlendSurf bl) return null;
+            if (!blendSign.TryGetValue(sn.Id, out int sOurs) || XtSurf.Of(f, sn) is not XtBlendSurf bl) { if (XtDebug) warn?.Add($"XTDBG blend {sn.Id}: no sign"); return null; }
             // опоры скругления (у смещённой — и её основа): соседняя грань на опоре касается скругления по ребру
             var sup = new HashSet<int>();
             foreach (int id in sn.PA("surface")) { sup.Add(id); if (f[id] is { Name: "OFFSET_SURF" } os) sup.Add(os.P("surface")); }
@@ -199,12 +199,15 @@ public static class XtToStep
                         double cosR = Vector3d.Dot(n.Value.Normalized(), rad.Normalized());
                         if (Math.Abs(cosR) < (supportsOnly ? 0.9 : 0.999)) continue;            // не касается
                         double so = cosR * ((of.C("sense") != '-') == (osn.C("sense") != '-') ? 1 : -1);
+                        if (XtDebug) warn?.Add($"XTDBG blend {sn.Id} face {fc.Id}: neighbour {of.Id} {osn.Name} support={supportsOnly} cos {cosR:F3} faceSense {of.C("sense")} surfSense {osn.C("sense")} ours {sOurs} -> same {(so > 0) == (sOurs > 0)}");
                         return (so > 0) == (sOurs > 0);
                     }
                 }
             }
+            if (XtDebug) warn?.Add($"XTDBG blend {sn.Id}: no tangent neighbour");
             return null;
         }
+        static readonly bool XtDebug = Environment.GetEnvironmentVariable("P3D_XTDEBUG") == "1";
 
         /// <summary>Естественная нормаль поверхности XT в точке (не единичная), null — вид не поддержан.</summary>
         Vector3d? NatNormal(XtNode s, Vector3d q)
