@@ -39,6 +39,8 @@ public static class XtToStep
         foreach (var n in f.Order) if (n.Name is "EDGE" or "VERTEX" && n.D("tolerance") is double tl && tl > 0 && tl < 1e-3) acc = Math.Max(acc, tl * S);
         foreach (var body in f.OfType("BODY"))
         {
+            // только твёрдые тела (body_type 1): листовые и проволочные тела — не оболочки тела
+            if (body.I("body_type") is int bt && bt != 1 && bt != 0) { warnings?.Add($"Parasolid: a non-solid body (type {bt}) was left out."); continue; }
             var faceLists = new List<List<XtNode>>();
             foreach (var region in f.OfType("REGION").Where(r => r.P("body") == body.Id && r.C("type") == 'S'))
                 for (var sh = f[region.P("shell")]; sh != null; sh = f[sh.P("next")])
