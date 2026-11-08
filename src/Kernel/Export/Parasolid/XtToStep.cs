@@ -698,25 +698,39 @@ public static class XtToStep
             }
             double h = Math.Min(1.5 * rad, rho < double.MaxValue ? Math.Pow(1e-7 * 384 / 5 * rho * rho * rho, 0.25) : double.MaxValue);
             int nu = Math.Clamp((int)Math.Ceiling(len / Math.Max(h, 1e-9)) + 1, 8, 160);
-            var Pw = new Vector3d[nu, 3]; var W = new double[nu, 3]; var cen = new List<Vector3d>(nu);
+            // сечение — две половины дуги (рациональные квадратичные, пять вершин): вес середины половины cos(θ/4) ≥ 0,7 при
+            // любом сечении до полукруга и больше — кубическая интерполяция весов по u не уходит в ноль (у кончика сверла
+            // одна дуга почти в полкруга давала отрицательные веса и запасную сетку)
+            const int NV = 5;
+            var Pw = new Vector3d[nu, NV]; var W = new double[nu, NV]; var cen = new List<Vector3d>(nu);
+            Vector3d? prevMid = null;
             for (int i = 0; i < nu; i++)
             {
                 var c = bl.CentreAt(at(len * i / (nu - 1))); cen.Add(c);
                 var (pa, pb) = bl.Contacts(c);
                 var ea = pa - c; var eb = pb - c; double r = 0.5 * (ea.Length + eb.Length);
-                Vector3d m; double w;
-                if (r < 1e-12 || ea.LengthSquared < 1e-24 || eb.LengthSquared < 1e-24) { pa = pb = m = c; w = 1; }
+                if (r < 1e-12 || ea.LengthSquared < 1e-24 || eb.LengthSquared < 1e-24)
+                {
+                    for (int j = 0; j < NV; j++) { Pw[i, j] = c; W[i, j] = 1; }
+                    continue;
+                }
+                var na = ea.Normalized(); var nb = eb.Normalized();
+                var bis = na + nb;
+                Vector3d nm;
+                if (bis.LengthSquared > 1e-8) nm = bis.Normalized();
                 else
                 {
-                    var na = ea.Normalized(); var nb = eb.Normalized();
-                    double cosT = Math.Clamp(Vector3d.Dot(na, nb), -1, 1);
-                    if (cosT < -0.999) { warn?.Add("Parasolid: a blend section spans half a circle — fitted grid used."); return null; }   // одной дугой не задать
-                    w = Math.Sqrt((1 + cosT) / 2);                        // cos(θ/2)
-                    var bis = na + nb;
-                    m = bis.LengthSquared > 1e-24 ? c + bis.Normalized() * (r / Math.Max(w, 1e-12)) : (pa + pb) / 2;
-                    pa = c + na * r; pb = c + nb * r;
+                    // полкруга: середина — поворот na на 90° вокруг оси (направление — как у соседнего сечения)
+                    var tg = at(Math.Min(len, len * (i + 0.5) / (nu - 1))) - at(Math.Max(0, len * (i - 0.5) / (nu - 1)));
+                    nm = Vector3d.Cross(tg, na); if (nm.LengthSquared < 1e-30) { warn?.Add("Parasolid: a blend section has no plane — fitted grid used."); return null; }
+                    nm.Normalize(); if (prevMid is { } pm && Vector3d.Dot(pm, nm) < 0) nm = -nm;
                 }
-                Pw[i, 0] = pa; Pw[i, 1] = m * w; Pw[i, 2] = pb; W[i, 0] = 1; W[i, 1] = w; W[i, 2] = 1;
+                prevMid = nm;
+                double cosH = Math.Clamp(Vector3d.Dot(na, nm), -1, 1);          // cos(θ/2)
+                double w = Math.Sqrt((1 + cosH) / 2);                             // cos(θ/4)
+                var m1 = c + (na + nm).Normalized() * (r / w); var m2 = c + (nm + nb).Normalized() * (r / w);
+                Pw[i, 0] = c + na * r; Pw[i, 1] = m1 * w; Pw[i, 2] = c + nm * r; Pw[i, 3] = m2 * w; Pw[i, 4] = c + nb * r;
+                W[i, 0] = 1; W[i, 1] = w; W[i, 2] = 1; W[i, 3] = w; W[i, 4] = 1;
             }
             {
                 // знак нормали нашей поверхности относительно радиуса шара (в середине оси): du × касательная дуги в A к B
@@ -731,8 +745,8 @@ public static class XtToStep
             for (int i = 1; i < nu; i++) if (pu[i] <= pu[i - 1]) { warn?.Add("Parasolid: blend section centres repeat along the spine — fitted grid used."); return null; }
             int du = 3;
             var (ku, _) = XtBasis.Setup(pu, du);
-            var P = new Vector3d[nu, 3]; var Wt = new double[nu, 3];
-            for (int j = 0; j < 3; j++)
+            var P = new Vector3d[nu, NV]; var Wt = new double[nu, NV];
+            for (int j = 0; j < NV; j++)
             {
                 var xyz = XtBasis.Solve(ku, du, pu, Enumerable.Range(0, nu).Select(i => Pw[i, j]).ToList());
                 var ww = XtBasis.Solve(ku, du, pu, Enumerable.Range(0, nu).Select(i => new Vector3d(W[i, j], 0, 0)).ToList());
@@ -745,12 +759,12 @@ public static class XtToStep
             var rows = new List<string>(); var wrows = new List<string>();
             for (int i = 0; i < nu; i++)
             {
-                rows.Add("(" + string.Join(",", Enumerable.Range(0, 3).Select(j => "#" + Pt(P[i, j]))) + ")");
-                wrows.Add("(" + string.Join(",", Enumerable.Range(0, 3).Select(j => N(Wt[i, j]))) + ")");
+                rows.Add("(" + string.Join(",", Enumerable.Range(0, NV).Select(j => "#" + Pt(P[i, j]))) + ")");
+                wrows.Add("(" + string.Join(",", Enumerable.Range(0, NV).Select(j => N(Wt[i, j]))) + ")");
             }
             var ks = new List<double>(); var ms = new List<int>();
             foreach (var x in ku) { if (ks.Count > 0 && Math.Abs(ks[^1] - x) < 1e-14) ms[^1]++; else { ks.Add(x); ms.Add(1); } }
-            string knots = $"({string.Join(",", ms)}),(3,3),({string.Join(",", ks.Select(N))}),(0.,1.)";
+            string knots = $"({string.Join(",", ms)}),(3,2,3),({string.Join(",", ks.Select(N))}),(0.,0.5,1.)";
             return E($"(BOUNDED_SURFACE()B_SPLINE_SURFACE({du},2,({string.Join(",", rows)}),.UNSPECIFIED.,.F.,.F.,.F.)B_SPLINE_SURFACE_WITH_KNOTS({knots},.UNSPECIFIED.)GEOMETRIC_REPRESENTATION_ITEM()RATIONAL_B_SPLINE_SURFACE(({string.Join(",", wrows)}))REPRESENTATION_ITEM('')SURFACE())");
         }
 
