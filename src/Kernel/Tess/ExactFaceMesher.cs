@@ -651,8 +651,11 @@ public static partial class ExactFaceMesher
         SwapUv sw when sw.Inner is RevolvedSurface r && Math.Abs(Math.Abs(r.Sweep) - 2 * Math.PI) < 1e-9 => 1.0,
         // Трубка вращения с замкнутым основанием (тор): замкнута по первому параметру.
         RevolvedSurface rv when rv.Base is ArcCurve3 ba && ba.IsClosed => 1.0,
+        // k182: NURBS, замкнутая по u (трубка пружины из Parasolid). Мутация P3D_NURBSCLOSEDU=0.
+        NurbsSurface ns when !NurbsClosedOff && ns.ClosedU => 1.0,
         _ => 0
     };
+    static readonly bool NurbsClosedOff = Environment.GetEnvironmentVariable("P3D_NURBSCLOSEDU") == "0";
 
     /// <summary>
     /// Период параметра u для развёртки контура: у дуги любого размаха угол определён с

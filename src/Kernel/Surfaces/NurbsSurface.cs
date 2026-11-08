@@ -33,6 +33,21 @@ public sealed class NurbsSurface : ISurface3
     public IReadOnlyList<double> KnotsV => _kv;
 
     public Vector3d ControlPoint(int i, int j) => _cp[i, j];
+
+    /// <summary>k182: поверхность замкнута по u — первый и последний ряды вершин совпадают (узлы на концах кратные): трубка
+    /// пружины, кольцо фитинга из Parasolid (u_closed). Мешу нужна развёртка контура по периоду, как у цилиндра.</summary>
+    public bool ClosedU => _closedU ??= ComputeClosedU();
+    private bool? _closedU;
+    private bool ComputeClosedU()
+    {
+        int n = CountU, m = CountV; if (n < 3) return false;
+        double scale = 0; for (int j = 0; j < m; j++) scale = Math.Max(scale, (_cp[0, j] - _cp[n / 2, j]).Length);
+        if (scale <= 0) return false;
+        for (int j = 0; j < m; j++)
+            if ((_cp[0, j] - _cp[n - 1, j]).Length > 1e-9 * Math.Max(1, scale) || Math.Abs(_w[0, j] - _w[n - 1, j]) > 1e-12) return false;
+        // концы — точные (кратность узла на концах = степень + 1)
+        return _ku[0] == _ku[_du] && _ku[^1] == _ku[^(_du + 1)];
+    }
     public double Weight(int i, int j) => _w[i, j];
 
     public NurbsSurface(Vector3d[,] controlPoints, int degreeU = 3, int degreeV = 3,
