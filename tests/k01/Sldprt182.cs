@@ -54,6 +54,7 @@ static partial class Program
                 var b = bodies.FirstOrDefault();
                 var vrs = bodies.Select(x => SolidValidator.Validate(x)).ToList();
                 var vr = vrs.FirstOrDefault(x => !x.IsValid) ?? vrs.FirstOrDefault();
+                if (Environment.GetEnvironmentVariable("P3D_SLDDIAG") == "1") SldDiag(Path.GetFileName(path), bodies, vrs);
                 if (prof) { Console.Error.WriteLine("SLDPROF all " + Path.GetFileName(path) + "\n" + Parametric3D.Kernel.Diagnostics.Prof.Report()); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
                 double vol = bodies.Sum(x => AnalyticVolume.Of(x) ?? 0), area = bodies.Sum(x => AnalyticVolume.AreaOf(x) ?? 0);
                 // Габарит по вершинам и дугам (окружности, эллипсы) рёбер XT и тех же рёбер импортированных тел — должны совпасть; объём не больше объёма габарита.
@@ -153,5 +154,41 @@ static partial class Program
         try { done = t.Wait(TimeSpan.FromSeconds(lim)); }
         catch (AggregateException ae) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ae.InnerException ?? ae).Throw(); throw; }
         if (!done) { Log(new { test = "sldprt", file = name, timeout = lim, stage = sldStage }); throw new Exception($"timeout {lim} s at {sldStage}"); }
+    }
+
+    /// <summary>Разбор: у тела с ошибками сетки — какие грани (метка STEP, поверхность, сторона) у сторон без пары / в одну сторону.</summary>
+    static void SldDiag(string file, List<TSolid> bodies, List<ValidationReport> vrs)
+    {
+        for (int bi = 0; bi < bodies.Count; bi++)
+        {
+            if (vrs[bi].IsValid) continue;
+            var md = Parametric3D.Kernel.Tess.Tessellator.Tessellate(bodies[bi]);
+            var faceOfTri = new Dictionary<int, uint>();
+            for (int t = 0; t + 2 < md.Indices.Length; t += 3) faceOfTri[t / 3] = md.Vertices[md.Indices[t]].FaceId;
+            var vpos = md.Vertices.Select(v => new Vector3d(Math.Round(v.P.X, 4), Math.Round(v.P.Y, 4), Math.Round(v.P.Z, 4))).ToArray();
+            var edges = new Dictionary<(Vector3d, Vector3d), List<(int Tri, int Dir)>>();
+            for (int t = 0; t + 2 < md.Indices.Length; t += 3)
+                for (int k = 0; k < 3; k++)
+                {
+                    var a = vpos[md.Indices[t + k]]; var b = vpos[md.Indices[t + (k + 1) % 3]];
+                    bool less = a.X < b.X || a.X == b.X && (a.Y < b.Y || a.Y == b.Y && a.Z < b.Z);
+                    var key = less ? (a, b) : (b, a);
+                    if (!edges.TryGetValue(key, out var l)) edges[key] = l = new();
+                    l.Add((t / 3, less ? 1 : -1));
+                }
+            var cnt = new Dictionary<string, int>();
+            foreach (var (key, l) in edges)
+            {
+                string kind = l.Count == 1 ? "open" : l.Count > 2 ? "multi" : l[0].Dir == l[1].Dir ? "same" : "";
+                if (kind == "") continue;
+                foreach (var (tri, _) in l)
+                {
+                    var f = faceOfTri.TryGetValue(tri, out var fid) ? bodies[bi].Faces.FirstOrDefault(x => x.Id == fid) : null;
+                    string fd = f == null ? "?" : $"{f.Tag}/{Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name}/{(f.Reversed ? "R" : "N")}";
+                    string k2 = kind + " " + fd; cnt[k2] = cnt.GetValueOrDefault(k2) + 1;
+                }
+            }
+            Log(new { test = "sldprt-diag", file, body = bi + 1, faces = cnt.OrderByDescending(kv => kv.Value).Take(12).Select(kv => $"{kv.Key} ×{kv.Value}").ToList() });
+        }
     }
 }
