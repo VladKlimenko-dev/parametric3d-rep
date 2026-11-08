@@ -1,0 +1,245 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["allB"]}
+  R2: added 36.716 (MC 36.78), faces 5, 2180 ms
+  R3: added 72.696 (MC 72.45), faces 5, 704 ms
+  R8: added 260.104 (MC 260.75), faces 4, 521 ms
+{"test":"KRN-ROUND-CAP-SPHERE-RADII","ok":true}
+{"test":"KRN-PARAM-K102","ok":true}
+{"test":"KRN-SK-CONFLICTS-K106","ok":true}
+  hinge bottom: error , volume 23475.068 (want 23475.068), angle 90 -> 85
+  total 80: applied 10, volume 22942.038 (want 22942.038)
+  hinge top: error , x at z=0 18.250227, z=20 20
+  cylinder: error , volume 5247.895 (cone 5247.895), angle 90 -> 85
+{"test":"KRN-DRAFT-HINGE-K112","ok":true}
+{"test":"KRN-SWEEP-CLOSED-K111","ok":true}
+{"test":"KRN-SK-LINKS-K110","ok":true}
+{"test":"KRN-SK-FORMULA-LIVE","ok":true}
+{"test":"KRN-REF-ROLES","ok":true}
+{"test":"KRN-REV-MIRROR","ok":true}
+{"test":"KRN-SK-WEAK-DOF","ok":true}
+{"test":"KRN-SK-NO-TRIVIAL","ok":true}
+{"test":"KRN-SK-EDIT-STEP","ok":true}
+{"test":"KRN-SK-EDIT-REJECT","ok":true}
+{"test":"KRN-SK-ZERO-DIM","ok":true}
+{"test":"KRN-SK-SIDE","ok":true}
+{"test":"KRN-SK-BUILTIN","ok":true}
+{"test":"KRN-SK-DELETE-DIMS","ok":true}
+{"test":"KRN-SK-KEEP-WEAK","ok":true}
+{"test":"KRN-SK-REDUNDANT","ok":true}
+  boss          instant True, volume preview 320763.2 exact 320774.1 (dV 0.003%), error 
+  pocket        instant True, volume preview 318548.2 exact 318556.2 (dV 0.003%), error 
+  hole          instant True, volume preview 319184.3 exact 319190.8 (dV 0.002%), error 
+  round         instant True, volume preview 319490.8 exact 319501.5 (dV 0.003%), error 
+  chamfer       instant True, volume preview 319444.8 exact 319452.8 (dV 0.003%), error 
+  pattern       instant True, volume preview 319617.1 exact 319624.8 (dV 0.002%), error 
+  revolve       instant True, volume preview 325018.3 exact 325034.1 (dV 0.005%), error 
+  touching cut  instant True, volume preview 319552.6 exact 319560.2 (dV 0.002%), error 
+  mid edit: instant True at 4 (operation 4), rollbacks 1
+  counters: instant 11, region probes 18, tree memo 1371, reach memo 8, reach cull 12, solid triangles memo 24
+{"test":"KRN-INSTANT-PREVIEW-K113","ok":true}
+  file 173 KB, open 32 ms; cached False, dirty False, bodies 1, triangles 2644 (built 2644)
+  rebuild 90 ms; cached False, volume 319756.239 vs 319756.239
+{"test":"KRN-FILE-DISPLAY-K114","ok":true}
+  loaded: side1 ThroughAll flip True, side2 ToNext 7.5 flip True
+{"test":"KRN-EXTRUDE-END-K115","ok":true}
+    face FacetedSurface RevolvedSurface edges 1 x 30/0
+    face FacetedSurface RevolvedSurface edges 6 x 20/80,30/0,15/30,15/60,15/60,15/30
+    face FacetedSurface RevolvedSurface edges 1 x 20/80
+    face FacetedSurface ExtrudedSurface edges 2 x 15/30,15/30
+    face FacetedSurface ExtrudedSurface edges 2 x 15/60,15/60
+    face FacetedSurface PlaneSurface edges 4 x 15/60,15/30,15/30,15/60
+  flat face: FacetedSurface (PlaneSurface), edges 4
+  flat draft: error , volume 151577.5 -> 150018.8, angle 90 -> 95
+  cone draft: error , volume 128314 (want 128314, top radius 14.268), angle 82.87 -> 78.87
+{"test":"KRN-DRAFT-ANYFACE-K115","ok":true}
+  groove: error , removed 3926.991 (expected 3926.991)
+  mirrored: error , removed 7853.982 (expected 7853.982)
+{"test":"KRN-MIRROR-SWEEP-K116","ok":true}
+  nested: errors //, removed 3000 (expected 3000), 20 ms
+{"test":"KRN-MIRROR-NESTED-K116","ok":true}
+  loaded: free sketch visible False, used sketch visible True, tree f:d00000010d=True,i:group:G=False
+  Windows file: cached False restored True, this system: cached False restored True, rejected 0
+{"test":"KRN-FILE-STATE-K116","ok":true}
+  contour: 11 segments, 0 points outside the pocket
+{"test":"KRN-TREE-OWN-K116","ok":true}
+  slot pocket: error , tangent vertex off 7.11E-15
+{"test":"KRN-TANGENT-JOINT-K116","ok":true}
+  user part: 5163 ms, volume 8421325.775, downgrades 0, errors 
+  front wall faces: 5, overlapping pairs 0
+{"test":"KRN-USER-EXACT-K116","ok":true}
+  user part, 4 operations, old seam: 2298 ms, anisotropic cylinder faces 1, seam moves 0, downgrades 0
+  user part, 4 operations, k125 seam: 997 ms, anisotropic cylinder faces 0, seam moves 1, downgrades 0
+{"test":"KRN-LONG-CYLINDER-K116","ok":true}
+  grid: compared 9600, mismatches 0
+{"test":"KRN-SPEED-K126-GRID-EQUIV","ok":true}
+  bounds index: faces 44, compared 2640, mismatches 0
+{"test":"KRN-SPEED-K126-BOUNDS-EQUIV","ok":true}
+  user_k116.p3d: eager V 8421325.774719 faces 35 errors 0; deferred V 8421325.774719 faces 35 errors 0; pending before True, after False
+  seq_handles_k75.p3d: eager V 1117388.864091 faces 16 errors 1; deferred V 1117388.864091 faces 16 errors 1; pending before True, after False
+  load_session_k75b.p3d: eager V 316628.409909 faces 77 errors 9; deferred V 316628.409909 faces 77 errors 9; pending before True, after False
+  tube k116: eager V 7457729.817856 faces 11 errors 0; deferred V 7457729.817856 faces 11 errors 0; pending before True, after False
+  twin pockets + groove: eager V 972242.235233 faces 13 errors 0; deferred V 972242.235233 faces 13 errors 0; pending before True, after False
+  twin pockets, circles, mirror: eager V 976123.895833 faces 10 errors 0; deferred V 976123.895833 faces 10 errors 0; pending before True, after False
+  lazy faces 345
+{"test":"KRN-SPEED-K126-DEFERRED-SAME","ok":true}
+  box: точное тело: граней 6 (плоскостей 6, цилиндров 0, конусов 0, сфер 0, торов 0); рёбра: прямых 12, окружностей 0, эллипсов 0, ломаных 0; выравниваний 0; 109 мс; volume 120000 vs 120000 (mesh 120000)
+  cyl: точное тело: граней 3 (плоскостей 2, цилиндров 1, конусов 0, сфер 0, торов 0); рёбра: прямых 0, окружностей 4, эллипсов 0, ломаных 0; выравниваний 4; 53 мс; volume 3078.7608 vs 3078.7608 (mesh 3069.976)
+  cone: точное тело: граней 3 (плоскостей 2, цилиндров 0, конусов 1, сфер 0, торов 0); рёбра: прямых 0, окружностей 4, эллипсов 0, ломаных 0; выравниваний 2; 18 мс; volume 2450.4423 vs 2450.4423 (mesh 2443.9981)
+  sphere: точное тело: граней 2 (плоскостей 0, цилиндров 0, конусов 0, сфер 2, торов 0); рёбра: прямых 0, окружностей 2, эллипсов 0, ломаных 0; выравниваний 5; 26 мс; volume 7238.2295 vs 7238.2295 (mesh 7199.789)
+  torus: точное тело: граней 4 (плоскостей 0, цилиндров 0, конусов 0, сфер 0, торов 4); рёбра: прямых 0, окружностей 8, эллипсов 0, ломаных 0; выравниваний 23; 239 мс; volume 9869.6044 vs 9869.6044 (mesh 9831.0707)
+{"test":"KRN-MESHFIT-PRIMITIVES-K119","ok":true}
+  holes: точное тело: граней 13 (плоскостей 8, цилиндров 4, конусов 1, сфер 0, торов 0); рёбра: прямых 12, окружностей 18, эллипсов 0, ломаных 0; выравниваний 16; 48 мс; volume 116590.3247 vs 116590.3248 (mesh 116598.2684)
+  rounded: точное тело: граней 26 (плоскостей 6, цилиндров 12, конусов 0, сфер 8, торов 0); рёбра: прямых 24, окружностей 24, эллипсов 0, ломаных 0; выравниваний 68; 375 мс; volume 47109.0794 vs 47109.0794 (mesh 47101.3342)
+  rounded4: точное тело: граней 10 (плоскостей 6, цилиндров 4, конусов 0, сфер 0, торов 0); рёбра: прямых 16, окружностей 8, эллипсов 0, ломаных 0; выравниваний 12; 34 мс; volume 47845.4867 vs 47845.4867 (mesh 47844.1308)
+  real7: точное тело: граней 30 (плоскостей 25, цилиндров 5, конусов 0, сфер 0, торов 0); рёбра: прямых 56, окружностей 16, эллипсов 0, ломаных 0; выравниваний 3; 43 мс; volume 315853.3221 vs 315853.3203 (mesh 315851.952)
+  real: точное тело: граней 35 (плоскостей 22, цилиндров 13, конусов 0, сфер 0, торов 0); рёбра: прямых 32, окружностей 48, эллипсов 0, ломаных 0; выравниваний 9; 119 мс; volume 319756.2366 vs 319756.2392 (mesh 319748.1958)
+  user: точное тело: граней 35 (плоскостей 22, цилиндров 9, конусов 4, сфер 0, торов 0); рёбра: прямых 48, окружностей 28, эллипсов 4, ломаных 16; выравниваний 41; 2456 мс; volume 8421258.0083 vs 8421325.7747 (mesh 8412652.7313)
+{"test":"KRN-MESHFIT-PARTS-K119","ok":true}
+  cylinder: R 7, axis (0, 0, 1), point (3, 4, 0)
+  plate radii: 5, 6, 8, 10
+  realistic part: tangents 2, corners left at mesh vertices 0
+{"test":"KRN-MESHFIT-SNAP-K119","ok":true}
+  flat: тело из плоских граней: граней 1537 (плоскостей 1537, цилиндров 0, конусов 0, сфер 0, торов 0); рёбра: прямых 2514, окружностей 0, эллипсов 0, ломаных 0; выравниваний 0; 208 мс
+{"test":"KRN-MESHFIT-FLAT-K119","ok":true}
+{"test":"KRN06-FALLBACK-ROUND-ESTIMATE-GUARD","ok":true}
+  hole d8 r1: dV -7.72145092280698 exact -7.721450878381295 tangency 3.3E-007 rad refine evals 5938
+  hole d8 r2: dV -34.80734637207934 exact -34.80734634434457 tangency 3.4E-007 rad refine evals 2058
+  boss R8 r3: dV 62.88832095397811 exact 62.88832101419214 tangency 3.5E-007 rad refine evals 2232
+  hole d30 r1: dV -76.73886154621141 exact -76.73886087567209 tangency 3.7E-007 rad refine evals 30594
+{"test":"KRN06-CYLCYL-ROLLING-BALL-EXACT","ok":true}
+  frustum rim: dV -6.127600855837954 Pappus -6.127600864042562 tangency 2.9E-007 rad
+  cyl/cone convex: dV -2.5179987173178233 Pappus -2.5179987206703616 tangency 3.1E-007 rad
+  cone/cyl concave: dV 16.57844319265496 Pappus 16.578443275179755 tangency 3.1E-007 rad
+  cyl/sphere convex: dV -4.194436226523976 Pappus -4.194436238700229 tangency 3.1E-007 rad
+  sphere off-axis hole rim: dV -11.781851349005592 Pappus NaN tangency 3.5E-007 rad
+{"test":"KRN06-CLOSED-QUADRIC-ROLLING-BALL-EXACT","ok":true}
+  R=1: V 123647.7479450729 want 123647.74794506204 faces 8 tangency 3.3E-007
+  R=2 edited: V 123593.57615416619 want 123593.57615413012 faces 8 tangency 3.4E-007
+  R=1.5 edited: V 123626.3312985493 want 123626.33129853405 faces 8 tangency 3.4E-007
+{"test":"KRN06-CYLCYL-PART-REBUILD","ok":true}
+  cross-hole rim: STEP 62889 chars, read back faces 6, V 123570.98781609423 vs 123655.46939592763
+  frustum rim: STEP 50960 chars, read back faces 5, V 16399.886376129587 vs 16413.93000190692
+{"test":"KRN06-BLEND-STEP-EXPORT","ok":true}
+  hole R5 at x=30: V 120538.61603355619 want 120538.6160335061
+  boss R5 at x=-30: V 124453.23720493352 want 124453.23720490921
+  through the blend: ExactAnalytic
+  part after blend: V 120530.89458270138 want 120530.89458262772 ExactAnalytic
+{"test":"KRN05-BOOLEAN-AFTER-BLEND","ok":true}
+{"test":"KRN11-HISTORY","seed":11,"step":0,"act":"edit HistParams { D1 = 6, RoundR = 5, RoundOff = False, SphR = 4, Copies = 3, Hole7Off = False, ChamferD = 3 }","volume":2919286.0680491347}
+{"test":"KRN11-HISTORY","seed":11,"step":1,"act":"undo\u002Bredo","volume":2919286.0680491347}
+{"test":"KRN11-HISTORY","seed":11,"step":2,"act":"edit HistParams { D1 = 6, RoundR = 5, RoundOff = False, SphR = 4, Copies = 3, Hole7Off = False, ChamferD = 3 }","volume":2919286.0680491347}
+{"test":"KRN11-HISTORY","seed":11,"step":3,"act":"undo\u002Bredo","volume":2919286.0680491347}
+{"test":"KRN11-HISTORY","seed":11,"step":4,"act":"edit HistParams { D1 = 6, RoundR = 5, RoundOff = True, SphR = 4, Copies = 3, Hole7Off = False, ChamferD = 3 }","volume":2920895.581823654}
+{"test":"KRN11-HISTORY","seed":11,"step":5,"act":"edit HistParams { D1 = 5.5, RoundR = 5, RoundOff = True, SphR = 4, Copies = 3, Hole7Off = False, ChamferD = 3 }","volume":2929024.4528148174}
+{"test":"KRN11-HISTORY","seed":11,"step":6,"act":"edit HistParams { D1 = 5.5, RoundR = 5, RoundOff = True, SphR = 4, Copies = 2, Hole7Off = False, ChamferD = 3 }","volume":1952682.9685432112}
+{"test":"KRN11-HISTORY","seed":11,"step":7,"act":"undo\u002Bredo","volume":1952682.9685432112}
+{"test":"KRN11-HISTORY","seed":11,"step":8,"act":"edit HistParams { D1 = 5.5, RoundR = 5, RoundOff = True, SphR = 4, Copies = 2, Hole7Off = True, ChamferD = 3 }","volume":1956609.9593601984}
+{"test":"KRN11-HISTORY","seed":11,"step":9,"act":"undo\u002Bredo","volume":1956609.9593601984}
+{"test":"KRN11-HISTORY","seed":11,"step":10,"act":"edit HistParams { D1 = 5.5, RoundR = 4, RoundOff = True, SphR = 4, Copies = 2, Hole7Off = True, ChamferD = 3 }","volume":1956609.9593601984}
+{"test":"KRN11-HISTORY","seed":11,"step":11,"act":"undo","volume":1956609.9593601984}
+{"test":"KRN11-HISTORY","seed":11,"step":12,"act":"undo","volume":1952682.9685432112}
+{"test":"KRN11-HISTORY","seed":11,"step":13,"act":"save/load","volume":1952682.9685432112}
+{"test":"KRN11-HISTORY","seed":11,"step":14,"act":"save/load","volume":1952682.9685432112}
+{"test":"KRN11-HISTORY","seed":11,"step":15,"act":"edit HistParams { D1 = 5.5, RoundR = 5, RoundOff = True, SphR = 3, Copies = 2, Hole7Off = False, ChamferD = 3 }","volume":1951269.2518490946}
+{"test":"KRN11-HISTORY","seed":12,"step":0,"act":"edit HistParams { D1 = 6, RoundR = 5, RoundOff = True, SphR = 4, Copies = 3, Hole7Off = False, ChamferD = 3 }","volume":2920895.581823654}
+{"test":"KRN11-HISTORY","seed":12,"step":1,"act":"edit HistParams { D1 = 7, RoundR = 5, RoundOff = True, SphR = 4, Copies = 3, Hole7Off = False, ChamferD = 3 }","volume":2902517.264800154}
+{"test":"KRN11-HISTORY","seed":12,"step":2,"act":"edit HistParams { D1 = 7, RoundR = 3, RoundOff = True, SphR = 4, Copies = 3, Hole7Off = False, ChamferD = 3 }","volume":2902517.264800154}
+{"test":"KRN11-HISTORY","seed":12,"step":3,"act":"edit HistParams { D1 = 7, RoundR = 3, RoundOff = True, SphR = 4, Copies = 2, Hole7Off = False, ChamferD = 3 }","volume":1935011.5098667694}
+{"test":"KRN11-HISTORY","seed":12,"step":4,"act":"edit HistParams { D1 = 7, RoundR = 3, RoundOff = True, SphR = 4, Copies = 2, Hole7Off = True, ChamferD = 3 }","volume":1938938.5006837568}
+{"test":"KRN11-HISTORY","seed":12,"step":5,"act":"undo","volume":1935011.5098667694}
+{"test":"KRN11-HISTORY","seed":12,"step":6,"act":"save/load","volume":1935011.5098667694}
+{"test":"KRN11-HISTORY","seed":12,"step":7,"act":"edit HistParams { D1 = 7, RoundR = 3, RoundOff = True, SphR = 4, Copies = 2, Hole7Off = False, ChamferD = 3 }","volume":1935011.5098667694}
+{"test":"KRN11-HISTORY","seed":12,"step":8,"act":"edit HistParams { D1 = 8, RoundR = 3, RoundOff = True, SphR = 4, Copies = 2, Hole7Off = False, ChamferD = 3 }","volume":1920874.3429256154}
+{"test":"KRN11-HISTORY","seed":12,"step":9,"act":"edit HistParams { D1 = 8, RoundR = 3, RoundOff = True, SphR = 4, Copies = 2, Hole7Off = True, ChamferD = 3 }","volume":1924801.3337426027}
+{"test":"KRN11-HISTORY","seed":12,"step":10,"act":"edit HistParams { D1 = 8, RoundR = 5, RoundOff = True, SphR = 4, Copies = 2, Hole7Off = True, ChamferD = 3 }","volume":1924801.3337426027}
+{"test":"KRN11-HISTORY","seed":12,"step":11,"act":"edit HistParams { D1 = 8, RoundR = 2, RoundOff = True, SphR = 4, Copies = 2, Hole7Off = True, ChamferD = 3 }","volume":1924801.3337426027}
+{"test":"KRN11-HISTORY","seed":12,"step":12,"act":"undo","volume":1924801.3337426027}
+{"test":"KRN11-HISTORY","seed":12,"step":13,"act":"save/load","volume":1924801.3337426027}
+{"test":"KRN11-HISTORY","seed":12,"step":14,"act":"save/load","volume":1924801.3337426027}
+{"test":"KRN11-HISTORY","seed":12,"step":15,"act":"save/load","volume":1924801.3337426027}
+{"test":"KRN11-HISTORY-QUALIFICATION","ok":true}
+diff dump: 22 cases → /tmp/rp_9_21_2398
+{"test":"KRN05-UNITE-MULTIBODY","outcome":"Success","guarantee":"ExactAnalytic","bodies":"2","volume":"3924.957083799976","seconds":1.5040277,"detail":""}
+{"test":"KRN05-UNITE-MULTIBODY-NO-CYCLE","ok":true}
+{"test":"KRN06-VARIABLE-REFERENCE","constant":77.25666120267078,"exact":77.25666117691861}
+{"test":"KRN06-VARIABLE","name":"convex 2\u21924","volume":47919.94797252913,"reference":47919.94797252913,"removed":80.05202747086626,"direct":true,"guarantee":"ExactAnalytic"}
+{"test":"KRN06-VARIABLE","name":"convex 4\u21921","volume":47940.02266769294,"reference":47940.022667684934,"removed":59.97733231506299,"direct":true,"guarantee":"ExactAnalytic"}
+{"test":"KRN06-VARIABLE","name":"concave 2\u21924","volume":36080.05202747087,"reference":36080.05202747087,"removed":80.05202747086626,"direct":true,"guarantee":"ExactAnalytic"}
+{"test":"KRN06-VARIABLE","name":"part R1.5\u21925","volume":215851.0188588176,"reloaded":215851.0188588176,"reference":215851.01885881013,"err":null}
+{"test":"KRN06-VARIABLE-RADIUS-EXACT","ok":true}
+{"test":"KRN04-UNIQ","eps":0.002,"tilt":0.0001,"curves":2,"length":125.66432477668187,"reference":125.66433385644417,"uncertified":"trace certificate: trace step at (-9.988994, 0.511637, 1.999999) not proven single-branch"}
+{"test":"KRN04-UNIQ","eps":0.0015,"tilt":3E-05,"curves":2,"length":125.66371913237154,"reference":125.66373003102578,"uncertified":"trace certificate: too many cells"}
+{"test":"KRN04-UNIQ","eps":0.0008,"tilt":3E-05,"curves":1,"length":63.10589412328134,"reference":125.66376892080677,"uncertified":"trace certificate: near-tangent cell at (2.000892, -9.750006, 1.99944) (single branch not proven)"}
+{"test":"KRN04-UNIQ","eps":0.0005,"tilt":0.0001,"curves":1,"length":41.89048816286284,"reference":125.66571177422058,"uncertified":"trace certificate: trace step at (5.01423, 8.65477, 1.999999) not proven single-branch"}
+{"test":"KRN04-UNIQ","eps":0.003,"tilt":0.0001,"curves":2,"length":125.66385578030294,"reference":125.66387394618407,"uncertified":"trace certificate: too many cells"}
+{"test":"KRN04-UNIQ","eps":0.01,"tilt":3E-05,"curves":2,"length":125.66362104694383,"reference":125.66370900453882,"uncertified":null}
+{"test":"KRN04-UNIQ","acceptedCloseBranches":1}
+{"test":"KRN04-UNIQ","jumpGood":null,"jump":"trace certificate: trace step at (5.00005, 8.66034, 1.9905) not proven single-branch"}
+{"test":"KRN04-TRACE-UNIQUE-BRANCH","ok":true}
+{"test":"KRN04-NURBS-UNIQ","eps":0.01,"tilt":0.0001,"curves":2,"length":125.66373759894788,"reference":125.66374052629958,"uncertified":null}
+{"test":"KRN04-NURBS-UNIQ","eps":0.003,"tilt":3E-05,"curves":2,"length":125.66371569437197,"reference":125.66371651592983,"uncertified":null}
+{"test":"KRN04-NURBS-UNIQ","eps":0.002,"tilt":0.0001,"curves":2,"length":125.66433352975076,"reference":125.66433377613859,"uncertified":"NURBS certificate: trace step at (-6.982349, -7.159214, 2) not proven single-branch (a 1.55E-06 c 1.29E-06 Hs 0.000574)"}
+{"test":"KRN04-NURBS-UNIQ","eps":0.0008,"tilt":0.0001,"curves":2,"length":54.780422105091944,"reference":125.66587357827538,"uncertified":"NURBS certificate: trace step at (-5.508723, 8.34496, 2) not proven single-branch (a 0.000126 c 7.07E-05 Hs 0.000608)"}
+{"test":"KRN04-NURBS-UNIQ","eps":0.0005,"tilt":3E-05,"curves":2,"length":92.0216615415117,"reference":125.66434431330076,"uncertified":"NURBS certificate: trace step at (-9.983374, 0.564746, 2) not proven single-branch (a 2.63E-05 c 2.06E-05 Hs 0.000576)"}
+{"test":"KRN04-NURBS-UNIQ","loop":true,"length":5.8824867322248915,"reference":5.882284978414923,"uncertified":null}
+{"test":"KRN04-NURBS-UNIQ","nn":true,"eps":0.01,"tilt":0.0001,"curves":2,"length":125.66373759896695,"reference":125.66374052629958,"uncertified":null}
+{"test":"KRN04-NURBS-UNIQ","nn":true,"eps":0.003,"tilt":3E-05,"curves":2,"length":125.66371569437194,"reference":125.66371651592983,"uncertified":null}
+{"test":"KRN04-NURBS-UNIQ","nn":true,"eps":0.002,"tilt":0.0001,"curves":2,"length":125.66433352533724,"reference":125.66433377613859,"uncertified":"NURBS\u00D7NURBS certificate: trace step at (-6.840895, -7.295703, 2) not proven single-branch (E 0.501 s 0.00162 T 0.000725)"}
+{"test":"KRN04-NURBS-UNIQ","nn":true,"eps":0.0008,"tilt":0.0001,"curves":4,"length":54.779226470022415,"reference":125.66587357827538,"uncertified":"NURBS\u00D7NURBS certificate: trace step at (-5.510625, 8.344953, 2) not proven single-branch (E 3.37 s 1.63 T 0.000731)"}
+{"test":"KRN04-NURBS-UNIQ","nn":true,"eps":0.0005,"tilt":3E-05,"curves":4,"length":92.0211467173113,"reference":125.66434431330076,"uncertified":"NURBS\u00D7NURBS certificate: trace step at (-9.984369, 0.560629, 2) not proven single-branch (E 6.45 s 1.4 T 0.000726)"}
+{"test":"KRN04-NURBS-UNIQ","jump":"NURBS certificate: trace step at (-4.897799, -8.923161, 1.991977) not proven single-branch (a -2.53E-05 c 0.00166 Hs 0.413)","jumpNN":"NURBS\u00D7NURBS certificate: trace step at (-4.896431, -8.923912, 1.991977) not proven single-branch (E 3.79 s 0.14 T 0.517)","good":null,"goodNN":null}
+{"test":"KRN04-NURBS-UNIQ","acceptedCloseBranches":2,"acceptedCloseBranchesNN":2}
+{"test":"KRN04-NURBS-UNIQUE-BRANCH","ok":true}
+{"test":"KRN07-NURBS-NN","name":"tool turned 60\u00B0 about X and shifted 1.5 along X (crossing cylinders)","volume":"909.8501393509731","want":"909.8501393509313","area":"930.8517771996627","areaWant":"930.851777200086","bodies":1,"guarantee":"ExactAnalytic","ms":597}
+{"test":"KRN07-NURBS-NN","name":"tool shifted (-4,-4,5) (parallel axes)","volume":"1319.883434194697","want":"1319.8834341946558","area":"828.4487515402677","areaWant":"828.4487515401062","bodies":1,"guarantee":"ExactAnalytic","ms":430}
+{"test":"KRN07-NURBS-NN","name":"tool turned 30\u00B0 about (1,1,0) and shifted","volume":"610.9721278104694","want":"610.9721278108631","area":"834.2895792354352","areaWant":"834.2895792354575","bodies":1,"guarantee":"ExactAnalytic","ms":759}
+{"test":"KRN07-NURBS-NURBS-BOOLEAN","ok":true}
+{"test":"KRN07-NURBS","name":"plane z=15 (top cut)","volume":1178.0972450960685,"want":1178.0972450961724,"guarantee":"ExactAnalytic","ms":62,"nurbsFaces":1}
+{"test":"KRN07-NURBS","name":"plane x=3 (slab cut)","volume":979.9219123543581,"want":979.9219123544153,"guarantee":"ExactAnalytic","ms":106,"nurbsFaces":1}
+{"test":"KRN07-NURBS","name":"hole r2 clear of the NURBS face","volume":1319.4689145075906,"want":1319.4689145077132,"guarantee":"ExactAnalytic","ms":46,"nurbsFaces":1}
+{"test":"KRN07-NURBS","name":"cylinder r3 across the NURBS face","volume":1331.0529446691985,"want":1331.0529446715466,"guarantee":"ExactAnalytic","ms":205,"nurbsFaces":1}
+{"test":"KRN07-NURBS","name":"sphere r3 on the NURBS face","volume":1517.4345233375004,"want":1517.434523338399,"guarantee":"ExactAnalytic","ms":180,"nurbsFaces":1}
+{"test":"KRN07-NURBS","name":"small sphere r0.1 on the NURBS face (closed branch)","volume":1570.7942363266138,"want":1570.7942363267905,"guarantee":"ExactAnalytic","ms":158,"nurbsFaces":1}
+{"test":"KRN07-NURBS-EXACT-BOOLEAN","ok":true}
+  big model: 201 features, 406 faces, full build 23971 ms, ExactAnalytic
+{"test":"KRN11-BIG-MODEL","features":201,"fullMs":23971,"editMedianMs":1046,"editMaxMs":1156,"memGrowthMB":-9.5}
+{"test":"KRN11-BIG-MODEL","ok":true}
+{"test":"KRN05-USER-X05-FULL-TREE","errors":"","downgrades":"","faces":107,"volume":41485663.280197024}
+{"test":"KRN05-USER-X05-FULL-TREE","ok":true}
+{"model":"user_k123_part.p3d","Features":0,"Errors":0,"Faces":0,"Volume":0,"ms":0,"same":true}
+{"model":"user_k124_dims.p3d","Features":0,"Errors":0,"Faces":0,"Volume":0,"ms":0,"same":true}
+{"model":"user_k125_tube.p3d","Features":12,"Errors":0,"Faces":35,"Volume":8421325.774718525,"ms":5074,"same":true}
+{"model":"user_k128_x05.p3d","Features":0,"Errors":0,"Faces":0,"Volume":0,"ms":0,"same":true}
+{"model":"user_k132_x05.p3d","Features":3,"Errors":0,"Faces":37,"Volume":43026382.96667489,"ms":754,"same":true}
+{"model":"user_k136_x05.p3d","Features":3,"Errors":0,"Faces":167,"Volume":41172038.02418906,"ms":12615,"same":true}
+{"model":"user_k148_sweep_blend.p3d","Features":4,"Errors":1,"Faces":15,"Volume":642818.3550956353,"ms":16154,"same":true}
+{"model":"user_k148e_sweep_blend_r555.p3d","Features":5,"Errors":0,"Faces":18,"Volume":643495.8654491355,"ms":19959,"same":true}
+{"model":"user_k150_sweep_blend_c972.p3d","Features":3,"Errors":1,"Faces":11,"Volume":645199.9207494807,"ms":3249,"same":true}
+{"model":"user_k153_tube_chamfer.p3d","Features":16,"Errors":1,"Faces":47,"Volume":8243382.442603442,"ms":11472,"same":true}
+{"model":"user_k179_gear.p3d","Features":1,"Errors":0,"Faces":142,"Volume":772714.2418011543,"ms":19115,"same":true}
+{"test":"KRN00-USER-MODELS","ok":true}
+{"loft":645529.995,"hollow":1,"guarantee":"ExactAnalytic"}
+{"tag":"4.1 round R10.29","volume":644280.526,"valid":true,"guarantee":"ExactPolyhedral"}
+{"tag":"4.3 round R6.27","volume":644850.616,"valid":true,"guarantee":"ExactPolyhedral"}
+{"tag":"4.4 chamfer 2.18 at the round","volume":644787.999,"valid":true,"guarantee":"ExactPolyhedral"}
+{"tag":"k144 round R10.29 direct","volume":644582.87,"valid":true,"guarantee":"ExactAnalytic"}
+{"tag":"k144 chamfer 3 direct","volume":645437.839,"valid":true,"guarantee":"ExactAnalytic"}
+{"tag":"k144 round R3 direct","volume":645477.513,"valid":true,"guarantee":"ExactAnalytic"}
+{"tag":"k144 chamfer 10.29 direct","volume":644433.431,"valid":true,"guarantee":"ExactAnalytic"}
+{"tag":"k144 round R1 direct","volume":645525.201,"valid":true,"guarantee":"ExactAnalytic"}
+{"test":"KRN06-LOFT-BLENDS-K139","ok":true}
+{"test":"KRN06-TANGENT-CHAIN-K145","model":"extrude","removed":"339.4887737227182","want":339.48877372268805,"valid":true,"guarantee":"ExactAnalytic","direct":true}
+{"test":"KRN06-TANGENT-CHAIN-K145","model":"loft prism","faces":"FacetedSurface","removed":"339.48877373166033","want":339.48877372268805,"valid":true,"guarantee":"ExactAnalytic","joints":8}
+{"test":"KRN06-TANGENT-CHAIN-K145","model":"loft","gotMesh":447.03177406659233,"ms":948,"removed":"440.4815759429184","valid":true,"guarantee":"ExactAnalytic","direct":true,"joints":8,"warn":"Round: direct blend (8 edge(s), exact blend surfaces)."}
+{"test":"KRN06-TANGENT-CHAIN-K145","model":"loft by the cutter","cutMesh":448.8312472800026,"guarantee":"ExactPolyhedral"}
+{"test":"KRN06-TANGENT-CHAIN-K145","ok":true}
+{"test":"KRN06-CHAMFER-CHAIN-K146","model":"equal","removed":"351.5870138909668","want":351.5870138909414,"valid":true,"guarantee":"ExactAnalytic","joints":0,"direct":false}
+{"test":"KRN06-CHAMFER-CHAIN-K146","model":"two distances","removed":"331.57632097222813","want":331.5763209312512,"valid":true,"guarantee":"ExactAnalytic","joints":8,"direct":true}
+{"test":"KRN06-CHAMFER-CHAIN-K146","model":"loft prism","removed":"331.57632095663575","want":331.5763209312512,"valid":true,"guarantee":"ExactAnalytic","joints":8}
+{"test":"KRN06-CHAMFER-CHAIN-K146","model":"loft","error":null,"removed":"347.88529637880856","gotMesh":342.1720662624284,"valid":true,"guarantee":"ExactAnalytic","switches":8,"dr":null}
+{"test":"KRN06-CHAMFER-CHAIN-K146","model":"loft by the cutter","cutMesh":348.02761459126486,"guarantee":"ExactPolyhedral"}
+{"test":"KRN06-CHAMFER-CHAIN-K146","ok":true}
+{"file":"case_s3_C2.17_73931.p3d","Ok":true,"dv":239.9796,"want":239.9796,"Ms":14936,"Problems":[],"expected":null}
+{"file":"case_s3_R2.17_73931.p3d","Ok":true,"dv":96.7719,"want":97.4204,"Ms":1252,"Problems":[],"expected":null}
+{"file":"fail_s10_C2.19_38878.p3d","Ok":true,"dv":52.0596,"want":52.1729,"Ms":364,"Problems":[],"expected":null}
+{"file":"fail_s10_R2.19_38878.p3d","Ok":true,"dv":27.271,"want":27.5096,"Ms":412,"Problems":[],"expected":null}
+{"file":"fail_s13_C1.24_4280.p3d","Ok":true,"dv":9.3578,"want":9.3636,"Ms":1894,"Problems":[],"expected":null}
