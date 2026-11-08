@@ -1,0 +1,1 @@
+seconds 13 nproc 4 env  cmd sldprt tests/k01/data/sw_rv_3645t16.SLDPRT tests/k01/data/sw_rv_3099t13.SLDPRT tests/k01/data/sw_rv_70255k26.SLDPRT
