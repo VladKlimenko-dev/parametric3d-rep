@@ -1,0 +1,2 @@
+exit 1
+seconds 4512 nproc 4 env P3D_SLDOUT=res/out cmd sldprt
