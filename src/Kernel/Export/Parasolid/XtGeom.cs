@@ -537,6 +537,7 @@ internal static class XtPoly
 
     /// <summary>Сгущение ломаной кривой пересечения двух поверхностей: точки между узлами карты переносятся на обе поверхности
     /// попеременной проекцией (сходится к линии пересечения при пересечении под углом).</summary>
+    static readonly bool DenseCheckOff = Environment.GetEnvironmentVariable("P3D_XTDENSECHECK") == "0";
     static readonly bool IntNewtonOff = Environment.GetEnvironmentVariable("P3D_XTINTNEWTON") == "0";
 
     /// <summary>Нормаль поверхности в точке q на ней — по проекциям двух близких точек (у XtSurf нет производных).</summary>
@@ -613,6 +614,11 @@ internal static class XtPoly
                     // 6168T106). Тогда — шаги Ньютона по касательным плоскостям обеих поверхностей (ближайшая к точке точка
                     // их линии пересечения), как маршевые шаги пересечения в OCCT. Мутация P3D_XTINTNEWTON=0.
                     if (!conv && !IntNewtonOff && IntersectNewton(a, b, (a.Project(p) - p).Length > 1e-9 ? p0 : p) is { } x) p = x;
+                    // k184: точка, так и не севшая на обе поверхности (граница скругления BLEND_BOUND против плоскости или
+                    // цилиндра: попеременная проекция уходит к другому касанию), не ставится — между точками карты остаётся
+                    // кубический сплайн по самой карте (её хордовая ошибка задана файлом). Прежде такие точки уводили ребро на
+                    // 0.3–0.5 мм. Мутация P3D_XTDENSECHECK=0.
+                    if (!DenseCheckOff && ((a.Project(p) - p).Length > 1e-8 || (b.Project(p) - p).Length > 1e-8)) continue;
                 }
                 res.Add(p);
             }
