@@ -193,11 +193,24 @@ public static class XtToStep
                         if (a0 == null && b0 == null) continue;
                         var mid = a0 != null && b0 != null ? (a0.Value + b0.Value) / 2 : (a0 ?? b0)!.Value;
                         var P = XtSurf.Of(f, osn) is { } xs ? xs.Project(mid) : mid;
-                        var c = bl.CentreAt(P); var rad = P - c;
-                        if (rad.LengthSquared < 1e-24) continue;
                         var n = NatNormal(osn, P); if (n == null || n.Value.LengthSquared < 1e-30) continue;
-                        double cosR = Vector3d.Dot(n.Value.Normalized(), rad.Normalized());
-                        if (Math.Abs(cosR) < (supportsOnly ? 0.9 : 0.999)) continue;            // не касается
+                        var nh = n.Value.Normalized();
+                        // центр шара — на нормали соседа на расстоянии радиуса, с той стороны, где ось скругления ближе
+                        // (у опор-NURBS уточнение центра на смещённых опорах ненадёжно: «нет касательного соседа» у сверла)
+                        double r = Math.Max(bl.R0, bl.R1);
+                        double cosR;
+                        if (r > 1e-12)
+                        {
+                            var cp = P + nh * r; var cm = P - nh * r;
+                            double dp = (bl.SpineNear(cp) - cp).Length, dm = (bl.SpineNear(cm) - cm).Length;
+                            if (Math.Min(dp, dm) > 0.2 * r && !supportsOnly) continue;          // сосед не касается шара
+                            cosR = dp < dm ? -1 : 1;                                             // P − c вдоль −n или +n
+                        }
+                        else
+                        {
+                            var c = bl.CentreAt(P); var rad = P - c; if (rad.LengthSquared < 1e-24) continue;
+                            cosR = Vector3d.Dot(nh, rad.Normalized()); if (Math.Abs(cosR) < 0.9) continue;
+                        }
                         double so = cosR * ((of.C("sense") != '-') == (osn.C("sense") != '-') ? 1 : -1);
                         if (XtDebug) warn?.Add($"XTDBG blend {sn.Id} face {fc.Id}: neighbour {of.Id} {osn.Name} support={supportsOnly} cos {cosR:F3} faceSense {of.C("sense")} surfSense {osn.C("sense")} ours {sOurs} -> same {(so > 0) == (sOurs > 0)}");
                         return (so > 0) == (sOurs > 0);
