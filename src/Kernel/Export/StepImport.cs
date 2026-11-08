@@ -127,6 +127,7 @@ public static class StepImport
         return (lo, hi);
     }
 
+    static readonly bool EdgeIdOff = Environment.GetEnvironmentVariable("P3D_STEPEDGEID") == "0";
     static readonly bool EdgeTolOff = Environment.GetEnvironmentVariable("P3D_STEPEDGETOL") == "0";
     static readonly bool ImpRangeOff = Environment.GetEnvironmentVariable("P3D_IMPRANGE") == "0";
     static IEnumerable<double> RangeSamples(Curves.ICurve3 c)
@@ -303,6 +304,8 @@ public static class StepImport
             // соединяют одни и те же точки, и ключ по одним концам сливал их в одно ребро —
             // крышки прочитанного тела оставались с одним ребром и нулевой площадью.
             var edges = new Dictionary<string, TEdge>();
+            var edgeByEc = new Dictionary<int, TEdge>();
+            var edgeKeyOf = new Dictionary<TEdge, string>(ReferenceEqualityComparer.Instance);
 
             static (long, long, long) K(Vector3d p) =>
                 ((long)Math.Round(p.X / Tol.Weld), (long)Math.Round(p.Y / Tol.Weld), (long)Math.Round(p.Z / Tol.Weld));
@@ -552,6 +555,19 @@ public static class StepImport
                         string ends = string.CompareOrdinal(ka.ToString(), kb.ToString()) <= 0
                             ? ka + "|" + kb : kb + "|" + ka;
                         string key = ends + "|" + km;
+                        // k184: РЕБРО ФАЙЛА — ПО EDGE_CURVE. Два разных ребра с теми же концами и серединой (витки резьбы
+                        // штампа, сходящиеся к одной вершине) склеивались по ключу в одно, у него выходило больше двух граней
+                        // (штампы 2602A123, 8294A14). Ребро, уже занятое двумя гранями и пришедшее из другого EDGE_CURVE, —
+                        // отдельное; ребро того же EDGE_CURVE — то же. Склейка разных EDGE_CURVE по ключу (файлы с повторами)
+                        // остаётся, пока у ребра меньше двух граней. Мутация P3D_STEPEDGEID=0.
+                        if (!EdgeIdOff && parser.EdgeCurveOf.TryGetValue(c, out int ecId))
+                        {
+                            if (edgeByEc.TryGetValue(ecId, out var known)) key = edgeKeyOf[known];
+                            else if (edges.TryGetValue(key, out var taken) && taken.CoEdges.Count >= 2)
+                            {
+                                key = key + "#ec" + ecId;
+                            }
+                        }
 
                         if (!edges.TryGetValue(key, out var edge))
                         {
@@ -562,7 +578,9 @@ public static class StepImport
                             edge.Tolerance = Math.Max(Math.Min((ca - edge.V0.P).Length, (ca - edge.V1.P).Length),
                                                       Math.Min((cb - edge.V0.P).Length, (cb - edge.V1.P).Length));
                             edges[key] = edge;
+                            edgeKeyOf[edge] = key;
                         }
+                        if (!EdgeIdOff && parser.EdgeCurveOf.TryGetValue(c, out int ecId2)) edgeByEc.TryAdd(ecId2, edge);
                         if (!EdgeTolOff && parser.EdgeTolerance.TryGetValue(c, out double ftol)) edge.Tolerance = Math.Max(edge.Tolerance, ftol);
                         // НАПРАВЛЕНИЕ ОБХОДА. У замкнутой окружности начало и конец совпадают,
                         // и сравнение концов всегда давало «не развёрнуто»: верхняя окружность
