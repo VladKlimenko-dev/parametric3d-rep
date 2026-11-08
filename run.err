@@ -1,0 +1,2 @@
+exit 1
+seconds 3117 nproc 4 env P3D_CUSPCLOSED=0 cmd loftcorpus140
