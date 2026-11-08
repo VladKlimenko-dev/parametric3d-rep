@@ -420,6 +420,8 @@ public sealed class StepParser
     /// <summary>Концы каждой кривой контура по вершинам файла (в направлении обхода).</summary>
     public readonly Dictionary<ICurve3, (Vector3d Start, Vector3d End)> LastEnds = new(ReferenceEqualityComparer.Instance);
 
+    static readonly bool NoBoundOff = Environment.GetEnvironmentVariable("P3D_STEPNOBOUND") == "0";
+
     public (ISurface3 Surface, List<List<ICurve3>> Loops, bool SameSense)? Face(string arg)
     {
         int id = Ref(arg);
@@ -471,6 +473,10 @@ public sealed class StepParser
 
         // Флаг совпадения с нормалью поверхности отдаётся наружу: без него тело собиралось с
         // вывернутыми гранями (у конуса объём выходил 58 864 вместо 82 467).
+        // k182: грань БЕЗ КОНТУРОВ (пустой список границ) — вся замкнутая поверхность: шарик подшипника из Parasolid. Прежде
+        // такая грань отбрасывалась, и тело-шар пропадало. Мутация P3D_STEPNOBOUND=0.
+        bool noBounds = SplitArgs(e.Args[1].Trim('(', ')')).All(x => string.IsNullOrWhiteSpace(x));
+        if (loops.Count == 0 && noBounds && !NoBoundOff) return (surf, loops, faceSame);
         return loops.Count == 0 ? null : (surf, loops, faceSame);
     }
 

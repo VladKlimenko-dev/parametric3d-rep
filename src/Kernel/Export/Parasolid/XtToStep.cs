@@ -177,6 +177,13 @@ public static class XtToStep
                         pts.Add(pS.Value);
                         if (Math.Sqrt(bd) > 1e-6) warn?.Add("Parasolid: a closed free-form edge does not pass through its vertex.");
                     }
+                    else if (pts.Count > 2)
+                    {
+                        // кольцо без вершины: конец ломаной — точно её начало (у карты пересечения последняя точка отстоит
+                        // от первой на доли микрона, и замкнутое ребро «не замыкалось»)
+                        pts = pts.ToList();
+                        if ((pts[^1] - pts[0]).Length < 1e-6) pts[^1] = pts[0]; else pts.Add(pts[0]);
+                    }
                 }
                 ringStart = pts[0];
                 cid = Interp(pts);

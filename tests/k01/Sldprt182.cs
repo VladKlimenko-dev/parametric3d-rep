@@ -28,11 +28,14 @@ static partial class Program
                 var xt = SldprtFile.PartitionXt(bytes, w);
                 var f = XtReader.Read(xt);
                 var counts = f.Order.GroupBy(n => n.Name).ToDictionary(g => g.Key, g => g.Count());
+                sldStage = "convert";
                 string step = XtToStep.Convert(f, Path.GetFileNameWithoutExtension(path), w);
                 double tConv = sw.Elapsed.TotalMilliseconds;
+                sldStage = $"read STEP (convert {tConv:F0} ms, {step.Length / 1024} KB)";
                 if (Environment.GetEnvironmentVariable("P3D_SLDOUT") is { Length: > 0 } od) { Directory.CreateDirectory(od); File.WriteAllText(Path.Combine(od, Path.GetFileNameWithoutExtension(path) + ".step"), step); }
                 var part = Exchange.Read(step, out _, w);
                 double tAll = sw.Elapsed.TotalMilliseconds;
+                sldStage = $"validate (convert {tConv:F0} ms, read {sw.Elapsed.TotalMilliseconds - tConv:F0} ms)";
                 var bodies = part?.Bodies ?? new List<TSolid>();
                 var b = bodies.FirstOrDefault();
                 var vrs = bodies.Select(x => SolidValidator.Validate(x)).ToList();
@@ -113,13 +116,16 @@ static partial class Program
     }
 
     /// <summary>Разбор файла не дольше P3D_SLDTIMEOUT секунд (по умолчанию 300): долгий файл не задерживает остальные.</summary>
+    static volatile string sldStage = "";
+
     static void WithTimeout(string name, Action work)
     {
+        sldStage = "read XT";
         int lim = int.TryParse(Environment.GetEnvironmentVariable("P3D_SLDTIMEOUT"), out var l) ? l : 300;
         var t = Task.Run(work);
         bool done;
         try { done = t.Wait(TimeSpan.FromSeconds(lim)); }
         catch (AggregateException ae) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ae.InnerException ?? ae).Throw(); throw; }
-        if (!done) { Log(new { test = "sldprt", file = name, timeout = lim }); throw new Exception($"timeout {lim} s"); }
+        if (!done) { Log(new { test = "sldprt", file = name, timeout = lim, stage = sldStage }); throw new Exception($"timeout {lim} s at {sldStage}"); }
     }
 }
