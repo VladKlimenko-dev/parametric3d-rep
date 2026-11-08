@@ -206,8 +206,29 @@ static partial class Program
                 }
             }
             var mentioned = cnt.Keys.Select(k => k.Split(' ')[1].Split('/')[0]).Distinct().Take(8).ToList();
+            // луч из середины треугольника грани вдоль её нормали: чётное число пересечений с прочими треугольниками — нормаль
+            // наружу (верно), нечётное — внутрь
+            var tris = new List<(Vector3d A, Vector3d B, Vector3d C, uint F)>();
+            for (int t = 0; t + 2 < md.Indices.Length; t += 3)
+                tris.Add(((Vector3d)md.Vertices[md.Indices[t]].P, (Vector3d)md.Vertices[md.Indices[t + 1]].P, (Vector3d)md.Vertices[md.Indices[t + 2]].P, md.Vertices[md.Indices[t]].FaceId));
+            string Ray(TFace x)
+            {
+                var mine = tris.Where(q => q.F == x.Id).OrderByDescending(q => Vector3d.Cross(q.B - q.A, q.C - q.A).Length).FirstOrDefault();
+                if (mine.F != x.Id) return "?";
+                var c = (mine.A + mine.B + mine.C) / 3; var n = Vector3d.Cross(mine.B - mine.A, mine.C - mine.A).Normalized();
+                var o = c + n * 1e-4; var dir = (n + new Vector3d(1.234e-3, -2.345e-3, 3.456e-3)).Normalized();
+                int hits = 0;
+                foreach (var q in tris)
+                {
+                    var e1 = q.B - q.A; var e2 = q.C - q.A; var pv = Vector3d.Cross(dir, e2); double det = Vector3d.Dot(e1, pv);
+                    if (Math.Abs(det) < 1e-18) continue; double inv = 1 / det; var tv = o - q.A; double uu = Vector3d.Dot(tv, pv) * inv; if (uu < 0 || uu > 1) continue;
+                    var qv = Vector3d.Cross(tv, e1); double vv = Vector3d.Dot(dir, qv) * inv; if (vv < 0 || uu + vv > 1) continue;
+                    if (Vector3d.Dot(e2, qv) * inv > 1e-9) hits++;
+                }
+                return hits % 2 == 0 ? "out" : "IN";
+            }
             var fstats = bodies[bi].Faces.Where(x => mentioned.Contains(x.Tag) && faceStat.ContainsKey(x.Id))
-                .Select(x => { var st = faceStat[x.Id]; var cc = st.A > 0 ? st.S / st.A : Vector3d.Zero; var ag = agree.GetValueOrDefault(x.Id); return $"{x.Tag}: tris {st.N} area {st.A:G4} centroid ({cc.X:F3},{cc.Y:F3},{cc.Z:F3}) normal agrees {ag.Yes}/{ag.Yes + ag.No} rev {x.Reversed}"; }).ToList();
+                .Select(x => { var st = faceStat[x.Id]; var cc = st.A > 0 ? st.S / st.A : Vector3d.Zero; var ag = agree.GetValueOrDefault(x.Id); return $"{x.Tag}: tris {st.N} area {st.A:G4} centroid ({cc.X:F3},{cc.Y:F3},{cc.Z:F3}) normal agrees {ag.Yes}/{ag.Yes + ag.No} rev {x.Reversed} ray {Ray(x)}"; }).ToList();
             Log(new { test = "sldprt-diag", file, body = bi + 1, faces = cnt.OrderByDescending(kv => kv.Value).Take(12).Select(kv => $"{kv.Key} ×{kv.Value}").ToList(), fstats });
         }
     }
