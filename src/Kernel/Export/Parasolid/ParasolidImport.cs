@@ -21,9 +21,9 @@ public static class ParasolidImport
 
     public static string StepText(byte[] bytes, string name, List<string>? warnings = null)
     {
-        byte[] xt = bytes.Length >= 2 && bytes[0] == (byte)'P' && bytes[1] == (byte)'S' ? bytes : SldprtFile.PartitionXt(bytes, warnings);
-        var f = XtReader.Read(xt);
-        if (f.Truncated) warnings?.Add($"Parasolid: the body stream is incomplete ({f.Order.Count} nodes read).");
-        return XtToStep.Convert(f, name, warnings);
+        var xts = bytes.Length >= 2 && bytes[0] == (byte)'P' && bytes[1] == (byte)'S' ? new List<byte[]> { bytes } : SldprtFile.PartsXt(bytes, warnings);
+        var files = xts.Select(x => XtReader.Read(x)).ToList();
+        foreach (var f in files) if (f.Truncated) warnings?.Add($"Parasolid: the body stream is incomplete ({f.Order.Count} nodes read).");
+        return XtToStep.Convert(files, name, warnings);
     }
 }

@@ -71,19 +71,35 @@ public static class SldprtFile
         var xt = Section(u, 4, warnings);
         // деталь из импортированного тела (элемент «Imported»): в разделе — пустая модель, тело — в потоке
         // «Config-N-FeatureBodies/LocalBodies» (заголовок с именем элемента, затем раздел того же устройства)
-        string cfg = Regex.Match(pick, @"Config-\d+").Value;
-        if (st.TryGetValue(cfg + "-FeatureBodies/LocalBodies", out var lb) && !HasFaces(xt))
-        {
-            int mk = IndexOf(lb, SectionMagic, 0);
-            if (mk >= 4)
-            {
-                var x2 = Section(lb, mk, warnings);
-                if (x2.Length > 0) { warnings?.Add("SLDPRT: the part body is an imported feature body (LocalBodies)."); xt = x2; }
-                if (BitConverter.ToInt32(lb, 0) > 1) warnings?.Add($"SLDPRT: {BitConverter.ToInt32(lb, 0)} imported feature bodies stored; read the first.");
-            }
-        }
         return xt;
     }
+
+    /// <summary>
+    /// Все потоки XT детали: раздел конфигурации; если в нём нет граней (деталь из импортированных тел) — каждое тело
+    /// потока «Config-N-FeatureBodies/LocalBodies» (корпус 7812K81: 21 тело; прежде читалось только первое).
+    /// </summary>
+    public static List<byte[]> PartsXt(byte[] file, List<string>? warnings = null)
+    {
+        var xt = PartitionXt(file, warnings);
+        if (HasFaces(xt)) return new List<byte[]> { xt };
+        var st = Streams(file);
+        var res = new List<byte[]>();
+        foreach (var k in st.Keys.Where(k => k.EndsWith("-FeatureBodies/LocalBodies")).OrderBy(k => k, StringComparer.Ordinal))
+        {
+            var lb = st[k];
+            for (int mk = IndexOf(lb, SectionMagic, 0); mk >= 4; mk = IndexOf(lb, SectionMagic, mk + 16))
+            {
+                var x2 = Section(lb, mk, warnings);
+                if (x2.Length > 0 && HasFaces(x2)) res.Add(x2);
+                if (LocalAllOff) break;
+            }
+            if (res.Count > 0) break;
+        }
+        if (res.Count == 0) return new List<byte[]> { xt };
+        warnings?.Add($"SLDPRT: the part is made of {res.Count} imported feature bod{(res.Count == 1 ? "y" : "ies")} (LocalBodies).");
+        return res;
+    }
+    static readonly bool LocalAllOff = Environment.GetEnvironmentVariable("P3D_SLDLOCALALL") == "0";
 
     static readonly byte[] SectionMagic = { 0x23, 0x1d, 0xd5, 0x71, 0xda, 0x81, 0x48, 0xa2, 0xa8, 0x58, 0x98, 0xb2, 0x1b, 0x89, 0xef, 0x99 };
 

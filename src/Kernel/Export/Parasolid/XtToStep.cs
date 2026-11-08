@@ -22,10 +22,21 @@ public static class XtToStep
     const double S = 1000.0;   // метры XT → мм STEP
     static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    public static string Convert(XtFile f, string name, List<string>? warnings = null)
+    public static string Convert(XtFile f, string name, List<string>? warnings = null) => Convert(new[] { f }, name, warnings);
+
+    /// <summary>Несколько потоков XT (тела импортированных элементов SolidWorks) — в один файл STEP: тело на оболочку.</summary>
+    public static string Convert(IReadOnlyList<XtFile> files, string name, List<string>? warnings = null)
     {
-        var c = new Ctx(f, warnings);
+        var sb = new StringBuilder(); var box = new[] { 1 };
+        Ctx c = null!;
         var shells = new List<int>();
+        int skipped = 0; var skippedKinds = new HashSet<string>();
+        double acc = 1e-6;
+        foreach (var f in files)
+        {
+        c = new Ctx(f, warnings) { Sb = sb, NextBox = box };
+        // точность модели — наибольший допуск рёбер и вершин XT (допусковые элементы Parasolid), мм; не меньше 10⁻⁶ мм
+        foreach (var n in f.Order) if (n.Name is "EDGE" or "VERTEX" && n.D("tolerance") is double tl && tl > 0 && tl < 1e-3) acc = Math.Max(acc, tl * S);
         foreach (var body in f.OfType("BODY"))
         {
             var faceLists = new List<List<XtNode>>();
@@ -50,28 +61,27 @@ public static class XtToStep
                 if (ids.Count > 0) shells.Add(c.E($"CLOSED_SHELL('',({string.Join(",", ids.Select(x => "#" + x))}))"));
             }
         }
+        skipped += c.Skipped; skippedKinds.UnionWith(c.SkippedKinds);
+        }
         if (shells.Count == 0) throw new InvalidDataException("Parasolid: no solid body faces in the file.");
         var solids = shells.Select(sh => c.E($"MANIFOLD_SOLID_BREP('{Esc(name)}',#{sh})")).ToList();
         int uLen = c.E("(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.))");
         int uAng = c.E("(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.))");
         int uSol = c.E("(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT())");
-        // точность модели — наибольший допуск рёбер и вершин XT (допусковые элементы Parasolid), мм; не меньше 10⁻⁶ мм
-        double acc = 1e-6;
-        foreach (var n in f.Order) if (n.Name is "EDGE" or "VERTEX" && n.D("tolerance") is double tl && tl > 0 && tl < 1e-3) acc = Math.Max(acc, tl * S);
         int unc = c.E($"UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE({N(acc)}),#{uLen},'distance_accuracy_value','')");
         int ctx = c.E($"(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#{unc}))GLOBAL_UNIT_ASSIGNED_CONTEXT((#{uLen},#{uAng},#{uSol}))REPRESENTATION_CONTEXT('',''))");
         int origin = c.E($"AXIS2_PLACEMENT_3D('',#{c.Pt(Vector3d.Zero)},#{c.Dir(Vector3d.UnitZ)},#{c.Dir(Vector3d.UnitX)})");
         c.E($"ADVANCED_BREP_SHAPE_REPRESENTATION('{Esc(name)}',(#{origin},{string.Join(",", solids.Select(x => "#" + x))}),#{ctx})");
-        if (c.Skipped > 0) warnings?.Add($"Parasolid: {c.Skipped} face(s) with an unsupported surface were left out ({string.Join(", ", c.SkippedKinds)}).");
+        if (skipped > 0) warnings?.Add($"Parasolid: {skipped} face(s) with an unsupported surface were left out ({string.Join(", ", skippedKinds)}).");
         var w = new StringBuilder();
         w.AppendLine("ISO-10303-21;");
         w.AppendLine("HEADER;");
         w.AppendLine("FILE_DESCRIPTION(('Parametric3D import of a Parasolid body'),'2;1');");
-        w.AppendLine($"FILE_NAME('{Esc(name)}','',(''),(''),'Parametric3D','{Esc(f.Modeller)}','');");
+        w.AppendLine($"FILE_NAME('{Esc(name)}','',(''),(''),'Parametric3D','{Esc(files[0].Modeller)}','');");
         w.AppendLine("FILE_SCHEMA(('AUTOMOTIVE_DESIGN'));");
         w.AppendLine("ENDSEC;");
         w.AppendLine("DATA;");
-        w.Append(c.Sb);
+        w.Append(sb);
         w.AppendLine("ENDSEC;");
         w.AppendLine("END-ISO-10303-21;");
         return w.ToString();
@@ -82,9 +92,9 @@ public static class XtToStep
 
     sealed class Ctx
     {
-        public readonly StringBuilder Sb = new();
+        public StringBuilder Sb = new();
         readonly XtFile f; readonly List<string>? warn;
-        int next = 1;
+        public int[] NextBox = { 1 };
         readonly Dictionary<int, int> edges = new(), verts = new(), surfs = new(), curves = new();
         readonly Dictionary<int, bool> surfFlip = new();
         readonly Dictionary<int, int> blendSign = new();
@@ -92,7 +102,7 @@ public static class XtToStep
         public int Skipped; public readonly HashSet<string> SkippedKinds = new();
         public Ctx(XtFile f, List<string>? w) { this.f = f; warn = w; }
 
-        public int E(string body) { int id = next++; Sb.Append('#').Append(id).Append('=').Append(body).Append(";\n"); return id; }
+        public int E(string body) { int id = NextBox[0]++; Sb.Append('#').Append(id).Append('=').Append(body).Append(";\n"); return id; }
         public int Pt(Vector3d p) => E($"CARTESIAN_POINT('',({N(p.X * S)},{N(p.Y * S)},{N(p.Z * S)}))");
         public int Dir(Vector3d d) { d = d.LengthSquared > 0 ? d.Normalized() : Vector3d.UnitZ; return E($"DIRECTION('',({N(d.X)},{N(d.Y)},{N(d.Z)}))"); }
         int Ax2(Vector3d o, Vector3d z, Vector3d x)
