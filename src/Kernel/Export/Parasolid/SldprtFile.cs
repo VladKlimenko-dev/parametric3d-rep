@@ -68,12 +68,54 @@ public static class SldprtFile
         if (parts.Count > 1) warnings?.Add($"SLDPRT: {parts.Count} configurations stored; read {pick}.");
         var u = st[pick];
         if (u.Length < 28) throw new InvalidDataException("SLDPRT: the geometry stream is empty.");
-        int csz = BitConverter.ToInt32(u, 24);
-        using var zs = new ZLibStream(new MemoryStream(u, 28, Math.Min(csz, u.Length - 28)), CompressionMode.Decompress);
+        var xt = Section(u, 4, warnings);
+        // деталь из импортированного тела (элемент «Imported»): в разделе — пустая модель, тело — в потоке
+        // «Config-N-FeatureBodies/LocalBodies» (заголовок с именем элемента, затем раздел того же устройства)
+        string cfg = Regex.Match(pick, @"Config-\d+").Value;
+        if (st.TryGetValue(cfg + "-FeatureBodies/LocalBodies", out var lb) && !HasFaces(xt))
+        {
+            int mk = IndexOf(lb, SectionMagic, 0);
+            if (mk >= 4)
+            {
+                var x2 = Section(lb, mk, warnings);
+                if (x2.Length > 0) { warnings?.Add("SLDPRT: the part body is an imported feature body (LocalBodies)."); xt = x2; }
+                if (BitConverter.ToInt32(lb, 0) > 1) warnings?.Add($"SLDPRT: {BitConverter.ToInt32(lb, 0)} imported feature bodies stored; read the first.");
+            }
+        }
+        return xt;
+    }
+
+    static readonly byte[] SectionMagic = { 0x23, 0x1d, 0xd5, 0x71, 0xda, 0x81, 0x48, 0xa2, 0xa8, 0x58, 0x98, 0xb2, 0x1b, 0x89, 0xef, 0x99 };
+
+    /// <summary>
+    /// Раздел [длина][16 байт метки][куски: исходный размер, сжатый размер, zlib]… до куска нулевого размера. Большой раздел
+    /// (больше 1 МиБ исходных данных) пишется кусками: первый на 1 МиБ, дальше по 4 КиБ — прежде читался только первый, и
+    /// поток XT обрывался (клапан: 3 977 граней).
+    /// </summary>
+    static byte[] Section(byte[] u, int magicAt, List<string>? warnings)
+    {
         using var o = new MemoryStream();
-        try { zs.CopyTo(o); }
-        catch (InvalidDataException) { warnings?.Add("SLDPRT: the geometry stream is cut short; reading what is complete."); }
+        int p = magicAt + 16;
+        while (p + 8 <= u.Length)
+        {
+            int us = BitConverter.ToInt32(u, p), cs = BitConverter.ToInt32(u, p + 4);
+            if (us <= 0 || cs <= 0 || p + 8 + cs > u.Length) break;
+            try
+            {
+                using var zs = new ZLibStream(new MemoryStream(u, p + 8, cs), CompressionMode.Decompress);
+                zs.CopyTo(o);
+            }
+            catch (InvalidDataException) { warnings?.Add("SLDPRT: the geometry stream is cut short; reading what is complete."); break; }
+            p += 8 + cs;
+            if (ChunkedOff) break;
+        }
         return o.ToArray();
+    }
+    static readonly bool ChunkedOff = Environment.GetEnvironmentVariable("P3D_SLDCHUNKS") == "0";
+
+    static bool HasFaces(byte[] xt)
+    {
+        try { return XtReader.Read(xt).OfType("FACE").Any(); } catch { return false; }
     }
 
     static int IndexOf(byte[] b, byte[] pat, int from)
