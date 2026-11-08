@@ -173,7 +173,6 @@ public static class XtToStep
         bool? BlendSame(XtNode fc, XtNode sn)
         {
             if (!blendSign.TryGetValue(sn.Id, out int sOurs) || XtSurf.Of(f, sn) is not XtBlendSurf bl) return null;
-            var sup = sn.PA("surface");
             var seenL = new HashSet<int>();
             for (var lp = f[fc.P("loop")]; lp != null && seenL.Add(lp.Id); lp = f[lp.P("next")])
             {
@@ -182,14 +181,16 @@ public static class XtToStep
                 {
                     var o = f[h.P("other")]; if (o == null) continue;
                     var of = f[f[o.P("loop")]?.P("face") ?? 1]; if (of == null) continue;
-                    var osn = f[of.P("surface")]; if (osn == null || !sup.Contains(osn.Id) || osn.Name == "BLENDED_EDGE") continue;
+                    // сосед, касательный к скруглению (опора, её смещённая основа и т. п.): нормаль соседа — вдоль радиуса шара
+                    var osn = f[of.P("surface")]; if (osn == null || osn.Name == "BLENDED_EDGE") continue;
                     var v = f[h.P("vertex")]; var pv = v == null ? null : f[v.P("point")];
                     if (pv == null) continue;
                     var P = pv.V("pvec"); var c = bl.CentreAt(P); var rad = P - c;
                     if (rad.LengthSquared < 1e-24) continue;
-                    var n = NatNormal(osn, P); if (n == null) continue;
-                    double so = Vector3d.Dot(n.Value, rad) * ((of.C("sense") != '-') == (osn.C("sense") != '-') ? 1 : -1);
-                    if (Math.Abs(so) < 1e-18) continue;
+                    var n = NatNormal(osn, P); if (n == null || n.Value.LengthSquared < 1e-30) continue;
+                    double cosR = Vector3d.Dot(n.Value.Normalized(), rad.Normalized());
+                    if (Math.Abs(cosR) < 0.999) continue;                                  // не касается
+                    double so = cosR * ((of.C("sense") != '-') == (osn.C("sense") != '-') ? 1 : -1);
                     return (so > 0) == (sOurs > 0);
                 }
             }
@@ -210,6 +211,7 @@ public static class XtToStep
                     return e * s.D("cos_half_angle") - a * s.D("sin_half_angle");
                 }
                 case "SPHERE": return q - s.V("centre");
+                case "OFFSET_SURF": return f[s.P("surface")] is { } ob ? NatNormal(ob, q) : null;
                 case "TORUS":
                 {
                     var a = s.V("axis").Normalized(); var d = q - s.V("centre"); var e = d - a * Vector3d.Dot(d, a);
