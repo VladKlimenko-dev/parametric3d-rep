@@ -493,16 +493,17 @@ public static class StepImport
                                 for (int k = 0, nk = TorusGapOff ? 16 : 64; k <= nk; k++)
                                     ts.Add(((rvLat.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * k / (double)nk)).X - bc.T0) / span % 1 + 1) % 1);
                         ts.Sort();
-                        double gap = 0, after = 0, before = 1;
+                        double gap = 0, gap2 = 0, after = 0, before = 1;
                         for (int i = 0; i < ts.Count; i++)
                         {
                             double nx = i + 1 < ts.Count ? ts[i + 1] : ts[0] + 1;
-                            if (nx - ts[i] > gap) { gap = nx - ts[i]; before = ts[i]; after = nx % 1; }
+                            double g = nx - ts[i];
+                            if (g > gap) { gap2 = gap; gap = g; before = ts[i]; after = nx % 1; } else if (g > gap2) gap2 = g;
                         }
                         // k184: промежуток — настоящий, а не шаг выборки: контур из окружности сечения (колено трубы) давал по 17
                         // точкам промежуток 1/16, и образующая тора обрезалась на 22°, — сетка отходила от поверхности на 12 мм
                         // (подъёмник 3645T16). Теперь 65 точек на кривую и промежуток не меньше 0.05 оборота. P3D_TORUSGAP=0.
-                        if (gap > (TorusGapOff ? 1e-3 : 0.05))
+                        if (TorusGapOff ? gap > 1e-3 : gap > 1e-3 && (gap > 0.05 || gap > 3 * gap2))
                         {
                             double a0 = after, a1 = before < after ? before + 1 : before;
                             var trimmedT = new Curves.ArcCurve3(gArc.Frame, gArc.Radius, gArc.A0 + gArc.Sweep * a0, gArc.A0 + gArc.Sweep * a1);
