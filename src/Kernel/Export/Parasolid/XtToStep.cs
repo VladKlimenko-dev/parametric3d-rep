@@ -432,7 +432,15 @@ public static class XtToStep
                     // формула напечатана как P − vA + …, но окружности ложатся на конус только при P + vA + …): ось STEP — та же
                     r = E($"CONICAL_SURFACE('',#{Ax2(sn.V("pvec"), sn.V("axis"), sn.V("x_axis"))},{N(sn.D("radius") * S)},{N(Math.Atan2(sn.D("sin_half_angle"), sn.D("cos_half_angle")))})"); break;
                 case "SPHERE": r = E($"SPHERICAL_SURFACE('',#{Ax2(sn.V("centre"), sn.V("axis"), sn.V("x_axis"))},{N(sn.D("radius") * S)})"); break;
-                case "TORUS": r = E($"TOROIDAL_SURFACE('',#{Ax2(sn.V("centre"), sn.V("axis"), sn.V("x_axis"))},{N(sn.D("major_radius") * S)},{N(sn.D("minor_radius") * S)})"); break;
+                case "TORUS":
+                {
+                    // «яблоко» (0 < R ≤ r) и «лимон» (R < 0) Parasolid — DEGENERATE_TOROIDAL_SURFACE с выбором листа
+                    double R = sn.D("major_radius"), rr = sn.D("minor_radius");
+                    var ax = Ax2(sn.V("centre"), sn.V("axis"), sn.V("x_axis"));
+                    r = R > rr ? E($"TOROIDAL_SURFACE('',#{ax},{N(R * S)},{N(rr * S)})")
+                               : E($"DEGENERATE_TOROIDAL_SURFACE('',#{ax},{N(Math.Abs(R) * S)},{N(rr * S)},{(R > 0 ? ".T." : ".F.")})");
+                    break;
+                }
                 case "B_SURFACE": if (f[sn.P("nurbs")] is { } ns) r = BSurf(ns); break;
                 case "SWEPT_SURF":
                     if (f[sn.P("section")] is { } sc && CurveOf(sc, out _, out _) is int cid)

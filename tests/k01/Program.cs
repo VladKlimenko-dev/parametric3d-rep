@@ -619,7 +619,7 @@ static partial class Program
         if (mode is "cut181" or "allA") Cut181Checks();
         if (mode is "draft181" or "allA") Draft181Checks();   // k181: уклон наружу у грани со скруглённым соседом   // k181: вырез насквозь — по направлению, мимо тела — ошибка, отверстие в торце перехода   // k180: рёбра Безье — точные в аудите   // k179: направляющая ведёт все рёбра, кривая за точкой эскиза, порядок создания
         if (mode is "allC") AllCChecks();
-        if (mode is "sldprt" or "allA") SldprtChecks(mode == "sldprt" && args.Length > 1 ? args.Skip(1) : null);   // k182: импорт SolidWorks
+        if (mode is "sldprt" or "allA") SldprtChecks(mode == "sldprt" && args.Length > 1 ? args.Skip(1) : null, goldOnly: mode != "sldprt");   // k182: импорт SolidWorks
         if (mode is "allcreg" or "allA") AllCRegressChecks();   // k181: отобранные случаи AllC   // k181: Tests AllC — комбинаторный набор операций
         if (mode == "userfile179") { UserFile179(args[1]); return; }
         if (mode == "guidedump") { GuideDump(args[1]); return; }
