@@ -522,6 +522,7 @@ internal static class XtPoly
 internal sealed class XtBlendSurf : XtSurf
 {
     public List<Vector3d> Spine = new();
+    static readonly bool BlendRevOff = Environment.GetEnvironmentVariable("P3D_XTBLENDREV") == "0";
     public XtSurf S0 = null!, S1 = null!;
     public double R0, R1;
     public bool Rev;
@@ -580,6 +581,10 @@ internal sealed class XtBlendSurf : XtSurf
             if (d0.LengthSquared > 0) raw.Insert(0, bl.OnSpineIn(raw[0] + d0.Normalized() * ext, d0));
             if (d1.LengthSquared > 0) raw.Add(bl.OnSpineIn(raw[^1] + d1.Normalized() * ext, d1));
         }
+        // ось со знаком «−»: параметр u скругления идёт против кривой оси (а v — от второй опоры к первой, см. Contacts);
+        // без разворота u обращалась только v, и нормаль поверхности выходила обратной (винт с полукруглой головкой:
+        // сетка грани скругления шлица вывернута). Мутация P3D_XTBLENDREV=0.
+        if (bl.Rev && !BlendRevOff) raw.Reverse();
         bl.Spine = raw;
         return bl;
     }
