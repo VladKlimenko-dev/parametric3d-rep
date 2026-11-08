@@ -1,0 +1,2 @@
+exit 1
+seconds 2707 nproc 4 env P3D_CAPFIX=0 cmd loftcorpus140
