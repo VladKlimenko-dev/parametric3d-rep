@@ -90,6 +90,7 @@ public static class StepImport
     /// проекция на поверхность упиралась в край, и ребро «отходило» на 0.47 мм (бачок 1358K26). Прямая — концы; прочие — 33
     /// точки. Мутация P3D_IMPRANGE=0.
     /// </summary>
+    static readonly bool MeridianDbg = Environment.GetEnvironmentVariable("P3D_MERIDBG") == "1";
     static readonly bool MeridianOff = Environment.GetEnvironmentVariable("P3D_IMPMERIDIAN") == "0";
 
     /// <summary>k184: размах тела вращения между двумя контурами-меридианами (каждый — на постоянном угле); null — не тот случай.</summary>
@@ -440,8 +441,9 @@ public static class StepImport
                     // контур — на своём угле, и [меньший, больший] угол — лишь одна из двух дуг; бралась она, хотя грань могла
                     // лежать по другую сторону шва (подъёмник 3645T16: сетка на 278° вместо 82°, точная площадь 0). Сторона —
                     // по обходу контура: грань слева от него, если смотреть против нормали грани. Мутация P3D_IMPMERIDIAN=0.
-                    if (!MeridianOff && got.Value.Loops.Count == 2 && MeridianSweep(rvAng, got.Value.Loops, got.Value.SameSense) is { } ms)
-                    { lo = ms.Lo; hi = ms.Hi; span = hi - lo; }
+                    var msr = !MeridianOff && got.Value.Loops.Count == 2 ? MeridianSweep(rvAng, got.Value.Loops, got.Value.SameSense) : null;
+                    if (MeridianDbg) Console.Error.WriteLine($"MERID face {faceCount} loops {got.Value.Loops.Count} base {rvAng.Base.GetType().Name} A {rvAng.A0:0.###}..{rvAng.A1:0.###} lo {lo:0.####} hi {hi:0.####} ms {msr}");
+                    if (msr is { } ms) { lo = ms.Lo; hi = ms.Hi; span = hi - lo; }
                     if (span > 1e-6 && span < 0.999)
                     {
                         double full = rvAng.A1 - rvAng.A0;
