@@ -446,8 +446,9 @@ public static partial class ExactFaceMesher
             List<int>? T = null; List<Vector2d> pts = new();
             for (int pass = 0; pass < 20; pass++)
             {
-                T = Cdt.Triangulate(outer, holes, out pts, inner);
+                using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("сетка: конформная — разбиение") : null) T = Cdt.Triangulate(outer, holes, out pts, inner);
                 if (T == null) { lastWhy = $"conformal ({map.Kind}): triangulation failed"; break; }
+                using var _pdv = Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("сетка: конформная — прогиб") : null;
                 if (pts.Count(q => lookup.ContainsKey((q.X, q.Y))) != nB) { T = null; lastWhy = $"conformal ({map.Kind}): the triangulator dropped contour points"; break; }
                 var bad = new List<Vector2d>();
                 for (int i = 0; i + 2 < T.Count; i += 3)

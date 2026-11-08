@@ -46,7 +46,7 @@ jobs:
       matrix:
         include:
           - { name: k184_cv, cmd: 'sldprt tests/k01/data/sw_cv_1423n12.SLDPRT tests/k01/data/sw_cv_1358k26.SLDPRT tests/k01/data/sw_cv_4574n11.SLDPRT tests/k01/data/sw_cv_1423n5.SLDPRT tests/k01/data/sw_cv_7641k35.SLDPRT tests/k01/data/sw_cv_2417t63.SLDPRT tests/k01/data/sw_cv_5706n12.SLDPRT tests/k01/data/sw_cv_3178a481.SLDPRT', env: 'P3D_SLDOUT=res/out' }
-          - { name: k184_cdt, cmd: 'sldprt tests/k01/data/sw_to_2425t37.SLDPRT', env: 'P3D_SLDPROF=1 P3D_SLDTIMEOUT=3000' }
+          - { name: k184_cdt, cmd: 'sldprt tests/k01/data/sw_to_2425t37.SLDPRT', env: 'P3D_SLDPROF=1 P3D_SLDTIMEOUT=3000 P3D_CONFTRACE=1' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

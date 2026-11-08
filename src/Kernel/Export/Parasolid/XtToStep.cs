@@ -459,16 +459,51 @@ public static class XtToStep
             var q = new List<Vector3d>();
             foreach (var p in raw) if (q.Count == 0 || (q[^1] - p).Length > 1e-12) q.Add(p);
             if (q.Count < 2 || PolyMode) return Poly(raw);
+            // k184: ТОЧКА ВПЛОТНУЮ К СОСЕДНЕЙ убирается (кроме концов). Обрезка карты пересечения по вершине ставит вершину рядом
+            // с точкой карты (звено 0.012 при соседних 0.2): кубический сплайн через такую пару раскачивается, вершины уходят на
+            // миллиметры, и ребро отходит от своих поверхностей (гнездо 1423N12: 2.7 мм от плоскости). Мутация P3D_XTINTERPCLEAN=0.
+            if (!InterpCleanOff && q.Count > 3)
+            {
+                for (int pass = 0; pass < 3; pass++)
+                {
+                    bool dropped = false;
+                    for (int i = 1; i + 1 < q.Count && q.Count > 3; i++)
+                    {
+                        double a = (q[i] - q[i - 1]).Length, b = (q[i + 1] - q[i]).Length;
+                        if (Math.Min(a, b) < 0.15 * Math.Max(a, b) && Math.Min(a, b) < 0.15 * (i - 2 >= 0 && i + 2 < q.Count ? Math.Max((q[i - 1] - q[i - 2]).Length, (q[i + 2] - q[i + 1]).Length) : Math.Max(a, b)))
+                        { q.RemoveAt(i); dropped = true; i--; }
+                    }
+                    if (!dropped) break;
+                }
+            }
             int deg = Math.Min(3, q.Count - 1);
             var prm = XtBasis.Chord(q);
             var (k, _) = XtBasis.Setup(prm, deg);
             var cp = XtBasis.Solve(k, deg, prm, q);
+            // k184: проверка раскачки — сплайн между соседними точками не должен уходить от их хорды дальше четверти звена;
+            // иначе — ломаная по тем же точкам (точно через них, без выбросов). Мутация P3D_XTINTERPCHECK=0.
+            if (!InterpCheckOff && deg == 3)
+            {
+                int ncp = cp.Length; bool wild = false;
+                for (int i = 0; i + 1 < q.Count && !wild; i++)
+                {
+                    double tm = 0.5 * (prm[i] + prm[i + 1]);
+                    var N = XtBasis.Eval(k, deg, ncp, tm); var c = Vector3d.Zero;
+                    for (int j = 0; j < ncp; j++) if (N[j] != 0) c += cp[j] * N[j];
+                    var ab = q[i + 1] - q[i]; double l = ab.Length;
+                    double t = l > 0 ? Math.Clamp(Vector3d.Dot(c - q[i], ab) / (l * l), 0, 1) : 0;
+                    if ((q[i] + ab * t - c).Length > 0.25 * l + 1e-6) wild = true;
+                }
+                if (wild) return Poly(q);
+            }
             var ks = new List<double>(); var ms = new List<int>();
             foreach (var x in k) { if (ks.Count > 0 && Math.Abs(ks[^1] - x) < 1e-14) ms[^1]++; else { ks.Add(x); ms.Add(1); } }
             string P = string.Join(",", cp.Select(p => "#" + Pt(p)));
             return E($"B_SPLINE_CURVE_WITH_KNOTS('',{deg},({P}),.UNSPECIFIED.,.F.,.F.,({string.Join(",", ms)}),({string.Join(",", ks.Select(N))}),.UNSPECIFIED.)");
         }
         static readonly bool PolyMode = Environment.GetEnvironmentVariable("P3D_XTPOLY") == "1";
+        static readonly bool InterpCleanOff = Environment.GetEnvironmentVariable("P3D_XTINTERPCLEAN") == "0";
+        static readonly bool InterpCheckOff = Environment.GetEnvironmentVariable("P3D_XTINTERPCHECK") == "0";
         static readonly bool ConeFlipOff = Environment.GetEnvironmentVariable("P3D_XTCONEFLIP") != "1";   // естественная нормаль конуса XT (P + vA + …) — наружу, как у STEP
 
         /// <summary>Плотная ломаная кривой свободной формы в естественном направлении; null — аналитическая кривая (прямая,

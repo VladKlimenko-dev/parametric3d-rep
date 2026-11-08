@@ -44,8 +44,8 @@ public static class Cdt
         // рамки; при делении части ложатся в ячейки своих рамок, прежний треугольник лишь уменьшается). Мутация P3D_CDTGRID=0.
         if (!GridOff && inner.Count >= 64)
         {
-            InsertWithGrid(tris, pts, inner);
-            FlipToDelaunay(tris, pts);
+            using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("разбиение: вставка точек") : null) InsertWithGrid(tris, pts, inner);
+            using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("разбиение: Делоне") : null) FlipToDelaunay(tris, pts);
             return tris;
         }
         foreach (var p in inner)
