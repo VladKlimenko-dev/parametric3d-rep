@@ -1,0 +1,1 @@
+seconds 144 nproc 4 env P3D_CUSPCLOSED=0 cmd sldprt tests/k01/data/sw_oe_60945k27.SLDPRT tests/k01/data/sw_cv_1423n12.SLDPRT tests/k01/data/sw_cv_5706n12.SLDPRT
