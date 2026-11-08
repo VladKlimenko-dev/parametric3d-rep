@@ -275,7 +275,9 @@ public sealed class NurbsSurface : ISurface3
     public Vector2d ProjectToUV(Vector3d p)
     {
         var uv0 = ProjectToUVCore(p);
-        if (MultiOff || DerivsOff) return uv0;
+        // только у поверхностей с многими пролётами (резьба, длинные винтовые ленты): у лофтов и скруглений ложных минимумов
+        // такого рода нет, а другой ответ на краю области менял построения (скругление лофта в корпусе K140)
+        if (MultiOff || DerivsOff || (CountU - _du) + (CountV - _dv) < 40) return uv0;
         double d0 = (PointAt(uv0) - p).LengthSquared;
         if (d0 <= 1e-12) return uv0;
         // подозрителен только ответ на краю области или с невязкой не по нормали (ложный минимум у соседнего витка лежит на краю
