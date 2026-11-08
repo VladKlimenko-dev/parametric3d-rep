@@ -181,7 +181,12 @@ static partial class Program
                     {
                         var c = e.Curve; var q = c.PointAt(c.T0 + (c.T1 - c.T0) * k / 16.0);
                         double dp; Vector2d uv; try { uv = sf.ProjectToUV(q); dp = (sf.PointAt(uv) - q).Length; } catch { continue; }
-                        double db = double.MaxValue; foreach (var g in grid) db = Math.Min(db, (g - q).LengthSquared); db = Math.Sqrt(db);
+                        double db = double.MaxValue; int bk = 0; for (int gi = 0; gi < grid.Length; gi++) { double dd = (grid[gi] - q).LengthSquared; if (dd < db) { db = dd; bk = gi; } } db = Math.Sqrt(db);
+                        if (sf is Parametric3D.Kernel.Surfaces.NurbsSurface ns0)
+                        {
+                            var h0 = new Vector2d((bk / (GV + 1)) / (double)GU, (bk % (GV + 1)) / (double)GV);
+                            try { var uvh = ns0.ProjectToUV(q, h0); db = Math.Min(db, (ns0.PointAt(uvh) - q).Length); } catch { }
+                        }
                         if (dp > proj) { proj = dp; worstUv = uv; worstP = q; }
                         brute = Math.Max(brute, db);
                     }
