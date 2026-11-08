@@ -173,25 +173,34 @@ public static class XtToStep
         bool? BlendSame(XtNode fc, XtNode sn)
         {
             if (!blendSign.TryGetValue(sn.Id, out int sOurs) || XtSurf.Of(f, sn) is not XtBlendSurf bl) return null;
-            var seenL = new HashSet<int>();
-            for (var lp = f[fc.P("loop")]; lp != null && seenL.Add(lp.Id); lp = f[lp.P("next")])
+            // опоры скругления (у смещённой — и её основа): соседняя грань на опоре касается скругления по ребру
+            var sup = new HashSet<int>();
+            foreach (int id in sn.PA("surface")) { sup.Add(id); if (f[id] is { Name: "OFFSET_SURF" } os) sup.Add(os.P("surface")); }
+            foreach (bool supportsOnly in new[] { true, false })
             {
-                var seenH = new HashSet<int>();
-                for (var h = f[lp.P("halfedge")]; h != null && seenH.Add(h.Id); h = f[h.P("forward")])
+                var seenL = new HashSet<int>();
+                for (var lp = f[fc.P("loop")]; lp != null && seenL.Add(lp.Id); lp = f[lp.P("next")])
                 {
-                    var o = f[h.P("other")]; if (o == null) continue;
-                    var of = f[f[o.P("loop")]?.P("face") ?? 1]; if (of == null) continue;
-                    // сосед, касательный к скруглению (опора, её смещённая основа и т. п.): нормаль соседа — вдоль радиуса шара
-                    var osn = f[of.P("surface")]; if (osn == null || osn.Name == "BLENDED_EDGE") continue;
-                    var v = f[h.P("vertex")]; var pv = v == null ? null : f[v.P("point")];
-                    if (pv == null) continue;
-                    var P = pv.V("pvec"); var c = bl.CentreAt(P); var rad = P - c;
-                    if (rad.LengthSquared < 1e-24) continue;
-                    var n = NatNormal(osn, P); if (n == null || n.Value.LengthSquared < 1e-30) continue;
-                    double cosR = Vector3d.Dot(n.Value.Normalized(), rad.Normalized());
-                    if (Math.Abs(cosR) < 0.999) continue;                                  // не касается
-                    double so = cosR * ((of.C("sense") != '-') == (osn.C("sense") != '-') ? 1 : -1);
-                    return (so > 0) == (sOurs > 0);
+                    var seenH = new HashSet<int>();
+                    for (var h = f[lp.P("halfedge")]; h != null && seenH.Add(h.Id); h = f[h.P("forward")])
+                    {
+                        var o = f[h.P("other")]; if (o == null) continue;
+                        var of = f[f[o.P("loop")]?.P("face") ?? 1]; if (of == null) continue;
+                        var osn = f[of.P("surface")]; if (osn == null || osn.Name == "BLENDED_EDGE") continue;
+                        if (supportsOnly != sup.Contains(osn.Id)) continue;
+                        // точка — середина ребра (по двум вершинам, спроецированная на соседа): у вершины-угла центр шара неточен
+                        Vector3d? a0 = f[f[h.P("vertex")]?.P("point") ?? 1]?.V("pvec"), b0 = f[f[o.P("vertex")]?.P("point") ?? 1]?.V("pvec");
+                        if (a0 == null && b0 == null) continue;
+                        var mid = a0 != null && b0 != null ? (a0.Value + b0.Value) / 2 : (a0 ?? b0)!.Value;
+                        var P = XtSurf.Of(f, osn) is { } xs ? xs.Project(mid) : mid;
+                        var c = bl.CentreAt(P); var rad = P - c;
+                        if (rad.LengthSquared < 1e-24) continue;
+                        var n = NatNormal(osn, P); if (n == null || n.Value.LengthSquared < 1e-30) continue;
+                        double cosR = Vector3d.Dot(n.Value.Normalized(), rad.Normalized());
+                        if (Math.Abs(cosR) < (supportsOnly ? 0.9 : 0.999)) continue;            // не касается
+                        double so = cosR * ((of.C("sense") != '-') == (osn.C("sense") != '-') ? 1 : -1);
+                        return (so > 0) == (sOurs > 0);
+                    }
                 }
             }
             return null;
