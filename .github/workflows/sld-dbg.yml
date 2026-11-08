@@ -67,7 +67,7 @@ jobs:
           start=$(date +%s)
           timeout 330m out/k01/K01Checks $CMD > res/run.log 2> res/run.err || echo "exit $?" >> res/run.err
           echo "seconds $(( $(date +%s) - start )) nproc $(nproc) env ${{ matrix.env }} cmd $CMD" >> res/run.err
-          find res -name '*.p3d' -size +20M -delete
+          find res -name '*.p3d' -size +20M -delete; find res -name '*.dump' -size +40M -delete
       - name: Итог — в ветку ya1/res/${{ matrix.name }}
         if: always()
         run: |
