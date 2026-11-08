@@ -193,7 +193,7 @@ public static class XtToStep
                         if (a0 == null && b0 == null) continue;
                         var mid = a0 != null && b0 != null ? (a0.Value + b0.Value) / 2 : (a0 ?? b0)!.Value;
                         var P = XtSurf.Of(f, osn) is { } xs ? xs.Project(mid) : mid;
-                        var n = NatNormal(osn, P); if (n == null || n.Value.LengthSquared < 1e-30) continue;
+                        var n = NatNormal(osn, P); if (n == null || !(n.Value.LengthSquared > 0)) continue;   // малые детали: нормаль по разностям ~10⁻¹⁸ м²
                         var nh = n.Value.Normalized();
                         // центр шара — на нормали соседа на расстоянии радиуса, с той стороны, где ось скругления ближе
                         // (у опор-NURBS уточнение центра на смещённых опорах ненадёжно: «нет касательного соседа» у сверла)
