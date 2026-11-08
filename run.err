@@ -1,0 +1,2 @@
+exit 1
+seconds 69 nproc 4 env P3D_NURBSMULTI=0 cmd krn11qual
