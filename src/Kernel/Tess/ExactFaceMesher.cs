@@ -494,7 +494,7 @@ public static partial class ExactFaceMesher
         {
             var de = Leave(e, v, out _, out _);
             if (de == Vector3d.Zero) return null;
-            foreach (var o in v.Edges)
+            foreach (var o in CuspCandidates(e, v))
             {
                 if (ReferenceEquals(o, e) || ReferenceEquals(o.V0, o.V1)) continue;
                 var d = Leave(o, v, out _, out _);
@@ -534,6 +534,30 @@ public static partial class ExactFaceMesher
         return res;
     }
     public static long CuspDensified;
+
+    /// <summary>
+    /// k184: СОСЕДИ РЕБРА В ВЕРШИНЕ — не только по списку рёбер вершины, но и по контурам граней ребра. У прочитанного тела
+    /// (STEP, Parasolid) список рёбер вершины пуст: его ведёт только построитель топологии, и клюв на импорте не находился —
+    /// ломаные двух касающихся кривых пересекались у вершины (крестовина 60075K97: тонкая грань между цилиндрами R11.9 и
+    /// R3.17, щепка с обратным обходом). Мутация P3D_CUSPFACES=0.
+    /// </summary>
+    static readonly bool CuspFacesOff = Environment.GetEnvironmentVariable("P3D_CUSPFACES") == "0";
+    static IEnumerable<TEdge> CuspCandidates(TEdge e, TVertex v)
+    {
+        var seen = new HashSet<TEdge>(ReferenceEqualityComparer.Instance);
+        foreach (var o in v.Edges) if (seen.Add(o)) yield return o;
+        if (CuspFacesOff) yield break;
+        foreach (var ce in e.CoEdges)
+        {
+            var f = ce.Loop?.Face; if (f == null) continue;
+            foreach (var l in f.Loops)
+                foreach (var c2 in l.CoEdges)
+                {
+                    var o = c2.Edge;
+                    if ((ReferenceEquals(o.V0, v) || ReferenceEquals(o.V1, v)) && seen.Add(o)) yield return o;
+                }
+        }
+    }
 
     private static List<Vector3d> RawEdgePoints(TEdge e)
     {
@@ -3065,6 +3089,61 @@ public static partial class ExactFaceMesher
             }
             if (vote < 0)
                 for (int i = 0; i + 2 < T.Count; i += 3) (T[i + 1], T[i + 2]) = (T[i + 2], T[i + 1]);
+        }
+        if (!CapFixOff) FixBoundaryCaps(P, T);
+    }
+
+    /// <summary>
+    /// k184: ЩЕПКА У КРАЯ С ОБРАТНЫМ ОБХОДОМ. Три подряд точки края P1, P2, P3, причём P2 в развёртке оказалась по ту сторону
+    /// хорды P1–P3 (две касающиеся кривые у клюва, неточная проекция края на B-поверхность): разбиение дало треугольник на
+    /// хорде и щепку P1–P2–P3, обход которой против края. Сторона P1–P3 тогда пройдена гранью дважды в одну сторону, а края
+    /// P1–P2, P2–P3 — в ту же сторону, что у соседней грани (проверка: «стороны, обходимые обеими сторонами в одну сторону»).
+    /// Щепка, обе прочие стороны которой — край грани (встречаются в её сетке один раз), переворачивается: обход края
+    /// задаёт контур, а не почти нулевая площадь. Так же поступает сшивка сетки OCCT (BRepMesh: треугольник на границе
+    /// ориентируется по ребру контура). Мутация P3D_CAPFIX=0.
+    /// </summary>
+    static readonly bool CapFixOff = Environment.GetEnvironmentVariable("P3D_CAPFIX") == "0";
+    public static long CapsFixed;
+    static void FixBoundaryCaps(List<Vector3d> P, List<int> T)
+    {
+        if (T.Count < 6) return;
+        var canon = new Dictionary<Vector3d, int>();
+        var id = new int[P.Count];
+        for (int i = 0; i < P.Count; i++) { if (!canon.TryGetValue(P[i], out int c)) canon[P[i]] = c = i; id[i] = c; }
+        for (int pass = 0; pass < 3; pass++)
+        {
+            var dir = new Dictionary<(int, int), List<int>>();
+            var und = new Dictionary<(int, int), int>();
+            for (int t = 0; t + 2 < T.Count; t += 3)
+                for (int k = 0; k < 3; k++)
+                {
+                    int a = id[T[t + k]], b = id[T[t + (k + 1) % 3]];
+                    if (a == b) continue;
+                    if (!dir.TryGetValue((a, b), out var l)) dir[(a, b)] = l = new List<int>(2);
+                    l.Add(t);
+                    var u = a < b ? (a, b) : (b, a); und[u] = und.GetValueOrDefault(u) + 1;
+                }
+            bool IsCap(int t, int a, int b)
+            {
+                for (int k = 0; k < 3; k++)
+                {
+                    int x = id[T[t + k]], y = id[T[t + (k + 1) % 3]];
+                    if (x == a && y == b) continue;
+                    var u = x < y ? (x, y) : (y, x);
+                    if (und.GetValueOrDefault(u) != 1) return false;
+                }
+                return true;
+            }
+            var flip = new HashSet<int>();
+            foreach (var ((a, b), l) in dir)
+            {
+                if (l.Count != 2) continue;
+                bool c0 = IsCap(l[0], a, b), c1 = IsCap(l[1], a, b);
+                if (c0 == c1) continue;
+                flip.Add(c0 ? l[0] : l[1]);
+            }
+            if (flip.Count == 0) return;
+            foreach (int t in flip) { (T[t + 1], T[t + 2]) = (T[t + 2], T[t + 1]); Interlocked.Increment(ref CapsFixed); }
         }
     }
 
