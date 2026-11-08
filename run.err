@@ -1,0 +1,2 @@
+exit 1
+seconds 46 nproc 4 env P3D_CDTGRID=0 cmd krn11qual
