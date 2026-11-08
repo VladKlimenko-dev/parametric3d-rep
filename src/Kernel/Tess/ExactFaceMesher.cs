@@ -930,6 +930,8 @@ public static partial class ExactFaceMesher
         catch { return null; }
     }
 
+    static readonly bool FailMemoOff = Environment.GetEnvironmentVariable("P3D_FAILMEMO") == "0";
+
     public static (List<Vector3d> P, List<int> T)? Mesh(TFace f, out string? why, out List<Vector3d>? normals)
     {
         // ПАМЯТЬ НЕ ДЕЙСТВУЕТ, ПОКА ЗАДАНА ПРИВЯЗКА ТОЧЕК. Привязка (Snap) меняет саму сетку, а в
@@ -964,7 +966,7 @@ public static partial class ExactFaceMesher
             // сторона грани в ключ не входит: та же грань с другой стороной (соглашение о сторонах после построителя) — та же
             // сетка с обратным обходом треугольников и обратными нормалями
             fk = MemoKey(f); tolKey = Core.Tol.Chord.ToString("R") + ":" + Core.Tol.ChordAngle.ToString("R");
-            if (_faceMemo.TryGetValue(fk, out var fm) && fm.Key == fk && fm.Tol == tolKey)
+            if (_faceMemo.TryGetValue(fk, out var fm) && fm.Key == fk && fm.Tol == tolKey && (fm.M != null || f.Surface is not FacetedSurface))
             {
                 Interlocked.Increment(ref FaceMemoHits);
                 bool flip = fm.Reversed != MemoSide(f);
@@ -991,7 +993,9 @@ public static partial class ExactFaceMesher
         else made = MeshUncached(f, out why, out normals);
         // в память — только посчитанные сетки: отказ разметки у грани без треугольников гранения у её гранёной копии мог бы
         // смениться сеткой по ним (иначе копия получала бы чужой отказ)
-        if (!memoHit && made != null && !MemoOff && Snap == null && MemoKey(f) == fk)
+        // k183: и ОТКАЗЫ — у грани с точной поверхностью без гранёной копии (импорт): проверка тела размечала такие грани
+        // заново всеми способами — сверло 2958A552: 35 минут на «проверка: сетка тела». Мутация P3D_FAILMEMO=0.
+        if (!memoHit && (made != null || !FailMemoOff && f.Surface is not FacetedSurface) && !MemoOff && Snap == null && MemoKey(f) == fk)
         {
             // k96 (самотест 17:56: +155 МБ за 80 правок, после удаления детали память не возвращалась): память сеток
             // ограничена по ОБЪЁМУ (точки сеток и нормалей), а не только по числу граней — у мелкой разметки крупных граней
