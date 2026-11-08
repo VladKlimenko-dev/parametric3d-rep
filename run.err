@@ -1,0 +1,2 @@
+exit 1
+seconds 75 nproc 4 env P3D_CAPFIX=0 cmd krn11qual
