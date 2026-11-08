@@ -157,6 +157,8 @@ static partial class Program
     }
 
     /// <summary>Разбор: у тела с ошибками сетки — какие грани (метка STEP, поверхность, сторона) у сторон без пары / в одну сторону.</summary>
+    static string GeometryAuditName(TFace f) => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name ?? "?";
+
     static void SldDiag(string file, List<TSolid> bodies, List<ValidationReport> vrs)
     {
         for (int bi = 0; bi < bodies.Count; bi++)
@@ -231,6 +233,34 @@ static partial class Program
                 .Select(x => { var st = faceStat[x.Id]; var cc = st.A > 0 ? st.S / st.A : Vector3d.Zero; var ag = agree.GetValueOrDefault(x.Id); return $"{x.Tag}: tris {st.N} area {st.A:G4} centroid ({cc.X:F3},{cc.Y:F3},{cc.Z:F3}) normal agrees {ag.Yes}/{ag.Yes + ag.No} rev {x.Reversed} ray {Ray(x)} exactArea {AnalyticVolume.FaceArea(x):G4}"; }).ToList();
             var sameCo = bodies[bi].Edges.Where(e => e.CoEdges.Count == 2 && e.CoEdges[0].Reversed == e.CoEdges[1].Reversed)
                 .Select(e => $"{e.Curve.GetType().Name}:{e.CoEdges[0].Loop?.Face?.Tag}|{e.CoEdges[1].Loop?.Face?.Tag}").Take(10).ToList();
+            // k184: выгрузка сетки тела, фасет граней и рёбер для разбора вне CI (P3D_SLDDIAGOBJ=каталог)
+            if (Environment.GetEnvironmentVariable("P3D_SLDDIAGOBJ") is { Length: > 0 } od)
+            {
+                Directory.CreateDirectory(od);
+                var sb = new System.Text.StringBuilder(); var inv = System.Globalization.CultureInfo.InvariantCulture;
+                foreach (var v in md.Vertices) sb.Append(inv, $"v {v.P.X:R} {v.P.Y:R} {v.P.Z:R}\n");
+                for (int t = 0; t + 2 < md.Indices.Length; t += 3)
+                    sb.Append(inv, $"f {md.Indices[t] + 1} {md.Indices[t + 1] + 1} {md.Indices[t + 2] + 1} {md.Vertices[md.Indices[t]].FaceId}\n");
+                foreach (var ff in bodies[bi].Faces)
+                {
+                    sb.Append(inv, $"F {ff.Id} {ff.Tag} {GeometryAuditName(ff)} rev {ff.Reversed}\n");
+                    if (ff.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface fsf)
+                        foreach (var (a, b, c) in fsf.Facets) sb.Append(inv, $"t {a.X:R} {a.Y:R} {a.Z:R} {b.X:R} {b.Y:R} {b.Z:R} {c.X:R} {c.Y:R} {c.Z:R}\n");
+                    foreach (var l in ff.Loops)
+                    {
+                        sb.Append(inv, $"L {(l.IsOuter ? 1 : 0)}\n");
+                        foreach (var ce in l.CoEdges)
+                        {
+                            List<Vector3d> pts; try { pts = Parametric3D.Kernel.Tess.ExactFaceMesher.EdgePoints(ce.Edge).ToList(); } catch { pts = new(); }
+                            if (ce.Reversed) pts.Reverse();
+                            sb.Append(inv, $"c {ce.Edge.Id} {(ce.Reversed ? 1 : 0)} {ce.Edge.Curve.GetType().Name}");
+                            foreach (var q in pts) sb.Append(inv, $" {q.X:R} {q.Y:R} {q.Z:R}");
+                            sb.Append('\n');
+                        }
+                    }
+                }
+                File.WriteAllText(Path.Combine(od, $"{Path.GetFileNameWithoutExtension(file)}_b{bi + 1}.dump"), sb.ToString());
+            }
             Log(new { test = "sldprt-diag", file, body = bi + 1, sameCoEdges = sameCo, faces = cnt.OrderByDescending(kv => kv.Value).Take(12).Select(kv => $"{kv.Key} ×{kv.Value}").ToList(), fstats });
         }
     }
