@@ -18,7 +18,7 @@ static partial class Program
     static void SldprtChecks(IEnumerable<string>? files = null, bool goldOnly = false)
     {
         // аргумент-каталог — все детали в нём (корпус: ветка corpus/sldprt); P3D_SLDSHARD=i/n — каждая n-я начиная с i
-        var list = files?.SelectMany(a => Directory.Exists(a) ? Directory.GetFiles(a, "*.*", SearchOption.AllDirectories)
+        var list = files?.SelectMany<string, string>(a => Directory.Exists(a) ? Directory.GetFiles(a, "*.*", SearchOption.AllDirectories)
                         .Where(x => x.EndsWith(".sldprt", StringComparison.OrdinalIgnoreCase) || x.EndsWith(".x_b", StringComparison.OrdinalIgnoreCase)).OrderBy(x => x, StringComparer.Ordinal)
                         : new[] { a }).ToList()
                    ?? Directory.GetFiles(Path.Combine("tests", "k01", "data"), "sw_*.SLDPRT").OrderBy(x => x).ToList();
