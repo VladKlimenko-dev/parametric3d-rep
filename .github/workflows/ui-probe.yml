@@ -19,7 +19,7 @@ jobs:
       matrix:
         include:
           - { name: ui_main,   ref: 'main' }
-          - { name: ui_branch, ref: 'ya1/state-probe' }
+          - { name: ui_branch, ref: 'kern/k182' }
     steps:
       - uses: actions/checkout@v4
         with:
