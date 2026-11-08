@@ -38,6 +38,16 @@ public static class Cdt
         if (tris == null || inner == null || inner.Count == 0) return tris;
 
         // Точка вставляется в тот треугольник, внутри которого лежит: он делится на три.
+        // k184: ПОИСК ТРЕУГОЛЬНИКА — ПО СЕТКЕ ЯЧЕЕК, а не перебором. Перебор «каждая точка × все треугольники» при 40 000
+        // точках конформной разметки тора стоил минуты на грань (колесо 2425T37: 678 с из 700). Ответ тот же: среди
+        // треугольников ячейки точки — первый по номеру, содержащий её (треугольник, содержащий точку, лежит в ячейках своей
+        // рамки; при делении части ложатся в ячейки своих рамок, прежний треугольник лишь уменьшается). Мутация P3D_CDTGRID=0.
+        if (!GridOff && inner.Count >= 64)
+        {
+            InsertWithGrid(tris, pts, inner);
+            FlipToDelaunay(tris, pts);
+            return tris;
+        }
         foreach (var p in inner)
         {
             int at = -1;
@@ -67,6 +77,46 @@ public static class Cdt
     /// Перестановка сторон до выполнения условия Делоне. Условие проверяется определителем: если
     /// четвёртая точка внутри описанной окружности треугольника, сторону надо развернуть.
     /// </summary>
+    static readonly bool GridOff = Environment.GetEnvironmentVariable("P3D_CDTGRID") == "0";
+
+    static void InsertWithGrid(List<int> tris, List<Vector2d> pts, IReadOnlyList<Vector2d> inner)
+    {
+        double x0 = double.MaxValue, y0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue;
+        foreach (var q in pts) { x0 = Math.Min(x0, q.X); y0 = Math.Min(y0, q.Y); x1 = Math.Max(x1, q.X); y1 = Math.Max(y1, q.Y); }
+        foreach (var q in inner) { x0 = Math.Min(x0, q.X); y0 = Math.Min(y0, q.Y); x1 = Math.Max(x1, q.X); y1 = Math.Max(y1, q.Y); }
+        double w = Math.Max(x1 - x0, 1e-300), h = Math.Max(y1 - y0, 1e-300);
+        int n = (int)Math.Clamp(Math.Sqrt(inner.Count + tris.Count / 3.0), 4, 1024);
+        int nx = Math.Max(1, (int)Math.Round(n * Math.Sqrt(w / h))), ny = Math.Max(1, (int)Math.Round(n * Math.Sqrt(h / w)));
+        nx = Math.Clamp(nx, 1, 2048); ny = Math.Clamp(ny, 1, 2048);
+        var cells = new List<int>?[nx * ny];
+        int CX(double x) => Math.Clamp((int)((x - x0) / w * nx), 0, nx - 1);
+        int CY(double y) => Math.Clamp((int)((y - y0) / h * ny), 0, ny - 1);
+        void Add(int t)
+        {
+            Vector2d a = pts[tris[t]], b = pts[tris[t + 1]], c = pts[tris[t + 2]];
+            int i0 = CX(Math.Min(a.X, Math.Min(b.X, c.X))), i1 = CX(Math.Max(a.X, Math.Max(b.X, c.X)));
+            int j0 = CY(Math.Min(a.Y, Math.Min(b.Y, c.Y))), j1 = CY(Math.Max(a.Y, Math.Max(b.Y, c.Y)));
+            for (int j = j0; j <= j1; j++) for (int i = i0; i <= i1; i++) (cells[j * nx + i] ??= new List<int>(4)).Add(t);
+        }
+        for (int t = 0; t + 2 < tris.Count; t += 3) Add(t);
+        foreach (var p in inner)
+        {
+            int at = -1;
+            var l = cells[CY(p.Y) * nx + CX(p.X)];
+            if (l != null)
+                foreach (int t in l)
+                    if ((at < 0 || t < at) && InTriangle(p, pts[tris[t]], pts[tris[t + 1]], pts[tris[t + 2]])) at = t;
+            if (at < 0) continue;
+            int a = tris[at], b = tris[at + 1], c = tris[at + 2];
+            int k = pts.Count;
+            pts.Add(p);
+            tris[at] = a; tris[at + 1] = b; tris[at + 2] = k;
+            int t1 = tris.Count; tris.Add(b); tris.Add(c); tris.Add(k);
+            int t2 = tris.Count; tris.Add(c); tris.Add(a); tris.Add(k);
+            Add(t1); Add(t2);
+        }
+    }
+
     public static void FlipToDelaunay(List<int> tris, List<Vector2d> pts, int maxPasses = 12)
     {
         if (maxPasses <= 0 || tris.Count < 6) return;
