@@ -403,7 +403,10 @@ public static partial class ExactFaceMesher
             for (int i = 0; i < allB.Count; i++) for (int j = i + 1; j < allB.Count; j++) { double d = (allB[i] - allB[j]).Length; if (d < mind) { mind = d; at = allB[i]; } }
             ConformalDebug($"face {f.Id}: loops {loops.Count} [{string.Join(",", loops.Select(l => l.Count))}], closest boundary points {mind:G3} at {at}");
         }
-        var maps = ConformalMaps(src, loops, f.InteriorHint);
+        // k182: грань шара без точки внутри (импорт: угол трёх скруглений — сферический треугольник) — точка у середины
+        // контура на шаре, если контур — малая шапка (см. SphereHint). Мутация P3D_SPHEREHINT=0.
+        var hint0 = f.InteriorHint ?? (SphereHintOff ? null : SphereHint(f, src));
+        var maps = ConformalMaps(src, loops, hint0);
         if (maps.Count == 0) { why = "conformal: surface kind not supported"; return null; }
         double tol = 2 * Math.Max(Tol.Chord, 1e-4);
         string? lastWhy = "conformal: no map fits";
@@ -423,7 +426,7 @@ public static partial class ExactFaceMesher
             // сторона области: точка внутри грани (InteriorHint) должна лечь внутрь внешнего контура и вне отверстий.
             // Обход контуров здесь не мерило: Cycles сцепляет рёбра без учёта стороны (у пояса цилиндра оба контура —
             // в одну сторону). У шара без такой точки полюс проекции не выбрать — отказ.
-            if (f.InteriorHint is { } hint)
+            if (hint0 is { } hint)
             {
                 var wh = map.Fwd(hint);
                 bool inReg = Inside(w[oi], wh) && !Enumerable.Range(0, nL).Any(i => i != oi && Inside(w[i], wh));
@@ -553,5 +556,30 @@ public static partial class ExactFaceMesher
         if (lastWhy != null) whys.Add(lastWhy);
         why = string.Join(" / ", whys.Distinct());
         return null;
+    }
+
+    static readonly bool SphereHintOff = Environment.GetEnvironmentVariable("P3D_SPHEREHINT") == "0";
+
+    /// <summary>Точка внутри грани шара с одним контуром — по обходу контура (см. вызов); null — не определить.</summary>
+    static Vector3d? SphereHint(TFace f, ISurface3 src)
+    {
+        // только угловой треугольник (контур из 3–4 дуг, как у угла трёх скруглений): у купола с вырезом середина контура может
+        // лечь в сам вырез
+        if (f.Loops.Count != 1 || f.Loops[0].CoEdges.Count > 4 || Geometry.ExactEdges.ShapeOf(src) is not Geometry.Ssi.Sphere sp) return null;
+        var pts = new List<Vector3d>();
+        foreach (var ce in f.Loops[0].CoEdges)
+        {
+            var t = new List<Vector3d>(); ce.Edge.Curve.Tessellate(t, true);
+            if (ce.Reversed) t.Reverse();
+            foreach (var q in t) if (pts.Count == 0 || (pts[^1] - q).Length > 1e-12) pts.Add(q);
+        }
+        if (pts.Count < 3) return null;
+        var m = pts.Aggregate(Vector3d.Zero, (a, q) => a + q) / pts.Count;
+        var d = m - sp.C; if (d.Length < 1e-6 * sp.R) return null;
+        // только контур, заметно не доходящий до большого круга (середина дальше 0,3 R от центра): грань — малая шапка
+        // у середины (дополнение — почти весь шар с малым отверстием — в теле из файла не встречается). Ближе к большому
+        // кругу сторону не угадать — отказ, как прежде.
+        if (d.Length < 0.3 * sp.R) return null;
+        return sp.C + d.Normalized() * sp.R;
     }
 }

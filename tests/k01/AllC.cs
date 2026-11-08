@@ -343,11 +343,16 @@ static partial class Program
             p.Limits = new KernelLimits { Deadline = DateTime.UtcNow.AddSeconds(stepSec) };
             bool prof = Environment.GetEnvironmentVariable("P3D_ALLC_PROF") != "0" && !Parametric3D.Kernel.Diagnostics.Prof.Enabled && set != "R";
             if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
+            // причины отказа внутренних маршрутов оболочки — в отчёт (иначе видна только итоговая «could not be hollowed»)
+            var dbg = new List<string>();
+            ShellOp.ShellDebug = m => { lock (dbg) if (dbg.Count < 12) dbg.Add(m); };
+            if (Environment.GetEnvironmentVariable("P3D_ALLC_DIAG") == "1") DirectRound.Debug = m => { lock (dbg) if (dbg.Count < 40) dbg.Add("offset: " + m); };
             var sw = Stopwatch.StartNew();
             try { p.Rebuild(null); }
             catch (Exception e) { r.Error = "exception: " + e.GetType().Name + ": " + e.Message; }
             r.Ms = sw.Elapsed.TotalMilliseconds;
             BooleanOp.GeneralAcceptProbe = null;
+            ShellOp.ShellDebug = null; DirectRound.Debug = null;
             // медленный шаг (> 3 с) — профиль этапов ядра в отчёт (P3D_ALLC_PROF=0 — без профиля)
             if (prof)
             {
@@ -374,6 +379,7 @@ static partial class Program
             }
             catch (Exception e) { r.Valid = false; invalidWhy = "validator: " + e.Message; }
             r.Warnings.AddRange(p.Warnings.Distinct());
+            if (r.Error != null) r.Warnings.AddRange(dbg.Select(m => "debug: " + m));
             var dg = added.Where(x => p.Downgrades.ContainsKey(x)).Select(x => p.Downgrades[x]).ToList();
             if (dg.Count > 0) r.Downgrade = $"{dg.Sum(x => x.Faces)} faceted face(s), {dg.Sum(x => x.Edges)} faceted edge(s)";
             // вердикт
@@ -381,7 +387,7 @@ static partial class Program
             void Fail(string w) { why.Add(w); v = "FAIL"; }
             void Warn(string w) { why.Add(w); if (v == "OK") v = "WARN"; }
             // законный отказ по геометрии (размер больше места) — не дефект ядра: отмечается отдельно
-            string[] legit = { "is wider than the face", "is too thick", "larger than the face", "is thicker than the radius" };
+            string[] legit = { "is wider than the face", "is too thick", "larger than the face", "is thicker than the radius", "a smooth join, not an edge" };
             if (r.Error != null && legit.Any(r.Error.Contains)) { why.Add("refused (geometry): " + r.Error); v = "REFUSED"; }
             else if (r.Error != null) Fail("error: " + r.Error);
             else

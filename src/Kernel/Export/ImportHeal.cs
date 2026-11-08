@@ -44,9 +44,13 @@ public static class ImportHeal
         try { return (src.PointAt(src.ProjectToUV(p)) - p).Length; } catch { return 0; }
     }
 
-    public static Report Heal(TSolid b, List<string>? warnings, string label)
+    static readonly bool FileAccOff = Environment.GetEnvironmentVariable("P3D_HEALFILEACC") == "0";
+
+    public static Report Heal(TSolid b, List<string>? warnings, string label, double fileAccuracy = 0)
     {
-        double budget = ToleranceContext.Current.ImportHeal;
+        // k182: бюджет — не меньше точности файла (STEP: GLOBAL_UNCERTAINTY; Parasolid: допуски рёбер и вершин), но не больше
+        // 0,01 мм — как OCCT при read.precision.mode = File. Мутация P3D_HEALFILEACC=0 — только общий бюджет.
+        double budget = Math.Max(ToleranceContext.Current.ImportHeal, FileAccOff ? 0 : Math.Min(fileAccuracy, 0.01));
         if (b.TopologyConvention < TopologyConventions.Version) TopologyConventions.Normalize(b);
         bool changed = false;
         // 1. зазоры вершин
@@ -65,7 +69,7 @@ public static class ImportHeal
             double g = fs.Max(f => Gap(f, v.P));
             maxGap = Math.Max(maxGap, g);
             if (g <= 1e-9) continue;
-            if (g > budget) { problem ??= $"a vertex is {g:G3} mm off its faces (budget {budget:G3} mm)"; continue; }
+            if (g > budget) { problem ??= $"a vertex is {g:G3} mm off its faces (budget {budget:G3} mm) at ({v.P.X:0.###}, {v.P.Y:0.###}, {v.P.Z:0.###}), faces {string.Join("/", fs.Select(x => $"{GeometryAudit.AuthoritativeSurface(x)?.GetType().Name}:{Gap(x, v.P):G3}"))}"; continue; }
             var pls = fs.Select(PlaneOf).ToList();
             var edges = b.Edges.Where(e => ReferenceEquals(e.V0, v) || ReferenceEquals(e.V1, v)).ToList();
             if (pls.Any(x => x == null) || edges.Any(e => e.Curve is not LineCurve3)) { v.Tolerance = Math.Max(v.Tolerance, g); continue; }

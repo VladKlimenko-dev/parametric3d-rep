@@ -162,13 +162,27 @@ public static class Exchange
         }
 
         // KRN-09 (09.5): лечение в бюджете с отчётом (строка на тело в предупреждениях)
+        double acc = format == Format.Step ? StepAccuracyMm(text) : 0;
         if (!Kernel.Export.ImportHeal.Off)
-            for (int i = 0; i < bodies.Count; i++) Kernel.Export.ImportHeal.Heal(bodies[i], warnings, $"body {i + 1}");
+            for (int i = 0; i < bodies.Count; i++) Kernel.Export.ImportHeal.Heal(bodies[i], warnings, $"body {i + 1}", acc);
         var part = new Part("импорт");
         foreach (var b in bodies) part.Bodies.Add(b);
         // k149: имена деталей файла (STEP: изделие оболочки), по порядку тел; нет — пусто
         if (stepNames.Count == bodies.Count) part.BodyNameList.AddRange(stepNames.Select(n => n ?? ""));
         return part;
+    }
+
+    /// <summary>Точность модели STEP (UNCERTAINTY_MEASURE_WITH_UNIT … 'distance_accuracy_value'), мм; единица — по SI_UNIT
+    /// длины файла (миллиметры, метры, сантиметры) или дюймам; нет — 0.</summary>
+    public static double StepAccuracyMm(string text)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(text, @"UNCERTAINTY_MEASURE_WITH_UNIT\s*\(\s*(?:LENGTH_MEASURE\s*\()?\s*([-+0-9.Ee]+)");
+        if (!m.Success || !double.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) || v <= 0) return 0;
+        double scale = 1;
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"LENGTH_UNIT\s*\(\s*\)\s*NAMED_UNIT\s*\(\s*\*\s*\)\s*SI_UNIT\s*\(\s*\$\s*,\s*\.METRE\.")) scale = 1000;
+        else if (text.Contains("SI_UNIT(.CENTI.,.METRE.)")) scale = 10;
+        else if (text.Contains("'INCH'")) scale = 25.4;
+        return v * scale;
     }
 
     /// <summary>Какого вида файл перед нами.</summary>

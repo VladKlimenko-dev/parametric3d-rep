@@ -398,6 +398,18 @@ public sealed class StepParser
             {
                 Frame3 f = Placement(a[1]);
                 double ring = Num(a[2]) * LengthScale, tube = Num(a[3]) * LengthScale;
+                // k182: САМОПЕРЕСЕКАЮЩИЙСЯ ТОР (малый радиус не меньше большого): образующая — только дуга по одну сторону
+                // оси: «яблоко» (внешняя часть, select_outer = .T.; у TOROIDAL_SURFACE — по умолчанию) или «лимон» (внутренняя).
+                // Прежде вращалась вся окружность, и проекция попадала на чужой лист (винт с полукруглой головкой: вершина
+                // в 1,46 мм от грани). Мутация P3D_SPINDLETORUS=0.
+                if (!SpindleOff && tube >= Math.Abs(ring) && Math.Abs(ring) > 1e-12)
+                {
+                    bool outer = type != "DEGENERATE_TOROIDAL_SURFACE" || a.Count < 5 || a[4].Contains("T");
+                    double t0 = Math.Acos(Math.Clamp(-ring / tube, -1, 1));
+                    var arc = outer ? new ArcCurve3(new Frame3(f.Origin + f.U * ring, f.U, f.W), tube, -t0, t0)
+                                    : new ArcCurve3(new Frame3(f.Origin + f.U * ring, f.U, f.W), tube, t0, 2 * Math.PI - t0);
+                    return new RevolvedSurface(arc, f, 0, 2 * Math.PI);
+                }
                 var circle = new ArcCurve3(new Frame3(f.Origin + f.U * ring, f.U, f.W), tube, 0, 2 * Math.PI);
                 return new RevolvedSurface(circle, f, 0, 2 * Math.PI);
             }
@@ -419,6 +431,9 @@ public sealed class StepParser
     /// </summary>
     /// <summary>Концы каждой кривой контура по вершинам файла (в направлении обхода).</summary>
     public readonly Dictionary<ICurve3, (Vector3d Start, Vector3d End)> LastEnds = new(ReferenceEqualityComparer.Instance);
+
+    static readonly bool SpindleOff = Environment.GetEnvironmentVariable("P3D_SPINDLETORUS") == "0";
+    static readonly bool NoBoundOff = Environment.GetEnvironmentVariable("P3D_STEPNOBOUND") == "0";
 
     public (ISurface3 Surface, List<List<ICurve3>> Loops, bool SameSense)? Face(string arg)
     {
@@ -471,6 +486,10 @@ public sealed class StepParser
 
         // Флаг совпадения с нормалью поверхности отдаётся наружу: без него тело собиралось с
         // вывернутыми гранями (у конуса объём выходил 58 864 вместо 82 467).
+        // k182: грань БЕЗ КОНТУРОВ (пустой список границ) — вся замкнутая поверхность: шарик подшипника из Parasolid. Прежде
+        // такая грань отбрасывалась, и тело-шар пропадало. Мутация P3D_STEPNOBOUND=0.
+        bool noBounds = SplitArgs(e.Args[1].Trim('(', ')')).All(x => string.IsNullOrWhiteSpace(x));
+        if (loops.Count == 0 && noBounds && !NoBoundOff) return (surf, loops, faceSame);
         return loops.Count == 0 ? null : (surf, loops, faceSame);
     }
 

@@ -60,6 +60,8 @@ public static partial class DirectRound
     }
     static readonly bool ProcTrimOff = Environment.GetEnvironmentVariable("P3D_OFFSETPROCTRIM") == "0";
     static readonly bool MoveDbg = Environment.GetEnvironmentVariable("P3D_OFFSETMOVEDBG") == "1";
+    static readonly bool ConeApexOff = Environment.GetEnvironmentVariable("P3D_OFFSETCONEAPEX") == "0";
+    static readonly bool AxisProbeOff = Environment.GetEnvironmentVariable("P3D_OFFSETAXISPROBE") == "0";
     static readonly bool FreeFormOff = Environment.GetEnvironmentVariable("P3D_OFFSETFREEFORM") == "0";
     static readonly bool SectionOffOff = Environment.GetEnvironmentVariable("P3D_OFFSETSECTION") == "0";
     static readonly bool NearTanOff = Environment.GetEnvironmentVariable("P3D_OFFSETNEARTAN") == "0";
@@ -125,6 +127,20 @@ public static partial class DirectRound
             if (src == null) { why = "face without an exact surface"; return null; }
             double d = offset(f);
             var probe = f.Loops.SelectMany(l => l.CoEdges).FirstOrDefault()?.Start.P ?? f.InteriorHint ?? src.PointAt(new Vector2d(0.3, 0.3));
+            // k182: ПРОБА ВНЕ ОСИ ПОВЕРХНОСТИ ВРАЩЕНИЯ. Первая вершина грани конуса — его вершина на оси (шов от вершины к основанию):
+            // нормаль там не определена, смещённая образующая «не несла сдвинутую точку» (AllC: вращение-конус + оболочка).
+            // Берётся точка контура (вершина или середина ребра), дальше всех от оси. Мутация P3D_OFFSETAXISPROBE=0.
+            if (!AxisProbeOff && src is RevolvedSurface rvp)
+            {
+                var axw = rvp.Axis.W.Normalized(); var axo = rvp.Axis.Origin;
+                double Rad(Vector3d q) { var r0 = q - axo; return (r0 - axw * Vector3d.Dot(r0, axw)).Length; }
+                if (Rad(probe) <= 1e3 * tol)
+                {
+                    var cands = f.Loops.SelectMany(l => l.CoEdges).SelectMany(c => c.Edge?.Curve is { } ec ? new[] { c.Start.P, ec.PointAt(0.5 * (ec.T0 + ec.T1)) } : new[] { c.Start.P });
+                    var best = cands.OrderByDescending(Rad).FirstOrDefault();
+                    if (Rad(best) > 1e3 * tol) probe = best;
+                }
+            }
             var no = Out(f, probe);
             ISurface3? ns = null;
             switch (src)
@@ -159,7 +175,20 @@ public static partial class DirectRound
                         // объём не сходился с фасетами). Продление — на max(4|d|, длина) с каждого конца (точка у открытой грани уходит вдоль шва
                         // фаски на ~1.4|d|), не дальше оси (вершины конуса). Мутация P3D_OFFSETCONEEXT=0.
                         var ax = rvl.Axis.W.Normalized(); var ao = rvl.Axis.Origin;
-                        double Rad(Vector3d q) { var r0 = q - ao; return (r0 - ax * Vector3d.Dot(r0, ax)).Length; }
+                        // k182: РАДИУС СО ЗНАКОМ (в меридиане образующей). Конус с вершиной на оси при смещении внутрь: сдвинутый конец у
+                        // вершины уходил за ось, беззнаковый радиус принимал его за точку другого «рукава», и образующая продлевалась
+                        // сквозь ось — поверхность вращения сама себя пересекала («смещение не несёт сдвинутую точку»: вращение-конус +
+                        // оболочка). Конец за осью срезается до оси (новая вершина конуса). Мутация P3D_OFFSETCONEAPEX=0.
+                        var m0 = gl.PointAt(0.5) - ao; var eR = m0 - ax * Vector3d.Dot(m0, ax);
+                        bool signedR = !ConeApexOff && eR.Length > tol; if (signedR) eR.Normalize();
+                        double Rad(Vector3d q) { var r0 = q - ao; return signedR ? Vector3d.Dot(r0, eR) : (r0 - ax * Vector3d.Dot(r0, ax)).Length; }
+                        if (signedR)
+                        {
+                            double ra0 = Rad(ga2), rb0 = Rad(gb2);
+                            if (ra0 < 0 && rb0 > 0) ga2 = ga2 + (gb2 - ga2) * (-ra0 / (rb0 - ra0));
+                            else if (rb0 < 0 && ra0 > 0) gb2 = gb2 + (ga2 - gb2) * (-rb0 / (ra0 - rb0));
+                            else if (ra0 <= 0 && rb0 <= 0) { why = "offset: a cone vanishes through its axis"; return null; }
+                        }
                         var dir = gb2 - ga2; double len = dir.Length;
                         if (len > tol)
                         {
