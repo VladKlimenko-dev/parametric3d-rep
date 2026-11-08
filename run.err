@@ -1,0 +1,2 @@
+exit 1
+seconds 373 nproc 4 env P3D_SLDOUT=res/out cmd sldprt tests/k01/data/sw_pipe_fitting_761.SLDPRT tests/k01/data/sw_pipe_fitting_366.SLDPRT tests/k01/data/sw_6261k973_roller_chain.SLDPRT
