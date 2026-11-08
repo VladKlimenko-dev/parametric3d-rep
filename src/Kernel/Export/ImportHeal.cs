@@ -69,7 +69,7 @@ public static class ImportHeal
             double g = fs.Max(f => Gap(f, v.P));
             maxGap = Math.Max(maxGap, g);
             if (g <= 1e-9) continue;
-            if (g > budget) { problem ??= $"a vertex is {g:G3} mm off its faces (budget {budget:G3} mm)"; continue; }
+            if (g > budget) { problem ??= $"a vertex is {g:G3} mm off its faces (budget {budget:G3} mm) at ({v.P.X:0.###}, {v.P.Y:0.###}, {v.P.Z:0.###}), faces {string.Join("/", fs.Select(x => $"{GeometryAudit.AuthoritativeSurface(x)?.GetType().Name}:{Gap(x, v.P):G3}"))}"; continue; }
             var pls = fs.Select(PlaneOf).ToList();
             var edges = b.Edges.Where(e => ReferenceEquals(e.V0, v) || ReferenceEquals(e.V1, v)).ToList();
             if (pls.Any(x => x == null) || edges.Any(e => e.Curve is not LineCurve3)) { v.Tolerance = Math.Max(v.Tolerance, g); continue; }
