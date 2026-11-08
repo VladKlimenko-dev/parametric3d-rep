@@ -537,6 +537,7 @@ internal static class XtPoly
 
     /// <summary>Сгущение ломаной кривой пересечения двух поверхностей: точки между узлами карты переносятся на обе поверхности
     /// попеременной проекцией (сходится к линии пересечения при пересечении под углом).</summary>
+    static readonly bool DenseOrderOff = Environment.GetEnvironmentVariable("P3D_XTDENSEORDER") == "0";
     static readonly bool DenseCheckOff = Environment.GetEnvironmentVariable("P3D_XTDENSECHECK") == "0";
     static readonly bool IntNewtonOff = Environment.GetEnvironmentVariable("P3D_XTINTNEWTON") == "0";
 
@@ -580,6 +581,15 @@ internal static class XtPoly
         for (int i = 0; i + 1 < chart.Count; i++)
         {
             res.Add(chart[i]);
+            var seg = chart[i + 1] - chart[i]; double segL2 = seg.LengthSquared; double lastT = 0;
+            bool InOrder(Vector3d q)
+            {
+                if (DenseOrderOff || segL2 <= 0) return true;
+                double t = Vector3d.Dot(q - chart[i], seg) / segL2;
+                double off = (chart[i] + seg * t - q).Length;
+                if (t <= lastT || t >= 1 || off > 0.5 * Math.Sqrt(segL2)) return false;
+                lastT = t; return true;
+            }
             for (int k = 1; k < per; k++)
             {
                 var p = Vector3d.Lerp(chart[i], chart[i + 1], (double)k / per);
@@ -588,7 +598,7 @@ internal static class XtPoly
                 if (!BlendEdgeOff && (a as XtBlendSurf ?? b as XtBlendSurf) is { } bl && (a is XtBlendSurf ? b : a) is { } other)
                 {
                     var q = bl.EdgeNear(p);
-                    if ((other.Project(q) - q).Length < 1e-8) { res.Add(q); continue; }
+                    if ((other.Project(q) - q).Length < 1e-8) { if (InOrder(q)) res.Add(q); continue; }
                 }
                 // граница скругления: её проекция уже лежит на опоре (обычно это и есть вторая поверхность) — один шаг
                 if (!BlendEdgeOff && (a as XtSurf.BlendBound ?? b as XtSurf.BlendBound) is { } bb && (a is XtSurf.BlendBound ? b : a) is { } oth)
@@ -597,7 +607,7 @@ internal static class XtPoly
                     // «на конусе», а ребро — на плоскости): берётся касание, лежащее на второй поверхности
                     var q = bb.Project(p);
                     if ((oth.Project(q) - q).Length >= 1e-8) { var q2 = bb.ProjectOther(p); if ((oth.Project(q2) - q2).Length < (oth.Project(q) - q).Length) q = q2; }
-                    if ((oth.Project(q) - q).Length < 1e-8) { res.Add(q); continue; }
+                    if ((oth.Project(q) - q).Length < 1e-8) { if (InOrder(q)) res.Add(q); continue; }
                 }
                 if (a != null && b != null)
                 {
@@ -620,7 +630,10 @@ internal static class XtPoly
                     // 0.3–0.5 мм. Мутация P3D_XTDENSECHECK=0.
                     if (!DenseCheckOff && ((a.Project(p) - p).Length > 1e-8 || (b.Project(p) - p).Length > 1e-8)) continue;
                 }
-                res.Add(p);
+                // k184: ПОРЯДОК ВДОЛЬ ЗВЕНА КАРТЫ. Проекция на ленту скругления уводила соседние точки вперёд и назад: ломаная
+                // шла зигзагом, контур плоской грани пересекал себя, и грань не строилась (опора 60945K27). Точка должна идти
+                // дальше предыдущей по хорде звена и не отходить от неё дальше половины звена. Мутация P3D_XTDENSEORDER=0.
+                if (InOrder(p)) res.Add(p);
             }
         }
         if (chart.Count > 0) res.Add(chart[^1]);
