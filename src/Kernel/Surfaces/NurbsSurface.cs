@@ -264,7 +264,81 @@ public sealed class NurbsSurface : ISurface3
         return n.LengthSquared < 1e-24 ? Vector3d.UnitZ : n.Normalized();
     }
 
+    /// <summary>
+    /// k184: ПРОЕКЦИЯ С НЕСКОЛЬКИХ НАЧАЛ. У винтовой поверхности резьбы (сотни пролётов, шаг витка меньше шага сетки вдоль
+    /// витка) ближайшая точка сетки бывает на соседнем витке, и Ньютон сходится к ложному минимуму — отход «0.74 мм» у ребра,
+    /// лежащего на поверхности точно (гнездо 1423N12). Если ответ не на поверхности (дальше 1e-6 мм), спуск повторяется от
+    /// лучших точек сетки в разных местах; берётся ближайший (так же поступает Parasolid/OCCT: Extrema по сетке с несколькими
+    /// решениями). Мутация P3D_NURBSMULTI=0.
+    /// </summary>
+    static readonly bool MultiOff = Environment.GetEnvironmentVariable("P3D_NURBSMULTI") == "0";
     public Vector2d ProjectToUV(Vector3d p)
+    {
+        var uv0 = ProjectToUVCore(p);
+        // только у поверхностей с многими пролётами (резьба, длинные винтовые ленты): у лофтов и скруглений ложных минимумов
+        // такого рода нет, а другой ответ на краю области менял построения (скругление лофта в корпусе K140)
+        if (MultiOff || DerivsOff || (CountU - _du) + (CountV - _dv) < 40) return uv0;
+        double d0 = (PointAt(uv0) - p).LengthSquared;
+        if (d0 <= 1e-12) return uv0;
+        // подозрителен только ответ на краю области или с невязкой не по нормали (ложный минимум у соседнего витка лежит на краю
+        // полосы); точка вне поверхности с честной проекцией внутрь области повторного поиска не получает
+        bool edge = uv0.X <= 0 || uv0.X >= 1 || uv0.Y <= 0 || uv0.Y >= 1;
+        if (!edge)
+        {
+            var nn = NormalAt(uv0); var rr = PointAt(uv0) - p;
+            if (rr.LengthSquared > 0 && Math.Abs(Vector3d.Dot(rr.Normalized(), nn)) > 1 - 1e-6) return uv0;
+        }
+        var g = _grid; if (g == null) return uv0;
+        int gu = g.GetLength(0) - 1, gv = g.GetLength(1) - 1;
+        // лучшие точки сетки, разнесённые не меньше чем на 3 ячейки
+        const int K = 6;
+        var cand = new List<(double D, int I, int J)>(K + 1);
+        for (int i = 0; i <= gu; i++)
+            for (int j = 0; j <= gv; j++)
+            {
+                double d = (g[i, j] - p).LengthSquared;
+                if (cand.Count == K && d >= cand[^1].D) continue;
+                int near = cand.FindIndex(c => Math.Abs(c.I - i) <= 3 && Math.Abs(c.J - j) <= 3);
+                if (near >= 0) { if (d < cand[near].D) cand[near] = (d, i, j); else continue; }
+                else cand.Add((d, i, j));
+                cand.Sort((a, b) => a.D.CompareTo(b.D));
+                if (cand.Count > K) cand.RemoveAt(K);
+            }
+        var best = uv0; double bd = d0;
+        foreach (var (_, ci, cj) in cand)
+        {
+            var (u, v, d) = NewtonDescent(p, ci / (double)gu, cj / (double)gv);
+            if (d < bd) { bd = d; best = new Vector2d(u, v); }
+        }
+        if (bd < d0) Interlocked.Increment(ref MultiStartWins);
+        return best;
+    }
+    public static long MultiStartWins;
+
+    (double U, double V, double D2) NewtonDescent(Vector3d p, double u, double v)
+    {
+        double bd = (PointAt(new Vector2d(u, v)) - p).LengthSquared;
+        for (int it = 0; it < 50; it++)
+        {
+            DerivsCore(new Vector2d(u, v), false, out var S, out var Su, out var Sv);
+            var r = S - p;
+            double f1 = Vector3d.Dot(r, Su), f2 = Vector3d.Dot(r, Sv);
+            double a11 = Vector3d.Dot(Su, Su), a12 = Vector3d.Dot(Su, Sv), a22 = Vector3d.Dot(Sv, Sv), det = a11 * a22 - a12 * a12;
+            if (Math.Abs(det) < 1e-30) break;
+            double du = -(f1 * a22 - f2 * a12) / det, dv = -(f2 * a11 - f1 * a12) / det;
+            double fr = 1; bool moved = false;
+            for (int hh = 0; hh < 30; hh++, fr *= 0.5)
+            {
+                double nu = Math.Clamp(u + du * fr, 0, 1), nv = Math.Clamp(v + dv * fr, 0, 1);
+                double nd = (PointAt(new Vector2d(nu, nv)) - p).LengthSquared;
+                if (nd < bd) { moved = true; u = nu; v = nv; bd = nd; break; }
+            }
+            if (!moved || Math.Abs(du * fr) + Math.Abs(dv * fr) < 1e-14) break;
+        }
+        return (u, v, bd);
+    }
+
+    Vector2d ProjectToUVCore(Vector3d p)
     {
         // Ближайшая точка ищется в два приёма: грубо по сетке значений, затем спуском по
         // параметрам. Для поверхности общего вида точного решения нет.

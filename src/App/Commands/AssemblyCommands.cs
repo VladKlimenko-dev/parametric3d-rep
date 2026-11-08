@@ -291,9 +291,23 @@ public static class AssemblyCommands
             foreach (var p in comps) if (!p.Bounds.IsEmpty) minX = Math.Min(minX, ToWorld(p, p.Bounds.Min).X);
             if (!b.IsEmpty && minX < double.MaxValue) dx = (float)(b.Max.X + 20 - minX);
         }
-        w.Session.Edit(L("Вставить компонент"), () => { foreach (var p in comps) { p.Translation += new Vector3(dx, 0, 0); root.Add(p); } });
+        w.Session.Edit(L("Вставить компонент"), () => { foreach (var p in comps) { p.Translation += new Vector3(dx, 0, 0); InsertAtBar(root, p); } });
         w.Session.Document.RebuildDirty();
         w.ViewPort.MarkDirty(); w.RebuildTree(); w.ViewPort.ZoomToFit();
+    }
+
+    /// <summary>
+    /// k184: КОМПОНЕНТ — В МЕСТО СТРОКИ ОТКАТА СБОРКИ (как операция детали — в место своей строки): перед первым компонентом
+    /// ниже строки; строка сдвигается за вставленный, чтобы он сразу был в модели. Строка в конце — в конец.
+    /// </summary>
+    public static void InsertAtBar(Parametric3D.Model.Assembly root, Part p)
+    {
+        if (root.StageIndex < 0) { root.Add(p); return; }
+        int k = 0, at = root.Children.Count;
+        for (int i = 0; i < root.Children.Count; i++)
+            if (root.Children[i] is Part) { if (k == root.StageIndex) { at = i; break; } k++; }
+        root.Insert(at, p);
+        root.StageIndex++;
     }
 
     /// <summary>Компонент в сборку: справа от уже стоящих (габарит + 20), первый — в начале.</summary>
@@ -315,7 +329,7 @@ public static class AssemblyCommands
         if (!pb.IsEmpty && placed.Count > 0) x -= pb.Min.X;
         part.Translation = new Vector3((float)x, 0, 0);
         if (placed.Count == 0) part.Fixed = true;   // первый компонент — основа
-        w.Session.Edit(undo, () => root.Add(part));
+        w.Session.Edit(undo, () => InsertAtBar(root, part));
         w.Session.Document.RebuildDirty();
         w.ViewPort.MarkDirty(); w.RebuildTree(); w.ViewPort.ZoomToFit();
         return part;

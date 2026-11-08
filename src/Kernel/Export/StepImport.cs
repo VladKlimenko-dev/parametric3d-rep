@@ -84,6 +84,58 @@ public static class StepImport
     static readonly bool ImportApexOff = Environment.GetEnvironmentVariable("P3D_IMPAPEX") == "0";
     static readonly bool ImportSeamOff = Environment.GetEnvironmentVariable("P3D_IMPSEAM") == "0";
 
+    /// <summary>
+    /// k184: ТОЧКИ КРИВОЙ КОНТУРА ДЛЯ ПРОТЯЖЁННОСТИ образующей конуса и цилиндра. Прежде — начало, середина, конец: у
+    /// сплайнового ребра (сбег резьбы на конусе) крайняя по оси точка лежала между ними, образующая выходила короче грани,
+    /// проекция на поверхность упиралась в край, и ребро «отходило» на 0.47 мм (бачок 1358K26). Прямая — концы; прочие — 33
+    /// точки. Мутация P3D_IMPRANGE=0.
+    /// </summary>
+    static readonly bool TorusGapOff = Environment.GetEnvironmentVariable("P3D_TORUSGAP") == "0";
+    static readonly bool MeridianDbg = Environment.GetEnvironmentVariable("P3D_MERIDBG") == "1";
+    static readonly bool MeridianOff = Environment.GetEnvironmentVariable("P3D_IMPMERIDIAN") == "0";
+
+    /// <summary>k184: размах тела вращения между двумя контурами-меридианами (каждый — на постоянном угле); null — не тот случай.</summary>
+    static (double Lo, double Hi)? MeridianSweep(Surfaces.RevolvedSurface rv, List<List<Curves.ICurve3>> loops, bool sameSense)
+    {
+        var w = rv.Axis.W.Normalized();
+        double sgnOut = (sameSense ^ !OurNormalIsCanonical(rv)) ? 1 : -1;
+        var res = new List<(double V, int Dir)>();
+        foreach (var lc in loops)
+        {
+            double vmin = double.MaxValue, vmax = double.MinValue;
+            foreach (var c in lc)
+                for (int k = 0; k <= 8; k++)
+                {
+                    double v = rv.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * k / 8.0)).Y;
+                    vmin = Math.Min(vmin, v); vmax = Math.Max(vmax, v);
+                }
+            if (vmax - vmin > 1e-4 && vmax - vmin < 1 - 1e-4) return null;   // не меридиан
+            var c0 = lc[0]; double tm = (c0.T0 + c0.T1) / 2;
+            var q = c0.PointAt(tm); var t = c0.TangentAt(tm);
+            var uv = rv.ProjectToUV(q);
+            var n = rv.NormalAt(uv) * sgnOut;
+            var left = Vector3d.Cross(n, t);
+            var radial = q - rv.Axis.Origin; radial -= w * Vector3d.Dot(radial, w);
+            var eTheta = Vector3d.Cross(w, radial);
+            double d = Vector3d.Dot(left, eTheta) * Math.Sign(rv.A1 - rv.A0);
+            if (Math.Abs(d) < 1e-12) return null;
+            res.Add(((uv.Y % 1 + 1) % 1, Math.Sign(d)));
+        }
+        if (res.Count != 2 || res[0].Dir == res[1].Dir) return null;
+        var start = res[0].Dir > 0 ? res[0] : res[1]; var end = res[0].Dir > 0 ? res[1] : res[0];
+        double lo = start.V, hi = end.V; if (hi <= lo) hi += 1;
+        return (lo, hi);
+    }
+
+    static readonly bool EdgeIdOff = Environment.GetEnvironmentVariable("P3D_STEPEDGEID") == "0";
+    static readonly bool EdgeTolOff = Environment.GetEnvironmentVariable("P3D_STEPEDGETOL") == "0";
+    static readonly bool ImpRangeOff = Environment.GetEnvironmentVariable("P3D_IMPRANGE") == "0";
+    static IEnumerable<double> RangeSamples(Curves.ICurve3 c)
+    {
+        if (ImpRangeOff || c is Curves.LineCurve3) { yield return c.T0; yield return (c.T0 + c.T1) / 2; yield return c.T1; yield break; }
+        for (int k = 0; k <= 32; k++) yield return c.T0 + (c.T1 - c.T0) * k / 32;
+    }
+
     internal static bool OurNormalIsCanonical(Surfaces.ISurface3 s)
     {
         if (StepNormalOff) return true;
@@ -252,6 +304,9 @@ public static class StepImport
             // соединяют одни и те же точки, и ключ по одним концам сливал их в одно ребро —
             // крышки прочитанного тела оставались с одним ребром и нулевой площадью.
             var edges = new Dictionary<string, TEdge>();
+            var edgeByEc = new Dictionary<int, TEdge>();
+            var ecOfEdge = new Dictionary<TEdge, int>(ReferenceEqualityComparer.Instance);
+            var edgeKeyOf = new Dictionary<TEdge, string>(ReferenceEqualityComparer.Instance);
 
             static (long, long, long) K(Vector3d p) =>
                 ((long)Math.Round(p.X / Tol.Weld), (long)Math.Round(p.Y / Tol.Weld), (long)Math.Round(p.Z / Tol.Weld));
@@ -283,7 +338,7 @@ public static class StepImport
                     double lo0 = double.MaxValue, hi0 = double.MinValue;
                     foreach (var lc in got.Value.Loops)
                         foreach (var c in lc)
-                            foreach (double t in new[] { c.T0, (c.T0 + c.T1) / 2, c.T1 })
+                            foreach (double t in RangeSamples(c))
                             {
                                 double z = Vector3d.Dot(c.PointAt(t) - rvc.Axis.Origin, axis0);
                                 lo0 = Math.Min(lo0, z); hi0 = Math.Max(hi0, z);
@@ -330,7 +385,7 @@ public static class StepImport
                     Vector3d axis = ex.Dir.Normalized();
                     foreach (var loopCurves in got.Value.Loops)
                         foreach (var c in loopCurves)
-                            foreach (double t in new[] { c.T0, (c.T0 + c.T1) / 2, c.T1 })
+                            foreach (double t in RangeSamples(c))
                             {
                                 double s2 = Vector3d.Dot(c.PointAt(t) - baseArc.Frame.Origin, axis);
                                 lo = Math.Min(lo, s2); hi = Math.Max(hi, s2);
@@ -387,6 +442,13 @@ public static class StepImport
                     }
 
                     double span = hi - lo;
+                    // k184: ГРАНЬ МЕЖДУ ДВУМЯ МЕРИДИАНАМИ (колено трубы: тор, ограниченный двумя окружностями сечения). Каждый
+                    // контур — на своём угле, и [меньший, больший] угол — лишь одна из двух дуг; бралась она, хотя грань могла
+                    // лежать по другую сторону шва (подъёмник 3645T16: сетка на 278° вместо 82°, точная площадь 0). Сторона —
+                    // по обходу контура: грань слева от него, если смотреть против нормали грани. Мутация P3D_IMPMERIDIAN=0.
+                    var msr = !MeridianOff && got.Value.Loops.Count == 2 ? MeridianSweep(rvAng, got.Value.Loops, got.Value.SameSense) : null;
+                    if (MeridianDbg) Console.Error.WriteLine($"MERID face {faceCount} loops {got.Value.Loops.Count} base {rvAng.Base.GetType().Name} A {rvAng.A0:0.###}..{rvAng.A1:0.###} lo {lo:0.####} hi {hi:0.####} ms {msr}");
+                    if (msr is { } ms) { lo = ms.Lo; hi = ms.Hi; span = hi - lo; }
                     if (span > 1e-6 && span < 0.999)
                     {
                         double full = rvAng.A1 - rvAng.A0;
@@ -432,16 +494,20 @@ public static class StepImport
                         var ts = new List<double>();
                         foreach (var lc in got.Value.Loops)
                             foreach (var c in lc)
-                                for (int k = 0; k <= 16; k++)
-                                    ts.Add(((rvLat.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * k / 16.0)).X - bc.T0) / span % 1 + 1) % 1);
+                                for (int k = 0, nk = TorusGapOff ? 16 : 64; k <= nk; k++)
+                                    ts.Add(((rvLat.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * k / (double)nk)).X - bc.T0) / span % 1 + 1) % 1);
                         ts.Sort();
-                        double gap = 0, after = 0, before = 1;
+                        double gap = 0, gap2 = 0, after = 0, before = 1;
                         for (int i = 0; i < ts.Count; i++)
                         {
                             double nx = i + 1 < ts.Count ? ts[i + 1] : ts[0] + 1;
-                            if (nx - ts[i] > gap) { gap = nx - ts[i]; before = ts[i]; after = nx % 1; }
+                            double g = nx - ts[i];
+                            if (g > gap) { gap2 = gap; gap = g; before = ts[i]; after = nx % 1; } else if (g > gap2) gap2 = g;
                         }
-                        if (gap > 1e-3)
+                        // k184: промежуток — настоящий, а не шаг выборки: контур из окружности сечения (колено трубы) давал по 17
+                        // точкам промежуток 1/16, и образующая тора обрезалась на 22°, — сетка отходила от поверхности на 12 мм
+                        // (подъёмник 3645T16). Теперь 65 точек на кривую и промежуток не меньше 0.05 оборота. P3D_TORUSGAP=0.
+                        if (TorusGapOff ? gap > 1e-3 : gap > 1e-3 && (gap > 0.05 || gap > 3 * gap2))
                         {
                             double a0 = after, a1 = before < after ? before + 1 : before;
                             var trimmedT = new Curves.ArcCurve3(gArc.Frame, gArc.Radius, gArc.A0 + gArc.Sweep * a0, gArc.A0 + gArc.Sweep * a1);
@@ -490,6 +556,22 @@ public static class StepImport
                         string ends = string.CompareOrdinal(ka.ToString(), kb.ToString()) <= 0
                             ? ka + "|" + kb : kb + "|" + ka;
                         string key = ends + "|" + km;
+                        // k184: РЕБРО ФАЙЛА — ПО EDGE_CURVE. Два разных ребра с теми же концами и серединой (витки резьбы
+                        // штампа, сходящиеся к одной вершине) склеивались по ключу в одно, у него выходило больше двух граней
+                        // (штампы 2602A123, 8294A14). Ребро, уже занятое двумя гранями и пришедшее из другого EDGE_CURVE, —
+                        // отдельное; ребро того же EDGE_CURVE — то же. Склейка разных EDGE_CURVE по ключу (файлы с повторами)
+                        // остаётся, пока у ребра меньше двух граней. Мутация P3D_STEPEDGEID=0.
+                        if (!EdgeIdOff && parser.EdgeCurveOf.TryGetValue(c, out int ecId))
+                        {
+                            if (edgeByEc.TryGetValue(ecId, out var known)) key = edgeKeyOf[known];
+                            else if (edges.TryGetValue(key, out var taken) &&
+                                     (taken.CoEdges.Count >= 2 || parser.EdgeCurveUses(ecId) >= 2 && ecOfEdge.TryGetValue(taken, out int takenEc) && parser.EdgeCurveUses(takenEc) >= 2))
+                            {
+                                // занято двумя гранями — или оба EDGE_CURVE полноценны (по две ссылки): это разные рёбра файла
+                                // (тонкая грань-линза между двумя рёбрами с общими концами — фильтр 4218K62)
+                                key = key + "#ec" + ecId;
+                            }
+                        }
 
                         if (!edges.TryGetValue(key, out var edge))
                         {
@@ -500,7 +582,10 @@ public static class StepImport
                             edge.Tolerance = Math.Max(Math.Min((ca - edge.V0.P).Length, (ca - edge.V1.P).Length),
                                                       Math.Min((cb - edge.V0.P).Length, (cb - edge.V1.P).Length));
                             edges[key] = edge;
+                            edgeKeyOf[edge] = key;
                         }
+                        if (!EdgeIdOff && parser.EdgeCurveOf.TryGetValue(c, out int ecId2)) { edgeByEc.TryAdd(ecId2, edge); ecOfEdge.TryAdd(edge, ecId2); }
+                        if (!EdgeTolOff && parser.EdgeTolerance.TryGetValue(c, out double ftol)) edge.Tolerance = Math.Max(edge.Tolerance, ftol);
                         // НАПРАВЛЕНИЕ ОБХОДА. У замкнутой окружности начало и конец совпадают,
                         // и сравнение концов всегда давало «не развёрнуто»: верхняя окружность
                         // цилиндра шла в ту же сторону, что нижняя, контур не замыкался, и грань
@@ -644,6 +729,7 @@ public static class StepImport
         using var _oh = Diagnostics.Overhead.Scope();
         int built = 0, failed = 0;
         var faceList = solid.Faces.ToList();
+        ImportProgress.FacesAdded(faceList.Count);
         // 20:17 (скорость): ДОНОР И СЕТКИ ГРАНЕЙ — ЗАРАНЕЕ, ПАРАЛЛЕЛЬНО. Грани размечались по одной (скругление на пересечении
         // цилиндра и шара: 310 мс на 5 граней, из них 2–3 кривые по ~100 мс). Построитель сетки грани уже идёт параллельно в
         // разметке отображения (Tessellator); точки рёбер считаются заранее последовательно — общий кэш ребра у соседних
@@ -673,6 +759,7 @@ public static class StepImport
                         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
                         try { var m = Tess.ExactFaceMesher.Mesh(fi, out var w, out _); pre[i] = (m, w); }
                         catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { pre[i] = null; }
+                        ImportProgress.FaceDone();
                         if (SlowFaceDbg && System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds > 300)
                         {
                             var src0 = Topology.GeometryAudit.AuthoritativeSurface(fi);
@@ -928,6 +1015,8 @@ public static class StepImport
 
     internal static void OrientShellPublic(TSolid solid) => OrientShell(solid);
     [ThreadStatic] static int _orientFlips;
+    /// <summary>k184: ориентация оболочки по фасетам; ответ — сколько граней развёрнуто.</summary>
+    internal static int OrientShellCount(TSolid solid) { _orientFlips = 0; OrientShell(solid); return _orientFlips; }
     /// <summary>k126: сколько граней развернула бы ориентация оболочки (на копии; тело не меняется).</summary>
     internal static int OrientFlipsOn(TSolid solid)
     {

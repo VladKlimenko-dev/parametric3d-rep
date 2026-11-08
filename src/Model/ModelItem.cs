@@ -102,6 +102,14 @@ public abstract class ModelItem
         NotifyChanged(child);
     }
 
+    /// <summary>k184: вставка на место index (вставка компонента у строки отката сборки).</summary>
+    public void Insert(int index, ModelItem child)
+    {
+        child.Parent = this;
+        Children.Insert(Math.Clamp(index, 0, Children.Count), child);
+        NotifyChanged(child);
+    }
+
     public bool Remove(ModelItem child)
     {
         if (!Children.Remove(child)) return false;

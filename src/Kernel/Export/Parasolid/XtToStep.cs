@@ -32,6 +32,9 @@ public static class XtToStep
         var shells = new List<int>();
         int skipped = 0; var skippedKinds = new HashSet<string>();
         double acc = 1e-6;
+        // k184: ход импорта — по граням всех тел
+        int facesAll = files.Sum(ff => ff.OfType("FACE").Count()), facesDone = 0;
+        ImportProgress.SetFaceTotal(facesAll);
         foreach (var f in files)
         {
         c = new Ctx(f, warnings) { Sb = sb, NextBox = box };
@@ -59,7 +62,7 @@ public static class XtToStep
             foreach (var faces in faceLists)
             {
                 var ids = new List<int>();
-                foreach (var fc in faces) if (c.Face(fc) is int fid) ids.Add(fid);
+                foreach (var fc in faces) { if (c.Face(fc) is int fid) ids.Add(fid); ImportProgress.Convert(++facesDone, facesAll); }
                 if (ids.Count > 0) shells.Add(c.E($"CLOSED_SHELL('',({string.Join(",", ids.Select(x => "#" + x))}))"));
             }
         }
@@ -382,7 +385,15 @@ public static class XtToStep
                 var p = ringStart ?? Vector3d.Zero;
                 vs = ve = E($"VERTEX_POINT('',#{Pt(p)})");
             }
-            return edges[e.Id] = E($"EDGE_CURVE('',#{vs},#{ve},#{cid},{(sense ? ".T." : ".F.")})");
+            // k184: ДОПУСК РЕБРА XT (допусковое ребро Parasolid: кривая — у плавников, грани сходятся в пределах допуска) —
+            // в имени ребра: STEP AP214 своего поля для него не имеет, а без него проверка видела отход кривой плавника от второй
+            // грани в 8 мкм при допуске ребра 7.5 мкм (панель 4574N11). Читается нашим импортом; прочим — просто имя.
+            // допуск — наибольший из допусков ребра и его вершин (прямая между допусковыми вершинами отходит от граней на их
+            // допуск: клеммник 7641K35), вдвое — запас на перевод кривой плавника в сплайн по точкам
+            double etl = 0;
+            foreach (var tn in new[] { e, vStart, vEnd }) if (tn?.D("tolerance") is double t0 && t0 > 1e-10 && t0 < 1e-3) etl = Math.Max(etl, t0);
+            string nm = etl > 0 ? $"P3D_TOL={N(2 * etl * S)}" : "";
+            return edges[e.Id] = E($"EDGE_CURVE('{nm}',#{vs},#{ve},#{cid},{(sense ? ".T." : ".F.")})");
         }
 
         /// <summary>Кривая STEP; sense — совпадает ли направление ребра с направлением кривой; ringStart — точка начала кривой.</summary>
@@ -459,16 +470,71 @@ public static class XtToStep
             var q = new List<Vector3d>();
             foreach (var p in raw) if (q.Count == 0 || (q[^1] - p).Length > 1e-12) q.Add(p);
             if (q.Count < 2 || PolyMode) return Poly(raw);
+            // k184: ТОЧКА ВПЛОТНУЮ К СОСЕДНЕЙ убирается (кроме концов). Обрезка карты пересечения по вершине ставит вершину рядом
+            // с точкой карты (звено 0.012 при соседних 0.2): кубический сплайн через такую пару раскачивается, вершины уходят на
+            // миллиметры, и ребро отходит от своих поверхностей (гнездо 1423N12: 2.7 мм от плоскости). Мутация P3D_XTINTERPCLEAN=0.
+            if (!InterpCleanOff && q.Count > 3)
+            {
+                for (int pass = 0; pass < 3; pass++)
+                {
+                    bool dropped = false;
+                    for (int i = 1; i + 1 < q.Count && q.Count > 3; i++)
+                    {
+                        double a = (q[i] - q[i - 1]).Length, b = (q[i + 1] - q[i]).Length;
+                        if (Math.Min(a, b) < 0.15 * Math.Max(a, b) && Math.Min(a, b) < 0.15 * (i - 2 >= 0 && i + 2 < q.Count ? Math.Max((q[i - 1] - q[i - 2]).Length, (q[i + 2] - q[i + 1]).Length) : Math.Max(a, b)))
+                        { q.RemoveAt(i); dropped = true; i--; }
+                    }
+                    if (!dropped) break;
+                }
+            }
             int deg = Math.Min(3, q.Count - 1);
             var prm = XtBasis.Chord(q);
             var (k, _) = XtBasis.Setup(prm, deg);
             var cp = XtBasis.Solve(k, deg, prm, q);
+            // k184: проверка раскачки — сплайн между соседними точками не должен уходить от их хорды дальше четверти звена;
+            // иначе — ломаная по тем же точкам (точно через них, без выбросов). Мутация P3D_XTINTERPCHECK=0.
+            if (!InterpCheckOff && deg == 3)
+            {
+                double Turn(int m) { if (m <= 0 || m + 1 >= q.Count) return 0; var x = q[m] - q[m - 1]; var y = q[m + 1] - q[m]; double cs = Vector3d.Dot(x, y) / Math.Max(1e-300, x.Length * y.Length); return Math.Acos(Math.Clamp(cs, -1, 1)); }
+                bool Wild(double[] kk, double[] pr, Vector3d[] cc)
+                {
+                    int ncp = cc.Length;
+                    for (int i = 0; i + 1 < q.Count; i++)
+                    {
+                        double tm = 0.5 * (pr[i] + pr[i + 1]);
+                        var N = XtBasis.Eval(kk, deg, ncp, tm); var c = Vector3d.Zero;
+                        for (int j = 0; j < ncp; j++) if (N[j] != 0) c += cc[j] * N[j];
+                        var ab = q[i + 1] - q[i]; double l = ab.Length;
+                        double t = l > 0 ? Math.Clamp(Vector3d.Dot(c - q[i], ab) / (l * l), 0, 1) : 0;
+                        // ожидаемый прогиб — по повороту соседних звеньев (дуга с поворотом α на звене l отходит на ≈ l·α/8)
+                        double expect = l * Math.Max(Turn(i), Turn(i + 1)) / 8;
+                        double dev = (q[i] + ab * t - c).Length;
+                        // единицы XT — метры: запас 2 мкм
+                        if (dev > 0.25 * l + 1e-9 || dev > 4 * expect + 2e-6) return true;
+                    }
+                    return false;
+                }
+                if (Wild(k, prm, cp))
+                {
+                    // центростремительные параметры (корень из хорды) раскачиваются меньше при неравных звеньях; не помогло — ломаная
+                    var pc = new double[q.Count]; double acc = 0;
+                    for (int i = 1; i < q.Count; i++) { acc += Math.Sqrt((q[i] - q[i - 1]).Length); pc[i] = acc; }
+                    for (int i = 1; i < q.Count; i++) pc[i] /= acc;
+                    var (k2, _) = XtBasis.Setup(pc, deg);
+                    var cp2 = XtBasis.Solve(k2, deg, pc, q);
+                    if (Wild(k2, pc, cp2)) return Poly(q);
+                    k = k2; cp = cp2;
+                }
+            }
             var ks = new List<double>(); var ms = new List<int>();
             foreach (var x in k) { if (ks.Count > 0 && Math.Abs(ks[^1] - x) < 1e-14) ms[^1]++; else { ks.Add(x); ms.Add(1); } }
             string P = string.Join(",", cp.Select(p => "#" + Pt(p)));
             return E($"B_SPLINE_CURVE_WITH_KNOTS('',{deg},({P}),.UNSPECIFIED.,.F.,.F.,({string.Join(",", ms)}),({string.Join(",", ks.Select(N))}),.UNSPECIFIED.)");
         }
+        static readonly bool IntDbg = Environment.GetEnvironmentVariable("P3D_XTINTDBG") == "1";
         static readonly bool PolyMode = Environment.GetEnvironmentVariable("P3D_XTPOLY") == "1";
+        static readonly bool InterpCleanOff = Environment.GetEnvironmentVariable("P3D_XTINTERPCLEAN") == "0";
+        static readonly bool InterpCheckOff = Environment.GetEnvironmentVariable("P3D_XTINTERPCHECK") == "0";
         static readonly bool ConeFlipOff = Environment.GetEnvironmentVariable("P3D_XTCONEFLIP") != "1";   // естественная нормаль конуса XT (P + vA + …) — наружу, как у STEP
 
         /// <summary>Плотная ломаная кривой свободной формы в естественном направлении; null — аналитическая кривая (прямая,
@@ -484,7 +550,13 @@ public static class XtToStep
                     if (pts == null || pts.Length < 2) return null;
                     var ss = cn.PA("surface");
                     XtSurf? a = ss.Length > 0 && f[ss[0]] is { } a0 ? XtSurf.Of(f, a0) : null, b = ss.Length > 1 && f[ss[1]] is { } b0 ? XtSurf.Of(f, b0) : null;
-                    return XtPoly.Densify(pts, a, b, 8);
+                    var dz = XtPoly.Densify(pts, a, b, 8);
+                    if (IntDbg && a != null && b != null)
+                    {
+                        double wa = 0, wb = 0; foreach (var q in dz) { wa = Math.Max(wa, (a.Project(q) - q).Length); wb = Math.Max(wb, (b.Project(q) - q).Length); }
+                        if (wa > 1e-7 || wb > 1e-7) Console.Error.WriteLine($"XTINT node {cn.Id} chart {pts.Length} dense {dz.Count} offA {wa * 1000:G3} mm ({a.GetType().Name}) offB {wb * 1000:G3} mm ({b.GetType().Name})");
+                    }
+                    return dz;
                 }
                 case "B_CURVE":
                 {

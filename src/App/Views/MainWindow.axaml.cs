@@ -391,9 +391,17 @@ public partial class MainWindow : Window
         catch (Exception ex) { ShowToast(L("Не удалось открыть: {0}", ex.Message)); return null; }
     }
 
+    /// <summary>
+    /// k184 (замечание 09.11, 06:18, п. 2): ИМПОРТ — В ТЕКУЩИЙ ДОКУМЕНТ, а не новым документом. Пустой новый документ —
+    /// заменяется прочитанным, как прежде. Деталь — вопрос «преобразовать в сборку?»: да — новая сборка, текущая деталь первым
+    /// компонентом, файл — вторым (деталь или подсборка из деталей файла); нет — тела файла операцией «Импорт» в текущую деталь
+    /// (в место строки отката). Сборка — компонент или подсборка в место строки отката сборки. Чтение — в фоне, с полосой хода
+    /// в строке состояния (п. 1). STL — прежним путём (своё окно настроек). P3D_IMPORTINTO=0 — прежнее поведение.
+    /// </summary>
     public async Task ImportAsync()
     {
-        if (!await ConfirmDiscard()) return;
+        bool into = Environment.GetEnvironmentVariable("P3D_IMPORTINTO") != "0";
+        if (!into && !await ConfirmDiscard()) return;
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = L("Импорт"),
@@ -406,26 +414,77 @@ public partial class MainWindow : Window
         });
         var path = files.FirstOrDefault()?.TryGetLocalPath();
         if (path == null) return;
-        if (Path.GetExtension(path).Equals(".stl", StringComparison.OrdinalIgnoreCase)) { await ImportStlAsync(path); return; }
+        if (Path.GetExtension(path).Equals(".stl", StringComparison.OrdinalIgnoreCase)) { await ImportStlAsync(path, null, into); return; }
+        await ImportFileAsync(path, into);
+    }
+
+    /// <summary>k184: прочитать файл (в фоне, с полосой хода) и вставить в текущий документ (см. ImportAsync).</summary>
+    public async Task ImportFileAsync(string path, bool into = true)
+    {
         var warnings = new List<string>();
-        SetSession(DocumentSession.Import(path, warnings));
+        _loadingFile = Path.GetFileName(path);
+        Parametric3D.Kernel.Export.ImportProgress.Begin();
+        StartProgress();
+        DocumentSession.Prepared pr;
+        try { pr = await Task.Run(() => DocumentSession.PrepareImport(path, warnings)); }
+        catch (Exception ex) { ShowToast(L("Импорт: ") + ex.Message); return; }
+        finally { Parametric3D.Kernel.Export.ImportProgress.End(); _loadingFile = null; UpdateProgress(); }
+        if (!await PlacePrepared(pr, into)) return;
+        StartProgress();
         if (warnings.Count > 0) ShowToast(string.Join("\n", warnings.Take(6)), error: false);
+    }
+
+    /// <summary>k184: прочитанное — в текущий документ (пустой — заменяется; деталь — вопрос «в сборку?»; сборка — у строки отката).</summary>
+    public async Task<bool> PlacePrepared(DocumentSession.Prepared pr, bool into = true)
+    {
+        var cur = Session;
+        bool empty = cur == null || (!cur.IsAssembly && cur.FilePath == null && !cur.Modified && cur.Part is { } p0 && p0.Features.Count == 0 && p0.Bodies.Count == 0);
+        if (!into || empty) SetSession(DocumentSession.FromPrepared(pr));
+        else if (cur!.IsAssembly) InsertPrepared(pr);
+        else
+        {
+            string yes = L("Да, в сборку"), no = L("Нет, в эту деталь"), cancel = L("Отмена");
+            var r = await Dialogs.Ask(this, L("Импорт"), L("Преобразовать «{0}» в сборку? Текущая деталь станет первым компонентом, «{1}» — вторым.", cur.Title, pr.Name), yes, no, cancel);
+            if (r == yes)
+            {
+                SetSession(DocumentSession.AssemblyFromPart(cur));
+                RebuildTree();
+                InsertPrepared(pr);
+            }
+            else if (r == no && cur.Part is { } target)
+            {
+                var srcs = pr.Components ?? new List<Parametric3D.Model.Part> { pr.Single! };
+                cur.Edit(L("Импорт «{0}»", pr.Name), () => { foreach (var src in srcs) DocumentSession.MoveFeaturesInto(src, target); });
+                View.MarkDirty(); RebuildTree();
+            }
+            else return false;
+        }
+        return true;
+    }
+
+    public void InsertPrepared(DocumentSession.Prepared pr)
+    {
+        if (pr.Components != null) Commands.AssemblyCommands.AddComponents(this, pr.Components, pr.Name);
+        else { pr.Single!.Name = pr.Name; Commands.AssemblyCommands.AddComponent(this, pr.Single, L("Импорт «{0}»", pr.Name)); }
     }
 
     /// <summary>
     /// k119: ИМПОРТ STL с галочкой «Преобразовать в точную геометрию»: окно настроек, новая деталь с операцией «Импорт STL»,
     /// перевод — перестроением (в фоне), итог — в строке сообщения.
     /// </summary>
-    public async Task ImportStlAsync(string path, Dialogs.StlOptions? preset = null)
+    public async Task ImportStlAsync(string path, Dialogs.StlOptions? preset = null, bool into = true)
     {
         var o = preset ?? await Dialogs.StlImport(this, Path.GetFileName(path));
         if (o == null) return;
-        DocumentSession s;
-        try { s = DocumentSession.ImportMesh(path, o.Exact, o.Snap, o.TolScale, o.Scale); }
+        DocumentSession s0;
+        try { s0 = DocumentSession.ImportMesh(path, o.Exact, o.Snap, o.TolScale, o.Scale); }
         catch (Exception ex) { ShowToast(L("Импорт STL: ") + ex.Message); return; }
-        SetSession(s);
+        // k184: деталь с операцией «Импорт STL» — в текущий документ, как прочие форматы (пустой документ — заменяется)
+        var part = s0.Part!; s0.Document.Root.Remove(part);
+        if (!await PlacePrepared(new DocumentSession.Prepared(null, part, Path.GetFileNameWithoutExtension(path)), into)) return;
+        var s = Session;
         ShowToast(L("Импорт STL: перевод сетки в тело…"), error: false);
-        var fi = LastStlImport = s.Part!.Features.OfType<MeshImportFeature>().FirstOrDefault();
+        var fi = LastStlImport = s.Document.AllParts().SelectMany(p => p.Features.OfType<MeshImportFeature>()).LastOrDefault();
         void Done()
         {
             s.Document.BuildFinished -= Done;
@@ -961,7 +1020,7 @@ public partial class MainWindow : Window
     {
         "sk.line", "sk.centerline", "sk.rect", "sk.rect_center", "sk.rect_3p", "sk.circle", "sk.circle_2p", "sk.circle3",
         "sk.arc3", "sk.arc_center", "sk.arc_tangent", "sk.ellipse", "sk.ellipse_5p", "sk.spline_through", "sk.spline_cv",
-        "sk.slot", "sk.polygon", "sk.gear", "sk.point", "sk.text", "sk.csys",
+        "sk.slot", "sk.polygon", "sk.gear", "sk.point", "sk.text", "sk.image", "sk.csys",
     };
 
     /// <summary>k98: панель настройки эскиза (первая слева в эскизе).</summary>
@@ -1237,6 +1296,7 @@ public partial class MainWindow : Window
         // значки ограничений эскиза — поверх вида, под панелями
         GlyphLayer = new ConstraintGlyphLayer(View);
         ViewArea.Children.Insert(ViewArea.Children.IndexOf(RegionCanvas) + 1, GlyphLayer);
+        SetupSketchImages();
         SetupDocks();
         View.ComponentDragStarted += _ => Session.BeginEdit(L("Перетащить компонент"));
         View.ComponentDragEnded += _ => { Session.CommitEdit(); Commands.AssemblyCommands.Solve(this); };
@@ -3480,6 +3540,8 @@ public partial class MainWindow : Window
         using var _ui = Diagnostics.UiTimes.Measure("окно: свойства");
         PropsBody.Children.Clear();
         PropsButtons.Children.Clear();
+        // k184: выбрано изображение эскиза — его свойства
+        if (ImageLayer?.Selected is { } simg && View.ActiveSketch is { } isk && isk.Images.Contains(simg)) { ShowSketchImageProperties(isk, simg); return; }
         var sel = View.Selection;
         // k120 (замечание 15:06, п. 1): свойства детали — и когда ничего не выбрано, и по щелчку на детали в дереве (на виде)
         var part = sel.IsEmpty ? Session.Part
@@ -3860,7 +3922,9 @@ public partial class MainWindow : Window
         if (StatusProgressOff) return;
         string? stage = null; double pct = 0; bool ind = false;
         var doc = Session?.Document;
-        if (_loadingFile != null) { stage = L("Загрузка «{0}»…", _loadingFile); ind = true; }
+        // k184 (замечание 09.11, 06:18, п. 1): импорт — заполняющаяся полоса по этапам (перевод, разбор, разметка граней, лечение)
+        if (_loadingFile != null && Parametric3D.Kernel.Export.ImportProgress.Active) { pct = 100 * Parametric3D.Kernel.Export.ImportProgress.Value; stage = L("Импорт «{0}»", _loadingFile); }
+        else if (_loadingFile != null) { stage = L("Загрузка «{0}»…", _loadingFile); ind = true; }
         // k126: деталь показана, идут отложенные проверки (правка их прерывает)
         else if (doc != null && doc.IsVerifying) { stage = L("Проверка детали…"); ind = true; }
         else if (doc != null && doc.IsBuilding)

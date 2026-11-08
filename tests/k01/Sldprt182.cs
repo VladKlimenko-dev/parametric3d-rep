@@ -54,6 +54,7 @@ static partial class Program
                 var b = bodies.FirstOrDefault();
                 var vrs = bodies.Select(x => SolidValidator.Validate(x)).ToList();
                 var vr = vrs.FirstOrDefault(x => !x.IsValid) ?? vrs.FirstOrDefault();
+                if (Environment.GetEnvironmentVariable("P3D_SLDDIAG") == "1") SldDiag(Path.GetFileName(path), bodies, vrs);
                 if (prof) { Console.Error.WriteLine("SLDPROF all " + Path.GetFileName(path) + "\n" + Parametric3D.Kernel.Diagnostics.Prof.Report()); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
                 double vol = bodies.Sum(x => AnalyticVolume.Of(x) ?? 0), area = bodies.Sum(x => AnalyticVolume.AreaOf(x) ?? 0);
                 // Габарит по вершинам и дугам (окружности, эллипсы) рёбер XT и тех же рёбер импортированных тел — должны совпасть; объём не больше объёма габарита.
@@ -70,7 +71,7 @@ static partial class Program
                     curves = counts.Where(kv => kv.Key is "LINE" or "CIRCLE" or "ELLIPSE" or "B_CURVE" or "INTERSECTION" or "SP_CURVE" or "TRIMMED_CURVE").ToDictionary(kv => kv.Key, kv => kv.Value),
                     stepKb = step.Length / 1024, xtBodies, bodies = bodies.Count, bodyFaces = bodies.Sum(x => x.Faces.Count()), valid = vrs.Count > 0 && vrs.All(x => x.IsValid), verdict = vr?.Summary(),
                     errors = vrs.SelectMany(x => x.Issues).Where(x => x.Severity == ValidationSeverity.Error).Take(4).Select(x => x.ToString()).ToList(),
-                    guarantee = b?.Guarantee.ToString(), volume = vol, area, boxVol, boxGap, xtBox = new[] { xl.X, xl.Y, xl.Z, xh.X, xh.Y, xh.Z }, bodyBox = new[] { bl.X, bl.Y, bl.Z, bh.X, bh.Y, bh.Z }, swVolume = swVol, swArea, msConvert = Math.Round(tConv), msTotal = Math.Round(tAll), warnings = w.Take(12).ToList() });
+                    guarantee = b?.Guarantee.ToString(), volume = vol, area, boxVol, boxGap, xtBox = new[] { xl.X, xl.Y, xl.Z, xh.X, xh.Y, xh.Z }, bodyBox = new[] { bl.X, bl.Y, bl.Z, bh.X, bh.Y, bh.Z }, swVolume = swVol, swArea, msConvert = Math.Round(tConv), msTotal = Math.Round(tAll), warnings = w.Take(12).ToList(), heal = w.Where(x => x.Contains("HEALSIDE") || x.Contains("turned") || x.StartsWith("Import:")).Take(40).ToList() });
                 bool good = !truncated && !w.Any(x => x.Contains("were left out") || x.Contains("is not supported; the edge")) && bodies.Count == xtBodies
                             && vrs.Count > 0 && vrs.All(x => x.IsValid) && boxGap <= 1e-3 && vol > 0 && vol <= boxVol * (1 + 1e-6);
                 if (good) Interlocked.Increment(ref sldGood);
@@ -153,5 +154,169 @@ static partial class Program
         try { done = t.Wait(TimeSpan.FromSeconds(lim)); }
         catch (AggregateException ae) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ae.InnerException ?? ae).Throw(); throw; }
         if (!done) { Log(new { test = "sldprt", file = name, timeout = lim, stage = sldStage }); throw new Exception($"timeout {lim} s at {sldStage}"); }
+    }
+
+    /// <summary>Разбор: у тела с ошибками сетки — какие грани (метка STEP, поверхность, сторона) у сторон без пары / в одну сторону.</summary>
+    static string GeometryAuditName(TFace f) => Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name ?? "?";
+
+    static void SldDiag(string file, List<TSolid> bodies, List<ValidationReport> vrs)
+    {
+        // k184: отход кривой ребра от поверхности — проекция против перебора по плотной сетке параметров
+        for (int bi = 0; bi < bodies.Count; bi++)
+        {
+            var offIds = vrs[bi].Issues.Where(x => x.Code == "curve-off-surface" && x.Element is { }).Select(x => x.Element!.Value).Take(3).ToList();
+            foreach (var eid in offIds)
+            {
+                var e = bodies[bi].Edges.FirstOrDefault(x => x.Id == eid); if (e == null) continue;
+                var parts = new List<string>();
+                foreach (var ce in e.CoEdges)
+                {
+                    var sf = ce.Loop?.Face is { } ff ? Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(ff) : null;
+                    if (sf == null) continue;
+                    double proj = 0, brute = 0; Vector2d worstUv = default; Vector3d worstP = default;
+                    const int GU = 64, GV = 4096;
+                    var grid = new Vector3d[(GU + 1) * (GV + 1)];
+                    for (int i = 0; i <= GU; i++) for (int j = 0; j <= GV; j++) grid[i * (GV + 1) + j] = sf.PointAt(new Vector2d(i / (double)GU, j / (double)GV));
+                    for (int k = 0; k <= 16; k++)
+                    {
+                        var c = e.Curve; var q = c.PointAt(c.T0 + (c.T1 - c.T0) * k / 16.0);
+                        double dp; Vector2d uv; try { uv = sf.ProjectToUV(q); dp = (sf.PointAt(uv) - q).Length; } catch { continue; }
+                        double db = double.MaxValue; int bk = 0; for (int gi = 0; gi < grid.Length; gi++) { double dd = (grid[gi] - q).LengthSquared; if (dd < db) { db = dd; bk = gi; } } db = Math.Sqrt(db);
+                        if (sf is Parametric3D.Kernel.Surfaces.NurbsSurface ns0)
+                        {
+                            var h0 = new Vector2d((bk / (GV + 1)) / (double)GU, (bk % (GV + 1)) / (double)GV);
+                            try { var uvh = ns0.ProjectToUV(q, h0); db = Math.Min(db, (ns0.PointAt(uvh) - q).Length); } catch { }
+                        }
+                        if (dp > proj) { proj = dp; worstUv = uv; worstP = q; }
+                        brute = Math.Max(brute, db);
+                    }
+                    string extra = sf is Parametric3D.Kernel.Surfaces.RevolvedSurface rvd ? $" base {rvd.Base.GetType().Name} {rvd.Base.PointAt(rvd.Base.T0)}->{rvd.Base.PointAt(rvd.Base.T1)} axis {rvd.Axis.Origin}/{rvd.Axis.W}" : "";
+                    parts.Add($"{ce.Loop!.Face!.Tag} {sf.GetType().Name}{extra}: proj {proj:G3} at uv ({worstUv.X:0.####},{worstUv.Y:0.####}) p ({worstP.X:0.###},{worstP.Y:0.###},{worstP.Z:0.###}), grid64x4096 {brute:G3}");
+                }
+                Log(new { test = "sldprt-curveoff", file, body = bi + 1, edge = eid, curve = e.Curve.GetType().Name, parts });
+            }
+        }
+        for (int bi = 0; bi < bodies.Count; bi++)
+        {
+            if (vrs[bi].IsValid) continue;
+            var md = Parametric3D.Kernel.Tess.Tessellator.Tessellate(bodies[bi]);
+            var faceOfTri = new Dictionary<int, uint>();
+            for (int t = 0; t + 2 < md.Indices.Length; t += 3) faceOfTri[t / 3] = md.Vertices[md.Indices[t]].FaceId;
+            var vpos = md.Vertices.Select(v => new Vector3d(Math.Round(v.P.X, 4), Math.Round(v.P.Y, 4), Math.Round(v.P.Z, 4))).ToArray();
+            var edges = new Dictionary<(Vector3d, Vector3d), List<(int Tri, int Dir)>>();
+            for (int t = 0; t + 2 < md.Indices.Length; t += 3)
+                for (int k = 0; k < 3; k++)
+                {
+                    var a = vpos[md.Indices[t + k]]; var b = vpos[md.Indices[t + (k + 1) % 3]];
+                    bool less = a.X < b.X || a.X == b.X && (a.Y < b.Y || a.Y == b.Y && a.Z < b.Z);
+                    var key = less ? (a, b) : (b, a);
+                    if (!edges.TryGetValue(key, out var l)) edges[key] = l = new();
+                    l.Add((t / 3, less ? 1 : -1));
+                }
+            var cnt = new Dictionary<string, int>();
+            foreach (var (key, l) in edges)
+            {
+                string kind = l.Count == 1 ? "open" : l.Count > 2 ? "multi" : l[0].Dir == l[1].Dir ? "same" : "";
+                if (kind == "") continue;
+                foreach (var (tri, _) in l)
+                {
+                    var f = faceOfTri.TryGetValue(tri, out var fid) ? bodies[bi].Faces.FirstOrDefault(x => x.Id == fid) : null;
+                    string fd = f == null ? "?" : $"{f.Tag}/{Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name}/{(f.Reversed ? "R" : "N")}";
+                    string k2 = kind + " " + fd; cnt[k2] = cnt.GetValueOrDefault(k2) + 1;
+                }
+            }
+            // центроид и площадь сетки каждой упомянутой грани
+            var faceStat = new Dictionary<uint, (Vector3d S, double A, int N)>();
+            var agree = new Dictionary<uint, (int Yes, int No)>();
+            var byId = bodies[bi].Faces.ToDictionary(x => x.Id);
+            for (int t = 0; t + 2 < md.Indices.Length; t += 3)
+            {
+                uint fid = md.Vertices[md.Indices[t]].FaceId;
+                var a = (Vector3d)md.Vertices[md.Indices[t]].P; var b = (Vector3d)md.Vertices[md.Indices[t + 1]].P; var c = (Vector3d)md.Vertices[md.Indices[t + 2]].P;
+                double ar = Vector3d.Cross(b - a, c - a).Length / 2;
+                var st = faceStat.GetValueOrDefault(fid); faceStat[fid] = (st.S + (a + b + c) / 3 * ar, st.A + ar, st.N + 1);
+                if (byId.TryGetValue(fid, out var ff) && ar > 0)
+                {
+                    var cn = (a + b + c) / 3; Vector3d fn; try { fn = ff.NormalAt(cn); } catch { continue; }
+                    var tn = Vector3d.Cross(b - a, c - a); var ag = agree.GetValueOrDefault(fid);
+                    agree[fid] = Vector3d.Dot(tn, fn) >= 0 ? (ag.Yes + 1, ag.No) : (ag.Yes, ag.No + 1);
+                }
+            }
+            var mentioned = cnt.Keys.Select(k => k.Split(' ')[1].Split('/')[0]).Distinct().Take(8).ToList();
+            // луч из середины треугольника грани вдоль её нормали: чётное число пересечений с прочими треугольниками — нормаль
+            // наружу (верно), нечётное — внутрь
+            var tris = new List<(Vector3d A, Vector3d B, Vector3d C, uint F)>();
+            for (int t = 0; t + 2 < md.Indices.Length; t += 3)
+                tris.Add(((Vector3d)md.Vertices[md.Indices[t]].P, (Vector3d)md.Vertices[md.Indices[t + 1]].P, (Vector3d)md.Vertices[md.Indices[t + 2]].P, md.Vertices[md.Indices[t]].FaceId));
+            string Ray(TFace x)
+            {
+                var mine = tris.Where(q => q.F == x.Id).OrderByDescending(q => Vector3d.Cross(q.B - q.A, q.C - q.A).Length).FirstOrDefault();
+                if (mine.F != x.Id) return "?";
+                var c = (mine.A + mine.B + mine.C) / 3; var n = Vector3d.Cross(mine.B - mine.A, mine.C - mine.A).Normalized();
+                var o = c + n * 1e-4; var dir = (n + new Vector3d(1.234e-3, -2.345e-3, 3.456e-3)).Normalized();
+                int hits = 0;
+                foreach (var q in tris)
+                {
+                    var e1 = q.B - q.A; var e2 = q.C - q.A; var pv = Vector3d.Cross(dir, e2); double det = Vector3d.Dot(e1, pv);
+                    if (Math.Abs(det) < 1e-18) continue; double inv = 1 / det; var tv = o - q.A; double uu = Vector3d.Dot(tv, pv) * inv; if (uu < 0 || uu > 1) continue;
+                    var qv = Vector3d.Cross(tv, e1); double vv = Vector3d.Dot(dir, qv) * inv; if (vv < 0 || uu + vv > 1) continue;
+                    if (Vector3d.Dot(e2, qv) * inv > 1e-9) hits++;
+                }
+                return hits % 2 == 0 ? "out" : "IN";
+            }
+            var fstats = bodies[bi].Faces.Where(x => mentioned.Contains(x.Tag) && faceStat.ContainsKey(x.Id))
+                .Select(x => { var st = faceStat[x.Id]; var cc = st.A > 0 ? st.S / st.A : Vector3d.Zero; var ag = agree.GetValueOrDefault(x.Id); return $"{x.Tag}: tris {st.N} area {st.A:G4} centroid ({cc.X:F3},{cc.Y:F3},{cc.Z:F3}) normal agrees {ag.Yes}/{ag.Yes + ag.No} rev {x.Reversed} ray {Ray(x)} exactArea {AnalyticVolume.FaceArea(x):G4}"; }).ToList();
+            var multiCo = bodies[bi].Edges.Where(e => e.CoEdges.Count > 2).Take(4)
+                .Select(e => $"{e.Curve.GetType().Name} {e.V0.P}->{e.V1.P} closed {ReferenceEquals(e.V0, e.V1)}: " + string.Join(",", e.CoEdges.Select(c => (c.Loop?.Face?.Tag ?? "?") + (c.Reversed ? "-" : "+")))).ToList();
+            if (multiCo.Count > 0) Log(new { test = "sldprt-multicoedge", file, body = bi + 1, multiCo });
+            var sameCo = bodies[bi].Edges.Where(e => e.CoEdges.Count == 2 && e.CoEdges[0].Reversed == e.CoEdges[1].Reversed)
+                .Select(e => $"{e.Curve.GetType().Name}:{e.CoEdges[0].Loop?.Face?.Tag}|{e.CoEdges[1].Loop?.Face?.Tag}").Take(10).ToList();
+            // k184: выгрузка сетки тела, фасет граней и рёбер для разбора вне CI (P3D_SLDDIAGOBJ=каталог)
+            if (Environment.GetEnvironmentVariable("P3D_SLDDIAGOBJ") is { Length: > 0 } od)
+            {
+                Directory.CreateDirectory(od);
+                var sb = new System.Text.StringBuilder(); var inv = System.Globalization.CultureInfo.InvariantCulture;
+                foreach (var v in md.Vertices) sb.Append(inv, $"v {v.P.X:R} {v.P.Y:R} {v.P.Z:R}\n");
+                for (int t = 0; t + 2 < md.Indices.Length; t += 3)
+                    sb.Append(inv, $"f {md.Indices[t] + 1} {md.Indices[t + 1] + 1} {md.Indices[t + 2] + 1} {md.Vertices[md.Indices[t]].FaceId}\n");
+                foreach (var ff in bodies[bi].Faces)
+                {
+                    sb.Append(inv, $"F {ff.Id} {ff.Tag} {GeometryAuditName(ff)} rev {ff.Reversed}\n");
+                    if (ff.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface fsf)
+                        foreach (var (a, b, c) in fsf.Facets) sb.Append(inv, $"t {a.X:R} {a.Y:R} {a.Z:R} {b.X:R} {b.Y:R} {b.Z:R} {c.X:R} {c.Y:R} {c.Z:R}\n");
+                    foreach (var l in ff.Loops)
+                    {
+                        sb.Append(inv, $"L {(l.IsOuter ? 1 : 0)}\n");
+                        foreach (var ce in l.CoEdges)
+                        {
+                            List<Vector3d> pts; try { pts = Parametric3D.Kernel.Tess.ExactFaceMesher.EdgePoints(ce.Edge).ToList(); } catch { pts = new(); }
+                            if (ce.Reversed) pts.Reverse();
+                            sb.Append(inv, $"c {ce.Edge.Id} {(ce.Reversed ? 1 : 0)} {ce.Edge.Curve.GetType().Name}");
+                            foreach (var q in pts) sb.Append(inv, $" {q.X:R} {q.Y:R} {q.Z:R}");
+                            sb.Append('\n');
+                        }
+                    }
+                }
+                File.WriteAllText(Path.Combine(od, $"{Path.GetFileNameWithoutExtension(file)}_b{bi + 1}.dump"), sb.ToString());
+            }
+            Log(new { test = "sldprt-diag", file, body = bi + 1, sameCoEdges = sameCo, faces = cnt.OrderByDescending(kv => kv.Value).Take(12).Select(kv => $"{kv.Key} ×{kv.Value}").ToList(), fstats });
+        }
+    }
+
+    /// <summary>k184: импорт и проверка файлов STEP (разбор: тот же STEP с правкой руками).</summary>
+    static void StepFileChecks(IEnumerable<string> files)
+    {
+        foreach (var path in files)
+            Check("STEPCHECK " + Path.GetFileName(path), () =>
+            {
+                var w = new List<string>();
+                var part = Exchange.Read(File.ReadAllText(path), out _, w);
+                var bodies = part?.Bodies ?? new List<TSolid>();
+                var vrs = bodies.Select(x => SolidValidator.Validate(x)).ToList();
+                Log(new { test = "stepcheck", file = Path.GetFileName(path), bodies = bodies.Count, valid = vrs.Select(v => v.IsValid).ToList(),
+                    errors = vrs.SelectMany(x => x.Issues).Where(x => x.Severity == ValidationSeverity.Error).Take(6).Select(x => x.ToString()).ToList(),
+                    volume = bodies.Select(x => AnalyticVolume.Of(x)).ToList(), warnings = w.Take(10).ToList() });
+                if (Environment.GetEnvironmentVariable("P3D_SLDDIAG") == "1") SldDiag(Path.GetFileName(path), bodies, vrs);
+            });
     }
 }

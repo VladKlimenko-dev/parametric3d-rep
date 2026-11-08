@@ -28,6 +28,8 @@ public static partial class ExactFaceMesher
     public static Action<string>? ConformalDebug;
     public static Action<string>? TorusDebug;
 
+    static readonly bool ConfBaseOff = Environment.GetEnvironmentVariable("P3D_CONFBASE") == "0";
+    static readonly bool ConfStallOff = Environment.GetEnvironmentVariable("P3D_CONFSTALL") == "0";
     static readonly bool ConfTrace = Environment.GetEnvironmentVariable("P3D_CONFTRACE") == "1";
     static readonly bool CylAnisoOff = Environment.GetEnvironmentVariable("P3D_CYLANISO") == "0";
     /// <summary>k116: граней цилиндра, размеченных развёрткой, сжатой вдоль оси (счётчик разбора).</summary>
@@ -444,10 +446,16 @@ public static partial class ExactFaceMesher
             int nB = w.Sum(l => l.Count);
             var inner = new List<Vector2d>(); var tried = new HashSet<(double, double)>();
             List<int>? T = null; List<Vector2d> pts = new();
+            int prevBad = int.MaxValue, stall = 0;
+            // k184: разбиение контуров — одно на все проходы (P3D_CONFBASE=0 — заново на каждом)
+            List<int>? baseT = null; List<Vector2d> basePts = new();
+            if (!ConfBaseOff) using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("сетка: конформная — разбиение контуров") : null) baseT = Cdt.Triangulate(outer, holes, out basePts);
+            List<int>? Tri(out List<Vector2d> ptsOut) => ConfBaseOff ? Cdt.Triangulate(outer, holes, out ptsOut, inner) : Cdt.TriangulateFrom(baseT, basePts, out ptsOut, inner);
             for (int pass = 0; pass < 20; pass++)
             {
-                T = Cdt.Triangulate(outer, holes, out pts, inner);
+                using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("сетка: конформная — разбиение") : null) T = Tri(out pts);
                 if (T == null) { lastWhy = $"conformal ({map.Kind}): triangulation failed"; break; }
+                using var _pdv = Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("сетка: конформная — прогиб") : null;
                 if (pts.Count(q => lookup.ContainsKey((q.X, q.Y))) != nB) { T = null; lastWhy = $"conformal ({map.Kind}): the triangulator dropped contour points"; break; }
                 var bad = new List<Vector2d>();
                 for (int i = 0; i + 2 < T.Count; i += 3)
@@ -477,6 +485,16 @@ public static partial class ExactFaceMesher
                 bad.RemoveAll(q => tried.Contains((q.X, q.Y)));
                 if (ConfTrace) Console.Error.WriteLine($"CONF face {f.Id} {map.Kind} pass {pass}: boundary {nB}, inner {inner.Count}, tris {T.Count / 3}, bad {bad.Count}");
                 if (bad.Count == 0) break;
+                // k184: ЗАСТОЙ — число плохих треугольников не убывает два прохода подряд (щепка у длинной хорды края: вставленная
+                // точка ползёт к краю, а прогиб не меняется): дальше проходы — только полные перестроения (колесо 2425T37: 20
+                // проходов по 17 000 точек края на каждую из шести граней тора, минуты). Итог — на суд самопроверки. P3D_CONFSTALL=0.
+                // только у больших контуров (тысячи точек края — где проход дорог): у малой грани плато бывает перед улучшением
+                // (шар против овала: квалификация KRN11 теряла точный путь)
+                if (!ConfStallOff && nB >= 1000)
+                {
+                    if (bad.Count >= prevBad) { if (++stall >= 3) break; } else stall = 0;
+                    prevBad = bad.Count;
+                }
                 if (inner.Count + bad.Count > 40000) { T = null; lastWhy = $"conformal ({map.Kind}): too many points"; break; }
                 foreach (var q in bad) tried.Add((q.X, q.Y));
                 inner.AddRange(bad);
@@ -499,7 +517,7 @@ public static partial class ExactFaceMesher
                 }
                 if (drop.Count == 0) break;
                 inner.RemoveAll(q => drop.Contains((q.X, q.Y)));
-                T = Cdt.Triangulate(outer, holes, out pts, inner);
+                T = Tri(out pts);
             }
             if (T == null) continue;
             var P = pts.Select(P3).ToList();

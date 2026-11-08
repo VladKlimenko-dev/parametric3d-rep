@@ -44,6 +44,10 @@ public static class ImportHeal
         try { return (src.PointAt(src.ProjectToUV(p)) - p).Length; } catch { return 0; }
     }
 
+    static readonly bool HealSideDbg = Environment.GetEnvironmentVariable("P3D_HEALSIDEDBG") == "1";
+    static readonly bool HealSideOff = Environment.GetEnvironmentVariable("P3D_HEALSIDE") == "0";
+    static readonly bool HealSideLoops = Environment.GetEnvironmentVariable("P3D_HEALSIDE") == "loops";
+    static readonly bool CapFixOff = Environment.GetEnvironmentVariable("P3D_CAPFIX") == "0";
     static readonly bool FileAccOff = Environment.GetEnvironmentVariable("P3D_HEALFILEACC") == "0";
 
     public static Report Heal(TSolid b, List<string>? warnings, string label, double fileAccuracy = 0)
@@ -130,6 +134,69 @@ public static class ImportHeal
             TopologyConventions.Normalize(b);
             // разметка — только у тронутых граней (у прочих — прежняя сетка как донор)
             StepImport.MeshFacesFromLoops(b, null, "Heal", f => touched.Contains(f) ? null : f.Surface as FacetedSurface);
+        }
+        // k184: СТОРОНА ГРАНИ — ПО ОБХОДУ КОНТУРОВ. После соглашения контуры всей оболочки согласованы (каждое ребро — в разные
+        // стороны у двух граней) и ориентированы по якорю; грань лежит слева от обхода. Треугольник сетки у края проходит
+        // сторону края в том же направлении, что и полуребро; если у грани большинство таких сторон пройдено навстречу —
+        // её фасеты вывернуты (кардан 60075K97: стенка поперечного отверстия против кусочков расточки). Мутация P3D_HEALSIDE=0.
+        // k184: сторона — по соседям в сетке (обход фасет оболочки, как ShapeFix_Shell в OCCT), а не по контурам: у части
+        // деталей контуры граней обходят их навстречу верным фасетам (крестовина 2455K22, опора 60945K17, плита 8856N18,
+        // ограждение 92735T25 — грани разворачивались зря). Прежний способ — P3D_HEALSIDE=loops.
+        if (!HealSideOff && !HealSideLoops)
+        {
+            int before = StepImport.OrientShellCount(b);
+            if (before > 0) { b.DisplayMeshKey = null; warnings?.Add($"Import: {label}: {before} face side(s) turned to match the neighbours."); }
+        }
+        if (!HealSideOff && HealSideLoops)
+        {
+            static (long, long, long) K(Vector3d p) => ((long)Math.Round(p.X * 1e5), (long)Math.Round(p.Y * 1e5), (long)Math.Round(p.Z * 1e5));
+            int flippedSides = 0;
+            foreach (var f in b.Faces.ToList())
+            {
+                if (f.Surface is not FacetedSurface fs || fs.Facets.Count == 0) continue;
+                var dirEdges = new Dictionary<((long, long, long), (long, long, long)), int>();
+                foreach (var t in fs.Facets)
+                    foreach (var (p0, p1) in new[] { (t.Item1, t.Item2), (t.Item2, t.Item3), (t.Item3, t.Item1) })
+                        dirEdges[(K(p0), K(p1))] = 1;
+                int with = 0, against = 0;
+                foreach (var ce in f.Loops.SelectMany(l => l.CoEdges))
+                {
+                    List<Vector3d> pts; try { pts = Tess.ExactFaceMesher.EdgePoints(ce.Edge); } catch { continue; }
+                    if (pts.Count < 2) continue;
+                    if (ce.Reversed) { pts = new List<Vector3d>(pts); pts.Reverse(); }
+                    for (int i = 0; i + 1 < pts.Count; i++)
+                    {
+                        var ka = K(pts[i]); var kb = K(pts[i + 1]);
+                        if (dirEdges.ContainsKey((ka, kb))) with++; else if (dirEdges.ContainsKey((kb, ka))) against++;
+                    }
+                }
+                if (HealSideDbg && (against > 0 || with < 3)) warnings?.Add($"HEALSIDE {f.Tag}: with {with}, against {against}, facets {fs.Facets.Count}, loops {f.Loops.Count}");
+                if (against <= with || against < 3) continue;
+                var list = fs.Facets.ToList(); var n = Vector3d.Zero;
+                foreach (var t in list) n += Vector3d.Cross(t.Item3 - t.Item1, t.Item2 - t.Item1);
+                var fl = new FacetedSurface(fs.Source, n.LengthSquared > 1e-18 ? n.Normalized() : Vector3d.UnitZ) { FromLoops = fs.FromLoops };
+                foreach (var t in list) fl.Facets.Add((t.Item1, t.Item3, t.Item2));
+                f.Surface = fl;
+                flippedSides++;
+            }
+            if (flippedSides > 0) { b.DisplayMeshKey = null; warnings?.Add($"Import: {label}: {flippedSides} face side(s) turned to match the loops."); }
+        }
+        // k184: щепки у края с обратным обходом — и в фасетах прочитанной грани (их сетка идёт в показ и проверку как есть;
+        // стартер 7595K62: отверстие, касающееся контура плоской грани в вершине). Мутация P3D_CAPFIX=0.
+        if (!CapFixOff)
+        {
+            int capFaces = 0;
+            foreach (var f in b.Faces.ToList())
+            {
+                if (f.Surface is not FacetedSurface fs || fs.Facets.Count < 2) continue;
+                var P = new List<Vector3d>(fs.Facets.Count * 3); var T = new List<int>(fs.Facets.Count * 3);
+                foreach (var t in fs.Facets) { T.Add(P.Count); P.Add(t.Item1); T.Add(P.Count); P.Add(t.Item2); T.Add(P.Count); P.Add(t.Item3); }
+                if (!Tess.ExactFaceMesher.FixBoundaryCaps(P, T)) continue;
+                var fl = new FacetedSurface(fs.Source, fs.FallbackNormal) { FromLoops = fs.FromLoops };
+                for (int i = 0; i + 2 < T.Count; i += 3) fl.Facets.Add((P[T[i]], P[T[i + 1]], P[T[i + 2]]));
+                f.Surface = fl; capFaces++;
+            }
+            if (capFaces > 0) { b.DisplayMeshKey = null; warnings?.Add($"Import: {label}: boundary slivers turned on {capFaces} face(s)."); }
         }
         var vr = SolidValidator.ValidateBRep(b);
         bool overBudget = maxGap > budget;

@@ -346,6 +346,14 @@ public static class DocumentFile
                 Items = g.Items.ToList(), Centre = g.CenterId,
             }).ToList();
 
+        // k184: изображения-подложки эскиза
+        if (s.Images.Count > 0)
+            dto.Images = s.Images.Select(im => new ImageDto
+            {
+                File = im.FileName, Px = im.PixelWidth, Py = im.PixelHeight, Data = Convert.ToBase64String(im.Data),
+                Cx = im.Center.X, Cy = im.Center.Y, W = im.Width, H = im.Height, Angle = im.Angle, Opacity = im.Opacity,
+            }).ToList();
+
         foreach (var c in s.Constraints)
             dto.Constraints.Add(new ConstraintDto
             {
@@ -1095,6 +1103,19 @@ public static class DocumentFile
                     var g = new SkGear { P = gp, CenterId = byOld.TryGetValue(gd.Centre, out var gce) ? gce.Id : 0 };
                     foreach (var oid in gd.Items) if (byOld.TryGetValue(oid, out var ge)) g.Items.Add(ge.Id);
                     if (g.Items.Count > 0) s.Gears.Add(g); else lost.Add($"sketch '{sd.Name}': gear without elements");
+                }
+            if (sd.Images != null)
+                foreach (var idt in sd.Images)
+                {
+                    try
+                    {
+                        s.Images.Add(new SkImage
+                        {
+                            FileName = idt.File ?? "", PixelWidth = idt.Px, PixelHeight = idt.Py, Data = Convert.FromBase64String(idt.Data ?? ""),
+                            Center = new OpenTK.Mathematics.Vector2d(idt.Cx, idt.Cy), Width = idt.W, Height = idt.H, Angle = idt.Angle, Opacity = idt.Opacity > 0 ? idt.Opacity : 0.75,
+                        });
+                    }
+                    catch (FormatException) { lost.Add($"sketch '{sd.Name}': image '{idt.File}' is damaged"); }
                 }
             // k96: встроенные ссылки (нуль, оси) — по особым номерам
             foreach (var bid in new[] { Sketch.OriginSaveId, Sketch.AxisHSaveId, Sketch.AxisVSaveId }) byOld[bid] = s.BuiltinBySaveId(bid)!;
@@ -2043,6 +2064,8 @@ public static class DocumentFile
         public List<DimensionDto> Dimensions { get; set; } = new();
         /// <summary>k176: шестерни эскиза (null — нет).</summary>
         public List<GearDto>? Gears { get; set; }
+        /// <summary>k184: изображения-подложки эскиза (null — нет).</summary>
+        public List<ImageDto>? Images { get; set; }
         /// <summary>k109: место в дереве — сколько операций перед эскизом (null — файл до k109).</summary>
         public int? Slot { get; set; }
         /// <summary>k116: видимость, заданная пользователем (глаз в дереве); null — по умолчанию программы.</summary>
@@ -2055,6 +2078,20 @@ public static class DocumentFile
 
     /// <summary>k176: мутация — шестерни эскиза в файл не пишутся (после открытия — закреплённая геометрия без параметров).</summary>
     static readonly bool GearSaveOff = Environment.GetEnvironmentVariable("P3D_SKGEARSAVE") == "0";
+
+    private sealed class ImageDto
+    {
+        public string? File { get; set; }
+        public int Px { get; set; }
+        public int Py { get; set; }
+        public string? Data { get; set; }
+        public double Cx { get; set; }
+        public double Cy { get; set; }
+        public double W { get; set; }
+        public double H { get; set; }
+        public double Angle { get; set; }
+        public double Opacity { get; set; }
+    }
 
     private sealed class GearDto
     {

@@ -257,7 +257,11 @@ internal sealed class XtNurbsSurf : XtSurf
     void BuildGrid()
     {
         var (u0, u1, v0, v1) = Range;
-        gu = Math.Clamp(3 * (Nu - Du), 24, 240); gv = Math.Clamp(3 * (Nv - Dv), 24, 240);
+        // k184: до 1536 точек по каждому направлению (8 на пролёт): у резьбы 104 пролёта по витку, и при 240 точках шаг сетки
+        // вдоль витка (3.8 мм) больше шага резьбы — ближайшая точка сетки оказывалась на соседнем витке. P3D_XTGRIDFINE=0 — прежняя.
+        int cap = GridFineOff ? 240 : 1536, per = GridFineOff ? 3 : 8;
+        gu = Math.Clamp(per * (Nu - Du), 24, cap); gv = Math.Clamp(per * (Nv - Dv), 24, cap);
+        while (!GridFineOff && (long)(gu + 1) * (gv + 1) > 250_000) { if (gu >= gv) gu = Math.Max(24, gu * 3 / 4); else gv = Math.Max(24, gv * 3 / 4); if (gu == 24 && gv == 24) break; }
         var g = new Vector3d[gu + 1, gv + 1];
         for (int i = 0; i <= gu; i++) for (int j = 0; j <= gv; j++) g[i, j] = At(u0 + (u1 - u0) * i / gu, v0 + (v1 - v0) * j / gv);
         grid = g;
@@ -300,6 +304,35 @@ internal sealed class XtNurbsSurf : XtSurf
         return (bu, bv, false);
     }
 
+    static readonly bool GridFineOff = Environment.GetEnvironmentVariable("P3D_XTGRIDFINE") == "0";
+
+    /// <summary>Гаусс — Ньютон с делением шага, пока расстояние не убывает.</summary>
+    (double U, double V, double D2) Descent(Vector3d q, double bu, double bv)
+    {
+        var (u0, u1, v0, v1) = Range;
+        double hu = 1e-7 * Math.Max(1, u1 - u0), hv = 1e-7 * Math.Max(1, v1 - v0);
+        double bd = (At(bu, bv) - q).LengthSquared;
+        for (int it = 0; it < 40; it++)
+        {
+            var p = At(bu, bv);
+            var su = (At(bu + hu, bv) - At(bu - hu, bv)) / (2 * hu); var sv = (At(bu, bv + hv) - At(bu, bv - hv)) / (2 * hv);
+            var r = p - q;
+            double a = Vector3d.Dot(su, su), b = Vector3d.Dot(su, sv), c = Vector3d.Dot(sv, sv), det = a * c - b * b;
+            if (Math.Abs(det) < 1e-300) break;
+            double g1 = Vector3d.Dot(r, su), g2 = Vector3d.Dot(r, sv);
+            double du = (c * g1 - b * g2) / det, dv = (a * g2 - b * g1) / det;
+            double fr = 1; bool moved = false;
+            for (int h = 0; h < 30; h++, fr *= 0.5)
+            {
+                double nu = Math.Clamp(bu - du * fr, u0, u1), nv = Math.Clamp(bv - dv * fr, v0, v1);
+                double nd = (At(nu, nv) - q).LengthSquared;
+                if (nd < bd) { bu = nu; bv = nv; bd = nd; moved = true; break; }
+            }
+            if (!moved || Math.Abs(du * fr) < 1e-13 * Math.Max(1, u1 - u0) && Math.Abs(dv * fr) < 1e-13 * Math.Max(1, v1 - v0)) break;
+        }
+        return (bu, bv, bd);
+    }
+
     (double U, double V) ProjectUvFull(Vector3d q)
     {
         var (u0, u1, v0, v1) = Range;
@@ -310,6 +343,27 @@ internal sealed class XtNurbsSurf : XtSurf
             {
                 double d = (gr[i, j] - q).LengthSquared; if (d < best) { best = d; bu = u0 + (u1 - u0) * i / gu; bv = v0 + (v1 - v0) * j / gv; }
             }
+        if (!GridFineOff)
+        {
+            // k184: спуск с проверкой убывания от лучших точек сетки, разнесённых на 3 ячейки (ложный минимум соседнего витка)
+            var cand = new List<(double D, int I, int J)>();
+            for (int i = 0; i <= gu; i++) for (int j = 0; j <= gv; j++)
+                {
+                    double d = (gr[i, j] - q).LengthSquared;
+                    if (cand.Count == 6 && d >= cand[^1].D) continue;
+                    int near = cand.FindIndex(c => Math.Abs(c.I - i) <= 3 && Math.Abs(c.J - j) <= 3);
+                    if (near >= 0) { if (d < cand[near].D) cand[near] = (d, i, j); else continue; } else cand.Add((d, i, j));
+                    cand.Sort((x, y) => x.D.CompareTo(y.D)); if (cand.Count > 6) cand.RemoveAt(6);
+                }
+            double bestD = double.MaxValue; (double, double) bestUv = (bu, bv);
+            foreach (var (_, ci, cj) in cand)
+            {
+                var (ru, rv, rd) = Descent(q, u0 + (u1 - u0) * ci / gu, v0 + (v1 - v0) * cj / gv);
+                if (rd < bestD) { bestD = rd; bestUv = (ru, rv); }
+                if (bestD < 1e-24) break;
+            }
+            return bestUv;
+        }
         double hu = 1e-7 * Math.Max(1, u1 - u0), hv = 1e-7 * Math.Max(1, v1 - v0);
         for (int it = 0; it < 30; it++)
         {
@@ -483,12 +537,59 @@ internal static class XtPoly
 
     /// <summary>Сгущение ломаной кривой пересечения двух поверхностей: точки между узлами карты переносятся на обе поверхности
     /// попеременной проекцией (сходится к линии пересечения при пересечении под углом).</summary>
+    static readonly bool DenseOrderOff = Environment.GetEnvironmentVariable("P3D_XTDENSEORDER") == "0";
+    static readonly bool DenseCheckOff = Environment.GetEnvironmentVariable("P3D_XTDENSECHECK") == "0";
+    static readonly bool IntNewtonOff = Environment.GetEnvironmentVariable("P3D_XTINTNEWTON") == "0";
+
+    /// <summary>Нормаль поверхности в точке q на ней — по проекциям двух близких точек (у XtSurf нет производных).</summary>
+    static Vector3d? NormalNear(XtSurf s, Vector3d q, Vector3d hintAway)
+    {
+        double h = 1e-6;   // метры XT: микрон
+        var t1 = Math.Abs(hintAway.X) < 0.9 ? Vector3d.Cross(hintAway, Vector3d.UnitX) : Vector3d.Cross(hintAway, Vector3d.UnitY);
+        if (t1.LengthSquared < 1e-30) t1 = Vector3d.UnitX; t1.Normalize();
+        var t2 = Vector3d.Cross(hintAway, t1); if (t2.LengthSquared < 1e-30) t2 = Vector3d.UnitY; t2.Normalize();
+        var a1 = s.Project(q + t1 * h) - q; var a2 = s.Project(q + t2 * h) - q;
+        var n = Vector3d.Cross(a1, a2);
+        return n.LengthSquared > 1e-40 ? n.Normalized() : null;
+    }
+
+    static Vector3d? IntersectNewton(XtSurf a, XtSurf b, Vector3d p)
+    {
+        for (int it = 0; it < 30; it++)
+        {
+            var qa = a.Project(p); var qb = b.Project(p);
+            if ((qa - p).Length < 1e-11 && (qb - p).Length < 1e-11) return p;
+            var dirA = qa - p; var dirB = qb - p;
+            var na = NormalNear(a, qa, dirA.LengthSquared > 0 ? dirA.Normalized() : Vector3d.UnitZ);
+            var nb = NormalNear(b, qb, dirB.LengthSquared > 0 ? dirB.Normalized() : Vector3d.UnitZ);
+            if (na is not { } A || nb is not { } B) return null;
+            double aa = 1, ab = Vector3d.Dot(A, B), bb = 1, det = aa * bb - ab * ab;
+            if (det < 1e-10) return null;                       // касание: линия пересечения не определена
+            double ra = Vector3d.Dot(A, qa - p), rb = Vector3d.Dot(B, qb - p);
+            double l1 = (ra * bb - rb * ab) / det, l2 = (rb * aa - ra * ab) / det;
+            var x = p + A * l1 + B * l2;
+            if (!double.IsFinite(x.X) || (x - p).Length > 1e-2) return null;   // скачок больше 1 см — не тот корень
+            p = x;
+        }
+        var fa = a.Project(p); var fb = b.Project(p);
+        return (fa - p).Length < 1e-9 && (fb - p).Length < 1e-9 ? p : null;
+    }
+
     public static List<Vector3d> Densify(IReadOnlyList<Vector3d> chart, XtSurf? a, XtSurf? b, int per)
     {
         var res = new List<Vector3d>();
         for (int i = 0; i + 1 < chart.Count; i++)
         {
             res.Add(chart[i]);
+            var seg = chart[i + 1] - chart[i]; double segL2 = seg.LengthSquared; double lastT = 0;
+            bool InOrder(Vector3d q)
+            {
+                if (DenseOrderOff || segL2 <= 0) return true;
+                double t = Vector3d.Dot(q - chart[i], seg) / segL2;
+                double off = (chart[i] + seg * t - q).Length;
+                if (t <= lastT || t >= 1 || off > 0.5 * Math.Sqrt(segL2)) return false;
+                lastT = t; return true;
+            }
             for (int k = 1; k < per; k++)
             {
                 var p = Vector3d.Lerp(chart[i], chart[i + 1], (double)k / per);
@@ -497,7 +598,7 @@ internal static class XtPoly
                 if (!BlendEdgeOff && (a as XtBlendSurf ?? b as XtBlendSurf) is { } bl && (a is XtBlendSurf ? b : a) is { } other)
                 {
                     var q = bl.EdgeNear(p);
-                    if ((other.Project(q) - q).Length < 1e-8) { res.Add(q); continue; }
+                    if ((other.Project(q) - q).Length < 1e-8) { if (InOrder(q)) res.Add(q); continue; }
                 }
                 // граница скругления: её проекция уже лежит на опоре (обычно это и есть вторая поверхность) — один шаг
                 if (!BlendEdgeOff && (a as XtSurf.BlendBound ?? b as XtSurf.BlendBound) is { } bb && (a is XtSurf.BlendBound ? b : a) is { } oth)
@@ -506,17 +607,33 @@ internal static class XtPoly
                     // «на конусе», а ребро — на плоскости): берётся касание, лежащее на второй поверхности
                     var q = bb.Project(p);
                     if ((oth.Project(q) - q).Length >= 1e-8) { var q2 = bb.ProjectOther(p); if ((oth.Project(q2) - q2).Length < (oth.Project(q) - q).Length) q = q2; }
-                    if ((oth.Project(q) - q).Length < 1e-8) { res.Add(q); continue; }
+                    if ((oth.Project(q) - q).Length < 1e-8) { if (InOrder(q)) res.Add(q); continue; }
                 }
                 if (a != null && b != null)
+                {
+                    var p0 = p; bool conv = false;
                     for (int it = 0; it < 60; it++)
                     {
                         var q = b.Project(a.Project(p));
                         bool done = (q - p).Length < 1e-11;
                         p = q;
-                        if (done) break;
+                        if (done) { conv = true; break; }
                     }
-                res.Add(p);
+                    // k184: ПОПЕРЕМЕННАЯ ПРОЕКЦИЯ НЕ СОШЛАСЬ (поверхности сходятся под малым углом: торец резьбы срезает виток
+                    // вскользь) — точка оставалась на одной поверхности в 1.5 мм от другой, сплайн ребра шёл волной (разъём
+                    // 6168T106). Тогда — шаги Ньютона по касательным плоскостям обеих поверхностей (ближайшая к точке точка
+                    // их линии пересечения), как маршевые шаги пересечения в OCCT. Мутация P3D_XTINTNEWTON=0.
+                    if (!conv && !IntNewtonOff && IntersectNewton(a, b, (a.Project(p) - p).Length > 1e-9 ? p0 : p) is { } x) p = x;
+                    // k184: точка, так и не севшая на обе поверхности (граница скругления BLEND_BOUND против плоскости или
+                    // цилиндра: попеременная проекция уходит к другому касанию), не ставится — между точками карты остаётся
+                    // кубический сплайн по самой карте (её хордовая ошибка задана файлом). Прежде такие точки уводили ребро на
+                    // 0.3–0.5 мм. Мутация P3D_XTDENSECHECK=0.
+                    if (!DenseCheckOff && ((a.Project(p) - p).Length > 1e-8 || (b.Project(p) - p).Length > 1e-8)) continue;
+                }
+                // k184: ПОРЯДОК ВДОЛЬ ЗВЕНА КАРТЫ. Проекция на ленту скругления уводила соседние точки вперёд и назад: ломаная
+                // шла зигзагом, контур плоской грани пересекал себя, и грань не строилась (опора 60945K27). Точка должна идти
+                // дальше предыдущей по хорде звена и не отходить от неё дальше половины звена. Мутация P3D_XTDENSEORDER=0.
+                if (InOrder(p)) res.Add(p);
             }
         }
         if (chart.Count > 0) res.Add(chart[^1]);
@@ -554,6 +671,7 @@ internal static class XtPoly
     }
 
     /// <summary>Участок ломаной между ближайшими к s и e точками (по ходу ломаной), концы — точно s и e.</summary>
+    static readonly bool TrimRingOff = Environment.GetEnvironmentVariable("P3D_XTTRIMRING") == "0";
     public static List<Vector3d> Trim(IReadOnlyList<Vector3d> pts, Vector3d s, Vector3d e)
     {
         (int I, double T, double D) Near(Vector3d q)
@@ -570,6 +688,20 @@ internal static class XtPoly
         }
         if (pts.Count < 2) return pts.ToList();
         var ns = Near(s); var ne = Near(e);
+        // k184: ЗАМКНУТАЯ ОБРЕЗКА (точки начала и конца совпадают — кольцо плавника без вершины): весь обход от s до s. Прежде из
+        // кольца оставались две совпавшие точки, ломаная пропадала, и ребро строилось по обрезанной кривой плавника незамкнутым
+        // (муфта 5706N22: «замкнутое ребро не замкнуто: 1.8 мм»). Мутация P3D_XTTRIMRING=0.
+        if (!TrimRingOff && (s - e).Length < 1e-9 && pts.Count > 2)
+        {
+            var ring = new List<Vector3d> { s };
+            for (int k = 1; k <= pts.Count; k++)
+            {
+                var q = pts[(ns.I + k) % pts.Count];
+                if ((q - ring[^1]).Length > 1e-12) ring.Add(q);
+            }
+            if ((ring[^1] - s).Length > 1e-12) ring.Add(s); else ring[^1] = s;
+            return ring;
+        }
         var res = new List<Vector3d>();
         bool fwd = (ns.I, ns.T).CompareTo((ne.I, ne.T)) <= 0;
         var (a, b) = fwd ? (ns, ne) : (ne, ns);

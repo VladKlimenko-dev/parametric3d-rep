@@ -452,6 +452,22 @@ public sealed class StepParser
     /// </summary>
     /// <summary>Концы каждой кривой контура по вершинам файла (в направлении обхода).</summary>
     public readonly Dictionary<ICurve3, (Vector3d Start, Vector3d End)> LastEnds = new(ReferenceEqualityComparer.Instance);
+    public readonly Dictionary<ICurve3, double> EdgeTolerance = new(ReferenceEqualityComparer.Instance);
+    /// <summary>k184: номер EDGE_CURVE кривой контура (одно ребро файла — у двух граней).</summary>
+    public readonly Dictionary<ICurve3, int> EdgeCurveOf = new(ReferenceEqualityComparer.Instance);
+    Dictionary<int, int>? _ecUses;
+    /// <summary>k184: сколько ORIENTED_EDGE ссылается на EDGE_CURVE (у годного файла — два).</summary>
+    public int EdgeCurveUses(int ec)
+    {
+        if (_ecUses == null)
+        {
+            var d = new Dictionary<int, int>();
+            foreach (var (_, en) in Entities)
+                if (en.Type == "ORIENTED_EDGE" && en.Args.Count > 3) { int r = Ref(en.Args[3]); d[r] = d.GetValueOrDefault(r) + 1; }
+            _ecUses = d;
+        }
+        return _ecUses.GetValueOrDefault(ec);
+    }
 
     static readonly bool SpindleOff = Environment.GetEnvironmentVariable("P3D_SPINDLETORUS") == "0";
     static readonly bool RevolOff = Environment.GetEnvironmentVariable("P3D_STEPREVOL") == "0";
@@ -502,6 +518,10 @@ public sealed class StepParser
                 // Концы — из ВЕРШИН файла, а не из кривой: у дуги, подогнанной к точкам, конец
                 // отходит от вершины на 1e-5 мм, и склейка по допуску 1e-6 разрывала контур.
                 LastEnds[curves[^1]] = same ? (v0, v1) : (v1, v0);
+                EdgeCurveOf[curves[^1]] = Ref(oe.Args[3]);
+                // k184: допуск ребра из имени (P3D_TOL=…, пишет наш перевод Parasolid)
+                if (ec.Args[0].Contains("P3D_TOL=") && double.TryParse(ec.Args[0].Trim('\'', ' ').Replace("P3D_TOL=", ""), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double etol))
+                    EdgeTolerance[curves[^1]] = etol * LengthScale;
             }
             if (curves.Count > 0) loops.Add(curves);
         }

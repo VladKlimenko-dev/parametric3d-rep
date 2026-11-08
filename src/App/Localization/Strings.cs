@@ -160,7 +160,7 @@ public static class Strings
             "The application will build parts and measure time: each operation separately, realistic parts (full rebuild, edit, preview, memory), 100 holes, a long session, file and export, then the view on this computer's OpenGL (frames per second in every style, picking under the cursor) and UI scenarios. It takes 2–5 minutes; keep the mouse off the window meanwhile. Your document is reopened at the end. The report is saved to a file — please send it.",
 
         // ---------------------------------------------------------------- группы команд
-        ["Файл"] = "File", ["Правка"] = "Edit", ["Вид"] = "View", ["Модель"] = "Model", ["Эскиз"] = "Sketch", ["Приложение"] = "Application",
+        ["Правка"] = "Edit", ["Вид"] = "View", ["Модель"] = "Model", ["Эскиз"] = "Sketch", ["Приложение"] = "Application",
 
         // ---------------------------------------------------------------- файл
         ["Новая"] = "New", ["Новая деталь"] = "New part", ["Пробная деталь (куб 100)"] = "Sample part (cube 100)",
@@ -230,7 +230,7 @@ public static class Strings
         ["Фильтр по имени"] = "Filter by name", ["Имя:"] = "Name:", ["Обозначение"] = "Part number", ["Наименование"] = "Title",
         ["Изменение"] = "Revision", ["Габариты"] = "Overall size", ["Ш × В × Г"] = "W × H × D", ["Ед. учёта"] = "UoM",
         ["Ед. длины"] = "Length units", ["Допуски"] = "Tolerances", ["Сборка"] = "Assembly", ["Зависит от"] = "Depends on",
-        ["Ссылка в"] = "Referenced in", ["Импорт STL"] = "STL import", ["Импорт STL «{0}»"] = "STL import «{0}»", ["Импорт «{0}»"] = "Import «{0}»",
+        ["Ссылка в"] = "Referenced in", ["Импорт STL"] = "STL import", ["Импорт STL «{0}»"] = "STL import «{0}»", ["Импорт «{0}»"] = "Import «{0}»", ["Да, в сборку"] = "Yes, make an assembly", ["Импорт изображения"] = "Import image", ["Изображения"] = "Images", ["ИЗОБРАЖЕНИЕ"] = "IMAGE", ["Файл"] = "File", ["Размер изображения, px"] = "Image size, px", ["Прозрачность, %"] = "Transparency, %", ["Пропорции файла"] = "File proportions", ["Удалить изображение"] = "Delete image", ["Изображение вставляется в эскиз — откройте эскиз"] = "An image is inserted into a sketch — open a sketch", ["Импорт изображения: {0}"] = "Import image: {0}", ["Нет, в эту деталь"] = "No, into this part", ["Преобразовать «{0}» в сборку? Текущая деталь станет первым компонентом, «{1}» — вторым."] = "Convert «{0}» into an assembly? The current part becomes the first component, «{1}» the second.", ["Импорт: "] = "Import: ",
         ["Преобразовать в точную геометрию"] = "Convert to exact geometry", ["Выравнивать по замыслу"] = "Align to design intent",
         ["Выравнивать по замыслу (оси, соосность, круглые размеры, касания)"] = "Align to design intent (axes, coaxiality, round values, tangency)",
         ["Единицы файла"] = "File units", ["Импортировать"] = "Import", ["Допуск, × (1 — сетка из САПР; скан — 10…100)"] = "Tolerance, × (1 — CAD mesh; scan — 10…100)",

@@ -482,41 +482,72 @@ public static partial class ExactFaceMesher
     {
         if (pts.Count < 2) return pts;
         var c = e.Curve;
-        bool fwd = (c.PointAt(c.T0) - e.V0.P).LengthSquared <= (c.PointAt(c.T1) - e.V0.P).LengthSquared;
-        Vector3d Leave(TEdge x, TVertex v, out double tEnd, out double tIn)
+        bool closed = ReferenceEquals(e.V0, e.V1);
+        // k184: у замкнутого ребра (окружность отверстия, касающаяся контура грани в своей вершине) ломаная идёт по параметру
+        bool fwd = closed || (c.PointAt(c.T0) - e.V0.P).LengthSquared <= (c.PointAt(c.T1) - e.V0.P).LengthSquared;
+        static Vector3d Dir(ICurve3 cx, double tEnd, double tIn, Vector3d at)
         {
-            var cx = x.Curve; bool atStart = (cx.PointAt(cx.T0) - v.P).LengthSquared <= (cx.PointAt(cx.T1) - v.P).LengthSquared;
-            tEnd = atStart ? cx.T0 : cx.T1; tIn = atStart ? cx.T1 : cx.T0;
-            var q = cx.PointAt(tEnd + (tIn - tEnd) * 1e-4); var d = q - v.P;
+            var q = cx.PointAt(tEnd + (tIn - tEnd) * 1e-4); var d = q - at;
             return d.LengthSquared > 0 ? d.Normalized() : Vector3d.Zero;
         }
-        TEdge? Cusp(TVertex v)
+        // направления, в которых ребро x уходит из вершины v (у замкнутого — два: от начала и от конца)
+        IEnumerable<Vector3d> Leaves(TEdge x, TVertex v)
         {
-            var de = Leave(e, v, out _, out _);
-            if (de == Vector3d.Zero) return null;
-            foreach (var o in v.Edges)
+            var cx = x.Curve;
+            if (ReferenceEquals(x.V0, x.V1))
             {
-                if (ReferenceEquals(o, e) || ReferenceEquals(o.V0, o.V1)) continue;
-                var d = Leave(o, v, out _, out _);
-                if (Vector3d.Dot(d, de) > Math.Cos(3 * Math.PI / 180)) return o;
+                if (CuspClosedOff) yield break;
+                yield return Dir(cx, cx.T0, cx.T1, v.P); yield return Dir(cx, cx.T1, cx.T0, v.P); yield break;
+            }
+            bool atStart = (cx.PointAt(cx.T0) - v.P).LengthSquared <= (cx.PointAt(cx.T1) - v.P).LengthSquared;
+            yield return atStart ? Dir(cx, cx.T0, cx.T1, v.P) : Dir(cx, cx.T1, cx.T0, v.P);
+        }
+        TEdge? Cusp(TVertex v, Vector3d de)
+        {
+            if (de == Vector3d.Zero) return null;
+            foreach (var o in CuspCandidates(e, v))
+            {
+                if (ReferenceEquals(o, e)) continue;
+                foreach (var d in Leaves(o, v))
+                    if (Vector3d.Dot(d, de) > Math.Cos(3 * Math.PI / 180)) return o;
             }
             return null;
         }
+        if (closed && CuspClosedOff) return pts;
         var res = pts;
         foreach (bool atV0 in new[] { true, false })
         {
             var v = atV0 ? e.V0 : e.V1;
-            if (Cusp(v) is not { } partner) continue;
-            Leave(e, v, out double tEnd, out double tIn);
+            double tEnd = atV0 == fwd ? c.T0 : c.T1, tIn = atV0 == fwd ? c.T1 : c.T0;
+            if (Cusp(v, Dir(c, tEnd, tIn, v.P)) is not { } partner) continue;
             // параметр первой внутренней точки ломаной со стороны v
             var nb = atV0 ? res[1] : res[^2];
             double t1 = CurveParam.Closest(c, nb);
+            // у замкнутой кривой ближайший параметр может оказаться у другого конца — берётся со стороны этого конца
+            if (closed && Math.Abs(t1 - tEnd) > 0.5 * Math.Abs(tIn - tEnd)) t1 = tEnd + (tIn - tEnd) * 0.01;
             var extra = new List<Vector3d>();
+            var outer = nb;
             for (int k = 1; k < 60; k++)
             {
                 double t = tEnd + (t1 - tEnd) * Math.Pow(0.5, k);
                 var q = c.PointAt(t);
                 if ((q - v.P).Length < 1e-6) break;
+                // k184: точка дальше от вершины, чем предыдущая (параметр ближайшей точки — не с той стороны кривой), — конец
+                // сгущения: ломаная уходила петлями (опора 60945K27, сплайн второй степени из трёх вершин)
+                if (!CuspSagOff && (q - v.P).Length >= (outer - v.P).Length) break;
+                // k184: точка на хорде (прогиб звена меньше 1e-6 мм) ничего не меняет в форме, а три точки на одной прямой
+                // дают разметке вырожденный треугольник (гайка: резьба у торца, грань B-поверхности не строилась по контуру).
+                // Мутация P3D_CUSPSAG=0.
+                if (!CuspSagOff)
+                {
+                    var dch = outer - v.P; double l2 = dch.LengthSquared;
+                    if (l2 > 0)
+                    {
+                        double tt = Math.Clamp(Vector3d.Dot(q - v.P, dch) / l2, 0, 1);
+                        if ((v.P + dch * tt - q).Length < 1e-6) break;
+                    }
+                }
+                outer = q;
                 // ближе к клюву, где зазор до соседней кривой меньше 2e-5 мм, точек не ставить: их склеит сварка сетки, и
                 // контуры пересекутся; последнее звено до вершины — общая с соседом узкая щель
                 var pc = partner.Curve; double gap = (pc.PointAt(CurveParam.Closest(pc, q)) - q).Length;
@@ -533,7 +564,38 @@ public static partial class ExactFaceMesher
         }
         return res;
     }
+    /// <summary>k184: клюв с замкнутым ребром (окружность, касающаяся контура в своей вершине). Мутация P3D_CUSPCLOSED=0.</summary>
+    static readonly bool CuspSagOff = Environment.GetEnvironmentVariable("P3D_CUSPSAG") == "0";
+    static readonly bool CuspClosedOff = Environment.GetEnvironmentVariable("P3D_CUSPCLOSED") == "0";
     public static long CuspDensified;
+
+    /// <summary>
+    /// k184: СОСЕДИ РЕБРА В ВЕРШИНЕ — не только по списку рёбер вершины, но и по контурам граней ребра. У прочитанного тела
+    /// (STEP, Parasolid) список рёбер вершины пуст: его ведёт только построитель топологии, и клюв на импорте не находился —
+    /// ломаные двух касающихся кривых пересекались у вершины (крестовина 60075K97: тонкая грань между цилиндрами R11.9 и
+    /// R3.17, щепка с обратным обходом). Мутация P3D_CUSPFACES=0.
+    /// </summary>
+    static readonly bool CuspFacesOff = Environment.GetEnvironmentVariable("P3D_CUSPFACES") == "0";
+    static IEnumerable<TEdge> CuspCandidates(TEdge e, TVertex v)
+    {
+        var seen = new HashSet<TEdge>(ReferenceEqualityComparer.Instance);
+        foreach (var o in v.Edges) if (seen.Add(o)) yield return o;
+        // только у вершин без списка рёбер (прочитанное тело): у построенного тела список полон, а добавка соседей по граням
+        // меняла разметку промежуточных тел операций (фаска прямой/цилиндр откатывалась)
+        if (CuspFacesOff || seen.Count > 0) yield break;
+        // и только у граней прочитанного тела (метка грани файла): промежуточные тела операций тоже бывают без списка рёбер вершин
+        if (!e.CoEdges.Any(c => c.Loop?.Face?.Tag is { } tg && (tg.StartsWith("step:", StringComparison.Ordinal) || tg.StartsWith("iges:", StringComparison.Ordinal)))) yield break;
+        foreach (var ce in e.CoEdges)
+        {
+            var f = ce.Loop?.Face; if (f == null) continue;
+            foreach (var l in f.Loops)
+                foreach (var c2 in l.CoEdges)
+                {
+                    var o = c2.Edge;
+                    if ((ReferenceEquals(o.V0, v) || ReferenceEquals(o.V1, v)) && seen.Add(o)) yield return o;
+                }
+        }
+    }
 
     private static List<Vector3d> RawEdgePoints(TEdge e)
     {
@@ -567,7 +629,7 @@ public static partial class ExactFaceMesher
             if (len < 2e-3 && l2 > 0 && pts.Skip(1).Take(pts.Count - 2).All(q => (pts[0] + d * (Vector3d.Dot(q - pts[0], d) / l2) - q).Length <= Core.Tol.Chord / 10))
                 pts = new List<Vector3d> { pts[0], pts[^1] };
         }
-        if (!CuspOff && !ReferenceEquals(e.V0, e.V1)) pts = DensifyAtCusps(e, pts);
+        if (!CuspOff && (!ReferenceEquals(e.V0, e.V1) || !CuspClosedOff)) pts = DensifyAtCusps(e, pts);
         e.PolylineCache = pts;
         e.PolylineQuality = want;
         e.PolylineSource = source;
@@ -3066,6 +3128,101 @@ public static partial class ExactFaceMesher
             if (vote < 0)
                 for (int i = 0; i + 2 < T.Count; i += 3) (T[i + 1], T[i + 2]) = (T[i + 2], T[i + 1]);
         }
+        if (!CapFixOff) FixBoundaryCaps(P, T);
+    }
+
+    /// <summary>
+    /// k184: ЩЕПКА У КРАЯ С ОБРАТНЫМ ОБХОДОМ. Три подряд точки края P1, P2, P3, причём P2 в развёртке оказалась по ту сторону
+    /// хорды P1–P3 (две касающиеся кривые у клюва, неточная проекция края на B-поверхность): разбиение дало треугольник на
+    /// хорде и щепку P1–P2–P3, обход которой против края. Сторона P1–P3 тогда пройдена гранью дважды в одну сторону, а края
+    /// P1–P2, P2–P3 — в ту же сторону, что у соседней грани (проверка: «стороны, обходимые обеими сторонами в одну сторону»).
+    /// Щепка, обе прочие стороны которой — край грани (встречаются в её сетке один раз), переворачивается: обход края
+    /// задаёт контур, а не почти нулевая площадь. Так же поступает сшивка сетки OCCT (BRepMesh: треугольник на границе
+    /// ориентируется по ребру контура). Мутация P3D_CAPFIX=0.
+    /// </summary>
+    static readonly bool CapFixOff = Environment.GetEnvironmentVariable("P3D_CAPFIX") == "0";
+    public static long CapsFixed;
+    public static bool FixBoundaryCaps(List<Vector3d> P, List<int> T)
+    {
+        bool any = false;
+        if (T.Count < 6) return false;
+        var canon = new Dictionary<Vector3d, int>();
+        var id = new int[P.Count];
+        for (int i = 0; i < P.Count; i++) { if (!canon.TryGetValue(P[i], out int c)) canon[P[i]] = c = i; id[i] = c; }
+        for (int pass = 0; pass < 3; pass++)
+        {
+            var dir = new Dictionary<(int, int), List<int>>();
+            var und = new Dictionary<(int, int), int>();
+            for (int t = 0; t + 2 < T.Count; t += 3)
+                for (int k = 0; k < 3; k++)
+                {
+                    int a = id[T[t + k]], b = id[T[t + (k + 1) % 3]];
+                    if (a == b) continue;
+                    if (!dir.TryGetValue((a, b), out var l)) dir[(a, b)] = l = new List<int>(2);
+                    l.Add(t);
+                    var u = a < b ? (a, b) : (b, a); und[u] = und.GetValueOrDefault(u) + 1;
+                }
+            bool IsCap(int t, int a, int b)
+            {
+                for (int k = 0; k < 3; k++)
+                {
+                    int x = id[T[t + k]], y = id[T[t + (k + 1) % 3]];
+                    if (x == a && y == b) continue;
+                    var u = x < y ? (x, y) : (y, x);
+                    if (und.GetValueOrDefault(u) != 1) return false;
+                }
+                return true;
+            }
+            var flip = new HashSet<int>();
+            foreach (var ((a, b), l) in dir)
+            {
+                if (l.Count != 2) continue;
+                bool c0 = IsCap(l[0], a, b), c1 = IsCap(l[1], a, b);
+                if (c0 == c1) continue;
+                flip.Add(c0 ? l[0] : l[1]);
+            }
+            if (flip.Count == 0) break;
+            any = true;
+            foreach (int t in flip) { (T[t + 1], T[t + 2]) = (T[t + 2], T[t + 1]); Interlocked.Increment(ref CapsFixed); }
+        }
+        // k184: ЩЕПКА ИЗ НЕСКОЛЬКИХ ТРЕУГОЛЬНИКОВ (две почти совпадающие ломаные края одной грани: хорда одного ребра и
+        // дуга другого — гнездо 1423N12): переворачиваются по одному треугольники у сторон, пройденных дважды в одну сторону,
+        // пока это уменьшает число таких сторон (сторона с обходами f и b вперёд и назад стоит max(f, b) − 1).
+        if (!CapGreedyOff) any |= GreedyFlips(T, id);
+        return any;
+    }
+    static readonly bool CapGreedyOff = Environment.GetEnvironmentVariable("P3D_CAPGREEDY") == "0";
+
+    static bool GreedyFlips(List<int> T, int[] id)
+    {
+        var cnt = new Dictionary<(int, int), int>();
+        void Count(int t, int sgn)
+        {
+            for (int k = 0; k < 3; k++)
+            {
+                int a = id[T[t + k]], b = id[T[t + (k + 1) % 3]];
+                if (a != b) cnt[(a, b)] = cnt.GetValueOrDefault((a, b)) + sgn;
+            }
+        }
+        for (int t = 0; t + 2 < T.Count; t += 3) Count(t, 1);
+        int Cost(int a, int b) { int f = cnt.GetValueOrDefault((a, b)), r = cnt.GetValueOrDefault((b, a)); return Math.Max(0, Math.Max(f, r) - 1); }
+        if (!cnt.Any(kv => kv.Value >= 2)) return false;   // сторон, пройденных дважды в одну сторону, нет — сетка в порядке
+        int Local(int t) { int c = 0; for (int k = 0; k < 3; k++) { int a = id[T[t + k]], b = id[T[t + (k + 1) % 3]]; if (a != b) c += Cost(a, b); } return c; }
+        bool any = false;
+        for (int round = 0; round < 4; round++)
+        {
+            bool changed = false;
+            for (int t = 0; t + 2 < T.Count; t += 3)
+            {
+                int before = Local(t);
+                if (before == 0) continue;
+                Count(t, -1); (T[t + 1], T[t + 2]) = (T[t + 2], T[t + 1]); Count(t, 1);
+                if (Local(t) < before) { changed = any = true; Interlocked.Increment(ref CapsFixed); }
+                else { Count(t, -1); (T[t + 1], T[t + 2]) = (T[t + 2], T[t + 1]); Count(t, 1); }
+            }
+            if (!changed) break;
+        }
+        return any;
     }
 
 
