@@ -68,6 +68,7 @@ jobs:
         include:
           - { name: k184_l0, cmd: 'loftcorpus140', env: '' }
           - { name: k184_cv, cmd: 'sldprt tests/k01/data/sw_to_6168t106.SLDPRT tests/k01/data/sw_cv_1423n12.SLDPRT tests/k01/data/sw_hosefit_2802n11.SLDPRT', env: '' }
+          - { name: k184_rv, cmd: 'sldprt tests/k01/data/sw_rv_3645t16.SLDPRT tests/k01/data/sw_rv_3099t13.SLDPRT tests/k01/data/sw_rv_70255k26.SLDPRT', env: 'P3D_SLDOUT=res/out' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
