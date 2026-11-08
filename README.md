@@ -5,3 +5,4 @@
 `K01Checks sldprt <каталог>`.
 
 - `sldprt1/` — 136 деталей McMaster-Carr (архив пользователя `sldprt1.zip`, 08.11.2026).
+- `sldprt2/` — 89 деталей McMaster-Carr (архив `sldprt2.zip`, 08.11.2026).
