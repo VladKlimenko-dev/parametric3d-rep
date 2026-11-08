@@ -1,0 +1,2 @@
+exit 1
+seconds 3002 nproc 4 env P3D_SLDPROF=1 P3D_SLOWFACE=1 P3D_SLDTIMEOUT=3000 cmd sldprt tests/k01/data/sw_to_6168t106.SLDPRT

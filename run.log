@@ -1,0 +1,7 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["sldprt","tests/k01/data/sw_to_6168t106.SLDPRT"]}
+{"test":"sldprt","file":"sw_to_6168t106.SLDPRT","timeout":3000,"stage":"read STEP (convert 509 ms, 1575 KB)"}
+{"test":"SLDPRT-IMPORT-K182 sw_to_6168t106.SLDPRT","ok":false,"error":"timeout 3000 s at read STEP (convert 509 ms, 1575 KB)"}
+{"test":"sldprt-summary","files":1,"good":0,"seconds":3000}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":0,"failed":1}
