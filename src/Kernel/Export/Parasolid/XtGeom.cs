@@ -238,9 +238,16 @@ internal sealed class XtNurbsSurf : XtSurf
     {
         var (u0, u1, v0, v1) = Range;
         u = Math.Clamp(u, u0, u1); v = Math.Clamp(v, v0, v1);
-        var bu = XtBasis.Eval(Ku, Du, Nu, u); var bv = XtBasis.Eval(Kv, Dv, Nv, v);
+        // k183: только вершины пролёта, без выделения памяти (прежде — полные массивы базиса на каждую точку: перевод
+        // штампа 2602A125 выделял 1,3 ТБ и шёл 10 минут)
+        Span<double> bu = stackalloc double[Du + 1]; Span<double> bv = stackalloc double[Dv + 1];
+        int su = XtBasis.EvalLocal(Ku, Du, Nu, u, bu), sv = XtBasis.EvalLocal(Kv, Dv, Nv, v, bv);
         var acc = Vector4d.Zero;
-        for (int i = 0; i < Nu; i++) if (bu[i] != 0) for (int j = 0; j < Nv; j++) if (bv[j] != 0) acc += H[i, j] * (bu[i] * bv[j]);
+        for (int a = 0; a <= Du; a++)
+        {
+            int i = su - Du + a; if (i < 0 || i >= Nu || bu[a] == 0) continue;
+            for (int b = 0; b <= Dv; b++) { int j = sv - Dv + b; if (j < 0 || j >= Nv || bv[b] == 0) continue; acc += H[i, j] * (bu[a] * bv[b]); }
+        }
         return acc.W != 0 ? acc.Xyz / acc.W : acc.Xyz;
     }
 
@@ -259,7 +266,41 @@ internal sealed class XtNurbsSurf : XtSurf
     public override Vector3d Project(Vector3d q) { var (u, v) = ProjectUv(q); return At(u, v); }
 
     /// <summary>Параметры ближайшей к q точки.</summary>
+    // тёплый старт: соседние точки сгущаемой кривой близки — Ньютон от прошлого решения, без просмотра сетки
+    Vector3d lastQ = new(double.NaN); double lastU, lastV;
+
     public (double U, double V) ProjectUv(Vector3d q)
+    {
+        var (u0, u1, v0, v1) = Range;
+        if (!WarmOff && !double.IsNaN(lastQ.X) && (q - lastQ).Length < 2e-4 && NewtonFrom(q, lastU, lastV) is var (wu, wv, ok) && ok)
+        { lastQ = q; lastU = wu; lastV = wv; return (wu, wv); }
+        var res = ProjectUvFull(q); lastQ = q; lastU = res.U; lastV = res.V; return res;
+    }
+    static readonly bool WarmOff = Environment.GetEnvironmentVariable("P3D_XTWARM") == "0";
+
+    (double, double, bool) NewtonFrom(Vector3d q, double bu, double bv)
+    {
+        var (u0, u1, v0, v1) = Range;
+        double hu = 1e-7 * Math.Max(1, u1 - u0), hv = 1e-7 * Math.Max(1, v1 - v0);
+        for (int it = 0; it < 12; it++)
+        {
+            var p = At(bu, bv);
+            var su = (At(bu + hu, bv) - At(bu - hu, bv)) / (2 * hu); var sv = (At(bu, bv + hv) - At(bu, bv - hv)) / (2 * hv);
+            var r = p - q;
+            double a = Vector3d.Dot(su, su), b = Vector3d.Dot(su, sv), c = Vector3d.Dot(sv, sv), det = a * c - b * b;
+            if (Math.Abs(det) < 1e-300) return (bu, bv, false);
+            double gu = Vector3d.Dot(r, su), gv = Vector3d.Dot(r, sv);
+            double du = (c * gu - b * gv) / det, dv = (a * gv - b * gu) / det;
+            double nu = Math.Clamp(bu - du, u0, u1), nv = Math.Clamp(bv - dv, v0, v1);
+            bool clamped = nu != bu - du || nv != bv - dv;
+            bu = nu; bv = nv;
+            if (Math.Abs(du) < 1e-12 * Math.Max(1, u1 - u0) && Math.Abs(dv) < 1e-12 * Math.Max(1, v1 - v0))
+                return (bu, bv, !clamped || true);
+        }
+        return (bu, bv, false);
+    }
+
+    (double U, double V) ProjectUvFull(Vector3d q)
     {
         var (u0, u1, v0, v1) = Range;
         if (grid == null) BuildGrid();
@@ -289,6 +330,29 @@ internal sealed class XtNurbsSurf : XtSurf
 /// <summary>Базисные функции B-сплайна (Кокс — де Бур) и глобальная интерполяция (NURBS Book, A9.1).</summary>
 internal static class XtBasis
 {
+    /// <summary>Ненулевые базисные функции в пролёте (без выделения памяти): N[0..p] относятся к вершинам span − p … span.</summary>
+    public static int EvalLocal(double[] k, int p, int n, double t, Span<double> N)
+    {
+        int span = p;
+        if (t >= k[n]) span = n - 1;
+        else { int lo = p, hi = n; while (hi - lo > 1) { int mid = (lo + hi) >> 1; if (t >= k[mid]) lo = mid; else hi = mid; } span = lo; }
+        Span<double> left = stackalloc double[p + 1]; Span<double> right = stackalloc double[p + 1];
+        N[0] = 1;
+        for (int j = 1; j <= p; j++)
+        {
+            left[j] = t - k[span + 1 - j]; right[j] = k[span + j] - t;
+            double saved = 0;
+            for (int r = 0; r < j; r++)
+            {
+                double den = right[r + 1] + left[j - r];
+                double tmp = den != 0 ? N[r] / den : 0;
+                N[r] = saved + right[r + 1] * tmp; saved = left[j - r] * tmp;
+            }
+            N[j] = saved;
+        }
+        return span;
+    }
+
     public static double[] Eval(double[] k, int p, int n, double t)
     {
         var res = new double[n];
