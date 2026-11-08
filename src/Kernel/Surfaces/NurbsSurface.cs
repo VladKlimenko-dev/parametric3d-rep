@@ -260,12 +260,35 @@ public sealed class NurbsSurface : ISurface3
         double bestU = 0, bestV = 0, best = double.MaxValue;
         // KRN-07 (07.8): точки сетки — один раз на поверхность (прежде 169 вычислений на каждую проекцию)
         var g = _grid ??= BuildGrid(gu, gv);
-        for (int i = 0; i <= gu; i++)
-            for (int j = 0; j <= gv; j++)
+        if ((gu + 1) * (gv + 1) <= 400)
+        {
+            for (int i = 0; i <= gu; i++)
+                for (int j = 0; j <= gv; j++)
+                {
+                    double d = (g[i, j] - p).LengthSquared;
+                    if (d < best) { best = d; bestU = i / (double)gu; bestV = j / (double)gv; }
+                }
+        }
+        else
+        {
+            // большая сетка — по блокам 8×8 с габаритами: блок дальше лучшей точки не просматривается
+            var bl = _gridBlocks ??= BuildBlocks(g);
+            int nb = bl.Length;
+            var order = new (double D, int K)[nb];
+            for (int k = 0; k < nb; k++) order[k] = (BoxDist2(bl[k].Lo, bl[k].Hi, p), k);
+            Array.Sort(order, (x, y) => x.D.CompareTo(y.D));
+            foreach (var (bd, k) in order)
             {
-                double d = (g[i, j] - p).LengthSquared;
-                if (d < best) { best = d; bestU = i / (double)gu; bestV = j / (double)gv; }
+                if (bd >= best) break;
+                var b = bl[k];
+                for (int i = b.I0; i <= b.I1; i++)
+                    for (int j = b.J0; j <= b.J1; j++)
+                    {
+                        double d = (g[i, j] - p).LengthSquared;
+                        if (d < best) { best = d; bestU = i / (double)gu; bestV = j / (double)gv; }
+                    }
             }
+        }
 
         // k140 (скорость): СРАЗУ НЬЮТОН. Гаусс — Ньютон с точными производными (Derivs) от лучшей точки сетки, шаг делится
         // пополам, пока расстояние не уменьшится; сходится за несколько шагов. Прежде — спуск по сетке (до 160 вычислений
@@ -594,6 +617,28 @@ public sealed class NurbsSurface : ISurface3
     }
 
     private Vector3d[,]? _grid;
+    private (int I0, int I1, int J0, int J1, Vector3d Lo, Vector3d Hi)[]? _gridBlocks;
+
+    static (int I0, int I1, int J0, int J1, Vector3d Lo, Vector3d Hi)[] BuildBlocks(Vector3d[,] g)
+    {
+        int nu = g.GetLength(0), nv = g.GetLength(1); const int B = 8;
+        var res = new List<(int, int, int, int, Vector3d, Vector3d)>();
+        for (int i0 = 0; i0 < nu; i0 += B)
+            for (int j0 = 0; j0 < nv; j0 += B)
+            {
+                int i1 = Math.Min(nu - 1, i0 + B), j1 = Math.Min(nv - 1, j0 + B);
+                var lo = new Vector3d(double.MaxValue); var hi = new Vector3d(double.MinValue);
+                for (int i = i0; i <= i1; i++) for (int j = j0; j <= j1; j++) { lo = Vector3d.ComponentMin(lo, g[i, j]); hi = Vector3d.ComponentMax(hi, g[i, j]); }
+                res.Add((i0, i1, j0, j1, lo, hi));
+            }
+        return res.ToArray();
+    }
+
+    static double BoxDist2(Vector3d lo, Vector3d hi, Vector3d p)
+    {
+        double dx = Math.Max(0, Math.Max(lo.X - p.X, p.X - hi.X)), dy = Math.Max(0, Math.Max(lo.Y - p.Y, p.Y - hi.Y)), dz = Math.Max(0, Math.Max(lo.Z - p.Z, p.Z - hi.Z));
+        return dx * dx + dy * dy + dz * dz;
+    }
     private Vector3d[,] BuildGrid(int nu, int nv)
     {
         var g = new Vector3d[nu + 1, nv + 1];
