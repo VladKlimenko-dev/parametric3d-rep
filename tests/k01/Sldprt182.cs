@@ -266,6 +266,9 @@ static partial class Program
             }
             var fstats = bodies[bi].Faces.Where(x => mentioned.Contains(x.Tag) && faceStat.ContainsKey(x.Id))
                 .Select(x => { var st = faceStat[x.Id]; var cc = st.A > 0 ? st.S / st.A : Vector3d.Zero; var ag = agree.GetValueOrDefault(x.Id); return $"{x.Tag}: tris {st.N} area {st.A:G4} centroid ({cc.X:F3},{cc.Y:F3},{cc.Z:F3}) normal agrees {ag.Yes}/{ag.Yes + ag.No} rev {x.Reversed} ray {Ray(x)} exactArea {AnalyticVolume.FaceArea(x):G4}"; }).ToList();
+            var multiCo = bodies[bi].Edges.Where(e => e.CoEdges.Count > 2).Take(4)
+                .Select(e => $"{e.Curve.GetType().Name} {e.V0.P}->{e.V1.P} closed {ReferenceEquals(e.V0, e.V1)}: " + string.Join(",", e.CoEdges.Select(c => (c.Loop?.Face?.Tag ?? "?") + (c.Reversed ? "-" : "+")))).ToList();
+            if (multiCo.Count > 0) Log(new { test = "sldprt-multicoedge", file, body = bi + 1, multiCo });
             var sameCo = bodies[bi].Edges.Where(e => e.CoEdges.Count == 2 && e.CoEdges[0].Reversed == e.CoEdges[1].Reversed)
                 .Select(e => $"{e.Curve.GetType().Name}:{e.CoEdges[0].Loop?.Face?.Tag}|{e.CoEdges[1].Loop?.Face?.Tag}").Take(10).ToList();
             // k184: выгрузка сетки тела, фасет граней и рёбер для разбора вне CI (P3D_SLDDIAGOBJ=каталог)
