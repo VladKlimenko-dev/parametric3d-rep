@@ -44,6 +44,7 @@ public static class ImportHeal
         try { return (src.PointAt(src.ProjectToUV(p)) - p).Length; } catch { return 0; }
     }
 
+    static readonly bool HealSideDbg = Environment.GetEnvironmentVariable("P3D_HEALSIDEDBG") == "1";
     static readonly bool HealSideOff = Environment.GetEnvironmentVariable("P3D_HEALSIDE") == "0";
     static readonly bool FileAccOff = Environment.GetEnvironmentVariable("P3D_HEALFILEACC") == "0";
 
@@ -159,6 +160,7 @@ public static class ImportHeal
                         if (dirEdges.ContainsKey((ka, kb))) with++; else if (dirEdges.ContainsKey((kb, ka))) against++;
                     }
                 }
+                if (HealSideDbg && (against > 0 || with < 3)) warnings?.Add($"HEALSIDE {f.Tag}: with {with}, against {against}, facets {fs.Facets.Count}, loops {f.Loops.Count}");
                 if (against <= with || against < 3) continue;
                 var list = fs.Facets.ToList(); var n = Vector3d.Zero;
                 foreach (var t in list) n += Vector3d.Cross(t.Item3 - t.Item1, t.Item2 - t.Item1);
