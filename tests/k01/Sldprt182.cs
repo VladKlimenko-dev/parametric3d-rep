@@ -188,7 +188,19 @@ static partial class Program
                     string k2 = kind + " " + fd; cnt[k2] = cnt.GetValueOrDefault(k2) + 1;
                 }
             }
-            Log(new { test = "sldprt-diag", file, body = bi + 1, faces = cnt.OrderByDescending(kv => kv.Value).Take(12).Select(kv => $"{kv.Key} ×{kv.Value}").ToList() });
+            // центроид и площадь сетки каждой упомянутой грани
+            var faceStat = new Dictionary<uint, (Vector3d S, double A, int N)>();
+            for (int t = 0; t + 2 < md.Indices.Length; t += 3)
+            {
+                uint fid = md.Vertices[md.Indices[t]].FaceId;
+                var a = (Vector3d)md.Vertices[md.Indices[t]].P; var b = (Vector3d)md.Vertices[md.Indices[t + 1]].P; var c = (Vector3d)md.Vertices[md.Indices[t + 2]].P;
+                double ar = Vector3d.Cross(b - a, c - a).Length / 2;
+                var st = faceStat.GetValueOrDefault(fid); faceStat[fid] = (st.S + (a + b + c) / 3 * ar, st.A + ar, st.N + 1);
+            }
+            var mentioned = cnt.Keys.Select(k => k.Split(' ')[1].Split('/')[0]).Distinct().Take(8).ToList();
+            var fstats = bodies[bi].Faces.Where(x => mentioned.Contains(x.Tag) && faceStat.ContainsKey(x.Id))
+                .Select(x => { var st = faceStat[x.Id]; var cc = st.A > 0 ? st.S / st.A : Vector3d.Zero; return $"{x.Tag}: tris {st.N} area {st.A:G4} centroid ({cc.X:F3},{cc.Y:F3},{cc.Z:F3})"; }).ToList();
+            Log(new { test = "sldprt-diag", file, body = bi + 1, faces = cnt.OrderByDescending(kv => kv.Value).Take(12).Select(kv => $"{kv.Key} ×{kv.Value}").ToList(), fstats });
         }
     }
 }
