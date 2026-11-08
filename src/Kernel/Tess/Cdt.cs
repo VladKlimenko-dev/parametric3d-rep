@@ -35,6 +35,23 @@ public static class Cdt
                                          out List<Vector2d> pts, IReadOnlyList<Vector2d>? inner)
     {
         var tris = Triangulate(outer, holes, out pts);
+        return WithInner(tris, pts, inner);
+    }
+
+    /// <summary>
+    /// k184: то же, что <see cref="Triangulate(IReadOnlyList{Vector2d}, IReadOnlyList{IReadOnlyList{Vector2d}}, out List{Vector2d}, IReadOnlyList{Vector2d}?)"/>,
+    /// но от готового разбиения контуров (его копии): уточняющие проходы конформной разметки перестраивали разбиение 17 000
+    /// точек края заново на каждом проходе — секунды на проход, хотя контуры те же.
+    /// </summary>
+    public static List<int>? TriangulateFrom(List<int>? baseTris, List<Vector2d> basePts, out List<Vector2d> pts, IReadOnlyList<Vector2d>? inner)
+    {
+        pts = new List<Vector2d>(basePts);
+        if (baseTris == null) return null;
+        return WithInner(new List<int>(baseTris), pts, inner);
+    }
+
+    static List<int>? WithInner(List<int>? tris, List<Vector2d> pts, IReadOnlyList<Vector2d>? inner)
+    {
         if (tris == null || inner == null || inner.Count == 0) return tris;
 
         // Точка вставляется в тот треугольник, внутри которого лежит: он делится на три.
