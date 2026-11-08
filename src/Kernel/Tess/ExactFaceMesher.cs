@@ -3104,9 +3104,10 @@ public static partial class ExactFaceMesher
     /// </summary>
     static readonly bool CapFixOff = Environment.GetEnvironmentVariable("P3D_CAPFIX") == "0";
     public static long CapsFixed;
-    static void FixBoundaryCaps(List<Vector3d> P, List<int> T)
+    public static bool FixBoundaryCaps(List<Vector3d> P, List<int> T)
     {
-        if (T.Count < 6) return;
+        bool any = false;
+        if (T.Count < 6) return false;
         var canon = new Dictionary<Vector3d, int>();
         var id = new int[P.Count];
         for (int i = 0; i < P.Count; i++) { if (!canon.TryGetValue(P[i], out int c)) canon[P[i]] = c = i; id[i] = c; }
@@ -3142,9 +3143,11 @@ public static partial class ExactFaceMesher
                 if (c0 == c1) continue;
                 flip.Add(c0 ? l[0] : l[1]);
             }
-            if (flip.Count == 0) return;
+            if (flip.Count == 0) return any;
+            any = true;
             foreach (int t in flip) { (T[t + 1], T[t + 2]) = (T[t + 2], T[t + 1]); Interlocked.Increment(ref CapsFixed); }
         }
+        return any;
     }
 
 

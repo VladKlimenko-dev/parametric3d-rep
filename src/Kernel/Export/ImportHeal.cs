@@ -46,6 +46,7 @@ public static class ImportHeal
 
     static readonly bool HealSideDbg = Environment.GetEnvironmentVariable("P3D_HEALSIDEDBG") == "1";
     static readonly bool HealSideOff = Environment.GetEnvironmentVariable("P3D_HEALSIDE") == "0";
+    static readonly bool CapFixOff = Environment.GetEnvironmentVariable("P3D_CAPFIX") == "0";
     static readonly bool FileAccOff = Environment.GetEnvironmentVariable("P3D_HEALFILEACC") == "0";
 
     public static Report Heal(TSolid b, List<string>? warnings, string label, double fileAccuracy = 0)
@@ -170,6 +171,23 @@ public static class ImportHeal
                 flippedSides++;
             }
             if (flippedSides > 0) { b.DisplayMeshKey = null; warnings?.Add($"Import: {label}: {flippedSides} face side(s) turned to match the loops."); }
+        }
+        // k184: щепки у края с обратным обходом — и в фасетах прочитанной грани (их сетка идёт в показ и проверку как есть;
+        // стартер 7595K62: отверстие, касающееся контура плоской грани в вершине). Мутация P3D_CAPFIX=0.
+        if (!CapFixOff)
+        {
+            int capFaces = 0;
+            foreach (var f in b.Faces.ToList())
+            {
+                if (f.Surface is not FacetedSurface fs || fs.Facets.Count < 2) continue;
+                var P = new List<Vector3d>(fs.Facets.Count * 3); var T = new List<int>(fs.Facets.Count * 3);
+                foreach (var t in fs.Facets) { T.Add(P.Count); P.Add(t.Item1); T.Add(P.Count); P.Add(t.Item2); T.Add(P.Count); P.Add(t.Item3); }
+                if (!Tess.ExactFaceMesher.FixBoundaryCaps(P, T)) continue;
+                var fl = new FacetedSurface(fs.Source, fs.FallbackNormal) { FromLoops = fs.FromLoops };
+                for (int i = 0; i + 2 < T.Count; i += 3) fl.Facets.Add((P[T[i]], P[T[i + 1]], P[T[i + 2]]));
+                f.Surface = fl; capFaces++;
+            }
+            if (capFaces > 0) { b.DisplayMeshKey = null; warnings?.Add($"Import: {label}: boundary slivers turned on {capFaces} face(s)."); }
         }
         var vr = SolidValidator.ValidateBRep(b);
         bool overBudget = maxGap > budget;
