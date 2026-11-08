@@ -33,7 +33,10 @@ static partial class Program
                 double tConv = sw.Elapsed.TotalMilliseconds;
                 sldStage = $"read STEP (convert {tConv:F0} ms, {step.Length / 1024} KB)";
                 if (Environment.GetEnvironmentVariable("P3D_SLDOUT") is { Length: > 0 } od) { Directory.CreateDirectory(od); File.WriteAllText(Path.Combine(od, Path.GetFileNameWithoutExtension(path) + ".step"), step); }
+                bool prof = Environment.GetEnvironmentVariable("P3D_SLDPROF") == "1";
+                if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.Reset(); }
                 var part = Exchange.Read(step, out _, w);
+                if (prof) { Console.Error.WriteLine("SLDPROF " + Path.GetFileName(path) + "\n" + Parametric3D.Kernel.Diagnostics.Prof.Report()); Parametric3D.Kernel.Diagnostics.Prof.Enabled = false; }
                 double tAll = sw.Elapsed.TotalMilliseconds;
                 sldStage = $"validate (convert {tConv:F0} ms, read {sw.Elapsed.TotalMilliseconds - tConv:F0} ms)";
                 var bodies = part?.Bodies ?? new List<TSolid>();
