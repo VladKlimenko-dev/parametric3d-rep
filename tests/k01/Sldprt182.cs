@@ -211,4 +211,21 @@ static partial class Program
             Log(new { test = "sldprt-diag", file, body = bi + 1, faces = cnt.OrderByDescending(kv => kv.Value).Take(12).Select(kv => $"{kv.Key} ×{kv.Value}").ToList(), fstats });
         }
     }
+
+    /// <summary>k184: импорт и проверка файлов STEP (разбор: тот же STEP с правкой руками).</summary>
+    static void StepFileChecks(IEnumerable<string> files)
+    {
+        foreach (var path in files)
+            Check("STEPCHECK " + Path.GetFileName(path), () =>
+            {
+                var w = new List<string>();
+                var part = Exchange.Read(File.ReadAllText(path), out _, w);
+                var bodies = part?.Bodies ?? new List<TSolid>();
+                var vrs = bodies.Select(x => SolidValidator.Validate(x)).ToList();
+                Log(new { test = "stepcheck", file = Path.GetFileName(path), bodies = bodies.Count, valid = vrs.Select(v => v.IsValid).ToList(),
+                    errors = vrs.SelectMany(x => x.Issues).Where(x => x.Severity == ValidationSeverity.Error).Take(6).Select(x => x.ToString()).ToList(),
+                    volume = bodies.Select(x => AnalyticVolume.Of(x)).ToList(), warnings = w.Take(10).ToList() });
+                if (Environment.GetEnvironmentVariable("P3D_SLDDIAG") == "1") SldDiag(Path.GetFileName(path), bodies, vrs);
+            });
+    }
 }
