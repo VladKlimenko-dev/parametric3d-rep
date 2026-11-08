@@ -63,6 +63,12 @@ jobs:
           - { name: k183_c2s1, cmd: 'sldprt CORPUS/sldprt2', env: 'P3D_SLDSHARD=1/4' }
           - { name: k183_c2s2, cmd: 'sldprt CORPUS/sldprt2', env: 'P3D_SLDSHARD=2/4' }
           - { name: k183_c2s3, cmd: 'sldprt CORPUS/sldprt2', env: 'P3D_SLDSHARD=3/4' }
+          - { name: k183_c3s0, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=0/6' }
+          - { name: k183_c3s1, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=1/6' }
+          - { name: k183_c3s2, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=2/6' }
+          - { name: k183_c3s3, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=3/6' }
+          - { name: k183_c3s4, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=4/6' }
+          - { name: k183_c3s5, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=5/6' }
           - { name: k183_sld, cmd: 'sldprt', env: '' }
     steps:
       - uses: actions/checkout@v4
