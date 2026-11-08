@@ -112,9 +112,11 @@ public static class XtToStep
             if (flip) same = !same;
             if (sn.Name == "BLENDED_EDGE" && !BlendSideOff && BlendSame(fc, sn) is bool bs) same = bs;
             var bounds = new List<int>();
+            var boundScore = new List<double>();
             var seenL = new HashSet<int>();
             for (var lp = f[fc.P("loop")]; lp != null && seenL.Add(lp.Id); lp = f[lp.P("next")])
             {
+                double score = OuterScore(lp, sn, (fc.C("sense") != '-') == (sn.C("sense") != '-'));
                 var oes = new List<int>();
                 var h0 = f[lp.P("halfedge")];
                 var seenH = new HashSet<int>();
@@ -127,7 +129,19 @@ public static class XtToStep
                 }
                 if (oes.Count == 0) continue;
                 int loop = E($"EDGE_LOOP('',({string.Join(",", oes.Select(x => "#" + x))}))");
-                bounds.Add(E($"FACE_BOUND('',#{loop},.T.)"));
+                bounds.Add(loop); boundScore.Add(score);
+            }
+            // k183: НАРУЖНЫЙ КОНТУР — ПЕРВЫМ (FACE_OUTER_BOUND). Порядок петель XT не обещает наружную первой, а импорт берёт
+            // первую за наружную: у корпуса 7812K81 плоская грань с отверстием читалась двумя несвязными кусками.
+            // Мутация P3D_XTOUTERLOOP=0 — прежний порядок.
+            if (bounds.Count > 0)
+            {
+                int oi = 0;
+                if (!OuterLoopOff) for (int i = 1; i < bounds.Count; i++) if (boundScore[i] > boundScore[oi]) oi = i;
+                var ordered = new List<int>();
+                ordered.Add(E($"FACE_OUTER_BOUND('',#{bounds[oi]},.T.)"));
+                for (int i = 0; i < bounds.Count; i++) if (i != oi) ordered.Add(E($"FACE_BOUND('',#{bounds[i]},.T.)"));
+                bounds = ordered;
             }
             // грань без рёбер — вся замкнутая поверхность (шарик подшипника): грань без контуров
             if (bounds.Count == 0 && sn.Name is not ("SPHERE" or "TORUS" or "B_SURFACE" or "SPUN_SURF")) { Skip("face without edges"); return null; }
@@ -197,6 +211,55 @@ public static class XtToStep
                     return null;
             }
             return null;
+        }
+
+        static readonly bool OuterLoopOff = Environment.GetEnvironmentVariable("P3D_XTOUTERLOOP") == "0";
+
+        /// <summary>
+        /// Оценка «наружности» петли: у плоскости — площадь со знаком относительно наружной нормали грани (наружная петля
+        /// обходит нормаль против часовой — площадь положительна и наибольшая; отверстия — отрицательны); у прочих поверхностей —
+        /// диагональ габарита петли. Точки петли — вершины плавников и дуги окружностей между ними.
+        /// </summary>
+        double OuterScore(XtNode lp, XtNode sn, bool faceSameAsSurface)
+        {
+            var pts = new List<Vector3d>();
+            var seenH = new HashSet<int>();
+            for (var h = f[lp.P("halfedge")]; h != null && seenH.Add(h.Id); h = f[h.P("forward")])
+            {
+                var o = f[h.P("other")];
+                bool fwd = h.C("sense") != '-';
+                // начало хода по плавнику: вершина предыдущего (вершина плавника — его конец)
+                var vEnd = f[h.P("vertex")]; var vStart = o != null ? f[o.P("vertex")] : null;
+                Vector3d? pe = vEnd != null ? f[vEnd.P("point")]?.V("pvec") : null, ps = vStart != null ? f[vStart.P("point")]?.V("pvec") : null;
+                var e = f[h.P("edge")]; var cn = e != null ? f[e.P("curve")] : null;
+                if (cn != null && cn.Name == "CIRCLE")
+                {
+                    var c = cn.V("centre"); var z = cn.V("normal").Normalized(); var x = cn.V("x_axis").Normalized(); var y = Vector3d.Cross(z, x); double r = cn.D("radius");
+                    // направление хода по окружности: знак кривой и знак плавника
+                    bool ccw = (cn.C("sense") != '-') == fwd;
+                    double A(Vector3d q) => Math.Atan2(Vector3d.Dot(q - c, y), Vector3d.Dot(q - c, x));
+                    double a0, sw;
+                    if (ps != null && pe != null && (ps.Value - pe.Value).Length > 1e-12)
+                    {
+                        a0 = A(ps.Value); double a1 = A(pe.Value);
+                        sw = ccw ? a1 - a0 : a0 - a1; sw = ((sw % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI); if (!ccw) sw = -sw;
+                    }
+                    else { a0 = pe != null ? A(pe.Value) : 0; sw = ccw ? 2 * Math.PI : -2 * Math.PI; }
+                    for (int i = 0; i < 32; i++) { double t = a0 + sw * i / 32; pts.Add(c + (x * Math.Cos(t) + y * Math.Sin(t)) * r); }
+                }
+                else if (ps != null) pts.Add(ps.Value);
+            }
+            if (pts.Count < 2) return 0;
+            if (sn.Name == "PLANE")
+            {
+                var n = sn.V("normal").Normalized() * (faceSameAsSurface ? 1 : -1);
+                var area = Vector3d.Zero; var c0 = pts[0];
+                for (int i = 1; i + 1 < pts.Count; i++) area += Vector3d.Cross(pts[i] - c0, pts[i + 1] - c0);
+                return Math.Abs(Vector3d.Dot(area, n)) * 0.5;   // наружная охватывает отверстия — наибольшая по модулю
+            }
+            var lo = pts[0]; var hi = pts[0];
+            foreach (var q in pts) { lo = Vector3d.ComponentMin(lo, q); hi = Vector3d.ComponentMax(hi, q); }
+            return (hi - lo).Length;
         }
 
         void Skip(string kind) { Skipped++; SkippedKinds.Add(kind); }
