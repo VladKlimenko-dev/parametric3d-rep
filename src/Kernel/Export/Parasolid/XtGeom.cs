@@ -110,6 +110,8 @@ internal abstract class XtSurf
         public BlendBound(XtBlendSurf b, int idx) { B = b; Idx = idx; }
         public override Vector3d At(double u, double v) => B.At(u, Idx == 0 ? 0 : 1);
         public override Vector3d Project(Vector3d q) { var c = B.CentreAt(q); return (Idx == 0 ? B.S0 : B.S1).Project(c); }
+        /// <summary>Касание с другой опорой (см. сгущение кривой пересечения).</summary>
+        public Vector3d ProjectOther(Vector3d q) { var c = B.CentreAt(q); return (Idx == 0 ? B.S1 : B.S0).Project(c); }
     }
     sealed class Off : XtSurf
     {
@@ -433,7 +435,10 @@ internal static class XtPoly
                 // граница скругления: её проекция уже лежит на опоре (обычно это и есть вторая поверхность) — один шаг
                 if (!BlendEdgeOff && (a as XtSurf.BlendBound ?? b as XtSurf.BlendBound) is { } bb && (a is XtSurf.BlendBound ? b : a) is { } oth)
                 {
+                    // номер опоры у границы не всегда та опора, с которой пересекается вторая поверхность (гайка: граница
+                    // «на конусе», а ребро — на плоскости): берётся касание, лежащее на второй поверхности
                     var q = bb.Project(p);
+                    if ((oth.Project(q) - q).Length >= 1e-8) { var q2 = bb.ProjectOther(p); if ((oth.Project(q2) - q2).Length < (oth.Project(q) - q).Length) q = q2; }
                     if ((oth.Project(q) - q).Length < 1e-8) { res.Add(q); continue; }
                 }
                 if (a != null && b != null)
