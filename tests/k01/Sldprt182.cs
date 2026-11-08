@@ -161,6 +161,35 @@ static partial class Program
 
     static void SldDiag(string file, List<TSolid> bodies, List<ValidationReport> vrs)
     {
+        // k184: отход кривой ребра от поверхности — проекция против перебора по плотной сетке параметров
+        for (int bi = 0; bi < bodies.Count; bi++)
+        {
+            var offIds = vrs[bi].Issues.Where(x => x.Code == "curve-off-surface" && x.Element is { }).Select(x => x.Element!.Value).Take(3).ToList();
+            foreach (var eid in offIds)
+            {
+                var e = bodies[bi].Edges.FirstOrDefault(x => x.Id == eid); if (e == null) continue;
+                var parts = new List<string>();
+                foreach (var ce in e.CoEdges)
+                {
+                    var sf = ce.Loop?.Face is { } ff ? Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(ff) : null;
+                    if (sf == null) continue;
+                    double proj = 0, brute = 0; Vector2d worstUv = default; Vector3d worstP = default;
+                    const int GU = 64, GV = 4096;
+                    var grid = new Vector3d[(GU + 1) * (GV + 1)];
+                    for (int i = 0; i <= GU; i++) for (int j = 0; j <= GV; j++) grid[i * (GV + 1) + j] = sf.PointAt(new Vector2d(i / (double)GU, j / (double)GV));
+                    for (int k = 0; k <= 16; k++)
+                    {
+                        var c = e.Curve; var q = c.PointAt(c.T0 + (c.T1 - c.T0) * k / 16.0);
+                        double dp; Vector2d uv; try { uv = sf.ProjectToUV(q); dp = (sf.PointAt(uv) - q).Length; } catch { continue; }
+                        double db = double.MaxValue; foreach (var g in grid) db = Math.Min(db, (g - q).LengthSquared); db = Math.Sqrt(db);
+                        if (dp > proj) { proj = dp; worstUv = uv; worstP = q; }
+                        brute = Math.Max(brute, db);
+                    }
+                    parts.Add($"{ce.Loop!.Face!.Tag} {sf.GetType().Name}: proj {proj:G3} at uv ({worstUv.X:0.####},{worstUv.Y:0.####}) p ({worstP.X:0.###},{worstP.Y:0.###},{worstP.Z:0.###}), grid64x4096 {brute:G3}");
+                }
+                Log(new { test = "sldprt-curveoff", file, body = bi + 1, edge = eid, curve = e.Curve.GetType().Name, parts });
+            }
+        }
         for (int bi = 0; bi < bodies.Count; bi++)
         {
             if (vrs[bi].IsValid) continue;
