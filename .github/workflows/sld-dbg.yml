@@ -66,7 +66,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k184_rv, cmd: 'sldprt tests/k01/data/sw_rv_3645t16.SLDPRT', env: 'P3D_MERIDBG=1' }
+          - { name: k184_rv, cmd: 'sldprt tests/k01/data/sw_rv_3645t16.SLDPRT tests/k01/data/sw_rv_3099t13.SLDPRT tests/k01/data/sw_rv_70255k26.SLDPRT', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

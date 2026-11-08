@@ -90,6 +90,7 @@ public static class StepImport
     /// проекция на поверхность упиралась в край, и ребро «отходило» на 0.47 мм (бачок 1358K26). Прямая — концы; прочие — 33
     /// точки. Мутация P3D_IMPRANGE=0.
     /// </summary>
+    static readonly bool TorusGapOff = Environment.GetEnvironmentVariable("P3D_TORUSGAP") == "0";
     static readonly bool MeridianDbg = Environment.GetEnvironmentVariable("P3D_MERIDBG") == "1";
     static readonly bool MeridianOff = Environment.GetEnvironmentVariable("P3D_IMPMERIDIAN") == "0";
 
@@ -489,8 +490,8 @@ public static class StepImport
                         var ts = new List<double>();
                         foreach (var lc in got.Value.Loops)
                             foreach (var c in lc)
-                                for (int k = 0; k <= 16; k++)
-                                    ts.Add(((rvLat.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * k / 16.0)).X - bc.T0) / span % 1 + 1) % 1);
+                                for (int k = 0, nk = TorusGapOff ? 16 : 64; k <= nk; k++)
+                                    ts.Add(((rvLat.ProjectToUV(c.PointAt(c.T0 + (c.T1 - c.T0) * k / (double)nk)).X - bc.T0) / span % 1 + 1) % 1);
                         ts.Sort();
                         double gap = 0, after = 0, before = 1;
                         for (int i = 0; i < ts.Count; i++)
@@ -498,7 +499,10 @@ public static class StepImport
                             double nx = i + 1 < ts.Count ? ts[i + 1] : ts[0] + 1;
                             if (nx - ts[i] > gap) { gap = nx - ts[i]; before = ts[i]; after = nx % 1; }
                         }
-                        if (gap > 1e-3)
+                        // k184: промежуток — настоящий, а не шаг выборки: контур из окружности сечения (колено трубы) давал по 17
+                        // точкам промежуток 1/16, и образующая тора обрезалась на 22°, — сетка отходила от поверхности на 12 мм
+                        // (подъёмник 3645T16). Теперь 65 точек на кривую и промежуток не меньше 0.05 оборота. P3D_TORUSGAP=0.
+                        if (gap > (TorusGapOff ? 1e-3 : 0.05))
                         {
                             double a0 = after, a1 = before < after ? before + 1 : before;
                             var trimmedT = new Curves.ArcCurve3(gArc.Frame, gArc.Radius, gArc.A0 + gArc.Sweep * a0, gArc.A0 + gArc.Sweep * a1);
