@@ -482,41 +482,69 @@ public static partial class ExactFaceMesher
     {
         if (pts.Count < 2) return pts;
         var c = e.Curve;
-        bool fwd = (c.PointAt(c.T0) - e.V0.P).LengthSquared <= (c.PointAt(c.T1) - e.V0.P).LengthSquared;
-        Vector3d Leave(TEdge x, TVertex v, out double tEnd, out double tIn)
+        bool closed = ReferenceEquals(e.V0, e.V1);
+        // k184: у замкнутого ребра (окружность отверстия, касающаяся контура грани в своей вершине) ломаная идёт по параметру
+        bool fwd = closed || (c.PointAt(c.T0) - e.V0.P).LengthSquared <= (c.PointAt(c.T1) - e.V0.P).LengthSquared;
+        static Vector3d Dir(ICurve3 cx, double tEnd, double tIn, Vector3d at)
         {
-            var cx = x.Curve; bool atStart = (cx.PointAt(cx.T0) - v.P).LengthSquared <= (cx.PointAt(cx.T1) - v.P).LengthSquared;
-            tEnd = atStart ? cx.T0 : cx.T1; tIn = atStart ? cx.T1 : cx.T0;
-            var q = cx.PointAt(tEnd + (tIn - tEnd) * 1e-4); var d = q - v.P;
+            var q = cx.PointAt(tEnd + (tIn - tEnd) * 1e-4); var d = q - at;
             return d.LengthSquared > 0 ? d.Normalized() : Vector3d.Zero;
         }
-        TEdge? Cusp(TVertex v)
+        // направления, в которых ребро x уходит из вершины v (у замкнутого — два: от начала и от конца)
+        IEnumerable<Vector3d> Leaves(TEdge x, TVertex v)
         {
-            var de = Leave(e, v, out _, out _);
+            var cx = x.Curve;
+            if (ReferenceEquals(x.V0, x.V1))
+            {
+                if (CuspClosedOff) yield break;
+                yield return Dir(cx, cx.T0, cx.T1, v.P); yield return Dir(cx, cx.T1, cx.T0, v.P); yield break;
+            }
+            bool atStart = (cx.PointAt(cx.T0) - v.P).LengthSquared <= (cx.PointAt(cx.T1) - v.P).LengthSquared;
+            yield return atStart ? Dir(cx, cx.T0, cx.T1, v.P) : Dir(cx, cx.T1, cx.T0, v.P);
+        }
+        TEdge? Cusp(TVertex v, Vector3d de)
+        {
             if (de == Vector3d.Zero) return null;
             foreach (var o in CuspCandidates(e, v))
             {
-                if (ReferenceEquals(o, e) || ReferenceEquals(o.V0, o.V1)) continue;
-                var d = Leave(o, v, out _, out _);
-                if (Vector3d.Dot(d, de) > Math.Cos(3 * Math.PI / 180)) return o;
+                if (ReferenceEquals(o, e)) continue;
+                foreach (var d in Leaves(o, v))
+                    if (Vector3d.Dot(d, de) > Math.Cos(3 * Math.PI / 180)) return o;
             }
             return null;
         }
+        if (closed && CuspClosedOff) return pts;
         var res = pts;
         foreach (bool atV0 in new[] { true, false })
         {
             var v = atV0 ? e.V0 : e.V1;
-            if (Cusp(v) is not { } partner) continue;
-            Leave(e, v, out double tEnd, out double tIn);
+            double tEnd = atV0 == fwd ? c.T0 : c.T1, tIn = atV0 == fwd ? c.T1 : c.T0;
+            if (Cusp(v, Dir(c, tEnd, tIn, v.P)) is not { } partner) continue;
             // параметр первой внутренней точки ломаной со стороны v
             var nb = atV0 ? res[1] : res[^2];
             double t1 = CurveParam.Closest(c, nb);
+            // у замкнутой кривой ближайший параметр может оказаться у другого конца — берётся со стороны этого конца
+            if (closed && Math.Abs(t1 - tEnd) > 0.5 * Math.Abs(tIn - tEnd)) t1 = tEnd + (tIn - tEnd) * 0.01;
             var extra = new List<Vector3d>();
+            var outer = nb;
             for (int k = 1; k < 60; k++)
             {
                 double t = tEnd + (t1 - tEnd) * Math.Pow(0.5, k);
                 var q = c.PointAt(t);
                 if ((q - v.P).Length < 1e-6) break;
+                // k184: точка на хорде (прогиб звена меньше 1e-6 мм) ничего не меняет в форме, а три точки на одной прямой
+                // дают разметке вырожденный треугольник (гайка: резьба у торца, грань B-поверхности не строилась по контуру).
+                // Мутация P3D_CUSPSAG=0.
+                if (!CuspSagOff)
+                {
+                    var dch = outer - v.P; double l2 = dch.LengthSquared;
+                    if (l2 > 0)
+                    {
+                        double tt = Math.Clamp(Vector3d.Dot(q - v.P, dch) / l2, 0, 1);
+                        if ((v.P + dch * tt - q).Length < 1e-6) break;
+                    }
+                }
+                outer = q;
                 // ближе к клюву, где зазор до соседней кривой меньше 2e-5 мм, точек не ставить: их склеит сварка сетки, и
                 // контуры пересекутся; последнее звено до вершины — общая с соседом узкая щель
                 var pc = partner.Curve; double gap = (pc.PointAt(CurveParam.Closest(pc, q)) - q).Length;
@@ -533,6 +561,9 @@ public static partial class ExactFaceMesher
         }
         return res;
     }
+    /// <summary>k184: клюв с замкнутым ребром (окружность, касающаяся контура в своей вершине). Мутация P3D_CUSPCLOSED=0.</summary>
+    static readonly bool CuspSagOff = Environment.GetEnvironmentVariable("P3D_CUSPSAG") == "0";
+    static readonly bool CuspClosedOff = Environment.GetEnvironmentVariable("P3D_CUSPCLOSED") == "0";
     public static long CuspDensified;
 
     /// <summary>
@@ -591,7 +622,7 @@ public static partial class ExactFaceMesher
             if (len < 2e-3 && l2 > 0 && pts.Skip(1).Take(pts.Count - 2).All(q => (pts[0] + d * (Vector3d.Dot(q - pts[0], d) / l2) - q).Length <= Core.Tol.Chord / 10))
                 pts = new List<Vector3d> { pts[0], pts[^1] };
         }
-        if (!CuspOff && !ReferenceEquals(e.V0, e.V1)) pts = DensifyAtCusps(e, pts);
+        if (!CuspOff && (!ReferenceEquals(e.V0, e.V1) || !CuspClosedOff)) pts = DensifyAtCusps(e, pts);
         e.PolylineCache = pts;
         e.PolylineQuality = want;
         e.PolylineSource = source;
