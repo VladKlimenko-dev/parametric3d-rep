@@ -483,6 +483,42 @@ internal static class XtPoly
 
     /// <summary>Сгущение ломаной кривой пересечения двух поверхностей: точки между узлами карты переносятся на обе поверхности
     /// попеременной проекцией (сходится к линии пересечения при пересечении под углом).</summary>
+    static readonly bool IntNewtonOff = Environment.GetEnvironmentVariable("P3D_XTINTNEWTON") == "0";
+
+    /// <summary>Нормаль поверхности в точке q на ней — по проекциям двух близких точек (у XtSurf нет производных).</summary>
+    static Vector3d? NormalNear(XtSurf s, Vector3d q, Vector3d hintAway)
+    {
+        double h = 1e-6;   // метры XT: микрон
+        var t1 = Math.Abs(hintAway.X) < 0.9 ? Vector3d.Cross(hintAway, Vector3d.UnitX) : Vector3d.Cross(hintAway, Vector3d.UnitY);
+        if (t1.LengthSquared < 1e-30) t1 = Vector3d.UnitX; t1.Normalize();
+        var t2 = Vector3d.Cross(hintAway, t1); if (t2.LengthSquared < 1e-30) t2 = Vector3d.UnitY; t2.Normalize();
+        var a1 = s.Project(q + t1 * h) - q; var a2 = s.Project(q + t2 * h) - q;
+        var n = Vector3d.Cross(a1, a2);
+        return n.LengthSquared > 1e-40 ? n.Normalized() : null;
+    }
+
+    static Vector3d? IntersectNewton(XtSurf a, XtSurf b, Vector3d p)
+    {
+        for (int it = 0; it < 30; it++)
+        {
+            var qa = a.Project(p); var qb = b.Project(p);
+            if ((qa - p).Length < 1e-11 && (qb - p).Length < 1e-11) return p;
+            var dirA = qa - p; var dirB = qb - p;
+            var na = NormalNear(a, qa, dirA.LengthSquared > 0 ? dirA.Normalized() : Vector3d.UnitZ);
+            var nb = NormalNear(b, qb, dirB.LengthSquared > 0 ? dirB.Normalized() : Vector3d.UnitZ);
+            if (na is not { } A || nb is not { } B) return null;
+            double aa = 1, ab = Vector3d.Dot(A, B), bb = 1, det = aa * bb - ab * ab;
+            if (det < 1e-10) return null;                       // касание: линия пересечения не определена
+            double ra = Vector3d.Dot(A, qa - p), rb = Vector3d.Dot(B, qb - p);
+            double l1 = (ra * bb - rb * ab) / det, l2 = (rb * aa - ra * ab) / det;
+            var x = p + A * l1 + B * l2;
+            if (!double.IsFinite(x.X) || (x - p).Length > 1e-2) return null;   // скачок больше 1 см — не тот корень
+            p = x;
+        }
+        var fa = a.Project(p); var fb = b.Project(p);
+        return (fa - p).Length < 1e-9 && (fb - p).Length < 1e-9 ? p : null;
+    }
+
     public static List<Vector3d> Densify(IReadOnlyList<Vector3d> chart, XtSurf? a, XtSurf? b, int per)
     {
         var res = new List<Vector3d>();
@@ -509,13 +545,21 @@ internal static class XtPoly
                     if ((oth.Project(q) - q).Length < 1e-8) { res.Add(q); continue; }
                 }
                 if (a != null && b != null)
+                {
+                    var p0 = p; bool conv = false;
                     for (int it = 0; it < 60; it++)
                     {
                         var q = b.Project(a.Project(p));
                         bool done = (q - p).Length < 1e-11;
                         p = q;
-                        if (done) break;
+                        if (done) { conv = true; break; }
                     }
+                    // k184: ПОПЕРЕМЕННАЯ ПРОЕКЦИЯ НЕ СОШЛАСЬ (поверхности сходятся под малым углом: торец резьбы срезает виток
+                    // вскользь) — точка оставалась на одной поверхности в 1.5 мм от другой, сплайн ребра шёл волной (разъём
+                    // 6168T106). Тогда — шаги Ньютона по касательным плоскостям обеих поверхностей (ближайшая к точке точка
+                    // их линии пересечения), как маршевые шаги пересечения в OCCT. Мутация P3D_XTINTNEWTON=0.
+                    if (!conv && !IntNewtonOff && IntersectNewton(a, b, (a.Project(p) - p).Length > 1e-9 ? p0 : p) is { } x) p = x;
+                }
                 res.Add(p);
             }
         }
