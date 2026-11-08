@@ -84,6 +84,19 @@ public static class StepImport
     static readonly bool ImportApexOff = Environment.GetEnvironmentVariable("P3D_IMPAPEX") == "0";
     static readonly bool ImportSeamOff = Environment.GetEnvironmentVariable("P3D_IMPSEAM") == "0";
 
+    /// <summary>
+    /// k184: ТОЧКИ КРИВОЙ КОНТУРА ДЛЯ ПРОТЯЖЁННОСТИ образующей конуса и цилиндра. Прежде — начало, середина, конец: у
+    /// сплайнового ребра (сбег резьбы на конусе) крайняя по оси точка лежала между ними, образующая выходила короче грани,
+    /// проекция на поверхность упиралась в край, и ребро «отходило» на 0.47 мм (бачок 1358K26). Прямая — концы; прочие — 33
+    /// точки. Мутация P3D_IMPRANGE=0.
+    /// </summary>
+    static readonly bool ImpRangeOff = Environment.GetEnvironmentVariable("P3D_IMPRANGE") == "0";
+    static IEnumerable<double> RangeSamples(Curves.ICurve3 c)
+    {
+        if (ImpRangeOff || c is Curves.LineCurve3) { yield return c.T0; yield return (c.T0 + c.T1) / 2; yield return c.T1; yield break; }
+        for (int k = 0; k <= 32; k++) yield return c.T0 + (c.T1 - c.T0) * k / 32;
+    }
+
     internal static bool OurNormalIsCanonical(Surfaces.ISurface3 s)
     {
         if (StepNormalOff) return true;
@@ -283,7 +296,7 @@ public static class StepImport
                     double lo0 = double.MaxValue, hi0 = double.MinValue;
                     foreach (var lc in got.Value.Loops)
                         foreach (var c in lc)
-                            foreach (double t in new[] { c.T0, (c.T0 + c.T1) / 2, c.T1 })
+                            foreach (double t in RangeSamples(c))
                             {
                                 double z = Vector3d.Dot(c.PointAt(t) - rvc.Axis.Origin, axis0);
                                 lo0 = Math.Min(lo0, z); hi0 = Math.Max(hi0, z);
@@ -330,7 +343,7 @@ public static class StepImport
                     Vector3d axis = ex.Dir.Normalized();
                     foreach (var loopCurves in got.Value.Loops)
                         foreach (var c in loopCurves)
-                            foreach (double t in new[] { c.T0, (c.T0 + c.T1) / 2, c.T1 })
+                            foreach (double t in RangeSamples(c))
                             {
                                 double s2 = Vector3d.Dot(c.PointAt(t) - baseArc.Frame.Origin, axis);
                                 lo = Math.Min(lo, s2); hi = Math.Max(hi, s2);
