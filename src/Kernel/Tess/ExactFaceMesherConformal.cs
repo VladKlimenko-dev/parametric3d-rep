@@ -488,9 +488,11 @@ public static partial class ExactFaceMesher
                 // k184: ЗАСТОЙ — число плохих треугольников не убывает два прохода подряд (щепка у длинной хорды края: вставленная
                 // точка ползёт к краю, а прогиб не меняется): дальше проходы — только полные перестроения (колесо 2425T37: 20
                 // проходов по 17 000 точек края на каждую из шести граней тора, минуты). Итог — на суд самопроверки. P3D_CONFSTALL=0.
-                if (!ConfStallOff)
+                // только у больших контуров (тысячи точек края — где проход дорог): у малой грани плато бывает перед улучшением
+                // (шар против овала: квалификация KRN11 теряла точный путь)
+                if (!ConfStallOff && nB >= 1000)
                 {
-                    if (bad.Count >= prevBad) { if (++stall >= 2) break; } else stall = 0;
+                    if (bad.Count >= prevBad) { if (++stall >= 3) break; } else stall = 0;
                     prevBad = bad.Count;
                 }
                 if (inner.Count + bad.Count > 40000) { T = null; lastWhy = $"conformal ({map.Kind}): too many points"; break; }
