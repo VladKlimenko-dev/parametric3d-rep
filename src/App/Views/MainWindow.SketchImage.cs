@@ -5,6 +5,7 @@ using Avalonia.Platform.Storage;
 using OpenTK.Mathematics;
 using Parametric3D.App.Viewport;
 using Parametric3D.Model.Sketching;
+using static Parametric3D.App.Loc;
 
 namespace Parametric3D.App.Views;
 
