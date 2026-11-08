@@ -90,6 +90,7 @@ public static class StepImport
     /// проекция на поверхность упиралась в край, и ребро «отходило» на 0.47 мм (бачок 1358K26). Прямая — концы; прочие — 33
     /// точки. Мутация P3D_IMPRANGE=0.
     /// </summary>
+    static readonly bool EdgeTolOff = Environment.GetEnvironmentVariable("P3D_STEPEDGETOL") == "0";
     static readonly bool ImpRangeOff = Environment.GetEnvironmentVariable("P3D_IMPRANGE") == "0";
     static IEnumerable<double> RangeSamples(Curves.ICurve3 c)
     {
@@ -514,6 +515,7 @@ public static class StepImport
                                                       Math.Min((cb - edge.V0.P).Length, (cb - edge.V1.P).Length));
                             edges[key] = edge;
                         }
+                        if (!EdgeTolOff && parser.EdgeTolerance.TryGetValue(c, out double ftol)) edge.Tolerance = Math.Max(edge.Tolerance, ftol);
                         // НАПРАВЛЕНИЕ ОБХОДА. У замкнутой окружности начало и конец совпадают,
                         // и сравнение концов всегда давало «не развёрнуто»: верхняя окружность
                         // цилиндра шла в ту же сторону, что нижняя, контур не замыкался, и грань

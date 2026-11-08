@@ -382,7 +382,11 @@ public static class XtToStep
                 var p = ringStart ?? Vector3d.Zero;
                 vs = ve = E($"VERTEX_POINT('',#{Pt(p)})");
             }
-            return edges[e.Id] = E($"EDGE_CURVE('',#{vs},#{ve},#{cid},{(sense ? ".T." : ".F.")})");
+            // k184: ДОПУСК РЕБРА XT (допусковое ребро Parasolid: кривая — у плавников, грани сходятся в пределах допуска) —
+            // в имени ребра: STEP AP214 своего поля для него не имеет, а без него проверка видела отход кривой плавника от второй
+            // грани в 8 мкм при допуске ребра 7.5 мкм (панель 4574N11). Читается нашим импортом; прочим — просто имя.
+            string nm = e.D("tolerance") is double etl && etl > 1e-10 && etl < 1e-3 ? $"P3D_TOL={N(etl * S)}" : "";
+            return edges[e.Id] = E($"EDGE_CURVE('{nm}',#{vs},#{ve},#{cid},{(sense ? ".T." : ".F.")})");
         }
 
         /// <summary>Кривая STEP; sense — совпадает ли направление ребра с направлением кривой; ringStart — точка начала кривой.</summary>
