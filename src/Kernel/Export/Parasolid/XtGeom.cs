@@ -15,7 +15,20 @@ internal abstract class XtSurf
     /// <summary>Ближайшая точка поверхности к q.</summary>
     public abstract Vector3d Project(Vector3d q);
 
+    // поверхности по узлам файла — одна на узел: скругление строит ось (сгущение, уточнение) — дорого повторять для каждой
+    // кривой пересечения и границы
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<XtFile, Dictionary<int, XtSurf?>> cache = new();
+
     public static XtSurf? Of(XtFile f, XtNode n)
+    {
+        var d = cache.GetOrCreateValue(f);
+        lock (d) if (d.TryGetValue(n.Id, out var hit)) return hit;
+        var r = Make(f, n);
+        lock (d) d[n.Id] = r;
+        return r;
+    }
+
+    static XtSurf? Make(XtFile f, XtNode n)
     {
         switch (n.Name)
         {
@@ -27,7 +40,7 @@ internal abstract class XtSurf
             case "B_SURFACE": return f[n.P("nurbs")] is { } ns ? XtNurbsSurf.Of(f, ns) : null;
             case "BLENDED_EDGE": return XtBlendSurf.Of(f, n, 0);
             // граница скругления (вспомогательная поверхность, пересекающая опору по краю скругления): проекция — точка края
-            case "BLEND_BOUND": return f[n.P("blend")] is { } bn && XtBlendSurf.Of(f, bn, 0) is { } bb ? new BlendBound(bb, n.I("boundary")) : null;
+            case "BLEND_BOUND": return f[n.P("blend")] is { } bn && Of(f, bn) is XtBlendSurf bb ? new BlendBound(bb, n.I("boundary")) : null;
             case "OFFSET_SURF": return f[n.P("surface")] is { } bs && Of(f, bs) is { } b ? new Off(b, n.D("offset") * (n.C("sense") == '-' ? -1 : 1) * (bs.C("sense") == '-' ? -1 : 1)) : null;
         }
         return null;
@@ -90,7 +103,7 @@ internal abstract class XtSurf
             return c + t.Normalized() * r;
         }
     }
-    sealed class BlendBound : XtSurf
+    internal sealed class BlendBound : XtSurf
     {
         readonly XtBlendSurf B; readonly int Idx;
         public BlendBound(XtBlendSurf b, int idx) { B = b; Idx = idx; }
@@ -350,6 +363,12 @@ internal static class XtPoly
                     var q = bl.EdgeNear(p);
                     if ((other.Project(q) - q).Length < 1e-8) { res.Add(q); continue; }
                 }
+                // граница скругления: её проекция уже лежит на опоре (обычно это и есть вторая поверхность) — один шаг
+                if (!BlendEdgeOff && (a as XtSurf.BlendBound ?? b as XtSurf.BlendBound) is { } bb && (a is XtSurf.BlendBound ? b : a) is { } oth)
+                {
+                    var q = bb.Project(p);
+                    if ((oth.Project(q) - q).Length < 1e-8) { res.Add(q); continue; }
+                }
                 if (a != null && b != null)
                     for (int it = 0; it < 60; it++)
                     {
@@ -562,11 +581,11 @@ internal sealed class XtBlendSurf : XtSurf
         if (tg.LengthSquared < 1e-30) return OnSpine(c0);
         tg.Normalize();
         var c = c0;
-        for (int it = 0; it < 60; it++)
+        for (int it = 0; it < 40; it++)
         {
             var c1 = Offset(S1, Offset(S0, c, R0), R1);
             c1 -= tg * Vector3d.Dot(c1 - c0, tg);
-            bool done = (c1 - c).Length < 1e-12; c = c1;
+            bool done = (c1 - c).Length < 1e-11; c = c1;
             if (done) break;
         }
         return c;

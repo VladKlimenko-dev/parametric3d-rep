@@ -461,7 +461,7 @@ public static class XtToStep
 
         int? Blend(XtNode sn)
         {
-            var bl = XtBlendSurf.Of(f, sn, 0);
+            var bl = XtSurf.Of(f, sn) as XtBlendSurf;
             if (bl == null || bl.Spine.Count < 2) return null;
             double rad = Math.Max(Math.Max(bl.R0, bl.R1), 1e-6);
             var sp = bl.Spine;
