@@ -26,6 +26,8 @@ internal abstract class XtSurf
             case "TORUS": return new Tor(n.V("centre"), n.V("axis"), n.V("x_axis"), n.D("major_radius"), n.D("minor_radius"));
             case "B_SURFACE": return f[n.P("nurbs")] is { } ns ? XtNurbsSurf.Of(f, ns) : null;
             case "BLENDED_EDGE": return XtBlendSurf.Of(f, n, 0);
+            // граница скругления (вспомогательная поверхность, пересекающая опору по краю скругления): проекция — точка края
+            case "BLEND_BOUND": return f[n.P("blend")] is { } bn && XtBlendSurf.Of(f, bn, 0) is { } bb ? new BlendBound(bb, n.I("boundary")) : null;
             case "OFFSET_SURF": return f[n.P("surface")] is { } bs && Of(f, bs) is { } b ? new Off(b, n.D("offset") * (n.C("sense") == '-' ? -1 : 1) * (bs.C("sense") == '-' ? -1 : 1)) : null;
         }
         return null;
@@ -87,6 +89,13 @@ internal abstract class XtSurf
             var c = Cn + e * Rm; var t = q - c; if (t.LengthSquared < 1e-30) t = e;
             return c + t.Normalized() * r;
         }
+    }
+    sealed class BlendBound : XtSurf
+    {
+        readonly XtBlendSurf B; readonly int Idx;
+        public BlendBound(XtBlendSurf b, int idx) { B = b; Idx = idx; }
+        public override Vector3d At(double u, double v) => B.At(u, Idx == 0 ? 0 : 1);
+        public override Vector3d Project(Vector3d q) { var c = B.OnSpine(B.SpineNear(q)); return (Idx == 0 ? B.S0 : B.S1).Project(c); }
     }
     sealed class Off : XtSurf
     {
