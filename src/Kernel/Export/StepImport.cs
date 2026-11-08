@@ -928,6 +928,8 @@ public static class StepImport
 
     internal static void OrientShellPublic(TSolid solid) => OrientShell(solid);
     [ThreadStatic] static int _orientFlips;
+    /// <summary>k184: ориентация оболочки по фасетам; ответ — сколько граней развёрнуто.</summary>
+    internal static int OrientShellCount(TSolid solid) { _orientFlips = 0; OrientShell(solid); return _orientFlips; }
     /// <summary>k126: сколько граней развернула бы ориентация оболочки (на копии; тело не меняется).</summary>
     internal static int OrientFlipsOn(TSolid solid)
     {

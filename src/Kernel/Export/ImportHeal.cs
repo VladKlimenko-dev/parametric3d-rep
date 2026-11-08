@@ -46,6 +46,7 @@ public static class ImportHeal
 
     static readonly bool HealSideDbg = Environment.GetEnvironmentVariable("P3D_HEALSIDEDBG") == "1";
     static readonly bool HealSideOff = Environment.GetEnvironmentVariable("P3D_HEALSIDE") == "0";
+    static readonly bool HealSideLoops = Environment.GetEnvironmentVariable("P3D_HEALSIDE") == "loops";
     static readonly bool CapFixOff = Environment.GetEnvironmentVariable("P3D_CAPFIX") == "0";
     static readonly bool FileAccOff = Environment.GetEnvironmentVariable("P3D_HEALFILEACC") == "0";
 
@@ -138,7 +139,15 @@ public static class ImportHeal
         // стороны у двух граней) и ориентированы по якорю; грань лежит слева от обхода. Треугольник сетки у края проходит
         // сторону края в том же направлении, что и полуребро; если у грани большинство таких сторон пройдено навстречу —
         // её фасеты вывернуты (кардан 60075K97: стенка поперечного отверстия против кусочков расточки). Мутация P3D_HEALSIDE=0.
-        if (!HealSideOff)
+        // k184: сторона — по соседям в сетке (обход фасет оболочки, как ShapeFix_Shell в OCCT), а не по контурам: у части
+        // деталей контуры граней обходят их навстречу верным фасетам (крестовина 2455K22, опора 60945K17, плита 8856N18,
+        // ограждение 92735T25 — грани разворачивались зря). Прежний способ — P3D_HEALSIDE=loops.
+        if (!HealSideOff && !HealSideLoops)
+        {
+            int before = StepImport.OrientShellCount(b);
+            if (before > 0) { b.DisplayMeshKey = null; warnings?.Add($"Import: {label}: {before} face side(s) turned to match the neighbours."); }
+        }
+        if (!HealSideOff && HealSideLoops)
         {
             static (long, long, long) K(Vector3d p) => ((long)Math.Round(p.X * 1e5), (long)Math.Round(p.Y * 1e5), (long)Math.Round(p.Z * 1e5));
             int flippedSides = 0;
