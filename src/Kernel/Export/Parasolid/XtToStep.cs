@@ -118,7 +118,9 @@ public static class XtToStep
         {
             var sn = f[fc.P("surface")];
             if (sn == null) { Skip("no surface"); return null; }
-            int? sid = Surface(sn, out bool flip);
+            int? sid;
+            bool flip;
+            using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("XT: поверхность " + sn.Name) : null) sid = Surface(sn, out flip);
             if (sid == null) { Skip(sn.Name); return null; }
             bool same = (fc.C("sense") != '-') == (sn.C("sense") != '-');
             if (flip) same = !same;
@@ -299,7 +301,9 @@ public static class XtToStep
             Vector3d? pS = vStart != null ? f[vStart.P("point")]?.V("pvec") : null, pE = vEnd != null ? f[vEnd.P("point")]?.V("pvec") : null;
             // кривые свободной формы (пересечение, B-кривая, кривая на поверхности) — плотной ломаной от начала ребра до конца,
             // затем кубическим B-сплайном: в файле они длиннее ребра (пределы кривой) или заданы редкой картой
-            var free = cn != null && (Dense(cn) is { Count: >= 2 } dn) ? dn : cn == null ? TolerantDense(h) : null;
+            List<Vector3d>? free;
+            using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("XT: кривая " + (cn?.Name ?? "допусковая")) : null)
+                free = cn != null && (Dense(cn) is { Count: >= 2 } dn) ? dn : cn == null ? TolerantDense(h) : null;
             if (free != null)
             {
                 bool closed = pS == null || pE == null || (pS.Value - pE.Value).Length < 1e-12;
@@ -329,7 +333,7 @@ public static class XtToStep
                     }
                 }
                 ringStart = pts[0];
-                cid = Interp(pts);
+                using (Diagnostics.Prof.Enabled ? Diagnostics.Prof.Time("XT: сплайн по точкам") : null) cid = Interp(pts);
             }
             else if (cn == null)
             {
