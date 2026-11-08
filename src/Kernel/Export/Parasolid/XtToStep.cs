@@ -506,7 +506,8 @@ public static class XtToStep
                         // ожидаемый прогиб — по повороту соседних звеньев (дуга с поворотом α на звене l отходит на ≈ l·α/8)
                         double expect = l * Math.Max(Turn(i), Turn(i + 1)) / 8;
                         double dev = (q[i] + ab * t - c).Length;
-                        if (dev > 0.25 * l + 1e-6 || dev > 4 * expect + 2e-3) return true;
+                        // единицы XT — метры: запас 2 мкм
+                        if (dev > 0.25 * l + 1e-9 || dev > 4 * expect + 2e-6) return true;
                     }
                     return false;
                 }
