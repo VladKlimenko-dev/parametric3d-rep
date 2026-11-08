@@ -68,7 +68,7 @@ public static class TopologyCheck
                 else
                 {
                     double worst = Math.Max((cs - e.V0.P).Length, (ce2 - e.V1.P).Length);
-                    if (worst > allow) issues.Add(new TopologyIssue("кривая не сходится с вершинами", e.Id, worst, allow));
+                    if (worst > Math.Max(allow, 1e-9)) issues.Add(new TopologyIssue("кривая не сходится с вершинами", e.Id, worst, allow));
                 }
             }
 

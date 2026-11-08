@@ -53,13 +53,30 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: r175b_instant, cmd: 'instant', env: '' }
-          - { name: r175b_y2o,     cmd: 'y2o',  env: '' }
-          - { name: r175b_corpus,  cmd: 'loftseq 10 101 6 OUT', env: '' }
-          - { name: r175b_allA,    cmd: 'allA', env: '' }
-          - { name: r175b_allB,    cmd: 'allB', env: '' }
-          - { name: r175b_fix,     cmd: 'loftcorpus140', env: '' }
-          - { name: r175b_mut1,    cmd: 'y2', env: 'P3D_SECNODENAN=0' }
+          - { name: k184_c1s0, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=0/6' }
+          - { name: k184_c1s1, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=1/6' }
+          - { name: k184_c1s2, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=2/6' }
+          - { name: k184_c1s3, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=3/6' }
+          - { name: k184_c1s4, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=4/6' }
+          - { name: k184_c1s5, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=5/6' }
+          - { name: k184_c2s0, cmd: 'sldprt CORPUS/sldprt2', env: 'P3D_SLDSHARD=0/4' }
+          - { name: k184_c2s1, cmd: 'sldprt CORPUS/sldprt2', env: 'P3D_SLDSHARD=1/4' }
+          - { name: k184_c2s2, cmd: 'sldprt CORPUS/sldprt2', env: 'P3D_SLDSHARD=2/4' }
+          - { name: k184_c2s3, cmd: 'sldprt CORPUS/sldprt2', env: 'P3D_SLDSHARD=3/4' }
+          - { name: k184_c3s0, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=0/6' }
+          - { name: k184_c3s1, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=1/6' }
+          - { name: k184_c3s2, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=2/6' }
+          - { name: k184_c3s3, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=3/6' }
+          - { name: k184_c3s4, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=4/6' }
+          - { name: k184_c3s5, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=5/6' }
+          - { name: k184_c4s0, cmd: 'sldprt CORPUS/sldprt4', env: 'P3D_SLDSHARD=0/3' }
+          - { name: k184_c4s1, cmd: 'sldprt CORPUS/sldprt4', env: 'P3D_SLDSHARD=1/3' }
+          - { name: k184_c4s2, cmd: 'sldprt CORPUS/sldprt4', env: 'P3D_SLDSHARD=2/3' }
+          - { name: k184_dbg, cmd: 'sldprt tests/k01/data/sw_drill_2901a107.SLDPRT tests/k01/data/sw_drill_29045a758.SLDPRT tests/k01/data/sw_bur_4295a56.SLDPRT tests/k01/data/sw_ujoint_6445k6.SLDPRT tests/k01/data/sw_enclosure_7812k81.SLDPRT tests/k01/data/sw_pin_1809n56.SLDPRT tests/k01/data/sw_ujoint_60075k97.SLDPRT tests/k01/data/sw_starter_7595k62.SLDPRT', env: 'P3D_SLDOUT=res/out' }
+          - { name: k184_prof, cmd: 'sldprt tests/k01/data/sw_die_2602a125.SLDPRT tests/k01/data/sw_drill_2958a552.SLDPRT tests/k01/data/sw_hosefit_2802n11.SLDPRT', env: 'P3D_SLDPROF=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k184_sld, cmd: 'sldprt', env: 'P3D_SLDOUT=res/out' }
+          - { name: k184_allA, cmd: 'allA', env: '' }
+          - { name: k184_allB, cmd: 'allB', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -76,6 +93,8 @@ jobs:
           export DOTNET_TieredCompilation=0 SEQ_REBUILDCHECK=1 P3D_USERMODELS="$PWD/tests/ui/data"
           if [ -n "${{ matrix.env }}" ]; then export ${{ matrix.env }}; fi
           CMD="${{ matrix.cmd }}"; CMD="${CMD/OUT/res/out}"
+          # корпус деталей SolidWorks — отдельная ветка corpus/sldprt (в клон main не входит)
+          if [[ "$CMD" == *CORPUS* ]]; then git fetch -q --depth 1 origin corpus/sldprt && mkdir -p corpus && git --work-tree=corpus checkout FETCH_HEAD -- . && CMD="${CMD//CORPUS/corpus}"; fi
           start=$(date +%s)
           timeout 330m out/k01/K01Checks $CMD > res/run.log 2> res/run.err || echo "exit $?" >> res/run.err
           echo "seconds $(( $(date +%s) - start )) nproc $(nproc) env ${{ matrix.env }} cmd $CMD" >> res/run.err
