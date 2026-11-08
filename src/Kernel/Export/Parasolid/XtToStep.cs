@@ -698,7 +698,7 @@ public static class XtToStep
                 {
                     var na = ea.Normalized(); var nb = eb.Normalized();
                     double cosT = Math.Clamp(Vector3d.Dot(na, nb), -1, 1);
-                    if (cosT < -0.999) return null;                       // сечение в полкруга и больше — одной дугой не задать
+                    if (cosT < -0.999) { warn?.Add("Parasolid: a blend section spans half a circle — fitted grid used."); return null; }   // одной дугой не задать
                     w = Math.Sqrt((1 + cosT) / 2);                        // cos(θ/2)
                     var bis = na + nb;
                     m = bis.LengthSquared > 1e-24 ? c + bis.Normalized() * (r / Math.Max(w, 1e-12)) : (pa + pb) / 2;
@@ -716,7 +716,7 @@ public static class XtToStep
                 if (Math.Abs(sg) > 0) blendSign[curBlend] = sg > 0 ? 1 : -1;
             }
             var pu = XtBasis.Chord(cen);
-            for (int i = 1; i < nu; i++) if (pu[i] <= pu[i - 1]) return null;
+            for (int i = 1; i < nu; i++) if (pu[i] <= pu[i - 1]) { warn?.Add("Parasolid: blend section centres repeat along the spine — fitted grid used."); return null; }
             int du = 3;
             var (ku, _) = XtBasis.Setup(pu, du);
             var P = new Vector3d[nu, 3]; var Wt = new double[nu, 3];
@@ -726,7 +726,7 @@ public static class XtToStep
                 var ww = XtBasis.Solve(ku, du, pu, Enumerable.Range(0, nu).Select(i => new Vector3d(W[i, j], 0, 0)).ToList());
                 for (int i = 0; i < nu; i++)
                 {
-                    if (ww[i].X <= 1e-9) return null;                     // вес не положителен — интерполяция не годится
+                    if (ww[i].X <= 1e-9) { warn?.Add("Parasolid: blend weights not positive — fitted grid used."); return null; }
                     Wt[i, j] = ww[i].X; P[i, j] = xyz[i] / ww[i].X;
                 }
             }
