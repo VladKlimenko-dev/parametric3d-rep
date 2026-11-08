@@ -1,0 +1,82 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["krn11qual"]}
+{"test":"KRN11-QUAL-METAMORPHIC","n":60,"seed":1102,"exact":56,"bounded":4,"refused":0,"failures":0}
+{"test":"KRN11-QUAL-EXACT-CYLINDER-BAND","Guarantee":3,"Outcome":0}
+{"test":"KRN11-QUAL-EXACT-CYLINDER-BAND","ok":true}
+{"test":"KRN11-QUAL-EXACT-SPHERE-OVAL","Guarantee":1,"Outcome":0}
+{"test":"KRN11-QUAL-EXACT-SPHERE-OVAL","ok":false,"error":"union is ExactPolyhedral"}
+{"test":"KRN11-QUAL-METAMORPHIC","ok":true}
+{"test":"KRN11-QUAL-DEGEN-SHARED-FACE","kind":"Unite","G":"ExactAnalytic","V":2000,"want":2000,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-SHARED-FACE","kind":"Intersect","G":"ExactAnalytic","V":0,"want":0,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-SHARED-FACE","kind":"Subtract","G":"ExactAnalytic","V":1000,"want":1000,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-SHARED-FACE","ok":true}
+{"test":"KRN11-QUAL-DEGEN-SHARED-FACE-PARTIAL","kind":"Unite","G":"ExactAnalytic","V":1120,"want":1120,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-SHARED-FACE-PARTIAL","kind":"Intersect","G":"ExactAnalytic","V":0,"want":0,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-SHARED-FACE-PARTIAL","kind":"Subtract","G":"ExactAnalytic","V":1000,"want":1000,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-SHARED-FACE-PARTIAL","ok":true}
+{"test":"KRN11-QUAL-DEGEN-EDGE-TOUCH","kind":"Unite","G":"ExactAnalytic","V":2000,"want":2000,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-EDGE-TOUCH","kind":"Intersect","G":"ExactAnalytic","V":0,"want":0,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-EDGE-TOUCH","kind":"Subtract","G":"ExactAnalytic","V":1000,"want":1000,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-EDGE-TOUCH","ok":true}
+{"test":"KRN11-QUAL-DEGEN-VERTEX-TOUCH","kind":"Unite","G":"ExactAnalytic","V":2000,"want":2000,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-VERTEX-TOUCH","kind":"Intersect","G":"ExactAnalytic","V":0,"want":0,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-VERTEX-TOUCH","kind":"Subtract","G":"ExactAnalytic","V":1000,"want":1000,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-VERTEX-TOUCH","ok":true}
+{"test":"KRN11-QUAL-DEGEN-COPLANAR-OVERLAP","kind":"Unite","G":"ExactAnalytic","V":1750,"want":1750,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-COPLANAR-OVERLAP","kind":"Intersect","G":"ExactAnalytic","V":250,"want":250,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-COPLANAR-OVERLAP","kind":"Subtract","G":"ExactAnalytic","V":750,"want":750,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-COPLANAR-OVERLAP","ok":true}
+{"test":"KRN11-QUAL-DEGEN-SAME-BODY","kind":"Unite","G":"ExactAnalytic","V":1000,"want":1000,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-SAME-BODY","kind":"Intersect","G":"ExactAnalytic","V":1000,"want":1000,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-SAME-BODY","kind":"Subtract","G":"ExactAnalytic","V":0,"want":0,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-SAME-BODY","ok":true}
+{"test":"KRN11-QUAL-DEGEN-SAME-CYLINDER","kind":"Unite","G":"ExactAnalytic","V":785.3981633974482,"want":785.3981633974483,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-SAME-CYLINDER","kind":"Intersect","G":"ExactAnalytic","V":785.3981633974482,"want":785.3981633974483,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-SAME-CYLINDER","kind":"Subtract","G":"ExactAnalytic","V":0,"want":0,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-SAME-CYLINDER","ok":true}
+{"test":"KRN11-QUAL-DEGEN-COAXIAL-EQUAL-R","kind":"Unite","G":"ExactAnalytic","V":1256.6370614359173,"want":1256.6370614359173,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-COAXIAL-EQUAL-R","kind":"Intersect","G":"ExactAnalytic","V":314.1592653589793,"want":314.1592653589793,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-COAXIAL-EQUAL-R","kind":"Subtract","G":"ExactAnalytic","V":471.23889803846896,"want":471.23889803846896,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-COAXIAL-EQUAL-R","ok":true}
+{"test":"KRN11-QUAL-DEGEN-CYL-TANGENT-BOX","kind":"Unite","G":"ExactAnalytic","V":4785.398163397448,"want":4785.398163397448,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-CYL-TANGENT-BOX","kind":"Intersect","G":"ExactAnalytic","V":0,"want":0,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-CYL-TANGENT-BOX","kind":"Subtract","G":"ExactAnalytic","V":4000,"want":4000,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-CYL-TANGENT-BOX","ok":true}
+{"test":"KRN11-QUAL-DEGEN-CYL-INSCRIBED","kind":"Unite","G":"ExactAnalytic","V":1000,"want":1000,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-CYL-INSCRIBED","kind":"Intersect","G":"ExactAnalytic","V":785.3981633974482,"want":785.3981633974483,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-CYL-INSCRIBED","kind":"Subtract","G":"ExactPolyhedral","V":216.842580432,"want":214.60183660255166,"Bound":30.2921438331157,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-CYL-INSCRIBED","ok":true}
+{"test":"KRN11-QUAL-DEGEN-CYLS-TANGENT","kind":"Unite","G":"ExactAnalytic","V":1570.7963267948958,"want":1570.7963267948967,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-CYLS-TANGENT","kind":"Intersect","G":"ExactAnalytic","V":0,"want":0,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-CYLS-TANGENT","kind":"Subtract","G":"ExactAnalytic","V":785.3981633974482,"want":785.3981633974483,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-CYLS-TANGENT","ok":true}
+{"test":"KRN11-QUAL-DEGEN-SPHERE-ON-FACE","kind":"Unite","G":"ExactAnalytic","V":4523.598775598299,"want":4523.598775598299,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-SPHERE-ON-FACE","kind":"Intersect","G":"ExactAnalytic","V":0,"want":0,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-SPHERE-ON-FACE","kind":"Subtract","G":"ExactAnalytic","V":4000,"want":4000,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-SPHERE-ON-FACE","ok":true}
+{"test":"KRN11-QUAL-DEGEN-CONCENTRIC-SPHERES","kind":"Unite","G":"ExactAnalytic","V":2144.660584850632,"want":2144.660584850632,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-CONCENTRIC-SPHERES","kind":"Intersect","G":"ExactAnalytic","V":523.5987755982989,"want":523.5987755982989,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-CONCENTRIC-SPHERES","kind":"Subtract","G":"ExactAnalytic","V":1621.0618092523334,"want":1621.0618092523332,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-CONCENTRIC-SPHERES","ok":true}
+{"test":"KRN11-QUAL-DEGEN-CYL-CAP-ON-FACE","kind":"Unite","G":"ExactAnalytic","V":4502.654824574367,"want":4502.654824574367,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-CYL-CAP-ON-FACE","kind":"Intersect","G":"ExactAnalytic","V":0,"want":0,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-CYL-CAP-ON-FACE","kind":"Subtract","G":"ExactAnalytic","V":4000,"want":4000,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-CYL-CAP-ON-FACE","ok":true}
+{"test":"KRN11-QUAL-DEGEN-HOLE-FLUSH","kind":"Unite","G":"ExactAnalytic","V":4000,"want":4000,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-HOLE-FLUSH","kind":"Intersect","G":"ExactAnalytic","V":502.65482457436684,"want":502.6548245743669,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-HOLE-FLUSH","kind":"Subtract","G":"ExactAnalytic","V":3497.3451754256325,"want":3497.345175425633,"Bound":0,"Why":null}
+{"test":"KRN11-QUAL-DEGEN-HOLE-FLUSH","ok":true}
+{"test":"KRN11-QUAL-NEG-ZERO-DEPTH","outcome":"InvalidInput","err":"Extrude: zero depth.","vol":216000,"v0":216000}
+{"test":"KRN11-QUAL-NEG-ZERO-DEPTH","ok":true}
+{"test":"KRN11-QUAL-NEG-ROUND-TOO-BIG","outcome":"Unsupported","err":"Round refused (exception at round.build): Round: none of the selected edges could be processed.\nRound: the cut reaches 70 across the first face, which is only 60 wide there.","vol":216000,"v0":216000}
+{"test":"KRN11-QUAL-NEG-ROUND-TOO-BIG","ok":true}
+{"test":"KRN11-QUAL-NEG-HOLE-MISSES","outcome":"InvalidInput","err":"Hole: the position is outside the body.","vol":216000,"v0":216000}
+{"test":"KRN11-QUAL-NEG-HOLE-MISSES","ok":true}
+{"test":"KRN11-QUAL-NEG-SHELL-TOO-THICK","outcome":"Unsupported","err":"Shell: the body could not be hollowed.","vol":216000,"v0":216000}
+{"test":"KRN11-QUAL-NEG-SHELL-TOO-THICK","ok":true}
+{"test":"KRN11-QUAL-NEG-EMPTY-SKETCH","outcome":"InvalidInput","err":"Extrude: the sketch has no closed loop.","vol":216000,"v0":216000}
+{"test":"KRN11-QUAL-NEG-EMPTY-SKETCH","ok":true}
+{"test":"KRN11-QUAL-NEG-BOWTIE-SKETCH","outcome":"InvalidInput","err":"Extrude: the sketch \u00ABS2\u00BB cannot be used \u2014 its profile crosses itself.","vol":216000,"v0":216000}
+{"test":"KRN11-QUAL-NEG-BOWTIE-SKETCH","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":1,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":1840,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":23,"failed":1}
