@@ -229,7 +229,9 @@ static partial class Program
             }
             var fstats = bodies[bi].Faces.Where(x => mentioned.Contains(x.Tag) && faceStat.ContainsKey(x.Id))
                 .Select(x => { var st = faceStat[x.Id]; var cc = st.A > 0 ? st.S / st.A : Vector3d.Zero; var ag = agree.GetValueOrDefault(x.Id); return $"{x.Tag}: tris {st.N} area {st.A:G4} centroid ({cc.X:F3},{cc.Y:F3},{cc.Z:F3}) normal agrees {ag.Yes}/{ag.Yes + ag.No} rev {x.Reversed} ray {Ray(x)} exactArea {AnalyticVolume.FaceArea(x):G4}"; }).ToList();
-            Log(new { test = "sldprt-diag", file, body = bi + 1, faces = cnt.OrderByDescending(kv => kv.Value).Take(12).Select(kv => $"{kv.Key} ×{kv.Value}").ToList(), fstats });
+            var sameCo = bodies[bi].Edges.Where(e => e.CoEdges.Count == 2 && e.CoEdges[0].Reversed == e.CoEdges[1].Reversed)
+                .Select(e => $"{e.Curve.GetType().Name}:{e.CoEdges[0].Loop?.Face?.Tag}|{e.CoEdges[1].Loop?.Face?.Tag}").Take(10).ToList();
+            Log(new { test = "sldprt-diag", file, body = bi + 1, sameCoEdges = sameCo, faces = cnt.OrderByDescending(kv => kv.Value).Take(12).Select(kv => $"{kv.Key} ×{kv.Value}").ToList(), fstats });
         }
     }
 
