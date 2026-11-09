@@ -338,7 +338,22 @@ public static class XtToStep
             {
                 bool closed = pS == null || pE == null || (pS.Value - pE.Value).Length < 1e-12;
                 List<Vector3d> pts;
-                if (!closed) { pts = XtPoly.Trim(free, pS!.Value, pE!.Value); sense = true; }
+                // k185: ОТКРЫТОЕ РЕБРО НА ЗАМКНУТОЙ КРИВОЙ (карта пересечения — кольцо): участок от начала до конца ребра — по ходу
+                // кривой (против хода при sense '-'), через стык кольца, а не по возрастанию номеров точек карты: прежде ребро
+                // шло дополнительной дугой (300° вместо 60°), контуры плоских граней пересекали себя, сетка рвалась (тепловое
+                // реле 7254K613). Мутация P3D_XTRINGDIR=0.
+                if (!closed && !RingDirOff && XtPoly.IsRing(free))
+                {
+                    bool fw = cn == null || cn.C("sense") != '-';
+                    pts = XtPoly.TrimRing(free, pS!.Value, pE!.Value, fw); sense = true;
+                    if (IntDbg)
+                    {
+                        static double Len(List<Vector3d> q) { double l = 0; for (int i = 1; i < q.Count; i++) l += (q[i] - q[i - 1]).Length; return l; }
+                        var other = XtPoly.TrimRing(free, pS!.Value, pE!.Value, !fw); var old = XtPoly.Trim(free, pS!.Value, pE!.Value);
+                        Console.Error.WriteLine($"XTRING edge {e.Id} curve {cn?.Id} {cn?.Name} sense {cn?.C("sense")} chosen {Len(pts) * 1000:G4} mm other {Len(other) * 1000:G4} old {Len(old) * 1000:G4}");
+                    }
+                }
+                else if (!closed) { pts = XtPoly.Trim(free, pS!.Value, pE!.Value); sense = true; }
                 else
                 {
                     pts = free; sense = cn == null || cn.C("sense") != '-';
@@ -533,6 +548,7 @@ public static class XtToStep
         }
         static readonly bool IntDbg = Environment.GetEnvironmentVariable("P3D_XTINTDBG") == "1";
         static readonly bool PolyMode = Environment.GetEnvironmentVariable("P3D_XTPOLY") == "1";
+        static readonly bool RingDirOff = Environment.GetEnvironmentVariable("P3D_XTRINGDIR") == "0";
         static readonly bool InterpCleanOff = Environment.GetEnvironmentVariable("P3D_XTINTERPCLEAN") == "0";
         static readonly bool InterpCheckOff = Environment.GetEnvironmentVariable("P3D_XTINTERPCHECK") == "0";
         static readonly bool ConeFlipOff = Environment.GetEnvironmentVariable("P3D_XTCONEFLIP") != "1";   // естественная нормаль конуса XT (P + vA + …) — наружу, как у STEP
