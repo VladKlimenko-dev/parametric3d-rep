@@ -292,28 +292,57 @@ public sealed class NurbsSurface : ISurface3
         int gu = g.GetLength(0) - 1, gv = g.GetLength(1) - 1;
         // лучшие точки сетки, разнесённые не меньше чем на 3 ячейки
         const int K = 6;
-        var cand = new List<(double D, int I, int J)>(K + 1);
-        for (int i = 0; i <= gu; i++)
-            for (int j = 0; j <= gv; j++)
-            {
-                double d = (g[i, j] - p).LengthSquared;
-                if (cand.Count == K && d >= cand[^1].D) continue;
-                int near = cand.FindIndex(c => Math.Abs(c.I - i) <= 3 && Math.Abs(c.J - j) <= 3);
-                if (near >= 0) { if (d < cand[near].D) cand[near] = (d, i, j); else continue; }
-                else cand.Add((d, i, j));
-                cand.Sort((a, b) => a.D.CompareTo(b.D));
-                if (cand.Count > K) cand.RemoveAt(K);
-            }
-        var best = uv0; double bd = d0;
-        foreach (var (_, ci, cj) in cand)
+        // k185: БЕЗ ВЫДЕЛЕНИЙ НА ТОЧКУ И ПО БЛОКАМ СЕТКИ. Прежде на каждую точку сетки — замыкание FindIndex и сортировка списка:
+        // у резьбы точки края грани (все на краю области) шли этим путём на каждой проекции — объём штампа 2602A125 выделял
+        // 18 ГБ и шёл 50 с. Теперь — блоки сетки по возрастанию нижней оценки расстояния, кандидаты — в массиве на стеке.
+        // Мутация P3D_NURBSMULTIBLOCKS=0 — прежний перебор.
+        Span<double> cD = stackalloc double[K]; Span<int> cI = stackalloc int[K], cJ = stackalloc int[K]; int cN = 0;
+        static void Offer(double d, int i, int j, Span<double> cD, Span<int> cI, Span<int> cJ, ref int cN)
         {
-            var (u, v, d) = NewtonDescent(p, ci / (double)gu, cj / (double)gv);
+            if (cN == K && d >= cD[K - 1]) return;
+            int near = -1;
+            for (int k = 0; k < cN; k++) if (Math.Abs(cI[k] - i) <= 3 && Math.Abs(cJ[k] - j) <= 3) { near = k; break; }
+            int at;
+            if (near >= 0) { if (d >= cD[near]) return; at = near; }
+            else if (cN < K) at = cN++;
+            else at = K - 1;
+            cD[at] = d; cI[at] = i; cJ[at] = j;
+            while (at > 0 && cD[at - 1] > cD[at]) { (cD[at - 1], cD[at]) = (cD[at], cD[at - 1]); (cI[at - 1], cI[at]) = (cI[at], cI[at - 1]); (cJ[at - 1], cJ[at]) = (cJ[at], cJ[at - 1]); at--; }
+            while (at + 1 < cN && cD[at + 1] < cD[at]) { (cD[at + 1], cD[at]) = (cD[at], cD[at + 1]); (cI[at + 1], cI[at]) = (cI[at], cI[at + 1]); (cJ[at + 1], cJ[at]) = (cJ[at], cJ[at + 1]); at++; }
+        }
+        if (!MultiBlocksOff)
+        {
+            var blocks = _gridBlocks ??= BuildBlocks(g);
+            int nb = blocks.Length;
+            double[]? rentD = null; int[]? rentI = null;
+            Span<double> lb = nb <= 2048 ? stackalloc double[nb] : (rentD = System.Buffers.ArrayPool<double>.Shared.Rent(nb)).AsSpan(0, nb);
+            Span<int> ord = nb <= 2048 ? stackalloc int[nb] : (rentI = System.Buffers.ArrayPool<int>.Shared.Rent(nb)).AsSpan(0, nb);
+            for (int k = 0; k < nb; k++) { lb[k] = BoxDist2(blocks[k].Lo, blocks[k].Hi, p); ord[k] = k; }
+            lb.Sort(ord);
+            for (int k = 0; k < nb; k++)
+            {
+                if (cN == K && lb[k] >= cD[K - 1]) break;
+                var bk = blocks[ord[k]];
+                for (int i = bk.I0; i <= bk.I1; i++)
+                    for (int j = bk.J0; j <= bk.J1; j++) Offer((g[i, j] - p).LengthSquared, i, j, cD, cI, cJ, ref cN);
+            }
+            if (rentD != null) System.Buffers.ArrayPool<double>.Shared.Return(rentD);
+            if (rentI != null) System.Buffers.ArrayPool<int>.Shared.Return(rentI);
+        }
+        else
+            for (int i = 0; i <= gu; i++)
+                for (int j = 0; j <= gv; j++) Offer((g[i, j] - p).LengthSquared, i, j, cD, cI, cJ, ref cN);
+        var best = uv0; double bd = d0;
+        for (int k = 0; k < cN; k++)
+        {
+            var (u, v, d) = NewtonDescent(p, cI[k] / (double)gu, cJ[k] / (double)gv);
             if (d < bd) { bd = d; best = new Vector2d(u, v); }
         }
         if (bd < d0) Interlocked.Increment(ref MultiStartWins);
         return best;
     }
     public static long MultiStartWins;
+    static readonly bool MultiBlocksOff = Environment.GetEnvironmentVariable("P3D_NURBSMULTIBLOCKS") == "0";
 
     (double U, double V, double D2) NewtonDescent(Vector3d p, double u, double v)
     {

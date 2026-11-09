@@ -265,6 +265,12 @@ internal sealed class XtNurbsSurf : XtSurf
         var g = new Vector3d[gu + 1, gv + 1];
         for (int i = 0; i <= gu; i++) for (int j = 0; j <= gv; j++) g[i, j] = At(u0 + (u1 - u0) * i / gu, v0 + (v1 - v0) * j / gv);
         grid = g;
+        // средний шаг сетки по каждому направлению; ячейка — меньший
+        double su = 0, sv = 0;
+        for (int i = 0; i < gu; i++) for (int j = 0; j <= gv; j += Math.Max(1, gv / 16)) su += (g[i + 1, j] - g[i, j]).Length;
+        for (int i = 0; i <= gu; i += Math.Max(1, gu / 16)) for (int j = 0; j < gv; j++) sv += (g[i, j + 1] - g[i, j]).Length;
+        int nsu = gu * (gv / Math.Max(1, gv / 16) + 1), nsv = gv * (gu / Math.Max(1, gu / 16) + 1);
+        cell = Math.Min(su / Math.Max(1, nsu), sv / Math.Max(1, nsv));
     }
 
     public override Vector3d Project(Vector3d q) { var (u, v) = ProjectUv(q); return At(u, v); }
@@ -276,12 +282,18 @@ internal sealed class XtNurbsSurf : XtSurf
     public (double U, double V) ProjectUv(Vector3d q)
     {
         var (u0, u1, v0, v1) = Range;
-        if (!WarmOff && !double.IsNaN(lastQ.X) && (q - lastQ).Length < 2e-4 && NewtonFrom(q, lastU, lastV) is var (wu, wv, ok) && ok)
+        // k185: радиус тёплого старта — не меньше половины ячейки сетки: ближе прошлый ответ — не худшее начало, чем точки
+        // сетки полного поиска (P3D_XTWARMCELL=0 — прежние 0.2 мм)
+        if (grid == null && !WarmCellOff) BuildGrid();
+        double warmR = WarmCellOff ? 2e-4 : Math.Max(2e-4, 0.5 * cell);
+        if (!WarmOff && !double.IsNaN(lastQ.X) && (q - lastQ).Length < warmR && NewtonFrom(q, lastU, lastV) is var (wu, wv, ok) && ok)
         { lastQ = q; lastU = wu; lastV = wv; if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count("XT: проекция на B — тёплая", 1); return (wu, wv); }
         if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count("XT: проекция на B — полная", 1);
         var res = ProjectUvFull(q); lastQ = q; lastU = res.U; lastV = res.V; return res;
     }
     static readonly bool WarmOff = Environment.GetEnvironmentVariable("P3D_XTWARM") == "0";
+    static readonly bool WarmCellOff = Environment.GetEnvironmentVariable("P3D_XTWARMCELL") == "0";
+    double cell;
 
     (double, double, bool) NewtonFrom(Vector3d q, double bu, double bv)
     {
@@ -611,6 +623,7 @@ internal static class XtPoly
     static readonly bool DenseOrderOff = Environment.GetEnvironmentVariable("P3D_XTDENSEORDER") == "0";
     static readonly bool DenseCheckOff = Environment.GetEnvironmentVariable("P3D_XTDENSECHECK") == "0";
     static readonly bool IntNewtonOff = Environment.GetEnvironmentVariable("P3D_XTINTNEWTON") == "0";
+    static readonly bool AltShortOff = Environment.GetEnvironmentVariable("P3D_XTALTSHORT") == "0";
 
     /// <summary>Нормаль поверхности в точке q на ней — по проекциям двух близких точек (у XtSurf нет производных).</summary>
     static Vector3d? NormalNear(XtSurf s, Vector3d q, Vector3d hintAway)
@@ -683,18 +696,38 @@ internal static class XtPoly
                 if (a != null && b != null)
                 {
                     var p0 = p; bool conv = false;
-                    for (int it = 0; it < 60; it++)
+                    // k185: ПОПЕРЕМЕННАЯ ПРОЕКЦИЯ — при медленном убывании шага (меньше чем вдвое за шаг) (поверхности под малым углом
+                    // сходятся линейно с отношением cos²θ, при касании — стоят): дальше — Ньютон по касательным плоскостям
+                    // (сходится за несколько шагов). Прежде 60 шагов попеременной проекции на каждую такую точку: у штампа
+                    // 2602A125 — 3.6 млн полных проекций на B-поверхность резьбы, 290 с. Мутация P3D_XTALTSHORT=0.
+                    double prevStep = double.MaxValue; bool early = false; int it = 0;
+                    for (; it < 60; it++)
                     {
                         var q = b.Project(a.Project(p));
-                        bool done = (q - p).Length < 1e-11;
+                        double step = (q - p).Length;
+                        bool done = step < 1e-11;
                         p = q;
                         if (done) { conv = true; break; }
+                        if (!AltShortOff && !IntNewtonOff && it >= 3 && step > 0.5 * prevStep) { early = true; break; }   // медленно — к Ньютону
+                        prevStep = step;
                     }
                     // k184: ПОПЕРЕМЕННАЯ ПРОЕКЦИЯ НЕ СОШЛАСЬ (поверхности сходятся под малым углом: торец резьбы срезает виток
                     // вскользь) — точка оставалась на одной поверхности в 1.5 мм от другой, сплайн ребра шёл волной (разъём
                     // 6168T106). Тогда — шаги Ньютона по касательным плоскостям обеих поверхностей (ближайшая к точке точка
                     // их линии пересечения), как маршевые шаги пересечения в OCCT. Мутация P3D_XTINTNEWTON=0.
                     if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count(conv ? "XT: сгущение — сошлось" : "XT: сгущение — не сошлось", 1);
+                    if (early)
+                    {
+                        if (IntersectNewton(a, b, p) is { } xe) p = xe;
+                        else
+                            for (it++; it < 60; it++)   // Ньютон не сошёлся — попеременная проекция до прежнего предела, затем как прежде
+                            {
+                                var q = b.Project(a.Project(p));
+                                bool done = (q - p).Length < 1e-11; p = q;
+                                if (done) { conv = true; break; }
+                            }
+                        if (!conv && (a.Project(p) - p).Length < 1e-9 && (b.Project(p) - p).Length < 1e-9) conv = true;
+                    }
                     if (!conv && !IntNewtonOff && IntersectNewton(a, b, (a.Project(p) - p).Length > 1e-9 ? p0 : p) is { } x) p = x;
                     // k184: точка, так и не севшая на обе поверхности (граница скругления BLEND_BOUND против плоскости или
                     // цилиндра: попеременная проекция уходит к другому касанию), не ставится — между точками карты остаётся
