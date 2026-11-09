@@ -1136,8 +1136,31 @@ internal sealed class XtBlendSurf : XtSurf
             if (d < bd) { bd = d; bi = i; bt = t; }
         }
         var c0 = Spine[bi] + (Spine[bi + 1] - Spine[bi]) * bt;
-        return OnSpineIn(c0, Spine[bi + 1] - Spine[bi]);
+        var tg0 = Spine[bi + 1] - Spine[bi];
+        var c = OnSpineIn(c0, tg0);
+        // k185 (шайба 92146A038): СЕЧЕНИЕ — ЧЕРЕЗ САМУ ТОЧКУ, НОРМАЛЬ — НАСТОЯЩАЯ КАСАТЕЛЬНАЯ ОСИ (n₀ × n₁ нормалей опор в центре).
+        // Отрезок редкой ломаной оси (до 0.7 мм) на изгибе расходился с касательной: плоскость сечения наклонена, центр сдвинут
+        // вдоль оси — точка ребра отстояла от «своего» центра на 0.42–0.46 мм при R 0.3175, касание уходило на 0.27–0.33 мм.
+        // Уточнение до трёх раз: точка в нормальной плоскости своего центра. Мутация P3D_XTCENTRESECT=0.
+        if (!CentreSectOff && R0 > 1e-12 && R1 > 1e-12)
+        {
+            for (int k = 0; k < 3; k++)
+            {
+                var (_, n0, g0) = OffsetN(S0, c, R0); var (_, n1, g1) = OffsetN(S1, c, R1);
+                if (!g0 || !g1) break;
+                var t = Vector3d.Cross(n0, n1);
+                if (t.LengthSquared < 1e-12) break;
+                t.Normalize(); if (Vector3d.Dot(t, tg0) < 0) t = -t;
+                double off = Vector3d.Dot(q - c, t);
+                if (Math.Abs(off) < 1e-10) break;
+                var cn = OnSpineIn(c + t * off, t);
+                if ((cn - c).Length > 4 * Math.Max(R0, R1) + Math.Abs(off)) break;   // ушло на чужую ветвь — прежний центр
+                c = cn;
+            }
+        }
+        return c;
     }
+    static readonly bool CentreSectOff = Environment.GetEnvironmentVariable("P3D_XTCENTRESECT") == "0";
 
     /// <summary>Точка оси в плоскости через c0 с нормалью tg (см. CentreAt).</summary>
     internal Vector3d OnSpineIn(Vector3d c0, Vector3d tg)
