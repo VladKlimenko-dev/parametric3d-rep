@@ -520,6 +520,7 @@ public static class Ssi
     static readonly bool CylTouchOff = Environment.GetEnvironmentVariable("P3D_CYLTOUCH") == "0";
     public static long CylTouchSplits;
     static readonly bool EqualCylOn = Environment.GetEnvironmentVariable("P3D_EQUALCYLSSI") != "0";
+    static readonly bool EqCylDbg = Environment.GetEnvironmentVariable("P3D_EQCYLDBG") == "1";
     public static long EqualCylSplits;
     /// <summary>Проверка отождествления кусков при сборке (KRN05-SHARED-BY-CONSTRUCTION): стык «на ус» — общим способом.</summary>
     public static volatile bool EqualCylOffForTest;
@@ -535,6 +536,7 @@ public static class Ssi
     static Result? EqualRadiiMeeting(Cylinder c, Cylinder d, Vector3d wc, Vector3d wd)
     {
         double R = c.R;
+        if (EqCylDbg) { var nd = Vector3d.Cross(wc, wd); Console.Error.WriteLine($"EQCYL R {c.R:R} {d.R:R} dR {c.R - d.R:G3} axes {(nd.LengthSquared > 1e-30 ? Vector3d.Dot(d.P - c.P, nd.Normalized()) : double.NaN):G3} angle {Math.Acos(Math.Clamp(Math.Abs(Vector3d.Dot(wc, wd)), 0, 1)):G6}"); }
         if (Math.Abs(c.R - d.R) > 1e-12 * Math.Max(1, R)) return null;
         var nn = Vector3d.Cross(wc, wd); var n = nn.Normalized();
         var off = d.P - c.P;
