@@ -1,0 +1,79 @@
+NURBSEXT step:face[1] pass 0 need True u [-1.22E-05, 1] v [-1.731E-09, 1] closedU False
+NURBSEXT   extended to u [-1.342E-05, 1] v [-1.904E-09, 1]
+NURBSEXT step:face[1] pass 1 need True u [0, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [0, 1]
+NURBSEXT step:face[1] pass 2 need True u [0, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [0, 1]
+NURBSEXT step:face[2] pass 0 need True u [0, 1] v [-1.501E-08, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [-1.651E-08, 1]
+NURBSEXT step:face[2] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[3] pass 0 need True u [-3.945E-05, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [-4.339E-05, 1] v [0, 1]
+NURBSEXT step:face[3] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[4] pass 0 need True u [-1.22E-05, 1] v [-1.731E-09, 1] closedU False
+NURBSEXT   extended to u [-1.342E-05, 1] v [-1.904E-09, 1]
+NURBSEXT step:face[4] pass 1 need True u [0, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [0, 1]
+NURBSEXT step:face[4] pass 2 need True u [0, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [0, 1]
+NURBSEXT step:face[5] pass 0 need True u [0, 1] v [-1.501E-08, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [-1.651E-08, 1]
+NURBSEXT step:face[5] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[6] pass 0 need True u [-3.945E-05, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [-4.339E-05, 1] v [0, 1]
+NURBSEXT step:face[6] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[8] pass 0 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[9] pass 0 need True u [0, 1] v [-5.483E-08, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [-6.031E-08, 1]
+NURBSEXT step:face[9] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[10] pass 0 need True u [0, 1] v [-1.589E-07, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [-1.748E-07, 1]
+NURBSEXT step:face[10] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[11] pass 0 need True u [0, 1] v [-0.1778, 1.002] closedU False
+NURBSEXT step:face[12] pass 0 need True u [-8.279E-06, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [-9.107E-06, 1] v [0, 1]
+NURBSEXT step:face[12] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[13] pass 0 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[14] pass 0 need True u [0, 1] v [-5.483E-08, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [-6.031E-08, 1]
+NURBSEXT step:face[14] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[15] pass 0 need True u [0, 1] v [-1.589E-07, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [-1.748E-07, 1]
+NURBSEXT step:face[15] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[16] pass 0 need True u [0, 1] v [-0.0003696, 1.002] closedU False
+NURBSEXT   extended to u [0, 1] v [-0.0004066, 1.002]
+NURBSEXT step:face[16] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[17] pass 0 need True u [-8.279E-06, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [-9.107E-06, 1] v [0, 1]
+NURBSEXT step:face[17] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[19] pass 0 need True u [0, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [0, 1]
+NURBSEXT step:face[19] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[20] pass 0 need True u [-2.266E-05, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [-2.492E-05, 1] v [0, 1]
+NURBSEXT step:face[20] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[21] pass 0 need True u [0, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [0, 1]
+NURBSEXT step:face[21] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[23] pass 0 need True u [0, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [0, 1]
+NURBSEXT step:face[23] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[24] pass 0 need True u [0, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [0, 1]
+NURBSEXT step:face[24] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[25] pass 0 need True u [0, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [0, 1]
+NURBSEXT step:face[25] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[26] pass 0 need True u [-2.266E-05, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [-2.492E-05, 1] v [0, 1]
+NURBSEXT step:face[26] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[27] pass 0 need True u [0, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [0, 1]
+NURBSEXT step:face[27] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[28] pass 0 need True u [0, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [0, 1]
+NURBSEXT step:face[28] pass 1 need False u [0, 1] v [0, 1] closedU False
+NURBSEXT step:face[29] pass 0 need True u [0, 1] v [0, 1] closedU False
+NURBSEXT   extended to u [0, 1] v [0, 1]
+NURBSEXT step:face[29] pass 1 need False u [0, 1] v [0, 1] closedU False
+seconds 11 nproc 4 env P3D_SLDNAME=drill_2958a552 P3D_EXTDBG=1 cmd sldprt
