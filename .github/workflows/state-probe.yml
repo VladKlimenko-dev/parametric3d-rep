@@ -53,8 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k185y_allA, cmd: 'allA', env: '' }
-          - { name: k185y_allB, cmd: 'allB', env: '' }
+          - { name: k185z_drill, cmd: 'sldprt', env: 'P3D_SLDNAME=drill_2958a552 P3D_SLDDIAG=1 P3D_SLDPROF=1 P3D_SLDTIMEOUT=2400' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
