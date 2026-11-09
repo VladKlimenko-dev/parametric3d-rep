@@ -1232,8 +1232,9 @@ public static partial class ExactFaceMesher
             catch { continue; }
             if (ns.LengthSquared < 1e-24) continue;                    // особая точка (вершина конуса, полюс)
             double cs = Vector3d.Dot(n / a, ns.Normalized());
-            if (cs > 0.5) { pos += a; nPos++; } else if (cs < -0.5) { neg += a; nNeg++; }
+            if (cs > 0.5) { pos += a; nPos++; } else if (cs < -0.5) { neg += a; nNeg++; if (MeshTrace && nNeg <= 5) Console.Error.WriteLine($"MESHTRACE   fold tri at {c} area {a / 2:G3} cos {cs:F3}"); }
         }
+        if (MeshTrace) Console.Error.WriteLine($"MESHTRACE   fold stats pos {nPos} ({pos / 2:G4}) neg {nNeg} ({neg / 2:G4})");
         return nPos > 0 && nNeg > 0;
     }
 
