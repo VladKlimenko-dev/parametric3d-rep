@@ -1785,7 +1785,7 @@ public sealed partial class SheetWindow : Window
         var g = new Grid();
         if (LabelsOff) g.ColumnDefinitions = new ColumnDefinitions("110,*");
         else { g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MinWidth = 110, SharedSizeGroup = "plabel" }); g.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star)); }
-        var t = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Margin = LabelsOff ? default : new Thickness(0, 0, 8, 0), MaxWidth = LabelsOff ? double.PositiveInfinity : 170, TextWrapping = LabelsOff ? TextWrapping.NoWrap : TextWrapping.Wrap };
+        var t = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Margin = LabelsOff ? default : new Thickness(0, 0, 8, 0), MaxWidth = LabelsOff ? double.PositiveInfinity : 240, TextWrapping = LabelsOff ? TextWrapping.NoWrap : TextWrapping.Wrap };
         Grid.SetColumn(c, 1); g.Children.Add(t); g.Children.Add(c);
         return g;
     }

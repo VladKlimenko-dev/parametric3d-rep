@@ -6839,6 +6839,31 @@ Check("UI-SKETCH-D30-K185", () =>
         else { var back = SketchEditing.SetDimensionValue(sk, d, v0, null, solver); Require(back.Ok, "could not set d30 back"); }
     }
     Require(bad.Count == 0, "d30 edits refused: " + string.Join("; ", bad));
+    // разбор: значения в дюймах (единицы детали) — как ввёл бы пользователь
+    foreach (double inch in new[] { 0.5, 0.75, 0.9, 1.0, 1.125, 1.25, 1.5, 2.0 })
+    {
+        double v0 = d.Value;
+        var res = SketchEditing.SetDimensionValue(sk, d, inch * 25.4, null, solver);
+        Console.WriteLine($"  d30 = {inch} in: ok {res.Ok}, failure {res.Failure}, status {res.Status}, related {res.Related}, cons {res.Constraints.Count}, dims {string.Join(",", res.Dimensions.Select(x => x.Name))}, degenerate {string.Join(",", res.Degenerate.Select(e => e.Id))}");
+        if (res.Ok) SketchEditing.SetDimensionValue(sk, d, v0, null, solver);
+    }
+    // путь окна: правка эскиза в окне (вход в эскиз), затем то же
+    var w = Open(s);
+    try
+    {
+        w.EditSketch(sk); Dispatcher.UIThread.RunJobs();
+        foreach (double inch in new[] { 1.0, 1.25 })
+        {
+            double v0 = d.Value;
+            var res = SketchEditing.SetDimensionValue(sk, d, inch * 25.4, null, solver);
+            Console.WriteLine($"  in sketch: d30 = {inch} in: ok {res.Ok}, failure {res.Failure}, status {res.Status}, cons {res.Constraints.Count}, dims {res.Dimensions.Count}");
+            if (res.Ok) SketchEditing.SetDimensionValue(sk, d, v0, null, solver);
+            else bad.Add($"in sketch {inch} in: {res.Failure}");
+        }
+        w.CancelSketch();
+    }
+    finally { w.Close(); }
+    Require(bad.Count == 0, "d30 edits refused in the sketch: " + string.Join("; ", bad));
 });
 
 Check("UI-SKETCH-PLANE-K185", () =>
@@ -6869,7 +6894,8 @@ Check("UI-SKETCH-PLANE-K185", () =>
         w.StartOperation(new SketchOp()); Run();
         Require(w.CurrentOperation is SketchOp, "sketch panel did not open");
         vp.SimulatePick(sp.Value.X / vp.Bounds.Width, sp.Value.Y / vp.Bounds.Height, select: true); Run(); Run();
-        Console.WriteLine($"  panel pick: in sketch {w.InSketch}, operation {w.CurrentOperation?.GetType().Name}");
+        var sop = w.CurrentOperation;
+        Console.WriteLine($"  panel pick: in sketch {w.InSketch}, operation {sop?.GetType().Name}, active field {sop?.ActiveRef?.Label}, items {sop?.ActiveRef?.Items.Count}, filter {vp.Selection.Filter}, selection {string.Join(", ", vp.Selection.Items.Select(r => r.Kind.ToString()))}, hover {vp.Selection.Hover.Kind}, cpu {vp.PickForTest(sp.Value).Kind}");
         Require(w.InSketch, "a plane clicked in the view does not fill the sketch panel");
         w.CancelSketch(); Run();
         // а7: YZ — Y вверх
