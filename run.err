@@ -1,0 +1,2 @@
+exit 1
+seconds 1040 nproc 4 env P3D_SLDSHARD=0/6 P3D_SLDDIAG=1 cmd sldprt corpus/sldprt3
