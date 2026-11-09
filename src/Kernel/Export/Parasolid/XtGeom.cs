@@ -286,11 +286,61 @@ internal sealed class XtNurbsSurf : XtSurf
         // сетки полного поиска (P3D_XTWARMCELL=0 — прежние 0.2 мм)
         if (grid == null && !WarmCellOff) BuildGrid();
         double warmR = WarmCellOff ? 2e-4 : Math.Max(2e-4, 0.5 * cell);
-        if (!WarmOff && !double.IsNaN(lastQ.X) && (q - lastQ).Length < warmR && NewtonFrom(q, lastU, lastV) is var (wu, wv, ok) && ok)
-        { lastQ = q; lastU = wu; lastV = wv; if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count("XT: проекция на B — тёплая", 1); return (wu, wv); }
-        if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count(double.IsNaN(lastQ.X) ? "XT: проекция на B — полная (первая)" : (q - lastQ).Length >= warmR ? "XT: проекция на B — полная (далеко)" : "XT: проекция на B — полная (Ньютон)", 1);
-        var res = ProjectUvFull(q); lastQ = q; lastU = res.U; lastV = res.V; return res;
+        // k185: ПАМЯТЬ НЕСКОЛЬКИХ ПРОШЛЫХ ОТВЕТОВ (8 ячеек по кругу): одну опору спрашивают попеременно из разных мест (оси и края
+        // нескольких скруглений на одной B-поверхности) — с одной ячейкой тёплый старт сбивался («далеко»: 2.1 млн полных проекций
+        // у переходника 8761K424). Мутация P3D_XTWARMSLOTS=0 — одна ячейка.
+        if (!WarmOff)
+        {
+            int best = -1; double bd = warmR;
+            int ns = WarmSlotsOff ? 1 : Slots;
+            for (int k = 0; k < ns; k++)
+            {
+                if (double.IsNaN(sQ[k].X)) continue;
+                double d = (q - sQ[k]).Length; if (d < bd) { bd = d; best = k; }
+            }
+            if (best >= 0)
+            {
+                if (NewtonFrom(q, sU[best], sV[best]) is var (wu, wv, ok) && ok)
+                { Remember(q, wu, wv); if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count("XT: проекция на B — тёплая", 1); return (wu, wv); }
+                // Ньютон не сошёлся (шаг с упором, вырождение) — спуск с проверкой убывания от того же начала: годен, если
+                // невязка по нормали (или точка на краю области)
+                if (!WarmDescentOff)
+                {
+                    var (du2, dv2, _) = Descent(q, sU[best], sV[best]);
+                    if (Stationary(q, du2, dv2)) { Remember(q, du2, dv2); if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count("XT: проекция на B — тёплая (спуск)", 1); return (du2, dv2); }
+                }
+            }
+        }
+        if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count(double.IsNaN(sQ[0].X) ? "XT: проекция на B — полная (первая)" : "XT: проекция на B — полная", 1);
+        var res = ProjectUvFull(q); Remember(q, res.U, res.V); return res;
     }
+    const int Slots = 8;
+    readonly Vector3d[] sQ = Enumerable.Repeat(new Vector3d(double.NaN), Slots).ToArray();
+    readonly double[] sU = new double[Slots], sV = new double[Slots];
+    int sNext;
+    void Remember(Vector3d q, double u, double v)
+    {
+        int k = WarmSlotsOff ? 0 : sNext; sNext = (sNext + 1) % Slots;
+        // ячейка рядом (та же область) — обновляется она, иначе — следующая по кругу
+        if (!WarmSlotsOff) for (int j = 0; j < Slots; j++) if (!double.IsNaN(sQ[j].X) && (sQ[j] - q).Length < 0.25 * Math.Max(cell, 2e-4)) { k = j; break; }
+        sQ[k] = q; sU[k] = u; sV[k] = v; lastQ = q; lastU = u; lastV = v;
+    }
+    /// <summary>(u, v) — стационарная точка расстояния до q: невязка по нормали (касательные составляющие малы) или упор в край.</summary>
+    bool Stationary(Vector3d q, double u, double v)
+    {
+        var (u0, u1, v0, v1) = Range;
+        double hu = 1e-7 * Math.Max(1, u1 - u0), hv = 1e-7 * Math.Max(1, v1 - v0);
+        var p = At(u, v); var r = p - q; double rl = r.Length;
+        if (rl < 1e-13) return true;
+        var su = (At(u + hu, v) - At(u - hu, v)) / (2 * hu); var sv = (At(u, v + hv) - At(u, v - hv)) / (2 * hv);
+        double tol = Math.Max(1e-8 * rl, 1e-12);
+        double gu = Vector3d.Dot(r, su), gv = Vector3d.Dot(r, sv);
+        bool okU = Math.Abs(gu) <= tol * su.Length || (u <= u0 && gu > 0) || (u >= u1 && gu < 0);
+        bool okV = Math.Abs(gv) <= tol * sv.Length || (v <= v0 && gv > 0) || (v >= v1 && gv < 0);
+        return okU && okV;
+    }
+    static readonly bool WarmSlotsOff = Environment.GetEnvironmentVariable("P3D_XTWARMSLOTS") == "0";
+    static readonly bool WarmDescentOff = Environment.GetEnvironmentVariable("P3D_XTWARMDESCENT") == "0";
     static readonly bool WarmOff = Environment.GetEnvironmentVariable("P3D_XTWARM") == "0";
     static readonly bool WarmCellOff = Environment.GetEnvironmentVariable("P3D_XTWARMCELL") == "0";
     static readonly bool WarmClampOff = Environment.GetEnvironmentVariable("P3D_XTWARMCLAMP") == "0";
