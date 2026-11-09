@@ -6653,13 +6653,16 @@ Check("UI-NECK-CUT-K185", () =>
     // k185 (замечание 09.11, 15:44): вырез Extrude в шейке DLOT — «Приближение: гранёных граней 35» (разбор)
     var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "user_k185_neck_cut.p3d")); BuildNow(s);
     var part = s.Part!;
+    Console.WriteLine($"  stage {part.StageIndex} of {part.Features.Count}");
+    if (part.StageIndex >= 0) { part.EndInsertMode(resume: true); BuildNow(s); }
     foreach (var f in part.Features)
-        Console.WriteLine($"  feature {f.Name} {f.GetType().Name} downgrade {(part.Downgrades.TryGetValue(f, out var dg) ? dg.ToString() : "-")}");
+        Console.WriteLine($"  feature {f.Name} {f.GetType().Name} downgrade {(part.Downgrades.TryGetValue(f, out var dg) ? dg.ToString() : "-")} error {f.Error} beyond {part.IsBeyondStage(f)}");
     foreach (var b in part.Bodies)
     {
         var fac = Parametric3D.Kernel.Topology.EntityNames.Faceted(b);
         Console.WriteLine($"  body faces {b.Faces.Count()}, faceted {fac.Count}: {string.Join(", ", fac.Take(12))}");
-        foreach (var f in b.Faces.Where(x => x.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface).Take(6))
+        Console.WriteLine($"  tags {string.Join(" ", b.Faces.Select(x => x.Tag).Where(t => !t.Contains("revolve")).Take(20))}");
+        foreach (var f in b.Faces.Where(x => x.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface && !x.Tag.Contains("revolve")).Take(6))
         {
             var fs = (Parametric3D.Kernel.Surfaces.FacetedSurface)f.Surface;
             Console.WriteLine($"    {f.Tag}: source {fs.Source?.GetType().Name}, authoritative {Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name}, loops {f.Loops.Count}, edges {string.Join("/", f.Loops.SelectMany(l => l.CoEdges).Select(c => c.Edge.Curve.GetType().Name).Distinct())}");
