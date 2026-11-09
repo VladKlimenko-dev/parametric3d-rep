@@ -1,0 +1,77 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["allB"]}
+  R2: added 36.716 (MC 36.78), faces 5, 2774 ms
+  R3: added 72.696 (MC 72.45), faces 5, 1171 ms
+  R8: added 260.104 (MC 260.75), faces 4, 811 ms
+{"test":"KRN-ROUND-CAP-SPHERE-RADII","ok":true}
+{"test":"KRN-PARAM-K102","ok":true}
+{"test":"KRN-SK-CONFLICTS-K106","ok":true}
+  hinge bottom: error , volume 23475.068 (want 23475.068), angle 90 -> 85
+  total 80: applied 10, volume 22942.038 (want 22942.038)
+  hinge top: error , x at z=0 18.250227, z=20 20
+  cylinder: error , volume 5247.895 (cone 5247.895), angle 90 -> 85
+{"test":"KRN-DRAFT-HINGE-K112","ok":true}
+{"test":"KRN-SWEEP-CLOSED-K111","ok":true}
+{"test":"KRN-SK-LINKS-K110","ok":true}
+{"test":"KRN-SK-FORMULA-LIVE","ok":true}
+{"test":"KRN-REF-ROLES","ok":true}
+{"test":"KRN-REV-MIRROR","ok":true}
+{"test":"KRN-SK-WEAK-DOF","ok":true}
+{"test":"KRN-SK-NO-TRIVIAL","ok":true}
+{"test":"KRN-SK-EDIT-STEP","ok":true}
+{"test":"KRN-SK-EDIT-REJECT","ok":true}
+{"test":"KRN-SK-ZERO-DIM","ok":true}
+{"test":"KRN-SK-SIDE","ok":true}
+{"test":"KRN-SK-BUILTIN","ok":true}
+{"test":"KRN-SK-DELETE-DIMS","ok":true}
+{"test":"KRN-SK-KEEP-WEAK","ok":true}
+{"test":"KRN-SK-REDUNDANT","ok":true}
+  boss          instant True, volume preview 320763.2 exact 320774.1 (dV 0.003%), error 
+  pocket        instant True, volume preview 318548.2 exact 318556.2 (dV 0.003%), error 
+  hole          instant True, volume preview 319184.3 exact 319190.8 (dV 0.002%), error 
+  round         instant True, volume preview 319490.8 exact 319501.5 (dV 0.003%), error 
+  chamfer       instant True, volume preview 319444.8 exact 319452.8 (dV 0.003%), error 
+  pattern       instant True, volume preview 319617.1 exact 319624.8 (dV 0.002%), error 
+  revolve       instant True, volume preview 325018.3 exact 325034.1 (dV 0.005%), error 
+  touching cut  instant True, volume preview 319552.6 exact 319560.2 (dV 0.002%), error 
+  mid edit: instant True at 4 (operation 4), rollbacks 1
+  counters: instant 11, region probes 18, tree memo 1371, reach memo 8, reach cull 12, solid triangles memo 24
+{"test":"KRN-INSTANT-PREVIEW-K113","ok":true}
+  file 173 KB, open 50 ms; cached False, dirty False, bodies 1, triangles 2644 (built 2644)
+  rebuild 153 ms; cached False, volume 319756.239 vs 319756.239
+{"test":"KRN-FILE-DISPLAY-K114","ok":true}
+  loaded: side1 ThroughAll flip True, side2 ToNext 7.5 flip True
+{"test":"KRN-EXTRUDE-END-K115","ok":true}
+    face FacetedSurface RevolvedSurface edges 1 x 30/0
+    face FacetedSurface RevolvedSurface edges 6 x 20/80,30/0,15/30,15/60,15/60,15/30
+    face FacetedSurface RevolvedSurface edges 1 x 20/80
+    face FacetedSurface ExtrudedSurface edges 2 x 15/30,15/30
+    face FacetedSurface ExtrudedSurface edges 2 x 15/60,15/60
+    face FacetedSurface PlaneSurface edges 4 x 15/60,15/30,15/30,15/60
+  flat face: FacetedSurface (PlaneSurface), edges 4
+  flat draft: error , volume 151577.5 -> 150018.8, angle 90 -> 95
+  cone draft: error , volume 128314 (want 128314, top radius 14.268), angle 82.87 -> 78.87
+{"test":"KRN-DRAFT-ANYFACE-K115","ok":true}
+  groove: error , removed 3926.991 (expected 3926.991)
+  mirrored: error , removed 7853.982 (expected 7853.982)
+{"test":"KRN-MIRROR-SWEEP-K116","ok":true}
+  nested: errors //, removed 3000 (expected 3000), 17 ms
+{"test":"KRN-MIRROR-NESTED-K116","ok":true}
+  loaded: free sketch visible False, used sketch visible True, tree f:d00000010d=True,i:group:G=False
+  Windows file: cached False restored True, this system: cached False restored True, rejected 0
+{"test":"KRN-FILE-STATE-K116","ok":true}
+  contour: 11 segments, 0 points outside the pocket
+{"test":"KRN-TREE-OWN-K116","ok":true}
+  slot pocket: error , tangent vertex off 7.11E-15
+{"test":"KRN-TANGENT-JOINT-K116","ok":true}
+  user part: 8409 ms, volume 8421325.775, downgrades 0, errors 
+  front wall faces: 5, overlapping pairs 0
+{"test":"KRN-USER-EXACT-K116","ok":true}
+  user part, 4 operations, old seam: 2903 ms, anisotropic cylinder faces 1, seam moves 0, downgrades 0
+  user part, 4 operations, k125 seam: 1570 ms, anisotropic cylinder faces 0, seam moves 1, downgrades 0
+{"test":"KRN-LONG-CYLINDER-K116","ok":true}
+  grid: compared 9600, mismatches 0
+{"test":"KRN-SPEED-K126-GRID-EQUIV","ok":true}
+  bounds index: faces 44, compared 2640, mismatches 0
+{"test":"KRN-SPEED-K126-BOUNDS-EQUIV","ok":true}
+  user_k116.p3d: eager V 8421325.774719 faces 35 errors 0; deferred V 8421325.774719 faces 35 errors 0; pending before True, after False
+  seq_handles_k75.p3d: eager V 1117388.864091 faces 16 errors 1; deferred V 1117388.864091 faces 16 errors 1; pending before True, after False
