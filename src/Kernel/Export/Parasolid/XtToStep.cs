@@ -342,7 +342,17 @@ public static class XtToStep
                 // кривой (против хода при sense '-'), через стык кольца, а не по возрастанию номеров точек карты: прежде ребро
                 // шло дополнительной дугой (300° вместо 60°), контуры плоских граней пересекали себя, сетка рвалась (тепловое
                 // реле 7254K613). Мутация P3D_XTRINGDIR=0.
-                if (!closed && !RingDirOff && XtPoly.IsRing(free)) { pts = XtPoly.TrimRing(free, pS!.Value, pE!.Value, cn == null || cn.C("sense") != '-'); sense = true; }
+                if (!closed && !RingDirOff && XtPoly.IsRing(free))
+                {
+                    bool fw = cn == null || cn.C("sense") != '-';
+                    pts = XtPoly.TrimRing(free, pS!.Value, pE!.Value, fw); sense = true;
+                    if (IntDbg)
+                    {
+                        static double Len(List<Vector3d> q) { double l = 0; for (int i = 1; i < q.Count; i++) l += (q[i] - q[i - 1]).Length; return l; }
+                        var other = XtPoly.TrimRing(free, pS!.Value, pE!.Value, !fw); var old = XtPoly.Trim(free, pS!.Value, pE!.Value);
+                        Console.Error.WriteLine($"XTRING edge {e.Id} curve {cn?.Id} {cn?.Name} sense {cn?.C("sense")} chosen {Len(pts) * 1000:G4} mm other {Len(other) * 1000:G4} old {Len(old) * 1000:G4}");
+                    }
+                }
                 else if (!closed) { pts = XtPoly.Trim(free, pS!.Value, pE!.Value); sense = true; }
                 else
                 {
