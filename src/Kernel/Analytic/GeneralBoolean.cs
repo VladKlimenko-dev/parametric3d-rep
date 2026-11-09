@@ -192,6 +192,8 @@ public static class GeneralBoolean
     public static int SideUndecided;
     /// <summary>k185: сторона грани решена пробой со сдвигом вдоль касательной (разбор).</summary>
     public static int SideShifted;
+    /// <summary>k185: куски граней, по обе стороны которых результат один (не граница), — отброшены (разбор).</summary>
+    public static int SideDropped;
     static readonly bool SideShiftOff = Environment.GetEnvironmentVariable("P3D_SIDESHIFT") == "0";
     internal static readonly bool FaceLossOld = Environment.GetEnvironmentVariable("P3D_FACELOSS") == "0";
     internal static readonly bool NestedOff = Environment.GetEnvironmentVariable("P3D_NESTED") == "0";
@@ -868,6 +870,10 @@ public static class GeneralBoolean
                         if (decided) break;
                     }
                 }
+                // k185: ГРАНЬ НИЧЕГО НЕ РАЗДЕЛЯЕТ. Все пробы со сдвигом классифицированы чисто, и по обе стороны ответ один — кусок
+                // лежит внутри другого операнда или на его касательной границе (дно выреза касается шейки вдоль линии), в границу
+                // результата он не входит: отбрасывается (не отказ маршрута). Неверное тело без него отвергнет проверка ниже.
+                if (!decided && !SideShiftOff && shSame > 0 && shNull == 0) { Interlocked.Increment(ref SideDropped); continue; }
                 if (!decided) { SideUndecided++; why = $"outward side undecided ({f.Face.Tag}, {src.GetType().Name}, inside {r.Inside:0.####}; shifted probes: on boundary {shNull}, same side {shSame}; candidates {r.InsideCandidates.Count()})"; return null; }
             }
             // СФЕРА — КАРТА ОПЕРАНДА, ПОКА ОНА ВЫПОЛНЯЕТ КОНТРАКТ ОБЛАСТИ (KRN-03, SurfaceDomain): булева не подбирает
