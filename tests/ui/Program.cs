@@ -6958,9 +6958,11 @@ Check("UI-SKETCH-PLANE-PANEL-K185", () =>
         var cs = part.PlaneXY.DisplayCorners();
         var cw = new Vector3d(cs[0].X * 0.25 + cs[2].X * 0.75, cs[0].Y * 0.25 + cs[2].Y * 0.75, cs[0].Z * 0.25 + cs[2].Z * 0.75);
         var sp = vp.Project(cw)!.Value;
-        Console.WriteLine($"  before: pick {vp.PickForTest(sp).Kind}");
+        Console.WriteLine($"  before: pick {vp.PickForTest(sp).Kind}, camera {vp.Camera.State.Rotation}, view {vp.Bounds}");
         w.StartOperation(new SketchOp()); Run();
-        Console.WriteLine($"  panel open: op {w.CurrentOperation?.GetType().Name}, filter {vp.Selection.Filter}, pick {vp.PickForTest(sp).Kind}, planes shown {vp.Show.Planes}");
+        Console.WriteLine($"  panel open: op {w.CurrentOperation?.GetType().Name}, filter {vp.Selection.Filter}, pick {vp.PickForTest(sp).Kind}, planes shown {vp.Show.Planes}, camera {vp.Camera.State.Rotation}, view {vp.Bounds}");
+        var sp2 = vp.Project(cw)!.Value; Console.WriteLine($"  point moved {sp} → {sp2}, pick there {vp.PickForTest(sp2).Kind}");
+        sp = sp2;
         vp.SimulatePick(sp.X / vp.Bounds.Width, sp.Y / vp.Bounds.Height, select: true); Run(); Run();
         Console.WriteLine($"  after click: in sketch {w.InSketch}");
         Require(w.InSketch, "a plane clicked in the view does not fill the sketch panel (fresh window)");
