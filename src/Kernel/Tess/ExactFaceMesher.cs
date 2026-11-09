@@ -1603,7 +1603,9 @@ public static partial class ExactFaceMesher
     public static long PinchFoldsDropped;
     /// <summary>k185: способов разметки, отвергнутых сверкой с точной площадью грани (разбор).</summary>
     public static long ExactAreaRejects;
-    static readonly bool ExactAreaOff = Environment.GetEnvironmentVariable("P3D_MESHEXACTAREA") == "0";
+    // ВЫКЛЮЧЕНО ПО УМОЛЧАНИЮ (P3D_MESHEXACTAREA=1 — включить): FaceAreaRough груб (резьбовой переходник 7537K2: 4.374 при сетке 1.012) —
+    // верные сетки отвергались, грани оставались без сетки, открытые рёбра у многих деталей корпуса
+    static readonly bool ExactAreaOff = Environment.GetEnvironmentVariable("P3D_MESHEXACTAREA") != "1";
     [ThreadStatic] static TFace? _exAreaFace; [ThreadStatic] static ISurface3? _exAreaSurf; [ThreadStatic] static double? _exArea;
     static double? ExactAreaOf(TFace f)
     {
