@@ -53,13 +53,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k185f3_base, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=7819N12 ' }
-          - { name: k185f3_mesh, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=7819N12 P3D_FOLDHINT=0 P3D_FULLDOMAINGUARD=0 P3D_FALLBACKREFINE=0 P3D_FOLDUV=0 P3D_CDTBIG=0 P3D_REFINEPROJ=0' }
-          - { name: k185f3_xt, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=7819N12 P3D_XTBOUNDNEAR=0 P3D_XTCENTRESECT=0 P3D_XTSPINEDENSE=0' }
-          - { name: k185f3_both, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=7819N12 P3D_FOLDHINT=0 P3D_FULLDOMAINGUARD=0 P3D_FALLBACKREFINE=0 P3D_FOLDUV=0 P3D_CDTBIG=0 P3D_REFINEPROJ=0 P3D_XTBOUNDNEAR=0 P3D_XTCENTRESECT=0 P3D_XTSPINEDENSE=0' }
-          - { name: k185f3_side, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=7819N12 P3D_SIDESHIFT=0' }
-          - { name: k185f3_flux, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=7819N12 P3D_FLUXSPAN1=0' }
-          - { name: k185f3_stale, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=7819N12 P3D_STALEFACETS=0 P3D_LOADFACETED=0' }
+          - { name: k185g3_bs, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=7819N12 P3D_XTBOUNDNEAR=0 P3D_XTCENTRESECT=0' }
+          - { name: k185g3_bd, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=7819N12 P3D_XTBOUNDNEAR=0 P3D_XTSPINEDENSE=0' }
+          - { name: k185g3_sd, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=7819N12 P3D_XTCENTRESECT=0 P3D_XTSPINEDENSE=0' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
