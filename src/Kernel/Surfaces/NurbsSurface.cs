@@ -875,6 +875,9 @@ public sealed class NurbsSurface : ISurface3
 
     /// <summary>k185: граней, которым отказано в сетке всей области параметров (контуры внутри области) — разбор.</summary>
     public static long FullDomainRefused;
+    /// <summary>k185: уровней дробления запасной сетки грани (разбор).</summary>
+    public static long FallbackRefines;
+    static readonly bool FallbackRefineOff = Environment.GetEnvironmentVariable("P3D_FALLBACKREFINE") == "0";
     static readonly bool FullDomainGuardOff = Environment.GetEnvironmentVariable("P3D_FULLDOMAINGUARD") == "0";
     public void TessellateFace(TFace face, MeshBuilder mb)
     {
@@ -898,6 +901,43 @@ public sealed class NurbsSurface : ISurface3
         // поверхности, чтобы грань и её рёбра сходились.
         var all = new List<Vector2d>(outer);
         foreach (var h in loops.Skip(1)) all.AddRange(h);
+        // k185 (замечание 09.11, 23:18): ДРОБЛЕНИЕ В ПАРАМЕТРАХ. Триангуляция по одному контуру, без внутренних точек, на ленте
+        // в несколько витков (грань канавки сверла 2958A552) давала хорды поперёк детали — «канавка заполнена телом» (101 мм²
+        // сетки при грани 1.8 мм²). Все треугольники делятся на четыре (середины сторон в параметрах — общие у соседей), пока
+        // середина какой-либо стороны на поверхности отходит от хорды больше допуска гранения; не больше 5 уровней.
+        // Мутация P3D_FALLBACKREFINE=0.
+        if (!FallbackRefineOff)
+        {
+            var T = tris.ToList();
+            for (int level = 0; level < 5; level++)
+            {
+                bool need = false;
+                for (int i = 0; i + 2 < T.Count && !need; i += 3)
+                    for (int k = 0; k < 3 && !need; k++)
+                    {
+                        var ua = all[T[i + k]]; var ub = all[T[i + (k + 1) % 3]];
+                        var pa = PointAt(ua); var pb = PointAt(ub);
+                        if ((PointAt((ua + ub) / 2) - (pa + pb) / 2).Length > Math.Max(Tol.Chord, 1e-4)) need = true;
+                    }
+                if (!need) break;
+                var mid = new Dictionary<(int, int), int>();
+                int Mid(int x, int y)
+                {
+                    var key = x < y ? (x, y) : (y, x);
+                    if (!mid.TryGetValue(key, out int m)) { m = all.Count; all.Add((all[x] + all[y]) / 2); mid[key] = m; }
+                    return m;
+                }
+                var T2 = new List<int>(T.Count * 4);
+                for (int i = 0; i + 2 < T.Count; i += 3)
+                {
+                    int a0 = T[i], b0 = T[i + 1], c0 = T[i + 2];
+                    int ab = Mid(a0, b0), bc = Mid(b0, c0), ca = Mid(c0, a0);
+                    T2.AddRange(new[] { a0, ab, ca, ab, b0, bc, ca, bc, c0, ab, bc, ca });
+                }
+                T = T2; Interlocked.Increment(ref FallbackRefines);
+            }
+            tris = T;
+        }
 
         int start = mb.VertexCount;
         foreach (var uv in all)
