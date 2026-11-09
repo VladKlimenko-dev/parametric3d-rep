@@ -6903,6 +6903,14 @@ Check("UI-SKETCH-PLANE-K185", () =>
         var axDir = Math.Abs(Vector3d.Dot(Vector3d.UnitY, setup.Sketch.Plane.W.Normalized())) < 0.5 ? Vector3d.UnitY : Vector3d.UnitX;
         var ax = new DatumAxis("A_up", Vector3d.Zero, axDir); part.Add(ax);
         Require(setup.UpCandidate(new PickRef(ax.Id, PickKind.DatumAxis, part, ax)), "a part axis is not accepted as the sketch top");
+        // а8.6: «верх» — в обратную сторону
+        if (!SketchSetupOp.UpReverseOff)
+        {
+            var upv = setup.Sketch.UpVector;
+            ((CheckBox)setup.Panel!.Checks["Верх — в обратную сторону"]).IsChecked = true; Run();
+            Console.WriteLine($"  up {upv} → {setup.Sketch.UpVector}");
+            Require((setup.Sketch.UpVector + upv).Length < 1e-9, "reverse top did not turn the up direction");
+        }
         w.CancelOperation(); Run();
     }
     finally { if (Loc.En) w.ToggleLanguage(); w.Close(); }

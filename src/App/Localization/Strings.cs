@@ -1267,6 +1267,8 @@ public static class Strings
         ["t от"] = "t from",
         ["t до"] = "t to",
         ["Щёлкните сторону рамки основы, прямое ребро грани-основы или ось детали (сборки) — она задаст верх эскиза. Сейчас: {0}."] = "Click a side of the base frame, a straight edge of the base face or a part (assembly) axis — it sets the top of the sketch. Now: {0}.",
+        ["Щёлкните сторону рамки основы, прямое ребро, ось или точку детали (сборки) — они задают верх эскиза. Сейчас: {0}."] = "Click a side of the base frame, a straight edge, an axis or a point of the part (assembly) — it sets the top of the sketch. Now: {0}.",
+        ["Верх — в обратную сторону"] = "Reverse the top direction",
         ["нижняя сторона рамки"] = "bottom side of the frame", ["правая сторона рамки"] = "right side of the frame", ["верхняя сторона рамки"] = "top side of the frame", ["левая сторона рамки"] = "left side of the frame",
         ["Основа (Base plane)"] = "Base plane", ["Начало — начало основы (Origin – base plane)"] = "Origin – base plane",
         ["Начало — центр основы (Origin – mid-plane)"] = "Origin – mid-plane", ["Точка начала (Origin point)"] = "Origin point",

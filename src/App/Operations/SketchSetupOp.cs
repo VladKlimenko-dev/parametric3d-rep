@@ -66,6 +66,15 @@ public sealed class SketchSetupOp : Operation
             if (BaseRef() is { } br) { _plane.Items.Add(br); _plane.Touched = false; }
         }
         p.Note(L("Сейчас: {0}. Щелчок по другой плоской грани или плоскости — новая основа.", L(_sk.PlaneDescription)));
+        // k185 (замечание 10.11, 08:55): порядок как у Creo — плоскость и сторона взгляда; нуль и смещения; верх и его сторона
+        p.Check("Взгляд с обратной стороны (или щелчок по стрелке нормали)", () => _sk.PlaneDescription.EndsWith(" (flipped)"), _ => { _sk.Flip(); ShowArrows(); });
+        // k185 (замечание 10.11, 08:46, а8.3): наведение на «Взгляд с обратной стороны» подсвечивает стрелку нормали в виде
+        if (!FlipHotOff && p.Checks.TryGetValue("Взгляд с обратной стороны (или щелчок по стрелке нормали)", out var flipCb))
+        {
+            FlipCheck = flipCb as Avalonia.Controls.CheckBox;
+            flipCb.PointerEntered += (_, _) => { NormalHot = true; ShowArrows(); };
+            flipCb.PointerExited += (_, _) => { NormalHot = false; ShowArrows(); };
+        }
         _origin = p.Ref(new RefField
         {
             Label = "Основа нулевой точки (Origin)", Filter = PickFilter.Vertices | PickFilter.Datums | PickFilter.SketchPoints, Accept = r => Refs.PointOf(r) != null, Single = true, Optional = true,
@@ -78,24 +87,21 @@ public sealed class SketchSetupOp : Operation
         // эскиз поворачивается так, что выбранное ребро — сверху (как ориентация «Top» в Creo)
         _up = p.Ref(new RefField
         {
-            Label = "Верх эскиза", Filter = AxisUpOff ? PickFilter.Edges : PickFilter.Edges | PickFilter.Datums, Accept = UpCandidate, Single = true, Optional = true,
+            Label = "Верх эскиза", Filter = AxisUpOff ? PickFilter.Edges : PickFilter.Edges | PickFilter.Datums | PickFilter.Vertices | PickFilter.SketchPoints, Accept = UpCandidate, Single = true, Optional = true,
             Prefer = PreferOff ? null : UpCandidate,
         });
         if (!KeptOff) _up.KeptText = _sk.UpDescription.Length > 0 ? L(_sk.UpDescription) : L("ось плоскости");
-        p.Note(L(AxisUpOff ? "Щёлкните сторону рамки основы или прямое ребро грани-основы — оно станет верхом эскиза. Сейчас: {0}." : "Щёлкните сторону рамки основы, прямое ребро грани-основы или ось детали (сборки) — она задаст верх эскиза. Сейчас: {0}.",
+        p.Note(L(AxisUpOff ? "Щёлкните сторону рамки основы или прямое ребро грани-основы — оно станет верхом эскиза. Сейчас: {0}." : "Щёлкните сторону рамки основы, прямое ребро, ось или точку детали (сборки) — они задают верх эскиза. Сейчас: {0}.",
             _sk.UpDescription.Length > 0 ? L(_sk.UpDescription) : L("ось плоскости")));
-        p.Check("Взгляд с обратной стороны (или щелчок по стрелке нормали)", () => _sk.PlaneDescription.EndsWith(" (flipped)"), _ => { _sk.Flip(); ShowArrows(); });
-        // k185 (замечание 10.11, 08:46, а8.3): наведение на «Взгляд с обратной стороны» подсвечивает стрелку нормали в виде
-        if (!FlipHotOff && p.Checks.TryGetValue("Взгляд с обратной стороны (или щелчок по стрелке нормали)", out var flipCb))
-        {
-            FlipCheck = flipCb;
-            flipCb.PointerEntered += (_, _) => { NormalHot = true; ShowArrows(); };
-            flipCb.PointerExited += (_, _) => { NormalHot = false; ShowArrows(); };
-        }
+        // k185 (замечание 10.11, 08:52, а8.6): «верх» — в обратную сторону (ось, ребро, точка задают направление, флажок — сторону)
+        if (!UpReverseOff)
+            p.Check("Верх — в обратную сторону", () => _upRev, v => { if (v == _upRev) return; _upRev = v; _sk.SetUpVector(-_sk.UpVector); W.ViewPort.MarkDirty(); ShowArrows(); });
     }
 
     static readonly bool KeptOff = Environment.GetEnvironmentVariable("P3D_SKSETUPKEPT") == "0";
     public static readonly bool AxisUpOff = Environment.GetEnvironmentVariable("P3D_SKUPAXIS") == "0";
+    public static readonly bool UpReverseOff = Environment.GetEnvironmentVariable("P3D_SKUPREVERSE") == "0";
+    bool _upRev;
     static readonly bool FlipHotOff = Environment.GetEnvironmentVariable("P3D_SKFLIPHOT") == "0";
     /// <summary>k185 (а8.3): стрелка нормали подсвечена наведением на флажок «Взгляд с обратной стороны».</summary>
     public bool NormalHot { get; private set; }
@@ -122,10 +128,20 @@ public sealed class SketchSetupOp : Operation
         // кроме осей, перпендикулярных плоскости. Мутация P3D_SKUPAXIS=0 — только рёбра.
         if (!AxisUpOff && r.Kind == PickKind.DatumAxis && r.Target is DatumAxis ax)
             return Math.Abs(Vector3d.Dot(ax.Direction.Normalized(), _sk.Plane.W.Normalized())) < 1 - 1e-6;
+        // точка: верх — от нуля эскиза к точке (проекция на плоскость)
+        if (!AxisUpOff && r.Kind is PickKind.Vertex or PickKind.DatumPoint or PickKind.SketchPoint && Refs.PointOf(r) is { } pt)
+            return UpFromPoint(pt).Length > 1e-6 * Math.Max(1, Len());
         if (r.Kind != PickKind.Edge || Refs.LineOf(r) is not { } ln) return false;
         var n = _sk.Plane.W.Normalized(); var o = _sk.Plane.Origin;
         double tol = Math.Max(1e-6, Len() * 1e-6);
         return Math.Abs(Vector3d.Dot(ln.Dir.Normalized(), n)) < 1e-6 && Math.Abs(Vector3d.Dot(ln.At - o, n)) <= tol;
+    }
+
+    /// <summary>Направление «верха» к точке: от нуля эскиза к её проекции на плоскость.</summary>
+    Vector3d UpFromPoint(Vector3d pt)
+    {
+        var n = _sk.Plane.W.Normalized(); var d = pt - _sk.Plane.Origin;
+        return d - n * Vector3d.Dot(d, n);
     }
 
     /// <summary>«Верх» — к прямой (ребру) в плоскости эскиза: перпендикуляр от центра эскиза к ней.</summary>
@@ -205,6 +221,8 @@ public sealed class SketchSetupOp : Operation
             var r = _up.Items[0];
             bool okUp = true;
             if (!AxisUpOff && r.Target is DatumAxis ax) okUp = _sk.SetUpDirection(ax.Direction, ax.Name);   // ось — направление
+            else if (!AxisUpOff && r.Kind is PickKind.Vertex or PickKind.DatumPoint or PickKind.SketchPoint && Refs.PointOf(r) is { } pt) okUp = _sk.SetUpDirection(UpFromPoint(pt), Describe(r));
+            if (okUp && _upRev) _sk.SetUpVector(-_sk.UpVector);   // сторона — по флажку
             else if (Refs.LineOf(r) is { } ln) okUp = SetUpTowardLine(ln.At, ln.Dir, Describe(r));
             if (!okUp) W.ShowToast(L("Это направление перпендикулярно плоскости эскиза — «верх» им не задать"));
             _up.Touched = false;
