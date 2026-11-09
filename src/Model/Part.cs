@@ -1078,6 +1078,9 @@ public sealed class Part : ModelItem
     {
         public int After;                       // номер операции, после которой снято
         public Features.BuildContext.Snapshot State = null!;
+        /// <summary>k185: состояние не из точного расчёта — восстановлено из файла или снято при живом предпросмотре; гранёные
+        /// грани в нём могут быть приближением, а не геометрией детали.</summary>
+        public bool Untrusted;
     }
 
     /// <summary>
@@ -1190,7 +1193,7 @@ public sealed class Part : ModelItem
         if (after < 0 || after >= Features.Count) return;
         foreach (var b in state.Bodies) b.Publish();
         _checkpoints.RemoveAll(c => c.After == after);
-        _checkpoints.Add(new Checkpoint { After = after, State = state });
+        _checkpoints.Add(new Checkpoint { After = after, State = state, Untrusted = true });
         _checkpoints.Sort((x, y) => x.After.CompareTo(y.After));
         // итог операций до состояния — для пропущенных при перестроении (ошибки, созданные грани)
         foreach (var f in Features.Take(after + 1))
@@ -1349,7 +1352,12 @@ public sealed class Part : ModelItem
                 _staleRetry = true;
                 try
                 {
-                    ForgetCheckpoints(); DirtyFromIndex(0); r = ComputeCore(parameters, solver, cancellation); StaleFacetRetries++;
+                    // забываются только недоверенные состояния (из файла, из предпросмотра): снятые точным расчётом остаются
+                    // (K03-FAULT-PART: расчёт не меняет состояний до правленой операции)
+                    int firstBad = _checkpoints.Where(c => c.Untrusted).Select(c => c.After).DefaultIfEmpty(int.MaxValue).Min();
+                    _checkpoints.RemoveAll(c => c.Untrusted || c.After >= firstBad);
+                    DirtyFromIndex(Math.Min(Math.Max(0, dirtyAtStart), firstBad));
+                    r = ComputeCore(parameters, solver, cancellation); Interlocked.Increment(ref StaleFacetRetries);
                     // приближение осталось и с нуля — оно настоящее (гранёный вход: сетка, приближённое скругление); больше не повторять
                     // до правки состава дерева
                     if (r.GeometryDowngrades.Count > 0) _staleUseless = true;
@@ -1605,6 +1613,7 @@ public sealed class Part : ModelItem
         // НАЧАЛО ПЕРЕСЧЁТА: последнее сохранённое состояние перед изменённой операцией. Операции
         // до него уже выполнены, и их результат лежит в сохранённом; повторять их незачем.
         int from = 0;
+        bool startUntrusted = false;
         int dirtyNote = _dirtyFrom;
 
         if (UseCheckpoints && (_dirtyFrom < int.MaxValue || _stageMoved))
@@ -1614,6 +1623,7 @@ public sealed class Part : ModelItem
             {
                 ctx.RollBack(take.State);
                 from = take.After + 1;
+                startUntrusted = take.Untrusted;
             }
         }
         else _checkpoints.Clear();
@@ -1843,7 +1853,7 @@ public sealed class Part : ModelItem
                     nf += bf; ne += be;
                 }
                 // k185: вход операции уже был гранёным, и он из сохранённого состояния — пометка для повтора расчёта с нуля
-                if (nf + ne > 0 && from > 0 && saved.Bodies.Any(b => Kernel.Topology.GeometryAudit.Faceted(b).Faces > 0)) result.StaleFacets = true;
+                if (nf + ne > 0 && from > 0 && startUntrusted && saved.Bodies.Any(b => Kernel.Topology.GeometryAudit.Faceted(b).Faces > 0)) result.StaleFacets = true;
                 if (nf + ne > 0)
                 {
                     if (Kernel.KernelSettings.Capture().GeometryPolicy == Kernel.GeometryPolicy.PreserveBRep)
@@ -1884,7 +1894,7 @@ public sealed class Part : ModelItem
                 {
                     // k122: по порядку операций (за полоской могут оставаться прежние состояния)
                     int at = _checkpoints.FindIndex(c => c.After > fi);
-                    var cp = new Checkpoint { After = fi, State = ctx.Remember() };
+                    var cp = new Checkpoint { After = fi, State = ctx.Remember(), Untrusted = FastPreview && Kernel.KernelSettings.Capture().LivePreview };
                     if (at < 0) _checkpoints.Add(cp); else _checkpoints.Insert(at, cp);
                 }
             if (instantHere)

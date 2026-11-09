@@ -6705,6 +6705,8 @@ Check("UI-NECK-CUT-K185", () =>
         }
     }
     foreach (var wmsg in part.Warnings.Take(25)) Console.WriteLine("  warn " + wmsg);
+    Console.WriteLine($"  stale retries {Part.StaleFacetRetries}");
+    Require(part.Bodies.All(b => Parametric3D.Kernel.Topology.EntityNames.Faceted(b).Count == 0), "cut from a saved state left faceted faces");
 });
 
 Check("UI-SKETCH-DIMEXT-K185", () =>
