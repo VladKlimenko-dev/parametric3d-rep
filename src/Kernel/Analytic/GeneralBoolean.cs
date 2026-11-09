@@ -834,10 +834,14 @@ public static class GeneralBoolean
                 // лежит в ней (вырез шейки DLOT: точка тела вращения на плоскости z = 0 выреза, нормаль радиальная) — классификатор
                 // отвечает «на границе» при любом шаге, и маршрут отказывал (многогранная булева, 35 гранёных граней). Тогда
                 // точка сдвигается вдоль касательной грани (четыре направления, 1/16 минимального элемента) и возвращается на
-                // поверхность; сторона грани в окрестности та же. Мутация P3D_SIDESHIFT=0.
+                // поверхность; сторона грани в окрестности та же (на той же гладкой поверхности сторона не меняется; вне области
+                // обе пробы дают одно и то же — пропуск). Мутация P3D_SIDESHIFT=0.
                 if (!decided && !SideShiftOff)
                 {
-                    double floor = 4 * Classifier.Tol, sh = ToleranceContext.Current.MinFeature / 16;
+                    double floor = 4 * Classifier.Tol;
+                    // сдвиг растёт вчетверо (до 16 минимальных элементов): у линии касания плоскости с цилиндром сдвиг по окружности
+                    // уводит от плоскости лишь на sh²/2R — малый сдвиг остаётся «на границе»
+                    for (double sh = ToleranceContext.Current.MinFeature / 16; sh <= 16 * ToleranceContext.Current.MinFeature && !decided; sh *= 4)
                     foreach (var pt0 in new[] { r.Inside }.Concat(r.InsideCandidates))
                     {
                         var n0 = face.NormalAt(pt0).Normalized();
