@@ -10,18 +10,25 @@ namespace Parametric3D.Kernel.Export.Parasolid;
 /// deflate. Повторные записи в конце файла (каталог) данных не несут. Геометрия детали — поток «Contents/Config-N-Partition»:
 /// разделы [длина][16 байт метки][исходный размер][сжатый размер][zlib], раздел 0 — Parasolid XT (нейтральный двоичный,
 /// «TRANSMIT FILE (partition)»), раздел 1 — изменения (не нужны). Файлы до 2015 г. — составной документ OLE2 (D0 CF 11 E0),
-/// они пока не читаются. Устройство восстановлено по файлам (так же его описывает sldprt-re, github.com/RonClemens/sldprt-re).
+/// читаются Ole2File (k185), устройство потоков то же. Устройство восстановлено по файлам (так же его описывает sldprt-re, github.com/RonClemens/sldprt-re).
 /// </summary>
 public static class SldprtFile
 {
     static readonly byte[] Mark = { 0x14, 0x00, 0x06, 0x00, 0x08, 0x00 };
+    static readonly bool OleOff = Environment.GetEnvironmentVariable("P3D_SLDOLE") == "0";
+    static readonly bool UsizeOff = Environment.GetEnvironmentVariable("P3D_SLDUSIZE") == "0";
 
     /// <summary>Все потоки контейнера по именам (первая запись с данными на каждое имя).</summary>
     public static Dictionary<string, byte[]> Streams(byte[] b)
     {
         if (b.Length >= 4 && b[0] == 0xD0 && b[1] == 0xCF && b[2] == 0x11 && b[3] == 0xE0)
+        {
+            // k185: файл до 2015 г. — составной документ OLE2; потоки те же (Ole2File). Мутация P3D_SLDOLE=0 — прежний отказ.
+            if (!OleOff && Ole2File.IsOle2(b)) return Ole2File.Streams(b);
             throw new InvalidDataException("SLDPRT: a SolidWorks file older than 2015 (OLE2 container) is not supported yet — save it in SolidWorks 2015 or newer, or export Parasolid (.x_b/.x_t) or STEP.");
+        }
         var res = new Dictionary<string, byte[]>();
+        var partial = new Dictionary<string, byte[]>();   // записи с неполной распаковкой — только если полной нет
         int i = 0;
         while ((i = IndexOf(b, Mark, i)) >= 0)
         {
@@ -39,13 +46,18 @@ public static class SldprtFile
                         using var ds = new DeflateStream(new MemoryStream(b, i + 26 + nl, csize), CompressionMode.Decompress);
                         using var ms = new MemoryStream();
                         ds.CopyTo(ms);
-                        res[name] = ms.ToArray();
+                        // k185: запись принимается, только если распакован весь заявленный размер. Ложное совпадение метки
+                        // (6450K1: «Config-0-Partition» в заголовке файла, 10 байт из 792) обрывком deflate не бросает и
+                        // заслоняло настоящую запись дальше в файле — «пустой поток геометрии». Мутация P3D_SLDUSIZE=0.
+                        if (UsizeOff || ms.Length == usize) res[name] = ms.ToArray();
+                        else partial.TryAdd(name, ms.ToArray());
                     }
                     catch (InvalidDataException) { }
                 }
             }
             i++;
         }
+        foreach (var kv in partial) res.TryAdd(kv.Key, kv.Value);
         return res;
     }
 
@@ -65,6 +77,8 @@ public static class SldprtFile
             var m = Regex.Match(t, "<swConfiguration [^>]*swID=\"(\\d+)\"[^>]*swMostRecentConfiguration=\"YES\"");
             if (m.Success && parts.Contains($"Contents/Config-{m.Groups[1].Value}-Partition")) pick = $"Contents/Config-{m.Groups[1].Value}-Partition";
         }
+        // k185: раздел выбранной конфигурации пуст, а у другой есть геометрия — берётся самый большой (6450K1)
+        if (st[pick].Length < 28 && !UsizeOff && parts.Where(k => st[k].Length >= 28).MaxBy(k => st[k].Length) is { } alt) pick = alt;
         if (parts.Count > 1) warnings?.Add($"SLDPRT: {parts.Count} configurations stored; read {pick}.");
         var u = st[pick];
         if (u.Length < 28) throw new InvalidDataException("SLDPRT: the geometry stream is empty.");
