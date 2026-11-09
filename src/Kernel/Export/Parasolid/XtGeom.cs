@@ -293,6 +293,7 @@ internal sealed class XtNurbsSurf : XtSurf
     }
     static readonly bool WarmOff = Environment.GetEnvironmentVariable("P3D_XTWARM") == "0";
     static readonly bool WarmCellOff = Environment.GetEnvironmentVariable("P3D_XTWARMCELL") == "0";
+    static readonly bool WarmClampOff = Environment.GetEnvironmentVariable("P3D_XTWARMCLAMP") == "0";
     double cell;
 
     (double, double, bool) NewtonFrom(Vector3d q, double bu, double bv)
@@ -309,10 +310,13 @@ internal sealed class XtNurbsSurf : XtSurf
             double gu = Vector3d.Dot(r, su), gv = Vector3d.Dot(r, sv);
             double du = (c * gu - b * gv) / det, dv = (a * gv - b * gu) / det;
             double nu = Math.Clamp(bu - du, u0, u1), nv = Math.Clamp(bv - dv, v0, v1);
-            bool clamped = nu != bu - du || nv != bv - dv;
+            // k185: сходимость — по фактическому шагу после упора в край области: у точек на краю (рёбра на границе
+            // B-поверхности резьбы) шаг Ньютона наружу не убывает, тёплый старт «не сходился», и каждая такая проекция шла полным
+            // поиском (3.6 млн у штампа 2602A125). Мутация P3D_XTWARMCLAMP=0.
+            double mu = WarmClampOff ? du : nu - bu, mv = WarmClampOff ? dv : nv - bv;
             bu = nu; bv = nv;
-            if (Math.Abs(du) < 1e-12 * Math.Max(1, u1 - u0) && Math.Abs(dv) < 1e-12 * Math.Max(1, v1 - v0))
-                return (bu, bv, !clamped || true);
+            if (Math.Abs(mu) < 1e-12 * Math.Max(1, u1 - u0) && Math.Abs(mv) < 1e-12 * Math.Max(1, v1 - v0))
+                return (bu, bv, true);
         }
         return (bu, bv, false);
     }
