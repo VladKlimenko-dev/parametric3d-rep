@@ -968,6 +968,7 @@ internal sealed class XtBlendSurf : XtSurf
     public double R0, R1;
     public bool Rev;
 
+    static readonly bool SpineDenseOff = Environment.GetEnvironmentVariable("P3D_XTSPINEDENSE") == "0";
     static readonly bool BlendFieldsDbg = Environment.GetEnvironmentVariable("P3D_XTBLENDF") == "1";
     public static XtBlendSurf? Of(XtFile f, XtNode n, int depth)
     {
@@ -983,7 +984,20 @@ internal sealed class XtBlendSurf : XtSurf
         List<Vector3d> raw;
         switch (sp.Name)
         {
-            case "INTERSECTION": raw = f[sp.P("chart")]?.VA("hvec").ToList() ?? new(); break;
+            case "INTERSECTION":
+            {
+                raw = f[sp.P("chart")]?.VA("hvec").ToList() ?? new();
+                // k185 (сверло 2958A552): ОСЬ УПЛОТНЯЕТСЯ ДО ТОЧЕК НА ЕЁ ПОВЕРХНОСТЯХ (смещённых опорах). Карта оси — 22 точки на два
+                // витка спирали (прогиб хорды ~0.19 мм), а радиус скругления — 0.0254 мм: начальная точка центра оказывалась за
+                // опорой, центр уходил на смещённую поверхность не с той стороны — край скругления отходил от точных кривых
+                // пересечения файла на 0.12 мм (5 радиусов), грань канавки рвалась. Мутация P3D_XTSPINEDENSE=0.
+                var sps = sp.PA("surface");
+                if (!SpineDenseOff && raw.Count >= 2 && sps.Length > 1 && f[sps[0]] is { } sa && f[sps[1]] is { } sb && XtSurf.Of(f, sa) is { } xa && XtSurf.Of(f, sb) is { } xb)
+                {
+                    try { var dz = XtPoly.Densify(raw, xa, xb, 8); if (dz.Count >= raw.Count) raw = dz; } catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { }
+                }
+                break;
+            }
             case "CIRCLE":
             {
                 var c = sp.V("centre"); var z = sp.V("normal").Normalized(); var x = sp.V("x_axis").Normalized(); var y = Vector3d.Cross(z, x); double r = sp.D("radius");
