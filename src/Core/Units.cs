@@ -202,9 +202,9 @@ public static class Units
                 if (!int.TryParse(s[i..k], out e)) { why = $"unit '{text}': bad exponent"; return false; }
                 i = k;
             }
-            f *= Math.Pow(a!.Factor, sign * e); d = d * a.Dim.Pow(sign * e); first = false;
+            f *= Math.Pow(a.Factor, sign * e); d = d * a.Dim.Pow(sign * e); first = false;
         }
-        unit = new Unit(text.Trim(), d, f, "composite"); return true;
+        unit = new Unit(text!.Trim(), d, f, "composite"); return true;
     }
 
     public static double Convert(double v, string from, string to)
