@@ -6897,6 +6897,7 @@ Check("UI-SKETCH-PLANE-K185", () =>
         sp = vp.Project(cw); Require(sp != null, "plane point is off the view after the sketch");
         w.StartOperation(new SketchOp()); Run();
         Require(w.CurrentOperation is SketchOp, "sketch panel did not open");
+        sp = vp.Project(cw);   // панель свойств сузила вид — точка плоскости на экране сдвинулась
         vp.SimulatePick(sp.Value.X / vp.Bounds.Width, sp.Value.Y / vp.Bounds.Height, select: true); Run(); Run();
         var sop = w.CurrentOperation;
         Console.WriteLine($"  panel pick: in sketch {w.InSketch}, operation {sop?.GetType().Name}, active field {sop?.ActiveRef?.Label}, items {sop?.ActiveRef?.Items.Count}, filter {vp.Selection.Filter}, selection {string.Join(", ", vp.Selection.Items.Select(r => r.Kind.ToString()))}, hover {vp.Selection.Hover.Kind}, cpu {vp.PickForTest(sp.Value).Kind}");
