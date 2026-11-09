@@ -194,7 +194,7 @@ static partial class Program
                 {
                     var sf = ce.Loop?.Face is { } ff ? Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(ff) : null;
                     if (sf == null) continue;
-                    double proj = 0, brute = 0; Vector2d worstUv = default; Vector3d worstP = default;
+                    double proj = 0, brute = 0; double extMax = 0, extD = -1, extUvLo = 0, extUvHi = 1; int extFail = 0; Vector2d worstUv = default; Vector3d worstP = default;
                     const int GU = 64, GV = 4096;
                     var grid = new Vector3d[(GU + 1) * (GV + 1)];
                     for (int i = 0; i <= GU; i++) for (int j = 0; j <= GV; j++) grid[i * (GV + 1) + j] = sf.PointAt(new Vector2d(i / (double)GU, j / (double)GV));
@@ -210,7 +210,11 @@ static partial class Program
                         }
                         if (dp > proj) { proj = dp; worstUv = uv; worstP = q; }
                         brute = Math.Max(brute, db);
+                        // k185: продолжение поверхности за край области (Parasolid допускает рёбра на продолжении B-поверхности)
+                        if (sf is Parametric3D.Kernel.Surfaces.NurbsSurface nsx)
+                            try { if (nsx.ProjectExtended(q, 0.5) is { } ex) { double de = (ex.P - q).Length; if (de < extD || extD < 0) { } extMax = Math.Max(extMax, de); extUvLo = Math.Min(extUvLo, Math.Min(ex.Uv.X, ex.Uv.Y)); extUvHi = Math.Max(extUvHi, Math.Max(ex.Uv.X, ex.Uv.Y)); } else extFail++; } catch { extFail++; }
                     }
+                    if (sf is Parametric3D.Kernel.Surfaces.NurbsSurface) parts.Add($"  extended: max dist {extMax:G3}, uv range [{extUvLo:0.####}, {extUvHi:0.####}], failed {extFail}");
                     string extra = sf is Parametric3D.Kernel.Surfaces.RevolvedSurface rvd ? $" base {rvd.Base.GetType().Name} {rvd.Base.PointAt(rvd.Base.T0)}->{rvd.Base.PointAt(rvd.Base.T1)} axis {rvd.Axis.Origin}/{rvd.Axis.W}" : "";
                     parts.Add($"{ce.Loop!.Face!.Tag} {sf.GetType().Name}{extra}: proj {proj:G3} at uv ({worstUv.X:0.####},{worstUv.Y:0.####}) p ({worstP.X:0.###},{worstP.Y:0.###},{worstP.Z:0.###}), grid64x4096 {brute:G3}");
                 }
