@@ -1212,6 +1212,7 @@ public static partial class ExactFaceMesher
     /// <summary>k125: разметок по uv, не удавшихся (грань ушла на запасной путь — дорого). Проверки.</summary>
     public static long UvFailures;
     /// <summary>Есть ли в сетке треугольник, повёрнутый против нормали поверхности (угол > 120°) при общей стороне сетки.</summary>
+    static readonly bool FoldUvOff = Environment.GetEnvironmentVariable("P3D_FOLDUV") == "0";
     static readonly bool FoldHintOff = Environment.GetEnvironmentVariable("P3D_FOLDHINT") == "0";
     internal static bool Folded(ISurface3 src, List<Vector3d> P, List<int> T)
     {
@@ -1321,7 +1322,11 @@ public static partial class ExactFaceMesher
             // g.05: СКЛАДКА — треугольники против нормали поверхности при большинстве по ней (конусная грань у края: полоса
             // перевёрнутых треугольников, сетка «обходится в одну сторону» с соседом — 9 отказов маршрута на серии 8). Такая
             // разметка не берётся, грань размечается следующим способом. Мутация P3D_FOLDCHECK=0.
-            if (uvm is { } uvF && !FoldCheckOff && Topology.GeometryAudit.AuthoritativeSurface(f) is { } fsrc && Folded(fsrc, uvF.P, uvF.T))
+            // k185: сетка без переворотов в параметрах (ровно однажды накрывает область грани) складкой не считается — «складка»
+            // тогда у самой поверхности (параметризация подгибается у края: трубка пружины 9271K53 у отгиба, 14 % площади против
+            // нормали по проекции); прежде грань оставалась без сетки или рисовалась всей областью. Мутация P3D_FOLDUV=0.
+            int uvMixed = UvMesher.LastUvMixed;
+            if (uvm is { } uvF && !FoldCheckOff && (FoldUvOff || uvMixed > 0) && Topology.GeometryAudit.AuthoritativeSurface(f) is { } fsrc && Folded(fsrc, uvF.P, uvF.T))
             {
                 if (MeshTrace) Console.Error.WriteLine($"MESHTRACE {DateTime.Now:HH:mm:ss.fff}   uv folded — rejected");
                 Interlocked.Increment(ref FoldRejected);

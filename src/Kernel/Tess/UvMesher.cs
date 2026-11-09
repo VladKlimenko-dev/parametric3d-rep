@@ -32,6 +32,8 @@ public static class UvMesher
     public static int StereoFaces;
     internal static readonly bool FullPeriodic = Environment.GetEnvironmentVariable("P3D_FULLTORUS") != "0";
     public static int FullPeriodicFaces;
+    /// <summary>k185: у последней сетки этого потока — число треугольников против большинства по ориентации в параметрах.</summary>
+    [ThreadStatic] public static int LastUvMixed;
     internal static readonly bool DropPoleSlivers = Environment.GetEnvironmentVariable("P3D_POLEDROP") != "0";
     internal static readonly bool PoleCutFromNearest = Environment.GetEnvironmentVariable("P3D_POLECUT") != "0";
     internal static readonly bool StuckOff = Environment.GetEnvironmentVariable("P3D_UVSTUCK") == "0";
@@ -974,6 +976,13 @@ public static class UvMesher
                 kept.Add(T[t]); kept.Add(T[t + 1]); kept.Add(T[t + 2]);
             }
             T = kept;
+        }
+        // k185: согласие ориентации треугольников в параметрах (для проверки складки у вызывающего: сетка, ровно однажды
+        // накрывающая область грани в (u, v), не сложена, даже если нормаль поверхности по проекции с ней не согласна)
+        {
+            int op = 0, on = 0;
+            for (int t = 0; t + 2 < T.Count; t += 3) { double o = Orient(T[t], T[t + 1], T[t + 2]); if (o > 0) op++; else if (o < 0) on++; }
+            LastUvMixed = Math.Min(op, on);
         }
         return (xyz, T);
     }
