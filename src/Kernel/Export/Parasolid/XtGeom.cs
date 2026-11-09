@@ -316,7 +316,8 @@ internal sealed class XtNurbsSurf : XtSurf
             if (!WarmOrthoOff)
             {
                 double rl = r.Length;
-                if (rl < 1e-13 || Math.Abs(gu) <= 1e-10 * rl * Math.Sqrt(a) && Math.Abs(gv) <= 1e-10 * rl * Math.Sqrt(c)) return (bu, bv, true);
+                double tol = Math.Max(1e-10 * rl, 1e-13);   // касательная невязка — не больше 1e-10 расстояния и не меньше 0.1 нм (шум вычисления)
+                if (rl < 1e-13 || Math.Abs(gu) <= tol * Math.Sqrt(a) && Math.Abs(gv) <= tol * Math.Sqrt(c)) return (bu, bv, true);
             }
             double du = (c * gu - b * gv) / det, dv = (a * gv - b * gu) / det;
             double nu = Math.Clamp(bu - du, u0, u1), nv = Math.Clamp(bv - dv, v0, v1);
