@@ -692,10 +692,29 @@ public sealed class CircularPatternOp : FeatureOp<CircularPatternFeature>
     {
         _src = p.Ref(Fields.Features());
         if (Editing) _src.Kept = F.Sources.Count;
-        _axis = p.Ref(Fields.Line("Ось", optional: true));
+        // k185 (замечание 09.11, 15:36, п. 2): ось — прямая, ребро-окружность или круглая грань (цилиндр, конус, тор, шар —
+        // ось её дуги)
+        _axis = p.Ref(new RefField
+        {
+            Label = "Ось (прямая, окружность, круглая грань)", Filter = PickFilter.Edges | PickFilter.Faces | PickFilter.Datums | PickFilter.SketchCurves,
+            Accept = r => Refs.IsLinear(r) && !Topo.IsSeam(r) || PatternAxisOf(r) != null && r.Kind is PickKind.Face or PickKind.Edge && !(r.Kind == PickKind.Face && Refs.IsPlanar(r)),
+            Single = true, Optional = true,
+        });
         if (Editing) _axis.Kept = 1;
         p.Note("Без оси — ось Z через начало координат.");
         p.Number("Количество", () => F.Count, v => F.Count = v, "шт");
+        // k185 (п. 1): угол между копиями; 0 — копии равномерно по полному кругу
+        p.Number("Угол между копиями", () => F.Step, v => F.Step = v, "°");
+        p.Note("Угол 0 — копии равномерно по кругу (360° / количество).");
+    }
+
+    /// <summary>Ось ссылки массива: прямая — она сама; ребро-окружность — ось окружности; круглая грань — ось её дуги.</summary>
+    public static (Vector3d At, Vector3d Dir)? PatternAxisOf(PickRef r)
+    {
+        if (Refs.IsLinear(r)) return Refs.LineOf(r);
+        if (r.Kind == PickKind.Edge && r.Owner is Part pe && pe.FindEdge(r.Id)?.Curve is Parametric3D.Kernel.Curves.ArcCurve3 a) return (a.Frame.Origin, a.Frame.W.Normalized());
+        if (r.Kind == PickKind.Face) return AxialHoleOp.AxisOf(r);
+        return null;
     }
 
     private RefField _src = null!;
@@ -705,7 +724,7 @@ public sealed class CircularPatternOp : FeatureOp<CircularPatternFeature>
     {
         Fields.PushSources(_src, F.Sources);
         if (!_axis.Touched) return;
-        if (_axis.Items.Count > 0 && Refs.LineOf(_axis.Items[0]) is { } ln) { F.At = ln.At; F.Axis = ln.Dir; }
+        if (_axis.Items.Count > 0 && PatternAxisOf(_axis.Items[0]) is { } ln) { F.At = ln.At; F.Axis = ln.Dir; }
         else { F.At = Vector3d.Zero; F.Axis = Vector3d.UnitZ; }
     }
 }

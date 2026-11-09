@@ -6648,6 +6648,26 @@ Check("UI-SKETCH-IMAGE-UNDO-K185", () =>
     finally { if (File.Exists(png)) File.Delete(png); }
 });
 
+Check("UI-NECK-CUT-K185", () =>
+{
+    // k185 (замечание 09.11, 15:44): вырез Extrude в шейке DLOT — «Приближение: гранёных граней 35» (разбор)
+    var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "user_k185_neck_cut.p3d")); BuildNow(s);
+    var part = s.Part!;
+    foreach (var f in part.Features)
+        Console.WriteLine($"  feature {f.Name} {f.GetType().Name} downgrade {(part.Downgrades.TryGetValue(f, out var dg) ? dg.ToString() : "-")}");
+    foreach (var b in part.Bodies)
+    {
+        var fac = Parametric3D.Kernel.Topology.EntityNames.Faceted(b);
+        Console.WriteLine($"  body faces {b.Faces.Count}, faceted {fac.Count}: {string.Join(", ", fac.Take(12))}");
+        foreach (var f in b.Faces.Where(x => x.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface).Take(6))
+        {
+            var fs = (Parametric3D.Kernel.Surfaces.FacetedSurface)f.Surface;
+            Console.WriteLine($"    {f.Tag}: source {fs.Source?.GetType().Name}, authoritative {Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name}, loops {f.Loops.Count}, edges {string.Join("/", f.Loops.SelectMany(l => l.CoEdges).Select(c => c.Edge.Curve.GetType().Name).Distinct())}");
+        }
+    }
+    foreach (var wmsg in part.Warnings.Take(25)) Console.WriteLine("  warn " + wmsg);
+});
+
 Check("UI-SKETCH-DIMEXT-K185", () =>
 {
     // k185 (замечание 09.11, 12:39, пп. 1–2): размер между параллельными отрезками — размерная линия на обоих отрезках: выносных

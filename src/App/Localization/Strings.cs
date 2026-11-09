@@ -910,7 +910,7 @@ public static class Strings
         ["Грань входа"] = "Entry face", ["Без точек — отверстие в середине грани."] = "No points — the hole is placed in the middle of the face.",
         ["Вид"] = "View", ["Простое"] = "Simple", ["С цекованием"] = "Counterbore", ["С зенковкой"] = "Countersink",
         ["Диаметр"] = "Diameter", ["Диаметр головки"] = "Head diameter", ["Глубина головки"] = "Head depth",
-        ["Плоскость зеркала"] = "Mirror plane", ["Направление"] = "Direction", ["Шаг"] = "Spacing", ["Количество"] = "Count",
+        ["Плоскость зеркала"] = "Mirror plane", ["Угол между копиями"] = "Angle between copies", ["Строка отката не перемещается во время правки эскиза — завершите эскиз"] = "The rollback bar cannot be moved while a sketch is being edited — finish the sketch", ["Угол 0 — копии равномерно по кругу (360° / количество)."] = "Angle 0 — copies spread evenly around the circle (360° / count).", ["Ось (прямая, окружность, круглая грань)"] = "Axis (line, circle, round face)", ["Направление"] = "Direction", ["Шаг"] = "Spacing", ["Количество"] = "Count",
         ["Без оси — ось Z через начало координат."] = "No axis — the Z axis through the origin.",
         ["От плоскости"] = "From plane", ["Смещение"] = "Offset",
         ["Выберите опорную плоскость (в виде или в дереве) или плоскую грань тела."] = "Select a datum plane (in the view or the tree) or a planar face of the body.",

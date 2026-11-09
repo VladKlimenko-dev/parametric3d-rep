@@ -549,12 +549,18 @@ public sealed class Part : ModelItem
         NotifyChanged(f);
     }
 
+    static readonly bool StageRemoveOff = Environment.GetEnvironmentVariable("P3D_STAGEREMOVE") == "0";
     public void RemoveFeature(Feature f)
     {
         int at = Features.IndexOf(f);
         // операции нет в дереве — отметку пересчёта не трогать (номер −1 давал «с нулевой»)
         if (at < 0 && !RemoveMissingOff) { _removingFeature++; try { Remove(f); } finally { _removingFeature--; } return; }
         Features.Remove(f);
+        // k185 (замечание 09.11, 15:36, п. 5): ПОЛОСКА ОТКАТА — НА МЕСТЕ. Удалённая операция стояла выше полоски — полоска
+        // поднимается на одну (вставка новой операции сдвигала её вниз; отмена новой операции оставляла её сдвинутой: полоска
+        // над последней операцией после «Отмены» предпросмотра оказывалась в конце, и следующая операция вставала в самый низ
+        // дерева). Мутация P3D_STAGEREMOVE=0.
+        if (!StageRemoveOff && StageIndex >= 0 && at < StageIndex) StageIndex--;
         // u-нагрузка: удаление из дерева детали извещало «изменилась сама деталь» — все сохранённые состояния забывались, и
         // «Отмена» новой операции (её удаление) пересчитывала всё дерево с нуля (деталь из 40 операций — ~30 с). Отметка
         // пересчёта — с места удалённой операции, ниже. Мутация P3D_REMOVEMISSING=0.

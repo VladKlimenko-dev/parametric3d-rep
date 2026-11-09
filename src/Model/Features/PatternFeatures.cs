@@ -112,8 +112,13 @@ public sealed class CircularPatternFeature : Feature
     public Vector3d At;
     public Vector3d Axis = Vector3d.UnitZ;
     public ValueRef Count = new(4);
+    /// <summary>k185 (замечание 09.11, 15:36, п. 1): угол между соседними копиями, °; 0 — равномерно по полному кругу (360/количество).</summary>
+    public ValueRef Step = new(0);
     /// <summary>u12: ключи операций для повтора (массив операций); пусто — массив тела.</summary>
     public readonly List<string> Sources = new();
+
+    /// <summary>Угол i-й копии, °.</summary>
+    public double AngleOf(int i, int n, double step) => step != 0 ? step * i : 360.0 * i / n;
 
     public CircularPatternFeature(string name = "Circular pattern") { Name = name; }
 
@@ -126,7 +131,7 @@ public sealed class CircularPatternFeature : Feature
         try { Execute(ctx); } finally { _outer = null; }
     }
 
-    public override string Summary => $"Circular pattern ×{Count}";
+    public override string Summary => Step.Value != 0 ? $"Circular pattern ×{Count}, {Step}°" : $"Circular pattern ×{Count}";
 
     public override void Execute(BuildContext ctx)
     {
@@ -139,9 +144,11 @@ public sealed class CircularPatternFeature : Feature
         if (!CopyLimitOff && n > MaxCopies) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, $"Circular pattern: the count {n} exceeds the limit of {MaxCopies} copies.");
         if (Axis.LengthSquared < 1e-18) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Circular pattern: the axis is not set.");
 
-        if (Sources.Count > 0) { FeatureReplay.Run(ctx, this, Sources, Enumerable.Range(1, n - 1).Select(i => FeatureReplay.Outer(_outer, TransformOp.Rotate(At, Axis.Normalized(), 360.0 * i / n))).ToList(), "Circular pattern"); return; }
+        double step = Step.Resolve(ctx.Parameters);
+        if (double.IsNaN(step) || Math.Abs(step) >= 360) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Circular pattern: the angle between copies must be less than 360°.");
+        if (Sources.Count > 0) { FeatureReplay.Run(ctx, this, Sources, Enumerable.Range(1, n - 1).Select(i => FeatureReplay.Outer(_outer, TransformOp.Rotate(At, Axis.Normalized(), AngleOf(i, n, step)))).ToList(), "Circular pattern"); return; }
         bool rotated = false;
-        Kernel.OperationContract.Apply("CircularPattern", ctx.Bodies, b => rotated = TransformOp.CircularPattern(b, At, Axis.Normalized(), n, ctx.Warnings, Key));
+        Kernel.OperationContract.Apply("CircularPattern", ctx.Bodies, b => rotated = TransformOp.CircularPattern(b, At, Axis.Normalized(), n, step, ctx.Warnings, Key));
         if (!rotated)
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Circular pattern: the copies could not be built.");
     }
