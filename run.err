@@ -1,0 +1,11 @@
+XTINT node 442 chart 22 dense 169 offA 2.81E-13 mm (XtNurbsSurf) offB 0.117 mm (BlendBound)
+XTINT node 559 chart 22 dense 169 offA 2.93E-13 mm (XtNurbsSurf) offB 0.117 mm (BlendBound)
+XTINT node 776 chart 10 dense 12 offA 0.000946 mm (XtBlendSurf) offB 1.42E-13 mm (Cone)
+XTINT node 676 chart 10 dense 12 offA 0.000946 mm (XtBlendSurf) offB 1.37E-13 mm (Cone)
+XTINT node 462 chart 8 dense 8 offA 1.94E-11 mm (XtNurbsSurf) offB 0.142 mm (XtBlendSurf)
+XTINT node 470 chart 3 dense 3 offA 0.142 mm (XtBlendSurf) offB 1.26E-15 mm (XtNurbsSurf)
+XTINT node 791 chart 22 dense 169 offA 8.71E-11 mm (XtNurbsSurf) offB 0.124 mm (BlendBound)
+XTINT node 758 chart 8 dense 8 offA 1.94E-11 mm (XtNurbsSurf) offB 0.142 mm (XtBlendSurf)
+XTINT node 735 chart 3 dense 3 offA 0.142 mm (XtBlendSurf) offB 2.67E-15 mm (XtNurbsSurf)
+XTINT node 516 chart 22 dense 169 offA 8.7E-11 mm (XtNurbsSurf) offB 0.124 mm (BlendBound)
+seconds 10 nproc 4 env P3D_SLDNAME=drill_2958a552 P3D_XTDEBUG=1 P3D_XTINTDBG=1 cmd sldprt
