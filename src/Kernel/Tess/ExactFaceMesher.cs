@@ -1287,7 +1287,28 @@ public static partial class ExactFaceMesher
         return (chk.Value.P, chk.Value.T, N.Count == chk.Value.P.Count ? N : null!);
     }
 
+    // k185: сетка uv-разметчика без переворотов в параметрах, отвергнутая проверкой складки, — последний запас грани: берётся,
+    // только если все прочие способы отказали (принятая сразу, она вытесняла лучший следующий способ — скругление у фаски,
+    // KRN06-USER-SWEEPBLEND-ROUND-AT-CHAMFER, уходило в многогранный путь). Трубка пружины 9271K53 иначе без сетки.
+    [ThreadStatic] static (List<Vector3d> P, List<int> T, List<Vector3d> N)? _uvFoldReserve;
     private static (List<Vector3d> P, List<int> T)? MeshUncached(TFace f, out string? why, out List<Vector3d>? normals)
+    {
+        var keep = _uvFoldReserve; _uvFoldReserve = null;
+        try
+        {
+            var r = MeshUncachedCore(f, out why, out normals);
+            if (r == null && _uvFoldReserve is { } res)
+            {
+                Interlocked.Increment(ref FoldReserveUsed);
+                normals = res.N; why = null;
+                return (res.P, res.T);
+            }
+            return r;
+        }
+        finally { _uvFoldReserve = keep; }
+    }
+    public static long FoldReserveUsed;
+    private static (List<Vector3d> P, List<int> T)? MeshUncachedCore(TFace f, out string? why, out List<Vector3d>? normals)
     {
         // 21.10 (скорость): ЦЕЛЫЙ ТОР (грань без контуров, кроме двух швов) — правильной сеткой по точкам швов: тор-заготовка
         // и тор после булевой, не задевшей его, шли разметкой в параметрах с доводкой (0.1–0.16 с, 12 000 треугольников).
@@ -1326,8 +1347,15 @@ public static partial class ExactFaceMesher
             // тогда у самой поверхности (параметризация подгибается у края: трубка пружины 9271K53 у отгиба, 14 % площади против
             // нормали по проекции); прежде грань оставалась без сетки или рисовалась всей областью. Мутация P3D_FOLDUV=0.
             int uvMixed = UvMesher.LastUvMixed;
-            if (uvm is { } uvF && !FoldCheckOff && (FoldUvOff || uvMixed > 0) && Topology.GeometryAudit.AuthoritativeSurface(f) is { } fsrc && Folded(fsrc, uvF.P, uvF.T))
+            if (uvm is { } uvF && !FoldCheckOff && Topology.GeometryAudit.AuthoritativeSurface(f) is { } fsrc && Folded(fsrc, uvF.P, uvF.T))
             {
+                if (!FoldUvOff && uvMixed == 0)
+                {
+                    var nTr = Vector3d.Cross(uvF.P[uvF.T[1]] - uvF.P[uvF.T[0]], uvF.P[uvF.T[2]] - uvF.P[uvF.T[0]]);
+                    var nS = fsrc.NormalAt(fsrc.ProjectToUV(uvF.P[uvF.T[0]]));
+                    double sgr = Vector3d.Dot(nTr, nS) < 0 ? -1 : 1;
+                    _uvFoldReserve = (uvF.P, uvF.T, uvF.P.Select(q => { var nn = fsrc.NormalAt(fsrc.ProjectToUV(q)); return nn.LengthSquared > 0 ? nn.Normalized() * sgr : nn; }).ToList());
+                }
                 if (MeshTrace) Console.Error.WriteLine($"MESHTRACE {DateTime.Now:HH:mm:ss.fff}   uv folded — rejected");
                 Interlocked.Increment(ref FoldRejected);
                 uvm = null;

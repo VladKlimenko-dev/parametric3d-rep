@@ -53,16 +53,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k185n_base, cmd: 'sweepblend148e', env: '' }
-          - { name: k185n_foldUv, cmd: 'sweepblend148e', env: 'P3D_FOLDUV=0' }
-          - { name: k185n_foldHint, cmd: 'sweepblend148e', env: 'P3D_FOLDHINT=0' }
-          - { name: k185n_fullDom, cmd: 'sweepblend148e', env: 'P3D_FULLDOMAINGUARD=0' }
-          - { name: k185n_exArea, cmd: 'sweepblend148e', env: 'P3D_MESHEXACTAREA=0' }
-          - { name: k185n_uvChain, cmd: 'sweepblend148e', env: 'P3D_UVCHAIN=0' }
-          - { name: k185n_fbRef, cmd: 'sweepblend148e', env: 'P3D_FALLBACKREFINE=0' }
-          - { name: k185n_ext, cmd: 'sweepblend148e', env: 'P3D_NURBSEXTEND=0' }
-          - { name: k185n_side, cmd: 'sweepblend148e', env: 'P3D_SIDESHIFT=0' }
-          - { name: k185n_cdt, cmd: 'sweepblend148e', env: 'P3D_CDTBIG=0' }
+          - { name: k185o_drill, cmd: 'sldprt', env: 'P3D_SLDNAME=drill_2958a552 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=2400' }
+          - { name: k185o_drill2, cmd: 'sldprt', env: 'P3D_SLDNAME=drill_2901a107 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=2400' }
+          - { name: k185o_spring, cmd: 'sldprt', env: 'P3D_SLDNAME=9271k53 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=2400' }
+          - { name: k185o_lock, cmd: 'sldprt', env: 'P3D_SLDNAME=92146a038 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=2400' }
+          - { name: k185o_sweep, cmd: 'sweepblend148e', env: '' }
+          - { name: k185o_sw, cmd: 'sldprt', env: '' }
+          - { name: k185o_allA, cmd: 'allA', env: '' }
+          - { name: k185o_allB, cmd: 'allB', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
