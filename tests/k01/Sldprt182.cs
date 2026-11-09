@@ -24,6 +24,9 @@ static partial class Program
                    ?? Directory.GetFiles(Path.Combine("tests", "k01", "data"), "sw_*.SLDPRT").OrderBy(x => x).ToList();
         if (Environment.GetEnvironmentVariable("P3D_SLDSHARD") is { } sh && sh.Split('/') is [var si, var sn] && int.TryParse(si, out var shI) && int.TryParse(sn, out var shN) && shN > 0)
             list = list.Where((_, k) => k % shN == shI).ToList();
+        // k185: P3D_SLDNAME=часть имени;часть имени — только эти детали (разбор деталей корпуса)
+        if (Environment.GetEnvironmentVariable("P3D_SLDNAME") is { Length: > 0 } nm)
+            list = list.Where(x => nm.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries).Any(n => Path.GetFileName(x).Contains(n, StringComparison.OrdinalIgnoreCase))).ToList();
         if (goldOnly && files == null) list = list.Where(x => Gold.Contains(Path.GetFileNameWithoutExtension(x))).ToList();
         sldGood = 0;
         var sw0 = System.Diagnostics.Stopwatch.StartNew();
