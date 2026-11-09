@@ -6658,7 +6658,7 @@ Check("UI-NECK-CUT-K185", () =>
     foreach (var b in part.Bodies)
     {
         var fac = Parametric3D.Kernel.Topology.EntityNames.Faceted(b);
-        Console.WriteLine($"  body faces {b.Faces.Count}, faceted {fac.Count}: {string.Join(", ", fac.Take(12))}");
+        Console.WriteLine($"  body faces {b.Faces.Count()}, faceted {fac.Count}: {string.Join(", ", fac.Take(12))}");
         foreach (var f in b.Faces.Where(x => x.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface).Take(6))
         {
             var fs = (Parametric3D.Kernel.Surfaces.FacetedSurface)f.Surface;
