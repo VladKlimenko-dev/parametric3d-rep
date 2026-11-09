@@ -1,0 +1,1 @@
+seconds 78 nproc 4 env P3D_SLDNAME=7819N12 P3D_FLUXSPAN1=0 cmd sldprt corpus
