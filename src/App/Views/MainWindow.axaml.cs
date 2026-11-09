@@ -2578,6 +2578,8 @@ public partial class MainWindow : Window
         if (!SketchStashOff && (sk.Parent as Part ?? Session.Part) is { } ep && ep.StashBuild() is { } stash)
             _skEdit = (ep, sk, SketchState.Capture(sk), SketchSigRounded(sk), stash);
         SketchRollback(sk);
+        // k185: таблица формул размеров (единицы детали) — до входа в эскиз, а не с первой перестройкой
+        if (sk.FormulaScope == null && (sk.Parent as Part ?? Session.Part) is { } fp) sk.UpdateDimensionsFromParameters(Session.Document.ScopeFor(fp));
         EnterSketchUi(sk);
     }
 
