@@ -42,6 +42,7 @@ static partial class Program
         ["Kernel.Tess.Cdt.LoopWalks"] = "g.13: счётчик обходов контуров (Interlocked, замер KRN10-CDT-BOX-SAME)",
         ["Kernel.Tess.Cdt.BoxOffForTests"] = "переключатель сравнения KRN10-CDT-BOX-SAME (только проверки)",
         ["Kernel.Ops.QuadricCut.LocalOffForTests"] = "переключатель прежнего правила плиты для проверок механизмов общей булевой (только проверки)",
+        ["Model.Part.StaleFacetRetries"] = "k185: счётчик повторов расчёта с нуля из-за приближения от недоверенного состояния (Interlocked, разбор)",
         ["Model.FeatureHistory.HistRefHits"] = "g.13: счётчик сравнений истории по объектам (разбор)",
         ["Kernel.Ops.DirectRound.AsymJunctions"] = "06.10: счётчик несимметричных стыков цепочек (разбор)",
         ["Kernel.Ops.DirectRound.LineCylChamfers"] = "06.15: счётчик фасок прямых рёбер плоскость/цилиндр (разбор)",
