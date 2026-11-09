@@ -1,0 +1,70 @@
+MESHTRACE 12:57:29.245 face step:face[0] NurbsSurface loops 2 ces 2 faceted False
+MESHTRACE 12:57:29.256   uv start
+UV classify NurbsSurface per True/False: closed 0, periodic 2, chains 2
+UV strip 0: A 0..48 B 0..48 area 0.85 n 608 holes 0
+UV strips: A 49 pts 0.5→1.5, B 49 pts 1.5→0.5, other coord A 0 B 0.85
+UV rims 2: points 98, missing 0, boundary edges 96, tris 606
+UV consistency: max |P(uv)-x| on boundary 8.61E-015, su 2.744 sv 172.644, tol 0.02, pts 608, tris 606
+UV pass 0: interior points 1256, h 0.331 hx 0.331 hy 0.931 kx 1.46 ky 0.185 span 2.74x146.75, tris 3118, area3 612.259
+UV pass 1: bad 2871 of 3118, worst 0.1558 tol 0.02
+UV pass 2: bad 5568 of 7248, worst 0.1683 tol 0.02
+UV pass 3: bad 6868 of 15080, worst 0.2325 tol 0.02
+UV pass 4: bad 5502 of 24914, worst 0.1254 tol 0.02
+UV pass 5: bad 1947 of 31576, worst 0.0762 tol 0.02
+UV pass 6: bad 567 of 33934, worst 0.0653 tol 0.02
+UV pass 7: bad 161 of 34630, worst 0.0474 tol 0.02
+UV pass 8: bad 70 of 34814, worst 0.0515 tol 0.02
+UV pass 9: bad 3 of 34908, worst 0.0383 tol 0.02
+UV pass 10: bad 0 of 34912, worst 0 tol 0.02
+UV refine timing: total 175.3 ms, delaunay 76.2 ms, tris 34912
+MESHTRACE 12:57:29.681   uv done ok
+MESHTRACE   fold tri at (-0.5823118469293832, -5.816398512053546, -0.41185976487774645) area 0.0148 cos -0.568
+MESHTRACE   fold tri at (-0.6966122970688878, -5.4290649545387595, -0.4003423627828642) area 0.00545 cos -0.996
+MESHTRACE   fold tri at (-0.5820404669919603, -5.098555840959633, -0.14006575713072092) area 0.0504 cos -0.536
+MESHTRACE   fold tri at (-0.6474049894078763, -5.158948738280732, -0.590764248385522) area 0.0304 cos -0.775
+MESHTRACE   fold tri at (-0.7452854472881533, -5.179502563247496, -2.2292180747386285) area 0.0166 cos -0.899
+MESHTRACE   fold stats pos 29593 (522.8) neg 4244 (85.14)
+MESHTRACE   result folded True tris 34912
+MESHTRACE 12:57:30.380 face step:face[1] ExtrudedSurface loops 2 ces 2 faceted False
+MESHTRACE 12:57:30.380   uv start
+UV classify ExtrudedSurface per True/False: closed 0, periodic 2, chains 2
+UV strip 0: A 0..48 B 0..48 area 1 n 98 holes 0
+UV strips: A 49 pts 0.5→1.5, B 49 pts 1.5→0.5, other coord A 0 B 1
+UV rims 2: points 98, missing 0, boundary edges 96, tris 96
+UV consistency: max |P(uv)-x| on boundary 1.07E-014, su 4.309 sv 50.8, tol 0.02, pts 98, tris 96
+UV pass 0: interior points 13, h 0.331 hx 0.331 hy 50.8 kx 1.46 ky 0 span 4.31x50.8, tris 122, area3 218.749
+UV pass 1: bad 0 of 122, worst 0 tol 0.02
+UV refine timing: total 0.8 ms, delaunay 0.0 ms, tris 122
+MESHTRACE 12:57:30.395   uv done ok
+MESHTRACE   fold stats pos 122 (218.7) neg 0 (0)
+MESHTRACE   result folded False tris 122
+MESHTRACE 12:57:30.396 face step:face[2] PlaneSurface loops 1 ces 1 faceted False
+MESHTRACE 12:57:30.396   uv start
+UV classify PlaneSurface per False/False: closed 1, periodic 0, chains 1
+UV rims 1: points 48, missing 0, boundary edges 48, tris 46
+UV consistency: max |P(uv)-x| on boundary 7.12E-015, su 1 sv 1, tol 0.02, pts 48, tris 46
+MESHTRACE 12:57:30.402   uv done ok
+MESHTRACE   fold stats pos 46 (1.473) neg 0 (0)
+MESHTRACE   result folded False tris 46
+MESHTRACE 12:57:30.402 face step:face[3] ExtrudedSurface loops 2 ces 2 faceted False
+MESHTRACE 12:57:30.402   uv start
+UV classify ExtrudedSurface per True/False: closed 0, periodic 2, chains 2
+UV strip 0: A 0..48 B 0..48 area 1 n 98 holes 0
+UV strips: A 49 pts 0.5→-0.5, B 49 pts -0.5→0.5, other coord A 1 B 0
+UV rims 2: points 98, missing 0, boundary edges 96, tris 96
+UV consistency: max |P(uv)-x| on boundary 1.08E-014, su 4.309 sv 50.8, tol 0.02, pts 98, tris 96
+UV pass 0: interior points 13, h 0.331 hx 0.331 hy 50.8 kx 1.46 ky 6.88E-13 span 4.31x50.8, tris 122, area3 218.749
+UV pass 1: bad 0 of 122, worst 0 tol 0.02
+UV refine timing: total 0.1 ms, delaunay 0.0 ms, tris 122
+MESHTRACE 12:57:30.403   uv done ok
+MESHTRACE   fold stats pos 122 (218.7) neg 0 (0)
+MESHTRACE   result folded False tris 122
+MESHTRACE 12:57:30.403 face step:face[4] PlaneSurface loops 1 ces 1 faceted False
+MESHTRACE 12:57:30.403   uv start
+UV classify PlaneSurface per False/False: closed 1, periodic 0, chains 1
+UV rims 1: points 48, missing 0, boundary edges 48, tris 46
+UV consistency: max |P(uv)-x| on boundary 7.11E-015, su 1 sv 1, tol 0.02, pts 48, tris 46
+MESHTRACE 12:57:30.403   uv done ok
+MESHTRACE   fold stats pos 46 (1.473) neg 0 (0)
+MESHTRACE   result folded False tris 46
+seconds 5 nproc 4 env P3D_SLDNAME=9271k53 P3D_MESHTRACE=1 P3D_UVDBG=1 cmd sldprt
