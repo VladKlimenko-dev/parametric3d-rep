@@ -392,11 +392,15 @@ public sealed class NurbsSurface : ISurface3
             // большая сетка — по блокам 8×8 с габаритами: блок дальше лучшей точки не просматривается
             var bl = _gridBlocks ??= BuildBlocks(g);
             int nb = bl.Length;
-            var order = new (double D, int K)[nb];
-            for (int k = 0; k < nb; k++) order[k] = (BoxDist2(bl[k].Lo, bl[k].Hi, p), k);
-            Array.Sort(order, (x, y) => x.D.CompareTo(y.D));
-            foreach (var (bd, k) in order)
+            // k185: без выделений (прежде — массив пар и сортировка с делегатом на каждую проекцию: 9 ГБ на объём штампа)
+            double[]? rD = null; int[]? rK = null;
+            Span<double> od = nb <= 2048 ? stackalloc double[nb] : (rD = System.Buffers.ArrayPool<double>.Shared.Rent(nb)).AsSpan(0, nb);
+            Span<int> ok2 = nb <= 2048 ? stackalloc int[nb] : (rK = System.Buffers.ArrayPool<int>.Shared.Rent(nb)).AsSpan(0, nb);
+            for (int k = 0; k < nb; k++) { od[k] = BoxDist2(bl[k].Lo, bl[k].Hi, p); ok2[k] = k; }
+            od.Sort(ok2);
+            for (int kk = 0; kk < nb; kk++)
             {
+                double bd = od[kk]; int k = ok2[kk];
                 if (bd >= best) break;
                 var b = bl[k];
                 for (int i = b.I0; i <= b.I1; i++)
@@ -406,6 +410,8 @@ public sealed class NurbsSurface : ISurface3
                         if (d < best) { best = d; bestU = i / (double)gu; bestV = j / (double)gv; }
                     }
             }
+            if (rD != null) System.Buffers.ArrayPool<double>.Shared.Return(rD);
+            if (rK != null) System.Buffers.ArrayPool<int>.Shared.Return(rK);
         }
 
         // k140 (скорость): СРАЗУ НЬЮТОН. Гаусс — Ньютон с точными производными (Derivs) от лучшей точки сетки, шаг делится

@@ -233,9 +233,16 @@ public static class AnalyticFlux
     private static Param General(ISurface3 s)
     {
         const double h = 1e-6;
+        // k185: точки края идут подряд (узлы Гаусса и шаблон производной) — проекция NURBS от прошлого ответа (Ньютон с
+        // проверкой нормали; не годится — общая проекция). Объём граней резьбы штампа 2602A125 — 48 с. Мутация P3D_FLUXHINT=0.
+        var last = new Vector2d(double.NaN);
         return new Param
         {
-            Coords = x => { var uv = s.ProjectToUV(x); return (uv.X, uv.Y); },
+            Coords = x =>
+            {
+                Vector2d uv = !FluxHintOff && s is NurbsSurface nsh && !double.IsNaN(last.X) ? nsh.ProjectToUV(x, last) : s.ProjectToUV(x);
+                last = uv; return (uv.X, uv.Y);
+            },
             Point = (u, v) => s.PointAt(new Vector2d(u, v)),
             Normal = (u, v) =>
             {
@@ -251,6 +258,7 @@ public static class AnalyticFlux
         };
     }
     static readonly bool FluxKnotsOff = Environment.GetEnvironmentVariable("P3D_FLUXKNOTS") == "0";
+    static readonly bool FluxHintOff = Environment.GetEnvironmentVariable("P3D_FLUXHINT") == "0";
 
     /// <summary>
     /// Поверхность вращения: P(θ, s) = o + z(s)w + ρ(s)r̂(θ), s — параметр образующей.
