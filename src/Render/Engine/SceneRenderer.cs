@@ -28,6 +28,9 @@ public sealed class SceneRenderer : IDisposable
     /// ссылки эскиза (наведение подсвечивает, выбор — тоже без заслонения).
     /// </summary>
     public bool SketchMode;
+    public static readonly bool SketchOutlineOff = Environment.GetEnvironmentVariable("P3D_SKOUTLINE") == "0";
+    /// <summary>Разбор: кадров эскиза с очерком тела.</summary>
+    public static long SketchOutlines;
 
     private ShaderProgram? _mesh, _line, _point, _fill, _bg, _floor, _image;
     /// <summary>k132: габарит тел сцены (мир), без предпросмотра; пусто — нет тел.</summary>
@@ -483,6 +486,17 @@ public sealed class SceneRenderer : IDisposable
 
         if (SketchMode)
         {
+            // k185 (замечание 09.11, 16:17): ОЧЕРК ТЕЛА В ЭСКИЗЕ — контур кривых граней (цилиндр сбоку), которого нет среди рёбер:
+            // у вала с лысками и отверстиями нижняя образующая — не ребро, и линии не было. Глубина тела без цвета, затем контур
+            // цветом опорных рёбер; глубина стирается — сетка и плоскости эскиза тело не заслоняют. Мутация P3D_SKOUTLINE=0.
+            if (!SketchOutlineOff && _meshes.Count > 0)
+            {
+                GL.Enable(EnableCap.DepthTest);
+                DrawMeshDepthOnly(f);
+                DrawOutline(f, Theme.SketchRefEdge, Theme.EdgeWidth * 0.6f);
+                GL.Clear(ClearBufferMask.DepthBufferBit);
+                SketchOutlines++;
+            }
             GL.Disable(EnableCap.DepthTest);
             DrawLines(_bodyEdges, f, 0f, colorOverride: Theme.SketchRefEdge);
             // k118 (п.2): потенциальные опорные точки тела — мельче и бледнее выбранных опорных точек эскиза
