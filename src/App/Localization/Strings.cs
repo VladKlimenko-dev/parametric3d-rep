@@ -561,7 +561,7 @@ public static class Strings
         ["Ниже строки отката"] = "Below the rollback bar",
         ["Эскиз переопределён"] = "Sketch over-defined",
         ["Эскиз не полностью определён"] = "Sketch under-defined",
-        ["Приближение: гранёных граней {0}, рёбер {1}"] = "Approximation: {0} faceted faces, {1} edges",
+        ["Приближение: гранёных граней {0}, рёбер {1}"] = "Approximation: {0} faceted faces, {1} edges", ["Приближённая геометрия: граней {0} и рёбер {1} заданы сеткой треугольников, а не точной поверхностью. Деталь показывается и считается (масса, объём) верно с точностью сетки; точные операции по этим граням (скругление, сопряжение) могут не удаться. Если значок появился после правки — «Перестроить» (Ctrl+B)."] = "Approximate geometry: {0} faces and {1} edges are a triangle mesh rather than an exact surface. The part displays and measures (mass, volume) correctly to mesh accuracy; exact operations on these faces (fillet, blend) may fail. If the icon appeared after an edit, use Rebuild (Ctrl+B).",
         ["Правка граней"] = "Face edit",
         ["Исполнения ({0}){1}"] = "Configurations ({0}){1}",
         ["Тело {0}"] = "Body {0}",

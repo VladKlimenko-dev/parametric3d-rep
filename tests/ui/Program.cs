@@ -6633,6 +6633,16 @@ Check("UI-SKETCH-IMAGE-UNDO-K185", () =>
         Require(sel != null && sk.Images.Contains(sel), "the selection stays on the old image object after undo");
         { var hp = w.ImageLayer.Handles(out _)[0].P; var ep = vp.Project(sk.Plane.ToWorld(sel!.At(-1, -1)))!.Value; Require(Math.Abs(hp.X - ep.X) + Math.Abs(hp.Y - ep.Y) < 1e-6, "handles are not at the restored image"); }
         w.ImageLayer.InvalidateVisual(); Run();
+        // k185 (15:48, 15:57): линия эскиза поверх картинки — выбирается раньше картинки (слой мыши её не берёт)
+        w.ImageLayer.Select(null); Run();
+        var img = sk.Images[0];
+        var ln = sk.AddEntity(new SkLine(new SkPoint(img.At(-0.8, 0)), new SkPoint(img.At(0.8, 0)))); w.AfterSketchEdit(sk); Run();
+        var midS = vp.Project(sk.Plane.ToWorld(img.At(0, 0)))!.Value;
+        var offS = vp.Project(sk.Plane.ToWorld(img.At(0.3, 0.6)))!.Value;
+        bool onLine = w.ImageLayer.HitTest(midS), onImage = w.ImageLayer.HitTest(offS);
+        Console.WriteLine($"  hit: on line {onLine}, on image only {onImage}, pick {vp.PickForTest(midS).Kind}");
+        Require(!onLine && onImage, "the image takes the mouse over a sketch line (or not over the image)");
+        sk.Entities.Remove(ln); w.AfterSketchEdit(sk); Run();
         // (2) поворот: 87° → 90°, 80° — как есть, 183° → 180°
         foreach (var (deg, want) in new[] { (87.0, 90.0), (80.0, 80.0), (183.0, 180.0), (-92.0, -90.0) })
         {
@@ -6646,6 +6656,32 @@ Check("UI-SKETCH-IMAGE-UNDO-K185", () =>
         w.Close();
     }
     finally { if (File.Exists(png)) File.Delete(png); }
+});
+
+Check("UI-PATTERN-STAGE-K185", () =>
+{
+    // k185 (замечание 09.11, 15:36): (1) круговой массив с углом между копиями; (5) строка отката после «Отмены» новой операции
+    // остаётся на месте — следующая операция встаёт к строке, а не в конец
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var sk = Parametric3D.App.Diagnostics.TestParts.RectSketch(part, 0, 30, -5, 10, 10);
+    var ex = new ExtrudeFeature("Block") { SketchId = sk.Id }; ex.Side1.Distance = new ValueRef(10); part.AddFeature(ex);
+    var cp = new CircularPatternFeature("CP") { At = Vector3d.Zero, Axis = Vector3d.UnitZ, Count = new ValueRef(3), Step = new ValueRef(30) };
+    part.AddFeature(cp);
+    BuildNow(s);
+    Console.WriteLine($"  step 30°: volume {part.Volume:0.#}, x {part.Bounds.Min.X:0.##}..{part.Bounds.Max.X:0.##}, y {part.Bounds.Min.Y:0.##}..{part.Bounds.Max.Y:0.##}, error {cp.Error}");
+    Require(cp.Error == null && Math.Abs(part.Volume - 3000) < 1 && part.Bounds.Min.X > 5 && part.Bounds.Max.Y > 30, "the 30° step pattern is wrong");
+    cp.Step = new ValueRef(0); part.Invalidate(); BuildNow(s);
+    Console.WriteLine($"  equal: volume {part.Volume:0.#}, x {part.Bounds.Min.X:0.##}..{part.Bounds.Max.X:0.##}");
+    Require(Math.Abs(part.Volume - 3000) < 1 && part.Bounds.Min.X < -10, "the equal-spacing pattern is wrong");
+    // строка отката — над массивом; новая операция, её отмена (удаление), снова новая — встаёт над массивом
+    part.StageIndex = 1;
+    var tmp = new ExtrudeFeature("Tmp") { SketchId = sk.Id }; part.AddFeature(tmp);
+    Require(part.Features.IndexOf(tmp) == 1 && part.StageIndex == 2, $"insert at the bar: index {part.Features.IndexOf(tmp)}, stage {part.StageIndex}");
+    part.RemoveFeature(tmp);
+    Console.WriteLine($"  after cancel: stage {part.StageIndex}");
+    Require(part.StageIndex == 1, $"the rollback bar moved after cancelling a new operation: {part.StageIndex}");
+    var nf = new ExtrudeFeature("New") { SketchId = sk.Id }; part.AddFeature(nf);
+    Require(part.Features.IndexOf(nf) == 1, $"the new operation is not at the rollback bar: index {part.Features.IndexOf(nf)} of {part.Features.Count}");
 });
 
 Check("UI-NECK-CUT-K185", () =>

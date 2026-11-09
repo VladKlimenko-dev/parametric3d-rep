@@ -120,7 +120,7 @@ public sealed partial class TreeNode : ObservableObject
             if (sk.LastSolve is SolveStatus.Overconstrained or SolveStatus.Inconsistent) return ("state_overdefined_ico.svg", "+", Loc.L("Эскиз переопределён"));
             if (sk.Entities.Count > 0 && sk.FreeDegrees > 0) return ("state_underdefined_ico.svg", "−", Loc.L("Эскиз не полностью определён: степеней свободы {0}", sk.FreeDegrees));
         }
-        if (item is Feature fw && part != null && part.Downgrades.TryGetValue(fw, out var dg)) return ("state_warning_ico.svg", "⚠", Loc.L("Приближение: гранёных граней {0}, рёбер {1}", dg.Faces, dg.Edges));
+        if (item is Feature fw && part != null && part.Downgrades.TryGetValue(fw, out var dg)) return ("state_warning_ico.svg", "⚠", Loc.L("Приближённая геометрия: граней {0} и рёбер {1} заданы сеткой треугольников, а не точной поверхностью. Деталь показывается и считается (масса, объём) верно с точностью сетки; точные операции по этим граням (скругление, сопряжение) могут не удаться. Если значок появился после правки — «Перестроить» (Ctrl+B).", dg.Faces, dg.Edges));
         // u13h: шаг FreeForm — зафиксирован (замок) или ещё правится; компонент сборки — закреплён
         if (item is Feature { FreeForm: not null } st && item is not FreeFormFeature)
             return st.Frozen ? ("lock_ico.svg", "🔒", Loc.L("Шаг зафиксирован")) : ("unlocked_ico.svg", "", Loc.L("Шаг правится (параметры доступны до завершения команды)"));
