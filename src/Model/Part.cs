@@ -448,6 +448,7 @@ public sealed class Part : ModelItem
     /// </summary>
     public T AddFeature<T>(T f) where T : Feature
     {
+        _staleUseless = false;
         int at = EffectiveStage;
 
         Features.Insert(at, f);
@@ -549,12 +550,18 @@ public sealed class Part : ModelItem
         NotifyChanged(f);
     }
 
+    static readonly bool StageRemoveOff = Environment.GetEnvironmentVariable("P3D_STAGEREMOVE") == "0";
     public void RemoveFeature(Feature f)
     {
         int at = Features.IndexOf(f);
         // операции нет в дереве — отметку пересчёта не трогать (номер −1 давал «с нулевой»)
         if (at < 0 && !RemoveMissingOff) { _removingFeature++; try { Remove(f); } finally { _removingFeature--; } return; }
         Features.Remove(f);
+        // k185 (замечание 09.11, 15:36, п. 5): ПОЛОСКА ОТКАТА — НА МЕСТЕ. Удалённая операция стояла выше полоски — полоска
+        // поднимается на одну (вставка новой операции сдвигала её вниз; отмена новой операции оставляла её сдвинутой: полоска
+        // над последней операцией после «Отмены» предпросмотра оказывалась в конце, и следующая операция вставала в самый низ
+        // дерева). Мутация P3D_STAGEREMOVE=0.
+        if (!StageRemoveOff && StageIndex >= 0 && at < StageIndex) StageIndex--;
         // u-нагрузка: удаление из дерева детали извещало «изменилась сама деталь» — все сохранённые состояния забывались, и
         // «Отмена» новой операции (её удаление) пересчитывала всё дерево с нуля (деталь из 40 операций — ~30 с). Отметка
         // пересчёта — с места удалённой операции, ниже. Мутация P3D_REMOVEMISSING=0.
@@ -707,6 +714,8 @@ public sealed class Part : ModelItem
         /// <summary>KRN-01 (ворота g.03): операции, после которых в новых телах есть не точные грани/рёбра (гранение) — сколько
         /// таких граней и рёбер. При AllowBoundedFaceting — видимое понижение (и предупреждение); при PreserveBRep — отказ.</summary>
         public readonly Dictionary<Feature, (int Faces, int Edges)> GeometryDowngrades = new();
+        /// <summary>k185: гранёные грани во входе операции пришли из сохранённого состояния (расчёт начат не с нуля).</summary>
+        public bool StaleFacets;
         public readonly Dictionary<Feature, List<uint>> Created = new();
         /// <summary>UI: время выполнения каждой операции в этом расчёте (мс); операции до точки возобновления — не считались.</summary>
         public readonly Dictionary<Feature, double> FeatureMs = new();
@@ -1315,6 +1324,11 @@ public sealed class Part : ModelItem
     /// <summary>Расчёт закончен (ход — весь).</summary>
     public void CompleteProgress() { ProgressDone = ProgressTotal; }
 
+    static readonly bool StaleFacetsOff = Environment.GetEnvironmentVariable("P3D_STALEFACETS") == "0";
+    [ThreadStatic] static bool _staleRetry;
+    bool _staleUseless;
+    /// <summary>Разбор: сколько раз расчёт повторён с нуля из-за приближения от сохранённого состояния.</summary>
+    public static long StaleFacetRetries;
     public BuildResult Compute(ParameterTable? parameters, ISketchSolver? solver, CancellationToken cancellation)
     {
         if (RebuildLog) Console.WriteLine($"REBUILD {Name} features {Features.Count} dirty {IsDirty} {string.Join(" < ", Environment.StackTrace.Split('\n').Skip(2).Take(7).Select(l => l.Trim()))}");
@@ -1326,6 +1340,22 @@ public sealed class Part : ModelItem
         try
         {
             var r = ComputeCore(parameters, solver, cancellation);
+            // k185 (замечание 09.11, 15:44): ПРИБЛИЖЕНИЕ ОТ СОХРАНЁННОГО СОСТОЯНИЯ — расчёт с нуля. Гранёные грани пришли во вход
+            // операции из сохранённого состояния (предпросмотр по сеткам предыдущего шага), а не из неё самой: вырез шейки DLOT
+            // показывал «Приближение: гранёных граней 35» (все грани тела вращения), хотя расчёт той же детали из файла — точный.
+            // Сохранённые состояния забываются, расчёт — заново, один раз. Мутация P3D_STALEFACETS=0.
+            if (r.StaleFacets && !StaleFacetsOff && !_staleRetry && !_staleUseless)
+            {
+                _staleRetry = true;
+                try
+                {
+                    ForgetCheckpoints(); DirtyFromIndex(0); r = ComputeCore(parameters, solver, cancellation); StaleFacetRetries++;
+                    // приближение осталось и с нуля — оно настоящее (гранёный вход: сетка, приближённое скругление); больше не повторять
+                    // до правки состава дерева
+                    if (r.GeometryDowngrades.Count > 0) _staleUseless = true;
+                }
+                finally { _staleRetry = false; }
+            }
             r.Inputs = inputs; r.ParamTable = parameters; r.ParamSnapshot = snap;
             return r;
         }
@@ -1812,6 +1842,8 @@ public sealed class Part : ModelItem
                     var (bf, be) = Kernel.Topology.GeometryAudit.Faceted(b);
                     nf += bf; ne += be;
                 }
+                // k185: вход операции уже был гранёным, и он из сохранённого состояния — пометка для повтора расчёта с нуля
+                if (nf + ne > 0 && from > 0 && saved.Bodies.Any(b => Kernel.Topology.GeometryAudit.Faceted(b).Faces > 0)) result.StaleFacets = true;
                 if (nf + ne > 0)
                 {
                     if (Kernel.KernelSettings.Capture().GeometryPolicy == Kernel.GeometryPolicy.PreserveBRep)

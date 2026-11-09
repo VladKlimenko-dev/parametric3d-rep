@@ -2805,6 +2805,7 @@ public partial class MainWindow : Window
     /// <summary>Строку отката — после stage операций (stage = число операций — в конец). Один шаг отмены.</summary>
     public bool MoveRollbackTo(Part part, int stage)
     {
+        if (InSketch && !BarSketchLockOff) return false;
         int st = stage >= part.Features.Count ? -1 : part.ClampStage(stage);
         if (st == part.StageIndex || (st < 0 && !part.InInsertMode)) return false;
         Session.Edit(L("Строка отката"), () => { if (st < 0) part.EndInsertMode(resume: true); else { part.StageIndex = st; if (Part.StageKeepOffPublic) part.Invalidate(); else part.MarkStageMoved(); } });
@@ -2816,8 +2817,10 @@ public partial class MainWindow : Window
     /// Строка отката — к узлу дерева: ниже узла (lower) или выше. Деталь: после операции (её эскиз — вместе с ней), выше
     /// первой операции — 0; сборка: после компонента. Ниже строки — не в расчёте (подавлены). Один шаг отмены.
     /// </summary>
+    public static readonly bool BarSketchLockOff = Environment.GetEnvironmentVariable("P3D_BARSKETCHLOCK") == "0";
     public bool MoveRollbackBar(TreeNode bar, TreeNode target, bool lower)
     {
+        if (InSketch && !BarSketchLockOff) return false;
         if (bar.Item is InfoItem { Role: "rollback", Owner: var part })
         {
             var item = target.Item;
@@ -2890,6 +2893,8 @@ public partial class MainWindow : Window
         {
             if ((e.Source as StyledElement)?.DataContext is TreeNode { IsBar: true } bn && e.GetCurrentPoint(Tree).Properties.IsLeftButtonPressed && bn.Item is InfoItem { Role: "rollback" or "asm_rollback" })
             {
+                // k185 (замечание 09.11, 15:36, п. 3): в эскизе строка отката стоит — эскиз правится в своём месте истории
+                if (InSketch && !BarSketchLockOff) { ShowToast(L("Строка отката не перемещается во время правки эскиза — завершите эскиз")); e.Handled = true; return; }
                 _barDrag = bn; e.Pointer.Capture(Tree); e.Handled = true;
             }
         }, RoutingStrategies.Tunnel);

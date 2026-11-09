@@ -125,6 +125,10 @@ public static class TransformOp
 
     /// <summary>Массив поворотом вокруг оси: count копий на полный оборот.</summary>
     public static bool CircularPattern(List<TSolid> bodies, Vector3d at, Vector3d axis, int count, List<string> warnings, string? instanceKey = null)
+        => CircularPattern(bodies, at, axis, count, 0, warnings, instanceKey);
+
+    /// <summary>k185: круговой массив с шагом угла stepDeg между копиями (0 — равномерно по полному кругу: 360/count).</summary>
+    public static bool CircularPattern(List<TSolid> bodies, Vector3d at, Vector3d axis, int count, double stepDeg, List<string> warnings, string? instanceKey = null)
     {
         if (bodies.Count == 0) { warnings.Add("Pattern: no body."); return false; }
         if (count < 2) { warnings.Add("Pattern: the count must be at least two."); return false; }
@@ -132,7 +136,7 @@ public static class TransformOp
             for (int i = 1; i < count; i++)
             {
                 if (!CheckpointOff) KernelContext.Checkpoint("pattern.copy");
-                BooleanOp.Unite(bodies, Instance(Copy(seed, Rotate(at, axis, 360.0 * i / count)), instanceKey, i), warnings);
+                BooleanOp.Unite(bodies, Instance(Copy(seed, Rotate(at, axis, stepDeg != 0 ? stepDeg * i : 360.0 * i / count)), instanceKey, i), warnings);
             }
         warnings.Add($"Pattern: {count} copies around an axis.");
         return true;

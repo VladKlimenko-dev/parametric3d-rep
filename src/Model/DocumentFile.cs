@@ -646,6 +646,8 @@ public static class DocumentFile
             Point = new[] { cp.At.X, cp.At.Y, cp.At.Z },
             Dir = new[] { cp.Axis.X, cp.Axis.Y, cp.Axis.Z },
             Distance = cp.Count.Value, Formula = cp.Count.Formula,
+            Num = cp.Step.Value != 0 || cp.Step.Formula != null ? new Dictionary<string, double> { ["step"] = cp.Step.Value } : null,
+            Str = cp.Step.Formula != null ? new Dictionary<string, string?> { ["step"] = cp.Step.Formula } : null,
             Sources = cp.Sources.Count == 0 ? null : cp.Sources.ToList()
         },
 
@@ -1261,6 +1263,7 @@ public static class DocumentFile
                     var ax = Vec(fd.Dir);
                     if (ax.LengthSquared > 1e-18) cp.Axis = ax;
                     cp.Count = new ValueRef(fd.Distance) { Formula = fd.Formula };
+                    cp.Step = GetV(fd, "step", 0);
                     if (fd.Sources != null) cp.Sources.AddRange(fd.Sources);
                     part.AddFeature(cp);
                     break;

@@ -129,9 +129,26 @@ public sealed class SketchImageLayer : Control, ICustomHitTest
             foreach (var (fu, fv, q) in hs) if (Dist(q, p) <= HandlePx * 0.75) return (Mode.Size, fu, fv, Selected);
         }
         if (_view.Tool != null) return (Mode.None, 0, 0, null);
+        // k185 (замечание 09.11, 15:48): картинка — фон: размер, значок связи, точка и линия эскиза над ней выбираются и
+        // подсвечиваются первыми (слой мыши не берёт). Мутация P3D_SKIMGBELOW=0.
+        if (!BelowOff && SketchUnder(p)) return (Mode.None, 0, 0, null);
         for (int i = sk.Images.Count - 1; i >= 0; i--)
             if (Inside(sk, sk.Images[i], p)) return (Mode.Move, 0, 0, sk.Images[i]);
         return (Mode.None, 0, 0, null);
+    }
+
+    static readonly bool BelowOff = Environment.GetEnvironmentVariable("P3D_SKIMGBELOW") == "0";
+    /// <summary>Под точкой — что-то из эскиза (размер, значок связи, точка, линия).</summary>
+    bool SketchUnder(Point p)
+    {
+        try
+        {
+            if (_view.DimensionAt(p) != null) return true;
+            if (_view.ConstraintGlyphAt(p) is { IsEmpty: false }) return true;
+            var r = _view.PickForTest(p);
+            return !r.IsEmpty && r.Owner is Sketch && r.Kind is Parametric3D.Core.PickKind.SketchPoint or Parametric3D.Core.PickKind.SketchCurve or Parametric3D.Core.PickKind.SketchDimension or Parametric3D.Core.PickKind.SketchConstraint;
+        }
+        catch { return false; }
     }
 
     private static double Dist(Point a, Point b) { var d = a - b; return Math.Sqrt(d.X * d.X + d.Y * d.Y); }

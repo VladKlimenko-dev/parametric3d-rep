@@ -6633,6 +6633,16 @@ Check("UI-SKETCH-IMAGE-UNDO-K185", () =>
         Require(sel != null && sk.Images.Contains(sel), "the selection stays on the old image object after undo");
         { var hp = w.ImageLayer.Handles(out _)[0].P; var ep = vp.Project(sk.Plane.ToWorld(sel!.At(-1, -1)))!.Value; Require(Math.Abs(hp.X - ep.X) + Math.Abs(hp.Y - ep.Y) < 1e-6, "handles are not at the restored image"); }
         w.ImageLayer.InvalidateVisual(); Run();
+        // k185 (15:48, 15:57): линия эскиза поверх картинки — выбирается раньше картинки (слой мыши её не берёт)
+        w.ImageLayer.Select(null); Run();
+        var img = sk.Images[0];
+        var midS = vp.Project(sk.Plane.ToWorld(img.At(0, 0)))!.Value;
+        bool onImage = w.ImageLayer.HitTest(midS);   // до линии — картинка берёт мышь
+        var ln = sk.AddEntity(new SkLine(new SkPoint(img.At(-0.8, 0)), new SkPoint(img.At(0.8, 0)))); w.AfterSketchEdit(sk); Run();
+        bool onLine = w.ImageLayer.HitTest(midS);
+        Console.WriteLine($"  hit: on line {onLine}, image before the line {onImage}, pick {vp.PickForTest(midS).Kind}, tool {vp.Tool?.GetType().Name}");
+        Require(!onLine && onImage, "the image takes the mouse over a sketch line (or not over the image)");
+        sk.Entities.Remove(ln); w.AfterSketchEdit(sk); Run();
         // (2) поворот: 87° → 90°, 80° — как есть, 183° → 180°
         foreach (var (deg, want) in new[] { (87.0, 90.0), (80.0, 80.0), (183.0, 180.0), (-92.0, -90.0) })
         {
@@ -6646,6 +6656,55 @@ Check("UI-SKETCH-IMAGE-UNDO-K185", () =>
         w.Close();
     }
     finally { if (File.Exists(png)) File.Delete(png); }
+});
+
+Check("UI-PATTERN-STAGE-K185", () =>
+{
+    // k185 (замечание 09.11, 15:36): (1) круговой массив с углом между копиями; (5) строка отката после «Отмены» новой операции
+    // остаётся на месте — следующая операция встаёт к строке, а не в конец
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var sk = Parametric3D.App.Diagnostics.TestParts.RectSketch(part, 0, 30, -5, 10, 10);
+    var ex = new ExtrudeFeature("Block") { SketchId = sk.Id }; ex.Side1.Distance = new ValueRef(10); part.AddFeature(ex);
+    var cp = new CircularPatternFeature("CP") { At = Vector3d.Zero, Axis = Vector3d.UnitZ, Count = new ValueRef(3), Step = new ValueRef(30) };
+    part.AddFeature(cp);
+    BuildNow(s);
+    Console.WriteLine($"  step 30°: volume {part.Volume:0.#}, x {part.Bounds.Min.X:0.##}..{part.Bounds.Max.X:0.##}, y {part.Bounds.Min.Y:0.##}..{part.Bounds.Max.Y:0.##}, error {cp.Error}");
+    Require(cp.Error == null && Math.Abs(part.Volume - 3000) < 1 && part.Bounds.Min.X > 5 && part.Bounds.Max.Y > 30, "the 30° step pattern is wrong");
+    cp.Step = new ValueRef(0); part.Invalidate(); BuildNow(s);
+    Console.WriteLine($"  equal: volume {part.Volume:0.#}, x {part.Bounds.Min.X:0.##}..{part.Bounds.Max.X:0.##}");
+    Require(Math.Abs(part.Volume - 3000) < 1 && part.Bounds.Min.X < -10, "the equal-spacing pattern is wrong");
+    // строка отката — над массивом; новая операция, её отмена (удаление), снова новая — встаёт над массивом
+    part.StageIndex = 1;
+    var tmp = new ExtrudeFeature("Tmp") { SketchId = sk.Id }; part.AddFeature(tmp);
+    Require(part.Features.IndexOf(tmp) == 1 && part.StageIndex == 2, $"insert at the bar: index {part.Features.IndexOf(tmp)}, stage {part.StageIndex}");
+    part.RemoveFeature(tmp);
+    Console.WriteLine($"  after cancel: stage {part.StageIndex}");
+    Require(part.StageIndex == 1, $"the rollback bar moved after cancelling a new operation: {part.StageIndex}");
+    var nf = new ExtrudeFeature("New") { SketchId = sk.Id }; part.AddFeature(nf);
+    Require(part.Features.IndexOf(nf) == 1, $"the new operation is not at the rollback bar: index {part.Features.IndexOf(nf)} of {part.Features.Count}");
+});
+
+Check("UI-NECK-CUT-K185", () =>
+{
+    // k185 (замечание 09.11, 15:44): вырез Extrude в шейке DLOT — «Приближение: гранёных граней 35» (разбор)
+    var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "user_k185_neck_cut.p3d")); BuildNow(s);
+    var part = s.Part!;
+    Console.WriteLine($"  stage {part.StageIndex} of {part.Features.Count}");
+    if (part.StageIndex >= 0) { part.EndInsertMode(resume: true); BuildNow(s); }
+    foreach (var f in part.Features)
+        Console.WriteLine($"  feature {f.Name} {f.GetType().Name} downgrade {(part.Downgrades.TryGetValue(f, out var dg) ? dg.ToString() : "-")} error {f.Error} beyond {part.IsBeyondStage(f)}");
+    foreach (var b in part.Bodies)
+    {
+        var fac = Parametric3D.Kernel.Topology.EntityNames.Faceted(b);
+        Console.WriteLine($"  body faces {b.Faces.Count()}, faceted {fac.Count}: {string.Join(", ", fac.Take(12))}");
+        Console.WriteLine($"  tags {string.Join(" ", b.Faces.Select(x => x.Tag).Where(t => !t.Contains("revolve")).Take(20))}");
+        foreach (var f in b.Faces.Where(x => x.Surface is Parametric3D.Kernel.Surfaces.FacetedSurface && !x.Tag.Contains("revolve")).Take(6))
+        {
+            var fs = (Parametric3D.Kernel.Surfaces.FacetedSurface)f.Surface;
+            Console.WriteLine($"    {f.Tag}: source {fs.Source?.GetType().Name}, authoritative {Parametric3D.Kernel.Topology.GeometryAudit.AuthoritativeSurface(f)?.GetType().Name}, loops {f.Loops.Count}, edges {string.Join("/", f.Loops.SelectMany(l => l.CoEdges).Select(c => c.Edge.Curve.GetType().Name).Distinct())}");
+        }
+    }
+    foreach (var wmsg in part.Warnings.Take(25)) Console.WriteLine("  warn " + wmsg);
 });
 
 Check("UI-SKETCH-DIMEXT-K185", () =>
