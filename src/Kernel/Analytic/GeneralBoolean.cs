@@ -836,6 +836,7 @@ public static class GeneralBoolean
                 // точка сдвигается вдоль касательной грани (четыре направления, 1/16 минимального элемента) и возвращается на
                 // поверхность; сторона грани в окрестности та же (на той же гладкой поверхности сторона не меняется; вне области
                 // обе пробы дают одно и то же — пропуск). Мутация P3D_SIDESHIFT=0.
+                int shNull = 0, shSame = 0;
                 if (!decided && !SideShiftOff)
                 {
                     double floor = 4 * Classifier.Tol;
@@ -855,10 +856,10 @@ public static class GeneralBoolean
                             for (double step = ToleranceContext.Current.MinFeature / 4; step >= floor && !decided; step /= 2)
                             {
                                 int? qa1 = clA.Classify(pt + n * step), qb1 = clB.Classify(pt + n * step), qa2 = clA.Classify(pt - n * step), qb2 = clB.Classify(pt - n * step);
-                                if (qa1 is not (1 or -1) || qb1 is not (1 or -1) || qa2 is not (1 or -1) || qb2 is not (1 or -1)) continue;
+                                if (qa1 is not (1 or -1) || qb1 is not (1 or -1) || qa2 is not (1 or -1) || qb2 is not (1 or -1)) { shNull++; continue; }
                                 bool InR(int qa, int qb) => op switch { Bool2.Union => qa == 1 || qb == 1, Bool2.Intersect => qa == 1 && qb == 1, _ => qa == 1 && qb != 1 };
                                 bool plus = InR(qa1.Value, qb1.Value), minus = InR(qa2.Value, qb2.Value);
-                                if (plus == minus) continue;
+                                if (plus == minus) { shSame++; continue; }
                                 if (plus) face.Reversed = !face.Reversed;
                                 decided = true; Interlocked.Increment(ref SideShifted);
                             }
@@ -867,7 +868,7 @@ public static class GeneralBoolean
                         if (decided) break;
                     }
                 }
-                if (!decided) { SideUndecided++; why = $"outward side undecided ({f.Face.Tag}, {src.GetType().Name}, inside {r.Inside:0.####})"; return null; }
+                if (!decided) { SideUndecided++; why = $"outward side undecided ({f.Face.Tag}, {src.GetType().Name}, inside {r.Inside:0.####}; shifted probes: on boundary {shNull}, same side {shSame}; candidates {r.InsideCandidates.Count()})"; return null; }
             }
             // СФЕРА — КАРТА ОПЕРАНДА, ПОКА ОНА ВЫПОЛНЯЕТ КОНТРАКТ ОБЛАСТИ (KRN-03, SurfaceDomain): булева не подбирает
             // параметризацию под разметчик. Карта меняется (по правилу SurfaceDomain.SphereAxis) только если полюс карты
