@@ -1557,6 +1557,17 @@ public static partial class ExactFaceMesher
     /// <summary>k144: тонких ушей из трёх подряд точек контура, принятых разметкой.</summary>
     public static long ThinEarsKept;
     public static long PinchFoldsDropped;
+    /// <summary>k185: способов разметки, отвергнутых сверкой с точной площадью грани (разбор).</summary>
+    public static long ExactAreaRejects;
+    static readonly bool ExactAreaOff = Environment.GetEnvironmentVariable("P3D_MESHEXACTAREA") == "0";
+    [ThreadStatic] static TFace? _exAreaFace; [ThreadStatic] static ISurface3? _exAreaSurf; [ThreadStatic] static double? _exArea;
+    static double? ExactAreaOf(TFace f)
+    {
+        if (ReferenceEquals(_exAreaFace, f) && ReferenceEquals(_exAreaSurf, f.Surface)) return _exArea;
+        double? a = null;
+        try { a = Topology.AnalyticVolume.FaceAreaRough(f) is { } v ? Math.Abs(v) : null; } catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { }
+        _exAreaFace = f; _exAreaSurf = f.Surface; _exArea = a; return a;
+    }
     private static (List<Vector3d> P, List<int> T)? Validate(TFace f, ISurface3 src, List<Vector3d> P, List<int> T, out string? why, bool checkArea = true, double boundaryDev = 0)
     {
         using var _pv = Diagnostics.Prof.Time("сетка: самопроверка");
@@ -1722,6 +1733,26 @@ public static partial class ExactFaceMesher
             {
                 why = $"площадь сетки {aNew:0.###} не сходится с площадью по контурам {aLoops:0.###}";
                 return null;
+            }
+        }
+        // k185 (замечания 09.11, 23:18–23:30): НЕПЛОСКАЯ ГРАНЬ БЕЗ ФАСЕТ (разметка при импорте) — площадь сетки против точной
+        // площади грани. Сверять было не с чем: фасеты грани строит эта же разметка, и способ, накрывший дополнение контура,
+        // принимался — канавка сверла 2958A552 (сетка 101 мм² при грани 1.8 мм²: «канавка заполнена телом»), трубка пружины
+        // 9271K53 (735 при 629: виток дальше отгиба). Порог широкий (10 % и полоса вдоль кривых рёбер) — против грубых
+        // ошибок области, не против гранения. Как в UvMesher (там — 0.5 %). Мутация P3D_MESHEXACTAREA=0.
+        if (checkArea && !ExactAreaOff && f.Surface is not FacetedSurface && !src.IsPlanar)
+        {
+            double? exA = ExactAreaOf(f);
+            if (exA is { } ea && ea > 1e-9)
+            {
+                double perimC = 0;
+                foreach (var e in f.Edges) if (e.Curve is not Curves.LineCurve3) perimC += (e.V1.P - e.V0.P).Length + (ReferenceEquals(e.V0, e.V1) ? 1 : 0);
+                if (Math.Abs(aNew - ea) > 0.1 * ea + perimC * Tol.Chord * 4)
+                {
+                    Interlocked.Increment(ref ExactAreaRejects);
+                    why = $"площадь сетки {aNew:0.###} не сходится с точной площадью грани {ea:0.###}";
+                    return null;
+                }
             }
         }
         if (checkArea && f.Surface is FacetedSurface fo && fo.Facets.Count > 0)
