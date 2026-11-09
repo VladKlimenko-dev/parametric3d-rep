@@ -1,0 +1,76 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!--
+    k185 (замечание 10.11, 08:19, а3.1–а3.2): ПОЛЕ ЧИСЛА КАК В FIGMA. Стрелки поля стоят одна над другой (вверх — над вниз)
+    в узкой колонке справа и видны только при наведении мыши на поле (и пока в поле идёт ввод); без наведения поле — просто
+    текст. Шаблон заменяется у ButtonSpinner внутри каждого NumericUpDown (и DragNumber), части PART_IncreaseButton и
+    PART_DecreaseButton — те же, что у Fluent, поэтому шаг, повтор при удержании и протяжка работают как прежде.
+    Подключается из App.Initialize; мутация P3D_SPINHOVER=0 — прежние стрелки Fluent рядом друг с другом.
+  -->
+  <Style Selector="NumericUpDown /template/ ButtonSpinner#PART_Spinner">
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}"
+                MinHeight="{TemplateBinding MinHeight}">
+          <Grid ColumnDefinitions="*,Auto">
+            <ContentPresenter Name="PART_ContentPresenter" Grid.Column="0"
+                              Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                              Padding="{TemplateBinding Padding}"
+                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+            <Grid Name="PART_SpinnerPanel" Grid.Column="1" RowDefinitions="*,*" Width="16" Margin="0,2,2,2"
+                  IsVisible="{TemplateBinding ShowButtonSpinner}">
+              <RepeatButton Name="PART_IncreaseButton" Grid.Row="0" Classes="p3spin">
+                <Path Data="M0,4 L4,0 L8,4" />
+              </RepeatButton>
+              <RepeatButton Name="PART_DecreaseButton" Grid.Row="1" Classes="p3spin">
+                <Path Data="M0,0 L4,4 L8,0" />
+              </RepeatButton>
+            </Grid>
+          </Grid>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="RepeatButton.p3spin">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="Cursor" Value="SizeNorthSouth" />
+    <Setter Property="Opacity" Value="0" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="SpinBg" Background="Transparent" CornerRadius="3">
+          <ContentPresenter Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Setter Property="Transitions">
+      <Transitions>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.12" />
+      </Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="RepeatButton.p3spin Path">
+    <Setter Property="Stroke" Value="{DynamicResource P3.TextDim}" />
+    <Setter Property="StrokeThickness" Value="1.4" />
+    <Setter Property="Width" Value="8" />
+    <Setter Property="Height" Value="4" />
+    <Setter Property="Stretch" Value="None" />
+  </Style>
+  <Style Selector="RepeatButton.p3spin:pointerover /template/ Border#SpinBg">
+    <Setter Property="Background" Value="{DynamicResource P3.HoverBg}" />
+  </Style>
+  <Style Selector="RepeatButton.p3spin:pointerover Path">
+    <Setter Property="Stroke" Value="{DynamicResource P3.Text}" />
+  </Style>
+  <Style Selector="RepeatButton.p3spin:pressed /template/ Border#SpinBg">
+    <Setter Property="Background" Value="{DynamicResource P3.PressedBg}" />
+  </Style>
+  <!-- стрелки видны при наведении на поле и во время ввода -->
+  <Style Selector="ButtonSpinner#PART_Spinner:pointerover /template/ RepeatButton.p3spin">
+    <Setter Property="Opacity" Value="1" />
+  </Style>
+  <Style Selector="ButtonSpinner#PART_Spinner:focus-within /template/ RepeatButton.p3spin">
+    <Setter Property="Opacity" Value="1" />
+  </Style>
+</Styles>

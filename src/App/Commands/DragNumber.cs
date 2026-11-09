@@ -58,44 +58,84 @@ public static class Scrub
     }
 }
 
-/// <summary>Поле числа со стрелками и протяжкой по стрелкам (см. <see cref="Scrub"/>).</summary>
+/// <summary>
+/// Поле числа со стрелками и протяжкой (см. <see cref="Scrub"/>).
+/// k185 (замечание 10.11, 08:19, а3.3): ПРОТЯЖКА ПО ВСЕМУ ПОЛЮ, как в Figma. Нажать левую кнопку на поле и тянуть вверх или
+/// вправо — значение растёт, вниз или влево — убывает (сдвиг считается как «вверх + вправо»). На стрелках протяжка начинается
+/// сразу; на тексте — только когда мышь сдвинулась на <see cref="TextDragPx"/> пикселей, поэтому щелчок в текст по-прежнему
+/// ставит курсор ввода, а двойной щелчок выделяет. Мутация P3D_SCRUBANY=0 — протяжка только по стрелкам и только по вертикали.
+/// </summary>
 public class DragNumber : NumericUpDown
 {
+    public static readonly bool AnyOff = Environment.GetEnvironmentVariable("P3D_SCRUBANY") == "0";
+    public const double TextDragPx = 4;
     protected override Type StyleKeyOverride => typeof(NumericUpDown);
     bool _attached;
     public DragNumber()
     {
-        if (!Scrub.Off) ToolTip.SetTip(this, Parametric3D.App.Loc.L("Стрелки: щелчок — шаг; тянуть вверх или вниз с нажатой левой кнопкой — изменить значение (Shift ×10, Ctrl ×0.1)"));
+        if (!Scrub.Off) ToolTip.SetTip(this, Parametric3D.App.Loc.L(AnyOff
+            ? "Стрелки: щелчок — шаг; тянуть вверх или вниз с нажатой левой кнопкой — изменить значение (Shift ×10, Ctrl ×0.1)"
+            : "Тянуть с нажатой левой кнопкой вверх или вправо — больше, вниз или влево — меньше (Shift ×10, Ctrl ×0.1); стрелки: щелчок — шаг"));
     }
+
+    /// <summary>Сдвиг протяжки в пикселях «вверх» с учётом горизонтали: вправо — как вверх.</summary>
+    public static double Shift(Point start, Point now) => AnyOff ? start.Y - now.Y : (start.Y - now.Y) + (now.X - start.X);
 
     protected override void OnApplyTemplate(Avalonia.Controls.Primitives.TemplateAppliedEventArgs e)
     {
         base.OnApplyTemplate(e);
         if (_attached || Scrub.Off) return;
         _attached = true;
-        // протяжка — по стрелкам (нажатие на текст остаётся вводом)
         AddHandler(PointerPressedEvent, (s, a) =>
         {
-            if (!OnArrows(a.Source)) return;
-            _drag = a.GetPosition(this); _v0 = (double)(Value ?? 0); _moved = false; _dir = DirOf(a.Source);
-            a.Pointer.Capture(this); a.Handled = true;
+            if (!a.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+            if (OnArrows(a.Source))
+            {
+                _drag = a.GetPosition(this); _v0 = (double)(Value ?? 0); _moved = false; _fromText = false; _dir = DirOf(a.Source);
+                a.Pointer.Capture(this); a.Handled = true;
+                return;
+            }
+            // на тексте: нажатие уходит полю ввода; протяжка начнётся, только если мышь заметно сдвинется
+            if (!AnyOff && IsEnabled) { _pend = a.GetPosition(this); _v0 = (double)(Value ?? 0); }
         }, RoutingStrategies.Tunnel);
         AddHandler(PointerMovedEvent, (s, a) =>
         {
-            if (_drag is not { } p) return;
-            double dy = p.Y - a.GetPosition(this).Y;
-            if (!_moved && Math.Abs(dy) < 3) return;
-            _moved = true; ScrubTo(_v0 + Scrub.Steps(dy, a.KeyModifiers) * (double)Increment); a.Handled = true;
+            if (_drag is { } p)
+            {
+                double d = Shift(p, a.GetPosition(this));
+                if (!_moved && Math.Abs(d) < 3) return;
+                _moved = true; ScrubTo(_v0 + Scrub.Steps(d, a.KeyModifiers) * (double)Increment); a.Handled = true;
+                return;
+            }
+            if (_pend is { } q)
+            {
+                if (!a.GetCurrentPoint(this).Properties.IsLeftButtonPressed) { _pend = null; return; }
+                var now = a.GetPosition(this);
+                if (Math.Abs(now.X - q.X) + Math.Abs(now.Y - q.Y) < TextDragPx) return;
+                // протяжка с текста: перехватить мышь у поля ввода, снять выделение
+                _pend = null; _drag = q; _moved = true; _fromText = true;
+                a.Pointer.Capture(this);
+                if (this.GetVisualDescendants().OfType<TextBox>().FirstOrDefault() is { } tb) tb.ClearSelection();
+                Cursor = new Cursor(StandardCursorType.SizeAll);
+                ScrubTo(_v0 + Scrub.Steps(Shift(q, now), a.KeyModifiers) * (double)Increment);
+                a.Handled = true;
+            }
         }, RoutingStrategies.Tunnel);
         AddHandler(PointerReleasedEvent, (s, a) =>
         {
+            _pend = null;
             if (_drag == null) return;
             _drag = null; a.Pointer.Capture(null); a.Handled = true;
+            if (_fromText) { Cursor = null; _fromText = false; return; }
             if (!_moved) ScrubTo((double)(Value ?? 0) + _dir * (double)Increment);
         }, RoutingStrategies.Tunnel);
-        AddHandler(PointerCaptureLostEvent, (_, _) => _drag = null);
+        AddHandler(PointerCaptureLostEvent, (_, _) => { if (_fromText && _drag != null) { _drag = null; _fromText = false; Cursor = null; } else if (!_fromText) _drag = null; });
     }
-    Point? _drag; double _v0; bool _moved; int _dir = 1;
+    Point? _drag, _pend; double _v0; bool _moved, _fromText; int _dir = 1;
+
+    /// <summary>Протяжка с текста поля: из точки start в точку now (разбор и проверки; та же арифметика, что у мыши).</summary>
+    public void ScrubFromTo(Point start, Point now, KeyModifiers mods = KeyModifiers.None) =>
+        ScrubTo((double)(Value ?? 0) + Scrub.Steps(Shift(start, now), mods) * (double)Increment);
 
     /// <summary>Значение протяжки — в пределах поля.</summary>
     public void ScrubTo(double v)

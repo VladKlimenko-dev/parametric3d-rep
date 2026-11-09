@@ -22,6 +22,8 @@ public sealed class UserPrefs
     /// <summary>u13: закреплённые команды контекстной панели.</summary>
     public List<string> PinnedCommands { get; set; } = new();
     public bool TreeVisible { get; set; } = true;
+    /// <summary>k185 (а1): панель свойств свёрнута в узкую полосу.</summary>
+    public bool PropsCollapsed { get; set; }
     /// <summary>k127: подсказка о жесте трёх пальцев Windows показана.</summary>
     public bool TouchpadHintShown { get; set; }
     public double TreeWidth { get; set; } = 260;

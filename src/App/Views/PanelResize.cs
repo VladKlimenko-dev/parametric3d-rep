@@ -13,15 +13,16 @@ public static class PanelResize
     static readonly Dictionary<string, double> Remembered = new();
     public const double Grip = 5;
 
-    public static void Attach(Control panel, string key, double min = 240, double max = 1000, Action<double>? done = null)
+    public static void Attach(Control panel, string key, double min = 240, double max = 1000, Action<double>? done = null, Func<bool>? blocked = null)
     {
-        if (Remembered.TryGetValue(key, out var w0)) panel.Width = w0;
+        // k185 (а1): свёрнутая панель не тянется за край — её ширина задана кнопкой-шевроном
+        if (Remembered.TryGetValue(key, out var w0) && blocked?.Invoke() != true) panel.Width = w0;
         bool drag = false; double startX = 0, startW = 0;
         var arrows = new Cursor(StandardCursorType.SizeWestEast);
         panel.AddHandler(InputElement.PointerPressedEvent, (_, e) =>
         {
             var p = e.GetPosition(panel);
-            if (p.X > Grip || !e.GetCurrentPoint(panel).Properties.IsLeftButtonPressed) return;
+            if (p.X > Grip || !e.GetCurrentPoint(panel).Properties.IsLeftButtonPressed || blocked?.Invoke() == true) return;
             drag = true; startX = e.GetPosition(null).X; startW = double.IsNaN(panel.Width) ? panel.Bounds.Width : panel.Width;
             e.Pointer.Capture(panel); e.Handled = true;
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
@@ -33,7 +34,7 @@ public static class PanelResize
                 panel.Width = w; Remembered[key] = w; e.Handled = true;
                 return;
             }
-            panel.Cursor = e.GetPosition(panel).X <= Grip ? arrows : null;
+            panel.Cursor = e.GetPosition(panel).X <= Grip && blocked?.Invoke() != true ? arrows : null;
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         panel.AddHandler(InputElement.PointerReleasedEvent, (_, e) => { if (drag) { drag = false; e.Pointer.Capture(null); e.Handled = true; done?.Invoke(panel.Width); } }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
     }

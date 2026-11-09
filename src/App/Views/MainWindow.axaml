@@ -226,12 +226,20 @@
 
       <!-- правая панель: свойства или параметры операции -->
       <Border Grid.Column="3" x:Name="PropsPanel" Classes="panel" BorderThickness="1,0,0,0" Width="300" IsVisible="False">
-        <Grid RowDefinitions="Auto,*,Auto">
-          <TextBlock x:Name="PropsTitle" Classes="header" Margin="12,10,12,4" />
-          <ScrollViewer Grid.Row="1">
+        <Grid RowDefinitions="Auto,Auto,*,Auto">
+          <!-- k185 (замечание 10.11, 08:19, а1): строка «Свойства» с шевроном сворачивания панели в узкую полосу -->
+          <Grid x:Name="PropsHeaderRow" ColumnDefinitions="Auto,*" Margin="4,6,8,0">
+            <Button x:Name="PropsCollapse" Classes="tool" Width="24" Height="24" Padding="0" VerticalAlignment="Center">
+              <Path x:Name="PropsCollapseGlyph" Data="M2,0 L6,4 L2,8 M6,0 L10,4 L6,8" Stroke="{DynamicResource P3.TextDim}" StrokeThickness="1.5"
+                    Width="12" Height="8" Stretch="None" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Button>
+            <TextBlock Grid.Column="1" x:Name="PropsHeader" Classes="dim" FontWeight="SemiBold" VerticalAlignment="Center" Margin="4,0,0,0" />
+          </Grid>
+          <TextBlock Grid.Row="1" x:Name="PropsTitle" Classes="header" Margin="12,6,12,4" />
+          <ScrollViewer Grid.Row="2" x:Name="PropsScroll">
             <StackPanel x:Name="PropsBody" Margin="12,4,12,12" Spacing="6" />
           </ScrollViewer>
-          <StackPanel Grid.Row="2" x:Name="PropsButtons" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6" Margin="12,6,12,12" />
+          <StackPanel Grid.Row="3" x:Name="PropsButtons" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6" Margin="12,6,12,12" />
         </Grid>
       </Border>
     </Grid>

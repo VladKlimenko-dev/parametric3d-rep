@@ -53,9 +53,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k185g3_bs, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=7819N12 P3D_XTBOUNDNEAR=0 P3D_XTCENTRESECT=0' }
-          - { name: k185g3_bd, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=7819N12 P3D_XTBOUNDNEAR=0 P3D_XTSPINEDENSE=0' }
-          - { name: k185g3_sd, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=7819N12 P3D_XTCENTRESECT=0 P3D_XTSPINEDENSE=0' }
+          - { name: k185h_sw, cmd: 'sldprt', env: '' }
+          - { name: k185h_allA, cmd: 'allA', env: '' }
+          - { name: k185h_allB, cmd: 'allB', env: '' }
+          - { name: k185h_c1, cmd: 'sldprt CORPUS', env: 'P3D_SLDSHARD=c1' }
+          - { name: k185h_c2, cmd: 'sldprt CORPUS', env: 'P3D_SLDSHARD=c2' }
+          - { name: k185h_c3, cmd: 'sldprt CORPUS', env: 'P3D_SLDSHARD=c3' }
+          - { name: k185h_c4, cmd: 'sldprt CORPUS', env: 'P3D_SLDSHARD=c4' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

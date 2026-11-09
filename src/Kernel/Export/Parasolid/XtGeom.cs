@@ -988,7 +988,8 @@ internal sealed class XtBlendSurf : XtSurf
     public double R0, R1;
     public bool Rev;
 
-    static readonly bool SpineDenseOff = Environment.GetEnvironmentVariable("P3D_XTSPINEDENSE") == "0";
+    // k185g3: по отдельности ломает 7819N12 (открытые рёбра) — выключено по умолчанию; P3D_XTSPINEDENSE=1 — включить
+    static readonly bool SpineDenseOff = Environment.GetEnvironmentVariable("P3D_XTSPINEDENSE") != "1";
     static readonly bool BlendFieldsDbg = Environment.GetEnvironmentVariable("P3D_XTBLENDF") == "1";
     public static XtBlendSurf? Of(XtFile f, XtNode n, int depth)
     {
@@ -1160,7 +1161,8 @@ internal sealed class XtBlendSurf : XtSurf
         }
         return c;
     }
-    static readonly bool CentreSectOff = Environment.GetEnvironmentVariable("P3D_XTCENTRESECT") == "0";
+    // k185g3: по отдельности ломает 7819N12 (обход сторон в одну сторону) — выключено по умолчанию; P3D_XTCENTRESECT=1 — включить
+    static readonly bool CentreSectOff = Environment.GetEnvironmentVariable("P3D_XTCENTRESECT") != "1";
 
     /// <summary>Точка оси в плоскости через c0 с нормалью tg (см. CentreAt).</summary>
     internal Vector3d OnSpineIn(Vector3d c0, Vector3d tg)

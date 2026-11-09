@@ -27,6 +27,9 @@ public static class SettingsDialog
     public static readonly bool GroupsOff = Environment.GetEnvironmentVariable("P3D_SETTINGSGROUPS") == "0";
 
     /// <summary>Строка раздела: подпись, элемент, загрузка из настроек и запись в них (тема — у цветов по теме).</summary>
+    /// <summary>k185 (а2): шаблонные пункты списка языка (P3D_LANGTEMPLATE=0 — прежние готовые элементы).</summary>
+    public static readonly bool LangTemplateOff = Environment.GetEnvironmentVariable("P3D_LANGTEMPLATE") == "0";
+    public sealed record LangItem(string Icon, string Text);
     sealed class Bind
     {
         public string Section = "", Label = "";
@@ -179,7 +182,15 @@ public static class SettingsDialog
         section = "general";
         var theme = new ComboBox { ItemsSource = new[] { L("Тёмная"), L("Светлая") }, SelectedIndex = w.IsDark ? 0 : 1, MinWidth = 200, Name = "set_theme" };
         var lang = new ComboBox { MinWidth = 200, Name = "set_lang" };
-        lang.ItemsSource = new[] { WithIcon("language_ru_but.svg", "Русский"), WithIcon("language_en_but.svg", "English") };
+        // k185 (замечание 10.11, 08:19, а2): пункты языка — данные с шаблоном, а не готовые элементы. Готовый элемент в списке
+        // ComboBox показывает в поле выбора «снимком» (VisualBrush) пункта списка: вне дерева текст не получал цвет темы (в тёмной —
+        // чёрный, не виден) и сдвигался на отступы пункта. Шаблон строит в поле свою копию значка и текста, как у соседних списков.
+        if (LangTemplateOff) lang.ItemsSource = new[] { WithIcon("language_ru_but.svg", "Русский"), WithIcon("language_en_but.svg", "English") };
+        else
+        {
+            lang.ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<LangItem>((it, _) => it == null ? new TextBlock() : WithIcon(it.Icon, it.Text), true);
+            lang.ItemsSource = new[] { new LangItem("language_ru_but.svg", "Русский"), new LangItem("language_en_but.svg", "English") };
+        }
         if (!DocCommands.LangFixOff) lang.SelectedIndex = prefs.Language == "en" ? 1 : 0;
         string[] glModes = { "auto", "angle", "wgl", "software" };
         var gl = new ComboBox { ItemsSource = new[] { L("Автоматически"), L("ANGLE (Direct3D 11)"), L("WGL (настольный OpenGL)"), L("Программная отрисовка") }, SelectedIndex = Math.Max(0, Array.IndexOf(glModes, prefs.GlMode ?? "auto")), MinWidth = 200, Name = "set_gl" };
@@ -278,7 +289,7 @@ public static class SettingsDialog
                 for (int i = 0; i < 3; i++)
                 {
                     boxes[i] = Nud($"set_mv_{nm}{ax[i].ToLowerInvariant()}", "", g[i], s[i], -10, 10, 0.05, "0.###");
-                    boxes[i].MinWidth = 70; boxes[i].Width = 84; boxes[i].ShowButtonSpinner = false;
+                    boxes[i].MinWidth = 70; boxes[i].Width = 84; boxes[i].ShowButtonSpinner = !Parametric3D.App.App.SpinHoverOff;   // k185 (а3): стрелки — при наведении, поле не тесно
                     sp.Children.Add(new TextBlock { Text = ax[i], VerticalAlignment = VerticalAlignment.Center, Opacity = 0.7 });
                     sp.Children.Add(boxes[i]);
                 }

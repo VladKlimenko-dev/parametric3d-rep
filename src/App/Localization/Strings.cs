@@ -225,7 +225,7 @@ public static class Strings
 
         // ---------------------------------------------------------------- приложение
         ["Тема: тёмная / светлая"] = "Theme: dark / light", ["Язык: русский / английский"] = "Language: Russian / English",
-        ["Свойства"] = "Properties", ["Параметры"] = "Parameters", ["Палитра команд"] = "Command palette",
+        ["Свойства"] = "Properties", ["Свернуть панель свойств"] = "Collapse properties panel", ["Развернуть панель свойств"] = "Expand properties panel", ["Параметры"] = "Parameters", ["Палитра команд"] = "Command palette",
         // k118–k119
         ["Фильтр по имени"] = "Filter by name", ["Имя:"] = "Name:", ["Обозначение"] = "Part number", ["Наименование"] = "Title",
         ["Изменение"] = "Revision", ["Габариты"] = "Overall size", ["Ш × В × Г"] = "W × H × D", ["Ед. учёта"] = "UoM",
@@ -1303,6 +1303,7 @@ public static class Strings
         ["Модель и куб вида"] = "Model and view cube",
         ["Тема цветов"] = "Colour theme",
         ["Куб вида"] = "View cube",
+        ["Тянуть с нажатой левой кнопкой вверх или вправо — больше, вниз или влево — меньше (Shift ×10, Ctrl ×0.1); стрелки: щелчок — шаг"] = "Drag with the left button up or right to increase, down or left to decrease (Shift ×10, Ctrl ×0.1); arrows: click — one step",
         ["Стрелки: щелчок — шаг; тянуть вверх или вниз с нажатой левой кнопкой — изменить значение (Shift ×10, Ctrl ×0.1)"] = "Arrows: click — one step; drag up or down with the left button held — change the value (Shift ×10, Ctrl ×0.1)",
         ["Тянуть вверх или вниз с нажатой левой кнопкой — изменить значение; щелчок — шаг"] = "Drag up or down with the left button held to change the value; click — one step",
         ["Направление (0; 0; 0 — на центр)"] = "Direction (0; 0; 0 — towards the centre)",

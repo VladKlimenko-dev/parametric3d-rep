@@ -1557,9 +1557,9 @@ public sealed partial class SheetWindow : Window
                         if (it == _sel) box.Background = new SolidColorBrush(Color.FromArgb(60, 255, 120, 0));
                         var title = Field(it.Title, t => { if (t != it.Title) Change(() => it.Title = t); }, 200); title.PlaceholderText = L("Название таблицы"); title.Name = "dr_table_title";
                         box.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { vis, title, del } });
-                        var rows = new NumericUpDown { Minimum = 1, Maximum = 200, Increment = 1, Value = Math.Max(1, it.Rows), FormatString = "0", Width = 110, Name = "dr_table_rows" };
+                        var rows = new Parametric3D.App.Commands.DragNumber { Minimum = 1, Maximum = 200, Increment = 1, Value = Math.Max(1, it.Rows), FormatString = "0", Width = 110, Name = "dr_table_rows" };
                         rows.ValueChanged += (_, e) => { int n = (int)(e.NewValue ?? 1); if (n != it.Rows) Change(() => { it.NormalizeCells(); while (it.Rows < n) it.InsertRow(it.Rows); while (it.Rows > n && it.Rows > 1) it.DeleteRow(it.Rows - 1); }); };
-                        var cols = new NumericUpDown { Minimum = 1, Maximum = 50, Increment = 1, Value = Math.Max(1, it.Columns?.Count ?? 1), FormatString = "0", Width = 110, Name = "dr_table_cols" };
+                        var cols = new Parametric3D.App.Commands.DragNumber { Minimum = 1, Maximum = 50, Increment = 1, Value = Math.Max(1, it.Columns?.Count ?? 1), FormatString = "0", Width = 110, Name = "dr_table_cols" };
                         cols.ValueChanged += (_, e) => { int n = (int)(e.NewValue ?? 1); if (n != (it.Columns?.Count ?? 1)) Change(() => { it.NormalizeCells(); while (it.Columns!.Count < n) it.InsertColumn(it.Columns.Count); while (it.Columns.Count > n && it.Columns.Count > 1) it.DeleteColumn(it.Columns.Count - 1); }); };
                         box.Children.Add(Row(L("Строк"), rows));
                         box.Children.Add(Row(L("Столбцов"), cols));

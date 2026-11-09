@@ -11,6 +11,9 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+        // k185 (а3): поля числа как в Figma — стрелки одна над другой, видны при наведении (P3D_SPINHOVER=0 — стрелки Fluent)
+        if (!SpinHoverOff)
+            Styles.Add(new Avalonia.Markup.Xaml.Styling.StyleInclude(new Uri("avares://Parametric3D/")) { Source = new Uri("avares://Parametric3D/App/Theme/Spinner.axaml") });
         // k121: мутация P3D_TIPONELINE=0 — прежние подсказки (перенос, ширина до 420)
         if (TipOneLineOff)
         {
@@ -21,6 +24,7 @@ public partial class App : Application
             Styles.Add(tip); Styles.Add(tb);
         }
     }
+    public static readonly bool SpinHoverOff = Environment.GetEnvironmentVariable("P3D_SPINHOVER") == "0";
     public static readonly bool TipOneLineOff = Environment.GetEnvironmentVariable("P3D_TIPONELINE") == "0";
 
     /// <summary>Прошлый запуск не дошёл до выхода (аварийное завершение).</summary>

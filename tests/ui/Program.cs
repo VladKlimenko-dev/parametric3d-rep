@@ -6736,6 +6736,89 @@ Check("UI-TREE-HELIX-K185", () =>
     Require(ff != null && Parametric3D.App.Views.TreeContours.MaterialOf(ff) is not null, "no hover contour for the import feature");
 });
 
+Check("UI-PROPS-PANEL-K185", () =>
+{
+    // k185 (замечание 10.11, 08:19, а1–а4): строка «Свойства» с шевроном сворачивания; список языка в настройках — текст виден
+    // в тёмной теме и стоит ровно с соседними списками; поля числа — стрелки одна над другой, видны при наведении, протяжка по
+    // всему полю (вверх/вправо — больше); колонка названий панели — по тексту, без переноса в широкой панели
+    var s = DocumentSession.Sample(); var w = Open(s); var part = s.Part!;
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    try
+    {
+        // а1
+        w.ViewPort.Selection.Select(new PickRef(part.Bodies[0].Edges.First().Id, PickKind.Edge, part, null), additive: false);
+        w.StartOperation(new RoundOp()); Run();
+        Require(w.PropsHeader.Text == Loc.L("Свойства") && w.PropsHeader.IsEffectivelyVisible, "no «Properties» header row");
+        var hb = w.PropsCollapse.TranslatePoint(new Point(0, 0), w.PropsPanel); var tb0 = w.PropsHeader.TranslatePoint(new Point(0, 0), w.PropsPanel);
+        Console.WriteLine($"  header: chevron at {hb}, text at {tb0}, panel {w.PropsPanel.Bounds.Width:0}");
+        Require(hb is { } h && tb0 is { } t && h.X < t.X && Math.Abs(h.Y + w.PropsCollapse.Bounds.Height / 2 - t.Y - w.PropsHeader.Bounds.Height / 2) < 4, "the chevron is not at the start of the header row");
+        w.PropsCollapse.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Run();
+        Console.WriteLine($"  collapsed: width {w.PropsPanel.Bounds.Width:0}, body visible {w.PropsScroll.IsEffectivelyVisible}, chevron visible {w.PropsCollapse.IsEffectivelyVisible}");
+        Require(w.PropsCollapsed && w.PropsPanel.Bounds.Width <= MainWindow.PropsCollapsedPx + 1 && !w.PropsScroll.IsEffectivelyVisible && !w.PropsButtons.IsEffectivelyVisible && !w.PropsHeader.IsEffectivelyVisible, "collapsed panel is not a narrow strip");
+        Require(w.PropsCollapse.IsEffectivelyVisible && w.PropsCollapse.Bounds.Width <= MainWindow.PropsCollapsedPx, "no expand button on the collapsed strip");
+        w.PropsCollapse.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Run();
+        Require(!w.PropsCollapsed && w.PropsScroll.IsEffectivelyVisible && w.PropsPanel.Bounds.Width > 200, "the panel did not expand");
+        // а4: широкая панель — названия в одну строку
+        w.PropsPanel.Width = 640; Run(); w.FitPropsLabels(); Run();
+        var labels = w.PropsBody.GetVisualDescendants().OfType<Grid>().Where(g => g.ColumnDefinitions.Count >= 2 && g.ColumnDefinitions[1].Width.IsStar)
+            .SelectMany(g => g.Children.OfType<TextBlock>().Where(x => Grid.GetColumn(x) == 0 && x.Classes.Contains("dim") && x.IsEffectivelyVisible)).ToList();
+        var lh = labels.Select(x => x.Bounds.Height).DefaultIfEmpty(0).Min();
+        var wrapped = labels.Where(x => x.Bounds.Height > lh * 1.5).Select(x => x.Text).ToList();
+        Console.WriteLine($"  labels {labels.Count}, column {w.PropsLabelColumnPx:0}, wrapped at 640: {(wrapped.Count == 0 ? "none" : string.Join(" | ", wrapped))}");
+        Require(labels.Count > 0, "no label rows in the round panel");
+        Require(wrapped.Count == 0, "labels wrap though the panel is wide enough");
+        w.PropsPanel.Width = 300; Run(); w.FitPropsLabels(); Run();
+        Require(w.PropsLabelColumnPx >= 108 && w.PropsLabelColumnPx <= 300 - MainWindow.PropsEditorMinPx, "narrow panel: label column leaves no room for the fields");
+        w.CancelOperation(); Run();
+
+        // а3: поле числа
+        var host = new Window { Width = 300, Height = 120 };
+        var dn = new DragNumber { Minimum = -100, Maximum = 100, Increment = 1, Value = 10, Width = 140 };
+        var other = new TextBox { Text = "x" };
+        host.Content = new StackPanel { Children = { dn, other } }; host.Show();
+        for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); host.UpdateLayout(); }
+        var inc = dn.GetVisualDescendants().OfType<RepeatButton>().FirstOrDefault(b => b.Name == "PART_IncreaseButton");
+        var dec = dn.GetVisualDescendants().OfType<RepeatButton>().FirstOrDefault(b => b.Name == "PART_DecreaseButton");
+        Require(inc != null && dec != null, "no spinner buttons");
+        var pi = inc!.TranslatePoint(new Point(0, 0), dn)!.Value; var pd = dec!.TranslatePoint(new Point(0, 0), dn)!.Value;
+        Console.WriteLine($"  spinner: up at {pi} {inc.Bounds.Size}, down at {pd} {dec.Bounds.Size}, opacity {inc.Opacity}");
+        Require(Math.Abs(pi.X - pd.X) < 1 && pi.Y + inc.Bounds.Height <= pd.Y + 0.5, "the up arrow is not above the down arrow");
+        Require(inc.Opacity < 0.05 && dec.Opacity < 0.05, "arrows are visible without hovering");
+        dn.ScrubFromTo(new Point(20, 10), new Point(40, 10));
+        Require(dn.Value == 15, $"drag right: {dn.Value} (expected 15)");
+        dn.ScrubFromTo(new Point(20, 30), new Point(20, 10));
+        Require(dn.Value == 20, $"drag up: {dn.Value} (expected 20)");
+        dn.ScrubFromTo(new Point(40, 10), new Point(20, 10));
+        Require(dn.Value == 15, $"drag left: {dn.Value} (expected 15)");
+        dn.ScrubFromTo(new Point(20, 10), new Point(20, 50));
+        Require(dn.Value == 5, $"drag down: {dn.Value} (expected 5)");
+        host.Close();
+
+        // а2: список языка в тёмной теме
+        if (!w.IsDark) w.ApplyTheme(true);
+        _ = DocCommands.Settings(w); Run();
+        var sw = DocCommands.LastSettingsWindow!;
+        for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); sw.UpdateLayout(); }
+        try
+        {
+            var lang = sw.GetVisualDescendants().OfType<ComboBox>().First(c => c.Name == "set_lang");
+            var theme = sw.GetVisualDescendants().OfType<ComboBox>().First(c => c.Name == "set_theme");
+            var lt = lang.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault(x => x.Text is "Русский" or "English" && x.IsEffectivelyVisible);
+            var li = lang.GetVisualDescendants().OfType<Image>().FirstOrDefault(x => x.IsEffectivelyVisible);
+            var tt = theme.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault(x => x.Text == Loc.L("Тёмная") && x.IsEffectivelyVisible);
+            Require(lt != null && tt != null, "no visible text in the language or theme list");
+            var fg = (lt!.Foreground as Avalonia.Media.ISolidColorBrush)?.Color; var fgT = (tt!.Foreground as Avalonia.Media.ISolidColorBrush)?.Color;
+            double lum(Avalonia.Media.Color c) => (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) / 255;
+            double xl = (li ?? (Control)lt).TranslatePoint(new Point(0, 0), lang)!.Value.X, xt = tt.TranslatePoint(new Point(0, 0), theme)!.Value.X;
+            Console.WriteLine($"  language: text {lt.Text} colour {fg}, theme text colour {fgT}; left {xl:0.#} vs {xt:0.#}");
+            Require(fg is { } c1 && lum(c1) > 0.5, "language name is dark on the dark theme");
+            Require(Math.Abs(xl - xt) < 3, "language icon and name are shifted against the other lists");
+        }
+        finally { sw.Close(); }
+    }
+    finally { w.Close(); }
+});
+
 Check("UI-SKETCH-DIMEXT-K185", () =>
 {
     // k185 (замечание 09.11, 12:39, пп. 1–2): размер между параллельными отрезками — размерная линия на обоих отрезках: выносных

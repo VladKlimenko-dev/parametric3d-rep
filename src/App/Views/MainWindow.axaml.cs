@@ -67,6 +67,7 @@ public partial class MainWindow : Window
         // шрифт ГОСТ тип А — только у объектов вида (размеры эскиза, подписи куба вида); меню и панели — шрифтом интерфейса
         Loc.Set(UserPrefs.Current.Language == "en");
         StandardCommands.Register(this);
+        InitPropsHeader();
         WireView();
         WireStatusDetails();
         WireTree();
@@ -1211,7 +1212,7 @@ public partial class MainWindow : Window
         if (!_propsResizeHooked)
         {
             _propsResizeHooked = true;
-            PanelResize.Attach(PropsPanel, "main.props", 220, 900, w => { UserPrefs.Current.Look.PropsPanelPx = w; try { UserPrefs.Current.Save(); } catch { } });
+            PanelResize.Attach(PropsPanel, "main.props", 220, 900, blocked: () => PropsCollapsed, done: w => { UserPrefs.Current.Look.PropsPanelPx = w; try { UserPrefs.Current.Save(); } catch { } });
         }
         Cube.SetSize(UiLook.ViewCubePx);
         if (PanelLookOff) { Resources["P3.TreeIconPx"] = 16.0; Resources["P3.TreeRowPx"] = 24.0; return; }
@@ -1219,8 +1220,32 @@ public partial class MainWindow : Window
         Resources["P3.TreeRowPx"] = UiLook.TreeRowPx;
         Tree.FontSize = UiLook.TreeFontSize;
         if (WorkArea.ColumnDefinitions.Count > 0) WorkArea.ColumnDefinitions[0].Width = new GridLength(UiLook.TreePanelPx);
-        PropsPanel.Width = UiLook.PropsPanelPx;
+        PropsPanel.Width = PropsCollapsed ? PropsCollapsedPx : UiLook.PropsPanelPx;
         PropsPanel.SetValue(Avalonia.Controls.Documents.TextElement.FontSizeProperty, UiLook.PropsFontSize);
+    }
+
+    // k185 (замечание 10.11, 08:19, а1): СВОРАЧИВАНИЕ ПАНЕЛИ СВОЙСТВ. Шеврон в начале строки «Свойства» сворачивает панель в
+    // вертикальную полосу шириной в одну кнопку — кнопку разворачивания; содержимое панели (поля, кнопки) сохраняется.
+    public const double PropsCollapsedPx = 32;
+    public bool PropsCollapsed { get; private set; }
+    public void SetPropsCollapsed(bool on)
+    {
+        PropsCollapsed = on;
+        PropsPanel.Width = on ? PropsCollapsedPx : UiLook.PropsPanelPx;
+        PropsHeader.IsVisible = !on; PropsTitle.IsVisible = !on; PropsScroll.IsVisible = !on; PropsButtons.IsVisible = !on;
+        PropsHeaderRow.Margin = on ? new Thickness(4, 6, 4, 0) : new Thickness(4, 6, 8, 0);
+        // » — свернуть (вправо), « — развернуть
+        PropsCollapseGlyph.Data = Avalonia.Media.Geometry.Parse(on ? "M10,0 L6,4 L10,8 M6,0 L2,4 L6,8" : "M2,0 L6,4 L2,8 M6,0 L10,4 L6,8");
+        ToolTip.SetTip(PropsCollapse, Loc.L(on ? "Развернуть панель свойств" : "Свернуть панель свойств"));
+        try { if (UserPrefs.Current.PropsCollapsed != on) { UserPrefs.Current.PropsCollapsed = on; UserPrefs.Current.Save(); } } catch { }
+    }
+    void InitPropsHeader()
+    {
+        PropsHeader.Text = Loc.L("Свойства");
+        PropsCollapse.Click += (_, _) => SetPropsCollapsed(!PropsCollapsed);
+        HookPropsLabelFit();
+        bool saved = false; try { saved = UserPrefs.Current.PropsCollapsed; } catch { }
+        SetPropsCollapsed(saved);
     }
 
     public void ApplyTheme(bool dark)
@@ -1252,6 +1277,7 @@ public partial class MainWindow : Window
         RebuildUi();
         RebuildTree();
         if (CurrentOperation != null) PropsTitle.Text = L(CurrentOperation.Title).ToUpperInvariant();
+        PropsHeader.Text = L("Свойства"); SetPropsCollapsed(PropsCollapsed);
         ShowHint(View.Tool != null ? L(View.Tool.Hint) : null);
         Cube.InvalidateVisual();
     }
@@ -2392,6 +2418,8 @@ public partial class MainWindow : Window
         // операция не от ручки — ручка у выбора убирается (её операция — другая)
         if (!_startingHandleOp) { View.Handle = null; _handleOp = null; _handleOpFixed = false; }
         PropsPanel.IsVisible = showPanel || _propsOn;
+        // k185 (а1): операция с полями разворачивает свёрнутую панель — иначе её поля и «ОК» скрыты
+        if (showPanel && PropsCollapsed) SetPropsCollapsed(false);
         PropsTitle.Text = L(op.Title).ToUpperInvariant();
         PropsBody.Children.Clear();
         PropsButtons.Children.Clear();
