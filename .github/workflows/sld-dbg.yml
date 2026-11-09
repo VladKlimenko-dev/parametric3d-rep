@@ -66,7 +66,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k185_d4, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=93152A110,8294A14,7632K72 P3D_SLDDIAG=1' }
+          - { name: k185_p3, cmd: 'sldprt tests/k01/data/sw_die_2602a125.SLDPRT', env: 'P3D_SLDPROF=1 P3D_SLDTIMEOUT=1500' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

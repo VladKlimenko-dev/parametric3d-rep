@@ -277,7 +277,8 @@ internal sealed class XtNurbsSurf : XtSurf
     {
         var (u0, u1, v0, v1) = Range;
         if (!WarmOff && !double.IsNaN(lastQ.X) && (q - lastQ).Length < 2e-4 && NewtonFrom(q, lastU, lastV) is var (wu, wv, ok) && ok)
-        { lastQ = q; lastU = wu; lastV = wv; return (wu, wv); }
+        { lastQ = q; lastU = wu; lastV = wv; if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count("XT: проекция на B — тёплая", 1); return (wu, wv); }
+        if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count("XT: проекция на B — полная", 1);
         var res = ProjectUvFull(q); lastQ = q; lastU = res.U; lastV = res.V; return res;
     }
     static readonly bool WarmOff = Environment.GetEnvironmentVariable("P3D_XTWARM") == "0";
@@ -693,6 +694,7 @@ internal static class XtPoly
                     // вскользь) — точка оставалась на одной поверхности в 1.5 мм от другой, сплайн ребра шёл волной (разъём
                     // 6168T106). Тогда — шаги Ньютона по касательным плоскостям обеих поверхностей (ближайшая к точке точка
                     // их линии пересечения), как маршевые шаги пересечения в OCCT. Мутация P3D_XTINTNEWTON=0.
+                    if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count(conv ? "XT: сгущение — сошлось" : "XT: сгущение — не сошлось", 1);
                     if (!conv && !IntNewtonOff && IntersectNewton(a, b, (a.Project(p) - p).Length > 1e-9 ? p0 : p) is { } x) p = x;
                     // k184: точка, так и не севшая на обе поверхности (граница скругления BLEND_BOUND против плоскости или
                     // цилиндра: попеременная проекция уходит к другому касанию), не ставится — между точками карты остаётся
