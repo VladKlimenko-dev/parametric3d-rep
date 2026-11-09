@@ -795,11 +795,9 @@ public static class StepImport
             if (ExtDbg) Console.Error.WriteLine($"NURBSEXT {f.Tag} pass {pass} need {need} u [{lu:G4}, {hu:G4}] v [{lv:G4}, {hv:G4}] closedU {ns.ClosedU}");
             if (!need) break;
             if (ns.ClosedU && (lu < 0 || hu > 1)) break;
-            // запас: вылет плюс 5 % области — угловая точка ребра проекции на продолжение не находит и в подсчёт не входит
-            // (сверло 2958A552: найдено −0.0004 при нужных −0.0013); продление дальше рёбер грани не меняет (она ограничена ими)
-            double M(double x) => Math.Sign(x) * (Math.Abs(x) * 1.1 + 0.05);
+            double M(double x) => x * 1.1;   // запас 10 % от вылета
             double u0 = lu < 0 ? M(lu) : 0, u1 = hu > 1 ? 1 + M(hu - 1) : 1, v0 = lv < 0 ? M(lv) : 0, v1 = hv > 1 ? 1 + M(hv - 1) : 1;
-            if (u0 < -0.15 || u1 > 1.15 || v0 < -0.15 || v1 > 1.15) break;
+            if (u0 < -0.1 || u1 > 1.1 || v0 < -0.1 || v1 > 1.1) break;
             if (ns.Extended(u0, u1, v0, v1) is { } ext) { f.Surface = ext; Interlocked.Increment(ref NurbsExtended); if (ExtDbg) Console.Error.WriteLine($"NURBSEXT   extended to u [{u0:G4}, {u1:G4}] v [{v0:G4}, {v1:G4}]"); }
             else { if (ExtDbg) Console.Error.WriteLine("NURBSEXT   Extended returned null"); break; }
         }
