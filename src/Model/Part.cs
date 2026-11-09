@@ -942,6 +942,31 @@ public sealed class Part : ModelItem
     /// (снятые), — ломаными; знак — по объёму (больше — добавлено, меньше — убрано). null — состояний нет (деталь не посчитана,
     /// операция подавлена, ошибка). Мутация P3D_TREEDIFF=0.
     /// </summary>
+    /// <summary>
+    /// k185 (замечание 09.11, 23:07): ЛОМАНАЯ РЕБРА ДЛЯ КОНТУРОВ ДЕРЕВА — точки ребра по точной кривой с шагом по прогибу хорды
+    /// (ExactFaceMesher.EdgePoints — те же, что у рёбер на виде). Прежде — 32 равных куска на ребро: винтовое ребро резьбы
+    /// (ниппель 4548K221) в десятки витков получало по 1–2 куска на виток, и подсветка операции шла «звёздами» поперёк детали.
+    /// Мутация P3D_TREEEDGEPTS=0 — прежние 32 куска.
+    /// </summary>
+    public static void EdgeLines(Kernel.Topology.TEdge e, List<(Vector3d A, Vector3d B)> lines)
+    {
+        var c = e.Curve;
+        if (!TreeEdgePtsOff && c is not Kernel.Curves.LineCurve3)
+        {
+            List<Vector3d>? pts = null;
+            try { pts = Kernel.Tess.ExactFaceMesher.EdgePoints(e); } catch (Exception ex) when (!Kernel.KernelContext.IsCancellation(ex)) { }
+            if (pts is { Count: >= 2 })
+            {
+                for (int i = 1; i < pts.Count; i++) lines.Add((pts[i - 1], pts[i]));
+                return;
+            }
+        }
+        int n = c is Kernel.Curves.LineCurve3 ? 1 : 32;
+        var prev = c.PointAt(c.T0);
+        for (int i = 1; i <= n; i++) { var q = c.PointAt(c.T0 + (c.T1 - c.T0) * i / n); lines.Add((prev, q)); prev = q; }
+    }
+    static readonly bool TreeEdgePtsOff = Environment.GetEnvironmentVariable("P3D_TREEEDGEPTS") == "0";
+
     public (List<(Vector3d A, Vector3d B)> Lines, bool Adds)? MaterialDiff(Feature f)
     {
         if (TreeDiffOff || IsDirty || f.Suppressed || f.Error != null) return null;
@@ -964,13 +989,7 @@ public sealed class Part : ModelItem
         var k0 = new HashSet<string>(b0.SelectMany(b => b.Edges).Where(e => !e.Hidden).Select(Key));
         var k1 = new HashSet<string>(b1.SelectMany(b => b.Edges).Where(e => !e.Hidden).Select(Key));
         var lines = new List<(Vector3d A, Vector3d B)>();
-        void Add(Kernel.Topology.TEdge e)
-        {
-            var c = e.Curve;
-            int n = c is Kernel.Curves.LineCurve3 ? 1 : 32;
-            var prev = c.PointAt(c.T0);
-            for (int i = 1; i <= n; i++) { var q = c.PointAt(c.T0 + (c.T1 - c.T0) * i / n); lines.Add((prev, q)); prev = q; }
-        }
+        void Add(Kernel.Topology.TEdge e) => EdgeLines(e, lines);
         // k116 (замечание 16:00, п. 6): КОНТУР ДОБАВЛЕННОГО/СНЯТОГО — рёбра граней, порождённых операцией (метка «#ключ/»):
         // стенки и дно выреза, стенки и крышка бобышки. Разность рёбер «до/после» давала и рёбра чужих граней, которые
         // булева лишь переразбила (кромки, порезанные на куски). Нет таких граней (зеркало, массив) — прежняя разность.

@@ -66,7 +66,7 @@ public static class TreeContours
                 var ids = f.CreatedFaceIds.ToHashSet();
                 foreach (var e in fp.Bodies.SelectMany(b => b.Edges))
                     if (!e.Hidden && ((e.FaceA != null && ids.Contains(e.FaceA.Id)) || (e.FaceB != null && ids.Contains(e.FaceB.Id))))
-                        Curve(l, e.Curve, e.Curve is Parametric3D.Kernel.Curves.LineCurve3 ? 1 : 32);
+                        Part.EdgeLines(e, l);   // k185: по точной кривой с шагом по прогибу (винтовые рёбра резьбы)
                 break;
             }
         }

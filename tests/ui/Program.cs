@@ -6709,6 +6709,33 @@ Check("UI-NECK-CUT-K185", () =>
     Require(part.Bodies.All(b => Parametric3D.Kernel.Topology.EntityNames.Faceted(b).Count == 0), "cut from a saved state left faceted faces");
 });
 
+Check("UI-TREE-HELIX-K185", () =>
+{
+    // k185 (замечание 09.11, 23:07): подсветка операции при наведении в дереве — рёбра резьбы ниппеля 4548K221 шли ломаными по
+    // 32 куска на ребро («звёзды»); теперь — по точной кривой с шагом по прогибу: длина ломаной = длина кривой
+    string path = Path.Combine("tests", "k01", "data", "sw_4548k221_steel_pipe_nipple.SLDPRT");
+    if (!File.Exists(path)) { Console.WriteLine("  no file " + path); return; }
+    var imp = DocumentSession.FromPart(DocumentSession.ImportPart(path, new List<string>()), "nipple");
+    imp.Document.RebuildDirty();
+    var part = imp.Part!;
+    int curved = 0; double worst = 0;
+    foreach (var e in part.Bodies.SelectMany(b => b.Edges))
+    {
+        if (e.Hidden || e.Curve is Parametric3D.Kernel.Curves.LineCurve3) continue;
+        var c = e.Curve; double len = 0; var prev = c.PointAt(c.T0);
+        for (int i = 1; i <= 4000; i++) { var q = c.PointAt(c.T0 + (c.T1 - c.T0) * i / 4000); len += (q - prev).Length; prev = q; }
+        if (len < 1e-3) continue;
+        var lines = new List<(Vector3d A, Vector3d B)>(); Part.EdgeLines(e, lines);
+        double poly = lines.Sum(x => (x.B - x.A).Length);
+        worst = Math.Max(worst, 1 - poly / len); curved++;
+    }
+    Console.WriteLine($"  curved edges {curved}, worst polyline shortfall {worst:P3}");
+    Require(curved > 0, "no curved edges");
+    Require(worst < 0.005, $"edge polyline {worst:P2} shorter than the curve");
+    var ff = part.Features.FirstOrDefault(x => !x.Suppressed);
+    Require(ff != null && Parametric3D.App.Views.TreeContours.MaterialOf(ff) is not null, "no hover contour for the import feature");
+});
+
 Check("UI-SKETCH-DIMEXT-K185", () =>
 {
     // k185 (замечание 09.11, 12:39, пп. 1–2): размер между параллельными отрезками — размерная линия на обоих отрезках: выносных
