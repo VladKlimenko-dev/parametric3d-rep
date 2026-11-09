@@ -1,0 +1,2 @@
+exit 1
+seconds 1501 nproc 4 env P3D_SLDNAME=6169K417 P3D_SLDPROF=1 P3D_SLDTIMEOUT=1500 cmd sldprt corpus
