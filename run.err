@@ -1,0 +1,29 @@
+XTBLENDF 50 type R range [0.0003175,0.0003175] thumb [] spine INTERSECTION s0 B_SURFACE s1 B_SURFACE fields node_id=378 attributes_features=1 owner=275 next=250 previous=46 geometric_owner=276 sense=+ blend_type=R surface=System.Int32[] spine=277 range=[0.0003175,0.0003175] thumb_weight=[1,1] boundary=System.Int32[] start=1 end=1
+XTINT node 147 chart 22 dense 169 offA 1.03E-11 mm (XtNurbsSurf) offB 0.0559 mm (BlendBound)
+XTINT   B worst (-0.00016130476884353552, 0.021030581404505876, -0.000944552914708224) centre (-0.00010386943582639169, 0.020713439570281256, -0.0009474587210316054) d0 0.3175 mm (R0 0.3175) d1 0.3175 mm (R1 0.3175) contact off 0.05592 mm, q-centre 0.3223 mm, spine pts 179 nearest 0.7469 mm
+XTBLENDF 170 type R range [0.0003175,0.0003175] thumb [] spine INTERSECTION s0 B_SURFACE s1 B_SURFACE fields node_id=306 attributes_features=1 owner=131 next=175 previous=176 geometric_owner=177 sense=+ blend_type=R surface=System.Int32[] spine=178 range=[0.0003175,0.0003175] thumb_weight=[1,1] boundary=System.Int32[] start=1 end=1
+XTINT node 141 chart 22 dense 169 offA 1.12E-11 mm (XtNurbsSurf) offB 0.282 mm (BlendBound)
+XTINT   B worst (-0.016284943490558507, 0.013308342832573719, -0.005682281006202282) centre (-0.016546278178540458, 0.013486997582948593, -0.005962555009244992) d0 0.3154 mm (R0 0.3175) d1 0.3175 mm (R1 0.3175) contact off 0.2815 mm, q-centre 0.4228 mm, spine pts 179 nearest 0.6927 mm
+XTINT node 159 chart 22 dense 169 offA 2.9E-11 mm (XtNurbsSurf) offB 0.0536 mm (BlendBound)
+XTINT   B worst (-5.509942398002106E-05, 0.020713619952098413, -0.0069820917526123155) centre (1.5151656016380815E-05, 0.020714062715493878, -0.006667857800926108) d0 0.3175 mm (R0 0.3175) d1 0.3175 mm (R1 0.3175) contact off 0.0536 mm, q-centre 0.322 mm, spine pts 179 nearest 0.8652 mm
+XTBLENDF 174 type R range [0.0003175,0.0003175] thumb [] spine INTERSECTION s0 B_SURFACE s1 B_SURFACE fields node_id=330 attributes_features=1 owner=180 next=185 previous=210 geometric_owner=217 sense=+ blend_type=R surface=System.Int32[] spine=195 range=[0.0003175,0.0003175] thumb_weight=[1,1] boundary=System.Int32[] start=1 end=1
+XTINT node 146 chart 21 dense 161 offA 4.25E-15 mm (XtNurbsSurf) offB 0.267 mm (BlendBound)
+XTINT   B worst (0.012888507084193949, 0.002078350107872524, -0.001567774267603932) centre (0.01315734268839316, 0.002089978629121968, -0.0012517823377117515) d0 0.3175 mm (R0 0.3175) d1 0.3175 mm (R1 0.3175) contact off 0.2673 mm, q-centre 0.415 mm, spine pts 171 nearest 0.06625 mm
+XTBLENDF 184 type R range [0.0003175,0.0003175] thumb [] spine INTERSECTION s0 B_SURFACE s1 B_SURFACE fields node_id=354 attributes_features=1 owner=219 next=211 previous=248 geometric_owner=249 sense=+ blend_type=R surface=System.Int32[] spine=208 range=[0.0003175,0.0003175] thumb_weight=[1,1] boundary=System.Int32[] start=1 end=1
+XTINT node 252 chart 21 dense 161 offA 3.4E-11 mm (XtNurbsSurf) offB 0.067 mm (BlendBound)
+XTINT   B worst (-0.0012558386722586515, 0.012944021487515372, -0.000846892243500336) centre (-0.001218382411061247, 0.01326646982380362, -0.0008525995298859845) d0 0.3175 mm (R0 0.3175) d1 0.3175 mm (R1 0.3175) contact off 0.06703 mm, q-centre 0.3247 mm, spine pts 171 nearest 0.06866 mm
+XTINT node 243 chart 21 dense 161 offA 3.37E-11 mm (XtNurbsSurf) offB 0.0551 mm (BlendBound)
+XTINT   B worst (0.00125583867225866, 0.01294402148751537, 0.0002118922435003363) centre (0.0012305168763469892, 0.013265349807067643, 0.00021658330397027753) d0 0.3175 mm (R0 0.3175) d1 0.3175 mm (R1 0.3175) contact off 0.05509 mm, q-centre 0.3224 mm, spine pts 171 nearest 0.05643 mm
+XTINT node 194 chart 21 dense 161 offA 3.88E-15 mm (XtNurbsSurf) offB 0.104 mm (BlendBound)
+XTINT   B worst (0.0002057978580304981, 0.013320684891500552, 0.0063330863446930796) centre (7.578467820146364E-05, 0.013322084444118807, 0.006025208610229874) d0 0.3175 mm (R0 0.3175) d1 0.3175 mm (R1 0.3175) contact off 0.1044 mm, q-centre 0.3342 mm, spine pts 171 nearest 0.1763 mm
+XTINT node 202 chart 22 dense 169 offA 1.07E-11 mm (XtNurbsSurf) offB 0.0615 mm (BlendBound)
+XTINT   B worst (-0.00014736037943325616, 0.02071316904397085, -0.0006272180998000516) centre (-0.00010268165111294473, 0.020713445492479582, -0.0009475214554044415) d0 0.3175 mm (R0 0.3175) d1 0.3175 mm (R1 0.3175) contact off 0.06151 mm, q-centre 0.3234 mm, spine pts 179 nearest 0.7481 mm
+XTINT node 357 chart 6 dense 6 offA 0.0654 mm (XtBlendSurf) offB 8.09E-12 mm (Pl)
+XTINT node 138 chart 6 dense 13 offA 0.317 mm (XtBlendSurf) offB 8.82E-11 mm (Pl)
+XTINT node 222 chart 6 dense 17 offA 0.113 mm (XtBlendSurf) offB 1.47E-10 mm (Pl)
+XTINT node 315 chart 6 dense 6 offA 0.092 mm (XtBlendSurf) offB 9.54E-12 mm (Pl)
+XTINT node 336 chart 6 dense 13 offA 0.239 mm (XtBlendSurf) offB 5.94E-15 mm (Pl)
+XTINT node 308 chart 6 dense 6 offA 0.00605 mm (XtBlendSurf) offB 4.12E-15 mm (Pl)
+XTINT node 9 chart 6 dense 6 offA 0.0674 mm (XtBlendSurf) offB 1.29E-11 mm (Pl)
+XTINT node 49 chart 6 dense 13 offA 0.232 mm (XtBlendSurf) offB 2.16E-11 mm (Pl)
+seconds 6 nproc 4 env P3D_SLDNAME=92146a038 P3D_XTINTDBG=1 P3D_XTSPINEDENSE=0 P3D_XTBLENDF=1 cmd sldprt
