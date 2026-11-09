@@ -6636,11 +6636,11 @@ Check("UI-SKETCH-IMAGE-UNDO-K185", () =>
         // k185 (15:48, 15:57): линия эскиза поверх картинки — выбирается раньше картинки (слой мыши её не берёт)
         w.ImageLayer.Select(null); Run();
         var img = sk.Images[0];
-        var ln = sk.AddEntity(new SkLine(new SkPoint(img.At(-0.8, 0)), new SkPoint(img.At(0.8, 0)))); w.AfterSketchEdit(sk); Run();
         var midS = vp.Project(sk.Plane.ToWorld(img.At(0, 0)))!.Value;
-        var offS = vp.Project(sk.Plane.ToWorld(img.At(0.3, 0.6)))!.Value;
-        bool onLine = w.ImageLayer.HitTest(midS), onImage = w.ImageLayer.HitTest(offS);
-        Console.WriteLine($"  hit: on line {onLine}, on image only {onImage}, pick {vp.PickForTest(midS).Kind}");
+        bool onImage = w.ImageLayer.HitTest(midS);   // до линии — картинка берёт мышь
+        var ln = sk.AddEntity(new SkLine(new SkPoint(img.At(-0.8, 0)), new SkPoint(img.At(0.8, 0)))); w.AfterSketchEdit(sk); Run();
+        bool onLine = w.ImageLayer.HitTest(midS);
+        Console.WriteLine($"  hit: on line {onLine}, image before the line {onImage}, pick {vp.PickForTest(midS).Kind}, tool {vp.Tool?.GetType().Name}");
         Require(!onLine && onImage, "the image takes the mouse over a sketch line (or not over the image)");
         sk.Entities.Remove(ln); w.AfterSketchEdit(sk); Run();
         // (2) поворот: 87° → 90°, 80° — как есть, 183° → 180°
