@@ -1,0 +1,1 @@
+seconds 10 nproc 4 env P3D_SLDNAME=drill_2958a552 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=2400 cmd sldprt
