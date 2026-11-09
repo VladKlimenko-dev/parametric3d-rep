@@ -6571,7 +6571,8 @@ Check("UI-SKETCH-IMAGE-K184", () =>
         Console.WriteLine($"  pixels {pxs?.W}x{pxs?.H} rgba {pxs?.Rgba[0]:X2}{pxs?.Rgba[1]:X2}{pxs?.Rgba[2]:X2}{pxs?.Rgba[3]:X2}, GL images {vp.GlSketchImages}");
         Require(pxs != null && pxs.W == 40 && pxs.H == 20 && pxs.Rgba[0] == 0x33 && pxs.Rgba[1] == 0x66 && pxs.Rgba[2] == 0xCC && pxs.Rgba[3] == 255, "image pixels for the GL frame are wrong");
         Require(SketchImageLayer.InvertedOf(im) != null, "no inverted bitmap");
-        var invCb = w.GetVisualDescendants().OfType<CheckBox>().FirstOrDefault(c => c.Name == "prop_image_invert");
+        var invCb = w.FindControl<Panel>("PropsBody")?.Children.OfType<CheckBox>().FirstOrDefault(c => c.Name == "prop_image_invert");
+        Console.WriteLine($"  props body: {string.Join(", ", w.FindControl<Panel>("PropsBody")?.Children.Select(c => c.GetType().Name + ":" + c.Name) ?? Array.Empty<string>())}");
         Require(invCb != null && invCb.IsChecked == false, "no invert check box in the image properties");
         invCb!.IsChecked = true; Run();
         Require(im.Invert, "the invert check box did not invert the image");
