@@ -249,7 +249,7 @@ public static class SketchDimensions
             if (l != null && l.B.P != l.A.P && Math.Abs(Vector2d.Dot((l.B.P - l.A.P).Normalized(), nrm)) > 0.999)
             {
                 var ld = l.B.P - l.A.P; double t = Vector2d.Dot(q - l.A.P, ld) / ld.LengthSquared;
-                if (t >= -1e-9 && t <= 1 + 1e-9) return;           // размерная линия — на самом отрезке
+                if (l.Builtin || t >= -1e-9 && t <= 1 + 1e-9) return;   // на самом отрезке (ось эскиза — бесконечна)
                 var end = t < 0 ? l.A.P : l.B.P; var dq = q - end; double dl = dq.Length;
                 if (dl < 1e-12) return;
                 var to = q + dq / dl * (OverrunPx * px);

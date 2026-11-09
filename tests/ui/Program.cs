@@ -6631,6 +6631,41 @@ Check("UI-SKETCH-DIMEXT-K185", () =>
     w.FinishSketch(); Run();
 });
 
+Check("UI-SKETCH-NECK-K185", () =>
+{
+    // k185 (замечание 09.11, 12:39 и 13:06, файл пользователя): (2) выносные размера 1.25 (d99, между вертикальными отрезками) —
+    // от верхних концов (точки над и справа); (3) серый d17 при удалении остаётся (не задана глубина канавки), с объяснением;
+    // глубина канавки задана — d17 исчезает сам
+    var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "user_k185_neck.p3d")); var w = Open(s); BuildNow(s);
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    var vp = w.ViewPort; var solver = s.Document.Solver;
+    var sk = s.Part!.Sketches.First();
+    w.EditSketch(sk); BuildNow(s); Run();
+    var d99 = sk.Dimensions.First(x => x.Name == "d99");
+    var keep = sk.Dimensions.ToList();
+    sk.Dimensions.RemoveAll(x => !ReferenceEquals(x, d99));
+    SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+    sk.Dimensions.Clear(); sk.Dimensions.AddRange(keep);
+    var ex = SketchDimensions.LastExtensions.ToList();
+    Console.WriteLine($"  d99 extensions {string.Join("; ", ex.Select(e => $"({e.A.X:0.##},{e.A.Y:0.##})-({e.B.X:0.##},{e.B.Y:0.##})"))}");
+    var l1 = (SkLine)d99.Items[0]; var l2 = (SkLine)d99.Items[1];
+    SkPoint Top(SkLine l) => l.A.Y > l.B.Y ? l.A : l.B;
+    Require(ex.Count == 2 && ex.Any(e => (e.A - Top(l1).P).Length < 1e-6) && ex.Any(e => (e.A - Top(l2).P).Length < 1e-6), "d99 extension lines do not start at the upper segment ends");
+    var d17 = sk.Dimensions.FirstOrDefault(x => x.Name == "d17");
+    Require(d17 != null && d17.IsDefault, "d17 is not a grey dimension in the file");
+    SketchSuggest.DeleteDims(w, new List<SkDimension> { d17! }); Run();
+    Console.WriteLine($"  delete d17: stays {sk.Dimensions.Contains(d17!)}, toast: {w.ToastShown}");
+    Require(sk.Dimensions.Contains(d17!) && (w.ToastShown ?? "").Contains("d17"), "d17 was removed or no explanation");
+    // глубина канавки: нижняя точка правой стенки канавки (262.98, 28.66) — до оси эскиза
+    var bottom = sk.AllPoints().OrderBy(p => (p.P - new Vector2d(262.98, 28.66)).Length).First();
+    var depth = sk.AddDimension(DimensionType.DistancePointLine, Math.Abs(bottom.Y), bottom, sk.AxisH);
+    depth.Locked = true; depth.UserPlaced = false;
+    sk.Solve(solver); DefaultDimensions.Refresh(sk, solver); w.AfterSketchEdit(sk); Run();
+    Console.WriteLine($"  depth set: d17 present {sk.Dimensions.Contains(d17!)}, free {sk.FreeDegrees}");
+    Require(!sk.Dimensions.Contains(d17!), "d17 stays after the groove depth is set");
+    w.Close();
+});
+
 Check("UI-SKETCH-K106", () =>
 {
     // k106 (снимок 13:13): вершина открытого конца — поверх красного квадрата (2); совпадение концов дуг, уже касающихся,
