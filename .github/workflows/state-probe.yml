@@ -53,27 +53,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k185c_c1s0, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=0/6 P3D_SLDDIAG=1' }
-          - { name: k185c_c1s1, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=1/6 P3D_SLDDIAG=1' }
-          - { name: k185c_c1s2, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=2/6 P3D_SLDDIAG=1' }
-          - { name: k185c_c1s3, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=3/6 P3D_SLDDIAG=1' }
-          - { name: k185c_c1s4, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=4/6 P3D_SLDDIAG=1' }
-          - { name: k185c_c1s5, cmd: 'sldprt CORPUS/sldprt1', env: 'P3D_SLDSHARD=5/6 P3D_SLDDIAG=1' }
-          - { name: k185c_c2s0, cmd: 'sldprt CORPUS/sldprt2', env: 'P3D_SLDSHARD=0/4 P3D_SLDDIAG=1' }
-          - { name: k185c_c2s1, cmd: 'sldprt CORPUS/sldprt2', env: 'P3D_SLDSHARD=1/4 P3D_SLDDIAG=1' }
-          - { name: k185c_c2s2, cmd: 'sldprt CORPUS/sldprt2', env: 'P3D_SLDSHARD=2/4 P3D_SLDDIAG=1' }
-          - { name: k185c_c2s3, cmd: 'sldprt CORPUS/sldprt2', env: 'P3D_SLDSHARD=3/4 P3D_SLDDIAG=1' }
-          - { name: k185c_c3s0, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=0/6 P3D_SLDDIAG=1' }
-          - { name: k185c_c3s1, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=1/6 P3D_SLDDIAG=1' }
-          - { name: k185c_c3s2, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=2/6 P3D_SLDDIAG=1' }
-          - { name: k185c_c3s3, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=3/6 P3D_SLDDIAG=1' }
-          - { name: k185c_c3s4, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=4/6 P3D_SLDDIAG=1' }
-          - { name: k185c_c3s5, cmd: 'sldprt CORPUS/sldprt3', env: 'P3D_SLDSHARD=5/6 P3D_SLDDIAG=1' }
-          - { name: k185c_c4s0, cmd: 'sldprt CORPUS/sldprt4', env: 'P3D_SLDSHARD=0/3 P3D_SLDDIAG=1' }
-          - { name: k185c_c4s1, cmd: 'sldprt CORPUS/sldprt4', env: 'P3D_SLDSHARD=1/3 P3D_SLDDIAG=1' }
-          - { name: k185c_c4s2, cmd: 'sldprt CORPUS/sldprt4', env: 'P3D_SLDSHARD=2/3 P3D_SLDDIAG=1' }
-          - { name: k185c_allA, cmd: 'allA', env: '' }
-          - { name: k185c_allB, cmd: 'allB', env: '' }
+          - { name: k185p_p1, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=8761K424 P3D_SLDPROF=1 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k185p_p2, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=28035T11 P3D_SLDPROF=1 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k185p_p3, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=6169K417 P3D_SLDPROF=1 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k185p_p4, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=6169K419 P3D_SLDPROF=1 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k185p_p5, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=6169K406 P3D_SLDPROF=1 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k185p_p6, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=5K19_Easy P3D_SLDPROF=1 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k185p_p7, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=T54_Push P3D_SLDPROF=1 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=1500' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
