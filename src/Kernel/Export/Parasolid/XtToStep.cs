@@ -571,6 +571,13 @@ public static class XtToStep
                     {
                         double wa = 0, wb = 0; foreach (var q in dz) { wa = Math.Max(wa, (a.Project(q) - q).Length); wb = Math.Max(wb, (b.Project(q) - q).Length); }
                         if (wa > 1e-7 || wb > 1e-7) Console.Error.WriteLine($"XTINT node {cn.Id} chart {pts.Length} dense {dz.Count} offA {wa * 1000:G3} mm ({a.GetType().Name}) offB {wb * 1000:G3} mm ({b.GetType().Name})");
+                        foreach (var (sx, nm) in new[] { (a, "A"), (b, "B") })
+                            if (sx is XtSurf.BlendBound bbd)
+                            {
+                                Vector3d worst = dz[0]; double wd = -1;
+                                foreach (var q in dz) { double d = (bbd.Project(q) - q).Length; if (d > wd) { wd = d; worst = q; } }
+                                if (wd > 1e-7) Console.Error.WriteLine($"XTINT   {nm} worst {worst} {bbd.Diag(worst)}");
+                            }
                     }
                     return dz;
                 }

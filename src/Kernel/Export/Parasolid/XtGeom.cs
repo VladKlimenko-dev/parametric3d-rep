@@ -112,6 +112,12 @@ internal abstract class XtSurf
         public override Vector3d Project(Vector3d q) { var c = B.CentreAt(q); return (Idx == 0 ? B.S0 : B.S1).Project(c); }
         /// <summary>Касание с другой опорой (см. сгущение кривой пересечения).</summary>
         public Vector3d ProjectOther(Vector3d q) { var c = B.CentreAt(q); return (Idx == 0 ? B.S1 : B.S0).Project(c); }
+        /// <summary>k185: разбор — центр у точки, его отстояние от опор против радиусов, отход касания.</summary>
+        public string Diag(Vector3d q)
+        {
+            var c = B.CentreAt(q); var p0 = B.S0.Project(c); var p1 = B.S1.Project(c); var mine = Idx == 0 ? p0 : p1;
+            return $"centre {c} d0 {(c - p0).Length * 1000:G4} mm (R0 {B.R0 * 1000:G4}) d1 {(c - p1).Length * 1000:G4} mm (R1 {B.R1 * 1000:G4}) contact off {(mine - q).Length * 1000:G4} mm, q-centre {(q - c).Length * 1000:G4} mm";
+        }
     }
     sealed class Off : XtSurf
     {
