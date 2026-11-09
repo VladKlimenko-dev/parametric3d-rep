@@ -288,7 +288,7 @@ internal sealed class XtNurbsSurf : XtSurf
         double warmR = WarmCellOff ? 2e-4 : Math.Max(2e-4, 0.5 * cell);
         if (!WarmOff && !double.IsNaN(lastQ.X) && (q - lastQ).Length < warmR && NewtonFrom(q, lastU, lastV) is var (wu, wv, ok) && ok)
         { lastQ = q; lastU = wu; lastV = wv; if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count("XT: проекция на B — тёплая", 1); return (wu, wv); }
-        if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count("XT: проекция на B — полная", 1);
+        if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count(double.IsNaN(lastQ.X) ? "XT: проекция на B — полная (первая)" : (q - lastQ).Length >= warmR ? "XT: проекция на B — полная (далеко)" : "XT: проекция на B — полная (Ньютон)", 1);
         var res = ProjectUvFull(q); lastQ = q; lastU = res.U; lastV = res.V; return res;
     }
     static readonly bool WarmOff = Environment.GetEnvironmentVariable("P3D_XTWARM") == "0";
@@ -665,6 +665,7 @@ internal static class XtPoly
 
     public static List<Vector3d> Densify(IReadOnlyList<Vector3d> chart, XtSurf? a, XtSurf? b, int per)
     {
+        if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count($"XT: сгущение {a?.GetType().Name}×{b?.GetType().Name} точек", chart.Count);
         var res = new List<Vector3d>();
         for (int i = 0; i + 1 < chart.Count; i++)
         {
