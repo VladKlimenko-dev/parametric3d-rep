@@ -53,13 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k185f_drill, cmd: 'sldprt', env: 'P3D_SLDNAME=drill_2958a552 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=2400' }
-          - { name: k185f_drill2, cmd: 'sldprt', env: 'P3D_SLDNAME=drill_2901a107 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=2400' }
-          - { name: k185f_spring, cmd: 'sldprt', env: 'P3D_SLDNAME=9271k53 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=2400' }
-          - { name: k185f_lock, cmd: 'sldprt', env: 'P3D_SLDNAME=92146a038 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=2400' }
-          - { name: k185f_sw, cmd: 'sldprt', env: '' }
-          - { name: k185f_allA, cmd: 'allA', env: '' }
-          - { name: k185f_allB, cmd: 'allB', env: '' }
+          - { name: k185g_drillT, cmd: 'sldprt', env: 'P3D_SLDNAME=drill_2958a552 P3D_MESHTRACE=1' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
