@@ -190,6 +190,9 @@ public static class GeneralBoolean
     static double TolV => FaceSplit.TolOverride ?? Region2Ops.Eps;
     /// <summary>KRN-02: отказы «сторона грани не определена» (счётчик разбора).</summary>
     public static int SideUndecided;
+    /// <summary>k185: сторона грани решена пробой со сдвигом вдоль касательной (разбор).</summary>
+    public static int SideShifted;
+    static readonly bool SideShiftOff = Environment.GetEnvironmentVariable("P3D_SIDESHIFT") == "0";
     internal static readonly bool FaceLossOld = Environment.GetEnvironmentVariable("P3D_FACELOSS") == "0";
     internal static readonly bool NestedOff = Environment.GetEnvironmentVariable("P3D_NESTED") == "0";
     /// <summary>KRN-03, замер: переворот оси сферы по результату сетки / отказ разметки сферы.</summary>
@@ -826,6 +829,39 @@ public static class GeneralBoolean
                         decided = true;
                     }
                     if (decided) break;
+                }
+                // k185: ТОЧКА ОБЛАСТИ НА ЧУЖОЙ ГРАНИЦЕ. Проба по нормали остаётся в плоскости грани другого операнда, если нормаль
+                // лежит в ней (вырез шейки DLOT: точка тела вращения на плоскости z = 0 выреза, нормаль радиальная) — классификатор
+                // отвечает «на границе» при любом шаге, и маршрут отказывал (многогранная булева, 35 гранёных граней). Тогда
+                // точка сдвигается вдоль касательной грани (четыре направления, 1/16 минимального элемента) и возвращается на
+                // поверхность; сторона грани в окрестности та же. Мутация P3D_SIDESHIFT=0.
+                if (!decided && !SideShiftOff)
+                {
+                    double floor = 4 * Classifier.Tol, sh = ToleranceContext.Current.MinFeature / 16;
+                    foreach (var pt0 in new[] { r.Inside }.Concat(r.InsideCandidates))
+                    {
+                        var n0 = face.NormalAt(pt0).Normalized();
+                        var t1 = Vector3d.Cross(n0, Math.Abs(n0.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY).Normalized(); var t2 = Vector3d.Cross(n0, t1);
+                        foreach (var dir in new[] { t1, -t1, t2, -t2 })
+                        {
+                            Vector3d pt;
+                            try { pt = src.PointAt(src.ProjectToUV(pt0 + dir * sh)); } catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { continue; }
+                            if ((pt - pt0).Length > 4 * sh) continue;
+                            var n = face.NormalAt(pt).Normalized();
+                            for (double step = ToleranceContext.Current.MinFeature / 4; step >= floor && !decided; step /= 2)
+                            {
+                                int? qa1 = clA.Classify(pt + n * step), qb1 = clB.Classify(pt + n * step), qa2 = clA.Classify(pt - n * step), qb2 = clB.Classify(pt - n * step);
+                                if (qa1 is not (1 or -1) || qb1 is not (1 or -1) || qa2 is not (1 or -1) || qb2 is not (1 or -1)) continue;
+                                bool InR(int qa, int qb) => op switch { Bool2.Union => qa == 1 || qb == 1, Bool2.Intersect => qa == 1 && qb == 1, _ => qa == 1 && qb != 1 };
+                                bool plus = InR(qa1.Value, qb1.Value), minus = InR(qa2.Value, qb2.Value);
+                                if (plus == minus) continue;
+                                if (plus) face.Reversed = !face.Reversed;
+                                decided = true; Interlocked.Increment(ref SideShifted);
+                            }
+                            if (decided) break;
+                        }
+                        if (decided) break;
+                    }
                 }
                 if (!decided) { SideUndecided++; why = $"outward side undecided ({f.Face.Tag}, {src.GetType().Name}, inside {r.Inside:0.####})"; return null; }
             }
