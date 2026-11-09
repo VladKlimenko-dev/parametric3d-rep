@@ -6662,16 +6662,20 @@ Check("UI-SKETCH-NECK-K185", () =>
         var st1 = sk.Solve(solver);
         Console.WriteLine($"  after formulas: solve {st1}, free {sk.FreeDegrees}");
     }
+    int weak0 = sk.Dimensions.Count(x => x.IsDefault);
     SketchSuggest.DeleteDims(w, new List<SkDimension> { d17! }); Run();
-    Console.WriteLine($"  delete d17: stays {sk.Dimensions.Contains(d17!)}, toast: {w.ToastShown}");
-    Require(sk.Dimensions.Contains(d17!) && (w.ToastShown ?? "").Contains("d17"), "d17 was removed or no explanation");
+    int weak1 = sk.Dimensions.Count(x => x.IsDefault);
+    var added = sk.Dimensions.Where(x => x.IsDefault && !keep.Contains(x)).Select(x => $"{x.Name}:{x.Type}:{x.Value:0.###}").ToList();
+    Console.WriteLine($"  delete d17: stays {sk.Dimensions.Contains(d17!)}, weak {weak0} -> {weak1}, new weak {string.Join(",", added)}, solve {sk.Solve(solver)}, toast: {w.ToastShown}");
+    Require(!sk.Dimensions.Contains(d17!) || (w.ToastShown ?? "").Contains("d17"), "d17 neither removed nor explained");
     // глубина канавки: нижняя точка правой стенки канавки (262.98, 28.66) — до оси эскиза
     var bottom = sk.AllPoints().OrderBy(p => (p.P - new Vector2d(262.98, 28.66)).Length).First();
     var depth = sk.AddDimension(DimensionType.DistancePointLine, Math.Abs(bottom.Y), bottom, sk.AxisH);
     depth.Locked = true; depth.UserPlaced = false;
     sk.Solve(solver); DefaultDimensions.Refresh(sk, solver); w.AfterSketchEdit(sk); Run();
-    Console.WriteLine($"  depth set: d17 present {sk.Dimensions.Contains(d17!)}, free {sk.FreeDegrees}");
-    Require(!sk.Dimensions.Contains(d17!), "d17 stays after the groove depth is set");
+    int weak2 = sk.Dimensions.Count(x => x.IsDefault);
+    Console.WriteLine($"  depth set: weak {weak1} -> {weak2}, free {sk.FreeDegrees}");
+    Require(weak2 == weak1 - 1, "the groove depth did not replace a grey dimension");
     w.Close();
 });
 
