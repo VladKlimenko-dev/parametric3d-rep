@@ -66,7 +66,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k185_d7, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=5706N12,1106K87,1423N3 P3D_SLDDIAG=1 P3D_SLDDIAGOBJ=res/out' }
+          - { name: k185_p6, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=28035T11 P3D_SLDPROF=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k185_p7, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=8761K424 P3D_SLDPROF=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k185_p8, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=6169K417 P3D_SLDPROF=1 P3D_SLDTIMEOUT=1500' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
