@@ -78,16 +78,31 @@ public sealed class SketchSetupOp : Operation
         // эскиз поворачивается так, что выбранное ребро — сверху (как ориентация «Top» в Creo)
         _up = p.Ref(new RefField
         {
-            Label = "Верх эскиза", Filter = PickFilter.Edges, Accept = UpCandidate, Single = true, Optional = true,
+            Label = "Верх эскиза", Filter = AxisUpOff ? PickFilter.Edges : PickFilter.Edges | PickFilter.Datums, Accept = UpCandidate, Single = true, Optional = true,
             Prefer = PreferOff ? null : UpCandidate,
         });
         if (!KeptOff) _up.KeptText = _sk.UpDescription.Length > 0 ? L(_sk.UpDescription) : L("ось плоскости");
-        p.Note(L("Щёлкните сторону рамки основы или прямое ребро грани-основы — оно станет верхом эскиза. Сейчас: {0}.",
+        p.Note(L(AxisUpOff ? "Щёлкните сторону рамки основы или прямое ребро грани-основы — оно станет верхом эскиза. Сейчас: {0}." : "Щёлкните сторону рамки основы, прямое ребро грани-основы или ось детали (сборки) — она задаст верх эскиза. Сейчас: {0}.",
             _sk.UpDescription.Length > 0 ? L(_sk.UpDescription) : L("ось плоскости")));
         p.Check("Взгляд с обратной стороны (или щелчок по стрелке нормали)", () => _sk.PlaneDescription.EndsWith(" (flipped)"), _ => { _sk.Flip(); ShowArrows(); });
+        // k185 (замечание 10.11, 08:46, а8.3): наведение на «Взгляд с обратной стороны» подсвечивает стрелку нормали в виде
+        if (!FlipHotOff && p.Checks.TryGetValue("Взгляд с обратной стороны (или щелчок по стрелке нормали)", out var flipCb))
+        {
+            FlipCheck = flipCb;
+            flipCb.PointerEntered += (_, _) => { NormalHot = true; ShowArrows(); };
+            flipCb.PointerExited += (_, _) => { NormalHot = false; ShowArrows(); };
+        }
     }
 
     static readonly bool KeptOff = Environment.GetEnvironmentVariable("P3D_SKSETUPKEPT") == "0";
+    public static readonly bool AxisUpOff = Environment.GetEnvironmentVariable("P3D_SKUPAXIS") == "0";
+    static readonly bool FlipHotOff = Environment.GetEnvironmentVariable("P3D_SKFLIPHOT") == "0";
+    /// <summary>k185 (а8.3): стрелка нормали подсвечена наведением на флажок «Взгляд с обратной стороны».</summary>
+    public bool NormalHot { get; private set; }
+    /// <summary>Флажок «Взгляд с обратной стороны» (проверки).</summary>
+    public Avalonia.Controls.CheckBox? FlipCheck { get; private set; }
+    /// <summary>Цвет стрелки нормали в последнем показе (проверки).</summary>
+    public Vector4 NormalColor { get; private set; }
     static readonly bool PreferOff = Environment.GetEnvironmentVariable("P3D_SKSETUPUP") == "0";
 
     /// <summary>Основа эскиза ссылкой вида: опорная плоскость по номеру или грань по имени (номеру).</summary>
@@ -103,6 +118,10 @@ public sealed class SketchSetupOp : Operation
     /// <summary>Годится ли под курсором для «верха»: прямое ребро, лежащее в плоскости основы (ребро грани-основы).</summary>
     public bool UpCandidate(PickRef r)
     {
+        // k185 (замечание 10.11, 08:50, а8.5): оси детали и сборки — направлением «верха» (проекция оси на плоскость эскиза),
+        // кроме осей, перпендикулярных плоскости. Мутация P3D_SKUPAXIS=0 — только рёбра.
+        if (!AxisUpOff && r.Kind == PickKind.DatumAxis && r.Target is DatumAxis ax)
+            return Math.Abs(Vector3d.Dot(ax.Direction.Normalized(), _sk.Plane.W.Normalized())) < 1 - 1e-6;
         if (r.Kind != PickKind.Edge || Refs.LineOf(r) is not { } ln) return false;
         var n = _sk.Plane.W.Normalized(); var o = _sk.Plane.Origin;
         double tol = Math.Max(1e-6, Len() * 1e-6);
@@ -168,7 +187,7 @@ public sealed class SketchSetupOp : Operation
         // плоскость-основа
         if (_plane.Items.Count > 0 && _plane.Touched && Refs.PlaneOf(_plane.Items[0]) is { } pl)
         {
-            var frame = SketchOp.SketchFrame(_plane.Items[0], pl.Frame);
+            var frame = SketchOp.PreferYUp(SketchOp.SketchFrame(_plane.Items[0], pl.Frame));
             _sk.SetBasePlane(frame, pl.SourceId, pl.Name);
             SketchFaceRef.AttachById(_sk, Part.Bodies, pl.SourceId);
             _sk.OriginBase = null; _sk.OriginOffset = Vector2d.Zero; _dx = _dy = 0; _sk.UpDescription = "";
@@ -184,7 +203,10 @@ public sealed class SketchSetupOp : Operation
         if (_up.Items.Count > 0 && _up.Touched)
         {
             var r = _up.Items[0];
-            if (Refs.LineOf(r) is { } ln && !SetUpTowardLine(ln.At, ln.Dir, Describe(r))) W.ShowToast(L("Это направление перпендикулярно плоскости эскиза — «верх» им не задать"));
+            bool okUp = true;
+            if (!AxisUpOff && r.Target is DatumAxis ax) okUp = _sk.SetUpDirection(ax.Direction, ax.Name);   // ось — направление
+            else if (Refs.LineOf(r) is { } ln) okUp = SetUpTowardLine(ln.At, ln.Dir, Describe(r));
+            if (!okUp) W.ShowToast(L("Это направление перпендикулярно плоскости эскиза — «верх» им не задать"));
             _up.Touched = false;
             if (_up.Text != null) _up.Text.Text = L(_sk.UpDescription);
         }
@@ -230,7 +252,15 @@ public sealed class SketchSetupOp : Operation
         var orange = new Vector4(1f, 0.55f, 0.1f, 1f); var green = new Vector4(0.3f, 0.85f, 0.4f, 1f); var blue = new Vector4(0.35f, 0.6f, 1f, 0.9f);
         var hot = new Vector4(1f, 0.92f, 0.3f, 1f);
         // k101 (замечание 1): стрелка или сторона рамки под курсором — подсвечена (сторона рамки — щелчком «верх»)
-        Arrow(c, pl.W.Normalized(), L, Hot == 1 ? hot : orange);
+        bool nHot = Hot == 1 || NormalHot;
+        NormalColor = nHot ? hot : orange;
+        Arrow(c, pl.W.Normalized(), L, nHot ? hot : orange);
+        if (nHot)
+        {
+            // подсвеченная стрелка — толще: ещё два ствола рядом
+            var off = (Math.Abs(Vector3d.Dot(pl.W.Normalized(), pl.U.Normalized())) < 0.9 ? pl.U : pl.V).Normalized() * L * 0.006;
+            lines.Add((c + off, c + pl.W.Normalized() * L + off, hot)); lines.Add((c - off, c + pl.W.Normalized() * L - off, hot));
+        }
         Arrow(c, pl.V.Normalized(), L * 0.7, Hot == 2 ? hot : green);
         var sides = FrameSides();
         for (int i = 0; i < 4; i++)

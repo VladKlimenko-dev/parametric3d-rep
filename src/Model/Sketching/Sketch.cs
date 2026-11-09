@@ -80,6 +80,25 @@ public sealed class Sketch : ModelItem
     /// </summary>
     public void Flip()
     {
+        // k185 (замечание 10.11, 08:46, а8.2): ВЗГЛЯД С ОБРАТНОЙ СТОРОНЫ — КАК В CREO: верх эскиза остаётся верхом, меняется
+        // сторона взгляда — ось U разворачивается (U' = −U, V' = V, нормаль — обратная), плоские координаты x' = −x. Прежде
+        // оси U и V менялись местами: нормаль тоже разворачивалась, но эскиз на экране поворачивался на 90° (верх уходил
+        // вбок). Мутация P3D_SKFLIPMIRROR=0 — прежний обмен осей.
+        if (!FlipMirrorOff)
+        {
+            Plane = new Frame3(Plane.Origin, -Plane.U, Plane.V);
+            if (!FlipKeepOff)
+            {
+                BaseFrame = new Frame3(BaseFrame.Origin, -BaseFrame.U, BaseFrame.V);
+                UpVector = new Vector2d(-UpVector.X, UpVector.Y);
+                OriginOffset = new Vector2d(-OriginOffset.X, OriginOffset.Y);
+                MirrorX();
+            }
+            PlaneDescription = PlaneDescription.EndsWith(" (flipped)") ? PlaneDescription[..^10] : PlaneDescription + " (flipped)";
+            BumpStructure();
+            NotifyChanged(this);
+            return;
+        }
         Plane = new Frame3(Plane.Origin, Plane.V, Plane.U);
         // k101 (замечание 2): ГЕОМЕТРИЯ ОСТАЁТСЯ НА МЕСТЕ В МИРЕ. Оси эскиза меняются местами — прежде плоские координаты
         // оставались прежними, и эскиз (с рамкой настройки) зеркально «улетал» в сторону; основа не переворачивалась, и
@@ -99,6 +118,47 @@ public sealed class Sketch : ModelItem
     }
 
     public static readonly bool FlipKeepOff = Environment.GetEnvironmentVariable("P3D_SKFLIPKEEP") == "0";
+    public static readonly bool FlipMirrorOff = Environment.GetEnvironmentVariable("P3D_SKFLIPMIRROR") == "0";
+
+    /// <summary>
+    /// k185 (а8.2): плоские координаты x → −x (зеркало по оси Y эскиза): точки, обход дуг, эллипсы, координатные размеры X
+    /// (со знаком), подписи и значки, изображения (место и угол; картинка остаётся читаемой). «Горизонтально/вертикально» и
+    /// оси эскиза в ссылках не меняются — оси остаются теми же.
+    /// </summary>
+    private void MirrorX()
+    {
+        var builtin = new HashSet<SkEntity>(Builtins, ReferenceEqualityComparer.Instance);
+        var done = new HashSet<SkPoint>(ReferenceEqualityComparer.Instance);
+        foreach (var p in AllPoints())
+        {
+            if (builtin.Contains(p) || p.Owner is { } o && builtin.Contains(o) || !done.Add(p)) continue;
+            p.X = -p.X;
+        }
+        foreach (var e in Entities)
+        {
+            if (e is SkArc a) a.CCW = !a.CCW;
+            if (e is SkEllipse el) { el.Rotation = Math.PI - el.Rotation; (el.A0, el.A1) = (-el.A1, -el.A0); }
+        }
+        foreach (var c in Constraints) c.IconPos = new Vector2d(-c.IconPos.X, c.IconPos.Y);
+        foreach (var d in Dimensions)
+        {
+            // угол к горизонтальной оси эскиза: направление прямой зеркалится, угол от +X дополняется до 180
+            if (d.Type == DimensionType.AngleLineLine && !DimensionMeasure.AxisRayOff && d.Items.Any(i => ReferenceEquals(i, AxisH)))
+            {
+                d.Value = 180 - d.Value;
+                if (!string.IsNullOrWhiteSpace(d.Formula)) d.Formula = "180 - (" + d.Formula + ")";
+            }
+            if (d.Type == DimensionType.CoordX)
+            {
+                d.Value = -d.Value;
+                if (!string.IsNullOrWhiteSpace(d.Formula)) d.Formula = "-(" + d.Formula + ")";
+            }
+            d.Side = 0;
+            d.TextOffset = new Vector2d(-d.TextOffset.X, d.TextOffset.Y);
+            d.TextCenter = new Vector2d(-d.TextCenter.X, d.TextCenter.Y);
+        }
+        foreach (var im in Images) { im.Center = new Vector2d(-im.Center.X, im.Center.Y); im.Angle = -im.Angle; }
+    }
 
     /// <summary>
     /// k123 (замечание 27.10, 21:55, пп. 2, 5): ПОВОРОТ ВИДА ЭСКИЗА НА 90° (стрелки у куба вида). «Горизонтально» и
@@ -128,6 +188,9 @@ public sealed class Sketch : ModelItem
             var q = R(new Vector2d(p.X, p.Y)); p.X = q.X; p.Y = q.Y;
         }
         foreach (var e in Entities) if (e is SkEllipse el) el.Rotation += beta;
+        // k185 (замечание 10.11, 08:47, а8.4): изображение эскиза — вместе с геометрией (место и угол), на месте в мире.
+        // Мутация P3D_SKROLLIMAGE=0 — изображение не поворачивается.
+        if (!RollImageOff) foreach (var im in Images) { im.Center = R(im.Center); im.Angle += ccw ? 90 : -90; }
         SkEntity Map(SkEntity x) => ReferenceEquals(x, AxisH) ? AxisV : ReferenceEquals(x, AxisV) ? AxisH : x;
         foreach (var c in Constraints)
         {
@@ -158,6 +221,7 @@ public sealed class Sketch : ModelItem
         NotifyChanged(this);
     }
     public static readonly bool RollOff = Environment.GetEnvironmentVariable("P3D_SKROLL") == "0";
+    public static readonly bool RollImageOff = Environment.GetEnvironmentVariable("P3D_SKROLLIMAGE") == "0";
 
     /// <summary>Плоские координаты x ↔ y (зеркало по диагонали): точки, обход дуг, эллипсы, «горизонтально/вертикально»,
     /// координатные размеры, ссылки на оси эскиза.</summary>

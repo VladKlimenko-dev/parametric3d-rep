@@ -3272,7 +3272,7 @@ Check("UI-U13F-SURFACES", () =>
     p4.RemoveFeature(sb); s4.Document.RebuildDirty();
     // вращением: квадраты 5×5 на радиусе 20–25 в плоскостях XZ и YZ (90°) — по Паппу 25·(π/2)·22.5
     var q0 = DrawSketch(w4, p4, p4.PlaneXZ, sk => { Rect(sk, 20, 0, 25, 5); var l = new LineTool(chain: false); l.Click(new SketchInput(sk, new Vector2d(0, -5), null)); l.Click(new SketchInput(sk, new Vector2d(0, 10), null)); sk.Entities.OfType<SkLine>().Last().Role = SkRole.Centerline; });
-    var q1 = DrawSketch(w4, p4, p4.PlaneYZ, sk => Rect(sk, 20, 0, 25, 5));
+    var q1 = DrawSketch(w4, p4, p4.PlaneYZ, sk => { if (SketchOp.YUpOff) Rect(sk, 20, 0, 25, 5); else Rect(sk, -5, 20, 0, 25); });   // k185 (а7): на YZ верх — Y, U = −Z
     var rb = new BlendFeature { Mode = BlendKind.Rotational }; rb.SectionSketchIds.Add(q0.Id); rb.SectionSketchIds.Add(q1.Id); p4.AddFeature(rb); s4.Document.RebuildDirty();
     double pap = 25 * Math.PI / 2 * 22.5;
     Console.WriteLine($"  rotational blend: error {rb.Error}, volume {p4.Volume:F4} want {pap:F4}");
@@ -6819,6 +6819,95 @@ Check("UI-PROPS-PANEL-K185", () =>
     finally { w.Close(); }
 });
 
+Check("UI-SKETCH-D30-K185", () =>
+{
+    // k185 (замечание 10.11, 08:41, а5): деталь 100395799 — правка d30 (расстояние от горизонтали до оси) объявлялась
+    // противоречием со всеми связями и размерами. Разбор: состояние эскиза, правка на ±1…10 %, участники отказа.
+    var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "sketch_k185_sleeve_d30.p3d")); BuildNow(s);
+    var part = s.Part!; var sk = part.Sketches.First(); var solver = s.Document.Solver;
+    var d = sk.Dimensions.First(x => x.Name == "d30");
+    var st0 = sk.Solve(solver);
+    var insp = SketchEditing.Inspect(sk, solver);
+    Console.WriteLine($"  sketch: {st0}, dof {sk.DegreesOfFreedom}, inspect {insp.Failure}: cons {string.Join(", ", insp.Constraints.Select(c => c.Type + "[" + string.Join("/", c.Items.Select(i => i.Id)) + "]"))}; dims {string.Join(", ", insp.Dimensions.Select(x => x.Name))}");
+    var bad = new List<string>();
+    foreach (double k in new[] { 1.01, 0.99, 1.05, 0.95, 1.1, 0.9 })
+    {
+        double v0 = d.Value, want = v0 * k;
+        var res = SketchEditing.SetDimensionValue(sk, d, want, null, solver);
+        Console.WriteLine($"  d30 {v0:0.####} → {want:0.####}: ok {res.Ok}, failure {res.Failure}, status {res.Status}, related {res.Related}, cons {res.Constraints.Count}, dims {string.Join(",", res.Dimensions.Select(x => x.Name))}, degenerate {res.Degenerate.Count}");
+        if (!res.Ok) bad.Add($"{k}: {res.Failure}");
+        else { var back = SketchEditing.SetDimensionValue(sk, d, v0, null, solver); Require(back.Ok, "could not set d30 back"); }
+    }
+    Require(bad.Count == 0, "d30 edits refused: " + string.Join("; ", bad));
+});
+
+Check("UI-SKETCH-PLANE-K185", () =>
+{
+    // k185 (замечания 10.11, 08:41–08:50, а6–а8): плоскость, выбранная в виде, начинает эскиз; эскиз на YZ — Y вверх; взгляд
+    // с обратной стороны не поворачивает эскиз; подпись флажка — по-английски; стрелка нормали подсвечена наведением на флажок;
+    // поворот на 90° поворачивает и изображение; ось детали — «верх» эскиза
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var w = Open(s); var vp = w.ViewPort;
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    try
+    {
+        // а6: выбор в виде (вид спереди — XY лицом) до команды и в панели команды
+        vp.Camera.State.Rotation = Parametric3D.Render.Camera.OrientationQuat(Parametric3D.Render.ViewOrientation.Front); vp.ZoomToFit(animate: false); Run();
+        var cs = part.PlaneXY.DisplayCorners();
+        var cw = new Vector3d(cs[0].X * 0.25 + cs[2].X * 0.75, cs[0].Y * 0.25 + cs[2].Y * 0.75, cs[0].Z * 0.25 + cs[2].Z * 0.75);
+        var sp = vp.Project(cw);
+        Require(sp != null, "plane point is off the view");
+        var hit = vp.PickForTest(sp!.Value);
+        Console.WriteLine($"  view pick at {sp}: {hit.Kind} {(hit.Target as ModelItem)?.Name}");
+        vp.SimulatePick(sp.Value.X / vp.Bounds.Width, sp.Value.Y / vp.Bounds.Height, select: true); Run();
+        Console.WriteLine($"  selection: {string.Join(", ", vp.Selection.Items.Select(r => r.Kind + " " + (r.Target as ModelItem)?.Name))}");
+        Require(vp.Selection.Items.Any(r => r.Kind == PickKind.DatumPlane), "a plane clicked in the view is not selected");
+        w.StartOperation(new SketchOp()); Run();
+        Require(w.InSketch, "a plane selected in the view did not start the sketch");
+        w.CancelSketch(); Run();
+        vp.Selection.Clear(); Run();
+        w.StartOperation(new SketchOp()); Run();
+        Require(w.CurrentOperation is SketchOp, "sketch panel did not open");
+        vp.SimulatePick(sp.Value.X / vp.Bounds.Width, sp.Value.Y / vp.Bounds.Height, select: true); Run(); Run();
+        Console.WriteLine($"  panel pick: in sketch {w.InSketch}, operation {w.CurrentOperation?.GetType().Name}");
+        Require(w.InSketch, "a plane clicked in the view does not fill the sketch panel");
+        w.CancelSketch(); Run();
+        // а7: YZ — Y вверх
+        vp.Selection.Clear(); w.SelectItem(part.PlaneYZ); w.StartOperation(new SketchOp()); Run();
+        var sk = vp.ActiveSketch!;
+        Console.WriteLine($"  YZ sketch: U {sk.Plane.U}, V {sk.Plane.V}, W {sk.Plane.W}");
+        Require(SketchOp.YUpOff || (sk.Plane.V - Vector3d.UnitY).Length < 1e-9 && (sk.Plane.W - Vector3d.UnitX).Length < 1e-9, "YZ sketch: Y is not up");
+        // а8.4: изображение поворачивается с эскизом
+        var img = SkImage.Create("t.png", new byte[16], 2, 2); img.Center = new Vector2d(10, 0); img.Width = 4; img.Height = 2; sk.Images.Add(img);
+        var wc = sk.Plane.ToWorld(img.Center); double a0 = img.Angle;
+        sk.RotateQuarter(true);
+        Console.WriteLine($"  rotate: image centre {img.Center}, angle {img.Angle} (was {a0})");
+        Require(Sketch.RollImageOff || (sk.Plane.ToWorld(img.Center) - wc).Length < 1e-9 && Math.Abs(img.Angle - a0 - 90) < 1e-9, "the image did not turn with the sketch");
+        sk.RotateQuarter(false);
+        w.FinishSketch(); Run();
+        // а8.1–а8.3: настройка эскиза по-английски
+        if (!Loc.En) w.ToggleLanguage();
+        var setup = new SketchSetupOp(part.Sketches.Last(), false);
+        w.StartOperation(setup); Run();
+        var cb = setup.FlipCheck;
+        Console.WriteLine($"  flip check: «{cb?.Content}»");
+        Require(cb != null && (cb.Content as string) == "View from the opposite side (or click the normal arrow)", "flip check is not in English");
+        var n0 = setup.NormalColor;
+        cb!.RaiseEvent(new Avalonia.Input.PointerEventArgs(InputElement.PointerEnteredEvent, cb, new Avalonia.Input.Pointer(1, Avalonia.Input.PointerType.Mouse, true), w, new Point(1, 1), 0, new Avalonia.Input.PointerPointProperties(), KeyModifiers.None));
+        Console.WriteLine($"  normal colour {n0} → {setup.NormalColor}");
+        Require(setup.NormalHot && setup.NormalColor != n0, "hovering the flip check does not highlight the normal arrow");
+        var v0 = setup.Sketch.Plane.V;
+        cb.IsChecked = true; Run();
+        Require(Sketch.FlipMirrorOff || (setup.Sketch.Plane.V - v0).Length < 1e-9, "flip turned the sketch by 90°");
+        // а8.5: ось детали — «верх»
+        var axDir = Math.Abs(Vector3d.Dot(Vector3d.UnitY, setup.Sketch.Plane.W.Normalized())) < 0.5 ? Vector3d.UnitY : Vector3d.UnitX;
+        var ax = new DatumAxis("A_up", Vector3d.Zero, axDir); part.Add(ax);
+        Require(setup.UpCandidate(new PickRef(ax.Id, PickKind.DatumAxis, part, ax)), "a part axis is not accepted as the sketch top");
+        w.CancelOperation(); Run();
+    }
+    finally { if (Loc.En) w.ToggleLanguage(); w.Close(); }
+});
+
 Check("UI-SKETCH-DIMEXT-K185", () =>
 {
     // k185 (замечание 09.11, 12:39, пп. 1–2): размер между параллельными отрезками — размерная линия на обоих отрезках: выносных
@@ -7235,11 +7324,15 @@ Check("UI-SKETCH-K101", () =>
     Require(sk.Constraints.Count == nc && again.Type == ConstraintType.Coincident, "a coincident closing a cycle was added");
     sk.Constraints.Add(new SkConstraint(ConstraintType.Coincident, la.A, lb.A));   // старый файл
     Require(sk.Solve(s.Document.Solver) != SolveStatus.Overconstrained && sk.Constraints.Count == nc, $"cycle coincident not removed: {sk.Constraints.Count} vs {nc}");
-    // (2) взгляд с обратной стороны — точки на месте в мире, «горизонтально» становится «вертикально»
+    // (2) взгляд с обратной стороны — точки на месте в мире; k185 (а8.2): верх эскиза остаётся верхом (V та же, нормаль
+    // обратная), «горизонтально» остаётся «горизонтально» — эскиз на экране не поворачивается на 90°
     var hc = sk.AddConstraint(ConstraintType.Horizontal, lb);
     var wb = sk.Plane.ToWorld(lb.B.P);
+    var v0 = sk.Plane.V; var n0 = sk.Plane.W;
     sk.Flip();
-    Require((sk.Plane.ToWorld(lb.B.P) - wb).Length < 1e-9 && hc.Type == ConstraintType.Vertical, $"flip moved the geometry: {sk.Plane.ToWorld(lb.B.P)} vs {wb}, {hc.Type}");
+    var hcWant = Sketch.FlipMirrorOff ? ConstraintType.Vertical : ConstraintType.Horizontal;
+    Require((sk.Plane.ToWorld(lb.B.P) - wb).Length < 1e-9 && hc.Type == hcWant, $"flip moved the geometry: {sk.Plane.ToWorld(lb.B.P)} vs {wb}, {hc.Type}");
+    Require(Sketch.FlipMirrorOff || (sk.Plane.V - v0).Length < 1e-9 && (sk.Plane.W + n0).Length < 1e-9, $"flip turned the sketch: V {sk.Plane.V} (was {v0}), normal {sk.Plane.W} (was {n0})");
     sk.Flip();
     Require((sk.Plane.ToWorld(lb.B.P) - wb).Length < 1e-9 && hc.Type == ConstraintType.Horizontal, "flip twice is not identity");
     w.FinishSketch(); Run();

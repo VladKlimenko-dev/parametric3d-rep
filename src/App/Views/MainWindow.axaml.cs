@@ -2583,6 +2583,7 @@ public partial class MainWindow : Window
     public void BeginNewSketch(Part part, Frame3 frame, uint sourceId, string planeName, Func<Sketch, Operation>? then)
     {
         Session.BeginEdit(L("Эскиз"));
+        frame = SketchOp.PreferYUp(frame);   // k185 (а7): Y мира — вверх, если лежит в плоскости
         var sk = new Sketch(L("Эскиз{0}", part.Sketches.Count() + 1), frame);
         sk.SetBasePlane(frame, sourceId, planeName);
         SketchFaceRef.AttachById(sk, part.Bodies, sourceId);

@@ -1015,6 +1015,23 @@ public sealed class SketchOp : Operation
     /// Плоскость эскиза на грани: начало — проекция начала координат детали на плоскость грани, чтобы размеры до нуля
     /// эскиза были размерами от начала детали (как в Creo).
     /// </summary>
+    /// <summary>
+    /// k185 (замечание 10.11, 08:41, а7): ВЕРХ НОВОГО ЭСКИЗА — ОСЬ Y МИРА, если она лежит в плоскости (как у Creo и SolidWorks:
+    /// эскиз на RIGHT/YZ — Y вверх, Z в сторону). Плоскость YZ хранит оси (Y, Z), и эскиз на ней показывался повёрнутым на
+    /// 90° по часовой (Y — вправо). Нормаль та же, начало то же; оси U, V поворачиваются в плоскости так, что V = +Y.
+    /// Плоскости, в которых Y не лежит (XY, XZ, наклонные), — как были. Мутация P3D_SKETCHYUP=0.
+    /// </summary>
+    public static Frame3 PreferYUp(Frame3 f)
+    {
+        if (YUpOff) return f;
+        var w = f.W.Normalized();
+        if (Math.Abs(Vector3d.Dot(w, Vector3d.UnitY)) > 1e-9) return f;
+        if ((f.V.Normalized() - Vector3d.UnitY).Length < 1e-9) return f;
+        var u = Vector3d.Cross(Vector3d.UnitY, w);   // U = V × W при V = Y
+        return new Frame3(f.Origin, u, Vector3d.UnitY);
+    }
+    public static readonly bool YUpOff = Environment.GetEnvironmentVariable("P3D_SKETCHYUP") == "0";
+
     public static Frame3 SketchFrame(PickRef r, Frame3 f)
     {
         if (r.Kind != PickKind.Face) return f;
