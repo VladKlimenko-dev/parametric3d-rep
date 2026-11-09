@@ -1938,7 +1938,8 @@ public static partial class ExactFaceMesher
             if (p3.Count < 3) continue;
             var uv = new List<Vector2d>(p3.Count);
             using (Diagnostics.Prof.Time("сетка: контур в параметры"))
-                foreach (var q in p3) uv.Add(src.ProjectToUV(q));
+                if (src is NurbsSurface nsc) uv.AddRange(nsc.ProjectChain(p3));   // k185: продолжением (витки канавки сверла)
+                else foreach (var q in p3) uv.Add(src.ProjectToUV(q));
             RawLoopDebug?.Invoke(f, uv);
             int wind = 0;
             if (per > 0)

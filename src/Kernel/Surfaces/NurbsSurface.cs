@@ -912,13 +912,40 @@ public sealed class NurbsSurface : ISurface3
             else mb.AddTriangle(start + tris[i], start + tris[i + 1], start + tris[i + 2]);
     }
 
+    /// <summary>
+    /// k185 (замечания 09.11, 23:18–23:30): ПАРАМЕТРЫ ТОЧЕК ЦЕПОЧКИ — ПРОДОЛЖЕНИЕМ (как p-кривые в OCCT): первая — общей
+    /// проекцией, каждая следующая — Ньютоном от параметров предыдущей; не легла на поверхность (отход больше 1e-6) и общая
+    /// ближе — общая. Общая проекция каждой точки по отдельности перескакивала на соседний виток винтовой поверхности канавки
+    /// сверла 2958A552: контур узкой грани (1.8 мм²) в параметрах занимал 80 % области, и триангуляция закрашивала канавку.
+    /// Мутация P3D_UVCHAIN=0 — каждая точка отдельно.
+    /// </summary>
+    public List<Vector2d> ProjectChain(IReadOnlyList<Vector3d> pts)
+    {
+        var res = new List<Vector2d>(pts.Count);
+        Vector2d? prev = null;
+        foreach (var q in pts)
+        {
+            Vector2d uv;
+            if (UvChainOff || prev == null) uv = ProjectToUV(q);
+            else
+            {
+                uv = ProjectToUV(q, prev.Value);
+                double dh = (PointAt(uv) - q).Length;
+                if (dh > 1e-6) { var g = ProjectToUV(q); if ((PointAt(g) - q).Length < dh) uv = g; }
+            }
+            res.Add(uv); prev = uv;
+        }
+        return res;
+    }
+    public static readonly bool UvChainOff = Environment.GetEnvironmentVariable("P3D_UVCHAIN") == "0";
+
     /// <summary>Контуры грани в параметрах поверхности.</summary>
     private List<List<Vector2d>> FaceLoopsUV(TFace face)
     {
         var res = new List<List<Vector2d>>();
         foreach (var loop in face.Loops)
         {
-            var pts = new List<Vector2d>();
+            var p3 = new List<Vector3d>();
             foreach (var ce in loop.CoEdges)
             {
                 var c = ce.Edge.Curve;
@@ -927,9 +954,10 @@ public sealed class NurbsSurface : ISurface3
                 {
                     double t = i / (double)n;
                     double tt = ce.Reversed ? c.T1 + (c.T0 - c.T1) * t : c.T0 + (c.T1 - c.T0) * t;
-                    pts.Add(ProjectToUV(c.PointAt(tt)));
+                    p3.Add(c.PointAt(tt));
                 }
             }
+            var pts = ProjectChain(p3);
             if (pts.Count >= 3) res.Add(pts);
         }
         return res;

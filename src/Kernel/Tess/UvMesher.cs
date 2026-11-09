@@ -109,7 +109,7 @@ public static class UvMesher
             int first = ces.FindIndex(c => uses[c.Edge] > 1);
             if (first >= 0) ces = ces.Skip(first).Concat(ces.Take(first)).ToList();
             var pts = new List<(Vector2d, Vector3d)>();
-            Vector2d? prev = null;
+            Vector2d? prev = null, lastRaw = null;
             void Flush() { if (pts.Count >= 2) loops.Add(pts); pts = new List<(Vector2d, Vector3d)>(); prev = null; }
             foreach (var ce in ces)
             {
@@ -118,7 +118,16 @@ public static class UvMesher
                 if (ce.Reversed) ep.Reverse();
                 for (int i = pts.Count == 0 ? 0 : 1; i < ep.Count; i++)
                 {
-                    var uv = s.ProjectToUV(ep[i]);
+                    // k185: у B-поверхности — продолжением от прошлой точки (витки канавки сверла 2958A552; P3D_UVCHAIN=0)
+                    Vector2d uv;
+                    if (s is NurbsSurface nsu && !NurbsSurface.UvChainOff && lastRaw is { } lr)
+                    {
+                        uv = nsu.ProjectToUV(ep[i], lr);
+                        double dh = (nsu.PointAt(uv) - ep[i]).Length;
+                        if (dh > 1e-6) { var g = s.ProjectToUV(ep[i]); if ((s.PointAt(g) - ep[i]).Length < dh) uv = g; }
+                    }
+                    else uv = s.ProjectToUV(ep[i]);
+                    lastRaw = uv;
                     if (prev is { } q) uv = Unwrap(uv, q, perU, perV);
                     pts.Add((uv, ep[i])); prev = uv;
                 }
