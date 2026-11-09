@@ -18,6 +18,8 @@ public static class Shots
                 System.Runtime.InteropServices.Marshal.Copy(rgba, src, fb.Address + y * fb.RowBytes, w * 4);
             }
         }
+#pragma warning disable CS0618 // Avalonia 12: Save(path) — PNG; перегрузка с BitmapEncoderOptions — то же
         bmp.Save(path);
+#pragma warning restore CS0618
     }
 }

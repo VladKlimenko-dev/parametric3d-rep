@@ -23,7 +23,6 @@ public static class ContextCommands
 {
     public static void Register(CommandRegistry r, MainWindow w)
     {
-        KeyGesture K(Key k, KeyModifiers m = KeyModifiers.None) => new(k, m);
         const string C = "Контекстная панель";
         bool Op() => w.CurrentOperation != null;
         r.Add(new AppCommand { Id = "ctx.more", Label = "Ещё… (остальные допустимые операции)", Short = "Ещё…", Group = C, Icon = "more_but.svg", Synonyms = "more operations ещё операции",

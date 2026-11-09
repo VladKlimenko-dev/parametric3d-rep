@@ -424,7 +424,7 @@ public static partial class DirectRound
             var tg = c.TangentAt(atStart ? c.T0 : c.T1).Normalized();
             return atStart ? tg : -tg;
         }
-        static Vector3d Nrm(TFace f, Vector3d V) { var su = GeometryAudit.AuthoritativeSurface(f); return su.NormalAt(su.ProjectToUV(V)).Normalized(); }
+        static Vector3d Nrm(TFace f, Vector3d V) { var su = GeometryAudit.AuthoritativeSurface(f)!; return su.NormalAt(su.ProjectToUV(V)).Normalized(); }
         var all = body.Edges.ToList(); var added = new List<TEdge>();
         for (int i = 0; i < sel.Count; i++)
         {
@@ -1885,7 +1885,7 @@ public static partial class DirectRound
             else
             {
                 newC = lc!.Select(sg => Moved(sg, O + shift, R)).ToList();
-                lc.Clear(); lc.AddRange(newC);
+                lc!.Clear(); lc.AddRange(newC);
             }
             lp.Clear(); lp.AddRange(newP);
             Fp.Touched = true;

@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- код проверок: черновые разборы (неиспользуемые переменные, допущения о не-null); предупреждения исходников ядра — в сборке приложения -->
+    <NoWarn>$(NoWarn);CS0162;CS0219;CS1717;CS8123;CS8321;CS8602;CS8604;CS8629</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="$(SourceRoot)/Kernel/**/*.cs" />

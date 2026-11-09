@@ -131,7 +131,7 @@ public static class SettingsDialog
         }
         TextBox ColorRow(string label, Func<LookPrefs, string> get, Action<LookPrefs, string> set, string watermark = "по умолчанию (#RRGGBB)")
         {
-            var t = new TextBox { Text = get(look), Watermark = L(watermark), MinWidth = 160 };
+            var t = new TextBox { Text = get(look), PlaceholderText = L(watermark), MinWidth = 160 };
             var sw = new Border { Width = 24, Height = 24, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1), BorderBrush = Brushes.Gray };
             void Upd() => sw.Background = UiLook.ParseColor(t.Text) is { } c ? new SolidColorBrush(c) : Brushes.Transparent;
             t.TextChanged += (_, _) => Upd(); Upd();
@@ -334,7 +334,7 @@ public static class SettingsDialog
         }
         var list = new ListBox { Name = "set_sections", MinWidth = 210 };
         foreach (var (key, title, icon) in sections) list.Items.Add(new ListBoxItem { Content = WithIcon(icon, L(title), 18), Tag = key, Padding = new Thickness(8, 6) });
-        var search = new TextBox { Name = "set_search", Watermark = L("Поиск настройки…"), Margin = new Thickness(0, 0, 0, 8) };
+        var search = new TextBox { Name = "set_search", PlaceholderText = L("Поиск настройки…"), Margin = new Thickness(0, 0, 0, 8) };
         var resetBtn = new Button { Content = L("Сбросить раздел"), Name = "set_reset" };
         string Current() => (list.SelectedItem as ListBoxItem)?.Tag as string ?? "general";
         void Show()

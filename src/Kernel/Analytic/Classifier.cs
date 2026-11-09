@@ -1032,12 +1032,11 @@ public sealed partial class AnalyticFace
     {
         public readonly List<int> Always = new();
         public readonly List<(int S, int E, double X0, double X1, double Y0, double Y1)> Chunks = new();
-        bool _cyl;
         [ThreadStatic] static List<int>? _buf;
         public static BoundsIdx? Build(AnalyticFace f)
         {
             if (BoundsIndexOff || f.Band || f.Param || f.Tor || f.FullSurface || f.Bounds.Count < 96) return null;
-            var ix = new BoundsIdx { _cyl = f.Cyl };
+            var ix = new BoundsIdx();
             int i = 0, n = f.Bounds.Count;
             while (i < n)
             {

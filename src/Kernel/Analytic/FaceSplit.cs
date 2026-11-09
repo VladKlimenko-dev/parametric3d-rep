@@ -905,7 +905,7 @@ public static partial class FaceSplit
         if (ClosestFastOff) return ClosestParamCore(c, x);
         if (ClosestCheck && c is IntersectionCurve3)
         {
-            ClosestFastOffForCheck = true; double tc = ClosestParamCore(c, x); ClosestFastOffForCheck = false;
+            double tc = ClosestParamCore(c, x);
             double tf = ClosestFast(c, x);
             if ((c.PointAt(tc) - x).Length < 1 && ((c.PointAt(tf) - x).Length > (c.PointAt(tc) - x).Length + 1e-9 || Math.Abs(tf - tc) > 1e-6))
             {
@@ -918,7 +918,6 @@ public static partial class FaceSplit
     }
     // отрезок и дуга — прежним поиском (с памятью): его конечная разрешающая способность сводит почти совпадающие точки
     // к одному параметру, и ключи рёбер у соседних граней совпадают побитово (формула давала разные — KRN04-COMMON-VERTICES)
-    [ThreadStatic] static bool ClosestFastOffForCheck;
     static readonly bool ClosestCheck = Environment.GetEnvironmentVariable("P3D_CLOSESTCHECK") == "1";
     public static long ClosestMismatches;
     static double ClosestFast(ICurve3 c, Vector3d x)

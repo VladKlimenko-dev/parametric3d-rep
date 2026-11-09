@@ -249,7 +249,7 @@ public sealed class HoleFeature : Feature
             if (Vector3d.Dot(p0 - a, m) < 0) m = -m;
             return (a, m);
         }
-        var l1 = Line(LinRef1.Value)!.Value;
+        var l1 = Line(LinRef1!.Value)!.Value;
         double d1 = LinD1.Resolve(pars);
         if (LinRef2 == null)
             return p0 + l1.Nrm * (d1 - Vector3d.Dot(p0 - l1.A, l1.Nrm));

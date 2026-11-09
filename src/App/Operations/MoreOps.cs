@@ -61,7 +61,7 @@ public sealed class SweepOp : FeatureOp<SweepFeature>
         public bool Cut, Keep, Reverse;
         public ValueRef Twist = new(0), Fraction = new(1), OffsetU = new(0), OffsetV = new(0);
     }
-    public State? Seed;
+    public new State? Seed;
 
     private RefField _sec = null!, _path = null!, _secPoint = null!, _pathPlane = null!;
     private bool _pickSecPoint, _pickPathPlane, _leaving;

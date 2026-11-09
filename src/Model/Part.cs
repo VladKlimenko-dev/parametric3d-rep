@@ -2352,9 +2352,6 @@ public sealed class FeatureHistory
         }
         foreach (var tag in b.Keys) if (!a.ContainsKey(tag)) h.Deleted.Add(tag);
 
-        static string EdgeName(Kernel.Topology.TEdge e) => EdgeInfo(e).Name;
-        static string EdgeSig(IEnumerable<Kernel.Topology.TEdge> es) =>
-            string.Join(";", es.Select(e => EdgeInfo(e).Sig).OrderBy(x => x, StringComparer.Ordinal));
         var _pe = Kernel.Diagnostics.Prof.Time("история: рёбра");
         var eb = EdgeMap(before); var ea = EdgeMap(after);
         foreach (var (name, sig) in ea)

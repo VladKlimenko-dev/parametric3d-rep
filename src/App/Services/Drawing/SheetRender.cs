@@ -1,3 +1,6 @@
+// SkiaSharp 3: изменяемые методы SKPath (MoveTo/LineTo/Close) и SKTypeface.ContainsGlyph помечены устаревшими в пользу
+// SKPathBuilder и SKFont; поведение прежнее — переход вместе с обновлением отрисовки листа.
+#pragma warning disable CS0618
 using Parametric3D.Model.Drawing;
 using SkiaSharp;
 

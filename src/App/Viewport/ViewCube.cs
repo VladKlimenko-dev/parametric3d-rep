@@ -40,7 +40,7 @@ public sealed class ViewCube : Control, Avalonia.Rendering.ICustomHitTest
     public bool AlwaysRoll { get; set; }
     bool HasView => Viewport != null || Host != null;
 
-    private const double Margin = 1.25;      // доля полуразмера контрола под куб с кольцом
+    private new const double Margin = 1.25;      // доля полуразмера контрола под куб с кольцом
     private const double Band = 0.26;        // ширина полосы ребра (доля стороны грани в [-1, 1] → 2·Band)
     private const double RingR = 1.85, RingW = 0.22;
 

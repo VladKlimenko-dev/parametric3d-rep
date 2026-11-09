@@ -1,4 +1,6 @@
-﻿using System.Text.Json;
+﻿// проверки: устаревшие вызовы Avalonia/SkiaSharp и допущения о не-null в разборе — намеренно (код проверок)
+#pragma warning disable CS0618, CS8602, CS8604, CS0219
+using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -4669,7 +4671,7 @@ Check("UI-FLOOR-SETTINGS-K133", () =>
             foreach (var c in Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(win))
             {
                 if (c is TextBlock tb && tb.Text is { Length: > 0 } t) texts.Add(t);
-                if (c is TextBox tx && tx.Watermark is string wm && wm.Length > 0) texts.Add(wm);
+                if (c is TextBox tx && tx.PlaceholderText is string wm && wm.Length > 0) texts.Add(wm);
                 if (c is ComboBox cb && cb.ItemsSource is System.Collections.IEnumerable items) foreach (var it in items) if (it is string si) texts.Add(si);
                 if (c is CheckBox ch && ch.Content is string cs) texts.Add(cs);
                 if (c is Button bt && bt.Content is string bs) texts.Add(bs);
@@ -9755,8 +9757,8 @@ Check("UI-DRAWING-K167", () =>
         // 2–3. панель: заголовки отклонений, нет полей текста и смещения
         var tbs = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(dw).OfType<TextBlock>().Select(x => x.Text).ToList();
         var boxes = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(dw).OfType<TextBox>().ToList();
-        Console.WriteLine($"  panel: headers {tbs.Contains("Верхнее (+)")}/{tbs.Contains("Нижнее (−)")}, tol boxes {boxes.Count(x => x.Name == "dr_tol_up")}, text boxes {boxes.Count(x => x.Watermark as string == "текст")}");
-        Require(tbs.Contains("Верхнее (+)") && tbs.Contains("Нижнее (−)") && boxes.Count(x => x.Name == "dr_tol_up") == d.Dims.Count && !boxes.Any(x => x.Watermark as string is "текст"), "deviation columns, no text/offset fields");
+        Console.WriteLine($"  panel: headers {tbs.Contains("Верхнее (+)")}/{tbs.Contains("Нижнее (−)")}, tol boxes {boxes.Count(x => x.Name == "dr_tol_up")}, text boxes {boxes.Count(x => x.PlaceholderText as string == "текст")}");
+        Require(tbs.Contains("Верхнее (+)") && tbs.Contains("Нижнее (−)") && boxes.Count(x => x.Name == "dr_tol_up") == d.Dims.Count && !boxes.Any(x => x.PlaceholderText as string is "текст"), "deviation columns, no text/offset fields");
         // 4. двойной щелчок по полю надписи после ввода значения
         var ft = dw.Pages[0].Texts.First(q => q.Field == Parametric3D.Model.Drawing.Fields.Designation);
         dw.FocusFieldAt(ft.X, ft.Y + 1); Dispatcher.UIThread.RunJobs();

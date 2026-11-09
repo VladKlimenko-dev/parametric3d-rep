@@ -71,7 +71,7 @@ public static class ProvenanceBySurface
             foreach (var g in pv.Faces.Where(x => x.Source != null).GroupBy(x => x.Source!, ReferenceEqualityComparer.Instance).ToList())
             {
                 var list = g.ToList(); if (list.Count < 2) continue;
-                var sf = (TFace)g.Key;
+                var sf = (TFace)g.Key!;
                 var on = list.ToDictionary(x => x.Result, x => OnSourceSurface(x.Result, sf), (IEqualityComparer<TFace>)ReferenceEqualityComparer.Instance);
                 if (!on.Values.Any(v => v) || on.Values.All(v => v)) continue;
                 foreach (var x in list.Where(x => !on[x.Result]))

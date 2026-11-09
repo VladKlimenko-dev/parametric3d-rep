@@ -169,11 +169,6 @@ public static partial class FaceSplit
         // выше (по кругу) с обходом в −
         if (wrapping.Count > 0)
         {
-            double Across(int ci)
-            {
-                var poly = cycles[ci].Poly; var q = poly[0];
-                return byTheta ? q.Y : q.X;
-            }
             double Along(int ci) => byTheta ? cycles[ci].Wt : cycles[ci].Wp;
             var idx = Enumerable.Range(0, cycles.Count).Where(i => cycles[i].Wt != 0 || cycles[i].Wp != 0).ToList();
             // поперечный угол цикла «на одном и том же продольном значении»: берётся точка цикла, ближайшая к опорному значению

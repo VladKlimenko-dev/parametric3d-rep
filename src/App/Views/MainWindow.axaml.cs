@@ -710,7 +710,7 @@ public partial class MainWindow : Window
         ToolTip.SetTip(_projButton, _reg["view.projection"].Tooltip + " — " + (perspective ? L("сейчас перспектива") : L("сейчас ортогональ")));
     }
 
-    private static readonly (DisplayStyle Style, string Id)[] Styles =
+    private static new readonly (DisplayStyle Style, string Id)[] Styles =
     {
         (DisplayStyle.Shaded, "style.shaded"), (DisplayStyle.ShadedWithEdges, "style.shaded_edges"), (DisplayStyle.Wireframe, "style.wireframe"),
         (DisplayStyle.HiddenLines, "style.hidden_lines"), (DisplayStyle.Transparent, "style.transparent"), (DisplayStyle.Material, "style.material"),
@@ -779,7 +779,6 @@ public partial class MainWindow : Window
 
     // ================================================================ п. 3 (21:04): панели перемещаются и прилипают к сторонам вида
 
-    private bool _cmdHorizontal;
 
     private PanelMode _viewMode = PanelMode.Float;
 
@@ -818,7 +817,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void SetupDocks()
     {
-        _cmdMode = PanelMode.StripH; _cmdHorizontal = true;
+        _cmdMode = PanelMode.StripH;
         _shapeMode = PanelMode.StripH;
         _viewMode = PanelMode.StripH;
         _sketchMode = PanelMode.StripH;

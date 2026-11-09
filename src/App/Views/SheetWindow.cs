@@ -23,7 +23,7 @@ public sealed partial class SheetWindow : Window
 {
     public enum Mode { Template, Bom, Drawing }
     public readonly Mode Kind;
-    public SheetTemplate Template;
+    public new SheetTemplate Template;
     public BomDocument? Bom;
     /// <summary>k155 (D2): чертёж — виды детали на листе.</summary>
     public DrawingDocument? Drawing;
@@ -1536,7 +1536,7 @@ public sealed partial class SheetWindow : Window
                     continue;
                 }
                 var tb = Field(Template.Values.GetValueOrDefault(f) ?? "", v => Change(() => { if (v.Length == 0) Template.Values.Remove(f); else Template.Values[f] = v; }));
-                tb.Watermark = src.Auto.GetValueOrDefault(f) ?? "";
+                tb.PlaceholderText = src.Auto.GetValueOrDefault(f) ?? "";
                 _fieldControls[f] = tb;
                 fp.Children.Add(Row(L(lab), tb));
             }
@@ -1555,7 +1555,7 @@ public sealed partial class SheetWindow : Window
                         // k168 (замечание 05.11, 16:17, п. 11): название, число строк и столбцов
                         var box = new StackPanel { Spacing = 3 };
                         if (it == _sel) box.Background = new SolidColorBrush(Color.FromArgb(60, 255, 120, 0));
-                        var title = Field(it.Title, t => { if (t != it.Title) Change(() => it.Title = t); }, 200); title.Watermark = L("Название таблицы"); title.Name = "dr_table_title";
+                        var title = Field(it.Title, t => { if (t != it.Title) Change(() => it.Title = t); }, 200); title.PlaceholderText = L("Название таблицы"); title.Name = "dr_table_title";
                         box.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { vis, title, del } });
                         var rows = new NumericUpDown { Minimum = 1, Maximum = 200, Increment = 1, Value = Math.Max(1, it.Rows), FormatString = "0", Width = 110, Name = "dr_table_rows" };
                         rows.ValueChanged += (_, e) => { int n = (int)(e.NewValue ?? 1); if (n != it.Rows) Change(() => { it.NormalizeCells(); while (it.Rows < n) it.InsertRow(it.Rows); while (it.Rows > n && it.Rows > 1) it.DeleteRow(it.Rows - 1); }); };
@@ -1709,8 +1709,8 @@ public sealed partial class SheetWindow : Window
                 show.IsCheckedChanged += (_, _) => { bool h = show.IsChecked != true; if (h != dim.Hidden) Change(() => dim.Hidden = h); };
                 row.Children.Add(show);
                 row.Children.Add(new TextBlock { Text = $"{dim.View}: {d.CaptionOf(dim)}", MinWidth = 110, VerticalAlignment = VerticalAlignment.Center });
-                var tup = Field(dim.TolUp, t => { if (t != dim.TolUp) Change(() => { dim.TolUp = t; dim.Tol = ""; }); }, 64); tup.Watermark = "+0,1"; tup.Name = "dr_tol_up";
-                var tlo = Field(dim.TolLo, t => { if (t != dim.TolLo) Change(() => { dim.TolLo = t; dim.Tol = ""; }); }, 64); tlo.Watermark = "−0,1"; tlo.Name = "dr_tol_lo";
+                var tup = Field(dim.TolUp, t => { if (t != dim.TolUp) Change(() => { dim.TolUp = t; dim.Tol = ""; }); }, 64); tup.PlaceholderText = "+0,1"; tup.Name = "dr_tol_up";
+                var tlo = Field(dim.TolLo, t => { if (t != dim.TolLo) Change(() => { dim.TolLo = t; dim.Tol = ""; }); }, 64); tlo.PlaceholderText = "−0,1"; tlo.Name = "dr_tol_lo";
                 ToolTip.SetTip(tup, L("Верхнее отклонение (Upper): +0,015"));
                 ToolTip.SetTip(tlo, L("Нижнее отклонение (Lower): 0,010 или −0,010; равные верхнему по величине — «±»"));
                 row.Children.Add(tup); row.Children.Add(tlo);
@@ -1751,7 +1751,7 @@ public sealed partial class SheetWindow : Window
                             sym.SelectionChanged += (_, _) => { var k = DrawingDocument.GdtSymbols[Math.Max(0, sym.SelectedIndex)].Key; if (k != n.Symbol) Change(() => n.Symbol = k); };
                             row.Children.Add(sym);
                             row.Children.Add(Field(n.Value, t => { if (t != n.Value) Change(() => n.Value = t); }, 54));
-                            var db = Field(n.Datums, t => { if (t != n.Datums) Change(() => n.Datums = t); }, 40); db.Watermark = L("базы");
+                            var db = Field(n.Datums, t => { if (t != n.Datums) Change(() => n.Datums = t); }, 40); db.PlaceholderText = L("базы");
                             row.Children.Add(db);
                             break;
                         }

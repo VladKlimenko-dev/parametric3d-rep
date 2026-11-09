@@ -144,7 +144,7 @@ internal sealed class XtSpun : XtSurf
     public Vector3d P, A; public Func<double, Vector3d> C = null!; public double T0, T1;
     List<(double T, Vector2d M)> mer = new();
 
-    public static XtSpun? Of(XtFile f, XtNode n)
+    public static new XtSpun? Of(XtFile f, XtNode n)
     {
         var pr = f[n.P("profile")]; if (pr == null) return null;
         var s = new XtSpun { P = n.V("base"), A = n.V("axis").Normalized() };
@@ -206,7 +206,7 @@ internal sealed class XtNurbsSurf : XtSurf
     public int Du, Dv, Nu, Nv; public double[] Ku = Array.Empty<double>(), Kv = Array.Empty<double>();
     public Vector4d[,] H = new Vector4d[0, 0];
 
-    public static XtNurbsSurf? Of(XtFile f, XtNode n)
+    public static new XtNurbsSurf? Of(XtFile f, XtNode n)
     {
         var s = new XtNurbsSurf { Du = n.I("u_degree"), Dv = n.I("v_degree"), Nu = n.I("n_u_vertices"), Nv = n.I("n_v_vertices") };
         int vd = n.I("vertex_dim"); bool rat = n.L("rational");
