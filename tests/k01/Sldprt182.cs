@@ -156,7 +156,13 @@ static partial class Program
         bool done;
         try { done = t.Wait(TimeSpan.FromSeconds(lim)); }
         catch (AggregateException ae) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ae.InnerException ?? ae).Throw(); throw; }
-        if (!done) { Log(new { test = "sldprt", file = name, timeout = lim, stage = sldStage }); throw new Exception($"timeout {lim} s at {sldStage}"); }
+        if (!done)
+        {
+            Log(new { test = "sldprt", file = name, timeout = lim, stage = sldStage });
+            // k185: профиль и при превышении времени (что успело набраться)
+            if (Environment.GetEnvironmentVariable("P3D_SLDPROF") == "1") Console.Error.WriteLine("SLDPROF timeout " + name + "\n" + Parametric3D.Kernel.Diagnostics.Prof.Report());
+            throw new Exception($"timeout {lim} s at {sldStage}");
+        }
     }
 
     /// <summary>Разбор: у тела с ошибками сетки — какие грани (метка STEP, поверхность, сторона) у сторон без пары / в одну сторону.</summary>

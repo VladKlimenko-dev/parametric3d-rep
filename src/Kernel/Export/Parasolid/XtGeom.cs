@@ -450,6 +450,14 @@ internal sealed class XtNurbsSurf : XtSurf
         while (at + 1 < cN && cD[at + 1] < cD[at]) { (cD[at + 1], cD[at]) = (cD[at], cD[at + 1]); (cI[at + 1], cI[at]) = (cI[at], cI[at + 1]); (cJ[at + 1], cJ[at]) = (cJ[at], cJ[at + 1]); at++; }
     }
 
+    void ScanBlock(int k, Vector3d q, Vector3d[,] gr)
+    {
+        int bi = k / nbj, bj = k % nbj;
+        for (int i = bi * GB; i <= Math.Min(gu, bi * GB + GB - 1); i++)
+            for (int j = bj * GB; j <= Math.Min(gv, bj * GB + GB - 1); j++) Offer((gr[i, j] - q).LengthSquared, i, j);
+    }
+    static readonly bool GridSortOff = Environment.GetEnvironmentVariable("P3D_XTGRIDSORT") == "1";
+
     static double BoxD2(Vector3d q, Vector3d mn, Vector3d mx)
     {
         double dx = q.X < mn.X ? mn.X - q.X : q.X > mx.X ? q.X - mx.X : 0;
@@ -468,15 +476,36 @@ internal sealed class XtNurbsSurf : XtSurf
         {
             if (bmin == null) BuildBlocks();
             int nb = nbi * nbj;
-            for (int k = 0; k < nb; k++) { blb![k] = BoxD2(q, bmin![k], bmax![k]); bord![k] = k; }
-            Array.Sort(blb!, bord!, 0, nb);
             cN = 0;
-            for (int k = 0; k < nb; k++)
+            if (GridSortOff)
             {
-                if (cN == 6 && blb![k] >= cD[5]) break;
-                int bi = bord![k] / nbj, bj = bord[k] % nbj;
-                for (int i = bi * GB; i <= Math.Min(gu, bi * GB + GB - 1); i++)
-                    for (int j = bj * GB; j <= Math.Min(gv, bj * GB + GB - 1); j++) Offer((gr[i, j] - q).LengthSquared, i, j);
+                for (int k = 0; k < nb; k++) { blb![k] = BoxD2(q, bmin![k], bmax![k]); bord![k] = k; }
+                Array.Sort(blb!, bord!, 0, nb);
+                for (int k = 0; k < nb; k++)
+                {
+                    if (cN == 6 && blb![k] >= cD[5]) break;
+                    ScanBlock(bord![k], q, gr);
+                }
+            }
+            else
+            {
+                // k185: без сортировки блоков — сначала 8 блоков с наименьшей оценкой (выбором за один проход), затем один проход
+                // по остальным с отсечением по шестому кандидату (сортировка 4000 блоков на каждую полную проекцию стоила
+                // больше самого поиска). Мутация P3D_XTGRIDSORT=1 — прежняя сортировка.
+                Span<int> top = stackalloc int[8]; Span<double> topD = stackalloc double[8]; int nt = 0;
+                for (int k = 0; k < nb; k++)
+                {
+                    double d = BoxD2(q, bmin![k], bmax![k]); blb![k] = d;
+                    if (nt < 8) { top[nt] = k; topD[nt] = d; nt++; }
+                    else { int w = 0; for (int t = 1; t < 8; t++) if (topD[t] > topD[w]) w = t; if (d < topD[w]) { top[w] = k; topD[w] = d; } }
+                }
+                for (int a = 1; a < nt; a++) for (int b = a; b > 0 && topD[b - 1] > topD[b]; b--) { (topD[b - 1], topD[b]) = (topD[b], topD[b - 1]); (top[b - 1], top[b]) = (top[b], top[b - 1]); }
+                for (int t = 0; t < nt; t++) { if (cN == 6 && topD[t] >= cD[5]) break; ScanBlock(top[t], q, gr); blb![top[t]] = double.MaxValue; }
+                for (int k = 0; k < nb; k++)
+                {
+                    if (blb![k] == double.MaxValue || cN == 6 && blb[k] >= cD[5]) continue;
+                    ScanBlock(k, q, gr);
+                }
             }
             double bD = double.MaxValue; (double, double) bUv = (u0, v0);
             for (int k = 0; k < cN; k++)
