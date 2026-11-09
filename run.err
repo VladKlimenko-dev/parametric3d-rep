@@ -1,0 +1,1 @@
+seconds 1381 nproc 4 env P3D_XTSPINEDENSE=0 cmd sldprt
