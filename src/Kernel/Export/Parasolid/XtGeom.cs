@@ -1160,7 +1160,6 @@ internal sealed class XtBlendSurf : XtSurf
         }
         return c;
     }
-    static readonly bool BlendProjOff = Environment.GetEnvironmentVariable("P3D_XTBLENDPROJ") == "0";
     static readonly bool CentreSectOff = Environment.GetEnvironmentVariable("P3D_XTCENTRESECT") == "0";
 
     /// <summary>Точка оси в плоскости через c0 с нормалью tg (см. CentreAt).</summary>
@@ -1230,33 +1229,6 @@ internal sealed class XtBlendSurf : XtSurf
 
     public override Vector3d Project(Vector3d q)
     {
-        // k185 (сверло 2958A552, шайба 92146A038): ТОЧНАЯ ПРОЕКЦИЯ НА СКРУГЛЕНИЕ — центр уточнённый (CentreAt: на обеих смещённых
-        // опорах, сечение через саму точку), точка — на окружности сечения радиуса R в пределах дуги между касаниями. Прежде —
-        // ближайшая точка ломаной оси (прогиб до 0.19 мм) и ломаной дуги из 33 точек: кривые на скруглении отходили на 0.07–0.13 мм.
-        // Разные радиусы — прежний путь. Мутация P3D_XTBLENDPROJ=0.
-        if (!BlendProjOff && R0 > 1e-12 && Math.Abs(R0 - R1) <= 1e-9 * Math.Max(1, R0))
-        {
-            var cc = CentreAt(q);
-            var (_, n0, g0) = OffsetN(S0, cc, R0); var (_, n1, g1) = OffsetN(S1, cc, R1);
-            if (g0 && g1)
-            {
-                var t = Vector3d.Cross(n0, n1);
-                if (t.LengthSquared > 1e-12)
-                {
-                    t.Normalize();
-                    var p0 = S0.Project(cc); var p1 = S1.Project(cc);
-                    var u0 = p0 - cc; var u1 = p1 - cc;
-                    var w = q - cc; w -= t * Vector3d.Dot(w, t);
-                    if (w.LengthSquared < 1e-30) return p0;
-                    var d = w.Normalized();
-                    // в пределах дуги u0→u1 (меньшей): d — между ними, если углы (u0, d) + (d, u1) = (u0, u1)
-                    double A(Vector3d x, Vector3d y) => Math.Acos(Math.Clamp(Vector3d.Dot(x.Normalized(), y.Normalized()), -1, 1));
-                    double a01 = A(u0, u1), a0 = A(u0, d), a1 = A(d, u1);
-                    if (Math.Abs(a0 + a1 - a01) < 1e-9) return cc + d * R0;
-                    return (p0 - q).LengthSquared <= (p1 - q).LengthSquared ? p0 : p1;
-                }
-            }
-        }
         // ближайшая точка оси, затем ближайшая точка дуги сечения
         var c = SpineNear(q);
         if (R0 < 1e-12 && R1 < 1e-12) return c;
