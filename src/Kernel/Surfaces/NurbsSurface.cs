@@ -342,6 +342,7 @@ public sealed class NurbsSurface : ISurface3
         return best;
     }
     public static long MultiStartWins;
+    static readonly (double, double)[] Dirs4 = { (1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0) };
     static readonly bool MultiBlocksOff = Environment.GetEnvironmentVariable("P3D_NURBSMULTIBLOCKS") == "0";
 
     (double U, double V, double D2) NewtonDescent(Vector3d p, double u, double v)
@@ -447,9 +448,9 @@ public sealed class NurbsSurface : ISurface3
         for (int pass = 0; pass < 40 && step > 1e-6; pass++)
         {
             bool moved = false;
-            foreach (var (du, dv) in new[] { (step, 0.0), (-step, 0.0), (0.0, step), (0.0, -step) })
+            foreach (var (eu, ev) in Dirs4)   // k185: без нового массива на каждый шаг (69 ГБ выделений у колеса 28035T11)
             {
-                double u = Math.Clamp(bestU + du, 0, 1), v = Math.Clamp(bestV + dv, 0, 1);
+                double u = Math.Clamp(bestU + eu * step, 0, 1), v = Math.Clamp(bestV + ev * step, 0, 1);
                 double d = (PointAt(new Vector2d(u, v)) - p).LengthSquared;
                 if (d >= best) continue;
                 best = d; bestU = u; bestV = v; moved = true;
