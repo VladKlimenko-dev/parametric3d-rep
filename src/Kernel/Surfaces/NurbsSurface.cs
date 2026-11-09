@@ -611,6 +611,7 @@ public sealed class NurbsSurface : ISurface3
     /// </summary>
     public (Vector2d Uv, Vector3d P, Vector3d N)? ProjectExtended(Vector3d p, double maxOut = 0.5)
     {
+        if (!ProjExtDampOff) return ProjectExtendedDamped(p, maxOut);
         var uv = ProjectToUV(p);
         for (int it = 0; it < 40; it++)
         {
@@ -631,6 +632,49 @@ public sealed class NurbsSurface : ISurface3
         }
         return null;
     }
+
+    /// <summary>
+    /// k185: ПРОЕКЦИЯ НА ПРОДОЛЖЕНИЕ С ДРОБЛЕНИЕМ ШАГА. Чистый Гаусс — Ньютон с порогом 1e-13 по параметру при ненулевом отходе
+    /// сходился линейно и за 40 шагов не успевал — «нет» (угловая точка ребра канавки сверла 2958A552). Здесь шаг дробится,
+    /// пока отход не перестанет расти, до 100 шагов; ответ — при малом шаге или стационарности (градиент отхода по обоим
+    /// параметрам мал относительно отхода). Мутация P3D_PROJEXTDAMP=0.
+    /// </summary>
+    (Vector2d Uv, Vector3d P, Vector3d N)? ProjectExtendedDamped(Vector3d p, double maxOut)
+    {
+        var uv = ProjectToUV(p);
+        DerivsExtended(uv, out var S, out var Su, out var Sv);
+        double r2 = (S - p).LengthSquared;
+        for (int it = 0; it < 100; it++)
+        {
+            var r = S - p;
+            double f1 = Vector3d.Dot(r, Su), f2 = Vector3d.Dot(r, Sv);
+            double a11 = Vector3d.Dot(Su, Su), a12 = Vector3d.Dot(Su, Sv), a22 = Vector3d.Dot(Sv, Sv), det = a11 * a22 - a12 * a12;
+            if (Math.Abs(det) < 1e-24) return null;
+            double rl = Math.Sqrt(r2);
+            if (Math.Abs(f1) <= 1e-9 * Math.Sqrt(a11) * Math.Max(rl, 1e-12) && Math.Abs(f2) <= 1e-9 * Math.Sqrt(a22) * Math.Max(rl, 1e-12)) break;
+            double du = -(f1 * a22 - f2 * a12) / det, dv = -(f2 * a11 - f1 * a12) / det;
+            double t = 1; bool moved = false;
+            for (int k = 0; k < 30; k++, t *= 0.5)
+            {
+                var nuv = uv + new Vector2d(du, dv) * t;
+                if (nuv.X < -maxOut || nuv.X > 1 + maxOut || nuv.Y < -maxOut || nuv.Y > 1 + maxOut) continue;
+                DerivsExtended(nuv, out var S1, out var Su1, out var Sv1);
+                double n2 = (S1 - p).LengthSquared;
+                if (n2 <= r2 * (1 + 1e-12)) { uv = nuv; S = S1; Su = Su1; Sv = Sv1; moved = n2 < r2 || t * (Math.Abs(du) + Math.Abs(dv)) > 1e-15; r2 = n2; break; }
+            }
+            if (!moved || t * (Math.Abs(du) + Math.Abs(dv)) < 1e-12) break;
+        }
+        if (uv.X < -maxOut || uv.X > 1 + maxOut || uv.Y < -maxOut || uv.Y > 1 + maxOut) return null;
+        // стационарность (иначе — не сошлось)
+        {
+            var r = S - p; double rl = r.Length;
+            double g1 = Math.Abs(Vector3d.Dot(r, Su)), g2 = Math.Abs(Vector3d.Dot(r, Sv));
+            if (g1 > 1e-6 * Su.Length * Math.Max(rl, 1e-9) + 1e-12 || g2 > 1e-6 * Sv.Length * Math.Max(rl, 1e-9) + 1e-12) return null;
+        }
+        var nn = Vector3d.Cross(Su, Sv); if (nn.LengthSquared < 1e-30) return null;
+        return (uv, S, nn.Normalized());
+    }
+    static readonly bool ProjExtDampOff = Environment.GetEnvironmentVariable("P3D_PROJEXTDAMP") == "0";
 
     /// <summary>
     /// k144: ТА ЖЕ ПОВЕРХНОСТЬ НА БОЛЬШЕЙ ОБЛАСТИ — точное продолжение крайних промежутков (те же многочлены, что у
