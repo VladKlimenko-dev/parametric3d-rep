@@ -1114,7 +1114,9 @@ internal sealed class XtBlendSurf : XtSurf
         if (!SpineNewtonOff && R0 > 1e-12 && R1 > 1e-12)
         {
             var cn = c0; bool ok = false;
-            double lim = 10 * Math.Max(R0, R1);
+            // точка оси (ломаной центров из файла) — у самого центра: дальше четверти радиуса — другая ветвь пересечения
+            // смещённых опор (47995K19: с пределом в 10 радиусов рёбра отходили от поверхностей на 0,01–0,12 мм)
+            double lim = 0.25 * Math.Min(R0, R1);
             for (int it = 0; it < 12; it++)
             {
                 var (o0, n0, g0) = OffsetN(S0, cn, R0); var (o1, n1, g1) = OffsetN(S1, cn, R1);

@@ -2282,6 +2282,9 @@ public static partial class ExactFaceMesher
         if (!CdtBigOff && outerS.Count + holesS.Sum(h => h.Count) >= CdtBigN && candidates.Count > earAt + 1)
         {
             var cdtCand = candidates[^1]; candidates.RemoveAt(candidates.Count - 1); candidates.Insert(earAt, cdtCand);
+            // Делоне не прошёл — ушная на таком контуре тоже не проходит, а стоит по минуте на грань (6169K419: 3 грани по
+            // 57–63 с на каждый из двух ушных способов): ушные не пробуются
+            candidates.RemoveRange(earAt + 1, candidates.Count - earAt - 1);
         }
 
         // ПОРЯДОК СПОСОБОВ — «СПЕРВА ПРОСТЫЕ», И МЕНЯТЬ ЕГО НЕ СТОИТ. Пробовал подсказывать:
