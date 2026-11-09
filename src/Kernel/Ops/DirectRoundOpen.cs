@@ -540,8 +540,6 @@ public static partial class DirectRound
         // ребра шва), на E (шар касается общей грани и соседней боковой E). rgT — переход T → шов, rgE — шов → E.
         var rgT = new[] { double.NaN, double.NaN }; var rgE = new[] { double.NaN, double.NaN }; var rgSeam = new ICurve3?[2];
         var rgShE = new Geometry.Ssi.Shape?[2]; var rgSE = new double[2]; var rgOnA = new bool[2];
-        double OffA(double t) => sigma * sA * Rt(t);
-        double OffB(double t) => sigma * sB * Rt(t);
         bool ch = chDist != null; double dA = ch ? chDist!(e, fs[0]) : r, dB = ch ? chDist!(e, fs[1]) : r;
         foreach (var (sh, off) in ch ? Array.Empty<(Geometry.Ssi.Shape, double)>() : new[] { (shA, offA), (shB, offB) })
             if (sh is Geometry.Ssi.Cylinder cy0 && cy0.R + off < 1e-6 || sh is Geometry.Ssi.Sphere sp0 && sp0.R + off < 1e-6 || sh is Geometry.Ssi.Torus to0 && to0.r + off < 1e-6)

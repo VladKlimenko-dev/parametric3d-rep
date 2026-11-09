@@ -574,7 +574,7 @@ public enum FFArrayKind { Linear = 0, Circular = 1, Curve = 2 }
 /// <summary>МАССИВ тел FreeForm: прямоугольный (одно или два направления), круговой, вдоль кривой — копии отдельными телами.</summary>
 public sealed class FFArrayFeature : Feature, IFreeFormNative
 {
-    public FFArrayKind Kind;
+    public new FFArrayKind Kind;
     public readonly List<string> BodyNames = new();
     public ValueRef Count = new(3), Count2 = new(1), Angle = new(360);
     public Vector3d Step = new(30, 0, 0), Step2 = new(0, 30, 0);

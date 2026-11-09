@@ -72,7 +72,7 @@ public static class Dialogs
         Core.UnitSystem? result = null;
         var w = new Window { Title = Loc.L("Новая система единиц"), SizeToContent = SizeToContent.WidthAndHeight, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner, ShowInTaskbar = false, MinWidth = 360 };
         w.Bind(Window.BackgroundProperty, w.GetResourceObservable("P3.PanelBg"));
-        var name = new TextBox { Text = "", Watermark = "in/kg/s", MinWidth = 180, Name = "us_name" };
+        var name = new TextBox { Text = "", PlaceholderText = "in/kg/s", MinWidth = 180, Name = "us_name" };
         ComboBox Pick(string nm, string[] opts, string cur) => new() { Name = nm, ItemsSource = opts.Select(Commands.DisplayUnits.Symbol).ToList(), SelectedIndex = Math.Max(0, Array.IndexOf(opts, cur)), MinWidth = 120 };
         var lenOpts = new[] { "mm", "cm", "m", "in", "ft" }; var massOpts = new[] { "g", "kg", "t", "lb" }; var timeOpts = new[] { "s", "min", "h" }; var angOpts = new[] { "deg", "rad" };
         var len = Pick("us_length", lenOpts, "mm"); var mass = Pick("us_mass", massOpts, "kg"); var time = Pick("us_time", timeOpts, "s"); var ang = Pick("us_angle", angOpts, "deg");

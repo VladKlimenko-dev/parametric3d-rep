@@ -63,7 +63,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     public event Action<string>? GlReady;
     public event Action<string>? HoverChanged;
     public event Action? CameraChanged;
-    public event Action<Point>? ContextRequested;
+    public new event Action<Point>? ContextRequested;
     /// <summary>Сцена перестроена (после перестроения модели) — панели обновляют сведения.</summary>
     public event Action? SceneRebuilt;
 
@@ -250,7 +250,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     public Action<Point>? HoverInterceptor;
 
     /// <summary>Цвета вида (для надстроек поверх него — значков ограничений и т. п.).</summary>
-    public RenderTheme Theme => _r.Theme;
+    public new RenderTheme Theme => _r.Theme;
 
     /// <summary>Кадр нарисован (вызывается в потоке окна): надстройки поверх вида перерисовываются вслед за ним.</summary>
     public event Action? FrameDrawn;

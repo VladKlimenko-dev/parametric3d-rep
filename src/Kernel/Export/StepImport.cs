@@ -705,7 +705,7 @@ public static class StepImport
         {
             names.Clear();
             Dictionary<int, string> sn; try { sn = ShellNames(parser); } catch { sn = new(); }
-            var shellOf = solidOfShell.ToDictionary(kv => kv.Value, kv => kv.Key, ReferenceEqualityComparer.Instance);
+            var shellOf = solidOfShell.ToDictionary<KeyValuePair<int, TSolid>, TSolid, int>(kv => kv.Value, kv => kv.Key, ReferenceEqualityComparer.Instance);
             foreach (var so in solids) names.Add(shellOf.TryGetValue(so, out int shId) && sn.TryGetValue(shId, out var nm) ? nm : null);
         }
         return solids;

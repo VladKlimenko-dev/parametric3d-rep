@@ -957,7 +957,6 @@ public static class TopologyConventions
     private static List<Vector3d> RingPointsRaw(Ring r)
     {
         Diagnostics.Prof.Count("соглашение: разметок колец", 1);
-        const int sign = 1;
         var pts = new List<Vector3d>();
         foreach (var (ce, dir) in r.Items)
         {
@@ -968,7 +967,6 @@ public static class TopologyConventions
             if (pts.Count > 0) seg.RemoveAt(0);
             pts.AddRange(seg);
         }
-        if (sign < 0) pts.Reverse();
         return pts;
     }
 

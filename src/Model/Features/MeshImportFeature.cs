@@ -29,7 +29,7 @@ public sealed class MeshImportFeature : Feature
     public MeshImportFeature(string name = "Mesh import") { Name = name; }
     public override string Summary => $"STL «{SourceName}»: {(Exact ? "точная геометрия" : "плоские грани")}" + (Report.Length > 0 ? " — " + Report : "");
 
-    public string Key => $"{MeshData.Length}:{Hash(MeshData)}|{Exact}|{Snap}|{TolScale:R}|{Scale:R}";
+    public new string Key => $"{MeshData.Length}:{Hash(MeshData)}|{Exact}|{Snap}|{TolScale:R}|{Scale:R}";
 
     static string Hash(string s)
     {

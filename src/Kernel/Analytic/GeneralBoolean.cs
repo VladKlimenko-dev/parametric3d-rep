@@ -914,7 +914,7 @@ public static class GeneralBoolean
             // несколько областей (несколько граней результата) — разделена; ни одной — удалена, если её область не легла на
             // совпадающую грань другого операнда, оставшуюся в результате (тогда — слилась)
             var pv = new Topology.Provenance { Operation = "boolean." + op };
-            var bySource = shell.Faces.Where(x => _src.ContainsKey(x)).GroupBy(x => _src[x], ReferenceEqualityComparer.Instance).ToDictionary(g => (TFace)g.Key!, g => g.ToList(), ReferenceEqualityComparer.Instance);
+            var bySource = shell.Faces.Where(x => _src.ContainsKey(x)).GroupBy(x => _src[x], ReferenceEqualityComparer.Instance).ToDictionary<IGrouping<object?, TFace>, TFace, List<TFace>>(g => (TFace)g.Key!, g => g.ToList(), ReferenceEqualityComparer.Instance);
             foreach (var rf in shell.Faces)
             {
                 if (!_src.TryGetValue(rf, out var sf)) { pv.Faces.Add(new Topology.FaceProvenance(rf, null, Topology.FaceOrigin.Generated, "no source recorded")); continue; }

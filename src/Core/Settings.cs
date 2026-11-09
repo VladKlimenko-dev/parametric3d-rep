@@ -354,6 +354,7 @@ public sealed class Settings
     public bool StatusModeBold = true;
 
     /// <summary>Собирает шрифт по заданной гарнитуре с откатом на общую.</summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows6.1")]
     public Font MakeFont(string family, float size, FontStyle style = FontStyle.Regular)
     {
         string name = string.IsNullOrWhiteSpace(family) ? UiFontFamily : family;
@@ -361,8 +362,11 @@ public sealed class Settings
         catch { return new Font(FontFamily.GenericSansSerif, size, style); }
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows6.1")]
     public Font TreeFont() => MakeFont(TreeFontFamily, TreeFontSize);
+    [System.Runtime.Versioning.SupportedOSPlatform("windows6.1")]
     public Font StatusFont() => MakeFont(StatusFontFamily, StatusFontSize);
+    [System.Runtime.Versioning.SupportedOSPlatform("windows6.1")]
     public Font StatusModeFont() =>
         MakeFont(StatusFontFamily, StatusFontSize, StatusModeBold ? FontStyle.Bold : FontStyle.Regular);
 

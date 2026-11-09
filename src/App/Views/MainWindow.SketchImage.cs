@@ -77,7 +77,9 @@ public partial class MainWindow
                 if (bmp != null && bmp.PixelSize.Width > 0 && bmp.PixelSize.Height > 0)
                 {
                     using var ms = new MemoryStream();
+#pragma warning disable CS0618 // Avalonia 12: Save(Stream) — PNG по умолчанию; перегрузка с BitmapEncoderOptions — то же
                     bmp.Save(ms);
+#pragma warning restore CS0618
                     InsertSketchImageData(sk, L("Буфер обмена") + ".png", ms.ToArray());
                     return;
                 }

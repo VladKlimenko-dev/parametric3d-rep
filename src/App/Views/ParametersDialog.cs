@@ -106,7 +106,7 @@ public sealed class ParametersDialog : Window
         add.Click += (_, _) => AddRow();
         del.Click += (_, _) => DeleteRow();
         // k118 (п.9.2): фильтр строк по имени
-        _filter.Watermark = L("Фильтр по имени");
+        _filter.PlaceholderText = L("Фильтр по имени");
         _filter.TextChanged += (_, _) => { if (_cur != null) Fill(); };
 
         var top0 = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { new TextBlock { Text = L("Искать в:"), VerticalAlignment = VerticalAlignment.Center }, _lookIn, add, del } };

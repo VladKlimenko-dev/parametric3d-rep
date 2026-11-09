@@ -105,7 +105,7 @@ public sealed class Mate : ModelItem
         }
         if (!AmbiguityOff && found.Any(x => !Same(found[0], x)))
         {
-            ambiguity = $"{found.Count} faces named '{Kernel.Topology.EdgeRef.Bare(tag)}' lie on different {(found[0].Plane ? "planes" : "axes")}";
+            ambiguity = $"{found.Count} faces named '{Kernel.Topology.EdgeRef.Bare(tag ?? "")}' lie on different {(found[0].Plane ? "planes" : "axes")}";
             return false;
         }
         origin = found[0].O; axis = found[0].A;
