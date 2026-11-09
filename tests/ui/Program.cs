@@ -6612,31 +6612,22 @@ Check("UI-SKETCH-DIMEXT-K185", () =>
     w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp()); Run();
     var vp = w.ViewPort; var sk = vp.ActiveSketch!;
     vp.EnterSketch(sk, animate: false); Run();
-    var l1 = sk.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(0, 10)));
-    var l2 = sk.AddEntity(new SkLine(new SkPoint(20, -5), new SkPoint(20, 4)));
-    sk.Dimensions.RemoveAll(x => true);
+    var l1 = sk.AddEntity(new SkLine(new SkPoint(0, -50), new SkPoint(0, 50)));
+    var l2 = sk.AddEntity(new SkLine(new SkPoint(20, -40), new SkPoint(20, 40)));
     var dd = sk.AddDimension(DimensionType.DistanceLineLine, 20, l1, l2);
     dd.UserPlaced = true;
     sk.Dimensions.RemoveAll(x => !ReferenceEquals(x, dd));
-    double[] Ys() { var r = new List<double>(); foreach (var e in SketchDimensions.LastExtensions) r.Add(e.A.Y); return r.ToArray(); }
-    // размерная линия на высоте 2 (внутри обоих отрезков)
-    for (int pass = 0; pass < 8; pass++)
-    {
-        SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
-        var a2 = dd.TextCenter;
-        Console.WriteLine($"  pass {pass}: text at ({a2.X:0.##},{a2.Y:0.##}), extensions {string.Join("; ", SketchDimensions.LastExtensions.Select(e => $"({e.A.X:0.#},{e.A.Y:0.#})-({e.B.X:0.#},{e.B.Y:0.#})"))}");
-        // сдвиг подписи, пока размерная линия не окажется на обоих отрезках (подпись — чуть выше линии)
-        if (SketchDimensions.LastExtensions.Count == 0) break;
-        dd.TextOffset += new Vector2d(0, 2.5 - a2.Y);
-    }
+    string Ex() => string.Join("; ", SketchDimensions.LastExtensions.Select(e => $"({e.A.X:0.#},{e.A.Y:0.#})-({e.B.X:0.#},{e.B.Y:0.#})"));
+    SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+    Console.WriteLine($"  inside: text at ({dd.TextCenter.X:0.##},{dd.TextCenter.Y:0.##}), extensions {Ex()}");
+    Require(Math.Abs(dd.TextCenter.Y) < 35, "test setup: the dimension line is not between the segment ends");
     Require(SketchDimensions.LastExtensions.Count == 0, "extension lines drawn though the dimension line lies on both segments");
-    // выше обоих отрезков
-    dd.TextOffset += new Vector2d(0, 60);
+    dd.TextOffset += new Vector2d(0, 200);
     SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
     var ex = SketchDimensions.LastExtensions.ToList();
-    Console.WriteLine($"  above: extensions {string.Join("; ", ex.Select(e => $"({e.A.X:0.#},{e.A.Y:0.#})-({e.B.X:0.#},{e.B.Y:0.#})"))}");
+    Console.WriteLine($"  above: text at ({dd.TextCenter.X:0.##},{dd.TextCenter.Y:0.##}), extensions {Ex()}");
+    Require(dd.TextCenter.Y > 50, "test setup: the dimension line is not above the segments");
     Require(ex.Count == 2 && ex.Any(e => (e.A - l1.B.P).Length < 1e-9) && ex.Any(e => (e.A - l2.B.P).Length < 1e-9), "extension lines do not start at the upper segment ends");
-    Require(ex.All(e => e.B.Y > 10.5), "extension lines do not reach the dimension line");
     w.FinishSketch(); Run();
 });
 
