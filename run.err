@@ -1,0 +1,2 @@
+exit 1
+seconds 113 nproc 4 env P3D_FULLDOMAINGUARD=0 cmd sweepblend148e
