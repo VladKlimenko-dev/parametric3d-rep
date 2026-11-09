@@ -1026,7 +1026,9 @@ internal sealed class XtBlendSurf : XtSurf
         return bl;
     }
 
-    static readonly bool SpineNewtonOff = Environment.GetEnvironmentVariable("P3D_XTSPINENEWTON") == "0";
+    // ВЫКЛЮЧЕНО ПО УМОЛЧАНИЮ (P3D_XTSPINENEWTON=1 — включить): длинный шаг Ньютона уводит проекцию на B-поверхность (тёплый
+    // старт — местный минимум) на другой участок опоры; объём 8761K424 менялся на 30 %, 6168T54 — на 0,05 %
+    static readonly bool SpineNewtonOff = Environment.GetEnvironmentVariable("P3D_XTSPINENEWTON") != "1";
     /// <summary>Точка смещённой опоры у q и нормаль её касательной плоскости (от опоры к q); false — q на самой опоре.</summary>
     static (Vector3d O, Vector3d N, bool Ok) OffsetN(XtSurf s, Vector3d q, double d)
     {
@@ -1110,7 +1112,7 @@ internal sealed class XtBlendSurf : XtSurf
         // шаг — пересечение их касательных плоскостей (касательная плоскость смещённой опоры параллельна плоскости опоры в
         // основании перпендикуляра). Сходится за 3–5 шагов, попеременная проекция ниже — линейно, с отношением cos²θ, и на
         // опорах под малым углом выбирала все 40 шагов по две проекции на B-поверхность (переходник 8761K424: 11 млн проекций,
-        // 495 с на 104 кривые пересечения). Опоры почти параллельны или шаг расходится — прежняя итерация. P3D_XTSPINENEWTON=0.
+        // 495 с на 104 кривые пересечения). Опоры почти параллельны или шаг расходится — прежняя итерация. Пока выключено (см. SpineNewtonOff).
         if (!SpineNewtonOff && R0 > 1e-12 && R1 > 1e-12)
         {
             var cn = c0; bool ok = false;
