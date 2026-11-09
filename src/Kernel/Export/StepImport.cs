@@ -785,6 +785,7 @@ public static class StepImport
                         if (ns.ProjectExtended(q, 0.5) is not { } ex) continue;
                         double de = (ex.P - q).Length;
                         if (de > Math.Max(1e-5, 0.05 * d)) continue;
+                        if (ex.Uv.X >= -1e-9 && ex.Uv.X <= 1 + 1e-9 && ex.Uv.Y >= -1e-9 && ex.Uv.Y <= 1 + 1e-9) continue;   // не за краем
                         lu = Math.Min(lu, ex.Uv.X); hu = Math.Max(hu, ex.Uv.X); lv = Math.Min(lv, ex.Uv.Y); hv = Math.Max(hv, ex.Uv.Y);
                         need = true;
                     }
