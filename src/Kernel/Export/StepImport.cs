@@ -667,6 +667,7 @@ public static class StepImport
                 // считаются один раз, и обе соседние грани берут их же — швов по построению нет.
                 // Прежние попытки (обёртка поверх грубой сетки, приём по граням) только рвали
                 // стыки, потому что смешивали сетки разного происхождения.
+                ExtendNurbsToEdges(solid);
                 MeshFacesFromLoops(solid, warnings, "STEP");
 
                 // СОГЛАСОВАНИЕ ОРИЕНТАЦИИ ПО ТЕЛУ. Нормаль поверхности не задаёт «наружу»: у
@@ -754,6 +755,52 @@ public static class StepImport
         if (MissDbg) Console.Error.WriteLine($"DONOREDGES {f.Tag}: donor rim {edge.Count} points, edges {need.Count}, common {edge.Count(need.Contains)}");
         return false;
     }
+    /// <summary>
+    /// k185 (замечания 09.11, 23:18–23:30): РЁБРА НА ПРОДОЛЖЕНИИ B-ПОВЕРХНОСТИ. Parasolid допускает ребро грани чуть за краем
+    /// области её B-поверхности (поверхность продолжается теми же многочленами); у нас точка ребра проецировалась на край, отход
+    /// 0.03–0.1 мм (канавка сверла 2958A552: от продолжения — 4e-5 мм при v = −0.0013), контур грани в параметрах тянулся вдоль
+    /// края, и разметка закрашивала канавку. Здесь: точки рёбер, ушедшие с поверхности на краю области и лежащие на продолжении
+    /// (в 20 раз ближе или до 1e-5 мм), расширяют область (точное продолжение NurbsSurface.Extended, запас 2 %), не больше 0.1
+    /// области; замкнутое направление не продлевается. Мутация P3D_NURBSEXTEND=0.
+    /// </summary>
+    static void ExtendNurbsToEdges(TSolid solid)
+    {
+        if (NurbsExtendOff) return;
+        foreach (var f in solid.Faces)
+        {
+            if (f.Surface is not Surfaces.NurbsSurface ns) continue;
+            double lu = 0, hu = 1, lv = 0, hv = 1; bool need = false;
+            try
+            {
+                foreach (var e in f.Loops.SelectMany(l => l.CoEdges).Select(c => c.Edge).Distinct())
+                {
+                    var c = e.Curve;
+                    for (int k = 0; k <= 16; k++)
+                    {
+                        var q = c.PointAt(c.T0 + (c.T1 - c.T0) * k / 16.0);
+                        var uv = ns.ProjectToUV(q); double d = (ns.PointAt(uv) - q).Length;
+                        if (d <= 1e-6) continue;
+                        if (!(uv.X <= 1e-9 || uv.X >= 1 - 1e-9 || uv.Y <= 1e-9 || uv.Y >= 1 - 1e-9)) continue;
+                        if (ns.ProjectExtended(q, 0.1) is not { } ex) continue;
+                        double de = (ex.P - q).Length;
+                        if (de > Math.Max(1e-5, 0.05 * d)) continue;
+                        lu = Math.Min(lu, ex.Uv.X); hu = Math.Max(hu, ex.Uv.X); lv = Math.Min(lv, ex.Uv.Y); hv = Math.Max(hv, ex.Uv.Y);
+                        need = true;
+                    }
+                }
+            }
+            catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { continue; }
+            if (!need) continue;
+            if (ns.ClosedU && (lu < 0 || hu > 1)) continue;
+            double M(double x) => x * 1.02;   // запас 2 % от вылета
+            double u0 = lu < 0 ? M(lu) : 0, u1 = hu > 1 ? 1 + M(hu - 1) : 1, v0 = lv < 0 ? M(lv) : 0, v1 = hv > 1 ? 1 + M(hv - 1) : 1;
+            if (u0 < -0.1 || u1 > 1.1 || v0 < -0.1 || v1 > 1.1) continue;
+            if (ns.Extended(u0, u1, v0, v1) is { } ext) { f.Surface = ext; Interlocked.Increment(ref NurbsExtended); }
+        }
+    }
+    static readonly bool NurbsExtendOff = Environment.GetEnvironmentVariable("P3D_NURBSEXTEND") == "0";
+    /// <summary>k185: граней, чья B-поверхность продлена до рёбер (разбор).</summary>
+    public static long NurbsExtended;
     static readonly bool LoopMeshParallel = Environment.GetEnvironmentVariable("P3D_LOOPMESHPAR") != "0";
     static readonly bool SlowFaceDbg = Environment.GetEnvironmentVariable("P3D_SLOWFACE") == "1";
     public static Func<TFace, string?>? DonorKeyProbe;
