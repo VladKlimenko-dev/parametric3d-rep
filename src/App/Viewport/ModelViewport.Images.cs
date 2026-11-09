@@ -19,7 +19,7 @@ public sealed partial class ModelViewport
     public static readonly bool SketchImageGlOff = Environment.GetEnvironmentVariable("P3D_SKIMGGL") == "0";
 
     /// <summary>Изображения эскиза рисует кадр OpenGL (слой — только рамку и ручки).</summary>
-    public bool GlSketchImages => _glReady && !SketchImageGlOff;
+    public bool GlSketchImages => _glReady && !SketchImageGlOff && !_r.ImageShaderFailed;
 
     /// <summary>Разбор: изображений эскиза в последнем кадре OpenGL.</summary>
     public int GlImagesDrawn => _r.ImagesDrawn;
@@ -76,7 +76,7 @@ public sealed partial class ModelViewport
     /// <summary>Изображения активного эскиза для кадра (null — нет или рисует слой).</summary>
     private List<SceneRenderer.OverlayImage>? SketchImagesForGl()
     {
-        if (SketchImageGlOff || ActiveSketch is not { } sk || sk.Images.Count == 0) return null;
+        if (SketchImageGlOff || _r.ImageShaderFailed || ActiveSketch is not { } sk || sk.Images.Count == 0) return null;
         var res = new List<SceneRenderer.OverlayImage>();
         foreach (var im in sk.Images)
         {

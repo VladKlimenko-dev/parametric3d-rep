@@ -140,7 +140,9 @@ public sealed class SceneRenderer : IDisposable
         _bg = new ShaderProgram("background", EngineShaders.BackgroundVert, EngineShaders.BackgroundFrag);
         _cap = new ShaderProgram("cap", EngineShaders.CapVert, EngineShaders.CapFrag);
         _floor = new ShaderProgram("floor", EngineShaders.FloorVert, EngineShaders.FloorFrag);
-        _image = new ShaderProgram("image", EngineShaders.ImageVert, EngineShaders.ImageFrag);
+        // k185: изображение эскиза — без него вид работает (слой рисует картинку сам)
+        try { _image = new ShaderProgram("image", EngineShaders.ImageVert, EngineShaders.ImageFrag); }
+        catch (Exception ex) { _image = null; ImageShaderFailed = true; Console.Error.WriteLine("image shader: " + ex.Message); }
         _emptyVao = GL.GenVertexArray();
     }
 
@@ -284,6 +286,8 @@ public sealed class SceneRenderer : IDisposable
         public bool Invert;
     }
 
+    /// <summary>Шейдер изображения не собрался — картинку рисует слой поверх вида.</summary>
+    public bool ImageShaderFailed { get; private set; }
     private readonly Dictionary<object, int> _imgTex = new(ReferenceEqualityComparer.Instance);
     private List<OverlayImage>? _ovImages;
     /// <summary>Разбор: изображений эскиза в последнем кадре.</summary>
