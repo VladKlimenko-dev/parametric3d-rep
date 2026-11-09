@@ -333,12 +333,82 @@ internal sealed class XtNurbsSurf : XtSurf
         return (bu, bv, bd);
     }
 
+    // k185: БЛОКИ СЕТКИ (8×8 точек с габаритом) — кандидаты проекции перебором блоков по возрастанию нижней оценки расстояния, без
+    // просмотра всех 250 000 точек и без выделения памяти на каждую точку (прежде — замыкание FindIndex и сортировка списка на
+    // каждой точке: перевод штампа 2602A125 — 597 с и 195 ГБ на кривых пересечения). P3D_XTGRIDBLOCKS=0 — прежний перебор.
+    static readonly bool GridBlocksOff = Environment.GetEnvironmentVariable("P3D_XTGRIDBLOCKS") == "0";
+    const int GB = 8;
+    int nbi, nbj; Vector3d[]? bmin, bmax; double[]? blb; int[]? bord;
+    readonly double[] cD = new double[6]; readonly int[] cI = new int[6], cJ = new int[6]; int cN;
+
+    void BuildBlocks()
+    {
+        nbi = gu / GB + 1; nbj = gv / GB + 1;
+        bmin = new Vector3d[nbi * nbj]; bmax = new Vector3d[nbi * nbj]; blb = new double[nbi * nbj]; bord = new int[nbi * nbj];
+        var gr = grid!;
+        for (int bi = 0; bi < nbi; bi++)
+            for (int bj = 0; bj < nbj; bj++)
+            {
+                var mn = new Vector3d(double.MaxValue); var mx = new Vector3d(double.MinValue);
+                for (int i = bi * GB; i <= Math.Min(gu, bi * GB + GB - 1); i++)
+                    for (int j = bj * GB; j <= Math.Min(gv, bj * GB + GB - 1); j++) { mn = Vector3d.ComponentMin(mn, gr[i, j]); mx = Vector3d.ComponentMax(mx, gr[i, j]); }
+                bmin[bi * nbj + bj] = mn; bmax[bi * nbj + bj] = mx;
+            }
+    }
+
+    /// <summary>Кандидат (d, i, j): точка в 3 ячейках от прежнего заменяет его, если ближе; иначе — в шестёрку лучших.</summary>
+    void Offer(double d, int i, int j)
+    {
+        if (cN == 6 && d >= cD[5]) return;
+        int near = -1;
+        for (int k = 0; k < cN; k++) if (Math.Abs(cI[k] - i) <= 3 && Math.Abs(cJ[k] - j) <= 3) { near = k; break; }
+        int at;
+        if (near >= 0) { if (d >= cD[near]) return; at = near; }
+        else if (cN < 6) at = cN++;
+        else at = 5;
+        cD[at] = d; cI[at] = i; cJ[at] = j;
+        // вставкой — по возрастанию
+        while (at > 0 && cD[at - 1] > cD[at]) { (cD[at - 1], cD[at]) = (cD[at], cD[at - 1]); (cI[at - 1], cI[at]) = (cI[at], cI[at - 1]); (cJ[at - 1], cJ[at]) = (cJ[at], cJ[at - 1]); at--; }
+        while (at + 1 < cN && cD[at + 1] < cD[at]) { (cD[at + 1], cD[at]) = (cD[at], cD[at + 1]); (cI[at + 1], cI[at]) = (cI[at], cI[at + 1]); (cJ[at + 1], cJ[at]) = (cJ[at], cJ[at + 1]); at++; }
+    }
+
+    static double BoxD2(Vector3d q, Vector3d mn, Vector3d mx)
+    {
+        double dx = q.X < mn.X ? mn.X - q.X : q.X > mx.X ? q.X - mx.X : 0;
+        double dy = q.Y < mn.Y ? mn.Y - q.Y : q.Y > mx.Y ? q.Y - mx.Y : 0;
+        double dz = q.Z < mn.Z ? mn.Z - q.Z : q.Z > mx.Z ? q.Z - mx.Z : 0;
+        return dx * dx + dy * dy + dz * dz;
+    }
+
     (double U, double V) ProjectUvFull(Vector3d q)
     {
         var (u0, u1, v0, v1) = Range;
         if (grid == null) BuildGrid();
         var gr = grid!;
         double bu = u0, bv = v0, best = double.MaxValue;
+        if (!GridFineOff && !GridBlocksOff)
+        {
+            if (bmin == null) BuildBlocks();
+            int nb = nbi * nbj;
+            for (int k = 0; k < nb; k++) { blb![k] = BoxD2(q, bmin![k], bmax![k]); bord![k] = k; }
+            Array.Sort(blb!, bord!, 0, nb);
+            cN = 0;
+            for (int k = 0; k < nb; k++)
+            {
+                if (cN == 6 && blb![k] >= cD[5]) break;
+                int bi = bord![k] / nbj, bj = bord[k] % nbj;
+                for (int i = bi * GB; i <= Math.Min(gu, bi * GB + GB - 1); i++)
+                    for (int j = bj * GB; j <= Math.Min(gv, bj * GB + GB - 1); j++) Offer((gr[i, j] - q).LengthSquared, i, j);
+            }
+            double bD = double.MaxValue; (double, double) bUv = (u0, v0);
+            for (int k = 0; k < cN; k++)
+            {
+                var (ru, rv, rd) = Descent(q, u0 + (u1 - u0) * cI[k] / gu, v0 + (v1 - v0) * cJ[k] / gv);
+                if (rd < bD) { bD = rd; bUv = (ru, rv); }
+                if (bD < 1e-24) break;
+            }
+            return bUv;
+        }
         for (int i = 0; i <= gu; i++) for (int j = 0; j <= gv; j++)
             {
                 double d = (gr[i, j] - q).LengthSquared; if (d < best) { best = d; bu = u0 + (u1 - u0) * i / gu; bv = v0 + (v1 - v0) * j / gv; }
