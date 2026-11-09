@@ -6687,7 +6687,7 @@ Check("UI-PATTERN-STAGE-K185", () =>
 Check("UI-NECK-CUT-K185", () =>
 {
     // k185 (замечание 09.11, 15:44): вырез Extrude в шейке DLOT — «Приближение: гранёных граней 35» (разбор)
-    var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "user_k185_neck_cut.p3d")); BuildNow(s);
+    var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "sketch_k185_neck_cut.p3d")); BuildNow(s);
     var part = s.Part!;
     Console.WriteLine($"  stage {part.StageIndex} of {part.Features.Count}");
     if (part.StageIndex >= 0) { part.EndInsertMode(resume: true); BuildNow(s); }
@@ -6741,7 +6741,7 @@ Check("UI-SKETCH-NECK-K185", () =>
     // k185 (замечание 09.11, 12:39 и 13:06, файл пользователя): (2) выносные размера 1.25 (d99, между вертикальными отрезками) —
     // от верхних концов (точки над и справа); (3) серый d17 при удалении остаётся (не задана глубина канавки), с объяснением;
     // глубина канавки задана — d17 исчезает сам
-    var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "user_k185_neck.p3d")); var w = Open(s); BuildNow(s);
+    var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "sketch_k185_neck.p3d")); var w = Open(s); BuildNow(s);
     void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
     var vp = w.ViewPort; var solver = s.Document.Solver;
     var sk = s.Part!.Sketches.First();
