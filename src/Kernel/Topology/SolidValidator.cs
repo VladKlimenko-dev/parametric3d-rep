@@ -787,6 +787,7 @@ public static class SolidValidator
     // грани с фасетами — по точной поверхности-источнику; P3D_LOOPFACETED=0 — только по фасетам (как прежде)
     static readonly bool LoopFacetedOff = Environment.GetEnvironmentVariable("P3D_LOOPFACETED") == "0";
     static readonly bool LoopDbg = Environment.GetEnvironmentVariable("P3D_LOOPDBG") == "1";
+    static readonly bool LoopSeamOff = Environment.GetEnvironmentVariable("P3D_LOOPSEAM") == "0";
 
     /// <summary>Контур грани против её нормали (по точной поверхности) — причина; согласован или не решить — null.</summary>
     internal static string? LoopAgainstNormal(TFace f)
@@ -804,6 +805,16 @@ public static class SolidValidator
             {
                 if (uses[ce.Edge] != 1) continue;
                 var c = ce.Edge.Curve; double t0 = c.T0, t1 = c.T1, tm = (t0 + t1) / 2, h = (t1 - t0) * 1e-4;
+                // k185: СЕРЕДИНА РЕБРА НА ШВЕ ЦИЛИНДРА. Пробы влево и вправо при θ = −0 и +0 — по разные стороны шва, принадлежность
+                // области там неоднозначна (θ = 0 и 2π — одна линия): у выреза шейки DLOT ребро отверстия в боковой грани
+                // инструмента проходило через шов, проверка ложно видела «материал справа», и точная булева отвергалась (сетка —
+                // согласована). Тогда голосует точка того же ребра вне шва (0,37 или 0,63 длины). Мутация P3D_LOOPSEAM=0.
+                if (!LoopSeamOff && af.Cyl)
+                    foreach (double fr in new[] { 0.5, 0.37, 0.63, 0.25, 0.75 })
+                    {
+                        double tt = t0 + (t1 - t0) * fr; double th = af.Theta(c.PointAt(tt));
+                        if (Math.Abs(Math.Sin(th)) > 1e-6 || Math.Cos(th) < 0) { tm = tt; break; }
+                    }
                 var p = c.PointAt(tm); var tg = (c.PointAt(tm + h) - c.PointAt(tm - h)) * (ce.Reversed ? -1 : 1);
                 double len = (c.PointAt(t1) - c.PointAt(t0)).Length + (c.PointAt(tm) - c.PointAt(t0)).Length;
                 if (tg.LengthSquared < 1e-30 || len < 1e-6) continue;
