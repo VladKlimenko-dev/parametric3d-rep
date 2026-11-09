@@ -6653,6 +6653,15 @@ Check("UI-SKETCH-NECK-K185", () =>
     Require(ex.Count == 2 && ex.Any(e => (e.A - Top(l1).P).Length < 1e-6) && ex.Any(e => (e.A - Top(l2).P).Length < 1e-6), "d99 extension lines do not start at the upper segment ends");
     var d17 = sk.Dimensions.FirstOrDefault(x => x.Name == "d17");
     Require(d17 != null && d17.IsDefault, "d17 is not a grey dimension in the file");
+    {
+        var st0 = sk.Solve(solver);
+        Console.WriteLine($"  loaded: solve {st0}, free {sk.FreeDegrees}, dof {sk.DegreesOfFreedom}, conflicts {string.Join(",", sk.Dimensions.Where(x => x.Conflict).Select(x => x.Name))}, weak {string.Join(",", sk.Dimensions.Where(x => x.IsDefault).Select(x => x.Name))}");
+        var before = sk.Dimensions.Where(x => !string.IsNullOrWhiteSpace(x.Formula)).Select(x => (x, x.Value)).ToList();
+        sk.UpdateDimensionsFromParameters(s.Document.ScopeFor(s.Part!));
+        foreach (var (x, v) in before) Console.WriteLine($"    formula {x.Name} = {x.Formula}: {v:R} -> {x.Value:R}");
+        var st1 = sk.Solve(solver);
+        Console.WriteLine($"  after formulas: solve {st1}, free {sk.FreeDegrees}");
+    }
     SketchSuggest.DeleteDims(w, new List<SkDimension> { d17! }); Run();
     Console.WriteLine($"  delete d17: stays {sk.Dimensions.Contains(d17!)}, toast: {w.ToastShown}");
     Require(sk.Dimensions.Contains(d17!) && (w.ToastShown ?? "").Contains("d17"), "d17 was removed or no explanation");
