@@ -294,13 +294,14 @@ internal sealed class XtNurbsSurf : XtSurf
     static readonly bool WarmOff = Environment.GetEnvironmentVariable("P3D_XTWARM") == "0";
     static readonly bool WarmCellOff = Environment.GetEnvironmentVariable("P3D_XTWARMCELL") == "0";
     static readonly bool WarmClampOff = Environment.GetEnvironmentVariable("P3D_XTWARMCLAMP") == "0";
+    static readonly bool WarmOrthoOff = Environment.GetEnvironmentVariable("P3D_XTWARMORTHO") == "0";
     double cell;
 
     (double, double, bool) NewtonFrom(Vector3d q, double bu, double bv)
     {
         var (u0, u1, v0, v1) = Range;
         double hu = 1e-7 * Math.Max(1, u1 - u0), hv = 1e-7 * Math.Max(1, v1 - v0);
-        for (int it = 0; it < 12; it++)
+        for (int it = 0; it < (WarmOrthoOff ? 12 : 24); it++)
         {
             var p = At(bu, bv);
             var su = (At(bu + hu, bv) - At(bu - hu, bv)) / (2 * hu); var sv = (At(bu, bv + hv) - At(bu, bv - hv)) / (2 * hv);
@@ -308,6 +309,15 @@ internal sealed class XtNurbsSurf : XtSurf
             double a = Vector3d.Dot(su, su), b = Vector3d.Dot(su, sv), c = Vector3d.Dot(sv, sv), det = a * c - b * b;
             if (Math.Abs(det) < 1e-300) return (bu, bv, false);
             double gu = Vector3d.Dot(r, su), gv = Vector3d.Dot(r, sv);
+            // k185: точка вне поверхности (центр шара скругления в R от опоры): Гаусс — Ньютон без второй формы сходится
+            // линейно и за 12 шагов не доходил до 1e-12 по шагу — тёплый старт «не сходился», и проекция шла полным поиском
+            // (3.65 млн у штампа 2602A125: оси скруглений по резьбе). Сходимость — и по ортогональности невязки касательным:
+            // это и есть условие ближайшей точки. Мутация P3D_XTWARMORTHO=0.
+            if (!WarmOrthoOff)
+            {
+                double rl = r.Length;
+                if (rl < 1e-13 || Math.Abs(gu) <= 1e-10 * rl * Math.Sqrt(a) && Math.Abs(gv) <= 1e-10 * rl * Math.Sqrt(c)) return (bu, bv, true);
+            }
             double du = (c * gu - b * gv) / det, dv = (a * gv - b * gu) / det;
             double nu = Math.Clamp(bu - du, u0, u1), nv = Math.Clamp(bv - dv, v0, v1);
             // k185: сходимость — по фактическому шагу после упора в край области: у точек на краю (рёбра на границе
