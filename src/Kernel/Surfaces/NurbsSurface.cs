@@ -873,18 +873,26 @@ public sealed class NurbsSurface : ISurface3
         return Math.Abs(dom - loop) <= 1e-6 * Math.Max(1e-9, dom);
     }
 
+    /// <summary>k185: граней, которым отказано в сетке всей области параметров (контуры внутри области) — разбор.</summary>
+    public static long FullDomainRefused;
+    static readonly bool FullDomainGuardOff = Environment.GetEnvironmentVariable("P3D_FULLDOMAINGUARD") == "0";
     public void TessellateFace(TFace face, MeshBuilder mb)
     {
         // ГРАНЕНИЕ ИДЁТ ПО КОНТУРУ ГРАНИ, а не по всей области параметров: иначе у вырезанного
         // куска поверхности сетка накрывает лишнее — ровно та беда, что была у прочитанных из
         // обменного файла цилиндров.
         var loops = FaceLoopsUV(face);
-        if (loops.Count == 0) { FullDomain(face, mb); return; }
+        // k185 (замечания 09.11, 23:18–23:30): ВСЯ ОБЛАСТЬ ПАРАМЕТРОВ — только у грани-лоскута (все точки контуров на краю области).
+        // Иначе вся область рисовала поверхность за пределами грани: виток пружины 9271K53 за отгибом, канавка сверла 2958A552
+        // «заполнена телом». Тогда грань остаётся без сетки (честная дыра вместо чужой поверхности). Мутация P3D_FULLDOMAINGUARD=0.
+        bool onRim = loops.All(l => l.All(q => q.X <= 1e-6 || q.X >= 1 - 1e-6 || q.Y <= 1e-6 || q.Y >= 1 - 1e-6));
+        bool fullOk = FullDomainGuardOff || face.Loops.All(l => l.CoEdges.Count == 0) || onRim;
+        if (loops.Count == 0) { if (fullOk) FullDomain(face, mb); else Interlocked.Increment(ref FullDomainRefused); return; }
 
         var outer = loops[0];
         var holes = loops.Skip(1).Cast<IReadOnlyList<Vector2d>>().ToList();
         var tris = Cdt.Triangulate(outer, holes, out _);
-        if (tris == null) { FullDomain(face, mb); return; }
+        if (tris == null) { if (fullOk) FullDomain(face, mb); else Interlocked.Increment(ref FullDomainRefused); return; }
 
         // Точки контура в развёртке — вершины сетки; их положение в пространстве берётся с
         // поверхности, чтобы грань и её рёбра сходились.

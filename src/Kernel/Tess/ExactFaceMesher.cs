@@ -1212,6 +1212,7 @@ public static partial class ExactFaceMesher
     /// <summary>k125: разметок по uv, не удавшихся (грань ушла на запасной путь — дорого). Проверки.</summary>
     public static long UvFailures;
     /// <summary>Есть ли в сетке треугольник, повёрнутый против нормали поверхности (угол > 120°) при общей стороне сетки.</summary>
+    static readonly bool FoldHintOff = Environment.GetEnvironmentVariable("P3D_FOLDHINT") == "0";
     internal static bool Folded(ISurface3 src, List<Vector3d> P, List<int> T)
     {
         double pos = 0, neg = 0; int nPos = 0, nNeg = 0;
@@ -1219,7 +1220,16 @@ public static partial class ExactFaceMesher
         {
             var n = Vector3d.Cross(P[T[t + 1]] - P[T[t]], P[T[t + 2]] - P[T[t]]); double a = n.Length; if (a < 1e-18) continue;
             var c = (P[T[t]] + P[T[t + 1]] + P[T[t + 2]]) / 3;
-            Vector3d ns; try { ns = src.NormalAt(src.ProjectToUV(c)); } catch { continue; }
+            // k185: у B-поверхности центр проецируется от параметров вершины того же треугольника (вершина лежит на поверхности —
+            // её проекция однозначна): спираль пружины 9271K53 — одна поверхность, витки почти касаются, и центр треугольника на
+            // внутренней стороне трубки уходил на соседний виток — чужая нормаль, «складка», сетка отвергалась. P3D_FOLDHINT=0.
+            Vector3d ns;
+            try
+            {
+                if (!FoldHintOff && src is NurbsSurface nsf) ns = nsf.NormalAt(nsf.ProjectToUV(c, nsf.ProjectToUV(P[T[t]])));
+                else ns = src.NormalAt(src.ProjectToUV(c));
+            }
+            catch { continue; }
             if (ns.LengthSquared < 1e-24) continue;                    // особая точка (вершина конуса, полюс)
             double cs = Vector3d.Dot(n / a, ns.Normalized());
             if (cs > 0.5) { pos += a; nPos++; } else if (cs < -0.5) { neg += a; nNeg++; }
