@@ -49,6 +49,8 @@ public static class ImportHeal
     static readonly bool HealSideLoops = Environment.GetEnvironmentVariable("P3D_HEALSIDE") == "loops";
     static readonly bool CapFixOff = Environment.GetEnvironmentVariable("P3D_CAPFIX") == "0";
     static readonly bool FileAccOff = Environment.GetEnvironmentVariable("P3D_HEALFILEACC") == "0";
+    static readonly bool EdgeTolOff = Environment.GetEnvironmentVariable("P3D_HEALEDGETOL") == "0";
+    const double EdgeTolCap = 0.02;
 
     public static Report Heal(TSolid b, List<string>? warnings, string label, double fileAccuracy = 0)
     {
@@ -197,6 +199,24 @@ public static class ImportHeal
                 f.Surface = fl; capFaces++;
             }
             if (capFaces > 0) { b.DisplayMeshKey = null; warnings?.Add($"Import: {label}: boundary slivers turned on {capFaces} face(s)."); }
+        }
+        // k185: ДОПУСК РЁБЕР ПО ФАКТУ (как ShapeFix_Edge::FixSameParameter в OCCT и допусковые рёбра Parasolid): кривая ребра
+        // отходит от смежных поверхностей на микроны — сотые доли мм (приближённая поверхность скругления по сечениям, сплайн
+        // кривой пересечения по карте XT) — ребру ставится допуск по измеренному отходу, если он не больше 0,02 мм. Больший
+        // отход — брак, как прежде. Мутация P3D_HEALEDGETOL=0.
+        if (!EdgeTolOff)
+        {
+            var audit = GeometryAudit.Of(b);
+            int raised = 0; double maxDev = 0;
+            var byId = b.Edges.GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First());
+            foreach (var eg in audit.Edges)
+            {
+                if (eg.Level != GeometryLevel.Inconsistent) continue;
+                double dev = Math.Max(double.IsNaN(eg.OnA) ? 0 : eg.OnA, double.IsNaN(eg.OnB) ? 0 : eg.OnB);
+                if (dev > EdgeTolCap || !byId.TryGetValue(eg.Edge, out var ed)) continue;
+                ed.Tolerance = Math.Max(ed.Tolerance, 0.6 * dev); raised++; maxDev = Math.Max(maxDev, dev);
+            }
+            if (raised > 0) warnings?.Add($"Import: {label}: tolerance of {raised} edge(s) set from the curve-to-surface gap (max {maxDev:G3} mm).");
         }
         var vr = SolidValidator.ValidateBRep(b);
         bool overBudget = maxGap > budget;
